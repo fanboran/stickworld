@@ -2,3 +2,5 @@
 	path = external/godot-cpp
 	url = https://github.com/godotengine/godot-cpp.git
 	branch = master
+	update = checkout
+	shallow = true

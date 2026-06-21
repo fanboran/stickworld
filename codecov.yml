@@ -1,0 +1,40 @@
+codecov:
+  require_ci_to_pass: false
+  notify:
+    wait_for_ci: false
+
+coverage:
+  precision: 2
+  round: down
+  range: "30...80"
+
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+        informational: true
+    patch:
+      default:
+        target: 0%
+        informational: true
+
+parsers:
+  gcov:
+    branch_detection:
+      conditional: true
+      loop: true
+      method: false
+      macro: false
+
+# Godot 项目里排除第三方插件和引擎配置
+ignore:
+  - "**/addons/**"
+  - "**/.godot/**"
+  - "**/import/**"
+
+# PR comment 风格：简洁明了
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false

@@ -1,6 +1,7 @@
 # Godot
 .import/
-export/
+export/*
+!export/.gitkeep
 *.translation
 **/.godot/
 .godot/

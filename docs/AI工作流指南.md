@@ -7,7 +7,7 @@
 
 ## 一、项目 AI 协作概述
 
-本项目（stick-world）采用 **Vibe Coding + AI 深度协同** 的开发模式，继承并改进自前代桌宠项目（TransparentPet）积累的 AI 工作流资产。
+本项目（stick-world）采用 **Vibe Coding + AI 深度协同** 的开发模式。
 
 ### 核心分工
 
@@ -170,18 +170,3 @@ docs(ai): 更新AI工作流指南
 - **架构有新问题/改进项** → 追加到 `doc/架构改进待办项.md`（按 P1/P2/P3 优先级）
 - **完成一项架构改进** → 从 `doc/架构改进待办项.md` 中删除对应条目
 - **每次会话结束** → WorkBuddy 自动追加日志到 `.workbuddy/memory/YYYY-MM-DD.md`
-
----
-
-## 八、工作流资产来源说明
-
-本工作流资产迁移自 `game/` 项目（TransparentPet 桌宠项目），剔除了 GDExtension/C++/桌宠特有内容，保留并适配了：
-
-| 资产 | 来源 | 位置 |
-|------|------|------|
-| 模块化架构规范 | game/.trae/rules/rule.md | `.workbuddy/rules/rule.md` |
-| AI 行为指令 | game/.trae/rules/rule.md | `.workbuddy/rules/rule.md` |
-| Git 分支工作流 | game/.trae/rules/rule.md | `.workbuddy/rules/rule.md` |
-| 提交信息规范 | game/.trae/rules/rule.md | `.workbuddy/rules/rule.md` |
-| ChromaDB 向量错误知识库 | game/tools/vector_db/ | `tools/vector_db/` |
-| AI 角色定位体系 | game/docs/游戏开发规划与AI辅助系统.md | 本文件 |

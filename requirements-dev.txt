@@ -1,0 +1,5 @@
+# Pre-commit 框架
+pre-commit>=3.0.0
+
+# C++ 格式化
+clang-format>=21.1.8

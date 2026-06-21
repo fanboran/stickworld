@@ -1,0 +1,61 @@
+# Godot 项目文件 - 使用 LF 换行符
+*.godot text eol=lf
+*.tres text eol=lf
+*.tscn text eol=lf
+*.gd text eol=lf
+*.gdshader text eol=lf
+
+# C++ 源文件
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.cc text eol=lf
+*.hh text eol=lf
+*.cxx text eol=lf
+*.hxx text eol=lf
+
+# Python 文件
+*.py text eol=lf
+SConstruct text eol=lf
+SConscript text eol=lf
+
+# 配置文件
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+
+# 文档
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+
+# Shell 脚本
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows 批处理文件
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.ico binary
+*.svg binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.mp4 binary
+*.zip binary
+*.7z binary
+*.rar binary
+
+# Godot 特定导入文件
+*.import text eol=lf
+*.uid -text

@@ -1,0 +1,47 @@
+default_language_version:
+  python: python3
+
+exclude: |
+  (?x)^(
+    external/|
+    addons/|
+    .godot/|
+    imported/|
+    .vscode/|
+    .trae/
+  )/
+
+repos:
+  # Prettier - JSON/YAML 格式化
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: v3.7.4
+    hooks:
+      - id: prettier
+        files: \.(yaml|yml|json|md)$
+        types_or:
+          - yaml
+          - json
+          - markdown
+
+  # Python 格式化
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.10
+    hooks:
+      - id: ruff-format
+        files: \.py$
+      - id: ruff
+        args: [--fix]
+        files: \.py$
+
+  # 通用文件检查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]

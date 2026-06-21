@@ -17,6 +17,11 @@ config/icon="res://icon.svg"
 [autoload]
 
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
+EventBus="*res://core/autoload/event_bus.gd"
+ConfigManager="*res://core/autoload/config_manager.gd"
+SaveManager="*res://core/autoload/save_manager.gd"
+SceneManager="*res://core/autoload/scene_manager.gd"
+AudioManager="*res://core/services/audio_manager.gd"
 
 [display]
 

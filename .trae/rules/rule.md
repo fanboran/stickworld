@@ -186,5 +186,6 @@ modules/player/
 - 本项目使用 **Git Bash**（非 PowerShell）。使用 Unix 风格命令：`ls`、`grep`、`rm`、`mkdir -p`、`&&`、`||`。
 - 路径使用正斜杠 `/`。
 - 路径含空格必须用引号包裹。
-- Godot headless 命令：`"<godot路径>" --headless`。
+- Godot 可执行文件路径：`"F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe"`
+- Godot headless 命令：`"F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" --headless --path "f:/VSCode/game-2/stick-world"`。
 

@@ -1,0 +1,70 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "resource_definitions"
+_meta = {
+	"resource_name": "resource_definitions",
+	"version": "0.1.0",
+	"description": "基础资源定义：食物、木材、石料、金属矿、黑色沥青",
+	"category": "resource_template"
+}
+
+variables = {
+	# ── 食物 ──
+	"food": {
+		"name": "食物",
+		"category": "BASIC",
+		"base_price": "[PLACEHOLDER]",
+		"weight_per_unit": "[PLACEHOLDER]",
+		"perishable": true,
+		"initial_stock": "[PLACEHOLDER]",
+		"description": "维持人口生存的基础资源"
+	},
+
+	# ── 木材 ──
+	"wood": {
+		"name": "木材",
+		"category": "BASIC",
+		"base_price": "[PLACEHOLDER]",
+		"weight_per_unit": "[PLACEHOLDER]",
+		"perishable": false,
+		"initial_stock": "[PLACEHOLDER]",
+		"description": "基础建筑材料"
+	},
+
+	# ── 石料 ──
+	"stone": {
+		"name": "石料",
+		"category": "BASIC",
+		"base_price": "[PLACEHOLDER]",
+		"weight_per_unit": "[PLACEHOLDER]",
+		"perishable": false,
+		"initial_stock": "[PLACEHOLDER]",
+		"description": "坚固的建筑材料"
+	},
+
+	# ── 金属矿 ──
+	"metal_ore": {
+		"name": "金属矿",
+		"category": "BASIC",
+		"base_price": "[PLACEHOLDER]",
+		"weight_per_unit": "[PLACEHOLDER]",
+		"perishable": false,
+		"initial_stock": "[PLACEHOLDER]",
+		"description": "冶炼金属、制造武器盔甲的原料"
+	},
+
+	# ── 黑色沥青 ──
+	"black_bitumen": {
+		"name": "黑色沥青",
+		"category": "STRATEGIC",
+		"base_price": "[PLACEHOLDER]",
+		"weight_per_unit": "[PLACEHOLDER]",
+		"perishable": false,
+		"initial_stock": "[PLACEHOLDER]",
+		"description": "战略资源，用于召唤火柴人和维持魔法科技"
+	}
+}

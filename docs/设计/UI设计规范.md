@@ -18,7 +18,7 @@
 
 ## 二、工作区预设
 
-从通用项目管理系统（[`organization.md`](mechanics/organization.md)）衍生：
+从通用项目管理系统（[`organization.md`](系统/组织系统.md)）衍生：
 
 同一个组织管理面板，切换标签 = 切换工作区布局：
 

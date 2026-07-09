@@ -59,12 +59,12 @@ fix(org): 修复组织架构树节点层级溢出
 
 ## 文档同步
 
-- 修改游戏设计 → 更新 `docs/design/游戏设计文档.md`
-- 发现架构问题 → 追加到 `docs/project/待办事项.md`
+- 修改游戏设计 → 更新 `docs/设计/游戏设计文档.md`
+- 发现架构问题 → 追加到 `docs/项目/待办事项.md`
 - 每次会话结束 → WorkBuddy 自动追加 `.workbuddy/memory/YYYY-MM-DD.md`
 
 ## 提问与沟通
 
-- 设计问题 → 参考 `docs/design/游戏设计文档.md`（GDD 是唯一真相源）
-- 技术问题 → 参考 `docs/technical/技术架构.md`
+- 设计问题 → 参考 `docs/设计/游戏设计文档.md`（GDD 是唯一真相源）
+- 技术问题 → 参考 `docs/技术/技术架构.md`
 - 未找到答案 → 询问项目创始人

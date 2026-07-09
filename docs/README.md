@@ -22,25 +22,25 @@
 
 | 你想了解 | 去看 |
 |----------|------|
-| 游戏整体设计 | [`design/游戏设计文档.md`](design/游戏设计文档.md) |
-| 设计支柱（为什么这么做） | [`design/设计支柱.md`](design/设计支柱.md) |
-| 核心玩法循环 | [`design/核心循环.md`](design/核心循环.md) |
-| 世界观与种族 | [`design/世界观设定.md`](design/世界观设定.md) |
-| 通用项目管理系统 | [`design/mechanics/组织系统.md`](design/mechanics/组织系统.md) |
-| 战斗系统 | [`design/mechanics/战斗系统.md`](design/mechanics/战斗系统.md) |
-| 组织与指挥链 | [`design/mechanics/组织系统.md`](design/mechanics/组织系统.md) |
-| 经济与市场 | [`design/mechanics/经济系统.md`](design/mechanics/经济系统.md) |
-| 科技系统 | [`design/mechanics/科技系统.md`](design/mechanics/科技系统.md) |
-| 扩张系统 | [`design/mechanics/扩张系统.md`](design/mechanics/扩张系统.md) |
-| 物流运输 | [`design/mechanics/物流系统.md`](design/mechanics/物流系统.md) |
-| 成就/图章系统 | [`design/mechanics/成就系统.md`](design/mechanics/成就系统.md) |
-| UI/UX 设计 | [`design/UI设计规范.md`](design/UI设计规范.md) |
-| 平衡性数据 | [`design/balance/经济变量表.md`](design/balance/经济变量表.md) |
-| Excel 数据管线 | [`technical/excel-pipeline.md`](technical/excel-pipeline.md) |
-| 技术架构 | [`technical/技术架构.md`](technical/技术架构.md) |
-| 开发者指南 | [`technical/开发指南.md`](technical/开发指南.md) |
-| 竞品分析 | [`business/竞品分析.md`](business/竞品分析.md) |
-| 项目路线图 | [`project/路线图.md`](project/路线图.md) |
+| 游戏整体设计 | [`设计/游戏设计文档.md`](设计/游戏设计文档.md) |
+| 设计支柱（为什么这么做） | [`设计/设计支柱.md`](设计/设计支柱.md) |
+| 核心玩法循环 | [`设计/核心循环.md`](设计/核心循环.md) |
+| 世界观与种族 | [`设计/世界观设定.md`](设计/世界观设定.md) |
+| 通用项目管理系统 | [`设计/系统/组织系统.md`](设计/系统/组织系统.md) |
+| 战斗系统 | [`设计/系统/战斗系统.md`](设计/系统/战斗系统.md) |
+| 组织与指挥链 | [`设计/系统/组织系统.md`](设计/系统/组织系统.md) |
+| 经济与市场 | [`设计/系统/经济系统.md`](设计/系统/经济系统.md) |
+| 科技系统 | [`设计/系统/科技系统.md`](设计/系统/科技系统.md) |
+| 扩张系统 | [`设计/系统/扩张系统.md`](设计/系统/扩张系统.md) |
+| 物流运输 | [`设计/系统/物流系统.md`](设计/系统/物流系统.md) |
+| 成就/图章系统 | [`设计/系统/成就系统.md`](设计/系统/成就系统.md) |
+| UI/UX 设计 | [`设计/UI设计规范.md`](设计/UI设计规范.md) |
+| 平衡性数据 | [`设计/平衡/经济变量表.md`](设计/平衡/经济变量表.md) |
+| Excel 数据管线 | [`技术/excel-pipeline.md`](技术/excel-pipeline.md) |
+| 技术架构 | [`技术/技术架构.md`](技术/技术架构.md) |
+| 开发者指南 | [`技术/开发指南.md`](技术/开发指南.md) |
+| 竞品分析 | [`商业/竞品分析.md`](商业/竞品分析.md) |
+| 项目路线图 | [`项目/路线图.md`](项目/路线图.md) |
 | 变更日志 | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---

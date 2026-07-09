@@ -12,12 +12,12 @@
 - 数据配置引用更新：四份文档新增 Excel 管线交叉引用
   - `.trae/rules/rule.md` 文档导航表新增"游戏数据表"行
   - `docs/README.md` 文档导航表新增"Excel 数据管线"行
-  - `docs/technical/architecture/平衡框架.md` 开头添加变量来源迁移说明
+  - `docs/技术/架构/平衡框架.md` 开头添加变量来源迁移说明
   - `export/agent-prompts.md` 顶部添加数据表迁移注释，指导 Agent 改 Excel 而非直接改 .tres
 
 ### 架构设计 (2026-07-09 · 第三轮)
 - 代码 vs 文档对照审计完成——文档超前代码 2 个大版本，代码骨架好但缺血肉
-- 新建 `docs/technical/architecture/` 目录，6 份底层架构文件
+- 新建 `docs/技术/架构/` 目录，6 份底层架构文件
 - **精简 `.trae/rules/rule.md`**：364 行 → ~230 行，砍掉说服性散文和 PowerShell 规范，新增项目文档导航和"设计先行"规则：
   - `核心实体.md` — 9 个核心实体的完整属性 + 状态机
   - `系统交互.md` — 8 层系统交互矩阵 + EventBus 事件目录 2.0（28→50+ 信号）

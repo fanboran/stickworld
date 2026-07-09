@@ -1,0 +1,339 @@
+# 核心实体与状态机
+
+> 底层架构第一阶段：定义游戏中一切"东西"的数据结构和生命周期。
+> 所有数值 `[PLACEHOLDER]`。
+
+---
+
+## 实体清单
+
+| 实体 | 简述 | 数量级 |
+|------|------|--------|
+| Stickman（火柴人个体） | 最小游戏单位，有特性、装备、当前任务 | 初期 5-50，帝国级 1000-10000+ |
+| Building（建筑） | 从茅草屋到奇观 | 数十到数百 |
+| Organization（组织） | 五层级通用管理单元，军队/科学院/工程队/行政/商队 | 数个到数十 |
+| Project（项目） | 一次军事行动/建设工程/科研课题/运输任务 | 并行数十个 |
+| Region（地块） | 世界地图上的地理单元 | 几十到上百 |
+| Resource（资源） | 食物/木材/石料/金属/黑色沥青等 | 库存追踪 |
+| Technology（科技） | 已解锁或研究中 | 数十到上百项 |
+| Battle（战斗实例） | 一场实时战斗的运行时数据 | 并行 0-10+ |
+| SupplyChain（物流链路） | 一条从产地到消费点的运输路线 | 数十条 |
+
+---
+
+## 一、Stickman（火柴人个体）
+
+### 属性
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | String | 唯一标识 |
+| `name` | String | 名称（可玩家命名） |
+| `race` | enum | 平原/火山/源流/荒漠/海洋/森林/冰原/畸形变体 |
+| `variant` | enum | 正常/巨人/长臂/半人马/翼人/多头（畸形变体） |
+| `age` | enum | 幼年/成年/老年（召唤来时的年龄随机） |
+| `hp` | float | 当前生命值 |
+| `max_hp` | float | 最大生命值（受种族+装备影响） |
+| `stamina` | float | 当前体力 |
+| `max_stamina` | float | 最大体力 |
+| `morale` | float | 0-100，影响战斗力和逃跑阈值 |
+| `attack` | float | 攻击力（受武器影响） |
+| `defense` | float | 防御力（受盔甲影响） |
+| `speed` | float | 移动速度 |
+| `equipment` | Dict | {weapon_id, armor_id, tool_id} |
+| `skills` | Array[String] | 拥有的技能 ID 列表 |
+| `traits` | Array[String] | 性格特性（勇敢/懦弱/勤劳/懒惰等） |
+| `current_task` | String/null | 当前执行的任务 ID |
+| `assigned_org` | String/null | 所属组织 ID |
+| `org_rank` | int | 在所属组织中的层级(L1-L5) |
+| `org_role` | String | 在组织中的角色（指挥官/士兵/研究员/工匠等） |
+| `location` | Vector2 | 当前世界坐标 |
+| `state` | enum | IDLE / MOVING / WORKING / FIGHTING / FLEEING / DEAD / SUMMONING |
+
+### 状态机
+
+```
+                    ┌─────────────────────┐
+                    │       DEAD          │（终态，不可逆）
+                    └─────────────────────┘
+                              ▲
+                              │ hp <= 0
+                              │
+    ┌─────────┐       ┌───────┴───────┐       ┌──────────┐
+    │  IDLE   │ ────→ │   MOVING     │ ────→ │ WORKING  │
+    └─────────┘       └───────────────┘       └──────────┘
+         ▲                 │    ▲                    │
+         │                 │    │                    │
+         │  任务完成       │    │  路径被阻           │  任务完成
+         │                 ▼    │                    ▼
+         │           ┌──────────┴──┐           ┌──────────┐
+         └───────────│  FIGHTING   │←──────────│ FLEEING  │
+                     └─────────────┘  士气崩溃  └──────────┘
+```
+
+**状态转换条件**：
+
+| 从 | 到 | 条件 |
+|----|-----|------|
+| IDLE | MOVING | 收到移动指令 / 自主决定移动 |
+| MOVING | IDLE | 到达目标 / 指令取消 |
+| MOVING | WORKING | 到达工作地点 |
+| WORKING | IDLE | 任务完成 / 体力耗尽 |
+| IDLE | FIGHTING | 检测到敌人 / 收到攻击指令 |
+| FIGHTING | FLEEING | 士气 < 崩溃阈值 |
+| FLEEING | IDLE | 脱离战斗 + 到达安全位置 |
+| 任意 | DEAD | hp <= 0 |
+
+### 特殊规则
+
+- **战时召唤**：消耗黑色沥青 + 召唤师施法时间 → 立即生成火柴人（非自然繁殖速度）
+- **装备自动匹配**：根据 `assigned_org` 的编制配置自动装备
+- **中层生成**：帝国级不可能追踪 10000 个火柴人——未处于活跃视口内的火柴人用简化模拟，当玩家缩放到该区域时"实例化"
+
+---
+
+## 二、Building（建筑）
+
+### 属性
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | String | |
+| `type` | enum | 住房/农田/工坊/矿场/兵营/学院/市场/仓库/奇观/…… |
+| `tier` | int | 等级 1-5 |
+| `location` | Vector2 | 世界坐标 |
+| `region_id` | String | 所属地块 |
+| `hp` | float | |
+| `max_hp` | float | |
+| `state` | enum | PLANNED / CONSTRUCTING / OPERATIONAL / DAMAGED / DESTROYED / UPGRADING |
+| `construction_progress` | float | 0-1 |
+| `required_resources` | Dict | {resource_id: amount} |
+| `production_queue` | Array | 当前生产队列 |
+| `assigned_workers` | Array[String] | 分配到此建筑的火柴人 ID |
+| `assigned_org` | String/null | 所属组织（如是科学院的下属建筑） |
+
+### 状态机
+
+```
+PLANNED ──→ CONSTRUCTING ──→ OPERATIONAL ──→ UPGRADING ──→ OPERATIONAL
+                │                  │
+                │ 建设中断          │ 被攻击
+                ▼                  ▼
+           PLANNED             DAMAGED ──→ OPERATIONAL（修复）
+                                   │
+                                   ▼
+                              DESTROYED（终态）
+```
+
+---
+
+## 三、Organization（组织）— 核心实体
+
+这是整个游戏最核心的实体，承载五层级通用项目管理系统。
+
+### 属性
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | String | |
+| `name` | String | 玩家自定义名称（"虎贲师"/"皇家科学院"） |
+| `tag` | enum | MILITARY / RESEARCH / ENGINEERING / ADMINISTRATION / COMMERCE |
+| `tier` | int | 自身在五层级中的层级 1-5 |
+| `parent_org` | String/null | 上级组织 ID |
+| `child_orgs` | Array[String] | 下级组织 ID |
+| `commander_id` | String/null | 指挥官火柴人 ID |
+| `personnel` | Array[String] | 该组织直属火柴人 ID 列表 |
+| `personnel_template` | Dict | 编制模板（如 {rifleman: 4, machine_gunner: 1, mage: 1}） |
+| `equipment_template` | Dict | 装备模板 |
+| `autonomy_level` | enum | HIGH / MEDIUM / LOW（自主决策权限） |
+| `default_behavior` | Dict | 无指令时的默认行为配置 |
+| `supply_priority` | enum | HIGH / MEDIUM / LOW |
+| `morale_threshold` | float | 士气崩溃阈值 |
+| `current_project` | String/null | 当前执行的项目 ID |
+| `location` | String | 当前所在地（地块 ID 或坐标） |
+| `state` | enum | FORMING / ACTIVE / EXECUTING / RESTING / DISBANDED |
+
+### 状态机
+
+```
+FORMING ──→ ACTIVE ──→ EXECUTING ──→ ACTIVE
+  │            │            │
+  │ 组建完成   │ 项目分配   │ 项目完成
+  │            │            │
+  └────────────┴────────────┘
+               │
+               ▼
+          DISBANDED（解散，人员回归待分配池）
+```
+
+**关键**：Organization 本身不"做"事——它通过创建并委派 Project（项目）来驱动实际行为。
+
+### 层级规则
+
+- 每个 Organization 的 `tier` 相对其上下级必须是连续的（不能 L5 直辖 L3）
+- 但玩家可以"跳过"某一层——实质上是创建一个空壳 Organization 占据该层，或者直接不创建
+- 最低层（L1）可以额外展开 2 个子层（如火力组→班→排挤在 L1 内）
+
+---
+
+## 四、Project（项目）
+
+组织通过"项目"来执行实际工作。战斗、建设、科研、运输——本质上都是项目。
+
+### 属性
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | String | |
+| `type` | enum | MILITARY_CAMPAIGN / CONSTRUCTION / RESEARCH / LOGISTICS / CENSUS / ... |
+| `owner_org_id` | String | 发起项目的组织 |
+| `name` | String | |
+| `description` | String | |
+| `state` | enum | PLANNING / EXECUTING / PAUSED / COMPLETED / FAILED |
+| `progress` | float | 0-1 |
+| `assigned_orgs` | Array[String] | 参与项目的各级组织 |
+| `assigned_resources` | Dict | {resource_id: amount} |
+| `sub_projects` | Array[String] | 子项目（高层的项目分解为低层子项目） |
+| `parent_project` | String/null | 上级项目 |
+| `start_time` | float | 游戏内时间戳 |
+| `deadline` | float/null | 截止时间 |
+| `result` | Dict/null | 完成后存储结果 |
+
+### 状态机
+
+```
+PLANNING ──→ EXECUTING ──→ COMPLETED
+                │
+                ├──→ PAUSED ──→ EXECUTING
+                │
+                └──→ FAILED
+```
+
+### 项目分解（核心机制）
+
+一个 L4 组织的"攻占北方行省"军事项目，会自动分解为：
+- L3 子项目：第1团攻A城 / 第2团攻B城 / 第3团牵制C城
+- L2 子项目：第1连突破城墙 / 第2连清理街区 / 工兵连修桥
+- L1 子项目：火力组A压制塔楼 / 火力组B掩护街道
+
+每一层只知道自己要做什么，不知道上级全局——这模拟了真实指挥链的信息不对称。
+
+---
+
+## 五、Region（地块）
+
+见现有代码 `modules/world_map/data/region_definitions.gd`，已完整定义。此处补充扩展属性：
+
+| 补充字段 | 说明 |
+|----------|------|
+| `control_percentage` | 0-1，交战地块不完全控制时的进度 |
+| `cultural_affinity` | Dict{culture_id: 0-1}，文化同化进度 |
+| `infrastructure_level` | 0-1，道路/港口等基建水平 |
+| `buildings` | Array[String]，地块内的建筑 ID |
+| `organizations_present` | Array[String]，驻扎的组织 |
+| `battles_active` | Array[String]，正在进行的战斗实例 |
+
+---
+
+## 六、Resource（资源）
+
+### 属性
+
+| 字段 | 说明 |
+|------|------|
+| `id` | 资源类型 ID |
+| `name` | |
+| `category` | BASIC / PROCESSED / STRATEGIC / LUXURY |
+| `base_price` | [PLACEHOLDER] |
+| `weight_per_unit` | 影响运输成本 |
+| `perishable` | bool，食物会过期 |
+| `current_stock` | 帝国总库存（按地块分仓库） |
+| `production_rate` | 当前生产速率（由所有生产建筑的产出求和） |
+| `consumption_rate` | 当前消费速率 |
+
+---
+
+## 七、Battle（战斗实例）
+
+### 属性
+
+| 字段 | 说明 |
+|------|------|
+| `id` | |
+| `region_id` | 发生地块 |
+| `attacker_orgs` | Array[String] |
+| `defender_orgs` | Array[String] |
+| `state` | PREPARING / ENGAGED / STALEMATE / ATTACKER_WIN / DEFENDER_WIN / ROUT |
+| `casualties_attacker` | int |
+| `casualties_defender` | int |
+| `duration` | 已持续游戏时间 |
+| `tactical_data` | Dict，存储当前战场状态（战线位置、制高点归属等） |
+
+### 状态机
+
+```
+PREPARING ──→ ENGAGED ──→ ATTACKER_WIN / DEFENDER_WIN
+                  │
+                  ├──→ STALEMATE ──→ ENGAGED（突破僵局）
+                  │
+                  └──→ ROUT（一方士气崩溃）
+```
+
+---
+
+## 八、Technology（科技）
+
+### 属性
+
+| 字段 | 说明 |
+|------|------|
+| `id` | |
+| `name` | |
+| `tier` | 1-5 |
+| `prerequisites` | Array[String]，前置科技 |
+| `state` | LOCKED / AVAILABLE / RESEARCHING / UNLOCKED |
+| `research_progress` | 0-1 |
+| `research_cost` | 研究点数 |
+| `unlocks` | Array[String]，解锁的建筑/单位/能力 |
+| `assigned_org` | String/null，负责研究的组织 |
+
+---
+
+## 九、SupplyChain（物流链路）
+
+### 属性
+
+| 字段 | 说明 |
+|------|------|
+| `id` | |
+| `origin_region` | 产地地块 |
+| `destination_region` | 目的地地块 |
+| `resource_type` | 运输的物资 |
+| `quantity` | 运输量/批次 |
+| `frequency` | 批次间隔 |
+| `carrier_org_id` | 承运组织 |
+| `route` | Array[Vector2]，路径点 |
+| `state` | ACTIVE / BLOCKED / DEPLETED / CANCELLED |
+| `efficiency` | 0-1，受距离/路况/护送影响 |
+
+---
+
+## 十、实体关系速查
+
+```
+Organization (1) ──owns──→ (N) Project
+Organization (1) ──has──→ (N) Stickman
+Organization (1) ──has──→ (0..N) Organization (child)
+Organization (1) ──owns──→ (0..N) Building
+Project (1) ──decomposes──→ (0..N) Project (sub)
+Project (1) ──triggers──→ (0..1) Battle
+Project (1) ──creates──→ (0..N) SupplyChain
+Region (1) ──contains──→ (N) Building
+Region (1) ──contains──→ (N) Stickman
+Region (1) ──hosts──→ (0..N) Battle
+Technology (1) ──unlocks──→ (N) Building/Equipment/Ability
+```
+
+---
+
+*下一阶段：系统交互矩阵与事件目录。*

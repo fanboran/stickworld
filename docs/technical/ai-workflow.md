@@ -1,7 +1,7 @@
 # stick-world AI 工作流指南
 
 > **适用对象**：所有参与本项目的 AI Coding Agent（WorkBuddy、Cursor、Claude 等）
-> **阅读顺序**：先读本文件，再读 `.workbuddy/rules/rule.md`（核心规则）
+> **阅读顺序**：先读本文件，再读 `.trae/rules/rule.md`（核心规则文件，AI 每次加载）
 
 ---
 
@@ -21,7 +21,7 @@
 
 ### 关键约定
 
-- **GDD 是唯一设计真相源**：`doc/游戏设计文档-GDD.md`，所有游戏系统设计以此为准
+- **GDD 是唯一设计真相源**：`docs/design/gdd.md`，所有游戏系统设计以此为准
 - **AI 不做设计决策**：未确定处标注 `[待补充]`，告知用户决策，不自行发明
 - **架构规范参考**：`.workbuddy/rules/rule.md`，这是核心规则文件
 
@@ -34,14 +34,22 @@ F:\VSCode\game-2\
 ├── .workbuddy/
 │   ├── rules/rule.md         # ⭐ 核心 AI 规则（架构 + Git 工作流 + 提交规范）
 │   └── memory/               # WorkBuddy 工作日志
-├── doc/                      # 项目文档
-│   ├── 游戏设计文档-GDD.md   # ⭐ 游戏设计真相源（唯一）
-│   ├── 技术架构与开发规范.md  # 工程分析/估算
-│   ├── 用户画像.md           # 创始人画像
-│   ├── 项目进度.md           # 开发进度追踪
-│   ├── 架构改进待办项.md     # 架构改进追踪（待创建）
-│   ├── AI工作流指南.md       # 本文件
-│   └── OPC商业分析/          # 商业验证三步走
+├── docs/                     # 项目文档（开源级多层结构）
+│   ├── README.md             # 项目总览与导航
+│   ├── CHANGELOG.md          # 变更日志
+│   ├── CONTRIBUTING.md       # 贡献指南
+│   ├── design/               # 游戏设计
+│   │   ├── gdd.md            # ⭐ 游戏设计真相源（唯一）
+│   │   ├── design-pillars.md # 设计支柱
+│   │   ├── core-loop.md      # 核心玩法循环
+│   │   ├── world-building.md # 世界观设定
+│   │   ├── phasing-system.md # 阶段演进
+│   │   ├── ui-ux.md          # UI/UX 设计
+│   │   ├── mechanics/        # 子系统规格
+│   │   └── balance/          # 平衡性数据
+│   ├── technical/            # 技术文档
+│   ├── business/             # 商业分析
+│   └── project/              # 项目管理
 ├── tools/
 │   └── vector_db/            # ChromaDB 错误知识库
 │       ├── errors.json       # 错误数据源（提交到 Git）
@@ -166,7 +174,7 @@ docs(ai): 更新AI工作流指南
 
 ## 七、文档维护约定
 
-- **GDD 有新决策** → 更新 `doc/游戏设计文档-GDD.md`
-- **架构有新问题/改进项** → 追加到 `doc/架构改进待办项.md`（按 P1/P2/P3 优先级）
-- **完成一项架构改进** → 从 `doc/架构改进待办项.md` 中删除对应条目
+- **GDD 有新决策** → 更新 `docs/design/gdd.md`
+- **架构有新问题/改进项** → 追加到 `docs/project/todo.md`（按 P1/P2/P3 优先级）
+- **完成一项架构改进** → 从 `docs/project/todo.md` 中删除对应条目
 - **每次会话结束** → WorkBuddy 自动追加日志到 `.workbuddy/memory/YYYY-MM-DD.md`

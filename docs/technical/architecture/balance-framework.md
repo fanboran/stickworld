@@ -1,0 +1,202 @@
+# 平衡性调优框架
+
+> 底层架构第六阶段：变量→公式→数据表→调优面板的完整管线。
+> 目标：所有数值可以通过修改配置文件调整，无需改代码。
+
+---
+
+## 一、管线全景
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│ config/      │ ──→ │ BalanceConfig│ ──→ │ 各模块的     │ ──→ │ 调优面板     │
+│ balance/     │     │ (Autoload)   │     │ 计算公式     │     │ (开发工具)   │
+│ *.tres       │     │ 热加载       │     │              │     │              │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+    静态配置             运行时缓存            游戏逻辑            开发期调参
+```
+
+---
+
+## 二、变量分类
+
+### 2.1 按系统分类
+
+| 系统 | 变量组 | 示例变量 | 数量估计 |
+|------|--------|----------|----------|
+| 战斗 | combat_*.tres | base_hp, morale_threshold, damage_formula_coeff | ~30 |
+| 经济 | economy_*.tres | base_price, supply_elasticity, tax_rate_defaults | ~25 |
+| 科技 | tech_*.tres | research_speed_base, education_roi_years | ~10 |
+| 组织 | org_*.tres | optimal_span, tier_depth_penalty, autonomy_accuracy | ~10 |
+| 扩张 | expansion_*.tres | control_gain_rate, ae_decay, overextension_threshold | ~10 |
+| 物流 | logistics_*.tres | transport_speed, loss_rate, max_supply_distance | ~8 |
+| 人口 | population_*.tres | growth_rate, asphalt_per_summon, happiness_threshold | ~8 |
+| 全局 | global_*.tres | time_speed_factors, lod_distances, autosave_interval | ~5 |
+
+### 2.2 按用途分类
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| **基础值** | 直接参与计算的原始数值 | `base_hp = 100` |
+| **系数** | 乘到基础值上的修正因子 | `race_multiplier_volcano_hp = 1.2` |
+| **阈值** | 触发某种状态变更的条件值 | `morale_rout_threshold = 20` |
+| **曲线参数** | 定义非线性关系的参数 | `distance_penalty_exponent = 1.5` |
+| **概率** | 随机事件的触发概率 | `initiative_trigger_chance = 0.15` |
+
+---
+
+## 三、变量文件格式（.tres）
+
+```gdscript
+# config/balance/combat_basics.tres
+[resource]
+script = preload("res://config/balance/balance_resource.gd")
+
+variables = {
+    "unit_base_hp": 100.0,
+    "unit_base_attack": 15.0,
+    "unit_base_defense": 5.0,
+    "unit_base_speed": 200.0,
+    "morale_initial": 100.0,
+    "morale_casualty_penalty_per_percent": 2.0,
+    "morale_commander_death_penalty": 30.0,
+    "morale_rout_threshold": 20.0,
+    "morale_recovery_rate": 2.0,
+    "supply_starvation_days": 3.0,
+    "supply_half_penalty_ratio": 0.5
+}
+
+[resource]
+# 每个变量附带元数据
+_meta = {
+    "unit_base_hp": {"min": 50.0, "max": 500.0, "step": 10.0, "desc": "火柴人基础生命值"},
+    "unit_base_attack": {"min": 5.0, "max": 100.0, "step": 1.0, "desc": "基础攻击力（无武器修正）"},
+    ...
+}
+```
+
+### BalanceResource 基类
+
+```gdscript
+# config/balance/balance_resource.gd
+class_name BalanceResource extends Resource
+
+@export var variables: Dictionary = {}
+@export var _meta: Dictionary = {}
+
+func get_var(path: String):
+    # 支持点号路径: "combat.unit_base_hp"
+    pass
+
+func get_meta(path: String):
+    pass
+```
+
+---
+
+## 四、计算公式约定
+
+### 原则
+
+1. **公式写在模块中，变量读自 BalanceConfig**
+2. **公式本身不可配置**（避免数学错误），但公式中的系数和阈值全部可配
+3. **每个公式有单元测试**——输入边界值，验证输出在合理范围
+
+### 示例
+
+```gdscript
+# modules/combat/damage_calculator.gd
+
+func calculate_damage(attacker: StickmanState, defender: StickmanState) -> float:
+    var base_attack = BalanceConfig.get_var("combat.unit_base_attack")
+    var base_defense = BalanceConfig.get_var("combat.unit_base_defense")
+    var weapon_mult = BalanceConfig.get_var("weapons." + attacker.equipment.weapon_id + ".attack_mult")
+    var armor_reduction = BalanceConfig.get_var("armors." + defender.equipment.armor_id + ".reduction")
+    
+    var raw_damage = base_attack * weapon_mult
+    var mitigated = raw_damage * (1.0 - armor_reduction)
+    var morale_factor = clamp(attacker.morale / 100.0, 0.3, 1.5)
+    
+    return mitigated * morale_factor
+```
+
+---
+
+## 五、开发期调优面板
+
+不面向玩家——仅开发/测试期使用，帮助快速调整变量观察效果。
+
+### 功能
+
+- 列出所有 BalanceConfig 中的变量（树形/搜索）
+- 滑块调整数值（根据 `_meta` 中的 min/max/step）
+- "应用"按钮 → 热加载到运行时
+- "重置"→ 恢复到 .tres 文件中的值
+- "导出"→ 将当前调整写回 .tres 文件
+
+### 实现方式
+
+```
+Godot EditorPlugin (编辑器插件) → 独立面板
+  或
+游戏中隐藏的开发面板 (F12 开启)
+```
+
+---
+
+## 六、模拟测试
+
+在调优之前，对关键经济曲线做纸面模拟：
+
+### 需模拟的曲线
+
+| 曲线 | 变量 | 目标形状 |
+|------|------|----------|
+| 管理成本 vs 地块数 | `expansion.management_cost_exponent` | 超线性，但不过陡 |
+| XP 到下一管理等级 | — | 对数增长（前期快，后期慢） |
+| 伤害 vs 护甲 | `combat.*` | 护甲不是线性减法，是高护甲也至少受最小伤害 |
+| 价格 vs 供需差 | `economy.supply_elasticity` | 供需差越大价格变动越剧烈 |
+
+### 模拟脚本
+
+```python
+# tools/balance_sim.py
+# 纸面模拟经济/战斗/人口曲线的独立脚本
+# 在修改 .tres 之前先跑一遍确保不会爆炸
+```
+
+---
+
+## 七、"坏了"的定义
+
+在调优开始前，先定义"什么算坏了"：
+
+| 系统 | 坏了的定义 |
+|------|-----------|
+| 战斗 | 任何单位能一刀秒同级单位 / 战斗永远打不完 / 士气永远不会崩 |
+| 经济 | 通货紧缩螺旋（物价无限跌） / 通货膨胀螺旋（物价无限涨） / 资源无限生钱漏洞 |
+| 组织 | 一个 L1 组织效率超过 L5 / 解散重建零代价导致刷属性 |
+| 扩张 | 可以无限扩张无惩罚 / AE 从来不会触发包围网 |
+| 科技 | 科技树有死循环 / 研究速度比解锁速度快 100 倍 |
+
+---
+
+## 八、扩展：Monte Carlo 模拟（后期）
+
+当系统足够复杂后，用 Monte Carlo 方法模拟成千上万次游戏运行：
+
+```python
+# tools/monte_carlo.py
+for i in range(10000):
+    sim = GameSimulation(balance_config, random_seed=i)
+    result = sim.run_until(100_years_or_game_over)
+    if result.economy_crashed:
+        log("经济崩溃：通胀率=%f，变量快照=%s", ...)
+```
+
+用于检测：哪些变量组合会导致经济崩溃、哪些科技解锁顺序会导致平衡崩坏。
+
+---
+
+*底层架构六阶段全部完成。*  
+*产出文件位置：`docs/technical/architecture/`*

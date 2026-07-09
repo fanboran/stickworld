@@ -1,0 +1,109 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "buildings"
+_meta = {
+	"resource_name": "buildings",
+	"version": "0.1.0",
+	"description": "从 config/excel/buildings.xlsx → buildings sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/buildings.xlsx",
+	"source_sheet": "buildings"
+}
+variables = {
+	"data": [
+		{
+			"id": "bld_house",
+			"name_zh": "民居",
+			"type": "house",
+			"tier": 1,
+			"build_time": 30,
+			"build_cost_food": 50,
+			"build_cost_wood": 100,
+			"build_cost_stone": 50,
+			"build_cost_metal": 0,
+			"max_hp": 200,
+			"workers_required": 0,
+			"unlocked_by_tech": "none",
+			"description": "提供人口居住空间"
+		},
+		{
+			"id": "bld_farm",
+			"name_zh": "农场",
+			"type": "farm",
+			"tier": 1,
+			"build_time": 45,
+			"build_cost_food": 20,
+			"build_cost_wood": 80,
+			"build_cost_stone": 30,
+			"build_cost_metal": 0,
+			"max_hp": 150,
+			"workers_required": 2,
+			"unlocked_by_tech": "tech_agriculture",
+			"description": "生产食物资源"
+		},
+		{
+			"id": "bld_workshop",
+			"name_zh": "工坊",
+			"type": "workshop",
+			"tier": 2,
+			"build_time": 60,
+			"build_cost_food": 30,
+			"build_cost_wood": 120,
+			"build_cost_stone": 60,
+			"build_cost_metal": 20,
+			"max_hp": 300,
+			"workers_required": 3,
+			"unlocked_by_tech": "tech_crafting",
+			"description": "加工基础资源为高级资源"
+		},
+		{
+			"id": "bld_barracks",
+			"name_zh": "兵营",
+			"type": "barracks",
+			"tier": 2,
+			"build_time": 90,
+			"build_cost_food": 80,
+			"build_cost_wood": 150,
+			"build_cost_stone": 100,
+			"build_cost_metal": 50,
+			"max_hp": 500,
+			"workers_required": 5,
+			"unlocked_by_tech": "tech_military_1",
+			"description": "训练战斗单位"
+		},
+		{
+			"id": "bld_market",
+			"name_zh": "集市",
+			"type": "market",
+			"tier": 2,
+			"build_time": 50,
+			"build_cost_food": 100,
+			"build_cost_wood": 80,
+			"build_cost_stone": 40,
+			"build_cost_metal": 10,
+			"max_hp": 250,
+			"workers_required": 2,
+			"unlocked_by_tech": "tech_trade",
+			"description": "进行资源交易"
+		},
+		{
+			"id": "bld_academy",
+			"name_zh": "学院",
+			"type": "academy",
+			"tier": 3,
+			"build_time": 120,
+			"build_cost_food": 150,
+			"build_cost_wood": 200,
+			"build_cost_stone": 150,
+			"build_cost_metal": 80,
+			"max_hp": 600,
+			"workers_required": 4,
+			"unlocked_by_tech": "tech_education",
+			"description": "研究科技"
+		}
+	]
+}

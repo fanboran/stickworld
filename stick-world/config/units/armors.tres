@@ -1,0 +1,74 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "armors"
+_meta = {
+	"resource_name": "armors",
+	"version": "0.1.0",
+	"description": "从 config/excel/units.xlsx → armors sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/units.xlsx",
+	"source_sheet": "armors"
+}
+variables = {
+	"data": [
+		{
+			"id": "arm_cloth_001",
+			"name_zh": "布衣",
+			"type": "cloth",
+			"damage_reduction": 5,
+			"speed_penalty": 0,
+			"weight": 1,
+			"asphalt_cost": 10,
+			"icon_path": "res://assets/icons/armors/cloth_robe.png",
+			"type: cloth/leather/chain/plate/magic_shield": null
+		},
+		{
+			"id": "arm_leather_001",
+			"name_zh": "皮甲",
+			"type": "leather",
+			"damage_reduction": 15,
+			"speed_penalty": 2,
+			"weight": 4,
+			"asphalt_cost": 25,
+			"icon_path": "res://assets/icons/armors/leather_vest.png",
+			"type: cloth/leather/chain/plate/magic_shield": null
+		},
+		{
+			"id": "arm_chain_001",
+			"name_zh": "锁子甲",
+			"type": "chain",
+			"damage_reduction": 30,
+			"speed_penalty": 5,
+			"weight": 8,
+			"asphalt_cost": 50,
+			"icon_path": "res://assets/icons/armors/chain_mail.png",
+			"type: cloth/leather/chain/plate/magic_shield": null
+		},
+		{
+			"id": "arm_plate_001",
+			"name_zh": "板甲",
+			"type": "plate",
+			"damage_reduction": 50,
+			"speed_penalty": 10,
+			"weight": 15,
+			"asphalt_cost": 80,
+			"icon_path": "res://assets/icons/armors/plate_armor.png",
+			"type: cloth/leather/chain/plate/magic_shield": null
+		},
+		{
+			"id": "arm_magic_001",
+			"name_zh": "魔法护盾",
+			"type": "magic_shield",
+			"damage_reduction": 20,
+			"speed_penalty": 0,
+			"weight": 0,
+			"asphalt_cost": 60,
+			"icon_path": "res://assets/icons/armors/magic_shield.png",
+			"type: cloth/leather/chain/plate/magic_shield": null
+		}
+	]
+}

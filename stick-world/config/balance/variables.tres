@@ -4,80 +4,160 @@
 
 [resource]
 script = ExtResource("1")
-resource_name = "global_balance_variables"
+resource_name = "variables"
 _meta = {
-	"resource_name": "global_balance_variables",
+	"resource_name": "variables",
 	"version": "0.1.0",
-	"description": "全局平衡变量，从 variables.md 经济变量表提取",
-	"category": "balance_variables"
+	"description": "从 config/excel/balance.xlsx → variables sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/balance.xlsx",
+	"source_sheet": "variables"
 }
-
 variables = {
-	# ── 一、基础资源（初始值） ──
-	"initial_food": "[PLACEHOLDER]",
-	"initial_wood": "[PLACEHOLDER]",
-	"initial_stone": "[PLACEHOLDER]",
-	"initial_metal_ore": "[PLACEHOLDER]",
-	"initial_black_bitumen": "[PLACEHOLDER]",
-	"food_consumption_per_stickman_per_day": "[PLACEHOLDER]",
-	"soldier_food_consumption_per_day": "[PLACEHOLDER]",
-
-	# ── 二、生产效率 ──
-	"farmer_food_output_per_day": "[PLACEHOLDER]",
-	"miner_ore_output_per_day": "[PLACEHOLDER]",
-	"lumberjack_wood_output_per_day": "[PLACEHOLDER]",
-	"builder_construction_speed": "[PLACEHOLDER]",
-	"researcher_research_points_per_month": "[PLACEHOLDER]",
-
-	# ── 三、市场价格 ──
-	"market": {
-		"food_base_price": "[PLACEHOLDER]",
-		"food_price_fluctuation": "[PLACEHOLDER]",
-		"wood_base_price": "[PLACEHOLDER]",
-		"wood_price_fluctuation": "[PLACEHOLDER]",
-		"stone_base_price": "[PLACEHOLDER]",
-		"stone_price_fluctuation": "[PLACEHOLDER]",
-		"metal_ore_base_price": "[PLACEHOLDER]",
-		"metal_ore_price_fluctuation": "[PLACEHOLDER]",
-		"black_bitumen_base_price": "[PLACEHOLDER]",
-		"black_bitumen_price_fluctuation": "[PLACEHOLDER]",
-		"weapon_base_price": "[PLACEHOLDER]",
-		"armor_base_price": "[PLACEHOLDER]",
-		"spell_scroll_base_price": "[PLACEHOLDER]"
-	},
-
-	# ── 四、经济制度参数 ──
-	"base_tax_rate": "[PLACEHOLDER]",
-	"inflation_warning_threshold": "[PLACEHOLDER]",
-	"market_response_delay_days": "[PLACEHOLDER]",
-	"corruption_natural_rate": "[PLACEHOLDER]",
-	"transport_cost_per_km": "[PLACEHOLDER]",
-
-	# ── 五、人口 ──
-	"initial_followers": 0,
-	"natural_growth_rate": "[PLACEHOLDER]",
-	"summon_bitumen_cost_per_stickman": "[PLACEHOLDER]",
-	"happiness_unrest_threshold": "[PLACEHOLDER]",
-
-	# ── 六、科技 ──
-	"base_research_speed_per_researcher_per_month": "[PLACEHOLDER]",
-	"bitumen_consumption_per_researcher_per_month": "[PLACEHOLDER]",
-	"education_roi_years": "[PLACEHOLDER]",
-	"technology_diffusion_rate": "[PLACEHOLDER]",
-
-	# ── 七、扩张与管理 ──
-	"region_control_gain_rate": "[PLACEHOLDER]",
-	"aggressive_expansion_decay": "[PLACEHOLDER]",
-	"overextension_threshold": "[PLACEHOLDER]",
-	"management_cost_exponent": "[PLACEHOLDER]",
-	"coalition_ae_threshold": "[PLACEHOLDER]",
-
-	# ── 八、战斗（来自 variables.md 战斗表） ──
-	"combat": {
-		"base_hp": "[PLACEHOLDER]",
-		"base_attack": "[PLACEHOLDER]",
-		"morale_break_threshold": "[PLACEHOLDER]",
-		"command_delay_per_layer": "[PLACEHOLDER]",
-		"supply_cut_survival_days": "[PLACEHOLDER]"
-	}
+	"data": [
+		{
+			"id": "var_attack_base",
+			"category": "combat",
+			"value": 10,
+			"min": 1,
+			"max": 100,
+			"step": 1,
+			"description": "基础攻击力"
+		},
+		{
+			"id": "var_defense_base",
+			"category": "combat",
+			"value": 5,
+			"min": 1,
+			"max": 100,
+			"step": 1,
+			"description": "基础防御力"
+		},
+		{
+			"id": "var_tax_rate",
+			"category": "economy",
+			"value": 0.15,
+			"min": 0,
+			"max": 0.5,
+			"step": 0.01,
+			"description": "基础税率"
+		},
+		{
+			"id": "var_trade_efficiency",
+			"category": "economy",
+			"value": 1,
+			"min": 0.1,
+			"max": 5,
+			"step": 0.1,
+			"description": "贸易效率倍率"
+		},
+		{
+			"id": "var_research_speed",
+			"category": "tech",
+			"value": 1,
+			"min": 0.1,
+			"max": 10,
+			"step": 0.1,
+			"description": "科技研究速度倍率"
+		},
+		{
+			"id": "var_tech_cost_scale",
+			"category": "tech",
+			"value": 100,
+			"min": 10,
+			"max": 1000,
+			"step": 10,
+			"description": "科技研究基础消耗"
+		},
+		{
+			"id": "var_org_maintenance",
+			"category": "org",
+			"value": 10,
+			"min": 1,
+			"max": 100,
+			"step": 1,
+			"description": "组织每回合维护费"
+		},
+		{
+			"id": "var_org_loyalty_decay",
+			"category": "org",
+			"value": 0.5,
+			"min": 0,
+			"max": 5,
+			"step": 0.1,
+			"description": "组织忠诚度每回合衰减"
+		},
+		{
+			"id": "var_expand_cost_base",
+			"category": "expansion",
+			"value": 200,
+			"min": 50,
+			"max": 1000,
+			"step": 10,
+			"description": "扩张基础消耗"
+		},
+		{
+			"id": "var_expand_cooldown",
+			"category": "expansion",
+			"value": 5,
+			"min": 1,
+			"max": 30,
+			"step": 1,
+			"description": "扩张冷却回合数"
+		},
+		{
+			"id": "var_supply_range",
+			"category": "logistics",
+			"value": 10,
+			"min": 1,
+			"max": 50,
+			"step": 1,
+			"description": "补给线最大范围"
+		},
+		{
+			"id": "var_transport_speed",
+			"category": "logistics",
+			"value": 1,
+			"min": 0.1,
+			"max": 5,
+			"step": 0.1,
+			"description": "运输速度倍率"
+		},
+		{
+			"id": "var_pop_growth_rate",
+			"category": "population",
+			"value": 0.02,
+			"min": 0,
+			"max": 0.1,
+			"step": 0.001,
+			"description": "人口增长率"
+		},
+		{
+			"id": "var_pop_happiness_base",
+			"category": "population",
+			"value": 50,
+			"min": 0,
+			"max": 100,
+			"step": 1,
+			"description": "基础幸福度"
+		},
+		{
+			"id": "var_game_speed",
+			"category": "global",
+			"value": 1,
+			"min": 0.25,
+			"max": 4,
+			"step": 0.25,
+			"description": "游戏速度倍率"
+		},
+		{
+			"id": "var_day_duration",
+			"category": "global",
+			"value": 10,
+			"min": 1,
+			"max": 60,
+			"step": 1,
+			"description": "每回合代表天数"
+		}
+	]
 }

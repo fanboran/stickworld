@@ -1,0 +1,71 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "weapons"
+_meta = {
+	"resource_name": "weapons",
+	"version": "0.1.0",
+	"description": "从 config/excel/units.xlsx → weapons sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/units.xlsx",
+	"source_sheet": "weapons"
+}
+variables = {
+	"data": [
+		{
+			"id": "wpn_sword_001",
+			"name_zh": "铁剑",
+			"type": "sword",
+			"attack_mult": 1.2,
+			"speed_mult": 0.9,
+			"range_bonus": 0,
+			"armor_penetration": 5,
+			"asphalt_cost": 30,
+			"weight": 5,
+			"icon_path": "res://assets/icons/weapons/sword_iron.png",
+			"type: sword/spear/bow/crossbow/staff/bare_hand": null
+		},
+		{
+			"id": "wpn_bow_001",
+			"name_zh": "短弓",
+			"type": "bow",
+			"attack_mult": 0.8,
+			"speed_mult": 1,
+			"range_bonus": 3,
+			"armor_penetration": 2,
+			"asphalt_cost": 25,
+			"weight": 2,
+			"icon_path": "res://assets/icons/weapons/bow_short.png",
+			"type: sword/spear/bow/crossbow/staff/bare_hand": null
+		},
+		{
+			"id": "wpn_staff_001",
+			"name_zh": "学徒法杖",
+			"type": "staff",
+			"attack_mult": 1,
+			"speed_mult": 0.8,
+			"range_bonus": 2,
+			"armor_penetration": 10,
+			"asphalt_cost": 40,
+			"weight": 3,
+			"icon_path": "res://assets/icons/weapons/staff_apprentice.png",
+			"type: sword/spear/bow/crossbow/staff/bare_hand": null
+		},
+		{
+			"id": "wpn_bare_001",
+			"name_zh": "徒手",
+			"type": "bare_hand",
+			"attack_mult": 1,
+			"speed_mult": 1,
+			"range_bonus": 0,
+			"armor_penetration": 0,
+			"asphalt_cost": 0,
+			"weight": 0,
+			"icon_path": null,
+			"type: sword/spear/bow/crossbow/staff/bare_hand": null
+		}
+	]
+}

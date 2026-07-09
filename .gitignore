@@ -38,6 +38,7 @@ debug.log
 .idea/
 
 # 编辑器缓存（Godot 自动生成文件）
+*.uid
 *.ctex
 *.md5
 *.res-folding-*.cfg

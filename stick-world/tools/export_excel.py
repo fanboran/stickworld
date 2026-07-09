@@ -231,22 +231,53 @@ variables = {{
 # Excel 读取
 # ---------------------------------------------------------------------------
 
+def parse_meta_row(first_row):
+    """解析元数据行。如果第一行首单元格以 # 开头，则解析 key:value 对。
+
+    格式: 第一行各列为 `#key: value`，如 `#output_dir: units`
+    返回: dict，无元数据行时返回空 dict
+    """
+    first_cell = str(first_row[0]).strip() if first_row and first_row[0] is not None else ""
+    if not first_cell.startswith("#"):
+        return {}
+
+    meta = {}
+    for cell in first_row:
+        if cell is None:
+            continue
+        s = str(cell).strip()
+        if s.startswith("#"):
+            s = s[1:]  # 去掉 #
+            if ":" in s:
+                key, _, value = s.partition(":")
+                meta[key.strip()] = value.strip()
+    return meta
+
+
 def parse_sheet_with_raw(ws):
     """解析工作表，同时返回原始 headers（含 * 标记）和清洗后的 headers。
 
     约定:
-        - 第 1 行: 英文字段名（可带 * 表示必填）
-        - 第 2 行: 中文说明（跳过）
-        - 第 3 行起: 数据
+        - 第 1 行（可选）: 元数据行，首单元格以 # 开头，如 `#output_dir: units`
+        - 第 1/2 行: 英文字段名（可带 * 表示必填）
+        - 第 2/3 行: 中文说明（跳过）
+        - 第 3/4 行起: 数据
 
-    返回: (raw_headers, clean_headers, data_rows, errors)
+    返回: (raw_headers, clean_headers, data_rows, errors, metadata)
     """
     errors = []
     rows = list(ws.iter_rows(min_row=1, values_only=True))
 
+    # 检测元数据行
+    metadata = {}
+    if rows:
+        metadata = parse_meta_row(rows[0])
+        if metadata:
+            rows = rows[1:]  # 跳过元数据行
+
     if len(rows) < 3:
         errors.append("数据不足（至少需要 3 行：表头 + 说明 + 数据）")
-        return [], [], [], errors
+        return [], [], [], errors, metadata
 
     # 原始字段名（含 * 标记）
     raw_headers = [str(c).strip() if c is not None else "" for c in rows[0]]
@@ -263,7 +294,7 @@ def parse_sheet_with_raw(ws):
         seen.add(h)
 
     if errors:
-        return raw_headers, clean_headers, [], errors
+        return raw_headers, clean_headers, [], errors, metadata
 
     # 数据行
     data_rows = []
@@ -281,7 +312,7 @@ def parse_sheet_with_raw(ws):
         if row_has_data:
             data_rows.append(row_data)
 
-    return raw_headers, clean_headers, data_rows, errors
+    return raw_headers, clean_headers, data_rows, errors, metadata
 
 
 # ---------------------------------------------------------------------------
@@ -427,6 +458,7 @@ def export_all(dry_run=False):
 
     all_errors = []
     all_parsed = {}  # {(file_name, sheet_name): (headers, data_rows, raw_headers)}
+    all_meta = {}    # {file_name: metadata_dict} 用于获取 output_dir
     all_ids_map = {}  # {sheet_name: set of ids}
 
     # ── 第一遍：解析所有 Sheet ──
@@ -446,7 +478,7 @@ def export_all(dry_run=False):
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            raw_headers, headers, data_rows, sheet_errors = parse_sheet_with_raw(ws)
+            raw_headers, headers, data_rows, sheet_errors, metadata = parse_sheet_with_raw(ws)
 
             if sheet_errors:
                 for err in sheet_errors:
@@ -455,6 +487,10 @@ def export_all(dry_run=False):
 
             key = (file_name, sheet_name)
             all_parsed[key] = (headers, data_rows, raw_headers)
+
+            # 记录元数据（第一个 sheet 的 metadata 作为整个文件的 metadata）
+            if file_name not in all_meta and metadata:
+                all_meta[file_name] = metadata
 
             # 收集 id 用于引用完整性检查
             if "id" in headers:
@@ -512,9 +548,11 @@ def export_all(dry_run=False):
 
     exported_count = 0
     for (file_name, sheet_name), (headers, data_rows, _) in all_parsed.items():
-        # 输出目录: config/<excel文件名>/
-        base_name = Path(file_name).stem  # 去掉 .xlsx
-        output_dir = CONFIG_DIR / base_name
+        # 输出目录: 优先使用 Excel 元数据中的 output_dir，否则用文件名
+        base_name = Path(file_name).stem
+        meta = all_meta.get(file_name, {})
+        dir_name = meta.get("output_dir", base_name)
+        output_dir = CONFIG_DIR / dir_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
         output_path = output_dir / f"{sheet_name}.tres"

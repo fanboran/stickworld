@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://6611fc55c472"]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+variables = {
+"data": [
+    {"id": "fac_plain", "name_zh": "平原王国", "civilization_type": "agriculture", "start_region": "reg_plain_01", "color_hex": "#4CAF50", "description": "平原农耕文明，人口众多"},
+    {"id": "fac_volcano", "name_zh": "炎炉部落", "civilization_type": "agriculture", "start_region": "reg_volcano_01", "color_hex": "#FF5722", "description": "火山锻造文明，军工发达"},
+    {"id": "fac_source", "name_zh": "源流学院", "civilization_type": "agriculture", "start_region": "reg_source_01", "color_hex": "#9C27B0", "description": "法术文明，法师比例极高"},
+    {"id": "fac_desert", "name_zh": "赤砂汗国", "civilization_type": "nomadic", "start_region": "reg_desert_01", "color_hex": "#FFC107", "description": "游牧文明，骑兵精锐"},
+    {"id": "fac_ocean", "name_zh": "碧波联邦", "civilization_type": "commerce", "start_region": "reg_ocean_01", "color_hex": "#2196F3", "description": "海洋贸易文明，造船发达"},
+    {"id": "fac_forest", "name_zh": "苍翠猎团", "civilization_type": "agriculture", "start_region": "reg_forest_01", "color_hex": "#4CAF50", "description": "森林狩猎文明，隐匿强弓"},
+    {"id": "fac_ice", "name_zh": "极北城邦", "civilization_type": "agriculture", "start_region": "reg_ice_01", "color_hex": "#90CAF9", "description": "冰原生存专家，防御型文明"}
+]
+}

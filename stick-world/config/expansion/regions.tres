@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://0ce3ba7da625"]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+variables = {
+"data": [
+    {"id": "reg_plain_01", "name_zh": "中原平原", "terrain": "plain", "resources": "food,wood", "stickmen_types": "plain", "center_x": 500, "center_y": 500},
+    {"id": "reg_volcano_01", "name_zh": "炎炉山脉", "terrain": "mountain", "resources": "metal,black_pitch", "stickmen_types": "volcano,giant", "tech_unlocks": "tech_smelting", "center_x": 200, "center_y": 300},
+    {"id": "reg_source_01", "name_zh": "源流湿地", "terrain": "swamp", "resources": "food,black_pitch", "stickmen_types": "source", "tech_unlocks": "tech_magic_basic", "center_x": 700, "center_y": 200},
+    {"id": "reg_desert_01", "name_zh": "赤砂荒原", "terrain": "desert", "resources": "stone", "stickmen_types": "desert,centaur", "tech_unlocks": "tech_camelry", "center_x": 900, "center_y": 600},
+    {"id": "reg_ocean_01", "name_zh": "碧波群岛", "terrain": "coast", "resources": "food,wood", "stickmen_types": "ocean", "tech_unlocks": "tech_sailing", "center_x": 300, "center_y": 800},
+    {"id": "reg_forest_01", "name_zh": "苍翠密林", "terrain": "forest", "resources": "wood,food", "stickmen_types": "forest,winged", "tech_unlocks": "tech_arbalest", "center_x": 600, "center_y": 700},
+    {"id": "reg_ice_01", "name_zh": "极北冰原", "terrain": "ice", "resources": "stone,black_pitch", "stickmen_types": "ice", "tech_unlocks": "tech_frost_resist", "center_x": 400, "center_y": 100}
+]
+}

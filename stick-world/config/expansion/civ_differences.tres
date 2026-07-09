@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://04d2f3ce7e97"]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+variables = {
+"data": [
+    {"civilization_type": "agriculture", "org_depth_bonus": "deep", "military_bonus": "balanced", "economy_bonus": "中", "research_bonus": "中", "naval_bonus": "低", "description": "农耕文明组织严密，中央集权"},
+    {"civilization_type": "nomadic", "org_depth_bonus": "shallow", "military_bonus": "高(骑兵)", "economy_bonus": "低", "research_bonus": "低", "naval_bonus": "无", "description": "游牧来去如风，层级灵活"},
+    {"civilization_type": "commerce", "org_depth_bonus": "medium", "military_bonus": "低", "economy_bonus": "高", "research_bonus": "中", "naval_bonus": "高", "description": "商业文明贸易驱动，军事靠外包"},
+    {"civilization_type": "ocean", "org_depth_bonus": "medium", "military_bonus": "中", "economy_bonus": "高(贸易)", "research_bonus": "中", "naval_bonus": "极高", "description": "海洋文明制海权至上"}
+]
+}

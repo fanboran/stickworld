@@ -1,82 +1,17 @@
-[gd_resource type="Resource" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://5c41645855e8"]
 
 [ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
-resource_name = "resources"
-_meta = {
-	"resource_name": "resources",
-	"version": "0.1.0",
-	"description": "从 config/excel/resources.xlsx → resources sheet 自动生成",
-	"category": "excel_export",
-	"source_file": "config/excel/resources.xlsx",
-	"source_sheet": "resources"
-}
 variables = {
-	"data": [
-		{
-			"id": "res_food",
-			"name_zh": "食物",
-			"category": "basic",
-			"base_price": 5,
-			"weight_per_unit": 1,
-			"perishable": true,
-			"icon_path": "res://assets/icons/food.png"
-		},
-		{
-			"id": "res_wood",
-			"name_zh": "木材",
-			"category": "basic",
-			"base_price": 3,
-			"weight_per_unit": 2,
-			"perishable": false,
-			"icon_path": "res://assets/icons/wood.png"
-		},
-		{
-			"id": "res_stone",
-			"name_zh": "石料",
-			"category": "basic",
-			"base_price": 4,
-			"weight_per_unit": 5,
-			"perishable": false,
-			"icon_path": "res://assets/icons/stone.png"
-		},
-		{
-			"id": "res_metal_ore",
-			"name_zh": "金属矿",
-			"category": "basic",
-			"base_price": 8,
-			"weight_per_unit": 8,
-			"perishable": false,
-			"icon_path": "res://assets/icons/metal_ore.png"
-		},
-		{
-			"id": "res_black_asphalt",
-			"name_zh": "黑色沥青",
-			"category": "strategic",
-			"base_price": 15,
-			"weight_per_unit": 6,
-			"perishable": false,
-			"icon_path": "res://assets/icons/black_asphalt.png"
-		},
-		{
-			"id": "res_iron_ingot",
-			"name_zh": "铁锭",
-			"category": "processed",
-			"base_price": 20,
-			"weight_per_unit": 7,
-			"perishable": false,
-			"icon_path": "res://assets/icons/iron_ingot.png"
-		},
-		{
-			"id": "res_silk",
-			"name_zh": "丝绸",
-			"category": "luxury",
-			"base_price": 50,
-			"weight_per_unit": 0.5,
-			"perishable": false,
-			"icon_path": "res://assets/icons/silk.png"
-		}
-	]
+"data": [
+    {"id": "res_food", "name_zh": "食物", "category": "basic", "base_price": 5, "weight_per_unit": 1, "perishable": true, "icon_path": "res://assets/icons/food.png"},
+    {"id": "res_wood", "name_zh": "木材", "category": "basic", "base_price": 3, "weight_per_unit": 2, "perishable": false, "icon_path": "res://assets/icons/wood.png"},
+    {"id": "res_stone", "name_zh": "石料", "category": "basic", "base_price": 4, "weight_per_unit": 5, "perishable": false, "icon_path": "res://assets/icons/stone.png"},
+    {"id": "res_metal_ore", "name_zh": "金属矿", "category": "basic", "base_price": 8, "weight_per_unit": 8, "perishable": false, "icon_path": "res://assets/icons/metal_ore.png"},
+    {"id": "res_black_asphalt", "name_zh": "黑色沥青", "category": "strategic", "base_price": 15, "weight_per_unit": 6, "perishable": false, "icon_path": "res://assets/icons/black_asphalt.png"},
+    {"id": "res_iron_ingot", "name_zh": "铁锭", "category": "processed", "base_price": 20, "weight_per_unit": 7, "perishable": false, "icon_path": "res://assets/icons/iron_ingot.png"},
+    {"id": "res_silk", "name_zh": "丝绸", "category": "luxury", "base_price": 50, "weight_per_unit": 0.5, "perishable": false, "icon_path": "res://assets/icons/silk.png"}
+]
 }

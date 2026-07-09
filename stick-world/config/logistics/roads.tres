@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://ecf4e5f12534"]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+variables = {
+"data": [
+    {"id": "road_dirt", "name_zh": "土路", "speed_bonus": "1.2x", "build_cost_stone": 20, "build_cost_wood": 10, "build_time": 5, "maintenance": 1},
+    {"id": "road_stone", "name_zh": "石板路", "speed_bonus": "1.5x", "build_cost_stone": 80, "build_cost_wood": 20, "build_time": 15, "maintenance": 3, "unlock_tech": "tech_stone_road"},
+    {"id": "road_highway", "name_zh": "帝国大道", "speed_bonus": "2.0x", "build_cost_stone": 200, "build_cost_wood": 50, "build_time": 30, "maintenance": 8, "unlock_tech": "tech_imperial_road"},
+    {"id": "canal", "name_zh": "运河", "speed_bonus": "3.0x", "build_cost_stone": 500, "build_cost_wood": 0, "build_time": 60, "maintenance": 15, "unlock_tech": "tech_canal"}
+]
+}

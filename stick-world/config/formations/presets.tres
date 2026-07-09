@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://adc0a0280460"]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+variables = {
+"data": [
+    {"id": "tier_division", "preset": "军事编制", "name": "师", "level": 5},
+    {"id": "tier_regiment", "preset": "军事编制", "name": "团", "level": 4, "parent_id": "tier_division"},
+    {"id": "tier_battalion", "preset": "军事编制", "name": "营", "level": 3, "parent_id": "tier_regiment"},
+    {"id": "tier_company", "preset": "军事编制", "name": "连", "level": 2, "parent_id": "tier_battalion"},
+    {"id": "tier_platoon", "preset": "军事编制", "name": "排", "level": 1, "parent_id": "tier_company"},
+    {"id": "tier_academy", "preset": "科研架构", "name": "科学院", "level": 5},
+    {"id": "tier_institute", "preset": "科研架构", "name": "研究院", "level": 4, "parent_id": "tier_academy"},
+    {"id": "tier_research_center", "preset": "科研架构", "name": "研究所", "level": 3, "parent_id": "tier_institute"},
+    {"id": "tier_lab", "preset": "科研架构", "name": "研究室", "level": 2, "parent_id": "tier_research_center"},
+    {"id": "tier_research_group", "preset": "科研架构", "name": "课题组", "level": 1, "parent_id": "tier_lab"},
+    {"id": "tier_engineering_academy", "preset": "工程架构", "name": "工程院", "level": 5},
+    {"id": "tier_engineering_institute", "preset": "工程架构", "name": "工程所", "level": 4, "parent_id": "tier_engineering_academy"},
+    {"id": "tier_project_team", "preset": "工程架构", "name": "项目组", "level": 3, "parent_id": "tier_engineering_institute"},
+    {"id": "tier_construction_crew", "preset": "工程架构", "name": "施工队", "level": 2, "parent_id": "tier_project_team"},
+    {"id": "tier_construction_squad", "preset": "工程架构", "name": "施工分队", "level": 1, "parent_id": "tier_construction_crew"},
+    {"id": "tier_empire", "preset": "行政架构", "name": "帝国", "level": 5},
+    {"id": "tier_region", "preset": "行政架构", "name": "地区", "level": 4, "parent_id": "tier_empire"},
+    {"id": "tier_province", "preset": "行政架构", "name": "省份", "level": 3, "parent_id": "tier_region"},
+    {"id": "tier_city", "preset": "行政架构", "name": "城市", "level": 2, "parent_id": "tier_province"},
+    {"id": "tier_tribe", "preset": "行政架构", "name": "部落", "level": 1, "parent_id": "tier_city"},
+    {"id": "tier_logistics_hq", "preset": "运输架构", "name": "总物流中心", "level": 5},
+    {"id": "tier_logistics_center", "preset": "运输架构", "name": "物流中心", "level": 4, "parent_id": "tier_logistics_hq"},
+    {"id": "tier_transfer_station", "preset": "运输架构", "name": "中转站", "level": 3, "parent_id": "tier_logistics_center"},
+    {"id": "tier_transport_convoy", "preset": "运输架构", "name": "运输队", "level": 2, "parent_id": "tier_transfer_station"},
+    {"id": "tier_transport_squad", "preset": "运输架构", "name": "运输分队", "level": 1, "parent_id": "tier_transport_convoy"}
+]
+}

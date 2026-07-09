@@ -1,64 +1,13 @@
-[gd_resource type="Resource" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://8cc42a264dab"]
 
 [ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
-resource_name = "stickmen"
-_meta = {
-	"resource_name": "stickmen",
-	"version": "0.1.0",
-	"description": "从 config/excel/units.xlsx → stickmen sheet 自动生成",
-	"category": "excel_export",
-	"source_file": "config/excel/units.xlsx",
-	"source_sheet": "stickmen"
-}
 variables = {
-	"data": [
-		{
-			"id": "stm_plain_001",
-			"name_zh": "平原步兵",
-			"race": "plain",
-			"variant": "normal",
-			"base_hp": 100,
-			"base_attack": 15,
-			"base_defense": 10,
-			"base_speed": 5,
-			"base_stamina": 100,
-			"asphalt_cost": 50,
-			"icon_path": "res://assets/icons/stickmen/plain_normal.png",
-			"description": "基础平原火柴人，均衡型",
-			"race: plain/volcano/source/desert/ocean/forest/ice": null
-		},
-		{
-			"id": "stm_volcano_giant_001",
-			"name_zh": "火山巨人",
-			"race": "volcano",
-			"variant": "giant",
-			"base_hp": 250,
-			"base_attack": 30,
-			"base_defense": 20,
-			"base_speed": 2,
-			"base_stamina": 80,
-			"asphalt_cost": 120,
-			"icon_path": "res://assets/icons/stickmen/volcano_giant.png",
-			"description": "火山巨人，高生命高攻击，速度慢",
-			"race: plain/volcano/source/desert/ocean/forest/ice": null
-		},
-		{
-			"id": "stm_ocean_winged_001",
-			"name_zh": "海洋翼人",
-			"race": "ocean",
-			"variant": "winged",
-			"base_hp": 80,
-			"base_attack": 12,
-			"base_defense": 5,
-			"base_speed": 12,
-			"base_stamina": 120,
-			"asphalt_cost": 80,
-			"icon_path": "res://assets/icons/stickmen/ocean_winged.png",
-			"description": "海洋翼人，高速度高耐力，可飞行",
-			"race: plain/volcano/source/desert/ocean/forest/ice": null
-		}
-	]
+"data": [
+    {"id": "stm_plain_001", "name_zh": "平原步兵", "race": "plain", "variant": "normal", "base_hp": 100, "base_attack": 15, "base_defense": 10, "base_speed": 5, "base_stamina": 100, "asphalt_cost": 50, "icon_path": "res://assets/icons/stickmen/plain_normal.png", "description": "基础平原火柴人，均衡型"},
+    {"id": "stm_volcano_giant_001", "name_zh": "火山巨人", "race": "volcano", "variant": "giant", "base_hp": 250, "base_attack": 30, "base_defense": 20, "base_speed": 2, "base_stamina": 80, "asphalt_cost": 120, "icon_path": "res://assets/icons/stickmen/volcano_giant.png", "description": "火山巨人，高生命高攻击，速度慢"},
+    {"id": "stm_ocean_winged_001", "name_zh": "海洋翼人", "race": "ocean", "variant": "winged", "base_hp": 80, "base_attack": 12, "base_defense": 5, "base_speed": 12, "base_stamina": 120, "asphalt_cost": 80, "icon_path": "res://assets/icons/stickmen/ocean_winged.png", "description": "海洋翼人，高速度高耐力，可飞行"}
+]
 }

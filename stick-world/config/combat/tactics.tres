@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://43d97f89a71e"]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+variables = {
+"data": [
+    {"id": "tac_aggressive", "name_zh": "猛攻", "description": "主动冲击不惜代价", "cover_priority": "low", "flank_enabled": "yes", "retreat_threshold": 0.2, "fire_discipline": "loose", "autonomy": "high"},
+    {"id": "tac_defensive", "name_zh": "坚守", "description": "固守阵地寸步不退", "cover_priority": "high", "flank_enabled": "no", "retreat_threshold": 0.5, "fire_discipline": "tight", "autonomy": "low"},
+    {"id": "tac_guerrilla", "name_zh": "游击", "description": "打了就跑骚扰为主", "cover_priority": "low", "flank_enabled": "yes", "retreat_threshold": 0.1, "fire_discipline": "loose", "autonomy": "high"},
+    {"id": "tac_balanced", "name_zh": "均衡", "description": "灵活应对战场局势", "cover_priority": "medium", "flank_enabled": "yes", "retreat_threshold": 0.35, "fire_discipline": "medium", "autonomy": "medium"},
+    {"id": "tac_sniper", "name_zh": "狙击", "description": "远程优先避近战", "cover_priority": "high", "flank_enabled": "no", "retreat_threshold": 0.3, "fire_discipline": "tight", "autonomy": "low"}
+]
+}

@@ -127,7 +127,7 @@ pip install openpyxl --user
 在项目根目录（`stick-world/`），用终端运行：
 
 ```bash
-python tools/export_excel.py
+python stick-world/tools/export_excel.py
 ```
 
 脚本会做三件事：

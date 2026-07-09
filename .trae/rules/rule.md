@@ -31,12 +31,13 @@ alwaysApply: true
 
 | 要做什么 | 读哪个 |
 |----------|--------|
-| 了解游戏整体 | `docs/design/gdd.md` |
+| 了解游戏整体 | `docs/design/游戏设计文档.md` |
 | 实现某个系统 | `docs/design/mechanics/<系统名>.md` |
-| 查核心实体/状态机 | `docs/technical/architecture/entities.md` |
-| 查 EventBus 信号 | `docs/technical/architecture/interactions.md` |
-| 查模块 API 规范 | `docs/technical/architecture/apis.md` |
-| 查 Autoload 依赖 | `docs/technical/architecture/autoloads.md` |
+| 查核心实体/状态机 | `docs/technical/architecture/核心实体.md` |
+| 查 EventBus 信号 | `docs/technical/architecture/系统交互.md` |
+| 查模块 API 规范 | `docs/technical/architecture/模块API.md` |
+| 查 Autoload 依赖 | `docs/technical/architecture/自动加载依赖.md` |
+| 游戏数据表 | `config/excel/` 目录 + `docs/technical/excel-pipeline.md` |
 | 开发规范 | `docs/CONTRIBUTING.md` |
 
 ---
@@ -48,7 +49,7 @@ alwaysApply: true
 3. **代码即文档**：代码必须清晰、易读，包含必要的注释解释复杂逻辑。
 4. **原子化提交**：每次提交完成一个独立、最小化的功能单元。
 5. **主动沟通**：当任务描述不清晰或与架构原则冲突时，主动提问，不做危险假设。
-6. **设计先行**：实现任何模块前，必须先用 Read 工具读取对应的设计文档（`docs/design/mechanics/<模块名>.md` 和 `docs/technical/architecture/apis.md` 中该模块的 API 段落）。如果 GDD 标记了 `[待补充]`，必须向用户确认后再编码。跳过此步直接写代码会导致 API 和数据结构与设计脱节。
+6. **设计先行**：实现任何模块前，必须先用 Read 工具读取对应的设计文档（`docs/design/mechanics/<模块名>.md` 和 `docs/technical/architecture/模块API.md` 中该模块的 API 段落）。如果 GDD 标记了 `[待补充]`，必须向用户确认后再编码。跳过此步直接写代码会导致 API 和数据结构与设计脱节。
 
 ---
 
@@ -175,7 +176,7 @@ modules/player/
 
 ### 待办项维护
 
-- 改进待办项记录在 `docs/project/todo.md`
+- 改进待办项记录在 `docs/project/待办事项.md`
 - 完成一项立即删除对应条目
 - 新增项追加到对应优先级分区
 

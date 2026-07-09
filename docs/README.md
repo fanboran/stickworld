@@ -22,24 +22,25 @@
 
 | 你想了解 | 去看 |
 |----------|------|
-| 游戏整体设计 | [`design/gdd.md`](design/gdd.md) |
-| 设计支柱（为什么这么做） | [`design/design-pillars.md`](design/design-pillars.md) |
-| 核心玩法循环 | [`design/core-loop.md`](design/core-loop.md) |
-| 世界观与种族 | [`design/world-building.md`](design/world-building.md) |
-| 通用项目管理系统 | [`design/mechanics/organization.md`](design/mechanics/organization.md) |
-| 战斗系统 | [`design/mechanics/combat.md`](design/mechanics/combat.md) |
-| 组织与指挥链 | [`design/mechanics/organization.md`](design/mechanics/organization.md) |
-| 经济与市场 | [`design/mechanics/economy.md`](design/mechanics/economy.md) |
-| 科技系统 | [`design/mechanics/technology.md`](design/mechanics/technology.md) |
-| 扩张系统 | [`design/mechanics/expansion.md`](design/mechanics/expansion.md) |
-| 物流运输 | [`design/mechanics/logistics.md`](design/mechanics/logistics.md) |
-| 成就/图章系统 | [`design/mechanics/achievements.md`](design/mechanics/achievements.md) |
-| UI/UX 设计 | [`design/ui-ux.md`](design/ui-ux.md) |
-| 平衡性数据 | [`design/balance/variables.md`](design/balance/variables.md) |
-| 技术架构 | [`technical/architecture.md`](technical/architecture.md) |
-| 开发者指南 | [`technical/dev-guide.md`](technical/dev-guide.md) |
-| 竞品分析 | [`business/competitive-analysis.md`](business/competitive-analysis.md) |
-| 项目路线图 | [`project/roadmap.md`](project/roadmap.md) |
+| 游戏整体设计 | [`design/游戏设计文档.md`](design/游戏设计文档.md) |
+| 设计支柱（为什么这么做） | [`design/设计支柱.md`](design/设计支柱.md) |
+| 核心玩法循环 | [`design/核心循环.md`](design/核心循环.md) |
+| 世界观与种族 | [`design/世界观设定.md`](design/世界观设定.md) |
+| 通用项目管理系统 | [`design/mechanics/组织系统.md`](design/mechanics/组织系统.md) |
+| 战斗系统 | [`design/mechanics/战斗系统.md`](design/mechanics/战斗系统.md) |
+| 组织与指挥链 | [`design/mechanics/组织系统.md`](design/mechanics/组织系统.md) |
+| 经济与市场 | [`design/mechanics/经济系统.md`](design/mechanics/经济系统.md) |
+| 科技系统 | [`design/mechanics/科技系统.md`](design/mechanics/科技系统.md) |
+| 扩张系统 | [`design/mechanics/扩张系统.md`](design/mechanics/扩张系统.md) |
+| 物流运输 | [`design/mechanics/物流系统.md`](design/mechanics/物流系统.md) |
+| 成就/图章系统 | [`design/mechanics/成就系统.md`](design/mechanics/成就系统.md) |
+| UI/UX 设计 | [`design/UI设计规范.md`](design/UI设计规范.md) |
+| 平衡性数据 | [`design/balance/经济变量表.md`](design/balance/经济变量表.md) |
+| Excel 数据管线 | [`technical/excel-pipeline.md`](technical/excel-pipeline.md) |
+| 技术架构 | [`technical/技术架构.md`](technical/技术架构.md) |
+| 开发者指南 | [`technical/开发指南.md`](technical/开发指南.md) |
+| 竞品分析 | [`business/竞品分析.md`](business/竞品分析.md) |
+| 项目路线图 | [`project/路线图.md`](project/路线图.md) |
 | 变更日志 | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---

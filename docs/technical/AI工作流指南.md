@@ -21,7 +21,7 @@
 
 ### 关键约定
 
-- **GDD 是唯一设计真相源**：`docs/design/gdd.md`，所有游戏系统设计以此为准
+- **GDD 是唯一设计真相源**：`docs/design/游戏设计文档.md`，所有游戏系统设计以此为准
 - **AI 不做设计决策**：未确定处标注 `[待补充]`，告知用户决策，不自行发明
 - **架构规范参考**：`.workbuddy/rules/rule.md`，这是核心规则文件
 
@@ -39,12 +39,12 @@ F:\VSCode\game-2\
 │   ├── CHANGELOG.md          # 变更日志
 │   ├── CONTRIBUTING.md       # 贡献指南
 │   ├── design/               # 游戏设计
-│   │   ├── gdd.md            # ⭐ 游戏设计真相源（唯一）
-│   │   ├── design-pillars.md # 设计支柱
-│   │   ├── core-loop.md      # 核心玩法循环
-│   │   ├── world-building.md # 世界观设定
+│   │   ├── 游戏设计文档.md            # ⭐ 游戏设计真相源（唯一）
+│   │   ├── 设计支柱.md # 设计支柱
+│   │   ├── 核心循环.md      # 核心玩法循环
+│   │   ├── 世界观设定.md # 世界观设定
 │   │   ├── phasing-system.md # 阶段演进
-│   │   ├── ui-ux.md          # UI/UX 设计
+│   │   ├── UI设计规范.md          # UI/UX 设计
 │   │   ├── mechanics/        # 子系统规格
 │   │   └── balance/          # 平衡性数据
 │   ├── technical/            # 技术文档
@@ -174,7 +174,7 @@ docs(ai): 更新AI工作流指南
 
 ## 七、文档维护约定
 
-- **GDD 有新决策** → 更新 `docs/design/gdd.md`
-- **架构有新问题/改进项** → 追加到 `docs/project/todo.md`（按 P1/P2/P3 优先级）
-- **完成一项架构改进** → 从 `docs/project/todo.md` 中删除对应条目
+- **GDD 有新决策** → 更新 `docs/design/游戏设计文档.md`
+- **架构有新问题/改进项** → 追加到 `docs/project/待办事项.md`（按 P1/P2/P3 优先级）
+- **完成一项架构改进** → 从 `docs/project/待办事项.md` 中删除对应条目
 - **每次会话结束** → WorkBuddy 自动追加日志到 `.workbuddy/memory/YYYY-MM-DD.md`

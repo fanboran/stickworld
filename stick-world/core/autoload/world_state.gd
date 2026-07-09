@@ -7,8 +7,6 @@ extends Node
 ## 与 SaveManager 协作：通过 register_module_save_data 注册各模块的
 ## 序列化/反序列化回调，SaveManager 存档时收集所有模块数据。
 
-class_name WorldState
-
 # ─────────────────────────────── 实体容器 ────────────────────────────────
 
 var stickmen: Dictionary = {}          # {id: StickmanState}
@@ -41,7 +39,7 @@ func get_entity(entity_type: String, entity_id: String) -> Variant:
 
 
 ## 返回实体类型对应的容器字典引用，不存在则返回 null。
-func _get_container(entity_type: String) -> Dictionary:
+func _get_container(entity_type: String) -> Variant:
 	match entity_type:
 		"stickmen":
 			return stickmen

@@ -4,8 +4,6 @@ extends Node
 ## 各系统在 _process 中调用 should_update(system_name) 判断当前帧是否需要执行更新。
 ## 通过 EventBus 发射 game_paused / game_resumed 信号通知所有监听者。
 
-class_name TimeManager
-
 # ─────────────────────────────── 速度枚举 ────────────────────────────────
 
 enum Speed {

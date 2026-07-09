@@ -5,8 +5,6 @@ extends Node
 ## 支持热加载：编辑 .tres 后调用 reload() 无需重启游戏。
 ## 变量变更时通过 EventBus 发射 balance_changed 信号。
 
-class_name BalanceConfig
-
 # ─────────────────────────────── 数据 ───────────────────────────────────
 
 ## 所有平衡变量缓存。key 为点号分隔的路径（如 "combat.base_hp"）。

@@ -6,6 +6,10 @@ export/*
 **/.godot/
 .godot/
 
+# Godot 插件（第三方 addons，通过自更新/包管理器维护）
+addons/
+!addons/.gitkeep
+
 # Godot 4 GDExtension 构建输出
 *.so
 *.dll

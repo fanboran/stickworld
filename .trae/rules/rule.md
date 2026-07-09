@@ -132,6 +132,21 @@ modules/player/
 
 ---
 
+## godot-ai MCP 更新流程
+
+当 Godot 插件自更新后，IDE 端 MCP 服务版本需手动同步：
+
+1. **Godot 端**：在编辑器 dock 面板点 **Update**，插件自动更新 `addons/godot_ai/`
+2. **IDE 端**：卸载后完整重装（避免增量升级导致依赖损坏）
+   ```powershell
+   uv tool uninstall godot-ai
+   uv tool install godot-ai@<目标版本>
+   ```
+3. **验证**：`godot-ai --version` 确认版本匹配，`godot-ai --transport streamable-http --port 8000` 确认能正常启动
+4. **重启 Godot 编辑器**，让插件重新连接新版 MCP 服务
+
+---
+
 ## Git 分支与工作流规范
 
 ### 分支角色

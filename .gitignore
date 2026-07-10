@@ -1,4 +1,6 @@
 # Godot
+# stick-world/docs 是指向 ../../docs 的本地 symlink（core.symlinks=false 无法追踪）
+stick-world/docs
 .import/
 export/*
 !export/.gitkeep

@@ -112,8 +112,10 @@ modules/player/
 │   ├── player.tscn
 │   └── components/        # 组件化子场景
 ├── scripts/               # 模块脚本
-├── assets/                # 模块专属资源
-├── ui/                    # 模块专属 UI
+├── animations/            # 动画资源（按需）
+├── assets/                # 模块专属资源（按需）
+├── ui/                    # 模块专属 UI（按需）
+├── data/                  # 纯数据定义类（按需）
 └── api.gd                 # 公共接口契约（关键！）
 ```
 

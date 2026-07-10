@@ -4,7 +4,7 @@ extends Node2D
 ## 按 1/2/3/4 切换 idle/walk/attack/dead 动画
 ## 按 ←/-> 移动火柴人，按 ↑/↓ 缩放
 
-const RigScript = preload("res://modules/units/stickman_rig.gd")
+const RigScript = preload("res://modules/units/scripts/stickman_rig.gd")
 
 var _rig: Node2D
 var _label: Label

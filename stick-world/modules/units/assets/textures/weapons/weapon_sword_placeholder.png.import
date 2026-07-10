@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://p31tbet5acp1"
-path="res://.godot/imported/bone_13_pill.png-293fcc3f80034f521d81f524c15b6b78.ctex"
+uid="uid://6sd7cl7rifsu"
+path="res://.godot/imported/weapon_sword_placeholder.png-a8ef9b6118420a05e01b20a97f914c74.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/stickman/bone_13_pill.png"
-dest_files=["res://.godot/imported/bone_13_pill.png-293fcc3f80034f521d81f524c15b6b78.ctex"]
+source_file="res://modules/units/assets/textures/weapons/weapon_sword_placeholder.png"
+dest_files=["res://.godot/imported/weapon_sword_placeholder.png-a8ef9b6118420a05e01b20a97f914c74.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

@@ -34,7 +34,7 @@ const SWL_SWORDWRATH: Dictionary = {
 const BODY_COLOR := Color(0.82, 0.82, 0.85, 1.0)
 const WEAPON_COLOR := Color(0.72, 0.74, 0.78, 1.0)
 const GUARD_COLOR := Color(0.65, 0.45, 0.18, 1.0)
-const OUTPUT_DIR := "res://assets/textures/stickman/"
+const OUTPUT_DIR := "res://modules/units/assets/textures/stickman/"
 
 
 func _ready() -> void:

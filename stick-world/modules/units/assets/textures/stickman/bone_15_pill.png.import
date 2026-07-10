@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://snveqbbxrx6p"
-path="res://.godot/imported/bone_11_pill.png-7ceed1a986373bf468e272667338d90c.ctex"
+uid="uid://bgcju53rimf12"
+path="res://.godot/imported/bone_15_pill.png-7847d0a78db2459fc9152d26cba1a1d6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/stickman/bone_11_pill.png"
-dest_files=["res://.godot/imported/bone_11_pill.png-7ceed1a986373bf468e272667338d90c.ctex"]
+source_file="res://modules/units/assets/textures/stickman/bone_15_pill.png"
+dest_files=["res://.godot/imported/bone_15_pill.png-7847d0a78db2459fc9152d26cba1a1d6.ctex"]
 
 [params]
 

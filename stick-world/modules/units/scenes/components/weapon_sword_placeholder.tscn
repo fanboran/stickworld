@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3 uid="uid://wpnswordm01"]
+[gd_scene format=3 uid="uid://wpnswordm01"]
 
-[ext_resource type="Texture2D" path="res://assets/textures/weapon_sword_placeholder.png" id="1_tex"]
+[ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/weapon_sword_placeholder.png" id="1_tex"]
 
 [node name="SwordPlaceholder" type="Node2D"]
 

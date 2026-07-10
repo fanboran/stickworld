@@ -1,22 +1,82 @@
 [gd_scene format=3 uid="uid://bitpg2trkppie"]
 
-[ext_resource type="Script" uid="uid://cso3gtt44idvd" path="res://modules/units/stickman_rig.gd" id="1_rig"]
-[ext_resource type="Texture2D" uid="uid://bw6ni7k0prth7" path="res://assets/textures/stickman/bone_1_pill.png" id="1_tex_bone"]
-[ext_resource type="Script" uid="uid://bxg2fsbyk2asi" path="res://modules/units/stickman_test.gd" id="2_test"]
-[ext_resource type="Texture2D" uid="uid://cl74ubh1fhaol" path="res://assets/textures/stickman/bone_2_pill.png" id="2_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://dypso82gji2ed" path="res://assets/textures/stickman/bone_3_pill.png" id="3_tex_bone"]
-[ext_resource type="PackedScene" uid="uid://wpnswordm01" path="res://modules/units/weapon/weapon_sword_placeholder.tscn" id="3_wvxud"]
-[ext_resource type="Texture2D" uid="uid://qh4ast218e0m" path="res://assets/textures/stickman/bone_4_pill.png" id="4_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://8ftskm3qn88x" path="res://assets/textures/stickman/bone_5_pill.png" id="5_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://c8o38mk45mqxa" path="res://assets/textures/stickman/bone_6_pill.png" id="6_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://cytm0odrcsdkm" path="res://assets/textures/stickman/bone_7_pill.png" id="7_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://dbyjhohsnd0i1" path="res://assets/textures/stickman/bone_8_pill.png" id="8_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://ds65uuti0ttuo" path="res://assets/textures/stickman/bone_10_circle.png" id="10_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://snveqbbxrx6p" path="res://assets/textures/stickman/bone_11_pill.png" id="11_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://dwq5rro3hb2rt" path="res://assets/textures/stickman/bone_12_pill.png" id="12_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://p31tbet5acp1" path="res://assets/textures/stickman/bone_13_pill.png" id="13_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://dyqof1b8i7nmo" path="res://assets/textures/stickman/bone_14_pill.png" id="14_tex_bone"]
-[ext_resource type="Texture2D" uid="uid://bgcju53rimf12" path="res://assets/textures/stickman/bone_15_pill.png" id="15_tex_bone"]
+[ext_resource type="Script" path="res://modules/units/scripts/stickman_rig.gd" id="1_rig"]
+[ext_resource type="Texture2D" uid="uid://bw6ni7k0prth7" path="res://modules/units/assets/textures/stickman/bone_1_pill.png" id="1_tex_bone"]
+[ext_resource type="Script" path="res://modules/units/scripts/stickman_test.gd" id="2_test"]
+[ext_resource type="Texture2D" uid="uid://cl74ubh1fhaol" path="res://modules/units/assets/textures/stickman/bone_2_pill.png" id="2_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://dypso82gji2ed" path="res://modules/units/assets/textures/stickman/bone_3_pill.png" id="3_tex_bone"]
+[ext_resource type="PackedScene" uid="uid://wpnswordm01" path="res://modules/units/scenes/components/weapon_sword_placeholder.tscn" id="3_wvxud"]
+[ext_resource type="Texture2D" uid="uid://qh4ast218e0m" path="res://modules/units/assets/textures/stickman/bone_4_pill.png" id="4_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://8ftskm3qn88x" path="res://modules/units/assets/textures/stickman/bone_5_pill.png" id="5_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://c8o38mk45mqxa" path="res://modules/units/assets/textures/stickman/bone_6_pill.png" id="6_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://cytm0odrcsdkm" path="res://modules/units/assets/textures/stickman/bone_7_pill.png" id="7_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://dbyjhohsnd0i1" path="res://modules/units/assets/textures/stickman/bone_8_pill.png" id="8_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://ds65uuti0ttuo" path="res://modules/units/assets/textures/stickman/bone_10_circle.png" id="10_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://snveqbbxrx6p" path="res://modules/units/assets/textures/stickman/bone_11_pill.png" id="11_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://dwq5rro3hb2rt" path="res://modules/units/assets/textures/stickman/bone_12_pill.png" id="12_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://p31tbet5acp1" path="res://modules/units/assets/textures/stickman/bone_13_pill.png" id="13_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://dyqof1b8i7nmo" path="res://modules/units/assets/textures/stickman/bone_14_pill.png" id="14_tex_bone"]
+[ext_resource type="Texture2D" uid="uid://bgcju53rimf12" path="res://modules/units/assets/textures/stickman/bone_15_pill.png" id="15_tex_bone"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_wvxud"]
+animation = &"attack"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_j6xib"]
+animation = &"dead"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_rduw8"]
+animation = &"idle"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_cd5qv"]
+animation = &"walk"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_6tal3"]
+xfade_time = 0.2
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_s4j2a"]
+xfade_time = 0.2
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_yf7ww"]
+xfade_time = 0.1
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_4psge"]
+xfade_time = 0.1
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_e6brr"]
+xfade_time = 0.3
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_ovvts"]
+xfade_time = 0.3
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_1ulct"]
+xfade_time = 0.3
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_ap64e"]
+xfade_time = 0.3
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_yncau"]
+switch_mode = 1
+
+[sub_resource type="AnimationNodeStateMachine" id="AnimationNodeStateMachine_ax4ak"]
+states/Start/position = Vector2(161, 131)
+states/attack/node = SubResource("AnimationNodeAnimation_wvxud")
+states/attack/position = Vector2(11, -26)
+states/dead/node = SubResource("AnimationNodeAnimation_j6xib")
+states/dead/position = Vector2(234, 12)
+states/idle/node = SubResource("AnimationNodeAnimation_rduw8")
+states/idle/position = Vector2(-151, 55)
+states/walk/node = SubResource("AnimationNodeAnimation_cd5qv")
+states/walk/position = Vector2(-48, 151)
+transitions = ["idle", "walk", SubResource("AnimationNodeStateMachineTransition_6tal3"), "walk", "idle", SubResource("AnimationNodeStateMachineTransition_s4j2a"), "idle", "attack", SubResource("AnimationNodeStateMachineTransition_yf7ww"), "walk", "attack", SubResource("AnimationNodeStateMachineTransition_4psge"), "attack", "idle", SubResource("AnimationNodeStateMachineTransition_e6brr"), "idle", "dead", SubResource("AnimationNodeStateMachineTransition_ovvts"), "walk", "dead", SubResource("AnimationNodeStateMachineTransition_1ulct"), "attack", "dead", SubResource("AnimationNodeStateMachineTransition_ap64e"), "Start", "idle", SubResource("AnimationNodeStateMachineTransition_yncau")]
+graph_offset = Vector2(-245, -48)
 
 [node name="StickmanTest" type="Node2D" unique_id=372756659]
 script = ExtResource("2_test")
@@ -25,6 +85,12 @@ script = ExtResource("2_test")
 script = ExtResource("1_rig")
 body_color = Color(0.1560398, 0.15568888, 0.18235794, 1)
 weapon_scene = ExtResource("3_wvxud")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="StickmanRig" unique_id=726246529]
+
+[node name="AnimationTree" type="AnimationTree" parent="StickmanRig" unique_id=1737963116]
+tree_root = SubResource("AnimationNodeStateMachine_ax4ak")
+anim_player = NodePath("../AnimationPlayer")
 
 [node name="bone_0" type="Node2D" parent="StickmanRig" unique_id=1013551157]
 

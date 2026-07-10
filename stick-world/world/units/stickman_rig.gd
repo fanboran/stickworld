@@ -121,7 +121,7 @@ func _rebuild_all_sprites() -> void:
 
 
 func _do_rebuild_all_sprites() -> void:
-	# 只更新纹理，不删除/重建节点（避免编辑器保存时丢失 sprite）
+	# 改色时不用重建纹理（太慢），直接用 modulate 调色
 	for id in _sprites.keys():
 		var sprite: Sprite2D = _sprites[id]
 		if not is_instance_valid(sprite):
@@ -130,7 +130,10 @@ func _do_rebuild_all_sprites() -> void:
 		var node_type: int = data.get("type", -1)
 		if node_type < 0:
 			continue
-		_update_sprite_texture(sprite, data["length"], data["thickness"], node_type)
+		sprite.modulate = _get_color_for_type(node_type)
+		# 默认颜色时还原 modulate 为白色，保留烘焙纹理原色
+		if _colors_are_default():
+			sprite.modulate = Color.WHITE
 
 
 # ============================================================
@@ -175,17 +178,14 @@ func _collect_existing_nodes(parent: Node) -> void:
 
 
 func _update_sprite_texture(sprite: Sprite2D, length: int, thickness: int, node_type: int) -> void:
-	# 从 sprite 名称提取 bone id，优先加载烘焙 PNG
 	var id_str := sprite.name.trim_prefix("sprite_")
 	var tex: Texture2D = null
 	if id_str.is_valid_int():
 		tex = _try_load_baked_texture(id_str.to_int(), node_type)
-	if tex == null:
-		var color: Color = _get_color_for_type(node_type)
-		var adj_thickness: int = max(int(thickness * thickness_scale), 1)
-		tex = _generate_texture(node_type, length, adj_thickness, color)
-	sprite.texture = tex
-	sprite.scale = Vector2(1.0 / OUTPUT_SCALE, 1.0 / OUTPUT_SCALE)
+	if tex != null:
+		sprite.texture = tex
+		sprite.scale = Vector2(1.0 / OUTPUT_SCALE, 1.0 / OUTPUT_SCALE)
+		sprite.modulate = Color.WHITE
 
 
 func _build_from_scratch() -> void:

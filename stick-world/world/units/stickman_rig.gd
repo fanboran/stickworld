@@ -121,24 +121,16 @@ func _rebuild_all_sprites() -> void:
 
 
 func _do_rebuild_all_sprites() -> void:
-	# 清除旧 sprites
+	# 只更新纹理，不删除/重建节点（避免编辑器保存时丢失 sprite）
 	for id in _sprites.keys():
-		var sprite: Node = _sprites[id]
-		if is_instance_valid(sprite):
-			sprite.queue_free()
-	_sprites.clear()
-	# 重新创建
-	for id in _bones.keys():
-		if id == 0:
+		var sprite: Sprite2D = _sprites[id]
+		if not is_instance_valid(sprite):
 			continue
 		var data: Dictionary = SWL_SWORDWRATH.get(id, {})
 		var node_type: int = data.get("type", -1)
 		if node_type < 0:
 			continue
-		var bone: Node2D = _bones[id]
-		var length: int = data["length"]
-		var thickness: int = data["thickness"]
-		_create_part_sprite(bone, id, length, thickness, node_type, data["x"], data["y"])
+		_update_sprite_texture(sprite, data["length"], data["thickness"], node_type)
 
 
 # ============================================================

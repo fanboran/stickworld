@@ -25,6 +25,9 @@ const ANIM_WALK := "walk"
 const ANIM_ATTACK := "attack"
 const ANIM_DEAD := "dead"
 
+# ===== 武器类型枚举 =====
+enum WeaponType { SWORD, SPEAR, BOW, SHIELD, UNARMED }
+
 # ===== Inspector 可调参数 =====
 @export var stick_scale: float = 1.0:
 	set(v):
@@ -46,8 +49,22 @@ const ANIM_DEAD := "dead"
 	set(v):
 		guard_color = v
 		_rebuild_all_sprites()
+@export var weapon_scene: PackedScene:  ## 右手武器
+	set(v):
+		weapon_scene = v
+		_setup_weapon(WEAPON_ATTACH_R, "_weapon_r")
+@export var offhand_scene: PackedScene:  ## 左手（盾/弓/副武器）
+	set(v):
+		offhand_scene = v
+		_setup_weapon(WEAPON_ATTACH_L, "_weapon_l")
 
-## SWL Swordwrath 完整骨骼数据（24 节点，Y 已取反适配 Godot Y-down）
+const WEAPON_ATTACH_R := 15
+const WEAPON_ATTACH_L := 2
+
+var _weapon_r: Node2D
+var _weapon_l: Node2D
+
+## SWL Swordwrath 骨骼数据（已移除武器骨骼，武器改用 scene 挂载）
 ## root=髋部, 身体↑(6→7→8), 头↑(9→10), 手臂↓(1→2,14→15), 腿↓(3→4→5,11→12→13)
 const SWL_SWORDWRATH: Dictionary = {
 	0:  {"parent": -1, "x": 0.0,    "y": 0.0,    "length": 0,   "thickness": 0,  "type": -1},
@@ -63,15 +80,7 @@ const SWL_SWORDWRATH: Dictionary = {
 	1:  {"parent": 8,  "x": -34.7,  "y": 53.9,   "length": 64,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	2:  {"parent": 1,  "x": -3.1,   "y": 48.7,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	14: {"parent": 8,  "x": 1.1,    "y": 64.1,   "length": 64,  "thickness": 23, "type": TYPE_ROUND_SEG},
-	15: {"parent": 14, "x": 33.8,   "y": 35.2,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
-	16: {"parent": 15, "x": 144.2,  "y": -91.9,  "length": 171, "thickness": 0,  "type": TYPE_ROUND_SEG},
-	17: {"parent": 16, "x": -100.3, "y": 64.0,   "length": 119, "thickness": 18, "type": TYPE_TRIANGLE},
-	18: {"parent": 17, "x": -28.7,  "y": 18.3,   "length": 34,  "thickness": 18, "type": TYPE_TRIANGLE},
-	23: {"parent": 18, "x": 15.4,   "y": 24.2,   "length": 29,  "thickness": 18, "type": TYPE_TRIANGLE},
-	22: {"parent": 18, "x": -15.4,  "y": -24.2,  "length": 29,  "thickness": 18, "type": TYPE_TRIANGLE},
-	19: {"parent": 18, "x": -13.9,  "y": 8.9,    "length": 17,  "thickness": 7,  "type": TYPE_TRIANGLE},
-	20: {"parent": 19, "x": -11.8,  "y": 7.5,    "length": 14,  "thickness": 7,  "type": TYPE_TRIANGLE},
-	21: {"parent": 20, "x": -26.1,  "y": 16.7,   "length": 31,  "thickness": 14, "type": TYPE_ELLIPSE},
+	15: {"parent": 14, "x": 33.8,   "y": 35.2,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},  ## 右手 → 武器挂载点
 	9:  {"parent": 8,  "x": 19.9,   "y": -45.9,  "length": 50,  "thickness": 23, "type": -1},  ## 脖：仅用于定位头，不渲染
 	10: {"parent": 9,  "x": -15.1,  "y": 34.8,   "length": 38,  "thickness": 23, "type": TYPE_CIRCLE},
 }
@@ -93,14 +102,19 @@ var _rebuild_pending: bool = false
 
 func _ready() -> void:
 	if Engine.is_editor_hint():
-		# 编辑器：扫描已有节点，但不生成纹理（用 .tscn 的 ExtResource）
 		_collect_existing_nodes(self)
+		_setup_animations()
+		_setup_animation_tree()
+		_setup_weapon(WEAPON_ATTACH_R, "_weapon_r")
+		_setup_weapon(WEAPON_ATTACH_L, "_weapon_l")
 		return
 	if _bones.size() > 0:
 		return
 	_build_skeleton()
 	_setup_animations()
 	_setup_animation_tree()
+	_setup_weapon(WEAPON_ATTACH_R, "_weapon_r")
+	_setup_weapon(WEAPON_ATTACH_L, "_weapon_l")
 
 
 func _process(_delta: float) -> void:
@@ -109,6 +123,56 @@ func _process(_delta: float) -> void:
 	if _rebuild_pending:
 		_rebuild_pending = false
 		_do_rebuild_all_sprites()
+
+
+# ============================================================
+#  武器挂载（GripPoint 对齐，支持双持）
+# ============================================================
+
+func _setup_weapon(bone_id: int, slot_name: String) -> void:
+	var scene: PackedScene = weapon_scene if bone_id == WEAPON_ATTACH_R else offhand_scene
+	var current: Node2D = _weapon_r if bone_id == WEAPON_ATTACH_R else _weapon_l
+	
+	if bone_id == WEAPON_ATTACH_R and scene == null and ResourceLoader.exists("res://modules/units/weapon/weapon_sword_placeholder.tscn"):
+		scene = load("res://modules/units/weapon/weapon_sword_placeholder.tscn")
+		weapon_scene = scene
+	
+	if is_instance_valid(current):
+		current.queue_free()
+	if bone_id == WEAPON_ATTACH_R:
+		_weapon_r = null
+	else:
+		_weapon_l = null
+	
+	if scene == null:
+		return
+	
+	var hand := _bones.get(bone_id, null) as Node2D
+	if hand == null:
+		return
+	
+	var hand_marker := hand.get_node_or_null("HandMarker") as Marker2D
+	if hand_marker == null:
+		hand_marker = Marker2D.new()
+		hand_marker.name = "HandMarker"
+		hand.add_child(hand_marker)
+	
+	var instance := scene.instantiate() as Node2D
+	instance.name = slot_name.trim_prefix("_")
+	hand.add_child(instance)
+	
+	var grip := instance.get_node_or_null("GripPoint") as Marker2D
+	if grip:
+		instance.position = hand_marker.position - grip.position
+		instance.rotation = hand_marker.rotation - grip.rotation
+	
+	instance.z_index = 1
+	instance.z_as_relative = false
+	
+	if bone_id == WEAPON_ATTACH_R:
+		_weapon_r = instance
+	else:
+		_weapon_l = instance
 
 
 # ============================================================
@@ -177,7 +241,7 @@ func _collect_existing_nodes(parent: Node) -> void:
 		_collect_existing_nodes(child)
 
 
-func _update_sprite_texture(sprite: Sprite2D, length: int, thickness: int, node_type: int) -> void:
+func _update_sprite_texture(sprite: Sprite2D, _length: int, _thickness: int, node_type: int) -> void:
 	var id_str := sprite.name.trim_prefix("sprite_")
 	var tex: Texture2D = null
 	if id_str.is_valid_int():
@@ -441,16 +505,35 @@ static func _downscale_lanczos(img: Image, target_w: int, target_h: int) -> Imag
 # ============================================================
 
 func _setup_animations() -> void:
-	_anim_player = AnimationPlayer.new()
-	_anim_player.name = "AnimationPlayer"
-	add_child(_anim_player)
+	_anim_player = get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if _anim_player == null:
+		_anim_player = AnimationPlayer.new()
+		_anim_player.name = "AnimationPlayer"
+		add_child(_anim_player)
+	else:
+		_anim_player.clear_animation_libraries()
+	_anim_player.root_node = NodePath("..")
+	# 代码生成动画
+	var lib := AnimationLibrary.new()
+	_anim_player.add_animation_library("", lib)
 	_create_idle_anim()
 	_create_walk_anim()
 	_create_attack_anim()
 	_create_dead_anim()
 
 
+func _load_anim(lib: AnimationLibrary, anim_name: String) -> void:
+	var anim := load("res://modules/units/animations/%s.tres" % anim_name) as Animation
+	if anim:
+		lib.add_animation(anim_name, anim)
+
+
 func _setup_animation_tree() -> void:
+	# 复用已有的 AnimationTree
+	_anim_tree = get_node_or_null("AnimationTree") as AnimationTree
+	if _anim_tree != null:
+		_acquire_playback()
+		return
 	_anim_tree = AnimationTree.new()
 	_anim_tree.name = "AnimationTree"
 	add_child(_anim_tree)
@@ -495,18 +578,20 @@ static func _make_smt(xfade: float) -> AnimationNodeStateMachineTransition:
 	return t
 
 
+# ============================================================
+#  动画创建（代码 K 帧，使用 root_node 相对路径）
+# ============================================================
+
 func _create_idle_anim() -> void:
 	var anim := Animation.new()
 	anim.loop_mode = Animation.LOOP_LINEAR
 	anim.length = 2.0
-	var lib := AnimationLibrary.new()
 	_add_rot_keys(anim, 8, [0.0, deg_to_rad(4.0), 1.0, deg_to_rad(-3.0), 2.0, 0.0])
 	_add_rot_keys(anim, 1, [0.0, deg_to_rad(2.0), 1.0, deg_to_rad(-1.5), 2.0, 0.0])
 	_add_rot_keys(anim, 3, [0.0, deg_to_rad(5.0), 1.0, deg_to_rad(-4.0), 2.0, 0.0])
 	_add_rot_keys(anim, 11, [0.0, deg_to_rad(-4.0), 1.0, deg_to_rad(5.0), 2.0, 0.0])
 	_add_rot_keys(anim, 9, [0.0, deg_to_rad(2.0), 1.0, deg_to_rad(-1.5), 2.0, 0.0])
-	lib.add_animation(ANIM_IDLE, anim)
-	_anim_player.add_animation_library("", lib)
+	_anim_player.get_animation_library("").add_animation(ANIM_IDLE, anim)
 
 
 func _create_walk_anim() -> void:
@@ -531,7 +616,6 @@ func _create_attack_anim() -> void:
 	_add_rot_keys(anim, 14, [0.0, deg_to_rad(-80.0), 0.15, deg_to_rad(100.0), 0.4, deg_to_rad(15.0), 0.6, 0.0])
 	_add_rot_keys(anim, 15, [0.0, deg_to_rad(-40.0), 0.15, deg_to_rad(50.0), 0.4, 0.0, 0.6, 0.0])
 	_add_rot_keys(anim, 8, [0.0, deg_to_rad(-12.0), 0.15, deg_to_rad(15.0), 0.4, 0.0, 0.6, 0.0])
-	_add_rot_keys(anim, 16, [0.0, deg_to_rad(30.0), 0.15, deg_to_rad(-40.0), 0.4, 0.0, 0.6, 0.0])
 	_add_rot_keys(anim, 3, [0.0, deg_to_rad(-10.0), 0.15, deg_to_rad(15.0), 0.4, 0.0, 0.6, 0.0])
 	_anim_player.get_animation_library("").add_animation(ANIM_ATTACK, anim)
 
@@ -555,10 +639,11 @@ func _add_rot_keys(anim: Animation, bone_id: int, keys: Array) -> void:
 	var bone: Node2D = _bones.get(bone_id, null)
 	if bone == null:
 		return
+	# root_node 是 StickmanRig(self)，路径从 self 出发
 	var path := "%s:rotation" % str(get_path_to(bone))
 	var track_idx: int = anim.add_track(Animation.TYPE_VALUE)
 	anim.track_set_path(track_idx, path)
-	anim.track_set_interpolation_type(track_idx, 3)
+	anim.track_set_interpolation_type(track_idx, Animation.INTERPOLATION_LINEAR)
 	var i: int = 0
 	while i + 1 < keys.size():
 		anim.track_insert_key(track_idx, float(keys[i]), float(keys[i + 1]))

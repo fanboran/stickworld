@@ -1,0 +1,99 @@
+# 武器挂载系统
+
+## 架构
+
+```
+StickmanRig（角色骨架，不变）
+├── bone_2（左手）→ HandMarker → weapon_l（左手武器实例）
+└── bone_15（右手）→ HandMarker → weapon_r（右手武器实例）
+```
+
+角色和武器完全解耦。同一套骨架适配所有武器，不需要为每种武器复制角色。
+
+## Inspector 属性
+
+选中 `StickmanRig` 节点：
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `Weapon Scene` | PackedScene | 右手武器，默认加载占位剑 |
+| `Offhand Scene` | PackedScene | 左手武器（盾/弓/副武器），留空表示空手 |
+
+## 武器场景规范
+
+任何武器只需满足以下接口即可挂载：
+
+```
+YourWeapon.tscn
+├── Sprite2D（武器贴图，可多个）
+└── GripPoint（Marker2D）← 标记握持点
+```
+
+`GripPoint` 的位置在武器的本地坐标系中定义。挂载时通过差值计算对齐到手上的 `HandMarker`：
+
+```gdscript
+weapon.position = hand_marker.position - grip.position
+weapon.rotation = hand_marker.rotation - grip.rotation
+```
+
+**示例**：剑的 GripPoint 设在剑柄 `(0, 48)`，矛设在杆子偏后位置，盾设在把手中央，弓设在握把处。
+
+## 使用方式
+
+### 编辑器中
+
+1. 打开 `stickman_test.tscn`
+2. 选中 `StickmanRig` 节点
+3. 把武器 `.tscn` 拖入 `Weapon Scene` 或 `Offhand Scene`
+
+### 运行时
+
+```gdscript
+# 装备
+$StickmanRig.weapon_scene = load("res://world/units/my_sword.tscn")
+
+# 换武器
+$StickmanRig.weapon_scene = load("res://world/units/my_spear.tscn")
+
+# 双持
+$StickmanRig.offhand_scene = load("res://world/units/my_shield.tscn")
+
+# 卸下
+$StickmanRig.weapon_scene = null
+```
+
+## K帧武器动画
+
+武器是手部骨骼的子节点，AnimationPlayer 中可 K 两层：
+
+| 轨道 | 效果 |
+|------|------|
+| `bone_15:rotation` | 手臂摆动，武器跟随 |
+| `bone_15/weapon:rotation` | **武器在手中的旋转**（转圈/翻转/收鞘） |
+| `bone_15/weapon:position` | 武器在手中的位移（抛出/收回，很少用） |
+
+**下压挥砍**：手臂往下摆 + 武器同步旋转保持刃口朝前。
+```gdscript
+# attack 动画中
+_add_rot_keys(anim, 15, [0.0, deg_to_rad(-40), ...])   # 手臂下压
+_add_rot_keys(anim, "weapon_r", [0.0, deg_to_rad(30), ...])  # 武器转刃
+```
+
+## 渲染层级
+
+武器 `z_index = 1`（在身体之上）。如果需要武器在特定手臂之下，给该手臂骨骼的 sprite 设 `z_index = 2`。
+
+## 待扩展：武器类型 → 动作模组
+
+`StickmanRig` 中预置了 `WeaponType` 枚举（SWORD / SPEAR / BOW / SHIELD / UNARMED）。
+
+后续武器场景可添加 `weapon_type` 元数据，AnimationTree 根据类型切换到对应的攻击动画：
+
+```
+StateMachine
+├── idle / walk / dead（共用）
+├── attack_sword  ← weapon_type == SWORD
+├── attack_spear  ← weapon_type == SPEAR
+├── attack_bow    ← weapon_type == BOW
+└── block         ← weapon_type == SHIELD
+```

@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="stick_world"
-run/main_scene="uid://b8w2y6k7tam4x"
+run/main_scene="uid://stickmantmod01"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 

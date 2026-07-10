@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3 uid="uid://wpnswordm01"]
+
+[ext_resource type="Texture2D" path="res://assets/textures/weapon_sword_placeholder.png" id="1_tex"]
+
+[node name="SwordPlaceholder" type="Node2D"]
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("1_tex")
+scale = Vector2(2, 2)
+
+[node name="GripPoint" type="Marker2D" parent="."]
+position = Vector2(0, 48)

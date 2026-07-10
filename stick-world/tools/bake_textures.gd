@@ -27,15 +27,7 @@ const SWL_SWORDWRATH: Dictionary = {
 	2:  {"parent": 1,  "x": -3.1,   "y": 48.7,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	14: {"parent": 8,  "x": 1.1,    "y": 64.1,   "length": 64,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	15: {"parent": 14, "x": 33.8,   "y": 35.2,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
-	16: {"parent": 15, "x": 144.2,  "y": -91.9,  "length": 171, "thickness": 0,  "type": TYPE_ROUND_SEG},
-	17: {"parent": 16, "x": -100.3, "y": 64.0,   "length": 119, "thickness": 18, "type": TYPE_TRIANGLE},
-	18: {"parent": 17, "x": -28.7,  "y": 18.3,   "length": 34,  "thickness": 18, "type": TYPE_TRIANGLE},
-	23: {"parent": 18, "x": 15.4,   "y": 24.2,   "length": 29,  "thickness": 18, "type": TYPE_TRIANGLE},
-	22: {"parent": 18, "x": -15.4,  "y": -24.2,  "length": 29,  "thickness": 18, "type": TYPE_TRIANGLE},
-	19: {"parent": 18, "x": -13.9,  "y": 8.9,    "length": 17,  "thickness": 7,  "type": TYPE_TRIANGLE},
-	20: {"parent": 19, "x": -11.8,  "y": 7.5,    "length": 14,  "thickness": 7,  "type": TYPE_TRIANGLE},
-	21: {"parent": 20, "x": -26.1,  "y": 16.7,   "length": 31,  "thickness": 14, "type": TYPE_ELLIPSE},
-	9:  {"parent": 8,  "x": 19.9,   "y": -45.9,  "length": 50,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	9:  {"parent": 8,  "x": 19.9,   "y": -45.9,  "length": 50,  "thickness": 23, "type": -1},
 	10: {"parent": 9,  "x": -15.1,  "y": 34.8,   "length": 38,  "thickness": 23, "type": TYPE_CIRCLE},
 }
 

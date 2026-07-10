@@ -9,21 +9,21 @@ var data_path: String:
 
 var _data: Dictionary = {}
 
-func _ready():
+func _ready() -> void:
 	load_data()
 
 ## 加载数据
-func load_data():
+func load_data() -> void:
 	_data = FileUtils.load_json(data_path)
 
 ## 读取
-func data_get(key: String, default):
+func data_get(key: String, default = null):
 	return _data.get(key, default)
 
 ## 写入
-func data_set(key: String, value):
+func data_set(key: String, value) -> void:
 	_data[key] = value
 
 ## 保存
-func save_data():
+func save_data() -> void:
 	FileUtils.save_json(data_path, _data)

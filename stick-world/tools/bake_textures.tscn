@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://dm4uoiht8rsxw"]
+
+[ext_resource type="Script" path="res://tools/bake_textures.gd" id="1_bake"]
+
+[node name="BakeTextures" type="Node"]
+script = ExtResource("1_bake")

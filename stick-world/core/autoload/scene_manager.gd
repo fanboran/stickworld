@@ -56,7 +56,7 @@ func register_views(view_map: Dictionary) -> void:
 func switch_view(view_name: String, push_history: bool = true) -> Node:
 	if not _views.has(view_name):
 		push_warning("[SceneManager] 未注册的视图: %s" % view_name)
-		emit_signal("view_not_found", view_name)
+		view_not_found.emit(view_name)
 		return null
 
 	var packed: PackedScene = _views[view_name]
@@ -78,7 +78,7 @@ func switch_view(view_name: String, push_history: bool = true) -> Node:
 	_current_view = new_view
 	_current_name = view_name
 
-	emit_signal("view_changed", view_name, new_view)
+	view_changed.emit(view_name, new_view)
 	return new_view
 
 

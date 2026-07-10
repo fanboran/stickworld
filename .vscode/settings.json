@@ -1,6 +1,7 @@
 {
     "files.exclude": {
         ".workbuddy": true,
-        ".codebuddy": true
+        ".codebuddy": true,
+        "**/*.uid": true
     }
 }

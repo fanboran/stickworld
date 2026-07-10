@@ -78,14 +78,14 @@ func play_bgm(path: String, loop: bool = true) -> void:
 	_bgm_player.volume_db = _to_db(float(_volumes["master"]) * float(_volumes["bgm"]))
 	_bgm_player.play()
 	_current_bgm_path = path
-	emit_signal("bgm_playing", path)
+	bgm_playing.emit(path)
 
 
 func stop_bgm() -> void:
 	if _bgm_player and _bgm_player.playing:
 		_bgm_player.stop()
 		_current_bgm_path = ""
-		emit_signal("bgm_stopped")
+		bgm_stopped.emit()
 
 
 func is_bgm_playing() -> bool:

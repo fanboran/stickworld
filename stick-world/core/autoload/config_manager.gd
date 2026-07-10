@@ -76,7 +76,7 @@ func save_to_disk() -> void:
 func reset_to_defaults() -> void:
 	_data = _defaults.duplicate(true)
 	save_to_disk()
-	emit_signal("config_changed", "", null)
+	config_changed.emit("", null)
 
 
 # ─────────────────────────────── 通用读写 ───────────────────────────────
@@ -93,7 +93,7 @@ func set_value(key: String, value) -> void:
 	if (not _data.has(key)) or _data[key] != value:
 		_data[key] = value
 		save_to_disk()
-		emit_signal("config_changed", key, value)
+		config_changed.emit(key, value)
 
 
 ## 键是否存在。
@@ -117,7 +117,7 @@ func set_volume(channel: String, value: float) -> void:
 	var clamped: float = clamp(value, 0.0, 1.0)
 	var key: String = "audio/%s_volume" % channel
 	set_value(key, clamped)
-	emit_signal("volume_changed", channel, clamped)
+	volume_changed.emit(channel, clamped)
 	if channel == "master":
 		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"),
 			linear_to_db(clamped))
@@ -139,7 +139,7 @@ func is_fullscreen() -> bool:
 
 func set_fullscreen(value: bool) -> void:
 	set_value("display/fullscreen", value)
-	emit_signal("display_changed", "fullscreen", value)
+	display_changed.emit("fullscreen", value)
 	if value:
 		get_window().mode = Window.MODE_FULLSCREEN
 	else:
@@ -154,7 +154,7 @@ func is_vsync() -> bool:
 
 func set_vsync(value: bool) -> void:
 	set_value("display/vsync", value)
-	emit_signal("display_changed", "vsync", value)
+	display_changed.emit("vsync", value)
 	if value:
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
 	else:
@@ -174,7 +174,7 @@ func get_resolution() -> Vector2i:
 func set_resolution(size: Vector2i) -> void:
 	set_value("display/resolution_width", size.x)
 	set_value("display/resolution_height", size.y)
-	emit_signal("display_changed", "resolution", size)
+	display_changed.emit("resolution", size)
 	if not is_fullscreen():
 		get_window().size = size
 

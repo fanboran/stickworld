@@ -62,3 +62,27 @@ coverage/
 
 # OS
 .DS_
+external/swl_extracted/SWL Archidon.nodes
+external/swl_extracted/SWL Giant.nodes
+external/swl_extracted/SWL Magikill.nodes
+external/swl_extracted/SWL Miner Bag.nodes
+external/swl_extracted/SWL Miner.nodes
+external/swl_extracted/SWL Minion (Side-Front view).nodes
+external/swl_extracted/SWL Minion (Trident).nodes
+external/swl_extracted/SWL Spearton.nodes
+external/swl_extracted/SWL Swordwrath.nodes
+node_modules/.package-lock.json
+node_modules/sticknodes-js/LICENSE
+node_modules/sticknodes-js/package.json
+node_modules/sticknodes-js/README.docs.md
+node_modules/sticknodes-js/README.md
+node_modules/sticknodes-js/sticknodes_js_bg.js
+node_modules/sticknodes-js/sticknodes_js_bg.wasm
+node_modules/sticknodes-js/sticknodes_js_bg.wasm.d.ts
+node_modules/sticknodes-js/sticknodes_js_nodejs_bg.js
+node_modules/sticknodes-js/sticknodes_js_nodejs_bg.wasm
+node_modules/sticknodes-js/sticknodes_js_nodejs.js
+node_modules/sticknodes-js/sticknodes_js_web_bg.wasm
+node_modules/sticknodes-js/sticknodes_js_web.js
+node_modules/sticknodes-js/sticknodes_js.d.ts
+node_modules/sticknodes-js/sticknodes_js.js

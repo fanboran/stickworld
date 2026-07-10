@@ -1,0 +1,82 @@
+[gd_scene format=3 uid="uid://b8w2y6k7tam4x"]
+
+[ext_resource type="Script" uid="uid://iekmwutgekif" path="res://world/units/stickman_rig.gd" id="1_rig"]
+[ext_resource type="Script" uid="uid://cuh2fct523xj" path="res://world/units/stickman_test.gd" id="2_test"]
+
+[node name="StickmanTest" type="Node2D" unique_id=1077912293]
+script = ExtResource("2_test")
+
+[node name="StickmanRig" type="Node2D" parent="." unique_id=1296349571]
+script = ExtResource("1_rig")
+body_color = Color(0.14178935, 0.14146012, 0.16638729, 1)
+
+[node name="bone_0" type="Node2D" parent="StickmanRig" unique_id=637891763]
+
+[node name="bone_3" type="Node2D" parent="StickmanRig/bone_0" unique_id=1631555293]
+position = Vector2(25.4, 60.9)
+
+[node name="bone_4" type="Node2D" parent="StickmanRig/bone_0/bone_3" unique_id=802239867]
+position = Vector2(2.9, 68.9)
+
+[node name="bone_5" type="Node2D" parent="StickmanRig/bone_0/bone_3/bone_4" unique_id=1479433324]
+position = Vector2(11, 0)
+
+[node name="bone_11" type="Node2D" parent="StickmanRig/bone_0" unique_id=20536172]
+position = Vector2(-4.8, 65.8)
+
+[node name="bone_12" type="Node2D" parent="StickmanRig/bone_0/bone_11" unique_id=1618285253]
+position = Vector2(-16.9, 66.9)
+
+[node name="bone_13" type="Node2D" parent="StickmanRig/bone_0/bone_11/bone_12" unique_id=1146965839]
+position = Vector2(11, -0.2)
+
+[node name="bone_6" type="Node2D" parent="StickmanRig/bone_0" unique_id=2009824137]
+position = Vector2(1.8, -30.9)
+
+[node name="bone_7" type="Node2D" parent="StickmanRig/bone_0/bone_6" unique_id=1641816522]
+position = Vector2(5.7, -30.5)
+
+[node name="bone_8" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7" unique_id=716044644]
+position = Vector2(10.4, -29.2)
+
+[node name="bone_1" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8" unique_id=235611013]
+position = Vector2(-34.7, 53.9)
+
+[node name="bone_2" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_1" unique_id=541825843]
+position = Vector2(-3.1, 48.7)
+
+[node name="bone_14" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8" unique_id=163767382]
+position = Vector2(1.1, 64.1)
+
+[node name="bone_15" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14" unique_id=1191953852]
+position = Vector2(33.8, 35.2)
+
+[node name="bone_16" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15" unique_id=45117108]
+position = Vector2(144.2, -91.9)
+
+[node name="bone_17" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15/bone_16" unique_id=1013378164]
+position = Vector2(-100.3, 64)
+
+[node name="bone_18" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15/bone_16/bone_17" unique_id=43958542]
+position = Vector2(-28.7, 18.3)
+
+[node name="bone_23" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15/bone_16/bone_17/bone_18" unique_id=579408479]
+position = Vector2(15.4, 24.2)
+
+[node name="bone_22" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15/bone_16/bone_17/bone_18" unique_id=1856162275]
+position = Vector2(-15.4, -24.2)
+
+[node name="bone_19" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15/bone_16/bone_17/bone_18" unique_id=1827730367]
+position = Vector2(-13.9, 8.9)
+
+[node name="bone_20" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15/bone_16/bone_17/bone_18/bone_19" unique_id=1106433602]
+position = Vector2(-11.8, 7.5)
+
+[node name="bone_21" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15/bone_16/bone_17/bone_18/bone_19/bone_20" unique_id=418648086]
+position = Vector2(-26.1, 16.7)
+
+[node name="bone_9" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8" unique_id=1950893669]
+position = Vector2(19.9, -45.9)
+
+[node name="bone_10" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_9" unique_id=1172953555]
+position = Vector2(-15.1, 34.8)

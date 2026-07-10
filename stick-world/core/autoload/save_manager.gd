@@ -65,7 +65,7 @@ func save_game(slot_index: int) -> bool:
 		push_warning("[SaveManager] 存档槽越界: %d" % slot_index)
 		return false
 
-	EventBus.emit_signal("game_saving", slot_index)
+	EventBus.game_saving.emit(slot_index)
 
 	var modules_data: Dictionary = {}
 	for name in _modules.keys():
@@ -89,7 +89,7 @@ func save_game(slot_index: int) -> bool:
 	file.store_string(JSON.stringify(payload, "\t"))
 	file.close()
 
-	EventBus.emit_signal("game_saved", slot_index)
+	EventBus.game_saved.emit(slot_index)
 	return true
 
 
@@ -126,7 +126,7 @@ func load_game(slot_index: int) -> bool:
 			else:
 				obj.call("load_save_data", {})
 
-	EventBus.emit_signal("game_loaded", slot_index)
+	EventBus.game_loaded.emit(slot_index)
 	return true
 
 

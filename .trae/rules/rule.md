@@ -150,23 +150,6 @@ modules/player/
 
 ## Git 分支与工作流规范
 
-### 分支角色
-
-| 分支 | 用途 | 寿命 |
-|------|------|------|
-| `main` | 稳定发布分支 | 永久 |
-| `dev/xxx` | 各开发者的个人集成分支 | 永久 |
-| `agent/xxx` | AI 执行任务的功能分支 | **合并后删除** |
-
-### AI 工作流
-
-1. 确定当前 `dev/xxx` 分支
-2. `git checkout -b agent/xxx <当前dev分支>`
-3. 编码 + 测试 → `godot --headless` 验证 → 原子化提交
-4. `git push -u origin agent/xxx`
-5. 合并回 dev：`git checkout <dev> ; git merge agent/xxx ; git push`
-6. 清理：`git branch -d agent/xxx ; git push origin --delete agent/xxx`
-
 ### 提交规范
 
 - 中文提交信息，格式：`类型(模块): 描述`
@@ -187,6 +170,5 @@ modules/player/
 - 本项目使用 **Git Bash**（非 PowerShell）。使用 Unix 风格命令：`ls`、`grep`、`rm`、`mkdir -p`、`&&`、`||`。
 - 路径使用正斜杠 `/`。
 - 路径含空格必须用引号包裹。
-- Godot 可执行文件路径：`"F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe"`
 - Godot headless 命令：`"F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" --headless --path "f:/VSCode/game-2/stick-world"`。
 

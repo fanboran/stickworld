@@ -7,6 +7,9 @@ extends Node
 ##
 ## 约定：事件名用 snake_case，见名知意；参数放在信号声明里。
 
+# 信号是公共 API，供其他模块 connect/emit，此处忽略"未使用"警告
+@warning_ignore("unused_signal")
+
 # ─────────────────────────────── 游戏生命周期 ───────────────────────────────
 
 signal game_started

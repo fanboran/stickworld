@@ -2,6 +2,7 @@
     "files.exclude": {
         ".workbuddy": true,
         ".codebuddy": true,
-        "**/*.uid": true
+        "**/*.uid": true,
+		"**/*.import": true
     }
 }

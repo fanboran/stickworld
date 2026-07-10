@@ -14,7 +14,7 @@ const TYPE_TRIANGLE: int = 3
 const TYPE_ELLIPSE: int = 5
 
 # ===== 超采样倍率 =====
-const SSAA: int = 2
+const SSAA: int = 4
 
 # ===== 动画状态名 =====
 const ANIM_IDLE := "idle"
@@ -344,7 +344,7 @@ func _draw_pill_ssaa(w: int, h: int, thickness: int, color: Color) -> Image:
 	var sh: int = h * SSAA
 	var st: int = thickness * SSAA
 	var img := Image.create(sw, sh, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
+	img.fill(Color(color.r, color.g, color.b, 0.0))  # 用目标色填充避免降采样边缘黑边
 	var radius: float = st / 2.0
 	var rect_left: float = radius
 	var rect_right: float = sw - radius
@@ -359,7 +359,7 @@ func _draw_pill_ssaa(w: int, h: int, thickness: int, color: Color) -> Image:
 func _draw_circle_ssaa(d: int, color: Color) -> Image:
 	var sd: int = d * SSAA
 	var img := Image.create(sd, sd, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
+	img.fill(Color(color.r, color.g, color.b, 0.0))  # 用目标色填充避免降采样边缘黑边
 	var cx: float = sd / 2.0
 	var cy: float = sd / 2.0
 	var radius: float = sd / 2.0
@@ -376,7 +376,7 @@ func _draw_triangle_ssaa(w: int, h: int, color: Color) -> Image:
 	var sw: int = w * SSAA
 	var sh: int = h * SSAA
 	var img := Image.create(sw, sh, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
+	img.fill(Color(color.r, color.g, color.b, 0.0))  # 用目标色填充避免降采样边缘黑边
 	var p1 := Vector2(0.0, sh / 2.0)
 	var p2 := Vector2(float(sw), 0.0)
 	var p3 := Vector2(float(sw), float(sh))
@@ -392,7 +392,7 @@ func _draw_ellipse_ssaa(w: int, h: int, color: Color) -> Image:
 	var sw: int = w * SSAA
 	var sh: int = h * SSAA
 	var img := Image.create(sw, sh, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
+	img.fill(Color(color.r, color.g, color.b, 0.0))  # 用目标色填充避免降采样边缘黑边
 	var rx: float = sw / 2.0
 	var ry: float = sh / 2.0
 	var cx: float = rx

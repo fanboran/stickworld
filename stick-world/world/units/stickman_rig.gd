@@ -16,6 +16,9 @@ const TYPE_ELLIPSE: int = 5
 # ===== 超采样倍率 =====
 const SSAA: int = 4
 
+# ===== 输出倍率（纹理放大倍数，4 倍消除锯齿感） =====
+const OUTPUT_SCALE: float = 4.0
+
 # ===== 动画状态名 =====
 const ANIM_IDLE := "idle"
 const ANIM_WALK := "walk"
@@ -190,6 +193,7 @@ func _update_sprite_texture(sprite: Sprite2D, length: int, thickness: int, node_
 		var adj_thickness: int = max(int(thickness * thickness_scale), 1)
 		tex = _generate_texture(node_type, length, adj_thickness, color)
 	sprite.texture = tex
+	sprite.scale = Vector2(1.0 / OUTPUT_SCALE, 1.0 / OUTPUT_SCALE)
 
 
 func _build_from_scratch() -> void:
@@ -247,6 +251,7 @@ func _create_part_sprite(node: Node2D, id: int, length: int, thickness: int, nod
 		var adj_thickness: int = max(int(thickness * thickness_scale), 1)
 		tex = _generate_texture(node_type, length, adj_thickness, color)
 	sprite.texture = tex
+	sprite.scale = Vector2(1.0 / OUTPUT_SCALE, 1.0 / OUTPUT_SCALE)
 
 	var offset := Vector2(px, py)
 	if node_type == TYPE_CIRCLE:
@@ -313,28 +318,28 @@ func _generate_texture(node_type: int, length: int, thickness: int, color: Color
 # ============================================================
 
 func _generate_pill_texture(length: float, thickness: int, color: Color) -> ImageTexture:
-	var w: int = max(int(length) + thickness, 4)
-	var h: int = max(thickness, 4)
-	var img := _draw_pill_ssaa(w, h, thickness, color)
+	var w: int = int((max(int(length) + thickness, 4)) * OUTPUT_SCALE)
+	var h: int = int(max(thickness, 4) * OUTPUT_SCALE)
+	var img := _draw_pill_ssaa(w, h, thickness * int(OUTPUT_SCALE), color)
 	return ImageTexture.create_from_image(img)
 
 
 func _generate_circle_texture(diameter: int, color: Color) -> ImageTexture:
-	var d: int = max(diameter, 4)
+	var d: int = int(max(diameter, 4) * OUTPUT_SCALE)
 	var img := _draw_circle_ssaa(d, color)
 	return ImageTexture.create_from_image(img)
 
 
 func _generate_triangle_texture(length: float, thickness: int, color: Color) -> ImageTexture:
-	var w: int = max(int(length), 4)
-	var h: int = max(thickness * 2, 8)
+	var w: int = int(max(int(length), 4) * OUTPUT_SCALE)
+	var h: int = int(max(thickness * 2, 8) * OUTPUT_SCALE)
 	var img := _draw_triangle_ssaa(w, h, color)
 	return ImageTexture.create_from_image(img)
 
 
 func _generate_ellipse_texture(length: float, thickness: int, color: Color) -> ImageTexture:
-	var w: int = max(int(length), 4)
-	var h: int = max(thickness, 4)
+	var w: int = int(max(int(length), 4) * OUTPUT_SCALE)
+	var h: int = int(max(thickness, 4) * OUTPUT_SCALE)
 	var img := _draw_ellipse_ssaa(w, h, color)
 	return ImageTexture.create_from_image(img)
 

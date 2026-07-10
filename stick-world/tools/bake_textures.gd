@@ -10,6 +10,7 @@ const TYPE_CIRCLE: int = 2
 const TYPE_TRIANGLE: int = 3
 const TYPE_ELLIPSE: int = 5
 const SSAA: int = 4
+const OUTPUT_SCALE: float = 4.0
 
 const SWL_SWORDWRATH: Dictionary = {
 	0:  {"parent": -1, "x": 0.0,    "y": 0.0,    "length": 0,   "thickness": 0,  "type": -1},
@@ -113,28 +114,28 @@ func _generate_texture(node_type: int, length: int, thickness: int, color: Color
 # ============================================================
 
 func _generate_pill_texture(length: float, thickness: int, color: Color) -> ImageTexture:
-	var w: int = max(int(length) + thickness, 4)
-	var h: int = max(thickness, 4)
-	var img := _draw_pill_ssaa(w, h, thickness, color)
+	var w: int = int((max(int(length) + thickness, 4)) * OUTPUT_SCALE)
+	var h: int = int(max(thickness, 4) * OUTPUT_SCALE)
+	var img := _draw_pill_ssaa(w, h, thickness * int(OUTPUT_SCALE), color)
 	return ImageTexture.create_from_image(img)
 
 
 func _generate_circle_texture(diameter: int, color: Color) -> ImageTexture:
-	var d: int = max(diameter, 4)
+	var d: int = int(max(diameter, 4) * OUTPUT_SCALE)
 	var img := _draw_circle_ssaa(d, color)
 	return ImageTexture.create_from_image(img)
 
 
 func _generate_triangle_texture(length: float, thickness: int, color: Color) -> ImageTexture:
-	var w: int = max(int(length), 4)
-	var h: int = max(thickness * 2, 8)
+	var w: int = int(max(int(length), 4) * OUTPUT_SCALE)
+	var h: int = int(max(thickness * 2, 8) * OUTPUT_SCALE)
 	var img := _draw_triangle_ssaa(w, h, color)
 	return ImageTexture.create_from_image(img)
 
 
 func _generate_ellipse_texture(length: float, thickness: int, color: Color) -> ImageTexture:
-	var w: int = max(int(length), 4)
-	var h: int = max(thickness, 4)
+	var w: int = int(max(int(length), 4) * OUTPUT_SCALE)
+	var h: int = int(max(thickness, 4) * OUTPUT_SCALE)
 	var img := _draw_ellipse_ssaa(w, h, color)
 	return ImageTexture.create_from_image(img)
 

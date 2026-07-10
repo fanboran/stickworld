@@ -68,10 +68,10 @@ func save_game(slot_index: int) -> bool:
 	EventBus.game_saving.emit(slot_index)
 
 	var modules_data: Dictionary = {}
-	for name in _modules.keys():
-		var obj: Object = _modules[name]
+	for module_name in _modules.keys():
+		var obj: Object = _modules[module_name]
 		if obj and obj.has_method("get_save_data"):
-			modules_data[name] = obj.call("get_save_data")
+			modules_data[module_name] = obj.call("get_save_data")
 
 	var payload: Dictionary = {
 		"version": 1,
@@ -118,11 +118,11 @@ func load_game(slot_index: int) -> bool:
 	var modules_data: Dictionary = payload.get("modules", {})
 	if typeof(modules_data) != TYPE_DICTIONARY:
 		modules_data = {}
-	for name in _modules.keys():
-		var obj: Object = _modules[name]
+	for module_name in _modules.keys():
+		var obj: Object = _modules[module_name]
 		if obj and obj.has_method("load_save_data"):
-			if modules_data.has(name):
-				obj.call("load_save_data", modules_data[name])
+			if modules_data.has(module_name):
+				obj.call("load_save_data", modules_data[module_name])
 			else:
 				obj.call("load_save_data", {})
 

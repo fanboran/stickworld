@@ -26,8 +26,6 @@ var auto_slow_on_possess: bool = true
 
 # ─────────────────────────────── 内部状态 ────────────────────────────────
 
-var _was_paused: bool = false
-
 
 # ─────────────────────────────── 速度控制 ────────────────────────────────
 
@@ -38,11 +36,11 @@ func set_speed(speed: Speed) -> void:
 
 	var was_paused: bool = (current_speed == Speed.PAUSED)
 	current_speed = speed
-	var is_paused: bool = (current_speed == Speed.PAUSED)
+	var now_paused: bool = (current_speed == Speed.PAUSED)
 
 	# 只在状态变化时发射信号
-	if was_paused != is_paused:
-		if is_paused:
+	if was_paused != now_paused:
+		if now_paused:
 			EventBus.game_paused.emit()
 		else:
 			EventBus.game_resumed.emit()
@@ -76,7 +74,7 @@ func is_paused() -> bool:
 ## 各系统调用此方法判断当前帧是否需要执行更新。
 ## 返回值取决于当前速度：PAUSED 时返回 false，X1 时每帧 true，X2/X4 时可做帧跳过。
 ## 当前实现：PAUSED → false，其他 → true（倍速由各系统自行处理帧间隔）。
-func should_update(system_name: String) -> bool:
+func should_update(_system_name: String) -> bool:
 	if current_speed == Speed.PAUSED:
 		return false
 	# 检查自动暂停条件
@@ -90,7 +88,7 @@ func should_update(system_name: String) -> bool:
 
 ## 检查指定的自动暂停条件是否满足。
 ## 当前预留同步检查接口，后续可改为信号驱动。
-func _check_auto_pause_condition(condition: String) -> bool:
+func _check_auto_pause_condition(_condition: String) -> bool:
 	# 预留：各系统通过 EventBus 注册条件，此处仅检查已触发的条件列表
 	# 当前占位，始终返回 false（不触发自动暂停）
 	return false

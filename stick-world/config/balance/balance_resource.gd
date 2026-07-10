@@ -10,4 +10,5 @@ class_name BalanceResource
 @export var variables: Dictionary = {}
 
 ## 元数据（resource_name、version、description 等）。
+@warning_ignore("unused_private_class_variable")
 @export var _meta: Dictionary = {}

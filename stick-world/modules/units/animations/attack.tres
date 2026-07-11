@@ -1,11 +1,11 @@
-[gd_resource type="Animation" format=3]
+[gd_resource type="Animation" format=3 uid="uid://cc1o1uncwu162"]
 
 [resource]
 length = 0.6
 tracks/0/type = "value"
 tracks/0/imported = false
 tracks/0/enabled = true
-tracks/0/path = NodePath("bone_0/bone_6/bone_7/bone_8/bone_14:rotation")
+tracks/0/path = NodePath("hip/lower_torso/upper_torso/upper_arm_inner:rotation")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = {
@@ -17,7 +17,7 @@ tracks/0/keys = {
 tracks/1/type = "value"
 tracks/1/imported = false
 tracks/1/enabled = true
-tracks/1/path = NodePath("bone_0/bone_6/bone_7/bone_8/bone_14/bone_15:rotation")
+tracks/1/path = NodePath("hip/lower_torso/upper_torso/upper_arm_inner/forearm_inner:rotation")
 tracks/1/interp = 1
 tracks/1/loop_wrap = true
 tracks/1/keys = {
@@ -29,7 +29,7 @@ tracks/1/keys = {
 tracks/2/type = "value"
 tracks/2/imported = false
 tracks/2/enabled = true
-tracks/2/path = NodePath("bone_0/bone_6/bone_7/bone_8:rotation")
+tracks/2/path = NodePath("hip/lower_torso/upper_torso:rotation")
 tracks/2/interp = 1
 tracks/2/loop_wrap = true
 tracks/2/keys = {
@@ -41,7 +41,7 @@ tracks/2/keys = {
 tracks/3/type = "value"
 tracks/3/imported = false
 tracks/3/enabled = true
-tracks/3/path = NodePath("bone_0/bone_3:rotation")
+tracks/3/path = NodePath("thigh_outer:rotation")
 tracks/3/interp = 1
 tracks/3/loop_wrap = true
 tracks/3/keys = {

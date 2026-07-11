@@ -1,9 +1,10 @@
 @tool
 class_name StickmanRig
-extends Node2D
+extends Skeleton2D
 ## 火柴人渲染骨架（主控制器）
 ##
-## 协调骨骼、纹理、动画、武器子系统。
+## 基于 Skeleton2D + Bone2D，在编辑器中只能旋转骨骼关节（不能拖动位置），
+## K 帧体验自然。协调骨骼、纹理、动画、武器子系统。
 ## Inspector 可调参数：厚度、颜色、缩放、武器。
 
 const Skeleton := preload("res://modules/units/scripts/stickman_skeleton.gd")
@@ -84,14 +85,20 @@ func _process(_delta: float) -> void:
 # ============================================================
 
 func _init_bones() -> void:
-	if get_node_or_null("bone_0") != null:
+	# 检查是否已有骨骼（通过 hip 节点判断）
+	if get_node_or_null("hip") != null:
 		var result := Skeleton.collect_nodes(self)
 		_bones = result["bones"]
 		_sprites = result["sprites"]
 	else:
-		_bones = Skeleton.build_from_scratch(self)
-		# 收集新创建的 sprites
-		var result := Skeleton.collect_nodes(self)
+		# 首次打开：从零构建骨骼 + 精灵
+		var colors := {
+			"body": body_color,
+			"weapon": weapon_color,
+			"guard": guard_color,
+		}
+		var result := Skeleton.build_from_scratch(self, thickness_scale, colors)
+		_bones = result["bones"]
 		_sprites = result["sprites"]
 
 
@@ -102,12 +109,17 @@ func _init_animations() -> void:
 		return
 	# 确保 root_node 正确
 	_anim_player.root_node = NodePath("..")
+	# 编辑器模式下跳过动画库加载和 AnimationTree 激活，避免虚拟 AnimationPlayer 警告
+	if Engine.is_editor_hint():
+		return
 	Anims.setup_player(_anim_player)
 	if _anim_tree != null:
 		_state_machine = Anims.setup_tree(_anim_tree, _anim_player)
 
 
 func _init_weapons() -> void:
+	if Engine.is_editor_hint():
+		return
 	_refresh_weapon(Skeleton.WEAPON_ATTACH_R)
 	_refresh_weapon(Skeleton.WEAPON_ATTACH_L)
 

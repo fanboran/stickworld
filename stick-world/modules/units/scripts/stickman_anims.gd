@@ -54,7 +54,9 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	# 先关联 player，再设 tree_root，最后激活
 	tree.anim_player = player.get_path()
 	tree.tree_root = sm
-	tree.active = true
+	# 编辑器模式下不激活 AnimationTree，避免触发虚拟 AnimationPlayer 警告
+	if not Engine.is_editor_hint():
+		tree.active = true
 	return tree.get("parameters/playback")
 
 

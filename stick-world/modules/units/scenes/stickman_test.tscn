@@ -1,14 +1,18 @@
 [gd_scene format=3 uid="uid://bitpg2trkppie"]
 
-[ext_resource type="Script" path="res://modules/units/scripts/stickman_rig.gd" id="1_rig"]
+[ext_resource type="Script" uid="uid://cjrg7kwfc7ljw" path="res://modules/units/scripts/stickman_rig.gd" id="1_rig"]
 [ext_resource type="Texture2D" uid="uid://bw6ni7k0prth7" path="res://modules/units/assets/textures/stickman/bone_1_pill.png" id="1_tex_bone"]
-[ext_resource type="Script" path="res://modules/units/scripts/stickman_test.gd" id="2_test"]
+[ext_resource type="Script" uid="uid://cnaex1dwul5e3" path="res://modules/units/scripts/stickman_test.gd" id="2_test"]
 [ext_resource type="Texture2D" uid="uid://cl74ubh1fhaol" path="res://modules/units/assets/textures/stickman/bone_2_pill.png" id="2_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://dypso82gji2ed" path="res://modules/units/assets/textures/stickman/bone_3_pill.png" id="3_tex_bone"]
 [ext_resource type="PackedScene" uid="uid://wpnswordm01" path="res://modules/units/scenes/components/weapon_sword_placeholder.tscn" id="3_wvxud"]
+[ext_resource type="Animation" uid="uid://cc1o1uncwu162" path="res://modules/units/animations/attack.tres" id="4_c5kt6"]
 [ext_resource type="Texture2D" uid="uid://qh4ast218e0m" path="res://modules/units/assets/textures/stickman/bone_4_pill.png" id="4_tex_bone"]
+[ext_resource type="Animation" path="res://modules/units/animations/dead.tres" id="5_nakf6"]
 [ext_resource type="Texture2D" uid="uid://8ftskm3qn88x" path="res://modules/units/assets/textures/stickman/bone_5_pill.png" id="5_tex_bone"]
+[ext_resource type="Animation" path="res://modules/units/animations/idle.tres" id="6_0rt1i"]
 [ext_resource type="Texture2D" uid="uid://c8o38mk45mqxa" path="res://modules/units/assets/textures/stickman/bone_6_pill.png" id="6_tex_bone"]
+[ext_resource type="Animation" path="res://modules/units/animations/walk.tres" id="7_dwcds"]
 [ext_resource type="Texture2D" uid="uid://cytm0odrcsdkm" path="res://modules/units/assets/textures/stickman/bone_7_pill.png" id="7_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://dbyjhohsnd0i1" path="res://modules/units/assets/textures/stickman/bone_8_pill.png" id="8_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://ds65uuti0ttuo" path="res://modules/units/assets/textures/stickman/bone_10_circle.png" id="10_tex_bone"]
@@ -18,218 +22,249 @@
 [ext_resource type="Texture2D" uid="uid://dyqof1b8i7nmo" path="res://modules/units/assets/textures/stickman/bone_14_pill.png" id="14_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://bgcju53rimf12" path="res://modules/units/assets/textures/stickman/bone_15_pill.png" id="15_tex_bone"]
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_wvxud"]
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_cshof"]
+_data = {
+&"attack": ExtResource("4_c5kt6"),
+&"dead": ExtResource("5_nakf6"),
+&"idle": ExtResource("6_0rt1i"),
+&"walk": ExtResource("7_dwcds")
+}
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_s1jc1"]
 animation = &"attack"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_j6xib"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_fojrx"]
 animation = &"dead"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_rduw8"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_0ucph"]
 animation = &"idle"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_cd5qv"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_17tci"]
 animation = &"walk"
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_6tal3"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_a3egc"]
 xfade_time = 0.2
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_s4j2a"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_0smo0"]
 xfade_time = 0.2
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_yf7ww"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_3ub52"]
 xfade_time = 0.1
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_4psge"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_xu4jv"]
 xfade_time = 0.1
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_e6brr"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_3h6mg"]
 xfade_time = 0.3
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_ovvts"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_365qj"]
 xfade_time = 0.3
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_1ulct"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_sb4xk"]
 xfade_time = 0.3
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_ap64e"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_vk47w"]
 xfade_time = 0.3
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_yncau"]
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_dyvrc"]
 switch_mode = 1
 
-[sub_resource type="AnimationNodeStateMachine" id="AnimationNodeStateMachine_ax4ak"]
-states/Start/position = Vector2(161, 131)
-states/attack/node = SubResource("AnimationNodeAnimation_wvxud")
-states/attack/position = Vector2(11, -26)
-states/dead/node = SubResource("AnimationNodeAnimation_j6xib")
-states/dead/position = Vector2(234, 12)
-states/idle/node = SubResource("AnimationNodeAnimation_rduw8")
-states/idle/position = Vector2(-151, 55)
-states/walk/node = SubResource("AnimationNodeAnimation_cd5qv")
-states/walk/position = Vector2(-48, 151)
-transitions = ["idle", "walk", SubResource("AnimationNodeStateMachineTransition_6tal3"), "walk", "idle", SubResource("AnimationNodeStateMachineTransition_s4j2a"), "idle", "attack", SubResource("AnimationNodeStateMachineTransition_yf7ww"), "walk", "attack", SubResource("AnimationNodeStateMachineTransition_4psge"), "attack", "idle", SubResource("AnimationNodeStateMachineTransition_e6brr"), "idle", "dead", SubResource("AnimationNodeStateMachineTransition_ovvts"), "walk", "dead", SubResource("AnimationNodeStateMachineTransition_1ulct"), "attack", "dead", SubResource("AnimationNodeStateMachineTransition_ap64e"), "Start", "idle", SubResource("AnimationNodeStateMachineTransition_yncau")]
-graph_offset = Vector2(-245, -48)
+[sub_resource type="AnimationNodeStateMachine" id="AnimationNodeStateMachine_38vfy"]
+states/attack/node = SubResource("AnimationNodeAnimation_s1jc1")
+states/attack/position = Vector2(-118, -58)
+states/dead/node = SubResource("AnimationNodeAnimation_fojrx")
+states/dead/position = Vector2(80, -77)
+states/idle/node = SubResource("AnimationNodeAnimation_0ucph")
+states/idle/position = Vector2(73, 142)
+states/walk/node = SubResource("AnimationNodeAnimation_17tci")
+states/walk/position = Vector2(-118, 147)
+transitions = ["idle", "walk", SubResource("AnimationNodeStateMachineTransition_a3egc"), "walk", "idle", SubResource("AnimationNodeStateMachineTransition_0smo0"), "idle", "attack", SubResource("AnimationNodeStateMachineTransition_3ub52"), "walk", "attack", SubResource("AnimationNodeStateMachineTransition_xu4jv"), "attack", "idle", SubResource("AnimationNodeStateMachineTransition_3h6mg"), "idle", "dead", SubResource("AnimationNodeStateMachineTransition_365qj"), "walk", "dead", SubResource("AnimationNodeStateMachineTransition_sb4xk"), "attack", "dead", SubResource("AnimationNodeStateMachineTransition_vk47w"), "Start", "idle", SubResource("AnimationNodeStateMachineTransition_dyvrc")]
+graph_offset = Vector2(-218, -111)
 
 [node name="StickmanTest" type="Node2D" unique_id=372756659]
 script = ExtResource("2_test")
 
-[node name="StickmanRig" type="Node2D" parent="." unique_id=1221827476]
+[node name="StickmanRig" type="Skeleton2D" parent="." unique_id=1221827476]
 script = ExtResource("1_rig")
 body_color = Color(0.1560398, 0.15568888, 0.18235794, 1)
 weapon_scene = ExtResource("3_wvxud")
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="StickmanRig" unique_id=726246529]
+[node name="hip" type="Bone2D" parent="StickmanRig" unique_id=1013551157]
+rest = Transform2D(1, 0, 0, 1, 0, 0)
 
-[node name="AnimationTree" type="AnimationTree" parent="StickmanRig" unique_id=1737963116]
-tree_root = SubResource("AnimationNodeStateMachine_ax4ak")
-anim_player = NodePath("../AnimationPlayer")
-
-[node name="bone_0" type="Node2D" parent="StickmanRig" unique_id=1013551157]
-
-[node name="bone_3" type="Node2D" parent="StickmanRig/bone_0" unique_id=1784305549]
-position = Vector2(25.4, 60.9)
-
-[node name="sprite_3" type="Sprite2D" parent="StickmanRig/bone_0/bone_3" unique_id=1343093235]
+[node name="sprite_6" type="Sprite2D" parent="StickmanRig/hip" unique_id=663561304]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-12.7, -30.45)
-rotation = 1.176
-scale = Vector2(0.25, 0.25)
-texture = ExtResource("3_tex_bone")
-
-[node name="bone_4" type="Node2D" parent="StickmanRig/bone_0/bone_3" unique_id=1725707417]
-position = Vector2(2.9, 68.9)
-
-[node name="sprite_4" type="Sprite2D" parent="StickmanRig/bone_0/bone_3/bone_4" unique_id=547909880]
-modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-1.45, -34.45)
-rotation = 1.529
-scale = Vector2(0.25, 0.25)
-texture = ExtResource("4_tex_bone")
-
-[node name="bone_5" type="Node2D" parent="StickmanRig/bone_0/bone_3/bone_4" unique_id=952719594]
-position = Vector2(11, 0)
-
-[node name="sprite_5" type="Sprite2D" parent="StickmanRig/bone_0/bone_3/bone_4/bone_5" unique_id=2073366354]
-modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-5.5, 0)
-scale = Vector2(0.25, 0.25)
-texture = ExtResource("5_tex_bone")
-
-[node name="bone_11" type="Node2D" parent="StickmanRig/bone_0" unique_id=29905056]
-position = Vector2(-4.8, 65.8)
-
-[node name="sprite_11" type="Sprite2D" parent="StickmanRig/bone_0/bone_11" unique_id=1613970702]
-modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(2.4, -32.9)
-rotation = 1.644
-scale = Vector2(0.25, 0.25)
-texture = ExtResource("11_tex_bone")
-
-[node name="bone_12" type="Node2D" parent="StickmanRig/bone_0/bone_11" unique_id=1819078240]
-position = Vector2(-16.9, 66.9)
-
-[node name="sprite_12" type="Sprite2D" parent="StickmanRig/bone_0/bone_11/bone_12" unique_id=121493700]
-modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(8.45, -33.45)
-rotation = 1.818
-scale = Vector2(0.25, 0.25)
-texture = ExtResource("12_tex_bone")
-
-[node name="bone_13" type="Node2D" parent="StickmanRig/bone_0/bone_11/bone_12" unique_id=944919895]
-position = Vector2(11, -0.2)
-
-[node name="sprite_13" type="Sprite2D" parent="StickmanRig/bone_0/bone_11/bone_12/bone_13" unique_id=680890197]
-modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-5.5, 0.1)
-rotation = -0.018
-scale = Vector2(0.25, 0.25)
-texture = ExtResource("13_tex_bone")
-
-[node name="bone_6" type="Node2D" parent="StickmanRig/bone_0" unique_id=220458876]
-position = Vector2(1.8, -30.9)
-
-[node name="sprite_6" type="Sprite2D" parent="StickmanRig/bone_0/bone_6" unique_id=663561304]
-modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-0.9, 15.45)
+position = Vector2(0.9, -15.45)
 rotation = -1.513
 scale = Vector2(0.25, 0.25)
 texture = ExtResource("6_tex_bone")
 
-[node name="bone_7" type="Node2D" parent="StickmanRig/bone_0/bone_6" unique_id=576270806]
-position = Vector2(5.7, -30.5)
+[node name="lower_torso" type="Bone2D" parent="StickmanRig/hip" unique_id=220458876]
+position = Vector2(1.8, -30.9)
+rest = Transform2D(1, 0, 0, 1, 1.8, -30.9)
 
-[node name="sprite_7" type="Sprite2D" parent="StickmanRig/bone_0/bone_6/bone_7" unique_id=804562802]
+[node name="sprite_7" type="Sprite2D" parent="StickmanRig/hip/lower_torso" unique_id=804562802]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-2.85, 15.25)
+position = Vector2(2.85, -15.25)
 rotation = -1.386
 scale = Vector2(0.25, 0.25)
 texture = ExtResource("7_tex_bone")
 
-[node name="bone_8" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7" unique_id=697582802]
-position = Vector2(10.4, -29.2)
+[node name="upper_torso" type="Bone2D" parent="StickmanRig/hip/lower_torso" unique_id=576270806]
+position = Vector2(5.7, -30.5)
+rest = Transform2D(1, 0, 0, 1, 5.7, -30.5)
 
-[node name="sprite_8" type="Sprite2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8" unique_id=1264414652]
+[node name="sprite_8" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=1264414652]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-5.2, 14.6)
+position = Vector2(5.2, -14.6)
 rotation = -1.229
 scale = Vector2(0.25, 0.25)
 texture = ExtResource("8_tex_bone")
 
-[node name="bone_1" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8" unique_id=20172263]
-position = Vector2(-34.7, 53.9)
+[node name="neck" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=697582802]
+position = Vector2(10.4, -29.2)
+rest = Transform2D(1, 0, 0, 1, 10.4, -29.2)
+auto_calculate_length_and_angle = false
+length = 12.493
+bone_angle = -66.560776
 
-[node name="sprite_1" type="Sprite2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_1" unique_id=1392110674]
+[node name="sprite_10" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/neck" unique_id=1483854500]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(17.35, -26.95)
-rotation = 2.143
+position = Vector2(4.799999, -11.099991)
 scale = Vector2(0.25, 0.25)
+texture = ExtResource("10_tex_bone")
+
+[node name="upper_arm_outer" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=998274463]
+position = Vector2(10.4, -29.200005)
+scale = Vector2(0.9999999, 0.9999999)
+rest = Transform2D(1, 0, 0, 1, 10.4, -29.2)
+
+[node name="sprite_1" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_outer" unique_id=1392110674]
+modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
+position = Vector2(-17.35, 26.95)
+rotation = 2.143
+scale = Vector2(0.24999999, 0.24999999)
 texture = ExtResource("1_tex_bone")
 
-[node name="bone_2" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_1" unique_id=2082236455]
-position = Vector2(-3.1, 48.7)
+[node name="forearm_outer" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_outer" unique_id=20172263]
+position = Vector2(-34.7, 55.9)
+rest = Transform2D(1, 0, 0, 1, -34.7, 53.9)
+auto_calculate_length_and_angle = false
+length = 50.0
+bone_angle = 93.956985
 
-[node name="sprite_2" type="Sprite2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_1/bone_2" unique_id=542986239]
+[node name="sprite_2" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_outer/forearm_outer" unique_id=542986239]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(1.55, -24.35)
+position = Vector2(-1.55, 24.35)
 rotation = 1.634
 scale = Vector2(0.25, 0.25)
 texture = ExtResource("2_tex_bone")
 
-[node name="bone_14" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8" unique_id=422281174]
-position = Vector2(1.1, 64.1)
+[node name="upper_arm_inner" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=1226975132]
+position = Vector2(10.4, -29.200005)
+rest = Transform2D(1, 0, 0, 1, 10.4, -29.2)
 
-[node name="sprite_14" type="Sprite2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14" unique_id=1505495638]
+[node name="sprite_14" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_inner" unique_id=1505495638]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-0.55, -32.05)
+position = Vector2(0.54999924, 32.05)
 rotation = 1.554
-scale = Vector2(0.25, 0.25)
+scale = Vector2(0.24999999, 0.24999999)
 texture = ExtResource("14_tex_bone")
 
-[node name="bone_15" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14" unique_id=1650389484]
-position = Vector2(33.8, 35.2)
+[node name="forearm_inner" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_inner" unique_id=422281174]
+position = Vector2(1.1000004, 64.1)
+rest = Transform2D(1, 0, 0, 1, 1.1, 64.1)
+auto_calculate_length_and_angle = false
+length = 50.0
+bone_angle = 45.669994
 
-[node name="sprite_15" type="Sprite2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_14/bone_15" unique_id=1417248966]
+[node name="sprite_15" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_inner/forearm_inner" unique_id=1417248966]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
-position = Vector2(-16.9, -17.6)
+position = Vector2(16.9, 17.6)
 rotation = 0.806
 scale = Vector2(0.25, 0.25)
 texture = ExtResource("15_tex_bone")
 
-[node name="bone_9" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8" unique_id=2053130819]
-position = Vector2(19.9, -45.9)
+[node name="thigh_outer" type="Bone2D" parent="StickmanRig" unique_id=190033927]
+rest = Transform2D(1, 0, 0, 1, 0, 0)
 
-[node name="bone_10" type="Node2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_9" unique_id=1909529683]
-position = Vector2(-15.1, 34.8)
-
-[node name="sprite_10" type="Sprite2D" parent="StickmanRig/bone_0/bone_6/bone_7/bone_8/bone_9/bone_10" unique_id=1483854500]
+[node name="sprite_3" type="Sprite2D" parent="StickmanRig/thigh_outer" unique_id=1343093235]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
+position = Vector2(12.7, 30.45)
+rotation = 1.176
 scale = Vector2(0.25, 0.25)
-texture = ExtResource("10_tex_bone")
+texture = ExtResource("3_tex_bone")
+
+[node name="shin_outer" type="Bone2D" parent="StickmanRig/thigh_outer" unique_id=1784305549]
+position = Vector2(25.4, 60.9)
+rest = Transform2D(1, 0, 0, 1, 25.4, 60.9)
+
+[node name="sprite_4" type="Sprite2D" parent="StickmanRig/thigh_outer/shin_outer" unique_id=547909880]
+modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
+position = Vector2(1.45, 34.45)
+rotation = 1.529
+scale = Vector2(0.25, 0.25)
+texture = ExtResource("4_tex_bone")
+
+[node name="foot_outer" type="Bone2D" parent="StickmanRig/thigh_outer/shin_outer" unique_id=1725707417]
+position = Vector2(2.9, 68.9)
+rest = Transform2D(1, 0, 0, 1, 2.9, 68.9)
+auto_calculate_length_and_angle = false
+length = 11.0
+bone_angle = 0.0
+
+[node name="sprite_5" type="Sprite2D" parent="StickmanRig/thigh_outer/shin_outer/foot_outer" unique_id=2073366354]
+modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
+position = Vector2(5.5, 0)
+scale = Vector2(0.25, 0.25)
+texture = ExtResource("5_tex_bone")
+
+[node name="thigh_inner" type="Bone2D" parent="StickmanRig" unique_id=901328688]
+rest = Transform2D(1, 0, 0, 1, 0, 0)
+
+[node name="sprite_11" type="Sprite2D" parent="StickmanRig/thigh_inner" unique_id=1613970702]
+modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
+position = Vector2(-2.4, 32.9)
+rotation = 1.644
+scale = Vector2(0.24999999, 0.24999999)
+texture = ExtResource("11_tex_bone")
+
+[node name="shin_inner" type="Bone2D" parent="StickmanRig/thigh_inner" unique_id=29905056]
+position = Vector2(-4.8, 65.8)
+rest = Transform2D(1, 0, 0, 1, -4.8, 65.8)
+
+[node name="sprite_12" type="Sprite2D" parent="StickmanRig/thigh_inner/shin_inner" unique_id=121493700]
+modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
+position = Vector2(-8.45, 33.45)
+rotation = 1.818
+scale = Vector2(0.25, 0.25)
+texture = ExtResource("12_tex_bone")
+
+[node name="foot_inner" type="Bone2D" parent="StickmanRig/thigh_inner/shin_inner" unique_id=1819078240]
+position = Vector2(-16.9, 66.9)
+rest = Transform2D(1, 0, 0, 1, -16.9, 66.9)
+auto_calculate_length_and_angle = false
+length = 11.0
+bone_angle = 0.0
+
+[node name="sprite_13" type="Sprite2D" parent="StickmanRig/thigh_inner/shin_inner/foot_inner" unique_id=680890197]
+modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
+position = Vector2(5.5, -0.1)
+rotation = -0.018
+scale = Vector2(0.25, 0.25)
+texture = ExtResource("13_tex_bone")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="StickmanRig" unique_id=726246529]
+libraries/ = SubResource("AnimationLibrary_cshof")
+
+[node name="AnimationTree" type="AnimationTree" parent="StickmanRig" unique_id=1737963116]
+tree_root = SubResource("AnimationNodeStateMachine_38vfy")
+anim_player = NodePath("../AnimationPlayer")

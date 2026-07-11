@@ -14,6 +14,7 @@ const Weapon := preload("res://modules/units/scripts/stickman_weapon.gd")
 # ===== 动画状态名（公共 API 用） =====
 const ANIM_IDLE := "idle"
 const ANIM_WALK := "walk"
+const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
 const ANIM_DEAD := "dead"
 
@@ -68,6 +69,7 @@ var _rebuild_pending: bool = false
 
 func _ready() -> void:
 	_init_bones()
+	_init_ik()
 	_init_animations()
 	_init_weapons()
 
@@ -102,6 +104,50 @@ func _init_bones() -> void:
 		_sprites = result["sprites"]
 
 
+func _init_ik() -> void:
+	# 运行时通过遍历骨骼修正 bone_idx，避免 .tscn 中写死的索引和实际不匹配
+	var stack := get_modification_stack()
+	if stack == null:
+		print("[IK] modification_stack 为 null，IK 不会执行")
+		return
+	print("[IK] stack.enabled = ", stack.enabled, ", modification_count = ", stack.modification_count)
+	# 构建骨骼名→索引映射
+	var bone_name_to_idx: Dictionary = {}
+	for idx in range(get_bone_count()):
+		var b := get_bone(idx)
+		if b:
+			bone_name_to_idx[b.name] = idx
+	for i in range(stack.modification_count):
+		var mod := stack.get_modification(i) as SkeletonModification2DTwoBoneIK
+		if mod == null:
+			print("[IK] modification ", i, " 不是 TwoBoneIK")
+			continue
+		# 通过 NodePath 找到 Bone2D 节点，再用名称查实际索引
+		var bone1 := get_node_or_null(mod.joint_one_bone2d_node) as Bone2D
+		var bone2 := get_node_or_null(mod.joint_two_bone2d_node) as Bone2D
+		if bone1:
+			var idx1: int = bone_name_to_idx.get(bone1.name, -1)
+			print("[IK] mod ", i, ": bone1 = ", bone1.name, " actual_idx = ", idx1, " saved_idx = ", mod.joint_one_bone_idx)
+			if idx1 >= 0:
+				mod.joint_one_bone_idx = idx1
+		else:
+			print("[IK] mod ", i, ": bone1 NodePath 解析失败: ", mod.joint_one_bone2d_node)
+		if bone2:
+			var idx2: int = bone_name_to_idx.get(bone2.name, -1)
+			print("[IK] mod ", i, ": bone2 = ", bone2.name, " actual_idx = ", idx2, " saved_idx = ", mod.joint_two_bone_idx)
+			if idx2 >= 0:
+				mod.joint_two_bone_idx = idx2
+		else:
+			print("[IK] mod ", i, ": bone2 NodePath 解析失败: ", mod.joint_two_bone2d_node)
+		# 检查目标节点
+		var target := get_node_or_null(mod.target_nodepath) as Node2D
+		if target:
+			print("[IK] mod ", i, ": target = ", target.name, " pos = ", target.global_position)
+		else:
+			print("[IK] mod ", i, ": target NodePath 解析失败: ", mod.target_nodepath)
+		print("[IK] mod ", i, ": enabled = ", mod.enabled)
+
+
 func _init_animations() -> void:
 	_anim_player = get_node_or_null("AnimationPlayer") as AnimationPlayer
 	_anim_tree = get_node_or_null("AnimationTree") as AnimationTree
@@ -109,8 +155,12 @@ func _init_animations() -> void:
 		return
 	# 确保 root_node 正确
 	_anim_player.root_node = NodePath("..")
-	# 编辑器模式下跳过动画库加载和 AnimationTree 激活，避免虚拟 AnimationPlayer 警告
+	# 编辑器模式下断开 AnimationTree 的 anim_player，避免 state machine
+	# 把 idle pose 应用到骨骼，阻止 IK 实时调试。运行时由 setup_tree 重新关联。
 	if Engine.is_editor_hint():
+		if _anim_tree != null:
+			_anim_tree.active = false
+			_anim_tree.anim_player = NodePath()
 		return
 	Anims.setup_player(_anim_player)
 	if _anim_tree != null:
@@ -170,8 +220,17 @@ func play(anim_name: String) -> void:
 			_state_machine = _anim_tree.get("parameters/playback")
 	if _state_machine == null:
 		return
+	# 切换到非 walk 动画时重置播放速率
+	if _anim_player != null and anim_name != ANIM_WALK:
+		_anim_player.speed_scale = 1.0
 	_state_machine.travel(anim_name)
 	_current_anim = anim_name
+
+
+## 设置动画播放速率（用于 walk 速度匹配，p_speed=1.0 为原始速率）
+func set_anim_speed(p_speed: float) -> void:
+	if _anim_player != null:
+		_anim_player.speed_scale = clampf(p_speed, 0.0, 3.0)
 
 
 func get_current_anim() -> String:

@@ -1,0 +1,66 @@
+[gd_resource type="Animation" format=3 uid="uid://uhcw8chh4ft"]
+
+[resource]
+length = 1.2
+loop_mode = 1
+step = 0.05
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("../Node2D/outfoot:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4, 0.6, 0.8, 1, 1.2),
+"transitions": PackedFloat32Array(-2, 1, 1, 1, 1, -2, -2),
+"update": 0,
+"values": [Vector2(1, 133), Vector2(-65, 118), Vector2(-89, 83), Vector2(-25, 51), Vector2(18, 71), Vector2(50, 123), Vector2(1, 133)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("../Node2D/innerfoot:position")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4, 0.6, 0.8, 1, 1.2),
+"transitions": PackedFloat32Array(-2, 1, 1, 1, 1, -2, -2),
+"update": 0,
+"values": [Vector2(-25, 51), Vector2(18, 71), Vector2(50, 123), Vector2(1, 133), Vector2(-65, 118), Vector2(-89, 83), Vector2(-25, 51)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("../Node2D/outhand:position")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4, 0.6, 0.8, 1, 1.2),
+"transitions": PackedFloat32Array(-2, 1, 1, 1, 1, -2, -2),
+"update": 0,
+"values": [Vector2(76, 0), Vector2(101, -23), Vector2(70, 10), Vector2(-28, -11), Vector2(-42, -18), Vector2(-29, -2), Vector2(76, 0)]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("../Node2D/innerhand:position")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4, 0.6, 0.8, 1, 1.2),
+"transitions": PackedFloat32Array(-2, 1, 1, 1, 1, -2, -2),
+"update": 0,
+"values": [Vector2(-28, -11), Vector2(-42, -18), Vector2(-29, -2), Vector2(76, 0), Vector2(101, -23), Vector2(70, 10), Vector2(-28, -11)]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("hip:rotation")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0, 0.6, 1.2),
+"transitions": PackedFloat32Array(-2, 1, -2),
+"update": 0,
+"values": [0.3490658503988659, 0.2617993877991494, 0.3490658503988659]
+}

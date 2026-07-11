@@ -4,6 +4,7 @@ extends RefCounted
 
 const ANIM_IDLE := "idle"
 const ANIM_WALK := "walk"
+const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
 const ANIM_DEAD := "dead"
 
@@ -24,6 +25,7 @@ static func setup_player(player: AnimationPlayer) -> void:
 	if lib.get_animation_list().is_empty():
 		_load_anim(lib, ANIM_IDLE)
 		_load_anim(lib, ANIM_WALK)
+		_load_anim(lib, ANIM_RUN)
 		_load_anim(lib, ANIM_ATTACK)
 		_load_anim(lib, ANIM_DEAD)
 
@@ -39,11 +41,15 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	var sm := AnimationNodeStateMachine.new()
 	_add_state(sm, ANIM_IDLE)
 	_add_state(sm, ANIM_WALK)
+	_add_state(sm, ANIM_RUN)
 	_add_state(sm, ANIM_ATTACK)
 	_add_state(sm, ANIM_DEAD)
 	# 过渡
 	sm.add_transition(ANIM_IDLE, ANIM_WALK, _smt(0.2))
 	sm.add_transition(ANIM_WALK, ANIM_IDLE, _smt(0.2))
+	sm.add_transition(ANIM_WALK, ANIM_RUN, _smt(0.15))
+	sm.add_transition(ANIM_RUN, ANIM_WALK, _smt(0.15))
+	sm.add_transition(ANIM_RUN, ANIM_IDLE, _smt(0.3))
 	sm.add_transition(ANIM_IDLE, ANIM_ATTACK, _smt(0.1))
 	sm.add_transition(ANIM_WALK, ANIM_ATTACK, _smt(0.1))
 	sm.add_transition(ANIM_ATTACK, ANIM_IDLE, _smt(0.3))

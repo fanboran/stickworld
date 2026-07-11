@@ -8,12 +8,13 @@
 [ext_resource type="PackedScene" uid="uid://wpnswordm01" path="res://modules/units/scenes/components/weapon_sword_placeholder.tscn" id="3_wvxud"]
 [ext_resource type="Animation" uid="uid://cc1o1uncwu162" path="res://modules/units/animations/attack.tres" id="4_c5kt6"]
 [ext_resource type="Texture2D" uid="uid://qh4ast218e0m" path="res://modules/units/assets/textures/stickman/bone_4_pill.png" id="4_tex_bone"]
-[ext_resource type="Animation" path="res://modules/units/animations/dead.tres" id="5_nakf6"]
+[ext_resource type="Animation" uid="uid://bp555s8elvftv" path="res://modules/units/animations/dead.tres" id="5_nakf6"]
 [ext_resource type="Texture2D" uid="uid://8ftskm3qn88x" path="res://modules/units/assets/textures/stickman/bone_5_pill.png" id="5_tex_bone"]
-[ext_resource type="Animation" path="res://modules/units/animations/idle.tres" id="6_0rt1i"]
+[ext_resource type="Animation" uid="uid://dq3g7qawkcu0e" path="res://modules/units/animations/idle.tres" id="6_0rt1i"]
 [ext_resource type="Texture2D" uid="uid://c8o38mk45mqxa" path="res://modules/units/assets/textures/stickman/bone_6_pill.png" id="6_tex_bone"]
-[ext_resource type="Animation" path="res://modules/units/animations/walk.tres" id="7_dwcds"]
+[ext_resource type="Animation" uid="uid://ygt4b7pap6ke" path="res://modules/units/animations/walk.tres" id="7_dwcds"]
 [ext_resource type="Texture2D" uid="uid://cytm0odrcsdkm" path="res://modules/units/assets/textures/stickman/bone_7_pill.png" id="7_tex_bone"]
+[ext_resource type="Animation" uid="uid://uhcw8chh4ft" path="res://modules/units/animations/run.tres" id="8_run"]
 [ext_resource type="Texture2D" uid="uid://dbyjhohsnd0i1" path="res://modules/units/assets/textures/stickman/bone_8_pill.png" id="8_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://ds65uuti0ttuo" path="res://modules/units/assets/textures/stickman/bone_10_circle.png" id="10_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://snveqbbxrx6p" path="res://modules/units/assets/textures/stickman/bone_11_pill.png" id="11_tex_bone"]
@@ -22,11 +23,114 @@
 [ext_resource type="Texture2D" uid="uid://dyqof1b8i7nmo" path="res://modules/units/assets/textures/stickman/bone_14_pill.png" id="14_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://bgcju53rimf12" path="res://modules/units/assets/textures/stickman/bone_15_pill.png" id="15_tex_bone"]
 
+[sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_leg_outer"]
+target_nodepath = NodePath("../Node2D/outfoot")
+joint_one_bone_idx = 8
+joint_one_bone2d_node = NodePath("thigh_outer")
+joint_two_bone_idx = 9
+joint_two_bone2d_node = NodePath("thigh_outer/shin_outer")
+
+[sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_leg_inner"]
+target_nodepath = NodePath("../Node2D/innerfoot")
+joint_one_bone_idx = 11
+joint_one_bone2d_node = NodePath("thigh_inner")
+joint_two_bone_idx = 12
+joint_two_bone2d_node = NodePath("thigh_inner/shin_inner")
+
+[sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_arm_outer"]
+target_nodepath = NodePath("../Node2D/outhand")
+flip_bend_direction = true
+joint_one_bone_idx = 4
+joint_one_bone2d_node = NodePath("hip/lower_torso/upper_torso/upper_arm_outer")
+joint_two_bone_idx = 5
+joint_two_bone2d_node = NodePath("hip/lower_torso/upper_torso/upper_arm_outer/forearm_outer")
+
+[sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_arm_inner"]
+target_nodepath = NodePath("../Node2D/innerhand")
+flip_bend_direction = true
+joint_one_bone_idx = 6
+joint_one_bone2d_node = NodePath("hip/lower_torso/upper_torso/upper_arm_inner")
+joint_two_bone_idx = 7
+joint_two_bone2d_node = NodePath("hip/lower_torso/upper_torso/upper_arm_inner/forearm_inner")
+
+[sub_resource type="SkeletonModificationStack2D" id="SkeletonModificationStack2D_ik"]
+enabled = true
+modification_count = 4
+modifications/0 = SubResource("SkeletonModification2DTwoBoneIK_leg_outer")
+modifications/1 = SubResource("SkeletonModification2DTwoBoneIK_leg_inner")
+modifications/2 = SubResource("SkeletonModification2DTwoBoneIK_arm_outer")
+modifications/3 = SubResource("SkeletonModification2DTwoBoneIK_arm_inner")
+
+[sub_resource type="Animation" id="Animation_nakf6"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("../Node2D/outfoot:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(-12, 123)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("hip:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [0.34732053]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("../Node2D/innerhand:position")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(60, 0)]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("../Node2D/outhand:position")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(-26, -6)]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("../Node2D/innerfoot:position")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(-25, 51)]
+}
+
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_cshof"]
 _data = {
+&"RESET": SubResource("Animation_nakf6"),
 &"attack": ExtResource("4_c5kt6"),
 &"dead": ExtResource("5_nakf6"),
 &"idle": ExtResource("6_0rt1i"),
+&"run": ExtResource("8_run"),
 &"walk": ExtResource("7_dwcds")
 }
 
@@ -93,11 +197,15 @@ graph_offset = Vector2(-218, -111)
 script = ExtResource("2_test")
 
 [node name="StickmanRig" type="Skeleton2D" parent="." unique_id=1221827476]
+modification_stack = SubResource("SkeletonModificationStack2D_ik")
 script = ExtResource("1_rig")
 body_color = Color(0.1560398, 0.15568888, 0.18235794, 1)
 weapon_scene = ExtResource("3_wvxud")
 
 [node name="hip" type="Bone2D" parent="StickmanRig" unique_id=1013551157]
+position = Vector2(0, -1.2523315)
+rotation = 0.34732053
+scale = Vector2(0.9998595, 0.9998595)
 rest = Transform2D(1, 0, 0, 1, 0, 0)
 
 [node name="sprite_6" type="Sprite2D" parent="StickmanRig/hip" unique_id=663561304]
@@ -120,6 +228,8 @@ texture = ExtResource("7_tex_bone")
 
 [node name="upper_torso" type="Bone2D" parent="StickmanRig/hip/lower_torso" unique_id=576270806]
 position = Vector2(5.7, -30.5)
+rotation = -0.2354
+scale = Vector2(0.99984086, 0.99984086)
 rest = Transform2D(1, 0, 0, 1, 5.7, -30.5)
 
 [node name="sprite_8" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=1264414652]
@@ -131,10 +241,11 @@ texture = ExtResource("8_tex_bone")
 
 [node name="neck" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=697582802]
 position = Vector2(10.4, -29.2)
+scale = Vector2(0.99998164, 0.99998164)
 rest = Transform2D(1, 0, 0, 1, 10.4, -29.2)
 auto_calculate_length_and_angle = false
 length = 12.493
-bone_angle = -66.560776
+bone_angle = -66.56076
 
 [node name="sprite_10" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/neck" unique_id=1483854500]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -144,8 +255,12 @@ texture = ExtResource("10_tex_bone")
 
 [node name="upper_arm_outer" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=998274463]
 position = Vector2(10.4, -29.200005)
-scale = Vector2(0.9999999, 0.9999999)
+scale = Vector2(0.9998589, 0.9998589)
 rest = Transform2D(1, 0, 0, 1, 10.4, -29.2)
+auto_calculate_length_and_angle = false
+length = 64.0
+bone_angle = 122.759964
+metadata/_local_pose_override_enabled_ = true
 
 [node name="sprite_1" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_outer" unique_id=1392110674]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -155,11 +270,14 @@ scale = Vector2(0.24999999, 0.24999999)
 texture = ExtResource("1_tex_bone")
 
 [node name="forearm_outer" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_outer" unique_id=20172263]
-position = Vector2(-34.7, 55.9)
+position = Vector2(-34.7, 53.9)
+rotation = -0.03819293
+scale = Vector2(0.9999665, 0.9999665)
 rest = Transform2D(1, 0, 0, 1, -34.7, 53.9)
 auto_calculate_length_and_angle = false
-length = 50.0
-bone_angle = 93.956985
+length = 49.0
+bone_angle = 93.64
+metadata/_local_pose_override_enabled_ = true
 
 [node name="sprite_2" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_outer/forearm_outer" unique_id=542986239]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -170,7 +288,12 @@ texture = ExtResource("2_tex_bone")
 
 [node name="upper_arm_inner" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=1226975132]
 position = Vector2(10.4, -29.200005)
+scale = Vector2(0.99986506, 0.99986506)
 rest = Transform2D(1, 0, 0, 1, 10.4, -29.2)
+auto_calculate_length_and_angle = false
+length = 64.109436
+bone_angle = 89.01682
+metadata/_local_pose_override_enabled_ = true
 
 [node name="sprite_14" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_inner" unique_id=1505495638]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -181,10 +304,13 @@ texture = ExtResource("14_tex_bone")
 
 [node name="forearm_inner" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_inner" unique_id=422281174]
 position = Vector2(1.1000004, 64.1)
+rotation = -0.06981317
+scale = Vector2(0.9999636, 0.9999636)
 rest = Transform2D(1, 0, 0, 1, 1.1, 64.1)
 auto_calculate_length_and_angle = false
-length = 50.0
-bone_angle = 45.669994
+length = 49.0
+bone_angle = 46.129997
+metadata/_local_pose_override_enabled_ = true
 
 [node name="sprite_15" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_inner/forearm_inner" unique_id=1417248966]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -194,7 +320,12 @@ scale = Vector2(0.25, 0.25)
 texture = ExtResource("15_tex_bone")
 
 [node name="thigh_outer" type="Bone2D" parent="StickmanRig" unique_id=190033927]
+scale = Vector2(0.99985015, 0.99985015)
 rest = Transform2D(1, 0, 0, 1, 0, 0)
+auto_calculate_length_and_angle = false
+length = 66.0
+bone_angle = 67.36008
+metadata/_local_pose_override_enabled_ = true
 
 [node name="sprite_3" type="Sprite2D" parent="StickmanRig/thigh_outer" unique_id=1343093235]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -205,7 +336,13 @@ texture = ExtResource("3_tex_bone")
 
 [node name="shin_outer" type="Bone2D" parent="StickmanRig/thigh_outer" unique_id=1784305549]
 position = Vector2(25.4, 60.9)
+rotation = -0.10456437
+scale = Vector2(0.99999744, 0.99999744)
 rest = Transform2D(1, 0, 0, 1, 25.4, 60.9)
+auto_calculate_length_and_angle = false
+length = 69.0
+bone_angle = 87.5898
+metadata/_local_pose_override_enabled_ = true
 
 [node name="sprite_4" type="Sprite2D" parent="StickmanRig/thigh_outer/shin_outer" unique_id=547909880]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -228,7 +365,12 @@ scale = Vector2(0.25, 0.25)
 texture = ExtResource("5_tex_bone")
 
 [node name="thigh_inner" type="Bone2D" parent="StickmanRig" unique_id=901328688]
+scale = Vector2(0.9998929, 0.9998929)
 rest = Transform2D(1, 0, 0, 1, 0, 0)
+auto_calculate_length_and_angle = false
+length = 66.0
+bone_angle = 94.17219
+metadata/_local_pose_override_enabled_ = true
 
 [node name="sprite_11" type="Sprite2D" parent="StickmanRig/thigh_inner" unique_id=1613970702]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -239,7 +381,13 @@ texture = ExtResource("11_tex_bone")
 
 [node name="shin_inner" type="Bone2D" parent="StickmanRig/thigh_inner" unique_id=29905056]
 position = Vector2(-4.8, 65.8)
+rotation = 0.12077655
+scale = Vector2(0.99999946, 0.99999946)
 rest = Transform2D(1, 0, 0, 1, -4.8, 65.8)
+auto_calculate_length_and_angle = false
+length = 69.0
+bone_angle = 104.177185
+metadata/_local_pose_override_enabled_ = true
 
 [node name="sprite_12" type="Sprite2D" parent="StickmanRig/thigh_inner/shin_inner" unique_id=121493700]
 modulate = Color(0.1560398, 0.15568888, 0.18235794, 1)
@@ -266,5 +414,19 @@ texture = ExtResource("13_tex_bone")
 libraries/ = SubResource("AnimationLibrary_cshof")
 
 [node name="AnimationTree" type="AnimationTree" parent="StickmanRig" unique_id=1737963116]
+active = false
 tree_root = SubResource("AnimationNodeStateMachine_38vfy")
-anim_player = NodePath("../AnimationPlayer")
+
+[node name="Node2D" type="Node2D" parent="." unique_id=542218933]
+
+[node name="outfoot" type="Marker2D" parent="Node2D" unique_id=1500419271]
+position = Vector2(-12, 123)
+
+[node name="innerfoot" type="Marker2D" parent="Node2D" unique_id=264248036]
+position = Vector2(-25, 51)
+
+[node name="outhand" type="Marker2D" parent="Node2D" unique_id=372756660]
+position = Vector2(-26, -6)
+
+[node name="innerhand" type="Marker2D" parent="Node2D" unique_id=372756661]
+position = Vector2(60, 0)

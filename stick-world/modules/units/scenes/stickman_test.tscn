@@ -203,9 +203,9 @@ body_color = Color(0.1560398, 0.15568888, 0.18235794, 1)
 weapon_scene = ExtResource("3_wvxud")
 
 [node name="hip" type="Bone2D" parent="StickmanRig" unique_id=1013551157]
-position = Vector2(0, -1.2523315)
+position = Vector2(0, -0.609411)
 rotation = 0.34732053
-scale = Vector2(0.9998595, 0.9998595)
+scale = Vector2(0.9998407, 0.9998407)
 rest = Transform2D(1, 0, 0, 1, 0, 0)
 
 [node name="sprite_6" type="Sprite2D" parent="StickmanRig/hip" unique_id=663561304]
@@ -228,8 +228,7 @@ texture = ExtResource("7_tex_bone")
 
 [node name="upper_torso" type="Bone2D" parent="StickmanRig/hip/lower_torso" unique_id=576270806]
 position = Vector2(5.7, -30.5)
-rotation = -0.2354
-scale = Vector2(0.99984086, 0.99984086)
+scale = Vector2(0.99983424, 0.99983424)
 rest = Transform2D(1, 0, 0, 1, 5.7, -30.5)
 
 [node name="sprite_8" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=1264414652]

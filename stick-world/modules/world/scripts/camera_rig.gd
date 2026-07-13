@@ -202,11 +202,11 @@ func _update_position(delta: float) -> void:
 	global_position.y = target_y
 	# 震屏偏移
 	if _shake_time > 0.0:
-		var offset := Vector2(
+		var shake_offset := Vector2(
 			randf_range(-_shake_intensity, _shake_intensity),
 			randf_range(-_shake_intensity, _shake_intensity)
 		)
-		global_position += offset
+		global_position += shake_offset
 
 
 func _compute_camera_y() -> float:
@@ -294,7 +294,7 @@ func _update_edge_scroll() -> void:
 			_manual_cooldown = MANUAL_COOLDOWN_TIME
 
 
-func _update_manual_control(delta: float) -> void:
+func _update_manual_control(_delta: float) -> void:
 	if _dragging:
 		# 拖动：鼠标移动量转换为相机世界移动量
 		var mouse_delta: Vector2 = get_viewport().get_mouse_position() - _drag_start_mouse

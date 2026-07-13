@@ -7,13 +7,14 @@ extends Node
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §二.2、§七.3。
 
-const PlayerControlAPI := preload("res://modules/player_control/api.gd")
+# PlayerControlAPI 是全局 class_name，无需 preload
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 signal mode_changed(old_mode: int, new_mode: int)
 
 # ─────────────────────────────── 状态 ────────────────────────────────
-var current_mode: int = PlayerControlAPI.Mode.EXPLORE
+## 初始为 NONE，等地图加载完后由 GameRoot.set_mode(EXPLORE) 激活
+var current_mode: int = PlayerControlAPI.Mode.NONE
 
 ## 已注册的模式处理器：mode -> handler Node
 ## handler 需要实现 _on_mode_activated(mode) 和 _on_mode_deactivated(mode) 方法

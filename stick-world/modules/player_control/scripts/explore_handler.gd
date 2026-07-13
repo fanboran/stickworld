@@ -9,7 +9,7 @@ extends Node
 ## 实际 WASD 输入由 StickmanEntity._physics_process 读取（P0 简化），
 ## 后续阶段可重构为 handler 显式下发 move_command。
 
-const PlayerControlAPI := preload("res://modules/player_control/api.gd")
+# PlayerControlAPI 是全局 class_name，无需 preload
 
 ## 当前附身的实体
 var _possessed_entity: Node2D = null

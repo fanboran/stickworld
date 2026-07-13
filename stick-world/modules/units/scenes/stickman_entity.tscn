@@ -1,0 +1,20 @@
+[gd_scene load_steps=5 format=3 uid="uid://stickman_entity_01"]
+
+[ext_resource type="Script" path="res://modules/units/scripts/stickman_entity.gd" id="1_entity"]
+[ext_resource type="PackedScene" uid="uid://bitpg2trkppie" path="res://modules/units/scenes/stickman_test.tscn" id="2_rig_scene"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
+size = Vector2(30, 90)
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_entity"]
+
+[node name="StickmanEntity" type="CharacterBody2D"]
+script = ExtResource("1_entity")
+possessed = false
+accel = 600.0
+decel = 800.0
+
+[node name="RigHost" parent="." instance=ExtResource("2_rig_scene")]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_body")

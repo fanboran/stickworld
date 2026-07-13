@@ -1,5 +1,5 @@
 ---
-alwaysApply: true
+alwaysApply: false
 ---
 ## **研究报告：在Godot独立游戏项目中途引入以单元测试为核心、AI辅助驱动的CI/CD流程**
 

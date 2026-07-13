@@ -9,7 +9,7 @@ extends Node
 ## 后续阶段扩展：天空、天气、地面震动、生物群落。
 ## 详见 docs/技术/架构/场景与战斗架构.md §十一。
 
-const EnvironmentAPI := preload("res://modules/environment/api.gd")
+# EnvironmentAPI 是全局 class_name，无需 preload
 
 # ─────────────────────────────── Inspector 参数 ────────────────────────────────
 ## 时间推进速度（现实秒 : 游戏小时）。默认 60 秒 = 24 小时。

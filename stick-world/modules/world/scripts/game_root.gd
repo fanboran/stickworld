@@ -9,8 +9,7 @@ extends Node2D
 ## 子场景（村落/战场/室内）通过 SceneLoader 加载到 WorldChunkHost。
 ## 详见 docs/技术/架构/场景与战斗架构.md §二。
 
-const WorldAPI := preload("res://modules/world/api.gd")
-const PlayerControlAPI := preload("res://modules/player_control/api.gd")
+# WorldAPI / PlayerControlAPI 是全局 class_name，无需 preload
 
 ## 测试村落地图场景（P0 硬编码）
 const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/test_village_map.tscn")
@@ -39,11 +38,9 @@ const PLAYER_SPAWN_X: float = 300.0
 func _ready() -> void:
 	_validate_children()
 	_bind_event_bus()
-	_register_explore_handler()
 	_register_default_maps()
-	# 默认探索模式
-	if input_dispatcher and input_dispatcher.has_method("set_mode"):
-		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
+	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
+	_register_explore_handler()
 	# 默认 X1 速度
 	if TimeManager:
 		TimeManager.set_speed(TimeManager.Speed.X1)
@@ -51,6 +48,7 @@ func _ready() -> void:
 	if EventBus:
 		EventBus.game_started.emit()
 	# 加载测试村落地图（延迟一帧确保 SceneLoader 就绪）
+	# 地图加载完成后会 set_mode(EXPLORE) 激活 handler，此时实体已就绪
 	call_deferred("_load_test_village")
 
 
@@ -104,12 +102,9 @@ func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
 	# 让 CameraRig 跟随玩家
 	if camera_rig != null and camera_rig.has_method("set_follow_target"):
 		camera_rig.set_follow_target(player)
-	# EXPLORE handler 此时应该已激活（默认模式），让其重新附身到玩家
-	var handler := get_node_or_null("ExploreHandler")
-	if handler != null and handler.has_method("_on_mode_activated"):
-		# 先释放再激活，确保附身新实体
-		handler._on_mode_deactivated(PlayerControlAPI.Mode.EXPLORE)
-		handler._on_mode_activated(PlayerControlAPI.Mode.EXPLORE)
+	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
+	if input_dispatcher and input_dispatcher.has_method("set_mode"):
+		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 
 
 func _validate_children() -> void:

@@ -5,7 +5,7 @@ extends Node
 ## 详见 docs/技术/架构/场景与战斗架构.md §三。
 ## 当前 P0 阶段实现：地图整体加载/卸载（Chunk 流式留到阶段 0.8）。
 
-const WorldAPI := preload("res://modules/world/api.gd")
+# WorldAPI 是全局 class_name，无需 preload
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 地图加载完成

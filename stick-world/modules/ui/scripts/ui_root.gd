@@ -9,8 +9,7 @@ extends CanvasLayer
 ##   ContextPanel    (Control)
 ##   ModalOverlay    (Control)
 
-const UIAPI := preload("res://modules/ui/api.gd")
-const PlayerControlAPI := preload("res://modules/player_control/api.gd")
+# UIAPI / PlayerControlAPI 是全局 class_name，无需 preload
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var global_hud: Control = get_node_or_null(UIAPI.PATH_GLOBAL_HUD)
@@ -51,7 +50,7 @@ func _bind_event_bus() -> void:
 
 # ─────────────────────────────── 模式切换响应 ────────────────────────────────
 
-func _on_mode_changed(old_mode: int, new_mode: int) -> void:
+func _on_mode_changed(_old_mode: int, new_mode: int) -> void:
 	# 把模式映射到面板类型
 	var panel_type: int = _mode_to_panel_type(new_mode)
 	if mode_panel and mode_panel.has_method("switch_to"):

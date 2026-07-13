@@ -17,7 +17,8 @@ extends Node2D
 ##   ├── ChunkTriggers (Node2D)                ← 末端触发器（P0 空）
 ##   └── BattleAnchor (Node2D)                 ← 战斗实例挂载点（P0 空）
 
-const WorldAPI := preload("res://modules/world/api.gd")
+# WorldAPI 是全局 class_name，无需 preload
+
 
 # ─────────────────────────────── 地图元数据（§3.4.1）────────────────────────────────
 ## 地面线 Y（世界坐标），火柴人可走区域顶部
@@ -164,7 +165,7 @@ func get_entity_walk_bounds() -> Vector2:
 
 
 ## 生成实体到 EntityHost，并注入 ground_y / map_left / map_right
-func spawn_entity(entity_scene: PackedScene, position: Vector2) -> Node2D:
+func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
 	if entity_host == null or entity_scene == null:
 		push_error("[VillageMap] 无法生成实体: entity_host 或 scene 为空")
 		return null
@@ -173,7 +174,7 @@ func spawn_entity(entity_scene: PackedScene, position: Vector2) -> Node2D:
 		push_error("[VillageMap] 实体场景实例化失败")
 		return null
 	entity_host.add_child(instance)
-	instance.global_position = position
+	instance.global_position = p_position
 	# 注入地面约束参数（详见 §7.1.1）
 	if instance.has_method("set_ground_constraints"):
 		instance.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)

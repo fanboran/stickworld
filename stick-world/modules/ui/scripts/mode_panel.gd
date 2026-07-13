@@ -6,7 +6,7 @@ extends Control
 ## 子面板需要：VillagePanel / BattlePanel / PossessPanel
 ## 当前阶段仅切换可见性，不实例化（场景里预置占位 Control）。
 
-const UIAPI := preload("res://modules/ui/api.gd")
+# UIAPI 是全局 class_name，无需 preload
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 ## 三种模式面板占位（在 .tscn 中预置）

@@ -7,10 +7,8 @@ extends Node
 ## 退出码：0 全部通过，1 有失败
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const WorldAPI := preload("res://modules/world/api.gd")
-const PlayerControlAPI := preload("res://modules/player_control/api.gd")
-const UIAPI := preload("res://modules/ui/api.gd")
-# 显式 preload 各实现脚本，用于类型 cast（headless 模式下 class_name 全局注册可能未触发）
+# WorldAPI / PlayerControlAPI / UIAPI 是全局 class_name，无需 preload
+# 显式 preload 各实现脚本，用于类型 cast（常量名加 Script 前缀避免遮蔽全局类名）
 const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
 const ScriptCameraRig := preload("res://modules/world/scripts/camera_rig.gd")
 const ScriptSceneLoader := preload("res://modules/world/scripts/scene_loader.gd")
@@ -104,7 +102,8 @@ func _test_input_default_mode() -> void:
 	var d: ScriptInputDispatcher = _get_child(WorldAPI.PATH_INPUT_DISPATCHER) as ScriptInputDispatcher
 	_runner.assert_true(d != null, "InputDispatcher 应存在")
 	if d:
-		_runner.assert_equal(d.get_mode(), PlayerControlAPI.Mode.EXPLORE, "默认应为 EXPLORE")
+		# 初始为 NONE，地图加载完成后自动切到 EXPLORE（await 一帧后已加载）
+		_runner.assert_equal(d.get_mode(), PlayerControlAPI.Mode.EXPLORE, "地图加载后应为 EXPLORE")
 
 
 func _test_input_mode_switch() -> void:
@@ -142,7 +141,7 @@ func _test_input_handler_register() -> void:
 	var handler := Node.new()
 	handler.set_script(load("res://tests/helpers/mode_handler_helper.gd"))
 	add_child(handler)
-	# 注册到当前模式（EXPLORE），应立即激活
+	# 当前模式为 EXPLORE（地图已加载），注册 EXPLORE handler 应立即激活
 	d.register_handler(PlayerControlAPI.Mode.EXPLORE, handler)
 	var activated_count: int = handler.get_meta("activated_count", 0)
 	_runner.assert_equal(activated_count, 1, "注册当前模式应立即激活")

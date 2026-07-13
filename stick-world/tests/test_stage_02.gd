@@ -7,8 +7,7 @@ extends Node
 ## 退出码：0 全部通过，1 有失败
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const WorldAPI := preload("res://modules/world/api.gd")
-const PlayerControlAPI := preload("res://modules/player_control/api.gd")
+# WorldAPI / PlayerControlAPI 是全局 class_name，无需 preload
 # 显式 preload 各实现脚本，用于类型 cast
 const ScriptPlacementGrid := preload("res://modules/world/placement_grid/placement_grid.gd")
 const ScriptPlacementValidator := preload("res://modules/world/placement_grid/placement_validator.gd")

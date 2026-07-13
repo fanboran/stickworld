@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="stick_world"
-run/main_scene="uid://stickmantmod01"
+run/main_scene="res://modules/world/scripts/game_root.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -29,12 +29,27 @@ _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
 
+window/size/viewport_width=1920
+window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
+
+[file_customization]
+
+folder_colors={
+"res://assets/": "blue",
+"res://core/": "yellow",
+"res://modules/": "gray",
+"res://modules/units/assets/": "blue",
+"res://modules/units/scripts/": "teal",
+"res://modules/world_map/assets/": "blue",
+"res://modules/world_map/scripts/": "teal",
+"res://tests/": "red"
+}
 
 [godot_ai]
 

@@ -1,0 +1,193 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://modules/world/scripts/game_root.gd" id="1_game_root"]
+[ext_resource type="Script" path="res://modules/environment/scripts/environment_system.gd" id="2_env"]
+[ext_resource type="Script" path="res://modules/world/scripts/camera_rig.gd" id="3_camera"]
+[ext_resource type="Script" path="res://modules/world/scripts/scene_loader.gd" id="4_loader"]
+[ext_resource type="Script" path="res://modules/player_control/scripts/input_dispatcher.gd" id="5_input"]
+[ext_resource type="Script" path="res://modules/world/scripts/world_chunk_host.gd" id="6_chunk_host"]
+[ext_resource type="Script" path="res://modules/ui/scripts/ui_root.gd" id="7_ui_root"]
+[ext_resource type="Script" path="res://modules/ui/scripts/global_hud.gd" id="8_hud"]
+[ext_resource type="Script" path="res://modules/ui/scripts/mode_panel.gd" id="9_mode"]
+[ext_resource type="Script" path="res://modules/ui/scripts/context_panel.gd" id="10_ctx"]
+
+[node name="GameRoot" type="Node2D"]
+script = ExtResource("1_game_root")
+
+[node name="EnvironmentSystem" type="Node" parent="."]
+script = ExtResource("2_env")
+time_of_day = 8.0
+
+[node name="CanvasModulate" type="CanvasModulate" parent="EnvironmentSystem"]
+
+[node name="CameraRig" type="Camera2D" parent="."]
+script = ExtResource("3_camera")
+
+[node name="SceneLoader" type="Node" parent="."]
+script = ExtResource("4_loader")
+
+[node name="InputDispatcher" type="Node" parent="."]
+script = ExtResource("5_input")
+
+[node name="WorldChunkHost" type="Node2D" parent="."]
+script = ExtResource("6_chunk_host")
+
+[node name="UIRoot" type="CanvasLayer" parent="."]
+script = ExtResource("7_ui_root")
+
+[node name="GlobalHUD" type="Control" parent="UIRoot"]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 60.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("8_hud")
+
+[node name="MarginContainer" type="MarginContainer" parent="UIRoot/GlobalHUD"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 8
+
+[node name="HBoxContainer" type="HBoxContainer" parent="UIRoot/GlobalHUD/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="SpeedLabel" type="Label" parent="UIRoot/GlobalHUD/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "速度: 1x"
+
+[node name="TimeLabel" type="Label" parent="UIRoot/GlobalHUD/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "时间: 08:00"
+
+[node name="CenteredButton" type="Button" parent="UIRoot/GlobalHUD/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "居中: 关"
+
+[node name="NotificationLabel" type="Label" parent="UIRoot/GlobalHUD"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -200.0
+offset_top = 60.0
+offset_right = 200.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 1
+horizontal_alignment = 1
+text = ""
+
+[node name="ModePanel" type="Control" parent="UIRoot"]
+layout_mode = 3
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -80.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("9_mode")
+
+[node name="VillagePanel" type="Control" parent="UIRoot/ModePanel"]
+visible = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="UIRoot/ModePanel/VillagePanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[村落模式]"
+
+[node name="BattlePanel" type="Control" parent="UIRoot/ModePanel"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="UIRoot/ModePanel/BattlePanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[战斗模式]"
+
+[node name="PossessPanel" type="Control" parent="UIRoot/ModePanel"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="UIRoot/ModePanel/PossessPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[附身模式]"
+
+[node name="ContextPanel" type="Control" parent="UIRoot"]
+layout_mode = 3
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = -240.0
+offset_top = 60.0
+offset_bottom = -80.0
+grow_horizontal = 0
+grow_vertical = 2
+script = ExtResource("10_ctx")
+
+[node name="ModalOverlay" type="Control" parent="UIRoot"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="BattleDirector" type="Node" parent="."]

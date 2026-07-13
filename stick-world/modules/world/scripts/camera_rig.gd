@@ -27,6 +27,10 @@ const EDGE_SCROLL_SPEED: float = 400.0
 const FOLLOW_SMOOTHING: float = 8.0
 ## 居中模式平滑系数
 const CENTER_SMOOTHING: float = 10.0
+## 弹回过渡平滑系数（冷却结束后慢速缓动，约为 FOLLOW_SMOOTHING 的 1/3）
+const RETURN_SMOOTHING: float = 2.5
+## 弹回过渡持续时间（秒，超过后切回正常跟随）
+const RETURN_TRANSITION_TIME: float = 1.5
 ## 手动控制冷却时间（拖动/缩放结束后等待 N 秒无操作才弹回跟随）
 const MANUAL_COOLDOWN_TIME: float = 5.0
 
@@ -50,6 +54,10 @@ var centered_mode: bool = false
 var _manual_active: bool = false
 ## 手动控制冷却剩余时间（拖动/缩放结束后递减，归零时退出 manual）
 var _manual_cooldown: float = 0.0
+## 弹回过渡中（冷却结束后慢速缓动到跟随位置）
+var _returning: bool = false
+## 弹回过渡已用时间
+var _return_elapsed: float = 0.0
 ## 边缘滚动方向（-1 左 / 0 无 / 1 右）
 var _edge_scroll_dir: int = 0
 ## 拖动状态
@@ -108,6 +116,9 @@ func _physics_process(delta: float) -> void:
 		if _manual_cooldown <= 0.0:
 			_manual_cooldown = 0.0
 			_manual_active = false
+			# 进入弹回过渡（慢速缓动），而非硬切到跟随
+			_returning = true
+			_return_elapsed = 0.0
 	# 更新位置（在 _physics_process 中执行，与 StickmanEntity._physics_process 同步，避免渲染重影）
 	_update_position(delta)
 
@@ -120,15 +131,18 @@ func _unhandled_input(event: InputEvent) -> void:
 				_dragging = true
 				_manual_active = true
 				_manual_cooldown = 0.0
+				_returning = false
 				_drag_start_mouse = event.position
 				_drag_start_cam = global_position
 			else:
 				if _dragging:
 					_dragging = false
 					if centered_mode:
-						# 居中模式：松手立即弹回（类似王者荣耀）
+						# 居中模式：松手立即进入弹回过渡（平滑缓动，非硬切）
 						_manual_active = false
 						_manual_cooldown = 0.0
+						_returning = true
+						_return_elapsed = 0.0
 					elif _edge_scroll_dir != 0:
 						# 边缘滚动持续中：保持 manual，不计时
 						_manual_cooldown = 0.0
@@ -167,6 +181,14 @@ func _update_position(delta: float) -> void:
 			target_x = global_position.x + _edge_scroll_dir * EDGE_SCROLL_SPEED * delta
 		# 拖动时位置在 _update_manual_control 里直接设置
 		target_x = _clamp_camera_x(target_x)
+	elif _returning:
+		# 弹回过渡：慢速缓动到跟随目标位置（非硬切，避免"Duang"一下）
+		var return_target_x: float = _compute_return_target_x()
+		target_x = lerp(global_position.x, return_target_x, RETURN_SMOOTHING * delta)
+		target_x = _clamp_camera_x(target_x)
+		_return_elapsed += delta
+		if _return_elapsed >= RETURN_TRANSITION_TIME:
+			_returning = false
 	elif centered_mode and follow_target != null and is_instance_valid(follow_target):
 		# 居中模式：强制角色到屏幕中心
 		target_x = follow_target.global_position.x
@@ -196,27 +218,42 @@ func _compute_camera_y() -> float:
 	return ground_y - vp_h / effective_zoom * (0.5 - ground_ratio)
 
 
-func _compute_follow_x(delta: float) -> float:
+## 计算跟随目标 X（不经过 lerp，直接算"相机应该在哪"）
+## 中间 1/2 不跟随（目标=当前位置）；两侧各 1/4 触发跟随（目标=让角色回到触发线）
+func _compute_follow_target_x() -> float:
 	if follow_target == null or not is_instance_valid(follow_target):
 		return global_position.x
 	var target_world_x: float = follow_target.global_position.x
 	var cam_x: float = global_position.x
-	# 计算角色在屏幕水平方向的相对位置
 	var vp_w: float = get_viewport_rect().size.x
 	var screen_x_ratio: float = (target_world_x - cam_x) / vp_w * effective_zoom + 0.5
-	# 中间 1/2 范围 [1/4, 3/4] → 不跟随；两侧各 1/4 触发跟随
+	# 中间 1/2 范围 [1/4, 3/4] -> 不跟随；两侧各 1/4 触发跟随
 	var left_trigger: float = 1.0 / 4.0
 	var right_trigger: float = 3.0 / 4.0
-	var new_cam_x: float = cam_x
 	if screen_x_ratio < left_trigger:
-		# 角色在左 1/4，相机向左跟随，让角色回到 left_trigger
-		var desired_cam_x: float = target_world_x - (left_trigger - 0.5) * vp_w / effective_zoom
-		new_cam_x = lerp(cam_x, desired_cam_x, FOLLOW_SMOOTHING * delta)
+		# 角色在左 1/4，相机目标 = 让角色回到 left_trigger
+		return target_world_x - (left_trigger - 0.5) * vp_w / effective_zoom
 	elif screen_x_ratio > right_trigger:
-		# 角色在右 1/4，相机向右跟随
-		var desired_cam_x: float = target_world_x - (right_trigger - 0.5) * vp_w / effective_zoom
-		new_cam_x = lerp(cam_x, desired_cam_x, FOLLOW_SMOOTHING * delta)
-	return _clamp_camera_x(new_cam_x)
+		# 角色在右 1/4，相机目标 = 让角色回到 right_trigger
+		return target_world_x - (right_trigger - 0.5) * vp_w / effective_zoom
+	else:
+		# 中间 1/2，不跟随，目标 = 当前位置
+		return cam_x
+
+
+## 计算弹回过渡的目标 X（根据当前模式）
+func _compute_return_target_x() -> float:
+	if centered_mode and follow_target != null and is_instance_valid(follow_target):
+		# 居中模式：目标 = 角色在屏幕中心
+		return follow_target.global_position.x
+	else:
+		# 自由镜头模式：目标 = 1/4 跟随逻辑的目标位置
+		return _compute_follow_target_x()
+
+
+func _compute_follow_x(delta: float) -> float:
+	var target_x := _compute_follow_target_x()
+	return _clamp_camera_x(lerp(global_position.x, target_x, FOLLOW_SMOOTHING * delta))
 
 
 # ─────────────────────────────── 手动控制 ────────────────────────────────
@@ -236,16 +273,20 @@ func _update_edge_scroll() -> void:
 	if mouse_pos.x < 0 or mouse_pos.x > vp_size.x or mouse_pos.y < 0 or mouse_pos.y > vp_size.y:
 		if _edge_scroll_dir != 0:
 			_edge_scroll_dir = 0
-			_manual_active = false
+			# 鼠标移出窗口：停止边缘滚动，但启动冷却（非居中模式），不瞬间弹回
+			if not centered_mode:
+				_manual_cooldown = MANUAL_COOLDOWN_TIME
 		return
 	if mouse_pos.x < vp_size.x * EDGE_DEAD_ZONE:
 		_edge_scroll_dir = -1
 		_manual_active = true
 		_manual_cooldown = 0.0
+		_returning = false
 	elif mouse_pos.x > vp_size.x * (1.0 - EDGE_DEAD_ZONE):
 		_edge_scroll_dir = 1
 		_manual_active = true
 		_manual_cooldown = 0.0
+		_returning = false
 	else:
 		if _edge_scroll_dir != 0:
 			_edge_scroll_dir = 0
@@ -304,8 +345,14 @@ func _zoom_at_mouse(step: float) -> void:
 		global_position.y = _compute_camera_y()
 	# 缩放算作一次手动操作：重置冷却计时
 	# 注：居中模式缩放不立即弹回（玩家可能在居中模式下也想调缩放），但保持居中模式行为
-	if not centered_mode and _manual_active and not _dragging and _edge_scroll_dir == 0:
-		_manual_cooldown = MANUAL_COOLDOWN_TIME
+	if not centered_mode:
+		if _returning:
+			# 弹回过渡中被缩放打断：重新进入手动控制，启动冷却
+			_returning = false
+			_manual_active = true
+			_manual_cooldown = MANUAL_COOLDOWN_TIME
+		elif _manual_active and not _dragging and _edge_scroll_dir == 0:
+			_manual_cooldown = MANUAL_COOLDOWN_TIME
 
 
 # ─────────────────────────────── 公共 API（§2.4.7）────────────────────────────────
@@ -370,9 +417,9 @@ func is_shaking() -> bool:
 ## 居中跟随开关
 ## 开启居中模式：保持当前镜头位置，但禁用边缘滚动，后续拖动/跳转松手立即弹回
 ## 关闭居中模式：恢复自由镜头（边缘滚动可用，拖动/缩放后 5 秒弹回）
-func set_centered_mode(enabled: bool) -> void:
-	centered_mode = enabled
-	if enabled:
+func set_centered_mode(p_enabled: bool) -> void:
+	centered_mode = p_enabled
+	if p_enabled:
 		# 切到居中模式：清除边缘滚动，但保持当前镜头（不立即弹回，等下次松手）
 		_edge_scroll_dir = 0
 
@@ -382,15 +429,17 @@ func is_centered_mode() -> bool:
 
 
 ## RTS 式跳转：相机跳到指定 X 位置，暂停自动跟随
-## 居中模式：立即弹回跟随（类似王者荣耀小地图）
+## 居中模式：立即进入弹回过渡（平滑缓动）
 ## 自由镜头模式：启动 5 秒冷却
 func jump_to_x(world_x: float) -> void:
 	global_position.x = _clamp_camera_x(world_x)
 	_manual_active = true
 	if centered_mode:
-		# 居中模式：松手即弹回
+		# 居中模式：立即进入弹回过渡
 		_manual_cooldown = 0.0
 		_manual_active = false
+		_returning = true
+		_return_elapsed = 0.0
 	else:
 		_manual_cooldown = MANUAL_COOLDOWN_TIME
 

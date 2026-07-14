@@ -37,6 +37,9 @@ func _register_tests() -> void:
 	_tests.append({"name": "PlacementGrid: 冲突检测", "fn": Callable(self, "_test_grid_conflict")})
 	_tests.append({"name": "PlacementGrid: 边界检查", "fn": Callable(self, "_test_grid_bounds")})
 	_tests.append({"name": "PlacementGrid: 坐标转换", "fn": Callable(self, "_test_grid_coords")})
+	_tests.append({"name": "PlacementGrid: BuildMask 标记与查询", "fn": Callable(self, "_test_grid_build_mask")})
+	_tests.append({"name": "PlacementGrid: BuildMask 影响占用查询", "fn": Callable(self, "_test_grid_build_mask_occupied")})
+	_tests.append({"name": "PlacementGrid: BuildMask 区域标记", "fn": Callable(self, "_test_grid_build_mask_area")})
 	_tests.append({"name": "PlacementValidator: 校验通过", "fn": Callable(self, "_test_validator_pass")})
 	_tests.append({"name": "PlacementValidator: 越界失败", "fn": Callable(self, "_test_validator_oob")})
 	_tests.append({"name": "PlacementValidator: 冲突失败", "fn": Callable(self, "_test_validator_conflict")})
@@ -50,6 +53,14 @@ func _register_tests() -> void:
 	_tests.append({"name": "GameRoot: CameraRig 跟随玩家", "fn": Callable(self, "_test_camera_follows_player")})
 	_tests.append({"name": "InputDispatcher: EXPLORE handler 已注册", "fn": Callable(self, "_test_explore_handler_registered")})
 	_tests.append({"name": "StickmanEntity: 实例化与 API", "fn": Callable(self, "_test_stickman_entity_api")})
+	_tests.append({"name": "VillageMap: 新增子节点齐全", "fn": Callable(self, "_test_village_new_children")})
+	_tests.append({"name": "VillageMap: ground_bottom getter", "fn": Callable(self, "_test_village_ground_bottom")})
+	_tests.append({"name": "VillageMap: WalkBarrier 查询接口", "fn": Callable(self, "_test_village_walk_barrier_query")})
+	_tests.append({"name": "StickmanEntity: map_reference 已注入", "fn": Callable(self, "_test_stickman_map_ref")})
+	_tests.append({"name": "DebugApi: 绘制器注册与注销", "fn": Callable(self, "_test_debug_api_drawers")})
+	_tests.append({"name": "DebugApi: 可见性切换", "fn": Callable(self, "_test_debug_api_visibility")})
+	_tests.append({"name": "DebugOverlay: GameRoot 子节点", "fn": Callable(self, "_test_debug_overlay_exists")})
+	_tests.append({"name": "DebugOverlay: 绘制器已注册", "fn": Callable(self, "_test_debug_drawers_registered")})
 
 
 # ─────────────────────────────── 异步执行 ────────────────────────────────
@@ -399,3 +410,190 @@ func _test_stickman_entity_api() -> void:
 	_runner.assert_true(e.has_method("set_possessed"), "应有 set_possessed 方法")
 	_runner.assert_true(e.has_method("get_facing"), "应有 get_facing 方法")
 	_runner.assert_true(e.rig != null, "rig 引用应非空")
+
+
+# ─────────────────────────────── BuildMask 测试 ────────────────────────────────
+
+func _test_grid_build_mask() -> void:
+	var g := _make_grid()
+	if g == null:
+		_runner.assert_true(false, "grid 创建失败")
+		return
+	# 初始无 blockage
+	_runner.assert_true(not g.is_blocked(0, 0), "(0,0) 初始应未 blocked")
+	_runner.assert_equal(g.get_blocked_count(), 0, "初始 blocked 数应为 0")
+	# 标记单格
+	g.set_blocked(1, 1)
+	_runner.assert_true(g.is_blocked(1, 1), "(1,1) 标记后应 blocked")
+	_runner.assert_true(not g.is_blocked(0, 0), "(0,0) 应仍未 blocked")
+	_runner.assert_equal(g.get_blocked_count(), 1, "blocked 数应为 1")
+	# 取消标记
+	g.set_blocked(1, 1, false)
+	_runner.assert_true(not g.is_blocked(1, 1), "(1,1) 取消后应未 blocked")
+	_runner.assert_equal(g.get_blocked_count(), 0, "取消后 blocked 数应为 0")
+	g.queue_free()
+
+
+func _test_grid_build_mask_occupied() -> void:
+	var g := _make_grid()
+	if g == null:
+		_runner.assert_true(false, "grid 创建失败")
+		return
+	# BuildMask 标记的格应视为 occupied
+	g.set_blocked(2, 2)
+	_runner.assert_true(g.is_occupied(2, 2), "blocked 格应视为 occupied")
+	# can_place 应返回 false
+	_runner.assert_true(not g.can_place(2, 2, 1, 1), "blocked 格 can_place 应失败")
+	# occupy 应失败（因 is_occupied 返回 true -> can_place false）
+	var ok: bool = g.occupy(2, 2, 1, 1, "test")
+	_runner.assert_true(not ok, "blocked 格 occupy 应失败")
+	# 未标记的格应正常
+	_runner.assert_true(not g.is_occupied(3, 3), "(3,3) 应未 occupied")
+	_runner.assert_true(g.can_place(3, 3, 1, 1), "(3,3) can_place 应成功")
+	g.queue_free()
+
+
+func _test_grid_build_mask_area() -> void:
+	var g := _make_grid()
+	if g == null:
+		_runner.assert_true(false, "grid 创建失败")
+		return
+	# 标记 2x2 区域
+	g.set_blocked_area(0, 0, 2, 2)
+	_runner.assert_true(g.is_blocked(0, 0), "(0,0) 应 blocked")
+	_runner.assert_true(g.is_blocked(1, 1), "(1,1) 应 blocked")
+	_runner.assert_true(not g.is_blocked(2, 2), "(2,2) 应未 blocked")
+	_runner.assert_equal(g.get_blocked_count(), 4, "2x2 应有 4 blocked")
+	# clear_blockage
+	g.clear_blockage()
+	_runner.assert_equal(g.get_blocked_count(), 0, "clear 后应无 blocked")
+	g.queue_free()
+
+
+# ─────────────────────────────── 新增节点与接口测试 ────────────────────────────────
+
+func _test_village_new_children() -> void:
+	var map := _get_current_map()
+	if map == null:
+		_runner.assert_true(false, "地图未加载")
+		return
+	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS) != null, "TerrainBuildings 应存在")
+	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_INITIAL_BUILDINGS_LIST) != null, "InitialBuildingsList 应存在")
+	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_WALK_BARRIER) != null, "WalkBarrier 应存在")
+	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_BUILD_MASK_LAYER) != null, "BuildMaskLayer 应存在")
+	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_FOREGROUND_LAYER) != null, "ForegroundLayer 应存在")
+	# ForegroundLayer z_index 应为 10
+	var fg: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_FOREGROUND_LAYER) as Node2D
+	if fg != null:
+		_runner.assert_equal(fg.z_index, 10, "ForegroundLayer z_index 应为 10")
+
+
+func _test_village_ground_bottom() -> void:
+	var map_node := _get_current_map()
+	if map_node == null:
+		_runner.assert_true(false, "地图未加载")
+		return
+	var map: ScriptVillageMap = map_node as ScriptVillageMap
+	if map == null:
+		_runner.assert_true(false, "地图非 VillageMap")
+		return
+	_runner.assert_equal(map.get_ground_bottom(), 882.0, "get_ground_bottom 应为 882")
+
+
+func _test_village_walk_barrier_query() -> void:
+	var map_node := _get_current_map()
+	if map_node == null:
+		_runner.assert_true(false, "地图未加载")
+		return
+	var map: ScriptVillageMap = map_node as ScriptVillageMap
+	if map == null:
+		_runner.assert_true(false, "地图非 VillageMap")
+		return
+	# get_walk_barriers 应返回 Array（即使为空）
+	var barriers: Array = map.get_walk_barriers()
+	_runner.assert_true(barriers != null, "get_walk_barriers 应返回数组")
+	# get_passage_barriers 应返回 Array
+	var pbarriers: Array = map.get_passage_barriers()
+	_runner.assert_true(pbarriers != null, "get_passage_barriers 应返回数组")
+
+
+func _test_stickman_map_ref() -> void:
+	var map_node := _get_current_map()
+	if map_node == null:
+		_runner.assert_true(false, "地图未加载")
+		return
+	var map: ScriptVillageMap = map_node as ScriptVillageMap
+	if map == null:
+		_runner.assert_true(false, "地图非 VillageMap")
+		return
+	var player: Node2D = map.get_possessed_entity()
+	if player == null:
+		_runner.assert_true(false, "无玩家实体")
+		return
+	var e: ScriptStickmanEntity = player as ScriptStickmanEntity
+	if e == null:
+		_runner.assert_true(false, "玩家非 StickmanEntity")
+		return
+	_runner.assert_true(e.has_method("set_map_reference"), "应有 set_map_reference 方法")
+	_runner.assert_true(e.has_method("_is_in_passage_barrier"), "应有 _is_in_passage_barrier 方法")
+	# _is_in_passage_barrier 应返回 false（无障碍物）
+	_runner.assert_true(not e._is_in_passage_barrier(), "无障碍物时应返回 false")
+
+
+# ─────────────────────────────── DebugApi / DebugOverlay 测试 ────────────────────────────────
+
+func _test_debug_api_drawers() -> void:
+	if DebugApi == null:
+		_runner.assert_true(false, "DebugApi autoload 不存在")
+		return
+	# 注册一个测试绘制器
+	var test_called: Array = []
+	var test_drawer: Callable = func(_control: Control, _ctx: Dictionary) -> void:
+		test_called.append(1)
+	DebugApi.register_drawer("test_drawer", test_drawer)
+	_runner.assert_true(DebugApi.get_drawers().has("test_drawer"), "注册后应存在")
+	# 注销
+	DebugApi.unregister_drawer("test_drawer")
+	_runner.assert_true(not DebugApi.get_drawers().has("test_drawer"), "注销后应不存在")
+
+
+func _test_debug_api_visibility() -> void:
+	if DebugApi == null:
+		_runner.assert_true(false, "DebugApi autoload 不存在")
+		return
+	var old_visible: bool = DebugApi.is_visible()
+	# 切换
+	DebugApi.toggle_visibility()
+	_runner.assert_true(DebugApi.is_visible() != old_visible, "toggle 后应变化")
+	# 切换回
+	DebugApi.toggle_visibility()
+	_runner.assert_true(DebugApi.is_visible() == old_visible, "再 toggle 应回原值")
+	# 图例
+	DebugApi.hide_legend()
+	_runner.assert_true(not DebugApi.is_legend_visible(), "hide_legend 后应不可见")
+	DebugApi.show_legend()
+	_runner.assert_true(DebugApi.is_legend_visible(), "show_legend 后应可见")
+
+
+func _test_debug_overlay_exists() -> void:
+	if _game_root == null:
+		_runner.assert_true(false, "GameRoot 不存在")
+		return
+	var overlay: Node = _game_root.get_node_or_null("DebugOverlay")
+	_runner.assert_true(overlay != null, "DebugOverlay 应为 GameRoot 子节点")
+	if overlay != null:
+		_runner.assert_true(overlay is CanvasLayer, "DebugOverlay 应为 CanvasLayer")
+
+
+func _test_debug_drawers_registered() -> void:
+	if DebugApi == null:
+		_runner.assert_true(false, "DebugApi autoload 不存在")
+		return
+	# 地图加载后应已注册 6 个绘制器
+	var drawers: Dictionary = DebugApi.get_drawers()
+	_runner.assert_true(drawers.has("grid_drawer"), "grid_drawer 应已注册")
+	_runner.assert_true(drawers.has("barrier_drawer"), "barrier_drawer 应已注册")
+	_runner.assert_true(drawers.has("building_drawer"), "building_drawer 应已注册")
+	_runner.assert_true(drawers.has("ground_line_drawer"), "ground_line_drawer 应已注册")
+	_runner.assert_true(drawers.has("chunk_trigger_drawer"), "chunk_trigger_drawer 应已注册")
+	_runner.assert_true(drawers.has("entity_state_drawer"), "entity_state_drawer 应已注册")

@@ -31,6 +31,18 @@ const PATH_MAP_BUILDING_HOST := "BuildingHost"
 const PATH_MAP_ENTITY_HOST := "EntityHost"
 const PATH_MAP_CHUNK_TRIGGERS := "ChunkTriggers"
 const PATH_MAP_BATTLE_ANCHOR := "BattleAnchor"
+## 地形建筑层（只读，随场景打包，不可拆除，详见 §4.5）
+const PATH_MAP_TERRAIN_BUILDINGS := "TerrainBuildings"
+## 初始建筑数据列表（def_id + cell_x + cell_y，详见 §4.5）
+const PATH_MAP_INITIAL_BUILDINGS_LIST := "InitialBuildingsList"
+## 地图级通行障碍容器（悬崖/高楼边缘，详见 §7.1.2）
+const PATH_MAP_WALK_BARRIER := "WalkBarrier"
+## 不可放建筑区域（大石头/山坡阶梯处，详见 §4.2）
+const PATH_MAP_BUILD_MASK_LAYER := "BuildMaskLayer"
+## 前景层（z_index=10，室内支柱/天花板，详见 §3.4）
+const PATH_MAP_FOREGROUND_LAYER := "ForegroundLayer"
+## 地面线标记（y = ground_y，供调试可视化）
+const PATH_MAP_GROUND_LINE := "GroundLine"
 
 # ─────────────────────────────── 地图类型 ────────────────────────────────
 enum MapType {

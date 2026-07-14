@@ -57,6 +57,12 @@ var map_right: float = 8192.0
 ## 脚部到节点原点的偏移（CollisionShape2D 半高，约 45）
 var foot_offset: float = 45.0
 
+# ─────────────────────────────── 通行障碍（§7.1.2）────────────────────────────────
+## 地图引用（供通行障碍查询，由 VillageMap.spawn_entity 注入）
+var _map_ref: Node2D = null
+## 上一帧有效位置（未碰撞障碍时的位置，用于回退）
+var _last_valid_position: Vector2 = Vector2.ZERO
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
 var rig: Node2D = null
@@ -96,6 +102,8 @@ func _ready() -> void:
 	_apply_scale()
 	# 播放 idle
 	_play_anim("idle")
+	# 初始化上一帧有效位置
+	_last_valid_position = global_position
 
 
 func _physics_process(delta: float) -> void:
@@ -136,6 +144,12 @@ func _physics_process(delta: float) -> void:
 	global_position.y = clampf(global_position.y, y_min, y_max)
 	# X 边界约束
 	global_position.x = clampf(global_position.x, map_left, map_right)
+	# 通行障碍检测：若进入 WalkBarrier / PassageBarrier 区域，回退到上一帧位置（§7.1.2）
+	if _is_in_passage_barrier():
+		global_position = _last_valid_position
+		velocity = Vector2.ZERO
+	else:
+		_last_valid_position = global_position
 	_sync_markers_transform()
 
 
@@ -239,6 +253,45 @@ func set_ground_constraints(p_ground_y: float, p_ground_bottom: float, p_map_lef
 	ground_bottom = p_ground_bottom
 	map_left = p_map_left
 	map_right = p_map_right
+
+
+## 由 MapInstance.spawn_entity 调用，注入地图引用（供通行障碍查询，§7.1.2）
+func set_map_reference(p_map: Node2D) -> void:
+	_map_ref = p_map
+
+
+## 检测是否在通行障碍区域内（WalkBarrier / PassageBarrier，§7.1.2）
+## 使用几何方式检测：遍历 Area2D 的 RectangleShape2D，判断实体位置是否在矩形内
+func _is_in_passage_barrier() -> bool:
+	if _map_ref == null or not is_instance_valid(_map_ref):
+		return false
+	var pos: Vector2 = global_position
+	# 检查地图级 WalkBarrier
+	if _map_ref.has_method("get_walk_barriers"):
+		for area in _map_ref.get_walk_barriers():
+			if _is_pos_in_area(pos, area):
+				return true
+	# 检查建筑级 PassageBarrier
+	if _map_ref.has_method("get_passage_barriers"):
+		for area in _map_ref.get_passage_barriers():
+			if _is_pos_in_area(pos, area):
+				return true
+	return false
+
+
+## 检查点是否在 Area2D 的 RectangleShape2D 范围内
+func _is_pos_in_area(pos: Vector2, area: Area2D) -> bool:
+	for child in area.get_children():
+		if child is CollisionShape2D:
+			var shape: Shape2D = (child as CollisionShape2D).shape
+			if shape is RectangleShape2D:
+				var rect_shape: RectangleShape2D = shape as RectangleShape2D
+				var area_pos: Vector2 = area.global_position + (child as CollisionShape2D).position
+				var half_size: Vector2 = rect_shape.size * 0.5
+				# 判断点是否在矩形内（考虑 Area2D 的 global_position 和 CollisionShape2D 的偏移）
+				var local_pos: Vector2 = pos - area_pos
+				return absf(local_pos.x) <= half_size.x and absf(local_pos.y) <= half_size.y
+	return false
 
 
 ## 切换附身状态

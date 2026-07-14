@@ -14,11 +14,16 @@
 ## 公共方法（PlacementGrid）：
 ##   - occupy(cell_x, cell_y, w, h, occupant) -> bool    占用矩形区域
 ##   - release(occupant) -> void                         按占用者释放
-##   - is_occupied(cell_x, cell_y) -> bool               单格是否占用
+##   - is_occupied(cell_x, cell_y) -> bool               单格是否占用（建筑占用 OR BuildMask）
+##   - is_blocked(cell_x, cell_y) -> bool                单格是否被 BuildMask 标记（§4.2）
 ##   - can_place(cell_x, cell_y, w, h) -> bool           矩形区域是否全部空闲
-##   - world_to_cell(world_pos) -> Vector2i              世界坐标→格子坐标
-##   - cell_to_world(cell_x, cell_y) -> Vector2          格子坐标→世界坐标（中心点）
+##   - world_to_cell(world_pos) -> Vector2i              世界坐标->格子坐标
+##   - cell_to_world(cell_x, cell_y) -> Vector2          格子坐标->世界坐标（中心点）
 ##   - clear() -> void                                    清空所有占用
+##   - set_blocked(cell_x, cell_y, blocked) -> void      标记单格为不可放建筑（§4.2）
+##   - set_blocked_area(cell_x, cell_y, w, h, blocked) -> void  标记矩形区域
+##   - clear_blockage() -> void                           清空所有 BuildMask 标记
+##   - get_blocked_count() -> int                         获取被标记的格子数
 ##
 ## 信号：
 ##   - cell_occupied(cell_x, cell_y, occupant)

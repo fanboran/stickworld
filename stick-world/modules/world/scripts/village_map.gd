@@ -13,6 +13,11 @@ extends Node2D
 ##   ├── GroundLine (Marker2D)                 ← 地面线标记（y = ground_y）
 ##   ├── DecorationLayer (Node2D)              ← 装饰物（P0 空）
 ##   ├── BuildingHost (Node2D)                 ← 建筑容器（P0 空）
+##   ├── TerrainBuildings (Node2D)             ← 地形建筑（只读，随场景打包，不可拆除）
+##   ├── InitialBuildingsList (Node)           ← 初始建筑数据列表（def_id + cell_x + cell_y）
+##   ├── WalkBarrier (Node2D)                  ← 地图级通行障碍容器（悬崖/高楼边缘）
+##   ├── BuildMaskLayer (Node2D)               ← 不可放建筑区域（大石头/山坡阶梯处）
+##   ├── ForegroundLayer (Node2D)              ← 前景层（z_index=10，火柴人经过被遮挡）
 ##   ├── EntityHost (Node2D)                   ← 火柴人容器
 ##   ├── ChunkTriggers (Node2D)                ← 末端触发器（P0 空）
 ##   └── BattleAnchor (Node2D)                 ← 战斗实例挂载点（P0 空）
@@ -40,10 +45,15 @@ const GRASS_TILE_SIZE: float = 96.0
 @onready var terrain_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_LAYER)
 @onready var decoration_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_DECORATION_LAYER)
 @onready var building_host: Node2D = get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST)
+@onready var terrain_buildings: Node2D = get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS)
+@onready var initial_buildings_list: Node = get_node_or_null(WorldAPI.PATH_MAP_INITIAL_BUILDINGS_LIST)
+@onready var walk_barrier: Node2D = get_node_or_null(WorldAPI.PATH_MAP_WALK_BARRIER)
+@onready var build_mask_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_BUILD_MASK_LAYER)
+@onready var foreground_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_FOREGROUND_LAYER)
 @onready var entity_host: Node2D = get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST)
 @onready var chunk_triggers: Node2D = get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS)
 @onready var battle_anchor: Node2D = get_node_or_null(WorldAPI.PATH_MAP_BATTLE_ANCHOR)
-@onready var ground_line: Marker2D = get_node_or_null("GroundLine")
+@onready var ground_line: Marker2D = get_node_or_null(WorldAPI.PATH_MAP_GROUND_LINE)
 
 # ─────────────────────────────── 元数据 ────────────────────────────────
 ## 地图 ID（由 SceneLoader 注册时分配）
@@ -58,6 +68,7 @@ func _ready() -> void:
 	_validate_children()
 	_sync_ground_line()
 	_apply_grass_texture()
+	_sync_build_mask()
 
 
 func _validate_children() -> void:
@@ -66,6 +77,11 @@ func _validate_children() -> void:
 		WorldAPI.PATH_MAP_TERRAIN_LAYER: "TerrainLayer",
 		WorldAPI.PATH_MAP_BUILDING_HOST: "BuildingHost",
 		WorldAPI.PATH_MAP_ENTITY_HOST: "EntityHost",
+		WorldAPI.PATH_MAP_TERRAIN_BUILDINGS: "TerrainBuildings",
+		WorldAPI.PATH_MAP_INITIAL_BUILDINGS_LIST: "InitialBuildingsList",
+		WorldAPI.PATH_MAP_WALK_BARRIER: "WalkBarrier",
+		WorldAPI.PATH_MAP_BUILD_MASK_LAYER: "BuildMaskLayer",
+		WorldAPI.PATH_MAP_FOREGROUND_LAYER: "ForegroundLayer",
 	}
 	for path: String in required.keys():
 		if get_node_or_null(path) == null:
@@ -76,6 +92,62 @@ func _sync_ground_line() -> void:
 	# GroundLine 节点位置对齐 ground_y（可视化调试用）
 	if ground_line != null:
 		ground_line.position = Vector2(0, ground_y)
+
+
+# ─────────────────────────────── BuildMask（§4.2）────────────────────────────────
+# 设计时在 BuildMaskLayer 下放置 ColorRect（红色半透明），运行时读取其位置尺寸，
+# 注册到 PlacementGrid.blockage_mask。
+
+func _sync_build_mask() -> void:
+	if build_mask_layer == null or placement_grid == null:
+		return
+	if not placement_grid.has_method("set_blocked_area"):
+		return
+	for child in build_mask_layer.get_children():
+		if child is ColorRect:
+			var rect: ColorRect = child as ColorRect
+			# ColorRect 的 position 和 size 都是局部坐标（BuildMaskLayer 在地图原点）
+			var pos: Vector2 = rect.position
+			var size: Vector2 = rect.size
+			# 世界坐标 -> 格子坐标
+			var cell_start: Vector2i = placement_grid.world_to_cell(pos)
+			var cell_end: Vector2i = placement_grid.world_to_cell(pos + size)
+			var w: int = cell_end.x - cell_start.x
+			var h: int = cell_end.y - cell_start.y
+			if w > 0 and h > 0:
+				placement_grid.set_blocked_area(cell_start.x, cell_start.y, w, h)
+			# 运行时隐藏 ColorRect（仅设计时可见）
+			rect.visible = false
+
+
+# ─────────────────────────────── 通行障碍查询（§7.1.2）────────────────────────────────
+
+## 获取所有 WalkBarrier Area2D 列表（地图级通行障碍）
+func get_walk_barriers() -> Array:
+	if walk_barrier == null:
+		return []
+	var barriers: Array = []
+	for child in walk_barrier.get_children():
+		if child is Area2D:
+			barriers.append(child)
+	return barriers
+
+
+## 获取所有建筑级 PassageBarrier Area2D 列表
+func get_passage_barriers() -> Array:
+	var barriers: Array = []
+	if building_host == null:
+		return barriers
+	for building in building_host.get_children():
+		var pb: Node = building.get_node_or_null("PassageBarrier") if building.has_method("get_node_or_null") else null
+		if pb != null and pb is Area2D:
+			barriers.append(pb)
+	return barriers
+
+
+## 获取地面底部 Y
+func get_ground_bottom() -> float:
+	return ground_bottom
 
 
 # ─────────────────────────────── 草地噪波材质（临时调试）────────────────────────────────
@@ -164,7 +236,7 @@ func get_entity_walk_bounds() -> Vector2:
 	return Vector2(map_left, map_right)
 
 
-## 生成实体到 EntityHost，并注入 ground_y / map_left / map_right
+## 生成实体到 EntityHost，并注入 ground_y / map_left / map_right / 地图引用
 func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
 	if entity_host == null or entity_scene == null:
 		push_error("[VillageMap] 无法生成实体: entity_host 或 scene 为空")
@@ -178,6 +250,9 @@ func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
 	# 注入地面约束参数（详见 §7.1.1）
 	if instance.has_method("set_ground_constraints"):
 		instance.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)
+	# 注入地图引用（供通行障碍查询，详见 §7.1.2）
+	if instance.has_method("set_map_reference"):
+		instance.set_map_reference(self)
 	return instance
 
 

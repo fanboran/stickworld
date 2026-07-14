@@ -165,6 +165,9 @@ uniform float noise_scale = 0.0006;  // 噪波频率（越小=色块越大）
 uniform bool random_flip = true;     // 随机翻转
 uniform float seam_blend = 0.2;      // 接缝过渡宽度（占格子比例）
 
+// 传递顶点局部坐标（= 世界坐标）到 fragment，避免 fragment 中 VERTEX 是视空间导致贴图不跟随世界
+varying vec2 world_pos;
+
 // 2D hash -> [0,1]
 float hash21(vec2 p) {
 	p = fract(p * vec2(443.897, 441.423));
@@ -212,8 +215,12 @@ vec2 stochastic_uv(vec2 cell, vec2 local_uv, float seed) {
 	return fract(uv + offset);
 }
 
+void vertex() {
+	world_pos = VERTEX;
+}
+
 void fragment() {
-	vec2 pos = VERTEX / tile_size;
+	vec2 pos = world_pos / tile_size;
 
 	// Layer 1: 原始网格
 	vec2 cell1 = floor(pos);
@@ -232,7 +239,7 @@ void fragment() {
 	COLOR = (c1 * w1 + c2 * w2) / (w1 + w2);
 
 	// 连续噪波控制整体明暗（平滑过渡，不按格子）
-	float n = fbm(VERTEX * noise_scale);
+	float n = fbm(world_pos * noise_scale);
 	float tint = 1.0 + (n - 0.5) * 2.0 * color_jitter;
 	COLOR.rgb *= tint;
 }

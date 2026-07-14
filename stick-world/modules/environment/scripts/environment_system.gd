@@ -28,9 +28,14 @@ var _canvas_modulate: CanvasModulate = null
 
 func _ready() -> void:
 	_ensure_canvas_modulate()
-	# 同步给 WorldState
 	if WorldState:
-		WorldState.game_time = time_of_day
+		# 存档加载后 WorldState.game_time 已有值，同步到 time_of_day
+		if WorldState.game_time > 0.0:
+			time_of_day = WorldState.game_time
+		else:
+			WorldState.game_time = time_of_day
+	# 立即设置初始光照，避免首帧白屏
+	_update_lighting()
 
 
 func _process(delta: float) -> void:

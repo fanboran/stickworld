@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://modules/world/scripts/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://modules/environment/scripts/environment_system.gd" id="2_env"]
@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://modules/ui/scripts/mode_panel.gd" id="9_mode"]
 [ext_resource type="Script" path="res://modules/ui/scripts/context_panel.gd" id="10_ctx"]
 [ext_resource type="Script" path="res://modules/debug/scripts/debug_overlay.gd" id="11_debug"]
+[ext_resource type="Script" path="res://modules/ui/scripts/clock_widget.gd" id="12_clock"]
 
 [node name="GameRoot" type="Node2D"]
 script = ExtResource("1_game_root")
@@ -87,6 +88,19 @@ grow_horizontal = 2
 grow_vertical = 1
 horizontal_alignment = 1
 text = ""
+
+[node name="ClockWidget" type="Control" parent="UIRoot/GlobalHUD"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -76.0
+offset_top = 2.0
+offset_right = -12.0
+offset_bottom = 66.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("12_clock")
 
 [node name="ModePanel" type="Control" parent="UIRoot"]
 layout_mode = 3

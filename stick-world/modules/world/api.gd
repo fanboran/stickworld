@@ -33,7 +33,7 @@ const PATH_MAP_CHUNK_TRIGGERS := "ChunkTriggers"
 const PATH_MAP_BATTLE_ANCHOR := "BattleAnchor"
 ## 地形建筑层（只读，随场景打包，不可拆除，详见 §4.5）
 const PATH_MAP_TERRAIN_BUILDINGS := "TerrainBuildings"
-## 初始建筑数据列表（def_id + cell_x + cell_y，详见 §4.5）
+## 初始建筑数据列表（def_id + cell_x + width，详见 §4.5）
 const PATH_MAP_INITIAL_BUILDINGS_LIST := "InitialBuildingsList"
 ## 地图级通行障碍容器（悬崖/高楼边缘，详见 §7.1.2）
 const PATH_MAP_WALK_BARRIER := "WalkBarrier"

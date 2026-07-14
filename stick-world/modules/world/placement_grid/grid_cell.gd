@@ -1,22 +1,23 @@
 class_name GridCell
 extends RefCounted
-## 占地网格单元格。
+## 占地网格竖向条带（1D）。
+##
+## 横向卷轴游戏中，世界按 32px 宽切分为竖向条带，
+## 每个条带无限向上下延伸。建筑只占宽度（N 个条带），不关心垂直方向。
 ##
 ## 每个 cell 记录是否被占用 + 占用者引用。
 ## 占用者通常是 Building 节点或唯一标识符（String/Object）。
 
-## 格子坐标（格子单位，非像素）
+## 条带坐标（格子单位，非像素）
 var cell_x: int = 0
-var cell_y: int = 0
 ## 是否被占用
 var occupied: bool = false
 ## 占用者引用（Object 或 String id）；空闲时为 null
 var occupant: Variant = null
 
 
-func _init(p_x: int = 0, p_y: int = 0) -> void:
+func _init(p_x: int = 0) -> void:
 	cell_x = p_x
-	cell_y = p_y
 
 
 ## 设置占用
@@ -32,4 +33,4 @@ func release() -> void:
 
 
 func _to_string() -> String:
-	return "GridCell(%d,%d)%s" % [cell_x, cell_y, "[O]" if occupied else "[]"]
+	return "GridCell(%d)%s" % [cell_x, "[O]" if occupied else "[]"]

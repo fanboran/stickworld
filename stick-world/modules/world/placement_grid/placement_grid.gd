@@ -1,37 +1,35 @@
 class_name PlacementGrid
 extends Node
-## 32px 高精度占地网格。
+## 1D 竖向条带占地网格。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §4.2。
+## 横向卷轴游戏中，世界按 32px 宽切分为竖向条带，每个条带无限向上下延伸。
+## 建筑只占宽度（N 个条带），不关心垂直方向占地。
+##
 ## 每张 Map 持有一个 PlacementGrid，用于：
 ##   - 建筑选址（can_place）
 ##   - 占地登记（occupy）
 ##   - 冲突检测（is_occupied）
-##   - 世界坐标↔格子坐标互转
-##
-## 网格原点对齐 MapInstance 原点（0,0）。Y 轴向下为正。
+##   - 世界坐标↔条带坐标互转
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
 const ScriptGridCell := preload("res://modules/world/placement_grid/grid_cell.gd")
 
-## 单元格尺寸（像素）
+## 单元格尺寸（像素，即每个竖向条带的宽度）
 const CELL_SIZE: int = 32
 
-## 信号：单元格被占用
-signal cell_occupied(cell_x: int, cell_y: int, occupant: Variant)
-## 信号：单元格被释放
-signal cell_released(cell_x: int, cell_y: int)
+## 信号：条带被占用
+signal cell_occupied(cell_x: int, occupant: Variant)
+## 信号：条带被释放
+signal cell_released(cell_x: int)
 
-## 网格宽度（格数）
+## 网格宽度（条带数）
 @export var grid_width: int = 64
-## 网格高度（格数）
-@export var grid_height: int = 32
 
-## 内部存储：cell_x, cell_y -> GridCell
+## 内部存储：cell_x -> GridCell
 var _cells: Dictionary = {}
 
-## BuildMask 不可放建筑区域掩码（1=不可放建筑，详见 §4.2）
-## 与 grid 同尺寸，标记地形限制不可放建筑的格子
+## BuildMask 不可放建筑区域掩码（1=不可放建筑）
+## 1D 数组，与 grid_width 同长度
 var blockage_mask: PackedByteArray = PackedByteArray()
 
 
@@ -43,76 +41,66 @@ func _ready() -> void:
 func _init_cells() -> void:
 	_cells.clear()
 	for x in range(grid_width):
-		for y in range(grid_height):
-			_cells[Vector2i(x, y)] = ScriptGridCell.new(x, y)
+		_cells[x] = ScriptGridCell.new(x)
 
 
 func _init_blockage_mask() -> void:
-	# 初始化 blockage_mask 为全 0（全部可放建筑）
-	blockage_mask.resize(grid_width * grid_height)
+	blockage_mask.resize(grid_width)
 	blockage_mask.fill(0)
 
 
 # ─────────────────────────────── 坐标转换 ────────────────────────────────
 
-## 世界坐标 → 格子坐标
-func world_to_cell(world_pos: Vector2) -> Vector2i:
-	var cx: int = int(world_pos.x / CELL_SIZE)
-	var cy: int = int(world_pos.y / CELL_SIZE)
-	return Vector2i(cx, cy)
+## 世界坐标 X -> 条带坐标
+func world_to_cell(world_pos: Vector2) -> int:
+	return int(world_pos.x / CELL_SIZE)
 
 
-## 格子坐标 → 世界坐标（格子中心点）
-func cell_to_world(cell_x: int, cell_y: int) -> Vector2:
-	return Vector2(
-		cell_x * CELL_SIZE + CELL_SIZE * 0.5,
-		cell_y * CELL_SIZE + CELL_SIZE * 0.5
-	)
+## 条带坐标 -> 世界坐标 X（条带中心点）
+func cell_to_world(cell_x: int) -> float:
+	return cell_x * CELL_SIZE + CELL_SIZE * 0.5
 
 
 # ─────────────────────────────── 边界检查 ────────────────────────────────
 
-## 格子坐标是否在网格范围内
-func is_in_bounds(cell_x: int, cell_y: int) -> bool:
-	return cell_x >= 0 and cell_x < grid_width and cell_y >= 0 and cell_y < grid_height
+## 条带坐标是否在网格范围内
+func is_in_bounds(cell_x: int) -> bool:
+	return cell_x >= 0 and cell_x < grid_width
 
 
 # ─────────────────────────────── 查询 ────────────────────────────────
 
-## 单格是否被占用。越界返回 true（视为不可建）。
-## 注意：建筑占用 OR BuildMask 标记 = 不可放（详见 §4.2）
-func is_occupied(cell_x: int, cell_y: int) -> bool:
-	if not is_in_bounds(cell_x, cell_y):
+## 条带是否被占用。越界返回 true（视为不可建）。
+## 注意：建筑占用 OR BuildMask 标记 = 不可放
+func is_occupied(cell_x: int) -> bool:
+	if not is_in_bounds(cell_x):
 		return true
-	var key := Vector2i(cell_x, cell_y)
-	var cell: ScriptGridCell = _cells.get(key)
+	var cell: ScriptGridCell = _cells.get(cell_x)
 	if cell == null:
 		return true
-	return cell.occupied or is_blocked(cell_x, cell_y)
+	return cell.occupied or is_blocked(cell_x)
 
 
-## 单格是否被 BuildMask 标记为不可放建筑（地形限制，详见 §4.2）
-func is_blocked(cell_x: int, cell_y: int) -> bool:
-	if not is_in_bounds(cell_x, cell_y):
+## 条带是否被 BuildMask 标记为不可放建筑（地形限制）
+func is_blocked(cell_x: int) -> bool:
+	if not is_in_bounds(cell_x):
 		return true
-	return blockage_mask[cell_y * grid_width + cell_x] == 1
+	return blockage_mask[cell_x] == 1
 
 
-## 矩形区域是否全部空闲（可建）
-func can_place(cell_x: int, cell_y: int, w: int, h: int) -> bool:
-	if w <= 0 or h <= 0:
+## 连续 N 个条带是否全部空闲（可建）
+func can_place(cell_x: int, w: int) -> bool:
+	if w <= 0:
 		return false
 	for x in range(cell_x, cell_x + w):
-		for y in range(cell_y, cell_y + h):
-			if is_occupied(x, y):
-				return false
+		if is_occupied(x):
+			return false
 	return true
 
 
-## 获取单格占用者
-func get_occupant(cell_x: int, cell_y: int) -> Variant:
-	var key := Vector2i(cell_x, cell_y)
-	var cell: ScriptGridCell = _cells.get(key)
+## 获取条带占用者
+func get_occupant(cell_x: int) -> Variant:
+	var cell: ScriptGridCell = _cells.get(cell_x)
 	if cell == null:
 		return null
 	return cell.occupant
@@ -120,62 +108,57 @@ func get_occupant(cell_x: int, cell_y: int) -> Variant:
 
 # ─────────────────────────────── 占用/释放 ────────────────────────────────
 
-## 占用矩形区域。成功返回 true，失败（部分越界或冲突）返回 false。
-## 注意：失败时不会留下半占用状态（全成功才写入）。
-func occupy(cell_x: int, cell_y: int, w: int, h: int, occupant: Variant) -> bool:
-	if not can_place(cell_x, cell_y, w, h):
+## 占用连续 N 个条带。成功返回 true，失败（部分越界或冲突）返回 false。
+func occupy(cell_x: int, w: int, occupant: Variant) -> bool:
+	if not can_place(cell_x, w):
 		return false
 	for x in range(cell_x, cell_x + w):
-		for y in range(cell_y, cell_y + h):
-			var cell: ScriptGridCell = _cells[Vector2i(x, y)]
-			cell.set_occupied(occupant)
-			cell_occupied.emit(x, y, occupant)
+		var cell: ScriptGridCell = _cells[x]
+		cell.set_occupied(occupant)
+		cell_occupied.emit(x, occupant)
 	return true
 
 
-## 按占用者释放所有相关格子
+## 按占用者释放所有相关条带
 func release(occupant: Variant) -> void:
-	for key: Vector2i in _cells.keys():
+	for key: int in _cells.keys():
 		var cell: ScriptGridCell = _cells[key]
 		if cell.occupied and cell.occupant == occupant:
 			cell.release()
-			cell_released.emit(key.x, key.y)
+			cell_released.emit(key)
 
 
-## 释放矩形区域
-func release_area(cell_x: int, cell_y: int, w: int, h: int) -> void:
+## 释放连续区域
+func release_area(cell_x: int, w: int) -> void:
 	for x in range(cell_x, cell_x + w):
-		for y in range(cell_y, cell_y + h):
-			var key := Vector2i(x, y)
-			var cell: ScriptGridCell = _cells.get(key)
-			if cell != null and cell.occupied:
-				cell.release()
-				cell_released.emit(x, y)
+		var cell: ScriptGridCell = _cells.get(x)
+		if cell != null and cell.occupied:
+			cell.release()
+			cell_released.emit(x)
 
 
 ## 清空所有占用
 func clear() -> void:
-	for key: Vector2i in _cells.keys():
+	for key: int in _cells.keys():
 		var cell: ScriptGridCell = _cells[key]
 		if cell.occupied:
 			cell.release()
-			cell_released.emit(key.x, key.y)
+			cell_released.emit(key)
 
 
-# ─────────────────────────────── BuildMask（§4.2）────────────────────────────────
+# ─────────────────────────────── BuildMask ────────────────────────────────
 
-## 标记单格为不可放建筑（地形限制）
-func set_blocked(cell_x: int, cell_y: int, blocked: bool = true) -> void:
-	if not is_in_bounds(cell_x, cell_y):
+## 标记单个条带为不可放建筑（地形限制）
+func set_blocked(cell_x: int, blocked: bool = true) -> void:
+	if not is_in_bounds(cell_x):
 		return
-	blockage_mask[cell_y * grid_width + cell_x] = 1 if blocked else 0
+	blockage_mask[cell_x] = 1 if blocked else 0
 
 
-## 标记矩形区域为不可放建筑
-func set_blocked_area(cell_x: int, cell_y: int, w: int, h: int, blocked: bool = true) -> void:
+## 标记连续区域为不可放建筑
+func set_blocked_area(cell_x: int, w: int, blocked: bool = true) -> void:
 	for x in range(cell_x, cell_x + w):
-		for y in range(cell_y, cell_y + h):
-			set_blocked(x, y, blocked)
+		set_blocked(x, blocked)
 
 
 ## 清空所有 BuildMask 标记
@@ -183,7 +166,7 @@ func clear_blockage() -> void:
 	blockage_mask.fill(0)
 
 
-## 获取被 BuildMask 标记的格子数
+## 获取被 BuildMask 标记的条带数
 func get_blocked_count() -> int:
 	var count: int = 0
 	for i in range(blockage_mask.size()):
@@ -194,16 +177,16 @@ func get_blocked_count() -> int:
 
 # ─────────────────────────────── 统计 ────────────────────────────────
 
-## 已占用格子数
+## 已占用条带数
 func get_occupied_count() -> int:
 	var count: int = 0
-	for key: Vector2i in _cells.keys():
+	for key: int in _cells.keys():
 		var cell: ScriptGridCell = _cells[key]
 		if cell.occupied:
 			count += 1
 	return count
 
 
-## 总格子数
+## 总条带数
 func get_total_count() -> int:
-	return grid_width * grid_height
+	return grid_width

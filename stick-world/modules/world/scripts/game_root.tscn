@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://modules/world/scripts/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://modules/environment/scripts/environment_system.gd" id="2_env"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://modules/ui/scripts/global_hud.gd" id="8_hud"]
 [ext_resource type="Script" path="res://modules/ui/scripts/mode_panel.gd" id="9_mode"]
 [ext_resource type="Script" path="res://modules/ui/scripts/context_panel.gd" id="10_ctx"]
+[ext_resource type="Script" path="res://modules/debug/scripts/debug_overlay.gd" id="11_debug"]
 
 [node name="GameRoot" type="Node2D"]
 script = ExtResource("1_game_root")
@@ -191,3 +192,6 @@ grow_vertical = 2
 mouse_filter = 2
 
 [node name="BattleDirector" type="Node" parent="."]
+
+[node name="DebugOverlay" type="CanvasLayer" parent="."]
+script = ExtResource("11_debug")

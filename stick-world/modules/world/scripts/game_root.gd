@@ -17,6 +17,8 @@ const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/test
 const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 ## EXPLORE 模式 handler 脚本
 const _ExploreHandlerScript: GDScript = preload("res://modules/player_control/scripts/explore_handler.gd")
+## 调试绘制器
+const _DebugDrawers: GDScript = preload("res://modules/debug/scripts/debug_drawers.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -105,6 +107,20 @@ func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
+	# 注册调试绘制器
+	_register_debug_drawers()
+
+
+## 注册调试绘制器到 DebugApi（详见 §10.5.7）
+func _register_debug_drawers() -> void:
+	if DebugApi == null:
+		return
+	DebugApi.register_drawer("grid_drawer", Callable(_DebugDrawers, "draw_grid"))
+	DebugApi.register_drawer("barrier_drawer", Callable(_DebugDrawers, "draw_barriers"))
+	DebugApi.register_drawer("building_drawer", Callable(_DebugDrawers, "draw_buildings"))
+	DebugApi.register_drawer("ground_line_drawer", Callable(_DebugDrawers, "draw_ground_lines"))
+	DebugApi.register_drawer("chunk_trigger_drawer", Callable(_DebugDrawers, "draw_chunk_triggers"))
+	DebugApi.register_drawer("entity_state_drawer", Callable(_DebugDrawers, "draw_entity_states"))
 
 
 func _validate_children() -> void:

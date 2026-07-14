@@ -1,0 +1,21 @@
+[gd_scene format=3 uid="uid://bms4thlv40004"]
+
+[ext_resource type="Texture2D" uid="uid://cn2mi0tq3ouwd" path="res://modules/buildings/assets/smithy_lv4.png" id="1_tex"]
+[ext_resource type="Script" uid="uid://bhwpk8y6t8cwg" path="res://modules/buildings/scripts/building_snap.gd" id="2_snap"]
+
+[sub_resource type="RectangleShape2D" id="rect_passage"]
+size = Vector2(495, 512)
+
+[node name="BldSmithyLv4" type="Node2D" unique_id=2010212606]
+script = ExtResource("2_snap")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1303007353]
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("1_tex")
+offset = Vector2(0, -512)
+
+[node name="PassageBarrier" type="Area2D" parent="." unique_id=795373711]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier" unique_id=570988568]
+position = Vector2(5.5, -297)
+shape = SubResource("rect_passage")

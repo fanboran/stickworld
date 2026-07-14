@@ -33,6 +33,10 @@ tools/volc_image_gen/output/
 tools/volc_image_gen/.env
 stick-world/assets/_raw/
 
+# 世界生成工具：.npy 是大数据文件（高度场/mask，256MB+），不提交，只提交 PNG 预览
+tools/worldgen/output/**/*.npy
+.tmp/
+
 # 调试 / 日志
 debug.log
 *.log
@@ -67,15 +71,11 @@ coverage/
 
 # OS
 .DS_
-external/swl_extracted/SWL Archidon.nodes
-external/swl_extracted/SWL Giant.nodes
-external/swl_extracted/SWL Magikill.nodes
-external/swl_extracted/SWL Miner Bag.nodes
-external/swl_extracted/SWL Miner.nodes
-external/swl_extracted/SWL Minion (Side-Front view).nodes
-external/swl_extracted/SWL Minion (Trident).nodes
-external/swl_extracted/SWL Spearton.nodes
-external/swl_extracted/SWL Swordwrath.nodes
+# 第三方开源库（本地参考用，不入 Git）
+external/
+!external/.gitkeep
+# 保留已存在的 swl_extracted 特例（已在上一行 external/ 中被忽略，这里仅作记录）
+
 node_modules/.package-lock.json
 node_modules/sticknodes-js/LICENSE
 node_modules/sticknodes-js/package.json

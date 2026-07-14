@@ -43,16 +43,16 @@ TIER_COLORS = {
 }
 
 # 高度分级阈值（值域 0-100，与 Azgaar 一致：<20=水）
-# 删掉 snow，合并到 plateau；coast 收窄，plains 范围最大
+# 阈值根据 8192 高度场实际分布标定，使 plains 主导（~51%），接近 1024 预览版分布
 TIER_THRESHOLDS = {
     "deep_ocean":  (-1e9, 8.0),
     "ocean":       (8.0, 14.0),
     "shallow":     (14.0, 19.0),
-    "coast":       (19.0, 24.0),
-    "plains":      (24.0, 45.0),
-    "hills":       (45.0, 60.0),
-    "mountain":    (60.0, 75.0),
-    "plateau":     (75.0, 1e9),
+    "coast":       (19.0, 26.0),
+    "plains":      (26.0, 55.0),
+    "hills":       (55.0, 65.0),
+    "mountain":    (65.0, 78.0),
+    "plateau":     (78.0, 1e9),
 }
 
 

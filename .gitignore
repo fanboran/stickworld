@@ -29,6 +29,9 @@ gdextension_crash_on_quit.txt
 tools/godot_ai_repo/.venv/
 tools/godot_ai_repo/venv/
 tools/vector_db/chroma_db/
+tools/volc_image_gen/output/
+tools/volc_image_gen/.env
+stick-world/assets/_raw/
 
 # 调试 / 日志
 debug.log

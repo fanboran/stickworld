@@ -37,8 +37,8 @@ extends Node2D
 ## 地面底部 Y（火柴人可走区域底部，= ground_y + DESIGN_HEIGHT * ground_ratio = 450 + 1080*0.4 = 882）
 ## 注意：此值应匹配屏幕可见地面范围，避免地面矩形超出屏幕导致火柴人显示偏下
 @export var ground_bottom: float = 882.0
-## 草地纹理平铺尺寸（世界坐标 px，每 96px 重复一次噪波纹理）
-const GRASS_TILE_SIZE: float = 96.0
+## 草地纹理平铺尺寸（世界坐标 px，每 GRASS_TILE_SIZE 像素重复一次纹理）
+const GRASS_TILE_SIZE: float = 512.0
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var placement_grid: Node = get_node_or_null(WorldAPI.PATH_MAP_PLACEMENT_GRID)
@@ -150,9 +150,94 @@ func get_ground_bottom() -> float:
 	return ground_bottom
 
 
-# ─────────────────────────────── 草地噪波材质（临时调试）────────────────────────────────
-# 用 FastNoiseLite 生成噪波，着色为绿色草地纹理，平铺到 GroundPolygon 上作为移动参照物。
-# 详见用户需求："给调试时的地面加个临时的材质，可以是一个噪波生成的绿色草地"。
+# ─────────────────────────────── 草地纹理 ────────────────────────────────
+# 使用 assets/environment/grassland.jpeg 作为平铺草地纹理。
+# 用 ShaderMaterial 实现 Stochastic Tiling（随机偏移+随机翻转，打破规则网格感）。
+
+const _GRASS_SHADER_CODE: String = """
+shader_type canvas_item;
+
+uniform sampler2D tex : repeat_enable, filter_linear_mipmap;
+uniform vec2 tile_size = vec2(512.0, 512.0);
+uniform float jitter = 0.35;        // 随机偏移强度 (0=无偏移, 0.5=最大偏移)
+uniform float color_jitter = 0.15;   // 明暗变化强度
+uniform float noise_scale = 0.0006;  // 噪波频率（越小=色块越大）
+uniform bool random_flip = true;     // 随机翻转
+uniform float seam_blend = 0.2;      // 接缝过渡宽度（占格子比例）
+
+// 2D hash -> [0,1]
+float hash21(vec2 p) {
+	p = fract(p * vec2(443.897, 441.423));
+	p += dot(p, p.yx + 19.19);
+	return fract((p.x + p.y) * p.x);
+}
+
+// 2D value noise（平滑连续噪波，覆盖整个地面）
+float value_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f); // smoothstep 插值
+	float a = hash21(i);
+	float b = hash21(i + vec2(1.0, 0.0));
+	float c = hash21(i + vec2(0.0, 1.0));
+	float d = hash21(i + vec2(1.0, 1.0));
+	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// 分形布朗运动（多频叠加，更自然）
+float fbm(vec2 p) {
+	float v = 0.0;
+	float a = 0.5;
+	for (int i = 0; i < 3; i++) {
+		v += a * value_noise(p);
+		p *= 2.0;
+		a *= 0.5;
+	}
+	return v;
+}
+
+// 格子内到最近边缘的距离 [0, 0.5]
+float edge_dist(vec2 local_uv) {
+	return min(min(local_uv.x, 1.0 - local_uv.x), min(local_uv.y, 1.0 - local_uv.y));
+}
+
+// 计算单个格子的随机采样 UV
+vec2 stochastic_uv(vec2 cell, vec2 local_uv, float seed) {
+	vec2 offset = vec2(hash21(cell + seed), hash21(cell + seed + 1.0)) * jitter;
+	vec2 uv = local_uv;
+	if (random_flip) {
+		if (hash21(cell + seed + 2.0) > 0.5) uv.x = 1.0 - uv.x;
+		if (hash21(cell + seed + 3.0) > 0.5) uv.y = 1.0 - uv.y;
+	}
+	return fract(uv + offset);
+}
+
+void fragment() {
+	vec2 pos = VERTEX / tile_size;
+
+	// Layer 1: 原始网格
+	vec2 cell1 = floor(pos);
+	vec2 luv1 = fract(pos);
+	vec4 c1 = texture(tex, stochastic_uv(cell1, luv1, 0.0));
+
+	// Layer 2: 网格偏移半格，接缝与 Layer 1 错开
+	vec2 pos2 = pos + 0.5;
+	vec2 cell2 = floor(pos2);
+	vec2 luv2 = fract(pos2);
+	vec4 c2 = texture(tex, stochastic_uv(cell2, luv2, 10.0));
+
+	// 按到边缘距离加权混合：一层在接缝处时另一层在格子中心
+	float w1 = smoothstep(0.0, seam_blend, edge_dist(luv1));
+	float w2 = smoothstep(0.0, seam_blend, edge_dist(luv2));
+	COLOR = (c1 * w1 + c2 * w2) / (w1 + w2);
+
+	// 连续噪波控制整体明暗（平滑过渡，不按格子）
+	float n = fbm(VERTEX * noise_scale);
+	float tint = 1.0 + (n - 0.5) * 2.0 * color_jitter;
+	COLOR.rgb *= tint;
+}
+"""
+
 func _apply_grass_texture() -> void:
 	if terrain_layer == null:
 		push_warning("[VillageMap] terrain_layer 为空，跳过草地材质")
@@ -161,61 +246,74 @@ func _apply_grass_texture() -> void:
 	if gp == null:
 		push_warning("[VillageMap] GroundPolygon 不存在，跳过草地材质")
 		return
-	var tex: ImageTexture = _generate_grass_texture()
-	# 直接设置 texture + uv，用 ShaderMaterial 实现 repeat（Polygon2D 默认 clamp uv>1）
+	# 自动查找 assets/environment/ 下以 grassland 开头的图片文件
+	var img_path := _find_grass_texture()
+	if img_path.is_empty():
+		push_warning("[VillageMap] 未找到草地纹理文件")
+		return
+	# 按文件头检测真实格式加载（避免扩展名与实际格式不匹配）
+	var img := _load_image_auto(img_path)
+	if img == null:
+		push_warning("[VillageMap] 草地图片加载失败: " + img_path)
+		return
+	var tex := ImageTexture.create_from_image(img)
 	gp.texture = tex
-	# 用 ShaderMaterial 覆盖采样行为，让 uv>1 时平铺
+	# 用 ShaderMaterial 的 repeat_enable 强制平铺，shader 内用 VERTEX 计算 UV
 	var mat := ShaderMaterial.new()
-	mat.shader = _get_grass_shader()
+	mat.shader = Shader.new()
+	mat.shader.code = _GRASS_SHADER_CODE
 	mat.set_shader_parameter("tex", tex)
+	mat.set_shader_parameter("tile_size", Vector2(GRASS_TILE_SIZE, GRASS_TILE_SIZE))
 	gp.material = mat
-	# 平铺 UV：每 GRASS_TILE_SIZE 世界像素重复一次
-	var w: float = map_right - map_left
-	var h: float = ground_bottom - ground_y
-	gp.uv = PackedVector2Array([
-		Vector2(0.0, 0.0),
-		Vector2(w / GRASS_TILE_SIZE, 0.0),
-		Vector2(w / GRASS_TILE_SIZE, h / GRASS_TILE_SIZE),
-		Vector2(0.0, h / GRASS_TILE_SIZE)
-	])
+	# 纹理颜色不需要 color 调色，设为白色避免叠加
+	gp.color = Color.WHITE
 
 
-func _generate_grass_texture() -> ImageTexture:
-	# FastNoiseLite 生成 SIMPLEX 噪声，映射到深绿→浅绿渐变
-	var noise := FastNoiseLite.new()
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	noise.frequency = 0.08
-	noise.seed = 42
-	var size: int = 128
-	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	# 草地配色：深绿 (0.22, 0.42, 0.16) → 浅绿 (0.52, 0.72, 0.36)
-	for y in size:
-		for x in size:
-			var n: float = noise.get_noise_2d(float(x), float(y)) * 0.5 + 0.5
-			n = clampf(n, 0.0, 1.0)
-			var r: float = lerpf(0.22, 0.52, n)
-			var g: float = lerpf(0.42, 0.72, n)
-			var b: float = lerpf(0.16, 0.36, n)
-			img.set_pixel(x, y, Color(r, g, b, 1.0))
-	return ImageTexture.create_from_image(img)
+## 在 assets/environment/ 目录下查找 grassland 开头的图片文件，返回绝对路径
+func _find_grass_texture() -> String:
+	var dir_path := "res://assets/environment"
+	var abs_dir := ProjectSettings.globalize_path(dir_path)
+	var dir := DirAccess.open(abs_dir)
+	if dir == null:
+		return ""
+	var exts := [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tga"]
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if not dir.current_is_dir():
+			var lower := file_name.to_lower()
+			if lower.begins_with("grassland"):
+				for ext in exts:
+					if lower.ends_with(ext):
+						return abs_dir + "/" + file_name
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	return ""
 
 
-const _GRASS_SHADER_CODE: String = """
-shader_type canvas_item;
-
-uniform sampler2D tex : repeat_enable, filter_linear_mipmap;
-
-void fragment() {
-	COLOR = texture(tex, UV);
-}
-"""
-
-
-func _get_grass_shader() -> Shader:
-	# 用 const 字符串避免运行时拼接错误
-	var shader := Shader.new()
-	shader.code = _GRASS_SHADER_CODE
-	return shader
+## 按文件头检测真实图片格式并加载（不依赖文件扩展名）
+func _load_image_auto(path: String) -> Image:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return null
+	var buf := file.get_buffer(file.get_length())
+	file.close()
+	if buf.size() < 4:
+		return null
+	var img := Image.new()
+	var err: int = ERR_FILE_UNRECOGNIZED
+	# JPEG: FF D8 FF
+	if buf[0] == 0xFF and buf[1] == 0xD8 and buf[2] == 0xFF:
+		err = img.load_jpg_from_buffer(buf)
+	# PNG: 89 50 4E 47
+	elif buf[0] == 0x89 and buf[1] == 0x50 and buf[2] == 0x4E and buf[3] == 0x47:
+		err = img.load_png_from_buffer(buf)
+	# WebP: 52 49 46 46
+	elif buf.size() >= 12 and buf[0] == 0x52 and buf[1] == 0x49 and buf[2] == 0x46 and buf[3] == 0x46:
+		err = img.load_webp_from_buffer(buf)
+	if err == OK:
+		return img
+	return null
 
 
 # ─────────────────────────────── 公共 API（§3.4.2）────────────────────────────────

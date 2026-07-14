@@ -259,11 +259,11 @@ def cmd_world_from_png(args):
 
     # 步骤 2：从 resized mask 生成世界地图（新进程的内存完全干净）
     print(f"生成群系/河流 (seed={seed})...")
-    subprocess.run(
-        [sys.executable, __file__, "_world",
-         "--mask", locked_path, "--size", str(size), "--seed", str(seed)],
-        check=True,
-    )
+    cmd = [sys.executable, __file__, "_world",
+           "--mask", locked_path, "--size", str(size), "--seed", str(seed)]
+    if getattr(args, "heightmap", None):
+        cmd += ["--heightmap", args.heightmap]
+    subprocess.run(cmd, check=True)
 
 
 def _load_mask_png(path: str) -> np.ndarray:
@@ -564,7 +564,15 @@ def _cmd_world(args):
         mask = _load_mask_png(args.mask)
     print(f"  mask: {mask.shape[1]}x{mask.shape[0]}, 陆地 {land_ratio(mask)*100:.1f}%")
     gc.collect()
-    wm = generate_world_map(args.size, args.seed, mask)
+
+    # 可选：加载外部高度场
+    heightmap = None
+    if getattr(args, "heightmap", None):
+        heightmap = np.load(args.heightmap)
+        print(f"  heightmap: {heightmap.shape[1]}x{heightmap.shape[0]}, 值域 {heightmap.min():.1f}-{heightmap.max():.1f}")
+        gc.collect()
+
+    wm = generate_world_map(args.size, args.seed, mask, heightmap=heightmap)
 
     locked_path = os.path.join(OUTPUT_DIR, "locked_continent.png")
     _save_mask_png(wm.landmask, locked_path)
@@ -604,6 +612,7 @@ def main():
     pwp.add_argument("--mask", type=str, required=True, help="大陆掩码 PNG 路径")
     pwp.add_argument("--seed", type=int, default=BASE_SEED)
     pwp.add_argument("--size", type=int, default=4096)
+    pwp.add_argument("--heightmap", type=str, default=None, help="外部高度场 .npy（Azgaar 模板法）")
     pwp.set_defaults(func=cmd_world_from_png)
 
     pc = sub.add_parser("crop", help="裁切高度场/mask，去掉周围深蓝海洋")
@@ -643,6 +652,7 @@ def main():
     pw2.add_argument("--mask", type=str, required=True)
     pw2.add_argument("--size", type=int, required=True)
     pw2.add_argument("--seed", type=int, required=True)
+    pw2.add_argument("--heightmap", type=str, default=None, help="外部高度场 .npy")
     pw2.set_defaults(func=_cmd_world)
 
     pt1 = sub.add_parser("_tectonic_one", help="[内部] 生成单张板块构造地形图")

@@ -44,29 +44,45 @@ class WorldMap:
         self.is_river = np.zeros((size, size), dtype=np.uint8)
 
 
-def generate_world_map(size: int, seed: int, landmask: np.ndarray, slab_h: int = 64) -> WorldMap:
-    """在给定大陆掩码上生成群系/河流。"""
+def generate_world_map(size: int, seed: int, landmask: np.ndarray, slab_h: int = 64,
+                       heightmap: np.ndarray = None) -> WorldMap:
+    """在给定大陆掩码上生成群系/河流。
+
+    Args:
+        heightmap: 可选外部高度场 (size,size) float32，值域 0-100（<20=水）。
+                   如果提供，群系和河流都基于它（跳过内部 fbm 高程计算）。
+                   对应 terrain_template.py 的 Azgaar 模板法高度场。
+    """
     wm = WorldMap(size, seed, landmask)
+    use_external_h = heightmap is not None
+    if use_external_h:
+        print("  使用外部高度场（Azgaar 模板法）", flush=True)
 
     # 0. 预计算海岸距离场（低分辨率，用于高程调制：越靠海越低，越内陆越高）
-    cd_res = min(size, 1024)
-    print("  coast distance...", flush=True)
-    coast_dist = _compute_coast_distance(landmask, cd_res)
-    print("  coast distance done", flush=True)
+    #    外部高度场模式下不需要（高度场已包含内陆信息）
+    coast_dist = None
+    cd_res = 0
+    if not use_external_h:
+        cd_res = min(size, 1024)
+        print("  coast distance...", flush=True)
+        coast_dist = _compute_coast_distance(landmask, cd_res)
+        print("  coast distance done", flush=True)
 
     # 1. 群系（分块计算）
     n_slabs = (size + slab_h - 1) // slab_h
     for i, y0 in enumerate(range(0, size, slab_h)):
         y1 = min(y0 + slab_h, size)
-        wm.biome[y0:y1] = _slab_biome(size, seed, landmask, y0, y1, coast_dist, cd_res)
+        wm.biome[y0:y1] = _slab_biome(size, seed, landmask, y0, y1, coast_dist, cd_res,
+                                       heightmap=heightmap)
         gc.collect()
         if i % 2 == 0:
             print(f"  biome {i}/{n_slabs}", flush=True)
 
-    # 2. 河流（复用 coast_dist 保证高程一致性）
+    # 2. 河流（复用 coast_dist 保证高程一致性；外部高度场模式下用外部高度场）
     print("  rivers...", flush=True)
     river_res = min(size, 1024)
-    river_mask = _rivers_lowres(size, seed, river_res, landmask, coast_dist, cd_res)
+    river_mask = _rivers_lowres(size, seed, river_res, landmask, coast_dist, cd_res,
+                                heightmap=heightmap)
     wm.is_river = _upscale_rivers(river_mask, size, landmask)
     del coast_dist
     gc.collect()
@@ -121,35 +137,39 @@ def _compute_coast_distance(landmask: np.ndarray, res: int) -> np.ndarray:
 
 
 def _slab_biome(size: int, seed: int, landmask: np.ndarray, y0: int, y1: int,
-                coast_dist=None, cd_res: int = 0) -> np.ndarray:
+                coast_dist=None, cd_res: int = 0, heightmap: np.ndarray = None) -> np.ndarray:
     """计算 [y0,y1) 行的群系。"""
     xs = np.arange(size, dtype=np.float32)
     ys = np.arange(y0, y1, dtype=np.float32)
     PX, PY = np.meshgrid(xs, ys)
     land_slab = landmask[y0:y1].astype(bool)
 
-    # 高程（低频 ridge 让山脉集中成带，不散碎；海岸距离调制让内陆更高）
-    ridge = fbm_sample(PX, PY, size, 5, 4, seed + 301) * np.float32(2.0) - np.float32(1.0)
-    mountain = smoothstep(np.float32(-0.15), np.float32(0.45), ridge) * np.float32(0.78)
-    depth = np.abs(fbm_sample(PX, PY, size, 10, 3, seed + 601) * np.float32(2.0) - np.float32(1.0))
-
-    # 海岸距离调制：海岸附近 inland≈0（低地），内陆深处 inland≈1（可出高山）
-    if coast_dist is not None and cd_res > 0:
-        scale_cd = np.float32(cd_res) / np.float32(size)
-        ys_cd = np.clip((np.arange(y0, y1, dtype=np.float32) * scale_cd).astype(np.int32), 0, cd_res - 1)
-        xs_cd = np.clip((np.arange(size, dtype=np.float32) * scale_cd).astype(np.int32), 0, cd_res - 1)
-        inland = coast_dist[ys_cd][:, xs_cd]
+    if heightmap is not None:
+        # 外部高度场模式：elev = heightmap / 100（0-1 范围），跳过 fbm 高程计算
+        # 海洋高度（<20）映射为负值，陆地高度（≥20）映射为 0.2+
+        elev = (heightmap[y0:y1] / np.float32(100.0)).astype(np.float32)
     else:
-        inland = np.ones(land_slab.shape, dtype=np.float32)
+        # 原始 fbm 高程模式
+        # 高程（低频 ridge 让山脉集中成带，不散碎；海岸距离调制让内陆更高）
+        ridge = fbm_sample(PX, PY, size, 5, 4, seed + 301) * np.float32(2.0) - np.float32(1.0)
+        mountain = smoothstep(np.float32(-0.15), np.float32(0.45), ridge) * np.float32(0.78)
+        depth = np.abs(fbm_sample(PX, PY, size, 10, 3, seed + 601) * np.float32(2.0) - np.float32(1.0))
 
-    # 高程公式：海岸基础低(0.12)，内陆乘子高(0.25+0.75*inland)
-    # 海岸: elev = 0.12 + mountain * 0.25 (海滩/平原)
-    # 内陆: elev = 0.12 + mountain * 1.0  (可达山地/雪峰)
-    elev = np.where(land_slab,
-                    np.float32(0.12) + mountain * (np.float32(0.25) + np.float32(0.75) * inland),
-                    np.float32(-0.08) - depth * np.float32(0.45)).astype(np.float32, copy=False)
+        # 海岸距离调制：海岸附近 inland≈0（低地），内陆深处 inland≈1（可出高山）
+        if coast_dist is not None and cd_res > 0:
+            scale_cd = np.float32(cd_res) / np.float32(size)
+            ys_cd = np.clip((np.arange(y0, y1, dtype=np.float32) * scale_cd).astype(np.int32), 0, cd_res - 1)
+            xs_cd = np.clip((np.arange(size, dtype=np.float32) * scale_cd).astype(np.int32), 0, cd_res - 1)
+            inland = coast_dist[ys_cd][:, xs_cd]
+        else:
+            inland = np.ones(land_slab.shape, dtype=np.float32)
 
-    # 温度（纬度主导 + 低频扰动）
+        # 高程公式：海岸基础低(0.12)，内陆乘子高(0.25+0.75*inland)
+        elev = np.where(land_slab,
+                        np.float32(0.12) + mountain * (np.float32(0.25) + np.float32(0.75) * inland),
+                        np.float32(-0.08) - depth * np.float32(0.45)).astype(np.float32, copy=False)
+
+    # 温度（纬度主导 + 低频扰动 + 高海拔降温）
     cy = np.float32(size * 0.5)
     lat = np.abs(PY - cy) / np.float32(size * 0.5)
     temp = (np.float32(1.0) - lat) + (fbm_sample(PX, PY, size, 4, 3, seed + 401) * np.float32(2.0) - np.float32(1.0)) * np.float32(0.25)
@@ -159,11 +179,15 @@ def _slab_biome(size: int, seed: int, landmask: np.ndarray, y0: int, y1: int,
     # 湿度（低频让湿度区域更大块，减少迷彩感）
     moist = np.clip(fbm_sample(PX, PY, size, 4, 4, seed + 501), np.float32(0.0), np.float32(1.0))
 
-    return _classify_biome(land_slab, elev, temp, moist, landmask, y0, y1, size)
+    return _classify_biome(land_slab, elev, temp, moist, landmask, y0, y1, size, external_elev=heightmap is not None)
 
 
-def _classify_biome(land_slab, elev, temp, moist, landmask, y0, y1, size):
-    """向量化群系分类（对 slab）。"""
+def _classify_biome(land_slab, elev, temp, moist, landmask, y0, y1, size, external_elev=False):
+    """向量化群系分类（对 slab）。
+
+    external_elev: True 时使用与 terrain_template TIER_THRESHOLDS 对齐的阈值
+                   （elev = heightmap/100，故阈值 = TIER_THRESHOLDS/100）。
+    """
     biome = np.zeros(land_slab.shape, dtype=np.uint8)
     biome[...] = BIOME_OCEAN_DEEP
 
@@ -192,14 +216,27 @@ def _classify_biome(land_slab, elev, temp, moist, landmask, y0, y1, size):
         neighbor_ocean[-1, :] |= ~land_full[y1, :].astype(bool)
     neighbor_ocean[:, 1:] |= ~land_slab[:, :-1]
     neighbor_ocean[:, :-1] |= ~land_slab[:, 1:]
-    beach = land_slab & neighbor_ocean & (elev < np.float32(0.22))
+
+    if external_elev:
+        # 外部高度场阈值（对齐 terrain_template TIER_THRESHOLDS）
+        # elev = h/100，故阈值 = TIER_THRESHOLDS / 100
+        beach_thr = np.float32(0.26)   # h < 26
+        mtn_thr = np.float32(0.65)     # h > 65
+        snow_thr = np.float32(0.78)    # h > 78
+    else:
+        # 原始 fbm 高程阈值
+        beach_thr = np.float32(0.22)
+        mtn_thr = np.float32(0.45)
+        snow_thr = np.float32(0.72)
+
+    beach = land_slab & neighbor_ocean & (elev < beach_thr)
     biome[beach] = BIOME_BEACH
 
     # 高程覆盖（阶梯式：海滩 < 平原/森林 < 山地 < 雪峰）
     rest = land_slab & ~beach
-    snow = rest & (elev > np.float32(0.72))
+    snow = rest & (elev > snow_thr)
     biome[snow] = BIOME_SNOW_PEAK
-    mtn = rest & (elev > np.float32(0.45)) & ~snow
+    mtn = rest & (elev > mtn_thr) & ~snow
     biome[mtn] = BIOME_MOUNTAIN
 
     # Whittaker
@@ -216,12 +253,13 @@ def _classify_biome(land_slab, elev, temp, moist, landmask, y0, y1, size):
 
 
 def _rivers_lowres(size: int, seed: int, res: int, landmask: np.ndarray,
-                   coast_dist: np.ndarray = None, cd_res: int = 0) -> np.ndarray:
+                   coast_dist: np.ndarray = None, cd_res: int = 0,
+                   heightmap: np.ndarray = None) -> np.ndarray:
     """在低分辨率高程上追踪河流。
 
     关键：landmask 从全尺寸降采样（不用 generate_landmask 重新生成），
     保证河流追踪的地形和实际显示的大陆完全一致，不会在海洋上出现河流。
-    高程公式与 _slab_biome 完全一致（含海岸距离调制），保证河流流向正确。
+    如果提供 heightmap，用外部高度场（缩放到 res）替代 fbm 高程。
     """
     from PIL import Image
     img = Image.fromarray(landmask * 255, "L")
@@ -231,28 +269,40 @@ def _rivers_lowres(size: int, seed: int, res: int, landmask: np.ndarray,
 
     PX, PY = pixel_coords(res)
     land = lm.astype(bool)
-    # 高程（和 _slab_biome 用同样的种子、频率、海岸距离调制，保证一致性）
-    ridge = fbm_sample(PX, PY, res, 5, 4, seed + 301) * np.float32(2.0) - np.float32(1.0)
-    mountain = smoothstep(np.float32(-0.15), np.float32(0.45), ridge) * np.float32(0.78)
-    depth = np.abs(fbm_sample(PX, PY, res, 10, 3, seed + 601) * np.float32(2.0) - np.float32(1.0))
 
-    if coast_dist is not None and cd_res > 0 and cd_res == res:
-        inland = coast_dist
+    if heightmap is not None:
+        # 外部高度场模式：缩放到 res，归一化到 0-1
+        img = Image.fromarray(heightmap.astype(np.float32), "F")
+        img = img.resize((res, res), Image.BILINEAR)
+        elev = (np.array(img, dtype=np.float32) / np.float32(100.0)).astype(np.float32)
+        del img
+        # 河流源头阈值：外部高度场 h > 55 (elev > 0.55，对应 hills 区间)
+        source_thr = np.float32(0.55)
     else:
-        inland = np.ones(land.shape, dtype=np.float32)
-    elev = np.where(land,
-                    np.float32(0.12) + mountain * (np.float32(0.25) + np.float32(0.75) * inland),
-                    np.float32(-0.08) - depth * np.float32(0.45)).astype(np.float32, copy=False)
+        # 原始 fbm 高程模式
+        ridge = fbm_sample(PX, PY, res, 5, 4, seed + 301) * np.float32(2.0) - np.float32(1.0)
+        mountain = smoothstep(np.float32(-0.15), np.float32(0.45), ridge) * np.float32(0.78)
+        depth = np.abs(fbm_sample(PX, PY, res, 10, 3, seed + 601) * np.float32(2.0) - np.float32(1.0))
+        if coast_dist is not None and cd_res > 0 and cd_res == res:
+            inland = coast_dist
+        else:
+            inland = np.ones(land.shape, dtype=np.float32)
+        elev = np.where(land,
+                        np.float32(0.12) + mountain * (np.float32(0.25) + np.float32(0.75) * inland),
+                        np.float32(-0.08) - depth * np.float32(0.45)).astype(np.float32, copy=False)
+        source_thr = np.float32(0.45)
 
     river = np.zeros((res, res), dtype=np.uint8)
     rng = np.random.default_rng(seed + 707)
-    sy, sx = np.where(land & (elev > 0.45))
+    sy, sx = np.where(land & (elev > source_thr))
     n_sources = 0
     if len(sx) > 0:
-        pick = rng.random(len(sx)) < 0.08   # 源头比例 8%
+        # 源头比例：外部高度场用更低比例（大陆很大，减少河流数量）
+        source_ratio = 0.02 if heightmap is not None else 0.08
+        pick = rng.random(len(sx)) < source_ratio
         sources = list(zip(sx[pick], sy[pick]))
         n_sources = len(sources)
-        print(f"    河流源头数: {n_sources}", flush=True)
+        print(f"    河流源头数: {n_sources} (比例 {source_ratio:.0%})", flush=True)
         for i, (rx, ry) in enumerate(sources):
             _trace_river(elev, lm, river, int(rx), int(ry))
             if (i + 1) % 200 == 0:

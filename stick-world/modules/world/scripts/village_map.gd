@@ -14,7 +14,7 @@ extends Node2D
 ##   ├── DecorationLayer (Node2D)              ← 装饰物（P0 空）
 ##   ├── BuildingHost (Node2D)                 ← 建筑容器（P0 空）
 ##   ├── TerrainBuildings (Node2D)             ← 地形建筑（只读，随场景打包，不可拆除）
-##   ├── InitialBuildingsList (Node)           ← 初始建筑数据列表（def_id + cell_x + cell_y）
+##   ├── InitialBuildingsList (Node)           ← 初始建筑数据列表（def_id + cell_x + width）
 ##   ├── WalkBarrier (Node2D)                  ← 地图级通行障碍容器（悬崖/高楼边缘）
 ##   ├── BuildMaskLayer (Node2D)               ← 不可放建筑区域（大石头/山坡阶梯处）
 ##   ├── ForegroundLayer (Node2D)              ← 前景层（z_index=10，火柴人经过被遮挡）
@@ -27,16 +27,16 @@ extends Node2D
 
 # ─────────────────────────────── 地图元数据（§3.4.1）────────────────────────────────
 ## 地面线 Y（世界坐标），火柴人可走区域顶部
-@export var ground_y: float = 450.0
-## 地面占屏幕高度比例（Inspector 可改，默认 0.4 = 2/5）
-@export var ground_ratio: float = 0.4
+@export var ground_y: float = 810.0
+## 地面占屏幕高度比例（Inspector 可改，默认 0.25 = 1/4）
+@export var ground_ratio: float = 0.25
 ## 地图左边界 X（相机/火柴人 X 下限）
 @export var map_left: float = 0.0
 ## 地图右边界 X（相机/火柴人 X 上限）—— 卷轴式水平展开，P0 设为 8192（足够测试左右移动）
 @export var map_right: float = 8192.0
-## 地面底部 Y（火柴人可走区域底部，= ground_y + DESIGN_HEIGHT * ground_ratio = 450 + 1080*0.4 = 882）
+## 地面底部 Y（火柴人可走区域底部，= ground_y + DESIGN_HEIGHT * ground_ratio = 810 + 1080*0.25 = 1080）
 ## 注意：此值应匹配屏幕可见地面范围，避免地面矩形超出屏幕导致火柴人显示偏下
-@export var ground_bottom: float = 882.0
+@export var ground_bottom: float = 1080.0
 ## 草地纹理平铺尺寸（世界坐标 px，每 GRASS_TILE_SIZE 像素重复一次纹理）
 const GRASS_TILE_SIZE: float = 512.0
 
@@ -69,6 +69,7 @@ func _ready() -> void:
 	_sync_ground_line()
 	_apply_grass_texture()
 	_sync_build_mask()
+	_register_terrain_buildings()
 
 
 func _validate_children() -> void:
@@ -109,15 +110,39 @@ func _sync_build_mask() -> void:
 			# ColorRect 的 position 和 size 都是局部坐标（BuildMaskLayer 在地图原点）
 			var pos: Vector2 = rect.position
 			var size: Vector2 = rect.size
-			# 世界坐标 -> 格子坐标
-			var cell_start: Vector2i = placement_grid.world_to_cell(pos)
-			var cell_end: Vector2i = placement_grid.world_to_cell(pos + size)
-			var w: int = cell_end.x - cell_start.x
-			var h: int = cell_end.y - cell_start.y
-			if w > 0 and h > 0:
-				placement_grid.set_blocked_area(cell_start.x, cell_start.y, w, h)
+			# 世界坐标 X -> 条带坐标（1D，只关心宽度）
+			var cell_start: int = placement_grid.world_to_cell(pos)
+			var cell_end: int = placement_grid.world_to_cell(pos + size)
+			var w: int = cell_end - cell_start
+			if w > 0:
+				placement_grid.set_blocked_area(cell_start, w)
 			# 运行时隐藏 ColorRect（仅设计时可见）
 			rect.visible = false
+
+
+# ─────────────────────────────── 地形建筑注册 ────────────────────────────────
+# 运行时扫描 TerrainBuildings 子节点，读取 PassageBarrier 宽度，
+# 自动注册到 PlacementGrid，使地形建筑在调试方格中显示为绿色条带。
+
+func _register_terrain_buildings() -> void:
+	if terrain_buildings == null or placement_grid == null:
+		return
+	for building in terrain_buildings.get_children():
+		if not building is Node2D:
+			continue
+		# 从 PassageBarrier 读取宽度
+		var width_cells := 1
+		var pb: Node = building.get_node_or_null("PassageBarrier")
+		if pb:
+			for child in pb.get_children():
+				if child is CollisionShape2D and child.shape is RectangleShape2D:
+					width_cells = maxi(1, int(round((child.shape as RectangleShape2D).size.x / placement_grid.CELL_SIZE)))
+					break
+		# 建筑原点在底部中心，左边缘 = position.x - width_px / 2
+		var width_px: float = width_cells * placement_grid.CELL_SIZE
+		var left_x: float = building.position.x - width_px / 2.0
+		var cell_x: int = placement_grid.world_to_cell(Vector2(left_x, 0))
+		placement_grid.occupy(cell_x, width_cells, building.name)
 
 
 # ─────────────────────────────── 通行障碍查询（§7.1.2）────────────────────────────────
@@ -134,14 +159,16 @@ func get_walk_barriers() -> Array:
 
 
 ## 获取所有建筑级 PassageBarrier Area2D 列表
+## 同时扫描 building_host（动态建筑）和 terrain_buildings（地形建筑）
 func get_passage_barriers() -> Array:
 	var barriers: Array = []
-	if building_host == null:
-		return barriers
-	for building in building_host.get_children():
-		var pb: Node = building.get_node_or_null("PassageBarrier") if building.has_method("get_node_or_null") else null
-		if pb != null and pb is Area2D:
-			barriers.append(pb)
+	for host in [building_host, terrain_buildings]:
+		if host == null:
+			continue
+		for building in host.get_children():
+			var pb: Node = building.get_node_or_null("PassageBarrier") if building.has_method("get_node_or_null") else null
+			if pb != null and pb is Area2D:
+				barriers.append(pb)
 	return barriers
 
 

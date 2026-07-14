@@ -28,7 +28,7 @@ static func world_to_screen_size(world_size: float, ctx: Dictionary) -> float:
 
 # ─────────────────────────────── 绘制器 ────────────────────────────────
 
-## PlacementGrid 占用格（绿）+ BuildMask 不可放建筑格（红）
+## PlacementGrid 竖向条带（绿=占用 红=不可建）+ 网格竖线
 static func draw_grid(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
@@ -38,30 +38,34 @@ static func draw_grid(control: Control, ctx: Dictionary) -> void:
 		return
 	var cell_size: float = float(grid.get("CELL_SIZE")) if grid.get("CELL_SIZE") != null else 32.0
 	var gw: int = grid.grid_width
-	var gh: int = grid.grid_height
 	var zoom: float = ctx.get("effective_zoom", 1.0)
 	var screen_cell: float = cell_size * zoom
-	# 仅绘制可见范围内的格子
 	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
 	var cam_pos: Vector2 = ctx.get("camera_pos", Vector2.ZERO)
 	var view_left: float = cam_pos.x - vp_size.x / (2.0 * zoom)
 	var view_right: float = cam_pos.x + vp_size.x / (2.0 * zoom)
+	var view_top: float = cam_pos.y - vp_size.y / (2.0 * zoom)
+	var view_bottom: float = cam_pos.y + vp_size.y / (2.0 * zoom)
 	var cell_x_start: int = maxi(0, int(view_left / cell_size))
 	var cell_x_end: int = mini(gw, int(view_right / cell_size) + 1)
-	# 绘制占用格（绿色半透明）和 BuildMask 格（红色半透明）
+	# 竖线范围（屏幕全高）
+	var line_top := world_to_screen(Vector2(0, view_top), ctx).y
+	var line_bottom := world_to_screen(Vector2(0, view_bottom), ctx).y
+	# 绘制竖向条带
 	for x in range(cell_x_start, cell_x_end):
-		for y in range(gh):
-			var world_pos := Vector2(x * cell_size, y * cell_size)
-			var screen_pos := world_to_screen(world_pos, ctx)
-			var rect := Rect2(screen_pos, Vector2(screen_cell, screen_cell))
-			if grid.is_occupied(x, y):
-				# BuildMask 标记的格用红色，建筑占用的用绿色
-				if grid.is_blocked(x, y) and not grid.get_occupant(x, y) != null:
-					control.draw_rect(rect, Color(1.0, 0.3, 0.3, 0.3), true)
-				else:
-					control.draw_rect(rect, Color(0.3, 1.0, 0.3, 0.3), true)
-			elif grid.is_blocked(x, y):
-				control.draw_rect(rect, Color(1.0, 0.3, 0.3, 0.3), true)
+		var world_x := x * cell_size
+		var screen_x := world_to_screen(Vector2(world_x, 0), ctx).x
+		if grid.is_occupied(x):
+			if grid.is_blocked(x) and grid.get_occupant(x) == null:
+				# BuildMask 标记的条带用红色
+				control.draw_rect(Rect2(screen_x, line_top, screen_cell, line_bottom - line_top), Color(1.0, 0.3, 0.3, 0.15), true)
+			else:
+				# 建筑占用的条带用绿色
+				control.draw_rect(Rect2(screen_x, line_top, screen_cell, line_bottom - line_top), Color(0.3, 1.0, 0.3, 0.15), true)
+		elif grid.is_blocked(x):
+			control.draw_rect(Rect2(screen_x, line_top, screen_cell, line_bottom - line_top), Color(1.0, 0.3, 0.3, 0.15), true)
+		# 网格竖线
+		control.draw_line(Vector2(screen_x, line_top), Vector2(screen_x, line_bottom), Color(1.0, 1.0, 1.0, 0.08), 1.0)
 
 
 ## WalkBarrier（蓝）+ PassageBarrier（紫）
@@ -94,18 +98,30 @@ static func _draw_area_rect(control: Control, ctx: Dictionary, area: Area2D, col
 				control.draw_rect(rect, Color(color.r, color.g, color.b, 0.8), false, 1.0)
 
 
-## 建筑边界框（白）
+## 建筑边界框（白）-- 基于 PassageBarrier CollisionShape2D
 static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
 		return
 	var building_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST)
-	if building_host == null:
+	if building_host != null:
+		for building in building_host.get_children():
+			_draw_building_outline(control, ctx, building, Color(1.0, 1.0, 1.0, 0.6))
+	# 地形建筑也绘制
+	var terrain_buildings: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS)
+	if terrain_buildings != null:
+		for building in terrain_buildings.get_children():
+			_draw_building_outline(control, ctx, building, Color(0.8, 0.8, 0.8, 0.4))
+
+
+## 辅助：根据 PassageBarrier 绘制建筑边界框 + 碰撞体下边界红色标记线
+static func _draw_building_outline(control: Control, ctx: Dictionary, building: Node2D, color: Color) -> void:
+	var pb: Node = building.get_node_or_null("PassageBarrier")
+	if pb == null or not pb is Area2D:
 		return
-	for building in building_host.get_children():
-		var footprint: Node = building.get_node_or_null("Footprint") if building.has_method("get_node_or_null") else null
-		if footprint != null and footprint is CollisionShape2D:
-			var cs: CollisionShape2D = footprint as CollisionShape2D
+	for child in pb.get_children():
+		if child is CollisionShape2D:
+			var cs: CollisionShape2D = child as CollisionShape2D
 			if cs.shape is RectangleShape2D:
 				var rs: RectangleShape2D = cs.shape as RectangleShape2D
 				var world_pos: Vector2 = building.global_position + cs.position
@@ -113,22 +129,19 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 				var zoom: float = ctx.get("effective_zoom", 1.0)
 				var screen_size := Vector2(rs.size.x * zoom, rs.size.y * zoom)
 				var rect := Rect2(screen_pos - screen_size * 0.5, screen_size)
-				control.draw_rect(rect, Color(1.0, 1.0, 1.0, 0.6), false, 1.5)
-	# 地形建筑也绘制
-	var terrain_buildings: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS)
-	if terrain_buildings != null:
-		for building in terrain_buildings.get_children():
-			var footprint: Node = building.get_node_or_null("Footprint") if building.has_method("get_node_or_null") else null
-			if footprint != null and footprint is CollisionShape2D:
-				var cs: CollisionShape2D = footprint as CollisionShape2D
-				if cs.shape is RectangleShape2D:
-					var rs: RectangleShape2D = cs.shape as RectangleShape2D
-					var world_pos: Vector2 = building.global_position + cs.position
-					var screen_pos := world_to_screen(world_pos, ctx)
-					var zoom: float = ctx.get("effective_zoom", 1.0)
-					var screen_size := Vector2(rs.size.x * zoom, rs.size.y * zoom)
-					var rect := Rect2(screen_pos - screen_size * 0.5, screen_size)
-					control.draw_rect(rect, Color(0.8, 0.8, 0.8, 0.4), false, 1.0)
+				control.draw_rect(rect, color, false, 1.5)
+				# 红色下边界横线：按格子数 × 32px 绘制，居中对齐建筑位置
+				var width_cells: int = maxi(1, int(round(rs.size.x / 32.0)))
+				var footprint_px: float = width_cells * 32.0
+				var bottom_y: float = screen_pos.y + screen_size.y * 0.5
+				var foot_center_x: float = world_to_screen(Vector2(building.global_position.x, 0), ctx).x
+				var foot_left_x: float = foot_center_x - footprint_px * zoom / 2.0
+				var foot_right_x: float = foot_center_x + footprint_px * zoom / 2.0
+				var tick_height: float = 20.0
+				var red := Color(1.0, 0.2, 0.2, 0.9)
+				control.draw_line(Vector2(foot_left_x, bottom_y), Vector2(foot_right_x, bottom_y), red, 2.0)
+				control.draw_line(Vector2(foot_left_x, bottom_y), Vector2(foot_left_x, bottom_y - tick_height), red, 2.0)
+				control.draw_line(Vector2(foot_right_x, bottom_y), Vector2(foot_right_x, bottom_y - tick_height), red, 2.0)
 
 
 ## ground_y 线（黄）+ ground_bottom 线（青）

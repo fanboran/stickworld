@@ -261,20 +261,21 @@ func set_map_reference(p_map: Node2D) -> void:
 
 
 ## 检测是否在通行障碍区域内（WalkBarrier / PassageBarrier，§7.1.2）
-## 使用几何方式检测：遍历 Area2D 的 RectangleShape2D，判断实体位置是否在矩形内
+## 使用脚部位置检测，避免头部提前触碰障碍
 func _is_in_passage_barrier() -> bool:
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		return false
-	var pos: Vector2 = global_position
+	# 用脚部位置检测碰撞，而不是身体中心
+	var feet_pos: Vector2 = Vector2(global_position.x, global_position.y + foot_offset)
 	# 检查地图级 WalkBarrier
 	if _map_ref.has_method("get_walk_barriers"):
 		for area in _map_ref.get_walk_barriers():
-			if _is_pos_in_area(pos, area):
+			if _is_pos_in_area(feet_pos, area):
 				return true
 	# 检查建筑级 PassageBarrier
 	if _map_ref.has_method("get_passage_barriers"):
 		for area in _map_ref.get_passage_barriers():
-			if _is_pos_in_area(pos, area):
+			if _is_pos_in_area(feet_pos, area):
 				return true
 	return false
 

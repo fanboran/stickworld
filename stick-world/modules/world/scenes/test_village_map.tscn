@@ -1,54 +1,67 @@
-[gd_scene load_steps=5 format=3 uid="uid://test_village_map_01"]
+[gd_scene format=3 uid="uid://d0wab6rfsdona"]
 
-[ext_resource type="Script" path="res://modules/world/scripts/village_map.gd" id="1_vmap"]
-[ext_resource type="Script" path="res://modules/world/placement_grid/placement_grid.gd" id="2_grid"]
-[ext_resource type="Script" path="res://modules/world/scripts/initial_buildings_list.gd" id="3_ibl"]
+[ext_resource type="Script" uid="uid://e6o0yc67qlyl" path="res://modules/world/scripts/village_map.gd" id="1_vmap"]
+[ext_resource type="Script" uid="uid://bnt0k4kto231k" path="res://modules/world/placement_grid/placement_grid.gd" id="2_grid"]
+[ext_resource type="Script" uid="uid://cqxakicqelpkj" path="res://modules/world/scripts/initial_buildings_list.gd" id="3_ibl"]
+[ext_resource type="PackedScene" uid="uid://bms1thlv10001" path="res://modules/buildings/scenes/bld_smithy_lv1.tscn" id="4_5r7bm"]
+[ext_resource type="Script" uid="uid://7ko7iiaifff4" path="res://tools/map_grid_drawer.gd" id="4_grid_drawer"]
+[ext_resource type="PackedScene" uid="uid://bms2thlv20002" path="res://modules/buildings/scenes/bld_smithy_lv2.tscn" id="5_3vaax"]
+[ext_resource type="PackedScene" uid="uid://bms3thlv30003" path="res://modules/buildings/scenes/bld_smithy_lv3.tscn" id="6_k5uxq"]
+[ext_resource type="PackedScene" uid="uid://bms4thlv40004" path="res://modules/buildings/scenes/bld_smithy_lv4.tscn" id="7_hb2ek"]
 
-[node name="VillageMap" type="Node2D"]
+[node name="VillageMap" type="Node2D" unique_id=1514933581]
 script = ExtResource("1_vmap")
-ground_y = 450.0
-ground_ratio = 0.4
-map_left = 0.0
-map_right = 8192.0
-ground_bottom = 882.0
 
-[node name="PlacementGrid" type="Node" parent="."]
+[node name="PlacementGrid" type="Node" parent="." unique_id=866086613]
 script = ExtResource("2_grid")
 grid_width = 256
-grid_height = 14
 
-[node name="TerrainLayer" type="Node2D" parent="."]
-z_index = 0
+[node name="TerrainLayer" type="Node2D" parent="." unique_id=925498960]
 
-[node name="GroundPolygon" type="Polygon2D" parent="TerrainLayer"]
-polygon = PackedVector2Array(0, 450, 8192, 450, 8192, 882, 0, 882)
+[node name="GroundPolygon" type="Polygon2D" parent="TerrainLayer" unique_id=4563212]
 color = Color(0.45, 0.55, 0.32, 1)
+polygon = PackedVector2Array(0, 810, 8192, 810, 8192, 1080, 0, 1080)
 
-[node name="GroundLine" type="Marker2D" parent="."]
-position = Vector2(0, 450)
+[node name="GroundLine" type="Marker2D" parent="." unique_id=391952542]
+position = Vector2(0, 810)
 
-[node name="DecorationLayer" type="Node2D" parent="."]
+[node name="MapGridDrawer" type="Node2D" parent="." unique_id=168981441]
+script = ExtResource("4_grid_drawer")
+
+[node name="DecorationLayer" type="Node2D" parent="." unique_id=1680575950]
 z_index = 1
 
-[node name="BuildingHost" type="Node2D" parent="."]
+[node name="BuildingHost" type="Node2D" parent="." unique_id=227808963]
 z_index = 2
 
-[node name="TerrainBuildings" type="Node2D" parent="."]
+[node name="TerrainBuildings" type="Node2D" parent="." unique_id=130193755]
 z_index = 2
 
-[node name="InitialBuildingsList" type="Node" parent="."]
+[node name="BldSmithyLv1" parent="TerrainBuildings" unique_id=1644709951 instance=ExtResource("4_5r7bm")]
+position = Vector2(320, 1017)
+
+[node name="BldSmithyLv2" parent="TerrainBuildings" unique_id=1179412195 instance=ExtResource("5_3vaax")]
+position = Vector2(832, 997)
+
+[node name="BldSmithyLv3" parent="TerrainBuildings" unique_id=254573418 instance=ExtResource("6_k5uxq")]
+position = Vector2(1344, 988)
+
+[node name="BldSmithyLv4" parent="TerrainBuildings" unique_id=1160652166 instance=ExtResource("7_hb2ek")]
+position = Vector2(1856, 986)
+
+[node name="InitialBuildingsList" type="Node" parent="." unique_id=818831420]
 script = ExtResource("3_ibl")
 
-[node name="WalkBarrier" type="Node2D" parent="."]
+[node name="WalkBarrier" type="Node2D" parent="." unique_id=1540466640]
 
-[node name="BuildMaskLayer" type="Node2D" parent="."]
+[node name="BuildMaskLayer" type="Node2D" parent="." unique_id=2101599595]
 
-[node name="ForegroundLayer" type="Node2D" parent="."]
+[node name="ForegroundLayer" type="Node2D" parent="." unique_id=306871105]
 z_index = 10
 
-[node name="EntityHost" type="Node2D" parent="."]
+[node name="EntityHost" type="Node2D" parent="." unique_id=1560596730]
 z_index = 3
 
-[node name="ChunkTriggers" type="Node2D" parent="."]
+[node name="ChunkTriggers" type="Node2D" parent="." unique_id=1182080428]
 
-[node name="BattleAnchor" type="Node2D" parent="."]
+[node name="BattleAnchor" type="Node2D" parent="." unique_id=831602561]

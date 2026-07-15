@@ -103,11 +103,17 @@ def main():
     # 7. Squig curve 分形弯曲（连续空间，采样三角网高度；用平均版本作为高度参考）
     print("7. Squig curve...", flush=True)
     elev_func_avg = make_tri_interpolator(points, tri, elevations_avg)
+    water_mask = ocean_mask | interior_water_mask
     t0 = time.time()
     for river in rivers:
         for i, path in enumerate(river['paths']):
             coords = [(points[v, 0], points[v, 1]) for v in path]
-            river['paths'][i] = squig_curve(coords, SQUIG_LEVELS, rng, elev_func_avg)
+            flows = river['flows'][i] if i < len(river.get('flows', [])) else None
+            new_coords, new_flows = squig_curve(coords, SQUIG_LEVELS, rng, elev_func_avg,
+                                                 flows, water_mask)
+            river['paths'][i] = new_coords
+            if new_flows is not None:
+                river['flows'][i] = new_flows
     print(f"   {time.time()-t0:.1f}s", flush=True)
 
     # 8. 渲染（平均合成版本）
@@ -442,25 +448,42 @@ def trace_all_rivers(points, adj, elevations, land_for_terrain, ocean_mask, n_mo
     is_coast = np.array([ocean_edge[int(points[i, 1]), int(points[i, 0])]
                          for i in range(n)], dtype=bool) & is_land
 
-    # --- 1. 流向：每个陆地顶点流向最陡下游邻居；无下游时海岸顶点才入海 ---
-    print("   流向计算...", flush=True)
-    flow_dir = np.full(n, -1, dtype=np.int32)  # -1=无流向, -2=流向外海
+    # --- 1. Priority-Flood 填洼 + 流向计算（消除洼地断流）---
+    print("   Priority-Flood 填洼 + 流向...", flush=True)
+    import heapq
+    flow_dir = np.full(n, -1, dtype=np.int32)  # -1=未处理, -2=流向外海
+    filled_elev = elevations.astype(np.float64).copy()
+    visited = np.zeros(n, dtype=bool)
+
+    pq = []
+    # 海岸顶点作为起点（最低的先处理，水从海岸向内陆反向传播流向）
     for i in range(n):
-        if not is_land[i]:
+        if is_coast[i]:
+            heapq.heappush(pq, (filled_elev[i], i))
+
+    while pq:
+        h, i = heapq.heappop(pq)
+        if visited[i]:
             continue
-        best_j = -1
-        best_drop = 0.0
+        visited[i] = True
         for j in adj[i]:
-            if not is_land[j]:
+            if not is_land[j] or visited[j]:
                 continue
-            drop = elevations[i] - elevations[j]
-            if drop > best_drop:
-                best_drop = drop
-                best_j = j
-        if best_j >= 0:
-            flow_dir[i] = best_j
-        elif is_coast[i]:
-            flow_dir[i] = -2  # 无下游且邻接外海，直接出流
+            # 填洼：邻居不能低于当前顶点（消除洼地）
+            if filled_elev[j] < h:
+                filled_elev[j] = h
+            # 流向：j -> i（i 是处理 j 的最低已访问顶点）
+            if flow_dir[j] == -1:
+                flow_dir[j] = i
+            heapq.heappush(pq, (filled_elev[j], j))
+
+    # 海岸顶点未设流向的设为 -2（出流到海洋）
+    for i in range(n):
+        if is_coast[i] and flow_dir[i] == -1:
+            flow_dir[i] = -2
+
+    no_flow = int(np.sum((flow_dir == -1) & is_land))
+    print(f"   无流向陆地顶点: {no_flow}/{int(is_land.sum())}", flush=True)
 
     # --- 2. 流量累积（拓扑排序）---
     print("   流量累积...", flush=True)
@@ -525,19 +548,25 @@ def trace_all_rivers(points, adj, elevations, land_for_terrain, ocean_mask, n_mo
 
 # ==================== Squig Curve 分形弯曲 ====================
 
-def squig_curve(path, levels, rng, elev_func):
+def squig_curve(path, levels, rng, elev_func, flows=None, water_mask=None):
     """Squig curve 分形弯曲。
 
     递归中点位移：在每对相邻点间插入中点，
     中点沿垂直方向偏移，偏移方向偏向低地。
+
+    flows: 每个路径点对应的流量值，递归插入中点时同步线性插值。
+    water_mask: 水域蒙版，偏移后落在水域的中点回退为原始中点。
     """
     if len(path) < 2:
-        return path
+        return path, flows
 
     current = list(path)
+    current_flows = list(flows) if flows is not None else None
+
     for level in range(levels):
-        scale = 0.35 * (0.65 ** level)
+        scale = 0.15 * (0.65 ** level)  # 降低偏移幅度（0.35->0.15），减少自交叉
         refined = [current[0]]
+        refined_flows = [current_flows[0]] if current_flows is not None else None
         for i in range(len(current) - 1):
             x1, y1 = current[i]
             x2, y2 = current[i + 1]
@@ -545,6 +574,8 @@ def squig_curve(path, levels, rng, elev_func):
             seg_len = math.hypot(dx, dy)
             if seg_len < 0.5:
                 refined.append((x2, y2))
+                if current_flows is not None:
+                    refined_flows.append(current_flows[i + 1])
                 continue
 
             nx, ny = -dy / seg_len, dx / seg_len
@@ -560,11 +591,26 @@ def squig_curve(path, levels, rng, elev_func):
             mx += nx * displacement
             my += ny * displacement
 
-            refined.append((mx, my))
-            refined.append((x2, y2))
-        current = refined
+            # 水域检查：偏移后落在水域则回退为原始中点
+            if water_mask is not None:
+                mxi, myi = int(mx), int(my)
+                if 0 <= mxi < SIZE and 0 <= myi < SIZE and water_mask[myi, mxi]:
+                    mx = (x1 + x2) / 2
+                    my = (y1 + y2) / 2
 
-    return current
+            refined.append((mx, my))
+            if current_flows is not None:
+                # 中点流量 = 两端点流量平均值（线性插值）
+                mid_flow = (current_flows[i] + current_flows[i + 1]) * 0.5
+                refined_flows.append(mid_flow)
+
+            refined.append((x2, y2))
+            if current_flows is not None:
+                refined_flows.append(current_flows[i + 1])
+        current = refined
+        current_flows = refined_flows
+
+    return current, current_flows
 
 
 # ==================== 流量计算 ====================
@@ -618,57 +664,24 @@ def compute_flows(rivers, rain_func):
 
 def render(points, tri, elevations, rivers, mask, ocean_mask, interior_water_mask,
            out_name="preview_fractal.png", hm_name="fractal_heightmap_8192.npy"):
-    """渲染：三角面填充 + 三类区域裁剪 + 河流线条。
+    """渲染：高度场插值 + 连续颜色映射 + 三类区域裁剪 + 河流线条。
 
     三类区域：
       - 外海 (ocean_mask): 深蓝 (25,55,105)，高度场=-0.1
       - 内部水域 (interior_water_mask): 湖泊色 (60,100,140)，高度场=周围地形海拔（保留）
       - 陆地 (mask>0): 地形色，高度场=地形海拔
 
-    策略：2048 填三角面+插值高度场，放大到 8192，再用原始掩码精确裁剪三类区域。
-    河流绘制时会跳过进入外海/内水的线段（两端点都在水域则不画）。
+    策略：2048 插值高度场，放大到 8192，用 256 级 LUT 连续颜色映射（无离散色带），
+    再用原始掩码精确裁剪三类区域。
+    河流绘制时检查端点+中点是否在水域，穿海线段跳过。
     """
     render_size = 2048
-
-    # --- 降采样掩码到 2048 ---
-    def resize_mask(m):
-        arr = np.asarray(
-            Image.fromarray(m.astype(np.uint8) * 255, mode='L').resize((render_size, render_size), Image.NEAREST),
-            dtype=np.uint8
-        )
-        return arr > 127
-
-    land_small = resize_mask(mask > 0)              # 仅陆地
-    ocean_small = resize_mask(ocean_mask)           # 外海
-    interior_small = resize_mask(interior_water_mask)  # 内部水域
-    # land_for_terrain_small = land_small | interior_small  # 陆地+内部水域（三角面填充区域）
-
-    # --- 三角面填充（2048 分辨率，在 land_for_terrain 区域）---
-    print("   三角面填充...", flush=True)
-    scale = render_size / SIZE
-    img_small = Image.new('RGB', (render_size, render_size), (25, 55, 105))
-    draw_small = ImageDraw.Draw(img_small)
-
-    for simplex in tri.simplices:
-        a, b, c = simplex
-        # 跳过全外海三角形（三个顶点都在外海）
-        if ocean_small[int(points[a, 1] * scale), int(points[a, 0] * scale)] and \
-           ocean_small[int(points[b, 1] * scale), int(points[b, 0] * scale)] and \
-           ocean_small[int(points[c, 1] * scale), int(points[c, 0] * scale)]:
-            continue
-
-        avg_elev = (elevations[a] + elevations[b] + elevations[c]) / 3
-        color = elev_to_color(avg_elev)
-
-        p1 = (points[a, 0] * scale, points[a, 1] * scale)
-        p2 = (points[b, 0] * scale, points[b, 1] * scale)
-        p3 = (points[c, 0] * scale, points[c, 1] * scale)
-        draw_small.polygon([p1, p2, p3], fill=color)
 
     # --- 高度场插值（2048 分辨率）---
     print("   高度场插值...", flush=True)
     from scipy.interpolate import LinearNDInterpolator
     interp = LinearNDInterpolator(points, elevations)
+    scale = render_size / SIZE
     yy, xx = np.mgrid[0:render_size, 0:render_size]
     xx_real = xx / scale  # 映射回 8192 坐标
     yy_real = yy / scale
@@ -677,31 +690,31 @@ def render(points, tri, elevations, rivers, mask, ocean_mask, interior_water_mas
     # 落在三角网外的点设为 -0.1
     hm_small = np.where(np.isnan(hm_small), -0.1, hm_small)
 
-    # --- 2048 蒙版裁剪：外海深蓝、内部水域湖泊色 ---
-    print("   蒙版裁剪...", flush=True)
-    pixels = np.array(img_small)
-    pixels[ocean_small] = [25, 55, 105]      # 外海深蓝
-    pixels[interior_small] = [60, 100, 140]  # 内部水域湖泊色
-    img_small = Image.fromarray(pixels)
-
-    # --- 高度场裁剪：外海=-0.1，内部水域+陆地=保留高度值 ---
+    # --- 2048 外海高度场裁剪 ---
+    ocean_small = np.asarray(
+        Image.fromarray(ocean_mask.astype(np.uint8) * 255, mode='L').resize((render_size, render_size), Image.NEAREST),
+        dtype=np.uint8
+    ) > 127
     hm_small = np.where(ocean_small, np.float32(-0.1), hm_small)
 
-    # 放大到 8192
+    # --- 放大高度场到 8192 ---
     print("   放大到 8192...", flush=True)
-    img = img_small.resize((SIZE, SIZE), Image.BILINEAR)
     hm_img = Image.fromarray((np.clip(hm_small, 0, 1) * 255).astype(np.uint8), mode='L')
     hm_img = hm_img.resize((SIZE, SIZE), Image.BILINEAR)
     hm_full = np.asarray(hm_img, dtype=np.float32) / 255.0
-
-    # --- 8192 用原始掩码精确设置三类区域（避免放大模糊边界）---
-    pixels_full = np.array(img)
-    pixels_full[ocean_mask] = [25, 55, 105]       # 外海深蓝
-    pixels_full[interior_water_mask] = [60, 100, 140]  # 内部水域湖泊色
-    img = Image.fromarray(pixels_full)
-
-    # 高度场：外海=-0.1，其他保留（内部水域继承周围地形海拔）
     hm_full = np.where(ocean_mask, np.float32(-0.1), hm_full)
+
+    # --- 连续颜色映射（8192，256 级 LUT，无离散色带跳变）---
+    print("   颜色映射...", flush=True)
+    lut = build_color_lut()
+    indices = np.clip((hm_full * 255).astype(np.int32), 0, 255)
+    pixels = lut[indices]  # (SIZE, SIZE, 3)
+
+    # --- 8192 用原始掩码精确设置三类区域 ---
+    print("   蒙版裁剪...", flush=True)
+    pixels[ocean_mask] = [25, 55, 105]            # 外海深蓝
+    pixels[interior_water_mask] = [60, 100, 140]  # 内部水域湖泊色
+    img = Image.fromarray(pixels)
 
     # --- 河流绘制（8192 全分辨率）---
     print("   河流绘制...", flush=True)
@@ -715,7 +728,7 @@ def render(points, tri, elevations, rivers, mask, ocean_mask, interior_water_mas
     if max_flow < 0.001:
         max_flow = 1.0
 
-    # 水域联合蒙版（外海+内水），用于裁切河流：任一端点在水域则跳过该线段
+    # 水域联合蒙版（外海+内水），用于裁切河流
     water_mask_full = ocean_mask | interior_water_mask
 
     # 河流统一颜色（不随流量变化）
@@ -732,19 +745,20 @@ def render(points, tri, elevations, rivers, mask, ocean_mask, interior_water_mas
                 x2, y2 = path[i + 1]
                 flow = flows[i] if i < len(flows) else flows[-1]
 
-                # 蒙版裁切：任一端点在水域（外海或内水）则跳过该线段
+                # 水域裁切：只跳过两端点都在水域的线段（完全在水里）。
+                # 一端在水域的线段照画（河流入海口自然延伸到海岸线）。
                 ix1, iy1 = int(x1), int(y1)
                 ix2, iy2 = int(x2), int(y2)
                 if 0 <= iy1 < SIZE and 0 <= ix1 < SIZE and \
                    0 <= iy2 < SIZE and 0 <= ix2 < SIZE:
-                    if water_mask_full[iy1, ix1] or water_mask_full[iy2, ix2]:
+                    if water_mask_full[iy1, ix1] and water_mask_full[iy2, ix2]:
                         continue
 
                 # 四次根号：大部分河流很细，只有主干粗
                 ratio = flow / max_flow
-                width = int(math.sqrt(math.sqrt(ratio)) * 4)
-                # 过滤1像素的河流（细支流和大河的1像素部分都不画）
-                if width < 2:
+                width = int(math.sqrt(math.sqrt(ratio)) * 6)
+                # 只过滤 0 宽度（最细河流保留 1 像素）
+                if width < 1:
                     continue
 
                 draw.line([(x1, y1), (x2, y2)],
@@ -762,24 +776,38 @@ def render(points, tri, elevations, rivers, mask, ocean_mask, interior_water_mas
     print(f"   保存 {hm_path} ({os.path.getsize(hm_path) / 1024 / 1024:.1f} MB)", flush=True)
 
 
-def elev_to_color(e):
-    """高度值 -> 地形颜色（8 级离散色带，不插值）。"""
-    if e < 0.02:
-        return (205, 195, 145)   # 沙滩
-    elif e < 0.15:
-        return (115, 165, 85)    # 低地平原
-    elif e < 0.30:
-        return (85, 140, 65)     # 平原
-    elif e < 0.45:
-        return (130, 130, 55)    # 丘陵
-    elif e < 0.60:
-        return (150, 110, 65)    # 山地
-    elif e < 0.75:
-        return (120, 95, 75)     # 高山
-    elif e < 0.88:
-        return (180, 175, 170)   # 苔原
-    else:
-        return (240, 240, 245)   # 雪峰
+# 颜色色带控制点（高度, R, G, B）
+COLOR_STOPS = [
+    (0.00, 205, 195, 145),   # 沙滩
+    (0.02, 205, 195, 145),
+    (0.15, 115, 165, 85),    # 低地平原
+    (0.30, 85, 140, 65),     # 平原
+    (0.45, 130, 130, 55),    # 丘陵
+    (0.60, 150, 110, 65),    # 山地
+    (0.75, 120, 95, 75),     # 高山
+    (0.88, 180, 175, 170),   # 苔原
+    (1.00, 240, 240, 245),   # 雪峰
+]
+
+
+def build_color_lut():
+    """构建 256 级连续颜色 LUT（相邻色带间线性插值，无离散跳变）。
+
+    返回 (256, 3) uint8 数组，用 lut[indices] 直接查表。
+    """
+    stops_t = np.array([s[0] for s in COLOR_STOPS])
+    stops_c = np.array([s[1:] for s in COLOR_STOPS], dtype=np.float32)
+
+    lut = np.zeros((256, 3), dtype=np.uint8)
+    for i in range(256):
+        e = i / 255.0
+        idx = int(np.searchsorted(stops_t, e, side='right') - 1)
+        idx = max(0, min(idx, len(stops_t) - 2))
+        t0, t1 = stops_t[idx], stops_t[idx + 1]
+        f = (e - t0) / (t1 - t0) if t1 > t0 else 0.0
+        c = stops_c[idx] * (1 - f) + stops_c[idx + 1] * f
+        lut[i] = c.astype(np.uint8)
+    return lut
 
 
 if __name__ == '__main__':

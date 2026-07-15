@@ -252,8 +252,9 @@ def cmd_world_from_png(args):
             check=True,
         )
     else:
-        # 尺寸一致，直接复制
+        # 尺寸一致，直接复制（同时保存 .npy 供 _cmd_world 直读）
         _save_mask_png(mask, locked_path)
+        np.save(locked_path + ".npy", mask)
     del mask
     gc.collect()
 
@@ -570,6 +571,14 @@ def _cmd_world(args):
     if getattr(args, "heightmap", None):
         heightmap = np.load(args.heightmap)
         print(f"  heightmap: {heightmap.shape[1]}x{heightmap.shape[0]}, 值域 {heightmap.min():.1f}-{heightmap.max():.1f}")
+        # 如果高度场尺寸和 mask 不一致，缩放到匹配 size
+        if heightmap.shape[0] != args.size or heightmap.shape[1] != args.size:
+            print(f"  缩放高度场 {heightmap.shape[1]}x{heightmap.shape[0]} -> {args.size}x{args.size}...")
+            img = Image.fromarray(heightmap.astype(np.float32), "F")
+            img = img.resize((args.size, args.size), Image.BILINEAR)
+            heightmap = np.array(img, dtype=np.float32)
+            del img
+            gc.collect()
         gc.collect()
 
     wm = generate_world_map(args.size, args.seed, mask, heightmap=heightmap)
@@ -585,7 +594,7 @@ def _cmd_world(args):
     stats = biome_stats(wm)
     for b in range(len(BIOME_NAMES)):
         print(f"  {BIOME_NAMES[b]:<6s} {stats[b]*100:.1f}%")
-    river_count = int(wm.is_river.sum())
+    river_count = int((wm.river_flow > 0.01).sum())
     print(f"河流格子数: {river_count}")
 
 

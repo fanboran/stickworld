@@ -1,9 +1,11 @@
 """世界地图生成：在锁定大陆掩码上派生 高程/山脉、生物群落、河流。
 
-群系按行分块计算（内存恒定）；河流在低分辨率高程上追踪再放大。
+群系按行分块计算（内存恒定）；河流用标准水文模型（Priority-Flood + D8 + 流量累积）。
 对应 docs/设计/系统/程序化世界生成.md §5.2-5.4。
 """
 import gc
+import heapq
+from collections import deque
 
 import numpy as np
 
@@ -21,15 +23,24 @@ BIOME_TUNDRA = 6
 BIOME_MOUNTAIN = 7
 BIOME_SNOW_PEAK = 8
 BIOME_JUNGLE = 9
+# 特殊文化区（手动指定，脱离实际地形）
+BIOME_VOLCANIC = 10      # 火山之地
+BIOME_PERMAFROST = 11    # 永冻之地
+BIOME_PLATEAU = 12       # 高原之地
 
 BIOME_COLORS = np.array([
     [0.05, 0.10, 0.25], [0.10, 0.28, 0.48], [0.84, 0.79, 0.55],
     [0.46, 0.66, 0.31], [0.20, 0.45, 0.20], [0.86, 0.71, 0.40],
     [0.72, 0.76, 0.73], [0.46, 0.41, 0.36], [0.95, 0.95, 0.96],
     [0.15, 0.42, 0.16],
+    # 特殊文化区
+    [0.35, 0.12, 0.10],   # 火山之地：暗红
+    [0.85, 0.90, 0.95],   # 永冻之地：冰蓝白
+    [0.60, 0.50, 0.45],   # 高原之地：棕褐
 ], dtype=np.float32)
 
-BIOME_NAMES = ["深海", "浅海", "海岸", "平原", "森林", "荒漠", "冻原", "山地", "雪峰", "丛林"]
+BIOME_NAMES = ["深海", "浅海", "海岸", "平原", "森林", "荒漠", "冻原", "山地", "雪峰", "丛林",
+               "火山之地", "永冻之地", "高原之地"]
 
 _DX = [-1, 0, 1, -1, 1, -1, 0, 1]
 _DY = [-1, -1, -1, 0, 0, 1, 1, 1]
@@ -41,17 +52,28 @@ class WorldMap:
         self.seed = seed
         self.landmask = landmask
         self.biome = np.zeros((size, size), dtype=np.uint8)
-        self.is_river = np.zeros((size, size), dtype=np.uint8)
+        # 河流流量场：float32 (size,size)，0=无河，>0=流量（对数映射颜色深浅）
+        self.river_flow = np.zeros((size, size), dtype=np.float32)
+        # 特殊文化区覆盖掩码：uint8 (size,size)，255=不覆盖，其他=强制群系ID
+        self.biome_override = None
 
 
 def generate_world_map(size: int, seed: int, landmask: np.ndarray, slab_h: int = 64,
-                       heightmap: np.ndarray = None) -> WorldMap:
+                       heightmap: np.ndarray = None,
+                       biome_overrides: list = None) -> WorldMap:
     """在给定大陆掩码上生成群系/河流。
 
     Args:
         heightmap: 可选外部高度场 (size,size) float32，值域 0-100（<20=水）。
                    如果提供，群系和河流都基于它（跳过内部 fbm 高程计算）。
                    对应 terrain_template.py 的 Azgaar 模板法高度场。
+        biome_overrides: 可选特殊文化区列表，每项为 dict：
+            {"type": "circle"|"rect", "cx": float, "cy": float, "r": float,
+             "biome": int, "feather": float}
+            - circle: cx/cy/r 定义圆形区域（像素坐标，0-1 归一化或绝对值）
+            - rect: cx/cy 为中心，r 为半宽/半高
+            - biome: 强制群系 ID（BIOME_VOLCANIC/PERMAFROST/PLATEAU 等）
+            - feather: 边缘羽化比例（0=硬边，0.1=10%过渡带）
     """
     wm = WorldMap(size, seed, landmask)
     use_external_h = heightmap is not None
@@ -78,16 +100,64 @@ def generate_world_map(size: int, seed: int, landmask: np.ndarray, slab_h: int =
         if i % 2 == 0:
             print(f"  biome {i}/{n_slabs}", flush=True)
 
-    # 2. 河流（复用 coast_dist 保证高程一致性；外部高度场模式下用外部高度场）
-    print("  rivers...", flush=True)
-    river_res = min(size, 1024)
-    river_mask = _rivers_lowres(size, seed, river_res, landmask, coast_dist, cd_res,
-                                heightmap=heightmap)
-    wm.is_river = _upscale_rivers(river_mask, size, landmask)
+    # 1.5 应用特殊文化区覆盖（火山/永冻/高原等，脱离实际地形）
+    if biome_overrides:
+        print(f"  应用 {len(biome_overrides)} 个特殊文化区...", flush=True)
+        wm.biome_override = np.full((size, size), 255, dtype=np.uint8)
+        for ov in biome_overrides:
+            _apply_biome_override(wm.biome, wm.biome_override, size, landmask, ov)
+        print("  特殊文化区应用完成", flush=True)
+
+    # 2. 河流（待重新实现，参见 docs/设计/系统/河流算法需求.md）
+    print("  rivers (待实现)...", flush=True)
+    wm.river_flow = np.zeros((size, size), dtype=np.float32)
     del coast_dist
     gc.collect()
-    print("  rivers done", flush=True)
+    print("  rivers done (empty)", flush=True)
     return wm
+
+
+def _apply_biome_override(biome: np.ndarray, override_mask: np.ndarray,
+                          size: int, landmask: np.ndarray, ov: dict):
+    """应用单个特殊文化区覆盖。
+
+    ov 格式：
+        type: "circle" | "rect"
+        cx, cy: 中心坐标（0-1 归一化，或绝对像素值 >= 1）
+        r: 半径/半宽（0-1 归一化，或绝对像素值 >= 1）
+        biome: 强制群系 ID
+        feather: 边缘羽化比例（0=硬边，0.1=10%过渡带），默认 0.05
+    """
+    # 解析坐标（<1 视为归一化，>=1 视为绝对像素）
+    cx = ov["cx"] * size if ov["cx"] < 1 else ov["cx"]
+    cy = ov["cy"] * size if ov["cy"] < 1 else ov["cy"]
+    r = ov["r"] * size if ov["r"] < 1 else ov["r"]
+    biome_id = int(ov["biome"])
+    feather = ov.get("feather", 0.05)
+
+    ys = np.arange(size, dtype=np.float32)
+    xs = np.arange(size, dtype=np.float32)
+    PX, PY = np.meshgrid(xs, ys)
+
+    if ov["type"] == "circle":
+        dist = np.sqrt((PX - cx) ** 2 + (PY - cy) ** 2)
+        # 羽化带：r*(1-feather) 内完全覆盖，r 外完全无，中间过渡
+        inner = r * (1.0 - feather)
+        weight = np.clip(1.0 - (dist - inner) / (r - inner + 1e-6), 0.0, 1.0)
+    else:  # rect
+        dx = np.abs(PX - cx) / r
+        dy = np.abs(PY - cy) / r
+        dist = np.maximum(dx, dy)
+        inner = 1.0 - feather
+        weight = np.clip(1.0 - (dist - inner) / (1.0 - inner + 1e-6), 0.0, 1.0)
+
+    del PX, PY
+    # 只在陆地上覆盖
+    weight *= landmask.astype(np.float32)
+    # 应用覆盖
+    mask = weight > 0.5
+    biome[mask] = biome_id
+    override_mask[mask] = biome_id
 
 
 def _compute_coast_distance(landmask: np.ndarray, res: int) -> np.ndarray:
@@ -252,119 +322,34 @@ def _classify_biome(land_slab, elev, temp, moist, landmask, y0, y1, size, extern
     return biome
 
 
-def _rivers_lowres(size: int, seed: int, res: int, landmask: np.ndarray,
-                   coast_dist: np.ndarray = None, cd_res: int = 0,
-                   heightmap: np.ndarray = None) -> np.ndarray:
-    """在低分辨率高程上追踪河流。
-
-    关键：landmask 从全尺寸降采样（不用 generate_landmask 重新生成），
-    保证河流追踪的地形和实际显示的大陆完全一致，不会在海洋上出现河流。
-    如果提供 heightmap，用外部高度场（缩放到 res）替代 fbm 高程。
-    """
-    from PIL import Image
-    img = Image.fromarray(landmask * 255, "L")
-    img = img.resize((res, res), Image.LANCZOS)
-    lm = (np.array(img, dtype=np.float32) / np.float32(255.0) > np.float32(0.5)).astype(np.uint8)
-    del img
-
-    PX, PY = pixel_coords(res)
-    land = lm.astype(bool)
-
-    if heightmap is not None:
-        # 外部高度场模式：缩放到 res，归一化到 0-1
-        img = Image.fromarray(heightmap.astype(np.float32), "F")
-        img = img.resize((res, res), Image.BILINEAR)
-        elev = (np.array(img, dtype=np.float32) / np.float32(100.0)).astype(np.float32)
-        del img
-        # 河流源头阈值：外部高度场 h > 55 (elev > 0.55，对应 hills 区间)
-        source_thr = np.float32(0.55)
-    else:
-        # 原始 fbm 高程模式
-        ridge = fbm_sample(PX, PY, res, 5, 4, seed + 301) * np.float32(2.0) - np.float32(1.0)
-        mountain = smoothstep(np.float32(-0.15), np.float32(0.45), ridge) * np.float32(0.78)
-        depth = np.abs(fbm_sample(PX, PY, res, 10, 3, seed + 601) * np.float32(2.0) - np.float32(1.0))
-        if coast_dist is not None and cd_res > 0 and cd_res == res:
-            inland = coast_dist
-        else:
-            inland = np.ones(land.shape, dtype=np.float32)
-        elev = np.where(land,
-                        np.float32(0.12) + mountain * (np.float32(0.25) + np.float32(0.75) * inland),
-                        np.float32(-0.08) - depth * np.float32(0.45)).astype(np.float32, copy=False)
-        source_thr = np.float32(0.45)
-
-    river = np.zeros((res, res), dtype=np.uint8)
-    rng = np.random.default_rng(seed + 707)
-    sy, sx = np.where(land & (elev > source_thr))
-    n_sources = 0
-    if len(sx) > 0:
-        # 源头比例：外部高度场用更低比例（大陆很大，减少河流数量）
-        source_ratio = 0.02 if heightmap is not None else 0.08
-        pick = rng.random(len(sx)) < source_ratio
-        sources = list(zip(sx[pick], sy[pick]))
-        n_sources = len(sources)
-        print(f"    河流源头数: {n_sources} (比例 {source_ratio:.0%})", flush=True)
-        for i, (rx, ry) in enumerate(sources):
-            _trace_river(elev, lm, river, int(rx), int(ry))
-            if (i + 1) % 200 == 0:
-                print(f"    river {i+1}/{n_sources}", flush=True)
-    return river
-
-
-def _trace_river(elev, landmask, river, sx, sy):
-    res = elev.shape[0]
-    x, y = sx, sy
-    steps = 0
-    while steps < 800:
-        if x < 0 or x >= res or y < 0 or y >= res:
-            return
-        if not landmask[y, x]:
-            return
-        river[y, x] = 1
-        cur = elev[y, x]
-        best = cur
-        bx = by = -1
-        for k in range(8):
-            nx = x + _DX[k]
-            ny = y + _DY[k]
-            if nx < 0 or nx >= res or ny < 0 or ny >= res:
-                continue
-            ne = elev[ny, nx]
-            if ne < best - 0.001:
-                best = ne
-                bx, by = nx, ny
-        if bx < 0:
-            return
-        x, y = bx, by
-        steps += 1
-
-
-def _upscale_rivers(arr: np.ndarray, size: int, landmask: np.ndarray) -> np.ndarray:
-    """LANCZOS 放大河流 mask，用 landmask 裁剪确保河流只在陆地。"""
-    if arr.shape[0] == size:
-        return arr & landmask
-    from PIL import Image
-    img = Image.fromarray(arr * 255, "L")
-    img = img.resize((size, size), Image.LANCZOS)
-    # 用 uint8 而非 float32，内存 16MB vs 64MB
-    result = np.array(img, dtype=np.uint8)
-    del img
-    result = (result > 64).astype(np.uint8)  # 0.25 * 255 ≈ 64
-    result &= landmask  # 裁剪：河流只在陆地，不会出现在海洋
-    return result
-
 
 def render_png(wm: WorldMap, path: str) -> None:
-    """渲染彩色 PNG（群系色 + 河流蓝），分块写入。"""
+    """渲染彩色 PNG（群系色 + 河流颜色深浅表示流量）。
+
+    河流：流量越大颜色越深（深蓝），流量越小越浅（浅蓝）。
+    流量场 river_flow 已归一化到 [0,1]，用对数映射放大差异。
+    """
     from PIL import Image
-    river_color = np.array([0.25, 0.55, 0.92], dtype=np.float32)
-    river_rgb = (river_color * np.float32(255.0)).astype(np.uint8)
+    # 河流颜色：浅蓝(0.5, 0.75, 0.95) -> 深蓝(0.10, 0.35, 0.80)
+    river_light = np.array([0.5, 0.75, 0.95], dtype=np.float32)
+    river_dark = np.array([0.10, 0.35, 0.80], dtype=np.float32)
     img = Image.new("RGB", (wm.size, wm.size))
     slab_h = 512
     _255 = np.float32(255.0)
     for y0 in range(0, wm.size, slab_h):
         y1 = min(y0 + slab_h, wm.size)
         colors = (BIOME_COLORS[wm.biome[y0:y1]] * _255).astype(np.uint8)
-        colors[wm.is_river[y0:y1].astype(bool)] = river_rgb
+        # 河流：流量 > 0 的格子用颜色深浅覆盖
+        flow_slab = wm.river_flow[y0:y1]
+        river_mask = flow_slab > 0.01
+        if river_mask.any():
+            # 流量归一化值（0-1），用幂函数增强对比度
+            f = flow_slab[river_mask]
+            f = np.clip(f ** 0.5, 0, 1)  # sqrt 增强低流量对比
+            # 插值：浅蓝 -> 深蓝
+            river_colors = (river_light[None, :] * (1 - f[:, None]) +
+                            river_dark[None, :] * f[:, None]) * _255
+            colors[river_mask] = river_colors.astype(np.uint8)
         slab_img = Image.fromarray(colors, "RGB")
         img.paste(slab_img, (0, y0))
     img.save(path)

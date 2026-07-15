@@ -1,40 +1,37 @@
 extends Node2D
 class_name MapRenderer
-## 世界地图核心渲染器 —— P社 Clausewitz 引擎风格的像素-省份映射系统
+## 战略图渲染器 —— 分层级差异化渲染
 ##
-## 核心原理：
-##   region_mask_texture 是一张索引颜色图，每个像素的 RGB 值通过 ID<->RGB 编码
-##   唯一地对应一个 region_id。这与 P社的 provinces.bmp 机制完全一致。
+## 详见 docs/技术/架构/战略图架构.md §四 渲染架构
 ##
-##   渲染管线：
-##     1. 绘制底图（base_map_texture）
-##     2. 对每个像素读取 region_mask 获取 region_id
-##     3. 根据当前地图模式，查找该 region_id 对应的颜色
-##     4. 将该颜色以半透明叠加绘制到底图上
-##   鼠标点击检测也是同样的原理 —— 采样点击位置的像素即可获知点击了哪个地块。
+## 渲染策略（按粒度）：
+##   L3 大世界：预渲染风格化底图 + Shader 叠加边界/政治色（P0 用 _draw 简版）
+##   L2 地区：预渲染底图 + 地标图标 + 聚落规模指示
+##   L1 地块：地形底图 + 动态聚落建筑群（SettlementRenderer）+ 道路 + 资源
+##
+## P0 简版：用 GDScript _draw 实现，不上 Shader（P1 再上）
+## P1 完整版：Shader 驱动（region_overlay.shader + border_outline.shader）
 
-## 区域索引纹理（每个像素的RGB对应一个region_id）
-@export var region_mask_texture: Texture2D
+## 关联的数据容器
+@export var data: StrategicMapData
 
-## 基础底图纹理（美术图层，提供地形视觉）
-@export var base_map_texture: Texture2D
+## 关联的聚落建筑群渲染器（L1 用）
+@export var settlement_renderer: SettlementRenderer
 
-## 世界地图全局数据
-@export var world_data: WorldMapData
-
-## 颜色缓存（按地图模式预计算，避免每帧重算）
-var _color_cache: Dictionary = {}  # {mode_int: {region_id_int: Color}}
+## 颜色缓存（按地图模式预计算）
+## {mode_int: {id_string: Color}}
+var _color_cache: Dictionary = {}
 
 ## 当前地图模式
-var current_mode: int = 0  # 0=POLITICAL, 1=TERRAIN, 2=RESOURCE
+var current_mode: int = 0  # 0=POLITICAL, 1=TERRAIN, 2=RESOURCE, 3=STICKMAN, 4=BATTLEFRONT
 
-## 当前悬停的地块ID（-1表示无）
-var hovered_region_id: int = -1
+## 当前悬停的 ID（""表示无）
+var hovered_id: String = ""
 
-## 当前选中的地块ID（-1表示无）
-var selected_region_id: int = -1
+## 当前选中的 ID（""表示无）
+var selected_id: String = ""
 
-## 高亮叠加不透明度
+## 叠加层不透明度
 @export var overlay_alpha: float = 0.5
 
 ## 选中高亮颜色
@@ -46,241 +43,212 @@ var selected_region_id: int = -1
 ## 边框颜色
 @export var border_color: Color = Color(0.0, 0.0, 0.0, 0.3)
 
-## 调试模式：绘制 region_id 标签
+## 调试模式：绘制 ID 标签
 @export var debug_show_labels: bool = false
 
-## ID编码时各通道的位偏移
-const ID_R_SHIFT: int = 16
-const ID_G_SHIFT: int = 8
-const ID_B_SHIFT: int = 0
-const ID_MASK: int = 0xFF
+## 战线标记列表（运行时动态）
+## {battle_id: {"region_id": String, "tile_id": String, "position": Vector2}}
+var _battlefront_markers: Dictionary = {}
 
 
-# ===== ID <-> 颜色编码（与P社 provinces.bmp 的RGB编码逻辑等价）=====
-
-## 将 region_id 编码为 RGB Color
-static func id_to_color(rid: int) -> Color:
-	return Color(
-		float((rid >> ID_R_SHIFT) & ID_MASK) / 255.0,
-		float((rid >> ID_G_SHIFT) & ID_MASK) / 255.0,
-		float((rid >> ID_B_SHIFT) & ID_MASK) / 255.0,
-		1.0
-	)
-
-## 将 RGB Color 解码为 region_id
-static func color_to_id(c: Color) -> int:
-	var r: int = int(c.r * 255.0) & ID_MASK
-	var g: int = int(c.g * 255.0) & ID_MASK
-	var b: int = int(c.b * 255.0) & ID_MASK
-	return (r << ID_R_SHIFT) | (g << ID_G_SHIFT) | (b << ID_B_SHIFT)
-
-
-func _ready():
+func _ready() -> void:
 	_rebuild_color_cache(0)
 	_rebuild_color_cache(1)
 	_rebuild_color_cache(2)
 
-## 重建指定地图模式的颜色缓存
-func _rebuild_color_cache(mode: int) -> void:
-	if world_data == null:
+
+func _process(_delta: float) -> void:
+	if not is_visible_in_tree():
 		return
-	var cache: Dictionary = {}
-	for rid in world_data.regions.keys():
-		cache[rid] = world_data.get_region_color(rid, mode)
-	_color_cache[mode] = cache
-
-
-# ===== 地块查询 =====
-
-## 根据地图空间坐标获取 region_id
-## 地图中心为原点 (0,0)，X 向右，Y 向下
-func get_region_id_at_map_position(map_pos: Vector2) -> int:
-	if region_mask_texture == null:
-		return -1
-	var mask_img: Image = region_mask_texture.get_image()
-	if mask_img.is_empty():
-		return -1
-
-	var tex_size: Vector2i = region_mask_texture.get_size()
-	var half_size: Vector2 = Vector2(tex_size) / 2.0
-
-	# 地图坐标 → 纹理像素坐标
-	var tex_x: int = int(map_pos.x + half_size.x)
-	var tex_y: int = int(map_pos.y + half_size.y)
-
-	if tex_x < 0 or tex_x >= tex_size.x or tex_y < 0 or tex_y >= tex_size.y:
-		return -1
-
-	var pixel_color: Color = mask_img.get_pixel(tex_x, tex_y)
-	return color_to_id(pixel_color)
-
-## 根据屏幕坐标获取 region_id
-func get_region_id_at_screen_position(screen_pos: Vector2) -> int:
-	var map_pos: Vector2 = to_local(screen_pos)
-	return get_region_id_at_map_position(map_pos)
-
-
-# ===== 渲染入口 =====
-
-func _process(_delta: float):
 	# 悬停检测
 	var mouse_pos: Vector2 = get_global_mouse_position()
-	if is_visible_in_tree():
-		var in_viewport: bool = (get_viewport() != null and
-			get_viewport().get_visible_rect().has_point(mouse_pos))
-		if in_viewport:
-			hovered_region_id = get_region_id_at_screen_position(mouse_pos)
+	var in_viewport: bool = (get_viewport() != null and
+		get_viewport().get_visible_rect().has_point(mouse_pos))
+	if in_viewport and data != null:
+		var query: Dictionary = data.query_id_at_screen(mouse_pos)
+		var new_hovered: String = _get_query_id(query)
+		if new_hovered != hovered_id:
+			hovered_id = new_hovered
 	queue_redraw()
 
-func _draw():
-	_draw_base_map()
-	_draw_mode_overlay()
-	_draw_borders()
-	if hovered_region_id != -1:
-		_draw_highlight(hovered_region_id, hover_color)
-	if selected_region_id != -1:
-		_draw_highlight(selected_region_id, selection_color)
+
+func _draw() -> void:
+	if data == null:
+		return
+	match data.current_granularity:
+		StrategicMapData.Granularity.L3_CONTINENT:
+			_draw_l3()
+		StrategicMapData.Granularity.L2_REGION:
+			_draw_l2()
+		StrategicMapData.Granularity.L1_TILE:
+			_draw_l1()
+	_draw_battlefront_markers()
 	if debug_show_labels:
 		_draw_debug_labels()
 
-## 绘制底图
-func _draw_base_map():
-	if base_map_texture == null:
+
+# ===== L3 大世界渲染（P0 简版：底图 + _draw 叠加） =====
+
+func _draw_l3() -> void:
+	# TODO: SM-1 实现
+	# 1. 绘制 continent.style_base_texture（风格化底图，含草坪/火山/山脉/河流）
+	# 2. 按当前地图模式叠加边界色（_draw_mode_overlay_l3）
+	# 3. 绘制地区边界描边
+	# 4. 绘制政权边界（粗线）
+	# 5. 绘制悬停/选中高亮
+	if data.continent == null:
 		return
-	var tex_size: Vector2 = base_map_texture.get_size()
-	draw_texture(base_map_texture, -tex_size / 2.0)
+	if data.continent.style_base_texture != null:
+		var tex_size: Vector2 = data.continent.style_base_texture.get_size()
+		draw_texture(data.continent.style_base_texture, -tex_size / 2.0)
+	# P1: Shader 叠加边界/政治色（P0 简版跳过，只显示底图）
+	_draw_highlight_if_any()
 
-## 绘制当前模式的叠加层
-## 基于P社思路：逐像素读取索引图 → 查表获取显示颜色 → 叠加绘制
-func _draw_mode_overlay():
-	if region_mask_texture == null or world_data == null:
+
+# ===== L2 地区渲染（P0 简版：底图 + 地标图标） =====
+
+func _draw_l2() -> void:
+	# TODO: SM-2 实现
+	# 1. 绘制 region.style_base_texture（该地区风格化底图）
+	# 2. 按地图模式叠加地块边界色
+	# 3. 绘制 Q版地标图标（从 region.landmarks）
+	# 4. 绘制聚落规模指示（每地块中心聚落用不同大小图标）
+	# 5. 绘制悬停/选中高亮
+	var region: RegionData = data.get_current_region()
+	if region == null:
 		return
+	if region.style_base_texture != null:
+		var tex_size: Vector2 = region.style_base_texture.get_size()
+		draw_texture(region.style_base_texture, -tex_size / 2.0)
+	# P1: 地标图标 + 地块边界叠加
+	_draw_highlight_if_any()
 
-	var mask_img: Image = region_mask_texture.get_image()
-	if mask_img.is_empty():
+
+# ===== L1 地块渲染（重度程序化：底图 + 动态聚落建筑群） =====
+
+func _draw_l1() -> void:
+	# TODO: SM-3 实现
+	# 1. 绘制 tile.style_base_texture（该地块地形纹理底图）
+	# 2. 绘制河流（从 tile.rivers 矢量）
+	# 3. 绘制聚落建筑群（调用 settlement_renderer，按 level + population_score 生成）
+	# 4. 绘制聚落间道路（从 tile.roads 矢量）
+	# 5. 绘制资源点图标（从 tile.resources）
+	# 6. 绘制聚落领地边界（淡色填充）
+	# 7. 绘制悬停/选中高亮
+	var tile: TileData = data.get_current_tile()
+	if tile == null:
 		return
+	if tile.style_base_texture != null:
+		var tex_size: Vector2 = tile.style_base_texture.get_size()
+		draw_texture(tile.style_base_texture, -tex_size / 2.0)
+	# P1: 动态聚落建筑群 + 道路 + 资源图标
+	_draw_highlight_if_any()
 
-	var cache: Dictionary = _color_cache.get(current_mode, {})
-	var tex_size: Vector2i = region_mask_texture.get_size()
-	var half_size: Vector2 = Vector2(tex_size) / 2.0
 
-	# 逐像素处理 —— 对于小地图（1024x512）完全可行
-	# 对于大地图可以降采样或使用Shader来做
-	for y in range(0, tex_size.y, 2):
-		for x in range(0, tex_size.x, 2):
-			var pixel: Color = mask_img.get_pixel(x, y)
-			var rid: int = color_to_id(pixel)
-			var display_color: Color = cache.get(rid, Color(0.5, 0.5, 0.5, overlay_alpha))
-			if display_color.a < 0.01:
-				continue
-			display_color.a *= overlay_alpha
-			draw_rect(Rect2(
-				float(x) - half_size.x,
-				float(y) - half_size.y,
-				2.0, 2.0
-			), display_color)
+# ===== 高亮 =====
 
-## 绘制地块边界
-func _draw_borders():
-	if region_mask_texture == null:
-		return
-	var mask_img: Image = region_mask_texture.get_image()
-	if mask_img.is_empty():
-		return
+func _draw_highlight_if_any() -> void:
+	# TODO: SM-1 实现
+	# 按当前粒度的边界索引图，高亮 hovered_id 和 selected_id 对应的区域
+	if not hovered_id.is_empty():
+		_draw_highlight_for_id(hovered_id, hover_color)
+	if not selected_id.is_empty():
+		_draw_highlight_for_id(selected_id, selection_color)
 
-	var tex_size: Vector2i = region_mask_texture.get_size()
-	var half_size: Vector2 = Vector2(tex_size) / 2.0
 
-	# 检测像素邻接的边界边缘（邻接像素属于不同region_id即为边界）
-	var border_step: int = 4
-	for y in range(0, tex_size.y, border_step):
-		for x in range(0, tex_size.x, border_step):
-			var current: int = color_to_id(mask_img.get_pixel(x, y))
+func _draw_highlight_for_id(id: String, color: Color) -> void:
+	# TODO: SM-1 实现
+	# 查找 id 对应的多边形，填充 color
+	pass
 
-			# 检查右侧邻居
-			if x + border_step < tex_size.x:
-				var right: int = color_to_id(mask_img.get_pixel(x + border_step, y))
-				if current != right:
-					draw_line(
-						Vector2(float(x + border_step) - half_size.x, float(y) - half_size.y),
-						Vector2(float(x + border_step) - half_size.x, float(y + border_step) - half_size.y),
-						border_color, 1.0
-					)
 
-			# 检查下方邻居
-			if y + border_step < tex_size.y:
-				var down: int = color_to_id(mask_img.get_pixel(x, y + border_step))
-				if current != down:
-					draw_line(
-						Vector2(float(x) - half_size.x, float(y + border_step) - half_size.y),
-						Vector2(float(x + border_step) - half_size.x, float(y + border_step) - half_size.y),
-						border_color, 1.0
-					)
+# ===== 战线标记 =====
 
-## 绘制地块高亮
-func _draw_highlight(rid: int, h_color: Color):
-	if region_mask_texture == null:
-		return
-	var mask_img: Image = region_mask_texture.get_image()
-	if mask_img.is_empty():
-		return
+func _draw_battlefront_markers() -> void:
+	# TODO: P1 实现
+	# 在战略图上叠加战线标记（剑交叉、火焰等图标）
+	pass
 
-	var tex_size: Vector2i = region_mask_texture.get_size()
-	var half_size: Vector2 = Vector2(tex_size) / 2.0
 
-	for y in range(0, tex_size.y, 2):
-		for x in range(0, tex_size.x, 2):
-			var pixel: Color = mask_img.get_pixel(x, y)
-			if color_to_id(pixel) == rid:
-				draw_rect(Rect2(
-					float(x) - half_size.x,
-					float(y) - half_size.y,
-					2.0, 2.0
-				), h_color)
+func add_battlefront_marker(battle_id: String, region_id: String, tile_id: String) -> void:
+	# TODO: P1 实现
+	# 计算标记位置（region/tile 中心），加入 _battlefront_markers
+	_battlefront_markers[battle_id] = {"region_id": region_id, "tile_id": tile_id}
+	queue_redraw()
 
-## 调试：绘制所有地块ID标签
-func _draw_debug_labels():
-	if world_data == null:
-		return
-	for rid in world_data.regions:
-		var region: RegionDefinition = world_data.regions[rid]
-		if region.center_position != Vector2.ZERO:
-			draw_string(
-				ThemeDB.fallback_font,
-				region.center_position,
-				"%d:%s" % [rid, region.name],
-				HORIZONTAL_ALIGNMENT_CENTER,
-				-1,
-				10
-			)
+
+func remove_battlefront_marker(battle_id: String) -> void:
+	_battlefront_markers.erase(battle_id)
+	queue_redraw()
+
+
+# ===== 调试标签 =====
+
+func _draw_debug_labels() -> void:
+	# TODO: SM-1 实现
+	# 按当前粒度绘制所有 ID + 名称
+	pass
+
+
+# ===== 颜色缓存 =====
+
+func _rebuild_color_cache(mode: int) -> void:
+	# TODO: SM-1 实现
+	# 按地图模式预计算每个 ID 的显示色
+	# POLITICAL: 按 political_owner 着色
+	# TERRAIN: 按 biome 着色
+	# RESOURCE: 按 resource_types 着色
+	_color_cache[mode] = {}
 
 
 # ===== 公共方法 =====
 
-## 设置地图模式并重建缓存
-func set_map_mode(mode: int):
+func set_map_mode(mode: int) -> void:
 	current_mode = mode
 	if not _color_cache.has(mode):
 		_rebuild_color_cache(mode)
+	queue_redraw()
 
-## 刷新颜色缓存（归属变化时调用）
-func refresh_cache():
+
+func refresh() -> void:
+	# 归属/数据变化时刷新
 	_rebuild_color_cache(0)
 	_rebuild_color_cache(1)
 	_rebuild_color_cache(2)
+	queue_redraw()
 
-## 选中地块
-func select_region(rid: int):
-	selected_region_id = rid
 
-## 取消选中
-func deselect_region():
-	selected_region_id = -1
+func refresh_settlement(settlement_id: String) -> void:
+	# L1 粒度下聚落规模变化时，重新渲染该聚落
+	# TODO: SM-3/P1 实现
+	# settlement_renderer.refresh(settlement_id)
+	queue_redraw()
 
-## 获取当前悬停地块
-func get_hovered_region() -> int:
-	return hovered_region_id
 
-## 获取当前选中地块
-func get_selected_region() -> int:
-	return selected_region_id
+func select(id: String) -> void:
+	selected_id = id
+	queue_redraw()
+
+
+func deselect() -> void:
+	selected_id = ""
+	queue_redraw()
+
+
+func get_selected() -> String:
+	return selected_id
+
+
+func get_hovered() -> String:
+	return hovered_id
+
+
+# ===== 内部辅助 =====
+
+func _get_query_id(query: Dictionary) -> String:
+	var g: int = query.get("granularity", 0)
+	match g:
+		0: return query.get("region_id", "")
+		1: return query.get("tile_id", "")
+		2: return query.get("settlement_id", "")
+	return ""

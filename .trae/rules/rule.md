@@ -32,15 +32,22 @@ alwaysApply: true
 
 | 要做什么            | 读哪个                                                     |
 | --------------- | ------------------------------------------------------- |
-| 了解游戏整体          | `docs/design/游戏设计文档.md`                                 |
-| 实现某个系统          | `docs/design/mechanics/<系统名>.md`                        |
-| 查核心实体/状态机       | `docs/technical/architecture/entities.md`               |
-| 查 EventBus 信号   | `docs/technical/architecture/interactions.md`           |
-| 查模块 API 规范      | `docs/technical/architecture/apis.md`                   |
-| 查 Autoload 依赖   | `docs/technical/architecture/autoloads.md`              |
-| 游戏数据表           | `config/excel/` 目录 + `docs/technical/excel-pipeline.md` |
+| 了解游戏整体          | `docs/设计/游戏设计文档.md`                                 |
+| 实现某个系统          | `docs/设计/系统/<系统名>.md`                        |
+| 查核心实体/状态机       | `docs/技术/架构/核心实体.md`               |
+| 查 EventBus 信号   | `docs/技术/架构/系统交互.md`           |
+| 查模块 API 规范      | `docs/技术/架构/模块API.md`                   |
+| 查 Autoload 依赖   | `docs/技术/架构/自动加载依赖.md`              |
+| 查战略图（world_map）架构 | `docs/技术/架构/战略图架构.md`（模块重新设计基线） |
+| 查程序化产物如何喂给战略图 | `docs/技术/架构/世界地图数据流.md`（生成端 ↔ 消费端契约） |
+| 查场景图（卷轴地图）架构 | `docs/技术/架构/场景与战斗架构.md`（modules/world 等） |
+| 查数据流与存储方案      | `docs/技术/架构/数据流.md` |
+| 查程序化世界生成       | `docs/设计/系统/程序化世界生成.md` |
+| 游戏数据表           | `config/excel/` 目录 + `docs/技术/Excel 数据管线使用说明书.md` |
 | 开发规范            | `docs/CONTRIBUTING.md`                                  |
 | 有可以参考的开源项目就放到这里 | external/                                               |
+
+> **术语提示**：「战略图」（modules/world_map，鸟瞰多边形领土，玩家不在其中）与「场景图」（modules/world 等，卷轴地图，玩家在其中）是两类不同的地图概念，详见 `docs/技术/架构/世界地图数据流.md` §1。
 
 ***
 

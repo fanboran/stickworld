@@ -1,178 +1,308 @@
 extends Node
-## world_map 模块公共接口契约
+## 战略图模块（world_map）公共接口契约
 ##
 ## 外部模块只能通过本文件定义的信号和方法与本模块交互。
 ## 禁止跨模块直接引用 world_map 内部脚本的方法。
-## 借鉴 P社 Clausewitz 引擎设计：地图=标识层+数据层+渲染层分离。
+##
+## 详见 docs/技术/架构/战略图架构.md §六 API 契约
+## 术语：战略图（看的地图，玩家不在其中）vs 场景图（玩家地图，玩家在其中）
 
 # ===== 公共信号 =====
 
-## 地块被点击（左键）
-signal region_clicked(region_id: int)
+## 地块/地区/聚落被点击（左键）
+## granularity: 0=L3, 1=L2, 2=L1；未命中字段为 ""
+signal region_clicked(granularity: int, region_id: String, tile_id: String, settlement_id: String)
 
-## 地块被右键点击
-signal region_right_clicked(region_id: int)
+## 地块/地区/聚落被右键点击
+signal region_right_clicked(granularity: int, region_id: String, tile_id: String, settlement_id: String)
 
-## 鼠标悬停地块变化（-1 表示离开所有地块区域）
-signal region_hovered(region_id: int)
+## 鼠标悬停变化
+signal region_hovered(granularity: int, region_id: String, tile_id: String, settlement_id: String)
+
+## 粒度切换（L3↔L2↔L1）
+signal granularity_changed(old_g: int, new_g: int, focused_parent_id: String)
 
 ## 地图模式切换
 signal map_mode_changed(mode: int, mode_name: String)
 
-## 地块归属变化
-signal region_owner_changed(region_id: int, old_owner: int, new_owner: int)
+## 数据变更（接收其他模块的 EventBus 信号后转发）
+signal region_owner_changed(region_id: String, old_owner: String, new_owner: String)
+signal settlement_updated(settlement_id: String)  ## 聚落规模变化（玩家建设）
+signal battlefront_updated(battle_id: String, region_id: String)
 
 
-# ===== 内部引用（在 _setup 中绑定） =====
-var _map_renderer: MapRenderer
-var _map_camera: MapCamera
-var _map_mode_manager: MapModeManager
-var _world_data: WorldMapData
+# ===== 内部引用（在 setup 中绑定） =====
+
+var _controller: StrategicMapController = null
+var _renderer: MapRenderer = null
+var _camera: MapCamera = null
+var _mode_manager: MapModeManager = null
+var _data: StrategicMapData = null
+var _granularity_manager: GranularityManager = null
+var _stitched_preview: StitchedPreviewController = null
 var _is_initialized: bool = false
 
 
 # ===== 初始化 =====
 
-## 由 world_map 场景的根节点调用，注入内部组件引用
+## 由 strategic_map.tscn 根节点调用，注入内部组件引用
 func setup(
-	map_renderer: MapRenderer,
-	map_camera: MapCamera,
-	map_mode_manager: MapModeManager,
-	world_data: WorldMapData
+	controller: StrategicMapController,
+	renderer: MapRenderer,
+	camera: MapCamera,
+	mode_manager: MapModeManager,
+	data: StrategicMapData,
+	granularity_manager: GranularityManager,
+	stitched_preview: StitchedPreviewController
 ) -> void:
-	_map_renderer = map_renderer
-	_map_camera = map_camera
-	_map_mode_manager = map_mode_manager
-	_world_data = world_data
+	_controller = controller
+	_renderer = renderer
+	_camera = camera
+	_mode_manager = mode_manager
+	_data = data
+	_granularity_manager = granularity_manager
+	_stitched_preview = stitched_preview
 	_is_initialized = true
 
 
-# ===== 地块查询 =====
+## 初始化战略图（加载 L3 大世界数据）
+## [P] setup 已调用，manifest_path 指向 config/strategic_map/manifest.tres
+## [Q] continent + political 加载完成，current_granularity = L3
+func initialize(manifest_path: String) -> void:
+	# TODO: SM-1 实现
+	# 1. load(manifest_path) 加载 manifest.tres
+	# 2. _data.manifest = manifest
+	# 3. _data.load_continent()
+	# 4. _renderer.refresh()
+	pass
 
-## 根据屏幕坐标查询地块ID（用于输入处理）
-func get_region_at_screen(screen_pos: Vector2) -> int:
-	if _map_renderer == null:
-		return -1
-	return _map_renderer.get_region_id_at_screen_position(screen_pos)
+
+# ===== 粒度切换 =====
+
+## 设置粒度级别
+## level: 0=L3, 1=L2, 2=L1
+## [P] level=1 时 parent_id 是合法 region_id；level=2 时是合法 tile_id
+## [Q] 触发懒加载，发射 granularity_changed
+func set_granularity(level: int, parent_id: String = "") -> void:
+	if _granularity_manager:
+		_granularity_manager.set_granularity(level, parent_id)
+
+
+func get_granularity() -> int:
+	if _data:
+		return _data.current_granularity
+	return 0
+
+
+func get_focused_parent_id() -> String:
+	if _data:
+		return _data.focused_parent_id
+	return ""
+
+
+# ===== 查询 =====
+
+## 根据屏幕坐标查询 ID
+## 返回 {"granularity": int, "region_id": String, "tile_id": String, "settlement_id": String}
+func query_at_screen(screen_pos: Vector2) -> Dictionary:
+	if _data:
+		return _data.query_id_at_screen(screen_pos)
+	return {"granularity": 0, "region_id": "", "tile_id": "", "settlement_id": ""}
+
+
+## 获取地区数据
+func get_region_data(region_id: String) -> RegionData:
+	if _data:
+		return _data.regions.get(region_id, null)
+	return null
+
 
 ## 获取地块数据
-func get_region(region_id: int) -> RegionDefinition:
-	if _world_data == null:
-		return null
-	return _world_data.get_region(region_id)
-
-## 获取所有地块数据
-func get_all_regions() -> Dictionary:
-	if _world_data == null:
-		return {}
-	return _world_data.regions
-
-## 获取所有可通行陆地地块
-func get_passable_land_regions() -> Array[int]:
-	if _world_data == null:
-		return []
-	return _world_data.get_passable_land_regions()
+func get_tile_data(tile_id: String) -> TileData:
+	if _data:
+		return _data.tiles.get(tile_id, null)
+	return null
 
 
-# ===== 归属操作 =====
+## 获取聚落引用
+func get_settlement_ref(settlement_id: String) -> SettlementRef:
+	if _data:
+		return _data.get_settlement(settlement_id)
+	return null
 
-## 获取地块归属
-func get_region_owner(region_id: int) -> int:
-	if _world_data == null:
-		return -1
-	return _world_data.get_owner(region_id)
 
-## 设置地块归属
-func set_region_owner(region_id: int, owner_id: int):
-	if _world_data == null:
-		return
-	var old_owner: int = _world_data.get_owner(region_id)
-	_world_data.set_owner(region_id, owner_id)
-	if _map_renderer:
-		_map_renderer.refresh_cache()
-	region_owner_changed.emit(region_id, old_owner, owner_id)
+## 获取当前粒度下所有可见多边形（用于 UI 标记放置）
+func get_visible_polygons() -> Array[Dictionary]:
+	if _data:
+		return _data.get_visible_polygons()
+	return []
 
-## 批量设置地块归属（用于和平条约等场景）
-func set_region_owners_bulk(owner_map: Dictionary):
-	if _world_data == null:
-		return
-	for region_id in owner_map:
-		_world_data.set_owner(region_id, owner_map[region_id])
-	if _map_renderer:
-		_map_renderer.refresh_cache()
+
+# ===== 选中 =====
+
+func select(id: String) -> void:
+	if _renderer:
+		_renderer.select(id)
+
+
+func deselect() -> void:
+	if _renderer:
+		_renderer.deselect()
+
+
+func get_selected() -> String:
+	if _renderer:
+		return _renderer.get_selected()
+	return ""
 
 
 # ===== 地图模式 =====
 
-## 设置地图模式
-func set_map_mode(mode: int):
-	if _map_mode_manager:
-		_map_mode_manager.switch_mode(mode)
+func set_map_mode(mode: int) -> void:
+	if _mode_manager:
+		_mode_manager.switch_mode(mode)
 
-## 获取当前地图模式
+
 func get_map_mode() -> int:
-	if _map_mode_manager:
-		return int(_map_mode_manager.current_mode)
+	if _mode_manager:
+		return int(_mode_manager.current_mode)
 	return 0
 
-## 获取所有可用地图模式
+
 func get_available_map_modes() -> Array:
-	if _map_mode_manager:
-		return _map_mode_manager.get_available_modes()
+	if _mode_manager:
+		return _mode_manager.get_available_modes()
 	return []
 
 
-# ===== 地块选中 =====
+# ===== 相机 =====
 
-## 选中地块
-func select_region(region_id: int):
-	if _map_renderer:
-		_map_renderer.select_region(region_id)
-
-## 取消选中
-func deselect_region():
-	if _map_renderer:
-		_map_renderer.deselect_region()
-
-## 获取当前选中地块
-func get_selected_region() -> int:
-	if _map_renderer:
-		return _map_renderer.get_selected_region()
-	return -1
+## 聚焦到指定 region/tile/settlement 的中心
+func camera_focus(id: String, animated: bool = true) -> void:
+	if _camera:
+		_camera.focus_on(id, animated)
 
 
-# ===== 镜头控制 =====
+## 缩放到指定粒度（触发 set_granularity）
+func camera_zoom_to(granularity: int) -> void:
+	set_granularity(granularity)
 
-## 镜头移动到指定地图坐标
-func camera_move_to(pos: Vector2, animated: bool = false):
-	if _map_camera:
-		_map_camera.move_to(pos, animated)
 
-## 镜头缩放到指定级别
-func camera_set_zoom(zoom: float):
-	if _map_camera:
-		_map_camera.set_zoom(zoom)
-
-## 屏幕坐标转地图坐标
 func screen_to_map(screen_pos: Vector2) -> Vector2:
-	if _map_camera:
-		return _map_camera.screen_to_map(screen_pos)
+	if _camera:
+		return _camera.screen_to_map(screen_pos)
 	return screen_pos
 
 
-# ===== 势力颜色管理 =====
-
-## 设置势力颜色
-func set_owner_color(owner_id: int, color: Color):
-	if _world_data == null:
-		return
-	_world_data.owner_colors[owner_id] = color
-	if _map_renderer:
-		_map_renderer.refresh_cache()
+func map_to_screen(map_pos: Vector2) -> Vector2:
+	if _camera:
+		return _camera.map_to_screen(map_pos)
+	return map_pos
 
 
-## 获取地图尺寸
-func get_map_size() -> Vector2:
-	if _world_data == null:
-		return Vector2.ZERO
-	return _world_data.map_size
+# ===== 政治属性（只读查询，写入通过 EventBus） =====
+
+func get_region_owner(region_id: String) -> String:
+	if _data:
+		return _data.get_region_owner(region_id)
+	return ""
+
+
+func get_region_alliance(region_id: String) -> String:
+	if _data and _data.political:
+		var state_id := _data.get_region_owner(region_id)
+		if state_id.is_empty():
+			return ""
+		var info: Dictionary = _data.political.get_state_info(state_id)
+		return info.get("alliance_id", "")
+	return ""
+
+
+func get_state_info(state_id: String) -> Dictionary:
+	if _data and _data.political:
+		return _data.political.get_state_info(state_id)
+	return {}
+
+
+func get_alliance_info(alliance_id: String) -> Dictionary:
+	if _data and _data.political:
+		return _data.political.get_alliance_info(alliance_id)
+	return {}
+
+
+func set_owner_color(state_id: String, color: Color) -> void:
+	if _data and _data.political:
+		_data.political.set_state_color(state_id, color)
+		if _renderer:
+			_renderer.refresh()
+
+
+# ===== 拼接预览模式 =====
+
+## 启用拼接预览（跨地区作战时）
+func enable_stitched_preview() -> void:
+	if _stitched_preview:
+		_stitched_preview.enable()
+
+
+## 关闭拼接预览
+func disable_stitched_preview() -> void:
+	if _stitched_preview:
+		_stitched_preview.disable()
+
+
+## 拼接预览是否启用
+func is_stitched_preview_enabled() -> bool:
+	if _stitched_preview:
+		return _stitched_preview.is_enabled()
+	return false
+
+
+# ===== 场景图切换 =====
+
+## 进入聚落（关闭战略图，加载场景图）
+## [P] settlement_id 存在且对应 map_id 已注册
+## [Q] 发射 EventBus.travel_requested，关闭战略图 ModalOverlay
+func enter_settlement(settlement_id: String) -> void:
+	# TODO: SM-3 实现
+	# 1. 查 SettlementRef.map_id
+	# 2. EventBus.travel_requested.emit(map_id)
+	# 3. close_strategic_map()
+	pass
+
+
+## 关闭战略图，返回之前的场景图
+func close_strategic_map() -> void:
+	# TODO: SM-1 实现
+	# 1. 暂停战略图渲染
+	# 2. 恢复场景图的 CameraRig 和 InputDispatcher
+	# 3. 隐藏 ModalOverlay
+	pass
+
+
+# ===== 接收其他模块的 EventBus 信号 =====
+# 这些方法由 EventBus 连接调用，不是外部直接调用
+
+func _on_region_owner_changed(region_id: String, old_owner: String, new_owner: String) -> void:
+	if _data and _data.political:
+		_data.political.set_region_owner(region_id, new_owner)
+		if _renderer:
+			_renderer.refresh()
+	region_owner_changed.emit(region_id, old_owner, new_owner)
+
+
+func _on_settlement_updated(settlement_id: String) -> void:
+	# L1 粒度下重新渲染该聚落建筑群
+	if _renderer and _data.current_granularity == StrategicMapData.Granularity.L1_TILE:
+		_renderer.refresh_settlement(settlement_id)
+	settlement_updated.emit(settlement_id)
+
+
+func _on_battle_started(battle_id: String, region_id: String, tile_id: String) -> void:
+	if _renderer:
+		_renderer.add_battlefront_marker(battle_id, region_id, tile_id)
+
+
+func _on_battle_ended(battle_id: String) -> void:
+	if _renderer:
+		_renderer.remove_battlefront_marker(battle_id)

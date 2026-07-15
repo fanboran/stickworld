@@ -1,5 +1,10 @@
 extends Resource
 class_name WorldMapData
+## [已废弃 2026-07-16] 旧的单粒度世界地图数据容器。
+## 新架构改用 StrategicMapData（三级粒度：ContinentData/RegionData/TileData/SettlementRef）。
+## 详见 docs/技术/架构/战略图架构.md §三 数据模型。
+## 本文件保留作为参考，不要在新代码中使用。
+##
 ## 世界地图全局数据 —— 管理所有地块的定义和归属
 
 ## 所有地块定义（key=region_id）

@@ -69,7 +69,7 @@ HISTORY_DB = HISTORY_DIR / "history.db"
 ENV_FILE = SCRIPT_DIR / ".env"
 
 ARK_API_URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
-DEFAULT_MODEL = "doubao-seedream-5-0-lite"
+DEFAULT_MODEL = "doubao-seedream-5-0-lite-260128"
 DEFAULT_SIZE = "4K"
 DEFAULT_WATERMARK = False
 DEFAULT_PORT = 8787
@@ -363,7 +363,7 @@ INDEX_HTML = r'''<!DOCTYPE html>
         <div class="field">
           <label>模型</label>
           <select id="model">
-            <option value="doubao-seedream-5-0-lite" selected>5.0 Lite</option>
+            <option value="doubao-seedream-5-0-lite-260128" selected>5.0 Lite</option>
             <option value="doubao-seedream-5-0-pro-260628">5.0 Pro</option>
           </select>
         </div>

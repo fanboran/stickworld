@@ -7,11 +7,12 @@ alwaysApply: true
 > **说明**：本文件（`rule.md`）是 AI 辅助开发的**主规则文件**。汇集了模块化架构规范、核心行为指令、Git 工作流、项目文档导航。
 >
 > 同一目录下可能还存在：
+>
 > - `rule_local.md`（项目特定内容：项目名、项目路径、项目级引用）
 > - `CI-DI.md`（CI/CD 方法论）
 > - `issues.md`（错误记忆 / 向量数据库管理）
 
----
+***
 
 ### 语言规范
 
@@ -29,18 +30,19 @@ alwaysApply: true
 
 **按需自行读取以下文档（不要预加载，只在实现对应模块时读取）**：
 
-| 要做什么 | 读哪个 |
-|----------|--------|
-| 了解游戏整体 | `docs/design/游戏设计文档.md` |
-| 实现某个系统 | `docs/design/mechanics/<系统名>.md` |
-| 查核心实体/状态机 | `docs/technical/architecture/entities.md` |
-| 查 EventBus 信号 | `docs/technical/architecture/interactions.md` |
-| 查模块 API 规范 | `docs/technical/architecture/apis.md` |
-| 查 Autoload 依赖 | `docs/technical/architecture/autoloads.md` |
-| 游戏数据表 | `config/excel/` 目录 + `docs/technical/excel-pipeline.md` |
-| 开发规范 | `docs/CONTRIBUTING.md` |
+| 要做什么            | 读哪个                                                     |
+| --------------- | ------------------------------------------------------- |
+| 了解游戏整体          | `docs/design/游戏设计文档.md`                                 |
+| 实现某个系统          | `docs/design/mechanics/<系统名>.md`                        |
+| 查核心实体/状态机       | `docs/technical/architecture/entities.md`               |
+| 查 EventBus 信号   | `docs/technical/architecture/interactions.md`           |
+| 查模块 API 规范      | `docs/technical/architecture/apis.md`                   |
+| 查 Autoload 依赖   | `docs/technical/architecture/autoloads.md`              |
+| 游戏数据表           | `config/excel/` 目录 + `docs/technical/excel-pipeline.md` |
+| 开发规范            | `docs/CONTRIBUTING.md`                                  |
+| 有可以参考的开源项目就放到这里 | external/                                               |
 
----
+***
 
 ## 核心行为指令
 
@@ -51,7 +53,7 @@ alwaysApply: true
 5. **主动沟通**：当任务描述不清晰或与架构原则冲突时，主动提问，不做危险假设。
 6. **设计先行**：实现任何模块前，必须先用 Read 工具读取对应的设计文档（`docs/design/mechanics/<模块名>.md` 和 `docs/technical/architecture/apis.md` 中该模块的 API 段落）。如果 GDD 标记了 `[待补充]`，必须向用户确认后再编码。跳过此步直接写代码会导致 API 和数据结构与设计脱节。
 
----
+***
 
 ### Godot 模块化架构 4 大原则
 
@@ -61,12 +63,13 @@ alwaysApply: true
 4. **接口契约**：模块对外交互必须通过其根目录下的 `api.gd` 文件。
 
 **解耦核心策略**：
+
 - 优先使用事件总线，而非直接方法调用
 - 每个模块只暴露一小组精心设计的公共方法和信号
 - 高层模块不直接依赖低层模块，两者依赖抽象接口
 - 同一模块所有文件物理上放在同一文件夹
 
----
+***
 
 ### 顶层目录结构
 
@@ -123,7 +126,7 @@ modules/player/
 
 命名规范：配置尽量放 `.tres`/`.json` 而非全堆在 `project.godot`。
 
----
+***
 
 ## 自动化工作流（预留）
 
@@ -133,7 +136,7 @@ modules/player/
 2. 使用 GdUnit4 测试框架。AI 生成功能代码时同时生成测试。
 3. 可在流水线中加入场景层次验证：用 Godot headless 运行验证脚本，断言场景结构完整。
 
----
+***
 
 ## godot-ai MCP 更新流程
 
@@ -148,7 +151,7 @@ modules/player/
 3. **验证**：`godot-ai --version` 确认版本匹配，`godot-ai --transport streamable-http --port 8000` 确认能正常启动
 4. **重启 Godot 编辑器**，让插件重新连接新版 MCP 服务
 
----
+***
 
 ## Git 分支与工作流规范
 
@@ -157,7 +160,7 @@ modules/player/
 - 中文提交信息，格式：`类型(模块): 描述`
 - 类型：`feat` / `fix` / `refactor` / `test` / `docs` / `chore`
 - 示例：`feat(combat): 实现基础自动战斗单位AI`
-- **修改 Godot 项目后必须用 `godot --headless` 验证编译通过再提交**
+- **修改 Godot 项目后必须用** **`godot --headless`** **验证编译通过再提交**
 
 ### 待办项维护
 
@@ -165,12 +168,18 @@ modules/player/
 - 完成一项立即删除对应条目
 - 新增项追加到对应优先级分区
 
----
+***
 
 ## 命令行环境规范
 
-- 本项目使用 **Git Bash**（非 PowerShell）。使用 Unix 风格命令：`ls`、`grep`、`rm`、`mkdir -p`、`&&`、`||`。
-- 路径使用正斜杠 `/`。
-- 路径含空格必须用引号包裹。
+- PowerShell 5 不支持 `&&` 和 `||`，请使用 `;` 分隔命令，或用 `if ($LASTEXITCODE -eq 0)` 做条件判断。
+- 不使用 `mkdir -p`、`rm -rf`、`ls -la`、`grep -r` 等 Unix shell 语法；改用 PowerShell 原生命令：`New-Item -ItemType Directory -Force`、`Get-ChildItem`、`Select-String`、`Get-Command`。
+- 路径包含空格必须用引号包裹并使用 `&` 调用运算符，例如 `& "F:\SteamLibrary\steamapps\common\Godot Engine\godot.exe" --headless`。
+- 始终使用反斜杠 `\` 作为路径分隔符；连接路径优先使用 `Join-Path`。
+- `.ps1` 脚本默认被执行策略拦截，**不要主动修改执行策略**；如有需要应向用户说明风险并征得确认。
+- 执行当前目录的脚本需要加 `.\` 前缀（如 `.\script.ps1`）。
+- 避免使用 `Read-Host`、`Get-Credential`、`Out-GridView`、`$Host.UI.PromptForChoice`、`pause` 等需要人工输入的命令；AI 应在非交互式模式下完成任务。
+- Git 命令始终加 `--no-pager` 或设置 `$env:GIT_PAGER = "cat"` 防止挂起。
+- PowerShell 中的 `curl` 是 `Invoke-WebRequest` 的别名，不兼容 curl 参数；应直接使用 `Invoke-WebRequest` 或 `Invoke-RestMethod` 并加 `-UseBasicParsing`。
 - Godot headless 命令：`"F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" --headless --path "f:/VSCode/game-2/stick-world"`。
 

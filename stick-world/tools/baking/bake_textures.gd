@@ -3,7 +3,7 @@ extends Node
 ## 从 stickman_rig.gd 的 SWL_SWORDWRATH 数据烘焙所有骨骼纹理为 PNG
 ##
 ## 运行方式:
-##   godot --headless --path "f:/VSCode/game-2/stick-world" res://tools/bake_textures.tscn
+##   godot --headless --path "f:/VSCode/game-2/stick-world" res://tools/baking/bake_textures.tscn
 
 const TYPE_ROUND_SEG: int = 0
 const TYPE_CIRCLE: int = 2

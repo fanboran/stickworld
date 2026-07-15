@@ -1,7 +1,7 @@
-extends Node
+extends SceneTree
 
 ## 代码扫描器：检查项目中所有 .gd 文件的语法和基本质量问题
-## 使用方式: godot --headless --path <project_dir> -s res://tools/code_scanner.gd
+## 使用方式: godot --headless --path <project_dir> -s res://tools/dev/code_scanner.gd
 ## 退出码: 0 = 无问题, >0 = 有问题
 
 const SCAN_DIRS := ["modules", "core", "tests", "tools"]
@@ -11,10 +11,10 @@ var issues_found: int = 0
 var files_scanned: int = 0
 var total_lines: int = 0
 
-func _run() -> void:
-	print("=" * 60)
+func _initialize() -> void:
+	print("=".repeat(60))
 	print("GDScript 代码扫描器")
-	print("=" * 60)
+	print("=".repeat(60))
 	print("")
 
 	var all_files: Array = collect_gd_files()
@@ -25,19 +25,19 @@ func _run() -> void:
 		scan_file(file_path)
 
 	print("")
-	print("=" * 60)
+	print("=".repeat(60))
 	print("扫描完成")
 	print("  文件数: %d" % files_scanned)
 	print("  代码行数: %d" % total_lines)
 	print("  问题数: %d" % issues_found)
-	print("=" * 60)
+	print("=".repeat(60))
 
 	if issues_found > 0:
 		push_error("扫描发现 %d 个问题，CI 失败" % issues_found)
-		OS.exit(1)
+		quit(1)
 	else:
 		print("全部文件通过检查")
-		OS.exit(0)
+		quit(0)
 
 
 func collect_gd_files() -> Array:

@@ -3,8 +3,8 @@
 export_excel.py —— 将 config/excel/*.xlsx 导出为 Godot .tres 资源文件。
 
 用法:
-    python tools/export_excel.py              # 导出所有
-    python tools/export_excel.py --dry-run    # 只校验不导出
+    python tools/pipeline/export_excel.py              # 导出所有
+    python tools/pipeline/export_excel.py --dry-run    # 只校验不导出
 
 Excel 格式约定:
     - 第 1 行: 英文字段名（.tres 的键）
@@ -25,7 +25,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 # 项目根目录（相对于本脚本位置）
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 EXCEL_DIR = PROJECT_ROOT / "config" / "excel"
 CONFIG_DIR = PROJECT_ROOT / "config"
 ASSETS_DIR = PROJECT_ROOT / "assets"

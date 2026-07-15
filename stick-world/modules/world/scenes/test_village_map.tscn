@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://bnt0k4kto231k" path="res://modules/world/placement_grid/placement_grid.gd" id="2_grid"]
 [ext_resource type="Script" uid="uid://cqxakicqelpkj" path="res://modules/world/scripts/initial_buildings_list.gd" id="3_ibl"]
 [ext_resource type="PackedScene" uid="uid://bms1thlv10001" path="res://modules/buildings/scenes/bld_smithy_lv1.tscn" id="4_5r7bm"]
-[ext_resource type="Script" uid="uid://7ko7iiaifff4" path="res://tools/map_grid_drawer.gd" id="4_grid_drawer"]
+[ext_resource type="Script" uid="uid://7ko7iiaifff4" path="res://tools/dev/map_grid_drawer.gd" id="4_grid_drawer"]
 [ext_resource type="PackedScene" uid="uid://bms2thlv20002" path="res://modules/buildings/scenes/bld_smithy_lv2.tscn" id="5_3vaax"]
 [ext_resource type="PackedScene" uid="uid://bms3thlv30003" path="res://modules/buildings/scenes/bld_smithy_lv3.tscn" id="6_k5uxq"]
 [ext_resource type="PackedScene" uid="uid://bms4thlv40004" path="res://modules/buildings/scenes/bld_smithy_lv4.tscn" id="7_hb2ek"]

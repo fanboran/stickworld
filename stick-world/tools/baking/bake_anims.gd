@@ -3,7 +3,7 @@ extends Node
 ## 从 stickman_anims.gd 的动画数据烘焙 .tres 资源文件
 ##
 ## 运行方式:
-##   godot --headless --path "f:/VSCode/game-2/stick-world" res://tools/bake_anims.tscn
+##   godot --headless --path "f:/VSCode/game-2/stick-world" res://tools/baking/bake_anims.tscn
 
 const Skeleton := preload("res://modules/units/scripts/stickman_skeleton.gd")
 

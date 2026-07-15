@@ -77,7 +77,7 @@ static func _load_anim(lib: AnimationLibrary, name: String) -> void:
 		if anim != null:
 			lib.add_animation(name, anim)
 			return
-	push_warning("StickmanAnims: 动画资源不存在 %s，请运行 tools/bake_anims.tscn 生成" % path)
+	push_warning("StickmanAnims: 动画资源不存在 %s，请运行 tools/baking/bake_anims.tscn 生成" % path)
 
 
 static func _add_state(sm: AnimationNodeStateMachine, anim_name: String) -> void:

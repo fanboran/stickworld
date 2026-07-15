@@ -22,7 +22,7 @@
 
 1. 打开 `config/excel/平衡变量.xlsx`
 2. 找到 `var_attack_base` 那一行，把 `value` 列从 `10` 改成 `15`
-3. 保存，然后在终端运行 `python tools/export_excel.py`
+3. 保存，然后在终端运行 `python tools/pipeline/export_excel.py`
 4. 重新启动游戏（或触发热加载），攻击力就变成 15 了
 
 不需要修改任何 `.gd` 脚本，不需要重新编译 Godot 项目。
@@ -127,7 +127,7 @@ pip install openpyxl --user
 在项目根目录（`stick-world/`），用终端运行：
 
 ```bash
-python stick-world/tools/export_excel.py
+python stick-world/tools/pipeline/export_excel.py
 ```
 
 脚本会做三件事：
@@ -180,7 +180,7 @@ python stick-world/tools/export_excel.py
 如果你想先检查数据有没有错误，但不实际导出，加上 `--dry-run`：
 
 ```bash
-python tools/export_excel.py --dry-run
+python tools/pipeline/export_excel.py --dry-run
 ```
 
 干跑模式会执行解析和验证，但不会生成任何 `.tres` 文件。如果验证通过，你会看到：
@@ -329,7 +329,7 @@ var wood_price = BalanceConfig.get_value("resources.resources.res_wood.base_pric
 ### 5.3 运行导出
 
 ```bash
-python tools/export_excel.py
+python tools/pipeline/export_excel.py
 ```
 
 导出后，你的数据会自动生成到 `config/skills/<Sheet名>.tres`。
@@ -382,7 +382,7 @@ Mod 作者可以创建自己的 Excel 数据文件，覆盖或扩展游戏的基
 **A**：90% 的情况是忘了运行导出脚本。修改 Excel 后必须执行：
 
 ```bash
-python tools/export_excel.py
+python tools/pipeline/export_excel.py
 ```
 
 修改 `.xlsx` 不会自动更新 `.tres`。Excel 是源文件，`.tres` 是导出产物，游戏读的是 `.tres`。

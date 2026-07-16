@@ -135,6 +135,18 @@ tracks/5/keys = {
 "update": 0,
 "values": [Vector2(0, 0)]
 }
+tracks/6/type = "value"
+tracks/6/imported = false
+tracks/6/enabled = true
+tracks/6/path = NodePath("..:position")
+tracks/6/interp = 1
+tracks/6/loop_wrap = true
+tracks/6/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(0, 0)]
+}
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_cshof"]
 _data = {
@@ -215,7 +227,7 @@ body_color = Color(0.1560398, 0.15568888, 0.18235794, 1)
 weapon_scene = ExtResource("3_wvxud")
 
 [node name="hip" type="Bone2D" parent="StickmanRig" unique_id=1013551157]
-scale = Vector2(0.9999994, 0.9999994)
+scale = Vector2(0.99986917, 0.99986917)
 rest = Transform2D(1, 0, 0, 1, 0, 0)
 
 [node name="sprite_6" type="Sprite2D" parent="StickmanRig/hip" unique_id=663561304]

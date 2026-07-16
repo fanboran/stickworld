@@ -25,7 +25,7 @@ var continent: ContinentData = null
 var regions: Dictionary = {}
 
 ## L1 地块（按 tile_id 懒加载）
-## key: tile_id (String), value: TileData
+## key: tile_id (String), value: MapTileData
 var tiles: Dictionary = {}
 
 ## 政权数据（启动时必加载）
@@ -76,7 +76,7 @@ func load_tile(tile_id: String) -> Result:
 	# TODO: SM-3 实现
 	# 1. 检查 tiles 是否已加载该 tile
 	# 2. 从 manifest 找到 tile_<id>.tres 路径
-	# 3. load() 加载 TileData
+	# 3. load() 加载 MapTileData
 	# 4. current_granularity = Granularity.L1_TILE
 	# 5. focused_parent_id = tile_id
 	return Result.ok()
@@ -131,7 +131,7 @@ func get_visible_polygons() -> Array[Dictionary]:
 func get_settlement(settlement_id: String) -> SettlementRef:
 	if current_granularity != Granularity.L1_TILE:
 		return null
-	var tile: TileData = tiles.get(focused_parent_id, null)
+	var tile: MapTileData = tiles.get(focused_parent_id, null)
 	if tile == null:
 		return null
 	return tile.get_settlement(settlement_id)
@@ -142,14 +142,14 @@ func get_current_region() -> RegionData:
 	if current_granularity == Granularity.L2_REGION:
 		return regions.get(focused_parent_id, null)
 	if current_granularity == Granularity.L1_TILE:
-		var tile: TileData = tiles.get(focused_parent_id, null)
+		var tile: MapTileData = tiles.get(focused_parent_id, null)
 		if tile != null:
 			return regions.get(tile.parent_region_id, null)
 	return null
 
 
 ## 获取当前地块数据（L1 粒度下）
-func get_current_tile() -> TileData:
+func get_current_tile() -> MapTileData:
 	if current_granularity != Granularity.L1_TILE:
 		return null
 	return tiles.get(focused_parent_id, null)
@@ -179,13 +179,13 @@ func get_state_color(state_id: String) -> Color:
 
 ## Result 简易封装（对齐 docs/技术/架构/模块API.md 的 Result 模式）
 class Result:
-	static func ok() -> Resource:
-		var r = Resource.new()
+	static func ok() -> Result:
+		var r = Result.new()
 		r.set_meta("ok", true)
 		return r
 
-	static func err(msg: String) -> Resource:
-		var r = Resource.new()
+	static func err(msg: String) -> Result:
+		var r = Result.new()
 		r.set_meta("ok", false)
 		r.set_meta("error", msg)
 		return r

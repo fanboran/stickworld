@@ -118,7 +118,7 @@ func get_region_data(region_id: String) -> RegionData:
 
 
 ## 获取地块数据
-func get_tile_data(tile_id: String) -> TileData:
+func get_tile_data(tile_id: String) -> MapTileData:
 	if _data:
 		return _data.tiles.get(tile_id, null)
 	return null

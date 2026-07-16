@@ -2,7 +2,7 @@ class_name ResourceDeposit
 extends Resource
 ## 资源点 —— 地块内的资源禀赋
 ##
-## 详见 docs/技术/架构/战略图架构.md §3.4 TileData
+## 详见 docs/技术/架构/战略图架构.md §3.4 MapTileData
 
 ## 资源类型 ID（"iron" / "black_pitch" / "magic_source" / "wood" / "gold" ...）
 @export var resource_id: String = ""

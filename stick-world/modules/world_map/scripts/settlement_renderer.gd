@@ -69,7 +69,7 @@ func get_rendered_node(settlement_id: String) -> Node2D:
 
 
 ## 渲染地块内所有聚落（L1 粒度进入时调用）
-func render_all_in_tile(tile: TileData) -> void:
+func render_all_in_tile(tile: MapTileData) -> void:
 	clear_all()
 	for settlement in tile.settlements:
 		if settlement == null:

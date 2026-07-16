@@ -135,7 +135,7 @@ func _draw_l1() -> void:
 	# 5. 绘制资源点图标（从 tile.resources）
 	# 6. 绘制聚落领地边界（淡色填充）
 	# 7. 绘制悬停/选中高亮
-	var tile: TileData = data.get_current_tile()
+	var tile: MapTileData = data.get_current_tile()
 	if tile == null:
 		return
 	if tile.style_base_texture != null:

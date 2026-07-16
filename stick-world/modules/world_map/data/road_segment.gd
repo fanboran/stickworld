@@ -2,7 +2,7 @@ class_name RoadSegment
 extends Resource
 ## 道路段 —— L1 地块图上的聚落间道路
 ##
-## 详见 docs/技术/架构/战略图架构.md §3.4 TileData.roads
+## 详见 docs/技术/架构/战略图架构.md §3.4 MapTileData.roads
 
 enum RoadClass {
 	DIRT,       ## 土路（默认）

@@ -1,7 +1,7 @@
 extends Resource
 class_name RegionDefinition
 ## [已废弃 2026-07-16] 旧的单粒度地块定义。
-## 新架构按 L3/L2/L1 三级粒度拆分为 ContinentData/RegionData/TileData/SettlementRef。
+## 新架构按 L3/L2/L1 三级粒度拆分为 ContinentData/RegionData/MapTileData/SettlementRef。
 ## 详见 docs/技术/架构/战略图架构.md §三 数据模型 和 §9.3 迁移表。
 ## 本文件保留作为参考，不要在新代码中使用。
 ##

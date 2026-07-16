@@ -37,7 +37,7 @@ extends Resource
 @export var boundary_mask_texture: Texture2D = null
 
 ## 该包在世界坐标系（0-8192）中的地理范围（拼接预览用）
-@export var world_bounds: Rect2 = Rect2.ZERO
+@export var world_bounds: Rect2 = Rect2()
 
 ## 邻接地区 ID（拼接预览用，同粒度）
 @export var neighbors: Array[String] = []

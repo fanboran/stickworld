@@ -769,11 +769,68 @@ def render(points, tri, elevations, rivers, mask, ocean_mask, interior_water_mas
     img.save(out_path)
     print(f"   保存 {out_path} ({os.path.getsize(out_path) / 1024 / 1024:.1f} MB)", flush=True)
 
+    # --- 湖泊高度归一化：每个湖泊连通分量设为边缘陆地平均高度 ---
+    if interior_water_mask.any():
+        print("   湖泊高度归一化...", flush=True)
+        from scipy.ndimage import binary_dilation, grey_dilation
+        labeled_lakes, n_lakes_full = label(interior_water_mask)
+        # 用 grey_dilation 把湖泊 label 扩展到边缘陆地像素（size=3 = 8邻域）
+        dilated_labels = grey_dilation(labeled_lakes, size=3)
+        # 边缘陆地 = 扩展后 label>0 但本身不是湖泊也不是外海
+        edge_ring = (dilated_labels > 0) & ~interior_water_mask & ~ocean_mask
+        edge_labels = dilated_labels[edge_ring]  # 现在是湖泊 ID（1~n）
+        edge_heights = hm_full[edge_ring]
+        # bincount 计算每个湖泊 ID 的边缘总高度和计数
+        sum_h = np.bincount(edge_labels, weights=edge_heights, minlength=n_lakes_full + 1)
+        cnt = np.bincount(edge_labels, minlength=n_lakes_full + 1)
+        mean_h = np.where(cnt > 0, sum_h / cnt, 0.0).astype(np.float32)
+        # 把每个湖泊像素设为对应的平均高度
+        lake_pixels = labeled_lakes > 0
+        hm_full[lake_pixels] = mean_h[labeled_lakes[lake_pixels]]
+        del labeled_lakes, dilated_labels, edge_ring  # 释放内存
+        print(f"   湖泊数量: {n_lakes_full}, 边缘像素: {int(cnt[1:].sum())}", flush=True)
+
     # --- 保存高度场 ---
     print("   保存高度场...", flush=True)
     hm_path = os.path.join(OUTPUT_DIR, hm_name)
     np.save(hm_path, hm_full.astype(np.float32))
     print(f"   保存 {hm_path} ({os.path.getsize(hm_path) / 1024 / 1024:.1f} MB)", flush=True)
+
+    # --- 保存湖泊蒙版（8192 单通道，1=湖泊 0=非湖泊）---
+    print("   保存湖泊蒙版...", flush=True)
+    lake_mask_path = os.path.join(OUTPUT_DIR, "fractal_lake_mask_8192.png")
+    Image.fromarray(interior_water_mask.astype(np.uint8) * 255, mode='L').save(lake_mask_path)
+    print(f"   保存 {lake_mask_path} ({os.path.getsize(lake_mask_path) / 1024 / 1024:.1f} MB)", flush=True)
+
+    # --- 保存河流蒙版（8192 单通道，1=河流 0=非河流）---
+    print("   生成河流蒙版...", flush=True)
+    river_mask = Image.new('L', (SIZE, SIZE), 0)
+    draw_mask = ImageDraw.Draw(river_mask)
+    for river in rivers:
+        for path_idx, path in enumerate(river['paths']):
+            flows = river['flows'][path_idx] if path_idx < len(river.get('flows', [])) else []
+            if len(path) < 2 or not flows:
+                continue
+            for i in range(len(path) - 1):
+                x1, y1 = path[i]
+                x2, y2 = path[i + 1]
+                flow = flows[i] if i < len(flows) else flows[-1]
+                # 与渲染完全一致的水域裁切
+                ix1, iy1 = int(x1), int(y1)
+                ix2, iy2 = int(x2), int(y2)
+                if 0 <= iy1 < SIZE and 0 <= ix1 < SIZE and \
+                   0 <= iy2 < SIZE and 0 <= ix2 < SIZE:
+                    if water_mask_full[iy1, ix1] and water_mask_full[iy2, ix2]:
+                        continue
+                # 与渲染完全一致的宽度过滤
+                ratio = flow / max_flow
+                width = int(math.sqrt(math.sqrt(ratio)) * 6)
+                if width < 1:
+                    continue
+                draw_mask.line([(x1, y1), (x2, y2)], fill=255, width=width)
+    rm_path = os.path.join(OUTPUT_DIR, "fractal_river_mask_8192.png")
+    river_mask.save(rm_path)
+    print(f"   保存 {rm_path} ({os.path.getsize(rm_path) / 1024 / 1024:.1f} MB)", flush=True)
 
 
 # 颜色色带控制点（高度, R, G, B）

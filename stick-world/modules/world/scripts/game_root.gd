@@ -24,6 +24,8 @@ const _DebugDrawers: GDScript = preload("res://modules/debug/scripts/debug_drawe
 const TEST_VILLAGE_MAP_ID := "test_village"
 ## 玩家初始 X 位置（地图坐标系，偏左便于观察）
 const PLAYER_SPAWN_X: float = 300.0
+## NPC 村民数量（P0 测试用，展示 AI 行为）
+const NPC_COUNT: int = 5
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
@@ -90,10 +92,14 @@ func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
 	if map == null or not map.has_method("spawn_entity"):
 		return
 	# 火柴人生成 Y = 地面偏中心（ground_y 与 ground_bottom 中间偏上）
+	# 注意：spawn_y 是脚部目标 Y，entity origin 需要偏移 foot_offset
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
 	var player: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(PLAYER_SPAWN_X, spawn_y))
 	if player == null:
 		return
+	# 修正 Y：让脚部对齐 spawn_y
+	if player.get("foot_offset") != null:
+		player.global_position.y = spawn_y - player.foot_offset
 	# 配置相机：注入 ground_y / ground_ratio / map_bounds（详见 §2.4.7）
 	if camera_rig != null and camera_rig.has_method("set_ground_y"):
 		camera_rig.set_ground_y(map.ground_y)
@@ -104,11 +110,29 @@ func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
 	# 让 CameraRig 跟随玩家
 	if camera_rig != null and camera_rig.has_method("set_follow_target"):
 		camera_rig.set_follow_target(player)
+	# spawn NPC 村民（不附身，AI 自动驱动 idle ↔ move，详见 §7.2）
+	_spawn_npcs(map, spawn_y)
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 注册调试绘制器
 	_register_debug_drawers()
+
+
+## 生成 NPC 村民，分布在玩家右侧不同 X 位置，不附身（AI 接管）。
+func _spawn_npcs(map: Node2D, spawn_y: float) -> void:
+	for i in NPC_COUNT:
+		var x: float = PLAYER_SPAWN_X + 200.0 * (i + 1)
+		# 确保在地图边界内
+		if x > map.map_right - 100.0:
+			x = PLAYER_SPAWN_X + randf_range(100.0, 800.0)
+		var npc: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
+		if npc != null:
+			# 修正 Y：让脚部对齐 spawn_y
+			if npc.get("foot_offset") != null:
+				npc.global_position.y = spawn_y - npc.foot_offset
+			if npc.has_method("set_possessed"):
+				npc.set_possessed(false)  # NPC 不被附身，AIController 自动接管
 
 
 ## 注册调试绘制器到 DebugApi（详见 §10.5.7）

@@ -54,7 +54,7 @@ var ground_bottom: float = 882.0
 var map_left: float = 0.0
 ## X 活动范围右边界（由 MapInstance 注入）
 var map_right: float = 8192.0
-## 脚部到节点原点的偏移（CollisionShape2D 半高，约 45）
+## 脚部到节点原点的 Y 偏移（由 _ready 从模型 marker 动态计算，正值=脚在下方）
 var foot_offset: float = 45.0
 
 # ─────────────────────────────── 通行障碍（§7.1.2）────────────────────────────────
@@ -62,6 +62,14 @@ var foot_offset: float = 45.0
 var _map_ref: Node2D = null
 ## 上一帧有效位置（未碰撞障碍时的位置，用于回退）
 var _last_valid_position: Vector2 = Vector2.ZERO
+
+# ─────────────────────────────── AI 移动（§7.1 / §7.2）────────────────────────────────
+## AI 控制器引用（_ready 时自动获取子节点）
+var _ai_controller: Node = null
+## AI 设定的移动方向（归一化），由 ai_move() 设置
+var _ai_move_dir: Vector2 = Vector2.ZERO
+## AI 是否要求奔跑
+var _ai_running: bool = false
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
@@ -76,6 +84,8 @@ var _is_running: bool = false
 var _facing: int = 1
 ## 当前动画名
 var _current_anim: String = "idle"
+## 散步模式（true=只走不跑，按 Alt 切换）
+var _walk_only: bool = false
 ## 开场 IK workaround（前 0.25s 模拟向右移动触发 IK 解算）
 var _startup_fix_time: float = 0.25
 var _startup_fix_elapsed: float = 0.0
@@ -92,18 +102,55 @@ func _enter_tree() -> void:
 		rig_host.set_script(null)
 
 
+## 玩家按 Alt 切换散步/奔跑模式（仅附身时生效）
+func _input(event: InputEvent) -> void:
+	if not possessed:
+		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ALT:
+		_walk_only = not _walk_only
+		if _walk_only and _is_running:
+			_is_running = false
+			_current_speed = WALK_SPEED
+			_play_anim("walk")
+
+
 func _ready() -> void:
 	# 拿到 StickmanRig 和 IK markers 引用
 	var rig_host := get_node_or_null("RigHost")
 	if rig_host != null:
 		rig = rig_host.get_node_or_null("StickmanRig")
 		_markers_parent = rig_host.get_node_or_null("Node2D")
+	# 获取 AIController 子节点（§7.1）
+	_ai_controller = get_node_or_null("AIController")
+	# 从模型 marker 动态计算 foot_offset（适配不同参考系）
+	foot_offset = _calculate_foot_offset()
+	# 碰撞体移到脚部位置
+	var col := get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if col != null:
+		col.position = Vector2(0, foot_offset)
 	# 应用初始缩放
 	_apply_scale()
 	# 播放 idle
 	_play_anim("idle")
 	# 初始化上一帧有效位置
 	_last_valid_position = global_position
+
+
+## 从 RigHost 的 outfoot marker 位置计算脚部 Y 偏移。
+## 公式：foot_offset = root_y + outfoot_local_y * BASE_SCALE
+## 这样无论模型参考系怎么改，脚部位置都能正确对齐地面。
+func _calculate_foot_offset() -> float:
+	var rig_host := get_node_or_null("RigHost")
+	if rig_host == null:
+		return 45.0
+	var root_y: float = (rig_host as Node2D).position.y
+	var outfoot := rig_host.get_node_or_null("Node2D/outfoot") as Node2D
+	if outfoot == null:
+		return 45.0
+	var outfoot_y: float = outfoot.position.y
+	var offset: float = root_y + outfoot_y * BASE_SCALE
+	print("[StickmanEntity] foot_offset = ", offset, " (root_y=", root_y, " outfoot_y=", outfoot_y, " scale=", BASE_SCALE, ")")
+	return offset
 
 
 func _physics_process(delta: float) -> void:
@@ -130,11 +177,10 @@ func _physics_process(delta: float) -> void:
 	if possessed:
 		_handle_player_input(delta)
 	else:
-		# P0：AI 未实现，逐渐减速到 idle
-		_handle_deceleration(delta)
-		velocity = velocity.lerp(Vector2.ZERO, decel * delta * 0.01)
-		if velocity.length() < IDLE_THRESHOLD:
-			velocity = Vector2.ZERO
+		# AI 控制：先让 AIController 决策（设置 _ai_move_dir），再处理移动
+		if _ai_controller != null and _ai_controller.has_method("physics_update"):
+			_ai_controller.physics_update(delta)
+		_handle_ai_input(delta)
 
 	# 火柴人可在地面范围内上下左右移动（详见 §7.1.1）
 	move_and_slide()
@@ -170,9 +216,11 @@ func _handle_player_input(delta: float) -> void:
 		if dir.length() > 1.0:
 			dir = dir.normalized()
 		if dir.x != 0:
-			_facing = 1 if dir.x > 0 else -1
-			_apply_scale()
-		_handle_acceleration(delta)
+			var new_facing := 1 if dir.x > 0 else -1
+			if new_facing != _facing:
+				_facing = new_facing
+				_apply_scale()
+		_handle_acceleration(delta, not _walk_only)
 		velocity = dir * _current_speed
 	else:
 		_handle_deceleration(delta)
@@ -184,23 +232,26 @@ func _handle_player_input(delta: float) -> void:
 			velocity = Vector2.ZERO
 
 
-func _handle_acceleration(delta: float) -> void:
+func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 	if _is_running:
 		_current_speed = RUN_SPEED
 		return
 	_current_speed += accel * delta
-	if _current_speed >= WALK_SPEED:
+	if allow_run and _current_speed >= WALK_SPEED:
 		_is_running = true
 		_current_speed = RUN_SPEED
 		_play_anim("run")
 		if rig != null:
 			rig.set_anim_speed(1.0 * ANIM_SPEED_MULT)
-	elif _current_anim != "walk" and _current_anim != "run":
-		_play_anim("walk")
-	if _current_anim == "walk" and not _is_running:
-		var s := _current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT
-		if rig != null:
-			rig.set_anim_speed(maxf(s, MIN_ANIM_SCALE))
+	else:
+		# 不允许跑时，速度封顶在 WALK_SPEED
+		_current_speed = minf(_current_speed, WALK_SPEED)
+		if _current_anim != "walk" and _current_anim != "run":
+			_play_anim("walk")
+		if _current_anim == "walk" and not _is_running:
+			var s := _current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT
+			if rig != null:
+				rig.set_anim_speed(maxf(s, MIN_ANIM_SCALE))
 
 
 func _handle_deceleration(delta: float) -> void:
@@ -219,6 +270,40 @@ func _handle_deceleration(delta: float) -> void:
 			var s := _current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT
 			if rig != null:
 				rig.set_anim_speed(maxf(s, MIN_ANIM_SCALE))
+
+
+# ─────────────────────────────── AI 输入处理 ────────────────────────────────
+
+## AI 驱动移动：根据 _ai_move_dir 处理加速/减速/动画，复用与玩家输入相同的物理逻辑。
+func _handle_ai_input(delta: float) -> void:
+	if _ai_move_dir != Vector2.ZERO:
+		# 有移动方向：加速 + 设速度
+		var dir: Vector2 = _ai_move_dir
+		if dir.length() > 1.0:
+			dir = dir.normalized()
+		if dir.x != 0:
+			var new_facing := 1 if dir.x > 0 else -1
+			if new_facing != _facing:
+				_facing = new_facing
+				_apply_scale()
+		if _ai_running:
+			_is_running = true
+			_current_speed = RUN_SPEED
+			_play_anim("run")
+			if rig != null:
+				rig.set_anim_speed(1.0 * ANIM_SPEED_MULT)
+		else:
+			# NPC 始终散步，不允许加速到奔跑
+			_handle_acceleration(delta, false)
+		velocity = dir * _current_speed
+	else:
+		# 无移动方向：减速到停
+		_handle_deceleration(delta)
+		if _current_speed > 0:
+			var v_dir := velocity.normalized() if velocity.length() > 0.001 else Vector2.ZERO
+			velocity = v_dir * _current_speed
+		else:
+			velocity = Vector2.ZERO
 
 
 # ─────────────────────────────── 渲染同步 ────────────────────────────────
@@ -287,7 +372,7 @@ func _is_pos_in_area(pos: Vector2, area: Area2D) -> bool:
 			var shape: Shape2D = (child as CollisionShape2D).shape
 			if shape is RectangleShape2D:
 				var rect_shape: RectangleShape2D = shape as RectangleShape2D
-				var area_pos: Vector2 = area.global_position + (child as CollisionShape2D).position
+				var area_pos: Vector2 = (child as CollisionShape2D).global_position
 				var half_size: Vector2 = rect_shape.size * 0.5
 				# 判断点是否在矩形内（考虑 Area2D 的 global_position 和 CollisionShape2D 的偏移）
 				var local_pos: Vector2 = pos - area_pos
@@ -320,3 +405,25 @@ func _on_possession_changed(p: bool) -> void:
 		_current_speed = 0.0
 		_is_running = false
 		velocity = Vector2.ZERO
+	# 取消附身时也清除 AI 移动方向，避免残留
+	_ai_move_dir = Vector2.ZERO
+	_ai_running = false
+
+
+# ─────────────────────────────── AI 移动接口（供 AIController / behavior 调用）────────────────────────────────
+
+## AI 设定移动方向。dir 应为归一化向量，run=true 强制奔跑。
+func ai_move(dir: Vector2, run: bool = false) -> void:
+	_ai_move_dir = dir
+	_ai_running = run
+
+
+## AI 停止移动。
+func ai_stop() -> void:
+	_ai_move_dir = Vector2.ZERO
+	_ai_running = false
+
+
+## 获取 AIController 引用（可能为 null）。
+func get_ai_controller() -> Node:
+	return _ai_controller

@@ -110,8 +110,14 @@ func _init_ik() -> void:
 	if stack == null:
 		print("[IK] modification_stack 为 null，IK 不会执行")
 		return
+	# 强制每个实例拥有独立的 modification stack 副本，避免多实例共享同一资源导致 IK 冲突
+	if not Engine.is_editor_hint():
+		var unique_stack := stack.duplicate(true) as SkeletonModificationStack2D
+		if unique_stack != null:
+			set_modification_stack(unique_stack)
+			stack = unique_stack
 	print("[IK] stack.enabled = ", stack.enabled, ", modification_count = ", stack.modification_count)
-	# 构建骨骼名→索引映射
+	# 构建骨骼名->索引映射
 	var bone_name_to_idx: Dictionary = {}
 	for idx in range(get_bone_count()):
 		var b := get_bone(idx)
@@ -145,7 +151,7 @@ func _init_ik() -> void:
 			print("[IK] mod ", i, ": target = ", target.name, " pos = ", target.global_position)
 		else:
 			print("[IK] mod ", i, ": target NodePath 解析失败: ", mod.target_nodepath)
-		print("[IK] mod ", i, ": enabled = ", mod.enabled)
+		print("[IK] mod ", i, ": enabled = ", mod.enabled, ", flip_bend = ", mod.flip_bend_direction)
 
 
 func _init_animations() -> void:

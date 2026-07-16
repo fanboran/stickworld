@@ -76,3 +76,21 @@ func all_passed() -> bool:
 		if not r["passed"]:
 			return false
 	return true
+
+
+# ─────────────────────────────── 异步测试支持 ────────────────────────────────
+
+## 标记一个测试开始（用于手动管理异步测试的生命周期）。
+func begin_test(name: String) -> void:
+	_current_test_name = name
+	_current_failed = false
+	_current_messages = []
+
+
+## 标记当前测试结束，记录结果。需与 begin_test 配对使用。
+func end_test() -> void:
+	_results.append({
+		"name": _current_test_name,
+		"passed": not _current_failed,
+		"messages": _current_messages.duplicate(),
+	})

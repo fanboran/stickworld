@@ -66,62 +66,74 @@ length = 0.001
 tracks/0/type = "value"
 tracks/0/imported = false
 tracks/0/enabled = true
-tracks/0/path = NodePath("../Node2D/outfoot:position")
+tracks/0/path = NodePath("../Node2D/outhand:position")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 0,
-"values": [Vector2(-12, 123)]
+"values": [Vector2(-20, 13)]
 }
 tracks/1/type = "value"
 tracks/1/imported = false
 tracks/1/enabled = true
-tracks/1/path = NodePath("hip:rotation")
+tracks/1/path = NodePath("../Node2D/innerhand:position")
 tracks/1/interp = 1
 tracks/1/loop_wrap = true
 tracks/1/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 0,
-"values": [0.34732053]
+"values": [Vector2(54, 9)]
 }
 tracks/2/type = "value"
 tracks/2/imported = false
 tracks/2/enabled = true
-tracks/2/path = NodePath("../Node2D/innerhand:position")
+tracks/2/path = NodePath("../Node2D/innerfoot:position")
 tracks/2/interp = 1
 tracks/2/loop_wrap = true
 tracks/2/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 0,
-"values": [Vector2(60, 0)]
+"values": [Vector2(-22, 131)]
 }
 tracks/3/type = "value"
 tracks/3/imported = false
 tracks/3/enabled = true
-tracks/3/path = NodePath("../Node2D/outhand:position")
+tracks/3/path = NodePath("../Node2D/outfoot:position")
 tracks/3/interp = 1
 tracks/3/loop_wrap = true
 tracks/3/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 0,
-"values": [Vector2(-26, -6)]
+"values": [Vector2(28, 131)]
 }
 tracks/4/type = "value"
 tracks/4/imported = false
 tracks/4/enabled = true
-tracks/4/path = NodePath("../Node2D/innerfoot:position")
+tracks/4/path = NodePath("hip:rotation")
 tracks/4/interp = 1
 tracks/4/loop_wrap = true
 tracks/4/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 0,
-"values": [Vector2(-25, 51)]
+"values": [0.0]
+}
+tracks/5/type = "value"
+tracks/5/imported = false
+tracks/5/enabled = true
+tracks/5/path = NodePath("hip:position")
+tracks/5/interp = 1
+tracks/5/loop_wrap = true
+tracks/5/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(0, 0)]
 }
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_cshof"]
@@ -203,9 +215,7 @@ body_color = Color(0.1560398, 0.15568888, 0.18235794, 1)
 weapon_scene = ExtResource("3_wvxud")
 
 [node name="hip" type="Bone2D" parent="StickmanRig" unique_id=1013551157]
-position = Vector2(0, -0.609411)
-rotation = 0.34732053
-scale = Vector2(0.9998397, 0.9998397)
+scale = Vector2(0.9999994, 0.9999994)
 rest = Transform2D(1, 0, 0, 1, 0, 0)
 
 [node name="sprite_6" type="Sprite2D" parent="StickmanRig/hip" unique_id=663561304]
@@ -228,7 +238,7 @@ texture = ExtResource("7_tex_bone")
 
 [node name="upper_torso" type="Bone2D" parent="StickmanRig/hip/lower_torso" unique_id=576270806]
 position = Vector2(5.7, -30.5)
-scale = Vector2(0.99983424, 0.99983424)
+scale = Vector2(0.99983335, 0.99983335)
 rest = Transform2D(1, 0, 0, 1, 5.7, -30.5)
 
 [node name="sprite_8" type="Sprite2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=1264414652]
@@ -254,6 +264,7 @@ texture = ExtResource("10_tex_bone")
 
 [node name="upper_arm_outer" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=998274463]
 position = Vector2(10.4, -29.200005)
+rotation = -0.22509837
 scale = Vector2(0.9998589, 0.9998589)
 rest = Transform2D(1, 0, 0, 1, 10.4, -29.2)
 auto_calculate_length_and_angle = false
@@ -270,8 +281,8 @@ texture = ExtResource("1_tex_bone")
 
 [node name="forearm_outer" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_outer" unique_id=20172263]
 position = Vector2(-34.7, 53.9)
-rotation = -0.038192935
-scale = Vector2(0.99996644, 0.99996644)
+rotation = -0.29202795
+scale = Vector2(0.999966, 0.999966)
 rest = Transform2D(1, 0, 0, 1, -34.7, 53.9)
 auto_calculate_length_and_angle = false
 length = 49.0
@@ -287,7 +298,8 @@ texture = ExtResource("2_tex_bone")
 
 [node name="upper_arm_inner" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso" unique_id=1226975132]
 position = Vector2(10.4, -29.200005)
-scale = Vector2(0.99986506, 0.99986506)
+rotation = 0.43503365
+scale = Vector2(0.9998672, 0.9998672)
 rest = Transform2D(1, 0, 0, 1, 10.4, -29.2)
 auto_calculate_length_and_angle = false
 length = 64.109436
@@ -303,8 +315,8 @@ texture = ExtResource("14_tex_bone")
 
 [node name="forearm_inner" type="Bone2D" parent="StickmanRig/hip/lower_torso/upper_torso/upper_arm_inner" unique_id=422281174]
 position = Vector2(1.1000004, 64.1)
-rotation = -0.06981317
-scale = Vector2(0.9999636, 0.9999636)
+rotation = -0.22445399
+scale = Vector2(0.9999632, 0.9999632)
 rest = Transform2D(1, 0, 0, 1, 1.1, 64.1)
 auto_calculate_length_and_angle = false
 length = 49.0
@@ -319,6 +331,7 @@ scale = Vector2(0.25, 0.25)
 texture = ExtResource("15_tex_bone")
 
 [node name="thigh_outer" type="Bone2D" parent="StickmanRig" unique_id=190033927]
+rotation = 0.14613175
 scale = Vector2(0.99985015, 0.99985015)
 rest = Transform2D(1, 0, 0, 1, 0, 0)
 auto_calculate_length_and_angle = false
@@ -335,8 +348,8 @@ texture = ExtResource("3_tex_bone")
 
 [node name="shin_outer" type="Bone2D" parent="StickmanRig/thigh_outer" unique_id=1784305549]
 position = Vector2(25.4, 60.9)
-rotation = -0.10456437
-scale = Vector2(0.99999744, 0.99999744)
+rotation = 0.13390324
+scale = Vector2(0.99999666, 0.99999666)
 rest = Transform2D(1, 0, 0, 1, 25.4, 60.9)
 auto_calculate_length_and_angle = false
 length = 69.0
@@ -364,7 +377,8 @@ scale = Vector2(0.25, 0.25)
 texture = ExtResource("5_tex_bone")
 
 [node name="thigh_inner" type="Bone2D" parent="StickmanRig" unique_id=901328688]
-scale = Vector2(0.9998929, 0.9998929)
+rotation = -0.32200933
+scale = Vector2(0.999893, 0.999893)
 rest = Transform2D(1, 0, 0, 1, 0, 0)
 auto_calculate_length_and_angle = false
 length = 66.0
@@ -380,8 +394,8 @@ texture = ExtResource("11_tex_bone")
 
 [node name="shin_inner" type="Bone2D" parent="StickmanRig/thigh_inner" unique_id=29905056]
 position = Vector2(-4.8, 65.8)
-rotation = 0.12077655
-scale = Vector2(0.9999994, 0.9999994)
+rotation = 0.3127129
+scale = Vector2(0.999999, 0.999999)
 rest = Transform2D(1, 0, 0, 1, -4.8, 65.8)
 auto_calculate_length_and_angle = false
 length = 69.0
@@ -419,13 +433,13 @@ tree_root = SubResource("AnimationNodeStateMachine_38vfy")
 [node name="Node2D" type="Node2D" parent="." unique_id=542218933]
 
 [node name="outfoot" type="Marker2D" parent="Node2D" unique_id=1500419271]
-position = Vector2(-12, 123)
+position = Vector2(28, 131)
 
 [node name="innerfoot" type="Marker2D" parent="Node2D" unique_id=264248036]
-position = Vector2(-25, 51)
+position = Vector2(-22, 131)
 
 [node name="outhand" type="Marker2D" parent="Node2D" unique_id=372756660]
-position = Vector2(-26, -6)
+position = Vector2(-20, 13)
 
 [node name="innerhand" type="Marker2D" parent="Node2D" unique_id=372756661]
-position = Vector2(60, 0)
+position = Vector2(54, 9)

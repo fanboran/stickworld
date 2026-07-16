@@ -1,0 +1,29 @@
+[gd_scene load_steps=3 format=3 uid="uid://bldworkshop001ab"]
+
+[ext_resource type="Script" path="res://modules/buildings/scripts/building.gd" id="1_building"]
+
+[sub_resource type="RectangleShape2D" id="rect_passage"]
+size = Vector2(64, 80)
+
+[node name="BldWorkshop" type="Node2D"]
+script = ExtResource("1_building")
+def_id = "bld_workshop"
+width = 2
+
+[node name="Exterior" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(-32, -80, 32, -80, 32, 0, -32, 0)
+color = Color(0.5, 0.5, 0.55, 1)
+
+[node name="PassageBarrier" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier"]
+position = Vector2(0, -40)
+shape = SubResource("rect_passage")
+
+[node name="WorkSlots" type="Node2D" parent="."]
+
+[node name="Slot0" type="Marker2D" parent="WorkSlots"]
+position = Vector2(-16, 30)
+
+[node name="Slot1" type="Marker2D" parent="WorkSlots"]
+position = Vector2(16, 30)

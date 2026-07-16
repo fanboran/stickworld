@@ -70,6 +70,8 @@ var _ai_controller: Node = null
 var _ai_move_dir: Vector2 = Vector2.ZERO
 ## AI 是否要求奔跑
 var _ai_running: bool = false
+## Construction 模块引用（由 GameRoot spawn 时注入，供 AIController 查询派工；可能为 null）
+var _construction_manager: Node = null
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
@@ -427,3 +429,16 @@ func ai_stop() -> void:
 ## 获取 AIController 引用（可能为 null）。
 func get_ai_controller() -> Node:
 	return _ai_controller
+
+
+## 由 GameRoot spawn 时注入 ConstructionManager 引用（供 AIController 查询派工）
+func set_construction_manager(manager: Node) -> void:
+	_construction_manager = manager
+	# 把 NPC 注册为可派工工人
+	if manager != null and manager.has_method("register_worker"):
+		manager.register_worker(self)
+
+
+## 获取 ConstructionManager 引用（可能为 null）
+func get_construction_manager() -> Node:
+	return _construction_manager

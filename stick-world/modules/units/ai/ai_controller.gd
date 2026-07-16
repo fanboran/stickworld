@@ -9,8 +9,12 @@ extends Node
 ##   3. 玩家附身时暂停 AI，取消附身时恢复
 ##
 ## P0 阶段实现最简决策：
-##   - idle 完成后，随机概率切换到 wander（Reynolds 漫游）
-##   - wander 完成后，自动回 idle
+#   - work（有派工）优先级最高
+#   - idle 完成后，随机概率切换到 wander（Reynolds 漫游）
+#   - wander 完成后，自动回 idle
+
+# 显式 preload，避免 headless 模式下 class_name 全局注册未触发
+const ScriptBehaviorWork := preload("res://modules/units/ai/behavior_work.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）
@@ -59,6 +63,13 @@ func _setup_state_machine() -> void:
 	_state_machine.add_child(wander)
 	_state_machine.register_behavior(wander)
 
+	var work := ScriptBehaviorWork.new()
+	work.name = "BehaviorWork"
+	work.behavior_name = "work"
+	work.entity = _entity
+	_state_machine.add_child(work)
+	_state_machine.register_behavior(work)
+
 	# 初始行为：闲置
 	_state_machine.travel("idle")
 
@@ -97,9 +108,13 @@ func physics_update(delta: float) -> void:
 
 # ─────────────────────────────── 决策逻辑 ────────────────────────────────
 
-## P0 简单决策：idle -> wander -> idle 循环。
+## P0 简单决策：work（有派工）→ idle → wander 循环。
+## work 优先级最高：被派工到 ConstructionProject 时优先工作。
 func _make_decision() -> void:
 	if not _state_machine.has_active_behavior():
+		# 无激活行为，检查派工
+		if _try_work():
+			return
 		_state_machine.travel("idle")
 		return
 
@@ -108,17 +123,54 @@ func _make_decision() -> void:
 		return  # 当前行为未完成，不切换
 
 	if current == "idle":
-		# 闲置完成，随机决定是否漫游
+		# 闲置完成：优先看是否有派工
+		if _try_work():
+			return
+		# 没有派工，随机决定是否漫游
 		if randf() < WANDER_PROBABILITY:
 			_state_machine.travel("wander")
 		else:
 			_state_machine.travel("idle")  # 重新闲置
 	elif current == "wander":
-		# 漫游完成，回 idle
+		# 漫游完成：先检查派工
+		if _try_work():
+			return
+		_state_machine.travel("idle")
+	elif current == "work":
+		# work 完成（项目完工或取消）：检查是否还有派工
+		if _try_work():
+			return
 		_state_machine.travel("idle")
 	else:
 		# 未知行为，回 idle
 		_state_machine.travel("idle")
+
+
+## 尝试进入 work 行为。如果工人被派工到活跃项目，travel("work", {project})。
+## 返回 true 表示已切换到 work。
+func _try_work() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if not _entity.has_method("get_construction_manager"):
+		return false
+	var manager: Node = _entity.get_construction_manager()
+	if manager == null:
+		return false
+	if not manager.has_method("get_worker_project"):
+		return false
+	var project: RefCounted = manager.get_worker_project(_entity)
+	if project == null:
+		# 没有派工，尝试自动派工
+		if manager.has_method("try_assign_worker"):
+			if manager.try_assign_worker(_entity):
+				project = manager.get_worker_project(_entity)
+	if project == null:
+		return false
+	# 检查项目是否还在接受工人（PLANNED 或 UNDER_CONSTRUCTION）
+	if not project.is_accepting_workers():
+		return false
+	_state_machine.travel("work", {"project": project})
+	return true
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────

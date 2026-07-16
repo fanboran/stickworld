@@ -23,6 +23,10 @@ const _DebugDrawers: GDScript = preload("res://modules/debug/scripts/debug_drawe
 const _ConstructionManagerScript: GDScript = preload("res://modules/construction/scripts/construction_manager.gd")
 ## Construction api 脚本
 const _ConstructionApiScript: GDScript = preload("res://modules/construction/api.gd")
+## BattleDirector 脚本（战斗系统，§8.1）
+const _BattleDirectorScript: GDScript = preload("res://modules/combat/scripts/battle_director.gd")
+## Combat api 脚本
+const _CombatApiScript: GDScript = preload("res://modules/combat/api.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -42,6 +46,10 @@ var _construction_manager: Node = null
 ## Construction api 实例引用（运行时由 _ready 装配）
 var _construction_api: Node = null
 
+# ─────────────────────────────── 战斗系统（§15 阶段 0.5）────────────────────────────────
+## CombatApi 实例引用（运行时由 _ready 装配）
+var _combat_api: Node = null
+
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
 @onready var camera_rig: Camera2D = get_node_or_null(WorldAPI.PATH_CAMERA_RIG)
@@ -58,6 +66,7 @@ func _ready() -> void:
 	_validate_children()
 	_bind_event_bus()
 	_setup_construction_system()
+	_setup_combat_system()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -100,6 +109,56 @@ func _setup_construction_api_deferred() -> void:
 	if not _construction_api.has_method("setup"):
 		return
 	_construction_api.setup(_construction_manager)
+
+
+# ─────────────────────────────── 战斗系统装配 ────────────────────────────────
+
+## 给场景中的 BattleDirector 节点挂脚本，并实例化 CombatApi。
+## 详见 §15 阶段 0.5。
+func _setup_combat_system() -> void:
+	# 给场景中已存在的 BattleDirector 节点挂脚本（§8.1）
+	if battle_director != null:
+		battle_director.set_script(_BattleDirectorScript)
+	# 实例化 CombatApi（公共接口契约）
+	var api := Node.new()
+	api.set_script(_CombatApiScript)
+	api.name = "CombatApi"
+	add_child(api)
+	_combat_api = api
+	# api.setup 必须在 battle_director 脚本挂载后调用
+	call_deferred("_setup_combat_api_deferred")
+
+
+func _setup_combat_api_deferred() -> void:
+	if _combat_api == null or battle_director == null:
+		return
+	if not _combat_api.has_method("setup"):
+		return
+	_combat_api.setup(battle_director)
+
+
+## 获取 CombatApi 引用（供测试用）
+func get_combat_api() -> Node:
+	return _combat_api
+
+
+## 获取 BattleDirector 引用（供测试用）
+func get_battle_director_node() -> Node:
+	return battle_director
+
+
+## 启动一场测试战斗（供 test_stage_05 调用）。
+## attacker_units / defender_units: StickmanEntity 数组
+## 返回 BattleInstance（失败返回 null）
+func start_test_battle(attacker_units: Array, defender_units: Array) -> Node:
+	if battle_director == null or not battle_director.has_method("start_battle_at"):
+		push_warning("[GameRoot] BattleDirector 未就绪")
+		return null
+	var map: Node2D = get_current_map()
+	if map == null:
+		push_warning("[GameRoot] 当前无地图，无法启动战斗")
+		return null
+	return battle_director.start_battle_at(map, attacker_units, defender_units)
 
 
 ## 获取 ConstructionManager 引用（供测试用）

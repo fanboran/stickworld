@@ -15,6 +15,9 @@ extends Node
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
 const ScriptBehaviorWork := preload("res://modules/units/ai/behavior_work.gd")
+const ScriptBehaviorAttack := preload("res://modules/units/ai/behavior_attack.gd")
+const ScriptBehaviorSeekCover := preload("res://modules/units/ai/behavior_seek_cover.gd")
+const ScriptBehaviorRetreat := preload("res://modules/units/ai/behavior_retreat.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）
@@ -70,6 +73,28 @@ func _setup_state_machine() -> void:
 	_state_machine.add_child(work)
 	_state_machine.register_behavior(work)
 
+	# 战斗行为（§7.2 / §8，阶段 0.5）
+	var attack := ScriptBehaviorAttack.new()
+	attack.name = "BehaviorAttack"
+	attack.behavior_name = "attack"
+	attack.entity = _entity
+	_state_machine.add_child(attack)
+	_state_machine.register_behavior(attack)
+
+	var seek_cover := ScriptBehaviorSeekCover.new()
+	seek_cover.name = "BehaviorSeekCover"
+	seek_cover.behavior_name = "seek_cover"
+	seek_cover.entity = _entity
+	_state_machine.add_child(seek_cover)
+	_state_machine.register_behavior(seek_cover)
+
+	var retreat := ScriptBehaviorRetreat.new()
+	retreat.name = "BehaviorRetreat"
+	retreat.behavior_name = "retreat"
+	retreat.entity = _entity
+	_state_machine.add_child(retreat)
+	_state_machine.register_behavior(retreat)
+
 	# 初始行为：闲置
 	_state_machine.travel("idle")
 
@@ -108,9 +133,12 @@ func physics_update(delta: float) -> void:
 
 # ─────────────────────────────── 决策逻辑 ────────────────────────────────
 
-## P0 简单决策：work（有派工）→ idle → wander 循环。
-## work 优先级最高：被派工到 ConstructionProject 时优先工作。
+## P0 决策：战斗（参战时）> work（有派工）> idle/wander 循环。
+## 参战时（entity 有激活的 battle_instance）战斗行为优先级最高。
 func _make_decision() -> void:
+	# 1. 战斗决策（最高优先级，阶段 0.5）
+	if _try_combat():
+		return
 	if not _state_machine.has_active_behavior():
 		# 无激活行为，检查派工
 		if _try_work():
@@ -144,6 +172,46 @@ func _make_decision() -> void:
 	else:
 		# 未知行为，回 idle
 		_state_machine.travel("idle")
+
+
+## 尝试战斗决策。当 entity 参战（有激活的 battle_instance）时返回 true 并切换到战斗行为。
+## 决策优先级：溃逃/士气极低 -> retreat；重伤且附近有掩体 -> seek_cover；默认 -> attack。
+func _try_combat() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if not _entity.has_method("get_battle_instance"):
+		return false
+	var bi: Node = _entity.get_battle_instance()
+	if bi == null or not is_instance_valid(bi):
+		return false
+	if not bi.has_method("is_active") or not bi.is_active():
+		return false
+	if _entity.has_method("is_dead") and _entity.is_dead():
+		return false
+	# 战斗行为进行中且未完成 -> 保持
+	var current: String = _state_machine.get_current_behavior_name()
+	if current in ["attack", "seek_cover", "retreat"]:
+		if not _state_machine.is_current_finished():
+			return true
+	var bi_param: Dictionary = {"battle": bi}
+	var health: Node = _entity.get_health() if _entity.has_method("get_health") else null
+	# 溃逃或士气极低 -> retreat
+	if health != null:
+		if health.has_method("is_routed") and health.is_routed():
+			_state_machine.travel("retreat", bi_param)
+			return true
+		if health.has_method("get_morale_ratio") and health.get_morale_ratio() < 0.25:
+			_state_machine.travel("retreat", bi_param)
+			return true
+		# HP 低且附近有掩体 -> seek_cover
+		if health.has_method("get_hp_ratio") and health.get_hp_ratio() < 0.4:
+			var cover = bi.get_cover() if bi.has_method("get_cover") else null
+			if cover != null and cover.has_method("has_covers") and cover.has_covers():
+				_state_machine.travel("seek_cover", bi_param)
+				return true
+	# 默认 -> attack
+	_state_machine.travel("attack", bi_param)
+	return true
 
 
 ## 尝试进入 work 行为。如果工人被派工到活跃项目，travel("work", {project})。

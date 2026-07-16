@@ -73,6 +73,12 @@ var _ai_running: bool = false
 ## Construction 模块引用（由 GameRoot spawn 时注入，供 AIController 查询派工；可能为 null）
 var _construction_manager: Node = null
 
+# ─────────────────────────────── 战斗（§7.1 / §8）────────────────────────────────
+## 阵营 ID（0=未参战，1/2=敌对双方，由 BattleInstance 分配）
+var faction_id: int = 0
+## 所属战斗实例引用（null=未参战）
+var _battle_instance: Node = null
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
 var rig: Node2D = null
@@ -92,6 +98,11 @@ var _walk_only: bool = false
 var _startup_fix_time: float = 0.25
 var _startup_fix_elapsed: float = 0.0
 var _startup_done: bool = false
+
+# ─────────────────────────────── 战斗组件引用（§7.1）────────────────────────────────
+@onready var health_component: Node = get_node_or_null("HealthComponent")
+@onready var hitbox: Area2D = get_node_or_null("Hitbox")
+@onready var weapon_mount: Node2D = get_node_or_null("WeaponMount")
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -136,6 +147,9 @@ func _ready() -> void:
 	_play_anim("idle")
 	# 初始化上一帧有效位置
 	_last_valid_position = global_position
+	# 战斗组件：死亡信号连接
+	if health_component != null:
+		health_component.died.connect(_on_died)
 
 
 ## 从 RigHost 的 outfoot marker 位置计算脚部 Y 偏移。
@@ -442,3 +456,59 @@ func set_construction_manager(manager: Node) -> void:
 ## 获取 ConstructionManager 引用（可能为 null）
 func get_construction_manager() -> Node:
 	return _construction_manager
+
+
+# ─────────────────────────────── 战斗 API（§8）────────────────────────────────
+
+## 死亡处理：停止移动、播放死亡动画、禁用受击、通知战斗实例
+func _on_died() -> void:
+	ai_stop()
+	velocity = Vector2.ZERO
+	_play_anim("dead")
+	# 禁用 hitbox 避免继续被攻击
+	if hitbox != null:
+		hitbox.set_deferred("monitorable", false)
+	# 通知战斗实例（由 BattleInstance 统计伤亡）
+	if _battle_instance != null and is_instance_valid(_battle_instance):
+		if _battle_instance.has_method("on_unit_died"):
+			_battle_instance.on_unit_died(self)
+
+
+## 设置阵营 ID（由 BattleInstance 分配）
+func set_faction(fid: int) -> void:
+	faction_id = fid
+
+
+## 获取阵营 ID
+func get_faction() -> int:
+	return faction_id
+
+
+## 设置所属战斗实例
+func set_battle_instance(bi: Node) -> void:
+	_battle_instance = bi
+
+
+## 获取所属战斗实例（可能为 null）
+func get_battle_instance() -> Node:
+	return _battle_instance
+
+
+## 获取 HealthComponent（可能为 null）
+func get_health() -> Node:
+	return health_component
+
+
+## 获取 WeaponMount（可能为 null）
+func get_weapon() -> Node2D:
+	return weapon_mount
+
+
+## 是否已死亡
+func is_dead() -> bool:
+	return health_component != null and health_component.is_dead()
+
+
+## 是否溃逃（士气低于阈值且未死）
+func is_routed() -> bool:
+	return health_component != null and health_component.is_routed()

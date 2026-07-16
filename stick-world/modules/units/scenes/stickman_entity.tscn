@@ -3,9 +3,15 @@
 [ext_resource type="Script" uid="uid://c5g5asnh6dklg" path="res://modules/units/scripts/stickman_entity.gd" id="1_entity"]
 [ext_resource type="PackedScene" uid="uid://bitpg2trkppie" path="res://modules/units/scenes/stickman_test.tscn" id="2_rig_scene"]
 [ext_resource type="Script" uid="uid://bbtod1vbrkrir" path="res://modules/units/ai/ai_controller.gd" id="3_ai_controller"]
+[ext_resource type="Script" path="res://modules/units/scripts/health_component.gd" id="4_health"]
+[ext_resource type="Script" path="res://modules/units/scripts/hitbox.gd" id="5_hitbox"]
+[ext_resource type="Script" path="res://modules/units/scripts/weapon_mount.gd" id="6_weapon"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hs7ru"]
 size = Vector2(28, 13)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hitbox"]
+size = Vector2(36, 90)
 
 [node name="StickmanEntity" type="CharacterBody2D" unique_id=655489722]
 collision_layer = 2
@@ -19,3 +25,17 @@ shape = SubResource("RectangleShape2D_hs7ru")
 
 [node name="AIController" type="Node" parent="." unique_id=279625248]
 script = ExtResource("3_ai_controller")
+
+[node name="HealthComponent" type="Node" parent="."]
+script = ExtResource("4_health")
+
+[node name="Hitbox" type="Area2D" parent="."]
+collision_layer = 4
+script = ExtResource("5_hitbox")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+position = Vector2(0, 80)
+shape = SubResource("RectangleShape2D_hitbox")
+
+[node name="WeaponMount" type="Node2D" parent="."]
+script = ExtResource("6_weapon")

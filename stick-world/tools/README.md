@@ -6,10 +6,11 @@
 
 ```
 tools/
-├── baking/       # 资源烘焙工具（Godot @tool）
-├── pipeline/     # 数据管线工具（Python）
-├── dev/          # 开发辅助工具（Godot）
-└── README.md     # 本文件
+├── baking/           # 资源烘焙工具（Godot @tool）
+├── pipeline/         # 数据管线工具（Python）
+├── dev/              # 开发辅助工具（Godot）
+├── terrain_viewer/   # 3D 地形查看器（Godot + Python）
+└── README.md         # 本文件
 ```
 
 ---
@@ -90,3 +91,40 @@ godot --headless --path "f:/VSCode/game-2/stick-world" -s res://tools/dev/code_s
 
 - **引用场景：** `modules/world/scenes/test_village_map.tscn`
 - **全局类型：** `MapGridDrawer`（通过 `class_name` 注册）
+
+---
+
+## terrain_viewer/ — 3D 地形查看器
+
+将 `tools/worldgen/output/` 生成的 `.npy` 高度图转换为 3D 地形，在 Godot 编辑器中交互查看。
+
+### 使用方式
+
+1. **转换高度图**（首次或高度图更新后）：
+
+```bash
+python tools/terrain_viewer/convert_heightmap.py --size 1024
+```
+
+2. **在 Godot 编辑器中打开** `res://tools/terrain_viewer/terrain_viewer.tscn`
+
+3. **交互操作**（运行时）：
+   - 左键拖拽 → 旋转视角
+   - 滚轮 → 缩放
+   - 中键拖拽 → 平移
+
+### 文件说明
+
+| 文件 | 说明 |
+|------|------|
+| `convert_heightmap.py` | Python 脚本：将 `.npy` 下采样并转为 16-bit 灰度 PNG |
+| `terrain.gdshader` | 着色器：顶点位移 + 8 级海拔着色（深海→浅海→沙滩→草地→森林→岩石→雪） |
+| `terrain_viewer.gd` | `@tool` 脚本：生成地形网格、加载着色器、运行时相机控制 |
+| `terrain_viewer.tscn` | 场景文件 |
+| `output/heightmap_1024.png` | 转换后的高度图（16-bit 灰度 PNG） |
+
+### 可调参数
+
+在编辑器 Inspector 中选中 TerrainViewer 节点可调整：
+- **Height Scale**：地形垂直缩放（默认 60）
+- **Sea Level**：海平面在归一化高度图中的位置（默认 0.12）

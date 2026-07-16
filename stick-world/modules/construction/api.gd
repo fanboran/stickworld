@@ -36,6 +36,21 @@ var _is_initialized: bool = false
 func setup(manager: ConstructionManager) -> void:
 	_manager = manager
 	_is_initialized = true
+	# 转发 manager 的完工/拆除信号为 api.gd 的公共信号
+	if not manager.building_completed.is_connected(_on_building_completed):
+		manager.building_completed.connect(_on_building_completed)
+	if not manager.building_removed.is_connected(_on_building_removed):
+		manager.building_removed.connect(_on_building_removed)
+
+
+# ─────────────────────────────── manager 信号转发 ────────────────────────────────
+
+func _on_building_completed(building_id: String, region_id: String) -> void:
+	building_completed.emit(building_id, region_id)
+
+
+func _on_building_removed(building_id: String, region_id: String) -> void:
+	building_removed.emit(building_id, region_id)
 
 
 # ===== 建造 =====
@@ -43,12 +58,13 @@ func setup(manager: ConstructionManager) -> void:
 ## 开工建造
 ## [P] region_id 属于玩家控制区域, org_id 存在且标签=ENGINEERING
 ## [Q] 创建一个 Construction Project, building 状态=PLANNED, 发射 building_started
+## P0 简化：building_started 信号第一参数为 project_id（建筑实例化前尚无 building_id）
 func start_construction(region_id: String, building_type: String, org_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
 	var result := _manager.start_construction(region_id, building_type, org_id)
 	if result.get("ok", false):
-		building_started.emit(result.get("building_id", ""), region_id)
+		building_started.emit(result.get("project_id", ""), region_id)
 	return result
 
 
@@ -82,14 +98,13 @@ func upgrade_building(building_id: String) -> Dictionary:
 # ===== 拆除 =====
 
 ## 拆除建筑
-## [Q] 资源部分回收, building 状态=DESTROYED, 发射 building_removed
+## [Q] 资源部分回收, building 状态=DESTROYED
+## 注意：building_removed 信号由 manager.demolish_building 内部 emit，
+##       通过 setup() 注册的转发回调自动 emit api.gd.building_removed，这里不重复 emit。
 func demolish_building(building_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	var result := _manager.demolish_building(building_id)
-	if result.get("ok", false):
-		building_removed.emit(building_id, result.get("region_id", ""))
-	return result
+	return _manager.demolish_building(building_id)
 
 
 # ===== 修理 =====

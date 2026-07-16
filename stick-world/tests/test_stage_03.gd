@@ -55,6 +55,8 @@ func _run_tests_async() -> void:
 		get_tree().quit(1)
 		return
 	_game_root = packed.instantiate()
+	# 关闭阶段 0.4 演示建造（避免 NPC 被派工影响 idle/wander 测试）
+	_game_root.set("auto_demo_building", false)
 	add_child(_game_root)
 	# 等待地图加载和实体生成
 	await get_tree().process_frame

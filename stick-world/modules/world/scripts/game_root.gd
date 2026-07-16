@@ -19,6 +19,10 @@ const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/
 const _ExploreHandlerScript: GDScript = preload("res://modules/player_control/scripts/explore_handler.gd")
 ## 调试绘制器
 const _DebugDrawers: GDScript = preload("res://modules/debug/scripts/debug_drawers.gd")
+## ConstructionManager 脚本（用于实例化建造系统）
+const _ConstructionManagerScript: GDScript = preload("res://modules/construction/scripts/construction_manager.gd")
+## Construction api 脚本
+const _ConstructionApiScript: GDScript = preload("res://modules/construction/api.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -26,6 +30,17 @@ const TEST_VILLAGE_MAP_ID := "test_village"
 const PLAYER_SPAWN_X: float = 300.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为）
 const NPC_COUNT: int = 5
+## 演示建筑的 cell_x（远离玩家 spawn，避免阻挡）
+const DEMO_BUILDING_CELL_X: int = 50
+
+# ─────────────────────────────── 建造系统（§15 阶段 0.4）────────────────────────────────
+
+## 是否在地图加载完成后自动触发一次演示建造（test_stage_03 等旧测试应关闭）
+@export var auto_demo_building: bool = true
+## ConstructionManager 实例引用（运行时由 _ready 装配）
+var _construction_manager: Node = null
+## Construction api 实例引用（运行时由 _ready 装配）
+var _construction_api: Node = null
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
@@ -42,6 +57,7 @@ const NPC_COUNT: int = 5
 func _ready() -> void:
 	_validate_children()
 	_bind_event_bus()
+	_setup_construction_system()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -54,6 +70,46 @@ func _ready() -> void:
 	# 加载测试村落地图（延迟一帧确保 SceneLoader 就绪）
 	# 地图加载完成后会 set_mode(EXPLORE) 激活 handler，此时实体已就绪
 	call_deferred("_load_test_village")
+
+
+# ─────────────────────────────── 建造系统装配 ────────────────────────────────
+
+## 实例化 ConstructionManager + api.gd 作为子节点，并互相 setup。
+## 详见 §15 阶段 0.4。
+func _setup_construction_system() -> void:
+	# 实例化 ConstructionManager
+	var mgr := Node.new()
+	mgr.set_script(_ConstructionManagerScript)
+	mgr.name = "ConstructionManager"
+	add_child(mgr)
+	_construction_manager = mgr
+	# 实例化 api.gd（公共接口契约）
+	var api := Node.new()
+	api.set_script(_ConstructionApiScript)
+	api.name = "ConstructionApi"
+	add_child(api)
+	_construction_api = api
+	# api.setup 必须在 manager._ready 后调用（_ready 中初始化 _assigner）
+	# 这里用 call_deferred 保证顺序
+	call_deferred("_setup_construction_api_deferred")
+
+
+func _setup_construction_api_deferred() -> void:
+	if _construction_api == null or _construction_manager == null:
+		return
+	if not _construction_api.has_method("setup"):
+		return
+	_construction_api.setup(_construction_manager)
+
+
+## 获取 ConstructionManager 引用（供测试用）
+func get_construction_manager() -> Node:
+	return _construction_manager
+
+
+## 获取 Construction api 引用（供测试用）
+func get_construction_api() -> Node:
+	return _construction_api
 
 
 func _register_explore_handler() -> void:
@@ -110,6 +166,9 @@ func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
 	# 让 CameraRig 跟随玩家
 	if camera_rig != null and camera_rig.has_method("set_follow_target"):
 		camera_rig.set_follow_target(player)
+	# 注入地图到 ConstructionManager（供项目实例化建筑用）
+	if _construction_manager != null and _construction_manager.has_method("set_map"):
+		_construction_manager.set_map(map)
 	# spawn NPC 村民（不附身，AI 自动驱动 idle ↔ move，详见 §7.2）
 	_spawn_npcs(map, spawn_y)
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
@@ -117,6 +176,37 @@ func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 注册调试绘制器
 	_register_debug_drawers()
+	# 自动触发演示建造（test_stage_03 等旧测试应通过 auto_demo_building=false 关闭）
+	if auto_demo_building:
+		call_deferred("_start_demo_building")
+
+
+# ─────────────────────────────── 演示建造 ────────────────────────────────
+
+## 触发一次演示建造：在 DEMO_BUILDING_CELL_X 处建一栋 bld_workshop。
+## NPC 会通过 AIController 自动派工并完成建造。
+func _start_demo_building() -> void:
+	if _construction_api == null or not _construction_api.has_method("start_construction"):
+		push_warning("[GameRoot] 建造系统未就绪，跳过演示建造")
+		return
+	var region_id := "test_region"
+	var building_type := "bld_workshop"
+	var result: Dictionary = _construction_api.start_construction(region_id, building_type, "")
+	if result.get("ok", false):
+		print("[GameRoot] 演示建造已启动: project=%s cell_x=%d" % [result.get("project_id", ""), DEMO_BUILDING_CELL_X])
+	else:
+		push_warning("[GameRoot] 演示建造失败: %s" % result.get("error", "未知错误"))
+
+
+## 主动按指定 cell_x 触发建造（供 test_stage_04 测试用）。
+## 返回 {ok, project_id, cell_x, width} 或 {ok:false, error}。
+func start_demo_building_at(cell_x: int) -> Dictionary:
+	if _construction_api == null or not _construction_api.has_method("start_construction"):
+		return {"ok": false, "error": "建造系统未就绪"}
+	if _construction_manager == null or not _construction_manager.has_method("start_construction_at"):
+		return {"ok": false, "error": "ConstructionManager 未就绪"}
+	# 直接调用 manager 的 start_construction_at（按指定位置）
+	return _construction_manager.start_construction_at("test_region", "bld_workshop", cell_x, "")
 
 
 ## 生成 NPC 村民，分布在玩家右侧不同 X 位置，不附身（AI 接管）。
@@ -133,6 +223,9 @@ func _spawn_npcs(map: Node2D, spawn_y: float) -> void:
 				npc.global_position.y = spawn_y - npc.foot_offset
 			if npc.has_method("set_possessed"):
 				npc.set_possessed(false)  # NPC 不被附身，AIController 自动接管
+			# 注入 ConstructionManager 引用，使 NPC 可被派工（§15 阶段 0.4）
+			if npc.has_method("set_construction_manager") and _construction_manager != null:
+				npc.set_construction_manager(_construction_manager)
 
 
 ## 注册调试绘制器到 DebugApi（详见 §10.5.7）

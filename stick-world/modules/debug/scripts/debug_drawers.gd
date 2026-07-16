@@ -153,7 +153,6 @@ static func draw_ground_lines(control: Control, ctx: Dictionary) -> void:
 	var ground_bottom: float = map.ground_bottom if "ground_bottom" in map else 0.0
 	var map_left: float = map.map_left if "map_left" in map else 0.0
 	var map_right: float = map.map_right if "map_right" in map else 0.0
-	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
 	# ground_y 线（黄色）
 	var p1 := world_to_screen(Vector2(map_left, ground_y), ctx)
 	var p2 := world_to_screen(Vector2(map_right, ground_y), ctx)

@@ -95,16 +95,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## 可见性变化回调
-func _on_visibility_changed(is_visible: bool) -> void:
+func _on_visibility_changed(p_visible: bool) -> void:
 	if _draw_control != null:
-		_draw_control.visible = is_visible
-		if is_visible:
+		_draw_control.visible = p_visible
+		if p_visible:
 			_draw_control.queue_redraw()
 	if _legend_panel != null:
-		_legend_panel.visible = is_visible and DebugApi.is_legend_visible() if DebugApi else is_visible
+		_legend_panel.visible = p_visible and DebugApi.is_legend_visible() if DebugApi else p_visible
 
 
 ## 图例可见性变化回调
-func _on_legend_changed(is_visible: bool) -> void:
+func _on_legend_changed(p_visible: bool) -> void:
 	if _legend_panel != null:
-		_legend_panel.visible = is_visible and (DebugApi.is_visible() if DebugApi else false)
+		_legend_panel.visible = p_visible and (DebugApi.is_visible() if DebugApi else false)

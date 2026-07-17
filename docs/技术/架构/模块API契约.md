@@ -239,7 +239,7 @@ func get_all_badges() -> Array[Dictionary]  # {id, name, description, rarity, un
 
 # 检查（由其他系统调用，不建议玩家手动触发）
 func check_and_unlock(badge_id: String) -> Dictionary
-# [Q] 若条件满足 → 解锁, 发射 badge_unlocked
+# [Q] 若条件满足 -> 解锁, 发射 badge_unlocked
 ```
 
 ---
@@ -247,22 +247,22 @@ func check_and_unlock(badge_id: String) -> Dictionary
 ## 九、模块间 API 依赖图
 
 ```
-construction ──→ resources (消耗建材)
-technology   ──→ resources (消耗研究材料)
-             ──→ organization (分配研究员)
-resources    ──→ (无出向 API 依赖, 通过 EventBus 通信)
-expansion    ──→ resources (殖民地消耗)
-organization ──→ resources (征兵消耗沥青)
-             ──→ construction (建设组织)
-             ──→ technology (科研组织)
-             ──→ combat (军事组织)
-             ──→ logistics (运输组织)
-combat       ──→ resources (消耗弹药/食物)
-             ──→ expansion (控制度变化)
-             ──→ organization (伤亡)
-logistics    ──→ resources (转移物资)
-             ──→ organization (承运单位)
-achievement  ──→ (仅查询, 无出向 API 依赖)
+construction ──-> resources (消耗建材)
+technology   ──-> resources (消耗研究材料)
+             ──-> organization (分配研究员)
+resources    ──-> (无出向 API 依赖, 通过 EventBus 通信)
+expansion    ──-> resources (殖民地消耗)
+organization ──-> resources (征兵消耗沥青)
+             ──-> construction (建设组织)
+             ──-> technology (科研组织)
+             ──-> combat (军事组织)
+             ──-> logistics (运输组织)
+combat       ──-> resources (消耗弹药/食物)
+             ──-> expansion (控制度变化)
+             ──-> organization (伤亡)
+logistics    ──-> resources (转移物资)
+             ──-> organization (承运单位)
+achievement  ──-> (仅查询, 无出向 API 依赖)
 ```
 
 ---

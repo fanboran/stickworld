@@ -2,7 +2,7 @@
 
 > **适用读者**：策划、Mod 作者、开发者
 >
-> **前两节写给纯策划**——不需要懂代码，只要会用 Excel 就能改游戏数据。
+> **前两节写给纯策划**--不需要懂代码，只要会用 Excel 就能改游戏数据。
 
 ---
 
@@ -15,7 +15,7 @@
 ### 完整工作流
 
 ```
-策划修改 Excel → 运行导出脚本 → 游戏自动读取新数据
+策划修改 Excel -> 运行导出脚本 -> 游戏自动读取新数据
 ```
 
 举个例子：你想把"基础攻击力"从 10 改成 15。
@@ -54,7 +54,7 @@
 第 3 行起：数据行                ← 你填数据的地方
 ```
 
-**示例——平衡变量.xlsx 的 variables sheet：**
+**示例--平衡变量.xlsx 的 variables sheet：**
 
 | id | category | value | min | max | step | description |
 |----|----------|-------|-----|-----|------|-------------|
@@ -132,15 +132,15 @@ python stick-world/tools/pipeline/export_excel.py
 
 脚本会做三件事：
 
-1. **第一遍：解析**——扫描 `config/excel/` 下所有 `.xlsx` 文件，读取每个 Sheet 的数据
-2. **第二遍：验证**——检查 id 是否重复、必填列是否为空、引用是否正确
-3. **第三遍：导出**——生成 `.tres` 文件到 `config/` 对应子目录
+1. **第一遍：解析**--扫描 `config/excel/` 下所有 `.xlsx` 文件，读取每个 Sheet 的数据
+2. **第二遍：验证**--检查 id 是否重复、必填列是否为空、引用是否正确
+3. **第三遍：导出**--生成 `.tres` 文件到 `config/` 对应子目录
 
 **运行成功时的输出示例：**
 
 ```
 ============================================================
-  stick-world Excel → .tres 导出工具
+  stick-world Excel -> .tres 导出工具
 ============================================================
   Excel 目录: f:\VSCode\game-2\stick-world\config\excel
   输出目录:   f:\VSCode\game-2\stick-world\config
@@ -244,7 +244,7 @@ python tools/pipeline/export_excel.py --dry-run
 运行导出脚本后，`.tres` 文件会按以下规则生成：
 
 ```
-config/excel/<文件名>.xlsx  →  config/<文件名>/<Sheet名>.tres
+config/excel/<文件名>.xlsx  ->  config/<文件名>/<Sheet名>.tres
 ```
 
 **示例**：
@@ -275,12 +275,12 @@ var all_resources = BalanceConfig.get_value("resources.data")
 
 `BalanceConfig` 将 `.tres` 文件中的数据加载到内存字典中。路径格式取决于 `.tres` 的结构。
 
-以 `平衡变量.xlsx → variables.tres` 为例，导出后的 `.tres` 中有一个 `variables.data` 数组，包含每条数据行。`BalanceConfig` 会将其展开为以下路径：
+以 `平衡变量.xlsx -> variables.tres` 为例，导出后的 `.tres` 中有一个 `variables.data` 数组，包含每条数据行。`BalanceConfig` 会将其展开为以下路径：
 
 ```
-balance.variables.var_attack_base.value → 10
-balance.variables.var_attack_base.min   → 1
-balance.variables.var_attack_base.max   → 100
+balance.variables.var_attack_base.value -> 10
+balance.variables.var_attack_base.min   -> 1
+balance.variables.var_attack_base.max   -> 100
 ```
 
 **路径规则**：`[Excel文件名].[Sheet名].[数据id].[字段名]`
@@ -303,7 +303,7 @@ var wood_price = BalanceConfig.get_value("resources.resources.res_wood.base_pric
 - `_meta`：元数据（来源文件、Sheet、版本号等）
 - `variables.data`：数据数组，每个元素是一个字典，对应 Excel 的一行
 
-不止是代码需要读 `.tres`——如果你想确认导出是否正确，可以直接用文本编辑器打开 `.tres` 文件查看内容。
+不止是代码需要读 `.tres`--如果你想确认导出是否正确，可以直接用文本编辑器打开 `.tres` 文件查看内容。
 
 ---
 
@@ -393,7 +393,7 @@ python tools/pipeline/export_excel.py
 
 ### Q3：图片无法导出
 
-**A**：确认图片是**嵌入到单元格**的，而不是链接外部文件。在 Excel 中右键图片 → 选择"更改图片"时，确保没有勾选"链接到文件"。嵌入的图片数据会存在 `.xlsx` 文件内部，脚本才能提取出来。
+**A**：确认图片是**嵌入到单元格**的，而不是链接外部文件。在 Excel 中右键图片 -> 选择"更改图片"时，确保没有勾选"链接到文件"。嵌入的图片数据会存在 `.xlsx` 文件内部，脚本才能提取出来。
 
 ### Q4：数组/Dict 格式的数据导出来不对
 
@@ -406,11 +406,11 @@ python tools/pipeline/export_excel.py
 
 ### Q5：导出时提示"数据不足（至少需要 3 行）"
 
-**A**：每个 Sheet 至少需要 3 行——第 1 行字段名、第 2 行说明、第 3 行起数据。如果 Sheet 里只有表头没有数据，导出会跳过。
+**A**：每个 Sheet 至少需要 3 行--第 1 行字段名、第 2 行说明、第 3 行起数据。如果 Sheet 里只有表头没有数据，导出会跳过。
 
 ### Q6：新增了一列，但导出后看不到
 
-**A**：检查第 1 行的列名是否填写正确。如果列名为空，那一列会被忽略。另外，确保列名没有和其他列重复——重复的列名会导致验证错误。
+**A**：检查第 1 行的列名是否填写正确。如果列名为空，那一列会被忽略。另外，确保列名没有和其他列重复--重复的列名会导致验证错误。
 
 ### Q7：Excel 文件打不开，导出报错
 

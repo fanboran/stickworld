@@ -68,8 +68,18 @@ extends Node
 @warning_ignore("unused_signal") signal battle_stalemate(battle_id, duration)
 # 补给被切断：战斗系统 → 运输系统、组织系统
 @warning_ignore("unused_signal") signal supply_line_cut(org_id, supply_id)
-# 关键战术事件：战斗系统 → UI（可选显示）
+# 关键战术事件：战斗系统 -> UI（可选显示）
 @warning_ignore("unused_signal") signal tactical_event(battle_id, event_type, data)
+
+# ─────────────────────────────── 战斗编队（§14.4）────────────────────────────────
+# 框选/选择变化：SelectionSystem -> UI
+@warning_ignore("unused_signal") signal selection_changed(unit_ids: Array)
+# 编队创建：FormationSystem -> UI、Organization
+@warning_ignore("unused_signal") signal squad_created(squad_id, unit_ids)
+# 号令下达：TacticalOrders -> UI、Units
+@warning_ignore("unused_signal") signal order_issued(order_type, target_squad_id, issuer_unit_id)
+# 任命指挥官：Organization -> UI
+@warning_ignore("unused_signal") signal commander_assigned(squad_id, unit_id)
 @warning_ignore("unused_signal") signal territory_gained(tile_id: String)
 @warning_ignore("unused_signal") signal territory_lost(tile_id: String)
 # 文化同化完成：扩张系统 → UI

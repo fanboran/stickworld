@@ -27,6 +27,8 @@ const _ConstructionApiScript: GDScript = preload("res://modules/construction/api
 const _BattleDirectorScript: GDScript = preload("res://modules/combat/scripts/battle_director.gd")
 ## Combat api 脚本
 const _CombatApiScript: GDScript = preload("res://modules/combat/api.gd")
+## SelectionSystem 脚本（§15 阶段 0.6 框选系统）
+const _SelectionSystemScript: GDScript = preload("res://modules/combat/scripts/selection_system.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -50,6 +52,10 @@ var _construction_api: Node = null
 ## CombatApi 实例引用（运行时由 _ready 装配）
 var _combat_api: Node = null
 
+# ─────────────────────────────── 框选系统（§15 阶段 0.6）────────────────────────────────
+## SelectionSystem 实例引用（运行时由 _ready 装配，挂到 UIRoot）
+var _selection_system: Control = null
+
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
 @onready var camera_rig: Camera2D = get_node_or_null(WorldAPI.PATH_CAMERA_RIG)
@@ -67,6 +73,7 @@ func _ready() -> void:
 	_bind_event_bus()
 	_setup_construction_system()
 	_setup_combat_system()
+	_setup_selection_system()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -140,6 +147,29 @@ func _setup_combat_api_deferred() -> void:
 ## 获取 CombatApi 引用（供测试用）
 func get_combat_api() -> Node:
 	return _combat_api
+
+
+# ─────────────────────────────── 框选系统装配 ────────────────────────────────
+
+## 实例化 SelectionSystem，挂到 UIRoot 下，注册为 BATTLE 模式 handler。
+## 详见 §15 阶段 0.6。
+func _setup_selection_system() -> void:
+	if ui_root == null:
+		push_warning("[GameRoot] UIRoot 为空，跳过框选系统装配")
+		return
+	var sel := Control.new()
+	sel.set_script(_SelectionSystemScript)
+	sel.name = "SelectionSystem"
+	ui_root.add_child(sel)
+	_selection_system = sel
+	# 注册为 BATTLE 模式 handler
+	if input_dispatcher != null and input_dispatcher.has_method("register_handler"):
+		input_dispatcher.register_handler(PlayerControlAPI.Mode.BATTLE, sel)
+
+
+## 获取 SelectionSystem 引用（供测试用）
+func get_selection_system() -> Control:
+	return _selection_system
 
 
 ## 获取 BattleDirector 引用（供测试用）

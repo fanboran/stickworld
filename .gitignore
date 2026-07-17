@@ -68,6 +68,11 @@ test-reports/
 test-results/
 coverage/
 *.xml
+# 测试输出临时文件
+test_*.txt
+stick-world/test_*.txt
+stick-world/stderr.txt
+stick-world/stdout.txt
 
 # OS
 .DS_

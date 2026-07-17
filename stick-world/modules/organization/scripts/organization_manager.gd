@@ -122,7 +122,7 @@ func create_organization(name: String, tag: String, tier: int, parent_id: String
 
 	# 关联父组织
 	if parent_id != "":
-		var parent := organizations[parent_id]
+		var parent: Dictionary = organizations[parent_id]
 		parent.child_orgs.append(org_id)
 
 	return {"ok": true, "data": {"org_id": org_id}}
@@ -259,7 +259,7 @@ func insert_tier(org_id: String, new_org_name: String, position: String) -> Dict
 	if not _is_valid_position(normalized_pos):
 		return {"ok": false, "error": "无效的位置: %s，有效值: above/below" % position}
 
-	var parent_id := org.parent_org
+	var parent_id: String = org.parent_org
 	if parent_id == "":
 		return {"ok": false, "error": "根组织无法在其上方插入新层级"}
 
@@ -319,7 +319,7 @@ func insert_tier(org_id: String, new_org_name: String, position: String) -> Dict
 	org.parent_org = new_org_id
 
 	# 更新父组织的 child_orgs（替换 org_id 为 new_org_id）
-	var idx := parent.child_orgs.find(org_id)
+	var idx: int = parent.child_orgs.find(org_id)
 	if idx != -1:
 		parent.child_orgs[idx] = new_org_id
 	else:
@@ -334,7 +334,7 @@ func remove_tier(org_id: String) -> Dictionary:
 	if org.is_empty():
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
 
-	var parent_id := org.parent_org
+	var parent_id: String = org.parent_org
 	if parent_id == "":
 		return {"ok": false, "error": "根组织无法被删除"}
 
@@ -367,9 +367,9 @@ func disband_organization(org_id: String) -> Dictionary:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
 
 	# 子组织上挂到 parent
-	var parent_id := org.parent_org
+	var parent_id: String = org.parent_org
 	if parent_id != "":
-		var parent := _get_org(parent_id)
+		var parent: Dictionary = _get_org(parent_id)
 		if not parent.is_empty():
 			for child_id in org.child_orgs:
 				var child := _get_org(child_id)

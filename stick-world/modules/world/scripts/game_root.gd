@@ -29,6 +29,12 @@ const _BattleDirectorScript: GDScript = preload("res://modules/combat/scripts/ba
 const _CombatApiScript: GDScript = preload("res://modules/combat/api.gd")
 ## SelectionSystem 脚本（§15 阶段 0.6 框选系统）
 const _SelectionSystemScript: GDScript = preload("res://modules/combat/scripts/selection_system.gd")
+## FormationSystem 脚本（§15 阶段 0.6 编队系统）
+const _FormationSystemScript: GDScript = preload("res://modules/combat/scripts/formation_system.gd")
+## OrganizationManager 脚本（组织模块内部管理器）
+const _OrganizationManagerScript: GDScript = preload("res://modules/organization/scripts/organization_manager.gd")
+## Organization api 脚本（组织模块公共接口）
+const _OrganizationApiScript: GDScript = preload("res://modules/organization/api.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -56,6 +62,12 @@ var _combat_api: Node = null
 ## SelectionSystem 实例引用（运行时由 _ready 装配，挂到 UIRoot）
 var _selection_system: Control = null
 
+# ─────────────────────────────── 组织 + 编队系统（§15 阶段 0.6）────────────────────────────────
+## OrganizationApi 实例引用（运行时由 _ready 装配）
+var _organization_api: Node = null
+## FormationSystem 实例引用（运行时由 _ready 装配）
+var _formation_system: Node = null
+
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
 @onready var camera_rig: Camera2D = get_node_or_null(WorldAPI.PATH_CAMERA_RIG)
@@ -74,6 +86,8 @@ func _ready() -> void:
 	_setup_construction_system()
 	_setup_combat_system()
 	_setup_selection_system()
+	_setup_organization_system()
+	_setup_formation_system()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -170,6 +184,46 @@ func _setup_selection_system() -> void:
 ## 获取 SelectionSystem 引用（供测试用）
 func get_selection_system() -> Control:
 	return _selection_system
+
+
+# ─────────────────────────────── 组织系统装配 ────────────────────────────────
+
+## 实例化 OrganizationManager + OrganizationApi 作为子节点并互相 setup。
+func _setup_organization_system() -> void:
+	# OrganizationManager 是 RefCounted，直接 new
+	var mgr = _OrganizationManagerScript.new()
+	# OrganizationApi 是 Node，挂为子节点
+	var api := Node.new()
+	api.set_script(_OrganizationApiScript)
+	api.name = "OrganizationApi"
+	add_child(api)
+	_organization_api = api
+	# api.setup 需要 manager 引用
+	if api.has_method("setup"):
+		api.setup(mgr)
+
+
+## 获取 OrganizationApi 引用（供测试用）
+func get_organization_api() -> Node:
+	return _organization_api
+
+
+# ─────────────────────────────── 编队系统装配 ────────────────────────────────
+
+## 实例化 FormationSystem，注入 OrganizationApi 引用。
+func _setup_formation_system() -> void:
+	var fs := Node.new()
+	fs.set_script(_FormationSystemScript)
+	fs.name = "FormationSystem"
+	add_child(fs)
+	_formation_system = fs
+	if _organization_api != null and fs.has_method("setup"):
+		fs.setup(_organization_api)
+
+
+## 获取 FormationSystem 引用（供测试用）
+func get_formation_system() -> Node:
+	return _formation_system
 
 
 ## 获取 BattleDirector 引用（供测试用）

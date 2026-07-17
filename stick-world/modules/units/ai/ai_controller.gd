@@ -15,6 +15,7 @@ extends Node
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
 const ScriptBehaviorWork := preload("res://modules/units/ai/behavior_work.gd")
+const ScriptBehaviorMove := preload("res://modules/units/ai/behavior_move.gd")
 const ScriptBehaviorAttack := preload("res://modules/units/ai/behavior_attack.gd")
 const ScriptBehaviorSeekCover := preload("res://modules/units/ai/behavior_seek_cover.gd")
 const ScriptBehaviorRetreat := preload("res://modules/units/ai/behavior_retreat.gd")
@@ -34,6 +35,12 @@ var _state_machine: BehaviorStateMachine = null
 var _decision_timer: float = 0.0
 ## 上一帧是否被附身（用于检测附身状态变化）
 var _was_possessed: bool = false
+
+# ─────────────────────────────── 命令覆盖（§8.3 战术号令）────────────────────────────────
+## 当前下达的命令行为名（空=无命令，由 AI 自主决策）
+var _ordered_behavior: String = ""
+## 命令参数
+var _ordered_params: Dictionary = {}
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -72,6 +79,14 @@ func _setup_state_machine() -> void:
 	work.entity = _entity
 	_state_machine.add_child(work)
 	_state_machine.register_behavior(work)
+
+	# 移动行为（§7.2，阶段 0.6 战术号令用）
+	var move := ScriptBehaviorMove.new()
+	move.name = "BehaviorMove"
+	move.behavior_name = "move"
+	move.entity = _entity
+	_state_machine.add_child(move)
+	_state_machine.register_behavior(move)
 
 	# 战斗行为（§7.2 / §8，阶段 0.5）
 	var attack := ScriptBehaviorAttack.new()
@@ -133,9 +148,27 @@ func physics_update(delta: float) -> void:
 
 # ─────────────────────────────── 决策逻辑 ────────────────────────────────
 
-## P0 决策：战斗（参战时）> work（有派工）> idle/wander 循环。
-## 参战时（entity 有激活的 battle_instance）战斗行为优先级最高。
+## P0 决策：命令覆盖 > 战斗（参战时）> work（有派工）> idle/wander 循环。
+## 命令覆盖：tactical_orders 下达的号令优先于自主决策，但溃逃例外。
 func _make_decision() -> void:
+	# 0. 命令覆盖（最高优先级，溃逃例外）
+	if not _ordered_behavior.is_empty():
+		if _is_routing():
+			# 士气崩溃，无视命令强制溃逃
+			_ordered_behavior = ""
+			_ordered_params = {}
+		else:
+			var current: String = _state_machine.get_current_behavior_name()
+			if current == _ordered_behavior:
+				if not _state_machine.is_current_finished():
+					return  # 命令执行中，保持
+				# 命令完成，清除并转入正常决策
+				_ordered_behavior = ""
+				_ordered_params = {}
+			else:
+				# 命令被中断（如战斗行为抢占），重新下达
+				_state_machine.travel(_ordered_behavior, _ordered_params)
+				return
 	# 1. 战斗决策（最高优先级，阶段 0.5）
 	if _try_combat():
 		return
@@ -253,3 +286,44 @@ func get_current_behavior() -> String:
 ## 获取状态机引用（供测试用）。
 func get_state_machine() -> BehaviorStateMachine:
 	return _state_machine
+
+
+# ─────────────────────────────── 命令覆盖 API（§8.3 战术号令）────────────────────────────────
+
+## 下达命令：覆盖 AI 自主决策，强制执行指定行为直到完成或新命令。
+## behavior_name 必须是已注册的行为名（如 "move", "idle", "retreat"）。
+func set_order(behavior_name: String, params: Dictionary = {}) -> void:
+	_ordered_behavior = behavior_name
+	_ordered_params = params
+	if _state_machine != null:
+		_state_machine.travel(behavior_name, params)
+
+
+## 清除命令：恢复 AI 自主决策。
+func clear_order() -> void:
+	_ordered_behavior = ""
+	_ordered_params = {}
+
+
+## 获取当前命令行为名（空=无命令）。
+func get_ordered_behavior() -> String:
+	return _ordered_behavior
+
+
+## 是否有命令在执行。
+func has_order() -> bool:
+	return not _ordered_behavior.is_empty()
+
+
+# ─────────────────────────────── 内部辅助 ────────────────────────────────
+
+## 检查实体是否正在溃逃（士气低于阈值）。
+func _is_routing() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if not _entity.has_method("get_health"):
+		return false
+	var health: Node = _entity.get_health()
+	if health == null or not health.has_method("is_routed"):
+		return false
+	return health.is_routed()

@@ -35,6 +35,10 @@ const _FormationSystemScript: GDScript = preload("res://modules/combat/scripts/f
 const _OrganizationManagerScript: GDScript = preload("res://modules/organization/scripts/organization_manager.gd")
 ## Organization api 脚本（组织模块公共接口）
 const _OrganizationApiScript: GDScript = preload("res://modules/organization/api.gd")
+## TacticalOrders 脚本（§15 阶段 0.6 战术号令）
+const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/tactical_orders.gd")
+## CommandChain 脚本（§15 阶段 0.6 指挥链）
+const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command_chain.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -67,6 +71,10 @@ var _selection_system: Control = null
 var _organization_api: Node = null
 ## FormationSystem 实例引用（运行时由 _ready 装配）
 var _formation_system: Node = null
+## TacticalOrders 实例引用（运行时由 _ready 装配）
+var _tactical_orders: Node = null
+## CommandChain 实例引用（运行时由 _ready 装配）
+var _command_chain: Node = null
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
@@ -88,6 +96,7 @@ func _ready() -> void:
 	_setup_selection_system()
 	_setup_organization_system()
 	_setup_formation_system()
+	_setup_tactical_system()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -224,6 +233,36 @@ func _setup_formation_system() -> void:
 ## 获取 FormationSystem 引用（供测试用）
 func get_formation_system() -> Node:
 	return _formation_system
+
+
+# ─────────────────────────────── 战术号令系统装配 ────────────────────────────────
+
+## 实例化 CommandChain + TacticalOrders，注入 FormationSystem 引用。
+func _setup_tactical_system() -> void:
+	# CommandChain
+	var cc := Node.new()
+	cc.set_script(_CommandChainScript)
+	cc.name = "CommandChain"
+	add_child(cc)
+	_command_chain = cc
+	# TacticalOrders
+	var to := Node.new()
+	to.set_script(_TacticalOrdersScript)
+	to.name = "TacticalOrders"
+	add_child(to)
+	_tactical_orders = to
+	if to.has_method("setup"):
+		to.setup(_formation_system, _command_chain)
+
+
+## 获取 TacticalOrders 引用（供测试用）
+func get_tactical_orders() -> Node:
+	return _tactical_orders
+
+
+## 获取 CommandChain 引用（供测试用）
+func get_command_chain() -> Node:
+	return _command_chain
 
 
 ## 获取 BattleDirector 引用（供测试用）

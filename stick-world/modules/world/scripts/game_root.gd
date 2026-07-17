@@ -39,6 +39,10 @@ const _OrganizationApiScript: GDScript = preload("res://modules/organization/api
 const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/tactical_orders.gd")
 ## CommandChain 脚本（§15 阶段 0.6 指挥链）
 const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command_chain.gd")
+## BattlePanel 脚本（§15 阶段 0.6 战斗 UI）
+const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/battle_panel.gd")
+## Minimap 脚本（§15 阶段 0.6 小地图）
+const _MinimapScript: GDScript = preload("res://modules/ui/scripts/minimap.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -76,6 +80,12 @@ var _tactical_orders: Node = null
 ## CommandChain 实例引用（运行时由 _ready 装配）
 var _command_chain: Node = null
 
+# ─────────────────────────────── UI 系统（§15 阶段 0.6）────────────────────────────────
+## BattlePanel 实例引用（运行时由 _ready 装配）
+var _battle_panel: Control = null
+## Minimap 实例引用（运行时由 _ready 装配）
+var _minimap: Control = null
+
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
 @onready var camera_rig: Camera2D = get_node_or_null(WorldAPI.PATH_CAMERA_RIG)
@@ -97,6 +107,8 @@ func _ready() -> void:
 	_setup_organization_system()
 	_setup_formation_system()
 	_setup_tactical_system()
+	_setup_battle_panel()
+	_setup_minimap()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -265,6 +277,55 @@ func get_command_chain() -> Node:
 	return _command_chain
 
 
+# ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────
+
+## 给场景中已存在的 BattlePanel 占位节点挂脚本，并注入系统引用。详见 §10.1。
+func _setup_battle_panel() -> void:
+	if ui_root == null:
+		return
+	var mp: Control = ui_root.get_node_or_null("ModePanel")
+	if mp == null:
+		return
+	var bp: Control = mp.get_node_or_null("BattlePanel")
+	if bp == null:
+		return
+	bp.set_script(_BattlePanelScript)
+	_battle_panel = bp
+	call_deferred("_setup_battle_panel_deferred")
+
+
+func _setup_battle_panel_deferred() -> void:
+	if _battle_panel == null:
+		return
+	if _battle_panel.has_method("setup"):
+		_battle_panel.setup(self)
+
+
+## 获取 BattlePanel 引用（供测试用）
+func get_battle_panel() -> Control:
+	return _battle_panel
+
+
+# ─────────────────────────────── 小地图装配（§15 阶段 0.6）────────────────────────────────
+
+## 创建 Minimap 并挂到 UIRoot。详见 §10.4。
+func _setup_minimap() -> void:
+	if ui_root == null:
+		return
+	var mm := Control.new()
+	mm.set_script(_MinimapScript)
+	mm.name = "Minimap"
+	ui_root.add_child(mm)
+	_minimap = mm
+	if mm.has_method("setup"):
+		mm.setup(self)
+
+
+## 获取 Minimap 引用（供测试用）
+func get_minimap() -> Control:
+	return _minimap
+
+
 ## 获取 BattleDirector 引用（供测试用）
 func get_battle_director_node() -> Node:
 	return battle_director
@@ -348,6 +409,9 @@ func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
 	# 让 CameraRig 跟随玩家
 	if camera_rig != null and camera_rig.has_method("set_follow_target"):
 		camera_rig.set_follow_target(player)
+	# 配置小地图地图信息（详见 §10.4.6）
+	if _minimap != null and _minimap.has_method("set_map_info"):
+		_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 	# 注入地图到 ConstructionManager（供项目实例化建筑用）
 	if _construction_manager != null and _construction_manager.has_method("set_map"):
 		_construction_manager.set_map(map)

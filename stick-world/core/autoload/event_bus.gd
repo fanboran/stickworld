@@ -111,6 +111,26 @@ extends Node
 # 项目分解为子项目：组织系统 → 组织系统
 @warning_ignore("unused_signal") signal project_decomposed(parent_id, child_ids)
 
+# ─────────────────────────────── 场景 / 地图 / 旅行（§14.1 / §14.2）────────────────────────────────
+# 旅行请求：战略图 -> SceneLoader（玩家点击聚落进入场景图）
+@warning_ignore("unused_signal") signal travel_requested(map_id: String)
+# 地图加载完成：SceneLoader -> UI / Environment
+@warning_ignore("unused_signal") signal map_loaded(map_id: String, map_type: int)
+# 地图卸载完成：SceneLoader -> UI
+@warning_ignore("unused_signal") signal map_unloaded(map_id: String)
+# Chunk 加载完成：SceneLoader -> MapInstance
+@warning_ignore("unused_signal") signal chunk_loaded(chunk_idx: int)
+# Chunk 卸载完成：SceneLoader -> MapInstance
+@warning_ignore("unused_signal") signal chunk_unloaded(chunk_idx: int)
+# 旅行开始：SceneLoader -> UI / WorldClock
+@warning_ignore("unused_signal") signal travel_started(from_id: String, to_id: String, mode: int)
+# 旅行完成：SceneLoader -> UI
+@warning_ignore("unused_signal") signal travel_completed(to_id: String)
+# 战略图打开：world_map -> UI / InputDispatcher
+@warning_ignore("unused_signal") signal strategic_map_opened
+# 战略图关闭：world_map -> UI / InputDispatcher
+@warning_ignore("unused_signal") signal strategic_map_closed
+
 # ─────────────────────────────── UI 通用信号 ───────────────────────────────
 
 @warning_ignore("unused_signal") signal ui_notification(title: String, body: String, level: String)

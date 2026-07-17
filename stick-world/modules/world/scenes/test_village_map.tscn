@@ -4,6 +4,10 @@
 [ext_resource type="Script" uid="uid://bnt0k4kto231k" path="res://modules/world/placement_grid/placement_grid.gd" id="2_grid"]
 [ext_resource type="Script" uid="uid://cqxakicqelpkj" path="res://modules/world/scripts/initial_buildings_list.gd" id="3_ibl"]
 [ext_resource type="Script" uid="uid://7ko7iiaifff4" path="res://tools/dev/map_grid_drawer.gd" id="4_grid_drawer"]
+[ext_resource type="Script" path="res://modules/world/scripts/chunk_trigger.gd" id="5_trigger"]
+
+[sub_resource type="RectangleShape2D" id="shape_exit_right"]
+size = Vector2(64, 270)
 
 [node name="VillageMap" type="Node2D" unique_id=1514933581]
 script = ExtResource("1_vmap")
@@ -47,5 +51,16 @@ z_index = 10
 z_index = 3
 
 [node name="ChunkTriggers" type="Node2D" parent="." unique_id=1182080428]
+
+[node name="ExitRight" type="Area2D" parent="ChunkTriggers"]
+script = ExtResource("5_trigger")
+exit_side = 1
+target_map_id = "road_a_to_b"
+target_entry_side = 0
+trigger_width = 64.0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ChunkTriggers/ExitRight"]
+position = Vector2(8160, 945)
+shape = SubResource("shape_exit_right")
 
 [node name="BattleAnchor" type="Node2D" parent="." unique_id=831602561]

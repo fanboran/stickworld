@@ -1,0 +1,51 @@
+[gd_scene format=3 uid="uid://broadmap001"]
+
+[ext_resource type="Script" path="res://modules/world/scripts/road_map.gd" id="1_road"]
+[ext_resource type="Script" path="res://modules/world/scripts/chunk_trigger.gd" id="2_trigger"]
+
+[sub_resource type="RectangleShape2D" id="shape_exit"]
+size = Vector2(64, 270)
+
+[node name="RoadMap" type="Node2D"]
+script = ExtResource("1_road")
+ground_y = 810.0
+ground_ratio = 0.25
+map_left = 0.0
+map_right = 4096.0
+ground_bottom = 1080.0
+
+[node name="TerrainLayer" type="Node2D" parent="."]
+
+[node name="GroundPolygon" type="Polygon2D" parent="TerrainLayer"]
+color = Color(0.45, 0.35, 0.25, 1)
+polygon = PackedVector2Array(0, 810, 4096, 810, 4096, 1080, 0, 1080)
+
+[node name="GroundLine" type="Marker2D" parent="."]
+position = Vector2(0, 810)
+
+[node name="EntityHost" type="Node2D" parent="."]
+z_index = 3
+
+[node name="ChunkTriggers" type="Node2D" parent="."]
+
+[node name="ExitLeft" type="Area2D" parent="ChunkTriggers"]
+script = ExtResource("2_trigger")
+exit_side = 0
+target_map_id = "test_village"
+target_entry_side = 1
+trigger_width = 64.0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ChunkTriggers/ExitLeft"]
+position = Vector2(32, 945)
+shape = SubResource("shape_exit")
+
+[node name="ExitRight" type="Area2D" parent="ChunkTriggers"]
+script = ExtResource("2_trigger")
+exit_side = 1
+target_map_id = "test_village_b"
+target_entry_side = 0
+trigger_width = 64.0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ChunkTriggers/ExitRight"]
+position = Vector2(4064, 945)
+shape = SubResource("shape_exit")

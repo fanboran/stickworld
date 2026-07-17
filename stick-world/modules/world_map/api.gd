@@ -29,6 +29,10 @@ signal map_mode_changed(mode: int, mode_name: String)
 signal region_owner_changed(region_id: String, old_owner: String, new_owner: String)
 signal settlement_updated(settlement_id: String)  ## 聚落规模变化（玩家建设）
 signal battlefront_updated(battle_id: String, region_id: String)
+## 战略图打开（通知 UI / InputDispatcher 暂停场景图输入）
+signal strategic_map_opened
+## 战略图关闭（通知 UI / InputDispatcher 恢复场景图输入）
+signal strategic_map_closed
 
 
 # ===== 内部引用（在 setup 中绑定） =====
@@ -264,20 +268,32 @@ func is_stitched_preview_enabled() -> bool:
 ## [P] settlement_id 存在且对应 map_id 已注册
 ## [Q] 发射 EventBus.travel_requested，关闭战略图 ModalOverlay
 func enter_settlement(settlement_id: String) -> void:
-	# TODO: SM-3 实现
-	# 1. 查 SettlementRef.map_id
-	# 2. EventBus.travel_requested.emit(map_id)
-	# 3. close_strategic_map()
-	pass
+	var settlement: SettlementRef = get_settlement_ref(settlement_id)
+	if settlement == null:
+		push_warning("[WorldMapApi] 聚落不存在: %s" % settlement_id)
+		return
+	var map_id: String = settlement.map_id
+	if map_id.is_empty():
+		push_warning("[WorldMapApi] 聚落无 map_id: %s" % settlement_id)
+		return
+	# 发射旅行请求 -> SceneLoader 监听并处理（详见 §9 战略图->聚落进入流程）
+	if EventBus:
+		EventBus.travel_requested.emit(map_id)
+	# 关闭战略图
+	close_strategic_map()
 
 
 ## 关闭战略图，返回之前的场景图
 func close_strategic_map() -> void:
-	# TODO: SM-1 实现
+	# TODO: 完整实现需要恢复场景图的 CameraRig 和 InputDispatcher
+	# 当前阶段：发射关闭信号，由 UI 层处理 ModalOverlay 隐藏
+	# 后续实现：
 	# 1. 暂停战略图渲染
 	# 2. 恢复场景图的 CameraRig 和 InputDispatcher
 	# 3. 隐藏 ModalOverlay
-	pass
+	strategic_map_closed.emit()
+	if EventBus:
+		EventBus.emit_signal("strategic_map_closed")
 
 
 # ===== 接收其他模块的 EventBus 信号 =====

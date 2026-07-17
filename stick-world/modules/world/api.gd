@@ -60,6 +60,12 @@ enum TravelMode {
 	TELEPORT,       ## 传送（大建筑内部）
 }
 
+# ─────────────────────────────── 进入方向 ────────────────────────────────
+enum EntrySide {
+	LEFT,           ## 从左侧进入新地图（x ≈ map_left）
+	RIGHT,          ## 从右侧进入新地图（x ≈ map_right）
+}
+
 # ─────────────────────────────── 信号契约 ────────────────────────────────
 ## GameRoot 发射的信号（通过 EventBus 转发或本地信号）：
 ##   - map_loaded(map_id: String, map_type: int)

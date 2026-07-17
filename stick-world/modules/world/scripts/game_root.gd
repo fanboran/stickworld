@@ -13,6 +13,10 @@ extends Node2D
 
 ## 测试村落地图场景（P0 硬编码）
 const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/test_village_map.tscn")
+## 第二个测试村落地图场景（阶段 0.8 多场景衔接）
+const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/test_village_map_b.tscn")
+## 道路地图场景（阶段 0.8 村落间道路）
+const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/test_road_map.tscn")
 ## 玩家火柴人实体场景
 const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 ## EXPLORE 模式 handler 脚本
@@ -43,11 +47,13 @@ const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/comm
 const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/battle_panel.gd")
 ## Minimap 脚本（§15 阶段 0.6 小地图）
 const _MinimapScript: GDScript = preload("res://modules/ui/scripts/minimap.gd")
-const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
-const _PossessPanelScript: GDScript = preload("res://modules/ui/scripts/possess_panel.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
+## 道路地图 ID（村落 A -> 村落 B）
+const ROAD_MAP_ID := "road_a_to_b"
+## 第二个测试村落地图 ID
+const VILLAGE_B_MAP_ID := "test_village_b"
 ## 玩家初始 X 位置（地图坐标系，偏左便于观察）
 const PLAYER_SPAWN_X: float = 300.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为）
@@ -59,6 +65,8 @@ const DEMO_BUILDING_CELL_X: int = 50
 
 ## 是否在地图加载完成后自动触发一次演示建造（test_stage_03 等旧测试应关闭）
 @export var auto_demo_building: bool = true
+## 是否已加载过初始地图（用于区分初始加载 vs 地图切换）
+var _initial_map_loaded: bool = false
 ## ConstructionManager 实例引用（运行时由 _ready 装配）
 var _construction_manager: Node = null
 ## Construction api 实例引用（运行时由 _ready 装配）
@@ -88,10 +96,6 @@ var _battle_panel: Control = null
 ## Minimap 实例引用（运行时由 _ready 装配）
 var _minimap: Control = null
 
-# ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
-var _possession_interface: Node = null
-var _possess_panel: Control = null
-
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
 @onready var camera_rig: Camera2D = get_node_or_null(WorldAPI.PATH_CAMERA_RIG)
@@ -115,8 +119,6 @@ func _ready() -> void:
 	_setup_tactical_system()
 	_setup_battle_panel()
 	_setup_minimap()
-	_setup_possession_system()
-	_setup_possess_panel()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -334,53 +336,6 @@ func get_minimap() -> Control:
 	return _minimap
 
 
-# ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────
-
-## 实例化 PossessionInterface，注册为 POSSESS 模式 handler。详见 §7.1.3、§7.5。
-func _setup_possession_system() -> void:
-	if input_dispatcher == null or not input_dispatcher.has_method("register_handler"):
-		push_warning("[GameRoot] InputDispatcher 未就绪，跳过附身系统装配")
-		return
-	var pi := Node.new()
-	pi.set_script(_PossessionInterfaceScript)
-	pi.name = "PossessionInterface"
-	add_child(pi)
-	_possession_interface = pi
-	input_dispatcher.register_handler(PlayerControlAPI.Mode.POSSESS, pi)
-
-
-## 获取 PossessionInterface 引用（供测试用）
-func get_possession_interface() -> Node:
-	return _possession_interface
-
-
-## 给场景中已存在的 PossessPanel 占位节点挂脚本，并注入系统引用。详见 §10.1。
-func _setup_possess_panel() -> void:
-	if ui_root == null:
-		return
-	var mp: Control = ui_root.get_node_or_null("ModePanel")
-	if mp == null:
-		return
-	var pp: Control = mp.get_node_or_null("PossessPanel")
-	if pp == null:
-		return
-	pp.set_script(_PossessPanelScript)
-	_possess_panel = pp
-	call_deferred("_setup_possess_panel_deferred")
-
-
-func _setup_possess_panel_deferred() -> void:
-	if _possess_panel == null:
-		return
-	if _possess_panel.has_method("setup"):
-		_possess_panel.setup(self)
-
-
-## 获取 PossessPanel 引用（供测试用）
-func get_possess_panel() -> Control:
-	return _possess_panel
-
-
 ## 获取 BattleDirector 引用（供测试用）
 func get_battle_director_node() -> Node:
 	return battle_director
@@ -423,37 +378,54 @@ func _register_explore_handler() -> void:
 func _register_default_maps() -> void:
 	if scene_loader == null or not scene_loader.has_method("register_map"):
 		return
+	# 注册地图场景
 	scene_loader.register_map(TEST_VILLAGE_MAP_ID, _VILLAGE_MAP_SCENE, WorldAPI.MapType.VILLAGE)
+	scene_loader.register_map(ROAD_MAP_ID, _ROAD_MAP_SCENE, WorldAPI.MapType.ROAD)
+	scene_loader.register_map(VILLAGE_B_MAP_ID, _VILLAGE_MAP_B_SCENE, WorldAPI.MapType.VILLAGE)
+	# 配置地图出口（步行衔接，详见 §6.2）
+	scene_loader.register_map_exit(TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT, VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT, ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 
 
 func _load_test_village() -> void:
 	if scene_loader == null or not scene_loader.has_method("load_map"):
 		return
-	# 监听一次 map_loaded，加载完成后 spawn 玩家
-	if not scene_loader.map_loaded.is_connected(_on_test_village_loaded):
-		scene_loader.map_loaded.connect(_on_test_village_loaded)
+	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
+	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
+		scene_loader.map_loaded.connect(_on_map_loaded)
 	scene_loader.load_map(TEST_VILLAGE_MAP_ID)
 
 
-func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
-	if map_id != TEST_VILLAGE_MAP_ID:
-		return
-	# 解除连接（仅一次性）
-	if scene_loader and scene_loader.map_loaded.is_connected(_on_test_village_loaded):
-		scene_loader.map_loaded.disconnect(_on_test_village_loaded)
-	# 在地图上 spawn 玩家，Y 在地面垂直范围内偏中心
+## 通用地图加载回调（初始加载 + 地图切换共用）
+func _on_map_loaded(map_id: String, _map_type: int) -> void:
 	var map: Node2D = scene_loader.get_current_map() if scene_loader.has_method("get_current_map") else null
 	if map == null or not map.has_method("spawn_entity"):
 		return
-	# 火柴人生成 Y = 地面偏中心（ground_y 与 ground_bottom 中间偏上）
-	# 注意：spawn_y 是脚部目标 Y，entity origin 需要偏移 foot_offset
+	# 计算玩家 spawn 位置
+	var spawn_x: float
+	var entry_side: int = scene_loader.get_last_entry_side() if scene_loader.has_method("get_last_entry_side") else WorldAPI.EntrySide.LEFT
+	if not _initial_map_loaded:
+		# 初始加载：固定 spawn 位置
+		spawn_x = PLAYER_SPAWN_X
+	else:
+		# 地图切换：根据进入方向决定 spawn 位置
+		if entry_side == WorldAPI.EntrySide.LEFT:
+			spawn_x = map.map_left + 150.0
+		else:
+			spawn_x = map.map_right - 150.0
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
-	var player: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(PLAYER_SPAWN_X, spawn_y))
+	# Spawn 玩家
+	var player: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(spawn_x, spawn_y))
 	if player == null:
 		return
 	# 修正 Y：让脚部对齐 spawn_y
 	if player.get("foot_offset") != null:
 		player.global_position.y = spawn_y - player.foot_offset
+	# 附身玩家实体（地图切换时需重新附身新实体）
+	if player.has_method("set_possessed"):
+		player.set_possessed(true)
 	# 配置相机：注入 ground_y / ground_ratio / map_bounds（详见 §2.4.7）
 	if camera_rig != null and camera_rig.has_method("set_ground_y"):
 		camera_rig.set_ground_y(map.ground_y)
@@ -470,16 +442,25 @@ func _on_test_village_loaded(map_id: String, _map_type: int) -> void:
 	# 注入地图到 ConstructionManager（供项目实例化建筑用）
 	if _construction_manager != null and _construction_manager.has_method("set_map"):
 		_construction_manager.set_map(map)
-	# spawn NPC 村民（不附身，AI 自动驱动 idle ↔ move，详见 §7.2）
-	_spawn_npcs(map, spawn_y)
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 注册调试绘制器
 	_register_debug_drawers()
-	# 自动触发演示建造（test_stage_03 等旧测试应通过 auto_demo_building=false 关闭）
-	if auto_demo_building:
-		call_deferred("_start_demo_building")
+	# 仅初始加载时 spawn NPC 和演示建造
+	if not _initial_map_loaded:
+		_initial_map_loaded = true
+		_spawn_npcs(map, spawn_y)
+		# 自动触发演示建造（test_stage_03 等旧测试应通过 auto_demo_building=false 关闭）
+		if auto_demo_building:
+			call_deferred("_start_demo_building")
+
+
+## 请求地图旅行（由 ChunkTrigger 调用，详见 §6.2 步行流程）
+func request_map_travel(target_map_id: String, entry_side: int) -> void:
+	if scene_loader == null or not scene_loader.has_method("travel_to_map"):
+		return
+	scene_loader.travel_to_map(target_map_id, WorldAPI.TravelMode.WALK, entry_side)
 
 
 # ─────────────────────────────── 演示建造 ────────────────────────────────

@@ -23,6 +23,7 @@ var _squad_container: VBoxContainer = null
 var _order_buttons: Dictionary = {}  # order_type(int) -> Button
 var _create_squad_btn: Button = null
 var _assign_leader_btn: Button = null
+var _possess_btn: Button = null
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 前进号令的目标偏移（向右 800px，P0 简化）
@@ -101,6 +102,16 @@ func _build_ui() -> void:
 	action_section.add_child(action_hbox)
 	_create_squad_btn = _create_button(action_hbox, "编队", _on_create_squad_pressed)
 	_assign_leader_btn = _create_button(action_hbox, "任命排长", _on_assign_leader_pressed)
+
+	# 分隔线
+	_add_separator(hbox)
+
+	# ── 5. 附身按钮 ──
+	var possess_section := _create_section(hbox, "附身")
+	var possess_hbox := HBoxContainer.new()
+	possess_hbox.add_theme_constant_override("separation", 6)
+	possess_section.add_child(possess_hbox)
+	_possess_btn = _create_button(possess_hbox, "附身选中单位", _on_possess_pressed)
 
 
 func _create_section(parent: Container, title: String) -> VBoxContainer:
@@ -218,6 +229,9 @@ func _refresh_buttons() -> void:
 	var can_order: bool = can_assign
 	for btn in _order_buttons.values():
 		btn.disabled = not can_order
+	# 附身按钮：有选中单位时可用
+	if _possess_btn != null:
+		_possess_btn.disabled = not has_selection
 
 
 # ─────────────────────────────── 按钮回调 ────────────────────────────────
@@ -298,6 +312,31 @@ func _compute_advance_target(units: Array) -> Vector2:
 	avg_x /= count
 	avg_y /= count
 	return Vector2(avg_x + ADVANCE_OFFSET_X, avg_y)
+
+
+## 附身选中单位：切换到 POSSESS 模式
+func _on_possess_pressed() -> void:
+	if _selection == null:
+		return
+	var units: Array = _selection.get_selected_units() if _selection.has_method("get_selected_units") else []
+	if units.is_empty():
+		_show_notify("请先选中一个单位")
+		return
+	var unit: Node = units[0]
+	if not is_instance_valid(unit):
+		return
+	if unit.has_method("is_dead") and unit.is_dead():
+		_show_notify("不能附身已死亡的单位")
+		return
+	# 切换到 POSSESS 模式
+	if _game_root != null and _game_root.has_method("get") and _game_root.get("input_dispatcher") != null:
+		var dispatcher: Node = _game_root.input_dispatcher
+		# 先设置 pending entity（SelectionSystem 在模式切换时会清空选择）
+		var pi: Node = _game_root.get_possession_interface() if _game_root.has_method("get_possession_interface") else null
+		if pi != null and pi.has_method("set_pending_entity"):
+			pi.set_pending_entity(unit)
+		if dispatcher.has_method("enter_possess_mode"):
+			dispatcher.enter_possess_mode()
 
 
 func _show_notify(msg: String) -> void:

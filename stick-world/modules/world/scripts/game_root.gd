@@ -43,6 +43,8 @@ const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/comm
 const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/battle_panel.gd")
 ## Minimap 脚本（§15 阶段 0.6 小地图）
 const _MinimapScript: GDScript = preload("res://modules/ui/scripts/minimap.gd")
+const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
+const _PossessPanelScript: GDScript = preload("res://modules/ui/scripts/possess_panel.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -86,6 +88,10 @@ var _battle_panel: Control = null
 ## Minimap 实例引用（运行时由 _ready 装配）
 var _minimap: Control = null
 
+# ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
+var _possession_interface: Node = null
+var _possess_panel: Control = null
+
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
 @onready var camera_rig: Camera2D = get_node_or_null(WorldAPI.PATH_CAMERA_RIG)
@@ -109,6 +115,8 @@ func _ready() -> void:
 	_setup_tactical_system()
 	_setup_battle_panel()
 	_setup_minimap()
+	_setup_possession_system()
+	_setup_possess_panel()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -324,6 +332,53 @@ func _setup_minimap() -> void:
 ## 获取 Minimap 引用（供测试用）
 func get_minimap() -> Control:
 	return _minimap
+
+
+# ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────
+
+## 实例化 PossessionInterface，注册为 POSSESS 模式 handler。详见 §7.1.3、§7.5。
+func _setup_possession_system() -> void:
+	if input_dispatcher == null or not input_dispatcher.has_method("register_handler"):
+		push_warning("[GameRoot] InputDispatcher 未就绪，跳过附身系统装配")
+		return
+	var pi := Node.new()
+	pi.set_script(_PossessionInterfaceScript)
+	pi.name = "PossessionInterface"
+	add_child(pi)
+	_possession_interface = pi
+	input_dispatcher.register_handler(PlayerControlAPI.Mode.POSSESS, pi)
+
+
+## 获取 PossessionInterface 引用（供测试用）
+func get_possession_interface() -> Node:
+	return _possession_interface
+
+
+## 给场景中已存在的 PossessPanel 占位节点挂脚本，并注入系统引用。详见 §10.1。
+func _setup_possess_panel() -> void:
+	if ui_root == null:
+		return
+	var mp: Control = ui_root.get_node_or_null("ModePanel")
+	if mp == null:
+		return
+	var pp: Control = mp.get_node_or_null("PossessPanel")
+	if pp == null:
+		return
+	pp.set_script(_PossessPanelScript)
+	_possess_panel = pp
+	call_deferred("_setup_possess_panel_deferred")
+
+
+func _setup_possess_panel_deferred() -> void:
+	if _possess_panel == null:
+		return
+	if _possess_panel.has_method("setup"):
+		_possess_panel.setup(self)
+
+
+## 获取 PossessPanel 引用（供测试用）
+func get_possess_panel() -> Control:
+	return _possess_panel
 
 
 ## 获取 BattleDirector 引用（供测试用）

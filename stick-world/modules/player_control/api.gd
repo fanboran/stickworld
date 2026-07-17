@@ -7,9 +7,22 @@ extends RefCounted
 ## - SelectionSystem 框选/选择 —— P0.6 阶段
 ## - FormationSystem 编队 —— P0.6 阶段
 ## - TacticalOrders 战术指令 —— P0.6 阶段
-## - PossessionInterface 附身操控 —— P0.7 阶段
+## - PossessionInterface 附身操控 -- P0.7 阶段
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §七.3、§八.3。
+## 详见 docs/技术/架构/场景与战斗架构.md §7.1.3、§7.5、§八.3。
+##
+## PossessionInterface 公共 API：
+##   - get_possessed_entity() -> Node2D    获取当前附身实体
+##   - possess(entity: Node2D) -> void     主动附身指定实体
+##   - release() -> void                   释放附身并退出 POSSESS 模式
+##
+## 附身流程：
+##   1. BATTLE 模式框选单位
+##   2. BattlePanel 点击"附身选中单位"按钮 -> InputDispatcher.enter_possess_mode()
+##   3. PossessionInterface._on_mode_activated 从 SelectionSystem 取选中单位
+##   4. entity.set_possessed(true) + CameraRig 居中跟随 + TimeManager 降速
+##   5. WASD 移动 / 鼠标左键攻击 / ESC 退出
+##   6. 退出时恢复之前模式和时间速度
 
 # ─────────────────────────────── 输入模式 ────────────────────────────────
 enum Mode {

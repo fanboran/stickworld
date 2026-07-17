@@ -118,8 +118,12 @@ extends Node
 @warning_ignore("unused_signal") signal ui_switch_view(view_name: String)
 # 缩放级别变化：相机 → UI
 @warning_ignore("unused_signal") signal ui_zoom_level_changed(new_level)
-# 附身操控单位：UI → 战斗系统
+# 附身操控单位：UI -> 战斗系统
 @warning_ignore("unused_signal") signal ui_possess_unit(unit_id)
+# 附身开始：PossessionInterface -> UI、Units、TimeManager
+@warning_ignore("unused_signal") signal possession_started(entity)
+# 附身结束：PossessionInterface -> UI、Units、TimeManager
+@warning_ignore("unused_signal") signal possession_ended(entity)
 
 # ─────────────────────────────── 通用工具 ────────────────────────────────
 

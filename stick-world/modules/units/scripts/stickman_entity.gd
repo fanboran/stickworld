@@ -116,6 +116,7 @@ func _enter_tree() -> void:
 
 
 ## 玩家按 Alt 切换散步/奔跑模式（仅附身时生效）
+## 鼠标左键攻击（仅附身时生效，§7.5）
 func _input(event: InputEvent) -> void:
 	if not possessed:
 		return
@@ -125,6 +126,8 @@ func _input(event: InputEvent) -> void:
 			_is_running = false
 			_current_speed = WALK_SPEED
 			_play_anim("walk")
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_player_attack()
 
 
 func _ready() -> void:
@@ -344,6 +347,47 @@ func _play_anim(anim_name: String) -> void:
 		return
 	rig.play(anim_name)
 	_current_anim = anim_name
+
+
+# ─────────────────────────────── 玩家攻击（§7.5）────────────────────────────────
+
+## 玩家附身时鼠标左键攻击：找最近敌人InRange并执行攻击
+func _player_attack() -> void:
+	if weapon_mount == null or not weapon_mount.has_method("can_attack"):
+		return
+	if not weapon_mount.can_attack():
+		return
+	var target: Node = _find_nearest_enemy_in_range()
+	if target == null:
+		return
+	weapon_mount.perform_attack(target)
+
+
+## 找最近敌人（不同阵营且存活）在武器射程内
+func _find_nearest_enemy_in_range() -> Node:
+	if _map_ref == null or not is_instance_valid(_map_ref):
+		return null
+	if not _map_ref.has_method("get_entities"):
+		return null
+	var attack_range: float = weapon_mount.attack_range if weapon_mount != null and weapon_mount.get("attack_range") != null else 140.0
+	var nearest: Node = null
+	var nearest_dist: float = attack_range
+	for e in _map_ref.get_entities():
+		if e == self or not is_instance_valid(e):
+			continue
+		if not (e is CharacterBody2D):
+			continue
+		# 跳过同阵营
+		if e.has_method("get_faction") and e.get_faction() == faction_id:
+			continue
+		# 跳过死亡
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		var dist: float = global_position.distance_to(e.global_position)
+		if dist <= nearest_dist:
+			nearest_dist = dist
+			nearest = e
+	return nearest
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────

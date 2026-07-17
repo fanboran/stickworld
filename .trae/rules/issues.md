@@ -1,3 +1,6 @@
+---
+alwaysApply: false
+---
 ### **附录：向量知识库（ChromaDB 错误记忆系统）**
 
 > 替代旧的两阶 Issue 体系（working_log.md / issues.md），使用向量数据库实现语义化的错误知识管理。

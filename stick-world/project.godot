@@ -26,7 +26,6 @@ AudioManager="*res://core/services/audio_manager.gd"
 SaveManager="*res://core/autoload/save_manager.gd"
 SceneManager="*res://core/autoload/scene_manager.gd"
 DebugApi="*res://modules/debug/api.gd"
-_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
 
@@ -37,7 +36,7 @@ window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/map_editor/plugin.cfg")
+enabled=PackedStringArray("res://addons/map_editor/plugin.cfg")
 
 [file_customization]
 

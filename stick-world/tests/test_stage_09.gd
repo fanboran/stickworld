@@ -14,7 +14,7 @@ extends Node
 ##   - 传送封锁（战斗中/附身中禁止传送）
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptBuilding := preload("res://modules/buildings/scripts/building.gd")
+const ScriptBuilding := preload("res://modules/old_buildings/scripts/building.gd")
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 
 var _runner: TestRunner

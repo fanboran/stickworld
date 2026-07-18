@@ -1,0 +1,189 @@
+[gd_scene format=3 uid="uid://bms1thlv10001"]
+
+[ext_resource type="Texture2D" uid="uid://mgn16ap6gdgu" path="res://modules/old_buildings/assets/smithy_lv1.png" id="1_tex"]
+[ext_resource type="Script" uid="uid://bhwpk8y6t8cwg" path="res://modules/old_buildings/scripts/building_snap.gd" id="2_snap"]
+
+[sub_resource type="RectangleShape2D" id="rect_passage"]
+size = Vector2(498, 805)
+
+[sub_resource type="RectangleShape2D" id="rect_interaction"]
+size = Vector2(420, 700)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_0a4cv"]
+size = Vector2(238, 16)
+
+[sub_resource type="ConvexPolygonShape2D" id="ConvexPolygonShape2D_hyap7"]
+points = PackedVector2Array(178, -416, 248, -282, 212, -280, 146, -417)
+
+[sub_resource type="ConvexPolygonShape2D" id="ConvexPolygonShape2D_eg0p3"]
+points = PackedVector2Array(55, -419, 143, -417, 194, -311, 103, -310)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_nm4qu"]
+size = Vector2(224, 102)
+
+[sub_resource type="ConvexPolygonShape2D" id="ConvexPolygonShape2D_ogq8d"]
+resource_local_to_scene = true
+points = PackedVector2Array(-299, -236, -181, -406, 39, -410, -58, -235)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_g06i6"]
+size = Vector2(133.06888, 20.437284)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_nae50"]
+size = Vector2(23, 117)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ogq8d"]
+size = Vector2(70, 65)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_eg0p3"]
+size = Vector2(107, 68)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_irt5y"]
+size = Vector2(103, 156)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hyur1"]
+size = Vector2(41, 98)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_dlo6s"]
+size = Vector2(89, 74)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_g2uht"]
+size = Vector2(21, 246)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_nr3fk"]
+size = Vector2(20, 197)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hyap7"]
+size = Vector2(500, 356)
+
+[node name="BldSmithyLv1" type="Node2D" unique_id=1079258452]
+script = ExtResource("2_snap")
+
+[node name="Exterior" type="Node2D" parent="." unique_id=525560141]
+
+[node name="Roof" type="Sprite2D" parent="Exterior" unique_id=1790951434]
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("1_tex")
+offset = Vector2(0, -512)
+
+[node name="WallFront" type="Sprite2D" parent="Exterior" unique_id=1180973947]
+modulate = Color(0.9, 0.9, 0.9, 1)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("1_tex")
+offset = Vector2(0, -512)
+
+[node name="PassageBarrier" type="Area2D" parent="." unique_id=1878038708]
+visible = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier" unique_id=1581363915]
+position = Vector2(-4, -474.5)
+shape = SubResource("rect_passage")
+
+[node name="Interior" type="Node2D" parent="." unique_id=510302364]
+visible = false
+
+[node name="Floor" type="ColorRect" parent="Interior" unique_id=1212429181]
+offset_left = -80.0
+offset_top = -60.0
+offset_right = 80.0
+offset_bottom = 20.0
+color = Color(0.4, 0.3, 0.2, 1)
+
+[node name="WorkSlots" type="Node2D" parent="Interior" unique_id=1042662447]
+
+[node name="Slot0" type="Marker2D" parent="Interior/WorkSlots" unique_id=546861241]
+position = Vector2(-40, 0)
+
+[node name="Slot1" type="Marker2D" parent="Interior/WorkSlots" unique_id=1915752302]
+position = Vector2(40, 0)
+
+[node name="InteractionZone" type="Area2D" parent="." unique_id=1539287252]
+visible = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="InteractionZone" unique_id=489280042]
+position = Vector2(0, -400)
+shape = SubResource("rect_interaction")
+
+[node name="示例" type="Node2D" parent="." unique_id=897200484]
+
+[node name="顶棚" type="Node2D" parent="示例" unique_id=1385562981]
+
+[node name="从左边缘延伸到右边缘的木头顶棚横梁，显示层级在顶棚稻草后，前景支柱前" type="CollisionShape2D" parent="示例/顶棚" unique_id=1054928835]
+position = Vector2(96, -303)
+shape = SubResource("RectangleShape2D_0a4cv")
+
+[node name="顶棚右端点，上下更长稻草，平行四边形" type="CollisionShape2D" parent="示例/顶棚" unique_id=243155533]
+shape = SubResource("ConvexPolygonShape2D_hyap7")
+
+[node name="顶棚无限延伸稻草，平行四边形" type="CollisionShape2D" parent="示例/顶棚" unique_id=1033835560]
+shape = SubResource("ConvexPolygonShape2D_eg0p3")
+
+[node name="顶棚后景，渲染层级在一切以后" type="CollisionShape2D" parent="示例/顶棚" unique_id=1069772964]
+position = Vector2(80, -333)
+shape = SubResource("RectangleShape2D_nm4qu")
+
+[node name="顶棚左侧边缘组合体1，平行四边形" type="CollisionShape2D" parent="示例/顶棚" unique_id=1102435751]
+position = Vector2(14, -21)
+shape = SubResource("ConvexPolygonShape2D_ogq8d")
+
+[node name="顶棚左侧边缘组合体2，比顶棚横梁要显示的靠后" type="Node2D" parent="示例/顶棚" unique_id=287671113]
+
+[node name="斜支柱" type="CollisionShape2D" parent="示例/顶棚/顶棚左侧边缘组合体2，比顶棚横梁要显示的靠后" unique_id=631354669]
+position = Vector2(68.499985, -362)
+rotation = 1.1554079
+scale = Vector2(0.9999999, 0.9999999)
+shape = SubResource("RectangleShape2D_g06i6")
+
+[node name="竖支柱" type="CollisionShape2D" parent="示例/顶棚/顶棚左侧边缘组合体2，比顶棚横梁要显示的靠后" unique_id=751921565]
+position = Vector2(37.5, -355.5)
+shape = SubResource("RectangleShape2D_nae50")
+
+[node name="建筑内部物体" type="Node2D" parent="示例" unique_id=816727390]
+
+[node name="酒桶，置物用的，上面铁砧" type="CollisionShape2D" parent="示例/建筑内部物体" unique_id=1460923594]
+position = Vector2(-103, -123)
+shape = SubResource("RectangleShape2D_ogq8d")
+
+[node name="铁砧" type="CollisionShape2D" parent="示例/建筑内部物体" unique_id=947759227]
+position = Vector2(-96.5, -190)
+shape = SubResource("RectangleShape2D_eg0p3")
+
+[node name="高炉" type="Node2D" parent="示例/建筑内部物体" unique_id=882196885]
+
+[node name="高炉体" type="CollisionShape2D" parent="示例/建筑内部物体/高炉" unique_id=815697151]
+position = Vector2(70.5, -166)
+shape = SubResource("RectangleShape2D_irt5y")
+
+[node name="高炉烟囱，在除了顶棚后景之后" type="CollisionShape2D" parent="示例/建筑内部物体/高炉" unique_id=631032527]
+position = Vector2(80.5, -310)
+shape = SubResource("RectangleShape2D_hyur1")
+
+[node name="小桌子，置物用" type="CollisionShape2D" parent="示例/建筑内部物体" unique_id=832653368]
+position = Vector2(154.5, -113)
+shape = SubResource("RectangleShape2D_dlo6s")
+
+[node name="支柱" type="Node2D" parent="示例" unique_id=1493373823]
+
+[node name="支柱前景左" type="CollisionShape2D" parent="示例/支柱" unique_id=111507070]
+position = Vector2(-205, -200)
+shape = SubResource("RectangleShape2D_g2uht")
+
+[node name="支柱前景右" type="CollisionShape2D" parent="示例/支柱" unique_id=1073668612]
+position = Vector2(204, -197)
+shape = SubResource("RectangleShape2D_g2uht")
+
+[node name="支柱前景中间那一堆" type="CollisionShape2D" parent="示例/支柱" unique_id=1145101355]
+position = Vector2(-5.5, -197)
+shape = SubResource("RectangleShape2D_g2uht")
+
+[node name="后景支柱左" type="CollisionShape2D" parent="示例/支柱" unique_id=694919390]
+position = Vector2(-149, -200.5)
+shape = SubResource("RectangleShape2D_nr3fk")
+
+[node name="后景支柱右" type="CollisionShape2D" parent="示例/支柱" unique_id=797354037]
+position = Vector2(166, -190)
+shape = SubResource("RectangleShape2D_nr3fk")
+
+[node name="建筑显示范围" type="CollisionShape2D" parent="示例" unique_id=1378090396]
+visible = false
+position = Vector2(2, -252)
+shape = SubResource("RectangleShape2D_hyap7")

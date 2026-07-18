@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dx08h4nwyms7t"
-path="res://.godot/imported/smithy_lv3.png-bb9959ef6d40ce2f08e11e0941e1db62.ctex"
+path="res://.godot/imported/smithy_lv3.png-668e227456059e21f21ccc240f018912.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/buildings/assets/smithy_lv3.png"
-dest_files=["res://.godot/imported/smithy_lv3.png-bb9959ef6d40ce2f08e11e0941e1db62.ctex"]
+source_file="res://modules/old_buildings/assets/smithy_lv3.png"
+dest_files=["res://.godot/imported/smithy_lv3.png-668e227456059e21f21ccc240f018912.ctex"]
 
 [params]
 

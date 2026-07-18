@@ -398,7 +398,6 @@ func get_possession_interface() -> Node:
 func get_possess_panel() -> Control:
 	return _possess_panel
 
-
 ## 获取 BattleDirector 引用（供测试用）
 func get_battle_director_node() -> Node:
 	return battle_director

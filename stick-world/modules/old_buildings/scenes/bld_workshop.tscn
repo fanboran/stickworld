@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://bldworkshop001ab"]
 
-[ext_resource type="Script" path="res://modules/buildings/scripts/building.gd" id="1_building"]
+[ext_resource type="Script" path="res://modules/old_buildings/scripts/building.gd" id="1_building"]
 
 [sub_resource type="RectangleShape2D" id="rect_passage"]
 size = Vector2(64, 80)

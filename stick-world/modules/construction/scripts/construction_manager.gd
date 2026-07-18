@@ -20,7 +20,7 @@ extends Node
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 const ScriptWorkCrewAssigner := preload("res://modules/construction/scripts/work_crew_assigner.gd")
 const ScriptPlacementSystem := preload("res://modules/construction/placement/placement_system.gd")
-const ScriptBuilding := preload("res://modules/buildings/scripts/building.gd")
+const ScriptBuilding := preload("res://modules/old_buildings/scripts/building.gd")
 
 # ─────────────────────────────── 字段 ────────────────────────────────
 
@@ -77,7 +77,7 @@ func register_building_scene(def_id: String, scene: PackedScene) -> void:
 
 ## P0 默认注册：bld_workshop
 func _register_default_building_scenes() -> void:
-	var workshop_scene := load("res://modules/buildings/scenes/bld_workshop.tscn") as PackedScene
+	var workshop_scene := load("res://modules/old_buildings/scenes/bld_workshop.tscn") as PackedScene
 	if workshop_scene != null:
 		register_building_scene("bld_workshop", workshop_scene)
 	else:

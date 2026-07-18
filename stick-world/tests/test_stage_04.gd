@@ -22,7 +22,7 @@ const ScriptVillageMap := preload("res://modules/world/scripts/village_map.gd")
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 const ScriptConstructionManager := preload("res://modules/construction/scripts/construction_manager.gd")
 const ScriptConstructionApi := preload("res://modules/construction/api.gd")
-const ScriptBuilding := preload("res://modules/buildings/scripts/building.gd")
+const ScriptBuilding := preload("res://modules/old_buildings/scripts/building.gd")
 
 var _runner: TestRunner
 var _game_root: Node

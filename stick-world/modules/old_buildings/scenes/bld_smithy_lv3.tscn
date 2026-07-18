@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://bms3thlv30003"]
 
-[ext_resource type="Texture2D" uid="uid://dx08h4nwyms7t" path="res://modules/buildings/assets/smithy_lv3.png" id="1_tex"]
-[ext_resource type="Script" uid="uid://bhwpk8y6t8cwg" path="res://modules/buildings/scripts/building_snap.gd" id="2_snap"]
+[ext_resource type="Texture2D" uid="uid://dx08h4nwyms7t" path="res://modules/old_buildings/assets/smithy_lv3.png" id="1_tex"]
+[ext_resource type="Script" uid="uid://bhwpk8y6t8cwg" path="res://modules/old_buildings/scripts/building_snap.gd" id="2_snap"]
 
 [sub_resource type="RectangleShape2D" id="rect_passage"]
 size = Vector2(482.5, 512)

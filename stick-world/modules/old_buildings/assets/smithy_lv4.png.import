@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b01m34iyf6t5a"
-path="res://.godot/imported/smithy_lv2.png-3684dbdb61c0a7ec0aae66f89db1e7e3.ctex"
+uid="uid://cn2mi0tq3ouwd"
+path="res://.godot/imported/smithy_lv4.png-7f89252ee55e56a7f2638b8e1f123caa.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/buildings/assets/smithy_lv2.png"
-dest_files=["res://.godot/imported/smithy_lv2.png-3684dbdb61c0a7ec0aae66f89db1e7e3.ctex"]
+source_file="res://modules/old_buildings/assets/smithy_lv4.png"
+dest_files=["res://.godot/imported/smithy_lv4.png-7f89252ee55e56a7f2638b8e1f123caa.ctex"]
 
 [params]
 

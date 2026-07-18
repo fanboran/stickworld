@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://0g2l47kb7emi"]
+
+[ext_resource type="Script" uid="uid://c2n6pmrt34kqe" path="res://modules/building_gen/scripts/preview/smithy_preview.gd" id="1_d0qwq"]
+
+[node name="SmithyPreview" type="Node2D" unique_id=1133741269]
+script = ExtResource("1_d0qwq")
+width_cells = 18

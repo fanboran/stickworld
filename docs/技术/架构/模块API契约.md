@@ -40,6 +40,53 @@ func repair_building(building_id: String, org_id: String) -> Dictionary
 # [P] building 状态=DAMAGED
 ```
 
+> **🔄 模块化重构后（B1+ 阶段，详见 [建筑模块化设计.md](建筑模块化设计.md)）**：
+> 
+> 上述 `building_type` 字符串将被 `BuildingDef` 配方取代，签名改为：
+> 
+> ```gdscript
+> # 建造（模块化版本）
+> func start_construction(region_id: String, building_def: BuildingDef, cell_x: int, org_id: String) -> Dictionary
+> # [P] building_def 是 config/buildings/defs/ 下的 .tres 资源
+> # [P] BuildingGenApi 已注册所需材质和模块
+> # [Q] 创建项目并调 BuildingGen.generate(def) 产出节点
+>
+> # 直接生成（绕过建造过程，用于 InitialBuildingsList）
+> func spawn_operational_building(building_def: BuildingDef, cell_x: int) -> Dictionary
+> # [Q] 瞬间生成 OPERATIONAL 状态的 BuildingEntity，挂到 BuildingHost
+>
+> # 后期追加模块到已有建筑
+> func add_module_to_building(building_id: String, layer_index: int, module_id: String, cell_pos: Vector2i) -> Dictionary
+> # [P] layer_index 在 0..def.size.y-1 范围
+> # [P] cell_pos 不与其他模块 footprint 冲突
+> # [Q] 实例化模块并挂到对应 layer.Modules_Slot，前景墙按需重建
+> ```
+
+---
+
+## 一-A、建筑生成模块 `modules/building_gen/api.gd`（B0+ 阶段新增）
+
+```gdscript
+# 资源注册
+func register_material(material: MaterialDef) -> void
+func register_module(module: ModuleDef) -> void
+func register_roof(roof: RoofShape) -> void
+
+# 资源查询
+func get_material(material_id: String) -> MaterialDef
+func get_module(module_id: String) -> ModuleDef
+func get_roof(shape_id: String) -> RoofShape
+
+# 程序化生成
+func generate_building(def: BuildingDef) -> Node2D
+# [P] def.default_material 或 def.layers[*].material_id 已注册
+# [P] def.layers[*].module_specs 引用的 module_id 已注册
+# [Q] 返回的节点树结构遵循 [建筑模块化设计.md] §三 的 BuildingEntity 节点结构
+#     包含 Layers / Roof / InteractionZone / PassageBarrier / Footprint
+#     模块占位格的前景墙已挖洞（不生成）
+#     透明化时遍历所有层的 FrontLayer.Walls_Front 做批量 alpha→0.3
+```
+
 ---
 
 ## 二、科技模块 `modules/technology/api.gd`

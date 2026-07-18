@@ -1,0 +1,57 @@
+[gd_scene format=3 uid="uid://cmarkertool001"]
+
+[ext_resource type="Script" path="res://modules/building_gen/tools/marker_tool.gd" id="1_script"]
+
+[node name="标注工具" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="RoofMain_底左" type="Marker2D" parent="."]
+position = Vector2(103, -236)
+
+[node name="RoofMain_底右" type="Marker2D" parent="."]
+position = Vector2(194, -236)
+
+[node name="RoofMain_顶左" type="Marker2D" parent="."]
+position = Vector2(39, -346)
+
+[node name="RoofMain_顶右" type="Marker2D" parent="."]
+position = Vector2(130, -346)
+
+[node name="RoofRightEnd_底左" type="Marker2D" parent="."]
+position = Vector2(212, -206)
+
+[node name="RoofRightEnd_底右" type="Marker2D" parent="."]
+position = Vector2(248, -206)
+
+[node name="RoofRightEnd_顶左" type="Marker2D" parent="."]
+position = Vector2(131, -346)
+
+[node name="RoofRightEnd_顶右" type="Marker2D" parent="."]
+position = Vector2(167, -346)
+
+[node name="RoofLeftGroup1_底左" type="Marker2D" parent="."]
+position = Vector2(-285, -182)
+
+[node name="RoofLeftGroup1_底右" type="Marker2D" parent="."]
+position = Vector2(-44, -182)
+
+[node name="RoofLeftGroup1_顶左" type="Marker2D" parent="."]
+position = Vector2(-190, -346)
+
+[node name="RoofLeftGroup1_顶右" type="Marker2D" parent="."]
+position = Vector2(51, -346)
+
+[node name="后景柱_左" type="Marker2D" parent="."]
+position = Vector2(-149, -122.5)
+
+[node name="后景柱_右" type="Marker2D" parent="."]
+position = Vector2(166, -122.5)
+
+[node name="前景柱_左" type="Marker2D" parent="."]
+position = Vector2(-205, -123)
+
+[node name="前景柱_中" type="Marker2D" parent="."]
+position = Vector2(-5.5, -123)
+
+[node name="前景柱_右" type="Marker2D" parent="."]
+position = Vector2(204, -123)

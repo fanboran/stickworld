@@ -1,18 +1,27 @@
-[gd_scene load_steps=3 format=3 uid="uid://bldworkshop001ab"]
+[gd_scene load_steps=4 format=3 uid="uid://bldworkshop001ab"]
 
 [ext_resource type="Script" path="res://modules/buildings/scripts/building.gd" id="1_building"]
 
 [sub_resource type="RectangleShape2D" id="rect_passage"]
 size = Vector2(64, 80)
 
+[sub_resource type="RectangleShape2D" id="rect_interaction"]
+size = Vector2(80, 100)
+
 [node name="BldWorkshop" type="Node2D"]
 script = ExtResource("1_building")
 def_id = "bld_workshop"
 width = 2
 
-[node name="Exterior" type="Polygon2D" parent="."]
+[node name="Exterior" type="Node2D" parent="."]
+
+[node name="Roof" type="Polygon2D" parent="Exterior"]
 polygon = PackedVector2Array(-32, -80, 32, -80, 32, 0, -32, 0)
 color = Color(0.5, 0.5, 0.55, 1)
+
+[node name="WallFront" type="Polygon2D" parent="Exterior"]
+polygon = PackedVector2Array(-32, -80, 32, -80, 32, 0, -32, 0)
+color = Color(0.4, 0.4, 0.45, 1)
 
 [node name="PassageBarrier" type="Area2D" parent="."]
 
@@ -20,10 +29,23 @@ color = Color(0.5, 0.5, 0.55, 1)
 position = Vector2(0, -40)
 shape = SubResource("rect_passage")
 
-[node name="WorkSlots" type="Node2D" parent="."]
+[node name="Interior" type="Node2D" parent="."]
+visible = false
 
-[node name="Slot0" type="Marker2D" parent="WorkSlots"]
+[node name="Floor" type="Polygon2D" parent="Interior"]
+polygon = PackedVector2Array(-30, -10, 30, -10, 30, 30, -30, 30)
+color = Color(0.6, 0.5, 0.4, 1)
+
+[node name="WorkSlots" type="Node2D" parent="Interior"]
+
+[node name="Slot0" type="Marker2D" parent="Interior/WorkSlots"]
 position = Vector2(-16, 30)
 
-[node name="Slot1" type="Marker2D" parent="WorkSlots"]
+[node name="Slot1" type="Marker2D" parent="Interior/WorkSlots"]
 position = Vector2(16, 30)
+
+[node name="InteractionZone" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="InteractionZone"]
+position = Vector2(0, -45)
+shape = SubResource("rect_interaction")

@@ -213,6 +213,72 @@ func get_all_project_ids() -> Array:
 
 # ─────────────────────────────── 拆除 ────────────────────────────────
 
+## 直接生成已完工建筑（OPERATIONAL 状态），跳过建造过程。
+## 用于：InitialBuildingsList 预置建筑、地形建筑初始化、测试快速部署。
+## 返回 {ok, building_id, cell_x, width} 或 {ok:false, error}。
+func spawn_operational_building(def_id: String, cell_x: int, width: int = 2) -> Dictionary:
+	if _map == null:
+		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
+	if not _building_scene_registry.has(def_id):
+		return {"ok": false, "error": "未注册建筑类型: %s" % def_id}
+	var scene: PackedScene = _building_scene_registry[def_id]
+
+	# 校验选址
+	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null
+	if placement_grid == null:
+		return {"ok": false, "error": "地图缺少 placement_grid"}
+	var ps := ScriptPlacementSystem.new()
+	var validate_result := ps.validate(placement_grid, cell_x, width)
+	if not validate_result.ok:
+		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
+
+	# 实例化建筑场景
+	var building: Node = scene.instantiate()
+	if building == null or not building is Node2D:
+		return {"ok": false, "error": "建筑场景实例化失败"}
+
+	# 注入元数据
+	if building is ScriptBuilding:
+		var typed: ScriptBuilding = building as ScriptBuilding
+		typed.def_id = def_id
+		typed.cell_x = cell_x
+		typed.width = width
+		typed.is_terrain = false
+
+	# 挂到 BuildingHost
+	var host: Node2D = _map.get("building_host") if "building_host" in _map else null
+	if host == null:
+		building.queue_free()
+		return {"ok": false, "error": "map.building_host 不存在"}
+	host.add_child(building)
+
+	# 摆放位置（建筑原点 = 底部中心 = ground_y）
+	var world_x: float = cell_x * 32.0 + width * 32.0 / 2.0
+	var ground_y: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0)
+	(building as Node2D).global_position = Vector2(world_x, ground_y)
+
+	# 立即设为 OPERATIONAL
+	if building is ScriptBuilding:
+		(building as ScriptBuilding).set_state(ScriptBuilding.State.OPERATIONAL)
+
+	# 注册到 PlacementGrid
+	if placement_grid != null and placement_grid.has_method("occupy"):
+		placement_grid.occupy(cell_x, width, building)
+
+	# 注册 building_id
+	var building_id := "bld_%04d" % _next_building_id
+	_next_building_id += 1
+	if building is ScriptBuilding:
+		(building as ScriptBuilding).set_meta("building_id", building_id)
+	_buildings[building_id] = building
+	_building_to_id[building] = building_id
+
+	print("[ConstructionManager] 预置建筑已生成: %s (def=%s, cell_x=%d, width=%d)" % [building_id, def_id, cell_x, width])
+	return {"ok": true, "building_id": building_id, "cell_x": cell_x, "width": width}
+
+
+# ─────────────────────────────── 拆除 ────────────────────────────────
+
 ## 拆除建筑
 ## [Q] 资源部分回收, building 状态=DESTROYED, 发射 building_removed
 func demolish_building(building_id: String) -> Dictionary:

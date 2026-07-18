@@ -1,9 +1,10 @@
 @tool
-extends Node2D
-## 建筑编辑器吸附脚本
+extends Building
+## 建筑编辑器吸附脚本 + Building 室内系统（§5）。
 ## 挂在建筑场景根节点上，在编辑器中拖动建筑时：
 ## - X 吸附到 32px 网格
 ## - Y 吸附到碰撞体下边界对齐草地中线
+## 运行时继承 Building 的全部方法（透明化、工作位、状态机等）。
 
 const CELL_SIZE := 32
 
@@ -12,6 +13,8 @@ var _snapping := false
 
 
 func _ready() -> void:
+	if not Engine.is_editor_hint():
+		super()  # 调用 Building._ready() -> _lookup_children() + _apply_state_visual()
 	set_notify_local_transform(true)
 
 

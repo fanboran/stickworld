@@ -204,7 +204,7 @@ func _test_validator_pass() -> void:
 		_runner.assert_true(false, "grid 创建失败")
 		return
 	var v := ScriptPlacementValidator.new()
-	var r = v.validate_placement(g, 0, 0, 2, 2)
+	var r = ScriptPlacementSystem.validate(g, 0, 2)
 	_runner.assert_true(r.ok, "空闲区域应校验通过")
 	g.queue_free()
 

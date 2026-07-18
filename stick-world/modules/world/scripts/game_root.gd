@@ -17,6 +17,8 @@ const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/test
 const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/test_village_map_b.tscn")
 ## 道路地图场景（阶段 0.8 村落间道路）
 const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/test_road_map.tscn")
+## 测试大建筑内部地图场景（阶段 0.9.5 传送切换）
+const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/test_mega_interior.tscn")
 ## 玩家火柴人实体场景
 const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 ## EXPLORE 模式 handler 脚本
@@ -47,6 +49,10 @@ const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/comm
 const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/battle_panel.gd")
 ## Minimap 脚本（§15 阶段 0.6 小地图）
 const _MinimapScript: GDScript = preload("res://modules/ui/scripts/minimap.gd")
+## PossessionInterface 脚本（附身系统，§15 阶段 0.7）
+const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
+## PossessPanel 脚本（附身 UI，§15 阶段 0.7）
+const _PossessPanelScript: GDScript = preload("res://modules/ui/scripts/possess_panel.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -54,6 +60,8 @@ const TEST_VILLAGE_MAP_ID := "test_village"
 const ROAD_MAP_ID := "road_a_to_b"
 ## 第二个测试村落地图 ID
 const VILLAGE_B_MAP_ID := "test_village_b"
+## 测试大建筑内部地图 ID
+const MEGA_INTERIOR_MAP_ID := "test_mega_interior"
 ## 玩家初始 X 位置（地图坐标系，偏左便于观察）
 const PLAYER_SPAWN_X: float = 300.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为）
@@ -96,6 +104,18 @@ var _battle_panel: Control = null
 ## Minimap 实例引用（运行时由 _ready 装配）
 var _minimap: Control = null
 
+# ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
+## PossessionInterface 实例引用（运行时由 _ready 装配）
+var _possession_interface: Node = null
+## PossessPanel 实例引用（运行时由 _ready 装配）
+var _possess_panel: Control = null
+
+# ─────────────────────────────── 传送系统（§5.6）────────────────────────────────
+## 传送返回地图 ID（进入 MegaInteriorMap 前记录，退出时返回）
+var _return_map_id: String = ""
+## 传送进入点 X（返回时 spawn 位置）
+var _return_spawn_x: float = 0.0
+
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
 @onready var camera_rig: Camera2D = get_node_or_null(WorldAPI.PATH_CAMERA_RIG)
@@ -119,6 +139,8 @@ func _ready() -> void:
 	_setup_tactical_system()
 	_setup_battle_panel()
 	_setup_minimap()
+	_setup_possession_interface()
+	_setup_possess_panel()
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
@@ -335,6 +357,47 @@ func _setup_minimap() -> void:
 func get_minimap() -> Control:
 	return _minimap
 
+# ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────
+
+## 实例化 PossessionInterface，注册为 POSSESS 模式 handler。
+func _setup_possession_interface() -> void:
+	var pi := Node.new()
+	pi.set_script(_PossessionInterfaceScript)
+	pi.name = "PossessionInterface"
+	add_child(pi)
+	_possession_interface = pi
+	# 注册为 POSSESS handler
+	if input_dispatcher != null and input_dispatcher.has_method("register_handler"):
+		input_dispatcher.register_handler(PlayerControlAPI.Mode.POSSESS, pi)
+
+## 给场景中已存在的 PossessPanel 占位节点挂脚本，并调用 setup。
+func _setup_possess_panel() -> void:
+	if ui_root == null:
+		return
+	var mp: Control = ui_root.get_node_or_null("ModePanel")
+	if mp == null:
+		return
+	var pp: Control = mp.get_node_or_null("PossessPanel")
+	if pp == null:
+		return
+	pp.set_script(_PossessPanelScript)
+	_possess_panel = pp
+	call_deferred("_setup_possess_panel_deferred")
+
+func _setup_possess_panel_deferred() -> void:
+	if _possess_panel == null:
+		return
+	if _possess_panel.has_method("setup"):
+		_possess_panel.setup(self)
+
+## 获取 PossessionInterface 引用（供测试和 Building 调用）
+func get_possession_interface() -> Node:
+	return _possession_interface
+
+## 获取 PossessPanel 引用（供测试用）
+func get_possess_panel() -> Control:
+	return _possess_panel
+
 
 ## 获取 BattleDirector 引用（供测试用）
 func get_battle_director_node() -> Node:
@@ -382,6 +445,7 @@ func _register_default_maps() -> void:
 	scene_loader.register_map(TEST_VILLAGE_MAP_ID, _VILLAGE_MAP_SCENE, WorldAPI.MapType.VILLAGE)
 	scene_loader.register_map(ROAD_MAP_ID, _ROAD_MAP_SCENE, WorldAPI.MapType.ROAD)
 	scene_loader.register_map(VILLAGE_B_MAP_ID, _VILLAGE_MAP_B_SCENE, WorldAPI.MapType.VILLAGE)
+	scene_loader.register_map(MEGA_INTERIOR_MAP_ID, _MEGA_INTERIOR_SCENE, WorldAPI.MapType.MEGA_INTERIOR)
 	# 配置地图出口（步行衔接，详见 §6.2）
 	scene_loader.register_map_exit(TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT)
@@ -442,18 +506,19 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 	# 注入地图到 ConstructionManager（供项目实例化建筑用）
 	if _construction_manager != null and _construction_manager.has_method("set_map"):
 		_construction_manager.set_map(map)
+	# 仅初始加载时 spawn 初始建筑、NPC 和演示建造
+	if not _initial_map_loaded:
+		_initial_map_loaded = true
+		_spawn_initial_buildings(map)
+		_spawn_npcs(map, spawn_y)
+		# 自动触发演示建造（test_stage_03 等旧测试应通过 auto_demo_building=false 关闭）
+		if auto_demo_building:
+			call_deferred("_start_demo_building")
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 注册调试绘制器
 	_register_debug_drawers()
-	# 仅初始加载时 spawn NPC 和演示建造
-	if not _initial_map_loaded:
-		_initial_map_loaded = true
-		_spawn_npcs(map, spawn_y)
-		# 自动触发演示建造（test_stage_03 等旧测试应通过 auto_demo_building=false 关闭）
-		if auto_demo_building:
-			call_deferred("_start_demo_building")
 
 
 ## 请求地图旅行（由 ChunkTrigger 调用，详见 §6.2 步行流程）
@@ -461,6 +526,32 @@ func request_map_travel(target_map_id: String, entry_side: int) -> void:
 	if scene_loader == null or not scene_loader.has_method("travel_to_map"):
 		return
 	scene_loader.travel_to_map(target_map_id, WorldAPI.TravelMode.WALK, entry_side)
+
+
+# ─────────────────────────────── 初始建筑 ────────────────────────────────
+
+## 读取地图的 InitialBuildingsList，直接创建 OPERATIONAL 状态建筑（跳过建造过程）。
+## P0-2 修复：绕过存档系统，在 VillageMap 首次加载时预置建筑。
+func _spawn_initial_buildings(map: Node2D) -> void:
+	var ibl: Node = map.get("initial_buildings_list") if "initial_buildings_list" in map else null
+	if ibl == null or not ibl.has_method("get_defs"):
+		return
+	var defs: Array = ibl.get_defs()
+	if defs.is_empty():
+		return
+	if _construction_manager == null or not _construction_manager.has_method("spawn_operational_building"):
+		push_warning("[GameRoot] ConstructionManager 未就绪，跳过初始建筑生成")
+		return
+	for d in defs:
+		var def_id: String = d.get("def_id") if d is Dictionary else d.def_id
+		var cell_x: int = int(d.get("cell_x") if d is Dictionary else d.cell_x)
+		var width: int = int(d.get("width") if d is Dictionary else d.width)
+		if def_id.is_empty():
+			push_warning("[GameRoot] 初始建筑 def_id 为空，跳过")
+			continue
+		var result: Dictionary = _construction_manager.spawn_operational_building(def_id, cell_x, width)
+		if not result.get("ok", false):
+			push_warning("[GameRoot] 初始建筑生成失败: %s cell_x=%d: %s" % [def_id, cell_x, result.get("error", "未知错误")])
 
 
 # ─────────────────────────────── 演示建造 ────────────────────────────────
@@ -543,6 +634,159 @@ func _bind_event_bus() -> void:
 	# 玩家请求暂停/恢复
 	if EventBus.has_signal("ui_toggle_pause_requested"):
 		EventBus.ui_toggle_pause_requested.connect(_on_pause_requested)
+	# 玩家离开建筑交互区 -> 全局检查是否退出 INDOOR
+	if EventBus.has_signal("interior_exited"):
+		EventBus.interior_exited.connect(_on_interior_exited)
+	# 传送进入大建筑 -> 过场 + 旅行
+	if EventBus.has_signal("mega_interior_entered"):
+		EventBus.mega_interior_entered.connect(_on_mega_interior_entered)
+	# 从大建筑返回
+	if EventBus.has_signal("mega_interior_exited"):
+		EventBus.mega_interior_exited.connect(_on_mega_interior_exited)
+
+
+# ─────────────────────────────── 传送系统（§5.6）───────────────────────────────
+
+## 进入大建筑：校验 -> 记录返回信息 -> 过场 -> 旅行
+func _on_mega_interior_entered(building_id: int, map_id: String) -> void:
+	# 校验：战斗中禁止传送
+	if is_in_battle():
+		push_warning("[GameRoot] 战斗中禁止传送进入大建筑")
+		return
+	# 校验：附身中禁止传送
+	if _possession_interface != null and _possession_interface.has_method("get_possessed_entity"):
+		var pe: Node = _possession_interface.get_possessed_entity()
+		if pe != null and is_instance_valid(pe) and _possession_interface.has_method("get") and _possession_interface.get("_slowed_time") == true:
+			push_warning("[GameRoot] 附身中禁止传送进入大建筑")
+			return
+	# 记录返回信息
+	_return_map_id = scene_loader.current_map_id if scene_loader != null and scene_loader.has_method("get") else ""
+	var player: Node2D = _find_player_entity()
+	if player != null and is_instance_valid(player):
+		_return_spawn_x = player.global_position.x
+	# 显示过场
+	_show_transition_overlay("进入宫殿")
+	# 延迟执行旅行（等过场淡入完成）
+	var tween := create_tween()
+	tween.tween_interval(0.5)
+	tween.tween_callback(_travel_to_interior.bind(map_id))
+
+
+func _travel_to_interior(map_id: String) -> void:
+	if scene_loader == null or not scene_loader.has_method("travel_to_map"):
+		_hide_transition_overlay()
+		return
+	scene_loader.travel_to_map(map_id, WorldAPI.TravelMode.TELEPORT, WorldAPI.EntrySide.LEFT)
+	# 地图加载完成后隐藏过场
+	var tween := create_tween()
+	tween.tween_interval(0.05)
+	tween.tween_callback(_hide_transition_overlay)
+
+
+## 从大建筑返回
+func _on_mega_interior_exited(_return_map_id_received: String) -> void:
+	var target := _return_map_id
+	if target.is_empty():
+		target = _return_map_id_received
+	if target.is_empty():
+		push_warning("[GameRoot] 无返回地图 ID，无法退出大建筑")
+		return
+	_show_transition_overlay("离开宫殿")
+	var tween := create_tween()
+	tween.tween_interval(0.5)
+	tween.tween_callback(_travel_back.bind(target))
+
+
+func _travel_back(target: String) -> void:
+	if scene_loader == null or not scene_loader.has_method("travel_to_map"):
+		_hide_transition_overlay()
+		return
+	scene_loader.travel_to_map(target, WorldAPI.TravelMode.TELEPORT, WorldAPI.EntrySide.LEFT)
+	var tween := create_tween()
+	tween.tween_interval(0.05)
+	tween.tween_callback(_hide_transition_overlay)
+	# 清空返回记录
+	_return_map_id = ""
+	_return_spawn_x = 0.0
+
+
+## 显示过场黑屏
+func _show_transition_overlay(text: String) -> void:
+	if ui_root == null:
+		return
+	# 移除旧 overlay
+	_hide_transition_overlay()
+	var overlay := ColorRect.new()
+	overlay.name = "TransitionOverlay"
+	overlay.color = Color(0, 0, 0, 0)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(overlay)
+	var label := Label.new()
+	label.name = "TransitionLabel"
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.add_theme_font_size_override("font_size", 36)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	overlay.add_child(label)
+	# 淡入动画
+	var tween := create_tween()
+	tween.tween_property(overlay, "color:a", 1.0, 0.5)
+
+
+## 隐藏过场
+func _hide_transition_overlay() -> void:
+	if ui_root == null:
+		return
+	var overlay: Node = ui_root.get_node_or_null("TransitionOverlay")
+	if overlay == null:
+		return
+	var tween := create_tween()
+	tween.tween_property(overlay, "color:a", 0.0, 0.5)
+	tween.tween_callback(overlay.queue_free)
+
+
+## 查找当前玩家实体
+func _find_player_entity() -> Node2D:
+	var map: Node2D = get_current_map()
+	if map == null:
+		return null
+	for e in map.get_entities():
+		if e is CharacterBody2D and e.has_method("is_possessed") and e.is_possessed():
+			return e
+	return null
+
+
+## 某个建筑的 InteractionZone 离开 -> 检查是否所有建筑都不含玩家
+func _on_interior_exited(_building_id: int) -> void:
+	_check_indoor_exit()
+
+
+## 遍历当前地图所有 Building，无玩家在内则退出 INDOOR 模式
+func _check_indoor_exit() -> void:
+	if input_dispatcher == null or not input_dispatcher.has_method("get_mode"):
+		return
+	if input_dispatcher.get_mode() != PlayerControlAPI.Mode.INDOOR:
+		return
+	var map: Node2D = get_current_map()
+	if map == null:
+		return
+	if not _has_any_player_in_building(map):
+		if input_dispatcher.has_method("exit_to_explore"):
+			input_dispatcher.exit_to_explore()
+
+
+## 递归遍历节点树，检查是否有 Building 内含玩家
+func _has_any_player_in_building(node: Node) -> bool:
+	if node is Building and node.has_method("is_player_inside_interaction_zone"):
+		if node.is_player_inside_interaction_zone():
+			return true
+	for child in node.get_children():
+		if _has_any_player_in_building(child):
+			return true
+	return false
 
 
 func _on_pause_requested() -> void:

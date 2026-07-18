@@ -145,6 +145,17 @@ extends Node
 # 附身结束：PossessionInterface -> UI、Units、TimeManager
 @warning_ignore("unused_signal") signal possession_ended(entity)
 
+# ─────────────────────────────── 室内 / 建筑交互（§5.2）──────────────────────────────
+
+# 进入室内交互区：Building -> InputDispatcher、UI
+@warning_ignore("unused_signal") signal interior_entered(building_id: int)
+# 离开室内交互区：Building -> InputDispatcher、UI
+@warning_ignore("unused_signal") signal interior_exited(building_id: int)
+# 传送进入大建筑：Building -> GameRoot
+@warning_ignore("unused_signal") signal mega_interior_entered(building_id: int, map_id: String)
+# 从大建筑返回：MegaInteriorMap -> GameRoot
+@warning_ignore("unused_signal") signal mega_interior_exited(return_map_id: String)
+
 # ─────────────────────────────── 通用工具 ────────────────────────────────
 
 ## 带"事件存在性检查"的安全发射。事件名写错时打印警告而不是静默失败。

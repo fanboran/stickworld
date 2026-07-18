@@ -6,16 +6,48 @@
 [sub_resource type="RectangleShape2D" id="rect_passage"]
 size = Vector2(498, 805)
 
+[sub_resource type="RectangleShape2D" id="rect_interaction"]
+size = Vector2(420, 700)
+
 [node name="BldSmithyLv1" type="Node2D" unique_id=1079258452]
 script = ExtResource("2_snap")
 
-[node name="Sprite2D" type="Sprite2D" parent="." unique_id=744579276]
+[node name="Exterior" type="Node2D" parent="."]
+
+[node name="Roof" type="Sprite2D" parent="Exterior"]
 scale = Vector2(0.5, 0.5)
 texture = ExtResource("1_tex")
 offset = Vector2(0, -512)
 
-[node name="PassageBarrier" type="Area2D" parent="." unique_id=877850341]
+[node name="WallFront" type="Sprite2D" parent="Exterior"]
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("1_tex")
+offset = Vector2(0, -512)
+modulate = Color(0.9, 0.9, 0.9, 1)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier" unique_id=474457413]
+[node name="PassageBarrier" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier"]
 position = Vector2(-4, -474.5)
 shape = SubResource("rect_passage")
+
+[node name="Interior" type="Node2D" parent="."]
+visible = false
+
+[node name="Floor" type="ColorRect" parent="Interior"]
+size = Vector2(160, 80)
+position = Vector2(-80, -60)
+color = Color(0.4, 0.3, 0.2, 1)
+
+[node name="WorkSlots" type="Node2D" parent="Interior"]
+[node name="Slot0" type="Marker2D" parent="Interior/WorkSlots"]
+position = Vector2(-40, 0)
+
+[node name="Slot1" type="Marker2D" parent="Interior/WorkSlots"]
+position = Vector2(40, 0)
+
+[node name="InteractionZone" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="InteractionZone"]
+position = Vector2(0, -400)
+shape = SubResource("rect_interaction")

@@ -50,7 +50,7 @@ const RL1_POS    = Vector2(-6, 3)
 
 # RoofMain — 中间可拉伸（只拉伸 dw）
 const RM_BL_X    = 103.0
-const RM_BL_Y    = -236.0
+const RM_BL_Y    = -232.0        # 下边缘略下延 4px
 const RM_SLANT   = 64.0          # 60°: 110 / tan60 ≈ 63.5
 const RM_TY      = -346.0
 const RM_REF_DW  = 87.17         # 参考底边宽
@@ -209,7 +209,7 @@ func _build():
 
 	# 后景柱（左固定，右跟随，宽度增加时自动加柱）
 	_a(l1, _sprite("BackPillarL", BP_LEFT, tex_bp))
-	var nbp = maxi(2, ceili(width_cells / 6.0) + 1)
+	var nbp = maxi(2, ceili(width_cells / 12.0) + 1)
 	for i in range(1, nbp - 1):
 		var bx = lerpf(BP_LEFT.x, BP_RIGHT_REF_X + shift, float(i) / float(nbp - 1))
 		_a(l1, _sprite("BackPillar", Vector2(bx, BP_RIGHT_Y), tex_bp))
@@ -223,7 +223,7 @@ func _build():
 	# ── L4 前景柱 ──
 	# 左侧两柱固定（左堵头），右侧柱跟随平移，中间加柱
 	var l4  = _c("L4_FrontWall")
-	var nfp = maxi(3, ceili(width_cells / 6.0) + 1)
+	var nfp = maxi(2, ceili(width_cells / 12.0) + 1)
 	_a(l4, _sprite("FrontPillar", FP_LEFT_POS, tex_fp))          # 左堵头 第1根
 	_a(l4, _sprite("FrontPillar", FP_MID_POS, tex_fp))           # @Sprite2D@48784 第2根固定
 	var fr  = FP_RIGHT_REF_X + shift                              # 最右柱跟随右堵头

@@ -141,24 +141,7 @@ modules/player/
 
 1. 任务定义 → Agent 代码生成 → 自动化验证（CI 运行编译+测试+场景检查）→ 人类审查 → 合并
 2. 使用 GdUnit4 测试框架。AI 生成功能代码时同时生成测试。
-3. 可在流水线中加入场景层次验证：用 Godot headless 运行验证脚本，断言场景结构完整。
-
-***
-
-## godot-ai MCP 更新流程
-
-当 Godot 插件自更新后，IDE 端 MCP 服务版本需手动同步：
-
-1. **Godot 端**：在编辑器 dock 面板点 **Update**，插件自动更新 `addons/godot_ai/`
-2. **IDE 端**：卸载后完整重装（避免增量升级导致依赖损坏）
-   ```powershell
-   uv tool uninstall godot-ai
-   uv tool install godot-ai@<目标版本>
-   ```
-3. **验证**：`godot-ai --version` 确认版本匹配，`godot-ai --transport streamable-http --port 8000` 确认能正常启动
-4. **重启 Godot 编辑器**，让插件重新连接新版 MCP 服务
-
-***
+3. 可在流水线中加入场景层次验证：用 Godot 运行验证脚本，断言场景结构完整。
 
 ## Git 分支与工作流规范
 
@@ -188,5 +171,45 @@ modules/player/
 - 避免使用 `Read-Host`、`Get-Credential`、`Out-GridView`、`$Host.UI.PromptForChoice`、`pause` 等需要人工输入的命令；AI 应在非交互式模式下完成任务。
 - Git 命令始终加 `--no-pager` 或设置 `$env:GIT_PAGER = "cat"` 防止挂起。
 - PowerShell 中的 `curl` 是 `Invoke-WebRequest` 的别名，不兼容 curl 参数；应直接使用 `Invoke-WebRequest` 或 `Invoke-RestMethod` 并加 `-UseBasicParsing`。
-- Godot headless 命令：`"F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" --headless --path "f:/VSCode/game-2/stick-world"`。
+- Godot 检验 命令：`"godot.exe --headless --quit --check-only --debug --verbose 2>&1"`或者`"godot.exe --headless --quit --check-only --debug --verbose > log.txt 2>&1"`。
+
+### 程序化材质迭代工具
+
+开发程序化材质（茅草、木纹、石材）时，使用以下工具链进行系统化视觉迭代，而非盲目调参。详见 [docs/技术/教程/程序化材质开发工作流.md](file:///f:/VSCode/game-2/stick-world/docs/技术/教程/程序化材质开发工作流.md)。
+
+| 工具 | 路径 | 用途 |
+|------|------|------|
+| **Python 裁剪** | `modules/building_gen/tools/py/clip_ref.py` | 从参考图裁剪材质区域到 `modules/building_gen/reference/` |
+| **Python 归档** | `modules/building_gen/tools/py/archive_preview.py` | 迭代前将旧 preview 移入 `modules/building_gen/reference/history/` |
+| **Python 对比** | `modules/building_gen/tools/py/compare.py` | OpenCV 颜色/亮度/纹理对比 |
+| **Godot 渲染** | `modules/building_gen/tools/render_preview.gd` | headless 渲染 smithy_preview.tscn 为 PNG |
+| **贴图 dump** | `modules/building_gen/tools/dmp.gd` | 快速导出 512×512 贴图到 `modules/building_gen/reference/` |
+| **OpenCV** | `pip install opencv-python` | 颜色直方图/SSIM 量化对比 |
+| **rembg** | `pip install rembg`（按需） | 自动检测参考图中材质边界 |
+
+**快速 dump 当前贴图**：
+```powershell
+# 先归档旧版本
+& "C:\Users\fanbo\AppData\Local\Programs\Python\Python312\python.exe" "f:\VSCode\game-2\stick-world\modules\building_gen\tools\py\archive_preview.py"
+# 再生成新版本
+& "F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" --headless --path "f:/VSCode/game-2/stick-world" --script "res://modules/building_gen/tools/dmp.gd"
+# → modules/building_gen/reference/preview_thatch.png（旧版已移入 reference/history/）
+```
+
+**渲染 smithy_preview 整体**：
+```powershell
+& "F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" --headless --path "f:/VSCode/game-2/stick-world" --script "res://modules/building_gen/tools/render_preview.gd"
+# → modules/building_gen/reference/smithy_preview_render.png
+```
+
+**裁剪参考图材质区域**：
+```powershell
+& "C:\Users\fanbo\AppData\Local\Programs\Python\Python312\python.exe" modules/building_gen/tools/py/clip_ref.py --type thatch_roof
+# → modules/building_gen/reference/thatch_roof.png
+```
+
+**⚠ Python 路径**：本机 `python` 命令解析为 Inkscape 自带的 Python，实际使用
+`C:\Users\fanbo\AppData\Local\Programs\Python\Python312\python.exe`。
+
+**迭代流程**：每次修改 `procedural_materials.gd` 后 → dump 贴图 → 对比 `modules/building_gen/reference/thatch_ref.png` → 不够像就继续调参（可上网查开源方案）。
 

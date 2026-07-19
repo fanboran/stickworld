@@ -107,14 +107,14 @@ shape = SubResource("rect_interaction")
 
 [node name="顶棚" type="Node2D" parent="示例" unique_id=1385562981]
 
-[node name="从左边缘延伸到右边缘的木头顶棚横梁，显示层级在顶棚稻草后，前景支柱前" type="CollisionShape2D" parent="示例/顶棚" unique_id=1054928835]
+[node name="从左边缘延伸到右边缘的木头顶棚横梁，显示层级在顶棚茅草后，前景支柱前" type="CollisionShape2D" parent="示例/顶棚" unique_id=1054928835]
 position = Vector2(96, -303)
 shape = SubResource("RectangleShape2D_0a4cv")
 
-[node name="顶棚右端点，上下更长稻草，平行四边形" type="CollisionShape2D" parent="示例/顶棚" unique_id=243155533]
+[node name="顶棚右端点，上下更长茅草，平行四边形" type="CollisionShape2D" parent="示例/顶棚" unique_id=243155533]
 shape = SubResource("ConvexPolygonShape2D_hyap7")
 
-[node name="顶棚无限延伸稻草，平行四边形" type="CollisionShape2D" parent="示例/顶棚" unique_id=1033835560]
+[node name="顶棚无限延伸茅草，平行四边形" type="CollisionShape2D" parent="示例/顶棚" unique_id=1033835560]
 shape = SubResource("ConvexPolygonShape2D_eg0p3")
 
 [node name="顶棚后景，渲染层级在一切以后" type="CollisionShape2D" parent="示例/顶棚" unique_id=1069772964]

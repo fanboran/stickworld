@@ -1,0 +1,8 @@
+# Reference history（程序化材质历史迭代）
+modules/building_gen/reference/history/
+
+# 材质迭代临时配置文件
+modules/building_gen/tools/py/_material_config.json
+
+# Godot headless 输出日志
+modules/building_gen/reference/godot_output.txt

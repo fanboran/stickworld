@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/modules/building_gen/test_smithy_preview.gd" id="1_3k5j7"]
+
+[node name="TestSmithyPreview" type="Node"]
+script = ExtResource("1_3k5j7")

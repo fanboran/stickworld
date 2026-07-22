@@ -44,6 +44,7 @@ alwaysApply: true
 | 查数据流与存储方案      | `docs/技术/架构/数据流全景.md` |
 | 查程序化世界生成       | `docs/设计/系统/08-程序化世界生成.md` |
 | 游戏数据表           | `config/excel/` 目录 + `docs/技术/教程/Excel数据管线.md` |
+| 查编辑器工具/插件    | `docs/技术/编辑器工具索引.md`（addons/ + tools/ 全部脚本） |
 | 开发规范            | `docs/CONTRIBUTING.md`                                  |
 | 有可以参考的开源项目就放到这里 | external/                                               |
 
@@ -85,9 +86,9 @@ alwaysApply: true
 ├── core/                  # 核心系统与基础设施（稳定，修改需批准）
 ├── modules/               # 游戏功能模块（开发最频繁的区域）
 ├── assets/                # 全局共享资源
-├── addons/                # 第三方插件
+├── addons/                # 编辑器插件（项目自带 + 第三方），详见 docs/技术/编辑器工具索引.md
 ├── prototypes/            # 原型沙盒（不被正式逻辑依赖）
-├── tools/                 # 自定义编辑器工具（@tool 脚本）
+├── tools/                 # 自定义编辑器工具与 CLI 脚本（@tool），详见 docs/技术/编辑器工具索引.md
 ├── tests/                 # 自动化测试（镜像 core/ 和 modules/ 结构）
 └── docs/                  # 项目文档
 ```

@@ -45,14 +45,6 @@ func _initialize() -> void:
 		return
 	_log_line("[STEP0] ProceduralMaterials 已加载")
 
-	# 强制重新构建建筑，确保 .tscn 旧结构被新代码覆盖
-	if node.has_method("force_build"):
-		_log_line("calling force_build...")
-		node.force_build()
-		_log_line("[STEP0.5] 建筑已重新构建")
-	else:
-		_log_line("node has no force_build")
-
 	# 动态替换所有茅草材质贴图（屋顶 + 后景墙）
 	_log_line("replacing thatch textures...")
 	_replace_thatch_textures(node)
@@ -163,7 +155,7 @@ func _replace_recursive(node: Node, counter: Array) -> void:
 	if node is Polygon2D:
 		var pname: String = node.get_name()
 		var parent := node.get_parent()
-		var parent_is_roof_group := parent != null and parent.get_name() == "MainRoofGroup"
+		var parent_is_roof_group := parent != null and parent.get_name() == "L5_Roof"
 		if pname.find("Roof") >= 0 or parent_is_roof_group:
 			var poly: PackedVector2Array = node.polygon
 			var bounds := _poly_bounds(poly)

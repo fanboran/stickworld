@@ -28,12 +28,7 @@ func _initialize() -> void:
 		_node.remove_child(cam)
 		cam.queue_free()
 
-	if _node.has_method("force_build"):
-		print("[RenderWindow] force_build...")
-		_node.force_build()
-		print("[RenderWindow] force_build done")
-
-	# 在 force_build 后计算真实包围盒
+	# 计算包围盒
 	var rect := _compute_rect(_node)
 	var pad := 20.0
 	var view_size := Vector2i(int((rect.size.x + pad * 2.0)), int((rect.size.y + pad * 2.0)))

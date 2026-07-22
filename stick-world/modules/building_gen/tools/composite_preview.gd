@@ -14,9 +14,6 @@ func _initialize() -> void:
 	var node: Node2D = scene.instantiate()
 	root.add_child(node)
 
-	if node.has_method("force_build"):
-		node.force_build()
-
 	# 合成到一张大图（1:1 匹配编辑器预览）
 	var render_scale := 1.0
 	var canvas := _render_to_image(node, render_scale)

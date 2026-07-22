@@ -29,11 +29,6 @@ func _initialize() -> void:
 		_node.remove_child(cam)
 		cam.queue_free()
 
-	if _node.has_method("force_build"):
-		print("[RoofOnly] force_build...")
-		_node.force_build()
-		print("[RoofOnly] force_build done")
-
 	# 只保留 L5_Roof 子树
 	var roof: Node2D = _node.get_node_or_null("L5_Roof")
 	if roof == null:

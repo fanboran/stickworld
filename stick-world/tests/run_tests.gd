@@ -19,8 +19,6 @@ func _ready() -> void:
 	_register_event_bus_tests()
 	_register_config_manager_tests()
 	_register_procedural_materials_tests()
-	_register_smithy_preview_tests()
-
 	for t in _suite:
 		_runner.add_test(t["name"], t["fn"])
 
@@ -104,96 +102,3 @@ func _test_create_thatch_material() -> void:
 	_runner.assert_true(mat != null, "应返回 ShaderMaterial")
 	_runner.assert_true(mat.shader != null, "Shader 应加载成功")
 	_runner.assert_equal(mat.get_shader_parameter("albedo_tex"), tex, "albedo_tex uniform 应指向贴图")
-
-
-# -- SmithyPreview --------------------------------------------------------
-
-func _register_smithy_preview_tests() -> void:
-	_suite.append({"name": "SmithyPreview: force_build 生成期望的子节点", "fn": Callable(self, "_test_smithy_build_creates_nodes")})
-	_suite.append({"name": "SmithyPreview: width_cells=7 时零件位置正确", "fn": Callable(self, "_test_smithy_default_width_positions")})
-	_suite.append({"name": "SmithyPreview: 加宽后右堵头跟随 RoofMain", "fn": Callable(self, "_test_smithy_wider_shift")})
-
-
-func _get_smithy_child(preview: Node, path: String) -> Node:
-	return preview.get_node_or_null(path)
-
-
-func _get_poly_bounds(poly: Polygon2D) -> Rect2:
-	var r := Rect2(poly.polygon[0], Vector2.ZERO)
-	for i in range(1, poly.polygon.size()):
-		r = r.expand(poly.polygon[i])
-	return r
-
-
-func _test_smithy_build_creates_nodes() -> void:
-	var packed := load("res://modules/building_gen/scenes/smithy_preview.tscn") as PackedScene
-	_runner.assert_true(packed != null, "应加载 smithy_preview.tscn")
-	var preview: Node2D = packed.instantiate() as Node2D
-	if preview == null:
-		return
-	preview.force_build()
-	_runner.assert_true(_get_smithy_child(preview, "L1_BackWall/BackWall") != null, "BackWall 应存在")
-	_runner.assert_true(_get_smithy_child(preview, "L1_BackWall/BackWallTop") != null, "BackWallTop 应存在")
-	_runner.assert_true(_get_smithy_child(preview, "L1_BackWall/BackPillarL") != null, "BackPillarL 应存在")
-	_runner.assert_true(_get_smithy_child(preview, "L4_FrontWall/FrontPillar") != null, "FrontPillar 应存在")
-	_runner.assert_true(_get_smithy_child(preview, "L5_Roof/Beam") != null, "Beam 应存在")
-	_runner.assert_true(_get_smithy_child(preview, "L5_Roof/MainRoofGroup/RoofMain") != null, "RoofMain 应存在")
-	_runner.assert_true(_get_smithy_child(preview, "L5_Roof/MainRoofGroup/RoofRightEnd") != null, "RoofRightEnd 应存在")
-	_runner.assert_true(_get_smithy_child(preview, "L5_Roof/RoofLeftGroup1") != null, "RoofLeftGroup1 应存在")
-	preview.queue_free()
-
-
-func _test_smithy_default_width_positions() -> void:
-	var packed := load("res://modules/building_gen/scenes/smithy_preview.tscn") as PackedScene
-	if packed == null:
-		return
-	var preview: Node2D = packed.instantiate() as Node2D
-	if preview == null:
-		return
-	preview.force_build()
-
-	var back_wall: Sprite2D = _get_smithy_child(preview, "L1_BackWall/BackWall") as Sprite2D
-	if back_wall:
-		_runner.assert_true(abs(back_wall.position.x - 83.0) < 2.0, "BackWall x 应接近 83")
-		_runner.assert_true(abs(back_wall.position.y - (-250.5)) < 1.0, "BackWall y 应接近 -250.5")
-
-	var beam: Sprite2D = _get_smithy_child(preview, "L5_Roof/Beam") as Sprite2D
-	if beam:
-		_runner.assert_true(abs(beam.position.x - 81.0) < 2.0, "Beam x 应接近 81")
-		_runner.assert_true(abs(beam.position.y - (-229.0)) < 1.0, "Beam y 应接近 -229")
-
-	var roof_main: Polygon2D = _get_smithy_child(preview, "L5_Roof/MainRoofGroup/RoofMain") as Polygon2D
-	if roof_main:
-		var bounds := _get_poly_bounds(roof_main)
-		_runner.assert_true(abs(bounds.position.x - 39.0) < 1.0, "RoofMain 左边界应接近 39")
-		_runner.assert_true(abs(bounds.end.x - 126.17) < 2.0, "RoofMain 右边界应接近 126")
-
-	var roof_right: Polygon2D = _get_smithy_child(preview, "L5_Roof/MainRoofGroup/RoofRightEnd") as Polygon2D
-	if roof_right:
-		var bounds := _get_poly_bounds(roof_right)
-		_runner.assert_true(abs(bounds.position.x - 128.9) < 2.0, "RoofRightEnd 左边界应贴合 RoofMain 右端")
-		_runner.assert_true(abs(bounds.end.x - 164.9) < 2.0, "RoofRightEnd 右边界应接近 165")
-
-	preview.queue_free()
-
-
-func _test_smithy_wider_shift() -> void:
-	var packed := load("res://modules/building_gen/scenes/smithy_preview.tscn") as PackedScene
-	if packed == null:
-		return
-	var preview: Node2D = packed.instantiate() as Node2D
-	if preview == null:
-		return
-	preview.width_cells = 11
-	preview.force_build()
-
-	var back_pillar_r: Sprite2D = _get_smithy_child(preview, "L1_BackWall/BackPillarR") as Sprite2D
-	if back_pillar_r:
-		_runner.assert_true(back_pillar_r.position.x > 166.0, "加宽后 BackPillarR 应右移")
-
-	var roof_right: Polygon2D = _get_smithy_child(preview, "L5_Roof/MainRoofGroup/RoofRightEnd") as Polygon2D
-	if roof_right:
-		var bounds := _get_poly_bounds(roof_right)
-		_runner.assert_true(bounds.position.x > 128.9, "加宽后 RoofRightEnd 应右移")
-
-	preview.queue_free()

@@ -10,7 +10,7 @@ extends EditorPlugin
 ## 5. 场景中标尺显示格子编号
 
 const CELL_SIZE := 32
-const BUILDINGS_DIR := "res://modules/buildings/scenes/"
+const BUILDINGS_DIR := "res://modules/building_gen/buildings/"
 
 var _button: Button
 var _menu_button: MenuButton

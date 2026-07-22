@@ -101,14 +101,10 @@ func _nc(name: String, parent: Node2D) -> Node2D:
 	var n := Node2D.new()
 	n.name = name
 	parent.add_child(n)
-	if Engine.is_editor_hint():
-		n.owner = get_tree().edited_scene_root
 	return n
 
 func _a(parent: Node, child: Node) -> void:
 	parent.add_child(child)
-	if Engine.is_editor_hint():
-		child.owner = get_tree().edited_scene_root
 
 func _sprite2d(name: String, pos: Vector2, tex, rot: float = 0.0, sc: Vector2 = Vector2(1, 1)) -> Sprite2D:
 	var s := Sprite2D.new()

@@ -6,7 +6,7 @@ extends Node
 ## 运行后会等待若干帧确保 Shader 已编译并渲染完成，保存 viewport 截图并退出。
 
 ## 截图保存路径（res:// 路径）
-@export var output_path: String = "res://modules/building_gen/reference/thatch_debug_capture.png"
+@export var output_path: String = "res://modules/building_gen/materials/thatch/reference/thatch_debug_capture.png"
 
 ## 启动后等待的帧数，给 Shader 编译和窗口初始化留足时间
 @export var settle_frames: int = 5

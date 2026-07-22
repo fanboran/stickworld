@@ -6,9 +6,9 @@ extends Node
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
 
-const SCENE_PATH := "res://modules/building_gen/scenes/thatch_debug.tscn"
-const BUILDING_DEMO_PATH := "res://modules/building_gen/scenes/thatch_building_demo.tscn"
-const SHADER_PATH := "res://modules/building_gen/shaders/thatch.gdshader"
+const SCENE_PATH := "res://modules/building_gen/materials/thatch/scenes/thatch_debug.tscn"
+const BUILDING_DEMO_PATH := "res://modules/building_gen/materials/thatch/scenes/thatch_building_demo.tscn"
+const SHADER_PATH := "res://modules/building_gen/materials/thatch/shaders/thatch.gdshader"
 const CAPTURE_SCRIPT_PATH := "res://modules/building_gen/scripts/debug/capture_in_game.gd"
 
 var _runner := TestRunner.new()
@@ -132,6 +132,6 @@ func _test_capture_helper() -> void:
 	_runner.assert_true(helper != null, "CaptureHelper 应存在")
 	if helper != null:
 		_runner.assert_equal(helper.get_script().resource_path, CAPTURE_SCRIPT_PATH, "脚本路径应为 capture_in_game.gd")
-		_runner.assert_equal(helper.output_path, "res://modules/building_gen/reference/thatch_debug_capture.png", "默认输出路径")
+		_runner.assert_equal(helper.output_path, "res://modules/building_gen/materials/thatch/reference/thatch_debug_capture.png", "默认输出路径")
 
 	scene.free()

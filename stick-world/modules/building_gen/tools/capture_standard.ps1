@@ -1,4 +1,4 @@
-# Thatch material debug screenshot tool (standard run mode)
+# Procedural material screenshot tool (standard run mode)
 # Runs the project normally (no --headless, no Movie Maker) and relies on an
 # in-game script to save the viewport to a PNG file.
 #
@@ -13,14 +13,23 @@
 #   modules/building_gen/scripts/debug/capture_in_game.gd
 #
 # Usage:
+#   # Capture the default material (thatch) debug scene
 #   powershell -File modules/building_gen/tools/capture_standard.ps1
-#   Or from project root: .\modules\building_gen\tools\capture_standard.ps1
+#
+#   # Capture a specific material by name
+#   powershell -File modules/building_gen/tools/capture_standard.ps1 -Material wood
+#
+#   # Explicit scene/output override
+#   powershell -File modules/building_gen/tools/capture_standard.ps1 `
+#     -ScenePath "res://modules/building_gen/materials/wood/scenes/wood_debug.tscn" `
+#     -OutputFrame "modules/building_gen/materials/wood/reference/wood_debug_capture.png"
 
 param(
     [string]$GodotExe = "F:\SteamLibrary\steamapps\common\Godot Engine\Godot_v4.5-stable_mono_win64.exe",
     [string]$ProjectDir = "F:\VSCode\game-2\stick-world",
-    [string]$OutputFrame = "modules/building_gen/reference/thatch_debug_capture.png",
+    [string]$Material = "",
     [string]$ScenePath = "",
+    [string]$OutputFrame = "",
     [string]$WindowPosition = "10000,10000",
     [int]$TimeoutSec = 60
 )
@@ -31,6 +40,14 @@ function Resolve-ProjectPath($relativePath) {
     return Join-Path $ProjectDir $relativePath
 }
 
+function Get-MaterialScenePath($materialName) {
+    return "res://modules/building_gen/materials/$materialName/scenes/${materialName}_debug.tscn"
+}
+
+function Get-MaterialOutputPath($materialName) {
+    return "modules/building_gen/materials/$materialName/reference/${materialName}_debug_capture.png"
+}
+
 # Validate
 if (-not (Test-Path $GodotExe)) {
     Write-Error "Godot executable not found: $GodotExe"
@@ -39,6 +56,26 @@ if (-not (Test-Path $GodotExe)) {
 if (-not (Test-Path $ProjectDir)) {
     Write-Error "Project directory not found: $ProjectDir"
     exit 1
+}
+
+# Resolve material-based defaults if -Material is provided
+if ($Material -ne "") {
+    $materialDir = Resolve-ProjectPath "modules/building_gen/materials/$Material"
+    if (-not (Test-Path $materialDir)) {
+        Write-Error "Material directory does not exist: $materialDir"
+        exit 1
+    }
+    if ($ScenePath -eq "") {
+        $ScenePath = Get-MaterialScenePath $Material
+    }
+    if ($OutputFrame -eq "") {
+        $OutputFrame = Get-MaterialOutputPath $Material
+    }
+}
+
+# Fallback defaults for backward compatibility
+if ($OutputFrame -eq "") {
+    $OutputFrame = "modules/building_gen/materials/thatch/reference/thatch_debug_capture.png"
 }
 
 $outputFull = Resolve-ProjectPath $OutputFrame
@@ -59,11 +96,16 @@ $arguments = @(
 
 if ($ScenePath -ne "") {
     $arguments += $ScenePath
-    Write-Host "  Scene:   $ScenePath"
 }
 
 Write-Host "[capture_standard] Starting Godot in standard run mode..."
 Write-Host "  Project: $ProjectDir"
+if ($Material -ne "") {
+    Write-Host "  Material: $Material"
+}
+if ($ScenePath -ne "") {
+    Write-Host "  Scene:   $ScenePath"
+}
 Write-Host "  Output:  $outputFull"
 Write-Host "  Window position: $WindowPosition"
 

@@ -44,10 +44,12 @@ func _ready():
 
 func _apply_textures():
 	# 预生成纹理
+	# 三块屋顶共用一张 512×512 横向 tileable 程序化茅草贴图
+	var tex_thatch_roof  = PM.make_thatch_layered(512, 512, 0)
 	var tex_thatch_back  = PM.make_straw_thatch(BW_TEX_W, BW_TEX_H, C_THATCH_BACK)
-	var tex_thatch_main  = PM.make_straw_thatch(THATCH_W, THATCH_H, C_THATCH_MAIN)
-	var tex_thatch_right = PM.make_straw_thatch(THATCH_W, THATCH_H, C_THATCH_RIGHT)
-	var tex_thatch_left  = PM.make_straw_thatch(THATCH_W, THATCH_H, C_THATCH_LEFT)
+	var tex_thatch_main  = tex_thatch_roof
+	var tex_thatch_right = tex_thatch_roof
+	var tex_thatch_left  = tex_thatch_roof
 	var tex_bp           = PM.make_wood_pillar(BP_TEX_W, BP_TEX_H, C_WOOD_BACK)
 	var tex_fp           = PM.make_wood_pillar(FP_TEX_W, FP_TEX_H, C_WOOD_FRONT)
 	var tex_beam         = PM.make_wood_pillar(BEAM_TEX_W, BEAM_TEX_H, C_WOOD_BEAM)
@@ -75,6 +77,13 @@ func _apply_textures():
 	_set_tex("L5_Roof/MainRoofGroup/RoofRightEnd", tex_thatch_right)
 	_set_tex("L5_Roof/MainRoofGroup/RoofMain",     tex_thatch_main)
 	_set_tex("L5_Roof/RoofLeftGroup1",             tex_thatch_left)
+	# RoofLeftGroup1 是容器节点，需把贴图同步给它内部所有 Polygon2D
+	var rl1 = get_node_or_null("L5_Roof/RoofLeftGroup1")
+	if rl1:
+		for c in rl1.get_children():
+			if c is Polygon2D:
+				c.texture = tex_thatch_left
+				c.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 
 
 func _set_tex(path: String, tex):
@@ -82,6 +91,9 @@ func _set_tex(path: String, tex):
 	if n:
 		if n is Sprite2D or n is Polygon2D:
 			n.texture = tex
+			# 屋顶多边形 uv.x > 1 产生横向循环——需启用 texture_repeat 才不会边缘截断
+			if n is Polygon2D:
+				n.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 
 
 func _make_slanted_beam_tex(color: Color):

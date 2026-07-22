@@ -6,3 +6,14 @@ modules/building_gen/tools/py/_material_config.json
 
 # Godot headless 输出日志
 modules/building_gen/reference/godot_output.txt
+
+# 程序化材质：自动生成的截图/诊断图/色板（参考原图除外，手动维护）
+modules/building_gen/materials/*/reference/*_capture.png
+modules/building_gen/materials/*/reference/*_capture.png.import
+modules/building_gen/materials/*/reference/diagnose_*.png
+modules/building_gen/materials/*/reference/diagnose_*.png.import
+modules/building_gen/materials/*/reference/*_swatch.png
+modules/building_gen/materials/*/reference/*_swatch.png.import
+
+# Movie Maker 实验临时帧
+prototypes/building_gen_legacy/reference/thatch_movie_frames/

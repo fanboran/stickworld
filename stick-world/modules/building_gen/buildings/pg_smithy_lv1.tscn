@@ -1,0 +1,49 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://modules/building_gen/buildings/pg_smithy_lv1.gd" id="1_script"]
+
+[sub_resource type="RectangleShape2D" id="rect_passage"]
+size = Vector2(560, 390)
+
+[sub_resource type="RectangleShape2D" id="rect_interaction"]
+size = Vector2(490, 340)
+
+[sub_resource type="RectangleShape2D" id="rect_floor"]
+size = Vector2(200, 80)
+
+[node name="PgSmithyLv1" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="Exterior" type="Node2D" parent="."]
+
+[node name="PassageBarrier" type="Area2D" parent="."]
+visible = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier"]
+position = Vector2(0, -190)
+shape = SubResource("rect_passage")
+
+[node name="Interior" type="Node2D" parent="."]
+visible = false
+
+[node name="Floor" type="ColorRect" parent="Interior"]
+offset_left = -100.0
+offset_top = -140.0
+offset_right = 100.0
+offset_bottom = -60.0
+color = Color(0.4, 0.3, 0.2, 1)
+
+[node name="WorkSlots" type="Node2D" parent="Interior"]
+
+[node name="Slot0" type="Marker2D" parent="Interior/WorkSlots"]
+position = Vector2(-60, -100)
+
+[node name="Slot1" type="Marker2D" parent="Interior/WorkSlots"]
+position = Vector2(60, -100)
+
+[node name="InteractionZone" type="Area2D" parent="."]
+visible = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="InteractionZone"]
+position = Vector2(0, -170)
+shape = SubResource("rect_interaction")

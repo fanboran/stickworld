@@ -50,31 +50,31 @@ func _build_ui() -> void:
 
 	vbox.add_child(_separator())
 
-	_add_slider(vbox, "brick_size.x", 20.0, 160.0, 84.0, 1.0, "brick_size", 0)
-	_add_slider(vbox, "brick_size.y", 15.0, 100.0, 52.0, 1.0, "brick_size", 1)
-	_add_slider(vbox, "gap_size.x", 0.0, 15.0, 5.0, 0.5, "gap_size", 0)
-	_add_slider(vbox, "gap_size.y", 0.0, 15.0, 5.0, 0.5, "gap_size", 1)
+	_add_slider(vbox, "brick_size.x", 20.0, 160.0, 100.0, 1.0, "brick_size", 0)
+	_add_slider(vbox, "brick_size.y", 15.0, 120.0, 70.0, 1.0, "brick_size", 1)
+	_add_slider(vbox, "gap_size.x", 0.0, 15.0, 4.0, 0.5, "gap_size", 0)
+	_add_slider(vbox, "gap_size.y", 0.0, 15.0, 4.0, 0.5, "gap_size", 1)
 
 	vbox.add_child(_separator())
 
 	_add_slider(vbox, "length_var", 0.0, 0.5, 0.18, 0.01)
 	_add_slider(vbox, "height_var", 0.0, 0.4, 0.12, 0.01)
-	_add_slider(vbox, "position_jitter.x", 0.0, 10.0, 3.0, 0.5, "position_jitter", 0)
+	_add_slider(vbox, "position_jitter.x", 0.0, 10.0, 2.0, 0.5, "position_jitter", 0)
 	_add_slider(vbox, "position_jitter.y", 0.0, 10.0, 2.0, 0.5, "position_jitter", 1)
-	_add_slider(vbox, "row_height_var", 0.0, 0.3, 0.08, 0.01)
+	_add_slider(vbox, "row_height_var", 0.0, 0.3, 0.06, 0.01)
 
 	vbox.add_child(_separator())
 
-	_add_slider(vbox, "corner_radius", 0.0, 20.0, 6.0, 0.5)
-	_add_slider(vbox, "corner_radius_var", 0.0, 1.0, 0.65, 0.05)
-	_add_slider(vbox, "edge_wave", 0.0, 4.0, 2.0, 0.1)
-	_add_slider(vbox, "edge_roughness", 0.0, 10.0, 3.2, 0.1)
-	_add_slider(vbox, "oil_scale", 0.0, 0.5, 0.22, 0.01)
-	_add_slider(vbox, "corner_cut_chance", 0.0, 1.0, 0.5, 0.05)
-	_add_slider(vbox, "corner_cut_amount", 0.0, 24.0, 12.0, 0.5)
-	_add_slider(vbox, "crack_chance", 0.0, 1.0, 0.35, 0.05)
-	_add_slider(vbox, "crack_width", 0.0, 4.0, 1.2, 0.1)
-	_add_slider(vbox, "crack_opacity", 0.0, 1.0, 0.55, 0.05)
+	_add_slider(vbox, "corner_radius", 0.0, 20.0, 5.0, 0.5)
+	_add_slider(vbox, "corner_radius_var", 0.0, 1.0, 0.4, 0.05)
+	_add_slider(vbox, "edge_wave", 0.0, 4.0, 0.8, 0.1)
+	_add_slider(vbox, "edge_roughness", 0.0, 10.0, 2.0, 0.1)
+	_add_slider(vbox, "oil_scale", 0.0, 0.5, 0.18, 0.01)
+	_add_slider(vbox, "corner_cut_chance", 0.0, 1.0, 0.25, 0.05)
+	_add_slider(vbox, "corner_cut_amount", 0.0, 24.0, 8.0, 0.5)
+	_add_slider(vbox, "crack_chance", 0.0, 1.0, 0.15, 0.05)
+	_add_slider(vbox, "crack_width", 0.0, 4.0, 1.0, 0.1)
+	_add_slider(vbox, "crack_opacity", 0.0, 1.0, 0.4, 0.05)
 
 	vbox.add_child(_separator())
 

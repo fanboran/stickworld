@@ -5,11 +5,11 @@ shader_type canvas_item;
 uniform vec2 resolution = vec2(512.0, 128.0);
 
 // 砖块基础尺寸（像素）
-uniform vec2 brick_size = vec2(64.0, 36.0);
+uniform vec2 brick_size = vec2(80.0, 40.0);
 uniform vec2 gap_size = vec2(4.0, 4.0);
 
 // 浅色行数（石檐上方）
-uniform int top_rows = 2;
+uniform int top_rows = 1;
 // 蓝灰色行数
 uniform int band_rows = 2;
 
@@ -22,25 +22,25 @@ uniform float edge_roughness = 2.0;
 uniform float oil_scale = 0.2;
 
 // 浅色石墙配色
-uniform vec3 top_color_light : source_color = vec3(0.929, 0.894, 0.827);
-uniform vec3 top_color_mid : source_color = vec3(0.827, 0.776, 0.694);
-uniform vec3 top_color_dark : source_color = vec3(0.549, 0.478, 0.404);
+uniform vec3 top_color_light : source_color = vec3(0.930, 0.900, 0.830);
+uniform vec3 top_color_mid : source_color = vec3(0.820, 0.780, 0.700);
+uniform vec3 top_color_dark : source_color = vec3(0.580, 0.520, 0.440);
 
 // 蓝灰色石带配色
-uniform vec3 band_color_light : source_color = vec3(0.700, 0.730, 0.780);
-uniform vec3 band_color_mid : source_color = vec3(0.560, 0.590, 0.640);
-uniform vec3 band_color_dark : source_color = vec3(0.360, 0.390, 0.440);
+uniform vec3 band_color_light : source_color = vec3(0.680, 0.710, 0.770);
+uniform vec3 band_color_mid : source_color = vec3(0.540, 0.570, 0.630);
+uniform vec3 band_color_dark : source_color = vec3(0.340, 0.370, 0.430);
 
-uniform vec3 color_mortar : source_color = vec3(0.300, 0.280, 0.280);
+uniform vec3 color_mortar : source_color = vec3(0.360, 0.330, 0.310);
 
 uniform float color_var = 0.05;
 uniform float color_block_blend = 0.5;
 uniform vec2 light_dir = vec2(-1.0, -1.0);
 
 // 滴水块
-uniform float drip_chance = 0.35;
-uniform float drip_length = 18.0;
-uniform float drip_width = 16.0;
+uniform float drip_chance = 0.45;
+uniform float drip_length = 8.0;
+uniform float drip_width = 18.0;
 uniform float drip_var = 0.3;
 
 uniform int seed = 0;

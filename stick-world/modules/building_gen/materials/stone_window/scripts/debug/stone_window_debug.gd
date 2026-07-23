@@ -51,8 +51,8 @@ func _build_ui() -> void:
 	vbox.add_child(_separator())
 
 	_add_slider(vbox, "window_width", 80.0, 260.0, 180.0, 1.0)
-	_add_slider(vbox, "window_height", 120.0, 360.0, 260.0, 1.0)
-	_add_slider(vbox, "arch_height", 0.0, 100.0, 50.0, 1.0)
+	_add_slider(vbox, "window_height", 120.0, 420.0, 300.0, 1.0)
+	_add_slider(vbox, "arch_height", 30.0, 130.0, 90.0, 1.0)
 	_add_slider(vbox, "frame_thickness", 8.0, 40.0, 22.0, 0.5)
 	_add_slider(vbox, "frame_depth", 0.0, 20.0, 8.0, 0.5)
 	_add_slider(vbox, "arch_stones", 3.0, 17.0, 9.0, 1.0)
@@ -62,6 +62,18 @@ func _build_ui() -> void:
 	_add_slider(vbox, "vertical_bars", 1.0, 9.0, 5.0, 1.0)
 	_add_slider(vbox, "horizontal_bars", 1.0, 9.0, 4.0, 1.0)
 	_add_slider(vbox, "bar_width", 1.0, 10.0, 4.0, 0.5)
+
+	vbox.add_child(_separator())
+
+	_add_slider(vbox, "sill_height", 0.0, 40.0, 18.0, 1.0)
+	_add_slider(vbox, "sill_extension", 0.0, 50.0, 18.0, 1.0)
+
+	vbox.add_child(_separator())
+
+	_add_slider(vbox, "wall_brick_size.x", 40.0, 160.0, 96.0, 1.0, "wall_brick_size", 0)
+	_add_slider(vbox, "wall_brick_size.y", 30.0, 120.0, 70.0, 1.0, "wall_brick_size", 1)
+	_add_slider(vbox, "wall_gap_size.x", 0.0, 12.0, 5.0, 0.5, "wall_gap_size", 0)
+	_add_slider(vbox, "wall_gap_size.y", 0.0, 12.0, 5.0, 0.5, "wall_gap_size", 1)
 
 
 func _add_slider(parent: Control, label_text: String, min_v: float, max_v: float, default_v: float, step: float, uniform_name: String = "", component: int = -1) -> HSlider:

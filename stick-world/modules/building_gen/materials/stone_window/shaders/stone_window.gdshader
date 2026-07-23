@@ -1,17 +1,18 @@
 shader_type canvas_item;
 
-// 拱形石窗材质配方：固定风格、无随机性，保证与石墙视觉一致
+// 拱形石窗材质配方：固定风格、无随机性，透明背景
 
 uniform vec2 resolution = vec2(240.0, 340.0);
 
 // 窗户整体尺寸
 uniform float window_width = 180.0;
-uniform float window_height = 260.0;
-// 拱顶高度（从矩形顶部往上隆起的半圆高度）
-uniform float arch_height = 50.0;
+// 窗户总高度（矩形部分 + 拱顶半圆）
+uniform float window_height = 300.0;
+// 拱顶半径；标准半圆拱应等于 window_width * 0.5
+uniform float arch_height = 90.0;
 // 窗框厚度
 uniform float frame_thickness = 22.0;
-// 窗框外凸厚度（让窗框有立体感）
+// 窗框内凹深度
 uniform float frame_depth = 8.0;
 
 // 拱顶石块数量
@@ -35,56 +36,41 @@ uniform vec2 light_dir = vec2(-1.0, -1.0);
 #include "res://modules/building_gen/shaders/lib/stone_lib.gdshaderinc"
 
 
+// 拱形窗 SDF：底部矩形 + 顶部半圆
+float sd_window_shape(vec2 p, vec2 center, float body_h, float arch_r) {
+	vec2 q = p - center;
+	vec2 rect_half = vec2(arch_r, body_h * 0.5);
+	vec2 d = abs(q) - rect_half;
+	float rect_dist = min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+	float circle_dist = length(q - vec2(0.0, -body_h * 0.5)) - arch_r;
+	float top_mask = step(0.0, -q.y - body_h * 0.5);
+	return mix(rect_dist, circle_dist, top_mask);
+}
+
+
 void fragment() {
 	// 以 Sprite 中心为窗户中心
 	vec2 p = (UV - 0.5) * resolution;
 
 	// ── 拱形外框 SDF ──
-	// 外框：底部矩形 + 顶部半圆
-	float outer_arch_r = window_width * 0.5;
-	float outer_body_h = window_height - arch_height;
-	vec2 outer_center = vec2(0.0, -window_height * 0.5 + outer_body_h * 0.5);
-	float outer_dist;
-	{
-		vec2 q = p - outer_center;
-		vec2 d = abs(q) - vec2(outer_arch_r, outer_body_h * 0.5);
-		float rect_dist = min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
-		// 拱形圆心在矩形顶部中央（y 向上隆起，故圆心在 q.y 负方向）
-		float circle_dist = length(q - vec2(0.0, -outer_body_h * 0.5)) - outer_arch_r;
-		float top_mask = step(0.0, -q.y - outer_body_h * 0.5);
-		outer_dist = mix(rect_dist, circle_dist, top_mask);
-	}
+	float outer_arch_r = arch_height;
+	float outer_body_h = max(window_height - arch_height, 0.0);
+	vec2 outer_center = vec2(0.0, (window_height - outer_body_h) * 0.5 - window_height * 0.5);
+	float outer_dist = sd_window_shape(p, outer_center, outer_body_h, outer_arch_r);
 
-	// 内框：外框向内缩
+	// 内框
 	float inner_arch_r = max(outer_arch_r - frame_thickness, 0.0);
-	float inner_body_h = max(outer_body_h - frame_thickness * 2.0, 0.0);
-	vec2 inner_center = vec2(0.0, -window_height * 0.5 + inner_body_h * 0.5);
-	float inner_dist;
-	{
-		vec2 q = p - inner_center;
-		vec2 d = abs(q) - vec2(inner_arch_r, inner_body_h * 0.5);
-		float rect_dist = min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
-		float circle_dist = length(q - vec2(0.0, -inner_body_h * 0.5)) - inner_arch_r;
-		float top_mask = step(0.0, -q.y - inner_body_h * 0.5);
-		inner_dist = mix(rect_dist, circle_dist, top_mask);
-	}
+	float inner_body_h = max(outer_body_h - frame_thickness, 0.0);
+	vec2 inner_center = vec2(0.0, outer_center.y + frame_thickness * 0.5);
+	float inner_dist = sd_window_shape(p, inner_center, inner_body_h, inner_arch_r);
 
 	// 更内层的窗洞（用于玻璃和栅栏）
 	float hole_arch_r = max(inner_arch_r - frame_depth, 0.0);
 	float hole_body_h = max(inner_body_h - frame_depth * 2.0, 0.0);
-	vec2 hole_center = vec2(0.0, -window_height * 0.5 + hole_body_h * 0.5);
-	float hole_dist;
-	{
-		vec2 q = p - hole_center;
-		vec2 d = abs(q) - vec2(hole_arch_r, hole_body_h * 0.5);
-		float rect_dist = min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
-		float circle_dist = length(q - vec2(0.0, -hole_body_h * 0.5)) - hole_arch_r;
-		float top_mask = step(0.0, -q.y - hole_body_h * 0.5);
-		hole_dist = mix(rect_dist, circle_dist, top_mask);
-	}
+	vec2 hole_center = vec2(0.0, inner_center.y + frame_depth * 0.5);
+	float hole_dist = sd_window_shape(p, hole_center, hole_body_h, hole_arch_r);
 
 	// ── 拱顶石块分割线 ──
-	// 在窗框顶部区域，按角度划分石块
 	float stone_line = 0.0;
 	{
 		vec2 q = p - outer_center;
@@ -110,7 +96,6 @@ void fragment() {
 		for (int i = 1; i <= 8; i++) {
 			if (i > horizontal_bars) break;
 			float y = hole_center.y - (hole_body_h + hole_arch_r) * 0.5 + float(i) * hbar_spacing;
-			// 横条只在窗洞范围内
 			float in_hole = step(0.0, -hole_dist);
 			bars = max(bars, in_hole * (1.0 - smoothstep(bar_width * 0.3, bar_width * 0.6, abs(p.y - y))));
 		}

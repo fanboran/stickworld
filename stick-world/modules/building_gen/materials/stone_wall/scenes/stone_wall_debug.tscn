@@ -14,7 +14,7 @@ script = ExtResource("1_debug")
 [node name="Sprite2D" type="Sprite2D" parent="."]
 texture = ExtResource("4_tex")
 material = SubResource("mat_stone_wall")
-scale = Vector2(128, 128)
+scale = Vector2(270, 270)
 
 [node name="Camera2D" type="Camera2D" parent="."]
 enabled = true
@@ -23,3 +23,4 @@ zoom = Vector2(1, 1)
 [node name="CaptureHelper" type="Node" parent="."]
 script = ExtResource("2_capture")
 output_path = "res://modules/building_gen/materials/stone_wall/reference/stone_wall_debug_capture.png"
+target_node_path = NodePath("../Sprite2D")

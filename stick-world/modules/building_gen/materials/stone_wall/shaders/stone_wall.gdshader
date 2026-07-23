@@ -6,47 +6,47 @@ shader_type canvas_item;
 uniform vec2 resolution = vec2(512.0, 512.0);
 
 // ── 砖块基础尺寸（像素） ──
-uniform vec2 brick_size = vec2(86.0, 50.0);
+uniform vec2 brick_size = vec2(100.0, 70.0);
 // 缝隙尺寸（像素）
-uniform vec2 gap_size = vec2(5.0, 5.0);
+uniform vec2 gap_size = vec2(4.0, 4.0);
 
 // ── 砖块变化 ──
 // 长度随机范围（相对 brick_size.x 的比例）
-uniform float length_var = 0.28;
+uniform float length_var = 0.18;
 // 高度随机范围（相对 brick_size.y 的比例）
-uniform float height_var = 0.18;
+uniform float height_var = 0.12;
 // 位置抖动（像素）
-uniform vec2 position_jitter = vec2(4.0, 3.0);
+uniform vec2 position_jitter = vec2(2.0, 2.0);
 // 行高整体波动
-uniform float row_height_var = 0.1;
+uniform float row_height_var = 0.06;
 
 // ── 形状 ──
 // 圆角半径（像素）
-uniform float corner_radius = 6.0;
+uniform float corner_radius = 5.0;
 // 四个角圆角差异（相对 corner_radius 的比例）
-uniform float corner_radius_var = 0.65;
+uniform float corner_radius_var = 0.4;
 // 边缘波浪幅度（像素），让石头轮廓有手绘起伏
-uniform float edge_wave = 2.0;
+uniform float edge_wave = 0.8;
 // 边缘不规则程度（像素）
-uniform float edge_roughness = 3.2;
+uniform float edge_roughness = 2.0;
 // 油画笔触边缘缩放
-uniform float oil_scale = 0.22;
+uniform float oil_scale = 0.18;
 // 切角触发概率
-uniform float corner_cut_chance = 0.5;
+uniform float corner_cut_chance = 0.25;
 // 切角深度（像素）
-uniform float corner_cut_amount = 12.0;
+uniform float corner_cut_amount = 8.0;
 // 裂纹触发概率
-uniform float crack_chance = 0.35;
+uniform float crack_chance = 0.15;
 // 裂纹宽度
-uniform float crack_width = 1.2;
+uniform float crack_width = 1.0;
 // 裂纹不透明度
-uniform float crack_opacity = 0.55;
+uniform float crack_opacity = 0.4;
 
 // ── 颜色 ──
-uniform vec3 color_light : source_color = vec3(0.945, 0.906, 0.820);
-uniform vec3 color_mid : source_color = vec3(0.850, 0.800, 0.710);
-uniform vec3 color_dark : source_color = vec3(0.520, 0.440, 0.360);
-uniform vec3 color_mortar : source_color = vec3(0.320, 0.275, 0.240);
+uniform vec3 color_light : source_color = vec3(0.930, 0.900, 0.830);
+uniform vec3 color_mid : source_color = vec3(0.820, 0.780, 0.700);
+uniform vec3 color_dark : source_color = vec3(0.580, 0.520, 0.440);
+uniform vec3 color_mortar : source_color = vec3(0.380, 0.340, 0.300);
 
 // 每块石头颜色随机变化幅度
 uniform float color_var = 0.08;

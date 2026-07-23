@@ -50,14 +50,14 @@ func _build_ui() -> void:
 
 	vbox.add_child(_separator())
 
-	_add_slider(vbox, "brick_size.x", 20.0, 120.0, 64.0, 1.0, "brick_size", 0)
-	_add_slider(vbox, "brick_size.y", 15.0, 80.0, 36.0, 1.0, "brick_size", 1)
+	_add_slider(vbox, "brick_size.x", 20.0, 120.0, 80.0, 1.0, "brick_size", 0)
+	_add_slider(vbox, "brick_size.y", 15.0, 80.0, 40.0, 1.0, "brick_size", 1)
 	_add_slider(vbox, "gap_size.x", 0.0, 12.0, 4.0, 0.5, "gap_size", 0)
 	_add_slider(vbox, "gap_size.y", 0.0, 12.0, 4.0, 0.5, "gap_size", 1)
 
 	vbox.add_child(_separator())
 
-	_add_slider(vbox, "top_rows", 0.0, 6.0, 2.0, 1.0)
+	_add_slider(vbox, "top_rows", 0.0, 6.0, 1.0, 1.0)
 	_add_slider(vbox, "band_rows", 1.0, 6.0, 2.0, 1.0)
 	_add_slider(vbox, "length_var", 0.0, 0.5, 0.15, 0.01)
 	_add_slider(vbox, "height_var", 0.0, 0.4, 0.1, 0.01)
@@ -66,9 +66,9 @@ func _build_ui() -> void:
 
 	vbox.add_child(_separator())
 
-	_add_slider(vbox, "drip_chance", 0.0, 1.0, 0.35, 0.05)
-	_add_slider(vbox, "drip_length", 0.0, 40.0, 18.0, 1.0)
-	_add_slider(vbox, "drip_width", 4.0, 32.0, 16.0, 1.0)
+	_add_slider(vbox, "drip_chance", 0.0, 1.0, 0.45, 0.05)
+	_add_slider(vbox, "drip_length", 0.0, 40.0, 8.0, 1.0)
+	_add_slider(vbox, "drip_width", 4.0, 32.0, 18.0, 1.0)
 	_add_slider(vbox, "seed", 0.0, 100.0, 0.0, 1.0)
 
 	vbox.add_child(_separator())

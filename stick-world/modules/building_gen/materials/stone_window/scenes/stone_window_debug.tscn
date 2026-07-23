@@ -14,7 +14,7 @@ script = ExtResource("1_debug")
 [node name="Sprite2D" type="Sprite2D" parent="."]
 texture = ExtResource("4_tex")
 material = SubResource("mat_stone_window")
-scale = Vector2(120, 170)
+scale = Vector2(160, 210)
 
 [node name="Camera2D" type="Camera2D" parent="."]
 enabled = true

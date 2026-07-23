@@ -39,3 +39,15 @@ modules/building_gen/tools/inspect_capture.py
 modules/building_gen/tools/temp_crop.py
 modules/building_gen/tools/temp_inspect.py
 modules/building_gen/scripts/debug/recrop_references.py
+
+# 石头材质中间产物（单砖抠图实验、未处理参考图原片）
+modules/building_gen/materials/stone_wall/reference/brick_*.png
+modules/building_gen/materials/stone_wall/reference/brick_*.png.import
+modules/building_gen/materials/stone_band/reference/brick_*.png
+modules/building_gen/materials/stone_band/reference/brick_*.png.import
+modules/building_gen/materials/stone_band/reference/stone_band_ref_raw.png
+modules/building_gen/materials/stone_band/reference/stone_band_ref_raw.png.import
+
+# 旧建筑砖块清理失败的中间文件
+modules/old_buildings/assets/*_clean.png
+modules/old_buildings/assets/*_clean.png.import

@@ -1,7 +1,9 @@
-# building_gen：程序化建筑材质系统
+# building_gen：程序化建筑生成系统
 
-> 本模块负责程序化生成建筑及其材质。
-> 每种材质独立开发、独立迭代，共享底层 Shader 原语与截图/对比工具链。
+> 本模块负责程序化生成建筑实体及其材质：
+> - `buildings/` + `scenes/` + `scripts/preview/`：建筑零件装配、编辑器预览、建筑定义（核心）
+> - `materials/`：每种材质独立开发、独立迭代，共享底层 Shader 原语与截图工具链
+>
 > 茅草材质的专属迭代日志见 [materials/thatch/README.md](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/README.md)。
 
 ---
@@ -12,6 +14,12 @@
 modules/building_gen/
 ├── api.gd                          # 模块对外 API（预留）
 ├── README.md                       # 本文件：系统级说明
+├── buildings/                      # 程序化建筑定义（核心）
+│   ├── pg_smithy_lv1.gd            #   铁匠铺 Lv1 生成脚本（继承 Building 基类）
+│   └── pg_smithy_lv1.tscn          #   铁匠铺 Lv1 场景（碰撞/交互区/工作槽位）
+├── scenes/                         # 建筑编辑/预览场景（核心）
+│   ├── smithy_reference.tscn       #   铁匠铺完整参考场景（程序化零件装配）
+│   └── smithy_preview.tscn         #   铁匠铺编辑器实时预览场景
 ├── materials/                      # 材质配方，每种材质一个子目录
 │   ├── thatch/                     # 茅草屋顶（已实现）
 │   │   ├── shaders/thatch.gdshader
@@ -20,18 +28,37 @@ modules/building_gen/
 │   │   ├── scenes/thatch_debug.tscn
 │   │   ├── scenes/thatch_building_demo.tscn
 │   │   └── reference/              # 参考图与截图
-│   ├── wood/                       # 木板墙（待实现）
-│   └── stone_wall/                 # 石墙（待实现）
-├── shaders/
-│   └── lib/
-│       └── hash.gdshaderinc        # 共享：确定性 hash 原语
+│   ├── stone_wall/                 # 浅色石墙（已实现）
+│   │   ├── shaders/stone_wall.gdshader
+│   │   ├── scripts/debug/stone_wall_debug.gd
+│   │   ├── scenes/stone_wall_debug.tscn
+│   │   └── reference/              # 参考图与截图
+│   ├── stone_band/                 # 蓝灰石檐（已实现）
+│   │   ├── shaders/stone_band.gdshader
+│   │   ├── scripts/debug/stone_band_debug.gd
+│   │   ├── scenes/stone_band_debug.tscn
+│   │   └── reference/              # 参考图与截图
+│   ├── stone_window/               # 拱形石窗（已实现）
+│   │   ├── shaders/stone_window.gdshader
+│   │   ├── scripts/debug/stone_window_debug.gd
+│   │   ├── scenes/stone_window_debug.tscn
+│   │   └── reference/              # 参考图与截图
+│   └── wood/                       # 木板墙（待实现）
 ├── scripts/
+│   ├── preview/                    # @tool 预览脚本（编辑器实时渲染）
+│   │   ├── smithy_reference.gd     #   装配铁匠铺所有零件到场景
+│   │   └── smithy_preview.gd       #   编辑器内实时预览
+│   ├── materials/
+│   │   └── procedural_materials.gd # 程序化材质（CPU 合成贴图，遗留方案）
 │   └── debug/
 │       └── capture_in_game.gd      # 通用：标准运行模式自动截图
+├── shaders/
+│   └── lib/
+│       ├── hash.gdshaderinc        # 共享：确定性 hash 原语
+│       └── stone_lib.gdshaderinc   # 共享：石头 SDF / 笔触 / 配色原语
 ├── tools/
 │   ├── capture_standard.ps1        # 通用截图 wrapper（支持 -Material）
-│   ├── capture_movie.ps1           # Movie Maker 备选方案
-│   └── compare/                    # AI 迭代对比工具（待完善）
+│   └── capture_movie.ps1           # Movie Maker 备选方案
 └── assets/
     └── white_tex.png               # 4x4 白色纹理，激活 Sprite2D UV
 ```
@@ -69,6 +96,19 @@ godot --path stick-world res://modules/building_gen/materials/thatch/scenes/that
 godot --headless --path stick-world res://tests/modules/building_gen/test_thatch_shader.tscn
 ```
 
+### 调试石头材质
+
+```powershell
+# 浅色石墙
+.\modules\building_gen\tools\capture_standard.ps1 -Material stone_wall
+
+# 蓝灰石檐
+.\modules\building_gen\tools\capture_standard.ps1 -Material stone_band
+
+# 拱形石窗
+.\modules\building_gen\tools\capture_standard.ps1 -Material stone_window
+```
+
 ---
 
 ## 材质配方契约
@@ -104,6 +144,22 @@ godot --headless --path stick-world res://tests/modules/building_gen/test_thatch
 float h = hash21(p);
 ```
 
+`shaders/lib/stone_lib.gdshaderinc` 提供石头材质共享原语：
+
+- `sl_sd_rounded_box(vec2 p, vec2 half_size, float r)`：圆角矩形 SDF
+- `sl_painterly_edge(vec2 p, float dist, float roughness, float oil_scale, vec2 seed)`：笔触感边缘粗糙化
+- `sl_stone_color_blocks(vec2 local, vec3 light, vec3 mid, vec3 dark, vec2 light_dir, float blend)`：三层颜色块采样
+
+用法：
+
+```glsl
+#include "res://modules/building_gen/shaders/lib/stone_lib.gdshaderinc"
+
+float dist = sl_sd_rounded_box(brick_local, vec2(bw, bh) * 0.5, corner_radius);
+float rough = sl_painterly_edge(p, dist, edge_roughness, oil_scale, hseed);
+vec3 col = sl_stone_color_blocks(sample_local, c_light, c_mid, c_dark, light_dir, color_block_blend);
+```
+
 ---
 
 ## 迁移记录
@@ -114,13 +170,23 @@ float h = hash21(p);
 
 | 原位置 | 去向 | 说明 |
 |--------|------|------|
-| `modules/building_gen/scripts/materials/procedural_materials.gd` | 已移除 | 功能由 `materials/<name>/shaders/<name>.gdshader` 替代 |
-| `modules/building_gen/scenes/smithy_preview.tscn` | `prototypes/building_gen_legacy/scenes/` | 旧版编辑器预览场景 |
-| `modules/building_gen/scenes/smithy_reference.tscn` | `prototypes/building_gen_legacy/scenes/` | 旧版参考场景 |
 | `modules/building_gen/tools/capture_debug.gd` 等 7 个 GDScript 工具 | `prototypes/building_gen_legacy/tools/gdscript_archive/` | 旧版截图/渲染脚本 |
 | `modules/building_gen/tools/py/` | `prototypes/building_gen_legacy/tools/py/` | 旧版 Python 材质生成工具链 |
 | `modules/building_gen/materials/thatch/shaders/thatch_edge.gdshader` | `prototypes/building_gen_legacy/shaders/` | 旧版 "零后处理" Shader 实验 |
 | `modules/building_gen/materials/thatch/reference/thatch_movie_frame*.png` | `prototypes/building_gen_legacy/reference/thatch_movie_frames/` | Movie Maker 实验临时帧 |
+
+### 迁回核心文件（2026-07 修正）
+
+> 此前曾误将下列建筑生成系统的核心文件归档到 `prototypes/building_gen_legacy/`。
+> 经确认：`smithy_reference.tscn` / `smithy_preview.tscn` 及其 `@tool` 脚本、`pg_smithy_lv1.*`、`procedural_materials.gd` 才是整个建筑生成系统的核心，并非只是材质生成。现已全部迁回 `modules/building_gen/`，相关 `ext_resource` / `preload` 路径已同步修正。
+
+| 文件 | 当前位置 | 作用 |
+|------|----------|------|
+| `pg_smithy_lv1.gd` / `.tscn` | `modules/building_gen/buildings/` | 铁匠铺 Lv1 程序化建筑定义 |
+| `smithy_reference.tscn` | `modules/building_gen/scenes/` | 完整建筑零件装配参考场景 |
+| `smithy_preview.tscn` | `modules/building_gen/scenes/` | 编辑器实时预览场景 |
+| `smithy_reference.gd` / `smithy_preview.gd` | `modules/building_gen/scripts/preview/` | `@tool` 装配/预览脚本 |
+| `procedural_materials.gd` | `modules/building_gen/scripts/materials/` | CPU 合成贴图（茅草/木材/石材等原语） |
 
 ### 清理内容
 
@@ -131,7 +197,6 @@ float h = hash21(p);
 
 - `capture_standard.ps1`：标准运行模式截图 wrapper
 - `capture_movie.ps1`：Movie Maker 备选方案
-- `compare/`：AI 迭代对比工具（待完善）
 - `scripts/debug/capture_in_game.gd`：场景内自动截图脚本
 
 ---

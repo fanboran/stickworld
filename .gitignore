@@ -33,6 +33,14 @@ tools/volc_image_gen/output/
 tools/volc_image_gen/.env
 stick-world/assets/_raw/
 
+# 项目根 tools/ 下的一次性辅助脚本（抠图实验、边缘清理等）
+tools/clean_*.py
+tools/reextract_*.py
+tools/sam_*.py
+tools/trim_*.py
+tools/extract_*.py
+tools/filter_*.py
+
 # 世界生成工具：.npy 是大数据文件（高度场/mask，256MB+），不提交，只提交 PNG 预览
 tools/worldgen/output/**/*.npy
 .tmp/

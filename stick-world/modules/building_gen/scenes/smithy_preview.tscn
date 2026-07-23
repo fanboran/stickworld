@@ -1,0 +1,87 @@
+[gd_scene format=3 uid="uid://0g2l47kb7emi"]
+
+[ext_resource type="Script" path="res://modules/building_gen/scripts/preview/smithy_preview.gd" id="1_d0qwq"]
+[ext_resource type="Script" path="res://modules/building_gen/materials/thatch/scripts/preview/smithy_thatch_applier.gd" id="2_applier"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/backwalltop.png" id="tex_backwalltop"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/backpillarl.png" id="tex_backpillarl"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/frontpillar.png" id="tex_frontpillar"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/slantedbeam.png" id="tex_slantedbeam"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/verticalstrut.png" id="tex_verticalstrut"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/beam.png" id="tex_beam"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/roofmain.png" id="tex_roofmain"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/slantedstrut.png" id="tex_slantedstrut"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_preview_textures/roofleftgroup1.png" id="tex_roofleftgroup1"]
+
+[node name="SmithyPreview" type="Node2D" unique_id=1133741269]
+script = ExtResource("1_d0qwq")
+
+[node name="L1_BackWall" type="Node2D" parent="." unique_id=784497569]
+
+[node name="BackWallTop" type="Polygon2D" parent="L1_BackWall" unique_id=722694787]
+texture = ExtResource("tex_backwalltop")
+polygon = PackedVector2Array(227, -210, -53, -210, 13, -330, 150, -330)
+uv = PackedVector2Array(1, 1, 0, 1, 0, 0, 1, 0)
+
+[node name="BackPillarL" type="Sprite2D" parent="L1_BackWall" unique_id=1977703196]
+position = Vector2(-166, -124)
+texture = ExtResource("tex_backpillarl")
+
+[node name="BackPillarR" type="Sprite2D" parent="L1_BackWall" unique_id=662810236]
+position = Vector2(165.99918, -122.5)
+texture = ExtResource("tex_backpillarl")
+
+[node name="L2_BackItems" type="Node2D" parent="." unique_id=1119265070]
+
+[node name="L3_FrontItems" type="Node2D" parent="." unique_id=202762928]
+
+[node name="L4_FrontWall" type="Node2D" parent="." unique_id=1957323419]
+
+[node name="FrontPillar" type="Sprite2D" parent="L4_FrontWall" unique_id=292207057]
+position = Vector2(-205, -123)
+texture = ExtResource("tex_frontpillar")
+
+[node name="@Sprite2D@45469" type="Sprite2D" parent="L4_FrontWall" unique_id=1771060998]
+position = Vector2(-0.5, -123)
+texture = ExtResource("tex_frontpillar")
+
+[node name="@Sprite2D@45470" type="Sprite2D" parent="L4_FrontWall" unique_id=3771060999]
+position = Vector2(204, -123)
+texture = ExtResource("tex_frontpillar")
+
+[node name="L5_Roof" type="Node2D" parent="." unique_id=943062079]
+
+[node name="SlantedBeam" type="Sprite2D" parent="L5_Roof" unique_id=675907071]
+position = Vector2(60, -258)
+rotation = 0.712094
+scale = Vector2(1, 0.491)
+texture = ExtResource("tex_slantedbeam")
+
+[node name="VerticalStrut" type="Sprite2D" parent="L5_Roof" unique_id=561120911]
+position = Vector2(37.5, -281.5)
+texture = ExtResource("tex_verticalstrut")
+
+[node name="Beam" type="Sprite2D" parent="L5_Roof" unique_id=1955245075]
+position = Vector2(80.99959, -229)
+texture = ExtResource("tex_beam")
+
+[node name="RoofMain" type="Polygon2D" parent="L5_Roof" unique_id=573321588]
+texture = ExtResource("tex_roofmain")
+polygon = PackedVector2Array(59.796, -346, 164.90918, -346, 245.90918, -206, 209.90918, -206, 194.957, -232, 125.844, -232)
+uv = PackedVector2Array(0, 0, 1, 0, 1, 1, 0.75, 1, 0.65, 0.35, 0.2, 0.35)
+
+[node name="SlantedStrut" type="Sprite2D" parent="L5_Roof" unique_id=945431594]
+position = Vector2(80.34, -290.65)
+rotation = 1.047
+texture = ExtResource("tex_slantedstrut")
+
+[node name="RoofLeftGroup1" type="Polygon2D" parent="L5_Roof" unique_id=1058266878]
+position = Vector2(-6, 3)
+texture = ExtResource("tex_roofleftgroup1")
+polygon = PackedVector2Array(-182, -361, 59, -361, -44, -182, -285, -182)
+uv = PackedVector2Array(0, 0, 3.765625, 0, 3.765625, 1, 0, 1)
+
+[node name="ThatchApplier" type="Node" parent="."]
+script = ExtResource("2_applier")
+roof_paths = [NodePath("../L5_Roof/RoofMain"), NodePath("../L5_Roof/RoofLeftGroup1")]
+alternate_angle_per_roof = false
+match_angle_to_slope = true

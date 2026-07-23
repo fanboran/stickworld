@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://modules/building_gen/scenes/smithy_preview.tscn" id="1_preview"]
+[ext_resource type="Script" path="res://modules/building_gen/scripts/debug/capture_in_game.gd" id="2_capture"]
+
+[node name="SmithyThatchPreview" type="Node2D"]
+
+[node name="SmithyPreview" parent="." instance=ExtResource("1_preview")]
+
+[node name="CaptureHelper" type="Node" parent="."]
+script = ExtResource("2_capture")
+output_path = "res://modules/building_gen/materials/thatch/reference/smithy_thatch_capture.png"
+settle_frames = 30
+hide_node_paths = [NodePath("../SmithyPreview/L1_BackWall"), NodePath("../SmithyPreview/L4_FrontWall"), NodePath("../SmithyPreview/L5_Roof/SlantedBeam"), NodePath("../SmithyPreview/L5_Roof/VerticalStrut"), NodePath("../SmithyPreview/L5_Roof/Beam"), NodePath("../SmithyPreview/L5_Roof/SlantedStrut")]
+crop_node_paths = [NodePath("../SmithyPreview/L5_Roof/RoofMain"), NodePath("../SmithyPreview/L5_Roof/RoofLeftGroup1")]

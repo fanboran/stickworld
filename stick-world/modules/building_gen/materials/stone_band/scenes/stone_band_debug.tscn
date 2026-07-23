@@ -1,0 +1,25 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://modules/building_gen/materials/stone_band/scripts/debug/stone_band_debug.gd" id="1_debug"]
+[ext_resource type="Script" path="res://modules/building_gen/scripts/debug/capture_in_game.gd" id="2_capture"]
+[ext_resource type="Shader" path="res://modules/building_gen/materials/stone_band/shaders/stone_band.gdshader" id="3_shader"]
+[ext_resource type="Texture2D" path="res://modules/building_gen/assets/white_tex.png" id="4_tex"]
+
+[sub_resource type="ShaderMaterial" id="mat_stone_band"]
+shader = ExtResource("3_shader")
+
+[node name="StoneBandDebug" type="Node2D"]
+script = ExtResource("1_debug")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("4_tex")
+material = SubResource("mat_stone_band")
+scale = Vector2(256, 64)
+
+[node name="Camera2D" type="Camera2D" parent="."]
+enabled = true
+zoom = Vector2(1, 1)
+
+[node name="CaptureHelper" type="Node" parent="."]
+script = ExtResource("2_capture")
+output_path = "res://modules/building_gen/materials/stone_band/reference/stone_band_debug_capture.png"

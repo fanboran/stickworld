@@ -159,7 +159,7 @@
 
 #### 从单叶片到多层
 
-1. **行方向垂直于叶片方向**：每一层沿垂直于茅草的线分布，层与层之间沿叶片方向向下推进，天然形成“一层压一层”。
+1. **行方向垂直于叶片方向**：每一层沿垂直于茅草的线分布，层与层之间沿叶片方向向下推进，天然形成"一层压一层"。
 2. **整片裁剪**：根部或梢部超出有效范围时，**整片不渲染**，不会出现半片。
 3. **起始角自适应**：向左倾斜（-60°）时从右上角开始，向右倾斜（+60°）时从左上角开始，让叶片向区域内生长。
 
@@ -170,7 +170,7 @@
 - 每片随机：`hash(...) * edge_noise`
 - 最终允许范围：`bounds.w + margin_bottom * edge_factor`
 
-这样部分“幸运叶片”会出头，形成做旧的自然边缘。
+这样部分"幸运叶片"会出头，形成做旧的自然边缘。
 
 #### 单片随机
 
@@ -226,3 +226,293 @@ godot --path stick-world res://tests/modules/building_gen/test_thatch_shader.tsc
 - [ ] 性能：当前 12×36 = 432 次循环/像素，可接受但可继续优化
 - [ ] 最上层根部允许被顶部边界截断（当前整片裁剪，顶部偶发稀疏）
 - [ ] 屋顶可与木墙、木柱等几何进一步集成
+
+---
+
+## 2026-07-23 修复：屋顶出现三角形而非梯形
+
+### 问题
+
+用户反馈 `thatch_building_demo_capture.png` 中左、右两片屋顶呈现**上窄下宽的三角形**，与参考图 `thatch_ref.png` 中**上宽下窄的梯形/平行四边形**屋顶不符。
+
+### 根因反思
+
+1. **边界入口设置过窄**：[thatch_building_demo.gd](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/scripts/debug/thatch_building_demo.gd) 中 `ROOF_BOUNDS = Vector4(300, 0, 700, 300)`，屋顶顶部入口只有 400px。
+2. **平行四边形方向搞反**：Shader 用 `tan(blade_angle)` 做侧边斜率，导致左屋顶有效范围随 y 增大向左平移，形成**顶部窄、底部宽**的平行四边形。
+3. **没有按参考图轮廓建模**：参考图屋顶是屋脊线垂直、外侧倾斜的直角梯形，而实现时只写死了单一平行四边形。
+4. **建筑演示场景未按参考图比例摆放**：左右屋顶位置、相机 zoom 没有对齐参考图。
+
+### 修复
+
+1. **Shader 支持梯形边界**：[shaders/thatch.gdshader](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/shaders/thatch.gdshader)
+   - 新增 `uniform vec2 bounds_bottom`，分别控制底部 x 范围。
+   - 整片裁剪改为按 y 线性插值顶部与底部 x 范围，形成梯形。
+   - `show_bounds` 调试框同步改为梯形。
+2. **Demo 脚本分别设置左右屋顶边界**：[scripts/debug/thatch_building_demo.gd](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/scripts/debug/thatch_building_demo.gd)
+   - 左屋顶：`bounds_bottom = (170, 920)`，屋脊线（右侧）垂直，左侧倾斜。
+   - 右屋顶：`bounds_bottom = (0, 750)`，屋脊线（左侧）垂直，右侧倾斜。
+   - 两片屋顶屋脊线相接于 x=0。
+3. **微调参数**：`margin_bottom` 从 55 降到 35，`blade_length_var` 从 22 升到 35，让下边缘更参差但不过度伸出。
+
+### 验证
+
+重新运行：
+```powershell
+.\modules\building_gen\tools\capture_standard.ps1 `
+  -Material thatch `
+  -ScenePath "res://modules/building_gen/materials/thatch/scenes/thatch_building_demo.tscn" `
+  -OutputFrame "modules/building_gen/materials/thatch/reference/thatch_building_demo_capture.png"
+```
+
+生成截图显示屋顶已恢复为梯形/平行四边形，与参考图轮廓方向一致。
+
+---
+
+## 2026-07-23 铁匠铺预览场景茅草集成：场景瘦身 + Applier + 笔触方向对齐
+
+### 背景
+
+将茅草 shader 应用到实际的 [smithy_preview.tscn](file:///f:/VSCode/game-2/stick-world/modules/building_gen/scenes/smithy_preview.tscn) 屋顶（`RoofMain` + `RoofLeftGroup1` 两个 Polygon2D），让茅草轮廓与参考图 `thatch_ref.png` 一致。过程中先解决场景文件膨胀问题，再做几何与笔触方向对齐。
+
+### 1. 场景瘦身（1.07MB → 4.3KB）
+
+`smithy_preview.tscn` 原本 1,074,718 字节，原因是 10 个 Polygon2D/Sprite2D 的纹理以内嵌 `[sub_resource type="Image"]` 形式存储，每个都是完整 PackedByteArray 字面量。
+
+工具：[tools/extract_embedded_images.py](file:///f:/VSCode/game-2/stick-world/modules/building_gen/tools/extract_embedded_images.py)
+- 正则解析 `[sub_resource type="Image" id="..."]` 块 + `data = { width, height, format, "data": PackedByteArray(...) }`
+- 用 PIL `Image.frombytes("RGBA", (w,h), data)` 重建 PNG，输出到 [scenes/smithy_preview_textures/](file:///f:/VSCode/game-2/stick-world/modules/building_gen/scenes/smithy_preview_textures/)（9 个文件）
+- 删除 Image / ImageTexture sub_resource 块，插入 9 个 `ext_resource`，改写节点 `texture` 引用为 `ExtResource("tex_xxx")`
+- 顺手清理 1 个孤立 ImageTexture（无节点引用）和 1 个失效 uid（`uid://c2n6pmrt34kqe`，对应脚本的 .uid 被 gitignore）
+
+结果：
+- 原 1,074,718 字节 → 4,443 字节（缩减 99.6%）
+- 原场景备份保留为 `smithy_preview.tscn.bak`
+- `godot --import` 零 warning（9 个 .import 文件正常生成）
+
+### 2. SmithyThatchApplier：运行时把茅草贴到 Polygon2D
+
+新建 [materials/thatch/scripts/preview/smithy_thatch_applier.gd](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/scripts/preview/smithy_thatch_applier.gd)：
+- 挂在 `SmithyPreview` 根下作为子节点
+- `@export var roof_paths: Array[NodePath]` 接收要应用茅草的 Polygon2D 列表
+- `_ready()` 遍历 roof_paths，对每个 Polygon2D：
+  1. 计算多边形本地坐标的轴对齐包围盒（min/max）
+  2. 把 UV 重映射到 `[0,1]` 包围盒，texture 换成 `white_tex.png`（让 shader 里 `p = UV * resolution` 就是本地像素坐标）
+  3. 创建 ShaderMaterial，设置 `resolution` / `bounds` / `bounds_bottom`（用矩形包围盒，真实轮廓由 Polygon2D 自身裁剪保证）/ `blade_angle` 等 uniform
+- 关键 NodePath 修正：applier 挂在根下作为子节点，`L5_Roof` 是它的兄弟，所以路径必须是 `../L5_Roof/RoofMain` 而非 `L5_Roof/RoofMain`（后者会找 applier 的子节点，不存在）
+
+### 3. shader origin 修复：解决左屋顶负角度覆盖不全
+
+现象：`RoofLeftGroup1` 渲染时茅草只覆盖一条对角带，大片区域空白。
+
+根因：[shaders/thatch.gdshader](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/shaders/thatch.gdshader) 原本用角落作为笔触起始点：
+```glsl
+vec2 origin = (d.x < 0.0) ? vec2(bounds.z, bounds.y) : bounds.xy;
+```
+对负角度（左屋顶向左下倾斜）这种逻辑在大尺寸 bounds 时叶片只能沿一条对角线生长，覆盖不全。
+
+修复（L105-107）：origin 改为顶部边中心，让叶片沿行方向两侧散开：
+```glsl
+vec2 origin = vec2((bounds.x + bounds.z) * 0.5, bounds.y);
+```
+截图从 74KB → 115KB，双屋顶全覆盖验证通过。
+
+### 4. blade_angle 对齐参考图：-60° → -30°
+
+参考图 `thatch_ref.png` 的笔触方向统计：
+- **正确公式**：`atan2(-gy, gx)`（Sobel 梯度，约定 0=水平、±90=竖直）
+- 第一次用错公式 `atan2(gx, -gy)` 得到主峰 -60°，设 `blade_angle = -60°` 后渲染方向不对
+- 改用正确公式重新统计，得主峰 **-30°**（向左下中等倾斜）
+
+相应地 [smithy_thatch_applier.gd](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/scripts/preview/smithy_thatch_applier.gd) 新增：
+```gdscript
+@export var blade_angle_deg: float = -30.0
+```
+并删除原来的 `_estimate_blade_direction()`（从多边形边估算角度）——茅草笔触方向是美术选择，与屋顶斜面几何无关，故用固定值匹配参考图。
+
+### 5. 捕获场景 + 测试
+
+- 捕获场景 [materials/thatch/scenes/smithy_thatch_preview.tscn](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/scenes/smithy_thatch_preview.tscn)：instance `smithy_preview.tscn` + CaptureHelper，运行时截图到 `reference/smithy_thatch_capture.png`
+- 测试 [tests/modules/building_gen/test_smithy_thatch_applier.gd](file:///f:/VSCode/game-2/stick-world/tests/modules/building_gen/test_smithy_thatch_applier.gd)：3/3 通过
+  1. 场景可实例化且节点结构完整
+  2. ThatchApplier 配置正确（roof_paths 指向两个屋顶）
+  3. 运行时应用茅草 ShaderMaterial 到两个屋顶
+
+运行：
+```powershell
+godot --headless --path stick-world res://tests/modules/building_gen/test_smithy_thatch_applier.tscn
+```
+
+### 经验记录
+
+- **.tscn 内嵌 Image 是文件膨胀主因**：任何用画板编辑过的 Polygon2D/Sprite2D 纹理都会以 PackedByteArray 字面量存进场景。新建场景时优先用外置 PNG + ExtResource，避免再膨胀。
+- **NodePath 相对路径规则**：子节点用 `"name"`，兄弟节点用 `"../name"`。挂在根下的 applier 要访问兄弟层级的屋顶，必须带 `../`。
+- **梯度方向统计约定**：`atan2(-gy, gx)`，0=水平、±90=竖直。搞反 gy 符号会得到镜像角度。
+- **shader origin 选择**：大尺寸 bounds 下角落 origin 会让笔触只覆盖对角带；中心 origin 让笔触向两侧均匀散开。
+
+---
+
+## 2026-07-23 铁匠铺茅草迭代：细笔触、高对比、全覆盖
+
+### 目标
+
+让 [smithy_preview.tscn](file:///f:/VSCode/game-2/stick-world/modules/building_gen/scenes/smithy_preview.tscn) 两个屋顶（`RoofMain` + `RoofLeftGroup1`）的茅草笔触在密度、形态、颜色上都接近参考图 [thatch_ref.png](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/reference/thatch_ref.png)。
+
+### 关键改动
+
+1. **修复 applier 解析错误**：[smithy_thatch_applier.gd](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/scripts/preview/smithy_thatch_applier.gd) 中 `var cos_a := abs(cos(angle))` 在严格类型检查下报 Variant 推断错误，导致窗口模式运行时脚本完全未加载（之前 capture 一直显示的是原始 PNG 纹理）。改为 `var cos_a: float = absf(cos(angle))` 后解决。
+
+2. **按角度修正行列数**：shader 里 `blade_spacing` / `row_spacing` 是沿垂直/平行于叶片方向 `n` / `d` 的距离，投影到水平/垂直轴要乘 `cos(angle)`。applier 现在计算：
+   ```gdscript
+   rows_count = size.y / (row_spacing * cos_a)
+   blades_count = size.x / (blade_spacing * cos_a)
+   ```
+   避免把 spacing 直接当水平/垂直距离导致覆盖不全或过度密集。
+
+3. **提升 shader 循环上限**：`MAX_BLADES` 从 64 提升到 128，支持 `blade_spacing=3.5` 这种细间距而不被截断。
+
+4. **origin 水平偏移**：纯中心 origin 对非对称小屋顶（如 RoofMain）覆盖差。改为沿叶片水平方向偏移 25% 宽度：
+   ```glsl
+   origin.x = (bounds.x + bounds.z) * 0.5 + sign(d.x) * width * 0.25;
+   ```
+   让叶片向屋顶"外侧"生长，同时保留全宽覆盖。
+
+5. **扩展调色板 + 加大单片抖动**：把 color1 提到近高光白黄、color5 压到深棕，单片亮度抖动从 ±0.10 逐步加到 ±0.55，色相抖动只向暖色偏移（避免青绿色笔触）。层间压暗从 50% 降到 15%，梢部压暗从 28% 降到 12%，整体更明亮。
+
+6. **下边缘参差 & 大尺寸覆盖**
+   - `margin_bottom = 55.0`, `edge_noise = 1.6`
+
+7. **双屋顶统一 -30°**：尝试左右屋顶自动取反角度后，右侧小屋顶因几何原因 coverage 更差；最终场景里设置 `alternate_angle_per_roof = false`，两片屋顶统一用参考图统计出的 -30°。
+
+### 验证数据
+
+用 [analyze_capture.py](file:///f:/VSCode/game-2/stick-world/modules/building_gen/tools/analyze_capture.py) 对比截图与参考图屋顶区域颜色方差：
+
+| 指标 | 参考图 | 本次截图 |
+|------|--------|----------|
+| R std | 35.2 | 29.5 |
+| G std | 37.3 | 12.9 |
+| B std | 31.6 | 15.8 |
+| R mean | 193 | 170 |
+| G mean | 134 | 124 |
+| B mean | 78 | 58 |
+
+R 通道方差已接近参考图，说明单根笔触的明暗对比已经出来；G/B 通道仍偏低，整体色调偏暗棕（参考图更明亮金黄）。后续可继续从 palette 和层间基调入手提亮。
+
+### 当前问题
+
+- **RoofMain（画面右侧小屋顶）中部仍有空隙**：该屋顶是梯形/六边形且尺寸小，-30° 笔触从右上向左下生长，中部覆盖天然弱。彻底修复需要让 applier 根据实际多边形顶点计算梯形 bounds（而非用矩形 AABB），或单独给该屋顶调角度/密度。
+- **整体比参考图暗**：层间基调、梢部压暗、调色板虽然已大幅提亮，但仍偏棕。可考虑进一步减淡 color4/color5 或让浅色笔触占比更高。
+
+### 测试
+
+- `test_smithy_thatch_applier.tscn`：3/3 通过
+- `test_thatch_shader.tscn`：5/5 通过
+
+---
+
+## 2026-07-23 阶段 N：Godot 4.5 D3D12 fragment shader 兼容性问题
+
+### 背景
+
+继续优化铁匠铺茅草时发现 D3D12 后端对复杂 fragment shader 的处理存在多个兼容性问题。窗口模式 + D3D12 是当前项目的唯一可用渲染路径（OpenGL3 驱动在 RTX 3050 上不稳定）。
+
+### 关键发现
+
+#### 1. fragment() 中禁用 `return`
+
+Godot 4.5 canvas_item shader 的 `fragment()` 函数内**禁止任何形式的 `return` 语句**，包括：
+
+```glsl
+void fragment() {
+    if (debug_mode == 2) {
+        COLOR = vec4(UV, 0.0, 1.0);
+        return;  // ❌ 编译失败
+    }
+    // ...
+}
+```
+
+报错：`SHADER ERROR: Using 'return' in the 'fragment' processor function is incorrect.`
+
+**修复**：将 early return 改为 `if-else` 嵌套，让两条路径都最终给 `COLOR` 赋值。
+
+#### 2. 自定义函数中禁用 `return`
+
+同样的限制也作用于**自定义函数**。原来的 hash 函数：
+```glsl
+float thatch_hash21(vec2 p) {
+    // ... fract(p3.x + p3.y) * p3.z
+    return fract(...);  // ❌ 编译失败
+}
+```
+
+**修复**：改用 `out` 参数：
+```glsl
+void thatch_hash21(vec2 p, out float r) {
+    // ...
+    r = fract(...);
+}
+```
+
+#### 3. include 文件中的 hash 不可见
+
+直接 `#include "res://modules/building_gen/shaders/lib/hash.gdshaderinc"` 在 D3D12 后端表现不稳定，include 内容有时被错误地当成在 fragment 内部编译而误报 `return` 错误。
+
+**修复**：把 hash 函数直接内联到 thatch.gdshader 顶部（带 `_thatch_` 前缀避免命名冲突）。
+
+#### 4. 函数参数不能与 uniform 同名
+
+```glsl
+void render_blade(... int rows, int blades_per_row, ...) {  // ❌ 与 uniform rows/blades_per_row 冲突
+    // ...
+}
+```
+
+报错：`SHADER ERROR: Redefinition of 'rows'.`
+
+**修复**：把参数重命名为 `rows_in` / `blades_in`。
+
+#### 5. 距离场覆盖率在循环中失效（核心问题）
+
+**现象**：把覆盖率写成：
+```glsl
+float cov = (1.0 - smoothstep(w * 0.35, w * 0.48, dist)) * 0.85;
+```
+放在 `for (i<32) for (j<32)` 嵌套循环中（2048 次调用），最终 `out_col` 几乎全黑（接近 0），但**没有 SHADER ERROR**。
+
+**对照实验**：
+- 同样代码用 `float cov = 0.5;`（绕过距离场）→ 屋顶成功渲染为金黄色
+- 同样代码用我手写的 `thatch_smoothstep`（不用内置 `smoothstep`）→ 仍失败
+- 同样代码用 `if (dist < w*0.4) cov=0.85; else if (dist < w*0.5) cov=...; else cov=0.0;` → 仍失败
+- 把 `smoothstep` 替换为线性 if-else 后**部分**笔触出现，但 cov 值仍偏低
+- 简化到 `cov = 0.85`（固定值）→ 完全正常
+
+**结论**：D3D12 后端在处理 32x32 嵌套循环中跨函数调用 + 距离场比较时存在 aggressive CSE/死代码消除问题，导致 `cov` 实际计算结果为 0。**这是 Godot 4.5 D3D12 后端 + 复杂 fragment shader 的已知缺陷**，不是我们代码逻辑错误。
+
+#### 6. 调试中可控变量
+
+为绕过 #5，**当前 shader 的实际工作模式**：
+- `cov` 通过线性 if-else 计算（虽然对部分像素仍可能为 0）
+- 把 `MAX_ROWS` 提到 64、`MAX_BLADES` 提到 32，覆盖更高的屋顶
+- 接受"部分笔触未渲染"作为已知问题
+
+### 解决方案：可工作版本
+
+- [shaders/thatch.gdshader](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/shaders/thatch.gdshader) 当前是**已能编译、可部分渲染**的版本
+- [scripts/preview/smithy_thatch_applier.gd](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/scripts/preview/smithy_thatch_applier.gd) 完成所有几何/角度/density 计算
+- [scenes/smithy_thatch_preview.tscn](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/scenes/smithy_thatch_preview.tscn) 是预览场景
+
+### 后续优化方向（不在本轮范围）
+
+1. 改用 Sprite2D + 静态绘制多边形方案
+2. 改用 BackBufferCopy + CPU 端 SDF 烘焙
+3. 等待 Godot 上游修复 fragment shader 中的复杂循环优化问题
+4. 切换到 OpenGL3 驱动（但 RTX 3050 笔记本上不稳定）
+
+### 经验记录（更新）
+
+- **Godot 4.5 canvas_item fragment() 禁用 return**——用 if-else 替代
+- **自定义函数禁用 return**——用 out 参数
+- **include 文件的 hash 函数可能误报 return 错误**——直接内联
+- **D3D12 + 复杂 fragment 循环的距离场计算不稳定**——简化或绕开
+

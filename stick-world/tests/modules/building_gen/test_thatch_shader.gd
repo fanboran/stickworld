@@ -110,7 +110,7 @@ func _test_shader_uniforms() -> void:
 		names.append(item["name"])
 
 	var required := [
-		"resolution", "bounds", "blade_angle", "angle_var", "curve_amount",
+		"resolution", "bounds", "bounds_bottom", "blade_angle", "angle_var", "curve_amount",
 		"rows", "blades_per_row", "row_spacing", "blade_spacing",
 		"blade_length_base", "blade_length_var", "blade_width_base", "blade_width_var",
 		"root_width_mul", "tip_width_mul", "width_noise", "oil_roughness",

@@ -17,3 +17,25 @@ modules/building_gen/materials/*/reference/*_swatch.png.import
 
 # Movie Maker 实验临时帧
 prototypes/building_gen_legacy/reference/thatch_movie_frames/
+
+# 茅草临时参考截图（仅保留 smithy_thatch_capture.png 主截图）
+modules/building_gen/materials/thatch/reference/smithy_center_*.png
+modules/building_gen/materials/thatch/reference/smithy_center_*.png.import
+modules/building_gen/materials/thatch/reference/smithy_roof_*.png
+modules/building_gen/materials/thatch/reference/smithy_roof_*.png.import
+modules/building_gen/materials/thatch/reference/*_crop*.png
+modules/building_gen/materials/thatch/reference/*_crop*.png.import
+modules/building_gen/materials/thatch/reference/thatch_ref_*.png
+modules/building_gen/materials/thatch/reference/thatch_ref_*.png.import
+
+# 调试/实验 shader
+modules/building_gen/materials/thatch/shaders/thatch_debug.gdshader
+modules/building_gen/materials/thatch/shaders/thatch_minimal.gdshader
+
+# 一次性 Python 工具脚本
+modules/building_gen/tools/analyze_capture.py
+modules/building_gen/tools/extract_embedded_images.py
+modules/building_gen/tools/inspect_capture.py
+modules/building_gen/tools/temp_crop.py
+modules/building_gen/tools/temp_inspect.py
+modules/building_gen/scripts/debug/recrop_references.py

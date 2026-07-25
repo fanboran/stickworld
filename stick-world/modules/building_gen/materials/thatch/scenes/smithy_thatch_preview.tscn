@@ -11,5 +11,8 @@
 script = ExtResource("2_capture")
 output_path = "res://modules/building_gen/materials/thatch/reference/smithy_thatch_capture.png"
 settle_frames = 30
+preview_guides_node_path = NodePath("../SmithyPreview")
 hide_node_paths = [NodePath("../SmithyPreview/L1_BackWall"), NodePath("../SmithyPreview/L4_FrontWall"), NodePath("../SmithyPreview/L5_Roof/SlantedBeam"), NodePath("../SmithyPreview/L5_Roof/VerticalStrut"), NodePath("../SmithyPreview/L5_Roof/Beam"), NodePath("../SmithyPreview/L5_Roof/SlantedStrut")]
 crop_node_paths = [NodePath("../SmithyPreview/L5_Roof/RoofMain"), NodePath("../SmithyPreview/L5_Roof/RoofLeftGroup1")]
+crop_padding = 12
+transparent_background = true

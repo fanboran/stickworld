@@ -65,25 +65,25 @@ func _build_ui() -> void:
 	)
 
 	# 层数
-	var rows_slider := _add_slider(vbox, "rows", 1.0, 32.0, 6.0, 1.0)
+	var rows_slider := _add_slider(vbox, "rows", 1.0, 48.0, 18.0, 1.0)
 	rows_slider.value_changed.connect(func(v: float) -> void:
 		_material.set_shader_parameter("rows", int(v))
 	)
 
 	# 每层叶片数
-	var blades_slider := _add_slider(vbox, "blades_per_row", 1.0, 64.0, 20.0, 1.0)
+	var blades_slider := _add_slider(vbox, "blades_per_row", 1.0, 96.0, 64.0, 1.0)
 	blades_slider.value_changed.connect(func(v: float) -> void:
 		_material.set_shader_parameter("blades_per_row", int(v))
 	)
 
 	# 叶片长度
-	var len_slider := _add_slider(vbox, "blade_length_base", 20.0, 300.0, 120.0, 5.0)
+	var len_slider := _add_slider(vbox, "blade_length_base", 20.0, 300.0, 130.0, 5.0)
 	len_slider.value_changed.connect(func(v: float) -> void:
 		_material.set_shader_parameter("blade_length_base", v)
 	)
 
 	# 叶片宽度
-	var wid_slider := _add_slider(vbox, "blade_width_base", 1.0, 30.0, 10.0, 0.5)
+	var wid_slider := _add_slider(vbox, "blade_width_base", 1.0, 30.0, 5.0, 0.5)
 	wid_slider.value_changed.connect(func(v: float) -> void:
 		_material.set_shader_parameter("blade_width_base", v)
 	)
@@ -101,21 +101,33 @@ func _build_ui() -> void:
 	)
 
 	# 笔触宽度抖动
-	var wnoise_slider := _add_slider(vbox, "width_noise", 0.0, 1.5, 0.45, 0.05)
+	var wnoise_slider := _add_slider(vbox, "width_noise", 0.0, 1.5, 0.35, 0.05)
 	wnoise_slider.value_changed.connect(func(v: float) -> void:
 		_material.set_shader_parameter("width_noise", v)
 	)
 
 	# 油画边缘粗糙度
-	var oil_slider := _add_slider(vbox, "oil_roughness", 0.0, 1.5, 0.55, 0.05)
+	var oil_slider := _add_slider(vbox, "oil_roughness", 0.0, 1.5, 0.5, 0.05)
 	oil_slider.value_changed.connect(func(v: float) -> void:
 		_material.set_shader_parameter("oil_roughness", v)
 	)
 
 	# 下边缘余量
-	var margin_slider := _add_slider(vbox, "margin_bottom", 0.0, 120.0, 55.0, 1.0)
+	var margin_slider := _add_slider(vbox, "margin_bottom", 0.0, 120.0, 35.0, 1.0)
 	margin_slider.value_changed.connect(func(v: float) -> void:
 		_material.set_shader_parameter("margin_bottom", v)
+	)
+
+	# 叶片边缘描边宽度
+	var outline_slider := _add_slider(vbox, "outline_width", 0.0, 8.0, 2.0, 0.25)
+	outline_slider.value_changed.connect(func(v: float) -> void:
+		_material.set_shader_parameter("outline_width", v)
+	)
+
+	# 屋顶轮廓描边宽度
+	var sil_slider := _add_slider(vbox, "silhouette_width", 0.0, 8.0, 0.0, 0.25)
+	sil_slider.value_changed.connect(func(v: float) -> void:
+		_material.set_shader_parameter("silhouette_width", v)
 	)
 
 	# 随机种子
@@ -134,6 +146,15 @@ func _build_ui() -> void:
 		_material.set_shader_parameter("show_bounds", pressed)
 	)
 	vbox.add_child(bounds_btn)
+
+	# 屋顶轮廓辅助红线（与参考图对位用）
+	var outline_btn := CheckButton.new()
+	outline_btn.text = "show_roof_outline"
+	outline_btn.button_pressed = false
+	outline_btn.toggled.connect(func(pressed: bool) -> void:
+		_material.set_shader_parameter("show_roof_outline", pressed)
+	)
+	vbox.add_child(outline_btn)
 
 
 func _add_slider(parent: Control, label_text: String, min_v: float, max_v: float, default_v: float, step: float) -> HSlider:

@@ -6,6 +6,9 @@ const GUIDE_LEFT     = -248
 const GUIDE_RIGHT    = 252
 const GUIDE_BASE_Y   = -24.0
 
+## 是否绘制对位辅助线（彩色横线）。capture 模式下设为 false，只输出"纯屋顶"特写。
+@export var show_guides: bool = true
+
 
 func _ready():
 	if Engine.is_editor_hint():
@@ -16,6 +19,8 @@ func _ready():
 
 
 func _draw():
+	if not show_guides:
+		return
 	for i in 4:
 		draw_line(Vector2(GUIDE_LEFT, GUIDE_BASE_Y + i * 8.0), Vector2(GUIDE_RIGHT, GUIDE_BASE_Y + i * 8.0), GUIDE_COLORS[i], 1.0)
 

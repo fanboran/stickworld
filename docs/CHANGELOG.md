@@ -8,6 +8,14 @@
 
 ## [未发布]
 
+### 阶段 0.7 闭环 (2026-07-18 之后)
+
+- ✅ **P0-1 修复**：PossessionInterface 装配代码已补全（[game_root.gd:363-399](file:///f:/VSCode/game-2/stick-world/modules/world/scripts/game_root.gd)）
+- ✅ **InputDispatcher** 已注册 POSSESS handler（game_root.gd:370-371）
+- 🔄 **待重跑 test_stage_07**：16 项测试代码就绪，纯验证
+- 📌 **附身完整版深化**后移到阶段 1/2 详细指挥系统开发（与 [路线图.md](项目/路线图.md) "完整指挥链设计"合并）
+- 📌 **章节号迁移**：旧版"§十七"已变更为 [场景与战斗架构.md §六](技术/架构/场景与战斗架构.md)
+
 ### 阶段 0.1 - GameRoot 骨架 ✅
 
 - **新增 `game_root.tscn` 主场景**：搭建 GameRoot 骨架，挂载 WorldClock / CameraRig / SceneLoader / InputDispatcher 四大根组件
@@ -73,6 +81,7 @@
 - **`StickmanEntity` 新增鼠标左键攻击**：`_player_attack` + `_find_nearest_enemy_in_range`
 - **EventBus 新增 `possession_started` / `possession_ended` 信号**
 - ⚠️ **P0-1 发现 PossessionInterface 未装配，待修复**：`game_root.gd` 缺失 `_setup_possession_interface()` / `_setup_possess_panel()` 方法，`InputDispatcher` 未注册 POSSESS handler，附身功能当前完全不可用。`test_stage_07_result.txt` 显示 16/16 通过是重构前旧版本残留，具有误导性。详见 §十七 P0-1。
+  > **注**：已于 2026-07-18 修复（见"阶段 0.7 闭环"段）。原章节号 §十七 已变更为 §六。
 
 ### 阶段 0.8 - 多场景衔接 ✅
 

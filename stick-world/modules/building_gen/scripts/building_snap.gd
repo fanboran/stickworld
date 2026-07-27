@@ -5,6 +5,9 @@ extends Building
 ## - X 吸附到 32px 网格
 ## - Y 吸附到碰撞体下边界对齐草地中线
 ## 运行时继承 Building 的全部方法（透明化、工作位、状态机等）。
+##
+## 迁移记录：原位于 modules/old_buildings/scripts/building_snap.gd，
+## 2026-07 迁至 modules/building_gen/scripts/building_snap.gd。
 
 const CELL_SIZE := 32
 

@@ -12,7 +12,7 @@
 
 ```
 modules/building_gen/
-├── api.gd                          # 模块对外 API（预留）
+├── api.gd                          # 模块对外 API（委托 ProceduralMaterials + 建筑实例化）
 ├── README.md                       # 本文件：系统级说明
 ├── buildings/                      # 程序化建筑定义（核心）
 │   ├── pg_smithy_lv1.gd            #   铁匠铺 Lv1 生成脚本（继承 Building 基类）
@@ -45,13 +45,15 @@ modules/building_gen/
 │   │   └── reference/              # 参考图与截图
 │   └── wood/                       # 木板墙（待实现）
 ├── scripts/
-│   ├── preview/                    # @tool 预览脚本（编辑器实时渲染）
-│   │   ├── smithy_reference.gd     #   装配铁匠铺所有零件到场景
-│   │   └── smithy_preview.gd       #   编辑器内实时预览
+│   ├── building.gd                  # Building 基类（class_name）
+│   ├── building_snap.gd             # 编辑器吸附脚本（@tool）
+│   ├── preview/                     # @tool 预览脚本（编辑器实时渲染）
+│   │   ├── smithy_reference.gd      #   装配铁匠铺所有零件到场景
+│   │   └── smithy_preview.gd        #   编辑器内实时预览
 │   ├── materials/
-│   │   └── procedural_materials.gd # 程序化材质（CPU 合成贴图，遗留方案）
+│   │   └── procedural_materials.gd  # 程序化材质（CPU 合成贴图，遗留方案）
 │   └── debug/
-│       └── capture_in_game.gd      # 通用：标准运行模式自动截图
+│       └── capture_in_game.gd       # 通用：标准运行模式自动截图
 ├── shaders/
 │   └── lib/
 │       ├── hash.gdshaderinc        # 共享：确定性 hash 原语

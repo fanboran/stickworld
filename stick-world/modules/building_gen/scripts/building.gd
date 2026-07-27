@@ -10,7 +10,7 @@ extends Node2D
 ##   Building (Node2D, 本脚本)
 ##   ├── Exterior (Node2D)             ← 外观容器（含 Roof + WallFront；兼容旧 Sprite2D）
 ##   │   ├── Roof (Sprite2D)            ← 🆕 屋顶（始终可见）
-##   │   └── WallFront (Sprite2D)       ← 🆕 前墙（透明化时 alpha 渐变）
+##   │   └── WallFront (CanvasItem)     ← 🆕 前墙（透明化时 alpha 渐变，Polygon2D 也可）
 ##   ├── Interior (Node2D)              ← 🆕 内部空间（默认 visible=false）
 ##   │   ├── Floor (Sprite2D)           ← 🆕 室内地面
 ##   │   ├── Props (Node2D)             ← 🆕 装饰
@@ -23,6 +23,9 @@ extends Node2D
 ##   ├── PassageBarrier (Area2D)        ← 通行障碍（可选）
 ##   │   └── CollisionShape2D[]
 ##   └── HealthComponent (Node)         ←（后续阶段）
+##
+## 迁移记录：原位于 modules/old_buildings/scripts/building.gd，
+## 2026-07 迁至 modules/building_gen/scripts/building.gd。
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 
@@ -66,8 +69,8 @@ var _work_slot_markers: Array = []  # Marker2D[] 缓存
 # ─────────────────────────────── 室内相关（§5）───────────────────────────────
 ## 室内容器（默认不可见）
 var _interior: Node2D = null
-## 前墙 Sprite（透明化时 alpha 渐变）
-var _wall_front: Sprite2D = null
+## 前墙 CanvasItem（透明化时 alpha 渐变，兼容 Sprite2D / Polygon2D）
+var _wall_front: CanvasItem = null
 ## 透明化触发区
 var _interaction_zone: Area2D = null
 ## 传送触发区
@@ -127,9 +130,9 @@ func _lookup_children() -> void:
 
 	# WallFront：从 Exterior 容器或直接从 Building 子节点查找
 	if ext is Node2D:
-		_wall_front = ext.get_node_or_null("WallFront") as Sprite2D
+		_wall_front = ext.get_node_or_null("WallFront") as CanvasItem
 	if _wall_front == null:
-		_wall_front = get_node_or_null("WallFront") as Sprite2D
+		_wall_front = get_node_or_null("WallFront") as CanvasItem
 
 	# InteractionZone
 	_interaction_zone = get_node_or_null("InteractionZone") as Area2D

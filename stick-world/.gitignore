@@ -4,8 +4,9 @@ modules/building_gen/reference/history/
 # 材质迭代临时配置文件
 modules/building_gen/tools/py/_material_config.json
 
-# Godot headless 输出日志
+# Godot 输出日志
 modules/building_gen/reference/godot_output.txt
+**/godot_log.txt
 
 # 程序化材质：自动生成的截图/诊断图/色板（参考原图除外，手动维护）
 modules/building_gen/materials/*/reference/*_capture.png
@@ -48,6 +49,3 @@ modules/building_gen/materials/stone_band/reference/brick_*.png.import
 modules/building_gen/materials/stone_band/reference/stone_band_ref_raw.png
 modules/building_gen/materials/stone_band/reference/stone_band_ref_raw.png.import
 
-# 旧建筑砖块清理失败的中间文件
-modules/old_buildings/assets/*_clean.png
-modules/old_buildings/assets/*_clean.png.import

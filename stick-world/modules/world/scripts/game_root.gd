@@ -570,7 +570,7 @@ func _start_demo_building() -> void:
 		push_warning("[GameRoot] 演示建造失败: %s" % result.get("error", "未知错误"))
 
 
-## 主动按指定 cell_x 触发建造（供 test_stage_04 测试用）。
+## 主动按指定 cell_x 触发建造（供调试 / 集成测试调用）。
 ## 返回 {ok, project_id, cell_x, width} 或 {ok:false, error}。
 func start_demo_building_at(cell_x: int) -> Dictionary:
 	if _construction_api == null or not _construction_api.has_method("start_construction"):

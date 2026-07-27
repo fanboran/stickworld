@@ -83,5 +83,7 @@ uv = PackedVector2Array(0, 0, 3.765625, 0, 3.765625, 1, 0, 1)
 [node name="ThatchApplier" type="Node" parent="."]
 script = ExtResource("2_applier")
 roof_paths = [NodePath("../L5_Roof/RoofMain"), NodePath("../L5_Roof/RoofLeftGroup1")]
+show_guides = true
 alternate_angle_per_roof = false
 match_angle_to_slope = true
+stroke_angle_deg = -30.0

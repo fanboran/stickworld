@@ -31,7 +31,11 @@ param(
     [string]$ScenePath = "",
     [string]$OutputFrame = "",
     [string]$WindowPosition = "10000,10000",
-    [int]$TimeoutSec = 60
+    [int]$TimeoutSec = 90,
+    # 渲染驱动：d3d12 (默认, Forward+)、opengl3 (Compatibility)
+    # 遇到 D3D12 fragment shader 死代码消除 bug 时改用 opengl3
+    [ValidateSet("d3d12", "opengl3", "vulkan")]
+    [string]$RenderingDriver = "d3d12"
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,12 +98,22 @@ $arguments = @(
     "--position", $WindowPosition
 )
 
+# 渲染驱动参数（绕开 D3D12 fragment shader 死代码消除 bug）
+if ($RenderingDriver -ne "d3d12") {
+    $arguments += "--rendering-driver", $RenderingDriver
+    # opengl3 必须同时使用 gl_compatibility 渲染方法
+    if ($RenderingDriver -eq "opengl3") {
+        $arguments += "--rendering-method", "gl_compatibility"
+    }
+}
+
 if ($ScenePath -ne "") {
     $arguments += $ScenePath
 }
 
 Write-Host "[capture_standard] Starting Godot in standard run mode..."
 Write-Host "  Project: $ProjectDir"
+Write-Host "  Rendering driver: $RenderingDriver"
 if ($Material -ne "") {
     Write-Host "  Material: $Material"
 }

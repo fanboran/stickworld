@@ -515,4 +515,64 @@ float cov = (1.0 - smoothstep(w * 0.35, w * 0.48, dist)) * 0.85;
 - **自定义函数禁用 return**——用 out 参数
 - **include 文件的 hash 函数可能误报 return 错误**——直接内联
 - **D3D12 + 复杂 fragment 循环的距离场计算不稳定**——简化或绕开
+- **PI 是 Godot 内建常量，不要重定义**（`const float PI = 3.14159` 会报 "Redefinition of 'PI'"）
+
+---
+
+## 2026-07-25 铁匠铺茅草迭代：单层 SDF 算法 + D3D12 限制实测
+
+### 目标
+
+继续优化铁匠铺 `smithy_preview.tscn` 两个屋顶（`RoofMain` + `RoofLeftGroup1`）的茅草渲染，
+让两片都更像参考图 `thatch_ref.png`。
+
+### 关键改动
+
+1. **重写 shader 为单层 SDF（绕开 D3D12 嵌套循环 bug）**
+   - 之前是 `for (i in rows) for (j in blades_per_row)` 嵌套循环枚举所有 stroke，D3D12 优化器
+     会在大尺寸多边形上把 `cov` 错误地优化成 0，导致只渲染 silhouette
+   - 改为：对每个像素按 `fi = floor(p.y / row_spacing)` + `fj = floor((p.x - row_x_min) / blade_spacing)`
+     直接定位到单根 stroke，做单次 SDF 计算
+   - 配合 `if (cov > 0.0)` 替换为 `cov = max(half_w - dist, 0) / half_w` 线性表达式
+
+2. **shader 结构与笔触密度**
+   - `rows = 24, blades_per_row = 64, row_spacing = 5.5, blade_spacing = 3.8`
+   - `blade_length_base = 32, blade_width_base = 6.0, root_width_mul = 1.6, tip_width_mul = 0.4`
+   - 行（rows）是水平横切；每行内笔触从 `row_x_min`（梯形左边缘）沿 x 方向均匀分布
+   - 笔触沿 `blade_angle` 方向（默认 -30°）延伸
+   - 5 色调色板 + 行间基调色 + 尖部压暗 + 描边 + silhouette
+
+3. **applier 重构为绝对像素参数**
+   - 之前是"相对屋顶像素尺寸的比率"，现在直接是"屋顶像素"
+   - 这样 shader 内的 `resolution` 直接是屋顶真实像素尺寸，`spacing` 等参数也是绝对值
+   - 与 `procedural_materials.gd` 的调用约定统一
+
+4. **测试更新**
+   - `test_thatch_shader.gd`：headless 模式下 `get_shader_uniform_list()` 返回空，改为
+     直接检查 shader 源码包含关键 uniform
+
+### 验证数据
+
+捕获 `smithy_thatch_capture.png`（560x203）：
+
+| 区域 | 大小 | 渲染情况 |
+|------|------|---------|
+| `RoofMain` (右) | 186x140 | ✅ 正常渲染密集笔触，色块分明 |
+| `RoofLeftGroup1` (左) | 344x179 | ⚠️ D3D12 优化 bug，只渲染 silhouette |
+
+**结论**：单层 SDF 算法在 D3D12 后端下能稳定渲染小尺寸多边形，
+但大尺寸（>200x200）多边形仍会触发 D3D12 fragment shader 死代码消除。
+
+### 已知 D3D12 限制
+
+- 大尺寸多边形 + 复杂 fragment shader → strokes 被优化为 0
+- 解决方向（不在本轮范围）：Sprite2D 静态绘制 / BackBufferCopy + CPU 端 SDF 烘焙 /
+  等待 Godot 上游修复 / 切换 OpenGL3 驱动
+
+### 当前输出
+
+- `reference/smithy_thatch_capture.png`（560x203）：
+  - 右侧小屋顶渲染良好，可见密集分层笔触
+  - 左侧大屋顶仅显示 silhouette（暗色边框）
+- 视觉接近参考图 `thatch_ref.png`，但密度和颜色调校还需进一步细化
 

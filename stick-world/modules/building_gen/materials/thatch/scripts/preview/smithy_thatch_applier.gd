@@ -1,81 +1,57 @@
 extends Node
-## 铁匠铺预览场景茅草屋顶适配器
-##
-## 关键发现：thatch.gdshader 内部的 blade 参数（row_spacing、blade_spacing、blade_length）
-## 是基于 `resolution` 像素单位的硬编码值（如 spacing=32、length=110）。
-## 铁匠铺屋顶在屏幕上只占 100 像素级别，会让 blade 长度 = 110% 屋顶高度 → 整张全黑。
-##
-## 修正方案：
-## - 不重映射 UV，shader 直接使用 world-to-screen 坐标
-## - `resolution` 传屋顶在世界坐标下的实际尺寸
-## - 把 blade 参数改为**相对屋顶分辨率的比率**（除以 max(resolution.x, resolution.y)）
-
-const SHADER_PATH := "res://modules/building_gen/materials/thatch/shaders/thatch.gdshader"
-const WHITE_TEX_PATH := "res://modules/building_gen/assets/white_tex.png"
+## 铁匠铺预览场景茅草屋顶适配器（v11 - 油画笔迹风格）
 
 @export var roof_paths: Array[NodePath] = []
 
-# 注意：这些单位是"屋顶像素"。spacing = 3.0 意味 3 屋顶像素/笔触间距。
-# 实际渲染尺寸 = spacing / resolution.y * 屋顶实际高度
-@export var row_spacing: float = 0.04    # 相对屋顶高度的笔触行间距 (4%)
-@export var blade_spacing: float = 0.05  # 相对屋顶宽度的笔触列间距 (5%)
-@export var blade_length_base: float = 0.5  # 相对屋顶高度的叶片长度
-@export var blade_length_var: float = 0.08
-@export var blade_width_base: float = 0.025
-@export var blade_width_var: float = 0.005
-@export var root_width_mul: float = 1.6
-@export var tip_width_mul: float = 0.25
-@export var width_noise: float = 0.45
-@export var oil_roughness: float = 0.40
+# 笔迹数量
+@export var stroke_count: int = 60
+@export var stroke_count_var: int = 15
 
-@export var margin_bottom: float = 0.15  # 相对屋顶高度
-@export var edge_noise: float = 1.6
+# 笔迹尺寸
+@export var stroke_length_base: float = 200.0
+@export var stroke_length_var: float = 40.0
+@export var stroke_width_base: float = 16.0
+@export var stroke_width_var: float = 6.0
 
-@export var angle_var: float = 0.08
-@export var curve_amount: float = 0.18
-@export var root_jitter: float = 0.02  # 相对屋顶宽度
-@export var row_jitter: float = 0.02   # 相对屋顶高度
+# 笔迹外观
+@export var stroke_roughness: float = 0.6
+@export var stroke_opacity: float = 0.85
+@export var stroke_color_var: float = 0.15
+
+# 红色辅助线（场景中的 Line2D）
+@export var show_guides: bool = true
+@export var guide_color: Color = Color(1.0, 0.1, 0.1, 1.0)
+@export var guide_width: float = 1.0
+
 @export var seed_offset: int = 0
 
-@export var base_color: Color = Color(0.35, 0.20, 0.08)
+# 颜色 - 油画颜料色调
+@export var color_a: Color = Color(0.75, 0.45, 0.18)  # 赭石
+@export var color_b: Color = Color(0.82, 0.55, 0.25)  # 土黄
+@export var color_c: Color = Color(0.65, 0.35, 0.10)  # 深褐
+@export var color_d: Color = Color(0.88, 0.62, 0.35)  # 浅棕
 
-@export var blade_angle_deg: float = -30.0
+@export var stroke_angle_deg: float = -30.0
 @export var alternate_angle_per_roof: bool = true
 @export var match_angle_to_slope: bool = true
 
-@export var debug_mode: int = 0
-@export var show_bounds: bool = false
-
-var _shader: Shader
-var _white_tex: Texture2D
-
 
 func _ready() -> void:
-	print("[SmithyThatchApplier] _ready called, editor_hint=", Engine.is_editor_hint())
 	if Engine.is_editor_hint():
 		return
-
-	_shader = load(SHADER_PATH) as Shader
-	_white_tex = load(WHITE_TEX_PATH) as Texture2D
-	if _shader == null or _white_tex == null:
-		push_error("[SmithyThatchApplier] 缺少 shader 或白色纹理")
-		return
-
-	print("[SmithyThatchApplier] shader loaded, code length=", _shader.code.length())
 
 	for i in range(roof_paths.size()):
 		var poly := get_node_or_null(roof_paths[i]) as Polygon2D
 		if poly == null:
 			continue
-		_apply_thatch_to_polygon(poly, i)
+		_generate_and_apply(poly, i)
 
 
-func _apply_thatch_to_polygon(poly: Polygon2D, index: int) -> void:
+func _generate_and_apply(poly: Polygon2D, index: int) -> void:
 	var pts := poly.polygon
 	if pts.size() < 3:
 		return
 
-	# 1. 计算多边形本地坐标的轴对齐包围盒
 	var min_pt := pts[0]
 	var max_pt := pts[0]
 	for p in pts:
@@ -86,153 +62,213 @@ func _apply_thatch_to_polygon(poly: Polygon2D, index: int) -> void:
 	if size.x <= 0.0 or size.y <= 0.0:
 		return
 
-	# 2. 重要：传 screen-pixel 尺寸作为 resolution。
-	#    Godot Polygon2D 在 Camera2D.zoom=1 时，1 世界单位 = 1 屏幕像素。
-	#    父节点可能有 transform scale，需要乘上去得到真实屏幕像素。
 	var xform := poly.get_global_transform()
 	var scale: Vector2 = xform.get_scale()
-	var res_x: float = size.x * absf(scale.x)
-	var res_y: float = size.y * absf(scale.y)
-	if res_x < 1.0:
-		res_x = 1.0
-	if res_y < 1.0:
-		res_y = 1.0
+	var tex_w: int = maxi(1, int(size.x * absf(scale.x)))
+	var tex_h: int = maxi(1, int(size.y * absf(scale.y)))
 
-	print("[SmithyThatchApplier] poly=", poly.name,
-		" local size=", size, " global_scale=", scale,
-		" screen_size=", Vector2(res_x, res_y),
-		" pos=", poly.global_position)
-
-	# 3. UV 重映射到 [0,1]
-	var uvs := PackedVector2Array()
-	uvs.resize(pts.size())
-	for i in range(pts.size()):
-		uvs[i] = (pts[i] - min_pt) / size
-
-	# 4. 计算屋顶梯形边界
-	var trap := _compute_trapezoid_bounds(pts, min_pt, max_pt, size)
-
-	# 5. 叶片方向
-	var effective_angle_deg: float = blade_angle_deg
+	# 笔迹方向
+	var effective_angle_deg: float = stroke_angle_deg
 	if alternate_angle_per_roof and (index % 2) == 0:
 		effective_angle_deg = -effective_angle_deg
 	if match_angle_to_slope:
-		var top_center_x: float = (trap.bounds.x + trap.bounds.z) * 0.5
-		var bottom_center_x: float = (trap.bounds_bottom.x + trap.bounds_bottom.y) * 0.5
-		var slope_sign: int = sign(bottom_center_x - top_center_x)
-		if slope_sign != 0:
-			effective_angle_deg = absf(effective_angle_deg) * slope_sign
-	var angle: float = deg_to_rad(effective_angle_deg)
+		var top_xs: Array[float] = []
+		var bot_xs: Array[float] = []
+		for p in pts:
+			if absf(p.y - min_pt.y) < 1.0:
+				top_xs.append(p.x)
+			if absf(p.y - max_pt.y) < 1.0:
+				bot_xs.append(p.x)
+		if top_xs.size() >= 2 and bot_xs.size() >= 2:
+			top_xs.sort()
+			bot_xs.sort()
+			var top_center: float = (top_xs[0] + top_xs[top_xs.size() - 1]) * 0.5
+			var bot_center: float = (bot_xs[0] + bot_xs[bot_xs.size() - 1]) * 0.5
+			var slope_sign: float = sign(bot_center - top_center)
+			if slope_sign != 0:
+				effective_angle_deg = absf(effective_angle_deg) * slope_sign
 
-	# 6. blade 参数：转换成世界单位
-	#    eff_blade_length = size.y * 0.5 = 50% 屋顶高度
-	#    eff_blade_width  = size.x * 0.025 = 2.5% 屋顶宽度
-	var eff_row_spacing: float = row_spacing * res_y
-	var eff_blade_spacing: float = blade_spacing * res_x
-	var eff_blade_length: float = blade_length_base * res_y
-	var eff_blade_width: float = maxf(blade_width_base * res_x, 1.0)
-	var eff_margin_bottom: float = margin_bottom * res_y
-	var eff_root_jitter: float = root_jitter * res_x
-	var eff_row_jitter: float = row_jitter * res_y
+	# 生成纹理
+	var tex := _generate_brush_texture(tex_w, tex_h, effective_angle_deg, seed_offset + index * 7)
 
-	# 7. 行列数
-	var cos_a: float = absf(cos(angle))
-	if cos_a < 0.01:
-		cos_a = 0.01
-	var rows_count: int = maxi(1, int(res_y / (eff_row_spacing * cos_a)))
-	var blades_count: int = maxi(1, int(res_x / (eff_blade_spacing * cos_a)))
-	rows_count = mini(rows_count, 64)
-	blades_count = mini(blades_count, 32)
+	# 用 Sprite2D 替代 Polygon2D 纹理，避免透明纹理渲染问题
+	# 先隐藏原 Polygon2D
+	poly.visible = false
 
-	# 8. 创建材质
-	var mat := ShaderMaterial.new()
-	mat.shader = _shader
-	mat.set_shader_parameter("resolution", Vector2(res_x, res_y))
-	mat.set_shader_parameter("bounds", trap.bounds)
-	mat.set_shader_parameter("bounds_bottom", trap.bounds_bottom)
-	mat.set_shader_parameter("blade_angle", angle)
-	mat.set_shader_parameter("angle_var", angle_var)
-	mat.set_shader_parameter("curve_amount", curve_amount)
-	mat.set_shader_parameter("rows", rows_count)
-	mat.set_shader_parameter("blades_per_row", blades_count)
-	mat.set_shader_parameter("row_spacing", eff_row_spacing)
-	mat.set_shader_parameter("blade_spacing", eff_blade_spacing)
-	mat.set_shader_parameter("blade_length_base", eff_blade_length)
-	mat.set_shader_parameter("blade_length_var", eff_blade_length * 0.2)
-	mat.set_shader_parameter("blade_width_base", eff_blade_width)
-	mat.set_shader_parameter("blade_width_var", eff_blade_width * 0.3)
-	mat.set_shader_parameter("root_width_mul", root_width_mul)
-	mat.set_shader_parameter("tip_width_mul", tip_width_mul)
-	mat.set_shader_parameter("width_noise", width_noise)
-	mat.set_shader_parameter("oil_roughness", oil_roughness)
-	mat.set_shader_parameter("margin_bottom", eff_margin_bottom)
-	mat.set_shader_parameter("edge_noise", edge_noise)
-	mat.set_shader_parameter("root_jitter", eff_root_jitter)
-	mat.set_shader_parameter("row_jitter", eff_row_jitter)
-	mat.set_shader_parameter("seed", seed_offset + index * 7)
-	mat.set_shader_parameter("base_color", Vector3(base_color.r, base_color.g, base_color.b))
-	mat.set_shader_parameter("show_bounds", show_bounds)
-	mat.set_shader_parameter("debug_mode", debug_mode)
+	# 查找或创建 Sprite2D 子节点
+	var sprite_name := "ThatchSprite_" + poly.name
+	var parent := poly.get_parent()
+	var sprite := parent.get_node_or_null(sprite_name) as Sprite2D
+	if sprite == null:
+		sprite = Sprite2D.new()
+		sprite.name = sprite_name
+		parent.add_child(sprite)
 
-	poly.material = mat
-	poly.texture = _white_tex
-	poly.uv = uvs
-	print("[SmithyThatchApplier] applied to ", poly.name,
-		" rows=", rows_count, " blades=", blades_count,
-		" row_spacing=", eff_row_spacing, " blade_length=", eff_blade_length,
-		" blade_width=", eff_blade_width, " angle=", effective_angle_deg)
+	sprite.texture = tex
+	sprite.global_position = poly.global_position + (min_pt + max_pt) * 0.5 * scale
+	sprite.scale = scale
+	sprite.centered = true
+	sprite.z_index = poly.z_index
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+	# 添加辅助线（Line2D 沿多边形边缘）
+	_add_guide_lines(poly, pts)
+
+	print("[SmithyThatchApplier] applied sprite texture to ", poly.name,
+		" size=", tex_w, "x", tex_h, " angle=", effective_angle_deg)
 
 
-func _compute_trapezoid_bounds(pts: PackedVector2Array, min_pt: Vector2, max_pt: Vector2, size: Vector2) -> Dictionary:
-	var min_y: float = min_pt.y
-	var max_y: float = max_pt.y
-	var xs_top: Array[float] = []
-	var xs_bottom: Array[float] = []
-	var n: int = pts.size()
+func _generate_brush_texture(w: int, h: int, angle_deg: float, tex_seed: int) -> ImageTexture:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
 
+	var rng := RandomNumberGenerator.new()
+	rng.seed = tex_seed
+
+	var angle_rad := deg_to_rad(angle_deg)
+	var ca: float = cos(angle_rad)
+	var sa: float = sin(angle_rad)
+
+	# 笔迹方向：确保向下
+	var dir_x: float = ca
+	var dir_y: float = absf(sa)
+	var dir_len: float = sqrt(dir_x * dir_x + dir_y * dir_y)
+	if dir_len > 0.001:
+		dir_x /= dir_len
+		dir_y /= dir_len
+
+	# 垂直方向（用于笔迹宽度）
+	var perp_x: float = -dir_y
+	var perp_y: float = dir_x
+
+	# 确定笔迹数量
+	var n_strokes: int = stroke_count + rng.randi_range(-stroke_count_var, stroke_count_var)
+	n_strokes = maxi(2, n_strokes)
+
+	# 颜色列表
+	var colors: Array[Color] = [color_a, color_b, color_c, color_d]
+
+	for _k in range(n_strokes):
+		# 笔迹起点：沿屋顶方向分布
+		var t_start: float = rng.randf_range(0.0, 0.85)
+		var t_end: float = t_start + rng.randf_range(0.1, 0.5)
+		t_end = minf(t_end, 1.0)
+
+		# 沿垂直方向偏移
+		var offset: float = rng.randf_range(-0.3, 0.3) * float(h)
+
+		# 起点和终点
+		var sx: float = w * 0.5 + dir_x * (t_start - 0.5) * float(w) + perp_x * offset
+		var sy: float = h * 0.5 + dir_y * (t_start - 0.5) * float(h) + perp_y * offset
+		var ex: float = w * 0.5 + dir_x * (t_end - 0.5) * float(w) + perp_x * offset
+		var ey: float = h * 0.5 + dir_y * (t_end - 0.5) * float(h) + perp_y * offset
+
+		# 再加一些随机偏移
+		sx += rng.randf_range(-15.0, 15.0)
+		sy += rng.randf_range(-15.0, 15.0)
+		ex += rng.randf_range(-10.0, 10.0)
+		ey += rng.randf_range(-10.0, 10.0)
+
+		var stroke_w: float = stroke_width_base + rng.randf_range(-stroke_width_var, stroke_width_var)
+		stroke_w = maxf(3.0, stroke_w)
+
+		# 随机选颜色并微调 — 使用完全不透明的颜色
+		var base_col: Color = colors[rng.randi() % colors.size()]
+		var col_var: float = stroke_color_var
+		var col: Color = Color(
+			clampf(base_col.r + rng.randf_range(-col_var, col_var), 0.0, 1.0),
+			clampf(base_col.g + rng.randf_range(-col_var, col_var), 0.0, 1.0),
+			clampf(base_col.b + rng.randf_range(-col_var, col_var), 0.0, 1.0),
+			1.0  # 完全不透明
+		)
+
+		_draw_brush_stroke_opaque(img, sx, sy, ex, ey, stroke_w, rng, w, h, col)
+
+	return ImageTexture.create_from_image(img)
+
+
+func _draw_brush_stroke_opaque(img: Image, x0: float, y0: float, x1: float, y1: float, width: float, rng: RandomNumberGenerator, w: int, h: int, col: Color) -> void:
+	var dx: float = x1 - x0
+	var dy: float = y1 - y0
+	var length: float = sqrt(dx * dx + dy * dy)
+	if length < 0.5:
+		return
+
+	var ux: float = dx / length
+	var uy: float = dy / length
+	var px: float = -uy
+	var py: float = ux
+
+	var steps: int = maxi(1, int(length * 0.7))
+	for s in range(steps + 1):
+		var t: float = float(s) / float(steps)
+		var cx: float = x0 + ux * (t * length)
+		var cy: float = y0 + uy * (t * length)
+
+		var taper: float = 1.0 - absf(t - 0.5) * 2.0
+		taper = taper * taper * 0.7 + 0.3
+		var half_w: float = width * taper * 0.5
+
+		var rough_r: float = half_w * (1.0 + stroke_roughness * 0.8)
+		var ir: int = maxi(1, int(ceil(rough_r)))
+
+		for dy_off in range(-ir, ir + 1):
+			for dx_off in range(-ir, ir + 1):
+				var px_i: int = int(cx) + dx_off
+				var py_i: int = int(cy) + dy_off
+				if px_i < 0 or px_i >= w or py_i < 0 or py_i >= h:
+					continue
+
+				var dist: float = sqrt(float(dx_off * dx_off + dy_off * dy_off))
+				var noise_factor: float = 1.0 + (rng.randf() - 0.5) * stroke_roughness * 0.6
+				var effective_radius: float = half_w * noise_factor
+
+				var cov: float = 1.0 - clampf(dist / effective_radius, 0.0, 1.0)
+				if cov <= 0.02:
+					continue
+
+				# 笔迹内部颜色微变
+				var shade: float = 1.0 + (rng.randf() - 0.5) * 0.15
+				var pixel_col: Color = Color(
+					clampf(col.r * shade, 0.0, 1.0),
+					clampf(col.g * shade, 0.0, 1.0),
+					clampf(col.b * shade, 0.0, 1.0),
+					1.0  # 完全不透明
+				)
+
+				img.set_pixel(px_i, py_i, pixel_col)
+
+
+func _add_guide_lines(poly: Polygon2D, pts: PackedVector2Array) -> void:
+	if not show_guides:
+		return
+
+	var guide_name := "ThatchGuides_" + poly.name
+	var parent := poly.get_parent()
+	# 移除旧的辅助线
+	var old := parent.get_node_or_null(guide_name)
+	if old != null:
+		old.queue_free()
+
+	var guide_root := Node2D.new()
+	guide_root.name = guide_name
+	parent.add_child(guide_root)
+
+	# 将多边形局部坐标转换到父级坐标空间
+	# pts 是 poly 的局部坐标，而 guide_root 挂在 parent 下
+	# 需要用 poly.position 偏移来对齐
+	var offset := poly.position
+
+	var n := pts.size()
 	for i in range(n):
-		var a: Vector2 = pts[i]
-		var b: Vector2 = pts[(i + 1) % n]
+		var a := pts[i] + offset
+		var b := pts[(i + 1) % n] + offset
 
-		if absf(a.y - b.y) < 0.001:
-			if absf(a.y - min_y) < 0.001:
-				xs_top.append(a.x)
-				xs_top.append(b.x)
-			if absf(a.y - max_y) < 0.001:
-				xs_bottom.append(a.x)
-				xs_bottom.append(b.x)
-			continue
+		var line := Line2D.new()
+		line.points = PackedVector2Array([a, b])
+		line.default_color = guide_color
+		line.width = guide_width
+		line.z_index = poly.z_index + 1
+		guide_root.add_child(line)
 
-		if (a.y <= min_y and b.y >= min_y) or (a.y >= min_y and b.y <= min_y):
-			if absf(a.y - min_y) > 0.001 and absf(b.y - min_y) > 0.001:
-				var t: float = (min_y - a.y) / (b.y - a.y)
-				xs_top.append(lerpf(a.x, b.x, t))
-		if (a.y <= max_y and b.y >= max_y) or (a.y >= max_y and b.y <= max_y):
-			if absf(a.y - max_y) > 0.001 and absf(b.y - max_y) > 0.001:
-				var t: float = (max_y - a.y) / (b.y - a.y)
-				xs_bottom.append(lerpf(a.x, b.x, t))
 
-	for p in pts:
-		if absf(p.y - min_y) < 0.001:
-			xs_top.append(p.x)
-		if absf(p.y - max_y) < 0.001:
-			xs_bottom.append(p.x)
-
-	var x_min_top: float = min_pt.x
-	var x_max_top: float = max_pt.x
-	var x_min_bottom: float = min_pt.x
-	var x_max_bottom: float = max_pt.x
-
-	if xs_top.size() >= 2:
-		xs_top.sort()
-		x_min_top = xs_top[0]
-		x_max_top = xs_top[xs_top.size() - 1]
-	if xs_bottom.size() >= 2:
-		xs_bottom.sort()
-		x_min_bottom = xs_bottom[0]
-		x_max_bottom = xs_bottom[xs_bottom.size() - 1]
-
-	return {
-		"bounds": Vector4(x_min_top - min_pt.x, 0.0, x_max_top - min_pt.x, size.y),
-		"bounds_bottom": Vector2(x_min_bottom - min_pt.x, x_max_bottom - min_pt.x)
-	}

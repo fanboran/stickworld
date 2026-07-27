@@ -29,6 +29,9 @@ extends Node
 ## 例如 smithy_preview.gd 的 SmithyPreview 根节点。
 @export var preview_guides_node_path: NodePath = NodePath("")
 
+## 可选：另外的带 show_guides 的节点列表（如 ThatchApplier），capture 时也设为 false。
+@export var extra_guides_node_paths: Array[NodePath] = []
+
 ## 可选：要隐藏的节点路径列表（capture 时整组节点 `.visible = false`）。
 ## 用来屏蔽 smithy_preview 中的柱子、墙、横梁等无关节点，让截图只包含目标区域。
 @export var hide_node_paths: Array = []
@@ -37,8 +40,21 @@ extends Node
 ## 让截图里没有屋顶的位置完全透明——直接贴近参考图的"屋顶特写 + 透明背景"风格。
 @export var transparent_background: bool = false
 
+## 超采样倍率（2 = 2x 分辨率渲染后降采样，边缘更平滑）
+@export var super_sample: int = 2
+
+
+var _frame: int = 0
+var _phase: int = 0  # 0=等待shader编译, 1=隐藏辅助线, 2=隐藏节点, 3=超采样准备, 4=超采样等待, 5=截图
+var _ss: int = 1       # 超采样倍率
 
 func _ready() -> void:
+	# 设置 viewport 透明背景，让 Sprite2D 的透明区域直接显示为透明
+	var vp := get_viewport()
+	if vp != null:
+		vp.transparent_bg = true
+		print("[capture_in_game] viewport transparent_bg = true")
+
 	# 兜底：如果 tscn 没把 Array export 加载进来（Godot 4 tscn 加载 Array 已知问题），
 	# 手动设置 hide_node_paths 兜底
 	if hide_node_paths.is_empty():
@@ -51,30 +67,65 @@ func _ready() -> void:
 			NodePath("../SmithyPreview/L5_Roof/SlantedStrut"),
 		]
 	print("[capture_in_game] _ready: hide_node_paths.size=", hide_node_paths.size(), " crop_node_paths.size=", crop_node_paths.size())
-	# 让场景先稳定几帧，避免捕获到灰底或 Shader 未编译完成的画面
-	for i in range(settle_frames):
-		await RenderingServer.frame_post_draw
+	_frame = 0
+	_phase = 0
 
-	# 可选：关闭预览辅助线
-	if not preview_guides_node_path.is_empty():
-		var guides_node := get_node_or_null(preview_guides_node_path)
-		if guides_node != null and "show_guides" in guides_node:
-			guides_node.set("show_guides", false)
-		# 多渲染一帧让 _draw 跳过辅助线
-		await RenderingServer.frame_post_draw
+func _process(_delta: float) -> void:
+	_frame += 1
 
-	# 可选：隐藏无关节点（柱子、墙、横梁等）
-	for np in hide_node_paths:
-		var n := get_node_or_null(np)
-		if n != null:
-			n.visible = false
-			print("[capture_in_game] hidden: %s" % np)
-		else:
-			push_warning("[capture_in_game] hide path not found: %s" % np)
-	if not hide_node_paths.is_empty():
-		# 多渲染一帧让 visible 变化生效
-		await RenderingServer.frame_post_draw
+	# Phase 0: 等待 shader 编译
+	if _phase == 0:
+		if _frame < settle_frames:
+			return
+		_phase = 1
+		_frame = 0
+		# 关闭预览辅助线
+		if not preview_guides_node_path.is_empty():
+			var guides_node := get_node_or_null(preview_guides_node_path)
+			if guides_node != null and "show_guides" in guides_node:
+				guides_node.set("show_guides", false)
+		for extra_np in extra_guides_node_paths:
+			var extra_node := get_node_or_null(extra_np)
+			if extra_node != null and "show_guides" in extra_node:
+				extra_node.set("show_guides", false)
+		print("[capture_in_game] Phase 0 -> 1")
+		return
 
+	# Phase 1: 等待辅助线隐藏生效
+	if _phase == 1:
+		if _frame < 2:
+			return
+		_phase = 2
+		_frame = 0
+		# 隐藏无关节点
+		for np in hide_node_paths:
+			var n := get_node_or_null(np)
+			if n != null:
+				n.visible = false
+				print("[capture_in_game] hidden: %s" % np)
+		print("[capture_in_game] Phase 1 -> 2")
+		return
+
+	# Phase 2: 等待隐藏生效
+	if _phase == 2:
+		if _frame < 2:
+			return
+		_phase = 3
+		_frame = 0
+		print("[capture_in_game] Phase 2 -> 3 (super sample)")
+		_apply_super_sample()
+		return
+
+	# Phase 3: 等待超采样窗口更新生效
+	if _phase == 3:
+		if _frame < 3:
+			return
+		_phase = 4
+		print("[capture_in_game] Phase 3 -> 4 (capturing)")
+		_capture_and_save()
+		set_process(false)
+
+func _capture_and_save() -> void:
 	var vp := get_viewport()
 	if vp == null:
 		push_error("[capture_in_game] viewport 为 null")
@@ -100,11 +151,12 @@ func _ready() -> void:
 			get_tree().quit(1)
 			return
 
-	# 可选：把背景填成透明（贴近参考图风格）。
-	# 原理：清空整张裁剪图 alpha = 0；保留 polygon 自身的 alpha = 1 区域。
-	# 实现：img.fill_rect 全图 → 透明。然后用 polygon mask 恢复 polygon 内部 alpha。
 	if transparent_background:
 		img = _apply_transparent_background(img)
+
+	# 降采样回目标尺寸
+	if _ss > 1:
+		img.resize(img.get_width() / _ss, img.get_height() / _ss, Image.INTERPOLATE_LANCZOS)
 
 	var err := img.save_png(output_path)
 	if err != OK:
@@ -114,6 +166,41 @@ func _ready() -> void:
 
 	print("[capture_in_game] 已保存: %s (%dx%d)" % [output_path, img.get_width(), img.get_height()])
 	get_tree().quit(0)
+
+
+## 超采样：放大窗口并更新茅草 shader 的 resolution 参数
+func _apply_super_sample() -> void:
+	_ss = maxi(1, super_sample)
+	if _ss <= 1:
+		return
+
+	var window := get_window()
+	if window == null:
+		return
+	var old_size := window.size
+	window.size = Vector2i(old_size.x * _ss, old_size.y * _ss)
+	print("[capture_in_game] super_sample: window %dx%d -> %dx%d" % [old_size.x, old_size.y, window.size.x, window.size.y])
+
+	# 缩放 camera zoom → Polygon2D 在屏幕上 2x 大
+	var vp := get_viewport()
+	if vp != null:
+		var cam := vp.get_camera_2d()
+		if cam != null:
+			cam.zoom = cam.zoom * float(_ss)
+			print("[capture_in_game] super_sample: camera zoom -> %s" % cam.zoom)
+
+	# 更新所有茅草 Polygon2D 的 shader resolution uniform
+	for np in crop_node_paths:
+		var poly := get_node_or_null(np) as Polygon2D
+		if poly == null or poly.material == null:
+			continue
+		var mat := poly.material as ShaderMaterial
+		if mat == null:
+			continue
+		var old_res := mat.get_shader_parameter("resolution") as Vector2
+		if old_res != Vector2.ZERO:
+			mat.set_shader_parameter("resolution", old_res * float(_ss))
+			print("[capture_in_game] super_sample: %s resolution %s -> %s" % [poly.name, old_res, old_res * float(_ss)])
 
 
 # 多节点 union AABB 裁剪：计算所有 crop_node 在屏幕空间的世界 AABB，

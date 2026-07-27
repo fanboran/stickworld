@@ -105,4 +105,5 @@ node_modules/sticknodes-js/sticknodes_js_web.js
 node_modules/sticknodes-js/sticknodes_js.d.ts
 node_modules/sticknodes-js/sticknodes_js.js
 
-stick-world/modules/building_gen/reference/*
+stick-world/modules/building_gen/**/reference/*
+tools/mocap/references/

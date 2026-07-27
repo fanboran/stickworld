@@ -1,0 +1,270 @@
+# 战斗与AI
+
+> 拆分自 [场景与战斗架构.md](../场景与战斗架构.md) §七、§八。
+> 关联文档：[`场景宿主架构.md`](场景宿主架构.md)（InputDispatcher/CameraRig）、[`地图与场景图.md`](地图与场景图.md)（MapInstance/EntityHost）、[`事件总线信号契约.md`](EventBus信号契约.md)
+
+---
+
+## 七、火柴人行为 AI
+
+### 7.1 StickmanEntity 节点结构（在已有 StickmanRig 之外包一层）
+
+```
+StickmanEntity (CharacterBody2D)        ← 🆕 物理+碰撞
+├── StickmanRig (Skeleton2D)            ← ✅ 已有，纯渲染骨架
+├── Hitbox (Area2D)                     ← 受击判定
+├── WeaponMount (Node2D)                ← 武器挂载
+├── HealthComponent (Node)              ← HP/士气
+├── AIController (Node)                 ← 🆕 决策大脑
+│   └── BehaviorStateMachine
+└── PossessionInterface (Node)          ← 🆕 玩家附身接口
+```
+
+**关键**：`StickmanRig` 不动（已实现的 IK/动画保留），外层包一个 `CharacterBody2D` 承担物理与移动。AI 通过 `rig.play("walk")` + `rig.set_anim_speed(...)` 驱动渲染，通过 `CharacterBody2D.velocity` 驱动物理。
+
+#### 7.1.1 地面约束（Y 范围 + X 边界）
+
+火柴人可在地面区域内上下左右自由移动（不是锁死在 ground_y 一条线）：
+
+```gdscript
+# StickmanEntity 字段
+var ground_y: float = 300.0       # 地面顶部 Y（由 MapInstance.spawn_entity 注入）
+var ground_bottom: float = 1024.0 # 地面底部 Y（火柴人可走区域底部）
+var map_left: float = 0.0         # X 活动范围左边界
+var map_right: float = 2048.0     # X 活动范围右边界
+var foot_offset: float = 30.0     # 脚部到节点原点的偏移（CollisionShape2D 半高）
+
+func _physics_process(delta):
+    # ... 输入处理（WASD 上下左右）...
+    move_and_slide()
+    # Y 范围约束：脚部保持在 [ground_y, ground_bottom] 内
+    var y_min: float = ground_y - foot_offset
+    var y_max: float = ground_bottom - foot_offset
+    global_position.y = clampf(global_position.y, y_min, y_max)
+    # X 边界约束
+    global_position.x = clampf(global_position.x, map_left, map_right)
+```
+
+**生成位置：** 火柴人生成 Y = `ground_y + (ground_bottom - ground_y) * 0.5`（地面垂直范围偏中心）。
+
+**未来扩展（非 P0）：**
+- 跳跃：`velocity.y` 临时非零，落地后重新受 Y 范围约束
+- 飞行单位：`position.y` 可超出 `ground_y`（向上飞），但仍受 `ground_bottom` 约束
+- 地形高度变化：地图不同 X 位置 `ground_y` 不同（查表），火柴人 Y 跟随地形
+
+#### 7.1.2 通行障碍系统（WalkBarrier + PassageBarrier）
+
+火柴人移动除了受 `ground_y`/`ground_bottom`/`map_left`/`map_right` 矩形约束外，还受**两级透明障碍**约束：
+
+**地图级 WalkBarrier（悬崖/高楼边缘）**：
+- 位于 `MapInstance.WalkBarrier` 节点下，含若干 `Area2D` + `CollisionShape2D`（矩形）
+- 设计时在地图场景中绘制，覆盖悬崖边缘/高楼边界/断崖
+- 运行时不可见，调试模式显示为**蓝色半透明矩形**（详见 [UI与环境.md](UI与环境.md) §10.5）
+- 适用场景：悬崖边缘、高楼堡垒边缘、断崖、任何"角色不能御空而行"的边界
+- **不适用于山坡**（山坡走 `SlopeMap` 独立逻辑，详见 [地图与场景图.md](地图与场景图.md) §3.1）
+
+**建筑级 PassageBarrier（建筑本体不可通行）**：
+- 位于每个建筑场景的 `PassageBarrier` 子节点下（详见 [建筑与定居点.md](建筑与定居点.md) §4.3）
+- 设计师在建筑场景中绘制，划定建筑本体哪些区域不可通行
+- 运行时不可见，调试模式显示为**紫色半透明矩形**（与地图级蓝色区分）
+- 典型用例：雕像上下可过、房屋只能从下方过、矿山完全不可过
+
+**火柴人碰撞查询**：
+
+```gdscript
+# StickmanEntity._physics_process
+var _last_valid_position: Vector2
+
+func _physics_process(delta):
+    # ... 输入处理 + move_and_slide() + Y/X 矩形约束 ...
+
+    # 🆕 通行障碍检测：若进入任何 WalkBarrier / PassageBarrier 区域，回退到上一帧位置
+    if _is_in_passage_barrier():
+        global_position = _last_valid_position
+        velocity = Vector2.ZERO  # 撞墙停止
+    else:
+        _last_valid_position = global_position
+
+func _is_in_passage_barrier() -> bool:
+    # 查询当前 MapInstance.WalkBarrier 下所有 Area2D
+    # 查询 BuildingHost 下所有建筑的 PassageBarrier Area2D
+    # 用 PhysicsDirectSpaceState2D.intersect_point 或 Area2D.overlaps_body 检测
+    # 实现细节：见 modules/units/scripts/stickman_entity.gd
+    ...
+```
+
+**与 SlopeMap 的关系**：
+- WalkBarrier/PassageBarrier 是"矩形区域阻挡"的轻量方案，适用于 VillageMap 等水平卷轴地图
+- SlopeMap 走独立逻辑，不用 WalkBarrier（坡面是连续的 Y 变化，不是矩形阻挡）
+
+#### 7.1.3 附身接口
+
+`PossessionInterface` 提供：
+- `set_possessed(bool)`：切换玩家控制
+- `is_possessed() -> bool`
+- 附身时：读取 WASD 输入驱动 `velocity`，`AIController` 暂停
+- 取消附身：`AIController` 恢复控制
+
+### 7.2 行为状态机
+
+```
+modules/units/ai/
+├── behavior_base.gd                 # 行为基类（enter/update/exit）
+├── behavior_idle.gd                 # 闲置
+├── behavior_move.gd                 # 移动（含简单寻路）
+├── behavior_attack.gd               # 攻击（命中帧→伤害事件）
+├── behavior_seek_cover.gd           # 找掩体
+├── behavior_suppress.gd             # 火力压制
+├── behavior_flank.gd                # 侧翼包抄
+├── behavior_retreat.gd              # 撤退
+├── behavior_work.gd                 # 工作（建造/采集/打铁）
+├── behavior_flee.gd                 # 溃逃
+└── behavior_state_machine.gd        # 状态机调度
+```
+
+每个行为是独立的 `Node`/`Resource`，状态机持有引用并通过 `travel(behavior_name)` 切换。
+
+### 7.3 三层命令系统（决策来源）
+
+```
+┌──────────────────────────────────────┐
+│ 1. 玩家/指挥链下达的指令              │ ← 高优先级
+│    (tactical_orders → command_chain) │
+├──────────────────────────────────────┤
+│ 2. 编制默认战术（自主决策权限内）     │ ← 中优先级
+│    (OrganizationState.autonomy_level)│
+├──────────────────────────────────────┤
+│ 3. 单位本能（受击反击、找掩体）       │ ← 低优先级
+│    (behavior_xxx 内置触发)           │
+└──────────────────────────────────────┘
+```
+
+- 高优先级指令覆盖中低优先级
+- 中优先级在无指令时驱动默认行为
+- 低优先级是生存本能，永远生效但被高优先级压制
+
+`StickmanState` 已有 `autonomy_level` 字段，AIController 读取它决定能否自主行动。
+
+### 7.4 小兵步枪式灵动性 — 两层实现
+
+**第一层：行为层概率钩子**
+
+每个战斗行为内置可配置概率：
+```gdscript
+# behavior_attack.gd 示意
+@export var prob_aggressive_push: float = 0.05  # 擅自冲锋概率
+@export var prob_hesitate: float = 0.03          # 犹豫概率
+
+func update(delta):
+    if _is_at_disadvantage() and randf() < prob_hesitate:
+        _enter_hesitate_substate()
+    elif _enemy_exposed() and randf() < prob_aggressive_push:
+        _push_forward()
+```
+
+**第二层：战场导演情绪标签**
+
+`battle_ai_director.gd` 周期性（每 2~5s）给单位打"情绪标签"：
+- `HESITANT` — 犹豫（命中率-30%、移动减速）
+- `EXCITED` — 亢奋（追击倾向+50%、忽视指令概率+10%）
+- `PANICKED` — 恐慌（找掩体优先级最高、可能溃逃）
+- `STEADY` — 稳定（默认）
+
+情绪概率受：指挥官能力、部队士气、文化传统、自主决策权限影响。
+
+### 7.5 玩家附身
+
+`PossessionInterface`：
+```gdscript
+func possess(unit_id: int) -> void:
+    # 1. 暂停该单位的 AIController
+    # 2. InputDispatcher.set_mode(POSSESS)
+    # 3. CameraRig.follow(entity)
+    # 4. 路由 WASD/鼠标到该 entity 的 velocity/weapon
+
+func release() -> void:
+    # 反向恢复
+```
+
+附身时：
+- WASD → `CharacterBody2D.velocity`
+- 鼠标左键 → 攻击
+- 鼠标右键 → 瞄准/格挡
+- Tab → 打开该层级管理面板
+- ESC → 退出附身
+
+---
+
+## 八、战斗系统
+
+### 8.1 战斗实例 vs 战场场景（关键解耦）
+
+```
+battle_instance.gd (纯逻辑)         ← 战斗状态、参战双方、结果判定
+   ↓ 拥有
+battle_arena.tscn (战场场景)         ← 渲染战场、地形、掩体
+   ↓ 引用
+多个 StickmanEntity                  ← 参战单位
+```
+
+**为什么这样**：城镇被袭变战场时，**不切场景**——当前 `VillageMap` 挂载一个 `battle_instance` 即可，建筑继续显示（且可被破坏）。`battle_instance` 是纯数据+逻辑，挂在任何 Map 上都行。
+
+`MapInstance.BattleAnchor` 节点就是 `battle_instance` 的挂载点。无战斗时为空。
+
+### 8.2 模块结构
+
+```
+modules/combat/
+├── api.gd
+├── scripts/
+│   ├── battle_manager.gd           # 多战场调度（同时打几场）
+│   ├── battle_instance.gd          # 单场战斗逻辑（不依赖场景）
+│   ├── formation_system.gd         # 编队/框选/分组
+│   ├── tactical_orders.gd          # 预设号令（前进/冲刺/掩护/撤退）
+│   ├── command_chain.gd            # 指挥链（逐层下达+延迟）
+│   ├── morale_system.gd            # 士气（影响AI行为选择）
+│   ├── cover_system.gd             # 掩体（查询接口供AI调用）
+│   ├── suppression_system.gd       # 火力压制（区域debuff）
+│   └── battle_ai_director.gd       # 战场导演（灵动性来源）
+├── scenes/
+│   ├── battlefield_chunk.tscn      # 战场chunk（用于BattlefieldMap）
+│   └── battle_overlay.tscn         # 战斗UI层（指令面板、选中框）
+└── data/
+    └── tactical_presets.tres       # 预设号令配置
+```
+
+### 8.3 框选 → 编队 → 任命 → 下令 流程
+
+```
+1. 玩家框选 → selection_system 返回 unit_ids 数组
+2. "编队"按钮 → formation_system.create_squad(unit_ids) → 返回 squad_id
+3. "任命排长"→ organization_api.assign_commander(squad_id, leader_unit_id)
+4. "全体前进"→ tactical_orders.issue(ORDER_ADVANCE_ALL, target_pos)
+            → command_chain 逐层下达（带延迟）
+            → 各单位 AIController 接收 → 切换到 behavior_move
+5. "对排长发令"→ selection 排长 → tactical_orders.issue_to(squad_id, ORDER_*)
+              → 仅该 squad 执行
+```
+
+**关键**：任命排长 = 创建 L1 组织节点，复用现有 `organization_state.gd`。这就是为什么战斗和组织高度耦合——必须一起设计。
+
+### 8.4 预设号令清单（P0 范围）
+
+| 号令 | 效果 | 适用层级 |
+|------|------|---------|
+| `ORDER_ADVANCE_ALL` | 全体向目标点前进 | L1-L2 |
+| `ORDER_SPRINT` | 消耗体力加速冲刺 | L1 |
+| `ORDER_HOLD_POSITION` | 原地坚守 | L1-L2 |
+| `ORDER_RETREAT` | 有序后撤 | L1-L2 |
+| `ORDER_TAKE_COVER` | 就近找掩体 | L1 |
+| `ORDER_SUPPRESSING_FIRE` | 对指定区域压制射击 | L1 |
+| `ORDER_FLANK_LEFT/RIGHT` | 侧翼包抄 | L1-L2 |
+| `ORDER_RALLY` | 集结溃兵 | L2 |
+
+### 8.5 指挥链延迟
+
+命令从 L(n) 下达到 L(n-1) 有延迟，模拟传令时间：
+- 延迟 = `base_delay × tier_diff × commander_efficiency_modifier`
+- 默认 `base_delay = 2s`，每跨一层 +2s
+- 指挥官能力高 → 延迟减半
+- 玩家附身该层级指挥官时 → 延迟为 0（直接指挥）

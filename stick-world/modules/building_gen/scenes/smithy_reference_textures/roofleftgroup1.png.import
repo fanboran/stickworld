@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://66wmnqxb88kc"
-path="res://.godot/imported/backpillarl.png-c2ee26a14dda0be33d3274f4db4f7ac0.ctex"
+uid="uid://tmlm7hg2j30i"
+path="res://.godot/imported/roofleftgroup1.png-73fad610c251aac856537029b5a73b9f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_preview_textures/backpillarl.png"
-dest_files=["res://.godot/imported/backpillarl.png-c2ee26a14dda0be33d3274f4db4f7ac0.ctex"]
+source_file="res://modules/building_gen/scenes/smithy_reference_textures/roofleftgroup1.png"
+dest_files=["res://.godot/imported/roofleftgroup1.png-73fad610c251aac856537029b5a73b9f.ctex"]
 
 [params]
 

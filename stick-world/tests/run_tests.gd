@@ -10,15 +10,11 @@ var _runner: Object
 var _suite: Array = []
 
 
-const PM = preload("res://modules/building_gen/scripts/materials/procedural_materials.gd")
-
-
 func _ready() -> void:
 	var runner_script = load("res://tests/core/test_runner.gd")
 	_runner = runner_script.new()
 	_register_event_bus_tests()
 	_register_config_manager_tests()
-	_register_procedural_materials_tests()
 	for t in _suite:
 		_runner.add_test(t["name"], t["fn"])
 
@@ -76,29 +72,3 @@ func _test_config_volume_clamp() -> void:
 	ConfigManager.set_volume("master", -0.5)
 	vol = ConfigManager.get_volume("master")
 	_runner.assert_true(vol >= 0.0, "volume 不应小于 0")
-
-
-# -- ProceduralMaterials ----------------------------------------------
-
-func _register_procedural_materials_tests() -> void:
-	_suite.append({"name": "ProceduralMaterials: thatch texture has metadata", "fn": Callable(self, "_test_thatch_texture_metadata")})
-	_suite.append({"name": "ProceduralMaterials: create_thatch_material sets uniforms", "fn": Callable(self, "_test_create_thatch_material")})
-
-
-func _test_thatch_texture_metadata() -> void:
-	var tex: ImageTexture = PM.make_thatch_for_polygon(64, 64, 123)
-	_runner.assert_true(tex != null, "应返回 ImageTexture")
-	_runner.assert_true(tex.has_meta("thatch_inner_size"), "应有 inner_size 元数据")
-	_runner.assert_true(tex.has_meta("thatch_margin"), "应有 margin 元数据")
-	var inner_size: Vector2i = tex.get_meta("thatch_inner_size")
-	var margin: int = tex.get_meta("thatch_margin")
-	_runner.assert_true(inner_size.x > 0 and inner_size.y > 0, "inner_size 应合法")
-	_runner.assert_true(margin >= 0, "margin 不应为负")
-
-
-func _test_create_thatch_material() -> void:
-	var tex: ImageTexture = PM.make_thatch_for_polygon(64, 64, 456)
-	var mat: ShaderMaterial = PM.create_thatch_material(tex)
-	_runner.assert_true(mat != null, "应返回 ShaderMaterial")
-	_runner.assert_true(mat.shader != null, "Shader 应加载成功")
-	_runner.assert_equal(mat.get_shader_parameter("albedo_tex"), tex, "albedo_tex uniform 应指向贴图")

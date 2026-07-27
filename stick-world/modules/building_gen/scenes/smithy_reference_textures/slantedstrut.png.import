@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7mwa6vuprn8e"
-path="res://.godot/imported/frontpillar.png-2198da6644fa1cbe45f5083fb92767d7.ctex"
+uid="uid://bew3u60o0tw12"
+path="res://.godot/imported/slantedstrut.png-93fea5c911757701af8d7cfc6a39ed76.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_preview_textures/frontpillar.png"
-dest_files=["res://.godot/imported/frontpillar.png-2198da6644fa1cbe45f5083fb92767d7.ctex"]
+source_file="res://modules/building_gen/scenes/smithy_reference_textures/slantedstrut.png"
+dest_files=["res://.godot/imported/slantedstrut.png-93fea5c911757701af8d7cfc6a39ed76.ctex"]
 
 [params]
 

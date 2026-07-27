@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dwo1xyqoh7rwc"
-path="res://.godot/imported/backwalltop.png-d41fb976fe1d647e28fdafba7f983211.ctex"
+uid="uid://cdht8hhdn8jgt"
+path="res://.godot/imported/灰.png-7ae3fcb752c5b6b6576533cb6270a14a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_preview_textures/backwalltop.png"
-dest_files=["res://.godot/imported/backwalltop.png-d41fb976fe1d647e28fdafba7f983211.ctex"]
+source_file="res://modules/building_gen/buildings/reference/swatches/灰.png"
+dest_files=["res://.godot/imported/灰.png-7ae3fcb752c5b6b6576533cb6270a14a.ctex"]
 
 [params]
 

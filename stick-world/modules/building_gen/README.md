@@ -4,7 +4,7 @@
 > - `buildings/` + `scenes/` + `scripts/preview/`：建筑零件装配、编辑器预览、建筑定义（核心）
 > - `materials/`：每种材质独立开发、独立迭代，共享底层 Shader 原语与截图工具链
 >
-> 茅草材质的专属迭代日志见 [materials/thatch/README.md](file:///f:/VSCode/game-2/stick-world/modules/building_gen/materials/thatch/README.md)。
+> 系统级设计规范见 [docs/技术/教程/程序化材质系统.md](file:///f:/VSCode/game-2/stick-world/docs/技术/教程/程序化材质系统.md)。
 
 ---
 
@@ -15,52 +15,62 @@ modules/building_gen/
 ├── api.gd                          # 模块对外 API（委托 ProceduralMaterials + 建筑实例化）
 ├── README.md                       # 本文件：系统级说明
 ├── buildings/                      # 程序化建筑定义（核心）
+│   ├── bld_workshop.tscn           #   旧预制场景（construction_manager P0 引用，待新版替换）
 │   ├── pg_smithy_lv1.gd            #   铁匠铺 Lv1 生成脚本（继承 Building 基类）
-│   └── pg_smithy_lv1.tscn          #   铁匠铺 Lv1 场景（碰撞/交互区/工作槽位）
+│   ├── pg_smithy_lv1.tscn          #   铁匠铺 Lv1 场景（碰撞/交互区/工作槽位）
+│   └── reference/                  #   建筑级参考图与色板
+│       ├── smithy_lv1.png ~ smithy_lv4.png
+│       ├── smithy_lv1_thatch.png
+│       ├── smithy_lv1_thatch_tile.png
+│       └── swatches/{白_1,白_2,灰}.png
 ├── scenes/                         # 建筑编辑/预览场景（核心）
 │   ├── smithy_reference.tscn       #   铁匠铺完整参考场景（程序化零件装配）
-│   └── smithy_preview.tscn         #   铁匠铺编辑器实时预览场景
+│   ├── smithy_preview.tscn         #   铁匠铺编辑器实时预览场景
+│   └── smithy_reference_textures/  #   smithy 建筑零件纹理（与 smithy_reference.tscn 配套）
 ├── materials/                      # 材质配方，每种材质一个子目录
 │   ├── thatch/                     # 茅草屋顶（已实现）
 │   │   ├── shaders/thatch.gdshader
-│   │   ├── scripts/debug/thatch_debug.gd
-│   │   ├── scripts/debug/thatch_building_demo.gd
-│   │   ├── scenes/thatch_debug.tscn
-│   │   ├── scenes/thatch_building_demo.tscn
+│   │   ├── scripts/debug/{thatch_debug.gd, thatch_building_demo.gd}
+│   │   ├── scenes/{thatch_debug.tscn, thatch_building_demo.tscn, smithy_thatch_preview.tscn}
 │   │   └── reference/              # 参考图与截图
 │   ├── stone_wall/                 # 浅色石墙（已实现）
 │   │   ├── shaders/stone_wall.gdshader
 │   │   ├── scripts/debug/stone_wall_debug.gd
 │   │   ├── scenes/stone_wall_debug.tscn
-│   │   └── reference/              # 参考图与截图
+│   │   └── reference/              # 参考图与截图（含 smithy_lv3.png）
 │   ├── stone_band/                 # 蓝灰石檐（已实现）
 │   │   ├── shaders/stone_band.gdshader
 │   │   ├── scripts/debug/stone_band_debug.gd
 │   │   ├── scenes/stone_band_debug.tscn
-│   │   └── reference/              # 参考图与截图
+│   │   └── reference/
 │   ├── stone_window/               # 拱形石窗（已实现）
 │   │   ├── shaders/stone_window.gdshader
 │   │   ├── scripts/debug/stone_window_debug.gd
 │   │   ├── scenes/stone_window_debug.tscn
-│   │   └── reference/              # 参考图与截图
-│   └── wood/                       # 木板墙（待实现）
+│   │   └── reference/
+│   └── wood/                       # 木板墙（待实现，仅 README 占位）
 ├── scripts/
-│   ├── building.gd                  # Building 基类（class_name）
-│   ├── building_snap.gd             # 编辑器吸附脚本（@tool）
-│   ├── preview/                     # @tool 预览脚本（编辑器实时渲染）
-│   │   ├── smithy_reference.gd      #   装配铁匠铺所有零件到场景
-│   │   └── smithy_preview.gd        #   编辑器内实时预览
+│   ├── building.gd                 # Building 基类（class_name）
+│   ├── building_snap.gd            # 编辑器吸附脚本（@tool）
+│   ├── preview/                    # @tool 预览脚本（编辑器实时渲染）
+│   │   ├── smithy_reference.gd     #   装配铁匠铺所有零件到场景
+│   │   ├── smithy_preview.gd       #   编辑器内实时预览
+│   │   └── smithy_thatch_applier.gd#   茅草 ShaderMaterial 应用到 smithy 屋顶
 │   ├── materials/
-│   │   └── procedural_materials.gd  # 程序化材质（CPU 合成贴图，遗留方案）
+│   │   └── procedural_materials.gd # 程序化材质（CPU 合成贴图，遗留方案，仍被 core API 链引用）
 │   └── debug/
-│       └── capture_in_game.gd       # 通用：标准运行模式自动截图
+│       ├── capture_in_game.gd      # 通用：标准运行模式自动截图
+│       └── recrop_references.py    # 一次性 Python 工具（gitignored）
 ├── shaders/
 │   └── lib/
 │       ├── hash.gdshaderinc        # 共享：确定性 hash 原语
 │       └── stone_lib.gdshaderinc   # 共享：石头 SDF / 笔触 / 配色原语
 ├── tools/
 │   ├── capture_standard.ps1        # 通用截图 wrapper（支持 -Material）
-│   └── capture_movie.ps1           # Movie Maker 备选方案
+│   ├── capture_movie.ps1           # Movie Maker 备选方案
+│   ├── analyze_capture.py          # 一次性 Python 工具（gitignored）
+│   ├── extract_embedded_images.py  # 一次性 Python 工具（gitignored）
+│   └── inspect_capture.py          # 一次性 Python 工具（gitignored）
 └── assets/
     └── white_tex.png               # 4x4 白色纹理，激活 Sprite2D UV
 ```
@@ -90,12 +100,6 @@ godot --path stick-world res://modules/building_gen/materials/thatch/scenes/that
   -Material thatch `
   -ScenePath "res://modules/building_gen/materials/thatch/scenes/thatch_building_demo.tscn" `
   -OutputFrame "modules/building_gen/materials/thatch/reference/thatch_building_demo_capture.png"
-```
-
-### 运行测试
-
-```powershell
-godot --headless --path stick-world res://tests/modules/building_gen/test_thatch_shader.tscn
 ```
 
 ### 调试石头材质
@@ -164,69 +168,37 @@ vec3 col = sl_stone_color_blocks(sample_local, c_light, c_mid, c_dark, light_dir
 
 ---
 
-## 迁移记录
+## 开发注意事项
 
-本次架构迁移将旧版 "Python+OpenCV+GDScript CPU 合成贴图" 方案，切换为 "Godot Shader 实时渲染" 方案。
+### Godot 编辑器 mmap 文件锁
 
-### 旧文件去向
+Godot 编辑器对 `.tscn` 文件使用内存映射文件（mmap），导致 PowerShell 的 `Set-Content` 或 `[System.IO.File]::WriteAllText` 直接写入会报错。
 
-| 原位置 | 去向 | 说明 |
-|--------|------|------|
-| `modules/building_gen/tools/capture_debug.gd` 等 7 个 GDScript 工具 | `prototypes/building_gen_legacy/tools/gdscript_archive/` | 旧版截图/渲染脚本 |
-| `modules/building_gen/tools/py/` | `prototypes/building_gen_legacy/tools/py/` | 旧版 Python 材质生成工具链 |
-| `modules/building_gen/materials/thatch/shaders/thatch_edge.gdshader` | `prototypes/building_gen_legacy/shaders/` | 旧版 "零后处理" Shader 实验 |
-| `modules/building_gen/materials/thatch/reference/thatch_movie_frame*.png` | `prototypes/building_gen_legacy/reference/thatch_movie_frames/` | Movie Maker 实验临时帧 |
+**绕过方法**：先写入临时文件，再用 `Move-Item` 原地替换：
 
-### 迁回核心文件（2026-07 修正）
+```powershell
+$tmp = "$f.tmp"; $c = [System.IO.File]::ReadAllText($f)
+# 编辑 $c ...
+[System.IO.File]::WriteAllText($tmp, $c)
+Move-Item -Path $tmp -Destination $f -Force
+```
 
-> 此前曾误将下列建筑生成系统的核心文件归档到 `prototypes/building_gen_legacy/`。
-> 经确认：`smithy_reference.tscn` / `smithy_preview.tscn` 及其 `@tool` 脚本、`pg_smithy_lv1.*`、`procedural_materials.gd` 才是整个建筑生成系统的核心，并非只是材质生成。现已全部迁回 `modules/building_gen/`，相关 `ext_resource` / `preload` 路径已同步修正。
+### 参考图被 gitignore 误忽略
 
-| 文件 | 当前位置 | 作用 |
-|------|----------|------|
-| `pg_smithy_lv1.gd` / `.tscn` | `modules/building_gen/buildings/` | 铁匠铺 Lv1 程序化建筑定义 |
-| `smithy_reference.tscn` | `modules/building_gen/scenes/` | 完整建筑零件装配参考场景 |
-| `smithy_preview.tscn` | `modules/building_gen/scenes/` | 编辑器实时预览场景 |
-| `smithy_reference.gd` / `smithy_preview.gd` | `modules/building_gen/scripts/preview/` | `@tool` 装配/预览脚本 |
-| `procedural_materials.gd` | `modules/building_gen/scripts/materials/` | CPU 合成贴图（茅草/木材/石材等原语） |
+根目录 `.gitignore` 中 `stick-world/modules/building_gen/**/reference/*` 会把所有 `reference/` 目录下的文件忽略。如果需要在 `buildings/reference/` 下放手动维护的参考图，必须加否定规则：
 
-### 清理内容
+```gitignore
+stick-world/modules/building_gen/**/reference/*
+# 但 buildings/reference/ 是手动维护的参考图，需要提交
+!stick-world/modules/building_gen/buildings/reference/
+!stick-world/modules/building_gen/buildings/reference/**
+!stick-world/modules/building_gen/buildings/reference/**/*
+```
 
-- 删除 `materials/thatch/reference/` 下所有孤立的 `.import` 文件（源 PNG 已不存在）
-- 删除 Movie Maker 临时产生的 `.wav`、`.avi` 和 `.png` 序列
+### Godot 脚本缓存导致旧错误反复出现
 
-### 保留文件
+`.godot/imported/` 目录缓存了旧版本的 `.gd` 脚本解析结果。如果修改了 `run_tests.gd` 之类文件但 Godot 仍报旧的解析错误，说明缓存未刷新。解决：`--editor --quit` 重导入，或手动删 `.godot/global_script_class_cache.cfg`。
 
-- `capture_standard.ps1`：标准运行模式截图 wrapper
-- `capture_movie.ps1`：Movie Maker 备选方案
-- `scripts/debug/capture_in_game.gd`：场景内自动截图脚本
+### 根目录与子目录的 .gitignore 关系
 
----
-
-## 版本控制
-
-### 不应提交的文件
-
-下列文件由工具自动生成，已写入 [`stick-world/.gitignore`](file:///f:/VSCode/game-2/stick-world/.gitignore)，**不要提交**：
-
-| 文件类型 | 示例 | 说明 |
-|----------|------|------|
-| 自动截图 | `materials/<name>/reference/<name>_debug_capture.png` | 每次运行 `capture_standard.ps1` 都会重新生成 |
-| 诊断图 | `materials/<name>/reference/diagnose_*.png` | 调试过程中临时保存的诊断画面 |
-| 色板图 | `materials/<name>/reference/*_swatch.png` | 由 OpenCV / Shader 自动生成的调色板预览 |
-| Movie Maker 临时帧 | `prototypes/building_gen_legacy/reference/thatch_movie_frames/*.png` | Movie Maker 实验产生的 PNG 序列 |
-| Godot 缓存 | `.godot/` | 由父级 `.gitignore` 统一忽略 |
-| `.uid` 文件 | `*.uid` | 由父级 `.gitignore` 统一忽略 |
-
-### 应提交的文件
-
-- 源代码：`.gd`、`.gdshader`、`.gdshaderinc`、`.tscn`、`.ps1`
-- 文档：`.md`
-- 手动维护的参考原图：如 `materials/thatch/reference/thatch_ref.png`、`materials/thatch/reference/smithy_lv1_full.png`
-
-新增材质时，若需要保留参考图，请将其命名成非 `*_capture.png` / `diagnose_*.png` / `*_swatch.png` 的形式，避免被 gitignore 误忽略。
-
-## 设计文档
-
-系统级设计规范见：
-[docs/技术/教程/程序化材质系统.md](file:///f:/VSCode/game-2/docs/技术/教程/程序化材质系统.md)
+`stick-world/.gitignore` 和项目根目录 `.gitignore` 同时生效。`git check-ignore -v <file>` 可以精确定位是哪条规则、哪个文件忽略了目标文件，对排查 gitignore 误匹配非常有用。

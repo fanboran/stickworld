@@ -1,11 +1,4 @@
-# Reference history（程序化材质历史迭代）
-modules/building_gen/reference/history/
-
-# 材质迭代临时配置文件
-modules/building_gen/tools/py/_material_config.json
-
 # Godot 输出日志
-modules/building_gen/reference/godot_output.txt
 **/godot_log.txt
 
 # 程序化材质：自动生成的截图/诊断图/色板（参考原图除外，手动维护）
@@ -15,9 +8,6 @@ modules/building_gen/materials/*/reference/diagnose_*.png
 modules/building_gen/materials/*/reference/diagnose_*.png.import
 modules/building_gen/materials/*/reference/*_swatch.png
 modules/building_gen/materials/*/reference/*_swatch.png.import
-
-# Movie Maker 实验临时帧
-prototypes/building_gen_legacy/reference/thatch_movie_frames/
 
 # 茅草临时参考截图（仅保留 smithy_thatch_capture.png 主截图）
 modules/building_gen/materials/thatch/reference/smithy_center_*.png
@@ -29,16 +19,10 @@ modules/building_gen/materials/thatch/reference/*_crop*.png.import
 modules/building_gen/materials/thatch/reference/thatch_ref_*.png
 modules/building_gen/materials/thatch/reference/thatch_ref_*.png.import
 
-# 调试/实验 shader
-modules/building_gen/materials/thatch/shaders/thatch_debug.gdshader
-modules/building_gen/materials/thatch/shaders/thatch_minimal.gdshader
-
 # 一次性 Python 工具脚本
 modules/building_gen/tools/analyze_capture.py
 modules/building_gen/tools/extract_embedded_images.py
 modules/building_gen/tools/inspect_capture.py
-modules/building_gen/tools/temp_crop.py
-modules/building_gen/tools/temp_inspect.py
 modules/building_gen/scripts/debug/recrop_references.py
 
 # 石头材质中间产物（单砖抠图实验、未处理参考图原片）

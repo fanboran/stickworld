@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bv5w8kbgaumoj"
-path="res://.godot/imported/roofmain.png-c97fcd26c9ebbe237b90daee74c613f4.ctex"
+path="res://.godot/imported/roofmain.png-eb54884ce45f986b2c400714f7528587.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_preview_textures/roofmain.png"
-dest_files=["res://.godot/imported/roofmain.png-c97fcd26c9ebbe237b90daee74c613f4.ctex"]
+source_file="res://modules/building_gen/scenes/smithy_reference_textures/roofmain.png"
+dest_files=["res://.godot/imported/roofmain.png-eb54884ce45f986b2c400714f7528587.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dwurjxumutb5e"
-path="res://.godot/imported/beam.png-208651970fef11df9caeed9d30adb899.ctex"
+uid="uid://66wmnqxb88kc"
+path="res://.godot/imported/backpillarl.png-b1057d8208f84ddcdb6d686acc4e02f2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_preview_textures/beam.png"
-dest_files=["res://.godot/imported/beam.png-208651970fef11df9caeed9d30adb899.ctex"]
+source_file="res://modules/building_gen/scenes/smithy_reference_textures/backpillarl.png"
+dest_files=["res://.godot/imported/backpillarl.png-b1057d8208f84ddcdb6d686acc4e02f2.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://tmlm7hg2j30i"
-path="res://.godot/imported/roofleftgroup1.png-3f9df2b6516be039238e54fa26341b82.ctex"
+uid="uid://dmp2d467un8g"
+path="res://.godot/imported/verticalstrut.png-c13d06890dd3ef7a7a2cc98b821c1c55.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_preview_textures/roofleftgroup1.png"
-dest_files=["res://.godot/imported/roofleftgroup1.png-3f9df2b6516be039238e54fa26341b82.ctex"]
+source_file="res://modules/building_gen/scenes/smithy_reference_textures/verticalstrut.png"
+dest_files=["res://.godot/imported/verticalstrut.png-c13d06890dd3ef7a7a2cc98b821c1c55.ctex"]
 
 [params]
 

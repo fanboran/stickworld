@@ -34,7 +34,7 @@ func _ready() -> void:
 	_draw_control.name = "DebugDrawControl"
 	_draw_control.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_draw_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_draw_control.set_script(load("res://modules/debug/scripts/debug_draw_control.gd"))
+	_draw_control.set_script(load("res://modules/debug_GUI/scripts/debug_draw_control.gd"))
 	add_child(_draw_control)
 	# 创建图例面板（带半透明深色背景，避开 GlobalHUD 顶部区域）
 	_legend_panel = Panel.new()

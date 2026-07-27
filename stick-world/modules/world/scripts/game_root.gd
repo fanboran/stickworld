@@ -24,7 +24,7 @@ const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/
 ## EXPLORE 模式 handler 脚本
 const _ExploreHandlerScript: GDScript = preload("res://modules/player_control/scripts/explore_handler.gd")
 ## 调试绘制器
-const _DebugDrawers: GDScript = preload("res://modules/debug/scripts/debug_drawers.gd")
+const _DebugDrawers: GDScript = preload("res://modules/debug_GUI/scripts/debug_drawers.gd")
 ## ConstructionManager 脚本（用于实例化建造系统）
 const _ConstructionManagerScript: GDScript = preload("res://modules/construction/scripts/construction_manager.gd")
 ## Construction api 脚本

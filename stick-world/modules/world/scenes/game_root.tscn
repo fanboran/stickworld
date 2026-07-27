@@ -10,7 +10,7 @@
 [ext_resource type="Script" path="res://modules/ui/scripts/global_hud.gd" id="8_hud"]
 [ext_resource type="Script" path="res://modules/ui/scripts/mode_panel.gd" id="9_mode"]
 [ext_resource type="Script" path="res://modules/ui/scripts/context_panel.gd" id="10_ctx"]
-[ext_resource type="Script" path="res://modules/debug/scripts/debug_overlay.gd" id="11_debug"]
+[ext_resource type="Script" path="res://modules/debug_GUI/scripts/debug_overlay.gd" id="11_debug"]
 [ext_resource type="Script" path="res://modules/ui/scripts/clock_widget.gd" id="12_clock"]
 
 [node name="GameRoot" type="Node2D"]

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cjdbx6t54fhuw"
-path="res://.godot/imported/stone_window_ref.png-e5ca424d75c31030ca388b5af426618e.ctex"
+path="res://.godot/imported/stone_window_ref.png-5cc32a0015be261b9ccad12e46e6389f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/materials/stone_window/reference/stone_window_ref.png"
-dest_files=["res://.godot/imported/stone_window_ref.png-e5ca424d75c31030ca388b5af426618e.ctex"]
+source_file="res://modules/texture_gen/materials/stone_window/reference/stone_window_ref.png"
+dest_files=["res://.godot/imported/stone_window_ref.png-5cc32a0015be261b9ccad12e46e6389f.ctex"]
 
 [params]
 

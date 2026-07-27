@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d2gcw8x4gcma8"
-path="res://.godot/imported/smithy_lv1_full.png-4db891a12743732e0d8624d558e697e2.ctex"
+path="res://.godot/imported/smithy_lv1_full.png-e2168d15adc044c3926d772a05f655e8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/materials/thatch/reference/smithy_lv1_full.png"
-dest_files=["res://.godot/imported/smithy_lv1_full.png-4db891a12743732e0d8624d558e697e2.ctex"]
+source_file="res://modules/texture_gen/materials/thatch/reference/smithy_lv1_full.png"
+dest_files=["res://.godot/imported/smithy_lv1_full.png-e2168d15adc044c3926d772a05f655e8.ctex"]
 
 [params]
 

@@ -153,8 +153,8 @@ func _scan_dir(dir_path: String, menu: PopupMenu) -> void:
 	for folder in folders:
 		var submenu := PopupMenu.new()
 		submenu.name = folder
-		menu.add_submenu_item(folder, folder)
 		menu.add_child(submenu)
+		menu.add_submenu_item(folder, folder)
 		_scan_dir(dir_path + "/" + folder, submenu)
 
 

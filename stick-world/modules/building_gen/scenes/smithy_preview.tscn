@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://0g2l47kb7emi"]
 
 [ext_resource type="Script" path="res://modules/building_gen/scripts/preview/smithy_preview.gd" id="1_d0qwq"]
-[ext_resource type="Script" path="res://modules/building_gen/scripts/preview/smithy_thatch_applier.gd" id="2_applier"]
+[ext_resource type="Script" path="res://modules/texture_gen/materials/thatch/scripts/thatch_applier.gd" id="2_applier"]
 [ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/backwalltop.png" id="tex_backwalltop"]
 [ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/backpillarl.png" id="tex_backpillarl"]
 [ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/frontpillar.png" id="tex_frontpillar"]

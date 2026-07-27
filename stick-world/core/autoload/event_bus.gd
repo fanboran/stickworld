@@ -53,6 +53,13 @@ extends Node
 # 升级：建设系统 → UI
 @warning_ignore("unused_signal") signal building_upgraded(building_id, old_tier, new_tier)
 
+# ─────────────────────────────── 材质 / 纹理 ───────────────────────────────
+
+## 材质参数变更（调试面板调整时触发，由 texture_gen 转发）
+@warning_ignore("unused_signal") signal material_param_changed(material_name: String, param_name: String, value: Variant)
+## 材质截图完成
+@warning_ignore("unused_signal") signal texture_captured(material_name: String, output_path: String)
+
 # ─────────────────────────────── 科技 ────────────────────────────────────
 
 @warning_ignore("unused_signal") signal tech_researched(tech_id: String)

@@ -1,35 +1,32 @@
 # Godot 输出日志
 **/godot_log.txt
 
+# building_gen 运行时调试日志
+modules/building_gen/logs/
+
 # 程序化材质：自动生成的截图/诊断图/色板（参考原图除外，手动维护）
-modules/building_gen/materials/*/reference/*_capture.png
-modules/building_gen/materials/*/reference/*_capture.png.import
-modules/building_gen/materials/*/reference/diagnose_*.png
-modules/building_gen/materials/*/reference/diagnose_*.png.import
-modules/building_gen/materials/*/reference/*_swatch.png
-modules/building_gen/materials/*/reference/*_swatch.png.import
+modules/texture_gen/materials/*/reference/*_capture.png
+modules/texture_gen/materials/*/reference/*_capture.png.import
+modules/texture_gen/materials/*/reference/diagnose_*.png
+modules/texture_gen/materials/*/reference/diagnose_*.png.import
+modules/texture_gen/materials/*/reference/*_swatch.png
+modules/texture_gen/materials/*/reference/*_swatch.png.import
 
 # 茅草临时参考截图（仅保留 smithy_thatch_capture.png 主截图）
-modules/building_gen/materials/thatch/reference/smithy_center_*.png
-modules/building_gen/materials/thatch/reference/smithy_center_*.png.import
-modules/building_gen/materials/thatch/reference/smithy_roof_*.png
-modules/building_gen/materials/thatch/reference/smithy_roof_*.png.import
-modules/building_gen/materials/thatch/reference/*_crop*.png
-modules/building_gen/materials/thatch/reference/*_crop*.png.import
-modules/building_gen/materials/thatch/reference/thatch_ref_*.png
-modules/building_gen/materials/thatch/reference/thatch_ref_*.png.import
-
-# 一次性 Python 工具脚本
-modules/building_gen/tools/analyze_capture.py
-modules/building_gen/tools/extract_embedded_images.py
-modules/building_gen/tools/inspect_capture.py
-modules/building_gen/scripts/debug/recrop_references.py
+modules/texture_gen/materials/thatch/reference/smithy_center_*.png
+modules/texture_gen/materials/thatch/reference/smithy_center_*.png.import
+modules/texture_gen/materials/thatch/reference/smithy_roof_*.png
+modules/texture_gen/materials/thatch/reference/smithy_roof_*.png.import
+modules/texture_gen/materials/thatch/reference/*_crop*.png
+modules/texture_gen/materials/thatch/reference/*_crop*.png.import
+modules/texture_gen/materials/thatch/reference/thatch_ref_*.png
+modules/texture_gen/materials/thatch/reference/thatch_ref_*.png.import
 
 # 石头材质中间产物（单砖抠图实验、未处理参考图原片）
-modules/building_gen/materials/stone_wall/reference/brick_*.png
-modules/building_gen/materials/stone_wall/reference/brick_*.png.import
-modules/building_gen/materials/stone_band/reference/brick_*.png
-modules/building_gen/materials/stone_band/reference/brick_*.png.import
-modules/building_gen/materials/stone_band/reference/stone_band_ref_raw.png
-modules/building_gen/materials/stone_band/reference/stone_band_ref_raw.png.import
+modules/texture_gen/materials/stone_wall/reference/brick_*.png
+modules/texture_gen/materials/stone_wall/reference/brick_*.png.import
+modules/texture_gen/materials/stone_band/reference/brick_*.png
+modules/texture_gen/materials/stone_band/reference/brick_*.png.import
+modules/texture_gen/materials/stone_band/reference/stone_band_ref_raw.png
+modules/texture_gen/materials/stone_band/reference/stone_band_ref_raw.png.import
 

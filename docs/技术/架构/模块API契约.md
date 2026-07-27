@@ -89,6 +89,40 @@ func generate_building(def: BuildingDef) -> Node2D
 
 ---
 
+## 一-B、纹理生成模块 `modules/texture_gen/api.gd`（2026-07 从 building_gen 解耦）
+
+```gdscript
+# 材质查询
+static func list_materials() -> Array[StringName]
+static func has_material(material_id: StringName) -> bool
+
+# CPU 程序化贴图（委托 ProceduralMaterials）
+static func make_wood_pillar(w, h, base_color) -> ImageTexture
+static func make_wood_plank(w, h, base_color) -> ImageTexture
+static func make_straw_thatch(w, h, base_color) -> ImageTexture
+static func make_thatch_layered(w, h, seed) -> ImageTexture
+static func make_thatch_for_polygon(w, h, seed) -> ImageTexture
+static func create_thatch_material(tex) -> ShaderMaterial
+static func make_stone_dark(w, h, base_color) -> ImageTexture
+static func make_metal_iron(w, h) -> ImageTexture
+static func make_solid(w, h, color) -> ImageTexture
+
+# GPU Shader 材质
+static func load_shader_material(material_id) -> ShaderMaterial
+# [P] material_id 已注册（list_materials 返回包含它）
+# [Q] 返回 ShaderMaterial（未设置 uniform，调用方按需配置）
+
+static func apply_material(target, material_id) -> ShaderMaterial
+# [P] target is CanvasItem, material_id 已注册
+# [Q] target.material 被替换，返回新 ShaderMaterial
+
+# 茅草 CPU 笔迹适配（@tool 场景用）
+static func apply_thatch_cpu(polygon) -> void
+# [P] polygon is Polygon2D 且 polygon.polygon.size() >= 3
+```
+
+---
+
 ## 二、科技模块 `modules/technology/api.gd`
 
 ```gdscript

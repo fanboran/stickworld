@@ -173,6 +173,21 @@ func _collect_work_slot_markers() -> Array:
 	return result
 
 
+# ─────────────────────────────── 位置辅助 ────────────────────────────────
+
+## 获取碰撞体下边界相对于建筑原点的 Y 偏移
+## = CollisionShape2D.position.y + shape.size.y / 2
+## 用于运行时建造时对齐草坪中线（与 building_snap.gd 编辑器吸附逻辑一致）
+func get_collision_bottom_local() -> float:
+	var pb := get_node_or_null("PassageBarrier")
+	if pb == null:
+		return 0.0
+	for child in pb.get_children():
+		if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+			return (child as CollisionShape2D).position.y + ((child as CollisionShape2D).shape as RectangleShape2D).size.y * 0.5
+	return 0.0
+
+
 # ─────────────────────────────── 工作位 ────────────────────────────────
 
 ## 获取所有工作位的世界坐标（供工人 AI 寻路）

@@ -225,7 +225,12 @@ func _complete() -> void:
 		cell_size = int(placement_grid.CELL_SIZE)
 	var world_x: float = float(cell_x) * float(cell_size) + float(cell_size * width) * 0.5
 	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	new_building.global_position = Vector2(world_x, ground_y)
+	var ground_bottom: float = float(map.get("ground_bottom") if "ground_bottom" in map else 1080.0)
+	var midline: float = (ground_y + ground_bottom) * 0.5
+	var collision_bottom_local: float = 0.0
+	if new_building is ScriptBuilding:
+		collision_bottom_local = (new_building as ScriptBuilding).get_collision_bottom_local()
+	new_building.global_position = Vector2(world_x, midline - collision_bottom_local)
 	# 标记建筑为 OPERATIONAL（触发视觉/碰撞更新）
 	if new_building is ScriptBuilding:
 		(new_building as ScriptBuilding).set_state(ScriptBuilding.State.OPERATIONAL)

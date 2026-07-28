@@ -198,3 +198,28 @@ static func draw_entity_states(control: Control, ctx: Dictionary) -> void:
 		if entity.has_method("get_facing"):
 			info += " face:%d" % entity.get_facing()
 		control.draw_string(font, screen_pos + Vector2(-30, -50), info, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(1.0, 1.0, 1.0, 0.8))
+
+
+## 火柴人 Collider 矩形（青色）-- 脚部物理碰撞箱
+static func draw_entity_colliders(control: Control, ctx: Dictionary) -> void:
+	var map: Node2D = ctx.get("map", null)
+	if map == null or not is_instance_valid(map):
+		return
+	var entity_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST)
+	if entity_host == null:
+		return
+	var fill_color := Color(0.2, 1.0, 1.0, 0.2)
+	var border_color := Color(0.2, 1.0, 1.0, 0.8)
+	var zoom: float = ctx.get("effective_zoom", 1.0)
+	for entity in entity_host.get_children():
+		if not entity is CharacterBody2D:
+			continue
+		var col: CollisionShape2D = entity.get_node_or_null("Collider") as CollisionShape2D
+		if col == null or not (col.shape is RectangleShape2D):
+			continue
+		var rs: RectangleShape2D = col.shape as RectangleShape2D
+		var screen_pos := world_to_screen(col.global_position, ctx)
+		var screen_size := Vector2(rs.size.x * zoom, rs.size.y * zoom)
+		var rect := Rect2(screen_pos - screen_size * 0.5, screen_size)
+		control.draw_rect(rect, fill_color, true)
+		control.draw_rect(rect, border_color, false, 1.0)

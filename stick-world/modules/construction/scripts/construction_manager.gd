@@ -328,10 +328,15 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 		return {"ok": false, "error": "map.building_host 不存在"}
 	host.add_child(building)
 
-	# 摆放位置（建筑原点 = 底部中心 = ground_y）
+	# 摆放位置：建筑碰撞体下边界对齐草坪中线（与 building_snap.gd 编辑器吸附逻辑一致）
 	var world_x: float = cell_x * 32.0 + width * 32.0 / 2.0
 	var ground_y: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0)
-	(building as Node2D).global_position = Vector2(world_x, ground_y)
+	var ground_bottom: float = float(_map.get("ground_bottom") if "ground_bottom" in _map else 1080.0)
+	var midline: float = (ground_y + ground_bottom) * 0.5
+	var collision_bottom_local: float = 0.0
+	if building is ScriptBuilding:
+		collision_bottom_local = (building as ScriptBuilding).get_collision_bottom_local()
+	(building as Node2D).global_position = Vector2(world_x, midline - collision_bottom_local)
 
 	# 立即设为 OPERATIONAL
 	if building is ScriptBuilding:

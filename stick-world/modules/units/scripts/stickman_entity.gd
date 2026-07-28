@@ -31,7 +31,7 @@ const MIN_ANIM_SCALE: float = 0.2
 ## 切到 idle 的速度阈值
 const IDLE_THRESHOLD: float = 5.0
 ## 火柴人渲染缩放（对齐 stickman_test.BASE_SCALE * 1.5，适配 DESIGN_HEIGHT=1080）
-const BASE_SCALE: float = 0.4
+const BASE_SCALE: float = 0.5
 
 # ─────────────────────────────── @export ────────────────────────────────
 ## 是否被玩家附身（true=玩家控制，false=AI 控制）
@@ -98,6 +98,8 @@ var _walk_only: bool = false
 var _startup_fix_time: float = 0.25
 var _startup_fix_elapsed: float = 0.0
 var _startup_done: bool = false
+## Collider 原始尺寸（_ready 时保存，_apply_scale 时乘以 BASE_SCALE）
+var _collider_base_size: Vector2 = Vector2.ZERO
 
 # ─────────────────────────────── 战斗组件引用（§7.1）────────────────────────────────
 @onready var health_component: Node = get_node_or_null("HealthComponent")
@@ -141,9 +143,13 @@ func _ready() -> void:
 	# 从模型 marker 动态计算 foot_offset（适配不同参考系）
 	foot_offset = _calculate_foot_offset()
 	# 碰撞体移到脚部位置
-	var col := get_node_or_null("CollisionShape2D") as CollisionShape2D
+	var col := get_node_or_null("Collider") as CollisionShape2D
 	if col != null:
 		col.position = Vector2(0, foot_offset)
+		# duplicate shape 避免多实例共享同一资源导致 _apply_scale 互相覆盖
+		if col.shape is RectangleShape2D:
+			col.shape = (col.shape as RectangleShape2D).duplicate()
+			_collider_base_size = (col.shape as RectangleShape2D).size
 	# 应用初始缩放
 	_apply_scale()
 	# 播放 idle
@@ -332,6 +338,11 @@ func _apply_scale() -> void:
 		return
 	var s := BASE_SCALE
 	rig.scale = Vector2(s * _facing, s)
+	# 同步缩放 Collider shape（Collider 不在 rig 层级下，不受 rig.scale 影响）
+	if _collider_base_size != Vector2.ZERO:
+		var col := get_node_or_null("Collider") as CollisionShape2D
+		if col != null and col.shape is RectangleShape2D:
+			(col.shape as RectangleShape2D).size = _collider_base_size * s
 	_sync_markers_transform()
 
 
@@ -406,37 +417,49 @@ func set_map_reference(p_map: Node2D) -> void:
 
 
 ## 检测是否在通行障碍区域内（WalkBarrier / PassageBarrier，§7.1.2）
-## 使用脚部位置检测，避免头部提前触碰障碍
+## 使用脚部碰撞箱检测，与物理碰撞箱一致
 func _is_in_passage_barrier() -> bool:
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		return false
-	# 用脚部位置检测碰撞，而不是身体中心
-	var feet_pos: Vector2 = Vector2(global_position.x, global_position.y + foot_offset)
+	# 用脚部碰撞箱检测
+	var feet_rect := _get_feet_rect()
 	# 检查地图级 WalkBarrier
 	if _map_ref.has_method("get_walk_barriers"):
 		for area in _map_ref.get_walk_barriers():
-			if _is_pos_in_area(feet_pos, area):
+			if _is_rect_in_area(feet_rect, area):
 				return true
 	# 检查建筑级 PassageBarrier
 	if _map_ref.has_method("get_passage_barriers"):
 		for area in _map_ref.get_passage_barriers():
-			if _is_pos_in_area(feet_pos, area):
+			if _is_rect_in_area(feet_rect, area):
 				return true
 	return false
 
 
-## 检查点是否在 Area2D 的 RectangleShape2D 范围内
-func _is_pos_in_area(pos: Vector2, area: Area2D) -> bool:
+## 获取脚部碰撞箱的世界坐标矩形
+func _get_feet_rect() -> Rect2:
+	var col := get_node_or_null("Collider") as CollisionShape2D
+	if col != null and col.shape is RectangleShape2D:
+		var shape := col.shape as RectangleShape2D
+		var center: Vector2 = col.global_position
+		var half_size: Vector2 = shape.size * 0.5
+		return Rect2(center - half_size, shape.size)
+	# 退化：用脚部点位置
+	var feet_pos: Vector2 = Vector2(global_position.x, global_position.y + foot_offset)
+	return Rect2(feet_pos - Vector2.ONE, Vector2(2, 2))
+
+
+## 检查矩形是否与 Area2D 的 RectangleShape2D 重叠
+func _is_rect_in_area(rect: Rect2, area: Area2D) -> bool:
 	for child in area.get_children():
 		if child is CollisionShape2D:
 			var shape: Shape2D = (child as CollisionShape2D).shape
 			if shape is RectangleShape2D:
 				var rect_shape: RectangleShape2D = shape as RectangleShape2D
-				var area_pos: Vector2 = (child as CollisionShape2D).global_position
-				var half_size: Vector2 = rect_shape.size * 0.5
-				# 判断点是否在矩形内（考虑 Area2D 的 global_position 和 CollisionShape2D 的偏移）
-				var local_pos: Vector2 = pos - area_pos
-				return absf(local_pos.x) <= half_size.x and absf(local_pos.y) <= half_size.y
+				var area_center: Vector2 = (child as CollisionShape2D).global_position
+				var area_half: Vector2 = rect_shape.size * 0.5
+				var area_rect := Rect2(area_center - area_half, rect_shape.size)
+				return rect.intersects(area_rect)
 	return false
 
 

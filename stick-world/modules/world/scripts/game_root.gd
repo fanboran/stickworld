@@ -49,6 +49,7 @@ const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/comm
 const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/battle_panel.gd")
 ## Minimap 脚本（§15 阶段 0.6 小地图）
 const _MinimapScript: GDScript = preload("res://modules/ui/scripts/minimap.gd")
+const _ZoomBarScript: GDScript = preload("res://modules/ui/scripts/zoom_bar.gd")
 ## PossessionInterface 脚本（附身系统，§15 阶段 0.7）
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 ## PossessPanel 脚本（附身 UI，§15 阶段 0.7）
@@ -107,6 +108,8 @@ var _command_chain: Node = null
 var _battle_panel: Control = null
 ## Minimap 实例引用（运行时由 _ready 装配）
 var _minimap: Control = null
+## ZoomBar 实例引用（运行时由 _ready 装配）
+var _zoom_bar: Control = null
 
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
 ## PossessionInterface 实例引用（运行时由 _ready 装配）
@@ -148,6 +151,7 @@ func _ready() -> void:
 	_setup_tactical_system()
 	_setup_battle_panel()
 	_setup_minimap()
+	_setup_zoom_bar()
 	_setup_possession_interface()
 	_setup_possess_panel()
 	_register_default_maps()
@@ -395,6 +399,19 @@ func _setup_minimap() -> void:
 func get_minimap() -> Control:
 	return _minimap
 
+
+## 创建 ZoomBar 并挂到 UIRoot，位于小地图下方。
+func _setup_zoom_bar() -> void:
+	if ui_root == null:
+		return
+	var zb := Control.new()
+	zb.set_script(_ZoomBarScript)
+	zb.name = "ZoomBar"
+	ui_root.add_child(zb)
+	_zoom_bar = zb
+	if zb.has_method("setup"):
+		zb.setup(camera_rig)
+
 # ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────
 
 ## 实例化 PossessionInterface，注册为 POSSESS 模式 handler。
@@ -596,12 +613,12 @@ func _spawn_initial_buildings(map: Node2D) -> void:
 ## 触发一次演示建造：在 DEMO_BUILDING_CELL_X 处建一栋 bld_workshop。
 ## NPC 会通过 AIController 自动派工并完成建造。
 func _start_demo_building() -> void:
-	if _construction_api == null or not _construction_api.has_method("start_construction"):
+	if _construction_api == null or not _construction_api.has_method("start_construction_at"):
 		push_warning("[GameRoot] 建造系统未就绪，跳过演示建造")
 		return
 	var region_id := "test_region"
 	var building_type := "bld_workshop"
-	var result: Dictionary = _construction_api.start_construction(region_id, building_type, "")
+	var result: Dictionary = _construction_api.start_construction_at(region_id, building_type, DEMO_BUILDING_CELL_X, "")
 	if result.get("ok", false):
 		print("[GameRoot] 演示建造已启动: project=%s cell_x=%d" % [result.get("project_id", ""), DEMO_BUILDING_CELL_X])
 	else:
@@ -648,6 +665,7 @@ func _register_debug_drawers() -> void:
 	DebugApi.register_drawer("ground_line_drawer", Callable(_DebugDrawers, "draw_ground_lines"))
 	DebugApi.register_drawer("chunk_trigger_drawer", Callable(_DebugDrawers, "draw_chunk_triggers"))
 	DebugApi.register_drawer("entity_state_drawer", Callable(_DebugDrawers, "draw_entity_states"))
+	DebugApi.register_drawer("entity_collider_drawer", Callable(_DebugDrawers, "draw_entity_colliders"))
 
 
 func _validate_children() -> void:

@@ -13,8 +13,8 @@ extends Camera2D
 ## 设计基准垂直像素（世界坐标恒定，= 1080P 垂直分辨率）
 ## 1080P 为默认设计分辨率，其他分辨率按此换算（base_zoom = vp_h / 1080）
 const DESIGN_HEIGHT: float = 1080.0
-## 用户缩放下限（默认最小，1.0=设计基准视野）
-const ZOOM_MIN: float = 1.0
+## 用户缩放下限（0.5=缩小到一半视野，看更广）
+const ZOOM_MIN: float = 0.5
 ## 用户缩放上限（最大迫近，2.0=放大2倍看特写）
 const ZOOM_MAX: float = 2.0
 ## 缩放步长

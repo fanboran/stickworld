@@ -53,6 +53,10 @@ const _MinimapScript: GDScript = preload("res://modules/ui/scripts/minimap.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 ## PossessPanel 脚本（附身 UI，§15 阶段 0.7）
 const _PossessPanelScript: GDScript = preload("res://modules/ui/scripts/possess_panel.gd")
+## ResourceManager 脚本（资源系统，P0-9）
+const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
+## Resources api 脚本（资源模块公共接口）
+const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -110,6 +114,10 @@ var _possession_interface: Node = null
 ## PossessPanel 实例引用（运行时由 _ready 装配）
 var _possess_panel: Control = null
 
+# ─────────────────────────────── 资源系统（P0-9）────────────────────────────────
+## ResourcesApi 实例引用（运行时由 _ready 装配）
+var _resources_api: Node = null
+
 # ─────────────────────────────── 传送系统（§5.6）────────────────────────────────
 ## 传送返回地图 ID（进入 MegaInteriorMap 前记录，退出时返回）
 var _return_map_id: String = ""
@@ -133,6 +141,7 @@ func _ready() -> void:
 	_bind_event_bus()
 	_setup_construction_system()
 	_setup_combat_system()
+	_setup_resources_system()
 	_setup_selection_system()
 	_setup_organization_system()
 	_setup_formation_system()
@@ -214,6 +223,35 @@ func _setup_combat_api_deferred() -> void:
 ## 获取 CombatApi 引用（供测试用）
 func get_combat_api() -> Node:
 	return _combat_api
+
+
+# ─────────────────────────────── 资源系统装配（P0-9）────────────────────────────────
+
+## 实例化 ResourcesApi 作为子节点，并注入 ResourceManager。
+func _setup_resources_system() -> void:
+	var api := Node.new()
+	api.set_script(_ResourcesApiScript)
+	api.name = "ResourcesApi"
+	add_child(api)
+	_resources_api = api
+	call_deferred("_setup_resources_api_deferred")
+
+
+func _setup_resources_api_deferred() -> void:
+	if _resources_api == null:
+		return
+	if not _resources_api.has_method("setup"):
+		return
+	var mgr = _ResourcesManagerScript.new()
+	_resources_api.setup(mgr)
+	# P0-9 注入到 ConstructionManager（若已就绪）
+	if _construction_manager != null and _construction_manager.has_method("set_resources_api"):
+		_construction_manager.set_resources_api(_resources_api)
+
+
+## 获取 ResourcesApi 引用（供测试用）
+func get_resources_api() -> Node:
+	return _resources_api
 
 
 # ─────────────────────────────── 框选系统装配 ────────────────────────────────

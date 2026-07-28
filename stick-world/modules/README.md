@@ -372,7 +372,7 @@ L4 攻占北方行省
 | `res_metal_ore`     | 金属矿  | 8              | 8     | 否  |
 | `res_black_asphalt` | 黑色沥青 | 15             | 6     | 否  |
 
-> P0 阶段资源列表以 GDD 为准，加工品/奢侈品（铁锭/丝绸/食物）待 GDD §2.2 补充后激活。
+> P0 阶段资源列表以 GDD 为准，加工品/奢侈品（铁锭/丝绸）待 GDD §2.2 补充后激活。
 
 **库存模型**：按 region\_id 分区 `{resource_id: {region_id: amount}}`
 

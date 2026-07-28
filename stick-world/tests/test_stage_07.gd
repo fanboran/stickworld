@@ -295,14 +295,21 @@ func _test_player_attack() -> void:
 		attacker.set_faction(1)
 	if target.has_method("set_faction"):
 		target.set_faction(2)
+	# 设置必中 + 重置冷却（排除 randf 确定性序列与冷却干扰，聚焦验证攻击流程）
+	var weapon: Node = attacker.get_weapon() if attacker.has_method("get_weapon") else null
+	if weapon != null:
+		weapon.base_hit_chance = 1.0
 	# 记录目标 HP
 	var target_health: Node = target.get_health() if target.has_method("get_health") else null
 	if target_health == null:
 		_runner.assert_true(false, "目标无 HealthComponent")
 		return
 	var hp_before: float = target_health.hp
-	# 执行攻击（多次以覆盖冷却 1.3s）
-	for i in 10:
+	# 执行攻击（3 次即可验证伤害，避免杀死目标影响后续 possess_api 测试）
+	for i in 3:
+		# 每次循环前重置冷却，确保 can_attack() 返回 true
+		if weapon != null and "_cooldown_timer" in weapon:
+			weapon._cooldown_timer = 0.0
 		if attacker.has_method("_player_attack"):
 			attacker._player_attack()
 		# 等待足够时间让冷却恢复（每次 0.3s）

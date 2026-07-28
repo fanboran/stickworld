@@ -40,6 +40,10 @@ var _next_project_id: int = 1
 var _next_building_id: int = 1
 ## 当前地图引用（由 set_map 注入）
 var _map: Node2D = null
+## ResourcesApi 引用（由 GameRoot 注入，P0-9 资源检查）
+var _resources_api: Node = null
+## 建筑定义缓存 {def_id: Dictionary}（P0-6 数据驱动）
+var _building_defs_cache: Dictionary = {}
 
 
 # ─────────────────────────────── 信号（供 api.gd 转发）────────────────────────────────
@@ -53,6 +57,7 @@ signal building_removed(building_id: String, region_id: String)
 func _ready() -> void:
 	_assigner = ScriptWorkCrewAssigner.new()
 	_register_default_building_scenes()
+	_load_building_defs()
 
 
 # ─────────────────────────────── 地图注入 ────────────────────────────────
@@ -84,6 +89,28 @@ func _register_default_building_scenes() -> void:
 		push_warning("[ConstructionManager] 无法加载 bld_workshop.tscn")
 
 
+# ─────────────────────────────── 建筑定义数据驱动（P0-6）────────────────────────────────
+
+## 从 buildings.tres 预加载建筑定义
+func _load_building_defs() -> void:
+	var res_path := "res://config/buildings/buildings.tres"
+	if not ResourceLoader.exists(res_path):
+		push_warning("[ConstructionManager] 建筑定义表不存在: %s" % res_path)
+		return
+	var res: Resource = load(res_path)
+	if res == null or not (res.get("variables") is Dictionary):
+		return
+	var data: Array = res.variables.get("data", [])
+	for entry in data:
+		if entry is Dictionary and entry.has("id"):
+			_building_defs_cache[entry["id"]] = entry
+
+
+## 查询建筑定义
+func get_building_def(def_id: String) -> Dictionary:
+	return _building_defs_cache.get(def_id, {})
+
+
 # ─────────────────────────────── 每帧推进 ────────────────────────────────
 
 func _physics_process(delta: float) -> void:
@@ -109,9 +136,15 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	if not _building_scene_registry.has(building_type):
 		return {"ok": false, "error": "未注册建筑类型: %s" % building_type}
 	var scene: PackedScene = _building_scene_registry[building_type]
-	# P0 硬编码默认 width=2, total_work=10.0；将来从建筑配置表读取
-	var width: int = 2
-	var total_work: float = 10.0
+	# P0-9 资源检查
+	if _resources_api != null:
+		var cost_result := _check_and_consume_cost(building_type, region_id)
+		if not cost_result.ok:
+			return {"ok": false, "error": "资源不足: %s" % cost_result.reason}
+	# P0-6 从 buildings.tres 读取 width 和 build_time
+	var def: Dictionary = _building_defs_cache.get(building_type, {})
+	var width: int = int(def.get("width", 2))
+	var total_work: float = float(def.get("build_time", 60)) * 0.1
 	# 校验选址
 	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null
 	if placement_grid == null:
@@ -138,6 +171,38 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	}
 
 
+# ─────────────────────────────── 资源检查与扣减（P0-9）────────────────────────────────
+
+## 检查并扣减建造资源。返回 {ok:true} 或 {ok:false, reason}
+func _check_and_consume_cost(building_type: String, region_id: String) -> Dictionary:
+	if _resources_api == null:
+		return {"ok": true}  # 资源系统未接入，跳过检查
+	var def: Dictionary = _building_defs_cache.get(building_type, {})
+	if def.is_empty():
+		return {"ok": true}  # 无定义，跳过
+	var costs: Dictionary = {}
+	for key in ["build_cost_wood", "build_cost_stone", "build_cost_metal"]:
+		if def.has(key) and float(def[key]) > 0:
+			var res_id: String = key.replace("build_cost_", "res_")
+			# build_cost_wood -> res_wood, build_cost_metal -> res_metal_ore（特殊映射）
+			if key == "build_cost_metal":
+				res_id = "res_metal_ore"
+			costs[res_id] = float(def[key])
+	if costs.is_empty():
+		return {"ok": true}
+	# 先检查
+	for res_id in costs.keys():
+		var stock: float = _resources_api.get_stock(res_id, region_id)
+		if stock < costs[res_id]:
+			return {"ok": false, "reason": "缺少 %s (需要 %d, 现有 %d)" % [res_id, costs[res_id], stock]}
+	# 再扣减
+	for res_id in costs.keys():
+		var result: Dictionary = _resources_api.consume(res_id, costs[res_id], region_id, "建造:%s" % building_type)
+		if not result.get("ok", false):
+			return {"ok": false, "reason": "扣减失败: %s" % result.get("error", "")}
+	return {"ok": true}
+
+
 # ─────────────────────────────── 项目完工回调 ────────────────────────────────
 
 ## 项目完工：把 Building 注册到 _buildings，分配 building_id
@@ -150,6 +215,10 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 	if building is ScriptBuilding:
 		(building as ScriptBuilding).set_meta("building_id", building_id)
 		(building as ScriptBuilding).set_meta("region_id", project.region_id)
+		# D2: 应用数据驱动字段（interior_mode 等）
+		var def: Dictionary = _building_defs_cache.get(project.def_id, {})
+		if not def.is_empty() and (building as ScriptBuilding).has_method("apply_building_def"):
+			(building as ScriptBuilding).apply_building_def(def)
 	_buildings[building_id] = building
 	_building_to_id[building] = building_id
 	print("[ConstructionManager] 建筑完工: %s (def=%s, cell_x=%d)" % [building_id, project.def_id, project.cell_x])
@@ -216,12 +285,16 @@ func get_all_project_ids() -> Array:
 ## 直接生成已完工建筑（OPERATIONAL 状态），跳过建造过程。
 ## 用于：InitialBuildingsList 预置建筑、地形建筑初始化、测试快速部署。
 ## 返回 {ok, building_id, cell_x, width} 或 {ok:false, error}。
-func spawn_operational_building(def_id: String, cell_x: int, width: int = 2) -> Dictionary:
+func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) -> Dictionary:
 	if _map == null:
 		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
 	if not _building_scene_registry.has(def_id):
 		return {"ok": false, "error": "未注册建筑类型: %s" % def_id}
 	var scene: PackedScene = _building_scene_registry[def_id]
+	# D1: width=-1 时从 buildings.tres 读取
+	var def: Dictionary = _building_defs_cache.get(def_id, {})
+	if width < 0:
+		width = int(def.get("width", 2))
 
 	# 校验选址
 	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null
@@ -244,6 +317,9 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = 2) -> 
 		typed.cell_x = cell_x
 		typed.width = width
 		typed.is_terrain = false
+		# D2: 应用数据驱动字段（interior_mode 等）
+		if not def.is_empty() and typed.has_method("apply_building_def"):
+			typed.apply_building_def(def)
 
 	# 挂到 BuildingHost
 	var host: Node2D = _map.get("building_host") if "building_host" in _map else null

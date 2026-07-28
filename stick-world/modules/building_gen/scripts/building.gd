@@ -101,6 +101,14 @@ func _ready() -> void:
 	_apply_state_visual()
 
 
+# ─────────────────────────────── 数据驱动（D2）────────────────────────────────
+
+## 从建筑定义 Dictionary 应用数据驱动字段
+func apply_building_def(def: Dictionary) -> void:
+	_interior_mode = int(def.get("interior_mode", 0))
+	mega_interior_map_id = String(def.get("mega_interior_map_id", ""))
+
+
 # ─────────────────────────────── 子节点查找 ────────────────────────────────
 
 func _lookup_children() -> void:

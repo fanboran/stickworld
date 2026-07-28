@@ -11,7 +11,7 @@ enum Category {
 var id: String = ""
 var name: String = ""
 var category: Category = Category.BASIC
-var base_price: float = 0.0
+var initial_price: float = 0.0
 var weight_per_unit: float = 0.0
 var perishable: bool = false
 var current_stock: float = 0.0

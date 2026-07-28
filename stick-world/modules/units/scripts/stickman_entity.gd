@@ -136,8 +136,8 @@ func _ready() -> void:
 	# 拿到 StickmanRig 和 IK markers 引用
 	var rig_host := get_node_or_null("RigHost")
 	if rig_host != null:
-		rig = rig_host.get_node_or_null("StickmanRig")
-		_markers_parent = rig_host.get_node_or_null("Node2D")
+		rig = rig_host.get_node_or_null("OutlineGroup/StickmanRig")
+		_markers_parent = rig_host.get_node_or_null("OutlineGroup/Node2D")
 	# 获取 AIController 子节点（§7.1）
 	_ai_controller = get_node_or_null("AIController")
 	# 从模型 marker 动态计算 foot_offset（适配不同参考系）
@@ -169,7 +169,7 @@ func _calculate_foot_offset() -> float:
 	if rig_host == null:
 		return 45.0
 	var root_y: float = (rig_host as Node2D).position.y
-	var outfoot := rig_host.get_node_or_null("Node2D/outfoot") as Node2D
+	var outfoot := rig_host.get_node_or_null("OutlineGroup/Node2D/outfoot") as Node2D
 	if outfoot == null:
 		return 45.0
 	var outfoot_y: float = outfoot.position.y

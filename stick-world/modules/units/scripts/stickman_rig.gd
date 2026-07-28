@@ -10,6 +10,7 @@ extends Skeleton2D
 const Skeleton := preload("res://modules/units/scripts/stickman_skeleton.gd")
 const Anims := preload("res://modules/units/scripts/stickman_anims.gd")
 const Weapon := preload("res://modules/units/scripts/stickman_weapon.gd")
+const Outline := preload("res://modules/units/scripts/stickman_outline.gd")
 
 # ===== 动画状态名（公共 API 用） =====
 const ANIM_IDLE := "idle"
@@ -69,10 +70,10 @@ var _rebuild_pending: bool = false
 
 func _ready() -> void:
 	_init_bones()
+	_init_outline()
 	_init_ik()
 	_init_animations()
 	_init_weapons()
-
 
 func _process(_delta: float) -> void:
 	if _state_machine == null and _anim_tree != null:
@@ -178,6 +179,18 @@ func _init_weapons() -> void:
 		return
 	_refresh_weapon(Skeleton.WEAPON_ATTACH_R)
 	_refresh_weapon(Skeleton.WEAPON_ATTACH_L)
+
+
+# ============================================================
+#  描边初始化
+# ============================================================
+
+## 给每个 sprite 加 ID 材质 + 设置 CanvasGroup outline 材质
+func _init_outline() -> void:
+	var group := get_parent() as CanvasGroup
+	if group == null:
+		return
+	Outline.setup(group, _sprites)
 
 
 # ============================================================

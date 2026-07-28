@@ -30,8 +30,8 @@ var _facing := 1  # 1=向右, -1=向左
 
 
 func _ready() -> void:
-	_rig = get_node("StickmanRig") as Node2D
-	_markers_parent = get_node("Node2D") as Node2D
+	_rig = get_node("OutlineGroup/StickmanRig") as Node2D
+	_markers_parent = get_node("OutlineGroup/Node2D") as Node2D
 	# Marker2D 的父节点必须与 StickmanRig 保持相同 transform，
 	# 否则 IK target 全局位置与骨骼全局位置不匹配，IK 不可达
 	_rig.position = Vector2(400, 300)

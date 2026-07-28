@@ -200,13 +200,13 @@ func _complete() -> void:
 	if b == null:
 		push_error("[ConstructionProject] 建筑场景实例化失败: %s" % project_id)
 		return
-	var building := b as Node2D
-	if building == null:
+	var new_building := b as Node2D
+	if new_building == null:
 		push_error("[ConstructionProject] 建筑根节点非 Node2D: %s" % project_id)
 		return
 	# 注入元数据
-	if building is ScriptBuilding:
-		var typed: ScriptBuilding = building as ScriptBuilding
+	if new_building is ScriptBuilding:
+		var typed: ScriptBuilding = new_building as ScriptBuilding
 		typed.def_id = def_id
 		typed.cell_x = cell_x
 		typed.width = width
@@ -215,9 +215,9 @@ func _complete() -> void:
 	var host: Node2D = map.get("building_host") if "building_host" in map else null
 	if host == null:
 		push_error("[ConstructionProject] map.building_host 不存在: %s" % project_id)
-		building.queue_free()
+		new_building.queue_free()
 		return
-	host.add_child(building)
+	host.add_child(new_building)
 	# 计算世界坐标 X：建筑底部中心对齐条带 X 范围
 	var cell_size: int = 32
 	var placement_grid: Node = map.get("placement_grid") if "placement_grid" in map else null
@@ -225,17 +225,17 @@ func _complete() -> void:
 		cell_size = int(placement_grid.CELL_SIZE)
 	var world_x: float = float(cell_x) * float(cell_size) + float(cell_size * width) * 0.5
 	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	building.global_position = Vector2(world_x, ground_y)
+	new_building.global_position = Vector2(world_x, ground_y)
 	# 标记建筑为 OPERATIONAL（触发视觉/碰撞更新）
-	if building is ScriptBuilding:
-		(building as ScriptBuilding).set_state(ScriptBuilding.State.OPERATIONAL)
+	if new_building is ScriptBuilding:
+		(new_building as ScriptBuilding).set_state(ScriptBuilding.State.OPERATIONAL)
 	# 注册到 PlacementGrid（占用格子）
 	if placement_grid != null and placement_grid.has_method("occupy"):
-		placement_grid.occupy(cell_x, width, building)
+		placement_grid.occupy(cell_x, width, new_building)
 	# 切换状态
 	state = State.OPERATIONAL
-	self.building = building
-	completed.emit(self, building)
+	self.building = new_building
+	completed.emit(self, new_building)
 
 
 ## 取消项目（P0 简化：仅状态转换 + 通知工人离开）

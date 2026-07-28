@@ -212,12 +212,10 @@ func _jump_to_mouse(local_pos: Vector2) -> void:
 # ─────────────────────────────── 内部辅助 ────────────────────────────────
 
 func _anchor_top_center() -> void:
-	# 锚定到屏幕正上方中央
-	set_anchors_preset(Control.PRESET_TOP_WIDE)
-	# 计算居中位置
-	var vp_w: float = get_viewport_rect().size.x
-	var pos_x: float = (vp_w - MAP_WIDTH) * 0.5
-	position = Vector2(pos_x, 4.0)
+	# 锚定到屏幕正上方中央（左右锚点相等，避免 size 被父节点拉伸覆盖）
+	set_anchors_preset(Control.PRESET_CENTER_TOP)
+	# 相对锚点中心偏移到居中位置
+	position = Vector2(-MAP_WIDTH * 0.5, 4.0)
 	size = Vector2(MAP_WIDTH, MAP_HEIGHT)
 
 

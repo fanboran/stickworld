@@ -203,11 +203,11 @@ func _refresh_squad_list() -> void:
 		_squad_container.add_child(label)
 		return
 	for squad_id in squads:
-		var size: int = _formation.get_squad_size(squad_id) if _formation.has_method("get_squad_size") else 0
+		var squad_size: int = _formation.get_squad_size(squad_id) if _formation.has_method("get_squad_size") else 0
 		var leader: Node = _formation.get_squad_leader(squad_id) if _formation.has_method("get_squad_leader") else null
 		var leader_str: String = "无" if leader == null else "#%d" % leader.get_instance_id()
 		var entry := Label.new()
-		entry.text = "%s (%d人, 排长:%s)" % [squad_id, size, leader_str]
+		entry.text = "%s (%d人, 排长:%s)" % [squad_id, squad_size, leader_str]
 		_squad_container.add_child(entry)
 
 

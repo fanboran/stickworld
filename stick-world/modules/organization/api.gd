@@ -38,10 +38,10 @@ func setup(manager: OrganizationManager) -> void:
 ## 创建一个新组织
 ## [P] tier 必须在 1-5 范围内, tag 有效, parent 的 tier = tier+1（若存在）
 ## [Q] 发射 org_created
-func create_organization(name: String, tag: String, tier: int, parent_id: String) -> Dictionary:
+func create_organization(org_name: String, tag: String, tier: int, parent_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	return _manager.create_organization(name, tag, tier, parent_id)
+	return _manager.create_organization(org_name, tag, tier, parent_id)
 
 
 ## 获取组织数据

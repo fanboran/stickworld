@@ -158,8 +158,8 @@ func _make_decision() -> void:
 			_ordered_behavior = ""
 			_ordered_params = {}
 		else:
-			var current: String = _state_machine.get_current_behavior_name()
-			if current == _ordered_behavior:
+			var cur_behavior: String = _state_machine.get_current_behavior_name()
+			if cur_behavior == _ordered_behavior:
 				if not _state_machine.is_current_finished():
 					return  # 命令执行中，保持
 				# 命令完成，清除并转入正常决策

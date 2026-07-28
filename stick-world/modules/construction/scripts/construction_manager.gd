@@ -81,6 +81,8 @@ func register_building_scene(def_id: String, scene: PackedScene) -> void:
 
 
 ## P0 默认注册：bld_workshop
+## 注意：bld_workshop.tscn 为旧预制场景，仅作为 Building 节点结构参考。
+## 新版程序化建筑请使用 pg_smithy_lv1.tscn，待新版全面替代后删除此路径。
 func _register_default_building_scenes() -> void:
 	var workshop_scene := load("res://modules/building_gen/buildings/bld_workshop.tscn") as PackedScene
 	if workshop_scene != null:
@@ -130,7 +132,7 @@ func start_construction(region_id: String, building_type: String, org_id: String
 
 
 ## 开工建造（指定位置 cell_x）。返回 {ok:true, project_id, cell_x, width} 或 {ok:false, error}。
-func start_construction_at(region_id: String, building_type: String, cell_x: int, org_id: String = "") -> Dictionary:
+func start_construction_at(region_id: String, building_type: String, cell_x: int, _org_id: String = "") -> Dictionary:
 	if _map == null:
 		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
 	if not _building_scene_registry.has(building_type):
@@ -149,8 +151,7 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null
 	if placement_grid == null:
 		return {"ok": false, "error": "地图缺少 placement_grid"}
-	var ps := ScriptPlacementSystem.new()
-	var validate_result := ps.validate(placement_grid, cell_x, width)
+	var validate_result := ScriptPlacementSystem.validate(placement_grid, cell_x, width)
 	if not validate_result.ok:
 		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
 	# 创建项目
@@ -230,7 +231,7 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 
 ## 查询地块内的所有建筑 ID
 ## P0 简化：不区分 region，返回所有建筑
-func get_buildings_in_region(region_id: String) -> Array[String]:
+func get_buildings_in_region(_region_id: String) -> Array[String]:
 	var result: Array[String] = []
 	for b_id in _buildings.keys():
 		result.append(b_id as String)
@@ -300,8 +301,7 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null
 	if placement_grid == null:
 		return {"ok": false, "error": "地图缺少 placement_grid"}
-	var ps := ScriptPlacementSystem.new()
-	var validate_result := ps.validate(placement_grid, cell_x, width)
+	var validate_result := ScriptPlacementSystem.validate(placement_grid, cell_x, width)
 	if not validate_result.ok:
 		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
 
@@ -390,13 +390,13 @@ func demolish_building(building_id: String) -> Dictionary:
 ## 升级建筑
 ## [P] building 状态=OPERATIONAL, 科技满足升级条件
 ## [Q] building 状态=UPGRADING
-func upgrade_building(building_id: String) -> Dictionary:
+func upgrade_building(_building_id: String) -> Dictionary:
 	return {"ok": false, "error": "升级 P0 未实现"}
 
 
 ## 修理建筑
 ## [P] building 状态=DAMAGED
-func repair_building(building_id: String, org_id: String) -> Dictionary:
+func repair_building(_building_id: String, _org_id: String) -> Dictionary:
 	return {"ok": false, "error": "修理 P0 未实现"}
 
 

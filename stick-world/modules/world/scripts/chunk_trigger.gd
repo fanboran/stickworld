@@ -62,10 +62,13 @@ func _on_body_entered(body: Node) -> void:
 
 
 ## 向上查找 GameRoot 节点
+## 使用 duck typing (has_method) 而非 `is GameRoot` 类型检查，
+## 避免 game_root.gd preload 场景 → 场景引用 chunk_trigger.gd →
+## 编译时需要 GameRoot class_name → game_root.gd 的循环依赖。
 func _find_game_root() -> Node:
 	var p: Node = get_parent()
 	while p != null:
-		if p is GameRoot:
+		if p.has_method("request_map_travel"):
 			return p
 		p = p.get_parent()
 	return null

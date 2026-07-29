@@ -50,7 +50,6 @@ enabled=PackedStringArray("res://addons/map_editor/plugin.cfg")
 
 folder_colors={
 "res://modules/": "gray",
-"res://modules/world/": "blue",
 "res://modules/world_map/assets/": "blue",
 "res://modules/world_map/scripts/": "teal",
 "res://tests/": "red"

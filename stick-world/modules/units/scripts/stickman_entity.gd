@@ -100,6 +100,8 @@ var _startup_fix_elapsed: float = 0.0
 var _startup_done: bool = false
 ## Collider 原始尺寸（_ready 时保存，_apply_scale 时乘以 BASE_SCALE）
 var _collider_base_size: Vector2 = Vector2.ZERO
+## Range 原始尺寸（悬停检测范围，与 Collider 同步缩放）
+var _range_base_size: Vector2 = Vector2.ZERO
 
 # ─────────────────────────────── 战斗组件引用（§7.1）────────────────────────────────
 @onready var health_component: Node = get_node_or_null("HealthComponent")
@@ -142,14 +144,22 @@ func _ready() -> void:
 	_ai_controller = get_node_or_null("AIController")
 	# 从模型 marker 动态计算 foot_offset（适配不同参考系）
 	foot_offset = _calculate_foot_offset()
-	# 碰撞体移到脚部位置
+	# 碰撞体移到脚部位置（保留原始 X 偏移并缩放，不硬编码为 0）
 	var col := get_node_or_null("Collider") as CollisionShape2D
 	if col != null:
-		col.position = Vector2(0, foot_offset)
+		var col_orig_x: float = col.position.x
+		col.position = Vector2(col_orig_x * BASE_SCALE, foot_offset)
 		# duplicate shape 避免多实例共享同一资源导致 _apply_scale 互相覆盖
 		if col.shape is RectangleShape2D:
 			col.shape = (col.shape as RectangleShape2D).duplicate()
 			_collider_base_size = (col.shape as RectangleShape2D).size
+	# Range 节点也 duplicate shape 并保存原始尺寸
+	var rng := get_node_or_null("Range") as CollisionShape2D
+	if rng != null and rng.shape is RectangleShape2D:
+		rng.shape = (rng.shape as RectangleShape2D).duplicate()
+		_range_base_size = (rng.shape as RectangleShape2D).size
+		# Range position 也需要缩放（编辑器中的值基于原始大小，运行时需乘以 BASE_SCALE）
+		rng.position *= BASE_SCALE
 	# 应用初始缩放
 	_apply_scale()
 	# 播放 idle
@@ -159,6 +169,11 @@ func _ready() -> void:
 	# 战斗组件：死亡信号连接
 	if health_component != null:
 		health_component.died.connect(_on_died)
+
+
+## 外部设置上一帧有效位置（修复 add_child 时序：_ready 时 global_position 还是被默认值 (0,0)）
+func set_last_valid_position(pos: Vector2) -> void:
+	_last_valid_position = pos
 
 
 ## 从 RigHost 的 outfoot marker 位置计算脚部 Y 偏移。
@@ -343,6 +358,11 @@ func _apply_scale() -> void:
 		var col := get_node_or_null("Collider") as CollisionShape2D
 		if col != null and col.shape is RectangleShape2D:
 			(col.shape as RectangleShape2D).size = _collider_base_size * s
+	# 同步缩放 Range shape（悬停检测范围，与 Collider 同步缩放）
+	if _range_base_size != Vector2.ZERO:
+		var rng := get_node_or_null("Range") as CollisionShape2D
+		if rng != null and rng.shape is RectangleShape2D:
+			(rng.shape as RectangleShape2D).size = _range_base_size * s
 	_sync_markers_transform()
 
 

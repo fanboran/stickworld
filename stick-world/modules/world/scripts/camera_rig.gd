@@ -62,6 +62,10 @@ var _return_elapsed: float = 0.0
 var _edge_scroll_dir: int = 0
 ## 拖动状态
 var _dragging: bool = false
+## 中键滚动状态（红警风格：方向滚动，非拖动）
+var _middle_scrolling: bool = false
+## 中键滚动锚点（屏幕坐标，鼠标偏离此点决定滚动方向和速度）
+var _middle_anchor: Vector2 = Vector2.ZERO
 ## 拖动起始鼠标位置（屏幕坐标）
 var _drag_start_mouse: Vector2 = Vector2.ZERO
 ## 拖动起始相机位置（世界坐标）
@@ -109,9 +113,18 @@ func _physics_process(delta: float) -> void:
 	_update_edge_scroll()
 	# 更新手动控制（拖动 + 边缘）
 	_update_manual_control(delta)
+	# 中键滚动（红警风格：鼠标偏离锚点方向 = 相机移动方向）
+	if _middle_scrolling:
+		var mouse_pos: Vector2 = get_viewport().get_mouse_position()
+		var offset: Vector2 = mouse_pos - _middle_anchor
+		var dist: float = offset.length()
+		var dead_zone: float = 8.0
+		if dist > dead_zone:
+			var speed: float = (dist - dead_zone) * 4.0
+			var dir_x: float = offset.x / dist
+			global_position.x = _clamp_camera_x(global_position.x + dir_x * speed * delta)
 	# 手动控制冷却递减（拖动/缩放结束后等 N 秒无操作才弹回跟随）
-	# 注：居中模式松手立即弹回（在 _unhandled_input / jump_to_x 中处理）
-	if _manual_active and not _dragging and _edge_scroll_dir == 0 and _manual_cooldown > 0.0:
+	if _manual_active and not _dragging and not _middle_scrolling and _edge_scroll_dir == 0 and _manual_cooldown > 0.0:
 		_manual_cooldown -= delta
 		if _manual_cooldown <= 0.0:
 			_manual_cooldown = 0.0
@@ -148,6 +161,26 @@ func _unhandled_input(event: InputEvent) -> void:
 						_manual_cooldown = 0.0
 					else:
 						# 自由镜头模式：启动 5 秒冷却，期间无操作才弹回
+						_manual_cooldown = MANUAL_COOLDOWN_TIME
+		# 中键滚动（红警风格：鼠标偏离锚点方向 = 相机移动方向）
+		elif event.button_index == MOUSE_BUTTON_MIDDLE:
+			if event.pressed:
+				_middle_scrolling = true
+				_middle_anchor = event.position
+				_manual_active = true
+				_manual_cooldown = 0.0
+				_returning = false
+			else:
+				if _middle_scrolling:
+					_middle_scrolling = false
+					if centered_mode:
+						_manual_active = false
+						_manual_cooldown = 0.0
+						_returning = true
+						_return_elapsed = 0.0
+					elif _edge_scroll_dir != 0:
+						_manual_cooldown = 0.0
+					else:
 						_manual_cooldown = MANUAL_COOLDOWN_TIME
 		# 滚轮缩放
 		elif event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
@@ -265,7 +298,7 @@ func _update_edge_scroll() -> void:
 		if _edge_scroll_dir != 0:
 			_edge_scroll_dir = 0
 		return
-	if _dragging:
+	if _dragging or _middle_scrolling:
 		_edge_scroll_dir = 0
 		return
 	var vp_size: Vector2 = get_viewport_rect().size
@@ -427,6 +460,16 @@ func set_centered_mode(p_enabled: bool) -> void:
 
 func is_centered_mode() -> bool:
 	return centered_mode
+
+
+# ─────────────────────────────── 中键滚动查询（供 UI 显示图标）──────────────────────────────────
+
+func is_middle_scrolling() -> bool:
+	return _middle_scrolling
+
+
+func get_middle_anchor() -> Vector2:
+	return _middle_anchor
 
 
 ## RTS 式跳转：相机跳到指定 X 位置，暂停自动跟随

@@ -86,6 +86,16 @@ var _interior_mode: int = 0  # 0=NONE, 1=TRANSPARENT, 2=TELEPORT
 ## 大建筑内部地图 ID（仅 TELEPORT 模式，P0 硬编码）
 var mega_interior_map_id: String = ""
 
+# ─────────────────────────────── 城墙相关（阶段 F §5.7.4）──────────────────────────────────
+## 城墙等级（0=非城墙, 1/2/3=城墙 tier）
+var wall_tier: int = 0
+## 城墙顶部可站人
+var can_stand_on: bool = false
+## 城门（允许己方通行，可关闭拒敌）
+var is_gate: bool = false
+## 城墙顶部站立平台（tier>=2 时存在）
+var _stand_platform: Area2D = null
+
 # ─────────────────────────────── 信号 ────────────────────────────────
 
 ## 建筑被拆除。参数为自身引用，供外部释放 PlacementGrid 占用。
@@ -107,6 +117,12 @@ func _ready() -> void:
 func apply_building_def(def: Dictionary) -> void:
 	_interior_mode = int(def.get("interior_mode", 0))
 	mega_interior_map_id = String(def.get("mega_interior_map_id", ""))
+	# 阶段 F：城墙字段
+	wall_tier = int(def.get("wall_tier", 0))
+	can_stand_on = bool(def.get("can_stand_on", false))
+	is_gate = bool(def.get("is_gate", false))
+	max_health = float(def.get("max_hp", 100.0))
+	health = max_health
 
 
 # ─────────────────────────────── 子节点查找 ────────────────────────────────
@@ -155,6 +171,9 @@ func _lookup_children() -> void:
 	if _enter_trigger != null:
 		if not _enter_trigger.body_entered.is_connected(_on_enter_trigger_body_entered):
 			_enter_trigger.body_entered.connect(_on_enter_trigger_body_entered)
+
+	# 阶段 F：城墙站立平台（tier>=2 城墙顶部）
+	_stand_platform = get_node_or_null("StandPlatform") as Area2D
 
 	if _exterior == null:
 		push_warning("[Building] 缺少 Exterior/Sprite2D 子节点: %s" % name)
@@ -243,10 +262,18 @@ func _apply_state_visual() -> void:
 # ─────────────────────────────── 拆除/伤害 ────────────────────────────────
 
 ## 拆除：发射 demolished 信号，由外部 PlacementGrid 释放占用。
+## 阶段 F：城墙被破坏时 PassageBarrier 消失（可通过）。
 func demolish() -> void:
 	if state == State.DESTROYED:
 		return
 	set_state(State.DESTROYED)
+	# 城墙/城门被破坏时禁用 PassageBarrier，单位可通过
+	if _passage_barrier != null and wall_tier > 0:
+		_passage_barrier.monitoring = false
+		_passage_barrier.visible = false
+		for child in _passage_barrier.get_children():
+			if child is CollisionShape2D:
+				(child as CollisionShape2D).set_deferred("disabled", true)
 	demolished.emit(self)
 
 
@@ -269,6 +296,11 @@ func is_operational() -> bool:
 ## 是否正在建造中
 func is_under_construction() -> bool:
 	return state == State.UNDER_CONSTRUCTION
+
+
+## 阶段 F：是否城墙类建筑（wall_tier > 0）
+func is_wall() -> bool:
+	return wall_tier > 0
 
 
 ## 获取 PassageBarrier Area2D（供 VillageMap.get_passage_barriers 收集）

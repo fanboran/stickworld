@@ -40,6 +40,19 @@ extends Node2D
 ## 草地纹理平铺尺寸（世界坐标 px，每 GRASS_TILE_SIZE 像素重复一次纹理）
 const GRASS_TILE_SIZE: float = 512.0
 
+# ─────────────────────────────── 动态地图模型（阶段 F §5.7.2）────────────────────────────────
+## 城镇中心的世界坐标 X（运行时原点，加载时确定）
+var town_center_world_x: float = 0.0
+## 可移动范围外推格数（最外围建筑外推 128 格）
+const WALKABLE_MARGIN: int = 128
+## 扩展粒度（64 格向上取整）
+const EXPAND_GRANULARITY: int = 64
+## 动态边界（cell 坐标）
+var map_left_cell: int = 0
+var map_right_cell: int = 0
+## 是否已初始化动态边界
+var _dynamic_bounds_initialized: bool = false
+
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var placement_grid: Node = get_node_or_null(WorldAPI.PATH_MAP_PLACEMENT_GRID)
 @onready var terrain_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_LAYER)
@@ -70,6 +83,7 @@ func _ready() -> void:
 	_apply_grass_texture()
 	_sync_build_mask()
 	_register_terrain_buildings()
+	_init_dynamic_bounds()
 
 
 func _validate_children() -> void:
@@ -145,6 +159,129 @@ func _register_terrain_buildings() -> void:
 		placement_grid.occupy(cell_x, width_cells, building.name)
 
 
+# ─────────────────────────────── 动态地图模型（阶段 F §5.7.2）────────────────────────────────
+
+## 初始化动态边界：从 map_left/map_right 计算 cell 范围，扩展 PlacementGrid
+func _init_dynamic_bounds() -> void:
+	if _dynamic_bounds_initialized:
+		return
+	# 城镇中心 = 地图中间
+	town_center_world_x = (map_left + map_right) * 0.5
+	if placement_grid != null:
+		map_left_cell = int(map_left / placement_grid.CELL_SIZE)
+		map_right_cell = int(map_right / placement_grid.CELL_SIZE)
+		# 扩展 PlacementGrid 覆盖整个地图范围
+		placement_grid.expand_to(map_left_cell)
+		placement_grid.expand_to(map_right_cell)
+	else:
+		map_left_cell = int(map_left / 32)
+		map_right_cell = int(map_right / 32)
+	_dynamic_bounds_initialized = true
+
+
+## 扩展地图以包含指定 cell_x（建筑放置时由 ConstructionManager 触发）。
+## 以 64 格为单位向上取整，可移动范围 = 最外围建筑 + 128 格。
+func expand_map(cell_x: int, width: int = 1) -> void:
+	_init_dynamic_bounds()
+	# 计算需要的可移动范围（建筑外缘 + WALKABLE_MARGIN）
+	var needed_right: int = cell_x + width + WALKABLE_MARGIN
+	var needed_left: int = cell_x - WALKABLE_MARGIN
+	# 64 格向上取整
+	needed_right = int(ceil(float(needed_right) / EXPAND_GRANULARITY)) * EXPAND_GRANULARITY
+	needed_left = int(floor(float(needed_left) / EXPAND_GRANULARITY)) * EXPAND_GRANULARITY
+	var changed: bool = false
+	if needed_right > map_right_cell:
+		map_right_cell = needed_right
+		changed = true
+	if needed_left < map_left_cell:
+		map_left_cell = needed_left
+		changed = true
+	if not changed:
+		return
+	# 更新世界坐标边界
+	if placement_grid != null:
+		map_left = map_left_cell * placement_grid.CELL_SIZE
+		map_right = map_right_cell * placement_grid.CELL_SIZE
+		placement_grid.expand_to(map_left_cell)
+		placement_grid.expand_to(map_right_cell)
+	else:
+		map_left = map_left_cell * 32.0
+		map_right = map_right_cell * 32.0
+	# 更新 GroundPolygon 顶点
+	_update_ground_polygon()
+	# 更新所有已存在实体的边界约束（修复空气墙：expand_map 后实体仍用旧的 map_left/map_right）
+	if entity_host != null:
+		for entity in entity_host.get_children():
+			if entity.has_method("set_ground_constraints"):
+				entity.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)
+	print("[VillageMap] 地图扩展: left_cell=%d right_cell=%d (world %.0f~%.0f)" % [map_left_cell, map_right_cell, map_left, map_right])
+
+
+## 更新 GroundPolygon 顶点以匹配当前 map_left/map_right
+func _update_ground_polygon() -> void:
+	if terrain_layer == null:
+		return
+	var gp: Polygon2D = terrain_layer.get_node_or_null("GroundPolygon")
+	if gp == null:
+		return
+	var p := PackedVector2Array()
+	p.append(Vector2(map_left, ground_y))
+	p.append(Vector2(map_right, ground_y))
+	p.append(Vector2(map_right, ground_bottom))
+	p.append(Vector2(map_left, ground_bottom))
+	gp.polygon = p
+
+
+## 获取可移动范围（世界坐标 X）
+func get_walkable_bounds() -> Vector2:
+	return Vector2(map_left, map_right)
+
+
+# ─────────────────────────────── 垂直地形网格 + 资源点生成（阶段 F §5.7.4.5）────────────────────────────────
+## 垂直格子大小（与水平 CELL_SIZE 一致，32px）
+const TERRAIN_CELL_SIZE_Y: float = 32.0
+const ScriptResourceNode := preload("res://modules/world/scripts/resource_node.gd")
+
+## 获取地面垂直行数（ground_y ~ ground_bottom 之间按 32px 分行）
+func get_terrain_row_count() -> int:
+	return maxi(1, int((ground_bottom - ground_y) / TERRAIN_CELL_SIZE_Y))
+
+
+## 在指定 cell_x 的地面上生成随机 Y 位置（垂直网格内随机行）
+func random_resource_y(cell_x: int) -> float:
+	var rows: int = get_terrain_row_count()
+	var row: int = randi() % rows
+	return ground_y + row * TERRAIN_CELL_SIZE_Y + TERRAIN_CELL_SIZE_Y * 0.5
+
+
+## 在指定 cell 范围内程序化生成自然资源点。
+## start_cell / end_cell: cell_x 范围
+## density: 每格资源点概率（0.0~1.0）
+## 返回生成的 ResourceNode 数组
+func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> Array:
+	if decoration_layer == null:
+		return []
+	var nodes: Array = []
+	for cx in range(start_cell, end_cell):
+		if randf() > density:
+			continue
+		# 随机资源类型（0=WOOD, 1=STONE, 2=METAL）
+		var rtype: int = randi() % 3
+		# METAL 更稀有
+		if rtype == 2 and randf() > 0.3:
+			rtype = 0
+		var node: Node2D = ScriptResourceNode.new()
+		node.resource_type = rtype
+		node.amount = 50 + randi() % 100
+		var px: float = cx * 32.0 + 16.0
+		var py: float = random_resource_y(cx)
+		node.position = Vector2(px, py)
+		decoration_layer.add_child(node)
+		nodes.append(node)
+	print("[VillageMap] 生成 %d 个资源点 (cell %d~%d, density=%.2f)" % [nodes.size(), start_cell, end_cell, density])
+	return nodes
+
+
 # ─────────────────────────────── 通行障碍查询（§7.1.2）────────────────────────────────
 
 ## 获取所有 WalkBarrier Area2D 列表（地图级通行障碍）
@@ -191,6 +328,12 @@ uniform float color_jitter = 0.15;   // 明暗变化强度
 uniform float noise_scale = 0.0006;  // 噪波频率（越小=色块越大）
 uniform bool random_flip = true;     // 随机翻转
 uniform float seam_blend = 0.2;      // 接缝过渡宽度（占格子比例）
+
+// 阶段 F §5.7.3：城内/城外地形混合
+uniform vec4 city_color = vec4(0.45, 0.38, 0.28, 1.0);  // 城内泥土色
+uniform float city_left_x = -99999.0;   // 城内左边界（世界坐标）
+uniform float city_right_x = -99999.0;  // 城内右边界（世界坐标）
+uniform float city_fade = 320.0;        // 过渡带宽度（10 格 = 320px）
 
 // 传递顶点局部坐标（= 世界坐标）到 fragment，避免 fragment 中 VERTEX 是视空间导致贴图不跟随世界
 varying vec2 world_pos;
@@ -269,6 +412,11 @@ void fragment() {
 	float n = fbm(world_pos * noise_scale);
 	float tint = 1.0 + (n - 0.5) * 2.0 * color_jitter;
 	COLOR.rgb *= tint;
+
+	// 阶段 F §5.7.3：城内/城外地形混合
+	float city_factor = smoothstep(city_left_x - city_fade, city_left_x + city_fade, world_pos.x)
+		* (1.0 - smoothstep(city_right_x - city_fade, city_right_x + city_fade, world_pos.x));
+	COLOR = mix(COLOR, city_color, city_factor * 0.6);
 }
 """
 
@@ -301,6 +449,37 @@ func _apply_grass_texture() -> void:
 	gp.material = mat
 	# 纹理颜色不需要 color 调色，设为白色避免叠加
 	gp.color = Color.WHITE
+
+
+## 阶段 F §5.7.3：设置城内范围（世界坐标），更新地形遮罩 Shader 参数。
+## 城墙建造时调用此方法标记城内区域。
+func set_city_bounds(left_x: float, right_x: float) -> void:
+	if terrain_layer == null:
+		return
+	var gp: Polygon2D = terrain_layer.get_node_or_null("GroundPolygon")
+	if gp == null or gp.material == null:
+		return
+	gp.material.set_shader_parameter("city_left_x", left_x)
+	gp.material.set_shader_parameter("city_right_x", right_x)
+
+
+## 阶段 F：根据城墙建筑列表自动计算城内范围并更新地形遮罩。
+## city_walls: Array of {cell_x, width}，取最左和最右城墙作为城内边界。
+func update_terrain_mask_from_walls(city_walls: Array) -> void:
+	if city_walls.is_empty():
+		return
+	var min_x: float = INF
+	var max_x: float = -INF
+	for wall in city_walls:
+		if wall is Dictionary:
+			var cx: int = wall.get("cell_x", 0)
+			var w: int = wall.get("width", 1)
+			var left_x: float = cx * 32.0
+			var right_x: float = (cx + w) * 32.0
+			min_x = min(min_x, left_x)
+			max_x = max(max_x, right_x)
+	if min_x != INF and max_x != -INF:
+		set_city_bounds(min_x, max_x)
 
 
 ## 在 assets/environment/ 目录下查找 grassland 开头的图片文件，返回绝对路径
@@ -379,6 +558,9 @@ func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
 		return null
 	entity_host.add_child(instance)
 	instance.global_position = p_position
+	# 修复：_ready 中 _last_valid_position 被初始化为 (0,0)，这里刷新为正确位置
+	if instance.has_method("set_last_valid_position"):
+		instance.set_last_valid_position(p_position)
 	# 注入地面约束参数（详见 §7.1.1）
 	if instance.has_method("set_ground_constraints"):
 		instance.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)

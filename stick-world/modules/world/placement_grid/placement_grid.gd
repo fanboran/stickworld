@@ -10,6 +10,8 @@ extends Node
 ##   - 占地登记（occupy）
 ##   - 冲突检测（is_occupied）
 ##   - 世界坐标↔条带坐标互转
+##
+## 阶段 F：支持动态扩展（expand_to），cell_x 可为负数（相对坐标系统）。
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
 const ScriptGridCell := preload("res://modules/world/placement_grid/grid_cell.gd")
@@ -22,20 +24,24 @@ signal cell_occupied(cell_x: int, occupant: Variant)
 ## 信号：条带被释放
 signal cell_released(cell_x: int)
 
-## 网格宽度（条带数）
+## 初始网格宽度（条带数）。运行时可通过 expand_to 动态扩展。
 @export var grid_width: int = 64
 
 ## 内部存储：cell_x -> GridCell
 var _cells: Dictionary = {}
 
-## BuildMask 不可放建筑区域掩码（1=不可放建筑）
-## 1D 数组，与 grid_width 同长度
-var blockage_mask: PackedByteArray = PackedByteArray()
+## BuildMask 不可放建筑区域（cell_x -> bool，支持负数坐标）
+var _blockage: Dictionary = {}
+
+## 动态边界（运行时可扩展）
+var _min_cell: int = 0
+var _max_cell: int = 0
 
 
 func _ready() -> void:
 	_init_cells()
-	_init_blockage_mask()
+	_min_cell = 0
+	_max_cell = grid_width - 1
 
 
 func _init_cells() -> void:
@@ -44,9 +50,34 @@ func _init_cells() -> void:
 		_cells[x] = ScriptGridCell.new(x)
 
 
-func _init_blockage_mask() -> void:
-	blockage_mask.resize(grid_width)
-	blockage_mask.fill(0)
+# ─────────────────────────────── 动态扩展 ────────────────────────────────
+
+## 扩展网格范围以包含指定 cell_x（支持负数）
+func expand_to(cell_x: int) -> void:
+	if cell_x < _min_cell:
+		for x in range(cell_x, _min_cell):
+			if not _cells.has(x):
+				_cells[x] = ScriptGridCell.new(x)
+		_min_cell = cell_x
+	if cell_x > _max_cell:
+		for x in range(_max_cell + 1, cell_x + 1):
+			if not _cells.has(x):
+				_cells[x] = ScriptGridCell.new(x)
+		_max_cell = cell_x
+
+
+## 扩展网格范围以包含连续 N 个条带（从 cell_x 开始）
+func expand_range(cell_x: int, w: int) -> void:
+	expand_to(cell_x)
+	expand_to(cell_x + w - 1)
+
+
+func get_min_cell() -> int:
+	return _min_cell
+
+
+func get_max_cell() -> int:
+	return _max_cell
 
 
 # ─────────────────────────────── 坐标转换 ────────────────────────────────
@@ -65,7 +96,7 @@ func cell_to_world(cell_x: int) -> float:
 
 ## 条带坐标是否在网格范围内
 func is_in_bounds(cell_x: int) -> bool:
-	return cell_x >= 0 and cell_x < grid_width
+	return cell_x >= _min_cell and cell_x <= _max_cell
 
 
 # ─────────────────────────────── 查询 ────────────────────────────────
@@ -83,9 +114,7 @@ func is_occupied(cell_x: int) -> bool:
 
 ## 条带是否被 BuildMask 标记为不可放建筑（地形限制）
 func is_blocked(cell_x: int) -> bool:
-	if not is_in_bounds(cell_x):
-		return true
-	return blockage_mask[cell_x] == 1
+	return _blockage.get(cell_x, false)
 
 
 ## 连续 N 个条带是否全部空闲（可建）
@@ -150,9 +179,7 @@ func clear() -> void:
 
 ## 标记单个条带为不可放建筑（地形限制）
 func set_blocked(cell_x: int, blocked: bool = true) -> void:
-	if not is_in_bounds(cell_x):
-		return
-	blockage_mask[cell_x] = 1 if blocked else 0
+	_blockage[cell_x] = blocked
 
 
 ## 标记连续区域为不可放建筑
@@ -163,14 +190,14 @@ func set_blocked_area(cell_x: int, w: int, blocked: bool = true) -> void:
 
 ## 清空所有 BuildMask 标记
 func clear_blockage() -> void:
-	blockage_mask.fill(0)
+	_blockage.clear()
 
 
 ## 获取被 BuildMask 标记的条带数
 func get_blocked_count() -> int:
 	var count: int = 0
-	for i in range(blockage_mask.size()):
-		if blockage_mask[i] == 1:
+	for v in _blockage.values():
+		if v:
 			count += 1
 	return count
 
@@ -187,6 +214,6 @@ func get_occupied_count() -> int:
 	return count
 
 
-## 总条带数
+## 总条带数（动态范围）
 func get_total_count() -> int:
-	return grid_width
+	return _max_cell - _min_cell + 1

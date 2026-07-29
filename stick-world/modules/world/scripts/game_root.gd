@@ -12,13 +12,17 @@ extends Node2D
 # WorldAPI / PlayerControlAPI 是全局 class_name，无需 preload
 
 ## 测试村落地图场景（P0 硬编码）
-const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/test_village_map.tscn")
+const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_village_map.tscn")
 ## 第二个测试村落地图场景（阶段 0.8 多场景衔接）
-const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/test_village_map_b.tscn")
+const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_village_map_b.tscn")
 ## 道路地图场景（阶段 0.8 村落间道路）
-const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/test_road_map.tscn")
+const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_road_map.tscn")
 ## 测试大建筑内部地图场景（阶段 0.9.5 传送切换）
-const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/test_mega_interior.tscn")
+const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_mega_interior.tscn")
+## 遭遇战战场地图场景（阶段 F）
+const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_battlefield_map.tscn")
+## 森林附属区域场景（阶段 F）
+const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_forest_zone.tscn")
 ## 玩家火柴人实体场景
 const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 ## EXPLORE 模式 handler 脚本
@@ -58,6 +62,16 @@ const _PossessPanelScript: GDScript = preload("res://modules/ui/scripts/possess_
 const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
 ## Resources api 脚本（资源模块公共接口）
 const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
+## MapBoundaryDetector 脚本（阶段 F 边界检测出城系统）
+const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/map_boundary_detector.gd")
+## WorldMapPanel 脚本（阶段 F 大世界地图占位 UI）
+const _WorldMapPanelScript: GDScript = preload("res://modules/world/scripts/world_map_panel.gd")
+## PossessionIndicator 脚本（主控单位圆圈 UI）
+const _PossessionIndicatorScript: GDScript = preload("res://modules/ui/scripts/possession_indicator.gd")
+## HoverIndicator 脚本（鼠标悬停方框 UI）
+const _HoverIndicatorScript: GDScript = preload("res://modules/ui/scripts/hover_indicator.gd")
+## MiddleScrollOverlay 脚本（中键滚动图标 UI）
+const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui/scripts/middle_scroll_overlay.gd")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -67,6 +81,10 @@ const ROAD_MAP_ID := "road_a_to_b"
 const VILLAGE_B_MAP_ID := "test_village_b"
 ## 测试大建筑内部地图 ID
 const MEGA_INTERIOR_MAP_ID := "test_mega_interior"
+## 遭遇战战场地图 ID（阶段 F）
+const BATTLEFIELD_MAP_ID := "test_battlefield"
+## 森林附属区域地图 ID（阶段 F）
+const FOREST_ZONE_MAP_ID := "test_forest_zone"
 ## 玩家初始 X 位置（地图坐标系，偏左便于观察）
 const PLAYER_SPAWN_X: float = 300.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为）
@@ -136,6 +154,14 @@ var _return_spawn_x: float = 0.0
 @onready var ui_root: CanvasLayer = get_node_or_null(WorldAPI.PATH_UI_ROOT)
 @onready var battle_director: Node = get_node_or_null(WorldAPI.PATH_BATTLE_DIRECTOR)
 
+# ─────────────────────────────── 阶段 F 子系统 ────────────────────────────────
+var _boundary_detector: Node = null
+var _world_map_panel: Control = null
+# ─────────────────────────────── 游玩 UI ────────────────────────────────
+var _possession_indicator: Control = null
+var _hover_indicator: Control = null
+var _middle_scroll_overlay: Control = null
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
@@ -157,6 +183,10 @@ func _ready() -> void:
 	_register_default_maps()
 	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
 	_register_explore_handler()
+	# 阶段 F：边界检测 + 大世界地图
+	_setup_boundary_detector()
+	# 游玩 UI：主控圆圈 + 悬停方框
+	_setup_game_ui()
 	# 默认 X1 速度
 	if TimeManager:
 		TimeManager.set_speed(TimeManager.Speed.X1)
@@ -492,6 +522,79 @@ func _register_explore_handler() -> void:
 	input_dispatcher.register_handler(PlayerControlAPI.Mode.EXPLORE, handler)
 
 
+# ─────────────────────────────── 阶段 F：边界检测出城系统 ────────────────────────────────
+
+func _setup_boundary_detector() -> void:
+	# 实例化边界检测器
+	_boundary_detector = Node.new()
+	_boundary_detector.set_script(_MapBoundaryDetectorScript)
+	_boundary_detector.name = "MapBoundaryDetector"
+	add_child(_boundary_detector)
+	# 实例化大世界地图面板
+	_world_map_panel = Control.new()
+	_world_map_panel.set_script(_WorldMapPanelScript)
+	_world_map_panel.name = "WorldMapPanel"
+	if ui_root != null:
+		ui_root.add_child(_world_map_panel)
+	else:
+		add_child(_world_map_panel)
+	# 连接信号
+	_boundary_detector.open_world_map_requested.connect(_world_map_panel.toggle)
+	_world_map_panel.travel_requested.connect(_on_world_map_travel)
+	# 配置默认目的地
+	_setup_default_destinations()
+
+
+func _setup_default_destinations() -> void:
+	if _world_map_panel == null:
+		return
+	var dests := [
+		{"label": "前往道路 (-> 村落 B)", "map_id": ROAD_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
+		{"label": "返回村落 A", "map_id": TEST_VILLAGE_MAP_ID, "entry_side": WorldAPI.EntrySide.RIGHT},
+		{"label": "前往村落 B", "map_id": VILLAGE_B_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
+		{"label": "进入遭遇战战场", "map_id": BATTLEFIELD_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
+		{"label": "进入森林附属区域", "map_id": FOREST_ZONE_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
+	]
+	_world_map_panel.set_destinations(dests)
+
+
+func _on_world_map_travel(target_map_id: String, entry_side: int) -> void:
+	if scene_loader != null and scene_loader.has_method("travel_to_map"):
+		scene_loader.travel_to_map(target_map_id, WorldAPI.TravelMode.WALK, entry_side)
+
+
+# ─────────────────────────────── 游玩 UI ────────────────────────────────
+
+func _setup_game_ui() -> void:
+	# 主控单位圆圈
+	_possession_indicator = Control.new()
+	_possession_indicator.set_script(_PossessionIndicatorScript)
+	_possession_indicator.name = "PossessionIndicator"
+	_possession_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ui_root != null:
+		ui_root.add_child(_possession_indicator)
+	else:
+		add_child(_possession_indicator)
+	# 鼠标悬停方框
+	_hover_indicator = Control.new()
+	_hover_indicator.set_script(_HoverIndicatorScript)
+	_hover_indicator.name = "HoverIndicator"
+	_hover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ui_root != null:
+		ui_root.add_child(_hover_indicator)
+	else:
+		add_child(_hover_indicator)
+	# 中键滚动图标
+	_middle_scroll_overlay = Control.new()
+	_middle_scroll_overlay.set_script(_MiddleScrollOverlayScript)
+	_middle_scroll_overlay.name = "MiddleScrollOverlay"
+	_middle_scroll_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ui_root != null:
+		ui_root.add_child(_middle_scroll_overlay)
+	else:
+		add_child(_middle_scroll_overlay)
+
+
 func _register_default_maps() -> void:
 	if scene_loader == null or not scene_loader.has_method("register_map"):
 		return
@@ -500,6 +603,10 @@ func _register_default_maps() -> void:
 	scene_loader.register_map(ROAD_MAP_ID, _ROAD_MAP_SCENE, WorldAPI.MapType.ROAD)
 	scene_loader.register_map(VILLAGE_B_MAP_ID, _VILLAGE_MAP_B_SCENE, WorldAPI.MapType.VILLAGE)
 	scene_loader.register_map(MEGA_INTERIOR_MAP_ID, _MEGA_INTERIOR_SCENE, WorldAPI.MapType.MEGA_INTERIOR)
+	# 阶段 F：注册遭遇战战场地图
+	scene_loader.register_map(BATTLEFIELD_MAP_ID, _BATTLEFIELD_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
+	# 阶段 F：注册森林附属区域
+	scene_loader.register_map(FOREST_ZONE_MAP_ID, _FOREST_ZONE_SCENE, WorldAPI.MapType.VILLAGE)
 	# 配置地图出口（步行衔接，详见 §6.2）
 	scene_loader.register_map_exit(TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT)
@@ -560,10 +667,24 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 	# 注入地图到 ConstructionManager（供项目实例化建筑用）
 	if _construction_manager != null and _construction_manager.has_method("set_map"):
 		_construction_manager.set_map(map)
+	# 阶段 F：注入地图到 MapBoundaryDetector
+	if _boundary_detector != null and _boundary_detector.has_method("set_map"):
+		_boundary_detector.set_map(map)
 	# 仅初始加载时 spawn 初始建筑、NPC 和演示建造
 	if not _initial_map_loaded:
 		_initial_map_loaded = true
 		_spawn_initial_buildings(map)
+		# 重新设置相机边界（初始建筑可能触发了地图动态扩展，map_left/map_right 已变化）
+		if camera_rig != null and camera_rig.has_method("set_map_bounds"):
+			camera_rig.set_map_bounds(map.map_left, map.map_right)
+		# 重新设置小地图范围
+		if _minimap != null and _minimap.has_method("set_map_info"):
+			_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
+		# 阶段 F：程序化生成自然资源点（地图两侧边缘，避开中心建筑区）
+		if map.has_method("generate_resource_nodes"):
+			var right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
+			map.generate_resource_nodes(0, 15, 0.25)
+			map.generate_resource_nodes(right_cell - 15, right_cell, 0.25)
 		_spawn_npcs(map, spawn_y)
 		# 自动触发演示建造（test_stage_03 等旧测试应通过 auto_demo_building=false 关闭）
 		if auto_demo_building:
@@ -666,6 +787,11 @@ func _register_debug_drawers() -> void:
 	DebugApi.register_drawer("chunk_trigger_drawer", Callable(_DebugDrawers, "draw_chunk_triggers"))
 	DebugApi.register_drawer("entity_state_drawer", Callable(_DebugDrawers, "draw_entity_states"))
 	DebugApi.register_drawer("entity_collider_drawer", Callable(_DebugDrawers, "draw_entity_colliders"))
+	DebugApi.register_drawer("terrain_grid", Callable(_DebugDrawers, "draw_terrain_grid"))
+	DebugApi.register_drawer("resource_nodes", Callable(_DebugDrawers, "draw_resource_nodes"))
+	DebugApi.register_drawer("building_names", Callable(_DebugDrawers, "draw_building_names"))
+	DebugApi.register_drawer("world_ruler", Callable(_DebugDrawers, "draw_world_ruler"))
+	DebugApi.register_drawer("entity_info", Callable(_DebugDrawers, "draw_entity_info"))
 
 
 func _validate_children() -> void:

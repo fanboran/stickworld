@@ -57,3 +57,63 @@ func get_active_battles() -> Array:
 ## 获取所有战斗（含已结束）
 func get_all_battles() -> Array:
 	return _battles
+
+
+# ─────────────────────────────── 攻城战（阶段 F §5.7.6）──────────────────────────────────
+
+## 在城镇地图上启动攻城战（不切换场景，城镇地图即战场）。
+## attacker_units: 攻城方单位, defender_units: 守城方单位
+## siege_side: 0=从左侧攻城, 1=从右侧攻城
+## 返回创建的 BattleInstance（失败返回 null）
+func start_siege_battle(map: Node2D, attacker_units: Array, defender_units: Array, siege_side: int = 1) -> Node:
+	if map == null:
+		push_error("[BattleDirector] map 为空，无法启动攻城战")
+		return null
+	# 查找城墙，确定攻城方 spawn 位置
+	var wall_x: float = _find_outermost_wall_x(map, siege_side)
+	var spawn_x: float = wall_x + 200.0 if siege_side == 1 else wall_x - 200.0
+	# 设置攻城方单位位置
+	var ground_y: float = map.ground_y if "ground_y" in map else 810.0
+	var ground_bottom: float = map.ground_bottom if "ground_bottom" in map else 1080.0
+	var mid_y: float = (ground_y + ground_bottom) * 0.5
+	for i in range(attacker_units.size()):
+		var u: Node2D = attacker_units[i]
+		if is_instance_valid(u):
+			u.global_position = Vector2(spawn_x, mid_y + (i % 5) * 30 - 60)
+	# 复用 start_battle_at 在城镇地图上启动战斗
+	return start_battle_at(map, attacker_units, defender_units)
+
+
+## 查找最外层城墙的 X 坐标（攻城方从该侧接近）
+func _find_outermost_wall_x(map: Node2D, siege_side: int) -> float:
+	var building_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST)
+	var map_left: float = map.map_left if "map_left" in map else 0.0
+	var map_right: float = map.map_right if "map_right" in map else 8192.0
+	if building_host == null:
+		return map_right if siege_side == 1 else map_left
+	var wall_x: float = map_right if siege_side == 1 else map_left
+	for building in building_host.get_children():
+		if building.has_method("is_wall") and building.is_wall():
+			var bx: float = building.global_position.x
+			if siege_side == 1:
+				wall_x = max(wall_x, bx)
+			else:
+				wall_x = min(wall_x, bx)
+	return wall_x
+
+
+# ─────────────────────────────── 战场持续性（阶段 F §5.7.8）──────────────────────────────────
+
+## 标记玩家离开战场，AI 接管。
+## P0 简化：仅标记 + BattleInstance 继续 tick。完整 AI 指挥在 P1+ 实现。
+func mark_player_absent(battle: Node) -> void:
+	if battle != null and battle.has_method("set_player_present"):
+		battle.set_player_present(false)
+	print("[BattleDirector] 玩家离开战场，AI 接管")
+
+
+## 标记玩家返回战场
+func mark_player_present(battle: Node) -> void:
+	if battle != null and battle.has_method("set_player_present"):
+		battle.set_player_present(true)
+	print("[BattleDirector] 玩家返回战场")

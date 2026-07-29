@@ -80,7 +80,7 @@ func register_building_scene(def_id: String, scene: PackedScene) -> void:
 	_building_scene_registry[def_id] = scene
 
 
-## P0 默认注册：bld_workshop
+## P0 默认注册：bld_workshop + 城墙/城门（阶段 F）
 ## 注意：bld_workshop.tscn 为旧预制场景，仅作为 Building 节点结构参考。
 ## 新版程序化建筑请使用 pg_smithy_lv1.tscn，待新版全面替代后删除此路径。
 func _register_default_building_scenes() -> void:
@@ -89,6 +89,19 @@ func _register_default_building_scenes() -> void:
 		register_building_scene("bld_workshop", workshop_scene)
 	else:
 		push_warning("[ConstructionManager] 无法加载 bld_workshop.tscn")
+	# 阶段 F：城墙/城门场景注册
+	var wall_scenes := {
+		"bld_wall_tier1": "res://modules/building_gen/buildings/bld_wall_tier1.tscn",
+		"bld_wall_tier2": "res://modules/building_gen/buildings/bld_wall_tier2.tscn",
+		"bld_wall_tier3": "res://modules/building_gen/buildings/bld_wall_tier3.tscn",
+		"bld_wall_gate": "res://modules/building_gen/buildings/bld_wall_gate.tscn",
+	}
+	for def_id: String in wall_scenes.keys():
+		var scene := load(wall_scenes[def_id]) as PackedScene
+		if scene != null:
+			register_building_scene(def_id, scene)
+		else:
+			push_warning("[ConstructionManager] 无法加载 %s.tscn" % def_id)
 
 
 # ─────────────────────────────── 建筑定义数据驱动（P0-6）────────────────────────────────
@@ -151,9 +164,14 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null
 	if placement_grid == null:
 		return {"ok": false, "error": "地图缺少 placement_grid"}
+	# 阶段 F：建造前触发地图动态扩展
+	if _map.has_method("expand_map"):
+		_map.expand_map(cell_x, width)
 	var validate_result := ScriptPlacementSystem.validate(placement_grid, cell_x, width)
 	if not validate_result.ok:
 		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
+	# 阶段 F：建造自动清场（砍树给木材）
+	_clear_resource_nodes_in_area(cell_x, width, region_id)
 	# 创建项目
 	var project_id := "proj_%04d" % _next_project_id
 	_next_project_id += 1
@@ -223,8 +241,51 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 	_buildings[building_id] = building
 	_building_to_id[building] = building_id
 	print("[ConstructionManager] 建筑完工: %s (def=%s, cell_x=%d)" % [building_id, project.def_id, project.cell_x])
+	# 阶段 F：城墙完工时更新地形遮罩
+	if building is ScriptBuilding and (building as ScriptBuilding).is_wall():
+		_update_city_terrain_mask()
 	# 转发给 api.gd（building_completed 信号）
 	building_completed.emit(building_id, project.region_id)
+
+
+# ─────────────────────────────── 城墙地形遮罩更新（阶段 F）────────────────────────────────
+
+## 收集所有已完工城墙，通知地图更新城内/城外地形遮罩
+func _update_city_terrain_mask() -> void:
+	if _map == null or not _map.has_method("update_terrain_mask_from_walls"):
+		return
+	var walls: Array = []
+	for b in _buildings.values():
+		if b is ScriptBuilding and (b as ScriptBuilding).is_wall():
+			var typed: ScriptBuilding = b as ScriptBuilding
+			if typed.state == ScriptBuilding.State.OPERATIONAL or typed.state == ScriptBuilding.State.DAMAGED:
+				walls.append({"cell_x": typed.cell_x, "width": typed.width})
+	_map.update_terrain_mask_from_walls(walls)
+
+
+# ─────────────────────────────── 建造自动清场（阶段 F §5.7.4.5）──────────────────────────────────
+
+## 清理选址范围内的 ResourceNode，回收资源。
+func _clear_resource_nodes_in_area(cell_x: int, width: int, region_id: String) -> void:
+	if _map == null:
+		return
+	var cell_start_x: float = cell_x * 32.0
+	var cell_end_x: float = (cell_x + width) * 32.0
+	var nodes: Array = get_tree().get_nodes_in_group("resource_node")
+	for node in nodes:
+		if not node is Node2D or not is_instance_valid(node):
+			continue
+		var nx: float = (node as Node2D).global_position.x
+		if nx >= cell_start_x - 16.0 and nx <= cell_end_x + 16.0:
+			var res_id: String = ""
+			var qty: int = 0
+			if node.has_method("get_resource_id"):
+				res_id = node.get_resource_id()
+			if "amount" in node:
+				qty = int(node.amount)
+			if not res_id.is_empty() and qty > 0 and _resources_api != null:
+				_resources_api.produce(res_id, qty, region_id, "建造清场")
+			node.queue_free()
 
 
 # ─────────────────────────────── 查询 ────────────────────────────────
@@ -301,9 +362,15 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null
 	if placement_grid == null:
 		return {"ok": false, "error": "地图缺少 placement_grid"}
+	# 阶段 F：建造前触发地图动态扩展
+	if _map.has_method("expand_map"):
+		_map.expand_map(cell_x, width)
 	var validate_result := ScriptPlacementSystem.validate(placement_grid, cell_x, width)
 	if not validate_result.ok:
 		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
+
+	# 阶段 F：建造自动清场（砍树给木材）
+	_clear_resource_nodes_in_area(cell_x, width, "")
 
 	# 实例化建筑场景
 	var building: Node = scene.instantiate()

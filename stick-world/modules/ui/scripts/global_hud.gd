@@ -95,12 +95,14 @@ func show_notification(title: String, body: String, level: String) -> void:
 
 # ─────────────────────────────── 居中模式 ────────────────────────────────
 
-## 获取 CameraRig（通过场景 owner，即 GameRoot）
+## 获取 CameraRig（向上遍历祖先节点查找，兼容从独立场景实例化的情况）
 func _get_camera_rig() -> Node:
-	var root := owner
-	if root == null:
-		return null
-	return root.get_node_or_null("CameraRig")
+	var root := get_parent()
+	while root:
+		if root.has_node("CameraRig"):
+			return root.get_node("CameraRig")
+		root = root.get_parent()
+	return null
 
 
 func _on_centered_button_pressed() -> void:

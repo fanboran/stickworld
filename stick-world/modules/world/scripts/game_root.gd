@@ -72,6 +72,10 @@ const _PossessionIndicatorScript: GDScript = preload("res://modules/ui/scripts/p
 const _HoverIndicatorScript: GDScript = preload("res://modules/ui/scripts/hover_indicator.gd")
 ## MiddleScrollOverlay 脚本（中键滚动图标 UI）
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui/scripts/middle_scroll_overlay.gd")
+## UIRoot 场景（UI 覆盖层，从 UI 模块加载）
+const _UIRootScene: PackedScene = preload("res://modules/ui/scenes/ui_root.tscn")
+## DebugOverlay 场景（调试覆盖层，从 debug_GUI 模块加载）
+const _DebugOverlayScene: PackedScene = preload("res://modules/debug_GUI/scenes/debug_overlay.tscn")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -166,6 +170,9 @@ var _middle_scroll_overlay: Control = null
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	# 实例化 UI 覆盖层和调试覆盖层（从各自模块场景加载）
+	_setup_ui_root()
+	_setup_debug_overlay()
 	_validate_children()
 	_bind_event_bus()
 	_setup_construction_system()
@@ -196,6 +203,28 @@ func _ready() -> void:
 	# 加载测试村落地图（延迟一帧确保 SceneLoader 就绪）
 	# 地图加载完成后会 set_mode(EXPLORE) 激活 handler，此时实体已就绪
 	call_deferred("_load_test_village")
+
+
+# ─────────────────────────────── UI / Debug 覆盖层装配 ────────────────────────────────
+
+## 实例化 UIRoot 场景并挂为子节点。
+## UI 覆盖层从 UI 模块自包含场景加载，不再内嵌于 game_root.tscn。
+func _setup_ui_root() -> void:
+	if ui_root != null:
+		return  # 场景中已存在（兼容旧场景）
+	var ur: CanvasLayer = _UIRootScene.instantiate()
+	ur.name = "UIRoot"
+	add_child(ur)
+	ui_root = ur
+
+
+## 实例化 DebugOverlay 场景并挂为子节点。
+## 调试覆盖层从 debug_GUI 模块自包含场景加载，不再内嵌于 game_root.tscn。
+func _setup_debug_overlay() -> void:
+	if get_node_or_null("DebugOverlay") != null:
+		return  # 已存在，避免重复添加
+	var dop: CanvasLayer = _DebugOverlayScene.instantiate()
+	add_child(dop)
 
 
 # ─────────────────────────────── 建造系统装配 ────────────────────────────────

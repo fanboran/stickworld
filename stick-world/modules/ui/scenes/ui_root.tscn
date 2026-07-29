@@ -1,0 +1,178 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://modules/ui/scripts/ui_root.gd" id="1_ui_root"]
+[ext_resource type="Script" path="res://modules/ui/scripts/global_hud.gd" id="2_hud"]
+[ext_resource type="Script" path="res://modules/ui/scripts/mode_panel.gd" id="3_mode"]
+[ext_resource type="Script" path="res://modules/ui/scripts/context_panel.gd" id="4_ctx"]
+[ext_resource type="Script" path="res://modules/ui/scripts/clock_widget.gd" id="5_clock"]
+
+[node name="UIRoot" type="CanvasLayer"]
+script = ExtResource("1_ui_root")
+
+[node name="GlobalHUD" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 60.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("2_hud")
+
+[node name="MarginContainer" type="MarginContainer" parent="GlobalHUD"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 8
+
+[node name="HBoxContainer" type="HBoxContainer" parent="GlobalHUD/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="SpeedLabel" type="Label" parent="GlobalHUD/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "速度: 1x"
+
+[node name="TimeLabel" type="Label" parent="GlobalHUD/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "时间: 08:00"
+
+[node name="CenteredButton" type="Button" parent="GlobalHUD/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "居中: 关"
+
+[node name="NotificationLabel" type="Label" parent="GlobalHUD"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -200.0
+offset_top = 60.0
+offset_right = 200.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 1
+horizontal_alignment = 1
+text = ""
+
+[node name="ClockWidget" type="Control" parent="GlobalHUD"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -76.0
+offset_top = 2.0
+offset_right = -12.0
+offset_bottom = 66.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_clock")
+
+[node name="ModePanel" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -80.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("3_mode")
+
+[node name="VillagePanel" type="Control" parent="ModePanel"]
+visible = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="ModePanel/VillagePanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[村落模式]"
+
+[node name="BattlePanel" type="Control" parent="ModePanel"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="ModePanel/BattlePanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[战斗模式]"
+
+[node name="PossessPanel" type="Control" parent="ModePanel"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="ModePanel/PossessPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[附身模式]"
+
+[node name="ContextPanel" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = -240.0
+offset_top = 60.0
+offset_bottom = -80.0
+grow_horizontal = 0
+grow_vertical = 2
+script = ExtResource("4_ctx")
+
+[node name="ModalOverlay" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2

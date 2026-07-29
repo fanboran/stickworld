@@ -10,6 +10,9 @@ extends RefCounted
 ##   - effective_zoom: float   有效缩放
 ##   - map: Node2D             当前地图实例
 
+## 建筑名称缓存（def_id -> name_zh）
+static var _building_name_cache: Dictionary = {}
+
 # ─────────────────────────────── 辅助 ────────────────────────────────
 
 ## 世界坐标 -> 屏幕坐标
@@ -37,7 +40,9 @@ static func draw_grid(control: Control, ctx: Dictionary) -> void:
 	if grid == null:
 		return
 	var cell_size: float = float(grid.get("CELL_SIZE")) if grid.get("CELL_SIZE") != null else 32.0
-	var gw: int = grid.grid_width
+	# 阶段 F：使用动态边界（支持负数 cell_x）
+	var gw_min: int = grid.get_min_cell() if grid.has_method("get_min_cell") else 0
+	var gw_max: int = grid.get_max_cell() if grid.has_method("get_max_cell") else grid.grid_width - 1
 	var zoom: float = ctx.get("effective_zoom", 1.0)
 	var screen_cell: float = cell_size * zoom
 	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
@@ -46,8 +51,8 @@ static func draw_grid(control: Control, ctx: Dictionary) -> void:
 	var view_right: float = cam_pos.x + vp_size.x / (2.0 * zoom)
 	var view_top: float = cam_pos.y - vp_size.y / (2.0 * zoom)
 	var view_bottom: float = cam_pos.y + vp_size.y / (2.0 * zoom)
-	var cell_x_start: int = maxi(0, int(view_left / cell_size))
-	var cell_x_end: int = mini(gw, int(view_right / cell_size) + 1)
+	var cell_x_start: int = maxi(gw_min, int(view_left / cell_size))
+	var cell_x_end: int = mini(gw_max + 1, int(view_right / cell_size) + 1)
 	# 竖线范围（屏幕全高）
 	var line_top := world_to_screen(Vector2(0, view_top), ctx).y
 	var line_bottom := world_to_screen(Vector2(0, view_bottom), ctx).y
@@ -223,3 +228,172 @@ static func draw_entity_colliders(control: Control, ctx: Dictionary) -> void:
 		var rect := Rect2(screen_pos - screen_size * 0.5, screen_size)
 		control.draw_rect(rect, fill_color, true)
 		control.draw_rect(rect, border_color, false, 1.0)
+
+
+## 垂直地形网格（橙线）-- 地面带内按 32px 分行，用于资源点定位
+static func draw_terrain_grid(control: Control, ctx: Dictionary) -> void:
+	var map: Node2D = ctx.get("map", null)
+	if map == null or not is_instance_valid(map):
+		return
+	var ground_y: float = map.ground_y if "ground_y" in map else 810.0
+	var ground_bottom: float = map.ground_bottom if "ground_bottom" in map else 1080.0
+	var map_left: float = map.map_left if "map_left" in map else 0.0
+	var map_right: float = map.map_right if "map_right" in map else 8192.0
+	var cell_size: float = 32.0
+	var zoom: float = ctx.get("effective_zoom", 1.0)
+	var cam_pos: Vector2 = ctx.get("camera_pos", Vector2.ZERO)
+	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
+	var view_left: float = cam_pos.x - vp_size.x / (2.0 * zoom)
+	var view_right: float = cam_pos.x + vp_size.x / (2.0 * zoom)
+	var clamped_left: float = maxf(view_left, map_left)
+	var clamped_right: float = minf(view_right, map_right)
+	var row_count: int = int((ground_bottom - ground_y) / cell_size)
+	for row in range(row_count + 1):
+		var y: float = ground_y + row * cell_size
+		var p1 := world_to_screen(Vector2(clamped_left, y), ctx)
+		var p2 := world_to_screen(Vector2(clamped_right, y), ctx)
+		control.draw_line(p1, p2, Color(1.0, 0.6, 0.2, 0.15), 1.0)
+
+
+## 资源点标记（彩色小方块 + 储量文字）
+static func draw_resource_nodes(control: Control, ctx: Dictionary) -> void:
+	var map: Node2D = ctx.get("map", null)
+	if map == null or not is_instance_valid(map):
+		return
+	var zoom: float = ctx.get("effective_zoom", 1.0)
+	var nodes: Array = map.get_tree().get_nodes_in_group("resource_node")
+	var font: Font = control.get_theme_default_font()
+	for node in nodes:
+		if not node is Node2D or not is_instance_valid(node):
+			continue
+		var n: Node2D = node as Node2D
+		var screen_pos := world_to_screen(n.global_position, ctx)
+		var s: float = 16.0 * zoom
+		# 资源类型颜色
+		var rtype: int = n.get("resource_type") if "resource_type" in n else 0
+		var colors: Array[Color] = [
+			Color(0.2, 0.6, 0.2, 0.6),  # WOOD=绿
+			Color(0.5, 0.5, 0.5, 0.6),  # STONE=灰
+			Color(0.6, 0.3, 0.2, 0.6),  # METAL=棕
+		]
+		var c: Color = colors[rtype] if rtype < colors.size() else Color.WHITE
+		control.draw_rect(Rect2(screen_pos - Vector2(s * 0.5, s * 0.5), Vector2(s, s)), c, true)
+		control.draw_rect(Rect2(screen_pos - Vector2(s * 0.5, s * 0.5), Vector2(s, s)), Color(c.r, c.g, c.b, 1.0), false, 1.0)
+		# 储量文字
+		var amount: int = n.get("amount") if "amount" in n else 0
+		var text: String = str(amount)
+		control.draw_string(font, screen_pos + Vector2(-10, s * 0.5 + 12), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 1.0, 1.0, 0.8))
+
+
+## 建筑名称（建筑头顶显示中文名 + def_id）
+static func draw_building_names(control: Control, ctx: Dictionary) -> void:
+	var map: Node2D = ctx.get("map", null)
+	if map == null or not is_instance_valid(map):
+		return
+	var font: Font = control.get_theme_default_font()
+	# 扫描 BuildingHost（动态建筑）
+	var hosts: Array[Node] = []
+	var bh: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST)
+	if bh != null:
+		hosts.append(bh)
+	var tb: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS)
+	if tb != null:
+		hosts.append(tb)
+	for host in hosts:
+		for building in host.get_children():
+			if not building is Node2D:
+				continue
+			var def_id: String = ""
+			if "def_id" in building:
+				def_id = str(building.def_id)
+			if def_id.is_empty():
+				continue
+			var name_zh: String = _get_building_name(def_id)
+			# 在建筑上方绘制名称
+			var offset_y: float = -80.0
+			if building.has_method("get_collision_bottom_local"):
+				offset_y = building.get_collision_bottom_local() - 20.0
+			var label_pos := world_to_screen(building.global_position + Vector2(0, offset_y), ctx)
+			# 半透明背景
+			var label_text: String = "%s (%s)" % [name_zh, def_id]
+			var ts: Vector2 = font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 11)
+			control.draw_rect(Rect2(label_pos - Vector2(ts.x * 0.5 + 4, 2), ts + Vector2(8, 4)), Color(0.0, 0.0, 0.0, 0.6), true)
+			control.draw_string(font, label_pos + Vector2(-ts.x * 0.5, ts.y - 1), label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, Color(1.0, 1.0, 0.8, 0.95))
+
+
+## 从 buildings.tres 加载建筑名称缓存
+static func _load_building_names() -> void:
+	_building_name_cache.clear()
+	var res: Resource = load("res://config/buildings/buildings.tres")
+	if res == null or not (res.get("variables") is Dictionary):
+		return
+	var data: Array = res.variables.get("data", [])
+	for entry in data:
+		if entry is Dictionary and entry.has("id"):
+			_building_name_cache[entry["id"]] = String(entry.get("name_zh", entry["id"]))
+
+
+static func _get_building_name(def_id: String) -> String:
+	if _building_name_cache.is_empty():
+		_load_building_names()
+	return _building_name_cache.get(def_id, def_id)
+
+
+## 世界坐标水平标尺（地平线上，标注世界原点 0 + 每10格标数字）
+static func draw_world_ruler(control: Control, ctx: Dictionary) -> void:
+	var map: Node2D = ctx.get("map", null)
+	if map == null or not is_instance_valid(map):
+		return
+	var ground_y: float = map.ground_y if "ground_y" in map else 810.0
+	var map_left: float = map.map_left if "map_left" in map else 0.0
+	var map_right: float = map.map_right if "map_right" in map else 8192.0
+	var zoom: float = ctx.get("effective_zoom", 1.0)
+	var cam_pos: Vector2 = ctx.get("camera_pos", Vector2.ZERO)
+	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
+	var view_left: float = cam_pos.x - vp_size.x / (2.0 * zoom)
+	var view_right: float = cam_pos.x + vp_size.x / (2.0 * zoom)
+	var font: Font = control.get_theme_default_font()
+	# 水平基准线
+	var p1 := world_to_screen(Vector2(maxf(view_left, map_left), ground_y), ctx)
+	var p2 := world_to_screen(Vector2(minf(view_right, map_right), ground_y), ctx)
+	control.draw_line(p1, p2, Color(0.8, 0.8, 0.8, 0.3), 1.0)
+	# 自适应刻度间距：目标屏幕间距 ~60px，世界间距向上取整到 32px（1 cell）的倍数
+	var target_screen_step: float = 60.0
+	var world_step: float = target_screen_step / zoom
+	world_step = maxf(32.0, ceil(world_step / 32.0) * 32.0)
+	# 每 10 格（320px）标数字
+	var label_step: float = 320.0
+	var clamped_left: float = maxf(view_left, map_left)
+	var clamped_right: float = minf(view_right, map_right)
+	var start_x: int = int(clamped_left / world_step) * int(world_step)
+	var end_x: int = int(clamped_right / world_step) * int(world_step) + int(world_step)
+	var x: float = float(start_x)
+	while x <= end_x:
+		var screen_x: float = world_to_screen(Vector2(x, ground_y), ctx).x
+		var is_label: bool = absf(fmod(x, label_step)) < 0.5  # 每 10 格标数字
+		var tick_len: float = 10.0 if is_label else 4.0
+		var tick_color: Color = Color(0.9, 0.9, 0.9, 0.6) if is_label else Color(0.7, 0.7, 0.7, 0.35)
+		control.draw_line(Vector2(screen_x, p1.y), Vector2(screen_x, p1.y + tick_len), tick_color, 1.0)
+		if is_label:
+			var cell_num: int = int(x / 32.0)
+			if x == 0.0:
+				control.draw_string(font, Vector2(screen_x - 40, p1.y + 24), "★ 0 (世界原点)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.8, 0.2, 0.95))
+			else:
+				control.draw_string(font, Vector2(screen_x - 16, p1.y + 24), "cell %d" % cell_num, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.8, 0.8, 0.85, 0.7))
+		x += world_step
+
+
+## 鼠标位置调试信息（鼠标旁边显示世界坐标）
+static func draw_entity_info(control: Control, ctx: Dictionary) -> void:
+	var camera: Camera2D = ctx.get("camera", null) as Camera2D
+	if camera == null:
+		return
+	var zoom: float = ctx.get("effective_zoom", 1.0)
+	var cam_pos: Vector2 = ctx.get("camera_pos", Vector2.ZERO)
+	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
+	var mouse_screen: Vector2 = control.get_viewport().get_mouse_position()
+	var mouse_world: Vector2 = (mouse_screen - vp_size * 0.5) / zoom + cam_pos
+	var font: Font = control.get_theme_default_font()
+	# 鼠标旁边显示绿色世界坐标
+	var diag_pos := world_to_screen(mouse_world, ctx)
+	control.draw_string(font, diag_pos + Vector2(12, -12), "世界:(%d,%d)" % [int(mouse_world.x), int(mouse_world.y)], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.8, 1.0, 0.8, 0.7))

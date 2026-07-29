@@ -2,10 +2,13 @@ class_name ZoomBar
 extends Control
 ## 缩放条 -- 小地图下方的相机缩放滑块。
 ##
-## 显示当前缩放倍率，支持拖动滑块和滚轮缩放双向同步。
+## 宽度与小地图对齐，滑块占左侧，右侧显示缩放百分比。
+## 支持拖动滑块和滚轮缩放双向同步。
 
 const BAR_WIDTH: float = 240.0
-const BAR_HEIGHT: float = 36.0
+const BAR_HEIGHT: float = 24.0
+## 右侧百分比标签宽度
+const LABEL_WIDTH: float = 48.0
 
 var _slider: HSlider = null
 var _label: Label = null
@@ -32,21 +35,25 @@ func _anchor_below_minimap() -> void:
 
 
 func _build_ui() -> void:
-	# 滑块
+	# 滑块（占左侧，留出右侧标签空间）
 	_slider = HSlider.new()
 	_slider.min_value = 0.5
 	_slider.max_value = 2.0
 	_slider.step = 0.1
-	_slider.anchors_preset = Control.PRESET_TOP_WIDE
-	_slider.offset_bottom = 18.0
+	_slider.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_slider.offset_right = BAR_WIDTH - LABEL_WIDTH
+	_slider.offset_bottom = BAR_HEIGHT
 	_slider.value_changed.connect(_on_slider_changed)
 	add_child(_slider)
-	# 标签
+	# 百分比标签（右侧，右对齐）
 	_label = Label.new()
-	_label.anchors_preset = Control.PRESET_BOTTOM_WIDE
-	_label.offset_top = -18.0
-	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label.text = "1.0x"
+	_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_label.offset_left = -LABEL_WIDTH
+	_label.offset_right = 0.0
+	_label.offset_bottom = BAR_HEIGHT
+	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_label.text = "100%"
 	add_child(_label)
 
 
@@ -60,7 +67,7 @@ func _update_label() -> void:
 	if _label == null:
 		return
 	if _camera_rig != null and _camera_rig.has_method("get_user_zoom"):
-		_label.text = "%.1fx" % _camera_rig.get_user_zoom()
+		_label.text = "%d%%" % int(round(_camera_rig.get_user_zoom() * 100))
 
 
 ## 滚轮缩放后由 GameRoot 调用，同步滑块位置

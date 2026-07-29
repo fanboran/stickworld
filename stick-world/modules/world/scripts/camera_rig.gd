@@ -3,10 +3,10 @@ extends Camera2D
 ## 相机系统 —— 水平卷轴 + 自由镜头 + 缩放 + 震屏。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §2.4。
-## - 垂直显示范围限定：camera_y 由 ground_y + ground_ratio 计算，不跟随角色 Y
+## - 垂直显示范围限定：视野下边界固定在草坪下边界（ground_bottom），缩放时不变
 ## - 水平 1/4 区域跟随：角色进入屏幕两侧 1/4 才触发跟随
 ## - 手动控制：左键拖动 / 边缘滚动 / 滚轮缩放 / 小地图跳转
-## - 缩放：1.0~2.0，以鼠标为锚点，缩放时不重算 camera_y
+## - 缩放：1.0~2.0，水平以鼠标为锚点，垂直以地面线为基准（视野下边界不变）
 ## - 居中模式：强制角色到屏幕中心
 
 # ─────────────────────────────── 常量 ────────────────────────────────
@@ -170,7 +170,7 @@ func _clamp_camera_x(x: float) -> float:
 
 
 func _update_position(delta: float) -> void:
-	# 垂直位置：恒定（由 ground_y + ground_ratio 计算，缩放时不重算）
+	# 垂直位置：视野下边界固定在 ground_bottom，缩放时以草坪下边界为锚点
 	var target_y: float = _compute_camera_y()
 	# 水平位置
 	var target_x: float = global_position.x
@@ -210,12 +210,13 @@ func _update_position(delta: float) -> void:
 
 
 func _compute_camera_y() -> float:
-	# 地面线 ground_y 应在屏幕下方 ground_ratio 处（距底部 ground_ratio * vp_h/zoom）
-	# 推导：ground_y = camera_y + vp_h/zoom * (0.5 - ground_ratio)
-	#        => camera_y = ground_y - vp_h/zoom * (0.5 - ground_ratio)
-	# 注：缩放时不重算（保持当前 Y），仅 ground_y/ground_ratio 变化时重算
+	# 视野下边界（屏幕底部）固定在草坪下边界 ground_bottom，缩放时不变
+	# 屏幕底部 = camera_y + vp_h / (2 * effective_zoom) = ground_bottom
+	# => camera_y = ground_bottom - vp_h / (2 * effective_zoom)
+	# 其中 ground_bottom = ground_y + DESIGN_HEIGHT * ground_ratio（草坪下边界）
 	var vp_h: float = get_viewport_rect().size.y
-	return ground_y - vp_h / effective_zoom * (0.5 - ground_ratio)
+	var ground_bottom: float = ground_y + DESIGN_HEIGHT * ground_ratio
+	return ground_bottom - vp_h / (2.0 * effective_zoom)
 
 
 ## 计算跟随目标 X（不经过 lerp，直接算"相机应该在哪"）
@@ -327,22 +328,22 @@ func _zoom_at_mouse(step: float) -> void:
 	var new_user: float = clampf(user_zoom + step, ZOOM_MIN, ZOOM_MAX)
 	if absf(new_user - old_user) < 0.001:
 		return
-	# 以鼠标位置为锚点：鼠标指向的世界点保持屏幕位置不变
+	# 水平方向以鼠标为锚点：鼠标指向的世界 X 保持屏幕位置不变
+	# 垂直方向以地面线为基准：缩放后重算 camera_y，使地面线始终在屏幕下方 ground_ratio 处
 	var vp_size: Vector2 = get_viewport_rect().size
 	var mouse_screen: Vector2 = get_viewport().get_mouse_position()
 	var old_eff: float = base_zoom * old_user
-	# 鼠标在世界坐标的位置（缩放前）
-	var mouse_world_before: Vector2 = global_position + (mouse_screen - vp_size * 0.5) / old_eff
+	# 鼠标在世界坐标的 X 位置（缩放前）
+	var mouse_world_x_before: float = global_position.x + (mouse_screen.x - vp_size.x * 0.5) / old_eff
 	# 应用新缩放
 	user_zoom = new_user
-	# 调整 global_position 使鼠标世界点保持屏幕位置
-	var mouse_world_after: Vector2 = global_position + (mouse_screen - vp_size * 0.5) / effective_zoom
-	global_position += mouse_world_before - mouse_world_after
+	# 调整 global_position.x 使鼠标世界 X 保持屏幕位置
+	var mouse_world_x_after: float = global_position.x + (mouse_screen.x - vp_size.x * 0.5) / effective_zoom
+	global_position.x += mouse_world_x_before - mouse_world_x_after
 	# 重新约束 X 边界（视野边缘不超出地图）
 	global_position.x = _clamp_camera_x(global_position.x)
-	# 缩放时 camera_y 不重算（保持当前 Y），但首次配置时需要
-	if not _configured:
-		global_position.y = _compute_camera_y()
+	# 垂直方向以地面为基准：重算 camera_y（地面线在屏幕下方 ground_ratio 处，视野下边界不变）
+	global_position.y = _compute_camera_y()
 	# 缩放算作一次手动操作：重置冷却计时
 	# 注：居中模式缩放不立即弹回（玩家可能在居中模式下也想调缩放），但保持居中模式行为
 	if not centered_mode:

@@ -72,6 +72,10 @@ const _PossessionIndicatorScript: GDScript = preload("res://modules/ui/scripts/p
 const _HoverIndicatorScript: GDScript = preload("res://modules/ui/scripts/hover_indicator.gd")
 ## MiddleScrollOverlay 脚本（中键滚动图标 UI）
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui/scripts/middle_scroll_overlay.gd")
+## ResourceBar 脚本（阶段 E 资源条 UI）
+const _ResourceBarScript: GDScript = preload("res://modules/ui/scripts/resource_bar.gd")
+## BuildMenu 脚本（阶段 E 建造菜单 UI）
+const _BuildMenuScript: GDScript = preload("res://modules/ui/scripts/build_menu.gd")
 ## UIRoot 场景（UI 覆盖层，从 UI 模块加载）
 const _UIRootScene: PackedScene = preload("res://modules/ui/scenes/ui_root.tscn")
 ## DebugOverlay 场景（调试覆盖层，从 debug_GUI 模块加载）
@@ -91,8 +95,8 @@ const BATTLEFIELD_MAP_ID := "test_battlefield"
 const FOREST_ZONE_MAP_ID := "test_forest_zone"
 ## 玩家初始 X 位置（地图坐标系，偏左便于观察）
 const PLAYER_SPAWN_X: float = 300.0
-## NPC 村民数量（P0 测试用，展示 AI 行为）
-const NPC_COUNT: int = 5
+## NPC 村民数量（P0 测试用，展示 AI 行为；阶段 E 创始人确认改为 2）
+const NPC_COUNT: int = 2
 
 # ─────────────────────────────── 建造系统（§15 阶段 0.4）────────────────────────────────
 
@@ -163,6 +167,9 @@ var _world_map_panel: Control = null
 var _possession_indicator: Control = null
 var _hover_indicator: Control = null
 var _middle_scroll_overlay: Control = null
+# ─────────────────────────────── 阶段 E 游玩 UI ────────────────────────────────
+var _resource_bar: Control = null
+var _build_menu: Control = null
 
 # ─────────────────────────────── 存档系统 ────────────────────────────────
 ## 是否有存档待加载（读档入口标记）
@@ -202,6 +209,9 @@ func _ready() -> void:
 	_setup_boundary_detector()
 	# 游玩 UI：主控圆圈 + 悬停方框
 	_setup_game_ui()
+	# 阶段 E：资源条 + 建造菜单
+	_setup_resource_bar()
+	_setup_build_menu()
 	# 存档系统：信号连接 + 注册
 	_setup_save_system()
 	# 默认 X1 速度
@@ -320,6 +330,23 @@ func _setup_resources_api_deferred() -> void:
 	# P0-9 注入到 ConstructionManager（若已就绪）
 	if _construction_manager != null and _construction_manager.has_method("set_resources_api"):
 		_construction_manager.set_resources_api(_resources_api)
+	# 阶段 E：给玩家初始资源（P0 简化，资源不持久化，每次启动重置）
+	# produce 到 "test_region"（与建造扣减 region 一致），资源条显示全局总量
+	_grant_initial_resources()
+
+
+## P0 初始资源：木材 300 / 石料 300 / 铁矿 100（足够建造兵营 + 几段城墙）
+func _grant_initial_resources() -> void:
+	if _resources_api == null or not _resources_api.has_method("produce"):
+		return
+	var initial: Dictionary = {
+		"res_wood": 300.0,
+		"res_stone": 300.0,
+		"res_metal_ore": 100.0,
+	}
+	for res_id in initial.keys():
+		_resources_api.produce(res_id, initial[res_id], "test_region", "初始资源")
+	print("[GameRoot] 初始资源已发放: %s" % str(initial))
 
 
 ## 获取 ResourcesApi 引用（供测试用）
@@ -634,6 +661,75 @@ func _setup_game_ui() -> void:
 		add_child(_middle_scroll_overlay)
 
 
+# ─────────────────────────────── 阶段 E：资源条 / 建造菜单装配 ────────────────────────────────
+
+## 实例化资源条并挂到 UIRoot，延迟 setup 等 ResourcesApi 就绪。
+func _setup_resource_bar() -> void:
+	# 优先从 ui_root.tscn 预置节点挂载（编辑器可见位置/范围）
+	if ui_root != null:
+		var rb: Control = ui_root.get_node_or_null("ResourceBar")
+		if rb != null:
+			rb.set_script(_ResourceBarScript)
+			_resource_bar = rb
+			call_deferred("_setup_resource_bar_deferred")
+			return
+	# 回退：代码创建
+	_resource_bar = Control.new()
+	_resource_bar.set_script(_ResourceBarScript)
+	_resource_bar.name = "ResourceBar"
+	_resource_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ui_root != null:
+		ui_root.add_child(_resource_bar)
+	else:
+		add_child(_resource_bar)
+	call_deferred("_setup_resource_bar_deferred")
+
+
+func _setup_resource_bar_deferred() -> void:
+	if _resource_bar == null or _resources_api == null:
+		return
+	if _resource_bar.has_method("setup"):
+		_resource_bar.setup(_resources_api)
+
+
+## 获取 ResourceBar 引用（供测试用）
+func get_resource_bar() -> Control:
+	return _resource_bar
+
+
+## 实例化建造菜单并挂到 UIRoot，延迟 setup 等 ConstructionManager 就绪。
+func _setup_build_menu() -> void:
+	# 优先从 ui_root.tscn 预置节点挂载（编辑器可见位置/范围）
+	if ui_root != null:
+		var bm: Control = ui_root.get_node_or_null("BuildMenu")
+		if bm != null:
+			bm.set_script(_BuildMenuScript)
+			_build_menu = bm
+			call_deferred("_setup_build_menu_deferred")
+			return
+	# 回退：代码创建
+	_build_menu = Control.new()
+	_build_menu.set_script(_BuildMenuScript)
+	_build_menu.name = "BuildMenu"
+	if ui_root != null:
+		ui_root.add_child(_build_menu)
+	else:
+		add_child(_build_menu)
+	call_deferred("_setup_build_menu_deferred")
+
+
+func _setup_build_menu_deferred() -> void:
+	if _build_menu == null:
+		return
+	if _build_menu.has_method("setup"):
+		_build_menu.setup(self)
+
+
+## 获取 BuildMenu 引用（供测试用）
+func get_build_menu() -> Control:
+	return _build_menu
+
+
 # ─────────────────────────────── 存档系统 ────────────────────────────────
 
 ## 存档面板脚本
@@ -853,12 +949,9 @@ func _load_test_village() -> void:
 	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
 	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
 		scene_loader.map_loaded.connect(_on_map_loaded)
-	# 启动时检查槽位 0 是否有存档，有则自动读档，无则新游戏
-	if SaveManager and SaveManager.has_method("slot_exists") and SaveManager.slot_exists(0):
-		print("[GameRoot] 检测到槽位 0 存档，自动读取")
-		load_game_from_slot(0)
-	else:
-		scene_loader.load_map(TEST_VILLAGE_MAP_ID)
+	# P0 开发阶段：跳过自动读档，每次启动新游戏
+	# （避免旧存档与代码改动不兼容；存档功能仍可用 F9 手动读取 / Ctrl+S 面板测试）
+	scene_loader.load_map(TEST_VILLAGE_MAP_ID)
 
 
 ## 退出时自动存档（防止数据丢失）
@@ -935,6 +1028,9 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 				map.generate_resource_nodes(0, 15, 0.25)
 				map.generate_resource_nodes(right_cell - 15, right_cell, 0.25)
 			_spawn_npcs(map, spawn_y)
+		# 阶段 E：遭遇战战场 spawn 敌方火柴人 + 启动战斗（地图切换进入战场时触发）
+		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded:
+			_spawn_battlefield_enemies(map, player)
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
@@ -1013,6 +1109,44 @@ func _spawn_npcs(map: Node2D, spawn_y: float) -> void:
 			# 注入 ConstructionManager 引用，使 NPC 可被派工（§15 阶段 0.4）
 			if npc.has_method("set_construction_manager") and _construction_manager != null:
 				npc.set_construction_manager(_construction_manager)
+
+
+## 阶段 E：遭遇战战场生成敌方火柴人并启动战斗。
+## 敌方为红色阵营（视觉区分），玩家方为进攻方。
+func _spawn_battlefield_enemies(map: Node2D, player: Node2D) -> void:
+	if map == null or player == null:
+		return
+	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
+	var enemies: Array = []
+	# 敌方在战场右端（玩家从左侧进入）
+	var count: int = 4
+	for i in count:
+		var x: float = map.map_right - 250.0 - i * 60.0
+		var e: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
+		if e == null:
+			continue
+		# 修正 Y：让脚部对齐 spawn_y
+		if e.get("foot_offset") != null:
+			e.global_position.y = spawn_y - e.foot_offset
+		# 不附身（AI 接管）
+		if e.has_method("set_possessed"):
+			e.set_possessed(false)
+		# 红色身体区分敌方
+		_set_unit_body_color(e, Color(0.82, 0.22, 0.22))
+		enemies.append(e)
+	# 启动战斗：玩家方(进攻) vs 敌方(防守)
+	if not enemies.is_empty():
+		start_test_battle([player], enemies)
+		print("[GameRoot] 遭遇战已启动: 玩家 + 0 友军 vs %d 敌军" % enemies.size())
+
+
+## 设置火柴人身体颜色（用于阵营视觉区分）
+func _set_unit_body_color(entity: Node2D, color: Color) -> void:
+	if not is_instance_valid(entity):
+		return
+	var r = entity.get("rig") if "rig" in entity else null
+	if r != null and "body_color" in r:
+		r.body_color = color
 
 
 ## 注册调试绘制器到 DebugApi（详见 §10.5.7）

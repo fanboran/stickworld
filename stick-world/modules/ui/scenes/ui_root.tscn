@@ -1,15 +1,15 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene format=3 uid="uid://c5tcww7rbu3cs"]
 
-[ext_resource type="Script" path="res://modules/ui/scripts/ui_root.gd" id="1_ui_root"]
-[ext_resource type="Script" path="res://modules/ui/scripts/global_hud.gd" id="2_hud"]
-[ext_resource type="Script" path="res://modules/ui/scripts/mode_panel.gd" id="3_mode"]
-[ext_resource type="Script" path="res://modules/ui/scripts/context_panel.gd" id="4_ctx"]
-[ext_resource type="Script" path="res://modules/ui/scripts/clock_widget.gd" id="5_clock"]
+[ext_resource type="Script" uid="uid://chedldf8fuhta" path="res://modules/ui/scripts/ui_root.gd" id="1_ui_root"]
+[ext_resource type="Script" uid="uid://bhvemj6s8akro" path="res://modules/ui/scripts/global_hud.gd" id="2_hud"]
+[ext_resource type="Script" uid="uid://c0htxr0xbt2ix" path="res://modules/ui/scripts/mode_panel.gd" id="3_mode"]
+[ext_resource type="Script" uid="uid://dr756nv1o33qm" path="res://modules/ui/scripts/context_panel.gd" id="4_ctx"]
+[ext_resource type="Script" uid="uid://cn4f70s21pher" path="res://modules/ui/scripts/clock_widget.gd" id="5_clock"]
 
-[node name="UIRoot" type="CanvasLayer"]
+[node name="UIRoot" type="CanvasLayer" unique_id=1942486944]
 script = ExtResource("1_ui_root")
 
-[node name="GlobalHUD" type="Control" parent="."]
+[node name="GlobalHUD" type="Control" parent="." unique_id=381952387]
 layout_mode = 3
 anchors_preset = 10
 anchor_right = 1.0
@@ -18,7 +18,7 @@ grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("2_hud")
 
-[node name="MarginContainer" type="MarginContainer" parent="GlobalHUD"]
+[node name="MarginContainer" type="MarginContainer" parent="GlobalHUD" unique_id=926316729]
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
@@ -30,26 +30,27 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 8
 
-[node name="HBoxContainer" type="HBoxContainer" parent="GlobalHUD/MarginContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="GlobalHUD/MarginContainer" unique_id=1940854214]
 layout_mode = 2
 theme_override_constants/separation = 24
 
-[node name="SpeedLabel" type="Label" parent="GlobalHUD/MarginContainer/HBoxContainer"]
+[node name="SpeedLabel" type="Label" parent="GlobalHUD/MarginContainer/HBoxContainer" unique_id=1073199118]
 layout_mode = 2
 text = "速度: 1x"
 
-[node name="TimeLabel" type="Label" parent="GlobalHUD/MarginContainer/HBoxContainer"]
+[node name="TimeLabel" type="Label" parent="GlobalHUD/MarginContainer/HBoxContainer" unique_id=238169416]
 layout_mode = 2
 text = "时间: 08:00"
 
-[node name="CenteredButton" type="Button" parent="GlobalHUD/MarginContainer/HBoxContainer"]
+[node name="CenteredButton" type="Button" parent="GlobalHUD/MarginContainer/HBoxContainer" unique_id=137787552]
 layout_mode = 2
 text = "居中: 关"
 
-[node name="NotificationLabel" type="Label" parent="GlobalHUD"]
+[node name="NotificationLabel" type="Label" parent="GlobalHUD" unique_id=1766089372]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
+anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -200.0
@@ -57,11 +58,10 @@ offset_top = 60.0
 offset_right = 200.0
 offset_bottom = 100.0
 grow_horizontal = 2
-grow_vertical = 1
+grow_vertical = 0
 horizontal_alignment = 1
-text = ""
 
-[node name="ClockWidget" type="Control" parent="GlobalHUD"]
+[node name="ClockWidget" type="Control" parent="GlobalHUD" unique_id=691686855]
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
@@ -74,7 +74,7 @@ grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("5_clock")
 
-[node name="ModePanel" type="Control" parent="."]
+[node name="ModePanel" type="Control" parent="." unique_id=776624750]
 layout_mode = 3
 anchors_preset = 12
 anchor_top = 1.0
@@ -85,8 +85,7 @@ grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("3_mode")
 
-[node name="VillagePanel" type="Control" parent="ModePanel"]
-visible = true
+[node name="VillagePanel" type="Control" parent="ModePanel" unique_id=1495639617]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -94,7 +93,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Label" type="Label" parent="ModePanel/VillagePanel"]
+[node name="Label" type="Label" parent="ModePanel/VillagePanel" unique_id=1022387230]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -109,7 +108,7 @@ grow_horizontal = 2
 grow_vertical = 2
 text = "[村落模式]"
 
-[node name="BattlePanel" type="Control" parent="ModePanel"]
+[node name="BattlePanel" type="Control" parent="ModePanel" unique_id=1905868625]
 visible = false
 layout_mode = 1
 anchors_preset = 15
@@ -118,7 +117,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Label" type="Label" parent="ModePanel/BattlePanel"]
+[node name="Label" type="Label" parent="ModePanel/BattlePanel" unique_id=1788923613]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -133,7 +132,7 @@ grow_horizontal = 2
 grow_vertical = 2
 text = "[战斗模式]"
 
-[node name="PossessPanel" type="Control" parent="ModePanel"]
+[node name="PossessPanel" type="Control" parent="ModePanel" unique_id=550243692]
 visible = false
 layout_mode = 1
 anchors_preset = 15
@@ -142,7 +141,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Label" type="Label" parent="ModePanel/PossessPanel"]
+[node name="Label" type="Label" parent="ModePanel/PossessPanel" unique_id=1475776361]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -157,7 +156,7 @@ grow_horizontal = 2
 grow_vertical = 2
 text = "[附身模式]"
 
-[node name="ContextPanel" type="Control" parent="."]
+[node name="ContextPanel" type="Control" parent="." unique_id=593907855]
 layout_mode = 3
 anchors_preset = 9
 anchor_bottom = 1.0
@@ -168,7 +167,26 @@ grow_horizontal = 0
 grow_vertical = 2
 script = ExtResource("4_ctx")
 
-[node name="ModalOverlay" type="Control" parent="."]
+[node name="ResourceBar" type="Control" parent="." unique_id=1165130178]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 289.0
+offset_right = -1811.0
+offset_bottom = 618.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="BuildMenu" type="Control" parent="." unique_id=1011632081]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ModalOverlay" type="Control" parent="." unique_id=1646500837]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

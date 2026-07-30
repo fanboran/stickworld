@@ -14,6 +14,7 @@ def_id = "bld_wall_tier2"
 width = 1
 
 [node name="Exterior" type="Node2D" parent="."]
+position = Vector2(16, 0)
 
 [node name="WallBody" type="Polygon2D" parent="Exterior"]
 polygon = PackedVector2Array(-16, -128, 16, -128, 16, 0, -16, 0)
@@ -26,11 +27,11 @@ color = Color(0.5, 0.5, 0.53, 1)
 [node name="PassageBarrier" type="Area2D" parent="."]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier"]
-position = Vector2(0, -64)
+position = Vector2(16, -64)
 shape = SubResource("rect_passage")
 
 [node name="StandPlatform" type="Area2D" parent="."]
-position = Vector2(0, -120)
+position = Vector2(16, -120)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="StandPlatform"]
 shape = SubResource("rect_stand")

@@ -682,7 +682,10 @@ func _get_city_left_x() -> float:
 	var gp: Polygon2D = terrain_layer.get_node_or_null("GroundPolygon")
 	if gp == null or gp.material == null:
 		return -99999.0
-	return float(gp.material.get_shader_parameter("city_left_x"))
+	var v = gp.material.get_shader_parameter("city_left_x")
+	if v == null:
+		return -99999.0
+	return float(v)
 
 
 ## 获取城内右边界
@@ -692,4 +695,7 @@ func _get_city_right_x() -> float:
 	var gp: Polygon2D = terrain_layer.get_node_or_null("GroundPolygon")
 	if gp == null or gp.material == null:
 		return -99999.0
-	return float(gp.material.get_shader_parameter("city_right_x"))
+	var v = gp.material.get_shader_parameter("city_right_x")
+	if v == null:
+		return -99999.0
+	return float(v)

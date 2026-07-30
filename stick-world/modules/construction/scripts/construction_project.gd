@@ -44,8 +44,10 @@ var map: Node2D = null
 var building_scene: PackedScene = null
 ## 完工所需总工作量（人·秒）。P0 默认 10.0（单人 10 秒建完，双人 5 秒）
 var total_work: float = 10.0
-## 已累计工作量
+## 已累计工作量（建造进度 = current_work / total_work）
 var current_work: float = 0.0
+## 材料进度 [0,1]（搬运工推进，阶段 E 双进度条）
+var material_progress: float = 0.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 
@@ -154,24 +156,42 @@ func get_worker_slot_index(worker: Node) -> int:
 
 # ─────────────────────────────── 推进 ────────────────────────────────
 
-## 每帧调用，推进项目进度。每个在工工人贡献 1.0 工作/秒。
+## 每帧调用，推进项目进度。
+## 阶段 E 双进度：材料进度（搬运工）+ 建造进度（建造工，受材料限制：建造 ≤ 材料）。
+## P0 简化：所有工人同时推进材料与建造，材料速率 1.5x 建造（材料条先满）。
 func tick(delta: float) -> void:
 	if state != State.UNDER_CONSTRUCTION:
 		return
 	if _assigned_workers.is_empty():
 		return  # 无人工作不推进（但状态保留）
-	var contribution: float = float(_assigned_workers.size()) * delta
-	current_work = minf(current_work + contribution, total_work)
+	# total_work<=0（如 bld_placeholder）直接完工
+	if total_work <= 0.0:
+		material_progress = 1.0
+		current_work = total_work
+		progress_changed.emit(self, get_progress())
+		_complete()
+		return
+	var n: float = float(_assigned_workers.size())
+	# 材料进度：搬运工推进，速率 1.5x 建造（材料条先满）
+	material_progress = minf(material_progress + n * delta * 1.5 / total_work, 1.0)
+	# 建造进度：建造工推进，受材料进度限制（建造 ≤ 材料）
+	var build_cap: float = material_progress * total_work
+	current_work = minf(current_work + n * delta, build_cap)
 	progress_changed.emit(self, get_progress())
 	if current_work >= total_work:
 		_complete()
 
 
-## 获取当前进度 [0, 1]
+## 获取当前建造进度 [0, 1]
 func get_progress() -> float:
 	if total_work <= 0.0:
 		return 1.0
 	return clampf(current_work / total_work, 0.0, 1.0)
+
+
+## 获取当前材料进度 [0, 1]（阶段 E 双进度条）
+func get_material_progress() -> float:
+	return material_progress
 
 
 # ─────────────────────────────── 内部状态转换 ────────────────────────────────

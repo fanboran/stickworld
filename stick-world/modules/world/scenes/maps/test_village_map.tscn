@@ -5,9 +5,6 @@
 [ext_resource type="Script" uid="uid://cqxakicqelpkj" path="res://modules/world/scripts/initial_buildings_list.gd" id="3_ibl"]
 [ext_resource type="Script" uid="uid://7ko7iiaifff4" path="res://tools/dev/map_grid_drawer.gd" id="4_grid_drawer"]
 [ext_resource type="Script" uid="uid://bcel8iqruyy63" path="res://modules/world/scripts/chunk_trigger.gd" id="5_trigger"]
-[ext_resource type="PackedScene" uid="uid://c2xr5ftdidmgm" path="res://modules/building_gen/buildings/bld_placeholder.tscn" id="5_w1ufe"]
-[ext_resource type="Script" uid="uid://cu07wep3u76eh" path="res://modules/building_gen/scripts/building.gd" id="6_blvyu"]
-[ext_resource type="PackedScene" path="res://modules/building_gen/buildings/pg_smithy_lv1.tscn" id="7_v4rvx"]
 
 [sub_resource type="RectangleShape2D" id="shape_exit_right"]
 size = Vector2(64, 270)
@@ -41,24 +38,24 @@ z_index = 2
 [node name="TerrainBuildings" type="Node2D" parent="." unique_id=130193755]
 z_index = 2
 
-[node name="PgSmithyLv1" parent="TerrainBuildings" unique_id=1148837165 instance=ExtResource("7_v4rvx")]
-position = Vector2(864, 901)
-
-[node name="@Node2D@33288" parent="TerrainBuildings" unique_id=1168501876 instance=ExtResource("7_v4rvx")]
-position = Vector2(1376, 901)
-
-[node name="BldPlaceholder" type="Node2D" parent="TerrainBuildings" unique_id=1510291278 instance=ExtResource("5_w1ufe")]
-position = Vector2(96, 906)
-script = ExtResource("6_blvyu")
-def_id = "bld_placeholder"
-width = 16
-
 [node name="InitialBuildingsList" type="Node" parent="." unique_id=818831420]
 script = ExtResource("3_ibl")
 building_defs = Array[Dictionary]([{
 "cell_x": 20,
 "def_id": "bld_placeholder",
 "width": 16
+}, {
+"cell_x": 3,
+"def_id": "bld_wall_tier2",
+"width": 1
+}, {
+"cell_x": 4,
+"def_id": "bld_wall_gate",
+"width": 1
+}, {
+"cell_x": 250,
+"def_id": "bld_wall_tier2",
+"width": 1
 }])
 
 [node name="WalkBarrier" type="Node2D" parent="." unique_id=1540466640]

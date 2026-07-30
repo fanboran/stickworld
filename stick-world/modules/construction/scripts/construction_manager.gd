@@ -21,6 +21,7 @@ const ScriptConstructionProject := preload("res://modules/construction/scripts/c
 const ScriptWorkCrewAssigner := preload("res://modules/construction/scripts/work_crew_assigner.gd")
 const ScriptPlacementSystem := preload("res://modules/construction/placement/placement_system.gd")
 const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
+const ScriptBuildProgressIndicator := preload("res://modules/construction/scripts/build_progress_indicator.gd")
 
 # ─────────────────────────────── 字段 ────────────────────────────────
 
@@ -44,6 +45,8 @@ var _map: Node2D = null
 var _resources_api: Node = null
 ## 建筑定义缓存 {def_id: Dictionary}（P0-6 数据驱动）
 var _building_defs_cache: Dictionary = {}
+## 建造项目 -> 进度条指示器映射（阶段 E 双进度条）
+var _project_indicators: Dictionary = {}
 
 
 # ─────────────────────────────── 信号（供 api.gd 转发）────────────────────────────────
@@ -100,6 +103,12 @@ func _register_default_building_scenes() -> void:
 			register_building_scene(def_id, scene)
 		else:
 			push_warning("[ConstructionManager] 无法加载 %s.tscn" % def_id)
+	# 阶段 E：兵营场景注册（复制自铁匠铺，红色调区分）
+	var barracks_scene := load("res://modules/building_gen/buildings/bld_barracks.tscn") as PackedScene
+	if barracks_scene != null:
+		register_building_scene("bld_barracks", barracks_scene)
+	else:
+		push_warning("[ConstructionManager] 无法加载 bld_barracks.tscn")
 
 
 # ─────────────────────────────── 建筑定义数据驱动（P0-6）────────────────────────────────
@@ -124,7 +133,14 @@ func get_building_def(def_id: String) -> Dictionary:
 	return _building_defs_cache.get(def_id, {})
 
 
-# ─────────────────────────────── 每帧推进 ────────────────────────────────
+## 返回所有已注册场景的建筑 def_id（即可建造的建筑类型）
+func get_registered_def_ids() -> Array:
+	return _building_scene_registry.keys()
+
+
+## 建筑类型是否已注册场景（可建造）
+func is_building_registered(def_id: String) -> bool:
+	return _building_scene_registry.has(def_id)
 
 func _physics_process(delta: float) -> void:
 	# 推进所有活跃项目
@@ -179,6 +195,10 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	# 监听完工，自动注册 Building
 	if not project.completed.is_connected(_on_project_completed):
 		project.completed.connect(_on_project_completed)
+	# 阶段 E：创建双进度条指示器 + 监听进度
+	_create_progress_indicator(project)
+	if not project.progress_changed.is_connected(_on_project_progress):
+		project.progress_changed.connect(_on_project_progress)
 	return {
 		"ok": true,
 		"project_id": project_id,
@@ -224,6 +244,8 @@ func _check_and_consume_cost(building_type: String, region_id: String) -> Dictio
 
 ## 项目完工：把 Building 注册到 _buildings，分配 building_id
 func _on_project_completed(project: ScriptConstructionProject, building: Node) -> void:
+	# 阶段 E：移除建造进度条
+	_remove_progress_indicator(project.project_id)
 	if building == null:
 		return
 	var building_id := "bld_%04d" % _next_building_id
@@ -244,6 +266,39 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 		_update_city_terrain_mask()
 	# 转发给 api.gd（building_completed 信号）
 	building_completed.emit(building_id, project.region_id)
+
+
+# ─────────────────────────────── 建造进度条（阶段 E）────────────────────────────────
+
+## 为项目创建双进度条指示器，挂到 map.BuildMaskLayer
+func _create_progress_indicator(project: ScriptConstructionProject) -> void:
+	if _map == null:
+		return
+	var mask_layer: Node2D = _map.get("build_mask_layer") if "build_mask_layer" in _map else null
+	if mask_layer == null:
+		mask_layer = _map.get_node_or_null("BuildMaskLayer")
+	if mask_layer == null:
+		return
+	var indicator: Node2D = ScriptBuildProgressIndicator.new()
+	indicator.setup(project.cell_x, project.width, float(_map.get("ground_y") if "ground_y" in _map else 810.0))
+	mask_layer.add_child(indicator)
+	_project_indicators[project.project_id] = indicator
+	indicator.update_progress(project.get_material_progress(), project.get_progress())
+
+
+## 项目进度变化回调：更新进度条
+func _on_project_progress(project: ScriptConstructionProject, _progress: float) -> void:
+	var indicator: Node2D = _project_indicators.get(project.project_id)
+	if indicator != null and is_instance_valid(indicator):
+		indicator.update_progress(project.get_material_progress(), project.get_progress())
+
+
+## 移除项目进度条（完工/取消时调用）
+func _remove_progress_indicator(project_id: String) -> void:
+	var indicator: Node2D = _project_indicators.get(project_id)
+	if indicator != null and is_instance_valid(indicator):
+		indicator.queue_free()
+	_project_indicators.erase(project_id)
 
 
 # ─────────────────────────────── 城墙地形遮罩更新（阶段 F）────────────────────────────────
@@ -586,6 +641,11 @@ func _clear_all_buildings_and_projects() -> void:
 	_buildings.clear()
 	_building_to_id.clear()
 	_projects.clear()
+	# 阶段 E：清理进度条
+	for indicator in _project_indicators.values():
+		if is_instance_valid(indicator):
+			(indicator as Node).queue_free()
+	_project_indicators.clear()
 
 
 ## 从行数据恢复一个建造项目
@@ -603,9 +663,15 @@ func _restore_project_from_row(row: Dictionary) -> void:
 		_map, scene, total_work, str(row["region_id"]))
 	project.current_work = float(row["current_work"])
 	project.state = int(row["state"])
+	# 阶段 E：读档时材料进度视为已满（不阻塞建造继续推进）
+	project.material_progress = 1.0
 	_projects[project_id] = project
 	if not project.completed.is_connected(_on_project_completed):
 		project.completed.connect(_on_project_completed)
+	# 阶段 E：恢复进度条 + 监听进度
+	_create_progress_indicator(project)
+	if not project.progress_changed.is_connected(_on_project_progress):
+		project.progress_changed.connect(_on_project_progress)
 
 
 ## 计算下一个 ID（避免恢复后冲突）

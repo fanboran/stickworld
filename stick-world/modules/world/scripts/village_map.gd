@@ -37,6 +37,9 @@ extends Node2D
 ## 地面底部 Y（火柴人可走区域底部，= ground_y + DESIGN_HEIGHT * ground_ratio = 810 + 1080*0.25 = 1080）
 ## 注意：此值应匹配屏幕可见地面范围，避免地面矩形超出屏幕导致火柴人显示偏下
 @export var ground_bottom: float = 1080.0
+## 建筑下基准线偏移（地平线向下像素数）：所有房屋类建筑底部对齐到 ground_y + 此值。
+## 不是按格子计算，而是固定像素偏移（当前 96px，后续可调整为 100/200 等）。
+@export var building_baseline_offset: float = 96.0
 ## 草地纹理平铺尺寸（世界坐标 px，每 GRASS_TILE_SIZE 像素重复一次纹理）
 const GRASS_TILE_SIZE: float = 512.0
 
@@ -144,19 +147,25 @@ func _register_terrain_buildings() -> void:
 	for building in terrain_buildings.get_children():
 		if not building is Node2D:
 			continue
-		# 从 PassageBarrier 读取宽度
+		# 宽度：优先用 building.width 属性，无则从碰撞箱尺寸反推
 		var width_cells := 1
+		if "width" in building:
+			width_cells = maxi(1, int(building.get("width")))
+		# 从 PassageBarrier 读取碰撞箱左边缘（网格对齐）注册占地
 		var pb: Node = building.get_node_or_null("PassageBarrier")
 		if pb:
 			for child in pb.get_children():
 				if child is CollisionShape2D and child.shape is RectangleShape2D:
-					width_cells = maxi(1, int(round((child.shape as RectangleShape2D).size.x / placement_grid.CELL_SIZE)))
+					var cs: CollisionShape2D = child as CollisionShape2D
+					if width_cells <= 1:
+						width_cells = maxi(1, int(round((cs.shape as RectangleShape2D).size.x / placement_grid.CELL_SIZE)))
+					var col_left: float = building.position.x + cs.position.x - (cs.shape as RectangleShape2D).size.x / 2.0
+					var cell_x: int = placement_grid.world_to_cell(Vector2(col_left, 0))
+					placement_grid.occupy(cell_x, width_cells, building.name)
 					break
-		# 建筑原点在底部中心，左边缘 = position.x - width_px / 2
-		var width_px: float = width_cells * placement_grid.CELL_SIZE
-		var left_x: float = building.position.x - width_px / 2.0
-		var cell_x: int = placement_grid.world_to_cell(Vector2(left_x, 0))
-		placement_grid.occupy(cell_x, width_cells, building.name)
+		# 地形建筑默认设为 OPERATIONAL（不透明）
+		if building.has_method("set_state"):
+			building.set_state(Building.State.OPERATIONAL)
 
 
 # ─────────────────────────────── 动态地图模型（阶段 F §5.7.2）────────────────────────────────

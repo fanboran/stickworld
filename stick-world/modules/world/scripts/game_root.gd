@@ -93,13 +93,11 @@ const FOREST_ZONE_MAP_ID := "test_forest_zone"
 const PLAYER_SPAWN_X: float = 300.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为）
 const NPC_COUNT: int = 5
-## 演示建筑的 cell_x（远离玩家 spawn，避免阻挡）
-const DEMO_BUILDING_CELL_X: int = 50
 
 # ─────────────────────────────── 建造系统（§15 阶段 0.4）────────────────────────────────
 
-## 是否在地图加载完成后自动触发一次演示建造（test_stage_03 等旧测试应关闭）
-@export var auto_demo_building: bool = true
+## [已废弃] 原自动演示建造开关，演示建造功能已删除。保留字段仅为兼容旧测试脚本 set 调用。
+@export var auto_demo_building: bool = false
 ## 是否已加载过初始地图（用于区分初始加载 vs 地图切换）
 var _initial_map_loaded: bool = false
 ## ConstructionManager 实例引用（运行时由 _ready 装配）
@@ -715,9 +713,6 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 			map.generate_resource_nodes(0, 15, 0.25)
 			map.generate_resource_nodes(right_cell - 15, right_cell, 0.25)
 		_spawn_npcs(map, spawn_y)
-		# 自动触发演示建造（test_stage_03 等旧测试应通过 auto_demo_building=false 关闭）
-		if auto_demo_building:
-			call_deferred("_start_demo_building")
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
@@ -758,23 +753,6 @@ func _spawn_initial_buildings(map: Node2D) -> void:
 			push_warning("[GameRoot] 初始建筑生成失败: %s cell_x=%d: %s" % [def_id, cell_x, result.get("error", "未知错误")])
 
 
-# ─────────────────────────────── 演示建造 ────────────────────────────────
-
-## 触发一次演示建造：在 DEMO_BUILDING_CELL_X 处建一栋 bld_workshop。
-## NPC 会通过 AIController 自动派工并完成建造。
-func _start_demo_building() -> void:
-	if _construction_api == null or not _construction_api.has_method("start_construction_at"):
-		push_warning("[GameRoot] 建造系统未就绪，跳过演示建造")
-		return
-	var region_id := "test_region"
-	var building_type := "bld_workshop"
-	var result: Dictionary = _construction_api.start_construction_at(region_id, building_type, DEMO_BUILDING_CELL_X, "")
-	if result.get("ok", false):
-		print("[GameRoot] 演示建造已启动: project=%s cell_x=%d" % [result.get("project_id", ""), DEMO_BUILDING_CELL_X])
-	else:
-		push_warning("[GameRoot] 演示建造失败: %s" % result.get("error", "未知错误"))
-
-
 ## 主动按指定 cell_x 触发建造（供调试 / 集成测试调用）。
 ## 返回 {ok, project_id, cell_x, width} 或 {ok:false, error}。
 func start_demo_building_at(cell_x: int) -> Dictionary:
@@ -783,7 +761,7 @@ func start_demo_building_at(cell_x: int) -> Dictionary:
 	if _construction_manager == null or not _construction_manager.has_method("start_construction_at"):
 		return {"ok": false, "error": "ConstructionManager 未就绪"}
 	# 直接调用 manager 的 start_construction_at（按指定位置）
-	return _construction_manager.start_construction_at("test_region", "bld_workshop", cell_x, "")
+	return _construction_manager.start_construction_at("test_region", "bld_placeholder", cell_x, "")
 
 
 ## 生成 NPC 村民，分布在玩家右侧不同 X 位置，不附身（AI 接管）。

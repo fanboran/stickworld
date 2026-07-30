@@ -15,7 +15,7 @@ modules/building_gen/
 ├── api.gd                          # 模块对外 API（仅建筑实例化，材质 API 见 TextureGenApi）
 ├── README.md                       # 本文件：系统级说明
 ├── buildings/                      # 程序化建筑定义（核心）
-│   ├── bld_workshop.tscn           #   @deprecated 旧预制场景，待新版替换
+│   ├── bld_placeholder.tscn        #   占位建筑（纯灰+黑线，仅碰撞箱，16格宽）
 │   ├── pg_smithy_lv1.gd            #   铁匠铺 Lv1 生成脚本（继承 Building 基类）
 │   ├── pg_smithy_lv1.tscn          #   铁匠铺 Lv1 场景（碰撞/交互区/工作槽位）
 │   └── reference/                  #   建筑级参考图

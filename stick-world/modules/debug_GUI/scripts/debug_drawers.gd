@@ -135,13 +135,17 @@ static func _draw_building_outline(control: Control, ctx: Dictionary, building: 
 				var screen_size := Vector2(rs.size.x * zoom, rs.size.y * zoom)
 				var rect := Rect2(screen_pos - screen_size * 0.5, screen_size)
 				control.draw_rect(rect, color, false, 1.5)
-				# 红色下边界横线：按格子数 × 32px 绘制，居中对齐建筑位置
-				var width_cells: int = maxi(1, int(round(rs.size.x / 32.0)))
+				# 红色下边界横线：按建筑 width 属性 × 32px 绘制，左边缘对齐碰撞箱左边缘（网格对齐）
+				var width_cells: int = 1
+				if "width" in building:
+					width_cells = maxi(1, int(building.get("width")))
+				else:
+					width_cells = maxi(1, int(round(rs.size.x / 32.0)))
 				var footprint_px: float = width_cells * 32.0
 				var bottom_y: float = screen_pos.y + screen_size.y * 0.5
-				var foot_center_x: float = world_to_screen(Vector2(building.global_position.x, 0), ctx).x
-				var foot_left_x: float = foot_center_x - footprint_px * zoom / 2.0
-				var foot_right_x: float = foot_center_x + footprint_px * zoom / 2.0
+				var col_left_world: float = building.global_position.x + cs.position.x - rs.size.x / 2.0
+				var foot_left_x: float = world_to_screen(Vector2(floor(col_left_world / 32.0) * 32.0, 0), ctx).x
+				var foot_right_x: float = foot_left_x + footprint_px * zoom
 				var tick_height: float = 20.0
 				var red := Color(1.0, 0.2, 0.2, 0.9)
 				control.draw_line(Vector2(foot_left_x, bottom_y), Vector2(foot_right_x, bottom_y), red, 2.0)

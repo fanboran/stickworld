@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://modules/building_gen/buildings/pg_smithy_lv1.gd" id="1_script"]
 
 [sub_resource type="RectangleShape2D" id="rect_passage"]
-size = Vector2(560, 390)
+size = Vector2(512, 390)
 
 [sub_resource type="RectangleShape2D" id="rect_interaction"]
 size = Vector2(490, 340)
@@ -13,6 +13,7 @@ size = Vector2(200, 80)
 
 [node name="PgSmithyLv1" type="Node2D"]
 script = ExtResource("1_script")
+width = 16
 
 [node name="Exterior" type="Node2D" parent="."]
 position = Vector2(28, 0)

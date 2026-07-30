@@ -80,15 +80,13 @@ func register_building_scene(def_id: String, scene: PackedScene) -> void:
 	_building_scene_registry[def_id] = scene
 
 
-## P0 默认注册：bld_workshop + 城墙/城门（阶段 F）
-## 注意：bld_workshop.tscn 为旧预制场景，仅作为 Building 节点结构参考。
-## 新版程序化建筑请使用 pg_smithy_lv1.tscn，待新版全面替代后删除此路径。
+## P0 默认注册：bld_placeholder（占位建筑） + 城墙/城门（阶段 F）
 func _register_default_building_scenes() -> void:
-	var workshop_scene := load("res://modules/building_gen/buildings/bld_workshop.tscn") as PackedScene
-	if workshop_scene != null:
-		register_building_scene("bld_workshop", workshop_scene)
+	var placeholder_scene := load("res://modules/building_gen/buildings/bld_placeholder.tscn") as PackedScene
+	if placeholder_scene != null:
+		register_building_scene("bld_placeholder", placeholder_scene)
 	else:
-		push_warning("[ConstructionManager] 无法加载 bld_workshop.tscn")
+		push_warning("[ConstructionManager] 无法加载 bld_placeholder.tscn")
 	# 阶段 F：城墙/城门场景注册
 	var wall_scenes := {
 		"bld_wall_tier1": "res://modules/building_gen/buildings/bld_wall_tier1.tscn",
@@ -395,15 +393,15 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 		return {"ok": false, "error": "map.building_host 不存在"}
 	host.add_child(building)
 
-	# 摆放位置：建筑碰撞体下边界对齐草坪中线（与 building_snap.gd 编辑器吸附逻辑一致）
-	var world_x: float = cell_x * 32.0 + width * 32.0 / 2.0
+	# 摆放位置：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基准线（地平线向下 baseline_offset）
+	var world_x: float = cell_x * 32.0
 	var ground_y: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0)
-	var ground_bottom: float = float(_map.get("ground_bottom") if "ground_bottom" in _map else 1080.0)
-	var midline: float = (ground_y + ground_bottom) * 0.5
+	var baseline_offset: float = float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
+	var baseline: float = ground_y + baseline_offset
 	var collision_bottom_local: float = 0.0
 	if building is ScriptBuilding:
 		collision_bottom_local = (building as ScriptBuilding).get_collision_bottom_local()
-	(building as Node2D).global_position = Vector2(world_x, midline - collision_bottom_local)
+	(building as Node2D).global_position = Vector2(world_x, baseline - collision_bottom_local)
 
 	# 立即设为 OPERATIONAL
 	if building is ScriptBuilding:

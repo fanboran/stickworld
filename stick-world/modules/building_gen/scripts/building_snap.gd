@@ -37,17 +37,15 @@ func _snap_position() -> void:
 		return
 
 	var ground_y: float = map_root.get("ground_y") if "ground_y" in map_root else 810.0
-	var ground_bottom: float = map_root.get("ground_bottom") if "ground_bottom" in map_root else 1080.0
-	var midline: float = (ground_y + ground_bottom) / 2.0
+	var baseline_offset: float = map_root.get("building_baseline_offset") if "building_baseline_offset" in map_root else 96.0
+	var baseline: float = ground_y + baseline_offset
 
 	# X 吸附到 32px 网格
 	var snapped_x: float = roundf(position.x / CELL_SIZE) * CELL_SIZE
 
-	# Y 吸附：碰撞体下边界对齐草地中线
-	# 碰撞体下边界(世界坐标) = building.y + CollisionShape2D.position.y + shape.size.y / 2
-	# 要让它 = midline，所以 building.y = midline - CollisionShape2D.position.y - shape.size.y / 2
+	# Y 吸附：碰撞体下边界对齐建筑基准线（地平线向下 baseline_offset）
 	var collision_bottom_local := _get_collision_bottom_local()
-	var snapped_y: float = midline - collision_bottom_local
+	var snapped_y: float = baseline - collision_bottom_local
 
 	if abs(snapped_x - position.x) > 0.5 or abs(snapped_y - position.y) > 0.5:
 		position = Vector2(snapped_x, snapped_y)

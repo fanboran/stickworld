@@ -74,11 +74,16 @@ func _draw_building_markers(map_root: Node) -> void:
 				var col_left: float = center.x - rs.size.x / 2.0
 				var col_right: float = center.x + rs.size.x / 2.0
 				draw_rect(Rect2(col_left, top, col_right - col_left, bottom - top), Color(1, 1, 1, 0.5), false, 1.5)
-				# 红色下边界横线：按格子数 × 32px 绘制，居中对齐建筑位置
-				var width_cells: int = maxi(1, int(round(rs.size.x / 32.0)))
+				# 红色下边界横线：按建筑 width 属性 × 32px 绘制，左边缘对齐碰撞箱左边缘（网格对齐）
+				# width 属性与运行时 PlacementGrid.occupy 一致；无 width 时回退到碰撞箱尺寸取整
+				var width_cells: int = 1
+				if "width" in building:
+					width_cells = maxi(1, int(building.get("width")))
+				else:
+					width_cells = maxi(1, int(round(rs.size.x / 32.0)))
 				var footprint_px: float = width_cells * 32.0
-				var foot_left: float = building.position.x - footprint_px / 2.0
-				var foot_right: float = building.position.x + footprint_px / 2.0
+				var foot_left: float = floor(col_left / 32.0) * 32.0
+				var foot_right: float = foot_left + footprint_px
 				var red := Color(1.0, 0.2, 0.2, 0.9)
 				draw_line(Vector2(foot_left, bottom), Vector2(foot_right, bottom), red, 2.0)
 				# 两端向上刻度线

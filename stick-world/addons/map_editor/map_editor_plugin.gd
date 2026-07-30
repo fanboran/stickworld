@@ -185,13 +185,13 @@ func _on_place_clicked() -> void:
 		return
 
 	var ground_y: float = root.ground_y if "ground_y" in root else 810.0
-	var ground_bottom: float = root.ground_bottom if "ground_bottom" in root else 1080.0
-	var midline: float = (ground_y + ground_bottom) / 2.0
+	var baseline_offset: float = root.get("building_baseline_offset") if "building_baseline_offset" in root else 96.0
+	var baseline: float = ground_y + baseline_offset
 	var width_cells := _get_building_width_cells(_building_scenes[_selected_index])
 	var width_px: float = width_cells * CELL_SIZE
-	# Y = midline - 碰撞体下边界相对建筑原点的偏移
+	# Y = baseline - 碰撞体下边界相对建筑原点的偏移
 	var collision_bottom_local := _get_scene_collision_bottom_local(_building_scenes[_selected_index])
-	var pos := Vector2(cell_x * CELL_SIZE + width_px / 2.0, midline - collision_bottom_local)
+	var pos := Vector2(cell_x * CELL_SIZE + width_px / 2.0, baseline - collision_bottom_local)
 
 	# 重叠检查
 	var new_left: float = pos.x - width_px / 2.0
@@ -236,8 +236,8 @@ func _on_snap_all_clicked() -> void:
 		print("[MapEditor] 未找到 TerrainBuildings")
 		return
 	var ground_y: float = root.get("ground_y") if "ground_y" in root else 810.0
-	var ground_bottom: float = root.get("ground_bottom") if "ground_bottom" in root else 1080.0
-	var midline: float = (ground_y + ground_bottom) / 2.0
+	var baseline_offset: float = root.get("building_baseline_offset") if "building_baseline_offset" in root else 96.0
+	var baseline: float = ground_y + baseline_offset
 	var count := 0
 	var ur := get_undo_redo()
 	ur.create_action("吸附全部建筑")
@@ -245,9 +245,9 @@ func _on_snap_all_clicked() -> void:
 		if child is Node2D:
 			var old_pos: Vector2 = child.position
 			var new_x: float = roundf(old_pos.x / CELL_SIZE) * CELL_SIZE
-			# Y = midline - 碰撞体下边界相对建筑原点的偏移
+			# Y = baseline - 碰撞体下边界相对建筑原点的偏移
 			var col_bottom_local := _get_node_collision_bottom_local(child)
-			var new_y: float = midline - col_bottom_local
+			var new_y: float = baseline - col_bottom_local
 			var new_pos := Vector2(new_x, new_y)
 			if old_pos.distance_to(new_pos) > 0.5:
 				ur.add_do_property(child, "position", new_pos)

@@ -218,19 +218,19 @@ func _complete() -> void:
 		new_building.queue_free()
 		return
 	host.add_child(new_building)
-	# 计算世界坐标 X：建筑底部中心对齐条带 X 范围
+	# 计算世界坐标：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基准线（地平线向下 baseline_offset）
 	var cell_size: int = 32
 	var placement_grid: Node = map.get("placement_grid") if "placement_grid" in map else null
 	if placement_grid != null and "CELL_SIZE" in placement_grid:
 		cell_size = int(placement_grid.CELL_SIZE)
-	var world_x: float = float(cell_x) * float(cell_size) + float(cell_size * width) * 0.5
+	var world_x: float = float(cell_x) * float(cell_size)
 	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	var ground_bottom: float = float(map.get("ground_bottom") if "ground_bottom" in map else 1080.0)
-	var midline: float = (ground_y + ground_bottom) * 0.5
+	var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
+	var baseline: float = ground_y + baseline_offset
 	var collision_bottom_local: float = 0.0
 	if new_building is ScriptBuilding:
 		collision_bottom_local = (new_building as ScriptBuilding).get_collision_bottom_local()
-	new_building.global_position = Vector2(world_x, midline - collision_bottom_local)
+	new_building.global_position = Vector2(world_x, baseline - collision_bottom_local)
 	# 标记建筑为 OPERATIONAL（触发视觉/碰撞更新）
 	if new_building is ScriptBuilding:
 		(new_building as ScriptBuilding).set_state(ScriptBuilding.State.OPERATIONAL)
@@ -259,7 +259,7 @@ func cancel() -> void:
 
 # ─────────────────────────────── 查询 ────────────────────────────────
 
-## 工作位 hint：P0 简化为 4（同 bld_workshop 等），实际应读 Building.def_id 查配置表
+## 工作位 hint：P0 简化为 4，实际应读 Building.def_id 查配置表
 func _get_max_work_slots_hint() -> int:
 	return 4
 

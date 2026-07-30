@@ -1,18 +1,19 @@
 [gd_scene format=3 uid="uid://0g2l47kb7emi"]
 
-[ext_resource type="Script" path="res://modules/building_gen/scripts/preview/smithy_preview.gd" id="1_d0qwq"]
-[ext_resource type="Script" path="res://modules/texture_gen/materials/thatch/scripts/thatch_applier.gd" id="2_applier"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/backwalltop.png" id="tex_backwalltop"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/backpillarl.png" id="tex_backpillarl"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/frontpillar.png" id="tex_frontpillar"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/slantedbeam.png" id="tex_slantedbeam"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/verticalstrut.png" id="tex_verticalstrut"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/beam.png" id="tex_beam"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/roofmain.png" id="tex_roofmain"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/slantedstrut.png" id="tex_slantedstrut"]
-[ext_resource type="Texture2D" path="res://modules/building_gen/scenes/smithy_reference_textures/roofleftgroup1.png" id="tex_roofleftgroup1"]
+[ext_resource type="Script" uid="uid://da7xnm4y0mu5e" path="res://modules/building_gen/scripts/preview/smithy_preview.gd" id="1_d0qwq"]
+[ext_resource type="Script" uid="uid://b11d5afjwi0wy" path="res://modules/texture_gen/materials/thatch/scripts/thatch_applier.gd" id="2_applier"]
+[ext_resource type="Texture2D" uid="uid://66wmnqxb88kc" path="res://modules/building_gen/scenes/smithy_reference_textures/backpillarl.png" id="tex_backpillarl"]
+[ext_resource type="Texture2D" uid="uid://dwo1xyqoh7rwc" path="res://modules/building_gen/scenes/smithy_reference_textures/backwalltop.png" id="tex_backwalltop"]
+[ext_resource type="Texture2D" uid="uid://dwurjxumutb5e" path="res://modules/building_gen/scenes/smithy_reference_textures/beam.png" id="tex_beam"]
+[ext_resource type="Texture2D" uid="uid://c7mwa6vuprn8e" path="res://modules/building_gen/scenes/smithy_reference_textures/frontpillar.png" id="tex_frontpillar"]
+[ext_resource type="Texture2D" uid="uid://tmlm7hg2j30i" path="res://modules/building_gen/scenes/smithy_reference_textures/roofleftgroup1.png" id="tex_roofleftgroup1"]
+[ext_resource type="Texture2D" uid="uid://bv5w8kbgaumoj" path="res://modules/building_gen/scenes/smithy_reference_textures/roofmain.png" id="tex_roofmain"]
+[ext_resource type="Texture2D" uid="uid://5hv52re110gi" path="res://modules/building_gen/scenes/smithy_reference_textures/slantedbeam.png" id="tex_slantedbeam"]
+[ext_resource type="Texture2D" uid="uid://bew3u60o0tw12" path="res://modules/building_gen/scenes/smithy_reference_textures/slantedstrut.png" id="tex_slantedstrut"]
+[ext_resource type="Texture2D" uid="uid://dmp2d467un8g" path="res://modules/building_gen/scenes/smithy_reference_textures/verticalstrut.png" id="tex_verticalstrut"]
 
 [node name="SmithyPreview" type="Node2D" unique_id=1133741269]
+position = Vector2(250, 0)
 script = ExtResource("1_d0qwq")
 
 [node name="L1_BackWall" type="Node2D" parent="." unique_id=784497569]
@@ -44,7 +45,7 @@ texture = ExtResource("tex_frontpillar")
 position = Vector2(-0.5, -123)
 texture = ExtResource("tex_frontpillar")
 
-[node name="@Sprite2D@45470" type="Sprite2D" parent="L4_FrontWall" unique_id=3771060999]
+[node name="@Sprite2D@45470" type="Sprite2D" parent="L4_FrontWall" unique_id=-523906297]
 position = Vector2(204, -123)
 texture = ExtResource("tex_frontpillar")
 
@@ -80,10 +81,7 @@ texture = ExtResource("tex_roofleftgroup1")
 polygon = PackedVector2Array(-182, -361, 59, -361, -44, -182, -285, -182)
 uv = PackedVector2Array(0, 0, 3.765625, 0, 3.765625, 1, 0, 1)
 
-[node name="ThatchApplier" type="Node" parent="."]
+[node name="ThatchApplier" type="Node" parent="." unique_id=965001715]
 script = ExtResource("2_applier")
-roof_paths = [NodePath("../L5_Roof/RoofMain"), NodePath("../L5_Roof/RoofLeftGroup1")]
-show_guides = true
+roof_paths = Array[NodePath]([NodePath("../L5_Roof/RoofMain"), NodePath("../L5_Roof/RoofLeftGroup1")])
 alternate_angle_per_roof = false
-match_angle_to_slope = true
-stroke_angle_deg = -30.0

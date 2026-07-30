@@ -106,6 +106,10 @@ var _range_base_size: Vector2 = Vector2.ZERO
 var _collider_base_x: float = 0.0
 ## Range 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
 var _range_base_x: float = 0.0
+## Hitbox 子 CollisionShape2D 原始尺寸（受击判定，与 Collider 同步缩放）
+var _hitbox_base_size: Vector2 = Vector2.ZERO
+## Hitbox 子 CollisionShape2D 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
+var _hitbox_base_x: float = 0.0
 
 # ─────────────────────────────── 战斗组件引用（§7.1）────────────────────────────────
 @onready var health_component: Node = get_node_or_null("HealthComponent")
@@ -166,6 +170,14 @@ func _ready() -> void:
 		# Range position 也需要缩放（编辑器中的值基于原始大小，运行时需乘以 BASE_SCALE）
 		_range_base_x = rng.position.x * BASE_SCALE
 		rng.position *= BASE_SCALE
+	# Hitbox 子 CollisionShape2D 同步缩放并保存原始尺寸/偏移
+	if hitbox != null:
+		var hb_shape := hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
+		if hb_shape != null and hb_shape.shape is RectangleShape2D:
+			hb_shape.shape = (hb_shape.shape as RectangleShape2D).duplicate()
+			_hitbox_base_size = (hb_shape.shape as RectangleShape2D).size
+			_hitbox_base_x = hb_shape.position.x * BASE_SCALE
+			hb_shape.position *= BASE_SCALE
 	# 应用初始缩放
 	_apply_scale()
 	# 播放 idle
@@ -372,6 +384,12 @@ func _apply_scale() -> void:
 		if rng != null and rng.shape is RectangleShape2D:
 			(rng.shape as RectangleShape2D).size = _range_base_size * s
 			rng.position.x = _range_base_x * _facing
+	# 同步缩放 Hitbox 子 shape（受击判定，与 Collider 同步缩放）
+	if _hitbox_base_size != Vector2.ZERO and hitbox != null:
+		var hb_shape := hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
+		if hb_shape != null and hb_shape.shape is RectangleShape2D:
+			(hb_shape.shape as RectangleShape2D).size = _hitbox_base_size * s
+			hb_shape.position.x = _hitbox_base_x * _facing
 	_sync_markers_transform()
 
 

@@ -164,10 +164,20 @@ var _possession_indicator: Control = null
 var _hover_indicator: Control = null
 var _middle_scroll_overlay: Control = null
 
+# ─────────────────────────────── 存档系统 ────────────────────────────────
+## 是否有存档待加载（读档入口标记）
+var _pending_save_load: bool = false
+## 读档时缓存的 map_id（从 save_meta 读取）
+var _cached_load_map_id: String = ""
+## 存档 UI 面板
+var _save_panel: Control = null
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	# 加入 game_root group（供 SavePanel 等查找）
+	add_to_group("game_root")
 	# 实例化 UI 覆盖层和调试覆盖层（从各自模块场景加载）
 	_setup_ui_root()
 	_setup_debug_overlay()
@@ -192,6 +202,8 @@ func _ready() -> void:
 	_setup_boundary_detector()
 	# 游玩 UI：主控圆圈 + 悬停方框
 	_setup_game_ui()
+	# 存档系统：信号连接 + 注册
+	_setup_save_system()
 	# 默认 X1 速度
 	if TimeManager:
 		TimeManager.set_speed(TimeManager.Speed.X1)
@@ -622,6 +634,200 @@ func _setup_game_ui() -> void:
 		add_child(_middle_scroll_overlay)
 
 
+# ─────────────────────────────── 存档系统 ────────────────────────────────
+
+## 存档面板脚本
+const _SavePanelScript: GDScript = preload("res://modules/ui/scripts/save_panel.gd")
+
+func _setup_save_system() -> void:
+	if EventBus:
+		if EventBus.has_signal("game_saving"):
+			EventBus.game_saving.connect(_on_game_saving)
+		if EventBus.has_signal("game_loaded"):
+			EventBus.game_loaded.connect(_on_game_loaded)
+	# 向 SaveManager 注册（接收 game_saving/game_loaded 信号）
+	if SaveManager and SaveManager.has_method("register_module"):
+		SaveManager.register_module("map_runtime", self)
+	# 实例化存档面板
+	_save_panel = Control.new()
+	_save_panel.set_script(_SavePanelScript)
+	_save_panel.name = "SavePanel"
+	_save_panel.visible = false
+	if ui_root != null:
+		ui_root.add_child(_save_panel)
+	else:
+		add_child(_save_panel)
+
+
+## 存档保存回调（由 EventBus.game_saving 触发）
+func _on_game_saving(_slot_index: int) -> void:
+	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
+	if db == null:
+		return
+	var slot_id: int = SaveManager.get_current_slot() if SaveManager.has_method("get_current_slot") else -1
+	if slot_id < 0:
+		return
+	var map: Node2D = get_current_map()
+	var map_id: String = ""
+	if scene_loader and "current_map_id" in scene_loader:
+		map_id = scene_loader.current_map_id
+	# 1. 地图边界 -> maps 表
+	if map != null and map.has_method("save_to_db"):
+		map.save_to_db(db, slot_id, map_id)
+	# 2. 建筑 + 建造项目 -> buildings + construction_projects 表
+	if _construction_manager != null and _construction_manager.has_method("save_to_db"):
+		_construction_manager.save_to_db(db, slot_id, map_id)
+	# 3. 实体（玩家+NPC）-> entities 表
+	_save_entities(db, slot_id, map_id, map)
+	# 4. 资源点 -> resource_nodes 表
+	if map != null and map.has_method("save_resource_nodes_to_db"):
+		map.save_resource_nodes_to_db(db, slot_id, map_id)
+	# 5. 更新 save_meta.current_map_id
+	db.update_rows("save_meta", "slot_id = %d" % slot_id, {"current_map_id": map_id})
+
+
+## 保存实体到 DB
+func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
+	if map == null:
+		return
+	db.delete_rows("entities", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+	var idx: int = 0
+	for entity in map.get_entities():
+		if not is_instance_valid(entity):
+			continue
+		var is_player: int = 1 if (entity.has_method("is_possessed") and entity.is_possessed()) else 0
+		var facing: int = int(entity.get("_facing")) if "_facing" in entity else 1
+		var extra: Dictionary = {}
+		if "faction_id" in entity:
+			extra["faction_id"] = entity.faction_id
+		db.insert_row("entities", {
+			"slot_id": slot_id, "map_id": map_id,
+			"entity_id": "ent_%04d" % idx,
+			"entity_type": "stickman",
+			"def_id": "stickman_basic",
+			"pos_x": entity.global_position.x,
+			"pos_y": entity.global_position.y,
+			"facing": facing,
+			"is_player": is_player,
+			"extra_data": JSON.stringify(extra),
+		})
+		idx += 1
+
+
+## 存档加载回调（由 EventBus.game_loaded 触发）
+func _on_game_loaded(slot_index: int) -> void:
+	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
+	if db != null:
+		var rows: Array = db.select_rows("save_meta", "slot_id = %d" % slot_index, ["current_map_id"])
+		if not rows.is_empty():
+			_cached_load_map_id = str(rows[0].get("current_map_id", ""))
+	if not _cached_load_map_id.is_empty():
+		call_deferred("_load_map_for_save")
+
+
+## 外部调用：启动读档流程
+func load_game_from_slot(slot_index: int) -> void:
+	_pending_save_load = true
+	# 清理当前地图实例（如果存在）
+	if world_chunk_host != null and world_chunk_host.get_child_count() > 0:
+		var old_map: Node2D = world_chunk_host.get_child(0) as Node2D
+		if old_map:
+			old_map.queue_free()
+		_initial_map_loaded = false
+	# 调用 SaveManager.load_game（会 emit game_loaded -> _on_game_loaded -> 加载地图）
+	if SaveManager and SaveManager.has_method("load_game"):
+		SaveManager.load_game(slot_index)
+
+
+## 读档时加载缓存的地图
+func _load_map_for_save() -> void:
+	if scene_loader == null or not scene_loader.has_method("load_map"):
+		return
+	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
+		scene_loader.map_loaded.connect(_on_map_loaded)
+	if _cached_load_map_id.is_empty():
+		_cached_load_map_id = TEST_VILLAGE_MAP_ID
+	scene_loader.load_map(_cached_load_map_id)
+
+
+## 从存档恢复场景
+func _restore_from_save(map: Node2D, map_id: String) -> void:
+	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
+	var slot_id: int = SaveManager.get_current_slot() if SaveManager and SaveManager.has_method("get_current_slot") else -1
+	if db == null or slot_id < 0:
+		return
+	# 1. 恢复地图边界
+	if map.has_method("load_from_db"):
+		map.load_from_db(db, slot_id, map_id)
+	# 2. 恢复建筑 + 建造项目
+	if _construction_manager != null and _construction_manager.has_method("load_from_db"):
+		_construction_manager.load_from_db(db, slot_id, map_id)
+	# 3. 恢复玩家 + NPC
+	_restore_entities(db, slot_id, map_id, map)
+	# 4. 恢复资源点
+	if map.has_method("load_resource_nodes_from_db"):
+		map.load_resource_nodes_from_db(db, slot_id, map_id)
+	# 5. 恢复城墙地形遮罩
+	if _construction_manager != null and _construction_manager.has_method("_update_city_terrain_mask"):
+		_construction_manager._update_city_terrain_mask()
+	# 6. 重新设置相机/小地图边界
+	if camera_rig != null and camera_rig.has_method("set_map_bounds"):
+		camera_rig.set_map_bounds(map.map_left, map.map_right)
+	if _minimap != null and _minimap.has_method("set_map_info"):
+		_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
+	# 关闭 DB
+	if SaveManager and SaveManager.has_method("end_load"):
+		SaveManager.end_load()
+
+
+## 从 DB 恢复实体
+func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
+	var rows: Array = db.select_rows("entities", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+	for row in rows:
+		var pos := Vector2(float(row["pos_x"]), float(row["pos_y"]))
+		var entity: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, pos)
+		if entity == null:
+			continue
+		# 修正 Y（脚部对齐）
+		if entity.get("foot_offset") != null:
+			entity.global_position.y = pos.y - entity.foot_offset
+		# 朝向
+		if "_facing" in entity:
+			entity.set("_facing", int(row["facing"]))
+		# 玩家附身
+		if int(row["is_player"]) == 1 and entity.has_method("set_possessed"):
+			entity.set_possessed(true)
+			if camera_rig != null and camera_rig.has_method("set_follow_target"):
+				camera_rig.set_follow_target(entity)
+		else:
+			if entity.has_method("set_possessed"):
+				entity.set_possessed(false)
+			if entity.has_method("set_construction_manager") and _construction_manager != null:
+				entity.set_construction_manager(_construction_manager)
+
+
+## 切换存档面板可见性
+func toggle_save_panel() -> void:
+	if _save_panel != null:
+		_save_panel.visible = not _save_panel.visible
+
+
+## 快速保存到槽位 0
+func quick_save() -> void:
+	if SaveManager and SaveManager.has_method("save_game"):
+		SaveManager.save_game(0)
+		print("[GameRoot] 快速保存到槽位 0")
+
+
+## 快速读取槽位 0
+func quick_load() -> void:
+	if SaveManager and SaveManager.has_method("slot_exists") and SaveManager.slot_exists(0):
+		load_game_from_slot(0)
+		print("[GameRoot] 快速读取槽位 0")
+	else:
+		push_warning("[GameRoot] 槽位 0 无存档")
+
+
 func _register_default_maps() -> void:
 	if scene_loader == null or not scene_loader.has_method("register_map"):
 		return
@@ -647,7 +853,20 @@ func _load_test_village() -> void:
 	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
 	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
 		scene_loader.map_loaded.connect(_on_map_loaded)
-	scene_loader.load_map(TEST_VILLAGE_MAP_ID)
+	# 启动时检查槽位 0 是否有存档，有则自动读档，无则新游戏
+	if SaveManager and SaveManager.has_method("slot_exists") and SaveManager.slot_exists(0):
+		print("[GameRoot] 检测到槽位 0 存档，自动读取")
+		load_game_from_slot(0)
+	else:
+		scene_loader.load_map(TEST_VILLAGE_MAP_ID)
+
+
+## 退出时自动存档（防止数据丢失）
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if SaveManager and SaveManager.has_method("save_game"):
+			SaveManager.save_game(0)
+			print("[GameRoot] 退出前自动存档到槽位 0")
 
 
 ## 通用地图加载回调（初始加载 + 地图切换共用）
@@ -655,29 +874,12 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 	var map: Node2D = scene_loader.get_current_map() if scene_loader.has_method("get_current_map") else null
 	if map == null or not map.has_method("spawn_entity"):
 		return
-	# 计算玩家 spawn 位置
-	var spawn_x: float
-	var entry_side: int = scene_loader.get_last_entry_side() if scene_loader.has_method("get_last_entry_side") else WorldAPI.EntrySide.LEFT
-	if not _initial_map_loaded:
-		# 初始加载：固定 spawn 位置
-		spawn_x = PLAYER_SPAWN_X
-	else:
-		# 地图切换：根据进入方向决定 spawn 位置
-		if entry_side == WorldAPI.EntrySide.LEFT:
-			spawn_x = map.map_left + 150.0
-		else:
-			spawn_x = map.map_right - 150.0
-	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
-	# Spawn 玩家
-	var player: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(spawn_x, spawn_y))
-	if player == null:
-		return
-	# 修正 Y：让脚部对齐 spawn_y
-	if player.get("foot_offset") != null:
-		player.global_position.y = spawn_y - player.foot_offset
-	# 附身玩家实体（地图切换时需重新附身新实体）
-	if player.has_method("set_possessed"):
-		player.set_possessed(true)
+	# 注入地图到 ConstructionManager（供项目实例化建筑用）
+	if _construction_manager != null and _construction_manager.has_method("set_map"):
+		_construction_manager.set_map(map)
+	# 阶段 F：注入地图到 MapBoundaryDetector
+	if _boundary_detector != null and _boundary_detector.has_method("set_map"):
+		_boundary_detector.set_map(map)
 	# 配置相机：注入 ground_y / ground_ratio / map_bounds（详见 §2.4.7）
 	if camera_rig != null and camera_rig.has_method("set_ground_y"):
 		camera_rig.set_ground_y(map.ground_y)
@@ -685,39 +887,69 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		camera_rig.set_ground_ratio(map.ground_ratio)
 	if camera_rig != null and camera_rig.has_method("set_map_bounds"):
 		camera_rig.set_map_bounds(map.map_left, map.map_right)
-	# 让 CameraRig 跟随玩家
-	if camera_rig != null and camera_rig.has_method("set_follow_target"):
-		camera_rig.set_follow_target(player)
 	# 配置小地图地图信息（详见 §10.4.6）
 	if _minimap != null and _minimap.has_method("set_map_info"):
 		_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-	# 注入地图到 ConstructionManager（供项目实例化建筑用）
-	if _construction_manager != null and _construction_manager.has_method("set_map"):
-		_construction_manager.set_map(map)
-	# 阶段 F：注入地图到 MapBoundaryDetector
-	if _boundary_detector != null and _boundary_detector.has_method("set_map"):
-		_boundary_detector.set_map(map)
-	# 仅初始加载时 spawn 初始建筑、NPC 和演示建造
-	if not _initial_map_loaded:
-		_initial_map_loaded = true
-		_spawn_initial_buildings(map)
-		# 重新设置相机边界（初始建筑可能触发了地图动态扩展，map_left/map_right 已变化）
-		if camera_rig != null and camera_rig.has_method("set_map_bounds"):
-			camera_rig.set_map_bounds(map.map_left, map.map_right)
-		# 重新设置小地图范围
-		if _minimap != null and _minimap.has_method("set_map_info"):
-			_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-		# 阶段 F：程序化生成自然资源点（地图两侧边缘，避开中心建筑区）
-		if map.has_method("generate_resource_nodes"):
-			var right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
-			map.generate_resource_nodes(0, 15, 0.25)
-			map.generate_resource_nodes(right_cell - 15, right_cell, 0.25)
-		_spawn_npcs(map, spawn_y)
+	# 读档恢复：跳过默认 spawn，由 _restore_from_save 接管
+	if _pending_save_load:
+		_pending_save_load = false
+		_restore_from_save(map, map_id)
+	# 正常流程：spawn 玩家 + 初始内容
+	else:
+		var spawn_x: float
+		var entry_side: int = scene_loader.get_last_entry_side() if scene_loader.has_method("get_last_entry_side") else WorldAPI.EntrySide.LEFT
+		if not _initial_map_loaded:
+			spawn_x = PLAYER_SPAWN_X
+		else:
+			if entry_side == WorldAPI.EntrySide.LEFT:
+				spawn_x = map.map_left + 150.0
+			else:
+				spawn_x = map.map_right - 150.0
+		var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
+		# Spawn 玩家
+		var player: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(spawn_x, spawn_y))
+		if player == null:
+			return
+		# 修正 Y：让脚部对齐 spawn_y
+		if player.get("foot_offset") != null:
+			player.global_position.y = spawn_y - player.foot_offset
+		# 附身玩家实体（地图切换时需重新附身新实体）
+		if player.has_method("set_possessed"):
+			player.set_possessed(true)
+		# 让 CameraRig 跟随玩家
+		if camera_rig != null and camera_rig.has_method("set_follow_target"):
+			camera_rig.set_follow_target(player)
+		# 仅初始加载时 spawn 初始建筑、NPC 和演示建造
+		if not _initial_map_loaded:
+			_initial_map_loaded = true
+			_spawn_initial_buildings(map)
+			# 重新设置相机边界（初始建筑可能触发了地图动态扩展，map_left/map_right 已变化）
+			if camera_rig != null and camera_rig.has_method("set_map_bounds"):
+				camera_rig.set_map_bounds(map.map_left, map.map_right)
+			# 重新设置小地图范围
+			if _minimap != null and _minimap.has_method("set_map_info"):
+				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
+			# 阶段 F：程序化生成自然资源点（地图两侧边缘，避开中心建筑区）
+			if map.has_method("generate_resource_nodes"):
+				var right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
+				map.generate_resource_nodes(0, 15, 0.25)
+				map.generate_resource_nodes(right_cell - 15, right_cell, 0.25)
+			_spawn_npcs(map, spawn_y)
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 注册调试绘制器
 	_register_debug_drawers()
+	# 新游戏初始加载完成后，延迟存档一次（确保下次启动可读）
+	if not _pending_save_load and _initial_map_loaded:
+		call_deferred("_initial_auto_save")
+
+
+## 新游戏初始化后自动存档
+func _initial_auto_save() -> void:
+	if SaveManager and SaveManager.has_method("save_game"):
+		SaveManager.save_game(0)
+		print("[GameRoot] 初始加载完成，自动存档到槽位 0")
 
 
 ## 请求地图旅行（由 ChunkTrigger 调用，详见 §6.2 步行流程）
@@ -1002,3 +1234,23 @@ func is_in_battle() -> bool:
 	if battle_director and battle_director.has_method("has_active_battle"):
 		return battle_director.has_active_battle()
 	return false
+
+
+# ─────────────────────────────── 快捷键 ────────────────────────────────
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey) or not event.pressed:
+		return
+	var ek: InputEventKey = event as InputEventKey
+	# F5 快速保存到槽位 0
+	if ek.keycode == KEY_F5:
+		quick_save()
+		get_viewport().set_input_as_handled()
+	# F9 快速读取槽位 0
+	elif ek.keycode == KEY_F9:
+		quick_load()
+		get_viewport().set_input_as_handled()
+	# Ctrl+S 打开/关闭存档面板
+	elif ek.keycode == KEY_S and (ek.ctrl_pressed or ek.meta_pressed):
+		toggle_save_panel()
+		get_viewport().set_input_as_handled()

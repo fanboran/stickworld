@@ -503,3 +503,119 @@ func get_worker_project(worker: Node) -> ScriptConstructionProject:
 	if _assigner == null:
 		return null
 	return _assigner.get_worker_project(worker)
+
+
+# ─────────────────────────────── SQLite 存档 ────────────────────────────────
+# 详见 docs/技术/架构/SQLite存档迁移方案.md §5.2
+
+## 保存建筑和建造项目到 DB
+func save_to_db(db, slot_id: int, map_id: String) -> void:
+	# 建筑
+	db.delete_rows("buildings", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+	for b_id in _buildings.keys():
+		var b: Node = _buildings[b_id]
+		if not is_instance_valid(b) or not (b is ScriptBuilding):
+			continue
+		var typed: ScriptBuilding = b as ScriptBuilding
+		db.insert_row("buildings", {
+			"slot_id": slot_id, "building_id": b_id, "map_id": map_id,
+			"def_id": typed.def_id, "cell_x": typed.cell_x,
+			"width": typed.width, "state": typed.state,
+			"health": typed.health, "max_health": typed.max_health,
+			"is_terrain": 1 if typed.is_terrain else 0,
+			"wall_tier": typed.wall_tier,
+			"is_gate": 1 if typed.is_gate else 0,
+			"region_id": str(typed.get_meta("region_id", "")),
+		})
+	# 建造项目（只存未完工的）
+	db.delete_rows("construction_projects", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+	for p_id in _projects.keys():
+		var p: ScriptConstructionProject = _projects[p_id]
+		if p.state == ScriptConstructionProject.State.OPERATIONAL:
+			continue
+		db.insert_row("construction_projects", {
+			"slot_id": slot_id, "project_id": p_id, "map_id": map_id,
+			"def_id": p.def_id, "cell_x": p.cell_x, "width": p.width,
+			"state": p.state, "total_work": p.total_work,
+			"current_work": p.current_work, "region_id": p.region_id,
+		})
+
+
+## 从 DB 恢复建筑和建造项目
+func load_from_db(db, slot_id: int, map_id: String) -> void:
+	# 清空当前运行时状态
+	_clear_all_buildings_and_projects()
+	# 恢复建筑（用 spawn_operational_building 重建，再修正状态）
+	var bld_rows: Array = db.select_rows("buildings",
+		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+	for row in bld_rows:
+		var def_id: String = str(row["def_id"])
+		var cx: int = int(row["cell_x"])
+		var w: int = int(row["width"])
+		var result: Dictionary = spawn_operational_building(def_id, cx, w)
+		if result.get("ok", false):
+			var new_id: String = result["building_id"]
+			var b: Node = _buildings.get(new_id)
+			if b is ScriptBuilding:
+				var typed: ScriptBuilding = b as ScriptBuilding
+				typed.health = float(row["health"])
+				typed.set_state(int(row["state"]))
+				typed.wall_tier = int(row["wall_tier"])
+				typed.is_gate = bool(int(row["is_gate"]))
+				typed.set_meta("region_id", str(row["region_id"]))
+			# 替换为存档原始 building_id
+			_buildings.erase(new_id)
+			_buildings[str(row["building_id"])] = b
+			if b != null:
+				_building_to_id[b] = str(row["building_id"])
+	# 恢复建造项目
+	var proj_rows: Array = db.select_rows("construction_projects",
+		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+	for row in proj_rows:
+		_restore_project_from_row(row)
+	# 更新 ID 计数器
+	_next_building_id = _calc_next_id(_buildings.keys(), "bld_") + 1
+	_next_project_id = _calc_next_id(_projects.keys(), "proj_") + 1
+
+
+## 清空所有建筑和项目（读档前调用）
+func _clear_all_buildings_and_projects() -> void:
+	for b in _buildings.values():
+		if is_instance_valid(b):
+			b.queue_free()
+	_buildings.clear()
+	_building_to_id.clear()
+	_projects.clear()
+
+
+## 从行数据恢复一个建造项目
+func _restore_project_from_row(row: Dictionary) -> void:
+	if _map == null:
+		return
+	var def_id: String = str(row["def_id"])
+	if not _building_scene_registry.has(def_id):
+		return
+	var scene: PackedScene = _building_scene_registry[def_id]
+	var total_work: float = float(row["total_work"])
+	var project_id: String = str(row["project_id"])
+	var project := ScriptConstructionProject.new(
+		project_id, def_id, int(row["cell_x"]), int(row["width"]),
+		_map, scene, total_work, str(row["region_id"]))
+	project.current_work = float(row["current_work"])
+	project.state = int(row["state"])
+	_projects[project_id] = project
+	if not project.completed.is_connected(_on_project_completed):
+		project.completed.connect(_on_project_completed)
+
+
+## 计算下一个 ID（避免恢复后冲突）
+func _calc_next_id(ids: Array, prefix: String) -> int:
+	var max_id: int = 0
+	for id in ids:
+		var s := str(id)
+		if s.begins_with(prefix):
+			var num_part: String = s.substr(prefix.length())
+			var num: int = num_part.to_int()
+			if num > max_id:
+				max_id = num
+	return max_id

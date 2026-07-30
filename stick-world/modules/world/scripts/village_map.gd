@@ -597,3 +597,99 @@ func get_possessed_entity() -> Node2D:
 ## 获取地图宽度（像素）
 func get_map_width() -> float:
 	return map_right - map_left
+
+
+# ─────────────────────────────── SQLite 存档 ────────────────────────────────
+# 详见 docs/技术/架构/SQLite存档迁移方案.md §5.3
+
+## 保存地图边界到 DB
+func save_to_db(db, slot_id: int, map_id: String) -> void:
+	db.delete_rows("maps", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+	db.insert_row("maps", {
+		"slot_id": slot_id, "map_id": map_id,
+		"town_center_world_x": town_center_world_x,
+		"map_left_cell": map_left_cell, "map_right_cell": map_right_cell,
+		"city_left_x": _get_city_left_x(), "city_right_x": _get_city_right_x(),
+		"ground_y": ground_y, "ground_bottom": ground_bottom,
+	})
+
+
+## 保存资源点到 DB
+func save_resource_nodes_to_db(db, slot_id: int, map_id: String) -> void:
+	db.delete_rows("resource_nodes", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+	if decoration_layer == null:
+		return
+	var idx: int = 0
+	for node in decoration_layer.get_children():
+		if node is ScriptResourceNode and not node.is_depleted():
+			db.insert_row("resource_nodes", {
+				"slot_id": slot_id, "map_id": map_id,
+				"node_id": "rn_%04d" % idx,
+				"pos_x": node.global_position.x, "pos_y": node.global_position.y,
+				"resource_type": node.resource_type, "amount": node.amount,
+			})
+			idx += 1
+
+
+## 从 DB 恢复地图边界
+func load_from_db(db, slot_id: int, map_id: String) -> void:
+	var rows: Array = db.select_rows("maps",
+		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+	if rows.is_empty():
+		_init_dynamic_bounds()
+		return
+	var row: Dictionary = rows[0]
+	town_center_world_x = float(row["town_center_world_x"])
+	map_left_cell = int(row["map_left_cell"])
+	map_right_cell = int(row["map_right_cell"])
+	ground_y = float(row["ground_y"])
+	ground_bottom = float(row["ground_bottom"])
+	if placement_grid != null:
+		map_left = map_left_cell * placement_grid.CELL_SIZE
+		map_right = map_right_cell * placement_grid.CELL_SIZE
+		placement_grid.expand_to(map_left_cell)
+		placement_grid.expand_to(map_right_cell)
+	_update_ground_polygon()
+	var clx: float = float(row["city_left_x"])
+	var crx: float = float(row["city_right_x"])
+	if clx > -99990.0:
+		set_city_bounds(clx, crx)
+	_dynamic_bounds_initialized = true
+
+
+## 从 DB 恢复资源点
+func load_resource_nodes_from_db(db, slot_id: int, map_id: String) -> void:
+	if decoration_layer == null:
+		return
+	# 清除现有资源点
+	for node in decoration_layer.get_children():
+		if node is ScriptResourceNode:
+			node.queue_free()
+	var rows: Array = db.select_rows("resource_nodes",
+		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+	for row in rows:
+		var node: Node2D = ScriptResourceNode.new()
+		node.resource_type = int(row["resource_type"])
+		node.amount = int(row["amount"])
+		node.position = Vector2(float(row["pos_x"]), float(row["pos_y"]))
+		decoration_layer.add_child(node)
+
+
+## 获取城内左边界（从 Shader 参数读）
+func _get_city_left_x() -> float:
+	if terrain_layer == null:
+		return -99999.0
+	var gp: Polygon2D = terrain_layer.get_node_or_null("GroundPolygon")
+	if gp == null or gp.material == null:
+		return -99999.0
+	return float(gp.material.get_shader_parameter("city_left_x"))
+
+
+## 获取城内右边界
+func _get_city_right_x() -> float:
+	if terrain_layer == null:
+		return -99999.0
+	var gp: Polygon2D = terrain_layer.get_node_or_null("GroundPolygon")
+	if gp == null or gp.material == null:
+		return -99999.0
+	return float(gp.material.get_shader_parameter("city_right_x"))

@@ -14,7 +14,7 @@ size = Vector2(83, 24)
 size = Vector2(38, 262.5)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ogq8d"]
-size = Vector2(100, 270)
+size = Vector2(90, 277)
 
 [node name="StickmanEntity" type="CharacterBody2D" unique_id=655489722]
 position = Vector2(-8.5, -130)
@@ -45,5 +45,5 @@ shape = SubResource("RectangleShape2D_hitbox")
 script = ExtResource("6_weapon")
 
 [node name="Range" type="CollisionShape2D" parent="." unique_id=1337042102]
-position = Vector2(16, 9)
+position = Vector2(8.5, 9.5)
 shape = SubResource("RectangleShape2D_ogq8d")

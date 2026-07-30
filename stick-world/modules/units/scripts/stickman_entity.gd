@@ -102,6 +102,10 @@ var _startup_done: bool = false
 var _collider_base_size: Vector2 = Vector2.ZERO
 ## Range 原始尺寸（悬停检测范围，与 Collider 同步缩放）
 var _range_base_size: Vector2 = Vector2.ZERO
+## Collider 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
+var _collider_base_x: float = 0.0
+## Range 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
+var _range_base_x: float = 0.0
 
 # ─────────────────────────────── 战斗组件引用（§7.1）────────────────────────────────
 @onready var health_component: Node = get_node_or_null("HealthComponent")
@@ -148,7 +152,8 @@ func _ready() -> void:
 	var col := get_node_or_null("Collider") as CollisionShape2D
 	if col != null:
 		var col_orig_x: float = col.position.x
-		col.position = Vector2(col_orig_x * BASE_SCALE, foot_offset)
+		_collider_base_x = col_orig_x * BASE_SCALE
+		col.position = Vector2(_collider_base_x, foot_offset)
 		# duplicate shape 避免多实例共享同一资源导致 _apply_scale 互相覆盖
 		if col.shape is RectangleShape2D:
 			col.shape = (col.shape as RectangleShape2D).duplicate()
@@ -159,6 +164,7 @@ func _ready() -> void:
 		rng.shape = (rng.shape as RectangleShape2D).duplicate()
 		_range_base_size = (rng.shape as RectangleShape2D).size
 		# Range position 也需要缩放（编辑器中的值基于原始大小，运行时需乘以 BASE_SCALE）
+		_range_base_x = rng.position.x * BASE_SCALE
 		rng.position *= BASE_SCALE
 	# 应用初始缩放
 	_apply_scale()
@@ -358,11 +364,14 @@ func _apply_scale() -> void:
 		var col := get_node_or_null("Collider") as CollisionShape2D
 		if col != null and col.shape is RectangleShape2D:
 			(col.shape as RectangleShape2D).size = _collider_base_size * s
+			# X 偏移随朝向镜像（原点不在碰撞箱中心时，翻转需镜像偏移）
+			col.position.x = _collider_base_x * _facing
 	# 同步缩放 Range shape（悬停检测范围，与 Collider 同步缩放）
 	if _range_base_size != Vector2.ZERO:
 		var rng := get_node_or_null("Range") as CollisionShape2D
 		if rng != null and rng.shape is RectangleShape2D:
 			(rng.shape as RectangleShape2D).size = _range_base_size * s
+			rng.position.x = _range_base_x * _facing
 	_sync_markers_transform()
 
 

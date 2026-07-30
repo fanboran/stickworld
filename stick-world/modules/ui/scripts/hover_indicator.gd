@@ -2,7 +2,7 @@ extends Control
 ## 鼠标悬停指示器 -- 4 角直角呼吸方框（游玩 UI，非调试）。
 ##
 ## 鼠标悬停在 NPC/玩家上时显示 4 角方框，方框大小匹配 Range 节点范围。
-## 轻微内外呼吸放大缩小。
+## 轻微向外呼吸放大（基准大小即最小范围，不向内收缩）。
 
 const FRAME_COLOR: Color = Color(1.0, 1.0, 1.0, 0.9)
 const BREATH_AMP: float = 3.0
@@ -44,7 +44,8 @@ func _draw() -> void:
 	var rs: RectangleShape2D = _hovered_range.shape as RectangleShape2D
 	if rs == null:
 		return
-	var breath: float = sin(_breath_time * BREATH_SPEED) * BREATH_AMP
+	# 呼吸只往外扩：将 sin 映射到 [0,1]，基准大小即最小范围
+	var breath: float = (sin(_breath_time * BREATH_SPEED) * 0.5 + 0.5) * BREATH_AMP
 	var hw: float = rs.size.x * 0.5 * zoom + breath
 	var hh: float = rs.size.y * 0.5 * zoom + breath
 	var cl: float = CORNER_LEN * zoom

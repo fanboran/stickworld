@@ -8,14 +8,16 @@ export/*
 **/.godot/
 .godot/
 
-# Godot 插件（第三方 addons，通过自更新/包管理器维护）
-addons/
-!addons/.gitkeep
-
 # Godot 4 GDExtension 构建输出
+# 但保留 godot-sqlite 插件的预编译二进制
 *.so
 *.dll
 *.dylib
+!stick-world/addons/godot-sqlite/bin/*.dll
+!stick-world/addons/godot-sqlite/bin/*.so
+!stick-world/addons/godot-sqlite/bin/*.dylib
+# 忽略 godot-sqlite 的临时/备份文件（~ 前缀）
+stick-world/addons/godot-sqlite/bin/~*
 gdextension_crash_on_quit.txt
 
 # AI 助手记忆 / 本地状态

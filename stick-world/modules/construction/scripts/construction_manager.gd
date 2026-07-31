@@ -74,6 +74,41 @@ func get_map() -> Node2D:
 	return _map
 
 
+## 查找距离 pos 最近的已完工仓库建筑（def_id=="bld_warehouse"）。
+## 用于搬运工取货。无仓库返回 null。
+func get_nearest_warehouse(pos: Vector2) -> Node2D:
+	var best: Node2D = null
+	var best_dist: float = INF
+	for building_id: String in _buildings.keys():
+		var b: Node2D = _buildings[building_id] as Node2D
+		if b == null or not is_instance_valid(b):
+			continue
+		if b.get("def_id") != "bld_warehouse":
+			continue
+		var d: float = b.global_position.distance_to(pos)
+		if d < best_dist:
+			best_dist = d
+			best = b
+	return best
+
+
+## 查找距离 pos 最近的活跃建造项目（UNDER_CONSTRUCTION）。无项目返回 null。
+func get_nearest_project(pos: Vector2) -> RefCounted:
+	var best: RefCounted = null
+	var best_dist: float = INF
+	for p in _projects.values():
+		if p is ScriptConstructionProject:
+			var proj: ScriptConstructionProject = p as ScriptConstructionProject
+			if proj.state != proj.State.UNDER_CONSTRUCTION:
+				continue
+			var center_x: float = float(proj.cell_x) * 32.0 + float(proj.width) * 16.0
+			var d: float = absf(center_x - pos.x)
+			if d < best_dist:
+				best_dist = d
+				best = proj
+	return best
+
+
 # ─────────────────────────────── 建筑场景注册 ────────────────────────────────
 
 ## 注册建筑场景模板（def_id → PackedScene）
@@ -109,6 +144,12 @@ func _register_default_building_scenes() -> void:
 		register_building_scene("bld_barracks", barracks_scene)
 	else:
 		push_warning("[ConstructionManager] 无法加载 bld_barracks.tscn")
+	# 仓库场景注册（搬运系统取货点，复制自兵营改棕黄色调）
+	var warehouse_scene := load("res://modules/building_gen/buildings/bld_warehouse.tscn") as PackedScene
+	if warehouse_scene != null:
+		register_building_scene("bld_warehouse", warehouse_scene)
+	else:
+		push_warning("[ConstructionManager] 无法加载 bld_warehouse.tscn")
 
 
 # ─────────────────────────────── 建筑定义数据驱动（P0-6）────────────────────────────────
@@ -173,7 +214,7 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	# P0-6 从 buildings.tres 读取 width 和 build_time
 	var def: Dictionary = _building_defs_cache.get(building_type, {})
 	var width: int = int(def.get("width", 2))
-	var total_work: float = float(def.get("build_time", 60)) * 0.1
+	var total_work: float = 8.0  # 固定8次敲击完工（后续由 Excel build_time 驱动）
 	# 校验选址
 	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null
 	if placement_grid == null:

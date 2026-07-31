@@ -55,8 +55,14 @@ var material_progress: float = 0.0
 var state: State = State.PLANNED
 ## 已派工的工人列表（StickmanEntity[]）
 var _assigned_workers: Array = []
-## 工人 → 工作位索引映射（避免多名工人挤同一 slot）
+## 工人 -> 工作位索引映射（避免多名工人挤同一 slot）
 var _worker_slot_map: Dictionary = {}
+## 当前认领搬运工的工人（null=无搬运工）。同一项目最多一个搬运工。
+var _hauler: Node = null
+## 每次搬运交付的材料进度增量（25%，4 次往返填满）
+const HAUL_PAYLOAD_FRACTION: float = 0.25
+## 工地临时障碍（建造中阻挡通行，完工移除）
+var _barrier: Area2D = null
 ## 完工后实例化的 Building 引用（state != OPERATIONAL 时为 null）
 var building: Node = null
 
@@ -162,8 +168,6 @@ func get_worker_slot_index(worker: Node) -> int:
 func tick(delta: float) -> void:
 	if state != State.UNDER_CONSTRUCTION:
 		return
-	if _assigned_workers.is_empty():
-		return  # 无人工作不推进（但状态保留）
 	# total_work<=0（如 bld_placeholder）直接完工
 	if total_work <= 0.0:
 		material_progress = 1.0
@@ -171,15 +175,7 @@ func tick(delta: float) -> void:
 		progress_changed.emit(self, get_progress())
 		_complete()
 		return
-	var n: float = float(_assigned_workers.size())
-	# 材料进度：搬运工推进，速率 1.5x 建造（材料条先满）
-	material_progress = minf(material_progress + n * delta * 1.5 / total_work, 1.0)
-	# 建造进度：建造工推进，受材料进度限制（建造 ≤ 材料）
-	var build_cap: float = material_progress * total_work
-	current_work = minf(current_work + n * delta, build_cap)
-	progress_changed.emit(self, get_progress())
-	if current_work >= total_work:
-		_complete()
+	# 进度由 add_build_progress（建造工敲击）和 deliver_material（搬运工）行为驱动
 
 
 ## 获取当前建造进度 [0, 1]
@@ -194,6 +190,53 @@ func get_material_progress() -> float:
 	return material_progress
 
 
+## 是否需要搬运建材：材料未满且建造进度已追上材料进度。
+func needs_material() -> bool:
+	if total_work <= 0.0:
+		return false
+	if material_progress >= 1.0:
+		return false
+	return (current_work / total_work) >= material_progress - 0.001
+
+
+## 认领搬运工。同一项目最多一个搬运工，返回 true 表示认领成功。
+## 若该 worker 已认领则返回 true（幂等）。
+func try_claim_hauler(worker: Node) -> bool:
+	if _hauler == worker:
+		return true  # 已认领
+	if _hauler != null and is_instance_valid(_hauler):
+		return false
+	_hauler = worker
+	return true
+
+
+## 释放搬运工认领。
+func release_hauler(worker: Node) -> void:
+	if _hauler == worker:
+		_hauler = null
+
+
+## 搬运工交付建材，推进材料进度。
+func deliver_material(fraction: float = HAUL_PAYLOAD_FRACTION) -> void:
+	material_progress = minf(material_progress + fraction, 1.0)
+	progress_changed.emit(self, get_progress())
+
+
+## 建造工敲击一次推进建造进度。受材料进度限制（建造 ≤ 材料）。
+## 由 BehaviorWork / 玩家在播放 build 动画后调用。
+func add_build_progress(amount: float) -> void:
+	if state != State.UNDER_CONSTRUCTION:
+		return
+	if total_work <= 0.0:
+		_complete()
+		return
+	var build_cap: float = material_progress * total_work
+	current_work = minf(current_work + amount, build_cap)
+	progress_changed.emit(self, get_progress())
+	if current_work >= total_work:
+		_complete()
+
+
 # ─────────────────────────────── 内部状态转换 ────────────────────────────────
 
 ## 开工：PLANNED → UNDER_CONSTRUCTION
@@ -202,6 +245,51 @@ func _start() -> void:
 		return
 	state = State.UNDER_CONSTRUCTION
 	started.emit(self)
+	_create_barrier()
+
+
+## 创建工地临时障碍（建造中阻挡通行，完工移除）。
+## 从建筑场景模板读取 PassageBarrier 碰撞箱参数，确保与完工后建筑完全一致。
+func _create_barrier() -> void:
+	if map == null:
+		return
+	var host: Node2D = map.get("walk_barrier") if "walk_barrier" in map else null
+	if host == null:
+		return
+	# 从建筑场景模板读取 PassageBarrier 碰撞箱参数
+	var barrier_size: Vector2 = Vector2(float(width) * 32.0, 390.0)
+	var barrier_offset_x: float = float(width) * 16.0
+	var barrier_offset_y: float = -190.0
+	if building_scene != null:
+		var temp := building_scene.instantiate()
+		if temp != null:
+			var pb := temp.get_node_or_null("PassageBarrier") if temp is Node else null
+			if pb != null:
+				for child in pb.get_children():
+					if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+						var cs := child as CollisionShape2D
+						barrier_size = ((cs.shape as RectangleShape2D).size)
+						barrier_offset_x = cs.position.x
+						barrier_offset_y = cs.position.y
+						break
+			temp.queue_free()
+	_barrier = Area2D.new()
+	_barrier.visible = false
+	var shape := RectangleShape2D.new()
+	shape.size = barrier_size
+	var col := CollisionShape2D.new()
+	col.shape = shape
+	_barrier.add_child(col)
+	# 建筑原点 Y = baseline - collision_bottom_local
+	# collision_bottom_local = barrier_offset_y + barrier_size.y / 2
+	# 障碍 CollisionShape2D 世界坐标 = 建筑原点 + (barrier_offset_x, barrier_offset_y)
+	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
+	var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
+	var baseline: float = ground_y + baseline_offset
+	var collision_bottom_local: float = barrier_offset_y + barrier_size.y * 0.5
+	var building_origin_y: float = baseline - collision_bottom_local
+	_barrier.position = Vector2(float(cell_x) * 32.0 + barrier_offset_x, building_origin_y + barrier_offset_y)
+	host.add_child(_barrier)
 
 
 ## 完工：UNDER_CONSTRUCTION → OPERATIONAL
@@ -209,6 +297,10 @@ func _start() -> void:
 func _complete() -> void:
 	if state != State.UNDER_CONSTRUCTION:
 		return
+	# 移除工地临时障碍（Building 的 PassageBarrier 接管）
+	if _barrier != null and is_instance_valid(_barrier):
+		_barrier.queue_free()
+		_barrier = null
 	if map == null:
 		push_error("[ConstructionProject] map 为 null，无法实例化建筑: %s" % project_id)
 		return

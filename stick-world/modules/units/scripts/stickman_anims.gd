@@ -7,6 +7,8 @@ const ANIM_WALK := "walk"
 const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
 const ANIM_DEAD := "dead"
+const ANIM_WALK_CARRY := "walk_carry"
+const ANIM_BUILD := "build"
 
 const ANIM_DIR := "res://modules/units/animations/"
 
@@ -22,13 +24,15 @@ static func setup_player(player: AnimationPlayer) -> void:
 	if not player.has_animation_library(""):
 		player.add_animation_library("", AnimationLibrary.new())
 	var lib := player.get_animation_library("")
-	if lib.get_animation_list().is_empty():
-		_load_anim(lib, ANIM_IDLE)
-		_load_anim(lib, ANIM_WALK)
-		_load_anim(lib, ANIM_RUN)
-		_load_anim(lib, ANIM_ATTACK)
-		_load_anim(lib, ANIM_DEAD)
-
+	# 强制加载/覆盖：场景预置的 AnimationLibrary 可能有草稿（如 walk_carry 单帧），
+	# 用 .tres 文件覆盖以确保完整动画
+	_load_anim(lib, ANIM_IDLE)
+	_load_anim(lib, ANIM_WALK)
+	_load_anim(lib, ANIM_RUN)
+	_load_anim(lib, ANIM_ATTACK)
+	_load_anim(lib, ANIM_DEAD)
+	_load_anim(lib, ANIM_WALK_CARRY)
+	_load_anim(lib, ANIM_BUILD)
 
 # ============================================================
 #  AnimationTree StateMachine
@@ -44,6 +48,8 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	_add_state(sm, ANIM_RUN)
 	_add_state(sm, ANIM_ATTACK)
 	_add_state(sm, ANIM_DEAD)
+	_add_state(sm, ANIM_WALK_CARRY)
+	_add_state(sm, ANIM_BUILD)
 	# 过渡
 	sm.add_transition(ANIM_IDLE, ANIM_WALK, _smt(0.2))
 	sm.add_transition(ANIM_WALK, ANIM_IDLE, _smt(0.2))
@@ -56,6 +62,18 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	sm.add_transition(ANIM_IDLE, ANIM_DEAD, _smt(0.3))
 	sm.add_transition(ANIM_WALK, ANIM_DEAD, _smt(0.3))
 	sm.add_transition(ANIM_ATTACK, ANIM_DEAD, _smt(0.3))
+	# 搬运动画过渡（搬运工 set_carrying 切换时）
+	sm.add_transition(ANIM_IDLE, ANIM_WALK_CARRY, _smt(0.2))
+	sm.add_transition(ANIM_WALK_CARRY, ANIM_IDLE, _smt(0.2))
+	sm.add_transition(ANIM_WALK, ANIM_WALK_CARRY, _smt(0.15))
+	sm.add_transition(ANIM_WALK_CARRY, ANIM_WALK, _smt(0.15))
+	sm.add_transition(ANIM_WALK_CARRY, ANIM_RUN, _smt(0.15))
+	sm.add_transition(ANIM_RUN, ANIM_WALK_CARRY, _smt(0.15))
+	# 建造动画过渡（建造工 set_action_anim 切换时）
+	sm.add_transition(ANIM_IDLE, ANIM_BUILD, _smt(0.15))
+	sm.add_transition(ANIM_BUILD, ANIM_IDLE, _smt(0.2))
+	sm.add_transition(ANIM_WALK, ANIM_BUILD, _smt(0.15))
+	sm.add_transition(ANIM_BUILD, ANIM_WALK, _smt(0.2))
 	sm.add_transition("Start", ANIM_IDLE, _smt(0.0))
 	# 先关联 player，再设 tree_root，最后激活
 	tree.anim_player = player.get_path()

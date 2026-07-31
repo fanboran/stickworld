@@ -1,0 +1,18 @@
+[gd_resource type="Animation" format=3]
+
+[resource]
+resource_name = "build"
+length = 1.8
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("../Node2D/innerhand:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.36666673, 0.52666676, 0.6333334, 0.7266667, 0.8333334, 1.0333333, 1.3333334, 1.8),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(76, -96), Vector2(88, -17), Vector2(88, -23), Vector2(88, -17), Vector2(88, -20), Vector2(88, -17), Vector2(88, -17), Vector2(64, -49), Vector2(76, -96)]
+}

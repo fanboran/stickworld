@@ -10,8 +10,8 @@ extends Node
 ##
 ## P0 阶段实现最简决策：
 #   - work（有派工）优先级最高
-#   - idle 完成后，随机概率切换到 wander（Reynolds 漫游）
-#   - wander 完成后，自动回 idle
+#   - idle 完成后，若有派工则 work，否则继续原地待机（不随机漫游）
+#   - wander 仅保留供战术号令等场景显式调用
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
 const ScriptBehaviorWork := preload("res://modules/units/ai/behavior_work.gd")
@@ -19,12 +19,13 @@ const ScriptBehaviorMove := preload("res://modules/units/ai/behavior_move.gd")
 const ScriptBehaviorAttack := preload("res://modules/units/ai/behavior_attack.gd")
 const ScriptBehaviorSeekCover := preload("res://modules/units/ai/behavior_seek_cover.gd")
 const ScriptBehaviorRetreat := preload("res://modules/units/ai/behavior_retreat.gd")
+const ScriptBehaviorHaul := preload("res://modules/units/ai/behavior_haul.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）
 const DECISION_INTERVAL: float = 0.3
-## idle 后切换到 wander 的概率
-const WANDER_PROBABILITY: float = 0.7
+## idle 后切换到 wander 的概率（P0 设为 0：工人无事做原地待机，不随机漫游）
+const WANDER_PROBABILITY: float = 0.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属实体引用
@@ -79,6 +80,14 @@ func _setup_state_machine() -> void:
 	work.entity = _entity
 	_state_machine.add_child(work)
 	_state_machine.register_behavior(work)
+
+	# 搬运行为（仓库↔工地往返，阶段3）
+	var haul := ScriptBehaviorHaul.new()
+	haul.name = "BehaviorHaul"
+	haul.behavior_name = "haul"
+	haul.entity = _entity
+	_state_machine.add_child(haul)
+	_state_machine.register_behavior(haul)
 
 	# 移动行为（§7.2，阶段 0.6 战术号令用）
 	var move := ScriptBehaviorMove.new()
@@ -187,11 +196,8 @@ func _make_decision() -> void:
 		# 闲置完成：优先看是否有派工
 		if _try_work():
 			return
-		# 没有派工，随机决定是否漫游
-		if randf() < WANDER_PROBABILITY:
-			_state_machine.travel("wander")
-		else:
-			_state_machine.travel("idle")  # 重新闲置
+		# 没有派工，原地待机（P0 关闭随机漫游，工人无事做原地待命）
+		_state_machine.travel("idle")
 	elif current == "wander":
 		# 漫游完成：先检查派工
 		if _try_work():
@@ -270,8 +276,22 @@ func _try_work() -> bool:
 	# 检查项目是否还在接受工人（PLANNED 或 UNDER_CONSTRUCTION）
 	if not project.is_accepting_workers():
 		return false
+	# 决策：需要材料则搬运（需有仓库），否则建造（多工人各自决策，不限制搬运工数量）
+	if project.needs_material() and _has_warehouse():
+		_state_machine.travel("haul", {"project": project})
+		return true
 	_state_machine.travel("work", {"project": project})
 	return true
+
+
+## 是否存在可用的仓库建筑（搬运取货点）。
+func _has_warehouse() -> bool:
+	if _entity == null or not _entity.has_method("get_construction_manager"):
+		return false
+	var manager: Node = _entity.get_construction_manager()
+	if manager == null or not manager.has_method("get_nearest_warehouse"):
+		return false
+	return manager.get_nearest_warehouse(_entity.global_position) != null
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────

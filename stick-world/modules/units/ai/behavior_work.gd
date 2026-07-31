@@ -24,6 +24,12 @@ const CELL_SIZE: float = 32.0
 const ARRIVE_THRESHOLD: float = 24.0
 ## 单格高度（工作位相对地面线下方一点，避免遮住建筑）
 const WORK_OFFSET_Y: float = 40.0
+## 站在工地临时障碍外的水平距离（避免工人走进通行障碍）
+const STANDOFF_X: float = 40.0
+## build 动画一次循环时长（秒，与 build.tres length 一致）
+const BUILD_ANIM_DURATION: float = 1.8
+## 完工所需敲击次数（每次 build 动画循环推进 total_work / BUILD_HITS）
+const BUILD_HITS: int = 8
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 
@@ -33,6 +39,8 @@ var _project: ScriptConstructionProject = null
 var _target_pos: Vector2 = Vector2.ZERO
 ## 是否已到达
 var _arrived: bool = false
+## build 动画计时器（累积到 BUILD_ANIM_DURATION 推进一次进度）
+var _build_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -50,7 +58,7 @@ func enter(previous: String, params: Dictionary) -> void:
 	_compute_target_position()
 
 
-func update(_delta: float) -> void:
+func update(delta: float) -> void:
 	if _project == null:
 		finish()
 		return
@@ -75,7 +83,37 @@ func update(_delta: float) -> void:
 			_arrived = true
 			if entity.has_method("ai_stop"):
 				entity.ai_stop()
-	# 已到达：保持位置，等待项目完工（进度由 manager tick 推进）
+	# 已到达：检查材料是否耗尽
+	if _project.needs_material():
+		# 材料耗尽：解除动作动画，finish 转 haul（多工人都会去搬）
+		if entity.has_method("clear_action"):
+			entity.clear_action()
+		finish()
+		return
+	# 有材料：播放 build 动画，每次循环完成推进建造进度
+	if entity.has_method("set_action_anim"):
+		entity.set_action_anim("build")
+	if entity.has_method("ai_stop"):
+		entity.ai_stop()
+	_build_timer += delta
+	if entity.has_method("set_action_progress"):
+		entity.set_action_progress(_build_timer / BUILD_ANIM_DURATION)
+	if _build_timer >= BUILD_ANIM_DURATION:
+		_build_timer = 0.0
+		if entity.has_method("hide_action_progress"):
+			entity.hide_action_progress()
+		var per_hit: float = _project.total_work / float(BUILD_HITS)
+		_project.add_build_progress(per_hit)
+
+
+## 退出时解除动作动画锁定。
+func exit(_next: String) -> void:
+	super.exit(_next)
+	if entity != null:
+		if entity.has_method("clear_action"):
+			entity.clear_action()
+		if entity.has_method("hide_action_progress"):
+			entity.hide_action_progress()
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
@@ -87,14 +125,22 @@ func _compute_target_position() -> void:
 		return
 	var cell_x: int = _project.cell_x
 	var width: int = _project.width
-	# 建筑中心 X = cell_x * 32 + width * 16
-	var center_x: float = float(cell_x) * CELL_SIZE + float(width) * CELL_SIZE * 0.5
-	# slot_index 决定 X 偏移：0→-24, 1→0, 2→+24, 3→+48 ...
+	var left_x: float = float(cell_x) * CELL_SIZE
+	var right_x: float = left_x + float(width) * CELL_SIZE
+	var center_x: float = (left_x + right_x) * 0.5
 	var slot_index: int = _project.get_worker_slot_index(entity)
-	var offset_x: float = (float(slot_index) - 1.0) * 24.0
+	if slot_index < 0:
+		slot_index = 0
+	# 每名工人站在离自己最近一侧的障碍外，避免挤进临时障碍
+	var offset_along: float = float(slot_index) * 24.0
+	var target_x: float
+	if entity.global_position.x < center_x:
+		target_x = left_x - STANDOFF_X - offset_along
+	else:
+		target_x = right_x + STANDOFF_X + offset_along
 	# Y：建筑下方一点（建筑原点在 ground_y，工作位在 ground_y 下方）
 	var ground_y: float = entity.get("ground_y") if "ground_y" in entity else 810.0
-	_target_pos = Vector2(center_x + offset_x, ground_y + WORK_OFFSET_Y)
+	_target_pos = Vector2(target_x, ground_y + WORK_OFFSET_Y)
 
 
 ## 获取工作目标点（供测试/调试用）

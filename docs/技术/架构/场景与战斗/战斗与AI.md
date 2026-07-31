@@ -97,6 +97,16 @@ func _is_in_passage_barrier() -> bool:
 - WalkBarrier/PassageBarrier 是"矩形区域阻挡"的轻量方案，适用于 VillageMap 等水平卷轴地图
 - SlopeMap 走独立逻辑，不用 WalkBarrier（坡面是连续的 Y 变化，不是矩形阻挡）
 
+**火柴人之间的碰撞**（2026-07-31）：
+- `StickmanEntity` 的 `collision_layer = 2`，`collision_mask = 3`（layer 1 + layer 2）
+- 火柴人与地形障碍（layer 1）和其他火柴人（layer 2）都会发生物理碰撞
+- 工地临时障碍（建造中）挂在 `WalkBarrier` 下，与建筑完工后的 `PassageBarrier` 使用完全相同的 size/position（从建筑场景模板读取），确保障碍切换无缝
+
+**寻路避障（待实现）**：
+- 当前火柴人直线走向目标，遇到障碍被硬弹回，在障碍边缘卡死
+- 待实现：局部避障（raycast + 切线滑动）或 A* 网格寻路
+- 详见 `docs/项目/P0收口执行计划.md` §13.4
+
 #### 7.1.3 附身接口
 
 `PossessionInterface` 提供：
@@ -117,12 +127,42 @@ modules/units/ai/
 ├── behavior_suppress.gd             # 火力压制
 ├── behavior_flank.gd                # 侧翼包抄
 ├── behavior_retreat.gd              # 撤退
-├── behavior_work.gd                 # 工作（建造/采集/打铁）
+├── behavior_work.gd                 # 建造（build 动画驱动，受材料进度限制）
+├── behavior_haul.gd                 # 🆕 搬运（仓库↔工地往返，4次填满材料进度）
 ├── behavior_flee.gd                 # 溃逃
 └── behavior_state_machine.gd        # 状态机调度
 ```
 
 每个行为是独立的 `Node`/`Resource`，状态机持有引用并通过 `travel(behavior_name)` 切换。
+
+#### 7.2.0 搬运与建造行为（2026-07-31 实现）
+
+**双进度系统**：建造项目有两个进度条：
+- **材料进度** `[0,1]`：由搬运工交付推进，每次 `deliver_material()` +25%（4次填满）
+- **建造进度** `current_work / total_work`：由建造工敲击推进，受材料限制（建造 ≤ 材料）
+
+**AIController 决策逻辑**：
+- `needs_material()` 且有仓库 → `travel("haul", {project})`
+- 否则 → `travel("work", {project})`
+- 多工人各自决策，不限制搬运工数量
+
+**behavior_haul 搬运行为**：
+- 阶段：TO_WAREHOUSE → PICKING(0.5s) → TO_SITE → DELIVERING(0.5s) → 循环/finish
+- 目标点站在 PassageBarrier 外 40px（`STANDOFF_X`），不走进建筑
+- 取货时 `set_carrying(true)` 切 walk_carry 动画，交付时 `set_carrying(false)`
+- `is_finished()` 早退防止 finish 后重复交付
+
+**behavior_work 建造行为**：
+- 到达工地障碍外后播放 build 动画，每次循环完成（1.8s）推进 `total_work / 8`
+- 材料耗尽时 `finish()` 转 haul，形成 work↔haul 循环
+
+**站位规则**：
+- 工人和搬运工都站在 PassageBarrier 外 `STANDOFF_X=40px` 处
+- 多名工人按 `slot_index` 沿障碍外侧分散，避免重叠
+
+**walk_carry 动画**：
+- `walk_carry.tres` = walk.tres 腿部/身躯轨道 + 搬运手部姿势单帧
+- 工具脚本 `tools/animation/generate_walk_carry.gd` 可重新生成
 
 #### 7.2.1 待机行为修正（2026-07-29 创始人确认）
 

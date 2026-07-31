@@ -147,3 +147,4 @@ modules/player/
 - Git 命令始终加 `--no-pager` 或设置 `$env:GIT_PAGER = "cat"` 防止挂起。
 - PowerShell 中的 `curl` 是 `Invoke-WebRequest` 的别名，不兼容 curl 参数；应直接使用 `Invoke-WebRequest` 或 `Invoke-RestMethod` 并加 `-UseBasicParsing`。
 - 删除移动文件尽量调用工具而不是直接操作文件系统，如 `Move-Item`、`Remove-Item` 等。
+- Godot路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`

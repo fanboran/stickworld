@@ -225,13 +225,19 @@ modules/debug/                        ← 🆕 新建
 |------|------|------|------|
 | PlacementGrid 占用格 | 绿色半透明 | `PlacementGrid._cells` | 已被建筑占用的格子 |
 | BuildMask 不可放建筑格 | 红色半透明 | `PlacementGrid.blockage_mask` | 地形限制不可放建筑 |
-| WalkBarrier 地图障碍 | 蓝色半透明 | `MapInstance.WalkBarrier` 下 Area2D | 悬崖/高楼边缘，火柴人不可穿越 |
+| WalkBarrier 地图障碍 | 蓝色半透明 | `MapInstance.WalkBarrier` 下 Area2D | 悬崖/高楼边缘，火柴人不可穿越；含工地临时障碍 |
 | PassageBarrier 建筑障碍 | 紫色半透明 | 各建筑 `PassageBarrier` Area2D | 建筑本体不可通行区域 |
 | ground_y 地面线 | 黄色线 | `MapInstance.ground_y` | 火柴人可走区域顶部 |
 | ground_bottom 地面底线 | 青色线 | `MapInstance.ground_bottom` | 火柴人可走区域底部 |
 | 建筑边界框 | 白色边框 | `BuildingHost` 子节点 | 每个建筑的 Footprint 矩形 |
+| 建筑名称 | 黄色文字 | `BuildingHost` + `buildings.tres` | 建筑上方显示中文名 + def_id |
 | Chunk 触发器范围 | 紫色矩形边框 | `MapInstance.ChunkTriggers` | 流式加载触发区域 |
+| 垂直地形网格 | 橙色细线 | `MapInstance` ground_y~ground_bottom | 32px 分行，资源点定位用 |
+| 资源点标记 | 彩色方块 + 储量 | `resource_node` group | 木=绿/石=灰/铁=棕，F3 控制 |
+| 世界坐标标尺 | 灰色刻度 | `MapInstance.ground_y` 线上 | 每 10 格标 cell 编号，世界原点★标记 |
 | 火柴人状态文字 | 白色文字 | `EntityHost` 下 StickmanEntity | 速度/动画/朝向/坐标 |
+| 火柴人碰撞箱 | 白色边框 | `StickmanEntity.Collider` | 脚部碰撞箱 |
+| 火柴人详细信息 | 白色文字 | `EntityHost` 下 StickmanEntity | HP/行为/目标等 |
 | FPS / 实体数 | 白色文字 | 引擎 | 屏幕左下角 |
 
 #### 10.5.4 交互
@@ -266,9 +272,57 @@ hide_legend()
 
 | 模块 | 注册的绘制器 | 触发时机 |
 |------|------------|---------|
-| `world` | grid_drawer / barrier_drawer / ground_line_drawer / chunk_trigger_drawer | 地图加载时 |
-| `buildings` | building_drawer | 建筑增减时 |
-| `units` | entity_state_drawer | 单位生成时 |
+| `world` | grid_drawer / barrier_drawer / ground_line_drawer / chunk_trigger_drawer / terrain_grid / resource_nodes / world_ruler | 地图加载时 |
+| `buildings` | building_drawer / building_names | 建筑增减时 |
+| `units` | entity_state_drawer / entity_collider_drawer / entity_info | 单位生成时 |
+
+#### 10.5.8 ResourceNode 调试标签（2026-07-31）
+
+- `ResourceNode` 的调试标签（资源类型中文名）由 `DebugApi.visibility_changed` 信号驱动，不再每帧 `_process` 检查
+- F3 关闭调试时标签隐藏，开启时显示
+
+### 10.6 建造进度条与交互弹窗（2026-07-31 实现）
+
+#### 10.6.1 建筑头顶双进度条
+
+建造中的建筑头顶显示双进度条（`BuildProgressIndicator`），挂到 `MapInstance.BuildMaskLayer`：
+
+```
+  ┌──────────────────┐
+  │ ████░░░░░░░░░░░░ │  ← 材料条（蓝色）
+  │ ████████░░░░░░░░ │  ← 建造条（绿色）
+  └──────────────────┘
+```
+
+- 上方蓝色条：材料进度 `[0,1]`（搬运工交付推进）
+- 下方绿色条：建造进度 `[0,1]`（建造工敲击推进，受材料限制：建造 ≤ 材料）
+- 宽度 = 建筑占地宽度 * 32px，位置在 `ground_y - 220`
+- 完工/取消时由 `ConstructionManager` 移除
+
+#### 10.6.2 火柴人头顶动作进度条
+
+`ActionProgressIndicator`（Node2D）显示在火柴人头顶（y = -130）：
+- 搬运工取货/交付停留时显示（0.5s 填满）
+- 建造工敲击 build 动画时显示（1.8s 填满）
+- 玩家按 E 敲击建造时显示
+- 完成后隐藏
+
+#### 10.6.3 交互弹窗
+
+玩家附身时靠近仓库/工地，在**目标建筑上方**显示交互提示弹窗：
+
+- 节点结构：`Node2D`（挂到 `foreground_layer`，z_index=20）+ `Label`（带 `StyleBoxFlat` 暗色圆角背景）
+- 位置：建筑 PassageBarrier 中心 X，`ground_y - 280` Y
+- 样式：黑色 80% 透明背景 + 白色 25% 半透明 1px 边框 + 4px 圆角
+- 内容根据状态自动切换：
+  - 仓库 + 未搬运 -> "按E拿起建材"
+  - 仓库 + 搬运中 -> "按E放回材料"
+  - 工地 + 搬运中 -> "按E交付材料"
+  - 工地 + 未搬运 + 材料充足 -> "按E敲击建造"
+  - 工地 + 未搬运 + 材料不足 -> "材料不足，等待搬运"
+- 无交互目标时弹窗隐藏
+
+> **设计原则**：弹窗跟随目标建筑不跟随火柴人，玩家移动时弹窗稳定在建筑上方，不晃动。
 
 ---
 

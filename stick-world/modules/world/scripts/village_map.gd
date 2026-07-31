@@ -43,6 +43,18 @@ extends Node2D
 ## 草地纹理平铺尺寸（世界坐标 px，每 GRASS_TILE_SIZE 像素重复一次纹理）
 const GRASS_TILE_SIZE: float = 512.0
 
+# ─────────────────────────────── 地形类型（1D 地块带）────────────────────────────────
+## 地形类型常量：每 cell 的地形，影响移动速度与视觉
+const TERRAIN_GRASS: int = 0        # 草地（默认，非土路）
+const TERRAIN_DIRT_ROAD: int = 1    # 土路（村庄内，全速移动）
+const TERRAIN_FOREST: int = 2       # 林地（土路外资源区，移动 -20%）
+## 非土路移动速度倍率（土路=1.0，草地/林地=0.8）
+const OFF_ROAD_SPEED_MULT: float = 0.8
+## 每 cell 的地形类型（Dictionary: cell_x -> terrain_type），未设置=GRASS
+var _terrain_types: Dictionary = {}
+## 土路多边形节点（运行时创建，叠在草地上显示土黄色）
+var _dirt_road_poly: Polygon2D = null
+
 # ─────────────────────────────── 动态地图模型（阶段 F §5.7.2）────────────────────────────────
 ## 城镇中心的世界坐标 X（运行时原点，加载时确定）
 var town_center_world_x: float = 0.0
@@ -239,6 +251,8 @@ func _update_ground_polygon() -> void:
 	p.append(Vector2(map_right, ground_bottom))
 	p.append(Vector2(map_left, ground_bottom))
 	gp.polygon = p
+	# 重置 Polygon2D 的 position，避免设计时偏移导致地面与世界坐标错位
+	gp.position = Vector2.ZERO
 
 
 ## 获取可移动范围（世界坐标 X）
@@ -271,14 +285,24 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 	if decoration_layer == null:
 		return []
 	var nodes: Array = []
-	for cx in range(start_cell, end_cell):
+	# 保证 start <= end，避免调用端传反范围
+	var a: int = mini(start_cell, end_cell)
+	var b: int = maxi(start_cell, end_cell)
+	for cx in range(a, b):
+		# 硬化路面/土路上不可能长资源
+		if get_terrain_type_at_cell(cx) == TERRAIN_DIRT_ROAD:
+			continue
 		if randf() > density:
 			continue
-		# 随机资源类型（0=WOOD, 1=STONE, 2=METAL）
-		var rtype: int = randi() % 3
-		# METAL 更稀有
-		if rtype == 2 and randf() > 0.3:
-			rtype = 0
+		# 资源类型权重：WOOD 55% / STONE 35% / METAL 10%（树林密、石头次之、铁矿稀有）
+		var r: float = randf()
+		var rtype: int
+		if r < 0.55:
+			rtype = 0  # WOOD
+		elif r < 0.9:
+			rtype = 1  # STONE
+		else:
+			rtype = 2  # METAL
 		var node: Node2D = ScriptResourceNode.new()
 		node.resource_type = rtype
 		node.amount = 50 + randi() % 100
@@ -289,6 +313,82 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 		nodes.append(node)
 	print("[VillageMap] 生成 %d 个资源点 (cell %d~%d, density=%.2f)" % [nodes.size(), start_cell, end_cell, density])
 	return nodes
+
+
+# ─────────────────────────────── 地形类型（1D 地块带）────────────────────────────────
+
+## 标记 cell 范围 [start_cell, end_cell) 为土路，并刷新土路视觉。
+func set_dirt_road_range(start_cell: int, end_cell: int) -> void:
+	for cx in range(start_cell, end_cell):
+		_terrain_types[cx] = TERRAIN_DIRT_ROAD
+	# 确保地图边界覆盖土路范围（可能需要向负坐标扩展地面多边形）
+	var road_left_x: float = float(start_cell) * 32.0
+	var road_right_x: float = float(end_cell) * 32.0
+	var bounds_changed: bool = false
+	if road_left_x < map_left:
+		map_left = road_left_x
+		map_left_cell = start_cell
+		if placement_grid != null:
+			placement_grid.expand_to(start_cell)
+		bounds_changed = true
+	if road_right_x > map_right:
+		map_right = road_right_x
+		map_right_cell = end_cell
+		if placement_grid != null:
+			placement_grid.expand_to(end_cell)
+		bounds_changed = true
+	if bounds_changed:
+		_update_ground_polygon()
+		# 更新所有已存在实体的边界约束
+		if entity_host != null:
+			for entity in entity_host.get_children():
+				if entity.has_method("set_ground_constraints"):
+					entity.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)
+	_update_dirt_road_visual()
+	# 同步 grass shader 的 city_bounds，让土路范围显示土黄色（覆盖草地）
+	set_city_bounds(road_left_x, road_right_x)
+	print("[VillageMap] set_dirt_road_range: cell %d~%d, map_left=%.0f, map_right=%.0f, dirt_poly=%s" % [start_cell, end_cell, map_left, map_right, _dirt_road_poly != null])
+
+
+## 获取 cell 的地形类型（未设置默认 GRASS）。
+func get_terrain_type_at_cell(cell_x: int) -> int:
+	return _terrain_types.get(cell_x, TERRAIN_GRASS)
+
+
+## 获取世界坐标 X 对应的地形类型。
+func get_terrain_type_at_x(world_x: float) -> int:
+	return get_terrain_type_at_cell(int(world_x / 32.0))
+
+
+## 获取世界坐标 X 处的移动速度倍率（土路=1.0，非土路=0.8）。
+func get_move_speed_mult_at_x(world_x: float) -> float:
+	if get_terrain_type_at_x(world_x) == TERRAIN_DIRT_ROAD:
+		return 1.0
+	return OFF_ROAD_SPEED_MULT
+
+
+## 更新土路视觉：用土黄色 Polygon2D 覆盖土路 cell 范围的地面区域。
+func _update_dirt_road_visual() -> void:
+	if terrain_layer == null:
+		return
+	var min_cell: int = -1
+	var max_cell: int = -1
+	for cx: int in _terrain_types.keys():
+		if _terrain_types[cx] == TERRAIN_DIRT_ROAD:
+			if min_cell < 0 or cx < min_cell:
+				min_cell = cx
+			if cx > max_cell:
+				max_cell = cx
+	if min_cell < 0:
+		return  # 无土路
+	if _dirt_road_poly == null:
+		_dirt_road_poly = Polygon2D.new()
+		_dirt_road_poly.color = Color(0.62, 0.50, 0.32, 1.0)  # 土黄色
+		_dirt_road_poly.z_index = 2  # 在 terrain_layer / decoration_layer 之上，确保路面不被资源遮挡
+		add_child(_dirt_road_poly)
+	var x0: float = float(min_cell) * 32.0
+	var x1: float = float(max_cell + 1) * 32.0
+	_dirt_road_poly.polygon = PackedVector2Array([Vector2(x0, ground_y), Vector2(x1, ground_y), Vector2(x1, ground_bottom), Vector2(x0, ground_bottom)])
 
 
 # ─────────────────────────────── 通行障碍查询（§7.1.2）────────────────────────────────
@@ -395,7 +495,8 @@ vec2 stochastic_uv(vec2 cell, vec2 local_uv, float seed) {
 }
 
 void vertex() {
-	world_pos = VERTEX;
+	// MODEL_MATRIX 把局部顶点变换到世界坐标，兼容 Polygon2D 的 position 偏移
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
 }
 
 void fragment() {
@@ -425,7 +526,7 @@ void fragment() {
 	// 阶段 F §5.7.3：城内/城外地形混合
 	float city_factor = smoothstep(city_left_x - city_fade, city_left_x + city_fade, world_pos.x)
 		* (1.0 - smoothstep(city_right_x - city_fade, city_right_x + city_fade, world_pos.x));
-	COLOR = mix(COLOR, city_color, city_factor * 0.6);
+	COLOR = mix(COLOR, city_color, city_factor * 1.0);
 }
 """
 
@@ -449,13 +550,19 @@ func _apply_grass_texture() -> void:
 		return
 	var tex := ImageTexture.create_from_image(img)
 	gp.texture = tex
-	# 用 ShaderMaterial 的 repeat_enable 强制平铺，shader 内用 VERTEX 计算 UV
+	# 重置设计时可能存在的 position 偏移，确保 shader 世界坐标与地面边界一致
+	gp.position = Vector2.ZERO
+	# 用 ShaderMaterial 的 repeat_enable 强制平铺，shader 内用世界坐标计算 UV
 	var mat := ShaderMaterial.new()
 	mat.shader = Shader.new()
 	mat.shader.code = _GRASS_SHADER_CODE
 	mat.set_shader_parameter("tex", tex)
 	mat.set_shader_parameter("tile_size", Vector2(GRASS_TILE_SIZE, GRASS_TILE_SIZE))
 	gp.material = mat
+	# 土路颜色（city_color）：土黄色，覆盖草地显示硬化路面
+	mat.set_shader_parameter("city_color", Color(0.62, 0.50, 0.32, 1.0))
+	# 土路硬边界（1px 过渡避免 smoothstep 退化）
+	mat.set_shader_parameter("city_fade", 1.0)
 	# 纹理颜色不需要 color 调色，设为白色避免叠加
 	gp.color = Color.WHITE
 
@@ -654,6 +761,12 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 	var crx: float = float(row["city_right_x"])
 	if clx > -99990.0:
 		set_city_bounds(clx, crx)
+		# 从 city_bounds 恢复土路地形类型（cell 范围）
+		var start_cell: int = int(clx / 32.0)
+		var end_cell: int = int(crx / 32.0)
+		for cx in range(start_cell, end_cell):
+			_terrain_types[cx] = TERRAIN_DIRT_ROAD
+		_update_dirt_road_visual()
 	_dynamic_bounds_initialized = true
 
 

@@ -93,8 +93,8 @@ const MEGA_INTERIOR_MAP_ID := "test_mega_interior"
 const BATTLEFIELD_MAP_ID := "test_battlefield"
 ## 森林附属区域地图 ID（阶段 F）
 const FOREST_ZONE_MAP_ID := "test_forest_zone"
-## 玩家初始 X 位置（地图坐标系，偏左便于观察）
-const PLAYER_SPAWN_X: float = 300.0
+## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
+const PLAYER_SPAWN_X: float = 0.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为；阶段 E 创始人确认改为 2）
 const NPC_COUNT: int = 2
 
@@ -898,8 +898,9 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 		else:
 			if entity.has_method("set_possessed"):
 				entity.set_possessed(false)
-			if entity.has_method("set_construction_manager") and _construction_manager != null:
-				entity.set_construction_manager(_construction_manager)
+		# 玩家与 NPC 都注入 ConstructionManager（玩家按E交互需要）
+		if entity.has_method("set_construction_manager") and _construction_manager != null:
+			entity.set_construction_manager(_construction_manager)
 
 
 ## 切换存档面板可见性
@@ -949,9 +950,13 @@ func _load_test_village() -> void:
 	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
 	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
 		scene_loader.map_loaded.connect(_on_map_loaded)
-	# P0 开发阶段：跳过自动读档，每次启动新游戏
-	# （避免旧存档与代码改动不兼容；存档功能仍可用 F9 手动读取 / Ctrl+S 面板测试）
-	scene_loader.load_map(TEST_VILLAGE_MAP_ID)
+	# 自动读取存档槽位 0（玩家在上次保存位置复活）；无存档则新游戏
+	if SaveManager and SaveManager.has_method("slot_exists") and SaveManager.slot_exists(0):
+		print("[GameRoot] 检测到存档槽位 0，自动读取...")
+		load_game_from_slot(0)
+	else:
+		print("[GameRoot] 无存档，开始新游戏")
+		scene_loader.load_map(TEST_VILLAGE_MAP_ID)
 
 
 ## 退出时自动存档（防止数据丢失）
@@ -1006,9 +1011,12 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		# 修正 Y：让脚部对齐 spawn_y
 		if player.get("foot_offset") != null:
 			player.global_position.y = spawn_y - player.foot_offset
-		# 附身玩家实体（地图切换时需重新附身新实体）
+			# 附身玩家实体（地图切换时需重新附身新实体）
 		if player.has_method("set_possessed"):
 			player.set_possessed(true)
+		# 玩家也注入 ConstructionManager（按E搬运/建造交互需要）
+		if player.has_method("set_construction_manager") and _construction_manager != null:
+			player.set_construction_manager(_construction_manager)
 		# 让 CameraRig 跟随玩家
 		if camera_rig != null and camera_rig.has_method("set_follow_target"):
 			camera_rig.set_follow_target(player)
@@ -1016,17 +1024,24 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		if not _initial_map_loaded:
 			_initial_map_loaded = true
 			_spawn_initial_buildings(map)
-			# 重新设置相机边界（初始建筑可能触发了地图动态扩展，map_left/map_right 已变化）
+			# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
+			if _construction_manager != null and _construction_manager.has_method("spawn_operational_building"):
+				_construction_manager.spawn_operational_building("bld_warehouse", 15, 16)
+			# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
+			var spawn_cell: int = int(PLAYER_SPAWN_X / 32.0)
+			var safe_radius: int = 40  # 出生点±40格内为村庄土路区
+			if map.has_method("set_dirt_road_range"):
+				map.set_dirt_road_range(spawn_cell - safe_radius, spawn_cell + safe_radius)
+			if map.has_method("generate_resource_nodes"):
+				var map_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
+				var map_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
+				# 全地图生成，generate_resource_nodes 内部会跳过土路 cell，保证硬化路面不长资源
+				map.generate_resource_nodes(map_left_cell, map_right_cell, 0.65)
+			# 重新设置相机/小地图边界（土路可能向负坐标扩展了 map_left）
 			if camera_rig != null and camera_rig.has_method("set_map_bounds"):
 				camera_rig.set_map_bounds(map.map_left, map.map_right)
-			# 重新设置小地图范围
 			if _minimap != null and _minimap.has_method("set_map_info"):
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-			# 阶段 F：程序化生成自然资源点（地图两侧边缘，避开中心建筑区）
-			if map.has_method("generate_resource_nodes"):
-				var right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
-				map.generate_resource_nodes(0, 15, 0.25)
-				map.generate_resource_nodes(right_cell - 15, right_cell, 0.25)
 			_spawn_npcs(map, spawn_y)
 		# 阶段 E：遭遇战战场 spawn 敌方火柴人 + 启动战斗（地图切换进入战场时触发）
 		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded:
@@ -1094,11 +1109,13 @@ func start_demo_building_at(cell_x: int) -> Dictionary:
 
 ## 生成 NPC 村民，分布在玩家右侧不同 X 位置，不附身（AI 接管）。
 func _spawn_npcs(map: Node2D, spawn_y: float) -> void:
+	# NPC 生成在仓库右侧，避开仓库 PassageBarrier（cell 15~31, X 480~992）
+	var npc_start_x: float = 1050.0
 	for i in NPC_COUNT:
-		var x: float = PLAYER_SPAWN_X + 200.0 * (i + 1)
+		var x: float = npc_start_x + 200.0 * i
 		# 确保在地图边界内
 		if x > map.map_right - 100.0:
-			x = PLAYER_SPAWN_X + randf_range(100.0, 800.0)
+			x = npc_start_x + randf_range(0.0, 400.0)
 		var npc: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
 		if npc != null:
 			# 修正 Y：让脚部对齐 spawn_y

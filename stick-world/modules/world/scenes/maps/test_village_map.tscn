@@ -40,23 +40,7 @@ z_index = 2
 
 [node name="InitialBuildingsList" type="Node" parent="." unique_id=818831420]
 script = ExtResource("3_ibl")
-building_defs = Array[Dictionary]([{
-"cell_x": 20,
-"def_id": "bld_placeholder",
-"width": 16
-}, {
-"cell_x": 3,
-"def_id": "bld_wall_tier2",
-"width": 1
-}, {
-"cell_x": 4,
-"def_id": "bld_wall_gate",
-"width": 1
-}, {
-"cell_x": 250,
-"def_id": "bld_wall_tier2",
-"width": 1
-}])
+building_defs = Array[Dictionary]([])
 
 [node name="WalkBarrier" type="Node2D" parent="." unique_id=1540466640]
 

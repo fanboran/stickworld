@@ -20,11 +20,20 @@ enum ResourceType {
 @export var node_size: float = 32.0
 
 var _is_depleted: bool = false
+var _debug_label: Label = null
 
 
 func _ready() -> void:
 	add_to_group("resource_node")
 	_apply_visual()
+	if DebugApi != null:
+		DebugApi.visibility_changed.connect(_update_debug_visibility)
+	_update_debug_visibility()
+
+
+func _update_debug_visibility() -> void:
+	if _debug_label != null:
+		_debug_label.visible = DebugApi.is_visible() if DebugApi != null else false
 
 
 func _apply_visual() -> void:
@@ -40,6 +49,13 @@ func _apply_visual() -> void:
 	rect.size = Vector2(node_size, node_size)
 	rect.position = Vector2(-node_size * 0.5, -node_size * 0.5)
 	add_child(rect)
+	# 调试标签：显示资源类型名（F3 开关控制）
+	_debug_label = Label.new()
+	_debug_label.text = _get_type_name()
+	_debug_label.add_theme_font_size_override("font_size", 10)
+	_debug_label.position = Vector2(-node_size * 0.5, node_size * 0.5)
+	add_child(_debug_label)
+	_update_debug_visibility()
 
 
 ## 采集指定数量，返回实际采集量
@@ -56,6 +72,15 @@ func harvest(qty: int) -> int:
 
 func is_depleted() -> bool:
 	return _is_depleted
+
+
+## 调试用：获取资源类型中文名
+func _get_type_name() -> String:
+	match resource_type:
+		ResourceType.WOOD: return "木"
+		ResourceType.STONE: return "石"
+		ResourceType.METAL: return "铁"
+	return "?"
 
 
 ## 获取对应的资源 ID

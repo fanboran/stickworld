@@ -109,7 +109,7 @@ func _init_ik() -> void:
 	# 运行时通过遍历骨骼修正 bone_idx，避免 .tscn 中写死的索引和实际不匹配
 	var stack := get_modification_stack()
 	if stack == null:
-		print("[IK] modification_stack 为 null，IK 不会执行")
+		push_warning("[IK] modification_stack 为 null，IK 不会执行")
 		return
 	# 强制每个实例拥有独立的 modification stack 副本，避免多实例共享同一资源导致 IK 冲突
 	if not Engine.is_editor_hint():
@@ -117,7 +117,6 @@ func _init_ik() -> void:
 		if unique_stack != null:
 			set_modification_stack(unique_stack)
 			stack = unique_stack
-	print("[IK] stack.enabled = ", stack.enabled, ", modification_count = ", stack.modification_count)
 	# 构建骨骼名->索引映射
 	var bone_name_to_idx: Dictionary = {}
 	for idx in range(get_bone_count()):
@@ -127,32 +126,37 @@ func _init_ik() -> void:
 	for i in range(stack.modification_count):
 		var mod := stack.get_modification(i) as SkeletonModification2DTwoBoneIK
 		if mod == null:
-			print("[IK] modification ", i, " 不是 TwoBoneIK")
+			push_warning("[IK] modification ", i, " 不是 TwoBoneIK")
 			continue
 		# 通过 NodePath 找到 Bone2D 节点，再用名称查实际索引
 		var bone1 := get_node_or_null(mod.joint_one_bone2d_node) as Bone2D
 		var bone2 := get_node_or_null(mod.joint_two_bone2d_node) as Bone2D
 		if bone1:
 			var idx1: int = bone_name_to_idx.get(bone1.name, -1)
-			print("[IK] mod ", i, ": bone1 = ", bone1.name, " actual_idx = ", idx1, " saved_idx = ", mod.joint_one_bone_idx)
 			if idx1 >= 0:
 				mod.joint_one_bone_idx = idx1
 		else:
-			print("[IK] mod ", i, ": bone1 NodePath 解析失败: ", mod.joint_one_bone2d_node)
+			push_warning("[IK] mod ", i, ": bone1 NodePath 解析失败: ", mod.joint_one_bone2d_node)
 		if bone2:
 			var idx2: int = bone_name_to_idx.get(bone2.name, -1)
-			print("[IK] mod ", i, ": bone2 = ", bone2.name, " actual_idx = ", idx2, " saved_idx = ", mod.joint_two_bone_idx)
 			if idx2 >= 0:
 				mod.joint_two_bone_idx = idx2
 		else:
-			print("[IK] mod ", i, ": bone2 NodePath 解析失败: ", mod.joint_two_bone2d_node)
+			push_warning("[IK] mod ", i, ": bone2 NodePath 解析失败: ", mod.joint_two_bone2d_node)
 		# 检查目标节点
 		var target := get_node_or_null(mod.target_nodepath) as Node2D
-		if target:
-			print("[IK] mod ", i, ": target = ", target.name, " pos = ", target.global_position)
-		else:
-			print("[IK] mod ", i, ": target NodePath 解析失败: ", mod.target_nodepath)
-		print("[IK] mod ", i, ": enabled = ", mod.enabled, ", flip_bend = ", mod.flip_bend_direction)
+		if target == null:
+			push_warning("[IK] mod ", i, ": target NodePath 解析失败: ", mod.target_nodepath)
+	# 延迟一帧启用 IK：Skeleton2D + IK 在 _ready 后首帧不保证解算，
+	# 先禁用栈、等一个帧周期再启用，让解算自然完成（替代"前 0.25s 模拟移动"的 workaround）
+	if not Engine.is_editor_hint():
+		stack.enabled = false
+		call_deferred("_enable_ik_stack", stack)
+
+
+func _enable_ik_stack(stack: SkeletonModificationStack2D) -> void:
+	if stack != null and is_instance_valid(stack):
+		stack.enabled = true
 
 
 func _init_animations() -> void:

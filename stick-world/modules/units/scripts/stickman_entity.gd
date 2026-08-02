@@ -58,10 +58,8 @@ var map_right: float = 8192.0
 var foot_offset: float = 45.0
 
 # ─────────────────────────────── 通行障碍（§7.1.2）────────────────────────────────
-## 地图引用（供通行障碍查询，由 VillageMap.spawn_entity 注入）
+## 地图引用（供地形倍率/交互/脱困查询，由 VillageMap.spawn_entity 注入）
 var _map_ref: Node2D = null
-## 上一帧有效位置（未碰撞障碍时的位置，用于回退）
-var _last_valid_position: Vector2 = Vector2.ZERO
 
 # ─────────────────────────────── AI 移动（§7.1 / §7.2）────────────────────────────────
 ## AI 控制器引用（_ready 时自动获取子节点）
@@ -100,10 +98,6 @@ var _facing: int = 1
 var _current_anim: String = "idle"
 ## 散步模式（true=只走不跑，按 Alt 切换）
 var _walk_only: bool = false
-## 开场 IK workaround（前 0.25s 模拟向右移动触发 IK 解算）
-var _startup_fix_time: float = 0.25
-var _startup_fix_elapsed: float = 0.0
-var _startup_done: bool = false
 ## Collider 原始尺寸（_ready 时保存，_apply_scale 时乘以 BASE_SCALE）
 var _collider_base_size: Vector2 = Vector2.ZERO
 ## Range 原始尺寸（悬停检测范围，与 Collider 同步缩放）
@@ -188,16 +182,9 @@ func _ready() -> void:
 	_apply_scale()
 	# 播放 idle
 	_play_anim("idle")
-	# 初始化上一帧有效位置
-	_last_valid_position = global_position
 	# 战斗组件：死亡信号连接
 	if health_component != null:
 		health_component.died.connect(_on_died)
-
-
-## 外部设置上一帧有效位置（修复 add_child 时序：_ready 时 global_position 还是被默认值 (0,0)）
-func set_last_valid_position(pos: Vector2) -> void:
-	_last_valid_position = pos
 
 
 ## 从 RigHost 的 outfoot marker 位置计算脚部 Y 偏移。
@@ -213,30 +200,10 @@ func _calculate_foot_offset() -> float:
 		return 45.0
 	var outfoot_y: float = outfoot.position.y
 	var offset: float = root_y + outfoot_y * BASE_SCALE
-	print("[StickmanEntity] foot_offset = ", offset, " (root_y=", root_y, " outfoot_y=", outfoot_y, " scale=", BASE_SCALE, ")")
 	return offset
 
 
 func _physics_process(delta: float) -> void:
-	# 开场 IK workaround
-	if not _startup_done:
-		_startup_fix_elapsed += delta
-		if _startup_fix_elapsed < _startup_fix_time:
-			if rig != null:
-				rig.position += Vector2.RIGHT * 30 * delta
-				_sync_markers_transform()
-				if _current_anim == "idle":
-					_play_anim("walk")
-			return
-		else:
-			_startup_done = true
-			if rig != null:
-				rig.position = Vector2.ZERO
-				_sync_markers_transform()
-			_play_anim("idle")
-			_current_speed = 0.0
-			velocity = Vector2.ZERO
-
 	# 仅在被附身时处理玩家输入
 	if possessed:
 		_handle_player_input(delta)
@@ -254,12 +221,6 @@ func _physics_process(delta: float) -> void:
 	global_position.y = clampf(global_position.y, y_min, y_max)
 	# X 边界约束
 	global_position.x = clampf(global_position.x, map_left, map_right)
-	# 通行障碍检测：若进入 WalkBarrier / PassageBarrier 区域，回退到上一帧位置（§7.1.2）
-	if _is_in_passage_barrier():
-		global_position = _last_valid_position
-		velocity = Vector2.ZERO
-	else:
-		_last_valid_position = global_position
 	_sync_markers_transform()
 	# 玩家建造动画计时（按E敲击后 1.8 秒解除动作锁定）
 	if _player_build_timer > 0.0:
@@ -378,6 +339,10 @@ func _find_interact_target() -> Dictionary:
 # ─────────────────────────────── 玩家输入 ────────────────────────────────
 
 func _handle_player_input(delta: float) -> void:
+	# 敲击建造动作锁定：1.8s 内禁止移动
+	if _player_build_timer > 0.0:
+		_apply_movement(delta, Vector2.ZERO, false, false)
+		return
 	var dir := Vector2.ZERO
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 		dir.x -= 1.0
@@ -387,25 +352,7 @@ func _handle_player_input(delta: float) -> void:
 		dir.y -= 1.0
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
 		dir.y += 1.0
-
-	if dir != Vector2.ZERO:
-		if dir.length() > 1.0:
-			dir = dir.normalized()
-		if dir.x != 0:
-			var new_facing := 1 if dir.x > 0 else -1
-			if new_facing != _facing:
-				_facing = new_facing
-				_apply_scale()
-		_handle_acceleration(delta, not _walk_only)
-		velocity = dir * _current_speed
-	else:
-		_handle_deceleration(delta)
-		if _current_speed > 0:
-			# 保留方向但减速
-			var v_dir := velocity.normalized() if velocity.length() > 0.001 else Vector2.ZERO
-			velocity = v_dir * _current_speed
-		else:
-			velocity = Vector2.ZERO
+	_apply_movement(delta, dir, false, not _walk_only)
 
 
 ## 获取当前脚下地形的移动速度倍率（土路=1.0，非土路=0.8）。
@@ -462,9 +409,13 @@ func _handle_deceleration(delta: float) -> void:
 
 ## AI 驱动移动：根据 _ai_move_dir 处理加速/减速/动画，复用与玩家输入相同的物理逻辑。
 func _handle_ai_input(delta: float) -> void:
-	if _ai_move_dir != Vector2.ZERO:
-		# 有移动方向：加速 + 设速度
-		var dir: Vector2 = _ai_move_dir
+	_apply_movement(delta, _ai_move_dir, _ai_running, false)
+
+
+## 统一移动处理（玩家与 AI 共用）：方向 → 朝向/加速/奔跑 → velocity。
+## run=true 强制奔跑；allow_run=false 时不会自动加速到奔跑（NPC 散步）。
+func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> void:
+	if dir != Vector2.ZERO:
 		if dir.length() > 1.0:
 			dir = dir.normalized()
 		if dir.x != 0:
@@ -472,20 +423,19 @@ func _handle_ai_input(delta: float) -> void:
 			if new_facing != _facing:
 				_facing = new_facing
 				_apply_scale()
-		if _ai_running:
+		if run:
 			_is_running = true
 			_current_speed = RUN_SPEED * _terrain_speed_mult()
 			_play_anim("run")
 			if rig != null:
 				rig.set_anim_speed(1.0 * ANIM_SPEED_MULT)
 		else:
-			# NPC 始终散步，不允许加速到奔跑
-			_handle_acceleration(delta, false)
+			_handle_acceleration(delta, allow_run)
 		velocity = dir * _current_speed
 	else:
-		# 无移动方向：减速到停
 		_handle_deceleration(delta)
 		if _current_speed > 0:
+			# 保留方向但减速
 			var v_dir := velocity.normalized() if velocity.length() > 0.001 else Vector2.ZERO
 			velocity = v_dir * _current_speed
 		else:

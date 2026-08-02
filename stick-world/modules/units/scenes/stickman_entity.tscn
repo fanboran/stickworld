@@ -46,5 +46,6 @@ shape = SubResource("RectangleShape2D_hitbox")
 script = ExtResource("6_weapon")
 
 [node name="Range" type="CollisionShape2D" parent="." unique_id=1337042102]
+disabled = true
 position = Vector2(8.5, 9.5)
 shape = SubResource("RectangleShape2D_ogq8d")

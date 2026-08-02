@@ -281,6 +281,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_E:
 		_try_player_interact()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_H:
+		_escape_stuck()
 
 
 func _try_player_interact() -> void:
@@ -726,6 +728,61 @@ func set_ground_constraints(p_ground_y: float, p_ground_bottom: float, p_map_lef
 ## 由 MapInstance.spawn_entity 调用，注入地图引用（供通行障碍查询，§7.1.2）
 func set_map_reference(p_map: Node2D) -> void:
 	_map_ref = p_map
+
+
+## 物理查询：实体的 Collider 形状位于 pos 时是否与任何物理体（建筑/工地障碍/其他实体）碰撞。
+## 排除自身（否则查询自己的位置永远命中自己）。用于脱困采样判定与测试。
+func is_position_blocked(pos: Vector2) -> bool:
+	var col := get_node_or_null("Collider") as CollisionShape2D
+	if col == null or col.shape == null:
+		return false
+	var space := get_world_2d().direct_space_state
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = col.shape
+	query.collision_mask = collision_mask
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	query.exclude = [get_rid()]
+	query.transform = Transform2D(0.0, pos)
+	return not space.intersect_shape(query, 1).is_empty()
+
+
+## 脱离卡死（H 键 / HUD 脱困按钮）：随机传送到附近空旷地带。
+## 以当前位置为中心，半径 200px 起随机采样（每圈 24 次），用物理查询
+## 判定空旷（is_position_blocked）；逐级扩大到 3200px；仍找不到则沿左右
+## 线性扫描最近空旷点；兜底回地图中心。只动 X（Y 由地面约束管理）。
+func _escape_stuck() -> void:
+	if _map_ref == null or not is_instance_valid(_map_ref):
+		return
+	var map_left: float = float(_map_ref.map_left) if "map_left" in _map_ref else -100000.0
+	var map_right: float = float(_map_ref.map_right) if "map_right" in _map_ref else 100000.0
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var radius: float = 200.0
+	var found: bool = false
+	while radius <= 3200.0 and not found:
+		for attempt in range(24):
+			var probe_x: float = global_position.x + rng.randf_range(-radius, radius)
+			probe_x = clampf(probe_x, map_left + 50.0, map_right - 50.0)
+			if not is_position_blocked(Vector2(probe_x, global_position.y)):
+				global_position.x = probe_x
+				found = true
+				break
+		radius *= 2.0
+	# 随机采样未命中（密集建筑区）：沿左右线性扫描最近的空旷点
+	if not found:
+		for step in range(20, 4001, 20):
+			for s in [-1.0, 1.0]:
+				var probe_x: float = global_position.x + s * step
+				probe_x = clampf(probe_x, map_left + 50.0, map_right - 50.0)
+				if not is_position_blocked(Vector2(probe_x, global_position.y)):
+					global_position.x = probe_x
+					found = true
+					break
+			if found:
+				break
+	if not found:
+		global_position.x = (map_left + map_right) * 0.5
 
 
 ## 检测是否在通行障碍区域内（WalkBarrier / PassageBarrier，§7.1.2）

@@ -5,7 +5,7 @@ extends Building
 ## 作为搬运系统的取货点：工人从此仓库取建材运往工地。
 ## 初期阶段不需要独特贴图，仅用颜色区分。
 
-const PM = preload("res://modules/texture_gen/procedural_materials.gd")
+const PM = preload("res://modules/texture_gen/scripts/procedural_materials.gd")
 
 # 材质颜色（棕黄木色调，区别于兵营的红色调）
 const C_THATCH_BACK = Color(0.50, 0.35, 0.18)

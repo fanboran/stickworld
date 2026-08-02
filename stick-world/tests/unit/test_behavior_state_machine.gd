@@ -3,15 +3,15 @@ extends Node
 ## 不进场景树，确定性。
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptBehaviorStateMachine := preload("res://modules/units/ai/behavior_state_machine.gd")
-const ScriptBehaviorBase := preload("res://modules/units/ai/behavior_base.gd")
+const ScriptBehaviorStateMachine := preload("res://modules/units/scripts/ai/behavior_state_machine.gd")
+const ScriptBehaviorBase := preload("res://modules/units/scripts/ai/behavior_base.gd")
 
 var _runner: TestRunner
 
 
 ## 假行为：记录 enter/exit/update 调用
 class FakeBehavior:
-	extends "res://modules/units/ai/behavior_base.gd"
+	extends "res://modules/units/scripts/ai/behavior_base.gd"
 	var enter_calls: Array = []
 	var exit_calls: Array = []
 	var update_calls: int = 0

@@ -5,7 +5,7 @@ extends Building
 ## 阶段 E 任务 E5：复制 pg_smithy_lv1.tscn 为兵营，调整颜色区分。
 ## 初期阶段不需要独特贴图，仅用颜色区分。
 
-const PM = preload("res://modules/texture_gen/procedural_materials.gd")
+const PM = preload("res://modules/texture_gen/scripts/procedural_materials.gd")
 
 # 材质颜色（红色调，区别于铁匠铺的黄色茅草）
 const C_THATCH_BACK = Color(0.55, 0.20, 0.18)

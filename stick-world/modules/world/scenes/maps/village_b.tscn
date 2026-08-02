@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://bvillageb002"]
 
 [ext_resource type="Script" path="res://modules/world/scripts/map/village_map.gd" id="1_vmap"]
-[ext_resource type="Script" path="res://modules/world/placement_grid/placement_grid.gd" id="2_grid"]
+[ext_resource type="Script" path="res://modules/world/scripts/placement/placement_grid.gd" id="2_grid"]
 [ext_resource type="Script" path="res://modules/world/scripts/map/initial_buildings_list.gd" id="3_ibl"]
 [ext_resource type="Script" path="res://modules/world/scripts/loading/chunk_trigger.gd" id="5_trigger"]
 
@@ -57,7 +57,7 @@ z_index = 3
 [node name="ExitLeft" type="Area2D" parent="ChunkTriggers"]
 script = ExtResource("5_trigger")
 exit_side = 0
-target_map_id = "road_a_to_b"
+target_map_id = "road_a_b"
 target_entry_side = 1
 trigger_width = 64.0
 

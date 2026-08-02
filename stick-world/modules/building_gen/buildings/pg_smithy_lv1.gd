@@ -5,7 +5,7 @@ extends Building
 ## 自包含建筑场景：拖入场景即可使用。
 ## 纹理由 procedural_materials.gd 在 _ready() 时生成，不依赖外部贴图文件。
 
-const PM = preload("res://modules/texture_gen/procedural_materials.gd")
+const PM = preload("res://modules/texture_gen/scripts/procedural_materials.gd")
 
 # 材质颜色
 const C_THATCH_BACK = Color(0.62, 0.50, 0.20)

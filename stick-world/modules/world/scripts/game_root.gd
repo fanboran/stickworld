@@ -25,32 +25,32 @@ const _TravelHandlerScript: GDScript = preload("res://modules/world/scripts/setu
 const _InitialContentScript: GDScript = preload("res://modules/world/scripts/setup/initial_content.gd")
 
 ## 测试村落地图场景（P0 硬编码）
-const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_village_map.tscn")
+const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/village_a.tscn")
 ## 第二个测试村落地图场景（阶段 0.8 多场景衔接）
-const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_village_map_b.tscn")
+const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/maps/village_b.tscn")
 ## 道路地图场景（阶段 0.8 村落间道路）
-const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_road_map.tscn")
+const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/road_a_b.tscn")
 ## 测试大建筑内部地图场景（阶段 0.9.5 传送切换）
-const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_mega_interior.tscn")
+const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/mega_interior.tscn")
 ## 遭遇战战场地图场景（阶段 F）
-const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_battlefield_map.tscn")
+const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
 ## 森林附属区域场景（阶段 F）
-const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_forest_zone.tscn")
+const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/forest_zone.tscn")
 ## 玩家火柴人实体场景
 const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 
 ## 测试村落地图 ID
-const TEST_VILLAGE_MAP_ID := "test_village"
+const VILLAGE_A_MAP_ID := "village_a"
 ## 道路地图 ID（村落 A -> 村落 B）
-const ROAD_MAP_ID := "road_a_to_b"
+const ROAD_MAP_ID := "road_a_b"
 ## 第二个测试村落地图 ID
-const VILLAGE_B_MAP_ID := "test_village_b"
+const VILLAGE_B_MAP_ID := "village_b"
 ## 测试大建筑内部地图 ID
-const MEGA_INTERIOR_MAP_ID := "test_mega_interior"
+const MEGA_INTERIOR_MAP_ID := "mega_interior"
 ## 遭遇战战场地图 ID（阶段 F）
-const BATTLEFIELD_MAP_ID := "test_battlefield"
+const BATTLEFIELD_MAP_ID := "battlefield"
 ## 森林附属区域地图 ID（阶段 F）
-const FOREST_ZONE_MAP_ID := "test_forest_zone"
+const FOREST_ZONE_MAP_ID := "forest_zone"
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
 const PLAYER_SPAWN_X: float = 0.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为；阶段 E 创始人确认改为 2）
@@ -175,7 +175,7 @@ func _ready() -> void:
 		EventBus.game_started.emit()
 	# 加载测试村落地图（延迟一帧确保 SceneLoader 就绪）
 	# 地图加载完成后会 set_mode(EXPLORE) 激活 handler，此时实体已就绪
-	call_deferred("_load_test_village")
+	call_deferred("_load_start_village")
 
 
 ## 实例化四个子模块节点并挂到 GameRoot 下。
@@ -304,7 +304,7 @@ func _register_default_maps() -> void:
 	if scene_loader == null or not scene_loader.has_method("register_map"):
 		return
 	# 注册地图场景
-	scene_loader.register_map(TEST_VILLAGE_MAP_ID, _VILLAGE_MAP_SCENE, WorldAPI.MapType.VILLAGE)
+	scene_loader.register_map(VILLAGE_A_MAP_ID, _VILLAGE_MAP_SCENE, WorldAPI.MapType.VILLAGE)
 	scene_loader.register_map(ROAD_MAP_ID, _ROAD_MAP_SCENE, WorldAPI.MapType.ROAD)
 	scene_loader.register_map(VILLAGE_B_MAP_ID, _VILLAGE_MAP_B_SCENE, WorldAPI.MapType.VILLAGE)
 	scene_loader.register_map(MEGA_INTERIOR_MAP_ID, _MEGA_INTERIOR_SCENE, WorldAPI.MapType.MEGA_INTERIOR)
@@ -313,13 +313,13 @@ func _register_default_maps() -> void:
 	# 阶段 F：注册森林附属区域
 	scene_loader.register_map(FOREST_ZONE_MAP_ID, _FOREST_ZONE_SCENE, WorldAPI.MapType.VILLAGE)
 	# 配置地图出口（步行衔接，详见 §6.2）
-	scene_loader.register_map_exit(TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
-	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT, VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT, ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 
 
-func _load_test_village() -> void:
+func _load_start_village() -> void:
 	if scene_loader == null or not scene_loader.has_method("load_map"):
 		return
 	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
@@ -328,7 +328,7 @@ func _load_test_village() -> void:
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
 	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
 	print("[GameRoot] 开始新游戏")
-	scene_loader.load_map(TEST_VILLAGE_MAP_ID)
+	scene_loader.load_map(VILLAGE_A_MAP_ID)
 
 
 ## 通用地图加载回调（初始加载 + 地图切换共用）

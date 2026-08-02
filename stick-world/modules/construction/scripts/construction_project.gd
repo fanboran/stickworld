@@ -15,7 +15,7 @@ extends RefCounted
 ## 由 ConstructionManager 创建和管理；BehaviorWork 通过 ConstructionManager 派工。
 
 const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
-const ScriptPlacementSystem := preload("res://modules/construction/placement/placement_system.gd")
+const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://c37v4dhsuive3"]
 
 [ext_resource type="Script" uid="uid://e6o0yc67qlyl" path="res://modules/world/scripts/map/village_map.gd" id="1_vmap"]
-[ext_resource type="Script" uid="uid://bnt0k4kto231k" path="res://modules/world/placement_grid/placement_grid.gd" id="2_grid"]
+[ext_resource type="Script" uid="uid://bnt0k4kto231k" path="res://modules/world/scripts/placement/placement_grid.gd" id="2_grid"]
 [ext_resource type="Script" uid="uid://cqxakicqelpkj" path="res://modules/world/scripts/map/initial_buildings_list.gd" id="3_ibl"]
 [ext_resource type="PackedScene" path="res://modules/world/scenes/maps/decorations/tree.tscn" id="5_tree"]
 [ext_resource type="PackedScene" path="res://modules/world/scenes/maps/decorations/stone.tscn" id="6_stone"]

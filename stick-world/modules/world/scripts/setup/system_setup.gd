@@ -382,7 +382,7 @@ func _setup_default_destinations() -> void:
 		return
 	var dests := [
 		{"label": "前往道路 (-> 村落 B)", "map_id": _root.ROAD_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
-		{"label": "返回村落 A", "map_id": _root.TEST_VILLAGE_MAP_ID, "entry_side": WorldAPI.EntrySide.RIGHT},
+		{"label": "返回村落 A", "map_id": _root.VILLAGE_A_MAP_ID, "entry_side": WorldAPI.EntrySide.RIGHT},
 		{"label": "前往村落 B", "map_id": _root.VILLAGE_B_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
 		{"label": "进入遭遇战战场", "map_id": _root.BATTLEFIELD_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
 		{"label": "进入森林附属区域", "map_id": _root.FOREST_ZONE_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},

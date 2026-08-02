@@ -4,7 +4,7 @@ extends Node2D
 ## 铁匠铺参考场景 — 材质常量
 ## 节点结构在 smithy_reference.tscn 中手动维护
 
-const PM = preload("res://modules/texture_gen/procedural_materials.gd")
+const PM = preload("res://modules/texture_gen/scripts/procedural_materials.gd")
 
 # 材质颜色
 const C_THATCH_BACK  = Color(0.62, 0.50, 0.20)

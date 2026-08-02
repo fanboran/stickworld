@@ -129,7 +129,7 @@ func _load_map_for_save() -> void:
 	if not _root.scene_loader.map_loaded.is_connected(_root._on_map_loaded):
 		_root.scene_loader.map_loaded.connect(_root._on_map_loaded)
 	if _root._cached_load_map_id.is_empty():
-		_root._cached_load_map_id = _root.TEST_VILLAGE_MAP_ID
+		_root._cached_load_map_id = _root.VILLAGE_A_MAP_ID
 	_root.scene_loader.load_map(_root._cached_load_map_id)
 
 

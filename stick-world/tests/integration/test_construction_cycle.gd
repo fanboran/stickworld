@@ -1,6 +1,6 @@
 extends Node
 ## 集成测试：建造循环（选址→派工→建造→完工→注册）。
-## fixture：真 test_village_map.tscn + ConstructionManager，不用 GameRoot。
+## fixture：真 village_a.tscn + ConstructionManager，不用 GameRoot。
 ## 用例间共享 fixture（_map/_cm 惰性初始化一次），但各用例断言独立主题。
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -8,7 +8,7 @@ const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const ScriptConstructionManager := preload("res://modules/construction/scripts/construction_manager.gd")
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
-const MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_village_map.tscn")
+const MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/village_a.tscn")
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 
 var _runner: TestRunner

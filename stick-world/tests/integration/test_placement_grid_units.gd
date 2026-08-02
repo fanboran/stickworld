@@ -15,8 +15,8 @@ extends Node
 ## 纯单元测试，不依赖 GameRoot 场景。
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptPlacementGrid := preload("res://modules/world/placement_grid/placement_grid.gd")
-const ScriptPlacementValidator := preload("res://modules/world/placement_grid/placement_validator.gd")
+const ScriptPlacementGrid := preload("res://modules/world/scripts/placement/placement_grid.gd")
+const ScriptPlacementValidator := preload("res://modules/world/scripts/placement/placement_validator.gd")
 
 var _runner: TestRunner
 var _tests: Array = []

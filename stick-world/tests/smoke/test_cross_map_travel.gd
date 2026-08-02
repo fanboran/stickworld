@@ -74,7 +74,7 @@ func _run_tests_async() -> void:
 	sl.travel_to_map(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	sl.travel_to_map(ScriptGameRoot.TEST_VILLAGE_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
+	sl.travel_to_map(ScriptGameRoot.VILLAGE_A_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_run_phase_4_tests()
@@ -122,17 +122,17 @@ func _run_phase_1_tests() -> void:
 	if sl == null:
 		_runner.end_test()
 		return
-	_runner.assert_true(sl.has_map(ScriptGameRoot.TEST_VILLAGE_MAP_ID), "应注册 test_village")
-	_runner.assert_true(sl.has_map(ScriptGameRoot.ROAD_MAP_ID), "应注册 road_a_to_b")
-	_runner.assert_true(sl.has_map(ScriptGameRoot.VILLAGE_B_MAP_ID), "应注册 test_village_b")
+	_runner.assert_true(sl.has_map(ScriptGameRoot.VILLAGE_A_MAP_ID), "应注册 village_a")
+	_runner.assert_true(sl.has_map(ScriptGameRoot.ROAD_MAP_ID), "应注册 road_a_b")
+	_runner.assert_true(sl.has_map(ScriptGameRoot.VILLAGE_B_MAP_ID), "应注册 village_a_b")
 	_runner.end_test()
 
 	_runner.begin_test("SceneLoader: 出口配置正确")
-	var exit_right: Dictionary = sl.get_map_exit(ScriptGameRoot.TEST_VILLAGE_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	var exit_right: Dictionary = sl.get_map_exit(ScriptGameRoot.VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	_runner.assert_equal(exit_right.get("target", ""), ScriptGameRoot.ROAD_MAP_ID, "村落A 右出应指向道路")
 	_runner.assert_equal(exit_right.get("entry", -1), WorldAPI.EntrySide.LEFT, "村落A 右出应从左侧进入道路")
 	var road_left: Dictionary = sl.get_map_exit(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
-	_runner.assert_equal(road_left.get("target", ""), ScriptGameRoot.TEST_VILLAGE_MAP_ID, "道路左出应指向村落A")
+	_runner.assert_equal(road_left.get("target", ""), ScriptGameRoot.VILLAGE_A_MAP_ID, "道路左出应指向村落A")
 	var road_right: Dictionary = sl.get_map_exit(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	_runner.assert_equal(road_right.get("target", ""), ScriptGameRoot.VILLAGE_B_MAP_ID, "道路右出应指向村落B")
 	var vb_left: Dictionary = sl.get_map_exit(ScriptGameRoot.VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
@@ -141,7 +141,7 @@ func _run_phase_1_tests() -> void:
 
 	_runner.begin_test("初始地图: 村落A 已加载")
 	_runner.assert_true(sl.is_map_loaded(), "应已加载地图")
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.TEST_VILLAGE_MAP_ID, "当前应为 test_village")
+	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_A_MAP_ID, "当前应为 village_a")
 	_runner.assert_equal(sl.get_current_map_type(), WorldAPI.MapType.VILLAGE, "类型应为 VILLAGE")
 	_runner.end_test()
 
@@ -181,7 +181,7 @@ func _run_phase_2_tests() -> void:
 
 	_runner.begin_test("道路地图: 已加载")
 	var sl := _get_scene_loader()
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.ROAD_MAP_ID, "当前应为 road_a_to_b")
+	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.ROAD_MAP_ID, "当前应为 road_a_b")
 	_runner.assert_equal(sl.get_current_map_type(), WorldAPI.MapType.ROAD, "类型应为 ROAD")
 	_runner.end_test()
 
@@ -246,7 +246,7 @@ func _run_phase_2_tests() -> void:
 func _run_phase_3_tests() -> void:
 	_runner.begin_test("村落B: 已加载")
 	var sl := _get_scene_loader()
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_B_MAP_ID, "当前应为 test_village_b")
+	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_B_MAP_ID, "当前应为 village_a_b")
 	_runner.assert_equal(sl.get_current_map_type(), WorldAPI.MapType.VILLAGE, "类型应为 VILLAGE")
 	_runner.end_test()
 
@@ -294,7 +294,7 @@ func _run_phase_3_tests() -> void:
 func _run_phase_4_tests() -> void:
 	_runner.begin_test("反向旅行: 回到村落A")
 	var sl := _get_scene_loader()
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.TEST_VILLAGE_MAP_ID, "当前应回到 test_village")
+	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_A_MAP_ID, "当前应回到 village_a")
 	_runner.end_test()
 
 	_runner.begin_test("反向旅行: 玩家在右侧入口")

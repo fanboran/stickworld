@@ -20,7 +20,7 @@ extends Node
 
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 const ScriptWorkCrewAssigner := preload("res://modules/construction/scripts/work_crew_assigner.gd")
-const ScriptPlacementSystem := preload("res://modules/construction/placement/placement_system.gd")
+const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
 const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
 const ScriptBuildProgressIndicator := preload("res://modules/construction/scripts/build_progress_indicator.gd")
 

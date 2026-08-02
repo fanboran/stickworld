@@ -108,7 +108,7 @@ func _test_gameroot_load_village() -> void:
 		_runner.assert_true(false, "SceneLoader 不存在")
 		return
 	_runner.assert_true(sl.is_map_loaded(), "应已加载地图")
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.TEST_VILLAGE_MAP_ID, "地图 id 应为 test_village")
+	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_A_MAP_ID, "地图 id 应为 village_a")
 
 
 func _test_village_children() -> void:

@@ -12,7 +12,7 @@ extends Node
 ## 退出码：0 全过，1 有失败
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptPlacementGrid := preload("res://modules/world/placement_grid/placement_grid.gd")
+const ScriptPlacementGrid := preload("res://modules/world/scripts/placement/placement_grid.gd")
 
 var _runner: TestRunner
 

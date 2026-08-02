@@ -1,8 +1,9 @@
 extends Node
-## 阶段 0.1 GameRoot 骨架测试入口。
+## 集成测试：GameRoot 骨架装配（原 test_stage_01 迁移）。
+## 覆盖：GameRoot 实例化、子系统装配（InputDispatcher/SceneLoader/EnvironmentSystem/CameraRig/UIRoot/ModePanel）。
 ##
 ## 运行：
-##   godot --headless --path stick-world res://tests/test_stage_01.tscn
+##   godot --headless --path stick-world res://tests/integration/test_game_root_assembly.tscn -- --fresh-start
 ##
 ## 退出码：0 全部通过，1 有失败
 
@@ -52,7 +53,7 @@ func _register_tests() -> void:
 
 func _run_tests_async() -> void:
 	# 先实例化 GameRoot
-	var packed := load("res://modules/world/scripts/game_root.tscn") as PackedScene
+	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
 		print("[FATAL] 无法加载 game_root.tscn")
 		get_tree().quit(1)

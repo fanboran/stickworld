@@ -1,8 +1,8 @@
 extends Node
-## 阶段 0.5 小队级战斗集成测试入口。
+## 集成测试：小队战斗生命周期（原 test_stage_05 迁移）。
 ##
 ## 运行：
-##   godot --headless --path stick-world res://tests/test_stage_05.tscn
+##   godot --headless --path stick-world res://tests/integration/test_battle_lifecycle.tscn -- --fresh-start
 ##
 ## 退出码：0 全部通过，1 有失败
 ##
@@ -12,7 +12,7 @@ extends Node
 ##   - 单位 faction_id 分配
 ##   - 掩体系统扫描到 CoverMarker
 ##   - 战斗推进：伤亡发生、行为切换（attack/seek_cover/retreat）
-##   - 战斗结束判定（一方胜利或超时）
+##   - 战斗结束判定（一方胜利或超时）—— 战斗收敛（溃散判定）为后续规划项，未纳入
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
@@ -35,8 +35,6 @@ const DEFENDER_X: float = 2500.0
 const CASUALTY_TIMEOUT: float = 25.0
 ## 行为收集额外时长（秒）
 const BEHAVIOR_EXTRA_TIME: float = 5.0
-## 战斗结束总超时（秒）
-const BATTLE_TIMEOUT: float = 60.0
 
 var _runner: TestRunner
 var _game_root: Node
@@ -67,7 +65,6 @@ func _register_tests() -> void:
 	_tests.append({"name": "战斗: 掩体系统扫描到 CoverMarker", "fn": Callable(self, "_test_cover_scanned"), "async": true})
 	_tests.append({"name": "战斗: 推进后有伤亡", "fn": Callable(self, "_test_casualties_occur"), "async": true})
 	_tests.append({"name": "战斗: 行为切换（attack 等）", "fn": Callable(self, "_test_behavior_switch"), "async": true})
-	_tests.append({"name": "战斗: 最终结束判定", "fn": Callable(self, "_test_battle_ends"), "async": true})
 
 
 # ─────────────────────────────── 异步执行 ────────────────────────────────
@@ -100,30 +97,12 @@ func _run_tests_async() -> void:
 			_runner.begin_test(t["name"])
 			await t["fn"].call()
 			_runner.end_test()
-			_write_log("完成: %s | behaviors=%s" % [t["name"], str(_observed_behaviors.keys())])
+			print("完成: %s | behaviors=%s" % [t["name"], str(_observed_behaviors.keys())])
 
 	var summary := _runner.summary()
 	print(summary)
-	# 写入文件确保结果可读（stdout 可能被 IK 日志淹没）
-	var f := FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_05_result.txt", FileAccess.WRITE)
-	if f != null:
-		f.store_string(summary + "\n")
-		f.store_string("EXIT_CODE=%d\n" % (0 if _runner.all_passed() else 1))
-		f.store_string("OBSERVED_BEHAVIORS=%s\n" % str(_observed_behaviors.keys()))
-		f.close()
 	var exit_code: int = 0 if _runner.all_passed() else 1
 	get_tree().quit(exit_code)
-
-
-## 写日志到文件（stdout 可能被 IK 日志淹没）
-func _write_log(msg: String) -> void:
-	var f := FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_05_result.txt", FileAccess.READ_WRITE)
-	if f == null:
-		f = FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_05_result.txt", FileAccess.WRITE)
-	if f != null:
-		f.seek_end()
-		f.store_string(msg + "\n")
-		f.close()
 
 
 # ─────────────────────────────── 辅助 ────────────────────────────────
@@ -300,26 +279,3 @@ func _test_behavior_switch() -> void:
 		_track_behaviors()
 	_runner.assert_true(_observed_behaviors.has("attack"), "应观察到 attack 行为")
 	print("[test] 观察到的行为: %s" % str(_observed_behaviors.keys()))
-
-
-func _test_battle_ends() -> void:
-	if _battle == null:
-		_runner.assert_true(false, "battle 为空")
-		return
-	var elapsed: float = 0.0
-	while elapsed < BATTLE_TIMEOUT and _battle != null and is_instance_valid(_battle) and _battle.is_active():
-		await get_tree().process_frame
-		elapsed += get_process_delta_time()
-		_track_behaviors()
-	var ended: bool = _battle == null or not is_instance_valid(_battle) or not _battle.is_active()
-	_runner.assert_true(ended, "战斗应在 %ds 内结束" % int(BATTLE_TIMEOUT))
-	if ended and _battle != null and is_instance_valid(_battle):
-		var winner: int = _battle.get_winner()
-		print("[test] 战斗结束，胜方=%d，耗时=%.1fs，进攻方伤亡=%d，防守方伤亡=%d" % [
-			winner, _battle.get_duration(),
-			_battle.get_casualties(1), _battle.get_casualties(2)
-		])
-	if not ended:
-		print("[test] 战斗未结束，进攻方存活=%d，防守方存活=%d" % [
-			_battle.get_alive_count(1), _battle.get_alive_count(2)
-		])

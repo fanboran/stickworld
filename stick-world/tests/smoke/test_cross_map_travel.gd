@@ -1,8 +1,8 @@
 extends Node
-## 阶段 0.8 多场景衔接测试入口。
+## 冒烟测试：跨图旅行链路（原 test_stage_08 迁移）。
 ##
 ## 运行：
-##   godot --headless --path stick-world res://tests/test_stage_08.tscn
+##   godot --headless --path stick-world res://tests/smoke/test_cross_map_travel.tscn -- --fresh-start
 ##
 ## 退出码：0 全部通过，1 有失败
 ##

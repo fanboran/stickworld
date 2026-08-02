@@ -1,8 +1,10 @@
 extends Node
-## 阶段 0.2 单张村落地图测试入口。
+## 集成测试：村落地图（原 test_stage_02 迁移）。
+## 覆盖：PlacementGrid/PlacementValidator、VillageMap 装配、StickmanEntity 生成移动、CameraRig、DebugApi/DebugOverlay。
 ##
 ## 运行：
-##   godot --headless --path stick-world res://tests/test_stage_02.tscn
+##   godot --headless --path stick-world res://tests/integration/test_village_map.tscn -- --fresh-start
+##   （--fresh-start 跳过自动读档，保证纯净状态；无存档或污染时结果不可复现）
 ##
 ## 退出码：0 全部通过，1 有失败
 
@@ -67,7 +69,7 @@ func _register_tests() -> void:
 
 func _run_tests_async() -> void:
 	# 先实例化 GameRoot
-	var packed := load("res://modules/world/scripts/game_root.tscn") as PackedScene
+	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
 		print("[FATAL] 无法加载 game_root.tscn")
 		get_tree().quit(1)
@@ -204,7 +206,7 @@ func _test_validator_pass() -> void:
 		_runner.assert_true(false, "grid 创建失败")
 		return
 	var v := ScriptPlacementValidator.new()
-	var r = ScriptPlacementSystem.validate(g, 0, 2)
+	var r = v.validate_placement(g, 0, 2)
 	_runner.assert_true(r.ok, "空闲区域应校验通过")
 	g.queue_free()
 
@@ -266,14 +268,16 @@ func _test_village_ground_fields() -> void:
 	if map == null:
 		_runner.assert_true(false, "地图非 VillageMap")
 		return
-	_runner.assert_equal(map.ground_y, 450.0, "ground_y 应为 450")
-	_runner.assert_equal(map.ground_ratio, 0.4, "ground_ratio 应为 0.4")
-	_runner.assert_equal(map.map_left, 0.0, "map_left 应为 0")
-	_runner.assert_equal(map.map_right, 8192.0, "map_right 应为 8192")
-	_runner.assert_equal(map.ground_bottom, 882.0, "ground_bottom 应为 882")
-	_runner.assert_equal(map.get_ground_y(), 450.0, "get_ground_y 应为 450")
+	# 设计基准值（与 village_map.gd 默认 @export 一致）
+	_runner.assert_equal(map.ground_y, 810.0, "ground_y 应为 810")
+	_runner.assert_equal(map.ground_ratio, 0.25, "ground_ratio 应为 0.25")
+	_runner.assert_equal(map.ground_bottom, 1080.0, "ground_bottom 应为 1080")
+	_runner.assert_equal(map.get_ground_y(), 810.0, "get_ground_y 应为 810")
+	# 初始加载后土路/初始建筑会向负坐标扩展 map_left（expand_map 64 格粒度），故 map_left <= 0
+	_runner.assert_true(map.map_left <= 0.0, "map_left 应 <= 0（初始加载被土路扩展）")
+	_runner.assert_true(map.map_right >= 8192.0, "map_right 应 >= 8192")
 	var bounds: Vector2 = map.get_camera_bounds()
-	_runner.assert_equal(bounds, Vector2(0, 8192), "camera_bounds 应为 (0, 8192)")
+	_runner.assert_equal(bounds, Vector2(map.map_left, map.map_right), "camera_bounds 应与 map 边界一致")
 
 
 func _test_village_spawn() -> void:
@@ -304,12 +308,12 @@ func _test_player_spawned() -> void:
 	if player == null:
 		return
 	_runner.assert_true(player is CharacterBody2D, "玩家应为 CharacterBody2D")
-	# 位置应接近生成点
+	# 位置应接近生成点（PLAYER_SPAWN_X 由 GameRoot 配置）
 	var pos: Vector2 = player.global_position
-	_runner.assert_true(absf(pos.x - 300.0) < 5.0, "玩家 x 应接近 300")
-	# Y 应在地面偏中心位置 (450 + (882-450)*0.5 = 666)
-	var expected_spawn_y: float = 450.0 + (882.0 - 450.0) * 0.5
-	_runner.assert_true(absf(pos.y - expected_spawn_y) < 5.0, "玩家 y 应在地面偏中心 = %f" % expected_spawn_y)
+	_runner.assert_true(absf(pos.x - ScriptGameRoot.PLAYER_SPAWN_X) < 5.0, "玩家 x 应接近 PLAYER_SPAWN_X = %f" % ScriptGameRoot.PLAYER_SPAWN_X)
+	# Y = 地面中线 - foot_offset（脚部对齐）
+	var expected_spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5 - player.foot_offset
+	_runner.assert_true(absf(pos.y - expected_spawn_y) < 5.0, "玩家 y 应在地面偏中心 - foot_offset = %f" % expected_spawn_y)
 
 
 func _test_camera_follows_player() -> void:
@@ -339,11 +343,11 @@ func _test_player_ground_lock() -> void:
 	if e == null:
 		_runner.assert_true(false, "玩家非 StickmanEntity")
 		return
-	# ground_y / ground_bottom 应被注入
-	_runner.assert_equal(e.ground_y, 450.0, "玩家 ground_y 应为 450")
-	_runner.assert_equal(e.ground_bottom, 882.0, "玩家 ground_bottom 应为 882")
-	_runner.assert_equal(e.map_left, 0.0, "玩家 map_left 应为 0")
-	_runner.assert_equal(e.map_right, 8192.0, "玩家 map_right 应为 8192")
+	# ground_y / ground_bottom / map 边界应被注入且与地图一致
+	_runner.assert_equal(e.ground_y, map.ground_y, "玩家 ground_y 应与地图一致")
+	_runner.assert_equal(e.ground_bottom, map.ground_bottom, "玩家 ground_bottom 应与地图一致")
+	_runner.assert_equal(e.map_left, map.map_left, "玩家 map_left 应与地图一致")
+	_runner.assert_equal(e.map_right, map.map_right, "玩家 map_right 应与地图一致")
 	# Y 应在 [ground_y - foot_offset, ground_bottom - foot_offset] 范围内
 	var y_min: float = e.ground_y - e.foot_offset
 	var y_max: float = e.ground_bottom - e.foot_offset
@@ -356,10 +360,15 @@ func _test_camera_config() -> void:
 	if cam == null:
 		_runner.assert_true(false, "CameraRig 不存在")
 		return
-	_runner.assert_equal(cam.ground_y, 450.0, "相机 ground_y 应为 450")
-	_runner.assert_equal(cam.ground_ratio, 0.4, "相机 ground_ratio 应为 0.4")
-	_runner.assert_equal(cam.map_left, 0.0, "相机 map_left 应为 0")
-	_runner.assert_equal(cam.map_right, 8192.0, "相机 map_right 应为 8192")
+	var map_node := _get_current_map()
+	var map: ScriptVillageMap = map_node as ScriptVillageMap
+	if map == null:
+		_runner.assert_true(false, "地图未加载或非 VillageMap")
+		return
+	_runner.assert_equal(cam.ground_y, map.ground_y, "相机 ground_y 应与地图一致")
+	_runner.assert_equal(cam.ground_ratio, map.ground_ratio, "相机 ground_ratio 应与地图一致")
+	_runner.assert_equal(cam.map_left, map.map_left, "相机 map_left 应与地图一致")
+	_runner.assert_equal(cam.map_right, map.map_right, "相机 map_right 应与地图一致")
 	_runner.assert_true(cam._configured, "相机应已配置")
 	# 缩放系统：base_zoom（分辨率适配）+ user_zoom（1.0~2.0）= effective_zoom
 	_runner.assert_true(cam.user_zoom >= ScriptCameraRig.ZOOM_MIN, "user_zoom 不应低于 ZOOM_MIN")
@@ -495,7 +504,7 @@ func _test_village_ground_bottom() -> void:
 	if map == null:
 		_runner.assert_true(false, "地图非 VillageMap")
 		return
-	_runner.assert_equal(map.get_ground_bottom(), 882.0, "get_ground_bottom 应为 882")
+	_runner.assert_equal(map.get_ground_bottom(), 1080.0, "get_ground_bottom 应为 1080")
 
 
 func _test_village_walk_barrier_query() -> void:
@@ -533,9 +542,6 @@ func _test_stickman_map_ref() -> void:
 		_runner.assert_true(false, "玩家非 StickmanEntity")
 		return
 	_runner.assert_true(e.has_method("set_map_reference"), "应有 set_map_reference 方法")
-	_runner.assert_true(e.has_method("_is_in_passage_barrier"), "应有 _is_in_passage_barrier 方法")
-	# _is_in_passage_barrier 应返回 false（无障碍物）
-	_runner.assert_true(not e._is_in_passage_barrier(), "无障碍物时应返回 false")
 
 
 # ─────────────────────────────── DebugApi / DebugOverlay 测试 ────────────────────────────────

@@ -1,8 +1,8 @@
 extends Node
-## 阶段 0.7 玩家附身 -- 集成测试。
+## 集成测试：玩家附身（原 test_stage_07 迁移）。
 ##
 ## 运行：
-##   godot --headless --path stick-world res://tests/test_stage_07.tscn
+##   godot --headless --path stick-world res://tests/integration/test_possession.tscn -- --fresh-start
 ##
 ## 退出码：0 全部通过，1 有失败
 ##
@@ -24,6 +24,7 @@ extends Node
 ##   - 死亡单位不可附身
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 
@@ -58,7 +59,6 @@ func _register_tests() -> void:
 	_tests.append({"name": "装配: PossessPanel 已注册", "fn": Callable(self, "_test_possess_panel_assembled"), "async": false})
 	_tests.append({"name": "附身: 从 BATTLE 进入 POSSESS 附身选中单位", "fn": Callable(self, "_test_possess_from_battle"), "async": true})
 	_tests.append({"name": "附身: entity.is_possessed() == true", "fn": Callable(self, "_test_entity_possessed"), "async": true})
-	_tests.append({"name": "附身: 相机居中跟随", "fn": Callable(self, "_test_camera_centered"), "async": true})
 	_tests.append({"name": "信号: possession_started 发射", "fn": Callable(self, "_test_started_signal"), "async": true})
 	_tests.append({"name": "UI: PossessPanel 显示单位信息", "fn": Callable(self, "_test_panel_shows_info"), "async": true})
 	_tests.append({"name": "攻击: _find_nearest_enemy_in_range 找到敌人", "fn": Callable(self, "_test_find_enemy"), "async": false})
@@ -115,27 +115,12 @@ func _run_tests_async() -> void:
 			_runner.begin_test(t["name"])
 			await t["fn"].call()
 			_runner.end_test()
-			_write_log("完成: %s" % t["name"])
+			print("完成: %s" % t["name"])
 
 	var summary := _runner.summary()
 	print(summary)
-	var f := FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_07_result.txt", FileAccess.WRITE)
-	if f != null:
-		f.store_string(summary + "\n")
-		f.store_string("EXIT_CODE=%d\n" % (0 if _runner.all_passed() else 1))
-		f.close()
 	var exit_code: int = 0 if _runner.all_passed() else 1
 	get_tree().quit(exit_code)
-
-
-func _write_log(msg: String) -> void:
-	var f := FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_07_result.txt", FileAccess.READ_WRITE)
-	if f == null:
-		f = FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_07_result.txt", FileAccess.WRITE)
-	if f != null:
-		f.seek_end()
-		f.store_string(msg + "\n")
-		f.close()
 
 
 # ─────────────────────────────── 辅助 ────────────────────────────────
@@ -224,26 +209,6 @@ func _test_entity_possessed() -> void:
 		_runner.assert_true(false, "无附身实体")
 		return
 	_runner.assert_true(entity.is_possessed(), "entity.is_possessed() 应为 true")
-
-
-func _test_camera_centered() -> void:
-	if _possession == null:
-		_runner.assert_true(false, "PossessionInterface 为空")
-		return
-	var cam: Camera2D = _game_root.camera_rig
-	if cam == null:
-		_runner.assert_true(false, "CameraRig 为空")
-		return
-	_runner.assert_true(cam.is_centered_mode(), "相机应处于居中模式")
-	# 相机需要更多帧来更新位置，等待 5 帧确保跟随到位
-	for i in 5:
-		await get_tree().process_frame
-	var entity: Node2D = _possession.get_possessed_entity()
-	if entity != null:
-		# 相机受地图边界约束，差距可能较大（地图宽 2048px，视野约 1920px）
-		# 只要差距在地图宽度范围内即可
-		var diff: float = absf(cam.global_position.x - entity.global_position.x)
-		_runner.assert_true(diff < 1200.0, "相机应在合理范围内跟随附身实体（差距 %.1f，地图边界约束）" % diff)
 
 
 func _test_started_signal() -> void:

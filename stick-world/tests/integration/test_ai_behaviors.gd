@@ -1,8 +1,10 @@
 extends Node
-## 阶段 0.3 火柴人行为 AI 基础测试入口。
+## 集成测试：AI 行为（原 test_stage_03 迁移）。
+## 覆盖：GameRoot 装配下的 AIController 决策、行为切换、附身暂停、AI 驱动移动。
+## 纯逻辑部分（状态机注册/travel）已抽到 unit/test_behavior_state_machine.gd。
 ##
 ## 运行：
-##   godot --headless --path stick-world res://tests/test_stage_03.tscn
+##   godot --headless --path stick-world res://tests/integration/test_ai_behaviors.tscn -- --fresh-start
 ##
 ## 退出码：0 全部通过，1 有失败
 
@@ -14,6 +16,7 @@ const ScriptBehaviorStateMachine := preload("res://modules/units/ai/behavior_sta
 const ScriptBehaviorBase := preload("res://modules/units/ai/behavior_base.gd")
 const ScriptBehaviorIdle := preload("res://modules/units/ai/behavior_idle.gd")
 const ScriptBehaviorWander := preload("res://modules/units/ai/behavior_wander.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 
 var _runner: TestRunner
 var _game_root: Node
@@ -33,8 +36,6 @@ func _register_tests() -> void:
 	_tests.append({"name": "AIController: 存在为子节点", "fn": Callable(self, "_test_ai_exists"), "async": false})
 	_tests.append({"name": "StickmanEntity: AI 移动接口", "fn": Callable(self, "_test_ai_move_api"), "async": false})
 	_tests.append({"name": "AIController: 初始行为为 idle", "fn": Callable(self, "_test_initial_idle"), "async": false})
-	_tests.append({"name": "BehaviorStateMachine: 已注册 idle 和 wander", "fn": Callable(self, "_test_behaviors_registered"), "async": false})
-	_tests.append({"name": "BehaviorStateMachine: travel 切换行为", "fn": Callable(self, "_test_travel_switch"), "async": false})
 	_tests.append({"name": "BehaviorIdle: 闲置到时间后 finish", "fn": Callable(self, "_test_idle_finishes"), "async": false})
 	_tests.append({"name": "BehaviorWander: 到时间后 finish", "fn": Callable(self, "_test_wander_finishes"), "async": false})
 	_tests.append({"name": "BehaviorWander: 驱动实体移动", "fn": Callable(self, "_test_wander_moves"), "async": false})
@@ -160,49 +161,6 @@ func _test_initial_idle() -> void:
 	_runner.assert_equal(ai.get_current_behavior(), "idle", "初始行为应为 idle")
 
 
-func _test_behaviors_registered() -> void:
-	var e := _get_player_entity()
-	if e == null:
-		_runner.assert_true(false, "无玩家实体")
-		return
-	var ai: ScriptAIController = e.get_ai_controller() as ScriptAIController
-	if ai == null:
-		_runner.assert_true(false, "AIController 为空")
-		return
-	var sm: ScriptBehaviorStateMachine = ai.get_state_machine()
-	if sm == null:
-		_runner.assert_true(false, "StateMachine 为空")
-		return
-	# travel 到 idle 应成功（已注册）
-	sm.travel("idle")
-	_runner.assert_equal(sm.get_current_behavior_name(), "idle", "应能 travel 到 idle")
-	# travel 到 wander 应成功（已注册）
-	sm.travel("wander")
-	_runner.assert_equal(sm.get_current_behavior_name(), "wander", "应能 travel 到 wander")
-	# travel 回 idle
-	sm.travel("idle")
-	_runner.assert_equal(sm.get_current_behavior_name(), "idle", "应能 travel 回 idle")
-
-
-func _test_travel_switch() -> void:
-	var e := _get_player_entity()
-	if e == null:
-		_runner.assert_true(false, "无玩家实体")
-		return
-	var ai: ScriptAIController = e.get_ai_controller() as ScriptAIController
-	var sm: ScriptBehaviorStateMachine = ai.get_state_machine()
-	# travel 到 wander
-	sm.travel("wander")
-	_runner.assert_equal(sm.get_current_behavior_name(), "wander", "当前应为 wander")
-	_runner.assert_true(sm.has_active_behavior(), "应有激活行为")
-	# travel 回 idle
-	sm.travel("idle")
-	_runner.assert_equal(sm.get_current_behavior_name(), "idle", "当前应为 idle")
-	# 未注册行为应不切换
-	sm.travel("nonexistent")
-	_runner.assert_equal(sm.get_current_behavior_name(), "idle", "未注册行为不应切换")
-
-
 func _test_idle_finishes() -> void:
 	var e := _get_player_entity()
 	if e == null:
@@ -298,13 +256,15 @@ func _test_ai_moves_entity() -> void:
 	var sm: ScriptBehaviorStateMachine = ai.get_state_machine()
 	# 记录初始位置
 	var pos_before := e.global_position
-	# 手动切到 wander，持续 3 秒
-	sm.travel("wander", {"duration": 3.0})
-	# 等待 2 秒让实体移动
-	await get_tree().create_timer(2.0).timeout
-	var pos_after := e.global_position
-	var dist_moved := pos_after.distance_to(pos_before)
-	_runner.assert_true(dist_moved > 30.0, "实体应移动超过 30px，实际: %f" % dist_moved)
+	# 手动切到 wander，持续 5 秒
+	sm.travel("wander", {"duration": 5.0})
+	# 条件等待累计位移超阈值（wander 方向重选有抖动，固定时长等待不可靠）
+	var ok: bool = await TestHelpers.await_condition(
+		func(): return e.global_position.distance_to(pos_before) > 30.0,
+		4.0, "AI 驱动实体移动"
+	)
+	var dist_moved := e.global_position.distance_to(pos_before)
+	_runner.assert_true(ok, "实体应移动超过 30px，实际: %f" % dist_moved)
 
 
 func _test_ai_cycle() -> void:

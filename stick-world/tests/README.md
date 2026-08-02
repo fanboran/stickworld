@@ -1,28 +1,104 @@
-## 测试目录
+# 测试体系规范（v2 · 2026-08-01）
 
-本目录用于存放所有 GDScript 单元测试。
+> 本规范取代旧的 `test_stage_NN` 数字标号体系（渐进迁移中，旧 stage 测试仍保留于 `tests/` 根目录，见「迁移状态」）。
+> 依据：docs/项目/P0重审与稳定化方案.md §3「测试架构问题诊断与重新设计」。
 
-### 测试约定
+---
 
-1. 使用 Godot 4.x 内置的 `GDScript` 原生功能 + `assert()` 编写冒烟测试。
-2. 文件命名：`test_<模块名>.gd`，例如 `test_event_bus.gd`。
-3. 子目录结构与项目源码目录一致（`core/`, `modules/<name>/` 等）。
+## 一、三层测试体系
 
-### 手动运行测试
+按**依赖深度与运行速度**分层（而非按开发阶段编号）：
 
-在 Godot 编辑器中运行：
-- 创建一个临时场景，根节点挂一个脚本，在 `_ready()` 中调用 `run_all()`，然后 `get_tree().quit()`。
+| 层 | 目录 | 依赖 | 特征 | 示例 |
+|----|------|------|------|------|
+| **Unit 单元** | `tests/unit/` | 无 GameRoot，纯对象/纯函数 | 快、确定性、隔离、AAA | 指挥链延迟公式、战斗胜负判定、士气数值、资源扣减、编队增删 |
+| **Integration 集成** | `tests/integration/` | 最小场景树 fixture（自建自毁） | await 就绪信号+超时 | 战斗循环、附身流程、跨图旅行、建造循环、室内传送 |
+| **Smoke 冒烟** | `tests/smoke/` | 完整 GameRoot | 数量少、每条带超时、只验"不崩+关键里程碑" | 新游戏启动 60s 零 ERROR、跨图旅行不崩 |
 
-或者通过命令行：
+**命名规则**：`test_<模块或特性>.gd`（如 `test_command_chain.gd`、`test_battle_lifecycle.gd`）。一个文件只属一个模块/特性；一个阶段可对应多个文件。**禁止**新增 `test_stage_NN` 命名文件。
+
+**文件结构**（每个测试文件）：
+
+```gdscript
+extends Node
+const TestRunner := preload("res://tests/core/test_runner.gd")
+# 依赖纯逻辑/纯数据时用 const preload，禁止依赖 class_name 全局注册（headless 下不可靠）
+
+func _ready() -> void:
+	var runner := TestRunner.new()
+	runner.add_test("CommandChain: 玩家直接指挥零延迟", _test_zero_delay)          # 同步用例直接传 Callable
+	runner.add_test("BattleInstance: 全员溃散即结束", _test_rout_collapse, true)  # async 用例第三参传 true
+	await runner.run_async()          # async 用例必须用 run_async()
+	print(runner.summary())
+	get_tree().quit(0 if runner.all_passed() else 1)
 ```
-godot --headless -s tests/run_tests.gd
+
+---
+
+## 二、确定性原则（硬规矩）
+
+1. **等就绪，不数帧**：禁止裸 `for i in N: await get_tree().process_frame` 等待游戏就绪。用 `TestHelpers.await_condition(cond, timeout, desc)` 或 `TestHelpers.await_signal(emitter, sig, timeout)`。
+2. **必带超时**：任何等待必有超时上限；超时返回 `false` 而非挂死，调用方必须对返回值断言。
+3. **用例隔离**：每个用例自建 fixture、自毁；禁止跨用例共享可变状态（旧 stage 的"unit 0 被上个用例杀死"式时序依赖是反面教材）。
+4. **AAA 结构**：Arrange-Act-Assert，一个用例聚焦一个主题。
+5. **确定性输入**：AI/随机类用例固定 `seed`；时间相关逻辑用可注入时钟。
+6. **零断言即失败**：TestRunner 已内置零断言守卫——用例跑完 0 次断言直接判失败（防 `return` 静默通过）。
+7. **一个用例一个异步生命周期**：async 用例注册时传 `true`，用 `run_async()`；禁止手动 `begin_test/end_test` 配对（旧接口仅兼容旧文件）。
+
+---
+
+## 三、运行命令
+
+标准命令（headless，必须带 `-- --fresh-start` 防存档污染）：
+
+```
+godot --headless --path <项目根> res://tests/unit/test_xxx.tscn -- --fresh-start
+godot --headless --path <项目根> res://tests/integration/test_xxx.tscn -- --fresh-start
+godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-start
 ```
 
-### 自动 CI
+退出码约定：`0` = 全部通过；`1` = 有失败。
 
-暂未启用 GitHub Actions。之后可在此目录添加 CI 脚本。
+**已知限制**（headless）：
+- `class_name` 全局注册不可靠 → 测试内引用脚本一律显式 `const X := preload(...)`。
+- `FileAccess` 打开新文件用 `WRITE`（`READ_WRITE` 对不存在文件返回 null）。
+- 诊断输出写文件时用绝对路径 + `print` 双通道（stdout 可能被淹没/缓冲）。
 
-### 关于 GdUnit4
+---
 
-项目暂时没有引入 GdUnit4 插件。如果后续需要更完善的测试框架
-（参数化测试、断言 DSL、JUnit XML 报告等），再考虑添加。
+## 四、迁移状态（渐进式，不破坏绿基线）
+
+| 批次 | 内容 | 状态 |
+|------|------|------|
+| T0-1 | TestRunner 加固：零断言守卫 + async 内建 + 断言扩充 | ✅ |
+| T0-2 | 本规范文档（三层体系 + 确定性硬规矩） | ✅ |
+| T0-3 | unit：placement_grid/health/resource/command_chain/battle/formation/behavior_state_machine | ✅ 7 文件 52 用例 |
+| T0-4 | integration：建造循环 + 室内系统（smoke） | ✅ |
+| T0-5 | smoke：新游戏 60s 冒烟 + `run_all.ps1` 聚合器 | ✅ |
+| T0-6 | 清理孤儿 uid、`*_result.txt`、硬编码路径 | ✅ |
+| T0-7 | **数字标号全部清除**：test_stage_01~08 全部迁移完成——01→integration/test_game_root_assembly、02→integration/test_village_map、03→integration/test_ai_behaviors、05→integration/test_battle_lifecycle、06→integration/test_selection_formation、07→integration/test_possession、08→smoke/test_cross_map_travel | ✅ |
+
+**当前结构（17 套件 / 191 用例）**：
+- `tests/unit/`（7 文件）：placement_grid(9)、health_component(8)、resource_manager(8)、command_chain(6)、battle_instance(7)、formation_system(7)、behavior_state_machine(7)
+- `tests/integration/`（7 文件）：construction_cycle(5)、ai_behaviors(9)、game_root_assembly(15)、village_map(29)、battle_lifecycle(8)、selection_formation(29)、possession(16)
+- `tests/smoke/`（3 文件）：new_game_smoke(2)、interior_smoke(3)、cross_map_travel(23)
+
+> 后续轮次：巨型文件（village_map/selection_formation）内部继续按主题拆细、去除残留的用例间共享状态。
+
+---
+
+## 六、聚合运行
+
+```
+powershell -ExecutionPolicy Bypass -File tests\run_all.ps1
+powershell -ExecutionPolicy Bypass -File tests\run_all.ps1 -Filter unit      # 只跑 unit
+powershell -ExecutionPolicy Bypass -File tests\run_all.ps1 -Filter stage     # 只跑旧 stage 回归基线
+```
+
+`run_tests.gd`（旧入口）职责：仅 autoload 冒烟（EventBus/ConfigManager），不再是"全部测试入口"。
+
+---
+
+## 五、关于 GdUnit4（P0-7 决策）
+
+暂不迁移 GdUnit4（迁移成本高、会扰动未稳代码）；自研 TestRunner 已补零断言守卫/async/超时语义，满足 P0 最小可用。GdUnit4 列为 P1 引入项，待稳定后一次性迁移。

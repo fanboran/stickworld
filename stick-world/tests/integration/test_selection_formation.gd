@@ -1,8 +1,8 @@
 extends Node
-## 阶段 0.6 编队与指挥 -- 第一步：框选系统（SelectionSystem）集成测试。
+## 集成测试：框选/编队/号令（原 test_stage_06 迁移）。
 ##
 ## 运行：
-##   godot --headless --path stick-world res://tests/test_stage_06.tscn
+##   godot --headless --path stick-world res://tests/integration/test_selection_formation.tscn -- --fresh-start
 ##
 ## 退出码：0 全部通过，1 有失败
 ##
@@ -16,6 +16,7 @@ extends Node
 ##   - selection_changed 信号正确发射
 ##   - 阵营过滤（set_selectable_faction）
 ##   - 死亡单位自动移除
+##   - FormationSystem 编队/任命/号令（TacticalOrders）
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
@@ -139,27 +140,12 @@ func _run_tests_async() -> void:
 			_runner.begin_test(t["name"])
 			await t["fn"].call()
 			_runner.end_test()
-			_write_log("完成: %s" % t["name"])
+			print("完成: %s" % t["name"])
 
 	var summary := _runner.summary()
 	print(summary)
-	var f := FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_06_result.txt", FileAccess.WRITE)
-	if f != null:
-		f.store_string(summary + "\n")
-		f.store_string("EXIT_CODE=%d\n" % (0 if _runner.all_passed() else 1))
-		f.close()
 	var exit_code: int = 0 if _runner.all_passed() else 1
 	get_tree().quit(exit_code)
-
-
-func _write_log(msg: String) -> void:
-	var f := FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_06_result.txt", FileAccess.READ_WRITE)
-	if f == null:
-		f = FileAccess.open("f:/VSCode/game-2/stick-world/test_stage_06_result.txt", FileAccess.WRITE)
-	if f != null:
-		f.seek_end()
-		f.store_string(msg + "\n")
-		f.close()
 
 
 # ─────────────────────────────── 辅助 ────────────────────────────────
@@ -682,9 +668,9 @@ func _test_battle_panel_assembled() -> void:
 	if _battle_panel == null:
 		return
 	_runner.assert_true(_battle_panel.get_parent() != null, "BattlePanel 应在场景树中")
-	# 验证 setup 已调用（_selection_label 应存在）
-	var label: Label = _battle_panel.get_node_or_null("HBox")
-	_runner.assert_true(label != null, "BattlePanel UI 应已构建（HBox 存在）")
+	# 验证 setup 已调用（HBox 应存在）
+	var hbox: Node = _battle_panel.get_node_or_null("HBox")
+	_runner.assert_true(hbox != null, "BattlePanel UI 应已构建（HBox 存在）")
 
 
 func _test_battle_panel_selection() -> void:

@@ -116,3 +116,37 @@ modules/player/
 ```
 
 命名规范：配置尽量放 `.tres`/`.json` 而非全堆在 `project.godot`。
+
+***
+
+## GitHub 代码检索工具（opencode MCP）
+
+opencode 通过本地 MCP server 接入 GitHub API，弥补模型静态知识过时（新开源库、最新 API 变更、冷门库、工业级实现参考）。模型会在需要时自动调用，无需手动干预。详细说明见 `docs/CONTRIBUTING.md` 的「GitHub 代码检索工具」一节。
+
+**位置与注册**（全局配置，非项目内）：
+
+- MCP server 脚本：`C:\Users\fanbo\.config\opencode\github-search.mjs`
+- 注册于 `~/.config/opencode/opencode.jsonc` 的 `mcp.github-search`
+
+**工具一览**：
+
+| 工具 | 用途 | 底层 API |
+| --- | --- | --- |
+| `github_code_search` | 搜源码片段（新库用法/示例/API 报错迁移） | `/search/code` |
+| `github_repo_search` | 仓库元数据（选型、活跃度判断） | `/search/repositories` |
+| `github_issue_search` | 报错解决方案、已知 bug 与 workaround | `/search/issues` |
+| `github_readme` | 官方安装/用法（裁剪约 220 行） | `/repos/{repo}/readme` |
+| `github_clone` | 下载整仓到本地（长期/系统级参考，不限制大小） | codeload tarball（可直连，不依赖代理） |
+
+**Token 配置**：
+
+1. GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens**
+2. Repository access 选 **"Public repositories (read-only)"**
+3. 权限仅保留：**Contents: Read** + **Metadata: Read**（只读，不泄露写权限）
+4. `setx GITHUB_TOKEN "你的token"`，重启 opencode 生效
+
+- 带 token：5000 次/小时（代码搜索必须认证）；无 token：60 次/小时（仓库/issue/README 可用，代码搜索不可用）
+
+**克隆仓库落盘目录**：`<项目根>/external/<owner>--<repo>/`（已被 `.gitignore` 忽略，不入库；在项目内可直接 Read/Grep 深入参考）
+
+**防上下文溢出**：所有搜索结果按 token 上限裁剪（单次 ≤8k tokens）；限流耗尽（`X-RateLimit-Remaining`）时自动降级为友好提示，不疯狂重试。

@@ -950,21 +950,10 @@ func _load_test_village() -> void:
 	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
 	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
 		scene_loader.map_loaded.connect(_on_map_loaded)
-	# 自动读取存档槽位 0（玩家在上次保存位置复活）；无存档则新游戏
-	if SaveManager and SaveManager.has_method("slot_exists") and SaveManager.slot_exists(0):
-		print("[GameRoot] 检测到存档槽位 0，自动读取...")
-		load_game_from_slot(0)
-	else:
-		print("[GameRoot] 无存档，开始新游戏")
-		scene_loader.load_map(TEST_VILLAGE_MAP_ID)
-
-
-## 退出时自动存档（防止数据丢失）
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		if SaveManager and SaveManager.has_method("save_game"):
-			SaveManager.save_game(0)
-			print("[GameRoot] 退出前自动存档到槽位 0")
+	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
+	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
+	print("[GameRoot] 开始新游戏")
+	scene_loader.load_map(TEST_VILLAGE_MAP_ID)
 
 
 ## 通用地图加载回调（初始加载 + 地图切换共用）
@@ -1051,16 +1040,6 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 注册调试绘制器
 	_register_debug_drawers()
-	# 新游戏初始加载完成后，延迟存档一次（确保下次启动可读）
-	if not _pending_save_load and _initial_map_loaded:
-		call_deferred("_initial_auto_save")
-
-
-## 新游戏初始化后自动存档
-func _initial_auto_save() -> void:
-	if SaveManager and SaveManager.has_method("save_game"):
-		SaveManager.save_game(0)
-		print("[GameRoot] 初始加载完成，自动存档到槽位 0")
 
 
 ## 请求地图旅行（由 ChunkTrigger 调用，详见 §6.2 步行流程）
@@ -1328,6 +1307,11 @@ func _find_player_entity() -> Node2D:
 		if e is CharacterBody2D and e.has_method("is_possessed") and e.is_possessed():
 			return e
 	return null
+
+
+## 获取当前玩家实体（公开接口，供 HUD 等 UI 调用）
+func get_player_entity() -> Node2D:
+	return _find_player_entity()
 
 
 ## 某个建筑的 InteractionZone 离开 -> 检查是否所有建筑都不含玩家

@@ -5,8 +5,8 @@ extends Control
 ## 详见 docs/技术/架构/场景与战斗架构.md §10.1、§10.2、§8.3。
 ## 三大区域：
 ##   1. 框选信息：选中单位数量/概要
-##   2. 编制树：当前所有小队列表（名称、人数、排长）
-##   3. 指令按钮：前进/坚守/后撤/掩体 + 编队/任命排长
+##   2. 编制：打开编制管理窗口（FormationPanel，队伍类型编制）
+##   3. 指令按钮：前进/坚守/后撤/掩体（仅战斗职责小队可用）
 ##
 ## 由 GameRoot 在 _ready 中 set_script 装配，随后调用 setup(game_root)。
 ## 信号驱动更新：selection_changed / squad_created / squad_disbanded。
@@ -21,8 +21,7 @@ var _tactical: Node = null
 var _selection_label: Label = null
 var _squad_container: VBoxContainer = null
 var _order_buttons: Dictionary = {}  # order_type(int) -> Button
-var _create_squad_btn: Button = null
-var _assign_leader_btn: Button = null
+var _open_formation_btn: Button = null
 var _possess_btn: Button = null
 
 # ─────────────────────────────── 常量 ────────────────────────────────
@@ -95,13 +94,12 @@ func _build_ui() -> void:
 	# 分隔线
 	_add_separator(hbox)
 
-	# ── 4. 操作按钮 ──
-	var action_section := _create_section(hbox, "操作")
+	# ── 4. 编制入口 ──
+	var action_section := _create_section(hbox, "编制")
 	var action_hbox := HBoxContainer.new()
 	action_hbox.add_theme_constant_override("separation", 6)
 	action_section.add_child(action_hbox)
-	_create_squad_btn = _create_button(action_hbox, "编队", _on_create_squad_pressed)
-	_assign_leader_btn = _create_button(action_hbox, "任命排长", _on_assign_leader_pressed)
+	_open_formation_btn = _create_button(action_hbox, "打开编制窗口", _on_open_formation_pressed)
 
 	# 分隔线
 	_add_separator(hbox)
@@ -212,21 +210,17 @@ func _refresh_squad_list() -> void:
 
 
 func _refresh_buttons() -> void:
-	# 编队按钮：有选中单位时可用
+	# 编制窗口始终可用
+	if _open_formation_btn != null:
+		_open_formation_btn.disabled = false
+	# 号令按钮：选中单位所在小队为战斗职责小队时可用
 	var has_selection: bool = _selection != null and _selection.has_method("get_selected_count") and _selection.get_selected_count() > 0
-	if _create_squad_btn != null:
-		_create_squad_btn.disabled = not has_selection
-	# 任命排长按钮：有选中单位且该单位在小队中时可用
-	var can_assign: bool = false
-	if has_selection and _formation != null and _formation.has_method("get_unit_squad"):
+	var can_order: bool = false
+	if has_selection and _formation != null and _formation.has_method("get_unit_squad") and _formation.has_method("is_combat_squad"):
 		var units: Array = _selection.get_selected_units() if _selection.has_method("get_selected_units") else []
 		if not units.is_empty() and is_instance_valid(units[0]):
 			var sid: String = _formation.get_unit_squad(units[0])
-			can_assign = not sid.is_empty()
-	if _assign_leader_btn != null:
-		_assign_leader_btn.disabled = not can_assign
-	# 号令按钮：选中单位在小队中时可用
-	var can_order: bool = can_assign
+			can_order = (not sid.is_empty()) and _formation.is_combat_squad(sid)
 	for btn in _order_buttons.values():
 		btn.disabled = not can_order
 	# 附身按钮：有选中单位时可用
@@ -236,36 +230,10 @@ func _refresh_buttons() -> void:
 
 # ─────────────────────────────── 按钮回调 ────────────────────────────────
 
-## 编队：将当前选中单位编为一个小队
-func _on_create_squad_pressed() -> void:
-	if _selection == null or _formation == null:
-		return
-	var units: Array = _selection.get_selected_units() if _selection.has_method("get_selected_units") else []
-	if units.is_empty():
-		return
-	if _formation.has_method("create_squad"):
-		var squad_id: String = _formation.create_squad(units)
-		if not squad_id.is_empty():
-			_show_notify("编队成功: %s" % squad_id)
-
-
-## 任命排长：将第一个选中单位任命为其所在小队的排长
-func _on_assign_leader_pressed() -> void:
-	if _selection == null or _formation == null:
-		return
-	var units: Array = _selection.get_selected_units() if _selection.has_method("get_selected_units") else []
-	if units.is_empty():
-		return
-	var unit: Node = units[0]
-	if not is_instance_valid(unit):
-		return
-	if not _formation.has_method("get_unit_squad") or not _formation.has_method("assign_leader"):
-		return
-	var squad_id: String = _formation.get_unit_squad(unit)
-	if squad_id.is_empty():
-		return
-	if _formation.assign_leader(squad_id, unit):
-		_show_notify("任命排长: #%d" % unit.get_instance_id())
+## 打开编制管理窗口（FormationPanel）
+func _on_open_formation_pressed() -> void:
+	if _game_root != null and _game_root.has_method("toggle_formation_panel"):
+		_game_root.toggle_formation_panel()
 
 
 ## 号令按钮：对选中单位所在小队下达号令
@@ -282,7 +250,11 @@ func _on_order_pressed(order_type: int) -> void:
 		return
 	var squad_id: String = _formation.get_unit_squad(unit)
 	if squad_id.is_empty():
-		_show_notify("单位不在任何小队中")
+		_show_notify("单位不在任何编队中，请先到编制窗口编队")
+		return
+	# 战斗号令仅限战斗职责小队
+	if _formation.has_method("is_combat_squad") and not _formation.is_combat_squad(squad_id):
+		_show_notify("该编队无战斗职责，无法下达战斗号令")
 		return
 	# 前进号令需要目标位置：选中单位平均位置 + 右偏移
 	var target: Vector2 = Vector2.ZERO

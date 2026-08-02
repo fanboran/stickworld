@@ -311,14 +311,18 @@ modules/combat/
 
 ```
 1. 玩家框选 → selection_system 返回 unit_ids 数组
-2. "编队"按钮 → formation_system.create_squad(unit_ids) → 返回 squad_id
-3. "任命排长"→ organization_api.assign_commander(squad_id, leader_unit_id)
+2. 打开编制窗口（GlobalHUD"编制"按钮 / BattlePanel"打开编制窗口"）
+   → 选预设（战斗班/建造队/工人队）+ 勾选空闲火柴人 → formation_system.create_squad(units, name, preset_id)
+   → 创建 L1 组织（tag 来自预设）+ 成员角色写入 + 职责范围（work_types）记录
+3. "任命排长"→ formation_system.assign_leader(squad_id, leader_unit)
 4. "全体前进"→ tactical_orders.issue(ORDER_ADVANCE_ALL, target_pos)
             → command_chain 逐层下达（带延迟）
             → 各单位 AIController 接收 → 切换到 behavior_move
 5. "对排长发令"→ selection 排长 → tactical_orders.issue_to(squad_id, ORDER_*)
               → 仅该 squad 执行
 ```
+
+**队伍类型编制**（2026-08 新增）：编队 = 编制预设实例。预设（`config/formations/formation_presets.tres`）定义组织标签 + 职责范围（RimWorld 式工作类型 WORK_COMBAT/WORK_BUILD/WORK_HAUL/WORK_FORAGE）+ 成员角色。职责范围可调整（`set_squad_work_types`）；AI 决策与号令按职责过滤——战斗班可战斗接号令、建造队可建造/搬运不参战、工人队可搬运/采集。未编队单位全能（保持原行为）。组织系统 VALID_TAGS 追加 LABOR。
 
 **关键**：任命排长 = 创建 L1 组织节点，复用现有 `organization_state.gd`。这就是为什么战斗和组织高度耦合——必须一起设计。
 

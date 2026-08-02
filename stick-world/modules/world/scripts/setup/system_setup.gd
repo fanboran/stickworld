@@ -26,6 +26,7 @@ const _OrganizationApiScript: GDScript = preload("res://modules/organization/api
 const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/command/tactical_orders.gd")
 const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command/command_chain.gd")
 const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/panels/battle_panel.gd")
+const _FormationPanelScript: GDScript = preload("res://modules/ui/scripts/panels/formation_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui/scripts/hud/minimap.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui/scripts/hud/zoom_bar.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
@@ -57,6 +58,7 @@ func setup(root: GameRoot) -> void:
 	_setup_formation_system()
 	_setup_tactical_system()
 	_setup_battle_panel()
+	_setup_formation_panel()
 	_setup_minimap()
 	_setup_zoom_bar()
 	_setup_possession_interface()
@@ -277,6 +279,30 @@ func _setup_battle_panel_deferred() -> void:
 		return
 	if _root._battle_panel.has_method("setup"):
 		_root._battle_panel.setup(_root)
+
+
+# ─────────────────────────────── 编制管理窗口装配 ────────────────────────────────
+
+## 实例化 FormationPanel 并挂到 UIRoot.ModalOverlay（模态面板，open/close 控制可见性）。
+func _setup_formation_panel() -> void:
+	if _root.ui_root == null:
+		return
+	var overlay: Control = _root.ui_root.get_node_or_null(UIAPI.PATH_MODAL_OVERLAY)
+	if overlay == null:
+		return
+	var fp := Control.new()
+	fp.set_script(_FormationPanelScript)
+	fp.name = "FormationPanel"
+	overlay.add_child(fp)
+	_root._formation_panel = fp
+	call_deferred("_setup_formation_panel_deferred")
+
+
+func _setup_formation_panel_deferred() -> void:
+	if _root._formation_panel == null:
+		return
+	if _root._formation_panel.has_method("setup"):
+		_root._formation_panel.setup(_root)
 
 
 # ─────────────────────────────── 小地图装配（§15 阶段 0.6）────────────────────────────────

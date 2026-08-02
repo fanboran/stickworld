@@ -223,6 +223,7 @@ StickmanEntity (CharacterBody2D)
 - **三层命令系统**（详见 units）：玩家指令 → 编制默认 → 单位本能
 - **指挥链延迟**：`base_delay × tier_diff × commander_efficiency_modifier`，玩家附身该层级时延迟为 0
 - **战场导演**（`battle_ai_director.gd`）：每 2-5s 给单位打情绪标签（HESITANT/EXCITED/PANICKED/STEADY）→ 灵动性
+- **队伍类型编制**（2026-08 新增）：编队由**编制预设**驱动（`config/formations/formation_presets.tres`），预设定义组织标签 + 职责范围（工作类型 WORK_COMBAT/BUILD/HAUL/FORAGE）+ 成员角色；职责范围可调整（`set_squad_work_types`）；AIController 决策按队伍职责过滤（建造队不参战/战斗班不接建造派工，未编队全能）；TacticalOrders 拒绝非战斗职责小队号令。UI 见 [`modules/ui` 编制管理窗口（FormationPanel）](#modulesui--ui-容器)
 
 **预设号令**（P0 范围）：
 

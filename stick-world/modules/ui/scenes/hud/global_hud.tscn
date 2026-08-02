@@ -44,6 +44,10 @@ text = "居中: 关"
 layout_mode = 2
 text = "脱困(H)"
 
+[node name="FormationButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787554]
+layout_mode = 2
+text = "编制"
+
 [node name="NotificationLabel" type="Label" parent="." unique_id=1766089372]
 layout_mode = 1
 anchors_preset = 7

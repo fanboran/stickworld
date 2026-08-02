@@ -138,6 +138,8 @@ var _middle_scroll_overlay: Control = null
 # ─────────────────────────────── 阶段 E 游玩 UI ────────────────────────────────
 var _resource_bar: Control = null
 var _build_menu: Control = null
+## 编制管理窗口（运行时由 SystemSetup 装配到 UIRoot.ModalOverlay）
+var _formation_panel: Control = null
 
 # ─────────────────────────────── 存档系统 ────────────────────────────────
 ## 是否有存档待加载（读档入口标记）
@@ -284,6 +286,17 @@ func get_build_menu() -> Control:
 	return _build_menu
 
 
+## 获取编制管理窗口引用（供测试用）
+func get_formation_panel() -> Control:
+	return _formation_panel
+
+
+## 打开/关闭编制管理窗口（GlobalHUD 编制按钮 / BattlePanel 编制按钮调用）
+func toggle_formation_panel() -> void:
+	if _formation_panel != null and _formation_panel.has_method("toggle"):
+		_formation_panel.toggle()
+
+
 ## 启动一场测试战斗（供 test_stage_05 调用）。
 ## attacker_units / defender_units: StickmanEntity 数组
 ## 返回 BattleInstance（失败返回 null）
@@ -381,6 +394,9 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		# 玩家也注入 ConstructionManager（按E搬运/建造交互需要）
 		if player.has_method("set_construction_manager") and _construction_manager != null:
 			player.set_construction_manager(_construction_manager)
+		# 玩家注入 FormationSystem（编队职责查询）
+		if player.has_method("set_formation_system") and _formation_system != null:
+			player.set_formation_system(_formation_system)
 		# 让 CameraRig 跟随玩家
 		if camera_rig != null and camera_rig.has_method("set_follow_target"):
 			camera_rig.set_follow_target(player)

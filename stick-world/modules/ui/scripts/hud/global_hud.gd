@@ -11,6 +11,7 @@ extends Control
 @onready var notification_label: Label = get_node_or_null("NotificationLabel")
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
+@onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -23,6 +24,8 @@ func _ready() -> void:
 		_update_centered_button_text()
 	if stuck_button != null:
 		stuck_button.pressed.connect(_on_stuck_button_pressed)
+	if formation_button != null:
+		formation_button.pressed.connect(_on_formation_button_pressed)
 
 
 func _process(_delta: float) -> void:
@@ -148,3 +151,15 @@ func _on_stuck_button_pressed() -> void:
 		return
 	e._escape_stuck()
 	show_notification("脱困", "已随机传送到附近空旷地带", "info")
+
+
+# ─────────────────────────────── 编制管理窗口 ────────────────────────────────
+
+## 打开/关闭编制管理窗口（队伍类型编制：创建/配置编队）
+func _on_formation_button_pressed() -> void:
+	var gr := _get_game_root()
+	if gr == null:
+		show_notification("编制", "未找到游戏根节点", "error")
+		return
+	if gr.has_method("toggle_formation_panel"):
+		gr.toggle_formation_panel()

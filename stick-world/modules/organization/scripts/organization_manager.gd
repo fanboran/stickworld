@@ -13,7 +13,7 @@ const TIER_MAX: int = 5
 
 ## 有效标签
 const VALID_TAGS: Array[String] = [
-	"MILITARY", "RESEARCH", "ENGINEERING", "ADMINISTRATION", "COMMERCE"
+	"MILITARY", "RESEARCH", "ENGINEERING", "ADMINISTRATION", "COMMERCE", "LABOR"
 ]
 
 ## 有效自主权限级别

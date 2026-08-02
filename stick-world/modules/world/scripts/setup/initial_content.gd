@@ -70,6 +70,9 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 			# 注入 ConstructionManager 引用，使 NPC 可被派工（§15 阶段 0.4）
 			if npc.has_method("set_construction_manager") and _root._construction_manager != null:
 				npc.set_construction_manager(_root._construction_manager)
+			# 注入 FormationSystem 引用（编队职责查询，AIController 决策过滤）
+			if npc.has_method("set_formation_system") and _root._formation_system != null:
+				npc.set_formation_system(_root._formation_system)
 
 
 # ─────────────────────────────── 战场敌人 ────────────────────────────────

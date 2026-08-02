@@ -8,6 +8,15 @@
 
 ## [未发布]
 
+### 队伍类型编制系统（P0 验收阻塞解除）
+
+- **编制预设**：`config/formations/formation_presets.tres`（BalanceResource）定义三模板——战斗班（MILITARY/战斗）、建造队（ENGINEERING/建造+搬运）、工人队（LABOR/搬运+采集）
+- **FormationSystem 预设化**：`create_squad(units, name, preset_id)` 按预设创建（组织标签 + 成员角色映射，旧签名默认战斗班向后兼容）；新 API：`get_all_presets`/`get_preset`/`get_squad_preset`/`get_squad_work_types`/`set_squad_work_types`（职责可调整）/`is_work_allowed`/`is_combat_squad`
+- **行为职责过滤**：AIController 决策按队伍职责过滤——建造队不参战、战斗班不接建造派工；未编队单位保持全能（现有循环/测试不破）；TacticalOrders 拒绝非战斗职责小队的号令
+- **组织系统**：VALID_TAGS 追加 `LABOR`（第六标签，劳动班组）
+- **编制管理窗口**（FormationPanel，挂 UIRoot.ModalOverlay）：编队列表/创建（预设+勾选空闲火柴人）/职责勾选调整/成员管理（任命排长/移出）/解散；GlobalHUD 顶栏"编制"按钮 + BattlePanel"打开编制窗口"入口，Village/BATTLE 模式均可用
+- **测试**：新增 tests/integration/test_formation_presets（6 用例 38 断言，预设加载/标签映射/职责过滤/调整/号令拒绝/角色读写）；全量 16 套件通过
+
 ### 脱离卡死：随机传送 + HUD 按钮
 
 - **脱困功能**：H 键 / HUD"脱困(H)"按钮——随机传送到附近空旷地带（半径 200px 起采样，逐级扩大至 1600px，兜底地图中心；只动 X）。按钮直接作用于当前玩家实体（`game_root.get_player_entity()`），不依赖附身系统

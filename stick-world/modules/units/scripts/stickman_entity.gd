@@ -82,6 +82,13 @@ var faction_id: int = 0
 ## 所属战斗实例引用（null=未参战）
 var _battle_instance: Node = null
 
+# ─────────────────────────────── 编队角色（编制预设派生）────────────────────────────────
+## 角色类型（fighter/builder/worker，由编队预设写入，仅展示/标记；
+## 行为限制由所属编队的职责范围决定，见 FormationSystem.is_work_allowed）
+var role: String = ""
+## FormationSystem 引用（由 GameRoot spawn 时注入，供 AIController 查询队伍职责；可能为 null）
+var _formation_system: Node = null
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
 var rig: Node2D = null
@@ -661,6 +668,27 @@ func set_construction_manager(manager: Node) -> void:
 ## 获取 ConstructionManager 引用（可能为 null）
 func get_construction_manager() -> Node:
 	return _construction_manager
+
+
+## 由 GameRoot spawn 时注入 FormationSystem 引用（供 AIController 查询队伍职责）。
+## 未注入（如测试直生实体）时视为"未编队"，不限制行为。
+func set_formation_system(fs: Node) -> void:
+	_formation_system = fs
+
+
+## 获取 FormationSystem 引用（可能为 null）
+func get_formation_system() -> Node:
+	return _formation_system
+
+
+## 设置角色类型（由 FormationSystem 编队时写入）。
+func set_role(r: String) -> void:
+	role = r
+
+
+## 获取角色类型（空=未编队）。
+func get_role() -> String:
+	return role
 
 
 # ─────────────────────────────── 战斗 API（§8）────────────────────────────────

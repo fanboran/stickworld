@@ -27,6 +27,12 @@ const DECISION_INTERVAL: float = 0.3
 ## idle 后切换到 wander 的概率（P0 设为 0：工人无事做原地待机，不随机漫游）
 const WANDER_PROBABILITY: float = 0.0
 
+## 工作类型（与 FormationSystem.WorkType 保持一致，本地常量避免跨模块依赖）
+const WorkTypeCombat := "WORK_COMBAT"
+const WorkTypeBuild := "WORK_BUILD"
+const WorkTypeHaul := "WORK_HAUL"
+const WorkTypeForage := "WORK_FORAGE"
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属实体引用
 var _entity: CharacterBody2D = null
@@ -159,6 +165,7 @@ func physics_update(delta: float) -> void:
 
 ## P0 决策：命令覆盖 > 战斗（参战时）> work（有派工）> idle/wander 循环。
 ## 命令覆盖：tactical_orders 下达的号令优先于自主决策，但溃逃例外。
+## 职责过滤：编队中的单位只能做队伍职责范围内的行为（见 _can_work / _can_combat）。
 func _make_decision() -> void:
 	# 0. 命令覆盖（最高优先级，溃逃例外）
 	if not _ordered_behavior.is_empty():
@@ -215,8 +222,11 @@ func _make_decision() -> void:
 
 ## 尝试战斗决策。当 entity 参战（有激活的 battle_instance）时返回 true 并切换到战斗行为。
 ## 决策优先级：溃逃/士气极低 -> retreat；重伤且附近有掩体 -> seek_cover；默认 -> attack。
+## 职责过滤：队伍职责不含 WORK_COMBAT 的单位不进入战斗决策（如建造队/工人队）。
 func _try_combat() -> bool:
 	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if not _can_work(WorkTypeCombat):
 		return false
 	if not _entity.has_method("get_battle_instance"):
 		return false
@@ -255,8 +265,11 @@ func _try_combat() -> bool:
 
 ## 尝试进入 work 行为。如果工人被派工到活跃项目，travel("work", {project})。
 ## 返回 true 表示已切换到 work。
+## 职责过滤：队伍职责不含 WORK_BUILD/WORK_HAUL 的单位不接建造派工（如战斗班）。
 func _try_work() -> bool:
 	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if not _can_work(WorkTypeBuild):
 		return false
 	if not _entity.has_method("get_construction_manager"):
 		return false
@@ -292,6 +305,19 @@ func _has_warehouse() -> bool:
 	if manager == null or not manager.has_method("get_nearest_warehouse"):
 		return false
 	return manager.get_nearest_warehouse(_entity.global_position) != null
+
+
+## 检查单位是否被队伍职责允许执行某工作类型（编队行为过滤）。
+## 通过 entity 上的 FormationSystem 引用查询；未注入（未编队/测试直生实体）视为允许。
+func _can_work(work_type: String) -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return true
+	if not _entity.has_method("get_formation_system"):
+		return true
+	var fs: Node = _entity.get_formation_system()
+	if fs == null or not fs.has_method("is_work_allowed"):
+		return true
+	return fs.is_work_allowed(_entity, work_type)
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────

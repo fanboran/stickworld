@@ -26,7 +26,8 @@ $suites = @{
         "tests/integration/test_village_map.tscn",
         "tests/integration/test_battle_lifecycle.tscn",
         "tests/integration/test_selection_formation.tscn",
-        "tests/integration/test_possession.tscn"
+        "tests/integration/test_possession.tscn",
+        "tests/integration/test_formation_presets.tscn"
     )
     "smoke" = @(
         "tests/smoke/test_new_game_smoke.tscn",

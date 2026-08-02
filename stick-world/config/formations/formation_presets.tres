@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+variables = {
+"data": [
+    {"id": "fp_combat_squad", "name": "战斗班", "tag": "MILITARY", "work_types": ["WORK_COMBAT"], "default_role": "fighter"},
+    {"id": "fp_builder_crew", "name": "建造队", "tag": "ENGINEERING", "work_types": ["WORK_BUILD", "WORK_HAUL"], "default_role": "builder"},
+    {"id": "fp_worker_crew", "name": "工人队", "tag": "LABOR", "work_types": ["WORK_HAUL", "WORK_FORAGE"], "default_role": "worker"}
+]
+}

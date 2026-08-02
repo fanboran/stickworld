@@ -31,7 +31,7 @@ func _ready() -> void:
 	_update_debug_visibility()
 
 
-func _update_debug_visibility() -> void:
+func _update_debug_visibility(_p_visible: bool = false) -> void:
 	if _debug_label != null:
 		_debug_label.visible = DebugApi.is_visible() if DebugApi != null else false
 

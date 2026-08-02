@@ -94,7 +94,7 @@ func assign_researchers(org_id: String, researcher_ids: Array[String]) -> Dictio
 func pause_research(tech_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	var result := _manager.pause_research(tech_id)
+	var result: Dictionary = _manager.pause_research(tech_id)
 	if result.get("ok", false):
 		tech_paused.emit(tech_id)
 	return result
@@ -104,7 +104,7 @@ func pause_research(tech_id: String) -> Dictionary:
 func resume_research(tech_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	var result := _manager.resume_research(tech_id)
+	var result: Dictionary = _manager.resume_research(tech_id)
 	if result.get("ok", false):
 		tech_resumed.emit(tech_id)
 	return result

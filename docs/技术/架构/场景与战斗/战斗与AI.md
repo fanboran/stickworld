@@ -10,14 +10,14 @@
 ### 7.1 StickmanEntity 节点结构（在已有 StickmanRig 之外包一层）
 
 ```
-StickmanEntity (CharacterBody2D)        ← 🆕 物理+碰撞
+StickmanEntity (CharacterBody2D)        ← 物理+碰撞
 ├── StickmanRig (Skeleton2D)            ← ✅ 已有，纯渲染骨架
 ├── Hitbox (Area2D)                     ← 受击判定
 ├── WeaponMount (Node2D)                ← 武器挂载
 ├── HealthComponent (Node)              ← HP/士气
-├── AIController (Node)                 ← 🆕 决策大脑
+├── AIController (Node)                 ← 决策大脑
 │   └── BehaviorStateMachine
-└── PossessionInterface (Node)          ← 🆕 玩家附身接口
+└── PossessionInterface (Node)          ← 玩家附身接口
 ```
 
 **关键**：`StickmanRig` 不动（已实现的 IK/动画保留），外层包一个 `CharacterBody2D` 承担物理与移动。AI 通过 `rig.play("walk")` + `rig.set_anim_speed(...)` 驱动渲染，通过 `CharacterBody2D.velocity` 驱动物理。
@@ -78,7 +78,7 @@ var _last_valid_position: Vector2
 func _physics_process(delta):
     # ... 输入处理 + move_and_slide() + Y/X 矩形约束 ...
 
-    # 🆕 通行障碍检测：若进入任何 WalkBarrier / PassageBarrier 区域，回退到上一帧位置
+    # 通行障碍检测：若进入任何 WalkBarrier / PassageBarrier 区域，回退到上一帧位置
     if _is_in_passage_barrier():
         global_position = _last_valid_position
         velocity = Vector2.ZERO  # 撞墙停止
@@ -97,7 +97,7 @@ func _is_in_passage_barrier() -> bool:
 - WalkBarrier/PassageBarrier 是"矩形区域阻挡"的轻量方案，适用于 VillageMap 等水平卷轴地图
 - SlopeMap 走独立逻辑，不用 WalkBarrier（坡面是连续的 Y 变化，不是矩形阻挡）
 
-**火柴人之间的碰撞**（2026-07-31）：
+**火柴人之间的碰撞**：
 - `StickmanEntity` 的 `collision_layer = 2`，`collision_mask = 3`（layer 1 + layer 2）
 - 火柴人与地形障碍（layer 1）和其他火柴人（layer 2）都会发生物理碰撞
 - 工地临时障碍（建造中）挂在 `WalkBarrier` 下，与建筑完工后的 `PassageBarrier` 使用完全相同的 size/position（从建筑场景模板读取），确保障碍切换无缝
@@ -128,14 +128,14 @@ modules/units/ai/
 ├── behavior_flank.gd                # 侧翼包抄
 ├── behavior_retreat.gd              # 撤退
 ├── behavior_work.gd                 # 建造（build 动画驱动，受材料进度限制）
-├── behavior_haul.gd                 # 🆕 搬运（仓库↔工地往返，4次填满材料进度）
+├── behavior_haul.gd                 # 搬运（仓库↔工地往返，4次填满材料进度）
 ├── behavior_flee.gd                 # 溃逃
 └── behavior_state_machine.gd        # 状态机调度
 ```
 
 每个行为是独立的 `Node`/`Resource`，状态机持有引用并通过 `travel(behavior_name)` 切换。
 
-#### 7.2.0 搬运与建造行为（2026-07-31 实现）
+#### 7.2.0 搬运与建造行为
 
 **双进度系统**：建造项目有两个进度条：
 - **材料进度** `[0,1]`：由搬运工交付推进，每次 `deliver_material()` +25%（4次填满）
@@ -164,7 +164,7 @@ modules/units/ai/
 - `walk_carry.tres` = walk.tres 腿部/身躯轨道 + 搬运手部姿势单帧
 - 工具脚本 `tools/animation/generate_walk_carry.gd` 可重新生成
 
-#### 7.2.1 待机行为修正（2026-07-29 创始人确认）
+#### 7.2.1 待机行为修正（创始人确认）
 
 > **设计决策**：火柴人无事可做时**原地播放待机动画**，不随机跑动。
 
@@ -175,7 +175,7 @@ modules/units/ai/
 - `behavior_wander` 降级为**特定场景触发**（如村民在集市闲逛、士兵巡逻），不是默认空闲行为
 - AIController 无任务时默认切到 `behavior_idle`，不切到 `behavior_wander`
 
-#### 7.2.2 个体属性标签系统（2026-07-29 创始人确认，参考《世界盒子》）
+#### 7.2.2 个体属性标签系统（创始人确认，参考《世界盒子》）
 
 > **设计决策**：每个火柴人有独立属性标签，影响行为树和适合的工作。
 

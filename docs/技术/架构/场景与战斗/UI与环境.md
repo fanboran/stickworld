@@ -20,7 +20,7 @@ UIRoot (常驻)
 │   ├── BuildingInspector  (选中建筑)
 │   ├── SquadInspector     (选中编制)
 │   └── CommanderPanel     (附身指挥官时的管理面板)
-├── Minimap                ← 🆕 小地图（屏幕正上方中央，详见 §10.4）
+├── Minimap                ← 小地图（屏幕正上方中央，详见 §10.4）
 └── ModalOverlay           ← 弹窗（暂停菜单、组织架构总览、世界地图）
 ```
 
@@ -35,11 +35,11 @@ GlobalHUD (Control)
 ├── TopBar (HBoxContainer)               ← 顶部状态条
 │   ├── SpeedLabel                       ← 时间速度（1x/2x/暂停）
 │   ├── TimeLabel                        ← 游戏内时间（Day 3, 14:30）
-│   ├── ResourceBar (HBoxContainer)      ← 🆕 资源数量条
-│   │   ├── ResourceSlot[res_wood]       ← 🆕 木材图标 + 数量
-│   │   ├── ResourceSlot[res_stone]      ← 🆕 石料图标 + 数量
-│   │   ├── ResourceSlot[res_metal_ore]  ← 🆕 金属矿图标 + 数量
-│   │   └── ResourceSlot[res_black_asphalt] ← 🆕 黑色沥青图标 + 数量
+│   ├── ResourceBar (HBoxContainer)      ← 资源数量条
+│   │   ├── ResourceSlot[res_wood]       ← 木材图标 + 数量
+│   │   ├── ResourceSlot[res_stone]      ← 石料图标 + 数量
+│   │   ├── ResourceSlot[res_metal_ore]  ← 金属矿图标 + 数量
+│   │   └── ResourceSlot[res_black_asphalt] ← 黑色沥青图标 + 数量
 │   └── CenteredButton                   ← 居中模式按钮
 ├── NotificationLabel                    ← 通知文字（淡入淡出）
 └── ClockWidget                          ← 圆形表盘（详见现有实现）
@@ -103,7 +103,7 @@ modules/ui/
 │   ├── pause_menu.tscn
 │   ├── org_tree_overview.tscn
 │   └── strategic_map_modal.tscn   # 战略图模态窗口
-├── minimap/                    # 🆕 小地图（详见 §10.4）
+├── minimap/                    # 小地图（详见 §10.4）
 │   ├── minimap.gd
 │   ├── minimap.tscn
 │   └── minimap_renderer.gd     # 缩略图生成
@@ -191,7 +191,7 @@ P0 阶段先用策略 3（纯色填充），后续迭代到策略 1/2。
 #### 10.5.1 模块结构
 
 ```
-modules/debug/                        ← 🆕 新建
+modules/debug/                        ← 新建
 ├── api.gd                            # DebugApi：注册绘制器、切换可见性
 ├── scripts/
 │   ├── debug_overlay.gd              # 主控（CanvasLayer，F3 切换）
@@ -276,12 +276,12 @@ hide_legend()
 | `buildings` | building_drawer / building_names | 建筑增减时 |
 | `units` | entity_state_drawer / entity_collider_drawer / entity_info | 单位生成时 |
 
-#### 10.5.8 ResourceNode 调试标签（2026-07-31）
+#### 10.5.8 ResourceNode 调试标签
 
 - `ResourceNode` 的调试标签（资源类型中文名）由 `DebugApi.visibility_changed` 信号驱动，不再每帧 `_process` 检查
 - F3 关闭调试时标签隐藏，开启时显示
 
-### 10.6 建造进度条与交互弹窗（2026-07-31 实现）
+### 10.6 建造进度条与交互弹窗
 
 #### 10.6.1 建筑头顶双进度条
 

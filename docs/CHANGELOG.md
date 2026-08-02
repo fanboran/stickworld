@@ -8,11 +8,60 @@
 
 ## [未发布]
 
-### 阶段 0.7 闭环 (2026-07-18 之后)
+### 脱离卡死：随机传送 + HUD 按钮
+
+- **脱困功能**：H 键 / HUD"脱困(H)"按钮——随机传送到附近空旷地带（半径 200px 起采样，逐级扩大至 1600px，兜底地图中心；只动 X）。按钮直接作用于当前玩家实体（`game_root.get_player_entity()`），不依赖附身系统
+- **放置校验**：`start_construction_at`/`spawn_operational_building` 选址范围内有实体且其脚部位于建筑体高范围内时拒绝放置，玩家不会被罩进建筑，也不会因站在建筑脚下而误拦
+- **工人站位**：`behavior_work.STANDOFF_X` 40→44（脚部半宽 41.5），工人贴近建筑边缘敲击
+- **测试**：construction_cycle 覆盖放置校验与脱困；全量通过
+
+### 行走与建造修复
+
+- **敲击建造移动锁定**：按 E 敲击后 1.8s 内禁止移动
+- **读档恢复完善**：工地障碍重建、工人派工池恢复、材料进度真实保存/恢复
+- **存档策略**：自动存档已删除（启动定时自动存档/退出存档），启动默认新游戏；手动存档/读档框架保留（SaveManager / SavePanel / quick_save / quick_load），`--fresh-start` 保证 headless 测试互不影响
+- **验证**：新游戏玩家出生在原点；`map_left=-4096` 为设计值（仓库 cell 15 + WALKABLE_MARGIN=128 格 → -128 cell）
+
+### 测试体系重构：数字标号全清除 + 分层迁移
+
+- ✅ **T0-7 stage 全部迁移完成**：`test_stage_01~08` 数字标号体系彻底清除，映射到分层命名——01→integration/test_game_root_assembly、02→integration/test_village_map、03→integration/test_ai_behaviors、05→integration/test_battle_lifecycle、06→integration/test_selection_formation、07→integration/test_possession、08→smoke/test_cross_map_travel。新增 unit/test_behavior_state_machine（状态机纯逻辑 7 用例，从 stage_03 抽出）。当前 15 套件：unit 6 文件 + integration 7 文件 + smoke 2 文件
+- ✅ **P0-3 清理**：废弃 WorldMapController 已删除（零引用）
+- ✅ **P0-4 修复**：stickman_rig.gd IK 调试 print 改为 push_warning（仅失败路径），成功路径日志删除；stickman_entity foot_offset print 删除
+- ✅ **P0-1 防静默**：SceneLoader preload_chunk/unload_chunk 加"未实现"push_warning
+- ✅ **文档同步**：在役文档 test_stage_NN 引用全部更新为分层命名（归档文档加映射注记）
+
+### 测试体系重设计 T0 + 文档校准 T1
+
+- ✅ **T0-1 TestRunner 加固**（tests/core/test_runner.gd）：零断言守卫（0 断言用例判失败）、async 用例内建（add_test 第三参 + run_async，免手动 begin/end_test）、断言扩充（assert_false/lt/gt/approx/null/not_null）、汇总输出断言总数
+- ✅ **T0-2 测试规范**（tests/README.md 重写）：三层体系（unit/integration/smoke）替代数字标号、命名规则、确定性硬规矩（等就绪不数帧/必带超时/用例隔离/AAA/零断言即失败）、`-- --fresh-start` 运行约定
+- ✅ **T0-3 第一批 unit 测试（5 文件 38 用例）**：health_component(8)、resource_manager(8)、command_chain(6)、formation_system(7)、placement_grid(9)——全部纯逻辑、不进树、确定性
+- ✅ **T0-4 建造循环 integration**（tests/integration/test_construction_cycle.gd，5 用例起，后增至 7 用例含脱困/放置校验）：真村落地图 fixture 下的开工→派工→材料→敲击→完工注册完整循环 + 资源不足/未注册/无地图失败路径
+- ✅ **T0-5 smoke 冒烟**（tests/smoke/test_new_game_smoke.gd）：新游戏启动运行 60s 零崩溃（S3-1 达成）+ `tests/run_all.ps1` 聚合器（unit/integration/smoke/stage 分组、超时、汇总）
+- ✅ **T0-6 清理**：孤儿 uid（tests/integration/test_construction_cycle/09）、3 个 `*_result.txt` 残留
+- ✅ **T1 文档校准**：架构 §四/§六（补 P0-10/11/13/14/15、统一编号、0.5/0.7/0.9 状态）、自动加载依赖（9 autoload 实测）、路线图（阶段 0 实测 + P1 解锁顺序 + 阶段 2 前置达成）、GDD差异分析（资源/附身/combat/logistics/双目录过时项修正）、归档废弃声明、P0重审方案完成度更新
+- ✅ 全量回归：旧 stage 131/131 + 新测试 52 用例 = **183 用例全绿**（`tests/run_all.ps1` 一键运行）
+
+### P0 测试链稳定化 S1-4 + 战斗链路 S2-1
+
+- ✅ **S2-1 战斗链路确认**：`TacticalOrders.issue → CommandChain.deliver → AIController.set_order` 链路已装配（game_root.gd:437 `to.setup(_formation_system, _command_chain)`，tests/integration/test_selection_formation 覆盖）
+- 📌 **战斗结束判定（胜负收束/溃散判定/尸体处理）：规划延后**——依赖战斗与碰撞系统稳定后实施，不在 P0 范围，见 待办事项.md 低优先级
+- ✅ **全量基线 131/131**：01=15/15、02=29/29、03=11/11、05=8/8、06=29/29、07=16/16、08=23/23，全部通过
+
+### P0 测试链稳定化 S1-4
+
+- ✅ **tests/integration/test_village_map/03 挂死修复**：`tests/integration/test_village_map.gd:229` 使用未声明的 `ScriptPlacementSystem`（解析错误导致脚本加载失败、`_ready` 永不运行、进程无 quit 挂死）→ 修为 `ScriptPlacementValidator.new().validate_placement(g, 0, 2)`
+- ✅ **tests/integration/test_possession 挂死修复**：headless 下 `TestHelpers` class_name 未注册 → 显式 `const TestHelpers := preload(...)` + `var ok: bool` 显式类型
+- ✅ **存档污染守卫**：`game_root.gd` 自动读档处加 `--fresh-start` 守卫（跳过槽位 0 读档）；测试标准命令改为 `-- --fresh-start`
+- ✅ **C 类真 bug**：`resource_node.gd:34 _update_debug_visibility` 接收 0 参数但 `DebugApi.visibility_changed` 发射 1 个 bool → 加默认参数
+- ✅ **tests/integration/test_village_map 陈旧断言全部更新**（ground 810/0.25/1080、map_left 动态、player spawn 动态、camera 动态）→ 29/29
+- ✅ **tests/integration/test_ai_behaviors AI 移动抖动修复**：固定 2s 等待改 `await_condition`（累计位移 >30px 或超时）→ 11/11
+- ✅ **tests/integration/test_selection_formation HBox/Label 类型错修复**（测试自身变量类型注解）→ 29/29，stderr ERROR 清零
+
+### 阶段 0.7 闭环
 
 - ✅ **P0-1 修复**：PossessionInterface 装配代码已补全（[game_root.gd:363-399](file:///f:/VSCode/game-2/stick-world/modules/world/scripts/game_root.gd)）
 - ✅ **InputDispatcher** 已注册 POSSESS handler（game_root.gd:370-371）
-- 🔄 **待重跑 test_stage_07**：16 项测试代码就绪，纯验证
+- ✅ **tests/integration/test_possession**：16 项测试通过（附身排长操控战斗）
 - 📌 **附身完整版深化**后移到阶段 1/2 详细指挥系统开发（与 [路线图.md](项目/路线图.md) "完整指挥链设计"合并）
 - 📌 **章节号迁移**：旧版"§十七"已变更为 [场景与战斗架构.md §六](技术/架构/场景与战斗架构.md)
 
@@ -52,8 +101,8 @@
 - **新增 `Building` 节点结构**
 - **新增 `placement_system`**：选址 API（ghost 预览留到阶段 0.6）
 - **新增 `construction_project` + `work_crew_assigner`**：工程量驱动的建造流程 + 工人派工
-- 测试：选址 -> 派工 -> 建造 -> 完成循环（test_stage_04 10/10 通过）
-- ⚠️ 遗留：数值硬编码（见 P0-8），`InitialBuildingsList` 未接入（见 P0-2）
+- 测试：选址 -> 派工 -> 建造 -> 完成循环（tests/integration/test_construction_cycle 7/7 通过）
+- ⚠️ 遗留：`InitialBuildingsList` 未接入（后续阶段接入）
 
 ### 阶段 0.5 - 小队级战斗 ✅
 
@@ -61,7 +110,7 @@
 - **新增 `behavior_attack` / `behavior_seek_cover` / `behavior_retreat`**：战术 AI 行为
 - **新增 `battle_instance`**：挂载到 VillageMap.BattleAnchor
 - **新增 `BattleDirector` + `battle_ai_director`**：战场导演 + 情绪标签（压制 / 犹豫 / 溃逃）
-- 测试：5v5 战斗，观察到掩体利用、火力压制、溃逃行为切换（test_stage_05 8/8 通过）
+- 测试：5v5 战斗，观察到掩体利用、火力压制、溃逃行为切换（tests/integration/test_battle_lifecycle 7/7 通过）
 
 ### 阶段 0.6 - 编队与指挥 + 小地图 ✅
 
@@ -71,27 +120,27 @@
 - **新增 `BattlePanel` UI**：战斗面板
 - **新增 `Minimap`**：缩略图 + 视野框 + 角色点 + 建筑图标 + 点击跳转
 - **完善 `CameraRig` 手动控制**：拖动 + 边缘滚动 + 缩放（1.0~2.0）+ 居中模式按钮
-- 测试：框选 -> 编队 -> 任命排长 -> 下令前进；小地图点击跳转（test_stage_06 29/29 通过）
+- 测试：框选 -> 编队 -> 任命排长 -> 下令前进；小地图点击跳转（tests/integration/test_selection_formation 29/29 通过）
 
-### 阶段 0.7 - 玩家附身 ⚠️ 代码已写但未装配
+### 阶段 0.7 - 玩家附身 ✅（装配闭环见下段）
 
 - **新增 `PossessionInterface`**：附身接口 + POSSESS 模式 handler + ESC 退出 + 时间降速
 - **新增 `PossessPanel` UI**：HP / 士气 / 武器 / 行为 / 坐标 + 退出附身按钮
 - **`BattlePanel` 新增"附身选中单位"按钮**
 - **`StickmanEntity` 新增鼠标左键攻击**：`_player_attack` + `_find_nearest_enemy_in_range`
 - **EventBus 新增 `possession_started` / `possession_ended` 信号**
-- ⚠️ **P0-1 发现 PossessionInterface 未装配，待修复**：`game_root.gd` 缺失 `_setup_possession_interface()` / `_setup_possess_panel()` 方法，`InputDispatcher` 未注册 POSSESS handler，附身功能当前完全不可用。`test_stage_07_result.txt` 显示 16/16 通过是重构前旧版本残留，具有误导性。详见 §十七 P0-1。
-  > **注**：已于 2026-07-18 修复（见"阶段 0.7 闭环"段）。原章节号 §十七 已变更为 §六。
+- ⚠️ **P0-1 发现 PossessionInterface 未装配，待修复**：`game_root.gd` 缺失 `_setup_possession_interface()` / `_setup_possess_panel()` 方法，`InputDispatcher` 未注册 POSSESS handler，附身功能当前完全不可用。`tests/integration/test_possession_result.txt` 显示 16/16 通过是重构前旧版本残留，具有误导性。详见 §十七 P0-1。
+  > **注**：已修复（见"阶段 0.7 闭环"段）。原章节号 §十七 已变更为 §六。
 
 ### 阶段 0.8 - 多场景衔接 ✅
 
 - **新增地图间切换**：`SceneLoader.travel_to_map` + `ChunkTrigger` 出口触发器 + EventBus 信号转发
 - **新增 `RoadMap`**：`road_map.gd` + 双向出口触发器
 - **战略图进入聚落**：`enter_settlement` + `EventBus.travel_requested`
-- 测试：村落 A -> 道路 -> 村落 B 完整链路（test_stage_08 23/23 通过）
-- ⚠️ 遗留：Chunk 流式加载仍为占位（见 P0-3）；战略图 `close_strategic_map` 半成品（见 P0-4）；`WorldMapController` 已废弃未删除（见 P0-5）
+- 测试：村落 A -> 道路 -> 村落 B 完整链路（tests/smoke/test_cross_map_travel 23/23 通过）
+- ⚠️ 遗留：Chunk 流式加载仍为占位（见 P0-1）；战略图 `close_strategic_map` 半成品（见 P0-2）；`WorldMapController` 废弃副本（见 P0-3）
 
-### 世界生成 (2026-07-16)
+### 世界生成
 - **新增 `fractal_continent.py`**：分形大陆生成器，替代原 Azgaar 模板法方案
   - Delaunay 三角网格（100k 顶点 / 205k 三角形）上计算高度，不在像素网格上
   - 两阶段高度合成：阶段1外海距离场 → 阶段2内池随机 H + 非线性衰减
@@ -103,7 +152,7 @@
 - **目录整理**：`output/` 下历史实验归档到 `archive/`，诊断文件归入 `diag/`，河流实验代码归入 `experiments/`
 - **文档更新**：`程序化世界生成.md` 新增 §二十二 分形大陆生成器完整文档；`河流算法需求.md` §十一 记录实际实现与偏离
 
-### 文档维护 (2026-07-09)
+### 文档维护
 - 数据配置引用更新：四份文档新增 Excel 管线交叉引用
   - `.trae/rules/rule.md` 文档导航表新增"游戏数据表"行
   - `docs/README.md` 文档导航表新增"Excel 数据管线"行

@@ -86,15 +86,18 @@ core/
 
 ```
 modules/player/
-├── scenes/                # 模块场景
-│   ├── player.tscn
-│   └── components/        # 组件化子场景
-├── scripts/               # 模块脚本
-├── animations/            # 动画资源（按需）
+├── scenes/                # 模块场景（子目录按需组织，不强制固定结构）
+│   └── player.tscn
+├── scripts/               # 模块脚本（可再按子域分组，如 ai/、map/）
 ├── assets/                # 模块专属资源（按需）
 ├── ui/                    # 模块专属 UI（按需）
 ├── data/                  # 纯数据定义类（按需）
 └── api.gd                 # 公共接口契约（关键）
+
+# 二级类型目录可拓展：除常用类型外，可按需引入新类型，已有先例：
+#   animations/ —— 动画资源
+#   buildings/  —— 建筑类资源：建筑实例 = 场景 + 专属脚本的组合体，
+#                  抽象为一个整体存放（如 building_gen/buildings/）
 ```
 
 ## 架构红线
@@ -107,7 +110,7 @@ modules/player/
 
 ### 模块化架构原则
 
-1. **文件夹结构**：按功能模块（`/modules/`）和核心系统（`/core/`）划分，按功能组织，不按类型（场景/脚本/素材）
+1. **文件夹结构**：模块一级目录按功能划分（`/modules/`、`/core/`），新功能 = 新模块，互不干扰，保证高可扩展性；模块内二级目录按类型划分（scenes/、scripts/、assets/ 等），找场景去 scenes/、找脚本去 scripts/，保证高速定位。功能定边界、类型定导航，两级结合
 2. **耦合原则**：模块间通信优先使用 `core/autoload/event_bus.gd` 全局事件总线，或通过模块的 `api.gd` 定义信号；不要跨模块 `get_node` 或引用非 API 内部方法
 3. **接口契约**：模块对外交互须通过其根目录下的 `api.gd` 文件
 

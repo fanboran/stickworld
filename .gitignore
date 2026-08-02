@@ -45,6 +45,8 @@ tools/filter_*.py
 
 # 世界生成工具：.npy 是大数据文件（高度场/mask，256MB+），不提交，只提交 PNG 预览
 tools/worldgen/output/**/*.npy
+# 世界生成诊断输出（生成产物，不提交）
+tools/worldgen/output/diag/
 .tmp/
 
 # 调试 / 日志

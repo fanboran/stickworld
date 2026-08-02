@@ -63,7 +63,8 @@ debug.log
 .idea/
 
 # 编辑器缓存（Godot 自动生成文件）
-*.uid
+# 注：*.uid 不忽略 —— Godot 4.4+ 官方推荐提交 .uid 文件（资源 UID 持久化，
+#     保证 tscn 引用跨机器稳定），项目已有 20 个被跟踪
 *.ctex
 *.md5
 *.res-folding-*.cfg

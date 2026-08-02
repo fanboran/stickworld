@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://bitpg2trkppie"]
 
-[ext_resource type="Script" uid="uid://cjrg7kwfc7ljw" path="res://modules/units/scripts/stickman_rig.gd" id="1_rig"]
+[ext_resource type="Script" uid="uid://cjrg7kwfc7ljw" path="res://modules/units/scripts/rig/stickman_rig.gd" id="1_rig"]
 [ext_resource type="Texture2D" uid="uid://bw6ni7k0prth7" path="res://modules/units/assets/textures/stickman/bone_1_pill.png" id="1_tex_bone"]
 [ext_resource type="Shader" uid="uid://c6jv8gb6fm8hi" path="res://modules/units/shaders/stickman_outline.gdshader" id="2_dwcds"]
-[ext_resource type="Script" uid="uid://cnaex1dwul5e3" path="res://modules/units/scripts/stickman_test.gd" id="2_test"]
+[ext_resource type="Script" uid="uid://cnaex1dwul5e3" path="res://modules/units/scripts/rig/stickman_test.gd" id="2_test"]
 [ext_resource type="Texture2D" uid="uid://cl74ubh1fhaol" path="res://modules/units/assets/textures/stickman/bone_2_pill.png" id="2_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://dypso82gji2ed" path="res://modules/units/assets/textures/stickman/bone_3_pill.png" id="3_tex_bone"]
 [ext_resource type="PackedScene" uid="uid://wpnswordm01" path="res://modules/units/scenes/components/weapon_sword_placeholder.tscn" id="3_wvxud"]

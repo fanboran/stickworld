@@ -3,7 +3,7 @@
 ## 纯数据层测试：不进场景树（不触发 _ready），手动设值，确定性。
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptHealthComponent := preload("res://modules/units/scripts/health_component.gd")
+const ScriptHealthComponent := preload("res://modules/units/scripts/entity/health_component.gd")
 
 var _runner: TestRunner
 

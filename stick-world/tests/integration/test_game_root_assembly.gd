@@ -11,12 +11,12 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 # WorldAPI / PlayerControlAPI / UIAPI 是全局 class_name，无需 preload
 # 显式 preload 各实现脚本，用于类型 cast（常量名加 Script 前缀避免遮蔽全局类名）
 const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
-const ScriptCameraRig := preload("res://modules/world/scripts/camera_rig.gd")
-const ScriptSceneLoader := preload("res://modules/world/scripts/scene_loader.gd")
+const ScriptCameraRig := preload("res://modules/world/scripts/camera/camera_rig.gd")
+const ScriptSceneLoader := preload("res://modules/world/scripts/loading/scene_loader.gd")
 const ScriptInputDispatcher := preload("res://modules/player_control/scripts/input_dispatcher.gd")
 const ScriptEnvironmentSystem := preload("res://modules/environment/scripts/environment_system.gd")
 const ScriptUIRoot := preload("res://modules/ui/scripts/ui_root.gd")
-const ScriptModePanel := preload("res://modules/ui/scripts/mode_panel.gd")
+const ScriptModePanel := preload("res://modules/ui/scripts/panels/mode_panel.gd")
 
 var _runner: TestRunner
 var _game_root: Node

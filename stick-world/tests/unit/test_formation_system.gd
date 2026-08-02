@@ -3,7 +3,7 @@ extends Node
 ## FormationSystem 不进场景树（_process 不触发），确定性。
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptFormationSystem := preload("res://modules/combat/scripts/formation_system.gd")
+const ScriptFormationSystem := preload("res://modules/combat/scripts/command/formation_system.gd")
 
 var _runner: TestRunner
 

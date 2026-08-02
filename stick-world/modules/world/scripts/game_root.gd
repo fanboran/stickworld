@@ -8,8 +8,21 @@ extends Node2D
 ##
 ## 子场景（村落/战场/室内）通过 SceneLoader 加载到 WorldChunkHost。
 ## 详见 docs/技术/架构/场景与战斗架构.md §二。
+##
+## 子节点：
+##   SystemSetup     —— 系统装配（system_setup.gd）
+##   SaveHandler     —— 存档/读档（save_handler.gd）
+##   TravelHandler   —— 传送/过场（travel_handler.gd）
+##   InitialContent  —— 初始内容生成（initial_content.gd）
 
 # WorldAPI / PlayerControlAPI 是全局 class_name，无需 preload
+
+# ─────────────────────────────── 子模块脚本 ────────────────────────────────
+
+const _SystemSetupScript: GDScript = preload("res://modules/world/scripts/setup/system_setup.gd")
+const _SaveHandlerScript: GDScript = preload("res://modules/world/scripts/setup/save_handler.gd")
+const _TravelHandlerScript: GDScript = preload("res://modules/world/scripts/setup/travel_handler.gd")
+const _InitialContentScript: GDScript = preload("res://modules/world/scripts/setup/initial_content.gd")
 
 ## 测试村落地图场景（P0 硬编码）
 const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_village_map.tscn")
@@ -25,61 +38,6 @@ const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/
 const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/test_forest_zone.tscn")
 ## 玩家火柴人实体场景
 const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
-## EXPLORE 模式 handler 脚本
-const _ExploreHandlerScript: GDScript = preload("res://modules/player_control/scripts/explore_handler.gd")
-## 调试绘制器
-const _DebugDrawers: GDScript = preload("res://modules/debug_GUI/scripts/debug_drawers.gd")
-## ConstructionManager 脚本（用于实例化建造系统）
-const _ConstructionManagerScript: GDScript = preload("res://modules/construction/scripts/construction_manager.gd")
-## Construction api 脚本
-const _ConstructionApiScript: GDScript = preload("res://modules/construction/api.gd")
-## BattleDirector 脚本（战斗系统，§8.1）
-const _BattleDirectorScript: GDScript = preload("res://modules/combat/scripts/battle_director.gd")
-## Combat api 脚本
-const _CombatApiScript: GDScript = preload("res://modules/combat/api.gd")
-## SelectionSystem 脚本（§15 阶段 0.6 框选系统）
-const _SelectionSystemScript: GDScript = preload("res://modules/combat/scripts/selection_system.gd")
-## FormationSystem 脚本（§15 阶段 0.6 编队系统）
-const _FormationSystemScript: GDScript = preload("res://modules/combat/scripts/formation_system.gd")
-## OrganizationManager 脚本（组织模块内部管理器）
-const _OrganizationManagerScript: GDScript = preload("res://modules/organization/scripts/organization_manager.gd")
-## Organization api 脚本（组织模块公共接口）
-const _OrganizationApiScript: GDScript = preload("res://modules/organization/api.gd")
-## TacticalOrders 脚本（§15 阶段 0.6 战术号令）
-const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/tactical_orders.gd")
-## CommandChain 脚本（§15 阶段 0.6 指挥链）
-const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command_chain.gd")
-## BattlePanel 脚本（§15 阶段 0.6 战斗 UI）
-const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/battle_panel.gd")
-## Minimap 脚本（§15 阶段 0.6 小地图）
-const _MinimapScript: GDScript = preload("res://modules/ui/scripts/minimap.gd")
-const _ZoomBarScript: GDScript = preload("res://modules/ui/scripts/zoom_bar.gd")
-## PossessionInterface 脚本（附身系统，§15 阶段 0.7）
-const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
-## PossessPanel 脚本（附身 UI，§15 阶段 0.7）
-const _PossessPanelScript: GDScript = preload("res://modules/ui/scripts/possess_panel.gd")
-## ResourceManager 脚本（资源系统，P0-9）
-const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
-## Resources api 脚本（资源模块公共接口）
-const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
-## MapBoundaryDetector 脚本（阶段 F 边界检测出城系统）
-const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/map_boundary_detector.gd")
-## WorldMapPanel 脚本（阶段 F 大世界地图占位 UI）
-const _WorldMapPanelScript: GDScript = preload("res://modules/world/scripts/world_map_panel.gd")
-## PossessionIndicator 脚本（主控单位圆圈 UI）
-const _PossessionIndicatorScript: GDScript = preload("res://modules/ui/scripts/possession_indicator.gd")
-## HoverIndicator 脚本（鼠标悬停方框 UI）
-const _HoverIndicatorScript: GDScript = preload("res://modules/ui/scripts/hover_indicator.gd")
-## MiddleScrollOverlay 脚本（中键滚动图标 UI）
-const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui/scripts/middle_scroll_overlay.gd")
-## ResourceBar 脚本（阶段 E 资源条 UI）
-const _ResourceBarScript: GDScript = preload("res://modules/ui/scripts/resource_bar.gd")
-## BuildMenu 脚本（阶段 E 建造菜单 UI）
-const _BuildMenuScript: GDScript = preload("res://modules/ui/scripts/build_menu.gd")
-## UIRoot 场景（UI 覆盖层，从 UI 模块加载）
-const _UIRootScene: PackedScene = preload("res://modules/ui/scenes/ui_root.tscn")
-## DebugOverlay 场景（调试覆盖层，从 debug_GUI 模块加载）
-const _DebugOverlayScene: PackedScene = preload("res://modules/debug_GUI/scenes/debug_overlay.tscn")
 
 ## 测试村落地图 ID
 const TEST_VILLAGE_MAP_ID := "test_village"
@@ -104,45 +62,45 @@ const NPC_COUNT: int = 2
 @export var auto_demo_building: bool = false
 ## 是否已加载过初始地图（用于区分初始加载 vs 地图切换）
 var _initial_map_loaded: bool = false
-## ConstructionManager 实例引用（运行时由 _ready 装配）
+## ConstructionManager 实例引用（运行时由 SystemSetup 装配）
 var _construction_manager: Node = null
-## Construction api 实例引用（运行时由 _ready 装配）
+## Construction api 实例引用（运行时由 SystemSetup 装配）
 var _construction_api: Node = null
 
 # ─────────────────────────────── 战斗系统（§15 阶段 0.5）────────────────────────────────
-## CombatApi 实例引用（运行时由 _ready 装配）
+## CombatApi 实例引用（运行时由 SystemSetup 装配）
 var _combat_api: Node = null
 
 # ─────────────────────────────── 框选系统（§15 阶段 0.6）────────────────────────────────
-## SelectionSystem 实例引用（运行时由 _ready 装配，挂到 UIRoot）
+## SelectionSystem 实例引用（运行时由 SystemSetup 装配，挂到 UIRoot）
 var _selection_system: Control = null
 
 # ─────────────────────────────── 组织 + 编队系统（§15 阶段 0.6）────────────────────────────────
-## OrganizationApi 实例引用（运行时由 _ready 装配）
+## OrganizationApi 实例引用（运行时由 SystemSetup 装配）
 var _organization_api: Node = null
-## FormationSystem 实例引用（运行时由 _ready 装配）
+## FormationSystem 实例引用（运行时由 SystemSetup 装配）
 var _formation_system: Node = null
-## TacticalOrders 实例引用（运行时由 _ready 装配）
+## TacticalOrders 实例引用（运行时由 SystemSetup 装配）
 var _tactical_orders: Node = null
-## CommandChain 实例引用（运行时由 _ready 装配）
+## CommandChain 实例引用（运行时由 SystemSetup 装配）
 var _command_chain: Node = null
 
 # ─────────────────────────────── UI 系统（§15 阶段 0.6）────────────────────────────────
-## BattlePanel 实例引用（运行时由 _ready 装配）
+## BattlePanel 实例引用（运行时由 SystemSetup 装配）
 var _battle_panel: Control = null
-## Minimap 实例引用（运行时由 _ready 装配）
+## Minimap 实例引用（运行时由 SystemSetup 装配）
 var _minimap: Control = null
-## ZoomBar 实例引用（运行时由 _ready 装配）
+## ZoomBar 实例引用（运行时由 SystemSetup 装配）
 var _zoom_bar: Control = null
 
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
-## PossessionInterface 实例引用（运行时由 _ready 装配）
+## PossessionInterface 实例引用（运行时由 SystemSetup 装配）
 var _possession_interface: Node = null
-## PossessPanel 实例引用（运行时由 _ready 装配）
+## PossessPanel 实例引用（运行时由 SystemSetup 装配）
 var _possess_panel: Control = null
 
 # ─────────────────────────────── 资源系统（P0-9）────────────────────────────────
-## ResourcesApi 实例引用（运行时由 _ready 装配）
+## ResourcesApi 实例引用（运行时由 SystemSetup 装配）
 var _resources_api: Node = null
 
 # ─────────────────────────────── 传送系统（§5.6）────────────────────────────────
@@ -159,6 +117,16 @@ var _return_spawn_x: float = 0.0
 @onready var world_chunk_host: Node2D = get_node_or_null(WorldAPI.PATH_WORLD_CHUNK_HOST)
 @onready var ui_root: CanvasLayer = get_node_or_null(WorldAPI.PATH_UI_ROOT)
 @onready var battle_director: Node = get_node_or_null(WorldAPI.PATH_BATTLE_DIRECTOR)
+
+# ─────────────────────────────── 子模块实例 ────────────────────────────────
+## 系统装配器（SystemSetup 子节点）
+var _bootstrap: Node = null
+## 存档子系统（SaveHandler 子节点）
+var _save_system: Node = null
+## 传送子系统（TravelHandler 子节点）
+var _travel_system: Node = null
+## 初始内容生成器（InitialContent 子节点）
+var _worldgen: Node = null
 
 # ─────────────────────────────── 阶段 F 子系统 ────────────────────────────────
 var _boundary_detector: Node = null
@@ -185,35 +153,20 @@ var _save_panel: Control = null
 func _ready() -> void:
 	# 加入 game_root group（供 SavePanel 等查找）
 	add_to_group("game_root")
-	# 实例化 UI 覆盖层和调试覆盖层（从各自模块场景加载）
-	_setup_ui_root()
-	_setup_debug_overlay()
+	# 挂载子模块（SystemSetup / SaveHandler / TravelHandler / InitialContent）
+	_mount_child_modules()
+	# 装配 UI 覆盖层 + 所有子系统（由 SystemSetup 执行）
+	_bootstrap.setup(self)
+	# 存档系统：信号连接 + 注册 + SavePanel 实例化
+	_save_system.setup(self)
+	# 传送系统：EventBus 信号连接
+	_travel_system.setup(self)
+	# 初始内容生成器
+	_worldgen.setup(self)
 	_validate_children()
 	_bind_event_bus()
-	_setup_construction_system()
-	_setup_combat_system()
-	_setup_resources_system()
-	_setup_selection_system()
-	_setup_organization_system()
-	_setup_formation_system()
-	_setup_tactical_system()
-	_setup_battle_panel()
-	_setup_minimap()
-	_setup_zoom_bar()
-	_setup_possession_interface()
-	_setup_possess_panel()
+	# 注册默认地图与地图出口
 	_register_default_maps()
-	# 注册 EXPLORE handler（不立即激活，等地图加载完再 set_mode）
-	_register_explore_handler()
-	# 阶段 F：边界检测 + 大世界地图
-	_setup_boundary_detector()
-	# 游玩 UI：主控圆圈 + 悬停方框
-	_setup_game_ui()
-	# 阶段 E：资源条 + 建造菜单
-	_setup_resource_bar()
-	_setup_build_menu()
-	# 存档系统：信号连接 + 注册
-	_setup_save_system()
 	# 默认 X1 速度
 	if TimeManager:
 		TimeManager.set_speed(TimeManager.Speed.X1)
@@ -225,128 +178,35 @@ func _ready() -> void:
 	call_deferred("_load_test_village")
 
 
-# ─────────────────────────────── UI / Debug 覆盖层装配 ────────────────────────────────
+## 实例化四个子模块节点并挂到 GameRoot 下。
+## 子模块通过 setup(root) 拿到主脚本引用，业务逻辑保持在子模块内部。
+func _mount_child_modules() -> void:
+	_bootstrap = Node.new()
+	_bootstrap.set_script(_SystemSetupScript)
+	_bootstrap.name = "SystemSetup"
+	add_child(_bootstrap)
 
-## 实例化 UIRoot 场景并挂为子节点。
-## UI 覆盖层从 UI 模块自包含场景加载，不再内嵌于 game_root.tscn。
-func _setup_ui_root() -> void:
-	if ui_root != null:
-		return  # 场景中已存在（兼容旧场景）
-	var ur: CanvasLayer = _UIRootScene.instantiate()
-	ur.name = "UIRoot"
-	add_child(ur)
-	ui_root = ur
+	_save_system = Node.new()
+	_save_system.set_script(_SaveHandlerScript)
+	_save_system.name = "SaveHandler"
+	add_child(_save_system)
 
+	_travel_system = Node.new()
+	_travel_system.set_script(_TravelHandlerScript)
+	_travel_system.name = "TravelHandler"
+	add_child(_travel_system)
 
-## 实例化 DebugOverlay 场景并挂为子节点。
-## 调试覆盖层从 debug_GUI 模块自包含场景加载，不再内嵌于 game_root.tscn。
-func _setup_debug_overlay() -> void:
-	if get_node_or_null("DebugOverlay") != null:
-		return  # 已存在，避免重复添加
-	var dop: CanvasLayer = _DebugOverlayScene.instantiate()
-	add_child(dop)
-
-
-# ─────────────────────────────── 建造系统装配 ────────────────────────────────
-
-## 实例化 ConstructionManager + api.gd 作为子节点，并互相 setup。
-## 详见 §15 阶段 0.4。
-func _setup_construction_system() -> void:
-	# 实例化 ConstructionManager
-	var mgr := Node.new()
-	mgr.set_script(_ConstructionManagerScript)
-	mgr.name = "ConstructionManager"
-	add_child(mgr)
-	_construction_manager = mgr
-	# 实例化 api.gd（公共接口契约）
-	var api := Node.new()
-	api.set_script(_ConstructionApiScript)
-	api.name = "ConstructionApi"
-	add_child(api)
-	_construction_api = api
-	# api.setup 必须在 manager._ready 后调用（_ready 中初始化 _assigner）
-	# 这里用 call_deferred 保证顺序
-	call_deferred("_setup_construction_api_deferred")
+	_worldgen = Node.new()
+	_worldgen.set_script(_InitialContentScript)
+	_worldgen.name = "InitialContent"
+	add_child(_worldgen)
 
 
-func _setup_construction_api_deferred() -> void:
-	if _construction_api == null or _construction_manager == null:
-		return
-	if not _construction_api.has_method("setup"):
-		return
-	_construction_api.setup(_construction_manager)
-
-
-# ─────────────────────────────── 战斗系统装配 ────────────────────────────────
-
-## 给场景中的 BattleDirector 节点挂脚本，并实例化 CombatApi。
-## 详见 §15 阶段 0.5。
-func _setup_combat_system() -> void:
-	# 给场景中已存在的 BattleDirector 节点挂脚本（§8.1）
-	if battle_director != null:
-		battle_director.set_script(_BattleDirectorScript)
-	# 实例化 CombatApi（公共接口契约）
-	var api := Node.new()
-	api.set_script(_CombatApiScript)
-	api.name = "CombatApi"
-	add_child(api)
-	_combat_api = api
-	# api.setup 必须在 battle_director 脚本挂载后调用
-	call_deferred("_setup_combat_api_deferred")
-
-
-func _setup_combat_api_deferred() -> void:
-	if _combat_api == null or battle_director == null:
-		return
-	if not _combat_api.has_method("setup"):
-		return
-	_combat_api.setup(battle_director)
-
+# ─────────────────────────────── 系统引用访问（供测试/UI 使用）────────────────────────────────
 
 ## 获取 CombatApi 引用（供测试用）
 func get_combat_api() -> Node:
 	return _combat_api
-
-
-# ─────────────────────────────── 资源系统装配（P0-9）────────────────────────────────
-
-## 实例化 ResourcesApi 作为子节点，并注入 ResourceManager。
-func _setup_resources_system() -> void:
-	var api := Node.new()
-	api.set_script(_ResourcesApiScript)
-	api.name = "ResourcesApi"
-	add_child(api)
-	_resources_api = api
-	call_deferred("_setup_resources_api_deferred")
-
-
-func _setup_resources_api_deferred() -> void:
-	if _resources_api == null:
-		return
-	if not _resources_api.has_method("setup"):
-		return
-	var mgr = _ResourcesManagerScript.new()
-	_resources_api.setup(mgr)
-	# P0-9 注入到 ConstructionManager（若已就绪）
-	if _construction_manager != null and _construction_manager.has_method("set_resources_api"):
-		_construction_manager.set_resources_api(_resources_api)
-	# 阶段 E：给玩家初始资源（P0 简化，资源不持久化，每次启动重置）
-	# produce 到 "test_region"（与建造扣减 region 一致），资源条显示全局总量
-	_grant_initial_resources()
-
-
-## P0 初始资源：木材 300 / 石料 300 / 铁矿 100（足够建造兵营 + 几段城墙）
-func _grant_initial_resources() -> void:
-	if _resources_api == null or not _resources_api.has_method("produce"):
-		return
-	var initial: Dictionary = {
-		"res_wood": 300.0,
-		"res_stone": 300.0,
-		"res_metal_ore": 100.0,
-	}
-	for res_id in initial.keys():
-		_resources_api.produce(res_id, initial[res_id], "test_region", "初始资源")
-	print("[GameRoot] 初始资源已发放: %s" % str(initial))
 
 
 ## 获取 ResourcesApi 引用（供测试用）
@@ -354,44 +214,9 @@ func get_resources_api() -> Node:
 	return _resources_api
 
 
-# ─────────────────────────────── 框选系统装配 ────────────────────────────────
-
-## 实例化 SelectionSystem，挂到 UIRoot 下，注册为 BATTLE 模式 handler。
-## 详见 §15 阶段 0.6。
-func _setup_selection_system() -> void:
-	if ui_root == null:
-		push_warning("[GameRoot] UIRoot 为空，跳过框选系统装配")
-		return
-	var sel := Control.new()
-	sel.set_script(_SelectionSystemScript)
-	sel.name = "SelectionSystem"
-	ui_root.add_child(sel)
-	_selection_system = sel
-	# 注册为 BATTLE 模式 handler
-	if input_dispatcher != null and input_dispatcher.has_method("register_handler"):
-		input_dispatcher.register_handler(PlayerControlAPI.Mode.BATTLE, sel)
-
-
 ## 获取 SelectionSystem 引用（供测试用）
 func get_selection_system() -> Control:
 	return _selection_system
-
-
-# ─────────────────────────────── 组织系统装配 ────────────────────────────────
-
-## 实例化 OrganizationManager + OrganizationApi 作为子节点并互相 setup。
-func _setup_organization_system() -> void:
-	# OrganizationManager 是 RefCounted，直接 new
-	var mgr = _OrganizationManagerScript.new()
-	# OrganizationApi 是 Node，挂为子节点
-	var api := Node.new()
-	api.set_script(_OrganizationApiScript)
-	api.name = "OrganizationApi"
-	add_child(api)
-	_organization_api = api
-	# api.setup 需要 manager 引用
-	if api.has_method("setup"):
-		api.setup(mgr)
 
 
 ## 获取 OrganizationApi 引用（供测试用）
@@ -399,42 +224,9 @@ func get_organization_api() -> Node:
 	return _organization_api
 
 
-# ─────────────────────────────── 编队系统装配 ────────────────────────────────
-
-## 实例化 FormationSystem，注入 OrganizationApi 引用。
-func _setup_formation_system() -> void:
-	var fs := Node.new()
-	fs.set_script(_FormationSystemScript)
-	fs.name = "FormationSystem"
-	add_child(fs)
-	_formation_system = fs
-	if _organization_api != null and fs.has_method("setup"):
-		fs.setup(_organization_api)
-
-
 ## 获取 FormationSystem 引用（供测试用）
 func get_formation_system() -> Node:
 	return _formation_system
-
-
-# ─────────────────────────────── 战术号令系统装配 ────────────────────────────────
-
-## 实例化 CommandChain + TacticalOrders，注入 FormationSystem 引用。
-func _setup_tactical_system() -> void:
-	# CommandChain
-	var cc := Node.new()
-	cc.set_script(_CommandChainScript)
-	cc.name = "CommandChain"
-	add_child(cc)
-	_command_chain = cc
-	# TacticalOrders
-	var to := Node.new()
-	to.set_script(_TacticalOrdersScript)
-	to.name = "TacticalOrders"
-	add_child(to)
-	_tactical_orders = to
-	if to.has_method("setup"):
-		to.setup(_formation_system, _command_chain)
 
 
 ## 获取 TacticalOrders 引用（供测试用）
@@ -447,48 +239,9 @@ func get_command_chain() -> Node:
 	return _command_chain
 
 
-# ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────
-
-## 给场景中已存在的 BattlePanel 占位节点挂脚本，并注入系统引用。详见 §10.1。
-func _setup_battle_panel() -> void:
-	if ui_root == null:
-		return
-	var mp: Control = ui_root.get_node_or_null("ModePanel")
-	if mp == null:
-		return
-	var bp: Control = mp.get_node_or_null("BattlePanel")
-	if bp == null:
-		return
-	bp.set_script(_BattlePanelScript)
-	_battle_panel = bp
-	call_deferred("_setup_battle_panel_deferred")
-
-
-func _setup_battle_panel_deferred() -> void:
-	if _battle_panel == null:
-		return
-	if _battle_panel.has_method("setup"):
-		_battle_panel.setup(self)
-
-
 ## 获取 BattlePanel 引用（供测试用）
 func get_battle_panel() -> Control:
 	return _battle_panel
-
-
-# ─────────────────────────────── 小地图装配（§15 阶段 0.6）────────────────────────────────
-
-## 创建 Minimap 并挂到 UIRoot。详见 §10.4。
-func _setup_minimap() -> void:
-	if ui_root == null:
-		return
-	var mm := Control.new()
-	mm.set_script(_MinimapScript)
-	mm.name = "Minimap"
-	ui_root.add_child(mm)
-	_minimap = mm
-	if mm.has_method("setup"):
-		mm.setup(self)
 
 
 ## 获取 Minimap 引用（供测试用）
@@ -496,62 +249,39 @@ func get_minimap() -> Control:
 	return _minimap
 
 
-## 创建 ZoomBar 并挂到 UIRoot，位于小地图下方。
-func _setup_zoom_bar() -> void:
-	if ui_root == null:
-		return
-	var zb := Control.new()
-	zb.set_script(_ZoomBarScript)
-	zb.name = "ZoomBar"
-	ui_root.add_child(zb)
-	_zoom_bar = zb
-	if zb.has_method("setup"):
-		zb.setup(camera_rig)
-
-# ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────
-
-## 实例化 PossessionInterface，注册为 POSSESS 模式 handler。
-func _setup_possession_interface() -> void:
-	var pi := Node.new()
-	pi.set_script(_PossessionInterfaceScript)
-	pi.name = "PossessionInterface"
-	add_child(pi)
-	_possession_interface = pi
-	# 注册为 POSSESS handler
-	if input_dispatcher != null and input_dispatcher.has_method("register_handler"):
-		input_dispatcher.register_handler(PlayerControlAPI.Mode.POSSESS, pi)
-
-## 给场景中已存在的 PossessPanel 占位节点挂脚本，并调用 setup。
-func _setup_possess_panel() -> void:
-	if ui_root == null:
-		return
-	var mp: Control = ui_root.get_node_or_null("ModePanel")
-	if mp == null:
-		return
-	var pp: Control = mp.get_node_or_null("PossessPanel")
-	if pp == null:
-		return
-	pp.set_script(_PossessPanelScript)
-	_possess_panel = pp
-	call_deferred("_setup_possess_panel_deferred")
-
-func _setup_possess_panel_deferred() -> void:
-	if _possess_panel == null:
-		return
-	if _possess_panel.has_method("setup"):
-		_possess_panel.setup(self)
-
 ## 获取 PossessionInterface 引用（供测试和 Building 调用）
 func get_possession_interface() -> Node:
 	return _possession_interface
+
 
 ## 获取 PossessPanel 引用（供测试用）
 func get_possess_panel() -> Control:
 	return _possess_panel
 
+
 ## 获取 BattleDirector 引用（供测试用）
 func get_battle_director_node() -> Node:
 	return battle_director
+
+
+## 获取 ConstructionManager 引用（供测试用）
+func get_construction_manager() -> Node:
+	return _construction_manager
+
+
+## 获取 Construction api 引用（供测试用）
+func get_construction_api() -> Node:
+	return _construction_api
+
+
+## 获取 ResourceBar 引用（供测试用）
+func get_resource_bar() -> Control:
+	return _resource_bar
+
+
+## 获取 BuildMenu 引用（供测试用）
+func get_build_menu() -> Control:
+	return _build_menu
 
 
 ## 启动一场测试战斗（供 test_stage_05 调用）。
@@ -568,362 +298,7 @@ func start_test_battle(attacker_units: Array, defender_units: Array) -> Node:
 	return battle_director.start_battle_at(map, attacker_units, defender_units)
 
 
-## 获取 ConstructionManager 引用（供测试用）
-func get_construction_manager() -> Node:
-	return _construction_manager
-
-
-## 获取 Construction api 引用（供测试用）
-func get_construction_api() -> Node:
-	return _construction_api
-
-
-func _register_explore_handler() -> void:
-	if input_dispatcher == null or not input_dispatcher.has_method("register_handler"):
-		return
-	var handler := Node.new()
-	handler.set_script(_ExploreHandlerScript)
-	handler.name = "ExploreHandler"
-	add_child(handler)
-	input_dispatcher.register_handler(PlayerControlAPI.Mode.EXPLORE, handler)
-
-
-# ─────────────────────────────── 阶段 F：边界检测出城系统 ────────────────────────────────
-
-func _setup_boundary_detector() -> void:
-	# 实例化边界检测器
-	_boundary_detector = Node.new()
-	_boundary_detector.set_script(_MapBoundaryDetectorScript)
-	_boundary_detector.name = "MapBoundaryDetector"
-	add_child(_boundary_detector)
-	# 实例化大世界地图面板
-	_world_map_panel = Control.new()
-	_world_map_panel.set_script(_WorldMapPanelScript)
-	_world_map_panel.name = "WorldMapPanel"
-	if ui_root != null:
-		ui_root.add_child(_world_map_panel)
-	else:
-		add_child(_world_map_panel)
-	# 连接信号
-	_boundary_detector.open_world_map_requested.connect(_world_map_panel.toggle)
-	_world_map_panel.travel_requested.connect(_on_world_map_travel)
-	# 配置默认目的地
-	_setup_default_destinations()
-
-
-func _setup_default_destinations() -> void:
-	if _world_map_panel == null:
-		return
-	var dests := [
-		{"label": "前往道路 (-> 村落 B)", "map_id": ROAD_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
-		{"label": "返回村落 A", "map_id": TEST_VILLAGE_MAP_ID, "entry_side": WorldAPI.EntrySide.RIGHT},
-		{"label": "前往村落 B", "map_id": VILLAGE_B_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
-		{"label": "进入遭遇战战场", "map_id": BATTLEFIELD_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
-		{"label": "进入森林附属区域", "map_id": FOREST_ZONE_MAP_ID, "entry_side": WorldAPI.EntrySide.LEFT},
-	]
-	_world_map_panel.set_destinations(dests)
-
-
-func _on_world_map_travel(target_map_id: String, entry_side: int) -> void:
-	if scene_loader != null and scene_loader.has_method("travel_to_map"):
-		scene_loader.travel_to_map(target_map_id, WorldAPI.TravelMode.WALK, entry_side)
-
-
-# ─────────────────────────────── 游玩 UI ────────────────────────────────
-
-func _setup_game_ui() -> void:
-	# 主控单位圆圈
-	_possession_indicator = Control.new()
-	_possession_indicator.set_script(_PossessionIndicatorScript)
-	_possession_indicator.name = "PossessionIndicator"
-	_possession_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if ui_root != null:
-		ui_root.add_child(_possession_indicator)
-	else:
-		add_child(_possession_indicator)
-	# 鼠标悬停方框
-	_hover_indicator = Control.new()
-	_hover_indicator.set_script(_HoverIndicatorScript)
-	_hover_indicator.name = "HoverIndicator"
-	_hover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if ui_root != null:
-		ui_root.add_child(_hover_indicator)
-	else:
-		add_child(_hover_indicator)
-	# 中键滚动图标
-	_middle_scroll_overlay = Control.new()
-	_middle_scroll_overlay.set_script(_MiddleScrollOverlayScript)
-	_middle_scroll_overlay.name = "MiddleScrollOverlay"
-	_middle_scroll_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if ui_root != null:
-		ui_root.add_child(_middle_scroll_overlay)
-	else:
-		add_child(_middle_scroll_overlay)
-
-
-# ─────────────────────────────── 阶段 E：资源条 / 建造菜单装配 ────────────────────────────────
-
-## 实例化资源条并挂到 UIRoot，延迟 setup 等 ResourcesApi 就绪。
-func _setup_resource_bar() -> void:
-	# 优先从 ui_root.tscn 预置节点挂载（编辑器可见位置/范围）
-	if ui_root != null:
-		var rb: Control = ui_root.get_node_or_null("ResourceBar")
-		if rb != null:
-			rb.set_script(_ResourceBarScript)
-			_resource_bar = rb
-			call_deferred("_setup_resource_bar_deferred")
-			return
-	# 回退：代码创建
-	_resource_bar = Control.new()
-	_resource_bar.set_script(_ResourceBarScript)
-	_resource_bar.name = "ResourceBar"
-	_resource_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if ui_root != null:
-		ui_root.add_child(_resource_bar)
-	else:
-		add_child(_resource_bar)
-	call_deferred("_setup_resource_bar_deferred")
-
-
-func _setup_resource_bar_deferred() -> void:
-	if _resource_bar == null or _resources_api == null:
-		return
-	if _resource_bar.has_method("setup"):
-		_resource_bar.setup(_resources_api)
-
-
-## 获取 ResourceBar 引用（供测试用）
-func get_resource_bar() -> Control:
-	return _resource_bar
-
-
-## 实例化建造菜单并挂到 UIRoot，延迟 setup 等 ConstructionManager 就绪。
-func _setup_build_menu() -> void:
-	# 优先从 ui_root.tscn 预置节点挂载（编辑器可见位置/范围）
-	if ui_root != null:
-		var bm: Control = ui_root.get_node_or_null("BuildMenu")
-		if bm != null:
-			bm.set_script(_BuildMenuScript)
-			_build_menu = bm
-			call_deferred("_setup_build_menu_deferred")
-			return
-	# 回退：代码创建
-	_build_menu = Control.new()
-	_build_menu.set_script(_BuildMenuScript)
-	_build_menu.name = "BuildMenu"
-	if ui_root != null:
-		ui_root.add_child(_build_menu)
-	else:
-		add_child(_build_menu)
-	call_deferred("_setup_build_menu_deferred")
-
-
-func _setup_build_menu_deferred() -> void:
-	if _build_menu == null:
-		return
-	if _build_menu.has_method("setup"):
-		_build_menu.setup(self)
-
-
-## 获取 BuildMenu 引用（供测试用）
-func get_build_menu() -> Control:
-	return _build_menu
-
-
-# ─────────────────────────────── 存档系统 ────────────────────────────────
-
-## 存档面板脚本
-const _SavePanelScript: GDScript = preload("res://modules/ui/scripts/save_panel.gd")
-
-func _setup_save_system() -> void:
-	if EventBus:
-		if EventBus.has_signal("game_saving"):
-			EventBus.game_saving.connect(_on_game_saving)
-		if EventBus.has_signal("game_loaded"):
-			EventBus.game_loaded.connect(_on_game_loaded)
-	# 向 SaveManager 注册（接收 game_saving/game_loaded 信号）
-	if SaveManager and SaveManager.has_method("register_module"):
-		SaveManager.register_module("map_runtime", self)
-	# 实例化存档面板
-	_save_panel = Control.new()
-	_save_panel.set_script(_SavePanelScript)
-	_save_panel.name = "SavePanel"
-	_save_panel.visible = false
-	if ui_root != null:
-		ui_root.add_child(_save_panel)
-	else:
-		add_child(_save_panel)
-
-
-## 存档保存回调（由 EventBus.game_saving 触发）
-func _on_game_saving(_slot_index: int) -> void:
-	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
-	if db == null:
-		return
-	var slot_id: int = SaveManager.get_current_slot() if SaveManager.has_method("get_current_slot") else -1
-	if slot_id < 0:
-		return
-	var map: Node2D = get_current_map()
-	var map_id: String = ""
-	if scene_loader and "current_map_id" in scene_loader:
-		map_id = scene_loader.current_map_id
-	# 1. 地图边界 -> maps 表
-	if map != null and map.has_method("save_to_db"):
-		map.save_to_db(db, slot_id, map_id)
-	# 2. 建筑 + 建造项目 -> buildings + construction_projects 表
-	if _construction_manager != null and _construction_manager.has_method("save_to_db"):
-		_construction_manager.save_to_db(db, slot_id, map_id)
-	# 3. 实体（玩家+NPC）-> entities 表
-	_save_entities(db, slot_id, map_id, map)
-	# 4. 资源点 -> resource_nodes 表
-	if map != null and map.has_method("save_resource_nodes_to_db"):
-		map.save_resource_nodes_to_db(db, slot_id, map_id)
-	# 5. 更新 save_meta.current_map_id
-	db.update_rows("save_meta", "slot_id = %d" % slot_id, {"current_map_id": map_id})
-
-
-## 保存实体到 DB
-func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
-	if map == null:
-		return
-	db.delete_rows("entities", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
-	var idx: int = 0
-	for entity in map.get_entities():
-		if not is_instance_valid(entity):
-			continue
-		var is_player: int = 1 if (entity.has_method("is_possessed") and entity.is_possessed()) else 0
-		var facing: int = int(entity.get("_facing")) if "_facing" in entity else 1
-		var extra: Dictionary = {}
-		if "faction_id" in entity:
-			extra["faction_id"] = entity.faction_id
-		db.insert_row("entities", {
-			"slot_id": slot_id, "map_id": map_id,
-			"entity_id": "ent_%04d" % idx,
-			"entity_type": "stickman",
-			"def_id": "stickman_basic",
-			"pos_x": entity.global_position.x,
-			"pos_y": entity.global_position.y,
-			"facing": facing,
-			"is_player": is_player,
-			"extra_data": JSON.stringify(extra),
-		})
-		idx += 1
-
-
-## 存档加载回调（由 EventBus.game_loaded 触发）
-func _on_game_loaded(slot_index: int) -> void:
-	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
-	if db != null:
-		var rows: Array = db.select_rows("save_meta", "slot_id = %d" % slot_index, ["current_map_id"])
-		if not rows.is_empty():
-			_cached_load_map_id = str(rows[0].get("current_map_id", ""))
-	if not _cached_load_map_id.is_empty():
-		call_deferred("_load_map_for_save")
-
-
-## 外部调用：启动读档流程
-func load_game_from_slot(slot_index: int) -> void:
-	_pending_save_load = true
-	# 清理当前地图实例（如果存在）
-	if world_chunk_host != null and world_chunk_host.get_child_count() > 0:
-		var old_map: Node2D = world_chunk_host.get_child(0) as Node2D
-		if old_map:
-			old_map.queue_free()
-		_initial_map_loaded = false
-	# 调用 SaveManager.load_game（会 emit game_loaded -> _on_game_loaded -> 加载地图）
-	if SaveManager and SaveManager.has_method("load_game"):
-		SaveManager.load_game(slot_index)
-
-
-## 读档时加载缓存的地图
-func _load_map_for_save() -> void:
-	if scene_loader == null or not scene_loader.has_method("load_map"):
-		return
-	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
-		scene_loader.map_loaded.connect(_on_map_loaded)
-	if _cached_load_map_id.is_empty():
-		_cached_load_map_id = TEST_VILLAGE_MAP_ID
-	scene_loader.load_map(_cached_load_map_id)
-
-
-## 从存档恢复场景
-func _restore_from_save(map: Node2D, map_id: String) -> void:
-	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
-	var slot_id: int = SaveManager.get_current_slot() if SaveManager and SaveManager.has_method("get_current_slot") else -1
-	if db == null or slot_id < 0:
-		return
-	# 1. 恢复地图边界
-	if map.has_method("load_from_db"):
-		map.load_from_db(db, slot_id, map_id)
-	# 2. 恢复建筑 + 建造项目
-	if _construction_manager != null and _construction_manager.has_method("load_from_db"):
-		_construction_manager.load_from_db(db, slot_id, map_id)
-	# 3. 恢复玩家 + NPC
-	_restore_entities(db, slot_id, map_id, map)
-	# 4. 恢复资源点
-	if map.has_method("load_resource_nodes_from_db"):
-		map.load_resource_nodes_from_db(db, slot_id, map_id)
-	# 5. 恢复城墙地形遮罩
-	if _construction_manager != null and _construction_manager.has_method("_update_city_terrain_mask"):
-		_construction_manager._update_city_terrain_mask()
-	# 6. 重新设置相机/小地图边界
-	if camera_rig != null and camera_rig.has_method("set_map_bounds"):
-		camera_rig.set_map_bounds(map.map_left, map.map_right)
-	if _minimap != null and _minimap.has_method("set_map_info"):
-		_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-	# 关闭 DB
-	if SaveManager and SaveManager.has_method("end_load"):
-		SaveManager.end_load()
-
-
-## 从 DB 恢复实体
-func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
-	var rows: Array = db.select_rows("entities", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
-	for row in rows:
-		var pos := Vector2(float(row["pos_x"]), float(row["pos_y"]))
-		var entity: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, pos)
-		if entity == null:
-			continue
-		# 修正 Y（脚部对齐）
-		if entity.get("foot_offset") != null:
-			entity.global_position.y = pos.y - entity.foot_offset
-		# 朝向
-		if "_facing" in entity:
-			entity.set("_facing", int(row["facing"]))
-		# 玩家附身
-		if int(row["is_player"]) == 1 and entity.has_method("set_possessed"):
-			entity.set_possessed(true)
-			if camera_rig != null and camera_rig.has_method("set_follow_target"):
-				camera_rig.set_follow_target(entity)
-		else:
-			if entity.has_method("set_possessed"):
-				entity.set_possessed(false)
-		# 玩家与 NPC 都注入 ConstructionManager（玩家按E交互需要）
-		if entity.has_method("set_construction_manager") and _construction_manager != null:
-			entity.set_construction_manager(_construction_manager)
-
-
-## 切换存档面板可见性
-func toggle_save_panel() -> void:
-	if _save_panel != null:
-		_save_panel.visible = not _save_panel.visible
-
-
-## 快速保存到槽位 0
-func quick_save() -> void:
-	if SaveManager and SaveManager.has_method("save_game"):
-		SaveManager.save_game(0)
-		print("[GameRoot] 快速保存到槽位 0")
-
-
-## 快速读取槽位 0
-func quick_load() -> void:
-	if SaveManager and SaveManager.has_method("slot_exists") and SaveManager.slot_exists(0):
-		load_game_from_slot(0)
-		print("[GameRoot] 快速读取槽位 0")
-	else:
-		push_warning("[GameRoot] 槽位 0 无存档")
-
+# ─────────────────────────────── 地图注册与加载 ────────────────────────────────
 
 func _register_default_maps() -> void:
 	if scene_loader == null or not scene_loader.has_method("register_map"):
@@ -977,10 +352,10 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 	# 配置小地图地图信息（详见 §10.4.6）
 	if _minimap != null and _minimap.has_method("set_map_info"):
 		_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-	# 读档恢复：跳过默认 spawn，由 _restore_from_save 接管
+	# 读档恢复：跳过默认 spawn，由 SaveHandler 接管
 	if _pending_save_load:
 		_pending_save_load = false
-		_restore_from_save(map, map_id)
+		_save_system._restore_from_save(map, map_id)
 	# 正常流程：spawn 玩家 + 初始内容
 	else:
 		var spawn_x: float
@@ -1012,10 +387,9 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		# 仅初始加载时 spawn 初始建筑、NPC 和演示建造
 		if not _initial_map_loaded:
 			_initial_map_loaded = true
-			_spawn_initial_buildings(map)
+			_worldgen.spawn_initial_buildings(map)
 			# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
-			if _construction_manager != null and _construction_manager.has_method("spawn_operational_building"):
-				_construction_manager.spawn_operational_building("bld_warehouse", 15, 16)
+			_worldgen.spawn_initial_warehouse()
 			# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
 			var spawn_cell: int = int(PLAYER_SPAWN_X / 32.0)
 			var safe_radius: int = 40  # 出生点±40格内为村庄土路区
@@ -1031,15 +405,15 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 				camera_rig.set_map_bounds(map.map_left, map.map_right)
 			if _minimap != null and _minimap.has_method("set_map_info"):
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-			_spawn_npcs(map, spawn_y)
+			_worldgen.spawn_npcs(map, spawn_y)
 		# 阶段 E：遭遇战战场 spawn 敌方火柴人 + 启动战斗（地图切换进入战场时触发）
 		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded:
-			_spawn_battlefield_enemies(map, player)
+			_worldgen.spawn_battlefield_enemies(map, player)
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 注册调试绘制器
-	_register_debug_drawers()
+	_bootstrap.register_debug_drawers()
 
 
 ## 请求地图旅行（由 ChunkTrigger 调用，详见 §6.2 步行流程）
@@ -1047,32 +421,6 @@ func request_map_travel(target_map_id: String, entry_side: int) -> void:
 	if scene_loader == null or not scene_loader.has_method("travel_to_map"):
 		return
 	scene_loader.travel_to_map(target_map_id, WorldAPI.TravelMode.WALK, entry_side)
-
-
-# ─────────────────────────────── 初始建筑 ────────────────────────────────
-
-## 读取地图的 InitialBuildingsList，直接创建 OPERATIONAL 状态建筑（跳过建造过程）。
-## P0-2 修复：绕过存档系统，在 VillageMap 首次加载时预置建筑。
-func _spawn_initial_buildings(map: Node2D) -> void:
-	var ibl: Node = map.get("initial_buildings_list") if "initial_buildings_list" in map else null
-	if ibl == null or not ibl.has_method("get_defs"):
-		return
-	var defs: Array = ibl.get_defs()
-	if defs.is_empty():
-		return
-	if _construction_manager == null or not _construction_manager.has_method("spawn_operational_building"):
-		push_warning("[GameRoot] ConstructionManager 未就绪，跳过初始建筑生成")
-		return
-	for d in defs:
-		var def_id: String = d.get("def_id") if d is Dictionary else d.def_id
-		var cell_x: int = int(d.get("cell_x") if d is Dictionary else d.cell_x)
-		var width: int = int(d.get("width") if d is Dictionary else d.width)
-		if def_id.is_empty():
-			push_warning("[GameRoot] 初始建筑 def_id 为空，跳过")
-			continue
-		var result: Dictionary = _construction_manager.spawn_operational_building(def_id, cell_x, width)
-		if not result.get("ok", false):
-			push_warning("[GameRoot] 初始建筑生成失败: %s cell_x=%d: %s" % [def_id, cell_x, result.get("error", "未知错误")])
 
 
 ## 主动按指定 cell_x 触发建造（供调试 / 集成测试调用）。
@@ -1086,82 +434,42 @@ func start_demo_building_at(cell_x: int) -> Dictionary:
 	return _construction_manager.start_construction_at("test_region", "bld_placeholder", cell_x, "")
 
 
-## 生成 NPC 村民，分布在玩家右侧不同 X 位置，不附身（AI 接管）。
-func _spawn_npcs(map: Node2D, spawn_y: float) -> void:
-	# NPC 生成在仓库右侧，避开仓库 PassageBarrier（cell 15~31, X 480~992）
-	var npc_start_x: float = 1050.0
-	for i in NPC_COUNT:
-		var x: float = npc_start_x + 200.0 * i
-		# 确保在地图边界内
-		if x > map.map_right - 100.0:
-			x = npc_start_x + randf_range(0.0, 400.0)
-		var npc: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
-		if npc != null:
-			# 修正 Y：让脚部对齐 spawn_y
-			if npc.get("foot_offset") != null:
-				npc.global_position.y = spawn_y - npc.foot_offset
-			if npc.has_method("set_possessed"):
-				npc.set_possessed(false)  # NPC 不被附身，AIController 自动接管
-			# 注入 ConstructionManager 引用，使 NPC 可被派工（§15 阶段 0.4）
-			if npc.has_method("set_construction_manager") and _construction_manager != null:
-				npc.set_construction_manager(_construction_manager)
+# ─────────────────────────────── 存档转发（实现见 SaveHandler 子模块）────────────────────────────────
+
+## 外部调用：启动读档流程
+func load_game_from_slot(slot_index: int) -> void:
+	if _save_system != null and _save_system.has_method("load_game_from_slot"):
+		_save_system.load_game_from_slot(slot_index)
 
 
-## 阶段 E：遭遇战战场生成敌方火柴人并启动战斗。
-## 敌方为红色阵营（视觉区分），玩家方为进攻方。
-func _spawn_battlefield_enemies(map: Node2D, player: Node2D) -> void:
-	if map == null or player == null:
-		return
-	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
-	var enemies: Array = []
-	# 敌方在战场右端（玩家从左侧进入）
-	var count: int = 4
-	for i in count:
-		var x: float = map.map_right - 250.0 - i * 60.0
-		var e: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
-		if e == null:
-			continue
-		# 修正 Y：让脚部对齐 spawn_y
-		if e.get("foot_offset") != null:
-			e.global_position.y = spawn_y - e.foot_offset
-		# 不附身（AI 接管）
-		if e.has_method("set_possessed"):
-			e.set_possessed(false)
-		# 红色身体区分敌方
-		_set_unit_body_color(e, Color(0.82, 0.22, 0.22))
-		enemies.append(e)
-	# 启动战斗：玩家方(进攻) vs 敌方(防守)
-	if not enemies.is_empty():
-		start_test_battle([player], enemies)
-		print("[GameRoot] 遭遇战已启动: 玩家 + 0 友军 vs %d 敌军" % enemies.size())
+## 切换存档面板可见性
+func toggle_save_panel() -> void:
+	if _save_system != null and _save_system.has_method("toggle_save_panel"):
+		_save_system.toggle_save_panel()
 
 
-## 设置火柴人身体颜色（用于阵营视觉区分）
-func _set_unit_body_color(entity: Node2D, color: Color) -> void:
-	if not is_instance_valid(entity):
-		return
-	var r = entity.get("rig") if "rig" in entity else null
-	if r != null and "body_color" in r:
-		r.body_color = color
+## 快速保存到槽位 0
+func quick_save() -> void:
+	if _save_system != null and _save_system.has_method("quick_save"):
+		_save_system.quick_save()
 
 
-## 注册调试绘制器到 DebugApi（详见 §10.5.7）
-func _register_debug_drawers() -> void:
-	if DebugApi == null:
-		return
-	DebugApi.register_drawer("grid_drawer", Callable(_DebugDrawers, "draw_grid"))
-	DebugApi.register_drawer("barrier_drawer", Callable(_DebugDrawers, "draw_barriers"))
-	DebugApi.register_drawer("building_drawer", Callable(_DebugDrawers, "draw_buildings"))
-	DebugApi.register_drawer("ground_line_drawer", Callable(_DebugDrawers, "draw_ground_lines"))
-	DebugApi.register_drawer("chunk_trigger_drawer", Callable(_DebugDrawers, "draw_chunk_triggers"))
-	DebugApi.register_drawer("entity_state_drawer", Callable(_DebugDrawers, "draw_entity_states"))
-	DebugApi.register_drawer("entity_collider_drawer", Callable(_DebugDrawers, "draw_entity_colliders"))
-	DebugApi.register_drawer("terrain_grid", Callable(_DebugDrawers, "draw_terrain_grid"))
-	DebugApi.register_drawer("resource_nodes", Callable(_DebugDrawers, "draw_resource_nodes"))
-	DebugApi.register_drawer("building_names", Callable(_DebugDrawers, "draw_building_names"))
-	DebugApi.register_drawer("world_ruler", Callable(_DebugDrawers, "draw_world_ruler"))
-	DebugApi.register_drawer("entity_info", Callable(_DebugDrawers, "draw_entity_info"))
+## 快速读取槽位 0
+func quick_load() -> void:
+	if _save_system != null and _save_system.has_method("quick_load"):
+		_save_system.quick_load()
 
+
+# ─────────────────────────────── 玩家实体查找（实现见 TravelHandler 子模块）────────────────────────────────
+
+## 获取当前玩家实体（公开接口，供 HUD 等 UI 调用）
+func get_player_entity() -> Node2D:
+	if _travel_system != null and _travel_system.has_method("find_player_entity"):
+		return _travel_system.find_player_entity()
+	return null
+
+
+# ─────────────────────────────── 校验与事件绑定 ────────────────────────────────
 
 func _validate_children() -> void:
 	# 校验必需子节点存在（缺一不可）
@@ -1184,164 +492,8 @@ func _bind_event_bus() -> void:
 	# 玩家请求暂停/恢复
 	if EventBus.has_signal("ui_toggle_pause_requested"):
 		EventBus.ui_toggle_pause_requested.connect(_on_pause_requested)
-	# 玩家离开建筑交互区 -> 全局检查是否退出 INDOOR
-	if EventBus.has_signal("interior_exited"):
-		EventBus.interior_exited.connect(_on_interior_exited)
-	# 传送进入大建筑 -> 过场 + 旅行
-	if EventBus.has_signal("mega_interior_entered"):
-		EventBus.mega_interior_entered.connect(_on_mega_interior_entered)
-	# 从大建筑返回
-	if EventBus.has_signal("mega_interior_exited"):
-		EventBus.mega_interior_exited.connect(_on_mega_interior_exited)
-
-
-# ─────────────────────────────── 传送系统（§5.6）───────────────────────────────
-
-## 进入大建筑：校验 -> 记录返回信息 -> 过场 -> 旅行
-func _on_mega_interior_entered(building_id: int, map_id: String) -> void:
-	# 校验：战斗中禁止传送
-	if is_in_battle():
-		push_warning("[GameRoot] 战斗中禁止传送进入大建筑")
-		return
-	# 校验：附身中禁止传送
-	if _possession_interface != null and _possession_interface.has_method("get_possessed_entity"):
-		var pe: Node = _possession_interface.get_possessed_entity()
-		if pe != null and is_instance_valid(pe) and _possession_interface.has_method("get") and _possession_interface.get("_slowed_time") == true:
-			push_warning("[GameRoot] 附身中禁止传送进入大建筑")
-			return
-	# 记录返回信息
-	_return_map_id = scene_loader.current_map_id if scene_loader != null and scene_loader.has_method("get") else ""
-	var player: Node2D = _find_player_entity()
-	if player != null and is_instance_valid(player):
-		_return_spawn_x = player.global_position.x
-	# 显示过场
-	_show_transition_overlay("进入宫殿")
-	# 延迟执行旅行（等过场淡入完成）
-	var tween := create_tween()
-	tween.tween_interval(0.5)
-	tween.tween_callback(_travel_to_interior.bind(map_id))
-
-
-func _travel_to_interior(map_id: String) -> void:
-	if scene_loader == null or not scene_loader.has_method("travel_to_map"):
-		_hide_transition_overlay()
-		return
-	scene_loader.travel_to_map(map_id, WorldAPI.TravelMode.TELEPORT, WorldAPI.EntrySide.LEFT)
-	# 地图加载完成后隐藏过场
-	var tween := create_tween()
-	tween.tween_interval(0.05)
-	tween.tween_callback(_hide_transition_overlay)
-
-
-## 从大建筑返回
-func _on_mega_interior_exited(_return_map_id_received: String) -> void:
-	var target := _return_map_id
-	if target.is_empty():
-		target = _return_map_id_received
-	if target.is_empty():
-		push_warning("[GameRoot] 无返回地图 ID，无法退出大建筑")
-		return
-	_show_transition_overlay("离开宫殿")
-	var tween := create_tween()
-	tween.tween_interval(0.5)
-	tween.tween_callback(_travel_back.bind(target))
-
-
-func _travel_back(target: String) -> void:
-	if scene_loader == null or not scene_loader.has_method("travel_to_map"):
-		_hide_transition_overlay()
-		return
-	scene_loader.travel_to_map(target, WorldAPI.TravelMode.TELEPORT, WorldAPI.EntrySide.LEFT)
-	var tween := create_tween()
-	tween.tween_interval(0.05)
-	tween.tween_callback(_hide_transition_overlay)
-	# 清空返回记录
-	_return_map_id = ""
-	_return_spawn_x = 0.0
-
-
-## 显示过场黑屏
-func _show_transition_overlay(text: String) -> void:
-	if ui_root == null:
-		return
-	# 移除旧 overlay
-	_hide_transition_overlay()
-	var overlay := ColorRect.new()
-	overlay.name = "TransitionOverlay"
-	overlay.color = Color(0, 0, 0, 0)
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui_root.add_child(overlay)
-	var label := Label.new()
-	label.name = "TransitionLabel"
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	label.add_theme_font_size_override("font_size", 36)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	overlay.add_child(label)
-	# 淡入动画
-	var tween := create_tween()
-	tween.tween_property(overlay, "color:a", 1.0, 0.5)
-
-
-## 隐藏过场
-func _hide_transition_overlay() -> void:
-	if ui_root == null:
-		return
-	var overlay: Node = ui_root.get_node_or_null("TransitionOverlay")
-	if overlay == null:
-		return
-	var tween := create_tween()
-	tween.tween_property(overlay, "color:a", 0.0, 0.5)
-	tween.tween_callback(overlay.queue_free)
-
-
-## 查找当前玩家实体
-func _find_player_entity() -> Node2D:
-	var map: Node2D = get_current_map()
-	if map == null:
-		return null
-	for e in map.get_entities():
-		if e is CharacterBody2D and e.has_method("is_possessed") and e.is_possessed():
-			return e
-	return null
-
-
-## 获取当前玩家实体（公开接口，供 HUD 等 UI 调用）
-func get_player_entity() -> Node2D:
-	return _find_player_entity()
-
-
-## 某个建筑的 InteractionZone 离开 -> 检查是否所有建筑都不含玩家
-func _on_interior_exited(_building_id: int) -> void:
-	_check_indoor_exit()
-
-
-## 遍历当前地图所有 Building，无玩家在内则退出 INDOOR 模式
-func _check_indoor_exit() -> void:
-	if input_dispatcher == null or not input_dispatcher.has_method("get_mode"):
-		return
-	if input_dispatcher.get_mode() != PlayerControlAPI.Mode.INDOOR:
-		return
-	var map: Node2D = get_current_map()
-	if map == null:
-		return
-	if not _has_any_player_in_building(map):
-		if input_dispatcher.has_method("exit_to_explore"):
-			input_dispatcher.exit_to_explore()
-
-
-## 递归遍历节点树，检查是否有 Building 内含玩家
-func _has_any_player_in_building(node: Node) -> bool:
-	if node is Building and node.has_method("is_player_inside_interaction_zone"):
-		if node.is_player_inside_interaction_zone():
-			return true
-	for child in node.get_children():
-		if _has_any_player_in_building(child):
-			return true
-	return false
+	# 注：interior_exited / mega_interior_entered / mega_interior_exited 由 TravelHandler 绑定，
+	#     game_saving / game_loaded 由 SaveHandler 绑定
 
 
 func _on_pause_requested() -> void:

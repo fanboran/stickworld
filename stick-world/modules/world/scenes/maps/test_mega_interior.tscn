@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=3 uid="uid://testmegainterior"]
 
-[ext_resource type="Script" path="res://modules/world/scripts/village_map.gd" id="1_map"]
-[ext_resource type="Script" path="res://modules/world/scripts/mega_interior_exit_trigger.gd" id="2_exit"]
+[ext_resource type="Script" path="res://modules/world/scripts/map/village_map.gd" id="1_map"]
+[ext_resource type="Script" path="res://modules/world/scripts/travel/mega_interior_exit_trigger.gd" id="2_exit"]
 
 [sub_resource type="RectangleShape2D" id="rect_exit"]
 size = Vector2(100, 200)

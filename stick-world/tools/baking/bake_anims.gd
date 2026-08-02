@@ -5,7 +5,7 @@ extends Node
 ## 运行方式:
 ##   godot --headless --path "f:/VSCode/game-2/stick-world" res://tools/baking/bake_anims.tscn
 
-const Skeleton := preload("res://modules/units/scripts/stickman_skeleton.gd")
+const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
 
 const OUTPUT_DIR := "res://modules/units/animations/"
 

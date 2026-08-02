@@ -2,10 +2,10 @@
 
 [ext_resource type="Script" path="res://modules/world/scripts/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://modules/environment/scripts/environment_system.gd" id="2_env"]
-[ext_resource type="Script" path="res://modules/world/scripts/camera_rig.gd" id="3_camera"]
-[ext_resource type="Script" path="res://modules/world/scripts/scene_loader.gd" id="4_loader"]
+[ext_resource type="Script" path="res://modules/world/scripts/camera/camera_rig.gd" id="3_camera"]
+[ext_resource type="Script" path="res://modules/world/scripts/loading/scene_loader.gd" id="4_loader"]
 [ext_resource type="Script" path="res://modules/player_control/scripts/input_dispatcher.gd" id="5_input"]
-[ext_resource type="Script" path="res://modules/world/scripts/world_chunk_host.gd" id="6_chunk_host"]
+[ext_resource type="Script" path="res://modules/world/scripts/loading/world_chunk_host.gd" id="6_chunk_host"]
 
 [node name="GameRoot" type="Node2D"]
 script = ExtResource("1_game_root")

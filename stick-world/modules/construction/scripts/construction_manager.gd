@@ -8,20 +8,24 @@ extends Node
 ##   1. 持有当前活跃的 ConstructionProject 列表，每帧 tick 推进进度
 ##   2. 持有 WorkCrewAssigner，负责派工
 ##   3. 维护已完工建筑注册表（building_id → Building）
-##   4. 维护建筑场景模板注册表（def_id → PackedScene）
-##   5. 接入地图：set_map(map) 注入 VillageMap 引用
+##   4. 接入地图：set_map(map) 注入 VillageMap 引用
 ##
 ## P0 简化：
-##   - 不实现资源消耗（建造成本留到资源系统接入）
-##   - 不实现存档 JSON 读写
 ##   - 不实现建筑等级升级
 ##   - org_id（组织 ID）参数保留但忽略
+##
+## 子节点：
+##   BuildingCatalog     —— 建筑场景注册表与建筑定义（building_catalog.gd）
+##   BuildingPersistence —— SQLite 存档/读档（building_persistence.gd）
 
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 const ScriptWorkCrewAssigner := preload("res://modules/construction/scripts/work_crew_assigner.gd")
 const ScriptPlacementSystem := preload("res://modules/construction/placement/placement_system.gd")
 const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
 const ScriptBuildProgressIndicator := preload("res://modules/construction/scripts/build_progress_indicator.gd")
+
+const _BuildingCatalogScript: GDScript = preload("res://modules/construction/scripts/catalog/building_catalog.gd")
+const _BuildingPersistenceScript: GDScript = preload("res://modules/construction/scripts/catalog/building_persistence.gd")
 
 # ─────────────────────────────── 字段 ────────────────────────────────
 
@@ -48,6 +52,12 @@ var _building_defs_cache: Dictionary = {}
 ## 建造项目 -> 进度条指示器映射（阶段 E 双进度条）
 var _project_indicators: Dictionary = {}
 
+# ─────────────────────────────── 子组件引用 ────────────────────────────────
+## 建筑目录系统（场景注册/定义加载，_ready 装配）
+var _catalog: Node = null
+## 持久化系统（SQLite 存档/读档，_ready 装配）
+var _persistence: Node = null
+
 
 # ─────────────────────────────── 信号（供 api.gd 转发）────────────────────────────────
 
@@ -58,9 +68,27 @@ signal building_removed(building_id: String, region_id: String)
 
 
 func _ready() -> void:
+	_mount_components()
 	_assigner = ScriptWorkCrewAssigner.new()
-	_register_default_building_scenes()
-	_load_building_defs()
+	_catalog.register_defaults()
+	_catalog.load_defs()
+
+
+## 实例化并挂载子组件（BuildingCatalog / BuildingPersistence）。
+func _mount_components() -> void:
+	_catalog = Node.new()
+	_catalog.set_script(_BuildingCatalogScript)
+	_catalog.name = "BuildingCatalog"
+	add_child(_catalog)
+	if _catalog.has_method("setup"):
+		_catalog.setup(self)
+
+	_persistence = Node.new()
+	_persistence.set_script(_BuildingPersistenceScript)
+	_persistence.name = "BuildingPersistence"
+	add_child(_persistence)
+	if _persistence.has_method("setup"):
+		_persistence.setup(self)
 
 
 # ─────────────────────────────── 地图注入 ────────────────────────────────
@@ -72,7 +100,7 @@ func set_map(map: Node2D) -> void:
 		# 地图切换：旧地图节点正被 SceneLoader 卸载，清空其建筑/项目注册表，
 		# 否则 _buildings 会残留已释放 Node 引用，get_nearest_warehouse 等迭代会
 		# 触发 "Trying to cast a freed object" 报错（详见 P0 收口执行计划）。
-		_clear_all_buildings_and_projects()
+		_persistence._clear_all_buildings_and_projects()
 	_map = map
 
 
@@ -123,79 +151,27 @@ func get_nearest_project(pos: Vector2) -> RefCounted:
 	return best
 
 
-# ─────────────────────────────── 建筑场景注册 ────────────────────────────────
+# ─────────────────────────────── 建筑场景注册（转发到 BuildingCatalog）────────────────────────────────
 
 ## 注册建筑场景模板（def_id → PackedScene）
 func register_building_scene(def_id: String, scene: PackedScene) -> void:
-	if def_id.is_empty() or scene == null:
-		return
-	_building_scene_registry[def_id] = scene
-
-
-## P0 默认注册：bld_placeholder（占位建筑） + 城墙/城门（阶段 F）
-func _register_default_building_scenes() -> void:
-	var placeholder_scene := load("res://modules/building_gen/buildings/bld_placeholder.tscn") as PackedScene
-	if placeholder_scene != null:
-		register_building_scene("bld_placeholder", placeholder_scene)
-	else:
-		push_warning("[ConstructionManager] 无法加载 bld_placeholder.tscn")
-	# 阶段 F：城墙/城门场景注册
-	var wall_scenes := {
-		"bld_wall_tier1": "res://modules/building_gen/buildings/bld_wall_tier1.tscn",
-		"bld_wall_tier2": "res://modules/building_gen/buildings/bld_wall_tier2.tscn",
-		"bld_wall_tier3": "res://modules/building_gen/buildings/bld_wall_tier3.tscn",
-		"bld_wall_gate": "res://modules/building_gen/buildings/bld_wall_gate.tscn",
-	}
-	for def_id: String in wall_scenes.keys():
-		var scene := load(wall_scenes[def_id]) as PackedScene
-		if scene != null:
-			register_building_scene(def_id, scene)
-		else:
-			push_warning("[ConstructionManager] 无法加载 %s.tscn" % def_id)
-	# 阶段 E：兵营场景注册（复制自铁匠铺，红色调区分）
-	var barracks_scene := load("res://modules/building_gen/buildings/bld_barracks.tscn") as PackedScene
-	if barracks_scene != null:
-		register_building_scene("bld_barracks", barracks_scene)
-	else:
-		push_warning("[ConstructionManager] 无法加载 bld_barracks.tscn")
-	# 仓库场景注册（搬运系统取货点，复制自兵营改棕黄色调）
-	var warehouse_scene := load("res://modules/building_gen/buildings/bld_warehouse.tscn") as PackedScene
-	if warehouse_scene != null:
-		register_building_scene("bld_warehouse", warehouse_scene)
-	else:
-		push_warning("[ConstructionManager] 无法加载 bld_warehouse.tscn")
-
-
-# ─────────────────────────────── 建筑定义数据驱动（P0-6）────────────────────────────────
-
-## 从 buildings.tres 预加载建筑定义
-func _load_building_defs() -> void:
-	var res_path := "res://config/buildings/buildings.tres"
-	if not ResourceLoader.exists(res_path):
-		push_warning("[ConstructionManager] 建筑定义表不存在: %s" % res_path)
-		return
-	var res: Resource = load(res_path)
-	if res == null or not (res.get("variables") is Dictionary):
-		return
-	var data: Array = res.variables.get("data", [])
-	for entry in data:
-		if entry is Dictionary and entry.has("id"):
-			_building_defs_cache[entry["id"]] = entry
+	_catalog.register_scene(def_id, scene)
 
 
 ## 查询建筑定义
 func get_building_def(def_id: String) -> Dictionary:
-	return _building_defs_cache.get(def_id, {})
+	return _catalog.get_def(def_id)
 
 
 ## 返回所有已注册场景的建筑 def_id（即可建造的建筑类型）
 func get_registered_def_ids() -> Array:
-	return _building_scene_registry.keys()
+	return _catalog.get_registered_def_ids()
 
 
 ## 建筑类型是否已注册场景（可建造）
 func is_building_registered(def_id: String) -> bool:
-	return _building_scene_registry.has(def_id)
+	return _catalog.is_registered(def_id)
+
 
 func _physics_process(delta: float) -> void:
 	# 推进所有活跃项目
@@ -217,16 +193,16 @@ func start_construction(region_id: String, building_type: String, org_id: String
 func start_construction_at(region_id: String, building_type: String, cell_x: int, _org_id: String = "") -> Dictionary:
 	if _map == null:
 		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
-	if not _building_scene_registry.has(building_type):
+	if not _catalog.is_registered(building_type):
 		return {"ok": false, "error": "未注册建筑类型: %s" % building_type}
-	var scene: PackedScene = _building_scene_registry[building_type]
+	var scene: PackedScene = _catalog.get_scene(building_type)
 	# P0-9 资源检查
 	if _resources_api != null:
 		var cost_result := _check_and_consume_cost(building_type, region_id)
 		if not cost_result.ok:
 			return {"ok": false, "error": "资源不足: %s" % cost_result.reason}
 	# P0-6 从 buildings.tres 读取 width 和 build_time
-	var def: Dictionary = _building_defs_cache.get(building_type, {})
+	var def: Dictionary = _catalog.get_def(building_type)
 	var width: int = int(def.get("width", 2))
 	var total_work: float = 8.0  # 固定8次敲击完工（后续由 Excel build_time 驱动）
 	# 校验选址
@@ -274,7 +250,7 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 func _check_and_consume_cost(building_type: String, region_id: String) -> Dictionary:
 	if _resources_api == null:
 		return {"ok": true}  # 资源系统未接入，跳过检查
-	var def: Dictionary = _building_defs_cache.get(building_type, {})
+	var def: Dictionary = _catalog.get_def(building_type)
 	if def.is_empty():
 		return {"ok": true}  # 无定义，跳过
 	var costs: Dictionary = {}
@@ -315,7 +291,7 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 		(building as ScriptBuilding).set_meta("building_id", building_id)
 		(building as ScriptBuilding).set_meta("region_id", project.region_id)
 		# D2: 应用数据驱动字段（interior_mode 等）
-		var def: Dictionary = _building_defs_cache.get(project.def_id, {})
+		var def: Dictionary = _catalog.get_def(project.def_id)
 		if not def.is_empty() and (building as ScriptBuilding).has_method("apply_building_def"):
 			(building as ScriptBuilding).apply_building_def(def)
 	_buildings[building_id] = building
@@ -495,11 +471,11 @@ func _entity_blocking(cell_x: int, width: int) -> bool:
 func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) -> Dictionary:
 	if _map == null:
 		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
-	if not _building_scene_registry.has(def_id):
+	if not _catalog.is_registered(def_id):
 		return {"ok": false, "error": "未注册建筑类型: %s" % def_id}
-	var scene: PackedScene = _building_scene_registry[def_id]
+	var scene: PackedScene = _catalog.get_scene(def_id)
 	# D1: width=-1 时从 buildings.tres 读取
-	var def: Dictionary = _building_defs_cache.get(def_id, {})
+	var def: Dictionary = _catalog.get_def(def_id)
 	if width < 0:
 		width = int(def.get("width", 2))
 
@@ -655,135 +631,13 @@ func get_worker_project(worker: Node) -> ScriptConstructionProject:
 	return _assigner.get_worker_project(worker)
 
 
-# ─────────────────────────────── SQLite 存档 ────────────────────────────────
-# 详见 docs/技术/架构/SQLite存档迁移方案.md §5.2
+# ─────────────────────────────── SQLite 存档（转发到 BuildingPersistence）────────────────────────────────
 
 ## 保存建筑和建造项目到 DB
 func save_to_db(db, slot_id: int, map_id: String) -> void:
-	# 建筑
-	db.delete_rows("buildings", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
-	for b_id in _buildings.keys():
-		var b: Node = _buildings[b_id]
-		if not is_instance_valid(b) or not (b is ScriptBuilding):
-			continue
-		var typed: ScriptBuilding = b as ScriptBuilding
-		db.insert_row("buildings", {
-			"slot_id": slot_id, "building_id": b_id, "map_id": map_id,
-			"def_id": typed.def_id, "cell_x": typed.cell_x,
-			"width": typed.width, "state": typed.state,
-			"health": typed.health, "max_health": typed.max_health,
-			"is_terrain": 1 if typed.is_terrain else 0,
-			"wall_tier": typed.wall_tier,
-			"is_gate": 1 if typed.is_gate else 0,
-			"region_id": str(typed.get_meta("region_id", "")),
-		})
-	# 建造项目（只存未完工的）
-	db.delete_rows("construction_projects", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
-	for p_id in _projects.keys():
-		var p: ScriptConstructionProject = _projects[p_id]
-		if p.state == ScriptConstructionProject.State.OPERATIONAL:
-			continue
-		db.insert_row("construction_projects", {
-			"slot_id": slot_id, "project_id": p_id, "map_id": map_id,
-			"def_id": p.def_id, "cell_x": p.cell_x, "width": p.width,
-			"state": p.state, "total_work": p.total_work,
-			"current_work": p.current_work, "region_id": p.region_id,
-			"material_progress": p.material_progress,
-		})
+	_persistence.save_to_db(db, slot_id, map_id)
 
 
 ## 从 DB 恢复建筑和建造项目
 func load_from_db(db, slot_id: int, map_id: String) -> void:
-	# 清空当前运行时状态
-	_clear_all_buildings_and_projects()
-	# 恢复建筑（用 spawn_operational_building 重建，再修正状态）
-	var bld_rows: Array = db.select_rows("buildings",
-		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
-	for row in bld_rows:
-		var def_id: String = str(row["def_id"])
-		var cx: int = int(row["cell_x"])
-		var w: int = int(row["width"])
-		var result: Dictionary = spawn_operational_building(def_id, cx, w)
-		if result.get("ok", false):
-			var new_id: String = result["building_id"]
-			var b: Node = _buildings.get(new_id)
-			if b is ScriptBuilding:
-				var typed: ScriptBuilding = b as ScriptBuilding
-				typed.health = float(row["health"])
-				typed.set_state(int(row["state"]))
-				typed.wall_tier = int(row["wall_tier"])
-				typed.is_gate = bool(int(row["is_gate"]))
-				typed.set_meta("region_id", str(row["region_id"]))
-			# 替换为存档原始 building_id
-			_buildings.erase(new_id)
-			_buildings[str(row["building_id"])] = b
-			if b != null:
-				_building_to_id[b] = str(row["building_id"])
-	# 恢复建造项目
-	var proj_rows: Array = db.select_rows("construction_projects",
-		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
-	for row in proj_rows:
-		_restore_project_from_row(row)
-	# 更新 ID 计数器
-	_next_building_id = _calc_next_id(_buildings.keys(), "bld_") + 1
-	_next_project_id = _calc_next_id(_projects.keys(), "proj_") + 1
-
-
-## 清空所有建筑和项目（读档前调用）
-func _clear_all_buildings_and_projects() -> void:
-	for b in _buildings.values():
-		if is_instance_valid(b):
-			b.queue_free()
-	_buildings.clear()
-	_building_to_id.clear()
-	_projects.clear()
-	# 阶段 E：清理进度条
-	for indicator in _project_indicators.values():
-		if is_instance_valid(indicator):
-			(indicator as Node).queue_free()
-	_project_indicators.clear()
-
-
-## 从行数据恢复一个建造项目
-func _restore_project_from_row(row: Dictionary) -> void:
-	if _map == null:
-		return
-	var def_id: String = str(row["def_id"])
-	if not _building_scene_registry.has(def_id):
-		return
-	var scene: PackedScene = _building_scene_registry[def_id]
-	var total_work: float = float(row["total_work"])
-	var project_id: String = str(row["project_id"])
-	var project := ScriptConstructionProject.new(
-		project_id, def_id, int(row["cell_x"]), int(row["width"]),
-		_map, scene, total_work, str(row["region_id"]))
-	project.current_work = float(row["current_work"])
-	project.state = int(row["state"])
-	# 阶段 E：材料进度按存档真实值恢复（旧档无此字段时兼容为已满，避免阻塞）
-	project.material_progress = float(row.get("material_progress", 1.0))
-	_projects[project_id] = project
-	if not project.completed.is_connected(_on_project_completed):
-		project.completed.connect(_on_project_completed)
-	# 恢复工地障碍（读档后工地仍需阻挡通行）
-	if project.state == ScriptConstructionProject.State.UNDER_CONSTRUCTION:
-		project._create_barrier()
-	# 恢复派工池注册（否则 NPC 找不到该项目不会来帮忙）
-	if _assigner != null:
-		_assigner.add_project(project)
-	# 阶段 E：恢复进度条 + 监听进度
-	_create_progress_indicator(project)
-	if not project.progress_changed.is_connected(_on_project_progress):
-		project.progress_changed.connect(_on_project_progress)
-
-
-## 计算下一个 ID（避免恢复后冲突）
-func _calc_next_id(ids: Array, prefix: String) -> int:
-	var max_id: int = 0
-	for id in ids:
-		var s := str(id)
-		if s.begins_with(prefix):
-			var num_part: String = s.substr(prefix.length())
-			var num: int = num_part.to_int()
-			if num > max_id:
-				max_id = num
-	return max_id
+	_persistence.load_from_db(db, slot_id, map_id)

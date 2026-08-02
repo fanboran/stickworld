@@ -10,7 +10,7 @@ extends Node
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
-const ScriptVillageMap := preload("res://modules/world/scripts/village_map.gd")
+const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")
 const ScriptAIController := preload("res://modules/units/ai/ai_controller.gd")
 const ScriptBehaviorStateMachine := preload("res://modules/units/ai/behavior_state_machine.gd")
 const ScriptBehaviorBase := preload("res://modules/units/ai/behavior_base.gd")

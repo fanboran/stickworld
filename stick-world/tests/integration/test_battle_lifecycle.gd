@@ -16,8 +16,8 @@ extends Node
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
-const ScriptVillageMap := preload("res://modules/world/scripts/village_map.gd")
-const ScriptBattleInstance := preload("res://modules/combat/scripts/battle_instance.gd")
+const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")
+const ScriptBattleInstance := preload("res://modules/combat/scripts/battle/battle_instance.gd")
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 
 # ─────────────────────────────── 战斗单位配置 ────────────────────────────────

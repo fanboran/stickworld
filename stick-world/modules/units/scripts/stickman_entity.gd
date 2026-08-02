@@ -15,6 +15,8 @@ extends CharacterBody2D
 ##   ├── RigHost (Node2D, 实例化 stickman_test.tscn，禁用其脚本)
 ##   │   ├── StickmanRig (Skeleton2D)
 ##   │   └── Node2D (IK markers parent)
+##   ├── VisualController (Node, visual_controller.gd —— 动画播放/头顶进度条)
+##   ├── InteractionController (Node, interaction_controller.gd —— 按E交互/提示弹窗)
 ##   └── CollisionShape2D
 
 # ─────────────────────────────── 常量 ────────────────────────────────
@@ -24,14 +26,17 @@ const WALK_SPEED: float = 160.0
 const RUN_SPEED: float = 208.0
 ## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT）
 const WALK_ANIM_BASE: float = 100.0
-## 动画整体播放倍率（×1.4 加速）
+## 动画整体播放倍率（×1.4 加速，与 visual_controller.gd 一致）
 const ANIM_SPEED_MULT: float = 1.4
-## walk 动画最低播放速率
-const MIN_ANIM_SCALE: float = 0.2
 ## 切到 idle 的速度阈值
 const IDLE_THRESHOLD: float = 5.0
 ## 火柴人渲染缩放（对齐 stickman_test.BASE_SCALE * 1.5，适配 DESIGN_HEIGHT=1080）
 const BASE_SCALE: float = 0.5
+
+## 视觉控制器组件脚本（动画播放/头顶进度条）
+const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/entity/visual_controller.gd")
+## 交互控制器组件脚本（按E交互/提示弹窗）
+const _InteractionControllerScript: GDScript = preload("res://modules/units/scripts/entity/interaction_controller.gd")
 
 # ─────────────────────────────── @export ────────────────────────────────
 ## 是否被玩家附身（true=玩家控制，false=AI 控制）
@@ -116,6 +121,12 @@ var _hitbox_base_x: float = 0.0
 @onready var hitbox: Area2D = get_node_or_null("Hitbox")
 @onready var weapon_mount: Node2D = get_node_or_null("WeaponMount")
 
+# ─────────────────────────────── 子组件引用 ────────────────────────────────
+## 视觉控制器（动画播放/头顶进度条，_ready 装配）
+var _visual: Node = null
+## 交互控制器（按E交互/提示弹窗，_ready 装配）
+var _interaction: Node = null
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
@@ -137,12 +148,14 @@ func _input(event: InputEvent) -> void:
 		if _walk_only and _is_running:
 			_is_running = false
 			_current_speed = WALK_SPEED
-			_play_anim("walk")
+			_visual.play("walk")
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		_player_attack()
 
 
 func _ready() -> void:
+	# 装配子组件（VisualController / InteractionController）
+	_mount_components()
 	# 拿到 StickmanRig 和 IK markers 引用
 	var rig_host := get_node_or_null("RigHost")
 	if rig_host != null:
@@ -181,10 +194,28 @@ func _ready() -> void:
 	# 应用初始缩放
 	_apply_scale()
 	# 播放 idle
-	_play_anim("idle")
+	_visual.play("idle")
 	# 战斗组件：死亡信号连接
 	if health_component != null:
 		health_component.died.connect(_on_died)
+
+
+## 实例化并挂载子组件（VisualController / InteractionController）。
+## 组件通过 setup(entity) 拿到本实体引用。
+func _mount_components() -> void:
+	_visual = Node.new()
+	_visual.set_script(_VisualControllerScript)
+	_visual.name = "VisualController"
+	add_child(_visual)
+	if _visual.has_method("setup"):
+		_visual.setup(self)
+
+	_interaction = Node.new()
+	_interaction.set_script(_InteractionControllerScript)
+	_interaction.name = "InteractionController"
+	add_child(_interaction)
+	if _interaction.has_method("setup"):
+		_interaction.setup(self)
 
 
 ## 从 RigHost 的 outfoot marker 位置计算脚部 Y 偏移。
@@ -231,109 +262,20 @@ func _physics_process(delta: float) -> void:
 			hide_action_progress()
 			clear_action()
 	# 玩家交互提示（靠近仓库/工地时显示）
-	_update_interact_hint()
+	_interaction.update_hint()
 
 
-# ─────────────────────────────── 玩家交互（按E）────────────────────────────────
+# ─────────────────────────────── 玩家输入（按E / H 由交互控制器处理）────────────────────────────────
 
-## 玩家附身时按E：在仓库附近取材料，在工地附近交付/建造。
+## 玩家附身时按E：交互（取放材料 / 敲击建造，实现见 InteractionController）。
+## 按H：脱离卡死。
 func _unhandled_input(event: InputEvent) -> void:
 	if not possessed:
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_E:
-		_try_player_interact()
+		_interaction.try_interact()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_H:
 		_escape_stuck()
-
-
-func _try_player_interact() -> void:
-	if _construction_manager == null:
-		return
-	var info: Dictionary = _find_interact_target()
-	if info.is_empty():
-		return
-	var target = info.get("target", null)
-	if target == null:
-		return
-	# 工地交互
-	if target is RefCounted:
-		var project: RefCounted = target as RefCounted
-		if _carrying:
-			project.deliver_material()
-			set_carrying(false)
-		elif not project.needs_material():
-			# 敲击一次：推进建造进度 + 播放 build 动画
-			var per_hit: float = project.total_work / 8.0
-			project.add_build_progress(per_hit)
-			set_action_anim("build")
-			_player_build_timer = 1.8
-	# 仓库交互
-	elif target is Node2D:
-		if _carrying:
-			# 扔回材料到仓库
-			set_carrying(false)
-		else:
-			set_carrying(true)
-
-
-# ─────────────────────────────── 交互目标检测 ────────────────────────────────
-
-## 从建筑 PassageBarrier CollisionShape2D 读取真实世界边界。
-## 返回 {left, right, center} 或回退到 width*32 估算。
-func _get_building_barrier_bounds(building: Node2D) -> Dictionary:
-	var pb: Node = building.get_node_or_null("PassageBarrier") if building.has_method("get_node_or_null") else null
-	if pb != null:
-		for child in pb.get_children():
-			if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
-				var cs: CollisionShape2D = child as CollisionShape2D
-				var s: RectangleShape2D = (cs.shape as RectangleShape2D)
-				var cx: float = cs.global_position.x
-				return {"left": cx - s.size.x * 0.5, "right": cx + s.size.x * 0.5, "center": cx}
-	# 回退：用 width 属性估算
-	var w: int = int(building.get("width")) if "width" in building else 2
-	var left_x: float = building.global_position.x
-	return {"left": left_x, "right": left_x + float(w) * 32.0, "center": left_x + float(w) * 16.0}
-
-## 检测玩家 X 是否在工地建筑范围外延 margin 内。
-func _is_near_project(project: RefCounted, margin: float = 80.0) -> bool:
-	var left_x: float = float(project.cell_x) * 32.0
-	var right_x: float = left_x + float(project.width) * 32.0
-	return global_position.x >= left_x - margin and global_position.x <= right_x + margin
-
-## 检测玩家 X 是否在建筑 PassageBarrier 范围外延 margin 内。
-func _is_near_building(building: Node2D, margin: float = 80.0) -> bool:
-	var bounds: Dictionary = _get_building_barrier_bounds(building)
-	return global_position.x >= float(bounds.left) - margin and global_position.x <= float(bounds.right) + margin
-
-## 查找当前可交互目标及提示文字。返回 {target, hint, center_x} 或空。
-func _find_interact_target() -> Dictionary:
-	if _construction_manager == null:
-		return {}
-	# 优先：工地
-	var project: RefCounted = _construction_manager.get_nearest_project(global_position)
-	if project != null and _is_near_project(project):
-		var left_x: float = float(project.cell_x) * 32.0
-		var right_x: float = left_x + float(project.width) * 32.0
-		var cx: float = (left_x + right_x) * 0.5
-		var hint: String = ""
-		if _carrying:
-			hint = "按E交付材料"
-		elif project.needs_material():
-			hint = "材料不足，等待搬运"
-		else:
-			hint = "按E敲击建造"
-		return {"target": project, "hint": hint, "center_x": cx}
-	# 仓库
-	var warehouse: Node2D = _construction_manager.get_nearest_warehouse(global_position)
-	if warehouse != null and _is_near_building(warehouse):
-		var bounds: Dictionary = _get_building_barrier_bounds(warehouse)
-		var hint: String = ""
-		if _carrying:
-			hint = "按E放回材料"
-		else:
-			hint = "按E拿起建材"
-		return {"target": warehouse, "hint": hint, "center_x": float(bounds.center)}
-	return {}
 
 
 # ─────────────────────────────── 玩家输入 ────────────────────────────────
@@ -373,36 +315,31 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 	if allow_run and _current_speed >= walk_cap:
 		_is_running = true
 		_current_speed = run_cap
-		_play_anim("run")
-		if rig != null:
-			rig.set_anim_speed(1.0 * ANIM_SPEED_MULT)
+		_visual.play("run")
+		_visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
 	else:
 		# 不允许跑时，速度封顶在 walk_cap（受地形影响）
 		_current_speed = minf(_current_speed, walk_cap)
 		if _current_anim != "walk" and _current_anim != "run":
-			_play_anim("walk")
+			_visual.play("walk")
 		if _current_anim == "walk" and not _is_running:
-			var s := _current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT
-			if rig != null:
-				rig.set_anim_speed(maxf(s, MIN_ANIM_SCALE))
+			_visual.set_anim_speed(_current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT)
 
 
 func _handle_deceleration(delta: float) -> void:
 	if _is_running:
 		_is_running = false
 		_current_speed = WALK_SPEED * _terrain_speed_mult()
-		_play_anim("walk")
+		_visual.play("walk")
 	if _current_speed > 0:
 		_current_speed -= decel * delta
 		if _current_speed <= IDLE_THRESHOLD:
 			_current_speed = 0.0
-			_play_anim("idle")
+			_visual.play("idle")
 		else:
 			if _current_anim == "idle":
-				_play_anim("walk")
-			var s := _current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT
-			if rig != null:
-				rig.set_anim_speed(maxf(s, MIN_ANIM_SCALE))
+				_visual.play("walk")
+			_visual.set_anim_speed(_current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT)
 
 
 # ─────────────────────────────── AI 输入处理 ────────────────────────────────
@@ -426,9 +363,8 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 		if run:
 			_is_running = true
 			_current_speed = RUN_SPEED * _terrain_speed_mult()
-			_play_anim("run")
-			if rig != null:
-				rig.set_anim_speed(1.0 * ANIM_SPEED_MULT)
+			_visual.play("run")
+			_visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
 		else:
 			_handle_acceleration(delta, allow_run)
 		velocity = dir * _current_speed
@@ -478,150 +414,38 @@ func _sync_markers_transform() -> void:
 	_markers_parent.global_transform = rig.global_transform
 
 
-func _play_anim(anim_name: String) -> void:
-	if rig == null:
-		return
-	# 动作锁定时保持当前动作动画（如 build），不切走
-	if _action_locked:
-		return
-	# 搬运状态：walk/idle 映射为 walk_carry（手搬姿势）
-	var play_name: String = anim_name
-	if _carrying and (anim_name == "walk" or anim_name == "idle"):
-		play_name = "walk_carry"
-	rig.play(play_name)
-	_current_anim = anim_name
-
+# ─────────────────────────────── 动画 API（转发到 VisualController）────────────────────────────────
 
 ## 设置搬运状态：搬运工持物时 walk 切换为 walk_carry 动画。
 ## 由 BehaviorHaul 在 enter/exit 时调用。
 func set_carrying(v: bool) -> void:
-	_carrying = v
-	# 立即同步动画：搬运时切 walk_carry，否则按速度切 walk/idle
-	if rig == null:
-		return
-	if v:
-		rig.play("walk_carry")
-	else:
-		if _current_speed > IDLE_THRESHOLD:
-			rig.play("walk")
-		else:
-			rig.play("idle")
+	_visual.set_carrying(v)
 
 
-## 锁定动作动画（如 build 敲击），锁定期间 _play_anim 不切换。
+## 锁定动作动画（如 build 敲击），锁定期间动画不切换。
 ## 由 BehaviorWork 在工地播放建造动画时调用。
 func set_action_anim(anim_name: String) -> void:
-	_action_locked = true
-	if rig != null:
-		rig.play(anim_name)
-	_current_anim = anim_name
+	_visual.set_action_anim(anim_name)
 
 
 ## 解除动作锁定，恢复正常动画（根据当前速度切 walk/idle）。
 func clear_action() -> void:
-	_action_locked = false
-	if _current_speed > IDLE_THRESHOLD:
-		_play_anim("walk")
-	else:
-		_play_anim("idle")
-
-
-# ─────────────────────────────── 头顶动作进度条 ────────────────────────────────
-
-var _action_progress_indicator: Node2D = null
-
-## 确保头顶进度条节点存在。
-func _ensure_action_indicator() -> void:
-	if _action_progress_indicator != null and is_instance_valid(_action_progress_indicator):
-		return
-	var cls := load("res://modules/units/scripts/action_progress_indicator.gd")
-	_action_progress_indicator = cls.new()
-	_action_progress_indicator.position = Vector2(0, -130.0)  # 头顶上方
-	add_child(_action_progress_indicator)
+	_visual.clear_action()
 
 
 ## 设置头顶动作进度（0~1，>0 显示，0 隐藏）。由 BehaviorHaul/BehaviorWork/玩家调用。
 func set_action_progress(ratio: float) -> void:
-	_ensure_action_indicator()
-	if _action_progress_indicator != null:
-		_action_progress_indicator.set_progress(ratio)
+	_visual.set_progress(ratio)
 
 
 ## 隐藏头顶动作进度条。
 func hide_action_progress() -> void:
-	if _action_progress_indicator != null:
-		_action_progress_indicator.hide_bar()
+	_visual.hide_progress()
 
 
-# ─────────────────────────────── 玩家交互提示 ────────────────────────────────
-
-## 交互提示节点（Node2D 容器，挂到地图前景层，跟随目标建筑显示）
-var _interact_hint_node: Node2D = null
-var _interact_hint_label: Label = null
-
-## 确保交互提示节点存在，挂到地图前景层（z_index=10，在建筑之上）。
-func _ensure_interact_hint() -> void:
-	if _interact_hint_node != null and is_instance_valid(_interact_hint_node):
-		return
-	if _map_ref == null:
-		return
-	_interact_hint_node = Node2D.new()
-	_interact_hint_node.name = "InteractHint"
-	_interact_hint_node.visible = false
-	_interact_hint_node.z_index = 20
-	# 挂到 foreground_layer（z_index=10），确保在建筑之上
-	var layer: Node2D = _map_ref.get("foreground_layer") if "foreground_layer" in _map_ref else null
-	if layer != null:
-		layer.add_child(_interact_hint_node)
-	else:
-		_map_ref.add_child(_interact_hint_node)
-	_interact_hint_label = Label.new()
-	_interact_hint_label.add_theme_font_size_override("font_size", 14)
-	_interact_hint_label.position = Vector2(-100, -20)
-	_interact_hint_label.size = Vector2(200, 24)
-	_interact_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_interact_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	# 暗色圆角背景
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0, 0, 0, 0.8)
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_left = 4
-	style.corner_radius_bottom_right = 4
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	style.content_margin_top = 4
-	style.content_margin_bottom = 4
-	style.border_width_bottom = 1
-	style.border_width_top = 1
-	style.border_width_left = 1
-	style.border_width_right = 1
-	style.border_color = Color(1, 1, 1, 0.25)
-	_interact_hint_label.add_theme_stylebox_override("normal", style)
-	_interact_hint_node.add_child(_interact_hint_label)
-
-## 隐藏交互提示。
-func _hide_interact_hint() -> void:
-	if _interact_hint_node != null and is_instance_valid(_interact_hint_node):
-		_interact_hint_node.visible = false
-
-## 更新交互提示（玩家附身时，靠近仓库/工地在建筑上方显示弹窗）。
-func _update_interact_hint() -> void:
-	if not possessed or _construction_manager == null or _map_ref == null:
-		_hide_interact_hint()
-		return
-	_ensure_interact_hint()
-	if _interact_hint_node == null:
-		return
-	var info: Dictionary = _find_interact_target()
-	if info.is_empty():
-		_hide_interact_hint()
-		return
-	# 弹窗显示在目标建筑上方
-	var ground_y: float = _map_ref.get("ground_y") if "ground_y" in _map_ref else 810.0
-	_interact_hint_node.global_position = Vector2(float(info.center_x), ground_y - 280.0)
-	_interact_hint_label.text = String(info.hint)
-	_interact_hint_node.visible = true
+## 获取当前动画名
+func get_current_anim() -> String:
+	return _current_anim
 
 
 # ─────────────────────────────── 玩家攻击（§7.5）────────────────────────────────
@@ -796,11 +620,6 @@ func get_facing() -> int:
 	return _facing
 
 
-## 获取当前动画名
-func get_current_anim() -> String:
-	return _current_anim
-
-
 func _on_possession_changed(p: bool) -> void:
 	# 附身切换时重置速度，避免残留
 	if not p:
@@ -850,7 +669,7 @@ func get_construction_manager() -> Node:
 func _on_died() -> void:
 	ai_stop()
 	velocity = Vector2.ZERO
-	_play_anim("dead")
+	_visual.play("dead")
 	# 禁用 hitbox 避免继续被攻击
 	if hitbox != null:
 		hitbox.set_deferred("monitorable", false)

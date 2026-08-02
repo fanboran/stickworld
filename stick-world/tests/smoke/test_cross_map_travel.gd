@@ -16,10 +16,10 @@ extends Node
 ##   7. ChunkTrigger 配置验证
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptSceneLoader := preload("res://modules/world/scripts/scene_loader.gd")
-const ScriptVillageMap := preload("res://modules/world/scripts/village_map.gd")
-const ScriptRoadMap := preload("res://modules/world/scripts/road_map.gd")
-const ScriptChunkTrigger := preload("res://modules/world/scripts/chunk_trigger.gd")
+const ScriptSceneLoader := preload("res://modules/world/scripts/loading/scene_loader.gd")
+const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")
+const ScriptRoadMap := preload("res://modules/world/scripts/map/road_map.gd")
+const ScriptChunkTrigger := preload("res://modules/world/scripts/loading/chunk_trigger.gd")
 const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
 # WorldAPI / PlayerControlAPI 是全局 class_name
 

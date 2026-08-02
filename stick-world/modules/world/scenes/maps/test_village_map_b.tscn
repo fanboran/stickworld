@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://bvillageb002"]
 
-[ext_resource type="Script" path="res://modules/world/scripts/village_map.gd" id="1_vmap"]
+[ext_resource type="Script" path="res://modules/world/scripts/map/village_map.gd" id="1_vmap"]
 [ext_resource type="Script" path="res://modules/world/placement_grid/placement_grid.gd" id="2_grid"]
-[ext_resource type="Script" path="res://modules/world/scripts/initial_buildings_list.gd" id="3_ibl"]
-[ext_resource type="Script" path="res://modules/world/scripts/chunk_trigger.gd" id="5_trigger"]
+[ext_resource type="Script" path="res://modules/world/scripts/map/initial_buildings_list.gd" id="3_ibl"]
+[ext_resource type="Script" path="res://modules/world/scripts/loading/chunk_trigger.gd" id="5_trigger"]
 
 [sub_resource type="RectangleShape2D" id="shape_exit_left"]
 size = Vector2(64, 270)

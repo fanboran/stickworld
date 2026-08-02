@@ -4,8 +4,8 @@ extends Node
 ## 不进场景树，确定性。
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptCommandChain := preload("res://modules/combat/scripts/command_chain.gd")
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/tactical_orders.gd")
+const ScriptCommandChain := preload("res://modules/combat/scripts/command/command_chain.gd")
+const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
 
 var _runner: TestRunner
 

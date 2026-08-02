@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://broadmap001"]
 
-[ext_resource type="Script" path="res://modules/world/scripts/road_map.gd" id="1_road"]
-[ext_resource type="Script" path="res://modules/world/scripts/chunk_trigger.gd" id="2_trigger"]
+[ext_resource type="Script" path="res://modules/world/scripts/map/road_map.gd" id="1_road"]
+[ext_resource type="Script" path="res://modules/world/scripts/loading/chunk_trigger.gd" id="2_trigger"]
 
 [sub_resource type="RectangleShape2D" id="shape_exit"]
 size = Vector2(64, 270)

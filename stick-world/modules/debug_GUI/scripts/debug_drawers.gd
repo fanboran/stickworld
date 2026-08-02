@@ -88,8 +88,8 @@ static func draw_barriers(control: Control, ctx: Dictionary) -> void:
 			_draw_area_rect(control, ctx, area, Color(0.6, 0.2, 0.8, 0.3))
 
 
-## 辅助：绘制 Area2D 的矩形范围
-static func _draw_area_rect(control: Control, ctx: Dictionary, area: Area2D, color: Color) -> void:
+## 辅助：绘制障碍体的矩形范围（WalkBarrier/PassageBarrier 为 StaticBody2D）
+static func _draw_area_rect(control: Control, ctx: Dictionary, area: Node2D, color: Color) -> void:
 	for child in area.get_children():
 		if child is CollisionShape2D:
 			var cs: CollisionShape2D = child as CollisionShape2D

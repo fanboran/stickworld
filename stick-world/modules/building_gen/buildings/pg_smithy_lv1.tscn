@@ -18,7 +18,7 @@ width = 16
 [node name="Exterior" type="Node2D" parent="."]
 position = Vector2(28, 0)
 
-[node name="PassageBarrier" type="Area2D" parent="."]
+[node name="PassageBarrier" type="StaticBody2D" parent="."]
 visible = false
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier"]

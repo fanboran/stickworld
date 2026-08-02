@@ -24,7 +24,7 @@ color = Color(0, 0, 0, 1)
 polygon = PackedVector2Array(508, -96, 512, -96, 512, 0, 508, 0)
 color = Color(0, 0, 0, 1)
 
-[node name="PassageBarrier" type="Area2D" parent="."]
+[node name="PassageBarrier" type="StaticBody2D" parent="."]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier"]
 position = Vector2(256, -48)

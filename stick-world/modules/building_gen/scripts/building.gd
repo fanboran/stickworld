@@ -62,7 +62,7 @@ var max_health: float = 100.0
 ## 子节点引用
 ## 外观节点（Sprite2D / Polygon2D / ColorRect 等 CanvasItem 子类，需有 modulate 属性）
 var _exterior: CanvasItem = null
-var _passage_barrier: Area2D = null
+var _passage_barrier: StaticBody2D = null
 var _work_slots_node: Node2D = null
 var _work_slot_markers: Array = []  # Marker2D[] 缓存
 
@@ -136,7 +136,7 @@ func _lookup_children() -> void:
 		var sprite := get_node_or_null("Sprite2D")
 		if sprite is CanvasItem:
 			_exterior = sprite as CanvasItem
-	_passage_barrier = get_node_or_null("PassageBarrier") as Area2D
+	_passage_barrier = get_node_or_null("PassageBarrier") as StaticBody2D
 
 	# WorkSlots 兼容两种路径（§5.3 向后兼容）
 	_work_slots_node = get_node_or_null("WorkSlots") as Node2D
@@ -267,9 +267,8 @@ func demolish() -> void:
 	if state == State.DESTROYED:
 		return
 	set_state(State.DESTROYED)
-	# 城墙/城门被破坏时禁用 PassageBarrier，单位可通过
+	# 城墙/城门被破坏时禁用 PassageBarrier 碰撞，单位可通过
 	if _passage_barrier != null and wall_tier > 0:
-		_passage_barrier.monitoring = false
 		_passage_barrier.visible = false
 		for child in _passage_barrier.get_children():
 			if child is CollisionShape2D:
@@ -303,8 +302,8 @@ func is_wall() -> bool:
 	return wall_tier > 0
 
 
-## 获取 PassageBarrier Area2D（供 VillageMap.get_passage_barriers 收集）
-func get_passage_barrier() -> Area2D:
+## 获取 PassageBarrier StaticBody2D（供 VillageMap.get_passage_barriers 收集）
+func get_passage_barrier() -> StaticBody2D:
 	return _passage_barrier
 
 

@@ -24,8 +24,9 @@ const CELL_SIZE: float = 32.0
 const ARRIVE_THRESHOLD: float = 24.0
 ## 单格高度（工作位相对地面线下方一点，避免遮住建筑）
 const WORK_OFFSET_Y: float = 40.0
-## 站在工地临时障碍外的水平距离（避免工人走进通行障碍）
-const STANDOFF_X: float = 40.0
+## 站在工地临时障碍外的水平距离（避免工人走进通行障碍）。
+## 实体脚部碰撞箱半宽约 41.5px，取 44 让工人贴近建筑边缘而不触发回退
+const STANDOFF_X: float = 44.0
 ## build 动画一次循环时长（秒，与 build.tres length 一致）
 const BUILD_ANIM_DURATION: float = 1.8
 ## 完工所需敲击次数（每次 build 动画循环推进 total_work / BUILD_HITS）

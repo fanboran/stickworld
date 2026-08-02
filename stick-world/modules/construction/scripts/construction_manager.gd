@@ -65,8 +65,14 @@ func _ready() -> void:
 
 # ─────────────────────────────── 地图注入 ────────────────────────────────
 
-## 由外部（GameRoot / SceneLoader）注入当前地图实例
+## 由外部（GameRoot / SceneLoader）注入当前地图实例。
+## 地图切换时自动清空旧地图的建筑/项目注册表，防止悬空引用。
 func set_map(map: Node2D) -> void:
+	if _map != null and is_instance_valid(_map) and _map != map:
+		# 地图切换：旧地图节点正被 SceneLoader 卸载，清空其建筑/项目注册表，
+		# 否则 _buildings 会残留已释放 Node 引用，get_nearest_warehouse 等迭代会
+		# 触发 "Trying to cast a freed object" 报错（详见 P0 收口执行计划）。
+		_clear_all_buildings_and_projects()
 	_map = map
 
 
@@ -79,9 +85,15 @@ func get_map() -> Node2D:
 func get_nearest_warehouse(pos: Vector2) -> Node2D:
 	var best: Node2D = null
 	var best_dist: float = INF
+	var stale: Array[String] = []
 	for building_id: String in _buildings.keys():
-		var b: Node2D = _buildings[building_id] as Node2D
-		if b == null or not is_instance_valid(b):
+		var entry = _buildings[building_id]
+		# 先校验有效性再转型：对已释放对象执行 `as Node2D` 会报 "Trying to cast a freed object"
+		if not is_instance_valid(entry):
+			stale.append(building_id)
+			continue
+		var b: Node2D = entry as Node2D
+		if b == null:
 			continue
 		if b.get("def_id") != "bld_warehouse":
 			continue
@@ -89,6 +101,8 @@ func get_nearest_warehouse(pos: Vector2) -> Node2D:
 		if d < best_dist:
 			best_dist = d
 			best = b
+	for bid in stale:
+		_buildings.erase(bid)
 	return best
 
 
@@ -225,6 +239,9 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	var validate_result := ScriptPlacementSystem.validate(placement_grid, cell_x, width)
 	if not validate_result.ok:
 		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
+	# 放置校验：选址范围内有实体（玩家/NPC）则拒绝，防止放置后玩家被罩在建筑内
+	if _entity_blocking(cell_x, width):
+		return {"ok": false, "error": "选址范围内有单位，无法放置"}
 	# 阶段 F：建造自动清场（砍树给木材）
 	_clear_resource_nodes_in_area(cell_x, width, region_id)
 	# 创建项目
@@ -233,6 +250,8 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	var project := ScriptConstructionProject.new(project_id, building_type, cell_x, width, _map, scene, total_work, region_id)
 	_projects[project_id] = project
 	_assigner.add_project(project)
+	# 项目创建即立工地障碍（不等派工——否则无空闲工人时工地无碰撞箱，玩家可走进工地）
+	project._create_barrier()
 	# 监听完工，自动注册 Building
 	if not project.completed.is_connected(_on_project_completed):
 		project.completed.connect(_on_project_completed)
@@ -350,6 +369,8 @@ func _update_city_terrain_mask() -> void:
 		return
 	var walls: Array = []
 	for b in _buildings.values():
+		if not is_instance_valid(b):
+			continue
 		if b is ScriptBuilding and (b as ScriptBuilding).is_wall():
 			var typed: ScriptBuilding = b as ScriptBuilding
 			if typed.state == ScriptBuilding.State.OPERATIONAL or typed.state == ScriptBuilding.State.DAMAGED:
@@ -398,6 +419,8 @@ func get_building_state(building_id: String) -> Dictionary:
 	if not _buildings.has(building_id):
 		return {"ok": false, "error": "建筑不存在: %s" % building_id}
 	var b: Node = _buildings[building_id]
+	if not is_instance_valid(b):
+		return {"ok": false, "error": "建筑已释放: %s" % building_id}
 	if not (b is ScriptBuilding):
 		return {"ok": false, "error": "节点非 Building: %s" % building_id}
 	var typed: ScriptBuilding = b as ScriptBuilding
@@ -438,6 +461,34 @@ func get_all_project_ids() -> Array:
 
 # ─────────────────────────────── 拆除 ────────────────────────────────
 
+## 选址范围内是否有实体（玩家/NPC）阻挡放置。
+## 判定：实体脚部（Collider）位于建筑体 Y 范围（约 [baseline-390, baseline]）内且 X 在选址范围，
+## 防止放置后玩家被罩在建筑内；站在建筑脚下空地（Y 更大）不算妨碍。
+func _entity_blocking(cell_x: int, width: int) -> bool:
+	if _map == null or not _map.has_method("get_entities"):
+		return false
+	var left_x: float = float(cell_x) * 32.0
+	var right_x: float = left_x + float(width) * 32.0
+	# 建筑体 Y 范围（与 PassageBarrier 一致：约 [baseline-390, baseline]，不含脚下空地）
+	var ground_y: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0)
+	var baseline_offset: float = float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
+	var baseline: float = ground_y + baseline_offset
+	var body_top: float = baseline - 390.0
+	var body_bottom: float = baseline
+	for e in _map.get_entities():
+		if e == null or not is_instance_valid(e):
+			continue
+		var col := e.get_node_or_null("Collider") as CollisionShape2D
+		var center_y: float = col.global_position.y if col != null else e.global_position.y
+		var half_h: float = (col.shape as RectangleShape2D).size.y * 0.5 if col != null and col.shape is RectangleShape2D else 6.0
+		if center_y + half_h < body_top or center_y - half_h > body_bottom:
+			continue  # 脚部在建筑体区域外（脚下空地）→ 不挡
+		var x: float = e.global_position.x
+		if x >= left_x - 20.0 and x <= right_x + 20.0:
+			return true
+	return false
+
+
 ## 直接生成已完工建筑（OPERATIONAL 状态），跳过建造过程。
 ## 用于：InitialBuildingsList 预置建筑、地形建筑初始化、测试快速部署。
 ## 返回 {ok, building_id, cell_x, width} 或 {ok:false, error}。
@@ -462,6 +513,9 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	var validate_result := ScriptPlacementSystem.validate(placement_grid, cell_x, width)
 	if not validate_result.ok:
 		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
+	# 放置校验：选址范围内有实体（玩家/NPC）则拒绝，防止放置后玩家被罩在建筑内
+	if _entity_blocking(cell_x, width):
+		return {"ok": false, "error": "选址范围内有单位，无法放置"}
 
 	# 阶段 F：建造自动清场（砍树给木材）
 	_clear_resource_nodes_in_area(cell_x, width, "")
@@ -634,6 +688,7 @@ func save_to_db(db, slot_id: int, map_id: String) -> void:
 			"def_id": p.def_id, "cell_x": p.cell_x, "width": p.width,
 			"state": p.state, "total_work": p.total_work,
 			"current_work": p.current_work, "region_id": p.region_id,
+			"material_progress": p.material_progress,
 		})
 
 
@@ -704,11 +759,17 @@ func _restore_project_from_row(row: Dictionary) -> void:
 		_map, scene, total_work, str(row["region_id"]))
 	project.current_work = float(row["current_work"])
 	project.state = int(row["state"])
-	# 阶段 E：读档时材料进度视为已满（不阻塞建造继续推进）
-	project.material_progress = 1.0
+	# 阶段 E：材料进度按存档真实值恢复（旧档无此字段时兼容为已满，避免阻塞）
+	project.material_progress = float(row.get("material_progress", 1.0))
 	_projects[project_id] = project
 	if not project.completed.is_connected(_on_project_completed):
 		project.completed.connect(_on_project_completed)
+	# 恢复工地障碍（读档后工地仍需阻挡通行）
+	if project.state == ScriptConstructionProject.State.UNDER_CONSTRUCTION:
+		project._create_barrier()
+	# 恢复派工池注册（否则 NPC 找不到该项目不会来帮忙）
+	if _assigner != null:
+		_assigner.add_project(project)
 	# 阶段 E：恢复进度条 + 监听进度
 	_create_progress_indicator(project)
 	if not project.progress_changed.is_connected(_on_project_progress):

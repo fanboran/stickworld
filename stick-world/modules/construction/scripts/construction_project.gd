@@ -62,7 +62,7 @@ var _hauler: Node = null
 ## 每次搬运交付的材料进度增量（25%，4 次往返填满）
 const HAUL_PAYLOAD_FRACTION: float = 0.25
 ## 工地临时障碍（建造中阻挡通行，完工移除）
-var _barrier: Area2D = null
+var _barrier: StaticBody2D = null
 ## 完工后实例化的 Building 引用（state != OPERATIONAL 时为 null）
 var building: Node = null
 
@@ -251,6 +251,8 @@ func _start() -> void:
 ## 创建工地临时障碍（建造中阻挡通行，完工移除）。
 ## 从建筑场景模板读取 PassageBarrier 碰撞箱参数，确保与完工后建筑完全一致。
 func _create_barrier() -> void:
+	if _barrier != null and is_instance_valid(_barrier):
+		return  # 已创建（项目创建时与第一个工人派工时都可能调用）
 	if map == null:
 		return
 	var host: Node2D = map.get("walk_barrier") if "walk_barrier" in map else null
@@ -273,8 +275,11 @@ func _create_barrier() -> void:
 						barrier_offset_y = cs.position.y
 						break
 			temp.queue_free()
-	_barrier = Area2D.new()
+	_barrier = StaticBody2D.new()
 	_barrier.visible = false
+	# 与实体同层（layer 2）：实体 collision_mask=3 包含 layer 2，move_and_slide 自然阻挡
+	_barrier.collision_layer = 2
+	_barrier.collision_mask = 0
 	var shape := RectangleShape2D.new()
 	shape.size = barrier_size
 	var col := CollisionShape2D.new()

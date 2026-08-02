@@ -384,7 +384,8 @@ func _update_dirt_road_visual() -> void:
 	if _dirt_road_poly == null:
 		_dirt_road_poly = Polygon2D.new()
 		_dirt_road_poly.color = Color(0.62, 0.50, 0.32, 1.0)  # 土黄色
-		_dirt_road_poly.z_index = 2  # 在 terrain_layer / decoration_layer 之上，确保路面不被资源遮挡
+		# z=1（decoration 层）：低于建筑（BuildingHost z=2），否则路面盖住建筑画面
+		_dirt_road_poly.z_index = 1
 		add_child(_dirt_road_poly)
 	var x0: float = float(min_cell) * 32.0
 	var x1: float = float(max_cell + 1) * 32.0
@@ -393,18 +394,18 @@ func _update_dirt_road_visual() -> void:
 
 # ─────────────────────────────── 通行障碍查询（§7.1.2）────────────────────────────────
 
-## 获取所有 WalkBarrier Area2D 列表（地图级通行障碍）
+## 获取所有 WalkBarrier 静态体列表（地图级通行障碍，供 DebugOverlay 绘制）
 func get_walk_barriers() -> Array:
 	if walk_barrier == null:
 		return []
 	var barriers: Array = []
 	for child in walk_barrier.get_children():
-		if child is Area2D:
+		if child is StaticBody2D:
 			barriers.append(child)
 	return barriers
 
 
-## 获取所有建筑级 PassageBarrier Area2D 列表
+## 获取所有建筑级 PassageBarrier StaticBody2D 列表（供 DebugOverlay 绘制）
 ## 同时扫描 building_host（动态建筑）和 terrain_buildings（地形建筑）
 func get_passage_barriers() -> Array:
 	var barriers: Array = []
@@ -413,7 +414,7 @@ func get_passage_barriers() -> Array:
 			continue
 		for building in host.get_children():
 			var pb: Node = building.get_node_or_null("PassageBarrier") if building.has_method("get_node_or_null") else null
-			if pb != null and pb is Area2D:
+			if pb != null and pb is StaticBody2D:
 				barriers.append(pb)
 	return barriers
 

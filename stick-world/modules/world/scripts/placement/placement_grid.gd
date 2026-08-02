@@ -14,7 +14,7 @@ extends Node
 ## 阶段 F：支持动态扩展（expand_to），cell_x 可为负数（相对坐标系统）。
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
-const ScriptGridCell := preload("res://modules/world/placement_grid/grid_cell.gd")
+const ScriptGridCell := preload("res://modules/world/scripts/placement/grid_cell.gd")
 
 ## 单元格尺寸（像素，即每个竖向条带的宽度）
 const CELL_SIZE: int = 32

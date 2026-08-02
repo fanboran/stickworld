@@ -1,5 +1,5 @@
 class_name BehaviorAttack
-extends "res://modules/units/ai/behavior_base.gd"
+extends "res://modules/units/scripts/ai/behavior_base.gd"
 ## 攻击行为 -- 找最近敌人 -> 接近到射程内 -> 攻击（命中帧->伤害事件）。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §7.2 / §7.4 / §8。

@@ -1,5 +1,5 @@
 class_name BehaviorSeekCover
-extends "res://modules/units/ai/behavior_base.gd"
+extends "res://modules/units/scripts/ai/behavior_base.gd"
 ## 找掩体行为 -- 查询最佳掩体，移动过去，停留并还击，完成后回 attack。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §7.2 / §8.2（cover_system）。

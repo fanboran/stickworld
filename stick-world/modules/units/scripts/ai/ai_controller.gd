@@ -14,12 +14,12 @@ extends Node
 #   - wander 仅保留供战术号令等场景显式调用
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
-const ScriptBehaviorWork := preload("res://modules/units/ai/behavior_work.gd")
-const ScriptBehaviorMove := preload("res://modules/units/ai/behavior_move.gd")
-const ScriptBehaviorAttack := preload("res://modules/units/ai/behavior_attack.gd")
-const ScriptBehaviorSeekCover := preload("res://modules/units/ai/behavior_seek_cover.gd")
-const ScriptBehaviorRetreat := preload("res://modules/units/ai/behavior_retreat.gd")
-const ScriptBehaviorHaul := preload("res://modules/units/ai/behavior_haul.gd")
+const ScriptBehaviorWork := preload("res://modules/units/scripts/ai/behavior_work.gd")
+const ScriptBehaviorMove := preload("res://modules/units/scripts/ai/behavior_move.gd")
+const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
+const ScriptBehaviorSeekCover := preload("res://modules/units/scripts/ai/behavior_seek_cover.gd")
+const ScriptBehaviorRetreat := preload("res://modules/units/scripts/ai/behavior_retreat.gd")
+const ScriptBehaviorHaul := preload("res://modules/units/scripts/ai/behavior_haul.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）

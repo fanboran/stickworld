@@ -1,5 +1,5 @@
 class_name BehaviorMove
-extends "res://modules/units/ai/behavior_base.gd"
+extends "res://modules/units/scripts/ai/behavior_base.gd"
 ## 移动行为 -- 向目标点直线移动，到达后完成。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §7.2。

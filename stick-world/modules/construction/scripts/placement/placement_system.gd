@@ -11,7 +11,7 @@ extends RefCounted
 ##
 ## P0 不实现 ghost 预览 UI（玩家点击建造 UI 留到阶段 0.6）。
 
-const ScriptPlacementValidator := preload("res://modules/world/placement_grid/placement_validator.gd")
+const ScriptPlacementValidator := preload("res://modules/world/scripts/placement/placement_validator.gd")
 
 
 # ─────────────────────────────── 校验 ────────────────────────────────

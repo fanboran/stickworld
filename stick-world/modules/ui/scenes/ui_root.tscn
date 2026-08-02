@@ -46,6 +46,10 @@ text = "时间: 08:00"
 layout_mode = 2
 text = "居中: 关"
 
+[node name="StuckButton" type="Button" parent="GlobalHUD/MarginContainer/HBoxContainer" unique_id=137787553]
+layout_mode = 2
+text = "脱困(H)"
+
 [node name="NotificationLabel" type="Label" parent="GlobalHUD" unique_id=1766089372]
 layout_mode = 1
 anchors_preset = 7

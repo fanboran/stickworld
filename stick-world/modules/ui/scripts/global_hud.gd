@@ -10,6 +10,7 @@ extends Control
 @onready var time_label: Label = get_node_or_null("MarginContainer/TimeLabel")
 @onready var notification_label: Label = get_node_or_null("NotificationLabel")
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
+@onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -20,6 +21,8 @@ func _ready() -> void:
 	if centered_button != null:
 		centered_button.pressed.connect(_on_centered_button_pressed)
 		_update_centered_button_text()
+	if stuck_button != null:
+		stuck_button.pressed.connect(_on_stuck_button_pressed)
 
 
 func _process(_delta: float) -> void:
@@ -120,3 +123,28 @@ func _update_centered_button_text() -> void:
 	if cam == null or not cam.has_method("is_centered_mode"):
 		return
 	centered_button.text = "居中: 开" if cam.is_centered_mode() else "居中: 关"
+
+
+# ─────────────────────────────── 脱离卡死（H 键 / 按钮）────────────────────────────────
+
+## 获取 GameRoot（向上遍历祖先节点查找）
+func _get_game_root() -> Node:
+	var root := get_parent()
+	while root:
+		if root.has_method("get_player_entity"):
+			return root
+		root = root.get_parent()
+	return null
+
+
+func _on_stuck_button_pressed() -> void:
+	var gr := _get_game_root()
+	if gr == null:
+		show_notification("脱困", "未找到游戏根节点", "error")
+		return
+	var e: Node2D = gr.get_player_entity() if gr.has_method("get_player_entity") else null
+	if e == null or not is_instance_valid(e) or not e.has_method("_escape_stuck"):
+		show_notification("脱困", "未找到玩家实体", "error")
+		return
+	e._escape_stuck()
+	show_notification("脱困", "已随机传送到附近空旷地带", "info")

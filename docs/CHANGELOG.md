@@ -8,6 +8,23 @@
 
 ## [未发布]
 
+### 近战剑击：临时配剑 + 程序化挥砍 + 物理受击反馈
+
+- **临时配剑**：所有火柴人自动挂载占位剑（WeaponMount 挂到 IK 手部 marker innerhand，GripPoint 握把对齐）；攻击距离 140→80（剑长）、伤害 12→15（对齐 stickmen.tres 平原步兵 base_attack）
+- **程序化挥砍**：无 K 帧方案——Tween 驱动武器旋转（前摇 -100° → 挥出 +30° → 收招），attack.tres 空动画后续由用户 K 帧
+- **物理受击反馈**：命中时目标获得击退冲量（`apply_hit_reaction`，随帧衰减）+ 身体受击红闪 + HitStop 顿帧（Engine.time_scale 冻结 0.06s，headless 自动禁用）
+- **情绪系统保留**：Mood 枚举/命中率冷却修正（battle_ai_director 继续驱动）
+- **测试**：新增 tests/integration/test_melee_combat（5 用例 16 断言：配剑/命中扣血击退/距离拒绝/挥砍旋转/冷却）；全量 18 套件通过
+- **文档**：模块依赖关系.md 图改 Mermaid + 新增 §六 背包与装备系统预留设计
+
+### 带队出征：跨图携带编队（原型循环"战斗"环节解锁）
+
+- **编队跨图携带**：travel 时快照编队（`FormationSystem.export_squads`）→ 新图 spawn 玩家后跟随者随行（玩家右侧依次排开）→ `restore_squads` 重建（preset/职责/排长/角色）
+- **战斗闭环打通**：村庄编好战斗班 → 带队跨图进遭遇战战场 → 队伍（玩家+随行）vs 4 敌交战，全灭收敛
+- **修 bug**：`battlefield.tscn` 的 PlacementGrid 缺 `parent="."` 导致场景无法实例化；`FormationSystem._process` 对 freed 实例报错（跨图销毁残留）——快照后 `disband_all_squads` 清理 + 防御式遍历
+- **修 bug**：`GameRoot.get_current_map()` 在旧图 queue_free 延迟销毁窗口返回旧图（跟随者 spawn 到旧图、战斗挂到旧图 BattleAnchor 随图销毁）——优先用 `SceneLoader.current_map`
+- **测试**：新增 tests/integration/test_squad_travel（4 用例 19 断言：编队/跨图携带/重建/遭遇战双方人数）；全量 17 套件通过
+
 ### 队伍类型编制系统（P0 验收阻塞解除）
 
 - **编制预设**：`config/formations/formation_presets.tres`（BalanceResource）定义三模板——战斗班（MILITARY/战斗）、建造队（ENGINEERING/建造+搬运）、工人队（LABOR/搬运+采集）

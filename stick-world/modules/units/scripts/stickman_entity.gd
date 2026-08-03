@@ -110,6 +110,14 @@ var _facing: int = 1
 var _current_anim: String = "idle"
 ## 散步模式（true=只走不跑，按 Alt 切换）
 var _walk_only: bool = false
+
+# ─────────────────────────────── 受击反馈（近战打击感）────────────────────────────────
+## 击退冲量速度（受击时注入，随帧衰减）
+var _knockback_velocity: Vector2 = Vector2.ZERO
+## 击退衰减（px/s²）
+const KNOCKBACK_DECAY: float = 700.0
+## 受击红闪 Tween（中断旧闪烁）
+var _hurt_tween: Tween = null
 ## Collider 原始尺寸（_ready 时保存，_apply_scale 时乘以 BASE_SCALE）
 var _collider_base_size: Vector2 = Vector2.ZERO
 ## Range 原始尺寸（悬停检测范围，与 Collider 同步缩放）
@@ -252,7 +260,16 @@ func _physics_process(delta: float) -> void:
 		_handle_ai_input(delta)
 
 	# 火柴人可在地面范围内上下左右移动（详见 §7.1.1）
+	velocity += _knockback_velocity
 	move_and_slide()
+	# 击退冲量衰减
+	if _knockback_velocity != Vector2.ZERO:
+		var kb_len: float = _knockback_velocity.length()
+		var dec: float = KNOCKBACK_DECAY * delta
+		if kb_len <= dec:
+			_knockback_velocity = Vector2.ZERO
+		else:
+			_knockback_velocity = _knockback_velocity.normalized() * (kb_len - dec)
 	# Y 范围约束：脚部保持在 [ground_y, ground_bottom] 内
 	var y_min: float = ground_y - foot_offset
 	var y_max: float = ground_bottom - foot_offset
@@ -745,3 +762,29 @@ func is_dead() -> bool:
 ## 是否溃逃（士气低于阈值且未死）
 func is_routed() -> bool:
 	return health_component != null and health_component.is_routed()
+
+
+# ─────────────────────────────── 受击反馈（§7.5 近战打击感）────────────────────────────────
+
+## 受击反馈：物理击退冲量 + 受击红闪。
+## 由 WeaponMount.perform_attack 命中时调用（dir 为指向目标的方向）。
+func apply_hit_reaction(dir: Vector2, force: float) -> void:
+	if dir != Vector2.ZERO:
+		_knockback_velocity = dir.normalized() * force
+	_flash_hurt()
+
+
+## 受击红闪：身体短暂变红后恢复（Stickman Burst 受击闪光方案）。
+func _flash_hurt() -> void:
+	if rig == null:
+		return
+	if _hurt_tween != null and _hurt_tween.is_valid():
+		_hurt_tween.kill()
+	_hurt_tween = create_tween()
+	_hurt_tween.tween_property(rig, "modulate", Color(1.0, 0.25, 0.25), 0.06)
+	_hurt_tween.tween_property(rig, "modulate", Color.WHITE, 0.18)
+
+
+## 获取当前击退冲量（供测试/调试）
+func get_knockback_velocity() -> Vector2:
+	return _knockback_velocity

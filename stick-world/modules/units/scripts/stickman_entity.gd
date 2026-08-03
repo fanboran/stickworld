@@ -37,6 +37,8 @@ const BASE_SCALE: float = 0.5
 const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/entity/visual_controller.gd")
 ## 交互控制器组件脚本（按E交互/提示弹窗）
 const _InteractionControllerScript: GDScript = preload("res://modules/units/scripts/entity/interaction_controller.gd")
+## 头顶血条组件脚本（受击后显示 HP，满血隐藏）
+const _HealthBarScript: GDScript = preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
 
 # ─────────────────────────────── @export ────────────────────────────────
 ## 是否被玩家附身（true=玩家控制，false=AI 控制）
@@ -118,6 +120,14 @@ var _knockback_velocity: Vector2 = Vector2.ZERO
 const KNOCKBACK_DECAY: float = 700.0
 ## 受击红闪 Tween（中断旧闪烁）
 var _hurt_tween: Tween = null
+
+# ─────────────────────────────── 群体分离（防叠人/1字长蛇）────────────────────────────────
+## 分离检测半径（px）：与友军/任何单位过近时互相推开
+const SEPARATION_RADIUS: float = 42.0
+## 分离推力系数（叠加到 AI 移动方向）
+const SEPARATION_FORCE: float = 1.6
+## 头顶血条组件引用（_mount_components 装配）
+var _health_bar: Node = null
 ## Collider 原始尺寸（_ready 时保存，_apply_scale 时乘以 BASE_SCALE）
 var _collider_base_size: Vector2 = Vector2.ZERO
 ## Range 原始尺寸（悬停检测范围，与 Collider 同步缩放）
@@ -155,6 +165,7 @@ func _enter_tree() -> void:
 
 ## 玩家按 Alt 切换散步/奔跑模式（仅附身时生效）
 ## 鼠标左键攻击（仅附身时生效，§7.5）
+## Q 键切换建造/战斗模式（仅附身时生效）
 func _input(event: InputEvent) -> void:
 	if not possessed:
 		return
@@ -164,8 +175,25 @@ func _input(event: InputEvent) -> void:
 			_is_running = false
 			_current_speed = WALK_SPEED
 			_visual.play("walk")
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_Q:
+		_toggle_combat_mode()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		# 玩家点击：挥砍攻击（仅当鼠标不在 UI 控件上——编制按钮/建造菜单等优先）
+		if _is_mouse_over_ui():
+			return
 		_player_attack()
+		if get_viewport() != null:
+			get_viewport().set_input_as_handled()
+
+
+## 鼠标是否悬停在 UI 控件上（悬停时玩家左键不攻击，保证按钮可点）。
+func _is_mouse_over_ui() -> bool:
+	var vp := get_viewport()
+	if vp == null:
+		return false
+	if vp.has_method("gui_get_hovered_control"):
+		return vp.gui_get_hovered_control() != null
+	return false
 
 
 func _ready() -> void:
@@ -215,7 +243,7 @@ func _ready() -> void:
 		health_component.died.connect(_on_died)
 
 
-## 实例化并挂载子组件（VisualController / InteractionController）。
+## 实例化并挂载子组件（VisualController / InteractionController / HealthBar）。
 ## 组件通过 setup(entity) 拿到本实体引用。
 func _mount_components() -> void:
 	_visual = Node.new()
@@ -231,6 +259,14 @@ func _mount_components() -> void:
 	add_child(_interaction)
 	if _interaction.has_method("setup"):
 		_interaction.setup(self)
+
+	# 头顶血条（受击后显示，满血隐藏）
+	_health_bar = Node2D.new()
+	_health_bar.set_script(_HealthBarScript)
+	_health_bar.name = "HealthBar"
+	add_child(_health_bar)
+	if _health_bar.has_method("setup"):
+		_health_bar.setup(get_node_or_null("HealthComponent"))
 
 
 ## 从 RigHost 的 outfoot marker 位置计算脚部 Y 偏移。
@@ -369,8 +405,44 @@ func _handle_deceleration(delta: float) -> void:
 # ─────────────────────────────── AI 输入处理 ────────────────────────────────
 
 ## AI 驱动移动：根据 _ai_move_dir 处理加速/减速/动画，复用与玩家输入相同的物理逻辑。
+## 移动方向叠加群体分离（防叠人/1字长蛇，行业 soft-body separation 简化版）。
 func _handle_ai_input(delta: float) -> void:
-	_apply_movement(delta, _ai_move_dir, _ai_running, false)
+	var dir: Vector2 = _ai_move_dir
+	if dir != Vector2.ZERO:
+		dir = _apply_separation(dir)
+	_apply_movement(delta, dir, _ai_running, false)
+
+
+## 群体分离：扫描附近过近的单位（同图所有存活 CharacterBody2D），
+## 距离越近推力越强，叠加到移动方向（RTS 单位移动标准做法，参考
+## Stick War Legacy clone 的 soft-body separation：位置推开 + 速度修正）。
+func _apply_separation(dir: Vector2) -> Vector2:
+	if _map_ref == null or not is_instance_valid(_map_ref):
+		return dir
+	if not _map_ref.has_method("get_entities"):
+		return dir
+	var push := Vector2.ZERO
+	for e in _map_ref.get_entities():
+		if e == self or not is_instance_valid(e):
+			continue
+		if not (e is CharacterBody2D):
+			continue
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		var offset: Vector2 = global_position - e.global_position
+		var dist: float = offset.length()
+		if dist >= SEPARATION_RADIUS or dist <= 0.001:
+			continue
+		# 越近推力越大（1 - dist/radius 线性权重）
+		push += offset.normalized() * (1.0 - dist / SEPARATION_RADIUS)
+	if push == Vector2.ZERO:
+		return dir
+	return (dir + push * SEPARATION_FORCE).normalized()
+
+
+## 获取头顶血条组件（供测试/调试）
+func get_health_bar() -> Node:
+	return _health_bar
 
 
 ## 统一移动处理（玩家与 AI 共用）：方向 → 朝向/加速/奔跑 → velocity。
@@ -470,6 +542,40 @@ func hide_action_progress() -> void:
 ## 获取当前动画名
 func get_current_anim() -> String:
 	return _current_anim
+
+
+# ─────────────────────────────── 玩家战斗模式（Q 键切换）────────────────────────────────
+
+## 切换建造/战斗模式：EXPLORE <-> BATTLE。
+## 由 Q 键触发（仅附身时）。BATTLE 模式下玩家保持附身（ExploreHandler 不释放），
+## 左键 = 挥砍攻击；EXPLORE 模式下左键用于交互/框选。
+func _toggle_combat_mode() -> void:
+	var dispatcher: Node = _find_input_dispatcher()
+	if dispatcher == null or not dispatcher.has_method("get_mode"):
+		return
+	var new_mode: int = PlayerControlAPI.Mode.BATTLE
+	if dispatcher.get_mode() == PlayerControlAPI.Mode.BATTLE:
+		new_mode = PlayerControlAPI.Mode.EXPLORE
+	if dispatcher.has_method("set_mode"):
+		dispatcher.set_mode(new_mode)
+	if EventBus != null and EventBus.has_signal("ui_notification"):
+		var label: String = "战斗模式（左键挥砍，Q 切回）" if new_mode == PlayerControlAPI.Mode.BATTLE else "探索模式"
+		EventBus.ui_notification.emit("模式", label, "info")
+
+
+## 查找 InputDispatcher（向上遍历父链，从 GameRoot 取子节点）。
+func _find_input_dispatcher() -> Node:
+	var p: Node = get_parent()
+	while p != null:
+		if p.has_node("InputDispatcher"):
+			return p.get_node("InputDispatcher")
+		p = p.get_parent()
+	return null
+
+
+## 获取所在地图引用（可能为 null，供 AI 行为查询玩家等）。
+func get_map() -> Node2D:
+	return _map_ref
 
 
 # ─────────────────────────────── 玩家攻击（§7.5）────────────────────────────────

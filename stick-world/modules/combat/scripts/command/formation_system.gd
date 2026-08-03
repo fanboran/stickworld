@@ -177,6 +177,7 @@ func create_squad(units: Array, squad_name: String = "", preset_id: String = DEF
 		"work_types": work_types,
 		"role": preset["default_role"],
 		"name": name_str,
+		"follow_player": false,
 	}
 	# 发射信号
 	var unit_ids: Array = []
@@ -399,6 +400,32 @@ func is_combat_squad(squad_id: String) -> bool:
 	if not _squads.has(squad_id):
 		return false
 	return WorkType.COMBAT in _squads[squad_id]["work_types"]
+
+
+## 设置小队"跟随玩家"模式：开启后成员自动跟随玩家移动（跟到战场）。
+## 由编制窗口勾选触发，BehaviorFollow 行为执行。
+func set_squad_follow(squad_id: String, follow: bool) -> bool:
+	if not _squads.has(squad_id):
+		return false
+	_squads[squad_id]["follow_player"] = follow
+	return true
+
+
+## 小队是否处于跟随玩家模式。
+func is_squad_following(squad_id: String) -> bool:
+	if not _squads.has(squad_id):
+		return false
+	return _squads[squad_id].get("follow_player", false)
+
+
+## 单位所在小队是否跟随玩家（供 AI 决策查询）。
+func is_unit_squad_following(unit: Node) -> bool:
+	if unit == null or not is_instance_valid(unit):
+		return false
+	var squad_id: String = _unit_to_squad.get(unit.get_instance_id(), "")
+	if squad_id == "" or not _squads.has(squad_id):
+		return false
+	return _squads[squad_id].get("follow_player", false)
 
 
 ## 获取小队名称。

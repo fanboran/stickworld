@@ -280,6 +280,17 @@ func _refresh_detail() -> void:
 		remove_btn.pressed.connect(_on_remove_member.bind(u))
 		row.add_child(remove_btn)
 		_detail_box.add_child(row)
+	# 跟随玩家（队员尾随玩家移动，跟到战场）
+	var follow_row := HBoxContainer.new()
+	var follow_label := Label.new()
+	follow_label.text = "跟随玩家："
+	follow_row.add_child(follow_label)
+	var follow_check := CheckBox.new()
+	var is_following: bool = _formation.is_squad_following(sid) if _formation.has_method("is_squad_following") else false
+	follow_check.button_pressed = is_following
+	follow_check.pressed.connect(_on_toggle_follow.bind(sid, follow_check))
+	follow_row.add_child(follow_check)
+	_detail_box.add_child(follow_row)
 	# 解散
 	var disband_btn := Button.new()
 	disband_btn.text = "解散小队"
@@ -430,6 +441,15 @@ func _on_disband_pressed() -> void:
 		_formation.disband_squad(_selected_squad)
 	_selected_squad = ""
 	_refresh_all()
+
+
+## 切换小队跟随玩家模式
+func _on_toggle_follow(sid: String, check: CheckBox) -> void:
+	if _formation == null:
+		return
+	if _formation.has_method("set_squad_follow"):
+		_formation.set_squad_follow(sid, check.button_pressed)
+	_show_notify("跟随已%s" % ("开启" if check.button_pressed else "关闭"))
 
 
 func _show_notify(msg: String) -> void:

@@ -79,13 +79,13 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 
 ## 阶段 E：遭遇战战场生成敌方火柴人并启动战斗。
 ## 我方为红色阵营（视觉区分），玩家方（allies：玩家 + 随行编队）为进攻方。
-func spawn_battlefield_enemies(map: Node2D, allies: Array) -> void:
+## count: 敌方数量（默认 4，dev 场景可调）。
+func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> void:
 	if map == null or allies.is_empty():
 		return
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
 	var enemies: Array = []
 	# 敌方在战场右端（玩家从左侧进入）
-	var count: int = 4
 	for i in count:
 		var x: float = map.map_right - 250.0 - i * 60.0
 		var e: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))

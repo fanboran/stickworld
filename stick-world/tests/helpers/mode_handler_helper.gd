@@ -12,6 +12,6 @@ func _on_mode_activated(_mode: int) -> void:
 	set_meta("activated_count", c + 1)
 
 
-func _on_mode_deactivated(_mode: int) -> void:
+func _on_mode_deactivated(_mode: int, _new_mode: int = 0) -> void:
 	var c: int = get_meta("deactivated_count", 0)
 	set_meta("deactivated_count", c + 1)

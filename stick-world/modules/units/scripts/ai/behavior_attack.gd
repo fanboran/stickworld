@@ -123,8 +123,14 @@ func update(delta: float) -> void:
 		if weapon != null and weapon.has_method("can_attack") and weapon.can_attack():
 			weapon.perform_attack(_target)
 	else:
-		# 不在射程：移动接近，概率擅自冲锋（奔跑）
-		var dir: Vector2 = (_target.global_position - entity.global_position).normalized()
+		# 不在射程：朝"保角环绕点"移动——停在射程边缘并保持自身相对目标的方位，
+		# 各单位从不同方向包围目标（防一字长蛇/叠人；参考 RTS 攻击槽位思想）。
+		# 自身方位角保持：desired = 敌人 + 自身方向 * attack_radius，
+		# 从同一侧接近的部队自然散布在目标周围弧线上，配合实体 separation 防叠。
+		var attack_radius: float = maxf(attack_range * 0.85, 24.0)
+		var to_target: Vector2 = _target.global_position - entity.global_position
+		var desired_pos: Vector2 = _target.global_position + to_target.normalized() * attack_radius
+		var dir: Vector2 = (desired_pos - entity.global_position).normalized()
 		var run: bool = randf() < prob_aggressive_push
 		if entity.has_method("ai_move"):
 			entity.ai_move(dir, run)

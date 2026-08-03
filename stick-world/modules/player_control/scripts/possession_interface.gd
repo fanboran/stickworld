@@ -80,7 +80,7 @@ func _on_mode_activated(_mode: int) -> void:
 	_possess_selected_or_current()
 
 
-func _on_mode_deactivated(_mode: int) -> void:
+func _on_mode_deactivated(_mode: int, _new_mode: int = PlayerControlAPI.Mode.NONE) -> void:
 	_release_possession()
 
 

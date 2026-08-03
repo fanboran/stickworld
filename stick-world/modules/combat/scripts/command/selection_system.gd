@@ -85,7 +85,7 @@ func _on_mode_activated(mode: int) -> void:
 		set_process(true)
 
 
-func _on_mode_deactivated(mode: int) -> void:
+func _on_mode_deactivated(mode: int, _new_mode: int = PlayerControlAPI.Mode.NONE) -> void:
 	if mode == PlayerControlAPI.Mode.BATTLE:
 		_active = false
 		set_process_unhandled_input(false)

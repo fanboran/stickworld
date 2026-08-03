@@ -28,8 +28,8 @@ func set_mode(new_mode: int) -> void:
 	if new_mode == current_mode:
 		return
 	var old := current_mode
-	# 通知旧 handler
-	_notify_deactivated(old)
+	# 通知旧 handler（带新模式，供 handler 判断是否保持玩家控制，如 BATTLE）
+	_notify_deactivated(old, new_mode)
 	current_mode = new_mode
 	# 通知新 handler
 	_notify_activated(new_mode)
@@ -62,7 +62,7 @@ func register_handler(mode: int, handler: Node) -> void:
 ## 取消注册
 func unregister_handler(mode: int) -> void:
 	if mode == current_mode:
-		_notify_deactivated(mode)
+		_notify_deactivated(mode, PlayerControlAPI.Mode.NONE)
 	_handlers.erase(mode)
 
 
@@ -80,11 +80,11 @@ func _notify_activated(mode: int) -> void:
 			handler._on_mode_activated(mode)
 
 
-func _notify_deactivated(mode: int) -> void:
+func _notify_deactivated(mode: int, new_mode: int) -> void:
 	var handler: Node = _handlers.get(mode, null)
 	if handler != null and is_instance_valid(handler):
 		if handler.has_method("_on_mode_deactivated"):
-			handler._on_mode_deactivated(mode)
+			handler._on_mode_deactivated(mode, new_mode)
 
 
 # ─────────────────────────────── 便捷切换 ────────────────────────────────

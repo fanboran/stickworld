@@ -98,6 +98,8 @@ func _test_hit_in_range() -> void:
 	if wm == null:
 		_runner.assert_true(false, "WeaponMount 为空")
 		return
+	# 固定命中率消除随机性（基础 0.9 有 10% miss 导致偶发测试失败）
+	wm.base_hit_chance = 1.0
 	var hp_before: float = def.get_health().hp if def.get_health() != null else 0.0
 	var result: Dictionary = wm.perform_attack(def)
 	_runner.assert_true(result.get("hit", false), "近距离应命中，结果: %s" % str(result))
@@ -173,8 +175,9 @@ func _test_cooldown() -> void:
 		return
 	def.global_position = atk.global_position + Vector2(50, 0)
 	await get_tree().process_frame
-	# 第一次攻击（主动确保冷却恢复）
+	# 第一次攻击（主动确保冷却恢复 + 固定命中率）
 	wm.update_cooldown(10.0)
+	wm.base_hit_chance = 1.0
 	var first: Dictionary = wm.perform_attack(def)
 	_runner.assert_true(first.get("hit", false), "第一次攻击应命中")
 	# 立即第二次攻击：冷却拒绝

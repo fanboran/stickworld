@@ -20,6 +20,7 @@ const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_a
 const ScriptBehaviorSeekCover := preload("res://modules/units/scripts/ai/behavior_seek_cover.gd")
 const ScriptBehaviorRetreat := preload("res://modules/units/scripts/ai/behavior_retreat.gd")
 const ScriptBehaviorHaul := preload("res://modules/units/scripts/ai/behavior_haul.gd")
+const ScriptBehaviorFollow := preload("res://modules/units/scripts/ai/behavior_follow.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）
@@ -94,6 +95,14 @@ func _setup_state_machine() -> void:
 	haul.entity = _entity
 	_state_machine.add_child(haul)
 	_state_machine.register_behavior(haul)
+
+	# 跟随行为（小队"跟随玩家"模式，§8.3）
+	var follow := ScriptBehaviorFollow.new()
+	follow.name = "BehaviorFollow"
+	follow.behavior_name = "follow"
+	follow.entity = _entity
+	_state_machine.add_child(follow)
+	_state_machine.register_behavior(follow)
 
 	# 移动行为（§7.2，阶段 0.6 战术号令用）
 	var move := ScriptBehaviorMove.new()
@@ -187,6 +196,9 @@ func _make_decision() -> void:
 				return
 	# 1. 战斗决策（最高优先级，阶段 0.5）
 	if _try_combat():
+		return
+	# 1.5 跟随决策（小队开启跟随玩家时，高于工作/待机）
+	if _try_follow():
 		return
 	if not _state_machine.has_active_behavior():
 		# 无激活行为，检查派工
@@ -318,6 +330,28 @@ func _can_work(work_type: String) -> bool:
 	if fs == null or not fs.has_method("is_work_allowed"):
 		return true
 	return fs.is_work_allowed(_entity, work_type)
+
+
+## 尝试跟随决策：单位所在小队开启"跟随玩家"时，travel("follow") 尾随玩家。
+## 返回 true 表示已切换到跟随。
+func _try_follow() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if not _entity.has_method("get_formation_system"):
+		return false
+	var fs: Node = _entity.get_formation_system()
+	if fs == null or not fs.has_method("is_unit_squad_following"):
+		return false
+	if not fs.is_unit_squad_following(_entity):
+		return false
+	# 当前已在跟随且未完成 → 保持
+	var cur: String = _state_machine.get_current_behavior_name()
+	if cur == "follow":
+		if not _state_machine.is_current_finished():
+			return true
+	# 切换到跟随
+	_state_machine.travel("follow")
+	return true
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────

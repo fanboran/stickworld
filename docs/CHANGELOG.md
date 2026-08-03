@@ -8,6 +8,23 @@
 
 ## [未发布]
 
+### 玩家战斗模式（Q 键）+ 小队跟随 + 攻击展开
+
+- **Q 键切换建造/战斗模式**：玩家附身时按 Q 在 EXPLORE<->BATTLE 间切换；BATTLE 模式保持附身（ExploreHandler 不释放），左键=挥砍攻击（鼠标悬停 UI 时优先 UI，修复编制按钮被拦截的 bug）
+- **小队跟随玩家**：编制窗口新增"跟随玩家"勾选（FormationSystem.set_squad_follow）；开启后成员进入新 BehaviorFollow 行为尾随玩家（70px 停步），战斗优先于跟随，跨图自动携带
+- **攻击展开（防一字长蛇）**：BehaviorAttack 保角环绕——单位停在射程边缘并保持自身相对目标的方位，同线部队自然散布在目标周围弧线；配合已有分离彻底解决纵队推进
+- **InputDispatcher 信号兼容**：`_notify_deactivated` 带 new_mode（供 ExploreHandler 判断保持附身），所有 handler 签名统一
+- **dev 调试场景**（tests/dev/dev_playtest）：`--map battlefield --party 3 --enemies 4 --follow` 一键直达遭遇战（GameRoot 零改动，dev_enemy_count 字段默认 4）
+- **测试矩阵**（tests/matrix.md）+ tests/README 更新（三层自动化 + dev 层）
+- **清理**：移除仓库根 core/、modules/ 迁移残留（早期结构，无引用，正式版在 stick-world/ 内）
+- **测试**：新增 test_combat_control（Q 切换/跟随行为/尾随移动/保角展开）；全量 20 套件通过
+
+### 头顶血条 + 群体分离（战斗反馈与移动质量）
+
+- **头顶血条**（HealthBarIndicator）：受击后显示 HP 比例（绿→黄→红三档），满血/死亡隐藏；自绘无资源依赖，仿 ActionProgressIndicator
+- **群体分离**（防叠人/1字长蛇）：AI 移动方向叠加分离推力（半径 42px 内越近推力越大），参考 Stick War Legacy clone 的 soft-body separation 方案；玩家附身不受影响
+- **测试**：新增 test_combat_feedback（5 用例：血条装配/显隐/死亡隐藏/分离推开/远处无影响）；test_melee_combat 固定命中率消除随机性
+
 ### 近战剑击：临时配剑 + 程序化挥砍 + 物理受击反馈
 
 - **临时配剑**：所有火柴人自动挂载占位剑（WeaponMount 挂到 IK 手部 marker innerhand，GripPoint 握把对齐）；攻击距离 140→80（剑长）、伤害 12→15（对齐 stickmen.tres 平原步兵 base_attack）

@@ -40,7 +40,11 @@ func _on_mode_activated(_mode: int) -> void:
 	_possess_player_entity()
 
 
-func _on_mode_deactivated(_mode: int) -> void:
+## 模式停用。切到 BATTLE（玩家 Q 键进入战斗姿态）时**保持附身**——
+## 玩家继续控制火柴人（WASD 移动 + 左键挥砍），框选仅作用于其他单位。
+func _on_mode_deactivated(_mode: int, new_mode: int) -> void:
+	if new_mode == PlayerControlAPI.Mode.BATTLE:
+		return
 	_release_possession()
 
 

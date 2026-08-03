@@ -5,15 +5,18 @@
 
 ---
 
-## 一、三层测试体系
+## 一、测试体系总览（三层自动化 + 一层开发调试）
 
 按**依赖深度与运行速度**分层（而非按开发阶段编号）：
 
 | 层 | 目录 | 依赖 | 特征 | 示例 |
 |----|------|------|------|------|
 | **Unit 单元** | `tests/unit/` | 无 GameRoot，纯对象/纯函数 | 快、确定性、隔离、AAA | 指挥链延迟公式、战斗胜负判定、士气数值、资源扣减、编队增删 |
-| **Integration 集成** | `tests/integration/` | 最小场景树 fixture（自建自毁） | await 就绪信号+超时 | 战斗循环、附身流程、跨图旅行、建造循环、室内传送 |
+| **Integration 集成** | `tests/integration/` | 最小场景树 fixture（自建自毁） | await 就绪信号+超时 | 战斗循环、附身流程、跨图旅行、建造循环、近战剑击 |
 | **Smoke 冒烟** | `tests/smoke/` | 完整 GameRoot | 数量少、每条带超时、只验"不崩+关键里程碑" | 新游戏启动 60s 零 ERROR、跨图旅行不崩 |
+| **Dev 开发调试** | `tests/dev/` | 完整 GameRoot + 启动参数 | **不进 CI**，手动体验用 | 一键直达遭遇战（编队→跨图→4v4） |
+
+**Dev 层说明**（为什么需要）：自动化测试验证逻辑正确性，但**手动体验**（打击感、走位、节奏）无法用断言覆盖。`tests/dev/dev_playtest.tscn` 用启动参数直接组装目标状态，免去"启动→村庄→编队→跨图"的手工流程，GameRoot 零改动。详见 [`tests/dev/README.md`](dev/README.md)。
 
 **命名规则**：`test_<模块或特性>.gd`（如 `test_command_chain.gd`、`test_battle_lifecycle.gd`）。一个文件只属一个模块/特性；一个阶段可对应多个文件。**禁止**新增 `test_stage_NN` 命名文件。
 
@@ -78,10 +81,13 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 | T0-6 | 清理孤儿 uid、`*_result.txt`、硬编码路径 | ✅ |
 | T0-7 | **数字标号全部清除**：test_stage_01~08 全部迁移完成——01→integration/test_game_root_assembly、02→integration/test_village_map、03→integration/test_ai_behaviors、05→integration/test_battle_lifecycle、06→integration/test_selection_formation、07→integration/test_possession、08→smoke/test_cross_map_travel | ✅ |
 
-**当前结构（17 套件 / 191 用例）**：
-- `tests/unit/`（7 文件）：placement_grid(9)、health_component(8)、resource_manager(8)、command_chain(6)、battle_instance(7)、formation_system(7)、behavior_state_machine(7)
-- `tests/integration/`（7 文件）：construction_cycle(5)、ai_behaviors(9)、game_root_assembly(15)、village_map(29)、battle_lifecycle(8)、selection_formation(29)、possession(16)
-- `tests/smoke/`（3 文件）：new_game_smoke(2)、interior_smoke(3)、cross_map_travel(23)
+**当前结构（20 套件，`run_all.ps1` 全绿）**：
+- `tests/unit/`（6 文件）：placement_grid、health_component、resource_manager、command_chain、formation_system、behavior_state_machine
+- `tests/integration/`（12 文件）：construction_cycle、ai_behaviors、game_root_assembly、village_map、battle_lifecycle、selection_formation、possession、formation_presets、squad_travel、melee_combat、combat_feedback、combat_control
+- `tests/smoke/`（2 文件）：new_game_smoke、cross_map_travel
+- `tests/dev/`（1 场景，不进 CI）：dev_playtest
+
+> 功能 ↔ 场景 ↔ 覆盖 的完整对应关系见 [`tests/matrix.md`](matrix.md)。
 
 > 后续轮次：巨型文件（village_map/selection_formation）内部继续按主题拆细、去除残留的用例间共享状态。
 

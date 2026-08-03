@@ -152,6 +152,8 @@ var _save_panel: Control = null
 # ─────────────────────────────── 跨图携带（带队出征）────────────────────────────────
 ## travel_started 时收集的编队快照（跨图携带），map_loaded 后恢复
 var _pending_squad_snapshots: Array = []
+## 遭遇战敌方数量（dev 场景可调，默认 4）
+var dev_enemy_count: int = 4
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -495,7 +497,7 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded:
 			var allies: Array = [player]
 			allies.append_array(followers)
-			_worldgen.spawn_battlefield_enemies(map, allies)
+			_worldgen.spawn_battlefield_enemies(map, allies, dev_enemy_count)
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)

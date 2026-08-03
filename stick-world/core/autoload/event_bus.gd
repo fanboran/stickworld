@@ -31,6 +31,11 @@ extends Node
 # CPI 超警戒线：资源系统 → UI
 @warning_ignore("unused_signal") signal inflation_warning(rate)
 
+# ─────────────────────────────── 配置 / 平衡 ──────────────────────────────
+
+# 平衡配置变更：BalanceConfig → 订阅方（运行时热重载数值）
+@warning_ignore("unused_signal") signal balance_changed
+
 # ─────────────────────────────── 人口 / 单位 ───────────────────────────────
 
 @warning_ignore("unused_signal") signal population_changed(total: int, delta: int)

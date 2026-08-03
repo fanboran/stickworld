@@ -361,6 +361,7 @@ func remove_tier(org_id: String) -> Dictionary:
 # ===== 解散 =====
 
 ## 解散组织
+## [Q] 所有人员回归待分配池（personnel 清空、指挥官解除）, 子组织上挂到 parent
 func disband_organization(org_id: String) -> Dictionary:
 	var org := _get_org(org_id)
 	if org.is_empty():
@@ -377,6 +378,10 @@ func disband_organization(org_id: String) -> Dictionary:
 					child.parent_org = parent_id
 					parent.child_orgs.append(child_id)
 			parent.child_orgs.erase(org_id)
+
+	# 人员回归待分配池：清空 personnel 与指挥官
+	org.personnel.clear()
+	org.commander_id = ""
 
 	# 标记为已解散
 	org.state = "DISBANDED"

@@ -29,7 +29,8 @@ var _canvas_modulate: CanvasModulate = null
 func _ready() -> void:
 	_ensure_canvas_modulate()
 	if WorldState:
-		# 存档加载后 WorldState.game_time 已有值，同步到 time_of_day
+		# WorldState.game_time 单位为小时（0~24），存档加载后已有值则恢复，
+		# 否则以本节点初始 time_of_day 为准
 		if WorldState.game_time > 0.0:
 			time_of_day = WorldState.game_time
 		else:

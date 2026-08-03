@@ -41,7 +41,10 @@ func setup(manager: OrganizationManager) -> void:
 func create_organization(org_name: String, tag: String, tier: int, parent_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	return _manager.create_organization(org_name, tag, tier, parent_id)
+	var result := _manager.create_organization(org_name, tag, tier, parent_id)
+	if result.get("ok", false):
+		org_created.emit(result.data.org_id)
+	return result
 
 
 ## 获取组织数据

@@ -471,6 +471,39 @@ func get_possessed_entity() -> Node2D:
 	return null
 
 
+## 小地图建筑数据：[{x: float, width: float, terrain: bool}]
+## 动态建筑（BuildingHost）与地形建筑（TerrainBuildings）统一汇总，
+## 供 ui_global 的 Minimap 绘制，避免 UI 层直接遍历地图节点树。
+func get_minimap_buildings() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	_collect_minimap_buildings(building_host, false, result)
+	_collect_minimap_buildings(terrain_buildings, true, result)
+	return result
+
+
+func _collect_minimap_buildings(host: Node, is_terrain: bool, result: Array[Dictionary]) -> void:
+	if host == null:
+		return
+	for building in host.get_children():
+		if not building is Node2D:
+			continue
+		result.append({
+			"x": (building as Node2D).global_position.x,
+			"width": _get_building_width(building),
+			"terrain": is_terrain,
+		})
+
+
+## 建筑宽度：优先取 PassageBarrier 碰撞箱宽度，缺省 32px
+func _get_building_width(building: Node) -> float:
+	var pb: Node = building.get_node_or_null("PassageBarrier")
+	if pb != null:
+		for child in pb.get_children():
+			if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+				return ((child as CollisionShape2D).shape as RectangleShape2D).size.x
+	return 32.0
+
+
 ## 获取地图宽度（像素）
 func get_map_width() -> float:
 	return map_right - map_left

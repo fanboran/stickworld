@@ -3,6 +3,8 @@ class_name SettlementTooltip
 ## 聚落悬停提示 —— L1 粒度下鼠标悬停聚落时显示信息
 ##
 ## 详见 docs/技术/架构/战略图架构.md §二 模块结构
+## [待接线] 当前无场景引用（world_map/scenes/ 为空），待 strategic_map 场景
+## 落地后由 .tscn @export 连线接入（API 签名与 api.gd 已对齐）。
 
 ## API 引用
 @export var api_node: Node

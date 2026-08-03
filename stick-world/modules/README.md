@@ -32,7 +32,7 @@
 | `technology`           | 科技解锁与研究（Demo 阶段以征服获得为主）     | 🟡 部分       |
 | `environment`          | 跨场景天空/天气/光照/震动              | 🟡 仅光照      |
 | `player_control`       | 输入分发 + 框选/编队 + 附身           | ✅ P0.7 完整   |
-| `ui`                   | 三层 UI 容器 + 小地图 + 模式面板       | ✅ P0 完整     |
+| `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
 | `debug_GUI`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
 
 > **已废弃**：`modules/world_map/scripts/world_map_controller.gd`（2026-07-16 重构为 `strategic_map_controller.gd`），待清理。
@@ -223,7 +223,7 @@ StickmanEntity (CharacterBody2D)
 - **三层命令系统**（详见 units）：玩家指令 → 编制默认 → 单位本能
 - **指挥链延迟**：`base_delay × tier_diff × commander_efficiency_modifier`，玩家附身该层级时延迟为 0
 - **战场导演**（`battle_ai_director.gd`）：每 2-5s 给单位打情绪标签（HESITANT/EXCITED/PANICKED/STEADY）→ 灵动性
-- **队伍类型编制**（2026-08 新增）：编队由**编制预设**驱动（`config/formations/formation_presets.tres`），预设定义组织标签 + 职责范围（工作类型 WORK_COMBAT/BUILD/HAUL/FORAGE）+ 成员角色；职责范围可调整（`set_squad_work_types`）；AIController 决策按队伍职责过滤（建造队不参战/战斗班不接建造派工，未编队全能）；TacticalOrders 拒绝非战斗职责小队号令。UI 见 [`modules/ui` 编制管理窗口（FormationPanel）](#modulesui--ui-容器)
+- **队伍类型编制**（2026-08 新增）：编队由**编制预设**驱动（`config/formations/formation_presets.tres`），预设定义组织标签 + 职责范围（工作类型 WORK_COMBAT/BUILD/HAUL/FORAGE）+ 成员角色；职责范围可调整（`set_squad_work_types`）；AIController 决策按队伍职责过滤（建造队不参战/战斗班不接建造派工，未编队全能）；TacticalOrders 拒绝非战斗职责小队号令。UI 见 [`modules/combat/ui` 编制管理窗口（FormationPanel）](#modulescombat--战斗模块)
 
 **预设号令**（P0 范围）：
 
@@ -442,18 +442,32 @@ L4 攻占北方行省
 
 ***
 
-#### `modules/ui/` — UI 容器
+#### `modules/ui_global/` — 全局 UI 层
 
-**职责**：三层 UI 容器 + 小地图 + 模式面板。
+**职责**：跨模块共享的 UI 容器与通用控件。**不放**深度耦合某业务模块的面板（那些放 `modules/<模块>/ui/`，见下方权责划分）。
 
 ```
 UIRoot
 ├── GlobalHUD              # 顶层常驻：时间速度、资源数、通知、居中模式
-├── ModePanel              # 模式相关：Village/Battle/Possess 整体替换
-├── ContextPanel           # 上下文相关：BuildingInspector/SquadInspector/CommanderPanel
-├── Minimap                # 屏幕正上方中央，详见 §6.4
-└── ModalOverlay           # 弹窗（暂停/组织树/战略图）
+├── ModePanel              # 模式容器：Village/Battle/Possess 槽位（内容由各模块装配）
+├── ContextPanel           # 上下文容器：选中什么显示什么
+├── Minimap                # 小地图（屏幕正上方中央，详见 §6.4）
+├── ZoomBar / ResourceBar / ClockWidget  # 通用 HUD 控件
+└── ModalOverlay           # 弹窗容器（暂停/设置/存档/编制/战略图）
 ```
+
+**全局 UI 与模块专属 UI 的权责划分**：
+
+| 归属 | 内容 |
+|------|------|
+| `modules/ui_global/` | 容器（UIRoot/HUD/ModePanel/ContextPanel/ModalOverlay）、通用 HUD 控件（小地图/缩放条/时钟/资源条）、游玩指示器、全局弹窗（设置/存档，不绑业务模块） |
+| `modules/<模块>/ui/` | 深度耦合该模块 API 的业务面板（如 `combat/ui/` 战斗面板与编制窗口、`construction/ui/` 建造菜单、`player_control/ui/` 附身面板、`world_map/ui/` 战略图面板） |
+
+**依赖注入约定**（2026-08 审计后统一）：
+
+- UI 组件一律由 `SystemSetup` 装配时通过 `setup(...)` 注入依赖（CameraRig / GameRoot / 各系统引用），**禁止**自行向上遍历祖先或遍历 `get_tree().root` 查找（历史反模式已清除）
+- 业务面板通过 `has_method` 防御式调用注入的引用；跨模块数据查询走模块 API（如小地图用 `VillageMap.get_minimap_buildings()`，不遍历地图节点树）
+- 共享 HUD 布局常量（小地图/缩放条尺寸位置）定义在 `ui_global/api.gd` 的 `HUD_*`，禁止各文件硬编码
 
 **小地图**（§10.4）：
 

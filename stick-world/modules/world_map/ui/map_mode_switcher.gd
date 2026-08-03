@@ -1,6 +1,8 @@
 extends Control
 class_name MapModeSwitcher
 ## 地图模式切换器 —— 简洁的按钮栏，用于切换不同的地图视图
+## [待接线] 当前无场景引用（world_map/scenes/ 为空），待 strategic_map 场景
+## 落地后由 .tscn @export 连线接入。
 
 ## 模式管理器引用
 @export var map_mode_manager: MapModeManager

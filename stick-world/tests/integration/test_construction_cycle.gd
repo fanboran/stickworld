@@ -212,7 +212,7 @@ func _test_escape_stuck() -> void:
 	_runner.assert_false(e.is_position_blocked(outside_pos), "建筑外位置应判定为空旷")
 	# 脱困：实体卡在建筑内（直接放置，同一帧内传送，物理还来不及推出）
 	e.global_position = inside_pos
-	e._escape_stuck()
+	e.escape_stuck()
 	await get_tree().physics_frame
 	_runner.assert_false(e.is_position_blocked(e.global_position), "脱困后应在空旷位置，x=%.0f" % e.global_position.x)
 	# 脱困后位置应在地图范围内（没有飞出地图）

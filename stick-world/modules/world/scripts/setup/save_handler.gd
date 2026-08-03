@@ -12,7 +12,7 @@ extends Node
 ## 由 GameRoot 主脚本转发调用。
 
 ## 存档面板脚本
-const _SavePanelScript: GDScript = preload("res://modules/ui/scripts/menus/save_panel.gd")
+const _SavePanelScript: GDScript = preload("res://modules/ui_global/scripts/menus/save_panel.gd")
 
 var _root: GameRoot
 

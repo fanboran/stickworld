@@ -338,7 +338,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_E:
 		_interaction.try_interact()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_H:
-		_escape_stuck()
+		escape_stuck()
 
 
 # ─────────────────────────────── 玩家输入 ────────────────────────────────
@@ -686,7 +686,7 @@ func is_position_blocked(pos: Vector2) -> bool:
 ## 以当前位置为中心，半径 200px 起随机采样（每圈 24 次），用物理查询
 ## 判定空旷（is_position_blocked）；逐级扩大到 3200px；仍找不到则沿左右
 ## 线性扫描最近空旷点；兜底回地图中心。只动 X（Y 由地面约束管理）。
-func _escape_stuck() -> void:
+func escape_stuck() -> void:
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		return
 	var map_left: float = float(_map_ref.map_left) if "map_left" in _map_ref else -100000.0

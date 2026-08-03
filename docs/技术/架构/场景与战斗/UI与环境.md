@@ -26,7 +26,7 @@ UIRoot (常驻)
 
 #### 10.1.1 GlobalHUD 详细设计
 
-> **当前实现**：[global_hud.gd](file:///f:/VSCode/game-2/stick-world/modules/ui/scripts/global_hud.gd) 120 行，显示时间速度、游戏时间、通知、居中模式按钮。**未显示资源数量**（资源系统未接入，见 [建筑与定居点.md](建筑与定居点.md) §9.4 / P0-11）。
+> **当前实现**：[global_hud.gd](file:///f:/VSCode/game-2/stick-world/modules/ui_global/scripts/hud/global_hud.gd) 120 行，显示时间速度、游戏时间、通知、居中模式按钮。**未显示资源数量**（资源系统未接入，见 [建筑与定居点.md](建筑与定居点.md) §9.4 / P0-11）。
 
 GlobalHUD 节点结构（含资源显示扩展）：
 
@@ -87,28 +87,31 @@ func _on_resource_changed(res_id: String, amount: float, delta: float, _region_i
 
 ### 10.3 模块结构
 
+全局 UI 层（`modules/ui_global/`）只放**跨模块共享的容器与通用控件**；深度耦合某业务模块 API 的面板归属该模块的 `ui/` 子目录（垂直切片原则）：
+
 ```
-modules/ui/
+modules/ui_global/           # 全局 UI 层：容器 + 通用控件
 ├── api.gd
-├── global_hud/
-├── mode_panels/
-│   ├── village_panel.tscn
-│   ├── battle_panel.tscn
-│   └── possess_panel.tscn
-├── context_panels/
-│   ├── building_inspector.tscn
-│   ├── squad_inspector.tscn
-│   └── commander_panel.tscn
-├── modals/
-│   ├── pause_menu.tscn
-│   ├── org_tree_overview.tscn
-│   └── strategic_map_modal.tscn   # 战略图模态窗口
-├── minimap/                    # 小地图（详见 §10.4）
-│   ├── minimap.gd
-│   ├── minimap.tscn
-│   └── minimap_renderer.gd     # 缩略图生成
-└── widgets/                    # 通用控件（按钮、进度条、列表）
+├── scripts/
+│   ├── ui_root.gd           # UIRoot 主控
+│   ├── hud/                 # GlobalHUD / ClockWidget / Minimap / ZoomBar / ResourceBar
+│   ├── panels/              # ModePanel（容器）/ ContextPanel（容器）/ SettingsMenuPanel
+│   └── indicators/          # 游玩指示器（附身圆圈/悬停方框/中键图标）
+└── scenes/
+    ├── ui_root.tscn
+    ├── hud/global_hud.tscn
+    ├── panels/mode_panel.tscn    # 含 Village/Battle/Possess 槽位（内容由各模块装配）
+    ├── panels/context_panel.tscn
+    └── overlays/            # modal_overlay.tscn / resource_bar.tscn
+
+modules/<模块>/ui/           # 模块专属 UI（各模块自包含）
+├── combat/ui/               # battle_panel.gd（战斗面板）/ formation_panel.gd（编制窗口）
+├── construction/ui/         # build_menu.gd + build_menu.tscn（建造菜单）
+├── player_control/ui/       # possess_panel.gd（附身面板）
+└── world_map/ui/            # 战略图面板/提示等
 ```
+
+> **装配方式**：业务面板由 `SystemSetup`（world 模块装配器）`set_script` 到 UIRoot 的槽位/弹窗层节点，模块代码不跨模块 `get_node`。
 
 ### 10.4 Minimap 小地图系统
 

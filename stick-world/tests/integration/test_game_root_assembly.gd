@@ -15,8 +15,8 @@ const ScriptCameraRig := preload("res://modules/world/scripts/camera/camera_rig.
 const ScriptSceneLoader := preload("res://modules/world/scripts/loading/scene_loader.gd")
 const ScriptInputDispatcher := preload("res://modules/player_control/scripts/input_dispatcher.gd")
 const ScriptEnvironmentSystem := preload("res://modules/environment/scripts/environment_system.gd")
-const ScriptUIRoot := preload("res://modules/ui/scripts/ui_root.gd")
-const ScriptModePanel := preload("res://modules/ui/scripts/panels/mode_panel.gd")
+const ScriptUIRoot := preload("res://modules/ui_global/scripts/ui_root.gd")
+const ScriptModePanel := preload("res://modules/ui_global/scripts/panels/mode_panel.gd")
 
 var _runner: TestRunner
 var _game_root: Node

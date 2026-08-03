@@ -25,23 +25,23 @@ const _OrganizationManagerScript: GDScript = preload("res://modules/organization
 const _OrganizationApiScript: GDScript = preload("res://modules/organization/api.gd")
 const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/command/tactical_orders.gd")
 const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command/command_chain.gd")
-const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/panels/battle_panel.gd")
-const _FormationPanelScript: GDScript = preload("res://modules/ui/scripts/panels/formation_panel.gd")
-const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui/scripts/panels/settings_menu_panel.gd")
-const _MinimapScript: GDScript = preload("res://modules/ui/scripts/hud/minimap.gd")
-const _ZoomBarScript: GDScript = preload("res://modules/ui/scripts/hud/zoom_bar.gd")
+const _BattlePanelScript: GDScript = preload("res://modules/combat/ui/battle_panel.gd")
+const _FormationPanelScript: GDScript = preload("res://modules/combat/ui/formation_panel.gd")
+const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
+const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
+const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
-const _PossessPanelScript: GDScript = preload("res://modules/ui/scripts/panels/possess_panel.gd")
+const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
 const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
 const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
 const _WorldMapPanelScript: GDScript = preload("res://modules/world/scripts/travel/world_map_panel.gd")
-const _PossessionIndicatorScript: GDScript = preload("res://modules/ui/scripts/indicators/possession_indicator.gd")
-const _HoverIndicatorScript: GDScript = preload("res://modules/ui/scripts/indicators/hover_indicator.gd")
-const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui/scripts/indicators/middle_scroll_overlay.gd")
-const _ResourceBarScript: GDScript = preload("res://modules/ui/scripts/hud/resource_bar.gd")
-const _BuildMenuScript: GDScript = preload("res://modules/ui/scripts/menus/build_menu.gd")
-const _UIRootScene: PackedScene = preload("res://modules/ui/scenes/ui_root.tscn")
+const _PossessionIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/possession_indicator.gd")
+const _HoverIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/hover_indicator.gd")
+const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/scripts/indicators/middle_scroll_overlay.gd")
+const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/resource_bar.gd")
+const _BuildMenuScript: GDScript = preload("res://modules/construction/ui/build_menu.gd")
+const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_root.tscn")
 const _DebugOverlayScene: PackedScene = preload("res://modules/debug_GUI/scenes/debug_overlay.tscn")
 
 var _root: GameRoot
@@ -83,6 +83,13 @@ func _setup_ui_root() -> void:
 	ur.name = "UIRoot"
 	_root.add_child(ur)
 	_root.ui_root = ur
+	# 注入依赖（不自行向上遍历查找）：InputDispatcher 切换时同步面板
+	if ur.has_method("setup"):
+		ur.setup(_root.input_dispatcher)
+	# GlobalHUD 注入 CameraRig / GameRoot（居中/脱困/编制/设置按钮）
+	var hud: Control = ur.get_node_or_null(UIAPI.PATH_GLOBAL_HUD)
+	if hud != null and hud.has_method("setup"):
+		hud.setup(_root.camera_rig, _root)
 
 
 ## 实例化 DebugOverlay 场景并挂为子节点。
@@ -447,6 +454,8 @@ func _setup_game_ui() -> void:
 	_root._possession_indicator.set_script(_PossessionIndicatorScript)
 	_root._possession_indicator.name = "PossessionIndicator"
 	_root._possession_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _root._possession_indicator.has_method("setup"):
+		_root._possession_indicator.setup(_root.camera_rig, _root)
 	if _root.ui_root != null:
 		_root.ui_root.add_child(_root._possession_indicator)
 	else:
@@ -456,6 +465,8 @@ func _setup_game_ui() -> void:
 	_root._hover_indicator.set_script(_HoverIndicatorScript)
 	_root._hover_indicator.name = "HoverIndicator"
 	_root._hover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _root._hover_indicator.has_method("setup"):
+		_root._hover_indicator.setup(_root.camera_rig, _root)
 	if _root.ui_root != null:
 		_root.ui_root.add_child(_root._hover_indicator)
 	else:
@@ -465,6 +476,8 @@ func _setup_game_ui() -> void:
 	_root._middle_scroll_overlay.set_script(_MiddleScrollOverlayScript)
 	_root._middle_scroll_overlay.name = "MiddleScrollOverlay"
 	_root._middle_scroll_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _root._middle_scroll_overlay.has_method("setup"):
+		_root._middle_scroll_overlay.setup(_root.camera_rig)
 	if _root.ui_root != null:
 		_root.ui_root.add_child(_root._middle_scroll_overlay)
 	else:

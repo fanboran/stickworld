@@ -4,6 +4,8 @@ class_name GranularityIndicator
 ##
 ## 详见 docs/技术/架构/战略图架构.md §二 模块结构
 ## 显示当前所在粒度级别和层级路径（如：大陆 > region_001 > tile_042）
+## [待接线] 当前无场景引用（world_map/scenes/ 为空），待 strategic_map 场景
+## 落地后由 .tscn @export 连线接入；_update_display 的面包屑/图标高亮待实现（SM-1）。
 
 ## API 引用
 @export var api_node: Node

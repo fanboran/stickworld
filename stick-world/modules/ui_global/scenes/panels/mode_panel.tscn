@@ -1,0 +1,85 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" uid="uid://c0htxr0xbt2ix" path="res://modules/ui_global/scripts/panels/mode_panel.gd" id="3_mode"]
+
+[node name="ModePanel" type="Control" unique_id=776624750]
+layout_mode = 3
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -80.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("3_mode")
+
+[node name="VillagePanel" type="Control" parent="." unique_id=1495639617]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="VillagePanel" unique_id=1022387230]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[村落模式]"
+
+[node name="BattlePanel" type="Control" parent="." unique_id=1905868625]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="BattlePanel" unique_id=1788923613]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[战斗模式]"
+
+[node name="PossessPanel" type="Control" parent="." unique_id=550243692]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="PossessPanel" unique_id=1475776361]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -20.0
+offset_right = 60.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "[附身模式]"

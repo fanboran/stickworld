@@ -326,6 +326,8 @@ modules/combat/
 
 **关键**：任命排长 = 创建 L1 组织节点，复用现有 `organization_state.gd`。这就是为什么战斗和组织高度耦合——必须一起设计。
 
+**带队出征（跨图携带，2026-08 新增）**：编队可随玩家跨图——`SceneLoader.travel_started`（旧图卸载前）→ `FormationSystem.export_squads` 快照 + `disband_all_squads` 清理 → 新图 `_on_map_loaded` spawn 跟随者（玩家右侧排开）+ `restore_squads` 重建（preset/职责/排长/角色）。遭遇战战场（battlefield）由此支持"队伍 vs 敌人"（玩家+随行 vs 4 敌，全灭收敛）。
+
 ### 8.4 预设号令清单（P0 范围）
 
 | 号令 | 效果 | 适用层级 |

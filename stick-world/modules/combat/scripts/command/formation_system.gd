@@ -39,7 +39,7 @@ signal squad_disbanded(squad_id: String)
 ## OrganizationApi 引用（由 GameRoot 注入）
 var _org_api: Node = null
 ## squad_id -> {"units": Array[Node], "leader": Node, "preset_id": String,
-##              "work_types": Array[String], "role": String}
+##              "work_types": Array[String], "role": String, "name": String}
 var _squads: Dictionary = {}
 ## unit.get_instance_id() -> squad_id（快速反查）
 var _unit_to_squad: Dictionary = {}
@@ -102,15 +102,19 @@ func _process(_delta: float) -> void:
 		var changed: bool = false
 		var i: int = units.size() - 1
 		while i >= 0:
-			var u: Node = units[i]
-			if not is_instance_valid(u) or (u.has_method("is_dead") and u.is_dead()):
+			var u = units[i]
+			# 防御：实例已释放（如跨图销毁）时无法读取 iid，整体解散兜底
+			if not is_instance_valid(u):
+				to_disband.append(squad_id)
+				break
+			if u.has_method("is_dead") and u.is_dead():
 				_unit_to_squad.erase(u.get_instance_id())
 				units.remove_at(i)
 				changed = true
 				if squad["leader"] == u:
 					squad["leader"] = null
 				# 清除编队派生角色（单位仍有效时）
-				if is_instance_valid(u) and u.has_method("set_role"):
+				if u.has_method("set_role"):
 					u.set_role("")
 			i -= 1
 		if units.is_empty():
@@ -172,6 +176,7 @@ func create_squad(units: Array, squad_name: String = "", preset_id: String = DEF
 		"preset_id": preset["id"],
 		"work_types": work_types,
 		"role": preset["default_role"],
+		"name": name_str,
 	}
 	# 发射信号
 	var unit_ids: Array = []
@@ -198,6 +203,23 @@ func disband_squad(squad_id: String) -> void:
 	# 移除本地追踪
 	_squads.erase(squad_id)
 	squad_disbanded.emit(squad_id)
+
+
+## 解散全部小队并清空本地状态（跨图携带前调用：快照导出后调用，
+## 避免旧图实体 freed 后残留引用导致 _process 报错）。
+func disband_all_squads() -> void:
+	for squad_id in _squads.keys():
+		var squad: Dictionary = _squads[squad_id]
+		for u in squad["units"]:
+			if is_instance_valid(u):
+				_unit_to_squad.erase(u.get_instance_id())
+				if u.has_method("set_role"):
+					u.set_role("")
+		if _org_api != null and _org_api.has_method("disband_organization"):
+			_org_api.disband_organization(squad_id)
+		squad_disbanded.emit(squad_id)
+	_squads.clear()
+	_unit_to_squad.clear()
 
 
 ## 任命小队长（排长）。返回是否成功。
@@ -377,3 +399,71 @@ func is_combat_squad(squad_id: String) -> bool:
 	if not _squads.has(squad_id):
 		return false
 	return WorkType.COMBAT in _squads[squad_id]["work_types"]
+
+
+## 获取小队名称。
+func get_squad_name(squad_id: String) -> String:
+	if not _squads.has(squad_id):
+		return ""
+	return _squads[squad_id]["name"]
+
+
+# ─────────────────────────────── 跨图携带（快照/恢复）────────────────────────────────
+
+## 导出全部编队快照（跨图携带用，travel 前由 GameRoot 收集）。
+## 返回 Array[Dictionary]：{"name", "preset_id", "work_types", "leader_iid",
+##                           "members": [{"iid", "role"}]}
+func export_squads() -> Array:
+	var result: Array = []
+	for squad_id in _squads.keys():
+		var s: Dictionary = _squads[squad_id]
+		var members: Array = []
+		for u in s["units"]:
+			if is_instance_valid(u):
+				members.append({
+					"iid": u.get_instance_id(),
+					"role": u.get_role() if u.has_method("get_role") else "",
+				})
+		var leader_iid: int = 0
+		if s["leader"] != null and is_instance_valid(s["leader"]):
+			leader_iid = s["leader"].get_instance_id()
+		result.append({
+			"name": s["name"],
+			"preset_id": s["preset_id"],
+			"work_types": (s["work_types"] as Array).duplicate(),
+			"leader_iid": leader_iid,
+			"members": members,
+		})
+	return result
+
+
+## 按快照重建编队（跨图携带恢复，map_loaded 后由 GameRoot 调用）。
+## entity_map: 旧 instance_id(int) -> 新实体(Node)。
+## 返回成功恢复的小队数。
+func restore_squads(snapshots: Array, entity_map: Dictionary) -> int:
+	var restored: int = 0
+	for snap in snapshots:
+		var members: Array = []
+		for m in snap.get("members", []):
+			var e: Node = entity_map.get(int(m.get("iid", 0)))
+			if e != null and is_instance_valid(e):
+				members.append(e)
+		if members.is_empty():
+			continue
+		var squad_id: String = create_squad(
+			members, snap.get("name", ""), snap.get("preset_id", DEFAULT_PRESET_ID)
+		)
+		if squad_id.is_empty():
+			continue
+		# 恢复自定义职责范围
+		var work_types: Array = snap.get("work_types", [])
+		if not work_types.is_empty():
+			set_squad_work_types(squad_id, work_types)
+		# 恢复排长
+		var leader_iid: int = int(snap.get("leader_iid", 0))
+		if leader_iid != 0 and entity_map.has(leader_iid):
+			var leader: Node = entity_map[leader_iid]
+			if is_instance_valid(leader) and leader in members:
+				assign_leader(squad_id, leader)
+		restored += 1
+	return restored

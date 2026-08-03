@@ -12,7 +12,7 @@ map_left = 0.0
 map_right = 4096.0
 ground_bottom = 1080.0
 
-[node name="PlacementGrid" type="Node"]
+[node name="PlacementGrid" type="Node" parent="."]
 script = ExtResource("2_grid")
 grid_width = 128
 

@@ -149,6 +149,10 @@ var _cached_load_map_id: String = ""
 ## 存档 UI 面板
 var _save_panel: Control = null
 
+# ─────────────────────────────── 跨图携带（带队出征）────────────────────────────────
+## travel_started 时收集的编队快照（跨图携带），map_loaded 后恢复
+var _pending_squad_snapshots: Array = []
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
@@ -338,10 +342,73 @@ func _load_start_village() -> void:
 	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
 	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
 		scene_loader.map_loaded.connect(_on_map_loaded)
+	# 监听 travel_started：旧图卸载前收集编队快照（跨图携带）
+	if not scene_loader.travel_started.is_connected(_on_travel_started):
+		scene_loader.travel_started.connect(_on_travel_started)
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
 	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
 	print("[GameRoot] 开始新游戏")
 	scene_loader.load_map(VILLAGE_A_MAP_ID)
+
+
+## travel_started 回调：旧图卸载前快照全部编队（跨图携带，带队出征）。
+func _on_travel_started(_from_id: String, _to_id: String, _mode: int) -> void:
+	_snapshot_squads_for_travel()
+
+
+## 从 FormationSystem 导出编队快照，存入 _pending_squad_snapshots。
+## 导出后立即解散全部编队（旧图实体即将随地图销毁，避免 freed 引用残留）。
+func _snapshot_squads_for_travel() -> void:
+	_pending_squad_snapshots = []
+	if _formation_system == null:
+		return
+	if _formation_system.has_method("export_squads"):
+		_pending_squad_snapshots = _formation_system.export_squads()
+	if _formation_system.has_method("disband_all_squads"):
+		_formation_system.disband_all_squads()
+
+
+## 跨图携带：在新地图 spawn 随行编队成员（在玩家右侧依次排开）并重建编队。
+## map 必须为 scene_loader.get_current_map()（新图）——get_current_map() 取
+## world_chunk_host 第一个子节点，旧图 queue_free 延迟销毁时可能返回旧图。
+## 返回新地图上的随行实体列表（不含玩家）。无快照时返回空数组。
+func _spawn_travel_followers(map: Node2D, player: Node2D, spawn_y: float) -> Array:
+	var followers: Array = []
+	if _pending_squad_snapshots.is_empty():
+		return followers
+	var snapshots: Array = _pending_squad_snapshots
+	_pending_squad_snapshots = []
+	if map == null or not map.has_method("spawn_entity"):
+		return followers
+	# 旧 instance_id -> 新实体
+	var entity_map: Dictionary = {}
+	var idx: int = 1
+	for snap in snapshots:
+		for m in snap.get("members", []):
+			var old_iid: int = int(m.get("iid", 0))
+			if old_iid == 0 or entity_map.has(old_iid):
+				continue
+			var x: float = player.global_position.x + 70.0 * idx
+			var f: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
+			if f == null:
+				continue
+			# 修正 Y：脚部对齐
+			if f.get("foot_offset") != null:
+				f.global_position.y = spawn_y - f.foot_offset
+			# 不附身（AI 接管），注入系统引用
+			if f.has_method("set_possessed"):
+				f.set_possessed(false)
+			if f.has_method("set_construction_manager") and _construction_manager != null:
+				f.set_construction_manager(_construction_manager)
+			if f.has_method("set_formation_system") and _formation_system != null:
+				f.set_formation_system(_formation_system)
+			entity_map[old_iid] = f
+			followers.append(f)
+			idx += 1
+	# 重建编队（preset/职责/排长）
+	if _formation_system != null and _formation_system.has_method("restore_squads"):
+		_formation_system.restore_squads(snapshots, entity_map)
+	return followers
 
 
 ## 通用地图加载回调（初始加载 + 地图切换共用）
@@ -422,9 +489,13 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 			if _minimap != null and _minimap.has_method("set_map_info"):
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 			_worldgen.spawn_npcs(map, spawn_y)
+		# 跨图携带：spawn 随行编队成员并重建编队（带队出征）
+		var followers: Array = _spawn_travel_followers(map, player, spawn_y)
 		# 阶段 E：遭遇战战场 spawn 敌方火柴人 + 启动战斗（地图切换进入战场时触发）
 		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded:
-			_worldgen.spawn_battlefield_enemies(map, player)
+			var allies: Array = [player]
+			allies.append_array(followers)
+			_worldgen.spawn_battlefield_enemies(map, allies)
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
@@ -525,8 +596,14 @@ func start_new_game(initial_map_id: String) -> void:
 		scene_loader.load_map(initial_map_id)
 
 
-## 获取当前地图实例（可能为空）
+## 获取当前地图实例（可能为空）。
+## 优先用 SceneLoader.current_map（唯一可靠来源）；world_chunk_host 第一个
+## 子节点在旧图 queue_free 延迟销毁期间可能仍是旧图，仅作兜底。
 func get_current_map() -> Node2D:
+	if scene_loader != null and scene_loader.has_method("get_current_map"):
+		var m: Node2D = scene_loader.get_current_map()
+		if m != null and is_instance_valid(m):
+			return m
 	if world_chunk_host and world_chunk_host.get_child_count() > 0:
 		return world_chunk_host.get_child(0) as Node2D
 	return null

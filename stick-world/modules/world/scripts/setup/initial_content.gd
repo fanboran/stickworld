@@ -78,9 +78,9 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 # ─────────────────────────────── 战场敌人 ────────────────────────────────
 
 ## 阶段 E：遭遇战战场生成敌方火柴人并启动战斗。
-## 敌方为红色阵营（视觉区分），玩家方为进攻方。
-func spawn_battlefield_enemies(map: Node2D, player: Node2D) -> void:
-	if map == null or player == null:
+## 我方为红色阵营（视觉区分），玩家方（allies：玩家 + 随行编队）为进攻方。
+func spawn_battlefield_enemies(map: Node2D, allies: Array) -> void:
+	if map == null or allies.is_empty():
 		return
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
 	var enemies: Array = []
@@ -100,10 +100,10 @@ func spawn_battlefield_enemies(map: Node2D, player: Node2D) -> void:
 		# 红色身体区分敌方
 		set_unit_body_color(e, Color(0.82, 0.22, 0.22))
 		enemies.append(e)
-	# 启动战斗：玩家方(进攻) vs 敌方(防守)
+	# 启动战斗：玩家方（进攻）vs 敌方（防守）
 	if not enemies.is_empty():
-		_root.start_test_battle([player], enemies)
-		print("[GameRoot] 遭遇战已启动: 玩家 + 0 友军 vs %d 敌军" % enemies.size())
+		_root.start_test_battle(allies, enemies)
+		print("[GameRoot] 遭遇战已启动: %d 友军 vs %d 敌军" % [allies.size(), enemies.size()])
 
 
 ## 设置火柴人身体颜色（用于阵营视觉区分）

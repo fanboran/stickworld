@@ -24,7 +24,6 @@ func _ready() -> void:
 
 func _test_boot() -> void:
 	_game_root = GAME_ROOT_SCENE.instantiate()
-	_game_root.set("auto_demo_building", false)
 	add_child(_game_root)
 	var ok: bool = await TestHelpers.await_condition(
 		func(): return _game_root != null and is_instance_valid(_game_root) and _game_root.has_method("get_current_map") and _game_root.get_current_map() != null,

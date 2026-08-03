@@ -25,7 +25,8 @@ const ScriptBehaviorFollow := preload("res://modules/units/scripts/ai/behavior_f
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）
 const DECISION_INTERVAL: float = 0.3
-## idle 后切换到 wander 的概率（P0 设为 0：工人无事做原地待机，不随机漫游）
+## idle 后切换到 wander 的概率（当前 0：工人无事做原地待机，不随机漫游。
+## BehaviorWander 行为本体保留，敌人 AI / 闲逛功能启用时调大此值即可）
 const WANDER_PROBABILITY: float = 0.0
 
 ## 工作类型（与 FormationSystem.WorkType 保持一致，本地常量避免跨模块依赖）

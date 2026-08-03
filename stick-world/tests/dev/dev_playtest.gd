@@ -66,7 +66,6 @@ func _parse_args() -> Dictionary:
 func _run(args: Dictionary) -> void:
 	# 实例化 GameRoot（正式主场景，含全部系统装配）
 	_game_root = GameRootScene.instantiate()
-	_game_root.set("auto_demo_building", false)
 	_game_root.set("dev_enemy_count", int(args["enemies"]))
 	add_child(_game_root)
 	# 等待初始村庄加载与实体生成

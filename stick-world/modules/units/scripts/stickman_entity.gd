@@ -720,53 +720,6 @@ func escape_stuck() -> void:
 		global_position.x = (map_left + map_right) * 0.5
 
 
-## 检测是否在通行障碍区域内（WalkBarrier / PassageBarrier，§7.1.2）
-## 使用脚部碰撞箱检测，与物理碰撞箱一致
-func _is_in_passage_barrier() -> bool:
-	if _map_ref == null or not is_instance_valid(_map_ref):
-		return false
-	# 用脚部碰撞箱检测
-	var feet_rect := _get_feet_rect()
-	# 检查地图级 WalkBarrier
-	if _map_ref.has_method("get_walk_barriers"):
-		for area in _map_ref.get_walk_barriers():
-			if _is_rect_in_area(feet_rect, area):
-				return true
-	# 检查建筑级 PassageBarrier
-	if _map_ref.has_method("get_passage_barriers"):
-		for area in _map_ref.get_passage_barriers():
-			if _is_rect_in_area(feet_rect, area):
-				return true
-	return false
-
-
-## 获取脚部碰撞箱的世界坐标矩形
-func _get_feet_rect() -> Rect2:
-	var col := get_node_or_null("Collider") as CollisionShape2D
-	if col != null and col.shape is RectangleShape2D:
-		var shape := col.shape as RectangleShape2D
-		var center: Vector2 = col.global_position
-		var half_size: Vector2 = shape.size * 0.5
-		return Rect2(center - half_size, shape.size)
-	# 退化：用脚部点位置
-	var feet_pos: Vector2 = Vector2(global_position.x, global_position.y + foot_offset)
-	return Rect2(feet_pos - Vector2.ONE, Vector2(2, 2))
-
-
-## 检查矩形是否与 Area2D 的 RectangleShape2D 重叠
-func _is_rect_in_area(rect: Rect2, area: Area2D) -> bool:
-	for child in area.get_children():
-		if child is CollisionShape2D:
-			var shape: Shape2D = (child as CollisionShape2D).shape
-			if shape is RectangleShape2D:
-				var rect_shape: RectangleShape2D = shape as RectangleShape2D
-				var area_center: Vector2 = (child as CollisionShape2D).global_position
-				var area_half: Vector2 = rect_shape.size * 0.5
-				var area_rect := Rect2(area_center - area_half, rect_shape.size)
-				return rect.intersects(area_rect)
-	return false
-
-
 ## 切换附身状态
 func set_possessed(p: bool) -> void:
 	possessed = p

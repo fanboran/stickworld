@@ -2,10 +2,11 @@ extends Node
 ## 全局事件总线 —— 模块间解耦的核心通信机制。
 ##
 ## 使用方式：
-##   发布（广播）： EventBus.emit_signal("resource_changed", resource_name, amount)
-##   订阅（监听）： EventBus.resource_changed.connect(_on_resource_changed)
+##   发布（广播）： EventBus.safe_emit("building_completed", [building_id, tile_pos])
+##   订阅（监听）： EventBus.building_completed.connect(_on_building_completed)
 ##
 ## 约定：事件名用 snake_case，见名知意；参数放在信号声明里。
+## 注意：资源类变更信号（resource_changed 等）由模块 api.gd 自建并转发，EventBus 不重复声明。
 
 # 信号是公共 API，供其他模块 connect/emit。
 # @warning_ignore("unused_signal") 对每个信号逐条标注，因为该注解只作用于下一条语句。
@@ -21,7 +22,6 @@ extends Node
 
 # ─────────────────────────────── 资源 / 经济 ────────────────────────────────
 
-@warning_ignore("unused_signal") signal resource_changed(resource_name: String, amount: int, delta: int)
 @warning_ignore("unused_signal") signal resource_depleted(resource_name: String)
 @warning_ignore("unused_signal") signal resource_not_enough(resource_name: String, required: int)
 # 价格波动（供需自动）：资源系统 → 组织、UI
@@ -102,9 +102,7 @@ extends Node
 @warning_ignore("unused_signal") signal treaty_signed(type, parties, terms)
 
 # ─────────────────────────────── 组织 ─────────────────────────────────────
-# 创建新组织：组织系统 → UI
-@warning_ignore("unused_signal") signal org_created(org_id, parent_id, tag, tier)
-# 解散组织：组织系统 → UI、Project系统
+# 创建新组织：组织系统 → UI（由 organization/api.gd 自建信号转发，EventBus 不重复声明）
 @warning_ignore("unused_signal") signal org_disbanded(org_id)
 # 重组编制：组织系统 → UI
 @warning_ignore("unused_signal") signal org_restructured(org_id, changes)

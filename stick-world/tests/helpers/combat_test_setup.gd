@@ -39,7 +39,6 @@ func start(host: Node) -> void:
 		host.get_tree().quit(1)
 		return
 	game_root = packed.instantiate()
-	game_root.set("auto_demo_building", false)
 	host.add_child(game_root)
 	# 等待地图加载和实体生成
 	for i in 8:

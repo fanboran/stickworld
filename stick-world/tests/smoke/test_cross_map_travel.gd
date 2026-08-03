@@ -43,8 +43,6 @@ func _run_tests_async() -> void:
 		get_tree().quit(1)
 		return
 	_game_root = packed.instantiate()
-	# 关闭自动演示建造（本测试不关注建造系统）
-	_game_root.auto_demo_building = false
 	add_child(_game_root)
 	# 等待初始地图加载（call_deferred + 多帧确保 spawn 完成）
 	await get_tree().process_frame

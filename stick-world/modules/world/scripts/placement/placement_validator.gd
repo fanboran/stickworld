@@ -2,6 +2,9 @@ class_name PlacementValidator
 extends RefCounted
 ## 占地校验器 -- 在 PlacementGrid 之上提供更高层语义校验（1D 竖向条带）。
 ##
+## 注意：本类型被 construction 模块跨模块引用（modules/construction/scripts/placement/placement_system.gd），
+## 属"跨模块公共类型"，删除/改名需同步 construction 侧。
+##
 ## PlacementGrid 只回答"条带是否空闲"，PlacementValidator 还会检查：
 ##   - 是否在地图边界内
 ##   - 尺寸是否合法

@@ -76,7 +76,6 @@ func _run_tests_async() -> void:
 		get_tree().quit(1)
 		return
 	_game_root = packed.instantiate()
-	_game_root.set("auto_demo_building", false)
 	add_child(_game_root)
 	# 等待地图加载和实体生成
 	for i in 8:

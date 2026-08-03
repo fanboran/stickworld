@@ -1,4 +1,4 @@
-extends Node
+extends RefCounted
 ## 纹理生成模块（texture_gen）公共接口契约
 ##
 ## 提供程序化 CPU 贴图 + GPU Shader 材质。
@@ -15,15 +15,6 @@ extends Node
 ## some_sprite.material = shader_mat
 ## shader_mat.set_shader_parameter("seed", 42)
 ## ```
-
-# ===== 公共信号（转发到 EventBus）=====
-
-## 材质参数变更（调试面板调整时触发）
-signal material_param_changed(material_name: String, param_name: String, value: Variant)
-
-## 材质截图完成
-signal texture_captured(material_name: String, output_path: String)
-
 
 # ===== 材质查询 =====
 

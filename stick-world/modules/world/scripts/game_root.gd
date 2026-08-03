@@ -58,8 +58,6 @@ const NPC_COUNT: int = 2
 
 # ─────────────────────────────── 建造系统（§15 阶段 0.4）────────────────────────────────
 
-## [已废弃] 原自动演示建造开关，演示建造功能已删除。保留字段仅为兼容旧测试脚本 set 调用。
-@export var auto_demo_building: bool = false
 ## 是否已加载过初始地图（用于区分初始加载 vs 地图切换）
 var _initial_map_loaded: bool = false
 ## ConstructionManager 实例引用（运行时由 SystemSetup 装配）

@@ -13,10 +13,18 @@ extends Node
 ## BattleDirector 实例引用（由 GameRoot 装配时注入）
 var _director: Node = null
 
+## FormationSystem 实例引用（由 GameRoot 装配时注入，用于跨图编队快照）
+var _formation: Node = null
+
 
 ## 注入 BattleDirector 引用（由 GameRoot._setup_combat_system 调用）
 func setup(director: Node) -> void:
 	_director = director
+
+
+## 注入 FormationSystem 引用（跨图编队快照/恢复用）
+func setup_formation_system(formation: Node) -> void:
+	_formation = formation
 
 
 # ─────────────────────────────── 创建战斗 ────────────────────────────────
@@ -43,3 +51,26 @@ func get_active_battles() -> Array:
 	if _director == null:
 		return []
 	return _director.get_active_battles()
+
+
+# ─────────────────────────────── 编队跨图快照 ────────────────────────────────
+
+## 导出全部编队快照（跨图前调用，含 preset/职责/排长）。
+func export_squads() -> Array:
+	if _formation == null:
+		return []
+	if _formation.has_method("export_squads"):
+		return _formation.export_squads()
+	return []
+
+
+## 解散全部编队（旧图实体即将销毁前调用，防 freed 引用残留）。
+func disband_all_squads() -> void:
+	if _formation != null and _formation.has_method("disband_all_squads"):
+		_formation.disband_all_squads()
+
+
+## 在新地图重建编队（快照 + 新旧实体映射）。
+func restore_squads(snapshots: Array, entity_map: Dictionary) -> void:
+	if _formation != null and _formation.has_method("restore_squads"):
+		_formation.restore_squads(snapshots, entity_map)

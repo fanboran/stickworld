@@ -12,6 +12,19 @@ extends Node
 # ─────────────────────────────── 信号 ────────────────────────────────
 signal mode_changed(old_mode: int, new_mode: int)
 
+# ─────────────────────────────── 生命周期 ────────────────────────────────
+
+func _ready() -> void:
+	# 订阅建筑进入信号（2026-08 审计收敛：Building 不再直调 dispatcher）
+	if EventBus != null and EventBus.has_signal("interior_entered"):
+		EventBus.interior_entered.connect(_on_interior_entered)
+
+
+## 玩家进入建筑交互区 → 切入 INDOOR 模式
+func _on_interior_entered(_building_id: int) -> void:
+	if get_mode() != PlayerControlAPI.Mode.INDOOR:
+		enter_indoor_mode()
+
 # ─────────────────────────────── 状态 ────────────────────────────────
 ## 初始为 NONE，等地图加载完后由 GameRoot.set_mode(EXPLORE) 激活
 var current_mode: int = PlayerControlAPI.Mode.NONE

@@ -594,14 +594,15 @@ func _toggle_combat_mode() -> void:
 		EventBus.ui_notification.emit("模式", label, "info")
 
 
-## 查找 InputDispatcher（向上遍历父链，从 GameRoot 取子节点）。
+## 查找 InputDispatcher（通过 game_root group 获取；2026-08 审计收敛：替代父链遍历）。
+## GameRoot 注册于 "game_root" group（见 game_root._ready）。
 func _find_input_dispatcher() -> Node:
-	var p: Node = get_parent()
-	while p != null:
-		if p.has_node("InputDispatcher"):
-			return p.get_node("InputDispatcher")
-		p = p.get_parent()
-	return null
+	if get_tree() == null:
+		return null
+	var game_root: Node = get_tree().get_first_node_in_group("game_root")
+	if game_root == null:
+		return null
+	return game_root.get("input_dispatcher") as Node
 
 
 ## 获取所在地图引用（可能为 null，供 AI 行为查询玩家等）。

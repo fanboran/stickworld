@@ -377,14 +377,15 @@ func _on_travel_started(_from_id: String, _to_id: String, _mode: int) -> void:
 
 ## 从 FormationSystem 导出编队快照，存入 _pending_squad_snapshots。
 ## 导出后立即解散全部编队（旧图实体即将随地图销毁，避免 freed 引用残留）。
+## 统一走 CombatApi（2026-08 审计收敛，不再直调 combat 内部 manager）。
 func _snapshot_squads_for_travel() -> void:
 	_pending_squad_snapshots = []
-	if _formation_system == null:
+	if _combat_api == null:
 		return
-	if _formation_system.has_method("export_squads"):
-		_pending_squad_snapshots = _formation_system.export_squads()
-	if _formation_system.has_method("disband_all_squads"):
-		_formation_system.disband_all_squads()
+	if _combat_api.has_method("export_squads"):
+		_pending_squad_snapshots = _combat_api.export_squads()
+	if _combat_api.has_method("disband_all_squads"):
+		_combat_api.disband_all_squads()
 
 
 ## 跨图携带：在新地图 spawn 随行编队成员（在玩家右侧依次排开）并重建编队。
@@ -425,8 +426,8 @@ func _spawn_travel_followers(map: Node2D, player: Node2D, spawn_y: float) -> Arr
 			followers.append(f)
 			idx += 1
 	# 重建编队（preset/职责/排长）
-	if _formation_system != null and _formation_system.has_method("restore_squads"):
-		_formation_system.restore_squads(snapshots, entity_map)
+	if _combat_api != null and _combat_api.has_method("restore_squads"):
+		_combat_api.restore_squads(snapshots, entity_map)
 	return followers
 
 
@@ -435,9 +436,9 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 	var map: Node2D = scene_loader.get_current_map() if scene_loader.has_method("get_current_map") else null
 	if map == null or not map.has_method("spawn_entity"):
 		return
-	# 注入地图到 ConstructionManager（供项目实例化建筑用）
-	if _construction_manager != null and _construction_manager.has_method("set_map"):
-		_construction_manager.set_map(map)
+	# 注入地图到 ConstructionManager（供项目实例化建筑用；走 api 收敛）
+	if _construction_api != null and _construction_api.has_method("set_map"):
+		_construction_api.set_map(map)
 	# 阶段 F：注入地图到 MapBoundaryDetector
 	if _boundary_detector != null and _boundary_detector.has_method("set_map"):
 		_boundary_detector.set_map(map)

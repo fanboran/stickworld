@@ -517,6 +517,9 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 		building.queue_free()
 		return {"ok": false, "error": "map.building_host 不存在"}
 	host.add_child(building)
+	# 注入地图引用（建筑判定玩家实体用，2026-08 审计收敛）
+	if building.has_method("set_map_reference"):
+		building.set_map_reference(_map)
 
 	# 摆放位置：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基准线（地平线向下 baseline_offset）
 	var world_x: float = cell_x * 32.0

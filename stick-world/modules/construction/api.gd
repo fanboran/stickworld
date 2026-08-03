@@ -86,6 +86,12 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = 1) -> 
 	return _manager.spawn_operational_building(def_id, cell_x, width)
 
 
+## 注入当前地图（供项目实例化建筑使用；地图切换时调用）
+func set_map(map: Node2D) -> void:
+	if _is_initialized:
+		_manager.set_map(map)
+
+
 # ===== 查询 =====
 
 ## 查询地块内的所有建筑 ID

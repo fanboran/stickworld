@@ -334,6 +334,9 @@ func _complete() -> void:
 		new_building.queue_free()
 		return
 	host.add_child(new_building)
+	# 注入地图引用（建筑判定玩家实体用，2026-08 审计收敛）
+	if new_building.has_method("set_map_reference"):
+		new_building.set_map_reference(map)
 	# 计算世界坐标：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基准线（地平线向下 baseline_offset）
 	var cell_size: int = 32
 	var placement_grid: Node = map.get("placement_grid") if "placement_grid" in map else null

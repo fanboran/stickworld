@@ -155,6 +155,8 @@ func _setup_combat_api_deferred() -> void:
 	if not _root._combat_api.has_method("setup"):
 		return
 	_root._combat_api.setup(_root.battle_director)
+	if _root._formation_system != null and _root._combat_api.has_method("setup_formation_system"):
+		_root._combat_api.setup_formation_system(_root._formation_system)
 
 
 # ─────────────────────────────── 资源系统装配（P0-9）────────────────────────────────

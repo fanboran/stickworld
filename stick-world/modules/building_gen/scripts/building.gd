@@ -309,24 +309,24 @@ func get_passage_barrier() -> StaticBody2D:
 
 # ─────────────────────────────── 室内系统（§5）───────────────────────────────
 
+## 所属地图引用（由 ConstructionManager 挂载建筑时注入，用于判定玩家实体）
+var _map_ref: Node = null
+
+
+## 注入所属地图（2026-08 审计收敛：替代向上遍历找 GameRoot）
+func set_map_reference(map: Node) -> void:
+	_map_ref = map
+
+
 ## 判定 body 是否为当前玩家实体（供 InteractionZone 触发过滤：NPC 不触发透明化）
 func _is_player_entity(body: Node2D) -> bool:
-	# 方案：通过 GameRoot -> PossessionInterface 获取当前附身实体
-	var root: Node = get_tree().root
-	# 找到 GameRoot
-	var game_root: Node = null
-	for i in root.get_child_count():
-		var child := root.get_child(i)
-		if child.has_method("get_possession_interface"):
-			game_root = child
-			break
-	if game_root == null:
-		push_warning("[Building] 找不到 GameRoot，无法判定玩家实体")
+	# 通过地图的 get_possessed_entity 获取当前附身实体（VillageMap/RoadMap 均实现）
+	if _map_ref == null or not is_instance_valid(_map_ref):
+		push_warning("[Building] 地图引用未注入，无法判定玩家实体: %s" % name)
 		return false
-	var pi: Node = game_root.get_possession_interface()
-	if pi == null or not pi.has_method("get_possessed_entity"):
+	if not _map_ref.has_method("get_possessed_entity"):
 		return false
-	var possessed: Node2D = pi.get_possessed_entity()
+	var possessed: Node2D = _map_ref.get_possessed_entity()
 	if possessed == null or not is_instance_valid(possessed):
 		return false
 	return possessed == body
@@ -352,16 +352,9 @@ func _on_interaction_zone_body_entered(body: Node2D) -> void:
 	if state != State.OPERATIONAL:
 		return  # 建造中/被破坏不触发
 	_set_transparent(true)
-	# 发射 EventBus 信号
+	# 发射 EventBus 信号（InputDispatcher 订阅后切入 INDOOR 模式，2026-08 审计收敛）
 	if EventBus != null:
 		EventBus.interior_entered.emit(get_instance_id())
-	# 触发 INDOOR 模式切换（通过 GameRoot -> InputDispatcher）
-	var game_root: Node = _find_game_root()
-	if game_root != null:
-		var dispatcher: Node = game_root.get("input_dispatcher") as Node
-		if dispatcher != null and dispatcher.has_method("get_mode") and dispatcher.get_mode() != PlayerControlAPI.Mode.INDOOR:
-			if dispatcher.has_method("enter_indoor_mode"):
-				dispatcher.enter_indoor_mode()
 
 
 ## InteractionZone body_exited 回调
@@ -392,24 +385,10 @@ func _on_enter_trigger_body_entered(body: Node2D) -> void:
 func is_player_inside_interaction_zone() -> bool:
 	if _interaction_zone == null:
 		return false
-	var game_root: Node = _find_game_root()
-	if game_root == null:
+	if _map_ref == null or not is_instance_valid(_map_ref) or not _map_ref.has_method("get_possessed_entity"):
 		return false
-	var pi: Node = game_root.get_possession_interface() if game_root.has_method("get_possession_interface") else null
-	if pi == null or not pi.has_method("get_possessed_entity"):
-		return false
-	var player: Node2D = pi.get_possessed_entity()
+	var player: Node2D = _map_ref.get_possessed_entity()
 	if player == null or not is_instance_valid(player):
 		return false
 	var bodies: Array = _interaction_zone.get_overlapping_bodies()
 	return bodies.has(player)
-
-
-## 查找 GameRoot（从场景树根遍历）
-func _find_game_root() -> Node:
-	var root: Node = get_tree().root
-	for i in root.get_child_count():
-		var child := root.get_child(i)
-		if child.has_method("get_possession_interface"):
-			return child
-	return null

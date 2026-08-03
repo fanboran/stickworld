@@ -16,6 +16,12 @@ var _buttons_container: VBoxContainer = null
 var _is_open: bool = false
 ## SceneLoader 引用（由 SystemSetup 注入，用于动态查询出口/地图）
 var _scene_loader: Node = null
+## 背景与面板引用（打开时按 viewport 手动定位，不依赖 anchors 布局时序）
+var _bg: ColorRect = null
+var _panel: Panel = null
+
+## 面板尺寸
+const PANEL_SIZE: Vector2 = Vector2(440, 400)
 
 ## 地图显示名（map_id -> 中文名）
 const MAP_DISPLAY_NAMES: Dictionary = {
@@ -34,21 +40,18 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
-	# 半透明背景
-	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.7)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	# 面板容器（anchors + offsets 同时设置才真正居中）
-	var panel := Panel.new()
-	panel.custom_minimum_size = Vector2(440, 400)
-	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
-	add_child(panel)
+	# 半透明背景（打开时手动全屏）
+	_bg = ColorRect.new()
+	_bg.color = Color(0, 0, 0, 0.7)
+	add_child(_bg)
+	# 面板容器（打开时手动居中）
+	_panel = Panel.new()
+	add_child(_panel)
 	# 标题
 	var title := Label.new()
 	title.text = "大世界地图（简易导航）"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	panel.add_child(title)
+	_panel.add_child(title)
 	# 按钮容器
 	_buttons_container = VBoxContainer.new()
 	_buttons_container.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -56,7 +59,7 @@ func _build_ui() -> void:
 	_buttons_container.offset_bottom = -40
 	_buttons_container.offset_left = 20
 	_buttons_container.offset_right = -20
-	panel.add_child(_buttons_container)
+	_panel.add_child(_buttons_container)
 	# 关闭按钮
 	var close_btn := Button.new()
 	close_btn.text = "关闭 (Tab)"
@@ -66,7 +69,7 @@ func _build_ui() -> void:
 	close_btn.offset_left = 20
 	close_btn.offset_right = -20
 	close_btn.pressed.connect(close_panel)
-	panel.add_child(close_btn)
+	_panel.add_child(close_btn)
 
 
 ## 注入 SceneLoader 引用（由 SystemSetup 调用）。
@@ -76,6 +79,13 @@ func setup(scene_loader: Node) -> void:
 
 ## 打开面板：按当前地图动态生成目的地。
 func open_panel() -> void:
+	# 手动定位：按 viewport 尺寸居中（ModalOverlay 布局时序不可靠，锚点方案弃用）
+	var vp_rect: Rect2 = get_viewport().get_visible_rect() if get_viewport() != null else Rect2(0, 0, 1920, 1080)
+	if _bg != null:
+		_bg.size = vp_rect.size
+	if _panel != null:
+		_panel.size = PANEL_SIZE
+		_panel.position = (vp_rect.size - PANEL_SIZE) * 0.5
 	_is_open = true
 	visible = true
 	_refresh_dynamic_destinations()

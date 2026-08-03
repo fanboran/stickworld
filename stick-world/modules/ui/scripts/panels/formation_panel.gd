@@ -70,11 +70,12 @@ func _build_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg)
-	# 主面板（anchors + offsets 同时设置才真正居中）
+	# 主面板。注意顺序：先 add_child 再 set_anchors_and_offsets_preset
+	# （节点须已入树、父尺寸已知，才能正确计算居中偏移）。
 	var panel := Panel.new()
 	panel.custom_minimum_size = Vector2(760, 500)
-	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
 	add_child(panel)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
 	# 标题
 	var title := Label.new()
 	title.text = "编制管理"

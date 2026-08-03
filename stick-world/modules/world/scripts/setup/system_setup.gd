@@ -309,14 +309,18 @@ func _setup_formation_panel_deferred() -> void:
 
 # ─────────────────────────────── 设置菜单装配（齿轮/ESC 打开）────────────────────────────────
 
-## 实例化 SettingsMenuPanel 并挂到 UIRoot（左上角齿轮 + ESC 开关）。
+## 实例化 SettingsMenuPanel 并挂到 UIRoot.ModalOverlay（Control 容器，
+## anchors 布局可靠——直接挂 CanvasLayer 下 anchors 不生效会堆左上角）。
 func _setup_settings_menu_panel() -> void:
 	if _root.ui_root == null:
+		return
+	var overlay: Control = _root.ui_root.get_node_or_null(UIAPI.PATH_MODAL_OVERLAY)
+	if overlay == null:
 		return
 	var sp := Control.new()
 	sp.set_script(_SettingsMenuPanelScript)
 	sp.name = "SettingsMenuPanel"
-	_root.ui_root.add_child(sp)
+	overlay.add_child(sp)
 	_root._settings_menu_panel = sp
 	call_deferred("_setup_settings_menu_panel_deferred")
 
@@ -411,11 +415,14 @@ func _setup_boundary_detector() -> void:
 	_root._boundary_detector.set_script(_MapBoundaryDetectorScript)
 	_root._boundary_detector.name = "MapBoundaryDetector"
 	_root.add_child(_root._boundary_detector)
-	# 实例化大世界地图面板
+	# 实例化大世界地图面板（挂 ModalOverlay：Control 容器，anchors 布局可靠）
 	_root._world_map_panel = Control.new()
 	_root._world_map_panel.set_script(_WorldMapPanelScript)
 	_root._world_map_panel.name = "WorldMapPanel"
-	if _root.ui_root != null:
+	var overlay: Control = _root.ui_root.get_node_or_null(UIAPI.PATH_MODAL_OVERLAY) if _root.ui_root != null else null
+	if overlay != null:
+		overlay.add_child(_root._world_map_panel)
+	elif _root.ui_root != null:
 		_root.ui_root.add_child(_root._world_map_panel)
 	else:
 		_root.add_child(_root._world_map_panel)

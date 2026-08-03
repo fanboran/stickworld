@@ -14,6 +14,12 @@ extends Control
 var _game_root: Node = null
 var _buttons: VBoxContainer = null
 var _debug_section: VBoxContainer = null
+## 背景与主面板引用（打开时按 viewport 手动定位，不依赖 anchors 布局时序）
+var _bg: ColorRect = null
+var _panel: Panel = null
+
+## 面板尺寸
+const PANEL_SIZE: Vector2 = Vector2(480, 460)
 
 ## 地图显示名（map_id -> 中文名）
 const MAP_DISPLAY_NAMES: Dictionary = {
@@ -36,7 +42,6 @@ func setup(game_root: Node) -> void:
 
 func _ready() -> void:
 	visible = false
-	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 
 func toggle() -> void:
@@ -47,6 +52,13 @@ func toggle() -> void:
 
 
 func open_menu() -> void:
+	# 手动定位：按 viewport 尺寸居中（ModalOverlay 布局时序不可靠，锚点方案弃用）
+	var vp_rect: Rect2 = get_viewport().get_visible_rect() if get_viewport() != null else Rect2(0, 0, 1920, 1080)
+	if _bg != null:
+		_bg.size = vp_rect.size
+	if _panel != null:
+		_panel.size = PANEL_SIZE
+		_panel.position = (vp_rect.size - PANEL_SIZE) * 0.5
 	visible = true
 
 
@@ -73,17 +85,14 @@ func _unhandled_input(event: InputEvent) -> void:
 # ─────────────────────────────── UI 构建（Minecraft 式）────────────────────────────────
 
 func _build_ui() -> void:
-	# 半透明背景（点击不穿透）
-	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.55)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(bg)
-	# 居中面板（Minecraft 式：anchors + offsets 同时设置才真正居中）
-	var panel := Panel.new()
-	panel.custom_minimum_size = Vector2(480, 460)
-	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
-	add_child(panel)
+	# 半透明背景（点击不穿透，打开时手动全屏）
+	_bg = ColorRect.new()
+	_bg.color = Color(0, 0, 0, 0.55)
+	_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_bg)
+	# 居中面板（打开时手动定位）
+	_panel = Panel.new()
+	add_child(_panel)
 	# 标题
 	var title := Label.new()
 	title.text = "设置"
@@ -92,7 +101,7 @@ func _build_ui() -> void:
 	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title.offset_top = 20
 	title.offset_bottom = 56
-	panel.add_child(title)
+	_panel.add_child(title)
 	# 按钮列
 	_buttons = VBoxContainer.new()
 	_buttons.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -101,7 +110,7 @@ func _build_ui() -> void:
 	_buttons.offset_left = 40
 	_buttons.offset_right = -40
 	_buttons.add_theme_constant_override("separation", 8)
-	panel.add_child(_buttons)
+	_panel.add_child(_buttons)
 	# ── 常规区 ──
 	_add_section_title("游戏")
 	_add_speed_buttons()

@@ -32,7 +32,7 @@ func _ready() -> void:
 
 func _register_tests() -> void:
 	_tests.append({"name": "设置: 装配且默认隐藏", "fn": Callable(self, "_test_settings_assembled"), "async": false})
-	_tests.append({"name": "设置: toggle 显隐", "fn": Callable(self, "_test_settings_toggle"), "async": false})
+	_tests.append({"name": "设置: toggle 显隐且居中", "fn": Callable(self, "_test_settings_toggle"), "async": true})
 	_tests.append({"name": "设置: 调试区含地图选择按钮", "fn": Callable(self, "_test_settings_debug_buttons"), "async": false})
 	_tests.append({"name": "导航: 动态生成目的地含步行出口", "fn": Callable(self, "_test_world_map_dynamic"), "async": true})
 	_tests.append({"name": "战场: 无队伍也有默认步兵", "fn": Callable(self, "_test_default_infantry"), "async": true})
@@ -76,6 +76,21 @@ func _test_settings_toggle() -> void:
 	if _helper.game_root.has_method("toggle_settings_menu"):
 		_helper.game_root.toggle_settings_menu()
 	_runner.assert_true(panel.visible, "toggle 后应显示")
+	# 面板应真正居中（先等一帧布局完成）
+	await get_tree().process_frame
+	var inner: Control = panel.get_node_or_null("Panel") if panel.has_node("Panel") else null
+	if inner == null:
+		# 从子节点找 Panel（标题"设置"所在面板）
+		for child in panel.get_children():
+			if child is Panel:
+				inner = child
+				break
+	if inner != null:
+		var vp_size: Vector2 = _helper.game_root.get_viewport().get_visible_rect().size
+		var expected_x: float = (vp_size.x - inner.size.x) * 0.5
+		var expected_y: float = (vp_size.y - inner.size.y) * 0.5
+		_runner.assert_true(absf(inner.position.x - expected_x) < 8.0, "面板应水平居中，pos.x=%.1f 期望 %.1f" % [inner.position.x, expected_x])
+		_runner.assert_true(absf(inner.position.y - expected_y) < 8.0, "面板应垂直居中，pos.y=%.1f 期望 %.1f" % [inner.position.y, expected_y])
 	# 关闭
 	_helper.game_root.toggle_settings_menu()
 	_runner.assert_true(not panel.visible, "再次 toggle 后应隐藏")

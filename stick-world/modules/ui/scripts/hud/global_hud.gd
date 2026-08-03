@@ -12,6 +12,7 @@ extends Control
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
+@onready var settings_button: Button = get_node_or_null("MarginContainer/HBoxContainer/SettingsButton")
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -26,6 +27,8 @@ func _ready() -> void:
 		stuck_button.pressed.connect(_on_stuck_button_pressed)
 	if formation_button != null:
 		formation_button.pressed.connect(_on_formation_button_pressed)
+	if settings_button != null:
+		settings_button.pressed.connect(_on_settings_button_pressed)
 
 
 func _process(_delta: float) -> void:
@@ -163,3 +166,15 @@ func _on_formation_button_pressed() -> void:
 		return
 	if gr.has_method("toggle_formation_panel"):
 		gr.toggle_formation_panel()
+
+
+# ─────────────────────────────── 设置菜单（齿轮按钮）────────────────────────────────
+
+## 打开/关闭设置菜单（调试地图选择/速度控制）
+func _on_settings_button_pressed() -> void:
+	var gr := _get_game_root()
+	if gr == null:
+		show_notification("设置", "未找到游戏根节点", "error")
+		return
+	if gr.has_method("toggle_settings_menu"):
+		gr.toggle_settings_menu()

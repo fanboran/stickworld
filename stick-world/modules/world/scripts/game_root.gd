@@ -140,8 +140,8 @@ var _resource_bar: Control = null
 var _build_menu: Control = null
 ## 编制管理窗口（运行时由 SystemSetup 装配到 UIRoot.ModalOverlay）
 var _formation_panel: Control = null
-## 临时主页菜单（运行时由 SystemSetup 装配到 UIRoot）
-var _main_menu_panel: Control = null
+## 设置菜单（运行时由 SystemSetup 装配到 UIRoot，齿轮/ESC 打开）
+var _settings_menu_panel: Control = null
 
 # ─────────────────────────────── 存档系统 ────────────────────────────────
 ## 是否有存档待加载（读档入口标记）
@@ -305,15 +305,15 @@ func toggle_formation_panel() -> void:
 		_formation_panel.toggle()
 
 
-## 获取临时主页菜单引用（供测试用）
-func get_main_menu_panel() -> Control:
-	return _main_menu_panel
+## 获取设置菜单引用（供测试用）
+func get_settings_menu_panel() -> Control:
+	return _settings_menu_panel
 
 
-## 关闭主页菜单（测试/脚本调用）
-func close_main_menu() -> void:
-	if _main_menu_panel != null and _main_menu_panel.has_method("close_menu"):
-		_main_menu_panel.close_menu()
+## 打开/关闭设置菜单（左上角齿轮按钮 / ESC 键调用）
+func toggle_settings_menu() -> void:
+	if _settings_menu_panel != null and _settings_menu_panel.has_method("toggle"):
+		_settings_menu_panel.toggle()
 
 
 ## 启动一场测试战斗（供 test_stage_05 调用）。

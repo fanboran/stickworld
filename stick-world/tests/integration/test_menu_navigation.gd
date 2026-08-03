@@ -1,5 +1,5 @@
 extends Node
-## 集成测试：临时主页菜单 + 大世界导航动态目的地 + 战场默认步兵。
+## 集成测试：设置菜单（齿轮/ESC 开关）+ 大世界导航动态目的地 + 战场默认步兵。
 ##
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_menu_navigation.tscn -- --fresh-start
@@ -7,7 +7,9 @@ extends Node
 ## 退出码：0 全部通过，1 有失败
 ##
 ## 测试覆盖：
-##   - 主页菜单装配且启动时显示 / close 隐藏
+##   - 设置菜单装配（齿轮入口）
+##   - 设置菜单 toggle 显隐（ESC 等效调用）
+##   - debug 构建下含调试地图选择按钮
 ##   - 大世界地图面板按当前地图动态生成目的地（含步行出口）
 ##   - 战场默认步兵：不带队伍进战场也有基础友军
 ##
@@ -29,8 +31,9 @@ func _ready() -> void:
 
 
 func _register_tests() -> void:
-	_tests.append({"name": "主页: 装配且启动时显示", "fn": Callable(self, "_test_menu_assembled"), "async": false})
-	_tests.append({"name": "主页: close 后隐藏", "fn": Callable(self, "_test_menu_close"), "async": false})
+	_tests.append({"name": "设置: 装配且默认隐藏", "fn": Callable(self, "_test_settings_assembled"), "async": false})
+	_tests.append({"name": "设置: toggle 显隐", "fn": Callable(self, "_test_settings_toggle"), "async": false})
+	_tests.append({"name": "设置: 调试区含地图选择按钮", "fn": Callable(self, "_test_settings_debug_buttons"), "async": false})
 	_tests.append({"name": "导航: 动态生成目的地含步行出口", "fn": Callable(self, "_test_world_map_dynamic"), "async": true})
 	_tests.append({"name": "战场: 无队伍也有默认步兵", "fn": Callable(self, "_test_default_infantry"), "async": true})
 
@@ -54,24 +57,51 @@ func _run_tests_async() -> void:
 	get_tree().quit(exit_code)
 
 
-## 主页菜单装配且启动时显示（原型启动器）
-func _test_menu_assembled() -> void:
-	var panel: Control = _helper.game_root.get_main_menu_panel() if _helper.game_root.has_method("get_main_menu_panel") else null
-	_runner.assert_true(panel != null, "MainMenuPanel 应已装配")
+## 设置菜单装配且默认隐藏（启动不弹菜单）
+func _test_settings_assembled() -> void:
+	var panel: Control = _helper.game_root.get_settings_menu_panel() if _helper.game_root.has_method("get_settings_menu_panel") else null
+	_runner.assert_true(panel != null, "SettingsMenuPanel 应已装配")
 	if panel == null:
 		return
-	_runner.assert_true(panel.visible, "启动时主页菜单应显示")
+	_runner.assert_true(not panel.visible, "启动时设置菜单应隐藏")
 
 
-## close 后隐藏
-func _test_menu_close() -> void:
-	var panel: Control = _helper.game_root.get_main_menu_panel() if _helper.game_root.has_method("get_main_menu_panel") else null
+## toggle 显隐
+func _test_settings_toggle() -> void:
+	var panel: Control = _helper.game_root.get_settings_menu_panel() if _helper.game_root.has_method("get_settings_menu_panel") else null
 	if panel == null:
-		_runner.assert_true(false, "MainMenuPanel 为空")
+		_runner.assert_true(false, "SettingsMenuPanel 为空")
 		return
-	if _helper.game_root.has_method("close_main_menu"):
-		_helper.game_root.close_main_menu()
-	_runner.assert_true(not panel.visible, "close 后主页菜单应隐藏")
+	# 打开
+	if _helper.game_root.has_method("toggle_settings_menu"):
+		_helper.game_root.toggle_settings_menu()
+	_runner.assert_true(panel.visible, "toggle 后应显示")
+	# 关闭
+	_helper.game_root.toggle_settings_menu()
+	_runner.assert_true(not panel.visible, "再次 toggle 后应隐藏")
+
+
+## 调试构建下设置菜单含调试地图选择按钮（等效原主页测试入口）
+func _test_settings_debug_buttons() -> void:
+	var panel: Control = _helper.game_root.get_settings_menu_panel() if _helper.game_root.has_method("get_settings_menu_panel") else null
+	if panel == null:
+		_runner.assert_true(false, "SettingsMenuPanel 为空")
+		return
+	if not OS.is_debug_build():
+		_runner.assert_true(true, "非 debug 构建跳过（当前为 debug）")
+		return
+	if _helper.game_root.has_method("toggle_settings_menu"):
+		_helper.game_root.toggle_settings_menu()
+	var buttons: Node = panel.get("_buttons")
+	_runner.assert_true(buttons != null, "应有按钮容器")
+	if buttons == null:
+		return
+	var map_btn_count: int = 0
+	for child in buttons.get_children():
+		if child is Button and child.text.begins_with("前往"):
+			map_btn_count += 1
+	_runner.assert_true(map_btn_count >= 4, "调试区应有地图选择按钮（≥4），实际 %d" % map_btn_count)
+	_helper.game_root.toggle_settings_menu()
 
 
 ## 大世界地图面板：打开时按当前地图动态生成目的地（village_a 有左右出口）
@@ -111,9 +141,11 @@ func _test_default_infantry() -> void:
 	if sl == null or not sl.has_method("travel_to_map"):
 		_runner.assert_true(false, "SceneLoader 为空")
 		return
-	# 确保主页菜单关闭（避免干扰）
-	if _helper.game_root.has_method("close_main_menu"):
-		_helper.game_root.close_main_menu()
+	# 确保设置菜单关闭（避免干扰）
+	if _helper.game_root.has_method("toggle_settings_menu"):
+		var sp: Control = _helper.game_root.get_settings_menu_panel()
+		if sp != null and sp.visible:
+			_helper.game_root.toggle_settings_menu()
 	sl.travel_to_map(ScriptGameRoot.BATTLEFIELD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
 	for i in 4:
 		await get_tree().process_frame

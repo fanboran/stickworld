@@ -16,7 +16,7 @@
 | **近战剑击** | integration/melee_combat | 配剑/命中扣血击退/距离/挥砍/冷却 | `--map battlefield` |
 | **战斗反馈（血条/分离）** | integration/combat_feedback | 血条显隐/比例、群体分离推开 | 战斗中观察 |
 | **玩家战斗模式（Q 键）** | integration/combat_control | Q 切换/保持附身/跟随行为/攻击展开 | `--map battlefield` 按 Q |
-| **主页菜单/导航/默认步兵** | integration/menu_navigation | 主页装配显隐/动态目的地含步行出口/无队伍进战场有步兵 | 启动即主页菜单 |
+| **设置菜单/导航/默认步兵** | integration/menu_navigation | 设置装配显隐/调试地图按钮/动态目的地含步行出口/无队伍进战场有步兵 | 游戏内齿轮⚙或 ESC → 调试区选地图 |
 | **附身** | integration/possession | 附身链路、模式切换 | — |
 | **资源** | unit/resource_manager | 库存/价格/消耗 | — |
 | **战斗引擎** | integration/battle_lifecycle | 战斗启动/伤亡/胜负 | `--map battlefield --enemies 8` |

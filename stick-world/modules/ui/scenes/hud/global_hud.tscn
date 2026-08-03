@@ -32,6 +32,10 @@ theme_override_constants/separation = 24
 layout_mode = 2
 text = "速度: 1x"
 
+[node name="SettingsButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787555]
+layout_mode = 2
+text = "⚙"
+
 [node name="TimeLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=238169416]
 layout_mode = 2
 text = "时间: 08:00"

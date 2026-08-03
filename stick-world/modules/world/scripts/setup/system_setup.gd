@@ -27,7 +27,7 @@ const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/co
 const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command/command_chain.gd")
 const _BattlePanelScript: GDScript = preload("res://modules/ui/scripts/panels/battle_panel.gd")
 const _FormationPanelScript: GDScript = preload("res://modules/ui/scripts/panels/formation_panel.gd")
-const _MainMenuPanelScript: GDScript = preload("res://modules/ui/scripts/panels/main_menu_panel.gd")
+const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui/scripts/panels/settings_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui/scripts/hud/minimap.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui/scripts/hud/zoom_bar.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
@@ -60,7 +60,7 @@ func setup(root: GameRoot) -> void:
 	_setup_tactical_system()
 	_setup_battle_panel()
 	_setup_formation_panel()
-	_setup_main_menu_panel()
+	_setup_settings_menu_panel()
 	_setup_minimap()
 	_setup_zoom_bar()
 	_setup_possession_interface()
@@ -307,28 +307,25 @@ func _setup_formation_panel_deferred() -> void:
 		_root._formation_panel.setup(_root)
 
 
-# ─────────────────────────────── 临时主页菜单装配 ────────────────────────────────
+# ─────────────────────────────── 设置菜单装配（齿轮/ESC 打开）────────────────────────────────
 
-## 实例化 MainMenuPanel 并挂到 UIRoot（启动时由 GameRoot 显示）。
-func _setup_main_menu_panel() -> void:
+## 实例化 SettingsMenuPanel 并挂到 UIRoot（左上角齿轮 + ESC 开关）。
+func _setup_settings_menu_panel() -> void:
 	if _root.ui_root == null:
 		return
-	var mp := Control.new()
-	mp.set_script(_MainMenuPanelScript)
-	mp.name = "MainMenuPanel"
-	_root.ui_root.add_child(mp)
-	_root._main_menu_panel = mp
-	call_deferred("_setup_main_menu_panel_deferred")
+	var sp := Control.new()
+	sp.set_script(_SettingsMenuPanelScript)
+	sp.name = "SettingsMenuPanel"
+	_root.ui_root.add_child(sp)
+	_root._settings_menu_panel = sp
+	call_deferred("_setup_settings_menu_panel_deferred")
 
 
-func _setup_main_menu_panel_deferred() -> void:
-	if _root._main_menu_panel == null:
+func _setup_settings_menu_panel_deferred() -> void:
+	if _root._settings_menu_panel == null:
 		return
-	if _root._main_menu_panel.has_method("setup"):
-		_root._main_menu_panel.setup(_root)
-	# 地图加载完成后显示主页菜单（延迟到系统就绪）
-	if _root._main_menu_panel.has_method("open_menu"):
-		_root._main_menu_panel.call_deferred("open_menu")
+	if _root._settings_menu_panel.has_method("setup"):
+		_root._settings_menu_panel.setup(_root)
 
 
 # ─────────────────────────────── 小地图装配（§15 阶段 0.6）────────────────────────────────

@@ -140,6 +140,8 @@ var _resource_bar: Control = null
 var _build_menu: Control = null
 ## 编制管理窗口（运行时由 SystemSetup 装配到 UIRoot.ModalOverlay）
 var _formation_panel: Control = null
+## 临时主页菜单（运行时由 SystemSetup 装配到 UIRoot）
+var _main_menu_panel: Control = null
 
 # ─────────────────────────────── 存档系统 ────────────────────────────────
 ## 是否有存档待加载（读档入口标记）
@@ -303,6 +305,17 @@ func toggle_formation_panel() -> void:
 		_formation_panel.toggle()
 
 
+## 获取临时主页菜单引用（供测试用）
+func get_main_menu_panel() -> Control:
+	return _main_menu_panel
+
+
+## 关闭主页菜单（测试/脚本调用）
+func close_main_menu() -> void:
+	if _main_menu_panel != null and _main_menu_panel.has_method("close_menu"):
+		_main_menu_panel.close_menu()
+
+
 ## 启动一场测试战斗（供 test_stage_05 调用）。
 ## attacker_units / defender_units: StickmanEntity 数组
 ## 返回 BattleInstance（失败返回 null）
@@ -336,6 +349,11 @@ func _register_default_maps() -> void:
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT, VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT, ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	# 阶段 F：健全地图系统（任何地图可步行回村，链式衔接：村↔战场↔森林）
+	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 
 
 func _load_start_village() -> void:

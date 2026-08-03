@@ -80,9 +80,27 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 ## 阶段 E：遭遇战战场生成敌方火柴人并启动战斗。
 ## 我方为红色阵营（视觉区分），玩家方（allies：玩家 + 随行编队）为进攻方。
 ## count: 敌方数量（默认 4，dev 场景可调）。
-func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> void:
-	if map == null or allies.is_empty():
-		return
+## 默认步兵补位：allies 少于 MIN_DEFAULT_INFANTRY 时补 spawn 蓝方基础步兵
+## （玩家没带队伍也能打像样的仗），返回补位后的 allies 列表。
+func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> Array:
+	if map == null:
+		return allies
+	# 默认步兵补位（战场应有基础部队，见 GDD §6.7 战场地图）
+	var min_infantry: int = 3
+	var current: int = 0
+	for a in allies:
+		if is_instance_valid(a) and not (a.has_method("is_dead") and a.is_dead()):
+			current += 1
+	var extra: Array = []
+	while current < min_infantry:
+		var inf: Node2D = _spawn_ally_unit(map, current)
+		if inf == null:
+			break
+		extra.append(inf)
+		current += 1
+	allies.append_array(extra)
+	if allies.is_empty():
+		return allies
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
 	var enemies: Array = []
 	# 敌方在战场右端（玩家从左侧进入）
@@ -103,7 +121,30 @@ func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> vo
 	# 启动战斗：玩家方（进攻）vs 敌方（防守）
 	if not enemies.is_empty():
 		_root.start_test_battle(allies, enemies)
-		print("[GameRoot] 遭遇战已启动: %d 友军 vs %d 敌军" % [allies.size(), enemies.size()])
+		print("[GameRoot] 遭遇战已启动: %d 友军（含 %d 默认步兵） vs %d 敌军" % [allies.size(), extra.size(), enemies.size()])
+	return allies
+
+
+## spawn 一个默认蓝方步兵（玩家侧基础部队），返回实体。
+func _spawn_ally_unit(map: Node2D, idx: int) -> Node2D:
+	if map == null:
+		return null
+	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
+	var x: float = map.map_left + 250.0 + 70.0 * idx
+	var e: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
+	if e == null:
+		return null
+	if e.get("foot_offset") != null:
+		e.global_position.y = spawn_y - e.foot_offset
+	if e.has_method("set_possessed"):
+		e.set_possessed(false)
+	if e.has_method("set_construction_manager") and _root._construction_manager != null:
+		e.set_construction_manager(_root._construction_manager)
+	if e.has_method("set_formation_system") and _root._formation_system != null:
+		e.set_formation_system(_root._formation_system)
+	# 蓝色身体区分友军（红=敌）
+	set_unit_body_color(e, Color(0.35, 0.55, 0.95))
+	return e
 
 
 ## 设置火柴人身体颜色（用于阵营视觉区分）

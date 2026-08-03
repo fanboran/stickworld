@@ -100,6 +100,21 @@ func get_map_exit(map_id: String, exit_side: int) -> Dictionary:
 	return _map_exits[map_id].get(key, {})
 
 
+## 获取全部已注册地图 ID（供大世界地图面板动态生成目的地）。
+func get_registered_map_ids() -> Array:
+	var result: Array = []
+	for map_id in _registered_maps.keys():
+		result.append(map_id)
+	return result
+
+
+## 获取地图类型（未注册返回 -1）。
+func get_map_type(map_id: String) -> int:
+	if not _registered_maps.has(map_id):
+		return -1
+	return _registered_maps[map_id]["type"]
+
+
 # ─────────────────────────────── 加载/卸载 ────────────────────────────────
 
 ## 加载地图。如果当前有地图，先卸载。

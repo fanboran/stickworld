@@ -460,6 +460,7 @@ func export_squads() -> Array:
 			"work_types": (s["work_types"] as Array).duplicate(),
 			"leader_iid": leader_iid,
 			"members": members,
+			"follow_player": s.get("follow_player", false),
 		})
 	return result
 
@@ -492,5 +493,8 @@ func restore_squads(snapshots: Array, entity_map: Dictionary) -> int:
 			var leader: Node = entity_map[leader_iid]
 			if is_instance_valid(leader) and leader in members:
 				assign_leader(squad_id, leader)
+		# 恢复跟随玩家标志（跨图后跟随不丢）
+		if snap.get("follow_player", false):
+			set_squad_follow(squad_id, true)
 		restored += 1
 	return restored

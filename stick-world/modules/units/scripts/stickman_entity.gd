@@ -294,6 +294,9 @@ func _physics_process(delta: float) -> void:
 		if _ai_controller != null and _ai_controller.has_method("physics_update"):
 			_ai_controller.physics_update(delta)
 		_handle_ai_input(delta)
+		# 静态分离：停住的单位也互相推开（移动方向修正只在移动时生效，
+		# 双方都停在射程边缘时会黏住——soft-body 位置修正解决）
+		_apply_static_separation()
 
 	# 火柴人可在地面范围内上下左右移动（详见 §7.1.1）
 	velocity += _knockback_velocity
@@ -438,6 +441,34 @@ func _apply_separation(dir: Vector2) -> Vector2:
 	if push == Vector2.ZERO:
 		return dir
 	return (dir + push * SEPARATION_FORCE).normalized()
+
+
+## 静态分离（soft-body 位置修正）：对过近邻居直接推位置（重叠量各半，双向）。
+## 与 _apply_separation 的区别：后者只在移动时生效；停住的单位（射程边缘
+## 互停的敌我）靠本方法持续分开，解决"黏住"bug。参考 RtsGame.resolveSoftCollisions。
+func _apply_static_separation() -> void:
+	if _map_ref == null or not is_instance_valid(_map_ref):
+		return
+	if not _map_ref.has_method("get_entities"):
+		return
+	for e in _map_ref.get_entities():
+		if e == self or not is_instance_valid(e):
+			continue
+		if not (e is CharacterBody2D):
+			continue
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		var offset: Vector2 = global_position - e.global_position
+		var dist: float = offset.length()
+		if dist >= SEPARATION_RADIUS:
+			continue
+		if dist <= 0.001:
+			# 完全重叠：退化为固定方向（向上），否则无法计算推开方向
+			offset = Vector2.UP
+			dist = 0.001
+		# 重叠量的一半推给自己（对方也在推自己，双向合计推开整个重叠量）
+		var push_dist: float = (SEPARATION_RADIUS - dist) * 0.5
+		global_position += offset.normalized() * push_dist
 
 
 ## 获取头顶血条组件（供测试/调试）

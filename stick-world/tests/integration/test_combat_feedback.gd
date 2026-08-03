@@ -34,6 +34,7 @@ func _register_tests() -> void:
 	_tests.append({"name": "血条: 死亡隐藏", "fn": Callable(self, "_test_bar_on_death"), "async": true})
 	_tests.append({"name": "分离: 贴近时 AI 方向被推开", "fn": Callable(self, "_test_separation_pushes"), "async": true})
 	_tests.append({"name": "分离: 远处无影响", "fn": Callable(self, "_test_separation_far"), "async": true})
+	_tests.append({"name": "分离: 停住的单位被推开（防黏住）", "fn": Callable(self, "_test_static_separation"), "async": true})
 
 
 func _run_tests_async() -> void:
@@ -153,3 +154,26 @@ func _test_separation_far() -> void:
 	# 远处无邻居：速度应基本沿 +x（y 分量≈0）
 	_runner.assert_true(absf(vel.y) < 5.0, "远处无邻居时不应被推开，vel=%s" % str(vel))
 	a.ai_stop()
+
+
+## 静态分离：两个停住的单位贴近放置（模拟射程边缘互停黏住），数帧后应被推开
+func _test_static_separation() -> void:
+	var a: Node = _helper.units[0]
+	var b: Node = _helper.units[1]
+	if a == null or b == null:
+		_runner.assert_true(false, "单位缺失")
+		return
+	# 贴近放置（相距 10px，碰撞体约 40px 宽，即"黏住"状态）
+	a.global_position = Vector2(3000, 500)
+	b.global_position = Vector2(3010, 500)
+	# 双方都不移动（静止）
+	if a.has_method("ai_stop"):
+		a.ai_stop()
+	if b.has_method("ai_stop"):
+		b.ai_stop()
+	await get_tree().process_frame
+	var dist_before: float = a.global_position.distance_to(b.global_position)
+	# 等 0.3s（静态分离逐帧推开）
+	await get_tree().create_timer(0.3).timeout
+	var dist_after: float = a.global_position.distance_to(b.global_position)
+	_runner.assert_true(dist_after > dist_before + 5.0, "贴近停住的单位应被静态分离推开，before=%.1f after=%.1f" % [dist_before, dist_after])

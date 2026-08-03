@@ -69,7 +69,7 @@ func _run_tests_async() -> void:
 	get_tree().quit(exit_code)
 
 
-## 在村庄编成战斗班（3 人 + 排长）
+## 在村庄编成战斗班（3 人 + 排长 + 跟随）
 func _test_create_party() -> void:
 	if _formation == null:
 		_runner.assert_true(false, "FormationSystem 为空")
@@ -79,6 +79,8 @@ func _test_create_party() -> void:
 	_runner.assert_true(_formation.assign_leader(squad_id, _helper.units[0]), "任命排长应成功")
 	_runner.assert_equal(_formation.get_squad_size(squad_id), PARTY_SIZE, "战斗班应有 %d 人" % PARTY_SIZE)
 	_runner.assert_true(_formation.is_combat_squad(squad_id), "战斗班应有战斗职责")
+	# 开启跟随（跨图后应保留）
+	_runner.assert_true(_formation.set_squad_follow(squad_id, true), "开启跟随应成功")
 
 
 ## 跨图到战场：携带队伍
@@ -125,6 +127,8 @@ func _test_squad_restored() -> void:
 	_runner.assert_true(leader != null and is_instance_valid(leader), "排长应恢复")
 	if leader != null and is_instance_valid(leader):
 		_runner.assert_true(_formation.is_in_squad(leader), "排长应在编队中")
+	# 跟随标志恢复（跨图传送后跟随不丢）
+	_runner.assert_true(_formation.is_squad_following(squad_id), "跟随玩家标志应跨图保留")
 	# 成员角色恢复
 	for u in _formation.get_squad_units(squad_id):
 		if is_instance_valid(u):

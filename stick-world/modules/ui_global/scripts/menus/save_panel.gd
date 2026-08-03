@@ -1,36 +1,32 @@
-extends Control
+class_name SavePanel
+extends BaseScreen
 ## 存档管理面板 -- 简易多槽位 UI。
 ##
 ## 详见 docs/技术/架构/SQLite存档迁移方案.md §7
 ## 由 GameRoot._setup_save_system() 实例化，挂到 UIRoot。
 ## 快捷键：Ctrl+S 打开/关闭面板。
+## 模态面板生命周期（遮罩/居中/open/close/toggle）继承自 BaseScreen。
 
 const SLOT_COUNT := 5
 
+const PANEL_SIZE: Vector2 = Vector2(640, 480)
+
 var _slot_container: VBoxContainer = null
-var _panel: Panel = null
 
 
 func _ready() -> void:
-	_build_ui()
+	panel_size = PANEL_SIZE
+	_build_screen()
 	_refresh_slots()
 
 
-func _build_ui() -> void:
-	# 全屏半透明遮罩
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	# 居中面板
-	_panel = Panel.new()
-	_panel.custom_minimum_size = Vector2(640, 480)
-	_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_panel.position = Vector2(-320, -240)
-	add_child(_panel)
+## 构建面板内容（遮罩/居中面板由 BaseScreen 提供）
+func _build_content() -> void:
 	# 标题
 	var title := Label.new()
 	title.text = "存档管理"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", UITheme.FONT_TITLE)
 	title.position = Vector2(0, 10)
 	title.size = Vector2(640, 40)
 	_panel.add_child(title)
@@ -112,7 +108,7 @@ func _on_load(slot: int) -> void:
 	var game_root := get_tree().get_first_node_in_group("game_root")
 	if game_root != null and game_root.has_method("load_game_from_slot"):
 		game_root.load_game_from_slot(slot)
-	hide()
+	close()
 
 
 func _on_delete(slot: int) -> void:
@@ -122,4 +118,4 @@ func _on_delete(slot: int) -> void:
 
 
 func _on_close_pressed() -> void:
-	hide()
+	close()

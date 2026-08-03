@@ -1,5 +1,5 @@
 class_name SettingsMenuPanel
-extends Control
+extends BaseScreen
 ## 设置菜单 -- 左上角齿轮按钮 / ESC 开关，Minecraft 式居中布局。
 ##
 ## 结构（参照 Minecraft 设置界面）：
@@ -9,14 +9,12 @@ extends Control
 ##     测试地图选择（村落/战场/道路/森林/村落B）——替代原主页菜单的测试场景入口
 ##
 ## 由 SystemSetup 装配到 UIRoot；GlobalHUD 齿轮按钮与 ESC 键调 game_root.toggle_settings_menu()。
+## 模态面板生命周期（遮罩/居中/open/close/toggle）继承自 BaseScreen。
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 var _game_root: Node = null
 var _buttons: VBoxContainer = null
 var _debug_section: VBoxContainer = null
-## 背景与主面板引用（打开时按 viewport 手动定位，不依赖 anchors 布局时序）
-var _bg: ColorRect = null
-var _panel: Panel = null
 
 ## 面板尺寸
 const PANEL_SIZE: Vector2 = Vector2(480, 460)
@@ -37,37 +35,8 @@ const MAP_DISPLAY_NAMES: Dictionary = {
 ## 由 SystemSetup 调用，注入 GameRoot 并构建 UI。
 func setup(game_root: Node) -> void:
 	_game_root = game_root
-	_build_ui()
-
-
-func _ready() -> void:
-	visible = false
-
-
-func toggle() -> void:
-	if visible:
-		close_menu()
-	else:
-		open_menu()
-
-
-func open_menu() -> void:
-	# 手动定位：按 viewport 尺寸居中（ModalOverlay 布局时序不可靠，锚点方案弃用）
-	var vp_rect: Rect2 = get_viewport().get_visible_rect() if get_viewport() != null else Rect2(0, 0, 1920, 1080)
-	if _bg != null:
-		_bg.size = vp_rect.size
-	if _panel != null:
-		_panel.size = PANEL_SIZE
-		_panel.position = (vp_rect.size - PANEL_SIZE) * 0.5
-	visible = true
-
-
-func close_menu() -> void:
-	visible = false
-
-
-func is_open() -> bool:
-	return visible
+	panel_size = PANEL_SIZE
+	_build_screen()
 
 
 # ─────────────────────────────── 输入（ESC 开关）────────────────────────────────
@@ -84,20 +53,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ─────────────────────────────── UI 构建（Minecraft 式）────────────────────────────────
 
-func _build_ui() -> void:
-	# 半透明背景（点击不穿透，打开时手动全屏）
-	_bg = ColorRect.new()
-	_bg.color = Color(0, 0, 0, 0.55)
-	_bg.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(_bg)
-	# 居中面板（打开时手动定位）
-	_panel = Panel.new()
-	add_child(_panel)
+## 构建面板内容（遮罩/居中面板由 BaseScreen 提供）
+func _build_content() -> void:
 	# 标题
 	var title := Label.new()
 	title.text = "设置"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", UITheme.FONT_TITLE)
 	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title.offset_top = 20
 	title.offset_bottom = 56
@@ -122,8 +84,8 @@ func _build_ui() -> void:
 			_add_map_button(map_id)
 		var tip := Label.new()
 		tip.text = "提示：Tab 打开大世界导航 · Q 切换战斗模式 · 顶栏「编制」编队"
-		tip.add_theme_font_size_override("font_size", 11)
-		tip.modulate = Color(0.65, 0.65, 0.65)
+		tip.add_theme_font_size_override("font_size", UITheme.FONT_HINT)
+		tip.modulate = UITheme.COLOR_DIM_TEXT
 		_buttons.add_child(tip)
 
 
@@ -141,8 +103,8 @@ func _get_registered_map_ids() -> Array:
 func _add_section_title(text: String) -> void:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 13)
-	label.modulate = Color(0.7, 0.85, 1.0)
+	label.add_theme_font_size_override("font_size", UITheme.FONT_SECTION)
+	label.modulate = UITheme.COLOR_SECTION_TITLE
 	_buttons.add_child(label)
 
 
@@ -175,7 +137,7 @@ func _add_close_button() -> void:
 	var btn := Button.new()
 	btn.text = "关闭（ESC / 齿轮）"
 	btn.custom_minimum_size = Vector2(0, 36)
-	btn.pressed.connect(close_menu)
+	btn.pressed.connect(close)
 	_buttons.add_child(btn)
 
 
@@ -189,7 +151,7 @@ func _add_map_button(map_id: String) -> void:
 
 
 func _on_map_selected(map_id: String) -> void:
-	close_menu()
+	close()
 	if _game_root == null or _game_root.scene_loader == null:
 		return
 	var current: String = _game_root.scene_loader.get_current_map_id() if _game_root.scene_loader.has_method("get_current_map_id") else ""

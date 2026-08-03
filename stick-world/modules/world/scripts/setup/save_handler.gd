@@ -194,8 +194,8 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 
 ## 切换存档面板可见性
 func toggle_save_panel() -> void:
-	if _root._save_panel != null:
-		_root._save_panel.visible = not _root._save_panel.visible
+	if _root._save_panel != null and _root._save_panel.has_method("toggle"):
+		_root._save_panel.toggle()
 
 
 ## 快速保存到槽位 0

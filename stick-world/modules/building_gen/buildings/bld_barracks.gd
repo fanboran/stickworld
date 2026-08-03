@@ -5,7 +5,6 @@ extends Building
 ## 阶段 E 任务 E5：复制 pg_smithy_lv1.tscn 为兵营，调整颜色区分。
 ## 初期阶段不需要独特贴图，仅用颜色区分。
 
-const PM = preload("res://modules/texture_gen/scripts/procedural_materials.gd")
 
 # 材质颜色（红色调，区别于铁匠铺的黄色茅草）
 const C_THATCH_BACK = Color(0.55, 0.20, 0.18)
@@ -38,15 +37,15 @@ func _build_exterior() -> void:
 	if ext.get_child_count() > 0:
 		return
 	# 生成纹理
-	var tex_bw   = PM.make_straw_thatch(BW_TEX_W, BW_TEX_H, C_THATCH_BACK)
-	var tex_bp   = PM.make_wood_pillar(BP_TEX_W, BP_TEX_H, C_WOOD_BACK)
-	var tex_fp   = PM.make_wood_pillar(FP_TEX_W, FP_TEX_H, C_WOOD_FRONT)
-	var tex_bm   = PM.make_wood_pillar(BM_TEX_W, BM_TEX_H, C_WOOD_BEAM)
-	var tex_vs   = PM.make_wood_pillar(VS_TEX_W, VS_TEX_H, C_WOOD_BEAM)
-	var tex_ss   = PM.make_wood_pillar(SS_TEX_W, SS_TEX_H, C_WOOD_STRUT)
+	var tex_bw   = ProceduralMaterials.make_straw_thatch(BW_TEX_W, BW_TEX_H, C_THATCH_BACK)
+	var tex_bp   = ProceduralMaterials.make_wood_pillar(BP_TEX_W, BP_TEX_H, C_WOOD_BACK)
+	var tex_fp   = ProceduralMaterials.make_wood_pillar(FP_TEX_W, FP_TEX_H, C_WOOD_FRONT)
+	var tex_bm   = ProceduralMaterials.make_wood_pillar(BM_TEX_W, BM_TEX_H, C_WOOD_BEAM)
+	var tex_vs   = ProceduralMaterials.make_wood_pillar(VS_TEX_W, VS_TEX_H, C_WOOD_BEAM)
+	var tex_ss   = ProceduralMaterials.make_wood_pillar(SS_TEX_W, SS_TEX_H, C_WOOD_STRUT)
 	var tex_sb   = _make_slanted_beam_tex(C_WOOD_BEAM)
-	var tex_th_main  = PM.make_straw_thatch(64, 64, C_THATCH_MAIN)
-	var tex_th_left  = PM.make_straw_thatch(64, 64, C_THATCH_LEFT)
+	var tex_th_main  = ProceduralMaterials.make_straw_thatch(64, 64, C_THATCH_MAIN)
+	var tex_th_left  = ProceduralMaterials.make_straw_thatch(64, 64, C_THATCH_LEFT)
 
 	# ── L1 后景墙壁 ──
 	var l1 := _nc("L1_BackWall", ext)
@@ -130,4 +129,4 @@ func _make_slanted_beam_tex(color: Color):
 	var slant  := 64.0
 	var height := 110.0
 	var length := sqrt(slant * slant + height * height)
-	return PM.make_wood_pillar(23, ceili(length), color)
+	return ProceduralMaterials.make_wood_pillar(23, ceili(length), color)

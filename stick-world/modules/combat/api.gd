@@ -3,6 +3,11 @@ extends Node
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §8.2。
 ## P0 阶段委托给 BattleDirector（GameRoot.BattleDirector 节点）。
+##
+## ⚠️ 契约说明（2026-08 审计收敛）：模块API契约.md §六 文档的"战略级"接口
+## （initiate_battle/issue_order/possess_commander 等）尚未实现——当前玩法是
+## 实体级战场（地图上单位直接战斗），战略级接口待阶段 1+ 战略图接入后补充。
+## 以本文件实际签名为准。
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## BattleDirector 实例引用（由 GameRoot 装配时注入）

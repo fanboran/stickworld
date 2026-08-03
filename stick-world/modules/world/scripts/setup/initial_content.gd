@@ -28,8 +28,10 @@ func spawn_initial_buildings(map: Node2D) -> void:
 	var defs: Array = ibl.get_defs()
 	if defs.is_empty():
 		return
-	if _root._construction_manager == null or not _root._construction_manager.has_method("spawn_operational_building"):
-		push_warning("[GameRoot] ConstructionManager 未就绪，跳过初始建筑生成")
+	# 走 ConstructionApi（2026-08 审计收敛，不再直调内部 manager）
+	var construction_api: Node = _root.get_construction_api() if _root.has_method("get_construction_api") else null
+	if construction_api == null or not construction_api.has_method("spawn_operational_building"):
+		push_warning("[GameRoot] ConstructionApi 未就绪，跳过初始建筑生成")
 		return
 	for d in defs:
 		var def_id: String = d.get("def_id") if d is Dictionary else d.def_id
@@ -38,15 +40,16 @@ func spawn_initial_buildings(map: Node2D) -> void:
 		if def_id.is_empty():
 			push_warning("[GameRoot] 初始建筑 def_id 为空，跳过")
 			continue
-		var result: Dictionary = _root._construction_manager.spawn_operational_building(def_id, cell_x, width)
+		var result: Dictionary = construction_api.spawn_operational_building(def_id, cell_x, width)
 		if not result.get("ok", false):
 			push_warning("[GameRoot] 初始建筑生成失败: %s cell_x=%d: %s" % [def_id, cell_x, result.get("error", "未知错误")])
 
 
 ## 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
 func spawn_initial_warehouse() -> void:
-	if _root._construction_manager != null and _root._construction_manager.has_method("spawn_operational_building"):
-		_root._construction_manager.spawn_operational_building("bld_warehouse", 15, 16)
+	var construction_api: Node = _root.get_construction_api() if _root.has_method("get_construction_api") else null
+	if construction_api != null and construction_api.has_method("spawn_operational_building"):
+		construction_api.spawn_operational_building("bld_warehouse", 15, 16)
 
 
 # ─────────────────────────────── NPC 生成 ────────────────────────────────

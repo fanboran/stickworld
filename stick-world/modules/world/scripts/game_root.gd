@@ -314,18 +314,19 @@ func toggle_settings_menu() -> void:
 		_settings_menu_panel.toggle()
 
 
-## 启动一场测试战斗（供 test_stage_05 调用）。
+## 启动一场测试战斗（供遭遇战/测试调用）。
 ## attacker_units / defender_units: StickmanEntity 数组
 ## 返回 BattleInstance（失败返回 null）
+## 统一走 CombatApi（不再直调 battle_director，2026-08 审计收敛）
 func start_test_battle(attacker_units: Array, defender_units: Array) -> Node:
-	if battle_director == null or not battle_director.has_method("start_battle_at"):
-		push_warning("[GameRoot] BattleDirector 未就绪")
+	if _combat_api == null or not _combat_api.has_method("start_battle"):
+		push_warning("[GameRoot] CombatApi 未就绪")
 		return null
 	var map: Node2D = get_current_map()
 	if map == null:
 		push_warning("[GameRoot] 当前无地图，无法启动战斗")
 		return null
-	return battle_director.start_battle_at(map, attacker_units, defender_units)
+	return _combat_api.start_battle(map, attacker_units, defender_units)
 
 
 # ─────────────────────────────── 地图注册与加载 ────────────────────────────────

@@ -11,14 +11,13 @@ extends RefCounted
 ##
 ## P0 不实现 ghost 预览 UI（玩家点击建造 UI 留到阶段 0.6）。
 
-const ScriptPlacementValidator := preload("res://modules/world/scripts/placement/placement_validator.gd")
 
 
 # ─────────────────────────────── 校验 ────────────────────────────────
 
 ## 校验是否可建（不占用）。返回 PlacementValidator.ValidationResult。
 static func validate(grid: Node, cell_x: int, width: int) -> RefCounted:
-	var validator := ScriptPlacementValidator.new()
+	var validator := PlacementValidator.new()
 	return validator.validate_placement(grid, cell_x, width)
 
 
@@ -27,7 +26,7 @@ static func validate(grid: Node, cell_x: int, width: int) -> RefCounted:
 ## 尝试占用连续 width 个条带。成功返回 {ok:true, cell_x, width}，
 ## 失败返回 {ok:false, error}。occupant 通常是 Building 节点或 instance_id。
 static func try_place(grid: Node, cell_x: int, width: int, occupant: Variant) -> Dictionary:
-	var validator := ScriptPlacementValidator.new()
+	var validator := PlacementValidator.new()
 	var result := validator.validate_placement(grid, cell_x, width)
 	if not result.ok:
 		return {"ok": false, "error": result.reason}

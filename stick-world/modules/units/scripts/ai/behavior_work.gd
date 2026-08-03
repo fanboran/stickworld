@@ -14,7 +14,6 @@ extends "res://modules/units/scripts/ai/behavior_base.gd"
 ##   - BehaviorWork 不直接推进 project 进度（ConstructionManager._physics_process 已 tick 所有项目）
 ##   - BehaviorWork 只负责"工人到位"和"项目状态查询"
 
-const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 
@@ -35,7 +34,7 @@ const BUILD_HITS: int = 8
 # ─────────────────────────────── 运行时 ────────────────────────────────
 
 ## 当前项目引用（ConstructionProject）
-var _project: ScriptConstructionProject = null
+var _project: ConstructionProject = null
 ## 工作目标点（世界坐标）
 var _target_pos: Vector2 = Vector2.ZERO
 ## 是否已到达
@@ -51,7 +50,7 @@ func _ready() -> void:
 func enter(previous: String, params: Dictionary) -> void:
 	super.enter(previous, params)
 	_arrived = false
-	_project = params.get("project", null) as ScriptConstructionProject
+	_project = params.get("project", null) as ConstructionProject
 	if _project == null:
 		# 没有项目引用，立即结束
 		finish()

@@ -78,6 +78,14 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	return result
 
 
+## 直接生成 OPERATIONAL 状态建筑（绕过建造过程，用于初始建筑/仓库预置）。
+## [P] def_id 已注册（get_registered_def_ids 包含它）
+func spawn_operational_building(def_id: String, cell_x: int, width: int = 1) -> Dictionary:
+	if not _is_initialized:
+		return {"ok": false, "error": "模块未初始化"}
+	return _manager.spawn_operational_building(def_id, cell_x, width)
+
+
 # ===== 查询 =====
 
 ## 查询地块内的所有建筑 ID

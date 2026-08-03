@@ -9,7 +9,6 @@ extends Node
 ## 建筑/项目注册表（_buildings / _projects）由 ConstructionManager 持有。
 
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
-const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
 
 var _root: Node = null
 
@@ -27,9 +26,9 @@ func save_to_db(db, slot_id: int, map_id: String) -> void:
 	db.delete_rows("buildings", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
 	for b_id in _root._buildings.keys():
 		var b: Node = _root._buildings[b_id]
-		if not is_instance_valid(b) or not (b is ScriptBuilding):
+		if not is_instance_valid(b) or not (b is Building):
 			continue
-		var typed: ScriptBuilding = b as ScriptBuilding
+		var typed: Building = b as Building
 		db.insert_row("buildings", {
 			"slot_id": slot_id, "building_id": b_id, "map_id": map_id,
 			"def_id": typed.def_id, "cell_x": typed.cell_x,
@@ -70,8 +69,8 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 		if result.get("ok", false):
 			var new_id: String = result["building_id"]
 			var b: Node = _root._buildings.get(new_id)
-			if b is ScriptBuilding:
-				var typed: ScriptBuilding = b as ScriptBuilding
+			if b is Building:
+				var typed: Building = b as Building
 				typed.health = float(row["health"])
 				typed.set_state(int(row["state"]))
 				typed.wall_tier = int(row["wall_tier"])

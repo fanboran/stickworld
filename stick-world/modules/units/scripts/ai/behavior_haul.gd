@@ -14,7 +14,6 @@ extends "res://modules/units/scripts/ai/behavior_base.gd"
 ## 搬运工认领由 AIController 在 travel("haul") 前完成（try_claim_hauler），
 ## exit 时释放认领。搬运时切换为 carry 动画。
 
-const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 const CELL_SIZE: float = 32.0
@@ -32,7 +31,7 @@ const PICK_DURATION: float = 0.5
 const DELIVER_DURATION: float = 0.5
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
-var _project: ScriptConstructionProject = null
+var _project: ConstructionProject = null
 var _warehouse: Node2D = null
 var _phase: int = Phase.TO_WAREHOUSE
 var _warehouse_pos: Vector2 = Vector2.ZERO
@@ -46,7 +45,7 @@ func _ready() -> void:
 
 func enter(previous: String, params: Dictionary) -> void:
 	super.enter(previous, params)
-	_project = params.get("project", null) as ScriptConstructionProject
+	_project = params.get("project", null) as ConstructionProject
 	if _project == null:
 		finish()
 		return

@@ -109,11 +109,9 @@ func _find_outermost_wall_x(map: Node2D, siege_side: int) -> float:
 func mark_player_absent(battle: Node) -> void:
 	if battle != null and battle.has_method("set_player_present"):
 		battle.set_player_present(false)
-	print("[BattleDirector] 玩家离开战场，AI 接管")
 
 
 ## 标记玩家返回战场
 func mark_player_present(battle: Node) -> void:
 	if battle != null and battle.has_method("set_player_present"):
 		battle.set_player_present(true)
-	print("[BattleDirector] 玩家返回战场")

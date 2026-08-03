@@ -14,7 +14,6 @@ extends RefCounted
 ##
 ## 由 ConstructionManager 创建和管理；BehaviorWork 通过 ConstructionManager 派工。
 
-const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
 const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
 
 # ─────────────────────────────── 状态 ────────────────────────────────
@@ -322,8 +321,8 @@ func _complete() -> void:
 		push_error("[ConstructionProject] 建筑根节点非 Node2D: %s" % project_id)
 		return
 	# 注入元数据
-	if new_building is ScriptBuilding:
-		var typed: ScriptBuilding = new_building as ScriptBuilding
+	if new_building is Building:
+		var typed: Building = new_building as Building
 		typed.def_id = def_id
 		typed.cell_x = cell_x
 		typed.width = width
@@ -345,12 +344,12 @@ func _complete() -> void:
 	var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
 	var baseline: float = ground_y + baseline_offset
 	var collision_bottom_local: float = 0.0
-	if new_building is ScriptBuilding:
-		collision_bottom_local = (new_building as ScriptBuilding).get_collision_bottom_local()
+	if new_building is Building:
+		collision_bottom_local = (new_building as Building).get_collision_bottom_local()
 	new_building.global_position = Vector2(world_x, baseline - collision_bottom_local)
 	# 标记建筑为 OPERATIONAL（触发视觉/碰撞更新）
-	if new_building is ScriptBuilding:
-		(new_building as ScriptBuilding).set_state(ScriptBuilding.State.OPERATIONAL)
+	if new_building is Building:
+		(new_building as Building).set_state(Building.State.OPERATIONAL)
 	# 注册到 PlacementGrid（占用格子）
 	if placement_grid != null and placement_grid.has_method("occupy"):
 		placement_grid.occupy(cell_x, width, new_building)

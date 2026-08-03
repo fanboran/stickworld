@@ -21,7 +21,6 @@ extends Node
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 const ScriptWorkCrewAssigner := preload("res://modules/construction/scripts/work_crew_assigner.gd")
 const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
-const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
 const ScriptBuildProgressIndicator := preload("res://modules/construction/scripts/build_progress_indicator.gd")
 
 const _BuildingCatalogScript: GDScript = preload("res://modules/construction/scripts/catalog/building_catalog.gd")
@@ -287,18 +286,18 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 	var building_id := "bld_%04d" % _next_building_id
 	_next_building_id += 1
 	# 在 Building 上存 building_id（如果支持）
-	if building is ScriptBuilding:
-		(building as ScriptBuilding).set_meta("building_id", building_id)
-		(building as ScriptBuilding).set_meta("region_id", project.region_id)
+	if building is Building:
+		(building as Building).set_meta("building_id", building_id)
+		(building as Building).set_meta("region_id", project.region_id)
 		# D2: 应用数据驱动字段（interior_mode 等）
 		var def: Dictionary = _catalog.get_def(project.def_id)
-		if not def.is_empty() and (building as ScriptBuilding).has_method("apply_building_def"):
-			(building as ScriptBuilding).apply_building_def(def)
+		if not def.is_empty() and (building as Building).has_method("apply_building_def"):
+			(building as Building).apply_building_def(def)
 	_buildings[building_id] = building
 	_building_to_id[building] = building_id
 	print("[ConstructionManager] 建筑完工: %s (def=%s, cell_x=%d)" % [building_id, project.def_id, project.cell_x])
 	# 阶段 F：城墙完工时更新地形遮罩
-	if building is ScriptBuilding and (building as ScriptBuilding).is_wall():
+	if building is Building and (building as Building).is_wall():
 		_update_city_terrain_mask()
 	# 转发给 api.gd（building_completed 信号）
 	building_completed.emit(building_id, project.region_id)
@@ -347,9 +346,9 @@ func _update_city_terrain_mask() -> void:
 	for b in _buildings.values():
 		if not is_instance_valid(b):
 			continue
-		if b is ScriptBuilding and (b as ScriptBuilding).is_wall():
-			var typed: ScriptBuilding = b as ScriptBuilding
-			if typed.state == ScriptBuilding.State.OPERATIONAL or typed.state == ScriptBuilding.State.DAMAGED:
+		if b is Building and (b as Building).is_wall():
+			var typed: Building = b as Building
+			if typed.state == Building.State.OPERATIONAL or typed.state == Building.State.DAMAGED:
 				walls.append({"cell_x": typed.cell_x, "width": typed.width})
 	_map.update_terrain_mask_from_walls(walls)
 
@@ -397,9 +396,9 @@ func get_building_state(building_id: String) -> Dictionary:
 	var b: Node = _buildings[building_id]
 	if not is_instance_valid(b):
 		return {"ok": false, "error": "建筑已释放: %s" % building_id}
-	if not (b is ScriptBuilding):
+	if not (b is Building):
 		return {"ok": false, "error": "节点非 Building: %s" % building_id}
-	var typed: ScriptBuilding = b as ScriptBuilding
+	var typed: Building = b as Building
 	return {
 		"ok": true,
 		"building_id": building_id,
@@ -502,8 +501,8 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 		return {"ok": false, "error": "建筑场景实例化失败"}
 
 	# 注入元数据
-	if building is ScriptBuilding:
-		var typed: ScriptBuilding = building as ScriptBuilding
+	if building is Building:
+		var typed: Building = building as Building
 		typed.def_id = def_id
 		typed.cell_x = cell_x
 		typed.width = width
@@ -525,13 +524,13 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	var baseline_offset: float = float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
 	var baseline: float = ground_y + baseline_offset
 	var collision_bottom_local: float = 0.0
-	if building is ScriptBuilding:
-		collision_bottom_local = (building as ScriptBuilding).get_collision_bottom_local()
+	if building is Building:
+		collision_bottom_local = (building as Building).get_collision_bottom_local()
 	(building as Node2D).global_position = Vector2(world_x, baseline - collision_bottom_local)
 
 	# 立即设为 OPERATIONAL
-	if building is ScriptBuilding:
-		(building as ScriptBuilding).set_state(ScriptBuilding.State.OPERATIONAL)
+	if building is Building:
+		(building as Building).set_state(Building.State.OPERATIONAL)
 
 	# 注册到 PlacementGrid
 	if placement_grid != null and placement_grid.has_method("occupy"):
@@ -540,8 +539,8 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	# 注册 building_id
 	var building_id := "bld_%04d" % _next_building_id
 	_next_building_id += 1
-	if building is ScriptBuilding:
-		(building as ScriptBuilding).set_meta("building_id", building_id)
+	if building is Building:
+		(building as Building).set_meta("building_id", building_id)
 	_buildings[building_id] = building
 	_building_to_id[building] = building_id
 
@@ -557,9 +556,9 @@ func demolish_building(building_id: String) -> Dictionary:
 	if not _buildings.has(building_id):
 		return {"ok": false, "error": "建筑不存在: %s" % building_id}
 	var b: Node = _buildings[building_id]
-	if not (b is ScriptBuilding):
+	if not (b is Building):
 		return {"ok": false, "error": "节点非 Building"}
-	var typed: ScriptBuilding = b as ScriptBuilding
+	var typed: Building = b as Building
 	if typed.is_terrain:
 		return {"ok": false, "error": "地形建筑不可拆除"}
 	# 释放 PlacementGrid 占用

@@ -39,10 +39,10 @@ func _build_ui() -> void:
 	bg.color = Color(0, 0, 0, 0.7)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
-	# 面板容器
+	# 面板容器（anchors + offsets 同时设置才真正居中）
 	var panel := Panel.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.custom_minimum_size = Vector2(440, 400)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
 	add_child(panel)
 	# 标题
 	var title := Label.new()

@@ -20,6 +20,7 @@ class FakeResourcesApi:
 	extends Node
 	var fail_consume: bool = false
 	var stock: float = 1000.0
+	var consumed_total: float = 0.0
 
 	func get_stock(_res_id: String, _region_id: String = "") -> float:
 		return stock
@@ -27,6 +28,7 @@ class FakeResourcesApi:
 	func consume(_res_id: String, _amount: float, _region_id: String = "", _reason: String = "") -> Dictionary:
 		if fail_consume:
 			return {"ok": false, "error": "库存不足", "available": 0.0}
+		consumed_total += _amount
 		return {"ok": true, "amount": _amount}
 
 	func produce(_res_id: String, _amount: float, _region_id: String = "", _source: String = "") -> Dictionary:
@@ -39,6 +41,7 @@ func _ready() -> void:
 	_runner.add_test("建造: 未注册建筑类型返回失败", _test_unregistered_def, true)
 	_runner.add_test("建造: 完整循环（开工→派工→材料→敲击→完工注册）", _test_full_cycle, true)
 	_runner.add_test("建造: 资源不足时开工失败", _test_insufficient_resources, true)
+	_runner.add_test("建造: 成功建造时按成本扣减资源（2026-08 回归：注入点曾缺失）", _test_resources_consumed, true)
 	_runner.add_test("建造: 选址范围内有实体时拒绝放置（防人进建筑被卡）", _test_entity_blocking, true)
 	_runner.add_test("建造: 脱离卡死随机传送到空旷地带", _test_escape_stuck, true)
 	_runner.add_test("建造: 完工建筑登记与查询", _test_building_registry, true)
@@ -118,16 +121,30 @@ func _test_full_cycle() -> void:
 
 func _test_insufficient_resources() -> void:
 	await _ensure_setup()
-	# 白盒注入成本定义 + 库存为 0 的 fake api，验证资源检查路径
+	# 黑盒注入（走 set_resources_api 注入点，2026-08 回归验证）+ 库存为 0 的 fake api
 	_cm._building_defs_cache["bld_placeholder"] = {"build_cost_wood": 10.0}
 	var fake := FakeResourcesApi.new()
 	fake.fail_consume = true
 	fake.stock = 0.0
-	_cm._resources_api = fake
+	_cm.set_resources_api(fake)
 	var r: Dictionary = _cm.start_construction_at("r1", "bld_placeholder", 20)
 	_runner.assert_false(r.get("ok", true), "资源不足应失败")
 	_runner.assert_true(str(r.get("error", "")).contains("资源不足"), "错误应指明资源不足，实际: %s" % r.get("error", ""))
-	_cm._resources_api = null
+	_cm.set_resources_api(null)
+	_cm._building_defs_cache.erase("bld_placeholder")
+
+
+func _test_resources_consumed() -> void:
+	await _ensure_setup()
+	# 库存充足时建造成功，且按成本实际扣减（2026-08 修复：注入点缺失导致永久免费建造）
+	_cm._building_defs_cache["bld_placeholder"] = {"build_cost_wood": 10.0, "build_cost_stone": 5.0}
+	var fake := FakeResourcesApi.new()
+	fake.stock = 1000.0
+	_cm.set_resources_api(fake)
+	var r: Dictionary = _cm.start_construction_at("r1", "bld_placeholder", 40)
+	_runner.assert_true(r.get("ok", false), "资源充足应开工成功: " + str(r))
+	_runner.assert_equal(fake.consumed_total, 15.0, "应按成本扣减 wood10+stone5=15，实际: %s" % fake.consumed_total)
+	_cm.set_resources_api(null)
 	_cm._building_defs_cache.erase("bld_placeholder")
 
 

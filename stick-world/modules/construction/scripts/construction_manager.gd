@@ -103,6 +103,15 @@ func set_map(map: Node2D) -> void:
 	_map = map
 
 
+# ─────────────────────────────── 资源系统注入 ────────────────────────────────
+
+## 由 SystemSetup 注入 ResourcesApi 引用。
+## 2026-08 修复：此前缺失此注入点，system_setup 的 has_method 守卫恒 false，
+## 导致 _resources_api 恒为 null，资源检查/扣减/清场回收永久静默失效。
+func set_resources_api(resources_api: Node) -> void:
+	_resources_api = resources_api
+
+
 func get_map() -> Node2D:
 	return _map
 

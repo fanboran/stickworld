@@ -92,6 +92,36 @@ func set_map(map: Node2D) -> void:
 		_manager.set_map(map)
 
 
+# ===== 工作委派 / 仓库查询（2026-08 收敛：AI 侧此前直调 manager 内部方法） =====
+
+## 查询某工人当前派工的项目（无派工返回 null）
+func get_worker_project(worker: Node) -> RefCounted:
+	if not _is_initialized:
+		return null
+	return _manager.get_worker_project(worker)
+
+
+## 尝试自动派工（附近有空闲项目则指派，返回是否派工成功）
+func try_assign_worker(worker: Node) -> bool:
+	if not _is_initialized:
+		return false
+	return _manager.try_assign_worker(worker)
+
+
+## 查询距 pos 最近的仓库建筑（无则返回 null）
+func get_nearest_warehouse(pos: Vector2) -> Node2D:
+	if not _is_initialized:
+		return null
+	return _manager.get_nearest_warehouse(pos)
+
+
+## 查询距 pos 最近的建造项目（无则返回 null）
+func get_nearest_project(pos: Vector2) -> RefCounted:
+	if not _is_initialized:
+		return null
+	return _manager.get_nearest_project(pos)
+
+
 # ===== 查询 =====
 
 ## 查询地块内的所有建筑 ID

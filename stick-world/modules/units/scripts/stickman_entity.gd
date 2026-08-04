@@ -549,6 +549,11 @@ func set_carrying(v: bool) -> void:
 	_visual.set_carrying(v)
 
 
+## 是否处于搬运状态（供交互/UI 查询，2026-08 收敛：替代组件直读 _carrying 私有字段）
+func is_carrying() -> bool:
+	return _carrying
+
+
 ## 锁定动作动画（如 build 敲击），锁定期间动画不切换。
 ## 由 BehaviorWork 在工地播放建造动画时调用。
 func set_action_anim(anim_name: String) -> void:

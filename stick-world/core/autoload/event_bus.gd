@@ -21,9 +21,9 @@ extends Node
 @warning_ignore("unused_signal") signal game_resumed
 
 # ─────────────────────────────── 资源 / 经济 ────────────────────────────────
+# 资源变化/不足信号：由 resources/api.gd 自建信号承担（4 参），EventBus 不重复声明
 
 @warning_ignore("unused_signal") signal resource_depleted(resource_name: String)
-@warning_ignore("unused_signal") signal resource_not_enough(resource_name: String, required: int)
 # 价格波动（供需自动）：资源系统 → 组织、UI
 @warning_ignore("unused_signal") signal price_changed(resource_id, old_price, new_price, region_id)
 # 商队到货：运输系统 → 资源系统、UI
@@ -66,9 +66,9 @@ extends Node
 @warning_ignore("unused_signal") signal texture_captured(material_name: String, output_path: String)
 
 # ─────────────────────────────── 科技 ────────────────────────────────────
+# 科技状态信号：由 technology/api.gd 自建信号承担，EventBus 不重复声明
 
 @warning_ignore("unused_signal") signal tech_researched(tech_id: String)
-@warning_ignore("unused_signal") signal tech_started(tech_id: String)
 # 研究停滞（资源不足/人员不足）：科技系统 → UI
 @warning_ignore("unused_signal") signal tech_stalled(tech_id, reason)
 

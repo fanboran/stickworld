@@ -20,7 +20,7 @@ func setup(entity: Node2D) -> void:
 
 ## 玩家附身时按E：在仓库附近取材料，在工地附近交付/建造。
 func try_interact() -> void:
-	if _entity._construction_manager == null:
+	if _entity.get_construction_manager() == null:
 		return
 	var info: Dictionary = _find_interact_target()
 	if info.is_empty():
@@ -31,7 +31,7 @@ func try_interact() -> void:
 	# 工地交互
 	if target is RefCounted:
 		var project: RefCounted = target as RefCounted
-		if _entity._carrying:
+		if _entity.is_carrying():
 			project.deliver_material()
 			_entity.set_carrying(false)
 		elif not project.needs_material():
@@ -42,7 +42,7 @@ func try_interact() -> void:
 			_entity._player_build_timer = 1.8
 	# 仓库交互
 	elif target is Node2D:
-		if _entity._carrying:
+		if _entity.is_carrying():
 			# 扔回材料到仓库
 			_entity.set_carrying(false)
 		else:
@@ -83,16 +83,16 @@ func _is_near_building(building: Node2D, margin: float = 80.0) -> bool:
 
 ## 查找当前可交互目标及提示文字。返回 {target, hint, center_x} 或空。
 func _find_interact_target() -> Dictionary:
-	if _entity._construction_manager == null:
+	if _entity.get_construction_manager() == null:
 		return {}
 	# 优先：工地
-	var project: RefCounted = _entity._construction_manager.get_nearest_project(_entity.global_position)
+	var project: RefCounted = _entity.get_construction_manager().get_nearest_project(_entity.global_position)
 	if project != null and _is_near_project(project):
 		var left_x: float = float(project.cell_x) * 32.0
 		var right_x: float = left_x + float(project.width) * 32.0
 		var cx: float = (left_x + right_x) * 0.5
 		var hint: String = ""
-		if _entity._carrying:
+		if _entity.is_carrying():
 			hint = "按E交付材料"
 		elif project.needs_material():
 			hint = "材料不足，等待搬运"
@@ -100,11 +100,11 @@ func _find_interact_target() -> Dictionary:
 			hint = "按E敲击建造"
 		return {"target": project, "hint": hint, "center_x": cx}
 	# 仓库
-	var warehouse: Node2D = _entity._construction_manager.get_nearest_warehouse(_entity.global_position)
+	var warehouse: Node2D = _entity.get_construction_manager().get_nearest_warehouse(_entity.global_position)
 	if warehouse != null and _is_near_building(warehouse):
 		var bounds: Dictionary = _get_building_barrier_bounds(warehouse)
 		var hint: String = ""
-		if _entity._carrying:
+		if _entity.is_carrying():
 			hint = "按E放回材料"
 		else:
 			hint = "按E拿起建材"
@@ -169,7 +169,7 @@ func _hide_interact_hint() -> void:
 ## 更新交互提示（玩家附身时，靠近仓库/工地在建筑上方显示弹窗）。
 ## 由实体 _physics_process 每帧调用。
 func update_hint() -> void:
-	if not _entity.possessed or _entity._construction_manager == null or _entity._map_ref == null:
+	if not _entity.possessed or _entity.get_construction_manager() == null or _entity._map_ref == null:
 		_hide_interact_hint()
 		return
 	_ensure_interact_hint()

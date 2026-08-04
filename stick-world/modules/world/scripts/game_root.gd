@@ -418,8 +418,8 @@ func _spawn_travel_followers(map: Node2D, player: Node2D, spawn_y: float) -> Arr
 			# 不附身（AI 接管），注入系统引用
 			if f.has_method("set_possessed"):
 				f.set_possessed(false)
-			if f.has_method("set_construction_manager") and _construction_manager != null:
-				f.set_construction_manager(_construction_manager)
+			if f.has_method("set_construction_manager") and _construction_api != null:
+				f.set_construction_manager(_construction_api)
 			if f.has_method("set_formation_system") and _formation_system != null:
 				f.set_formation_system(_formation_system)
 			entity_map[old_iid] = f
@@ -479,8 +479,8 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		if player.has_method("set_possessed"):
 			player.set_possessed(true)
 		# 玩家也注入 ConstructionManager（按E搬运/建造交互需要）
-		if player.has_method("set_construction_manager") and _construction_manager != null:
-			player.set_construction_manager(_construction_manager)
+		if player.has_method("set_construction_manager") and _construction_api != null:
+			player.set_construction_manager(_construction_api)
 		# 玩家注入 FormationSystem（编队职责查询）
 		if player.has_method("set_formation_system") and _formation_system != null:
 			player.set_formation_system(_formation_system)

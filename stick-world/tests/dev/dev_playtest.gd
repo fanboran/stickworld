@@ -109,8 +109,8 @@ func _spawn_party(count: int, follow: bool) -> void:
 			e.global_position.y = spawn_y - e.foot_offset
 		if e.has_method("set_possessed"):
 			e.set_possessed(false)
-		if e.has_method("set_construction_manager") and _game_root.get_construction_manager() != null:
-			e.set_construction_manager(_game_root.get_construction_manager())
+		if e.has_method("set_construction_manager") and _game_root.get_construction_api() != null:
+			e.set_construction_manager(_game_root.get_construction_api())
 		if e.has_method("set_formation_system") and _game_root.get_formation_system() != null:
 			e.set_formation_system(_game_root.get_formation_system())
 		units.append(e)

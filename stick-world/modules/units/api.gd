@@ -39,5 +39,13 @@
 ##
 ## 信号：
 ##   （当前模块不对外发射信号，预留扩展）
+##
+## ⚠️ 契约说明（2026-08 审计收敛）：本文件为"类型契约 + 资源路径"层——
+## 外部模块通过全局 class_name（StickmanEntity 等）与公共方法交互，
+## 实体场景路径统一经 UnitsAPI 常量引用（替代直接 preload 内部路径）。
 class_name UnitsAPI
 extends RefCounted
+
+
+## 火柴人实体场景路径（外部模块实例化实体应使用此常量）
+const STICKMAN_ENTITY_SCENE := "res://modules/units/scenes/stickman_entity.tscn"

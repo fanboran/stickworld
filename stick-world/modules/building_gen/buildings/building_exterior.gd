@@ -1,4 +1,5 @@
 @tool
+class_name BuildingExterior
 extends Building
 ## 程序化建筑外观装配器 —— 铁匠铺/兵营/仓库三兄弟公共实现（2026-08 去重）。
 ##

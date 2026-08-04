@@ -8,6 +8,16 @@
 
 ## [未发布]
 
+### 独立审计收敛（2026-08，三轮）
+
+- **P0 修复**：`set_resources_api` 注入点补齐（此前缺失导致建造资源检查/扣减/清场回收永久静默失效，has_method 守卫吞错）；EventBus 与模块 api 重复声明去重（resource_not_enough/tech_started/org_* 移除）；run_all.ps1 补 4 个遗漏集成套件（battle_ui/formation_system/placement_grid_units/tactical_orders）
+- **架构收敛**：AI 侧改走 ConstructionApi（game_root 注入 api 实例，register_worker/unregister_worker 补齐转发）；interaction_controller 私有字段直读清零（get_map/is_possessed/set_player_build_timer）；实体销毁反注册派工池防悬垂；UnitsAPI.STICKMAN_ENTITY_SCENE 常量落实
+- **组织模块**：insert_tier("above") 层级校验修复（原恒失败）；SaveManager 存档接入（register_module + 序列化含 next_id 防冲突）
+- **僵尸清理**：SceneManager autoload 删除（全库零引用）；debug_GUI set_visible 遮蔽内建改名 set_overlay_visible；resource_node 依赖反转（EventBus.debug_visibility_changed 替代 DebugApi 直连）；road_a_b.tscn 出口目标 id 修复
+- **测试配置防污染**：ConfigManager.set_auto_save(false)，测试进程不再写入 user://settings.cfg
+- **单元覆盖补齐**：organization_manager（14 用例）、entity_states（7 用例）、resources_api（6 用例）；补测过程发现并修复 2 个真实 bug——`get_child_orgs` 返回类型崩溃（无类型 Array 赋给 Array[String]）、WorldState `from_dict` 系列 typed Array 赋值崩溃（存档恢复路径从未被调用过）
+- **测试**：全量 28 套件通过（unit 9 + integration 17 + smoke 2）
+
 ### 设置菜单（齿轮/ESC 开关）替代临时主页菜单 + 健全地图系统
 
 - **设置菜单**（SettingsMenuPanel，Minecraft 式居中布局）：左上角齿轮按钮 + ESC 键开关；常规区含时间速度控制（暂停/1x/2x/4x）；**调试区**（OS.is_debug_build）显示测试地图选择（村落/战场/道路/森林/村落B）——替代原主页菜单的测试场景入口；POSSESS 模式下 ESC 保留给退出附身

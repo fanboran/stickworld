@@ -15,6 +15,9 @@ $suites = @{
         "tests/unit/test_placement_grid.tscn",
         "tests/unit/test_health_component.tscn",
         "tests/unit/test_resource_manager.tscn",
+        "tests/unit/test_resources_api.tscn",
+        "tests/unit/test_organization_manager.tscn",
+        "tests/unit/test_entity_states.tscn",
         "tests/unit/test_command_chain.tscn",
         "tests/unit/test_formation_system.tscn",
         "tests/unit/test_behavior_state_machine.tscn"

@@ -2,6 +2,20 @@
 
 > 底层架构第二阶段：定义八层系统之间的所有交互关系，以及 EventBus 信号的完整目录。
 
+> **⚠️ 2026-08 校准声明**：信号**唯一真相源是 `core/autoload/event_bus.gd`**（本文件为演进记录）。
+> 实测差异（本文件 → 实际代码）：
+> - `battle_started`：文档 4 参（battle_id, region_id, attacker, defender）→ **实际 `battle_started(battle_id: String)` 单参**
+> - `battle_ended`：文档 3 参（battle_id, result, casualties）→ **实际 `battle_ended(battle_id: String, victory: bool)`**
+> - `building_started/completed/removed`：文档 region_id → **实际 `tile_pos: Vector2i`**
+> - `unit_recruited/unit_lost`：文档（unit_id, org_id）→ **实际 `(unit_type: String)` 单参**
+> - `population_changed`：文档 3 参 → **实际 `(total: int, delta: int)`**
+> - `ui_notification`：文档 2 参 → **实际 `(title: String, body: String, level: String)`**
+> - `territory_gained/lost`：文档 2 参 → **实际 `(tile_id: String)` 单参**
+> - `resource_not_enough`、`tech_started`、`org_created/disbanded/restructured`：**已从 EventBus 删除**（由模块 api.gd 自建信号，见资源/组织模块 api.gd）——EventBus 与模块 api 不重复声明
+> - 实现新增（文档未载）：`balance_changed`、`material_param_changed`、`texture_captured`、`selection_changed`、`squad_created`、`order_issued`、`commander_assigned`、`possession_started/ended`、`interior_entered/exited`、`mega_interior_entered/exited`、`travel_requested`、`travel_started/completed`、`map_loaded/unloaded`、`chunk_loaded/unloaded`、`strategic_map_opened/closed`、`debug_visibility_changed`
+> - `order_issued` 第三参为 `source_tier`（发令层级，非 unit_id）；`possession_*` 参数为 entity 对象
+> - `safe_emit` 动态发射最多支持 3 参数（4 参信号请直接 `emit_signal`）
+
 ---
 
 ## 一、系统交互矩阵

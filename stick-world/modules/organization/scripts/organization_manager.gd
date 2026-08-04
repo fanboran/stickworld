@@ -141,7 +141,11 @@ func get_child_orgs(org_id: String) -> Array[String]:
 	var org := _get_org(org_id)
 	if org.is_empty():
 		return []
-	return org.child_orgs.duplicate()
+	# 显式构造类型化数组（child_orgs 存储为无类型 Array，直接 duplicate 会触发返回类型检查崩溃）
+	var result: Array[String] = []
+	for child_id in org.child_orgs:
+		result.append(child_id)
+	return result
 
 
 ## 按标签查询组织

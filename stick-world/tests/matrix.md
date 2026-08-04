@@ -1,7 +1,7 @@
 # 测试矩阵（功能 ↔ 场景 ↔ 覆盖）
 
 > 单一事实源：**功能改动后查此表**——改了什么系统，跑对应场景；新增功能，在此登记。
-> 运行：`powershell -ExecutionPolicy Bypass -File tests\run_all.ps1`（20 套件）。
+> 运行：`powershell -ExecutionPolicy Bypass -File tests\run_all.ps1`（28 套件）。
 
 ## 一、系统 ↔ 自动化场景
 
@@ -18,7 +18,9 @@
 | **玩家战斗模式（Q 键）** | integration/combat_control | Q 切换/保持附身/跟随行为/攻击展开 | `--map battlefield` 按 Q |
 | **设置菜单/导航/默认步兵** | integration/menu_navigation | 设置装配显隐/调试地图按钮/动态目的地含步行出口/无队伍进战场有步兵 | 游戏内齿轮⚙或 ESC → 调试区选地图 |
 | **附身** | integration/possession | 附身链路、模式切换 | — |
-| **资源** | unit/resource_manager | 库存/价格/消耗 | — |
+| **资源** | unit/resource_manager、unit/resources_api | 库存/价格/消耗 + api 信号转发层（resource_changed/not_enough 参数语义） | — |
+| **组织系统** | unit/organization_manager | 创建/查询/编制/人事/层级插入（above 回归）/解散/序列化 round-trip | — |
+| **实体状态存档** | unit/entity_states | WorldState 6 类状态 to_dict/from_dict 保真 + 整体 save/load | — |
 | **战斗引擎** | integration/battle_lifecycle | 战斗启动/伤亡/胜负 | `--map battlefield --enemies 8` |
 | **启动冒烟** | smoke/new_game_smoke | 启动 60s 零崩溃 | — |
 
@@ -44,5 +46,5 @@ godot --path stick-world res://tests/dev/dev_playtest.tscn -- --map battlefield 
 
 ## 四、覆盖盲区（已知未测）
 
-- technology / world_map / resources 供需 / 室内（0.9）——见 `docs/技术/架构/模块依赖关系.md` §五 断链点
+- technology / world_map / resources 供需（价格系统未接入）——见 `docs/技术/架构/模块依赖关系.md` §五 断链点
 - 血条视觉细节、HitStop 表现（headless 无法断言渲染）→ 手动体验

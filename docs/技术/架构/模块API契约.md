@@ -125,6 +125,8 @@ static func apply_thatch_cpu(polygon) -> void
 
 ## 二、科技模块 `modules/technology/api.gd`
 
+> **⚠️ 已冻结（2026-08 审计标注）**：本模块当前为空壳实现——`TechnologyManager` 尚未实现，`setup()` 永不被调用，全部接口返回"模块未初始化"；且按路线图阶段 1 将按 `docs/设计/系统/04-科技系统.md` 的"征服获得"策略重建，**本契约描述的研究制 API 将整体作废**。在重建完成前，本段仅作历史参考，不承诺可用性。
+
 ```gdscript
 # 研究
 func start_research(tech_id: String, org_id: String) -> Dictionary
@@ -349,3 +351,26 @@ achievement  ──-> (仅查询, 无出向 API 依赖)
 ---
 
 *下一阶段：Autoload 依赖图。*
+
+---
+
+## 十、战略图模块 `modules/world_map/api.gd`（2026-08 状态登记）
+
+> **⚠️ 未接线（阶段 1 待实现）**：本模块为"架构文档先行、实现为零"的死模块——
+> `scenes/` 为空、无实例化入口、核心逻辑为 TODO 桩（35 处）、EventBus 处理器为死代码且签名冲突。
+> 契约与 `docs/技术/架构/战略图架构.md` §5.3 漂移（实现 7 参 setup vs 文档 4 参）。
+> 下表仅登记现状，正式契约待接线时重建。
+
+```gdscript
+# 现有导出（部分无 docstring，待重建时补齐）
+func setup(controller, renderer, camera, mode_manager, data, granularity_manager, stitched_preview) -> void
+func select(id) / deselect(id) / get_selected() -> void
+func set_map_mode(mode) / get_map_mode() / get_available_map_modes() -> void
+func camera_zoom_to(level) / screen_to_map(pos) / map_to_screen(pos) -> void
+func get_region_owner(id) / get_region_alliance(id) / get_state_info(id) / get_alliance_info() -> void
+func set_owner_color(id, color) -> void
+
+# 信号（经 api.gd 自建，部分与 EventBus 重复，接线时收敛）
+signal strategic_map_opened / strategic_map_closed
+signal settlement_updated
+```

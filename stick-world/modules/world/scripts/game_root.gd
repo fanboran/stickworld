@@ -36,8 +36,9 @@ const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/ma
 const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
 ## 森林附属区域场景（阶段 F）
 const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/forest_zone.tscn")
-## 玩家火柴人实体场景
-const _STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
+## 玩家火柴人实体场景（2026-08 收敛：经 UnitsAPI 常量引用，替代直接 preload 内部路径）
+const _UnitsApiScript: GDScript = preload("res://modules/units/api.gd")
+const _STICKMAN_ENTITY_SCENE: PackedScene = _UnitsApiScript.STICKMAN_ENTITY_SCENE
 
 ## 测试村落地图 ID
 const VILLAGE_A_MAP_ID := "village_a"

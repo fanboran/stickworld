@@ -122,6 +122,20 @@ func get_nearest_project(pos: Vector2) -> RefCounted:
 	return _manager.get_nearest_project(pos)
 
 
+## 注册可派工工人（工人实体注入 construction 引用时调用；重复注册自动去重）
+func register_worker(worker: Node) -> void:
+	if not _is_initialized:
+		return
+	_manager.register_worker(worker)
+
+
+## 取消注册工人（实体销毁时应调用，防止派工池悬垂引用）
+func unregister_worker(worker: Node) -> void:
+	if not _is_initialized:
+		return
+	_manager.unregister_worker(worker)
+
+
 # ===== 查询 =====
 
 ## 查询地块内的所有建筑 ID

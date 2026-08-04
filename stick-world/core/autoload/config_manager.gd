@@ -25,6 +25,9 @@ var _defaults: Dictionary = {
 # 内存副本
 var _data: Dictionary
 
+# 是否自动落盘（测试进程关闭，避免污染 user://settings.cfg）
+var _auto_save: bool = true
+
 # 设置变更信号。
 signal config_changed(key: String, value)
 signal volume_changed(channel: String, value: float)
@@ -58,6 +61,8 @@ func load_from_disk() -> void:
 
 ## 立即把当前内存中的配置写入磁盘。
 func save_to_disk() -> void:
+	if not _auto_save:
+		return
 	var cfg: ConfigFile = ConfigFile.new()
 	for key in _data.keys():
 		var s: String = key
@@ -99,6 +104,11 @@ func set_value(key: String, value) -> void:
 ## 键是否存在。
 func has_key(key: String) -> bool:
 	return _data.has(key)
+
+
+## 开关自动落盘（测试进程使用，避免测试写入污染玩家配置；关闭后 set_value 仅改内存）
+func set_auto_save(enabled: bool) -> void:
+	_auto_save = enabled
 
 
 # ─────────────────────────────── 音量相关快捷函数 ─────────────────────────────

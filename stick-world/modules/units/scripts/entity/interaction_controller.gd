@@ -39,7 +39,7 @@ func try_interact() -> void:
 			var per_hit: float = project.total_work / 8.0
 			project.add_build_progress(per_hit)
 			_entity.set_action_anim("build")
-			_entity._player_build_timer = 1.8
+			_entity.set_player_build_timer(1.8)
 	# 仓库交互
 	elif target is Node2D:
 		if _entity.is_carrying():
@@ -122,18 +122,19 @@ var _interact_hint_label: Label = null
 func _ensure_interact_hint() -> void:
 	if _interact_hint_node != null and is_instance_valid(_interact_hint_node):
 		return
-	if _entity._map_ref == null:
+	var map: Node2D = _entity.get_map()
+	if map == null:
 		return
 	_interact_hint_node = Node2D.new()
 	_interact_hint_node.name = "InteractHint"
 	_interact_hint_node.visible = false
 	_interact_hint_node.z_index = 20
 	# 挂到 foreground_layer（z_index=10），确保在建筑之上
-	var layer: Node2D = _entity._map_ref.get("foreground_layer") if "foreground_layer" in _entity._map_ref else null
+	var layer: Node2D = map.get("foreground_layer") if "foreground_layer" in map else null
 	if layer != null:
 		layer.add_child(_interact_hint_node)
 	else:
-		_entity._map_ref.add_child(_interact_hint_node)
+		map.add_child(_interact_hint_node)
 	_interact_hint_label = Label.new()
 	_interact_hint_label.add_theme_font_size_override("font_size", 14)
 	_interact_hint_label.position = Vector2(-100, -20)
@@ -169,7 +170,7 @@ func _hide_interact_hint() -> void:
 ## 更新交互提示（玩家附身时，靠近仓库/工地在建筑上方显示弹窗）。
 ## 由实体 _physics_process 每帧调用。
 func update_hint() -> void:
-	if not _entity.possessed or _entity.get_construction_manager() == null or _entity._map_ref == null:
+	if not _entity.is_possessed() or _entity.get_construction_manager() == null or _entity.get_map() == null:
 		_hide_interact_hint()
 		return
 	_ensure_interact_hint()
@@ -180,7 +181,8 @@ func update_hint() -> void:
 		_hide_interact_hint()
 		return
 	# 弹窗显示在目标建筑上方
-	var ground_y: float = _entity._map_ref.get("ground_y") if "ground_y" in _entity._map_ref else 810.0
+	var map: Node2D = _entity.get_map()
+	var ground_y: float = map.get("ground_y") if map != null and "ground_y" in map else 810.0
 	_interact_hint_node.global_position = Vector2(float(info.center_x), ground_y - 280.0)
 	_interact_hint_label.text = String(info.hint)
 	_interact_hint_node.visible = true

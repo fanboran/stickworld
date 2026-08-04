@@ -75,7 +75,7 @@ var _ai_controller: Node = null
 var _ai_move_dir: Vector2 = Vector2.ZERO
 ## AI 是否要求奔跑
 var _ai_running: bool = false
-## Construction 模块引用（由 GameRoot spawn 时注入，供 AIController 查询派工；可能为 null）
+## Construction 模块 API 引用（由 GameRoot spawn 时注入的是 ConstructionApi 实例，供 AIController 查询派工；可能为 null）
 var _construction_manager: Node = null
 
 # ─────────────────────────────── 战斗（§7.1 / §8）────────────────────────────────
@@ -554,6 +554,11 @@ func is_carrying() -> bool:
 	return _carrying
 
 
+## 设置玩家建造敲击计时（交互控制器触发敲击时调用，替代组件直写私有字段）
+func set_player_build_timer(v: float) -> void:
+	_player_build_timer = v
+
+
 ## 锁定动作动画（如 build 敲击），锁定期间动画不切换。
 ## 由 BehaviorWork 在工地播放建造动画时调用。
 func set_action_anim(anim_name: String) -> void:
@@ -770,17 +775,25 @@ func get_ai_controller() -> Node:
 	return _ai_controller
 
 
-## 由 GameRoot spawn 时注入 ConstructionManager 引用（供 AIController 查询派工）
+## 由 GameRoot spawn 时注入 ConstructionApi 引用（供 AIController 查询派工）
 func set_construction_manager(manager: Node) -> void:
 	_construction_manager = manager
-	# 把 NPC 注册为可派工工人
+	# 把 NPC 注册为可派工工人（api.gd 已转发 register_worker）
 	if manager != null and manager.has_method("register_worker"):
 		manager.register_worker(self)
 
 
-## 获取 ConstructionManager 引用（可能为 null）
+## 获取 ConstructionApi 引用（可能为 null）
 func get_construction_manager() -> Node:
 	return _construction_manager
+
+
+## 销毁时反注册派工池，防止悬垂引用（2026-08 收敛）
+func _exit_tree() -> void:
+	if _construction_manager != null and is_instance_valid(_construction_manager) \
+			and _construction_manager.has_method("unregister_worker"):
+		_construction_manager.unregister_worker(self)
+	_construction_manager = null
 
 
 ## 由 GameRoot spawn 时注入 FormationSystem 引用（供 AIController 查询队伍职责）。

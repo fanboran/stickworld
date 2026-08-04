@@ -47,5 +47,5 @@ class_name UnitsAPI
 extends RefCounted
 
 
-## 火柴人实体场景路径（外部模块实例化实体应使用此常量）
-const STICKMAN_ENTITY_SCENE := "res://modules/units/scenes/stickman_entity.tscn"
+## 火柴人实体场景资源（外部模块实例化实体应使用此常量，替代直接 preload 内部路径）
+const STICKMAN_ENTITY_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")

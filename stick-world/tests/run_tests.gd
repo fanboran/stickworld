@@ -11,6 +11,8 @@ var _suite: Array = []
 
 
 func _ready() -> void:
+	# 测试进程不落盘配置（避免污染 user://settings.cfg）
+	ConfigManager.set_auto_save(false)
 	var runner_script = load("res://tests/core/test_runner.gd")
 	_runner = runner_script.new()
 	_register_event_bus_tests()

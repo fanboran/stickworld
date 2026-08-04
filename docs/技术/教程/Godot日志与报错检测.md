@@ -50,24 +50,46 @@
 ## 三、自动检测
 
 ```powershell
-# 标准检查（ERROR / SCRIPT ERROR / Parse Error / Invalid call...），有错退出码 1
+# 标准检查（默认 = 日志扫描 + 编辑器启动模拟）：有错退出码 1
 powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1
+
+# 只查日志（跳过 ~15s 的启动模拟）
+powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1 -Quick
 
 # 连 WARNING 一起看（改代码后建议带 -Warnings）
 powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1 -Warnings
 
-# 只看最近 N 条错误摘要（大日志快速定位）
+# 只看最近 N 条错误摘要
 powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1 -Head 10
-
-# 指定日志目录（如排查其他项目）
-powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1 -LogDir "C:\path\to\logs"
 ```
+
+### 检测原理（2026-08 实验验证）
+
+**为什么不能只靠日志 / 无头测试？**
+
+| 检测方式 | 覆盖 | 局限 |
+|---|---|---|
+| 读 `logs/godot.log` | 最近一次运行的错误 | 会被后续运行轮转覆盖（保留最近若干次）；编辑器没再启动就没有新日志 |
+| `godot --headless --import` | 全量资源导入解析 | **有缓存跳过**：只解析"首次/变更"文件，重复跑不报 |
+| `godot --headless --editor --quit` | 完整编辑器启动（扫描/全局类名/GDExtension/插件/资源解析） | 同样受缓存影响：失败状态会被 `.godot` 缓存记住，第二次跑不报 |
+| 普通无头测试（run_all） | 测试加载到的代码路径 | **资源解析严格度不同**：普通运行路径容忍 UTF-8 BOM，编辑器启动路径严格报 Parse Error；且只加载测试场景 |
+
+**编辑器启动报错的标准复现**（已实验验证，~15s）：
+
+```
+删除 .godot/editor/filesystem_cache10（文件变更缓存，删除 = 强制全量重扫）
+→ godot --headless --editor --quit
+→ 输出中的 ERROR / Parse Error 即编辑器启动会报的错误
+```
+
+实验记录：带 BOM 的 tscn → 普通测试 9/9 通过（容忍）；`--editor --quit` 首次报 `Parse Error: Expected '['`（与 GUI 编辑器一致）；**删 filesystem_cache10 后每次都稳定报出**。
 
 **约定**（写进 AGENTS.md 核心行为指令）：
 
-1. 任何代码修改后运行标准检查，退出码 1 必须修复后再继续
-2. 用户报告编辑器报错时，先查 `logs/` 最新日志（含轮转文件）定位根因
+1. 任何代码修改后运行标准检查（默认含启动模拟），退出码 1 必须修复后再继续
+2. 用户报告编辑器报错时，先跑 `check_godot_errors.ps1`（启动模拟会强制重扫全部资源），再查 `logs/` 最新日志定位
 3. headless 测试（`tests/run_all.ps1`）只看断言结果，**不覆盖**编辑器资源解析类错误（BOM Parse Error 就是例子）——两者都要查
+4. 注意：`--editor --quit` 会重建 `filesystem_cache10`，首次耗时 ~15s；对项目无其他副作用（不写存档、不改源文件）
 
 ---
 

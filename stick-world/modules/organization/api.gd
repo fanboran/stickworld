@@ -31,6 +31,24 @@ var _is_initialized: bool = false
 func setup(manager: OrganizationManager) -> void:
 	_manager = manager
 	_is_initialized = true
+	# 注册存档（2026-08 修复：组织数据此前不落盘）
+	if SaveManager != null and SaveManager.has_method("register_module"):
+		SaveManager.register_module("organization", self)
+
+
+# ===== 存档对接（SaveManager 旧接口，2026-08 修复） =====
+
+## 序列化全部组织数据（SaveManager 调用）
+func get_save_data() -> Dictionary:
+	if not _is_initialized:
+		return {}
+	return _manager.get_save_data()
+
+
+## 恢复组织数据（SaveManager 调用）
+func load_save_data(data: Dictionary) -> void:
+	if _is_initialized:
+		_manager.load_save_data(data)
 
 
 # ===== 创建/查询 =====

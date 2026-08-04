@@ -10,6 +10,7 @@ extends Control
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
 var _construction_manager: Node = null
+var _construction_api: Node = null
 var _resources_api: Node = null
 var _input_dispatcher: Node = null
 var _camera_rig: Camera2D = null
@@ -56,6 +57,7 @@ func setup(game_root: Node) -> void:
 	set_process_input(true)
 	_game_root = game_root
 	_construction_manager = game_root.get_construction_manager() if game_root.has_method("get_construction_manager") else null
+	_construction_api = game_root.get_construction_api() if game_root.has_method("get_construction_api") else null
 	_resources_api = game_root.get_resources_api() if game_root.has_method("get_resources_api") else null
 	_input_dispatcher = game_root.get("input_dispatcher") if "input_dispatcher" in game_root else null
 	_camera_rig = game_root.get("camera_rig") if "camera_rig" in game_root else null
@@ -266,11 +268,13 @@ func _cancel_placing() -> void:
 func _confirm_place() -> void:
 	if not _placing or _placing_def_id.is_empty():
 		return
-	if _construction_manager == null or not _construction_manager.has_method("start_construction_at"):
+	# 2026-08 收敛：建造走 ConstructionApi（发射 building_started 信号），查询仍走模块内 manager
+	var api: Node = _construction_api if _construction_api != null else _construction_manager
+	if api == null or not api.has_method("start_construction_at"):
 		return
 	var world_x: float = _get_mouse_world_x()
 	var cell_x: int = int(floor(world_x / float(_CELL_SIZE)))
-	var result: Dictionary = _construction_manager.start_construction_at(_BUILD_REGION, _placing_def_id, cell_x, "")
+	var result: Dictionary = api.start_construction_at(_BUILD_REGION, _placing_def_id, cell_x, "")
 	if result.get("ok", false):
 		_show_notify("开始建造: %s (cell=%d)" % [_placing_def_id, cell_x])
 	else:

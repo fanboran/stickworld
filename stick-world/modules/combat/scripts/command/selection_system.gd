@@ -68,12 +68,11 @@ func _ready() -> void:
 
 
 func _resolve_game_root() -> void:
-	var p := get_parent()
-	while p != null:
-		if p.has_method("get_current_map"):
-			_game_root = p
-			return
-		p = p.get_parent()
+	# 2026-08 修复：group 查找替代父链遍历（GameRoot 注册于 "game_root" group）
+	var tree := get_tree()
+	if tree == null:
+		return
+	_game_root = tree.get_first_node_in_group("game_root")
 
 
 # ─────────────────────────────── 模式回调（InputDispatcher handler 接口）────────────────────────────────

@@ -83,22 +83,29 @@ func toggle_drawer(drawer_name: String) -> void:
 ## F3 切换调试覆盖层显示/隐藏
 func toggle_visibility() -> void:
 	_visible = not _visible
-	visibility_changed.emit(_visible)
+	_emit_visibility()
 	_save_settings()
 
 
-## 设置可见性
-func set_visible(v: bool) -> void:
+## 设置可见性（2026-08 改名：原 set_visible 遮蔽 Node.set_visible 内置方法）
+func set_overlay_visible(v: bool) -> void:
 	if _visible == v:
 		return
 	_visible = v
-	visibility_changed.emit(_visible)
+	_emit_visibility()
 	_save_settings()
 
 
 ## 是否可见
 func is_visible() -> bool:
 	return _visible
+
+
+## 发射可见性信号（本地 + EventBus 广播，供生产代码解耦订阅）
+func _emit_visibility() -> void:
+	visibility_changed.emit(_visible)
+	if EventBus != null and EventBus.has_signal("debug_visibility_changed"):
+		EventBus.debug_visibility_changed.emit(_visible)
 
 
 # ─────────────────────────────── 图例 ────────────────────────────────

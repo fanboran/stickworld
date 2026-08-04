@@ -29,7 +29,7 @@ enum OrderType {
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 号令已下达（送达前即发射，含延迟信息）
-signal order_issued(order_type: int, target_squad_id: String, issuer_unit_id: int)
+signal order_issued(order_type: int, target_squad_id: String, source_tier: int)
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 ## FormationSystem 引用（查询小队成员）

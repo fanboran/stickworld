@@ -36,11 +36,12 @@ func _on_mega_interior_entered(building_id: int, map_id: String) -> void:
 	# 校验：附身中禁止传送
 	if _root._possession_interface != null and _root._possession_interface.has_method("get_possessed_entity"):
 		var pe: Node = _root._possession_interface.get_possessed_entity()
-		if pe != null and is_instance_valid(pe) and _root._possession_interface.has_method("get") and _root._possession_interface.get("_slowed_time") == true:
+		if pe != null and is_instance_valid(pe) and _root._possession_interface.get("_slowed_time") == true:
 			push_warning("[GameRoot] 附身中禁止传送进入大建筑")
 			return
 	# 记录返回信息
-	_root._return_map_id = _root.scene_loader.current_map_id if _root.scene_loader != null and _root.scene_loader.has_method("get") else ""
+	# 2026-08 修复：原 has_method("get") 恒真（Object.get 恒存在），改为检查真实方法
+	_root._return_map_id = _root.scene_loader.current_map_id if _root.scene_loader != null and _root.scene_loader.has_method("get_current_map_id") else ""
 	var player: Node2D = find_player_entity()
 	if player != null and is_instance_valid(player):
 		_root._return_spawn_x = player.global_position.x

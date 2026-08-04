@@ -283,10 +283,12 @@ func insert_tier(org_id: String, new_org_name: String, position: String) -> Dict
 	if not _is_valid_tier(new_tier):
 		return {"ok": false, "error": "插入后的层级 %d 超出有效范围" % new_tier}
 
-	# 校验层级连续性
+	# 校验层级连续性（2026-08 修复：原 above 校验要求 new_tier == parent.tier - 1，
+	# 而 new_tier = org.tier + 1，连续层级下 parent.tier = org.tier + 1，
+	# 导致 above 分支恒失败——改为"不高于父层级 + 与原组织连续"）
 	if normalized_pos == "above":
-		if not _validate_tier_relationship(parent.tier, new_tier):
-			return {"ok": false, "error": "插入的层级与父组织层级不连续"}
+		if new_tier > parent.tier:
+			return {"ok": false, "error": "插入的层级不能高于父组织"}
 		if not _validate_tier_relationship(new_tier, org.tier):
 			return {"ok": false, "error": "插入的层级与原组织层级不连续"}
 	else:
@@ -404,3 +406,19 @@ func export_as_preset(org_id: String) -> Dictionary:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
 	# 骨架阶段：返回组织数据的浅拷贝作为预设数据
 	return {"ok": true, "data": org.duplicate(true)}
+
+
+# ===== 存档对接（SaveManager 旧接口，2026-08 修复） =====
+
+## 序列化全部组织数据（含 ID 计数器，避免读档后 ID 冲突）
+func get_save_data() -> Dictionary:
+	return {
+		"organizations": organizations.duplicate(true),
+		"next_id": _next_id,
+	}
+
+
+## 恢复组织数据
+func load_save_data(data: Dictionary) -> void:
+	organizations = (data.get("organizations", {}) as Dictionary).duplicate(true)
+	_next_id = int(data.get("next_id", 1))

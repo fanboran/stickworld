@@ -26,14 +26,14 @@ var _debug_label: Label = null
 func _ready() -> void:
 	add_to_group("resource_node")
 	_apply_visual()
-	if DebugApi != null:
-		DebugApi.visibility_changed.connect(_update_debug_visibility)
-	_update_debug_visibility()
+	# 2026-08 修复依赖反转：经 EventBus 订阅调试可见性（生产代码不再依赖 debug_GUI autoload）
+	if EventBus != null and EventBus.has_signal("debug_visibility_changed"):
+		EventBus.debug_visibility_changed.connect(_update_debug_visibility)
 
 
-func _update_debug_visibility(_p_visible: bool = false) -> void:
+func _update_debug_visibility(_v: bool = false) -> void:
 	if _debug_label != null:
-		_debug_label.visible = DebugApi.is_visible() if DebugApi != null else false
+		_debug_label.visible = _v
 
 
 func _apply_visual() -> void:

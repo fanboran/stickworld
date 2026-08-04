@@ -88,8 +88,8 @@ extends Node
 @warning_ignore("unused_signal") signal selection_changed(unit_ids: Array)
 # 编队创建：FormationSystem -> UI、Organization
 @warning_ignore("unused_signal") signal squad_created(squad_id, unit_ids)
-# 号令下达：TacticalOrders -> UI、Units
-@warning_ignore("unused_signal") signal order_issued(order_type, target_squad_id, issuer_unit_id)
+# 号令下达（source_tier=发令层级，0=玩家直接指挥）：TacticalOrders -> UI、Units
+@warning_ignore("unused_signal") signal order_issued(order_type, target_squad_id, source_tier)
 # 任命指挥官：Organization -> UI
 @warning_ignore("unused_signal") signal commander_assigned(squad_id, unit_id)
 @warning_ignore("unused_signal") signal territory_gained(tile_id: String)
@@ -102,10 +102,7 @@ extends Node
 @warning_ignore("unused_signal") signal treaty_signed(type, parties, terms)
 
 # ─────────────────────────────── 组织 ─────────────────────────────────────
-# 创建新组织：组织系统 → UI（由 organization/api.gd 自建信号转发，EventBus 不重复声明）
-@warning_ignore("unused_signal") signal org_disbanded(org_id)
-# 重组编制：组织系统 → UI
-@warning_ignore("unused_signal") signal org_restructured(org_id, changes)
+# 创建/解散/重组信号：由 organization/api.gd 自建信号承担，EventBus 不重复声明
 # 效率变动：组织系统 → UI
 @warning_ignore("unused_signal") signal org_efficiency_changed(org_id, old, new)
 # AI 自主行动：组织系统 → UI（可选）
@@ -154,6 +151,11 @@ extends Node
 @warning_ignore("unused_signal") signal possession_started(entity)
 # 附身结束：PossessionInterface -> UI、Units、TimeManager
 @warning_ignore("unused_signal") signal possession_ended(entity)
+
+# ─────────────────────────────── 调试可见性（debug_GUI → 生产解耦）──────────────────────────────
+# 调试覆盖层显隐广播：生产代码（如 resource_node 调试标签）订阅此信号，
+# 避免生产模块直接依赖 debug_GUI autoload（2026-08 修复依赖反转）。
+@warning_ignore("unused_signal") signal debug_visibility_changed(visible: bool)
 
 # ─────────────────────────────── 室内 / 建筑交互（§5.2）──────────────────────────────
 

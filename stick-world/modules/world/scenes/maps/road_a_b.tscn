@@ -42,7 +42,7 @@ shape = SubResource("shape_exit")
 [node name="ExitRight" type="Area2D" parent="ChunkTriggers"]
 script = ExtResource("2_trigger")
 exit_side = 1
-target_map_id = "test_village_b"
+target_map_id = "village_b"
 target_entry_side = 0
 trigger_width = 64.0
 

@@ -80,7 +80,7 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 | T0-5 | smoke：新游戏 60s 冒烟 + `run_all.ps1` 聚合器 | ✅ |
 | T0-6 | 清理孤儿 uid、`*_result.txt`、硬编码路径 | ✅ |
 | T0-7 | **数字标号全部清除**：test_stage_01~08 全部迁移完成——01→integration/test_game_root_assembly、02→integration/test_village_map、03→integration/test_ai_behaviors、05→integration/test_battle_lifecycle、06→integration/test_selection_formation、07→integration/test_possession、08→smoke/test_cross_map_travel | ✅ |
-| T0-8 | **单元覆盖补齐（2026-08 审计）**：organization_manager（14 用例，含 insert_tier 修复回归 + 序列化 round-trip）、entity_states（7 用例，WorldState 状态类序列化）、resources_api（6 用例，信号转发层）——补测过程揪出并修复 2 个真实 bug：`get_child_orgs` 返回类型崩溃、`from_dict` typed Array 赋值崩溃 | ✅ 3 文件 27 用例 |
+| T0-8 | **单元覆盖补齐（2026-08 审计）**：organization_manager（15 用例，含 insert_tier 修复回归 + WorldState 容器同步 + 序列化 round-trip）、entity_states（7 用例，WorldState 状态类序列化）、resources_api（6 用例，信号转发层）——补测过程揪出并修复 2 个真实 bug：`get_child_orgs` 返回类型崩溃、`from_dict` typed Array 赋值崩溃 | ✅ 3 文件 28 用例 |
 
 **当前结构（28 套件，`run_all.ps1` 全绿）**：
 - `tests/unit/`（9 文件）：placement_grid、health_component、resource_manager、resources_api、organization_manager、entity_states、command_chain、formation_system、behavior_state_machine

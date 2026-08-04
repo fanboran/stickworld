@@ -5,6 +5,8 @@ extends Node
 
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptOrgManager := preload("res://modules/organization/scripts/organization_manager.gd")
+const ScriptOrgState := preload("res://core/entities/organization_state.gd")
+const ScriptWS := preload("res://core/autoload/world_state.gd")
 
 var _runner: TestRunner
 
@@ -25,6 +27,7 @@ func _ready() -> void:
 	_runner.add_test("Org: remove_tier 子组织上挂", _test_remove_tier)
 	_runner.add_test("Org: disband 人员清空与子组织上挂", _test_disband)
 	_runner.add_test("Org: 序列化 round-trip 含 next_id 防冲突", _test_save_load)
+	_runner.add_test("Org: WorldState 容器同步（创建注册/删除注销）", _test_world_sync)
 	_runner.run()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -107,7 +110,7 @@ func _test_templates_autonomy() -> void:
 	_runner.assert_true(m.set_equipment_template(tree.leaf, {"rifle": 4}).get("ok", false), "设置装备模板")
 	_runner.assert_equal(m.get_organization(tree.leaf).data.equipment_template["rifle"], 4, "装备保真")
 	_runner.assert_true(m.set_autonomy(tree.leaf, "high").get("ok", false), "小写 high 应归一化成功")
-	_runner.assert_equal(m.get_organization(tree.leaf).data.autonomy_level, "HIGH", "自主权限归一化为大写")
+	_runner.assert_equal(m.get_organization(tree.leaf).data.autonomy_level, ScriptOrgState.AutonomyLevel.HIGH, "自主权限归一化为 enum HIGH")
 	_runner.assert_false(m.set_autonomy(tree.leaf, "RANDOM").get("ok", true), "无效权限级别应失败")
 	_runner.assert_false(m.set_personnel_template("org_999", {}).get("ok", true), "不存在组织设置失败")
 
@@ -169,7 +172,7 @@ func _test_insert_tier_fail() -> void:
 	_runner.assert_false(m.insert_tier(tree.leaf, "x", "sideways").get("ok", true), "无效位置应失败")
 	_runner.assert_false(m.insert_tier("org_999", "x", "above").get("ok", true), "不存在组织应失败")
 	# 白盒构造层级错乱（org 与 parent 同级）：above 新层级会超过父
-	m.organizations[tree.mid]["tier"] = 5
+	m.organizations[tree.mid].tier = 5
 	_runner.assert_false(m.insert_tier(tree.mid, "x", "above").get("ok", true), "新层级高于父组织应失败")
 
 
@@ -195,7 +198,7 @@ func _test_disband() -> void:
 	var org: Dictionary = m.get_organization(tree.mid).data
 	_runner.assert_equal(org.personnel, [], "人员应清空")
 	_runner.assert_equal(org.commander_id, "", "指挥官应解除")
-	_runner.assert_equal(org.state, "DISBANDED", "状态应为 DISBANDED")
+	_runner.assert_equal(org.state, ScriptOrgState.State.DISBANDED, "状态应为 DISBANDED")
 	_runner.assert_equal(m.get_organization(tree.leaf).data.parent_org, tree.root, "子组织应上挂到 root")
 	_runner.assert_equal(m.get_child_orgs(tree.root), [tree.leaf], "root 子列表应更新")
 
@@ -204,6 +207,7 @@ func _test_disband() -> void:
 
 func _test_save_load() -> void:
 	var m := ScriptOrgManager.new()
+	m.set_world(ScriptWS.new())
 	var tree := _build_tree(m)
 	m.assign_stickman(tree.leaf, "stick_1", "rifleman")
 	m.set_personnel_template(tree.leaf, {"rifleman": 4})
@@ -213,6 +217,7 @@ func _test_save_load() -> void:
 	_runner.assert_equal(save.next_id, 4, "next_id 应为 4")
 
 	var m2 := ScriptOrgManager.new()
+	m2.set_world(ScriptWS.new())
 	m2.load_save_data(save)
 	_runner.assert_equal(m2.get_organization(tree.leaf).data.personnel, ["stick_1"], "读档后人员保真")
 	_runner.assert_equal(m2.get_organization(tree.leaf).data.personnel_template, {"rifleman": 4}, "读档后编制保真")
@@ -223,3 +228,19 @@ func _test_save_load() -> void:
 	_runner.assert_true(r.get("ok", false), "读档后新建组织应成功")
 	_runner.assert_equal(r.data.org_id, "org_4", "新组织 ID 应从恢复的 next_id 继续")
 	_runner.assert_equal(m2.organizations.size(), 4, "总组织数应为 4（不覆盖旧数据）")
+	# 读档后组织应重新注册到 WorldState 容器
+	_runner.assert_equal(m2._world.organizations.size(), 4, "WorldState 容器应与 manager 同步")
+
+
+## WorldState 容器同步：创建注册、删除注销（2026-08 集中制 A 方案）
+func _test_world_sync() -> void:
+	var m := ScriptOrgManager.new()
+	var ws := ScriptWS.new()
+	m.set_world(ws)
+	var tree := _build_tree(m)
+	_runner.assert_equal(ws.organizations.size(), 3, "创建 3 个组织后 WorldState 容器应有 3 个")
+	_runner.assert_not_null(ws.organizations.get(tree.mid, null), "mid 应注册进 WorldState 容器")
+	_runner.assert_equal(ws.organizations[tree.mid].name, "师部", "容器内为 OrganizationState 对象且字段保真")
+	m.remove_tier(tree.mid)
+	_runner.assert_equal(ws.organizations.size(), 2, "删除后 WorldState 容器应同步注销")
+	_runner.assert_null(ws.organizations.get(tree.mid, null), "被删组织应已注销")

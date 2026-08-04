@@ -31,12 +31,13 @@ var _is_initialized: bool = false
 func setup(manager: OrganizationManager) -> void:
 	_manager = manager
 	_is_initialized = true
-	# 注册存档（2026-08 修复：组织数据此前不落盘）
-	if SaveManager != null and SaveManager.has_method("register_module"):
-		SaveManager.register_module("organization", self)
+	# 2026-08 集中制（WorldState 容器决策 A）：组织状态注册进 WorldState 容器，
+	# 存档由 WorldState 统一序列化（本模块不再自行注册 SaveManager）
+	if WorldState != null and manager.has_method("set_world"):
+		manager.set_world(WorldState)
 
 
-# ===== 存档对接（SaveManager 旧接口，2026-08 修复） =====
+# ===== 存档对接（保留转发，当前由 WorldState 统一落盘，此处仅防御性可用） =====
 
 ## 序列化全部组织数据（SaveManager 调用）
 func get_save_data() -> Dictionary:

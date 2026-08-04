@@ -15,6 +15,7 @@ enum Tag {
 	ENGINEERING,    ## 工程队
 	ADMINISTRATION, ## 行政
 	COMMERCE,       ## 商队
+	LABOR,          ## 劳工队
 }
 
 enum AutonomyLevel {

@@ -30,6 +30,7 @@
 | 查程序化世界生成       | `docs/设计/系统/08-程序化世界生成.md` |
 | 游戏数据表           | `config/excel/` 目录 + `docs/技术/教程/Excel数据管线.md` |
 | 查编辑器工具/插件    | `docs/技术/编辑器工具索引.md`（addons/ + tools/ 全部脚本） |
+| 查编辑器/运行时报错    | `tools/check_godot_errors.ps1`（扫描 `user://logs/`，日志机制见 `docs/技术/教程/Godot日志与报错检测.md`） |
 | 开发规范            | `docs/CONTRIBUTING.md`                                  |
 | 有可以参考的开源项目就放到这里 | external/                                               |
 
@@ -41,6 +42,7 @@
 
 1. **主动沟通**：当任务描述不清晰或与架构原则冲突时，积极主动提问，不做危险假设。
 2. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/design/mechanics/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
+3. **报错自检**：任何代码修改后，运行 `powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1`（退出码 1 = 编辑器/运行日志有 ERROR/SCRIPT ERROR/Parse Error，须修复）；修改场景/资源文件后若用户报告编辑器报错，先查 `%APPDATA%\Godot\app_userdata\stick_world\logs\` 下最新日志（含轮转文件 `godot<时间戳>.log`），详见 `docs/技术/教程/Godot日志与报错检测.md`。
 
 ***
 

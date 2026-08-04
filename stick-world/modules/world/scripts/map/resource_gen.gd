@@ -61,10 +61,9 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 		var node: Node2D = ScriptResourceNode.new()
 		node.resource_type = rtype
 		node.amount = 50 + randi() % 100
-		var px: float = cx * 32.0 + 16.0
+		var px: float = cx * PlacementGrid.CELL_SIZE + PlacementGrid.CELL_SIZE * 0.5
 		var py: float = random_resource_y(cx)
 		node.position = Vector2(px, py)
 		_root.decoration_layer.add_child(node)
 		nodes.append(node)
-	print("[VillageMap] 生成 %d 个资源点 (cell %d~%d, density=%.2f)" % [nodes.size(), start_cell, end_cell, density])
 	return nodes

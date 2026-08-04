@@ -33,8 +33,10 @@ func _register_event_bus_tests() -> void:
 
 
 func _test_eventbus_safe_emit_unknown() -> void:
+	# 断言目标：safe_emit 对未声明信号 push_warning 而非崩溃。
+	# 用"信号确实未声明"作为可验证的替代断言（避免恒真断言）。
+	_runner.assert_false(EventBus.has_signal("a_signal_that_does_not_exist"), "测试用信号必须未声明")
 	EventBus.safe_emit("a_signal_that_does_not_exist", [])
-	_runner.assert_true(true, "safe_emit 对未知信号静默")
 
 
 func _test_eventbus_game_started() -> void:

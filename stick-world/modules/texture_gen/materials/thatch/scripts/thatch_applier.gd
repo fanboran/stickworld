@@ -114,9 +114,6 @@ func _generate_and_apply(poly: Polygon2D, index: int) -> void:
 	# 添加辅助线（Line2D 沿多边形边缘）
 	_add_guide_lines(poly, pts)
 
-	print("[SmithyThatchApplier] applied sprite texture to ", poly.name,
-		" size=", tex_w, "x", tex_h, " angle=", effective_angle_deg)
-
 
 func _generate_brush_texture(w: int, h: int, angle_deg: float, tex_seed: int) -> ImageTexture:
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)

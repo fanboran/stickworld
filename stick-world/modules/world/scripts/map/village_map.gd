@@ -1,9 +1,11 @@
 class_name VillageMap
-extends Node2D
+extends MapBase
 ## 村落地图实例 —— 单 Chunk 简化版（P0）。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §3.4 / §3.2 / §2.4.3。
 ## P0 阶段：硬编码单张完整地图，不做 Chunk 流式（留到阶段 0.8）。
+## 公共 API（spawn_entity/get_entities/get_possessed_entity/元数据 getter/障碍收集）
+## 继承自 MapBase（2026-08 去重）。
 ##
 ## 节点结构：
 ##   VillageMap (Node2D)
@@ -31,17 +33,6 @@ const _ResourceGenScript: GDScript = preload("res://modules/world/scripts/map/re
 const ScriptResourceNode := preload("res://modules/world/scripts/map/resource_node.gd")
 
 # ─────────────────────────────── 地图元数据（§3.4.1）────────────────────────────────
-## 地面线 Y（世界坐标），火柴人可走区域顶部
-@export var ground_y: float = 810.0
-## 地面占屏幕高度比例（Inspector 可改，默认 0.25 = 1/4）
-@export var ground_ratio: float = 0.25
-## 地图左边界 X（相机/火柴人 X 下限）
-@export var map_left: float = 0.0
-## 地图右边界 X（相机/火柴人 X 上限）—— 卷轴式水平展开，P0 设为 8192（足够测试左右移动）
-@export var map_right: float = 8192.0
-## 地面底部 Y（火柴人可走区域底部，= ground_y + DESIGN_HEIGHT * ground_ratio = 810 + 1080*0.25 = 1080）
-## 注意：此值应匹配屏幕可见地面范围，避免地面矩形超出屏幕导致火柴人显示偏下
-@export var ground_bottom: float = 1080.0
 ## 建筑下基准线偏移（地平线向下像素数）：所有房屋类建筑底部对齐到 ground_y + 此值。
 ## 不是按格子计算，而是固定像素偏移（当前 96px，后续可调整为 100/200 等）。
 @export var building_baseline_offset: float = 96.0
@@ -75,13 +66,9 @@ var _dynamic_bounds_initialized: bool = false
 @onready var placement_grid: Node = get_node_or_null(WorldAPI.PATH_MAP_PLACEMENT_GRID)
 @onready var terrain_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_LAYER)
 @onready var decoration_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_DECORATION_LAYER)
-@onready var building_host: Node2D = get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST)
-@onready var terrain_buildings: Node2D = get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS)
 @onready var initial_buildings_list: Node = get_node_or_null(WorldAPI.PATH_MAP_INITIAL_BUILDINGS_LIST)
-@onready var walk_barrier: Node2D = get_node_or_null(WorldAPI.PATH_MAP_WALK_BARRIER)
 @onready var build_mask_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_BUILD_MASK_LAYER)
 @onready var foreground_layer: Node2D = get_node_or_null(WorldAPI.PATH_MAP_FOREGROUND_LAYER)
-@onready var entity_host: Node2D = get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST)
 @onready var chunk_triggers: Node2D = get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS)
 @onready var battle_anchor: Node2D = get_node_or_null(WorldAPI.PATH_MAP_BATTLE_ANCHOR)
 @onready var ground_line: Marker2D = get_node_or_null(WorldAPI.PATH_MAP_GROUND_LINE)
@@ -93,8 +80,6 @@ var _terrain: Node = null
 var _resource_gen: Node = null
 
 # ─────────────────────────────── 元数据 ────────────────────────────────
-## 地图 ID（由 SceneLoader 注册时分配）
-var map_id: String = ""
 ## 村落配置 ID（对应 VillageDefinition.tres，P0 留空）
 var village_id: String = ""
 
@@ -319,7 +304,6 @@ func set_dirt_road_range(start_cell: int, end_cell: int) -> void:
 	_terrain.update_dirt_road_visual()
 	# 同步 grass shader 的 city_bounds，让土路范围显示土黄色（覆盖草地）
 	_terrain.set_city_bounds(road_left_x, road_right_x)
-	print("[VillageMap] set_dirt_road_range: cell %d~%d, map_left=%.0f, map_right=%.0f, dirt_poly=%s" % [start_cell, end_cell, map_left, map_right, _dirt_road_poly != null])
 
 
 ## 获取 cell 的地形类型（未设置默认 GRASS）。
@@ -359,42 +343,6 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 	return _resource_gen.generate_resource_nodes(start_cell, end_cell, density)
 
 
-# ─────────────────────────────── 通行障碍查询（§7.1.2）────────────────────────────────
-
-## 获取所有 WalkBarrier 静态体列表（地图级通行障碍，供 DebugOverlay 绘制）
-func get_walk_barriers() -> Array:
-	if walk_barrier == null:
-		return []
-	var barriers: Array = []
-	for child in walk_barrier.get_children():
-		if child is StaticBody2D:
-			barriers.append(child)
-	return barriers
-
-
-## 获取所有建筑级 PassageBarrier StaticBody2D 列表（供 DebugOverlay 绘制）
-## 同时扫描 building_host（动态建筑）和 terrain_buildings（地形建筑）
-func get_passage_barriers() -> Array:
-	var barriers: Array = []
-	for host in [building_host, terrain_buildings]:
-		if host == null:
-			continue
-		for building in host.get_children():
-			var pb: Node = building.get_node_or_null("PassageBarrier") if building.has_method("get_node_or_null") else null
-			if pb != null and pb is StaticBody2D:
-				barriers.append(pb)
-	return barriers
-
-
-## 获取地面底部 Y
-func get_ground_bottom() -> float:
-	return ground_bottom
-
-
-# ─────────────────────────────── 城内地形遮罩（转发到 TerrainRenderer）────────────────────────────────
-
-## 阶段 F §5.7.3：设置城内范围（世界坐标），更新地形遮罩 Shader 参数。
-## 城墙建造时调用此方法标记城内区域。
 func set_city_bounds(left_x: float, right_x: float) -> void:
 	_terrain.set_city_bounds(left_x, right_x)
 
@@ -415,65 +363,6 @@ func _get_city_right_x() -> float:
 	return _terrain.get_city_right_x()
 
 
-# ─────────────────────────────── 公共 API（§3.4.2）────────────────────────────────
-
-func get_ground_y() -> float:
-	return ground_y
-
-
-func get_ground_ratio() -> float:
-	return ground_ratio
-
-
-func get_camera_bounds() -> Vector2:
-	return Vector2(map_left, map_right)
-
-
-func get_entity_walk_bounds() -> Vector2:
-	return Vector2(map_left, map_right)
-
-
-## 生成实体到 EntityHost，并注入 ground_y / map_left / map_right / 地图引用
-func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
-	if entity_host == null or entity_scene == null:
-		push_error("[VillageMap] 无法生成实体: entity_host 或 scene 为空")
-		return null
-	var instance: Node2D = entity_scene.instantiate() as Node2D
-	if instance == null:
-		push_error("[VillageMap] 实体场景实例化失败")
-		return null
-	entity_host.add_child(instance)
-	instance.global_position = p_position
-	# 修复：_ready 中 _last_valid_position 被初始化为 (0,0)，这里刷新为正确位置
-	if instance.has_method("set_last_valid_position"):
-		instance.set_last_valid_position(p_position)
-	# 注入地面约束参数（详见 §7.1.1）
-	if instance.has_method("set_ground_constraints"):
-		instance.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)
-	# 注入地图引用（供通行障碍查询，详见 §7.1.2）
-	if instance.has_method("set_map_reference"):
-		instance.set_map_reference(self)
-	return instance
-
-
-## 获取所有 StickmanEntity
-func get_entities() -> Array:
-	if entity_host == null:
-		return []
-	return entity_host.get_children()
-
-
-## 获取玩家附身的实体（如有）
-func get_possessed_entity() -> Node2D:
-	for e in get_entities():
-		if e is CharacterBody2D and e.has_method("is_possessed") and e.is_possessed():
-			return e
-	return null
-
-
-## 小地图建筑数据：[{x: float, width: float, terrain: bool}]
-## 动态建筑（BuildingHost）与地形建筑（TerrainBuildings）统一汇总，
-## 供 ui_global 的 Minimap 绘制，避免 UI 层直接遍历地图节点树。
 func get_minimap_buildings() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	_collect_minimap_buildings(building_host, false, result)
@@ -504,15 +393,6 @@ func _get_building_width(building: Node) -> float:
 	return 32.0
 
 
-## 获取地图宽度（像素）
-func get_map_width() -> float:
-	return map_right - map_left
-
-
-# ─────────────────────────────── SQLite 存档 ────────────────────────────────
-# 详见 docs/技术/架构/SQLite存档迁移方案.md §5.3
-
-## 保存地图边界到 DB
 func save_to_db(db, slot_id: int, map_id: String) -> void:
 	db.delete_rows("maps", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
 	db.insert_row("maps", {

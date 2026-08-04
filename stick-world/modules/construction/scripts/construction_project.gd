@@ -276,8 +276,8 @@ func _create_barrier() -> void:
 			temp.queue_free()
 	_barrier = StaticBody2D.new()
 	_barrier.visible = false
-	# 与实体同层（layer 2）：实体 collision_mask=3 包含 layer 2，move_and_slide 自然阻挡
-	_barrier.collision_layer = 2
+	# 与实体同层（BODY）：实体 collision_mask=3 包含 layer 2，move_and_slide 自然阻挡
+	_barrier.collision_layer = Hitbox.CollisionLayer.BODY
 	_barrier.collision_mask = 0
 	var shape := RectangleShape2D.new()
 	shape.size = barrier_size

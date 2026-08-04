@@ -4,9 +4,11 @@
 
 1. 安装 Godot 4.x（[godotengine.org](https://godotengine.org)）
 2. 克隆仓库：`git clone <repo-url>`
-3. 安装 GdUnit4 测试框架（Godot 内 AssetLib 搜索安装）
-4. 安装 Python 3.10+（用于工具脚本和向量知识库）
-5. Godot 编辑器路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
+3. 安装 Python 3.10+（用于工具脚本和向量知识库）
+4. Godot 编辑器路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
+
+> 测试框架：自研 TestRunner 体系（`tests/`，三层 unit/integration/smoke），
+> GdUnit4 未引入（见 tests/README.md）。全量测试：`powershell -ExecutionPolicy Bypass -File tests\run_all.ps1`
 
 ## 分支策略
 
@@ -28,7 +30,7 @@
 - 命名：snake_case（变量/函数），PascalCase（类）
 - 信号命名：`something_happened`
 - 所有公开函数须有 docstring
-- 新增功能必须有对应的 GdUnit4 测试
+- 新增功能必须有对应的自动化测试（自研 TestRunner，见 tests/README.md）
 - 配置尽量放 `.tres`/`.json` 而非全堆在 `project.godot`
 - 与 AI 协作时使用中文交流
 

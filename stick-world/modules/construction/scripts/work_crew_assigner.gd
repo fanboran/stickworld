@@ -170,29 +170,26 @@ func _assign(worker: Node, project: ScriptConstructionProject) -> void:
 
 
 func _on_project_completed(project: ScriptConstructionProject, _building: Node) -> void:
-	# 解除所有派工到这个项目的工人
-	var snapshot: Array = []
-	for w in _worker_to_project.keys():
-		if _worker_to_project[w] == project:
-			snapshot.append(w)
-	for w in snapshot:
-		var worker: Node = w as Node
-		project.unassign_worker(worker)
-		_worker_to_project.erase(worker)
-		if not _available_workers.has(worker):
-			_available_workers.append(worker)
-		worker_unassigned.emit(worker, project)
-	remove_project(project)
+	# 完工：解除派工（调用 unassign_worker 同步工人状态）+ 释放工人
+	_release_project_workers(project, true)
 
 
 func _on_project_cancelled(project: ScriptConstructionProject) -> void:
-	# 取消与完工处理类似：解除派工，释放工人
+	# 取消：与完工类似，仅释放工人（项目已取消，无需 unassign 同步）
+	_release_project_workers(project, false)
+
+
+## 解除项目全部派工：释放工人回池 + 发射 worker_unassigned + 移除项目。
+## unassign: 是否调用 project.unassign_worker（完工时 true，取消时 false）
+func _release_project_workers(project: ScriptConstructionProject, unassign: bool) -> void:
 	var snapshot: Array = []
 	for w in _worker_to_project.keys():
 		if _worker_to_project[w] == project:
 			snapshot.append(w)
 	for w in snapshot:
 		var worker: Node = w as Node
+		if unassign:
+			project.unassign_worker(worker)
 		_worker_to_project.erase(worker)
 		if not _available_workers.has(worker):
 			_available_workers.append(worker)

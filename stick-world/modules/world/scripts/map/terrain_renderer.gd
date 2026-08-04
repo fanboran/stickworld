@@ -188,8 +188,8 @@ func update_terrain_mask_from_walls(city_walls: Array) -> void:
 		if wall is Dictionary:
 			var cx: int = wall.get("cell_x", 0)
 			var w: int = wall.get("width", 1)
-			var left_x: float = cx * 32.0
-			var right_x: float = (cx + w) * 32.0
+			var left_x: float = cx * PlacementGrid.CELL_SIZE
+			var right_x: float = (cx + w) * PlacementGrid.CELL_SIZE
 			min_x = min(min_x, left_x)
 			max_x = max(max_x, right_x)
 	if min_x != INF and max_x != -INF:
@@ -216,8 +216,8 @@ func update_dirt_road_visual() -> void:
 		# z=1（decoration 层）：低于建筑（BuildingHost z=2），否则路面盖住建筑画面
 		_root._dirt_road_poly.z_index = 1
 		_root.add_child(_root._dirt_road_poly)
-	var x0: float = float(min_cell) * 32.0
-	var x1: float = float(max_cell + 1) * 32.0
+	var x0: float = float(min_cell) * PlacementGrid.CELL_SIZE
+	var x1: float = float(max_cell + 1) * PlacementGrid.CELL_SIZE
 	_root._dirt_road_poly.polygon = PackedVector2Array([Vector2(x0, _root.ground_y), Vector2(x1, _root.ground_y), Vector2(x1, _root.ground_bottom), Vector2(x0, _root.ground_bottom)])
 
 

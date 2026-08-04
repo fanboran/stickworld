@@ -14,6 +14,16 @@ extends Area2D
 ##
 ## 默认 Hitbox:  collision_layer=4, collision_mask=0（不主动检测，被武器层查询）
 
+# ─────────────────────────────── 碰撞层常量 ────────────────────────────────
+
+## 碰撞层 bit 约定（供各单位/障碍设置 collision_layer 时引用，避免裸数字）
+enum CollisionLayer {
+	TERRAIN = 1,  ## bit 0 地形/障碍
+	BODY = 2,     ## bit 1 角色本体（StickmanEntity.collision_layer / 建造障碍）
+	HITBOX = 4,   ## bit 2 Hitbox 层（本节点）
+	WEAPON = 8,   ## bit 3 武器/攻击检测层
+}
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 
 func _ready() -> void:

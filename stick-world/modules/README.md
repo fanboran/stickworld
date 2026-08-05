@@ -21,7 +21,7 @@
 | ---------------------- | --------------------------- | ----------- |
 | `world`                | 常驻主场景（GameRoot）+ 地图/相机/输入分发 | ✅ P0 完整     |
 | `world/placement_grid` | 32px 竖向条带占地网格               | ✅ P0 完整     |
-| `world_map`            | 战略图（鸟瞰多边形领土，玩家不在其中）         | 🟡 重构中      |
+| `world_map`            | 战略图（鸟瞰多边形领土，玩家不在其中）         | 🔄 P0 新 0.9 重写中（L1 单层） |
 | `units`                | 火柴人角色（实体 + 骨骼 + AI）         | ✅ P0 完整     |
 | `combat`               | 小队级战斗实例 + 编队/指令/掩体          | ✅ P0 完整     |
 | `construction`         | 建造/升级/拆除/修理（运行时）            | ✅ P0 完整     |
@@ -35,7 +35,7 @@
 | `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
 | `debug_GUI`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
 
-> **已废弃**：`modules/world_map/scripts/world_map_controller.gd`（2026-07-16 重构为 `strategic_map_controller.gd`），待清理。
+> **已废弃**：~~`modules/world_map/scripts/world_map_controller.gd`~~ 已删除（重构为 `strategic_map_controller.gd`；P0 新 0.9 进一步重写为 L1 单层，旧三级粒度框架弃用，见 [待办事项.md](../../docs/项目/待办事项.md) 高优先级）。
 
 ***
 

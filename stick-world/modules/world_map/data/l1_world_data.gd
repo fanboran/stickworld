@@ -166,13 +166,13 @@ func _tile_id_of_settlement(settlement_id: String) -> String:
 
 
 ## 生成器数据兜底：无 owner_state_id 时按首都归属推导
-func _find_state_for_settlement(tile_dict: Dictionary, states: Dictionary) -> String:
+func _find_state_for_settlement(tile_dict: Dictionary, state_map: Dictionary) -> String:
 	var sd: Variant = tile_dict.get("settlement")
 	if sd == null or not (sd is Dictionary):
 		return ""
 	var sid: String = sd.get("settlement_id", "")
-	for state_id in states:
-		var info: Dictionary = states[state_id]
+	for state_id in state_map:
+		var info: Dictionary = state_map[state_id]
 		if info.get("capital_settlement_id", "") == sid:
 			return state_id
 	return ""

@@ -1,0 +1,22 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://modules/world_map/scripts/strategic_map_controller.gd" id="1_ctrl"]
+[ext_resource type="Script" path="res://modules/world_map/scripts/map_renderer.gd" id="2_renderer"]
+[ext_resource type="Script" path="res://modules/world_map/scripts/map_camera.gd" id="3_camera"]
+[ext_resource type="Script" path="res://modules/world_map/api.gd" id="4_api"]
+
+[node name="StrategicMap" type="CanvasLayer"]
+layer = 100
+
+[node name="Content" type="Node2D" parent="."]
+script = ExtResource("1_ctrl")
+visible = false
+
+[node name="MapRenderer" type="Node2D" parent="Content"]
+script = ExtResource("2_renderer")
+
+[node name="MapCamera" type="Node" parent="Content"]
+script = ExtResource("3_camera")
+
+[node name="Api" type="Node" parent="Content"]
+script = ExtResource("4_api")

@@ -42,8 +42,8 @@ var _drag_offset_start: Vector2 = Vector2.ZERO
 ## 当前粒度的边界约束（世界坐标）
 var _bounds: Rect2 = Rect2(-4096, -2048, 8192, 4096)
 
-## 关联的数据容器（用于查询粒度边界）
-var _data: StrategicMapData = null
+## 设置数据容器引用（L1 单层数据，用于聚焦/边界）
+var _data: L1WorldData = null
 
 
 func _ready() -> void:
@@ -63,6 +63,9 @@ func _process(_delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	var parent: Node = get_parent()
+	if parent != null and parent is CanvasItem and not (parent as CanvasItem).is_visible_in_tree():
+		return
 	if not drag_enabled and not zoom_enabled:
 		return
 
@@ -128,6 +131,16 @@ func set_zoom(zoom: float) -> void:
 	_zoom_level = clampf(zoom, min_zoom, max_zoom)
 
 
+## 设置偏移（地图在屏幕上的位置；offset 为地图原点对应屏幕坐标）
+func set_offset(offset: Vector2) -> void:
+	_offset = offset
+
+
+## 获取当前偏移
+func get_offset() -> Vector2:
+	return _offset
+
+
 ## 获取当前缩放
 func get_zoom() -> float:
 	return _zoom_level
@@ -152,6 +165,11 @@ func set_bounds(bounds: Rect2) -> void:
 	_bounds = bounds
 
 
-## 设置数据容器引用
-func set_data(data: StrategicMapData) -> void:
+## 设置数据容器引用（L1 单层数据，用于聚焦/边界）
+func set_data(data: L1WorldData) -> void:
 	_data = data
+	if _data != null:
+		var s := float(_data.size)
+		set_bounds(Rect2(0, 0, s, s))
+		_zoom_level = clampf(1.0, min_zoom, max_zoom)
+		_offset = Vector2.ZERO

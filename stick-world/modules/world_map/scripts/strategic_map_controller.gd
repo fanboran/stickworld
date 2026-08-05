@@ -1,9 +1,13 @@
 extends Node2D
 class_name StrategicMapController
-## 战略图主控制器 —— 串联所有组件，处理输入事件
+## 战略图主控制器（L1 单层）—— 串联组件，处理输入
 ##
-## 详见 docs/技术/架构/战略图架构.md §二 模块结构
-## 替代旧的 WorldMapController
+## 详见 docs/技术/架构/战略图架构.md §9（L1 版）
+## 交互：
+##   - 左键单击聚落：选中（发 settlement_clicked）
+##   - 左键双击聚落：进入场景图（发 settlement_activated → api.enter_settlement）
+##   - ESC：关闭战略图
+##   - 中键拖拽 + 滚轮缩放（由 MapCamera 处理）
 
 ## 公共 API 引用（同一场景内）
 @export var api: Node
@@ -11,51 +15,33 @@ class_name StrategicMapController
 ## 组件引用
 @export var map_renderer: MapRenderer
 @export var map_camera: MapCamera
-@export var map_mode_manager: MapModeManager
-@export var granularity_manager: GranularityManager
-@export var stitched_preview: StitchedPreviewController
-
-## 世界数据
-@export var world_data: StrategicMapData
 
 ## 输入控制
 @export var left_click_selects: bool = true
-@export var right_click_info: bool = true
-@export var double_click_drill_down: bool = true  ## 双击下钻到下一粒度
+@export var double_click_enter: bool = true  ## 双击聚落进入场景图
+
+## 双击判定：两次点击间隔（秒）
+const DOUBLE_CLICK_INTERVAL: float = 0.3
+var _last_click_time: float = -10.0
+var _last_click_settlement: String = ""
 
 
 func _ready() -> void:
-	# 自动查找组件（如果未手动指定）
 	_auto_find_components()
-
-	# 初始化 API
-	if api and api.has_method("setup"):
-		api.setup(
-			self,
-			map_renderer,
-			map_camera,
-			map_mode_manager,
-			world_data,
-			granularity_manager,
-			stitched_preview
-		)
+	if api != null and api.has_method("setup"):
+		api.setup(self, map_renderer, map_camera)
+	# 渲染器悬停检测需要相机做屏幕->地图坐标换算
+	if map_renderer != null and map_renderer.has_method("set_camera"):
+		map_renderer.set_camera(map_camera)
 
 
 func _auto_find_components() -> void:
-	var parent := get_parent()
-	if parent == null:
-		return
-	for child in parent.get_children():
+	# 组件是 StrategicMap 根节点的子节点（同场景内）
+	for child in get_children():
 		if child is MapRenderer and map_renderer == null:
 			map_renderer = child
 		elif child is MapCamera and map_camera == null:
 			map_camera = child
-		elif child is MapModeManager and map_mode_manager == null:
-			map_mode_manager = child
-		elif child is GranularityManager and granularity_manager == null:
-			granularity_manager = child
-		elif child is StitchedPreviewController and stitched_preview == null:
-			stitched_preview = child
 		elif child.name.to_lower() == "api" and api == null:
 			api = child
 
@@ -63,113 +49,71 @@ func _auto_find_components() -> void:
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree():
 		return
-
-	# 鼠标点击
+	# 左键：单击选中 / 双击进入
 	if event is InputEventMouseButton and event.pressed:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
-		match mb.button_index:
-			MOUSE_BUTTON_LEFT:
-				_handle_left_click(mb.position)
-			MOUSE_BUTTON_RIGHT:
-				_handle_right_click(mb.position)
-
-	# 双击下钻
-	if double_click_drill_down and event is InputEventMouseButton:
-		var mb: InputEventMouseButton = event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT and mb.double_click:
-			_handle_double_click(mb.position)
-
-	# 键盘
-	if event is InputEventKey and event.pressed:
-		_handle_key(event as InputEventKey)
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			_handle_left_click(mb.position)
+	# ESC 关闭
+	elif event is InputEventKey and event.pressed:
+		var key: InputEventKey = event as InputEventKey
+		if key.keycode == KEY_ESCAPE:
+			close()
 
 
 func _handle_left_click(screen_pos: Vector2) -> void:
-	if api == null:
+	if api == null or not api.has_method("query_at_screen"):
 		return
 	var query: Dictionary = api.query_at_screen(screen_pos)
-	if query.is_empty():
+	var settlement: SettlementRef = query.get("settlement", null)
+	var tile: L1TileDef = query.get("tile", null)
+	if settlement == null:
+		# 点击空聚落地块：选中地块但不进入
+		if tile != null and left_click_selects and api.has_method("select"):
+			api.select(tile.tile_id)
 		return
-	api.select(_get_select_id(query))
-	if api.has_signal("region_clicked"):
-		api.region_clicked.emit(
-			query.get("granularity", 0),
-			query.get("region_id", ""),
-			query.get("tile_id", ""),
-			query.get("settlement_id", "")
-		)
+	# 双击判定
+	var now: float = Time.get_ticks_msec() / 1000.0
+	var is_double: bool = (
+		settlement.settlement_id == _last_click_settlement
+		and now - _last_click_time <= DOUBLE_CLICK_INTERVAL
+	)
+	_last_click_time = now
+	_last_click_settlement = settlement.settlement_id
+	if is_double and double_click_enter:
+		api.enter_settlement(settlement.settlement_id)
+	elif left_click_selects:
+		api.select(settlement.settlement_id)
+		if api.has_signal("settlement_clicked"):
+			api.settlement_clicked.emit(settlement.settlement_id)
 
 
-func _handle_right_click(screen_pos: Vector2) -> void:
-	if api == null:
-		return
-	var query: Dictionary = api.query_at_screen(screen_pos)
-	if query.is_empty():
-		return
-	if api.has_signal("region_right_clicked"):
-		api.region_right_clicked.emit(
-			query.get("granularity", 0),
-			query.get("region_id", ""),
-			query.get("tile_id", ""),
-			query.get("settlement_id", "")
-		)
+## 打开战略图（由接线方调用）
+## 透明背景悬浮：地图内容显示在屏幕中央（场景图保持可见作背景）
+func open() -> void:
+	visible = true
+	# 初始视角：底图 1024x1024，悬浮显示高度占屏幕 72%，居中
+	if map_camera != null and map_camera.has_method("set_zoom"):
+		var vp := get_viewport()
+		if vp != null:
+			var vp_size: Vector2 = vp.get_visible_rect().size
+			var target_h: float = vp_size.y * 0.72
+			var fit_zoom: float = target_h / 1024.0
+			map_camera.set_zoom(fit_zoom)
+			if map_camera.has_method("set_offset"):
+				# 地图原点（左上角）居中：屏幕中心 - 地图显示尺寸一半
+				var offset := vp_size * 0.5 - Vector2(1024.0 * fit_zoom * 0.5, 1024.0 * fit_zoom * 0.5)
+				map_camera.set_offset(offset)
+	if api != null and api.has_signal("strategic_map_opened"):
+		api.strategic_map_opened.emit()
+	if EventBus != null:
+		EventBus.emit_signal("strategic_map_opened")
 
 
-func _handle_double_click(screen_pos: Vector2) -> void:
-	# 双击下钻：L3→L2→L1→场景图
-	if api == null or granularity_manager == null:
-		return
-	var query: Dictionary = api.query_at_screen(screen_pos)
-	if query.is_empty():
-		return
-	var g: int = query.get("granularity", 0)
-	match g:
-		0:  # L3 → L2
-			var rid: String = query.get("region_id", "")
-			if not rid.is_empty():
-				granularity_manager.set_granularity(1, rid)
-		1:  # L2 → L1
-			var tid: String = query.get("tile_id", "")
-			if not tid.is_empty():
-				granularity_manager.set_granularity(2, tid)
-		2:  # L1 → 场景图
-			var sid: String = query.get("settlement_id", "")
-			if not sid.is_empty():
-				api.enter_settlement(sid)
-
-
-func _handle_key(key_event: InputEventKey) -> void:
-	match key_event.keycode:
-		KEY_TAB:
-			# 切换地图模式
-			if map_mode_manager:
-				map_mode_manager.cycle_mode()
-		KEY_ESCAPE:
-			# 返回上一级粒度，或关闭战略图
-			if granularity_manager:
-				granularity_manager.go_back()
-		KEY_HOME:
-			# 重置相机
-			if map_camera:
-				map_camera.focus_on("", true)
-		KEY_F1:
-			# 切换调试标签
-			if map_renderer:
-				map_renderer.debug_show_labels = not map_renderer.debug_show_labels
-		KEY_F2:
-			# 切换拼接预览模式
-			if api:
-				if api.is_stitched_preview_enabled():
-					api.disable_stitched_preview()
-				else:
-					api.enable_stitched_preview()
-
-
-func _get_select_id(query: Dictionary) -> String:
-	# 按粒度选最细的 ID
-	var g: int = query.get("granularity", 0)
-	match g:
-		0: return query.get("region_id", "")
-		1: return query.get("tile_id", "")
-		2: return query.get("settlement_id", "")
-	return ""
+## 关闭战略图（恢复场景图输入，由接线方/ESC 调用）
+func close() -> void:
+	visible = false
+	if api != null and api.has_signal("strategic_map_closed"):
+		api.strategic_map_closed.emit()
+	if EventBus != null:
+		EventBus.emit_signal("strategic_map_closed")

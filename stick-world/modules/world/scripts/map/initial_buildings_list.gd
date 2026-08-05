@@ -21,6 +21,38 @@ class InitialBuildingDef:
 ## 初始建筑定义列表（Inspector 可编辑）
 @export var building_defs: Array[Dictionary] = []
 
+## 初始建筑定义 JSON 路径（res://，0.9b 程序化聚落地图用）
+## 若非空且 building_defs 为空，_ready 时从 JSON 加载
+@export var defs_json_path: String = ""
+
+
+func _ready() -> void:
+	if building_defs.is_empty() and not defs_json_path.is_empty():
+		_load_defs_from_json(defs_json_path)
+
+
+## 从 JSON 加载初始建筑定义（程序化生成的地图用）
+## JSON 格式：{"buildings": [{"def_id": str, "cell_x": int, "width": int}, ...]}
+func load_defs_from_json(json_path: String) -> void:
+	_load_defs_from_json(json_path)
+
+
+func _load_defs_from_json(json_path: String) -> void:
+	var text := FileAccess.get_file_as_string(json_path)
+	if text.is_empty():
+		push_warning("[InitialBuildingsList] 无法读取 %s" % json_path)
+		return
+	var data: Variant = JSON.parse_string(text)
+	if data == null or not (data is Dictionary):
+		push_warning("[InitialBuildingsList] JSON 解析失败: %s" % json_path)
+		return
+	var defs: Array = data.get("buildings", [])
+	building_defs.clear()
+	for d in defs:
+		if d is Dictionary:
+			building_defs.append(d)
+	print("[InitialBuildingsList] 从 %s 加载 %d 条初始建筑" % [json_path, building_defs.size()])
+
 
 ## 获取所有初始建筑定义
 func get_defs() -> Array[InitialBuildingDef]:

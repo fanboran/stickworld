@@ -21,6 +21,7 @@ func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("L1 数据加载：8 聚落 + 空聚落", _test_load, true)
 	_runner.add_test("索引图命中查询（P 社机制）", _test_query, true)
+	_runner.add_test("悬停坐标换算（open 后 offset/zoom 非零）", _test_hover_mapping, true)
 	_runner.add_test("双击聚落进入场景图（travel_requested）", _test_enter, true)
 	_runner.add_test("空聚落不可进入", _test_empty_enter, true)
 	_runner.add_test("打开/关闭暂停恢复场景图输入", _test_pause_resume, true)
@@ -86,6 +87,57 @@ func _test_query() -> void:
 		var query: Dictionary = _api.query_at_screen(centroid)
 		_runner.assert_true(query.get("tile", null) != null, "空聚落地块应可命中 tile（%s）" % tile.tile_id)
 		break
+
+
+func _test_hover_mapping() -> void:
+	# 悬停坐标换算：相机 offset/zoom 非零时，屏幕坐标经 screen_to_map
+	# 应命中同一聚落（渲染器悬停检测与 api.query_at_screen 同路径）
+	if _api == null or not _api.is_initialized():
+		_runner.assert_true(false, "前置数据加载失败，跳过")
+		return
+	var camera: Node = _content.get_node_or_null("MapCamera")
+	_runner.assert_true(camera != null and camera.has_method("map_to_screen"),
+		"应有 MapCamera（map_to_screen）")
+	if camera == null:
+		return
+	var data: RefCounted = _api.get_data()
+	# 模拟悬浮居中：offset/zoom 非零（不 open，隔离 UI 副作用）
+	if camera.has_method("set_zoom") and camera.has_method("set_offset"):
+		camera.set_zoom(1.5)
+		camera.set_offset(Vector2(300, 200))
+	var checked: int = 0
+	for tile in data.tiles:
+		if tile.settlement == null:
+			continue
+		var map_pos: Vector2 = tile.settlement.position
+		var screen_pos: Vector2 = camera.map_to_screen(map_pos)
+		var back: Vector2 = camera.screen_to_map(screen_pos)
+		# api 路径：内部经 camera 换算
+		var query: Dictionary = _api.query_at_screen(screen_pos)
+		var hit: RefCounted = query.get("settlement", null)
+		var ok: bool = hit != null and hit.settlement_id == tile.settlement.settlement_id
+		if not ok:
+			# 直查路径（隔离 camera）：确认是换算问题还是索引图问题
+			var direct: Dictionary = data.query_at_map_pos(back)
+			var direct_hit: RefCounted = direct.get("settlement", null)
+			print("[debug] %s screen=%s back=%s api_hit=%s direct=%s" % [
+				tile.settlement.settlement_id, screen_pos, back,
+				hit.settlement_id if hit else "null",
+				direct_hit.settlement_id if direct_hit else "null"])
+		_runner.assert_true(ok,
+			"屏幕坐标 %s 应命中 %s（实测 %s）" % [
+				screen_pos, tile.settlement.settlement_id,
+				hit.settlement_id if hit else "null"
+			])
+		checked += 1
+	# 渲染器悬停换算已装配
+	var renderer: Node = _content.get_node_or_null("MapRenderer")
+	_runner.assert_true(renderer != null and renderer.has_method("set_camera"),
+		"渲染器应有 set_camera（悬停换算已装配）")
+	_runner.assert_true(checked >= 3, "至少验证 3 个聚落的坐标往返（实测 %d）" % checked)
+	# 恢复相机
+	camera.set_zoom(1.0)
+	camera.set_offset(Vector2.ZERO)
 
 
 func _test_enter() -> void:

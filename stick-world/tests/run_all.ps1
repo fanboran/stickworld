@@ -31,6 +31,7 @@ $suites = @{
         "tests/integration/test_selection_formation.tscn",
         "tests/integration/test_possession.tscn",
         "tests/integration/test_formation_presets.tscn",
+        "tests/integration/test_strategic_map_p0.tscn",
         "tests/integration/test_squad_travel.tscn",
         "tests/integration/test_melee_combat.tscn",
         "tests/integration/test_combat_feedback.tscn",

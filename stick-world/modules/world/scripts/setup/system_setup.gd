@@ -35,7 +35,7 @@ const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/p
 const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
 const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
-const _WorldMapPanelScript: GDScript = preload("res://modules/world/scripts/travel/world_map_panel.gd")
+const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
 const _PossessionIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/possession_indicator.gd")
 const _HoverIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/hover_indicator.gd")
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/scripts/indicators/middle_scroll_overlay.gd")
@@ -424,23 +424,51 @@ func _setup_boundary_detector() -> void:
 	_root._boundary_detector.set_script(_MapBoundaryDetectorScript)
 	_root._boundary_detector.name = "MapBoundaryDetector"
 	_root.add_child(_root._boundary_detector)
-	# 实例化大世界地图面板（挂 ModalOverlay：Control 容器，anchors 布局可靠）
-	_root._world_map_panel = Control.new()
-	_root._world_map_panel.set_script(_WorldMapPanelScript)
-	_root._world_map_panel.name = "WorldMapPanel"
-	var overlay: Control = _root.ui_root.get_node_or_null(UIAPI.PATH_MODAL_OVERLAY) if _root.ui_root != null else null
-	if overlay != null:
-		overlay.add_child(_root._world_map_panel)
-	elif _root.ui_root != null:
-		_root.ui_root.add_child(_root._world_map_panel)
-	else:
-		_root.add_child(_root._world_map_panel)
-	# 连接信号
-	_root._boundary_detector.open_world_map_requested.connect(_root._world_map_panel.toggle)
-	_root._world_map_panel.travel_requested.connect(_on_world_map_travel)
-	# 注入 SceneLoader（打开面板时按当前地图动态生成目的地）
-	if _root._world_map_panel.has_method("setup") and _root.scene_loader != null:
-		_root._world_map_panel.setup(_root.scene_loader)
+	# 实例化战略图（CanvasLayer 独立渲染层，全屏覆盖；Content 初始隐藏）
+	_root._strategic_map = _StrategicMapScene.instantiate()
+	_root._strategic_map.name = "StrategicMap"
+	_root.add_child(_root._strategic_map)
+	# 初始化 L1 世界数据（Api 在 Content 子节点下）
+	var content: Node = _root._strategic_map.get_node_or_null("Content")
+	var api: Node = content.get_node_or_null("Api") if content != null else null
+	if api != null and api.has_method("initialize"):
+		api.initialize(
+			"res://config/strategic_map/l1_world.json",
+			"res://config/strategic_map"
+		)
+	# 连接边界检测器 -> 打开战略图
+	_root._boundary_detector.open_world_map_requested.connect(_open_strategic_map)
+	# 战略图关闭 -> 恢复场景图输入（api.close_strategic_map / ESC 都发此信号）
+	if EventBus != null:
+		EventBus.strategic_map_closed.connect(_on_strategic_map_closed)
+
+
+func _open_strategic_map() -> void:
+	if _root._strategic_map == null:
+		return
+	# 战略图是 CanvasLayer，控制器在 Content 子节点（visible 控制全层显隐）
+	var content: Node = _root._strategic_map.get_node_or_null("Content")
+	if content != null and content.has_method("open"):
+		content.open()
+		_pause_scene_input(true)
+
+
+func _on_strategic_map_closed() -> void:
+	_pause_scene_input(false)
+
+
+## 暂停/恢复场景图输入（战略图打开时场景图不响应输入）
+## 方式：地图内容（WorldChunkHost）+ 相机置为 DISABLED（子树 _input/_process 全停），
+## 场景图仍保持渲染（战略图透明背景悬浮其上，作背景可见）；
+## 战略图（CanvasLayer 100）/UIRoot 不受影响；关闭时恢复 INHERIT
+func _pause_scene_input(paused: bool) -> void:
+	var mode := Node.PROCESS_MODE_INHERIT if not paused else Node.PROCESS_MODE_DISABLED
+	if _root.world_chunk_host != null:
+		_root.world_chunk_host.process_mode = mode
+	if _root.camera_rig != null:
+		_root.camera_rig.process_mode = mode
+	if _root.scene_loader != null:
+		_root.scene_loader.process_mode = mode
 
 
 func _on_world_map_travel(target_map_id: String, entry_side: int) -> void:

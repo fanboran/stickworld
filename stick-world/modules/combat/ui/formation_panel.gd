@@ -207,7 +207,7 @@ func _refresh_squad_list() -> void:
 		return
 	for sid in squads:
 		var btn := Button.new()
-		var size: int = _formation.get_squad_size(sid) if _formation.has_method("get_squad_size") else 0
+		var squad_size: int = _formation.get_squad_size(sid) if _formation.has_method("get_squad_size") else 0
 		var leader: Node = _formation.get_squad_leader(sid) if _formation.has_method("get_squad_leader") else null
 		var leader_str: String = "无" if leader == null else _role_zh(leader.get_role() if leader.has_method("get_role") else "")
 		# 类型徽标：预设名
@@ -216,7 +216,7 @@ func _refresh_squad_list() -> void:
 			var pid: String = _formation.get_squad_preset(sid)
 			var preset: Dictionary = _formation.get_preset(pid) if _formation.has_method("get_preset") else {}
 			preset_name = preset.get("name", pid)
-		btn.text = "%s（%d人，队长:%s）" % [preset_name, size, leader_str]
+		btn.text = "%s（%d人，队长:%s）" % [preset_name, squad_size, leader_str]
 		btn.toggle_mode = true
 		btn.button_pressed = (sid == _selected_squad)
 		btn.pressed.connect(_on_squad_selected.bind(sid))

@@ -129,13 +129,13 @@ func _refresh_drawer_list() -> void:
 	drawers_label.modulate = Color(0.7, 0.7, 0.7)
 	_vbox.add_child(drawers_label)
 	var drawer_names: Dictionary = DebugApi.get_drawers()
-	for name in drawer_names.keys():
+	for drawer_name in drawer_names.keys():
 		var check := CheckBox.new()
-		var zh: String = DRAWER_NAMES_ZH.get(name, name)
-		check.text = "%s (%s)" % [zh, name]
-		check.button_pressed = DebugApi.is_drawer_enabled(name)
+		var zh: String = DRAWER_NAMES_ZH.get(drawer_name, drawer_name)
+		check.text = "%s (%s)" % [zh, drawer_name]
+		check.button_pressed = DebugApi.is_drawer_enabled(drawer_name)
 		check.add_theme_font_size_override("font_size", 11)
-		check.toggled.connect(_on_drawer_toggled.bind(name))
+		check.toggled.connect(_on_drawer_toggled.bind(drawer_name))
 		_vbox.add_child(check)
 	# 操作提示
 	var hint := Label.new()
@@ -146,9 +146,9 @@ func _refresh_drawer_list() -> void:
 	_vbox.add_child(hint)
 
 
-func _on_drawer_toggled(pressed: bool, name: String) -> void:
+func _on_drawer_toggled(pressed: bool, drawer_name: String) -> void:
 	if DebugApi:
-		DebugApi.set_drawer_enabled(name, pressed)
+		DebugApi.set_drawer_enabled(drawer_name, pressed)
 
 
 ## 按钮点击（非拖动时触发）

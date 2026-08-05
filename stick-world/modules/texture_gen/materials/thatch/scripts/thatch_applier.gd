@@ -193,8 +193,6 @@ func _draw_brush_stroke_opaque(img: Image, x0: float, y0: float, x1: float, y1: 
 
 	var ux: float = dx / length
 	var uy: float = dy / length
-	var px: float = -uy
-	var py: float = ux
 
 	var steps: int = maxi(1, int(length * 0.7))
 	for s in range(steps + 1):

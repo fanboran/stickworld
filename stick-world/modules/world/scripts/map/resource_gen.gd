@@ -26,7 +26,7 @@ func get_terrain_row_count() -> int:
 
 
 ## 在指定 cell_x 的地面上生成随机 Y 位置（垂直网格内随机行）
-func random_resource_y(cell_x: int) -> float:
+func random_resource_y(_cell_x: int) -> float:
 	var rows: int = get_terrain_row_count()
 	var row: int = randi() % rows
 	return _root.ground_y + row * TERRAIN_CELL_SIZE_Y + TERRAIN_CELL_SIZE_Y * 0.5

@@ -3,6 +3,7 @@ extends Node
 ## CommandChain._calculate_delay / TacticalOrders._order_to_behavior / _order_to_params。
 ## 不进场景树，确定性。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptCommandChain := preload("res://modules/combat/scripts/command/command_chain.gd")
 const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")

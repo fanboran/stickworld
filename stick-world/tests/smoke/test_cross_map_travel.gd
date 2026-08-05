@@ -15,6 +15,7 @@ extends Node
 ##   6. 完整链路：村落A -> 道路 -> 村落B
 ##   7. ChunkTrigger 配置验证
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptSceneLoader := preload("res://modules/world/scripts/loading/scene_loader.gd")
 const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")

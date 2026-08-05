@@ -2,6 +2,7 @@ extends Node
 ## 单元测试：HealthComponent 生命/士气数值逻辑。
 ## 纯数据层测试：不进场景树（不触发 _ready），手动设值，确定性。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptHealthComponent := preload("res://modules/units/scripts/entity/health_component.gd")
 

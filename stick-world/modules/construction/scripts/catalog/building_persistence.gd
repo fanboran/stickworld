@@ -120,7 +120,7 @@ func _restore_project_from_row(row: Dictionary) -> void:
 		project_id, def_id, int(row["cell_x"]), int(row["width"]),
 		_root._map, scene, total_work, str(row["region_id"]))
 	project.current_work = float(row["current_work"])
-	project.state = int(row["state"])
+	project.state = int(row["state"]) as ScriptConstructionProject.State
 	# 阶段 E：材料进度按存档真实值恢复（旧档无此字段时兼容为已满，避免阻塞）
 	project.material_progress = float(row.get("material_progress", 1.0))
 	_root._projects[project_id] = project

@@ -14,6 +14,7 @@ extends Node
 ##   - 战斗推进：伤亡发生、行为切换（attack/seek_cover/retreat）
 ##   - 战斗结束判定（一方胜利或超时）—— 战斗收敛（溃散判定）为后续规划项，未纳入
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
 const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")

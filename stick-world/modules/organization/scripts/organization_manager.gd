@@ -111,7 +111,7 @@ func _make_state(org_id: String, name: String, tag_enum: int, tier: int, parent_
 	var state: ScriptOrgState = ScriptOrgState.new()
 	state.id = org_id
 	state.name = name
-	state.tag = tag_enum
+	state.tag = tag_enum as ScriptOrgState.Tag
 	state.tier = tier
 	state.parent_org = parent_id
 	state.autonomy_level = ScriptOrgState.AutonomyLevel.MEDIUM
@@ -257,7 +257,7 @@ func remove_commander(org_id: String) -> Dictionary:
 
 
 ## 分配火柴人到组织
-func assign_stickman(org_id: String, stickman_id: String, role: String) -> Dictionary:
+func assign_stickman(org_id: String, stickman_id: String, _role: String) -> Dictionary:
 	var org := _get_org(org_id)
 	if org == null:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
@@ -413,7 +413,7 @@ func disband_organization(org_id: String) -> Dictionary:
 # ===== 预设 =====
 
 ## 加载预设模板，创建组织树
-func load_preset(preset_name: String, parent_id: String) -> Dictionary:
+func load_preset(preset_name: String, _parent_id: String) -> Dictionary:
 	# 骨架阶段：返回预设未实现
 	return {"ok": false, "error": "预设系统尚未实现: %s" % preset_name}
 

@@ -11,6 +11,7 @@ extends Node
 ##   godot --headless --path "F:\VSCode\game-2\stick-world" "res://tests/unit/test_placement_grid.tscn"
 ## 退出码：0 全过，1 有失败
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptPlacementGrid := preload("res://modules/world/scripts/placement/placement_grid.gd")
 

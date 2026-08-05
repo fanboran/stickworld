@@ -14,7 +14,6 @@ extends BaseScreen
 # ─────────────────────────────── 状态 ────────────────────────────────
 var _game_root: Node = null
 var _buttons: VBoxContainer = null
-var _debug_section: VBoxContainer = null
 
 ## 面板尺寸
 const PANEL_SIZE: Vector2 = Vector2(480, 460)

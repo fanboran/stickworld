@@ -2,6 +2,7 @@ extends Node
 ## 单元测试：BehaviorStateMachine 注册/travel/调度纯逻辑（假行为白盒）。
 ## 不进场景树，确定性。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptBehaviorStateMachine := preload("res://modules/units/scripts/ai/behavior_state_machine.gd")
 const ScriptBehaviorBase := preload("res://modules/units/scripts/ai/behavior_base.gd")
@@ -21,7 +22,7 @@ class FakeBehavior:
 		super.enter(previous, params)
 		enter_calls.append([previous, params])
 
-	func update(delta: float) -> void:
+	func update(_delta: float) -> void:
 		update_calls += 1
 		if finish_on_update:
 			finish()
@@ -45,9 +46,9 @@ func _ready() -> void:
 	get_tree().quit(0 if _runner.all_passed() else 1)
 
 
-func _make_fake(name: String) -> FakeBehavior:
+func _make_fake(fake_name: String) -> FakeBehavior:
 	var b := FakeBehavior.new()
-	b.behavior_name = name
+	b.behavior_name = fake_name
 	return b
 
 

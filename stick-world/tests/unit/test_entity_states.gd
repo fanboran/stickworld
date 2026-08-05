@@ -3,6 +3,7 @@ extends Node
 ## 2026-08 补充：core/entities 8 个状态类此前零测试触点。
 ## 纯数据层测试：new 即用，不进场景树，确定性。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptWS := preload("res://core/autoload/world_state.gd")
 const ScriptStickmanState := preload("res://core/entities/stickman_state.gd")

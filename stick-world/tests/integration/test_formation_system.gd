@@ -17,6 +17,7 @@ extends Node
 ## 从 test_selection_formation.gd 拆分（原"编队系统测试"区块），
 ## 公共 setup 在 tests/helpers/combat_test_setup.gd。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 
@@ -207,7 +208,6 @@ func _test_squad_dead_cleanup() -> void:
 	# 找到包含 unit 5 的小队，杀死 unit 5
 	var squad_id: String = _formation.get_unit_squad(_helper.units[5])
 	_runner.assert_true(not squad_id.is_empty(), "unit 5 应在小队中")
-	var before_size: int = _formation.get_squad_size(squad_id)
 	# 杀死 unit 5
 	var health: Node = _helper.units[5].get_health() if _helper.units[5].has_method("get_health") else null
 	if health == null:

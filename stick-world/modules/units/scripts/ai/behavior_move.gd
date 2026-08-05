@@ -31,7 +31,7 @@ func enter(previous: String, params: Dictionary) -> void:
 	_running = params.get("run", false)
 
 
-func update(delta: float) -> void:
+func update(_delta: float) -> void:
 	if entity == null or not is_instance_valid(entity):
 		finish()
 		return

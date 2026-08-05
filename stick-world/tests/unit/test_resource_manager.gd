@@ -2,6 +2,7 @@ extends Node
 ## 单元测试：ResourceManager 资源扣减/生产/转移逻辑。
 ## 纯数据层（RefCounted）测试：new 即用，不进场景树，确定性。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptResourceManager := preload("res://modules/resources/scripts/resource_manager.gd")
 

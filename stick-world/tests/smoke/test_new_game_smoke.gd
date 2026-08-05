@@ -3,7 +3,9 @@ extends Node
 ## 场景：完整 GameRoot（含全部子系统装配）。
 ## 验收：map 就绪 + 玩家/NPC 生成 + 60s 持续运行无异常退出。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+@warning_ignore("shadowed_global_identifier")
 const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const GAME_ROOT_SCENE: PackedScene = preload("res://modules/world/scenes/game_root.tscn")
 

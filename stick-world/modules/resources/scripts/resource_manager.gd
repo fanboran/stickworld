@@ -52,7 +52,7 @@ func get_price(resource_id: String, region_id: String) -> float:
 
 # ===== 消耗/生产 =====
 
-func consume(resource_id: String, amount: float, region_id: String, reason: String) -> Dictionary:
+func consume(resource_id: String, amount: float, region_id: String, _reason: String) -> Dictionary:
 	var available: float = get_stock(resource_id, region_id)
 	if available < amount:
 		return {
@@ -75,7 +75,7 @@ func consume(resource_id: String, amount: float, region_id: String, reason: Stri
 	}
 
 
-func produce(resource_id: String, amount: float, region_id: String, source: String) -> Dictionary:
+func produce(resource_id: String, amount: float, region_id: String, _source: String) -> Dictionary:
 	_ensure_paths(resource_id, region_id)
 	stocks[resource_id][region_id] += amount
 	return {
@@ -140,7 +140,7 @@ func set_tax_rate(rate: float) -> Dictionary:
 # ===== 供需计算（框架，后期实现） =====
 
 ## 更新指定资源在指定区域的价格（基于供需）
-func _update_price(resource_id: String, region_id: String) -> void:
+func _update_price(_resource_id: String, _region_id: String) -> void:
 	# TODO: 根据供需关系计算价格
 	# 1. 计算供需比 supply / demand
 	# 2. 根据供需比调整价格
@@ -150,7 +150,7 @@ func _update_price(resource_id: String, region_id: String) -> void:
 
 
 ## 定期供需平衡（由 TimeManager 定时调用）
-func _tick_supply_demand(delta: float) -> void:
+func _tick_supply_demand(_delta: float) -> void:
 	# TODO: 遍历所有资源+区域，调用 _update_price
 	pass
 

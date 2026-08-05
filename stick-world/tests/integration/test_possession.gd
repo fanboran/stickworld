@@ -23,7 +23,9 @@ extends Node
 ##   - 鼠标左键攻击（_player_attack + _find_nearest_enemy_in_range）
 ##   - 死亡单位不可附身
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+@warning_ignore("shadowed_global_identifier")
 const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")

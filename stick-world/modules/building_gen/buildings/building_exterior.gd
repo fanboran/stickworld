@@ -103,27 +103,27 @@ func _build_exterior() -> void:
 
 # ── helpers ──
 
-func _nc(name: String, parent: Node2D) -> Node2D:
+func _nc(node_name: String, parent: Node2D) -> Node2D:
 	var n := Node2D.new()
-	n.name = name
+	n.name = node_name
 	parent.add_child(n)
 	return n
 
 func _a(parent: Node, child: Node) -> void:
 	parent.add_child(child)
 
-func _sprite2d(name: String, pos: Vector2, tex, rot: float = 0.0, sc: Vector2 = Vector2(1, 1)) -> Sprite2D:
+func _sprite2d(node_name: String, pos: Vector2, tex, rot: float = 0.0, sc: Vector2 = Vector2(1, 1)) -> Sprite2D:
 	var s := Sprite2D.new()
-	s.name = name; s.centered = true
+	s.name = node_name; s.centered = true
 	s.position = pos; s.texture = tex; s.rotation = rot; s.scale = sc
 	return s
 
-func _poly4(name: String, tl: Vector2, tr: Vector2, br: Vector2, bl: Vector2, tex) -> Polygon2D:
-	return _poly(name, PackedVector2Array([tl, tr, br, bl]), _full_uv(4), tex)
+func _poly4(node_name: String, top_left: Vector2, top_right: Vector2, bottom_right: Vector2, bottom_left: Vector2, tex) -> Polygon2D:
+	return _poly(node_name, PackedVector2Array([top_left, top_right, bottom_right, bottom_left]), _full_uv(4), tex)
 
-func _poly(name: String, pts: PackedVector2Array, uvs: PackedVector2Array, tex) -> Polygon2D:
+func _poly(node_name: String, pts: PackedVector2Array, uvs: PackedVector2Array, tex) -> Polygon2D:
 	var p := Polygon2D.new()
-	p.name = name; p.polygon = pts; p.uv = uvs; p.texture = tex
+	p.name = node_name; p.polygon = pts; p.uv = uvs; p.texture = tex
 	return p
 
 func _full_uv(n: int) -> PackedVector2Array:

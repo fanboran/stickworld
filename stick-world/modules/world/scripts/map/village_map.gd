@@ -46,7 +46,8 @@ const TERRAIN_FOREST: int = 2       # 林地（土路外资源区，移动 -20%�
 const OFF_ROAD_SPEED_MULT: float = 0.8
 ## 每 cell 的地形类型（Dictionary: cell_x -> terrain_type），未设置=GRASS
 var _terrain_types: Dictionary = {}
-## 土路多边形节点（运行时创建，叠在草地上显示土黄色，由 TerrainRenderer 维护）
+## 土路多边形节点（运行时创建，叠在草地上显示土黄色，由 TerrainRenderer 跨脚本维护）
+@warning_ignore("unused_private_class_variable")
 var _dirt_road_poly: Polygon2D = null
 
 # ─────────────────────────────── 动态地图模型（阶段 F §5.7.2）────────────────────────────────
@@ -393,10 +394,10 @@ func _get_building_width(building: Node) -> float:
 	return 32.0
 
 
-func save_to_db(db, slot_id: int, map_id: String) -> void:
-	db.delete_rows("maps", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+func save_to_db(db, slot_id: int, p_map_id: String) -> void:
+	db.delete_rows("maps", "slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id])
 	db.insert_row("maps", {
-		"slot_id": slot_id, "map_id": map_id,
+		"slot_id": slot_id, "map_id": p_map_id,
 		"town_center_world_x": town_center_world_x,
 		"map_left_cell": map_left_cell, "map_right_cell": map_right_cell,
 		"city_left_x": _get_city_left_x(), "city_right_x": _get_city_right_x(),
@@ -405,15 +406,15 @@ func save_to_db(db, slot_id: int, map_id: String) -> void:
 
 
 ## 保存资源点到 DB
-func save_resource_nodes_to_db(db, slot_id: int, map_id: String) -> void:
-	db.delete_rows("resource_nodes", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+func save_resource_nodes_to_db(db, slot_id: int, p_map_id: String) -> void:
+	db.delete_rows("resource_nodes", "slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id])
 	if decoration_layer == null:
 		return
 	var idx: int = 0
 	for node in decoration_layer.get_children():
 		if node is ScriptResourceNode and not node.is_depleted():
 			db.insert_row("resource_nodes", {
-				"slot_id": slot_id, "map_id": map_id,
+				"slot_id": slot_id, "map_id": p_map_id,
 				"node_id": "rn_%04d" % idx,
 				"pos_x": node.global_position.x, "pos_y": node.global_position.y,
 				"resource_type": node.resource_type, "amount": node.amount,
@@ -422,9 +423,9 @@ func save_resource_nodes_to_db(db, slot_id: int, map_id: String) -> void:
 
 
 ## 从 DB 恢复地图边界
-func load_from_db(db, slot_id: int, map_id: String) -> void:
+func load_from_db(db, slot_id: int, p_map_id: String) -> void:
 	var rows: Array = db.select_rows("maps",
-		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+		"slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id], ["*"])
 	if rows.is_empty():
 		_init_dynamic_bounds()
 		return
@@ -454,7 +455,7 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 
 
 ## 从 DB 恢复资源点
-func load_resource_nodes_from_db(db, slot_id: int, map_id: String) -> void:
+func load_resource_nodes_from_db(db, slot_id: int, p_map_id: String) -> void:
 	if decoration_layer == null:
 		return
 	# 清除现有资源点
@@ -462,7 +463,7 @@ func load_resource_nodes_from_db(db, slot_id: int, map_id: String) -> void:
 		if node is ScriptResourceNode:
 			node.queue_free()
 	var rows: Array = db.select_rows("resource_nodes",
-		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+		"slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id], ["*"])
 	for row in rows:
 		var node: Node2D = ScriptResourceNode.new()
 		node.resource_type = int(row["resource_type"])

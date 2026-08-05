@@ -164,7 +164,7 @@ func get_worker_slot_index(worker: Node) -> int:
 ## 每帧调用，推进项目进度。
 ## 阶段 E 双进度：材料进度（搬运工）+ 建造进度（建造工，受材料限制：建造 ≤ 材料）。
 ## P0 简化：所有工人同时推进材料与建造，材料速率 1.5x 建造（材料条先满）。
-func tick(delta: float) -> void:
+func tick(_delta: float) -> void:
 	if state != State.UNDER_CONSTRUCTION:
 		return
 	# total_work<=0（如 bld_placeholder）直接完工

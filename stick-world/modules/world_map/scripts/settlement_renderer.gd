@@ -45,7 +45,7 @@ func render_settlement(settlement: SettlementRef) -> Node2D:
 
 
 ## 刷新单个聚落（规模变化时重新生成）
-func refresh(settlement_id: String) -> void:
+func refresh(_settlement_id: String) -> void:
 	# TODO: P1 实现
 	# 1. 移除旧的 _rendered_settlements[settlement_id]
 	# 2. 从 data 查找最新的 SettlementRef

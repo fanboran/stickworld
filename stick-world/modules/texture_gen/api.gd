@@ -42,12 +42,12 @@ static func make_straw_thatch(w: int, h: int, base_color: Color = Color(0.72, 0.
 	return ProceduralMaterials.make_straw_thatch(w, h, base_color)
 
 ## 生成层叠茅草屋顶贴图（横向 tileable）
-static func make_thatch_layered(w: int, h: int, seed: int = 0) -> ImageTexture:
-	return ProceduralMaterials.make_thatch_layered(w, h, seed)
+static func make_thatch_layered(w: int, h: int, seed_value: int = 0) -> ImageTexture:
+	return ProceduralMaterials.make_thatch_layered(w, h, seed_value)
 
 ## 为多边形生成指定尺寸的茅草贴图（带 seed 控制随机性）
-static func make_thatch_for_polygon(w: int, h: int, seed: int = 0) -> ImageTexture:
-	return ProceduralMaterials.make_thatch_for_polygon(w, h, seed)
+static func make_thatch_for_polygon(w: int, h: int, seed_value: int = 0) -> ImageTexture:
+	return ProceduralMaterials.make_thatch_for_polygon(w, h, seed_value)
 
 ## 用纹理创建茅草 ShaderMaterial
 static func create_thatch_material(tex: ImageTexture) -> ShaderMaterial:

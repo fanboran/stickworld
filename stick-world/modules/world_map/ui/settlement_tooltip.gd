@@ -35,7 +35,7 @@ func _ready() -> void:
 	_hide_tooltip()
 
 
-func _on_region_hovered(granularity: int, region_id: String, tile_id: String, settlement_id: String) -> void:
+func _on_region_hovered(granularity: int, region_id: String, _tile_id: String, settlement_id: String) -> void:
 	# 只在 L1 粒度且有聚落命中时显示
 	if granularity != 2 or settlement_id.is_empty():
 		_hide_tooltip()
@@ -62,8 +62,8 @@ func _update_info(settlement: SettlementRef, region_id: String) -> void:
 	if population_label:
 		population_label.text = "规模: %d%%" % int(settlement.population_score * 100)
 	if owner_label:
-		var owner: String = api_node.get_region_owner(region_id)
-		owner_label.text = "归属: %s" % (owner if not owner.is_empty() else "无主")
+		var region_owner: String = api_node.get_region_owner(region_id)
+		owner_label.text = "归属: %s" % (region_owner if not region_owner.is_empty() else "无主")
 
 
 func _show_tooltip() -> void:

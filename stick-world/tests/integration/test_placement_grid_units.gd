@@ -14,6 +14,7 @@ extends Node
 ## 从 test_village_map.gd 拆分（原 PlacementGrid / Validator / BuildMask 单元测试区块）。
 ## 纯单元测试，不依赖 GameRoot 场景。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptPlacementGrid := preload("res://modules/world/scripts/placement/placement_grid.gd")
 const ScriptPlacementValidator := preload("res://modules/world/scripts/placement/placement_validator.gd")

@@ -37,17 +37,17 @@ func _ready() -> void:
 	add_child(cam)
 
 
-func _add_roof(shader: Shader, tex: Texture2D, name: String, angle: float, pos: Vector2, bounds_bottom: Vector2, seed: int) -> void:
+func _add_roof(shader: Shader, tex: Texture2D, node_name: String, angle: float, pos: Vector2, bounds_bottom: Vector2, seed_value: int) -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = shader
 	mat.set_shader_parameter("resolution", ROOF_RES)
 	mat.set_shader_parameter("bounds", ROOF_BOUNDS)
 	mat.set_shader_parameter("bounds_bottom", bounds_bottom)
 	mat.set_shader_parameter("blade_angle", angle)
-	mat.set_shader_parameter("seed", seed)
+	mat.set_shader_parameter("seed", seed_value)
 
 	var sprite := Sprite2D.new()
-	sprite.name = name
+	sprite.name = node_name
 	sprite.texture = tex
 	sprite.material = mat
 	# white_tex.png 是 4x4，scale 用 resolution / 4

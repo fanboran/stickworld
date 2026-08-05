@@ -168,7 +168,7 @@ func _get_current_map() -> Node2D:
 	return null
 
 
-func _on_visibility_changed(v: bool) -> void:
+func _on_visibility_changed(_v: bool) -> void:
 	_update_visible()
 
 

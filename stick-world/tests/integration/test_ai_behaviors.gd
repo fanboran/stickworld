@@ -8,6 +8,7 @@ extends Node
 ##
 ## 退出码：0 全部通过，1 有失败
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
 const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")
@@ -16,6 +17,7 @@ const ScriptBehaviorStateMachine := preload("res://modules/units/scripts/ai/beha
 const ScriptBehaviorBase := preload("res://modules/units/scripts/ai/behavior_base.gd")
 const ScriptBehaviorIdle := preload("res://modules/units/scripts/ai/behavior_idle.gd")
 const ScriptBehaviorWander := preload("res://modules/units/scripts/ai/behavior_wander.gd")
+@warning_ignore("shadowed_global_identifier")
 const TestHelpers := preload("res://tests/core/test_helpers.gd")
 
 var _runner: TestRunner

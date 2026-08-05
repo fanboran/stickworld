@@ -13,6 +13,7 @@ extends Node
 ## 从 test_selection_formation.gd 拆分（原"UI 系统测试"区块），
 ## 公共 setup 在 tests/helpers/combat_test_setup.gd。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 

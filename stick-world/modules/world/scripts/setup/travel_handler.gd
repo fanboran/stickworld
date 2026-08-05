@@ -28,7 +28,7 @@ func setup(root: GameRoot) -> void:
 # ─────────────────────────────── 传送系统（§5.6）───────────────────────────────
 
 ## 进入大建筑：校验 -> 记录返回信息 -> 过场 -> 旅行
-func _on_mega_interior_entered(building_id: int, map_id: String) -> void:
+func _on_mega_interior_entered(_building_id: int, map_id: String) -> void:
 	# 校验：战斗中禁止传送
 	if _root.is_in_battle():
 		push_warning("[GameRoot] 战斗中禁止传送进入大建筑")
@@ -66,7 +66,7 @@ func _travel_to_interior(map_id: String) -> void:
 
 ## 从大建筑返回
 func _on_mega_interior_exited(_return_map_id_received: String) -> void:
-	var target := _root._return_map_id
+	var target: String = String(_root._return_map_id)
 	if target.is_empty():
 		target = _return_map_id_received
 	if target.is_empty():

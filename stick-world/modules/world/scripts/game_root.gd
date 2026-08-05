@@ -36,6 +36,16 @@ const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/ma
 const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
 ## 森林附属区域场景（阶段 F）
 const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/forest_zone.tscn")
+const _L1_SETTLEMENT_SCENES: Array[PackedScene] = [
+	preload("res://modules/world/scenes/maps/l1_settlement_00.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_01.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_02.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_03.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_04.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_05.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_06.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_07.tscn"),
+]
 ## 玩家火柴人实体场景（2026-08 收敛：经 UnitsAPI 常量引用，替代直接 preload 内部路径）
 const _UnitsApiScript: GDScript = preload("res://modules/units/api.gd")
 const _STICKMAN_ENTITY_SCENE: PackedScene = _UnitsApiScript.STICKMAN_ENTITY_SCENE
@@ -52,6 +62,7 @@ const MEGA_INTERIOR_MAP_ID := "mega_interior"
 const BATTLEFIELD_MAP_ID := "battlefield"
 ## 森林附属区域地图 ID（阶段 F）
 const FOREST_ZONE_MAP_ID := "forest_zone"
+const L1_SETTLEMENT_MAP_ID_PREFIX := "l1_settlement_"
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
 const PLAYER_SPAWN_X: float = 0.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为；阶段 E 创始人确认改为 2）
@@ -89,7 +100,8 @@ var _command_chain: Node = null
 var _battle_panel: Control = null
 ## Minimap 实例引用（运行时由 SystemSetup 装配）
 var _minimap: Control = null
-## ZoomBar 实例引用（运行时由 SystemSetup 装配）
+## ZoomBar 实例引用（运行时由 SystemSetup 装配；SystemSetup 跨脚本写入，故加忽略）
+@warning_ignore("unused_private_class_variable")
 var _zoom_bar: Control = null
 
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
@@ -102,10 +114,12 @@ var _possess_panel: Control = null
 ## ResourcesApi 实例引用（运行时由 SystemSetup 装配）
 var _resources_api: Node = null
 
-# ─────────────────────────────── 传送系统（§5.6）────────────────────────────────
+# ─────────────────────────────── 传送系统（§5.6；TravelHandler 跨脚本读写，故加忽略）────────────────────────────────
 ## 传送返回地图 ID（进入 MegaInteriorMap 前记录，退出时返回）
+@warning_ignore("unused_private_class_variable")
 var _return_map_id: String = ""
 ## 传送进入点 X（返回时 spawn 位置）
+@warning_ignore("unused_private_class_variable")
 var _return_spawn_x: float = 0.0
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
@@ -127,12 +141,16 @@ var _travel_system: Node = null
 ## 初始内容生成器（InitialContent 子节点）
 var _worldgen: Node = null
 
-# ─────────────────────────────── 阶段 F 子系统 ────────────────────────────────
+# ─────────────────────────────── 阶段 F 子系统（SystemSetup 跨脚本写入，故加忽略）────────────────────────────────
 var _boundary_detector: Node = null
-var _world_map_panel: Control = null
-# ─────────────────────────────── 游玩 UI ────────────────────────────────
+@warning_ignore("unused_private_class_variable")
+var _strategic_map: Node = null
+# ─────────────────────────────── 游玩 UI（SystemSetup 跨脚本写入，故加忽略）────────────────────────────────
+@warning_ignore("unused_private_class_variable")
 var _possession_indicator: Control = null
+@warning_ignore("unused_private_class_variable")
 var _hover_indicator: Control = null
+@warning_ignore("unused_private_class_variable")
 var _middle_scroll_overlay: Control = null
 # ─────────────────────────────── 阶段 E 游玩 UI ────────────────────────────────
 var _resource_bar: Control = null
@@ -142,12 +160,14 @@ var _formation_panel: Control = null
 ## 设置菜单（运行时由 SystemSetup 装配到 UIRoot，齿轮/ESC 打开）
 var _settings_menu_panel: Control = null
 
-# ─────────────────────────────── 存档系统 ────────────────────────────────
+# ─────────────────────────────── 存档系统（SaveHandler 跨脚本读写，故加忽略）────────────────────────────────
 ## 是否有存档待加载（读档入口标记）
 var _pending_save_load: bool = false
 ## 读档时缓存的 map_id（从 save_meta 读取）
+@warning_ignore("unused_private_class_variable")
 var _cached_load_map_id: String = ""
 ## 存档 UI 面板
+@warning_ignore("unused_private_class_variable")
 var _save_panel: Control = null
 
 # ─────────────────────────────── 跨图携带（带队出征）────────────────────────────────
@@ -344,6 +364,13 @@ func _register_default_maps() -> void:
 	scene_loader.register_map(BATTLEFIELD_MAP_ID, _BATTLEFIELD_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 阶段 F：注册森林附属区域
 	scene_loader.register_map(FOREST_ZONE_MAP_ID, _FOREST_ZONE_SCENE, WorldAPI.MapType.VILLAGE)
+	# 0.9b：注册 8 张程序化生成的聚落地图（L1 世界图的 8 城邦，settlement_mapgen.py 产物）
+	for i in _L1_SETTLEMENT_SCENES.size():
+		scene_loader.register_map(
+			"%s%02d" % [L1_SETTLEMENT_MAP_ID_PREFIX, i],
+			_L1_SETTLEMENT_SCENES[i],
+			WorldAPI.MapType.VILLAGE
+		)
 	# 配置地图出口（步行衔接，详见 §6.2）
 	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)

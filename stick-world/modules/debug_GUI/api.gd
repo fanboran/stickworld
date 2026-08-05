@@ -161,8 +161,8 @@ func _save_settings() -> void:
 	cfg.set_value("ui", "panel_expanded", _panel_expanded)
 	cfg.set_value("ui", "panel_position", var_to_str(_panel_position))
 	cfg.set_value("ui", "overlay_visible", _visible)
-	for name in _drawer_enabled.keys():
-		cfg.set_value("drawers", name, _drawer_enabled[name])
+	for drawer_name in _drawer_enabled.keys():
+		cfg.set_value("drawers", drawer_name, _drawer_enabled[drawer_name])
 	cfg.save(SETTINGS_PATH)
 
 
@@ -183,5 +183,5 @@ func _load_settings() -> void:
 	_panel_expanded = cfg.get_value("ui", "panel_expanded", false)
 	_visible = cfg.get_value("ui", "overlay_visible", true)
 	if cfg.has_section("drawers"):
-		for name in cfg.get_section_keys("drawers"):
-			_drawer_enabled[name] = cfg.get_value("drawers", name, true)
+		for drawer_name in cfg.get_section_keys("drawers"):
+			_drawer_enabled[drawer_name] = cfg.get_value("drawers", drawer_name, true)

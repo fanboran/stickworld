@@ -3,6 +3,7 @@ extends Node
 ## 纯数据层（RefCounted）测试：new 即用，不进场景树，确定性。
 ## 2026-08 补充：此前 424 行核心逻辑零测试触点（含 insert_tier 修复回归）。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptOrgManager := preload("res://modules/organization/scripts/organization_manager.gd")
 const ScriptOrgState := preload("res://core/entities/organization_state.gd")

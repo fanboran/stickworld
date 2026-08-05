@@ -14,6 +14,7 @@ extends Node
 # ===== 公共信号 =====
 
 ## 科技研究已开始
+@warning_ignore("unused_signal")
 signal tech_started(tech_id: String)
 
 ## 科技研究已暂停
@@ -23,6 +24,7 @@ signal tech_paused(tech_id: String)
 signal tech_resumed(tech_id: String)
 
 ## 科技研究完成
+@warning_ignore("unused_signal")
 signal tech_completed(tech_id: String)
 
 

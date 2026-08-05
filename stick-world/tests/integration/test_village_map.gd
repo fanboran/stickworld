@@ -11,6 +11,7 @@ extends Node
 ## 注：PlacementGrid / PlacementValidator / BuildMask 单元测试已拆分到
 ##   test_placement_grid_units.gd（纯单元测试，无需 GameRoot 场景）。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 # WorldAPI / PlayerControlAPI 是全局 class_name，无需 preload
 # 显式 preload 各实现脚本，用于类型 cast

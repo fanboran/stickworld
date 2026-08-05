@@ -181,14 +181,14 @@ func _on_project_cancelled(project: ScriptConstructionProject) -> void:
 
 ## 解除项目全部派工：释放工人回池 + 发射 worker_unassigned + 移除项目。
 ## unassign: 是否调用 project.unassign_worker（完工时 true，取消时 false）
-func _release_project_workers(project: ScriptConstructionProject, unassign: bool) -> void:
+func _release_project_workers(project: ScriptConstructionProject, do_unassign: bool) -> void:
 	var snapshot: Array = []
 	for w in _worker_to_project.keys():
 		if _worker_to_project[w] == project:
 			snapshot.append(w)
 	for w in snapshot:
 		var worker: Node = w as Node
-		if unassign:
+		if do_unassign:
 			project.unassign_worker(worker)
 		_worker_to_project.erase(worker)
 		if not _available_workers.has(worker):

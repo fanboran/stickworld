@@ -50,8 +50,8 @@ func is_passable() -> bool:
 	return type != 3
 
 ## 是否有指定资源
-func has_resource(resource_name: String) -> bool:
-	return resource_name in resource_types
+func has_resource(res_name: String) -> bool:
+	return res_name in resource_types
 
 ## 是否有指定火柴人种类
 func has_stickman_type(stickman_type: String) -> bool:

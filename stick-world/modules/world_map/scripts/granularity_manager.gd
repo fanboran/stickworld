@@ -43,13 +43,13 @@ func _switch_to_l3() -> void:
 	pass
 
 
-func _switch_to_l2(region_id: String) -> void:
+func _switch_to_l2(_region_id: String) -> void:
 	# TODO: SM-2
 	# data.load_region(region_id)
 	pass
 
 
-func _switch_to_l1(tile_id: String) -> void:
+func _switch_to_l1(_tile_id: String) -> void:
 	# TODO: SM-3
 	# data.load_tile(tile_id)
 	pass

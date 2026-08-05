@@ -3,6 +3,7 @@ extends Node
 ## 2026-08 补充：此前仅测 ResourceManager 纯数据层，信号层零覆盖。
 ## 纯逻辑测试：api Node 实例化后不进场景树，确定性。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptResourcesApi := preload("res://modules/resources/api.gd")
 const ScriptResourceManager := preload("res://modules/resources/scripts/resource_manager.gd")

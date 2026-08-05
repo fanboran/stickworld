@@ -7,6 +7,7 @@ extends Node
 ##
 ## 退出码：0 全部通过，1 有失败
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 # WorldAPI / PlayerControlAPI / UIAPI 是全局 class_name，无需 preload
 # 显式 preload 各实现脚本，用于类型 cast（常量名加 Script 前缀避免遮蔽全局类名）

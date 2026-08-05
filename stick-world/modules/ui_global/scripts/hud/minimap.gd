@@ -45,7 +45,6 @@ var _map_left: float = 0.0
 var _map_right: float = 8192.0
 var _map_width: float = 8192.0
 var _ground_y: float = 810.0
-var _ground_bottom: float = 1080.0
 var _ground_ratio: float = 0.25
 var _has_map_info: bool = false
 

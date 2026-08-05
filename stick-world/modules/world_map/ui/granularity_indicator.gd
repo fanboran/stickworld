@@ -29,7 +29,7 @@ func _ready() -> void:
 	_update_display()
 
 
-func _on_granularity_changed(old_g: int, new_g: int, focused_parent_id: String) -> void:
+func _on_granularity_changed(_old_g: int, _new_g: int, _focused_parent_id: String) -> void:
 	_update_display()
 
 

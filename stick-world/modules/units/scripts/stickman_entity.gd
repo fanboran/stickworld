@@ -103,6 +103,8 @@ var _is_running: bool = false
 ## 是否处于搬运状态（搬运工持物，walk 切换为 walk_carry 动画）
 var _carrying: bool = false
 ## 动作动画锁定（如 build 敲击），锁定时 _play_anim 不切换动画
+## （由 visual_controller 跨脚本读写，故加忽略）
+@warning_ignore("unused_private_class_variable")
 var _action_locked: bool = false
 ## 玩家按E建造的动画计时器（>0 表示正在播放 build 动画）
 var _player_build_timer: float = 0.0
@@ -700,8 +702,8 @@ func is_position_blocked(pos: Vector2) -> bool:
 func escape_stuck() -> void:
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		return
-	var map_left: float = float(_map_ref.map_left) if "map_left" in _map_ref else -100000.0
-	var map_right: float = float(_map_ref.map_right) if "map_right" in _map_ref else 100000.0
+	var world_left: float = float(_map_ref.map_left) if "map_left" in _map_ref else -100000.0
+	var world_right: float = float(_map_ref.map_right) if "map_right" in _map_ref else 100000.0
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var radius: float = 200.0
@@ -709,7 +711,7 @@ func escape_stuck() -> void:
 	while radius <= 3200.0 and not found:
 		for attempt in range(24):
 			var probe_x: float = global_position.x + rng.randf_range(-radius, radius)
-			probe_x = clampf(probe_x, map_left + 50.0, map_right - 50.0)
+			probe_x = clampf(probe_x, world_left + 50.0, world_right - 50.0)
 			if not is_position_blocked(Vector2(probe_x, global_position.y)):
 				global_position.x = probe_x
 				found = true

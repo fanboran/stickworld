@@ -9,6 +9,7 @@ extends Resource
 @export var continent_id: String = "continent_main"
 
 ## 锁定种子（用于按需生成派生数据）
+@warning_ignore("shadowed_global_identifier")
 @export var seed: int = 0
 
 ## 原始数据尺寸（8192×8192）

@@ -116,12 +116,12 @@ func _physics_process(delta: float) -> void:
 	# 中键滚动（红警风格：鼠标偏离锚点方向 = 相机移动方向）
 	if _middle_scrolling:
 		var mouse_pos: Vector2 = get_viewport().get_mouse_position()
-		var offset: Vector2 = mouse_pos - _middle_anchor
-		var dist: float = offset.length()
+		var mouse_delta: Vector2 = mouse_pos - _middle_anchor
+		var dist: float = mouse_delta.length()
 		var dead_zone: float = 8.0
 		if dist > dead_zone:
 			var speed: float = (dist - dead_zone) * 4.0
-			var dir_x: float = offset.x / dist
+			var dir_x: float = mouse_delta.x / dist
 			global_position.x = _clamp_camera_x(global_position.x + dir_x * speed * delta)
 	# 手动控制冷却递减（拖动/缩放结束后等 N 秒无操作才弹回跟随）
 	if _manual_active and not _dragging and not _middle_scrolling and _edge_scroll_dir == 0 and _manual_cooldown > 0.0:

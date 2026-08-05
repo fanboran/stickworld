@@ -152,12 +152,12 @@ func _apply_material() -> void:
 	_mesh_instance.material_override = mat
 
 
-func _update_shader_param(name: String, value: float) -> void:
+func _update_shader_param(param_name: String, value: float) -> void:
 	if not _mesh_instance:
 		return
 	var mat := _mesh_instance.material_override as ShaderMaterial
 	if mat:
-		mat.set_shader_parameter(name, value)
+		mat.set_shader_parameter(param_name, value)
 
 
 # ── 编辑器内检查 ──────────────────────────────────────────────

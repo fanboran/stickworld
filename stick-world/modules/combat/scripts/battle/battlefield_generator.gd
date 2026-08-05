@@ -24,7 +24,6 @@ static func generate_battlefield(map: Node2D, march_direction: int) -> Dictionar
 	var map_right: float = map.map_right if "map_right" in map else 4096.0
 	var ground_y: float = map.ground_y if "ground_y" in map else 432.0
 	var ground_bottom: float = map.ground_bottom if "ground_bottom" in map else 1080.0
-	var mid_x: float = (map_left + map_right) * 0.5
 	var mid_y: float = (ground_y + ground_bottom) * 0.5
 	# spawn 位置：我方在行军方向侧，敌方在对侧
 	var attacker_x: float

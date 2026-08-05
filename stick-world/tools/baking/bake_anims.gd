@@ -23,7 +23,7 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 
-func _bake(name: String, tracks: Array, length: float, loop_mode: int) -> void:
+func _bake(anim_name: String, tracks: Array, length: float, loop_mode: Animation.LoopMode) -> void:
 	var anim := Animation.new()
 	anim.loop_mode = loop_mode
 	anim.length = length
@@ -44,12 +44,12 @@ func _bake(name: String, tracks: Array, length: float, loop_mode: int) -> void:
 			anim.track_insert_key(track_idx, float(keys[i]), deg_to_rad(float(keys[i + 1])))
 			i += 2
 
-	var file_path := OUTPUT_DIR + name + ".tres"
+	var file_path := OUTPUT_DIR + anim_name + ".tres"
 	var err := ResourceSaver.save(anim, file_path)
 	if err == OK:
-		print("  OK  %s.tres (%d tracks)" % [name, tracks.size()])
+		print("  OK  %s.tres (%d tracks)" % [anim_name, tracks.size()])
 	else:
-		print("  ERR %s.tres: 保存失败 (err=%d)" % [name, err])
+		print("  ERR %s.tres: 保存失败 (err=%d)" % [anim_name, err])
 
 
 ## 从骨骼数据计算 bone 路径（相对于 AnimationPlayer 的 root_node = StickmanRig/Skeleton2D）

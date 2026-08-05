@@ -36,7 +36,8 @@ var _projects: Dictionary = {}
 var _buildings: Dictionary = {}
 ## 建筑 → building_id 反查（用于 demolish）
 var _building_to_id: Dictionary = {}
-## 建筑场景模板注册表 {def_id → PackedScene}
+## 建筑场景模板注册表 {def_id → PackedScene}（数据由 building_catalog 跨脚本写入，故加忽略）
+@warning_ignore("unused_private_class_variable")
 var _building_scene_registry: Dictionary = {}
 ## 项目 ID 自增计数器
 var _next_project_id: int = 1
@@ -46,7 +47,8 @@ var _next_building_id: int = 1
 var _map: Node2D = null
 ## ResourcesApi 引用（由 GameRoot 注入，P0-9 资源检查）
 var _resources_api: Node = null
-## 建筑定义缓存 {def_id: Dictionary}（P0-6 数据驱动）
+## 建筑定义缓存 {def_id: Dictionary}（P0-6 数据驱动；同样由 building_catalog 跨脚本读写）
+@warning_ignore("unused_private_class_variable")
 var _building_defs_cache: Dictionary = {}
 ## 建造项目 -> 进度条指示器映射（阶段 E 双进度条）
 var _project_indicators: Dictionary = {}

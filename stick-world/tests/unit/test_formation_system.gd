@@ -2,6 +2,7 @@ extends Node
 ## 单元测试：FormationSystem 编队增删/任命（fake OrganizationApi 白盒）。
 ## FormationSystem 不进场景树（_process 不触发），确定性。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptFormationSystem := preload("res://modules/combat/scripts/command/formation_system.gd")
 
@@ -18,10 +19,10 @@ class FakeOrgApi:
 	var disbanded: Array = []
 	var _next_id: int = 1
 
-	func create_organization(name: String, _tag: String, _tier: int, _parent_id: String) -> Dictionary:
+	func create_organization(org_name: String, _tag: String, _tier: int, _parent_id: String) -> Dictionary:
 		var org_id := "org_%d" % _next_id
 		_next_id += 1
-		created.append({"id": org_id, "name": name})
+		created.append({"id": org_id, "name": org_name})
 		return {"ok": true, "data": {"org_id": org_id}}
 
 	func assign_stickman(org_id: String, stickman_id: String, role: String) -> void:

@@ -15,6 +15,7 @@ extends Node
 ##
 ## 公共 setup 在 tests/helpers/combat_test_setup.gd。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
@@ -119,35 +120,35 @@ func _test_settings_debug_buttons() -> void:
 	_helper.game_root.toggle_settings_menu()
 
 
-## 大世界地图面板：打开时按当前地图动态生成目的地（village_a 有左右出口）
+## 大世界地图（战略图）：Tab 打开显示 L1 世界图（8 城邦），关闭恢复
 func _test_world_map_dynamic() -> void:
-	var panel: Control = _helper.game_root.get("_world_map_panel")
-	if panel == null:
-		_runner.assert_true(false, "WorldMapPanel 为空")
+	var strategic_map: Node = _helper.game_root.get("_strategic_map")
+	if strategic_map == null:
+		_runner.assert_true(false, "GameRoot._strategic_map 为空")
 		return
-	if not panel.has_method("open_panel"):
-		_runner.assert_true(false, "WorldMapPanel 无 open_panel")
+	# 战略图是 CanvasLayer，控制器在 Content 子节点
+	var content: Node = strategic_map.get_node_or_null("Content")
+	if content == null or not content.has_method("open"):
+		_runner.assert_true(false, "战略图 Content 无 open 方法")
 		return
-	panel.open_panel()
-	_runner.assert_true(panel.visible, "打开后面板应可见")
-	# 按钮容器应有子节点（步行出口 + 快速旅行）
-	var container: Node = panel.get("_buttons_container")
-	_runner.assert_true(container != null, "应有按钮容器")
-	if container == null:
-		return
+	# 打开（模拟 Tab/边界触发 open_world_map_requested）
+	content.open()
 	await get_tree().process_frame
+	_runner.assert_true(content.visible, "打开后战略图应可见")
+	# 渲染器应持有 L1 数据（8 城邦）
+	var api: Node = content.get_node_or_null("Api")
+	_runner.assert_true(api != null and api.is_initialized(), "战略图 api 应已初始化（L1 数据加载）")
+	if api != null and api.is_initialized():
+		var data: RefCounted = api.get_data()
+		var settled: int = 0
+		for tile in data.tiles:
+			if tile.settlement != null:
+				settled += 1
+		_runner.assert_true(settled == 8, "战略图应含 8 个城邦聚落，实际 %d" % settled)
+	# 关闭
+	content.close()
 	await get_tree().process_frame
-	var btn_count: int = 0
-	var has_walk: bool = false
-	for child in container.get_children():
-		if child is Button:
-			btn_count += 1
-			if child.text.contains("步行"):
-				has_walk = true
-	_runner.assert_true(btn_count > 0, "应生成目的地按钮，实际 %d" % btn_count)
-	# village_a 已注册左右出口（左→战场、右→道路）
-	_runner.assert_true(has_walk, "应包含步行出口按钮（village_a 有出口配置）")
-	panel.close_panel()
+	_runner.assert_true(not content.visible, "关闭后战略图应不可见")
 
 
 ## 战场默认步兵：不带队伍进战场，友军（进攻方）应 ≥3（含玩家）

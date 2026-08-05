@@ -34,8 +34,8 @@ func setup(cell_x: int, width: int, ground_y: float) -> void:
 
 
 ## 更新进度并重绘
-func update_progress(material: float, build: float) -> void:
-	_material_progress = clampf(material, 0.0, 1.0)
+func update_progress(material_amount: float, build: float) -> void:
+	_material_progress = clampf(material_amount, 0.0, 1.0)
 	_build_progress = clampf(build, 0.0, 1.0)
 	queue_redraw()
 

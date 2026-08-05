@@ -32,9 +32,9 @@ static func make_wood_plank(w: int, h: int, base_color: Color = Color(0.50, 0.33
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("wood_plank_%dx%d" % [w, h])
-	var plank_h := maxi(6, h / 5)
+	var plank_h := maxi(6, int(h / 5.0))
 	for y in range(h):
-		var plank_idx := y / plank_h
+		var plank_idx := int(y / float(plank_h))
 		var shade := 1.0 + rng.randf_range(-0.06, 0.06) + (plank_idx % 2) * 0.03
 		for x in range(w):
 			var grain := 1.0 + sin(y * 0.4 + x * 0.08) * 0.04 + sin(x * 0.3) * 0.03
@@ -72,10 +72,10 @@ static func make_straw_thatch(w: int, h: int, base_color: Color = Color(0.72, 0.
 
 ## 简化版层叠茅草屋顶贴图（横向 tileable）
 ## 斜向茅草束 + 底边垂挂 + 外框描边
-static func make_thatch_layered(w: int, h: int, seed: int = 0) -> ImageTexture:
+static func make_thatch_layered(w: int, h: int, seed_value: int = 0) -> ImageTexture:
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("thatch_layered_%dx%d_s%d" % [w, h, seed])
+	rng.seed = hash("thatch_layered_%dx%d_s%d" % [w, h, seed_value])
 
 	# 调色板（从浅到深）
 	var palette: Array[Color] = [
@@ -89,8 +89,8 @@ static func make_thatch_layered(w: int, h: int, seed: int = 0) -> ImageTexture:
 
 	img.fill(palette[4])
 
-	var row_h := maxi(12, h / 32)
-	var rows := h / row_h + 2
+	var row_h := maxi(12, int(h / 32.0))
+	var rows := int(h / float(row_h)) + 2
 
 	for row in range(rows):
 		var row_y := row * row_h
@@ -106,8 +106,8 @@ static func make_thatch_layered(w: int, h: int, seed: int = 0) -> ImageTexture:
 			color_idx = 4
 		var base_c: Color = palette[clampi(color_idx, 0, 4)]
 		var x_offset := rng.randf_range(-row_h * 0.5, row_h * 0.5)
-		var bundle_w := maxi(8, w / 24)
-		var num_bundles := w / bundle_w + 2
+		var bundle_w := maxi(8, int(w / 24.0))
+		var num_bundles := int(w / float(bundle_w)) + 2
 		for b in range(num_bundles):
 			var bx := int(b * bundle_w + x_offset) % w
 			if bx < 0:
@@ -134,8 +134,8 @@ static func make_thatch_layered(w: int, h: int, seed: int = 0) -> ImageTexture:
 
 
 ## 为多边形生成指定尺寸的茅草贴图（带 seed 控制随机性）
-static func make_thatch_for_polygon(w: int, h: int, seed: int = 0) -> ImageTexture:
-	return make_thatch_layered(w, h, seed)
+static func make_thatch_for_polygon(w: int, h: int, seed_value: int = 0) -> ImageTexture:
+	return make_thatch_layered(w, h, seed_value)
 
 
 ## 用纹理创建茅草 ShaderMaterial
@@ -156,7 +156,7 @@ void fragment() {
 
 
 static func _draw_thatch_bundle(img: Image, x: int, y: int, w: int, h: int, color: Color, edge: Color, rng: RandomNumberGenerator, wrap_w: int) -> void:
-	var half_w := w / 2
+	var half_w := int(w / 2.0)
 	for dy in range(h):
 		var py := y + dy
 		if py < 0 or py >= img.get_height():

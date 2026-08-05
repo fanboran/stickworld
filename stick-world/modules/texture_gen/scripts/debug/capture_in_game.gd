@@ -156,7 +156,7 @@ func _capture_and_save() -> void:
 
 	# 降采样回目标尺寸
 	if _ss > 1:
-		img.resize(img.get_width() / _ss, img.get_height() / _ss, Image.INTERPOLATE_LANCZOS)
+		img.resize(int(img.get_width() / float(_ss)), int(img.get_height() / float(_ss)), Image.INTERPOLATE_LANCZOS)
 
 	var err := img.save_png(output_path)
 	if err != OK:

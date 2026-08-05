@@ -9,4 +9,5 @@ extends Node
 # ===== 公共信号 =====
 
 ## 建筑生成完成
+@warning_ignore("unused_signal")
 signal building_generated(building_type: String, instance: Node)

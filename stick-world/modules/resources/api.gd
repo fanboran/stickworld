@@ -13,7 +13,7 @@ signal resource_changed(resource_id: String, amount: float, delta: float, region
 ## 资源不足
 signal resource_not_enough(resource_id: String, required: float, available: float, region_id: String)
 ## 价格波动
-# @warning_ignore("unused_signal")  # P0 暂未接入价格波动逻辑，信号预留给外部订阅
+@warning_ignore("unused_signal")
 signal price_changed(resource_id: String, old_price: float, new_price: float, region_id: String)
 
 

@@ -59,7 +59,7 @@ func load_continent() -> Result:
 ## 加载指定 L2 地区（玩家双击地区时调用）
 ## [P] continent 已加载，region_id 在 continent.regions 内
 ## [Q] regions[region_id] 填充，current_granularity = L2, focused_parent_id = region_id
-func load_region(region_id: String) -> Result:
+func load_region(_region_id: String) -> Result:
 	# TODO: SM-2 实现
 	# 1. 检查 regions 是否已加载该 region（避免重复加载）
 	# 2. 从 manifest 找到 region_<id>.tres 路径
@@ -72,7 +72,7 @@ func load_region(region_id: String) -> Result:
 ## 加载指定 L1 地块（玩家双击地块时调用）
 ## [P] 该 tile 所属 region 已加载
 ## [Q] tiles[tile_id] 填充，current_granularity = L1, focused_parent_id = tile_id
-func load_tile(tile_id: String) -> Result:
+func load_tile(_tile_id: String) -> Result:
 	# TODO: SM-3 实现
 	# 1. 检查 tiles 是否已加载该 tile
 	# 2. 从 manifest 找到 tile_<id>.tres 路径
@@ -84,7 +84,7 @@ func load_tile(tile_id: String) -> Result:
 
 ## 卸载非相邻粒度的数据（内存控制）
 ## 拼接预览模式时保留相邻包，普通模式只保留当前粒度
-func unload_distant(target_granularity: Granularity, keep_ids: Array[String]) -> void:
+func unload_distant(_target_granularity: Granularity, _keep_ids: Array[String]) -> void:
 	# TODO: SM-2 实现
 	# 普通模式：卸载非当前粒度的所有包
 	# 拼接预览模式：保留 keep_ids 列表中的包
@@ -104,7 +104,7 @@ func unload_all_regions_and_tiles() -> void:
 ## 根据当前粒度和屏幕坐标查询最细粒度的 ID
 ## 返回 {"granularity": int, "region_id": String, "tile_id": String, "settlement_id": String}
 ## 未命中字段为 ""
-func query_id_at_screen(screen_pos: Vector2) -> Dictionary:
+func query_id_at_screen(_screen_pos: Vector2) -> Dictionary:
 	# TODO: SM-1 实现
 	# 1. 用当前粒度的 boundary_mask_texture 采样 screen_pos
 	# 2. 解码 RGB 得到当前粒度的 ID

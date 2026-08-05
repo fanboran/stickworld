@@ -3,7 +3,9 @@ extends Node
 ## fixture：真 village_a.tscn + ConstructionManager，不用 GameRoot。
 ## 用例间共享 fixture（_map/_cm 惰性初始化一次），但各用例断言独立主题。
 
+@warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+@warning_ignore("shadowed_global_identifier")
 const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const ScriptConstructionManager := preload("res://modules/construction/scripts/construction_manager.gd")
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
@@ -153,7 +155,6 @@ func _test_building_registry() -> void:
 	# 已通过 _test_full_cycle 完工一栋（cell_x=14），这里再走一遍完整循环验证登记
 	var start: Dictionary = _cm.start_construction_at("r1", "bld_placeholder", 30)
 	_runner.assert_true(start.get("ok", false), "开工应成功: %s" % start.get("error", ""))
-	var project_id: String = start.get("project_id", "")
 	var worker := _worker()
 	_cm.register_worker(worker)
 	_runner.assert_true(_cm.try_assign_worker(worker), "派工应成功")

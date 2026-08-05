@@ -18,9 +18,11 @@ signal building_completed(building_id: String, region_id: String)
 signal building_removed(building_id: String, region_id: String)
 
 ## 建筑受损
+@warning_ignore("unused_signal")
 signal building_damaged(building_id: String, damage_amount: float)
 
 ## 建筑升级完成
+@warning_ignore("unused_signal")
 signal building_upgraded(building_id: String, old_tier: int, new_tier: int)
 
 

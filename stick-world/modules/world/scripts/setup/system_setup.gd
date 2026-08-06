@@ -36,6 +36,7 @@ const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scrip
 const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
 const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
+const _StrategicMapL3Scene: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l3.tscn")
 const _PossessionIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/possession_indicator.gd")
 const _HoverIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/hover_indicator.gd")
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/scripts/indicators/middle_scroll_overlay.gd")
@@ -441,6 +442,49 @@ func _setup_boundary_detector() -> void:
 	# 战略图关闭 -> 恢复场景图输入（api.close_strategic_map / ESC 都发此信号）
 	if EventBus != null:
 		EventBus.strategic_map_closed.connect(_on_strategic_map_closed)
+	# M 键 -> L3 大世界战略图（与 Tab 的 L1 地图独立）
+	_setup_l3_strategic_map()
+
+
+## 装配 L3 大世界战略图（M 键视图）
+func _setup_l3_strategic_map() -> void:
+	_root._strategic_map_l3 = _StrategicMapL3Scene.instantiate()
+	_root._strategic_map_l3.name = "StrategicMapL3"
+	_root.add_child(_root._strategic_map_l3)
+	# 初始化 L3 数据（渲染器持有）
+	var content: Node = _root._strategic_map_l3.get_node_or_null("Content")
+	var renderer: Node = content.get_node_or_null("L3MapRenderer") if content != null else null
+	if renderer != null and renderer.has_method("set_data"):
+		var data := L3WorldData.load_from(
+			"res://config/strategic_map/l3_world.json",
+			"res://config/strategic_map"
+		)
+		renderer.set_data(data)
+
+
+## M 键全局监听（打开/关闭 L3 大世界战略图）
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_M:
+		_toggle_l3_strategic_map()
+		get_viewport().set_input_as_handled()
+
+
+func _toggle_l3_strategic_map() -> void:
+	if _root._strategic_map_l3 == null:
+		return
+	var content: Node = _root._strategic_map_l3.get_node_or_null("Content")
+	if content == null or not content.has_method("open"):
+		return
+	if content.visible:
+		content.close()
+		_pause_scene_input(false)
+	else:
+		# 打开 L3 前先关掉 L1（互斥）
+		var l1_content: Node = _root._strategic_map.get_node_or_null("Content") if _root._strategic_map != null else null
+		if l1_content != null and l1_content.visible and l1_content.has_method("close"):
+			l1_content.close()
+		content.open()
+		_pause_scene_input(true)
 
 
 func _open_strategic_map() -> void:

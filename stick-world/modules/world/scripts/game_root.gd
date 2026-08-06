@@ -145,6 +145,8 @@ var _worldgen: Node = null
 var _boundary_detector: Node = null
 @warning_ignore("unused_private_class_variable")
 var _strategic_map: Node = null
+@warning_ignore("unused_private_class_variable")
+var _strategic_map_l3: Node = null
 # ─────────────────────────────── 游玩 UI（SystemSetup 跨脚本写入，故加忽略）────────────────────────────────
 @warning_ignore("unused_private_class_variable")
 var _possession_indicator: Control = null

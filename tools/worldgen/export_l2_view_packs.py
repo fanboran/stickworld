@@ -76,40 +76,98 @@ def downsample_mode(seg, th, tw):
 
 def main():
     rids = sys.argv[1:] or sorted(d for d in os.listdir(L2_DIR) if d.startswith("region_"))
+
+    # 8192 合成标签图（region_labels 2048 放大 + 8K 大陆蒙版裁切海岸线）——
+    # 用于渲染相邻 L2 地区（灰色）与湖泊（浅蓝）
+    labels_2048 = np.load(os.path.join(HERE, "output", "regions", "region_labels.npy"))
+    labels8192 = np.array(Image.fromarray(
+        labels_2048.astype(np.int32), "I").resize((8192, 8192), Image.NEAREST)).astype(np.int32)
+    continent = np.array(Image.open(os.path.join(HERE, "output", "locked", "locked_continent_8192.png")))
+    labels8192[continent[:, :, 0] <= 127] = 0
+    lake_mask = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
+    # 邻接（分区后 4 邻域，来自 l3_world.json）
+    l3w = json.load(open(os.path.join(HERE, "output", "l3_view", "l3_world.json"), encoding="utf-8"))
+    adj_by_label = {int(r["label"]): r.get("adjacent", []) for r in l3w["regions"]}
+
     for rid in rids:
         rdir = os.path.join(L2_DIR, rid)
         info = json.load(open(os.path.join(rdir, "info.json"), encoding="utf-8"))
         bbox = info["bbox_8192"]
         x0, y0, x1, y1 = bbox["x0"], bbox["y0"], bbox["x1"], bbox["y1"]
         H, W = y1 - y0 + 1, x1 - x0 + 1
+        lab = info["label"]
 
         # 直接用 8192 裁切原分辨率（像素块细，放大无马赛克感；纯色 PNG 压缩率高）
         seg = np.load(os.path.join(rdir, "tiles_8192.npy"))
         seg[seg < 0] = 0
         tiles_small = seg.astype(np.int32)
 
+        # 上下文：裁切范围不变（当前 bbox），按长边把短边两侧补成正方形；
+        # 相邻地区只在自然出现在补齐区域内的部分显示（不完整显示）
+        neighbors = [n for n in adj_by_label.get(lab, [])]
+        side = max(W, H)
+        cx0 = x0 - (side - W) // 2
+        cy0 = y0 - (side - H) // 2
+        cx1, cy1 = cx0 + side - 1, cy0 + side - 1
+        if cx0 < 0:
+            cx0, cx1 = 0, side - 1
+        elif cx1 > 8191:
+            cx1, cx0 = 8191, 8191 - side + 1
+        if cy0 < 0:
+            cy0, cy1 = 0, side - 1
+        elif cy1 > 8191:
+            cy1, cy0 = 8191, 8191 - side + 1
+        ctx_h, ctx_w = cy1 - cy0 + 1, cx1 - cx0 + 1
+
+        # 统一混合标签图：地块(1000+) + 邻居(1..13) + 湖泊(2000) 同一网格提取
+        # -> 地块/邻居/湖泊共享角点，渲染绝对无缝（不再有湖泊缝隙）
+        TILE_LABEL = 1000
+        LAKE_LABEL = 2000
+        ctx = labels8192[cy0:cy1 + 1, cx0:cx1 + 1].copy()
+        ctx_lake = lake_mask[cy0:cy1 + 1, cx0:cx1 + 1]
+        ctx[(ctx == 0) & ctx_lake] = LAKE_LABEL
+        # 当前地区区域：陆地替换为地块标签（偏移防与邻居 label 冲突）
+        ty, tx = y0 - cy0, x0 - cx0
+        tile_zone = tiles_small[0:H, 0:W] > 0
+        ctx[ty:ty + H, tx:tx + W][tile_zone] = TILE_LABEL + tiles_small[0:H, 0:W][tile_zone]
+
+        # 邻居/湖泊/地块多边形（坐标 = context 局部；同一网格提取，无缝）
+        from mesh_extract import extract_mesh, simplify_mesh
+        ctx_mesh = simplify_mesh(extract_mesh(ctx.astype(np.int32)))
+        neighbors_data = []
+        for n in neighbors:
+            mv = ctx_mesh.get(n, {"outer": [], "holes": []})
+            if mv["outer"]:
+                neighbors_data.append({"label": n, "polygons": mv["outer"], "holes": mv["holes"]})
+        lakes = []
+        lmv = ctx_mesh.get(LAKE_LABEL, {"outer": [], "holes": []})
+        lakes = lmv["outer"]
+        # 地块（从统一网格取，label 映射回原值；坐标 = context 局部）
+        tile_mesh = {}
+        for k, mv in ctx_mesh.items():
+            if TILE_LABEL < k < TILE_LABEL + 100 and mv["outer"]:
+                tile_mesh[k - TILE_LABEL] = mv
+
         colors = unique_colors()
         # 索引图：label 直编 RGB（8192 级，hover 像素级查询精度）
         idx = np.zeros((H, W, 3), dtype=np.uint8)
-        for lab in range(1, int(tiles_small.max()) + 1):
-            m = tiles_small == lab
-            idx[m, 0] = (lab >> 16) & 0xFF
-            idx[m, 1] = (lab >> 8) & 0xFF
-            idx[m, 2] = lab & 0xFF
+        for k in range(1, int(tiles_small.max()) + 1):
+            m = tiles_small == k
+            idx[m, 0] = (k >> 16) & 0xFF
+            idx[m, 1] = (k >> 8) & 0xFF
+            idx[m, 2] = k & 0xFF
 
-        # 元数据（polygon/centroid 视图坐标）
-        # 共享顶点网格提取（复现 P 社架构：相邻地块共享角点 -> 渲染绝对无缝）
-        from mesh_extract import extract_mesh, simplify_mesh
-        mesh = simplify_mesh(extract_mesh(tiles_small.astype(np.int32)))
+        # 元数据（tiles 坐标 = context 局部，来自统一网格提取；centroid 用 context 内像素）
         tiles = []
-        for lab, mv in mesh.items():
+        for k, mv in tile_mesh.items():
             polys = mv["outer"]
             holes = mv["holes"]
-            m = tiles_small == lab
+            # 该地块在 ctx 中的像素（context 坐标）
+            m = ctx == (TILE_LABEL + k)
             ys, xs = np.where(m)
             tiles.append({
-                "label": lab,
-                "color": list(colors[lab - 1]),
+                "label": k,
+                "color": list(colors[(k - 1) % len(colors)]),
                 "area_px": int(m.sum()),
                 "area_ratio": float(m.sum() / (tiles_small > 0).sum()),
                 "centroid": [float(ys.mean()), float(xs.mean())],
@@ -120,11 +178,14 @@ def main():
         tiles.sort(key=lambda t: -t["area_ratio"])
         world = {
             "region_id": rid,
-            "label": info["label"],
+            "label": lab,
             "size": [W, H],
-            "base_texture": "",
+            "context_size": [ctx_w, ctx_h],
+            "tiles_offset": [ty, tx],   # 当前地区 bbox 原点在 context 中的位置（hover 查询换算）
             "mask_texture": "l2_tiles_index.png",
             "tiles": tiles,
+            "neighbors": neighbors_data,
+            "lakes": lakes,
         }
 
         outd = os.path.join(OUT_DIR, rid)
@@ -138,7 +199,7 @@ def main():
         os.makedirs(gamed, exist_ok=True)
         for fn in ("l2_world.json", "l2_tiles_index.png"):
             shutil.copy(os.path.join(outd, fn), os.path.join(gamed, fn))
-        print("  %s: %dx%d, %d 个地块" % (rid, W, H, len(tiles)))
+        print("  %s: %dx%d, %d 地块, 邻居 %d, 湖泊 %d" % (rid, W, H, len(tiles), len(neighbors_data), len(lakes)))
 
     print("完成。输出: %s" % OUT_DIR)
 

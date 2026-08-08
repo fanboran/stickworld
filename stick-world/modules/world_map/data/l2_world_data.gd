@@ -21,6 +21,18 @@ var tiles: Array[Dictionary] = []
 ## 底图像素尺寸（Vector2i, 宽高）
 var size := Vector2i.ZERO
 
+## context 尺寸（含相邻地区扩展区域，渲染画布）
+var context_size := Vector2i.ZERO
+
+## 当前地区 bbox 原点在 context 中的位置（渲染偏移）
+var tiles_offset := Vector2i.ZERO
+
+## 相邻 L2 地区（灰色显示）：[{label, polygons, holes}]（context 坐标）
+var neighbors: Array = []
+
+## 湖泊多边形（浅蓝显示）：[[(y,x),...]]（context 坐标）
+var lakes: Array = []
+
 ## 地区名（region_001 等）
 var region_id: String = ""
 
@@ -42,6 +54,13 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	world.region_id = str(data.get("region_id", ""))
 	var sz: Array = data.get("size", [0, 0])
 	world.size = Vector2i(int(sz[0]), int(sz[1]))
+	# 上下文（相邻地区扩展区域）：context 尺寸 + 当前 bbox 原点偏移 + 邻居/湖泊多边形
+	var csz: Array = data.get("context_size", sz)
+	world.context_size = Vector2i(int(csz[0]), int(csz[1]))
+	var toff: Array = data.get("tiles_offset", [0, 0])
+	world.tiles_offset = Vector2i(int(toff[0]), int(toff[1]))
+	world.neighbors = data.get("neighbors", [])
+	world.lakes = data.get("lakes", [])
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l2_base_2048.png")]
 	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l2_tiles_index_2048.png")]
 	var border_path := "%s/%s" % [base_dir, data.get("border_texture", "l2_tiles_border_2048.png")]

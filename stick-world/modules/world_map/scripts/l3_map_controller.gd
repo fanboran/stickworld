@@ -15,6 +15,12 @@ class_name L3MapController
 @export var map_renderer: L3MapRenderer
 @export var map_camera: MapCamera
 
+## 首次打开时设置初始视角（之后保留用户位置/缩放状态）
+var _view_initialized: bool = false
+
+## 当前是否在 L2 视图内（M 关闭/重开时保留）
+var _l2_active: bool = false
+
 
 func _ready() -> void:
 	_auto_find_components()
@@ -76,33 +82,46 @@ func _try_open_l2_at_screen(screen_pos: Vector2) -> bool:
 func _open_l2(label: int) -> void:
 	if l2_view == null:
 		return
+	_l2_active = true
 	visible = false
 	l2_view.open("region_%03d" % label)
 
 
 ## L2 返回（ESC）：恢复 L3 显示
 func _on_l2_back() -> void:
+	_l2_active = false
 	visible = true
 
 
 ## 打开 L3 地图（M 键触发）
+## 保留上次状态：相机位置/缩放不变；若上次关闭时在 L2 视图内，恢复 L2 显示
 func open() -> void:
-	visible = true
-	# 初始视角：无缩放（zoom 1.0，1:1 像素完美，无放大无马赛克），屏幕中心 = 地图中心
-	var map_size := 2048.0
-	if map_renderer != null and map_renderer.get_data() != null:
-		map_size = float(map_renderer.get_data().size)
-	if map_camera != null and map_camera.has_method("set_zoom"):
-		var vp := get_viewport()
-		if vp != null:
-			var vp_size: Vector2 = vp.get_visible_rect().size
-			map_camera.set_zoom(1.0)
-			if map_camera.has_method("set_offset"):
-				map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.5, map_size * 0.5))
+	if not _view_initialized:
+		_view_initialized = true
+		# 初始视角：无缩放（zoom 1.0，1:1 像素完美），屏幕中心 = 地图中心
+		var map_size := 2048.0
+		if map_renderer != null and map_renderer.get_data() != null:
+			map_size = float(map_renderer.get_data().size)
+		if map_camera != null and map_camera.has_method("set_zoom"):
+			var vp := get_viewport()
+			if vp != null:
+				var vp_size: Vector2 = vp.get_visible_rect().size
+				map_camera.set_zoom(1.0)
+				if map_camera.has_method("set_offset"):
+					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.5, map_size * 0.5))
+	if _l2_active and l2_view != null:
+		# 恢复 L2 视图（相机状态保留），L3 保持隐藏
+		visible = false
+		l2_view.visible = true
+	else:
+		visible = true
 
 
-## 关闭 L3 地图（ESC）
+## 关闭 L3 地图（ESC / M 键）
 func close() -> void:
+	# 若在 L2 视图内，一起隐藏（保留状态，重开时恢复）
+	if l2_view != null and l2_view.visible:
+		l2_view.visible = false
 	visible = false
 	# 通知 system_setup 恢复场景图输入
 	if EventBus != null:

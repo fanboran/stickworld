@@ -51,27 +51,30 @@ func _input(event: InputEvent) -> void:
 
 ## 打开指定 L2 地区视图（region_id 形如 region_001）
 func open(region_id: String) -> void:
+	# 同一地区重开（M 关闭后恢复）：保留相机位置/缩放；换地区则重新适配
+	var same_region: bool = region_id == _current_region_id and data != null
 	_current_region_id = region_id
-	var json_path := "%s/%s/l2_world.json" % [DATA_BASE_DIR, region_id]
-	var base_dir := "%s/%s" % [DATA_BASE_DIR, region_id]
-	data = L2WorldData.load_from(json_path, base_dir)
-	if data.size.x <= 0 or data.size.y <= 0:
-		push_error("[L2MapController] 加载失败: %s" % region_id)
-		return
-	if map_renderer != null and map_renderer.has_method("set_data"):
-		map_renderer.set_data(data)
+	if not same_region:
+		var json_path := "%s/%s/l2_world.json" % [DATA_BASE_DIR, region_id]
+		var base_dir := "%s/%s" % [DATA_BASE_DIR, region_id]
+		data = L2WorldData.load_from(json_path, base_dir)
+		if data.size.x <= 0 or data.size.y <= 0:
+			push_error("[L2MapController] 加载失败: %s" % region_id)
+			return
+		if map_renderer != null and map_renderer.has_method("set_data"):
+			map_renderer.set_data(data)
+		# 初始视角：整图适配屏幕
+		if map_camera != null and map_camera.has_method("set_zoom"):
+			var vp := get_viewport()
+			if vp != null:
+				var vp_size: Vector2 = vp.get_visible_rect().size
+				var target_h: float = vp_size.y * 0.72
+				var fit_zoom: float = target_h / float(data.size.y)
+				map_camera.set_zoom(fit_zoom)
+				if map_camera.has_method("set_offset"):
+					map_camera.set_offset(vp_size * 0.5 - Vector2(
+						float(data.size.x) * fit_zoom * 0.5, float(data.size.y) * fit_zoom * 0.5))
 	visible = true
-	# 初始视角：整图适配屏幕
-	if map_camera != null and map_camera.has_method("set_zoom"):
-		var vp := get_viewport()
-		if vp != null:
-			var vp_size: Vector2 = vp.get_visible_rect().size
-			var target_h: float = vp_size.y * 0.72
-			var fit_zoom: float = target_h / float(data.size.y)
-			map_camera.set_zoom(fit_zoom)
-			if map_camera.has_method("set_offset"):
-				map_camera.set_offset(vp_size * 0.5 - Vector2(
-					float(data.size.x) * fit_zoom * 0.5, float(data.size.y) * fit_zoom * 0.5))
 
 
 func get_current_region_id() -> String:

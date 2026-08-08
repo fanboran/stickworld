@@ -163,6 +163,35 @@ func _test_drilldown() -> void:
 		_runner.assert_true(flag.back, "L2 ESC 应发 back_requested")
 		_runner.assert_true(not _l2_content.visible, "ESC 后 L2 隐藏")
 		_runner.assert_true(_l3_content.visible, "返回后 L3 重新可见")
+
+		# M 关闭整图 -> 重开：保留相机状态；若在 L2 内则恢复 L2 视图
+		var l3_zoom_before: float = cam.get_zoom()
+		var l3_off_before: Vector2 = cam.get_offset()
+		cam.set_zoom(l3_zoom_before * 0.5)  # 模拟用户缩放/拖动
+		cam.set_offset(l3_off_before + Vector2(100, -50))
+		_l3_content.close()  # M 关闭
+		await get_tree().process_frame
+		_runner.assert_true(not _l3_content.visible, "M 关闭后 L3 隐藏")
+		_l3_content.open()  # M 重开
+		await get_tree().process_frame
+		_runner.assert_true(_l3_content.visible, "M 重开后 L3 可见")
+		_runner.assert_true(absf(cam.get_zoom() - l3_zoom_before * 0.5) < 0.01
+				and cam.get_offset().distance_to(l3_off_before + Vector2(100, -50)) < 1.0,
+				"M 重开后相机位置/缩放保留")
+
+		# 下钻 L2 后 M 关闭 -> 重开恢复 L2 视图
+		var opened2: bool = _l3_content.call("_try_open_l2_at_screen", screen_pos)
+		_runner.assert_true(opened2, "再次下钻 L2")
+		await get_tree().process_frame
+		_runner.assert_true(_l2_content.visible, "下钻后 L2 可见")
+		_l3_content.close()  # 在 L2 内按 M 关闭
+		await get_tree().process_frame
+		_runner.assert_true(not _l3_content.visible and not _l2_content.visible,
+				"M 关闭后 L3 与 L2 都隐藏")
+		_l3_content.open()  # M 重开
+		await get_tree().process_frame
+		_runner.assert_true(_l2_content.visible, "M 重开恢复 L2 视图")
+		_runner.assert_true(not _l3_content.visible, "恢复 L2 时 L3 保持隐藏")
 	else:
 		_runner.assert_true(false, "L3 应含 MapCamera")
 

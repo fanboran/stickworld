@@ -35,7 +35,7 @@ BIG_ISLAND_RATIO = 0.05
 # 小岛阈值：占陆地比例 < 此值的岛进入群岛聚类
 SMALL_ISLAND_RATIO = 0.005
 # 群岛聚类距离（像素，工作分辨率下质心距离阈值）
-ARCHIPELAGO_CLUSTER_DIST = 90
+ARCHIPELAGO_CLUSTER_DIST = 90   # 像素单位，运行时分辨率自适应（2048 基准）
 # 大陆内部分割：每个地区约占陆地比例（决定盆地种子数量）
 REGION_LAND_FRACTION = 0.04
 
@@ -83,8 +83,10 @@ def split_continents(h, m, labels_island, island_ids, region_offset):
         n_regions = max(1, int(round(n_land / (size * size) / REGION_LAND_FRACTION)))
         # 地形起伏度场（局部 max-min）：起伏大=陡坡/山脊，用作分水岭强度
         # （绝对高度不行：低海拔也可能有山脊，见开发记录）
-        maxf = ndi.maximum_filter(h, size=15)
-        minf = ndi.minimum_filter(h, size=15)
+        # 邻域按工作分辨率缩放（2048 基准 15px -> 8192 用 60px，保持相同物理尺度）
+        relief_r = max(15, size * 15 // 2048)
+        maxf = ndi.maximum_filter(h, size=relief_r)
+        minf = ndi.minimum_filter(h, size=relief_r)
         relief = maxf - minf
         # 取 n_regions 个"低且分散"的种子：网格法（岛 bbox 分格，每格取最平缓点）
         # 保证种子均匀散布，避免贪心导致局部聚集
@@ -143,7 +145,7 @@ def cluster_small_islands(labels_island, island_ids, size):
                     continue
                 if any(
                     (centroids[jid][0] - centroids[g][0]) ** 2 + (centroids[jid][1] - centroids[g][1]) ** 2
-                    <= ARCHIPELAGO_CLUSTER_DIST ** 2
+                    <= (ARCHIPELAGO_CLUSTER_DIST * size // 2048) ** 2
                     for g in group
                 ):
                     group.append(jid)

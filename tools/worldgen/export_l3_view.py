@@ -27,6 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REGIONS_DIR = os.path.join(HERE, "output", "regions")
 LOCKED_DIR = os.path.join(HERE, "output", "locked")
 OUT_DIR = os.path.join(HERE, "output", "l3_view")
+L2_PACKS_DIR = os.path.join(HERE, "output", "l2_packs")
 GAME_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "stick-world", "config", "strategic_map"))
 
 OCEAN_COLOR = (30, 55, 95)
@@ -76,16 +77,35 @@ def main():
     print("  海洋归边完成（分块 = 地面+海洋）")
 
     print("[3/5] 提取地区轮廓（陆地边界 + 海洋归边）...")
+    colors = unique_colors(n_regions)
+
+    # 8192 级共享网格：从 13 地区 mask_8192_full.png 合成 8192 级地区标签图
+    # （L3 渲染边界精细，放大无马赛克；hover 查询仍用 2048 索引图）
+    import mesh_extract
+    labels8192 = np.zeros((8192, 8192), dtype=np.int32)
+    for rid in range(1, n_regions + 1):
+        m = np.array(Image.open(os.path.join(
+            L2_PACKS_DIR, "region_%03d" % rid, "mask_8192_full.png"))) > 0
+        labels8192[m] = rid
+    mesh8192 = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(labels8192))
+
     regions = []
     for lab in range(1, n_regions + 1):
         # 陆地实际边界（用户要求：地面按实际分界线）
         m_land = labels == lab
+        # 兼容字段 land_polygon：2048 级（查询测试用，与 2048 索引图坐标一致）
         contours_land = find_contours(m_land.astype(np.uint8), 0.5)
         land_poly = None
         if contours_land:
             c = contours_land[0]
-            step = max(1, len(c) // 300)  # 300 点保留细节
+            step = max(1, len(c) // 300)
             land_poly = [[float(x), float(y)] for x, y in c[::step]]
+        # 渲染字段 land_polygons/land_holes：8192 级共享网格（放大精细无马赛克）
+        land_polys = []  # 外轮廓（所有岛屿，8192 级，一个都别丢）
+        land_holes = []  # 洞轮廓（C 形地区内的海洋，8192 级）
+        mv = mesh8192.get(lab, {"outer": [], "holes": []})
+        land_polys = mv["outer"]
+        land_holes = mv["holes"]
         # 海洋归边后的完整轮廓（用于 hover 高亮填充，含海洋延长）
         m_full = partition == lab
         contours_full = find_contours(m_full.astype(np.uint8), 0.5)
@@ -97,10 +117,13 @@ def main():
         ys, xs = np.where(m_land)
         regions.append({
             "label": lab,
+            "color": list(colors[lab - 1]),
             "area_px": int(m_land.sum()),
             "land_ratio": float(m_land.mean()),
             "centroid": [float(xs.mean()), float(ys.mean())],
             "land_polygon": land_poly or [],
+            "land_polygons": land_polys,  # 全部岛屿外轮廓（渲染用）
+            "land_holes": land_holes,     # 洞轮廓（挖空用）
             "full_polygon": full_poly or [],
         })
     # 邻接（分区后 4 邻域）
@@ -161,17 +184,6 @@ def main():
         idx_img[m, 1] = (lab >> 8) & 0xFF
         idx_img[m, 2] = lab & 0xFF
     Image.fromarray(idx_img).save(os.path.join(OUT_DIR, "l3_partition_2048.png"))
-    # 边界边缘图：像素级（右/下邻居 label 不同 = 边缘像素），
-    # 渲染时叠加即"地面+海洋一起分"的分界线，与 hover 高光边缘完全一致
-    # 背景必须透明（RGBA），否则不透明黑会盖住底图
-    border = np.zeros((size, size, 4), dtype=np.uint8)  # RGBA
-    right_diff = partition[:, :-1] != partition[:, 1:]
-    down_diff = partition[:-1, :] != partition[1:, :]
-    edge = np.zeros((size, size), dtype=bool)
-    edge[:, :-1] |= right_diff
-    edge[:-1, :] |= down_diff
-    border[edge] = (255, 220, 120, 255)  # 边缘：不透明黄
-    Image.fromarray(border).save(os.path.join(OUT_DIR, "l3_border_2048.png"))
     # 唯一色预览（人眼看分区效果）
     colors = unique_colors(n_regions)
     prev = np.zeros((size, size, 3), dtype=np.uint8)
@@ -184,16 +196,12 @@ def main():
     Image.fromarray(prev).save(os.path.join(OUT_DIR, "l3_partition_preview.png"))
     with open(os.path.join(OUT_DIR, "color_map.json"), "w", encoding="utf-8") as f:
         json.dump(color_map, f, indent=1)
-    # 底图（2048）
-    base = Image.open(os.path.join(LOCKED_DIR, "..", "preview_fractal.png")).convert("RGB")
-    base = base.resize((size, size), Image.BILINEAR)
-    base.save(os.path.join(OUT_DIR, "l3_base_2048.png"))
-    # 世界数据
+    # 世界数据（渲染坐标系 = 8192 级网格；索引图 2048 级仅作查询）
+    # 渲染为纯矢量（色块+描边），不再需要底图/边界位图
     world = {
         "name": "L3 大世界",
-        "size": size,
+        "size": 8192,
         "n_regions": n_regions,
-        "base_texture": "l3_base_2048.png",
         "mask_texture": "l3_partition_2048.png",
         "regions": regions,
         "sea_links": sea_links,
@@ -203,7 +211,7 @@ def main():
 
     print("[5/5] 复制到游戏 config/strategic_map/ ...")
     os.makedirs(GAME_DIR, exist_ok=True)
-    for fn in ("l3_world.json", "l3_base_2048.png", "l3_partition_2048.png", "l3_border_2048.png", "color_map.json"):
+    for fn in ("l3_world.json", "l3_partition_2048.png", "color_map.json"):
         src = os.path.join(OUT_DIR, fn)
         dst = os.path.join(GAME_DIR, fn)
         import shutil

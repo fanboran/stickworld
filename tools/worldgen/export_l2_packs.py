@@ -78,10 +78,15 @@ def main():
     height = np.load(HEIGHT_8192, mmap_mode="r")
     print("  底图 %s, 高程 %s" % (base_img.size, height.shape))
 
-    # 2048 labels -> 8192 蒙版（NEAREST，与底图对齐）
+    # 2048 labels -> 8192 蒙版（NEAREST 放大），再按 8K 大陆蒙版裁切陆地：
+    # 海岸线/大陆轮廓取 8192 级精细边界（locked_continent_8192.png），
+    # 地区划分语义保持 2048 定稿（人工调整结果不变）
     labels_8192 = np.array(
         Image.fromarray(labels.astype(np.int32), "I").resize((8192, 8192), Image.NEAREST)
     ).astype(np.int32)
+    continent_8192 = np.array(Image.open(os.path.join(LOCKED_DIR, "locked_continent_8192.png")))
+    land_8192 = continent_8192[:, :, 0] > 127  # 二值蒙版（0=海洋, 255=陆地）
+    labels_8192[~land_8192] = 0  # 按 8K 蒙版裁切 -> 海岸线 8192 级精细
 
     os.makedirs(OUT_DIR, exist_ok=True)
 

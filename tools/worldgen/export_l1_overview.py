@@ -1,6 +1,6 @@
 """生成 L3 全图预览：显示全部 L1 地块（13 个 L2 地区分块拼回 8192 坐标系）。
 
-- 背景：13 地区 base_8192.png 按 bbox 拼回（高清陆地），海洋用 l3_base_2048.png 放大
+- 背景：13 地区 base_8192.png 按 bbox 拼回（高清陆地），海洋纯色
 - 地块：tiles_8192.npy 按 bbox 贴入，HSL 随机着色 + 边界描边
 
 用法：
@@ -41,8 +41,7 @@ def main():
     region_dirs = sorted(d for d in os.listdir(L2_DIR) if d.startswith("region_"))
 
     # 背景：先放 L3 2048 底图放大（海洋），再贴各地区 8192 底图（陆地）
-    l3_base = Image.open(os.path.join(L3_DIR, "l3_base_2048.png")).convert("RGB")
-    canvas = np.array(l3_base.resize((SIZE, SIZE), Image.BILINEAR)).astype(np.float32)
+    canvas = np.full((SIZE, SIZE, 3), (30, 55, 95), dtype=np.float32)  # 海洋纯色
 
     # 全局 L1 地块 ID 图（8192），tile_id 唯一
     global_labels = np.zeros((SIZE, SIZE), dtype=np.int32)

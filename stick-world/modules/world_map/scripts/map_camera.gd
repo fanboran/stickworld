@@ -14,7 +14,7 @@ class_name MapCamera
 @export var target: Node2D
 
 ## 最小缩放（看全当前粒度）
-@export var min_zoom: float = 0.3
+@export var min_zoom: float = 0.02
 
 ## 最大缩放（看细节）
 @export var max_zoom: float = 3.0
@@ -93,10 +93,11 @@ func _input(event: InputEvent) -> void:
 		_offset = _drag_offset_start + (mm.position - _drag_start)
 
 
-## 在以某点为锚点时缩放
+## 以某点为锚点时缩放（等比缩放：每步 ×(1±delta_zoom)，各缩放级别阶梯均匀）
 func _zoom_at_point(screen_pos: Vector2, delta_zoom: float) -> void:
 	var old_zoom: float = _zoom_level
-	_zoom_level = clampf(_zoom_level + delta_zoom, min_zoom, max_zoom)
+	var factor: float = 1.0 + delta_zoom
+	_zoom_level = clampf(_zoom_level * factor, min_zoom, max_zoom)
 	if _zoom_level == old_zoom:
 		return
 	var ratio: float = _zoom_level / old_zoom

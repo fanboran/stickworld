@@ -37,6 +37,7 @@ const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
 const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
 const _StrategicMapL3Scene: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l3.tscn")
+const _StrategicMapL2Scene: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l2.tscn")
 const _PossessionIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/possession_indicator.gd")
 const _HoverIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/hover_indicator.gd")
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/scripts/indicators/middle_scroll_overlay.gd")
@@ -460,6 +461,14 @@ func _setup_l3_strategic_map() -> void:
 			"res://config/strategic_map"
 		)
 		renderer.set_data(data)
+	# 装配 L2 下钻视图（L3 单击地区 -> L2 详细地图）
+	var l2: Node = _StrategicMapL2Scene.instantiate()
+	l2.name = "StrategicMapL2"
+	_root.add_child(l2)
+	var l2_content: Node = l2.get_node_or_null("Content")
+	if l2_content != null and content != null and content.has_method("set_l2_view") \
+			and l2_content.has_method("open"):
+		content.call("set_l2_view", l2_content)
 
 
 ## M 键全局监听（打开/关闭 L3 大世界战略图）

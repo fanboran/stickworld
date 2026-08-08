@@ -37,9 +37,7 @@ func _test_load() -> void:
 		return
 	_data = L3WorldData.load_from(L3_JSON_PATH, L3_BASE_DIR)
 	_renderer.set_data(_data)
-	_runner.assert_true(_data.base_texture != null, "L3 底图已加载")
 	_runner.assert_true(_data.mask_image != null, "L3 分区索引图已加载")
-	_runner.assert_true(_data.border_texture != null, "L3 边界边缘图已加载（描边与高光同源）")
 	_runner.assert_true(_data.regions.size() == 13, "应有 13 个地区（实测 %d）" % _data.regions.size())
 	# 每个地区应有陆地轮廓
 	var no_poly: int = 0

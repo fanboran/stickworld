@@ -3,17 +3,12 @@ extends RefCounted
 ## L3 大世界数据容器 —— M 键战略图（13 个 L2 地区分块）
 ##
 ## 数据来源：tools/worldgen/export_l3_view.py 产出的 l3_world.json + PNG
-## 分块 = 地面+海洋一起分：陆地按实际分界线；隔海处质心连线直线延长（sea_links）
-## hover 高亮用分区索引图像素解码（P 社 provinces.bmp 机制）
-
-## 底图（L3 地形，2048）
-var base_texture: Texture2D = null
+## 渲染为纯矢量（色块+描边，见 L3MapRenderer），这里只提供：
+##   - 索引图（hover/下钻像素查询，P 社 provinces.bmp 机制）
+##   - 地区元数据（label/多边形/颜色）
 
 ## 分区索引图（label 直编，含海洋归边，NEAREST 采样）
 var mask_image: Image = null
-
-## 边界边缘图（像素级分界线，与 mask 同源；叠加渲染即分界描边）
-var border_texture: Texture2D = null
 
 ## 地区列表（label 1..N）
 var regions: Array[Dictionary] = []
@@ -21,7 +16,7 @@ var regions: Array[Dictionary] = []
 ## 隔海直线链接（渲染描边用）：{"a","b","p1","p2"}
 var sea_links: Array[Dictionary] = []
 
-## 底图像素尺寸
+## 底图像素尺寸（渲染坐标系，8192 级网格）
 var size: int = 0
 
 var _region_by_label: Dictionary = {}
@@ -39,18 +34,12 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 		push_error("[L3WorldData] JSON 解析失败: %s" % json_path)
 		return world
 
-	world.size = int(data.get("size", 2048))
-	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l3_base_2048.png")]
+	world.size = int(data.get("size", 8192))
 	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l3_partition_2048.png")]
-	var border_path := "%s/l3_border_2048.png" % base_dir
-	if ResourceLoader.exists(base_path):
-		world.base_texture = load(base_path) as Texture2D
 	if FileAccess.file_exists(mask_path):
 		var img := Image.new()
 		if img.load(mask_path) == OK:
 			world.mask_image = img
-	if ResourceLoader.exists(border_path):
-		world.border_texture = load(border_path) as Texture2D
 
 	for rd in (data.get("regions", []) as Array):
 		var r: Dictionary = rd

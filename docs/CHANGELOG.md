@@ -8,6 +8,16 @@
 
 ## [未发布]
 
+### 世界地图战略图：L3→L2 下钻 + 真 8K 素材管线（2026-08）
+
+- **L3→L2 下钻**：M 键 L3 战略图单击地区进入该 L2 详细视图（L1 地块分块 + hover 描边），ESC 返回 L3（CanvasLayer 102，`l2_world_data`/`l2_map_renderer`/`l2_map_controller`/`strategic_map_l2.tscn`）
+- **M 键关闭/重开保留状态**：相机位置/缩放 + 当前所在 L2 视图（首次才设初始视角；L2 同地区重开不重置）
+- **纯矢量渲染（ArrayMesh 静态几何缓存）**：地块/地区几何加载时一次性三角剖分合并为单个 mesh，每帧 1 次 `draw_mesh`（零 CPU 剖分，修复逐帧 draw_colored_polygon 卡顿）；洞预剖分；hover 描边 `draw_polyline` 抗锯齿
+- **真 8K 素材管线**：地区划分保持 2048 定稿（人工调整不变），海岸线按 8K 大陆蒙版（`locked_continent_8192.png`）裁切 → 全部素材 8192 级；共享顶点网格提取（`mesh_extract.py`，P 社省份网格架构：相邻地块共享角点无缝）+ 自接触分割 + 共线简化 + Chaikin 边界平滑
+- **交互优化**：相机等比缩放（×1.1/×0.9）、min_zoom 0.02、L3 首次 1:1 像素完美居中、hover 坐标换算（渲染 8192 ↔ 索引图 2048）
+- **清理**：废弃位图渲染资源（l3_base/l3_border 等）与死工具归档 `archive/`（标记/切分工具）、删除历史中间产物
+- **测试**：新增 `test_l2_strategic_map`（加载/索引命中/下钻-返回/状态保留，23 断言）；L3/L2/L1 战略图测试全绿；全量 31 套件通过
+
 ### 独立审计收敛（2026-08，三轮）
 
 - **P0 修复**：`set_resources_api` 注入点补齐（此前缺失导致建造资源检查/扣减/清场回收永久静默失效，has_method 守卫吞错）；EventBus 与模块 api 重复声明去重（resource_not_enough/tech_started/org_* 移除）；run_all.ps1 补 4 个遗漏集成套件（battle_ui/formation_system/placement_grid_units/tactical_orders）

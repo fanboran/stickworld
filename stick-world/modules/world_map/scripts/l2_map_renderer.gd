@@ -38,6 +38,59 @@ var _holes_mesh: ArrayMesh = null        # 当前地块洞（海洋色）
 var _tiles_offset := Vector2.ZERO        # 当前地区 bbox 原点在 context 中的位置
 var _context_size := Vector2.ONE
 var _neighbor_polys: Array = []          # 相邻地区轮廓（分界线绘制）
+var _lake_pt_grid := {}                  # 湖泊边界点网格（cell->点列表，用于湖泊接壤判定）
+var _tile_border_segs: Array = []        # 地块描边段（已滤除湖泊接壤段与画框边缘段）
+var _neighbor_border_segs: Array = []    # 相邻地区分界线段（同上过滤）
+const _GRID_CELL := 16.0
+const _LAKE_DIST := 2.5
+
+
+## 点是否在 context 画框边缘
+func _on_context_edge(v: Vector2) -> bool:
+	var cw := _context_size.x
+	var ch := _context_size.y
+	return v.x <= 0.5 or v.y <= 0.5 or v.x >= cw - 0.5 or v.y >= ch - 0.5
+
+
+## 把多边形顶点加入湖泊边界点网格
+func _add_lake_points(pts: PackedVector2Array) -> void:
+	for p in pts:
+		var key := "%d,%d" % [int(p.x / _GRID_CELL), int(p.y / _GRID_CELL)]
+		if not _lake_pt_grid.has(key):
+			_lake_pt_grid[key] = []
+		(_lake_pt_grid[key] as Array).append(p)
+
+
+## 判定线段是否与湖泊接壤：中点附近(容忍距离内)是否存在湖泊边界点。
+## 湖泊接壤的边界线段因共享边界/Chaikin 平滑而与湖边界点高度接近（~1 单位内）。
+func _is_lake_adjacent(a: Vector2, b: Vector2) -> bool:
+	var m := (a + b) * 0.5
+	var cx := int(m.x / _GRID_CELL)
+	var cy := int(m.y / _GRID_CELL)
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var key := "%d,%d" % [cx + dx, cy + dy]
+			if not _lake_pt_grid.has(key):
+				continue
+			for p in _lake_pt_grid[key]:
+				if (p - m).length() <= _LAKE_DIST:
+					return true
+	return false
+
+
+## 过滤一条闭合多边形环：返回可绘制的分段（跳过湖泊接壤段与画框边缘段）
+func _filter_border_segs(pts: PackedVector2Array) -> PackedVector2Array:
+	var segs := PackedVector2Array()
+	for i in range(pts.size()):
+		var a: Vector2 = pts[i]
+		var b: Vector2 = pts[(i + 1) % pts.size()]
+		if _on_context_edge(a) and _on_context_edge(b):
+			continue  # 贴边段：不画（消除贴边分界线）
+		if _is_lake_adjacent(a, b):
+			continue  # 湖泊接壤段：不画（避免湖泊被描边成小孔）
+		segs.append(a)
+		segs.append(b)
+	return segs
 
 
 func set_data(data: L2WorldData) -> void:
@@ -161,6 +214,50 @@ func _build_static_mesh() -> void:
 			_neighbor_polys.append(line)
 	_neighbors_mesh = _make_mesh(nverts, ncols, nindices)
 
+	# 湖泊边界点网格：描边时跳过与湖泊接壤的段（避免湖泊被描边成小孔/出现接壤描边）
+	_lake_pt_grid = {}
+	for poly in _data.lakes:
+		var lpts := PackedVector2Array()
+		for p in poly:
+			lpts.append(Vector2(p[1], p[0]))
+		_add_lake_points(lpts)
+	for t in _data.tiles:
+		for hole in t.get("holes", []):
+			if not (hole is Dictionary and hole.get("lake", false)):
+				continue
+			var hpts := PackedVector2Array()
+			for p in hole.get("points", []):
+				hpts.append(Vector2(p[1], p[0]))
+			_add_lake_points(hpts)
+
+	# 预计算地块描边段与相邻地区分界线段（滤除湖泊接壤段与画框边缘段）
+	_tile_border_segs = []
+	for t in _data.tiles:
+		for poly in t.get("polygons", []):
+			if (poly as Array).size() < 3:
+				continue
+			var tpts := PackedVector2Array()
+			for pp in poly:
+				tpts.append(Vector2(pp[1], pp[0]))
+			var segs := _filter_border_segs(tpts)
+			if segs.size() >= 2:
+				_tile_border_segs.append(segs)
+	_neighbor_border_segs = []
+	for line in _neighbor_polys:
+		var closed := PackedVector2Array(line)
+		var segs := PackedVector2Array()
+		for i in range(closed.size()):
+			var a: Vector2 = closed[i]
+			var b: Vector2 = closed[(i + 1) % closed.size()]
+			if _on_context_edge(a) and _on_context_edge(b):
+				continue  # 整段在画框边缘：不画
+			if _is_lake_adjacent(a, b):
+				continue  # 湖泊接壤段：不画（避免湖泊被描边成小孔）
+			segs.append(a)
+			segs.append(b)
+		if segs.size() >= 2:
+			_neighbor_border_segs.append(segs)
+
 
 func _process(_delta: float) -> void:
 	if not visible or _data == null:
@@ -199,34 +296,14 @@ func _draw() -> void:
 	# 5. 当前地块洞（海洋色）
 	if _holes_mesh != null:
 		draw_mesh(_holes_mesh, null)
-	# 5.5 地块常驻描边（内部省份边界；ctx 系坐标，不平移）
-	for t in _data.tiles:
-		for poly in t.get("polygons", []):
-			if (poly as Array).size() < 3:
-				continue
-			var tpts := PackedVector2Array()
-			for pp in poly:
-				tpts.append(Vector2(pp[1], pp[0]))
-			tpts.append(tpts[0])
-			draw_polyline(tpts, TILE_BORDER_COLOR, TILE_BORDER_WIDTH, true)
-	# 6. 相邻地区分界线（深色，抗锯齿矢量线；跳过与 context 边缘重合的段）
-	if not _neighbor_polys.is_empty():
+	# 5.5 地块常驻描边（内部省份边界；已预滤除湖泊接壤段与画框边缘段）
+	for segs in _tile_border_segs:
+		for i in range(0, segs.size() - 1, 2):
+			draw_line(segs[i], segs[i + 1], TILE_BORDER_COLOR, TILE_BORDER_WIDTH, true)
+	# 6. 相邻地区分界线（深色，抗锯齿矢量线；已预滤除湖泊接壤段与画框边缘段）
+	if not _neighbor_border_segs.is_empty():
 		var bw := BORDER_WIDTH()
-		for line in _neighbor_polys:
-			var closed := PackedVector2Array(line)
-			closed.append(closed[0])
-			var segs := PackedVector2Array()
-			var cw := _context_size.x
-			var ch := _context_size.y
-			for i in range(closed.size() - 1):
-				var a: Vector2 = closed[i]
-				var b: Vector2 = closed[i + 1]
-				var on_edge_a: bool = a.x <= 0.5 or a.y <= 0.5 or a.x >= cw - 0.5 or a.y >= ch - 0.5
-				var on_edge_b: bool = b.x <= 0.5 or b.y <= 0.5 or b.x >= cw - 0.5 or b.y >= ch - 0.5
-				if on_edge_a and on_edge_b:
-					continue  # 整段在画框边缘：不画
-				segs.append(a)
-				segs.append(b)
+		for segs in _neighbor_border_segs:
 			for i in range(0, segs.size() - 1, 2):
 				draw_line(segs[i], segs[i + 1], BORDER_COLOR, bw, true)
 	# 7. hover 地块轮廓描边（灰，最上层；固定屏幕像素粗细，不随缩放）

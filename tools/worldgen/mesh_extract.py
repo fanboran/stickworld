@@ -8,6 +8,7 @@
 性能：段收集向量化（numpy）；环追踪 O(边界段数)（Python 循环，秒级）。
 """
 import numpy as np
+import math
 
 
 def extract_mesh(labels):
@@ -182,19 +183,39 @@ def split_self_touch(loop):
     return out
 
 
-def chaikin_smooth(loop):
-    """Chaikin 曲线细分一次：每段插值 25%/75% 两点，直线台阶变圆滑折线。
+def chaikin_smooth(loop, corner_min_len=3.0):
+    """Chaikin 曲线细分一次：平滑像素台阶，但保留真实直角角。
 
-    插值点在共享线段上 -> 相邻地块的同一段生成相同插值点，无缝保持。
-    放大超 1:1 时台阶（像素角点网格）变缓坡，颗粒感大幅降低且保持锐利。
+    每段插值 25%/75% 两点，直线台阶变圆滑折线；插值点在共享线段上 ->
+    相邻地块同一段生成相同插值点，无缝保持。
+
+    关键：原实现删除**所有**顶点（含真实长边直角角），把直角角切成 45° 斜边，
+    放大后表现为"直角角落塌陷成三角形"（像 3D 建模删顶点）。这里改成：
+    某顶点相邻两条边都足够长（>=corner_min_len）视为**真实角**，保留原顶点不切角；
+    像素台阶（边长 1~2px 的小凸点）仍做 Chaikin 平滑。判定只依赖共享边长 ->
+    相邻地块结论一致，无缝保持。
     """
     n = len(loop)
+    if n < 3:
+        return list(loop)
+    keep = [False] * n
+    for k in range(n):
+        a = loop[(k - 1) % n]
+        b = loop[k]
+        c = loop[(k + 1) % n]
+        len1 = math.hypot(b[0] - a[0], b[1] - a[1])
+        len2 = math.hypot(c[0] - b[0], c[1] - b[1])
+        if len1 >= corner_min_len and len2 >= corner_min_len:
+            keep[k] = True
     out = []
     for k in range(n):
-        y0, x0 = loop[k]
-        y1, x1 = loop[(k + 1) % n]
-        out.append((0.75 * y0 + 0.25 * y1, 0.75 * x0 + 0.25 * x1))
-        out.append((0.25 * y0 + 0.75 * y1, 0.25 * x0 + 0.75 * x1))
+        if keep[k]:
+            out.append(loop[k])  # 真实角：保留原顶点（不切角）
+        else:
+            y0, x0 = loop[k]
+            y1, x1 = loop[(k + 1) % n]
+            out.append((0.75 * y0 + 0.25 * y1, 0.75 * x0 + 0.25 * x1))
+            out.append((0.25 * y0 + 0.75 * y1, 0.25 * x0 + 0.75 * x1))
     return out
 
 

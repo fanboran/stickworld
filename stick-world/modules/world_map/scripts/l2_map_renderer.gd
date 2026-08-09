@@ -38,66 +38,8 @@ var _lakes_mesh: ArrayMesh = null        # 湖泊（浅蓝）
 var _holes_mesh: ArrayMesh = null        # 当前地块洞（海洋色）
 var _tiles_offset := Vector2.ZERO        # 当前地区 bbox 原点在 context 中的位置
 var _context_size := Vector2.ONE
-var _neighbor_polys: Array = []          # 相邻地区轮廓（分界线绘制）
-var _lake_pt_grid := {}                  # 湖泊边界点网格（cell->点列表，用于湖泊接壤判定）
-var _tile_border_segs: Array = []        # 地块描边段（已滤除湖泊接壤段与画框边缘段）
-var _neighbor_border_segs: Array = []    # 相邻地区分界线段（同上过滤）
-const _GRID_CELL := 16.0
-const _LAKE_DIST := 4.0
-
-
-## 点是否在 context 画框边缘
-func _on_context_edge(v: Vector2) -> bool:
-	var cw := _context_size.x
-	var ch := _context_size.y
-	return v.x <= 0.5 or v.y <= 0.5 or v.x >= cw - 0.5 or v.y >= ch - 0.5
-
-
-## 把多边形顶点加入湖泊边界点网格
-func _add_lake_points(pts: PackedVector2Array) -> void:
-	for p in pts:
-		var key := "%d,%d" % [int(p.x / _GRID_CELL), int(p.y / _GRID_CELL)]
-		if not _lake_pt_grid.has(key):
-			_lake_pt_grid[key] = []
-		(_lake_pt_grid[key] as Array).append(p)
-
-
-## 判定线段是否与湖泊接壤：线段的两端与中点任一落在湖泊边界附近(容忍距离内)即视为接壤。
-## 湖泊接壤的边界线段因共享边界/Chaikin 平滑而与湖边界点高度接近；检查三点可覆盖
-## 边界平滑后产生的轻微偏移（~数单位），避免残留零星短描边。
-func _near_lake(pt: Vector2) -> bool:
-	var cx := int(pt.x / _GRID_CELL)
-	var cy := int(pt.y / _GRID_CELL)
-	for dx in range(-1, 2):
-		for dy in range(-1, 2):
-			var key := "%d,%d" % [cx + dx, cy + dy]
-			if not _lake_pt_grid.has(key):
-				continue
-			for p in _lake_pt_grid[key]:
-				if (p - pt).length() <= _LAKE_DIST:
-					return true
-	return false
-
-
-func _is_lake_adjacent(a: Vector2, b: Vector2) -> bool:
-	if _near_lake(a) or _near_lake(b):
-		return true
-	return _near_lake((a + b) * 0.5)
-
-
-## 过滤一条闭合多边形环：返回可绘制的分段（跳过湖泊接壤段与画框边缘段）
-func _filter_border_segs(pts: PackedVector2Array) -> PackedVector2Array:
-	var segs := PackedVector2Array()
-	for i in range(pts.size()):
-		var a: Vector2 = pts[i]
-		var b: Vector2 = pts[(i + 1) % pts.size()]
-		if _on_context_edge(a) and _on_context_edge(b):
-			continue  # 贴边段：不画（消除贴边分界线）
-		if _is_lake_adjacent(a, b):
-			continue  # 湖泊接壤段：不画（避免湖泊被描边成小孔）
-		segs.append(a)
-		segs.append(b)
-	return segs
+var _tile_border_segs: Array = []        # 地块描边段（烘焙，已合并共线段并滤除湖泊/边缘段）
+var _neighbor_border_segs: Array = []    # 相邻地区分界线段（烘焙，同上）
 
 
 func set_data(data: L2WorldData) -> void:
@@ -114,22 +56,36 @@ func refresh() -> void:
 	queue_redraw()
 
 
-func _add_polygon_mesh(verts: PackedVector3Array, colors: PackedColorArray,
-		indices: PackedInt32Array, pts2: PackedVector2Array, fill: Color) -> void:
-	var tri := Geometry2D.triangulate_polygon(pts2)
-	if tri.is_empty():
+## 一次性构建静态网格：直接读烘焙几何（素材阶段已三角剖分），运行时零几何计算。
+func _build_static_mesh() -> void:
+	_static_mesh = null
+	_neighbors_mesh = null
+	_lakes_mesh = null
+	_holes_mesh = null
+	if _data == null:
 		return
-	var base := verts.size()
-	for v in pts2:
-		verts.append(Vector3(v.x, v.y, 0.0))
-		colors.append(fill)
-	for idx in tri:
-		indices.append(base + idx)
+	_tiles_offset = Vector2(_data.tiles_offset[0], _data.tiles_offset[1])
+	_context_size = Vector2(_data.context_size[0], _data.context_size[1])
+	# 烘焙 mesh 顺序：[tiles, holes, lakes, neighbors]
+	var meshes: Array = _data.baked_meshes
+	if meshes.size() >= 1:
+		_static_mesh = _make_mesh_from_baked(meshes[0])
+	if meshes.size() >= 2:
+		_holes_mesh = _make_mesh_from_baked(meshes[1])
+	if meshes.size() >= 3:
+		_lakes_mesh = _make_mesh_from_baked(meshes[2])
+	if meshes.size() >= 4:
+		_neighbors_mesh = _make_mesh_from_baked(meshes[3])
+	# 描边段（烘焙时已合并共线段并滤除边缘段）
+	_tile_border_segs = _data.tile_border_segs
+	_neighbor_border_segs = _data.neighbor_border_segs
 
 
-func _make_mesh(verts: PackedVector3Array, colors: PackedColorArray,
-		indices: PackedInt32Array) -> ArrayMesh:
-	if verts.is_empty():
+func _make_mesh_from_baked(baked: Dictionary) -> ArrayMesh:
+	var verts: PackedVector3Array = baked.get("verts", PackedVector3Array())
+	var colors: PackedColorArray = baked.get("colors", PackedColorArray())
+	var indices: PackedInt32Array = baked.get("indices", PackedInt32Array())
+	if verts.is_empty() or indices.is_empty():
 		return null
 	var arr := []
 	arr.resize(Mesh.ARRAY_MAX)
@@ -139,131 +95,6 @@ func _make_mesh(verts: PackedVector3Array, colors: PackedColorArray,
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	return mesh
-
-
-## 一次性构建静态网格（全部几何合并为 ArrayMesh）
-func _build_static_mesh() -> void:
-	_static_mesh = null
-	_neighbors_mesh = null
-	_lakes_mesh = null
-	_holes_mesh = null
-	_neighbor_polys = []
-	if _data == null:
-		return
-	_tiles_offset = Vector2(_data.tiles_offset[0], _data.tiles_offset[1])
-	_context_size = Vector2(_data.context_size[0], _data.context_size[1])
-
-	var verts := PackedVector3Array()
-	var colors := PackedColorArray()
-	var indices := PackedInt32Array()
-	var hverts := PackedVector3Array()
-	var hcols := PackedColorArray()
-	var hindices := PackedInt32Array()
-	# 地块/湖泊/邻居多边形均为 ctx 系坐标（提取时已含 tiles_offset 偏移），渲染不平移
-	for t in _data.tiles:
-		var col: Array = t.get("color", [])
-		var fill := Color(0.6, 0.7, 0.8)
-		if col.size() >= 3:
-			fill = Color(col[0] / 255.0, col[1] / 255.0, col[2] / 255.0)
-		for poly in t.get("polygons", []):
-			if (poly as Array).size() < 3:
-				continue
-			var pts2 := PackedVector2Array()
-			for p in poly:
-				pts2.append(Vector2(p[1], p[0]))
-			_add_polygon_mesh(verts, colors, indices, pts2, fill)
-		for hole in t.get("holes", []):
-			var hpts_inner: Array = hole.get("points", []) if hole is Dictionary else hole
-			if (hpts_inner as Array).size() < 3:
-				continue
-			var hpts := PackedVector2Array()
-			for p in hpts_inner:
-				hpts.append(Vector2(p[1], p[0]))
-			var hfill := OCEAN_COLOR
-			if hole is Dictionary and hole.get("lake", false):
-				hfill = LAKE_COLOR
-			_add_polygon_mesh(hverts, hcols, hindices, hpts, hfill)
-	_static_mesh = _make_mesh(verts, colors, indices)
-	_holes_mesh = _make_mesh(hverts, hcols, hindices)
-
-	# 湖泊（ctx 系，不平移）
-	var lverts := PackedVector3Array()
-	var lcols := PackedColorArray()
-	var lindices := PackedInt32Array()
-	for poly in _data.lakes:
-		if (poly as Array).size() < 3:
-			continue
-		var pts2 := PackedVector2Array()
-		for p in poly:
-			pts2.append(Vector2(p[1], p[0]))
-		_add_polygon_mesh(lverts, lcols, lindices, pts2, LAKE_COLOR)
-	_lakes_mesh = _make_mesh(lverts, lcols, lindices)
-
-	# 相邻地区（灰色，坐标已在 context 系，无需平移）
-	var nverts := PackedVector3Array()
-	var ncols := PackedColorArray()
-	var nindices := PackedInt32Array()
-	for nb in _data.neighbors:
-		var polys: Array = nb.get("polygons", [])
-		for poly in polys:
-			if (poly as Array).size() < 3:
-				continue
-			var pts2 := PackedVector2Array()
-			for p in poly:
-				pts2.append(Vector2(p[1], p[0]))
-			_add_polygon_mesh(nverts, ncols, nindices, pts2, NEIGHBOR_COLOR)
-		for poly in polys:
-			if (poly as Array).size() < 3:
-				continue
-			var line := PackedVector2Array()
-			for p in poly:
-				line.append(Vector2(p[1], p[0]))
-			_neighbor_polys.append(line)
-	_neighbors_mesh = _make_mesh(nverts, ncols, nindices)
-
-	# 湖泊边界点网格：描边时跳过与湖泊接壤的段（避免湖泊被描边成小孔/出现接壤描边）
-	_lake_pt_grid = {}
-	for poly in _data.lakes:
-		var lpts := PackedVector2Array()
-		for p in poly:
-			lpts.append(Vector2(p[1], p[0]))
-		_add_lake_points(lpts)
-	for t in _data.tiles:
-		for hole in t.get("holes", []):
-			if not (hole is Dictionary and hole.get("lake", false)):
-				continue
-			var hpts := PackedVector2Array()
-			for p in hole.get("points", []):
-				hpts.append(Vector2(p[1], p[0]))
-			_add_lake_points(hpts)
-
-	# 预计算地块描边段与相邻地区分界线段（滤除湖泊接壤段与画框边缘段）
-	_tile_border_segs = []
-	for t in _data.tiles:
-		for poly in t.get("polygons", []):
-			if (poly as Array).size() < 3:
-				continue
-			var tpts := PackedVector2Array()
-			for pp in poly:
-				tpts.append(Vector2(pp[1], pp[0]))
-			var segs := _filter_border_segs(tpts)
-			if segs.size() >= 2:
-				_tile_border_segs.append(segs)
-	_neighbor_border_segs = []
-	for line in _neighbor_polys:
-		var closed := PackedVector2Array(line)
-		var segs := PackedVector2Array()
-		for i in range(closed.size()):
-			var a: Vector2 = closed[i]
-			var b: Vector2 = closed[(i + 1) % closed.size()]
-			if _on_context_edge(a) and _on_context_edge(b):
-				continue  # 整段在画框边缘：不画
-			if _is_lake_adjacent(a, b):
-				continue  # 湖泊接壤段：不画（避免湖泊被描边成小孔）
-			segs.append(a)
-			segs.append(b)
-		if segs.size() >= 2:
-			_neighbor_border_segs.append(segs)
 
 
 func _process(_delta: float) -> void:
@@ -303,16 +134,14 @@ func _draw() -> void:
 	# 5. 当前地块洞（海洋色）
 	if _holes_mesh != null:
 		draw_mesh(_holes_mesh, null)
-	# 5.5 地块常驻描边（内部省份边界；已预滤除湖泊接壤段与画框边缘段）
-	for segs in _tile_border_segs:
-		for i in range(0, segs.size() - 1, 2):
-			draw_line(segs[i], segs[i + 1], TILE_BORDER_COLOR, TILE_BORDER_WIDTH, true)
-	# 6. 相邻地区分界线（深色，抗锯齿矢量线；已预滤除湖泊接壤段与画框边缘段）
+	# 5.5 地块常驻描边（内部省份边界；已烘焙合并共线段并滤除湖泊/边缘段）
+	for seg in _tile_border_segs:
+		draw_line(seg[0], seg[1], TILE_BORDER_COLOR, TILE_BORDER_WIDTH, true)
+	# 6. 相邻地区分界线（深色，抗锯齿矢量线；已烘焙合并共线段）
 	if not _neighbor_border_segs.is_empty():
 		var bw := BORDER_WIDTH()
-		for segs in _neighbor_border_segs:
-			for i in range(0, segs.size() - 1, 2):
-				draw_line(segs[i], segs[i + 1], BORDER_COLOR, bw, true)
+		for seg in _neighbor_border_segs:
+			draw_line(seg[0], seg[1], BORDER_COLOR, bw, true)
 	# 6.5 湖泊绘制到最上层：覆盖灰色相邻地区/非地块区（湖是水域，不应被灰影盖住）。
 	# 地块内湖泊已作洞（5 步洞网格同色），此处再绘一次湖泊多边形，确保非地块区的湖也显现。
 	if _lakes_mesh != null:

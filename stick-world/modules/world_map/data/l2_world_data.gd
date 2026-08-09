@@ -36,6 +36,14 @@ var lakes: Array = []
 ## 地区名（region_001 等）
 var region_id: String = ""
 
+## 烘焙几何（l2_geom.bin，素材阶段已三角剖分，运行时零几何计算）。
+## meshes: Array[Dictionary]，顺序 [tiles, holes, lakes, neighbors]，
+##   每项 {verts: PackedVector3Array, colors: PackedColorArray, indices: PackedInt32Array}
+var baked_meshes: Array = []
+## 描边段（渲染坐标，已合并共线段消除毛刷）：每项 PackedVector2Array（每段 2 点）
+var tile_border_segs: Array = []
+var neighbor_border_segs: Array = []
+
 var _tile_by_label: Dictionary = {}
 
 
@@ -61,6 +69,7 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	world.tiles_offset = Vector2i(int(toff[0]), int(toff[1]))
 	world.neighbors = data.get("neighbors", [])
 	world.lakes = data.get("lakes", [])
+	world.load_baked_geom("%s/l2_geom.bin" % base_dir)
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l2_base_2048.png")]
 	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l2_tiles_index_2048.png")]
 	var border_path := "%s/%s" % [base_dir, data.get("border_texture", "l2_tiles_border_2048.png")]
@@ -99,3 +108,63 @@ func query_at_map_pos(map_pos: Vector2) -> Dictionary:
 
 func get_tile(label: int) -> Dictionary:
 	return _tile_by_label.get(label, {})
+
+
+## 解析 l2_geom.bin（素材阶段烘焙的三角剖分 + 描边段），运行时零几何计算。
+## 格式见 tools/worldgen/l2_bake.py 头部注释。
+func load_baked_geom(bin_path: String) -> void:
+	baked_meshes.clear()
+	tile_border_segs.clear()
+	neighbor_border_segs.clear()
+	if not FileAccess.file_exists(bin_path):
+		return
+	var f := FileAccess.open(bin_path, FileAccess.READ)
+	if f == null:
+		return
+	# magic + ver
+	var magic := f.get_buffer(4).get_string_from_ascii()
+	if magic != "L2GB":
+		f.close()
+		return
+	var _ver: int = f.get_16()
+	# 4 个 mesh section
+	for _s in range(4):
+		var tri_count := f.get_32()
+		var verts := PackedVector3Array()
+		var colors := PackedColorArray()
+		var indices := PackedInt32Array()
+		for _t in range(tri_count):
+			var v0 := Vector3(f.get_float(), f.get_float(), 0.0)
+			var v1 := Vector3(f.get_float(), f.get_float(), 0.0)
+			var v2 := Vector3(f.get_float(), f.get_float(), 0.0)
+			var r := f.get_8()
+			var g := f.get_8()
+			var b := f.get_8()
+			f.get_8()  # alpha
+			var base := verts.size()
+			verts.append(v0)
+			verts.append(v1)
+			verts.append(v2)
+			var col := Color(r / 255.0, g / 255.0, b / 255.0)
+			colors.append(col)
+			colors.append(col)
+			colors.append(col)
+			indices.append(base)
+			indices.append(base + 1)
+			indices.append(base + 2)
+		baked_meshes.append({"verts": verts, "colors": colors, "indices": indices})
+	# 2 个 border section
+	tile_border_segs = _read_border_section(f)
+	neighbor_border_segs = _read_border_section(f)
+	f.close()
+
+
+func _read_border_section(f: FileAccess) -> Array:
+	var out := []
+	var seg_count := f.get_32()
+	for _i in range(seg_count):
+		var a := Vector2(f.get_float(), f.get_float())
+		var b := Vector2(f.get_float(), f.get_float())
+		var line := PackedVector2Array([a, b])
+		out.append(line)
+	return out

@@ -197,12 +197,19 @@ def main():
         with open(os.path.join(outd, "l2_world.json"), "w", encoding="utf-8") as f:
             json.dump(world, f, ensure_ascii=False, separators=(",", ":"))
 
+        # 烘焙几何：三角剖分 + 描边段提前到素材阶段，运行时零几何计算
+        from l2_bake import bake
+        stats = bake(world, os.path.join(outd, "l2_geom.bin"))
+
         # 复制到游戏 config
         gamed = os.path.join(GAME_DIR, rid)
         os.makedirs(gamed, exist_ok=True)
-        for fn in ("l2_world.json", "l2_tiles_index.png"):
+        for fn in ("l2_world.json", "l2_tiles_index.png", "l2_geom.bin"):
             shutil.copy(os.path.join(outd, fn), os.path.join(gamed, fn))
-        print("  %s: %dx%d -> 正方形 %d, %d 地块, 邻居 %d, 湖泊 %d" % (rid, W, H, side, len(tiles), len(neighbors_data), len(lakes)))
+        print("  %s: %dx%d -> 正方形 %d, %d 地块, 邻居 %d, 湖泊 %d | tris T%d H%d L%d N%d | border %d/%d"
+              % (rid, W, H, side, len(tiles), len(neighbors_data), len(lakes),
+                 stats["tile_tris"], stats["hole_tris"], stats["lake_tris"], stats["neighbor_tris"],
+                 stats["tile_border_segs"], stats["neighbor_border_segs"]))
 
     print("完成。输出: %s" % OUT_DIR)
 

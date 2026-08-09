@@ -120,8 +120,12 @@ def main():
         TILE_LABEL = 1000
         LAKE_LABEL = 2000
         ctx[(ctx == 0) & ctx_lake] = LAKE_LABEL
+        # 陆地上所有湖像素标为 LAKE_LABEL（含地块内部 -> 地块洞；含非地块铺地区 -> 湖泊）
+        # （原实现只在 ctx==0 处标湖 + 整块铺地块标签 -> 地块内/非地块区的湖被覆盖成地块色/灰影）
+        ctx[ctx_lake & (ctx != 0)] = LAKE_LABEL
         tile_zone = tiles_small[0:H, 0:W] > 0
-        ctx[ty:ty + H, tx:tx + W][tile_zone] = TILE_LABEL + tiles_small[0:H, 0:W][tile_zone]
+        land_in_tile = tile_zone & ~ctx_lake[ty:ty + H, tx:tx + W]
+        ctx[ty:ty + H, tx:tx + W][land_in_tile] = TILE_LABEL + tiles_small[0:H, 0:W][land_in_tile]
 
         # Chaikin 1 次：平滑毛边同时控制数据量（运行时剖分快）
         ctx_mesh = simplify_mesh(extract_mesh(ctx.astype(np.int32)), smooth_passes=1)

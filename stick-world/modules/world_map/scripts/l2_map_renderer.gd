@@ -17,6 +17,7 @@ var hovered_tile: Dictionary = {}
 const EDGE_COLOR := Color(0.55, 0.55, 0.55)
 const EDGE_WIDTH := 5.0          # 地图单位线宽（邻居/地块常驻描边用）
 const EDGE_SCREEN_PX := 2.5      # hover 描边固定屏幕像素（不随缩放）
+const HOVER_MARGIN := 2.0        # hover 描边至少比地块常驻描边粗的裕量（地图单位）
 
 ## 相邻地区分界线（深色）
 const BORDER_COLOR := Color(0.25, 0.25, 0.25)
@@ -42,7 +43,7 @@ var _lake_pt_grid := {}                  # 湖泊边界点网格（cell->点列�
 var _tile_border_segs: Array = []        # 地块描边段（已滤除湖泊接壤段与画框边缘段）
 var _neighbor_border_segs: Array = []    # 相邻地区分界线段（同上过滤）
 const _GRID_CELL := 16.0
-const _LAKE_DIST := 2.5
+const _LAKE_DIST := 4.0
 
 
 ## 点是否在 context 画框边缘
@@ -61,21 +62,27 @@ func _add_lake_points(pts: PackedVector2Array) -> void:
 		(_lake_pt_grid[key] as Array).append(p)
 
 
-## 判定线段是否与湖泊接壤：中点附近(容忍距离内)是否存在湖泊边界点。
-## 湖泊接壤的边界线段因共享边界/Chaikin 平滑而与湖边界点高度接近（~1 单位内）。
-func _is_lake_adjacent(a: Vector2, b: Vector2) -> bool:
-	var m := (a + b) * 0.5
-	var cx := int(m.x / _GRID_CELL)
-	var cy := int(m.y / _GRID_CELL)
+## 判定线段是否与湖泊接壤：线段的两端与中点任一落在湖泊边界附近(容忍距离内)即视为接壤。
+## 湖泊接壤的边界线段因共享边界/Chaikin 平滑而与湖边界点高度接近；检查三点可覆盖
+## 边界平滑后产生的轻微偏移（~数单位），避免残留零星短描边。
+func _near_lake(pt: Vector2) -> bool:
+	var cx := int(pt.x / _GRID_CELL)
+	var cy := int(pt.y / _GRID_CELL)
 	for dx in range(-1, 2):
 		for dy in range(-1, 2):
 			var key := "%d,%d" % [cx + dx, cy + dy]
 			if not _lake_pt_grid.has(key):
 				continue
 			for p in _lake_pt_grid[key]:
-				if (p - m).length() <= _LAKE_DIST:
+				if (p - pt).length() <= _LAKE_DIST:
 					return true
 	return false
+
+
+func _is_lake_adjacent(a: Vector2, b: Vector2) -> bool:
+	if _near_lake(a) or _near_lake(b):
+		return true
+	return _near_lake((a + b) * 0.5)
 
 
 ## 过滤一条闭合多边形环：返回可绘制的分段（跳过湖泊接壤段与画框边缘段）
@@ -306,6 +313,10 @@ func _draw() -> void:
 		for segs in _neighbor_border_segs:
 			for i in range(0, segs.size() - 1, 2):
 				draw_line(segs[i], segs[i + 1], BORDER_COLOR, bw, true)
+	# 6.5 湖泊绘制到最上层：覆盖灰色相邻地区/非地块区（湖是水域，不应被灰影盖住）。
+	# 地块内湖泊已作洞（5 步洞网格同色），此处再绘一次湖泊多边形，确保非地块区的湖也显现。
+	if _lakes_mesh != null:
+		draw_mesh(_lakes_mesh, null)
 	# 7. hover 地块轮廓描边（灰，最上层；固定屏幕像素粗细，不随缩放）
 	var hpolys: Array = hovered_tile.get("polygons", [hovered_tile.get("polygon", [])])
 	for hp in hpolys:
@@ -319,7 +330,8 @@ func _draw() -> void:
 		if _camera != null and _camera.has_method("get_zoom"):
 			var z: float = _camera.get_zoom()
 			if z > 0.0001:
-				hw = EDGE_SCREEN_PX / z
+				# hover 描边至少比地块常驻描边粗一个裕量：放大时避免比地块描边还细
+				hw = maxf(EDGE_SCREEN_PX / z, TILE_BORDER_WIDTH + HOVER_MARGIN)
 		draw_polyline(hpts, EDGE_COLOR, hw, true)
 
 

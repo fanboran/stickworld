@@ -63,18 +63,20 @@ func open(region_id: String) -> void:
 			return
 		if map_renderer != null and map_renderer.has_method("set_data"):
 			map_renderer.set_data(data)
-		# 初始视角：1:1 像素完美特写（无缩放），当前地区中心对屏幕中心
+		# 初始视角：整图适配屏幕（fit 正方形 context，贴着大小特写，居中显示）
 		if map_camera != null and map_camera.has_method("set_zoom"):
 			var vp := get_viewport()
 			if vp != null:
 				var vp_size: Vector2 = vp.get_visible_rect().size
-				map_camera.set_zoom(1.0)
+				var msize: Vector2 = data.size
+				if data.context_size.x > 0:
+					msize = data.context_size
+				var target_h: float = vp_size.y * 0.72
+				var fit_zoom: float = target_h / float(msize.y)
+				map_camera.set_zoom(fit_zoom)
 				if map_camera.has_method("set_offset"):
-					# 当前地区中心（context 系）对准屏幕中心
-					var center: Vector2 = Vector2(
-						float(data.size.x) * 0.5, float(data.size.y) * 0.5) \
-						+ Vector2(data.tiles_offset[1], data.tiles_offset[0])
-					map_camera.set_offset(vp_size * 0.5 - center)
+					map_camera.set_offset(vp_size * 0.5 - Vector2(
+						float(msize.x) * fit_zoom * 0.5, float(msize.y) * fit_zoom * 0.5))
 	visible = true
 
 

@@ -93,18 +93,18 @@ def extract_mesh(labels):
                 y2, x2 = int(srt[cur, 3]), int(srt[cur, 4])
                 loop.append((y1, x1))
                 t_in = int(theta[cur])
-                # 角点 (y2,x2) 的出向候选（同 label；排除掉头）
-                # 规则：最左转（CCW 最大角，<180）——保持 label 在左的"左手沿墙"追踪，
-                #       在 T 形/凹角处不产生自交（"最小角"规则会自接触）
+                # 角点 (y2,x2) 的出向候选（同 label；排除回头段）
+                # 规则：最左转（CCW 最大角，含 180° 锯齿舌掉头）——保持 label 在左的
+                #       "左手沿墙"追踪，T 形/凹角/1px 锯齿不产生自交、不分裂环
                 best = -1
                 best_d = -1.0
                 for k in by_start.get((y2, x2), []):
                     if k == cur or k in visited:
                         continue
                     if int(srt[k, 3]) == y1 and int(srt[k, 4]) == x1:
-                        continue  # 掉头
+                        continue  # 回头段（走回刚来的角点）
                     d = (int(theta[k]) - t_in) % 360
-                    if d != 180 and d > best_d:
+                    if d > best_d:
                         best_d = d
                         best = k
                 if best < 0:
@@ -128,7 +128,14 @@ def extract_mesh(labels):
                 if area < 0:
                     result[lab]["outer"].append(loop)
                 else:
-                    result[lab]["holes"].append(loop)
+                    # 洞环验证：质心 3x3 邻域多数"是本 label"= 假洞（边界自接触，
+                    # 1px 细节分支重叠角点让追踪跨分支围住本 label 陆地）——丢弃，
+                    # 外环本身完整覆盖该区域；环内是其他 label（海洋/湖泊/邻居）= 真洞保留。
+                    cy = int(sum(p[0] for p in loop) / len(loop))
+                    cx = int(sum(p[1] for p in loop) / len(loop))
+                    sub = labels[max(0, cy - 1):cy + 2, max(0, cx - 1):cx + 2]
+                    if sub.size and np.bincount(sub.ravel()).argmax() != lab:
+                        result[lab]["holes"].append(loop)
     return result
 
 
@@ -191,10 +198,11 @@ def chaikin_smooth(loop):
     return out
 
 
-def simplify_mesh(mesh, smooth=True):
+def simplify_mesh(mesh, smooth=True, smooth_passes=2):
     """自接触分割 + 共线简化（原地修改外层 dict）。
 
-    smooth=True 时对环做 1 次 Chaikin 细分（放大边界圆滑，无缝保持）。
+    smooth=True 时对环做 smooth_passes 次 Chaikin 细分（放大边界圆滑，无缝保持）。
+    多次细分：像素台阶变缓坡，描边毛边大幅减少。
     """
     for v in mesh.values():
         outer = []
@@ -206,6 +214,7 @@ def simplify_mesh(mesh, smooth=True):
             holes.extend(split_self_touch(h))
         v["holes"] = [simplify_collinear(h) for h in holes]
         if smooth:
-            v["outer"] = [chaikin_smooth(o) for o in v["outer"]]
-            v["holes"] = [chaikin_smooth(h) for h in v["holes"]]
+            for _ in range(smooth_passes):
+                v["outer"] = [chaikin_smooth(o) for o in v["outer"]]
+                v["holes"] = [chaikin_smooth(h) for h in v["holes"]]
     return mesh

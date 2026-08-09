@@ -127,8 +127,8 @@ def main():
         land_in_tile = tile_zone & ~ctx_lake[ty:ty + H, tx:tx + W]
         ctx[ty:ty + H, tx:tx + W][land_in_tile] = TILE_LABEL + tiles_small[0:H, 0:W][land_in_tile]
 
-        # Chaikin 1 次：平滑毛边同时控制数据量（运行时剖分快）
-        ctx_mesh = simplify_mesh(extract_mesh(ctx.astype(np.int32)), smooth_passes=1)
+        # Chaikin 2 次：充分平滑像素台阶，控制数据量，消除放大后地块边缘麻麻赖赖
+        ctx_mesh = simplify_mesh(extract_mesh(ctx.astype(np.int32)), smooth_passes=2)
         # 灰影 = context 内出现的其他地区（8192 精度）
         neighbors_data = []
         for n, mv in ctx_mesh.items():

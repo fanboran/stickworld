@@ -12,7 +12,7 @@
   - color_map.json          索引图颜色 -> 地区
 
 用法：
-  python tools/worldgen/export_l3_view.py
+  python tools/worldgen/l2_export/export_l3_view.py
 """
 import json
 import os

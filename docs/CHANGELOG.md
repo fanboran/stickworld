@@ -17,7 +17,7 @@
 
 ### L2 渲染性能与描边优化（2026-08）
 
-- **运行时零几何计算（烘焙）**：三角剖分（earcut）与描边过滤/共线合并全部从运行时提前到素材阶段。新增 `tools/worldgen/earclip.py`（纯 Python 单环耳切，大环先 Douglas-Peucker 简化消除 O(n²) 性能瓶颈，10659 顶点湖 0.23s）+ `l2_bake.py`（输出 `l2_geom.bin` 二进制：4 个 mesh 段=地块/洞/湖泊/邻居 + 2 个描边段）。修复打开 L2 卡顿数秒（原 `_build_static_mesh` 对 27.5 万顶点逐个 `Geometry2D.triangulate_polygon` 运行时剖分）
+- **运行时零几何计算（烘焙）**：三角剖分（earcut）与描边过滤/共线合并全部从运行时提前到素材阶段。新增 `tools/worldgen/l2_export/earclip.py`（纯 Python 单环耳切，大环先 Douglas-Peucker 简化消除 O(n²) 性能瓶颈，10659 顶点湖 0.23s）+ `l2_bake.py`（输出 `l2_geom.bin` 二进制：4 个 mesh 段=地块/洞/湖泊/邻居 + 2 个描边段）。修复打开 L2 卡顿数秒（原 `_build_static_mesh` 对 27.5 万顶点逐个 `Geometry2D.triangulate_polygon` 运行时剖分）
 - **渲染器改读烘焙 mesh**（`l2_map_renderer.gd`）：`_build_static_mesh` 直接读 `_data.baked_meshes` 组装 ArrayMesh，删除 `_add_polygon_mesh`/`Geometry2D.triangulate_polygon`/湖泊边界点网格等运行时计算；描边段直接读烘焙数据
 - **描边毛刷消除**：描边段烘焙时 DP 简化 + 共线合并（`_merge_collinear_segments`），短碎线段数量大幅下降（region_008 描边段 10711/18316），`_draw` 逐段 `draw_line` 数量锐减，抗锯齿叠加毛刺消失
 - **数据体积**：region_008 `.bin` 仅 1.26 MB（原 `l2_world.json` 7.3 MB），加载更快

@@ -6,7 +6,7 @@
 用共享网格提取重建 tiles.json（polygons/holes/color/centroid）。
 
 用法：
-  python tools/worldgen/update_tiles_coastline.py [region_XXX ...]
+  python tools/worldgen/l2_export/update_tiles_coastline.py [region_XXX ...]
 """
 import json
 import os

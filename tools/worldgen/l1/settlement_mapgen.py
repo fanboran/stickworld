@@ -8,7 +8,7 @@
     - T1 部落：地图小、无城墙、少量民居
 
 用法：
-  python tools/worldgen/settlement_mapgen.py [--out <目录>] [--input <l1_world.json>]
+  python tools/worldgen/l1/settlement_mapgen.py [--out <目录>] [--input <l1_world.json>]
 
 0.9b 完成后，L1 世界数据（l1_world.json）中的聚落 map_id 应指向这 8 张图；
 消费端 game_root 需注册 l1_settlement_00..07 并写入战略图数据。

@@ -2,7 +2,7 @@ class_name L2WorldData
 extends RefCounted
 ## L2 地区数据容器 —— M 键 L3 地图点击地区下钻视图
 ##
-## 数据来源：tools/worldgen/export_l2_view_packs.py 产出的 l2_world.json + PNG
+## 数据来源：tools/worldgen/l2_export/export_l2_view_packs.py 产出的 l2_world.json + PNG
 ## （底图/地块索引图/边界图，最长边 2048；地块 label 与 L3 独立命名空间）
 ## hover 高亮用地块索引图像素解码（P 社 provinces.bmp 机制）
 
@@ -111,7 +111,7 @@ func get_tile(label: int) -> Dictionary:
 
 
 ## 解析 l2_geom.bin（素材阶段烘焙的三角剖分 + 描边段），运行时零几何计算。
-## 格式见 tools/worldgen/l2_bake.py 头部注释。
+## 格式见 tools/worldgen/l2_export/l2_bake.py 头部注释。
 func load_baked_geom(bin_path: String) -> void:
 	baked_meshes.clear()
 	tile_border_segs.clear()

@@ -5,7 +5,7 @@
 - 其他地区：地块上色 + 边界描边
 
 用法：
-  python tools/worldgen/merge_tiny_tiles.py
+  python tools/worldgen/l1/merge_tiny_tiles.py
 """
 import argparse
 import json

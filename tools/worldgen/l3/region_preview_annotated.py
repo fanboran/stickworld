@@ -1,7 +1,7 @@
 """唯一色标注预览生成器 —— 给每个地区分配唯一颜色 + 编号标注，消除色板循环歧义。
 
 用法：
-  python tools/worldgen/region_preview_annotated.py [--size 2048]
+  python tools/worldgen/l3/region_preview_annotated.py [--size 2048]
 输出：
   output/regions/region_preview_unique.png    # 每地区唯一色（含编号）
   output/regions/region_preview_unique_labels.png # 唯一色 + label 编号标注

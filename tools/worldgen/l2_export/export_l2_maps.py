@@ -13,7 +13,7 @@
   4. 产出：地块标签图 .npy + 预览 PNG + tiles.json
 
 用法：
-  python tools/worldgen/export_l2_maps.py
+  python tools/worldgen/l2_export/export_l2_maps.py
 """
 import argparse
 import json

@@ -4,7 +4,7 @@
 - 地块：tiles_8192.npy 按 bbox 贴入，HSL 随机着色 + 边界描边
 
 用法：
-  python tools/worldgen/export_l1_overview.py
+  python tools/worldgen/l2_export/export_l1_overview.py
 """
 import json
 import os

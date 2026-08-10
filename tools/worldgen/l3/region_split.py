@@ -15,7 +15,7 @@
   5. 大陆太小（无大岛）时整个大陆单独一个地区
 
 用法：
-  python tools/worldgen/region_split.py [--size 2048] [--out <dir>]
+  python tools/worldgen/l3/region_split.py [--size 2048] [--out <dir>]
 """
 import argparse
 import json

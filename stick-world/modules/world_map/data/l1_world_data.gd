@@ -3,7 +3,7 @@ extends RefCounted
 ## L1 世界数据容器 —— P0 战略图单层数据（玩家第一阶段世界图 = 8 城邦）
 ##
 ## 详见 docs/技术/架构/战略图架构.md §3（L1 单层版）
-## 数据来源：tools/worldgen/l1_worldgen.py 产出的 l1_world.json + l1_base.png + l1_mask.png
+## 数据来源：tools/worldgen/l1/l1_worldgen.py 产出的 l1_world.json + l1_base.png + l1_mask.png
 ##
 ## 设计约束（08-程序化世界生成.md §0.19）：
 ##   - 1 个 L1 地块 = 1 个聚落（或空聚落）

@@ -1,14 +1,14 @@
 """世界生成 CLI 工具（开发期，Python）。
 
 用法：
-  python tools/worldgen/generate.py candidates [--count 10] [--size 1024]
+  python tools/worldgen/legacy/generate.py candidates [--count 10] [--size 1024]
       批量生成大陆轮廓候选 PNG（供抽卡挑选）。
 
-  python tools/worldgen/generate.py world [--seed N] [--size 4096]
+  python tools/worldgen/legacy/generate.py world [--seed N] [--size 4096]
       在指定种子的大陆上生成完整 L3 世界地图（高程/群系/河流），
       输出 locked_continent.png + world_map_l3.png。
 
-  python tools/worldgen/generate.py world-from-png --mask <path> [--seed N] [--size 4096]
+  python tools/worldgen/legacy/generate.py world-from-png --mask <path> [--seed N] [--size 4096]
       从外部 PNG 读取大陆掩码（如回收站找回的锁定模板），
       放大到目标尺寸后叠加群系/河流，输出 world_map_l3.png。
 

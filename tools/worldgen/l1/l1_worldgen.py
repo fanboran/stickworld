@@ -14,7 +14,7 @@
   - 贫瘠 L1 地块 = 空聚落（无聚落、无建筑、不可进入）
 
 用法：
-  python tools/worldgen/l1_worldgen.py --seed N [--out <目录>] [--size 1024]
+  python tools/worldgen/l1/l1_worldgen.py --seed N [--out <目录>] [--size 1024]
 """
 import argparse
 import json

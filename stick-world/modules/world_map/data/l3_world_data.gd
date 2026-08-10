@@ -2,7 +2,7 @@ class_name L3WorldData
 extends RefCounted
 ## L3 大世界数据容器 —— M 键战略图（13 个 L2 地区分块）
 ##
-## 数据来源：tools/worldgen/export_l3_view.py 产出的 l3_world.json + PNG
+## 数据来源：tools/worldgen/l2_export/export_l3_view.py 产出的 l3_world.json + PNG
 ## 渲染为纯矢量（色块+描边，见 L3MapRenderer），这里只提供：
 ##   - 索引图（hover/下钻像素查询，P 社 provinces.bmp 机制）
 ##   - 地区元数据（label/多边形/颜色）

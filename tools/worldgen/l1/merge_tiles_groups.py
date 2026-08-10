@@ -5,7 +5,7 @@
 - 双邻 -> 归入"归后 |A-B| 更小"的组（保持两块均衡）
 
 用法：
-  python tools/worldgen/merge_tiles_groups.py region_002 --n 2
+  python tools/worldgen/l1/merge_tiles_groups.py region_002 --n 2
 """
 import argparse
 import json

@@ -1,7 +1,7 @@
 """把指定地区合并为"每岛一块"：地块 = 岛屿（连通分量），重建 tiles 数据与预览。
 
 用法：
-  python tools/worldgen/merge_island_tiles.py region_009 region_010 region_011
+  python tools/worldgen/l1/merge_island_tiles.py region_009 region_010 region_011
 """
 import json
 import os

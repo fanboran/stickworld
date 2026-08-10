@@ -3,7 +3,7 @@ extends RefCounted
 ## L1 地块定义 —— 1 个 L1 地块 = 1 个聚落（或空聚落）
 ##
 ## 详见 docs/设计/系统/08-程序化世界生成.md §0.19
-## 数据来源：tools/worldgen/l1_worldgen.py 产出的 l1_world.json
+## 数据来源：tools/worldgen/l1/l1_worldgen.py 产出的 l1_world.json
 
 ## 地块 ID（"l1_tile_00"）
 var tile_id: String = ""

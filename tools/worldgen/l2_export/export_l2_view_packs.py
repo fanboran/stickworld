@@ -10,7 +10,7 @@ stick-world/config/strategic_map/l2_packs/region_XXX/）：
 索引图降采样用"分块众数"（mode），保证小块不丢失；地块 label 与 L3 独立命名空间。
 
 用法：
-  python tools/worldgen/export_l2_view_packs.py [region_XXX ...]
+  python tools/worldgen/l2_export/export_l2_view_packs.py [region_XXX ...]
 """
 import json
 import os

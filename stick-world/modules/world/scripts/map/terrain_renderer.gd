@@ -218,7 +218,10 @@ func update_dirt_road_visual() -> void:
 		_root.add_child(_root._dirt_road_poly)
 	var x0: float = float(min_cell) * PlacementGrid.CELL_SIZE
 	var x1: float = float(max_cell + 1) * PlacementGrid.CELL_SIZE
-	_root._dirt_road_poly.polygon = PackedVector2Array([Vector2(x0, _root.ground_y), Vector2(x1, _root.ground_y), Vector2(x1, _root.ground_bottom), Vector2(x0, _root.ground_bottom)])
+	_root._dirt_road_poly.polygon = PackedVector2Array([
+		Vector2(x0, _root.ground_y), Vector2(x1, _root.ground_y),
+		Vector2(x1, _root.ground_bottom), Vector2(x0, _root.ground_bottom),
+	])
 
 
 ## 获取城内左边界（从 Shader 参数读）

@@ -76,7 +76,10 @@ func _build_ui() -> void:
 	_add_slider(vbox, "wall_gap_size.y", 0.0, 12.0, 5.0, 0.5, "wall_gap_size", 1)
 
 
-func _add_slider(parent: Control, label_text: String, min_v: float, max_v: float, default_v: float, step: float, uniform_name: String = "", component: int = -1) -> HSlider:
+func _add_slider(
+	parent: Control, label_text: String, min_v: float, max_v: float,
+	default_v: float, step: float, uniform_name: String = "", component: int = -1
+) -> HSlider:
 	var label := Label.new()
 	label.text = "%s: %s" % [label_text, str(default_v)]
 	label.name = "Label_" + label_text.replace(".", "_")

@@ -49,7 +49,10 @@ func _run_tests_async() -> void:
 	_helper = CombatTestSetup.new()
 	await _helper.start(self)
 	_formation = _helper.formation
-	_battle_director = _helper.game_root.get_battle_director_node() if _helper.game_root != null and _helper.game_root.has_method("get_battle_director_node") else null
+	_battle_director = _helper.game_root.get_battle_director_node() if (
+		_helper.game_root != null
+		and _helper.game_root.has_method("get_battle_director_node")
+	) else null
 	# 生成队伍成员并注入 FormationSystem
 	_helper.spawn_test_units(PARTY_SIZE)
 	for i in 1:

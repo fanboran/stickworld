@@ -158,7 +158,10 @@ static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 ## 在 parent_bone 上创建精灵，表示从 parent 到子骨骼的肢体段
 ## px, py = 子骨骼相对 parent 的偏移
 ## 精灵放在段的中点，旋转对齐段方向
-static func create_sprite(parent_bone: Node2D, id: int, length: int, thickness: int, node_type: int, px: float, py: float, thickness_scale: float, colors: Dictionary) -> Sprite2D:
+static func create_sprite(
+	parent_bone: Node2D, id: int, length: int, thickness: int, node_type: int,
+	px: float, py: float, thickness_scale: float, colors: Dictionary
+) -> Sprite2D:
 	var sprite := Sprite2D.new()
 	sprite.name = "sprite_%d" % id
 	parent_bone.add_child(sprite)

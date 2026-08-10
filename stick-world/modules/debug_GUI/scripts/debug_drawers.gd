@@ -400,4 +400,8 @@ static func draw_entity_info(control: Control, ctx: Dictionary) -> void:
 	var font: Font = control.get_theme_default_font()
 	# 鼠标旁边显示绿色世界坐标
 	var diag_pos := world_to_screen(mouse_world, ctx)
-	control.draw_string(font, diag_pos + Vector2(12, -12), "世界:(%d,%d)" % [int(mouse_world.x), int(mouse_world.y)], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.8, 1.0, 0.8, 0.7))
+	control.draw_string(
+		font, diag_pos + Vector2(12, -12),
+		"世界:(%d,%d)" % [int(mouse_world.x), int(mouse_world.y)],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.8, 1.0, 0.8, 0.7)
+	)

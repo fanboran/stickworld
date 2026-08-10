@@ -184,7 +184,10 @@ func _generate_brush_texture(w: int, h: int, angle_deg: float, tex_seed: int) ->
 	return ImageTexture.create_from_image(img)
 
 
-func _draw_brush_stroke_opaque(img: Image, x0: float, y0: float, x1: float, y1: float, width: float, rng: RandomNumberGenerator, w: int, h: int, col: Color) -> void:
+func _draw_brush_stroke_opaque(
+	img: Image, x0: float, y0: float, x1: float, y1: float, width: float,
+	rng: RandomNumberGenerator, w: int, h: int, col: Color
+) -> void:
 	var dx: float = x1 - x0
 	var dy: float = y1 - y0
 	var length: float = sqrt(dx * dx + dy * dy)

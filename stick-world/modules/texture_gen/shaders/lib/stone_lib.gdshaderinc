@@ -4,7 +4,7 @@
 #ifndef STONE_LIB_GDSHADERINC
 #define STONE_LIB_GDSHADERINC
 
-#include "res://modules/building_gen/shaders/lib/hash.gdshaderinc"
+#include "res://modules/texture_gen/shaders/lib/hash.gdshaderinc"
 
 // ── SDF 原语 ──
 

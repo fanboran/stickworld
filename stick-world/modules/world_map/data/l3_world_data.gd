@@ -36,10 +36,12 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 
 	world.size = int(data.get("size", 8192))
 	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l3_partition_2048.png")]
-	if FileAccess.file_exists(mask_path):
-		var img := Image.new()
-		if img.load(mask_path) == OK:
-			world.mask_image = img
+	if ResourceLoader.exists(mask_path):
+		# 经导入资源加载（export 安全）：直接 Image.load() 从项目路径读原始文件
+		# 无法在导出包内工作，且会告警。此处 get_image() 已验证字节保真（RGBA8）。
+		var tex: Texture2D = load(mask_path)
+		if tex != null:
+			world.mask_image = tex.get_image()
 
 	for rd in (data.get("regions", []) as Array):
 		var r: Dictionary = rd
@@ -72,6 +74,6 @@ func get_region(label: int) -> Dictionary:
 	return _region_by_label.get(label, {})
 
 
-func get_region_color(label: int) -> Color:
+func get_region_color(_label: int) -> Color:
 	# 从 mask 采样该地区的一个像素取色（无独立色表）
 	return Color(0.6, 0.8, 1.0)

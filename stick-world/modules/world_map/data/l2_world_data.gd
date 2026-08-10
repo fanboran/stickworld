@@ -75,10 +75,11 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	var border_path := "%s/%s" % [base_dir, data.get("border_texture", "l2_tiles_border_2048.png")]
 	if ResourceLoader.exists(base_path):
 		world.base_texture = load(base_path) as Texture2D
-	if FileAccess.file_exists(mask_path):
-		var img := Image.new()
-		if img.load(mask_path) == OK:
-			world.mask_image = img
+	if ResourceLoader.exists(mask_path):
+		# 经导入资源加载（export 安全），与 L3 掩码同法；get_image() 已验证字节保真
+		var tex: Texture2D = load(mask_path)
+		if tex != null:
+			world.mask_image = tex.get_image()
 	if ResourceLoader.exists(border_path):
 		world.border_texture = load(border_path) as Texture2D
 

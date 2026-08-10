@@ -8,6 +8,13 @@
 
 ## [未发布]
 
+### L2 描边 / 补丁感修复（2026-08，同源重烘焙）
+
+- **填充与描边同源**：根因是填充三角剖分（DP 简化）与描边（独立 Chaikin 平滑）使用**两套不同多边形** → 渲染时色块边缘与描边偏差最大 20px，呈"补丁感"。改为填充与描边**共用同一份金标准多边形**（`mesh_extract.simplify_mesh` 产物），描边零额外形状处理。Hausdorff 距离 = 0.0px，严丝合缝。
+- **毛边/像素台阶消除 + 顶点压缩**（`mesh_extract.py`）：新增 `_dp_simplify` + `_near_collinear_merge`（DP tol=0.2，亚像素精度降顶点，面积偏差 0.0012%），`simplify_mesh` 处理顺序改为「simplify_collinear → Chaikin×3 → DP 压缩」，解决 Chaikin 后曲线上 90% 冗余分点导致的 earclip O(n²) 卡顿。顶点数 107K→30K（3.5×），region_008 大湖剖分从卡死降至 ~68s。
+- **描边同源修复**（`l2_bake.py`）：`_triangulate_ring` 移除 DP 简化；`_ring_to_border_segs` 取消 `_angle_merge_light`（其 max_dev=0.3 > DP tol=0.2，会误删关键点导致描边跨过凸起）。
+- **数据重烘焙**：全量 13 地区 `l2_geom.bin`/`l2_world.json` 重生成（Chaikin×3 平滑 + DP 压缩 + 同源描边）。
+
 ### L2 渲染性能与描边优化（2026-08）
 
 - **运行时零几何计算（烘焙）**：三角剖分（earcut）与描边过滤/共线合并全部从运行时提前到素材阶段。新增 `tools/worldgen/earclip.py`（纯 Python 单环耳切，大环先 Douglas-Peucker 简化消除 O(n²) 性能瓶颈，10659 顶点湖 0.23s）+ `l2_bake.py`（输出 `l2_geom.bin` 二进制：4 个 mesh 段=地块/洞/湖泊/邻居 + 2 个描边段）。修复打开 L2 卡顿数秒（原 `_build_static_mesh` 对 27.5 万顶点逐个 `Geometry2D.triangulate_polygon` 运行时剖分）

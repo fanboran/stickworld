@@ -29,7 +29,7 @@ N_MOUTHS = 200          # 主干河数量
 BRANCH_DEPTH = 6        # 分支递归深度
 SQUIG_LEVELS = 3        # squig curve 细分层级（减少以适应大量河流）
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(HERE, "output")
 LOCKED_DIR = os.path.join(OUTPUT_DIR, "locked")
 

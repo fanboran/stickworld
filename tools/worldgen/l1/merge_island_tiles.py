@@ -12,7 +12,7 @@ from PIL import Image
 from scipy import ndimage as ndi
 from skimage.measure import find_contours
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 L2_DIR = os.path.join(HERE, "output", "l2_packs")
 
 

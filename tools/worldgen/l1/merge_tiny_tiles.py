@@ -16,7 +16,7 @@ from PIL import Image
 from scipy import ndimage as ndi
 from skimage.measure import find_contours
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 L2_DIR = os.path.join(HERE, "output", "l2_packs")
 MIN_L3_FRAC = 0.001  # L3 全局最小地块占比
 # 特写预览统一用"地块着色"（与全局预览一致）；岛屿色已弃用

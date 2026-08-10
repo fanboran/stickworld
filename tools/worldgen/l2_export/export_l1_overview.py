@@ -12,7 +12,7 @@ import os
 import numpy as np
 from PIL import Image
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 L2_DIR = os.path.join(HERE, "output", "l2_packs")
 L3_DIR = os.path.join(HERE, "output", "l3_view")
 SIZE = 8192

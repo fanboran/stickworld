@@ -23,7 +23,7 @@ import os
 import numpy as np
 from PIL import Image
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGIONS_DIR = os.path.join(HERE, "output", "regions")
 LOCKED_DIR = os.path.join(HERE, "output", "locked")
 OUT_DIR = os.path.join(HERE, "output", "l2_packs")

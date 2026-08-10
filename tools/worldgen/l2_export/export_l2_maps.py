@@ -26,7 +26,7 @@ from scipy.ndimage import distance_transform_edt
 from skimage.measure import find_contours
 from skimage.segmentation import watershed
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 L2_DIR = os.path.join(HERE, "output", "l2_packs")
 REGIONS_DIR = os.path.join(HERE, "output", "regions")
 BACKUP_DIR = os.path.join(HERE, "output", "regions_backup_v2")

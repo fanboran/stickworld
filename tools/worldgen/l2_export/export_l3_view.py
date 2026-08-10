@@ -23,7 +23,7 @@ from scipy import ndimage as ndi
 from scipy.ndimage import distance_transform_edt
 from skimage.measure import find_contours
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGIONS_DIR = os.path.join(HERE, "output", "regions")
 LOCKED_DIR = os.path.join(HERE, "output", "locked")
 OUT_DIR = os.path.join(HERE, "output", "l3_view")

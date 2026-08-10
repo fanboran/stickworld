@@ -25,38 +25,20 @@ func register_scene(def_id: String, scene: PackedScene) -> void:
 	_root._building_scene_registry[def_id] = scene
 
 
-## P0 默认注册：bld_placeholder（占位建筑） + 城墙/城门（阶段 F）
+## P0 默认注册：占位建筑 + 城墙/城门（阶段 F）+ 兵营 + 仓库。
+## 场景模板归属 building_gen 模块，运行时经其 api 加载（不用编译期 preload，
+## 以免与 code_scanner 独立 reload 各脚本产生资源路径冲突），本模块不硬编码内部路径。
 func register_defaults() -> void:
-	var placeholder_scene := load("res://modules/building_gen/buildings/bld_placeholder.tscn") as PackedScene
-	if placeholder_scene != null:
-		register_scene("bld_placeholder", placeholder_scene)
-	else:
-		push_warning("[ConstructionManager] 无法加载 bld_placeholder.tscn")
-	# 阶段 F：城墙/城门场景注册
-	var wall_scenes := {
-		"bld_wall_tier1": "res://modules/building_gen/buildings/bld_wall_tier1.tscn",
-		"bld_wall_tier2": "res://modules/building_gen/buildings/bld_wall_tier2.tscn",
-		"bld_wall_tier3": "res://modules/building_gen/buildings/bld_wall_tier3.tscn",
-		"bld_wall_gate": "res://modules/building_gen/buildings/bld_wall_gate.tscn",
-	}
-	for def_id: String in wall_scenes.keys():
-		var scene := load(wall_scenes[def_id]) as PackedScene
+	var api: GDScript = load("res://modules/building_gen/api.gd")
+	if api == null:
+		push_warning("[ConstructionManager] 无法加载 building_gen 接口")
+		return
+	for def_id: String in api.get_default_building_def_ids():
+		var scene: PackedScene = api.load_building_scene(def_id)
 		if scene != null:
 			register_scene(def_id, scene)
 		else:
-			push_warning("[ConstructionManager] 无法加载 %s.tscn" % def_id)
-	# 阶段 E：兵营场景注册（复制自铁匠铺，红色调区分）
-	var barracks_scene := load("res://modules/building_gen/buildings/bld_barracks.tscn") as PackedScene
-	if barracks_scene != null:
-		register_scene("bld_barracks", barracks_scene)
-	else:
-		push_warning("[ConstructionManager] 无法加载 bld_barracks.tscn")
-	# 仓库场景注册（搬运系统取货点，复制自兵营改棕黄色调）
-	var warehouse_scene := load("res://modules/building_gen/buildings/bld_warehouse.tscn") as PackedScene
-	if warehouse_scene != null:
-		register_scene("bld_warehouse", warehouse_scene)
-	else:
-		push_warning("[ConstructionManager] 无法加载 bld_warehouse.tscn")
+			push_warning("[ConstructionManager] 无法加载建筑场景: %s" % def_id)
 
 
 # ─────────────────────────────── 建筑定义数据驱动（P0-6）────────────────────────────────

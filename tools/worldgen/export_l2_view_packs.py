@@ -127,8 +127,11 @@ def main():
         land_in_tile = tile_zone & ~ctx_lake[ty:ty + H, tx:tx + W]
         ctx[ty:ty + H, tx:tx + W][land_in_tile] = TILE_LABEL + tiles_small[0:H, 0:W][land_in_tile]
 
-        # Chaikin 2 次：充分平滑像素台阶，控制数据量，消除放大后地块边缘麻麻赖赖
-        ctx_mesh = simplify_mesh(extract_mesh(ctx.astype(np.int32)), smooth_passes=2)
+        # Chaikin 3 次 + corner_min_len=3（mesh_extract 中 chaikin_smooth 默认值）：
+        # · 相邻两边 ≥3px 的「真实地形尖角」原顶点保留不切角 → 海角/河湾锐度不丢
+        # · 仅 1~2px 短边的「像素台阶」经 3 次 Chaikin 抹平 → 马赛克感彻底消除
+        # 提取后多边形是填充 mesh 和描边的唯一真源，保证两者渲染严丝合缝
+        ctx_mesh = simplify_mesh(extract_mesh(ctx.astype(np.int32)), smooth_passes=3)
         # 灰影 = context 内出现的其他地区（8192 精度）
         neighbors_data = []
         for n, mv in ctx_mesh.items():

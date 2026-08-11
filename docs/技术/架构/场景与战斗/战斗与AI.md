@@ -102,9 +102,9 @@ func _is_in_passage_barrier() -> bool:
 - 火柴人与地形障碍（layer 1）和其他火柴人（layer 2）都会发生物理碰撞
 - 工地临时障碍（建造中）挂在 `WalkBarrier` 下，与建筑完工后的 `PassageBarrier` 使用完全相同的 size/position（从建筑场景模板读取），确保障碍切换无缝
 
-**寻路避障（待实现）**：
-- 当前火柴人直线走向目标，遇到障碍被硬弹回，在障碍边缘卡死
-- 待实现：局部避障（raycast + 切线滑动）或 A* 网格寻路
+**寻路避障（方案已定 2026-08：局部避障 + 简单 A\*）**：
+- 当前火柴人直线走向目标，遇到障碍被硬弹回，在障碍边缘卡死（待实现）
+- 方案：平时**局部避障（raycast + 切线滑动 + separation 分离）**，契合模拟 Tag / RimWorld pawn 移动模型；障碍复杂/密集时用**简单 A\* 网格**兜底，两者结合
 - 详见 `docs/项目/P0收口执行计划.md` §13.4
 
 #### 7.1.3 附身接口
@@ -118,19 +118,21 @@ func _is_in_passage_barrier() -> bool:
 ### 7.2 行为状态机
 
 ```
-modules/units/ai/
-├── behavior_base.gd                 # 行为基类（enter/update/exit）
-├── behavior_idle.gd                 # 闲置
-├── behavior_move.gd                 # 移动（含简单寻路）
-├── behavior_attack.gd               # 攻击（命中帧→伤害事件）
-├── behavior_seek_cover.gd           # 找掩体
-├── behavior_suppress.gd             # 火力压制
-├── behavior_flank.gd                # 侧翼包抄
-├── behavior_retreat.gd              # 撤退
-├── behavior_work.gd                 # 建造（build 动画驱动，受材料进度限制）
-├── behavior_haul.gd                 # 搬运（仓库↔工地往返，4次填满材料进度）
-├── behavior_flee.gd                 # 溃逃
-└── behavior_state_machine.gd        # 状态机调度
+modules/units/ai/（✅=已实现注册，📋=设计未实现）
+├── behavior_base.gd                 ✅ 行为基类（enter/update/exit）
+├── behavior_idle.gd                 ✅ 闲置（默认空闲，P0 原地待机）
+├── behavior_wander.gd               ✅ 漫游（P0 默认关闭 WANDER_PROBABILITY=0，仅显式调用）
+├── behavior_move.gd                 ✅ 移动（含简单寻路）
+├── behavior_follow.gd               ✅ 跟随（小队"跟随玩家"）
+├── behavior_attack.gd               ✅ 攻击（命中帧→伤害事件）
+├── behavior_seek_cover.gd           ✅ 找掩体
+├── behavior_retreat.gd              ✅ 撤退（当前亦承担溃逃）
+├── behavior_work.gd                 ✅ 建造（build 动画驱动，受材料进度限制）
+├── behavior_haul.gd                 ✅ 搬运（仓库↔工地往返）
+├── behavior_suppress.gd             📋 火力压制（设计未实现）
+├── behavior_flank.gd                📋 侧翼包抄（设计未实现）
+├── behavior_flee.gd                 📋 独立溃逃（设计未实现，暂由 retreat 承担）
+└── behavior_state_machine.gd        ✅ 状态机调度
 ```
 
 每个行为是独立的 `Node`/`Resource`，状态机持有引用并通过 `travel(behavior_name)` 切换。
@@ -194,8 +196,8 @@ modules/units/ai/
 - 装备系统影响 traits（武器加攻击，工具加采集效率）
 
 **迭代路线**：
-- P0：基础属性（力量/智力/敏捷），简单权重影响
-- P1：扩展属性种类 + 装备系统 + 职业分化
+- P0：四属性（**力量/智力/敏捷/工艺**），取值 **1-10 默认 3**，简单权重影响（高力量→攻击/搬运权重↑，高智力→研究/管理↑，高工艺→建造/采集↑）
+- P1：扩展属性种类 + 装备系统 + 职业分化 + **天赋树**（承接 traits，树状解锁）
 - P2+：亚种/文化/宗教等世界盒子式复杂特质（详见 [竞品分析.md](../../../商业/竞品分析.md) §4.12）
 
 ### 7.3 三层命令系统（决策来源）
@@ -218,6 +220,8 @@ modules/units/ai/
 - 低优先级是生存本能，永远生效但被高优先级压制
 
 `StickmanState` 已有 `autonomy_level` 字段，AIController 读取它决定能否自主行动。
+
+> **实现状态（2026-08）**：当前为**确定性优先级**（命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`；§7.4 灵动性（概率钩子 + 战场导演情绪标签）为 **P1 目标，未实现**。决策优先级当前**硬编码**，计划抽成 `.tres` 数据驱动。
 
 ### 7.4 小兵步枪式灵动性 — 两层实现
 

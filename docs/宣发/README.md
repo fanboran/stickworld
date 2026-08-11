@@ -1,6 +1,6 @@
 # 宣发文档 · 索引
 
-> 火柴人大战略（Stick World）—— Steam PC 独立游戏。
+> 火柴人帝国模拟（Stick World）—— Steam PC 独立游戏。
 
 ---
 

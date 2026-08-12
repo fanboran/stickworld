@@ -123,9 +123,11 @@ static func apply_thatch_cpu(polygon) -> void
 
 ---
 
-## 二、科技模块 `modules/technology/api.gd`
+## 二、科技模块（已删除，阶段 1 按新策略重建）
 
-> **⚠️ 已冻结（2026-08 审计标注）**：本模块当前为空壳实现——`TechnologyManager` 尚未实现，`setup()` 永不被调用，全部接口返回"模块未初始化"；且按路线图阶段 1 将按 `docs/设计/系统/04-科技系统.md` 的"征服获得"策略重建，**本契约描述的研究制 API 将整体作废**。在重建完成前，本段仅作历史参考，不承诺可用性。
+> 原 `modules/technology/` 空壳模块已删除（Demo 阶段未启用，全部接口返回"模块未初始化"）。
+> 阶段 1 将按 `docs/设计/系统/04-科技系统.md` 的"征服获得"策略重建，契约以届时实现为准。
+> 历史设计（研究制，已作废）：
 
 ```gdscript
 # 研究
@@ -180,7 +182,7 @@ func set_tax_rate(rate: float) -> Dictionary
 
 ---
 
-## 四、扩张模块 `modules/expansion/api.gd`
+## 四、扩张模块 `modules/expansion/api.gd`（未实现，阶段 2 设计契约）
 
 ```gdscript
 # 地块查询
@@ -288,7 +290,7 @@ func call_airstrike(battle_id: String, target: Vector2) -> Dictionary  # 巫师�
 
 ---
 
-## 七、物流模块 `modules/logistics/api.gd`
+## 七、物流模块 `modules/logistics/api.gd`（未实现，阶段 2 设计契约）
 
 ```gdscript
 # 创建物流路线
@@ -313,7 +315,7 @@ func upgrade_road(from_region: String, to_region: String) -> Dictionary
 
 ---
 
-## 八、成就模块 `modules/achievement/api.gd`
+## 八、成就模块 `modules/achievement/api.gd`（未实现，阶段 2 设计契约）
 
 ```gdscript
 # 查询
@@ -329,23 +331,16 @@ func check_and_unlock(badge_id: String) -> Dictionary
 
 ## 九、模块间 API 依赖图
 
+> 仅含已实现模块（construction / resources / organization / combat）。technology（已删除）、expansion / logistics / achievement（未实现）为阶段 2 设计契约，实现时补充出边。
+
 ```
 construction ──-> resources (消耗建材)
-technology   ──-> resources (消耗研究材料)
-             ──-> organization (分配研究员)
 resources    ──-> (无出向 API 依赖, 通过 EventBus 通信)
-expansion    ──-> resources (殖民地消耗)
 organization ──-> resources (征兵消耗沥青)
              ──-> construction (建设组织)
-             ──-> technology (科研组织)
              ──-> combat (军事组织)
-             ──-> logistics (运输组织)
 combat       ──-> resources (消耗弹药/食物)
-             ──-> expansion (控制度变化)
              ──-> organization (伤亡)
-logistics    ──-> resources (转移物资)
-             ──-> organization (承运单位)
-achievement  ──-> (仅查询, 无出向 API 依赖)
 ```
 
 ---
@@ -354,23 +349,32 @@ achievement  ──-> (仅查询, 无出向 API 依赖)
 
 ---
 
-## 十、战略图模块 `modules/world_map/api.gd`（2026-08 状态登记）
+## 十、战略图模块 `modules/world_map/api.gd`
 
-> **⚠️ 未接线（阶段 1 待实现）**：本模块为"架构文档先行、实现为零"的死模块——
-> `scenes/` 为空、无实例化入口、核心逻辑为 TODO 桩（35 处）、EventBus 处理器为死代码且签名冲突。
-> 契约与 `docs/技术/架构/战略图架构.md` §5.3 漂移（实现 7 参 setup vs 文档 4 参）。
-> 下表仅登记现状，正式契约待接线时重建。
+> L1 单层战略图已实装（P0 新 0.9，Tab 键），集成测试 `test_strategic_map_p0` / `test_l2_strategic_map` / `test_l3_strategic_map` 全绿。
+> 战略图开/关通知走 EventBus（`strategic_map_opened` / `strategic_map_closed`），进入场景图走 `EventBus.travel_requested`。
 
 ```gdscript
-# 现有导出（部分无 docstring，待重建时补齐）
-func setup(controller, renderer, camera, mode_manager, data, granularity_manager, stitched_preview) -> void
-func select(id) / deselect(id) / get_selected() -> void
-func set_map_mode(mode) / get_map_mode() / get_available_map_modes() -> void
-func camera_zoom_to(level) / screen_to_map(pos) / map_to_screen(pos) -> void
-func get_region_owner(id) / get_region_alliance(id) / get_state_info(id) / get_alliance_info() -> void
-func set_owner_color(id, color) -> void
+# 初始化（3 参，由 system_setup 装配时调用）
+func initialize(l1_json_path: String, config_dir: String) -> void
+# [Q] 加载 L1 世界数据（8 聚落 + 空聚落 + MST 道路 + 边界索引图）
 
-# 信号（经 api.gd 自建，部分与 EventBus 重复，接线时收敛）
-signal strategic_map_opened / strategic_map_closed
-signal settlement_updated
+# 查询
+func query_at_screen(screen_pos: Vector2) -> Dictionary
+# [Q] 返回 {"settlement": SettlementRef, "tile": L1TileDef}（索引图像素解码命中）
+
+func get_settlement_ref(settlement_id: String) -> SettlementRef
+func get_all_settlements() -> Array[SettlementRef]
+
+# 进出
+func enter_settlement(settlement_id: String) -> void
+# [Q] 发射 EventBus.travel_requested(map_id) 并关闭战略图；空聚落不可进入
+
+func close_strategic_map() -> void
+# [Q] 控制器 visible=false 并发射 EventBus.strategic_map_closed（恢复场景图输入）
+
+# 模块本地信号
+signal settlement_clicked(settlement_id: String)
+signal settlement_activated(settlement_id: String)
+signal region_hovered(tile_id: String, settlement_id: String)
 ```

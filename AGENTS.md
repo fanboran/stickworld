@@ -6,7 +6,7 @@
 
 - 使用中文回答问题。
 - Git写中文提交信息，格式：`类型(模块): 描述`，示例：`feat(combat): 实现基础自动战斗单位AI`
-- 改进待办项记录在 `docs/project/待办事项.md`
+- 改进待办项记录在 `docs/项目/待办事项.md`
 - Godot路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
 
 ### 文档写作规范
@@ -31,12 +31,12 @@
 | 查 Autoload 依赖   | `docs/技术/架构/自动加载依赖.md`              |
 | 查战略图（world_map）架构 | `docs/技术/架构/战略图架构.md`（模块重新设计基线） |
 | 查程序化产物如何喂给战略图 | `docs/技术/架构/世界地图数据流.md`（生成端 ↔ 消费端契约） |
-| 查场景图（卷轴地图）架构 | `docs/技术/架构/场景与战斗架构.md`（导读，索引各子系统）<br>↳ 宿主: [`场景宿主架构.md`](docs/技术/架构/场景与战斗/场景宿主架构.md)<br>↳ 地图/室内/旅行: [`地图与场景图.md`](docs/技术/架构/场景与战斗/地图与场景图.md)<br>↳ 建筑/定居点: [`建筑与定居点.md`](docs/技术/架构/场景与战斗/建筑与定居点.md)<br>↳ 火柴人AI/战斗: [`战斗与AI.md`](docs/技术/架构/场景与战斗/战斗与AI.md)<br>↳ UI/环境: [`UI与环境.md`](docs/技术/架构/场景与战斗/UI与环境.md)<br>↳ 事件信号: [`EventBus信号契约.md`](docs/技术/架构/场景与战斗/EventBus信号契约.md) |
+| 查场景图（卷轴地图）架构 | `docs/技术/架构/场景与战斗架构.md`（导读，索引各子系统）<br>↳ 宿主: [`场景宿主架构.md`](docs/技术/架构/场景与战斗/场景宿主架构.md)<br>↳ 地图/室内/旅行: [`地图与场景图.md`](docs/技术/架构/场景与战斗/地图与场景图.md)<br>↳ 建筑/定居点: [`建筑与定居点.md`](docs/技术/架构/场景与战斗/建筑与定居点.md)<br>↳ 火柴人AI/战斗: [`战斗与AI.md`](docs/技术/架构/场景与战斗/战斗与AI.md)<br>↳ UI/环境: [`UI.md`](docs/技术/架构/场景与战斗/UI.md)<br>↳ 事件信号: [`EventBus信号契约.md`](docs/技术/架构/场景与战斗/EventBus信号契约.md) |
 | 查数据流与存储方案      | `docs/技术/架构/数据流全景.md` |
 | 查程序化世界生成       | `docs/设计/系统/08-程序化世界生成.md` |
 | 游戏数据表           | `config/excel/` 目录 + `docs/技术/教程/Excel数据管线.md` |
 | 查编辑器工具/插件    | `docs/技术/编辑器工具索引.md`（addons/ + tools/ 全部脚本） |
-| 查编辑器/运行时报错    | `tools/check_godot_errors.ps1`（扫描 `user://logs/`，日志机制见 `docs/技术/教程/Godot日志与报错检测.md`） |
+| 查编辑器/运行时报错    | `stick-world/tools/check_godot_errors.ps1`（扫描 `user://logs/`，日志机制见 `docs/技术/教程/Godot日志与报错检测.md`） |
 | 开发规范            | `docs/CONTRIBUTING.md`                                  |
 | 有可以参考的开源项目就放到这里 | external/                                               |
 
@@ -47,10 +47,10 @@
 ## 核心行为指令
 
 1. **主动沟通**：当任务描述不清晰或与架构原则冲突时，积极主动提问，不做危险假设。
-2. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/design/mechanics/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
-3. **报错自检**：任何代码修改后，运行 `powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1`（退出码 1 = 编辑器/运行日志有 ERROR/SCRIPT ERROR/Parse Error，须修复）；修改场景/资源文件后若用户报告编辑器报错，先查 `%APPDATA%\Godot\app_userdata\stick_world\logs\` 下最新日志（含轮转文件 `godot<时间戳>.log`），详见 `docs/技术/教程/Godot日志与报错检测.md`。
+2. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/设计/系统/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
+3. **报错自检**：任何代码修改后，运行 `powershell -ExecutionPolicy Bypass -File stick-world\tools\check_godot_errors.ps1`（退出码 1 = 编辑器/运行日志有 ERROR/SCRIPT ERROR/Parse Error，须修复）；修改场景/资源文件后若用户报告编辑器报错，先查 `%APPDATA%\Godot\app_userdata\stick_world\logs\` 下最新日志（含轮转文件 `godot<时间戳>.log`），详见 `docs/技术/教程/Godot日志与报错检测.md`。
 4. **GitHub 查询走 MCP**：查 GitHub（代码/issue/仓库/README）一律用 `github-search` MCP 工具（已配置 GITHUB_TOKEN 认证）；**禁止手动 curl 匿名调用 api.github.com**（匿名限额 60 次/时，会触发限流并污染诊断）。
-5. **UI 布局单一真相源（P1/P2）**：场景是布局唯一真相源。**禁止 `Control.new()` 当 UI 根**（会丢 anchor 致控件静默不可见）；代码建全屏控件用 `UIKit.full_rect()`，角落 HUD 部件自设 anchor 并挂 `UIRoot.add_to_slot("HudOverlay", ...)` 等槽。详见 `docs/技术/架构/UI架构.md`。
+5. **UI 布局单一真相源（P1/P2）**：场景是布局唯一真相源。**禁止 `Control.new()` 当 UI 根**（会丢 anchor 致控件静默不可见）；代码建全屏控件用 `UIKit.full_rect()`，角落 HUD 部件自设 anchor 并挂 `UIRoot.add_to_slot("HudOverlay", ...)` 等槽。详见 `docs/技术/架构/场景与战斗/UI.md`。
 
 ***
 
@@ -77,7 +77,6 @@
 ├── modules/               # 游戏功能模块（开发最频繁的区域）
 ├── assets/                # 全局共享资源
 ├── addons/                # 编辑器插件（项目自带 + 第三方），详见 docs/技术/编辑器工具索引.md
-├── prototypes/            # 原型沙盒（不被正式逻辑依赖）
 ├── tools/                 # 自定义编辑器工具与 CLI 脚本（@tool），详见 docs/技术/编辑器工具索引.md
 ├── tests/                 # 自动化测试（镜像 core/ 和 modules/ 结构）
 └── docs/                  # 项目文档
@@ -89,30 +88,29 @@
 core/
 ├── autoload/              # 全局单例
 │   ├── event_bus.gd       # 全局事件总线（发布-订阅模式）
-│   ├── scene_manager.gd   # 场景加载与视图切换
+│   ├── world_state.gd     # 全局状态容器
 │   ├── save_manager.gd    # 存档/读档服务
-│   └── config_manager.gd  # 游戏配置管理
+│   ├── config_manager.gd  # 游戏配置管理
+│   ├── time_manager.gd    # 时间/速度管理
+│   └── balance_config.gd  # 平衡变量加载（热重载预留）
+├── entities/              # 核心实体状态快照（RefCounted）
 ├── ui_framework/          # UI 基础设施
 │   ├── base_screen.gd     # UI 界面基类
 │   ├── components/        # 通用 UI 组件
 │   └── theme/             # 全局 UI 主题
-├── services/              # 抽象服务
-│   ├── audio_manager.gd   # 音频管理器
-│   ├── analytics/         # 数据分析（预留）
-│   └── iap/               # 内购（预留）
-└── utils/                 # 通用工具类
+└── services/              # 抽象服务
+    ├── audio_manager.gd   # 音频管理器（预留，未接线）
+    ├── analytics/         # 数据分析（预留）
+    └── iap/               # 内购（预留）
 ```
 
 ### 游戏功能模块 (`modules/`) 标准结构
 
-每个模块是一个垂直切片，自包含。以 `player` 为例：
+每个模块是一个垂直切片，自包含。以 `player_control` 为例：
 
 ```
-modules/player/
-├── scenes/                # 模块场景（子目录按需组织，不强制固定结构）
-│   └── player.tscn
+modules/player_control/
 ├── scripts/               # 模块脚本（可再按子域分组，如 ai/、map/）
-├── assets/                # 模块专属资源（按需）
 ├── ui/                    # 模块专属 UI（按需）
 ├── data/                  # 纯数据定义类（按需）
 └── api.gd                 # 公共接口契约（关键）

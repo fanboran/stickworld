@@ -8,6 +8,16 @@
 
 ## [未发布]
 
+### 全项目审计修复（2026-08）：架构收敛 + 信号清理 + 文档校准
+
+- **EventBus 清理**：67 个声明信号中 35 个零引用信号删除（未实现系统的预留信号 + 与 construction/api.gd 重复且签名冲突的 building_* 5 个）；`strategic_map_*` 动态 `emit_signal` 收口为类型安全 `.emit()` 并消除本地+EventBus 双重发射；信号唯一真相源与文档（系统交互与EventBus.md / EventBus信号契约.md）逐条对齐
+- **UI 根红线修复**：SavePanel / SettingsMenuPanel 从 `Control.new()`（挂 CanvasLayer 根）改为 `UIKit.full_rect()` + ModalOverlay 槽
+- **双向耦合消除**：SavePanel 删除 group 反查 game_root，改 `setup_load_callback` 注入（world→ui_global 单向）；stickman_entity 的 InputDispatcher 查找改走 PlayerControlAPI 静态注册表（units→player_control api）
+- **契约闭合**：texture_gen/api.gd 补 `class_name TextureGenApi`，building_exterior 改走契约；world_map 战略图开/关信号收敛为 EventBus 单通道
+- **死代码清理**：technology 空壳模块整体删除（阶段 1 按「征服获得」策略重建，待办已登记）；building_snap.gd（零挂载）归档至 building_gen/archive/
+- **文档校准**：AGENTS.md 路径修正（docs/项目、UI.md、check_godot_errors.ps1 前缀等）；modules/README §9/§10 同步现行信号与 8 个 autoload（标注 BalanceConfig/AudioManager/WorldState/ConfigManager 为预留）；模块API契约.md 的 world_map「死模块」登记更新为已实装契约；待办事项 0.9c/d/e 勾选
+- **测试**：test_battle_ui 断言同步 HudOverlay 槽位化（Minimap 已于 c6d8e10 迁移）；全量 31 套件通过
+
 ### L2 描边 / 补丁感修复（2026-08，同源重烘焙）
 
 - **填充与描边同源**：根因是填充三角剖分（DP 简化）与描边（独立 Chaikin 平滑）使用**两套不同多边形** → 渲染时色块边缘与描边偏差最大 20px，呈"补丁感"。改为填充与描边**共用同一份金标准多边形**（`mesh_extract.simplify_mesh` 产物），描边零额外形状处理。Hausdorff 距离 = 0.0px，严丝合缝。

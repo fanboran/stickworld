@@ -542,6 +542,8 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	if building is Building:
 		collision_bottom_local = (building as Building).get_collision_bottom_local()
 	(building as Node2D).global_position = Vector2(world_x, baseline - collision_bottom_local)
+	# 建筑 y-sort：根位置 = 基线 - collision_bottom_local（≈地平线+96px），
+	# BuildingHost y_sort_enabled 后按此排序（差 ≤5px，可忽略）
 
 	# 立即设为 OPERATIONAL
 	if building is Building:

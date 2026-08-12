@@ -386,6 +386,8 @@ func _complete() -> void:
 	if new_building is Building:
 		collision_bottom_local = (new_building as Building).get_collision_bottom_local()
 	new_building.global_position = Vector2(world_x, baseline - collision_bottom_local)
+	# 建筑 y-sort：根位置 = 基线 - collision_bottom_local（≈地平线+96px），
+	# BuildingHost y_sort_enabled 后按此排序（差 ≤5px，可忽略）
 	# 标记建筑为 OPERATIONAL（触发视觉/碰撞更新）
 	if new_building is Building:
 		(new_building as Building).set_state(Building.State.OPERATIONAL)

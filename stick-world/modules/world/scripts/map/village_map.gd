@@ -88,6 +88,7 @@ var village_id: String = ""
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	super()
 	_mount_components()
 	_validate_children()
 	_sync_ground_line()

@@ -34,6 +34,19 @@ extends Node2D
 var map_id: String = ""
 
 
+# ─────────────────────────────── 渲染层级 ────────────────────────────────
+
+func _ready() -> void:
+	# 火柴人 y-sort：Y 越大（越靠下）渲染越靠顶层
+	if entity_host != null:
+		entity_host.y_sort_enabled = true
+	# 建筑 y-sort（排序原点 = 基线，见各摆放处 y_sort_origin 设置）
+	if building_host != null:
+		building_host.y_sort_enabled = true
+	if terrain_buildings != null:
+		terrain_buildings.y_sort_enabled = true
+
+
 # ─────────────────────────────── 公共 API（§3.4.2）────────────────────────────────
 
 func get_ground_y() -> float:

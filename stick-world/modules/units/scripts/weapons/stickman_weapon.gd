@@ -46,10 +46,7 @@ static func attach(scene: PackedScene, bone_id: int, bones: Dictionary) -> Node2
 	if grip:
 		instance.position = marker.position - grip.position
 		instance.rotation = marker.rotation - grip.rotation
-
-	# 渲染层级：武器在身体之上
-	instance.z_index = 1
-	instance.z_as_relative = false
+	# 渲染层级：武器随角色（继承父级 z，不做强制抬升），与角色同图层 y-sort
 	return instance
 
 

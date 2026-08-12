@@ -9,9 +9,11 @@ alwaysApply: true
 ### 注意事项
 
 - 使用中文回答问题。
+- 默认终端为 **bash**。
 - Git写中文提交信息，格式：`类型(模块): 描述`，示例：`feat(combat): 实现基础自动战斗单位AI`
 - 改进待办项记录在 `docs/project/待办事项.md`
 - Godot路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
+- **Godot 类参考（项目外，版本精准）**：`F:\VSCode\godot-docs\doc\classes\<类名>.xml`（如 `CanvasItem.xml`，810 个类，`--doctool` 生成；查属性/方法/信号直接翻对应 XML，升级引擎后重跑 `godot --headless --doctool F:\VSCode\godot-docs` 保持对齐）
 
 ### 项目文档导航
 
@@ -34,6 +36,7 @@ alwaysApply: true
 | 查程序化世界生成       | `docs/设计/系统/08-程序化世界生成.md` |
 | 游戏数据表           | `config/excel/` 目录 + `docs/技术/教程/Excel数据管线.md` |
 | 查编辑器工具/插件    | `docs/技术/编辑器工具索引.md`（addons/ + tools/ 全部脚本） |
+| 查 Godot 引擎 API（类参考，项目外） | `F:\VSCode\godot-docs\doc\classes\<类名>.xml`（`--doctool` 生成，版本精准；查属性/方法/信号用） |
 | 开发规范            | `docs/CONTRIBUTING.md`                                  |
 | 有可以参考的开源项目就放到这里 | external/                                               |
 

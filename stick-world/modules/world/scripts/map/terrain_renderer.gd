@@ -213,8 +213,9 @@ func update_dirt_road_visual() -> void:
 	if _root._dirt_road_poly == null:
 		_root._dirt_road_poly = Polygon2D.new()
 		_root._dirt_road_poly.color = Color(0.62, 0.50, 0.32, 1.0)  # 土黄色
-		# z=1（decoration 层）：低于建筑（BuildingHost z=2），否则路面盖住建筑画面
-		_root._dirt_road_poly.z_index = 1
+		# 硬化路面与地面同层（z=0）：晚于 TerrainLayer 绘制故盖在草地上方，
+		# 低于 DecorationLayer(z=1)/BuildingHost(z=2)，不会盖住建筑
+		_root._dirt_road_poly.z_index = 0
 		_root.add_child(_root._dirt_road_poly)
 	var x0: float = float(min_cell) * PlacementGrid.CELL_SIZE
 	var x1: float = float(max_cell + 1) * PlacementGrid.CELL_SIZE

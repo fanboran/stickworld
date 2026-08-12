@@ -26,6 +26,7 @@ extends MapBase
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	super()
 	_sync_ground_line()
 	_apply_road_texture()
 

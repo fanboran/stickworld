@@ -2,11 +2,14 @@ extends Node
 ## 全局事件总线 —— 模块间解耦的核心通信机制。
 ##
 ## 使用方式：
-##   发布（广播）： EventBus.safe_emit("building_completed", [building_id, tile_pos])
-##   订阅（监听）： EventBus.building_completed.connect(_on_building_completed)
+##   发布（广播）： EventBus.safe_emit("game_paused")
+##   订阅（监听）： EventBus.game_paused.connect(_on_game_paused)
 ##
 ## 约定：事件名用 snake_case，见名知意；参数放在信号声明里。
-## 注意：资源类变更信号（resource_changed 等）由模块 api.gd 自建并转发，EventBus 不重复声明。
+## 注意：
+## - 资源/科技/组织/建筑等状态变更信号由对应模块 api.gd 自建并转发，EventBus 不重复声明。
+## - 本文件只保留"已实际接线"的信号（2026-08 审计清理 35 个零引用信号）；
+##   实现新系统时按当时契约重新声明，不要预先占位。
 
 # 信号是公共 API，供其他模块 connect/emit。
 # @warning_ignore("unused_signal") 对每个信号逐条标注，因为该注解只作用于下一条语句。
@@ -23,65 +26,18 @@ extends Node
 # ─────────────────────────────── 资源 / 经济 ────────────────────────────────
 # 资源变化/不足信号：由 resources/api.gd 自建信号承担（4 参），EventBus 不重复声明
 
-@warning_ignore("unused_signal") signal resource_depleted(resource_name: String)
-# 价格波动（供需自动）：资源系统 → 组织、UI
-@warning_ignore("unused_signal") signal price_changed(resource_id, old_price, new_price, region_id)
-# 商队到货：运输系统 → 资源系统、UI
-@warning_ignore("unused_signal") signal trade_completed(from_region, to_region, resource_id, quantity)
-# CPI 超警戒线：资源系统 → UI
-@warning_ignore("unused_signal") signal inflation_warning(rate)
-
 # ─────────────────────────────── 配置 / 平衡 ──────────────────────────────
 
 # 平衡配置变更：BalanceConfig → 订阅方（运行时热重载数值）
 @warning_ignore("unused_signal") signal balance_changed
 
-# ─────────────────────────────── 人口 / 单位 ───────────────────────────────
-
-@warning_ignore("unused_signal") signal population_changed(total: int, delta: int)
-@warning_ignore("unused_signal") signal unit_recruited(unit_type: String)
-@warning_ignore("unused_signal") signal unit_lost(unit_type: String)
-# 消耗沥青召唤：组织系统 → 资源系统
-@warning_ignore("unused_signal") signal unit_summoned(unit_id, asphalt_cost)
-# 晋升/调岗：组织系统 → UI
-@warning_ignore("unused_signal") signal unit_promoted(unit_id, old_role, new_role)
-# 指挥官阵亡：战斗系统 → 组织系统
-@warning_ignore("unused_signal") signal commander_died(org_id, commander_id)
-
 # ─────────────────────────────── 建筑 / 建设 ────────────────────────────────
+# 建筑开工/完工/拆除/受损/升级信号：由 construction/api.gd 自建信号承担，EventBus 不重复声明
 
-@warning_ignore("unused_signal") signal building_started(building_id: String, tile_pos: Vector2i)
-@warning_ignore("unused_signal") signal building_completed(building_id: String, tile_pos: Vector2i)
-@warning_ignore("unused_signal") signal building_removed(building_id: String, tile_pos: Vector2i)
-# 被攻击：战斗系统 → 建设系统
-@warning_ignore("unused_signal") signal building_damaged(building_id, damage_amount)
-# 升级：建设系统 → UI
-@warning_ignore("unused_signal") signal building_upgraded(building_id, old_tier, new_tier)
-
-# ─────────────────────────────── 材质 / 纹理 ───────────────────────────────
-
-## 材质参数变更（调试面板调整时触发，由 texture_gen 转发）
-@warning_ignore("unused_signal") signal material_param_changed(material_name: String, param_name: String, value: Variant)
-## 材质截图完成
-@warning_ignore("unused_signal") signal texture_captured(material_name: String, output_path: String)
-
-# ─────────────────────────────── 科技 ────────────────────────────────────
-# 科技状态信号：由 technology/api.gd 自建信号承担，EventBus 不重复声明
-
-@warning_ignore("unused_signal") signal tech_researched(tech_id: String)
-# 研究停滞（资源不足/人员不足）：科技系统 → UI
-@warning_ignore("unused_signal") signal tech_stalled(tech_id, reason)
-
-# ─────────────────────────────── 战斗 / 扩张 ────────────────────────────────
+# ─────────────────────────────── 战斗 ────────────────────────────────
 
 @warning_ignore("unused_signal") signal battle_started(battle_id: String)
 @warning_ignore("unused_signal") signal battle_ended(battle_id: String, victory: bool)
-# 进入僵持：战斗系统 → UI
-@warning_ignore("unused_signal") signal battle_stalemate(battle_id, duration)
-# 补给被切断：战斗系统 → 运输系统、组织系统
-@warning_ignore("unused_signal") signal supply_line_cut(org_id, supply_id)
-# 关键战术事件：战斗系统 -> UI（可选显示）
-@warning_ignore("unused_signal") signal tactical_event(battle_id, event_type, data)
 
 # ─────────────────────────────── 战斗编队（§14.4）────────────────────────────────
 # 框选/选择变化：SelectionSystem -> UI
@@ -92,31 +48,6 @@ extends Node
 @warning_ignore("unused_signal") signal order_issued(order_type, target_squad_id, source_tier)
 # 任命指挥官：Organization -> UI
 @warning_ignore("unused_signal") signal commander_assigned(squad_id, unit_id)
-@warning_ignore("unused_signal") signal territory_gained(tile_id: String)
-@warning_ignore("unused_signal") signal territory_lost(tile_id: String)
-# 文化同化完成：扩张系统 → UI
-@warning_ignore("unused_signal") signal culture_assimilated(region_id, from_culture, to_culture)
-# 包围网形成：扩张系统 → UI、战斗系统
-@warning_ignore("unused_signal") signal coalition_formed(members)
-# 条约签订：扩张系统 → UI
-@warning_ignore("unused_signal") signal treaty_signed(type, parties, terms)
-
-# ─────────────────────────────── 组织 ─────────────────────────────────────
-# 创建/解散/重组信号：由 organization/api.gd 自建信号承担，EventBus 不重复声明
-# 效率变动：组织系统 → UI
-@warning_ignore("unused_signal") signal org_efficiency_changed(org_id, old, new)
-# AI 自主行动：组织系统 → UI（可选）
-@warning_ignore("unused_signal") signal org_autonomy_triggered(org_id, action)
-
-# ─────────────────────────────── 项目 ─────────────────────────────────────
-# 创建项目：组织系统 → 组织系统
-@warning_ignore("unused_signal") signal project_created(project_id, owner_org_id, type)
-# 项目完成：组织系统 → 组织系统、UI
-@warning_ignore("unused_signal") signal project_completed(project_id, result)
-# 项目失败：组织系统 → 组织系统、UI
-@warning_ignore("unused_signal") signal project_failed(project_id, reason)
-# 项目分解为子项目：组织系统 → 组织系统
-@warning_ignore("unused_signal") signal project_decomposed(parent_id, child_ids)
 
 # ─────────────────────────────── 场景 / 地图 / 旅行（§14.1 / §14.2）────────────────────────────────
 # 旅行请求：战略图 -> SceneLoader（玩家点击聚落进入场景图）
@@ -142,11 +73,6 @@ extends Node
 
 @warning_ignore("unused_signal") signal ui_notification(title: String, body: String, level: String)
 @warning_ignore("unused_signal") signal ui_toggle_pause_requested
-@warning_ignore("unused_signal") signal ui_switch_view(view_name: String)
-# 缩放级别变化：相机 → UI
-@warning_ignore("unused_signal") signal ui_zoom_level_changed(new_level)
-# 附身操控单位：UI -> 战斗系统
-@warning_ignore("unused_signal") signal ui_possess_unit(unit_id)
 # 附身开始：PossessionInterface -> UI、Units、TimeManager
 @warning_ignore("unused_signal") signal possession_started(entity)
 # 附身结束：PossessionInterface -> UI、Units、TimeManager

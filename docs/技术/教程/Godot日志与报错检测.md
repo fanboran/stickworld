@@ -49,18 +49,20 @@
 
 ## 三、自动检测
 
-```powershell
+> 默认终端为 **bash**。检测脚本为 `.ps1`，从 bash 中经 `powershell` 调用（路径用 `/` 分隔）。
+
+```bash
 # 标准检查（默认 = 日志扫描 + 编辑器启动模拟）：有错退出码 1
-powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1
+powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1
 
 # 只查日志（跳过 ~15s 的启动模拟）
-powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1 -Quick
+powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1 -Quick
 
 # 连 WARNING 一起看（改代码后建议带 -Warnings）
-powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1 -Warnings
+powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1 -Warnings
 
 # 只看最近 N 条错误摘要
-powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1 -Head 10
+powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1 -Head 10
 ```
 
 ### 检测原理（2026-08 实验验证）

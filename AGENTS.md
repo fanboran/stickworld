@@ -50,6 +50,7 @@
 2. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/design/mechanics/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
 3. **报错自检**：任何代码修改后，运行 `powershell -ExecutionPolicy Bypass -File tools\check_godot_errors.ps1`（退出码 1 = 编辑器/运行日志有 ERROR/SCRIPT ERROR/Parse Error，须修复）；修改场景/资源文件后若用户报告编辑器报错，先查 `%APPDATA%\Godot\app_userdata\stick_world\logs\` 下最新日志（含轮转文件 `godot<时间戳>.log`），详见 `docs/技术/教程/Godot日志与报错检测.md`。
 4. **GitHub 查询走 MCP**：查 GitHub（代码/issue/仓库/README）一律用 `github-search` MCP 工具（已配置 GITHUB_TOKEN 认证）；**禁止手动 curl 匿名调用 api.github.com**（匿名限额 60 次/时，会触发限流并污染诊断）。
+5. **UI 布局单一真相源（P1/P2）**：场景是布局唯一真相源。**禁止 `Control.new()` 当 UI 根**（会丢 anchor 致控件静默不可见）；代码建全屏控件用 `UIKit.full_rect()`，角落 HUD 部件自设 anchor 并挂 `UIRoot.add_to_slot("HudOverlay", ...)` 等槽。详见 `docs/技术/架构/UI架构.md`。
 
 ***
 

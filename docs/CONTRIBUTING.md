@@ -8,7 +8,8 @@
 4. Godot 编辑器路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
 
 > 测试框架：自研 TestRunner 体系（`tests/`，三层 unit/integration/smoke），
-> GdUnit4 未引入（见 tests/README.md）。全量测试：`powershell -ExecutionPolicy Bypass -File tests\run_all.ps1`
+> GdUnit4 未引入（见 tests/README.md）。默认终端为 **bash**。全量测试（测试脚本为 `.ps1`，从 bash 中经 powershell 调用）：
+> `powershell -ExecutionPolicy Bypass -File tests/run_all.ps1`
 
 ## 分支策略
 

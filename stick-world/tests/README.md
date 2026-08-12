@@ -88,7 +88,7 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 - `tests/smoke/`（2 文件）：new_game_smoke、cross_map_travel
 - `tests/dev/`（1 场景，不进 CI）：dev_playtest
 
-> 功能 ↔ 场景 ↔ 覆盖 的完整对应关系见 [`tests/matrix.md`](matrix.md)。
+> 功能 ↔ 场景 ↔ 覆盖 的完整对应关系见 [`docs/技术/教程/测试矩阵.md`](../../docs/技术/教程/测试矩阵.md)。
 
 > 后续轮次：巨型文件（village_map/selection_formation）内部继续按主题拆细、去除残留的用例间共享状态。
 
@@ -97,9 +97,10 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 ## 六、聚合运行
 
 ```
-powershell -ExecutionPolicy Bypass -File tests\run_all.ps1
-powershell -ExecutionPolicy Bypass -File tests\run_all.ps1 -Filter unit      # 只跑 unit
-powershell -ExecutionPolicy Bypass -File tests\run_all.ps1 -Filter stage     # 只跑旧 stage 回归基线
+# 默认终端为 bash；脚本为 .ps1，经 powershell 调用（路径用 / 分隔）
+powershell -ExecutionPolicy Bypass -File tests/run_all.ps1
+powershell -ExecutionPolicy Bypass -File tests/run_all.ps1 -Filter unit      # 只跑 unit
+powershell -ExecutionPolicy Bypass -File tests/run_all.ps1 -Filter stage     # 只跑旧 stage 回归基线
 ```
 
 `run_tests.gd`（旧入口）职责：仅 autoload 冒烟（EventBus/ConfigManager），不再是"全部测试入口"。

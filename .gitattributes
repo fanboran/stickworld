@@ -59,3 +59,6 @@ SConscript text eol=lf
 # Godot 特定导入文件
 *.import text eol=lf
 *.uid -text
+
+# 程序化世界生成的归档工具（含内嵌 base64 图片的 HTML + 一次性 Python 脚本），不计入语言统计
+tools/worldgen/archive/** linguist-vendored

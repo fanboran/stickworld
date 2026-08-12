@@ -29,7 +29,6 @@
 | `texture_gen`          | CPU 贴图 + GPU Shader 材质库     | ✅ 完整        |
 | `organization`         | 五层级通用组织管理（军/科/工/政/商）        | 🟡 部分       |
 | `resources`            | 资源库存/价格/消耗/产出               | 🟡 待接入      |
-| `technology`           | 科技解锁与研究（Demo 阶段以征服获得为主）     | 🟡 部分       |
 | `environment`          | 跨场景天空/天气/光照/震动              | 🟡 仅光照      |
 | `player_control`       | 输入分发 + 框选/编队 + 附身           | ✅ P0.7 完整   |
 | `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
@@ -60,8 +59,8 @@
         ▼              ▼                          ▼            ▼
    ┌─────────────────────────────────────────────────────────────┐
    │              玩法系统层（核心循环）                          │
-   │  organization  construction  combat  technology  resources  │
-   │   (枢纽)         (建造)       (战斗)    (科技)     (经济)   │
+   │  organization  construction  combat  resources              │
+   │   (枢纽)         (建造)       (战斗)   (经济)                │
    └────────┬─────────────────────────────────┬──────────────────┘
             │                                 │
             ▼                                 ▼
@@ -80,7 +79,7 @@
 
 **关键路径**：
 
-- `organization` 是枢纽：军事组织触发 `combat`、工程组织触发 `construction`、科研组织触发 `technology`、商业组织触发 `resources` 流动
+- `organization` 是枢纽：军事组织触发 `combat`、工程组织触发 `construction`、商业组织触发 `resources` 流动
 - `units` 是被调用方：所有玩法系统通过 `units/api.gd` 拉取/驱动火柴人
 - `world` 是场景图容器：所有运行实体（建筑、单位、组织实例）都挂在它的 `MapInstance` 下
 - `world_map` 与 `world` 正交：前者是鸟瞰视图，玩家不在其中；后者是玩家实际所在
@@ -161,7 +160,7 @@ GameRoot
 | 政权 | `state_XXX`                  | `"state_007"`              |
 | 联盟 | `alliance_XXX`               | `"alliance_002"`           |
 
-**核心信号**：`region_clicked` / `granularity_changed` / `map_mode_changed` / `region_owner_changed` / `settlement_updated` / `battlefront_updated` / `strategic_map_opened` / `strategic_map_closed`
+**核心信号**：`settlement_clicked` / `settlement_activated` / `region_hovered`（模块本地）；开/关与进入场景图经 `EventBus.strategic_map_opened` / `strategic_map_closed` / `travel_requested`
 
 **核心方法**：`set_granularity(level, parent_id)` / `query_at_screen(pos)` / `enter_settlement(settlement_id)` / `close_strategic_map()`
 
@@ -389,31 +388,6 @@ L4 攻占北方行省
 
 ***
 
-#### `modules/technology/` — 科技系统
-
-**职责**：科技解锁与研究。
-
-**获取机制**（Demo 阶段）：
-
-| 方式       | 说明                                    |
-| -------- | ------------------------------------- |
-| **征服抢夺** | 打下敌国/占领特定地区 → 解锁对方科技（unlocked = true） |
-| **事件获取** | 遗迹探索、特殊事件触发                           |
-| **自主研究** | 后期帝国规模，组织科学院研究（Demo 阶段不启用）            |
-
-> Demo 阶段科技主要通过**征服获得**，获得即拥有，无 AVAILABLE/RESEARCHING 状态机。
-
-**核心方法**：
-
-- `start_research(tech_id, org_id)` → 需 org 标签=RESEARCH
-- `get_available_techs()` / `get_researching_techs()` / `get_unlocked_techs()` / `get_tech_state(tech_id)`
-- `assign_researchers(org_id, researcher_ids)`
-- `pause_research` / `resume_research`
-
-**信号**：`tech_started` / `tech_paused` / `tech_resumed` / `tech_completed`
-
-***
-
 ### 3.4 基础设施
 
 #### `modules/player_control/` — 玩家输入与控制
@@ -451,8 +425,7 @@ UIRoot
 ├── GlobalHUD              # 顶层常驻：时间速度、资源数、通知、居中模式
 ├── ModePanel              # 模式容器：Village/Battle/Possess 槽位（内容由各模块装配）
 ├── ContextPanel           # 上下文容器：选中什么显示什么
-├── Minimap                # 小地图（屏幕正上方中央，详见 §6.4）
-├── ZoomBar / ResourceBar / ClockWidget  # 通用 HUD 控件
+├── HudOverlay             # HUD 槽：Minimap / ZoomBar / ResourceBar / ClockWidget（角落 HUD 自设 anchor 挂此槽）
 └── ModalOverlay           # 弹窗容器（暂停/设置/存档/编制/战略图）
 ```
 
@@ -922,56 +895,30 @@ config/
 
 ## 9. EventBus 信号分类
 
-> 完整信号清单见 `core/autoload/event_bus.gd`。本节只列主要分类（按发射方-接收方）。
+> 完整信号清单见 `core/autoload/event_bus.gd`（2026-08 清理后仅保留已接线信号）。
+> 资源/科技/组织/建筑等**状态变更类信号由对应模块 api.gd 自建**，EventBus 不重复声明。
 
-### 9.1 资源/经济事件
+### 9.1 状态变更类（模块 api.gd 自建，不经过 EventBus）
 
-| 信号                    | 参数                                               | 触发   |
-| --------------------- | ------------------------------------------------ | ---- |
-| `resource_changed`    | resource\_id, amount, delta, region\_id          | 库存变化 |
-| `resource_not_enough` | resource\_id, required, available, region\_id    | 不足   |
-| `price_changed`       | resource\_id, old\_price, new\_price, region\_id | 价格波动 |
-| `trade_completed`     | from\_region, to\_region, resource\_id, quantity | 商队到货 |
+| 类别 | 模块 | 信号 |
+| -- | -- | -- |
+| 资源 | `resources/api.gd` | `resource_changed` / `resource_not_enough` / `price_changed` |
+| 建筑 | `construction/api.gd` | `building_started` / `building_completed` / `building_removed` / `building_damaged` / `building_upgraded`（参数统一 `building_id, region_id`） |
+| 组织 | `organization/api.gd` | `org_created` / `org_restructured` / `org_disbanded` |
 
-### 9.2 人口/单位事件
+### 9.2 跨模块事件（EventBus 转发）
 
-| 信号               | 参数                      | 触发     |
-| ---------------- | ----------------------- | ------ |
-| `unit_recruited` | unit\_id, org\_id       | 新火柴人加入 |
-| `unit_lost`      | unit\_id, cause         | 阵亡     |
-| `unit_summoned`  | unit\_id, asphalt\_cost | 沥青召唤   |
-| `commander_died` | org\_id, commander\_id  | 指挥官阵亡  |
-
-### 9.3 建筑事件
-
-| 信号                                     | 参数                                 | 触发      |
-| -------------------------------------- | ---------------------------------- | ------- |
-| `building_started`                     | project\_id, region\_id            | 开工      |
-| `building_completed`                   | building\_id, region\_id           | 完工      |
-| `building_removed`                     | building\_id, region\_id           | 拆除/摧毁   |
-| `building_damaged`                     | building\_id, damage\_amount       | 被攻击     |
-| `building_upgraded`                    | building\_id, old\_tier, new\_tier | 升级      |
-| `interior_entered` / `interior_exited` | building\_id                       | 进出室内交互区 |
-
-### 9.4 战斗事件
-
-| 信号                 | 参数                                         | 触发     |
-| ------------------ | ------------------------------------------ | ------ |
-| `battle_started`   | battle\_id, region\_id, attacker, defender | 战斗开始   |
-| `battle_ended`     | battle\_id, result, casualties             | 战斗结束   |
-| `battle_stalemate` | battle\_id, duration                       | 进入僵持   |
-| `supply_line_cut`  | org\_id, supply\_id                        | 补给被切断  |
-| `tactical_event`   | battle\_id, event\_type, data              | 关键战术事件 |
-
-### 9.5 科技/扩张/组织/项目/UI 事件
-
-| 类别 | 主要信号                                                                               |
-| -- | ---------------------------------------------------------------------------------- |
-| 科技 | `tech_researched` / `tech_started` / `tech_stalled`                                |
-| 扩张 | `territory_gained` / `territory_lost` / `coalition_formed` / `treaty_signed`       |
-| 组织 | `org_created` / `org_disbanded` / `org_restructured` / `org_efficiency_changed`    |
-| 项目 | `project_created` / `project_completed` / `project_failed` / `project_decomposed`  |
-| UI | `ui_notification` / `ui_switch_view` / `ui_zoom_level_changed` / `ui_possess_unit` |
+| 类别 | 信号 |
+| -- | -- |
+| 生命周期 | `game_started` / `game_loaded` / `game_saving` / `game_saved` / `game_paused` / `game_resumed` |
+| 战斗 | `battle_started(battle_id)` / `battle_ended(battle_id, victory)` |
+| 编队 | `selection_changed` / `squad_created` / `order_issued` / `commander_assigned` |
+| 场景/旅行 | `travel_requested` / `travel_started` / `travel_completed` / `map_loaded` / `map_unloaded` / `chunk_loaded` / `chunk_unloaded` |
+| 战略图 | `strategic_map_opened` / `strategic_map_closed` |
+| 附身 | `possession_started(entity)` / `possession_ended(entity)` |
+| UI | `ui_notification` / `ui_toggle_pause_requested` |
+| 室内交互 | `interior_entered` / `interior_exited` / `mega_interior_entered` / `mega_interior_exited` |
+| 其他 | `balance_changed` / `debug_visibility_changed` |
 
 **信号准则**：
 
@@ -984,27 +931,20 @@ config/
 
 ## 10. Autoload 依赖
 
-> 全局单例清单（来自 `project.godot`）。**严禁修改** **`core/`**，新增 autoload 需经批准。
+> 全局单例清单（来自 `project.godot`，共 8 个）。新增 autoload 需经批准。
 
-| 名称                 | 脚本                                       | 职责          |
-| ------------------ | ---------------------------------------- | ----------- |
-| `EventBus`         | `core/autoload/event_bus.gd`             | 全局事件总线（零依赖） |
-| `ConfigManager`    | `core/autoload/config_manager.gd`        | 用户设置读写      |
-| `SaveManager`      | `core/autoload/save_manager.gd`          | 存档/读档       |
-| `SceneManager`     | `core/autoload/scene_manager.gd`         | 场景/视图切换     |
-| `AudioManager`     | `core/services/audio_manager.gd`         | 音频播放        |
-| `_mcp_game_helper` | `addons/godot_ai/runtime/game_helper.gd` | 第三方 AI 工具   |
-| `DebugApi`         | `modules/debug_GUI/api.gd`               | 调试覆盖层管理     |
+| 名称              | 脚本                                     | 职责                          | 接线状态     |
+| --------------- | -------------------------------------- | --------------------------- | -------- |
+| `EventBus`      | `core/autoload/event_bus.gd`           | 全局事件总线（零依赖）                 | ✅ 活跃     |
+| `WorldState`    | `core/autoload/world_state.gd`         | 全局状态容器                      | 🟡 预留     |
+| `ConfigManager` | `core/autoload/config_manager.gd`      | 用户设置读写                      | ✅ core 内使用 |
+| `TimeManager`   | `core/autoload/time_manager.gd`        | 时间/速度管理                     | ✅ 活跃     |
+| `BalanceConfig` | `core/autoload/balance_config.gd`      | 平衡变量加载（`balance_changed` 热重载） | 🟡 预留     |
+| `AudioManager`  | `core/services/audio_manager.gd`       | 音频播放（P1 音效实现时接线）            | 🟡 预留     |
+| `SaveManager`   | `core/autoload/save_manager.gd`        | 存档/读档（SQLite）                | ✅ 活跃     |
+| `DebugApi`      | `modules/debug_GUI/api.gd`             | 调试覆盖层管理                     | ✅ 活跃     |
 
-**初始化顺序**（自上而下）：
-
-```
-EventBus（零依赖，最先）
-  → ConfigManager / TimeManager
-    → AudioManager（依赖 ConfigManager）
-      → SaveManager（依赖 WorldState + EventBus）
-        → SceneManager（依赖 SaveManager + EventBus）
-```
+**初始化顺序**（自上而下，project.godot 声明序）：`EventBus → WorldState → ConfigManager → TimeManager → BalanceConfig → AudioManager → SaveManager → DebugApi`
 
 **职责边界**：
 
@@ -1013,8 +953,7 @@ EventBus（零依赖，最先）
 | EventBus      | 信号注册、safe\_emit | 不存任何游戏状态                |
 | ConfigManager | 用户设置读写          | 不存游戏配置（→ BalanceConfig） |
 | SaveManager   | 存档读写、模块注册       | 不定义存档内容格式               |
-| SceneManager  | 场景/视图切换         | 不定义场景内容                 |
-| AudioManager  | 音频播放            | 不定义何时播放                 |
+| TimeManager   | 时间推进/速度/昼夜       | 不存实体状态                   |
 
 ***
 

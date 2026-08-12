@@ -320,18 +320,13 @@ func _setup_formation_panel_deferred() -> void:
 
 # ─────────────────────────────── 设置菜单装配（齿轮/ESC 打开）────────────────────────────────
 
-## 实例化 SettingsMenuPanel 并挂到 UIRoot.ModalOverlay（Control 容器，
-## anchors 布局可靠——直接挂 CanvasLayer 下 anchors 不生效会堆左上角）。
+## 实例化 SettingsMenuPanel 并挂到 UIRoot.ModalOverlay 槽（全屏 UI 根走 UIKit.full_rect）。
 func _setup_settings_menu_panel() -> void:
 	if _root.ui_root == null:
 		return
-	var overlay: Control = _root.ui_root.get_node_or_null(UIAPI.PATH_MODAL_OVERLAY)
-	if overlay == null:
+	var sp := UIKit.full_rect(_SettingsMenuPanelScript, "SettingsMenuPanel")
+	if not _root.ui_root.add_to_slot("ModalOverlay", sp):
 		return
-	var sp := Control.new()
-	sp.set_script(_SettingsMenuPanelScript)
-	sp.name = "SettingsMenuPanel"
-	overlay.add_child(sp)
 	_root._settings_menu_panel = sp
 	call_deferred("_setup_settings_menu_panel_deferred")
 

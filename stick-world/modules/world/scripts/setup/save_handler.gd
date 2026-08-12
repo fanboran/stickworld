@@ -27,15 +27,20 @@ func setup(root: GameRoot) -> void:
 	# 向 SaveManager 注册（接收 game_saving/game_loaded 信号）
 	if SaveManager and SaveManager.has_method("register_module"):
 		SaveManager.register_module("map_runtime", self)
-	# 实例化存档面板
-	_root._save_panel = Control.new()
-	_root._save_panel.set_script(_SavePanelScript)
-	_root._save_panel.name = "SavePanel"
+	# 实例化存档面板（全屏 UI 根走 UIKit.full_rect，挂 ModalOverlay 槽）
+	_root._save_panel = UIKit.full_rect(_SavePanelScript, "SavePanel")
 	_root._save_panel.visible = false
 	if _root.ui_root != null:
-		_root.ui_root.add_child(_root._save_panel)
+		_root.ui_root.add_to_slot("ModalOverlay", _root._save_panel)
 	else:
 		_root.add_child(_root._save_panel)
+	if _root._save_panel.has_method("setup_load_callback"):
+		_root._save_panel.setup_load_callback(_on_load_slot)
+
+
+## SavePanel 读档回调（SavePanel 不反向依赖 world，由本子系统注入）
+func _on_load_slot(slot_index: int) -> void:
+	load_game_from_slot(slot_index)
 
 
 # ─────────────────────────────── 保存流程 ────────────────────────────────

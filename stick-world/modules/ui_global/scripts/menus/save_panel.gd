@@ -13,6 +13,14 @@ const PANEL_SIZE: Vector2 = Vector2(640, 480)
 
 var _slot_container: VBoxContainer = null
 
+## 读档回调（由装配方 SaveHandler 注入，替代 group 反查 game_root）
+var _load_callback: Callable = Callable()
+
+
+## 注入读档回调（SaveHandler.load_game_from_slot 转发）
+func setup_load_callback(cb: Callable) -> void:
+	_load_callback = cb
+
 
 func _ready() -> void:
 	panel_size = PANEL_SIZE
@@ -105,9 +113,8 @@ func _on_save(slot: int) -> void:
 
 
 func _on_load(slot: int) -> void:
-	var game_root := get_tree().get_first_node_in_group("game_root")
-	if game_root != null and game_root.has_method("load_game_from_slot"):
-		game_root.load_game_from_slot(slot)
+	if _load_callback.is_valid():
+		_load_callback.call(slot)
 	close()
 
 

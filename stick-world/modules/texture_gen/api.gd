@@ -1,3 +1,4 @@
+class_name TextureGenApi
 extends RefCounted
 ## 纹理生成模块（texture_gen）公共接口契约
 ##

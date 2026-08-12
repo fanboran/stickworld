@@ -171,8 +171,11 @@ var dev_enemy_count: int = 4
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
-	# 加入 game_root group（供 SavePanel 等查找）
+	# 加入 game_root group（供 SelectionSystem 等查找相机等服务）
 	add_to_group("game_root")
+	# 注册 InputDispatcher 到 PlayerControlAPI（units 经 api 获取，不反向依赖 world）
+	if input_dispatcher != null:
+		PlayerControlAPI.register_input_dispatcher(input_dispatcher)
 	# 挂载子模块（SystemSetup / SaveHandler / TravelHandler / InitialContent）
 	_mount_child_modules()
 	# 装配 UI 覆盖层 + 所有子系统（由 SystemSetup 执行）

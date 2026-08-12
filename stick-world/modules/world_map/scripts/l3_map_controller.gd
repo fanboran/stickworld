@@ -125,4 +125,4 @@ func close() -> void:
 	visible = false
 	# 通知 system_setup 恢复场景图输入
 	if EventBus != null:
-		EventBus.emit_signal("strategic_map_closed")
+		EventBus.strategic_map_closed.emit()

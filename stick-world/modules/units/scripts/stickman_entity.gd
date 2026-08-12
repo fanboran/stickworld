@@ -606,15 +606,9 @@ func _toggle_combat_mode() -> void:
 		EventBus.ui_notification.emit("模式", label, "info")
 
 
-## 查找 InputDispatcher（通过 game_root group 获取；2026-08 审计收敛：替代父链遍历）。
-## GameRoot 注册于 "game_root" group（见 game_root._ready）。
+## 查找 InputDispatcher（经 PlayerControlAPI 注册表；GameRoot 装配时注册）。
 func _find_input_dispatcher() -> Node:
-	if get_tree() == null:
-		return null
-	var game_root: Node = get_tree().get_first_node_in_group("game_root")
-	if game_root == null:
-		return null
-	return game_root.get("input_dispatcher") as Node
+	return PlayerControlAPI.get_input_dispatcher()
 
 
 ## 获取所在地图引用（可能为 null，供 AI 行为查询玩家等）。

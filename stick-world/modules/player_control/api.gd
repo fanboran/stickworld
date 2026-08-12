@@ -35,6 +35,19 @@ enum Mode {
 	UI,         ## UI 模式（弹窗打开时屏蔽游戏输入）
 }
 
+# ─────────────────────────────── InputDispatcher 注册表 ────────────────────────────────
+## 由 GameRoot 装配时注册。units 等模块经本 api 获取（替代 group 反查，方向 units→player_control）。
+static var _input_dispatcher: Node = null
+
+
+static func register_input_dispatcher(dispatcher: Node) -> void:
+	_input_dispatcher = dispatcher
+
+
+static func get_input_dispatcher() -> Node:
+	return _input_dispatcher
+
+
 # ─────────────────────────────── 信号契约 ────────────────────────────────
 ## InputDispatcher 发射的信号：
 ##   - mode_changed(old_mode: int, new_mode: int)

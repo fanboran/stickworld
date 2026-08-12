@@ -88,15 +88,15 @@ func _build_exterior() -> void:
 	var right_edge: float = float(width) * 32.0 - EXT_OFFSET_X
 
 	# 生成纹理
-	var tex_bw   = ProceduralMaterials.make_straw_thatch(BW_TEX_W, BW_TEX_H, pal.C_THATCH_BACK)
-	var tex_bp   = ProceduralMaterials.make_wood_pillar(BP_TEX_W, BP_TEX_H, pal.C_WOOD_BACK)
-	var tex_fp   = ProceduralMaterials.make_wood_pillar(FP_TEX_W, FP_TEX_H, pal.C_WOOD_FRONT)
-	var tex_bm   = ProceduralMaterials.make_wood_pillar(BM_TEX_W, BM_TEX_H, pal.C_WOOD_BEAM)
-	var tex_vs   = ProceduralMaterials.make_wood_pillar(VS_TEX_W, VS_TEX_H, pal.C_WOOD_BEAM)
-	var tex_ss   = ProceduralMaterials.make_wood_pillar(SS_TEX_W, SS_TEX_H, pal.C_WOOD_STRUT)
+	var tex_bw   = TextureGenApi.make_straw_thatch(BW_TEX_W, BW_TEX_H, pal.C_THATCH_BACK)
+	var tex_bp   = TextureGenApi.make_wood_pillar(BP_TEX_W, BP_TEX_H, pal.C_WOOD_BACK)
+	var tex_fp   = TextureGenApi.make_wood_pillar(FP_TEX_W, FP_TEX_H, pal.C_WOOD_FRONT)
+	var tex_bm   = TextureGenApi.make_wood_pillar(BM_TEX_W, BM_TEX_H, pal.C_WOOD_BEAM)
+	var tex_vs   = TextureGenApi.make_wood_pillar(VS_TEX_W, VS_TEX_H, pal.C_WOOD_BEAM)
+	var tex_ss   = TextureGenApi.make_wood_pillar(SS_TEX_W, SS_TEX_H, pal.C_WOOD_STRUT)
 	var tex_sb   = _make_slanted_beam_tex(pal.C_WOOD_BEAM)
-	var tex_th_main  = ProceduralMaterials.make_straw_thatch(64, 64, pal.C_THATCH_MAIN)
-	var tex_th_left  = ProceduralMaterials.make_straw_thatch(64, 64, pal.C_THATCH_LEFT)
+	var tex_th_main  = TextureGenApi.make_straw_thatch(64, 64, pal.C_THATCH_MAIN)
+	var tex_th_left  = TextureGenApi.make_straw_thatch(64, 64, pal.C_THATCH_LEFT)
 
 	# ── L1 后景墙（左端固定 + 右端锚右边界 + 中间拉伸）──
 	var l1 := _nc("L1_BackWall", ext)
@@ -192,4 +192,4 @@ func _make_slanted_beam_tex(color: Color):
 	var slant  := 64.0
 	var height := 110.0
 	var length := sqrt(slant * slant + height * height)
-	return ProceduralMaterials.make_wood_pillar(23, ceili(length), color)
+	return TextureGenApi.make_wood_pillar(23, ceili(length), color)

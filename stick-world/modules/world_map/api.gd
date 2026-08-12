@@ -21,12 +21,7 @@ signal settlement_activated(settlement_id: String)
 @warning_ignore("unused_signal")
 signal region_hovered(tile_id: String, settlement_id: String)
 
-## 战略图打开（通知 UI / InputDispatcher 暂停场景图输入）
-@warning_ignore("unused_signal")
-signal strategic_map_opened
-
-## 战略图关闭（通知 UI / InputDispatcher 恢复场景图输入）
-signal strategic_map_closed
+# 战略图开/关通知走 EventBus.strategic_map_opened / strategic_map_closed（单一通道，勿在本地重复声明）
 
 
 # ===== 内部引用 =====
@@ -179,10 +174,11 @@ func enter_settlement(settlement_id: String) -> void:
 	close_strategic_map()
 
 
-## 关闭战略图，返回之前的场景图
+## 关闭战略图，返回之前的场景图。
+## 关闭通知统一由控制器经 EventBus.strategic_map_closed 发射（controller.close 内），
+## 此处兜底：控制器缺失时直接发信号，避免场景图输入永久暂停。
 func close_strategic_map() -> void:
 	if _controller != null and _controller.has_method("close"):
 		_controller.close()
-	strategic_map_closed.emit()
-	if EventBus != null:
-		EventBus.emit_signal("strategic_map_closed")
+	elif EventBus != null:
+		EventBus.strategic_map_closed.emit()

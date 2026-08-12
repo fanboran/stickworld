@@ -104,16 +104,12 @@ func open() -> void:
 				# 地图原点（左上角）居中：屏幕中心 - 地图显示尺寸一半
 				var offset := vp_size * 0.5 - Vector2(1024.0 * fit_zoom * 0.5, 1024.0 * fit_zoom * 0.5)
 				map_camera.set_offset(offset)
-	if api != null and api.has_signal("strategic_map_opened"):
-		api.strategic_map_opened.emit()
 	if EventBus != null:
-		EventBus.emit_signal("strategic_map_opened")
+		EventBus.strategic_map_opened.emit()
 
 
 ## 关闭战略图（恢复场景图输入，由接线方/ESC 调用）
 func close() -> void:
 	visible = false
-	if api != null and api.has_signal("strategic_map_closed"):
-		api.strategic_map_closed.emit()
 	if EventBus != null:
-		EventBus.emit_signal("strategic_map_closed")
+		EventBus.strategic_map_closed.emit()

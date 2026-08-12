@@ -86,8 +86,8 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
 	for row in proj_rows:
 		_restore_project_from_row(row)
-	# 更新 ID 计数器
-	_root._next_building_id = _calc_next_id(_root._buildings.keys(), "bld_") + 1
+	# 更新 ID 计数器（建筑实例 id 为纯数字无前缀）
+	_root._next_building_id = _calc_next_id(_root._buildings.keys(), "") + 1
 	_root._next_project_id = _calc_next_id(_root._projects.keys(), "proj_") + 1
 
 

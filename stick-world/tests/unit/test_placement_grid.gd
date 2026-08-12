@@ -62,7 +62,7 @@ func _test_world_to_cell_round_trip() -> void:
 func _test_occupy_marks_cells() -> void:
 	_runner.add_test("PlacementGrid: occupy 标记连续条带", func():
 		var g := _new_grid()
-		var ok := g.occupy(5, 2, "bld_a")
+		var ok := g.occupy(5, 2, "a")
 		_runner.assert_true(ok, "occupy(5,2) 应成功")
 		_runner.assert_true(g.is_occupied(5), "cell 5 应被占用")
 		_runner.assert_true(g.is_occupied(6), "cell 6 应被占用")
@@ -73,16 +73,16 @@ func _test_occupy_marks_cells() -> void:
 func _test_occupy_conflict_returns_false() -> void:
 	_runner.add_test("PlacementGrid: 冲突 occupy 返回 false", func():
 		var g := _new_grid()
-		_runner.assert_true(g.occupy(5, 2, "bld_a"), "首次 occupy(5,2) 成功")
-		_runner.assert_true(not g.occupy(6, 1, "bld_b"), "occupy(6,1) 与已占用冲突应失败")
+		_runner.assert_true(g.occupy(5, 2, "a"), "首次 occupy(5,2) 成功")
+		_runner.assert_true(not g.occupy(6, 1, "b"), "occupy(6,1) 与已占用冲突应失败")
 	)
 
 
 func _test_release_by_occupant() -> void:
 	_runner.add_test("PlacementGrid: release 按 occupant 释放", func():
 		var g := _new_grid()
-		g.occupy(5, 2, "bld_a")
-		g.release("bld_a")
+		g.occupy(5, 2, "a")
+		g.release("a")
 		_runner.assert_true(not g.is_occupied(5), "release 后 cell 5 应空闲")
 		_runner.assert_true(not g.is_occupied(6), "release 后 cell 6 应空闲")
 	)
@@ -103,7 +103,7 @@ func _test_expand_to_negative_cells() -> void:
 		g.expand_to(-5)
 		_runner.assert_equal(g.get_min_cell(), -5, "扩展后 min_cell = -5")
 		_runner.assert_true(g.is_in_bounds(-3), "扩展后 cell -3 应在界内")
-		_runner.assert_true(g.occupy(-3, 2, "bld_neg"), "负坐标 occupy 应成功")
+		_runner.assert_true(g.occupy(-3, 2, "neg"), "负坐标 occupy 应成功")
 	)
 
 

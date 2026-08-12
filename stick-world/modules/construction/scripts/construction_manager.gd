@@ -118,7 +118,7 @@ func get_map() -> Node2D:
 	return _map
 
 
-## 查找距离 pos 最近的已完工仓库建筑（def_id=="bld_warehouse"）。
+## 查找距离 pos 最近的已完工仓库建筑（def_id=="warehouse"）。
 ## 用于搬运工取货。无仓库返回 null。
 func get_nearest_warehouse(pos: Vector2) -> Node2D:
 	var best: Node2D = null
@@ -133,7 +133,7 @@ func get_nearest_warehouse(pos: Vector2) -> Node2D:
 		var b: Node2D = entry as Node2D
 		if b == null:
 			continue
-		if b.get("def_id") != "bld_warehouse":
+		if b.get("def_id") != "warehouse" and b.get("def_id") != "placeholder":
 			continue
 		var d: float = b.global_position.distance_to(pos)
 		if d < best_dist:
@@ -295,7 +295,7 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 	_remove_progress_indicator(project.project_id)
 	if building == null:
 		return
-	var building_id := "bld_%04d" % _next_building_id
+	var building_id := "%04d" % _next_building_id
 	_next_building_id += 1
 	# 在 Building 上存 building_id（如果支持）
 	if building is Building:
@@ -552,7 +552,7 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 		placement_grid.occupy(cell_x, width, building)
 
 	# 注册 building_id
-	var building_id := "bld_%04d" % _next_building_id
+	var building_id := "%04d" % _next_building_id
 	_next_building_id += 1
 	if building is Building:
 		(building as Building).set_meta("building_id", building_id)

@@ -71,7 +71,7 @@ func _ensure_setup() -> void:
 	_cm.set_map(_map)
 	# 等待 _ready 完成默认场景注册
 	await TestHelpers.await_condition(
-		func(): return _cm.is_building_registered("bld_placeholder"),
+		func(): return _cm.is_building_registered("placeholder"),
 		3.0, "默认建筑场景注册"
 	)
 
@@ -84,21 +84,21 @@ func _worker() -> Node:
 
 func _test_no_map() -> void:
 	var cm := ScriptConstructionManager.new()
-	var r: Dictionary = cm.start_construction_at("r1", "bld_placeholder", 12)
+	var r: Dictionary = cm.start_construction_at("r1", "placeholder", 12)
 	_runner.assert_false(r.get("ok", true), "无地图应失败")
 	_runner.assert_not_equal(r.get("error", ""), "", "应带错误信息")
 
 
 func _test_unregistered_def() -> void:
 	await _ensure_setup()
-	var r: Dictionary = _cm.start_construction_at("r1", "bld_nonexistent", 12)
+	var r: Dictionary = _cm.start_construction_at("r1", "nonexistent", 12)
 	_runner.assert_false(r.get("ok", true), "未注册类型应失败")
 	_runner.assert_true(str(r.get("error", "")).contains("未注册"), "错误应指明未注册")
 
 
 func _test_full_cycle() -> void:
 	await _ensure_setup()
-	var start: Dictionary = _cm.start_construction_at("r1", "bld_placeholder", 14)
+	var start: Dictionary = _cm.start_construction_at("r1", "placeholder", 14)
 	_runner.assert_true(start.get("ok", false), "开工应成功")
 	var project_id: String = start.get("project_id", "")
 	_runner.assert_not_equal(project_id, "", "应有 project_id")
@@ -124,36 +124,36 @@ func _test_full_cycle() -> void:
 func _test_insufficient_resources() -> void:
 	await _ensure_setup()
 	# 黑盒注入（走 set_resources_api 注入点，2026-08 回归验证）+ 库存为 0 的 fake api
-	_cm._building_defs_cache["bld_placeholder"] = {"build_cost_wood": 10.0}
+	_cm._building_defs_cache["placeholder"] = {"build_cost_wood": 10.0}
 	var fake := FakeResourcesApi.new()
 	fake.fail_consume = true
 	fake.stock = 0.0
 	_cm.set_resources_api(fake)
-	var r: Dictionary = _cm.start_construction_at("r1", "bld_placeholder", 20)
+	var r: Dictionary = _cm.start_construction_at("r1", "placeholder", 20)
 	_runner.assert_false(r.get("ok", true), "资源不足应失败")
 	_runner.assert_true(str(r.get("error", "")).contains("资源不足"), "错误应指明资源不足，实际: %s" % r.get("error", ""))
 	_cm.set_resources_api(null)
-	_cm._building_defs_cache.erase("bld_placeholder")
+	_cm._building_defs_cache.erase("placeholder")
 
 
 func _test_resources_consumed() -> void:
 	await _ensure_setup()
 	# 库存充足时建造成功，且按成本实际扣减（2026-08 修复：注入点缺失导致永久免费建造）
-	_cm._building_defs_cache["bld_placeholder"] = {"build_cost_wood": 10.0, "build_cost_stone": 5.0}
+	_cm._building_defs_cache["placeholder"] = {"build_cost_wood": 10.0, "build_cost_stone": 5.0}
 	var fake := FakeResourcesApi.new()
 	fake.stock = 1000.0
 	_cm.set_resources_api(fake)
-	var r: Dictionary = _cm.start_construction_at("r1", "bld_placeholder", 40)
+	var r: Dictionary = _cm.start_construction_at("r1", "placeholder", 40)
 	_runner.assert_true(r.get("ok", false), "资源充足应开工成功: " + str(r))
 	_runner.assert_equal(fake.consumed_total, 15.0, "应按成本扣减 wood10+stone5=15，实际: %s" % fake.consumed_total)
 	_cm.set_resources_api(null)
-	_cm._building_defs_cache.erase("bld_placeholder")
+	_cm._building_defs_cache.erase("placeholder")
 
 
 func _test_building_registry() -> void:
 	await _ensure_setup()
 	# 已通过 _test_full_cycle 完工一栋（cell_x=14），这里再走一遍完整循环验证登记
-	var start: Dictionary = _cm.start_construction_at("r1", "bld_placeholder", 30)
+	var start: Dictionary = _cm.start_construction_at("r1", "placeholder", 30)
 	_runner.assert_true(start.get("ok", false), "开工应成功: %s" % start.get("error", ""))
 	var worker := _worker()
 	_cm.register_worker(worker)
@@ -184,28 +184,28 @@ func _test_entity_blocking() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	# 有人挡着 → 预置建筑应拒绝
-	var r: Dictionary = _cm.spawn_operational_building("bld_warehouse", cell_x, 16)
+	var r: Dictionary = _cm.spawn_operational_building("warehouse", cell_x, 16)
 	_runner.assert_false(r.get("ok", true), "范围内有实体应拒绝放置: %s" % r.get("error", ""))
 	_runner.assert_true(str(r.get("error", "")).contains("单位"), "错误应指明有单位，实际: %s" % r.get("error", ""))
 	# 开工建造同样拒绝（用同宽度验证）
-	var r2: Dictionary = _cm.start_construction_at("r1", "bld_warehouse", cell_x)
+	var r2: Dictionary = _cm.start_construction_at("r1", "warehouse", cell_x)
 	_runner.assert_false(r2.get("ok", true), "范围内有实体应拒绝开工: %s" % r2.get("error", ""))
 	# 实体移到建筑脚下空地（Y 更大，脚部在建筑体区域外）→ 不应再妨碍放置
 	e.global_position = Vector2(float(cell_x) * 32.0 + 16.0 * 16.0, 960.0)
 	await get_tree().physics_frame
-	var r4: Dictionary = _cm.start_construction_at("r1", "bld_warehouse", cell_x)
+	var r4: Dictionary = _cm.start_construction_at("r1", "warehouse", cell_x)
 	_runner.assert_true(r4.get("ok", false), "实体在建筑脚下空地不应妨碍放置: %s" % r4.get("error", ""))
 	# 实体彻底移走后 → 预置建筑成功
 	e.global_position = Vector2(200.0, 900.0)
 	await get_tree().physics_frame
-	var r3: Dictionary = _cm.spawn_operational_building("bld_placeholder", cell_x, 2)
+	var r3: Dictionary = _cm.spawn_operational_building("placeholder", cell_x, 2)
 	_runner.assert_true(r3.get("ok", false), "实体离开后应可放置: %s" % r3.get("error", ""))
 
 
 func _test_escape_stuck() -> void:
 	await _ensure_setup()
 	# 建一栋仓库（宽 16，带 PassageBarrier）
-	var r: Dictionary = _cm.spawn_operational_building("bld_warehouse", 60, 16)
+	var r: Dictionary = _cm.spawn_operational_building("warehouse", 60, 16)
 	_runner.assert_true(r.get("ok", false), "预置建筑成功: %s" % r.get("error", ""))
 	if not r.get("ok", false):
 		return

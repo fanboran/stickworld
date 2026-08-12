@@ -18,14 +18,16 @@ signal building_generated(building_type: String, instance: Node)
 ## building_gen 自有的建筑场景模板（def_id → 相对本模块的 .tscn 路径）。
 ## 命名约定：文件名 = def_id = 存档字段三者一致（详见 buildings/README.md），
 ## 故直接以 def_id 为键，零映射成本。
+## 材质/模块分离后：房屋类建筑共用草棚外壳（placeholder.tscn），
+## 兵营/仓库等 def 复用该外壳，材质与功能模块由 def 数据驱动（后续扩展）。
 const _BUILDING_SCENE_PATHS := {
-	"bld_placeholder": "buildings/bld_placeholder.tscn",
-	"bld_wall_tier1": "buildings/bld_wall_tier1.tscn",
-	"bld_wall_tier2": "buildings/bld_wall_tier2.tscn",
-	"bld_wall_tier3": "buildings/bld_wall_tier3.tscn",
-	"bld_wall_gate": "buildings/bld_wall_gate.tscn",
-	"bld_barracks": "buildings/bld_barracks.tscn",
-	"bld_warehouse": "buildings/bld_warehouse.tscn",
+	"placeholder": "buildings/placeholder.tscn",
+	"wall_tier1": "buildings/wall_tier1.tscn",
+	"wall_tier2": "buildings/wall_tier2.tscn",
+	"wall_tier3": "buildings/wall_tier3.tscn",
+	"wall_gate": "buildings/wall_gate.tscn",
+	"barracks": "buildings/placeholder.tscn",
+	"warehouse": "buildings/placeholder.tscn",
 }
 
 

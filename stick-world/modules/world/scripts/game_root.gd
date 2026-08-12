@@ -36,16 +36,6 @@ const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/ma
 const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
 ## 森林附属区域场景（阶段 F）
 const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/forest_zone.tscn")
-const _L1_SETTLEMENT_SCENES: Array[PackedScene] = [
-	preload("res://modules/world/scenes/maps/l1_settlement_00.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_01.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_02.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_03.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_04.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_05.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_06.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_07.tscn"),
-]
 ## 玩家火柴人实体场景（2026-08 收敛：经 UnitsAPI 常量引用，替代直接 preload 内部路径）
 const _UnitsApiScript: GDScript = preload("res://modules/units/api.gd")
 const _STICKMAN_ENTITY_SCENE: PackedScene = _UnitsApiScript.STICKMAN_ENTITY_SCENE
@@ -62,7 +52,6 @@ const MEGA_INTERIOR_MAP_ID := "mega_interior"
 const BATTLEFIELD_MAP_ID := "battlefield"
 ## 森林附属区域地图 ID（阶段 F）
 const FOREST_ZONE_MAP_ID := "forest_zone"
-const L1_SETTLEMENT_MAP_ID_PREFIX := "l1_settlement_"
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
 const PLAYER_SPAWN_X: float = 0.0
 ## NPC 村民数量（P0 测试用，展示 AI 行为；阶段 E 创始人确认改为 2）
@@ -366,13 +355,6 @@ func _register_default_maps() -> void:
 	scene_loader.register_map(BATTLEFIELD_MAP_ID, _BATTLEFIELD_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 阶段 F：注册森林附属区域
 	scene_loader.register_map(FOREST_ZONE_MAP_ID, _FOREST_ZONE_SCENE, WorldAPI.MapType.VILLAGE)
-	# 0.9b：注册 8 张程序化生成的聚落地图（L1 世界图的 8 城邦，settlement_mapgen.py 产物）
-	for i in _L1_SETTLEMENT_SCENES.size():
-		scene_loader.register_map(
-			"%s%02d" % [L1_SETTLEMENT_MAP_ID_PREFIX, i],
-			_L1_SETTLEMENT_SCENES[i],
-			WorldAPI.MapType.VILLAGE
-		)
 	# 配置地图出口（步行衔接，详见 §6.2）
 	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
@@ -568,7 +550,7 @@ func start_demo_building_at(cell_x: int) -> Dictionary:
 	if _construction_manager == null or not _construction_manager.has_method("start_construction_at"):
 		return {"ok": false, "error": "ConstructionManager 未就绪"}
 	# 直接调用 manager 的 start_construction_at（按指定位置）
-	return _construction_manager.start_construction_at("test_region", "bld_placeholder", cell_x, "")
+	return _construction_manager.start_construction_at("test_region", "placeholder", cell_x, "")
 
 
 # ─────────────────────────────── 存档转发（实现见 SaveHandler 子模块）────────────────────────────────

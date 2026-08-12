@@ -62,6 +62,8 @@ var _hauler: Node = null
 const HAUL_PAYLOAD_FRACTION: float = 0.25
 ## 工地临时障碍（建造中阻挡通行，完工移除）
 var _barrier: StaticBody2D = null
+## 未建成时的占位建筑视觉（灰色盒子，随宽度拉伸，完工移除）
+var _placeholder_visual: Node2D = null
 ## 完工后实例化的 Building 引用（state != OPERATIONAL 时为 null）
 var building: Node = null
 
@@ -101,6 +103,8 @@ func _init(
 	building_scene = p_building_scene
 	total_work = p_total_work
 	region_id = p_region_id
+	# 立项即显示占位建筑（未建成时灰盒预览）
+	_create_placeholder_visual()
 
 
 # ─────────────────────────────── 派工 ────────────────────────────────
@@ -167,7 +171,7 @@ func get_worker_slot_index(worker: Node) -> int:
 func tick(_delta: float) -> void:
 	if state != State.UNDER_CONSTRUCTION:
 		return
-	# total_work<=0（如 bld_placeholder）直接完工
+	# total_work<=0（如 placeholder）直接完工
 	if total_work <= 0.0:
 		material_progress = 1.0
 		current_work = total_work
@@ -257,53 +261,67 @@ func _create_barrier() -> void:
 	var host: Node2D = map.get("walk_barrier") if "walk_barrier" in map else null
 	if host == null:
 		return
-	# 从建筑场景模板读取 PassageBarrier 碰撞箱参数
-	var barrier_size: Vector2 = Vector2(float(width) * 32.0, 390.0)
-	var barrier_offset_x: float = float(width) * 16.0
-	var barrier_offset_y: float = -190.0
-	# 模板自身的宽度（用于按实际宽度缩放障碍）
-	var template_width: int = width
-	if building_scene != null:
-		var temp := building_scene.instantiate()
-		if temp != null:
-			if temp is Building:
-				template_width = (temp as Building).width
-			var pb := temp.get_node_or_null("PassageBarrier") if temp is Node else null
-			if pb != null:
-				for child in pb.get_children():
-					if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
-						var cs := child as CollisionShape2D
-						barrier_size = ((cs.shape as RectangleShape2D).size)
-						barrier_offset_x = cs.position.x
-						barrier_offset_y = cs.position.y
-						break
-			temp.queue_free()
-	# 实际宽度与模板宽度不同时，障碍横向按比例缩放（工地紫色标记跟随建筑宽度）
-	if template_width > 0 and template_width != width:
-		var ratio: float = float(width) / float(template_width)
-		barrier_size.x *= ratio
-		barrier_offset_x *= ratio
+	# 占位碰撞箱：位于地面线 ground_y ~ ground_y+96（96px 高、坐在地面上），
+	# 与占位符建筑一致；X 覆盖整栋建筑宽度（跟随实际拉伸宽度）。
+	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
+	var site_size := Vector2(float(width) * 32.0, 96.0)
+	var site_center := Vector2(float(cell_x) * 32.0 + float(width) * 16.0, ground_y + 48.0)
 	_barrier = StaticBody2D.new()
 	_barrier.visible = false
-	# 非碰撞：仅作工地范围标记（调试层绘制）。工人需进入建筑中间区工作，
-	# 若仍按 BODY 碰撞会挡住工人（他们只能站在建筑外缘远处交互）。
-	_barrier.collision_layer = 0
+	# 与实体同层（BODY）：实体 collision_mask 含 layer 2，move_and_slide 自然阻挡
+	_barrier.collision_layer = Hitbox.CollisionLayer.BODY
 	_barrier.collision_mask = 0
 	var shape := RectangleShape2D.new()
-	shape.size = barrier_size
+	shape.size = site_size
 	var col := CollisionShape2D.new()
 	col.shape = shape
 	_barrier.add_child(col)
-	# 建筑原点 Y = baseline - collision_bottom_local
-	# collision_bottom_local = barrier_offset_y + barrier_size.y / 2
-	# 障碍 CollisionShape2D 世界坐标 = 建筑原点 + (barrier_offset_x, barrier_offset_y)
-	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
-	var baseline: float = ground_y + baseline_offset
-	var collision_bottom_local: float = barrier_offset_y + barrier_size.y * 0.5
-	var building_origin_y: float = baseline - collision_bottom_local
-	_barrier.position = Vector2(float(cell_x) * 32.0 + barrier_offset_x, building_origin_y + barrier_offset_y)
+	_barrier.position = site_center
 	host.add_child(_barrier)
+
+
+## 创建未建成时的占位建筑视觉（灰色盒子 + 黑色左右边缘，随建筑宽度拉伸）。
+## 位于地面线 ground_y ~ ground_y+96，与占位碰撞箱一致。
+func _create_placeholder_visual() -> void:
+	if _placeholder_visual != null and is_instance_valid(_placeholder_visual):
+		return
+	if map == null:
+		return
+	var host: Node2D = map.get("build_mask_layer") if "build_mask_layer" in map else null
+	if host == null:
+		host = map.get_node_or_null("BuildMaskLayer")
+	if host == null:
+		return
+	var w: float = float(width) * 32.0
+	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
+	var vis := Node2D.new()
+	vis.name = "ConstructionPlaceholder"
+	vis.z_index = 10
+	var body := Polygon2D.new()
+	body.name = "Body"
+	body.polygon = PackedVector2Array([Vector2(0, -96), Vector2(w, -96), Vector2(w, 0), Vector2(0, 0)])
+	body.color = Color(0.5, 0.5, 0.5, 1.0)
+	vis.add_child(body)
+	var edge_l := Polygon2D.new()
+	edge_l.name = "EdgeLeft"
+	edge_l.polygon = PackedVector2Array([Vector2(0, -96), Vector2(4, -96), Vector2(4, 0), Vector2(0, 0)])
+	edge_l.color = Color(0, 0, 0, 1.0)
+	vis.add_child(edge_l)
+	var edge_r := Polygon2D.new()
+	edge_r.name = "EdgeRight"
+	edge_r.polygon = PackedVector2Array([Vector2(w - 4, -96), Vector2(w, -96), Vector2(w, 0), Vector2(w - 4, 0)])
+	edge_r.color = Color(0, 0, 0, 1.0)
+	vis.add_child(edge_r)
+	vis.position = Vector2(float(cell_x) * 32.0, ground_y + 96.0)
+	host.add_child(vis)
+	_placeholder_visual = vis
+
+
+## 移除占位建筑视觉（完工/取消时调用）
+func _remove_placeholder_visual() -> void:
+	if _placeholder_visual != null and is_instance_valid(_placeholder_visual):
+		_placeholder_visual.queue_free()
+	_placeholder_visual = null
 
 
 ## 完工：UNDER_CONSTRUCTION → OPERATIONAL
@@ -311,10 +329,11 @@ func _create_barrier() -> void:
 func _complete() -> void:
 	if state != State.UNDER_CONSTRUCTION:
 		return
-	# 移除工地临时障碍（Building 的 PassageBarrier 接管）
+	# 移除工地临时障碍与占位建筑视觉（Building 的 PassageBarrier 接管）
 	if _barrier != null and is_instance_valid(_barrier):
 		_barrier.queue_free()
 		_barrier = null
+	_remove_placeholder_visual()
 	if map == null:
 		push_error("[ConstructionProject] map 为 null，无法实例化建筑: %s" % project_id)
 		return
@@ -407,6 +426,8 @@ func cancel() -> void:
 		worker_unassigned.emit(self, w)
 	_assigned_workers.clear()
 	_worker_slot_map.clear()
+	# 移除占位建筑视觉
+	_remove_placeholder_visual()
 	cancelled.emit(self)
 
 

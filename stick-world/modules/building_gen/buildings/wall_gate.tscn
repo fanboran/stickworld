@@ -1,24 +1,28 @@
-[gd_scene load_steps=3 format=3 uid="uid://bldwalltier1001"]
+[gd_scene format=3 uid="uid://depxy3a2qxfw7"]
 
 [ext_resource type="Script" path="res://modules/building_gen/scripts/building.gd" id="1_building"]
 
 [sub_resource type="RectangleShape2D" id="rect_passage"]
-size = Vector2(32, 64)
+size = Vector2(32, 128)
 
-[node name="BldWallTier1" type="Node2D"]
+[node name="WallGate" type="Node2D"]
 script = ExtResource("1_building")
-def_id = "bld_wall_tier1"
+def_id = "wall_gate"
 width = 1
 
 [node name="Exterior" type="Node2D" parent="."]
 position = Vector2(16, 0)
 
 [node name="WallBody" type="Polygon2D" parent="Exterior"]
-polygon = PackedVector2Array(-16, -64, 16, -64, 16, 0, -16, 0)
-color = Color(0.55, 0.42, 0.28, 1)
+polygon = PackedVector2Array(-16, -128, 16, -128, 16, 0, -16, 0)
+color = Color(0.48, 0.38, 0.25, 1)
+
+[node name="GateOpening" type="Polygon2D" parent="Exterior"]
+polygon = PackedVector2Array(-12, -64, 12, -64, 12, 0, -12, 0)
+color = Color(0.2, 0.15, 0.1, 1)
 
 [node name="PassageBarrier" type="StaticBody2D" parent="."]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier"]
-position = Vector2(16, -32)
+position = Vector2(16, -96)
 shape = SubResource("rect_passage")

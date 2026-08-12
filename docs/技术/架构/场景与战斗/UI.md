@@ -1,7 +1,7 @@
-# UI 与环境
+# UI 架构
 
-> 拆分自 [场景与战斗架构.md](../场景与战斗架构.md) §十、§十一。
-> 关联文档：[`场景宿主架构.md`](场景宿主架构.md)（GameRoot/UIRoot）、[`事件总线信号契约.md`](EventBus信号契约.md)
+> 拆分自 [场景与战斗架构.md](../场景与战斗架构.md) §十。
+> 关联文档：[`场景宿主架构.md`](场景宿主架构.md)（GameRoot/UIRoot；环境系统详见该文档 §2.5）、[`事件总线信号契约.md`](EventBus信号契约.md)
 
 ---
 
@@ -20,7 +20,10 @@ UIRoot (常驻)
 │   ├── BuildingInspector  (选中建筑)
 │   ├── SquadInspector     (选中编制)
 │   └── CommanderPanel     (附身指挥官时的管理面板)
-├── Minimap                ← 小地图（屏幕正上方中央，详见 §10.4）
+├── HudOverlay             ← 常驻 HUD 部件槽（有尺寸的容器，见 §10.7）
+│   ├── BuildMenu          ← 建造按钮 + 两阶段放置（见 §10.7.3）
+│   ├── Minimap            ← 小地图（屏幕正上方中央，详见 §10.4）
+│   └── ZoomBar            ← 缩放条
 └── ModalOverlay           ← 弹窗（暂停菜单、组织架构总览、世界地图）
 ```
 
@@ -111,7 +114,7 @@ modules/<模块>/ui/           # 模块专属 UI（各模块自包含）
 └── world_map/ui/            # 战略图面板/提示等
 ```
 
-> **装配方式**：业务面板由 `SystemSetup`（world 模块装配器）`set_script` 到 UIRoot 的槽位/弹窗层节点，模块代码不跨模块 `get_node`。
+> **装配方式**：业务面板由 `SystemSetup`（world 模块装配器）挂到 UIRoot 的槽位/弹窗层节点，模块代码不跨模块 `get_node`。全屏 UI 根一律用 `UIKit.full_rect()` 创建（强制 FULL_RECT），HUD 部件挂 `HudOverlay` 槽（见 §10.7）。
 
 ### 10.4 Minimap 小地图系统
 
@@ -327,36 +330,50 @@ hide_legend()
 
 > **设计原则**：弹窗跟随目标建筑不跟随火柴人，玩家移动时弹窗稳定在建筑上方，不晃动。
 
----
+#### 10.6.4 建造两阶段放置交互（草棚宽度可调）
 
-## 十一、环境系统
+建造菜单选择建筑（如草棚）后进入**两阶段放置**：
 
-### 11.1 模块结构
+1. **选址阶段**：鼠标显示条带预览（默认 def 宽度），左键放下草稿（**条带固定**，左右边界不再跟随鼠标）
+2. **拉伸阶段**：**按住左键拖动**调整左右边界（拖动侧由按下位置决定：靠近左边界拖左、靠近右边界拖右，两侧互不影响）；松开后条带固定；点击「确定建造」才真正调用 `start_construction_at`（携带最终 width）
+3. 右键/Esc 取消
 
+**条带预览**（`PlacementGhost`，单节点自绘）：
+- 每个单元格 = 30% 半透明蓝色填充矩形 + 描边，左右各内缩（格间留缝）
+- 呼吸动画：水平只向内缩（0~+1px）、垂直 ±1.5px，周期 3s
+- 端部等边三角把手（尖朝外、底边在端格内），悬停端格拉大（垂直 +5px、水平 +1px）并停呼吸、三角 ±0.5px 呼吸
+- 点击反馈：端格绕中心左右震动两下 + 三角位置浅色虚影外扩消失
+- 橙色 4 角角框标定未调整前的默认大小；条带上方显示格数计数器
+
+**其他约束**：
+- 放置期间关闭相机边缘滚动（避免靠近屏幕边缘拖动时世界跟着滚）
+- 点「确定建造」时不再被"开始拖动"逻辑消费（先判按钮矩形）
+
+### 10.7 UI 布局原则与槽位路由
+
+#### 10.7.1 两条布局铁律
+
+1. **场景是布局唯一真相源**：UI 槽位、常驻面板都在 `.tscn` 里声明（带 anchor）。**禁止 `Control.new()` + set_script 直接当 UI 根**——`Control.new()` 默认 anchor(0,0)/size 0，锚定子控件会定位到原点负坐标，导致**静默不可见**（无报错，曾致"建造"按钮消失，见 §10.7.4）。
+2. **槽位化路由**：所有 UI 通过 `UIRoot.add_to_slot()` 挂到具名槽（HudOverlay / ModePanel / ModalOverlay…），由槽提供确定坐标系，不散落手写 `add_child`。
+
+#### 10.7.2 代码创建规则
+
+| 场景 | 做法 |
+|------|------|
+| 全屏面板/UI 根 | `UIKit.full_rect(script, name)`（[UIKit.gd](file:///f:/VSCode/game-2/stick-world/modules/ui_global/scripts/UIKit.gd)，强制 FULL_RECT + 双向 grow） |
+| 角落 HUD 部件（小地图/缩放条/建造按钮） | 自设 anchor + `UIRoot.add_to_slot("HudOverlay", ...)` |
+| 弹窗/面板类 | 挂 ModalOverlay / ModePanel 等有尺寸槽 |
+
+#### 10.7.3 槽位 API
+
+```gdscript
+# UIRoot（modules/ui_global/scripts/ui_root.gd）
+get_slot(slot_name: String) -> Control     # 取具名槽
+add_to_slot(slot_name: String, node) -> bool  # 挂槽（子控件 anchor 自理）
+switch_mode_panel(type)                    # ModePanel 切换
+open_modal(node) / close_all_modals()
 ```
-modules/environment/
-├── api.gd
-├── sky_system.gd              # 天空：极光、星星、太阳/月亮
-├── weather_system.gd          # 天气：雨/雪/沙尘暴
-├── ground_system.gd           # 地面：纹理重复、震动摇晃
-├── lighting_system.gd         # 光照：随时间变化
-└── biome_system.gd            # 生物群落：地理位置决定基调
-```
 
-### 11.2 跨场景保持
+#### 10.7.4 事故复盘（为何立此规）
 
-环境系统是 `GameRoot` 的常驻子节点。地图切换时只是切换 `WorldChunkHost` 的子节点，**环境继续工作**。
-
-环境参数（天气、时间、地理位置）挂在 `WorldState`（Autoload）上，不挂场景。
-
-### 11.3 关键技术点
-
-| 效果 | 实现方式 |
-|------|---------|
-| 极光 | `Shader` + 噪波纹理 + 时间动画 |
-| 星星 | `GPUParticles2D` 或 Shader 顶点 |
-| 下雨 | `GPUParticles2D` + 风向参数 |
-| 沙尘暴 | `GPUParticles2D` + 屏幕色染 + 能见度衰减 |
-| 地面震动 | `GroundShakeRig` 父节点 `position` 抖动（参考相机抖动） |
-| 光照变化 | `CanvasModulate.color` 按 `time_of_day` 插值 |
-| 生物群落基调 | `biome_system` 提供参数，`sky`/`weather`/`ground` 各自读取 |
+`_setup_build_menu` 曾"优先用 ui_root.tscn 的 BuildMenu 节点、找不到则 `Control.new()` 回退"。回退创建丢失 .tscn 的 FULL_RECT anchor，`PRESET_BOTTOM_RIGHT` 的"建造"按钮被摆到 0 尺寸容器原点（负坐标），静默不可见。修复 = 代码创建全屏 UI 根一律 `UIKit.full_rect()` + 挂 HudOverlay 槽。规则已写入 `AGENTS.md` 核心行为指令 #5，防后续再踩。

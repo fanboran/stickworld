@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://66wmnqxb88kc"
-path="res://.godot/imported/backpillarl.png-b1057d8208f84ddcdb6d686acc4e02f2.ctex"
+uid="uid://c7mwa6vuprn8e"
+path="res://.godot/imported/frontpillar.png-6326614481f4e4d37a01ede75d16aa87.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_reference_textures/backpillarl.png"
-dest_files=["res://.godot/imported/backpillarl.png-b1057d8208f84ddcdb6d686acc4e02f2.ctex"]
+source_file="res://modules/building_gen/archive/smithy_reference_textures/frontpillar.png"
+dest_files=["res://.godot/imported/frontpillar.png-6326614481f4e4d37a01ede75d16aa87.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dwurjxumutb5e"
-path="res://.godot/imported/beam.png-b0530ce8562b216fdd666eb3bd404297.ctex"
+uid="uid://dmp2d467un8g"
+path="res://.godot/imported/verticalstrut.png-bfdaa58dc94181051ca7af66bc9b13a3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_reference_textures/beam.png"
-dest_files=["res://.godot/imported/beam.png-b0530ce8562b216fdd666eb3bd404297.ctex"]
+source_file="res://modules/building_gen/archive/smithy_reference_textures/verticalstrut.png"
+dest_files=["res://.godot/imported/verticalstrut.png-bfdaa58dc94181051ca7af66bc9b13a3.ctex"]
 
 [params]
 

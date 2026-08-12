@@ -74,7 +74,7 @@
 | 规则 | 说明 | 示例 |
 |------|------|------|
 | 英文蛇形命名 | 小写字母 + 下划线 | `base_price`、`max_hp` |
-| `id` 列 | 每行数据的唯一标识，必填 | `res_food`、`bld_house` |
+| `id` 列 | 每行数据的唯一标识，必填 | `res_food`、`house` |
 | `id*` 表示必填 | 列名末尾加 `*` 表示该列不能为空 | `id*`（但 `id` 列即使不加 `*` 也会被检查） |
 | `xxx_id` 表示引用 | 指向另一张表的 `id` | `unlocked_by_tech_id` 指向科技表的某个 id |
 
@@ -195,7 +195,7 @@ python tools/pipeline/export_excel.py --dry-run
 
 ```
 ❌ 发现 1 个错误:
-  [建筑数据.xlsx] Sheet 'buildings' 第 5 行: id 'bld_house' 重复
+  [建筑数据.xlsx] Sheet 'buildings' 第 5 行: id 'house' 重复
 ```
 
 **原因**：同一个 Sheet 里有两条数据的 `id` 列填了相同的值。

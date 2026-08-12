@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7mwa6vuprn8e"
-path="res://.godot/imported/frontpillar.png-f056a21f3632822324c34b0dfb6bed28.ctex"
+uid="uid://bv5w8kbgaumoj"
+path="res://.godot/imported/roofmain.png-be0ac26db63fd015dcc63b575366047d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_reference_textures/frontpillar.png"
-dest_files=["res://.godot/imported/frontpillar.png-f056a21f3632822324c34b0dfb6bed28.ctex"]
+source_file="res://modules/building_gen/archive/smithy_reference_textures/roofmain.png"
+dest_files=["res://.godot/imported/roofmain.png-be0ac26db63fd015dcc63b575366047d.ctex"]
 
 [params]
 

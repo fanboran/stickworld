@@ -3,7 +3,7 @@ extends BuildingExterior
 ## 草棚 —— 标准 16 格茅草屋外壳（房屋类建筑默认外壳）。
 ##
 ## 外观由 BuildingExterior 基类程序化生成（按 width 平铺，支持任意宽度），
-## 本文件只提供调色板。对应 def bld_placeholder（建造菜单里的"草棚"）。
+## 本文件只提供调色板。对应 def placeholder（建造菜单里的"草棚"）。
 
 
 func _get_palette() -> Dictionary:

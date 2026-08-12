@@ -1,8 +1,9 @@
 # building_gen：程序化建筑生成系统
 
 > 本模块负责程序化生成建筑实体：
-> - `buildings/` + `scenes/` + `scripts/preview/`：建筑零件装配、编辑器预览、建筑定义（核心）
+> - `buildings/`：程序化建筑定义（草棚外壳 + 城墙等，核心）
 > - 纹理/材质生成已迁移至 [`modules/texture_gen/`](../texture_gen/README.md)，本模块单向依赖之。
+> - 编辑器预览/参考场景已归档至 `archive/`（开发参考，运行时无引用）。
 >
 > 系统级设计规范见 [docs/技术/教程/程序化材质系统.md](file:///f:/VSCode/game-2/stick-world/docs/技术/教程/程序化材质系统.md)。
 
@@ -12,26 +13,25 @@
 
 ```
 modules/building_gen/
-├── api.gd                          # 模块对外 API（仅建筑实例化，材质 API 见 TextureGenApi）
+├── api.gd                          # 模块对外 API（def→场景注册表，材质 API 见 TextureGenApi）
 ├── README.md                       # 本文件：系统级说明
 ├── buildings/                      # 程序化建筑定义（核心）
-│   ├── bld_placeholder.tscn        #   占位建筑（纯灰+黑线，仅碰撞箱，16格宽）
-│   ├── pg_smithy_lv1.gd            #   铁匠铺 Lv1 生成脚本（继承 Building 基类）
-│   ├── pg_smithy_lv1.tscn          #   铁匠铺 Lv1 场景（碰撞/交互区/工作槽位）
-│   └── reference/                  #   建筑级参考图
-│       ├── smithy_lv1.png ~ smithy_lv4.png
-│       ├── smithy_lv1_thatch.png
-│       └── smithy_lv1_thatch_tile.png
-├── scenes/                         # 建筑编辑/预览场景（核心）
-│   ├── smithy_reference.tscn       #   铁匠铺完整参考场景（程序化零件装配）
-│   ├── smithy_preview.tscn         #   铁匠铺编辑器实时预览场景
-│   └── smithy_reference_textures/  #   smithy 建筑零件纹理（与 smithy_reference.tscn 配套）
+│   ├── placeholder.tscn            #   草棚外壳（房屋类建筑共用，16格宽，可拉伸）
+│   ├── thatch_hut.gd               #   草棚调色板子类（extends BuildingExterior）
+│   ├── building_exterior.gd        #   外观装配基类（外壳几何 + 纹理生成）
+│   ├── wall_tier1.tscn             #   低矮土墙（耦合：场景手绘，非材质/模块分离）
+│   ├── wall_tier2.tscn             #   标准城墙
+│   ├── wall_tier3.tscn             #   大型城墙
+│   ├── wall_gate.tscn              #   城门
+│   └── reference/                  #   建筑级参考图（设计稿）
+├── archive/                        # 归档（开发参考，无运行时引用）
+│   ├── smithy_reference.tscn       #   铁匠铺零件参考装配场景（历史）
+│   ├── smithy_preview.tscn         #   铁匠铺编辑器预览场景（历史）
+│   ├── smithy_reference_textures/  #   零件纹理（配套）
+│   ├── smithy_preview.gd / smithy_reference.gd
 ├── scripts/
 │   ├── building.gd                 # Building 基类（class_name）
-│   ├── building_snap.gd            # 编辑器吸附脚本（@tool）
-│   └── preview/                    # @tool 预览脚本（编辑器实时渲染）
-│       ├── smithy_reference.gd     #   装配铁匠铺所有零件到场景
-│       └── smithy_preview.gd       #   编辑器内实时预览
+│   └── building_snap.gd            # 编辑器吸附工具（@tool，配合预览场景做场景搭建/测试）
 └── assets/
     └── white_tex.png               # 4x4 白色纹理，激活 Sprite2D UV
 ```

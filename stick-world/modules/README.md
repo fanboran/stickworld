@@ -276,7 +276,7 @@ remaining_work = base_work                  # 例如铁匠铺 = 100 工时
 **核心理念**（与"预制场景"对比）：
 
 ```
-旧：bld_smithy_lv1.tscn (预制场景，复制粘贴改)
+旧：smithy_lv1.tscn (预制场景，复制粘贴改)
 新：BuildingDef (数据配方) ──→ BuildingGen.generate() ──→ BuildingEntity (节点树)
 ```
 

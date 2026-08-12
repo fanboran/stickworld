@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bew3u60o0tw12"
-path="res://.godot/imported/slantedstrut.png-93fea5c911757701af8d7cfc6a39ed76.ctex"
+path="res://.godot/imported/slantedstrut.png-fa0519c84ade71792f9962f0abd87923.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://modules/building_gen/scenes/smithy_reference_textures/slantedstrut.png"
-dest_files=["res://.godot/imported/slantedstrut.png-93fea5c911757701af8d7cfc6a39ed76.ctex"]
+source_file="res://modules/building_gen/archive/smithy_reference_textures/slantedstrut.png"
+dest_files=["res://.godot/imported/slantedstrut.png-fa0519c84ade71792f9962f0abd87923.ctex"]
 
 [params]
 

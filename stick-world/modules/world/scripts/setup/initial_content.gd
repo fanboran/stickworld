@@ -45,11 +45,11 @@ func spawn_initial_buildings(map: Node2D) -> void:
 			push_warning("[GameRoot] 初始建筑生成失败: %s cell_x=%d: %s" % [def_id, cell_x, result.get("error", "未知错误")])
 
 
-## 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
+## 预置村庄初始草棚（搬运系统取货点 + 玩家出生点右侧的草棚，放在出生点右侧土路区）
 func spawn_initial_warehouse() -> void:
 	var construction_api: Node = _root.get_construction_api() if _root.has_method("get_construction_api") else null
 	if construction_api != null and construction_api.has_method("spawn_operational_building"):
-		construction_api.spawn_operational_building("bld_warehouse", 15, 16)
+		construction_api.spawn_operational_building("placeholder", 15, 16)
 
 
 # ─────────────────────────────── NPC 生成 ────────────────────────────────

@@ -60,6 +60,8 @@ var _returning: bool = false
 var _return_elapsed: float = 0.0
 ## 边缘滚动方向（-1 左 / 0 无 / 1 右）
 var _edge_scroll_dir: int = 0
+## 边缘滚动总开关（建造放置期间关闭，避免拖动边界时世界跟着滚）
+var _edge_scroll_enabled: bool = true
 ## 拖动状态
 var _dragging: bool = false
 ## 中键滚动状态（红警风格：方向滚动，非拖动）
@@ -293,6 +295,11 @@ func _compute_follow_x(delta: float) -> float:
 # ─────────────────────────────── 手动控制 ────────────────────────────────
 
 func _update_edge_scroll() -> void:
+	# 总开关：建造放置期间关闭，防止拖动边界时相机边缘滚动干扰
+	if not _edge_scroll_enabled:
+		if _edge_scroll_dir != 0:
+			_edge_scroll_dir = 0
+		return
 	# 居中模式：禁用边缘滚动（仅允许拖动/小地图跳转，松手即弹回）
 	if centered_mode:
 		if _edge_scroll_dir != 0:
@@ -326,6 +333,13 @@ func _update_edge_scroll() -> void:
 			_edge_scroll_dir = 0
 			# 边缘滚动刚退出，启动 5 秒冷却
 			_manual_cooldown = MANUAL_COOLDOWN_TIME
+
+
+## 设置边缘滚动总开关（建造放置期间传入 false）
+func set_edge_scroll_enabled(enabled: bool) -> void:
+	_edge_scroll_enabled = enabled
+	if not enabled:
+		_edge_scroll_dir = 0
 
 
 func _update_manual_control(_delta: float) -> void:

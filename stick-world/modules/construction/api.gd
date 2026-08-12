@@ -70,11 +70,11 @@ func start_construction(region_id: String, building_type: String, org_id: String
 	return result
 
 
-## 开工建造（指定位置 cell_x）
-func start_construction_at(region_id: String, building_type: String, cell_x: int, org_id: String = "") -> Dictionary:
+## 开工建造（指定位置 cell_x，可选 width 覆盖 def 宽度）
+func start_construction_at(region_id: String, building_type: String, cell_x: int, org_id: String = "", width: int = -1) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	var result := _manager.start_construction_at(region_id, building_type, cell_x, org_id)
+	var result := _manager.start_construction_at(region_id, building_type, cell_x, org_id, width)
 	if result.get("ok", false):
 		building_started.emit(result.get("project_id", ""), region_id)
 	return result

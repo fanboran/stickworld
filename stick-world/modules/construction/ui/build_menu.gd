@@ -24,10 +24,32 @@ var _hint_label: Label = null  # 选址模式提示
 # ─────────────────────────────── 选址状态 ────────────────────────────────
 var _placing: bool = false
 var _placing_def_id: String = ""
-var _ghost: Polygon2D = null
+## 条带预览容器（单元格宽蓝色描边小长方形拼接）
+var _ghost: Node2D = null
+## 两阶段放置：false=选址阶段（鼠标显示预览），true=已放下草稿（拉伸左右边界阶段）
+var _draft_placed: bool = false
+## 拉伸阶段是否正在按住左键拖动（拖动时边界跟随鼠标，松开后条带固定）
+var _drag_active: bool = false
+## 拖动侧：0=拖左边界，1=拖右边界（决定拖动时哪一侧跟随鼠标，互不影响）
+var _drag_side: int = 0
+## 按下时的鼠标 cell 与该侧边界值（拖拽增量基准：按下不移动则边界不跳变）
+var _drag_start_mouse: int = 0
+var _drag_start_boundary: int = 0
+## 草稿锚点（左边界所在 cell，由选址阶段左键落下）
+var _anchor_cell: int = 0
+## 默认大小区间（锚点..锚点+默认宽），橙色角框标定未调整前的大小
+var _default_start: int = 0
+var _default_end: int = 0
+## 当前预览的 cell 区间 [左, 右)
+var _cell_start: int = 0
+var _cell_end: int = 0
+## 确定建造按钮（stage 2 才显示）
+var _confirm_btn: Button = null
 ## ghost 预览高度（像素，向上，接近大多数建筑视觉高度）
 const _GHOST_HEIGHT: float = 280.0
 const _CELL_SIZE: int = 32
+## 放置默认宽度（cell 数）
+const _DEFAULT_WIDTH_CELLS: int = 16
 
 # ─────────────────────────────── 配置 ────────────────────────────────
 ## 建造使用的 region_id（与初始资源扣减一致）
@@ -236,29 +258,55 @@ func _on_building_selected(def_id: String) -> void:
 func _start_placing(def_id: String) -> void:
 	_placing_def_id = def_id
 	_placing = true
+	_draft_placed = false
+	_default_start = 0
+	_default_end = 0
+	# 放置期间关闭相机边缘滚动，避免拖动边界靠近屏幕边缘时世界跟着滚
+	if _camera_rig != null and is_instance_valid(_camera_rig) and _camera_rig.has_method("set_edge_scroll_enabled"):
+		_camera_rig.set_edge_scroll_enabled(false)
 	_hint_label.visible = true
+	_hint_label.text = "选址：左键放下草稿(默认16格) | 右键/Esc 取消"
 	_toggle_btn.visible = false
-	# 创建 ghost（挂到当前地图的 BuildMaskLayer）
+	# 创建条带预览容器（挂到当前地图的 BuildMaskLayer）
 	var map: Node2D = _game_root.get_current_map() if _game_root.has_method("get_current_map") else null
 	if map != null:
 		var mask_layer: Node2D = map.get("build_mask_layer") if "build_mask_layer" in map else null
 		if mask_layer == null:
 			mask_layer = map.get_node_or_null("BuildMaskLayer")
 		if mask_layer != null:
-			_ghost = Polygon2D.new()
-			_ghost.color = Color(0.2, 0.9, 0.3, 0.35)
+			_ghost = PlacementGhost.new()
 			_ghost.z_index = 20
 			mask_layer.add_child(_ghost)
+	# 确定建造按钮（stage 2 拉伸后才显示）
+	_confirm_btn = Button.new()
+	_confirm_btn.name = "ConfirmBtn"
+	_confirm_btn.text = "确定建造"
+	_confirm_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_confirm_btn.offset_left = -140.0
+	_confirm_btn.offset_top = -108.0
+	_confirm_btn.offset_right = -12.0
+	_confirm_btn.offset_bottom = -72.0
+	_confirm_btn.pressed.connect(_confirm_place)
+	_confirm_btn.visible = false
+	add_child(_confirm_btn)
 	set_process(true)
 
 
 func _cancel_placing() -> void:
 	_placing = false
+	_draft_placed = false
+	_drag_active = false
 	_placing_def_id = ""
+	# 恢复相机边缘滚动
+	if _camera_rig != null and is_instance_valid(_camera_rig) and _camera_rig.has_method("set_edge_scroll_enabled"):
+		_camera_rig.set_edge_scroll_enabled(true)
 	_hint_label.visible = false
 	if _ghost != null and is_instance_valid(_ghost):
 		_ghost.queue_free()
 		_ghost = null
+	if _confirm_btn != null and is_instance_valid(_confirm_btn):
+		_confirm_btn.queue_free()
+		_confirm_btn = null
 	set_process(false)
 	# 恢复建造按钮可见性
 	if _input_dispatcher != null and _input_dispatcher.has_method("get_mode") and _input_dispatcher.get_mode() == PlayerControlAPI.Mode.EXPLORE:
@@ -272,11 +320,10 @@ func _confirm_place() -> void:
 	var api: Node = _construction_api if _construction_api != null else _construction_manager
 	if api == null or not api.has_method("start_construction_at"):
 		return
-	var world_x: float = _get_mouse_world_x()
-	var cell_x: int = int(floor(world_x / float(_CELL_SIZE)))
-	var result: Dictionary = api.start_construction_at(_BUILD_REGION, _placing_def_id, cell_x, "")
+	var width: int = maxi(1, _cell_end - _cell_start)
+	var result: Dictionary = api.start_construction_at(_BUILD_REGION, _placing_def_id, _cell_start, "", width)
 	if result.get("ok", false):
-		_show_notify("开始建造: %s (cell=%d)" % [_placing_def_id, cell_x])
+		_show_notify("开始建造: %s (cell=%d, 宽=%d)" % [_placing_def_id, _cell_start, width])
 	else:
 		_show_notify("建造失败: %s" % result.get("error", "未知错误"))
 	# 建造后退出选址模式
@@ -291,30 +338,74 @@ func _process(_delta: float) -> void:
 	var map: Node2D = _game_root.get_current_map() if _game_root.has_method("get_current_map") else null
 	if map == null:
 		return
-	var def: Dictionary = _construction_manager.get_building_def(_placing_def_id) if _construction_manager.has_method("get_building_def") else {}
-	var width: int = int(def.get("width", 2))
-	var world_x: float = _get_mouse_world_x()
-	var cell_x: int = int(floor(world_x / float(_CELL_SIZE)))
+	var mouse_cell: int = _get_mouse_cell()
+	if _draft_placed:
+		# 拉伸阶段：条带固定，按住左键拖动时按"按下基准 + 相对位移"更新对应边界，
+		# 按下未移动则不跳变（互不影响、不会向内溃缩）
+		if _drag_active:
+			var delta: int = mouse_cell - _drag_start_mouse
+			if _drag_side == 0:
+				_cell_start = clampi(_drag_start_boundary + delta, 0, _cell_end - 1)
+			else:
+				_cell_end = clampi(_drag_start_boundary + delta, _cell_start + 1, 1 << 30)
+		if _hint_label != null:
+			_hint_label.text = "按住左键拖动左右两侧方块调整边界 | 点击「确定建造」确认 | 右键/Esc 取消"
+	else:
+		# 选址阶段：以鼠标为左边界，默认宽度
+		var w: int = _get_def_width()
+		_cell_start = mouse_cell
+		_cell_end = mouse_cell + w
+	# 记录默认大小（放下草稿时定格，用于橙色角框标定）
+	if _draft_placed and _default_end <= _default_start:
+		_default_start = _anchor_cell
+		_default_end = _anchor_cell + _get_def_width()
+	if _confirm_btn != null:
+		_confirm_btn.visible = _draft_placed
+	# 更新 ghost 参数并重绘（单节点自绘，避免每帧建删数十个节点导致卡顿/闪烁）
+	var width: int = maxi(1, _cell_end - _cell_start)
 	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	# 实际建筑底部对齐 baseline = ground_y + baseline_offset（地平线向下）
 	var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
 	var baseline: float = ground_y + baseline_offset
-	var left: float = float(cell_x) * float(_CELL_SIZE)
-	var right: float = float(cell_x + width) * float(_CELL_SIZE)
 	var top: float = baseline - _GHOST_HEIGHT
-	_ghost.polygon = PackedVector2Array([
-		Vector2(left, baseline),
-		Vector2(right, baseline),
-		Vector2(right, top),
-		Vector2(left, top),
-	])
-	# 超出地图边界时变红提示
 	var ml: float = float(map.get("map_left") if "map_left" in map else 0.0)
 	var mr: float = float(map.get("map_right") if "map_right" in map else 8192.0)
-	if left < ml or right > mr:
-		_ghost.color = Color(0.9, 0.2, 0.2, 0.35)
-	else:
-		_ghost.color = Color(0.2, 0.9, 0.3, 0.35)
+	var in_bounds: bool = true
+	for c in range(width):
+		var cx: int = _cell_start + c
+		var left: float = float(cx) * float(_CELL_SIZE)
+		var right: float = left + float(_CELL_SIZE)
+		if left < ml or right > mr:
+			in_bounds = false
+	_ghost.cell_start = _cell_start
+	_ghost.cell_end = _cell_end
+	_ghost.in_bounds = in_bounds
+	_ghost.draft_placed = _draft_placed
+	_ghost.default_start = _default_start
+	_ghost.default_end = _default_end
+	_ghost.top = top
+	_ghost.baseline = baseline
+	# 悬停检测：水平上位于最左/最右端格，且垂直范围也在条带矩形内
+	_ghost.hover_side = -1
+	if _draft_placed:
+		var mwy: float = _get_mouse_world_y()
+		var within_v: bool = mwy >= top and mwy <= baseline
+		if within_v and mouse_cell == _cell_start:
+			_ghost.hover_side = 0
+		elif within_v and mouse_cell == _cell_end - 1:
+			_ghost.hover_side = 1
+	_ghost.queue_redraw()
+
+
+## 获取鼠标所在 cell（相对当前地图）
+func _get_mouse_cell() -> int:
+	return int(floor(_get_mouse_world_x() / float(_CELL_SIZE)))
+
+
+## 获取当前建筑的默认宽度（cell 数），异常时回退 16
+func _get_def_width() -> int:
+	var def: Dictionary = _construction_manager.get_building_def(_placing_def_id) if _construction_manager.has_method("get_building_def") else {}
+	var w: int = int(def.get("width", _DEFAULT_WIDTH_CELLS))
+	return w if w > 0 else _DEFAULT_WIDTH_CELLS
 
 
 # ─────────────────────────────── 输入处理 ────────────────────────────────
@@ -324,11 +415,39 @@ func _process(_delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if not _placing:
 		return
-	if event is InputEventMouseButton and event.pressed:
+	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			_confirm_place()
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			if event.pressed:
+				if not _draft_placed:
+					# 选址阶段：放下草稿（固定 16 格条带），进入拉伸阶段
+					_anchor_cell = _get_mouse_cell()
+					_draft_placed = true
+					var w: int = _get_def_width()
+					_cell_start = _anchor_cell
+					_cell_end = _anchor_cell + w
+					get_viewport().set_input_as_handled()
+				else:
+					# 点击落在「确定建造」按钮上：交给按钮处理，不启动拖动
+					if _confirm_btn != null and is_instance_valid(_confirm_btn) and _confirm_btn.visible \
+							and _confirm_btn.get_global_rect().has_point(event.position):
+						return
+					# 拉伸阶段：按住左键开始拖动。先判定拖动侧（靠近哪条边界拖哪条），
+					# 记录按下基准，拖动按"相对位移"更新边界——按下不移动则边界不跳变
+					# （修复"点击瞬间范围向内溃缩一格"）
+					var mid: int = (_cell_start + _cell_end) / 2
+					_drag_side = 0 if _get_mouse_cell() <= mid else 1
+					_drag_start_mouse = _get_mouse_cell()
+					_drag_start_boundary = _cell_start if _drag_side == 0 else _cell_end
+					_drag_active = true
+					if _ghost != null and is_instance_valid(_ghost):
+						_ghost.trigger_feedback(_drag_side)
+					get_viewport().set_input_as_handled()
+			else:
+				# 松开左键：结束拖动，条带固定
+				if _drag_active:
+					_drag_active = false
+					get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			_cancel_placing()
 			get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed:
@@ -347,6 +466,16 @@ func _get_mouse_world_x() -> float:
 	var map: Node2D = _game_root.get_current_map() if _game_root != null and _game_root.has_method("get_current_map") else null
 	if map != null:
 		return map.get_global_mouse_position().x
+	return 0.0
+
+
+## 获取鼠标在世界坐标的 Y（悬停的垂直范围判断用）
+func _get_mouse_world_y() -> float:
+	if _camera_rig != null and is_instance_valid(_camera_rig):
+		return _camera_rig.get_global_mouse_position().y
+	var map: Node2D = _game_root.get_current_map() if _game_root != null and _game_root.has_method("get_current_map") else null
+	if map != null:
+		return map.get_global_mouse_position().y
 	return 0.0
 
 

@@ -19,8 +19,6 @@ extends "res://modules/units/scripts/ai/behavior_base.gd"
 const CELL_SIZE: float = 32.0
 const ARRIVE_THRESHOLD: float = 28.0
 const WORK_OFFSET_Y: float = 40.0
-## 站在建筑/障碍碰撞箱外的水平距离（避免工人走进通行障碍）
-const STANDOFF_X: float = 40.0
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 enum Phase { TO_WAREHOUSE, PICKING, TO_SITE, DELIVERING }
@@ -166,22 +164,30 @@ func _find_warehouse() -> Node2D:
 	return manager.get_nearest_warehouse(entity.global_position)
 
 
-## 仓库取货点：站在仓库 PassageBarrier 外，不走进建筑。
+## 仓库取货点：站在仓库横向中间 (width-2) 格区域内（与玩家交互判定一致）。
 func _compute_warehouse_pos() -> Vector2:
 	if _warehouse == null or entity == null:
 		return entity.global_position if entity != null else Vector2.ZERO
 	var w: int = int(_warehouse.get("width")) if "width" in _warehouse else 16
 	var left_x: float = _warehouse.global_position.x
 	var right_x: float = left_x + float(w) * CELL_SIZE
-	var center_x: float = (left_x + right_x) * 0.5
+	var zone_left: float = left_x + CELL_SIZE
+	var zone_right: float = right_x - CELL_SIZE
+	if zone_right <= zone_left:
+		zone_left = left_x
+		zone_right = right_x
 	var ground_y: float = entity.get("ground_y") if "ground_y" in entity else 810.0
-	var target_x: float = left_x - STANDOFF_X
-	if entity.global_position.x > center_x:
-		target_x = right_x + STANDOFF_X
+	# 取货点 = 中间区中心（或偏自己一侧）
+	var center_x: float = (left_x + right_x) * 0.5
+	var target_x: float = zone_left + (zone_right - zone_left) * 0.5
+	if entity.global_position.x < center_x:
+		target_x = zone_left + 12.0
+	else:
+		target_x = zone_right - 12.0
 	return Vector2(target_x, ground_y + WORK_OFFSET_Y)
 
 
-## 工地交付点：站在工地临时障碍外，不走进建筑。
+## 工地交付点：站在工地横向中间 (width-2) 格区域内（与玩家交互判定一致）。
 func _compute_site_pos() -> Vector2:
 	if _project == null or entity == null:
 		return entity.global_position if entity != null else Vector2.ZERO
@@ -189,9 +195,16 @@ func _compute_site_pos() -> Vector2:
 	var width: int = _project.width
 	var left_x: float = float(cell_x) * CELL_SIZE
 	var right_x: float = left_x + float(width) * CELL_SIZE
-	var center_x: float = (left_x + right_x) * 0.5
+	var zone_left: float = left_x + CELL_SIZE
+	var zone_right: float = right_x - CELL_SIZE
+	if zone_right <= zone_left:
+		zone_left = left_x
+		zone_right = right_x
 	var ground_y: float = entity.get("ground_y") if "ground_y" in entity else 810.0
-	var target_x: float = left_x - STANDOFF_X
-	if entity.global_position.x > center_x:
-		target_x = right_x + STANDOFF_X
+	var center_x: float = (left_x + right_x) * 0.5
+	var target_x: float = zone_left + (zone_right - zone_left) * 0.5
+	if entity.global_position.x < center_x:
+		target_x = zone_left + 12.0
+	else:
+		target_x = zone_right - 12.0
 	return Vector2(target_x, ground_y + WORK_OFFSET_Y)

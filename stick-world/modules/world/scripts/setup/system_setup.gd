@@ -352,7 +352,7 @@ func _setup_minimap() -> void:
 	var mm := Control.new()
 	mm.set_script(_MinimapScript)
 	mm.name = "Minimap"
-	_root.ui_root.add_child(mm)
+	_root.ui_root.add_to_slot("HudOverlay", mm)
 	_root._minimap = mm
 	if mm.has_method("setup"):
 		mm.setup(_root)
@@ -365,7 +365,7 @@ func _setup_zoom_bar() -> void:
 	var zb := Control.new()
 	zb.set_script(_ZoomBarScript)
 	zb.name = "ZoomBar"
-	_root.ui_root.add_child(zb)
+	_root.ui_root.add_to_slot("HudOverlay", zb)
 	_root._zoom_bar = zb
 	if zb.has_method("setup"):
 		zb.setup(_root.camera_rig)
@@ -600,22 +600,12 @@ func _setup_resource_bar_deferred() -> void:
 
 ## 实例化建造菜单并挂到 UIRoot，延迟 setup 等 ConstructionManager 就绪。
 func _setup_build_menu() -> void:
-	# 优先从 ui_root.tscn 预置节点挂载（编辑器可见位置/范围）
-	if _root.ui_root != null:
-		var bm: Control = _root.ui_root.get_node_or_null("BuildMenu")
-		if bm != null:
-			bm.set_script(_BuildMenuScript)
-			_root._build_menu = bm
-			call_deferred("_setup_build_menu_deferred")
-			return
-	# 回退：代码创建
-	_root._build_menu = Control.new()
-	_root._build_menu.set_script(_BuildMenuScript)
-	_root._build_menu.name = "BuildMenu"
-	if _root.ui_root != null:
-		_root.ui_root.add_child(_root._build_menu)
-	else:
-		_root.add_child(_root._build_menu)
+	if _root.ui_root == null:
+		return
+	# P1 + P2：全屏 UI 根一律用 UIKit.full_rect（强制 FULL_RECT，杜绝"Control.new()
+	# 丢 anchor → 按钮静默不可见"），并挂到 HudOverlay 槽（槽位化路由）
+	_root._build_menu = UIKit.full_rect(_BuildMenuScript, "BuildMenu")
+	_root.ui_root.add_to_slot("HudOverlay", _root._build_menu)
 	call_deferred("_setup_build_menu_deferred")
 
 

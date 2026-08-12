@@ -261,9 +261,13 @@ func _create_barrier() -> void:
 	var barrier_size: Vector2 = Vector2(float(width) * 32.0, 390.0)
 	var barrier_offset_x: float = float(width) * 16.0
 	var barrier_offset_y: float = -190.0
+	# 模板自身的宽度（用于按实际宽度缩放障碍）
+	var template_width: int = width
 	if building_scene != null:
 		var temp := building_scene.instantiate()
 		if temp != null:
+			if temp is Building:
+				template_width = (temp as Building).width
 			var pb := temp.get_node_or_null("PassageBarrier") if temp is Node else null
 			if pb != null:
 				for child in pb.get_children():
@@ -274,10 +278,16 @@ func _create_barrier() -> void:
 						barrier_offset_y = cs.position.y
 						break
 			temp.queue_free()
+	# 实际宽度与模板宽度不同时，障碍横向按比例缩放（工地紫色标记跟随建筑宽度）
+	if template_width > 0 and template_width != width:
+		var ratio: float = float(width) / float(template_width)
+		barrier_size.x *= ratio
+		barrier_offset_x *= ratio
 	_barrier = StaticBody2D.new()
 	_barrier.visible = false
-	# 与实体同层（BODY）：实体 collision_mask=3 包含 layer 2，move_and_slide 自然阻挡
-	_barrier.collision_layer = Hitbox.CollisionLayer.BODY
+	# 非碰撞：仅作工地范围标记（调试层绘制）。工人需进入建筑中间区工作，
+	# 若仍按 BODY 碰撞会挡住工人（他们只能站在建筑外缘远处交互）。
+	_barrier.collision_layer = 0
 	_barrier.collision_mask = 0
 	var shape := RectangleShape2D.new()
 	shape.size = barrier_size
@@ -323,10 +333,17 @@ func _complete() -> void:
 	# 注入元数据
 	if new_building is Building:
 		var typed: Building = new_building as Building
+		var scene_width: int = typed.width
 		typed.def_id = def_id
 		typed.cell_x = cell_x
 		typed.width = width
 		typed.is_terrain = false
+		# 场景默认宽度与实际建造宽度不同时，重建程序化外观（草棚等可拉伸宽度建筑）
+		if new_building is BuildingExterior:
+			(new_building as BuildingExterior).rebuild_exterior()
+		# 同步缩放建筑自身 PassageBarrier（碰撞箱/调试标记跟随实际宽度）
+		if scene_width > 0 and scene_width != width:
+			_scale_passage_barrier(new_building, float(width) / float(scene_width))
 	# 挂到 BuildingHost
 	var host: Node2D = map.get("building_host") if "building_host" in map else null
 	if host == null:
@@ -360,6 +377,23 @@ func _complete() -> void:
 	state = State.OPERATIONAL
 	self.building = new_building
 	completed.emit(self, new_building)
+
+
+## 按比例缩放建筑自身 PassageBarrier 碰撞箱（实际建造宽度与场景默认宽度不同时）。
+## 建筑原点在左边缘，碰撞箱 position.x 与 size.x 同比例缩放即可覆盖整个建筑。
+func _scale_passage_barrier(building: Node2D, ratio: float) -> void:
+	var pb: Node = building.get_node_or_null("PassageBarrier") if building.has_method("get_node_or_null") else null
+	if pb == null:
+		return
+	for child in pb.get_children():
+		if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+			var cs: CollisionShape2D = child as CollisionShape2D
+			var old: RectangleShape2D = (cs.shape as RectangleShape2D)
+			var new_shape := RectangleShape2D.new()
+			new_shape.size = Vector2(old.size.x * ratio, old.size.y)
+			cs.shape = new_shape
+			cs.position.x *= ratio
+			return
 
 
 ## 取消项目（P0 简化：仅状态转换 + 通知工人离开）

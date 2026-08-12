@@ -23,9 +23,6 @@ const CELL_SIZE: float = 32.0
 const ARRIVE_THRESHOLD: float = 24.0
 ## 单格高度（工作位相对地面线下方一点，避免遮住建筑）
 const WORK_OFFSET_Y: float = 40.0
-## 站在工地临时障碍外的水平距离（避免工人走进通行障碍）。
-## 实体脚部碰撞箱半宽约 41.5px，取 44 让工人贴近建筑边缘而不触发回退
-const STANDOFF_X: float = 44.0
 ## build 动画一次循环时长（秒，与 build.tres length 一致）
 const BUILD_ANIM_DURATION: float = 1.8
 ## 完工所需敲击次数（每次 build 动画循环推进 total_work / BUILD_HITS）
@@ -119,7 +116,8 @@ func exit(_next: String) -> void:
 # ─────────────────────────────── 内部 ────────────────────────────────
 
 ## 计算工作目标点。
-## 多名工人派到同一项目时，按 slot_index 在 X 方向分散站位，避免挤一起。
+## 多名工人派到同一项目时，按 slot_index 在建筑横向中间 (width-2) 格区域内分散站位，
+## 与玩家交互判定一致（角色中心需在中间 14 格内才能交互）。
 func _compute_target_position() -> void:
 	if _project == null or entity == null:
 		return
@@ -127,17 +125,24 @@ func _compute_target_position() -> void:
 	var width: int = _project.width
 	var left_x: float = float(cell_x) * CELL_SIZE
 	var right_x: float = left_x + float(width) * CELL_SIZE
-	var center_x: float = (left_x + right_x) * 0.5
+	# 中间区 = 左右各内缩 1 格；宽度不足时退化为整体
+	var zone_left: float = left_x + CELL_SIZE
+	var zone_right: float = right_x - CELL_SIZE
+	if zone_right <= zone_left:
+		zone_left = left_x
+		zone_right = right_x
 	var slot_index: int = _project.get_worker_slot_index(entity)
 	if slot_index < 0:
 		slot_index = 0
-	# 每名工人站在离自己最近一侧的障碍外，避免挤进临时障碍
+	# 多名工人在中间区内按 slot 间隔分布（间隔 24px）；区域窄时居中
 	var offset_along: float = float(slot_index) * 24.0
+	var span: float = zone_right - zone_left
+	var workers: int = maxi(1, _project.get_worker_count())
 	var target_x: float
-	if entity.global_position.x < center_x:
-		target_x = left_x - STANDOFF_X - offset_along
+	if span > 24.0 * float(workers):
+		target_x = zone_left + 12.0 + offset_along
 	else:
-		target_x = right_x + STANDOFF_X + offset_along
+		target_x = zone_left + span * 0.5
 	# Y：建筑下方一点（建筑原点在 ground_y，工作位在 ground_y 下方）
 	var ground_y: float = entity.get("ground_y") if "ground_y" in entity else 810.0
 	_target_pos = Vector2(target_x, ground_y + WORK_OFFSET_Y)

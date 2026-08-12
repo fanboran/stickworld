@@ -11,6 +11,13 @@ extends Node
 
 var _entity: Node2D = null
 
+## 交互 X 范围：建筑左右各内缩 1 格（16 格建筑 → 角色需在中间 14 格内）
+const INTERACT_CELL_INSET: float = 32.0
+## 交互垂直范围外延容忍（px）
+const INTERACT_VERT_TOL: float = 40.0
+## 工地主体高度（与 ConstructionProject._create_barrier 默认障碍高一致）
+const PROJECT_BODY_HEIGHT: float = 390.0
+
 
 func setup(entity: Node2D) -> void:
 	_entity = entity
@@ -52,7 +59,7 @@ func try_interact() -> void:
 # ─────────────────────────────── 交互目标检测 ────────────────────────────────
 
 ## 从建筑 PassageBarrier CollisionShape2D 读取真实世界边界。
-## 返回 {left, right, center} 或回退到 width*32 估算。
+## 返回 {left, right, center, top, bottom} 或回退到 width*32 估算。
 func _get_building_barrier_bounds(building: Node2D) -> Dictionary:
 	var pb: Node = building.get_node_or_null("PassageBarrier") if building.has_method("get_node_or_null") else null
 	if pb != null:
@@ -61,24 +68,58 @@ func _get_building_barrier_bounds(building: Node2D) -> Dictionary:
 				var cs: CollisionShape2D = child as CollisionShape2D
 				var s: RectangleShape2D = (cs.shape as RectangleShape2D)
 				var cx: float = cs.global_position.x
-				return {"left": cx - s.size.x * 0.5, "right": cx + s.size.x * 0.5, "center": cx}
-	# 回退：用 width 属性估算
+				var cy: float = cs.global_position.y
+				return {
+					"left": cx - s.size.x * 0.5, "right": cx + s.size.x * 0.5, "center": cx,
+					"top": cy - s.size.y * 0.5, "bottom": cy + s.size.y * 0.5,
+				}
+	# 回退：用 width 属性估算（垂直按基线向上 PROJECT_BODY_HEIGHT）
 	var w: int = int(building.get("width")) if "width" in building else 2
 	var left_x: float = building.global_position.x
-	return {"left": left_x, "right": left_x + float(w) * 32.0, "center": left_x + float(w) * 16.0}
+	var map: Node2D = _entity.get_map()
+	var ground_y: float = float(map.get("ground_y") if map != null and "ground_y" in map else 810.0)
+	var baseline_offset: float = float(map.get("building_baseline_offset") if map != null and "building_baseline_offset" in map else 96.0)
+	var baseline: float = ground_y + baseline_offset
+	return {
+		"left": left_x, "right": left_x + float(w) * 32.0, "center": left_x + float(w) * 16.0,
+		"top": baseline - PROJECT_BODY_HEIGHT, "bottom": baseline,
+	}
 
 
-## 检测实体 X 是否在工地建筑范围外延 margin 内。
-func _is_near_project(project: RefCounted, margin: float = 80.0) -> bool:
+## 实体 X 是否位于建筑横向中间 (width-2) 格区间内（左右各内缩 1 格；宽度不足时退化为整体）
+func _is_x_in_building_zone(zone_left: float, zone_right: float) -> bool:
+	var zl: float = zone_left + INTERACT_CELL_INSET
+	var zr: float = zone_right - INTERACT_CELL_INSET
+	if zr <= zl:
+		zl = zone_left
+		zr = zone_right
+	return _entity.global_position.x >= zl and _entity.global_position.x <= zr
+
+
+## 实体 Y 是否在建筑垂直范围（上下各外延 INTERACT_VERT_TOL）内
+func _is_y_in_building_zone(top: float, bottom: float) -> bool:
+	return _entity.global_position.y >= top - INTERACT_VERT_TOL and _entity.global_position.y <= bottom + INTERACT_VERT_TOL
+
+
+## 检测实体是否在工地交互范围内（横向中间 (width-2) 格 + 垂直在主体范围内）。
+func _is_near_project(project: RefCounted) -> bool:
 	var left_x: float = float(project.cell_x) * 32.0
 	var right_x: float = left_x + float(project.width) * 32.0
-	return _entity.global_position.x >= left_x - margin and _entity.global_position.x <= right_x + margin
+	if not _is_x_in_building_zone(left_x, right_x):
+		return false
+	var map: Node2D = _entity.get_map()
+	var ground_y: float = float(map.get("ground_y") if map != null and "ground_y" in map else 810.0)
+	var baseline_offset: float = float(map.get("building_baseline_offset") if map != null and "building_baseline_offset" in map else 96.0)
+	var baseline: float = ground_y + baseline_offset
+	return _is_y_in_building_zone(baseline - PROJECT_BODY_HEIGHT, baseline)
 
 
-## 检测实体 X 是否在建筑 PassageBarrier 范围外延 margin 内。
-func _is_near_building(building: Node2D, margin: float = 80.0) -> bool:
+## 检测实体是否在建筑 PassageBarrier 交互范围内（横向中间 (width-2) 格 + 垂直在范围内）。
+func _is_near_building(building: Node2D) -> bool:
 	var bounds: Dictionary = _get_building_barrier_bounds(building)
-	return _entity.global_position.x >= float(bounds.left) - margin and _entity.global_position.x <= float(bounds.right) + margin
+	if not _is_x_in_building_zone(float(bounds.left), float(bounds.right)):
+		return false
+	return _is_y_in_building_zone(float(bounds.top), float(bounds.bottom))
 
 
 ## 查找当前可交互目标及提示文字。返回 {target, hint, center_x} 或空。

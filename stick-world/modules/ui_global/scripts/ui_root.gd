@@ -97,6 +97,25 @@ func close_all_modals() -> void:
 		child.queue_free()
 
 
+# ─────────────────────────────── 槽位化路由（P2）────────────────────────────────
+
+## 取具名槽（HudOverlay / ModePanel / ModalOverlay 等）。槽在 ui_root.tscn 中声明，
+## 是布局唯一真相源。
+func get_slot(slot_name: String) -> Control:
+	return get_node_or_null(slot_name) as Control
+
+
+## 挂到具名槽（P2 槽位化路由）：模块 UI 通过此方法注册进槽，由槽管理显隐与布局空间。
+## 子控件自身的 anchor 由它自己负责（全屏面板用 UIKit.full_rect，角落 HUD 自设 anchor）。
+func add_to_slot(slot_name: String, node: Node) -> bool:
+	var slot := get_node_or_null(slot_name) as Control
+	if slot == null:
+		push_warning("[UIRoot] 槽不存在: %s" % slot_name)
+		return false
+	slot.add_child(node)
+	return true
+
+
 # ─────────────────────────────── 通知 ────────────────────────────────
 
 func _on_notification(title: String, body: String, level: String) -> void:

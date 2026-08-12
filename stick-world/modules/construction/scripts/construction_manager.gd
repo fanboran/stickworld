@@ -199,8 +199,8 @@ func start_construction(region_id: String, building_type: String, org_id: String
 	return start_construction_at(region_id, building_type, 10, org_id)
 
 
-## 开工建造（指定位置 cell_x）。返回 {ok:true, project_id, cell_x, width} 或 {ok:false, error}。
-func start_construction_at(region_id: String, building_type: String, cell_x: int, _org_id: String = "") -> Dictionary:
+## 开工建造（指定位置 cell_x，可选 width 覆盖 def 宽度）。返回 {ok:true, project_id, cell_x, width} 或 {ok:false, error}。
+func start_construction_at(region_id: String, building_type: String, cell_x: int, _org_id: String = "", width: int = -1) -> Dictionary:
 	if _map == null:
 		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
 	if not _catalog.is_registered(building_type):
@@ -211,9 +211,10 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 		var cost_result := _check_and_consume_cost(building_type, region_id)
 		if not cost_result.ok:
 			return {"ok": false, "error": "资源不足: %s" % cost_result.reason}
-	# P0-6 从 buildings.tres 读取 width 和 build_time
+	# P0-6 从 buildings.tres 读取 build_time；width 默认取 def，可由调用方覆盖
 	var def: Dictionary = _catalog.get_def(building_type)
-	var width: int = int(def.get("width", 2))
+	if width <= 0:
+		width = int(def.get("width", 2))
 	var total_work: float = 8.0  # 固定8次敲击完工（后续由 Excel build_time 驱动）
 	# 校验选址
 	var placement_grid: Node = _map.get("placement_grid") if "placement_grid" in _map else null

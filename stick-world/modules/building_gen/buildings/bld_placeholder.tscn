@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://c2xr5ftdidmgm"]
 
-[ext_resource type="Script" path="res://modules/building_gen/scripts/building.gd" id="1_building"]
+[ext_resource type="Script" path="res://modules/building_gen/buildings/bld_thatch_hut.gd" id="1_building"]
 
 [sub_resource type="RectangleShape2D" id="rect_passage"]
-size = Vector2(512, 96)
+size = Vector2(512, 390)
 
 [node name="BldPlaceholder" type="Node2D"]
 script = ExtResource("1_building")
@@ -11,21 +11,10 @@ def_id = "bld_placeholder"
 width = 16
 
 [node name="Exterior" type="Node2D" parent="."]
-
-[node name="Body" type="Polygon2D" parent="Exterior"]
-polygon = PackedVector2Array(0, -96, 512, -96, 512, 0, 0, 0)
-color = Color(0.5, 0.5, 0.5, 1)
-
-[node name="EdgeLeft" type="Polygon2D" parent="Exterior"]
-polygon = PackedVector2Array(0, -96, 4, -96, 4, 0, 0, 0)
-color = Color(0, 0, 0, 1)
-
-[node name="EdgeRight" type="Polygon2D" parent="Exterior"]
-polygon = PackedVector2Array(508, -96, 512, -96, 512, 0, 508, 0)
-color = Color(0, 0, 0, 1)
+position = Vector2(245, 0)
 
 [node name="PassageBarrier" type="StaticBody2D" parent="."]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="PassageBarrier"]
-position = Vector2(256, -48)
+position = Vector2(256, -190)
 shape = SubResource("rect_passage")

@@ -34,9 +34,9 @@ var _is_initialized: bool = false
 
 # ===== 初始化 =====
 
-## 注入内部管理器引用
-func setup(manager: ConstructionManager) -> void:
-	_manager = manager
+## 注入内部管理器引用（参数用 Node 避免 api 表面暴露内部类型，2026-08 审计收敛）
+func setup(manager: Object) -> void:
+	_manager = manager as ConstructionManager
 	_is_initialized = true
 	# 转发 manager 的完工/拆除信号为 api.gd 的公共信号
 	if not manager.building_completed.is_connected(_on_building_completed):

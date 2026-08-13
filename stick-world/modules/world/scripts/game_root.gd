@@ -548,12 +548,10 @@ func request_map_travel(target_map_id: String, entry_side: int) -> void:
 ## 主动按指定 cell_x 触发建造（供调试 / 集成测试调用）。
 ## 返回 {ok, project_id, cell_x, width} 或 {ok:false, error}。
 func start_demo_building_at(cell_x: int) -> Dictionary:
-	if _construction_api == null or not _construction_api.has_method("start_construction"):
+	if _construction_api == null or not _construction_api.has_method("start_construction_at"):
 		return {"ok": false, "error": "建造系统未就绪"}
-	if _construction_manager == null or not _construction_manager.has_method("start_construction_at"):
-		return {"ok": false, "error": "ConstructionManager 未就绪"}
-	# 直接调用 manager 的 start_construction_at（按指定位置）
-	return _construction_manager.start_construction_at("test_region", "placeholder", cell_x, "")
+	# 统一走 api（2026-08 审计收敛：不再直调内部 manager）
+	return _construction_api.start_construction_at("test_region", "placeholder", cell_x)
 
 
 # ─────────────────────────────── 存档转发（实现见 SaveHandler 子模块）────────────────────────────────
@@ -611,17 +609,9 @@ func _validate_children() -> void:
 func _bind_event_bus() -> void:
 	if not EventBus:
 		return
-	# 玩家请求暂停/恢复
-	if EventBus.has_signal("ui_toggle_pause_requested"):
-		EventBus.ui_toggle_pause_requested.connect(_on_pause_requested)
 	# 注：interior_exited / mega_interior_entered / mega_interior_exited 由 TravelHandler 绑定，
 	#     game_saving / game_loaded 由 SaveHandler 绑定
-
-
-func _on_pause_requested() -> void:
-	if TimeManager:
-		TimeManager.toggle_pause()
-
+	#     （ui_toggle_pause_requested 死连接已删：暂停走设置面板速度按钮，2026-08 审计）
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
 

@@ -27,9 +27,9 @@ var _is_initialized: bool = false
 
 # ===== 初始化 =====
 
-## 注入内部管理器引用
-func setup(manager: OrganizationManager) -> void:
-	_manager = manager
+## 注入内部管理器引用（Node 签名，2026-08 审计收敛）
+func setup(manager: Object) -> void:
+	_manager = manager as OrganizationManager
 	_is_initialized = true
 	# 2026-08 集中制（WorldState 容器决策 A）：组织状态注册进 WorldState 容器，
 	# 存档由 WorldState 统一序列化（本模块不再自行注册 SaveManager）

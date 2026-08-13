@@ -70,9 +70,9 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 				npc.global_position.y = spawn_y - npc.foot_offset
 			if npc.has_method("set_possessed"):
 				npc.set_possessed(false)  # NPC 不被附身，AIController 自动接管
-			# 注入 ConstructionManager 引用，使 NPC 可被派工（§15 阶段 0.4）
-			if npc.has_method("set_construction_manager") and _root._construction_manager != null:
-				npc.set_construction_manager(_root._construction_manager)
+			# 注入 ConstructionAPI 引用（统一走 api，2026-08 审计收敛），使 NPC 可被派工（§15 阶段 0.4）
+			if npc.has_method("set_construction_manager") and _root.get_construction_api() != null:
+				npc.set_construction_manager(_root.get_construction_api())
 			# 注入 FormationSystem 引用（编队职责查询，AIController 决策过滤）
 			if npc.has_method("set_formation_system") and _root._formation_system != null:
 				npc.set_formation_system(_root._formation_system)
@@ -141,8 +141,8 @@ func _spawn_ally_unit(map: Node2D, idx: int) -> Node2D:
 		e.global_position.y = spawn_y - e.foot_offset
 	if e.has_method("set_possessed"):
 		e.set_possessed(false)
-	if e.has_method("set_construction_manager") and _root._construction_manager != null:
-		e.set_construction_manager(_root._construction_manager)
+	if e.has_method("set_construction_manager") and _root.get_construction_api() != null:
+		e.set_construction_manager(_root.get_construction_api())
 	if e.has_method("set_formation_system") and _root._formation_system != null:
 		e.set_formation_system(_root._formation_system)
 	# 蓝色身体区分友军（红=敌）

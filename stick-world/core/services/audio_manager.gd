@@ -3,6 +3,9 @@ extends Node
 ##
 ## 提供 play_bgm / stop_bgm / play_sfx 等方法。
 ## 所有音量受 ConfigManager 统一控制。
+##
+## ⚠️ 接线状态（2026-08 审计）：全项目无消费方（音效未实现），autoload 注册保留，
+## P1 音效接入时启用。
 
 signal bgm_playing(path: String)
 signal bgm_stopped()

@@ -25,9 +25,9 @@ var _is_initialized: bool = false
 
 # ===== 初始化 =====
 
-## 由 resources 场景的根节点调用，注入内部组件引用
-func setup(resource_manager: ResourceManager) -> void:
-	_resource_manager = resource_manager
+## 由 resources 场景的根节点调用，注入内部组件引用（Node 签名，2026-08 审计收敛）
+func setup(resource_manager: Object) -> void:
+	_resource_manager = resource_manager as ResourceManager
 	_is_initialized = true
 
 

@@ -1,4 +1,8 @@
 class_name ProjectState extends RefCounted
+
+## ⚠️ 预留状态类（2026-08 审计）：本类暂未被生产模块接入
+## （world_state.gd 提供 register_* 容器接口，模块数据流落地时按需启用；technology 阶段 1 重建时用）。
+
 ## 项目运行时状态数据 —— 组织通过项目执行实际工作
 
 enum State {

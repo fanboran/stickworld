@@ -10,6 +10,10 @@ extends Node
 ## - 资源/科技/组织/建筑等状态变更信号由对应模块 api.gd 自建并转发，EventBus 不重复声明。
 ## - 本文件只保留"已实际接线"的信号（2026-08 审计清理 35 个零引用信号）；
 ##   实现新系统时按当时契约重新声明，不要预先占位。
+## - 单向广播（生产 emit 无订户，2026-08 审计标注，UI/外部接入时连接）：
+##   game_saved（SaveManager 广播）、balance_changed（热重载预留）、
+##   battle_started/battle_ended（战斗生命周期）、selection_changed/squad_created/order_issued（编队 UI 数据通道）、
+##   chunk_loaded/chunk_unloaded（scene_loader 本地+EventBus 双发：生产消费方连本地信号，外部/测试连 EventBus）
 
 # 信号是公共 API，供其他模块 connect/emit。
 # @warning_ignore("unused_signal") 对每个信号逐条标注，因为该注解只作用于下一条语句。
@@ -72,7 +76,6 @@ extends Node
 # ─────────────────────────────── UI 通用信号 ───────────────────────────────
 
 @warning_ignore("unused_signal") signal ui_notification(title: String, body: String, level: String)
-@warning_ignore("unused_signal") signal ui_toggle_pause_requested
 # 附身开始：PossessionInterface -> UI、Units、TimeManager
 @warning_ignore("unused_signal") signal possession_started(entity)
 # 附身结束：PossessionInterface -> UI、Units、TimeManager

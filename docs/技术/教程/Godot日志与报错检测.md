@@ -1,7 +1,7 @@
 # Godot 日志与报错检测
 
 > 本文档说明 stick_world 的 Godot 报错从哪来、落在哪、如何自动检测。
-> 检测脚本：`tools/check_godot_errors.ps1`（核心行为指令要求代码修改后运行）。
+> 检测脚本：`tools/check_godot_errors.sh`（核心行为指令要求代码修改后运行）。
 
 ---
 
@@ -49,20 +49,20 @@
 
 ## 三、自动检测
 
-> 默认终端为 **bash**。检测脚本为 `.ps1`，从 bash 中经 `powershell` 调用（路径用 `/` 分隔）。
+> 默认终端为 **bash**，检测脚本直接经 bash 执行（路径用 `/` 分隔）。
 
 ```bash
 # 标准检查（默认 = 日志扫描 + 编辑器启动模拟）：有错退出码 1
-powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1
+bash tools/check_godot_errors.sh
 
 # 只查日志（跳过 ~15s 的启动模拟）
-powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1 -Quick
+bash tools/check_godot_errors.sh -Quick
 
 # 连 WARNING 一起看（改代码后建议带 -Warnings）
-powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1 -Warnings
+bash tools/check_godot_errors.sh -Warnings
 
 # 只看最近 N 条错误摘要
-powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1 -Head 10
+bash tools/check_godot_errors.sh -Head 10
 ```
 
 ### 检测原理（2026-08 实验验证）
@@ -89,8 +89,8 @@ powershell -ExecutionPolicy Bypass -File tools/check_godot_errors.ps1 -Head 10
 **约定**（写进 AGENTS.md 核心行为指令）：
 
 1. 任何代码修改后运行标准检查（默认含启动模拟），退出码 1 必须修复后再继续
-2. 用户报告编辑器报错时，先跑 `check_godot_errors.ps1`（启动模拟会强制重扫全部资源），再查 `logs/` 最新日志定位
-3. headless 测试（`tests/run_all.ps1`）只看断言结果，**不覆盖**编辑器资源解析类错误（BOM Parse Error 就是例子）——两者都要查
+2. 用户报告编辑器报错时，先跑 `check_godot_errors.sh`（启动模拟会强制重扫全部资源），再查 `logs/` 最新日志定位
+3. headless 测试（`tests/run_all.sh`）只看断言结果，**不覆盖**编辑器资源解析类错误（BOM Parse Error 就是例子）——两者都要查
 4. 注意：`--editor --quit` 会重建 `filesystem_cache10`，首次耗时 ~15s；对项目无其他副作用（不写存档、不改源文件）
 
 ---

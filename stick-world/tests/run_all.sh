@@ -259,7 +259,7 @@ if [ ${#pool[@]} -gt 0 ]; then
 		wait "$pid" 2>/dev/null; code=$?
 		kill "$killer" 2>/dev/null; wait "$killer" 2>/dev/null
 		t1=$(date +%s%3N); ms=$((t1 - t0))
-		if [ "$code" -ge 137 ] 2>/dev/null; then
+		if [[ "$code" =~ ^[0-9]+$ ]] && [ "$code" -ge 137 ]; then
 			echo "TIMEOUT $ms" >"$res"; exit 0
 		fi
 		sum=$(grep -aE "测试汇总|\[FAIL\]" "$out" | tail -8)

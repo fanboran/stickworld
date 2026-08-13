@@ -402,6 +402,21 @@ func get_buildings_in_region(_region_id: String) -> Array[String]:
 	return result
 
 
+## 注册/更新建筑定义（运行时与测试注入用；替代白盒写 _building_defs_cache，2026-08 审计）
+func set_building_def(def_id: String, def: Dictionary) -> void:
+	_building_defs_cache[def_id] = def
+
+
+## 移除建筑定义
+func clear_building_def(def_id: String) -> void:
+	_building_defs_cache.erase(def_id)
+
+
+## 按 ID 取建筑节点（替代白盒读 _buildings，2026-08 审计）
+func get_building_node(building_id: String) -> Node:
+	return _buildings.get(building_id, null)
+
+
 ## 查询单个建筑的状态
 func get_building_state(building_id: String) -> Dictionary:
 	if not _buildings.has(building_id):

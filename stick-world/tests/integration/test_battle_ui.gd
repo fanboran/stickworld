@@ -110,6 +110,7 @@ func _test_minimap_map_info() -> void:
 	var map_w: float = map_right - map_left
 	var minimap_w: float = _minimap.get("MAP_WIDTH")
 	# 小地图 X = MAP_WIDTH/2 对应世界 X = map_left + map_w/2
+	# 白盒标注（2026-08 审计）：minimap 私有方法，待 UI 层暴露公共查询后再脱敏
 	var world_x: float = _minimap._minimap_to_world_x(minimap_w * 0.5)
 	var expected_x: float = map_left + map_w * 0.5
 	_runner.assert_true(absf(world_x - expected_x) < 1.0, "小地图中点应映射到地图中点")

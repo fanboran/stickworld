@@ -210,9 +210,8 @@ func _setup_selection_system() -> void:
 	if _root.ui_root == null:
 		push_warning("[GameRoot] UIRoot 为空，跳过框选系统装配")
 		return
-	var sel := Control.new()
-	sel.set_script(_SelectionSystemScript)
-	sel.name = "SelectionSystem"
+	# 全屏输入层走 UIKit.full_rect（2026-08 审计收敛，替代 Control.new 自设 anchor）
+	var sel := UIKit.full_rect(_SelectionSystemScript, "SelectionSystem")
 	_root.ui_root.add_child(sel)
 	_root._selection_system = sel
 	# 注入 GameRoot（替代 group 反查）

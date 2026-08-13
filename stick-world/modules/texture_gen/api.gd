@@ -75,6 +75,9 @@ static func make_solid(w: int, h: int, color: Color) -> ImageTexture:
 static func load_shader_material(material_id: StringName) -> ShaderMaterial:
 	var shader_path := "res://modules/texture_gen/materials/%s/shaders/%s.gdshader" % [material_id, material_id]
 	var shader: Shader = load(shader_path)
+	if shader == null:
+		push_error("[TextureGenApi] shader 不存在: %s（id 未注册？见 list_materials）" % shader_path)
+		return null
 	var mat := ShaderMaterial.new()
 	mat.shader = shader
 	return mat

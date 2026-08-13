@@ -76,6 +76,7 @@ func _test_q_toggle_mode() -> void:
 		player.set_possessed(true)
 	await get_tree().process_frame
 	# 初始为 BATTLE（CombatTestSetup 已切）：第一次 Q 切回 EXPLORE
+	# 白盒标注（2026-08 审计）：私有方法直接驱动，重构时同步
 	if player.has_method("_toggle_combat_mode"):
 		player._toggle_combat_mode()
 	await get_tree().process_frame

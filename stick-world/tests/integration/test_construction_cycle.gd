@@ -124,7 +124,7 @@ func _test_full_cycle() -> void:
 func _test_insufficient_resources() -> void:
 	await _ensure_setup()
 	# 黑盒注入（走 set_resources_api 注入点，2026-08 回归验证）+ 库存为 0 的 fake api
-	_cm._building_defs_cache["placeholder"] = {"build_cost_wood": 10.0}
+	_cm.set_building_def("placeholder", {"build_cost_wood": 10.0})
 	var fake := FakeResourcesApi.new()
 	fake.fail_consume = true
 	fake.stock = 0.0
@@ -133,13 +133,13 @@ func _test_insufficient_resources() -> void:
 	_runner.assert_false(r.get("ok", true), "资源不足应失败")
 	_runner.assert_true(str(r.get("error", "")).contains("资源不足"), "错误应指明资源不足，实际: %s" % r.get("error", ""))
 	_cm.set_resources_api(null)
-	_cm._building_defs_cache.erase("placeholder")
+	_cm.clear_building_def("placeholder")
 
 
 func _test_resources_consumed() -> void:
 	await _ensure_setup()
 	# 库存充足时建造成功，且按成本实际扣减（2026-08 修复：注入点缺失导致永久免费建造）
-	_cm._building_defs_cache["placeholder"] = {"build_cost_wood": 10.0, "build_cost_stone": 5.0}
+	_cm.set_building_def("placeholder", {"build_cost_wood": 10.0, "build_cost_stone": 5.0})
 	var fake := FakeResourcesApi.new()
 	fake.stock = 1000.0
 	_cm.set_resources_api(fake)
@@ -147,7 +147,7 @@ func _test_resources_consumed() -> void:
 	_runner.assert_true(r.get("ok", false), "资源充足应开工成功: " + str(r))
 	_runner.assert_equal(fake.consumed_total, 15.0, "应按成本扣减 wood10+stone5=15，实际: %s" % fake.consumed_total)
 	_cm.set_resources_api(null)
-	_cm._building_defs_cache.erase("placeholder")
+	_cm.clear_building_def("placeholder")
 
 
 func _test_building_registry() -> void:
@@ -209,7 +209,7 @@ func _test_escape_stuck() -> void:
 	_runner.assert_true(r.get("ok", false), "预置建筑成功: %s" % r.get("error", ""))
 	if not r.get("ok", false):
 		return
-	var building: Node = _cm._buildings.get(r.get("building_id", ""))
+	var building: Node = _cm.get_building_node(r.get("building_id", ""))
 	var pb := building.get_node_or_null("PassageBarrier") as StaticBody2D
 	_runner.assert_not_null(pb, "仓库应有 PassageBarrier")
 	if pb == null:

@@ -115,16 +115,19 @@ func _apply_transform() -> void:
 ## 聚焦到指定 ID 的中心
 ## id 为 "" 时重置到当前粒度的中心
 func focus_on(id: String, animated: bool = true) -> void:
-	# SM-1 阶段实现：
+	# ⚠️ SM-1 未实现（2026-08 审计）：非空 id 的聚焦逻辑未接线，调用方会静默拿到"不聚焦"结果。
+	# 实现时按：
 	# 1. 查询 id 对应的 world_bounds 中心
 	# 2. 设置 _offset 使中心位于屏幕中央
 	# 3. 调整 _zoom_level 使 world_bounds 完整可见
+	if not id.is_empty():
+		push_warning("[MapCamera] focus_on 未实现（SM-1），id=%s 未聚焦" % id)
+		return
 	if animated:
 		# P1 用 Tween 实现动画
 		pass
-	if id.is_empty():
-		_offset = Vector2.ZERO
-		_zoom_level = 1.0
+	_offset = Vector2.ZERO
+	_zoom_level = 1.0
 
 
 ## 设置缩放

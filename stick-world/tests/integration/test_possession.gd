@@ -241,6 +241,7 @@ func _test_find_enemy() -> void:
 		unit.set_faction(1)
 	if _test_units[1].has_method("set_faction"):
 		_test_units[1].set_faction(2)
+	# 白盒标注（2026-08 审计）：私有方法直接驱动，重构时同步
 	# 调用 _find_nearest_enemy_in_range（通过 call 或直接调用）
 	var enemy: Node = null
 	if unit.has_method("_find_nearest_enemy_in_range"):

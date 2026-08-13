@@ -428,6 +428,12 @@ func _input(event: InputEvent) -> void:
 					var w: int = _get_def_width()
 					_cell_start = _anchor_cell
 					_cell_end = _anchor_cell + w
+					# 放下草稿后按住即可调整边界（无需松开再点；2026-08 修复"按住拖不动"）：
+					# 放下时鼠标在左边界（_anchor_cell），侧=0，按下基准=放下位置，不移动则不跳变
+					_drag_side = 0
+					_drag_start_mouse = _anchor_cell
+					_drag_start_boundary = _cell_start
+					_drag_active = true
 					get_viewport().set_input_as_handled()
 				else:
 					# 点击落在「确定建造」按钮上：交给按钮处理，不启动拖动

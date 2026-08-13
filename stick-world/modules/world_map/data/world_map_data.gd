@@ -35,7 +35,7 @@ func get_owner(region_id: int) -> int:
 	return region_owners.get(region_id, -1)
 
 ## 设置地块归属
-func set_owner(region_id: int, owner_id: int):
+func set_owner(region_id: int, owner_id: int) -> void:
 	region_owners[region_id] = owner_id
 
 ## 获取地块显示颜色（根据地图模式）

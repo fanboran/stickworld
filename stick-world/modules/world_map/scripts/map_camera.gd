@@ -115,12 +115,12 @@ func _apply_transform() -> void:
 ## 聚焦到指定 ID 的中心
 ## id 为 "" 时重置到当前粒度的中心
 func focus_on(id: String, animated: bool = true) -> void:
-	# TODO: SM-1 实现
+	# SM-1 阶段实现：
 	# 1. 查询 id 对应的 world_bounds 中心
 	# 2. 设置 _offset 使中心位于屏幕中央
 	# 3. 调整 _zoom_level 使 world_bounds 完整可见
 	if animated:
-		# TODO: P1 用 Tween 实现动画
+		# P1 用 Tween 实现动画
 		pass
 	if id.is_empty():
 		_offset = Vector2.ZERO

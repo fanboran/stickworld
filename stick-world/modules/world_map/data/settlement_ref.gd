@@ -42,7 +42,7 @@ enum Level {
 ## 获取建筑群占地半径（像素，L1 地图坐标系）
 ## 详见 docs/技术/架构/战略图架构.md §4.6
 func get_footprint_radius() -> float:
-	# TODO: SM-3 实现，按 level + population_score 计算
+	# SM-3 阶段实现：按 level + population_score 计算
 	# 基础值：T1=16, T2=32, T3=64, T4=96, T5=128
 	# 乘以 population_score 的非线性映射（下限偏置，大部分贴近下限）
 	return 16.0
@@ -50,6 +50,6 @@ func get_footprint_radius() -> float:
 
 ## 获取建筑数量
 func get_building_count() -> int:
-	# TODO: SM-3 实现，按 level + population_score 计算
+	# SM-3 阶段实现：按 level + population_score 计算
 	# T1: 3-5, T2: 6-10, T3: 15-30, T4: 40-80, T5: 100+
 	return 3

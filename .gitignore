@@ -16,6 +16,8 @@ export/*
 !stick-world/addons/godot-sqlite/bin/*.dll
 !stick-world/addons/godot-sqlite/bin/*.so
 !stick-world/addons/godot-sqlite/bin/*.dylib
+# godot-sqlite iOS 静态库体积巨大（~254MB），整个 xcframework 剔除入库（移动端导出时从插件源还原）
+stick-world/addons/godot-sqlite/bin/*.ios.*.xcframework/
 # 忽略 godot-sqlite 的临时/备份文件（~ 前缀）
 stick-world/addons/godot-sqlite/bin/~*
 gdextension_crash_on_quit.txt

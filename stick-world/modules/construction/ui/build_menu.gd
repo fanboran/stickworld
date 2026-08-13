@@ -389,6 +389,15 @@ func _process(_delta: float) -> void:
 	_ghost.default_end = _default_end
 	_ghost.top = top
 	_ghost.baseline = baseline
+	# 已有建筑占用格（绿/红斜纹标识）：每帧从 PlacementGrid 收集。
+	# 用 get_occupant（仅建筑占用），不含 blockage 地形标记
+	var grid: Node = map.get("placement_grid") if "placement_grid" in map else null
+	var occ: Array[int] = []
+	if grid != null and grid.has_method("get_occupant"):
+		for c in range(min_cell, max_cell + 1):
+			if grid.get_occupant(c) != null:
+				occ.append(c)
+	_ghost.occupied_cells = occ
 	# 悬停检测：水平上位于最左/最右端格，且垂直范围也在条带矩形内
 	_ghost.hover_side = -1
 	if _draft_placed:

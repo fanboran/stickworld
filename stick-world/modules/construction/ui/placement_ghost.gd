@@ -38,6 +38,21 @@ var baseline: float = 0.0
 ## 悬停的端部格：-1 无，0 左端格，1 右端格
 var hover_side: int = -1
 
+## 已有建筑占用的 cell 列表（BuildMenu 每帧从 PlacementGrid 收集）。
+## 绘制为绿色斜条纹矩形（无端部三角）；与拖拽条带重叠的 cell 绘制为红色斜条纹矩形。
+var occupied_cells: Array[int] = []
+
+## 已有建筑矩形：绿色底 + 斜条纹
+const OCC_FILL: Color = Color(0.35, 0.78, 0.32, 0.30)
+const OCC_OUTLINE: Color = Color(0.35, 0.78, 0.32, 0.85)
+const OCC_STRIPE: Color = Color(0.30, 0.72, 0.28, 0.55)
+## 重叠矩形：红色底 + 斜条纹
+const OVERLAP_FILL: Color = Color(0.90, 0.20, 0.20, 0.38)
+const OVERLAP_OUTLINE: Color = Color(0.90, 0.20, 0.20, 0.90)
+const OVERLAP_STRIPE: Color = Color(0.85, 0.15, 0.15, 0.65)
+## 斜条纹间距（px）
+const STRIPE_SPACING: float = 8.0
+
 ## 点击反馈状态
 var _wobble_side: int = -1
 var _wobble_start_ms: int = -1
@@ -58,6 +73,17 @@ func _draw() -> void:
 	var now: int = Time.get_ticks_msec()
 	var outline_color: Color = Color(0.3, 0.6, 1.0, 0.9) if in_bounds else Color(0.9, 0.2, 0.2, 0.9)
 	var fill_color: Color = Color(0.3, 0.6, 1.0, 0.3) if in_bounds else Color(0.9, 0.2, 0.2, 0.3)
+	# 已有建筑层（绿底斜纹，无端部三角）；与拖拽条带重叠的 cell 跳过，留给重叠层
+	if not occupied_cells.is_empty():
+		for c in occupied_cells:
+			if c >= cell_start and c < cell_end:
+				continue
+			var left: float = float(c) * float(CELL_SIZE)
+			var rect := Rect2(Vector2(left + CELL_INSET_X, top + CELL_INSET_Y),
+					Vector2(CELL_SIZE - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
+			draw_rect(rect, OCC_FILL, true)
+			_draw_stripes(rect, OCC_STRIPE)
+			draw_rect(rect, OCC_OUTLINE, false, 2.0)
 	# 呼吸动画（周期 3s）：水平只向内缩（0~+1px），垂直 ±1.5px
 	var tb: float = float(now) * TAU / 3000.0
 	var breath_x: float = (sin(tb) + 1.0) * 0.5
@@ -92,6 +118,17 @@ func _draw() -> void:
 		else:
 			draw_rect(rect, fill_color, true)
 			draw_rect(rect, outline_color, false, 2.0)
+	# 重叠层：拖拽条带 ∩ 已有建筑 → 红色斜条纹矩形（盖在条带之上）
+	if not occupied_cells.is_empty():
+		for c in occupied_cells:
+			if c < cell_start or c >= cell_end:
+				continue
+			var left: float = float(c) * float(CELL_SIZE)
+			var rect := Rect2(Vector2(left + CELL_INSET_X, top + CELL_INSET_Y),
+					Vector2(CELL_SIZE - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
+			draw_rect(rect, OVERLAP_FILL, true)
+			_draw_stripes(rect, OVERLAP_STRIPE)
+			draw_rect(rect, OVERLAP_OUTLINE, false, 2.0)
 	if draft_placed:
 		_draw_handles(now)
 		_draw_ripple(now)
@@ -185,3 +222,18 @@ func _draw_corner(px: float, py: float, sx: float, sy: float, color: Color) -> v
 	draw_polyline(PackedVector2Array([
 		Vector2(px, py + sy), Vector2(px, py), Vector2(px + sx, py),
 	]), color, 3.0)
+
+
+## 45° 斜条纹填充（平行线族，起点沿顶边等距，裁剪在矩形内）
+func _draw_stripes(rect: Rect2, color: Color, spacing: float = STRIPE_SPACING) -> void:
+	var x := rect.position.x
+	var end_x := rect.end.x
+	var h := rect.size.y
+	while x < end_x:
+		var x2 := x + h
+		if x2 > end_x:
+			x2 = end_x
+			draw_line(Vector2(x, rect.position.y), Vector2(x2, rect.position.y + (x2 - x)), color, 2.0)
+		else:
+			draw_line(Vector2(x, rect.position.y), Vector2(x2, rect.end.y), color, 2.0)
+		x += spacing

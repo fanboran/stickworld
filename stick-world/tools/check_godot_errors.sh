@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-PATTERNS=("ERROR" "SCRIPT ERROR" "Parse Error" "Invalid call" "Invalid access" "Cannot")
+PATTERNS=("ERROR" "SCRIPT ERROR" "Parse Error" "Invalid call" "Invalid access" "Cannot open" "Cannot load" "Cannot find" "Cannot instantiate" "Cannot create" "Cannot parse")
 [ "$WARNINGS" -eq 1 ] && PATTERNS+=("WARNING")
 
 total_errors=0
@@ -93,7 +93,7 @@ if [ "$QUICK" -eq 0 ]; then
 	wait "$pid" 2>/dev/null
 	code=$?
 	kill "$killer" 2>/dev/null; wait "$killer" 2>/dev/null
-	if [ "$code" -ge 137 ] 2>/dev/null; then
+	if [[ "$code" =~ ^[0-9]+$ ]] && [ "$code" -ge 137 ]; then
 		echo "  [boot] TIMEOUT"
 		exit 1
 	fi

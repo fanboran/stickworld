@@ -279,15 +279,15 @@ func _triangle_box(side: int) -> Rect2:
 func _draw_diff_rects() -> void:
 	if default_end <= default_start:
 		return
-	if _cell_start > _default_start:
-		var x1: float = float(_default_start) * float(CELL_SIZE)
-		var x2: float = float(_cell_start) * float(CELL_SIZE)
+	if cell_start > default_start:
+		var x1: float = float(default_start) * float(CELL_SIZE)
+		var x2: float = float(cell_start) * float(CELL_SIZE)
 		var rect := Rect2(Vector2(x1 + CELL_INSET_X, top + CELL_INSET_Y),
 				Vector2(x2 - x1 - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
 		draw_rect(rect, DIFF_OUTLINE, false, 2.0)
-	if _cell_end < _default_end:
-		var x1: float = float(_cell_end) * float(CELL_SIZE)
-		var x2: float = float(_default_end) * float(CELL_SIZE)
+	if cell_end < default_end:
+		var x1: float = float(cell_end) * float(CELL_SIZE)
+		var x2: float = float(default_end) * float(CELL_SIZE)
 		var rect := Rect2(Vector2(x1 + CELL_INSET_X, top + CELL_INSET_Y),
 				Vector2(x2 - x1 - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
 		draw_rect(rect, DIFF_OUTLINE, false, 2.0)

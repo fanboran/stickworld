@@ -338,6 +338,11 @@ func _process(_delta: float) -> void:
 	var map: Node2D = _game_root.get_current_map() if _game_root.has_method("get_current_map") else null
 	if map == null:
 		return
+	var ml: float = float(map.get("map_left") if "map_left" in map else 0.0)
+	var mr: float = float(map.get("map_right") if "map_right" in map else 8192.0)
+	# 地图边界对应 cell（负 cell 区域合法，2026-08 修复：原硬编码 0 下限在负区非法致左边界飞走）
+	var min_cell: int = int(floor(ml / float(_CELL_SIZE)))
+	var max_cell: int = int(floor(mr / float(_CELL_SIZE)))
 	var mouse_cell: int = _get_mouse_cell()
 	if _draft_placed:
 		# 拉伸阶段：条带固定，按住左键拖动时按"按下基准 + 相对位移"更新对应边界，
@@ -345,9 +350,9 @@ func _process(_delta: float) -> void:
 		if _drag_active:
 			var delta: int = mouse_cell - _drag_start_mouse
 			if _drag_side == 0:
-				_cell_start = clampi(_drag_start_boundary + delta, 0, _cell_end - 1)
+				_cell_start = clampi(_drag_start_boundary + delta, min_cell, _cell_end - 1)
 			else:
-				_cell_end = clampi(_drag_start_boundary + delta, _cell_start + 1, 1 << 30)
+				_cell_end = clampi(_drag_start_boundary + delta, _cell_start + 1, max_cell)
 		if _hint_label != null:
 			_hint_label.text = "按住左键拖动左右两侧方块调整边界 | 点击「确定建造」确认 | 右键/Esc 取消"
 	else:
@@ -367,8 +372,6 @@ func _process(_delta: float) -> void:
 	var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
 	var baseline: float = ground_y + baseline_offset
 	var top: float = baseline - _GHOST_HEIGHT
-	var ml: float = float(map.get("map_left") if "map_left" in map else 0.0)
-	var mr: float = float(map.get("map_right") if "map_right" in map else 8192.0)
 	var in_bounds: bool = true
 	for c in range(width):
 		var cx: int = _cell_start + c

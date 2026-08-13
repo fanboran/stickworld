@@ -1,4 +1,6 @@
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
+signal test_done(code: int)
 ## 单元测试：指挥链延迟公式 + 战术号令映射（纯逻辑）。
 ## CommandChain._calculate_delay / TacticalOrders._order_to_behavior / _order_to_params。
 ## 不进场景树，确定性。
@@ -21,7 +23,7 @@ func _ready() -> void:
 	_runner.add_test("TacticalOrders: 号令类型到行为参数映射", _test_order_to_params)
 	_runner.run()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _test_player_direct() -> void:

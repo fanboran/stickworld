@@ -1,4 +1,6 @@
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
+signal test_done(code: int)
 ## 单元测试：ResourcesApi 信号转发层（resource_changed / resource_not_enough）。
 ## 2026-08 补充：此前仅测 ResourceManager 纯数据层，信号层零覆盖。
 ## 纯逻辑测试：api Node 实例化后不进场景树，确定性。
@@ -21,7 +23,7 @@ func _ready() -> void:
 	_runner.add_test("ResourcesApi: transfer/市场参数转发", _test_forward_rest)
 	_runner.run()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 ## 构造 api + manager fixture，返回 {"api": ..., "manager": ..., "events": [...]}

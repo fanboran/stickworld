@@ -1,4 +1,6 @@
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
+signal test_done(code: int)
 ## 单元测试：ResourceManager 资源扣减/生产/转移逻辑。
 ## 纯数据层（RefCounted）测试：new 即用，不进场景树，确定性。
 
@@ -21,7 +23,7 @@ func _ready() -> void:
 	_runner.add_test("ResourceManager: 市场参数设置", _test_market_params)
 	_runner.run()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _test_empty() -> void:

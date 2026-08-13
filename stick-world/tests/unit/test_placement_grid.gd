@@ -1,4 +1,6 @@
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
+signal test_done(code: int)
 ## PlacementGrid 纯单元测试 -- 阶段 0.2 占地网格核心逻辑。
 ##
 ## 这是「重新设计测试」的示范样本（见 P0 重审方案 §三）：
@@ -31,7 +33,7 @@ func _ready() -> void:
 	_test_get_occupied_count()
 	_runner.run()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 # ─────────────────────────────── fixture ────────────────────────────────

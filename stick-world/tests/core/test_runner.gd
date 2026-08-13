@@ -199,3 +199,17 @@ func begin_test(name: String) -> void:
 ## 标记当前测试结束，记录结果。需与 begin_test 配对使用。
 func end_test() -> void:
 	_finish()
+
+
+# ─────────────────────────────── 进程结束出口 ────────────────────────────────
+
+## 测试进程结束统一出口：
+## - 批量模式（batch_runner 设置了 Engine meta "test_batch"）：经 test_done 信号
+##   通知批量运行器（deferred 发射，保证运行器先完成连接），不退出进程；
+## - 独立运行：直接 get_tree().quit(exit_code)。
+## 要求使用方脚本声明 `signal test_done(code: int)`。
+static func finish_process(emitter: Node, exit_code: int) -> void:
+	if Engine.has_meta("test_batch"):
+		emitter.call_deferred("emit_signal", "test_done", exit_code)
+	else:
+		emitter.get_tree().quit(exit_code)

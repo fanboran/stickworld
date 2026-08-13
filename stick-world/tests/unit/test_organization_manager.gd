@@ -1,4 +1,6 @@
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
+signal test_done(code: int)
 ## 单元测试：OrganizationManager 组织 CRUD/层级/人事/序列化逻辑。
 ## 纯数据层（RefCounted）测试：new 即用，不进场景树，确定性。
 ## 2026-08 补充：此前 424 行核心逻辑零测试触点（含 insert_tier 修复回归）。
@@ -31,7 +33,7 @@ func _ready() -> void:
 	_runner.add_test("Org: WorldState 容器同步（创建注册/删除注销）", _test_world_sync)
 	_runner.run()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 # ─────────────── fixture：根(tier5) -> mid(tier4) -> leaf(tier3) ───────────────

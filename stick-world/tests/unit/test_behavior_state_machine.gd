@@ -1,4 +1,6 @@
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
+signal test_done(code: int)
 ## 单元测试：BehaviorStateMachine 注册/travel/调度纯逻辑（假行为白盒）。
 ## 不进场景树，确定性。
 
@@ -43,7 +45,7 @@ func _ready() -> void:
 	_runner.add_test("StateMachine: 空注册行为被拒绝", _test_empty_register)
 	_runner.run()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _make_fake(fake_name: String) -> FakeBehavior:

@@ -1,4 +1,6 @@
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
+signal test_done(code: int)
 ## 单元测试：HealthComponent 生命/士气数值逻辑。
 ## 纯数据层测试：不进场景树（不触发 _ready），手动设值，确定性。
 
@@ -21,7 +23,7 @@ func _ready() -> void:
 	_runner.add_test("HealthComponent: heal/restore_morale 不超过上限", _test_heal_caps)
 	_runner.run()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _new_health(max_hp: float, max_morale: float, rout_threshold: float) -> Node:

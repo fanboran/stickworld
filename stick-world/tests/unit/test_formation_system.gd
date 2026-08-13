@@ -1,4 +1,6 @@
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
+signal test_done(code: int)
 ## 单元测试：FormationSystem 编队增删/任命（fake OrganizationApi 白盒）。
 ## FormationSystem 不进场景树（_process 不触发），确定性。
 
@@ -49,7 +51,7 @@ func _ready() -> void:
 	_runner.add_test("FormationSystem: disband 清空并同步组织", _test_disband)
 	_runner.run()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _make_fs() -> Array:

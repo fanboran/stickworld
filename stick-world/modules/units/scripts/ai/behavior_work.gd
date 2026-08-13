@@ -1,5 +1,5 @@
 class_name BehaviorWork
-extends "res://modules/units/scripts/ai/behavior_base.gd"
+extends BehaviorBase
 ## 工作行为 —— §15 阶段 0.4。
 ##
 ## 工人被派工到 ConstructionProject 后进入此行为：

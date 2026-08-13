@@ -307,7 +307,7 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 			(building as Building).apply_building_def(def)
 	_buildings[building_id] = building
 	_building_to_id[building] = building_id
-	print("[ConstructionManager] 建筑完工: %s (def=%s, cell_x=%d)" % [building_id, project.def_id, project.cell_x])
+	print_verbose("[ConstructionManager] 建筑完工: %s (def=%s, cell_x=%d)" % [building_id, project.def_id, project.cell_x])
 	# 阶段 F：城墙完工时更新地形遮罩
 	if building is Building and (building as Building).is_wall():
 		_update_city_terrain_mask()
@@ -561,7 +561,7 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	_buildings[building_id] = building
 	_building_to_id[building] = building_id
 
-	print("[ConstructionManager] 预置建筑已生成: %s (def=%s, cell_x=%d, width=%d)" % [building_id, def_id, cell_x, width])
+	print_verbose("[ConstructionManager] 预置建筑已生成: %s (def=%s, cell_x=%d, width=%d)" % [building_id, def_id, cell_x, width])
 	return {"ok": true, "building_id": building_id, "cell_x": cell_x, "width": width}
 
 
@@ -650,10 +650,10 @@ func get_worker_project(worker: Node) -> ScriptConstructionProject:
 # ─────────────────────────────── SQLite 存档（转发到 BuildingPersistence）────────────────────────────────
 
 ## 保存建筑和建造项目到 DB
-func save_to_db(db, slot_id: int, map_id: String) -> void:
+func save_to_db(db: Object, slot_id: int, map_id: String) -> void:
 	_persistence.save_to_db(db, slot_id, map_id)
 
 
 ## 从 DB 恢复建筑和建造项目
-func load_from_db(db, slot_id: int, map_id: String) -> void:
+func load_from_db(db: Object, slot_id: int, map_id: String) -> void:
 	_persistence.load_from_db(db, slot_id, map_id)

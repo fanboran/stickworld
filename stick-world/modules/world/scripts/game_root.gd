@@ -381,7 +381,7 @@ func _load_start_village() -> void:
 		scene_loader.travel_started.connect(_on_travel_started)
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
 	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
-	print("[GameRoot] 开始新游戏")
+	print_verbose("[GameRoot] 开始新游戏")
 	scene_loader.load_map(VILLAGE_A_MAP_ID)
 
 

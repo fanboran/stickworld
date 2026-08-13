@@ -18,7 +18,7 @@ func setup(root: Node) -> void:
 
 
 # ─────────────────────────────── SQLite 存档 ────────────────────────────────
-# 详见 docs/技术/架构/SQLite存档迁移方案.md §5.2
+# 详见 modules/README.md §8 存储分层
 
 ## 保存建筑和建造项目到 DB
 func save_to_db(db, slot_id: int, map_id: String) -> void:

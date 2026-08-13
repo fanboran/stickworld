@@ -53,7 +53,7 @@ func _ready() -> void:
 	var vp := get_viewport()
 	if vp != null:
 		vp.transparent_bg = true
-		print("[capture_in_game] viewport transparent_bg = true")
+		print_verbose("[capture_in_game] viewport transparent_bg = true")
 
 	# 兜底：如果 tscn 没把 Array export 加载进来（Godot 4 tscn 加载 Array 已知问题），
 	# 手动设置 hide_node_paths 兜底
@@ -66,7 +66,7 @@ func _ready() -> void:
 			NodePath("../SmithyPreview/L5_Roof/Beam"),
 			NodePath("../SmithyPreview/L5_Roof/SlantedStrut"),
 		]
-	print("[capture_in_game] _ready: hide_node_paths.size=", hide_node_paths.size(), " crop_node_paths.size=", crop_node_paths.size())
+	print_verbose("[capture_in_game] _ready: hide_node_paths.size=", hide_node_paths.size(), " crop_node_paths.size=", crop_node_paths.size())
 	_frame = 0
 	_phase = 0
 
@@ -88,7 +88,7 @@ func _process(_delta: float) -> void:
 			var extra_node := get_node_or_null(extra_np)
 			if extra_node != null and "show_guides" in extra_node:
 				extra_node.set("show_guides", false)
-		print("[capture_in_game] Phase 0 -> 1")
+		print_verbose("[capture_in_game] Phase 0 -> 1")
 		return
 
 	# Phase 1: 等待辅助线隐藏生效
@@ -102,8 +102,8 @@ func _process(_delta: float) -> void:
 			var n := get_node_or_null(np)
 			if n != null:
 				n.visible = false
-				print("[capture_in_game] hidden: %s" % np)
-		print("[capture_in_game] Phase 1 -> 2")
+				print_verbose("[capture_in_game] hidden: %s" % np)
+		print_verbose("[capture_in_game] Phase 1 -> 2")
 		return
 
 	# Phase 2: 等待隐藏生效
@@ -112,7 +112,7 @@ func _process(_delta: float) -> void:
 			return
 		_phase = 3
 		_frame = 0
-		print("[capture_in_game] Phase 2 -> 3 (super sample)")
+		print_verbose("[capture_in_game] Phase 2 -> 3 (super sample)")
 		_apply_super_sample()
 		return
 
@@ -121,7 +121,7 @@ func _process(_delta: float) -> void:
 		if _frame < 3:
 			return
 		_phase = 4
-		print("[capture_in_game] Phase 3 -> 4 (capturing)")
+		print_verbose("[capture_in_game] Phase 3 -> 4 (capturing)")
 		_capture_and_save()
 		set_process(false)
 
@@ -164,7 +164,7 @@ func _capture_and_save() -> void:
 		get_tree().quit(1)
 		return
 
-	print("[capture_in_game] 已保存: %s (%dx%d)" % [output_path, img.get_width(), img.get_height()])
+	print_verbose("[capture_in_game] 已保存: %s (%dx%d)" % [output_path, img.get_width(), img.get_height()])
 	get_tree().quit(0)
 
 
@@ -179,7 +179,7 @@ func _apply_super_sample() -> void:
 		return
 	var old_size := window.size
 	window.size = Vector2i(old_size.x * _ss, old_size.y * _ss)
-	print("[capture_in_game] super_sample: window %dx%d -> %dx%d" % [old_size.x, old_size.y, window.size.x, window.size.y])
+	print_verbose("[capture_in_game] super_sample: window %dx%d -> %dx%d" % [old_size.x, old_size.y, window.size.x, window.size.y])
 
 	# 缩放 camera zoom → Polygon2D 在屏幕上 2x 大
 	var vp := get_viewport()
@@ -187,7 +187,7 @@ func _apply_super_sample() -> void:
 		var cam := vp.get_camera_2d()
 		if cam != null:
 			cam.zoom = cam.zoom * float(_ss)
-			print("[capture_in_game] super_sample: camera zoom -> %s" % cam.zoom)
+			print_verbose("[capture_in_game] super_sample: camera zoom -> %s" % cam.zoom)
 
 	# 更新所有茅草 Polygon2D 的 shader resolution uniform
 	for np in crop_node_paths:
@@ -200,7 +200,7 @@ func _apply_super_sample() -> void:
 		var old_res := mat.get_shader_parameter("resolution") as Vector2
 		if old_res != Vector2.ZERO:
 			mat.set_shader_parameter("resolution", old_res * float(_ss))
-			print("[capture_in_game] super_sample: %s resolution %s -> %s" % [poly.name, old_res, old_res * float(_ss)])
+			print_verbose("[capture_in_game] super_sample: %s resolution %s -> %s" % [poly.name, old_res, old_res * float(_ss)])
 
 
 # 多节点 union AABB 裁剪：计算所有 crop_node 在屏幕空间的世界 AABB，
@@ -285,7 +285,7 @@ func _crop_to_nodes(img: Image, vp: Viewport) -> Image:
 		push_error("[capture_in_game] 计算出的截图区域无效: %s" % ri)
 		return null
 
-	print("[capture_in_game] 裁剪区域: pos=(%d, %d) size=(%d, %d)" % [ri.position.x, ri.position.y, ri.size.x, ri.size.y])
+	print_verbose("[capture_in_game] 裁剪区域: pos=(%d, %d) size=(%d, %d)" % [ri.position.x, ri.position.y, ri.size.x, ri.size.y])
 	return img.get_region(ri)
 
 

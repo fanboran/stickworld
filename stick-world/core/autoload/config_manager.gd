@@ -87,7 +87,7 @@ func reset_to_defaults() -> void:
 # ─────────────────────────────── 通用读写 ───────────────────────────────
 
 ## 读取任意键的值。
-func get_value(key: String):
+func get_value(key: String) -> Variant:
 	if _data.has(key):
 		return _data[key]
 	return null

@@ -124,7 +124,7 @@ func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> Ar
 	# 启动战斗：玩家方（进攻）vs 敌方（防守）
 	if not enemies.is_empty():
 		_root.start_test_battle(allies, enemies)
-		print("[GameRoot] 遭遇战已启动: %d 友军（含 %d 默认步兵） vs %d 敌军" % [allies.size(), extra.size(), enemies.size()])
+		print_verbose("[GameRoot] 遭遇战已启动: %d 友军（含 %d 默认步兵） vs %d 敌军" % [allies.size(), extra.size(), enemies.size()])
 	return allies
 
 

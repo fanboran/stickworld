@@ -51,7 +51,7 @@ func _load_defs_from_json(json_path: String) -> void:
 	for d in defs:
 		if d is Dictionary:
 			building_defs.append(d)
-	print("[InitialBuildingsList] 从 %s 加载 %d 条初始建筑" % [json_path, building_defs.size()])
+	print_verbose("[InitialBuildingsList] 从 %s 加载 %d 条初始建筑" % [json_path, building_defs.size()])
 
 
 ## 获取所有初始建筑定义

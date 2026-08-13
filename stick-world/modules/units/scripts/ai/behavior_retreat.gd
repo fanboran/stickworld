@@ -1,5 +1,5 @@
 class_name BehaviorRetreat
-extends "res://modules/units/scripts/ai/behavior_base.gd"
+extends BehaviorBase
 ## 撤退行为 -- 向远离最近敌人的方向移动，拉开距离或恢复士气后 finish。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §7.2。

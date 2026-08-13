@@ -1,5 +1,5 @@
 class_name BehaviorHaul
-extends "res://modules/units/scripts/ai/behavior_base.gd"
+extends BehaviorBase
 ## 搬运行为 -- 工人从仓库取建材运往工地。
 ##
 ## 工人被派工到 ConstructionProject 且项目需要材料时进入此行为：

@@ -1,5 +1,5 @@
 class_name BehaviorWander
-extends "res://modules/units/scripts/ai/behavior_base.gd"
+extends BehaviorBase
 ## 漫游行为 -- 基于 Reynolds Steering Behaviors 的平滑漫游。
 ##
 ## 参考：Craig Reynolds, "Steering Behaviors for Autonomous Characters" (1999)

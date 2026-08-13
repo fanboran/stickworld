@@ -246,10 +246,17 @@ static func _visit(id: int, data: Dictionary, visited: Dictionary, result: Array
 	result.append(id)
 
 
+const BONE_TEXTURE_DIR := "res://modules/units/assets/textures/stickman"
+
+
+static func _bone_texture_path(id: int, node_type: int) -> String:
+	return "%s/bone_%d_%s.png" % [BONE_TEXTURE_DIR, id, TextureGen.type_str(node_type)]
+
+
 static func _load_baked_texture(id: int, node_type: int, colors: Dictionary) -> Texture2D:
 	if not _colors_default(colors):
 		return null
-	var path := "res://modules/units/assets/textures/stickman/bone_%d_%s.png" % [id, TextureGen.type_str(node_type)]
+	var path := _bone_texture_path(id, node_type)
 	if ResourceLoader.exists(path):
 		return load(path) as Texture2D
 	return null

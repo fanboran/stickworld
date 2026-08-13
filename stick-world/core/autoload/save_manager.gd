@@ -6,7 +6,7 @@ extends Node
 ##   1. 旧接口模块（WorldState 等）：实现 get_save_data() / load_save_data()，数据存入 legacy_modules 表（JSON blob）
 ##   2. 新接口模块（GameRoot 等）：在 game_saving / game_loaded 信号回调中通过 get_db() 直接操作 DB 表
 ##
-## 详见 docs/技术/架构/SQLite存档迁移方案.md
+## 详见 modules/README.md §8 存储分层
 
 const SLOT_COUNT := 5
 const SAVE_DIR := "user://saves"
@@ -159,7 +159,7 @@ func unregister_module(module_name: String) -> void:
 # ─────────────────────────────── DB 访问（供新接口模块使用）────────────────
 
 ## 获取当前操作的 DB 连接（save/load 期间有效，外部不应长期持有）
-func get_db():
+func get_db() -> Object:
 	return _db
 
 
@@ -302,7 +302,7 @@ func set_auto_save_slot(slot_index: int) -> void:
 # ─────────────────────────────── 内部方法 ─────────────────────────────
 
 ## 创建新的 SQLite 实例（安全封装，防止插件未加载时崩溃）
-func _new_db():
+func _new_db() -> Object:
 	if not ClassDB.class_exists("SQLite"):
 		push_warning("[SaveManager] SQLite 类未注册（GDExtension 插件未加载？）")
 		return null
@@ -310,7 +310,7 @@ func _new_db():
 
 
 ## 打开指定槽位的数据库
-func _open_db_for_slot(slot_index: int):
+func _open_db_for_slot(slot_index: int) -> Object:
 	var db = _new_db()
 	if db == null:
 		push_warning("[SaveManager] 无法创建 SQLite 实例（插件未加载？）")

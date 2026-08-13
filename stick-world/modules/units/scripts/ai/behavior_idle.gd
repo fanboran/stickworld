@@ -1,5 +1,5 @@
 class_name BehaviorIdle
-extends "res://modules/units/scripts/ai/behavior_base.gd"
+extends BehaviorBase
 ## 闲置行为 -- 站立不动，持续一段时间后完成。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §7.2。

@@ -1,5 +1,5 @@
 class_name BehaviorFollow
-extends "res://modules/units/scripts/ai/behavior_base.gd"
+extends BehaviorBase
 ## 跟随行为 -- 小队启用"跟随玩家"后，成员自动尾随玩家（保持距离，separation 防叠）。
 ##
 ## 详见 docs/技术/架构/场景与战斗/战斗与AI.md §7.2。

@@ -207,13 +207,13 @@ func toggle_save_panel() -> void:
 func quick_save() -> void:
 	if SaveManager and SaveManager.has_method("save_game"):
 		SaveManager.save_game(0)
-		print("[GameRoot] 快速保存到槽位 0")
+		print_verbose("[GameRoot] 快速保存到槽位 0")
 
 
 ## 快速读取槽位 0
 func quick_load() -> void:
 	if SaveManager and SaveManager.has_method("slot_exists") and SaveManager.slot_exists(0):
 		load_game_from_slot(0)
-		print("[GameRoot] 快速读取槽位 0")
+		print_verbose("[GameRoot] 快速读取槽位 0")
 	else:
 		push_warning("[GameRoot] 槽位 0 无存档")

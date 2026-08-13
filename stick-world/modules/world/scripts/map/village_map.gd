@@ -249,7 +249,7 @@ func expand_map(cell_x: int, width: int = 1) -> void:
 		for entity in entity_host.get_children():
 			if entity.has_method("set_ground_constraints"):
 				entity.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)
-	print("[VillageMap] 地图扩展: left_cell=%d right_cell=%d (world %.0f~%.0f)" % [map_left_cell, map_right_cell, map_left, map_right])
+	print_verbose("[VillageMap] 地图扩展: left_cell=%d right_cell=%d (world %.0f~%.0f)" % [map_left_cell, map_right_cell, map_left, map_right])
 
 
 ## 更新 GroundPolygon 顶点以匹配当前 map_left/map_right

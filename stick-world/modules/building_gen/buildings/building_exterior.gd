@@ -188,7 +188,7 @@ func _full_uv(n: int) -> PackedVector2Array:
 		6: return PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0.75, 1), Vector2(0.65, 0.35), Vector2(0.2, 0.35)])
 	return PackedVector2Array()
 
-func _make_slanted_beam_tex(color: Color):
+func _make_slanted_beam_tex(color: Color) -> ImageTexture:
 	var slant  := 64.0
 	var height := 110.0
 	var length := sqrt(slant * slant + height * height)

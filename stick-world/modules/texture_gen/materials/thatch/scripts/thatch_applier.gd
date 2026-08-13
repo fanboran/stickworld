@@ -170,7 +170,7 @@ func _generate_brush_texture(w: int, h: int, angle_deg: float, tex_seed: int) ->
 		stroke_w = maxf(3.0, stroke_w)
 
 		# 随机选颜色并微调 — 使用完全不透明的颜色
-		var base_col: Color = colors[rng.randi() % colors.size()]
+		var base_col: Color = colors[rng.randi_range(0, colors.size() - 1)]
 		var col_var: float = stroke_color_var
 		var col: Color = Color(
 			clampf(base_col.r + rng.randf_range(-col_var, col_var), 0.0, 1.0),

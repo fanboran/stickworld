@@ -106,7 +106,7 @@ func transfer(resource_id: String, amount: float, from_region: String, to_region
 	_ensure_paths(resource_id, to_region)
 
 	stocks[resource_id][from_region] -= amount
-	# TODO: 根据实际距离计算运输损耗
+	# 距离相关运输损耗：当前按固定比例，阶段 1 按实际距离计算
 	var actual_arrival: float = amount * (1.0 - transport_loss_rate)
 	stocks[resource_id][to_region] += actual_arrival
 
@@ -141,7 +141,7 @@ func set_tax_rate(rate: float) -> Dictionary:
 
 ## 更新指定资源在指定区域的价格（基于供需）
 func _update_price(_resource_id: String, _region_id: String) -> void:
-	# TODO: 根据供需关系计算价格
+	# 供需价格模拟（阶段 1，见待办事项「resources 供需接入」）：
 	# 1. 计算供需比 supply / demand
 	# 2. 根据供需比调整价格
 	# 3. 应用价格上下限
@@ -151,7 +151,7 @@ func _update_price(_resource_id: String, _region_id: String) -> void:
 
 ## 定期供需平衡（由 TimeManager 定时调用）
 func _tick_supply_demand(_delta: float) -> void:
-	# TODO: 遍历所有资源+区域，调用 _update_price
+	# 阶段 1 实现：遍历所有资源+区域，调用 _update_price
 	pass
 
 

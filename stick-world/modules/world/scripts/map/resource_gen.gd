@@ -28,7 +28,7 @@ func get_terrain_row_count() -> int:
 ## 在指定 cell_x 的地面上生成随机 Y 位置（垂直网格内随机行）
 func random_resource_y(_cell_x: int) -> float:
 	var rows: int = get_terrain_row_count()
-	var row: int = randi() % rows
+	var row: int = randi_range(0, maxi(0, rows - 1))
 	return _root.ground_y + row * TERRAIN_CELL_SIZE_Y + TERRAIN_CELL_SIZE_Y * 0.5
 
 
@@ -60,7 +60,7 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 			rtype = 2  # METAL
 		var node: Node2D = ScriptResourceNode.new()
 		node.resource_type = rtype
-		node.amount = 50 + randi() % 100
+		node.amount = 50 + randi_range(0, 99)
 		var px: float = cx * PlacementGrid.CELL_SIZE + PlacementGrid.CELL_SIZE * 0.5
 		var py: float = random_resource_y(cx)
 		node.position = Vector2(px, py)

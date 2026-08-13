@@ -67,7 +67,7 @@
 | 文件 | 实现内容 |
 |------|----------|
 | `scripts/stickman_rig.gd` | 渲染骨架：Skeleton2D+Bone2D 骨骼 + 纹理烘焙 + 动画播放 + 武器挂载 |
-| `scripts/stickman_skeleton.gd` | 骨骼数据定义与构建（15 根骨骼） |
+| `scripts/rig/stickman_skeleton.gd` | 骨骼数据定义与构建（15 根骨骼） |
 | `scripts/stickman_texture_gen.gd` | 程序化纹理生成（4x 分辨率 + mipmaps） |
 | `scripts/stickman_anims.gd` | 动画系统：idle/walk/run/attack/dead，AnimationPlayer + .tres 资源 |
 | `scripts/stickman_weapon.gd` | 武器挂载系统（占位 sword） |

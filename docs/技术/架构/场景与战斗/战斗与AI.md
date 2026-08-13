@@ -118,7 +118,7 @@ func _is_in_passage_barrier() -> bool:
 ### 7.2 行为状态机
 
 ```
-modules/units/ai/（✅=已实现注册，📋=设计未实现）
+modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 ├── behavior_base.gd                 ✅ 行为基类（enter/update/exit）
 ├── behavior_idle.gd                 ✅ 闲置（默认空闲，P0 原地待机）
 ├── behavior_wander.gd               ✅ 漫游（P0 默认关闭 WANDER_PROBABILITY=0，仅显式调用）

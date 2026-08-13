@@ -199,7 +199,7 @@ func _grant_initial_resources() -> void:
 	}
 	for res_id in initial.keys():
 		_root._resources_api.produce(res_id, initial[res_id], "test_region", "初始资源")
-	print("[GameRoot] 初始资源已发放: %s" % str(initial))
+	print_verbose("[GameRoot] 初始资源已发放: %s" % str(initial))
 
 
 # ─────────────────────────────── 框选系统装配 ────────────────────────────────
@@ -300,13 +300,9 @@ func _setup_battle_panel_deferred() -> void:
 func _setup_formation_panel() -> void:
 	if _root.ui_root == null:
 		return
-	var overlay: Control = _root.ui_root.get_node_or_null(UIAPI.PATH_MODAL_OVERLAY)
-	if overlay == null:
+	var fp := UIKit.full_rect(_FormationPanelScript, "FormationPanel")
+	if not _root.ui_root.add_to_slot("ModalOverlay", fp):
 		return
-	var fp := Control.new()
-	fp.set_script(_FormationPanelScript)
-	fp.name = "FormationPanel"
-	overlay.add_child(fp)
 	_root._formation_panel = fp
 	call_deferred("_setup_formation_panel_deferred")
 
@@ -527,7 +523,7 @@ func _on_world_map_travel(target_map_id: String, entry_side: int) -> void:
 # ─────────────────────────────── 游玩 UI ────────────────────────────────
 
 func _setup_game_ui() -> void:
-	# 主控单位圆圈
+	# 主控单位圆圈（屏幕空间绘制，挂 HudOverlay 槽，坐标系与视口一致）
 	_root._possession_indicator = Control.new()
 	_root._possession_indicator.set_script(_PossessionIndicatorScript)
 	_root._possession_indicator.name = "PossessionIndicator"
@@ -535,7 +531,7 @@ func _setup_game_ui() -> void:
 	if _root._possession_indicator.has_method("setup"):
 		_root._possession_indicator.setup(_root.camera_rig, _root)
 	if _root.ui_root != null:
-		_root.ui_root.add_child(_root._possession_indicator)
+		_root.ui_root.add_to_slot("HudOverlay", _root._possession_indicator)
 	else:
 		_root.add_child(_root._possession_indicator)
 	# 鼠标悬停方框
@@ -546,7 +542,7 @@ func _setup_game_ui() -> void:
 	if _root._hover_indicator.has_method("setup"):
 		_root._hover_indicator.setup(_root.camera_rig, _root)
 	if _root.ui_root != null:
-		_root.ui_root.add_child(_root._hover_indicator)
+		_root.ui_root.add_to_slot("HudOverlay", _root._hover_indicator)
 	else:
 		_root.add_child(_root._hover_indicator)
 	# 中键滚动图标
@@ -557,7 +553,7 @@ func _setup_game_ui() -> void:
 	if _root._middle_scroll_overlay.has_method("setup"):
 		_root._middle_scroll_overlay.setup(_root.camera_rig)
 	if _root.ui_root != null:
-		_root.ui_root.add_child(_root._middle_scroll_overlay)
+		_root.ui_root.add_to_slot("HudOverlay", _root._middle_scroll_overlay)
 	else:
 		_root.add_child(_root._middle_scroll_overlay)
 
@@ -574,13 +570,13 @@ func _setup_resource_bar() -> void:
 			_root._resource_bar = rb
 			call_deferred("_setup_resource_bar_deferred")
 			return
-	# 回退：代码创建
+	# 回退：代码创建（挂 HudOverlay 槽，使脚本内 FULL_RECT 子控件拿到视口尺寸）
 	_root._resource_bar = Control.new()
 	_root._resource_bar.set_script(_ResourceBarScript)
 	_root._resource_bar.name = "ResourceBar"
 	_root._resource_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _root.ui_root != null:
-		_root.ui_root.add_child(_root._resource_bar)
+		_root.ui_root.add_to_slot("HudOverlay", _root._resource_bar)
 	else:
 		_root.add_child(_root._resource_bar)
 	call_deferred("_setup_resource_bar_deferred")

@@ -346,13 +346,15 @@ func _process(_delta: float) -> void:
 	var mouse_cell: int = _get_mouse_cell()
 	if _draft_placed:
 		# 拉伸阶段：条带固定，按住左键拖动时按"按下基准 + 相对位移"更新对应边界，
-		# 按下未移动则不跳变（互不影响、不会向内溃缩）
+		# 按下未移动则不跳变（互不影响、不会向内溃缩）。
+		# 最小宽度 = 建筑定义宽度（def.width，默认 16 格）：拖动时不能缩到更小。
+		var min_width: int = _get_def_width()
 		if _drag_active:
 			var delta: int = mouse_cell - _drag_start_mouse
 			if _drag_side == 0:
-				_cell_start = clampi(_drag_start_boundary + delta, min_cell, _cell_end - 1)
+				_cell_start = clampi(_drag_start_boundary + delta, min_cell, maxi(min_cell, _cell_end - min_width))
 			else:
-				_cell_end = clampi(_drag_start_boundary + delta, _cell_start + 1, max_cell)
+				_cell_end = clampi(_drag_start_boundary + delta, mini(max_cell, _cell_start + min_width), max_cell)
 		if _hint_label != null:
 			_hint_label.text = "按住左键拖动左右两侧方块调整边界 | 点击「确定建造」确认 | 右键/Esc 取消"
 	else:

@@ -215,6 +215,9 @@ func _setup_selection_system() -> void:
 	sel.name = "SelectionSystem"
 	_root.ui_root.add_child(sel)
 	_root._selection_system = sel
+	# 注入 GameRoot（替代 group 反查）
+	if sel.has_method("setup"):
+		sel.setup(_root)
 	# 注册为 BATTLE 模式 handler
 	if _root.input_dispatcher != null and _root.input_dispatcher.has_method("register_handler"):
 		_root.input_dispatcher.register_handler(PlayerControlAPI.Mode.BATTLE, sel)
@@ -371,6 +374,9 @@ func _setup_possession_interface() -> void:
 	pi.name = "PossessionInterface"
 	_root.add_child(pi)
 	_root._possession_interface = pi
+	# 注入 GameRoot（替代父链反查）
+	if pi.has_method("setup"):
+		pi.setup(_root)
 	# 注册为 POSSESS handler
 	if _root.input_dispatcher != null and _root.input_dispatcher.has_method("register_handler"):
 		_root.input_dispatcher.register_handler(PlayerControlAPI.Mode.POSSESS, pi)
@@ -406,6 +412,9 @@ func _register_explore_handler() -> void:
 	handler.set_script(_ExploreHandlerScript)
 	handler.name = "ExploreHandler"
 	_root.add_child(handler)
+	# 注入 GameRoot（替代父链反查）
+	if handler.has_method("setup"):
+		handler.setup(_root)
 	_root.input_dispatcher.register_handler(PlayerControlAPI.Mode.EXPLORE, handler)
 
 
@@ -417,6 +426,9 @@ func _setup_boundary_detector() -> void:
 	_root._boundary_detector.set_script(_MapBoundaryDetectorScript)
 	_root._boundary_detector.name = "MapBoundaryDetector"
 	_root.add_child(_root._boundary_detector)
+	# 注入 GameRoot（替代根节点遍历反查）
+	if _root._boundary_detector.has_method("setup"):
+		_root._boundary_detector.setup(_root)
 	# 实例化战略图（CanvasLayer 独立渲染层，全屏覆盖；Content 初始隐藏）
 	_root._strategic_map = _StrategicMapScene.instantiate()
 	_root._strategic_map.name = "StrategicMap"

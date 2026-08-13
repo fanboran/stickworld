@@ -24,6 +24,13 @@ const PATH_MODE_PANEL := "ModePanel"
 const PATH_CONTEXT_PANEL := "ContextPanel"
 const PATH_MODAL_OVERLAY := "ModalOverlay"
 
+# ─────────────────────────────── 面板工厂 ────────────────────────────────
+## 创建存档面板实例（全屏模态）。挂载与生命周期由装配方负责（ModalOverlay 槽）。
+## world 等模块经此工厂获取，不直接引用 ui_global 内部脚本。
+static func create_save_panel() -> Control:
+	const SavePanelScript := preload("res://modules/ui_global/scripts/menus/save_panel.gd")
+	return UIKit.full_rect(SavePanelScript, "SavePanel")
+
 # ─────────────────────────────── HUD 布局常量 ────────────────────────────────
 ## 小地图/缩放条共享布局参数（跨文件对齐，避免各处硬编码散落）
 const HUD_MINIMAP_WIDTH: float = 240.0

@@ -36,21 +36,20 @@ var _pending_entity: Node2D = null
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
-	call_deferred("_resolve_references")
+	pass
 
 
-func _resolve_references() -> void:
-	var p := get_parent()
-	while p != null:
-		if p.has_method("get_current_map"):
-			_game_root = p
-			break
-		p = p.get_parent()
-	if _game_root == null:
+## 装配注入（SystemSetup 调用）：替代父链遍历反查 game_root（2026-08 收敛）
+func setup(game_root: Node) -> void:
+	_game_root = game_root
+	if game_root == null:
 		return
-	_input_dispatcher = _game_root.input_dispatcher if _game_root.has_method("get") and _game_root.get("input_dispatcher") != null else null
-	_camera_rig = _game_root.camera_rig if _game_root.has_method("get") and _game_root.get("camera_rig") != null else null
-	_selection = _game_root.get_selection_system() if _game_root.has_method("get_selection_system") else null
+	if game_root.has_method("get") and game_root.get("input_dispatcher") != null:
+		_input_dispatcher = game_root.get("input_dispatcher") as Node
+	if game_root.has_method("get") and game_root.get("camera_rig") != null:
+		_camera_rig = game_root.get("camera_rig") as Node
+	if game_root.has_method("get_selection_system"):
+		_selection = game_root.get_selection_system()
 
 
 func _input(event: InputEvent) -> void:
@@ -166,8 +165,7 @@ func _release_and_exit() -> void:
 ## 从地图找第一个可用 StickmanEntity
 func _find_first_entity() -> Node2D:
 	if _game_root == null:
-		_resolve_references()
-	if _game_root == null:
+		push_warning("[PossessionInterface] game_root 未注入（setup 未调用？）")
 		return null
 	var map: Node2D = _game_root.get_current_map()
 	if map == null:

@@ -20,18 +20,12 @@ var _game_root: Node = null
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
-	# 延迟一帧获取 GameRoot
-	call_deferred("_resolve_game_root")
+	pass
 
 
-func _resolve_game_root() -> void:
-	var p := get_parent()
-	# 向上查找 GameRoot（持有 map 查询能力）
-	while p != null:
-		if p.has_method("get_current_map"):
-			_game_root = p
-			return
-		p = p.get_parent()
+## 装配注入（SystemSetup 调用）：替代父链遍历反查 game_root（2026-08 收敛）
+func setup(game_root: Node) -> void:
+	_game_root = game_root
 
 
 # ─────────────────────────────── 模式回调 ────────────────────────────────
@@ -71,8 +65,7 @@ func _release_possession() -> void:
 
 func _find_player_entity() -> Node2D:
 	if _game_root == null:
-		_resolve_game_root()
-	if _game_root == null:
+		push_warning("[ExploreHandler] game_root 未注入（setup 未调用？）")
 		return null
 	var map: Node2D = _game_root.get_current_map()
 	if map == null:

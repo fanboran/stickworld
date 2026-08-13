@@ -23,17 +23,12 @@ var _is_at_boundary: bool = false
 
 
 func _ready() -> void:
-	# 延迟获取 GameRoot 引用
-	call_deferred("_resolve_game_root")
+	pass
 
 
-func _resolve_game_root() -> void:
-	var root: Node = get_tree().root
-	for i in root.get_child_count():
-		var child := root.get_child(i)
-		if child.has_method("get_possession_interface"):
-			_game_root = child
-			break
+## 装配注入（SystemSetup 调用）：替代遍历根节点反查 game_root（2026-08 收敛）
+func setup(game_root: Node) -> void:
+	_game_root = game_root
 
 
 func set_map(map: Node2D) -> void:

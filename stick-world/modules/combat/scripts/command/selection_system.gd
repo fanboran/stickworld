@@ -51,7 +51,7 @@ var _drag_current_screen: Vector2 = Vector2.ZERO
 var _selected_units: Array = []
 ## 可选阵营过滤（0 = 所有阵营，>0 = 仅该阵营）
 var _selectable_faction: int = 0
-## GameRoot 引用（用于查找当前地图）
+## GameRoot 引用（用于查找当前地图；由 SystemSetup 装配时注入，2026-08 收敛）
 var _game_root: Node = null
 
 
@@ -64,15 +64,11 @@ func _ready() -> void:
 	# 初始禁用输入/帧处理，等 BATTLE 模式激活再开启
 	set_process_unhandled_input(false)
 	set_process(false)
-	call_deferred("_resolve_game_root")
 
 
-func _resolve_game_root() -> void:
-	# 2026-08 修复：group 查找替代父链遍历（GameRoot 注册于 "game_root" group）
-	var tree := get_tree()
-	if tree == null:
-		return
-	_game_root = tree.get_first_node_in_group("game_root")
+## 装配注入（SystemSetup 调用）：替代 group 反查 game_root
+func setup(game_root: Node) -> void:
+	_game_root = game_root
 
 
 # ─────────────────────────────── 模式回调（InputDispatcher handler 接口）────────────────────────────────
@@ -359,8 +355,7 @@ func set_selectable_faction(fid: int) -> void:
 
 func _get_current_map() -> Node2D:
 	if _game_root == null:
-		_resolve_game_root()
-	if _game_root == null:
+		push_warning("[SelectionSystem] game_root 未注入（setup 未调用？）")
 		return null
 	if _game_root.has_method("get_current_map"):
 		return _game_root.get_current_map()

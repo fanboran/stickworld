@@ -11,9 +11,6 @@ extends Node
 ## 对外提供 load_game_from_slot / quick_save / quick_load / toggle_save_panel，
 ## 由 GameRoot 主脚本转发调用。
 
-## 存档面板脚本
-const _SavePanelScript: GDScript = preload("res://modules/ui_global/scripts/menus/save_panel.gd")
-
 var _root: GameRoot
 
 
@@ -27,8 +24,8 @@ func setup(root: GameRoot) -> void:
 	# 向 SaveManager 注册（接收 game_saving/game_loaded 信号）
 	if SaveManager and SaveManager.has_method("register_module"):
 		SaveManager.register_module("map_runtime", self)
-	# 实例化存档面板（全屏 UI 根走 UIKit.full_rect，挂 ModalOverlay 槽）
-	_root._save_panel = UIKit.full_rect(_SavePanelScript, "SavePanel")
+	# 实例化存档面板（经 UIAPI 工厂，全屏 UI 根挂 ModalOverlay 槽）
+	_root._save_panel = UIAPI.create_save_panel()
 	_root._save_panel.visible = false
 	if _root.ui_root != null:
 		_root.ui_root.add_to_slot("ModalOverlay", _root._save_panel)

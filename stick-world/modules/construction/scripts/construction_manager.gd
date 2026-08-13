@@ -373,7 +373,8 @@ func _clear_resource_nodes_in_area(cell_x: int, width: int, region_id: String) -
 		return
 	var cell_start_x: float = cell_x * 32.0
 	var cell_end_x: float = (cell_x + width) * 32.0
-	var nodes: Array = get_tree().get_nodes_in_group("resource_node")
+	# 经地图查询接口取资源点（替代全局 group 扫描，2026-08 收敛）
+	var nodes: Array = _map.get_resource_nodes() if _map.has_method("get_resource_nodes") else []
 	for node in nodes:
 		if not node is Node2D or not is_instance_valid(node):
 			continue

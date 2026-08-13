@@ -147,6 +147,7 @@ func _update_hovered() -> void:
 	_hovered_entity = closest
 
 
+## （调试可视化职责豁免：本模块职责即全局可视化，2026-08 审计标注）
 func _get_camera() -> Camera2D:
 	var root: Node = get_tree().root
 	for i in root.get_child_count():

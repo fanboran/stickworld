@@ -406,6 +406,17 @@ func save_to_db(db, slot_id: int, p_map_id: String) -> void:
 	})
 
 
+## 取地图上全部资源点（供建造清场等查询，替代全局 group 扫描）
+func get_resource_nodes() -> Array:
+	var result: Array = []
+	if decoration_layer == null:
+		return result
+	for node in decoration_layer.get_children():
+		if node is ScriptResourceNode:
+			result.append(node)
+	return result
+
+
 ## 保存资源点到 DB
 func save_resource_nodes_to_db(db, slot_id: int, p_map_id: String) -> void:
 	db.delete_rows("resource_nodes", "slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id])

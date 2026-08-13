@@ -265,6 +265,7 @@ static func draw_resource_nodes(control: Control, ctx: Dictionary) -> void:
 	if map == null or not is_instance_valid(map):
 		return
 	var zoom: float = ctx.get("effective_zoom", 1.0)
+	# 调试可视化职责豁免：直接读地图资源节点（本模块职责就是可视化 map 内容，2026-08 审计标注）
 	var nodes: Array = map.get_tree().get_nodes_in_group("resource_node")
 	var font: Font = control.get_theme_default_font()
 	for node in nodes:

@@ -16,6 +16,10 @@ var _game_root: Node = null
 
 
 func _ready() -> void:
+	# headless 下 2x 加速：60s 游戏时间语义不变（get_process_delta_time 随 time_scale 缩放），
+	# wall-clock 减半（测试架构 2026-08 慢测试治理）。
+	if DisplayServer.get_name() == "headless":
+		Engine.time_scale = 2.0
 	_runner = TestRunner.new()
 	_runner.add_test("冒烟: GameRoot 启动装配", _test_boot, true)
 	_runner.add_test("冒烟: 60s 持续运行不崩溃", _test_run_60s, true)

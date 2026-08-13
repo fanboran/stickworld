@@ -29,9 +29,9 @@
 | TimeManager（时间控制） | `core/autoload/time_manager.gd` | ✅ 暂停/1x/2x/4x，自动暂停框架完整 |
 | SaveManager（存档系统） | `core/autoload/save_manager.gd` | ✅ 多槽位，自动存档，模块注册机制 |
 | ConfigManager（配置管理） | `core/autoload/config_manager.gd` | ✅ 音量/显示/语言，完整 ConfigFile 读写 |
-| SceneManager（场景切换） | `core/autoload/scene_manager.gd` | ✅ 视图注册/切换/历史栈 |
-| DataManager（数据管理） | `core/autoload/data_manager.gd` | ✅ JSON 读写 |
-| AudioManager | `core/services/audio_manager.gd` | ✅ 有文件 |
+| SceneManager（场景切换） | — | ❌ 已删（场景切换由 world 模块 SceneLoader 承担） |
+| DataManager（数据管理） | — | ❌ 从未实现（存档由 SaveManager/SQLite 承担） |
+| AudioManager | `core/services/audio_manager.gd` | 🟡 预留未接线（P1 音效实现时启用） |
 
 ### 1.2 核心实体
 

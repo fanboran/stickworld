@@ -298,7 +298,7 @@ var wood_price = BalanceConfig.get_value("resources.resources.res_wood.base_pric
 
 ### 4.4 .tres 文件结构说明
 
-每个 `.tres` 文件是一个 Godot 资源文件，基于 [balance_resource.gd](file:///f:/VSCode/game-2/stick-world/config/balance/balance_resource.gd) 类。文件包含：
+每个 `.tres` 文件是一个 Godot 资源文件，基于 [balance_resource.gd](../../../stick-world/config/balance/balance_resource.gd) 类。文件包含：
 
 - `_meta`：元数据（来源文件、Sheet、版本号等）
 - `variables.data`：数据数组，每个元素是一个字典，对应 Excel 的一行

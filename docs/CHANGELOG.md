@@ -164,7 +164,7 @@
 
 ### 阶段 0.7 闭环
 
-- ✅ **P0-1 修复**：PossessionInterface 装配代码已补全（[game_root.gd:363-399](file:///f:/VSCode/game-2/stick-world/modules/world/scripts/game_root.gd)）
+- ✅ **P0-1 修复**：PossessionInterface 装配代码已补全（[game_root.gd:363-399](../stick-world/modules/world/scripts/game_root.gd)）
 - ✅ **InputDispatcher** 已注册 POSSESS handler（game_root.gd:370-371）
 - ✅ **tests/integration/test_possession**：16 项测试通过（附身排长操控战斗）
 - 📌 **附身完整版深化**后移到阶段 1/2 详细指挥系统开发（与 [路线图.md](项目/路线图.md) "完整指挥链设计"合并）

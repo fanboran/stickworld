@@ -141,7 +141,7 @@ python tools/vector_db/manage.py list --type logic --search "信号"
 
 ## 五、提交规范与架构红线
 
-> 提交信息格式、分支策略、代码规范、架构红线等通用规范已统一收录在 [`../CONTRIBUTING.md`](../CONTRIBUTING.md)，请前往查阅。
+> 提交信息格式、分支策略、代码规范、架构红线等通用规范已统一收录在 [`../CONTRIBUTING.md`](../../CONTRIBUTING.md)，请前往查阅。
 >
 > 核心要点（详见 CONTRIBUTING.md）：
 > - 提交格式：`类型(模块): 描述`，类型为 `feat` / `fix` / `refactor` / `test` / `docs` / `chore`

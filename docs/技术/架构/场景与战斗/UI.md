@@ -29,7 +29,7 @@ UIRoot (常驻)
 
 #### 10.1.1 GlobalHUD 详细设计
 
-> **当前实现**：[global_hud.gd](file:///f:/VSCode/game-2/stick-world/modules/ui_global/scripts/hud/global_hud.gd) 120 行，显示时间速度、游戏时间、通知、居中模式按钮。**未显示资源数量**（资源系统未接入，见 [建筑与定居点.md](建筑与定居点.md) §9.4 / P0-11）。
+> **当前实现**：[global_hud.gd](../../../../stick-world/modules/ui_global/scripts/hud/global_hud.gd) 120 行，显示时间速度、游戏时间、通知、居中模式按钮。**未显示资源数量**（资源系统未接入，见 [建筑与定居点.md](建筑与定居点.md) §9.4 / P0-11）。
 
 GlobalHUD 节点结构（含资源显示扩展）：
 
@@ -360,7 +360,7 @@ hide_legend()
 
 | 场景 | 做法 |
 |------|------|
-| 全屏面板/UI 根 | `UIKit.full_rect(script, name)`（[UIKit.gd](file:///f:/VSCode/game-2/stick-world/modules/ui_global/scripts/UIKit.gd)，强制 FULL_RECT + 双向 grow） |
+| 全屏面板/UI 根 | `UIKit.full_rect(script, name)`（[UIKit.gd](../../../../stick-world/modules/ui_global/scripts/UIKit.gd)，强制 FULL_RECT + 双向 grow） |
 | 角落 HUD 部件（小地图/缩放条/建造按钮） | 自设 anchor + `UIRoot.add_to_slot("HudOverlay", ...)` |
 | 弹窗/面板类 | 挂 ModalOverlay / ModePanel 等有尺寸槽 |
 

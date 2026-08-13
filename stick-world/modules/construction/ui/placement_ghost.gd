@@ -272,23 +272,22 @@ func _triangle_box(side: int) -> Rect2:
 
 
 ## 条带 vs 默认角框的差值区域：灰色空心矩形（无填充，仅描边）。
-## 左差值 [min(cell_start,default_start), max(...))、右差值同理。
+## 仅画"缩小后失去的区域"（默认角框内、当前条带外）：
+## 左：条带左边界右移（cell_start > default_start）→ [default_start, cell_start)
+## 右：条带右边界左移（cell_end < default_end）→ [cell_end, default_end)
+## 扩大方向差值在蓝色条带内部（与蓝色重合），不画。
 func _draw_diff_rects() -> void:
 	if default_end <= default_start:
 		return
-	var dl: float = float(default_start) * float(CELL_SIZE)
-	var dr: float = float(default_end) * float(CELL_SIZE)
-	var bl: float = float(cell_start) * float(CELL_SIZE)
-	var br: float = float(cell_end) * float(CELL_SIZE)
-	if absf(bl - dl) > 0.5:
-		var x1 := minf(bl, dl)
-		var x2 := maxf(bl, dl)
+	if _cell_start > _default_start:
+		var x1: float = float(_default_start) * float(CELL_SIZE)
+		var x2: float = float(_cell_start) * float(CELL_SIZE)
 		var rect := Rect2(Vector2(x1 + CELL_INSET_X, top + CELL_INSET_Y),
 				Vector2(x2 - x1 - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
 		draw_rect(rect, DIFF_OUTLINE, false, 2.0)
-	if absf(br - dr) > 0.5:
-		var x1 := minf(br, dr)
-		var x2 := maxf(br, dr)
+	if _cell_end < _default_end:
+		var x1: float = float(_cell_end) * float(CELL_SIZE)
+		var x2: float = float(_default_end) * float(CELL_SIZE)
 		var rect := Rect2(Vector2(x1 + CELL_INSET_X, top + CELL_INSET_Y),
 				Vector2(x2 - x1 - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
 		draw_rect(rect, DIFF_OUTLINE, false, 2.0)

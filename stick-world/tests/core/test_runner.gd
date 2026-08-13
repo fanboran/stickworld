@@ -71,13 +71,29 @@ func assert_false(cond: bool, msg: String = "") -> void:
 
 func assert_equal(a, b, msg: String = "") -> void:
 	_count_assert()
-	if a != b:
+	# 类型不同直接判不等（避免 int/String 直接比较触发 SCRIPT ERROR 污染日志）；
+	# 例外：String 与 StringName 在 GDScript 中语义相等
+	var mismatch: bool = false
+	if typeof(a) != typeof(b):
+		if (a is String and b is StringName) or (a is StringName and b is String):
+			mismatch = a != b
+		else:
+			mismatch = true
+	else:
+		mismatch = a != b
+	if mismatch:
 		_fail("assert_equal 失败: %s vs %s (%s)" % [str(a), str(b), msg])
 
 
 func assert_not_equal(a, b, msg: String = "") -> void:
 	_count_assert()
-	if a == b:
+	var same_value: bool = false
+	if typeof(a) != typeof(b):
+		if (a is String and b is StringName) or (a is StringName and b is String):
+			same_value = a == b
+	else:
+		same_value = a == b
+	if same_value:
 		_fail("assert_not_equal 失败: %s == %s (%s)" % [str(a), str(b), msg])
 
 

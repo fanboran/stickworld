@@ -222,7 +222,7 @@ func _test_save_load() -> void:
 	m2.load_save_data(save)
 	_runner.assert_equal(m2.get_organization(tree.leaf).data.personnel, ["stick_1"], "读档后人员保真")
 	_runner.assert_equal(m2.get_organization(tree.leaf).data.personnel_template, {"rifleman": 4}, "读档后编制保真")
-	_runner.assert_equal(m2.get_organization(tree.mid).data.autonomy_level, "LOW", "读档后自主权限保真")
+	_runner.assert_equal(m2.get_organization(tree.mid).data.autonomy_level, ScriptOrgState.AutonomyLevel.LOW, "读档后自主权限保真")
 	_runner.assert_equal(m2.get_organization(tree.leaf).data.parent_org, tree.mid, "读档后层级关系保真")
 	# next_id 防冲突：读档后新建组织不应覆盖旧组织（leaf 为 tier3，新组织须 tier2 才连续）
 	var r: Dictionary = m2.create_organization("新连", "MILITARY", 2, tree.leaf)

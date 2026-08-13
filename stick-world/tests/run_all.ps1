@@ -40,7 +40,7 @@ $suites = @{
         "tests/integration/test_combat_control.tscn",
         "tests/integration/test_menu_navigation.tscn",
         "tests/integration/test_battle_ui.tscn",
-        "tests/integration/test_formation_system.tscn",
+        "tests/integration/test_formation_system_assembly.tscn",
         "tests/integration/test_placement_grid_units.tscn",
         "tests/integration/test_tactical_orders.tscn"
     )

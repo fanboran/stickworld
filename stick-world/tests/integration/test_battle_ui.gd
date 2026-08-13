@@ -94,7 +94,7 @@ func _test_minimap_assembled() -> void:
 	if _minimap == null:
 		return
 	_runner.assert_true(_minimap.get_parent() != null, "Minimap 应在场景树中")
-	_runner.assert_equal(_minimap.get_parent().name, "HudOverlay", "Minimap 应挂在 HudOverlay 槽下")
+	_runner.assert_equal(_minimap.get_parent().name, &"HudOverlay", "Minimap 应挂在 HudOverlay 槽下")
 
 
 func _test_minimap_map_info() -> void:

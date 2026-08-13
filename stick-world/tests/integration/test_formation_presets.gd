@@ -120,7 +120,7 @@ func _test_create_with_preset() -> void:
 	if _org_api != null:
 		var org: Dictionary = _org_api.get_organization(squad_id)
 		_runner.assert_true(org.get("ok", false), "组织应存在")
-		_runner.assert_equal(org.get("data", {}).get("tag", ""), "ENGINEERING", "建造队组织标签应为 ENGINEERING")
+		_runner.assert_equal(org.get("data", {}).get("tag", -1), OrganizationState.Tag.ENGINEERING, "建造队组织标签应为 ENGINEERING")
 	# 成员角色写入
 	_runner.assert_equal(_helper.units[0].get_role(), "builder", "成员 role 应为 builder")
 	_runner.assert_equal(_formation.get_squad_preset(squad_id), "fp_builder_crew", "squad preset 应记录")
@@ -129,13 +129,13 @@ func _test_create_with_preset() -> void:
 	_runner.assert_true(not worker_id.is_empty(), "工人队应创建成功")
 	if _org_api != null:
 		var worg: Dictionary = _org_api.get_organization(worker_id)
-		_runner.assert_equal(worg.get("data", {}).get("tag", ""), "LABOR", "工人队组织标签应为 LABOR")
+		_runner.assert_equal(worg.get("data", {}).get("tag", -1), OrganizationState.Tag.LABOR, "工人队组织标签应为 LABOR")
 	# 战斗班（默认预设）
 	var combat_id: String = _formation.create_squad([_helper.units[3], _helper.units[4]])
 	_runner.assert_true(not combat_id.is_empty(), "默认预设战斗班应创建成功")
 	if _org_api != null:
 		var corg: Dictionary = _org_api.get_organization(combat_id)
-		_runner.assert_equal(corg.get("data", {}).get("tag", ""), "MILITARY", "战斗班组织标签应为 MILITARY")
+		_runner.assert_equal(corg.get("data", {}).get("tag", -1), OrganizationState.Tag.MILITARY, "战斗班组织标签应为 MILITARY")
 
 
 ## 职责范围查询与过滤：编队单位受限，未编队全能

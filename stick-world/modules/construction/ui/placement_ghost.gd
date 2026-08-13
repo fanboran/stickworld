@@ -51,7 +51,9 @@ const OVERLAP_FILL: Color = Color(0.90, 0.20, 0.20, 0.38)
 const OVERLAP_OUTLINE: Color = Color(0.90, 0.20, 0.20, 0.90)
 const OVERLAP_STRIPE: Color = Color(0.85, 0.15, 0.15, 0.65)
 ## 斜条纹间距（px）
-const STRIPE_SPACING: float = 8.0
+const STRIPE_SPACING: float = 10.0
+## 差值区域（条带 vs 默认角框）：灰色空心矩形（无填充，仅描边）
+const DIFF_OUTLINE: Color = Color(0.62, 0.62, 0.62, 0.85)
 
 ## 点击反馈状态
 var _wobble_side: int = -1
@@ -118,21 +120,29 @@ func _draw() -> void:
 		else:
 			draw_rect(rect, fill_color, true)
 			draw_rect(rect, outline_color, false, 2.0)
-	# 重叠层：拖拽条带 ∩ 已有建筑 → 红色斜条纹矩形（盖在条带之上）
-	if not occupied_cells.is_empty():
-		for c in occupied_cells:
-			if c < cell_start or c >= cell_end:
-				continue
-			var left: float = float(c) * float(CELL_SIZE)
-			var rect := Rect2(Vector2(left + CELL_INSET_X, top + CELL_INSET_Y),
-					Vector2(CELL_SIZE - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
-			draw_rect(rect, OVERLAP_FILL, true)
-			_draw_stripes(rect, OVERLAP_STRIPE)
-			draw_rect(rect, OVERLAP_OUTLINE, false, 2.0)
+	# 重叠层：拖拽条带 ∩ 已有建筑 → 红色斜条纹矩形（盖在条带之上）。
+	# 端部三角把手所在区域不画斜纹（三角范围内留空）。
+	var left_tri := _triangle_box(0)
+	var right_tri := _triangle_box(1)
+	for c in occupied_cells:
+		if c < cell_start or c >= cell_end:
+			continue
+		var left: float = float(c) * float(CELL_SIZE)
+		var rect := Rect2(Vector2(left + CELL_INSET_X, top + CELL_INSET_Y),
+				Vector2(CELL_SIZE - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
+		draw_rect(rect, OVERLAP_FILL, true)
+		var skip := Rect2()
+		if c == cell_start and left_tri.size.x > 0.0:
+			skip = left_tri
+		elif c == cell_end - 1 and right_tri.size.x > 0.0:
+			skip = right_tri
+		_draw_stripes(rect, OVERLAP_STRIPE, STRIPE_SPACING, skip)
+		draw_rect(rect, OVERLAP_OUTLINE, false, 2.0)
 	if draft_placed:
 		_draw_handles(now)
 		_draw_ripple(now)
 		_draw_default_corners()
+		_draw_diff_rects()
 	# 格数计数器（条带上方居中，深色底 + 白字）
 	var center_x: float = (float(cell_start) + float(cell_end)) * 0.5 * float(CELL_SIZE)
 	var text: String = "%d 格" % width
@@ -226,12 +236,59 @@ func _draw_corner(px: float, py: float, sx: float, sy: float, color: Color) -> v
 
 ## 45° 斜条纹填充：右上→左下方向（斜率 -1）的平行线族，完整覆盖矩形。
 ## 线方程 y = b - x，b 从左上角 (left+top) 平移到右下角 (right+bottom)，步长 spacing。
-func _draw_stripes(rect: Rect2, color: Color, spacing: float = STRIPE_SPACING) -> void:
+## skip 非空时，与 skip 矩形相交的线段裁剪掉（保留两侧段），用于端部三角区域留空。
+func _draw_stripes(rect: Rect2, color: Color, spacing: float = STRIPE_SPACING, skip: Rect2 = Rect2()) -> void:
 	var b := rect.position.x + rect.position.y
 	var b_end: float = rect.end.x + rect.end.y
 	while b <= b_end:
 		var x1 := maxf(rect.position.x, b - rect.end.y)
 		var x2 := minf(rect.end.x, b - rect.position.y)
 		if x2 > x1:
-			draw_line(Vector2(x1, b - x1), Vector2(x2, b - x2), color, 2.0)
+			if skip.size.x <= 0.0 or x2 <= skip.position.x or x1 >= skip.end.x:
+				draw_line(Vector2(x1, b - x1), Vector2(x2, b - x2), color, 2.0)
+			else:
+				var sx1 := maxf(x1, skip.position.x)
+				var sx2 := minf(x2, skip.end.x)
+				if x1 < sx1:
+					draw_line(Vector2(x1, b - x1), Vector2(sx1, b - sx1), color, 2.0)
+				if x2 > sx2:
+					draw_line(Vector2(sx2, b - sx2), Vector2(x2, b - x2), color, 2.0)
 		b += spacing
+
+
+## 端部三角把手包围盒（斜纹跳过区域）：side 0=左端格，1=右端格。
+## 与 _draw_handles 的三角位置一致：底边贴端格内侧边，尖朝外。
+func _triangle_box(side: int) -> Rect2:
+	if not draft_placed:
+		return Rect2()
+	var cy: float = (top + baseline) * 0.5
+	if side == 0:
+		var x_right: float = float(cell_start + 1) * float(CELL_SIZE) - TRI_EDGE_INSET
+		return Rect2(Vector2(x_right - TRI_HEIGHT, cy - TRI_BASE * 0.5 - 3.0),
+				Vector2(TRI_HEIGHT, TRI_BASE + 6.0))
+	var x_left: float = float(cell_end - 1) * float(CELL_SIZE) + TRI_EDGE_INSET
+	return Rect2(Vector2(x_left, cy - TRI_BASE * 0.5 - 3.0),
+			Vector2(TRI_HEIGHT, TRI_BASE + 6.0))
+
+
+## 条带 vs 默认角框的差值区域：灰色空心矩形（无填充，仅描边）。
+## 左差值 [min(cell_start,default_start), max(...))、右差值同理。
+func _draw_diff_rects() -> void:
+	if default_end <= default_start:
+		return
+	var dl: float = float(default_start) * float(CELL_SIZE)
+	var dr: float = float(default_end) * float(CELL_SIZE)
+	var bl: float = float(cell_start) * float(CELL_SIZE)
+	var br: float = float(cell_end) * float(CELL_SIZE)
+	if absf(bl - dl) > 0.5:
+		var x1 := minf(bl, dl)
+		var x2 := maxf(bl, dl)
+		var rect := Rect2(Vector2(x1 + CELL_INSET_X, top + CELL_INSET_Y),
+				Vector2(x2 - x1 - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
+		draw_rect(rect, DIFF_OUTLINE, false, 2.0)
+	if absf(br - dr) > 0.5:
+		var x1 := minf(br, dr)
+		var x2 := maxf(br, dr)
+		var rect := Rect2(Vector2(x1 + CELL_INSET_X, top + CELL_INSET_Y),
+				Vector2(x2 - x1 - CELL_INSET_X * 2.0, baseline - top - CELL_INSET_Y * 2.0))
+		draw_rect(rect, DIFF_OUTLINE, false, 2.0)

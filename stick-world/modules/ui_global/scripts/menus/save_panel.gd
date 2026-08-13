@@ -2,7 +2,7 @@ class_name SavePanel
 extends BaseScreen
 ## 存档管理面板 -- 简易多槽位 UI。
 ##
-## 详见 docs/技术/架构/SQLite存档迁移方案.md §7
+## 详见 modules/README.md §8 存储分层
 ## 由 GameRoot._setup_save_system() 实例化，挂到 UIRoot。
 ## 快捷键：Ctrl+S 打开/关闭面板。
 ## 模态面板生命周期（遮罩/居中/open/close/toggle）继承自 BaseScreen。

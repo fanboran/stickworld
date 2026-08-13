@@ -224,16 +224,14 @@ func _draw_corner(px: float, py: float, sx: float, sy: float, color: Color) -> v
 	]), color, 3.0)
 
 
-## 45° 斜条纹填充（平行线族，起点沿顶边等距，裁剪在矩形内）
+## 45° 斜条纹填充：右上→左下方向（斜率 -1）的平行线族，完整覆盖矩形。
+## 线方程 y = b - x，b 从右上角 (top+right) 平移到左下角 (bottom+left)，步长 spacing。
 func _draw_stripes(rect: Rect2, color: Color, spacing: float = STRIPE_SPACING) -> void:
-	var x := rect.position.x
-	var end_x := rect.end.x
-	var h := rect.size.y
-	while x < end_x:
-		var x2 := x + h
-		if x2 > end_x:
-			x2 = end_x
-			draw_line(Vector2(x, rect.position.y), Vector2(x2, rect.position.y + (x2 - x)), color, 2.0)
-		else:
-			draw_line(Vector2(x, rect.position.y), Vector2(x2, rect.end.y), color, 2.0)
-		x += spacing
+	var b := rect.position.y + rect.end.x
+	var b_end: float = rect.end.y + rect.position.x
+	while b >= b_end:
+		var x1 := maxf(rect.position.x, b - rect.end.y)
+		var x2 := minf(rect.end.x, b - rect.position.y)
+		if x2 > x1:
+			draw_line(Vector2(x1, b - x1), Vector2(x2, b - x2), color, 2.0)
+		b -= spacing

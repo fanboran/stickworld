@@ -43,6 +43,9 @@ var _default_end: int = 0
 ## 当前预览的 cell 区间 [左, 右)
 var _cell_start: int = 0
 var _cell_end: int = 0
+## 上一帧的边界（变化时触发端部格抖动反馈）
+var _last_cell_start: int = 0
+var _last_cell_end: int = 0
 ## 确定建造按钮（stage 2 才显示）
 var _confirm_btn: Button = null
 ## ghost 预览高度（像素，向上，接近大多数建筑视觉高度）
@@ -261,6 +264,8 @@ func _start_placing(def_id: String) -> void:
 	_draft_placed = false
 	_default_start = 0
 	_default_end = 0
+	_last_cell_start = 0
+	_last_cell_end = 0
 	# 放置期间关闭相机边缘滚动，避免拖动边界靠近屏幕边缘时世界跟着滚
 	if _camera_rig != null and is_instance_valid(_camera_rig) and _camera_rig.has_method("set_edge_scroll_enabled"):
 		_camera_rig.set_edge_scroll_enabled(false)
@@ -398,6 +403,14 @@ func _process(_delta: float) -> void:
 			if grid.get_occupant(c) != null:
 				occ.append(c)
 	_ghost.occupied_cells = occ
+	# 边界变化时触发对应端部格抖动反馈（拖动每移动一格抖一次）
+	if _draft_placed and (_cell_start != _last_cell_start or _cell_end != _last_cell_end):
+		if _cell_start != _last_cell_start and _ghost.has_method("trigger_feedback"):
+			_ghost.trigger_feedback(0)
+		if _cell_end != _last_cell_end and _ghost.has_method("trigger_feedback"):
+			_ghost.trigger_feedback(1)
+		_last_cell_start = _cell_start
+		_last_cell_end = _cell_end
 	# 悬停检测：水平上位于最左/最右端格，且垂直范围也在条带矩形内
 	_ghost.hover_side = -1
 	if _draft_placed:

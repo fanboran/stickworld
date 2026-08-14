@@ -217,7 +217,18 @@ func _count_alive(units: Array) -> int:
 
 
 func _end(result: State) -> void:
+	# 防御：_check_victory 可能在同一帧多次命中，只允许结束一次
+	if _state != State.ENGAGED:
+		return
 	_state = result
+	# 清理单位身上的战斗引用（AI 依据 battle_instance 判参战，结束后应立即解除）
+	for unit in _units_attacker + _units_defender:
+		if is_instance_valid(unit) and unit.has_method("set_battle_instance"):
+			unit.set_battle_instance(null)
+	_units_attacker.clear()
+	_units_defender.clear()
 	if EventBus != null:
 		var attacker_wins: bool = result == State.ATTACKER_WIN
 		EventBus.battle_ended.emit(get_battle_id(), attacker_wins)
+	# 结束即释放：Director 只持有引用列表，下一帧会裁剪失效项
+	queue_free()

@@ -22,6 +22,8 @@ var _start_time: float = 0.0
 # SQLite 连接（save/load 期间有效）
 var _db = null
 var _current_slot: int = -1
+# 读档兜底计时器：game_loaded 后若场景恢复失败/无当前地图，超时强制关闭 DB
+var _load_guard: Timer = null
 
 # 建表 SQL（§3.2）
 const _SCHEMA_SQLS: Array[String] = [
@@ -124,6 +126,12 @@ func _ready() -> void:
 		if err != OK:
 			push_warning("[SaveManager] 创建保存目录失败: %s" % SAVE_DIR)
 	_start_time = Time.get_unix_time_from_system()
+	_load_guard = Timer.new()
+	_load_guard.name = "LoadGuard"
+	_load_guard.one_shot = true
+	_load_guard.wait_time = 30.0
+	_load_guard.timeout.connect(_on_load_guard_timeout)
+	add_child(_load_guard)
 
 
 func _process(delta: float) -> void:
@@ -170,10 +178,26 @@ func get_current_slot() -> int:
 
 ## 读档场景恢复完成后调用，关闭 DB
 func end_load() -> void:
+	if _load_guard != null:
+		_load_guard.stop()
 	if _db != null:
 		_db.close_db()
 		_db = null
 	_current_slot = -1
+
+
+## 读档兜底：恢复流程失败/无当前地图时，超时强制关闭 DB，避免半开连接
+func _on_load_guard_timeout() -> void:
+	if _db == null:
+		return
+	push_warning("[SaveManager] 读档恢复超时，强制关闭数据库")
+	end_load()
+
+
+## 读档完成后启动兜底计时器（由 load_game 调用）
+func _arm_load_guard() -> void:
+	if _load_guard != null and _db != null:
+		_load_guard.start()
 
 
 # ─────────────────────────────── 存档操作 ────────────────────────────────
@@ -189,6 +213,15 @@ func save_game(slot_index: int) -> bool:
 	_current_slot = slot_index
 	_ensure_schema()
 
+	# 事务包裹整段写库：任一环节失败回滚，避免半份存档（2026-08 审计修复）
+	var began: Variant = _db.query("BEGIN")
+	if began == false:
+		push_warning("[SaveManager] 无法开启存档事务，中止保存")
+		_db.close_db()
+		_db = null
+		_current_slot = -1
+		return false
+
 	# 写元数据
 	var now := Time.get_date_string_from_system() + " " + Time.get_time_string_from_system()
 	_upsert_save_meta(slot_index, now, _accumulate_playtime(), 2)
@@ -200,6 +233,7 @@ func save_game(slot_index: int) -> bool:
 	# 必须在 DB 打开后 emit，否则 get_db() 返回 null
 	EventBus.game_saving.emit(slot_index)
 
+	_db.query("COMMIT")
 	_db.close_db()
 	_db = null
 	_current_slot = -1
@@ -226,8 +260,10 @@ func load_game(slot_index: int) -> bool:
 	_load_legacy_modules()
 
 	# 新接口模块：发射 game_loaded 信号，模块自行读表
-	# DB 保持打开，等 GameRoot 场景恢复后调 end_load() 关闭
+	# DB 保持打开，等 GameRoot 场景恢复后调 end_load() 关闭；
+	# 若恢复流程失败/无当前地图，_load_guard 超时兜底关闭。
 	EventBus.game_loaded.emit(slot_index)
+	_arm_load_guard()
 	return true
 
 
@@ -335,14 +371,18 @@ func _ensure_schema() -> void:
 		_db.query(stmt)
 
 
-## 写入或更新 save_meta
+## 写入或更新 save_meta（保留首次创建时间，只更新 updated_at）
 func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version: int) -> void:
+	var rows: Array = _db.select_rows("save_meta", "slot_id = %d" % slot_id, ["created_at"])
+	var created_at: String = datetime
+	if not rows.is_empty():
+		created_at = str(rows[0].get("created_at", datetime))
 	# 先尝试删除旧记录（save_meta 主键是 slot_id）
 	_db.delete_rows("save_meta", "slot_id = %d" % slot_id)
 	_db.insert_row("save_meta", {
 		"slot_id": slot_id,
 		"save_name": "",
-		"created_at": datetime,
+		"created_at": created_at,
 		"updated_at": datetime,
 		"playtime_seconds": playtime,
 		"version": version,

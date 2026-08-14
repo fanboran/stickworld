@@ -5,7 +5,7 @@ extends Node2D
 ## 用于验证：建筑长度可变、左右屋顶对称、材质与几何耦合。
 
 const SHADER_PATH := "res://modules/texture_gen/materials/thatch/shaders/thatch.gdshader"
-const WHITE_TEX_PATH := "res://modules/building_gen/assets/white_tex.png"
+const WHITE_TEX_PATH := "res://modules/texture_gen/assets/white_tex.png"
 
 # 屋顶几何参数（像素单位）
 const ROOF_RES := Vector2(920.0, 300.0)

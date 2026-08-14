@@ -13,7 +13,7 @@ extends Node
 ##   capture 时设为 false，隐藏 _draw() 辅助线。
 
 ## 截图保存路径（res:// 路径）
-@export var output_path: String = "res://modules/building_gen/materials/thatch/reference/thatch_debug_capture.png"
+@export var output_path: String = "res://modules/texture_gen/materials/thatch/reference/thatch_debug_capture.png"
 
 ## 要精确截图的节点路径列表（多节点 union AABB）。留空则截取整个 viewport。
 ## 支持 Sprite2D 和 Polygon2D；最终裁剪矩形 = 所有节点的 union AABB + padding。

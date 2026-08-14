@@ -302,12 +302,17 @@ func _try_work() -> bool:
 	# 检查项目是否还在接受工人（PLANNED 或 UNDER_CONSTRUCTION）
 	if not project.is_accepting_workers():
 		return false
-	# 决策：需要材料则搬运（需有仓库），否则建造（多工人各自决策，不限制搬运工数量）
-	if project.needs_material() and _has_warehouse():
+	# 职责过滤按实际行为分支判断：需要材料时按 WORK_HAUL 过滤，否则按 WORK_BUILD 过滤。
+	# 修复：此前入口处只校验 WORK_BUILD，导致仅含 WORK_HAUL 的工人队（fp_worker_crew）无法搬运。
+	var can_build: bool = _can_work(WorkTypeBuild)
+	var can_haul: bool = _can_work(WorkTypeHaul)
+	if project.needs_material() and can_haul and _has_warehouse():
 		_state_machine.travel("haul", {"project": project})
 		return true
-	_state_machine.travel("work", {"project": project})
-	return true
+	if can_build:
+		_state_machine.travel("work", {"project": project})
+		return true
+	return false
 
 
 ## 是否存在可用的仓库建筑（搬运取货点）。
@@ -373,7 +378,11 @@ func get_state_machine() -> BehaviorStateMachine:
 
 ## 下达命令：覆盖 AI 自主决策，强制执行指定行为直到完成或新命令。
 ## behavior_name 必须是已注册的行为名（如 "move", "idle", "retreat"）。
+## 未注册时拒绝并告警，避免命令残留导致每 0.3s 重试死循环（2026-08 审计修复）。
 func set_order(behavior_name: String, params: Dictionary = {}) -> void:
+	if _state_machine != null and not _state_machine.has_behavior(behavior_name):
+		push_warning("[AIController] 拒绝未注册行为命令: %s" % behavior_name)
+		return
 	_ordered_behavior = behavior_name
 	_ordered_params = params
 	if _state_machine != null:

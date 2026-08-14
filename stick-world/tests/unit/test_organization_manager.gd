@@ -24,11 +24,11 @@ func _ready() -> void:
 	_runner.add_test("Org: 编制模板与自主权限", _test_templates_autonomy)
 	_runner.add_test("Org: 指挥官任免", _test_commander)
 	_runner.add_test("Org: 人员分配/移除（重复/不存在边界）", _test_stickman_assign)
-	_runner.add_test("Org: insert_tier above 成功（2026-08 修复回归）", _test_insert_tier_above)
-	_runner.add_test("Org: insert_tier below 成功", _test_insert_tier_below)
+	_runner.add_test("Org: insert_tier above 连续层级拒绝（不变量）", _test_insert_tier_above)
+	_runner.add_test("Org: insert_tier below 挂到目标组织之下", _test_insert_tier_below)
 	_runner.add_test("Org: insert_tier 边界失败（根组织/无效位置/跳级）", _test_insert_tier_fail)
 	_runner.add_test("Org: remove_tier 子组织上挂", _test_remove_tier)
-	_runner.add_test("Org: disband 人员清空与子组织上挂", _test_disband)
+	_runner.add_test("Org: disband 移除组织并子组织上挂", _test_disband)
 	_runner.add_test("Org: 序列化 round-trip 含 next_id 防冲突", _test_save_load)
 	_runner.add_test("Org: WorldState 容器同步（创建注册/删除注销）", _test_world_sync)
 	_runner.run()
@@ -142,18 +142,16 @@ func _test_stickman_assign() -> void:
 # ─────────────── 层级调整 ───────────────
 
 func _test_insert_tier_above() -> void:
-	# 回归：2026-08 修复前 above 分支恒失败（new_tier 校验自相矛盾）
+	# 层级不变量：child.tier == parent.tier - 1。连续层级树（5→4→3）中，
+	# org 与 parent 之间没有空层，above 必须拒绝（2026-08 审计修复：原实现
+	# 放行 new_tier == parent.tier，制造"同级父子"）。
 	var m := ScriptOrgManager.new()
 	var tree := _build_tree(m)
 	var r: Dictionary = m.insert_tier(tree.leaf, "加强连", "above")
-	_runner.assert_true(r.get("ok", false), "above 插入应成功（修复回归）: " + str(r))
-	var new_id: String = r.data.org_id
-	var new_org: Dictionary = m.get_organization(new_id).data
-	_runner.assert_equal(new_org.tier, 4, "新组织层级应为 mid 同级(tier4)")
-	_runner.assert_equal(new_org.parent_org, tree.mid, "新组织父应为 mid")
-	_runner.assert_equal(new_org.child_orgs, [tree.leaf], "新组织子应为 leaf")
-	_runner.assert_equal(m.get_organization(tree.leaf).data.parent_org, new_id, "leaf 父应更新为新组织")
-	_runner.assert_equal(m.get_child_orgs(tree.mid), [new_id], "mid 子列表应替换为新组织")
+	_runner.assert_false(r.get("ok", true), "连续层级树 above 插入应失败: " + str(r))
+	# 树结构不能被破坏
+	_runner.assert_equal(m.get_child_orgs(tree.mid), [tree.leaf], "mid 子列表不应变化")
+	_runner.assert_equal(m.get_organization(tree.leaf).data.parent_org, tree.mid, "leaf 父组织不应变化")
 
 
 func _test_insert_tier_below() -> void:
@@ -161,11 +159,13 @@ func _test_insert_tier_below() -> void:
 	var tree := _build_tree(m)
 	var r: Dictionary = m.insert_tier(tree.leaf, "排部", "below")
 	_runner.assert_true(r.get("ok", false), "below 插入应成功: " + str(r))
-	var new_org: Dictionary = m.get_organization(r.data.org_id).data
+	var new_id: String = r.data.org_id
+	var new_org: Dictionary = m.get_organization(new_id).data
 	_runner.assert_equal(new_org.tier, 2, "新组织层级应为 leaf-1(tier2)")
-	_runner.assert_equal(new_org.parent_org, tree.mid, "新组织父应为 mid")
-	_runner.assert_equal(new_org.child_orgs, [tree.leaf], "新组织子应为 leaf")
-	_runner.assert_equal(m.get_organization(tree.leaf).data.parent_org, r.data.org_id, "leaf 父应更新为新组织")
+	_runner.assert_equal(new_org.parent_org, tree.leaf, "新组织父应为 leaf（2026-08 修复：原实现错误挂到 mid）")
+	_runner.assert_equal(new_org.child_orgs, [], "新组织应无子组织")
+	_runner.assert_equal(m.get_child_orgs(tree.leaf), [new_id], "leaf 子列表应包含新组织")
+	_runner.assert_equal(m.get_child_orgs(tree.mid), [tree.leaf], "mid 子列表不应变化")
 
 
 func _test_insert_tier_fail() -> void:
@@ -174,9 +174,11 @@ func _test_insert_tier_fail() -> void:
 	_runner.assert_false(m.insert_tier(tree.root, "x", "above").get("ok", true), "根组织上方插入应失败")
 	_runner.assert_false(m.insert_tier(tree.leaf, "x", "sideways").get("ok", true), "无效位置应失败")
 	_runner.assert_false(m.insert_tier("org_999", "x", "above").get("ok", true), "不存在组织应失败")
-	# 白盒构造层级错乱（org 与 parent 同级）：above 新层级会超过父
-	m.organizations[tree.mid].tier = 5
-	_runner.assert_false(m.insert_tier(tree.mid, "x", "above").get("ok", true), "新层级高于父组织应失败")
+	# 连续层级树中 above 必然无空层
+	_runner.assert_false(m.insert_tier(tree.mid, "x", "above").get("ok", true), "连续层级 above 应失败")
+	# below 在 tier1 上应越界失败
+	var l1: Dictionary = m.create_organization("班组", "MILITARY", 1, "")
+	_runner.assert_false(m.insert_tier(l1.data.org_id, "x", "below").get("ok", true), "tier1 下方插入应失败")
 
 
 func _test_remove_tier() -> void:
@@ -192,18 +194,19 @@ func _test_remove_tier() -> void:
 
 func _test_disband() -> void:
 	var m := ScriptOrgManager.new()
+	var ws := ScriptWS.new()
+	m.set_world(ws)
 	var tree := _build_tree(m)
 	m.assign_commander(tree.mid, "stick_c")
 	m.assign_stickman(tree.mid, "stick_1", "rifleman")
 	m.assign_stickman(tree.mid, "stick_2", "rifleman")
 	var r: Dictionary = m.disband_organization(tree.mid)
 	_runner.assert_true(r.get("ok", false), "解散应成功")
-	var org: Dictionary = m.get_organization(tree.mid).data
-	_runner.assert_equal(org.personnel, [], "人员应清空")
-	_runner.assert_equal(org.commander_id, "", "指挥官应解除")
-	_runner.assert_equal(org.state, ScriptOrgState.State.DISBANDED, "状态应为 DISBANDED")
+	_runner.assert_false(m.get_organization(tree.mid).get("ok", false), "解散后组织应被移除")
 	_runner.assert_equal(m.get_organization(tree.leaf).data.parent_org, tree.root, "子组织应上挂到 root")
 	_runner.assert_equal(m.get_child_orgs(tree.root), [tree.leaf], "root 子列表应更新")
+	_runner.assert_null(ws.organizations.get(tree.mid, null), "WorldState 容器应同步注销")
+	_runner.assert_equal(ws.organizations.size(), 2, "WorldState 容器剩余 2 个组织")
 
 
 # ─────────────── 序列化 ───────────────

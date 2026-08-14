@@ -134,9 +134,16 @@ func _possess_selected_or_current() -> void:
 
 ## 释放附身
 func _release_possession() -> void:
-	if _possessed_entity == null or not is_instance_valid(_possessed_entity):
+	if _possessed_entity == null:
+		# 已经释放（如 release() 内部先释放、随后 mode_deactivated 再次回调），不重复广播
+		return
+	if not is_instance_valid(_possessed_entity):
+		# 实体已销毁（如战斗中死亡）：仍要广播 possession_ended，
+		# 否则依赖方（HUD/面板）状态残留（2026-08 审计修复）
 		_possessed_entity = null
 		_restore_time()
+		if EventBus != null:
+			EventBus.possession_ended.emit(null)
 		return
 	if _possessed_entity.has_method("set_possessed"):
 		_possessed_entity.set_possessed(false)

@@ -129,7 +129,7 @@ func _test_insufficient_resources() -> void:
 	fake.fail_consume = true
 	fake.stock = 0.0
 	_cm.set_resources_api(fake)
-	var r: Dictionary = _cm.start_construction_at("r1", "placeholder", 20)
+	var r: Dictionary = _cm.start_construction_at("r1", "placeholder", 120)
 	_runner.assert_false(r.get("ok", true), "资源不足应失败")
 	_runner.assert_true(str(r.get("error", "")).contains("资源不足"), "错误应指明资源不足，实际: %s" % r.get("error", ""))
 	_cm.set_resources_api(null)

@@ -8,6 +8,13 @@
 
 ## [未发布]
 
+### 架构审计修复（2026-08）：依赖环 + 生命周期清理 + 工具链
+
+- **P0 依赖环**：units→construction 内部类强引用（BehaviorWork/BehaviorHaul 的 ConstructionProject 类型）改为鸭子类型；construction→units 的 Hitbox.CollisionLayer 改为本地常量；combat→units 的 WeaponMount.Mood 改为本地同值枚举；texture_gen 的 white_tex.png 迁入本模块 assets 并修正全部 debug 场景/脚本路径，删除引用 building_gen 归档场景的 smithy_thatch_preview
+- **P1 功能缺陷**：GlobalHUD 速度/时间标签节点路径修正；AIController 职责门控修复（仅 WORK_HAUL 的工人队现在可搬运）；insert_tier 修正层级不变量（above 无空层拒绝 / below 挂目标之下）并重写单测；disband_organization 从容器与 WorldState 移除；BattleInstance 结束后清引用并 queue_free、BattleDirector 裁剪失效实例、GlobalHUD 接线 battle_started/ended；SaveManager 存档加事务、读档加 30s 兜底关 DB、save_meta 保留 created_at；建造资源扣减加回滚且扣减移到选址校验之后；possess 实体销毁时补发 possession_ended；FormationSystem 死亡清理同步组织模块并清 role
+- **工具链**：run_all.sh 修复 Windows Git Bash（TMP 路径 cygpath 归一化、Godot 用 Windows 路径、xargs 并行池改为原生 chunked 并发、复用 SUITE_TIMEOUT 表）
+- **测试**：unit 9/9、integration+smoke 22/22 通过
+
 ### 全项目审计修复（2026-08）：架构收敛 + 信号清理 + 文档校准
 
 - **EventBus 清理**：67 个声明信号中 35 个零引用信号删除（未实现系统的预留信号 + 与 construction/api.gd 重复且签名冲突的 building_* 5 个）；`strategic_map_*` 动态 `emit_signal` 收口为类型安全 `.emit()` 并消除本地+EventBus 双重发射；信号唯一真相源与文档（系统交互与EventBus.md / EventBus信号契约.md）逐条对齐

@@ -14,6 +14,10 @@ extends RefCounted
 ##
 ## 由 ConstructionManager 创建和管理；BehaviorWork 通过 ConstructionManager 派工。
 
+## 碰撞层常量（与 units/scripts/entity/hitbox.gd 的 CollisionLayer.BODY 约定一致，
+## 本模块不引用 units 内部类，避免 construction→units 编译期依赖）
+const BODY_COLLISION_LAYER: int = 2
+
 const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
 
 # ─────────────────────────────── 状态 ────────────────────────────────
@@ -269,7 +273,7 @@ func _create_barrier() -> void:
 	_barrier = StaticBody2D.new()
 	_barrier.visible = false
 	# 与实体同层（BODY）：实体 collision_mask 含 layer 2，move_and_slide 自然阻挡
-	_barrier.collision_layer = Hitbox.CollisionLayer.BODY
+	_barrier.collision_layer = BODY_COLLISION_LAYER
 	_barrier.collision_mask = 0
 	var shape := RectangleShape2D.new()
 	shape.size = site_size

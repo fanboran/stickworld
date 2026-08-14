@@ -13,6 +13,18 @@ const ScriptBattleInstance := preload("res://modules/combat/scripts/battle/battl
 var _battles: Array = []
 
 
+## 每帧裁剪已释放的战斗实例（BattleInstance 结束时会 queue_free）。
+## 修复：此前 _battles 只 append 永不清理，结束战斗残留为失效引用。
+func _process(_delta: float) -> void:
+	if _battles.is_empty():
+		return
+	var alive: Array = []
+	for b in _battles:
+		if is_instance_valid(b):
+			alive.append(b)
+	_battles = alive
+
+
 ## 在指定地图上启动一场战斗。
 ## attacker_units / defender_units: StickmanEntity 数组
 ## 返回创建的 BattleInstance（失败返回 null）

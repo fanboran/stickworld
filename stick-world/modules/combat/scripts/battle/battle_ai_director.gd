@@ -7,7 +7,7 @@ extends RefCounted
 ##
 ## 情绪概率受：士气、伤亡比影响（P0 简化版，指挥官能力/文化传统留待后续）。
 ##
-## 情绪标签（WeaponMount.Mood）：
+## 情绪标签（本模块本地枚举，数值与 WeaponMount.Mood 契约一致，避免跨模块引用内部类）：
 ##   STEADY   - 稳定（默认）
 ##   HESITANT - 犹豫（命中率-30%、移动减速）
 ##   EXCITED  - 亢奋（命中率+10%、冷却缩短）
@@ -15,6 +15,13 @@ extends RefCounted
 
 
 # ─────────────────────────────── 常量 ────────────────────────────────
+## 情绪枚举（顺序/取值与 units/weapon_mount.gd 的 Mood 保持一致）
+enum Mood {
+	STEADY,
+	HESITANT,
+	EXCITED,
+	PANICKED,
+}
 ## 情绪刷新最小/最大间隔（秒）
 const TICK_MIN: float = 2.0
 const TICK_MAX: float = 5.0
@@ -71,16 +78,16 @@ func _decide_mood(unit: Node) -> int:
 	# 士气极低 -> 大概率恐慌
 	if morale_ratio < 0.25:
 		if randf() < 0.6:
-			return WeaponMount.Mood.PANICKED
-		return WeaponMount.Mood.HESITANT
+			return Mood.PANICKED
+		return Mood.HESITANT
 	# 士气较低 -> 可能犹豫
 	if morale_ratio < 0.5:
 		if randf() < 0.4:
-			return WeaponMount.Mood.HESITANT
+			return Mood.HESITANT
 	# 士气高昂 -> 偶尔亢奋
 	if morale_ratio > 0.75 and randf() < 0.15:
-		return WeaponMount.Mood.EXCITED
-	return WeaponMount.Mood.STEADY
+		return Mood.EXCITED
+	return Mood.STEADY
 
 
 func _reset_interval() -> void:

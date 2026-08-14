@@ -299,8 +299,8 @@ func insert_tier(org_id: String, new_org_name: String, position: String) -> Dict
 		return {"ok": false, "error": "父组织不存在: %s" % parent_id}
 
 	# 计算新组织的层级
-	# "above": 新组织层级 = org.tier + 1（更接近 parent）
-	# "below": 新组织层级 = org.tier - 1（更远离 parent）
+	# "above": 在 org 与其 parent 之间插入（层级必须位于两者之间）
+	# "below": 在 org 之下插入（新组织成为 org 的子组织）
 	var new_tier: int
 	if normalized_pos == "above":
 		new_tier = org.tier + 1
@@ -310,33 +310,35 @@ func insert_tier(org_id: String, new_org_name: String, position: String) -> Dict
 	if not _is_valid_tier(new_tier):
 		return {"ok": false, "error": "插入后的层级 %d 超出有效范围" % new_tier}
 
-	# 校验层级连续性（2026-08 修复：原 above 校验要求 new_tier == parent.tier - 1，
-	# 而 new_tier = org.tier + 1，连续层级下 parent.tier = org.tier + 1，
-	# 导致 above 分支恒失败——改为"不高于父层级 + 与原组织连续"）
+	# 层级不变量：child.tier 必须 == parent.tier - 1。
+	# "above" 要求新层级严格低于父层级（存在空层才可插入）；连续层级下插入必然失败，
+	# 不能再制造"同级父子"（2026-08 审计修复：原实现放行 new_tier == parent.tier）。
 	if normalized_pos == "above":
-		if new_tier > parent.tier:
-			return {"ok": false, "error": "插入的层级不能高于父组织"}
-		if not _validate_tier_relationship(new_tier, org.tier):
-			return {"ok": false, "error": "插入的层级与原组织层级不连续"}
+		if new_tier >= parent.tier:
+			return {"ok": false, "error": "父组织与目标组织之间没有空层级可插入"}
 	else:
+		# "below"：新组织成为 org 的子级，org 成为其父级
 		if not _validate_tier_relationship(org.tier, new_tier):
 			return {"ok": false, "error": "插入的层级与原组织层级不连续"}
 
-	# 创建新组织
+	# 创建新组织。above 时挂到原父组织；below 时挂到 org 之下（2026-08 审计修复：
+	# 原实现 below 也挂到 parent_id，导致 org→new 隔代跳级）。
+	var new_parent_id: String = parent_id if normalized_pos == "above" else org_id
 	var new_org_id := _generate_org_id()
-	var state: ScriptOrgState = _make_state(new_org_id, new_org_name, parent.tag, new_tier, parent_id)
-	state.child_orgs.append(org_id)
+	var state: ScriptOrgState = _make_state(new_org_id, new_org_name, parent.tag, new_tier, new_parent_id)
 	organizations[new_org_id] = state
 
-	# 更新原组织的 parent
-	org.parent_org = new_org_id
-
-	# 更新父组织的 child_orgs（替换 org_id 为 new_org_id）
-	var idx: int = parent.child_orgs.find(org_id)
-	if idx != -1:
-		parent.child_orgs[idx] = new_org_id
+	if normalized_pos == "above":
+		state.child_orgs.append(org_id)
+		org.parent_org = new_org_id
+		# 更新父组织的 child_orgs（替换 org_id 为 new_org_id）
+		var idx: int = parent.child_orgs.find(org_id)
+		if idx != -1:
+			parent.child_orgs[idx] = new_org_id
+		else:
+			parent.child_orgs.append(new_org_id)
 	else:
-		parent.child_orgs.append(new_org_id)
+		org.child_orgs.append(new_org_id)
 
 	# 集中制：同步注册到 WorldState 容器
 	if _world != null:
@@ -359,12 +361,13 @@ func remove_tier(org_id: String) -> Dictionary:
 	if parent == null:
 		return {"ok": false, "error": "父组织不存在: %s" % parent_id}
 
-	# 子组织上挂到 parent
+	# 子组织上挂到 parent（去重：避免已是 parent 直属时产生重复 child_orgs）
 	for child_id in org.child_orgs:
 		var child := _get_org(child_id)
 		if child != null:
 			child.parent_org = parent_id
-			parent.child_orgs.append(child_id)
+			if child_id not in parent.child_orgs:
+				parent.child_orgs.append(child_id)
 
 	# 从父组织的 child_orgs 中移除
 	parent.child_orgs.erase(org_id)
@@ -383,12 +386,13 @@ func remove_tier(org_id: String) -> Dictionary:
 
 ## 解散组织
 ## [Q] 所有人员回归待分配池（personnel 清空、指挥官解除）, 子组织上挂到 parent
+## [Q] 组织从容器与 WorldState 中移除（解散=终态，不留墓碑；2026-08 审计修复状态泄漏）
 func disband_organization(org_id: String) -> Dictionary:
 	var org := _get_org(org_id)
 	if org == null:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
 
-	# 子组织上挂到 parent
+	# 子组织上挂到 parent（去重）
 	var parent_id: String = org.parent_org
 	if parent_id != "":
 		var parent: ScriptOrgState = _get_org(parent_id)
@@ -397,15 +401,18 @@ func disband_organization(org_id: String) -> Dictionary:
 				var child := _get_org(child_id)
 				if child != null:
 					child.parent_org = parent_id
-					parent.child_orgs.append(child_id)
+					if child_id not in parent.child_orgs:
+						parent.child_orgs.append(child_id)
 			parent.child_orgs.erase(org_id)
 
 	# 人员回归待分配池：清空 personnel 与指挥官
 	org.personnel.clear()
 	org.commander_id = ""
 
-	# 标记为已解散
-	org.state = ScriptOrgState.State.DISBANDED
+	# 从容器与 WorldState 移除，避免每次编队创建/解散都累积 DISBANDED 记录
+	organizations.erase(org_id)
+	if _world != null:
+		_world.unregister_organization(org_id)
 
 	return {"ok": true, "data": {}}
 

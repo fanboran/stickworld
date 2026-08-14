@@ -12,4 +12,4 @@ zoom = Vector2(1, 1)
 
 [node name="CaptureHelper" type="Node" parent="."]
 script = ExtResource("2_capture")
-output_path = "res://modules/building_gen/materials/thatch/reference/thatch_building_demo_capture.png"
+output_path = "res://modules/texture_gen/materials/thatch/reference/thatch_building_demo_capture.png"

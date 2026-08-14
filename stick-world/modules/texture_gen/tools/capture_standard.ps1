@@ -10,22 +10,22 @@
 #     path for interactive shader development.
 #
 # The in-game capture script lives at:
-#   modules/building_gen/scripts/debug/capture_in_game.gd
+#   modules/texture_gen/scripts/debug/capture_in_game.gd
 #
 # Usage:
 #   # Capture the default material (thatch) debug scene
-#   powershell -File modules/building_gen/tools/capture_standard.ps1
+#   powershell -File modules/texture_gen/tools/capture_standard.ps1
 #
 #   # Capture a specific material by name
-#   powershell -File modules/building_gen/tools/capture_standard.ps1 -Material wood
+#   powershell -File modules/texture_gen/tools/capture_standard.ps1 -Material thatch
 #
 #   # Explicit scene/output override
-#   powershell -File modules/building_gen/tools/capture_standard.ps1 `
-#     -ScenePath "res://modules/building_gen/materials/wood/scenes/wood_debug.tscn" `
-#     -OutputFrame "modules/building_gen/materials/wood/reference/wood_debug_capture.png"
+#   powershell -File modules/texture_gen/tools/capture_standard.ps1 `
+#     -ScenePath "res://modules/texture_gen/materials/thatch/scenes/thatch_debug.tscn" `
+#     -OutputFrame "modules/texture_gen/materials/thatch/reference/thatch_debug_capture.png"
 
 param(
-    [string]$GodotExe = "F:\SteamLibrary\steamapps\common\Godot Engine\Godot_v4.5-stable_mono_win64.exe",
+    [string]$GodotExe = "F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe",
     [string]$ProjectDir = "F:\VSCode\game-2\stick-world",
     [string]$Material = "",
     [string]$ScenePath = "",
@@ -64,7 +64,7 @@ if (-not (Test-Path $ProjectDir)) {
 
 # Resolve material-based defaults if -Material is provided
 if ($Material -ne "") {
-    $materialDir = Resolve-ProjectPath "modules/building_gen/materials/$Material"
+    $materialDir = Resolve-ProjectPath "modules/texture_gen/materials/$Material"
     if (-not (Test-Path $materialDir)) {
         Write-Error "Material directory does not exist: $materialDir"
         exit 1
@@ -79,7 +79,7 @@ if ($Material -ne "") {
 
 # Fallback defaults for backward compatibility
 if ($OutputFrame -eq "") {
-    $OutputFrame = "modules/building_gen/materials/thatch/reference/thatch_debug_capture.png"
+    $OutputFrame = "modules/texture_gen/materials/thatch/reference/thatch_debug_capture.png"
 }
 
 $outputFull = Resolve-ProjectPath $OutputFrame

@@ -206,11 +206,6 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	if not _catalog.is_registered(building_type):
 		return {"ok": false, "error": "未注册建筑类型: %s" % building_type}
 	var scene: PackedScene = _catalog.get_scene(building_type)
-	# P0-9 资源检查
-	if _resources_api != null:
-		var cost_result := _check_and_consume_cost(building_type, region_id)
-		if not cost_result.ok:
-			return {"ok": false, "error": "资源不足: %s" % cost_result.reason}
 	# P0-6 从 buildings.tres 读取 build_time；width 默认取 def，可由调用方覆盖
 	var def: Dictionary = _catalog.get_def(building_type)
 	if width <= 0:
@@ -229,6 +224,12 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	# 放置校验：选址范围内有实体（玩家/NPC）则拒绝，防止放置后玩家被罩在建筑内
 	if _entity_blocking(cell_x, width):
 		return {"ok": false, "error": "选址范围内有单位，无法放置"}
+	# P0-9 资源检查（校验与扣减放在选址/实体校验之后：此前先扣资源再校验，
+	# 校验失败会白扣资源，2026-08 审计修复）
+	if _resources_api != null:
+		var cost_result := _check_and_consume_cost(building_type, region_id)
+		if not cost_result.ok:
+			return {"ok": false, "error": "资源不足: %s" % cost_result.reason}
 	# 阶段 F：建造自动清场（砍树给木材）
 	_clear_resource_nodes_in_area(cell_x, width, region_id)
 	# 创建项目
@@ -279,11 +280,15 @@ func _check_and_consume_cost(building_type: String, region_id: String) -> Dictio
 		var stock: float = _resources_api.get_stock(res_id, region_id)
 		if stock < costs[res_id]:
 			return {"ok": false, "reason": "缺少 %s (需要 %d, 现有 %d)" % [res_id, costs[res_id], stock]}
-	# 再扣减
+	# 再扣减；若中途失败，回滚已扣资源（2026-08 审计修复：此前无回滚会白扣）
+	var consumed: Array = []
 	for res_id in costs.keys():
 		var result: Dictionary = _resources_api.consume(res_id, costs[res_id], region_id, "建造:%s" % building_type)
 		if not result.get("ok", false):
+			for entry in consumed:
+				_resources_api.produce(entry.res_id, entry.amount, region_id, "建造扣减回滚")
 			return {"ok": false, "reason": "扣减失败: %s" % result.get("error", "")}
+		consumed.append({"res_id": res_id, "amount": costs[res_id]})
 	return {"ok": true}
 
 
@@ -394,10 +399,17 @@ func _clear_resource_nodes_in_area(cell_x: int, width: int, region_id: String) -
 # ─────────────────────────────── 查询 ────────────────────────────────
 
 ## 查询地块内的所有建筑 ID
-## P0 简化：不区分 region，返回所有建筑
-func get_buildings_in_region(_region_id: String) -> Array[String]:
+## region_id 为空时返回全部；否则按建筑 meta.region_id 过滤
+func get_buildings_in_region(region_id: String) -> Array[String]:
 	var result: Array[String] = []
 	for b_id in _buildings.keys():
+		var b: Node = _buildings[b_id]
+		if not is_instance_valid(b):
+			continue
+		if not region_id.is_empty():
+			var b_region: String = str(b.get_meta("region_id", "")) if b.has_meta("region_id") else ""
+			if b_region != region_id:
+				continue
 		result.append(b_id as String)
 	return result
 

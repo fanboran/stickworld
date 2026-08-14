@@ -111,8 +111,14 @@ func _process(_delta: float) -> void:
 				_unit_to_squad.erase(u.get_instance_id())
 				units.remove_at(i)
 				changed = true
+				# 同步组织模块：移除死亡单位（2026-08 修复：原实现仅本地移除，org.personnel 失步）
+				if _org_api != null and _org_api.has_method("remove_stickman"):
+					_org_api.remove_stickman(squad_id, str(u.get_instance_id()))
 				if squad["leader"] == u:
 					squad["leader"] = null
+					# 同步解除指挥官
+					if _org_api != null and _org_api.has_method("remove_commander"):
+						_org_api.remove_commander(squad_id)
 				# 清除编队派生角色（单位仍有效时）
 				if u.has_method("set_role"):
 					u.set_role("")
@@ -120,8 +126,7 @@ func _process(_delta: float) -> void:
 		if units.is_empty():
 			to_disband.append(squad_id)
 		elif changed:
-			# 同步到组织模块（移除已死单位）
-			# 组织模块的 remove_stickman 已在 _remove_unit_from_squad 中调用
+			# 已同步组织模块（remove_stickman/remove_commander），无额外操作
 			pass
 	for sid in to_disband:
 		disband_squad(sid)
@@ -194,10 +199,12 @@ func disband_squad(squad_id: String) -> void:
 	if not _squads.has(squad_id):
 		return
 	var squad: Dictionary = _squads[squad_id]
-	# 清除单位映射
+	# 清除单位映射与编队派生角色（2026-08 审计修复：disband 也要清 role，与 disband_all_squads 一致）
 	for u in squad["units"]:
 		if is_instance_valid(u):
 			_unit_to_squad.erase(u.get_instance_id())
+			if u.has_method("set_role"):
+				u.set_role("")
 	# 解散组织
 	if _org_api != null and _org_api.has_method("disband_organization"):
 		_org_api.disband_organization(squad_id)

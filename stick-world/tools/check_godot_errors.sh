@@ -15,8 +15,20 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Godot 原生程序使用 Windows 风格路径（MSYS 的 /f/... 不保证被转换）
+PROJECT_DIR_WIN="$PROJECT_DIR"
+if command -v cygpath >/dev/null 2>&1; then
+	PROJECT_DIR_WIN="$(cygpath -m "$PROJECT_DIR")"
+fi
 GODOT="${GODOT:-F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe}"
-LOG_DIR="${APPDATA:-$HOME/AppData/Roaming}/Godot/app_userdata/stick_world/logs"
+# Windows Git Bash 下 %APPDATA%/%TEMP% 是反斜杠路径，需用 cygpath 归一化
+LOG_ROOT="${APPDATA:-$HOME/AppData/Roaming}"
+TMP_BASE="${TMPDIR:-$TEMP}"
+if command -v cygpath >/dev/null 2>&1; then
+	LOG_ROOT="$(cygpath -u "$LOG_ROOT" 2>/dev/null || echo "$LOG_ROOT")"
+	TMP_BASE="$(cygpath -u "$TMP_BASE" 2>/dev/null || echo "$TMP_BASE")"
+fi
+LOG_DIR="$LOG_ROOT/Godot/app_userdata/stick_world/logs"
 MAX_FILES=10
 WARNINGS=0
 QUICK=0
@@ -83,10 +95,10 @@ if [ "$QUICK" -eq 0 ]; then
 	echo "== 编辑器启动模拟（删 filesystem_cache10 + --editor --quit）=="
 	cache_path="$PROJECT_DIR/.godot/editor/filesystem_cache10"
 	[ -e "$cache_path" ] && rm -rf "$cache_path"
-	boot_log="${TMPDIR:-$TEMP}/sw_boot_check.log"
-	boot_err="${TMPDIR:-$TEMP}/sw_boot_check_err.log"
+	boot_log="$TMP_BASE/sw_boot_check.log"
+	boot_err="$TMP_BASE/sw_boot_check_err.log"
 	rm -f "$boot_log" "$boot_err"
-	"$GODOT" --headless --editor --quit --path "$PROJECT_DIR" >"$boot_log" 2>"$boot_err" &
+	"$GODOT" --headless --editor --quit --path "$PROJECT_DIR_WIN" >"$boot_log" 2>"$boot_err" &
 	pid=$!
 	( sleep 300; kill -9 "$pid" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
 	killer=$!

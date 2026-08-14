@@ -10,13 +10,14 @@ modules/texture_gen/
 ├── api.gd                          # 模块对外 API
 ├── README.md                       # 本文件
 ├── procedural_materials.gd         # CPU 合成贴图原语（class_name ProceduralMaterials）
+├── assets/                         # 模块自持资产（white_tex.png 等，不依赖 building_gen）
 ├── materials/                      # 材质配方，每种材质一个子目录
 │   ├── thatch/                     # 茅草屋顶（CPU 笔迹占位，shader 仅最小测试）
 │   │   ├── shaders/thatch.gdshader
 │   │   ├── scripts/
 │   │   │   ├── thatch_applier.gd   # CPU 笔迹生成器（v11 油画笔迹）
 │   │   │   └── debug/thatch_debug.gd
-│   │   ├── scenes/{thatch_debug.tscn, thatch_building_demo.tscn, smithy_thatch_preview.tscn}
+│   │   ├── scenes/{thatch_debug.tscn, thatch_building_demo.tscn}
 │   │   └── reference/
 │   ├── stone_wall/                 # 浅色石墙（已实现，GPU Shader）
 │   │   ├── shaders/stone_wall.gdshader

@@ -8,7 +8,8 @@ extends BehaviorBase
 ##   3. 项目完工或被取消时 finish()，AIController 决策下一步（回 idle）
 ##
 ## params 必需字段：
-##   - project: ConstructionProject  工人被派工的项目（由 AIController 在 travel 时注入）
+##   - project: 建造项目对象（由 construction 模块经 AIController 注入；本行为只做鸭子类型调用，
+##     不引用 construction 内部类，保持 units→construction 无编译期依赖）
 ##
 ## 设计原则：
 ##   - BehaviorWork 不直接推进 project 进度（ConstructionManager._physics_process 已 tick 所有项目）
@@ -30,8 +31,8 @@ const BUILD_HITS: int = 8
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 
-## 当前项目引用（ConstructionProject）
-var _project: ConstructionProject = null
+## 当前项目引用（鸭子类型：cell_x / width / needs_material / add_build_progress 等）
+var _project: Variant = null
 ## 工作目标点（世界坐标）
 var _target_pos: Vector2 = Vector2.ZERO
 ## 是否已到达
@@ -47,7 +48,7 @@ func _ready() -> void:
 func enter(previous: String, params: Dictionary) -> void:
 	super.enter(previous, params)
 	_arrived = false
-	_project = params.get("project", null) as ConstructionProject
+	_project = params.get("project", null)
 	if _project == null:
 		# 没有项目引用，立即结束
 		finish()

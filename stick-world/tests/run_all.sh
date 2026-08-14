@@ -22,8 +22,20 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Godot 原生程序使用 Windows 风格路径（MSYS 的 /f/... 不保证被转换）
+PROJECT_DIR_WIN="$PROJECT_DIR"
+if command -v cygpath >/dev/null 2>&1; then
+	PROJECT_DIR_WIN="$(cygpath -m "$PROJECT_DIR")"
+fi
 GODOT="${GODOT:-F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe}"
-TMP_DIR="${TMPDIR:-$TEMP}/sw_tests_$$"
+# Windows Git Bash 下 %TEMP% 是反斜杠路径，bash 重定向不识别，需用 cygpath 归一化
+if command -v cygpath >/dev/null 2>&1; then
+	TMP_BASE="$(cygpath -u "${TMPDIR:-$TEMP}" 2>/dev/null || true)"
+fi
+if [ -z "${TMP_BASE:-}" ]; then
+	TMP_BASE="${TMPDIR:-/tmp}"
+fi
+TMP_DIR="$TMP_BASE/sw_tests_$$"
 
 FILTER=""
 MATCH=""
@@ -212,7 +224,7 @@ declare -a report_entries=()
 # unit 层：单进程批量
 if [ "$run_unit" -eq 1 ]; then
 	t0=$(date +%s%3N)
-	if "$GODOT" --headless --path "$PROJECT_DIR" res://tests/batch_runner.tscn >"$TMP_DIR/unit.out" 2>"$TMP_DIR/unit.err"; then
+	if "$GODOT" --headless --path "$PROJECT_DIR_WIN" res://tests/batch_runner.tscn >"$TMP_DIR/unit.out" 2>"$TMP_DIR/unit.err"; then
 		t1=$(date +%s%3N)
 		total_pass=$((total_pass + 1))
 		unit_secs=$(awk "BEGIN{printf \"%.1f\", ($t1-$t0)/1000}")
@@ -240,19 +252,15 @@ done < <(select_suites "${pool[@]}")
 pool=("${filtered[@]}")
 
 if [ ${#pool[@]} -gt 0 ]; then
-	export GODOT PROJECT_DIR TMP_DIR
-	printf '%s\n' "${pool[@]}" | xargs -P "$PARALLEL" -I{} bash -c '
+	active=0
+	# 单套件执行器（后台函数体）：不用 xargs/export，避免 Windows Git Bash 环境变量过大
+	launch_suite() {
 		scene="$1"
 		base="${scene##*/}"; base="${base%.tscn}"
 		out="$TMP_DIR/$base.out" err="$TMP_DIR/$base.err" res="$TMP_DIR/$base.res"
-		case "$base" in
-			test_battle_lifecycle) timeout=120 ;;
-			test_selection_formation|test_possession|test_cross_map_travel|test_new_game_smoke) timeout=90 ;;
-			test_village_map) timeout=60 ;;
-			*) timeout=45 ;;
-		esac
+		local timeout="${SUITE_TIMEOUT[$scene]:-$DEFAULT_TIMEOUT}"
 		t0=$(date +%s%3N)
-		"$GODOT" --headless --path "$PROJECT_DIR" "res://$scene" -- --fresh-start >"$out" 2>"$err" &
+		"$GODOT" --headless --path "$PROJECT_DIR_WIN" "res://$scene" -- --fresh-start >"$out" 2>"$err" &
 		pid=$!
 		( sleep "$timeout"; kill -9 "$pid" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
 		killer=$!
@@ -260,7 +268,7 @@ if [ ${#pool[@]} -gt 0 ]; then
 		kill "$killer" 2>/dev/null; wait "$killer" 2>/dev/null
 		t1=$(date +%s%3N); ms=$((t1 - t0))
 		if [[ "$code" =~ ^[0-9]+$ ]] && [ "$code" -ge 137 ]; then
-			echo "TIMEOUT $ms" >"$res"; exit 0
+			echo "TIMEOUT $ms" >"$res"; return 0
 		fi
 		sum=$(grep -aE "测试汇总|\[FAIL\]" "$out" | tail -8)
 		if [ -z "$sum" ]; then
@@ -270,7 +278,16 @@ if [ ${#pool[@]} -gt 0 ]; then
 		else
 			echo "PASS $ms" >"$res"
 		fi
-	' _ {}
+	}
+	for scene in "${pool[@]}"; do
+		while [ "$active" -ge "$PARALLEL" ]; do
+			wait -n 2>/dev/null || true
+			active=$((active - 1))
+		done
+		launch_suite "$scene" &
+		active=$((active + 1))
+	done
+	wait 2>/dev/null || true
 	# 汇总（保持声明顺序）
 	for scene in "${pool[@]}"; do
 		base="${scene##*/}"; base="${base%.tscn}"

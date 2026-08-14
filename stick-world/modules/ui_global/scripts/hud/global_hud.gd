@@ -6,8 +6,8 @@ extends Control
 ## 后续扩展：资源数、人口、坐标、调试信息。
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
-@onready var speed_label: Label = get_node_or_null("MarginContainer/SpeedLabel")
-@onready var time_label: Label = get_node_or_null("MarginContainer/TimeLabel")
+@onready var speed_label: Label = get_node_or_null("MarginContainer/HBoxContainer/SpeedLabel")
+@onready var time_label: Label = get_node_or_null("MarginContainer/HBoxContainer/TimeLabel")
 @onready var notification_label: Label = get_node_or_null("NotificationLabel")
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
@@ -49,6 +49,19 @@ func _bind_event_bus() -> void:
 		EventBus.game_paused.connect(_on_pause_changed.bind(true))
 	if EventBus.has_signal("game_resumed"):
 		EventBus.game_resumed.connect(_on_pause_changed.bind(false))
+	if EventBus.has_signal("battle_started"):
+		EventBus.battle_started.connect(_on_battle_started)
+	if EventBus.has_signal("battle_ended"):
+		EventBus.battle_ended.connect(_on_battle_ended)
+
+
+func _on_battle_started(_battle_id: String) -> void:
+	show_notification("战斗", "一场战斗开始了", "info")
+
+
+func _on_battle_ended(_battle_id: String, victory: bool) -> void:
+	var result: String = "进攻方获胜" if victory else "防守方获胜"
+	show_notification("战斗", "战斗结束：%s" % result, "info")
 
 
 # ─────────────────────────────── 更新显示 ────────────────────────────────

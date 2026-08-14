@@ -21,7 +21,14 @@ func register_behavior(behavior: BehaviorBase) -> void:
 	if behavior == null or behavior.behavior_name.is_empty():
 		push_error("[BehaviorStateMachine] 注册失败：行为为空或未设 behavior_name")
 		return
+	if _behaviors.has(behavior.behavior_name):
+		push_warning("[BehaviorStateMachine] 行为名重复注册，覆盖旧行为: %s" % behavior.behavior_name)
 	_behaviors[behavior.behavior_name] = behavior
+
+
+## 是否已注册指定名称的行为。
+func has_behavior(behavior_name: String) -> bool:
+	return _behaviors.has(behavior_name)
 
 
 # ─────────────────────────────── 切换 ────────────────────────────────

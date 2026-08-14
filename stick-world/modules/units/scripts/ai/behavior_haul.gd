@@ -9,7 +9,8 @@ extends BehaviorBase
 ##   4. 若仍需材料则继续往返，否则 finish
 ##
 ## params 必需字段：
-##   - project: ConstructionProject  工人被派工的项目
+##   - project: 建造项目对象（由 construction 模块经 AIController 注入；本行为只做鸭子类型调用，
+##     不引用 construction 内部类，保持 units→construction 无编译期依赖）
 ##
 ## 搬运工认领由 AIController 在 travel("haul") 前完成（try_claim_hauler），
 ## exit 时释放认领。搬运时切换为 carry 动画。
@@ -29,7 +30,7 @@ const PICK_DURATION: float = 0.5
 const DELIVER_DURATION: float = 0.5
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
-var _project: ConstructionProject = null
+var _project: Variant = null
 var _warehouse: Node2D = null
 var _phase: int = Phase.TO_WAREHOUSE
 var _warehouse_pos: Vector2 = Vector2.ZERO
@@ -43,7 +44,7 @@ func _ready() -> void:
 
 func enter(previous: String, params: Dictionary) -> void:
 	super.enter(previous, params)
-	_project = params.get("project", null) as ConstructionProject
+	_project = params.get("project", null)
 	if _project == null:
 		finish()
 		return

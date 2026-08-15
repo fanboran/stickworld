@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://bvillageb002"]
+[gd_scene format=3 uid="uid://1sqct6j3li7p"]
 
 [ext_resource type="Script" path="res://modules/world/scripts/map/village_map.gd" id="1_vmap"]
 [ext_resource type="Script" path="res://modules/world/scripts/placement/placement_grid.gd" id="2_grid"]

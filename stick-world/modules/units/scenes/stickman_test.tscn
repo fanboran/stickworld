@@ -6,7 +6,7 @@
 [ext_resource type="Script" uid="uid://cnaex1dwul5e3" path="res://modules/units/scripts/rig/stickman_test.gd" id="2_test"]
 [ext_resource type="Texture2D" uid="uid://cl74ubh1fhaol" path="res://modules/units/assets/textures/stickman/bone_2_pill.png" id="2_tex_bone"]
 [ext_resource type="Texture2D" uid="uid://dypso82gji2ed" path="res://modules/units/assets/textures/stickman/bone_3_pill.png" id="3_tex_bone"]
-[ext_resource type="PackedScene" uid="uid://wpnswordm01" path="res://modules/units/scenes/components/weapon_sword_placeholder.tscn" id="3_wvxud"]
+[ext_resource type="PackedScene" uid="uid://tuvavopwpn0c" path="res://modules/units/scenes/components/weapon_sword_placeholder.tscn" id="3_wvxud"]
 [ext_resource type="Animation" uid="uid://cc1o1uncwu162" path="res://modules/units/animations/attack.tres" id="4_c5kt6"]
 [ext_resource type="Texture2D" uid="uid://qh4ast218e0m" path="res://modules/units/assets/textures/stickman/bone_4_pill.png" id="4_tex_bone"]
 [ext_resource type="Shader" uid="uid://ctuh2ujiadxlx" path="res://modules/units/shaders/stickman_outline_id.gdshader" id="5_cshof"]

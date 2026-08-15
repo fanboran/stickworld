@@ -185,3 +185,26 @@ func repair_building(building_id: String, org_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
 	return _manager.repair_building(building_id, org_id)
+
+
+# ===== 存档对接（SaveHandler 经本契约调用，禁止直调内部 manager，2026-08-15 审计收敛）=====
+
+## 保存建筑与建造项目到 DB（由 SaveHandler 在 EventBus.game_saving 回调中调用）
+func save_to_db(db: Object, slot_id: int, map_id: String) -> void:
+	if not _is_initialized:
+		return
+	_manager.save_to_db(db, slot_id, map_id)
+
+
+## 从 DB 恢复建筑与建造项目（由 SaveHandler 在读档恢复流程中调用）
+func load_from_db(db: Object, slot_id: int, map_id: String) -> void:
+	if not _is_initialized:
+		return
+	_manager.load_from_db(db, slot_id, map_id)
+
+
+## 读档后刷新城墙地形遮罩（manager 内部实现，经契约暴露给存档恢复流程）
+func refresh_city_terrain_mask() -> void:
+	if not _is_initialized:
+		return
+	_manager._update_city_terrain_mask()

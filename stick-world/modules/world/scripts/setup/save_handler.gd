@@ -57,9 +57,9 @@ func _on_game_saving(_slot_index: int) -> void:
 	# 1. 地图边界 -> maps 表
 	if map != null and map.has_method("save_to_db"):
 		map.save_to_db(db, slot_id, map_id)
-	# 2. 建筑 + 建造项目 -> buildings + construction_projects 表
-	if _root._construction_manager != null and _root._construction_manager.has_method("save_to_db"):
-		_root._construction_manager.save_to_db(db, slot_id, map_id)
+	# 2. 建筑 + 建造项目 -> buildings + construction_projects 表（经 ConstructionAPI 契约，禁止直调内部 manager）
+	if _root._construction_api != null and _root._construction_api.has_method("save_to_db"):
+		_root._construction_api.save_to_db(db, slot_id, map_id)
 	# 3. 实体（玩家+NPC）-> entities 表
 	_save_entities(db, slot_id, map_id, map)
 	# 4. 资源点 -> resource_nodes 表
@@ -144,17 +144,17 @@ func _restore_from_save(map: Node2D, map_id: String) -> void:
 	# 1. 恢复地图边界
 	if map.has_method("load_from_db"):
 		map.load_from_db(db, slot_id, map_id)
-	# 2. 恢复建筑 + 建造项目
-	if _root._construction_manager != null and _root._construction_manager.has_method("load_from_db"):
-		_root._construction_manager.load_from_db(db, slot_id, map_id)
+	# 2. 恢复建筑 + 建造项目（经 ConstructionAPI 契约）
+	if _root._construction_api != null and _root._construction_api.has_method("load_from_db"):
+		_root._construction_api.load_from_db(db, slot_id, map_id)
 	# 3. 恢复玩家 + NPC
 	_restore_entities(db, slot_id, map_id, map)
 	# 4. 恢复资源点
 	if map.has_method("load_resource_nodes_from_db"):
 		map.load_resource_nodes_from_db(db, slot_id, map_id)
-	# 5. 恢复城墙地形遮罩
-	if _root._construction_manager != null and _root._construction_manager.has_method("_update_city_terrain_mask"):
-		_root._construction_manager._update_city_terrain_mask()
+	# 5. 恢复城墙地形遮罩（经 ConstructionAPI 契约）
+	if _root._construction_api != null and _root._construction_api.has_method("refresh_city_terrain_mask"):
+		_root._construction_api.refresh_city_terrain_mask()
 	# 6. 重新设置相机/小地图边界
 	if _root.camera_rig != null and _root.camera_rig.has_method("set_map_bounds"):
 		_root.camera_rig.set_map_bounds(map.map_left, map.map_right)

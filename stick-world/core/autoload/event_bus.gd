@@ -47,11 +47,11 @@ extends Node
 # 框选/选择变化：SelectionSystem -> UI
 @warning_ignore("unused_signal") signal selection_changed(unit_ids: Array)
 # 编队创建：FormationSystem -> UI、Organization
-@warning_ignore("unused_signal") signal squad_created(squad_id, unit_ids)
+@warning_ignore("unused_signal") signal squad_created(squad_id: String, unit_ids: Array)
 # 号令下达（source_tier=发令层级，0=玩家直接指挥）：TacticalOrders -> UI、Units
-@warning_ignore("unused_signal") signal order_issued(order_type, target_squad_id, source_tier)
+@warning_ignore("unused_signal") signal order_issued(order_type: int, target_squad_id: String, source_tier: int)
 # 任命指挥官：Organization -> UI
-@warning_ignore("unused_signal") signal commander_assigned(squad_id, unit_id)
+@warning_ignore("unused_signal") signal commander_assigned(squad_id: String, unit_id: int)
 
 # ─────────────────────────────── 场景 / 地图 / 旅行（§14.1 / §14.2）────────────────────────────────
 # 旅行请求：战略图 -> SceneLoader（玩家点击聚落进入场景图）

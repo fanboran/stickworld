@@ -77,6 +77,7 @@ const _SCHEMA_SQLS: Array[String] = [
 		state         INTEGER NOT NULL DEFAULT 0,
 		total_work    REAL    NOT NULL DEFAULT 10.0,
 		current_work  REAL    NOT NULL DEFAULT 0.0,
+		material_progress REAL NOT NULL DEFAULT 1.0,
 		region_id     TEXT    NOT NULL DEFAULT '',
 		PRIMARY KEY (slot_id, project_id),
 		FOREIGN KEY (slot_id) REFERENCES save_meta(slot_id) ON DELETE CASCADE
@@ -213,14 +214,10 @@ func save_game(slot_index: int) -> bool:
 	_current_slot = slot_index
 	_ensure_schema()
 
-	# 事务包裹整段写库：任一环节失败回滚，避免半份存档（2026-08 审计修复）
-	var began: Variant = _db.query("BEGIN")
-	if began == false:
-		push_warning("[SaveManager] 无法开启存档事务，中止保存")
-		_db.close_db()
-		_db = null
-		_current_slot = -1
-		return false
+	# 注：不用外层 BEGIN/COMMIT 包裹整段写库 —— godot-sqlite 的 delete_rows/insert_row/
+	# select_rows/update_rows 内部各自开启并提交事务（2026-08-15 实测确认），外层事务会与
+	# 其嵌套冲突（每次写库刷 2 条 ERROR 日志），且首个 helper 的内部 COMMIT 会提前提交外层
+	# 事务，最后的 COMMIT 必然失败。每条语句的原子性由 helper 自身保证。
 
 	# 写元数据
 	var now := Time.get_date_string_from_system() + " " + Time.get_time_string_from_system()
@@ -233,7 +230,6 @@ func save_game(slot_index: int) -> bool:
 	# 必须在 DB 打开后 emit，否则 get_db() 返回 null
 	EventBus.game_saving.emit(slot_index)
 
-	_db.query("COMMIT")
 	_db.close_db()
 	_db = null
 	_current_slot = -1
@@ -369,6 +365,25 @@ func _ensure_schema() -> void:
 		return
 	for stmt in _SCHEMA_SQLS:
 		_db.query(stmt)
+	_migrate_schema()
+
+
+## 旧库迁移：construction_projects 补 material_progress 列。
+## 修复背景：写侧 insert 含该列而旧建表 SQL 缺列，导致含未完工项目的存档写入静默失败、项目丢失。
+## CREATE TABLE IF NOT EXISTS 对已存在的旧表无效，须按列检查后 ALTER 补列。
+func _migrate_schema() -> void:
+	if _db == null:
+		return
+	if _db.query("PRAGMA table_info(construction_projects)") == false:
+		return
+	for raw_row in _db.query_result:
+		var row: Dictionary = raw_row
+		if str(row.get("name", "")) == "material_progress":
+			return
+	var migrated: Variant = _db.query(
+		"ALTER TABLE construction_projects ADD COLUMN material_progress REAL NOT NULL DEFAULT 1.0")
+	if migrated == false:
+		push_warning("[SaveManager] construction_projects 补列 material_progress 失败，未完工项目存档将丢失")
 
 
 ## 写入或更新 save_meta（保留首次创建时间，只更新 updated_at）

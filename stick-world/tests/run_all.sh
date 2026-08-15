@@ -78,6 +78,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_formation_system_assembly.tscn"
 	"tests/integration/test_placement_grid_units.tscn"
 	"tests/integration/test_tactical_orders.tscn"
+	"tests/integration/test_save_roundtrip.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"

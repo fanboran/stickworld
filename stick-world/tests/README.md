@@ -82,9 +82,9 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 | T0-7 | **数字标号全部清除**：test_stage_01~08 全部迁移完成——01→integration/test_game_root_assembly、02→integration/test_village_map、03→integration/test_ai_behaviors、05→integration/test_battle_lifecycle、06→integration/test_selection_formation、07→integration/test_possession、08→smoke/test_cross_map_travel | ✅ |
 | T0-8 | **单元覆盖补齐（2026-08 审计）**：organization_manager（15 用例，含 insert_tier 修复回归 + WorldState 容器同步 + 序列化 round-trip）、entity_states（7 用例，WorldState 状态类序列化）、resources_api（6 用例，信号转发层）——补测过程揪出并修复 2 个真实 bug：`get_child_orgs` 返回类型崩溃、`from_dict` typed Array 赋值崩溃 | ✅ 3 文件 28 用例 |
 
-**当前结构（28 套件，`run_all.ps1` 全绿）**：
+**当前结构（24 套件，`run_all.sh` 全绿）**：
 - `tests/unit/`（9 文件）：placement_grid、health_component、resource_manager、resources_api、organization_manager、entity_states、command_chain、formation_system、behavior_state_machine
-- `tests/integration/`（17 文件）：construction_cycle、ai_behaviors、game_root_assembly、village_map、battle_lifecycle、selection_formation、possession、formation_presets、squad_travel、melee_combat、combat_feedback、combat_control、menu_navigation、battle_ui、formation_system、placement_grid_units、tactical_orders
+- `tests/integration/`（21 文件）：construction_cycle、save_roundtrip、ai_behaviors、game_root_assembly、village_map、battle_lifecycle、selection_formation、possession、formation_presets、squad_travel、melee_combat、combat_feedback、combat_control、menu_navigation、battle_ui、formation_system_assembly、placement_grid_units、tactical_orders、strategic_map_p0、l2_strategic_map、l3_strategic_map
 - `tests/smoke/`（2 文件）：new_game_smoke、cross_map_travel
 - `tests/dev/`（1 场景，不进 CI）：dev_playtest
 
@@ -97,10 +97,11 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 ## 六、聚合运行
 
 ```
-# 默认终端为 bash；脚本为 .ps1，经 powershell 调用（路径用 / 分隔）
-powershell -ExecutionPolicy Bypass -File tests/run_all.ps1
-powershell -ExecutionPolicy Bypass -File tests/run_all.ps1 -Filter unit      # 只跑 unit
-powershell -ExecutionPolicy Bypass -File tests/run_all.ps1 -Filter stage     # 只跑旧 stage 回归基线
+# 默认终端为 bash；聚合脚本为 run_all.sh（-Match 过滤 / -Changed 增量 / -Parallel 并行）
+bash tests/run_all.sh
+bash tests/run_all.sh -Match save_roundtrip   # 只跑匹配场景
+bash tests/run_all.sh -Changed                # 按变更文件挑选受影响套件
+bash tests/run_unit.sh                        # unit 批量（单进程，秒级）
 ```
 
 `run_tests.gd`（旧入口）职责：仅 autoload 冒烟（EventBus/ConfigManager），不再是"全部测试入口"。

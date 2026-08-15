@@ -57,9 +57,8 @@ fix(org): 修复组织架构树节点层级溢出
 ├── modules/               # 游戏功能模块（开发最频繁的区域）
 ├── assets/                # 全局共享资源
 ├── addons/                # 编辑器插件（项目自带 + 第三方）
-├── prototypes/            # 原型沙盒（不被正式逻辑依赖）
 ├── tools/                 # 自定义编辑器工具与 CLI 脚本（@tool）
-├── tests/                 # 自动化测试（镜像 core/ 和 modules/ 结构）
+├── tests/                 # 自动化测试（unit/integration/smoke/dev 分层）
 └── docs/                  # 项目文档
 ```
 
@@ -69,28 +68,29 @@ fix(org): 修复组织架构树节点层级溢出
 core/
 ├── autoload/              # 全局单例
 │   ├── event_bus.gd       # 全局事件总线（发布-订阅模式）
-│   ├── scene_manager.gd   # 场景加载与视图切换
+│   ├── world_state.gd     # 全局状态容器
 │   ├── save_manager.gd    # 存档/读档服务
-│   └── config_manager.gd  # 游戏配置管理
+│   ├── config_manager.gd  # 游戏配置管理
+│   ├── time_manager.gd    # 时间/速度管理
+│   └── balance_config.gd  # 平衡变量加载（热重载预留）
+├── entities/              # 核心实体状态快照（RefCounted）
 ├── ui_framework/          # UI 基础设施
 │   ├── base_screen.gd     # UI 界面基类
 │   ├── components/        # 通用 UI 组件
 │   └── theme/             # 全局 UI 主题
-├── services/              # 抽象服务
-│   ├── audio_manager.gd   # 音频管理器
-│   ├── analytics/         # 数据分析（预留）
-│   └── iap/               # 内购（预留）
-└── utils/                 # 通用工具类
+└── services/              # 抽象服务
+    ├── audio_manager.gd   # 音频管理器
+    ├── analytics/         # 数据分析（预留）
+    └── iap/               # 内购（预留）
 ```
 
 ### 游戏功能模块 (`modules/`) 标准结构
 
-每个模块是一个垂直切片，自包含。以 `player` 为例：
+每个模块是一个垂直切片，自包含。以 `player_control` 为例：
 
 ```
-modules/player/
+modules/player_control/
 ├── scenes/                # 模块场景（子目录按需组织，不强制固定结构）
-│   └── player.tscn
 ├── scripts/               # 模块脚本（可再按子域分组，如 ai/、map/）
 ├── assets/                # 模块专属资源（按需）
 ├── ui/                    # 模块专属 UI（按需）

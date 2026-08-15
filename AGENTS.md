@@ -78,7 +78,7 @@
 ├── assets/                # 全局共享资源
 ├── addons/                # 编辑器插件（项目自带 + 第三方），详见 docs/技术/编辑器工具索引.md
 ├── tools/                 # 自定义编辑器工具与 CLI 脚本（@tool），详见 docs/技术/编辑器工具索引.md
-├── tests/                 # 自动化测试（镜像 core/ 和 modules/ 结构）
+├── tests/                 # 自动化测试（unit/integration/smoke/dev 分层，详见 tests/README.md）
 └── docs/                  # 项目文档
 ```
 

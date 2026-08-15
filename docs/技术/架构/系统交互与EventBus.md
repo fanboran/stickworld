@@ -44,7 +44,7 @@
 
 ## 二、EventBus 事件目录（现行）
 
-> 与 `core/autoload/event_bus.gd` 逐条对齐（2026-08 清理后）。共 32 个信号。
+> 与 `core/autoload/event_bus.gd` 逐条对齐（2026-08 清理后）。共 30 个信号。
 
 ### 2.1 生命周期事件
 
@@ -79,9 +79,9 @@
 | 信号 | 参数 | 发射方 | 接收方 | 触发条件 |
 |------|------|--------|--------|----------|
 | `selection_changed` | unit_ids: Array | SelectionSystem | UI | 框选变化 |
-| `squad_created` | squad_id, unit_ids | FormationSystem | UI、Organization | 编队创建 |
-| `order_issued` | order_type, target_squad_id, source_tier | TacticalOrders | UI、Units | 号令下达（source_tier=发令层级，0=玩家直接指挥） |
-| `commander_assigned` | squad_id, unit_id | Organization | UI | 任命指挥官 |
+| `squad_created` | squad_id: String, unit_ids: Array | FormationSystem | UI、Organization | 编队创建 |
+| `order_issued` | order_type: int, target_squad_id: String, source_tier: int | TacticalOrders | UI、Units | 号令下达（source_tier=发令层级，0=玩家直接指挥） |
+| `commander_assigned` | squad_id: String, unit_id: int | FormationSystem | UI | 任命指挥官 |
 
 ### 2.5 场景/地图/旅行/战略图事件
 
@@ -102,7 +102,6 @@
 | 信号 | 参数 | 发射方 | 接收方 |
 |------|------|--------|--------|
 | `ui_notification` | title, body, level | 任意 | GlobalHUD |
-| `ui_toggle_pause_requested` | - | UI | GameRoot |
 | `possession_started` | entity | PossessionInterface | UI、Units、TimeManager |
 | `possession_ended` | entity | PossessionInterface | UI、Units、TimeManager |
 | `interior_entered` | building_id: int | Building | InputDispatcher、UI |

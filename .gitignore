@@ -115,3 +115,6 @@ node_modules/sticknodes-js/sticknodes_js.d.ts
 node_modules/sticknodes-js/sticknodes_js.js
 
 tools/mocap/references/
+
+# Godot 自定义用户数据目录（--user-data-dir 调试残留，不入库）
+stick-world/Godot/

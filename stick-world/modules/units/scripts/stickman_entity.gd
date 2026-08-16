@@ -47,6 +47,9 @@ const _HealthBarScript: GDScript = preload("res://modules/units/scripts/entity/h
 		possessed = v
 		_on_possession_changed(v)
 
+## 兵种数据 ID（对齐 config/units/stickmen.tres 的行 id；默认平原步兵）
+@export var stickman_def_id: String = "stm_plain_001"
+
 ## 移动加速度（px/s²）
 @export var accel: float = 600.0
 ## 减速度（px/s²）
@@ -201,6 +204,8 @@ func _is_mouse_over_ui() -> bool:
 func _ready() -> void:
 	# 装配子组件（VisualController / InteractionController）
 	_mount_components()
+	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
+	_apply_balance_data()
 	# 拿到 StickmanRig 和 IK markers 引用
 	var rig_host := get_node_or_null("RigHost")
 	if rig_host != null:
@@ -243,6 +248,21 @@ func _ready() -> void:
 	# 战斗组件：死亡信号连接
 	if health_component != null:
 		health_component.died.connect(_on_died)
+
+
+## 从 BalanceConfig 读取兵种数值并覆盖组件默认值。
+## 未命中/字段缺失时保持 @export 默认（当前默认=平原步兵，与 stickmen.tres 一致），保证行为零回归。
+func _apply_balance_data() -> void:
+	if stickman_def_id.is_empty():
+		return
+	var def_path := "units.stickmen." + stickman_def_id
+	var base_hp: Variant = BalanceConfig.get_value(def_path + ".base_hp")
+	var base_attack: Variant = BalanceConfig.get_value(def_path + ".base_attack")
+	if health_component != null and (base_hp is float or base_hp is int) and float(base_hp) > 0.0:
+		health_component.max_hp = float(base_hp)
+		health_component.hp = float(base_hp)
+	if weapon_mount != null and (base_attack is float or base_attack is int) and float(base_attack) > 0.0:
+		weapon_mount.damage = float(base_attack)
 
 
 ## 实例化并挂载子组件（VisualController / InteractionController / HealthBar）。

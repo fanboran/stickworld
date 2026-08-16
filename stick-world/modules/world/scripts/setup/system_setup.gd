@@ -51,6 +51,9 @@ var _root: GameRoot
 
 func setup(root: GameRoot) -> void:
 	_root = root
+	# 激活平衡配置装载：扫描 res://config 下全部 BalanceResource .tres
+	# （此前 reload() 零调用者，数据驱动层运行时为空字典，2026-08 审计修复）
+	BalanceConfig.reload()
 	_setup_ui_root()
 	_setup_debug_overlay()
 	_setup_construction_system()
@@ -141,6 +144,9 @@ func _setup_combat_system() -> void:
 	# 给场景中已存在的 BattleDirector 节点挂脚本（§8.1）
 	if _root.battle_director != null:
 		_root.battle_director.set_script(_BattleDirectorScript)
+		# 注入地图节点路径（拆 combat→world 硬引用，路径常量真相源仍在 world/api.gd）
+		_root.battle_director.battle_anchor_path = NodePath(WorldAPI.PATH_MAP_BATTLE_ANCHOR)
+		_root.battle_director.building_host_path = NodePath(WorldAPI.PATH_MAP_BUILDING_HOST)
 	# 实例化 CombatApi（公共接口契约）
 	var api := Node.new()
 	api.set_script(_CombatApiScript)

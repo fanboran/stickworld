@@ -8,6 +8,12 @@ extends Node
 
 const ScriptBattleInstance := preload("res://modules/combat/scripts/battle/battle_instance.gd")
 
+# ─────────────────────────────── 装配注入（拆 world→combat 依赖环）────────────────────────────
+## 地图上战斗锚点节点路径（由装配层注入，默认与 WorldAPI.PATH_MAP_BATTLE_ANCHOR 一致）
+@export var battle_anchor_path: NodePath = NodePath("BattleAnchor")
+## 地图上建筑宿主节点路径（由装配层注入，默认与 WorldAPI.PATH_MAP_BUILDING_HOST 一致）
+@export var building_host_path: NodePath = NodePath("BuildingHost")
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 活跃的 BattleInstance 列表
 var _battles: Array = []
@@ -32,7 +38,7 @@ func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array) 
 	if map == null:
 		push_error("[BattleDirector] map 为空，无法启动战斗")
 		return null
-	var anchor: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_BATTLE_ANCHOR)
+	var anchor: Node2D = map.get_node_or_null(battle_anchor_path)
 	if anchor == null:
 		push_error("[BattleDirector] 地图缺少 BattleAnchor 节点")
 		return null
@@ -98,7 +104,7 @@ func start_siege_battle(map: Node2D, attacker_units: Array, defender_units: Arra
 
 ## 查找最外层城墙的 X 坐标（攻城方从该侧接近）
 func _find_outermost_wall_x(map: Node2D, siege_side: int) -> float:
-	var building_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST)
+	var building_host: Node2D = map.get_node_or_null(building_host_path)
 	var map_left: float = map.map_left if "map_left" in map else 0.0
 	var map_right: float = map.map_right if "map_right" in map else 8192.0
 	if building_host == null:

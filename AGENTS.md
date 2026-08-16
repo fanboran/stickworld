@@ -71,6 +71,8 @@
 
 ### 顶层目录结构
 
+> **实际 Godot 工程在 `stick-world/` 子目录**（res:// 根 = `stick-world/`）；以下结构是 `stick-world/` 内的布局，根目录仅保留 docs/、tools/、external/ 等仓库级内容。
+
 ```
 / (res://)
 ├── core/                  # 核心系统与基础设施
@@ -79,7 +81,7 @@
 ├── addons/                # 编辑器插件（项目自带 + 第三方），详见 docs/技术/编辑器工具索引.md
 ├── tools/                 # 自定义编辑器工具与 CLI 脚本（@tool），详见 docs/技术/编辑器工具索引.md
 ├── tests/                 # 自动化测试（unit/integration/smoke/dev 分层，详见 tests/README.md）
-└── docs/                  # 项目文档
+└── docs/                  # 项目文档（指向仓库根 docs/ 的符号链接）
 ```
 
 ### 核心模块 (`core/`) 结构

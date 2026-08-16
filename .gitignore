@@ -45,7 +45,11 @@ tools/trim_*.py
 tools/extract_*.py
 tools/filter_*.py
 
-# 世界生成工具：.npy 是大数据文件（高度场/mask，256MB+），不提交，只提交 PNG 预览
+# 世界生成可再生产物（保留 locked/ 金标准与运行时 config/strategic_map 副本）
+tools/worldgen/output/**
+!tools/worldgen/output/locked/
+!tools/worldgen/output/locked/**
+# npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）
 tools/worldgen/output/diag/

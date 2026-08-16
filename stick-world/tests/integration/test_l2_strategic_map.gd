@@ -83,10 +83,14 @@ func _test_query() -> void:
 	if src.get_format() == Image.FORMAT_RGBA8:
 		bpp = 4
 	var w := src.get_width()
+	var h := src.get_height()
 	var found := {}
-	for y in range(src.get_height()):
+	# 8192 级索引图全像素扫描在 GDScript 下约 6700 万次循环，并行跑会超时。
+	# 改为分步扫描：总采样点上限 ~100 万（步长自适应），漏掉的 label 再全量兜底。
+	var step := maxi(1, int(sqrt(float(w * h) / 1_000_000.0)))
+	for y in range(0, h, step):
 		var row_base := y * w
-		for x in range(w):
+		for x in range(0, w, step):
 			var i := (row_base + x) * bpp
 			var code := (int(bytes[i]) << 16) | (int(bytes[i + 1]) << 8) | int(bytes[i + 2])
 			if code > 0 and needed.has(code) and not found.has(code):
@@ -95,6 +99,19 @@ func _test_query() -> void:
 					break
 		if found.size() == needed.size():
 			break
+	# 小地块/细碎 label 可能被步长跳过：对缺失项做全量精确扫描兜底
+	if found.size() < needed.size():
+		for y in range(h):
+			var row_base := y * w
+			for x in range(w):
+				var i := (row_base + x) * bpp
+				var code := (int(bytes[i]) << 16) | (int(bytes[i + 1]) << 8) | int(bytes[i + 2])
+				if code > 0 and needed.has(code) and not found.has(code):
+					found[code] = Vector2(x, y)
+					if found.size() == needed.size():
+						break
+			if found.size() == needed.size():
+				break
 	var hit: int = 0
 	for code in found.keys():
 		var q: Dictionary = _l2_data.query_at_map_pos(found[code])

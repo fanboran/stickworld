@@ -174,7 +174,14 @@ func _test_static_separation() -> void:
 		b.ai_stop()
 	await get_tree().process_frame
 	var dist_before: float = a.global_position.distance_to(b.global_position)
-	# 等 0.3s（静态分离逐帧推开）
-	await get_tree().create_timer(0.3).timeout
-	var dist_after: float = a.global_position.distance_to(b.global_position)
-	_runner.assert_true(dist_after > dist_before + 5.0, "贴近停住的单位应被静态分离推开，before=%.1f after=%.1f" % [dist_before, dist_after])
+	# 等 0.3s（静态分离逐帧推开）。固定墙钟等待在并行负载下会被饿死，
+	# 改为条件轮询：最多 2s 墙钟，每 50ms 检查一次是否已推开 ≥5px。
+	var moved := false
+	var dist_after := dist_before
+	for i in range(40):
+		await get_tree().create_timer(0.05).timeout
+		dist_after = a.global_position.distance_to(b.global_position)
+		if dist_after > dist_before + 5.0:
+			moved = true
+			break
+	_runner.assert_true(moved, "贴近停住的单位应被静态分离推开，before=%.1f after=%.1f" % [dist_before, dist_after])

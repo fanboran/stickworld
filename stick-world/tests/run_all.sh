@@ -3,7 +3,7 @@
 #
 # 设计（2026-08 测试架构）：
 #   - unit 层：单进程批量（batch_runner.tscn，9 套纯逻辑 <2s）
-#   - integration / smoke 层：进程级并行池（默认 6，上限 8），套件间互不共享状态
+#   - integration / smoke 层：进程级并行池（默认 4，上限 8），套件间互不共享状态
 #   - 每套件耗时输出 + JSON 报告
 #
 # 用法（在 stick-world/ 或任意目录均可）：
@@ -40,7 +40,7 @@ TMP_DIR="$TMP_BASE/sw_tests_$$"
 FILTER=""
 MATCH=""
 CHANGED=""
-PARALLEL=6
+PARALLEL=4
 REPORT=""
 
 while [ $# -gt 0 ]; do
@@ -86,14 +86,28 @@ SMOKE_SUITES=(
 )
 
 declare -A SUITE_TIMEOUT=(
+	# 每套件超时：长套件按串行实测 ×2 取整，短套件统一 ≥90s
+	# （2026-08 审计校准：并行 6 下 CPU 争用系数实测最高 ~2.5x，短套件 60s 边界会碰运气误杀）
 	["tests/integration/test_battle_lifecycle.tscn"]=120
 	["tests/integration/test_selection_formation.tscn"]=90
 	["tests/integration/test_possession.tscn"]=90
-	["tests/integration/test_village_map.tscn"]=60
-	["tests/smoke/test_cross_map_travel.tscn"]=90
-	["tests/smoke/test_new_game_smoke.tscn"]=90
+	["tests/integration/test_village_map.tscn"]=90
+	["tests/smoke/test_cross_map_travel.tscn"]=120
+	["tests/smoke/test_new_game_smoke.tscn"]=120
+	["tests/integration/test_ai_behaviors.tscn"]=90
+	["tests/integration/test_game_root_assembly.tscn"]=90
+	["tests/integration/test_formation_presets.tscn"]=110
+	["tests/integration/test_l2_strategic_map.tscn"]=120
+	["tests/integration/test_squad_travel.tscn"]=90
+	["tests/integration/test_melee_combat.tscn"]=120
+	["tests/integration/test_combat_feedback.tscn"]=120
+	["tests/integration/test_combat_control.tscn"]=90
+	["tests/integration/test_menu_navigation.tscn"]=95
+	["tests/integration/test_battle_ui.tscn"]=90
+	["tests/integration/test_formation_system_assembly.tscn"]=90
+	["tests/integration/test_tactical_orders.tscn"]=90
 )
-DEFAULT_TIMEOUT=45
+DEFAULT_TIMEOUT=90
 
 # ─────────────────────────────── affected 映射 ───────────────────────────────
 

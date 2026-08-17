@@ -71,4 +71,12 @@
 |------|------|
 | P0 后期 | 模板验收；主菜单接入启动流程（project.godot 主场景前插主菜单场景） |
 | P1 | 现有面板迁移 `.tscn` + 换 StickTheme；载入屏；读档界面卡片化；按键绑定页 |
-| P2 | 层级皮肤变体（石头→羊皮纸→全息）；图标资产入库（`assets/ui/`）；主题热切换设置项 |
+| P2 | 图标资产入库（`assets/ui/`）；界面缩放设置项完善 |
+
+---
+
+## 占位界面模块（`modules/ui_placeholder/`）
+
+依赖系统（科技/物流/成就/组织报表等）尚未建立的**大界面空面板**集中放在此模块，
+样式与入口已就绪，系统接入时替换填充。详见 [`modules/ui_placeholder/`](../../../stick-world/modules/ui_placeholder/api.gd)
+与 `02-界面框架.md` §4.4；验收入口 F6 运行 `ui_placeholder_preview.tscn`。

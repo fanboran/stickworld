@@ -60,6 +60,20 @@ func run() -> void:
 		get_tree().change_scene_to_file(GAME_ROOT_SCENE)
 		await _wait_world()
 		await _shot("07_continue_restored")
+	# ── 占位界面预览 ──
+	var preview: Control = (load(
+			"res://modules/ui_placeholder/scenes/ui_placeholder_preview.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(preview)
+	await _frames(5)
+	await _shot("08_placeholder_preview")
+	UIPlaceholderPanel.open_panel(preview, "tech_tree")
+	await _frames(5)
+	await _shot("09_placeholder_techtree")
+	UIPlaceholderPanel.open_panel(preview, "empire_overview")
+	await _frames(5)
+	await _shot("10_placeholder_empire")
+	preview.queue_free()
+	await _frames(3)
 	print("=== UI SHOTS DONE ===")
 	get_tree().quit()
 

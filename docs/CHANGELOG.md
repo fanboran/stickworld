@@ -8,6 +8,12 @@
 
 ## [未发布]
 
+### 全大陆 L1 蒙版划分（2026-08，L3 层直裁为 L1）
+
+- **生成端**：新增 `tools/worldgen/l1/l1_world_split.py`——在 L3 层把整块大陆划分为 423 个 L1 地块：城市点 = 均匀网格平铺 + 细微扰动（jittered grid，每岛至少 1 点）；受限 Voronoi 直线细胞边界（跨 L2 处采用 L2 地区边界，0 地块跨区污染）；同 L2 地区相似色蒙版（区内明度阶梯）。产物 `output/l1/`（labels npy / 相似色预览 / label 直编索引图 / 元数据 JSON）并拷贝至 `config/strategic_map/`
+- **消费端**：L3 战略图（M 键）新增 **V 键**切换 L1 蒙版叠加层（`modules/world_map/scripts/l1_overlay.gd`，加载时把全部地块三角剖分/线段烘焙为静态 ArrayMesh，每帧仅 2 次 draw_mesh 零 CPU 剖分）；新增集成测试 `test_l1_overlay`（2/2 绿），战略图相关 4 套件回归全绿
+- **文档**：08-程序化世界生成.md 增补 §二十一 L3-L；世界地图数据流.md / 编辑器工具索引 / worldgen README / 待办事项同步
+
 ### 架构审计修复（2026-08）：依赖环 + 生命周期清理 + 工具链
 
 - **P0 依赖环**：units→construction 内部类强引用（BehaviorWork/BehaviorHaul 的 ConstructionProject 类型）改为鸭子类型；construction→units 的 Hitbox.CollisionLayer 改为本地常量；combat→units 的 WeaponMount.Mood 改为本地同值枚举；texture_gen 的 white_tex.png 迁入本模块 assets 并修正全部 debug 场景/脚本路径，删除引用 building_gen 归档场景的 smithy_thatch_preview

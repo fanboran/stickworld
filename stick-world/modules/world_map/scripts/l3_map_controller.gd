@@ -15,6 +15,10 @@ class_name L3MapController
 @export var map_renderer: L3MapRenderer
 @export var map_camera: MapCamera
 
+## L1 蒙版叠加层（L3MapRenderer 子节点，V 键切换显示）
+var _l1_overlay: L1Overlay = null
+const L1_OVERLAY_PATH := "res://config/strategic_map/l1_data.json"
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放状态）
 var _view_initialized: bool = false
 
@@ -42,6 +46,12 @@ func _auto_find_components() -> void:
 			map_renderer = child
 		elif child is MapCamera and map_camera == null:
 			map_camera = child
+	# L1 蒙版叠加层：L3MapRenderer 的子节点（同一相机变换空间）
+	if _l1_overlay == null and map_renderer != null:
+		for child in map_renderer.get_children():
+			if child is L1Overlay:
+				_l1_overlay = child
+				break
 
 
 func _input(event: InputEvent) -> void:
@@ -52,11 +62,24 @@ func _input(event: InputEvent) -> void:
 		if key.keycode == KEY_ESCAPE:
 			close()
 			get_viewport().set_input_as_handled()
+		elif key.keycode == KEY_V:
+			_toggle_l1_overlay()
+			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		if _try_open_l2_at_screen(event.position):
 			get_viewport().set_input_as_handled()
+
+
+## V 键：切换 L1 蒙版叠加显示（首次开启时懒加载 l1_data.json）
+func _toggle_l1_overlay() -> void:
+	if _l1_overlay == null:
+		return
+	if not _l1_overlay.is_loaded():
+		_l1_overlay.load_overlay(L1_OVERLAY_PATH)
+	_l1_overlay.visible = not _l1_overlay.visible
+	print("[L3Map] L1 蒙版叠加: %s" % ("开" if _l1_overlay.visible else "关"))
 
 
 ## 单击：屏幕坐标 -> 地图坐标 -> 命中地区 -> 下钻 L2

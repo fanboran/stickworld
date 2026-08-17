@@ -25,11 +25,12 @@ tools/worldgen/
 │   ├── export_l3_view.py           # L3 视图素材
 │   ├── export_l1_overview.py       # L1 全图预览
 │   └── update_tiles_coastline.py   # 按 8K 蒙版裁切海岸线
-├── l1/                    # L1 地块合并 / 生成（部分预留）
+├── l1/                    # L1 地块合并 / 生成 / 全大陆 L1 蒙版（活跃）
+│   ├── l1_world_split.py          # 全大陆 L1 地块划分（L3 级蒙版：城市点 + 受限 Voronoi）
 │   ├── merge_tiny_tiles.py
 │   ├── merge_tiles_groups.py
 │   ├── merge_island_tiles.py
-│   ├── l1_worldgen.py              # 预留
+│   ├── l1_worldgen.py              # 预留（起始地区 8 城邦 L1 单层）
 │   └── settlement_mapgen.py        # 预留
 ├── legacy/                # 早期分形生成链（历史留档，被 generate.py 调用）
 │   ├── noise_util.py / landmask.py / mask_utils.py
@@ -44,6 +45,7 @@ tools/worldgen/
     ├── l2_packs/          # L2 图包素材（每地区 mask/base/heightmap/tiles）
     ├── l2_view_packs/     # L2 运行时视图包
     ├── l3_view/           # L3 视图素材
+    ├── l1/                # 全大陆 L1 蒙版（labels/预览/索引图/元数据）
     └── *.png / *.json     # 顶层预览与中间产物
 ```
 

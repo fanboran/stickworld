@@ -18,6 +18,9 @@ var _buttons: VBoxContainer = null
 ## 面板尺寸
 const PANEL_SIZE: Vector2 = Vector2(480, 460)
 
+## 主菜单场景路径（游戏内「回到主菜单」用）
+const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
+
 ## 地图显示名（map_id -> 中文名；未收录的 id 直接显示原始 id）
 const MAP_DISPLAY_NAMES: Dictionary = {
 	"village_a": "村落 A（初始村）",
@@ -76,6 +79,9 @@ func _build_content() -> void:
 	_add_section_title("游戏")
 	_add_speed_buttons()
 	_add_close_button()
+	# 回到主菜单（仅游戏内显示；主菜单里无 game_root）
+	if _game_root != null:
+		_add_return_menu_button()
 	# ── 调试区（仅 debug 构建 + 游戏内显示；主菜单无 game_root，跳过测试地图入口）──
 	if OS.is_debug_build() and _game_root != null:
 		_add_section_title("调试 · 测试地图")
@@ -138,6 +144,25 @@ func _add_close_button() -> void:
 	btn.custom_minimum_size = Vector2(0, 36)
 	btn.pressed.connect(close)
 	_buttons.add_child(btn)
+
+
+## 回到主菜单（保存当前进度后切场景；经确认框防误触）
+func _add_return_menu_button() -> void:
+	var btn := Button.new()
+	btn.text = "保存并回到主菜单"
+	btn.custom_minimum_size = Vector2(0, 36)
+	btn.pressed.connect(func():
+		StickKit.confirm(self, "回到主菜单", "将保存当前进度（槽位 0）并回到主菜单。",
+				_on_return_to_menu_confirmed, "保存并退出")
+	)
+	_buttons.add_child(btn)
+
+
+func _on_return_to_menu_confirmed() -> void:
+	close()
+	if SaveManager and SaveManager.has_method("save_game"):
+		SaveManager.save_game(0)
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
 ## 调试地图选择按钮：travel 到目标地图（等效原主页菜单测试场景入口）

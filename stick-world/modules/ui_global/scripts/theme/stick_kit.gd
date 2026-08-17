@@ -107,6 +107,55 @@ static func field_row(parent: Control, name_text: String, hint_text: String = ""
 	return h
 
 
+# ─────────────────────────────── 布局约束（摆放 UI 的唯一正确姿势）────────────────────────────────
+
+## 屏幕四角
+enum Corner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
+
+## 把面板居中到父节点中央（anchor 方案，不手写 viewport 计算，不受窗口尺寸影响）。
+## 要求父节点是全屏容器（FULL_RECT）。固定尺寸居中：
+static func center_on_screen(panel: Control, size: Vector2) -> void:
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.offset_left = -size.x * 0.5
+	panel.offset_right = size.x * 0.5
+	panel.offset_top = -size.y * 0.5
+	panel.offset_bottom = size.y * 0.5
+
+
+## 把控件停靠到屏幕某角，自动留 SCREEN_MARGIN 安全边距（禁止贴边）。
+## 要求父节点是全屏容器（FULL_RECT）。
+static func dock(node: Control, corner: Corner, size: Vector2,
+		margin: float = StickTokens.SCREEN_MARGIN) -> void:
+	match corner:
+		Corner.TOP_LEFT:
+			node.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			node.offset_left = margin
+			node.offset_top = margin
+			node.offset_right = margin + size.x
+			node.offset_bottom = margin + size.y
+		Corner.TOP_RIGHT:
+			node.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			node.offset_left = -margin - size.x
+			node.offset_top = margin
+			node.offset_right = -margin
+			node.offset_bottom = margin + size.y
+		Corner.BOTTOM_LEFT:
+			node.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+			node.offset_left = margin
+			node.offset_top = -margin - size.y
+			node.offset_right = margin + size.x
+			node.offset_bottom = -margin
+		Corner.BOTTOM_RIGHT:
+			node.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+			node.offset_left = -margin - size.x
+			node.offset_top = -margin - size.y
+			node.offset_right = -margin
+			node.offset_bottom = -margin
+	node.custom_minimum_size = size
+
+
 # ─────────────────────────────── Toast ────────────────────────────────
 
 ## 在指定层弹一条 toast（自动淡出销毁）。anchor 底部居中。
@@ -148,9 +197,14 @@ static func confirm(layer: Control, title: String, message: String,
 	window.add_theme_stylebox_override("panel", StickStyle.window_panel())
 	window.custom_minimum_size = Vector2(360, 0)
 	dim.add_child(window)
+	# 确定性居中（anchor + 半尺寸 offset，不依赖时序）
 	window.set_anchors_preset(Control.PRESET_CENTER)
 	window.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	window.grow_vertical = Control.GROW_DIRECTION_BOTH
+	window.resized.connect(func():
+		if is_instance_valid(window):
+			window.position = -window.size * 0.5
+	)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	window.add_child(box)
@@ -168,7 +222,3 @@ static func confirm(layer: Control, title: String, message: String,
 		if on_confirm.is_valid():
 			on_confirm.call()
 	, kind)
-	window.resized.connect(func():
-		if is_instance_valid(window):
-			window.position = -window.size * 0.5
-	)

@@ -106,8 +106,16 @@ func _on_game_loaded(slot_index: int) -> void:
 		var rows: Array = db.select_rows("save_meta", "slot_id = %d" % slot_index, ["current_map_id"])
 		if not rows.is_empty():
 			_root._cached_load_map_id = str(rows[0].get("current_map_id", ""))
-	if not _root._cached_load_map_id.is_empty():
-		call_deferred("_load_map_for_save")
+	# 兜底：存档缺地图信息（空档/损坏档/无图状态下存的档）时回退新游戏开局，
+	# 绝不能不加载地图（否则黑屏只剩 UI）
+	if _root._cached_load_map_id.is_empty():
+		push_warning("[SaveHandler] 存档槽位 %d 无地图信息，回退新游戏开局" % slot_index)
+		_root._pending_save_load = false
+		_root._cached_load_map_id = _root.VILLAGE_A_MAP_ID
+		# 无恢复流程，立即关闭 DB（不等 _load_guard 30s 超时）
+		if SaveManager and SaveManager.has_method("end_load"):
+			SaveManager.end_load()
+	call_deferred("_load_map_for_save")
 
 
 ## 外部调用：启动读档流程
@@ -160,6 +168,22 @@ func _restore_from_save(map: Node2D, map_id: String) -> void:
 		_root.camera_rig.set_map_bounds(map.map_left, map.map_right)
 	if _root._minimap != null and _root._minimap.has_method("set_map_info"):
 		_root._minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
+	# 7. 兜底：恢复后无玩家实体（实体表空/损坏）→ 生成默认玩家，保证可操作
+	if _root.get_player_entity() == null:
+		push_warning("[SaveHandler] 存档无玩家实体，生成默认玩家兜底")
+		var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
+		var player: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(0.0, spawn_y))
+		if player != null:
+			if player.get("foot_offset") != null:
+				player.global_position.y = spawn_y - player.foot_offset
+			if player.has_method("set_possessed"):
+				player.set_possessed(true)
+			if player.has_method("set_construction_manager") and _root._construction_api != null:
+				player.set_construction_manager(_root._construction_api)
+			if player.has_method("set_formation_system") and _root._formation_system != null:
+				player.set_formation_system(_root._formation_system)
+			if _root.camera_rig != null and _root.camera_rig.has_method("set_follow_target"):
+				_root.camera_rig.set_follow_target(player)
 	# 关闭 DB
 	if SaveManager and SaveManager.has_method("end_load"):
 		SaveManager.end_load()

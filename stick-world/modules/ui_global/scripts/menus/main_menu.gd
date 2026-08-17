@@ -46,8 +46,10 @@ func _ready() -> void:
 func _build_title() -> void:
 	var title := StickKit.label(_menu_column, "火柴人帝国模拟", StickKit.LabelKind.TITLE)
 	title.add_theme_font_size_override("font_size", StickTokens.FONT_DISPLAY)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var subtitle := StickKit.label(_menu_column, "从部落到大帝国 · 亲手设计，看它自转", StickKit.LabelKind.HINT)
 	subtitle.add_theme_color_override("font_color", StickTokens.TEXT_DIM)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 24)
 	_menu_column.add_child(spacer)

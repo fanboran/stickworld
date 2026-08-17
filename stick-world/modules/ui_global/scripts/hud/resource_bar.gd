@@ -37,7 +37,7 @@ func setup(resources_api: Node) -> void:
 # ─────────────────────────────── UI 构建 ────────────────────────────────
 
 func _build_ui() -> void:
-	# 父 Control 的位置/范围由 ui_root.tscn 预置节点配置（编辑器可见可调）
+	# 父 Control 的位置/范围由 resource_bar.tscn 预置（顶栏下方横条，编辑器可见可调）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# 背景半透明（铺满父 Control）
 	var bg := ColorRect.new()
@@ -45,21 +45,22 @@ func _build_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
-	# 资源条目竖直排列（适配窄高竖条布局）
-	var vbox := VBoxContainer.new()
-	vbox.name = "VBox"
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 8)
-	add_child(vbox)
+	# 资源条目水平排列（顶栏下方横条）
+	var hbox := HBoxContainer.new()
+	hbox.name = "HBox"
+	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 16)
+	add_child(hbox)
 	# 每种资源一个条目（色块+名称+数量 水平排列）
 	for res in _DISPLAY_RESOURCES:
 		var entry := HBoxContainer.new()
 		entry.add_theme_constant_override("separation", 6)
+		entry.alignment = BoxContainer.ALIGNMENT_CENTER
 		# 色块图标
 		var icon := ColorRect.new()
 		icon.color = res["color"]
-		icon.custom_minimum_size = Vector2(16, 16)
+		icon.custom_minimum_size = Vector2(14, 14)
 		entry.add_child(icon)
 		_icons[res["id"]] = icon
 		# 名称
@@ -74,7 +75,7 @@ func _build_ui() -> void:
 		qty_lbl.add_theme_color_override("font_color", Color.WHITE)
 		entry.add_child(qty_lbl)
 		_labels[res["id"]] = qty_lbl
-		vbox.add_child(entry)
+		hbox.add_child(entry)
 
 
 # ─────────────────────────────── 信号连接 ────────────────────────────────

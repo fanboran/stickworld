@@ -3,11 +3,11 @@ extends CanvasLayer
 ## UI 根容器 —— 三层 UI 的总装。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §十。
-## 子节点结构：
-##   GlobalHUD       (Control)
-##   ModePanel       (Control)
-##   ContextPanel    (Control)
-##   ModalOverlay    (Control)
+## 子节点结构（z 从低到高）：
+##   GlobalHUD / ModePanel / ContextPanel / ResourceBar / HudOverlay
+##   ModalOverlay（z=50，模态遮罩盖住全部 UI） / UiInspector（z=100，F3 调试）
+
+const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scripts/debug_ui_inspector.gd")
 
 # UIAPI / PlayerControlAPI 是全局 class_name，无需 preload
 
@@ -23,6 +23,16 @@ extends CanvasLayer
 func _ready() -> void:
 	_bind_event_bus()
 	_apply_theme()
+	_setup_ui_inspector()
+
+
+## F3 调试模式 UI 名称检查器（挂最上层，DebugApi 可见时生效）
+func _setup_ui_inspector() -> void:
+	var inspector := Control.new()
+	inspector.set_script(_DebugUiInspectorScript)
+	inspector.name = "UiInspector"
+	inspector.z_index = 100
+	add_child(inspector)
 
 
 ## 由 SystemSetup 装配时调用，注入 InputDispatcher（不自行向上遍历查找）。

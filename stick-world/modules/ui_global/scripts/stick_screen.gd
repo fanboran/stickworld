@@ -29,6 +29,9 @@ var _body: VBoxContainer = null
 ## 底栏（子类往这里加动作按钮，右对齐）
 var _footer: HBoxContainer = null
 
+## 打开前的时间速度（用于 close 时恢复；打开时若已暂停则无需恢复）
+var _prev_speed: int = -1
+
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
@@ -88,11 +91,22 @@ func open() -> void:
 	_panel.offset_top = -panel_size.y * 0.5
 	_panel.offset_right = panel_size.x * 0.5
 	_panel.offset_bottom = panel_size.y * 0.5
+	# 模态打开自动暂停（世界/玩家/缩放/悬停反馈全部冻结；close 恢复原速度）
+	if TimeManager:
+		if TimeManager.is_paused():
+			_prev_speed = -1
+		else:
+			_prev_speed = TimeManager.current_speed
+			TimeManager.set_speed(TimeManager.Speed.PAUSED)
 	visible = true
 
 
 func close() -> void:
 	visible = false
+	# 只恢复"由本面板打开的暂停"（嵌套模态时由最外层恢复）
+	if _prev_speed >= 0 and TimeManager and TimeManager.is_paused():
+		TimeManager.set_speed(_prev_speed)
+	_prev_speed = -1
 
 
 func toggle() -> void:

@@ -33,6 +33,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_breath_time += delta
 	size = get_viewport_rect().size
+	# 模态/暂停时（时间冻结）不显示悬停反馈，避免反馈漏过遮罩层
+	if TimeManager and TimeManager.is_paused():
+		_hovered_entity = null
+		_hovered_range = null
+		queue_redraw()
+		return
 	_update_hovered()
 	queue_redraw()
 

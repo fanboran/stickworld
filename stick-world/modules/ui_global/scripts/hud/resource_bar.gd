@@ -39,14 +39,7 @@ func setup(resources_api: Node) -> void:
 func _build_ui() -> void:
 	# 父 Control 的位置/范围由 resource_bar.tscn 预置（顶栏下方横条，编辑器可见可调）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# 背景：黑玻璃横条（与顶栏同质感，PanelContainer + StickStyle）
-	var bg := PanelContainer.new()
-	bg.name = "Background"
-	bg.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
-	# 资源条目水平排列（顶栏下方横条）
+	# 无背景框：资源条紧贴顶栏之下，用顶栏同字号，视觉上是顶栏的延伸而非独立方框
 	var hbox := HBoxContainer.new()
 	hbox.name = "HBox"
 	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)

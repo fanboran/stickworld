@@ -28,6 +28,7 @@ const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/comm
 const _BattlePanelScript: GDScript = preload("res://modules/combat/ui/battle_panel.gd")
 const _FormationPanelScript: GDScript = preload("res://modules/combat/ui/formation_panel.gd")
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
+const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
@@ -66,6 +67,7 @@ func setup(root: GameRoot) -> void:
 	_setup_battle_panel()
 	_setup_formation_panel()
 	_setup_settings_menu_panel()
+	_setup_pause_menu_panel()
 	_setup_minimap()
 	_setup_zoom_bar()
 	_setup_possession_interface()
@@ -340,6 +342,26 @@ func _setup_settings_menu_panel_deferred() -> void:
 		return
 	if _root._settings_menu_panel.has_method("setup"):
 		_root._settings_menu_panel.setup(_root)
+
+
+# ─────────────────────────────── 暂停菜单装配（ESC 打开）────────────────────────────────
+
+## 实例化 PauseMenuPanel 并挂到 UIRoot.ModalOverlay 槽（全屏 UI 根走 UIKit.full_rect）。
+func _setup_pause_menu_panel() -> void:
+	if _root.ui_root == null:
+		return
+	var pp := UIKit.full_rect(_PauseMenuPanelScript, "PauseMenuPanel")
+	if not _root.ui_root.add_to_slot("ModalOverlay", pp):
+		return
+	_root._pause_menu_panel = pp
+	call_deferred("_setup_pause_menu_panel_deferred")
+
+
+func _setup_pause_menu_panel_deferred() -> void:
+	if _root._pause_menu_panel == null:
+		return
+	if _root._pause_menu_panel.has_method("setup"):
+		_root._pause_menu_panel.setup(_root)
 
 
 # ─────────────────────────────── 小地图装配（§15 阶段 0.6）────────────────────────────────

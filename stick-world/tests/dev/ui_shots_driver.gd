@@ -60,6 +60,14 @@ func run() -> void:
 		get_tree().change_scene_to_file(GAME_ROOT_SCENE)
 		await _wait_world()
 		await _shot("07_continue_restored")
+	# ── 暂停菜单（ESC 语义 + 模态遮罩应盖住右下建造按钮）──
+	var gr2 := get_tree().current_scene
+	if gr2 != null and gr2.has_method("_handle_escape"):
+		gr2._handle_escape()
+		await _frames(5)
+		await _shot("11_pause_menu")
+		gr2._handle_escape()
+		await _frames(2)
 	# ── 占位界面预览 ──
 	var preview: Control = (load(
 			"res://modules/ui_placeholder/scenes/ui_placeholder_preview.tscn") as PackedScene).instantiate()

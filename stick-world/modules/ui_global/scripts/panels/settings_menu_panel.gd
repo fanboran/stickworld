@@ -38,24 +38,13 @@ func setup(game_root: Node) -> void:
 	_build_screen()
 
 
-# ─────────────────────────────── 输入（ESC 开关）────────────────────────────────
-
-## ESC 打开/关闭设置菜单。附身模式（POSSESS）下 ESC 保留给"退出附身"。
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		if _game_root != null and _game_root.input_dispatcher != null:
-			if _game_root.input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS:
-				return
-		toggle()
-		get_viewport().set_input_as_handled()
-
-
 # ─────────────────────────────── UI 构建（统一骨架 + schema 驱动）────────────────────────────────
 
 ## 构建面板内容：左分类列 + 右内容区（Container 布局）
 func _build_content() -> void:
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 12)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_body.add_child(body)
 	# 左：分类列
 	_category_column = VBoxContainer.new()
@@ -63,9 +52,10 @@ func _build_content() -> void:
 	_category_column.add_theme_constant_override("separation", 4)
 	body.add_child(_category_column)
 	body.add_child(VSeparator.new())
-	# 右：滚动内容区
+	# 右：滚动内容区（撑满剩余高度）
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(scroll)
 	_content_vbox = VBoxContainer.new()
 	_content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL

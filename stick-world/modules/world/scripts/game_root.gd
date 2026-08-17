@@ -150,6 +150,8 @@ var _build_menu: Control = null
 var _formation_panel: Control = null
 ## 设置菜单（运行时由 SystemSetup 装配到 UIRoot，齿轮/ESC 打开）
 var _settings_menu_panel: Control = null
+## 暂停菜单（运行时由 SystemSetup 装配到 UIRoot，ESC 打开；ESC 语义统一在 GameRoot 处理）
+var _pause_menu_panel: Control = null
 
 # ─────────────────────────────── 存档系统（SaveHandler 跨脚本读写，故加忽略）────────────────────────────────
 ## 是否有存档待加载（读档入口标记）
@@ -323,10 +325,15 @@ func get_settings_menu_panel() -> Control:
 	return _settings_menu_panel
 
 
-## 打开/关闭设置菜单（左上角齿轮按钮 / ESC 键调用）
+## 打开/关闭设置菜单（左上角齿轮按钮 / 暂停菜单「设置」调用）
 func toggle_settings_menu() -> void:
 	if _settings_menu_panel != null and _settings_menu_panel.has_method("toggle"):
 		_settings_menu_panel.toggle()
+
+
+## 获取暂停菜单引用（供测试/装配）
+func get_pause_menu_panel() -> Control:
+	return _pause_menu_panel
 
 
 ## 启动一场测试战斗（供遭遇战/测试调用）。
@@ -669,3 +676,22 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif ek.keycode == KEY_S and (ek.ctrl_pressed or ek.meta_pressed):
 		toggle_save_panel()
 		get_viewport().set_input_as_handled()
+	# ESC：统一模态/暂停菜单栈控制（见 _handle_escape）
+	elif ek.keycode == KEY_ESCAPE:
+		if _handle_escape():
+			get_viewport().set_input_as_handled()
+
+
+## ESC 语义（模态栈逐层关闭）：设置开着→关设置；暂停菜单开着→关暂停；
+## 都没开→开暂停菜单。附身模式返回 false（ESC 留给退出附身，不消费）。
+## 返回是否已消费事件。
+func _handle_escape() -> bool:
+	if input_dispatcher != null and input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS:
+		return false
+	if _settings_menu_panel != null and _settings_menu_panel.is_open():
+		_settings_menu_panel.close()
+	elif _pause_menu_panel != null and _pause_menu_panel.is_open():
+		_pause_menu_panel.close()
+	elif _pause_menu_panel != null:
+		_pause_menu_panel.open()
+	return true

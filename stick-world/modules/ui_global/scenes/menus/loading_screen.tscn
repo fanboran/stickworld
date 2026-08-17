@@ -1,0 +1,57 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modules/ui_global/scripts/menus/loading_screen.gd" id="1_loading"]
+
+[node name="LoadingScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_loading")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.012, 0.016, 1)
+
+[node name="CenterBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -80.0
+offset_right = 220.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 18
+
+[node name="TitleLabel" type="Label" parent="CenterBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "火柴人帝国模拟"
+
+[node name="SubtitleLabel" type="Label" parent="CenterBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "正在进入世界…"
+
+[node name="ProgressBar" type="ProgressBar" parent="CenterBox"]
+custom_minimum_size = Vector2(440, 10)
+layout_mode = 2
+value = 0.0
+show_percentage = false
+
+[node name="TipLabel" type="Label" parent="CenterBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "提示：空格暂停 · 1/2/3 调速 · Tab 战略图"

@@ -11,6 +11,7 @@ extends Node
 const SHOT_DIR := "user://shots"
 const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 const GAME_ROOT_SCENE := "res://modules/world/scenes/game_root.tscn"
+const LOADING_SCENE := "res://modules/ui_global/scenes/menus/loading_screen.tscn"
 
 
 func run() -> void:
@@ -39,10 +40,15 @@ func run() -> void:
 	await _shot("04_menu_confirm")
 	menu.queue_free()
 	await _frames(3)
-	# ── 继续游戏·坏档兜底 ──
+	# ── 载入屏（主菜单→游戏 过渡）──
+	await _frames(3)
+	SaveManager.boot_load_slot = 0
+	get_tree().change_scene_to_file(LOADING_SCENE)
+	await _frames(12)
+	await _shot("04_loading")
+	await _frames(125)  # 载入屏约 2s 后切 game_root
+	# ── 继续游戏·坏档兜底（载入屏结束后进 game_root）──
 	if SaveManager and SaveManager.slot_exists(0):
-		SaveManager.boot_load_slot = 0
-		get_tree().change_scene_to_file(GAME_ROOT_SCENE)
 		await _wait_world()
 		await _shot("05_continue_fallback")
 	# ── 游戏内设置面板 ──

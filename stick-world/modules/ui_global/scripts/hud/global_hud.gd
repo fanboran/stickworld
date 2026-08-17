@@ -1,18 +1,23 @@
 class_name GlobalHUD
 extends Control
-## 全局 HUD —— 顶层常驻 UI。
+## 全局 HUD —— 顶层常驻 UI（统一顶栏通栏）。
 ##
-## P0 阶段显示：时间速度、暂停状态、通知文本。
-## 后续扩展：资源数、人口、坐标、调试信息。
+## 顶栏一段式通栏（黑玻璃背景）：左=速度/时间，中=资源条（ResourceBar 内嵌），右=系统按钮。
+## 资源条由 attach_resources 注入（SystemSetup 在资源系统装配后调用）。
+
+const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/resource_bar.gd")
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
-@onready var speed_label: Label = get_node_or_null("MarginContainer/HBoxContainer/SpeedLabel")
-@onready var time_label: Label = get_node_or_null("MarginContainer/HBoxContainer/TimeLabel")
+@onready var speed_label: Label = get_node_or_null("LeftBar/LeftHBox/SpeedLabel")
+@onready var time_label: Label = get_node_or_null("LeftBar/LeftHBox/TimeLabel")
 @onready var notification_label: Label = get_node_or_null("NotificationLabel")
-@onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
-@onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
-@onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
-@onready var settings_button: Button = get_node_or_null("MarginContainer/HBoxContainer/SettingsButton")
+@onready var centered_button: Button = get_node_or_null("RightBar/RightHBox/CenteredButton")
+@onready var stuck_button: Button = get_node_or_null("RightBar/RightHBox/StuckButton")
+@onready var formation_button: Button = get_node_or_null("RightBar/RightHBox/FormationButton")
+@onready var settings_button: Button = get_node_or_null("RightBar/RightHBox/SettingsButton")
+@onready var _left_bar: PanelContainer = get_node_or_null("LeftBar")
+@onready var _center_bar: PanelContainer = get_node_or_null("CenterBar")
+@onready var _right_bar: PanelContainer = get_node_or_null("RightBar")
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -23,13 +28,30 @@ func setup(camera_rig: Node, game_root: Node) -> void:
 	_game_root = game_root
 
 
+## 注入资源条（SystemSetup 在资源系统装配后调用）：材料显示挂进顶栏中块。
+## 返回资源条实例（供装配方存引用），失败返回 null。
+func attach_resources(resources_api: Node) -> Control:
+	if _resource_bar != null or resources_api == null:
+		return _resource_bar
+	_resource_bar = _ResourceBarScript.new()
+	_resource_bar.name = "ResourceBar"
+	if _center_bar == null:
+		_resource_bar.queue_free()
+		_resource_bar = null
+		return null
+	_center_bar.add_child(_resource_bar)
+	if _resource_bar.has_method("setup"):
+		_resource_bar.setup(resources_api)
+	return _resource_bar
+
+
 func _ready() -> void:
 	_bind_event_bus()
 	_update_speed_display()
-	# 顶栏背景：黑玻璃通栏（统一质感，见 StickStyle.window_panel_light）
-	var top_bar_bg := get_node_or_null("TopBarBG")
-	if top_bar_bg:
-		top_bar_bg.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	# 顶栏三块：黑玻璃面板（左=速度/时间，中=材料，右=系统按钮）
+	for bar in [_left_bar, _center_bar, _right_bar]:
+		if bar != null:
+			bar.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	if centered_button != null:
 		centered_button.pressed.connect(_on_centered_button_pressed)
 		_update_centered_button_text()
@@ -129,6 +151,8 @@ func show_notification(title: String, body: String, level: String) -> void:
 
 var _camera_rig: Node = null
 var _game_root: Node = null
+## 顶栏内嵌资源条（attach_resources 注入）
+var _resource_bar: Control = null
 
 
 func _on_centered_button_pressed() -> void:

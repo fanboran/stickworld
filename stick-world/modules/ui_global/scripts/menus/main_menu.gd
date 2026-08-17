@@ -16,6 +16,8 @@ extends Control
 ## 传递给 GameRoot（GameRoot 启动时消费并复位）。
 
 const GAME_ROOT_SCENE := "res://modules/world/scenes/game_root.tscn"
+## 载入屏（主菜单 → 游戏 的过渡画面）
+const LOADING_SCENE := "res://modules/ui_global/scenes/menus/loading_screen.tscn"
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
 
 ## 菜单项数据：id / 文案 / 视觉档位
@@ -76,7 +78,7 @@ func _on_menu_pressed(item: Dictionary) -> void:
 	match item["id"]:
 		"new_game":
 			StickKit.confirm(self, "新游戏", "将建立一个全新的帝国，当前进度不会自动保存。确定开始吗？",
-					func(): get_tree().change_scene_to_file(GAME_ROOT_SCENE))
+					_start_new_game)
 		"quit":
 			StickKit.confirm(self, "退出游戏", "确定要退出吗？未保存的进度将丢失。",
 					func(): get_tree().quit(), "退出", StickKit.ButtonKind.DANGER)
@@ -88,11 +90,18 @@ func _on_menu_pressed(item: Dictionary) -> void:
 			_open_settings_panel()
 
 
-## 启动读档：设置 boot_load_slot 后切换 game_root（GameRoot 启动时消费）
+## 启动新游戏：清读档意图 → 载入屏 → game_root
+func _start_new_game() -> void:
+	if SaveManager:
+		SaveManager.boot_load_slot = -1
+	get_tree().change_scene_to_file(LOADING_SCENE)
+
+
+## 启动读档：设置 boot_load_slot 后经载入屏切 game_root（GameRoot 启动时消费）
 func _boot_load(slot: int) -> void:
 	if SaveManager:
 		SaveManager.boot_load_slot = slot
-	get_tree().change_scene_to_file(GAME_ROOT_SCENE)
+	get_tree().change_scene_to_file(LOADING_SCENE)
 
 
 # ─────────────────────────────── 读档面板 ────────────────────────────────

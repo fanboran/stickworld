@@ -1,9 +1,8 @@
 class_name ResourceBar
-extends Control
-## 资源条 UI -- 顶部常驻显示 P0 三种资源（木头/石头/铁）。
+extends HBoxContainer
+## 资源条组件 —— 顶栏内嵌的材料显示（挂 GlobalHUD 顶栏 HBox 中段）。
 ##
-## 详见 docs/项目/P0收口执行计划.md 阶段 E 任务 E2。
-## 由 GameRoot 在 _ready 中 set_script 装配，随后调用 setup(resources_api)。
+## 不画背景框：由顶栏通栏背景承载，本组件只显示"图标 名称 数量"条目。
 ## 监听 ResourcesApi.resource_changed 信号实时刷新；扣减时数量变红闪烁 0.5s。
 
 # ─────────────────────────────── 引用 ────────────────────────────────
@@ -26,7 +25,7 @@ var _icons: Dictionary = {}
 
 # ─────────────────────────────── 装配 ────────────────────────────────
 
-## 由 GameRoot 调用，注入 ResourcesApi 引用并构建 UI。
+## 由 GlobalHUD.attach_resources 调用，注入 ResourcesApi 并构建 UI。
 func setup(resources_api: Node) -> void:
 	_resources_api = resources_api
 	_build_ui()
@@ -37,15 +36,8 @@ func setup(resources_api: Node) -> void:
 # ─────────────────────────────── UI 构建 ────────────────────────────────
 
 func _build_ui() -> void:
-	# 父 Control 的位置/范围由 resource_bar.tscn 预置（顶栏下方横条，编辑器可见可调）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# 无背景框：资源条紧贴顶栏之下，用顶栏同字号，视觉上是顶栏的延伸而非独立方框
-	var hbox := HBoxContainer.new()
-	hbox.name = "HBox"
-	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	hbox.add_theme_constant_override("separation", 16)
-	add_child(hbox)
+	add_theme_constant_override("separation", 16)
 	# 每种资源一个条目（色块+名称+数量 水平排列）
 	for res in _DISPLAY_RESOURCES:
 		var entry := HBoxContainer.new()
@@ -69,7 +61,7 @@ func _build_ui() -> void:
 		qty_lbl.add_theme_color_override("font_color", Color.WHITE)
 		entry.add_child(qty_lbl)
 		_labels[res["id"]] = qty_lbl
-		hbox.add_child(entry)
+		add_child(entry)
 
 
 # ─────────────────────────────── 信号连接 ────────────────────────────────

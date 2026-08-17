@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" uid="uid://bhvemj6s8akro" path="res://modules/ui_global/scripts/hud/global_hud.gd" id="2_hud"]
 [ext_resource type="Script" uid="uid://cn4f70s21pher" path="res://modules/ui_global/scripts/hud/clock_widget.gd" id="5_clock"]
@@ -12,54 +12,70 @@ grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("2_hud")
 
-[node name="TopBarBG" type="PanelContainer" parent="." unique_id=926316730]
+[node name="LeftBar" type="PanelContainer" parent="." unique_id=926316731]
 layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_bottom = 40.0
-grow_horizontal = 2
-grow_vertical = 0
+anchors_preset = 0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 340.0
+offset_bottom = 48.0
 mouse_filter = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="." unique_id=926316729]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_bottom = 40.0
-grow_horizontal = 2
-grow_vertical = 0
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 8
-
-[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1940854214]
+[node name="LeftHBox" type="HBoxContainer" parent="LeftBar"]
 layout_mode = 2
 theme_override_constants/separation = 24
 
-[node name="SpeedLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=1073199118]
+[node name="SpeedLabel" type="Label" parent="LeftBar/LeftHBox"]
 layout_mode = 2
 text = "速度: 1x"
 
-[node name="SettingsButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787555]
-layout_mode = 2
-text = "⚙"
-
-[node name="TimeLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=238169416]
+[node name="TimeLabel" type="Label" parent="LeftBar/LeftHBox"]
 layout_mode = 2
 text = "时间: 08:00"
 
-[node name="CenteredButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787552]
+[node name="CenterBar" type="PanelContainer" parent="." unique_id=926316732]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -150.0
+offset_top = 8.0
+offset_right = 150.0
+offset_bottom = 48.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="RightBar" type="PanelContainer" parent="." unique_id=926316733]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -360.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 48.0
+grow_horizontal = 0
+mouse_filter = 2
+
+[node name="RightHBox" type="HBoxContainer" parent="RightBar"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CenteredButton" type="Button" parent="RightBar/RightHBox"]
 layout_mode = 2
 text = "居中: 关"
 
-[node name="StuckButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787553]
+[node name="StuckButton" type="Button" parent="RightBar/RightHBox"]
 layout_mode = 2
 text = "脱困(H)"
 
-[node name="FormationButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787554]
+[node name="FormationButton" type="Button" parent="RightBar/RightHBox"]
 layout_mode = 2
 text = "编制"
+
+[node name="SettingsButton" type="Button" parent="RightBar/RightHBox"]
+layout_mode = 2
+text = "⚙"
 
 [node name="NotificationLabel" type="Label" parent="." unique_id=1766089372]
 layout_mode = 1

@@ -42,7 +42,6 @@ const _StrategicMapL2Scene: PackedScene = preload("res://modules/world_map/scene
 const _PossessionIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/possession_indicator.gd")
 const _HoverIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/hover_indicator.gd")
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/scripts/indicators/middle_scroll_overlay.gd")
-const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/resource_bar.gd")
 const _BuildMenuScript: GDScript = preload("res://modules/construction/ui/build_menu.gd")
 const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_root.tscn")
 const _DebugOverlayScene: PackedScene = preload("res://modules/debug_GUI/scenes/debug_overlay.tscn")
@@ -75,7 +74,6 @@ func setup(root: GameRoot) -> void:
 	_register_explore_handler()
 	_setup_boundary_detector()
 	_setup_game_ui()
-	_setup_resource_bar()
 	_setup_build_menu()
 
 
@@ -194,6 +192,19 @@ func _setup_resources_api_deferred() -> void:
 	# 阶段 E：给玩家初始资源（P0 简化，资源不持久化，每次启动重置）
 	# produce 到 "test_region"（与建造扣减 region 一致），资源条显示全局总量
 	_grant_initial_resources()
+	# 资源条并入顶栏（GlobalHUD 中块），不再单独挂 HudOverlay
+	_attach_resource_bar_to_hud()
+
+
+## 把资源条注入 GlobalHUD 顶栏中块（跨模块经 UIRoot 路径，非直接 get_node）
+func _attach_resource_bar_to_hud() -> void:
+	if _root.ui_root == null:
+		return
+	var hud := _root.ui_root.get_node_or_null(UIAPI.PATH_GLOBAL_HUD)
+	if hud != null and hud.has_method("attach_resources"):
+		var rb: Control = hud.attach_resources(_root._resources_api)
+		if rb != null:
+			_root._resource_bar = rb
 
 
 ## P0 初始资源：木材 300 / 石料 300 / 铁矿 100（足够建造兵营 + 几段城墙）
@@ -597,36 +608,7 @@ func _setup_game_ui() -> void:
 		_root.add_child(_root._middle_scroll_overlay)
 
 
-# ─────────────────────────────── 阶段 E：资源条 / 建造菜单装配 ────────────────────────────────
-
-## 实例化资源条并挂到 UIRoot，延迟 setup 等 ResourcesApi 就绪。
-func _setup_resource_bar() -> void:
-	# 优先从 ui_root.tscn 预置节点挂载（编辑器可见位置/范围）
-	if _root.ui_root != null:
-		var rb: Control = _root.ui_root.get_node_or_null("ResourceBar")
-		if rb != null:
-			rb.set_script(_ResourceBarScript)
-			_root._resource_bar = rb
-			call_deferred("_setup_resource_bar_deferred")
-			return
-	# 回退：代码创建（挂 HudOverlay 槽，使脚本内 FULL_RECT 子控件拿到视口尺寸）
-	_root._resource_bar = Control.new()
-	_root._resource_bar.set_script(_ResourceBarScript)
-	_root._resource_bar.name = "ResourceBar"
-	_root._resource_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if _root.ui_root != null:
-		_root.ui_root.add_to_slot("HudOverlay", _root._resource_bar)
-	else:
-		_root.add_child(_root._resource_bar)
-	call_deferred("_setup_resource_bar_deferred")
-
-
-func _setup_resource_bar_deferred() -> void:
-	if _root._resource_bar == null or _root._resources_api == null:
-		return
-	if _root._resource_bar.has_method("setup"):
-		_root._resource_bar.setup(_root._resources_api)
-
+# ─────────────────────────────── 阶段 E：建造菜单装配 ────────────────────────────────
 
 ## 实例化建造菜单并挂到 UIRoot，延迟 setup 等 ConstructionManager 就绪。
 func _setup_build_menu() -> void:

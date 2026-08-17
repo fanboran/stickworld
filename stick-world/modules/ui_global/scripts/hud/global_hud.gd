@@ -26,6 +26,10 @@ func setup(camera_rig: Node, game_root: Node) -> void:
 func _ready() -> void:
 	_bind_event_bus()
 	_update_speed_display()
+	# 顶栏背景：黑玻璃通栏（统一质感，见 StickStyle.window_panel_light）
+	var top_bar_bg := get_node_or_null("TopBarBG")
+	if top_bar_bg:
+		top_bar_bg.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	if centered_button != null:
 		centered_button.pressed.connect(_on_centered_button_pressed)
 		_update_centered_button_text()

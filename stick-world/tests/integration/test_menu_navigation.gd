@@ -108,12 +108,9 @@ func _test_settings_debug_buttons() -> void:
 		return
 	if _helper.game_root.has_method("toggle_settings_menu"):
 		_helper.game_root.toggle_settings_menu()
-	var buttons: Node = panel.get("_buttons")
-	_runner.assert_true(buttons != null, "应有按钮容器")
-	if buttons == null:
-		return
 	var map_btn_count: int = 0
-	for child in buttons.get_children():
+	# 遍历面板全部后代找"前往 xxx"按钮（不依赖内部容器变量，结构解耦）
+	for child in panel.find_children("", "Button", true, false):
 		if child is Button and child.text.begins_with("前往"):
 			map_btn_count += 1
 	_runner.assert_true(map_btn_count >= 4, "调试区应有地图选择按钮（≥4），实际 %d" % map_btn_count)

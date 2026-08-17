@@ -39,9 +39,10 @@ func setup(resources_api: Node) -> void:
 func _build_ui() -> void:
 	# 父 Control 的位置/范围由 resource_bar.tscn 预置（顶栏下方横条，编辑器可见可调）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# 背景半透明（铺满父 Control）
-	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.45)
+	# 背景：黑玻璃横条（与顶栏同质感，PanelContainer + StickStyle）
+	var bg := PanelContainer.new()
+	bg.name = "Background"
+	bg.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)

@@ -22,12 +22,24 @@ extends CanvasLayer
 
 func _ready() -> void:
 	_bind_event_bus()
+	_apply_theme()
 
 
 ## 由 SystemSetup 装配时调用，注入 InputDispatcher（不自行向上遍历查找）。
 func setup(input_dispatcher: Node) -> void:
 	if input_dispatcher != null and input_dispatcher.has_signal("mode_changed"):
 		input_dispatcher.mode_changed.connect(_on_mode_changed)
+
+
+## 挂主题：全 UI 树走 StickTheme（黑玻璃窗 + 琥珀强调）。
+## 主题层在 modules/ui_global/scripts/theme/，模板层提升为正式共享层。
+func _apply_theme() -> void:
+	var t: Theme = StickTheme.create()
+	for slot_name in ["GlobalHUD", "ModePanel", "ContextPanel", "ResourceBar",
+			"ModalOverlay", "HudOverlay"]:
+		var slot := get_node_or_null(slot_name) as Control
+		if slot:
+			slot.theme = t
 
 
 func _bind_event_bus() -> void:

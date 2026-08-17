@@ -43,7 +43,7 @@
 | `workspace_template.tscn` | 工作区预设：军事/科研/工程/行政/商业标签切换 | 04 |
 | `component_gallery.tscn` | 组件展示页：全族控件陈列 + 主题回归自检 | 06 |
 
-主题层（`modules/ui_global/scripts/templates/theme/`）：
+主题层（`modules/ui_global/scripts/theme/`，正式共享基础设施，模板与游戏内 UI 共用）：
 
 | 脚本 | 职责 |
 |------|------|

@@ -11,6 +11,12 @@ const SLOT_COUNT := 5
 
 const PANEL_SIZE: Vector2 = Vector2(640, 480)
 
+## 面板标题（主菜单读档模式改标题）
+var title_text: String = "存档管理"
+
+## 只读模式：隐藏「保存」按钮（主菜单没有游戏世界可存）
+var read_only: bool = false
+
 var _slot_container: VBoxContainer = null
 
 ## 读档回调（由装配方 SaveHandler 注入，替代 group 反查 game_root）
@@ -32,7 +38,7 @@ func _ready() -> void:
 func _build_content() -> void:
 	# 标题
 	var title := Label.new()
-	title.text = "存档管理"
+	title.text = title_text
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", UITheme.FONT_TITLE)
 	title.position = Vector2(0, 10)
@@ -83,12 +89,13 @@ func _create_slot_row(slot: int, info: Dictionary) -> HBoxContainer:
 	label.custom_minimum_size = Vector2(380, 0)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hbox.add_child(label)
-	# 保存按钮
-	var btn_save := Button.new()
-	btn_save.text = "保存"
-	btn_save.custom_minimum_size = Vector2(60, 32)
-	btn_save.pressed.connect(_on_save.bind(slot))
-	hbox.add_child(btn_save)
+	# 保存按钮（只读模式隐藏）
+	if not read_only:
+		var btn_save := Button.new()
+		btn_save.text = "保存"
+		btn_save.custom_minimum_size = Vector2(60, 32)
+		btn_save.pressed.connect(_on_save.bind(slot))
+		hbox.add_child(btn_save)
 	# 读取按钮
 	var btn_load := Button.new()
 	btn_load.text = "读取"

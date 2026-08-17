@@ -76,8 +76,8 @@ func _build_content() -> void:
 	_add_section_title("游戏")
 	_add_speed_buttons()
 	_add_close_button()
-	# ── 调试区（仅 debug 构建）──
-	if OS.is_debug_build():
+	# ── 调试区（仅 debug 构建 + 游戏内显示；主菜单无 game_root，跳过测试地图入口）──
+	if OS.is_debug_build() and _game_root != null:
 		_add_section_title("调试 · 测试地图")
 		for map_id in _get_registered_map_ids():
 			_add_map_button(map_id)

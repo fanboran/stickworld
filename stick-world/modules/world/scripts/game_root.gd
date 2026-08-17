@@ -379,6 +379,16 @@ func _load_start_village() -> void:
 	# 监听 travel_started：旧图卸载前收集编队快照（跨图携带）
 	if not scene_loader.travel_started.is_connected(_on_travel_started):
 		scene_loader.travel_started.connect(_on_travel_started)
+	# 主菜单指定读档槽位：启动即读档（代替新游戏）
+	if SaveManager and SaveManager.boot_load_slot >= 0:
+		var boot_slot: int = SaveManager.boot_load_slot
+		SaveManager.boot_load_slot = -1
+		print_verbose("[GameRoot] 启动读档: 槽位 %d" % boot_slot)
+		load_game_from_slot(boot_slot)
+		return
+	# 新游戏：重置游戏时间（防上一局残留）
+	if WorldState and "game_time" in WorldState:
+		WorldState.game_time = 0.0
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
 	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
 	print_verbose("[GameRoot] 开始新游戏")

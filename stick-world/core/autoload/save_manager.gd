@@ -22,6 +22,10 @@ var _start_time: float = 0.0
 # SQLite 连接（save/load 期间有效）
 var _db = null
 var _current_slot: int = -1
+
+## 下次启动（GameRoot 装配后）要读取的存档槽位；-1 = 正常新游戏。
+## 主菜单「继续游戏/读取存档」设置后切换场景，GameRoot 启动时消费并复位。
+var boot_load_slot: int = -1
 # 读档兜底计时器：game_loaded 后若场景恢复失败/无当前地图，超时强制关闭 DB
 var _load_guard: Timer = null
 

@@ -1,0 +1,90 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modules/ui_global/scripts/templates/hud_template.gd" id="1_hud"]
+
+[node name="HudTemplate" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_hud")
+
+[node name="TopBar" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="TopRow" type="HBoxContainer" parent="TopBar"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="MinimapFrame" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -120.0
+offset_top = 44.0
+offset_right = 120.0
+offset_bottom = 124.0
+grow_horizontal = 2
+
+[node name="MinimapLabel" type="Label" parent="MinimapFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "小地图"
+
+[node name="NotificationFeed" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -240.0
+offset_right = 360.0
+offset_bottom = -12.0
+grow_horizontal = 1
+grow_vertical = 0
+theme_override_constants/separation = 6
+
+[node name="Quickbar" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -340.0
+offset_top = -64.0
+offset_right = 340.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="SlotsRow" type="HBoxContainer" parent="Quickbar"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ZoomWidget" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -56.0
+offset_top = -180.0
+offset_right = -12.0
+offset_bottom = -76.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/separation = 4

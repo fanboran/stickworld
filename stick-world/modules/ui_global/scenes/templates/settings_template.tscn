@@ -1,0 +1,79 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modules/ui_global/scripts/templates/settings_template.gd" id="1_settings"]
+
+[node name="SettingsTemplate" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_settings")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.025, 0.028, 0.038, 1)
+
+[node name="Window" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -440.0
+offset_top = -280.0
+offset_right = 440.0
+offset_bottom = 280.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MainVBox" type="VBoxContainer" parent="Window"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="HBoxContainer" parent="Window/MainVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="Window/MainVBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "设置"
+
+[node name="CloseButton" type="Button" parent="Window/MainVBox/Header"]
+layout_mode = 2
+text = "返回总览"
+
+[node name="Body" type="HBoxContainer" parent="Window/MainVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="CategoryColumn" type="VBoxContainer" parent="Window/MainVBox/Body"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="VSeparator" type="VSeparator" parent="Window/MainVBox/Body"]
+layout_mode = 2
+
+[node name="ContentScroll" type="ScrollContainer" parent="Window/MainVBox/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ContentVBox" type="VBoxContainer" parent="Window/MainVBox/Body/ContentScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="Footer" type="HBoxContainer" parent="Window/MainVBox"]
+layout_mode = 2
+alignment = 2
+theme_override_constants/separation = 8

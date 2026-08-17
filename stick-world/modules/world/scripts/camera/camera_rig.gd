@@ -139,6 +139,10 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# 暂停（模态打开）时禁止相机输入：滚轮缩放/左键拖动/中键平移一律不响应，
+	# 防止鼠标在模态面板上时事件穿透到世界（UI 遮罩只挡下层派发，不拦 _unhandled_input）
+	if TimeManager and TimeManager.is_paused():
+		return
 	# 拖动开始/结束
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
@@ -285,6 +289,15 @@ func _compute_return_target_x() -> float:
 	else:
 		# 自由镜头模式：目标 = 1/4 跟随逻辑的目标位置
 		return _compute_follow_target_x()
+
+
+## 瞬时对准跟随目标（进入游戏/读档/跨图时调用）：
+## 1/4 区域跟随机制下玩家只在触发线（1/4/3/4）被拉回，进入时若相机初始 X 与玩家 X 不一致，
+## 玩家会停在 1/4 或 3/4 处而非屏幕中心。此方法把相机立即对准玩家（水平居中，clamp 内）。
+func snap_to_follow_target() -> void:
+	if follow_target != null and is_instance_valid(follow_target):
+		global_position.x = _clamp_camera_x(follow_target.global_position.x)
+		global_position.y = _compute_camera_y()
 
 
 func _compute_follow_x(delta: float) -> float:

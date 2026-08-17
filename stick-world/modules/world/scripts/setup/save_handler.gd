@@ -184,6 +184,9 @@ func _restore_from_save(map: Node2D, map_id: String) -> void:
 				player.set_formation_system(_root._formation_system)
 			if _root.camera_rig != null and _root.camera_rig.has_method("set_follow_target"):
 				_root.camera_rig.set_follow_target(player)
+			# 兜底生成玩家同样对准（水平居中）
+			if _root.camera_rig != null and _root.camera_rig.has_method("snap_to_follow_target"):
+				_root.camera_rig.snap_to_follow_target()
 	# 关闭 DB
 	if SaveManager and SaveManager.has_method("end_load"):
 		SaveManager.end_load()
@@ -208,6 +211,9 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 			entity.set_possessed(true)
 			if _root.camera_rig != null and _root.camera_rig.has_method("set_follow_target"):
 				_root.camera_rig.set_follow_target(entity)
+			# 读档进入即对准玩家（水平居中）
+			if _root.camera_rig != null and _root.camera_rig.has_method("snap_to_follow_target"):
+				_root.camera_rig.snap_to_follow_target()
 		else:
 			if entity.has_method("set_possessed"):
 				entity.set_possessed(false)

@@ -23,6 +23,8 @@ const _SystemSetupScript: GDScript = preload("res://modules/world/scripts/setup/
 const _SaveHandlerScript: GDScript = preload("res://modules/world/scripts/setup/save_handler.gd")
 const _TravelHandlerScript: GDScript = preload("res://modules/world/scripts/setup/travel_handler.gd")
 const _InitialContentScript: GDScript = preload("res://modules/world/scripts/setup/initial_content.gd")
+## 世界加载覆盖层（消除启动加载期的死灰屏）
+const _WorldLoadingOverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/world_loading_overlay.gd")
 
 ## 测试村落地图场景（P0 硬编码）
 const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/village_a.tscn")
@@ -152,6 +154,8 @@ var _formation_panel: Control = null
 var _settings_menu_panel: Control = null
 ## 暂停菜单（运行时由 SystemSetup 装配到 UIRoot，ESC 打开；ESC 语义统一在 GameRoot 处理）
 var _pause_menu_panel: Control = null
+## 世界加载覆盖层（启动加载期显示，世界就绪淡出）
+var _world_loading_overlay: Control = null
 
 # ─────────────────────────────── 存档系统（SaveHandler 跨脚本读写，故加忽略）────────────────────────────────
 ## 是否有存档待加载（读档入口标记）
@@ -180,6 +184,10 @@ func _ready() -> void:
 		PlayerControlAPI.register_input_dispatcher(input_dispatcher)
 	# 挂载子模块（SystemSetup / SaveHandler / TravelHandler / InitialContent）
 	_mount_child_modules()
+	# 世界加载覆盖层：game_root 一启动立即显示，覆盖装配+加载全期（防裸灰屏）。
+	# 挂自身高层 CanvasLayer（不依赖尚未装配的 UIRoot），世界就绪后淡出。
+	_setup_world_loading_overlay()
+	_show_loading("正在加载…")
 	# 装配 UI 覆盖层 + 所有子系统（由 SystemSetup 执行）
 	_bootstrap.setup(self)
 	# 存档系统：信号连接 + 注册 + SavePanel 实例化
@@ -195,6 +203,7 @@ func _ready() -> void:
 	# 默认 X1 速度
 	if TimeManager:
 		TimeManager.set_speed(TimeManager.Speed.X1)
+	# 世界加载覆盖层（启动即显示，_on_map_loaded 世界就绪后淡出）
 	# 通知游戏开始
 	if EventBus:
 		EventBus.game_started.emit()
@@ -391,6 +400,7 @@ func _load_start_village() -> void:
 		var boot_slot: int = SaveManager.boot_load_slot
 		SaveManager.boot_load_slot = -1
 		print_verbose("[GameRoot] 启动读档: 槽位 %d" % boot_slot)
+		_show_loading("正在读取存档…")
 		load_game_from_slot(boot_slot)
 		return
 	# 新游戏：重置游戏时间（防上一局残留）
@@ -399,7 +409,30 @@ func _load_start_village() -> void:
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
 	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
 	print_verbose("[GameRoot] 开始新游戏")
+	_show_loading("正在生成世界…")
 	scene_loader.load_map(VILLAGE_A_MAP_ID)
+
+
+## 显示世界加载覆盖（启动加载期）
+func _show_loading(message: String) -> void:
+	if _world_loading_overlay != null and _world_loading_overlay.has_method("show_loading"):
+		_world_loading_overlay.show_loading(message)
+
+
+## 装配世界加载覆盖层：挂 game_root 自身高层 CanvasLayer（layer=10，盖住 UIRoot），
+## 在 game_root._ready 最开头调用，覆盖装配+加载全期，不依赖尚未装配的 UIRoot。
+func _setup_world_loading_overlay() -> void:
+	if _world_loading_overlay != null:
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "WorldLoadingLayer"
+	layer.layer = LayerOrder.WORLD_LOADING
+	add_child(layer)
+	var ov := Control.new()
+	ov.set_script(_WorldLoadingOverlayScript)
+	ov.name = "WorldLoadingOverlay"
+	layer.add_child(ov)
+	_world_loading_overlay = ov
 
 
 ## travel_started 回调：旧图卸载前快照全部编队（跨图携带，带队出征）。
@@ -519,6 +552,9 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		# 让 CameraRig 跟随玩家
 		if camera_rig != null and camera_rig.has_method("set_follow_target"):
 			camera_rig.set_follow_target(player)
+		# 进入即对准玩家（水平居中；1/4 跟随机制下不 snap 会在触发线偏移）
+		if camera_rig != null and camera_rig.has_method("snap_to_follow_target"):
+			camera_rig.snap_to_follow_target()
 		# 仅初始加载时 spawn 初始建筑、NPC 和演示建造
 		if not _initial_map_loaded:
 			_initial_map_loaded = true
@@ -553,6 +589,9 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 注册调试绘制器
 	_bootstrap.register_debug_drawers()
+	# 世界就绪：淡出加载覆盖（玩家已生成、相机已跟随）
+	if _world_loading_overlay != null and _world_loading_overlay.has_method("hide_loading"):
+		_world_loading_overlay.hide_loading()
 
 
 ## 请求地图旅行（由 ChunkTrigger 调用，详见 §6.2 步行流程）
@@ -676,20 +715,47 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif ek.keycode == KEY_S and (ek.ctrl_pressed or ek.meta_pressed):
 		toggle_save_panel()
 		get_viewport().set_input_as_handled()
+	# 帝国功能界面快捷键（K/O/J/L → 空面板占位；系统落地后替换真实面板）
+	elif ek.keycode == KEY_K:
+		_open_placeholder_panel("tech_tree")
+		get_viewport().set_input_as_handled()
+	elif ek.keycode == KEY_O:
+		_open_placeholder_panel("empire_overview")
+		get_viewport().set_input_as_handled()
+	elif ek.keycode == KEY_J:
+		_open_placeholder_panel("collection")
+		get_viewport().set_input_as_handled()
+	elif ek.keycode == KEY_L:
+		_open_placeholder_panel("logistics")
+		get_viewport().set_input_as_handled()
 	# ESC：统一模态/暂停菜单栈控制（见 _handle_escape）
 	elif ek.keycode == KEY_ESCAPE:
 		if _handle_escape():
 			get_viewport().set_input_as_handled()
 
 
-## ESC 语义（模态栈逐层关闭）：设置开着→关设置；暂停菜单开着→关暂停；
-## 都没开→开暂停菜单。附身模式返回 false（ESC 留给退出附身，不消费）。
+## 打开帝国功能空面板（经 ui_placeholder 模块，系统落地后替换真实面板）。
+## 快捷键（K/O/J/L）与暂停菜单「帝国功能」共用此入口。
+func _open_placeholder_panel(preset_id: String) -> void:
+	if ui_root == null:
+		return
+	var overlay: Control = ui_root.get_slot("ModalOverlay")
+	if overlay == null:
+		return
+	UIPlaceholderPanel.open_panel(overlay, preset_id)
+
+
+## ESC 语义（模态栈逐层关闭）：设置开着→关设置（若暂停菜单是被"让位隐藏"的则恢复）；
+## 暂停菜单开着→关暂停；都没开→开暂停菜单。附身模式返回 false（ESC 留给退出附身，不消费）。
 ## 返回是否已消费事件。
 func _handle_escape() -> bool:
 	if input_dispatcher != null and input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS:
 		return false
 	if _settings_menu_panel != null and _settings_menu_panel.is_open():
 		_settings_menu_panel.close()
+		# 从暂停菜单进入的设置：关闭后恢复暂停菜单（返回点）
+		if _pause_menu_panel != null and _pause_menu_panel.has_method("restore_if_delegated"):
+			_pause_menu_panel.restore_if_delegated()
 	elif _pause_menu_panel != null and _pause_menu_panel.is_open():
 		_pause_menu_panel.close()
 	elif _pause_menu_panel != null:

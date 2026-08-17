@@ -21,6 +21,7 @@ const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scrip
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	add_to_group("ui_root")
 	_bind_event_bus()
 	_apply_theme()
 	_setup_ui_inspector()
@@ -31,7 +32,7 @@ func _setup_ui_inspector() -> void:
 	var inspector := Control.new()
 	inspector.set_script(_DebugUiInspectorScript)
 	inspector.name = "UiInspector"
-	inspector.z_index = 100
+	inspector.z_index = LayerOrder.Z_INSPECTOR
 	add_child(inspector)
 
 

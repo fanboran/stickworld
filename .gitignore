@@ -122,3 +122,6 @@ tools/mocap/references/
 
 # Godot 自定义用户数据目录（--user-data-dir 调试残留，不入库）
 stick-world/Godot/
+
+# freebuff 工具本地产物
+.freebuff/

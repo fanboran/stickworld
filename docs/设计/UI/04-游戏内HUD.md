@@ -31,6 +31,7 @@
 | 小地图 | 顶部中央 | 缩略图 + 视野框 + 实体点 | ✅ Minimap |
 | 缩放部件 | 右下竖排 | ＋/－ + 缩放指示 | ✅ ZoomBar |
 | 通知流 | 左下 | 堆叠 feed（≤5 条，3s 淡出） | 模板（现 GlobalHUD 单条） |
+| 时钟表盘 | 右上角（顶栏右端） | 圆形表盘（ClockWidget） | ✅ ClockWidget |
 | 快捷栏 | 底部中央 | 10 格密集操作格：图标 + 热键角标 + 数量徽标 | 🧪 模板 |
 | 模式面板 | 底部（快捷栏之上） | Village/Battle/Possess 整体替换 | ✅ ModePanel |
 | 上下文面板 | 右侧 | 选中什么显示什么 | ✅ ContextPanel |

@@ -45,6 +45,10 @@ func _build_screen() -> void:
 	_bg.color = Color(0, 0, 0, bg_alpha)
 	_bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 真正消费鼠标事件（STOP 只挡下层 UI 派发，不阻止进 _unhandled_input → 相机穿透）
+	_bg.gui_input.connect(func(_event: InputEvent):
+		get_viewport().set_input_as_handled()
+	)
 	add_child(_bg)
 	# 居中面板（黑玻璃 + 统一内边距，不手写 position）
 	_panel = PanelContainer.new()

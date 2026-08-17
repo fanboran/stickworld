@@ -126,7 +126,7 @@ static func center_on_screen(panel: Control, size: Vector2) -> void:
 
 ## 把控件停靠到屏幕某角，自动留 SCREEN_MARGIN 安全边距（禁止贴边）。
 ## 要求父节点是全屏容器（FULL_RECT）。
-static func dock(node: Control, corner: Corner, size: Vector2,
+static func dock(node: Control, corner: int, size: Vector2,
 		margin: float = StickTokens.SCREEN_MARGIN) -> void:
 	match corner:
 		Corner.TOP_LEFT:
@@ -158,22 +158,34 @@ static func dock(node: Control, corner: Corner, size: Vector2,
 
 # ─────────────────────────────── Toast ────────────────────────────────
 
-## 在指定层弹一条 toast（自动淡出销毁）。anchor 底部居中。
+## 系统层（toast/确认框统一挂载，不随调用者层，根治"confirm 跑出屏幕"类问题）：
+## 找 UIRoot.SystemOverlay（z=90，模态之上）；无 UIRoot（如主菜单场景）回退调用者层。
+static func _system_overlay(layer: Control) -> Control:
+	var tree := layer.get_tree()
+	if tree != null:
+		var root: CanvasLayer = tree.get_first_node_in_group("ui_root")
+		if root != null:
+			var slot := root.get_node_or_null("SystemOverlay") as Control
+			if slot != null:
+				return slot
+	return layer
+
+
+## 在指定层弹一条 toast（自动淡出销毁）。底部居中。
 static func toast(layer: Control, text: String, kind: String = "info") -> void:
+	layer = _system_overlay(layer)
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", StickStyle.window_panel())
 	var l := label(panel, text, LabelKind.BODY,
 			StickTokens.INFO if kind == "info" else (StickTokens.WARN if kind == "warn" else StickTokens.DANGER))
 	l.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
 	layer.add_child(panel)
-	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	panel.position = Vector2(-panel.size.x * 0.5, -80)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	# 出场在下帧按实际尺寸校正水平居中
+	# 绝对定位（anchor 归零），底部居中、离底 80px；不混用 anchor 与 position setter
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	panel.resized.connect(func():
-		if is_instance_valid(panel):
-			panel.position.x = -panel.size.x * 0.5
+		if is_instance_valid(panel) and is_instance_valid(layer):
+			panel.position = Vector2((layer.size.x - panel.size.x) * 0.5,
+					layer.size.y - panel.size.y - 80.0)
 	)
 	var tween := panel.create_tween()
 	tween.tween_interval(StickTokens.T_TOAST)
@@ -188,22 +200,26 @@ static func toast(layer: Control, text: String, kind: String = "info") -> void:
 static func confirm(layer: Control, title: String, message: String,
 		on_confirm: Callable, confirm_text: String = "确定",
 		kind: ButtonKind = ButtonKind.ACCENT) -> void:
+	layer = _system_overlay(layer)
 	var dim := ColorRect.new()
 	dim.color = StickTokens.MODAL_DIM
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	# 真正消费鼠标（防滚轮等穿透到相机 _unhandled_input）
+	dim.gui_input.connect(func(_event: InputEvent):
+		if is_instance_valid(dim):
+			dim.get_viewport().set_input_as_handled()
+	)
 	layer.add_child(dim)
 	var window := PanelContainer.new()
 	window.add_theme_stylebox_override("panel", StickStyle.window_panel())
 	window.custom_minimum_size = Vector2(360, 0)
 	dim.add_child(window)
-	# 确定性居中（anchor + 半尺寸 offset，不依赖时序）
-	window.set_anchors_preset(Control.PRESET_CENTER)
-	window.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	window.grow_vertical = Control.GROW_DIRECTION_BOTH
+	# 绝对居中（anchor 归零 + 相对 dim 计算），Godot 的 position setter 配 anchor 会失效
+	window.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	window.resized.connect(func():
-		if is_instance_valid(window):
-			window.position = -window.size * 0.5
+		if is_instance_valid(window) and is_instance_valid(dim):
+			window.position = (dim.size - window.size) * 0.5
 	)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)

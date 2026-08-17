@@ -80,3 +80,33 @@
 依赖系统（科技/物流/成就/组织报表等）尚未建立的**大界面空面板**集中放在此模块，
 样式与入口已就绪，系统接入时替换填充。详见 [`modules/ui_placeholder/`](../../../stick-world/modules/ui_placeholder/api.gd)
 与 `02-界面框架.md` §4.4；验收入口 F6 运行 `ui_placeholder_preview.tscn`。
+
+---
+
+## 当前状态与下一步（给接手 AI 的入口）
+
+### 已落地（2026-08）
+
+- **启动/流程**：主菜单接入（继续/新游戏/读档/设置/退出）、载入屏（过渡型）、**战略图懒加载**（启动 20.8s→3.2s）、世界加载覆盖层（真实加载有指示、无死灰屏）
+- **分层**：ModalOverlay 盖住全部 UI（z=50）、模态打开自动暂停 + 遮罩消费鼠标 + 相机输入暂停兜底（防穿透）、ESC 统一在 `GameRoot._handle_escape`
+- **弹窗体系**：4 种行为模板（`StickScreen`=MODAL / `StickWindow`=FLOATING/DOCK/POPOVER，见 05 §六）、编制菜单已归 FLOATING（可拖动、不变灰）、暂停菜单（帝国功能组 + K/O/J/L 快捷键直达空面板）
+- **统一层号**：`LayerOrder`（layer_order.gd）+ `SystemOverlay` 系统层（toast/确认框挂它，不随调用者）
+- **约束与自检**：布局铁律 + 截图自检 `tests/dev/ui_shots.tscn`（见 09）
+- **设置面板**：880×620、分类切换真生效、字段落盘 ConfigManager
+- **HUD**：顶栏距边 12px、小地图 1.5 倍、缩放条条本体对齐+100%刻度+文字在条右侧、时钟缝隙对称
+
+### 下一步（接手 AI 的待办）
+
+1. **缺口 2：UIModalStack 模态栈**（见 10-UI系统重构参考.md，改动最大）——按 DarkScreen 的层键字典 + 逐层 pop 替代 `GameRoot._handle_escape` 特判；输入屏蔽随栈统一
+2. **做做样子项清理**（待办事项.md）：通知 feed 堆叠、游戏内快捷栏、设置项"存了不生效"（window_mode/音量/show_fps 接消费方）、小地图/缩放条样式统一
+3. **业务面板迁移**（Village/Battle/Possess/BuildMenu/FormationPanel 细节）到 4 模板 + StickTheme，按 09 自检
+
+### 关键约定速查
+
+| 事项 | 见 |
+|------|-----|
+| 布局铁律 / AI 自检 / 截图工具 | 09 |
+| 4 种弹窗行为模板 | 05 §六 |
+| 层号常量 / 模态栈蓝图 | 10 + `LayerOrder` |
+| 界面通达表（入口+快捷键） | 02 §六 |
+| 测试命令 | AGENTS.md（`tests/run_all.sh` / `check_godot_errors.sh` / 截图自检） |

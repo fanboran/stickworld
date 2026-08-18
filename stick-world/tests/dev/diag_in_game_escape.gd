@@ -1,5 +1,6 @@
 extends Node
-## 诊断：真实游戏内 ESC 暂停菜单渲染（跑 game_root → 等地图加载 → _handle_escape → 截图）。
+## 视觉诊断：真实游戏内 ESC 暂停菜单渲染截图（跑 game_root → 等地图加载 → _handle_escape → 截图）。
+## 输入链路回归由 tests/integration/test_esc_key_input.gd 覆盖，本文件只做视觉验收。
 ## 运行（弹窗 ~3s 自动截图退出）：
 ##   godot --path stick-world res://tests/dev/diag_in_game_escape.tscn -- --shot=F:/out.png
 
@@ -15,13 +16,14 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--shot="):
 			_shot_path = arg.trim_prefix("--shot=")
+	get_window().grab_focus()
 	_game_root = _GameRootScene.instantiate()
 	add_child(_game_root)
 
 
 func _process(_delta: float) -> void:
 	_frames += 1
-	# 等地图加载完（帧 60 左右；帧 90 时开暂停菜单截图）
+	# 等地图加载完（帧 90 时开暂停菜单，帧 120 截图）
 	if _frames == 90:
 		if _game_root != null and _game_root.has_method("_handle_escape"):
 			_game_root._handle_escape()

@@ -41,7 +41,7 @@ static func groove() -> StyleBoxFlat:
 
 # ─────────────────────────────── 按钮族 ────────────────────────────────
 
-## 磨砂玻璃按钮：奶白半透明 + 灰边 + 上缘高光（受光边）
+## 真透明磨砂玻璃按钮：无白无黑底色（模糊层负责磨砂）+ 灰细边 + 上缘高光（受光边）
 static func button_normal() -> StyleBoxFlat:
 	var s := _make(StickTokens.BTN_BG, StickTokens.BTN_BORDER, StickTokens.RADIUS)
 	_apply_glass_top_edge(s, StickTokens.BTN_EDGE_TOP)
@@ -56,13 +56,13 @@ static func button_hover() -> StyleBoxFlat:
 
 static func button_pressed() -> StyleBoxFlat:
 	var s := _make(StickTokens.BTN_BG_PRESSED, StickTokens.ACCENT, StickTokens.RADIUS)
-	_apply_glass_top_edge(s, Color(StickTokens.BTN_EDGE_TOP, 0.3))
+	_apply_glass_top_edge(s, Color(StickTokens.BTN_EDGE_TOP, 0.25))
 	return s
 
 
 static func button_disabled() -> StyleBoxFlat:
 	var s := _make(StickTokens.BTN_BG_DISABLED, Color.TRANSPARENT, StickTokens.RADIUS)
-	_apply_glass_top_edge(s, Color(StickTokens.BTN_EDGE_TOP, 0.18))
+	_apply_glass_top_edge(s, Color(StickTokens.BTN_EDGE_TOP, 0.15))
 	return s
 
 

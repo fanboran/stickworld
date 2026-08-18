@@ -92,17 +92,22 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 ## 透明背景悬浮：地图内容显示在屏幕中央（场景图保持可见作背景）
 func open() -> void:
 	visible = true
-	# 初始视角：底图 1024x1024，悬浮显示高度占屏幕 72%，居中
+	# 初始视角：按实际地图尺寸适配（出生 L1 城市图较小，放大显示更清晰）
 	if map_camera != null and map_camera.has_method("set_zoom"):
 		var vp := get_viewport()
 		if vp != null:
 			var vp_size: Vector2 = vp.get_visible_rect().size
-			var target_h: float = vp_size.y * 0.72
-			var fit_zoom: float = target_h / 1024.0
+			var msize: float = 1024.0
+			if api != null and api.has_method("get_data"):
+				var d: RefCounted = api.get_data()
+				if d != null and d.size > 0:
+					msize = float(d.size)
+			var target_h: float = vp_size.y * 0.85
+			var fit_zoom: float = target_h / msize
 			map_camera.set_zoom(fit_zoom)
 			if map_camera.has_method("set_offset"):
 				# 地图原点（左上角）居中：屏幕中心 - 地图显示尺寸一半
-				var offset := vp_size * 0.5 - Vector2(1024.0 * fit_zoom * 0.5, 1024.0 * fit_zoom * 0.5)
+				var offset := vp_size * 0.5 - Vector2(msize * fit_zoom * 0.5, msize * fit_zoom * 0.5)
 				map_camera.set_offset(offset)
 	if EventBus != null:
 		EventBus.strategic_map_opened.emit()

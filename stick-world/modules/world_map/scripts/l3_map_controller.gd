@@ -15,6 +15,9 @@ class_name L3MapController
 @export var map_renderer: L3MapRenderer
 @export var map_camera: MapCamera
 
+## 缩放指示条（CanvasLayer 直接子节点，open/close 同步显隐）
+var _zoom_indicator: Control = null
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放状态）
 var _view_initialized: bool = false
 
@@ -42,6 +45,11 @@ func _auto_find_components() -> void:
 			map_renderer = child
 		elif child is MapCamera and map_camera == null:
 			map_camera = child
+	# 缩放指示条（CanvasLayer 直接子节点）
+	if _zoom_indicator == null:
+		var layer := get_parent()
+		if layer != null:
+			_zoom_indicator = layer.get_node_or_null("ZoomIndicator")
 
 
 func _input(event: InputEvent) -> void:
@@ -114,15 +122,21 @@ func open() -> void:
 				if map_camera.has_method("set_offset"):
 					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.5, map_size * 0.5))
 	if _l2_active and l2_view != null:
-		# 恢复 L2 视图（相机状态保留），L3 保持隐藏
+		# 恢复 L2 视图（相机状态保留），L3 保持隐藏（指示条隐藏）
 		visible = false
 		l2_view.visible = true
+		if _zoom_indicator != null:
+			_zoom_indicator.visible = false
 	else:
 		visible = true
+		if _zoom_indicator != null:
+			_zoom_indicator.visible = true
 
 
 ## 关闭 L3 地图（ESC / M 键）
 func close() -> void:
+	if _zoom_indicator != null:
+		_zoom_indicator.visible = false
 	# 若在 L2 视图内，一起隐藏（保留状态，重开时恢复）
 	if l2_view != null and l2_view.visible:
 		l2_view.visible = false

@@ -31,6 +31,7 @@ tools/worldgen/
 │   ├── city_split_v2.py           # 老 L1 之下细分城市（13 地区 tiles 拼全局 → 城市蒙版，1038 城）
 │   ├── export_player_l1_cities.py  # ~~389 版玩家初始 L1 视图~~ 已废弃
 │   ├── export_player_l1_cities_v2.py # 出生老 L1 城市视图（Tab 数据源，region_012#3=66）
+│   ├── export_l3_l1_view.py          # L3 老 L1 视觉层（L3 直接显示 69 块老 L1）
 │   ├── merge_tiny_tiles.py
 │   ├── merge_tiles_groups.py
 │   ├── merge_island_tiles.py

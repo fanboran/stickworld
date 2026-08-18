@@ -24,6 +24,8 @@ const MIN_SCREEN_PX := 2.0       # 最小屏幕像素线宽（缩小保底，细
 const L2_LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const L2_LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
 const L2_LABEL_SIZE := 40.0        # 地图单位字号
+## L2 地区常驻描边（L1 视觉层时标识可下钻单元）
+const L2_BORDER_COLOR := Color(0.16, 0.16, 0.16, 0.85)
 var _debug_was_visible: bool = false
 
 ## 海洋背景色
@@ -57,19 +59,25 @@ func _build_static_mesh() -> void:
 	_holes_mesh = null
 	if _data == null:
 		return
+	# 视觉层优先级：老 L1（L3 直接显示 L1 地块，丰富配色）→ 回退 13 地区色块
+	var units: Array = _data.l1_tiles if not _data.l1_tiles.is_empty() else _data.regions
+	var is_l1: bool = not _data.l1_tiles.is_empty()
 	var verts := PackedVector3Array()
 	var colors := PackedColorArray()
 	var indices := PackedInt32Array()
 	var hverts := PackedVector3Array()
 	var hcols := PackedColorArray()
 	var hindices := PackedInt32Array()
-	for r in _data.regions:
+	for r in units:
 		var col: Array = r.get("color", [])
 		var fill := Color(0.6, 0.7, 0.8)
 		if col.size() >= 3:
 			fill = Color(col[0] / 255.0, col[1] / 255.0, col[2] / 255.0)
-		# 陆地外轮廓（全部岛屿）-> 三角剖分
-		for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
+		# 陆地外轮廓（全部岛屿/地块）-> 三角剖分
+		const POLY_KEYS_L1 := ["polygons", "holes"]
+		const POLY_KEYS_REG := ["land_polygons", "land_holes"]
+		var pkeys: Array = POLY_KEYS_L1 if is_l1 else POLY_KEYS_REG
+		for poly in r.get(pkeys[0], [r.get("polygon", [])]):
 			if (poly as Array).size() < 3:
 				continue
 			var pts2 := PackedVector2Array()
@@ -85,7 +93,7 @@ func _build_static_mesh() -> void:
 			for idx in tri:
 				indices.append(base + idx)
 		# 洞 -> 预剖分（海洋色覆盖）
-		for hole in r.get("land_holes", []):
+		for hole in r.get(pkeys[1], []):
 			if (hole as Array).size() < 3:
 				continue
 			var hpts := PackedVector2Array()
@@ -172,14 +180,39 @@ func _draw() -> void:
 			if z > 0.0001:
 				w = maxf(EDGE_WIDTH, MIN_SCREEN_PX / z)
 		draw_polyline(hpts, EDGE_COLOR, w, true)
+	# 4.5 L2 地区常驻描边（L1 视觉层开启时：底是老 L1 细块，用粗地区边界标识可下钻单元）
+	if _data != null and not _data.l1_tiles.is_empty():
+		var bw: float = BORDER_WIDTH()
+		for r in _data.regions:
+			for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
+				if (poly as Array).size() < 3:
+					continue
+				var bpts := PackedVector2Array()
+				for pp in poly:
+					bpts.append(Vector2(pp[1], pp[0]))
+				bpts.append(bpts[0])
+				draw_polyline(bpts, L2_BORDER_COLOR, bw, true)
 	# 5. L2 地区编号（F3 调试模式，标在地区质心，调试认地区用）
 	if DebugApi != null and DebugApi.is_visible() and _data != null:
 		_draw_l2_labels()
 
 
-## F3 调试：给每个 L2 地区打编号（地区质心；centroid 存 [x, y]）
+func BORDER_WIDTH() -> float:
+	var w := 9.0
+	if _camera != null and _camera.has_method("get_zoom"):
+		var z: float = _camera.get_zoom()
+		if z > 0.0001:
+			w = maxf(w, MIN_SCREEN_PX / z)
+	return w
+
+
+## F3 调试：给每个 L2 地区打编号（地区质心）。注意 centroid 是 2048 级，渲染 8192 级：
+## 需 ×(8192/2048=4) 才能落在正确位置（否则文字堆左上角、不随缩放）。
 func _draw_l2_labels() -> void:
 	var font := ThemeDB.fallback_font
+	var scale := 1.0
+	if _data != null and _data.size > 0 and _data.mask_image != null:
+		scale = float(_data.size) / float(_data.mask_image.get_width())
 	for r in _data.regions:
 		var label: int = int(r.get("label", 0))
 		if label <= 0:
@@ -187,7 +220,7 @@ func _draw_l2_labels() -> void:
 		var c: Array = r.get("centroid", [0, 0])
 		if c.size() < 2:
 			continue
-		var pos := Vector2(float(c[0]), float(c[1]))
+		var pos := Vector2(float(c[0]), float(c[1])) * scale
 		var txt := "L2#%d" % label
 		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
 			draw_string(font, pos + off * 2.0, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, L2_LABEL_SIZE, L2_LABEL_BG)

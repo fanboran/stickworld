@@ -8,6 +8,16 @@
 
 ## [未发布]
 
+### L3 视觉显示老 L1 + 缩放指示条 + Tab 放大（2026-08）
+
+- **L3 视觉 = 老 L1 地块**（"L3 直接把 L1 显示出来"，同 L2 地区相似色、丰富配色，类 city_preview）：新 `l1/export_l3_l1_view.py` 生成 `config/strategic_map/l3_l1.json`（69 块老 L1，8192 级多边形/洞/配色）；`l3_map_renderer` 渲染老 L1 色块为底 + **L2 地区粗描边**标识可下钻单元；**交互不变**——hover/点击仍按 L2 索引图下钻
+- **修 L3 编号坐标**：地区 centroid 是 2048 级，渲染 8192 级 → 原来文字堆左上角且不随缩放；现在 ×4 换算（`_draw_l2_labels` 按 size/mask 比例）
+- **L3 缩放指示条**：新 `l3_zoom_indicator.gd`（CanvasLayer 底部轨道+滑块+数值"缩放 x.xx"），M 打开显示、ESC 关闭隐藏、L2 下钻时隐藏
+- **Tab 放大**：`strategic_map_controller.open` 由硬编码 1024 改为按实际 `data.size` 适配（85% 屏高），出生 L1 图更清晰；`export_player_l1_cities_v2` 默认 margin 60→120（size 347→467）
+- **测试**：l3 5/5（断言 15，含老 L1 视觉层 69 块）、p0 6/6、l2 5/5 全绿
+
+### 出生 L1 定案（region_012 老L1#3）+ L3 显示 L2 编号（2026-08）
+
 ### 出生 L1 定案（region_012 老 L1#3）+ L3 显示 L2 编号（2026-08）
 
 - **出生 L1 定案**：region_012 的 3 号老 L1 地块（全局老 L1 label 66，质心 (928,932)/2048，面积 21752px）为玩家初始默认地块——`export_player_l1_cities_v2.py` 基于 v2 城市层重建 Tab 数据源（`l1_world.json`/`l1_base.png`/`l1_mask.png`）；13 城市 / 13 城邦 / 12 MST 道路，城市点 100% 命中 mask；出生 L1 权威轮廓 `l1_polygon` 731 点

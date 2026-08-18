@@ -16,6 +16,10 @@ var regions: Array[Dictionary] = []
 ## 隔海直线链接（渲染描边用）：{"a","b","p1","p2"}
 var sea_links: Array[Dictionary] = []
 
+## 老 L1 视觉层（可选，l3_l1.json）：L3 直接显示 69 块老 L1（丰富配色），
+## 交互（hover/下钻）仍按 L2 地区索引图
+var l1_tiles: Array = []
+
 ## 底图像素尺寸（渲染坐标系，8192 级网格）
 var size: int = 0
 
@@ -49,6 +53,14 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 		world._region_by_label[int(r.get("label", 0))] = r
 	for sd in (data.get("sea_links", []) as Array):
 		world.sea_links.append(sd)
+	# 老 L1 视觉层（可选加载，不影响 L2 交互）
+	var l1_path := "%s/l3_l1.json" % base_dir
+	if FileAccess.file_exists(l1_path):
+		var l1_text := FileAccess.get_file_as_string(l1_path)
+		if not l1_text.is_empty():
+			var l1_data: Variant = JSON.parse_string(l1_text)
+			if l1_data is Dictionary:
+				world.l1_tiles = l1_data.get("tiles", [])
 	return world
 
 

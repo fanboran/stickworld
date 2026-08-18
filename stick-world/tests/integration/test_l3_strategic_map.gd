@@ -40,6 +40,8 @@ func _test_load() -> void:
 	_renderer.set_data(_data)
 	_runner.assert_true(_data.mask_image != null, "L3 分区索引图已加载")
 	_runner.assert_true(_data.regions.size() == 13, "应有 13 个地区（实测 %d）" % _data.regions.size())
+	_runner.assert_true(_data.l1_tiles.size() == 69,
+		"L3 老 L1 视觉层应加载 69 块（实测 %d）" % _data.l1_tiles.size())
 	# 每个地区应有陆地轮廓
 	var no_poly: int = 0
 	for r in _data.regions:

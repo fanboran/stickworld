@@ -19,6 +19,9 @@ const DATA_BASE_DIR := "res://config/strategic_map/l2_packs"
 ## 当前加载的数据
 var data: L2WorldData = null
 
+## 底部 HUD（缩放条 + 显示模式按钮，CanvasLayer 直接子）
+var _hud: Control = null
+
 var _current_region_id: String = ""
 
 
@@ -34,6 +37,10 @@ func _auto_find_components() -> void:
 			map_renderer = child
 		elif child is MapCamera and map_camera == null:
 			map_camera = child
+	if _hud == null:
+		var layer := get_parent()
+		if layer != null:
+			_hud = layer.get_node_or_null("ZoomIndicator")
 
 
 func _input(event: InputEvent) -> void:
@@ -45,6 +52,8 @@ func _input(event: InputEvent) -> void:
 		if key.keycode == KEY_ESCAPE:
 			# ESC 返回 L3（地图整体仍开着，不关地图、不恢复场景图输入）
 			visible = false
+			if _hud != null:
+				_hud.visible = false
 			back_requested.emit()
 			get_viewport().set_input_as_handled()
 
@@ -78,6 +87,8 @@ func open(region_id: String) -> void:
 					map_camera.set_offset(vp_size * 0.5 - Vector2(
 						float(msize.x) * fit_zoom * 0.5, float(msize.y) * fit_zoom * 0.5))
 	visible = true
+	if _hud != null:
+		_hud.visible = true
 
 
 func get_current_region_id() -> String:

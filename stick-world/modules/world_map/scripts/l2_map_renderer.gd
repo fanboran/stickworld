@@ -1,22 +1,31 @@
 extends Node2D
 class_name L2MapRenderer
-## L2 地区渲染器 —— 纯矢量渲染（ArrayMesh 静态几何缓存）+ 相邻地区上下文
+## L2 地区渲染器 —— 纯矢量渲染（ArrayMesh 静态几何缓存）+ 相邻地区上下文 + 双显示模式
 ##
+## 显示模式（模式按钮切换，见 MapHUD）：
+##   MODE_L1   : 底 = 老 L1 地块彩色 mesh（l2_geom.bin）
+##   MODE_CITY : 底 = 该地区城市蒙版贴图（l2_city_preview.png，像 city_preview 花花绿绿）
+## hover/编号仍按老 L1（索引图不变）；交互不变。
 ## 分层（context 坐标系，含相邻地区扩展区域）：
-##   海洋背景 -> 湖泊(浅蓝) -> 相邻地区(灰色) -> 当前地区地块(彩色)
-##   -> 相邻地区分界线(深色) -> hover 灰色描边
+##   海洋背景 -> 湖泊(浅蓝) -> 相邻地区(灰色) -> 当前地区地块(模式相关)
+##   -> 相邻地区分界线(深色) -> hover 描边
 ## 性能：全部几何加载时一次性三角剖分合并为 ArrayMesh，每帧零 CPU 剖分。
+
+enum DisplayMode { MODE_L1, MODE_CITY }
 
 var _data: L2WorldData = null
 var _camera: MapCamera = null
+
+## 当前显示模式
+var display_mode: int = DisplayMode.MODE_L1
 
 ## hover 命中的地块（Dictionary，未命中为空）
 var hovered_tile: Dictionary = {}
 
 ## hover 描边色（灰色）
 const EDGE_COLOR := Color(0.55, 0.55, 0.55)
-const EDGE_WIDTH := 5.0          # 地图单位线宽（邻居/地块常驻描边用）
-const EDGE_SCREEN_PX := 2.5      # hover 描边固定屏幕像素（不随缩放）
+const EDGE_WIDTH := 5.0          # 地图单位线宽（描边=地图绝对粗细；放大超屏幕上限时 clamp）
+const HOVER_SCREEN_CAP := 9.0    # hover 描边屏幕像素上限（放大到超大时防糊屏）
 const HOVER_MARGIN := 2.0        # hover 描边至少比地块常驻描边粗的裕量（地图单位）
 
 ## L1 地块编号（F3 调试模式显示，画在 L1 地块质心）
@@ -60,6 +69,17 @@ func set_camera(camera: MapCamera) -> void:
 
 func refresh() -> void:
 	queue_redraw()
+
+
+## 切换显示模式（L1 <-> 城市），返回新模式
+func toggle_display_mode() -> int:
+	display_mode = DisplayMode.MODE_CITY if display_mode == DisplayMode.MODE_L1 else DisplayMode.MODE_L1
+	queue_redraw()
+	return display_mode
+
+
+func get_mode_name() -> String:
+	return "城市" if display_mode == DisplayMode.MODE_CITY else "L1"
 
 
 ## 一次性构建静态网格：直接读烘焙几何（素材阶段已三角剖分），运行时零几何计算。
@@ -139,15 +159,26 @@ func _draw() -> void:
 	# 3. 相邻地区（灰色）
 	if _neighbors_mesh != null:
 		draw_mesh(_neighbors_mesh, null)
-	# 4. 当前地区地块（彩色）
-	if _static_mesh != null:
-		draw_mesh(_static_mesh, null)
-	# 5. 当前地块洞（海洋色）
-	if _holes_mesh != null:
-		draw_mesh(_holes_mesh, null)
-	# 5.5 地块常驻描边（内部省份边界；已烘焙合并共线段并滤除湖泊/边缘段）
+	if display_mode == DisplayMode.MODE_CITY:
+		# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）
+		if _data.city_preview_texture != null:
+			draw_texture_rect(_data.city_preview_texture,
+				Rect2(Vector2.ZERO, _context_size), false)
+	else:
+		# 4. 当前地区地块（彩色）
+		if _static_mesh != null:
+			draw_mesh(_static_mesh, null)
+		# 5. 当前地块洞（海洋色）
+		if _holes_mesh != null:
+			draw_mesh(_holes_mesh, null)
+	# 5.5 地块常驻描边（地图绝对粗细，放大超屏幕上限时 clamp）
+	var twidth := TILE_BORDER_WIDTH
+	if _camera != null and _camera.has_method("get_zoom"):
+		var zz: float = _camera.get_zoom()
+		if zz > 0.0001:
+			twidth = minf(TILE_BORDER_WIDTH, 6.0 / zz)
 	for seg in _tile_border_segs:
-		draw_line(seg[0], seg[1], TILE_BORDER_COLOR, TILE_BORDER_WIDTH, true)
+		draw_line(seg[0], seg[1], TILE_BORDER_COLOR, twidth, true)
 	# 6. 相邻地区分界线（深色，抗锯齿矢量线；已烘焙合并共线段）
 	if not _neighbor_border_segs.is_empty():
 		var bw := BORDER_WIDTH()
@@ -166,12 +197,12 @@ func _draw() -> void:
 		for pp in hp:
 			hpts.append(Vector2(pp[1], pp[0]))
 		hpts.append(hpts[0])
-		var hw := EDGE_WIDTH
+		var hw := TILE_BORDER_WIDTH + HOVER_MARGIN
 		if _camera != null and _camera.has_method("get_zoom"):
 			var z: float = _camera.get_zoom()
 			if z > 0.0001:
-				# hover 描边至少比地块常驻描边粗一个裕量：放大时避免比地块描边还细
-				hw = maxf(EDGE_SCREEN_PX / z, TILE_BORDER_WIDTH + HOVER_MARGIN)
+				# hover 比地块常驻描边粗一个裕量（地图绝对），放大超屏幕上限 clamp
+				hw = minf(TILE_BORDER_WIDTH + HOVER_MARGIN, HOVER_SCREEN_CAP / z)
 		draw_polyline(hpts, EDGE_COLOR, hw, true)
 	# 8. L1 地块编号（F3 调试模式）：标在各地块质心，指认地块用
 	if DebugApi != null and DebugApi.is_visible() and _data != null:
@@ -196,9 +227,9 @@ func _draw_l1_labels() -> void:
 
 
 func BORDER_WIDTH() -> float:
-	var w := EDGE_WIDTH * 1.3
+	# 相邻地区分界：地图绝对宽 6.5，放大超 10 屏像素 clamp
 	if _camera != null and _camera.has_method("get_zoom"):
 		var z: float = _camera.get_zoom()
 		if z > 0.0001:
-			w = maxf(w, EDGE_SCREEN_PX / z)
-	return w
+			return minf(EDGE_WIDTH * 1.3, 10.0 / z)
+	return EDGE_WIDTH * 1.3

@@ -103,6 +103,8 @@ func _open_l2(label: int) -> void:
 func _on_l2_back() -> void:
 	_l2_active = false
 	visible = true
+	if _zoom_indicator != null:
+		_zoom_indicator.visible = true
 
 
 ## 打开 L3 地图（M 键触发）

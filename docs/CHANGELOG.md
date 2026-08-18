@@ -8,6 +8,15 @@
 
 ## [未发布]
 
+### 描边绝对粗细 + HUD 修复 + L2 城市模式（2026-08）
+
+- **描边=地图绝对粗细**：L3/L2 全部描边由"屏幕保底 max"改为"**地图单位固定宽，放大超屏幕像素上限时 clamp**"（`minf(map_w, cap_screen/zoom)`）——不随缩放变粗，仅极端放大有屏粒上限（L3 hover 5→cap 8px、L2 边界 9→cap 16px；L2 tile 4→cap 6px、hover 6→cap 9px、邻居 6.5→cap 10px）
+- **修 HUD 文字半截/出屏**：`l3_zoom_indicator.gd` 泛化为 `MapHUD`（查 Content 下带 toggle_display_mode 的渲染器，L3/L2 通用）；文字/按钮全部放控件 44px 内（轨道 y=24、数值 y=16 上方），不再溢出到屏幕外
+- **L2 城市模式**：新增 `l1/export_l2_city_previews.py` 生成 13 地区城市蒙版贴图（`l2_packs/region_XXX/l2_city_preview.png`，context 尺寸 RGBA，tiles 区域城市色/其余透明）；`L2MapRenderer` 加显示模式（L1 <-> 城市）+ `MapHUD` 模式按钮；L2 场景挂 HUD（open 显示/ESC 隐藏），L3 返回时恢复
+- **测试**：l2 6/6（新增城市贴图/模式切换）、l3 7/7、p0 6/6 全绿；`check_godot_errors` 干净
+
+### 修复 L3 老 L1 视觉层坐标序错位（描边/地块/hover 错位）（2026-08）
+
 ### 修复 L3 老 L1 视觉层坐标序错位（描边/地块/hover 错位）（2026-08）
 
 - **根因**：`export_l3_l1_view.py` 生成 `l3_l1.json` 时把 mesh 角点从 `(y,x)` 转成了 `(x,y)`，而渲染端统一按 `(y,x)` 读取（`Vector2(p[1],p[0])`）→ 老 L1 地块沿 y=x 镜像错位，hover 高亮随之错位；L2 地区边界是老数据 `(y,x)` 反而没错——于是"描边与地块错位"

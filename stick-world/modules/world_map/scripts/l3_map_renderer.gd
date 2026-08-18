@@ -21,8 +21,11 @@ var hovered_l1: Dictionary = {}
 
 ## hover 高亮色（黄）
 const HOVER_COLOR := Color(1.0, 0.9, 0.3, 0.95)
-const EDGE_WIDTH := 5.0
-const MIN_SCREEN_PX := 2.0
+## 描边=地图单位绝对粗细（不随缩放）；放大超屏幕像素上限时 clamp（防糊屏）
+const HOVER_MAP_WIDTH := 5.0      # hover 地图固定宽
+const HOVER_SCREEN_CAP := 8.0     # hover 屏幕像素上限
+const L2_BORDER_MAP_WIDTH := 9.0  # L2 地区边界地图固定宽
+const L2_BORDER_SCREEN_CAP := 16.0
 
 ## 海洋背景色
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
@@ -213,12 +216,12 @@ func _draw_l2_borders() -> void:
 
 
 func BORDER_WIDTH() -> float:
-	var w := 9.0
+	# 地图固定宽 9；放大超 16 屏像素时 clamp（极端放大防糊屏）
 	if _camera != null and _camera.has_method("get_zoom"):
 		var z: float = _camera.get_zoom()
 		if z > 0.0001:
-			w = maxf(w, MIN_SCREEN_PX / z)
-	return w
+			return minf(L2_BORDER_MAP_WIDTH, L2_BORDER_SCREEN_CAP / z)
+	return L2_BORDER_MAP_WIDTH
 
 
 func _draw_hover_l1() -> void:
@@ -232,11 +235,11 @@ func _draw_hover_l1() -> void:
 		for pp in hp:
 			hpts.append(Vector2(pp[1], pp[0]))
 		hpts.append(hpts[0])
-		var hw := EDGE_WIDTH
+		var hw := HOVER_MAP_WIDTH
 		if _camera != null and _camera.has_method("get_zoom"):
 			var z: float = _camera.get_zoom()
 			if z > 0.0001:
-				hw = maxf(EDGE_WIDTH, MIN_SCREEN_PX / z)
+				hw = minf(HOVER_MAP_WIDTH, HOVER_SCREEN_CAP / z)
 		draw_polyline(hpts, HOVER_COLOR, hw, true)
 
 

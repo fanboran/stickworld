@@ -32,6 +32,7 @@ tools/worldgen/
 │   ├── export_player_l1_cities.py  # ~~389 版玩家初始 L1 视图~~ 已废弃
 │   ├── export_player_l1_cities_v2.py # 出生老 L1 城市视图（Tab 数据源，region_012#3=66）
 │   ├── export_l3_l1_view.py          # L3 视觉层双模式（老 L1 矢量 + 城市贴图 + hover 索引图）
+│   ├── export_l2_city_previews.py   # L2 城市模式贴图（每地区 context 尺寸）
 │   ├── merge_tiny_tiles.py
 │   ├── merge_tiles_groups.py
 │   ├── merge_island_tiles.py

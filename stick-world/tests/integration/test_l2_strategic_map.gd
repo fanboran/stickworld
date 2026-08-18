@@ -27,6 +27,7 @@ func _ready() -> void:
 	_runner.add_test("L2 数据加载：索引图 + 地块列表", _test_load, true)
 	_runner.add_test("地块索引图命中", _test_query, true)
 	_runner.add_test("F3 调试模式：L1 地块标号刷新", _test_debug_labels, true)
+	_runner.add_test("L2 城市模式（贴图 + 模式切换）", _test_city_mode, true)
 	_runner.add_test("L3 单击下钻 -> L2 打开，ESC 返回 L3", _test_drilldown, true)
 	await _runner.run_async()
 	print(_runner.summary())
@@ -142,6 +143,29 @@ func _test_query() -> void:
 	_runner.assert_true(found.size() == _l2_data.tiles.size(),
 			"索引图应覆盖全部地块 label（%d/%d）" % [found.size(), _l2_data.tiles.size()])
 	_runner.assert_true(hit == found.size(), "索引图解码命中（%d/%d）" % [hit, found.size()])
+
+
+func _test_city_mode() -> void:
+	if _l2_data == null:
+		var data: RefCounted = L2WorldData.load_from(
+			"%s/region_001/l2_world.json" % L2_BASE_DIR,
+			"%s/region_001" % L2_BASE_DIR)
+		_l2_data = data
+	if _l2_data == null:
+		_runner.assert_true(false, "前置：L2 数据未加载")
+		return
+	_runner.assert_true(_l2_data.city_preview_texture != null, "L2 城市贴图应加载")
+	if _l2_renderer == null and _l2_scene != null:
+		_l2_content = _l2_scene.get_node_or_null("Content")
+		_l2_renderer = _l2_content.get_node_or_null("L2MapRenderer") if _l2_content != null else null
+	if _l2_renderer == null:
+		_runner.assert_true(false, "前置：渲染器未装载")
+		return
+	var before: int = _l2_renderer.display_mode
+	_l2_renderer.toggle_display_mode()
+	_runner.assert_true(_l2_renderer.display_mode != before, "toggle 应切换 L1/城市模式")
+	_l2_renderer.toggle_display_mode()
+	_runner.assert_true(_l2_renderer.display_mode == before, "再次切换应还原")
 
 
 func _test_drilldown() -> void:

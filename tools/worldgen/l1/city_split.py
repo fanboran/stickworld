@@ -218,7 +218,7 @@ def city_palette(city_labels, parent_labels, parent_rgb, n_city):
 
 def main():
     ap = argparse.ArgumentParser(description="L1 地块之下细分城市（城市蒙版）")
-    ap.add_argument("--spacing", type=int, default=36, help="城市点网格间距（2048 级像素）")
+    ap.add_argument("--spacing", type=int, default=22, help="城市点网格间距（2048 级像素）")
     ap.add_argument("--jitter", type=float, default=0.4, help="扰动幅度（spacing 的比例）")
     ap.add_argument("--min-city-area", type=int, default=90,
                     help="城市面积下限（px²，低于并入同 L1 最大邻居，无同 L1 邻居可并豁免）")
@@ -313,7 +313,7 @@ def main():
 
     def _decimate(loop):
         xy = [(float(p[1]), float(p[0])) for p in loop]
-        pts = mesh_extract._dp_simplify(xy, 0.8)
+        pts = mesh_extract._dp_simplify(xy, 0.3)
         return [[p[0], p[1]] for p in pts]
 
     cities_out = []

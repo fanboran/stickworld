@@ -1,6 +1,6 @@
 extends Node
 ## 集成测试：P0 新 0.9 基础战略图（L1 单层）
-## 验证：L1 数据加载 / 8 聚落 + 空聚落 / 索引图命中查询 / 双击进入聚落 / 打开关闭输入暂停恢复
+## 验证：L1 数据加载（出生 L1 城市划分）/ 城市点命中查询 / 双击进入（城市暂无 map_id 不可进）/ 打开关闭输入暂停恢复
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -19,11 +19,11 @@ var _api: Node = null
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("L1 数据加载：8 聚落 + 空聚落", _test_load, true)
+	_runner.add_test("L1 数据加载：出生 L1 城市划分", _test_load, true)
 	_runner.add_test("索引图命中查询（P 社机制）", _test_query, true)
 	_runner.add_test("悬停坐标换算（open 后 offset/zoom 非零）", _test_hover_mapping, true)
-	_runner.add_test("双击聚落进入场景图（travel_requested）", _test_enter, true)
-	_runner.add_test("空聚落不可进入", _test_empty_enter, true)
+	_runner.add_test("城市聚落暂无 map_id：双击不可进入", _test_enter, true)
+	_runner.add_test("无 map_id 聚落不可进入", _test_empty_enter, true)
 	_runner.add_test("打开/关闭暂停恢复场景图输入", _test_pause_resume, true)
 	await _runner.run_async()
 	print(_runner.summary())
@@ -46,20 +46,24 @@ func _test_load() -> void:
 	_runner.assert_true(data != null, "data 非空")
 	if data == null:
 		return
-	_runner.assert_true(data.tiles.size() >= 8, "地块数应 >= 8（实测 %d）" % data.tiles.size())
+	# 出生 L1 城市划分：每城市 = 1 地块 1 聚落（暂无 map_id），每城市独立政权，MST 道路
+	_runner.assert_true(data.tiles.size() >= 2, "地块数应 >= 2（出生 L1 城市数，实测 %d）" % data.tiles.size())
 	var settled: int = 0
-	var empty: int = 0
+	var no_map: int = 0
 	for tile in data.tiles:
 		if tile.settlement != null:
 			settled += 1
-		else:
-			empty += 1
-	_runner.assert_true(settled == 8, "应有 8 个聚落（实测 %d）" % settled)
-	_runner.assert_true(empty >= 1, "应有空聚落（贫瘠地块）（实测 %d）" % empty)
-	_runner.assert_true(data.roads.size() >= 7, "道路数应 >= 7（MST 连通 8 点，实测 %d）" % data.roads.size())
-	_runner.assert_true(data.states.size() == 8, "应有 8 个独立政权（实测 %d）" % data.states.size())
-	_runner.assert_true(not data.spawn_settlement_id.is_empty(), "应有出生聚落")
-	_runner.assert_true(data.base_texture != null, "卫星图底图已加载")
+			if tile.settlement.map_id.is_empty():
+				no_map += 1
+	_runner.assert_true(settled == data.tiles.size(), "每个城市地块都应有聚落（实测 %d/%d）" % [settled, data.tiles.size()])
+	_runner.assert_true(no_map == data.tiles.size(),
+		"城市聚落暂无 map_id（不可进入，实测 %d/%d）" % [no_map, data.tiles.size()])
+	_runner.assert_true(data.roads.size() >= data.tiles.size() - 1,
+		"道路数应 >= 城市数-1（MST 连通，实测 %d/%d）" % [data.roads.size(), data.tiles.size()])
+	_runner.assert_true(data.states.size() == data.tiles.size(),
+		"每城市独立政权（实测 %d/%d）" % [data.states.size(), data.tiles.size()])
+	_runner.assert_true(not data.spawn_settlement_id.is_empty(), "应有出生城市")
+	_runner.assert_true(data.base_texture != null, "底图已加载")
 	_runner.assert_true(data.mask_image != null, "边界索引图已加载")
 
 
@@ -145,7 +149,7 @@ func _test_enter() -> void:
 		_runner.assert_true(false, "前置数据加载失败，跳过")
 		return
 	var data: RefCounted = _api.get_data()
-	# 找一个有 map_id 的聚落（生成器为 8 聚落分配了 map_id）
+	# 找带 map_id 的聚落（城市层暂无可玩地图 -> 应没有；将来接入后自动恢复进入验证）
 	var target_id: String = ""
 	var expected_map: String = ""
 	for tile in data.tiles:
@@ -153,12 +157,17 @@ func _test_enter() -> void:
 			target_id = tile.settlement.settlement_id
 			expected_map = tile.settlement.map_id
 			break
-	_runner.assert_true(not target_id.is_empty(), "应有带 map_id 的可进入聚落")
-	if target_id.is_empty():
-		return
 	var emitted: Array = []
 	if EventBus != null:
 		EventBus.travel_requested.connect(func(m: String): emitted.append(m))
+	if target_id.is_empty():
+		# 城市层现状：全部城市无 map_id -> 双击/enter 不应触发旅行
+		_api.enter_settlement(data.spawn_settlement_id)
+		await get_tree().process_frame
+		_runner.assert_true(emitted.is_empty(),
+			"城市聚落无 map_id：enter_settlement 不应发射 travel_requested")
+		_runner.assert_true(true, "（城市层暂无 map_id，进入验证待可玩地图接入后恢复）")
+		return
 	_api.enter_settlement(target_id)
 	await get_tree().process_frame
 	_runner.assert_true(emitted.size() >= 1, "enter_settlement 应发射 EventBus.travel_requested（收到 %d）" % emitted.size())
@@ -174,20 +183,19 @@ func _test_empty_enter() -> void:
 	var data: RefCounted = _api.get_data()
 	var empty_id: String = ""
 	for tile in data.tiles:
-		if tile.settlement == null:
-			continue
-		if tile.settlement.map_id.is_empty() and tile.settlement.settlement_id != data.spawn_settlement_id:
+		if tile.settlement != null and tile.settlement.map_id.is_empty() \
+				and tile.settlement.settlement_id != data.spawn_settlement_id:
 			empty_id = tile.settlement.settlement_id
 			break
 	if empty_id.is_empty():
-		_runner.assert_true(true, "（无空 map_id 聚落可测，跳过）")
+		_runner.assert_true(true, "（无 map_id 非出生聚落可测，跳过）")
 		return
 	var emitted: Array = []
 	if EventBus != null:
 		EventBus.travel_requested.connect(func(m: String): emitted.append(m))
 	_api.enter_settlement(empty_id)
 	await get_tree().process_frame
-	_runner.assert_true(emitted.is_empty(), "空聚落（无 map_id）不应发射 travel_requested")
+	_runner.assert_true(emitted.is_empty(), "无 map_id 聚落不应发射 travel_requested")
 
 
 func _test_pause_resume() -> void:

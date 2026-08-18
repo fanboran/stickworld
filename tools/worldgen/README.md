@@ -28,6 +28,7 @@ tools/worldgen/
 ├── l1/                    # L1 地块合并 / 生成 / 全大陆 L1 蒙版（活跃）
 │   ├── l1_world_split.py          # 全大陆 L1 地块划分（L3 级蒙版：城市点 + 岛×L2 分组细胞质膨胀 + 面积下限）
 │   ├── city_split.py              # L1 之下细分城市（城市蒙版：按 L1 分组多源膨胀 + 面积下限）
+│   ├── export_player_l1_cities.py # 玩家初始 L1 城市视图（Tab 战略图数据源：l1_world.json + base/mask）
 │   ├── merge_tiny_tiles.py
 │   ├── merge_tiles_groups.py
 │   ├── merge_island_tiles.py

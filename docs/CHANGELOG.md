@@ -8,6 +8,14 @@
 
 ## [未发布]
 
+### 玩家初始 L1 地块 + Tab 城市划分视图（2026-08）
+
+- **出生 L1 定案**：L1 label 69（region 3，即预览图中 `#28bd72`（region 13 地块）下方的 `#a2ee36` 色块）标记为玩家初始默认地块——`l1_world_split.py` 新增 `--player-start-label`，`l1_data.json` 写入 `player_start: true`
+- **Tab 战略图 = 出生 L1 的城市划分**：新增 `l1/export_player_l1_cities.py`，把出生 L1 的 4 个城市导出为 L1WorldData 兼容格式（`l1_world.json` + `l1_base.png` + `l1_mask.png` 覆盖 Tab 数据源）——每城市 = 1 地块 1 聚落（城市点/级别按面积分档/独立城邦政权/MST 道路/出生城市 = 最大城市）；城市暂无 map_id → 双击不可进入（空 map_id 保护，可玩地图接入后自动恢复）
+- **城市层加密**：`city_split.py` 默认间距 36 → 22（3203 个城市，平均每 L1 ~8 个；出生 L1 内 4 个城市）；城市轮廓抽稀 tol 0.8 → 0.3
+- **预览**：`config/strategic_map/player_start_l1_cities_preview.png`（出生 L1 城市划分放大图，含城市点）
+- **测试**：`test_strategic_map_p0` 更新为城市层语义 6/6 绿（数据加载/城市点查询/悬停换算/无 map_id 不可进入/暂停恢复）；战略图 4 套件回归全绿
+
 ### 城市细分层 + 回滚 L2 视图改动（2026-08）
 
 - **新增 `l1/city_split.py`**：L1 地块之下细分"城市"——城市点（jittered grid，`--spacing 36`，每 L1 至少 1 点）→ 按 L1 分组多源膨胀（城市不跨 L1/海/湾，一个 L1 的两个半岛不共城市）→ 面积下限合并（`--min-city-area 90`）。1236 个城市 / 389 L1，同 L1 相似色（父 L1 色相 + 明度阶梯）。产物 `output/l1/city_*`（labels/预览/索引图/城市点图/JSON）

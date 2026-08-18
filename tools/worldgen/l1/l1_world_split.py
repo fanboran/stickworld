@@ -282,6 +282,8 @@ def main():
     ap.add_argument("--jitter", type=float, default=0.4, help="扰动幅度（spacing 的比例）")
     ap.add_argument("--min-tile-area", type=int, default=400,
                     help="地块面积下限（px²，2024 级；低于则并入同组最大邻居，组唯一豁免）")
+    ap.add_argument("--player-start-label", type=int, default=0,
+                    help="玩家初始默认 L1 地块 label（>0 时在 l1_data.json 标记 player_start=true）")
     ap.add_argument("--seed", type=int, default=20260817, help="城市点随机种子")
     args = ap.parse_args()
 
@@ -392,6 +394,7 @@ def main():
             "polygons": polys,
             "neighbors": sorted(adj[lab]),
             "small_exempt": lab in exempt,
+            "player_start": lab == args.player_start_label,
         })
     data = {
         "name": "全大陆 L1 地块（L3 级蒙版）",

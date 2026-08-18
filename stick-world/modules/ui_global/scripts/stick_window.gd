@@ -139,8 +139,12 @@ func is_open() -> bool:
 	return visible
 
 
-## ESC 关闭自身；POPOVER 点击面板外关闭。均消费（不触发 GameRoot 暂停菜单）
+## ESC 关闭自身；POPOVER 点击面板外关闭。均消费（不触发 GameRoot 暂停菜单）。
+## **必须检查 visible**：本节点常驻场景树（如编制窗口挂 ModalOverlay），隐藏时若仍消费
+## ESC 会把 GameRoot 的暂停菜单 ESC 吞掉（子节点 _unhandled_input 先于根节点执行）。
 func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		close()
 		get_viewport().set_input_as_handled()

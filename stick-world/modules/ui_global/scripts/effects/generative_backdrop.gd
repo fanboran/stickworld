@@ -21,8 +21,10 @@ const JITTER: float = 8.0
 const REPULSION_RADIUS: float = 250.0
 ## 排斥最大位移（px）
 const REPULSION_STRENGTH: float = 52.0
-## 光标光晕圈数
-const GLOW_RINGS: int = 7
+## 光标光晕半径（px）——柔和径向渐变，非同心圈
+const GLOW_RADIUS: float = 120.0
+## 光晕呼吸脉动幅度（alpha 上下摆）
+const GLOW_PULSE: float = 0.06
 
 ## 遮罩压暗色（背景变暗部分，立方体叠加其上）
 var dim_color: Color = Color(0.02, 0.03, 0.06, 0.5)
@@ -158,10 +160,21 @@ func _rounded_rect(rect: Rect2, radius: float, color: Color) -> void:
 	draw_style_box(_sb_cache, rect)
 
 
-## 光标光效：同心圆由内到外淡出（柔和径向光晕）
+## 光标光效：径向渐变贴图一张画完（无同心圈/无跳变），随时间缓慢呼吸脉动
+var _glow_tex: GradientTexture2D = null
+
 func _draw_glow(pos: Vector2) -> void:
-	for i in range(GLOW_RINGS):
-		var t: float = float(i) / float(GLOW_RINGS - 1)
-		var r: float = lerpf(16.0, 170.0, t)
-		var a: float = lerpf(0.14, 0.012, t)
-		draw_circle(pos, r, Color(1.0, 0.93, 0.78, a))
+	if _glow_tex == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(1.0, 0.93, 0.78, 0.32))
+		g.set_color(1, Color(1.0, 0.93, 0.78, 0.0))
+		_glow_tex = GradientTexture2D.new()
+		_glow_tex.gradient = g
+		_glow_tex.fill = GradientTexture2D.FILL_RADIAL
+		_glow_tex.fill_from = Vector2(0.5, 0.5)
+		_glow_tex.fill_to = Vector2(1.0, 0.5)
+		_glow_tex.width = 128
+		_glow_tex.height = 128
+	var breath: float = 1.0 + sin(_time * 1.6) * GLOW_PULSE
+	var r: float = GLOW_RADIUS
+	draw_texture_rect(_glow_tex, Rect2(pos - Vector2(r, r), Vector2(r * 2.0, r * 2.0)), false, Color(1.0, 1.0, 1.0, breath))

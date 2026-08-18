@@ -75,6 +75,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_combat_control.tscn"
 	"tests/integration/test_menu_navigation.tscn"
 	"tests/integration/test_modal_stack.tscn"
+	"tests/integration/test_esc_key_input.tscn"
 	"tests/integration/test_ui_layout.tscn"
 	"tests/integration/test_battle_ui.tscn"
 	"tests/integration/test_formation_system_assembly.tscn"
@@ -106,6 +107,7 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_combat_control.tscn"]=90
 	["tests/integration/test_menu_navigation.tscn"]=95
 	["tests/integration/test_modal_stack.tscn"]=95
+	["tests/integration/test_esc_key_input.tscn"]=90
 	["tests/integration/test_ui_layout.tscn"]=90
 	["tests/integration/test_battle_ui.tscn"]=90
 	["tests/integration/test_formation_system_assembly.tscn"]=90
@@ -161,6 +163,7 @@ affected_suites() {
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1
 				picked["tests/integration/test_modal_stack.tscn"]=1
+				picked["tests/integration/test_esc_key_input.tscn"]=1
 				picked["tests/integration/test_ui_layout.tscn"]=1 ;;
 			stick-world/modules/resources/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1 ;;

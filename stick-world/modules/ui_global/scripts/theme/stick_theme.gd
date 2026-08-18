@@ -55,10 +55,11 @@ static func _apply_button(t: Theme) -> void:
 	t.set_stylebox("pressed", "Button", StickStyle.button_pressed())
 	t.set_stylebox("disabled", "Button", StickStyle.button_disabled())
 	t.set_stylebox("focus", "Button", _empty_focus())
-	t.set_color("font_color", "Button", StickTokens.TEXT)
-	t.set_color("font_hover_color", "Button", StickTokens.TEXT)
+	# 按钮=磨砂玻璃（浅色底）→ 深色文字，两表面通用
+	t.set_color("font_color", "Button", StickTokens.TEXT_ON_LIGHT)
+	t.set_color("font_hover_color", "Button", StickTokens.TEXT_ON_LIGHT)
 	t.set_color("font_pressed_color", "Button", StickTokens.ACCENT)
-	t.set_color("font_disabled_color", "Button", StickTokens.TEXT_DISABLED)
+	t.set_color("font_disabled_color", "Button", StickTokens.TEXT_ON_LIGHT_DISABLED)
 	t.set_font_size("font_size", "Button", StickTokens.FONT_BODY)
 
 

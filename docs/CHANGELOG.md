@@ -8,6 +8,12 @@
 
 ## [未发布]
 
+### 修正出生 L1 定位：region 13（#28bd72）最东地块（2026-08）
+
+- **出生 L1 修正**：定位标准改为「游戏内 L3 地图中 `#28bd72` 色（L2 地区 13 区色，`l3_world.json` 精确命中）内最东侧的 L1 地块 = **label 219**」。此前按全图预览颜色近邻误选 region 3 的 label 69（`#a2ee36` 实为 L2 地区 3 的地区色，非 L1 色）——已用 `--player-start-label 219` 重跑整条链
+- **数据**：出生 L1=219（area 2733px）内 4 城市（面积和=2733）/ 4 城邦 / 3 条 MST 道路；`l1_world.json` + `l1_base.png` + `l1_mask.png`（Tab 数据源）与 `player_start_l1_cities_preview.png` 预览全部更新为 label 219
+- **校验**：城市点在自身 mask 内全部命中；P0 测试 6/6 + 战略图 4 套件回归全绿；`check_godot_errors` 干净
+
 ### 玩家初始 L1 地块 + Tab 城市划分视图（2026-08）
 
 - **出生 L1 定案**：L1 label 69（region 3，即预览图中 `#28bd72`（region 13 地块）下方的 `#a2ee36` 色块）标记为玩家初始默认地块——`l1_world_split.py` 新增 `--player-start-label`，`l1_data.json` 写入 `player_start: true`

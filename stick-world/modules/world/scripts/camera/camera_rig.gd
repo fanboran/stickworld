@@ -21,8 +21,10 @@ const ZOOM_MAX: float = 2.0
 const ZOOM_STEP: float = 0.1
 ## 边缘滚动死区（屏幕宽度比例）
 const EDGE_DEAD_ZONE: float = 0.05
-## 边缘滚动速度（世界坐标 px/s）
-const EDGE_SCROLL_SPEED: float = 400.0
+## 边缘滚动速度（世界坐标 px/s；设置面板 control/edge_scroll_speed 1~10 档可调，5 档 = 400）
+var edge_scroll_speed: float = 400.0
+## 滚轮缩放步长倍率（control/zoom_speed 1~10 档，5 档 = 1.0）
+var zoom_speed_mult: float = 1.0
 ## 跟随平滑系数（值越大越跟手）
 const FOLLOW_SMOOTHING: float = 8.0
 ## 居中模式平滑系数
@@ -62,6 +64,10 @@ var _return_elapsed: float = 0.0
 var _edge_scroll_dir: int = 0
 ## 边缘滚动总开关（建造放置期间关闭，避免拖动边界时世界跟着滚）
 var _edge_scroll_enabled: bool = true
+## 用户偏好：边缘滚动总开关（设置面板 control/edge_scroll）
+var _user_edge_scroll_enabled: bool = true
+## 用户偏好：中键拖拽平移开关（设置面板 control/middle_drag）
+var _middle_drag_enabled: bool = true
 ## 拖动状态
 var _dragging: bool = false
 ## 中键滚动状态（红警风格：方向滚动，非拖动）
@@ -97,6 +103,16 @@ func _ready() -> void:
 	make_current()
 	_recompute_base_zoom()
 	_apply_zoom()
+	# 设置面板持久化项（control/*，应用后实时 setter 生效，启动时读存量）
+	if ConfigManager:
+		if ConfigManager.has_key("control/edge_scroll"):
+			_user_edge_scroll_enabled = bool(ConfigManager.get_value("control/edge_scroll"))
+		if ConfigManager.has_key("control/edge_scroll_speed"):
+			edge_scroll_speed = 400.0 * float(ConfigManager.get_value("control/edge_scroll_speed")) / 5.0
+		if ConfigManager.has_key("control/zoom_speed"):
+			zoom_speed_mult = float(ConfigManager.get_value("control/zoom_speed")) / 5.0
+		if ConfigManager.has_key("control/middle_drag"):
+			_middle_drag_enabled = bool(ConfigManager.get_value("control/middle_drag"))
 
 
 func _physics_process(delta: float) -> void:
@@ -168,8 +184,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					else:
 						# 自由镜头模式：启动 5 秒冷却，期间无操作才弹回
 						_manual_cooldown = MANUAL_COOLDOWN_TIME
-		# 中键滚动（红警风格：鼠标偏离锚点方向 = 相机移动方向）
-		elif event.button_index == MOUSE_BUTTON_MIDDLE:
+		# 中键滚动（红警风格：鼠标偏离锚点方向 = 相机移动方向；control/middle_drag 关闭时不响应）
+		elif event.button_index == MOUSE_BUTTON_MIDDLE and _middle_drag_enabled:
 			if event.pressed:
 				_middle_scrolling = true
 				_middle_anchor = event.position
@@ -190,9 +206,9 @@ func _unhandled_input(event: InputEvent) -> void:
 						_manual_cooldown = MANUAL_COOLDOWN_TIME
 		# 滚轮缩放
 		elif event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-			_zoom_at_mouse(ZOOM_STEP)
+			_zoom_at_mouse(ZOOM_STEP * zoom_speed_mult)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-			_zoom_at_mouse(-ZOOM_STEP)
+			_zoom_at_mouse(-ZOOM_STEP * zoom_speed_mult)
 
 
 # ─────────────────────────────── 位置更新 ────────────────────────────────
@@ -217,7 +233,7 @@ func _update_position(delta: float) -> void:
 	if _manual_active:
 		# 手动控制期间，水平位置由拖动/边缘滚动驱动，不自动跟随
 		if _edge_scroll_dir != 0 and not _dragging:
-			target_x = global_position.x + _edge_scroll_dir * EDGE_SCROLL_SPEED * delta
+			target_x = global_position.x + _edge_scroll_dir * edge_scroll_speed * delta
 		# 拖动时位置在 _update_manual_control 里直接设置
 		target_x = _clamp_camera_x(target_x)
 	elif _returning:
@@ -308,8 +324,9 @@ func _compute_follow_x(delta: float) -> float:
 # ─────────────────────────────── 手动控制 ────────────────────────────────
 
 func _update_edge_scroll() -> void:
-	# 总开关：建造放置期间关闭，防止拖动边界时相机边缘滚动干扰
-	if not _edge_scroll_enabled:
+	# 总开关：建造放置期间关闭，防止拖动边界时相机边缘滚动干扰；
+	# 用户偏好开关（设置面板 control/edge_scroll）与总开关取交集
+	if not _edge_scroll_enabled or not _user_edge_scroll_enabled:
 		if _edge_scroll_dir != 0:
 			_edge_scroll_dir = 0
 		return
@@ -353,6 +370,28 @@ func set_edge_scroll_enabled(enabled: bool) -> void:
 	_edge_scroll_enabled = enabled
 	if not enabled:
 		_edge_scroll_dir = 0
+
+
+## 用户偏好：边缘滚动开关（设置面板 control/edge_scroll）
+func set_user_edge_scroll(enabled: bool) -> void:
+	_user_edge_scroll_enabled = enabled
+	if not enabled:
+		_edge_scroll_dir = 0
+
+
+## 用户偏好：边缘滚动速度 1~10 档（5 档 = 默认 400px/s）
+func set_edge_scroll_speed(level: float) -> void:
+	edge_scroll_speed = 400.0 * clampf(level, 1.0, 10.0) / 5.0
+
+
+## 用户偏好：滚轮缩放速度 1~10 档（5 档 = 默认步长 0.1）
+func set_zoom_speed(level: float) -> void:
+	zoom_speed_mult = clampf(level, 1.0, 10.0) / 5.0
+
+
+## 用户偏好：中键拖拽平移开关（设置面板 control/middle_drag）
+func set_middle_drag_enabled(enabled: bool) -> void:
+	_middle_drag_enabled = enabled
 
 
 func _update_manual_control(_delta: float) -> void:

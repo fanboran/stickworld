@@ -93,9 +93,17 @@ func _init_values() -> void:
 			var key: String = field["key"]
 			if ConfigManager and ConfigManager.has_method("get_value") \
 					and ConfigManager.get_value(key) != null:
-				_values[key] = ConfigManager.get_value(key)
+				_values[key] = _normalize_stored_value(key, ConfigManager.get_value(key))
 			else:
 				_values[key] = def_val
+
+
+## 存量值归一化：音量键历史上存 0~1 线性（ConfigManager/AudioManager 域），
+## 设置面板域用 0~100 百分比；读到 ≤1 的旧线性值时换算成百分比显示。
+func _normalize_stored_value(key: String, raw: Variant) -> Variant:
+	if key in _VOLUME_KEYS and typeof(raw) in [TYPE_FLOAT, TYPE_INT] and float(raw) <= 1.0:
+		return int(round(float(raw) * 100.0))
+	return raw
 
 
 # ─────────────────────────────── 分类切换（真实生效）────────────────────────────────
@@ -173,18 +181,24 @@ func _add_speed_buttons() -> void:
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 
-## 设置项字段行（slider / option / toggle），值变化写入 _values
+## 设置项字段行（slider / option / toggle），值变化写入 _values。
+## 未实装字段（field.implemented == false）：整体降透明度 + 控件禁用 + 「未实装」标注。
 func _add_field_row(field: Dictionary) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	row.custom_minimum_size = Vector2(0, StickTokens.ROW_H)
 	_content_vbox.add_child(row)
+	var key: String = field["key"]
+	var implemented: bool = bool(field.get("implemented", true))
 	var name_l := Label.new()
-	name_l.text = field["label"]
+	name_l.text = field["label"] + ("" if implemented else "（未实装）")
 	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(name_l)
-	var key: String = field["key"]
+	if not implemented:
+		name_l.modulate = StickTokens.TEXT_DIM
+		row.tooltip_text = "该选项尚未实装"
+	var widget: Control = null
 	match field["type"]:
 		"slider":
 			var s := HSlider.new()
@@ -196,6 +210,7 @@ func _add_field_row(field: Dictionary) -> void:
 			s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			row.add_child(s)
 			s.value_changed.connect(func(v: float): _values[key] = v)
+			widget = s
 		"option":
 			var o := OptionButton.new()
 			for i in field["options"].size():
@@ -204,25 +219,100 @@ func _add_field_row(field: Dictionary) -> void:
 			o.custom_minimum_size = Vector2(220, StickTokens.BTN_H)
 			row.add_child(o)
 			o.item_selected.connect(func(idx: int): _values[key] = idx)
+			widget = o
 		"toggle":
 			var c := CheckButton.new()
 			c.button_pressed = _values[key]
 			row.add_child(c)
 			c.toggled.connect(func(on: bool): _values[key] = on)
+			widget = c
+	if not implemented and widget != null:
+		row.modulate = Color(1.0, 1.0, 1.0, 0.5)
+		widget.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if widget is OptionButton or widget is CheckButton:
+			widget.disabled = true
 
 
 # ─────────────────────────────── 应用 / 恢复 ────────────────────────────────
 
-## 应用：把 _values 写入 ConfigManager 并落盘
+## 应用：把 _values 写入 ConfigManager 并落盘，同时把已实装项立即接线到真实系统。
 func _on_apply() -> void:
 	var written: int = 0
 	if ConfigManager and ConfigManager.has_method("set_value"):
 		for key in _values:
-			ConfigManager.set_value(key, _values[key])
+			# 音量键：面板域 0~100 百分比 -> 存储域 0~1 线性（AudioManager/ConfigManager 约定）
+			var stored: Variant = _values[key]
+			if key in _VOLUME_KEYS and typeof(stored) in [TYPE_FLOAT, TYPE_INT]:
+				stored = clampf(float(stored) / 100.0, 0.0, 1.0)
+			ConfigManager.set_value(key, stored)
 			written += 1
+			_apply_live_setting(key, _values[key])
 	if ConfigManager and ConfigManager.has_method("save_to_disk"):
 		ConfigManager.save_to_disk()
 	StickKit.toast(self, "已应用 %d 项设置" % written, "info")
+
+
+## 已实装设置项的即时生效（不改 ConfigManager，只调真实系统）。
+## 未实装项（schema implemented=false）不在此列。
+func _apply_live_setting(key: String, value: Variant) -> void:
+	match key:
+		"game/auto_save_interval_sec", "game/auto_pause_battle":
+			pass  # 消费方（SaveManager / TimeManager）实时读 ConfigManager
+		"game/slow_on_possess":
+			if TimeManager:
+				TimeManager.auto_slow_on_possess = bool(value)
+		"video/window_mode":
+			if ConfigManager and ConfigManager.has_method("apply_window_mode"):
+				ConfigManager.apply_window_mode(int(value))
+		"video/ui_scale":
+			get_window().content_scale_factor = float(value) / 100.0
+		"video/show_fps":
+			_set_fps_counter_visible(bool(value))
+		"audio/master_volume":
+			if AudioManager and AudioManager.has_method("set_volume"):
+				AudioManager.set_volume("master", float(value) / 100.0)
+		"audio/mute_when_unfocused":
+			if AudioManager and AudioManager.has_method("set_mute_on_unfocus"):
+				AudioManager.set_mute_on_unfocus(bool(value))
+		"control/edge_scroll":
+			var cam := _camera()
+			if cam != null and cam.has_method("set_user_edge_scroll"):
+				cam.set_user_edge_scroll(bool(value))
+		"control/edge_scroll_speed":
+			var cam2 := _camera()
+			if cam2 != null and cam2.has_method("set_edge_scroll_speed"):
+				cam2.set_edge_scroll_speed(float(value))
+		"control/zoom_speed":
+			var cam3 := _camera()
+			if cam3 != null and cam3.has_method("set_zoom_speed"):
+				cam3.set_zoom_speed(float(value))
+		"control/middle_drag":
+			var cam4 := _camera()
+			if cam4 != null and cam4.has_method("set_middle_drag_enabled"):
+				cam4.set_middle_drag_enabled(bool(value))
+		"debug/overlay":
+			if DebugApi and DebugApi.has_method("set_overlay_visible"):
+				DebugApi.set_overlay_visible(bool(value))
+		"debug/legend":
+			if DebugApi:
+				if bool(value):
+					DebugApi.show_legend()
+				else:
+					DebugApi.hide_legend()
+
+
+func _camera() -> Node:
+	if _game_root == null:
+		return null
+	return _game_root.get("camera_rig") if "camera_rig" in _game_root else null
+
+
+## 显示/隐藏 FPS 计数器（经 UIRoot 槽；无 UIRoot（主菜单）时静默跳过）
+func _set_fps_counter_visible(v: bool) -> void:
+	if _game_root == null or _game_root.ui_root == null:
+		return
+	if _game_root.ui_root.has_method("set_fps_counter_visible"):
+		_game_root.ui_root.set_fps_counter_visible(v)
 
 
 ## 恢复默认：_values 重置 + 重建内容
@@ -284,6 +374,9 @@ func _on_return_to_menu_confirmed() -> void:
 
 # ─────────────────────────────── 设置项 schema ────────────────────────────────
 
+## 音量键（面板域 0~100 百分比；存储域 0~1 线性，见 _on_apply 换算）
+const _VOLUME_KEYS: Array[String] = ["audio/master_volume", "audio/music_volume", "audio/sfx_volume"]
+
 const SETTINGS_SCHEMA: Array[Dictionary] = [
 	{
 		"id": "game", "title": "游戏",
@@ -291,13 +384,13 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 			{"key": "game/auto_save_interval_sec", "label": "自动存档间隔（秒）", "type": "slider", "min": 30, "max": 600, "step": 30, "default": 60},
 			{"key": "game/auto_pause_battle", "label": "战斗开始时自动暂停", "type": "toggle", "default": true},
 			{"key": "game/slow_on_possess", "label": "附身微操时自动减速", "type": "toggle", "default": true},
-			{"key": "game/ui_fade_zoom", "label": "缩放时 UI 渐隐渐显", "type": "toggle", "default": true},
+			{"key": "game/ui_fade_zoom", "label": "缩放时 UI 渐隐渐显", "type": "toggle", "default": true, "implemented": false},
 		],
 	},
 	{
 		"id": "video", "title": "画面",
 		"fields": [
-			{"key": "video/window_mode", "label": "窗口模式", "type": "option", "options": ["窗口化", "无边框全屏", "独占全屏"], "default": 1},
+			{"key": "video/window_mode", "label": "窗口模式", "type": "option", "options": ["窗口化", "无边框全屏", "独占全屏"], "default": 0},
 			{"key": "video/ui_scale", "label": "界面缩放", "type": "slider", "min": 75, "max": 150, "step": 5, "default": 100},
 			{"key": "video/show_fps", "label": "显示 FPS", "type": "toggle", "default": false},
 		],
@@ -306,8 +399,8 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		"id": "audio", "title": "音频",
 		"fields": [
 			{"key": "audio/master_volume", "label": "主音量", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80},
-			{"key": "audio/music_volume", "label": "音乐", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 60},
-			{"key": "audio/sfx_volume", "label": "音效", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80},
+			{"key": "audio/music_volume", "label": "音乐", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 60, "implemented": false},
+			{"key": "audio/sfx_volume", "label": "音效", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80, "implemented": false},
 			{"key": "audio/mute_when_unfocused", "label": "失焦时静音", "type": "toggle", "default": true},
 		],
 	},
@@ -325,7 +418,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		"fields": [
 			{"key": "debug/overlay", "label": "调试覆盖层（F3）", "type": "toggle", "default": false},
 			{"key": "debug/legend", "label": "常驻调试图例", "type": "toggle", "default": true},
-			{"key": "debug/log_level", "label": "日志级别", "type": "option", "options": ["ERROR", "WARN", "INFO", "DEBUG"], "default": 2},
+			{"key": "debug/log_level", "label": "日志级别", "type": "option", "options": ["ERROR", "WARN", "INFO", "DEBUG"], "default": 2, "implemented": false},
 		],
 	},
 ]

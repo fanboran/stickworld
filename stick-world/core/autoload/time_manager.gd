@@ -27,6 +27,27 @@ var auto_slow_on_possess: bool = true
 # ─────────────────────────────── 内部状态 ────────────────────────────────
 
 
+# ─────────────────────────────── 生命周期 ────────────────────────────────
+
+## 启动时应用设置面板持久化项（附身自动减速 / 战斗自动暂停）。
+func _ready() -> void:
+	if ConfigManager:
+		if ConfigManager.has_key("game/slow_on_possess"):
+			auto_slow_on_possess = bool(ConfigManager.get_value("game/slow_on_possess"))
+	if EventBus and EventBus.has_signal("battle_started"):
+		EventBus.battle_started.connect(_on_battle_started)
+
+
+## 战斗开始：若设置开启（game/auto_pause_battle，默认 true）则自动暂停，玩家手动恢复。
+func _on_battle_started(_battle_id: String) -> void:
+	if not ConfigManager:
+		return
+	var v: Variant = ConfigManager.get_value("game/auto_pause_battle")
+	# 键未存储（从未应用过设置）时按默认 true 处理
+	if v == null or bool(v):
+		pause()
+
+
 # ─────────────────────────────── 速度控制 ────────────────────────────────
 
 ## 设置当前时间流速。根据新旧速度状态发射 game_paused / game_resumed。

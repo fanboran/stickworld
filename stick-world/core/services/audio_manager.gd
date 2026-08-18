@@ -22,6 +22,13 @@ var _volumes: Dictionary = {
 	"sfx": 0.9,
 }
 
+## 失焦静音（设置面板 audio/mute_when_unfocused）
+var _mute_on_unfocus: bool = false
+## 当前是否因失焦被静音
+var _unfocused_muted: bool = false
+## 静音前的主音量（恢复用）
+var _master_before_mute: float = 1.0
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
@@ -35,6 +42,15 @@ func _ready() -> void:
 
 	if ConfigManager and ConfigManager.has_signal("volume_changed"):
 		ConfigManager.volume_changed.connect(_on_volume_changed)
+	# 失焦静音（audio/mute_when_unfocused）
+	if ConfigManager and ConfigManager.has_key("audio/mute_when_unfocused"):
+		_mute_on_unfocus = bool(ConfigManager.get_value("audio/mute_when_unfocused"))
+	var win := get_window()
+	if win:
+		win.focus_exited.connect(_on_focus_exited)
+		win.focus_entered.connect(_on_focus_entered)
+	if _mute_on_unfocus and win and not win.has_focus():
+		_apply_mute()
 
 
 func _apply_initial_volumes() -> void:
@@ -118,6 +134,42 @@ func _on_sfx_finished(player: AudioStreamPlayer) -> void:
 		_sfx_players.erase(player)
 	if is_instance_valid(player):
 		player.queue_free()
+
+
+# ─────────────────────────────── 失焦静音 ────────────────────────────────
+
+## 设置失焦静音开关（设置面板 audio/mute_when_unfocused）。
+## 关闭时立即恢复被静音的主音量；开启且当前失焦时立即静音。
+func set_mute_on_unfocus(enabled: bool) -> void:
+	_mute_on_unfocus = enabled
+	if not enabled:
+		if _unfocused_muted:
+			_restore_master()
+	elif get_window() != null and not get_window().has_focus():
+		_apply_mute()
+
+
+func _on_focus_exited() -> void:
+	if _mute_on_unfocus:
+		_apply_mute()
+
+
+func _on_focus_entered() -> void:
+	if _unfocused_muted:
+		_restore_master()
+
+
+## 静音主总线（记住当前主音量供恢复）
+func _apply_mute() -> void:
+	_unfocused_muted = true
+	_master_before_mute = float(_volumes.get("master", 1.0))
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), -80.0)
+
+
+## 恢复主音量
+func _restore_master() -> void:
+	_unfocused_muted = false
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), _to_db(_master_before_mute))
 
 
 func stop_all_sfx() -> void:

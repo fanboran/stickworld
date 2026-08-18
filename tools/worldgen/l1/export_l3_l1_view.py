@@ -75,7 +75,9 @@ def build_layer(label_map, group_of, group_seq, group_total, n_all, decimate_tol
         ys, xs = np.where(m)
         mv = mesh.get(lab, {"outer": [], "holes": []})
         def _dec(loop):
-            pts = mesh_extract._dp_simplify([(float(p[1]), float(p[0])) for p in loop], decimate_tol)
+            # 坐标约定：mesh 角点即 (y,x)；DP 对称，直接保留 (y,x) 写入 JSON，
+            # 与 l3_world.json 的 land_polygons 一致——渲染端统一 Vector2(p[1],p[0]) 解读。
+            pts = mesh_extract._dp_simplify([(float(p[0]), float(p[1])) for p in loop], decimate_tol)
             return [[p[0], p[1]] for p in pts]
         rings = [_dec(r) for r in mv["outer"] if len(r) >= 3]
         holes = [_dec(r) for r in mv["holes"] if len(r) >= 3]

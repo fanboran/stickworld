@@ -24,6 +24,7 @@ func _ready() -> void:
 	_runner.add_test("M 键视图打开/关闭", _test_toggle, true)
 	_runner.add_test("F3 调试模式：L2 地区编号刷新", _test_debug_labels, true)
 	_runner.add_test("显示模式切换（L1 <-> 城市）", _test_display_mode, true)
+	_runner.add_test("hover 命中老 L1（索引图查询）", _test_hover_l1, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -106,6 +107,22 @@ func _test_links() -> void:
 	_runner.assert_true(with_full == 13, "所有地区应有完整分区轮廓（%d/13）" % with_full)
 	_runner.assert_true(valid_full == 13, "所有完整轮廓应连续（边缘跳变<=2）（%d/13）" % valid_full)
 
+
+
+func _test_hover_l1() -> void:
+	if _data == null or _data.l1_index_image == null:
+		_runner.assert_true(false, "前置：L1 索引图未加载")
+		return
+	var hit: int = 0
+	for t in _data.l1_tiles:
+		var c: Array = t.get("centroid_2048", [0, 0])
+		if c.size() < 2:
+			continue
+		var q: Dictionary = _data.query_l1_at_map_pos(Vector2(float(c[0]), float(c[1])))
+		var l1hit: Dictionary = q.get("l1", {})
+		if int(l1hit.get("label", 0)) > 0:
+			hit += 1
+	_runner.assert_true(hit >= 10, "质心应命中老 L1（命中 %d/20）" % hit)
 
 func _test_display_mode() -> void:
 	if _scene == null or _renderer == null:

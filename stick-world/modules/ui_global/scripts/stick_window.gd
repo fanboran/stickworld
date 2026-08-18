@@ -76,6 +76,8 @@ func _build_content() -> void:
 
 
 ## 初始定位（FLOATING 居中；DOCK 停靠；POPOVER 锚点）
+## FLOATING/POPOVER 一律夹进安全矩形（HUD 顶栏/材料条/底栏避让），
+## 防"弹窗盖住常驻 HUD 按钮"（StickKit.safe_rect 单一真相源，见 09-布局规则与AI自检.md）。
 func _position_panel() -> void:
 	var vp := get_viewport().get_visible_rect() if get_viewport() != null else Rect2(0, 0, 1920, 1080)
 	match behavior:
@@ -85,6 +87,18 @@ func _position_panel() -> void:
 			_panel.position = anchor_pos
 		_:
 			_panel.position = vp.size * 0.5 - window_size * 0.5
+	# 尺寸定稿后（首次布局/resize）再夹一次，确保真实面板尺寸也落在安全区内
+	if not _panel.resized.is_connected(_clamp_into_safe_rect):
+		_panel.resized.connect(_clamp_into_safe_rect)
+	if behavior != Behavior.DOCK:
+		_clamp_into_safe_rect()
+
+
+## 把面板矩形夹进安全矩形（FLOATING/POPOVER）。拖动不触发（只监听 resized）。
+func _clamp_into_safe_rect() -> void:
+	if _panel == null or not is_instance_valid(_panel):
+		return
+	_panel.position = StickKit.clamp_to_safe_rect(self, Rect2(_panel.position, _panel.size)).position
 
 
 # ─────────────────────────────── 拖动（FLOATING）────────────────────────────────

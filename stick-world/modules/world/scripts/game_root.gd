@@ -334,9 +334,18 @@ func get_settings_menu_panel() -> Control:
 	return _settings_menu_panel
 
 
-## 打开/关闭设置菜单（左上角齿轮按钮 / 暂停菜单「设置」调用）
+## 打开/关闭设置菜单（左上角齿轮按钮 / 暂停菜单「设置」调用）。
+## 经模态栈开合（层键 SETTINGS）；无栈环境回退面板自身 toggle。
 func toggle_settings_menu() -> void:
-	if _settings_menu_panel != null and _settings_menu_panel.has_method("toggle"):
+	if _settings_menu_panel == null:
+		return
+	var stack := _get_modal_stack()
+	if stack != null:
+		if stack.is_open(UIModalStack.Layer.SETTINGS):
+			stack.pop(UIModalStack.Layer.SETTINGS)
+		else:
+			stack.push(_settings_menu_panel, UIModalStack.Layer.SETTINGS)
+	elif _settings_menu_panel.has_method("toggle"):
 		_settings_menu_panel.toggle()
 
 
@@ -745,19 +754,26 @@ func _open_placeholder_panel(preset_id: String) -> void:
 	UIPlaceholderPanel.open_panel(overlay, preset_id)
 
 
-## ESC 语义（模态栈逐层关闭）：设置开着→关设置（若暂停菜单是被"让位隐藏"的则恢复）；
-## 暂停菜单开着→关暂停；都没开→开暂停菜单。附身模式返回 false（ESC 留给退出附身，不消费）。
-## 返回是否已消费事件。
+## ESC 语义（统一模态栈逐层退栈）：有模态 → 退栈顶（设置→关设置、确认框→取消、
+## 占位面板→关面板，逐层返回）；无模态 → 开暂停菜单。附身模式返回 false
+## （ESC 留给退出附身，不消费）。返回是否已消费事件。
 func _handle_escape() -> bool:
 	if input_dispatcher != null and input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS:
 		return false
-	if _settings_menu_panel != null and _settings_menu_panel.is_open():
-		_settings_menu_panel.close()
-		# 从暂停菜单进入的设置：关闭后恢复暂停菜单（返回点）
-		if _pause_menu_panel != null and _pause_menu_panel.has_method("restore_if_delegated"):
-			_pause_menu_panel.restore_if_delegated()
-	elif _pause_menu_panel != null and _pause_menu_panel.is_open():
-		_pause_menu_panel.close()
-	elif _pause_menu_panel != null:
-		_pause_menu_panel.open()
+	var stack := _get_modal_stack()
+	if stack != null and stack.handle_escape():
+		return true
+	# 无模态 → 开暂停菜单
+	if _pause_menu_panel != null:
+		if stack != null:
+			stack.push(_pause_menu_panel, UIModalStack.Layer.PAUSE_MENU)
+		else:
+			_pause_menu_panel.open()
 	return true
+
+
+## 取 UIRoot 统一模态栈（无则 null）
+func _get_modal_stack() -> UIModalStack:
+	if ui_root == null:
+		return null
+	return ui_root.get_modal_stack()

@@ -6,6 +6,7 @@ extends CanvasLayer
 ## 子节点结构（z 从低到高）：
 ##   GlobalHUD / ModePanel / ContextPanel / ResourceBar / HudOverlay
 ##   ModalOverlay（z=50，模态遮罩盖住全部 UI） / UiInspector（z=100，F3 调试）
+##   UIModalStack（模态栈：层键字典 + 逐层 pop，见 ui_modal_stack.gd）
 
 const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scripts/debug_ui_inspector.gd")
 
@@ -17,14 +18,31 @@ const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scrip
 @onready var context_panel: Control = get_node_or_null(UIAPI.PATH_CONTEXT_PANEL)
 @onready var modal_overlay: Control = get_node_or_null(UIAPI.PATH_MODAL_OVERLAY)
 
+## 统一模态栈（UIModalStack 子节点，ESC/输入屏蔽/暂停的单一权威）
+var modal_stack: UIModalStack = null
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
 	add_to_group("ui_root")
+	_setup_modal_stack()
 	_bind_event_bus()
 	_apply_theme()
 	_setup_ui_inspector()
+
+
+## 装配统一模态栈（层键字典 + 逐层 pop，替代 GameRoot._handle_escape 特判）
+func _setup_modal_stack() -> void:
+	var stack := UIModalStack.new()
+	stack.name = "UIModalStack"
+	add_child(stack)
+	modal_stack = stack
+
+
+## 取模态栈（供 GameRoot / StickKit 等调用）
+func get_modal_stack() -> UIModalStack:
+	return modal_stack
 
 
 ## F3 调试模式 UI 名称检查器（挂最上层，DebugApi 可见时生效）

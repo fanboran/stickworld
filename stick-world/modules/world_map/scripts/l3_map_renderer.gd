@@ -21,11 +21,11 @@ var hovered_l1: Dictionary = {}
 
 ## hover 高亮色（黄）
 const HOVER_COLOR := Color(1.0, 0.9, 0.3, 0.95)
-## 描边=地图单位绝对粗细（不随缩放；放大超屏幕像素上限时 clamp 防糊屏）——2026-08 翻倍
-const HOVER_MAP_WIDTH := 10.0     # hover 地图固定宽
-const HOVER_SCREEN_CAP := 16.0    # hover 屏幕像素上限
-const L2_BORDER_MAP_WIDTH := 18.0 # L2 地区边界地图固定宽
-const L2_BORDER_SCREEN_CAP := 32.0
+## 描边=地图单位绝对粗细（不随缩放；放大超屏幕像素上限时 clamp）——=原值×1.3
+const HOVER_MAP_WIDTH := 6.5      # hover 地图固定宽（原 5 ×1.3）
+const HOVER_SCREEN_CAP := 10.4    # hover 屏幕像素上限（原 8 ×1.3）
+const L2_BORDER_MAP_WIDTH := 11.7 # L2 地区边界地图固定宽（原 9 ×1.3）
+const L2_BORDER_SCREEN_CAP := 20.8
 
 ## 海洋背景色
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)

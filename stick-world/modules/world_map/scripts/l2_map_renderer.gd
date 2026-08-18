@@ -24,8 +24,8 @@ var hovered_tile: Dictionary = {}
 
 ## hover 描边色（灰色）
 const EDGE_COLOR := Color(0.55, 0.55, 0.55)
-const EDGE_WIDTH := 10.0         # 地图单位线宽（描边=地图绝对粗细；放大超屏幕上限时 clamp）——翻倍
-const HOVER_SCREEN_CAP := 18.0   # hover 描边屏幕像素上限（放大到超大时防糊屏）
+const EDGE_WIDTH := 6.5          # 地图单位线宽（描边=地图绝对粗细；放大超屏幕上限时 clamp）——原×1.3
+const HOVER_SCREEN_CAP := 11.7   # hover 描边屏幕像素上限（原 9 ×1.3）
 const HOVER_MARGIN := 2.0        # hover 描边至少比地块常驻描边粗的裕量（地图单位）
 
 ## L1 地块编号（F3 调试模式显示，画在 L1 地块质心）
@@ -38,7 +38,7 @@ var _debug_was_visible: bool = false
 const BORDER_COLOR := Color(0.25, 0.25, 0.25)
 ## 地块常驻描边（内部省份边界；与邻居分界线风格协调：深灰、中等粗细）
 const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
-const TILE_BORDER_WIDTH := 8.0
+const TILE_BORDER_WIDTH := 5.2   # 原 4 ×1.3
 
 ## 海洋背景色
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
@@ -176,7 +176,7 @@ func _draw() -> void:
 	if _camera != null and _camera.has_method("get_zoom"):
 		var zz: float = _camera.get_zoom()
 		if zz > 0.0001:
-			twidth = minf(TILE_BORDER_WIDTH, 12.0 / zz)
+			twidth = minf(TILE_BORDER_WIDTH, 7.8 / zz)
 	for seg in _tile_border_segs:
 		draw_line(seg[0], seg[1], TILE_BORDER_COLOR, twidth, true)
 	# 6. 相邻地区分界线（深色，抗锯齿矢量线；已烘焙合并共线段）
@@ -231,5 +231,5 @@ func BORDER_WIDTH() -> float:
 	if _camera != null and _camera.has_method("get_zoom"):
 		var z: float = _camera.get_zoom()
 		if z > 0.0001:
-			return minf(EDGE_WIDTH * 1.3, 20.0 / z)
+			return minf(EDGE_WIDTH * 1.3, 13.0 / z)
 	return EDGE_WIDTH * 1.3

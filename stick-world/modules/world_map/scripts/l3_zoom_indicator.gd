@@ -17,8 +17,8 @@ const TRACK_H := 6.0
 const THUMB_W := 14.0
 const THUMB_H := 18.0
 
-## 模式按钮（右下角）
-const BTN_W := 120.0
+## 模式按钮（左下角）
+const BTN_W := 130.0
 const BTN_H := 26.0
 const BTN_COLOR := Color(0.25, 0.28, 0.33, 0.92)
 const BTN_HOVER := Color(0.34, 0.38, 0.45, 0.95)
@@ -67,30 +67,29 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _btn_rect() -> Rect2:
-	# 模式切换按钮：左下角
-	return Rect2(14.0, 9.0, BTN_W, BTN_H)
+	# 细分开关按钮：左下角，与轨道/文字分离不重叠
+	return Rect2(12.0, 6.0, 130.0, 26.0)
 
 
 func _draw() -> void:
-	var track_w := minf(size.x * 0.42, 420.0)
+	var track_w := minf(size.x * 0.4, 420.0)
 	var x0 := (size.x - track_w) * 0.5
-	var y := 24.0   # 轨道中心（控件内）
+	var y := 26.0   # 轨道中心（控件内）
 	# 轨道 + 已缩放范围
 	draw_rect(Rect2(x0, y - TRACK_H * 0.5, track_w, TRACK_H), TRACK_COLOR)
 	var zoom: float = _camera.get_zoom() if _camera != null and _camera.has_method("get_zoom") else 1.0
 	var t := clampf((zoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM), 0.0, 1.0)
 	draw_rect(Rect2(x0, y - TRACK_H * 0.5, track_w * t, TRACK_H), FILL_COLOR)
 	draw_rect(Rect2(x0 + t * (track_w - THUMB_W), y - THUMB_H * 0.5, THUMB_W, THUMB_H), THUMB_COLOR)
-	# 数值文字（放轨道上方，控件内）
-	draw_string(ThemeDB.fallback_font, Vector2(x0, y - 8.0), "缩放 %.2fx" % zoom,
+	# 缩放数值文字：轨道上方（与左下按钮隔开，互不重叠）
+	draw_string(ThemeDB.fallback_font, Vector2(x0, y - 9.0), "缩放 %.2fx" % zoom,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, TEXT_COLOR)
-	draw_string(ThemeDB.fallback_font, Vector2(x0 + track_w - 26.0, y - 8.0), "%.1fx" % MAX_ZOOM,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, TEXT_COLOR)
-	# 模式切换按钮
+	# 细分开关按钮（左下角）
 	var r := _btn_rect()
 	draw_rect(r, BTN_HOVER if _btn_hovered else BTN_COLOR)
-	var mode_text: String = "模式:L1"
+	var mode_text: String = "细分:关"
 	if _renderer != null and _renderer.has_method("get_mode_name"):
-		mode_text = "模式:" + _renderer.get_mode_name()
-	draw_string(ThemeDB.fallback_font, r.position + Vector2(12.0, 19.0), mode_text,
+		var mname: String = _renderer.get_mode_name()
+		mode_text = "细分:开" if mname == "城市" else "细分:关"
+	draw_string(ThemeDB.fallback_font, r.position + Vector2(12.0, 20.0), mode_text,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, BTN_TEXT)

@@ -60,6 +60,11 @@ func _input(event: InputEvent) -> void:
 		if key.keycode == KEY_ESCAPE:
 			close()
 			get_viewport().set_input_as_handled()
+		elif key.keycode == KEY_N:
+			# N：细分开关（L1 <-> 城市预览效果）
+			if map_renderer != null and map_renderer.has_method("toggle_display_mode"):
+				map_renderer.toggle_display_mode()
+			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:

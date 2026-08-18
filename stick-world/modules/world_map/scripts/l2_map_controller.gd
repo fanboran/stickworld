@@ -56,6 +56,11 @@ func _input(event: InputEvent) -> void:
 				_hud.visible = false
 			back_requested.emit()
 			get_viewport().set_input_as_handled()
+		elif key.keycode == KEY_N:
+			# N：细分开关（L1 <-> 城市预览效果）
+			if map_renderer != null and map_renderer.has_method("toggle_display_mode"):
+				map_renderer.toggle_display_mode()
+			get_viewport().set_input_as_handled()
 
 
 ## 打开指定 L2 地区视图（region_id 形如 region_001）

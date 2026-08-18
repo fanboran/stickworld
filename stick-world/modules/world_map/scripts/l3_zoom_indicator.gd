@@ -67,7 +67,8 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _btn_rect() -> Rect2:
-	return Rect2(size.x - BTN_W - 14.0, 10.0, BTN_W, BTN_H)
+	# 模式切换按钮：左下角
+	return Rect2(14.0, 9.0, BTN_W, BTN_H)
 
 
 func _draw() -> void:

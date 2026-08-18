@@ -8,6 +8,15 @@
 
 ## [未发布]
 
+### 描边翻倍 + HUD 按钮左下角 + HUD 默认隐藏（2026-08）
+
+- **描边×2**：L3 hover 5→10 (cap 8→16)、L2 地区边界 9→18 (cap 16→32)；L2 tile 4→8 (cap 6→12)、hover 6→12 (cap 9→18)、邻居 6.5→13 (cap 10→20)——仍是"地图绝对粗细，放大超屏幕上限 clamp"
+- **HUD 按钮移到左下角**：模式切换按钮 `_btn_rect` 从右下角改到左下角（x=14）
+- **HUD 默认隐藏**：L3/L2 的 ZoomIndicator 节点 `visible=false`（此前游戏一启动就叠在左下角）；由各控制器 open 显示 / close 隐藏
+- **测试**：l2 6/6、l3 7/7、p0 6/6 全绿；check_godot_errors 干净
+
+### 描边绝对粗细 + HUD 修复 + L2 城市模式（2026-08）
+
 ### 描边绝对粗细 + HUD 修复 + L2 城市模式（2026-08）
 
 - **描边=地图绝对粗细**：L3/L2 全部描边由"屏幕保底 max"改为"**地图单位固定宽，放大超屏幕像素上限时 clamp**"（`minf(map_w, cap_screen/zoom)`）——不随缩放变粗，仅极端放大有屏粒上限（L3 hover 5→cap 8px、L2 边界 9→cap 16px；L2 tile 4→cap 6px、hover 6→cap 9px、邻居 6.5→cap 10px）

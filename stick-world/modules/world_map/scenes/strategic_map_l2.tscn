@@ -20,3 +20,4 @@ script = ExtResource("3_camera")
 
 [node name="ZoomIndicator" type="Control" parent="."]
 script = ExtResource("4_hud")
+visible = false

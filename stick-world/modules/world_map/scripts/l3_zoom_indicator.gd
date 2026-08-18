@@ -1,9 +1,10 @@
 extends Control
 class_name L3ZoomIndicator
-## L3 大世界缩放指示条 —— 底部显示当前缩放档位（滑块 + 数值）
+## L3 底部 HUD：缩放指示条（轨道+滑块+数值）+ 显示模式切换按钮（L1 <-> 城市）
 ## 由 L3MapController 控制显隐（open 显示 / close 隐藏）
 
 var _camera: Node = null
+var _renderer: Node = null
 
 const MIN_ZOOM := 0.02
 const MAX_ZOOM := 3.0
@@ -15,19 +16,28 @@ const TRACK_H := 6.0
 const THUMB_W := 14.0
 const THUMB_H := 18.0
 
+## 模式按钮（右下角）
+const BTN_W := 120.0
+const BTN_H := 30.0
+const BTN_COLOR := Color(0.25, 0.28, 0.33, 0.92)
+const BTN_HOVER := Color(0.34, 0.38, 0.45, 0.95)
+const BTN_TEXT := Color(1.0, 1.0, 1.0, 0.98)
+
+var _btn_hovered: bool = false
+
 
 func _ready() -> void:
-	# CanvasLayer(StrategicMapL3) -> Content -> MapCamera
 	var layer := get_parent()
 	if layer != null:
 		var content := layer.get_node_or_null("Content")
 		if content != null:
 			_camera = content.get_node_or_null("MapCamera")
-	# 底部整宽 44px 条
+			_renderer = content.get_node_or_null("L3MapRenderer")
 	set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	offset_top = -44.0
 	offset_bottom = 0.0
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 按钮接收点击，其余区域事件继续向下传（不挡地图点击下钻）
+	mouse_filter = Control.MOUSE_FILTER_PASS
 
 
 func _process(_delta: float) -> void:
@@ -35,23 +45,46 @@ func _process(_delta: float) -> void:
 		queue_redraw()
 
 
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion or event is InputEventMouseButton:
+		var local := (event as InputEventMouseMotion).position if event is InputEventMouseMotion \
+			else (event as InputEventMouseButton).position
+		var prev := _btn_hovered
+		_btn_hovered = _btn_rect().has_point(local)
+		if _btn_hovered != prev:
+			queue_redraw()
+		# 释放时点击 -> 切换显示模式
+		if event is InputEventMouseButton and event.pressed \
+				and event.button_index == MOUSE_BUTTON_LEFT and _btn_hovered:
+			if _renderer != null and _renderer.has_method("toggle_display_mode"):
+				_renderer.toggle_display_mode()
+				queue_redraw()
+			accept_event()
+
+
+func _btn_rect() -> Rect2:
+	return Rect2(size.x - BTN_W - 12.0, 6.0, BTN_W, BTN_H)
+
+
 func _draw() -> void:
-	if _camera == null or not _camera.has_method("get_zoom"):
-		return
-	var zoom: float = _camera.get_zoom()
-	var track_w := minf(size.x * 0.5, 420.0)
+	var track_w := minf(size.x * 0.42, 420.0)
 	var x0 := (size.x - track_w) * 0.5
-	var y := offset_top + 24.0
-	# 轨道
+	var y := 22.0
+	# 轨道 + 已缩放范围
 	draw_rect(Rect2(x0, y - TRACK_H * 0.5, track_w, TRACK_H), TRACK_COLOR)
-	# 已缩放范围（min -> 当前）
+	var zoom: float = _camera.get_zoom() if _camera != null and _camera.has_method("get_zoom") else 1.0
 	var t := clampf((zoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM), 0.0, 1.0)
 	draw_rect(Rect2(x0, y - TRACK_H * 0.5, track_w * t, TRACK_H), FILL_COLOR)
-	# 滑块（当前缩放档位）
-	var tw := maxf(THUMB_W, THUMB_W)
-	draw_rect(Rect2(x0 + t * (track_w - tw), y - THUMB_H * 0.5, tw, THUMB_H), THUMB_COLOR)
-	# 数值
+	draw_rect(Rect2(x0 + t * (track_w - THUMB_W), y - THUMB_H * 0.5, THUMB_W, THUMB_H), THUMB_COLOR)
 	draw_string(ThemeDB.fallback_font, Vector2(x0, y + 30.0), "缩放 %.2fx" % zoom,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 18, TEXT_COLOR)
-	draw_string(ThemeDB.fallback_font, Vector2(x0 + track_w - 34.0, y + 30.0), "%.1fx" % MAX_ZOOM,
+	draw_string(ThemeDB.fallback_font, Vector2(x0 + track_w - 30.0, y + 30.0), "%.1fx" % MAX_ZOOM,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, TEXT_COLOR)
+	# 模式切换按钮
+	var r := _btn_rect()
+	draw_rect(r, BTN_HOVER if _btn_hovered else BTN_COLOR)
+	var mode_text: String = "模式:L1"
+	if _renderer != null and _renderer.has_method("get_mode_name"):
+		mode_text = "模式:" + _renderer.get_mode_name()
+	draw_string(ThemeDB.fallback_font, r.position + Vector2(14.0, 21.0), mode_text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 17, BTN_TEXT)

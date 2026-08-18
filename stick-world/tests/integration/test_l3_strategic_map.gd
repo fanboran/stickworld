@@ -23,6 +23,7 @@ func _ready() -> void:
 	_runner.add_test("完整分区轮廓即分界（含海上延长，连续无突变）", _test_links, true)
 	_runner.add_test("M 键视图打开/关闭", _test_toggle, true)
 	_runner.add_test("F3 调试模式：L2 地区编号刷新", _test_debug_labels, true)
+	_runner.add_test("显示模式切换（L1 <-> 城市）", _test_display_mode, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -42,6 +43,9 @@ func _test_load() -> void:
 	_runner.assert_true(_data.regions.size() == 13, "应有 13 个地区（实测 %d）" % _data.regions.size())
 	_runner.assert_true(_data.l1_tiles.size() == 69,
 		"L3 老 L1 视觉层应加载 69 块（实测 %d）" % _data.l1_tiles.size())
+	_runner.assert_true(_data.city_tiles.size() > 500,
+		"L3 城市视觉层应加载（实测 %d）" % _data.city_tiles.size())
+	_runner.assert_true(_data.l1_index_image != null, "L3 老 L1 索引图已加载（hover）")
 	# 每个地区应有陆地轮廓
 	var no_poly: int = 0
 	for r in _data.regions:
@@ -101,6 +105,19 @@ func _test_links() -> void:
 				valid_full += 1
 	_runner.assert_true(with_full == 13, "所有地区应有完整分区轮廓（%d/13）" % with_full)
 	_runner.assert_true(valid_full == 13, "所有完整轮廓应连续（边缘跳变<=2）（%d/13）" % valid_full)
+
+
+func _test_display_mode() -> void:
+	if _scene == null or _renderer == null:
+		_runner.assert_true(false, "前置：L3 场景未装载")
+		return
+	var before: int = _renderer.display_mode
+	var mode: int = _renderer.toggle_display_mode()
+	_runner.assert_true(mode != before, "toggle_display_mode 应切换 L1/城市模式")
+	var mname: String = _renderer.get_mode_name()
+	_runner.assert_true(mname == "城市" or mname == "L1", "模式名应可读（%s）" % mname)
+	_renderer.toggle_display_mode()
+	_runner.assert_true(_renderer.display_mode == before, "再次切换应还原")
 
 
 func _test_debug_labels() -> void:

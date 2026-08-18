@@ -110,7 +110,7 @@ func _on_l2_back() -> void:
 func open() -> void:
 	if not _view_initialized:
 		_view_initialized = true
-		# 初始视角：无缩放（zoom 1.0，1:1 像素完美），屏幕中心 = 地图中心
+		# 初始视角：默认缩放 0.36（看更大范围），屏幕中心 = 地图中心
 		var map_size := 2048.0
 		if map_renderer != null and map_renderer.get_data() != null:
 			map_size = float(map_renderer.get_data().size)
@@ -118,9 +118,9 @@ func open() -> void:
 			var vp := get_viewport()
 			if vp != null:
 				var vp_size: Vector2 = vp.get_visible_rect().size
-				map_camera.set_zoom(1.0)
+				map_camera.set_zoom(0.36)
 				if map_camera.has_method("set_offset"):
-					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.5, map_size * 0.5))
+					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.36 * 0.5, map_size * 0.36 * 0.5))
 	if _l2_active and l2_view != null:
 		# 恢复 L2 视图（相机状态保留），L3 保持隐藏（指示条隐藏）
 		visible = false

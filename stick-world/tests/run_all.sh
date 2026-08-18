@@ -68,7 +68,6 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_formation_presets.tscn"
 	"tests/integration/test_strategic_map_p0.tscn"
 	"tests/integration/test_l3_strategic_map.tscn"
-	"tests/integration/test_l1_overlay.tscn"
 	"tests/integration/test_l2_strategic_map.tscn"
 	"tests/integration/test_squad_travel.tscn"
 	"tests/integration/test_melee_combat.tscn"
@@ -145,8 +144,7 @@ affected_suites() {
 			stick-world/modules/world_map/*)
 				picked["tests/integration/test_strategic_map_p0.tscn"]=1
 				picked["tests/integration/test_l2_strategic_map.tscn"]=1
-				picked["tests/integration/test_l3_strategic_map.tscn"]=1
-				picked["tests/integration/test_l1_overlay.tscn"]=1 ;;
+				picked["tests/integration/test_l3_strategic_map.tscn"]=1 ;;
 			stick-world/modules/world/*|stick-world/tools/check_godot_errors.sh)
 				picked["tests/integration/test_game_root_assembly.tscn"]=1
 				picked["tests/integration/test_village_map.tscn"]=1

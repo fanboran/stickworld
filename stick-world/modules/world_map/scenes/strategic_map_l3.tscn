@@ -1,9 +1,8 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://modules/world_map/scripts/l3_map_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/l3_map_renderer.gd" id="2_renderer"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_camera.gd" id="3_camera"]
-[ext_resource type="Script" path="res://modules/world_map/scripts/l1_overlay.gd" id="4_overlay"]
 
 [node name="StrategicMapL3" type="CanvasLayer"]
 layer = 101
@@ -14,10 +13,6 @@ visible = false
 
 [node name="L3MapRenderer" type="Node2D" parent="Content"]
 script = ExtResource("2_renderer")
-
-[node name="L1Overlay" type="Node2D" parent="Content/L3MapRenderer"]
-visible = false
-script = ExtResource("4_overlay")
 
 [node name="MapCamera" type="Node" parent="Content"]
 script = ExtResource("3_camera")

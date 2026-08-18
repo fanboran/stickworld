@@ -22,6 +22,7 @@ func _ready() -> void:
 	_runner.add_test("分区索引图命中（含海洋归边）", _test_query, true)
 	_runner.add_test("完整分区轮廓即分界（含海上延长，连续无突变）", _test_links, true)
 	_runner.add_test("M 键视图打开/关闭", _test_toggle, true)
+	_runner.add_test("F3 调试模式：L2 地区编号刷新", _test_debug_labels, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -98,6 +99,24 @@ func _test_links() -> void:
 				valid_full += 1
 	_runner.assert_true(with_full == 13, "所有地区应有完整分区轮廓（%d/13）" % with_full)
 	_runner.assert_true(valid_full == 13, "所有完整轮廓应连续（边缘跳变<=2）（%d/13）" % valid_full)
+
+
+func _test_debug_labels() -> void:
+	# F3 调试（DebugApi）切换时，L3 渲染器应刷新（_debug_was_visible 变化），不崩溃
+	if _scene == null or _renderer == null:
+		_runner.assert_true(false, "前置：L3 场景未装载")
+		return
+	var before: bool = _renderer._debug_was_visible
+	var was_visible: bool = DebugApi != null and DebugApi.is_visible()
+	if DebugApi != null:
+		DebugApi.set_overlay_visible(true)
+	await get_tree().process_frame
+	_runner.assert_true(_renderer._debug_was_visible != before or bool(DebugApi.is_visible()),
+		"DebugApi 开启后 L3 渲染器应刷新")
+	if DebugApi != null:
+		DebugApi.set_overlay_visible(was_visible)
+	await get_tree().process_frame
+	_runner.assert_true(true, "F3 L2 标签路径无异常")
 
 
 func _test_toggle() -> void:

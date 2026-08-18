@@ -20,6 +20,12 @@ const EDGE_COLOR := Color(0.55, 0.55, 0.55)
 const EDGE_WIDTH := 5.0          # 地图单位线宽（与地块比例恒定，放大不显细）
 const MIN_SCREEN_PX := 2.0       # 最小屏幕像素线宽（缩小保底，细到看不见）
 
+## L2 地区编号（F3 调试模式显示，标在地区质心）
+const L2_LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
+const L2_LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
+const L2_LABEL_SIZE := 40.0        # 地图单位字号
+var _debug_was_visible: bool = false
+
 ## 海洋背景色
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 
@@ -132,6 +138,11 @@ func _process(_delta: float) -> void:
 	if label != int(hovered_region.get("label", -1)):
 		hovered_region = region
 		queue_redraw()
+	# F3 调试模式变化时刷新（L2 编号显隐）
+	var debug_now: bool = DebugApi != null and DebugApi.is_visible()
+	if debug_now != _debug_was_visible:
+		_debug_was_visible = debug_now
+		queue_redraw()
 
 
 func _draw() -> void:
@@ -161,3 +172,23 @@ func _draw() -> void:
 			if z > 0.0001:
 				w = maxf(EDGE_WIDTH, MIN_SCREEN_PX / z)
 		draw_polyline(hpts, EDGE_COLOR, w, true)
+	# 5. L2 地区编号（F3 调试模式，标在地区质心，调试认地区用）
+	if DebugApi != null and DebugApi.is_visible() and _data != null:
+		_draw_l2_labels()
+
+
+## F3 调试：给每个 L2 地区打编号（地区质心；centroid 存 [x, y]）
+func _draw_l2_labels() -> void:
+	var font := ThemeDB.fallback_font
+	for r in _data.regions:
+		var label: int = int(r.get("label", 0))
+		if label <= 0:
+			continue
+		var c: Array = r.get("centroid", [0, 0])
+		if c.size() < 2:
+			continue
+		var pos := Vector2(float(c[0]), float(c[1]))
+		var txt := "L2#%d" % label
+		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
+			draw_string(font, pos + off * 2.0, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, L2_LABEL_SIZE, L2_LABEL_BG)
+		draw_string(font, pos + Vector2(4.0, -L2_LABEL_SIZE * 0.3), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, L2_LABEL_SIZE, L2_LABEL_COLOR)

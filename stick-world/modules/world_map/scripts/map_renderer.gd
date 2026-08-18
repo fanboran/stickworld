@@ -1,56 +1,44 @@
 extends Node2D
 class_name MapRenderer
-## 战略图渲染器（L1 单层）—— 卫星图底图 + 边界线描边 + 聚落/道路/文字
+## 战略图渲染器（L1 单层，Tab 键）—— 与 L2 同款分层矢量绘制
 ##
-## 详见 docs/技术/架构/战略图架构.md §4.5（L1 渲染，P0 简版用 _draw 不上 Shader）
+## 数据来自 l1_world.json（含 context_size/neighbors/lakes，坐标 = context 局部）。
+## 全部矢量绘制（地块少），任意缩放清晰，不依赖底图纹理。
+## 分层（context 坐标系，含灰色邻居 L1 块扩展区域，与 L2MapRenderer 一致）：
+##   海洋背景 -> 湖泊(浅蓝) -> 邻居老 L1 块(灰色) -> 当前 L1 城市块(政权色)
+##   -> 城市描边 + 出生 L1 权威轮廓(深色) -> hover 描边(灰) -> F3 地块编号
 ##
-## 渲染层次：
-##   1. 卫星图底图（l1_base.png，地形色）
-##   2. 每个 L1 地块边界线描边（政权色，不填充内部）
-##   3. 聚落间道路（MST，白色虚线感实线）
-##   4. 聚落图标（按级别大小）+ 聚落名文字
-##   5. 悬停/选中高亮
+## 交互：hover 命中城市块（经相机换算 + 索引图查询），点击选中由控制器经 api 处理。
 
 ## 关联的 L1 世界数据
 var _data: L1WorldData = null
 
-## 当前选中的聚落 ID（""表示无）
-var selected_id: String = ""
-
-## 当前悬停的地块/聚落
-var hovered_tile_id: String = ""
-var hovered_settlement_id: String = ""
-
-## 选中高亮色
-@export var selection_color: Color = Color(1.0, 0.85, 0.2, 0.9)
-
-## 悬停高亮色
-@export var hover_color: Color = Color(1.0, 1.0, 1.0, 0.6)
-
-## 道路颜色
-@export var road_color: Color = Color(0.95, 0.85, 0.6, 0.85)
-
-## L1 地块边界粗线（出生 L1 权威轮廓，城市对外边界套用它；调试时强调）
-@export var l1_border_color: Color = Color(0.08, 0.08, 0.08, 0.9)
-@export var l1_border_width: float = 5.0
-
-## F3 调试模式（城市标号显示）
-var _debug_was_visible: bool = false
-
-## 空聚落地块边界颜色（灰，表示贫瘠）
-@export var empty_tile_color: Color = Color(0.6, 0.6, 0.6, 0.7)
-
-## 边界线宽度
-@export var border_width: float = 2.0
-
-## 聚落图标最小半径（T1）
-@export var icon_radius_min: float = 6.0
-
-## 聚落图标半径递增（每级 +）
-@export var icon_radius_step: float = 3.0
-
-## 相机引用（悬停检测做 screen->map 坐标换算用）
+## 相机引用（悬停检测做 screen->map 坐标换算）
 var _camera: MapCamera = null
+
+## 当前悬停的地块 ID（""=无）
+var hovered_tile_id: String = ""
+
+## 配色（与 L2MapRenderer 完全一致）
+const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
+const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
+const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
+## 城市常驻描边（内部城界；与 L2 tile_border 一致）
+const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
+const TILE_BORDER_WIDTH := 5.2
+## 出生 L1 轮廓 / 邻居分界（与 L2 邻居分界一致）
+const BORDER_COLOR := Color(0.25, 0.25, 0.25)
+const BORDER_WIDTH := 8.45
+const BORDER_SCREEN_CAP := 13.0
+## hover 描边（灰，固定屏幕像素粗细，不随缩放）
+const HOVER_COLOR := Color(0.55, 0.55, 0.55)
+const HOVER_SCREEN_CAP := 11.7
+const HOVER_MARGIN := 2.0
+## F3 调试：城市编号
+const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
+const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
+const LABEL_SIZE := 28.0
+var _debug_was_visible: bool = false
 
 
 func set_data(data: L1WorldData) -> void:
@@ -62,18 +50,17 @@ func set_camera(camera: MapCamera) -> void:
 	_camera = camera
 
 
-func select(id: String) -> void:
-	selected_id = id
+## 接口保留（api.select 调用）；选中高亮交给 hover/控制器
+func select(_id: String) -> void:
 	queue_redraw()
 
 
 func deselect() -> void:
-	selected_id = ""
 	queue_redraw()
 
 
 func get_selected() -> String:
-	return selected_id
+	return ""
 
 
 func refresh() -> void:
@@ -93,14 +80,11 @@ func _process(_delta: float) -> void:
 		mouse_pos = _camera.screen_to_map(mouse_pos)
 	var query: Dictionary = _data.query_at_map_pos(mouse_pos)
 	var tile: L1TileDef = query.get("tile", null)
-	var settlement: SettlementRef = query.get("settlement", null)
 	var new_tile_id: String = tile.tile_id if tile != null else ""
-	var new_settlement_id: String = settlement.settlement_id if settlement != null else ""
-	if new_tile_id != hovered_tile_id or new_settlement_id != hovered_settlement_id:
+	if new_tile_id != hovered_tile_id:
 		hovered_tile_id = new_tile_id
-		hovered_settlement_id = new_settlement_id
 		queue_redraw()
-	# F3 调试模式变化时刷新（城市标号显隐）
+	# F3 调试模式变化时刷新（城市编号显隐）
 	var debug_now: bool = DebugApi != null and DebugApi.is_visible()
 	if debug_now != _debug_was_visible:
 		_debug_was_visible = debug_now
@@ -110,83 +94,89 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if _data == null:
 		return
-	# 1. 卫星图底图
-	if _data.base_texture != null:
-		draw_texture(_data.base_texture, Vector2.ZERO)
-	# 2. 地块边界线（政权色）
+	var ctx := _data.context_size
+	var ctx_size := Vector2(float(ctx.x), float(ctx.y))
+	if ctx_size.x <= 0.0:
+		ctx_size = Vector2(float(_data.size), float(_data.size))
+	var zz: float = 1.0
+	if _camera != null and _camera.has_method("get_zoom"):
+		zz = _camera.get_zoom()
+	# 1. 海洋背景（context 尺寸）
+	draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
+	# 2. 湖泊（浅蓝，覆盖灰色邻居/非地块区）
+	for lake in _data.lakes:
+		if (lake as Array).size() >= 3:
+			draw_colored_polygon(_pts(lake), LAKE_COLOR)
+	# 3. 邻居老 L1 块（灰色）
+	for nb in _data.neighbors:
+		for poly in nb.get("polygons", []):
+			if (poly as Array).size() >= 3:
+				draw_colored_polygon(_pts(poly), NEIGHBOR_COLOR)
+	# 4. 当前 L1 城市块（政权色）
 	for tile in _data.tiles:
-		_draw_tile_border(tile)
-	# 3. 道路
-	for road in _data.roads:
-		if road.size() >= 2:
-			draw_polyline(road, road_color, 3.0)
-	# 4. 聚落图标 + 名称
+		if tile.polygon.size() < 3:
+			continue
+		draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
+	# 5. 城市描边（地图绝对粗细，放大超屏幕上限时 clamp）
+	var tw: float = TILE_BORDER_WIDTH
+	if zz > 0.0001:
+		tw = minf(TILE_BORDER_WIDTH, 7.8 / zz)
 	for tile in _data.tiles:
-		if tile.settlement != null:
-			_draw_settlement(tile)
-	# 5. 悬停高亮（最后画，盖在图标上）
+		if tile.polygon.size() < 3:
+			continue
+		draw_polyline(_closed(tile.polygon), TILE_BORDER_COLOR, tw, true)
+	# 6. 出生 L1 权威轮廓（深色，比城市描边粗；邻居分界同理）
+	var bw: float = BORDER_WIDTH
+	if zz > 0.0001:
+		bw = minf(BORDER_WIDTH, BORDER_SCREEN_CAP / zz)
+	if _data.l1_polygon.size() >= 3:
+		draw_polyline(_closed(_data.l1_polygon), BORDER_COLOR, bw, true)
+	# 7. hover 城市块描边（灰，固定屏幕像素粗细，不随缩放）
 	if not hovered_tile_id.is_empty():
+		var hw: float = TILE_BORDER_WIDTH + HOVER_MARGIN
+		if zz > 0.0001:
+			hw = minf(TILE_BORDER_WIDTH + HOVER_MARGIN, HOVER_SCREEN_CAP / zz)
 		for tile in _data.tiles:
-			if tile.tile_id == hovered_tile_id:
-				_draw_tile_border(tile, hover_color, border_width + 2.0)
+			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
+				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)
 				break
-
-
-func _draw_tile_border(tile: L1TileDef, color: Color = Color.WHITE, width: float = -1.0) -> void:
-	if tile.polygon.size() < 3:
-		return
-	if width < 0.0:
-		width = border_width
-	# 政权色（有归属）+ 选中高亮
-	var border_color: Color = color
-	if color == Color.WHITE:
-		if not tile.owner_state_id.is_empty():
-			border_color = _data.get_state_color(tile.owner_state_id)
-		elif tile.is_empty():
-			border_color = empty_tile_color
-	# 闭合多边形描边（首尾相连）
-	var pts: PackedVector2Array = tile.polygon
-	pts.append(pts[0])
-	draw_polyline(pts, border_color, width)
-
-
-func _draw_settlement(tile: L1TileDef) -> void:
-	var s: SettlementRef = tile.settlement
-	var pos: Vector2 = s.position
-	# 按级别大小画实心圆（城市最大）
-	var radius: float = icon_radius_min + float(s.level - 1) * icon_radius_step
-	var color: Color = _data.get_state_color(tile.owner_state_id) if not tile.owner_state_id.is_empty() else Color.GRAY
-	var is_selected: bool = s.settlement_id == selected_id
-	# 外圈（政权色）
-	draw_circle(pos, radius + 2.0, color)
-	# 内圈（白色，可读性）
-	draw_circle(pos, radius * 0.6, Color(0.98, 0.98, 0.95, 0.95))
-	# 选中环
-	if is_selected:
-		draw_arc(pos, radius + 5.0, 0.0, TAU, 24, selection_color, 2.5)
-	# 名称文字
-	draw_string(
-		ThemeDB.fallback_font,
-		pos + Vector2(radius + 4.0, -radius * 0.4),
-		s.name,
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		14,
-		Color(1.0, 1.0, 1.0, 0.95)
-	)
-	# 城市标号（F3 调试模式）
+	# 8. F3 调试：城市编号（标在聚落位置）
 	if DebugApi != null and DebugApi.is_visible():
+		_draw_city_labels()
+
+
+## 闭合多边形点列（首尾相连）
+func _closed(pts: PackedVector2Array) -> PackedVector2Array:
+	if pts.size() < 3:
+		return pts
+	var out := pts.duplicate()
+	out.append(out[0])
+	return out
+
+
+## Array[[x,y],...] -> PackedVector2Array
+func _pts(arr: Array) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for pt in arr:
+		if pt is Array and pt.size() >= 2:
+			pts.append(Vector2(float(pt[0]), float(pt[1])))
+	return pts
+
+
+## F3 调试：给城市打编号
+func _draw_city_labels() -> void:
+	var font := ThemeDB.fallback_font
+	for tile in _data.tiles:
+		if tile.settlement == null:
+			continue
 		var num := _city_num_from_tile_id(tile.tile_id)
-		if not num.is_empty():
-			draw_string(
-				ThemeDB.fallback_font,
-				pos + Vector2(-radius, radius + 18.0),
-				"L1城#" + num,
-				HORIZONTAL_ALIGNMENT_LEFT,
-				-1,
-				maxf(14, radius * 0.8),
-				Color(1.0, 0.88, 0.25, 0.95)
-			)
+		if num.is_empty():
+			continue
+		var pos := tile.settlement.position
+		var txt := "L1城#" + num
+		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
+			draw_string(font, pos + off * 2.0, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, LABEL_BG)
+		draw_string(font, pos + Vector2(2.0, -LABEL_SIZE * 0.4), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, LABEL_COLOR)
 
 
 ## 从 tile_id（"city_2082"）解析城市编号

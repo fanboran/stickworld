@@ -40,6 +40,15 @@ var spawn_settlement_id: String = ""
 ## 出生 L1 地块权威轮廓（context 像素坐标，L1 边界粗线用；贴 L1 边缘的城市套用该边界）
 var l1_polygon: PackedVector2Array = []
 
+## context 尺寸（正方形，含灰色邻居 L1 块扩展区域，渲染画布）
+var context_size := Vector2i.ZERO
+
+## 相邻老 L1 块（灰色显示）：[{label, polygons, holes}]（context 坐标）
+var neighbors: Array = []
+
+## 湖泊多边形（浅蓝显示）：[[(x,y),...]]（context 坐标）
+var lakes: Array = []
+
 ## 状态（tile_id -> L1TileDef 快速索引）
 var _tile_by_id: Dictionary = {}
 
@@ -65,6 +74,12 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	var l1poly: Variant = data.get("l1_polygon", [])
 	if l1poly is Array:
 		world.l1_polygon = _polygon_from(l1poly)
+	# context（含灰色邻居 L1 块扩展区域）：context 尺寸 + 邻居/湖泊多边形
+	var csz: Array = data.get("context_size", [])
+	if csz.size() >= 2:
+		world.context_size = Vector2i(int(csz[0]), int(csz[1]))
+	world.neighbors = data.get("neighbors", [])
+	world.lakes = data.get("lakes", [])
 
 	# 底图 + 索引图
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l1_base.png")]

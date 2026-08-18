@@ -65,10 +65,6 @@ func _input(event: InputEvent) -> void:
 		elif key.keycode == KEY_V:
 			_toggle_l1_overlay()
 			get_viewport().set_input_as_handled()
-		elif key.keycode == KEY_G and _l1_overlay != null:
-			# G：切换 L1 地块标号（调试；需先 V 开启蒙版叠加）
-			_l1_overlay.toggle_labels()
-			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:

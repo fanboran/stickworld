@@ -24,8 +24,8 @@ var _fill_mesh: ArrayMesh = null
 var _edge_mesh: ArrayMesh = null
 var _loaded: bool = false
 
-## L1 地块标号开关（G 键切换；调试时给每个 L1 细胞打上编号）
-var show_labels: bool = false
+## L1 地块标号（F3 调试模式时显示；不加自定义快捷键）
+var _debug_was_visible: bool = false
 
 
 ## 加载蒙版数据并烘焙网格（幂等）。json_path 相对 res://
@@ -132,8 +132,8 @@ func _draw() -> void:
 	# 城市点（数量少，逐点画）
 	for t in _tiles:
 		draw_circle(t["city"], CITY_RADIUS, VERTEX_COLOR)
-	# L1 地块标号（G 键调试：黑描边 + 白字，画在城市点旁）
-	if show_labels:
+	# L1 地块标号（F3 调试模式时显示）
+	if DebugApi != null and DebugApi.is_visible():
 		var font := ThemeDB.fallback_font
 		for t in _tiles:
 			var pos: Vector2 = t["city"]
@@ -144,7 +144,10 @@ func _draw() -> void:
 			draw_string(font, pos + Vector2(2.0, -14.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(1.0, 1.0, 1.0, 0.95))
 
 
-## G 键切换 L1 标号（调试）
-func toggle_labels() -> void:
-	show_labels = not show_labels
-	queue_redraw()
+func _process(_delta: float) -> void:
+	# F3 调试模式变化时刷新标号
+	if DebugApi != null:
+		var now := DebugApi.is_visible()
+		if now != _debug_was_visible:
+			_debug_was_visible = now
+			queue_redraw()

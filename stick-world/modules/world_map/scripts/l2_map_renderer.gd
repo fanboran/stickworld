@@ -19,6 +19,12 @@ const EDGE_WIDTH := 5.0          # 地图单位线宽（邻居/地块常驻描�
 const EDGE_SCREEN_PX := 2.5      # hover 描边固定屏幕像素（不随缩放）
 const HOVER_MARGIN := 2.0        # hover 描边至少比地块常驻描边粗的裕量（地图单位）
 
+## L1 地块编号（F3 调试模式显示，画在 L1 地块质心）
+const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
+const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
+const LABEL_SIZE := 28.0          # 地图单位字号（放大跟随，缩小保持可见）
+var _debug_was_visible: bool = false
+
 ## 相邻地区分界线（深色）
 const BORDER_COLOR := Color(0.25, 0.25, 0.25)
 ## 地块常驻描边（内部省份边界；与邻居分界线风格协调：深灰、中等粗细）
@@ -115,6 +121,11 @@ func _process(_delta: float) -> void:
 	if label != int(hovered_tile.get("label", -1)):
 		hovered_tile = tile
 		queue_redraw()
+	# F3 调试模式变化时刷新（L1 编号显隐）
+	var debug_now: bool = DebugApi != null and DebugApi.is_visible()
+	if debug_now != _debug_was_visible:
+		_debug_was_visible = debug_now
+		queue_redraw()
 
 
 func _draw() -> void:
@@ -162,6 +173,26 @@ func _draw() -> void:
 				# hover 描边至少比地块常驻描边粗一个裕量：放大时避免比地块描边还细
 				hw = maxf(EDGE_SCREEN_PX / z, TILE_BORDER_WIDTH + HOVER_MARGIN)
 		draw_polyline(hpts, EDGE_COLOR, hw, true)
+	# 8. L1 地块编号（F3 调试模式）：标在各地块质心，指认地块用
+	if DebugApi != null and DebugApi.is_visible() and _data != null:
+		_draw_l1_labels()
+
+
+## F3 调试：给当前地区内的每个 L1 地块打编号
+func _draw_l1_labels() -> void:
+	var font := ThemeDB.fallback_font
+	for tile in _data.tiles:
+		var label: int = int(tile.get("label", 0))
+		if label <= 0:
+			continue
+		var c: Array = tile.get("centroid", [0, 0])
+		if c.size() < 2:
+			continue
+		var pos := Vector2(float(c[1]), float(c[0]))   # centroid 存 (y, x) -> 渲染 (x, y)
+		var txt := "L1#%d" % label
+		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
+			draw_string(font, pos + off * 2.0, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, LABEL_BG)
+		draw_string(font, pos + Vector2(2.0, -LABEL_SIZE * 0.4), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, LABEL_COLOR)
 
 
 func BORDER_WIDTH() -> float:

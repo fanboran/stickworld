@@ -22,7 +22,6 @@ func _ready() -> void:
 	_runner.add_test("L1 数据加载：出生 L1 城市划分", _test_load, true)
 	_runner.add_test("索引图命中查询（P 社机制）", _test_query, true)
 	_runner.add_test("悬停坐标换算（open 后 offset/zoom 非零）", _test_hover_mapping, true)
-	_runner.add_test("城市标号切换（G 键）", _test_city_labels, true)
 	_runner.add_test("城市聚落暂无 map_id：双击不可进入", _test_enter, true)
 	_runner.add_test("无 map_id 聚落不可进入", _test_empty_enter, true)
 	_runner.add_test("打开/关闭暂停恢复场景图输入", _test_pause_resume, true)
@@ -144,22 +143,6 @@ func _test_hover_mapping() -> void:
 	# 恢复相机
 	camera.set_zoom(1.0)
 	camera.set_offset(Vector2.ZERO)
-
-
-func _test_city_labels() -> void:
-	if _api == null or not _api.is_initialized():
-		_runner.assert_true(false, "前置数据加载失败，跳过")
-		return
-	var renderer: Node = _content.get_node_or_null("MapRenderer")
-	_runner.assert_true(renderer != null and renderer.has_method("toggle_city_labels"),
-		"渲染器应有 toggle_city_labels（G 键）")
-	if renderer == null:
-		return
-	var before: bool = renderer.show_city_labels
-	renderer.toggle_city_labels()
-	_runner.assert_true(renderer.show_city_labels != before, "toggle 应翻转城市标号开关")
-	renderer.toggle_city_labels()
-	_runner.assert_true(renderer.show_city_labels == before, "再次切换应还原")
 
 
 func _test_enter() -> void:

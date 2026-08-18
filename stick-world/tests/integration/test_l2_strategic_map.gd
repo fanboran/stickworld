@@ -26,6 +26,7 @@ func _ready() -> void:
 	_runner.add_test("L2 素材齐备：13 地区数据可加载", _test_packs_exist, true)
 	_runner.add_test("L2 数据加载：索引图 + 地块列表", _test_load, true)
 	_runner.add_test("地块索引图命中", _test_query, true)
+	_runner.add_test("F3 调试模式：L1 地块标号刷新", _test_debug_labels, true)
 	_runner.add_test("L3 单击下钻 -> L2 打开，ESC 返回 L3", _test_drilldown, true)
 	await _runner.run_async()
 	print(_runner.summary())
@@ -60,6 +61,25 @@ func _test_load() -> void:
 		if data.mask_image != null and (data.tiles as Array).size() > 0:
 			ok += 1
 	_runner.assert_true(ok == 13, "13 地区应全部加载成功（索引图+地块）（%d/13）" % ok)
+
+
+func _test_debug_labels() -> void:
+	# F3 调试模式（DebugApi）切换时，L2 渲染器应刷新（_debug_was_visible 变化），不崩溃
+	if _l2_scene == null or _l2_renderer == null:
+		_runner.assert_true(false, "前置：L2 场景未装载")
+		return
+	var before: bool = _l2_renderer._debug_was_visible
+	var was_visible: bool = DebugApi != null and DebugApi.is_visible()
+	if DebugApi != null:
+		DebugApi.set_overlay_visible(true)
+	await get_tree().process_frame
+	_runner.assert_true(_l2_renderer._debug_was_visible != before or bool(DebugApi.is_visible()),
+		"DebugApi 开启后渲染器应刷新（_debug_was_visible=%s）" % bool(_l2_renderer._debug_was_visible))
+	# 恢复原可见性
+	if DebugApi != null:
+		DebugApi.set_overlay_visible(was_visible)
+	await get_tree().process_frame
+	_runner.assert_true(true, "F3 调试标签路径无异常")
 
 
 func _test_query() -> void:

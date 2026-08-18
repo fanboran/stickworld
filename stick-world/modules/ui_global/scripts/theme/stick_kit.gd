@@ -206,8 +206,6 @@ static func toast(layer: Control, text: String, kind: String = "info") -> void:
 	layer = _system_overlay(layer)
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", StickStyle.window_panel())
-	# 白面板子树挂浅色表面主题（深色底 × 语义色 modulate → 白底上仍可读）
-	panel.theme = StickTheme.create_light_surface()
 	var l := label(panel, text, LabelKind.BODY,
 			StickTokens.INFO if kind == "info" else (StickTokens.WARN if kind == "warn" else StickTokens.DANGER))
 	l.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)

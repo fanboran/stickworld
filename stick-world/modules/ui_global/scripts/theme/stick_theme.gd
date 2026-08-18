@@ -32,21 +32,6 @@ static func refresh(root: Control) -> void:
 	root.theme = create()
 
 
-## 浅色表面主题（白色磨砂面板子树专用）：全局默认是深色面（浅字），
-## 白面板上文字要反转为深色。只翻 Label 族（按钮/输入框仍是深玻璃浅字，两态通用）。
-## 用法：白色 PanelContainer 上挂 `theme = StickTheme.create_light_surface()`。
-static func create_light_surface() -> Theme:
-	var t := create()
-	t.set_color("font_color", "Label", StickTokens.TEXT_ON_LIGHT)
-	t.set_color("font_color", "CheckBox", StickTokens.TEXT_ON_LIGHT)
-	t.set_color("font_disabled_color", "CheckBox", StickTokens.TEXT_ON_LIGHT_DISABLED)
-	t.set_color("font_color", "CheckButton", StickTokens.TEXT_ON_LIGHT)
-	t.set_color("font_disabled_color", "CheckButton", StickTokens.TEXT_ON_LIGHT_DISABLED)
-	t.set_color("font_color", "ProgressBar", StickTokens.TEXT_ON_LIGHT)
-	t.set_color("font_color", "TooltipLabel", StickTokens.TEXT_ON_LIGHT)
-	return t
-
-
 # ─────────────────────────────── 控件装配 ────────────────────────────────
 
 static func _apply_button(t: Theme) -> void:
@@ -55,11 +40,10 @@ static func _apply_button(t: Theme) -> void:
 	t.set_stylebox("pressed", "Button", StickStyle.button_pressed())
 	t.set_stylebox("disabled", "Button", StickStyle.button_disabled())
 	t.set_stylebox("focus", "Button", _empty_focus())
-	# 按钮=磨砂玻璃（浅色底）→ 深色文字，两表面通用
-	t.set_color("font_color", "Button", StickTokens.TEXT_ON_LIGHT)
-	t.set_color("font_hover_color", "Button", StickTokens.TEXT_ON_LIGHT)
+	t.set_color("font_color", "Button", StickTokens.TEXT)
+	t.set_color("font_hover_color", "Button", StickTokens.TEXT)
 	t.set_color("font_pressed_color", "Button", StickTokens.ACCENT)
-	t.set_color("font_disabled_color", "Button", StickTokens.TEXT_ON_LIGHT_DISABLED)
+	t.set_color("font_disabled_color", "Button", StickTokens.TEXT_DISABLED)
 	t.set_font_size("font_size", "Button", StickTokens.FONT_BODY)
 
 

@@ -130,13 +130,11 @@ func _build_demo_body() -> void:
 
 
 func _node_card(text: String) -> PanelContainer:
-	# 深色玻璃卡片嵌在白面板内（浅色面主题下文字会变深色，这里显式浅色）
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
-	l.add_theme_color_override("font_color", StickTokens.TEXT)
 	card.add_child(l)
 	return card
 

@@ -117,8 +117,6 @@ func _build_ui() -> void:
 	# 建筑列表面板（按钮上方，右侧）
 	_list_panel = PanelContainer.new()
 	_list_panel.name = "ListPanel"
-	# 白面板子树挂浅色表面主题（深色文字；按钮仍深玻璃浅字）
-	_list_panel.theme = StickTheme.create_light_surface()
 	_list_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_list_panel.offset_left = -220.0
 	_list_panel.offset_top = -470.0
@@ -182,11 +180,11 @@ func _create_build_entry(def_id: String, def: Dictionary) -> Control:
 	btn.custom_minimum_size = Vector2(0, 30)
 	btn.pressed.connect(_on_building_selected.bind(def_id))
 	vbox.add_child(btn)
-	# 资源消耗摘要（白色磨砂面板上取深色次文本）
+	# 资源消耗摘要
 	var cost_label := Label.new()
 	cost_label.text = _format_cost(def)
 	cost_label.add_theme_font_size_override("font_size", 11)
-	cost_label.add_theme_color_override("font_color", StickTokens.TEXT_ON_LIGHT_DIM)
+	cost_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75))
 	vbox.add_child(cost_label)
 	# 资源不足时灰显按钮
 	if not _can_afford(def):

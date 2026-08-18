@@ -35,8 +35,7 @@ func attach_resources(resources_api: Node) -> Control:
 		return _resource_bar
 	if _resource_host == null:
 		return null
-	# 资源横条 = 白色磨砂（与面板一致；文字走 TEXT_ON_LIGHT 深色，见 resource_bar.gd）
-	_resource_host.add_theme_stylebox_override("panel", StickStyle.window_panel_strip())
+	_resource_host.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	_resource_bar = _ResourceBarScript.new()
 	_resource_bar.name = "ResourceBar"
 	_resource_host.add_child(_resource_bar)

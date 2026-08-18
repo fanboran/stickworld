@@ -339,6 +339,17 @@ def main():
         preview[labels == lab] = rgb
     Image.fromarray(preview).save(os.path.join(OUT_DIR, "l1_preview_2048.png"))
 
+    # 预览图叠加城市点：黑圆环 + 白芯（任何蒙版底色上都清晰）
+    if len(cities_final) > 0:
+        from PIL import ImageDraw
+        prev_img = Image.fromarray(preview)
+        dr = ImageDraw.Draw(prev_img)
+        for (cx, cy) in cities_final:
+            x, y = float(cx), float(cy)
+            dr.ellipse([x - 4, y - 4, x + 4, y + 4], outline=(12, 12, 12), width=2)
+            dr.ellipse([x - 1.5, y - 1.5, x + 1.5, y + 1.5], fill=(250, 250, 250))
+        prev_img.save(os.path.join(OUT_DIR, "l1_preview_2048.png"))
+
     idx_img = np.zeros((size, size, 3), dtype=np.uint8)
     idx_img[labels > 0, 0] = (labels[labels > 0] >> 16) & 0xFF
     idx_img[labels > 0, 1] = (labels[labels > 0] >> 8) & 0xFF

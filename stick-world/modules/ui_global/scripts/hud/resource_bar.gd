@@ -49,10 +49,10 @@ func _build_ui() -> void:
 		icon.custom_minimum_size = Vector2(14, 14)
 		entry.add_child(icon)
 		_icons[res["id"]] = icon
-		# 名称
+		# 名称（白色磨砂横条上取深色次文本，见 StickTokens.TEXT_DIM）
 		var name_lbl := Label.new()
 		name_lbl.text = res["name_zh"]
-		name_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
+		name_lbl.add_theme_color_override("font_color", StickTokens.TEXT_DIM)
 		entry.add_child(name_lbl)
 		# 数量
 		var qty_lbl := Label.new()

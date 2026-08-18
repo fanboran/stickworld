@@ -9,7 +9,7 @@ extends Control
 ##
 ## 用法：通常经 StickKit.confirm() 工厂创建（保持旧签名），不直接 new。
 
-var _dim: ColorRect = null
+var _dim: Control = null
 var _window: PanelContainer = null
 var _on_confirm: Callable = Callable()
 
@@ -23,14 +23,11 @@ func setup(title: String, message: String, on_confirm: Callable,
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	grow_horizontal = Control.GROW_DIRECTION_BOTH
 	grow_vertical = Control.GROW_DIRECTION_BOTH
-	# 遮罩（消费鼠标，防滚轮等穿透相机 _unhandled_input）
-	_dim = ColorRect.new()
-	_dim.color = StickTokens.MODAL_DIM
+	# 遮罩：生成艺术背景（压暗 + 旋转圆润立方体 + 光标光晕；自身消费鼠标防穿透）
+	_dim = GenerativeBackdrop.new()
+	_dim.name = "Dim"
+	_dim.dim_color = StickTokens.MODAL_DIM
 	_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	_dim.gui_input.connect(func(_event: InputEvent):
-		get_viewport().set_input_as_handled()
-	)
 	add_child(_dim)
 	# 居中窗口（anchor 归零 + 相对 dim 计算；Godot 的 position setter 配 anchor 会失效）
 	_window = PanelContainer.new()

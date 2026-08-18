@@ -7,13 +7,17 @@ extends RefCounted
 
 # ─────────────────────────────── 窗体 ────────────────────────────────
 
-## 主窗体底（大面板/弹窗）：黑半透明 + 1px 白描边 + 小圆角
+## 主窗体底（大面板/弹窗）：白色磨砂 + 柔和投影（不描边，投影造深度）
 static func window_panel() -> StyleBoxFlat:
-	return _make(StickTokens.WINDOW_BG, StickTokens.BORDER, StickTokens.RADIUS_PANEL,
+	var s := _make(StickTokens.WINDOW_BG, StickTokens.BORDER, StickTokens.RADIUS_PANEL,
 			StickTokens.PAD_X * 2, StickTokens.PAD_Y * 2)
+	s.shadow_color = Color(0.1, 0.16, 0.32, 0.28)
+	s.shadow_size = StickTokens.PANEL_SHADOW_SIZE
+	s.shadow_offset = StickTokens.PANEL_SHADOW_OFFSET
+	return s
 
 
-## 次窗体底（HUD 横条/内嵌区块）：更透的"玻璃窗"
+## 次窗体底（HUD 横条/内嵌区块）：更透的"白色玻璃"（不投影，贴近背景）
 static func window_panel_light() -> StyleBoxFlat:
 	return _make(StickTokens.WINDOW_BG_LIGHT, StickTokens.BORDER, StickTokens.RADIUS,
 			StickTokens.PAD_X, StickTokens.PAD_Y)

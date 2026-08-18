@@ -176,7 +176,8 @@ func _create_build_entry(def_id: String, def: Dictionary) -> Control:
 	vbox.add_theme_constant_override("separation", 2)
 	var btn := Button.new()
 	btn.text = str(def.get("name_zh", def_id))
-	btn.custom_minimum_size = Vector2(0, 30)
+	# 与右下角「建造」按钮等高（36px），保证建造菜单内按钮尺寸统一
+	btn.custom_minimum_size = Vector2(0, 36)
 	btn.pressed.connect(_on_building_selected.bind(def_id))
 	vbox.add_child(btn)
 	# 资源消耗摘要

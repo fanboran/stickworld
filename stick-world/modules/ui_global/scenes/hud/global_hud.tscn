@@ -35,7 +35,7 @@ text = "速度: 1x"
 
 [node name="SettingsButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787555]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 30)
 size_flags_vertical = 4
 text = "⚙"
 
@@ -46,19 +46,19 @@ text = "时间: 08:00"
 
 [node name="CenteredButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787552]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 30)
 size_flags_vertical = 4
 text = "居中: 关"
 
 [node name="StuckButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787553]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 30)
 size_flags_vertical = 4
 text = "脱困(H)"
 
 [node name="FormationButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787554]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 30)
 size_flags_vertical = 4
 text = "编制"
 

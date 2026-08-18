@@ -77,8 +77,8 @@ func _test_hud_no_overlap() -> void:
 		var brect: Rect2 = (c as Control).get_global_rect()
 		_runner.assert_true(not brect.intersects(strip_rect),
 				"材料条不应重叠按钮 %s（按钮 %s / 材料条 %s）" % [c.name, brect, strip_rect])
-	# 单行按钮等高不变式：HBox 内所有按钮高度必须一致（曾因默认 FILL 拉伸到 40px，
-	# 高于右下角建造按钮 36px，见 docs/设计/UI/09-布局规则与AI自检.md 规则表）
+	# 单行按钮等高不变式：HBox 内所有按钮高度必须一致（曾因默认 FILL 拉伸到 40px
+	# 高于右下角建造按钮；现统一 30px，见 docs/设计/UI/09-布局规则与AI自检.md 规则表）
 	var ref_h: float = -1.0
 	for c in hbox.get_children():
 		if not (c is Button):

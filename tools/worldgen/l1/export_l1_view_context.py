@@ -1,11 +1,11 @@
-"""出生 L1 视图上下文导出 —— Tab 战略图显示"出生老 L1 的城市划分 + 周围全部陆地(灰色) + 海洋 + 湖泊"。
+"""出生 L1 视图上下文导出 —— Tab 战略图显示"出生老 L1 地块特写（彩色城市） + 海洋 + 湖泊 + 紧邻灰色地块边"。
 
 结构对齐 L2 地区视图：彩色城市块（当前 L1 内部城市）+ 灰色邻居老 L1 块 + 海洋背景
 + 湖泊（浅蓝）+ 出生 L1 权威轮廓（l1_polygon，强描边）。渲染端（map_renderer.gd）据此矢量绘制，
 与 L2MapRenderer 分层一致；本脚本只产出几何数据，不做三角剖分烘焙（地块少，运行时直接 draw）。
 
 出生 L1 = 老 L1 全局 label 69（= region_013 的 3 号地块，经旧分区 player_start=219 质心验证）；
-context = 以出生 L1 质心为中心的正方形（默认半宽 350，覆盖"周围全部陆地"，共 ~18 块邻居）。
+context = 出生 L1 贴近裁剪正方形（默认边距 45，地块近距离特写、居中、四周留一点空隙）。
 
 城市/邻居/湖泊全部经 mesh_extract 从"上下文统一网格"提取（共享角点、无缝铺满）：
   - 城市层 = city_labels_2048（parent_l1=69，实测与 legacy label 69 像素级完全一致）
@@ -20,7 +20,7 @@ context = 以出生 L1 质心为中心的正方形（默认半宽 350，覆盖"�
   l1_mask.png（城市索引图，rank 直编 1..N，0=海洋/邻居）
 
 用法：
-  python tools/worldgen/l1/export_l1_view_context.py [--start-l1 69] [--half 350]
+  python tools/worldgen/l1/export_l1_view_context.py [--start-l1 69] [--margin 45]
 """
 import argparse
 import json
@@ -71,12 +71,27 @@ def to_xy(ring):
     return [[float(p[1]), float(p[0])] for p in ring]
 
 
+def jsonable(o):
+    """递归把 numpy 标量转回 Python 原生类型（mesh 提取的角点可能是 np 类型）。"""
+    if isinstance(o, dict):
+        return {k: jsonable(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [jsonable(v) for v in o]
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.floating):
+        return float(o)
+    if isinstance(o, np.bool_):
+        return bool(o)
+    return o
+
+
 def main():
     ap = argparse.ArgumentParser(description="出生老 L1 视图上下文导出（Tab 数据源）")
     ap.add_argument("--start-l1", type=int, default=69,
                     help="出生老 L1 全局 label（region_013 的 3 号 = 69，旧分区 player_start=219 质心验证）")
-    ap.add_argument("--half", type=int, default=350,
-                    help="context 半宽（以出生 L1 质心为中心的正方形，覆盖周围全部陆地）")
+    ap.add_argument("--margin", type=int, default=45,
+                    help="context 边距（出生 L1 贴近裁剪正方形四周留的空隙；地块近距离特写）")
     args = ap.parse_args()
     lab_l1 = args.start_l1
 
@@ -95,28 +110,22 @@ def main():
         print("错误：该老 L1 无城市（重跑 city_split_v2）")
         return
 
-    # context：以出生 L1 质心为中心的正方形（半宽 = --half），覆盖周围全部陆地
+    # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距
     l1_mask = legacy == lab_l1
     ys0, xs0 = np.where(l1_mask)
+    bx0, by0 = xs0.min(), ys0.min()
+    bx1, by1 = xs0.max(), ys0.max()
     cx = int(round(xs0.mean()))
     cy = int(round(ys0.mean()))
-    half = args.half
-    x0 = max(0, cx - half)
-    y0 = max(0, cy - half)
-    x1 = min(2048, cx + half)
-    y1 = min(2048, cy + half)
-    w, h = x1 - x0, y1 - y0
-    side = max(w, h)
-    # 若贴边导致非正方形，对称补到正方形（钳在 2048 内）
-    if side < 2 * half:
-        side = 2 * half
-    if x0 + side > 2048:
-        x0 = 2048 - side
-    if y0 + side > 2048:
-        y0 = 2048 - side
-    x0 = max(0, x0)
-    y0 = max(0, y0)
-    print("  context: %d x %d @ (%d,%d)，出生 L1 质心 (%d,%d)" % (side, side, x0, y0, cx, cy))
+    margin = args.margin
+    # 正方形边长 = 地块长边 + 2×边距；以地块 bbox 中心为中心，钳在 2048 内
+    side = max(bx1 - bx0 + 1, by1 - by0 + 1) + 2 * margin
+    x0 = cx - side // 2
+    y0 = cy - side // 2
+    x0 = max(0, min(x0, 2048 - side))
+    y0 = max(0, min(y0, 2048 - side))
+    print("  context: %d x %d @ (%d,%d)，出生 L1 bbox %d x %d（边距 %d，地块特写居中）"
+          % (side, side, x0, y0, bx1 - bx0 + 1, by1 - by0 + 1, margin))
 
     print("[2/5] 统一网格提取（城市/邻居/出生轮廓/湖泊，共享角点无缝）...")
     ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
@@ -225,7 +234,7 @@ def main():
         "lakes": lakes,
     }
     with open(os.path.join(GAME_DIR, "l1_world.json"), "w", encoding="utf-8") as f:
-        json.dump(world, f, ensure_ascii=False, indent=1)
+        json.dump(jsonable(world), f, ensure_ascii=False, indent=1)
 
     print("完成：%d 城市 / %d 政权 / %d 道路，context %d, 邻居 %d, 湖泊 %d, focus %s" % (
         len(tiles), len(states), len(roads), side, len(neighbors_data), len(lakes), focus))

@@ -49,16 +49,16 @@ func _build_ui() -> void:
 		icon.custom_minimum_size = Vector2(14, 14)
 		entry.add_child(icon)
 		_icons[res["id"]] = icon
-		# 名称（白色磨砂横条上取深色次文本，见 StickTokens.TEXT_DIM）
+		# 名称（白色磨砂横条上取深色次文本，见 StickTokens.TEXT_ON_LIGHT_DIM）
 		var name_lbl := Label.new()
 		name_lbl.text = res["name_zh"]
-		name_lbl.add_theme_color_override("font_color", StickTokens.TEXT_DIM)
+		name_lbl.add_theme_color_override("font_color", StickTokens.TEXT_ON_LIGHT_DIM)
 		entry.add_child(name_lbl)
 		# 数量
 		var qty_lbl := Label.new()
 		qty_lbl.text = "0"
 		qty_lbl.add_theme_font_size_override("font_size", 14)
-		qty_lbl.add_theme_color_override("font_color", Color.WHITE)
+		qty_lbl.add_theme_color_override("font_color", StickTokens.TEXT_ON_LIGHT)
 		entry.add_child(qty_lbl)
 		_labels[res["id"]] = qty_lbl
 		add_child(entry)
@@ -110,4 +110,4 @@ func _flash_red(resource_id: String) -> void:
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
 	var tween := create_tween()
 	tween.tween_interval(0.5)
-	tween.tween_property(lbl, "theme_override_colors/font_color", Color.WHITE, 0.3)
+	tween.tween_property(lbl, "theme_override_colors/font_color", StickTokens.TEXT_ON_LIGHT, 0.3)

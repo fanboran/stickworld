@@ -46,9 +46,11 @@ func _build_screen() -> void:
 	_bg.dim_color = Color(0.02, 0.03, 0.06, bg_alpha)
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_bg)
-	# 居中面板（黑玻璃 + 统一内边距，不手写 position）
+	# 居中面板（白色磨砂 + 统一内边距，不手写 position）
 	_panel = PanelContainer.new()
 	_panel.add_theme_stylebox_override("panel", StickStyle.window_panel())
+	# 白面板子树挂浅色表面主题（深色文字；按钮仍深玻璃浅字）
+	_panel.theme = StickTheme.create_light_surface()
 	add_child(_panel)
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 12)

@@ -32,6 +32,21 @@ static func refresh(root: Control) -> void:
 	root.theme = create()
 
 
+## 浅色表面主题（白色磨砂面板子树专用）：全局默认是深色面（浅字），
+## 白面板上文字要反转为深色。只翻 Label 族（按钮/输入框仍是深玻璃浅字，两态通用）。
+## 用法：白色 PanelContainer 上挂 `theme = StickTheme.create_light_surface()`。
+static func create_light_surface() -> Theme:
+	var t := create()
+	t.set_color("font_color", "Label", StickTokens.TEXT_ON_LIGHT)
+	t.set_color("font_color", "CheckBox", StickTokens.TEXT_ON_LIGHT)
+	t.set_color("font_disabled_color", "CheckBox", StickTokens.TEXT_ON_LIGHT_DISABLED)
+	t.set_color("font_color", "CheckButton", StickTokens.TEXT_ON_LIGHT)
+	t.set_color("font_disabled_color", "CheckButton", StickTokens.TEXT_ON_LIGHT_DISABLED)
+	t.set_color("font_color", "ProgressBar", StickTokens.TEXT_ON_LIGHT)
+	t.set_color("font_color", "TooltipLabel", StickTokens.TEXT_ON_LIGHT)
+	return t
+
+
 # ─────────────────────────────── 控件装配 ────────────────────────────────
 
 static func _apply_button(t: Theme) -> void:

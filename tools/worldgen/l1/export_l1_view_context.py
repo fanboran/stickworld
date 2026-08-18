@@ -1,24 +1,26 @@
-"""出生 L1 视图上下文导出 —— Tab 战略图显示"出生老 L1 的城市划分 + 周围灰色邻居 L1 块 + 海洋 + 湖泊"。
+"""出生 L1 视图上下文导出 —— Tab 战略图显示"出生老 L1 的城市划分 + 周围全部陆地(灰色) + 海洋 + 湖泊"。
 
-结构对齐 L2 地区视图：彩色城市块（当前 L1 内部 13 城邦）+ 灰色邻居 L1 块（label 65）+ 海洋背景
+结构对齐 L2 地区视图：彩色城市块（当前 L1 内部城市）+ 灰色邻居老 L1 块 + 海洋背景
 + 湖泊（浅蓝）+ 出生 L1 权威轮廓（l1_polygon，强描边）。渲染端（map_renderer.gd）据此矢量绘制，
 与 L2MapRenderer 分层一致；本脚本只产出几何数据，不做三角剖分烘焙（地块少，运行时直接 draw）。
 
+出生 L1 = 老 L1 全局 label 69（= region_013 的 3 号地块，经旧分区 player_start=219 质心验证）；
+context = 以出生 L1 质心为中心的正方形（默认半宽 350，覆盖"周围全部陆地"，共 ~18 块邻居）。
+
 城市/邻居/湖泊全部经 mesh_extract 从"上下文统一网格"提取（共享角点、无缝铺满）：
-  - 城市层 = city_labels_2048（parent_l1=66，实测与 legacy label 66 像素级完全一致）
+  - 城市层 = city_labels_2048（parent_l1=69，实测与 legacy label 69 像素级完全一致）
   - 邻居/出生轮廓 = legacy_l1_labels_2048（老 L1 全局蒙版）
   - 湖泊 = fractal_lake_mask_8192 缩到 2048
 
 输入（output/l1_v2/，2048 级）：city_data.json / city_labels_2048.npy / legacy_l1_labels_2048.npy
-出生 L1 = 全局 label 66（用户确认"12号L2的3号地块"）；邻居 = 与 66 相邻的老 L1 块（实测仅 65）。
 
 产出（覆盖 stick-world/config/strategic_map/ Tab 数据源）：
-  l1_world.json（新增 context_size/neighbors/lakes；城市/聚落/轮廓坐标整体平移到上下文）
+  l1_world.json（新增 context_size/neighbors/lakes/focus_center；城市/聚落/轮廓坐标整体平移到上下文）
   l1_base.png（海洋+灰色邻居+彩色城市，上下文尺寸；is_initialized 兜底，渲染走矢量）
-  l1_mask.png（城市索引图，rank 直编 1..13，0=海洋/邻居）
+  l1_mask.png（城市索引图，rank 直编 1..N，0=海洋/邻居）
 
 用法：
-  python tools/worldgen/l1/export_l1_view_context.py [--start-l1 66] [--margin 45]
+  python tools/worldgen/l1/export_l1_view_context.py [--start-l1 69] [--half 350]
 """
 import argparse
 import json
@@ -71,8 +73,10 @@ def to_xy(ring):
 
 def main():
     ap = argparse.ArgumentParser(description="出生老 L1 视图上下文导出（Tab 数据源）")
-    ap.add_argument("--start-l1", type=int, default=66, help="出生老 L1 全局 label（region_012 的 3 号 = 66）")
-    ap.add_argument("--margin", type=int, default=45, help="上下文外扩边距（2048 级像素）")
+    ap.add_argument("--start-l1", type=int, default=69,
+                    help="出生老 L1 全局 label（region_013 的 3 号 = 69，旧分区 player_start=219 质心验证）")
+    ap.add_argument("--half", type=int, default=350,
+                    help="context 半宽（以出生 L1 质心为中心的正方形，覆盖周围全部陆地）")
     args = ap.parse_args()
     lab_l1 = args.start_l1
 
@@ -91,51 +95,55 @@ def main():
         print("错误：该老 L1 无城市（重跑 city_split_v2）")
         return
 
-    # 邻居：与出生 L1 相邻的老 L1 块（4 邻域扩张）
+    # context：以出生 L1 质心为中心的正方形（半宽 = --half），覆盖周围全部陆地
     l1_mask = legacy == lab_l1
-    from scipy import ndimage
-    dil = ndimage.binary_dilation(l1_mask)
-    nbr_labels = np.unique(legacy[dil & (legacy != lab_l1) & (legacy != 0)]).tolist()
-    print("  邻居老 L1 块:", nbr_labels)
-
-    # bbox = 出生 L1 ∪ 邻居 + 边距，正方形 context
-    ys, xs = np.where(l1_mask)
-    y0, y1, x0, x1 = int(ys.min()), int(ys.max()), int(xs.min()), int(xs.max())
-    for nlb in nbr_labels:
-        nys, nxs = np.where(legacy == nlb)
-        y0, y1 = min(y0, int(nys.min())), max(y1, int(nys.max()))
-        x0, x1 = min(x0, int(nxs.min())), max(x1, int(nxs.max()))
-    m = args.margin
-    w, h = (x1 - x0 + 1) + 2 * m, (y1 - y0 + 1) + 2 * m
+    ys0, xs0 = np.where(l1_mask)
+    cx = int(round(xs0.mean()))
+    cy = int(round(ys0.mean()))
+    half = args.half
+    x0 = max(0, cx - half)
+    y0 = max(0, cy - half)
+    x1 = min(2048, cx + half)
+    y1 = min(2048, cy + half)
+    w, h = x1 - x0, y1 - y0
     side = max(w, h)
-    ox, oy = (side - w) // 2, (side - h) // 2
-    cx0, cy0 = x0 - m - ox, y0 - m - oy
-    # 钳到 2048 边界内（海图边界外虚空）
-    if cy0 < 0 or cx0 < 0 or cy0 + side > 2048 or cx0 + side > 2048:
-        pad = max(-cy0, -cx0, cy0 + side - 2048, cx0 + side - 2048)
-        cy0 += pad
-        cx0 += pad
+    # 若贴边导致非正方形，对称补到正方形（钳在 2048 内）
+    if side < 2 * half:
+        side = 2 * half
+    if x0 + side > 2048:
+        x0 = 2048 - side
+    if y0 + side > 2048:
+        y0 = 2048 - side
+    x0 = max(0, x0)
+    y0 = max(0, y0)
+    print("  context: %d x %d @ (%d,%d)，出生 L1 质心 (%d,%d)" % (side, side, x0, y0, cx, cy))
 
     print("[2/5] 统一网格提取（城市/邻居/出生轮廓/湖泊，共享角点无缝）...")
-    ctx_city = city_labels[cy0:cy0 + side, cx0:cx0 + side].copy()
-    ctx_legacy = legacy[cy0:cy0 + side, cx0:cx0 + side].copy()
-    ctx_lake = lake[cy0:cy0 + side, cx0:cx0 + side].copy()
+    ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
+    ctx_legacy = legacy[y0:y0 + side, x0:x0 + side].copy()
+    ctx_lake = lake[y0:y0 + side, x0:x0 + side].copy()
 
     city_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_city), smooth_passes=3)
     legacy_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_legacy), smooth_passes=3)
     lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)), smooth_passes=2)
 
-    # 出生 L1 权威轮廓 + 邻居块（灰色）
+    # 出生 L1 权威轮廓 + 邻居块（灰色）：context 内除出生块外的所有老 L1 块
     l1_polygon = []
     for p in legacy_mesh.get(lab_l1, {}).get("outer", []):
         l1_polygon.extend(to_xy(p))
     neighbors_data = []
-    for nlb in nbr_labels:
-        mv = legacy_mesh.get(nlb, {})
+    nbr_labels = []
+    for k, mv in legacy_mesh.items():
+        if k <= 0 or k == lab_l1:
+            continue
         outs = [to_xy(p) for p in mv.get("outer", [])]
-        if outs:
-            neighbors_data.append({"label": nlb, "polygons": outs,
-                                   "holes": [to_xy(p) for p in mv.get("holes", [])]})
+        if not outs:
+            continue
+        nbr_labels.append(int(k))
+        neighbors_data.append({"label": int(k), "polygons": outs,
+                               "holes": [to_xy(p) for p in mv.get("holes", [])]})
+    nbr_labels.sort()
+    print("  邻居老 L1 块 (%d):" % len(nbr_labels), nbr_labels)
     # 湖泊：context 内全部湖像素（覆盖邻居/非地块区；地块内湖极少，直接作湖泊色覆盖城市块）
     lakes = []
     for k, mv in lake_mesh.items():
@@ -148,13 +156,12 @@ def main():
     rgb_by_label = {int(c["label"]): c["rgb"] for c in cities}
     city_pos = {int(c["label"]): c["city"] for c in cities}
     city_area = {int(c["label"]): int(c["area_px"]) for c in cities}
-    city_cent = {int(c["label"]): c["centroid"] for c in cities}
     tiles = []
     for rank, c in enumerate(cities, start=1):
         mv = city_mesh.get(int(c["label"]), {})
         outs = [to_xy(p) for p in mv.get("outer", [])]
         if not outs:
-            outs = [[[float(p[0]) - cx0, float(p[1]) - cy0] for p in r] for r in c.get("polygons", [])]
+            outs = [[[float(p[0]) - x0, float(p[1]) - y0] for p in r] for r in c.get("polygons", [])]
             outs = [r for r in outs if len(r) >= 3]
         level = 3 if city_area[c["label"]] > 1500 else (2 if city_area[c["label"]] > 600 else 1)
         pos = city_pos[c["label"]]
@@ -168,7 +175,7 @@ def main():
                 "settlement_id": "settlement_city_%03d" % c["label"],
                 "name": "城市%d" % rank,
                 "level": level,
-                "position_px": [round(float(pos[0]) - cx0, 2), round(float(pos[1]) - cy0, 2)],
+                "position_px": [round(float(pos[0]) - x0, 2), round(float(pos[1]) - y0, 2)],
                 "map_id": "",
             },
         })
@@ -181,6 +188,8 @@ def main():
     city_pts = np.array([t["settlement"]["position_px"] for t in tiles], dtype=np.float64)
     sid = [t["settlement"]["settlement_id"] for t in tiles]
     roads = [{"from": sid[a], "to": sid[b]} for a, b in mst(city_pts)]
+    # 出生 L1 质心在 context 局部坐标（居中聚焦点）
+    focus = [float(cx - x0), float(cy - y0)]
 
     print("[4/5] 写索引图 + 底图 ...")
     idx = np.zeros((side, side, 3), dtype=np.uint8)
@@ -190,10 +199,10 @@ def main():
     Image.fromarray(idx).save(os.path.join(GAME_DIR, "l1_mask.png"))
 
     base = np.full((side, side, 3), OCEAN_COLOR, dtype=np.uint8)
-    for nlb in nbr_labels:
-        base[ctx_legacy == nlb] = NEIGHBOR_COLOR
     for c in cities:
         base[ctx_city == c["label"]] = c["rgb"]
+    for nlb in nbr_labels:
+        base[ctx_legacy == nlb] = NEIGHBOR_COLOR
     base[ctx_lake] = LAKE_COLOR
     Image.fromarray(base).save(os.path.join(GAME_DIR, "l1_base.png"))
 
@@ -203,6 +212,7 @@ def main():
         "name": "出生 L1 地图（城市划分）",
         "size": side,
         "context_size": [side, side],
+        "focus_center": focus,
         "base_texture": "l1_base.png",
         "mask_texture": "l1_mask.png",
         "parent_l1_label": lab_l1,
@@ -217,8 +227,8 @@ def main():
     with open(os.path.join(GAME_DIR, "l1_world.json"), "w", encoding="utf-8") as f:
         json.dump(world, f, ensure_ascii=False, indent=1)
 
-    print("完成：%d 城市 / %d 政权 / %d 道路，context %d, 邻居 %d, 湖泊 %d" % (
-        len(tiles), len(states), len(roads), side, len(neighbors_data), len(lakes)))
+    print("完成：%d 城市 / %d 政权 / %d 道路，context %d, 邻居 %d, 湖泊 %d, focus %s" % (
+        len(tiles), len(states), len(roads), side, len(neighbors_data), len(lakes), focus))
     print("  -> %s" % GAME_DIR)
 
 

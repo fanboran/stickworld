@@ -89,7 +89,12 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	else:
 		push_warning("[L1WorldData] 底图不存在: %s" % base_path)
 	if ResourceLoader.exists(mask_path):
-		world.mask_image = load(mask_path) as Image
+		var mask_tex: Texture2D = load(mask_path) as Texture2D
+		if mask_tex != null:
+			world.mask_image = mask_tex.get_image()
+		else:
+			# 兼容直接导入为 Image 的资源
+			world.mask_image = load(mask_path) as Image
 	else:
 		push_warning("[L1WorldData] 索引图不存在: %s" % mask_path)
 

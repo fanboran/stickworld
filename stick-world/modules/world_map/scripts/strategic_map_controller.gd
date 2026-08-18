@@ -4,7 +4,7 @@ class_name StrategicMapController
 ##
 ## 结构对齐 L2（Tab L1 与 L2 一样）：底部 MapHUD（缩放条+百分比，默认缩放=100%）
 ## 挂在 CanvasLayer 同级 ZoomIndicator 节点，open 显示 / close 隐藏。
-## 初始视角 = 整图适配 × 1.75（DEFAULT_ZOOM_MULT），地图居中，HUD 记为 100%；
+## 初始视角 = 整图适配（DEFAULT_ZOOM_MULT=1.0），地图居中（出生 L1 位于 context 中心），HUD 记为 100%；
 ## 首次打开适配后保留用户位置/缩放（与 L2/L3 一致）。
 ##
 ## 详见 docs/技术/架构/战略图架构.md §9（L1 版）
@@ -30,8 +30,8 @@ const DOUBLE_CLICK_INTERVAL: float = 0.3
 var _last_click_time: float = -10.0
 var _last_click_settlement: String = ""
 
-## 默认缩放 = 整图适配 × 1.75（打开即贴近城邦/城市细节，并以此作为 HUD 的 100%）
-const DEFAULT_ZOOM_MULT := 1.75
+## 默认缩放 = 整图适配（打开即见 context 全部陆地，出生 L1 居中，并以此作为 HUD 的 100%）
+const DEFAULT_ZOOM_MULT := 1.0
 
 ## 底部 HUD（CanvasLayer 直接子节点，open/close 同步显隐）
 var _hud: Control = null
@@ -110,7 +110,7 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 ## 透明背景悬浮：地图内容显示在屏幕中央（场景图保持可见作背景）
 func open() -> void:
 	visible = true
-	# 首次打开：初始视角 = 整图适配 × 1.75（默认 100%），地图居中；
+	# 首次打开：初始视角 = 整图适配（默认 100%），地图居中（出生 L1 在 context 中心）；
 	# 之后保留用户位置/缩放（与 L2 一致）
 	if not _view_initialized:
 		_view_initialized = true
@@ -125,11 +125,11 @@ func open() -> void:
 						msize = float(d.size)
 				var target_h: float = vp_size.y * 0.85
 				var fit_zoom: float = target_h / msize
-				# 默认缩放 = 1.75×整图适配，夹在相机缩放范围内（L1 图小会顶到 max_zoom）
+				# 默认缩放 = 整图适配（全部周边陆地可见，出生 L1 居中）
 				var default_zoom: float = clampf(fit_zoom * DEFAULT_ZOOM_MULT,
 						map_camera.min_zoom, map_camera.max_zoom)
 				map_camera.set_zoom(default_zoom)
-				# 默认缩放 = 1.75×整图适配 = 100%（HUD 百分比按此归一化显示）
+				# 默认缩放 = 整图适配 = 100%（HUD 百分比按此归一化显示）
 				if _hud != null and _hud.has_method("set_default_zoom"):
 					_hud.set_default_zoom(default_zoom)
 				if map_camera.has_method("set_offset"):

@@ -38,6 +38,8 @@ const HOVER_MARGIN := 2.0
 const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
 const LABEL_SIZE := 28.0
+## F3 城市编号的屏幕恒定字号（像素）：地图单元字号 ÷ 缩放，避免 L1 高缩放下"雷霆大字"
+const LABEL_SCREEN_SIZE := 22.0
 var _debug_was_visible: bool = false
 
 
@@ -163,9 +165,16 @@ func _pts(arr: Array) -> PackedVector2Array:
 	return pts
 
 
-## F3 调试：给城市打编号
+## F3 调试：给城市打编号（屏幕恒定字号，不随缩放放大成大字）
 func _draw_city_labels() -> void:
 	var font := ThemeDB.fallback_font
+	var zz: float = 1.0
+	if _camera != null and _camera.has_method("get_zoom"):
+		zz = _camera.get_zoom()
+	var fs: float = LABEL_SCREEN_SIZE
+	if zz > 0.0001:
+		fs = clampf(LABEL_SCREEN_SIZE / zz, 13.0, 30.0)
+	var halo: float = maxf(1.5, fs * 0.12)
 	for tile in _data.tiles:
 		if tile.settlement == null:
 			continue
@@ -175,8 +184,8 @@ func _draw_city_labels() -> void:
 		var pos := tile.settlement.position
 		var txt := "L1城#" + num
 		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
-			draw_string(font, pos + off * 2.0, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, LABEL_BG)
-		draw_string(font, pos + Vector2(2.0, -LABEL_SIZE * 0.4), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, LABEL_COLOR)
+			draw_string(font, pos + off * halo, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, LABEL_BG)
+		draw_string(font, pos + Vector2(2.0, -fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, LABEL_COLOR)
 
 
 ## 从 tile_id（"city_2082"）解析城市编号

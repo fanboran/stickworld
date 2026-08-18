@@ -25,7 +25,7 @@ func _ready() -> void:
 	_runner.add_test("城市聚落暂无 map_id：双击不可进入", _test_enter, true)
 	_runner.add_test("无 map_id 聚落不可进入", _test_empty_enter, true)
 	_runner.add_test("打开/关闭暂停恢复场景图输入", _test_pause_resume, true)
-	_runner.add_test("L1 结构对齐 L2：HUD 缩放条 + 1.75×默认=100% + 居中", _test_l2_like_hud, true)
+	_runner.add_test("L1 结构对齐 L2：HUD 缩放条 + 整图适配默认=100% + 居中", _test_l2_like_hud, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -244,21 +244,21 @@ func _test_l2_like_hud() -> void:
 	_runner.assert_true(cam != null, "前置：L1 应含 MapCamera")
 	if cam == null:
 		return
-	# 首次打开：默认视角 = 1.75×整图适配（HUD 记为 100%）+ 地图居中
+	# 首次打开：默认视角 = 整图适配（HUD 记为 100%）+ 地图居中
 	_content.open()
 	await get_tree().process_frame
 	var data: RefCounted = _api.get_data()
 	var vp_size: Vector2 = _content.get_viewport().get_visible_rect().size
 	var msize: float = float(data.size)
-	# 默认视角 = 1.75×整图适配，夹在相机范围内（L1 图小顶到 max_zoom）
-	var expect_zoom: float = clampf(vp_size.y * 0.85 / msize * 1.75, cam.min_zoom, cam.max_zoom)
+	# 默认视角 = 整图适配（全部周边陆地可见，出生 L1 居中），夹在相机范围内
+	var expect_zoom: float = clampf(vp_size.y * 0.85 / msize * 1.0, cam.min_zoom, cam.max_zoom)
 	_runner.assert_true(absf(cam.get_zoom() - expect_zoom) < 0.01,
-			"L1 默认视角 = 1.75×整图适配（夹在相机范围，实测 %.4f / 期望 %.4f）" % [cam.get_zoom(), expect_zoom])
+			"L1 默认视角 = 整图适配（夹在相机范围，实测 %.4f / 期望 %.4f）" % [cam.get_zoom(), expect_zoom])
 	var expect_off: Vector2 = vp_size * 0.5 - Vector2(msize * expect_zoom * 0.5, msize * expect_zoom * 0.5)
 	_runner.assert_true(cam.get_offset().distance_to(expect_off) < 1.0, "L1 打开后地图居中显示")
 	# HUD 默认缩放 = 该视角（100%），缩放条/百分比组件齐备
 	_runner.assert_true(hud.has_method("set_default_zoom") and absf(hud.default_zoom - expect_zoom) < 0.001,
-			"HUD 默认缩放应 = 1.75×整图适配（100% 基准）")
+			"HUD 默认缩放应 = 整图适配（100% 基准）")
 	var label: Label = null
 	var slider: HSlider = null
 	for ch in hud.get_children():

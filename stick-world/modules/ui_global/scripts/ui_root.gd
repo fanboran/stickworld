@@ -9,6 +9,7 @@ extends CanvasLayer
 ##   UIModalStack（模态栈：层键字典 + 逐层 pop，见 ui_modal_stack.gd）
 
 const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scripts/debug_ui_inspector.gd")
+const _FpsCounterScript: GDScript = preload("res://modules/ui_global/scripts/hud/fps_counter.gd")
 
 # UIAPI / PlayerControlAPI 是全局 class_name，无需 preload
 
@@ -20,6 +21,8 @@ const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scrip
 
 ## 统一模态栈（UIModalStack 子节点，ESC/输入屏蔽/暂停的单一权威）
 var modal_stack: UIModalStack = null
+## FPS 计数器（设置面板 video/show_fps 开关驱动）
+var _fps_counter: Label = null
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -30,6 +33,7 @@ func _ready() -> void:
 	_bind_event_bus()
 	_apply_theme()
 	_setup_ui_inspector()
+	_setup_fps_counter()
 
 
 ## 装配统一模态栈（层键字典 + 逐层 pop，替代 GameRoot._handle_escape 特判）
@@ -52,6 +56,24 @@ func _setup_ui_inspector() -> void:
 	inspector.name = "UiInspector"
 	inspector.z_index = LayerOrder.Z_INSPECTOR
 	add_child(inspector)
+
+
+## 挂载 FPS 计数器（设置面板 video/show_fps，启动时读存量配置）
+func _setup_fps_counter() -> void:
+	var counter := Label.new()
+	counter.set_script(_FpsCounterScript)
+	counter.name = "FpsCounter"
+	add_child(counter)
+	_fps_counter = counter
+	_fps_counter.visible = false
+	if ConfigManager and ConfigManager.has_key("video/show_fps"):
+		_fps_counter.visible = bool(ConfigManager.get_value("video/show_fps"))
+
+
+## 显示/隐藏 FPS 计数器（设置面板应用时调用）
+func set_fps_counter_visible(visible: bool) -> void:
+	if _fps_counter != null:
+		_fps_counter.visible = visible
 
 
 ## 由 SystemSetup 装配时调用，注入 InputDispatcher（不自行向上遍历查找）。

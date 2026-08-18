@@ -21,10 +21,11 @@ func _ready() -> void:
 	_runner.add_test("L3 数据加载：13 地区 + 底图 + 索引图", _test_load, true)
 	_runner.add_test("分区索引图命中（含海洋归边）", _test_query, true)
 	_runner.add_test("完整分区轮廓即分界（含海上延长，连续无突变）", _test_links, true)
-	_runner.add_test("M 键视图打开/关闭", _test_toggle, true)
+	_runner.add_test("M 键视图打开/关闭（HUD 同步显隐）", _test_toggle, true)
 	_runner.add_test("F3 调试模式：L2 地区编号刷新", _test_debug_labels, true)
 	_runner.add_test("显示模式切换（L1 <-> 城市）", _test_display_mode, true)
 	_runner.add_test("hover 命中老 L1（索引图查询）", _test_hover_l1, true)
+	_runner.add_test("HUD：默认缩放=100% + 按钮/缩放条/百分比互不重叠", _test_hud, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -159,12 +160,62 @@ func _test_toggle() -> void:
 	if _content == null:
 		_runner.assert_true(false, "前置失败")
 		return
+	var hud: Control = _scene.get_node_or_null("ZoomIndicator")
+	_runner.assert_true(hud != null and not hud.visible, "初始 L3 HUD 隐藏")
 	_runner.assert_true(not _content.visible, "初始 L3 视图隐藏")
 	if _content.has_method("open"):
 		_content.open()
 	await get_tree().process_frame
 	_runner.assert_true(_content.visible, "open() 后 L3 视图可见")
+	_runner.assert_true(hud != null and hud.visible, "open() 后 L3 HUD 显示")
 	if _content.has_method("close"):
 		_content.close()
 	await get_tree().process_frame
 	_runner.assert_true(not _content.visible, "close() 后 L3 视图隐藏")
+	_runner.assert_true(hud != null and not hud.visible, "close() 后 L3 HUD 隐藏")
+
+
+func _test_hud() -> void:
+	if _scene == null or _content == null:
+		_runner.assert_true(false, "前置：L3 场景未装载")
+		return
+	var hud: Control = _scene.get_node_or_null("ZoomIndicator")
+	_runner.assert_true(hud != null, "L3 场景应含 ZoomIndicator(HUD)")
+	if hud == null:
+		return
+	if _content.has_method("open"):
+		_content.open()
+	await get_tree().process_frame
+	# 默认缩放归一化：0.36 即 100%
+	_runner.assert_true(hud.has_method("set_default_zoom"), "HUD 应有 set_default_zoom")
+	hud.call("set_default_zoom", 0.36)
+	await get_tree().process_frame
+	var label: Label = null
+	var slider: HSlider = null
+	var btn: Button = null
+	for ch in hud.get_children():
+		if ch is Label:
+			label = ch
+		elif ch is HSlider:
+			slider = ch
+		elif ch is Button:
+			btn = ch
+	_runner.assert_true(label != null and label.text == "100%",
+			"默认缩放应显示 100%%（实测 %s）" % (label.text if label != null else "无标签"))
+	_runner.assert_true(slider != null, "HUD 缩放条应为 HSlider（非自绘抽象矩形）")
+	_runner.assert_true(btn != null, "L3 HUD 应有细分模式按钮")
+	# 三元素矩形互不重叠
+	var rects: Array[Rect2] = []
+	if btn != null:
+		rects.append(btn.get_global_rect())
+	rects.append(slider.get_global_rect())
+	rects.append(label.get_global_rect())
+	var overlap: bool = false
+	for i in range(rects.size()):
+		for j in range(i + 1, rects.size()):
+			if rects[i].intersects(rects[j]):
+				overlap = true
+	_runner.assert_true(not overlap, "HUD 按钮/缩放条/百分比标签矩形互不重叠")
+	if _content.has_method("close"):
+		_content.close()
+	await get_tree().process_frame

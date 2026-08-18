@@ -56,11 +56,6 @@ func _input(event: InputEvent) -> void:
 				_hud.visible = false
 			back_requested.emit()
 			get_viewport().set_input_as_handled()
-		elif key.keycode == KEY_N:
-			# N：细分开关（L1 <-> 城市预览效果）
-			if map_renderer != null and map_renderer.has_method("toggle_display_mode"):
-				map_renderer.toggle_display_mode()
-			get_viewport().set_input_as_handled()
 
 
 ## 打开指定 L2 地区视图（region_id 形如 region_001）
@@ -88,6 +83,9 @@ func open(region_id: String) -> void:
 				var target_h: float = vp_size.y * 0.72
 				var fit_zoom: float = target_h / float(msize.y)
 				map_camera.set_zoom(fit_zoom)
+				# 默认缩放 = fit 整图适配值 = 100%（HUD 百分比按此归一化显示）
+				if _hud != null and _hud.has_method("set_default_zoom"):
+					_hud.set_default_zoom(fit_zoom)
 				if map_camera.has_method("set_offset"):
 					map_camera.set_offset(vp_size * 0.5 - Vector2(
 						float(msize.x) * fit_zoom * 0.5, float(msize.y) * fit_zoom * 0.5))

@@ -95,12 +95,14 @@ func _try_open_l2_at_screen(screen_pos: Vector2) -> bool:
 	return true
 
 
-## 下钻 L2：隐藏自身（状态保留），打开 L2 视图
+## 下钻 L2：隐藏自身（状态保留）与 L3 HUD，打开 L2 视图
 func _open_l2(label: int) -> void:
 	if l2_view == null:
 		return
 	_l2_active = true
 	visible = false
+	if _zoom_indicator != null:
+		_zoom_indicator.visible = false
 	l2_view.open("region_%03d" % label)
 
 
@@ -126,6 +128,9 @@ func open() -> void:
 			if vp != null:
 				var vp_size: Vector2 = vp.get_visible_rect().size
 				map_camera.set_zoom(0.36)
+				# 默认缩放 0.36 = 100%（HUD 百分比按此归一化显示）
+				if _zoom_indicator != null and _zoom_indicator.has_method("set_default_zoom"):
+					_zoom_indicator.set_default_zoom(0.36)
 				if map_camera.has_method("set_offset"):
 					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.36 * 0.5, map_size * 0.36 * 0.5))
 	if _l2_active and l2_view != null:

@@ -27,8 +27,8 @@ func _ready() -> void:
 	_runner.add_test("L2 数据加载：索引图 + 地块列表", _test_load, true)
 	_runner.add_test("地块索引图命中", _test_query, true)
 	_runner.add_test("F3 调试模式：L1 地块标号刷新", _test_debug_labels, true)
-	_runner.add_test("L2 城市模式（贴图 + 模式切换）", _test_city_mode, true)
-	_runner.add_test("L3 单击下钻 -> L2 打开，ESC 返回 L3", _test_drilldown, true)
+	_runner.add_test("L2 恒城市模式（默认城市贴图 + 无细分开关）", _test_city_mode, true)
+	_runner.add_test("L3 单击下钻 -> L2 打开（L3 HUD 隐藏不重叠），ESC 返回 L3", _test_drilldown, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -161,11 +161,11 @@ func _test_city_mode() -> void:
 	if _l2_renderer == null:
 		_runner.assert_true(false, "前置：渲染器未装载")
 		return
-	var before: int = _l2_renderer.display_mode
-	_l2_renderer.toggle_display_mode()
-	_runner.assert_true(_l2_renderer.display_mode != before, "toggle 应切换 L1/城市模式")
-	_l2_renderer.toggle_display_mode()
-	_runner.assert_true(_l2_renderer.display_mode == before, "再次切换应还原")
+	# L2 本身即"具体到城市"：恒城市模式，不提供细分开关（MapHUD 因此不显示按钮）
+	_runner.assert_true(_l2_renderer.display_mode == _l2_renderer.DisplayMode.MODE_CITY,
+		"L2 默认恒城市模式（具体到城市）")
+	_runner.assert_true(not _l2_renderer.has_method("toggle_display_mode"),
+		"L2 不应有显示模式开关（无细分按钮）")
 
 
 func _test_drilldown() -> void:
@@ -201,6 +201,12 @@ func _test_drilldown() -> void:
 		await get_tree().process_frame
 		_runner.assert_true(not _l3_content.visible, "下钻后 L3 隐藏")
 		_runner.assert_true(_l2_content.visible, "下钻后 L2 可见")
+		# 双 HUD 不重叠：下钻后 L3 HUD 必须隐藏、L2 HUD 显示（修双 HUD 叠加根因）
+		var l3_hud: Control = _l3_scene.get_node_or_null("ZoomIndicator")
+		var l2_hud: Control = _l2_scene.get_node_or_null("ZoomIndicator")
+		_runner.assert_true(l3_hud != null and not l3_hud.visible,
+				"下钻后 L3 HUD 应隐藏（避免与 L2 HUD 叠加）")
+		_runner.assert_true(l2_hud != null and l2_hud.visible, "下钻后 L2 HUD 应显示")
 		_runner.assert_true(_l2_content.has_method("get_current_region_id")
 				and _l2_content.get_current_region_id() == "region_%03d" % lab,
 				"L2 应加载 region_%03d" % lab)
@@ -226,6 +232,8 @@ func _test_drilldown() -> void:
 		_runner.assert_true(flag.back, "L2 ESC 应发 back_requested")
 		_runner.assert_true(not _l2_content.visible, "ESC 后 L2 隐藏")
 		_runner.assert_true(_l3_content.visible, "返回后 L3 重新可见")
+		_runner.assert_true(l3_hud != null and l3_hud.visible, "返回后 L3 HUD 恢复显示")
+		_runner.assert_true(l2_hud != null and not l2_hud.visible, "返回后 L2 HUD 隐藏")
 
 		# M 关闭整图 -> 重开：保留相机状态；若在 L2 内则恢复 L2 视图
 		var l3_zoom_before: float = cam.get_zoom()

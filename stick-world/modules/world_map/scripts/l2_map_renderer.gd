@@ -1,13 +1,12 @@
 extends Node2D
 class_name L2MapRenderer
-## L2 地区渲染器 —— 纯矢量渲染（ArrayMesh 静态几何缓存）+ 相邻地区上下文 + 双显示模式
+## L2 地区渲染器 —— 纯矢量渲染（ArrayMesh 静态几何缓存）+ 相邻地区上下文 + 恒城市模式
 ##
-## 显示模式（模式按钮切换，见 MapHUD）：
-##   MODE_L1   : 底 = 老 L1 地块彩色 mesh（l2_geom.bin）
-##   MODE_CITY : 底 = 该地区城市蒙版贴图（l2_city_preview.png，像 city_preview 花花绿绿）
+## L2 本身即"具体到城市"的视图：恒以该地区城市蒙版贴图（l2_city_preview.png）为底，
+## 无显示模式切换（不提供 toggle_display_mode，MapHUD 因此不显示细分按钮）。
 ## hover/编号仍按老 L1（索引图不变）；交互不变。
 ## 分层（context 坐标系，含相邻地区扩展区域）：
-##   海洋背景 -> 湖泊(浅蓝) -> 相邻地区(灰色) -> 当前地区地块(模式相关)
+##   海洋背景 -> 湖泊(浅蓝) -> 相邻地区(灰色) -> 当前地区城市贴图
 ##   -> 相邻地区分界线(深色) -> hover 描边
 ## 性能：全部几何加载时一次性三角剖分合并为 ArrayMesh，每帧零 CPU 剖分。
 
@@ -16,8 +15,8 @@ enum DisplayMode { MODE_L1, MODE_CITY }
 var _data: L2WorldData = null
 var _camera: MapCamera = null
 
-## 当前显示模式
-var display_mode: int = DisplayMode.MODE_L1
+## 恒城市模式（L2 即"具体到城市"的视图）；不再提供 toggle_display_mode（无细分按钮）
+var display_mode: int = DisplayMode.MODE_CITY
 
 ## hover 命中的地块（Dictionary，未命中为空）
 var hovered_tile: Dictionary = {}
@@ -69,17 +68,6 @@ func set_camera(camera: MapCamera) -> void:
 
 func refresh() -> void:
 	queue_redraw()
-
-
-## 切换显示模式（L1 <-> 城市），返回新模式
-func toggle_display_mode() -> int:
-	display_mode = DisplayMode.MODE_CITY if display_mode == DisplayMode.MODE_L1 else DisplayMode.MODE_L1
-	queue_redraw()
-	return display_mode
-
-
-func get_mode_name() -> String:
-	return "城市" if display_mode == DisplayMode.MODE_CITY else "L1"
 
 
 ## 一次性构建静态网格：直接读烘焙几何（素材阶段已三角剖分），运行时零几何计算。

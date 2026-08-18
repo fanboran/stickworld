@@ -210,18 +210,18 @@ func _test_drilldown() -> void:
 		_runner.assert_true(_l2_content.has_method("get_current_region_id")
 				and _l2_content.get_current_region_id() == "region_%03d" % lab,
 				"L2 应加载 region_%03d" % lab)
-		# 打开后相机：fit 正方形 context 整图适配 + 居中显示
+		# 打开后相机：默认视角 = fit 整图适配 × 1.75（HUD 记为 100%）+ 居中显示
 		var l2_cam: Node = _l2_content.get_node_or_null("MapCamera")
 		if l2_cam != null:
 			var vp_size: Vector2 = _l2_content.get_viewport().get_visible_rect().size
 			var size: Vector2 = _l2_content.data.size
 			if _l2_content.data.context_size.x > 0:
 				size = _l2_content.data.context_size
-			var expect_zoom: float = vp_size.y * 0.72 / size.y
+			var expect_zoom: float = vp_size.y * 0.72 / size.y * 1.75
 			var expect_off: Vector2 = vp_size * 0.5 - Vector2(
 				size.x * expect_zoom * 0.5, size.y * expect_zoom * 0.5)
 			_runner.assert_true(absf(l2_cam.get_zoom() - expect_zoom) < 0.01,
-					"L2 打开后 fit 整图适配")
+					"L2 打开后默认视角 = 1.75×整图适配（HUD 100%）")
 			_runner.assert_true(l2_cam.get_offset().distance_to(expect_off) < 1.0,
 					"L2 打开后地图居中显示")
 		# ESC 返回 L3（headless 下直接调用 _input，parse_input_event 不派发）

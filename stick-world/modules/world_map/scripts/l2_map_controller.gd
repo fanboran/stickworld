@@ -16,6 +16,9 @@ signal back_requested
 ## L2 素材根目录（res:// 相对），子目录 = region_XXX
 const DATA_BASE_DIR := "res://config/strategic_map/l2_packs"
 
+## 默认缩放 = 整图适配 × 1.75（打开即更贴近城市细节，并以此作为 HUD 的 100%）
+const DEFAULT_ZOOM_MULT := 1.75
+
 ## 当前加载的数据
 var data: L2WorldData = null
 
@@ -72,7 +75,7 @@ func open(region_id: String) -> void:
 			return
 		if map_renderer != null and map_renderer.has_method("set_data"):
 			map_renderer.set_data(data)
-		# 初始视角：整图适配屏幕（fit 正方形 context，贴着大小特写，居中显示）
+		# 初始视角：整图适配的 1.75 倍（更贴近城市细节），以地图中心为屏幕中心，HUD 记为 100%
 		if map_camera != null and map_camera.has_method("set_zoom"):
 			var vp := get_viewport()
 			if vp != null:
@@ -82,13 +85,17 @@ func open(region_id: String) -> void:
 					msize = data.context_size
 				var target_h: float = vp_size.y * 0.72
 				var fit_zoom: float = target_h / float(msize.y)
-				map_camera.set_zoom(fit_zoom)
-				# 默认缩放 = fit 整图适配值 = 100%（HUD 百分比按此归一化显示）
+				# 默认缩放 = 1.75×整图适配，夹在相机缩放范围内（小图会顶到 max_zoom）
+				var default_zoom: float = clampf(fit_zoom * DEFAULT_ZOOM_MULT,
+						map_camera.min_zoom, map_camera.max_zoom)
+				map_camera.set_zoom(default_zoom)
+				# 默认缩放 = 1.75×整图适配 = 100%（HUD 百分比按此归一化显示）
 				if _hud != null and _hud.has_method("set_default_zoom"):
-					_hud.set_default_zoom(fit_zoom)
+					_hud.set_default_zoom(default_zoom)
 				if map_camera.has_method("set_offset"):
+					# 地图（context）中心对准屏幕中心，打开即居中
 					map_camera.set_offset(vp_size * 0.5 - Vector2(
-						float(msize.x) * fit_zoom * 0.5, float(msize.y) * fit_zoom * 0.5))
+						float(msize.x) * default_zoom * 0.5, float(msize.y) * default_zoom * 0.5))
 	visible = true
 	if _hud != null:
 		_hud.visible = true

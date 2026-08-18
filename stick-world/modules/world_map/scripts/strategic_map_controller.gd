@@ -2,6 +2,11 @@ extends Node2D
 class_name StrategicMapController
 ## 战略图主控制器（L1 单层）—— 串联组件，处理输入
 ##
+## 结构对齐 L2（Tab L1 与 L2 一样）：底部 MapHUD（缩放条+百分比，默认缩放=100%）
+## 挂在 CanvasLayer 同级 ZoomIndicator 节点，open 显示 / close 隐藏。
+## 初始视角 = 整图适配 × 1.75（DEFAULT_ZOOM_MULT），地图居中，HUD 记为 100%；
+## 首次打开适配后保留用户位置/缩放（与 L2/L3 一致）。
+##
 ## 详见 docs/技术/架构/战略图架构.md §9（L1 版）
 ## 交互：
 ##   - 左键单击聚落：选中（发 settlement_clicked）
@@ -25,6 +30,15 @@ const DOUBLE_CLICK_INTERVAL: float = 0.3
 var _last_click_time: float = -10.0
 var _last_click_settlement: String = ""
 
+## 默认缩放 = 整图适配 × 1.75（打开即贴近城邦/城市细节，并以此作为 HUD 的 100%）
+const DEFAULT_ZOOM_MULT := 1.75
+
+## 底部 HUD（CanvasLayer 直接子节点，open/close 同步显隐）
+var _hud: Control = null
+
+## 首次打开时设置初始视角（之后保留用户位置/缩放）
+var _view_initialized: bool = false
+
 
 func _ready() -> void:
 	_auto_find_components()
@@ -33,6 +47,10 @@ func _ready() -> void:
 	# 渲染器悬停检测需要相机做屏幕->地图坐标换算
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
+	# 底部 HUD（CanvasLayer 直接子节点）
+	var layer := get_parent()
+	if layer != null:
+		_hud = layer.get_node_or_null("ZoomIndicator")
 
 
 func _auto_find_components() -> void:
@@ -92,23 +110,34 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 ## 透明背景悬浮：地图内容显示在屏幕中央（场景图保持可见作背景）
 func open() -> void:
 	visible = true
-	# 初始视角：按实际地图尺寸适配（出生 L1 城市图较小，放大显示更清晰）
-	if map_camera != null and map_camera.has_method("set_zoom"):
-		var vp := get_viewport()
-		if vp != null:
-			var vp_size: Vector2 = vp.get_visible_rect().size
-			var msize: float = 1024.0
-			if api != null and api.has_method("get_data"):
-				var d: RefCounted = api.get_data()
-				if d != null and d.size > 0:
-					msize = float(d.size)
-			var target_h: float = vp_size.y * 0.85
-			var fit_zoom: float = target_h / msize
-			map_camera.set_zoom(fit_zoom)
-			if map_camera.has_method("set_offset"):
-				# 地图原点（左上角）居中：屏幕中心 - 地图显示尺寸一半
-				var offset := vp_size * 0.5 - Vector2(msize * fit_zoom * 0.5, msize * fit_zoom * 0.5)
-				map_camera.set_offset(offset)
+	# 首次打开：初始视角 = 整图适配 × 1.75（默认 100%），地图居中；
+	# 之后保留用户位置/缩放（与 L2 一致）
+	if not _view_initialized:
+		_view_initialized = true
+		if map_camera != null and map_camera.has_method("set_zoom"):
+			var vp := get_viewport()
+			if vp != null:
+				var vp_size: Vector2 = vp.get_visible_rect().size
+				var msize: float = 1024.0
+				if api != null and api.has_method("get_data"):
+					var d: RefCounted = api.get_data()
+					if d != null and d.size > 0:
+						msize = float(d.size)
+				var target_h: float = vp_size.y * 0.85
+				var fit_zoom: float = target_h / msize
+				# 默认缩放 = 1.75×整图适配，夹在相机缩放范围内（L1 图小会顶到 max_zoom）
+				var default_zoom: float = clampf(fit_zoom * DEFAULT_ZOOM_MULT,
+						map_camera.min_zoom, map_camera.max_zoom)
+				map_camera.set_zoom(default_zoom)
+				# 默认缩放 = 1.75×整图适配 = 100%（HUD 百分比按此归一化显示）
+				if _hud != null and _hud.has_method("set_default_zoom"):
+					_hud.set_default_zoom(default_zoom)
+				if map_camera.has_method("set_offset"):
+					# 地图中心对准屏幕中心，打开即居中
+					map_camera.set_offset(vp_size * 0.5 - Vector2(
+						msize * default_zoom * 0.5, msize * default_zoom * 0.5))
+	if _hud != null:
+		_hud.visible = true
 	if EventBus != null:
 		EventBus.strategic_map_opened.emit()
 
@@ -116,5 +145,7 @@ func open() -> void:
 ## 关闭战略图（恢复场景图输入，由接线方/ESC 调用）
 func close() -> void:
 	visible = false
+	if _hud != null:
+		_hud.visible = false
 	if EventBus != null:
 		EventBus.strategic_map_closed.emit()

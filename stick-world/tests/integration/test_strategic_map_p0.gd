@@ -25,6 +25,7 @@ func _ready() -> void:
 	_runner.add_test("城市聚落暂无 map_id：双击不可进入", _test_enter, true)
 	_runner.add_test("无 map_id 聚落不可进入", _test_empty_enter, true)
 	_runner.add_test("打开/关闭暂停恢复场景图输入", _test_pause_resume, true)
+	_runner.add_test("L1 结构对齐 L2：HUD 缩放条 + 1.75×默认=100% + 居中", _test_l2_like_hud, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -205,7 +206,11 @@ func _test_pause_resume() -> void:
 	if _api == null or _content == null:
 		_runner.assert_true(false, "前置失败，跳过")
 		return
-	# 打开：控制器 visible + strategic_map_opened 信号
+	var hud: Control = _map.get_node_or_null("ZoomIndicator")
+	_runner.assert_true(hud != null, "L1 场景应含 ZoomIndicator(HUD)，结构对齐 L2")
+	if hud != null:
+		_runner.assert_true(not hud.visible, "初始 HUD 隐藏")
+	# 打开：控制器 visible + HUD 显示 + strategic_map_opened 信号
 	var opened: Array = []
 	if EventBus != null:
 		EventBus.strategic_map_opened.connect(func(): opened.append(true))
@@ -213,8 +218,9 @@ func _test_pause_resume() -> void:
 		_content.open()
 	await get_tree().process_frame
 	_runner.assert_true(_content.visible, "打开后战略图内容可见")
+	_runner.assert_true(hud == null or hud.visible, "打开后 HUD 显示")
 	_runner.assert_true(opened.size() >= 1, "打开应发射 strategic_map_opened")
-	# 关闭：strategic_map_closed 信号
+	# 关闭：strategic_map_closed 信号 + HUD 隐藏
 	var closed: Array = []
 	if EventBus != null:
 		EventBus.strategic_map_closed.connect(func(): closed.append(true))
@@ -222,4 +228,57 @@ func _test_pause_resume() -> void:
 		_content.close()
 	await get_tree().process_frame
 	_runner.assert_true(not _content.visible, "关闭后战略图内容不可见")
+	_runner.assert_true(hud == null or not hud.visible, "关闭后 HUD 隐藏")
 	_runner.assert_true(closed.size() >= 1, "关闭应发射 strategic_map_closed")
+
+
+func _test_l2_like_hud() -> void:
+	if _api == null or _content == null or not _api.is_initialized():
+		_runner.assert_true(false, "前置失败，跳过")
+		return
+	var hud: Control = _map.get_node_or_null("ZoomIndicator")
+	_runner.assert_true(hud != null, "前置：L1 应含 HUD")
+	if hud == null:
+		return
+	var cam: Node = _content.get_node_or_null("MapCamera")
+	_runner.assert_true(cam != null, "前置：L1 应含 MapCamera")
+	if cam == null:
+		return
+	# 首次打开：默认视角 = 1.75×整图适配（HUD 记为 100%）+ 地图居中
+	_content.open()
+	await get_tree().process_frame
+	var data: RefCounted = _api.get_data()
+	var vp_size: Vector2 = _content.get_viewport().get_visible_rect().size
+	var msize: float = float(data.size)
+	# 默认视角 = 1.75×整图适配，夹在相机范围内（L1 图小顶到 max_zoom）
+	var expect_zoom: float = clampf(vp_size.y * 0.85 / msize * 1.75, cam.min_zoom, cam.max_zoom)
+	_runner.assert_true(absf(cam.get_zoom() - expect_zoom) < 0.01,
+			"L1 默认视角 = 1.75×整图适配（夹在相机范围，实测 %.4f / 期望 %.4f）" % [cam.get_zoom(), expect_zoom])
+	var expect_off: Vector2 = vp_size * 0.5 - Vector2(msize * expect_zoom * 0.5, msize * expect_zoom * 0.5)
+	_runner.assert_true(cam.get_offset().distance_to(expect_off) < 1.0, "L1 打开后地图居中显示")
+	# HUD 默认缩放 = 该视角（100%），缩放条/百分比组件齐备
+	_runner.assert_true(hud.has_method("set_default_zoom") and absf(hud.default_zoom - expect_zoom) < 0.001,
+			"HUD 默认缩放应 = 1.75×整图适配（100% 基准）")
+	var label: Label = null
+	var slider: HSlider = null
+	for ch in hud.get_children():
+		if ch is Label:
+			label = ch
+		elif ch is HSlider:
+			slider = ch
+	_runner.assert_true(label != null and label.text == "100%",
+			"默认缩放应显示 100%%（实测 %s）" % (label.text if label != null else "无标签"))
+	_runner.assert_true(slider != null, "L1 应有 HSlider 缩放条（与 L2 一致）")
+	# 重开保留状态（与 L2/L3 一致：首次适配后不再重置）
+	var z_mod: float = cam.get_zoom() * 0.6
+	var off_mod: Vector2 = cam.get_offset() + Vector2(80, -40)
+	cam.set_zoom(z_mod)
+	cam.set_offset(off_mod)
+	_content.close()
+	await get_tree().process_frame
+	_content.open()
+	await get_tree().process_frame
+	_runner.assert_true(absf(cam.get_zoom() - z_mod) < 0.001 and cam.get_offset().distance_to(off_mod) < 1.0,
+			"L1 重开保留用户位置/缩放（结构对齐 L2）")
+	_content.close()
+	await get_tree().process_frame

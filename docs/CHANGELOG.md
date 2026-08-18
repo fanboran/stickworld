@@ -8,15 +8,16 @@
 
 ## [未发布]
 
-### Tab L1 出生地块更正为 region_013 3 号 + 地块特写 + 居中（2026-08）
+### Tab L1 出生地块更正为 region_013 3 号 + 地块特写 + 细线 + 居中（2026-08）
 
 - **出生 L1 地块更正**：`label 66`（region 12 的 3 号，13 城）→ **`label 69`（region 13 的 3 号，8 城）**——经旧分区 `player_start=219` 质心落在 69 号块内验证；69 恰好符合 GDD"出生 L1 7-8 聚落"规格（之前用的 66 是错误地块，故 Tab 与"13号地块3号地块"长得不一样）
-- **地块近距离特写**：context 改为出生 L1 **贴近裁剪正方形**（地块 bbox + 四周 `--margin 45` 边距，260×260），不再铺开全部周边陆地；紧邻的 4 块老 L1（67/68/18/19）灰色边缘 + 海洋 + 湖泊作背景，出生 L1 居中、默认整图适配即特写
-- **默认缩放 = 整图适配（100%）**：`DEFAULT_ZOOM_MULT` 1.75 → 1.0；L1 相机 `max_zoom` 3.0 → 4.0，特写 fit 不被上限裁边
-- **F3 城市编号屏幕恒定字号**：`LABEL_SCREEN_SIZE=22`（÷缩放 clamp），高缩放下不再"雷霆大字"
+- **地块特写 + 贴裁**：context = 出生 L1 **贴近裁剪正方形**（地块 bbox + 四周 `--margin 15` 边距，200×200），以 **bbox 中心**居中（四周边距均匀）；默认整图适配即特写、出生 L1 居中
+- **细线（屏幕比例）**：城市界/出生轮廓/hover 的屏幕像素上限压到 L2 视觉一致——城市界 `7.8→3.5px`、出生轮廓 `13→5.5px`、hover `11.7→5.0px`（L1 高缩放下此前顶到 2~3 倍粗）
+- **默认缩放 = 整图适配（100%）**：`DEFAULT_ZOOM_MULT` 1.75 → 1.0；L1 相机 `max_zoom` → 5.0（fit=4.59 不被卡住，100% 正好显示贴裁方块）
+- **F3 城市编号屏幕恒定字号**：`LABEL_SCREEN_SIZE=22`（÷缩放 clamp），不再"雷霆大字"
 - **索引图健壮加载**：`l1_world_data.gd` 改 `tex.get_image()` 兼容 texture/image 两种导入类型
-- **生成脚本**：`export_l1_view_context.py` 改为 `--margin` 边距裁剪（`--start-l1 69 --margin 45`），输出加 `jsonable()` 递归转 numpy 标量
-- **测试**：p0 7/7、l2 6/6、l3 8/8 全绿；check_godot_errors 干净；全量回归仅剩历史遗留 test_menu_navigation
+- **生成脚本**：`export_l1_view_context.py` 改 `--margin` 贴裁 + bbox 中心居中 + `jsonable()` 转 numpy 标量
+- **测试**：p0 7/7、l2 6/6、l3 8/8 全绿；check_godot_errors 干净；全量回归仅剩历史遗留 test_menu_navigation（combat_feedback 为并行 flake）
 
 ### Tab L1 地图改为 L2 同款矢量渲染（彩色城市 + 灰色邻居 + 海洋）（2026-08）
 

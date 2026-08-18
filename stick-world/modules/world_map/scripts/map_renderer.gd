@@ -26,13 +26,15 @@ const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
 ## 城市常驻描边（内部城界；与 L2 tile_border 一致）
 const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
 const TILE_BORDER_WIDTH := 5.2
+## 屏幕像素上限：L2 在默认视角下城市界约 3.5px 屏显，这里按屏幕比例压到一致
+const TILE_BORDER_SCREEN_CAP := 3.5
 ## 出生 L1 轮廓 / 邻居分界（与 L2 邻居分界一致）
 const BORDER_COLOR := Color(0.25, 0.25, 0.25)
 const BORDER_WIDTH := 8.45
-const BORDER_SCREEN_CAP := 13.0
+const BORDER_SCREEN_CAP := 5.5   # L2 默认视角地区界约 5.7px 屏显
 ## hover 描边（灰，固定屏幕像素粗细，不随缩放）
 const HOVER_COLOR := Color(0.55, 0.55, 0.55)
-const HOVER_SCREEN_CAP := 11.7
+const HOVER_SCREEN_CAP := 5.0    # L2 默认视角 hover 约 4.8px 屏显
 const HOVER_MARGIN := 2.0
 ## F3 调试：城市编号
 const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
@@ -122,7 +124,7 @@ func _draw() -> void:
 	# 5. 城市描边（地图绝对粗细，放大超屏幕上限时 clamp）
 	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:
-		tw = minf(TILE_BORDER_WIDTH, 7.8 / zz)
+		tw = minf(TILE_BORDER_WIDTH, TILE_BORDER_SCREEN_CAP / zz)
 	for tile in _data.tiles:
 		if tile.polygon.size() < 3:
 			continue

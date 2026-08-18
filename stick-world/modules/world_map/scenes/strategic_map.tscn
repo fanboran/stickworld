@@ -18,7 +18,7 @@ script = ExtResource("2_renderer")
 
 [node name="MapCamera" type="Node" parent="Content"]
 script = ExtResource("3_camera")
-max_zoom = 4.0
+max_zoom = 5.0
 
 [node name="Api" type="Node" parent="Content"]
 script = ExtResource("4_api")

@@ -115,8 +115,9 @@ def main():
     ys0, xs0 = np.where(l1_mask)
     bx0, by0 = xs0.min(), ys0.min()
     bx1, by1 = xs0.max(), ys0.max()
-    cx = int(round(xs0.mean()))
-    cy = int(round(ys0.mean()))
+    # 以地块 bbox 中心居中（质心对不规则形状会偏，导致四周边距不均）
+    cx = int(round((bx0 + bx1) / 2.0))
+    cy = int(round((by0 + by1) / 2.0))
     margin = args.margin
     # 正方形边长 = 地块长边 + 2×边距；以地块 bbox 中心为中心，钳在 2048 内
     side = max(bx1 - bx0 + 1, by1 - by0 + 1) + 2 * margin

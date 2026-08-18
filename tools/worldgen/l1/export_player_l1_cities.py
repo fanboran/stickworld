@@ -22,9 +22,13 @@ import argparse
 import json
 import os
 import shutil
+import sys
 
 import numpy as np
 from PIL import Image, ImageDraw
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "l2_export"))
+import mesh_extract  # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # tools/worldgen
 L1_DIR = os.path.join(HERE, "output", "l1")
@@ -68,6 +72,7 @@ def main():
     l1data = json.load(open(os.path.join(L1_DIR, "l1_data.json"), encoding="utf-8"))
     citydata = json.load(open(os.path.join(L1_DIR, "city_data.json"), encoding="utf-8"))
     city_labels = np.load(os.path.join(L1_DIR, "city_labels_2048.npy"))
+    l1_labels = np.load(os.path.join(L1_DIR, "l1_labels_2048.npy"))
 
     start_tiles = [t for t in l1data["tiles"] if t.get("player_start", False)]
     if not start_tiles:
@@ -134,6 +139,17 @@ def main():
     sid = [t["settlement"]["settlement_id"] for t in tiles]
     roads = [{"from": sid[a], "to": sid[b]} for a, b in mst(city_pts)]
 
+    # 出生 L1 权威轮廓（l1_labels 蒙版提取，同源）：Tab 视图用粗线标出 L1 边界，
+    # 让"贴 L1 边缘的城市套用 L1 边界"肉眼可见
+    l1_m = l1_labels == lab_l1
+    if l1_m.any() and cy0 >= 0 and cx0 >= 0:
+        _mesh = mesh_extract.simplify_mesh(
+            mesh_extract.extract_mesh(l1_m.astype(np.int32)))
+        _outer = _mesh.get(1, {}).get("outer", [])
+        l1_polygon = [[float(p[1]) - cx0, float(p[0]) - cy0] for p in (_outer[0] if _outer else [])]
+    else:
+        l1_polygon = []
+
     print("[3/5] 底图 + 索引图 + 预览 ...")
     base = np.full((side, side, 3), OCEAN_COLOR, dtype=np.uint8)
     for c, t in zip(cities, tiles):
@@ -151,18 +167,25 @@ def main():
             (i >> 16) & 0xFF, (i >> 8) & 0xFF, i & 0xFF)
     Image.fromarray(idx).save(os.path.join(GAME_DIR, "l1_mask.png"))
 
-    # 预览图（放大，含城市点 + 边界线）
+    # 预览图（放大；城市色块 + 城市间细线 + L1 外边界粗线，城市贴 L1 边界一目了然）
     sc = args.scale
     prev = np.array(Image.fromarray(base).resize((side * sc, side * sc), Image.NEAREST))
     dr = ImageDraw.Draw(Image.fromarray(prev))
+    thin = max(1, sc // 3)
+    # 城市边界（细）+ 城市点
     for c, t in zip(cities, tiles):
         px = [(p[0] * sc, p[1] * sc) for p in t["polygon"]]
         if len(px) >= 3:
-            dr.line(px + [px[0]], fill=(10, 10, 10), width=max(2, sc // 2))
+            dr.line(px + [px[0]], fill=(40, 40, 40), width=thin)
         cxp, cyp = float(t["settlement"]["position_px"][0]) * sc, float(t["settlement"]["position_px"][1]) * sc
         r = max(4, sc * 3 // 4)
-        dr.ellipse([cxp - r, cyp - r, cxp + r, cyp + r], outline=(12, 12, 12), width=max(2, sc // 2))
+        dr.ellipse([cxp - r, cyp - r, cxp + r, cyp + r], outline=(12, 12, 12), width=thin)
         dr.ellipse([cxp - r * 0.35, cyp - r * 0.35, cxp + r * 0.35, cyp + r * 0.35], fill=(250, 250, 250))
+    # L1 外边界（粗，压过城市细线 → 城市对外边界 = L1 边界）
+    if l1_polygon:
+        lpx = [(p[0] * sc, p[1] * sc) for p in l1_polygon]
+        if len(lpx) >= 3:
+            dr.line(lpx + [lpx[0]], fill=(8, 8, 8), width=max(3, sc))
     Image.fromarray(prev).save(os.path.join(GAME_DIR, "player_start_l1_cities_preview.png"))
     shutil.copy(os.path.join(GAME_DIR, "player_start_l1_cities_preview.png"),
                 os.path.join(L1_DIR, "player_start_l1_cities_preview.png"))
@@ -176,6 +199,7 @@ def main():
         "base_texture": "l1_base.png",
         "mask_texture": "l1_mask.png",
         "parent_l1_label": lab_l1,
+        "l1_polygon": l1_polygon,
         "spawn_settlement_id": tiles[0]["settlement"]["settlement_id"],
         "tiles": tiles,
         "states": states,

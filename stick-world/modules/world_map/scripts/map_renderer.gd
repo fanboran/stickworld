@@ -30,6 +30,13 @@ var hovered_settlement_id: String = ""
 ## 道路颜色
 @export var road_color: Color = Color(0.95, 0.85, 0.6, 0.85)
 
+## L1 地块边界粗线（出生 L1 权威轮廓，城市对外边界套用它；调试时强调）
+@export var l1_border_color: Color = Color(0.08, 0.08, 0.08, 0.9)
+@export var l1_border_width: float = 5.0
+
+## 城市标号开关（G 键切换；调试时给每个城市地块打上编号）
+var show_city_labels: bool = false
+
 ## 空聚落地块边界颜色（灰，表示贫瘠）
 @export var empty_tile_color: Color = Color(0.6, 0.6, 0.6, 0.7)
 
@@ -73,6 +80,12 @@ func refresh() -> void:
 	queue_redraw()
 
 
+## G 键切换城市标号（调试）
+func toggle_city_labels() -> void:
+	show_city_labels = not show_city_labels
+	queue_redraw()
+
+
 func _process(_delta: float) -> void:
 	if not is_visible_in_tree() or _data == null:
 		return
@@ -112,6 +125,11 @@ func _draw() -> void:
 	for tile in _data.tiles:
 		if tile.settlement != null:
 			_draw_settlement(tile)
+	# 4.5 L1 地块边界粗线（出生 L1 权威轮廓：贴边城市对外边界 = L1 边界，调试强调用）
+	if _data.l1_polygon.size() >= 3 and show_city_labels:
+		var l1p: PackedVector2Array = _data.l1_polygon
+		l1p.append(l1p[0])
+		draw_polyline(l1p, l1_border_color, l1_border_width)
 	# 5. 悬停高亮（最后画，盖在图标上）
 	if not hovered_tile_id.is_empty():
 		for tile in _data.tiles:
@@ -162,3 +180,24 @@ func _draw_settlement(tile: L1TileDef) -> void:
 		14,
 		Color(1.0, 1.0, 1.0, 0.95)
 	)
+	# 城市标号（调试，G 键）：tile_id "city_XXXX" -> 编号
+	if show_city_labels:
+		var num := _city_num_from_tile_id(tile.tile_id)
+		if not num.is_empty():
+			draw_string(
+				ThemeDB.fallback_font,
+				pos + Vector2(-radius, radius + 18.0),
+				"L1城#" + num,
+				HORIZONTAL_ALIGNMENT_LEFT,
+				-1,
+				maxf(14, radius * 0.8),
+				Color(1.0, 0.88, 0.25, 0.95)
+			)
+
+
+## 从 tile_id（"city_2082"）解析城市编号
+func _city_num_from_tile_id(tile_id: String) -> String:
+	var prefix := "city_"
+	if tile_id.begins_with(prefix):
+		return tile_id.substr(prefix.length())
+	return tile_id

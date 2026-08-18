@@ -37,6 +37,9 @@ var states: Dictionary = {}
 ## 玩家出生聚落 ID
 var spawn_settlement_id: String = ""
 
+## 出生 L1 地块权威轮廓（context 像素坐标，L1 边界粗线用；贴 L1 边缘的城市套用该边界）
+var l1_polygon: PackedVector2Array = []
+
 ## 状态（tile_id -> L1TileDef 快速索引）
 var _tile_by_id: Dictionary = {}
 
@@ -59,6 +62,9 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	world.name = data.get("name", "")
 	world.size = int(data.get("size", 1024))
 	world.spawn_settlement_id = data.get("spawn_settlement_id", "")
+	var l1poly: Variant = data.get("l1_polygon", [])
+	if l1poly is Array:
+		world.l1_polygon = _polygon_from(l1poly)
 
 	# 底图 + 索引图
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l1_base.png")]

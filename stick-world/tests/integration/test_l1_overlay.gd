@@ -14,6 +14,7 @@ func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("L1 蒙版加载 + 网格烘焙", _test_load, true)
 	_runner.add_test("地块外环与城市点坐标合法", _test_geometry, true)
+	_runner.add_test("L1 地块标号切换（G 键）", _test_labels, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -50,3 +51,20 @@ func _test_geometry() -> void:
 			out_of_bounds += 1
 	_runner.assert_true(no_ring == 0, "每个地块应有外环（缺失 %d）" % no_ring)
 	_runner.assert_true(out_of_bounds == 0, "坐标应在 0..8192（越界 %d）" % out_of_bounds)
+
+
+func _test_labels() -> void:
+	if _ov == null or not _ov.is_loaded():
+		_runner.assert_true(false, "前置：蒙版未加载")
+		return
+	var before: bool = _ov.show_labels
+	_ov.toggle_labels()
+	_runner.assert_true(_ov.show_labels != before, "toggle_labels 应翻转标号开关")
+	# 每个地块都应有非零 label
+	var no_label: int = 0
+	for t in _ov._tiles:
+		if int(t["label"]) <= 0:
+			no_label += 1
+	_runner.assert_true(no_label == 0, "所有地块都有非零标号（缺失 %d）" % no_label)
+	_ov.toggle_labels()
+	_runner.assert_true(_ov.show_labels == before, "再次切换应还原")

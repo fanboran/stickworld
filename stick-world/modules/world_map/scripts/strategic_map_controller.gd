@@ -54,10 +54,14 @@ func _input(event: InputEvent) -> void:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			_handle_left_click(mb.position)
-	# ESC 关闭
+	# G：切换地块标号（调试）
 	elif event is InputEventKey and event.pressed:
 		var key: InputEventKey = event as InputEventKey
-		if key.keycode == KEY_ESCAPE:
+		if key.keycode == KEY_G:
+			if map_renderer != null and map_renderer.has_method("toggle_city_labels"):
+				map_renderer.toggle_city_labels()
+			get_viewport().set_input_as_handled()
+		elif key.keycode == KEY_ESCAPE:
 			close()
 
 

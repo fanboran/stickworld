@@ -7,30 +7,16 @@ extends RefCounted
 
 # ─────────────────────────────── 窗体 ────────────────────────────────
 
-## 主窗体底（大面板/弹窗）：白色磨砂 + 柔和投影（不描边，投影造深度）
+## 主窗体底（大面板/弹窗）：黑半透明 + 1px 白描边 + 小圆角
 static func window_panel() -> StyleBoxFlat:
-	var s := _make(StickTokens.WINDOW_BG, StickTokens.BORDER, StickTokens.RADIUS_PANEL,
+	return _make(StickTokens.WINDOW_BG, StickTokens.BORDER, StickTokens.RADIUS_PANEL,
 			StickTokens.PAD_X * 2, StickTokens.PAD_Y * 2)
-	s.shadow_color = Color(0.1, 0.16, 0.32, 0.28)
-	s.shadow_size = StickTokens.PANEL_SHADOW_SIZE
-	s.shadow_offset = StickTokens.PANEL_SHADOW_OFFSET
-	return s
 
 
-## 次窗体底（HUD 横条/内嵌区块）：深色玻璃（更透，"黑玻璃窗"）
+## 次窗体底（HUD 横条/内嵌区块）：更透的"玻璃窗"
 static func window_panel_light() -> StyleBoxFlat:
 	return _make(StickTokens.WINDOW_BG_LIGHT, StickTokens.BORDER, StickTokens.RADIUS,
 			StickTokens.PAD_X, StickTokens.PAD_Y)
-
-
-## 资源横条（白色磨砂薄条：无大投影、内边距紧凑，内容行不被压扁）
-static func window_panel_strip() -> StyleBoxFlat:
-	var s := _make(StickTokens.WINDOW_BG, Color.TRANSPARENT, 6,
-			StickTokens.PAD_X, 4)
-	s.shadow_color = Color(0.1, 0.16, 0.32, 0.22)
-	s.shadow_size = 10.0
-	s.shadow_offset = Vector2(0, 4)
-	return s
 
 
 ## 纯底无边框（列表行/凹槽）
@@ -41,29 +27,20 @@ static func groove() -> StyleBoxFlat:
 
 # ─────────────────────────────── 按钮族 ────────────────────────────────
 
-## 真透明磨砂玻璃按钮：无白无黑底色（模糊层负责磨砂）+ 灰细边 + 上缘高光（受光边）
 static func button_normal() -> StyleBoxFlat:
-	var s := _make(StickTokens.BTN_BG, StickTokens.BTN_BORDER, StickTokens.RADIUS)
-	_apply_glass_top_edge(s, StickTokens.BTN_EDGE_TOP)
-	return s
+	return _make(StickTokens.BTN_BG, StickTokens.BORDER, StickTokens.RADIUS)
 
 
 static func button_hover() -> StyleBoxFlat:
-	var s := _make(StickTokens.BTN_BG_HOVER, StickTokens.BTN_BORDER_STRONG, StickTokens.RADIUS)
-	_apply_glass_top_edge(s, StickTokens.BTN_EDGE_TOP)
-	return s
+	return _make(StickTokens.BTN_BG_HOVER, StickTokens.BORDER_STRONG, StickTokens.RADIUS)
 
 
 static func button_pressed() -> StyleBoxFlat:
-	var s := _make(StickTokens.BTN_BG_PRESSED, StickTokens.ACCENT, StickTokens.RADIUS)
-	_apply_glass_top_edge(s, Color(StickTokens.BTN_EDGE_TOP, 0.25))
-	return s
+	return _make(StickTokens.BTN_BG_PRESSED, StickTokens.ACCENT, StickTokens.RADIUS)
 
 
 static func button_disabled() -> StyleBoxFlat:
-	var s := _make(StickTokens.BTN_BG_DISABLED, Color.TRANSPARENT, StickTokens.RADIUS)
-	_apply_glass_top_edge(s, Color(StickTokens.BTN_EDGE_TOP, 0.15))
-	return s
+	return _make(StickTokens.BTN_BG_DISABLED, Color.TRANSPARENT, StickTokens.RADIUS)
 
 
 ## 强调按钮（主行动点：新游戏/确定/应用）
@@ -137,13 +114,6 @@ static func separator() -> StyleBoxFlat:
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
-
-## 给 StyleBoxFlat 加上 1px 上缘高光（玻璃受光边，比其余边框更亮）
-static func _apply_glass_top_edge(s: StyleBoxFlat, edge_color: Color) -> void:
-	if s.border_width_top < 1:
-		s.border_width_top = 1
-	s.border_color = edge_color
-
 
 static func _make(bg: Color, border: Color, radius: int,
 		pad_x: int = StickTokens.PAD_X, pad_y: int = StickTokens.PAD_Y) -> StyleBoxFlat:

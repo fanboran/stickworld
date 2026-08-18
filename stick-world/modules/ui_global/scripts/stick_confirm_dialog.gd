@@ -32,8 +32,6 @@ func setup(title: String, message: String, on_confirm: Callable,
 	# 居中窗口（anchor 归零 + 相对 dim 计算；Godot 的 position setter 配 anchor 会失效）
 	_window = PanelContainer.new()
 	_window.add_theme_stylebox_override("panel", StickStyle.window_panel())
-	# 白面板子树挂浅色表面主题（深色文字）
-	_window.theme = StickTheme.create_light_surface()
 	_window.custom_minimum_size = Vector2(360, 0)
 	_dim.add_child(_window)
 	_window.set_anchors_preset(Control.PRESET_TOP_LEFT)

@@ -39,8 +39,6 @@ func _build_window() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel = PanelContainer.new()
 	_panel.add_theme_stylebox_override("panel", StickStyle.window_panel())
-	# 白面板子树挂浅色表面主题（深色文字）
-	_panel.theme = StickTheme.create_light_surface()
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_panel.custom_minimum_size = window_size
 	add_child(_panel)

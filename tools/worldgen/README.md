@@ -26,7 +26,7 @@ tools/worldgen/
 │   ├── export_l1_overview.py       # L1 全图预览
 │   └── update_tiles_coastline.py   # 按 8K 蒙版裁切海岸线
 ├── l1/                    # L1 地块合并 / 生成 / 全大陆 L1 蒙版（活跃）
-│   ├── l1_world_split.py          # 全大陆 L1 地块划分（L3 级蒙版：城市点 + 受限 Voronoi）
+│   ├── l1_world_split.py          # 全大陆 L1 地块划分（L3 级蒙版：城市点 + 岛×L2 分组细胞质膨胀 + 面积下限）
 │   ├── merge_tiny_tiles.py
 │   ├── merge_tiles_groups.py
 │   ├── merge_island_tiles.py

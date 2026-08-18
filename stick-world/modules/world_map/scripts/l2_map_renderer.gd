@@ -41,6 +41,10 @@ var _context_size := Vector2.ONE
 var _tile_border_segs: Array = []        # 地块描边段（烘焙，已合并共线段并滤除湖泊/边缘段）
 var _neighbor_border_segs: Array = []    # 相邻地区分界线段（烘焙，同上）
 
+## L1 细分视图（由 L2L1Overlay 子节点绘制）：开启时隐藏旧地块色块/描边/hover，
+## 只保留海洋/湖泊/相邻地区背景 + L1 细胞蒙版（相似色填充 + 边界线 + 城市点）
+var l1_split_visible: bool = false
+
 
 func set_data(data: L2WorldData) -> void:
 	_data = data
@@ -100,6 +104,8 @@ func _make_mesh_from_baked(baked: Dictionary) -> ArrayMesh:
 func _process(_delta: float) -> void:
 	if not visible or _data == null:
 		return
+	if l1_split_visible:
+		return   # 细分视图下 hover 用旧索引图会误导，暂停
 	var viewport := get_viewport()
 	if viewport == null:
 		return
@@ -125,6 +131,14 @@ func _draw() -> void:
 	# 2. 湖泊（浅蓝）
 	if _lakes_mesh != null:
 		draw_mesh(_lakes_mesh, null)
+	if l1_split_visible:
+		# L1 细分视图：旧地块色块/洞/描边全部隐藏，仅保留背景（海洋/邻居/湖泊）。
+		# L1 细胞蒙版由子节点 L2L1Overlay 绘制（同一相机变换空间，绘制在父之后）。
+		if _neighbors_mesh != null:
+			draw_mesh(_neighbors_mesh, null)
+		if _lakes_mesh != null:
+			draw_mesh(_lakes_mesh, null)
+		return
 	# 3. 相邻地区（灰色）
 	if _neighbors_mesh != null:
 		draw_mesh(_neighbors_mesh, null)

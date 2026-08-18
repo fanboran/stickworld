@@ -19,6 +19,10 @@ const DATA_BASE_DIR := "res://config/strategic_map/l2_packs"
 ## 当前加载的数据
 var data: L2WorldData = null
 
+## L1 细分叠加层（L2MapRenderer 子节点，V 键切换；点开 L2 默认显示细分）
+var _l1_split: L2L1Overlay = null
+var _l1_split_on: bool = true
+
 var _current_region_id: String = ""
 
 
@@ -34,6 +38,11 @@ func _auto_find_components() -> void:
 			map_renderer = child
 		elif child is MapCamera and map_camera == null:
 			map_camera = child
+	if _l1_split == null and map_renderer != null:
+		for child in map_renderer.get_children():
+			if child is L2L1Overlay:
+				_l1_split = child
+				break
 
 
 func _input(event: InputEvent) -> void:
@@ -47,6 +56,24 @@ func _input(event: InputEvent) -> void:
 			visible = false
 			back_requested.emit()
 			get_viewport().set_input_as_handled()
+		elif key.keycode == KEY_V:
+			_toggle_l1_split()
+			get_viewport().set_input_as_handled()
+
+
+## V 键：切换 L1 细分视图（旧地块色块 <-> L1 细胞蒙版 + 城市点）
+func _toggle_l1_split() -> void:
+	_l1_split_on = not _l1_split_on
+	_apply_l1_split_visible()
+	print("[L2Map] L1 细分视图: %s" % ("开" if _l1_split_on else "关"))
+
+
+func _apply_l1_split_visible() -> void:
+	if map_renderer != null and map_renderer.has_method("refresh"):
+		map_renderer.l1_split_visible = _l1_split_on
+		if _l1_split != null:
+			_l1_split.visible = _l1_split_on
+		map_renderer.refresh()
 
 
 ## 打开指定 L2 地区视图（region_id 形如 region_001）
@@ -63,6 +90,10 @@ func open(region_id: String) -> void:
 			return
 		if map_renderer != null and map_renderer.has_method("set_data"):
 			map_renderer.set_data(data)
+		# L1 细分数据（l1_split.json，context 坐标）——点开 L2 默认看到 L1 细分
+		if _l1_split != null:
+			_l1_split.load_split("%s/%s/l1_split.json" % [DATA_BASE_DIR, region_id])
+		_apply_l1_split_visible()
 		# 初始视角：整图适配屏幕（fit 正方形 context，贴着大小特写，居中显示）
 		if map_camera != null and map_camera.has_method("set_zoom"):
 			var vp := get_viewport()

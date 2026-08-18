@@ -56,9 +56,9 @@ text = "编制"
 layout_mode = 1
 anchors_preset = 0
 offset_left = 8.0
-offset_top = 46.0
+offset_top = 64.0
 offset_right = 8.0
-offset_bottom = 46.0
+offset_bottom = 64.0
 mouse_filter = 2
 
 [node name="NotificationLabel" type="Label" parent="." unique_id=1766089372]

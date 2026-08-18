@@ -2,7 +2,8 @@ class_name GlobalHUD
 extends Control
 ## 全局 HUD —— 顶层常驻 UI（统一顶栏通栏）。
 ##
-## 顶栏一段式通栏（黑玻璃背景）：左=速度/时间，中=资源条（ResourceBar 内嵌），右=系统按钮。
+## 顶栏一段式通栏（黑玻璃背景）：左=速度/时间，中=系统按钮；材料条（ResourceBar）
+## 作为**顶栏下方独立横条**（ResourceBarHost，y=64 起，不重叠按钮行，见 global_hud.tscn）。
 ## 资源条由 attach_resources 注入（SystemSetup 在资源系统装配后调用）。
 
 const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/resource_bar.gd")

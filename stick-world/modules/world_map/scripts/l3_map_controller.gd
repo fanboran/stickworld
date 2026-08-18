@@ -93,12 +93,17 @@ func _on_l2_back() -> void:
 	visible = true
 
 
+## 首次打开时的初始视角缩放（视野放大 50%：可见范围宽/高 = 屏幕 1.5 倍，zoom = 1/1.5）
+## 原 1.0（1:1 像素）在 1080p 下只能看到 8192² 地图的中央 23%，看不到大陆全貌；
+## 2/3 可看到中央 ~35% + 四周海洋，大陆轮廓完整可见。用户可在拖拽/滚轮内自由缩放。
+const INITIAL_VIEW_ZOOM: float = 2.0 / 3.0
+
 ## 打开 L3 地图（M 键触发）
 ## 保留上次状态：相机位置/缩放不变；若上次关闭时在 L2 视图内，恢复 L2 显示
 func open() -> void:
 	if not _view_initialized:
 		_view_initialized = true
-		# 初始视角：无缩放（zoom 1.0，1:1 像素完美），屏幕中心 = 地图中心
+		# 初始视角：视野放大 50%（zoom = 2/3），屏幕中心 = 地图中心
 		var map_size := 2048.0
 		if map_renderer != null and map_renderer.get_data() != null:
 			map_size = float(map_renderer.get_data().size)
@@ -106,9 +111,9 @@ func open() -> void:
 			var vp := get_viewport()
 			if vp != null:
 				var vp_size: Vector2 = vp.get_visible_rect().size
-				map_camera.set_zoom(1.0)
+				map_camera.set_zoom(INITIAL_VIEW_ZOOM)
 				if map_camera.has_method("set_offset"):
-					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.5, map_size * 0.5))
+					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.5, map_size * 0.5) * INITIAL_VIEW_ZOOM)
 	if _l2_active and l2_view != null:
 		# 恢复 L2 视图（相机状态保留），L3 保持隐藏
 		visible = false

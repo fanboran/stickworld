@@ -19,6 +19,13 @@ var _camera: MapCamera = null
 ## 当前悬停的地块 ID（""=无）
 var hovered_tile_id: String = ""
 
+## 性能缓存：城市描边段 + 出生 L1 轮廓（不随 zoom/hover 变化，set_data 后首帧构建一次复用）。
+## 原实现每帧重建描边段并对每段遍历湖全部边做距离计算（4668 段 × 湖边数 ≈ 百万级），
+## hover 每帧触发 → 卡顿源；缓存后 hover 重绘 = 1 次 draw_multiline。
+var _cached_segs: PackedVector2Array = PackedVector2Array()
+var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
+var _segs_valid: bool = false
+
 ## 配色（与 L2MapRenderer 完全一致）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
@@ -45,6 +52,7 @@ var _debug_was_visible: bool = false
 
 func set_data(data: L1WorldData) -> void:
 	_data = data
+	_segs_valid = false
 	queue_redraw()
 
 
@@ -119,32 +127,21 @@ func _draw() -> void:
 		if tile.polygon.size() < 3:
 			continue
 		draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
-	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）
+	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）。
+	#    描边段不随 zoom/hover 变化 → 缓存复用（原每帧重建 = 4668 段 × 湖边数 距离计算，hover 卡顿源）
 	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:
 		tw = TILE_BORDER_WIDTH / zz
-	var lake_tol := _lake_edge_tol()
-	var segs := PackedVector2Array()
-	for tile in _data.tiles:
-		if tile.polygon.size() < 3:
-			continue
-		var pts := tile.polygon
-		var n := pts.size()
-		for i in range(n):
-			var a := pts[i]
-			var b := pts[(i + 1) % n]
-			if _edge_touches_lake(a, b, lake_tol):
-				continue
-			segs.append(a)
-			segs.append(b)
-	if segs.size() >= 2:
-		draw_multiline(segs, TILE_BORDER_COLOR, tw, true)
+	if not _segs_valid:
+		_build_cached_geometry()
+	if _cached_segs.size() >= 2:
+		draw_multiline(_cached_segs, TILE_BORDER_COLOR, tw, true)
 	# 6. 出生 L1 权威轮廓（屏幕像素固定，略粗区分出生块；邻居分界同理）
 	var bw: float = BORDER_WIDTH
 	if zz > 0.0001:
 		bw = BORDER_WIDTH / zz
-	if _data.l1_polygon.size() >= 3:
-		draw_polyline(_closed(_data.l1_polygon), BORDER_COLOR, bw, true)
+	if _cached_l1_closed.size() >= 3:
+		draw_polyline(_cached_l1_closed, BORDER_COLOR, bw, true)
 	# 7. hover 城市块描边（屏幕像素固定）
 	if not hovered_tile_id.is_empty():
 		var hw: float = HOVER_WIDTH
@@ -177,13 +174,54 @@ func _lake_edge_tol() -> float:
 	return tol
 
 
-## 边中点是否贴着某湖
-func _edge_touches_lake(a: Vector2, b: Vector2, tol: float) -> bool:
-	if _data.lakes.is_empty():
+## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓。
+## 仅 set_data / 首帧调用一次。
+func _build_cached_geometry() -> void:
+	_cached_segs = PackedVector2Array()
+	_cached_l1_closed = PackedVector2Array()
+	var lake_tol := _lake_edge_tol()
+	# 湖 bbox（外扩 tol）预筛：段中点不在任何湖 bbox 内 → 直接非邻湖，省精确距离计算
+	var lake_boxes: Array[Rect2] = []
+	for lake in _data.lakes:
+		lake_boxes.append(_lake_bbox(lake, lake_tol))
+	for tile in _data.tiles:
+		if tile.polygon.size() < 3:
+			continue
+		var pts := tile.polygon
+		var n := pts.size()
+		for i in range(n):
+			var a := pts[i]
+			var b := pts[(i + 1) % n]
+			if _edge_touches_lake_fast(a, b, lake_tol, lake_boxes):
+				continue
+			_cached_segs.append(a)
+			_cached_segs.append(b)
+	_cached_l1_closed = _closed(_data.l1_polygon)
+	_segs_valid = true
+
+
+## 湖多边形包围盒（外扩 tol）——邻湖判定预筛用
+func _lake_bbox(lake: Array, tol: float) -> Rect2:
+	var bb := Rect2()
+	var first := true
+	for pt in _pts(lake):
+		if first:
+			bb = Rect2(pt, Vector2.ZERO)
+			first = false
+		else:
+			bb = bb.expand(pt)
+	return bb.grow(tol)
+
+
+## 边中点是否贴着某湖（bbox 预筛加速版）：中点不在任何湖 bbox 内直接 false
+func _edge_touches_lake_fast(a: Vector2, b: Vector2, tol: float, lake_boxes: Array[Rect2]) -> bool:
+	if lake_boxes.is_empty():
 		return false
 	var mid := (a + b) * 0.5
-	for lake in _data.lakes:
-		var pts := _pts(lake)
+	for li in range(lake_boxes.size()):
+		if not lake_boxes[li].has_point(mid):
+			continue
+		var pts := _pts(_data.lakes[li])
 		var ln := pts.size()
 		for i in range(ln):
 			if _dist_point_segment(mid, pts[i], pts[(i + 1) % ln]) <= tol:

@@ -8,6 +8,12 @@
 
 ## [未发布]
 
+### L1 Tab 运行时性能优化：描边缓存 + 静态色块层烘焙（2026-08）
+
+- **描边/轮廓几何缓存**：原 `_draw` 每次重绘重建 4750 段城市描边并对每段遍历湖全部 91 边做距离计算（≈43 万次 GDScript/每次 hover 触发，hover 卡顿源）→ `set_data` 后首帧构建一次缓存，hover 重绘 = 1 次 `draw_multiline`；邻湖判定加湖 bbox 预筛（仅中点落湖 bbox 内的边做精确距离）
+- **静态色块层 ArrayMesh 烘焙**：海洋/湖泊/邻居/城市色块（8 城 4750 点 + 邻居 1623 点 + 湖）→ `Geometry2D.triangulate_polygon` 一次性 earcut 烘焙成单张 ArrayMesh（顶点色），每帧 1 次 `draw_mesh`，免每帧多边形三角剖分
+- **验证**：P0 7/7、全量 23/24（1 预存无关）、check_godot_errors 干净
+
 ### 城市层升 8192：L1 Tab 全链路原生精度（2026-08）
 
 - **根因**：L1 Tab 链路中城市层（city_split_v2）与 L1 context 导出一直锁 2048（其余导出——L3/L2 overview/湖泊/老 L1 拼图——早已 8192），Tab 长期"2048 小图放大 3 倍"，45° 斜线锯齿、文字问题皆源于此

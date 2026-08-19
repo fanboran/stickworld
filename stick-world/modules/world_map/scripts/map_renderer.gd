@@ -23,19 +23,15 @@ var hovered_tile_id: String = ""
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
 const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
-## 城市常驻描边（内部城界；与 L2 tile_border 一致）
+## 城市常驻描边（内部城界；屏幕像素固定、细，不随缩放变化——避免缩放时粗细跳变）
 const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
-const TILE_BORDER_WIDTH := 5.2
-## 屏幕像素上限：L2 在默认视角下城市界约 3.5px 屏显，这里按屏幕比例压到一致
-const TILE_BORDER_SCREEN_CAP := 3.5
-## 出生 L1 轮廓 / 邻居分界（与 L2 邻居分界一致）
+const TILE_BORDER_WIDTH := 2.0
+## 出生 L1 轮廓 / 邻居分界（屏幕像素固定，略粗区分出生块边界）
 const BORDER_COLOR := Color(0.25, 0.25, 0.25)
-const BORDER_WIDTH := 8.45
-const BORDER_SCREEN_CAP := 5.5   # L2 默认视角地区界约 5.7px 屏显
-## hover 描边（灰，固定屏幕像素粗细，不随缩放）
+const BORDER_WIDTH := 2.5
+## hover 描边（屏幕像素固定）
 const HOVER_COLOR := Color(0.55, 0.55, 0.55)
-const HOVER_SCREEN_CAP := 5.0    # L2 默认视角 hover 约 4.8px 屏显
-const HOVER_MARGIN := 2.0
+const HOVER_WIDTH := 3.0
 ## F3 调试：城市编号
 const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
@@ -123,25 +119,37 @@ func _draw() -> void:
 		if tile.polygon.size() < 3:
 			continue
 		draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
-	# 5. 城市描边（地图绝对粗细，放大超屏幕上限时 clamp）
+	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）
 	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:
-		tw = minf(TILE_BORDER_WIDTH, TILE_BORDER_SCREEN_CAP / zz)
+		tw = TILE_BORDER_WIDTH / zz
+	var lake_tol := _lake_edge_tol()
+	var segs := PackedVector2Array()
 	for tile in _data.tiles:
 		if tile.polygon.size() < 3:
 			continue
-		draw_polyline(_closed(tile.polygon), TILE_BORDER_COLOR, tw, true)
-	# 6. 出生 L1 权威轮廓（深色，比城市描边粗；邻居分界同理）
+		var pts := tile.polygon
+		var n := pts.size()
+		for i in range(n):
+			var a := pts[i]
+			var b := pts[(i + 1) % n]
+			if _edge_touches_lake(a, b, lake_tol):
+				continue
+			segs.append(a)
+			segs.append(b)
+	if segs.size() >= 2:
+		draw_multiline(segs, TILE_BORDER_COLOR, tw, true)
+	# 6. 出生 L1 权威轮廓（屏幕像素固定，略粗区分出生块；邻居分界同理）
 	var bw: float = BORDER_WIDTH
 	if zz > 0.0001:
-		bw = minf(BORDER_WIDTH, BORDER_SCREEN_CAP / zz)
+		bw = BORDER_WIDTH / zz
 	if _data.l1_polygon.size() >= 3:
 		draw_polyline(_closed(_data.l1_polygon), BORDER_COLOR, bw, true)
-	# 7. hover 城市块描边（灰，固定屏幕像素粗细，不随缩放）
+	# 7. hover 城市块描边（屏幕像素固定）
 	if not hovered_tile_id.is_empty():
-		var hw: float = TILE_BORDER_WIDTH + HOVER_MARGIN
+		var hw: float = HOVER_WIDTH
 		if zz > 0.0001:
-			hw = minf(TILE_BORDER_WIDTH + HOVER_MARGIN, HOVER_SCREEN_CAP / zz)
+			hw = HOVER_WIDTH / zz
 		for tile in _data.tiles:
 			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
 				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)
@@ -158,6 +166,39 @@ func _closed(pts: PackedVector2Array) -> PackedVector2Array:
 	var out := pts.duplicate()
 	out.append(out[0])
 	return out
+
+
+## 邻湖判定容差（地图单元）：边中点距湖多边形 ≤ 该值视为"地块-湖泊"边界不描边。
+## 8192 级 context 下沿湖边 ~0-10、最近非湖边 ~10.1，取 context 1%（798≈8）安全。
+func _lake_edge_tol() -> float:
+	var tol := 4.0
+	if _data.context_size.x > 0:
+		tol = _data.context_size.x * 0.01
+	return tol
+
+
+## 边中点是否贴着某湖
+func _edge_touches_lake(a: Vector2, b: Vector2, tol: float) -> bool:
+	if _data.lakes.is_empty():
+		return false
+	var mid := (a + b) * 0.5
+	for lake in _data.lakes:
+		var pts := _pts(lake)
+		var ln := pts.size()
+		for i in range(ln):
+			if _dist_point_segment(mid, pts[i], pts[(i + 1) % ln]) <= tol:
+				return true
+	return false
+
+
+## 点到线段的最短距离
+func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var len2 := ab.length_squared()
+	if len2 <= 0.000001:
+		return p.distance_to(a)
+	var t := clampf((p - a).dot(ab) / len2, 0.0, 1.0)
+	return p.distance_to(a + ab * t)
 
 
 ## Array[[x,y],...] -> PackedVector2Array

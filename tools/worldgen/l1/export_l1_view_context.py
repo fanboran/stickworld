@@ -71,6 +71,17 @@ def to_xy(ring):
     return [[float(p[1]), float(p[0])] for p in ring]
 
 
+def _area_xy(ring):
+    """多边形面积（(x,y) 坐标，鞋带公式）。"""
+    n = len(ring)
+    s = 0.0
+    for i in range(n):
+        x1, y1 = ring[i]
+        x2, y2 = ring[(i + 1) % n]
+        s += x1 * y2 - x2 * y1
+    return abs(s) / 2.0
+
+
 def jsonable(o):
     """递归把 numpy 标量转回 Python 原生类型（mesh 提取的角点可能是 np 类型）。"""
     if isinstance(o, dict):
@@ -173,6 +184,12 @@ def main():
         if not outs:
             outs = [[[float(p[0]) - x0, float(p[1]) - y0] for p in r] for r in c.get("polygons", [])]
             outs = [r for r in outs if len(r) >= 3]
+        # split_self_touch 自触分割会产生多个 outer：主体 + 1px 碎条。
+        # 取面积最大者作主轮廓（渲染器用 polygon 填充），剔除 <3px² 碎条，
+        # 否则 outs[0] 可能取到碎三角（如 city_1034 只剩 0.6px² → 渲染成海洋色）。
+        if len(outs) > 1:
+            outs = [r for r in outs if _area_xy(r) >= 3.0] or outs
+            outs = sorted(outs, key=_area_xy, reverse=True)
         level = 3 if city_area[c["label"]] > 1500 else (2 if city_area[c["label"]] > 600 else 1)
         pos = city_pos[c["label"]]
         tiles.append({

@@ -41,7 +41,7 @@ const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
 const LABEL_SIZE := 28.0
 ## F3 城市编号的屏幕恒定字号（像素）：地图单元字号 ÷ 缩放，避免 L1 高缩放下"雷霆大字"
-const LABEL_SCREEN_SIZE := 22.0
+const LABEL_SCREEN_SIZE := 12.0
 var _debug_was_visible: bool = false
 
 
@@ -175,7 +175,10 @@ func _draw_city_labels() -> void:
 		zz = _camera.get_zoom()
 	var fs: float = LABEL_SCREEN_SIZE
 	if zz > 0.0001:
-		fs = clampf(LABEL_SCREEN_SIZE / zz, 13.0, 30.0)
+		# 屏幕恒定字号 = LABEL_SCREEN_SIZE / zz（地图单元字号 ÷ 缩放）。
+		# 下限 13 曾导致整图适配(zz≈4.6)时被 clamp 到 13 → 屏幕 13×4.6≈60px"雷霆大字"。
+		# 下限只需防极端高缩放，取 2.0（max_zoom=5 时 12/5=2.4 不受影响）。
+		fs = clampf(LABEL_SCREEN_SIZE / zz, 2.0, 30.0)
 	var halo: float = maxf(1.5, fs * 0.12)
 	for tile in _data.tiles:
 		if tile.settlement == null:

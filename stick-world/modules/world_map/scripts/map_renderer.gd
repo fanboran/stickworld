@@ -23,19 +23,14 @@ var hovered_tile_id: String = ""
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
 const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
-## 城市常驻描边（内部城界；与 L2 tile_border 一致）
-const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
-const TILE_BORDER_WIDTH := 5.2
-## 屏幕像素上限：L2 在默认视角下城市界约 3.5px 屏显，这里按屏幕比例压到一致
-const TILE_BORDER_SCREEN_CAP := 3.5
-## 出生 L1 轮廓 / 邻居分界（与 L2 邻居分界一致）
+## 出生 L1 轮廓 / 邻居分界（细线，屏显上限 3px）
 const BORDER_COLOR := Color(0.25, 0.25, 0.25)
-const BORDER_WIDTH := 8.45
-const BORDER_SCREEN_CAP := 5.5   # L2 默认视角地区界约 5.7px 屏显
-## hover 描边（灰，固定屏幕像素粗细，不随缩放）
+const BORDER_WIDTH := 4.5
+const BORDER_SCREEN_CAP := 3.0
+## hover 城市块描边（灰，固定屏幕像素粗细，不随缩放）
 const HOVER_COLOR := Color(0.55, 0.55, 0.55)
-const HOVER_SCREEN_CAP := 5.0    # L2 默认视角 hover 约 4.8px 屏显
-const HOVER_MARGIN := 2.0
+const HOVER_WIDTH := 4.0
+const HOVER_SCREEN_CAP := 3.5
 ## F3 调试：城市编号
 const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
@@ -116,30 +111,22 @@ func _draw() -> void:
 		for poly in nb.get("polygons", []):
 			if (poly as Array).size() >= 3:
 				draw_colored_polygon(_pts(poly), NEIGHBOR_COLOR)
-	# 4. 当前 L1 城市块（政权色）
+	# 4. 当前 L1 城市块（政权色，纯色块不描边——内部城界靠政权色区分，湖边界不画追踪线）
 	for tile in _data.tiles:
 		if tile.polygon.size() < 3:
 			continue
 		draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
-	# 5. 城市描边（地图绝对粗细，放大超屏幕上限时 clamp）
-	var tw: float = TILE_BORDER_WIDTH
-	if zz > 0.0001:
-		tw = minf(TILE_BORDER_WIDTH, TILE_BORDER_SCREEN_CAP / zz)
-	for tile in _data.tiles:
-		if tile.polygon.size() < 3:
-			continue
-		draw_polyline(_closed(tile.polygon), TILE_BORDER_COLOR, tw, true)
-	# 6. 出生 L1 权威轮廓（深色，比城市描边粗；邻居分界同理）
+	# 5. 出生 L1 权威轮廓（深色细线，邻居分界同理）
 	var bw: float = BORDER_WIDTH
 	if zz > 0.0001:
 		bw = minf(BORDER_WIDTH, BORDER_SCREEN_CAP / zz)
 	if _data.l1_polygon.size() >= 3:
 		draw_polyline(_closed(_data.l1_polygon), BORDER_COLOR, bw, true)
-	# 7. hover 城市块描边（灰，固定屏幕像素粗细，不随缩放）
+	# 6. hover 城市块描边（灰，固定屏幕像素粗细，不随缩放）
 	if not hovered_tile_id.is_empty():
-		var hw: float = TILE_BORDER_WIDTH + HOVER_MARGIN
+		var hw: float = HOVER_WIDTH
 		if zz > 0.0001:
-			hw = minf(TILE_BORDER_WIDTH + HOVER_MARGIN, HOVER_SCREEN_CAP / zz)
+			hw = minf(HOVER_WIDTH, HOVER_SCREEN_CAP / zz)
 		for tile in _data.tiles:
 			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
 				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)

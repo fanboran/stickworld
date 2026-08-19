@@ -8,6 +8,12 @@
 
 ## [未发布]
 
+### L1 湖泊-陆地无缝 + Tab 跟随玩家当前 L1（2026-08）
+
+- **湖泊-陆地交界缝隙**：湖泊 mesh 来自 8192 原生（弧线丝滑），城市块 mesh 是另一套独立提取（直线边界）——交界处两套多边形不共享边界，弧线 vs 直线之间露缝（陆地侧像素块感）。修复：`export_l1_view_context.py` 把城市块**裁剪湖泊**（城市块在湖边的边界沿湖弧线，与湖泊共享像素边界）；`map_renderer._bake_base_mesh` **湖泊最后画**（盖邻居/城市色块）——交界处由湖弧线决定，严丝合缝。已重跑出生 + 全部 69 个 `l1_packs`
+- **Tab 跟随玩家当前 L1**：Tab 打开显示**玩家当前所在 L1**（现在=出生 L1）；L2 点击 L1 下钻改为**临时查看**（ESC 返回 L2，不再改变 Tab 的 L1）。api 记录当前 L1（`get_current_l1_label`）+ `ensure_player_l1`（Tab 打开时切回玩家 L1，切换才重载并重置视角）；controller 加 `_player_l1_label` + `set_player_l1`（预留游戏内跨 L1 移动时更新，Tab 跟随）
+- **验证**：P0 9/9（含新增"Tab 跟随/湖泊-城市不重叠"）、L2 7/7、全量 23/24（1 项预存无关失败）、check_godot_errors 干净
+
 ### L1 地图描边修复：跨环乱飞线 + 缩放粗细滞后跳变（2026-08）
 
 - **L1 权威轮廓跨环乱飞线**：老 L1 多连通（大陆 + 岛屿）时 `extract_mesh` 输出多个外环，`export_l1_view_context.py` 的 `extend` 把多环串接成单个点列 → renderer `_closed` + 单条 `draw_polyline` 把不相连环串成跨海乱飞连接线（下钻打开含岛屿的老 L1 时出现；出生 L1 为单连通不受影响）。修复：`export_l1_view_context.py` 的 `l1_polygon` 只取最大环（主大陆）——岛屿不画 L1 轮廓粗线，由城市色块/描边呈现；renderer 恢复单环闭合绘制。已重跑出生 + 全部 69 个 `l1_packs`

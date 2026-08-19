@@ -207,17 +207,18 @@ func _bake_base_mesh() -> void:
 	var ctx := _data.context_size
 	if ctx.x <= 0 or ctx.y <= 0:
 		return
-	# 收集 (多边形, 颜色)：顺序 = 原绘制顺序（湖泊盖海洋、邻居盖湖泊、城市盖邻居）
+	# 收集 (多边形, 颜色)：顺序 = 原绘制顺序（湖泊最后画，盖邻居/城市色块——
+	# 湖泊弧线与城市块交界处由湖弧线决定，严丝合缝无缝隙；export 已裁剪城市块不覆盖湖）
 	var pairs: Array = []  # [[PackedVector2Array, Color], ...]
 	# 海洋 = 全矩形底
-	for lake in _data.lakes:
-		pairs.append([_pts(lake), LAKE_COLOR])
 	for nb in _data.neighbors:
 		for poly in nb.get("polygons", []):
 			pairs.append([_pts(poly), NEIGHBOR_COLOR])
 	for tile in _data.tiles:
 		if tile.polygon.size() >= 3:
 			pairs.append([tile.polygon, _data.get_state_color(tile.owner_state_id)])
+	for lake in _data.lakes:
+		pairs.append([_pts(lake), LAKE_COLOR])
 	# 三角剖分 + 顶点色（每三角形独立顶点，避免共享顶点颜色冲突）
 	var verts := PackedVector2Array()
 	var cols := PackedColorArray()

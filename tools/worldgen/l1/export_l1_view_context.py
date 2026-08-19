@@ -150,6 +150,9 @@ def main():
     ctx_lake = lake[y0:y0 + side, x0:x0 + side].copy()
     # 8192：直接裁剪 8192 级城市标签（城市层已在 8192 生成，真实精细边界）
     ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
+    # 城市块裁剪湖泊：湖区域不属于任何城市块——城市块在湖边的边界沿湖弧线（与湖泊 mesh
+    # 共享同一像素边界），消除"湖泊丝滑弧线 vs 陆地直线大块"交界处的缝隙
+    ctx_city[ctx_lake] = 0
     # 8192 原生几何已足够细（屏幕 zoom≈0.77 时像素楼梯不可见）：轻平滑去尖角即可
     smooth_city, smooth_legacy, smooth_lake = 1, 1, 1
 

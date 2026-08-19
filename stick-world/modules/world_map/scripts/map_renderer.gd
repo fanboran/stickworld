@@ -26,6 +26,10 @@ var _cached_segs: PackedVector2Array = PackedVector2Array()
 var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
 var _segs_valid: bool = false
 
+## 静态色块层 ArrayMesh（海洋+湖泊+邻居+城市色块，set_data 后烘焙一次；描边/轮廓/hover 仍动态）。
+## Geometry2D.triangulate_polygon 一次三角剖分 → 每帧 1 次 draw_mesh，免每帧 earcut（8 城 4750 点 + 邻居 1623 点 + 湖）。
+var _base_mesh: ArrayMesh = null
+
 ## 配色（与 L2MapRenderer 完全一致）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
@@ -53,6 +57,7 @@ var _debug_was_visible: bool = false
 func set_data(data: L1WorldData) -> void:
 	_data = data
 	_segs_valid = false
+	_base_mesh = null
 	queue_redraw()
 
 
@@ -111,22 +116,25 @@ func _draw() -> void:
 	var zz: float = 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
-	# 1. 海洋背景（context 尺寸）
-	draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
-	# 2. 湖泊（浅蓝，覆盖灰色邻居/非地块区）
-	for lake in _data.lakes:
-		if (lake as Array).size() >= 3:
-			draw_colored_polygon(_pts(lake), LAKE_COLOR)
-	# 3. 邻居老 L1 块（灰色）
-	for nb in _data.neighbors:
-		for poly in nb.get("polygons", []):
-			if (poly as Array).size() >= 3:
-				draw_colored_polygon(_pts(poly), NEIGHBOR_COLOR)
-	# 4. 当前 L1 城市块（政权色）
-	for tile in _data.tiles:
-		if tile.polygon.size() < 3:
-			continue
-		draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
+	# 1. 静态色块层（海洋+湖泊+邻居+城市色块 → 单张 ArrayMesh，描边/轮廓/hover 仍动态画）
+	if _base_mesh == null:
+		_bake_base_mesh()
+	if _base_mesh != null:
+		draw_mesh(_base_mesh, null)
+	else:
+		# 回退：数据异常时逐层绘制
+		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
+		for lake in _data.lakes:
+			if (lake as Array).size() >= 3:
+				draw_colored_polygon(_pts(lake), LAKE_COLOR)
+		for nb in _data.neighbors:
+			for poly in nb.get("polygons", []):
+				if (poly as Array).size() >= 3:
+					draw_colored_polygon(_pts(poly), NEIGHBOR_COLOR)
+		for tile in _data.tiles:
+			if tile.polygon.size() < 3:
+				continue
+			draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
 	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）。
 	#    描边段不随 zoom/hover 变化 → 缓存复用（原每帧重建 = 4668 段 × 湖边数 距离计算，hover 卡顿源）
 	var tw: float = TILE_BORDER_WIDTH
@@ -172,6 +180,49 @@ func _lake_edge_tol() -> float:
 	if _data.context_size.x > 0:
 		tol = _data.context_size.x * 0.01
 	return tol
+
+
+## 烘焙静态色块层：海洋(矩形)/湖泊/邻居/城市色块 → 单张 ArrayMesh（顶点色，三角形独立顶点）。
+## Geometry2D.triangulate_polygon 一次性 earcut（C++，含凹多边形），仅 set_data / 首帧调用一次。
+func _bake_base_mesh() -> void:
+	_base_mesh = null
+	var ctx := _data.context_size
+	if ctx.x <= 0 or ctx.y <= 0:
+		return
+	# 收集 (多边形, 颜色)：顺序 = 原绘制顺序（湖泊盖海洋、邻居盖湖泊、城市盖邻居）
+	var pairs: Array = []  # [[PackedVector2Array, Color], ...]
+	# 海洋 = 全矩形底
+	for lake in _data.lakes:
+		pairs.append([_pts(lake), LAKE_COLOR])
+	for nb in _data.neighbors:
+		for poly in nb.get("polygons", []):
+			pairs.append([_pts(poly), NEIGHBOR_COLOR])
+	for tile in _data.tiles:
+		if tile.polygon.size() >= 3:
+			pairs.append([tile.polygon, _data.get_state_color(tile.owner_state_id)])
+	# 三角剖分 + 顶点色（每三角形独立顶点，避免共享顶点颜色冲突）
+	var verts := PackedVector2Array()
+	var cols := PackedColorArray()
+	for pair in pairs:
+		var pts: PackedVector2Array = pair[0]
+		if pts.size() < 3:
+			continue
+		var tris := Geometry2D.triangulate_polygon(pts)
+		if tris.is_empty():
+			continue
+		for i in range(0, tris.size(), 3):
+			for k in range(3):
+				verts.append(pts[tris[i + k]])
+				cols.append(pair[1])
+	if verts.is_empty():
+		return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_COLOR] = cols
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_base_mesh = mesh
 
 
 ## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓。

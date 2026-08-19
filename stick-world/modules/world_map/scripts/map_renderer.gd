@@ -23,10 +23,12 @@ var hovered_tile_id: String = ""
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
 const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
-## 出生 L1 轮廓 / 邻居分界（细线，屏显上限 3px）
-const BORDER_COLOR := Color(0.25, 0.25, 0.25)
-const BORDER_WIDTH := 4.5
-const BORDER_SCREEN_CAP := 3.0
+## 城市描边（内部城界 + 出生 L1 块边界；细线，屏显上限 2.5px）
+const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
+const TILE_BORDER_WIDTH := 4.0
+const TILE_BORDER_SCREEN_CAP := 2.5
+## 邻湖判定容差（地图单位）：边中点距湖多边形 ≤ 该值视为"地块-湖泊边界"，不描边
+const LAKE_EDGE_TOL := 1.5
 ## hover 城市块描边（灰，固定屏幕像素粗细，不随缩放）
 const HOVER_COLOR := Color(0.55, 0.55, 0.55)
 const HOVER_WIDTH := 4.0
@@ -111,17 +113,35 @@ func _draw() -> void:
 		for poly in nb.get("polygons", []):
 			if (poly as Array).size() >= 3:
 				draw_colored_polygon(_pts(poly), NEIGHBOR_COLOR)
-	# 4. 当前 L1 城市块（政权色，纯色块不描边——内部城界靠政权色区分，湖边界不画追踪线）
+	# 4. 当前 L1 城市块（政权色）
 	for tile in _data.tiles:
 		if tile.polygon.size() < 3:
 			continue
 		draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
-	# 5. 出生 L1 权威轮廓（深色细线，邻居分界同理）
-	var bw: float = BORDER_WIDTH
+	# 5. 城市描边：跳过"地块-湖泊"边界，其余全画（内部城界 + 出生 L1 块边界）。
+	#    描边与色块同源（同一多边形）-> 天然贴合；块边界由城市外边缘完整描出，
+	#    不再单独画 l1_polygon（两条不同来源的线会分离，即"描边与色块不重合"）。
+	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:
-		bw = minf(BORDER_WIDTH, BORDER_SCREEN_CAP / zz)
-	if _data.l1_polygon.size() >= 3:
-		draw_polyline(_closed(_data.l1_polygon), BORDER_COLOR, bw, true)
+		tw = minf(TILE_BORDER_WIDTH, TILE_BORDER_SCREEN_CAP / zz)
+	var lake_pts: Array[PackedVector2Array] = []
+	for lake in _data.lakes:
+		lake_pts.append(_pts(lake))
+	var segs := PackedVector2Array()
+	for tile in _data.tiles:
+		if tile.polygon.size() < 3:
+			continue
+		var pts := tile.polygon
+		var n := pts.size()
+		for i in range(n):
+			var a := pts[i]
+			var b := pts[(i + 1) % n]
+			if _edge_touches_lake(a, b, lake_pts):
+				continue
+			segs.append(a)
+			segs.append(b)
+	if segs.size() >= 2:
+		draw_multiline(segs, TILE_BORDER_COLOR, tw, true)
 	# 6. hover 城市块描边（灰，固定屏幕像素粗细，不随缩放）
 	if not hovered_tile_id.is_empty():
 		var hw: float = HOVER_WIDTH
@@ -143,6 +163,29 @@ func _closed(pts: PackedVector2Array) -> PackedVector2Array:
 	var out := pts.duplicate()
 	out.append(out[0])
 	return out
+
+
+## 边中点是否贴着某湖（"地块-湖泊"边界不描边）
+func _edge_touches_lake(a: Vector2, b: Vector2, lake_pts: Array[PackedVector2Array]) -> bool:
+	if lake_pts.is_empty():
+		return false
+	var mid := (a + b) * 0.5
+	for pts in lake_pts:
+		var ln := pts.size()
+		for i in range(ln):
+			if _dist_point_segment(mid, pts[i], pts[(i + 1) % ln]) <= LAKE_EDGE_TOL:
+				return true
+	return false
+
+
+## 点到线段的最短距离
+func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var len2 := ab.length_squared()
+	if len2 <= 0.000001:
+		return p.distance_to(a)
+	var t := clampf((p - a).dot(ab) / len2, 0.0, 1.0)
+	return p.distance_to(a + ab * t)
 
 
 ## Array[[x,y],...] -> PackedVector2Array

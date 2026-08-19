@@ -147,7 +147,7 @@ def _round_corner(p0, pc, p1, radius):
             for s in range(steps + 1)]
 
 
-def clean_mesh_shared(mesh, dp_tol=1.0, corner_radius=2.0):
+def clean_mesh_shared(mesh, dp_tol=1.0, corner_radius=0.0):
     """共享边安全简化 + 圆角（关键：相邻地块共享边界数据一致，不再分离）。
 
     整环 DP 会因各环起点不同把共享边简化成不同折线 -> 相邻地块各自描边变两条线。
@@ -198,9 +198,13 @@ def clean_mesh_shared(mesh, dp_tol=1.0, corner_radius=2.0):
             uniq = len(set((round(x, 1), round(y, 1)) for x, y in pts))
             if len(pts) >= 3 and uniq >= 3:
                 if sh:
-                    if sset not in shared_cache:
-                        shared_cache[sset] = mesh_extract._dp_simplify(pts, dp_tol)
-                    sp = shared_cache[sset]
+                    # 缓存 key 用"边的集合"而非环集合：同一对地块的共享边界可能被湖等
+                    # 切成多段（分段同 sset 会冲突，导致第二段拿第一段的 DP 结果 -> 自触尖刺）。
+                    # 段内边在两边环里完全相同 -> 边集 key 跨环稳定命中。
+                    rk = tuple(sorted(_edge_key(pts[k], pts[k + 1]) for k in range(len(pts) - 1)))
+                    if rk not in shared_cache:
+                        shared_cache[rk] = mesh_extract._dp_simplify(pts, dp_tol)
+                    sp = shared_cache[rk]
                     if abs(sp[0][0] - pts[0][0]) > 1e-6 or abs(sp[0][1] - pts[0][1]) > 1e-6:
                         sp = list(reversed(sp))
                 else:
@@ -214,7 +218,8 @@ def clean_mesh_shared(mesh, dp_tol=1.0, corner_radius=2.0):
                     out_shared.append(sh)
         if out_pts:
             new_rings[(label, oi)] = (out_pts, out_shared)
-    # 圆角：只动非共享角点
+    # 圆角（默认关闭：圆角会让凹角附近产生自交多边形，earcut 渲染成乱线；
+    # 且用户判定圆角收益不大。共享边安全 DP 已保证斜边拉直 + 共享边界单线）
     def _turn_angle(ring, k):
         a = ring[(k - 1) % len(ring)]
         b = ring[k]
@@ -227,10 +232,34 @@ def clean_mesh_shared(mesh, dp_tol=1.0, corner_radius=2.0):
             return 0.0
         cos = max(-1.0, min(1.0, (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2)))
         return 180.0 - math.degrees(math.acos(cos))
+    def _ring_self_intersects(poly):
+        """环是否自交（相邻边除外）——自交会让 earcut 剖分失败，渲染成乱线。"""
+        n = len(poly)
+        if n < 4:
+            return False
+
+        def ccw(a, b, c):
+            return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                if j == i or j == (i + 1) % n or i == (j + 1) % n:
+                    continue
+                a, b = poly[i], poly[(i + 1) % n]
+                c, d = poly[j], poly[(j + 1) % n]
+                o1, o2 = ccw(a, b, c), ccw(a, b, d)
+                o3, o4 = ccw(c, d, a), ccw(c, d, b)
+                if o1 * o2 < 0 and o3 * o4 < 0:
+                    return True
+        return False
+
     rounded = {}
     for (label, oi), (ring, fl) in new_rings.items():
         if len(ring) < 3:
             rounded[(label, oi)] = ring
+            continue
+        if corner_radius <= 0.0:
+            rounded[(label, oi)] = list(ring)
             continue
         newr = []
         n = len(ring)
@@ -248,7 +277,14 @@ def clean_mesh_shared(mesh, dp_tol=1.0, corner_radius=2.0):
     for label, v in mesh.items():
         result[label] = {"outer": [], "holes": v.get("holes", [])}
         for oi in range(len(v.get("outer", []))):
-            result[label]["outer"].append(rounded.get((label, oi), v["outer"][oi]))
+            ring = rounded.get((label, oi), v["outer"][oi])
+            # 自交兜底：DP 在裁剪边缘/复杂凹口可能切出自交环（earcut 渲染成乱线），
+            # 回退到 pre-DP 的原始简单环（split_self_touch 已保证简单）。
+            if len(ring) >= 4 and _ring_self_intersects(ring):
+                src = v["outer"][oi]
+                if len(src) >= 3 and not _ring_self_intersects(src):
+                    ring = list(src)
+            result[label]["outer"].append(ring)
     return result
 
 

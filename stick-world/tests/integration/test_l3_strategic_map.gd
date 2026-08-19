@@ -116,7 +116,7 @@ func _test_hover_l1() -> void:
 		return
 	var hit: int = 0
 	for t in _data.l1_tiles:
-		var c: Array = t.get("centroid_2048", [0, 0])
+		var c: Array = t.get("centroid", [0, 0])
 		if c.size() < 2:
 			continue
 		var q: Dictionary = _data.query_l1_at_map_pos(Vector2(float(c[0]), float(c[1])))

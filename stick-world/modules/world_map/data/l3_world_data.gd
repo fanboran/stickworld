@@ -21,7 +21,7 @@ var sea_links: Array[Dictionary] = []
 var l1_tiles: Array = []
 ## 城市视觉层（可选，l3_city.json）：原始矢量数据（备用；运行时城市模式直接用栅格贴图更快）
 var city_tiles: Array = []
-## 城市模式栅格贴图（l3_city_preview_2048.png，即 city_preview，花花绿绿最大方）
+## 城市模式栅格贴图（l3_city_preview_8192.png，即 city_preview，花花绿绿最大方）
 var city_preview_texture: Texture2D = null
 ## 老 L1 索引图（label 直编 2048）：hover 查询返回老 L1 地块
 var l1_index_image: Image = null
@@ -79,13 +79,13 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 			if city_data is Dictionary:
 				world.city_tiles = city_data.get("tiles", [])
 	# 老 L1 索引图（hover 查询）
-	var l1idx_path := "%s/l3_l1_index_2048.png" % base_dir
+	var l1idx_path := "%s/l3_l1_index_8192.png" % base_dir
 	if ResourceLoader.exists(l1idx_path):
 		var tex: Texture2D = load(l1idx_path)
 		if tex != null:
 			world.l1_index_image = tex.get_image()
 	# 城市模式栅格贴图
-	var cityprev_path := "%s/l3_city_preview_2048.png" % base_dir
+	var cityprev_path := "%s/l3_city_preview_8192.png" % base_dir
 	if ResourceLoader.exists(cityprev_path):
 		world.city_preview_texture = load(cityprev_path) as Texture2D
 	for r in world.l1_tiles:

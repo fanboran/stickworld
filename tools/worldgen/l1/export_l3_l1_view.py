@@ -6,11 +6,12 @@
   - 交互不变：hover 命中老 L1 地块（l3_l1_index.png 索引图），点击下钻 L2；
   - 配色调鲜艳（s=0.85，明度 0.5~0.98，亮色比例高）。
 
-输入：output/l1_v2/legacy_l1_labels_2048.npy + city_labels_2048.npy + region_labels.npy
+输入：output/l1_v2/legacy_l1_labels_8192.npy + city_labels_8192.npy + region_labels.npy
 输出（config/strategic_map/）：
   - l3_l1.json   老 L1 视觉层（69 块，8192 级 polygons/holes/color）
-  - l3_city.json 城市视觉层（1038 块，同上；DP 抽稀控制体积）
-  - l3_l1_index_2048.png  老 L1 索引图（label 直编，hover 查询用）
+  - l3_city.json 城市视觉层（1040 块，同上；DP 抽稀控制体积）
+  - l3_l1_index_8192.png  老 L1 索引图（label 直编，8192 级，hover 查询用）
+  - l3_city_preview_8192.png 城市模式栅格贴图（源自 city_preview_8192.png）
 
 用法：
   python tools/worldgen/l1/export_l3_l1_view.py
@@ -59,9 +60,8 @@ def rank_groups(label_map, group_of, n_all):
     return seq, total
 
 
-def extract_mesh(arr2048):
-    arr8192 = np.array(Image.fromarray(arr2048.astype(np.uint32), "I").resize(
-        (SIZE, SIZE), Image.NEAREST)).astype(np.int32)
+def extract_mesh(arr8192):
+    # 8192 原生标签直接提取（不再放大——源已是 8192 级城市层）
     return mesh_extract.simplify_mesh(mesh_extract.extract_mesh(arr8192))
 
 
@@ -88,7 +88,7 @@ def build_layer(label_map, group_of, group_seq, group_total, n_all, decimate_tol
             "color": vivid_color(g, group_seq.get(lab, 0), group_total.get(lab, 1)),
             "polygons": rings,
             "holes": holes,
-            "centroid_2048": [float(xs.mean()), float(ys.mean())],
+            "centroid": [float(xs.mean()), float(ys.mean())],
             "area_px": int(m.sum()),
         })
     return tiles
@@ -102,16 +102,18 @@ def vivid_color(g, k, m):
 
 
 def main():
-    print("[1/5] 加载 l1_v2 数据 ...")
-    l1 = np.load(os.path.join(V2_DIR, "legacy_l1_labels_2048.npy"))
-    city = np.load(os.path.join(V2_DIR, "city_labels_2048.npy"))
+    print("[1/5] 加载 l1_v2 数据（8192 级）...")
+    l1 = np.load(os.path.join(V2_DIR, "legacy_l1_labels_8192.npy"))
+    city = np.load(os.path.join(V2_DIR, "city_labels_8192.npy"))
     region = np.load(os.path.join(REGIONS_DIR, "region_labels.npy"))
     n_l1, n_city = int(l1.max()), int(city.max())
     print("  老 L1 %d 块 / 城市 %d 块" % (n_l1, n_city))
 
     # 配色组：老 L1 -> region；城市 -> 父老 L1（同组相似色），组序号 = 该组在图上怎么给 hue
     # （老 L1 的 group 用 region label；城市用父老 L1 label，hue 由 golden_hue(父L1序号) 给出，同 L1 城市相似）
-    l1_group = {lab: int(region.ravel()[np.flatnonzero(l1 == lab)[0]]) for lab in range(1, n_l1 + 1)}
+    region8192 = np.array(Image.fromarray(region.astype(np.uint32), "I").resize(
+        (SIZE, SIZE), Image.NEAREST)).astype(np.int32)
+    l1_group = {lab: int(region8192.ravel()[np.flatnonzero(l1 == lab)[0]]) for lab in range(1, n_l1 + 1)}
     city_group = {}
     for lab in range(1, n_city + 1):
         m = city == lab
@@ -123,7 +125,7 @@ def main():
     city_seq, city_total = rank_groups(city, city_group, n_city)
 
     print("[2/5] 老 L1 视觉层（69 块，鲜艳色）...")
-    l1_tiles = build_layer(l1, l1_group, l1_seq, l1_total, n_l1, decimate_tol=0.3)
+    l1_tiles = build_layer(l1, l1_group, l1_seq, l1_total, n_l1, decimate_tol=1.0)
     with open(os.path.join(GAME_DIR, "l3_l1.json"), "w", encoding="utf-8") as f:
         json.dump({"name": "L3 老 L1 视觉层", "size": SIZE, "n_l1": n_l1, "tiles": l1_tiles},
                   f, ensure_ascii=False, separators=(",", ":"))
@@ -131,26 +133,26 @@ def main():
     print("  老 L1 层 %d 块 -> l3_l1.json" % len(l1_tiles))
 
     print("[3/5] 城市视觉层（%d 块，鲜艳色，DP 抽稀）..." % n_city)
-    city_tiles = build_layer(city, city_group, city_seq, city_total, n_city, decimate_tol=0.5)
+    city_tiles = build_layer(city, city_group, city_seq, city_total, n_city, decimate_tol=2.0)
     with open(os.path.join(GAME_DIR, "l3_city.json"), "w", encoding="utf-8") as f:
         json.dump({"name": "L3 城市视觉层", "size": SIZE, "n_city": n_city, "tiles": city_tiles},
                   f, ensure_ascii=False, separators=(",", ":"))
     shutil.copy(os.path.join(GAME_DIR, "l3_city.json"), os.path.join(V2_DIR, "l3_city.json"))
     print("  城市层 %d 块 -> l3_city.json" % len(city_tiles))
 
-    print("[4/5] 老 L1 索引图（hover 查询用，label 直编 2048）...")
-    idx = np.zeros((2048, 2048, 3), dtype=np.uint8)
+    print("[4/5] 老 L1 索引图（hover 查询用，label 直编 8192）...")
+    idx = np.zeros((SIZE, SIZE, 3), dtype=np.uint8)
     idx[l1 > 0, 0] = (l1[l1 > 0] >> 16) & 0xFF
     idx[l1 > 0, 1] = (l1[l1 > 0] >> 8) & 0xFF
     idx[l1 > 0, 2] = l1[l1 > 0] & 0xFF
-    Image.fromarray(idx).save(os.path.join(GAME_DIR, "l3_l1_index_2048.png"))
-    shutil.copy(os.path.join(GAME_DIR, "l3_l1_index_2048.png"),
-                os.path.join(V2_DIR, "l3_l1_index_2048.png"))
+    Image.fromarray(idx).save(os.path.join(GAME_DIR, "l3_l1_index_8192.png"))
+    shutil.copy(os.path.join(GAME_DIR, "l3_l1_index_8192.png"),
+                os.path.join(V2_DIR, "l3_l1_index_8192.png"))
 
     # 城市模式栅格贴图（运行时 MODE_CITY 直接贴这张——即用户认为最好看的 city_preview）
-    shutil.copy(os.path.join(V2_DIR, "city_preview_2048.png"),
-                os.path.join(GAME_DIR, "l3_city_preview_2048.png"))
-    print("[5/5] 完成。配色调鲜艳：s=%.2f, v=%.2f~%.2f；城市贴图 l3_city_preview_2048.png" % (SAT, V0, V1))
+    shutil.copy(os.path.join(V2_DIR, "city_preview_8192.png"),
+                os.path.join(GAME_DIR, "l3_city_preview_8192.png"))
+    print("[5/5] 完成。配色调鲜艳：s=%.2f, v=%.2f~%.2f；城市贴图 l3_city_preview_8192.png" % (SAT, V0, V1))
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ var hovered_tile_id: String = ""
 ## 原实现每帧重建描边段并对每段遍历湖全部边做距离计算（4668 段 × 湖边数 ≈ 百万级），
 ## hover 每帧触发 → 卡顿源；缓存后 hover 重绘 = 1 次 draw_multiline。
 var _cached_segs: PackedVector2Array = PackedVector2Array()
+## 出生 L1 权威轮廓（主大陆单环，闭合；export 已保证 l1_polygon 只含最大环）
 var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
 var _segs_valid: bool = false
 
@@ -260,6 +261,7 @@ func _build_cached_geometry() -> void:
 				continue
 			_cached_segs.append(a)
 			_cached_segs.append(b)
+	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环，多环串接已在数据侧消除）
 	_cached_l1_closed = _closed(_data.l1_polygon)
 	_segs_valid = true
 

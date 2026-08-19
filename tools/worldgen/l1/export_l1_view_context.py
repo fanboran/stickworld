@@ -158,9 +158,12 @@ def main():
     lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)), smooth_passes=smooth_lake)
 
     # 出生 L1 权威轮廓 + 邻居块（灰色）：context 内除出生块外的所有老 L1 块
+    # 多连通（大陆 + 岛屿）时 extract 输出多个外环——只取最大环（主大陆）画 L1 轮廓粗线，
+    # 岛屿不画 L1 轮廓（防多环串接成跨海乱飞线；岛屿由城市色块/描边呈现）
     l1_polygon = []
-    for p in legacy_mesh.get(lab_l1, {}).get("outer", []):
-        l1_polygon.extend(to_xy(p))
+    outs = legacy_mesh.get(lab_l1, {}).get("outer", [])
+    if outs:
+        l1_polygon = to_xy(max(outs, key=len))
     neighbors_data = []
     nbr_labels = []
     for k, mv in legacy_mesh.items():

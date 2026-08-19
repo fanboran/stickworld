@@ -53,6 +53,9 @@ func _ready() -> void:
 	# 渲染器悬停检测需要相机做屏幕->地图坐标换算
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
+	# 缩放/平移后即时重绘：描边/轮廓宽度跟随新 zoom（消除粗细滞后跳变）
+	if map_camera != null and map_camera.has_method("set_map_renderer"):
+		map_camera.set_map_renderer(map_renderer)
 	# 底部 HUD（CanvasLayer 直接子节点）
 	var layer := get_parent()
 	if layer != null:

@@ -91,6 +91,7 @@ func _input(event: InputEvent) -> void:
 	if drag_enabled and event is InputEventMouseMotion and _is_dragging:
 		var mm: InputEventMouseMotion = event as InputEventMouseMotion
 		_offset = _drag_offset_start + (mm.position - _drag_start)
+		_notify_renderer()
 
 
 ## 以某点为锚点时缩放（等比缩放：每步 ×(1±delta_zoom)，各缩放级别阶梯均匀）
@@ -102,6 +103,7 @@ func _zoom_at_point(screen_pos: Vector2, delta_zoom: float) -> void:
 		return
 	var ratio: float = _zoom_level / old_zoom
 	_offset = screen_pos + ratio * (_offset - screen_pos)
+	_notify_renderer()
 
 
 ## 应用变换到目标节点
@@ -130,14 +132,32 @@ func focus_on(id: String, animated: bool = true) -> void:
 	_zoom_level = 1.0
 
 
+## 关联的地图渲染器（transform 变化时触发其重绘：缩放/平移后描边宽度立即按新 zoom 重算，
+## 消除"放大后移走鼠标再移回才粗细跳变"——transform 缩放不触发 CanvasItem 重绘，靠此补上）
+var _map_renderer: Node = null
+
+
+## 设置关联渲染器（transform 变化时触发其 queue_redraw）
+func set_map_renderer(r: Node) -> void:
+	_map_renderer = r
+
+
+## 通知渲染器重绘
+func _notify_renderer() -> void:
+	if _map_renderer != null and _map_renderer is CanvasItem:
+		_map_renderer.queue_redraw()
+
+
 ## 设置缩放
 func set_zoom(zoom: float) -> void:
 	_zoom_level = clampf(zoom, min_zoom, max_zoom)
+	_notify_renderer()
 
 
 ## 设置偏移（地图在屏幕上的位置；offset 为地图原点对应屏幕坐标）
 func set_offset(offset: Vector2) -> void:
 	_offset = offset
+	_notify_renderer()
 
 
 ## 获取当前偏移

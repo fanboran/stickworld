@@ -43,6 +43,10 @@ const BORDER_WIDTH := 2.5
 ## hover 描边（屏幕像素固定）
 const HOVER_COLOR := Color(0.55, 0.55, 0.55)
 const HOVER_WIDTH := 3.0
+## 城市中心标记点（小圆点 + 细环，屏幕像素固定；画在聚落位置，指示城市中心）
+const CITY_DOT_RADIUS := 3.0
+const CITY_DOT_COLOR := Color(0.95, 0.95, 0.9)
+const CITY_DOT_RING := Color(0.12, 0.12, 0.12)
 ## F3 调试：城市编号
 const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
@@ -150,6 +154,15 @@ func _draw() -> void:
 		bw = BORDER_WIDTH / zz
 	if _cached_l1_closed.size() >= 3:
 		draw_polyline(_cached_l1_closed, BORDER_COLOR, bw, true)
+	# 6.5 城市中心标记点（小圆点 + 细环，屏幕像素固定，画在聚落位置）
+	var dot_r: float = CITY_DOT_RADIUS
+	if zz > 0.0001:
+		dot_r = CITY_DOT_RADIUS / zz
+	for tile in _data.tiles:
+		if tile.settlement == null:
+			continue
+		draw_circle(tile.settlement.position, dot_r, CITY_DOT_COLOR)
+		draw_arc(tile.settlement.position, dot_r, 0.0, TAU, 16, CITY_DOT_RING, 1.0)
 	# 7. hover 城市块描边（屏幕像素固定）
 	if not hovered_tile_id.is_empty():
 		var hw: float = HOVER_WIDTH

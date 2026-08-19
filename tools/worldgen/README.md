@@ -28,15 +28,12 @@ tools/worldgen/
 ├── l1/                    # L1 地块合并 / 生成 / 全大陆 L1 蒙版（活跃）
 │   ├── l1_world_split.py          # 全大陆 L1 地块划分（L3 级蒙版：城市点 + 岛×L2 分组细胞质膨胀 + 面积下限）
 │   ├── city_split.py              # ~~389 细胞下细分城市~~ 已废弃
-│   ├── city_split_v2.py           # 老 L1 之下细分城市（13 地区 tiles 拼全局 → 城市蒙版，1038 城）
-│   ├── export_player_l1_cities.py  # ~~389 版玩家初始 L1 视图~~ 已废弃
-│   ├── export_player_l1_cities_v2.py # 出生老 L1 城市视图（Tab 数据源，region_012#3=66）
+│   ├── city_split_v2.py           # 老 L1 之下细分城市（13 地区 tiles 拼全局 → 城市蒙版，8192 级，1038 城）
 │   ├── export_l3_l1_view.py          # L3 视觉层双模式（老 L1 矢量 + 城市贴图 + hover 索引图）
-│   ├── export_l2_city_previews.py   # L2 城市模式贴图（每地区 context 尺寸）
+│   ├── export_l2_city_previews.py   # L2 城市模式贴图（每地区 context 尺寸，读 city_preview_8192）
 │   ├── merge_tiny_tiles.py
 │   ├── merge_tiles_groups.py
 │   ├── merge_island_tiles.py
-│   ├── l1_worldgen.py              # 预留（起始地区 8 城邦 L1 单层）
 │   └── settlement_mapgen.py        # 预留
 ├── legacy/                # 早期分形生成链（历史留档，被 generate.py 调用）
 │   ├── noise_util.py / landmask.py / mask_utils.py

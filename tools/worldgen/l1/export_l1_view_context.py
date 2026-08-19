@@ -8,11 +8,12 @@
 context = 出生 L1 贴近裁剪正方形（默认边距 45，地块近距离特写、居中、四周留一点空隙）。
 
 城市/邻居/湖泊全部经 mesh_extract 从"上下文统一网格"提取（共享角点、无缝铺满）：
-  - 城市层 = city_labels_2048（parent_l1=69，实测与 legacy label 69 像素级完全一致）
-  - 邻居/出生轮廓 = legacy_l1_labels_2048（老 L1 全局蒙版）
-  - 湖泊 = fractal_lake_mask_8192 缩到 2048
+  - 城市层 = city_labels_8192（parent_l1=69 的 8 城，8192 级真实精细边界）
+  - 邻居/出生轮廓 = legacy_l1_labels_8192（老 L1 全局蒙版，8192 级）
+  - 湖泊 = fractal_lake_mask_8192 原样（不重采样）
 
-输入（output/l1_v2/，2048 级）：city_data.json / city_labels_2048.npy / legacy_l1_labels_2048.npy
+输入（output/l1_v2/，8192 级，--res 2048 兼容旧 2048 级）：city_data.json（size 字段定坐标级）
+  / city_labels_8192.npy / legacy_l1_labels_8192.npy
 
 产出（覆盖 stick-world/config/strategic_map/ Tab 数据源）：
   l1_world.json（新增 context_size/neighbors/lakes/focus_center；城市/聚落/轮廓坐标整体平移到上下文）
@@ -20,7 +21,7 @@ context = 出生 L1 贴近裁剪正方形（默认边距 45，地块近距离特
   l1_mask.png（城市索引图，rank 直编 1..N，0=海洋/邻居）
 
 用法：
-  python tools/worldgen/l1/export_l1_view_context.py [--start-l1 69] [--margin 45]
+  python tools/worldgen/l1/export_l1_view_context.py [--start-l1 69] [--margin 15] [--res 8192]
 """
 import argparse
 import json
@@ -124,11 +125,9 @@ def main():
         lake8192 = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
         lake = np.array(Image.fromarray(lake8192.astype(np.uint8)).resize(
             (2048, 2048), Image.NEAREST)).astype(bool)
-    else:  # 8192：老 L1 拼 8192 原图 + 湖泊 8192 原样；城市在 8192 用当前质心×4 重膨胀
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "l1"))
-        from city_split_v2 import build_legacy_l1_mask  # noqa: E402
-        from skimage.segmentation import watershed  # noqa: E402
-        legacy = build_legacy_l1_mask(8192)
+    else:  # 8192：城市层 8192 生成 + 老 L1 拼 8192 原图 + 湖泊 8192 原样（无重采样）
+        legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_8192.npy")).astype(np.int32)
+        city_labels = np.load(os.path.join(V2_DIR, "city_labels_8192.npy")).astype(np.int32)
         lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
 
     # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距（按 res 缩放）
@@ -156,19 +155,8 @@ def main():
         ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
         smooth_city, smooth_legacy, smooth_lake = 3, 3, 2
     else:
-        # 8192：以当前城市质心×4 为种子，在 8192 级 69 mask 上 watershed 重膨胀
-        # （真实精细边界；同种子 → 城市归属/布局与 2048 一致，仅边界更细）
-        sub = l1_mask[y0:y0 + side, x0:x0 + side].copy()
-        markers = np.zeros(sub.shape, dtype=np.int32)
-        for gi, c in enumerate(cities):
-            sx = int(round(c["city"][0] * res // 2048)) - x0
-            sy = int(round(c["city"][1] * res // 2048)) - y0
-            if 0 <= sy < side and 0 <= sx < side:
-                markers[sy, sx] = gi + 1
-        seg = watershed(np.zeros(sub.shape, dtype=np.uint8), markers, mask=sub, connectivity=2)
-        ctx_city = np.zeros(sub.shape, dtype=np.int32)
-        for gi, c in enumerate(cities):
-            ctx_city[seg == gi + 1] = int(c["label"])
+        # 8192：直接裁剪 8192 级城市标签（城市层已在 8192 生成，真实精细边界）
+        ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
         # 8192 原生几何已足够细（屏幕 zoom≈0.77 时像素楼梯不可见）：轻平滑去尖角即可
         smooth_city, smooth_legacy, smooth_lake = 1, 1, 1
 
@@ -203,9 +191,12 @@ def main():
 
     print("[3/5] 城市块 + 政权 + 道路 ...")
     rgb_by_label = {int(c["label"]): c["rgb"] for c in cities}
-    # 城市点（city_data 为 2048 级坐标）按 res 缩放后减去 context 偏移
-    city_pos = {int(c["label"]): [v * res // 2048 for v in c["city"]] for c in cities}
-    city_area = {int(c["label"]): int(c["area_px"]) for c in cities}
+    # 城市点（city_data 坐标按其 size 字段定级）缩放对齐 res 后减去 context 偏移
+    cd_size = int(citydata.get("size", 2048))
+    cd_scale = res // cd_size
+    city_pos = {int(c["label"]): [v * cd_scale for v in c["city"]] for c in cities}
+    # 面积归一化到 2048 级判定 level（8192 级 area_px ÷16 后语义不变）
+    city_area = {int(c["label"]): int(c["area_px"] * (2048 * 2048) // (cd_size * cd_size)) for c in cities}
     tiles = []
     for rank, c in enumerate(cities, start=1):
         mv = city_mesh.get(int(c["label"]), {})

@@ -1,6 +1,6 @@
 """L2 城市模式贴图导出 —— 点开 L2 地区后可选"下探到城市"模式（像 L3 城市模式）。
 
-输入：output/l1_v2/city_preview_2048.png（全局城市蒙版视觉）+ l2_packs/region_XXX/
+输入：output/l1_v2/city_preview_8192.png（全局城市蒙版视觉，8192 级）+ l2_packs/region_XXX/
       （info.json bbox_8192 / tiles_8192.npy）
 输出（每地区，写入 config/strategic_map/l2_packs/region_XXX/l2_city_preview.png）：
   RGBA context 尺寸贴图：该地区陆地(tiles 区域)填城市蒙版色，其余全透明
@@ -27,7 +27,7 @@ GAME_DIR = os.path.normpath(os.path.join(
 def main():
     rids = (os.environ.get("PARTIAL_REGIONS") or "").split()
     rids = rids or sorted(d for d in os.listdir(L2_PACKS) if d.startswith("region_"))
-    city_prev = np.array(Image.open(os.path.join(V2_DIR, "city_preview_2048.png")).convert("RGB"))
+    city_prev = np.array(Image.open(os.path.join(V2_DIR, "city_preview_8192.png")).convert("RGB"))
 
     for rid in rids:
         info = json.load(open(os.path.join(L2_PACKS, rid, "info.json"), encoding="utf-8"))
@@ -47,9 +47,9 @@ def main():
                 v = tiles[yy, xx]
                 if v <= 0:
                     continue   # 海洋/湖/非地块 -> 透明，露出底层
-                # 全局 8192 像素 (gy,gx) -> city_preview 2048 像素（y//4, x//4）
+                # 全局 8192 像素 (gy,gx) -> city_preview 8192 像素（同级直接索引）
                 gx = x0 + xx
-                cpx, cpy = gx // 4, gyy // 4
+                cpx, cpy = gx, gyy
                 c = city_prev[cpy, cpx]
                 cy, cx = ty + yy, tx + xx   # context 坐标
                 if 0 <= cy < ctx_h and 0 <= cx < ctx_w:

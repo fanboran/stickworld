@@ -118,26 +118,35 @@ def grow_cities(land, parent, cities, city_parent):
     seed_of_label = {}
     for plab in np.unique(parent[parent > 0]):
         pmask = parent == plab
-        pcomp, npc = ndi.label(pmask, structure=STRUCT8)
+        # 按老 L1 bbox 裁剪（8192 级全图 ndi.label/EDT/watershed 极慢，局部化后快）
+        py_, px_ = np.nonzero(pmask)
+        y0p, y1p = int(py_.min()), int(py_.max())
+        x0p, x1p = int(px_.min()), int(px_.max())
+        sub_pmask = pmask[y0p:y1p + 1, x0p:x1p + 1].copy()
+        pcomp, npc = ndi.label(sub_pmask, structure=STRUCT8)
+        seeds_plab = seeds_by_parent.get(int(plab), [])
         for k in range(1, npc + 1):
             cmask = pcomp == k
             cy, cx = np.nonzero(cmask)
-            idxs = [i for i in seeds_by_parent.get(int(plab), [])
-                    if cmask[int(seeds[i][1]), int(seeds[i][0])]]
+            idxs = [i for i in seeds_plab
+                    if cmask[int(seeds[i][1]) - y0p, int(seeds[i][0]) - x0p]]
             if not idxs:
                 gd = distance_transform_edt(cmask)
                 pk = int(np.argmax(gd[cy, cx]))
-                seeds.append([float(cx.ravel()[pk]), float(cy.ravel()[pk])])
+                sx, sy = cx.ravel()[pk] + x0p, cy.ravel()[pk] + y0p
+                seeds.append([float(sx), float(sy)])
                 idxs = [len(seeds) - 1]
-            markers = np.zeros((size, size), dtype=np.int32)
+            markers = np.zeros(cmask.shape, dtype=np.int32)
             for gi, sidx in enumerate(idxs):
-                px, py = int(seeds[sidx][0]), int(seeds[sidx][1])
+                px = int(seeds[sidx][0]) - x0p
+                py = int(seeds[sidx][1]) - y0p
                 markers[py, px] = next_id + gi
-            seg = watershed(np.zeros((size, size), dtype=np.uint8), markers,
+            seg = watershed(np.zeros(cmask.shape, dtype=np.uint8), markers,
                             mask=cmask, connectivity=2)
+            sub = labels[y0p:y1p + 1, x0p:x1p + 1]
             for gi, sidx in enumerate(idxs):
                 lab = next_id + gi
-                labels[seg == lab] = lab
+                sub[seg == (next_id + gi)] = lab
                 seed_of_label[lab] = sidx
             next_id += len(idxs)
     return labels, np.array(seeds, dtype=np.float64), seed_of_label
@@ -248,22 +257,29 @@ def city_palette(city_labels, parent, parent_color, n_city):
 
 def main():
     ap = argparse.ArgumentParser(description="老 L1 之下细分城市（v2，替代废弃 389 版）")
-    ap.add_argument("--spacing", type=int, default=40, help="城市点网格间距（2048 级像素）")
+    ap.add_argument("--res", type=int, default=8192, choices=[2048, 8192],
+                    help="输出分辨率（8192=原生精细默认；2048=旧版全大陆 2048）")
+    ap.add_argument("--spacing", type=int, default=None,
+                    help="城市点网格间距（本 res 级像素；缺省 40×res//2048）")
     ap.add_argument("--jitter", type=float, default=0.4, help="扰动幅度")
-    ap.add_argument("--min-city-area", type=int, default=90, help="城市面积下限（px²）")
+    ap.add_argument("--min-city-area", type=int, default=None,
+                    help="城市面积下限（px²；缺省 90×(res//2048)²）")
     ap.add_argument("--seed", type=int, default=20260819, help="随机种子")
     args = ap.parse_args()
+    res = args.res
+    spacing = args.spacing if args.spacing else 40 * res // 2048
+    min_city_area = args.min_city_area if args.min_city_area else 90 * (res // 2048) ** 2
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    print("[1/6] 构建全局老 L1 蒙版（13 地区 tiles 拼接，2048）...")
-    parent = build_legacy_l1_mask(2048)
+    print("[1/6] 构建全局老 L1 蒙版（13 地区 tiles 拼接，res=%d）..." % res)
+    parent = build_legacy_l1_mask(res)
     n_l1 = int(parent.max())
     land = parent > 0
     print("  老 L1 地块 %d 个，陆地 %.1f%%" % (n_l1, land.mean() * 100))
 
-    print("[2/6] 城市点撒点（jittered grid, spacing=%d）..." % args.spacing)
+    print("[2/6] 城市点撒点（jittered grid, spacing=%d）..." % spacing)
     rng = np.random.default_rng(args.seed)
-    pts, city_parent = pick_city_points(land, parent, rng, args.spacing, args.jitter)
+    pts, city_parent = pick_city_points(land, parent, rng, spacing, args.jitter)
     has_pt = np.zeros(n_l1 + 1, dtype=bool)
     np.add.at(has_pt, city_parent, True)
     # 每老 L1 ≥1 点：无点用老 L1 质心兜底
@@ -280,7 +296,7 @@ def main():
     print("  膨胀后城市 %d 个" % int(labels.max()))
 
     print("[4/6] 城市面积下限合并 ...")
-    labels, exempt, remap = merge_small_cities(labels, parent, args.min_city_area)
+    labels, exempt, remap = merge_small_cities(labels, parent, min_city_area)
     n_city = int(labels.max())
     cities_final = np.array(
         [cities[seed_of_label[old]] for old, new in sorted(remap.items())
@@ -303,36 +319,37 @@ def main():
     palette = city_palette(labels, parent, parent_color, n_city)
 
     print("[6/6] 写文件 ...")
-    preview = np.zeros((2048, 2048, 3), dtype=np.uint8)
+    preview = np.zeros((res, res, 3), dtype=np.uint8)
     preview[~land] = OCEAN_COLOR
     for lab, rgb in palette.items():
         preview[labels == lab] = rgb
     prev_img = Image.fromarray(preview)
-    dr = ImageDraw = None
     from PIL import ImageDraw as _ID
     dr = _ID.Draw(prev_img)
+    dot_r = 3 * res // 2048
     for (cx, cy) in cities_final:
         x, y = float(cx), float(cy)
-        dr.ellipse([x - 3, y - 3, x + 3, y + 3], outline=(12, 12, 12), width=1)
-        dr.ellipse([x - 1, y - 1, x + 1, y + 1], fill=(250, 250, 250))
-    prev_img.save(os.path.join(OUT_DIR, "city_preview_2048.png"))
+        dr.ellipse([x - dot_r, y - dot_r, x + dot_r, y + dot_r], outline=(12, 12, 12), width=1)
+        dr.ellipse([x - dot_r // 3, y - dot_r // 3, x + dot_r // 3, y + dot_r // 3], fill=(250, 250, 250))
+    prev_img.save(os.path.join(OUT_DIR, "city_preview_%d.png" % res))
 
-    idx_img = np.zeros((2048, 2048, 3), dtype=np.uint8)
+    idx_img = np.zeros((res, res, 3), dtype=np.uint8)
     idx_img[labels > 0, 0] = (labels[labels > 0] >> 16) & 0xFF
     idx_img[labels > 0, 1] = (labels[labels > 0] >> 8) & 0xFF
     idx_img[labels > 0, 2] = labels[labels > 0] & 0xFF
-    Image.fromarray(idx_img).save(os.path.join(OUT_DIR, "city_partition_2048.png"))
+    Image.fromarray(idx_img).save(os.path.join(OUT_DIR, "city_partition_%d.png" % res))
 
-    city_img = np.full((2048, 2048, 3), 235, dtype=np.uint8)
+    city_img = np.full((res, res, 3), 235, dtype=np.uint8)
     city_img[land, :] = 220
+    box = 5 * res // 2048
     for (cx, cy) in cities_final:
-        x0c, y0c = int(cx) - 2, int(cy) - 2
-        city_img[max(0, y0c):y0c + 5, max(0, x0c):x0c + 5, 0] = 200
-        city_img[max(0, y0c):y0c + 5, max(0, x0c):x0c + 5, 1] = 40
-        city_img[max(0, y0c):y0c + 5, max(0, x0c):x0c + 5, 2] = 40
-    Image.fromarray(city_img).save(os.path.join(OUT_DIR, "city_cities_2048.png"))
+        x0c, y0c = int(cx) - box // 2, int(cy) - box // 2
+        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 0] = 200
+        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 1] = 40
+        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 2] = 40
+    Image.fromarray(city_img).save(os.path.join(OUT_DIR, "city_cities_%d.png" % res))
 
-    np.save(os.path.join(OUT_DIR, "city_labels_2048.npy"), labels)
+    np.save(os.path.join(OUT_DIR, "city_labels_%d.npy" % res), labels)
 
     def _decimate(loop):
         xy = [(float(p[1]), float(p[0])) for p in loop]
@@ -360,11 +377,11 @@ def main():
     out = {
         "name": "全大陆城市蒙版 v2（老 L1 之下细分）",
         "algorithm": "cells-growth（按老 L1 分组多源膨胀 + 面积下限合并）",
-        "size": 2048,
-        "coord": "xy",
-        "spacing": args.spacing,
+        "size": res,
+        "coord": "xy@%d" % res,
+        "spacing": spacing,
         "jitter": args.jitter,
-        "min_city_area": args.min_city_area,
+        "min_city_area": min_city_area,
         "seed": args.seed,
         "n_legacy_l1": n_l1,
         "n_city": n_city,

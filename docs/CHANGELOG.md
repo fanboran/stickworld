@@ -8,6 +8,15 @@
 
 ## [未发布]
 
+### 城市层升 8192：L1 Tab 全链路原生精度（2026-08）
+
+- **根因**：L1 Tab 链路中城市层（city_split_v2）与 L1 context 导出一直锁 2048（其余导出——L3/L2 overview/湖泊/老 L1 拼图——早已 8192），Tab 长期"2048 小图放大 3 倍"，45° 斜线锯齿、文字问题皆源于此
+- **城市层 8192**：`city_split_v2.py` 加 `--res 8192` 默认——全局老 L1 蒙版 8192 原图（不降采样）、城市点 spacing 160、膨胀按老 L1 bbox 裁剪局部化（8192 级全图 watershed 内存/时间不可行）、面积下限 1440；产出 `city_labels_8192.npy`（1040 城）/ `city_preview_8192.png` 等；**同 seed 布局与 2048 版一致**（69 号区域仍 8 城，面积÷16 与 2048 级吻合 <3%）
+- **Tab context 导出 8192**：`export_l1_view_context.py` 直接读 8192 城市标签（去掉"质心×4 重膨胀"中间态）；context 200 → 798×798，默认整图适配 zoom 3.06→0.77（原生 1:1），45° 像素楼梯屏幕 <1px 不可见
+- **L2 城市预览**：`export_l2_city_previews.py` 改读 `city_preview_8192.png`（同级索引，不再 //4）
+- **废弃清理**：`export_player_l1_cities.py` / `export_player_l1_cities_v2.py` / `l1_worldgen.py` 移入 `tools/worldgen/archive/`（防误跑覆盖 config 回退 2048）
+- **验证**：p0 7/7、全量 23/24（1 项预存无关失败）、check_godot_errors 干净
+
 ### Tab L1 出生地块更正为 region_013 3 号 + 地块特写 + 细线 + 居中（2026-08）
 
 - **出生 L1 地块更正**：`label 66`（region 12 的 3 号，13 城）→ **`label 69`（region 13 的 3 号，8 城）**——经旧分区 `player_start=219` 质心落在 69 号块内验证；69 恰好符合 GDD"出生 L1 7-8 聚落"规格（之前用的 66 是错误地块，故 Tab 与"13号地块3号地块"长得不一样）

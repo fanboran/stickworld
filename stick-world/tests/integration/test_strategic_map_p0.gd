@@ -26,9 +26,60 @@ func _ready() -> void:
 	_runner.add_test("无 map_id 聚落不可进入", _test_empty_enter, true)
 	_runner.add_test("打开/关闭暂停恢复场景图输入", _test_pause_resume, true)
 	_runner.add_test("L1 结构对齐 L2：HUD 缩放条 + 整图适配默认=100% + 居中", _test_l2_like_hud, true)
+	_runner.add_test("Tab 跟随玩家当前 L1：下钻是临时查看、不改变 Tab", _test_tab_follows_player_l1, true)
+	_runner.add_test("城市块已裁剪湖泊：陆地与湖泊无缝无重叠", _test_lake_city_no_overlap, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
+
+
+func _test_tab_follows_player_l1() -> void:
+	# 下钻（L2 点击 L1）是临时查看：Tab 打开跟随玩家当前所在 L1（出生），不因下钻改变
+	if _api == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	var ok: bool = _api.open_l1(41)
+	_runner.assert_true(ok, "下钻打开 l1_041")
+	_runner.assert_true(_api.get_current_l1_label() == 41, "下钻后当前 L1 = 41")
+	# Tab 打开：ensure_player_l1(出生 69) → 数据切回出生
+	var changed: bool = _api.ensure_player_l1(69)
+	_runner.assert_true(changed, "ensure_player_l1(69) 应切回出生")
+	_runner.assert_true(_api.get_current_l1_label() == 69, "Tab 打开后回到出生 L1")
+	var data: RefCounted = _api.get_data()
+	_runner.assert_true(data != null and data.parent_l1_label == 69, "数据为出生 L1（parent_l1_label=69）")
+	# 幂等：已是出生 L1 时 ensure 不重载
+	var changed2: bool = _api.ensure_player_l1(69)
+	_runner.assert_true(not changed2, "已是出生 L1 时 ensure_player_l1 不重载")
+
+
+func _test_lake_city_no_overlap() -> void:
+	# 城市块已裁剪湖泊：城市 polygon 质心不落入任何湖 polygon
+	# （湖泊丝滑弧线与陆地无缝——消除交界处缝隙/覆盖）
+	if _api == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	var data: RefCounted = _api.get_data()
+	if data == null:
+		_runner.assert_true(false, "数据缺失")
+		return
+	var lakes: Array = data.lakes
+	var bad: int = 0
+	for tile in data.tiles:
+		var p: PackedVector2Array = tile.polygon
+		if p.size() < 3:
+			continue
+		var cx: float = 0.0
+		var cy: float = 0.0
+		for v in p:
+			cx += v.x
+			cy += v.y
+		cx /= float(p.size())
+		cy /= float(p.size())
+		for lk in lakes:
+			if Geometry2D.is_point_in_polygon(Vector2(cx, cy), lk):
+				bad += 1
+				break
+	_runner.assert_true(bad == 0, "城市 polygon 质心不应落入湖内（裁剪湖泊生效，实测 %d）" % bad)
 
 
 func _test_load() -> void:

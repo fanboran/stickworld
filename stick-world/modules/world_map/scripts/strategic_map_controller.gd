@@ -45,6 +45,10 @@ var _view_initialized: bool = false
 ## 是否从 L2 下钻进入（ESC 时返回 L2 而非关闭）
 var _drill_from_l2: bool = false
 
+## 玩家当前所在 L1 全局 label（默认出生；游戏内跨 L1 移动逻辑移动到其他 L1 时
+## 调 set_player_l1 更新，Tab 打开跟随显示该 L1 的地图——下钻是临时查看，不改变它）
+var _player_l1_label: int = 69
+
 
 func _ready() -> void:
 	_auto_find_components()
@@ -135,9 +139,20 @@ func open_l1(l1_label: int) -> bool:
 	return true
 
 
+## 游戏内移动逻辑：玩家移动到其他 L1 地块时调用，Tab 打开跟随显示该 L1
+## （默认出生 L1；移动跨 L1 前不改变）
+func set_player_l1(l1_label: int) -> void:
+	_player_l1_label = l1_label
+
+
 ## 打开战略图（由接线方调用）
 ## 透明背景悬浮：地图内容显示在屏幕中央（场景图保持可见作背景）
 func open() -> void:
+	# Tab 打开跟随玩家当前所在 L1：下钻后数据可能是其他 L1，这里切回玩家所在 L1
+	# （已是则不动；切换了则重置视角适配新 context）
+	if api != null and api.has_method("ensure_player_l1"):
+		if api.ensure_player_l1(_player_l1_label):
+			_view_initialized = false
 	visible = true
 	# 首次打开：初始视角 = 整图适配（默认 100%），地图居中（出生 L1 在 context 中心）；
 	# 之后保留用户位置/缩放（与 L2 一致）

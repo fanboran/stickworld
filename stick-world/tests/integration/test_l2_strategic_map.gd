@@ -8,6 +8,7 @@ const L2_WORLD := preload("res://modules/world_map/data/l2_world_data.gd")
 const L3_SCENE: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l3.tscn")
 const L3_WORLD := preload("res://modules/world_map/data/l3_world_data.gd")
 
+const L1_SCENE: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
 const L3_JSON_PATH := "res://config/strategic_map/l3_world.json"
 const L3_BASE_DIR := "res://config/strategic_map"
 const L2_BASE_DIR := "res://config/strategic_map/l2_packs"
@@ -29,6 +30,7 @@ func _ready() -> void:
 	_runner.add_test("F3 调试模式：L1 地块标号刷新", _test_debug_labels, true)
 	_runner.add_test("L2 恒城市模式（默认城市贴图 + 无细分开关）", _test_city_mode, true)
 	_runner.add_test("L3 单击下钻 -> L2 打开（L3 HUD 隐藏不重叠），ESC 返回 L3", _test_drilldown, true)
+	_runner.add_test("L2 单击 L1 地块 -> 打开对应老 L1 地图，ESC 返回 L2", _test_l1_drilldown, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -265,6 +267,58 @@ func _test_drilldown() -> void:
 		_runner.assert_true(not _l3_content.visible, "恢复 L2 时 L3 保持隐藏")
 	else:
 		_runner.assert_true(false, "L3 应含 MapCamera")
+
+
+func _test_l1_drilldown() -> void:
+	# 装配 L1 场景 + 初始化出生数据 + L2 注入 l1_view（模拟 system_setup 接线）
+	var l1_scene: Node = L1_SCENE.instantiate()
+	add_child(l1_scene)
+	var l1_ctrl: Node = l1_scene.get_node_or_null("Content")
+	var l1_api: Node = l1_ctrl.get_node_or_null("Api") if l1_ctrl != null else null
+	_runner.assert_true(l1_api != null, "L1 场景应含 Api")
+	if l1_api == null or not l1_api.has_method("initialize"):
+		return
+	l1_api.initialize("res://config/strategic_map/l1_world.json", "res://config/strategic_map")
+	_runner.assert_true(l1_api.is_initialized(), "出生 L1 应初始化成功")
+	if _l2_content != null and _l2_content.has_method("set_l1_view"):
+		_l2_content.call("set_l1_view", l1_ctrl)
+	if _l2_content == null or not _l2_content.has_method("open"):
+		return
+	_l2_content.open("region_013")
+	await get_tree().process_frame
+	_runner.assert_true(_l2_content.visible, "L2 打开 region_013")
+	# 找 region_013 里 global_l1_label=69（出生老 L1）的地块
+	var target: Dictionary = {}
+	for t in _l2_content.data.tiles:
+		if int(t.get("global_l1_label", 0)) == 69:
+			target = t
+			break
+	_runner.assert_true(not target.is_empty(), "region_013 应含 global_l1_label=69 的地块")
+	if target.is_empty():
+		return
+	# 地块内一点（polygon 坐标 = context 正方形坐标）-> 屏幕坐标
+	var poly: Array = target.get("polygon", [])
+	if (poly as Array).is_empty():
+		return
+	var tpos := Vector2(poly[0][1], poly[0][0]) + Vector2(2, 2)
+	var cam: Node = _l2_content.get_node_or_null("MapCamera")
+	var screen_pos: Vector2 = tpos
+	if cam != null and cam.has_method("map_to_screen"):
+		screen_pos = cam.map_to_screen(tpos)
+	# 触发 L2 点击（模拟单击 L1 地块）
+	_l2_content.call("_handle_l1_click", screen_pos)
+	await get_tree().process_frame
+	_runner.assert_true(l1_ctrl.visible, "下钻后 L1 应可见")
+	_runner.assert_true(not _l2_content.visible, "下钻后 L2 应隐藏")
+	var d: RefCounted = l1_api.get_data()
+	_runner.assert_true(d != null and d.parent_l1_label == 69, "L1 应加载老 L1 69 数据（parent_l1_label=69）")
+	# ESC 返回 L2
+	var flag := {"back": false}
+	l1_ctrl.back_requested.connect(func() -> void: flag.back = true)
+	l1_ctrl._input(_esc_event())
+	await get_tree().process_frame
+	_runner.assert_true(flag.back, "L1 ESC 应发 back_requested")
+	_runner.assert_true(_l2_content.visible, "ESC 后 L2 应恢复显示")
 
 
 func _esc_event() -> InputEvent:

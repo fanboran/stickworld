@@ -522,6 +522,10 @@ func _setup_l3_strategic_map() -> void:
 	if l2_content != null and content != null and content.has_method("set_l2_view") \
 			and l2_content.has_method("open"):
 		content.call("set_l2_view", l2_content)
+	# 装配 L2 -> L1 下钻（L2 点击 L1 地块打开对应老 L1 的 Tab 视图；L1 controller = strategic_map.tscn 的 Content）
+	var l1_content: Node = _root._strategic_map.get_node_or_null("Content") if _root._strategic_map != null else null
+	if l2_content != null and l1_content != null and l2_content.has_method("set_l1_view"):
+		l2_content.call("set_l1_view", l1_content)
 
 
 ## M 键全局监听（打开/关闭 L3 大世界战略图）

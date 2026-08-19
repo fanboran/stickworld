@@ -65,6 +65,28 @@ func is_initialized() -> bool:
 	return _is_initialized
 
 
+## 加载指定老 L1 的地图数据（L2 点击 L1 下钻用）
+## l1_label: 老 L1 全局 label（1..69），数据在 config/strategic_map/l1_packs/l1_%03d/l1_world.json
+## 成功后替换当前数据（renderer/camera 同步切换），返回是否成功
+func open_l1(l1_label: int) -> bool:
+	var dir_name := "l1_%03d" % l1_label
+	var base_dir := "res://config/strategic_map/l1_packs/%s" % dir_name
+	var json_path := "%s/l1_world.json" % base_dir
+	if not FileAccess.file_exists(json_path):
+		push_error("[StrategicMapAPI] L1 数据缺失: %s" % json_path)
+		return false
+	var data := L1WorldData.load_from(json_path, base_dir)
+	if data == null or data.base_texture == null:
+		push_error("[StrategicMapAPI] L1 加载失败: %s" % dir_name)
+		return false
+	_data = data
+	if _renderer != null and _renderer.has_method("set_data"):
+		_renderer.set_data(data)
+	if _camera != null and _camera.has_method("set_data"):
+		_camera.set_data(data)
+	return true
+
+
 func get_data() -> L1WorldData:
 	return _data
 

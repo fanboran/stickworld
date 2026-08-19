@@ -37,6 +37,9 @@ var states: Dictionary = {}
 ## 玩家出生聚落 ID
 var spawn_settlement_id: String = ""
 
+## 所属老 L1 全局 label（1..69；L2 下钻打开的 L1 用此区分）
+var parent_l1_label: int = 0
+
 ## 出生 L1 地块权威轮廓（context 像素坐标，L1 边界粗线用；贴 L1 边缘的城市套用该边界）
 var l1_polygon: PackedVector2Array = []
 
@@ -71,6 +74,7 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	world.name = data.get("name", "")
 	world.size = int(data.get("size", 1024))
 	world.spawn_settlement_id = data.get("spawn_settlement_id", "")
+	world.parent_l1_label = int(data.get("parent_l1_label", 0))
 	var l1poly: Variant = data.get("l1_polygon", [])
 	if l1poly is Array:
 		world.l1_polygon = _polygon_from(l1poly)

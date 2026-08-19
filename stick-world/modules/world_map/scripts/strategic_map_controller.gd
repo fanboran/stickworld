@@ -14,6 +14,9 @@ class_name StrategicMapController
 ##   - ESC：关闭战略图
 ##   - 中键拖拽 + 滚轮缩放（由 MapCamera 处理）
 
+## 从 L2 下钻进入 L1 后，L1 的返回请求（ESC 触发；由接线方恢复 L2 显示）
+signal back_requested
+
 ## 公共 API 引用（同一场景内）
 @export var api: Node
 
@@ -38,6 +41,9 @@ var _hud: Control = null
 
 ## 首次打开时设置初始视角（之后保留用户位置/缩放）
 var _view_initialized: bool = false
+
+## 是否从 L2 下钻进入（ESC 时返回 L2 而非关闭）
+var _drill_from_l2: bool = false
 
 
 func _ready() -> void:
@@ -72,11 +78,18 @@ func _input(event: InputEvent) -> void:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			_handle_left_click(mb.position)
-	# ESC 关闭
+	# ESC：从 L2 下钻进入则返回 L2；否则关闭战略图
 	elif event is InputEventKey and event.pressed:
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_ESCAPE:
-			close()
+			if _drill_from_l2:
+				_drill_from_l2 = false
+				visible = false
+				if _hud != null:
+					_hud.visible = false
+				back_requested.emit()
+			else:
+				close()
 
 
 func _handle_left_click(screen_pos: Vector2) -> void:
@@ -104,6 +117,19 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 		api.select(settlement.settlement_id)
 		if api.has_signal("settlement_clicked"):
 			api.settlement_clicked.emit(settlement.settlement_id)
+
+
+## 打开指定老 L1 地图（L2 点击 L1 下钻）：加载数据 + 重置视角适配新 context。
+## 返回是否成功打开。
+func open_l1(l1_label: int) -> bool:
+	if api == null or not api.has_method("open_l1"):
+		return false
+	if not api.open_l1(l1_label):
+		return false
+	_drill_from_l2 = true
+	_view_initialized = false
+	open()
+	return true
 
 
 ## 打开战略图（由接线方调用）

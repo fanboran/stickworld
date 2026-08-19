@@ -8,6 +8,12 @@
 
 ## [未发布]
 
+### L2→L1 下钻：L2 点击 L1 地块打开对应老 L1 地图 + Tab 城市中心小点（2026-08）
+
+- **L2 点击 L1 下钻**：L2 地图单击任一 L1 地块 → 打开该老 L1 的 Tab 视图（城市细分），ESC 返回 L2。数据侧：`export_l2_view_packs.py` 为每个 L1 地块写新字段 `global_l1_label`（`tiles_8192` 与 `legacy_l1_labels_8192` 逐像素对齐、多数投票映射局部 label → 老 L1 全局 label，region_013 局部 1/2/3 ↔ 全局 67/68/69）；`export_l1_view_context.py` 加 `--out-dir` 支持批量，导出全部 69 个老 L1 上下文到 `config/strategic_map/l1_packs/l1_%03d/`（l1_world.json + l1_base.png + l1_mask.png，含 `parent_l1_label`）。运行时侧：`api.open_l1(label)` 加载指定 L1 数据（替换 _data、renderer/camera 同步切换）；`StrategicMapController.open_l1` 打开并重置视角适配新 context；`L2MapController` 左键点击 L1 地块（复用 hover 同路径：`screen_to_map − tiles_offset` → 索引图查询）触发下钻，隐藏 L2 并显示 L1，L1 ESC 经 `back_requested` 信号返回 L2；`system_setup.gd` 装配 L2→L1 接线（L2 Content 注入 L1 controller）
+- **Tab 城市中心小点**：`map_renderer.gd` 在 L1 地块描边后绘制城市中心圆点（`settlement.position`，屏幕固定 3px 圆点 + 细环，不随缩放，悬停/交互不变）
+- **验证**：P0 7/7、L2 集成 7/7（新增「L2 单击 L1 地块→打开对应老 L1，ESC 返回」）、全量 23/24（1 项预存无关失败）、check_godot_errors 干净
+
 ### L1 Tab 运行时性能优化：描边缓存 + 静态色块层烘焙（2026-08）
 
 - **描边/轮廓几何缓存**：原 `_draw` 每次重绘重建 4750 段城市描边并对每段遍历湖全部 91 边做距离计算（≈43 万次 GDScript/每次 hover 触发，hover 卡顿源）→ `set_data` 后首帧构建一次缓存，hover 重绘 = 1 次 `draw_multiline`；邻湖判定加湖 bbox 预筛（仅中点落湖 bbox 内的边做精确距离）

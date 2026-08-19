@@ -102,12 +102,17 @@ def main():
     ap = argparse.ArgumentParser(description="出生老 L1 视图上下文导出（Tab 数据源）")
     ap.add_argument("--start-l1", type=int, default=69,
                     help="出生老 L1 全局 label（region_013 的 3 号 = 69，旧分区 player_start=219 质心验证）")
+    ap.add_argument("--out-dir", default=None,
+                    help="输出目录（默认 config/strategic_map 单份；L2 下钻批量用 l1_packs/l1_%03d）")
     ap.add_argument("--margin", type=int, default=45,
                     help="context 边距（出生 L1 贴近裁剪正方形四周留的空隙；地块近距离特写）")
     args = ap.parse_args()
     # L1 Tab 全链路 8192 原生精度；旧 2048 回退已移除（city_data 升 8192 后 2048 分支坐标 scale=0 损坏）
     res = 8192
     lab_l1 = args.start_l1
+    # 输出目录：默认 Tab 单份（config/strategic_map）；--out-dir 批量 L2 下钻数据（每老 L1 一份）
+    out_dir = os.path.abspath(args.out_dir) if args.out_dir else GAME_DIR
+    os.makedirs(out_dir, exist_ok=True)
 
     print("[1/5] 加载 v2 数据（res=%d）..." % res)
     citydata = json.load(open(os.path.join(V2_DIR, "city_data.json"), encoding="utf-8"))
@@ -231,7 +236,7 @@ def main():
     for i, c in enumerate(cities, start=1):
         msk = ctx_city == c["label"]
         idx[msk] = ((i >> 16) & 0xFF, (i >> 8) & 0xFF, i & 0xFF)
-    Image.fromarray(idx).save(os.path.join(GAME_DIR, "l1_mask.png"))
+    Image.fromarray(idx).save(os.path.join(out_dir, "l1_mask.png"))
 
     base = np.full((side, side, 3), OCEAN_COLOR, dtype=np.uint8)
     for c in cities:
@@ -239,7 +244,7 @@ def main():
     for nlb in nbr_labels:
         base[ctx_legacy == nlb] = NEIGHBOR_COLOR
     base[ctx_lake] = LAKE_COLOR
-    Image.fromarray(base).save(os.path.join(GAME_DIR, "l1_base.png"))
+    Image.fromarray(base).save(os.path.join(out_dir, "l1_base.png"))
 
     print("[5/5] 写 l1_world.json（context 含邻居/湖泊）...")
     world = {
@@ -259,12 +264,12 @@ def main():
         "neighbors": neighbors_data,
         "lakes": lakes,
     }
-    with open(os.path.join(GAME_DIR, "l1_world.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(out_dir, "l1_world.json"), "w", encoding="utf-8") as f:
         json.dump(jsonable(world), f, ensure_ascii=False, indent=1)
 
     print("完成：%d 城市 / %d 政权 / %d 道路，context %d, 邻居 %d, 湖泊 %d, focus %s" % (
         len(tiles), len(states), len(roads), side, len(neighbors_data), len(lakes), focus))
-    print("  -> %s" % GAME_DIR)
+    print("  -> %s" % out_dir)
 
 
 if __name__ == "__main__":

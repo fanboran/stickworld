@@ -103,25 +103,35 @@ def main():
                     help="出生老 L1 全局 label（region_013 的 3 号 = 69，旧分区 player_start=219 质心验证）")
     ap.add_argument("--margin", type=int, default=45,
                     help="context 边距（出生 L1 贴近裁剪正方形四周留的空隙；地块近距离特写）")
+    ap.add_argument("--res", type=int, default=8192, choices=[2048, 8192],
+                    help="输出分辨率（8192=原生精细，默认；2048=旧版小 context 放大）")
     args = ap.parse_args()
+    res = args.res
     lab_l1 = args.start_l1
 
-    print("[1/5] 加载 v2 数据 ...")
+    print("[1/5] 加载 v2 数据（res=%d）..." % res)
     citydata = json.load(open(os.path.join(V2_DIR, "city_data.json"), encoding="utf-8"))
-    city_labels = np.load(os.path.join(V2_DIR, "city_labels_2048.npy")).astype(np.int32)
-    legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_2048.npy")).astype(np.int32)
-    lake8192 = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
-    lake = np.array(Image.fromarray(lake8192.astype(np.uint8)).resize(
-        (2048, 2048), Image.NEAREST)).astype(bool)
-
     cities = [c for c in citydata["cities"] if int(c["parent_l1"]) == lab_l1]
     cities.sort(key=lambda c: -c["area_px"])
     print("  出生老 L1 = 全局 label %d，内城市 %d 个" % (lab_l1, len(cities)))
     if not cities:
         print("错误：该老 L1 无城市（重跑 city_split_v2）")
         return
+    city_labels = None
+    if res == 2048:
+        city_labels = np.load(os.path.join(V2_DIR, "city_labels_2048.npy")).astype(np.int32)
+        legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_2048.npy")).astype(np.int32)
+        lake8192 = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
+        lake = np.array(Image.fromarray(lake8192.astype(np.uint8)).resize(
+            (2048, 2048), Image.NEAREST)).astype(bool)
+    else:  # 8192：老 L1 拼 8192 原图 + 湖泊 8192 原样；城市在 8192 用当前质心×4 重膨胀
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "l1"))
+        from city_split_v2 import build_legacy_l1_mask  # noqa: E402
+        from skimage.segmentation import watershed  # noqa: E402
+        legacy = build_legacy_l1_mask(8192)
+        lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
 
-    # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距
+    # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距（按 res 缩放）
     l1_mask = legacy == lab_l1
     ys0, xs0 = np.where(l1_mask)
     bx0, by0 = xs0.min(), ys0.min()
@@ -129,24 +139,42 @@ def main():
     # 以地块 bbox 中心居中（质心对不规则形状会偏，导致四周边距不均）
     cx = int(round((bx0 + bx1) / 2.0))
     cy = int(round((by0 + by1) / 2.0))
-    margin = args.margin
-    # 正方形边长 = 地块长边 + 2×边距；以地块 bbox 中心为中心，钳在 2048 内
+    margin = args.margin * res // 2048
+    # 正方形边长 = 地块长边 + 2×边距；以地块 bbox 中心为中心，钳在 res 内
     side = max(bx1 - bx0 + 1, by1 - by0 + 1) + 2 * margin
     x0 = cx - side // 2
     y0 = cy - side // 2
-    x0 = max(0, min(x0, 2048 - side))
-    y0 = max(0, min(y0, 2048 - side))
+    x0 = max(0, min(x0, res - side))
+    y0 = max(0, min(y0, res - side))
     print("  context: %d x %d @ (%d,%d)，出生 L1 bbox %d x %d（边距 %d，地块特写居中）"
           % (side, side, x0, y0, bx1 - bx0 + 1, by1 - by0 + 1, margin))
 
     print("[2/5] 统一网格提取（城市/邻居/出生轮廓/湖泊，共享角点无缝）...")
-    ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
     ctx_legacy = legacy[y0:y0 + side, x0:x0 + side].copy()
     ctx_lake = lake[y0:y0 + side, x0:x0 + side].copy()
+    if res == 2048:
+        ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
+        smooth_city, smooth_legacy, smooth_lake = 3, 3, 2
+    else:
+        # 8192：以当前城市质心×4 为种子，在 8192 级 69 mask 上 watershed 重膨胀
+        # （真实精细边界；同种子 → 城市归属/布局与 2048 一致，仅边界更细）
+        sub = l1_mask[y0:y0 + side, x0:x0 + side].copy()
+        markers = np.zeros(sub.shape, dtype=np.int32)
+        for gi, c in enumerate(cities):
+            sx = int(round(c["city"][0] * res // 2048)) - x0
+            sy = int(round(c["city"][1] * res // 2048)) - y0
+            if 0 <= sy < side and 0 <= sx < side:
+                markers[sy, sx] = gi + 1
+        seg = watershed(np.zeros(sub.shape, dtype=np.uint8), markers, mask=sub, connectivity=2)
+        ctx_city = np.zeros(sub.shape, dtype=np.int32)
+        for gi, c in enumerate(cities):
+            ctx_city[seg == gi + 1] = int(c["label"])
+        # 8192 原生几何已足够细（屏幕 zoom≈0.77 时像素楼梯不可见）：轻平滑去尖角即可
+        smooth_city, smooth_legacy, smooth_lake = 1, 1, 1
 
-    city_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_city), smooth_passes=3)
-    legacy_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_legacy), smooth_passes=3)
-    lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)), smooth_passes=2)
+    city_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_city), smooth_passes=smooth_city)
+    legacy_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_legacy), smooth_passes=smooth_legacy)
+    lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)), smooth_passes=smooth_lake)
 
     # 出生 L1 权威轮廓 + 邻居块（灰色）：context 内除出生块外的所有老 L1 块
     l1_polygon = []
@@ -175,7 +203,8 @@ def main():
 
     print("[3/5] 城市块 + 政权 + 道路 ...")
     rgb_by_label = {int(c["label"]): c["rgb"] for c in cities}
-    city_pos = {int(c["label"]): c["city"] for c in cities}
+    # 城市点（city_data 为 2048 级坐标）按 res 缩放后减去 context 偏移
+    city_pos = {int(c["label"]): [v * res // 2048 for v in c["city"]] for c in cities}
     city_area = {int(c["label"]): int(c["area_px"]) for c in cities}
     tiles = []
     for rank, c in enumerate(cities, start=1):

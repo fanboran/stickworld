@@ -39,9 +39,11 @@ const HOVER_MARGIN := 2.0
 ## F3 调试：城市编号
 const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
-const LABEL_SIZE := 28.0
-## F3 城市编号的屏幕恒定字号（像素）：地图单元字号 ÷ 缩放，避免 L1 高缩放下"雷霆大字"
-const LABEL_SCREEN_SIZE := 12.0
+## F3 城市编号字号（地图单元，原生渲染）：8192 级 context 城市约 180 地图单元，
+## 30 号在默认整图适配（zoom≈0.77）下约 23px 屏幕，字号随地图缩放（原生行为）
+const LABEL_SIZE := 30.0
+## F3 城市编号屏幕上限（像素）：仅高缩放时封顶防"雷霆大字"，默认缩放不受影响
+const LABEL_SCREEN_CAP := 40.0
 var _debug_was_visible: bool = false
 
 
@@ -173,12 +175,12 @@ func _draw_city_labels() -> void:
 	var zz: float = 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
-	var fs: float = LABEL_SCREEN_SIZE
+	var fs: float = LABEL_SIZE
 	if zz > 0.0001:
-		# 屏幕恒定字号 = LABEL_SCREEN_SIZE / zz（地图单元字号 ÷ 缩放）。
-		# 下限 13 曾导致整图适配(zz≈4.6)时被 clamp 到 13 → 屏幕 13×4.6≈60px"雷霆大字"。
-		# 下限只需防极端高缩放，取 2.0（max_zoom=5 时 12/5=2.4 不受影响）。
-		fs = clampf(LABEL_SCREEN_SIZE / zz, 2.0, 30.0)
+		# 原生渲染：固定地图单元字号（随地图缩放，默认整图适配即可见、大小合适）。
+		# 不再 ÷ 缩放——曾让局部字号过小（如 2.6 地图单元）导致 Godot 渲染消失；
+		# 仅高缩放时按屏幕像素上限封顶，防"雷霆大字"。
+		fs = minf(LABEL_SIZE, LABEL_SCREEN_CAP / zz)
 	var halo: float = maxf(1.5, fs * 0.12)
 	for tile in _data.tiles:
 		if tile.settlement == null:

@@ -54,8 +54,9 @@ STRUCT8 = np.ones((3, 3), dtype=bool)
 def build_legacy_l1_mask(size=2048):
     """拼 13 地区老 L1 → 全局 8192 → 降采样 size；修复陆地缺口（EDT 最近老 L1）。
 
-    返回 (l1_2048, meta)：l1_2048 为 (size,size) int32（0=非地块/海洋），
+    返回 (l1_size, meta)：l1_size 为 (size,size) int32（0=非地块/海洋），
     meta = {全局 label: {region, local_label, centroid_2048}}。
+    结果存 legacy_l1_labels_{size}.npy（size=2048 时文件名与旧版一致）。
     """
     glob8192 = np.zeros((8192, 8192), dtype=np.int32)
     shift = 0
@@ -73,14 +74,17 @@ def build_legacy_l1_mask(size=2048):
     l1 = np.array(Image.fromarray(l1_8192.astype(np.uint32), "I").resize(
         (size, size), Image.NEAREST)).astype(np.int32)
 
-    # 陆地缺口修复：最近老 L1
+    # 陆地缺口修复：最近老 L1（region 蒙版按 size 放大对齐——8192 时 shape 需匹配）
     region = np.load(os.path.join(REGIONS_DIR, "region_labels.npy"))
+    if region.shape[0] != size:
+        region = np.array(Image.fromarray(region.astype(np.uint32), "I").resize(
+            (size, size), Image.NEAREST)).astype(np.int32)
     land = region > 0
     miss = land & (l1 == 0)
     if miss.any():
         _, inds = distance_transform_edt(l1 > 0, return_indices=True)
         l1[miss] = l1[inds[0][miss], inds[1][miss]]
-    np.save(os.path.join(OUT_DIR, "legacy_l1_labels_2048.npy"), l1)
+    np.save(os.path.join(OUT_DIR, "legacy_l1_labels_%d.npy" % size), l1)
     return l1
 
 

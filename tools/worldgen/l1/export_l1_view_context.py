@@ -71,6 +71,17 @@ def to_xy(ring):
     return [[float(p[1]), float(p[0])] for p in ring]
 
 
+def _area_xy(poly):
+    """鞋带公式面积（(x,y) 环）。"""
+    s = 0.0
+    n = len(poly)
+    for i in range(n):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % n]
+        s += x1 * y2 - x2 * y1
+    return abs(s) / 2.0
+
+
 def jsonable(o):
     """递归把 numpy 标量转回 Python 原生类型（mesh 提取的角点可能是 np 类型）。"""
     if isinstance(o, dict):
@@ -90,7 +101,7 @@ def main():
     ap = argparse.ArgumentParser(description="出生老 L1 视图上下文导出（Tab 数据源）")
     ap.add_argument("--start-l1", type=int, default=69,
                     help="出生老 L1 全局 label（region_013 的 3 号 = 69，旧分区 player_start=219 质心验证）")
-    ap.add_argument("--margin", type=int, default=45,
+    ap.add_argument("--margin", type=int, default=15,
                     help="context 边距（出生 L1 贴近裁剪正方形四周留的空隙；地块近距离特写）")
     args = ap.parse_args()
     lab_l1 = args.start_l1
@@ -137,6 +148,19 @@ def main():
     legacy_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_legacy), smooth_passes=3)
     lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)), smooth_passes=2)
 
+    # 关键：DP 强简化（tol=1.0 context px）——把像素轮廓的 45° 楼梯折成直线。
+    # 像素蒙版提取的轮廓在斜边上是一格一格 1px 的台阶，Chaikin 只磨圆不拉直；
+    # L1 特写缩放下每格 ~4.6px 屏显 -> 锯齿。DP(tol=1.0) 能折叠台阶（最大偏差 0.71px < tol）
+    # 成一条直线，真实宏观轮廓保真（偏差 ≤1px = 4.6px 屏显，不可见）；同源同参数 ->
+    # 相邻地块共享边简化结果一致，仍无缝。
+    DP_TOL = 1.0
+    for mesh in (city_mesh, legacy_mesh):
+        for v in mesh.values():
+            v["outer"] = [mesh_extract._near_collinear_merge(list(o), tol=DP_TOL)
+                          for o in v["outer"] if len(o) >= 3]
+            v["holes"] = [mesh_extract._near_collinear_merge(list(h), tol=DP_TOL)
+                          for h in v["holes"] if len(h) >= 3]
+
     # 出生 L1 权威轮廓 + 邻居块（灰色）：context 内除出生块外的所有老 L1 块
     l1_polygon = []
     for p in legacy_mesh.get(lab_l1, {}).get("outer", []):
@@ -173,6 +197,11 @@ def main():
         if not outs:
             outs = [[[float(p[0]) - x0, float(p[1]) - y0] for p in r] for r in c.get("polygons", [])]
             outs = [r for r in outs if len(r) >= 3]
+        # split_self_touch 自触分割会产生多个 outer：主体 + 1px 碎条。
+        # 按面积降序取面积最大者作主轮廓，剔除 <3px² 的自触碎条（特写下会渲染成小三角）。
+        if len(outs) > 1:
+            outs = [r for r in outs if _area_xy(r) >= 3.0] or outs
+            outs = sorted(outs, key=_area_xy, reverse=True)
         level = 3 if city_area[c["label"]] > 1500 else (2 if city_area[c["label"]] > 600 else 1)
         pos = city_pos[c["label"]]
         tiles.append({

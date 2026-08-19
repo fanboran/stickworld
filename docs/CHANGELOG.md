@@ -17,6 +17,14 @@
 - **废弃清理**：`export_player_l1_cities.py` / `export_player_l1_cities_v2.py` / `l1_worldgen.py` 移入 `tools/worldgen/archive/`（防误跑覆盖 config 回退 2048）
 - **验证**：p0 7/7、全量 23/24（1 项预存无关失败）、check_godot_errors 干净
 
+### 2048 死数据整理：L2 冗余字段 + 389 废弃体系清理（2026-08）
+
+- **L2 冗余死字段移除**：`export_l2_packs.py` 不再产出 `mask_2048.png` / `index_mask_2048.png`，`info.json` / `regions_meta.json` 去掉 `area_px_2048` / `polygon_2048` / `files.mask_2048`——全仓 grep 确认**零消费者**（L2 渲染几何来自 `tiles_8192`，2048 字段是 region 划分遗留死数据）；`color_map.json` 有消费者保留
+- **389 废弃体系归档**：`city_split.py` / `l1_world_split.py` 移入 `archive/`（389 版 L1 划分 + 城市细分，被老 L1 体系取代）
+- **Tab 导出纯 8192**：`export_l1_view_context.py` 移除 `--res 2048` 回退（city_data 升 8192 后 2048 分支坐标 scale=0 已损坏），强制 8192
+- **config 死文件删除**：`l1_partition_2048.png` / `l1_preview_2048.png`（389 版，零消费者）
+- **验证**：p0 7/7、check_godot_errors 干净
+
 ### Tab L1 出生地块更正为 region_013 3 号 + 地块特写 + 细线 + 居中（2026-08）
 
 - **出生 L1 地块更正**：`label 66`（region 12 的 3 号，13 城）→ **`label 69`（region 13 的 3 号，8 城）**——经旧分区 `player_start=219` 质心落在 69 号块内验证；69 恰好符合 GDD"出生 L1 7-8 聚落"规格（之前用的 66 是错误地块，故 Tab 与"13号地块3号地块"长得不一样）

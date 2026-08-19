@@ -12,7 +12,7 @@ context = 出生 L1 贴近裁剪正方形（默认边距 45，地块近距离特
   - 邻居/出生轮廓 = legacy_l1_labels_8192（老 L1 全局蒙版，8192 级）
   - 湖泊 = fractal_lake_mask_8192 原样（不重采样）
 
-输入（output/l1_v2/，8192 级，--res 2048 兼容旧 2048 级）：city_data.json（size 字段定坐标级）
+输入（output/l1_v2/，8192 级）：city_data.json（size 字段定坐标级）
   / city_labels_8192.npy / legacy_l1_labels_8192.npy
 
 产出（覆盖 stick-world/config/strategic_map/ Tab 数据源）：
@@ -21,7 +21,7 @@ context = 出生 L1 贴近裁剪正方形（默认边距 45，地块近距离特
   l1_mask.png（城市索引图，rank 直编 1..N，0=海洋/邻居）
 
 用法：
-  python tools/worldgen/l1/export_l1_view_context.py [--start-l1 69] [--margin 15] [--res 8192]
+  python tools/worldgen/l1/export_l1_view_context.py [--start-l1 69] [--margin 15]
 """
 import argparse
 import json
@@ -104,10 +104,9 @@ def main():
                     help="出生老 L1 全局 label（region_013 的 3 号 = 69，旧分区 player_start=219 质心验证）")
     ap.add_argument("--margin", type=int, default=45,
                     help="context 边距（出生 L1 贴近裁剪正方形四周留的空隙；地块近距离特写）")
-    ap.add_argument("--res", type=int, default=8192, choices=[2048, 8192],
-                    help="输出分辨率（8192=原生精细，默认；2048=旧版小 context 放大）")
     args = ap.parse_args()
-    res = args.res
+    # L1 Tab 全链路 8192 原生精度；旧 2048 回退已移除（city_data 升 8192 后 2048 分支坐标 scale=0 损坏）
+    res = 8192
     lab_l1 = args.start_l1
 
     print("[1/5] 加载 v2 数据（res=%d）..." % res)
@@ -118,17 +117,10 @@ def main():
     if not cities:
         print("错误：该老 L1 无城市（重跑 city_split_v2）")
         return
-    city_labels = None
-    if res == 2048:
-        city_labels = np.load(os.path.join(V2_DIR, "city_labels_2048.npy")).astype(np.int32)
-        legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_2048.npy")).astype(np.int32)
-        lake8192 = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
-        lake = np.array(Image.fromarray(lake8192.astype(np.uint8)).resize(
-            (2048, 2048), Image.NEAREST)).astype(bool)
-    else:  # 8192：城市层 8192 生成 + 老 L1 拼 8192 原图 + 湖泊 8192 原样（无重采样）
-        legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_8192.npy")).astype(np.int32)
-        city_labels = np.load(os.path.join(V2_DIR, "city_labels_8192.npy")).astype(np.int32)
-        lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
+    # 城市层 8192 生成 + 老 L1 拼 8192 原图 + 湖泊 8192 原样（全链无重采样）
+    legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_8192.npy")).astype(np.int32)
+    city_labels = np.load(os.path.join(V2_DIR, "city_labels_8192.npy")).astype(np.int32)
+    lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
 
     # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距（按 res 缩放）
     l1_mask = legacy == lab_l1
@@ -151,14 +143,10 @@ def main():
     print("[2/5] 统一网格提取（城市/邻居/出生轮廓/湖泊，共享角点无缝）...")
     ctx_legacy = legacy[y0:y0 + side, x0:x0 + side].copy()
     ctx_lake = lake[y0:y0 + side, x0:x0 + side].copy()
-    if res == 2048:
-        ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
-        smooth_city, smooth_legacy, smooth_lake = 3, 3, 2
-    else:
-        # 8192：直接裁剪 8192 级城市标签（城市层已在 8192 生成，真实精细边界）
-        ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
-        # 8192 原生几何已足够细（屏幕 zoom≈0.77 时像素楼梯不可见）：轻平滑去尖角即可
-        smooth_city, smooth_legacy, smooth_lake = 1, 1, 1
+    # 8192：直接裁剪 8192 级城市标签（城市层已在 8192 生成，真实精细边界）
+    ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
+    # 8192 原生几何已足够细（屏幕 zoom≈0.77 时像素楼梯不可见）：轻平滑去尖角即可
+    smooth_city, smooth_legacy, smooth_lake = 1, 1, 1
 
     city_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_city), smooth_passes=smooth_city)
     legacy_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_legacy), smooth_passes=smooth_legacy)

@@ -26,9 +26,8 @@ tools/worldgen/
 │   ├── export_l1_overview.py       # L1 全图预览
 │   └── update_tiles_coastline.py   # 按 8K 蒙版裁切海岸线
 ├── l1/                    # L1 地块合并 / 生成 / 全大陆 L1 蒙版（活跃）
-│   ├── l1_world_split.py          # 全大陆 L1 地块划分（L3 级蒙版：城市点 + 岛×L2 分组细胞质膨胀 + 面积下限）
-│   ├── city_split.py              # ~~389 细胞下细分城市~~ 已废弃
-│   ├── city_split_v2.py           # 老 L1 之下细分城市（13 地区 tiles 拼全局 → 城市蒙版，8192 级，1038 城）
+│   ├── city_split_v2.py           # 老 L1 之下细分城市（13 地区 tiles 拼全局 → 城市蒙版，8192 级，1040 城）
+│   ├── export_l1_view_context.py  # 出生老 L1 视图上下文导出（Tab 数据源，8192 级）
 │   ├── export_l3_l1_view.py          # L3 视觉层双模式（老 L1 矢量 + 城市贴图 + hover 索引图）
 │   ├── export_l2_city_previews.py   # L2 城市模式贴图（每地区 context 尺寸，读 city_preview_8192）
 │   ├── merge_tiny_tiles.py

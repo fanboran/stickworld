@@ -24,6 +24,7 @@ context = 出生 L1 贴近裁剪正方形（默认边距 45，地块近距离特
 """
 import argparse
 import json
+import math
 import os
 import sys
 
@@ -97,6 +98,161 @@ def jsonable(o):
     return o
 
 
+def _edge_key(a, b):
+    """无向边 key（端点取整排序，保证两条环各自追踪的共享边匹配）。"""
+    pa = (round(a[0], 1), round(a[1], 1))
+    pb = (round(b[0], 1), round(b[1], 1))
+    return tuple(sorted((pa, pb)))
+
+
+def _round_corner(p0, pc, p1, radius):
+    """固定半径圆弧替换尖角，返回弧上采样点（闭合多边形顶点序列的一部分）。
+
+    弧半径受两侧边长限制（r <= min(l1,l2)/2），保证不越过相邻顶点。
+    """
+    v1 = (p0[0] - pc[0], p0[1] - pc[1])
+    v2 = (p1[0] - pc[0], p1[1] - pc[1])
+    l1 = math.hypot(*v1)
+    l2 = math.hypot(*v2)
+    r = min(radius, l1 * 0.5, l2 * 0.5)
+    if r < 0.05 or l1 < 1e-9 or l2 < 1e-9:
+        return [pc]
+    u1 = (v1[0] / l1, v1[1] / l1)
+    u2 = (v2[0] / l2, v2[1] / l2)
+    bx = u1[0] + u2[0]
+    by = u1[1] + u2[1]
+    nb = math.hypot(bx, by)
+    if nb < 1e-9:
+        return [pc]
+    bx /= nb
+    by /= nb
+    cos = max(-1.0, min(1.0, u1[0] * u2[0] + u1[1] * u2[1]))
+    theta = math.acos(cos)
+    if theta < math.radians(10):
+        return [pc]
+    d = r / math.sin(theta / 2.0)
+    cx = pc[0] + bx * d
+    cy = pc[1] + by * d
+    t1 = (pc[0] + u1[0] * r, pc[1] + u1[1] * r)
+    t2 = (pc[0] + u2[0] * r, pc[1] + u2[1] * r)
+    a1 = math.atan2(t1[1] - cy, t1[0] - cx)
+    a2 = math.atan2(t2[1] - cy, t2[0] - cx)
+    da = a2 - a1
+    while da > math.pi:
+        da -= 2 * math.pi
+    while da < -math.pi:
+        da += 2 * math.pi
+    steps = max(1, int(abs(da) / math.radians(60)))
+    return [(cx + r * math.cos(a1 + da * s / steps), cy + r * math.sin(a1 + da * s / steps))
+            for s in range(steps + 1)]
+
+
+def clean_mesh_shared(mesh, dp_tol=1.0, corner_radius=2.0):
+    """共享边安全简化 + 圆角（关键：相邻地块共享边界数据一致，不再分离）。
+
+    整环 DP 会因各环起点不同把共享边简化成不同折线 -> 相邻地块各自描边变两条线。
+    本函数把共享边界当作唯一几何：共享段只简化一次写回所有含它的环，外段各自简化。
+
+    1. 边 -> 含它的环集合（同一段共享边界在两条环里是同一整数楼梯）
+    2. 每条环按"共享环集合"分段：连续边被同一批环共享 -> 同一段
+    3. 共享段 DP 一次进缓存，按方向写回；外段各自 DP
+    4. 圆角：只圆"本环独有"（非共享段）的角 —— 共享段任何点绝不移动，
+       保证共享边界在两边始终是同一组点 -> 描边重合为一条线
+    """
+    from collections import defaultdict
+    edge_rings = defaultdict(set)
+    ring_ids = []
+    for label, v in mesh.items():
+        for oi, ring in enumerate(v.get("outer", [])):
+            rid = len(ring_ids)
+            ring_ids.append((label, oi))
+            for i in range(len(ring)):
+                edge_rings[_edge_key(ring[i], ring[(i + 1) % len(ring)])].add(rid)
+    shared_cache = {}
+    new_rings = {}
+    for rid, (label, oi) in enumerate(ring_ids):
+        ring = mesh[label]["outer"][oi]
+        n = len(ring)
+        if n < 3:
+            continue
+        sets = [frozenset(edge_rings[_edge_key(ring[i], ring[(i + 1) % n])]) for i in range(n)]
+        boundaries = [i for i in range(n) if sets[i] != sets[(i + 1) % n]]
+        if not boundaries:
+            runs = [(list(ring), sets[0])]
+        else:
+            s0 = boundaries[0]
+            r2 = [ring[(s0 + k) % n] for k in range(n)]
+            s2 = [sets[(s0 + k) % n] for k in range(n)]
+            runs = []
+            i = 0
+            while i < n:
+                j = i
+                while j + 1 < n and s2[j + 1] == s2[i]:
+                    j += 1
+                runs.append(([r2[k % n] for k in range(i, j + 2)], s2[i]))
+                i = j + 1
+        out_pts = []
+        out_shared = []
+        for pts, sset in runs:
+            sh = len(sset) > 1
+            uniq = len(set((round(x, 1), round(y, 1)) for x, y in pts))
+            if len(pts) >= 3 and uniq >= 3:
+                if sh:
+                    if sset not in shared_cache:
+                        shared_cache[sset] = mesh_extract._dp_simplify(pts, dp_tol)
+                    sp = shared_cache[sset]
+                    if abs(sp[0][0] - pts[0][0]) > 1e-6 or abs(sp[0][1] - pts[0][1]) > 1e-6:
+                        sp = list(reversed(sp))
+                else:
+                    sp = mesh_extract._dp_simplify(pts, dp_tol)
+                for p in sp[:-1]:
+                    out_pts.append(p)
+                    out_shared.append(sh)
+            else:
+                for p in pts[:-1]:
+                    out_pts.append(p)
+                    out_shared.append(sh)
+        if out_pts:
+            new_rings[(label, oi)] = (out_pts, out_shared)
+    # 圆角：只动非共享角点
+    def _turn_angle(ring, k):
+        a = ring[(k - 1) % len(ring)]
+        b = ring[k]
+        c = ring[(k + 1) % len(ring)]
+        v1 = (b[0] - a[0], b[1] - a[1])
+        v2 = (c[0] - b[0], c[1] - b[1])
+        l1 = math.hypot(*v1)
+        l2 = math.hypot(*v2)
+        if l1 < 1e-6 or l2 < 1e-6:
+            return 0.0
+        cos = max(-1.0, min(1.0, (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2)))
+        return 180.0 - math.degrees(math.acos(cos))
+    rounded = {}
+    for (label, oi), (ring, fl) in new_rings.items():
+        if len(ring) < 3:
+            rounded[(label, oi)] = ring
+            continue
+        newr = []
+        n = len(ring)
+        for k in range(n):
+            # 共享段任何点绝不移动：顶点只要相邻任一边来自共享段（自身或前一边）就不圆角。
+            # 交界顶点是共享段的端点，若被圆角会破坏两边共享边界的一致性。
+            on_shared = fl[k] or fl[(k - 1) % n]
+            if (not on_shared) and _turn_angle(ring, k) > 30.0:
+                arc = _round_corner(ring[(k - 1) % n], ring[k], ring[(k + 1) % n], corner_radius)
+                newr.extend(arc[:-1])
+            else:
+                newr.append(ring[k])
+        rounded[(label, oi)] = newr
+    result = {}
+    for label, v in mesh.items():
+        result[label] = {"outer": [], "holes": v.get("holes", [])}
+        for oi in range(len(v.get("outer", []))):
+            result[label]["outer"].append(rounded.get((label, oi), v["outer"][oi]))
+    return result
+
+
+
 def main():
     ap = argparse.ArgumentParser(description="出生老 L1 视图上下文导出（Tab 数据源）")
     ap.add_argument("--start-l1", type=int, default=69,
@@ -144,22 +300,22 @@ def main():
     ctx_legacy = legacy[y0:y0 + side, x0:x0 + side].copy()
     ctx_lake = lake[y0:y0 + side, x0:x0 + side].copy()
 
-    city_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_city), smooth_passes=3)
-    legacy_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_legacy), smooth_passes=3)
-    lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)), smooth_passes=2)
+    # 关键：共享边安全简化 + 圆角（clean_mesh_shared）。
+    # 像素蒙版轮廓的 45° 斜边是一格一格 1px 台阶，特写下 ~4.6px/格成锯齿；
+    # 整环 DP 会把相邻地块共享边简化成不同折线 -> 各画一条变"分离"。
+    # 方案：共享段只简化一次写回两边（共享边界数据一致 -> 描边重合为一条线），
+    # 外段各自简化；随后只圆本环独有的角（共享段任何点不动，圆角不破坏共享边）。
+    def _prep(raw_mesh):
+        for v in raw_mesh.values():
+            outer = []
+            for o in v.get("outer", []):
+                outer.extend(mesh_extract.split_self_touch(o))
+            v["outer"] = [mesh_extract.simplify_collinear(o) for o in outer]
+        return raw_mesh
 
-    # 关键：DP 强简化（tol=1.0 context px）——把像素轮廓的 45° 楼梯折成直线。
-    # 像素蒙版提取的轮廓在斜边上是一格一格 1px 的台阶，Chaikin 只磨圆不拉直；
-    # L1 特写缩放下每格 ~4.6px 屏显 -> 锯齿。DP(tol=1.0) 能折叠台阶（最大偏差 0.71px < tol）
-    # 成一条直线，真实宏观轮廓保真（偏差 ≤1px = 4.6px 屏显，不可见）；同源同参数 ->
-    # 相邻地块共享边简化结果一致，仍无缝。
-    DP_TOL = 1.0
-    for mesh in (city_mesh, legacy_mesh):
-        for v in mesh.values():
-            v["outer"] = [mesh_extract._near_collinear_merge(list(o), tol=DP_TOL)
-                          for o in v["outer"] if len(o) >= 3]
-            v["holes"] = [mesh_extract._near_collinear_merge(list(h), tol=DP_TOL)
-                          for h in v["holes"] if len(h) >= 3]
+    city_mesh = clean_mesh_shared(_prep(mesh_extract.extract_mesh(ctx_city)))
+    legacy_mesh = clean_mesh_shared(_prep(mesh_extract.extract_mesh(ctx_legacy)))
+    lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)), smooth_passes=2)
 
     # 出生 L1 权威轮廓 + 邻居块（灰色）：context 内除出生块外的所有老 L1 块
     l1_polygon = []

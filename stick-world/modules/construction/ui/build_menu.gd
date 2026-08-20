@@ -109,7 +109,7 @@ func _build_ui() -> void:
 	_toggle_btn.text = "建造"
 	_toggle_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_toggle_btn.offset_left = -108.0
-	_toggle_btn.offset_top = -48.0
+	_toggle_btn.offset_top = -42.0
 	_toggle_btn.offset_right = -12.0
 	_toggle_btn.offset_bottom = -12.0
 	_toggle_btn.pressed.connect(_on_toggle_pressed)
@@ -176,6 +176,7 @@ func _create_build_entry(def_id: String, def: Dictionary) -> Control:
 	vbox.add_theme_constant_override("separation", 2)
 	var btn := Button.new()
 	btn.text = str(def.get("name_zh", def_id))
+	# 与右下角「建造」按钮等高（30px），保证建造菜单内按钮尺寸统一
 	btn.custom_minimum_size = Vector2(0, 30)
 	btn.pressed.connect(_on_building_selected.bind(def_id))
 	vbox.add_child(btn)
@@ -288,7 +289,7 @@ func _start_placing(def_id: String) -> void:
 	_confirm_btn.text = "确定建造"
 	_confirm_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_confirm_btn.offset_left = -140.0
-	_confirm_btn.offset_top = -108.0
+	_confirm_btn.offset_top = -102.0
 	_confirm_btn.offset_right = -12.0
 	_confirm_btn.offset_bottom = -72.0
 	_confirm_btn.pressed.connect(_confirm_place)

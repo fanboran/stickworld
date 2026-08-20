@@ -39,6 +39,32 @@ signal display_changed(key: String, value)
 func _ready() -> void:
 	_data = _defaults.duplicate(true)
 	load_from_disk()
+	apply_startup_display()
+
+
+## 启动时应用画面类设置（video/window_mode、video/ui_scale）。
+## 键未存储（首次启动）时保持引擎默认，避免强改用户环境；headless 测试跳过。
+func apply_startup_display() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	if _data.has("video/window_mode"):
+		apply_window_mode(int(_data["video/window_mode"]))
+	if _data.has("video/ui_scale"):
+		get_window().content_scale_factor = float(_data["video/ui_scale"]) / 100.0
+
+
+## 应用窗口模式：0=窗口化，1=无边框全屏，2=独占全屏（设置面板 video/window_mode）。
+func apply_window_mode(mode: int) -> void:
+	var w: Window = get_window()
+	if w == null:
+		return
+	match mode:
+		0:
+			w.mode = Window.MODE_WINDOWED
+		1:
+			w.mode = Window.MODE_FULLSCREEN
+		2:
+			w.mode = Window.MODE_EXCLUSIVE_FULLSCREEN
 
 
 ## 从磁盘加载配置。文件不存在或损坏则使用默认值并立即写一份。

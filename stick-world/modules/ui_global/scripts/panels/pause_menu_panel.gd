@@ -3,16 +3,16 @@ extends StickScreen
 ## 暂停菜单 —— ESC 打开的标准暂停界面（游戏暂停 + 全屏遮罩屏蔽一切输入）。
 ##
 ## 由 SystemSetup 装配到 UIRoot.ModalOverlay；ESC 由 GameRoot 统一处理（见 game_root.gd
-## _handle_escape）：未开任何模态时开本菜单，已开则逐层关闭。
-## 打开即暂停（StickScreen.open 自动处理），关闭恢复原速度。
+## _handle_escape）：未开任何模态时开本菜单，已开则逐层退栈。
+## 打开即暂停（StickScreen.open + UIModalStack 双重保险），关闭恢复原速度。
 ## 附身模式下 ESC 保留给"退出附身"，不弹本菜单。
+## 从本菜单打开设置/存档时不自行隐藏：UIModalStack 压上层时自动盖住本菜单
+## （防双重遮罩），ESC 退栈后自动恢复可见。
 
 const PANEL_SIZE: Vector2 = Vector2(400, 480)
 const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 
 var _game_root: Node = null
-## 是否处于"让位隐藏"状态（从暂停菜单打开设置/存档时隐藏自身，ESC 返回时恢复）
-var _delegated: bool = false
 
 ## 帝国功能入口（依赖系统未建 → 打开空面板占位；系统落地后替换为真实面板）
 const EMPIRE_ENTRIES: Array[Dictionary] = [
@@ -54,25 +54,14 @@ func _open_placeholder(preset_id: String) -> void:
 
 
 func _on_settings() -> void:
-	# 让位隐藏（不 close）：保持暂停状态 + 保留返回点；ESC 关设置后 restore_if_delegated 恢复
-	_delegated = true
-	visible = false
+	# 不自行隐藏：模态栈压设置层时自动盖住本菜单，ESC 退栈后自动恢复
 	if _game_root != null and _game_root.has_method("toggle_settings_menu"):
 		_game_root.toggle_settings_menu()
 
 
 func _on_save_panel() -> void:
-	_delegated = true
-	visible = false
 	if _game_root != null and _game_root.has_method("toggle_save_panel"):
 		_game_root.toggle_save_panel()
-
-
-## ESC 关闭子面板后恢复暂停菜单（仅当本菜单是被"让位隐藏"时）
-func restore_if_delegated() -> void:
-	if _delegated:
-		_delegated = false
-		visible = true
 
 
 func _on_return_menu() -> void:

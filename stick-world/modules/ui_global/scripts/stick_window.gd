@@ -76,6 +76,8 @@ func _build_content() -> void:
 
 
 ## 初始定位（FLOATING 居中；DOCK 停靠；POPOVER 锚点）
+## FLOATING/POPOVER 一律夹进安全矩形（HUD 顶栏/材料条/底栏避让），
+## 防"弹窗盖住常驻 HUD 按钮"（StickKit.safe_rect 单一真相源，见 09-布局规则与AI自检.md）。
 func _position_panel() -> void:
 	var vp := get_viewport().get_visible_rect() if get_viewport() != null else Rect2(0, 0, 1920, 1080)
 	match behavior:
@@ -85,6 +87,18 @@ func _position_panel() -> void:
 			_panel.position = anchor_pos
 		_:
 			_panel.position = vp.size * 0.5 - window_size * 0.5
+	# 尺寸定稿后（首次布局/resize）再夹一次，确保真实面板尺寸也落在安全区内
+	if not _panel.resized.is_connected(_clamp_into_safe_rect):
+		_panel.resized.connect(_clamp_into_safe_rect)
+	if behavior != Behavior.DOCK:
+		_clamp_into_safe_rect()
+
+
+## 把面板矩形夹进安全矩形（FLOATING/POPOVER）。拖动不触发（只监听 resized）。
+func _clamp_into_safe_rect() -> void:
+	if _panel == null or not is_instance_valid(_panel):
+		return
+	_panel.position = StickKit.clamp_to_safe_rect(self, Rect2(_panel.position, _panel.size)).position
 
 
 # ─────────────────────────────── 拖动（FLOATING）────────────────────────────────
@@ -123,8 +137,12 @@ func is_open() -> bool:
 	return visible
 
 
-## ESC 关闭自身；POPOVER 点击面板外关闭。均消费（不触发 GameRoot 暂停菜单）
+## ESC 关闭自身；POPOVER 点击面板外关闭。均消费（不触发 GameRoot 暂停菜单）。
+## **必须检查 visible**：本节点常驻场景树（如编制窗口挂 ModalOverlay），隐藏时若仍消费
+## ESC 会把 GameRoot 的暂停菜单 ESC 吞掉（子节点 _unhandled_input 先于根节点执行）。
 func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		close()
 		get_viewport().set_input_as_handled()

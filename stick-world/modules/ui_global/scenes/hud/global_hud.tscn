@@ -30,35 +30,45 @@ theme_override_constants/separation = 24
 
 [node name="SpeedLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=1073199118]
 layout_mode = 2
+vertical_alignment = 1
 text = "速度: 1x"
 
 [node name="SettingsButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787555]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
 text = "⚙"
 
 [node name="TimeLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=238169416]
 layout_mode = 2
+vertical_alignment = 1
 text = "时间: 08:00"
 
 [node name="CenteredButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787552]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
 text = "居中: 关"
 
 [node name="StuckButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787553]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
 text = "脱困(H)"
 
 [node name="FormationButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787554]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
 text = "编制"
 
 [node name="ResourceBarHost" type="PanelContainer" parent="." unique_id=926316734]
 layout_mode = 1
 anchors_preset = 0
 offset_left = 8.0
-offset_top = 46.0
+offset_top = 64.0
 offset_right = 8.0
-offset_bottom = 46.0
+offset_bottom = 64.0
 mouse_filter = 2
 
 [node name="NotificationLabel" type="Label" parent="." unique_id=1766089372]

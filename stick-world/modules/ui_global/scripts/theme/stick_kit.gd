@@ -156,6 +156,36 @@ static func dock(node: Control, corner: int, size: Vector2,
 	node.custom_minimum_size = size
 
 
+# ─────────────────────────────── HUD 预留区与安全矩形（防 UI 重合）────────────────────────────────
+
+## HUD 预留区高度 —— 单一真相源，弹窗/浮动窗口定位必须避让（行业惯例：常驻 HUD 占位）。
+## 顶栏 GlobalHUD 高 60（global_hud.tscn offset_bottom=60）+ 材料横条 y=64~99
+const HUD_TOP_RESERVED := 104.0
+## 底部模式面板 ModePanel 高 80（mode_panel.tscn offset_top=-80，含留白）
+const HUD_BOTTOM_RESERVED := 88.0
+
+## 计算"安全矩形"：viewport 减去 HUD 预留区（顶栏+材料条 / 底部面板）。
+## 弹窗初始定位、浮动窗口开窗都必须把自身矩形夹进安全矩形——
+## 一劳永逸防"弹窗盖住常驻 HUD 按钮"（如材料条与顶栏按钮重叠的历史问题）。
+static func safe_rect(control: Control, margin: float = StickTokens.SCREEN_MARGIN) -> Rect2:
+	var vp := Rect2(0, 0, 1920, 1080)
+	if control != null and control.get_viewport() != null:
+		vp = control.get_viewport().get_visible_rect()
+	var pos := vp.position + Vector2(margin, HUD_TOP_RESERVED)
+	var size := vp.size - Vector2(margin * 2.0, HUD_TOP_RESERVED + HUD_BOTTOM_RESERVED)
+	return Rect2(pos, size)
+
+
+## 把期望矩形夹进安全矩形（保持尺寸，只平移；过大的窗口缩到安全区大小）。
+static func clamp_to_safe_rect(control: Control, desired: Rect2, margin: float = StickTokens.SCREEN_MARGIN) -> Rect2:
+	var safe := safe_rect(control, margin)
+	var size := Vector2(minf(desired.size.x, safe.size.x), minf(desired.size.y, safe.size.y))
+	var pos := desired.position
+	pos.x = clampf(pos.x, safe.position.x, maxf(safe.position.x, safe.end.x - size.x))
+	pos.y = clampf(pos.y, safe.position.y, maxf(safe.position.y, safe.end.y - size.y))
+	return Rect2(pos, size)
+
+
 # ─────────────────────────────── Toast ────────────────────────────────
 
 ## 系统层（toast/确认框统一挂载，不随调用者层，根治"confirm 跑出屏幕"类问题）：
@@ -197,44 +227,17 @@ static func toast(layer: Control, text: String, kind: String = "info") -> void:
 
 ## 模态确认框（确认框族最小实现）：message + 确定/取消。
 ## on_confirm 在点确定后调用；点遮罩/取消关闭。
+## 游戏内入 UIModalStack CONFIRM 层（ESC = 取消，逐层退栈）；无 UIRoot 环境
+## （主菜单）回退自管理。
 static func confirm(layer: Control, title: String, message: String,
 		on_confirm: Callable, confirm_text: String = "确定",
 		kind: ButtonKind = ButtonKind.ACCENT) -> void:
-	layer = _system_overlay(layer)
-	var dim := ColorRect.new()
-	dim.color = StickTokens.MODAL_DIM
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	# 真正消费鼠标（防滚轮等穿透到相机 _unhandled_input）
-	dim.gui_input.connect(func(_event: InputEvent):
-		if is_instance_valid(dim):
-			dim.get_viewport().set_input_as_handled()
-	)
-	layer.add_child(dim)
-	var window := PanelContainer.new()
-	window.add_theme_stylebox_override("panel", StickStyle.window_panel())
-	window.custom_minimum_size = Vector2(360, 0)
-	dim.add_child(window)
-	# 绝对居中（anchor 归零 + 相对 dim 计算），Godot 的 position setter 配 anchor 会失效
-	window.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	window.resized.connect(func():
-		if is_instance_valid(window) and is_instance_valid(dim):
-			window.position = (dim.size - window.size) * 0.5
-	)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
-	window.add_child(box)
-	label(box, title, LabelKind.SECTION)
-	var msg := label(box, message, LabelKind.BODY)
-	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var btn_row := row(box, 8)
-	btn_row.alignment = BoxContainer.ALIGNMENT_END
-	var close := func():
-		if is_instance_valid(dim):
-			dim.queue_free()
-	button(btn_row, "取消", close)
-	button(btn_row, confirm_text, func():
-		close.call()
-		if on_confirm.is_valid():
-			on_confirm.call()
-	, kind)
+	var host := _system_overlay(layer)
+	var dialog := StickConfirmDialog.new()
+	dialog.setup(title, message, on_confirm, confirm_text, kind)
+	host.add_child(dialog)
+	var stack := UIModalStack.find(layer)
+	if stack != null:
+		stack.push(dialog, UIModalStack.Layer.CONFIRM)
+	else:
+		dialog.open()

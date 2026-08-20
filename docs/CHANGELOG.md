@@ -8,6 +8,10 @@
 
 ## [未发布]
 
+### L3 城市模式贴图惰性加载（2026-08）
+
+- L3 首次打开 485ms 里，两张 8192 PNG 解码占 301ms（l1_index 158ms + city_preview 143ms）。把 `l3_city_preview_8192.png` 改为**惰性加载**：`L3WorldData.load_from` 不再加载，切到城市模式首次 `_draw` 时由 `L3MapRenderer._ensure_city_preview()` 按需加载并缓存到 `city_preview_texture`——首次打开 L3（默认 L1 模式）省 ~143ms，L1 模式打开/交互不受影响，城市模式首次切换才解码（一次性）
+
 ### L1 湖泊-陆地无缝 + Tab 跟随玩家当前 L1（2026-08）
 
 - **湖泊-陆地交界缝隙**：湖泊 mesh 与城市块 mesh 是**两套独立 extract**（湖从湖 mask 提、地块从城市划分提），交界处两套多边形边界不重合（0~2px 缝），且城市块直线边界 vs 湖弧线之间露缝。修复：`export_l1_view_context.py` **城市块湖边段顶点投影到湖泊 polygon 边**（地块边界"套用湖泊轮廓"，把地块填充到缝隙上；旋转使湖边段不跨数组起点 + 整段自交时从两端二分裁剪保留贴合段；自交检查局部化加速）；`map_renderer._bake_base_mesh` **湖泊最后画**（盖邻居/城市色块）——交界处由湖弧线决定，严丝合缝。已重跑出生 + 全部 69 个 `l1_packs`

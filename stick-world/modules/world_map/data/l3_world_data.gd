@@ -84,10 +84,9 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 		var tex: Texture2D = load(l1idx_path)
 		if tex != null:
 			world.l1_index_image = tex.get_image()
-	# 城市模式栅格贴图
-	var cityprev_path := "%s/l3_city_preview_8192.png" % base_dir
-	if ResourceLoader.exists(cityprev_path):
-		world.city_preview_texture = load(cityprev_path) as Texture2D
+	# 城市模式栅格贴图（l3_city_preview_8192.png）**惰性加载**：首次打开 L3（默认 L1 模式）
+	# 不解码这张 8192 PNG（省 ~143ms 加载）；切到城市模式时由 L3MapRenderer._ensure_city_preview()
+	# 按需加载并缓存到 city_preview_texture
 	for r in world.l1_tiles:
 		world._l1_by_label[int(r.get("label", 0))] = r
 	for r in world.city_tiles:

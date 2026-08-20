@@ -176,6 +176,16 @@ func _process(_delta: float) -> void:
 		queue_redraw()
 
 
+## 城市模式栅格贴图惰性加载：首次打开 L3（默认 L1 模式）不解码 8192 PNG，
+## 切到城市模式首次 _draw 时才加载并缓存到 _data（省 L3 打开 ~143ms）
+func _ensure_city_preview() -> void:
+	if _data == null or _data.city_preview_texture != null:
+		return
+	var p := "res://config/strategic_map/l3_city_preview_8192.png"
+	if ResourceLoader.exists(p):
+		_data.city_preview_texture = load(p) as Texture2D
+
+
 func _draw() -> void:
 	if _data == null:
 		return
@@ -183,6 +193,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), OCEAN_COLOR)
 	if display_mode == DisplayMode.MODE_CITY:
 		# 城市模式：直接贴 city_preview 栅格图（花花绿绿、零剖分、快）
+		_ensure_city_preview()
 		if _data.city_preview_texture != null:
 			draw_texture_rect(_data.city_preview_texture,
 				Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)

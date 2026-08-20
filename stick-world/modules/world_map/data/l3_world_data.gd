@@ -78,15 +78,12 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 			var city_data: Variant = JSON.parse_string(city_text)
 			if city_data is Dictionary:
 				world.city_tiles = city_data.get("tiles", [])
-	# 老 L1 索引图（hover 查询）
-	var l1idx_path := "%s/l3_l1_index_8192.png" % base_dir
-	if ResourceLoader.exists(l1idx_path):
-		var tex: Texture2D = load(l1idx_path)
-		if tex != null:
-			world.l1_index_image = tex.get_image()
-	# 城市模式栅格贴图（l3_city_preview_8192.png）**惰性加载**：首次打开 L3（默认 L1 模式）
-	# 不解码这张 8192 PNG（省 ~143ms 加载）；切到城市模式时由 L3MapRenderer._ensure_city_preview()
-	# 按需加载并缓存到 city_preview_texture
+	# 老 L1 索引图（hover 查询，l3_l1_index_8192.png）**异步加载**：8192 PNG 解码约
+	# 158ms，由 L3MapRenderer 在后台线程解码（Image.load_png_from_buffer，纯 CPU 线程安全），
+	# 完成前 query_l1_at_map_pos 因 l1_index_image 为 null 自然返回空（hover 静默），
+	# 就绪后自动生效——L3 首次打开不阻塞
+	# 城市模式栅格贴图（l3_city_preview_8192.png）**异步加载**：同样由 L3MapRenderer
+	# 后台线程解码（省 ~143ms）；切到城市模式首次 _draw 时启动，完成前城市模式短暂无底图
 	for r in world.l1_tiles:
 		world._l1_by_label[int(r.get("label", 0))] = r
 	for r in world.city_tiles:

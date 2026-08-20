@@ -40,10 +40,17 @@ var _l1_mesh: ArrayMesh = null
 var _l1_holes_mesh: ArrayMesh = null
 var _debug_was_visible: bool = false
 
+## 异步后台加载（8192 PNG 解码不阻塞主线程）：l1_index（hover 查询）+ city_preview（城市模式底图）
+var _l1_index_thread: Thread = null
+var _l1_index_result: Image = null
+var _city_preview_thread: Thread = null
+var _city_preview_result: Image = null
+
 
 func set_data(data: L3WorldData) -> void:
 	_data = data
 	_build_static_meshes()
+	_ensure_l1_index()
 	queue_redraw()
 
 
@@ -153,6 +160,7 @@ func _build_layer_mesh(tiles: Array) -> Array:
 
 
 func _process(_delta: float) -> void:
+	_poll_async_loads()
 	if not visible or _data == null:
 		return
 	var viewport := get_viewport()
@@ -176,14 +184,59 @@ func _process(_delta: float) -> void:
 		queue_redraw()
 
 
-## 城市模式栅格贴图惰性加载：首次打开 L3（默认 L1 模式）不解码 8192 PNG，
-## 切到城市模式首次 _draw 时才加载并缓存到 _data（省 L3 打开 ~143ms）
-func _ensure_city_preview() -> void:
-	if _data == null or _data.city_preview_texture != null:
+## 异步加载：老 L1 索引图（hover 查询用）——8192 PNG 后台线程解码（纯 CPU、线程安全），
+## 主线程零阻塞；完成前 query_l1_at_map_pos 因 l1_index_image 为 null 自然返回空（hover 静默）
+func _ensure_l1_index() -> void:
+	if _data == null or _data.l1_index_image != null or _l1_index_thread != null:
 		return
-	var p := "res://config/strategic_map/l3_city_preview_8192.png"
-	if ResourceLoader.exists(p):
-		_data.city_preview_texture = load(p) as Texture2D
+	_l1_index_thread = Thread.new()
+	_l1_index_thread.start(_load_l1_index_async)
+
+
+func _load_l1_index_async() -> void:
+	var f := FileAccess.open("res://config/strategic_map/l3_l1_index_8192.png", FileAccess.READ)
+	if f == null:
+		return
+	var img := Image.new()
+	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
+		_l1_index_result = img
+
+
+## 异步加载：城市模式栅格贴图——切到城市模式首次需要时后台解码（省 ~143ms 阻塞），
+## 完成前城市模式短暂无底图（下一帧自动补上）
+func _ensure_city_preview() -> void:
+	if _data == null or _data.city_preview_texture != null or _city_preview_thread != null:
+		return
+	_city_preview_thread = Thread.new()
+	_city_preview_thread.start(_load_city_preview_async)
+
+
+func _load_city_preview_async() -> void:
+	var f := FileAccess.open("res://config/strategic_map/l3_city_preview_8192.png", FileAccess.READ)
+	if f == null:
+		return
+	var img := Image.new()
+	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
+		_city_preview_result = img
+
+
+## 每帧检查后台线程：解码完成 → wait_to_finish + 取结果（ImageTexture 需主线程创建）
+func _poll_async_loads() -> void:
+	if _data == null:
+		return
+	if _l1_index_thread != null and not _l1_index_thread.is_alive():
+		_l1_index_thread.wait_to_finish()
+		_l1_index_thread = null
+		if _l1_index_result != null:
+			_data.l1_index_image = _l1_index_result
+			_l1_index_result = null
+	if _city_preview_thread != null and not _city_preview_thread.is_alive():
+		_city_preview_thread.wait_to_finish()
+		_city_preview_thread = null
+		if _city_preview_result != null:
+			_data.city_preview_texture = ImageTexture.create_from_image(_city_preview_result)
+			_city_preview_result = null
+			queue_redraw()
 
 
 func _draw() -> void:

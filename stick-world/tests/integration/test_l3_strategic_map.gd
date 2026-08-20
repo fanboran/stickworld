@@ -40,7 +40,14 @@ func _test_load() -> void:
 	if _renderer == null:
 		return
 	_data = L3WorldData.load_from(L3_JSON_PATH, L3_BASE_DIR)
-	_renderer.set_data(_data)
+	# l1_index 由 L3MapRenderer 后台异步解码（load_from 不阻塞，先为 null）；
+	# 测试同步注入等价结果（同一 PNG 解码），供 hover 查询用
+	_runner.assert_true(_data.l1_index_image == null, "l1_index 应异步加载（load_from 后为空）")
+	var l1_f := FileAccess.open("%s/l3_l1_index_8192.png" % L3_BASE_DIR, FileAccess.READ)
+	if l1_f != null:
+		var l1_img := Image.new()
+		if l1_img.load_png_from_buffer(l1_f.get_buffer(l1_f.get_length())) == OK:
+			_data.l1_index_image = l1_img
 	_runner.assert_true(_data.mask_image != null, "L3 分区索引图已加载")
 	_runner.assert_true(_data.regions.size() == 13, "应有 13 个地区（实测 %d）" % _data.regions.size())
 	_runner.assert_true(_data.l1_tiles.size() == 69,

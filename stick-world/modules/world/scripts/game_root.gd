@@ -760,6 +760,12 @@ func _open_placeholder_panel(preset_id: String) -> void:
 func _handle_escape() -> bool:
 	if input_dispatcher != null and input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS:
 		return false
+	# 战略图（Tab）打开时 ESC 先交给它：下钻返回 L2 / 关闭地图，不弹暂停菜单
+	if _strategic_map != null:
+		var sc: Node = _strategic_map.get_node_or_null("Content")
+		if sc != null and sc.visible and sc.has_method("handle_escape"):
+			sc.handle_escape()
+			return true
 	var stack := _get_modal_stack()
 	if stack != null and stack.handle_escape():
 		return true

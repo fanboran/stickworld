@@ -85,18 +85,27 @@ func _input(event: InputEvent) -> void:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			_handle_left_click(mb.position)
-	# ESC：从 L2 下钻进入则返回 L2；否则关闭战略图
+	# ESC：统一走 handle_escape（下钻返回 L2 / 关闭地图）；消费事件防止
+	# GameRoot 再收到后弹暂停菜单（GameRoot 也通过 handle_escape 分发，双路径互斥）
 	elif event is InputEventKey and event.pressed:
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_ESCAPE:
-			if _drill_from_l2:
-				_drill_from_l2 = false
-				visible = false
-				if _hud != null:
-					_hud.visible = false
-				back_requested.emit()
-			else:
-				close()
+			handle_escape()
+			get_viewport().set_input_as_handled()
+
+
+## ESC 语义（由 GameRoot._handle_escape 统一分发，战略图打开时优先于暂停菜单）：
+## 从 L2 下钻进入则返回 L2；否则关闭战略图
+func handle_escape() -> bool:
+	if _drill_from_l2:
+		_drill_from_l2 = false
+		visible = false
+		if _hud != null:
+			_hud.visible = false
+		back_requested.emit()
+	else:
+		close()
+	return true
 
 
 func _handle_left_click(screen_pos: Vector2) -> void:

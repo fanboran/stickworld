@@ -44,9 +44,6 @@ const BORDER_WIDTH := 2.5
 ## hover 描边（屏幕像素固定）
 const HOVER_COLOR := Color(0.55, 0.55, 0.55)
 const HOVER_WIDTH := 3.0
-## 湖泊轮廓描边宽度（地图单位固定）：盖住湖泊与城市块交界处 0~2px 的
-## 亚像素-像素级缝隙（两套独立 extract 的 mesh 边界不重合）——湖弧线成为权威边界
-const LAKE_EDGE_WIDTH := 2.0
 ## 城市中心标记点（小圆点 + 细环，屏幕像素固定；画在聚落位置，指示城市中心）
 const CITY_DOT_RADIUS := 3.0
 const CITY_DOT_RING_WIDTH := 1.0
@@ -130,12 +127,6 @@ func _draw() -> void:
 		_bake_base_mesh()
 	if _base_mesh != null:
 		draw_mesh(_base_mesh, null)
-		# 1.3 湖泊轮廓描边（湖色粗线，地图单位固定宽度）：湖 mesh 最后画盖住城市在湖边的
-		# 覆盖后，再沿湖 polygon 画一圈湖色线，盖住两套 mesh 边界不重合的缝隙（0~2px 地图）
-		for lake in _data.lakes:
-			var lp := _pts(lake)
-			if lp.size() >= 3:
-				draw_polyline(_closed(lp), LAKE_COLOR, LAKE_EDGE_WIDTH, true)
 	else:
 		# 回退：数据异常时逐层绘制
 		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)

@@ -56,18 +56,14 @@ var lakes: Array = []
 var _tile_by_id: Dictionary = {}
 
 
-## 从 JSON + PNG 加载 L1 世界数据
-## json_path: l1_world.json 的 res:// 路径
+## 从 JSON/紧凑 bin + PNG 加载 L1 世界数据
+## json_path: l1_world.json 的 res:// 路径（bin 优先：同名 .bin 原样序列化，见 _read_data_dict）
 ## base_dir: 含 l1_base.png / l1_mask.png 的目录（res:// 路径，末尾无斜杠）
 static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	var world := L1WorldData.new()
-	var json_text := FileAccess.get_file_as_string(json_path)
-	if json_text.is_empty():
-		push_error("[L1WorldData] 无法读取 %s" % json_path)
-		return world
-	var data: Variant = JSON.parse_string(json_text)
-	if data == null or not (data is Dictionary):
-		push_error("[L1WorldData] JSON 解析失败: %s" % json_path)
+	var data := _read_data_dict(json_path)
+	if data.is_empty():
+		push_error("[L1WorldData] 无法读取/解析 %s" % json_path)
 		return world
 
 	world.map_id = data.get("map_id", "l1_main")
@@ -214,3 +210,26 @@ static func _polygon_from(arr: Array) -> PackedVector2Array:
 		if pt is Array and pt.size() >= 2:
 			poly.append(Vector2(float(pt[0]), float(pt[1])))
 	return poly
+
+
+## 读取 l1_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，原样序列化——L1 顶点序
+## [x,y] 与 L2/L3 不同，polygon 保持 Array，构造逻辑 _polygon_from 不变）；
+## bin 缺失/格式不符（Godot 升级等）自动回退 JSON。
+static func _read_data_dict(json_path: String) -> Dictionary:
+	var bin_path := json_path.get_basename() + ".bin"
+	if FileAccess.file_exists(bin_path):
+		var f := FileAccess.open(bin_path, FileAccess.READ)
+		if f != null:
+			var magic := f.get_buffer(4).get_string_from_ascii()
+			if magic == "LWDB":
+				f.get_16()  # ver
+				var got: Variant = bytes_to_var(f.get_buffer(f.get_length()))
+				if got is Dictionary:
+					return got
+	var jt := FileAccess.get_file_as_string(json_path)
+	if jt.is_empty():
+		return {}
+	var parsed: Variant = JSON.parse_string(jt)
+	if parsed is Dictionary:
+		return parsed
+	return {}

@@ -35,16 +35,12 @@ var size: int = 0
 var _region_by_label: Dictionary = {}
 
 
-## 从 JSON + PNG 加载
+## 从 JSON/紧凑 bin + PNG 加载（bin 优先，见 _read_data_dict）
 static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 	var world := L3WorldData.new()
-	var json_text := FileAccess.get_file_as_string(json_path)
-	if json_text.is_empty():
-		push_error("[L3WorldData] 无法读取 %s" % json_path)
-		return world
-	var data: Variant = JSON.parse_string(json_text)
-	if data == null or not (data is Dictionary):
-		push_error("[L3WorldData] JSON 解析失败: %s" % json_path)
+	var data := _read_data_dict(json_path)
+	if data.is_empty():
+		push_error("[L3WorldData] 无法读取/解析 %s" % json_path)
 		return world
 
 	world.size = int(data.get("size", 8192))
@@ -62,22 +58,18 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 		world._region_by_label[int(r.get("label", 0))] = r
 	for sd in (data.get("sea_links", []) as Array):
 		world.sea_links.append(sd)
-	# 老 L1 视觉层（可选加载，不影响 L2 交互）
+	# 老 L1 视觉层（可选加载，不影响 L2 交互；bin 优先）
 	var l1_path := "%s/l3_l1.json" % base_dir
 	if FileAccess.file_exists(l1_path):
-		var l1_text := FileAccess.get_file_as_string(l1_path)
-		if not l1_text.is_empty():
-			var l1_data: Variant = JSON.parse_string(l1_text)
-			if l1_data is Dictionary:
-				world.l1_tiles = l1_data.get("tiles", [])
-	# 城市视觉层（可选；L3"模式:城市"用）
+		var l1_data := _read_data_dict(l1_path)
+		if not l1_data.is_empty():
+			world.l1_tiles = l1_data.get("tiles", [])
+	# 城市视觉层（可选；L3"模式:城市"用；bin 优先）
 	var city_path := "%s/l3_city.json" % base_dir
 	if FileAccess.file_exists(city_path):
-		var city_text := FileAccess.get_file_as_string(city_path)
-		if not city_text.is_empty():
-			var city_data: Variant = JSON.parse_string(city_text)
-			if city_data is Dictionary:
-				world.city_tiles = city_data.get("tiles", [])
+		var city_data := _read_data_dict(city_path)
+		if not city_data.is_empty():
+			world.city_tiles = city_data.get("tiles", [])
 	# 老 L1 索引图（hover 查询，l3_l1_index_8192.png）**异步加载**：8192 PNG 解码约
 	# 158ms，由 L3MapRenderer 在后台线程解码（Image.load_png_from_buffer，纯 CPU 线程安全），
 	# 完成前 query_l1_at_map_pos 因 l1_index_image 为 null 自然返回空（hover 静默），
@@ -137,3 +129,77 @@ func get_l1(label: int) -> Dictionary:
 func get_region_color(_label: int) -> Color:
 	# 从 mask 采样该地区的一个像素取色（无独立色表）
 	return Color(0.6, 0.8, 1.0)
+
+
+## 读取 l*_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，见 tools/worldgen/l_world_bake.gd），
+## bin 缺失/格式不符（Godot 升级等）自动回退 JSON。JSON 回退时把 polygon 顶点统一转成
+## PackedVector2Array(Vector2(x,y))，与 bin 产物一致（下游只面对一种形态）。
+static func _read_data_dict(json_path: String) -> Dictionary:
+	var bin_path := json_path.get_basename() + ".bin"
+	if FileAccess.file_exists(bin_path):
+		var f := FileAccess.open(bin_path, FileAccess.READ)
+		if f != null:
+			var magic := f.get_buffer(4).get_string_from_ascii()
+			if magic == "LWDB":
+				f.get_16()  # ver
+				var got: Variant = bytes_to_var(f.get_buffer(f.get_length()))
+				if got is Dictionary:
+					return got
+	var jt := FileAccess.get_file_as_string(json_path)
+	if jt.is_empty():
+		return {}
+	var parsed: Variant = JSON.parse_string(jt)
+	if parsed is Dictionary:
+		return _compact_dict(parsed)
+	return {}
+
+
+## JSON 回退时统一 polygon 顶点形态（bin 已紧凑，此转换幂等）
+static func _compact_dict(d: Dictionary) -> Dictionary:
+	if d.has("regions"):
+		var regions := []
+		for r in (d["regions"] as Array):
+			var rd: Dictionary = r
+			for f in ["land_polygon", "land_polygons", "land_holes", "full_polygon"]:
+				if rd.has(f):
+					rd[f] = _compact_poly(rd[f], f)
+			regions.append(rd)
+		d["regions"] = regions
+	if d.has("tiles"):
+		var tiles := []
+		for t in (d["tiles"] as Array):
+			var td: Dictionary = t
+			_compact_tile_polys(td)
+			tiles.append(td)
+		d["tiles"] = tiles
+	return d
+
+
+static func _compact_poly(poly: Variant, f: String) -> Variant:
+	var single := f in ["land_polygon", "full_polygon"]
+	if poly is Array and (poly as Array).size() > 0 and (poly as Array)[0] is Array:
+		return _to_vec2(poly)
+	if single and poly is Array and (poly as Array).size() > 0:
+		return _to_vec2(poly)
+	return poly
+
+
+static func _compact_tile_polys(td: Dictionary) -> void:
+	if td.has("polygon") and (td["polygon"] is Array):
+		td["polygon"] = _to_vec2(td["polygon"])
+	for f in ["polygons", "holes"]:
+		if td.has(f) and (td[f] is Array) and (td[f] as Array).size() > 0 \
+				and ((td[f] as Array)[0] is Array):
+			var arr := []
+			for poly in (td[f] as Array):
+				arr.append(_to_vec2(poly))
+			td[f] = arr
+
+
+static func _to_vec2(poly: Array) -> PackedVector2Array:
+	var arr := PackedVector2Array()
+	arr.resize(poly.size())
+	for i in poly.size():
+		var p: Array = poly[i]
+		arr[i] = Vector2(float(p[1]), float(p[0]))  # json [y,x] → Vector2(x,y)
+	return arr

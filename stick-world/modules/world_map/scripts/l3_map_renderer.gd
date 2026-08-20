@@ -108,11 +108,11 @@ func _build_layer_mesh(tiles: Array) -> Array:
 		if col.size() >= 3:
 			fill = Color(col[0] / 255.0, col[1] / 255.0, col[2] / 255.0)
 		for poly in t.get("polygons", []):
-			if (poly as Array).size() < 3:
+			if poly.size() < 3:
 				continue
 			var pts2 := PackedVector2Array()
 			for p in poly:
-				pts2.append(Vector2(p[1], p[0]))
+				pts2.append(p if p is Vector2 else Vector2(p[1], p[0]))
 			var tri := Geometry2D.triangulate_polygon(pts2)
 			if tri.is_empty():
 				continue
@@ -124,11 +124,11 @@ func _build_layer_mesh(tiles: Array) -> Array:
 				indices.append(base + idx)
 		# 洞
 		for hole in t.get("holes", []):
-			if (hole as Array).size() < 3:
+			if hole.size() < 3:
 				continue
 			var hpts := PackedVector2Array()
 			for p in hole:
-				hpts.append(Vector2(p[1], p[0]))
+				hpts.append(p if p is Vector2 else Vector2(p[1], p[0]))
 			var htri := Geometry2D.triangulate_polygon(hpts)
 			if htri.is_empty():
 				continue
@@ -270,11 +270,11 @@ func _draw_l2_borders() -> void:
 	var bw := BORDER_WIDTH()
 	for r in _data.regions:
 		for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
-			if (poly as Array).size() < 3:
+			if poly.size() < 3:
 				continue
 			var bpts := PackedVector2Array()
 			for pp in poly:
-				bpts.append(Vector2(pp[1], pp[0]))
+				bpts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
 			bpts.append(bpts[0])
 			draw_polyline(bpts, L2_BORDER_COLOR, bw, true)
 
@@ -293,11 +293,11 @@ func _draw_hover_l1() -> void:
 		return
 	var hpolys: Array = hovered_l1.get("polygons", [])
 	for hp in hpolys:
-		if (hp as Array).size() < 3:
+		if hp.size() < 3:
 			continue
 		var hpts := PackedVector2Array()
 		for pp in hp:
-			hpts.append(Vector2(pp[1], pp[0]))
+			hpts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
 		hpts.append(hpts[0])
 		var hw := HOVER_MAP_WIDTH
 		if _camera != null and _camera.has_method("get_zoom"):

@@ -179,11 +179,11 @@ func _draw() -> void:
 	# 7. hover 地块轮廓描边（灰，最上层；固定屏幕像素粗细，不随缩放）
 	var hpolys: Array = hovered_tile.get("polygons", [hovered_tile.get("polygon", [])])
 	for hp in hpolys:
-		if (hp as Array).size() < 3:
+		if hp.size() < 3:
 			continue
 		var hpts := PackedVector2Array()
 		for pp in hp:
-			hpts.append(Vector2(pp[1], pp[0]))
+			hpts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
 		hpts.append(hpts[0])
 		var hw := TILE_BORDER_WIDTH + HOVER_MARGIN
 		if _camera != null and _camera.has_method("get_zoom"):

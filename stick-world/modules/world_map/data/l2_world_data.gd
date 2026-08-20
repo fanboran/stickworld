@@ -50,16 +50,12 @@ var city_preview_texture: Texture2D = null
 var _tile_by_label: Dictionary = {}
 
 
-## 从 JSON + PNG 加载
+## 从 JSON/紧凑 bin + PNG 加载（bin 优先，见 _read_data_dict）
 static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	var world := L2WorldData.new()
-	var json_text := FileAccess.get_file_as_string(json_path)
-	if json_text.is_empty():
-		push_error("[L2WorldData] 无法读取 %s" % json_path)
-		return world
-	var data: Variant = JSON.parse_string(json_text)
-	if data == null or not (data is Dictionary):
-		push_error("[L2WorldData] JSON 解析失败: %s" % json_path)
+	var data := _read_data_dict(json_path)
+	if data.is_empty():
+		push_error("[L2WorldData] 无法读取/解析 %s" % json_path)
 		return world
 
 	world.region_id = str(data.get("region_id", ""))
@@ -176,3 +172,66 @@ func _read_border_section(f: FileAccess) -> Array:
 		var line := PackedVector2Array([a, b])
 		out.append(line)
 	return out
+
+
+## 读取 l*_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，见 tools/worldgen/l_world_bake.gd），
+## bin 缺失/格式不符（Godot 升级等）自动回退 JSON。JSON 回退时把 polygon 顶点统一转成
+## PackedVector2Array(Vector2(x,y))，与 bin 产物一致（下游只面对一种形态）。
+static func _read_data_dict(json_path: String) -> Dictionary:
+	var bin_path := json_path.get_basename() + ".bin"
+	if FileAccess.file_exists(bin_path):
+		var f := FileAccess.open(bin_path, FileAccess.READ)
+		if f != null:
+			var magic := f.get_buffer(4).get_string_from_ascii()
+			if magic == "LWDB":
+				f.get_16()  # ver
+				var got: Variant = bytes_to_var(f.get_buffer(f.get_length()))
+				if got is Dictionary:
+					return got
+	var jt := FileAccess.get_file_as_string(json_path)
+	if jt.is_empty():
+		return {}
+	var parsed: Variant = JSON.parse_string(jt)
+	if parsed is Dictionary:
+		return _compact_dict(parsed)
+	return {}
+
+
+## JSON 回退时统一 polygon 顶点形态（bin 已紧凑，此转换幂等）
+static func _compact_dict(d: Dictionary) -> Dictionary:
+	if d.has("tiles"):
+		var tiles := []
+		for t in (d["tiles"] as Array):
+			var td: Dictionary = t
+			if td.has("polygon") and (td["polygon"] is Array):
+				td["polygon"] = _to_vec2(td["polygon"])
+			for f in ["polygons", "holes"]:
+				if td.has(f) and (td[f] is Array) and (td[f] as Array).size() > 0 \
+						and ((td[f] as Array)[0] is Array):
+					var arr := []
+					for poly in (td[f] as Array):
+						arr.append(_to_vec2(poly))
+					td[f] = arr
+			tiles.append(td)
+		d["tiles"] = tiles
+	for f in ["neighbors", "lakes"]:
+		if d.has(f):
+			d[f] = _compact_poly_list(d[f])
+	return d
+
+
+static func _compact_poly_list(arr: Variant) -> Array:
+	var out := []
+	for poly in (arr as Array):
+		if poly is Array and (poly as Array).size() > 0 and (poly as Array)[0] is Array:
+			out.append(_to_vec2(poly))
+	return out
+
+
+static func _to_vec2(poly: Array) -> PackedVector2Array:
+	var arr := PackedVector2Array()
+	arr.resize(poly.size())
+	for i in poly.size():
+		var p: Array = poly[i]
+		arr[i] = Vector2(float(p[1]), float(p[0]))  # json [y,x] → Vector2(x,y)
+	return arr

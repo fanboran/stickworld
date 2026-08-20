@@ -58,7 +58,7 @@ func _test_load() -> void:
 	# 每个地区应有陆地轮廓
 	var no_poly: int = 0
 	for r in _data.regions:
-		if (r.get("land_polygon", []) as Array).size() < 3:
+		if r.get("land_polygon", []).size() < 3:
 			no_poly += 1
 	_runner.assert_true(no_poly == 0, "所有地区应有陆地轮廓（缺失 %d）" % no_poly)
 
@@ -72,11 +72,12 @@ func _test_query() -> void:
 	var checked: int = 0
 	for r in _data.regions:
 		var lab: int = r.get("label", 0)
-		var land_poly: Array = r.get("land_polygon", [])
+		var land_poly = r.get("land_polygon", [])
 		if land_poly.size() < 3:
 			continue
 		# 轮廓点是 (y,x) 顺序（find_contours），转为 (x,y) 并内移取陆地像素
-		var pt := Vector2(land_poly[0][1], land_poly[0][0]) + Vector2(4, 4)
+		# （紧凑 bin 已是 Vector2(x,y)，_pt 兼容两种形态）
+		var pt := _pt(land_poly[0]) + Vector2(4, 4)
 		var q: Dictionary = _data.query_at_map_pos(pt)
 		var region: Variant = q.get("region", {})
 		checked += 1
@@ -99,15 +100,15 @@ func _test_links() -> void:
 	var with_full: int = 0
 	var valid_full: int = 0
 	for r in _data.regions:
-		var full: Array = r.get("full_polygon", [])
+		var full = r.get("full_polygon", [])
 		if full.size() >= 3:
 			with_full += 1
 			# 非边缘段应连续（允许沿地图边缘的大跳变，渲染时断段处理）
 			var jumps: int = 0
 			for i in range(full.size()):
-				var a: Array = full[i]
-				var b: Array = full[(i + 1) % full.size()]
-				var d := Vector2(a[0], a[1]).distance_to(Vector2(b[0], b[1]))
+				var a: Variant = full[i]
+				var b: Variant = full[(i + 1) % full.size()]
+				var d := _pt(a).distance_to(_pt(b))
 				if d > 60.0:
 					jumps += 1
 			if jumps <= 2:
@@ -161,6 +162,15 @@ func _test_debug_labels() -> void:
 		DebugApi.set_overlay_visible(was_visible)
 	await get_tree().process_frame
 	_runner.assert_true(true, "F3 L2 标签路径无异常")
+
+
+## 顶点统一转 Vector2（紧凑 bin 已是 Vector2(x,y)；JSON 轮廓是 [y,x] Array，兼容两种）
+static func _pt(v: Variant) -> Vector2:
+	if v is Vector2:
+		return v
+	if v is Array and v.size() >= 2:
+		return Vector2(float(v[1]), float(v[0]))
+	return Vector2.ZERO
 
 
 func _test_toggle() -> void:

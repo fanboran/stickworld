@@ -8,6 +8,15 @@
 
 ## [未发布]
 
+### 全盘数据紧致化：战略图 JSON → 紧凑 bin（2026-08）
+
+- 运行时读取的 L1/L2/L3 `l*_world.json` 全部烘焙成同名紧凑 `.bin`（magic `LWDB` + `var_to_bytes`，工具 `tools/worldgen/l_world_bake.gd`，86 个 bin）
+- **L2/L3**：polygon 顶点 `[y,x]` Array → `PackedVector2Array(Vector2(x,y))`，省逐点 Array 构造 + 体积省 ~32%；渲染端统一只面对 PackedVector2Array（下游 5 处适配）
+- **L1**：原样序列化（polygon 保持 Array，构造逻辑不变）
+- data 类 **bin 优先**、bin 缺失/格式不符（Godot 升级）自动回退 JSON（json 回退路径已测：L2 7/7、L3 8/8）
+- **实测加载耗时**：L3 打开 162ms → 33ms（快 5 倍，含异步 PNG 后总 485→33ms）；L2 region_008 365 → 278ms；L1 各省 15-30ms
+- **验证**：P0 9/9、L2 7/7、L3 8/8、全量 26/27（1 项预存无关失败）
+
 ### Tab 战略图开关修复（2026-08）
 
 - **Tab 再按一次关闭地图**：`map_boundary_detector` 的 Tab 原来只发"打开"信号（`open_world_map_requested`）→ `system_setup._open_strategic_map` 只开不关。改为 **toggle**：已打开（Content.visible）则 `close()` + 恢复场景图输入，否则 `open()` + 暂停输入

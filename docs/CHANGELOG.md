@@ -8,6 +8,12 @@
 
 ## [未发布]
 
+### Tab 战略图开关修复（2026-08）
+
+- **Tab 再按一次关闭地图**：`map_boundary_detector` 的 Tab 原来只发"打开"信号（`open_world_map_requested`）→ `system_setup._open_strategic_map` 只开不关。改为 **toggle**：已打开（Content.visible）则 `close()` + 恢复场景图输入，否则 `open()` + 暂停输入
+- **ESC 应先关地图而不是弹暂停菜单**：模态栈统一后 ESC 由 `GameRoot._handle_escape` 分发（无模态 → 开暂停菜单），战略图打开时 ESC 被菜单吞掉。改为：`StrategicMapController` 增加 `handle_escape()`（下钻中 → 返回 L2，否则 `close()`），`GameRoot._handle_escape` 战略图打开时先交给它（不弹菜单）；`_input` 的 ESC 分支统一走 `handle_escape` + 消费事件（双路径互斥）
+- **验证**：P0 9/9、L2 7/7、L3 8/8、esc/modal/ui_layout 全过、全量 27/28（1 项预存无关失败）
+
 ### L3 8192 PNG 后台线程异步解码（2026-08）
 
 - L3 首次打开 485ms 里，两张 8192 PNG 解码占 301ms（l1_index 158ms + city_preview 143ms）。改为 **`L3MapRenderer` 后台线程解码**（`Image.load_png_from_buffer`，纯 CPU 线程安全）：`L3WorldData.load_from` 不再加载这两张图，`set_data` 后 `_ensure_l1_index()` 启动后台解码（hover 图就绪前 `query_l1_at_map_pos` 因 `l1_index_image` 为 null 自然返回空，hover 静默），切城市模式首次 `_draw` 时 `_ensure_city_preview()` 后台解码；`_process` 每帧 poll 线程完成 → 主线程收尾（`ImageTexture.create_from_image` 需主线程）。**首次打开 485ms → 175ms**（省 310ms，无损、8192 精度不降、主线程零阻塞）。未采用 GPU 压缩格式：l1_index 是 label 直编必须无损 + 需 CPU 查像素，city_preview 是上千小色块（BC 有损会出块状伪影）

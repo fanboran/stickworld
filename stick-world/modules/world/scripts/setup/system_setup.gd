@@ -560,7 +560,13 @@ func _open_strategic_map() -> void:
 		return
 	# 战略图是 CanvasLayer，控制器在 Content 子节点（visible 控制全层显隐）
 	var content: Node = _root._strategic_map.get_node_or_null("Content")
-	if content != null and content.has_method("open"):
+	if content == null or not content.has_method("open"):
+		return
+	if content.visible:
+		# 再按 Tab：关闭地图（恢复场景图输入）
+		content.close()
+		_pause_scene_input(false)
+	else:
 		content.open()
 		_pause_scene_input(true)
 

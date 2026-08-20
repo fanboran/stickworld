@@ -8,9 +8,9 @@
 
 ## [未发布]
 
-### L3 城市模式贴图惰性加载（2026-08）
+### L3 8192 PNG 后台线程异步解码（2026-08）
 
-- L3 首次打开 485ms 里，两张 8192 PNG 解码占 301ms（l1_index 158ms + city_preview 143ms）。把 `l3_city_preview_8192.png` 改为**惰性加载**：`L3WorldData.load_from` 不再加载，切到城市模式首次 `_draw` 时由 `L3MapRenderer._ensure_city_preview()` 按需加载并缓存到 `city_preview_texture`——首次打开 L3（默认 L1 模式）省 ~143ms，L1 模式打开/交互不受影响，城市模式首次切换才解码（一次性）
+- L3 首次打开 485ms 里，两张 8192 PNG 解码占 301ms（l1_index 158ms + city_preview 143ms）。改为 **`L3MapRenderer` 后台线程解码**（`Image.load_png_from_buffer`，纯 CPU 线程安全）：`L3WorldData.load_from` 不再加载这两张图，`set_data` 后 `_ensure_l1_index()` 启动后台解码（hover 图就绪前 `query_l1_at_map_pos` 因 `l1_index_image` 为 null 自然返回空，hover 静默），切城市模式首次 `_draw` 时 `_ensure_city_preview()` 后台解码；`_process` 每帧 poll 线程完成 → 主线程收尾（`ImageTexture.create_from_image` 需主线程）。**首次打开 485ms → 175ms**（省 310ms，无损、8192 精度不降、主线程零阻塞）。未采用 GPU 压缩格式：l1_index 是 label 直编必须无损 + 需 CPU 查像素，city_preview 是上千小色块（BC 有损会出块状伪影）
 
 ### L1 湖泊-陆地无缝 + Tab 跟随玩家当前 L1（2026-08）
 

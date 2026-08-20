@@ -25,6 +25,7 @@ context = 出生 L1 贴近裁剪正方形（默认边距 45，地块近距离特
 """
 import argparse
 import json
+import math
 import os
 import sys
 
@@ -70,6 +71,158 @@ def mst(pts):
 def to_xy(ring):
     """mesh_extract 返回 (y,x) 角点 -> 数据格式 (x,y) 浮点。"""
     return [[float(p[1]), float(p[0])] for p in ring]
+
+
+def _proj_pt_seg(v, a, b):
+    """点 v 到线段 ab 的垂足投影（(x,y) 坐标）"""
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    L2 = dx * dx + dy * dy
+    if L2 < 1e-9:
+        return (ax, ay)
+    t = max(0.0, min(1.0, ((v[0] - ax) * dx + (v[1] - ay) * dy) / L2))
+    return (ax + t * dx, ay + t * dy)
+
+
+def _segs_intersect(p1, p2, p3, p4):
+    """两线段是否严格相交（(x,y) 坐标）"""
+    def ccw(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    d1, d2 = ccw(p1, p2, p3), ccw(p1, p2, p4)
+    d3, d4 = ccw(p3, p4, p1), ccw(p3, p4, p2)
+    return ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0))
+
+
+def _self_intersects(poly):
+    """多边形是否自交（(x,y) 顶点列表）"""
+    n = len(poly)
+    for i in range(n):
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1:
+                continue
+            if _segs_intersect(poly[i], poly[(i + 1) % n], poly[j], poly[(j + 1) % n]):
+                return True
+    return False
+
+
+def _self_intersects_local(poly, check_edges):
+    """只检查指定边（索引列表）与多边形其他边的交叉——湖边段投影只改变局部边，
+    原多边形其余边之间已知不相交，故可跳过，比全量 O(n²) 快一个量级。"""
+    n = len(poly)
+    cs = set(check_edges)
+    for ei in check_edges:
+        if ei >= n:
+            continue
+        p1 = poly[ei % n]
+        p2 = poly[(ei + 1) % n]
+        for j in range(n):
+            if j == ei or (j + 1) % n == ei or (ei + 1) % n == j:
+                continue  # 自身/相邻边
+            if j in cs and j < ei:
+                continue  # 变化的边之间只查一次（j > ei 时会覆盖）
+            if _segs_intersect(p1, p2, poly[j], poly[(j + 1) % n]):
+                return True
+    return False
+
+
+def _fill_lake_edge(poly, lakes, tol=4.0):
+    """湖边段顶点投影到湖泊 polygon 边——地块边界"套用湖泊轮廓"，
+    填充地块与湖泊交界处两套 mesh 边界不重合的缝隙（0~2px）。
+    投影**所有**连续湖边段；整段投影自交时**从两端二分裁剪**（保留中间贴合段），
+    彻底自交则跳过该段（保留缝隙而非破坏多边形）。"""
+    n = len(poly)
+    if n < 4 or not lakes:
+        return poly, False
+    segs = []
+    for lk in lakes:
+        for j in range(len(lk)):
+            segs.append((lk[j], lk[(j + 1) % len(lk)]))
+    def proj(v):
+        best = None
+        bd = 1e18
+        for a, b in segs:
+            p = _proj_pt_seg(v, a, b)
+            d = math.hypot(p[0] - v[0], p[1] - v[1])
+            if d < bd:
+                bd, best = d, p
+        return best, bd
+    marks = [proj(v)[1] < tol for v in poly]
+    if not any(marks):
+        return poly, False
+    # 旋转：以非湖边顶点为起点，使湖边段不跨数组 0 点
+    #（湖边段跨 0 时投影会把索引 0 顶点移动，导致多边形闭合处自交）
+    non_mark = [i for i in range(n) if not marks[i]]
+    if not non_mark:
+        return poly, False
+    p0 = non_mark[0]
+    rot = poly[p0:] + poly[:p0]
+    marks_rot = marks[p0:] + marks[:p0]
+    # 分组所有连续湖边段（旋转后不跨 0）
+    groups = []
+    i = 0
+    while i < n:
+        if marks_rot[i]:
+            j = i
+            while j < n and marks_rot[j]:
+                j += 1
+            groups.append(list(range(i, j)))
+            i = j
+        else:
+            i += 1
+    newp = [list(v) for v in rot]
+    changed = False
+    for g in groups:
+        if len(g) < 3:
+            continue
+        # 局部自交检查：投影只改变湖边段内边 + 两端连接边
+        def check(t, lo2, hi2):
+            if hi2 - lo2 < 3:
+                return False
+            edges = list(g[lo2:hi2 - 1])
+            edges.append((g[lo2] - 1) % n)   # 段起点连接边
+            edges.append(g[hi2 - 1])         # 段终点连接边
+            return not _self_intersects_local(t, edges)
+        lo, hi = 0, len(g)
+        trial = None
+        # 二分裁剪：整段投影自交则从两端去顶点，直到找到不自交的贴合段
+        while hi - lo >= 4 and trial is None:
+            t = [list(v) for v in newp]
+            for idx in g[lo:hi]:
+                t[idx] = proj(rot[idx])[0]
+            if check(t, lo, hi):
+                trial = t
+                break
+            t1 = [list(v) for v in newp]
+            for idx in g[lo:hi - 1]:
+                t1[idx] = proj(rot[idx])[0]
+            if check(t1, lo, hi - 1):
+                trial = t1
+                hi -= 1
+                break
+            t2 = [list(v) for v in newp]
+            for idx in g[lo + 1:hi]:
+                t2[idx] = proj(rot[idx])[0]
+            if check(t2, lo + 1, hi):
+                trial = t2
+                lo += 1
+                break
+            lo += 1
+            hi -= 1
+        if trial is not None:
+            newp = trial
+            changed = True
+        # 该段彻底自交则跳过（保留原样）
+    if not changed:
+        return poly, False
+    # 去相邻重复点（投影可能让相邻顶点落到同一边上）
+    dedup = []
+    for v in newp:
+        if not dedup or math.hypot(v[0] - dedup[-1][0], v[1] - dedup[-1][1]) > 0.5:
+            dedup.append(v)
+    if len(dedup) >= 4 and dedup[0] != dedup[-1]:
+        return dedup, True
+    return poly, False
 
 
 def _area_xy(ring):
@@ -211,9 +364,16 @@ def main():
             outs = sorted(outs, key=_area_xy, reverse=True)
         level = 3 if city_area[c["label"]] > 1500 else (2 if city_area[c["label"]] > 600 else 1)
         pos = city_pos[c["label"]]
+        main_outer = outs[0] if outs else []
+        # 湖边段投影到湖轮廓：地块填充与湖泊交界的缝隙（套用湖轮廓，严丝合缝）
+        if main_outer and lakes:
+            filled, changed = _fill_lake_edge(main_outer, lakes)
+            if changed:
+                outs[0] = filled
+                main_outer = filled
         tiles.append({
             "tile_id": "city_%03d" % c["label"],
-            "polygon": outs[0] if outs else [],
+            "polygon": main_outer,
             "polygons": outs,
             "area_px": city_area[c["label"]],
             "owner_state_id": "state_%03d" % c["label"],

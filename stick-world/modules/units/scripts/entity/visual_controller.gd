@@ -59,6 +59,14 @@ func _on_rig_anim_finished(anim_name: String) -> void:
 		if _entity == null or _entity._action_locked:
 			return
 		play("idle")
+	elif anim_name == "block":
+		# 格挡动画播完按当前速度回 walk/idle
+		if _entity == null or _entity._action_locked:
+			return
+		if _entity._current_speed > IDLE_THRESHOLD:
+			play("walk")
+		else:
+			play("idle")
 
 
 # ─────────────────────────────── 动画播放 ────────────────────────────────

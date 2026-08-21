@@ -9,4 +9,4 @@ scale = Vector2(0.26, 0.26)
 texture = ExtResource("1_tex")
 
 [node name="GripPoint" type="Marker2D" parent="."]
-position = Vector2(0, 185.0)
+position = Vector2(0, 150.0)

@@ -135,7 +135,7 @@ func _test_out_of_range() -> void:
 	_runner.assert_equal(result.get("reason", ""), "out_of_range", "应拒绝为 out_of_range")
 
 
-## 挥砍：攻击后武器旋转发生变化（Tween 推进后）
+## 挥砍：攻击后武器跟随手臂动画移动（剑挂 hand_inner 骨骼，attack 动画驱动）
 func _test_swing_rotation() -> void:
 	var atk: Node = _helper.units[0]
 	var def: Node = _helper.units[1]
@@ -154,13 +154,17 @@ func _test_swing_rotation() -> void:
 	wm.update_cooldown(10.0)
 	def.global_position = atk.global_position + Vector2(50, 0)
 	await get_tree().process_frame
-	var rot_before: float = sword.rotation
+	var pos_before: Vector2 = sword.global_position
 	wm.perform_attack(def)
-	# 挥砍是 Tween 异步推进：等待数帧后检查旋转已偏离
-	for i in 3:
+	# 触发攻击动画（Swordwrath-Attack1 转译）驱动手臂挥砍，剑挂手骨骼跟随移动
+	if atk.has_method("play_attack"):
+		atk.play_attack()
+	# 动画异步推进：等待数帧后检查剑已跟随手臂移动（而非 Tween 自转）
+	for i in 6:
 		await get_tree().process_frame
-	var rot_after: float = sword.rotation
-	_runner.assert_true(absf(rot_after - rot_before) > 0.01, "攻击后武器旋转应变化（挥砍），before=%f after=%f" % [rot_before, rot_after])
+	var pos_after: Vector2 = sword.global_position
+	_runner.assert_true(pos_before.distance_to(pos_after) > 2.0,
+		"攻击后武器应跟随手臂动画挥砍移动，before=%s after=%s" % [pos_before, pos_after])
 
 
 ## 冷却：攻击后立即再攻被拒绝

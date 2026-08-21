@@ -32,6 +32,15 @@ const ANIM_SPEED_MULT: float = 1.4
 const IDLE_THRESHOLD: float = 5.0
 ## 火柴人渲染缩放（对齐 stickman_test.BASE_SCALE * 1.5，适配 DESIGN_HEIGHT=1080）
 const BASE_SCALE: float = 0.5
+## 主手武器类型 -> 攻击动画名（对应 WeaponMount.WeaponType 顺序：
+## 0=SWORD 1=SPEAR 2=BOW 3=PICKAXE 4=STAFF）
+const WEAPON_ATTACK_ANIM: Dictionary = {
+	0: "attack",          # SWORD：剑挥砍（Swordwrath-Attack1）
+	1: "attack_spear",    # SPEAR：矛刺（Spearton-Attack1）
+	2: "attack_bow",      # BOW：拉弓（Archidon-Draw）
+	3: "attack_pickaxe",  # PICKAXE：镐挥（Miner-Attack1）
+	4: "attack_staff",    # STAFF：法杖施法（Magikill-Spell1）
+}
 
 ## 视觉控制器组件脚本（动画播放/头顶进度条）
 const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/entity/visual_controller.gd")
@@ -99,6 +108,7 @@ var _formation_system: Node = null
 var rig: Node2D = null
 ## IK markers 父节点引用
 var _markers_parent: Node2D = null
+## IK markers 父节点引用
 ## 当前速度（标量，px/s）
 var _current_speed: float = 0.0
 ## 是否在奔跑
@@ -125,6 +135,12 @@ var _knockback_velocity: Vector2 = Vector2.ZERO
 const KNOCKBACK_DECAY: float = 700.0
 ## 受击红闪 Tween（中断旧闪烁）
 var _hurt_tween: Tween = null
+## 受击硬直剩余时间（秒，>0 时 AI 停止行动；行业最佳实践 hit stun）
+var _hit_stun_timer: float = 0.0
+## 受击硬直时长（秒）
+const HIT_STUN_DURATION: float = 0.2
+## 脱离战斗士气恢复速率（每秒；AI 完善批次 3）
+const REST_MORALE_REGEN: float = 4.0
 
 # ─────────────────────────────── 群体分离（防叠人/1字长蛇）────────────────────────────────
 ## 分离检测半径（px）：与友军/任何单位过近时互相推开
@@ -248,6 +264,7 @@ func _ready() -> void:
 	# 战斗组件：死亡信号连接
 	if health_component != null:
 		health_component.died.connect(_on_died)
+		health_component.damaged.connect(_on_damaged)
 
 
 ## 从 BalanceConfig 读取兵种数值并覆盖组件默认值。
@@ -323,6 +340,8 @@ func _physics_process(delta: float) -> void:
 	# 火柴人可在地面范围内上下左右移动（详见 §7.1.1）
 	velocity += _knockback_velocity
 	move_and_slide()
+	# 士气自然恢复（AI 完善批次 3，行业最佳实践）：脱离战斗后逐渐回士气，防永久溃逃
+	_apply_rest_morale_recovery(delta)
 	# 击退冲量衰减
 	if _knockback_velocity != Vector2.ZERO:
 		var kb_len: float = _knockback_velocity.length()
@@ -331,6 +350,9 @@ func _physics_process(delta: float) -> void:
 			_knockback_velocity = Vector2.ZERO
 		else:
 			_knockback_velocity = _knockback_velocity.normalized() * (kb_len - dec)
+	# 受击硬直计时递减
+	if _hit_stun_timer > 0.0:
+		_hit_stun_timer = maxf(0.0, _hit_stun_timer - delta)
 	# Y 范围约束：脚部保持在 [ground_y, ground_bottom] 内
 	var y_min: float = ground_y - foot_offset
 	var y_max: float = ground_bottom - foot_offset
@@ -847,6 +869,53 @@ func _on_died() -> void:
 	if _battle_instance != null and is_instance_valid(_battle_instance):
 		if _battle_instance.has_method("on_unit_died"):
 			_battle_instance.on_unit_died(self)
+
+
+## 受击处理（反编译参考实装 B）：按攻击者方位 vs 自身朝向判定正面/背面，
+## 触发 hit_front（后仰）/ hit_back（前扑）插播。对应遗产 SelectHitAnimation。
+func _on_damaged(_amount: float, source: Node) -> void:
+	if source == null or not is_instance_valid(source):
+		return
+	# 受击硬直：被打瞬间 AI 短暂停滞（行业最佳实践 hit stun）
+	_hit_stun_timer = HIT_STUN_DURATION
+	# 攻击者在自身朝向侧 = 正面受击（后仰）；否则背面受击（前扑）
+	var from_left: bool = source.global_position.x < global_position.x
+	var facing_right: bool = _facing > 0
+	var from_front: bool = from_left != facing_right
+	if _visual != null and _visual.has_method("play_hit"):
+		_visual.play_hit(from_front)
+
+
+## 是否处于受击硬直（>0 表示被打停中；AI 行为据此暂停行动）。
+func is_in_hit_stun() -> bool:
+	return _hit_stun_timer > 0.0
+
+
+## 士气自然恢复（AI 完善批次 3）：不在战斗中时按 REST_MORALE_REGEN 回士气。
+func _apply_rest_morale_recovery(delta: float) -> void:
+	if health_component == null or not health_component.has_method("restore_morale"):
+		return
+	var in_battle: bool = _battle_instance != null and is_instance_valid(_battle_instance) \
+			and _battle_instance.has_method("is_active") and _battle_instance.is_active()
+	if not in_battle:
+		health_component.restore_morale(REST_MORALE_REGEN * delta)
+
+
+## 播放攻击动画（反编译参考实装 C）：攻击命中帧触发攻击动画，
+## 播完由 VisualController 监听 rig.animation_finished 回切 walk/idle。
+## 按主手武器类型选择专属攻击动画（剑挥砍/矛刺/镐挥/法杖施法/弓拉弓）。
+func play_attack() -> void:
+	var anim := "attack"
+	if weapon_mount != null and "weapon_type" in weapon_mount:
+		anim = WEAPON_ATTACK_ANIM.get(int(weapon_mount.weapon_type), "attack")
+	if _visual != null and _visual.has_method("play"):
+		_visual.play(anim)
+
+
+## 播放列阵到位动画（AI 完善批次 4）：到达队形位时立正挺胸，播完回 idle。
+func play_arrive() -> void:
+	if _visual != null and _visual.has_method("play"):
+		_visual.play("arrive")
 
 
 ## 设置阵营 ID（由 BattleInstance 分配）

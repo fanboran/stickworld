@@ -1,16 +1,40 @@
 class_name StickmanAnims
 extends RefCounted
 ## 火柴人动画系统：加载 .tres 资源 + AnimationTree StateMachine
+##
+## 变体池（反编译参考实装 B）：
+##   - stand 变体（idle / idle_v2）防全员同帧，对应遗产 StandAnimations[] + RandomAnimation
+##   - 受击插播 hit（front/back 方向），经 AnimationNodeOneShot 触发，对应遗产 SelectHitAnimation
+##   - .tres 数据化（animation_set.tres）推迟：当前所有火柴人共用统一骨架、无兵种差异动画
 
 const ANIM_IDLE := "idle"
+const ANIM_IDLE_V2 := "idle_v2"
 const ANIM_WALK := "walk"
 const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
+## 各武器专属攻击动画（转译自解包 Spine 数据，见 tools/baking/spine_import.gd）
+const ANIM_ATTACK_SPEAR := "attack_spear"
+const ANIM_ATTACK_PICKAXE := "attack_pickaxe"
+const ANIM_ATTACK_STAFF := "attack_staff"
+const ANIM_ATTACK_BOW := "attack_bow"
 const ANIM_DEAD := "dead"
 const ANIM_WALK_CARRY := "walk_carry"
 const ANIM_BUILD := "build"
+const ANIM_HIT := "hit"
+const ANIM_HIT_FRONT := "hit_front"
+const ANIM_HIT_BACK := "hit_back"
+const ANIM_ARRIVE := "arrive"
 
 const ANIM_DIR := "res://modules/units/animations/"
+
+## 全部攻击动画（通用剑攻 + 各武器专属：矛刺/镐挥/法杖/拉弓）
+const ATTACK_ANIMS: Array[String] = [
+	ANIM_ATTACK, ANIM_ATTACK_SPEAR, ANIM_ATTACK_PICKAXE,
+	ANIM_ATTACK_STAFF, ANIM_ATTACK_BOW,
+]
+
+## 待机变体池（stand 类别，防全员同帧）
+const STAND_VARIANTS: Array[String] = [ANIM_IDLE, ANIM_IDLE_V2]
 
 
 # ============================================================
@@ -27,12 +51,20 @@ static func setup_player(player: AnimationPlayer) -> void:
 	# 强制加载/覆盖：场景预置的 AnimationLibrary 可能有草稿（如 walk_carry 单帧），
 	# 用 .tres 文件覆盖以确保完整动画
 	_load_anim(lib, ANIM_IDLE)
+	_load_anim(lib, ANIM_IDLE_V2)
 	_load_anim(lib, ANIM_WALK)
 	_load_anim(lib, ANIM_RUN)
 	_load_anim(lib, ANIM_ATTACK)
+	_load_anim(lib, ANIM_ATTACK_SPEAR)
+	_load_anim(lib, ANIM_ATTACK_PICKAXE)
+	_load_anim(lib, ANIM_ATTACK_STAFF)
+	_load_anim(lib, ANIM_ATTACK_BOW)
 	_load_anim(lib, ANIM_DEAD)
 	_load_anim(lib, ANIM_WALK_CARRY)
 	_load_anim(lib, ANIM_BUILD)
+	_load_anim(lib, ANIM_HIT_FRONT)
+	_load_anim(lib, ANIM_HIT_BACK)
+	_load_anim(lib, ANIM_ARRIVE)
 
 # ============================================================
 #  AnimationTree StateMachine
@@ -46,35 +78,64 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	_add_state(sm, ANIM_IDLE)
 	_add_state(sm, ANIM_WALK)
 	_add_state(sm, ANIM_RUN)
-	_add_state(sm, ANIM_ATTACK)
+	for a in ATTACK_ANIMS:
+		_add_state(sm, a)
 	_add_state(sm, ANIM_DEAD)
 	_add_state(sm, ANIM_WALK_CARRY)
 	_add_state(sm, ANIM_BUILD)
-	# 过渡
-	sm.add_transition(ANIM_IDLE, ANIM_WALK, _smt(0.2))
-	sm.add_transition(ANIM_WALK, ANIM_IDLE, _smt(0.2))
-	sm.add_transition(ANIM_WALK, ANIM_RUN, _smt(0.15))
-	sm.add_transition(ANIM_RUN, ANIM_WALK, _smt(0.15))
-	sm.add_transition(ANIM_RUN, ANIM_IDLE, _smt(0.3))
-	sm.add_transition(ANIM_IDLE, ANIM_ATTACK, _smt(0.1))
-	sm.add_transition(ANIM_WALK, ANIM_ATTACK, _smt(0.1))
-	sm.add_transition(ANIM_ATTACK, ANIM_IDLE, _smt(0.3))
-	sm.add_transition(ANIM_IDLE, ANIM_DEAD, _smt(0.3))
-	sm.add_transition(ANIM_WALK, ANIM_DEAD, _smt(0.3))
-	sm.add_transition(ANIM_ATTACK, ANIM_DEAD, _smt(0.3))
+	# 过渡（sync=false 即 AT_START：新动画从头播放）。
+	# 关键：idle↔walk/run↔idle 必须 AT_START。SWITCH_MODE_SYNC 会让新动画从
+	# 旧动画的当前进度映射过来（idle 2s / walk 0.8s 循环不等长），随机落在 walk
+	# 步态循环的任意相位——若落在"支撑腿完全伸直"相位（t≈0.5s，膝≈0°），
+	# 启动瞬间就是"四肢先伸直一下再滑步"。AT_START 让 walk 总从起步帧（膝弯曲）
+	# 开始、停止总回站姿，消除伸直相位。walk↔run 步态同相，保留 SYNC 保连续。
+	sm.add_transition(ANIM_IDLE, ANIM_WALK, _smt(0.06, false))
+	sm.add_transition(ANIM_WALK, ANIM_IDLE, _smt(0.06, false))
+	sm.add_transition(ANIM_WALK, ANIM_RUN, _smt(0.06))
+	sm.add_transition(ANIM_RUN, ANIM_WALK, _smt(0.06))
+	sm.add_transition(ANIM_RUN, ANIM_IDLE, _smt(0.1, false))
+	# 攻击状态（各武器专属）：从 idle/walk/run 可切入，播完回 idle
+	for a in ATTACK_ANIMS:
+		for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
+			sm.add_transition(s, a, _smt(0.1))
+		sm.add_transition(a, ANIM_IDLE, _smt(0.12))
+	sm.add_transition(ANIM_IDLE, ANIM_DEAD, _smt(0.15))
+	sm.add_transition(ANIM_WALK, ANIM_DEAD, _smt(0.15))
+	for a in ATTACK_ANIMS:
+		sm.add_transition(a, ANIM_DEAD, _smt(0.15))
 	# 搬运动画过渡（搬运工 set_carrying 切换时）
-	sm.add_transition(ANIM_IDLE, ANIM_WALK_CARRY, _smt(0.2))
-	sm.add_transition(ANIM_WALK_CARRY, ANIM_IDLE, _smt(0.2))
-	sm.add_transition(ANIM_WALK, ANIM_WALK_CARRY, _smt(0.15))
-	sm.add_transition(ANIM_WALK_CARRY, ANIM_WALK, _smt(0.15))
-	sm.add_transition(ANIM_WALK_CARRY, ANIM_RUN, _smt(0.15))
-	sm.add_transition(ANIM_RUN, ANIM_WALK_CARRY, _smt(0.15))
+	sm.add_transition(ANIM_IDLE, ANIM_WALK_CARRY, _smt(0.08))
+	sm.add_transition(ANIM_WALK_CARRY, ANIM_IDLE, _smt(0.08))
+	sm.add_transition(ANIM_WALK, ANIM_WALK_CARRY, _smt(0.08))
+	sm.add_transition(ANIM_WALK_CARRY, ANIM_WALK, _smt(0.08))
+	sm.add_transition(ANIM_WALK_CARRY, ANIM_RUN, _smt(0.08))
+	sm.add_transition(ANIM_RUN, ANIM_WALK_CARRY, _smt(0.08))
 	# 建造动画过渡（建造工 set_action_anim 切换时）
-	sm.add_transition(ANIM_IDLE, ANIM_BUILD, _smt(0.15))
-	sm.add_transition(ANIM_BUILD, ANIM_IDLE, _smt(0.2))
-	sm.add_transition(ANIM_WALK, ANIM_BUILD, _smt(0.15))
-	sm.add_transition(ANIM_BUILD, ANIM_WALK, _smt(0.2))
+	sm.add_transition(ANIM_IDLE, ANIM_BUILD, _smt(0.08))
+	sm.add_transition(ANIM_BUILD, ANIM_IDLE, _smt(0.08))
+	sm.add_transition(ANIM_WALK, ANIM_BUILD, _smt(0.08))
+	sm.add_transition(ANIM_BUILD, ANIM_WALK, _smt(0.08))
 	sm.add_transition("Start", ANIM_IDLE, _smt(0.0))
+	# 受击状态（普通 state）：rig.play_hit 打断插入 hit_front/hit_back，
+	# 播完由 rig._process 计时回切到受击前状态（对应遗产 SelectHitAnimation）。
+	_add_state(sm, ANIM_HIT_FRONT)
+	_add_state(sm, ANIM_HIT_BACK)
+	var from_states: Array[String] = [ANIM_IDLE, ANIM_WALK, ANIM_RUN]
+	from_states.append_array(ATTACK_ANIMS)
+	for s in from_states:
+		sm.add_transition(s, ANIM_HIT_FRONT, _smt(0.05))
+		sm.add_transition(s, ANIM_HIT_BACK, _smt(0.05))
+	sm.add_transition(ANIM_HIT_FRONT, ANIM_IDLE, _smt(0.08))
+	sm.add_transition(ANIM_HIT_BACK, ANIM_IDLE, _smt(0.08))
+	sm.add_transition(ANIM_HIT_FRONT, ANIM_DEAD, _smt(0.1))
+	sm.add_transition(ANIM_HIT_BACK, ANIM_DEAD, _smt(0.1))
+	# 列阵到位动画（AI 完善批次 4，对应传奇 ArriveAtFormationAnimationSystem）：
+	# 主状态可切入 arrive；播完由 rig.animation_finished 回 idle（VisualController 处理）
+	_add_state(sm, ANIM_ARRIVE)
+	for s in from_states:
+		sm.add_transition(s, ANIM_ARRIVE, _smt(0.1))
+	sm.add_transition(ANIM_ARRIVE, ANIM_IDLE, _smt(0.08))
+	sm.add_transition(ANIM_ARRIVE, ANIM_DEAD, _smt(0.1))
 	# 先关联 player，再设 tree_root，最后激活
 	tree.anim_player = player.get_path()
 	tree.tree_root = sm
@@ -82,6 +143,25 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	if not Engine.is_editor_hint():
 		tree.active = true
 	return tree.get("parameters/playback")
+
+
+# ============================================================
+#  变体池公共 API（反编译参考实装 B）
+# ============================================================
+
+## 随机挑一个待机变体动画名（防全员同帧；进入待机时调用一次并保持）。
+static func pick_stand_variant() -> String:
+	return STAND_VARIANTS[randi() % STAND_VARIANTS.size()]
+
+
+## 动态切换 state 节点的动画资源（如 idle 状态换待机变体）。
+## 变体与 state 共用：改 idle state 的动画名即可，不必为每个变体建独立 state。
+static func set_state_animation(sm: AnimationNodeStateMachine, state_name: String, anim_name: String) -> void:
+	if sm == null or not sm.has_node(state_name):
+		return
+	var node: AnimationNode = sm.get_node(state_name)
+	if node is AnimationNodeAnimation:
+		node.animation = anim_name
 
 
 # ============================================================
@@ -99,14 +179,26 @@ static func _load_anim(lib: AnimationLibrary, name: String) -> void:
 
 
 static func _add_state(sm: AnimationNodeStateMachine, anim_name: String) -> void:
+	sm.add_node(anim_name, _anim_node(anim_name))
+
+
+## 创建引用指定动画的 AnimationNodeAnimation
+static func _anim_node(anim_name: String) -> AnimationNodeAnimation:
 	var node := AnimationNodeAnimation.new()
 	node.animation = anim_name
-	sm.add_node(anim_name, node)
+	return node
 
 
-static func _smt(xfade: float) -> AnimationNodeStateMachineTransition:
+static func _smt(xfade: float, sync: bool = true) -> AnimationNodeStateMachineTransition:
 	var t := AnimationNodeStateMachineTransition.new()
 	t.advance_mode = AnimationNodeStateMachineTransition.ADVANCE_MODE_ENABLED
-	t.switch_mode = AnimationNodeStateMachineTransition.SWITCH_MODE_SYNC
+	# Godot 4.4+ 移除了 SWITCH_MODE_AT_START，改用 IMMEDIATE + reset 组合实现"从头播放"：
+	#   sync=false（idle↔walk/run↔idle）：IMMEDIATE + reset=true → 新动画从初始帧开始，
+	#     避免 SYNC 把 idle 的播放进度映射到 walk 步态循环的"支撑腿伸直"相位（膝≈0°，
+	#     表现为启动瞬间"四肢先伸直一下再滑步"）。
+	#   sync=true（walk↔run）：SYNC + reset=false → 保持动画进度，步态连续不跳变。
+	t.switch_mode = AnimationNodeStateMachineTransition.SWITCH_MODE_SYNC if sync \
+			else AnimationNodeStateMachineTransition.SWITCH_MODE_IMMEDIATE
+	t.reset = not sync
 	t.xfade_time = xfade
 	return t

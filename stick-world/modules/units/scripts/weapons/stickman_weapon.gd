@@ -5,7 +5,7 @@ extends RefCounted
 
 const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
 
-const DEFAULT_WEAPON_PATH := "res://modules/units/scenes/components/weapon_sword_placeholder.tscn"
+const DEFAULT_WEAPON_PATH := "res://modules/units/scenes/components/weapon_sword.tscn"
 
 
 # ============================================================

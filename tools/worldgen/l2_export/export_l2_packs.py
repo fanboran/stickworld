@@ -1,7 +1,6 @@
 """导出 L2 地图包素材 —— 为 13 个地区生成地图系统所需的全套数据。
 
 每地区（output/l2_packs/region_XXX/）：
-  - mask_2048.png         地区蒙版（2048 分辨率，与 region_labels 一致）
   - mask_8192.png         地区蒙版（8192 分辨率，与 L3 底图对齐）
   - base_8192.png         L3 地形底图裁切（bbox 扩展，8192 高清）
   - heightmap_8192.npy    高程场裁切（float32，与 base 对齐）
@@ -9,7 +8,6 @@
   - info.json             地区定位元数据（bbox/质心/多边形/邻接/类型/面积）
 
 全局（output/l2_packs/）：
-  - index_mask_2048.png   边界索引图（每地区唯一 RGB，战略图点击查询用）
   - color_map.json        颜色 -> 地区 label
   - regions_meta.json     全部地区元数据汇总
   - README.md             素材清单与格式说明
@@ -98,11 +96,9 @@ def main():
         d = os.path.join(OUT_DIR, rid)
         os.makedirs(d, exist_ok=True)
 
-        m2048 = labels == lab
         m8192 = labels_8192 == lab
 
         # ---- 蒙版 ----
-        Image.fromarray((m2048 * 255).astype(np.uint8)).save(os.path.join(d, "mask_2048.png"))
         Image.fromarray((m8192 * 255).astype(np.uint8)).save(os.path.join(d, "mask_8192_full.png"))
 
         # ---- 裁切范围（8192 坐标系，外扩） ----
@@ -131,13 +127,10 @@ def main():
             "region_id": rid,
             "label": lab,
             "type": r["type"],
-            "area_px_2048": r["area_px"],
             "area_ratio": r["area_ratio"],
             "adjacent": r["adjacent"],
-            "polygon_2048": r["polygon"],
             "bbox_8192": bbox_8192,
             "files": {
-                "mask_2048": rid + "/mask_2048.png",
                 "mask_8192_full": rid + "/mask_8192_full.png",
                 "mask_8192_crop": rid + "/mask_8192.png",
                 "base_8192": rid + "/base_8192.png",
@@ -153,16 +146,12 @@ def main():
             x1 - x0 + 1, y1 - y0 + 1))
 
     print("[4/5] 全局索引图 + 元数据...")
-    # 索引图（2048，每地区唯一色，战略图点击查询）
+    # 索引图色表（每地区唯一色；索引图本身 index_mask_2048 已无消费方不再产出）
     colors = unique_colors(n)
-    idx = np.zeros((2048, 2048, 3), dtype=np.uint8)
-    idx[labels == 0] = (30, 55, 95)
     color_map = {"ocean": "#1e375f", "labels": {}}
     for i, r in enumerate(regions):
         color = colors[i]
-        idx[labels == r["label"]] = color
         color_map["labels"][str(r["label"])] = "#%02x%02x%02x" % color
-    Image.fromarray(idx).save(os.path.join(OUT_DIR, "index_mask_2048.png"))
     with open(os.path.join(OUT_DIR, "color_map.json"), "w", encoding="utf-8") as f:
         json.dump(color_map, f, indent=1)
 
@@ -190,7 +179,6 @@ def main():
 
 | 文件 | 说明 |
 |------|------|
-| `index_mask_2048.png` | 边界索引图：每地区唯一 RGB 编码（P 社 provinces.bmp 机制，NEAREST 采样），战略图点击查询用 |
 | `color_map.json` | 索引图颜色 -> 地区 label 映射 |
 | `regions_meta.json` | 全部地区元数据汇总（类型/面积/邻接/多边形/bbox/文件清单） |
 

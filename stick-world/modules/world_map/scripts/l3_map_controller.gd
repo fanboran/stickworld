@@ -15,6 +15,9 @@ class_name L3MapController
 @export var map_renderer: L3MapRenderer
 @export var map_camera: MapCamera
 
+## 缩放指示条（CanvasLayer 直接子节点，open/close 同步显隐）
+var _zoom_indicator: Control = null
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放状态）
 var _view_initialized: bool = false
 
@@ -42,6 +45,11 @@ func _auto_find_components() -> void:
 			map_renderer = child
 		elif child is MapCamera and map_camera == null:
 			map_camera = child
+	# 缩放指示条（CanvasLayer 直接子节点）
+	if _zoom_indicator == null:
+		var layer := get_parent()
+		if layer != null:
+			_zoom_indicator = layer.get_node_or_null("ZoomIndicator")
 
 
 func _input(event: InputEvent) -> void:
@@ -52,11 +60,20 @@ func _input(event: InputEvent) -> void:
 		if key.keycode == KEY_ESCAPE:
 			close()
 			get_viewport().set_input_as_handled()
+		elif key.keycode == KEY_N:
+			# N：细分开关（L1 <-> 城市预览效果）
+			if map_renderer != null and map_renderer.has_method("toggle_display_mode"):
+				map_renderer.toggle_display_mode()
+			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		if _try_open_l2_at_screen(event.position):
 			get_viewport().set_input_as_handled()
+
+
+## 旧的 389 细胞 L1 蒙版叠加（V 键）已废弃移除——1986 由 city_split_v2 在老 L1 下重建城市层，
+## L1 蒙版展示待接老 L1（legacy_l1_labels）后恢复
 
 
 ## 单击：屏幕坐标 -> 地图坐标 -> 命中地区 -> 下钻 L2
@@ -78,12 +95,14 @@ func _try_open_l2_at_screen(screen_pos: Vector2) -> bool:
 	return true
 
 
-## 下钻 L2：隐藏自身（状态保留），打开 L2 视图
+## 下钻 L2：隐藏自身（状态保留）与 L3 HUD，打开 L2 视图
 func _open_l2(label: int) -> void:
 	if l2_view == null:
 		return
 	_l2_active = true
 	visible = false
+	if _zoom_indicator != null:
+		_zoom_indicator.visible = false
 	l2_view.open("region_%03d" % label)
 
 
@@ -91,6 +110,8 @@ func _open_l2(label: int) -> void:
 func _on_l2_back() -> void:
 	_l2_active = false
 	visible = true
+	if _zoom_indicator != null:
+		_zoom_indicator.visible = true
 
 
 ## 打开 L3 地图（M 键触发）
@@ -98,7 +119,7 @@ func _on_l2_back() -> void:
 func open() -> void:
 	if not _view_initialized:
 		_view_initialized = true
-		# 初始视角：无缩放（zoom 1.0，1:1 像素完美），屏幕中心 = 地图中心
+		# 初始视角：默认缩放 0.36（看更大范围），屏幕中心 = 地图中心
 		var map_size := 2048.0
 		if map_renderer != null and map_renderer.get_data() != null:
 			map_size = float(map_renderer.get_data().size)
@@ -106,19 +127,28 @@ func open() -> void:
 			var vp := get_viewport()
 			if vp != null:
 				var vp_size: Vector2 = vp.get_visible_rect().size
-				map_camera.set_zoom(1.0)
+				map_camera.set_zoom(0.36)
+				# 默认缩放 0.36 = 100%（HUD 百分比按此归一化显示）
+				if _zoom_indicator != null and _zoom_indicator.has_method("set_default_zoom"):
+					_zoom_indicator.set_default_zoom(0.36)
 				if map_camera.has_method("set_offset"):
-					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.5, map_size * 0.5))
+					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.36 * 0.5, map_size * 0.36 * 0.5))
 	if _l2_active and l2_view != null:
-		# 恢复 L2 视图（相机状态保留），L3 保持隐藏
+		# 恢复 L2 视图（相机状态保留），L3 保持隐藏（指示条隐藏）
 		visible = false
 		l2_view.visible = true
+		if _zoom_indicator != null:
+			_zoom_indicator.visible = false
 	else:
 		visible = true
+		if _zoom_indicator != null:
+			_zoom_indicator.visible = true
 
 
 ## 关闭 L3 地图（ESC / M 键）
 func close() -> void:
+	if _zoom_indicator != null:
+		_zoom_indicator.visible = false
 	# 若在 L2 视图内，一起隐藏（保留状态，重开时恢复）
 	if l2_view != null and l2_view.visible:
 		l2_view.visible = false

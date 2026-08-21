@@ -410,11 +410,16 @@ func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version:
 
 
 ## 旧接口模块：调 get_save_data()，结果存入 legacy_modules 表
+## 注意：模块节点可能随场景释放（如回主菜单后 game_root 被 free），
+## 必须用 is_instance_valid 判断（直接 `if obj` 对 freed 对象仍为真，会崩）。
 func _save_legacy_modules() -> void:
 	_db.delete_rows("legacy_modules", "slot_id = %d" % _current_slot)
 	for module_name in _modules.keys():
 		var obj: Object = _modules[module_name]
-		if obj and obj.has_method("get_save_data"):
+		if not is_instance_valid(obj):
+			_modules.erase(module_name)
+			continue
+		if obj.has_method("get_save_data"):
 			var data: Dictionary = obj.call("get_save_data")
 			_db.insert_row("legacy_modules", {
 				"slot_id": _current_slot,
@@ -427,7 +432,10 @@ func _save_legacy_modules() -> void:
 func _load_legacy_modules() -> void:
 	for module_name in _modules.keys():
 		var obj: Object = _modules[module_name]
-		if obj and obj.has_method("load_save_data"):
+		if not is_instance_valid(obj):
+			_modules.erase(module_name)
+			continue
+		if obj.has_method("load_save_data"):
 			var rows: Array = _db.select_rows("legacy_modules",
 				"slot_id = %d AND module_name = '%s'" % [_current_slot, module_name], ["data"])
 			var data: Dictionary = {}

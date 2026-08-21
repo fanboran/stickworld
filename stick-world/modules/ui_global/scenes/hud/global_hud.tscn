@@ -12,70 +12,64 @@ grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("2_hud")
 
-[node name="LeftBar" type="PanelContainer" parent="." unique_id=926316731]
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=926316729]
 layout_mode = 1
-anchors_preset = 0
-offset_left = 8.0
-offset_top = 8.0
-offset_right = 340.0
-offset_bottom = 48.0
-mouse_filter = 2
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 60.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
 
-[node name="LeftHBox" type="HBoxContainer" parent="LeftBar"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1940854214]
 layout_mode = 2
 theme_override_constants/separation = 24
 
-[node name="SpeedLabel" type="Label" parent="LeftBar/LeftHBox"]
+[node name="SpeedLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=1073199118]
 layout_mode = 2
+vertical_alignment = 1
 text = "速度: 1x"
 
-[node name="TimeLabel" type="Label" parent="LeftBar/LeftHBox"]
+[node name="SettingsButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787555]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
+text = "⚙"
+
+[node name="TimeLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=238169416]
+layout_mode = 2
+vertical_alignment = 1
 text = "时间: 08:00"
 
-[node name="CenterBar" type="PanelContainer" parent="." unique_id=926316732]
-layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -150.0
-offset_top = 8.0
-offset_right = 150.0
-offset_bottom = 48.0
-grow_horizontal = 2
-mouse_filter = 2
-
-[node name="RightBar" type="PanelContainer" parent="." unique_id=926316733]
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -360.0
-offset_top = 8.0
-offset_right = -8.0
-offset_bottom = 48.0
-grow_horizontal = 0
-mouse_filter = 2
-
-[node name="RightHBox" type="HBoxContainer" parent="RightBar"]
+[node name="CenteredButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787552]
 layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="CenteredButton" type="Button" parent="RightBar/RightHBox"]
-layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
 text = "居中: 关"
 
-[node name="StuckButton" type="Button" parent="RightBar/RightHBox"]
+[node name="StuckButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787553]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
 text = "脱困(H)"
 
-[node name="FormationButton" type="Button" parent="RightBar/RightHBox"]
+[node name="FormationButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787554]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
 text = "编制"
 
-[node name="SettingsButton" type="Button" parent="RightBar/RightHBox"]
-layout_mode = 2
-text = "⚙"
+[node name="ResourceBarHost" type="PanelContainer" parent="." unique_id=926316734]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 8.0
+offset_top = 64.0
+offset_right = 8.0
+offset_bottom = 64.0
+mouse_filter = 2
 
 [node name="NotificationLabel" type="Label" parent="." unique_id=1766089372]
 layout_mode = 1
@@ -98,9 +92,9 @@ anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -76.0
-offset_top = 2.0
+offset_top = 12.0
 offset_right = -12.0
-offset_bottom = 66.0
+offset_bottom = 76.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("5_clock")

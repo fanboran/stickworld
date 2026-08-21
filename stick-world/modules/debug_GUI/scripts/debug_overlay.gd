@@ -21,8 +21,8 @@ var _entity_info_panel: Control = null
 
 
 func _ready() -> void:
-	# 确保层级最高（高于游戏画面和 UI）
-	layer = 100
+	# 独立调试层（高于 UIRoot=1；战略图 100/101/102 全屏打开时被盖，合理）
+	layer = LayerOrder.DEBUG_OVERLAY
 	# 创建绘制控件
 	_draw_control = Control.new()
 	_draw_control.name = "DebugDrawControl"

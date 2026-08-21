@@ -1,8 +1,8 @@
 class_name SettingsMenuPanel
 extends StickScreen
-## 设置菜单 -- 统一弹窗骨架：左分类列 + 右内容区（schema 驱动）。
+## 设置菜单 -- 统一弹窗骨架：左分类列 + 右内容区（schema 驱动，分类切换真实生效）。
 ##
-## 由 SystemSetup 装配到 UIRoot；GlobalHUD 齿轮按钮与 ESC 键调 game_root.toggle_settings_menu()。
+## 由 SystemSetup 装配到 UIRoot；GlobalHUD 齿轮按钮 / 暂停菜单「设置」打开。
 ## 主菜单场景 setup(null) 复用（隐藏调试区与「回到主菜单」）。
 ## 模态面板生命周期继承自 StickScreen。
 
@@ -10,9 +10,15 @@ extends StickScreen
 var _game_root: Node = null
 var _category_column: VBoxContainer = null
 var _content_vbox: VBoxContainer = null
+## 当前分类 id
+var _active_category: String = "game"
+## 分类按钮 id -> Button（高亮选中态）
+var _category_buttons: Dictionary = {}
+## 当前设置值：key -> value（应用时写 ConfigManager）
+var _values: Dictionary = {}
 
-## 面板尺寸
-const PANEL_SIZE: Vector2 = Vector2(680, 520)
+## 面板尺寸（充分容纳分类 + 字段，不做小面板）
+const PANEL_SIZE: Vector2 = Vector2(880, 620)
 
 ## 主菜单场景路径（游戏内「回到主菜单」用）
 const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
@@ -38,9 +44,9 @@ func setup(game_root: Node) -> void:
 	_build_screen()
 
 
-# ─────────────────────────────── UI 构建（统一骨架 + schema 驱动）────────────────────────────────
+# ─────────────────────────────── UI 构建 ────────────────────────────────
 
-## 构建面板内容：左分类列 + 右内容区（Container 布局）
+## 构建面板内容：左分类列 + 右内容区 + 底栏（Container 布局）
 func _build_content() -> void:
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 12)
@@ -48,7 +54,7 @@ func _build_content() -> void:
 	_body.add_child(body)
 	# 左：分类列
 	_category_column = VBoxContainer.new()
-	_category_column.custom_minimum_size = Vector2(140, 0)
+	_category_column.custom_minimum_size = Vector2(150, 0)
 	_category_column.add_theme_constant_override("separation", 4)
 	body.add_child(_category_column)
 	body.add_child(VSeparator.new())
@@ -61,27 +67,77 @@ func _build_content() -> void:
 	_content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content_vbox.add_theme_constant_override("separation", 8)
 	scroll.add_child(_content_vbox)
-	_build_sections()
-	# 底栏：回主菜单（仅游戏内）+ 关闭
-	if _game_root != null:
-		StickKit.button(_footer, "保存并回到主菜单", _on_return_to_menu_pressed)
-	StickKit.button(_footer, "关闭（ESC）", close)
-
-
-## 左分类 + 右内容（首个分类=游戏，完整展示；分类切换在 schema 落盘时重建右内容）
-func _build_sections() -> void:
 	# 分类列按钮
 	for cat in SETTINGS_SCHEMA:
 		var btn := StickKit.button(_category_column, cat["title"],
 				_select_category.bind(cat["id"]), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	# 右侧内容：游戏分类（速度控制 + 字段）→ 调试
-	_add_section_title("游戏")
-	_add_speed_buttons()
-	for field in SETTINGS_SCHEMA[0]["fields"]:
+		_category_buttons[cat["id"]] = btn
+	# 初始值 + 内容
+	_init_values()
+	_select_category("game")
+	# 底栏：应用 / 恢复默认 / 回主菜单（仅游戏内）/ 关闭
+	StickKit.button(_footer, "恢复默认", _on_reset_defaults)
+	StickKit.button(_footer, "应用", _on_apply, StickKit.ButtonKind.ACCENT)
+	if _game_root != null:
+		StickKit.button(_footer, "保存并回到主菜单", _on_return_to_menu_pressed)
+	StickKit.button(_footer, "关闭（ESC）", close)
+
+
+## 初始值：schema 默认（可被 ConfigManager 已存值覆盖）
+func _init_values() -> void:
+	_values = {}
+	for cat in SETTINGS_SCHEMA:
+		for field in cat["fields"]:
+			var def_val: Variant = field["default"]
+			var key: String = field["key"]
+			if ConfigManager and ConfigManager.has_method("get_value") \
+					and ConfigManager.get_value(key) != null:
+				_values[key] = _normalize_stored_value(key, ConfigManager.get_value(key))
+			else:
+				_values[key] = def_val
+
+
+## 存量值归一化：音量键历史上存 0~1 线性（ConfigManager/AudioManager 域），
+## 设置面板域用 0~100 百分比；读到 ≤1 的旧线性值时换算成百分比显示。
+func _normalize_stored_value(key: String, raw: Variant) -> Variant:
+	if key in _VOLUME_KEYS and typeof(raw) in [TYPE_FLOAT, TYPE_INT] and float(raw) <= 1.0:
+		return int(round(float(raw) * 100.0))
+	return raw
+
+
+# ─────────────────────────────── 分类切换（真实生效）────────────────────────────────
+
+func _select_category(cat_id: String) -> void:
+	_active_category = cat_id
+	# 分类按钮高亮（选中态琥珀描边）
+	for id in _category_buttons:
+		var btn: Button = _category_buttons[id]
+		if id == cat_id:
+			btn.add_theme_stylebox_override("normal", StickStyle.accent_normal())
+			btn.add_theme_color_override("font_color", StickTokens.ACCENT)
+		else:
+			btn.remove_theme_stylebox_override("normal")
+			btn.remove_theme_color_override("font_color")
+	_rebuild_content()
+
+
+## 按当前分类重建右侧内容区
+func _rebuild_content() -> void:
+	for child in _content_vbox.get_children():
+		child.queue_free()
+	var cat := _find_category(_active_category)
+	if cat.is_empty():
+		return
+	_add_section_title(cat["title"])
+	# 游戏分类：速度控制是特例（操作类，非持久化设置项）
+	if _active_category == "game":
+		_add_speed_buttons()
+	for field in cat["fields"]:
 		_add_field_row(field)
-	if OS.is_debug_build() and _game_root != null:
-		_add_section_title("调试 · 测试地图")
+	# 调试分类：调试构建 + 游戏内时追加测试地图入口
+	if _active_category == "debug" and OS.is_debug_build() and _game_root != null:
+		_add_section_title("测试地图")
 		for map_id in _get_registered_map_ids():
 			_add_map_button(map_id)
 		var tip := Label.new()
@@ -91,9 +147,11 @@ func _build_sections() -> void:
 		_content_vbox.add_child(tip)
 
 
-func _select_category(_cat_id: String) -> void:
-	# 演示桩：正式版按分类重建右内容（见 docs/设计/UI/07）
-	pass
+func _find_category(cat_id: String) -> Dictionary:
+	for cat in SETTINGS_SCHEMA:
+		if cat["id"] == cat_id:
+			return cat
+	return {}
 
 
 func _add_section_title(text: String) -> void:
@@ -123,41 +181,157 @@ func _add_speed_buttons() -> void:
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 
-## 设置项字段行（slider / option / toggle，演示桩）
+## 设置项字段行（slider / option / toggle），值变化写入 _values。
+## 未实装字段（field.implemented == false）：整体降透明度 + 控件禁用 + 「未实装」标注。
 func _add_field_row(field: Dictionary) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	row.custom_minimum_size = Vector2(0, StickTokens.ROW_H)
 	_content_vbox.add_child(row)
+	var key: String = field["key"]
+	var implemented: bool = bool(field.get("implemented", true))
 	var name_l := Label.new()
-	name_l.text = field["label"]
+	name_l.text = field["label"] + ("" if implemented else "（未实装）")
 	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(name_l)
+	if not implemented:
+		name_l.modulate = StickTokens.TEXT_DIM
+		row.tooltip_text = "该选项尚未实装"
+	var widget: Control = null
 	match field["type"]:
 		"slider":
 			var s := HSlider.new()
 			s.min_value = field["min"]
 			s.max_value = field["max"]
 			s.step = field["step"]
-			s.value = field["default"]
-			s.custom_minimum_size = Vector2(200, 0)
+			s.value = _values[key]
+			s.custom_minimum_size = Vector2(240, 0)
 			s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			row.add_child(s)
+			s.value_changed.connect(func(v: float): _values[key] = v)
+			widget = s
 		"option":
 			var o := OptionButton.new()
 			for i in field["options"].size():
 				o.add_item(field["options"][i], i)
-			o.selected = field["default"]
-			o.custom_minimum_size = Vector2(180, StickTokens.BTN_H)
+			o.selected = _values[key]
+			o.custom_minimum_size = Vector2(220, StickTokens.BTN_H)
 			row.add_child(o)
+			o.item_selected.connect(func(idx: int): _values[key] = idx)
+			widget = o
 		"toggle":
 			var c := CheckButton.new()
-			c.button_pressed = field["default"]
+			c.button_pressed = _values[key]
 			row.add_child(c)
+			c.toggled.connect(func(on: bool): _values[key] = on)
+			widget = c
+	if not implemented and widget != null:
+		row.modulate = Color(1.0, 1.0, 1.0, 0.5)
+		widget.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if widget is OptionButton or widget is CheckButton:
+			widget.disabled = true
 
 
-## 地图列表从 SceneLoader 注册表动态获取（不硬编码，避免与地图注册重复维护）
+# ─────────────────────────────── 应用 / 恢复 ────────────────────────────────
+
+## 应用：把 _values 写入 ConfigManager 并落盘，同时把已实装项立即接线到真实系统。
+func _on_apply() -> void:
+	var written: int = 0
+	if ConfigManager and ConfigManager.has_method("set_value"):
+		for key in _values:
+			# 音量键：面板域 0~100 百分比 -> 存储域 0~1 线性（AudioManager/ConfigManager 约定）
+			var stored: Variant = _values[key]
+			if key in _VOLUME_KEYS and typeof(stored) in [TYPE_FLOAT, TYPE_INT]:
+				stored = clampf(float(stored) / 100.0, 0.0, 1.0)
+			ConfigManager.set_value(key, stored)
+			written += 1
+			_apply_live_setting(key, _values[key])
+	if ConfigManager and ConfigManager.has_method("save_to_disk"):
+		ConfigManager.save_to_disk()
+	StickKit.toast(self, "已应用 %d 项设置" % written, "info")
+
+
+## 已实装设置项的即时生效（不改 ConfigManager，只调真实系统）。
+## 未实装项（schema implemented=false）不在此列。
+func _apply_live_setting(key: String, value: Variant) -> void:
+	match key:
+		"game/auto_save_interval_sec", "game/auto_pause_battle":
+			pass  # 消费方（SaveManager / TimeManager）实时读 ConfigManager
+		"game/slow_on_possess":
+			if TimeManager:
+				TimeManager.auto_slow_on_possess = bool(value)
+		"video/window_mode":
+			if ConfigManager and ConfigManager.has_method("apply_window_mode"):
+				ConfigManager.apply_window_mode(int(value))
+		"video/ui_scale":
+			get_window().content_scale_factor = float(value) / 100.0
+		"video/show_fps":
+			_set_fps_counter_visible(bool(value))
+		"audio/master_volume":
+			if AudioManager and AudioManager.has_method("set_volume"):
+				AudioManager.set_volume("master", float(value) / 100.0)
+		"audio/mute_when_unfocused":
+			if AudioManager and AudioManager.has_method("set_mute_on_unfocus"):
+				AudioManager.set_mute_on_unfocus(bool(value))
+		"control/edge_scroll":
+			var cam := _camera()
+			if cam != null and cam.has_method("set_user_edge_scroll"):
+				cam.set_user_edge_scroll(bool(value))
+		"control/edge_scroll_speed":
+			var cam2 := _camera()
+			if cam2 != null and cam2.has_method("set_edge_scroll_speed"):
+				cam2.set_edge_scroll_speed(float(value))
+		"control/zoom_speed":
+			var cam3 := _camera()
+			if cam3 != null and cam3.has_method("set_zoom_speed"):
+				cam3.set_zoom_speed(float(value))
+		"control/middle_drag":
+			var cam4 := _camera()
+			if cam4 != null and cam4.has_method("set_middle_drag_enabled"):
+				cam4.set_middle_drag_enabled(bool(value))
+		"debug/overlay":
+			if DebugApi and DebugApi.has_method("set_overlay_visible"):
+				DebugApi.set_overlay_visible(bool(value))
+		"debug/legend":
+			if DebugApi:
+				if bool(value):
+					DebugApi.show_legend()
+				else:
+					DebugApi.hide_legend()
+
+
+func _camera() -> Node:
+	if _game_root == null:
+		return null
+	return _game_root.get("camera_rig") if "camera_rig" in _game_root else null
+
+
+## 显示/隐藏 FPS 计数器（经 UIRoot 槽；无 UIRoot（主菜单）时静默跳过）
+func _set_fps_counter_visible(v: bool) -> void:
+	if _game_root == null or _game_root.ui_root == null:
+		return
+	if _game_root.ui_root.has_method("set_fps_counter_visible"):
+		_game_root.ui_root.set_fps_counter_visible(v)
+
+
+## 恢复默认：_values 重置 + 重建内容
+func _on_reset_defaults() -> void:
+	StickKit.confirm(self, "恢复默认", "将把全部设置重置为默认值。确定吗？",
+			_confirm_reset, "重置")
+
+
+func _confirm_reset() -> void:
+	_init_values()
+	_rebuild_content()
+	if ConfigManager and ConfigManager.has_method("reset_to_defaults"):
+		ConfigManager.reset_to_defaults()
+		ConfigManager.save_to_disk()
+	StickKit.toast(self, "已恢复默认值", "info")
+
+
+# ─────────────────────────────── 调试地图 ────────────────────────────────
+
 func _get_registered_map_ids() -> Array:
 	if _game_root == null or _game_root.scene_loader == null:
 		return MAP_DISPLAY_NAMES.keys()
@@ -168,7 +342,6 @@ func _get_registered_map_ids() -> Array:
 	return MAP_DISPLAY_NAMES.keys()
 
 
-## 调试地图选择按钮：travel 到目标地图（等效原主页菜单测试场景入口）
 func _add_map_button(map_id: String) -> void:
 	var btn := StickKit.button(_content_vbox, "前往 %s" % MAP_DISPLAY_NAMES.get(map_id, map_id),
 			_on_map_selected.bind(map_id), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
@@ -199,50 +372,53 @@ func _on_return_to_menu_confirmed() -> void:
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
-# ─────────────────────────────── 设置项 schema（沿用模板，正式落盘走 ConfigManager）────────────────────────────────
+# ─────────────────────────────── 设置项 schema ────────────────────────────────
+
+## 音量键（面板域 0~100 百分比；存储域 0~1 线性，见 _on_apply 换算）
+const _VOLUME_KEYS: Array[String] = ["audio/master_volume", "audio/music_volume", "audio/sfx_volume"]
 
 const SETTINGS_SCHEMA: Array[Dictionary] = [
 	{
 		"id": "game", "title": "游戏",
 		"fields": [
-			{"key": "autosave_min", "label": "自动存档间隔（分钟）", "type": "slider", "min": 1, "max": 30, "step": 1, "default": 5},
-			{"key": "auto_pause_battle", "label": "战斗开始时自动暂停", "type": "toggle", "default": true},
-			{"key": "slow_on_possess", "label": "附身微操时自动减速", "type": "toggle", "default": true},
-			{"key": "ui_fade_zoom", "label": "缩放时 UI 渐隐渐显", "type": "toggle", "default": true},
+			{"key": "game/auto_save_interval_sec", "label": "自动存档间隔（秒）", "type": "slider", "min": 30, "max": 600, "step": 30, "default": 60},
+			{"key": "game/auto_pause_battle", "label": "战斗开始时自动暂停", "type": "toggle", "default": true},
+			{"key": "game/slow_on_possess", "label": "附身微操时自动减速", "type": "toggle", "default": true},
+			{"key": "game/ui_fade_zoom", "label": "缩放时 UI 渐隐渐显", "type": "toggle", "default": true, "implemented": false},
 		],
 	},
 	{
 		"id": "video", "title": "画面",
 		"fields": [
-			{"key": "window_mode", "label": "窗口模式", "type": "option", "options": ["窗口化", "无边框全屏", "独占全屏"], "default": 1},
-			{"key": "ui_scale", "label": "界面缩放", "type": "slider", "min": 75, "max": 150, "step": 5, "default": 100},
-			{"key": "show_fps", "label": "显示 FPS", "type": "toggle", "default": false},
+			{"key": "video/window_mode", "label": "窗口模式", "type": "option", "options": ["窗口化", "无边框全屏", "独占全屏"], "default": 0},
+			{"key": "video/ui_scale", "label": "界面缩放", "type": "slider", "min": 75, "max": 150, "step": 5, "default": 100},
+			{"key": "video/show_fps", "label": "显示 FPS", "type": "toggle", "default": false},
 		],
 	},
 	{
 		"id": "audio", "title": "音频",
 		"fields": [
-			{"key": "vol_master", "label": "主音量", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80},
-			{"key": "vol_music", "label": "音乐", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 60},
-			{"key": "vol_sfx", "label": "音效", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80},
-			{"key": "mute_when_unfocused", "label": "失焦时静音", "type": "toggle", "default": true},
+			{"key": "audio/master_volume", "label": "主音量", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80},
+			{"key": "audio/music_volume", "label": "音乐", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 60, "implemented": false},
+			{"key": "audio/sfx_volume", "label": "音效", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80, "implemented": false},
+			{"key": "audio/mute_when_unfocused", "label": "失焦时静音", "type": "toggle", "default": true},
 		],
 	},
 	{
 		"id": "control", "title": "控制",
 		"fields": [
-			{"key": "edge_scroll", "label": "屏幕边缘滚动镜头", "type": "toggle", "default": true},
-			{"key": "edge_scroll_speed", "label": "边缘滚动速度", "type": "slider", "min": 1, "max": 10, "step": 1, "default": 5},
-			{"key": "zoom_speed", "label": "缩放速度", "type": "slider", "min": 1, "max": 10, "step": 1, "default": 5},
-			{"key": "middle_drag", "label": "中键拖拽平移", "type": "toggle", "default": true},
+			{"key": "control/edge_scroll", "label": "屏幕边缘滚动镜头", "type": "toggle", "default": true},
+			{"key": "control/edge_scroll_speed", "label": "边缘滚动速度", "type": "slider", "min": 1, "max": 10, "step": 1, "default": 5},
+			{"key": "control/zoom_speed", "label": "缩放速度", "type": "slider", "min": 1, "max": 10, "step": 1, "default": 5},
+			{"key": "control/middle_drag", "label": "中键拖拽平移", "type": "toggle", "default": true},
 		],
 	},
 	{
 		"id": "debug", "title": "调试",
 		"fields": [
-			{"key": "debug_overlay", "label": "调试覆盖层（F3）", "type": "toggle", "default": false},
-			{"key": "debug_legend", "label": "常驻调试图例", "type": "toggle", "default": true},
-			{"key": "log_level", "label": "日志级别", "type": "option", "options": ["ERROR", "WARN", "INFO", "DEBUG"], "default": 2},
+			{"key": "debug/overlay", "label": "调试覆盖层（F3）", "type": "toggle", "default": false},
+			{"key": "debug/legend", "label": "常驻调试图例", "type": "toggle", "default": true},
+			{"key": "debug/log_level", "label": "日志级别", "type": "option", "options": ["ERROR", "WARN", "INFO", "DEBUG"], "default": 2, "implemented": false},
 		],
 	},
 ]

@@ -184,6 +184,9 @@ func _restore_from_save(map: Node2D, map_id: String) -> void:
 				player.set_formation_system(_root._formation_system)
 			if _root.camera_rig != null and _root.camera_rig.has_method("set_follow_target"):
 				_root.camera_rig.set_follow_target(player)
+			# 兜底生成玩家同样对准（水平居中）
+			if _root.camera_rig != null and _root.camera_rig.has_method("snap_to_follow_target"):
+				_root.camera_rig.snap_to_follow_target()
 	# 关闭 DB
 	if SaveManager and SaveManager.has_method("end_load"):
 		SaveManager.end_load()
@@ -208,6 +211,9 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 			entity.set_possessed(true)
 			if _root.camera_rig != null and _root.camera_rig.has_method("set_follow_target"):
 				_root.camera_rig.set_follow_target(entity)
+			# 读档进入即对准玩家（水平居中）
+			if _root.camera_rig != null and _root.camera_rig.has_method("snap_to_follow_target"):
+				_root.camera_rig.snap_to_follow_target()
 		else:
 			if entity.has_method("set_possessed"):
 				entity.set_possessed(false)
@@ -218,9 +224,17 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 
 # ─────────────────────────────── 对外接口（由 GameRoot 转发） ────────────────────────────────
 
-## 切换存档面板可见性
+## 切换存档面板可见性（经模态栈层键 SAVE_PANEL；无栈环境回退面板自身 toggle）
 func toggle_save_panel() -> void:
-	if _root._save_panel != null and _root._save_panel.has_method("toggle"):
+	if _root._save_panel == null:
+		return
+	var stack: UIModalStack = _root.ui_root.get_modal_stack() if _root.ui_root != null else null
+	if stack != null:
+		if stack.is_open(UIModalStack.Layer.SAVE_PANEL):
+			stack.pop(UIModalStack.Layer.SAVE_PANEL)
+		else:
+			stack.push(_root._save_panel, UIModalStack.Layer.SAVE_PANEL)
+	elif _root._save_panel.has_method("toggle"):
 		_root._save_panel.toggle()
 
 

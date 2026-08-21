@@ -1,6 +1,6 @@
 extends Node
 ## 集成测试：P0 新 0.9 基础战略图（L1 单层）
-## 验证：L1 数据加载 / 8 聚落 + 空聚落 / 索引图命中查询 / 双击进入聚落 / 打开关闭输入暂停恢复
+## 验证：L1 数据加载（出生 L1 城市划分）/ 城市点命中查询 / 双击进入（城市暂无 map_id 不可进）/ 打开关闭输入暂停恢复
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -19,15 +19,67 @@ var _api: Node = null
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("L1 数据加载：8 聚落 + 空聚落", _test_load, true)
+	_runner.add_test("L1 数据加载：出生 L1 城市划分", _test_load, true)
 	_runner.add_test("索引图命中查询（P 社机制）", _test_query, true)
 	_runner.add_test("悬停坐标换算（open 后 offset/zoom 非零）", _test_hover_mapping, true)
-	_runner.add_test("双击聚落进入场景图（travel_requested）", _test_enter, true)
-	_runner.add_test("空聚落不可进入", _test_empty_enter, true)
+	_runner.add_test("城市聚落暂无 map_id：双击不可进入", _test_enter, true)
+	_runner.add_test("无 map_id 聚落不可进入", _test_empty_enter, true)
 	_runner.add_test("打开/关闭暂停恢复场景图输入", _test_pause_resume, true)
+	_runner.add_test("L1 结构对齐 L2：HUD 缩放条 + 整图适配默认=100% + 居中", _test_l2_like_hud, true)
+	_runner.add_test("Tab 跟随玩家当前 L1：下钻是临时查看、不改变 Tab", _test_tab_follows_player_l1, true)
+	_runner.add_test("城市块已裁剪湖泊：陆地与湖泊无缝无重叠", _test_lake_city_no_overlap, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
+
+
+func _test_tab_follows_player_l1() -> void:
+	# 下钻（L2 点击 L1）是临时查看：Tab 打开跟随玩家当前所在 L1（出生），不因下钻改变
+	if _api == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	var ok: bool = _api.open_l1(41)
+	_runner.assert_true(ok, "下钻打开 l1_041")
+	_runner.assert_true(_api.get_current_l1_label() == 41, "下钻后当前 L1 = 41")
+	# Tab 打开：ensure_player_l1(出生 69) → 数据切回出生
+	var changed: bool = _api.ensure_player_l1(69)
+	_runner.assert_true(changed, "ensure_player_l1(69) 应切回出生")
+	_runner.assert_true(_api.get_current_l1_label() == 69, "Tab 打开后回到出生 L1")
+	var data: RefCounted = _api.get_data()
+	_runner.assert_true(data != null and data.parent_l1_label == 69, "数据为出生 L1（parent_l1_label=69）")
+	# 幂等：已是出生 L1 时 ensure 不重载
+	var changed2: bool = _api.ensure_player_l1(69)
+	_runner.assert_true(not changed2, "已是出生 L1 时 ensure_player_l1 不重载")
+
+
+func _test_lake_city_no_overlap() -> void:
+	# 城市块已裁剪湖泊：城市 polygon 质心不落入任何湖 polygon
+	# （湖泊丝滑弧线与陆地无缝——消除交界处缝隙/覆盖）
+	if _api == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	var data: RefCounted = _api.get_data()
+	if data == null:
+		_runner.assert_true(false, "数据缺失")
+		return
+	var lakes: Array = data.lakes
+	var bad: int = 0
+	for tile in data.tiles:
+		var p: PackedVector2Array = tile.polygon
+		if p.size() < 3:
+			continue
+		var cx: float = 0.0
+		var cy: float = 0.0
+		for v in p:
+			cx += v.x
+			cy += v.y
+		cx /= float(p.size())
+		cy /= float(p.size())
+		for lk in lakes:
+			if Geometry2D.is_point_in_polygon(Vector2(cx, cy), lk):
+				bad += 1
+				break
+	_runner.assert_true(bad == 0, "城市 polygon 质心不应落入湖内（裁剪湖泊生效，实测 %d）" % bad)
 
 
 func _test_load() -> void:
@@ -46,20 +98,25 @@ func _test_load() -> void:
 	_runner.assert_true(data != null, "data 非空")
 	if data == null:
 		return
-	_runner.assert_true(data.tiles.size() >= 8, "地块数应 >= 8（实测 %d）" % data.tiles.size())
+	# 出生 L1 城市划分：每城市 = 1 地块 1 聚落（暂无 map_id），每城市独立政权，MST 道路
+	_runner.assert_true(data.tiles.size() >= 2, "地块数应 >= 2（出生 L1 城市数，实测 %d）" % data.tiles.size())
 	var settled: int = 0
-	var empty: int = 0
+	var no_map: int = 0
 	for tile in data.tiles:
 		if tile.settlement != null:
 			settled += 1
-		else:
-			empty += 1
-	_runner.assert_true(settled == 8, "应有 8 个聚落（实测 %d）" % settled)
-	_runner.assert_true(empty >= 1, "应有空聚落（贫瘠地块）（实测 %d）" % empty)
-	_runner.assert_true(data.roads.size() >= 7, "道路数应 >= 7（MST 连通 8 点，实测 %d）" % data.roads.size())
-	_runner.assert_true(data.states.size() == 8, "应有 8 个独立政权（实测 %d）" % data.states.size())
-	_runner.assert_true(not data.spawn_settlement_id.is_empty(), "应有出生聚落")
-	_runner.assert_true(data.base_texture != null, "卫星图底图已加载")
+			if tile.settlement.map_id.is_empty():
+				no_map += 1
+	_runner.assert_true(settled == data.tiles.size(), "每个城市地块都应有聚落（实测 %d/%d）" % [settled, data.tiles.size()])
+	_runner.assert_true(no_map == data.tiles.size(),
+		"城市聚落暂无 map_id（不可进入，实测 %d/%d）" % [no_map, data.tiles.size()])
+	_runner.assert_true(data.roads.size() >= data.tiles.size() - 1,
+		"道路数应 >= 城市数-1（MST 连通，实测 %d/%d）" % [data.roads.size(), data.tiles.size()])
+	_runner.assert_true(data.states.size() == data.tiles.size(),
+		"每城市独立政权（实测 %d/%d）" % [data.states.size(), data.tiles.size()])
+	_runner.assert_true(not data.spawn_settlement_id.is_empty(), "应有出生城市")
+	_runner.assert_true(data.l1_polygon.size() >= 3, "应含出生 L1 权威轮廓（实测 %d 点）" % data.l1_polygon.size())
+	_runner.assert_true(data.base_texture != null, "底图已加载")
 	_runner.assert_true(data.mask_image != null, "边界索引图已加载")
 
 
@@ -144,8 +201,10 @@ func _test_enter() -> void:
 	if _api == null or not _api.is_initialized():
 		_runner.assert_true(false, "前置数据加载失败，跳过")
 		return
+		_runner.assert_true(false, "前置数据加载失败，跳过")
+		return
 	var data: RefCounted = _api.get_data()
-	# 找一个有 map_id 的聚落（生成器为 8 聚落分配了 map_id）
+	# 找带 map_id 的聚落（城市层暂无可玩地图 -> 应没有；将来接入后自动恢复进入验证）
 	var target_id: String = ""
 	var expected_map: String = ""
 	for tile in data.tiles:
@@ -153,12 +212,17 @@ func _test_enter() -> void:
 			target_id = tile.settlement.settlement_id
 			expected_map = tile.settlement.map_id
 			break
-	_runner.assert_true(not target_id.is_empty(), "应有带 map_id 的可进入聚落")
-	if target_id.is_empty():
-		return
 	var emitted: Array = []
 	if EventBus != null:
 		EventBus.travel_requested.connect(func(m: String): emitted.append(m))
+	if target_id.is_empty():
+		# 城市层现状：全部城市无 map_id -> 双击/enter 不应触发旅行
+		_api.enter_settlement(data.spawn_settlement_id)
+		await get_tree().process_frame
+		_runner.assert_true(emitted.is_empty(),
+			"城市聚落无 map_id：enter_settlement 不应发射 travel_requested")
+		_runner.assert_true(true, "（城市层暂无 map_id，进入验证待可玩地图接入后恢复）")
+		return
 	_api.enter_settlement(target_id)
 	await get_tree().process_frame
 	_runner.assert_true(emitted.size() >= 1, "enter_settlement 应发射 EventBus.travel_requested（收到 %d）" % emitted.size())
@@ -174,27 +238,30 @@ func _test_empty_enter() -> void:
 	var data: RefCounted = _api.get_data()
 	var empty_id: String = ""
 	for tile in data.tiles:
-		if tile.settlement == null:
-			continue
-		if tile.settlement.map_id.is_empty() and tile.settlement.settlement_id != data.spawn_settlement_id:
+		if tile.settlement != null and tile.settlement.map_id.is_empty() \
+				and tile.settlement.settlement_id != data.spawn_settlement_id:
 			empty_id = tile.settlement.settlement_id
 			break
 	if empty_id.is_empty():
-		_runner.assert_true(true, "（无空 map_id 聚落可测，跳过）")
+		_runner.assert_true(true, "（无 map_id 非出生聚落可测，跳过）")
 		return
 	var emitted: Array = []
 	if EventBus != null:
 		EventBus.travel_requested.connect(func(m: String): emitted.append(m))
 	_api.enter_settlement(empty_id)
 	await get_tree().process_frame
-	_runner.assert_true(emitted.is_empty(), "空聚落（无 map_id）不应发射 travel_requested")
+	_runner.assert_true(emitted.is_empty(), "无 map_id 聚落不应发射 travel_requested")
 
 
 func _test_pause_resume() -> void:
 	if _api == null or _content == null:
 		_runner.assert_true(false, "前置失败，跳过")
 		return
-	# 打开：控制器 visible + strategic_map_opened 信号
+	var hud: Control = _map.get_node_or_null("ZoomIndicator")
+	_runner.assert_true(hud != null, "L1 场景应含 ZoomIndicator(HUD)，结构对齐 L2")
+	if hud != null:
+		_runner.assert_true(not hud.visible, "初始 HUD 隐藏")
+	# 打开：控制器 visible + HUD 显示 + strategic_map_opened 信号
 	var opened: Array = []
 	if EventBus != null:
 		EventBus.strategic_map_opened.connect(func(): opened.append(true))
@@ -202,8 +269,9 @@ func _test_pause_resume() -> void:
 		_content.open()
 	await get_tree().process_frame
 	_runner.assert_true(_content.visible, "打开后战略图内容可见")
+	_runner.assert_true(hud == null or hud.visible, "打开后 HUD 显示")
 	_runner.assert_true(opened.size() >= 1, "打开应发射 strategic_map_opened")
-	# 关闭：strategic_map_closed 信号
+	# 关闭：strategic_map_closed 信号 + HUD 隐藏
 	var closed: Array = []
 	if EventBus != null:
 		EventBus.strategic_map_closed.connect(func(): closed.append(true))
@@ -211,4 +279,57 @@ func _test_pause_resume() -> void:
 		_content.close()
 	await get_tree().process_frame
 	_runner.assert_true(not _content.visible, "关闭后战略图内容不可见")
+	_runner.assert_true(hud == null or not hud.visible, "关闭后 HUD 隐藏")
 	_runner.assert_true(closed.size() >= 1, "关闭应发射 strategic_map_closed")
+
+
+func _test_l2_like_hud() -> void:
+	if _api == null or _content == null or not _api.is_initialized():
+		_runner.assert_true(false, "前置失败，跳过")
+		return
+	var hud: Control = _map.get_node_or_null("ZoomIndicator")
+	_runner.assert_true(hud != null, "前置：L1 应含 HUD")
+	if hud == null:
+		return
+	var cam: Node = _content.get_node_or_null("MapCamera")
+	_runner.assert_true(cam != null, "前置：L1 应含 MapCamera")
+	if cam == null:
+		return
+	# 首次打开：默认视角 = 整图适配（HUD 记为 100%）+ 地图居中
+	_content.open()
+	await get_tree().process_frame
+	var data: RefCounted = _api.get_data()
+	var vp_size: Vector2 = _content.get_viewport().get_visible_rect().size
+	var msize: float = float(data.size)
+	# 默认视角 = 整图适配（全部周边陆地可见，出生 L1 居中），夹在相机范围内
+	var expect_zoom: float = clampf(vp_size.y * 0.85 / msize * 1.0, cam.min_zoom, cam.max_zoom)
+	_runner.assert_true(absf(cam.get_zoom() - expect_zoom) < 0.01,
+			"L1 默认视角 = 整图适配（夹在相机范围，实测 %.4f / 期望 %.4f）" % [cam.get_zoom(), expect_zoom])
+	var expect_off: Vector2 = vp_size * 0.5 - Vector2(msize * expect_zoom * 0.5, msize * expect_zoom * 0.5)
+	_runner.assert_true(cam.get_offset().distance_to(expect_off) < 1.0, "L1 打开后地图居中显示")
+	# HUD 默认缩放 = 该视角（100%），缩放条/百分比组件齐备
+	_runner.assert_true(hud.has_method("set_default_zoom") and absf(hud.default_zoom - expect_zoom) < 0.001,
+			"HUD 默认缩放应 = 整图适配（100% 基准）")
+	var label: Label = null
+	var slider: HSlider = null
+	for ch in hud.get_children():
+		if ch is Label:
+			label = ch
+		elif ch is HSlider:
+			slider = ch
+	_runner.assert_true(label != null and label.text == "100%",
+			"默认缩放应显示 100%%（实测 %s）" % (label.text if label != null else "无标签"))
+	_runner.assert_true(slider != null, "L1 应有 HSlider 缩放条（与 L2 一致）")
+	# 重开保留状态（与 L2/L3 一致：首次适配后不再重置）
+	var z_mod: float = cam.get_zoom() * 0.6
+	var off_mod: Vector2 = cam.get_offset() + Vector2(80, -40)
+	cam.set_zoom(z_mod)
+	cam.set_offset(off_mod)
+	_content.close()
+	await get_tree().process_frame
+	_content.open()
+	await get_tree().process_frame
+	_runner.assert_true(absf(cam.get_zoom() - z_mod) < 0.001 and cam.get_offset().distance_to(off_mod) < 1.0,
+			"L1 重开保留用户位置/缩放（结构对齐 L2）")
+	_content.close()
+	await get_tree().process_frame

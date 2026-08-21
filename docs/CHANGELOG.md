@@ -8,6 +8,221 @@
 
 ## [未发布]
 
+### 全盘数据紧致化：战略图 JSON → 紧凑 bin（2026-08）
+
+- 运行时读取的 L1/L2/L3 `l*_world.json` 全部烘焙成同名紧凑 `.bin`（magic `LWDB` + `var_to_bytes`，工具 `tools/worldgen/l_world_bake.gd`，86 个 bin）
+- **L2/L3**：polygon 顶点 `[y,x]` Array → `PackedVector2Array(Vector2(x,y))`，省逐点 Array 构造 + 体积省 ~32%；渲染端统一只面对 PackedVector2Array（下游 5 处适配）
+- **L1**：原样序列化（polygon 保持 Array，构造逻辑不变）
+- data 类 **bin 优先**、bin 缺失/格式不符（Godot 升级）自动回退 JSON（json 回退路径已测：L2 7/7、L3 8/8）
+- **实测加载耗时**：L3 打开 162ms → 33ms（快 5 倍，含异步 PNG 后总 485→33ms）；L2 region_008 365 → 278ms；L1 各省 15-30ms
+- **验证**：P0 9/9、L2 7/7、L3 8/8、全量 26/27（1 项预存无关失败）
+
+### Tab 战略图开关修复（2026-08）
+
+- **Tab 再按一次关闭地图**：`map_boundary_detector` 的 Tab 原来只发"打开"信号（`open_world_map_requested`）→ `system_setup._open_strategic_map` 只开不关。改为 **toggle**：已打开（Content.visible）则 `close()` + 恢复场景图输入，否则 `open()` + 暂停输入
+- **ESC 应先关地图而不是弹暂停菜单**：模态栈统一后 ESC 由 `GameRoot._handle_escape` 分发（无模态 → 开暂停菜单），战略图打开时 ESC 被菜单吞掉。改为：`StrategicMapController` 增加 `handle_escape()`（下钻中 → 返回 L2，否则 `close()`），`GameRoot._handle_escape` 战略图打开时先交给它（不弹菜单）；`_input` 的 ESC 分支统一走 `handle_escape` + 消费事件（双路径互斥）
+- **验证**：P0 9/9、L2 7/7、L3 8/8、esc/modal/ui_layout 全过、全量 27/28（1 项预存无关失败）
+
+### L3 8192 PNG 后台线程异步解码（2026-08）
+
+- L3 首次打开 485ms 里，两张 8192 PNG 解码占 301ms（l1_index 158ms + city_preview 143ms）。改为 **`L3MapRenderer` 后台线程解码**（`Image.load_png_from_buffer`，纯 CPU 线程安全）：`L3WorldData.load_from` 不再加载这两张图，`set_data` 后 `_ensure_l1_index()` 启动后台解码（hover 图就绪前 `query_l1_at_map_pos` 因 `l1_index_image` 为 null 自然返回空，hover 静默），切城市模式首次 `_draw` 时 `_ensure_city_preview()` 后台解码；`_process` 每帧 poll 线程完成 → 主线程收尾（`ImageTexture.create_from_image` 需主线程）。**首次打开 485ms → 175ms**（省 310ms，无损、8192 精度不降、主线程零阻塞）。未采用 GPU 压缩格式：l1_index 是 label 直编必须无损 + 需 CPU 查像素，city_preview 是上千小色块（BC 有损会出块状伪影）
+
+### L1 湖泊-陆地无缝 + Tab 跟随玩家当前 L1（2026-08）
+
+- **湖泊-陆地交界缝隙**：湖泊 mesh 与城市块 mesh 是**两套独立 extract**（湖从湖 mask 提、地块从城市划分提），交界处两套多边形边界不重合（0~2px 缝），且城市块直线边界 vs 湖弧线之间露缝。修复：`export_l1_view_context.py` **城市块湖边段顶点投影到湖泊 polygon 边**（地块边界"套用湖泊轮廓"，把地块填充到缝隙上；旋转使湖边段不跨数组起点 + 整段自交时从两端二分裁剪保留贴合段；自交检查局部化加速）；`map_renderer._bake_base_mesh` **湖泊最后画**（盖邻居/城市色块）——交界处由湖弧线决定，严丝合缝。已重跑出生 + 全部 69 个 `l1_packs`
+- **Tab 跟随玩家当前 L1**：Tab 打开显示**玩家当前所在 L1**（现在=出生 L1）；L2 点击 L1 下钻改为**临时查看**（ESC 返回 L2，不再改变 Tab 的 L1）。api 记录当前 L1（`get_current_l1_label`）+ `ensure_player_l1`（Tab 打开时切回玩家 L1，切换才重载并重置视角）；controller 加 `_player_l1_label` + `set_player_l1`（预留游戏内跨 L1 移动时更新，Tab 跟随）
+- **验证**：P0 9/9（含新增"Tab 跟随/湖泊-城市不重叠"）、L2 7/7、全量 23/24（1 项预存无关失败）、check_godot_errors 干净
+
+### L1 地图描边修复：跨环乱飞线 + 缩放粗细滞后跳变（2026-08）
+
+- **L1 权威轮廓跨环乱飞线**：老 L1 多连通（大陆 + 岛屿）时 `extract_mesh` 输出多个外环，`export_l1_view_context.py` 的 `extend` 把多环串接成单个点列 → renderer `_closed` + 单条 `draw_polyline` 把不相连环串成跨海乱飞连接线（下钻打开含岛屿的老 L1 时出现；出生 L1 为单连通不受影响）。修复：`export_l1_view_context.py` 的 `l1_polygon` 只取最大环（主大陆）——岛屿不画 L1 轮廓粗线，由城市色块/描边呈现；renderer 恢复单环闭合绘制。已重跑出生 + 全部 69 个 `l1_packs`
+- **缩放后描边粗细滞后跳变**：MapCamera 缩放/平移用节点 transform（`target.scale`）不触发 CanvasItem 重绘，描边宽度（屏幕像素固定，`width/zoom`）按旧 zoom 计算 → 缩放后粗细不变、hover 触发重绘才跳到新值。修复：MapCamera 加 `set_map_renderer`，缩放/平移后 `queue_redraw()`，描边宽度即时跟随 zoom（`strategic_map_controller` 接线）
+- **验证**：P0 7/7、L2 7/7、全量 23/24（1 项预存无关失败）、check_godot_errors 干净
+
+### L2→L1 下钻：L2 点击 L1 地块打开对应老 L1 地图 + Tab 城市中心小点（2026-08）
+
+- **L2 点击 L1 下钻**：L2 地图单击任一 L1 地块 → 打开该老 L1 的 Tab 视图（城市细分），ESC 返回 L2。数据侧：`export_l2_view_packs.py` 为每个 L1 地块写新字段 `global_l1_label`（`tiles_8192` 与 `legacy_l1_labels_8192` 逐像素对齐、多数投票映射局部 label → 老 L1 全局 label，region_013 局部 1/2/3 ↔ 全局 67/68/69）；`export_l1_view_context.py` 加 `--out-dir` 支持批量，导出全部 69 个老 L1 上下文到 `config/strategic_map/l1_packs/l1_%03d/`（l1_world.json + l1_base.png + l1_mask.png，含 `parent_l1_label`）。运行时侧：`api.open_l1(label)` 加载指定 L1 数据（替换 _data、renderer/camera 同步切换）；`StrategicMapController.open_l1` 打开并重置视角适配新 context；`L2MapController` 左键点击 L1 地块（复用 hover 同路径：`screen_to_map − tiles_offset` → 索引图查询）触发下钻，隐藏 L2 并显示 L1，L1 ESC 经 `back_requested` 信号返回 L2；`system_setup.gd` 装配 L2→L1 接线（L2 Content 注入 L1 controller）
+- **Tab 城市中心小点**：`map_renderer.gd` 在 L1 地块描边后绘制城市中心圆点（`settlement.position`，屏幕固定 3px 圆点 + 细环，不随缩放，悬停/交互不变）
+- **验证**：P0 7/7、L2 集成 7/7（新增「L2 单击 L1 地块→打开对应老 L1，ESC 返回」）、全量 23/24（1 项预存无关失败）、check_godot_errors 干净
+
+### L1 Tab 运行时性能优化：描边缓存 + 静态色块层烘焙（2026-08）
+
+- **描边/轮廓几何缓存**：原 `_draw` 每次重绘重建 4750 段城市描边并对每段遍历湖全部 91 边做距离计算（≈43 万次 GDScript/每次 hover 触发，hover 卡顿源）→ `set_data` 后首帧构建一次缓存，hover 重绘 = 1 次 `draw_multiline`；邻湖判定加湖 bbox 预筛（仅中点落湖 bbox 内的边做精确距离）
+- **静态色块层 ArrayMesh 烘焙**：海洋/湖泊/邻居/城市色块（8 城 4750 点 + 邻居 1623 点 + 湖）→ `Geometry2D.triangulate_polygon` 一次性 earcut 烘焙成单张 ArrayMesh（顶点色），每帧 1 次 `draw_mesh`，免每帧多边形三角剖分
+- **验证**：P0 7/7、全量 23/24（1 预存无关）、check_godot_errors 干净
+
+### 城市层升 8192：L1 Tab 全链路原生精度（2026-08）
+
+- **根因**：L1 Tab 链路中城市层（city_split_v2）与 L1 context 导出一直锁 2048（其余导出——L3/L2 overview/湖泊/老 L1 拼图——早已 8192），Tab 长期"2048 小图放大 3 倍"，45° 斜线锯齿、文字问题皆源于此
+- **城市层 8192**：`city_split_v2.py` 加 `--res 8192` 默认——全局老 L1 蒙版 8192 原图（不降采样）、城市点 spacing 160、膨胀按老 L1 bbox 裁剪局部化（8192 级全图 watershed 内存/时间不可行）、面积下限 1440；产出 `city_labels_8192.npy`（1040 城）/ `city_preview_8192.png` 等；**同 seed 布局与 2048 版一致**（69 号区域仍 8 城，面积÷16 与 2048 级吻合 <3%）
+- **Tab context 导出 8192**：`export_l1_view_context.py` 直接读 8192 城市标签（去掉"质心×4 重膨胀"中间态）；context 200 → 798×798，默认整图适配 zoom 3.06→0.77（原生 1:1），45° 像素楼梯屏幕 <1px 不可见
+- **L2 城市预览**：`export_l2_city_previews.py` 改读 `city_preview_8192.png`（同级索引，不再 //4）
+- **废弃清理**：`export_player_l1_cities.py` / `export_player_l1_cities_v2.py` / `l1_worldgen.py` 移入 `tools/worldgen/archive/`（防误跑覆盖 config 回退 2048）
+- **验证**：p0 7/7、全量 23/24（1 项预存无关失败）、check_godot_errors 干净
+
+### 2048 死数据整理：L2 冗余字段 + 389 废弃体系清理（2026-08）
+
+- **L2 冗余死字段移除**：`export_l2_packs.py` 不再产出 `mask_2048.png` / `index_mask_2048.png`，`info.json` / `regions_meta.json` 去掉 `area_px_2048` / `polygon_2048` / `files.mask_2048`——全仓 grep 确认**零消费者**（L2 渲染几何来自 `tiles_8192`，2048 字段是 region 划分遗留死数据）；`color_map.json` 有消费者保留
+- **389 废弃体系归档**：`city_split.py` / `l1_world_split.py` 移入 `archive/`（389 版 L1 划分 + 城市细分，被老 L1 体系取代）
+- **Tab 导出纯 8192**：`export_l1_view_context.py` 移除 `--res 2048` 回退（city_data 升 8192 后 2048 分支坐标 scale=0 已损坏），强制 8192
+- **config 死文件删除**：`l1_partition_2048.png` / `l1_preview_2048.png`（389 版，零消费者）
+- **验证**：p0 7/7、check_godot_errors 干净
+
+### Tab L1 出生地块更正为 region_013 3 号 + 地块特写 + 细线 + 居中（2026-08）
+
+- **出生 L1 地块更正**：`label 66`（region 12 的 3 号，13 城）→ **`label 69`（region 13 的 3 号，8 城）**——经旧分区 `player_start=219` 质心落在 69 号块内验证；69 恰好符合 GDD"出生 L1 7-8 聚落"规格（之前用的 66 是错误地块，故 Tab 与"13号地块3号地块"长得不一样）
+- **地块特写 + 贴裁**：context = 出生 L1 **贴近裁剪正方形**（地块 bbox + 四周 `--margin 15` 边距，200×200），以 **bbox 中心**居中（四周边距均匀）；默认整图适配即特写、出生 L1 居中
+- **细线（屏幕比例）**：城市界/出生轮廓/hover 的屏幕像素上限压到 L2 视觉一致——城市界 `7.8→3.5px`、出生轮廓 `13→5.5px`、hover `11.7→5.0px`（L1 高缩放下此前顶到 2~3 倍粗）
+
+- **斜线去锯齿（共享边安全简化）**：像素蒙版轮廓的 45° 楼梯（1px 一格台阶）用 Douglas-Peucker(tol=1.0) 折成直线、短边(<1px)残留清零；**共享段只 DP 一次写回所有含它的环**（同源同参数 → 相邻地块描边数据一致、重合为一条线），修复整环 DP 因各环起点不同把共享边界简化成不同折线、描边变两条"分离"线的问题；外段各自简化
+- **自交兜底（修复湖附近"乱飞"）**：同一对地块的共享边界可被湖切成多段，共享缓存若按环集合做 key 会冲突（第二段拿第一段的 DP 结果 → 自交尖刺，earcut 剖分失败渲染成乱线）——缓存 key 改按**段内边的集合**（段内边在两边环里完全相同、跨环稳定命中）；产出环仍自交时回退到 pre-DP 简单环（裁边碎条等兜底）
+- **圆角默认关闭**：`corner_radius` 默认 0——圆角在凹角/湖凹口附近可能切出自交多边形，且视觉收益不大
+- **城市描边恢复（细）+ 地块-湖泊不描边 + 修复描边/色块不重合**：城市描边 `draw_multiline` 重画——**只跳过"地块-湖泊"边界**（边中点距湖多边形 ≤1.5 地图单位不描边），内部城界与出生 L1 块边界全画，屏显上限 `3.5→2.5px`、hover `5.0→3.5px`；**块边界改由城市外边缘描出**（与色块同源、天然贴合），不再单独画 `l1_polygon`——此前 l1（legacy 网格，膨胀 ~0.5px）与城市外缘（城市网格，收缩 ~0.5px）两条不同来源的线分离，即"描边与色块交接不重合"（`TILE_BORDER_*` 常量恢复，`BORDER_*` 移除）
+- **默认缩放 = 整图适配（100%）**：`DEFAULT_ZOOM_MULT` 1.75 → 1.0；L1 相机 `max_zoom` → 5.0（fit=4.59 不被卡住，100% 正好显示贴裁方块）
+- **F3 城市编号屏幕恒定字号**：`LABEL_SCREEN_SIZE=22`（÷缩放 clamp），不再"雷霆大字"
+- **索引图健壮加载**：`l1_world_data.gd` 改 `tex.get_image()` 兼容 texture/image 两种导入类型
+- **生成脚本**：`export_l1_view_context.py` 改 `--margin` 贴裁 + bbox 中心居中 + `jsonable()` 转 numpy 标量
+- **测试**：p0 7/7、l2 6/6、l3 8/8 全绿；check_godot_errors 干净；全量回归仅剩历史遗留 test_menu_navigation（combat_feedback 为并行 flake）
+
+### Tab L1 地图改为 L2 同款矢量渲染（彩色城市 + 灰色邻居 + 海洋）（2026-08）
+
+- **渲染样式对齐 L2**：`map_renderer.gd` 重写为 L2MapRenderer 同款分层矢量绘制——海洋背景 → 湖泊(浅蓝) → 灰色邻居老 L1 块 → 当前 L1 城市块(政权色) → 城市描边 + 出生 L1 权威轮廓(深色) → hover 描边；配色/线宽全部复用 L2 常量
+- **去掉大点大字**：移除聚落大圆点 + 名称大字（"雷霆大字/大点"来源）；F3 调试才显示小号城市编号
+- **周围灰色地块**：新增邻居老 L1 块（label 65）灰色显示 + 出生 L1 周围海洋；`l1_world.json` 新增 `context_size/neighbors/lakes`，坐标整体平移到上下文
+- **新生成脚本** `tools/worldgen/l1/export_l1_view_context.py`：统一网格（mesh_extract）提取城市/邻居/湖泊/出生轮廓，无缝铺满；重生成 `l1_world.json` + `l1_mask.png`（389×389，rank 直编，聚落命中逐一对齐）+ `l1_base.png`
+- **测试**：p0 7/7（索引图命中/悬停换算/HUD/居中全绿）、l2 6/6、l3 8/8；check_godot_errors 干净
+
+### L2 默认 1.75×=100% 居中 + Tab L1 结构对齐 L2（2026-08）
+
+- **L2 默认视角 = 整图适配 × 1.75（HUD 记为 100%）**：打开即贴近城市细节（此前 175% 的缩放值成为真正的 100%），并**居中显示**（context 中心对准屏幕中心）
+- **Tab L1 地图结构对齐 L2**：`strategic_map.tscn` 挂同款底部 HUD（缩放条 + 百分比，默认=100%、可拖动 + 滚轮同步）；首次打开适配到 1.75×整图适配（小图顶到相机 max_zoom=3.0，13 城邦仍全部可见）并居中，重开保留用户位置/缩放
+- **默认缩放夹在相机范围**：L2/L1 控制器 `clampf(fit×1.75, min_zoom, max_zoom)`，保证 HUD 打开即 100%
+- **测试**：l2 6/6（下钻默认视角 = 1.75×适配 + 居中）、p0 7/7（新增 L1 结构对齐 L2：HUD/默认 100%/居中/重开保留状态）、l3 8/8 全绿；check_godot_errors 干净
+
+### HUD 组件化 + 双 HUD 叠加修复 + L2 恒城市模式（2026-08）
+
+- **HUD 组件化（不再自绘抽象矩形）**：`l3_zoom_indicator.gd`(MapHUD) 重写为 StickTheme/StickKit 主题组件——细分按钮 = 主题 **Button**、缩放条 = 主题 **HSlider** + 百分比 **Label**，外观与其他 UI 一致
+- **缩放百分比归一化**：默认缩放 = 100%（L3 初始 0.36 = 100%，L2 fit 整图 = 100%）；HUD 显示 `zoom/默认 ×100%`，滑块可拖动 + 滚轮双向同步，带 100% 刻度
+- **修双 HUD 叠加根因**：L3 下钻 L2 时 L3 的 ZoomIndicator 未隐藏（此前 L3/L2 两个 HUD 同时显示叠在底部 → 左下角元素重叠）；现下钻隐藏 L3 HUD、返回恢复
+- **L2 恒城市模式**：L2 本身即"具体到城市"，默认恒 MODE_CITY（贴 l2_city_preview），移除 L2 细分开关（toggle_display_mode/N 键）——MapHUD 对 L2 不显示细分按钮
+- **布局**：左下角单行 `[细分按钮(L3)] [缩放条] [百分比]` 互不重叠；根节点 PASS 鼠标，仅控件收事件不挡地图拖拽/下钻
+- **测试**：l2 6/6、l3 8/8（新增默认 100% + 三元素互不重叠 + HUD 显隐断言）、p0 6/6 全绿
+
+### 描边微调(原×1.3) + 细分开关双入口 + HUD 布局不重叠（2026-08）
+
+- **描边=原值×1.3**（翻倍太粗）L3 hover 6.5/cap10.4、L2 边界 11.7/cap20.8；L2 tile 5.2/cap7.8、hover 7.2/cap11.7、邻居 8.45/cap13
+- **细分开关（"模式"= 开关 L3/L2 细分显示城市预览效果）**：左下角按钮显示「细分:关/开」+ **N 键**开关双入口；开启后 L3 显示全图城市（贴 city_preview）、L2 显示该地区城市（贴 l2_city_preview）——即"具体到城市的预览图"效果
+- **HUD 布局**：按钮左下角(12,6,130x26)、轨道居中、缩放文字放轨道上方，三者分离不重叠；移除轨道右端 MAX 文字
+- **测试**：l2 6/6、l3 7/7、p0 6/6 全绿
+
+### 描边翻倍 + HUD 按钮左下角 + HUD 默认隐藏（2026-08）
+
+### 描边翻倍 + HUD 按钮左下角 + HUD 默认隐藏（2026-08）
+
+- **描边×2**：L3 hover 5→10 (cap 8→16)、L2 地区边界 9→18 (cap 16→32)；L2 tile 4→8 (cap 6→12)、hover 6→12 (cap 9→18)、邻居 6.5→13 (cap 10→20)——仍是"地图绝对粗细，放大超屏幕上限 clamp"
+- **HUD 按钮移到左下角**：模式切换按钮 `_btn_rect` 从右下角改到左下角（x=14）
+- **HUD 默认隐藏**：L3/L2 的 ZoomIndicator 节点 `visible=false`（此前游戏一启动就叠在左下角）；由各控制器 open 显示 / close 隐藏
+- **测试**：l2 6/6、l3 7/7、p0 6/6 全绿；check_godot_errors 干净
+
+### 描边绝对粗细 + HUD 修复 + L2 城市模式（2026-08）
+
+### 描边绝对粗细 + HUD 修复 + L2 城市模式（2026-08）
+
+- **描边=地图绝对粗细**：L3/L2 全部描边由"屏幕保底 max"改为"**地图单位固定宽，放大超屏幕像素上限时 clamp**"（`minf(map_w, cap_screen/zoom)`）——不随缩放变粗，仅极端放大有屏粒上限（L3 hover 5→cap 8px、L2 边界 9→cap 16px；L2 tile 4→cap 6px、hover 6→cap 9px、邻居 6.5→cap 10px）
+- **修 HUD 文字半截/出屏**：`l3_zoom_indicator.gd` 泛化为 `MapHUD`（查 Content 下带 toggle_display_mode 的渲染器，L3/L2 通用）；文字/按钮全部放控件 44px 内（轨道 y=24、数值 y=16 上方），不再溢出到屏幕外
+- **L2 城市模式**：新增 `l1/export_l2_city_previews.py` 生成 13 地区城市蒙版贴图（`l2_packs/region_XXX/l2_city_preview.png`，context 尺寸 RGBA，tiles 区域城市色/其余透明）；`L2MapRenderer` 加显示模式（L1 <-> 城市）+ `MapHUD` 模式按钮；L2 场景挂 HUD（open 显示/ESC 隐藏），L3 返回时恢复
+- **测试**：l2 6/6（新增城市贴图/模式切换）、l3 7/7、p0 6/6 全绿；`check_godot_errors` 干净
+
+### 修复 L3 老 L1 视觉层坐标序错位（描边/地块/hover 错位）（2026-08）
+
+### 修复 L3 老 L1 视觉层坐标序错位（描边/地块/hover 错位）（2026-08）
+
+- **根因**：`export_l3_l1_view.py` 生成 `l3_l1.json` 时把 mesh 角点从 `(y,x)` 转成了 `(x,y)`，而渲染端统一按 `(y,x)` 读取（`Vector2(p[1],p[0])`）→ 老 L1 地块沿 y=x 镜像错位，hover 高亮随之错位；L2 地区边界是老数据 `(y,x)` 反而没错——于是"描边与地块错位"
+- **修复**：`build_layer` 不再翻转坐标，`l3_l1.json` 与其他 L3 数据统一存 `(y,x)` 角点（渲染 Vector2(p[1],p[0])）；坐标顺序约定在工具注释写明以防再犯
+- **校验**：JSON 多边形质心 vs 蒙版质心×4 偏差已从镜像级(~2000px)降到采样噪声(<50px)
+- **测试**：l3 新增 hover 命中老 L1 断言 → 7/7；p0 6/6、l2 5/5 全绿
+
+### L3 配色鲜艳 + 双显示模式（L1/城市）+ 缩放条模式按钮（2026-08）
+
+### L3 配色鲜艳 + 双显示模式（L1/城市）+ 缩放条模式按钮（2026-08）
+
+- **配色鲜艳化**：`export_l3_l1_view.py` 老 L1 视觉层改为高饱和（s=0.85）+ 亮明度（0.5~0.98），平均饱和 0.85 / 明度 0.74——"鲜艳、亮色比例高"
+- **L3 双显示模式**：底部新增**模式按钮**（`l3_zoom_indicator.gd`），点击在「模式:L1（69 块矢量）↔ 模式:城市」间切换；城市模式直接贴 `l3_city_preview_2048.png` 栅格（即用户认为最好看的 city_preview，零剖分快速）；**hover 恒命中老 L1**（新 `l3_l1_index_2048.png` 索引图），点击下钻仍按 L2
+- **M 默认缩放 0.36**：L3 首次打开即看更大范围（`l3_map_controller.open`）
+- **修复**：test_l3 类型推断解析错误（挂死）
+- **测试**：l3 6/6（断言 20，含城市贴图/模式切换）、p0 6/6、l2 5/5 全绿
+
+### L3 视觉显示老 L1 + 缩放指示条 + Tab 放大（2026-08）
+
+### L3 视觉显示老 L1 + 缩放指示条 + Tab 放大（2026-08）
+
+- **L3 视觉 = 老 L1 地块**（"L3 直接把 L1 显示出来"，同 L2 地区相似色、丰富配色，类 city_preview）：新 `l1/export_l3_l1_view.py` 生成 `config/strategic_map/l3_l1.json`（69 块老 L1，8192 级多边形/洞/配色）；`l3_map_renderer` 渲染老 L1 色块为底 + **L2 地区粗描边**标识可下钻单元；**交互不变**——hover/点击仍按 L2 索引图下钻
+- **修 L3 编号坐标**：地区 centroid 是 2048 级，渲染 8192 级 → 原来文字堆左上角且不随缩放；现在 ×4 换算（`_draw_l2_labels` 按 size/mask 比例）
+- **L3 缩放指示条**：新 `l3_zoom_indicator.gd`（CanvasLayer 底部轨道+滑块+数值"缩放 x.xx"），M 打开显示、ESC 关闭隐藏、L2 下钻时隐藏
+- **Tab 放大**：`strategic_map_controller.open` 由硬编码 1024 改为按实际 `data.size` 适配（85% 屏高），出生 L1 图更清晰；`export_player_l1_cities_v2` 默认 margin 60→120（size 347→467）
+- **测试**：l3 5/5（断言 15，含老 L1 视觉层 69 块）、p0 6/6、l2 5/5 全绿
+
+### 出生 L1 定案（region_012 老L1#3）+ L3 显示 L2 编号（2026-08）
+
+### 出生 L1 定案（region_012 老 L1#3）+ L3 显示 L2 编号（2026-08）
+
+- **出生 L1 定案**：region_012 的 3 号老 L1 地块（全局老 L1 label 66，质心 (928,932)/2048，面积 21752px）为玩家初始默认地块——`export_player_l1_cities_v2.py` 基于 v2 城市层重建 Tab 数据源（`l1_world.json`/`l1_base.png`/`l1_mask.png`）；13 城市 / 13 城邦 / 12 MST 道路，城市点 100% 命中 mask；出生 L1 权威轮廓 `l1_polygon` 731 点
+- **L3 显示 L2 编号**：L3 大世界视图 F3 调试模式下在 13 个 L2 地区质心标 `L2#编号`（`l3_map_renderer._draw_l2_labels`）——配合 L2 下钻的 `L1#编号`，从头到尾可认层
+- **废弃清理**：旧 `export_player_l1_cities.py`（389 版）不再使用（标记废弃）
+- **测试**：l3 5/5（新增 F3 L2 编号）、p0 6/6（13 城市断言 49 次）、l2 5/5 全绿
+
+### 层级纠偏：老 L1 之下细分城市 v2 + 废弃 389 蒙版（2026-08）
+
+### 层级纠偏：老 L1 之下细分城市 v2 + 废弃 389 蒙版（2026-08）
+
+- **用户纠偏**：真实分层 = L3(老 13 地区) → L2 下老 L1 划分(保持老，69 块) → 城市(在老 L1 之下细分)。"本来想细分 L1，误说成细分 L2"——按细分 L2 误解生成的 389 L1 蒙版 + 基于它的城市层**整体废弃**；L3 V 键 389 蒙版叠加已移除（`l1_overlay.gd`/`test_l1_overlay` 删除）
+- **新增 `l1/city_split_v2.py`**：13 地区老 L1 tiles 拼全局蒙版（69 块，EDT 补 0.01% 陆地缺口）→ 城市点（jittered grid spacing 40）→ 按老 L1 分组多源膨胀 → 面积下限。**1038 城 / 69 老 L1**（平均每 L1 15 城），产物 `output/l1_v2/`
+- **L2 F3 标号**：L2 下钻视图在 F3 调试下给每个老 L1 地块标 `L1#编号`（调试指认不再靠颜色）
+- **校验**：0 跨老 L1、0 多连通、城市点 100% 在自身城市、每老 L1 ≥1 城、面积和=陆地、同老 L1 色相差 0.0046
+- **测试**：`test_l2_strategic_map` 5/5（含 F3 标号）、p0 6/6、l3 4/4 回归全绿
+- **待办**：出生 L1（Tab 城市视图）基于废弃 389 临时占位，待确认"region 13 最右老 L1"后重建；L3 蒙版叠加待接老 L1 蒙版后恢复
+
+### 地块标号 + L1 边界强调（2026-08，调试指认用）
+
+### 地块标号 + L1 边界强调（2026-08，调试指认用）
+
+- **地块标号（G 键切换）**：L3 视图 V 键开启 L1 蒙版叠加后按 **G** 在每个 L1 细胞城市点旁显示地块编号（`l1_overlay.gd`，黑描边白字）；Tab 出生 L1 城市视图按 **G** 显示城市编号 `L1城#XXXX`（`map_renderer.gd`，解析 `tile_id`）。解决"颜色认错地块"——从此按编号指认
+- **L1 边界权威轮廓**：`export_player_l1_cities.py` 输出出生 L1 的权威轮廓（`l1_world.json` 新增 `l1_polygon`，从 L1 蒙版同源提取，194 点）；Tab 视图 G 开启时 L1 边界用粗线标出，**贴 L1 边缘的城市对外边界即套用 L1 边界**（数据已保证：城市并集 == L1 mask、贴边城市 46/104 顶点落在 L1 边界上）
+- **预览改进**：`player_start_l1_cities_preview.png` 分为"城市间细线 + L1 外边界粗线"两级，城市贴 L1 边界一目了然
+- **校验**：L1 叠加测试 3/3、P0 测试 7/7（新增标号切换与 l1_polygon 断言）、战略图 4 套件回归全绿
+
+### 修正出生 L1 定位：region 13（#28bd72）最东地块（2026-08）
+
+- **出生 L1 修正**：定位标准改为「游戏内 L3 地图中 `#28bd72` 色（L2 地区 13 区色，`l3_world.json` 精确命中）内最东侧的 L1 地块 = **label 219**」。此前按全图预览颜色近邻误选 region 3 的 label 69（`#a2ee36` 实为 L2 地区 3 的地区色，非 L1 色）——已用 `--player-start-label 219` 重跑整条链
+- **数据**：出生 L1=219（area 2733px）内 4 城市（面积和=2733）/ 4 城邦 / 3 条 MST 道路；`l1_world.json` + `l1_base.png` + `l1_mask.png`（Tab 数据源）与 `player_start_l1_cities_preview.png` 预览全部更新为 label 219
+- **校验**：城市点在自身 mask 内全部命中；P0 测试 6/6 + 战略图 4 套件回归全绿；`check_godot_errors` 干净
+
+### 玩家初始 L1 地块 + Tab 城市划分视图（2026-08）
+
+- **出生 L1 定案**：L1 label 69（region 3，即预览图中 `#28bd72`（region 13 地块）下方的 `#a2ee36` 色块）标记为玩家初始默认地块——`l1_world_split.py` 新增 `--player-start-label`，`l1_data.json` 写入 `player_start: true`
+- **Tab 战略图 = 出生 L1 的城市划分**：新增 `l1/export_player_l1_cities.py`，把出生 L1 的 4 个城市导出为 L1WorldData 兼容格式（`l1_world.json` + `l1_base.png` + `l1_mask.png` 覆盖 Tab 数据源）——每城市 = 1 地块 1 聚落（城市点/级别按面积分档/独立城邦政权/MST 道路/出生城市 = 最大城市）；城市暂无 map_id → 双击不可进入（空 map_id 保护，可玩地图接入后自动恢复）
+- **城市层加密**：`city_split.py` 默认间距 36 → 22（3203 个城市，平均每 L1 ~8 个；出生 L1 内 4 个城市）；城市轮廓抽稀 tol 0.8 → 0.3
+- **预览**：`config/strategic_map/player_start_l1_cities_preview.png`（出生 L1 城市划分放大图，含城市点）
+- **测试**：`test_strategic_map_p0` 更新为城市层语义 6/6 绿（数据加载/城市点查询/悬停换算/无 map_id 不可进入/暂停恢复）；战略图 4 套件回归全绿
+
+### 城市细分层 + 回滚 L2 视图改动（2026-08）
+
+- **新增 `l1/city_split.py`**：L1 地块之下细分"城市"——城市点（jittered grid，`--spacing 36`，每 L1 至少 1 点）→ 按 L1 分组多源膨胀（城市不跨 L1/海/湾，一个 L1 的两个半岛不共城市）→ 面积下限合并（`--min-city-area 90`）。1236 个城市 / 389 L1，同 L1 相似色（父 L1 色相 + 明度阶梯）。产物 `output/l1/city_*`（labels/预览/索引图/城市点图/JSON）
+- **回滚 L2 视图改动**：撤销"L2 下钻显示 L1 细分"（L2 视图恢复原始划分，`l2_l1_overlay.gd`/`export_l1_l2_split.py`/`test_l2_l1_overlay` 移除）——方向修正：L2 视图保持原样，细分目标改为 **L1 之下再分城市**
+- **校验**：城市 0 跨 L1、0 多连通、0 跨海；城市点 100% 在自身城市内；每 L1 ≥1 城市；面积和 == 陆地；同 L1 内城市最大色相差 0.003（量化噪声级）；L2 视图测试 4/4 绿
+
+### 全大陆 L1 蒙版划分 v2：细胞质膨胀（2026-08，L3 层直裁为 L1）
+
+- **算法升级**（`l1/l1_world_split.py`）：由欧氏 Voronoi 改为**岛×L2 分组多源同步膨胀**（flat watershed）——细胞在陆地内生长被海阻挡：**单个 L1 细胞不跨海、不跨湾，同一大陆的两个半岛不共用地块**；岛屿 = 独立计算单元（"孤立的岛屿单独算"，岛内像素只归岛内城市点竞争）；城市点贴近陆地边缘时向陆内均匀膨胀到与其他细胞相近大小；新增 `--min-tile-area` 面积下限合并（无同组相邻细胞可并的极小岛豁免标注 `small_exempt`）。389 个 L1 / 13 地区 / 83 岛全部覆盖。
+- **校验**：陆地零未分配像素；0 跨海细胞、0 多连通组件细胞、0 跨 L2 污染；城市点 100% 在自身胞内；每岛 ≥1 城市点；低于下限非豁免 0；面积和 == 陆地面积；邻接对称（`test_l1_overlay` 2/2 + 战略图 4 套件回归绿）
+- **消费端不变**：L3 战略图 V 键叠加仍走 `l1_overlay.gd`（ArrayMesh 静态烘焙），数据格式向后兼容
+
+### 全大陆 L1 蒙版划分（2026-08，L3 层直裁为 L1）
+
+- **生成端**：新增 `tools/worldgen/l1/l1_world_split.py`——在 L3 层把整块大陆划分为 423 个 L1 地块：城市点 = 均匀网格平铺 + 细微扰动（jittered grid，每岛至少 1 点）；受限 Voronoi 直线细胞边界（跨 L2 处采用 L2 地区边界，0 地块跨区污染）；同 L2 地区相似色蒙版（区内明度阶梯）。产物 `output/l1/`（labels npy / 相似色预览 / label 直编索引图 / 元数据 JSON）并拷贝至 `config/strategic_map/`
+- **消费端**：L3 战略图（M 键）新增 **V 键**切换 L1 蒙版叠加层（`modules/world_map/scripts/l1_overlay.gd`，加载时把全部地块三角剖分/线段烘焙为静态 ArrayMesh，每帧仅 2 次 draw_mesh 零 CPU 剖分）；新增集成测试 `test_l1_overlay`（2/2 绿），战略图相关 4 套件回归全绿
+- **文档**：08-程序化世界生成.md 增补 §二十一 L3-L；世界地图数据流.md / 编辑器工具索引 / worldgen README / 待办事项同步
+
 ### 架构审计修复（2026-08）：依赖环 + 生命周期清理 + 工具链
 
 - **P0 依赖环**：units→construction 内部类强引用（BehaviorWork/BehaviorHaul 的 ConstructionProject 类型）改为鸭子类型；construction→units 的 Hitbox.CollisionLayer 改为本地常量；combat→units 的 WeaponMount.Mood 改为本地同值枚举；texture_gen 的 white_tex.png 迁入本模块 assets 并修正全部 debug 场景/脚本路径，删除引用 building_gen 归档场景的 smithy_thatch_preview

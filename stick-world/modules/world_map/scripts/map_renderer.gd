@@ -1,53 +1,69 @@
 extends Node2D
 class_name MapRenderer
-## 战略图渲染器（L1 单层）—— 卫星图底图 + 边界线描边 + 聚落/道路/文字
+## 战略图渲染器（L1 单层，Tab 键）—— 与 L2 同款分层矢量绘制
 ##
-## 详见 docs/技术/架构/战略图架构.md §4.5（L1 渲染，P0 简版用 _draw 不上 Shader）
+## 数据来自 l1_world.json（含 context_size/neighbors/lakes，坐标 = context 局部）。
+## 全部矢量绘制（地块少），任意缩放清晰，不依赖底图纹理。
+## 分层（context 坐标系，含灰色邻居 L1 块扩展区域，与 L2MapRenderer 一致）：
+##   海洋背景 -> 湖泊(浅蓝) -> 邻居老 L1 块(灰色) -> 当前 L1 城市块(政权色)
+##   -> 城市描边 + 出生 L1 权威轮廓(深色) -> hover 描边(灰) -> F3 地块编号
 ##
-## 渲染层次：
-##   1. 卫星图底图（l1_base.png，地形色）
-##   2. 每个 L1 地块边界线描边（政权色，不填充内部）
-##   3. 聚落间道路（MST，白色虚线感实线）
-##   4. 聚落图标（按级别大小）+ 聚落名文字
-##   5. 悬停/选中高亮
+## 交互：hover 命中城市块（经相机换算 + 索引图查询），点击选中由控制器经 api 处理。
 
 ## 关联的 L1 世界数据
 var _data: L1WorldData = null
 
-## 当前选中的聚落 ID（""表示无）
-var selected_id: String = ""
-
-## 当前悬停的地块/聚落
-var hovered_tile_id: String = ""
-var hovered_settlement_id: String = ""
-
-## 选中高亮色
-@export var selection_color: Color = Color(1.0, 0.85, 0.2, 0.9)
-
-## 悬停高亮色
-@export var hover_color: Color = Color(1.0, 1.0, 1.0, 0.6)
-
-## 道路颜色
-@export var road_color: Color = Color(0.95, 0.85, 0.6, 0.85)
-
-## 空聚落地块边界颜色（灰，表示贫瘠）
-@export var empty_tile_color: Color = Color(0.6, 0.6, 0.6, 0.7)
-
-## 边界线宽度
-@export var border_width: float = 2.0
-
-## 聚落图标最小半径（T1）
-@export var icon_radius_min: float = 6.0
-
-## 聚落图标半径递增（每级 +）
-@export var icon_radius_step: float = 3.0
-
-## 相机引用（悬停检测做 screen->map 坐标换算用）
+## 相机引用（悬停检测做 screen->map 坐标换算）
 var _camera: MapCamera = null
+
+## 当前悬停的地块 ID（""=无）
+var hovered_tile_id: String = ""
+
+## 性能缓存：城市描边段 + 出生 L1 轮廓（不随 zoom/hover 变化，set_data 后首帧构建一次复用）。
+## 原实现每帧重建描边段并对每段遍历湖全部边做距离计算（4668 段 × 湖边数 ≈ 百万级），
+## hover 每帧触发 → 卡顿源；缓存后 hover 重绘 = 1 次 draw_multiline。
+var _cached_segs: PackedVector2Array = PackedVector2Array()
+## 出生 L1 权威轮廓（主大陆单环，闭合；export 已保证 l1_polygon 只含最大环）
+var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
+var _segs_valid: bool = false
+
+## 静态色块层 ArrayMesh（海洋+湖泊+邻居+城市色块，set_data 后烘焙一次；描边/轮廓/hover 仍动态）。
+## Geometry2D.triangulate_polygon 一次三角剖分 → 每帧 1 次 draw_mesh，免每帧 earcut（8 城 4750 点 + 邻居 1623 点 + 湖）。
+var _base_mesh: ArrayMesh = null
+
+## 配色（与 L2MapRenderer 完全一致）
+const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
+const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
+const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
+## 城市常驻描边（内部城界；屏幕像素固定、细，不随缩放变化——避免缩放时粗细跳变）
+const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
+const TILE_BORDER_WIDTH := 2.0
+## 出生 L1 轮廓 / 邻居分界（屏幕像素固定，略粗区分出生块边界）
+const BORDER_COLOR := Color(0.25, 0.25, 0.25)
+const BORDER_WIDTH := 2.5
+## hover 描边（屏幕像素固定）
+const HOVER_COLOR := Color(0.55, 0.55, 0.55)
+const HOVER_WIDTH := 3.0
+## 城市中心标记点（小圆点 + 细环，屏幕像素固定；画在聚落位置，指示城市中心）
+const CITY_DOT_RADIUS := 3.0
+const CITY_DOT_RING_WIDTH := 1.0
+const CITY_DOT_COLOR := Color(0.95, 0.95, 0.9)
+const CITY_DOT_RING := Color(0.12, 0.12, 0.12)
+## F3 调试：城市编号
+const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
+const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
+## F3 城市编号字号（地图单元，原生渲染）：8192 级 context 城市约 180 地图单元，
+## 30 号在默认整图适配（zoom≈0.77）下约 23px 屏幕，字号随地图缩放（原生行为）
+const LABEL_SIZE := 30.0
+## F3 城市编号屏幕上限（像素）：仅高缩放时封顶防"雷霆大字"，默认缩放不受影响
+const LABEL_SCREEN_CAP := 40.0
+var _debug_was_visible: bool = false
 
 
 func set_data(data: L1WorldData) -> void:
 	_data = data
+	_segs_valid = false
+	_base_mesh = null
 	queue_redraw()
 
 
@@ -55,18 +71,17 @@ func set_camera(camera: MapCamera) -> void:
 	_camera = camera
 
 
-func select(id: String) -> void:
-	selected_id = id
+## 接口保留（api.select 调用）；选中高亮交给 hover/控制器
+func select(_id: String) -> void:
 	queue_redraw()
 
 
 func deselect() -> void:
-	selected_id = ""
 	queue_redraw()
 
 
 func get_selected() -> String:
-	return selected_id
+	return ""
 
 
 func refresh() -> void:
@@ -86,79 +101,253 @@ func _process(_delta: float) -> void:
 		mouse_pos = _camera.screen_to_map(mouse_pos)
 	var query: Dictionary = _data.query_at_map_pos(mouse_pos)
 	var tile: L1TileDef = query.get("tile", null)
-	var settlement: SettlementRef = query.get("settlement", null)
 	var new_tile_id: String = tile.tile_id if tile != null else ""
-	var new_settlement_id: String = settlement.settlement_id if settlement != null else ""
-	if new_tile_id != hovered_tile_id or new_settlement_id != hovered_settlement_id:
+	if new_tile_id != hovered_tile_id:
 		hovered_tile_id = new_tile_id
-		hovered_settlement_id = new_settlement_id
+		queue_redraw()
+	# F3 调试模式变化时刷新（城市编号显隐）
+	var debug_now: bool = DebugApi != null and DebugApi.is_visible()
+	if debug_now != _debug_was_visible:
+		_debug_was_visible = debug_now
 		queue_redraw()
 
 
 func _draw() -> void:
 	if _data == null:
 		return
-	# 1. 卫星图底图
-	if _data.base_texture != null:
-		draw_texture(_data.base_texture, Vector2.ZERO)
-	# 2. 地块边界线（政权色）
-	for tile in _data.tiles:
-		_draw_tile_border(tile)
-	# 3. 道路
-	for road in _data.roads:
-		if road.size() >= 2:
-			draw_polyline(road, road_color, 3.0)
-	# 4. 聚落图标 + 名称
-	for tile in _data.tiles:
-		if tile.settlement != null:
-			_draw_settlement(tile)
-	# 5. 悬停高亮（最后画，盖在图标上）
-	if not hovered_tile_id.is_empty():
+	var ctx := _data.context_size
+	var ctx_size := Vector2(float(ctx.x), float(ctx.y))
+	if ctx_size.x <= 0.0:
+		ctx_size = Vector2(float(_data.size), float(_data.size))
+	var zz: float = 1.0
+	if _camera != null and _camera.has_method("get_zoom"):
+		zz = _camera.get_zoom()
+	# 1. 静态色块层（海洋+湖泊+邻居+城市色块 → 单张 ArrayMesh，描边/轮廓/hover 仍动态画）
+	if _base_mesh == null:
+		_bake_base_mesh()
+	if _base_mesh != null:
+		draw_mesh(_base_mesh, null)
+	else:
+		# 回退：数据异常时逐层绘制
+		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
+		for lake in _data.lakes:
+			if (lake as Array).size() >= 3:
+				draw_colored_polygon(_pts(lake), LAKE_COLOR)
+		for nb in _data.neighbors:
+			for poly in nb.get("polygons", []):
+				if (poly as Array).size() >= 3:
+					draw_colored_polygon(_pts(poly), NEIGHBOR_COLOR)
 		for tile in _data.tiles:
-			if tile.tile_id == hovered_tile_id:
-				_draw_tile_border(tile, hover_color, border_width + 2.0)
+			if tile.polygon.size() < 3:
+				continue
+			draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
+	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）。
+	#    描边段不随 zoom/hover 变化 → 缓存复用（原每帧重建 = 4668 段 × 湖边数 距离计算，hover 卡顿源）
+	var tw: float = TILE_BORDER_WIDTH
+	if zz > 0.0001:
+		tw = TILE_BORDER_WIDTH / zz
+	if not _segs_valid:
+		_build_cached_geometry()
+	if _cached_segs.size() >= 2:
+		draw_multiline(_cached_segs, TILE_BORDER_COLOR, tw, true)
+	# 6. 出生 L1 权威轮廓（屏幕像素固定，略粗区分出生块；邻居分界同理）
+	var bw: float = BORDER_WIDTH
+	if zz > 0.0001:
+		bw = BORDER_WIDTH / zz
+	if _cached_l1_closed.size() >= 3:
+		draw_polyline(_cached_l1_closed, BORDER_COLOR, bw, true)
+	# 6.5 城市中心标记点（小圆点 + 细环，屏幕像素固定——半径和环宽都随缩放换算成地图单位，
+	# 放大环不遮白点、缩小环不消失；粗细保持屏幕一致）
+	var dot_r: float = CITY_DOT_RADIUS
+	var ring_w: float = CITY_DOT_RING_WIDTH
+	if zz > 0.0001:
+		dot_r = CITY_DOT_RADIUS / zz
+		ring_w = CITY_DOT_RING_WIDTH / zz
+	for tile in _data.tiles:
+		if tile.settlement == null:
+			continue
+		draw_circle(tile.settlement.position, dot_r, CITY_DOT_COLOR)
+		draw_arc(tile.settlement.position, dot_r, 0.0, TAU, 16, CITY_DOT_RING, ring_w)
+	# 7. hover 城市块描边（屏幕像素固定）
+	if not hovered_tile_id.is_empty():
+		var hw: float = HOVER_WIDTH
+		if zz > 0.0001:
+			hw = HOVER_WIDTH / zz
+		for tile in _data.tiles:
+			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
+				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)
 				break
+	# 8. F3 调试：城市编号（标在聚落位置）
+	if DebugApi != null and DebugApi.is_visible():
+		_draw_city_labels()
 
 
-func _draw_tile_border(tile: L1TileDef, color: Color = Color.WHITE, width: float = -1.0) -> void:
-	if tile.polygon.size() < 3:
+## 闭合多边形点列（首尾相连）
+func _closed(pts: PackedVector2Array) -> PackedVector2Array:
+	if pts.size() < 3:
+		return pts
+	var out := pts.duplicate()
+	out.append(out[0])
+	return out
+
+
+## 邻湖判定容差（地图单元）：边中点距湖多边形 ≤ 该值视为"地块-湖泊"边界不描边。
+## 8192 级 context 下沿湖边 ~0-10、最近非湖边 ~10.1，取 context 1%（798≈8）安全。
+func _lake_edge_tol() -> float:
+	var tol := 4.0
+	if _data.context_size.x > 0:
+		tol = _data.context_size.x * 0.01
+	return tol
+
+
+## 烘焙静态色块层：海洋(矩形)/湖泊/邻居/城市色块 → 单张 ArrayMesh（顶点色，三角形独立顶点）。
+## Geometry2D.triangulate_polygon 一次性 earcut（C++，含凹多边形），仅 set_data / 首帧调用一次。
+func _bake_base_mesh() -> void:
+	_base_mesh = null
+	var ctx := _data.context_size
+	if ctx.x <= 0 or ctx.y <= 0:
 		return
-	if width < 0.0:
-		width = border_width
-	# 政权色（有归属）+ 选中高亮
-	var border_color: Color = color
-	if color == Color.WHITE:
-		if not tile.owner_state_id.is_empty():
-			border_color = _data.get_state_color(tile.owner_state_id)
-		elif tile.is_empty():
-			border_color = empty_tile_color
-	# 闭合多边形描边（首尾相连）
-	var pts: PackedVector2Array = tile.polygon
-	pts.append(pts[0])
-	draw_polyline(pts, border_color, width)
+	# 收集 (多边形, 颜色)：顺序 = 原绘制顺序（湖泊最后画，盖邻居/城市色块——
+	# 湖泊弧线与城市块交界处由湖弧线决定，严丝合缝无缝隙；export 已裁剪城市块不覆盖湖）
+	var pairs: Array = []  # [[PackedVector2Array, Color], ...]
+	# 海洋 = 全矩形底
+	for nb in _data.neighbors:
+		for poly in nb.get("polygons", []):
+			pairs.append([_pts(poly), NEIGHBOR_COLOR])
+	for tile in _data.tiles:
+		if tile.polygon.size() >= 3:
+			pairs.append([tile.polygon, _data.get_state_color(tile.owner_state_id)])
+	for lake in _data.lakes:
+		pairs.append([_pts(lake), LAKE_COLOR])
+	# 三角剖分 + 顶点色（每三角形独立顶点，避免共享顶点颜色冲突）
+	var verts := PackedVector2Array()
+	var cols := PackedColorArray()
+	for pair in pairs:
+		var pts: PackedVector2Array = pair[0]
+		if pts.size() < 3:
+			continue
+		var tris := Geometry2D.triangulate_polygon(pts)
+		if tris.is_empty():
+			continue
+		for i in range(0, tris.size(), 3):
+			for k in range(3):
+				verts.append(pts[tris[i + k]])
+				cols.append(pair[1])
+	if verts.is_empty():
+		return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_COLOR] = cols
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_base_mesh = mesh
 
 
-func _draw_settlement(tile: L1TileDef) -> void:
-	var s: SettlementRef = tile.settlement
-	var pos: Vector2 = s.position
-	# 按级别大小画实心圆（城市最大）
-	var radius: float = icon_radius_min + float(s.level - 1) * icon_radius_step
-	var color: Color = _data.get_state_color(tile.owner_state_id) if not tile.owner_state_id.is_empty() else Color.GRAY
-	var is_selected: bool = s.settlement_id == selected_id
-	# 外圈（政权色）
-	draw_circle(pos, radius + 2.0, color)
-	# 内圈（白色，可读性）
-	draw_circle(pos, radius * 0.6, Color(0.98, 0.98, 0.95, 0.95))
-	# 选中环
-	if is_selected:
-		draw_arc(pos, radius + 5.0, 0.0, TAU, 24, selection_color, 2.5)
-	# 名称文字
-	draw_string(
-		ThemeDB.fallback_font,
-		pos + Vector2(radius + 4.0, -radius * 0.4),
-		s.name,
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		14,
-		Color(1.0, 1.0, 1.0, 0.95)
-	)
+## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓。
+## 仅 set_data / 首帧调用一次。
+func _build_cached_geometry() -> void:
+	_cached_segs = PackedVector2Array()
+	_cached_l1_closed = PackedVector2Array()
+	var lake_tol := _lake_edge_tol()
+	# 湖 bbox（外扩 tol）预筛：段中点不在任何湖 bbox 内 → 直接非邻湖，省精确距离计算
+	var lake_boxes: Array[Rect2] = []
+	for lake in _data.lakes:
+		lake_boxes.append(_lake_bbox(lake, lake_tol))
+	for tile in _data.tiles:
+		if tile.polygon.size() < 3:
+			continue
+		var pts := tile.polygon
+		var n := pts.size()
+		for i in range(n):
+			var a := pts[i]
+			var b := pts[(i + 1) % n]
+			if _edge_touches_lake_fast(a, b, lake_tol, lake_boxes):
+				continue
+			_cached_segs.append(a)
+			_cached_segs.append(b)
+	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环，多环串接已在数据侧消除）
+	_cached_l1_closed = _closed(_data.l1_polygon)
+	_segs_valid = true
+
+
+## 湖多边形包围盒（外扩 tol）——邻湖判定预筛用
+func _lake_bbox(lake: Array, tol: float) -> Rect2:
+	var bb := Rect2()
+	var first := true
+	for pt in _pts(lake):
+		if first:
+			bb = Rect2(pt, Vector2.ZERO)
+			first = false
+		else:
+			bb = bb.expand(pt)
+	return bb.grow(tol)
+
+
+## 边中点是否贴着某湖（bbox 预筛加速版）：中点不在任何湖 bbox 内直接 false
+func _edge_touches_lake_fast(a: Vector2, b: Vector2, tol: float, lake_boxes: Array[Rect2]) -> bool:
+	if lake_boxes.is_empty():
+		return false
+	var mid := (a + b) * 0.5
+	for li in range(lake_boxes.size()):
+		if not lake_boxes[li].has_point(mid):
+			continue
+		var pts := _pts(_data.lakes[li])
+		var ln := pts.size()
+		for i in range(ln):
+			if _dist_point_segment(mid, pts[i], pts[(i + 1) % ln]) <= tol:
+				return true
+	return false
+
+
+## 点到线段的最短距离
+func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var len2 := ab.length_squared()
+	if len2 <= 0.000001:
+		return p.distance_to(a)
+	var t := clampf((p - a).dot(ab) / len2, 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+
+## Array[[x,y],...] -> PackedVector2Array
+func _pts(arr: Array) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for pt in arr:
+		if pt is Array and pt.size() >= 2:
+			pts.append(Vector2(float(pt[0]), float(pt[1])))
+	return pts
+
+
+## F3 调试：给城市打编号（屏幕恒定字号，不随缩放放大成大字）
+func _draw_city_labels() -> void:
+	var font := ThemeDB.fallback_font
+	var zz: float = 1.0
+	if _camera != null and _camera.has_method("get_zoom"):
+		zz = _camera.get_zoom()
+	var fs: float = LABEL_SIZE
+	if zz > 0.0001:
+		# 原生渲染：固定地图单元字号（随地图缩放，默认整图适配即可见、大小合适）。
+		# 不再 ÷ 缩放——曾让局部字号过小（如 2.6 地图单元）导致 Godot 渲染消失；
+		# 仅高缩放时按屏幕像素上限封顶，防"雷霆大字"。
+		fs = minf(LABEL_SIZE, LABEL_SCREEN_CAP / zz)
+	var halo: float = maxf(1.5, fs * 0.12)
+	for tile in _data.tiles:
+		if tile.settlement == null:
+			continue
+		var num := _city_num_from_tile_id(tile.tile_id)
+		if num.is_empty():
+			continue
+		var pos := tile.settlement.position
+		var txt := "L1城#" + num
+		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
+			draw_string(font, pos + off * halo, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, LABEL_BG)
+		draw_string(font, pos + Vector2(2.0, -fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, LABEL_COLOR)
+
+
+## 从 tile_id（"city_2082"）解析城市编号
+func _city_num_from_tile_id(tile_id: String) -> String:
+	var prefix := "city_"
+	if tile_id.begins_with(prefix):
+		return tile_id.substr(prefix.length())
+	return tile_id

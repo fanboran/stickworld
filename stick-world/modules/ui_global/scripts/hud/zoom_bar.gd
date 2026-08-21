@@ -25,33 +25,46 @@ func setup(camera_rig: Node) -> void:
 		_update_label()
 
 
-## 锚定到小地图下方（屏幕上方中央，y 与 Minimap 对齐见 UIAPI.HUD_*）
+## 锚定到小地图下方（屏幕上方中央，y 与 Minimap 对齐见 UIAPI.HUD_*）。
+## 条本体（BAR_WIDTH）居中与小地图对齐；右侧额外留出文字区（不占条宽）。
 func _anchor_below_minimap() -> void:
 	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	var vp_w: float = get_viewport_rect().size.x
-	var pos_x: float = (vp_w - BAR_WIDTH) * 0.5
-	position = Vector2(pos_x, UIAPI.HUD_ZOOMBAR_Y)
-	size = Vector2(BAR_WIDTH, BAR_HEIGHT)
+	var bar_x: float = (vp_w - BAR_WIDTH) * 0.5
+	position = Vector2(bar_x, UIAPI.HUD_ZOOMBAR_Y)
+	size = Vector2(BAR_WIDTH + LABEL_WIDTH + 8.0, BAR_HEIGHT)
 
 
 func _build_ui() -> void:
-	# 滑块（占左侧，留出右侧标签空间）
+	# 滑块：条本体宽 = BAR_WIDTH（与小地图同宽对齐），不把文字让进条内
 	_slider = HSlider.new()
 	_slider.min_value = 0.5
 	_slider.max_value = 2.0
 	_slider.step = 0.1
 	_slider.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_slider.offset_right = BAR_WIDTH - LABEL_WIDTH
+	_slider.offset_right = BAR_WIDTH
 	_slider.offset_bottom = BAR_HEIGHT
 	_slider.value_changed.connect(_on_slider_changed)
 	add_child(_slider)
-	# 百分比标签（右侧，右对齐）
+	# 默认缩放（100%）刻度：叠在条内底部（贴近下缘，拉柄圆形不覆盖该区域），
+	# 位置按 grabber 中心公式对准 1.0
+	var grabber_tex: Texture2D = _slider.get_theme_icon("grabber", "HSlider")
+	var grabber_w: float = grabber_tex.get_width() if grabber_tex != null else 16.0
+	var tick_x: float = (1.0 - _slider.min_value) / (_slider.max_value - _slider.min_value) \
+			* (BAR_WIDTH - grabber_w) + grabber_w * 0.5
+	var ruler := ColorRect.new()
+	ruler.color = Color(StickTokens.ACCENT, 0.75)
+	ruler.position = Vector2(tick_x - 1.0, BAR_HEIGHT - 5.0)
+	ruler.size = Vector2(2.0, 4.0)
+	ruler.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(ruler)
+	# 百分比标签：放在条右侧（条宽之外），不与条组成对齐体
 	_label = Label.new()
-	_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_label.offset_left = -LABEL_WIDTH
-	_label.offset_right = 0.0
+	_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_label.offset_left = BAR_WIDTH + 4.0
+	_label.offset_right = BAR_WIDTH + 4.0 + LABEL_WIDTH
 	_label.offset_bottom = BAR_HEIGHT
-	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.text = "100%"
 	add_child(_label)

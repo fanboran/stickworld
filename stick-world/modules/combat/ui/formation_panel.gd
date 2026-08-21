@@ -1,6 +1,6 @@
 class_name FormationPanel
-extends Control
-## 编制管理窗口 —— 队伍类型编制系统的配置界面（挂 UIRoot.ModalOverlay 的模态面板）。
+extends StickWindow
+## 编制管理窗口 —— 队伍类型编制系统的配置界面（FLOATING 浮动窗口）。
 ##
 ## 功能：
 ##   1. 编队列表（类型/人数/队长），点选查看详情
@@ -9,6 +9,8 @@ extends Control
 ##   4. 编队详情：职责范围勾选调整 / 成员管理（任命排长/移出）/ 解散
 ##
 ## 由 SystemSetup 装配到 UIRoot.ModalOverlay，open() 显示、close() 隐藏。
+## 不依赖 BATTLE 模式（村庄/战场都可打开），符合"建造→编队→下令"原型循环。
+## 行为：FLOATING 浮动窗口 —— 无全屏遮罩（可与游戏交互）、可拖动标题栏、ESC 关闭。
 ## 不依赖 BATTLE 模式（村庄/战场都可打开），符合"建造→编队→下令"原型循环。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
@@ -43,13 +45,12 @@ var _idle_checks: Dictionary = {}
 func setup(game_root: Node) -> void:
 	_game_root = game_root
 	_formation = game_root.get_formation_system() if game_root != null and game_root.has_method("get_formation_system") else null
-	_build_ui()
+	window_size = Vector2(760, 500)
+	window_title = "编制管理"
+	behavior = StickWindow.Behavior.FLOATING
+	_build_window()
 	_connect_signals()
 	_refresh_all()
-
-
-func _ready() -> void:
-	visible = false
 
 
 func _connect_signals() -> void:
@@ -63,36 +64,12 @@ func _connect_signals() -> void:
 
 # ─────────────────────────────── UI 构建 ────────────────────────────────
 
-func _build_ui() -> void:
-	# 半透明背景（点击不穿透）
-	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.6)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(bg)
-	# 主面板。注意顺序：先 add_child 再 set_anchors_and_offsets_preset
-	# （节点须已入树、父尺寸已知，才能正确计算居中偏移）。
-	var panel := Panel.new()
-	panel.custom_minimum_size = Vector2(760, 500)
-	add_child(panel)
-	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
-	# 标题
-	var title := Label.new()
-	title.text = "编制管理"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 16)
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top = 6
-	title.offset_bottom = 30
-	panel.add_child(title)
+## 内容装配（StickWindow 已建无遮罩骨架；内容挂 _body，左右分栏）
+func _build_content() -> void:
 	# 左右分栏
 	var hbox := HBoxContainer.new()
-	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	hbox.offset_top = 34
-	hbox.offset_bottom = -44
-	hbox.offset_left = 12
-	hbox.offset_right = -12
-	panel.add_child(hbox)
+	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_body.add_child(hbox)
 	# ── 左栏：编队列表 + 创建区 ──
 	var left := VBoxContainer.new()
 	left.custom_minimum_size = Vector2(300, 0)
@@ -133,34 +110,13 @@ func _build_ui() -> void:
 	_idle_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_idle_list.add_theme_constant_override("separation", 2)
 	right.add_child(_idle_list)
-	# 关闭按钮
-	var close_btn := Button.new()
-	close_btn.text = "关闭"
-	close_btn.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	close_btn.offset_top = -36
-	close_btn.offset_bottom = -8
-	close_btn.offset_left = 20
-	close_btn.offset_right = -20
-	close_btn.pressed.connect(close)
-	panel.add_child(close_btn)
 
 
 # ─────────────────────────────── 打开/关闭 ────────────────────────────────
 
 func open() -> void:
 	_refresh_all()
-	visible = true
-
-
-func close() -> void:
-	visible = false
-
-
-func toggle() -> void:
-	if visible:
-		close()
-	else:
-		open()
+	super.open()
 
 
 # ─────────────────────────────── 刷新 ────────────────────────────────

@@ -47,6 +47,7 @@ const ANIM_MAP: Dictionary = {
 	"walk":       {"spine": "Swordwrath-Walk",         "loop": true},
 	"run":        {"spine": "Swordwrath-Run",          "loop": true},
 	"attack":     {"spine": "Swordwrath-Attack1",      "loop": false},
+	"block":      {"spine": "Swordwrath-Block",       "loop": false},
 	"attack_spear":  {"spine": "Spearton-Attack1",     "loop": false},
 	"attack_pickaxe":{"spine": "Miner-Attack1",        "loop": false},
 	"attack_staff":  {"spine": "Magikill-Spell1",      "loop": false},

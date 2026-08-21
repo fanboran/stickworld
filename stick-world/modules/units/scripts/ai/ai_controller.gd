@@ -29,6 +29,18 @@ const DECISION_INTERVAL: float = 0.3
 ## BehaviorWander 行为本体保留，敌人 AI / 闲逛功能启用时调大此值即可）
 const WANDER_PROBABILITY: float = 0.0
 
+## 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙 背水一战。
+## 被围判定：SURROUND_RANGE 内敌对单位 >= SURROUND_MIN 视为被围
+const SURROUND_RANGE: float = 120.0
+## 被围所需敌对单位数
+const SURROUND_MIN: int = 2
+## 背墙判定：身后此距离内有掩体视为背墙
+const WALL_LOOKBACK: float = 80.0
+## 低血狂暴判定阈值（hp_ratio 低于此值视为低血）
+const RAGE_LOW_HP: float = 0.3
+## 狂暴所需最低士气（低血但士气高于此值 → 狂暴反击；低于此值走溃逃）
+const RAGE_MORALE_THRESHOLD: float = 0.4
+
 ## 工作类型（与 FormationSystem.WorkType 保持一致，本地常量避免跨模块依赖）
 const WorkTypeCombat := "WORK_COMBAT"
 const WorkTypeBuild := "WORK_BUILD"
@@ -265,6 +277,13 @@ func _try_combat() -> bool:
 		if health.has_method("get_morale_ratio") and health.get_morale_ratio() < 0.25:
 			_state_machine.travel("retreat", bi_param)
 			return true
+		# 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙背水一战
+		var mods: Dictionary = _compute_state_modifiers(bi, health)
+		if _should_rage(mods, health):
+			var rage_param: Dictionary = bi_param.duplicate()
+			rage_param["rage"] = true
+			_state_machine.travel("attack", rage_param)
+			return true
 		# HP 低且附近有掩体 -> seek_cover
 		if health.has_method("get_hp_ratio") and health.get_hp_ratio() < 0.4:
 			var cover = bi.get_cover() if bi.has_method("get_cover") else null
@@ -273,6 +292,60 @@ func _try_combat() -> bool:
 				return true
 	# 默认 -> attack
 	_state_machine.travel("attack", bi_param)
+	return true
+
+
+## 状态调制检测（反编译参考实装 E）：低血 / 溃逃 / 被围 / 背墙。
+## 返回 {"low_hp", "routing", "surrounded", "backed_to_wall"} 布尔集。
+func _compute_state_modifiers(bi: Node, health: Node) -> Dictionary:
+	var mods := {
+		"low_hp": false,
+		"routing": false,
+		"surrounded": false,
+		"backed_to_wall": false,
+	}
+	if health != null:
+		mods["low_hp"] = health.has_method("get_hp_ratio") and health.get_hp_ratio() < RAGE_LOW_HP
+		mods["routing"] = health.has_method("is_routed") and health.is_routed()
+	# 被围：SURROUND_RANGE 内敌对单位数 >= SURROUND_MIN
+	if bi != null and bi.has_method("get_enemies_of"):
+		var enemies: Array = bi.get_enemies_of(_entity.get_faction())
+		var near: int = 0
+		var pos: Vector2 = _entity.global_position
+		for e in enemies:
+			if e == null or not is_instance_valid(e):
+				continue
+			if e.has_method("is_dead") and e.is_dead():
+				continue
+			if pos.distance_to(e.global_position) <= SURROUND_RANGE:
+				near += 1
+		mods["surrounded"] = near >= SURROUND_MIN
+	# 背墙：身后（朝向反方向）WALL_LOOKBACK 距离内有掩体
+	if bi != null and bi.has_method("get_cover"):
+		var cover: Node = bi.get_cover()
+		if cover != null and cover.has_method("is_in_cover"):
+			var facing: int = _entity.get_facing() if _entity.has_method("get_facing") else 1
+			var back_pos: Vector2 = _entity.global_position - Vector2(facing, 0) * WALL_LOOKBACK
+			mods["backed_to_wall"] = cover.is_in_cover(back_pos)
+	return mods
+
+
+## 狂暴判定（反编译参考实装 E，参考传奇 RageSystem/DesperationTriggered）：
+##   - 溃逃中 -> 不狂暴（走溃逃）
+##   - 被围 + 背墙 -> 背水一战，强制狂暴（不溃逃）
+##   - 低血且士气高于 RAGE_MORALE_THRESHOLD -> 狂暴反击
+##   - 其余 -> 不狂暴（走现有 seek_cover / attack 决策）
+func _should_rage(mods: Dictionary, health: Node) -> bool:
+	if mods.get("routing", false):
+		return false
+	if mods.get("surrounded", false) and mods.get("backed_to_wall", false):
+		return true
+	if mods.get("low_hp", false):
+		var morale_ratio: float = 1.0
+		if health != null and health.has_method("get_morale_ratio"):
+			morale_ratio = health.get_morale_ratio()
+		return morale_ratio > RAGE_MORALE_THRESHOLD
+	return false
 	return true
 
 

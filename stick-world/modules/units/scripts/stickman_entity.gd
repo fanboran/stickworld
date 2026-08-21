@@ -918,6 +918,12 @@ func play_arrive() -> void:
 		_visual.play("arrive")
 
 
+## 播放格挡动画（持盾格挡时，Swordwrath-Block 转译），播完回 walk/idle。
+func play_block() -> void:
+	if _visual != null and _visual.has_method("play"):
+		_visual.play("block")
+
+
 ## 设置阵营 ID（由 BattleInstance 分配）
 func set_faction(fid: int) -> void:
 	faction_id = fid

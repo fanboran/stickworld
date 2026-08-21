@@ -22,6 +22,13 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_command_chain.gd",
 	"res://tests/unit/test_formation_system.gd",
 	"res://tests/unit/test_behavior_state_machine.gd",
+	"res://tests/unit/test_stickman_anims.gd",
+	"res://tests/unit/test_squad_dest.gd",
+	"res://tests/unit/test_squad_decision.gd",
+	"res://tests/unit/test_state_modifiers.gd",
+	"res://tests/unit/test_ai_enhance.gd",
+	"res://tests/unit/test_ai_morale.gd",
+	"res://tests/unit/test_ai_arrive.gd",
 ]
 
 const PER_TEST_TIMEOUT_SEC: float = 30.0

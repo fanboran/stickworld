@@ -18,6 +18,15 @@ const BASE_DELAY: float = 2.0
 ## 号令已送达单位（延迟结束后发射）
 signal order_delivered(order_type: int, squad_id: String, unit_ids: Array)
 
+# ─────────────────────────────── 运行时 ────────────────────────────────
+## FormationSystem 引用（队内目标点分配用；由装配注入）
+var _formation: Node = null
+
+
+## 注入 FormationSystem 引用（system_setup 装配时调用）。
+func setup_formation(formation: Node) -> void:
+	_formation = formation
+
 
 # ─────────────────────────────── 核心 API ────────────────────────────────
 
@@ -29,13 +38,15 @@ signal order_delivered(order_type: int, squad_id: String, unit_ids: Array)
 ## params: 行为参数（如 {"target": Vector2}）
 ## source_tier: 发令者层级（0=玩家直接指挥，>0=AI 指挥官层级）
 ## squad_tier: 接收小队层级（默认 1=L1 排级）
-func deliver(order_type: int, squad_id: String, units: Array, behavior_name: String, params: Dictionary, source_tier: int = 0, squad_tier: int = 1) -> void:
+## spread_mode: 队伍级目标点分配（反编译参考实装 D）：
+##   "line" 横排散开（推进/冲刺）/ "rally" 围圈（集合）/ "" 不散开（默认）。
+func deliver(order_type: int, squad_id: String, units: Array, behavior_name: String, params: Dictionary, source_tier: int = 0, squad_tier: int = 1, spread_mode: String = "") -> void:
 	var delay: float = _calculate_delay(source_tier, squad_tier)
 	if delay <= 0.0:
-		_execute_delivery(order_type, squad_id, units, behavior_name, params)
+		_execute_delivery(order_type, squad_id, units, behavior_name, params, spread_mode)
 	else:
 		await get_tree().create_timer(delay).timeout
-		_execute_delivery(order_type, squad_id, units, behavior_name, params)
+		_execute_delivery(order_type, squad_id, units, behavior_name, params, spread_mode)
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
@@ -52,8 +63,9 @@ func _calculate_delay(source_tier: int, squad_tier: int) -> float:
 	return BASE_DELAY * tier_diff
 
 
-## 实际执行号令送达：设置每个单位的 AIController 命令
-func _execute_delivery(order_type: int, squad_id: String, units: Array, behavior_name: String, params: Dictionary) -> void:
+## 实际执行号令送达：设置每个单位的 AIController 命令。
+## spread_mode 非空且有 formation 时，为每个单位个性化目标点（队内散开）。
+func _execute_delivery(order_type: int, squad_id: String, units: Array, behavior_name: String, params: Dictionary, spread_mode: String = "") -> void:
 	var unit_ids: Array = []
 	for u in units:
 		if not is_instance_valid(u):
@@ -62,6 +74,12 @@ func _execute_delivery(order_type: int, squad_id: String, units: Array, behavior
 			continue
 		var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
 		if ai != null and ai.has_method("set_order"):
-			ai.set_order(behavior_name, params)
+			# 队伍级目标点分配：复制 params 再个性化 target（不污染共享字典）
+			var p: Dictionary = params
+			if _formation != null and not spread_mode.is_empty() and p.has("target"):
+				p = params.duplicate()
+				var dest: Vector2 = _formation.get_squad_dest(squad_id, u, p["target"], spread_mode)
+				p["target"] = dest
+			ai.set_order(behavior_name, p)
 		unit_ids.append(u.get_instance_id())
 	order_delivered.emit(order_type, squad_id, unit_ids)

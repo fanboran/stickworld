@@ -75,6 +75,17 @@ func restore_morale(amount: float) -> void:
 		morale_changed.emit(old_morale, morale)
 
 
+## 损失士气（伤亡恐慌/士气惩罚；不影响 HP，与 take_damage 的伴随士气损失区分）。
+func lose_morale(amount: float) -> void:
+	amount = maxf(0.0, amount)
+	if is_dead():
+		return
+	var old_morale: float = morale
+	morale = maxf(0.0, morale - amount)
+	if old_morale != morale:
+		morale_changed.emit(old_morale, morale)
+
+
 ## 设置士气（受情绪标签影响时调用）
 func set_morale(value: float) -> void:
 	value = clampf(value, 0.0, max_morale)

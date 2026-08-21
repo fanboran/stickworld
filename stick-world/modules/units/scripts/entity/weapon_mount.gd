@@ -27,6 +27,18 @@ const WEAPON_SCENE_PATHS: Dictionary = {
 }
 ## 盾牌场景（挂左手）
 const SHIELD_SCENE_PATH := "res://modules/units/scenes/components/weapon_shield.tscn"
+## 箭矢投影物场景（弓远程攻击发射）
+const ARROW_SCENE_PATH := "res://modules/units/scenes/components/arrow.tscn"
+## 箭矢飞行速度（与 arrow_projectile.gd SPEED 一致，用于移动预判）
+const ARROW_SPEED: float = 640.0
+## 箭矢预判系数（瞄移动目标时提前量 × 飞行时间 × 系数）
+const ARROW_LEAD_FACTOR: float = 0.7
+## 拉弓满弓发射延迟（s）：attack_bow 动画 2.0s 的 ~37% 处放箭
+const BOW_FIRE_DELAY: float = 0.75
+## 盾牌格挡率（持盾被近战/箭矢命中时减伤概率）
+const BLOCK_CHANCE: float = 0.35
+## 格挡减伤系数（剩余伤害比例）
+const BLOCK_DAMAGE_FACTOR: float = 0.15
 ## 各武器攻击射程（像素，含手臂长度）
 const WEAPON_RANGE: Dictionary = {
 	WeaponType.SWORD: 80.0,
@@ -82,6 +94,9 @@ var _weapon: Node2D = null
 var _shield: Node2D = null
 ## 当前情绪标签
 var _mood: Mood = Mood.STEADY
+## 弓延迟发射：pending 目标与倒计时（拉弓满弓再放箭，视觉对齐 attack_bow 动画）
+var _pending_bow_target: Node = null
+var _bow_fire_timer: float = 0.0
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -131,12 +146,16 @@ func _mount_shield(owner_entity: CharacterBody2D) -> void:
 	_shield = _mount_one(scene, off_hand, "Shield")
 
 
-## 挂载单个物品到骨骼，GripPoint 对齐握把
+## 挂载单个物品到骨骼，GripPoint 对齐握把。
+## GripPoint 坐标 = 贴图握把相对贴图中心的像素偏移；对齐时乘 Sprite 缩放，
+## 使握把视觉精确落在手骨骼上（否则握把悬空，出现"空气把手"）。
 func _mount_one(scene: PackedScene, bone: Node2D, node_name: String) -> Node2D:
 	var instance: Node2D = scene.instantiate()
 	var grip := instance.get_node_or_null("GripPoint") as Marker2D
 	if grip:
-		instance.position = -grip.position
+		var spr := instance.get_node_or_null("Sprite") as Sprite2D
+		var s: float = spr.scale.x if spr else 1.0
+		instance.position = -grip.position * s
 		instance.rotation = -grip.rotation
 	instance.name = node_name
 	bone.add_child(instance)
@@ -176,6 +195,15 @@ func _find_shield_bone(owner_entity: Node2D) -> Node2D:
 
 func _physics_process(delta: float) -> void:
 	update_cooldown(delta)
+	# 弓延迟发射：拉弓满弓时放箭（视觉对齐 attack_bow 动画）
+	if _pending_bow_target != null:
+		if is_instance_valid(_pending_bow_target):
+			_bow_fire_timer -= delta
+			if _bow_fire_timer <= 0.0:
+				_fire_arrow(_pending_bow_target)
+				_pending_bow_target = null
+		else:
+			_pending_bow_target = null
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -190,7 +218,9 @@ func get_cooldown_remaining() -> float:
 	return _cooldown_timer
 
 
-## 执行一次攻击（近战挥砍）。
+## 执行一次攻击。
+## 近战（剑/矛/镐/法杖）：距离 + 命中率判定，命中则目标受击反馈。
+## 远程（弓）：发射箭矢投影物，命中由箭矢实际碰撞决定。
 ## target: 目标 StickmanEntity（必须有 HealthComponent）
 ## 返回 {hit: bool, damage: float, reason: String}
 func perform_attack(target: Node) -> Dictionary:
@@ -201,6 +231,9 @@ func perform_attack(target: Node) -> Dictionary:
 	if target == null or not is_instance_valid(target):
 		result["reason"] = "invalid_target"
 		return result
+	# 弓：远程射击（发射箭矢，命中由箭矢决定）
+	if weapon_type == WeaponType.BOW:
+		return _attack_ranged(target)
 	var health: Node = _get_health(target)
 	if health == null or health.is_dead():
 		result["reason"] = "no_health_or_dead"
@@ -219,6 +252,11 @@ func perform_attack(target: Node) -> Dictionary:
 	# 命中判定（含情绪修正，§7.4）
 	if randf() <= _get_effective_hit_chance():
 		var dmg: float = damage
+		# 目标持盾格挡：减伤 + 目标播放格挡动画（Swordwrath-Block 转译）
+		if _target_is_blocking(target):
+			dmg *= BLOCK_DAMAGE_FACTOR
+			if target.has_method("play_block"):
+				target.play_block()
 		health.take_damage(dmg, owner_entity)
 		# 登记攻击者（防集火重叠；TargetFinder.ignore_current_attackers 过滤依据）
 		if owner_entity.has_method("get_battle_instance"):
@@ -246,6 +284,63 @@ func update_cooldown(delta: float) -> void:
 		_cooldown_timer = maxf(0.0, _cooldown_timer - delta)
 
 
+# ─────────────────────────────── 远程攻击（弓）────────────────────────────────
+
+## 弓：发射箭矢朝向目标（命中由箭矢实际飞行碰撞决定，非概率）。
+## 延迟发射：记录目标 + 倒计时，拉弓满弓（BOW_FIRE_DELAY）时再放箭，
+## 视觉与 attack_bow 拉弓动画对齐。
+## 返回 {hit:false, damage:0, reason:"fired"/...}——命中结果由箭头落地后报告。
+func _attack_ranged(target: Node) -> Dictionary:
+	var result: Dictionary = {"hit": false, "damage": 0.0, "reason": ""}
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		result["reason"] = "no_owner"
+		return result
+	var dist: float = owner_entity.global_position.distance_to(target.global_position)
+	if dist > attack_range:
+		result["reason"] = "out_of_range"
+		return result
+	_pending_bow_target = target
+	_bow_fire_timer = BOW_FIRE_DELAY
+	result["reason"] = "fired"
+	_cooldown_timer = _get_effective_cooldown()
+	return result
+
+
+## 发射箭矢：从射手胸口高度朝目标身体（含移动预判）直线发射。
+func _fire_arrow(target: Node) -> void:
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		return
+	var scene: PackedScene = load(ARROW_SCENE_PATH)
+	if scene == null:
+		push_warning("[WeaponMount] 箭矢场景加载失败: %s" % ARROW_SCENE_PATH)
+		return
+	# 射手胸口（Collider 上部）与目标身体中心（Collider 位置）
+	var from: Vector2 = _body_pos(owner_entity) + Vector2(0, -70)
+	var aim_point: Vector2 = _body_pos(target)
+	var aim: Vector2 = aim_point - from
+	# 移动预判：目标速度 × 飞行时间 × 系数（瞄准移动目标）
+	if target is CharacterBody2D:
+		aim += (target as CharacterBody2D).velocity * (aim.length() / ARROW_SPEED) * ARROW_LEAD_FACTOR
+	var arrow: Node2D = scene.instantiate()
+	var parent: Node = owner_entity.get_parent()
+	if parent == null:
+		parent = get_tree().current_scene
+	parent.add_child(arrow)
+	arrow.global_position = from
+	if arrow.has_method("setup"):
+		arrow.call("setup", aim.normalized(), damage, owner_entity, target)
+
+
+## 实体身体位置（Collider 世界坐标，缺省回落 global + 典型偏移）
+func _body_pos(entity: Node) -> Vector2:
+	var collider: Node = entity.get_node_or_null("Collider")
+	if collider != null and collider is Node2D:
+		return (collider as Node2D).global_position
+	return entity.global_position + Vector2(8.5, 130)
+
+
 ## 获取挂在手部的武器实例（null=未挂载）
 func get_weapon_node() -> Node2D:
 	return _weapon
@@ -254,6 +349,21 @@ func get_weapon_node() -> Node2D:
 ## 获取副手盾牌实例（null=未装备盾）
 func get_shield_node() -> Node2D:
 	return _shield
+
+
+## 持盾格挡判定（被攻击方调用）：装备了盾 + 概率格挡
+func is_shield_blocking() -> bool:
+	if _shield == null or not is_instance_valid(_shield):
+		return false
+	return randf() < BLOCK_CHANCE
+
+
+## 目标是否持盾格挡本次命中（攻击方调用）
+func _target_is_blocking(target: Node) -> bool:
+	var wm: Node = target.get_node_or_null("WeaponMount")
+	if wm == null or not wm.has_method("is_shield_blocking"):
+		return false
+	return wm.is_shield_blocking()
 
 
 ## 是否正在挥砍（程序化挥砍已移除，挥砍由攻击动画驱动，恒 false）

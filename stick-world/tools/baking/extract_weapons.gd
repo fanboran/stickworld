@@ -18,6 +18,7 @@ const EXTRACT: Dictionary = {
 	"classic-spearton-spear-0":     "spear.png",
 	"classic-spearton-shield-0":    "shield.png",
 	"Bow_Full1":                    "bow.png",
+	"Arrow1":                      "arrow.png",
 	"pickaxe":                      "pickaxe.png",
 	"magicstaff":                   "magicstaff.png",
 }

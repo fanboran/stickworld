@@ -17,6 +17,7 @@ const ANIM_ATTACK_SPEAR := "attack_spear"
 const ANIM_ATTACK_PICKAXE := "attack_pickaxe"
 const ANIM_ATTACK_STAFF := "attack_staff"
 const ANIM_ATTACK_BOW := "attack_bow"
+const ANIM_BLOCK := "block"
 const ANIM_DEAD := "dead"
 const ANIM_WALK_CARRY := "walk_carry"
 const ANIM_BUILD := "build"
@@ -59,6 +60,7 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_ATTACK_PICKAXE)
 	_load_anim(lib, ANIM_ATTACK_STAFF)
 	_load_anim(lib, ANIM_ATTACK_BOW)
+	_load_anim(lib, ANIM_BLOCK)
 	_load_anim(lib, ANIM_DEAD)
 	_load_anim(lib, ANIM_WALK_CARRY)
 	_load_anim(lib, ANIM_BUILD)
@@ -80,6 +82,7 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	_add_state(sm, ANIM_RUN)
 	for a in ATTACK_ANIMS:
 		_add_state(sm, a)
+	_add_state(sm, ANIM_BLOCK)
 	_add_state(sm, ANIM_DEAD)
 	_add_state(sm, ANIM_WALK_CARRY)
 	_add_state(sm, ANIM_BUILD)
@@ -99,6 +102,10 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 		for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
 			sm.add_transition(s, a, _smt(0.1))
 		sm.add_transition(a, ANIM_IDLE, _smt(0.12))
+	for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
+		sm.add_transition(s, ANIM_BLOCK, _smt(0.08))
+	sm.add_transition(ANIM_BLOCK, ANIM_IDLE, _smt(0.08))
+	sm.add_transition(ANIM_BLOCK, ANIM_DEAD, _smt(0.1))
 	sm.add_transition(ANIM_IDLE, ANIM_DEAD, _smt(0.15))
 	sm.add_transition(ANIM_WALK, ANIM_DEAD, _smt(0.15))
 	for a in ATTACK_ANIMS:

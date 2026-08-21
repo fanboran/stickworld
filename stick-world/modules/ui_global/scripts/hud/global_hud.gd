@@ -2,22 +2,22 @@ class_name GlobalHUD
 extends Control
 ## 全局 HUD —— 顶层常驻 UI（统一顶栏通栏）。
 ##
-## 顶栏一段式通栏（黑玻璃背景）：左=速度/时间，中=资源条（ResourceBar 内嵌），右=系统按钮。
+## 顶栏一段式通栏（黑玻璃背景）：左=速度/时间，中=系统按钮；材料条（ResourceBar）
+## 作为**顶栏下方独立横条**（ResourceBarHost，y=64 起，不重叠按钮行，见 global_hud.tscn）。
 ## 资源条由 attach_resources 注入（SystemSetup 在资源系统装配后调用）。
 
 const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/resource_bar.gd")
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
-@onready var speed_label: Label = get_node_or_null("LeftBar/LeftHBox/SpeedLabel")
-@onready var time_label: Label = get_node_or_null("LeftBar/LeftHBox/TimeLabel")
+@onready var speed_label: Label = get_node_or_null("MarginContainer/HBoxContainer/SpeedLabel")
+@onready var time_label: Label = get_node_or_null("MarginContainer/HBoxContainer/TimeLabel")
 @onready var notification_label: Label = get_node_or_null("NotificationLabel")
-@onready var centered_button: Button = get_node_or_null("RightBar/RightHBox/CenteredButton")
-@onready var stuck_button: Button = get_node_or_null("RightBar/RightHBox/StuckButton")
-@onready var formation_button: Button = get_node_or_null("RightBar/RightHBox/FormationButton")
-@onready var settings_button: Button = get_node_or_null("RightBar/RightHBox/SettingsButton")
-@onready var _left_bar: PanelContainer = get_node_or_null("LeftBar")
-@onready var _center_bar: PanelContainer = get_node_or_null("CenterBar")
-@onready var _right_bar: PanelContainer = get_node_or_null("RightBar")
+@onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
+@onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
+@onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
+@onready var settings_button: Button = get_node_or_null("MarginContainer/HBoxContainer/SettingsButton")
+## 材料面板（顶栏下方横条，ResourceBar 挂这里）
+@onready var _resource_host: PanelContainer = get_node_or_null("ResourceBarHost")
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -28,18 +28,17 @@ func setup(camera_rig: Node, game_root: Node) -> void:
 	_game_root = game_root
 
 
-## 注入资源条（SystemSetup 在资源系统装配后调用）：材料显示挂进顶栏中块。
+## 注入资源条（SystemSetup 在资源系统装配后调用）：材料显示挂进顶栏下方横条。
 ## 返回资源条实例（供装配方存引用），失败返回 null。
 func attach_resources(resources_api: Node) -> Control:
 	if _resource_bar != null or resources_api == null:
 		return _resource_bar
+	if _resource_host == null:
+		return null
+	_resource_host.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	_resource_bar = _ResourceBarScript.new()
 	_resource_bar.name = "ResourceBar"
-	if _center_bar == null:
-		_resource_bar.queue_free()
-		_resource_bar = null
-		return null
-	_center_bar.add_child(_resource_bar)
+	_resource_host.add_child(_resource_bar)
 	if _resource_bar.has_method("setup"):
 		_resource_bar.setup(resources_api)
 	return _resource_bar
@@ -48,10 +47,6 @@ func attach_resources(resources_api: Node) -> Control:
 func _ready() -> void:
 	_bind_event_bus()
 	_update_speed_display()
-	# 顶栏三块：黑玻璃面板（左=速度/时间，中=材料，右=系统按钮）
-	for bar in [_left_bar, _center_bar, _right_bar]:
-		if bar != null:
-			bar.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	if centered_button != null:
 		centered_button.pressed.connect(_on_centered_button_pressed)
 		_update_centered_button_text()

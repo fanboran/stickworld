@@ -32,6 +32,13 @@ var _renderer: Node = null
 var _camera: Node = null
 var _is_initialized: bool = false
 
+## 出生 L1 全局 label（Tab 默认/玩家出生所在；config/strategic_map 单份数据）
+const BIRTH_L1_LABEL := 69
+## 出生 L1 数据（initialize 加载，open_l1 回到出生时恢复）
+var _birth_data: L1WorldData = null
+## 当前加载的 L1（BIRTH_L1_LABEL = 出生；其他 = l1_packs）
+var _current_l1_label: int = BIRTH_L1_LABEL
+
 
 # ===== 初始化 =====
 
@@ -52,7 +59,9 @@ func setup(
 ## [P] setup 已调用
 ## [Q] L1WorldData 加载完成，渲染器/相机就绪
 func initialize(json_path: String, base_dir: String) -> void:
-	_data = L1WorldData.load_from(json_path, base_dir)
+	_birth_data = L1WorldData.load_from(json_path, base_dir)
+	_data = _birth_data
+	_current_l1_label = BIRTH_L1_LABEL
 	_is_initialized = _data != null and _data.base_texture != null
 	if _is_initialized:
 		if _renderer != null and _renderer.has_method("set_data"):
@@ -63,6 +72,46 @@ func initialize(json_path: String, base_dir: String) -> void:
 
 func is_initialized() -> bool:
 	return _is_initialized
+
+
+## 加载指定老 L1 的地图数据（L2 点击 L1 下钻用）
+## l1_label: 老 L1 全局 label（1..69），数据在 config/strategic_map/l1_packs/l1_%03d/l1_world.json
+## 成功后替换当前数据（renderer/camera 同步切换），返回是否成功
+func open_l1(l1_label: int) -> bool:
+	var data: L1WorldData = null
+	if l1_label == BIRTH_L1_LABEL:
+		# 出生 L1 用 config/strategic_map 单份数据（非 l1_packs，保持 Tab 原有显示）
+		data = _birth_data
+	else:
+		var dir_name := "l1_%03d" % l1_label
+		var base_dir := "res://config/strategic_map/l1_packs/%s" % dir_name
+		var json_path := "%s/l1_world.json" % base_dir
+		if not FileAccess.file_exists(json_path):
+			push_error("[StrategicMapAPI] L1 数据缺失: %s" % json_path)
+			return false
+		data = L1WorldData.load_from(json_path, base_dir)
+	if data == null or data.base_texture == null:
+		push_error("[StrategicMapAPI] L1 加载失败: %s" % l1_label)
+		return false
+	_data = data
+	_current_l1_label = l1_label
+	if _renderer != null and _renderer.has_method("set_data"):
+		_renderer.set_data(data)
+	if _camera != null and _camera.has_method("set_data"):
+		_camera.set_data(data)
+	return true
+
+
+## 确保数据为指定 L1（Tab 打开用）：已是则不动返回 false，否则重载并返回 true（供控制器重置视角适配新 context）
+func ensure_player_l1(l1_label: int) -> bool:
+	if _current_l1_label == l1_label:
+		return false
+	return open_l1(l1_label)
+
+
+## 当前加载的 L1 全局 label（BIRTH_L1_LABEL = 出生）
+func get_current_l1_label() -> int:
+	return _current_l1_label
 
 
 func get_data() -> L1WorldData:

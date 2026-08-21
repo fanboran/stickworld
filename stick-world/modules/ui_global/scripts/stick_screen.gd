@@ -21,7 +21,7 @@ extends Control
 
 # ─────────────────────────────── 内部节点 ────────────────────────────────
 
-var _bg: ColorRect = null
+var _bg: Control = null
 var _panel: PanelContainer = null
 var _title_label: Label = null
 ## 内容区（子类往这里加控件）
@@ -40,10 +40,10 @@ func _ready() -> void:
 
 ## 构建遮罩 + 居中面板 + 统一骨架（子类在 setup() 或 _ready() 中调用）。
 func _build_screen() -> void:
-	# 遮罩
-	_bg = ColorRect.new()
-	_bg.color = Color(0, 0, 0, bg_alpha)
-	_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	# 遮罩：生成艺术背景（压暗 + 旋转圆润立方体 + 光标光晕；自身消费鼠标防穿透）
+	_bg = GenerativeBackdrop.new()
+	_bg.name = "Dim"
+	_bg.dim_color = Color(0.02, 0.03, 0.06, bg_alpha)
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_bg)
 	# 居中面板（黑玻璃 + 统一内边距，不手写 position）

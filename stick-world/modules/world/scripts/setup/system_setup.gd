@@ -467,7 +467,26 @@ func _setup_boundary_detector() -> void:
 	# 注入 GameRoot（替代根节点遍历反查）
 	if _root._boundary_detector.has_method("setup"):
 		_root._boundary_detector.setup(_root)
-	# 实例化战略图（CanvasLayer 独立渲染层，全屏覆盖；Content 初始隐藏）
+	# 战略图懒加载：启动时不再实例化/初始化（耗时阻塞主线程，曾致启动 10s+ 灰屏），
+	# 首次打开（Tab / M / 边界提示）时经 _ensure_strategic_maps 初始化，见 _open_strategic_map。
+	_root._boundary_detector.open_world_map_requested.connect(_open_strategic_map)
+	# 战略图关闭 -> 恢复场景图输入（api.close_strategic_map / ESC 都发此信号）
+	if EventBus != null:
+		EventBus.strategic_map_closed.connect(_on_strategic_map_closed)
+
+
+## 战略图懒加载：首次打开（Tab / M / 边界提示）才实例化并初始化。
+## 战略图启动时 Content 隐藏，其 instantiate + 数据加载（l1/l3 JSON + 索引图）耗时巨大，
+## 必须移出启动装配，否则每次启动卡 10s+。
+func _ensure_strategic_maps() -> void:
+	if _root._strategic_map == null:
+		_setup_l1_strategic_map()
+	if _root._strategic_map_l3 == null:
+		_setup_l3_strategic_map()
+
+
+## 装配 L1 战略图（Tab / 边界提示打开的世界地图）
+func _setup_l1_strategic_map() -> void:
 	_root._strategic_map = _StrategicMapScene.instantiate()
 	_root._strategic_map.name = "StrategicMap"
 	_root.add_child(_root._strategic_map)
@@ -479,13 +498,6 @@ func _setup_boundary_detector() -> void:
 			"res://config/strategic_map/l1_world.json",
 			"res://config/strategic_map"
 		)
-	# 连接边界检测器 -> 打开战略图
-	_root._boundary_detector.open_world_map_requested.connect(_open_strategic_map)
-	# 战略图关闭 -> 恢复场景图输入（api.close_strategic_map / ESC 都发此信号）
-	if EventBus != null:
-		EventBus.strategic_map_closed.connect(_on_strategic_map_closed)
-	# M 键 -> L3 大世界战略图（与 Tab 的 L1 地图独立）
-	_setup_l3_strategic_map()
 
 
 ## 装配 L3 大世界战略图（M 键视图）
@@ -510,6 +522,10 @@ func _setup_l3_strategic_map() -> void:
 	if l2_content != null and content != null and content.has_method("set_l2_view") \
 			and l2_content.has_method("open"):
 		content.call("set_l2_view", l2_content)
+	# 装配 L2 -> L1 下钻（L2 点击 L1 地块打开对应老 L1 的 Tab 视图；L1 controller = strategic_map.tscn 的 Content）
+	var l1_content: Node = _root._strategic_map.get_node_or_null("Content") if _root._strategic_map != null else null
+	if l2_content != null and l1_content != null and l2_content.has_method("set_l1_view"):
+		l2_content.call("set_l1_view", l1_content)
 
 
 ## M 键全局监听（打开/关闭 L3 大世界战略图）
@@ -520,6 +536,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _toggle_l3_strategic_map() -> void:
+	_ensure_strategic_maps()
 	if _root._strategic_map_l3 == null:
 		return
 	var content: Node = _root._strategic_map_l3.get_node_or_null("Content")
@@ -538,11 +555,18 @@ func _toggle_l3_strategic_map() -> void:
 
 
 func _open_strategic_map() -> void:
+	_ensure_strategic_maps()
 	if _root._strategic_map == null:
 		return
 	# 战略图是 CanvasLayer，控制器在 Content 子节点（visible 控制全层显隐）
 	var content: Node = _root._strategic_map.get_node_or_null("Content")
-	if content != null and content.has_method("open"):
+	if content == null or not content.has_method("open"):
+		return
+	if content.visible:
+		# 再按 Tab：关闭地图（恢复场景图输入）
+		content.close()
+		_pause_scene_input(false)
+	else:
 		content.open()
 		_pause_scene_input(true)
 

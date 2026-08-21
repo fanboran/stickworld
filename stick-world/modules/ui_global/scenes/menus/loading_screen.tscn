@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://modules/ui_global/scripts/menus/loading_screen.gd" id="1_loading"]
+[ext_resource type="Script" path="res://modules/ui_global/scripts/menus/loading_spinner.gd" id="2_spinner"]
 
 [node name="LoadingScreen" type="Control"]
 layout_mode = 3
@@ -45,11 +46,11 @@ layout_mode = 2
 horizontal_alignment = 1
 text = "正在进入世界…"
 
-[node name="ProgressBar" type="ProgressBar" parent="CenterBox"]
-custom_minimum_size = Vector2(440, 10)
+[node name="Spinner" type="Control" parent="CenterBox"]
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
-value = 0.0
-show_percentage = false
+size_flags_horizontal = 4
+script = ExtResource("2_spinner")
 
 [node name="TipLabel" type="Label" parent="CenterBox"]
 layout_mode = 2

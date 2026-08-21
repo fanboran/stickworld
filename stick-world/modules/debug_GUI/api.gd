@@ -37,6 +37,16 @@ var _panel_position: Vector2 = Vector2(12, 100)
 
 func _ready() -> void:
 	_load_settings()
+	# 设置面板持久化项（debug/overlay、debug/legend）优先级高于调试自身 cfg；
+	# 未在设置面板应用过（键不存在）时保持 debug_settings.cfg 行为
+	if ConfigManager:
+		if ConfigManager.has_key("debug/overlay"):
+			set_overlay_visible(bool(ConfigManager.get_value("debug/overlay")))
+		if ConfigManager.has_key("debug/legend"):
+			if bool(ConfigManager.get_value("debug/legend")):
+				show_legend()
+			else:
+				hide_legend()
 
 
 # ─────────────────────────────── 绘制器注册 ────────────────────────────────

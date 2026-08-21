@@ -80,3 +80,36 @@
 依赖系统（科技/物流/成就/组织报表等）尚未建立的**大界面空面板**集中放在此模块，
 样式与入口已就绪，系统接入时替换填充。详见 [`modules/ui_placeholder/`](../../../stick-world/modules/ui_placeholder/api.gd)
 与 `02-界面框架.md` §4.4；验收入口 F6 运行 `ui_placeholder_preview.tscn`。
+
+---
+
+## 当前状态与下一步（给接手 AI 的入口）
+
+### 已落地（2026-08）
+
+- **启动/流程**：主菜单接入（继续/新游戏/读档/设置/退出）、载入屏（过渡型）、**战略图懒加载**（启动 20.8s→3.2s）、世界加载覆盖层（真实加载有指示、无死灰屏）
+- **统一模态栈（缺口 2）**：`UIModalStack`（ui_modal_stack.gd）层键字典 + 逐层 pop（PAUSE_MENU/SETTINGS/SAVE_PANEL/EMPIRE_PANEL/CONFIRM），替代 `GameRoot._handle_escape` 特判；输入屏蔽随栈统一（首层入栈暂停、栈空恢复；压上层自动盖住下层防双重遮罩）；确认框已栈化（ESC=取消），占位面板同类单例（重复触发提到栈顶、换预设替换）
+- **分层**：ModalOverlay 盖住全部 UI（z=50）、模态打开自动暂停 + 遮罩消费鼠标 + 相机输入暂停兜底（防穿透）
+- **弹窗体系**：4 种行为模板（`StickScreen`=MODAL / `StickWindow`=FLOATING/DOCK/POPOVER，见 05 §六）、编制菜单已归 FLOATING（可拖动、不变灰）、暂停菜单（帝国功能组 + K/O/J/L 快捷键直达空面板）
+- **统一层号**：`LayerOrder`（layer_order.gd）+ `SystemOverlay` 系统层（toast/确认框挂它，不随调用者）
+- **约束与自检**：布局铁律 + 截图自检 `tests/dev/ui_shots.tscn`（见 09）
+- **防 UI 重合通用方案**：HUD 预留区 + 安全矩形（`StickKit.safe_rect` / `clamp_to_safe_rect`，顶栏 104px/底栏 88px 避让），`StickWindow` FLOATING/POPOVER 初始定位自动夹紧；回归测试 `tests/integration/test_ui_layout.tscn`（顶栏按钮↔材料条不重叠 + 弹窗不盖 HUD，headless 可跑）；材料条（ResourceBarHost）移至顶栏下方（y=64，不再压按钮行）
+- **设置面板**：880×620、分类切换真生效、字段落盘 ConfigManager
+- **HUD**：顶栏距边 12px、小地图 1.5 倍、缩放条条本体对齐+100%刻度+文字在条右侧、时钟缝隙对称
+
+### 下一步（接手 AI 的待办）
+
+1. **做做样子项清理**（待办事项.md）：通知 feed 堆叠、游戏内快捷栏、设置项"存了不生效"（window_mode/音量/show_fps 接消费方）、小地图/缩放条样式统一
+2. **业务面板迁移**（Village/Battle/Possess/BuildMenu/FormationPanel 细节）到 4 模板 + StickTheme，按 09 自检
+3. **模态栈深化**：强/弱模态分级（载入屏/新游戏向导屏蔽 ESC）、战略图并入层键、载入屏并入层号常量
+4. **战略图性能/体验**（2026-08 已做第一档）：L3 几何烘焙 l3_geom.bin（首次打开 10.6s→0.6s，见 `战略图架构.md` §6.1a）、初始视野放大 50%；下一步可做 L3 运行时 LOD 分级（缩放切精细度）、地图数据异步加载线程化
+
+### 关键约定速查
+
+| 事项 | 见 |
+|------|-----|
+| 布局铁律 / AI 自检 / 截图工具 | 09 |
+| 4 种弹窗行为模板 | 05 §六 |
+| 层号常量 / 模态栈蓝图 | 10 + `LayerOrder` |
+| 界面通达表（入口+快捷键） | 02 §六 |
+| 测试命令 | AGENTS.md（`tests/run_all.sh` / `check_godot_errors.sh` / 截图自检） |

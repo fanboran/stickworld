@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://modules/world_map/scripts/l2_map_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/l2_map_renderer.gd" id="2_renderer"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_camera.gd" id="3_camera"]
+[ext_resource type="Script" path="res://modules/world_map/scripts/l3_zoom_indicator.gd" id="4_hud"]
 
 [node name="StrategicMapL2" type="CanvasLayer"]
 layer = 102
@@ -16,3 +17,7 @@ script = ExtResource("2_renderer")
 
 [node name="MapCamera" type="Node" parent="Content"]
 script = ExtResource("3_camera")
+
+[node name="ZoomIndicator" type="Control" parent="."]
+script = ExtResource("4_hud")
+visible = false

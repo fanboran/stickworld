@@ -79,6 +79,8 @@ def main():
 
     # 8192 合成标签图（region_labels 2048 放大 + 8K 大陆蒙版裁切海岸线）——
     # 用于渲染相邻 L2 地区（灰色）与湖泊（浅蓝）
+    # 老 L1 全局标签（L2 点击 L1 下钻定位：局部 L1 label -> 老 L1 全局 label）
+    legacy = np.load(os.path.join(HERE, "output", "l1_v2", "legacy_l1_labels_8192.npy")).astype(np.int32)
     labels_2048 = np.load(os.path.join(HERE, "output", "regions", "region_labels.npy"))
     labels8192 = np.array(Image.fromarray(
         labels_2048.astype(np.int32), "I").resize((8192, 8192), Image.NEAREST)).astype(np.int32)
@@ -103,6 +105,15 @@ def main():
         seg = np.load(os.path.join(rdir, "tiles_8192.npy"))
         seg[seg < 0] = 0
         tiles_small = seg.astype(np.int32)
+
+        # 老 L1 全局映射：tiles_8192 = region bbox 内裁切，与 legacy bbox 区域逐像素对齐
+        l1_global = {}
+        legacy_crop = legacy[y0:y1 + 1, x0:x1 + 1]
+        for llab in np.unique(tiles_small[tiles_small > 0]):
+            m = tiles_small == llab
+            counts = np.bincount(legacy_crop[m].ravel())
+            if counts.size > 1:
+                l1_global[int(llab)] = int(np.argmax(counts[1:]) + 1)
 
         # 上下文：正方形（边长 = 地区长边，对称补齐；地图边界外虚空）。
         # 同一网格提取地块/邻居/湖泊（8192 精度，共享角点无缝）
@@ -173,6 +184,7 @@ def main():
                 holes_out.append({"points": h, "lake": is_lake})
             tiles.append({
                 "label": k,
+                "global_l1_label": l1_global.get(k, 0),
                 "color": list(colors[(k - 1) % len(colors)]),
                 "area_px": int(m.sum()),
                 "area_ratio": float(m.sum() / (tiles_small > 0).sum()),

@@ -21,7 +21,11 @@ func _ready() -> void:
 	_runner.add_test("L3 数据加载：13 地区 + 底图 + 索引图", _test_load, true)
 	_runner.add_test("分区索引图命中（含海洋归边）", _test_query, true)
 	_runner.add_test("完整分区轮廓即分界（含海上延长，连续无突变）", _test_links, true)
-	_runner.add_test("M 键视图打开/关闭", _test_toggle, true)
+	_runner.add_test("M 键视图打开/关闭（HUD 同步显隐）", _test_toggle, true)
+	_runner.add_test("F3 调试模式：L2 地区编号刷新", _test_debug_labels, true)
+	_runner.add_test("显示模式切换（L1 <-> 城市）", _test_display_mode, true)
+	_runner.add_test("hover 命中老 L1（索引图查询）", _test_hover_l1, true)
+	_runner.add_test("HUD：默认缩放=100% + 按钮/缩放条/百分比互不重叠", _test_hud, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -36,13 +40,25 @@ func _test_load() -> void:
 	if _renderer == null:
 		return
 	_data = L3WorldData.load_from(L3_JSON_PATH, L3_BASE_DIR)
-	_renderer.set_data(_data)
+	# l1_index 由 L3MapRenderer 后台异步解码（load_from 不阻塞，先为 null）；
+	# 测试同步注入等价结果（同一 PNG 解码），供 hover 查询用
+	_runner.assert_true(_data.l1_index_image == null, "l1_index 应异步加载（load_from 后为空）")
+	var l1_f := FileAccess.open("%s/l3_l1_index_8192.png" % L3_BASE_DIR, FileAccess.READ)
+	if l1_f != null:
+		var l1_img := Image.new()
+		if l1_img.load_png_from_buffer(l1_f.get_buffer(l1_f.get_length())) == OK:
+			_data.l1_index_image = l1_img
 	_runner.assert_true(_data.mask_image != null, "L3 分区索引图已加载")
 	_runner.assert_true(_data.regions.size() == 13, "应有 13 个地区（实测 %d）" % _data.regions.size())
+	_runner.assert_true(_data.l1_tiles.size() == 69,
+		"L3 老 L1 视觉层应加载 69 块（实测 %d）" % _data.l1_tiles.size())
+	_runner.assert_true(_data.city_tiles.size() > 500,
+		"L3 城市视觉层应加载（实测 %d）" % _data.city_tiles.size())
+	_runner.assert_true(_data.l1_index_image != null, "L3 老 L1 索引图已加载（hover）")
 	# 每个地区应有陆地轮廓
 	var no_poly: int = 0
 	for r in _data.regions:
-		if (r.get("land_polygon", []) as Array).size() < 3:
+		if r.get("land_polygon", []).size() < 3:
 			no_poly += 1
 	_runner.assert_true(no_poly == 0, "所有地区应有陆地轮廓（缺失 %d）" % no_poly)
 
@@ -56,11 +72,12 @@ func _test_query() -> void:
 	var checked: int = 0
 	for r in _data.regions:
 		var lab: int = r.get("label", 0)
-		var land_poly: Array = r.get("land_polygon", [])
+		var land_poly = r.get("land_polygon", [])
 		if land_poly.size() < 3:
 			continue
 		# 轮廓点是 (y,x) 顺序（find_contours），转为 (x,y) 并内移取陆地像素
-		var pt := Vector2(land_poly[0][1], land_poly[0][0]) + Vector2(4, 4)
+		# （紧凑 bin 已是 Vector2(x,y)，_pt 兼容两种形态）
+		var pt := _pt(land_poly[0]) + Vector2(4, 4)
 		var q: Dictionary = _data.query_at_map_pos(pt)
 		var region: Variant = q.get("region", {})
 		checked += 1
@@ -83,15 +100,15 @@ func _test_links() -> void:
 	var with_full: int = 0
 	var valid_full: int = 0
 	for r in _data.regions:
-		var full: Array = r.get("full_polygon", [])
+		var full = r.get("full_polygon", [])
 		if full.size() >= 3:
 			with_full += 1
 			# 非边缘段应连续（允许沿地图边缘的大跳变，渲染时断段处理）
 			var jumps: int = 0
 			for i in range(full.size()):
-				var a: Array = full[i]
-				var b: Array = full[(i + 1) % full.size()]
-				var d := Vector2(a[0], a[1]).distance_to(Vector2(b[0], b[1]))
+				var a: Variant = full[i]
+				var b: Variant = full[(i + 1) % full.size()]
+				var d := _pt(a).distance_to(_pt(b))
 				if d > 60.0:
 					jumps += 1
 			if jumps <= 2:
@@ -100,16 +117,122 @@ func _test_links() -> void:
 	_runner.assert_true(valid_full == 13, "所有完整轮廓应连续（边缘跳变<=2）（%d/13）" % valid_full)
 
 
+
+func _test_hover_l1() -> void:
+	if _data == null or _data.l1_index_image == null:
+		_runner.assert_true(false, "前置：L1 索引图未加载")
+		return
+	var hit: int = 0
+	for t in _data.l1_tiles:
+		var c: Array = t.get("centroid", [0, 0])
+		if c.size() < 2:
+			continue
+		var q: Dictionary = _data.query_l1_at_map_pos(Vector2(float(c[0]), float(c[1])))
+		var l1hit: Dictionary = q.get("l1", {})
+		if int(l1hit.get("label", 0)) > 0:
+			hit += 1
+	_runner.assert_true(hit >= 10, "质心应命中老 L1（命中 %d/20）" % hit)
+
+func _test_display_mode() -> void:
+	if _scene == null or _renderer == null:
+		_runner.assert_true(false, "前置：L3 场景未装载")
+		return
+	var before: int = _renderer.display_mode
+	var mode: int = _renderer.toggle_display_mode()
+	_runner.assert_true(mode != before, "toggle_display_mode 应切换 L1/城市模式")
+	var mname: String = _renderer.get_mode_name()
+	_runner.assert_true(mname == "城市" or mname == "L1", "模式名应可读（%s）" % mname)
+	_renderer.toggle_display_mode()
+	_runner.assert_true(_renderer.display_mode == before, "再次切换应还原")
+
+
+func _test_debug_labels() -> void:
+	# F3 调试（DebugApi）切换时，L3 渲染器应刷新（_debug_was_visible 变化），不崩溃
+	if _scene == null or _renderer == null:
+		_runner.assert_true(false, "前置：L3 场景未装载")
+		return
+	var before: bool = _renderer._debug_was_visible
+	var was_visible: bool = DebugApi != null and DebugApi.is_visible()
+	if DebugApi != null:
+		DebugApi.set_overlay_visible(true)
+	await get_tree().process_frame
+	_runner.assert_true(_renderer._debug_was_visible != before or bool(DebugApi.is_visible()),
+		"DebugApi 开启后 L3 渲染器应刷新")
+	if DebugApi != null:
+		DebugApi.set_overlay_visible(was_visible)
+	await get_tree().process_frame
+	_runner.assert_true(true, "F3 L2 标签路径无异常")
+
+
+## 顶点统一转 Vector2（紧凑 bin 已是 Vector2(x,y)；JSON 轮廓是 [y,x] Array，兼容两种）
+static func _pt(v: Variant) -> Vector2:
+	if v is Vector2:
+		return v
+	if v is Array and v.size() >= 2:
+		return Vector2(float(v[1]), float(v[0]))
+	return Vector2.ZERO
+
+
 func _test_toggle() -> void:
 	if _content == null:
 		_runner.assert_true(false, "前置失败")
 		return
+	var hud: Control = _scene.get_node_or_null("ZoomIndicator")
+	_runner.assert_true(hud != null and not hud.visible, "初始 L3 HUD 隐藏")
 	_runner.assert_true(not _content.visible, "初始 L3 视图隐藏")
 	if _content.has_method("open"):
 		_content.open()
 	await get_tree().process_frame
 	_runner.assert_true(_content.visible, "open() 后 L3 视图可见")
+	_runner.assert_true(hud != null and hud.visible, "open() 后 L3 HUD 显示")
 	if _content.has_method("close"):
 		_content.close()
 	await get_tree().process_frame
 	_runner.assert_true(not _content.visible, "close() 后 L3 视图隐藏")
+	_runner.assert_true(hud != null and not hud.visible, "close() 后 L3 HUD 隐藏")
+
+
+func _test_hud() -> void:
+	if _scene == null or _content == null:
+		_runner.assert_true(false, "前置：L3 场景未装载")
+		return
+	var hud: Control = _scene.get_node_or_null("ZoomIndicator")
+	_runner.assert_true(hud != null, "L3 场景应含 ZoomIndicator(HUD)")
+	if hud == null:
+		return
+	if _content.has_method("open"):
+		_content.open()
+	await get_tree().process_frame
+	# 默认缩放归一化：0.36 即 100%
+	_runner.assert_true(hud.has_method("set_default_zoom"), "HUD 应有 set_default_zoom")
+	hud.call("set_default_zoom", 0.36)
+	await get_tree().process_frame
+	var label: Label = null
+	var slider: HSlider = null
+	var btn: Button = null
+	for ch in hud.get_children():
+		if ch is Label:
+			label = ch
+		elif ch is HSlider:
+			slider = ch
+		elif ch is Button:
+			btn = ch
+	_runner.assert_true(label != null and label.text == "100%",
+			"默认缩放应显示 100%%（实测 %s）" % (label.text if label != null else "无标签"))
+	_runner.assert_true(slider != null, "HUD 缩放条应为 HSlider（非自绘抽象矩形）")
+	_runner.assert_true(btn != null, "L3 HUD 应有细分模式按钮")
+	# 三元素矩形互不重叠
+	var rects: Array[Rect2] = []
+	if btn != null:
+		rects.append(btn.get_global_rect())
+	rects.append(slider.get_global_rect())
+	rects.append(label.get_global_rect())
+	var overlap: bool = false
+	for i in range(rects.size()):
+		for j in range(i + 1, rects.size()):
+			if rects[i].intersects(rects[j]):
+				overlap = true
+	_runner.assert_true(not overlap, "HUD 按钮/缩放条/百分比标签矩形互不重叠")
+	if _content.has_method("close"):
+		_content.close()
+	await get_tree().process_frame

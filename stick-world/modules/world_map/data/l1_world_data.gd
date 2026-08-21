@@ -37,28 +37,49 @@ var states: Dictionary = {}
 ## 玩家出生聚落 ID
 var spawn_settlement_id: String = ""
 
+## 所属老 L1 全局 label（1..69；L2 下钻打开的 L1 用此区分）
+var parent_l1_label: int = 0
+
+## 出生 L1 地块权威轮廓（context 像素坐标，L1 边界粗线用；贴 L1 边缘的城市套用该边界）
+var l1_polygon: PackedVector2Array = []
+
+## context 尺寸（正方形，含灰色邻居 L1 块扩展区域，渲染画布）
+var context_size := Vector2i.ZERO
+
+## 相邻老 L1 块（灰色显示）：[{label, polygons, holes}]（context 坐标）
+var neighbors: Array = []
+
+## 湖泊多边形（浅蓝显示）：[[(x,y),...]]（context 坐标）
+var lakes: Array = []
+
 ## 状态（tile_id -> L1TileDef 快速索引）
 var _tile_by_id: Dictionary = {}
 
 
-## 从 JSON + PNG 加载 L1 世界数据
-## json_path: l1_world.json 的 res:// 路径
+## 从 JSON/紧凑 bin + PNG 加载 L1 世界数据
+## json_path: l1_world.json 的 res:// 路径（bin 优先：同名 .bin 原样序列化，见 _read_data_dict）
 ## base_dir: 含 l1_base.png / l1_mask.png 的目录（res:// 路径，末尾无斜杠）
 static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	var world := L1WorldData.new()
-	var json_text := FileAccess.get_file_as_string(json_path)
-	if json_text.is_empty():
-		push_error("[L1WorldData] 无法读取 %s" % json_path)
-		return world
-	var data: Variant = JSON.parse_string(json_text)
-	if data == null or not (data is Dictionary):
-		push_error("[L1WorldData] JSON 解析失败: %s" % json_path)
+	var data := _read_data_dict(json_path)
+	if data.is_empty():
+		push_error("[L1WorldData] 无法读取/解析 %s" % json_path)
 		return world
 
 	world.map_id = data.get("map_id", "l1_main")
 	world.name = data.get("name", "")
 	world.size = int(data.get("size", 1024))
 	world.spawn_settlement_id = data.get("spawn_settlement_id", "")
+	world.parent_l1_label = int(data.get("parent_l1_label", 0))
+	var l1poly: Variant = data.get("l1_polygon", [])
+	if l1poly is Array:
+		world.l1_polygon = _polygon_from(l1poly)
+	# context（含灰色邻居 L1 块扩展区域）：context 尺寸 + 邻居/湖泊多边形
+	var csz: Array = data.get("context_size", [])
+	if csz.size() >= 2:
+		world.context_size = Vector2i(int(csz[0]), int(csz[1]))
+	world.neighbors = data.get("neighbors", [])
+	world.lakes = data.get("lakes", [])
 
 	# 底图 + 索引图
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l1_base.png")]
@@ -68,7 +89,12 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	else:
 		push_warning("[L1WorldData] 底图不存在: %s" % base_path)
 	if ResourceLoader.exists(mask_path):
-		world.mask_image = load(mask_path) as Image
+		var mask_tex: Texture2D = load(mask_path) as Texture2D
+		if mask_tex != null:
+			world.mask_image = mask_tex.get_image()
+		else:
+			# 兼容直接导入为 Image 的资源
+			world.mask_image = load(mask_path) as Image
 	else:
 		push_warning("[L1WorldData] 索引图不存在: %s" % mask_path)
 
@@ -184,3 +210,26 @@ static func _polygon_from(arr: Array) -> PackedVector2Array:
 		if pt is Array and pt.size() >= 2:
 			poly.append(Vector2(float(pt[0]), float(pt[1])))
 	return poly
+
+
+## 读取 l1_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，原样序列化——L1 顶点序
+## [x,y] 与 L2/L3 不同，polygon 保持 Array，构造逻辑 _polygon_from 不变）；
+## bin 缺失/格式不符（Godot 升级等）自动回退 JSON。
+static func _read_data_dict(json_path: String) -> Dictionary:
+	var bin_path := json_path.get_basename() + ".bin"
+	if FileAccess.file_exists(bin_path):
+		var f := FileAccess.open(bin_path, FileAccess.READ)
+		if f != null:
+			var magic := f.get_buffer(4).get_string_from_ascii()
+			if magic == "LWDB":
+				f.get_16()  # ver
+				var got: Variant = bytes_to_var(f.get_buffer(f.get_length()))
+				if got is Dictionary:
+					return got
+	var jt := FileAccess.get_file_as_string(json_path)
+	if jt.is_empty():
+		return {}
+	var parsed: Variant = JSON.parse_string(jt)
+	if parsed is Dictionary:
+		return parsed
+	return {}

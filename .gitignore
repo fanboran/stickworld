@@ -57,6 +57,9 @@ tools/worldgen/output/diag/
 tools/worldgen/output/regions_backup_v*/
 .tmp/
 
+# 本地预览截图/内嵌 HTML（tests/dev/preview_* 渲染产物，可随时重生成）
+stick-world/.preview/
+
 # 调试 / 日志
 debug.log
 *.log
@@ -122,3 +125,9 @@ tools/mocap/references/
 
 # Godot 自定义用户数据目录（--user-data-dir 调试残留，不入库）
 stick-world/Godot/
+
+# freebuff 工具本地产物
+.freebuff/
+
+# git worktree（F:\VSCode\game-2\.worktrees\ 下的多分支工作区，不入库）
+.worktrees/

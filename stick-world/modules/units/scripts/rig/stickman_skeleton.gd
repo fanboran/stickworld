@@ -191,17 +191,18 @@ static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 
 
 ## 肢根融合补丁：肩×2 / 髋×2，各挂对应肢根骨骼（跟随摆动）。
-## 形状 = 与肢体等宽的填充胶囊（宽=填充+2×描边=描边外缘宽度），
-## 沿肢体轴向覆盖根部 ROOT_PATCH_LEN 段——横向永不越出肢体剪影，
-## 纵向盖掉链间描边在肢根的接缝弧：只溶根不溶中段。
+## 填充胶囊沿肢体轴向覆盖根部，宽度略窄于描边外缘，且向躯干侧
+## 偏移一段（offset，骨骼本地坐标）——只盖住"贴向躯干的内缝"，
+## 保留肩/髋处的外轮廓描边（外侧仍面向背景，无需遮线）。
 static func build_joint_patches(skeleton: Skeleton2D, colors: Dictionary) -> Array[Node2D]:
 	var patches: Array[Node2D] = []
 	var fill: Color = colors.get("body", DEFAULT_BODY)
+	# [骨骼路径, 段id, 缝侧偏移(骨骼本地坐标)]
 	var specs := [
-		["hip/lower_torso/upper_torso/upper_arm_outer", 1],
-		["hip/lower_torso/upper_torso/upper_arm_inner", 14],
-		["thigh_outer", 3],
-		["thigh_inner", 11],
+		["hip/lower_torso/upper_torso/upper_arm_outer", 1, Vector2(1.5, -4.0)],
+		["hip/lower_torso/upper_torso/upper_arm_inner", 14, Vector2(-3.5, -3.0)],
+		["thigh_outer", 3, Vector2(-2.5, -4.0)],
+		["thigh_inner", 11, Vector2(2.5, -4.0)],
 	]
 	for spec in specs:
 		var bone := skeleton.get_node_or_null(spec[0]) as Bone2D
@@ -209,10 +210,12 @@ static func build_joint_patches(skeleton: Skeleton2D, colors: Dictionary) -> Arr
 			continue
 		var seg: Dictionary = SKELETON_DATA[spec[1]]
 		var dir := Vector2(seg["x"], seg["y"])
-		var w: float = seg["thickness"] + OUTLINE_WIDTH * 2.0
+		# 补丁宽度 = 填充宽 + 描边（略窄于描边外缘 27 宽），偏移让外侧描边露出
+		var w: float = seg["thickness"] + OUTLINE_WIDTH * 1.0
 		var patch := _make_line("fill",
 			PackedVector2Array([Vector2(-6, 0), Vector2(ROOT_PATCH_LEN, 0)]), w, fill)
 		patch.rotation = dir.angle()
+		patch.position = spec[2]
 		patch.z_index = JOINT_PATCH_Z
 		bone.add_child(patch)
 		patches.append(patch)

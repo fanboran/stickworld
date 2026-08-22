@@ -18,7 +18,8 @@ bool is_adjacent(int a, int b) {
 	if (a == b) {
 		return true;
 	}
-	if (a < 0 || b < 0 || a > 14 || b > 14) {
+	// ID 槽位 0-15（14=未分类前景如武器，15=肩甲补丁）；越界一律视为不相邻
+	if (a < 0 || b < 0 || a > 15 || b > 15) {
 		return false;
 	}
 	vec2 uv = vec2((float(a) + 0.5) / 16.0, (float(b) + 0.5) / 16.0);

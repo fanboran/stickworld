@@ -7,13 +7,12 @@ extends RefCounted
 ## 大腿骨骼（thigh_outer/thigh_inner）位于髋部位置(0,0)，作为大腿肢体的容器。
 ## 旋转大腿骨骼 = 整条腿围绕髋部转；旋转小腿骨骼 = 小腿以下围绕膝盖转。
 ##
-## 渲染架构（方案 B · 矢量化描边）：
+## 渲染架构（方案 B · 矢量化描边，两遍渲染）：
 ## - 每段肢体 = 容器 Node2D（命名 sprite_<id> 保持扫描兼容），内含两层：
-##   描边层（加宽深色圆头 Line2D / 外圈 Polygon2D）+ 填充层 —— 全矢量，
-##   任意缩放无锯齿；每段自带轮廓 → 肢体重叠处天然出现分隔线。
-## - 关节融合补丁（肩×2 / 髋×1）：无描边的填充色小圆盘盖住关节处分隔线，
-##   实现"只溶关节不溶躯干中段"。
-## - 不再使用位图贴图 / CanvasGroup / ID 缓冲着色器。
+##   描边层（加宽深色圆头 Line2D / 外圈 Polygon2D，z_index=-1）+ 填充层（z=0）。
+## - 两遍渲染：全部描边压底、全部填充置顶 → 肢体重叠处填充无缝融合
+##   （关节自动连接），描边只在整体剪影外缘露出一圈。
+## - 不再使用位图贴图 / CanvasGroup / ID 缓冲着色器 / 邻接表。
 
 # ===== 节点类型 =====
 const TYPE_ROUND_SEG: int = 0
@@ -24,8 +23,6 @@ const TYPE_ELLIPSE: int = 5
 # ===== 描边参数 =====
 ## 描边宽度（逻辑像素，单侧）
 const OUTLINE_WIDTH: float = 2.0
-## 关节融合补丁半径（逻辑像素，略大于半厚度 11.5 保证盖住缝线）
-const PATCH_RADIUS: float = 12.5
 
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 15
@@ -89,22 +86,22 @@ const SKELETON_DATA: Dictionary = {
 	0:  {"parent": -1, "x": 0.0,    "y": 0.0,    "length": 0,   "thickness": 0,  "type": -1},
 	16: {"parent": -1, "x": 0.0,    "y": 0.0,    "length": 66,  "thickness": 23, "type": -1},
 	3:  {"parent": 16, "x": 25.4,   "y": 60.9,   "length": 69,  "thickness": 23, "type": TYPE_ROUND_SEG},
-	4:  {"parent": 3,  "x": 2.9,    "y": 68.9,   "length": 11,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	4:  {"parent": 3,  "x": 2.9,    "y": 68.9,   "length": 69,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	5:  {"parent": 4,  "x": 11.0,   "y": 0.0,    "length": 11,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	17: {"parent": -1, "x": 0.0,    "y": 0.0,    "length": 66,  "thickness": 23, "type": -1},
 	11: {"parent": 17, "x": -4.8,   "y": 65.8,   "length": 69,  "thickness": 23, "type": TYPE_ROUND_SEG},
-	12: {"parent": 11, "x": -16.9,  "y": 66.9,   "length": 11,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	12: {"parent": 11, "x": -16.9,  "y": 66.9,   "length": 69,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	13: {"parent": 12, "x": 11.0,   "y": -0.2,   "length": 11,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	6:  {"parent": 0,  "x": 1.8,    "y": -30.9,  "length": 31,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	7:  {"parent": 6,  "x": 5.7,    "y": -30.5,  "length": 31,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	18: {"parent": 7,  "x": 10.4,   "y": -29.2,  "length": 64,  "thickness": 23, "type": -1},
-	1:  {"parent": 18, "x": -34.7,  "y": 53.9,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	1:  {"parent": 18, "x": -34.7,  "y": 53.9,   "length": 64,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	2:  {"parent": 1,  "x": -3.1,   "y": 48.7,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	19: {"parent": 7,  "x": 10.4,   "y": -29.2,  "length": 64,  "thickness": 23, "type": -1},
-	14: {"parent": 19, "x": 1.1,    "y": 64.1,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	14: {"parent": 19, "x": 1.1,    "y": 64.1,   "length": 64,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	15: {"parent": 14, "x": 33.8,   "y": 35.2,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	9:  {"parent": 7,  "x": 10.4,   "y": -29.2,  "length": 50,  "thickness": 23, "type": -1},
-	10: {"parent": 9,  "x": -15.1,  "y": 34.8,   "length": 38,  "thickness": 23, "type": TYPE_CIRCLE},
+	10: {"parent": 9,  "x": 4.8,    "y": -11.1,   "length": 38,  "thickness": 23, "type": TYPE_CIRCLE},
 }
 
 ## 纯视觉附加肢体（无对应骨骼，仅渲染；旧 stickman_test.tscn 的 sprite_8 胸段收编于此）
@@ -184,29 +181,6 @@ static func build_limbs(skeleton: Skeleton2D, bones: Dictionary, thickness_scale
 	return sprites
 
 
-## 关节融合补丁：肩×2 挂上臂骨骼原点（跟随手臂摆动），
-## 髋×1 作为骨架末子节点盖住大腿根与躯干底的接缝。
-## 返回补丁节点数组（供换色/清理）。调用时机：build_limbs 之后（保证画在肢体之上）。
-static func build_joint_patches(skeleton: Skeleton2D, colors: Dictionary) -> Array[Node2D]:
-	var patches: Array[Node2D] = []
-	var fill: Color = colors.get("body", DEFAULT_BODY)
-	for arm_path in ["hip/lower_torso/upper_torso/upper_arm_outer",
-			"hip/lower_torso/upper_torso/upper_arm_inner"]:
-		var arm := skeleton.get_node_or_null(arm_path) as Node2D
-		if arm == null:
-			continue
-		var patch := _make_disc(fill)
-		patch.name = "JointPatch"
-		arm.add_child(patch)
-		patches.append(patch)
-	# 髋部：作为骨架最后一个子节点（渲染在所有骨骼之上）
-	var hip_patch := _make_disc(fill)
-	hip_patch.name = "JointPatchHip"
-	skeleton.add_child(hip_patch)
-	patches.append(hip_patch)
-	return patches
-
-
 ## 扫描 Skeleton2D 中已有的骨骼节点
 static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 	var bones: Dictionary = {}
@@ -242,7 +216,17 @@ static func _build_limb(
 		var pts := PackedVector2Array([Vector2(-length / 2.0, 0), Vector2(length / 2.0, 0)])
 		container.add_child(_make_line("stroke", pts, w + OUTLINE_WIDTH * 2.0, colors.get("outline", DEFAULT_OUTLINE)))
 		container.add_child(_make_line("fill", pts, w, _color_for_type(node_type, colors)))
+	_apply_two_pass(container)
 	return container
+
+
+## 两遍渲染分层：全部描边层 z=-1 压到所有填充层之下。
+## 效果：填充层在肢体重叠处无缝融合（关节自动"连接"），
+## 描边只在整体剪影外缘露出一圈——统一外轮廓，无需邻接表。
+static func _apply_two_pass(container: Node2D) -> void:
+	var stroke := container.get_node_or_null("stroke") as CanvasItem
+	if stroke != null:
+		stroke.z_index = -1
 
 
 static func _make_line(lname: String, pts: PackedVector2Array, width: float, color: Color) -> Line2D:
@@ -253,7 +237,8 @@ static func _make_line(lname: String, pts: PackedVector2Array, width: float, col
 	l.default_color = color
 	l.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	l.end_cap_mode = Line2D.LINE_CAP_ROUND
-	l.antialiased = true
+	# 不开自带抗锯齿：其羽化边在相机缩小后呈半透明发虚（"断断续续"观感）。
+	# 项目已开 msaa_2d，几何边缘由 MSAA 平滑，任意缩放干净利落。
 	return l
 
 
@@ -271,11 +256,6 @@ static func _make_circle_at(cname: String, pos: Vector2, radius: float, color: C
 		pts.append(pos + Vector2(cos(a), sin(a)) * radius)
 	p.polygon = pts
 	return p
-
-
-## 无描边的关节融合圆盘（填充色，盖住关节处的分隔线）
-static func _make_disc(color: Color) -> Polygon2D:
-	return _make_circle_at("fill", Vector2.ZERO, PATCH_RADIUS, color)
 
 
 ## 颜色更新（改线条/多边形颜色，不重建节点）
@@ -300,14 +280,6 @@ static func apply_colors(sprites: Dictionary, colors: Dictionary) -> void:
 			(fill as Line2D).default_color = _color_for_type(node_type, colors)
 		elif fill is Polygon2D:
 			(fill as Polygon2D).color = _color_for_type(node_type, colors)
-
-
-## 补丁换色
-static func apply_patch_colors(patches: Array[Node2D], colors: Dictionary) -> void:
-	var fill: Color = colors.get("body", DEFAULT_BODY)
-	for patch in patches:
-		if is_instance_valid(patch):
-			(patch as Polygon2D).color = fill
 
 
 # ============================================================

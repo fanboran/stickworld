@@ -10,7 +10,6 @@ extends Skeleton2D
 const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
 const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
 const Weapon := preload("res://modules/units/scripts/weapons/stickman_weapon.gd")
-const Outline := preload("res://modules/units/scripts/rig/stickman_outline.gd")
 const OverlayScript := preload("res://modules/units/scripts/rig/procedural_overlay.gd")
 
 # ===== 动画状态名（公共 API 用） =====
@@ -46,6 +45,10 @@ enum WeaponType { SWORD, SPEAR, BOW, SHIELD, UNARMED }
 @export var guard_color: Color = Skeleton.DEFAULT_GUARD:
 	set(v):
 		guard_color = v
+		_rebuild_pending = true
+@export var outline_color: Color = Skeleton.DEFAULT_OUTLINE:
+	set(v):
+		outline_color = v
 		_rebuild_pending = true
 @export var weapon_scene: PackedScene:
 	set(v):
@@ -84,7 +87,7 @@ signal animation_finished(anim_name: String)
 
 func _ready() -> void:
 	_init_bones()
-	_init_outline()
+	_init_joint_patches()
 	_init_ik()
 	_init_animations()
 	_init_weapons()
@@ -144,21 +147,35 @@ func _init_procedural_overlay() -> void:
 
 
 func _init_bones() -> void:
+	var colors := _make_colors()
 	# 检查是否已有骨骼（通过 hip 节点判断）
 	if get_node_or_null("hip") != null:
-		var result := Skeleton.collect_nodes(self)
-		_bones = result["bones"]
-		_sprites = result["sprites"]
+		Skeleton.reorder_render_order(self)
+		_bones = Skeleton.collect_nodes(self)["bones"]
+		# .tscn 骨骼 + 运行时矢量肢体（场景不再预置贴图精灵）
+		_sprites = Skeleton.build_limbs(self, _bones, thickness_scale, colors)
 	else:
-		# 首次打开：从零构建骨骼 + 精灵
-		var colors := {
-			"body": body_color,
-			"weapon": weapon_color,
-			"guard": guard_color,
-		}
+		# 首次打开：从零构建骨骼 + 矢量肢体
 		var result := Skeleton.build_from_scratch(self, thickness_scale, colors)
 		_bones = result["bones"]
 		_sprites = result["sprites"]
+
+
+## 组装颜色表（描边系统删除后由矢量肢体直接消费）
+func _make_colors() -> Dictionary:
+	return {
+		"body": body_color,
+		"weapon": weapon_color,
+		"guard": guard_color,
+		"outline": outline_color,
+	}
+
+
+## 关节融合补丁：肩×2 / 髋×1，盖住关节处分隔线（须在 build_limbs 之后调用）
+var _patches: Array[Node2D] = []
+
+func _init_joint_patches() -> void:
+	_patches = Skeleton.build_joint_patches(self, _make_colors())
 
 
 func _init_ik() -> void:
@@ -243,18 +260,6 @@ func _init_weapons() -> void:
 
 
 # ============================================================
-#  描边初始化
-# ============================================================
-
-## 给每个 sprite 加 ID 材质 + 设置 CanvasGroup outline 材质
-func _init_outline() -> void:
-	var group := get_parent() as CanvasGroup
-	if group == null:
-		return
-	Outline.setup(group, _sprites)
-
-
-# ============================================================
 #  武器刷新
 # ============================================================
 
@@ -284,12 +289,9 @@ func _refresh_weapon(bone_id: int) -> void:
 # ============================================================
 
 func _do_rebuild() -> void:
-	var colors := {
-		"body": body_color,
-		"weapon": weapon_color,
-		"guard": guard_color,
-	}
+	var colors := _make_colors()
 	Skeleton.apply_colors(_sprites, colors)
+	Skeleton.apply_patch_colors(_patches, colors)
 
 
 # ============================================================

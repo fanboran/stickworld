@@ -23,8 +23,6 @@ const TYPE_ELLIPSE: int = 5
 # ===== 描边参数 =====
 ## 描边宽度（逻辑像素，单侧）
 const OUTLINE_WIDTH: float = 2.0
-## 肢根融合补丁覆盖长度（逻辑像素，沿肢体轴向，约上臂/大腿 1/3）
-const ROOT_PATCH_LEN: float = 34.0
 
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 15
@@ -190,38 +188,6 @@ static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 	return {"bones": bones}
 
 
-## 肢根融合补丁：肩×2 / 髋×2，各挂对应肢根骨骼（跟随摆动）。
-## 填充胶囊沿肢体轴向覆盖根部，宽度略窄于描边外缘，且向躯干侧
-## 偏移一段（offset，骨骼本地坐标）——只盖住"贴向躯干的内缝"，
-## 保留肩/髋处的外轮廓描边（外侧仍面向背景，无需遮线）。
-static func build_joint_patches(skeleton: Skeleton2D, colors: Dictionary) -> Array[Node2D]:
-	var patches: Array[Node2D] = []
-	var fill: Color = colors.get("body", DEFAULT_BODY)
-	# [骨骼路径, 段id, 缝侧偏移(骨骼本地坐标)]
-	var specs := [
-		["hip/lower_torso/upper_torso/upper_arm_outer", 1, Vector2(1.5, -4.0)],
-		["hip/lower_torso/upper_torso/upper_arm_inner", 14, Vector2(-3.5, -3.0)],
-		["thigh_outer", 3, Vector2(-2.5, -4.0)],
-		["thigh_inner", 11, Vector2(2.5, -4.0)],
-	]
-	for spec in specs:
-		var bone := skeleton.get_node_or_null(spec[0]) as Bone2D
-		if bone == null:
-			continue
-		var seg: Dictionary = SKELETON_DATA[spec[1]]
-		var dir := Vector2(seg["x"], seg["y"])
-		# 补丁宽度 = 填充宽 + 描边（略窄于描边外缘 27 宽），偏移让外侧描边露出
-		var w: float = seg["thickness"] + OUTLINE_WIDTH * 1.0
-		var patch := _make_line("fill",
-			PackedVector2Array([Vector2(-6, 0), Vector2(ROOT_PATCH_LEN, 0)]), w, fill)
-		patch.rotation = dir.angle()
-		patch.position = spec[2]
-		patch.z_index = JOINT_PATCH_Z
-		bone.add_child(patch)
-		patches.append(patch)
-	return patches
-
-
 # ============================================================
 #  矢量肢体创建
 # ============================================================
@@ -229,18 +195,18 @@ static func build_joint_patches(skeleton: Skeleton2D, colors: Dictionary) -> Arr
 ## 在 parent_bone 上创建矢量肢体段，表示从 parent 到子骨骼的肢体段。
 ## px, py = 子骨骼相对 parent 的偏移；容器放段的中点、旋转对齐方向，
 ## 内含描边 + 填充两层圆头 Line2D（几何跨度 = length + thickness，与旧位图一致）。
-## 链式分层渲染：肢体分五条链（外腿/内腿/躯干+头/内臂/外臂），
-## 链内两遍渲染（描边压底、填充置顶→链内关节融合连贯），
-## 链间按 z 递增（高链描边可见于低链填充之上→胳膊与躯干分隔）。
-## z 值 = 链序*2+1(描边) / +2(填充)；关节补丁 z=12 盖住肩/髋接缝。
+## 链式分层渲染（SWL slot 序对齐）：肢体分五条链，链内两遍渲染
+## （描边压底、填充置顶→链内关节融合连贯）。链间 z 递增，排列遵循
+## SWL 原版槽位序——腿、双臂都在躯干之后（躯干填充盖住肢体根部 →
+## 肩/髋天然无缝融合，外缘轮廓描边完整保留，不需要任何补丁/邻接表）：
+##   外腿(1,2) → 内腿(3,4) → 外臂(5,6) → 内臂(7,8) → 躯干+头(9,10)
 const CHAIN_STROKE_Z: Dictionary = {
 	3: 1, 4: 1, 5: 1,            # 外腿
 	11: 3, 12: 3, 13: 3,         # 内腿
-	6: 5, 7: 5, 20: 5, 10: 5,    # 躯干+头
-	14: 7, 15: 7,                # 内臂
-	1: 9, 2: 9,                  # 外臂
+	1: 5, 2: 5,                  # 外臂（躯干之后→肩根内收无痕）
+	14: 7, 15: 7,                # 内臂（躯干之后）
+	6: 9, 7: 9, 20: 9, 10: 9,    # 躯干+头（最顶层，肢体根被其盖住）
 }
-const JOINT_PATCH_Z: int = 12
 
 static func _build_limb(
 	parent_bone: Node2D, id: int, length: int, thickness: int, node_type: int,
@@ -290,15 +256,6 @@ static func _make_line(lname: String, pts: PackedVector2Array, width: float, col
 
 static func _make_circle(cname: String, radius: float, color: Color) -> Polygon2D:
 	return _make_circle_at(cname, Vector2.ZERO, radius, color)
-
-
-
-## 补丁换色
-static func apply_patch_colors(patches: Array[Node2D], colors: Dictionary) -> void:
-	var fill: Color = colors.get("body", DEFAULT_BODY)
-	for patch in patches:
-		if is_instance_valid(patch) and patch is Line2D:
-			(patch as Line2D).default_color = fill
 
 
 static func _make_circle_at(cname: String, pos: Vector2, radius: float, color: Color) -> Polygon2D:

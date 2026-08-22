@@ -1,13 +1,19 @@
 class_name StickmanSkeleton
 extends RefCounted
-## 火柴人骨骼数据 + 骨骼构建 + Sprite 创建
+## 火柴人骨骼数据 + 骨骼构建 + 矢量肢体渲染
 ##
 ## 使用 Skeleton2D + Bone2D 实现真正的骨骼约束。
 ## 骨骼命名采用"肢体段"命名法：骨骼名 = 该骨骼到子骨骼之间的肢体段。
-## 大腿骨骼（thigh_outer/thigh_inner）位于髋部位置(0,0)，作为大腿精灵的容器。
+## 大腿骨骼（thigh_outer/thigh_inner）位于髋部位置(0,0)，作为大腿肢体的容器。
 ## 旋转大腿骨骼 = 整条腿围绕髋部转；旋转小腿骨骼 = 小腿以下围绕膝盖转。
-
-const TextureGen := preload("res://modules/units/scripts/rig/stickman_texture_gen.gd")
+##
+## 渲染架构（方案 B · 矢量化描边）：
+## - 每段肢体 = 容器 Node2D（命名 sprite_<id> 保持扫描兼容），内含两层：
+##   描边层（加宽深色圆头 Line2D / 外圈 Polygon2D）+ 填充层 —— 全矢量，
+##   任意缩放无锯齿；每段自带轮廓 → 肢体重叠处天然出现分隔线。
+## - 关节融合补丁（肩×2 / 髋×1）：无描边的填充色小圆盘盖住关节处分隔线，
+##   实现"只溶关节不溶躯干中段"。
+## - 不再使用位图贴图 / CanvasGroup / ID 缓冲着色器。
 
 # ===== 节点类型 =====
 const TYPE_ROUND_SEG: int = 0
@@ -15,8 +21,11 @@ const TYPE_CIRCLE: int = 2
 const TYPE_TRIANGLE: int = 3
 const TYPE_ELLIPSE: int = 5
 
-# ===== 输出倍率 =====
-const OUTPUT_SCALE: float = 4.0
+# ===== 描边参数 =====
+## 描边宽度（逻辑像素，单侧）
+const OUTLINE_WIDTH: float = 2.0
+## 关节融合补丁半径（逻辑像素，略大于半厚度 11.5 保证盖住缝线）
+const PATCH_RADIUS: float = 12.5
 
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 15
@@ -98,21 +107,25 @@ const SKELETON_DATA: Dictionary = {
 	10: {"parent": 9,  "x": -15.1,  "y": 34.8,   "length": 38,  "thickness": 23, "type": TYPE_CIRCLE},
 }
 
+## 纯视觉附加肢体（无对应骨骼，仅渲染；旧 stickman_test.tscn 的 sprite_8 胸段收编于此）
+const EXTRA_LIMBS: Dictionary = {
+	20: {"parent": 7, "x": 10.4, "y": -29.2, "length": 31, "thickness": 23, "type": TYPE_ROUND_SEG},
+}
+
 # ===== 默认颜色 =====
 const DEFAULT_BODY := Color(0.82, 0.82, 0.85, 1.0)
 const DEFAULT_WEAPON := Color(0.72, 0.74, 0.78, 1.0)
 const DEFAULT_GUARD := Color(0.65, 0.45, 0.18, 1.0)
+const DEFAULT_OUTLINE := Color.WHITE
 
 
 # ============================================================
 #  骨骼构建
 # ============================================================
 
-## 从零构建骨骼 + 精灵层级
-## 精灵挂在父骨骼上：大腿精灵挂在髋部，小腿精灵挂在膝盖，以此类推。
+## 从零构建骨骼 + 矢量肢体层级
 static func build_from_scratch(skeleton: Skeleton2D, thickness_scale: float = 1.0, colors: Dictionary = {}) -> Dictionary:
 	var bones: Dictionary = {}
-	var sprites: Dictionary = {}
 	var ordered := _topo_sort(SKELETON_DATA)
 
 	# 第一遍：创建所有骨骼
@@ -131,104 +144,183 @@ static func build_from_scratch(skeleton: Skeleton2D, thickness_scale: float = 1.
 			skeleton.add_child(node)
 		bones[id] = node
 
-	# 第二遍：为有精灵的骨骼，把精灵挂到父骨骼上
-	for id in ordered:
-		var data: Dictionary = SKELETON_DATA[id]
+	reorder_render_order(skeleton)
+	var sprites := build_limbs(skeleton, bones, thickness_scale, colors)
+	return {"bones": bones, "sprites": sprites}
+
+
+## 渲染顺序整理（原 Outline.setup 内逻辑，描边系统删除后收编于此）：
+## 腿移到躯干之前（腿在身体后面）；内臂先于外臂（外臂覆盖内臂）；头最后。
+static func reorder_render_order(skeleton: Skeleton2D) -> void:
+	var thigh_outer := skeleton.get_node_or_null("thigh_outer") as Node
+	var thigh_inner := skeleton.get_node_or_null("thigh_inner") as Node
+	if thigh_outer != null and thigh_inner != null:
+		skeleton.move_child(thigh_outer, 0)
+		skeleton.move_child(thigh_inner, 1)
+	var upper_torso := skeleton.get_node_or_null("hip/lower_torso/upper_torso") as Node
+	if upper_torso != null:
+		var arm_outer := upper_torso.get_node_or_null("upper_arm_outer") as Node
+		var arm_inner := upper_torso.get_node_or_null("upper_arm_inner") as Node
+		if arm_outer != null and arm_inner != null and arm_inner.get_index() > arm_outer.get_index():
+			upper_torso.move_child(arm_inner, arm_outer.get_index())
+
+
+## 为已有骨骼（.tscn 路径）构建矢量肢体层
+static func build_limbs(skeleton: Skeleton2D, bones: Dictionary, thickness_scale: float, colors: Dictionary) -> Dictionary:
+	var sprites: Dictionary = {}
+	var all_data := SKELETON_DATA.merged(EXTRA_LIMBS, true)
+	for id in all_data.keys():
+		var data: Dictionary = all_data[id]
 		var node_type: int = data.get("type", -1)
 		if node_type < 0:
 			continue
 		var pid: int = data["parent"]
-		var parent_node: Node2D = bones[pid] if (pid >= 0 and bones.has(pid)) else skeleton
-		var sprite := create_sprite(parent_node, id, data["length"], data["thickness"],
-			node_type, data["x"], data["y"], thickness_scale, colors)
-		sprites[id] = sprite
+		if not bones.has(pid):
+			continue
+		var parent_bone: Node2D = bones[pid]
+		sprites[id] = _build_limb(parent_bone, id,
+			data["length"], data["thickness"], node_type,
+			data["x"], data["y"], thickness_scale, colors)
+	return sprites
 
-	return {"bones": bones, "sprites": sprites}
+
+## 关节融合补丁：肩×2 挂上臂骨骼原点（跟随手臂摆动），
+## 髋×1 作为骨架末子节点盖住大腿根与躯干底的接缝。
+## 返回补丁节点数组（供换色/清理）。调用时机：build_limbs 之后（保证画在肢体之上）。
+static func build_joint_patches(skeleton: Skeleton2D, colors: Dictionary) -> Array[Node2D]:
+	var patches: Array[Node2D] = []
+	var fill: Color = colors.get("body", DEFAULT_BODY)
+	for arm_path in ["hip/lower_torso/upper_torso/upper_arm_outer",
+			"hip/lower_torso/upper_torso/upper_arm_inner"]:
+		var arm := skeleton.get_node_or_null(arm_path) as Node2D
+		if arm == null:
+			continue
+		var patch := _make_disc(fill)
+		patch.name = "JointPatch"
+		arm.add_child(patch)
+		patches.append(patch)
+	# 髋部：作为骨架最后一个子节点（渲染在所有骨骼之上）
+	var hip_patch := _make_disc(fill)
+	hip_patch.name = "JointPatchHip"
+	skeleton.add_child(hip_patch)
+	patches.append(hip_patch)
+	return patches
 
 
-## 扫描 Skeleton2D 中已有的骨骼和精灵节点
+## 扫描 Skeleton2D 中已有的骨骼节点
 static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 	var bones: Dictionary = {}
-	var sprites: Dictionary = {}
-	_scan(skeleton, bones, sprites)
-	return {"bones": bones, "sprites": sprites}
+	_scan(skeleton, bones)
+	return {"bones": bones}
 
 
 # ============================================================
-#  Sprite 创建
+#  矢量肢体创建
 # ============================================================
 
-## 在 parent_bone 上创建精灵，表示从 parent 到子骨骼的肢体段
-## px, py = 子骨骼相对 parent 的偏移
-## 精灵放在段的中点，旋转对齐段方向
-static func create_sprite(
+## 在 parent_bone 上创建矢量肢体段，表示从 parent 到子骨骼的肢体段。
+## px, py = 子骨骼相对 parent 的偏移；容器放段的中点、旋转对齐方向，
+## 内含描边 + 填充两层圆头 Line2D（几何跨度 = length + thickness，与旧位图一致）。
+static func _build_limb(
 	parent_bone: Node2D, id: int, length: int, thickness: int, node_type: int,
 	px: float, py: float, thickness_scale: float, colors: Dictionary
-) -> Sprite2D:
-	var sprite := Sprite2D.new()
-	sprite.name = "sprite_%d" % id
-	parent_bone.add_child(sprite)
+) -> Node2D:
+	var container := Node2D.new()
+	container.name = "sprite_%d" % id
+	parent_bone.add_child(container)
 
-	var tex := _load_baked_texture(id, node_type, colors)
-	if tex == null:
-		var color: Color = _color_for_type(node_type, colors)
-		var adj_t: int = max(int(thickness * thickness_scale), 1)
-		tex = TextureGen.generate(node_type, length, adj_t, color)
-	sprite.texture = tex
-	sprite.scale = Vector2(1.0 / OUTPUT_SCALE, 1.0 / OUTPUT_SCALE)
-
+	var w: float = max(thickness * thickness_scale, 1.0)
 	if node_type == TYPE_CIRCLE:
-		sprite.rotation = 0.0
-		sprite.position = Vector2(px, py)
+		container.position = Vector2(px, py)
+		container.rotation = 0.0
+		var r: float = max(float(length), w * 2.0) / 2.0
+		container.add_child(_make_circle("stroke", r + OUTLINE_WIDTH, colors.get("outline", DEFAULT_OUTLINE)))
+		container.add_child(_make_circle("fill", r, _color_for_type(node_type, colors)))
 	else:
-		sprite.rotation = Vector2(px, py).angle()
-		sprite.position = Vector2(px / 2.0, py / 2.0)
-	return sprite
+		container.rotation = Vector2(px, py).angle()
+		container.position = Vector2(px / 2.0, py / 2.0)
+		var pts := PackedVector2Array([Vector2(-length / 2.0, 0), Vector2(length / 2.0, 0)])
+		container.add_child(_make_line("stroke", pts, w + OUTLINE_WIDTH * 2.0, colors.get("outline", DEFAULT_OUTLINE)))
+		container.add_child(_make_line("fill", pts, w, _color_for_type(node_type, colors)))
+	return container
 
 
-## 更新已有 sprite 的纹理
-static func update_sprite_texture(sprite: Sprite2D, node_type: int, colors: Dictionary) -> void:
-	var id_str := sprite.name.trim_prefix("sprite_")
-	var tex: Texture2D = null
-	if id_str.is_valid_int():
-		tex = _load_baked_texture(id_str.to_int(), node_type, colors)
-	if tex != null:
-		sprite.texture = tex
-		sprite.scale = Vector2(1.0 / OUTPUT_SCALE, 1.0 / OUTPUT_SCALE)
-		sprite.modulate = Color.WHITE
+static func _make_line(lname: String, pts: PackedVector2Array, width: float, color: Color) -> Line2D:
+	var l := Line2D.new()
+	l.name = lname
+	l.points = pts
+	l.width = width
+	l.default_color = color
+	l.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	l.end_cap_mode = Line2D.LINE_CAP_ROUND
+	l.antialiased = true
+	return l
 
 
-## 颜色更新（只改 modulate，不重建纹理）
+static func _make_circle(cname: String, radius: float, color: Color) -> Polygon2D:
+	return _make_circle_at(cname, Vector2.ZERO, radius, color)
+
+
+static func _make_circle_at(cname: String, pos: Vector2, radius: float, color: Color) -> Polygon2D:
+	var p := Polygon2D.new()
+	p.name = cname
+	p.color = color
+	var pts := PackedVector2Array()
+	for i in range(40):
+		var a := TAU * float(i) / 40.0
+		pts.append(pos + Vector2(cos(a), sin(a)) * radius)
+	p.polygon = pts
+	return p
+
+
+## 无描边的关节融合圆盘（填充色，盖住关节处的分隔线）
+static func _make_disc(color: Color) -> Polygon2D:
+	return _make_circle_at("fill", Vector2.ZERO, PATCH_RADIUS, color)
+
+
+## 颜色更新（改线条/多边形颜色，不重建节点）
 static func apply_colors(sprites: Dictionary, colors: Dictionary) -> void:
-	var is_default: bool = _colors_default(colors)
+	var all_data := SKELETON_DATA.merged(EXTRA_LIMBS, true)
 	for id in sprites.keys():
-		var sprite: Sprite2D = sprites[id]
-		if not is_instance_valid(sprite):
+		var limb: Node2D = sprites[id]
+		if not is_instance_valid(limb):
 			continue
-		var data: Dictionary = SKELETON_DATA.get(id, {})
+		var data: Dictionary = all_data.get(id, {})
 		var node_type: int = data.get("type", -1)
 		if node_type < 0:
 			continue
-		sprite.modulate = _color_for_type(node_type, colors)
-		if is_default:
-			sprite.modulate = Color.WHITE
+		var stroke := limb.get_node_or_null("stroke")
+		var fill := limb.get_node_or_null("fill")
+		var outline: Color = colors.get("outline", DEFAULT_OUTLINE)
+		if stroke is Line2D:
+			(stroke as Line2D).default_color = outline
+		elif stroke is Polygon2D:
+			(stroke as Polygon2D).color = outline
+		if fill is Line2D:
+			(fill as Line2D).default_color = _color_for_type(node_type, colors)
+		elif fill is Polygon2D:
+			(fill as Polygon2D).color = _color_for_type(node_type, colors)
+
+
+## 补丁换色
+static func apply_patch_colors(patches: Array[Node2D], colors: Dictionary) -> void:
+	var fill: Color = colors.get("body", DEFAULT_BODY)
+	for patch in patches:
+		if is_instance_valid(patch):
+			(patch as Polygon2D).color = fill
 
 
 # ============================================================
 #  内部辅助
 # ============================================================
 
-static func _scan(parent: Node, bones: Dictionary, sprites: Dictionary) -> void:
+static func _scan(parent: Node, bones: Dictionary) -> void:
 	for child in parent.get_children():
 		if child is Bone2D:
 			var id: int = BONE_NAME_TO_ID.get(child.name, -1)
 			if id >= 0:
 				bones[id] = child
-		elif child.name.begins_with("sprite_"):
-			var id_str := child.name.trim_prefix("sprite_")
-			if id_str.is_valid_int():
-				sprites[id_str.to_int()] = child
-		_scan(child, bones, sprites)
+		_scan(child, bones)
 
 
 static func _topo_sort(data: Dictionary) -> Array[int]:
@@ -249,22 +341,6 @@ static func _visit(id: int, data: Dictionary, visited: Dictionary, result: Array
 	result.append(id)
 
 
-const BONE_TEXTURE_DIR := "res://modules/units/assets/textures/stickman"
-
-
-static func _bone_texture_path(id: int, node_type: int) -> String:
-	return "%s/bone_%d_%s.png" % [BONE_TEXTURE_DIR, id, TextureGen.type_str(node_type)]
-
-
-static func _load_baked_texture(id: int, node_type: int, colors: Dictionary) -> Texture2D:
-	if not _colors_default(colors):
-		return null
-	var path := _bone_texture_path(id, node_type)
-	if ResourceLoader.exists(path):
-		return load(path) as Texture2D
-	return null
-
-
 static func _color_for_type(node_type: int, colors: Dictionary) -> Color:
 	match node_type:
 		TYPE_TRIANGLE:
@@ -273,9 +349,3 @@ static func _color_for_type(node_type: int, colors: Dictionary) -> Color:
 			return colors.get("guard", DEFAULT_GUARD)
 		_:
 			return colors.get("body", DEFAULT_BODY)
-
-
-static func _colors_default(colors: Dictionary) -> bool:
-	return colors.get("body", DEFAULT_BODY) == DEFAULT_BODY \
-		and colors.get("weapon", DEFAULT_WEAPON) == DEFAULT_WEAPON \
-		and colors.get("guard", DEFAULT_GUARD) == DEFAULT_GUARD

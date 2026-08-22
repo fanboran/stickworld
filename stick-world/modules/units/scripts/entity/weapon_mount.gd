@@ -159,7 +159,7 @@ func _mount_one(scene: PackedScene, bone: Node2D, node_name: String) -> Node2D:
 		instance.rotation = -grip.rotation
 	instance.name = node_name
 	bone.add_child(instance)
-	instance.z_index = 1
+	instance.z_index = 20  # 高于链式肢体分层（描边/填充最高 z=10）与关节补丁(z=12)
 	instance.z_as_relative = false
 	return instance
 

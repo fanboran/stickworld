@@ -87,7 +87,6 @@ signal animation_finished(anim_name: String)
 
 func _ready() -> void:
 	_init_bones()
-	_init_joint_patches()
 	_init_ik()
 	_init_animations()
 	_init_weapons()
@@ -161,7 +160,7 @@ func _init_bones() -> void:
 		_sprites = result["sprites"]
 
 
-## 组装颜色表（描边系统删除后由矢量肢体直接消费）
+## 组装颜色表（矢量肢体直接消费）
 func _make_colors() -> Dictionary:
 	return {
 		"body": body_color,
@@ -169,13 +168,6 @@ func _make_colors() -> Dictionary:
 		"guard": guard_color,
 		"outline": outline_color,
 	}
-
-
-## 关节融合补丁：肩×2 / 髋×1，盖住关节处分隔线（须在 build_limbs 之后调用）
-var _patches: Array[Node2D] = []
-
-func _init_joint_patches() -> void:
-	_patches = Skeleton.build_joint_patches(self, _make_colors())
 
 
 func _init_ik() -> void:
@@ -289,9 +281,7 @@ func _refresh_weapon(bone_id: int) -> void:
 # ============================================================
 
 func _do_rebuild() -> void:
-	var colors := _make_colors()
-	Skeleton.apply_colors(_sprites, colors)
-	Skeleton.apply_patch_colors(_patches, colors)
+	Skeleton.apply_colors(_sprites, _make_colors())
 
 
 # ============================================================

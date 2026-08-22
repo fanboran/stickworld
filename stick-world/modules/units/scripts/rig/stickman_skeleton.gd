@@ -23,8 +23,8 @@ const TYPE_ELLIPSE: int = 5
 # ===== 描边参数 =====
 ## 描边宽度（逻辑像素，单侧）
 const OUTLINE_WIDTH: float = 2.0
-## 关节融合补丁半径（逻辑像素，略大于半厚度 11.5 保证盖住链间缝）
-const PATCH_RADIUS: float = 12.5
+## 肢根融合补丁覆盖长度（逻辑像素，沿肢体轴向，约上臂/大腿 1/3）
+const ROOT_PATCH_LEN: float = 34.0
 
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 15
@@ -190,26 +190,32 @@ static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 	return {"bones": bones}
 
 
-## 关节融合补丁：肩×2 挂上臂骨骼原点（跟随摆动），髋×1 作骨架末子节点。
-## 填充色圆盘 z=JOINT_PATCH_Z，盖住链间描边在肩/髋处的接缝——只溶关节不溶躯干中段。
+## 肢根融合补丁：肩×2 / 髋×2，各挂对应肢根骨骼（跟随摆动）。
+## 形状 = 与肢体等宽的填充胶囊（宽=填充+2×描边=描边外缘宽度），
+## 沿肢体轴向覆盖根部 ROOT_PATCH_LEN 段——横向永不越出肢体剪影，
+## 纵向盖掉链间描边在肢根的接缝弧：只溶根不溶中段。
 static func build_joint_patches(skeleton: Skeleton2D, colors: Dictionary) -> Array[Node2D]:
 	var patches: Array[Node2D] = []
 	var fill: Color = colors.get("body", DEFAULT_BODY)
-	for arm_path in ["hip/lower_torso/upper_torso/upper_arm_outer",
-			"hip/lower_torso/upper_torso/upper_arm_inner"]:
-		var arm := skeleton.get_node_or_null(arm_path) as Node2D
-		if arm == null:
+	var specs := [
+		["hip/lower_torso/upper_torso/upper_arm_outer", 1],
+		["hip/lower_torso/upper_torso/upper_arm_inner", 14],
+		["thigh_outer", 3],
+		["thigh_inner", 11],
+	]
+	for spec in specs:
+		var bone := skeleton.get_node_or_null(spec[0]) as Bone2D
+		if bone == null:
 			continue
-		var patch := _make_disc(fill)
-		patch.name = "JointPatch"
+		var seg: Dictionary = SKELETON_DATA[spec[1]]
+		var dir := Vector2(seg["x"], seg["y"])
+		var w: float = seg["thickness"] + OUTLINE_WIDTH * 2.0
+		var patch := _make_line("fill",
+			PackedVector2Array([Vector2(-6, 0), Vector2(ROOT_PATCH_LEN, 0)]), w, fill)
+		patch.rotation = dir.angle()
 		patch.z_index = JOINT_PATCH_Z
-		arm.add_child(patch)
+		bone.add_child(patch)
 		patches.append(patch)
-	var hip_patch := _make_disc(fill)
-	hip_patch.name = "JointPatchHip"
-	hip_patch.z_index = JOINT_PATCH_Z
-	skeleton.add_child(hip_patch)
-	patches.append(hip_patch)
 	return patches
 
 
@@ -283,17 +289,13 @@ static func _make_circle(cname: String, radius: float, color: Color) -> Polygon2
 	return _make_circle_at(cname, Vector2.ZERO, radius, color)
 
 
-## 无描边的关节融合圆盘（填充色，盖住关节处的链间分隔线）
-static func _make_disc(color: Color) -> Polygon2D:
-	return _make_circle_at("fill", Vector2.ZERO, PATCH_RADIUS, color)
-
 
 ## 补丁换色
 static func apply_patch_colors(patches: Array[Node2D], colors: Dictionary) -> void:
 	var fill: Color = colors.get("body", DEFAULT_BODY)
 	for patch in patches:
-		if is_instance_valid(patch):
-			(patch as Polygon2D).color = fill
+		if is_instance_valid(patch) and patch is Line2D:
+			(patch as Line2D).default_color = fill
 
 
 static func _make_circle_at(cname: String, pos: Vector2, radius: float, color: Color) -> Polygon2D:

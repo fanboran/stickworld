@@ -121,6 +121,9 @@ static func build_from_scratch(skeleton: Skeleton2D, thickness_scale: float = 1.
 		var node := Bone2D.new()
 		node.name = BONE_NAMES.get(id, "bone_%d" % id)
 		node.position = Vector2(data["x"], data["y"])
+		# rest 必须显式设置：Bone2D 默认 rest 是零矩阵（引擎"未设 rest"标记），
+		# Skeleton2D._update_bone_setup 对 rest 求 affine_inverse 会报 det==0
+		node.rest = Transform2D(0.0, node.position)
 		var pid: int = data["parent"]
 		if pid >= 0 and bones.has(pid):
 			(bones[pid] as Bone2D).add_child(node)

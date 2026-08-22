@@ -737,10 +737,42 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif ek.keycode == KEY_L:
 		_open_placeholder_panel("logistics")
 		get_viewport().set_input_as_handled()
+	# 武器调试（T 循环主手 / B 开关盾牌）：仅附身玩家可用，方便观察渲染
+	elif ek.keycode == KEY_T:
+		_debug_cycle_weapon()
+		get_viewport().set_input_as_handled()
+	elif ek.keycode == KEY_B:
+		_debug_toggle_shield()
+		get_viewport().set_input_as_handled()
 	# ESC：统一模态/暂停菜单栈控制（见 _handle_escape）
 	elif ek.keycode == KEY_ESCAPE:
 		if _handle_escape():
 			get_viewport().set_input_as_handled()
+
+
+## 武器调试：附身玩家循环主手武器（剑→矛→弓→镐→法杖）
+func _debug_cycle_weapon() -> void:
+	var player := get_player_entity()
+	if player == null:
+		return
+	var wm: Node = player.get_node_or_null("WeaponMount")
+	if wm == null:
+		return
+	var cur: int = wm.weapon_type
+	wm.weapon_type = (cur + 1) % 5
+	push_warning("[Debug] 主手武器类型: %d" % wm.weapon_type)
+
+
+## 武器调试：附身玩家开关盾牌
+func _debug_toggle_shield() -> void:
+	var player := get_player_entity()
+	if player == null:
+		return
+	var wm: Node = player.get_node_or_null("WeaponMount")
+	if wm == null:
+		return
+	wm.shield_enabled = not wm.shield_enabled
+	push_warning("[Debug] 盾牌: %s" % ("开" if wm.shield_enabled else "关"))
 
 
 ## 打开帝国功能空面板（经 ui_placeholder 模块，系统落地后替换真实面板）。

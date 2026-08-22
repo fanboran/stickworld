@@ -195,19 +195,10 @@ static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 ## 在 parent_bone 上创建矢量肢体段，表示从 parent 到子骨骼的肢体段。
 ## px, py = 子骨骼相对 parent 的偏移；容器放段的中点、旋转对齐方向，
 ## 内含描边 + 填充两层圆头 Line2D（几何跨度 = length + thickness，与旧位图一致）。
-## 链式分层渲染（SWL slot 序对齐）：肢体分五条链，链内两遍渲染
-## （描边压底、填充置顶→链内关节融合连贯）。链间 z 递增，排列遵循
-## SWL 原版槽位序——腿、双臂都在躯干之后（躯干填充盖住肢体根部 →
-## 肩/髋天然无缝融合，外缘轮廓描边完整保留，不需要任何补丁/邻接表）：
-##   外腿(1,2) → 内腿(3,4) → 外臂(5,6) → 内臂(7,8) → 躯干+头(9,10)
-const CHAIN_STROKE_Z: Dictionary = {
-	3: 1, 4: 1, 5: 1,            # 外腿
-	11: 3, 12: 3, 13: 3,         # 内腿
-	1: 5, 2: 5,                  # 外臂（躯干之后→肩根内收无痕）
-	14: 7, 15: 7,                # 内臂（躯干之后）
-	6: 9, 7: 9, 20: 9, 10: 9,    # 躯干+头（最顶层，肢体根被其盖住）
-}
-
+## 全局两遍渲染：所有描边层 z=-1 压底、所有填充层 z=0 置顶 →
+## 全身填充无缝融合（肢体/躯干/头部一体，无任何接缝，与"刚重构完"
+## 参考状态一致），描边只在整体剪影外缘露出一圈。
+## z_index 用相对值（祖先全部 z=0，等效于全局顺序）。
 static func _build_limb(
 	parent_bone: Node2D, id: int, length: int, thickness: int, node_type: int,
 	px: float, py: float, thickness_scale: float, colors: Dictionary
@@ -217,15 +208,14 @@ static func _build_limb(
 	parent_bone.add_child(container)
 
 	var w: float = max(thickness * thickness_scale, 1.0)
-	var sz: int = CHAIN_STROKE_Z.get(id, 5)
 	if node_type == TYPE_CIRCLE:
 		container.position = Vector2(px, py)
 		container.rotation = 0.0
 		var r: float = max(float(length), w * 2.0) / 2.0
 		var st := _make_circle("stroke", r + OUTLINE_WIDTH, colors.get("outline", DEFAULT_OUTLINE))
 		var fi := _make_circle("fill", r, _color_for_type(node_type, colors))
-		st.z_index = sz
-		fi.z_index = sz + 1
+		st.z_index = -1
+		fi.z_index = 0
 		container.add_child(st)
 		container.add_child(fi)
 	else:
@@ -234,8 +224,8 @@ static func _build_limb(
 		var pts := PackedVector2Array([Vector2(-length / 2.0, 0), Vector2(length / 2.0, 0)])
 		var stl := _make_line("stroke", pts, w + OUTLINE_WIDTH * 2.0, colors.get("outline", DEFAULT_OUTLINE))
 		var fil := _make_line("fill", pts, w, _color_for_type(node_type, colors))
-		stl.z_index = sz
-		fil.z_index = sz + 1
+		stl.z_index = -1
+		fil.z_index = 0
 		container.add_child(stl)
 		container.add_child(fil)
 	return container

@@ -71,8 +71,8 @@ func _build_night_stage() -> void:
 	_stage.add_child(cm)
 	var specs := [
 		{"pos": Vector2(480, 630), "size": 160, "base": Color(0.45, 0.55, 0.75), "theme": "violet", "tier": 6},
-		{"pos": Vector2(960, 570), "size": 250, "base": Color(0.50, 0.62, 0.78), "theme": "sky", "tier": 8},
-		{"pos": Vector2(1440, 650), "size": 115, "base": Color(0.42, 0.58, 0.70), "theme": "gold", "tier": 3},
+		{"pos": Vector2(960, 570), "size": 250, "base": Color(0.50, 0.62, 0.78), "theme": "mint", "tier": 8},
+		{"pos": Vector2(1440, 650), "size": 115, "base": Color(0.42, 0.58, 0.70), "theme": "gold", "tier": 6},
 	]
 	for s in specs:
 		var n := Node2D.new()

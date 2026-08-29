@@ -456,6 +456,10 @@ static func _make_system(host: Node2D, meas: Dictionary, lifetime: float, tier: 
 	# 暗背景上多颗粒子重叠处越来越亮，"布灵布灵"观感的另一半来源
 	var cam := CanvasItemMaterial.new()
 	cam.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	# UNSHADED（对齐 Unity Particles/Standard Unlit）：粒子不受 CanvasModulate
+	# 昼夜压暗 / Light2D 影响。否则夜间压暗系数把主题色乘暗后，Additive 下
+	# 暗色≈不可见，只剩白点幸存——"全是白点、配色丢失"的根因（B7）
+	cam.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
 	p.material = cam
 
 	host.add_child(p)

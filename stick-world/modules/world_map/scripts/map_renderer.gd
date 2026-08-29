@@ -84,6 +84,16 @@ func get_selected() -> String:
 	return ""
 
 
+## 查询地块质心（相机聚焦用；未知 id 返回 null）
+func get_tile_centroid(id: String) -> Variant:
+	if _data == null:
+		return null
+	for t in _data.tiles:
+		if t.tile_id == id:
+			return t.get_centroid()
+	return null
+
+
 func refresh() -> void:
 	queue_redraw()
 

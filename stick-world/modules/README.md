@@ -736,7 +736,7 @@ Technology  (1) ──unlocks───→ (N) Building/Equipment/Ability
 | --------- | ---------------------------------------- | --- | --------- | --------- |
 | **地形建筑层** | 地图场景 `.tscn` 中 `TerrainBuildings` 节点     | 否   | 随场景实例化    | 矿山、遗迹、大石头 |
 | **初始建筑层** | 地图场景 `.tscn` 中 `InitialBuildingsList` 列表 | 是   | 地图加载后写入存档 | 关卡设计放的民居  |
-| **玩家建筑层** | 存档 `.json`                               | 是   | 存档加载时实例化  | 玩家新建的农场   |
+| **玩家建筑层** | 存档 SQLite `buildings` 表                 | 是   | 存档加载时实例化  | 玩家新建的农场   |
 
 三者使用**同一套**建筑场景文件（`modules/building_gen/buildings/<id>.tscn`），只是加载时机不同。`PlacementGrid` 是统一占位登记表。
 
@@ -873,8 +873,8 @@ L1 排长 AI 检测到前方有大量敌军
 | **静态配置**  | 实体定义（建筑/单位/科技/资源/组织预设）            | `.tres` Resource    | 随包发布            |
 | **关卡数据**  | 地图定义（VillageMap / BattlefieldMap） | `.tres`             | 随包发布            |
 | **程序化产物** | L3 大陆/地区/地块 JSON + 风格化底图 PNG      | JSON + PNG          | 开发期 Python 生成   |
-| **运行时状态** | WorldState（所有实体快照）                | RefCounted/Resource | 内存              |
-| **存档**    | 游戏进度（建筑实例/组织/单位/资源）               | `.json`             | SaveManager 持久化 |
+| **运行时状态** | WorldState（⚠️ 冻结预留：仅 game_time 生产使用，实体容器零调用） | RefCounted/Resource | 内存              |
+| **存档**    | 游戏进度（建筑实例/组织/单位/资源）               | SQLite `save_<slot>.db` | SaveManager 持久化 |
 
 **配置目录**：
 

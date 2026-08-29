@@ -437,6 +437,9 @@ func export_as_preset(org_id: String) -> Dictionary:
 # ===== 存档对接（2026-08 集中制：序列化格式与 WorldState 统一） =====
 
 ## 序列化全部组织数据（含 ID 计数器，避免读档后 ID 冲突）
+## ⚠️ 冻结状态（2026-08-22 审计决策）：无任何调用方（organization 未注册存档接口，
+## 数据经 WorldState 冻结容器序列化）。保留实现，接入存档时改走
+## game_saving/game_loaded 信号直写表，勿再挂回 SaveManager.register_module 旧机制。
 func get_save_data() -> Dictionary:
 	var orgs: Dictionary = {}
 	for org_id in organizations:

@@ -23,11 +23,17 @@ extends Node
 # ─────────────────────────────── 内部状态 ────────────────────────────────
 var _canvas_modulate: CanvasModulate = null
 
+## 跟随玩家（附身实体）的暖光（PLACEHOLDER 素材 2026-08-22；替换项 P2）：
+## 夜晚玩家自带的营火/灯笼光。位置跟踪玩家而非镜头——玩家不在场（主菜单/战斗空场）
+## 时降为微光并在玩家出现前不移动。贴图为运行时生成的径向渐变，非手绘资产。
+var _camp_light: PointLight2D = null
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
 	_ensure_canvas_modulate()
+	_ensure_camp_light()
 	if WorldState:
 		# WorldState.game_time 单位为小时（0~24），存档加载后已有值则恢复，
 		# 否则以本节点初始 time_of_day 为准
@@ -48,6 +54,64 @@ func _process(delta: float) -> void:
 			WorldState.game_time = time_of_day
 	# 更新光照
 	_update_lighting()
+	_update_camp_light()
+
+
+# ─────────────────────────────── 夜间光源（PLACEHOLDER）────────────────────────────────
+
+func _ensure_camp_light() -> void:
+	_camp_light = PointLight2D.new()
+	_camp_light.name = "CampLight"
+	var tex := GradientTexture2D.new()
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	tex.width = 512
+	tex.height = 512
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.82, 0.55, 0.9))
+	grad.set_color(1, Color(1.0, 0.75, 0.45, 0.0))
+	tex.gradient = grad
+	_camp_light.texture = tex
+	_camp_light.texture_scale = 3.0
+	_camp_light.energy = 0.0
+	add_child(_camp_light)
+
+
+## 光强随环境亮度反相（越夜越亮），位置跟踪玩家（附身实体）脚下
+func _update_camp_light() -> void:
+	if _canvas_modulate == null or _camp_light == null:
+		return
+	var brightness: float = _canvas_modulate.color.get_luminance()
+	var t: float = clampf((0.72 - brightness) / 0.34, 0.0, 1.0)
+	_camp_light.energy = lerpf(_camp_light.energy, t * 1.1, 0.08)
+	var player: Node2D = _find_player_entity()
+	if player == null:
+		return
+	# 玩家脚下 + 轻微上移（光心在人物重心而非脚底板）
+	var target_pos: Vector2 = player.global_position + Vector2(0, -24.0)
+	_camp_light.global_position = _camp_light.global_position.lerp(target_pos, 0.12)
+
+
+## 找玩家（附身）实体：优先 GameRoot.get_entity 系的附身实体；无则先找当前附身单位
+## （EnvironmentSystem 与 units 解耦经 GameRoot 路径，若多个都找不到返回 null → 光静止）
+func _find_player_entity() -> Node2D:
+	var gr := get_tree().root.get_node_or_null("GameRoot")
+	if gr == null:
+		return null
+	# 1. 附身实体（最常用路径）：GameRoot → PossessionInterface.get_possessed_entity
+	if gr.has_method("get_possession_interface"):
+		var pi = gr.get_possession_interface()
+		if pi != null and pi.has_method("get_possessed_entity"):
+			var p = pi.get_possessed_entity()
+			if p != null and is_instance_valid(p):
+				return p as Node2D
+	# 2. 兜底：玩家实体
+	if gr.has_method("get_player_entity"):
+		var pl = gr.get_player_entity()
+		if pl != null and is_instance_valid(pl):
+			return pl as Node2D
+	return null
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────

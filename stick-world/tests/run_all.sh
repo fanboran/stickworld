@@ -249,11 +249,12 @@ declare -a report_entries=()
 # unit 层：单进程批量
 if [ "$run_unit" -eq 1 ]; then
 	t0=$(date +%s%3N)
+	unit_count=$(grep -c 'res://tests/unit/' "$SCRIPT_DIR/batch_runner.gd")
 	if "$GODOT" --headless --path "$PROJECT_DIR_WIN" res://tests/batch_runner.tscn >"$TMP_DIR/unit.out" 2>"$TMP_DIR/unit.err"; then
 		t1=$(date +%s%3N)
 		total_pass=$((total_pass + 1))
 		unit_secs=$(awk "BEGIN{printf \"%.1f\", ($t1-$t0)/1000}")
-		echo "[PASS] unit 批量（9 套） [${unit_secs}s]"
+		echo "[PASS] unit 批量（${unit_count} 套） [${unit_secs}s]"
 		report_entries+=("{\"suite\":\"unit(batch)\",\"result\":\"pass\",\"seconds\":$unit_secs}")
 	else
 		t1=$(date +%s%3N)

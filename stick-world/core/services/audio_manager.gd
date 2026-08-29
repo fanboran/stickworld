@@ -51,6 +51,8 @@ func _ready() -> void:
 		win.focus_entered.connect(_on_focus_entered)
 	if _mute_on_unfocus and win and not win.has_focus():
 		_apply_mute()
+	# SFX 事件接线（战斗/存档生命周期；音效资产未就位时静默）
+	_wire_event_bus()
 
 
 func _apply_initial_volumes() -> void:
@@ -170,6 +172,45 @@ func _apply_mute() -> void:
 func _restore_master() -> void:
 	_unfocused_muted = false
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), _to_db(_master_before_mute))
+
+
+# ─────────────────────────────── SFX 事件框架（2026-08-22）────────────────────────────────
+
+## 语义化事件 → 音效资产映射表（PLACEHOLDER：项目尚无音频文件，路径为约定占位；
+## 资产到位后按此表放入 res://assets/audio/sfx/ 即生效，调用点零改动）。
+## 替换清单见 docs/项目/待办事项.md「PLACEHOLDER 素材替换」。
+const SFX_EVENTS := {
+	"ui_click":           "res://assets/audio/sfx/ui_click.ogg",
+	"ui_confirm":         "res://assets/audio/sfx/ui_confirm.ogg",
+	"game_started":       "res://assets/audio/sfx/game_started.ogg",
+	"game_saved":         "res://assets/audio/sfx/game_saved.ogg",
+	"build_complete":     "res://assets/audio/sfx/build_complete.ogg",
+	"battle_started":     "res://assets/audio/sfx/battle_started.ogg",
+	"battle_ended_win":   "res://assets/audio/sfx/battle_ended_win.ogg",
+	"battle_ended_lose":  "res://assets/audio/sfx/battle_ended_lose.ogg",
+}
+
+## 按语义事件名播放。资产未就位时静默跳过（print_verbose，不刷警告）。
+func play_event(event_name: String) -> void:
+	if not SFX_EVENTS.has(event_name):
+		push_warning("[AudioManager] 未注册的音效事件: %s" % event_name)
+		return
+	var path: String = SFX_EVENTS[event_name]
+	if not ResourceLoader.exists(path):
+		print_verbose("[AudioManager] 音效资产未就位，跳过: %s" % path)
+		return
+	play_sfx(path)
+
+
+## 接线 EventBus 全局生命周期信号（战斗/存档；UI 点击由 StickKit 直接调 play_event）
+func _wire_event_bus() -> void:
+	if not EventBus or not EventBus.has_signal("battle_started"):
+		return
+	EventBus.game_started.connect(func() -> void: play_event("game_started"))
+	EventBus.game_saved.connect(func(_slot: int) -> void: play_event("game_saved"))
+	EventBus.battle_started.connect(func(_battle_id: String) -> void: play_event("battle_started"))
+	EventBus.battle_ended.connect(func(_battle_id: String, victory: bool) -> void:
+		play_event("battle_ended_win" if victory else "battle_ended_lose"))
 
 
 func stop_all_sfx() -> void:

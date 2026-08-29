@@ -5,7 +5,8 @@ extends CanvasLayer
 ## 详见 docs/技术/架构/场景与战斗架构.md §十。
 ## 子节点结构（z 从低到高）：
 ##   GlobalHUD / ModePanel / ContextPanel / ResourceBar / HudOverlay
-##   ModalOverlay（z=50，模态遮罩盖住全部 UI） / UiInspector（z=100，F3 调试）
+##   ModalOverlay（Z_MODAL，模态遮罩盖住全部 UI） / UiInspector（Z_INSPECTOR，F3 调试）
+##   SystemOverlay（Z_SYSTEM，toast/确认框，在模态之上）
 ##   UIModalStack（模态栈：层键字典 + 逐层 pop，见 ui_modal_stack.gd）
 
 const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scripts/debug_ui_inspector.gd")
@@ -29,11 +30,22 @@ var _fps_counter: Label = null
 
 func _ready() -> void:
 	add_to_group("ui_root")
+	_apply_slot_z_orders()
 	_setup_modal_stack()
 	_bind_event_bus()
 	_apply_theme()
 	_setup_ui_inspector()
 	_setup_fps_counter()
+
+
+## 槽位层序统一走 LayerOrder 常量（场景文件不写 z_index，单一真相源见 layer_order.gd）
+func _apply_slot_z_orders() -> void:
+	var modal := get_node_or_null("ModalOverlay") as Control
+	if modal != null:
+		modal.z_index = LayerOrder.Z_MODAL
+	var system := get_node_or_null("SystemOverlay") as Control
+	if system != null:
+		system.z_index = LayerOrder.Z_SYSTEM
 
 
 ## 装配统一模态栈（层键字典 + 逐层 pop，替代 GameRoot._handle_escape 特判）

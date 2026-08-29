@@ -52,6 +52,10 @@ static func button(parent: Control, text: String, callback: Callable = Callable(
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, height)
+	# 统一 UI 点击音（AudioManager 框架先行，资产未就位时静默跳过）
+	b.pressed.connect(func() -> void:
+		if AudioManager and AudioManager.has_method("play_event"):
+			AudioManager.play_event("ui_click"))
 	match kind:
 		ButtonKind.ACCENT:
 			b.add_theme_stylebox_override("normal", StickStyle.accent_normal())
@@ -89,6 +93,11 @@ static func row(parent: Control, separation: int = 8) -> HBoxContainer:
 
 static func separator(parent: Control) -> void:
 	parent.add_child(HSeparator.new())
+
+
+## 竖直分隔线（横向 HUD 行内分节用，替代旧 PanelKit.add_separator）
+static func vseparator(parent: Control) -> void:
+	parent.add_child(VSeparator.new())
 
 
 # ─────────────────────────────── 键值行 ────────────────────────────────
@@ -210,6 +219,7 @@ static func toast(layer: Control, text: String, kind: String = "info") -> void:
 			StickTokens.INFO if kind == "info" else (StickTokens.WARN if kind == "warn" else StickTokens.DANGER))
 	l.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
 	layer.add_child(panel)
+	_toast_apply_width_limit(panel, l, text, layer)
 	# 绝对定位（anchor 归零），底部居中、离底 80px；不混用 anchor 与 position setter
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	panel.resized.connect(func():
@@ -221,6 +231,25 @@ static func toast(layer: Control, text: String, kind: String = "info") -> void:
 	tween.tween_interval(StickTokens.T_TOAST)
 	tween.tween_property(panel, "modulate:a", 0.0, StickTokens.T_PANEL * 2)
 	tween.tween_callback(panel.queue_free)
+
+
+## toast 宽度约束：文本单行宽度超出屏幕安全区时开启自动换行并钳制标签宽，
+## 防止长文本把面板顶出屏幕左右边缘（参照《药剂工艺》Tooltip 的 marginFromScreenEdge）。
+static func _toast_apply_width_limit(panel: PanelContainer, l: Label, text: String, layer: Control) -> void:
+	var max_w := layer.size.x - StickTokens.SCREEN_MARGIN * 2.0
+	if max_w <= 0.0:
+		return
+	var font := l.get_theme_font(&"font")
+	if font == null:
+		return
+	var text_w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, StickTokens.FONT_BODY).x
+	var sb := panel.get_theme_stylebox(&"panel")
+	var inset := 24.0
+	if sb != null:
+		inset = maxf(24.0, sb.get_margin(SIDE_LEFT) + sb.get_margin(SIDE_RIGHT))
+	if text_w > max_w - inset:
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = max_w - inset
 
 
 # ─────────────────────────────── 确认框 ────────────────────────────────

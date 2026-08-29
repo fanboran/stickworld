@@ -31,8 +31,6 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-z_index = 90
 mouse_filter = 2
 
 [node name="ModalOverlay" parent="." instance=ExtResource("7_mo_scene")]
-z_index = 50

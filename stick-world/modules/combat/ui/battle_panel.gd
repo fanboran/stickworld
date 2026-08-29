@@ -60,16 +60,16 @@ func _build_ui() -> void:
 	add_child(hbox)
 
 	# ── 1. 框选信息 ──
-	var sel_section := PanelKit.create_section(hbox, "框选")
+	var sel_section := StickKit.section(hbox, "框选")
 	_selection_label = Label.new()
 	_selection_label.text = "选中: 0 人"
 	sel_section.add_child(_selection_label)
 
 	# 分隔线
-	PanelKit.add_separator(hbox)
+	StickKit.vseparator(hbox)
 
 	# ── 2. 编制树 ──
-	var squad_section := PanelKit.create_section(hbox, "编制")
+	var squad_section := StickKit.section(hbox, "编制")
 	_squad_container = VBoxContainer.new()
 	_squad_container.add_theme_constant_override("separation", 2)
 	squad_section.add_child(_squad_container)
@@ -79,10 +79,10 @@ func _build_ui() -> void:
 	_squad_container.add_child(_no_squad_label)
 
 	# 分隔线
-	PanelKit.add_separator(hbox)
+	StickKit.vseparator(hbox)
 
 	# ── 3. 指令按钮 ──
-	var order_section := PanelKit.create_section(hbox, "号令")
+	var order_section := StickKit.section(hbox, "号令")
 	var order_hbox := HBoxContainer.new()
 	order_hbox.add_theme_constant_override("separation", 6)
 	order_section.add_child(order_hbox)
@@ -92,28 +92,28 @@ func _build_ui() -> void:
 	_create_order_button(order_hbox, "掩体", TacticalOrders.OrderType.TAKE_COVER)
 
 	# 分隔线
-	PanelKit.add_separator(hbox)
+	StickKit.vseparator(hbox)
 
 	# ── 4. 编制入口 ──
-	var action_section := PanelKit.create_section(hbox, "编制")
+	var action_section := StickKit.section(hbox, "编制")
 	var action_hbox := HBoxContainer.new()
 	action_hbox.add_theme_constant_override("separation", 6)
 	action_section.add_child(action_hbox)
-	_open_formation_btn = PanelKit.create_button(action_hbox, "打开编制窗口", _on_open_formation_pressed)
+	_open_formation_btn = StickKit.button(action_hbox, "打开编制窗口", _on_open_formation_pressed)
 
 	# 分隔线
-	PanelKit.add_separator(hbox)
+	StickKit.vseparator(hbox)
 
 	# ── 5. 附身按钮 ──
-	var possess_section := PanelKit.create_section(hbox, "附身")
+	var possess_section := StickKit.section(hbox, "附身")
 	var possess_hbox := HBoxContainer.new()
 	possess_hbox.add_theme_constant_override("separation", 6)
 	possess_section.add_child(possess_hbox)
-	_possess_btn = PanelKit.create_button(possess_hbox, "附身选中单位", _on_possess_pressed)
+	_possess_btn = StickKit.button(possess_hbox, "附身选中单位", _on_possess_pressed)
 
 
 func _create_order_button(parent: Container, text: String, order_type: int) -> void:
-	var btn := PanelKit.create_button(parent, text, Callable(self, "_on_order_pressed").bind(order_type))
+	var btn := StickKit.button(parent, text, Callable(self, "_on_order_pressed").bind(order_type))
 	_order_buttons[order_type] = btn
 
 

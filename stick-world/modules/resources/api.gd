@@ -22,6 +22,10 @@ signal price_changed(resource_id: String, old_price: float, new_price: float, re
 var _resource_manager: ResourceManager
 var _is_initialized: bool = false
 
+## 供需定价 tick 周期（现实秒；暂停时不累计）
+const PRICE_TICK_INTERVAL := 5.0
+var _price_tick_accumulator: float = 0.0
+
 
 # ===== 初始化 =====
 
@@ -29,6 +33,23 @@ var _is_initialized: bool = false
 func setup(resource_manager: Object) -> void:
 	_resource_manager = resource_manager as ResourceManager
 	_is_initialized = true
+	if _resource_manager != null:
+		_resource_manager.init_market()
+
+
+func _process(delta: float) -> void:
+	if _resource_manager == null:
+		return
+	# 暂停时冻结市场（与全局时间流速一致）
+	if TimeManager and TimeManager.is_paused():
+		return
+	_price_tick_accumulator += delta
+	if _price_tick_accumulator < PRICE_TICK_INTERVAL:
+		return
+	_price_tick_accumulator = 0.0
+	for change: Dictionary in _resource_manager.tick_supply_demand():
+		price_changed.emit(
+			str(change["resource_id"]), float(change["old"]), float(change["new"]), str(change["region_id"]))
 
 
 # ===== 查询库存 =====
@@ -118,3 +139,29 @@ func set_tax_rate(rate: float) -> Dictionary:
 	if _resource_manager == null:
 		return {"ok": false, "error": "资源系统未初始化"}
 	return _resource_manager.set_tax_rate(rate)
+
+
+# ===== 调试接口（DebugToolsPanel 专用，生产代码勿用） =====
+
+## 跳过 tick 周期立即结算一次市场；返回变更条数（price_changed 已随之发射）
+func debug_force_market_tick() -> int:
+	if _resource_manager == null:
+		return 0
+	var count: int = 0
+	for change: Dictionary in _resource_manager.tick_supply_demand():
+		price_changed.emit(
+				str(change["resource_id"]), float(change["old"]), float(change["new"]),
+				str(change["region_id"]))
+		count += 1
+	return count
+
+
+## 全部已知资源定义行（id/name_zh/initial_price），来自 BalanceConfig
+func debug_resource_rows() -> Array:
+	var rows: Variant = BalanceConfig.get_value("resources.resources") if BalanceConfig else null
+	return rows if rows is Array else []
+
+
+## 当前税率
+func debug_tax_rate() -> float:
+	return _resource_manager.tax_rate if _resource_manager != null else 0.0

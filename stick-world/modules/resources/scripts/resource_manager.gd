@@ -137,22 +137,73 @@ func set_tax_rate(rate: float) -> Dictionary:
 	return {"ok": true, "tax_rate": rate}
 
 
-# ===== 供需计算（框架，后期实现） =====
+# ===== 供需定价（2026-08-22 实现，替代阶段 1 框架占位） =====
 
-## 更新指定资源在指定区域的价格（基于供需）
-func _update_price(_resource_id: String, _region_id: String) -> void:
-	# 供需价格模拟（阶段 1，见待办事项「resources 供需接入」）：
-	# 1. 计算供需比 supply / demand
-	# 2. 根据供需比调整价格
-	# 3. 应用价格上下限
-	# 4. 发射 price_changed 信号
-	pass
+## 均衡库存：库存等于该值时价格 = 基准价（阶段 1 全局常数；后续按资源/区域在 .tres 中配置）
+const EQUILIBRIUM_STOCK := 200.0
+## 价格对稀缺度的敏感指数：target = base × (均衡/库存)^指数。0.5 = 平方根响应（缓和）
+const PRICE_ELASTICITY := 0.5
+## 单次 tick 最大调价幅度（比例），防止价格跳变
+const MAX_ADJUST_PER_TICK := 0.15
+## 价格下限保护（绝对值），防止模型把价格打到 0
+const PRICE_MIN := 0.01
+
+## 基准价表：{resource_id: initial_price}，由 init_market 从 BalanceConfig 引导
+var _base_prices: Dictionary = {}
 
 
-## 定期供需平衡（由 TimeManager 定时调用）
-func _tick_supply_demand(_delta: float) -> void:
-	# 阶段 1 实现：遍历所有资源+区域，调用 _update_price
-	pass
+## 市场引导：从 BalanceConfig 读 resources.tres 的 initial_price 建基准价表。
+## 由 api.setup() 调用；BalanceConfig 未就绪时留空，价格按 PRICE_MIN 兜底。
+func init_market() -> void:
+	_base_prices.clear()
+	var rows: Variant = BalanceConfig.get_value("resources.resources") if BalanceConfig else null
+	if rows is Array:
+		for entry in rows:
+			if entry is Dictionary and entry.has("id"):
+				_base_prices[str(entry["id"])] = float(entry.get("initial_price", 1.0))
+
+
+func get_base_price(resource_id: String) -> float:
+	return float(_base_prices.get(resource_id, 1.0))
+
+
+## 计算并步进指定资源在指定区域的价格。
+## 模型：目标价 = 基准价 × (均衡库存/当前库存)^弹性 × (1+税率)，单次限幅逼近；
+## 显式上下限（set_price_ceiling/floor）优先于模型目标。
+## 返回 {resource_id, region_id, old, new}（纯计算，不发信号——由 api 发射 price_changed）。
+func update_price(resource_id: String, region_id: String) -> Dictionary:
+	_ensure_paths(resource_id, region_id)
+	var stock: float = get_stock(resource_id, region_id)
+	# 稀缺度：库存低于均衡 → >1 提价；高于均衡 → <1 降价
+	var scarcity: float = EQUILIBRIUM_STOCK / maxf(stock, 1.0)
+	var target: float = get_base_price(resource_id) * pow(scarcity, PRICE_ELASTICITY) * (1.0 + tax_rate)
+	if price_ceilings.has(resource_id):
+		target = minf(target, price_ceilings[resource_id])
+	if price_floors.has(resource_id):
+		target = maxf(target, price_floors[resource_id])
+	target = maxf(target, PRICE_MIN)
+
+	var old: float = prices[resource_id][region_id]
+	if old <= 0.0:
+		# 首次定价：直接落到目标价，不做限幅
+		prices[resource_id][region_id] = target
+		return {"resource_id": resource_id, "region_id": region_id, "old": 0.0, "new": target}
+
+	# 限幅逼近：单次最多变化 ±MAX_ADJUST_PER_TICK
+	var ratio: float = clampf((target - old) / old, -MAX_ADJUST_PER_TICK, MAX_ADJUST_PER_TICK)
+	var new_price: float = maxf(old * (1.0 + ratio), PRICE_MIN)
+	prices[resource_id][region_id] = new_price
+	return {"resource_id": resource_id, "region_id": region_id, "old": old, "new": new_price}
+
+
+## 供需周期：遍历所有已开库的 资源×区域 组合各步进一次价格。
+## 返回变更数组（元素同 update_price 返回值）；由 api 定时驱动并发信号。
+func tick_supply_demand() -> Array:
+	var changes: Array = []
+	for res_id in stocks.keys():
+		for region_id in stocks[res_id].keys():
+			changes.append(update_price(res_id, region_id))
+	return changes
 
 
 # ===== 内部工具 =====

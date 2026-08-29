@@ -28,6 +28,7 @@ func _ready() -> void:
 	_runner.add_test("模态栈: 占位面板同类单例（提到栈顶/替换）", _test_placeholder_singleton, true)
 	_runner.add_test("模态栈: 确认框 ESC = 取消", _test_confirm_escape_cancel, true)
 	_runner.add_test("模态栈: 存档面板经栈开合", _test_save_panel_stack, true)
+	_runner.add_test("模态栈: StickScreen 自带暂停与栈暂停不互相抢恢复", _test_dual_pause_ownership, true)
 	_run_tests_async()
 
 
@@ -177,3 +178,33 @@ func _test_save_panel_stack() -> void:
 	await get_tree().process_frame
 	_runner.assert_false(stack.is_open(UIModalStack.Layer.SAVE_PANEL), "再 toggle 应退栈")
 	_runner.assert_false(TimeManager.is_paused(), "栈空应恢复")
+
+
+## 双份暂停回归（2026-08-22）：StickScreen 自带 _prev_speed 暂停记录，
+## 与 UIModalStack 的暂停随栈并存——约定"面板 open() 发现已暂停则不记录，
+## 恢复只由最外层负责"。本用例钉死：面板关闭不得提前恢复速度。
+func _test_dual_pause_ownership() -> void:
+	var gr := _helper.game_root
+	var sp: Control = gr.get_settings_menu_panel() if gr.has_method("get_settings_menu_panel") else null
+	_runner.assert_not_null(sp, "设置面板应已装配（StickScreen 子类）")
+	if sp == null:
+		return
+	# 1. 栈先暂停（经暂停菜单）
+	gr._handle_escape()
+	_runner.assert_true(TimeManager.is_paused(), "前置：栈应已暂停")
+	var stack: Node = gr.ui_root.get_modal_stack()
+	# 2. StickScreen.open() 发现已暂停 → 不记录自己的恢复责任
+	gr.toggle_settings_menu()
+	await get_tree().process_frame
+	_runner.assert_true(sp.visible, "设置应显示")
+	_runner.assert_true(TimeManager.is_paused(), "设置打开保持暂停")
+	# 3. 面板自身 close()（toggle 关闭路径）→ 不得提前恢复
+	sp.call("close")
+	await get_tree().process_frame
+	_runner.assert_false(sp.visible, "面板应关闭")
+	_runner.assert_true(TimeManager.is_paused(),
+			"关键回归：面板 close 不得抢在栈之前恢复速度（_prev_speed 应为 -1 跳过恢复）")
+	# 4. 栈逐层退空 → 才由栈恢复
+	gr._handle_escape()  # 关暂停菜单
+	await get_tree().process_frame
+	_runner.assert_false(TimeManager.is_paused(), "栈退空才恢复原速度")

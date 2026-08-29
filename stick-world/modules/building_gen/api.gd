@@ -26,8 +26,9 @@ const _BUILDING_SCENE_PATHS := {
 	"wall_tier2": "buildings/wall_tier2.tscn",
 	"wall_tier3": "buildings/wall_tier3.tscn",
 	"wall_gate": "buildings/wall_gate.tscn",
-	"barracks": "buildings/placeholder.tscn",
-	"warehouse": "buildings/placeholder.tscn",
+	# 2026-08-22：兵营/仓库脱离共用草棚外壳，各自程序化差异化外观（PLACEHOLDER 几何挂件）
+	"barracks": "buildings/barracks.tscn",
+	"warehouse": "buildings/warehouse.tscn",
 }
 
 

@@ -156,6 +156,16 @@ func _build_exterior() -> void:
 	rl1.position = Vector2(-6, 3)
 	_a(l5, rl1)
 
+	# 子类差异化挂件（旗帜/货箱等；2026-08-22 兵营/仓库脱离共用外壳）
+	_post_build(ext)
+
+
+## 子类可选覆盖：在标准外壳构建完成后追加差异化挂件。
+## ext 为 Exterior 节点；调色板经 _get_palette() 自取。PLACEHOLDER 素材（程序化几何），
+## 替换清单见 docs/项目/待办事项.md「PLACEHOLDER 素材替换」。
+func _post_build(_ext: Node2D) -> void:
+	pass
+
 
 # ── helpers ──
 

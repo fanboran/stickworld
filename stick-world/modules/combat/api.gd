@@ -4,9 +4,10 @@ extends Node
 ## 详见 docs/技术/架构/场景与战斗架构.md §8.2。
 ## P0 阶段委托给 BattleDirector（GameRoot.BattleDirector 节点）。
 ##
-## ⚠️ 契约说明（2026-08 审计收敛）：模块API契约.md §六 文档的"战略级"接口
-## （initiate_battle/issue_order/possess_commander 等）尚未实现——当前玩法是
-## 实体级战场（地图上单位直接战斗），战略级接口待阶段 1+ 战略图接入后补充。
+## ⚠️ 契约说明（2026-08-22 修正）：模块API契约.md §六 的"战略级"接口拆解如下——
+##   - initiate_battle：由 start_battle（实体级）承接，战略图触发属阶段 1+ 设计空间；
+##   - issue_order：已实现（委托 TacticalOrders，经 CommandChain 逐层下达）；
+##   - possess_commander：本属 player_control 职责（PossessionInterface），不在本模块。
 ## 以本文件实际签名为准。
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
@@ -15,6 +16,9 @@ var _director: Node = null
 
 ## FormationSystem 实例引用（由 GameRoot 装配时注入，用于跨图编队快照）
 var _formation: Node = null
+
+## TacticalOrders 实例引用（由 GameRoot 装配时注入，issue_order 委托目标）
+var _tactical_orders: Node = null
 
 
 ## 注入 BattleDirector 引用（由 GameRoot._setup_combat_system 调用）
@@ -27,6 +31,11 @@ func setup_formation_system(formation: Node) -> void:
 	_formation = formation
 
 
+## 注入 TacticalOrders 引用（由 SystemSetup 装配，issue_order 用）
+func set_tactical_orders(tactical: Node) -> void:
+	_tactical_orders = tactical
+
+
 # ─────────────────────────────── 创建战斗 ────────────────────────────────
 
 ## 在指定地图上启动一场战斗。
@@ -37,6 +46,19 @@ func start_battle(map: Node2D, attacker_units: Array, defender_units: Array) -> 
 		push_warning("[CombatApi] BattleDirector 未注入")
 		return null
 	return _director.start_battle_at(map, attacker_units, defender_units)
+
+
+# ─────────────────────────────── 号令下达 ────────────────────────────────
+
+## 对指定小队下达战术号令（委托 TacticalOrders，经 CommandChain 逐层延迟下达）。
+## order_type 见 TacticalOrders.OrderType；source_tier 0=玩家直接指挥。
+## 返回是否受理（小队不存在/无战斗职责时拒绝）。
+func issue_order(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO,
+		source_tier: int = 0) -> bool:
+	if _tactical_orders == null:
+		push_warning("[CombatApi] TacticalOrders 未注入")
+		return false
+	return _tactical_orders.issue(order_type, squad_id, target_pos, source_tier)
 
 
 # ─────────────────────────────── 查询 ────────────────────────────────

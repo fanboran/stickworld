@@ -165,6 +165,9 @@ func _setup_combat_api_deferred() -> void:
 	_root._combat_api.setup(_root.battle_director)
 	if _root._formation_system != null and _root._combat_api.has_method("setup_formation_system"):
 		_root._combat_api.setup_formation_system(_root._formation_system)
+	# 号令委托入口（CombatApi.issue_order → TacticalOrders）
+	if _root._tactical_orders != null and _root._combat_api.has_method("set_tactical_orders"):
+		_root._combat_api.set_tactical_orders(_root._tactical_orders)
 
 
 # ─────────────────────────────── 资源系统装配（P0-9）────────────────────────────────

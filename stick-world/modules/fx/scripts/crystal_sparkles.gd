@@ -19,8 +19,10 @@ extends CPUParticles2D
 ##   alpha      全程不透明（ColorModule 关、渐变两键 a=1）—— 无渐隐！
 ##   位移/重力/旋转 全零；looping=true；prewarm=true（tier20 除外）
 ##   材质贴图   = Unity 默认粒子软点（已提取原版 PNG 直接使用，见 assets/）
-##   混合模式   = Additive 发光叠加（Unity 新建 ParticleSystem 的默认材质即
-##                Additive）——暗色岩壁上粒子是"发光"而非"贴白点"，亮晶晶的关键
+##   混合模式   = AlphaBlend（2026-08-29 解包实证：Default-ParticleSystem →
+##                Particles/Standard Unlit，_SrcBlend=5(SrcAlpha)/_DstBlend=10
+##                (OneMinusSrcAlpha)/_Mode=2(Fade)）。原版扁平手绘风、无泛光，
+##                重叠不变亮——Additive 是误判已回退（详见参考文档附录 B#11）
 ##
 ## 为什么用 CPUParticles2D 而不是 GPUParticles2D：
 ##   1. 发射区需要"精灵轮廓点集"（原版 Mesh 发射）。GPUParticles2D 在 Godot 4.4+
@@ -89,15 +91,15 @@ const JITTER_MAX := 2.0
 ## 两组数值原版均未直接出土，合并标定：按烘焙实例实测有效速率 0.008~0.62/s 反推量级。
 const AREA_TO_MESH := 0.12
 
-## 药工的发射 mesh 是美术手绘的若干"小块"（典型 0.01~0.1 单位²，烘焙实例反推），
-## 大面积宿主在原版里是"多挂几个小块"，而不是"把小块摊成一大块"。
-## 因此这里对换算后的 mesh 面积做上下限截断，避免巨型宿主把速率顶到失控
-## （实测：420px 水晶 11.6 单位² 不截断会算出 149 颗在世粒子，糊成一团）。
+## 药工的发射 mesh 是美术手绘的"小块"，由烘焙实例实测速率反推：
+## 实测单系统速率 0.008~0.62/s ÷ (档位×areaFactor) → mesh 面积 ≈ 0.011~0.013 单位²。
+## 大面积宿主在原版里是"多挂几个小块对象"，而不是"把小块摊成一大块"，
+## 因此上限按实测收紧到 0.013；下限 0.008 保证极小宿主仍有微弱闪光。
 const MESH_AREA_MIN := 0.008
-const MESH_AREA_MAX := 0.35
+const MESH_AREA_MAX := 0.013
 
-## 单子系统速率上限（安全网：异常巨大的宿主不会拖垮帧率）
-const MAX_RATE_PER_SYSTEM := 60.0
+## 单子系统速率上限（安全网；0.62/s 实测上限 × 抖动 2 ≈ 1.25，留余量到 2.0）
+const MAX_RATE_PER_SYSTEM := 2.0
 
 ## 100PPU：0.13 单位 → 像素换算基数（贴图 64px 时的 scale 峰值系数）
 const PX_PER_UNIT := 100.0
@@ -106,7 +108,8 @@ const PX_PER_UNIT := 100.0
 const START_SIZE_UNITS := 0.13
 
 ## 颜色主题（16 色相桶代表性出土色；每材料一色）
-## 每项 = [主题色 RGB]，出生随机白↔主题色
+## 原版一簇一色：CrystalSparksBase 的 5 个强度子系统共用同一主题色，
+## 每颗粒子再在纯白↔主题色间随机取色（2026-08-29 原版截图调研确认"一簇一色"）
 const THEMES := {
 	"white":    [1.00, 1.00, 1.00],
 	"rose":     [1.00, 0.58, 0.76],
@@ -126,13 +129,6 @@ const THEMES := {
 	"magenta":  [1.00, 0.58, 0.76],
 }
 
-## 5 个子系统各自的配色槽位：[主色, 白, 金, 青, 粉]
-## 出土 maxGradient 后段含橙金/紫/青/粉（a=0 的变体储备色），取金/青/粉作点缀。
-## 前两槽 areaFactor 最高（6.0/4.5）→ 主色与白占约 70% 粒子，维持"每材料一色"的识别度，
-## 后三槽稀疏点缀出多彩闪烁。
-const VARIANT_ACCENTS := ["gold", "cyan", "rose"]
-const VARIANT_RESERVE := ["mint", "violet", "orange", "pink", "lavender", "blue"]
-
 
 # ─────────────────────────── 速率 / 配色 ───────────────────────────
 
@@ -148,23 +144,6 @@ static func compute_rate(tier: int, area_units: float, area_factor: float = 1.0,
 ## 宿主轮廓面积（单位²）→ 药工发射 mesh 表面积（单位²）：线性标定 + 上下限截断
 static func mesh_area(area_units: float) -> float:
 	return clampf(maxf(area_units, 0.0) * AREA_TO_MESH, MESH_AREA_MIN, MESH_AREA_MAX)
-
-
-## 生成 5 个子系统的配色（主色 + 白 + 3 个点缀色，去重）
-static func variant_palette(theme_key: String) -> PackedStringArray:
-	var pal: Array[String] = [theme_key, "white"]
-	var pool: Array[String] = []
-	pool.append_array(VARIANT_ACCENTS)
-	pool.append_array(VARIANT_RESERVE)
-	for k in pool:
-		if pal.size() >= AREA_FACTORS.size():
-			break
-		if pal.has(k):
-			continue
-		pal.append(k)
-	while pal.size() < AREA_FACTORS.size():
-		pal.append("white")
-	return PackedStringArray(pal)
 
 
 # ─────────────────────────── 宿主轮廓测量 ───────────────────────────
@@ -392,7 +371,7 @@ static func attach_to(host: Node2D, sorting_z: int = WorldZ.OVERLAY_HINT,
 	if area_units >= 0.0:
 		meas["area_units"] = area_units
 
-	var palette := variant_palette(theme_key)
+	# 原版一簇一色：5 个强度子系统共用同一主题色（CrystalSparksBase 结构）
 	# 原版 5 个子系统共享同一发射 mesh → 此处采样一次点集，5 个子系统共用。
 	# 粒子系统节点挂在轮廓中心（见 _make_system 的 position），点集转为相对中心的坐标
 	var center: Vector2 = meas["center"]
@@ -405,7 +384,7 @@ static func attach_to(host: Node2D, sorting_z: int = WorldZ.OVERLAY_HINT,
 	var primary: CrystalSparkles = null
 	for i in AREA_FACTORS.size():
 		var sys := _make_system(host, meas, lifetime, tier, float(AREA_FACTORS[i]),
-				palette[i], sorting_z, i, points)
+				theme_key, sorting_z, i, points)
 		if primary == null:
 			primary = sys
 	return primary
@@ -425,10 +404,16 @@ static func _make_system(host: Node2D, meas: Dictionary, lifetime: float, tier: 
 	p.local_coords = true
 	p.z_index = sorting_z
 	p.texture = _get_sparkle_tex()
+	# ⚠️ CPUParticles2D 连续发射的密度下限 = 1/lifetime（amount 最少 1 颗循环），
+	# 原版烘焙实例的极稀速率（低至 0.008/s）无法用连续粒子表达；原版靠"多对象
+	# 各挂小块"叠加出总密度，我们的资源点模型一个宿主即一簇，下限约 5 颗在世/宿主
 	p.amount = maxi(int(ceilf(rate * lifetime)), 1)
 	p.lifetime = lifetime
-	# 原版 prewarm=true（tier20 除外）：开场粒子已在半程
-	p.preprocess = 0.0 if tier == 20 else lifetime
+	# 原版 prewarm=true（tier20 除外）：开场粒子已在周期中段。
+	# 各子系统按 index 错开相位（preprocess 递增 lifetime/5）——否则同宿主 5 系统
+	# 同寿命同相位，整簇同步闪烁/同步熄灭出现"死场帧"（原版 5 系统寿命各异天然错相）
+	p.preprocess = 0.0 if tier == 20 \
+			else lifetime * float(index) / float(AREA_FACTORS.size())
 	# 发射区对齐宿主轮廓中心（多边形/色块不一定以原点为中心）
 	p.position = meas["center"]
 
@@ -452,13 +437,12 @@ static func _make_system(host: Node2D, meas: Dictionary, lifetime: float, tier: 
 	p.scale_amount_max = 1.0
 	p.scale_amount_curve = _build_scale_curve()
 	p.color_initial_ramp = _build_color_ramp(theme_key)
-	# Additive 发光叠加（原版 Unity Default-ParticleSystem 即 Additive 混合）：
-	# 暗背景上多颗粒子重叠处越来越亮，"布灵布灵"观感的另一半来源
+	# 混合模式：AlphaBlend（2026-08-29 解包实证 _SrcBlend=5/_DstBlend=10，
+	# 原版扁平手绘风无泛光——重叠不变亮；Additive 曾为误判，已回退）
+	# UNSHADED（对齐 Particles/Standard Unlit）：粒子不受 CanvasModulate 昼夜压暗
+	# /Light2D 影响——夜间彩色不被压暗吞掉（B7）
 	var cam := CanvasItemMaterial.new()
-	cam.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	# UNSHADED（对齐 Unity Particles/Standard Unlit）：粒子不受 CanvasModulate
-	# 昼夜压暗 / Light2D 影响。否则夜间压暗系数把主题色乘暗后，Additive 下
-	# 暗色≈不可见，只剩白点幸存——"全是白点、配色丢失"的根因（B7）
+	cam.blend_mode = CanvasItemMaterial.BLEND_MODE_MIX
 	cam.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
 	p.material = cam
 

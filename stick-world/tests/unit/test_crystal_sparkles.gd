@@ -24,7 +24,7 @@ func _ready() -> void:
 	_runner.add_test("rate: 原版公式 档位×areaFactor×面积×SpawnRate", _test_rate_formula)
 	_runner.add_test("rate: 大面积速率 > 小面积速率（面积驱动）", _test_area_scales_emission)
 	_runner.add_test("tier: 档位表与原版一致（8档=0.72s）", _test_tier_table)
-	_runner.add_test("palette: 5 子系统配色 = 主色+白+3 点缀，无重复", _test_palette)
+	_runner.add_test("palette: 一簇一色——5 子系统共用主题色（白↔主题随机）", _test_single_theme)
 	_runner.add_test("measure: 轮廓面积支持 Sprite/Polygon/ColorRect", _test_measure_host)
 	_runner.add_test("emission: 不透明精灵采样为 POINTS（点落在轮廓内）", _test_emission_points_sprite)
 	_runner.add_test("emission: 全透明精灵回退 BOX", _test_emission_fallback_box)
@@ -105,16 +105,19 @@ func _test_five_subsystems() -> void:
 		_runner.assert_true(first.amount >= last.amount,
 				"areaFactor 最大(6.0)的子系统 amount 应 ≥ 最小(0.75)者")
 		_runner.assert_true(last.name == "CrystalSparkles_5", "第五个子系统命名")
+		# 相位错开：5 系统共用 tier 寿命，若 preprocess 同值会整簇同步熄灭（死场帧）
+		_runner.assert_approx(last.preprocess, last.lifetime * 4.0 / 5.0, 0.001,
+				"第 5 子系统 preprocess 应错开 4/5 周期")
 
 
 func _test_rate_formula() -> void:
 	# 原版：rateOverTime = 档位速率 × areaFactor × mesh表面积 × SpawnRate（jitter=1 时为基值）
+	# mesh 面积经 mesh_area() 标定截断（烘焙实测 0.008~0.62/s 反推 ≈ [0.008, 0.013] 单位²）
 	var area := 1.0
 	var spawn: float = ScriptCrystalSparkles.SPAWN_RATE
-	var to_mesh: float = ScriptCrystalSparkles.AREA_TO_MESH
-	var expect: float = 8.0 * 6.0 * (area * to_mesh) * spawn
+	var expect: float = 8.0 * 6.0 * ScriptCrystalSparkles.mesh_area(area) * spawn
 	_runner.assert_approx(ScriptCrystalSparkles.compute_rate(8, area, 6.0), expect, 0.001,
-			"tier8 × areaFactor6 × 面积1 → %f" % expect)
+			"tier8 × areaFactor6 × mesh_area(1.0) → %f" % expect)
 	# areaFactor 单调递增
 	var r_small: float = ScriptCrystalSparkles.compute_rate(8, area, 0.75)
 	var r_big: float = ScriptCrystalSparkles.compute_rate(8, area, 6.0)
@@ -122,10 +125,16 @@ func _test_rate_formula() -> void:
 	# 抖动：0.5~2 区间缩小/放大
 	_runner.assert_approx(ScriptCrystalSparkles.compute_rate(8, area, 6.0, 2.0), expect * 2.0, 0.001,
 			"jitter=2 应为基值两倍")
-	# 上限安全网
-	_runner.assert_true(
-			ScriptCrystalSparkles.compute_rate(20, 1e6, 6.0) <= ScriptCrystalSparkles.MAX_RATE_PER_SYSTEM,
-			"异常巨大宿主应被速率上限截断")
+	# 面积标定：超大宿主钉在烘焙实测反推的上限
+	_runner.assert_approx(ScriptCrystalSparkles.mesh_area(1e6), ScriptCrystalSparkles.MESH_AREA_MAX,
+			0.0001, "巨大宿主 mesh 面积钉在上限（0.62/s 实测反推 0.013）")
+	_runner.assert_approx(ScriptCrystalSparkles.mesh_area(0.0), ScriptCrystalSparkles.MESH_AREA_MIN,
+			0.0001, "极小宿主 mesh 面积兜底到下限")
+	# 上限安全网（tier20 × AF6 × 0.013 × jitter2 = 3.12 > 2.0 触发截断）
+	_runner.assert_approx(
+			ScriptCrystalSparkles.compute_rate(20, 1e6, 6.0, 2.0),
+			ScriptCrystalSparkles.MAX_RATE_PER_SYSTEM, 0.001,
+			"异常速率应被单系统上限截断")
 
 
 func _test_area_scales_emission() -> void:
@@ -158,20 +167,24 @@ func _test_tier_table() -> void:
 			"未知档位应兜底为默认档(tier8)寿命 0.72s")
 
 
-func _test_palette() -> void:
-	var pal := ScriptCrystalSparkles.variant_palette("mint")
-	_runner.assert_equal(pal.size(), 5, "配色槽位数 = 子系统数")
-	_runner.assert_equal(String(pal[0]), "mint", "第一槽 = 宿主主色（每材料一色）")
-	_runner.assert_equal(String(pal[1]), "white", "第二槽 = 白（RandomBetweenTwoGradients 另一端）")
-	# 前 4 个互不重复（第五个可能回退为白）
-	var seen := {}
-	for i in 4:
-		var k := String(pal[i])
-		_runner.assert_true(not seen.has(k), "配色前 4 槽不应重复：%s" % k)
-		seen[k] = true
-	# 主色本身是点缀色时应自动去重（gold 不会连出两个）
-	var pal_gold := ScriptCrystalSparkles.variant_palette("gold")
-	_runner.assert_true(String(pal_gold[2]) != "gold", "主色为 gold 时点缀槽应换成其它色")
+func _test_single_theme() -> void:
+	# 原版一簇一色（2026-08-29 截图调研确认）：CrystalSparksBase 的 5 个强度
+	# 子系统共用同一主题色，每颗粒子在纯白↔主题色间随机
+	var host: Node2D = _host_with_sprite(Vector2(40, 40))
+	ScriptCrystalSparkles.attach_to(host, WorldZ.OVERLAY_HINT, "gold", 8)
+	var subs := _subsystems(host)
+	_runner.assert_equal(subs.size(), 5, "应有 5 个子系统")
+	var theme: Array = ScriptCrystalSparkles.THEMES["gold"]
+	var theme_color := Color(theme[0], theme[1], theme[2], 1.0)
+	for s in subs:
+		var ramp: Gradient = (s as CrystalSparkles).color_initial_ramp
+		_runner.assert_not_null(ramp, "子系统应有 color_initial_ramp")
+		if ramp == null:
+			return
+		_runner.assert_true(ramp.get_color(0).is_equal_approx(Color(1, 1, 1, 1)),
+				"渐变端点 0 应为纯白（RandomBetweenTwoGradients 另一端）")
+		_runner.assert_true(ramp.get_color(1).is_equal_approx(theme_color),
+				"渐变端点 1 应为主题色——一簇一色，五彩点缀不是原版行为")
 
 
 func _test_measure_host() -> void:

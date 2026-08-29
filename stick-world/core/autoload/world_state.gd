@@ -1,11 +1,15 @@
 extends Node
 ## 运行时世界状态中心 —— 集中管理所有实体状态。
 ##
+## ⚠️ 冻结状态（2026-08-22 审计决策）：
+##   - 仅 game_time 为生产字段（EnvironmentSystem 推进/恢复）；
+##   - 六大实体容器（stickmen/organizations/regions/battles/projects/supply_chains）
+##     全部零调用，处于冻结预留态——不删除、不接线，technology 阶段 1 重建时
+##     再决策接入或归档；core/entities/ 七个状态类同步冻结；
+##   - 存档走 game_saving/game_loaded 信号直写 world_state 表（含旧档回退）。
+##
 ## 所有游戏实体（stickmen、organizations、regions 等）的状态存储于此，
 ## 各模块通过 WorldState 读写实体数据，而非各自维护独立状态。
-##
-## 与 SaveManager 协作：在 _ready() 中通过 register_module 注册自身，
-## SaveManager 存档时调用 get_save_data() / load_save_data()。
 
 # ─────────────────────────────── 实体容器 ────────────────────────────────
 
@@ -24,11 +28,53 @@ var game_time: float = 0.0
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
-	# 向 SaveManager 注册自身，启用存档功能
-	if SaveManager and SaveManager.has_method("register_module"):
-		SaveManager.register_module("world_state", self)
+	# 存档走统一信号接口（与 SaveHandler 同契约）；EventBus 先于本单例加载，_ready 时必在
+	if EventBus:
+		if EventBus.has_signal("game_saving"):
+			EventBus.game_saving.connect(_on_game_saving)
+		if EventBus.has_signal("game_loaded"):
+			EventBus.game_loaded.connect(_on_game_loaded)
 	else:
-		push_warning("[WorldState] SaveManager 不可用，存档功能未注册")
+		push_warning("[WorldState] EventBus 不可用，存档功能未接线")
+
+
+## 存档回调：序列化快照写入 world_state 表
+func _on_game_saving(_slot_index: int) -> void:
+	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
+	var slot_id: int = SaveManager.get_current_slot() if SaveManager.has_method("get_current_slot") else -1
+	if db == null or slot_id < 0:
+		return
+	db.delete_rows("world_state", "slot_id = %d" % slot_id)
+	db.insert_row("world_state", {
+		"slot_id": slot_id,
+		"module_name": "world_state",
+		"data": JSON.stringify(get_save_data()),
+	})
+
+
+## 读档回调：从 world_state 表恢复；旧档回退读 legacy_modules（见 _read_legacy_world_state）
+func _on_game_loaded(slot_index: int) -> void:
+	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
+	if db == null:
+		return
+	var rows: Array = db.select_rows("world_state", "slot_id = %d AND module_name = 'world_state'" % slot_index, ["data"])
+	if rows.is_empty():
+		rows = _read_legacy_world_state(db, slot_index)
+	var data: Dictionary = {}
+	if not rows.is_empty():
+		var parsed = JSON.parse_string(str(rows[0]["data"]))
+		if typeof(parsed) == TYPE_DICTIONARY:
+			data = parsed
+	load_save_data(data)
+
+
+## 旧档兼容（2026-08-22 前的存档）：world_state 表无行时回退 legacy_modules.world_state。
+## 新存档不再创建 legacy_modules 表，先查 sqlite_master 判断存在性避免查询报错。
+func _read_legacy_world_state(db, slot_id: int) -> Array:
+	var tables: Array = db.select_rows("sqlite_master", "type = 'table' AND name = 'legacy_modules'", ["name"])
+	if tables.is_empty():
+		return []
+	return db.select_rows("legacy_modules", "slot_id = %d AND module_name = 'world_state'" % slot_id, ["data"])
 
 
 # ─────────────────────────────── 实体注册 ────────────────────────────────

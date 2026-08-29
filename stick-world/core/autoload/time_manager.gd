@@ -108,7 +108,9 @@ func should_update(_system_name: String) -> bool:
 # ─────────────────────────────── 自动暂停条件 ────────────────────────────
 
 ## 检查指定的自动暂停条件是否满足。
-## 当前预留同步检查接口，后续可改为信号驱动。
+## ⚠️ 冻结预留（2026-08-22 审计决策）：add/remove_auto_pause_condition 全项目
+## 零调用方，本检查恒返 false。保留接口不实现语义——首个真实消费方出现时，
+## 建议改为信号驱动（EventBus 注册 Callable）而非字符串轮询。
 func _check_auto_pause_condition(_condition: String) -> bool:
 	# 预留：各系统通过 EventBus 注册条件，此处仅检查已触发的条件列表
 	# 当前占位，始终返回 false（不触发自动暂停）

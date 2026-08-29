@@ -2,7 +2,7 @@ extends Node
 ## 全局事件总线 —— 模块间解耦的核心通信机制。
 ##
 ## 使用方式：
-##   发布（广播）： EventBus.safe_emit("game_paused")
+##   发布（广播）： EventBus.game_paused.emit()
 ##   订阅（监听）： EventBus.game_paused.connect(_on_game_paused)
 ##
 ## 约定：事件名用 snake_case，见名知意；参数放在信号声明里。
@@ -99,20 +99,4 @@ extends Node
 
 # ─────────────────────────────── 通用工具 ────────────────────────────────
 
-## 带"事件存在性检查"的安全发射。事件名写错时打印警告而不是静默失败。
-func safe_emit(event_name: StringName, args: Array = []) -> void:
-	if not has_signal(event_name):
-		push_warning("[EventBus] 尝试发出未声明的信号: %s" % event_name)
-		return
-	# 按参数个数分支调用（最多支持 3 个动态参数，对当前信号足够）
-	match args.size():
-		0:
-			emit_signal(event_name)
-		1:
-			emit_signal(event_name, args[0])
-		2:
-			emit_signal(event_name, args[0], args[1])
-		3:
-			emit_signal(event_name, args[0], args[1], args[2])
-		_:
-			push_warning("[EventBus] safe_emit 参数个数超过 3，未传递")
+# safe_emit 已移除（2026-08-22）：改用类型化 .emit()，信号名拼写错误在编译期暴露。

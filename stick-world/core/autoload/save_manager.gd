@@ -2,17 +2,13 @@ extends Node
 ## 游戏存档管理 -- SQLite 版。
 ##
 ## 多存档槽位（slot 0..N-1），保存为 SQLite 数据库文件 user://saves/save_<slot>.db。
-## 数据来自两类提供者：
-##   1. 旧接口模块（WorldState 等）：实现 get_save_data() / load_save_data()，数据存入 legacy_modules 表（JSON blob）
-##   2. 新接口模块（GameRoot 等）：在 game_saving / game_loaded 信号回调中通过 get_db() 直接操作 DB 表
+## 数据统一走单一接口：模块订阅 EventBus.game_saving / game_loaded，
+## 在回调中经 get_db() 直接读写各自的表（2026-08-22 移除 legacy_modules 双轨）。
 ##
 ## 详见 modules/README.md §8 存储分层
 
 const SLOT_COUNT := 5
 const SAVE_DIR := "user://saves"
-
-# 模块注册表：module_name -> 对象
-var _modules: Dictionary = {}
 
 var _auto_save_timer: float = 0.0
 var _auto_save_slot: int = 0
@@ -113,9 +109,9 @@ const _SCHEMA_SQLS: Array[String] = [
 		PRIMARY KEY (slot_id, map_id, node_id),
 		FOREIGN KEY (slot_id) REFERENCES save_meta(slot_id) ON DELETE CASCADE
 	);""",
-	"""CREATE TABLE IF NOT EXISTS legacy_modules (
+	"""CREATE TABLE IF NOT EXISTS world_state (
 		slot_id        INTEGER NOT NULL,
-		module_name    TEXT    NOT NULL,
+		module_name    TEXT    NOT NULL DEFAULT 'world_state',
 		data           TEXT    NOT NULL DEFAULT '{}',
 		PRIMARY KEY (slot_id, module_name),
 		FOREIGN KEY (slot_id) REFERENCES save_meta(slot_id) ON DELETE CASCADE
@@ -155,21 +151,7 @@ func _process(delta: float) -> void:
 		save_game(_auto_save_slot)
 
 
-# ─────────────────────────────── 模块注册 ────────────────────────────────
-
-func register_module(module_name: String, module_object: Object) -> void:
-	if not module_object:
-		push_warning("[SaveManager] 注册空对象: %s" % module_name)
-		return
-	_modules[module_name] = module_object
-
-
-func unregister_module(module_name: String) -> void:
-	if _modules.has(module_name):
-		_modules.erase(module_name)
-
-
-# ─────────────────────────────── DB 访问（供新接口模块使用）────────────────
+# ─────────────────────────────── DB 访问（供模块使用）────────────────
 
 ## 获取当前操作的 DB 连接（save/load 期间有效，外部不应长期持有）
 func get_db() -> Object:
@@ -211,6 +193,11 @@ func save_game(slot_index: int) -> bool:
 	if slot_index < 0 or slot_index >= SLOT_COUNT:
 		push_warning("[SaveManager] 存档槽越界: %d" % slot_index)
 		return false
+	# 防御：若上一个连接（读档残留/未走 end_load）仍打开，先关再开，避免双连接写锁
+	if _db != null:
+		push_warning("[SaveManager] save_game 时发现未关闭的连接，强制关闭（疑似跳过 end_load 的路径）")
+		_db.close_db()
+		_db = null
 
 	_db = _open_db_for_slot(slot_index)
 	if _db == null:
@@ -227,10 +214,7 @@ func save_game(slot_index: int) -> bool:
 	var now := Time.get_date_string_from_system() + " " + Time.get_time_string_from_system()
 	_upsert_save_meta(slot_index, now, _accumulate_playtime(), 2)
 
-	# 旧接口模块：调 get_save_data()，存入 legacy_modules 表
-	_save_legacy_modules()
-
-	# 新接口模块：emit game_saving 信号，模块在回调中用 get_db() 写表
+	# 模块接口：emit game_saving 信号，模块在回调中用 get_db() 写表
 	# 必须在 DB 打开后 emit，否则 get_db() 返回 null
 	EventBus.game_saving.emit(slot_index)
 
@@ -250,16 +234,18 @@ func load_game(slot_index: int) -> bool:
 	if not slot_exists(slot_index):
 		push_warning("[SaveManager] 存档不存在: %s" % _slot_path(slot_index))
 		return false
+	# 防御：同上，读档入口先关残留连接
+	if _db != null:
+		push_warning("[SaveManager] load_game 时发现未关闭的连接，强制关闭")
+		_db.close_db()
+		_db = null
 
 	_db = _open_db_for_slot(slot_index)
 	if _db == null:
 		return false
 	_current_slot = slot_index
 
-	# 旧接口模块：从 legacy_modules 读，调 load_save_data()
-	_load_legacy_modules()
-
-	# 新接口模块：发射 game_loaded 信号，模块自行读表
+	# 模块接口：发射 game_loaded 信号，模块自行读表
 	# DB 保持打开，等 GameRoot 场景恢复后调 end_load() 关闭；
 	# 若恢复流程失败/无当前地图，_load_guard 超时兜底关闭。
 	EventBus.game_loaded.emit(slot_index)
@@ -356,6 +342,10 @@ func _open_db_for_slot(slot_index: int) -> Object:
 	if not db.open_db():
 		push_warning("[SaveManager] 无法打开数据库: %s" % db.path)
 		return null
+	# 缓解"database is locked"：并发窗口（SavePanel 列表查询/读档残留连接）内
+	# 写锁竞争改为重试 5 秒而非立刻报错（2026-08-22，SQLITE_BUSY 实测）
+	if db.has_method("query"):
+		db.query("PRAGMA busy_timeout = 5000")
 	return db
 
 
@@ -407,43 +397,6 @@ func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version:
 		"version": version,
 		"current_map_id": "",
 	})
-
-
-## 旧接口模块：调 get_save_data()，结果存入 legacy_modules 表
-## 注意：模块节点可能随场景释放（如回主菜单后 game_root 被 free），
-## 必须用 is_instance_valid 判断（直接 `if obj` 对 freed 对象仍为真，会崩）。
-func _save_legacy_modules() -> void:
-	_db.delete_rows("legacy_modules", "slot_id = %d" % _current_slot)
-	for module_name in _modules.keys():
-		var obj: Object = _modules[module_name]
-		if not is_instance_valid(obj):
-			_modules.erase(module_name)
-			continue
-		if obj.has_method("get_save_data"):
-			var data: Dictionary = obj.call("get_save_data")
-			_db.insert_row("legacy_modules", {
-				"slot_id": _current_slot,
-				"module_name": module_name,
-				"data": JSON.stringify(data),
-			})
-
-
-## 旧接口模块：从 legacy_modules 读，调 load_save_data()
-func _load_legacy_modules() -> void:
-	for module_name in _modules.keys():
-		var obj: Object = _modules[module_name]
-		if not is_instance_valid(obj):
-			_modules.erase(module_name)
-			continue
-		if obj.has_method("load_save_data"):
-			var rows: Array = _db.select_rows("legacy_modules",
-				"slot_id = %d AND module_name = '%s'" % [_current_slot, module_name], ["data"])
-			var data: Dictionary = {}
-			if not rows.is_empty():
-				var parsed = JSON.parse_string(str(rows[0]["data"]))
-				if typeof(parsed) == TYPE_DICTIONARY:
-					data = parsed
-			obj.call("load_save_data", data)
 
 
 func _accumulate_playtime() -> float:

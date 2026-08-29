@@ -114,22 +114,30 @@ func _apply_transform() -> void:
 	target.scale = Vector2(_zoom_level, _zoom_level)
 
 
-## 聚焦到指定 ID 的中心
-## id 为 "" 时重置到当前粒度的中心
+## 聚焦到指定 ID 的中心（SM-1 已实现，2026-08-22）
+## id 为 "" 时重置到当前粒度的中心；animated 时 0.35s 缓动平移（缩放保持不变）。
+## 屏幕坐标约定：S = _offset + M * zoom，故居中 C 需要 _offset = 视口中心 − C·zoom。
 func focus_on(id: String, animated: bool = true) -> void:
-	# ⚠️ SM-1 未实现（2026-08 审计）：非空 id 的聚焦逻辑未接线，调用方会静默拿到"不聚焦"结果。
-	# 实现时按：
-	# 1. 查询 id 对应的 world_bounds 中心
-	# 2. 设置 _offset 使中心位于屏幕中央
-	# 3. 调整 _zoom_level 使 world_bounds 完整可见
 	if not id.is_empty():
-		push_warning("[MapCamera] focus_on 未实现（SM-1），id=%s 未聚焦" % id)
+		var center: Variant = null
+		if _map_renderer != null and _map_renderer.has_method("get_tile_centroid"):
+			center = _map_renderer.get_tile_centroid(id)
+		if center == null:
+			push_warning("[MapCamera] focus_on：未知地块 id=%s" % id)
+			return
+		var vp := get_viewport()
+		var screen_center: Vector2 = vp.get_visible_rect().size * 0.5 if vp != null else Vector2.ZERO
+		var target_offset: Vector2 = screen_center - (center as Vector2) * _zoom_level
+		if animated:
+			var tw := create_tween()
+			tw.tween_method(func(v: Vector2) -> void: set_offset(v),
+					_offset, target_offset, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		else:
+			set_offset(target_offset)
 		return
-	if animated:
-		# P1 用 Tween 实现动画
-		pass
-	_offset = Vector2.ZERO
-	_zoom_level = 1.0
+	# 空 id：重置到整图中心
+	set_offset(Vector2.ZERO)
+	set_zoom(1.0)
 
 
 ## 关联的地图渲染器（transform 变化时触发其重绘：缩放/平移后描边宽度立即按新 zoom 重算，

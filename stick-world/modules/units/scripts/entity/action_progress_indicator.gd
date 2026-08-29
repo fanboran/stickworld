@@ -13,7 +13,7 @@ const _COLOR_BORDER := Color(0, 0, 0, 0.8)
 
 
 func _ready() -> void:
-	z_index = 50
+	z_index = WorldZ.OVERLAY_HEALTHBAR
 	visible = false
 
 

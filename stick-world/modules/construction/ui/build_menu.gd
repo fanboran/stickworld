@@ -281,7 +281,7 @@ func _start_placing(def_id: String) -> void:
 			mask_layer = map.get_node_or_null("BuildMaskLayer")
 		if mask_layer != null:
 			_ghost = PlacementGhost.new()
-			_ghost.z_index = 20
+			_ghost.z_index = WorldZ.OVERLAY_HINT
 			mask_layer.add_child(_ghost)
 	# 确定建造按钮（stage 2 拉伸后才显示）
 	_confirm_btn = Button.new()

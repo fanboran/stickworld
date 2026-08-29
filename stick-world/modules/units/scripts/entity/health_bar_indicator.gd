@@ -24,7 +24,7 @@ var _health: Node = null
 
 
 func _ready() -> void:
-	z_index = 50
+	z_index = WorldZ.OVERLAY_HEALTHBAR
 	position.y = OFFSET_Y
 	visible = false
 

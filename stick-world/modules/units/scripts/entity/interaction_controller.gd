@@ -169,7 +169,7 @@ func _ensure_interact_hint() -> void:
 	_interact_hint_node = Node2D.new()
 	_interact_hint_node.name = "InteractHint"
 	_interact_hint_node.visible = false
-	_interact_hint_node.z_index = 20
+	_interact_hint_node.z_index = WorldZ.OVERLAY_HINT
 	# 挂到 foreground_layer（z_index=10），确保在建筑之上
 	var layer: Node2D = map.get("foreground_layer") if "foreground_layer" in map else null
 	if layer != null:

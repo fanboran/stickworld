@@ -37,6 +37,8 @@ var map_id: String = ""
 # ─────────────────────────────── 渲染层级 ────────────────────────────────
 
 func _ready() -> void:
+	# 场景层序唯一真相源：WorldZ 常量（场景文件不保存 z_index）
+	WorldZ.apply(self)
 	# 火柴人 y-sort：Y 越大（越靠下）渲染越靠顶层
 	if entity_host != null:
 		entity_host.y_sort_enabled = true

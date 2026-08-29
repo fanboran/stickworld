@@ -30,13 +30,10 @@ position = Vector2(0, 810)
 script = ExtResource("4_grid_drawer")
 
 [node name="DecorationLayer" type="Node2D" parent="." unique_id=1680575950]
-z_index = 1
 
 [node name="BuildingHost" type="Node2D" parent="." unique_id=227808963]
-z_index = 2
 
 [node name="TerrainBuildings" type="Node2D" parent="." unique_id=130193755]
-z_index = 2
 
 [node name="InitialBuildingsList" type="Node" parent="." unique_id=818831420]
 script = ExtResource("3_ibl")
@@ -47,10 +44,8 @@ building_defs = Array[Dictionary]([])
 [node name="BuildMaskLayer" type="Node2D" parent="." unique_id=2101599595]
 
 [node name="ForegroundLayer" type="Node2D" parent="." unique_id=306871105]
-z_index = 10
 
 [node name="EntityHost" type="Node2D" parent="." unique_id=1560596730]
-z_index = 3
 
 [node name="ChunkTriggers" type="Node2D" parent="." unique_id=1182080428]
 

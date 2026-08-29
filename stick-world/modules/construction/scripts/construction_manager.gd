@@ -66,6 +66,10 @@ var _persistence: Node = null
 signal building_completed(building_id: String, region_id: String)
 ## 建筑被拆除
 signal building_removed(building_id: String, region_id: String)
+## 建筑升级完成（新等级）
+signal building_upgraded(building_id: String, upgrade_level: int)
+## 建筑修理完成
+signal building_repaired(building_id: String)
 
 
 func _ready() -> void:
@@ -265,6 +269,14 @@ func _check_and_consume_cost(building_type: String, region_id: String) -> Dictio
 	var def: Dictionary = _catalog.get_def(building_type)
 	if def.is_empty():
 		return {"ok": true}  # 无定义，跳过
+	var costs: Dictionary = _def_build_costs(def, 1.0)
+	if costs.is_empty():
+		return {"ok": true}
+	return _consume_costs(costs, region_id, "建造:%s" % building_type)
+
+
+## 从建筑定义提取资源成本字典（可乘系数：升级 0.5、修理按损伤比例）
+func _def_build_costs(def: Dictionary, factor: float = 1.0) -> Dictionary:
 	var costs: Dictionary = {}
 	for key in ["build_cost_wood", "build_cost_stone", "build_cost_metal"]:
 		if def.has(key) and float(def[key]) > 0:
@@ -272,18 +284,19 @@ func _check_and_consume_cost(building_type: String, region_id: String) -> Dictio
 			# build_cost_wood -> res_wood, build_cost_metal -> res_metal_ore（特殊映射）
 			if key == "build_cost_metal":
 				res_id = "res_metal_ore"
-			costs[res_id] = float(def[key])
-	if costs.is_empty():
-		return {"ok": true}
-	# 先检查
+			costs[res_id] = ceilf(float(def[key]) * factor)
+	return costs
+
+
+## 统一扣费入口：先全量检查，再逐项扣减；中途失败回滚已扣部分。
+func _consume_costs(costs: Dictionary, region_id: String, reason: String) -> Dictionary:
 	for res_id in costs.keys():
 		var stock: float = _resources_api.get_stock(res_id, region_id)
 		if stock < costs[res_id]:
 			return {"ok": false, "reason": "缺少 %s (需要 %d, 现有 %d)" % [res_id, costs[res_id], stock]}
-	# 再扣减；若中途失败，回滚已扣资源（2026-08 审计修复：此前无回滚会白扣）
 	var consumed: Array = []
 	for res_id in costs.keys():
-		var result: Dictionary = _resources_api.consume(res_id, costs[res_id], region_id, "建造:%s" % building_type)
+		var result: Dictionary = _resources_api.consume(res_id, costs[res_id], region_id, reason)
 		if not result.get("ok", false):
 			for entry in consumed:
 				_resources_api.produce(entry.res_id, entry.amount, region_id, "建造扣减回滚")
@@ -424,9 +437,10 @@ func clear_building_def(def_id: String) -> void:
 	_building_defs_cache.erase(def_id)
 
 
-## 按 ID 取建筑节点（替代白盒读 _buildings，2026-08 审计）
+## 按 ID 取建筑节点（替代白盒读 _buildings，2026-08 审计；含失效引用防护）
 func get_building_node(building_id: String) -> Node:
-	return _buildings.get(building_id, null)
+	var b = _buildings.get(building_id)
+	return b if is_instance_valid(b) else null
 
 
 ## 查询单个建筑的状态
@@ -625,22 +639,74 @@ func demolish_building(building_id: String) -> Dictionary:
 	return {"ok": true, "region_id": region_id}
 
 
-# ─────────────────────────────── 升级 / 修理（P0 未实现）────────────────────────────────
+# ─────────────────────────────── 升级 / 修理（2026-08-22 实现）────────────────────────────────
 
-## 升级建筑
-## [P] building 状态=OPERATIONAL, 科技满足升级条件
-## [Q] building 状态=UPGRADING
-func upgrade_building(_building_id: String) -> Dictionary:
-	return {"ok": false, "error": "升级 P0 未实现"}
+## 升级建筑（阶段 1 简化：即时完成，不走工时项目）
+## 效果：升级等级 +1，max_health +20%，回满血。外观差异化由 building_gen 阶段 B 补。
+## [P] building 状态=OPERATIONAL
+## [Q] 消耗 0.5×建造成本；building.upgrade_level +1；发射 building_upgraded
+func upgrade_building(building_id: String) -> Dictionary:
+	if not _buildings.has(building_id):
+		return {"ok": false, "error": "建筑不存在: %s" % building_id}
+	var typed := _buildings[building_id] as Building
+	if typed == null:
+		return {"ok": false, "error": "节点非 Building"}
+	if typed.state != Building.State.OPERATIONAL:
+		return {"ok": false, "error": "仅运营中的建筑可升级"}
+	var region_id: String = typed.get_meta("region_id", "") if typed.has_meta("region_id") else ""
+	if _resources_api != null:
+		var def: Dictionary = _catalog.get_def(typed.def_id)
+		if not def.is_empty():
+			var cost_result := _consume_costs(_def_build_costs(def, 0.5), region_id, "升级:%s" % typed.def_id)
+			if not cost_result.get("ok", false):
+				return cost_result
+	typed.upgrade_level += 1
+	typed.max_health *= 1.2
+	typed.health = typed.max_health
+	building_upgraded.emit(building_id, typed.upgrade_level - 1, typed.upgrade_level)
+	return {"ok": true, "upgrade_level": typed.upgrade_level}
 
 
-## 修理建筑
-## [P] building 状态=DAMAGED
-func repair_building(_building_id: String, _org_id: String) -> Dictionary:
-	return {"ok": false, "error": "修理 P0 未实现"}
+## 修理建筑（阶段 1 简化：即时完成，不走工时项目）
+## 成本 = 缺损比例 × 0.3 × 建造成本
+## [P] building 状态=DAMAGED 或 health < max_health
+## [Q] 回满血并恢复 OPERATIONAL；发射 building_repaired
+func repair_building(building_id: String, _org_id: String) -> Dictionary:
+	if not _buildings.has(building_id):
+		return {"ok": false, "error": "建筑不存在: %s" % building_id}
+	var typed := _buildings[building_id] as Building
+	if typed == null:
+		return {"ok": false, "error": "节点非 Building"}
+	if typed.health >= typed.max_health:
+		return {"ok": false, "error": "建筑无需修理"}
+	if typed.state == Building.State.DESTROYED:
+		return {"ok": false, "error": "已销毁的建筑不可修理"}
+	var missing_ratio: float = 1.0 - typed.health / maxf(typed.max_health, 0.01)
+	var region_id: String = typed.get_meta("region_id", "") if typed.has_meta("region_id") else ""
+	if _resources_api != null:
+		var def: Dictionary = _catalog.get_def(typed.def_id)
+		if not def.is_empty():
+			var cost_result := _consume_costs(
+					_def_build_costs(def, 0.3 * missing_ratio), region_id, "修理:%s" % typed.def_id)
+			if not cost_result.get("ok", false):
+				return cost_result
+	typed.health = typed.max_health
+	if typed.state == Building.State.DAMAGED:
+		typed.set_state(Building.State.OPERATIONAL)
+	building_repaired.emit(building_id)
+	return {"ok": true}
 
 
 # ─────────────────────────────── 派工接口（供 BehaviorWork / AIController 调用）────────────────────────────────
+
+## 全部有效建筑节点（调试面板列表用）
+func get_all_buildings() -> Array:
+	var out: Array = []
+	for b in _buildings.values():
+		if is_instance_valid(b):
+			out.append(b)
+	return out
+
 
 ## 获取派工系统
 func get_assigner() -> ScriptWorkCrewAssigner:

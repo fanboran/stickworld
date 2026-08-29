@@ -53,6 +53,9 @@ enum State {
 
 ## 当前状态
 var state: State = State.PLANNED
+
+## 升级等级（运行时累计，0=初始；upgrade_building 时 +1，外观差异化待 building_gen 阶段 B）
+var upgrade_level: int = 0
 ## 当前血量
 var health: float = 100.0
 ## 最大血量

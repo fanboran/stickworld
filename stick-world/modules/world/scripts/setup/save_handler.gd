@@ -21,9 +21,6 @@ func setup(root: GameRoot) -> void:
 			EventBus.game_saving.connect(_on_game_saving)
 		if EventBus.has_signal("game_loaded"):
 			EventBus.game_loaded.connect(_on_game_loaded)
-	# 向 SaveManager 注册（接收 game_saving/game_loaded 信号）
-	if SaveManager and SaveManager.has_method("register_module"):
-		SaveManager.register_module("map_runtime", self)
 	# 实例化存档面板（经 UIAPI 工厂，全屏 UI 根挂 ModalOverlay 槽）
 	_root._save_panel = UIAPI.create_save_panel()
 	_root._save_panel.visible = false

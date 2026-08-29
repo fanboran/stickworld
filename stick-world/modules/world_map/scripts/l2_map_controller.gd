@@ -33,6 +33,10 @@ var _current_region_id: String = ""
 
 func _ready() -> void:
 	_auto_find_components()
+	# 层号统一走 LayerOrder 常量（本节点是 CanvasLayer 的 Content 子节点）
+	var canvas := get_parent() as CanvasLayer
+	if canvas != null:
+		canvas.layer = LayerOrder.STRATEGIC_L2
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
 

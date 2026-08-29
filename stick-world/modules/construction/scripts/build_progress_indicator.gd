@@ -30,7 +30,7 @@ func setup(cell_x: int, width: int, ground_y: float) -> void:
 	var center_x: float = (float(cell_x) + float(width) * 0.5) * 32.0
 	position = Vector2(center_x, ground_y - 220.0)
 	_bar_width = maxf(float(width) * 32.0, 48.0)
-	z_index = 25
+	z_index = WorldZ.OVERLAY_PROGRESS
 
 
 ## 更新进度并重绘

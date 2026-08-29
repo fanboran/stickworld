@@ -52,6 +52,10 @@ var _player_l1_label: int = 69
 
 func _ready() -> void:
 	_auto_find_components()
+	# 层号统一走 LayerOrder 常量（本节点是 CanvasLayer 的 Content 子节点）
+	var canvas := get_parent() as CanvasLayer
+	if canvas != null:
+		canvas.layer = LayerOrder.STRATEGIC_L1
 	if api != null and api.has_method("setup"):
 		api.setup(self, map_renderer, map_camera)
 	# 渲染器悬停检测需要相机做屏幕->地图坐标换算

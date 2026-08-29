@@ -300,7 +300,7 @@ func _create_placeholder_visual() -> void:
 	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
 	var vis := Node2D.new()
 	vis.name = "ConstructionPlaceholder"
-	vis.z_index = 10
+	vis.z_index = WorldZ.FOREGROUND
 	var body := Polygon2D.new()
 	body.name = "Body"
 	body.polygon = PackedVector2Array([Vector2(0, -96), Vector2(w, -96), Vector2(w, 0), Vector2(0, 0)])

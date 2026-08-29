@@ -103,16 +103,26 @@ func _test_hit_in_range() -> void:
 	wm.base_hit_chance = 1.0
 	var hp_before: float = def.get_health().hp if def.get_health() != null else 0.0
 	var result: Dictionary = wm.perform_attack(def)
-	_runner.assert_true(result.get("hit", false), "近距离应命中，结果: %s" % str(result))
-	if result.get("hit", false):
+	# Strike 模式（Saga 复刻）：发起返回 striking，伤害在动画命中帧结算
+	var launched: bool = result.get("hit", false) or result.get("reason", "") == "striking"
+	_runner.assert_true(launched, "近距离应发起攻击，结果: %s" % str(result))
+	if launched:
+		# 轮询等待命中帧结算（STRIKE_FRAME_RATIO=0.45 × 动画 ≈0.6s）
+		# 击退冲量衰减 700/s，需在结算后立即采样：先等到 HP 变化那一帧抓击退
+		var kb_captured: Vector2 = Vector2.ZERO
+		for i in range(120):
+			await get_tree().process_frame
+			var hp_now: float = def.get_health().hp if def.get_health() != null else 0.0
+			if hp_now < hp_before:
+				if def.has_method("get_knockback_velocity"):
+					kb_captured = def.get_knockback_velocity()
+				break
 		var hp_after: float = def.get_health().hp if def.get_health() != null else 0.0
-		_runner.assert_true(hp_after < hp_before, "命中后目标 HP 应减少")
-		# 受击击退：目标获得非零击退冲量
+		_runner.assert_true(hp_after < hp_before, "命中帧后目标 HP 应减少")
+		# 受击击退：结算帧捕获的非零冲量
 		if def.has_method("get_knockback_velocity"):
-			var kb: Vector2 = def.get_knockback_velocity()
-			_runner.assert_true(kb.length() > 0.0, "受击后应有击退冲量，实际: %s" % str(kb))
-			# 击退方向背离攻击者
-			_runner.assert_true(kb.x > 0.0, "击退应背离攻击者（向右）")
+			_runner.assert_true(kb_captured.length() > 0.0, "受击后应有击退冲量，实际: %s" % str(kb_captured))
+			_runner.assert_true(kb_captured.x > 0.0, "击退应背离攻击者（向右）")
 
 
 ## 近战：超出剑长拒绝
@@ -184,7 +194,8 @@ func _test_cooldown() -> void:
 	wm.update_cooldown(10.0)
 	wm.base_hit_chance = 1.0
 	var first: Dictionary = wm.perform_attack(def)
-	_runner.assert_true(first.get("hit", false), "第一次攻击应命中")
+	var first_launched: bool = first.get("hit", false) or first.get("reason", "") == "striking"
+	_runner.assert_true(first_launched, "第一次攻击应发起")
 	# 立即第二次攻击：冷却拒绝
 	var second: Dictionary = wm.perform_attack(def)
 	_runner.assert_true(not second.get("hit", false), "冷却中第二次攻击应被拒绝")

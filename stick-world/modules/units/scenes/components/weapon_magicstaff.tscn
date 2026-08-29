@@ -5,8 +5,9 @@
 [node name="Magicstaff" type="Node2D"]
 
 [node name="Sprite" type="Sprite2D" parent="."]
-scale = Vector2(0.3, 0.3)
+rotation = -90.0
+scale = Vector2(0.909, 0.912)
 texture = ExtResource("1_tex")
 
 [node name="GripPoint" type="Marker2D" parent="."]
-position = Vector2(0, 114.0)
+position = Vector2(0, -150)

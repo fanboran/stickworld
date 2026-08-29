@@ -5,8 +5,9 @@
 [node name="Bow" type="Node2D"]
 
 [node name="Sprite" type="Sprite2D" parent="."]
-scale = Vector2(0.55, 0.55)
+rotation = 0.0
+scale = Vector2(0.899, 0.899)
 texture = ExtResource("1_tex")
 
 [node name="GripPoint" type="Marker2D" parent="."]
-position = Vector2(0, 0.0)
+position = Vector2(0, 0)

@@ -760,7 +760,7 @@ func _debug_cycle_weapon() -> void:
 		return
 	var cur: int = wm.weapon_type
 	wm.weapon_type = (cur + 1) % 5
-	push_warning("[Debug] 主手武器类型: %d" % wm.weapon_type)
+	_update_debug_weapon_hud()
 
 
 ## 武器调试：附身玩家开关盾牌
@@ -772,7 +772,42 @@ func _debug_toggle_shield() -> void:
 	if wm == null:
 		return
 	wm.shield_enabled = not wm.shield_enabled
-	push_warning("[Debug] 盾牌: %s" % ("开" if wm.shield_enabled else "关"))
+	_update_debug_weapon_hud()
+
+
+## 武器调试 HUD：屏幕左缘常驻武器状态标签（T/B 切换后实时刷新）
+var _debug_weapon_label: Label = null
+
+func _ensure_debug_weapon_hud() -> void:
+	if _debug_weapon_label != null and is_instance_valid(_debug_weapon_label):
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "DebugWeaponHud"
+	layer.layer = 50
+	add_child(layer)
+	_debug_weapon_label = Label.new()
+	_debug_weapon_label.position = Vector2(12, 120)
+	_debug_weapon_label.add_theme_font_size_override("font_size", 18)
+	layer.add_child(_debug_weapon_label)
+	_update_debug_weapon_hud()
+
+
+## 刷新 HUD 内容（武器/盾牌状态）
+func _update_debug_weapon_hud() -> void:
+	_ensure_debug_weapon_hud()
+	if _debug_weapon_label == null:
+		return
+	var player := get_player_entity()
+	if player == null:
+		_debug_weapon_label.text = "[T/B 武器调试] 需附身玩家"
+		return
+	var wm: Node = player.get_node_or_null("WeaponMount")
+	if wm == null:
+		_debug_weapon_label.text = "WeaponMount 不存在"
+		return
+	var wtype := int(wm.weapon_type)
+	var wname: String = ["剑", "矛", "弓", "镐", "法杖"][wtype]
+	_debug_weapon_label.text = "T: 换武器(%s)  B: 盾牌%s" % [wname, "关" if not wm.shield_enabled else "开"]
 
 
 ## 打开帝国功能空面板（经 ui_placeholder 模块，系统落地后替换真实面板）。

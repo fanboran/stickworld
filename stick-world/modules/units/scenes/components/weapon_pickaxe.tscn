@@ -5,8 +5,9 @@
 [node name="Pickaxe" type="Node2D"]
 
 [node name="Sprite" type="Sprite2D" parent="."]
-scale = Vector2(0.5, 0.5)
+rotation = -90.0
+scale = Vector2(0.984, 0.985)
 texture = ExtResource("1_tex")
 
 [node name="GripPoint" type="Marker2D" parent="."]
-position = Vector2(0, 71.0)
+position = Vector2(0, -60)

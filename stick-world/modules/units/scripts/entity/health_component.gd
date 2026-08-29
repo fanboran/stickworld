@@ -51,6 +51,10 @@ func take_damage(amount: float, source: Node = null) -> void:
 	var old_morale: float = morale
 	morale = maxf(0.0, morale - amount * morale_damage_ratio)
 	damaged.emit(amount, source)
+	# 打击火花（经 FxPool 组查找；无池环境如纯逻辑测试静默跳过）
+	var owner_node := get_parent()
+	if owner_node is Node2D:
+		FxPool.spawn_burst(get_tree(), FxLibrary.HIT_SPARK, (owner_node as Node2D).global_position)
 	if old_morale != morale:
 		morale_changed.emit(old_morale, morale)
 	if hp <= 0.0:

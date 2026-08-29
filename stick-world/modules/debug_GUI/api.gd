@@ -11,6 +11,8 @@ extends Node
 signal visibility_changed(is_visible: bool)
 signal legend_visibility_changed(is_visible: bool)
 signal drawer_enabled_changed(drawer_name: String, enabled: bool)
+## 交互式调试工具面板（DebugToolsPanel）显隐；独立于 F3 总开关
+signal tools_visibility_changed(is_visible: bool)
 
 ## 配置文件路径
 const SETTINGS_PATH := "user://debug_settings.cfg"
@@ -33,6 +35,8 @@ var _button_position: Vector2 = Vector2(12, 64)
 var _panel_expanded: bool = false
 ## 调试面板位置（展开状态）
 var _panel_position: Vector2 = Vector2(12, 100)
+## 交互式工具面板显隐（独立于 F3 总开关，2026-08-22）
+var _tools_visible: bool = false
 
 
 func _ready() -> void:
@@ -163,6 +167,25 @@ func set_panel_position(pos: Vector2) -> void:
 	_save_settings()
 
 
+# ─────────────────────────────── 交互式工具面板 ────────────────────────────────
+
+## 工具面板显隐（独立于 F3 总开关：F3 隐藏绘制覆盖层时工具面板保持原状）
+func set_tools_visible(v: bool) -> void:
+	if _tools_visible == v:
+		return
+	_tools_visible = v
+	tools_visibility_changed.emit(v)
+	_save_settings()
+
+
+func toggle_tools_visible() -> void:
+	set_tools_visible(not _tools_visible)
+
+
+func is_tools_visible() -> bool:
+	return _tools_visible
+
+
 # ─────────────────────────────── 配置持久化 ────────────────────────────────
 
 func _save_settings() -> void:
@@ -171,6 +194,7 @@ func _save_settings() -> void:
 	cfg.set_value("ui", "panel_expanded", _panel_expanded)
 	cfg.set_value("ui", "panel_position", var_to_str(_panel_position))
 	cfg.set_value("ui", "overlay_visible", _visible)
+	cfg.set_value("ui", "tools_visible", _tools_visible)
 	for drawer_name in _drawer_enabled.keys():
 		cfg.set_value("drawers", drawer_name, _drawer_enabled[drawer_name])
 	cfg.save(SETTINGS_PATH)
@@ -192,6 +216,7 @@ func _load_settings() -> void:
 		_panel_position = pp
 	_panel_expanded = cfg.get_value("ui", "panel_expanded", false)
 	_visible = cfg.get_value("ui", "overlay_visible", true)
+	_tools_visible = cfg.get_value("ui", "tools_visible", false)
 	if cfg.has_section("drawers"):
 		for drawer_name in cfg.get_section_keys("drawers"):
 			_drawer_enabled[drawer_name] = cfg.get_value("drawers", drawer_name, true)

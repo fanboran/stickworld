@@ -137,9 +137,23 @@ func _refresh_drawer_list() -> void:
 		check.add_theme_font_size_override("font_size", 11)
 		check.toggled.connect(_on_drawer_toggled.bind(drawer_name))
 		_vbox.add_child(check)
+	# 独立工具区（不随 F3 总开关隐藏）
+	var tools_label := Label.new()
+	tools_label.text = "独立工具"
+	tools_label.add_theme_font_size_override("font_size", 11)
+	tools_label.modulate = Color(0.7, 0.7, 0.7)
+	_vbox.add_child(tools_label)
+	var tools_check := CheckBox.new()
+	tools_check.text = "调试工具面板（特效/市场/环境/建筑）"
+	tools_check.button_pressed = DebugApi.is_tools_visible()
+	tools_check.add_theme_font_size_override("font_size", 11)
+	tools_check.toggled.connect(func(pressed: bool) -> void:
+		if DebugApi:
+			DebugApi.set_tools_visible(pressed))
+	_vbox.add_child(tools_check)
 	# 操作提示
 	var hint := Label.new()
-	hint.text = "拖动按钮/面板可移动\nF3 切换显示/隐藏"
+	hint.text = "拖动按钮/面板可移动\nF3 切换显示/隐藏\n独立工具不随 F3 隐藏"
 	hint.add_theme_font_size_override("font_size", 10)
 	hint.modulate = Color(0.5, 0.5, 0.5)
 	hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS

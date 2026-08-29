@@ -19,6 +19,8 @@ extends CPUParticles2D
 ##   alpha      全程不透明（ColorModule 关、渐变两键 a=1）—— 无渐隐！
 ##   位移/重力/旋转 全零；looping=true；prewarm=true（tier20 除外）
 ##   材质贴图   = Unity 默认粒子软点（已提取原版 PNG 直接使用，见 assets/）
+##   混合模式   = Additive 发光叠加（Unity 新建 ParticleSystem 的默认材质即
+##                Additive）——暗色岩壁上粒子是"发光"而非"贴白点"，亮晶晶的关键
 ##
 ## 为什么用 CPUParticles2D 而不是 GPUParticles2D：
 ##   1. 发射区需要"精灵轮廓点集"（原版 Mesh 发射）。GPUParticles2D 在 Godot 4.4+
@@ -450,6 +452,11 @@ static func _make_system(host: Node2D, meas: Dictionary, lifetime: float, tier: 
 	p.scale_amount_max = 1.0
 	p.scale_amount_curve = _build_scale_curve()
 	p.color_initial_ramp = _build_color_ramp(theme_key)
+	# Additive 发光叠加（原版 Unity Default-ParticleSystem 即 Additive 混合）：
+	# 暗背景上多颗粒子重叠处越来越亮，"布灵布灵"观感的另一半来源
+	var cam := CanvasItemMaterial.new()
+	cam.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	p.material = cam
 
 	host.add_child(p)
 	return p

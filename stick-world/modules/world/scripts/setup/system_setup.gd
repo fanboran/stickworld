@@ -35,6 +35,7 @@ const _PossessionInterfaceScript: GDScript = preload("res://modules/player_contr
 const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
 const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
 const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
+const _FxPoolScript: GDScript = preload("res://modules/fx/scripts/fx_pool.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
 const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
 const _StrategicMapL3Scene: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l3.tscn")
@@ -134,6 +135,19 @@ func _setup_construction_api_deferred() -> void:
 	if not _root._construction_api.has_method("setup"):
 		return
 	_root._construction_api.setup(_root._construction_manager)
+	# 建造完工 → 音效事件（跨模块经 AudioManager 框架，资产未就位时静默）
+	if _root._construction_api.has_signal("building_completed") and AudioManager != null:
+		_root._construction_api.building_completed.connect(
+				func(_building_id: String, _region_id: String) -> void:
+					AudioManager.play_event("build_complete"))
+	# 建造完工 → 尘土特效（经 FxPool 组查找，无池环境静默）
+	if _root._construction_api.has_signal("building_completed") and _root._construction_manager != null:
+		var mgr: Node = _root._construction_manager
+		_root._construction_api.building_completed.connect(
+				func(building_id: String, _region_id: String) -> void:
+					var b: Node = mgr.get_building_node(building_id)
+					if b is Node2D:
+						FxPool.spawn_burst(b.get_tree(), FxLibrary.BUILD_DUST, (b as Node2D).global_position))
 
 
 # ─────────────────────────────── 战斗系统装配 ────────────────────────────────
@@ -179,6 +193,11 @@ func _setup_resources_system() -> void:
 	api.name = "ResourcesApi"
 	_root.add_child(api)
 	_root._resources_api = api
+	# 粒子特效池（PLACEHOLDER 素材，见 fx_library.gd 头注释）
+	var fx := Node.new()
+	fx.set_script(_FxPoolScript)
+	fx.name = "FxPool"
+	_root.add_child(fx)
 	call_deferred("_setup_resources_api_deferred")
 
 

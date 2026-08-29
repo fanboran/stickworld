@@ -19,12 +19,12 @@ const HOURS_PER_DAY: int = 24
 ## 时间 [小时] -> CanvasModulate.color
 ## P0 阶段使用简化关键帧：黎明/白天/黄昏/夜晚
 const LIGHT_KEYFRAMES: Array = [
-	{"hour": 0.0,  "color": Color(0.35, 0.40, 0.55, 1.0)},  # 深夜
+	{"hour": 0.0,  "color": Color(0.26, 0.30, 0.46, 1.0)},  # 深夜（2026-08-22 压暗：为夜间光源让位）
 	{"hour": 5.0,  "color": Color(0.55, 0.50, 0.55, 1.0)},  # 黎明
 	{"hour": 7.0,  "color": Color(0.95, 0.92, 0.85, 1.0)},  # 早晨
 	{"hour": 12.0, "color": Color(1.00, 1.00, 0.95, 1.0)},  # 正午
 	{"hour": 17.0, "color": Color(0.95, 0.85, 0.75, 1.0)},  # 下午
-	{"hour": 19.0, "color": Color(0.75, 0.55, 0.45, 1.0)},  # 黄昏
-	{"hour": 21.0, "color": Color(0.45, 0.45, 0.60, 1.0)},  # 入夜
-	{"hour": 24.0, "color": Color(0.35, 0.40, 0.55, 1.0)},  # 深夜
+	{"hour": 19.0, "color": Color(0.72, 0.52, 0.42, 1.0)},  # 黄昏
+	{"hour": 21.0, "color": Color(0.36, 0.37, 0.54, 1.0)},  # 入夜
+	{"hour": 24.0, "color": Color(0.26, 0.30, 0.46, 1.0)},  # 深夜
 ]

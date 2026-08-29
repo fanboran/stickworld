@@ -25,6 +25,10 @@ signal building_damaged(building_id: String, damage_amount: float)
 @warning_ignore("unused_signal")
 signal building_upgraded(building_id: String, old_tier: int, new_tier: int)
 
+## 建筑修理完成
+@warning_ignore("unused_signal")
+signal building_repaired(building_id: String)
+
 
 # ===== 内部引用（在 setup 中绑定） =====
 
@@ -38,11 +42,15 @@ var _is_initialized: bool = false
 func setup(manager: Object) -> void:
 	_manager = manager as ConstructionManager
 	_is_initialized = true
-	# 转发 manager 的完工/拆除信号为 api.gd 的公共信号
+	# 转发 manager 的完工/拆除/升级/修理信号为 api.gd 的公共信号
 	if not manager.building_completed.is_connected(_on_building_completed):
 		manager.building_completed.connect(_on_building_completed)
 	if not manager.building_removed.is_connected(_on_building_removed):
 		manager.building_removed.connect(_on_building_removed)
+	if manager.has_signal("building_upgraded") and not manager.building_upgraded.is_connected(_on_building_upgraded):
+		manager.building_upgraded.connect(_on_building_upgraded)
+	if manager.has_signal("building_repaired") and not manager.building_repaired.is_connected(_on_building_repaired):
+		manager.building_repaired.connect(_on_building_repaired)
 
 
 # ─────────────────────────────── manager 信号转发 ────────────────────────────────
@@ -53,6 +61,14 @@ func _on_building_completed(building_id: String, region_id: String) -> void:
 
 func _on_building_removed(building_id: String, region_id: String) -> void:
 	building_removed.emit(building_id, region_id)
+
+
+func _on_building_upgraded(building_id: String, old_level: int, new_level: int) -> void:
+	building_upgraded.emit(building_id, old_level, new_level)
+
+
+func _on_building_repaired(building_id: String) -> void:
+	building_repaired.emit(building_id)
 
 
 # ===== 建造 =====

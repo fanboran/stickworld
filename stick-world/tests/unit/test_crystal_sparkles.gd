@@ -20,11 +20,12 @@ var _runner: TestRunner
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("attach: 持续发射（one_shot=false）", _test_attach_persistent)
-	_runner.add_test("attach: 一个宿主挂 5 个并发子系统（areaFactor 递减）", _test_five_subsystems)
+	_runner.add_test("attach: 基础层+5 子系统共 6 层（areaFactor 递减）", _test_five_subsystems)
+	_runner.add_test("frames: 帧序列动画（UVModule Sprites 复刻）", _test_frame_anim)
+	_runner.add_test("palette: RandomColor 离散调色盘（矿石窄盘/rainbow 彩虹盘）", _test_single_theme)
 	_runner.add_test("rate: 原版公式 档位×areaFactor×面积×SpawnRate", _test_rate_formula)
 	_runner.add_test("rate: 大面积速率 > 小面积速率（面积驱动）", _test_area_scales_emission)
 	_runner.add_test("tier: 档位表与原版一致（8档=0.72s）", _test_tier_table)
-	_runner.add_test("palette: 一簇一色——5 子系统共用主题色（白↔主题随机）", _test_single_theme)
 	_runner.add_test("measure: 轮廓面积支持 Sprite/Polygon/ColorRect", _test_measure_host)
 	_runner.add_test("emission: 不透明精灵采样为 POINTS（点落在轮廓内）", _test_emission_points_sprite)
 	_runner.add_test("emission: 全透明精灵回退 BOX", _test_emission_fallback_box)
@@ -92,22 +93,51 @@ func _test_attach_persistent() -> void:
 
 
 func _test_five_subsystems() -> void:
+	# 原版结构：CrystalSparksBase 基础层 + 5 个强度子系统 = 6 个并发系统
 	var host: Node2D = _host_with_sprite(Vector2(40, 40))
 	ScriptCrystalSparkles.attach_to(host, WorldZ.OVERLAY_HINT, "sky", 8)
 	var subs := _subsystems(host)
-	_runner.assert_equal(subs.size(), ScriptCrystalSparkles.AREA_FACTORS.size(),
-			"一个宿主应挂 5 个并发子系统（原版 CrystalSparks - 1..-5）")
-	# areaFactor 递减 → amount 非严格递减（随机抖动 ×0.5~2 可能打平，只校验总量关系）
-	if subs.size() == 5:
-		var first: CrystalSparkles = subs[0]
-		var last: CrystalSparkles = subs[4]
-		_runner.assert_true(first.name == "CrystalSparkles", "主子系统沿用原名（debug 面板按名查找）")
-		_runner.assert_true(first.amount >= last.amount,
-				"areaFactor 最大(6.0)的子系统 amount 应 ≥ 最小(0.75)者")
-		_runner.assert_true(last.name == "CrystalSparkles_5", "第五个子系统命名")
-		# 相位错开：5 系统共用 tier 寿命，若 preprocess 同值会整簇同步熄灭（死场帧）
-		_runner.assert_approx(last.preprocess, last.lifetime * 4.0 / 5.0, 0.001,
-				"第 5 子系统 preprocess 应错开 4/5 周期")
+	_runner.assert_equal(subs.size(), 6, "一个宿主应挂 6 层（基础层 + 5 强度子系统）")
+	var by_name := {}
+	for s in subs:
+		by_name[(s as CrystalSparkles).name] = s
+	_runner.assert_true(by_name.has("CrystalSparklesBase"), "应有基础层 CrystalSparklesBase")
+	_runner.assert_true(by_name.has("CrystalSparkles"), "主子系统（-1 层）沿用原名")
+	_runner.assert_true(by_name.has("CrystalSparkles_5"), "第五子系统命名")
+	# 基础层：出土 rate=10 / lifetime=1.0 / 静态柔点（UVModule 关闭）
+	var base: CrystalSparkles = by_name.get("CrystalSparklesBase")
+	if base == null:
+		_runner.assert_true(false, "未找到基础层")
+		return
+	_runner.assert_true(base.lifetime == 1.0, "基础层寿命 1.0s（出土）")
+	_runner.assert_true(base.texture.get_width() == 64, "基础层应为 64px 静态柔点")
+	_runner.assert_true(not (base.material as CanvasItemMaterial).particles_animation,
+			"基础层无帧动画")
+
+
+func _test_frame_anim() -> void:
+	# UVModule mode=1 Sprites：每层帧深度不同（-1=6 帧 … -5=12 帧），一生播一遍
+	var host: Node2D = _host_with_sprite(Vector2(40, 40))
+	ScriptCrystalSparkles.attach_to(host, WorldZ.OVERLAY_HINT, "sky", 8)
+	var by_name := {}
+	for s in _subsystems(host):
+		by_name[(s as CrystalSparkles).name] = s
+	var expect_frames := {"CrystalSparkles": 6, "CrystalSparkles_2": 8,
+			"CrystalSparkles_3": 9, "CrystalSparkles_4": 10, "CrystalSparkles_5": 12}
+	for nm in expect_frames:
+		var cs: CrystalSparkles = by_name.get(nm)
+		_runner.assert_not_null(cs, "存在 %s" % nm)
+		if cs == null:
+			continue
+		var mat: CanvasItemMaterial = cs.material
+		_runner.assert_true(mat.particles_animation, "%s 应启用帧序列动画" % nm)
+		_runner.assert_equal(mat.particles_anim_h_frames, expect_frames[nm],
+				"%s 帧深度 %d（出土序列）" % [nm, expect_frames[nm]])
+		_runner.assert_equal(mat.particles_anim_v_frames, 1, "单行帧网格")
+		_runner.assert_true(not mat.particles_anim_loop, "一生播一遍不循环（cycles=1）")
+		_runner.assert_approx(cs.anim_speed_max, 1.0, 0.001, "anim_speed=1：一寿命走完序列")
+		_runner.assert_true(cs.texture.get_width() == int(expect_frames[nm]) * 8,
+				"%s 贴图宽 = 帧数×8px" % nm)
 
 
 func _test_rate_formula() -> void:
@@ -168,23 +198,34 @@ func _test_tier_table() -> void:
 
 
 func _test_single_theme() -> void:
-	# 原版一簇一色（2026-08-29 截图调研确认）：CrystalSparksBase 的 5 个强度
-	# 子系统共用同一主题色，每颗粒子在纯白↔主题色间随机
+	# startColor = RandomColor(Fixed)：每颗粒子从调色盘随机抽一个纯色。
+	# 矿石窄盘 = 同色系 3 键；rainbow = CrystalSparksBase 出土 8 键彩虹盘。
+	# Godot 等价 = 平台渐变（每色占 1/n 区间，接缝零宽不插值）。
 	var host: Node2D = _host_with_sprite(Vector2(40, 40))
 	ScriptCrystalSparkles.attach_to(host, WorldZ.OVERLAY_HINT, "gold", 8)
-	var subs := _subsystems(host)
-	_runner.assert_equal(subs.size(), 5, "应有 5 个子系统")
-	var theme: Array = ScriptCrystalSparkles.THEMES["gold"]
-	var theme_color := Color(theme[0], theme[1], theme[2], 1.0)
-	for s in subs:
+	var gold_pal: Array = ScriptCrystalSparkles.palette_for("gold")
+	_runner.assert_equal(gold_pal.size(), 3, "矿石窄盘 3 键同色系")
+	for s in _subsystems(host):
 		var ramp: Gradient = (s as CrystalSparkles).color_initial_ramp
 		_runner.assert_not_null(ramp, "子系统应有 color_initial_ramp")
 		if ramp == null:
 			return
-		_runner.assert_true(ramp.get_color(0).is_equal_approx(Color(1, 1, 1, 1)),
-				"渐变端点 0 应为纯白（RandomBetweenTwoGradients 另一端）")
-		_runner.assert_true(ramp.get_color(1).is_equal_approx(theme_color),
-				"渐变端点 1 应为主题色——一簇一色，五彩点缀不是原版行为")
+		_runner.assert_equal(ramp.get_point_count(), gold_pal.size() * 2,
+				"平台渐变键数 = 色数×2")
+		# 每个平台的起点色 == 调色盘对应色（离散抽色，无插值过渡）
+		for i in gold_pal.size():
+			_runner.assert_true(
+					ramp.get_color(i * 2).is_equal_approx(gold_pal[i]) and
+					ramp.get_color(i * 2 + 1).is_equal_approx(gold_pal[i]),
+					"平台 %d 两键同为 %s" % [i, gold_pal[i]])
+	# rainbow：出土 8 键
+	var rb: Array = ScriptCrystalSparkles.palette_for("rainbow")
+	_runner.assert_equal(rb.size(), 8, "彩虹盘 8 键（CrystalSparksBase 出土）")
+	_runner.assert_true(rb[0].is_equal_approx(Color("CAD6DC")), "彩虹盘首色 #CAD6DC（出土）")
+	# rainbow 渐变键数 = 16
+	var host2: Node2D = _host_with_sprite(Vector2(40, 40))
+	var cs: CrystalSparkles = ScriptCrystalSparkles.attach_to(host2, WorldZ.OVERLAY_HINT, "rainbow", 8)
+	_runner.assert_equal(cs.color_initial_ramp.get_point_count(), 16, "rainbow 平台渐变 16 键")
 
 
 func _test_measure_host() -> void:

@@ -7,8 +7,9 @@ extends Node
 ## 支持热加载：编辑 .tres 后调用 reload() 无需重启游戏。
 ## 变量变更时通过 EventBus 发射 balance_changed 信号。
 ##
-## ⚠️ 接线状态（2026-08 审计）：balance_changed 目前无生产订户（热重载机制空转），
-## 属"预留未接线"——P1 数值数据驱动（config/units/*.tres 接入实体）时启用。
+## 接线状态（2026-08-22 更新）：F9 调试热重载已接入（debug_overlay 触发 reload()，
+## toast 反馈经 EventBus.ui_notification）。balance_changed 信号本身仍无生产订户，
+## 实体侧消费（如单位实时刷新属性）待 P1 数据驱动深化时接线。
 
 # ─────────────────────────────── 数据 ───────────────────────────────────
 
@@ -80,7 +81,7 @@ func reload() -> void:
 
 	_scan_and_load_dir("res://config", "")
 
-	EventBus.safe_emit("balance_changed")
+	EventBus.balance_changed.emit()
 
 
 ## 热重载单个 .tres 文件。
@@ -100,7 +101,7 @@ func reload_single(file_path: String) -> void:
 	# 加载新数据
 	_load_tres(full_path, type_path)
 
-	EventBus.safe_emit("balance_changed")
+	EventBus.balance_changed.emit()
 
 
 # ─────────────────────────────── 内部方法 ────────────────────────────────

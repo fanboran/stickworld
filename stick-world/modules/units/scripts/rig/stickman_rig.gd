@@ -308,6 +308,20 @@ func set_anim_speed(p_speed: float) -> void:
 		_anim_player.speed_scale = clampf(p_speed, 0.0, 3.0)
 
 
+## 查询指定动画的播放进度（0~1）。仅当当前状态正在播放该动画时返回真实进度，
+## 否则返回 1.0（未在播放 = 视为已结束）。供武器命中帧结算（Saga Strike 模式）。
+func get_anim_progress(anim_name: String) -> float:
+	if _state_machine == null:
+		return 1.0
+	var cur: String = _state_machine.get_current_node()
+	if cur != anim_name:
+		return 1.0
+	var len: float = _state_machine.get_current_length()
+	if len <= 0.0:
+		return 1.0
+	return clampf(_state_machine.get_current_play_position() / len, 0.0, 1.0)
+
+
 ## 受击插播（反编译参考实装 B）：打断任意动作插入 hit_front/hit_back，
 ## 动画播完（计时器）自动回切到受击前状态。from_front=true 正面受击（后仰）。
 func play_hit(from_front: bool) -> void:

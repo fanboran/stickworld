@@ -408,7 +408,7 @@ position = Vector2(28, 131)
 position = Vector2(-22, 131)
 
 [node name="outhand" type="Marker2D" parent="OutlineGroup/Node2D" unique_id=372756660]
-position = Vector2(-22, 43)
+position = Vector2(-20, 112)
 
 [node name="innerhand" type="Marker2D" parent="OutlineGroup/Node2D" unique_id=372756661]
-position = Vector2(51, 40)
+position = Vector2(24, 115)

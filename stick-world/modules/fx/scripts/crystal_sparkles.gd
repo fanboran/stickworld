@@ -64,8 +64,8 @@ const MAX_RATE_PER_SYSTEM := 2.0
 const PX_PER_UNIT := 100.0
 ## 子系统 startSize（单位）；基础层见 BASE_LAYER_SIZE
 const START_SIZE_UNITS := 0.13
-## 帧序列单帧像素尺寸（图集 CrystalSpark 精灵 8×8）
-const FRAME_PX := 8
+## 帧序列单帧像素尺寸（出土精灵 8×8，贴图已 4x nearest 预放大到 32×32 保采样质量）
+const FRAME_PX := 32
 
 ## 强度子系统帧序列贴图（从 SpriteAtlas "CrystalSparks" 出土展开，
 ## 每层深度不同：-1 只到微星 6 帧 … -5 到大星 12 帧）

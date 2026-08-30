@@ -12,9 +12,9 @@ func _ready() -> void:
 	var rig: Node = entity.get("rig")
 	var skeleton: Node2D = rig as Skeleton2D  # rig 就是 StickmanRig (Skeleton2D)
 	print("rig:", rig, " skeleton:", skeleton)
-	var head: Node2D = skeleton.get_node_or_null("hip/lower_torso/upper_torso/neck/head")
+	var head: Node2D = skeleton.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head")
 	if head == null:
-		head = skeleton.get_node_or_null("hip/lower_torso/upper_torso/neck")
+		head = skeleton.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/neck")
 	var hip: Node2D = skeleton.get_node_or_null("hip")
 	print("head:", head, " hip:", hip)
 	if head == null:
@@ -58,7 +58,7 @@ func _ready() -> void:
 	var r2: Node = entity.get("rig")
 	if r2 != null and r2.has_method("play"):
 		r2.play("walk")
-	var walk_torso: Node2D = skeleton.get_node_or_null("hip/lower_torso")
+	var walk_torso: Node2D = skeleton.get_node_or_null("hip/spine_root/lower_torso")
 	var lean_samples: Array[float] = []
 	for i in 6:
 		await get_tree().process_frame

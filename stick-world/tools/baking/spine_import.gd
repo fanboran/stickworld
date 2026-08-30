@@ -46,6 +46,11 @@ const SPINE_TO_MY: Dictionary = {
 	"minerleg4": 17,   # 大腿内
 	"minerleg3": 11,   # 小腿内
 	"minerfoot2": 12,  # 脚内
+	"bone": 21,        # 脊柱根（腿/躯干共同旋转层；dead 倒地 -87°、run -11° 等通道）
+	"minertorso1": 6,  # 下躯干（全动画有通道）
+	"bone2": 22,       # 胸中段（attack 摆动 ±20°）
+	"pickaxe1": 23,    # 武器骨（武器跟腕甩动，全动画大通道 -109~+34°）
+	"Arrow1": 24,      # 盾骨（拉弓 attack_bow -230~-8°、block -49°）
 }
 
 ## 本项目动画名 -> Spine 动画名（loop 标志 = 是否循环）

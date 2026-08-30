@@ -285,20 +285,22 @@ func _reload_weapons() -> void:
 	_mount_weapons()
 
 
-## 查找右手骨骼 hand_inner（rig 骨架下，挂在 forearm_inner 末端）。
+## 查找武器骨 weapon_hand（SWL pickaxe1 补译；挂 hand_inner 手骨原点，
+## 挥剑时武器随腕甩动——动画经 pickaxe1 通道驱动该骨旋转）。
 func _find_hand_bone(owner_entity: Node2D) -> Node2D:
 	var rig: Node = owner_entity.get("rig") if "rig" in owner_entity else null
 	if rig == null:
 		return null
-	return rig.get_node_or_null("hip/lower_torso/upper_torso/upper_arm_inner/forearm_inner/hand_inner")
+	return rig.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner/hand_inner/weapon_hand")
 
 
-## 查找左手骨骼 hand_outer（rig 骨架下，挂在 forearm_outer 末端）。
+## 查找盾骨 shield_hand（SWL Arrow1 补译；挂 hand_outer 手骨原点，
+## 拉弓/举盾的动画经 Arrow1 通道驱动该骨）。
 func _find_shield_bone(owner_entity: Node2D) -> Node2D:
 	var rig: Node = owner_entity.get("rig") if "rig" in owner_entity else null
 	if rig == null:
 		return null
-	return rig.get_node_or_null("hip/lower_torso/upper_torso/upper_arm_outer/forearm_outer/hand_outer")
+	return rig.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer/hand_outer/shield_hand")
 
 
 func _physics_process(delta: float) -> void:

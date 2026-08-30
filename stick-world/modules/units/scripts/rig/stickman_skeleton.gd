@@ -25,32 +25,39 @@ const TYPE_ELLIPSE: int = 5
 const OUTLINE_WIDTH: float = 2.0
 
 # ===== 武器挂载骨骼 =====
-const WEAPON_ATTACH_R := 15
-const WEAPON_ATTACH_L := 2
+const WEAPON_ATTACH_R := 23
+const WEAPON_ATTACH_L := 24
 
 # ===== 骨骼名称映射（肢体段命名法）=====
 ## 骨骼名代表"从此骨骼到子骨骼"的肢体段
-## 例如 thigh_outer = 大腿（从髋部到膝盖的段），位于髋部位置(0,0)
+## 例如 thigh_outer = 大腿（从髋部到膝盖的段），位于髋部位置
+## 21~24 为 SWL 躯干链/武器骨补译新增（2026-08-30 验收闭环计划）：
+##   spine_root(21)←bone、chest_mid(22)←bone2、weapon_hand(23)←pickaxe1、
+##   shield_hand(24)←Arrow1；minertorso1 复用 lower_torso(6)
 const BONE_NAMES: Dictionary = {
 	0:  "hip",             # 髋部（根节点）
 	1:  "forearm_outer",   # 小臂外（从外肘到外手）
-	2:  "hand_outer",      # 手外（叶子节点）
+	2:  "hand_outer",      # 手外
 	3:  "shin_outer",      # 小腿外（从外膝到外脚踝）
 	4:  "foot_outer",      # 脚掌外（从外脚踝到外脚尖）
 	5:  "toe_outer",       # 脚趾外（叶子节点）
-	6:  "lower_torso",     # 下躯干（从髋到下腹）
-	7:  "upper_torso",     # 上躯干（从下腹到胸）
+	6:  "lower_torso",     # 下躯干（从髋到下腹；SWL minertorso1 通道挂载点）
+	7:  "upper_torso",     # 上躯干（从胸到颈根；SWL bone3）
 	9:  "neck",            # 颈部（从胸到头根）
 	10: "head",            # 头部（从颈根到头顶）
 	11: "shin_inner",      # 小腿内
 	12: "foot_inner",      # 脚掌内
-	13: "toe_inner",       # 脚趾内
+	13: "toe_inner",       # 脚趾内（叶子节点）
 	14: "forearm_inner",   # 小臂内
-	15: "hand_inner",      # 手内（叶子节点）
+	15: "hand_inner",      # 手内
 	16: "thigh_outer",     # 大腿外（从髋到外膝，位于髋部位置）
 	17: "thigh_inner",     # 大腿内（从髋到内膝，位于髋部位置）
 	18: "upper_arm_outer", # 大臂外（从胸到外肘，位于胸部位置）
 	19: "upper_arm_inner", # 大臂内（从胸到内肘，位于胸部位置）
+	21: "spine_root",      # 脊柱根（SWL bone；hip 与腿/躯干之间的纯旋转传动骨，位于髋原点）
+	22: "chest_mid",       # 胸中段（SWL bone2；插在 lower_torso 与 upper_torso 之间）
+	23: "weapon_hand",     # 武器骨（SWL pickaxe1；挂 hand_inner，武器跟腕甩动的动画通道）
+	24: "shield_hand",     # 盾骨（SWL Arrow1；挂 hand_outer，拉弓/举盾的动画通道）
 }
 
 ## 反向映射：骨骼名 -> ID
@@ -74,32 +81,43 @@ const BONE_NAME_TO_ID: Dictionary = {
 	"thigh_inner": 17,
 	"upper_arm_outer": 18,
 	"upper_arm_inner": 19,
+	"spine_root": 21,
+	"chest_mid": 22,
+	"weapon_hand": 23,
+	"shield_hand": 24,
 }
 
 ## SWL Swordwrath 骨骼数据
-## root=hip, 躯干↑(6->7), 头↑(9->10)
-## 手臂外↓(18->1->2), 手臂内↓(19->14->15)
-## 腿外↓(16->3->4->5), 腿内↓(17->11->12->13)
+## root=hip, 脊柱↑(21→6→22→7), 头↑(9→10)
+## 手臂外↓(18->1->2->24), 手臂内↓(19->14->15->23)
+## 腿外↓(16->3->4->5), 腿内↓(17->11->12->13)；腿挂 spine_root(21) 下（SWL 腿挂 bone 下）
 ## x,y = 相对父骨骼的偏移量
 ## type = 精灵类型，-1 = 无精灵。精灵挂在父骨骼上。
+## spine_root/chest_mid/weapon_hand/shield_hand 为 SWL 躯干链与武器骨补译：
+## spine_root 在髋原点纯传动（腿与躯干的共同旋转层，几何不变）；
+## chest_mid 把原 6→7 躯干段拆为两段（总位移不变）；weapon/shield_hand 挂手骨原点。
 const SKELETON_DATA: Dictionary = {
 	0:  {"parent": -1, "x": 0.0,    "y": 0.0,    "length": 0,   "thickness": 0,  "type": -1},
-	16: {"parent": -1, "x": 0.0,    "y": 0.0,    "length": 66,  "thickness": 23, "type": -1},
+	21: {"parent": 0,  "x": 0.0,    "y": 0.0,    "length": 1,   "thickness": 0,  "type": -1},
+	16: {"parent": 21, "x": 0.0,    "y": 0.0,    "length": 66,  "thickness": 23, "type": -1},
 	3:  {"parent": 16, "x": 25.4,   "y": 60.9,   "length": 69,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	4:  {"parent": 3,  "x": 2.9,    "y": 68.9,   "length": 69,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	5:  {"parent": 4,  "x": 11.0,   "y": 0.0,    "length": 11,  "thickness": 23, "type": TYPE_ROUND_SEG},
-	17: {"parent": -1, "x": 0.0,    "y": 0.0,    "length": 66,  "thickness": 23, "type": -1},
+	17: {"parent": 21, "x": 0.0,    "y": 0.0,    "length": 66,  "thickness": 23, "type": -1},
 	11: {"parent": 17, "x": -4.8,   "y": 65.8,   "length": 69,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	12: {"parent": 11, "x": -16.9,  "y": 66.9,   "length": 69,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	13: {"parent": 12, "x": 11.0,   "y": -0.2,   "length": 11,  "thickness": 23, "type": TYPE_ROUND_SEG},
-	6:  {"parent": 0,  "x": 1.8,    "y": -30.9,  "length": 31,  "thickness": 23, "type": TYPE_ROUND_SEG},
-	7:  {"parent": 6,  "x": 5.7,    "y": -30.5,  "length": 31,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	6:  {"parent": 21, "x": 1.8,    "y": -30.9,  "length": 31,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	22: {"parent": 6,  "x": 2.85,   "y": -15.25, "length": 16,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	7:  {"parent": 22, "x": 2.85,   "y": -15.25, "length": 15,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	18: {"parent": 7,  "x": 10.4,   "y": -29.2,  "length": 64,  "thickness": 23, "type": -1},
 	1:  {"parent": 18, "x": -34.7,  "y": 53.9,   "length": 64,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	2:  {"parent": 1,  "x": -3.1,   "y": 48.7,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	24: {"parent": 2,  "x": 0.0,    "y": 0.0,    "length": 1,   "thickness": 0,  "type": -1},
 	19: {"parent": 7,  "x": 10.4,   "y": -29.2,  "length": 64,  "thickness": 23, "type": -1},
 	14: {"parent": 19, "x": 1.1,    "y": 64.1,   "length": 64,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	15: {"parent": 14, "x": 33.8,   "y": 35.2,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
+	23: {"parent": 15, "x": 0.0,    "y": 0.0,    "length": 1,   "thickness": 0,  "type": -1},
 	9:  {"parent": 7,  "x": 10.4,   "y": -29.2,  "length": 50,  "thickness": 23, "type": -1},
 	10: {"parent": 9,  "x": 4.8,    "y": -11.1,   "length": 38,  "thickness": 23, "type": TYPE_CIRCLE},
 }
@@ -154,7 +172,7 @@ static func reorder_render_order(skeleton: Skeleton2D) -> void:
 	if thigh_outer != null and thigh_inner != null:
 		skeleton.move_child(thigh_outer, 0)
 		skeleton.move_child(thigh_inner, 1)
-	var upper_torso := skeleton.get_node_or_null("hip/lower_torso/upper_torso") as Node
+	var upper_torso := skeleton.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso") as Node
 	if upper_torso != null:
 		var arm_outer := upper_torso.get_node_or_null("upper_arm_outer") as Node
 		var arm_inner := upper_torso.get_node_or_null("upper_arm_inner") as Node

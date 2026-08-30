@@ -32,6 +32,11 @@ BONE_MAP = {
     'minerleg4': 'thigh_inner',
     'minerleg3': 'shin_inner',
     'minerfoot2': 'foot_inner',
+    'bone': 'spine_root',
+    'minertorso1': 'lower_torso',
+    'bone2': 'chest_mid',
+    'pickaxe1': 'weapon_hand',
+    'Arrow1': 'shield_hand',
     'root': 'hip',  # 仅位置
 }
 
@@ -55,6 +60,19 @@ ANIM_MAP = {
     'Hit-Mid-Back-Small-1': 'hit_back',
     'Miner-Walk': 'walk_carry',
     'Cheering': 'arrive',
+}
+
+
+# 已知故意修正豁免（镜像产线 spine_import.KEYFRAME_FIXES）：
+# walk/run 的手臂轨道被手工重写（消除 idle→walk 切换"伸手卡顿"：原始起步
+# 前臂 29° vs idle 0.6°，瞬间抬手）。因这两动画手臂关键帧少（6 键），
+# FIXES 实际覆盖整条轨道 = 手臂曲线整体手工值，非原始数据（视觉已认可）。
+# 豁免=整条轨道（True）；链下子骨（weapon/shield_hand）随之同偏，一并豁免。
+KNOWN_FIXES = {
+    'walk': {'forearm_outer': True, 'forearm_inner': True,
+             'upper_arm_outer': True, 'upper_arm_inner': True,
+             'weapon_hand': True, 'shield_hand': True},
+    'run': {'upper_arm_inner': True, 'forearm_inner': True, 'weapon_hand': True},
 }
 
 
@@ -169,6 +187,7 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
         pos0 = None
         n_total = 0
         n_bad = 0
+        n_fix = 0
         err_sum = 0.0
         err_max = 0.0
         pos_bad = 0
@@ -201,11 +220,13 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
                     continue
                 err = abs(angle_diff_sign(pb_['angle'] - pb0_['angle'],
                                           pa_['angle'] - pa0_['angle'], 0.0))
-                n_total += 1
-                err_sum += err
-                err_max = max(err_max, err)
-                bone_worst[(sb, gb)] = max(bone_worst.get((sb, gb), 0.0), err)
-                if err > tol_angle:
+                known = bool(KNOWN_FIXES.get(an, {}).get(gb, False))
+                if not known:
+                    n_total += 1
+                    err_sum += err
+                    err_max = max(err_max, err)
+                    bone_worst[(sb, gb)] = max(bone_worst.get((sb, gb), 0.0), err)
+                if err > tol_angle and not known:
                     n_bad += 1
                     if len(detail_lines) < 30:
                         detail_lines.append(
@@ -213,13 +234,16 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
                             f'spine增量={pa_["angle"] - pa0_["angle"]:+.3f}° '
                             f'godot增量={pb_["angle"] - pb0_["angle"]:+.3f}°  '
                             f'残差={err:.3f}°')
+                elif known and err > tol_angle:
+                    n_fix += 1
 
         mean_err = err_sum / n_total if n_total else 0.0
         ok = (n_bad == 0 and pos_bad == 0)
         all_pass = all_pass and ok
         print(f'{an:<15} max={err_max:6.2f}°  mean={mean_err:5.2f}°  '
               f'超差 {n_bad}/{n_total}'
-              + (f'  位移超差 {pos_bad}(max {pos_max:.1f}px)' if pos_bad else '')
+              + (f'  [位移超差 {pos_bad}(max {pos_max:.1f}px)]' if pos_bad else '')
+              + (f'  [已知修正帧 {n_fix}]' if n_fix else '')
               + ('  [PASS]' if ok else '  [FAIL]'))
 
     print()

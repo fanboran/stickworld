@@ -79,10 +79,10 @@ func setup(skeleton: Skeleton2D, rig: Node2D) -> void:
 		_innerhand = _markers.get_node_or_null("innerhand")
 	# 叠加目标骨骼（不参与 IK）；head 骨骼可能不存在（部分骨架只有 neck），回退到 neck
 	_hip = skeleton.get_node_or_null("hip")
-	_torso = skeleton.get_node_or_null("hip/lower_torso")
-	_head = skeleton.get_node_or_null("hip/lower_torso/upper_torso/neck/head")
+	_torso = skeleton.get_node_or_null("hip/spine_root/lower_torso")
+	_head = skeleton.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head")
 	if _head == null:
-		_head = skeleton.get_node_or_null("hip/lower_torso/upper_torso/neck")
+		_head = skeleton.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/neck")
 	# 记录基准
 	if _hip != null:
 		_hip_base = _hip.rotation

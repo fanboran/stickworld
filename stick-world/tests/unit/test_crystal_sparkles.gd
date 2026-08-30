@@ -136,8 +136,8 @@ func _test_frame_anim() -> void:
 		_runner.assert_equal(mat.particles_anim_v_frames, 1, "单行帧网格")
 		_runner.assert_true(not mat.particles_anim_loop, "一生播一遍不循环（cycles=1）")
 		_runner.assert_approx(cs.anim_speed_max, 1.0, 0.001, "anim_speed=1：一寿命走完序列")
-		_runner.assert_true(cs.texture.get_width() == int(expect_frames[nm]) * 8,
-				"%s 贴图宽 = 帧数×8px" % nm)
+		_runner.assert_true(cs.texture.get_width() == int(expect_frames[nm]) * 24,
+				"%s 贴图宽 = 帧数×24px 画布" % nm)
 
 
 func _test_rate_formula() -> void:

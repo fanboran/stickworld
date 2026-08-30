@@ -95,6 +95,9 @@ var _minimap: Control = null
 @warning_ignore("unused_private_class_variable")
 var _zoom_bar: Control = null
 
+## 武器调控面板（左上角，WeaponPanel；T/B 快捷键与面板共享状态）
+var _weapon_panel: Control = null
+
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
 ## PossessionInterface 实例引用（运行时由 SystemSetup 装配）
 var _possession_interface: Node = null
@@ -775,39 +778,11 @@ func _debug_toggle_shield() -> void:
 	_update_debug_weapon_hud()
 
 
-## 武器调试 HUD：屏幕左缘常驻武器状态标签（T/B 切换后实时刷新）
-var _debug_weapon_label: Label = null
-
-func _ensure_debug_weapon_hud() -> void:
-	if _debug_weapon_label != null and is_instance_valid(_debug_weapon_label):
-		return
-	var layer := CanvasLayer.new()
-	layer.name = "DebugWeaponHud"
-	layer.layer = 50
-	add_child(layer)
-	_debug_weapon_label = Label.new()
-	_debug_weapon_label.position = Vector2(12, 120)
-	_debug_weapon_label.add_theme_font_size_override("font_size", 18)
-	layer.add_child(_debug_weapon_label)
-	_update_debug_weapon_hud()
-
-
-## 刷新 HUD 内容（武器/盾牌状态）
+## 刷新武器调控面板（T/B 快捷键切换后调用；面板自读附身玩家状态）。
+## 旧 CanvasLayer 文字标签已迁移到 WeaponPanel（UI 槽位规范）。
 func _update_debug_weapon_hud() -> void:
-	_ensure_debug_weapon_hud()
-	if _debug_weapon_label == null:
-		return
-	var player := get_player_entity()
-	if player == null:
-		_debug_weapon_label.text = "[T/B 武器调试] 需附身玩家"
-		return
-	var wm: Node = player.get_node_or_null("WeaponMount")
-	if wm == null:
-		_debug_weapon_label.text = "WeaponMount 不存在"
-		return
-	var wtype := int(wm.weapon_type)
-	var wname: String = ["剑", "矛", "弓", "镐", "法杖"][wtype]
-	_debug_weapon_label.text = "T: 换武器(%s)  B: 盾牌%s" % [wname, "关" if not wm.shield_enabled else "开"]
+	if _weapon_panel != null and _weapon_panel.has_method("refresh"):
+		_weapon_panel.refresh()
 
 
 ## 打开帝国功能空面板（经 ui_placeholder 模块，系统落地后替换真实面板）。

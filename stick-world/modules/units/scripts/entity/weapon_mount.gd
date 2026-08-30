@@ -228,9 +228,14 @@ func _mount_one(scene: PackedScene, bone: Node2D, node_name: String) -> Node2D:
 		instance.position = -(grip.position * spr.scale).rotated(spr.rotation)
 	instance.name = node_name
 	bone.add_child(instance)
-	# SWL 槽序：武器(剑/矛/弓/镐/杖)在躯干/腿之后（slot 8 < torso 9），盾在最前（Arrow1 slot 20）
-	instance.z_index = 20 if node_name == "Shield" else -2
-	instance.z_as_relative = false
+	# 层级跟随单位所在带（EntityHost z=3）：相对层级 + 树序近似 SWL 槽序。
+	# 旧写法 z_as_relative=false 是"绝对 z"——武器 -2 掉到所有地图瓦片层
+	# （地面 0/装饰 1/建筑 2）之下、盾 20 压过前景层 10，武器被地面盖住。
+	# 现在：武器 0 = 与身体填充同带，树序在手 subtree（盖腿/躯干/头，见
+	# reorder_render_order 把 neck 提到臂前）；盾 1 = 全局 4，盖武器与全身，
+	# 仍低于前景层 10。躯干盖武器需拆分填充层，待渲染重构（审计已知项）。
+	instance.z_index = 1 if node_name == "Shield" else 0
+	instance.z_as_relative = true
 	return instance
 
 

@@ -108,6 +108,9 @@ func _test_settings_debug_buttons() -> void:
 		return
 	if _helper.game_root.has_method("toggle_settings_menu"):
 		_helper.game_root.toggle_settings_menu()
+	# 面板按需构建分类内容（重构后默认分类无调试地图按钮）：切到 debug 分类再数
+	if panel.has_method("_select_category"):
+		panel._select_category("debug")
 	var map_btn_count: int = 0
 	# 遍历面板全部后代找"前往 xxx"按钮（不依赖内部容器变量，结构解耦）
 	for child in panel.find_children("", "Button", true, false):
@@ -119,6 +122,12 @@ func _test_settings_debug_buttons() -> void:
 
 ## 大世界地图（战略图）：Tab 打开显示 L1 世界图（8 城邦），关闭恢复
 func _test_world_map_dynamic() -> void:
+	# 战略图已改懒加载（SystemSetup 持有装配逻辑，启动不实例化，首次打开才装配）——
+	# 测试里先经 SystemSetup 触发装配
+	if _helper.game_root.get("_strategic_map") == null:
+		var setup_node: Node = _helper.game_root.get_node_or_null("SystemSetup")
+		if setup_node != null and setup_node.has_method("_ensure_strategic_maps"):
+			setup_node._ensure_strategic_maps()
 	var strategic_map: Node = _helper.game_root.get("_strategic_map")
 	if strategic_map == null:
 		_runner.assert_true(false, "GameRoot._strategic_map 为空")

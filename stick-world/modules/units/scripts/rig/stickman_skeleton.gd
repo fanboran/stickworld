@@ -169,7 +169,8 @@ static func build_from_scratch(skeleton: Skeleton2D, thickness_scale: float = 1.
 
 
 ## 渲染顺序整理（原 Outline.setup 内逻辑，描边系统删除后收编于此）：
-## 腿移到躯干之前（腿在身体后面）；内臂先于外臂（外臂覆盖内臂）；头最后。
+## 腿移到躯干之前（腿在身体后面）；内臂先于外臂（外臂覆盖内臂）；
+## 颈/头提到双臂之前（SWL 槽序：武器/盾盖头——武器挂臂 subtree，树序在后）。
 static func reorder_render_order(skeleton: Skeleton2D) -> void:
 	var thigh_outer := skeleton.get_node_or_null("thigh_outer") as Node
 	var thigh_inner := skeleton.get_node_or_null("thigh_inner") as Node
@@ -180,8 +181,14 @@ static func reorder_render_order(skeleton: Skeleton2D) -> void:
 	if upper_torso != null:
 		var arm_outer := upper_torso.get_node_or_null("upper_arm_outer") as Node
 		var arm_inner := upper_torso.get_node_or_null("upper_arm_inner") as Node
-		if arm_outer != null and arm_inner != null and arm_inner.get_index() > arm_outer.get_index():
-			upper_torso.move_child(arm_inner, arm_outer.get_index())
+		var neck := upper_torso.get_node_or_null("neck") as Node
+		if arm_outer != null and arm_inner != null:
+			if arm_inner.get_index() > arm_outer.get_index():
+				upper_torso.move_child(arm_inner, arm_outer.get_index())
+			# 头最后画会盖住武器/盾（臂 subtree 树序在内臂/外臂之后）——
+			# 把 neck 提到最前，武器（内臂下）与盾（外臂下）即盖头
+			if neck != null and neck.get_index() > arm_inner.get_index():
+				upper_torso.move_child(neck, 0)
 
 
 ## 为已有骨骼（.tscn 路径）构建矢量肢体层

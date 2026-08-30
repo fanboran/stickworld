@@ -152,6 +152,10 @@ static func build_from_scratch(skeleton: Skeleton2D, thickness_scale: float = 1.
 		# rest 必须显式设置：Bone2D 默认 rest 是零矩阵（引擎"未设 rest"标记），
 		# Skeleton2D._update_bone_setup 对 rest 求 affine_inverse 会报 det==0
 		node.rest = Transform2D(0.0, node.position)
+		# 关掉自动计算（否则叶骨/纯挂载骨每帧刷 "No Bone2D children" 警告，
+		# 与旧 tscn 骨架的显式 false 设置一致）
+		node.auto_calculate_length_and_angle = false
+		node.length = float(data.get("length", 1))
 		var pid: int = data["parent"]
 		if pid >= 0 and bones.has(pid):
 			(bones[pid] as Bone2D).add_child(node)

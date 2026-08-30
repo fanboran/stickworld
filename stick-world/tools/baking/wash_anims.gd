@@ -16,7 +16,7 @@ extends Node
 const ANIM_DIR := "res://modules/units/animations/"
 const ANIMATIONS: Array[String] = [
 	"idle", "idle_v2", "walk", "run", "attack", "dead",
-	"hit_front", "hit_back", "walk_carry", "build", "arrive",
+	"hit_front", "hit_back", "walk_carry", "build", "arrive", "dead_headshot", "block",
 ]
 ## 循环动画（可做相位/时长扰动）
 const LOOP_ANIMS: Array[String] = ["idle", "idle_v2", "walk", "run", "walk_carry", "build"]
@@ -31,14 +31,26 @@ const ANIM_AMP: Dictionary = {
 
 
 func _ready() -> void:
+	# --only=a,b,c：只洗指定动画（增量，洗稿不可重入）
+	var only := _parse_only_arg()
 	print("=== 开始动作洗稿（混合重构） ===")
-	_wash_all()
+	_wash_all(only)
 	print("=== 洗稿完成 ===")
 	get_tree().quit(0)
 
 
-func _wash_all() -> void:
+## 解析 --only=a,b,c 用户参数；缺省空 = 洗全清单。
+static func _parse_only_arg() -> PackedStringArray:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--only="):
+			return arg.trim_prefix("--only=").split(",", false)
+	return PackedStringArray()
+
+
+func _wash_all(only: PackedStringArray = PackedStringArray()) -> void:
 	for anim_name in ANIMATIONS:
+		if not only.is_empty() and not (anim_name in only):
+			continue
 		var path := ANIM_DIR + anim_name + ".tres"
 		if not ResourceLoader.exists(path):
 			printerr("  跳过（不存在）: %s" % path)
@@ -66,6 +78,10 @@ func _wash_anim(anim: Animation, anim_name: String, is_loop: bool) -> bool:
 	var new_anim := Animation.new()
 	new_anim.length = anim.length * stretch
 	new_anim.loop_mode = anim.loop_mode
+	# 保留 spine_import 写入的动画事件元数据（Hit/Sound 时间），并按 stretch 缩放时间
+	# —— 洗稿只扰动动作曲线，事件语义（命中帧/音效时机）必须原样继承，否则
+	# WeaponMount 又会退化回"拍脑袋比例"。
+	_copy_event_meta(anim, new_anim, stretch)
 
 	var track_count := anim.get_track_count()
 	for i in track_count:
@@ -136,6 +152,30 @@ func _wash_anim(anim: Animation, anim_name: String, is_loop: bool) -> bool:
 		printerr("  保存失败: %s (err=%d)" % [anim.resource_path, err])
 		return false
 	return true
+
+
+## 复制动画事件元数据（spine_import 写入），事件时间 × stretch。
+## 键：anim_events(Array[Dictionary]) / hit_time(float) / sound_events(Array[[t,sfx]])
+static func _copy_event_meta(src: Animation, dst: Animation, stretch: float) -> void:
+	for key in src.get_meta_list():
+		var v: Variant = src.get_meta(key)
+		match key:
+			"anim_events":
+				var scaled: Array = []
+				for e in v:
+					var e2: Dictionary = Dictionary(e).duplicate()
+					e2["time"] = float(e2["time"]) * stretch
+					scaled.append(e2)
+				dst.set_meta(key, scaled)
+			"hit_time":
+				dst.set_meta(key, float(v) * stretch if float(v) >= 0.0 else -1.0)
+			"sound_events":
+				var s2: Array = []
+				for pair in v:
+					s2.append([float(pair[0]) * stretch, str(pair[1])])
+				dst.set_meta(key, s2)
+			_:
+				dst.set_meta(key, v)
 
 
 ## 线性插值采样原曲线

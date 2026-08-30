@@ -53,6 +53,7 @@ const ANIM_MAP: Dictionary = {
 	"attack_staff":  {"spine": "Magikill-Spell1",      "loop": false},
 	"attack_bow":    {"spine": "Archidon-Draw",        "loop": false},
 	"dead":       {"spine": "Death1",                  "loop": false},
+	"dead_headshot": {"spine": "Death-Headshot",       "loop": false},
 	"hit_front":  {"spine": "Hit-Mid-Front-Small-1",   "loop": false},
 	"hit_back":   {"spine": "Hit-Mid-Back-Small-1",    "loop": false},
 	"walk_carry": {"spine": "Miner-Walk",              "loop": true},
@@ -101,7 +102,11 @@ func _ready() -> void:
 	_build_ref(data, animations)
 	var ok: int = 0
 	var err: int = 0
+	# --only=a,b,c：只转换指定动画（增量，避免整份重建冲掉洗稿成果）
+	var only := _parse_only_arg()
 	for godot_name in ANIM_MAP.keys():
+		if not only.is_empty() and not (godot_name in only):
+			continue
 		var cfg: Dictionary = ANIM_MAP[godot_name]
 		var spine_name: String = cfg["spine"]
 		if not animations.has(spine_name):
@@ -114,6 +119,14 @@ func _ready() -> void:
 			err += 1
 	print("=== 转换完成: %d 成功 / %d 失败 ===" % [ok, err])
 	get_tree().quit(0 if err == 0 else 1)
+
+
+## 解析 --only=a,b,c 用户参数（`--` 之后的参数，逗号分隔动画名）；缺省空 = 转换全表。
+static func _parse_only_arg() -> PackedStringArray:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--only="):
+			return arg.trim_prefix("--only=").split(",", false)
+	return PackedStringArray()
 
 
 ## 转换单个 Spine 动画为 .tres
@@ -173,7 +186,7 @@ func _convert_one(spine_anim: Dictionary, godot_name: String, loop: bool) -> boo
 	if length <= 0.0:
 		length = 1.0
 	var loop_mode: int = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
-	return _save_anim(godot_name, tracks, length, loop_mode)
+	return _save_anim(godot_name, tracks, length, loop_mode, _extract_events(spine_anim))
 
 
 ## 归一化 Spine 螺旋角：与前一帧取最短角差（避免跨圈线性插值）。
@@ -227,11 +240,13 @@ func _extract_translate(translate: Array) -> Array:
 	return keys
 
 
-## 保存 .tres（复用 bake_anims 的骨骼路径生成）
-func _save_anim(anim_name: String, tracks: Array, length: float, loop_mode: int) -> bool:
+## 保存 .tres（复用 bake_anims 的骨骼路径生成）。
+## events: Spine 内嵌事件表（_extract_events 产物），写入 Animation 元数据。
+func _save_anim(anim_name: String, tracks: Array, length: float, loop_mode: int, events: Array) -> bool:
 	var anim := Animation.new()
 	anim.loop_mode = loop_mode
 	anim.length = length
+	_write_event_meta(anim, events)
 	for track_data in tracks:
 		var bone_key: Variant = track_data[0]
 		var keys: Array = track_data[1]
@@ -253,10 +268,52 @@ func _save_anim(anim_name: String, tracks: Array, length: float, loop_mode: int)
 	var file_path := OUTPUT_DIR + anim_name + ".tres"
 	var err := ResourceSaver.save(anim, file_path)
 	if err == OK:
-		print("  OK  %s.tres (length=%.2f, tracks=%d, loop=%s)" % [anim_name, length, tracks.size(), loop_mode])
+		print("  OK  %s.tres (length=%.2f, tracks=%d, loop=%s, events=%s)" % [
+			anim_name, length, tracks.size(), loop_mode, _event_summary(events)])
 		return true
 	printerr("  ERR %s.tres: 保存失败 (err=%d)" % [anim_name, err])
 	return false
+
+
+## 提取 Spine 动画内嵌事件（events[]）→ 归一化事件表。
+## 返回 Array[Dictionary]：{name:String, time:float, string:String}（按时间升序）。
+## 原版 4 类事件：Hit（命中帧）/ Sound（音效，string=音效名）/ Drawn（弓拉满）/ Mine（矿工敲击）。
+static func _extract_events(spine_anim: Dictionary) -> Array:
+	var out: Array = []
+	for ev in spine_anim.get("events", []):
+		out.append({
+			"name": str(ev.get("name", "")),
+			"time": float(ev.get("time", 0.0)),
+			"string": str(ev.get("string", "")).strip_edges(),
+		})
+	out.sort_custom(func(a, b): return a["time"] < b["time"])
+	return out
+
+
+## 事件写入 Animation 元数据（ResourceSaver 会持久化到 .tres 的 metadata/* 行）。
+static func _write_event_meta(anim: Animation, events: Array) -> void:
+	anim.set_meta("anim_events", events)
+	var hit_time: float = -1.0
+	var sounds: Array = []
+	for e in events:
+		var nm: String = e["name"]
+		if nm == "Hit" and hit_time < 0.0:
+			hit_time = float(e["time"])
+		elif nm == "Sound":
+			sounds.append([float(e["time"]), str(e["string"])])
+	anim.set_meta("hit_time", hit_time)
+	anim.set_meta("sound_events", sounds)
+
+
+## 事件摘要（日志用）：Hit@1.0 Sound:Swoosh@0.8333
+static func _event_summary(events: Array) -> String:
+	if events.is_empty():
+		return "-"
+	var parts: Array[String] = []
+	for e in events:
+		var s: String = str(e["string"])
+		parts.append("%s%s@%.4f" % [e["name"], (":" + s) if not s.is_empty() else "", e["time"]])
+	return " ".join(parts)
 
 
 ## 骨骼路径（相对 AnimationPlayer root_node = StickmanRig/Skeleton2D）

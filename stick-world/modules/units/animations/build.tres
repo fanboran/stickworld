@@ -24,7 +24,7 @@ tracks/1/keys = {
 "times": PackedFloat32Array(0, 0.6667, 1),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [-0.36075955638722795, -0.03368485456349068, -0.3607595563872282]
+"values": [-0.3607595563872279, -0.03368485456349068, -0.3607595563872282]
 }
 tracks/2/type = "value"
 tracks/2/imported = false
@@ -72,7 +72,7 @@ tracks/5/keys = {
 "times": PackedFloat32Array(0, 0.6667, 1),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [-0.11868238913561441, -0.3871140280923424, -0.1186823891356146]
+"values": [-0.1186823891356144, -0.3871140280923424, -0.1186823891356146]
 }
 tracks/6/type = "value"
 tracks/6/imported = false
@@ -96,7 +96,7 @@ tracks/7/keys = {
 "times": PackedFloat32Array(0, 0.3333, 0.5333, 0.6667, 1),
 "transitions": PackedFloat32Array(1, 1, 1, 1, 1),
 "update": 0,
-"values": [-0.8714428955207688, -0.008377580409573098, -0.9341002156673659, -1.6805775367453404, -0.8714428955207688]
+"values": [-0.8714428955207688, -0.00837758040957309, -0.934100215667366, -1.6805775367453404, -0.8714428955207688]
 }
 tracks/8/type = "value"
 tracks/8/imported = false
@@ -108,7 +108,7 @@ tracks/8/keys = {
 "times": PackedFloat32Array(0, 0.3333, 0.6667, 1),
 "transitions": PackedFloat32Array(1, 1, 1, 1),
 "update": 0,
-"values": [0.31974431896536115, 1.2988740293341803, -0.28239427297268277, 0.31974431896536093]
+"values": [0.31974431896536115, 1.2988740293341805, -0.28239427297268277, 0.31974431896536093]
 }
 tracks/9/type = "value"
 tracks/9/imported = false
@@ -132,7 +132,7 @@ tracks/10/keys = {
 "times": PackedFloat32Array(0, 0.2333, 0.3, 0.3333, 0.5333, 0.6, 0.6667, 1),
 "transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1),
 "update": 0,
-"values": [-0.7831292353698556, -1.0691886997717261, -1.2164944886400475, -1.3009684244365736, -0.30805061297699926, 0.024085543677521668, -0.056548667764616437, -0.7831292353698558]
+"values": [-0.7831292353698556, -1.069188699771726, -1.2164944886400475, -1.3009684244365736, -0.30805061297699926, 0.02408554367752166, -0.05654866776461643, -0.7831292353698558]
 }
 tracks/11/type = "value"
 tracks/11/imported = false
@@ -158,3 +158,10 @@ tracks/12/keys = {
 "update": 0,
 "values": [Vector2(0, 0), Vector2(0, 0)]
 }
+metadata/anim_events = [{
+"name": "Hit",
+"string": "",
+"time": 0.6667
+}]
+metadata/hit_time = 0.6667
+metadata/sound_events = []

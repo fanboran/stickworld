@@ -26,6 +26,7 @@ const MENU_ITEMS: Array[Dictionary] = [
 	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.ACCENT},
 	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.NORMAL},
 	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.NORMAL},
+	{"id": "arena", "label": "战斗演练", "kind": StickKit.ButtonKind.NORMAL},
 	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.NORMAL},
 ]
 
@@ -88,6 +89,51 @@ func _on_menu_pressed(item: Dictionary) -> void:
 			_open_load_panel()
 		"settings":
 			_open_settings_panel()
+		"arena":
+			_open_arena_panel()
+
+
+## 战斗演练场选择面板（观察战斗表现用的测试场景入口，非正式玩法）。
+## 场景清单在此登记：名称 + 场景路径；新演练场景加一行即可。
+const ARENA_SCENES: Array[Dictionary] = [
+	{"name": "大乱斗观察场（12v12 混编自动互殴）", "path": "res://tests/dev/battle_arena.tscn"},
+]
+
+var _arena_panel: Control = null
+
+func _open_arena_panel() -> void:
+	if _arena_panel != null and is_instance_valid(_arena_panel):
+		_arena_panel.queue_free()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(dim)
+	_arena_panel = dim
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	dim.add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+	var title := Label.new()
+	title.text = "战斗演练场"
+	title.add_theme_font_size_override("font_size", 22)
+	vbox.add_child(title)
+	for scene_info in ARENA_SCENES:
+		var btn := StickKit.button(vbox, scene_info["name"],
+				func(): get_tree().change_scene_to_file(scene_info["path"]),
+				StickKit.ButtonKind.ACCENT, StickTokens.BTN_H)
+		vbox.add_child(btn)
+	var back := StickKit.button(vbox, "返回", _close_arena_panel,
+			StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+	vbox.add_child(back)
+
+
+func _close_arena_panel() -> void:
+	if _arena_panel != null and is_instance_valid(_arena_panel):
+		_arena_panel.queue_free()
 
 
 ## 启动新游戏：清读档意图 → 载入屏 → game_root

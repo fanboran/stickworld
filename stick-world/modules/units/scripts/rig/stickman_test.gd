@@ -3,6 +3,7 @@ extends Node2D
 ##
 ## WASD / 方向键 持续移动，自动加速→奔跑
 ## 1/2/3/4 切换 idle/walk/attack/dead 动画 | Q/E 缩放
+## T 切换武器（剑/矛/弓/镐/法杖）| B 切换盾牌
 
 # ===== 速度系统参数 =====
 # walk 动画 length=1.0s，2步/周期，每步 50px → 基准速度 100 px/s
@@ -28,6 +29,19 @@ var _startup_fix_elapsed := 0.0
 var _startup_done := false
 var _facing := 1  # 1=向右, -1=向左
 
+# ===== 武器调试（T/B） =====
+const WEAPON_PATHS := [
+	"res://modules/units/scenes/components/weapon_sword.tscn",
+	"res://modules/units/scenes/components/weapon_spear.tscn",
+	"res://modules/units/scenes/components/weapon_bow.tscn",
+	"res://modules/units/scenes/components/weapon_pickaxe.tscn",
+	"res://modules/units/scenes/components/weapon_magicstaff.tscn",
+]
+const WEAPON_NAMES := ["剑", "矛", "弓", "镐", "法杖"]
+const SHIELD_PATH := "res://modules/units/scenes/components/weapon_shield.tscn"
+var _weapon_idx := 0
+var _shield_on := false
+
 
 func _ready() -> void:
 	_rig = get_node("OutlineGroup/StickmanRig") as Node2D
@@ -39,7 +53,7 @@ func _ready() -> void:
 
 	_label = Label.new()
 	_label.position = Vector2(10, 10)
-	_label.text = "WASD/方向键 移动（持续按住加速→奔跑）| 1/2/3/4 切换动画 | Q/E 缩放"
+	_label.text = "WASD/方向键 移动（持续按住加速→奔跑）| 1/2/3/4 切换动画 | Q/E 缩放 | T 换武器 | B 盾牌"
 	add_child(_label)
 
 	_anim_label = Label.new()
@@ -48,6 +62,7 @@ func _ready() -> void:
 	_anim_label.text = "动画: idle | 速度: 0"
 	_anim_label.add_theme_font_size_override("font_size", 20)
 	add_child(_anim_label)
+	_update_weapon_label()
 
 
 func _input(event: InputEvent) -> void:
@@ -60,6 +75,29 @@ func _input(event: InputEvent) -> void:
 			KEY_4: _switch_anim("dead")
 			KEY_Q: _scale_factor *= 1.1; _apply_scale()
 			KEY_E: _scale_factor *= 0.9; _apply_scale()
+			KEY_T: _cycle_weapon()
+			KEY_B: _toggle_shield()
+
+
+## 切换主手武器（T 键，循环剑/矛/弓/镐/法杖）
+func _cycle_weapon() -> void:
+	_weapon_idx = (_weapon_idx + 1) % WEAPON_PATHS.size()
+	var scene := load(WEAPON_PATHS[_weapon_idx]) as PackedScene
+	if scene != null:
+		_rig.set("weapon_scene", scene)
+	_update_weapon_label()
+
+
+## 切换盾牌（B 键开/关）
+func _toggle_shield() -> void:
+	_shield_on = not _shield_on
+	_rig.set("offhand_scene", load(SHIELD_PATH) if _shield_on else null)
+	_update_weapon_label()
+
+
+func _update_weapon_label() -> void:
+	var wname: String = WEAPON_NAMES[_weapon_idx]
+	_label.text = "WASD/方向键 移动（持续按住加速→奔跑）| 1/2/3/4 切动画 | Q/E 缩放 | T 换武器 | B 盾牌\n武器: %s | 盾牌: %s" % [wname, "开" if _shield_on else "关"]
 
 
 func _process(delta: float) -> void:

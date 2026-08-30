@@ -67,8 +67,10 @@ func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO
 		return false
 	var behavior_name: String = _order_to_behavior(order_type)
 	var params: Dictionary = _order_to_params(order_type, target_pos)
+	# 队伍级目标点分配模式（反编译参考实装 D）：推进/冲刺横排散开，RALLY 围圈集合
+	var spread_mode: String = _order_to_spread(order_type)
 	# 通过指挥链下达（P0 source_tier=0 时无延迟）
-	_command_chain.deliver(order_type, squad_id, units, behavior_name, params, source_tier, 1)
+	_command_chain.deliver(order_type, squad_id, units, behavior_name, params, source_tier, 1, spread_mode)
 	# 发射信号
 	order_issued.emit(order_type, squad_id, source_tier)
 	if EventBus != null and EventBus.has_signal("order_issued"):
@@ -135,3 +137,15 @@ func _order_to_params(order_type: int, target_pos: Vector2) -> Dictionary:
 			return {}
 		_:
 			return {}
+
+
+## 号令类型 -> 队伍级目标点分配模式（反编译参考实装 D）：
+## "line" 推进横排散开（ADVANCE/SPRINT），"rally" 围圈集合，其余不散开。
+func _order_to_spread(order_type: int) -> String:
+	match order_type:
+		OrderType.ADVANCE_ALL, OrderType.SPRINT:
+			return "line"
+		OrderType.RALLY:
+			return "rally"
+		_:
+			return ""

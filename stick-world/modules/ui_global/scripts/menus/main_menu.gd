@@ -26,6 +26,8 @@ const MENU_ITEMS: Array[Dictionary] = [
 	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.ACCENT},
 	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.NORMAL},
 	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.NORMAL},
+	# 测试场景入口：仅开发构建显示（正式发布隐藏），字段 debug_only 过滤于 _build_menu
+	{"id": "arena", "label": "测试场景", "kind": StickKit.ButtonKind.NORMAL, "debug_only": true},
 	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.NORMAL},
 ]
 
@@ -59,6 +61,9 @@ func _build_title() -> void:
 
 func _build_menu() -> void:
 	for item in MENU_ITEMS:
+		# 开发专用入口（测试场景等）在非 debug 构建下不显示
+		if item.get("debug_only", false) and not OS.is_debug_build():
+			continue
 		var btn := StickKit.button(_menu_column, item["label"],
 				_on_menu_pressed.bind(item), item["kind"], StickTokens.BTN_H_LG)
 		if item["id"] == "continue":
@@ -88,6 +93,50 @@ func _on_menu_pressed(item: Dictionary) -> void:
 			_open_load_panel()
 		"settings":
 			_open_settings_panel()
+		"arena":
+			_open_arena_panel()
+
+
+## 测试场景选择面板（开发构建专用；非正式玩法入口）。
+## 场景清单在此登记：名称 + 场景路径；新测试场景加一行即可。
+const TEST_SCENES: Array[Dictionary] = [
+	{"name": "大乱斗观察场（12v12 混编自动互殴）", "path": "res://tests/dev/battle_arena.tscn"},
+]
+
+var _arena_panel: Control = null
+
+func _open_arena_panel() -> void:
+	if _arena_panel != null and is_instance_valid(_arena_panel):
+		_arena_panel.queue_free()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(dim)
+	_arena_panel = dim
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	dim.add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+	var title := Label.new()
+	title.text = "测试场景"
+	title.add_theme_font_size_override("font_size", 22)
+	vbox.add_child(title)
+	for scene_info in TEST_SCENES:
+		# StickKit.button 内部已挂到 vbox，不再手动 add_child（重复挂父会报错）
+		StickKit.button(vbox, scene_info["name"],
+				func(): get_tree().change_scene_to_file(scene_info["path"]),
+				StickKit.ButtonKind.ACCENT, StickTokens.BTN_H)
+	StickKit.button(vbox, "返回", _close_arena_panel,
+			StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+
+
+func _close_arena_panel() -> void:
+	if _arena_panel != null and is_instance_valid(_arena_panel):
+		_arena_panel.queue_free()
 
 
 ## 启动新游戏：清读档意图 → 载入屏 → game_root

@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+; 矛（Spearton）——数值直译自解包附件数据，挂载骨=新骨 weapon_hand：
+;   附件 = Spearton 皮肤 weapon 槽唯一附件（name→region "classic-spearton-spear-0"）：
+;           rot=-91.63  xy=(7.35,0.82)  s=0.85  wh=29x594（region 实际 19x380）
+;   数据源：external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt skins
+;   挂载骨世界角：Spine pickaxe1 @Spearton-Stand1 t=0 = 90.92（竖直上举，boneSpine
+;   取矛所属兵种自己的 Stand 动画，非 Swordwrath-Stand1 的 42.68——各兵种持骨姿态不同）；
+;   Godot weapon_hand @idle t=0 = 0.0（_faithful/rig_pose.json）
+;   Sprite.rotation = C − (90.92 + (-91.63)) − 0 = C + 0.71，C=0 → 0.71°（竖直、尖朝上）
+;   （C 标定同 weapon_sword.tscn：四候选对照，C=0 时矛/杖竖直与参考帧一致）
+;   Sprite.scale  = K×0.85×(29/19, 594/380)，K=64/134.71=0.475
+;   GripPoint = ( q.x/(29×0.85)×19 , −q.y/(594×0.85)×380 )，q=R(−91.63°)·(−xy)
+;               = (0.8, 5.5)：手握杆中部略偏柄端，与参考帧 ref_spear.png 手位一致
+[ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/spear.png" id="1_tex"]
+
+[node name="Spear" type="Node2D"]
+
+[node name="Sprite" type="Sprite2D" parent="."]
+rotation = 0.012392
+scale = Vector2(0.616, 0.631)
+texture = ExtResource("1_tex")
+
+[node name="GripPoint" type="Marker2D" parent="."]
+position = Vector2(0.8, 5.5)

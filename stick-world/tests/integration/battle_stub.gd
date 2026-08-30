@@ -1,6 +1,6 @@
 extends Node
 ## BattleInstance 最小桩（test_combat_control 用）：
-## 提供 is_active() / get_nearest_enemy() / get_cover() 供 BehaviorAttack 驱动。
+## 提供 is_active() / get_nearest_enemy() / get_enemies_of() / get_cover() 供 BehaviorAttack 驱动。
 
 var _units: Array = []
 var _enemies: Array = []
@@ -25,6 +25,11 @@ func get_nearest_enemy(unit: Node) -> Node:
 				best_dist = d
 				best = e
 	return best
+
+
+## TargetFinder 依赖：返回敌阵营单位（测试桩对任意 faction 返回同一批敌人）
+func get_enemies_of(_faction: int) -> Array:
+	return _enemies
 
 
 func get_cover() -> Node:

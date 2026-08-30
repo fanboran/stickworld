@@ -95,6 +95,9 @@ var _minimap: Control = null
 @warning_ignore("unused_private_class_variable")
 var _zoom_bar: Control = null
 
+## 武器调控面板（左上角，WeaponPanel；T/B 快捷键与面板共享状态）
+var _weapon_panel: Control = null
+
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
 ## PossessionInterface 实例引用（运行时由 SystemSetup 装配）
 var _possession_interface: Node = null
@@ -737,10 +740,49 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif ek.keycode == KEY_L:
 		_open_placeholder_panel("logistics")
 		get_viewport().set_input_as_handled()
+	# 武器调试（T 循环主手 / B 开关盾牌）：仅附身玩家可用，方便观察渲染
+	elif ek.keycode == KEY_T:
+		_debug_cycle_weapon()
+		get_viewport().set_input_as_handled()
+	elif ek.keycode == KEY_B:
+		_debug_toggle_shield()
+		get_viewport().set_input_as_handled()
 	# ESC：统一模态/暂停菜单栈控制（见 _handle_escape）
 	elif ek.keycode == KEY_ESCAPE:
 		if _handle_escape():
 			get_viewport().set_input_as_handled()
+
+
+## 武器调试：附身玩家循环主手武器（剑→矛→弓→镐→法杖）
+func _debug_cycle_weapon() -> void:
+	var player := get_player_entity()
+	if player == null:
+		return
+	var wm: Node = player.get_node_or_null("WeaponMount")
+	if wm == null:
+		return
+	var cur: int = wm.weapon_type
+	wm.weapon_type = (cur + 1) % 5
+	_update_debug_weapon_hud()
+
+
+## 武器调试：附身玩家开关盾牌
+func _debug_toggle_shield() -> void:
+	var player := get_player_entity()
+	if player == null:
+		return
+	var wm: Node = player.get_node_or_null("WeaponMount")
+	if wm == null:
+		return
+	wm.shield_enabled = not wm.shield_enabled
+	_update_debug_weapon_hud()
+
+
+## 刷新武器调控面板（T/B 快捷键切换后调用；面板自读附身玩家状态）。
+## 旧 CanvasLayer 文字标签已迁移到 WeaponPanel（UI 槽位规范）。
+func _update_debug_weapon_hud() -> void:
+	if _weapon_panel != null and _weapon_panel.has_method("refresh"):
+		_weapon_panel.refresh()
 
 
 ## 打开帝国功能空面板（经 ui_placeholder 模块，系统落地后替换真实面板）。

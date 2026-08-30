@@ -5,7 +5,7 @@ extends RefCounted
 
 const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
 
-const DEFAULT_WEAPON_PATH := "res://modules/units/scenes/components/weapon_sword_placeholder.tscn"
+const DEFAULT_WEAPON_PATH := "res://modules/units/scenes/components/weapon_sword.tscn"
 
 
 # ============================================================
@@ -46,7 +46,8 @@ static func attach(scene: PackedScene, bone_id: int, bones: Dictionary) -> Node2
 	if grip:
 		instance.position = marker.position - grip.position
 		instance.rotation = marker.rotation - grip.rotation
-	# 渲染层级：武器随角色（继承父级 z，不做强制抬升），与角色同图层 y-sort
+	# 渲染层级：高于链式肢体分层（填充最高 z=10），武器始终在手前
+	instance.z_index = 20
 	return instance
 
 

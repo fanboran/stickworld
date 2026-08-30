@@ -1,0 +1,28 @@
+[gd_scene load_steps=2 format=3]
+
+; 剑（Swordwrath）——数值直译自解包附件数据，挂载骨=新骨 weapon_hand：
+;   附件 = Swordwrath 皮肤 weapon 槽唯一附件（键名 "weapon"，name 字段→region "pickaxe"）：
+;           rot=-89.53  xy=(65.68,4.98)  s=0.65  wh=86x310
+;           （region "pickaxe" 55x198 = 粗制带钉棒刃，游戏里 Swordwrath 的真剑；
+;             旧版错裁 Swordbasic 82x300，那是 SwordwrathUnlocked 皮肤的长剑）
+;   数据源：external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt skins
+;   挂载骨世界角：Spine pickaxe1 @Swordwrath-Stand1 t=0 = 42.68（_faithful/spine_pose.json）；
+;   Godot weapon_hand @idle t=0 = 0.0（_faithful/rig_pose.json）
+;   Sprite.rotation = C − (42.68 + (-89.53)) − 0 = C + 46.85，C=0 → 46.85°
+;   （C 标定：四候选 {0,±90,180} 截图对照忠实参考帧 _faithful/refs/ref_sword.png，
+;     C=0 时剑与原版同向——前上方斜持 ~43°、尖朝上，手握柄端；
+;     旧参考帧"剑竖直"系 render_swl_ref.py 旧版把局部角 84.97 当世界角的 bug）
+;   Sprite.scale  = K×0.65×(86/55, 310/198)，K=64/134.71=0.475（forearm 长度比）
+;   GripPoint = ( q.x/(86×0.65)×55 , −q.y/(310×0.65)×198 )，q=R(−89.53°)·(−xy)
+;               = (4.4, 64.6)：手握纹理下端柄部（y-down 正=中心下方），与参考帧手位一致
+[ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/sword.png" id="1_tex"]
+
+[node name="Sword" type="Node2D"]
+
+[node name="Sprite" type="Sprite2D" parent="."]
+rotation = 0.81772
+scale = Vector2(0.483, 0.483)
+texture = ExtResource("1_tex")
+
+[node name="GripPoint" type="Marker2D" parent="."]
+position = Vector2(4.4, 64.6)

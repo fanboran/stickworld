@@ -32,6 +32,9 @@ extends Node
 var hp: float = 0.0
 ## 当前士气
 var morale: float = 0.0
+## 死亡原因：最后一击是否爆头（原版 Kill(isHeadShot) 参数——爆头致死播
+## Death-Headshot 专属死亡动画）。由 DamagePipeline 在爆头致死时置位。
+var died_from_headshot: bool = false
 
 
 func _ready() -> void:
@@ -75,6 +78,17 @@ func restore_morale(amount: float) -> void:
 	amount = maxf(0.0, amount)
 	var old_morale: float = morale
 	morale = minf(max_morale, morale + amount)
+	if old_morale != morale:
+		morale_changed.emit(old_morale, morale)
+
+
+## 损失士气（伤亡恐慌/士气惩罚；不影响 HP，与 take_damage 的伴随士气损失区分）。
+func lose_morale(amount: float) -> void:
+	amount = maxf(0.0, amount)
+	if is_dead():
+		return
+	var old_morale: float = morale
+	morale = maxf(0.0, morale - amount)
 	if old_morale != morale:
 		morale_changed.emit(old_morale, morale)
 

@@ -12,6 +12,10 @@ extends Node
 ##
 ## 小队 = L1 MILITARY 组织节点（§8.3: "任命排长 = 创建 L1 组织节点"）。
 ## 本系统在组织模块之上封装小队级别的便捷 API，并维护 unit<->squad 双向映射。
+##
+## 队伍级目标决策（反编译参考实装 D-B）：本系统每 SQUAD_DECISION_INTERVAL 秒为每个
+## 战斗小队选一个**共享攻击目标**（排长决策 → 队员执行），队员在攻击行为里优先用
+## 队伍目标（集火），否则各自寻敌。参考遗产 TeamAi / 传奇单位组目标同步。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 小队对应的组织层级（L1 = 最低层，排级）
@@ -20,6 +24,16 @@ const SQUAD_TIER := 1
 const DEFAULT_PRESET_ID := "fp_combat_squad"
 ## 预设配置文件路径
 const PRESET_CONFIG_PATH := "res://config/formations/formation_presets.tres"
+## 队形散开间距（px）：推进横排相邻队员间隔（反编译参考实装 D）
+const SPREAD_SPACING: float = 32.0
+## 集合围圈半径（px）：RALLY 集结时队员绕圈距离
+const RALLY_RADIUS: float = 24.0
+## 队伍级目标决策间隔（秒）：排长每此间隔重选一次共享攻击目标（反编译参考实装 D-B）
+const SQUAD_DECISION_INTERVAL: float = 0.5
+## 指挥官光环士气恢复速率（每秒；排长存活时队员士气恢复，AI 完善批次 3）
+const LEADER_MORALE_AURA: float = 3.0
+## 公共目标选择核心（反编译参考实装 A；同模块 combat，显式 preload）
+const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
 
 ## 工作类型（RimWorld 式抽象职责，见 docs 设计 §二）
 const WorkType := {
@@ -49,6 +63,10 @@ var _squad_counter: int = 0
 var _presets: Dictionary = {}
 ## 预设是否已加载
 var _presets_loaded: bool = false
+## 队伍级共享攻击目标：squad_id -> Node（排长决策；反编译参考实装 D-B）
+var _squad_targets: Dictionary = {}
+## 队伍级目标决策计时器（累计到 SQUAD_DECISION_INTERVAL 触发一轮决策）
+var _squad_decision_timer: float = 0.0
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -130,6 +148,33 @@ func _process(_delta: float) -> void:
 			pass
 	for sid in to_disband:
 		disband_squad(sid)
+	# 队伍级目标决策（反编译参考实装 D-B）：排长决策 → 队员执行
+	_decide_squad_targets(_delta)
+	# 指挥官光环（AI 完善批次 3）：排长存活 → 队员士气恢复
+	_apply_leader_morale_aura(_delta)
+
+
+## 指挥官光环（行业最佳实践）：战斗小队排长存活时，队员持续恢复士气（指挥提振）。
+func _apply_leader_morale_aura(delta: float) -> void:
+	if _squads.is_empty():
+		return
+	for squad_id in _squads.keys():
+		if not is_combat_squad(squad_id):
+			continue
+		var leader: Node = get_squad_leader(squad_id)
+		if leader == null or not is_instance_valid(leader) \
+				or (leader.has_method("is_dead") and leader.is_dead()):
+			continue
+		for u in _squads[squad_id]["units"]:
+			if u == leader or not is_instance_valid(u):
+				continue
+			if u.has_method("is_dead") and u.is_dead():
+				continue
+			if not u.has_method("get_health"):
+				continue
+			var health: Node = u.get_health()
+			if health != null and health.has_method("restore_morale"):
+				health.restore_morale(LEADER_MORALE_AURA * delta)
 
 
 # ─────────────────────────────── 核心 API ────────────────────────────────
@@ -210,6 +255,7 @@ func disband_squad(squad_id: String) -> void:
 		_org_api.disband_organization(squad_id)
 	# 移除本地追踪
 	_squads.erase(squad_id)
+	_squad_targets.erase(squad_id)
 	squad_disbanded.emit(squad_id)
 
 
@@ -287,6 +333,83 @@ func get_squad_leader(squad_id: String) -> Node:
 	if not _squads.has(squad_id):
 		return null
 	return _squads[squad_id]["leader"]
+
+
+## 队伍级目标点分配（反编译参考实装 D）：按单位在队内序号计算个性化目标点，
+## 取代"全体同一点"——推进横排展开、集合围圈，配合实体 separation 防叠人。
+## mode: "line" 横排散开（推进/冲刺）/ "rally" 围圈（集合）/ 其它 返回 base_pos。
+## 参考：遗产 TeamAi/Formation、传奇 Formations/FormationMember。
+func get_squad_dest(squad_id: String, unit: Node, base_pos: Vector2, mode: String = "") -> Vector2:
+	if not _squads.has(squad_id) or unit == null or not is_instance_valid(unit):
+		return base_pos
+	var units: Array = _squads[squad_id]["units"]
+	var idx: int = units.find(unit)
+	if idx < 0:
+		return base_pos
+	var n: int = units.size()
+	if n <= 1:
+		return base_pos
+	if mode == "line":
+		# 垂直于移动方向横排展开：间距 SPREAD_SPACING，相对中心左右交替
+		var dir: Vector2 = (base_pos - unit.global_position).normalized() if base_pos != unit.global_position else Vector2.RIGHT
+		var perp := Vector2(-dir.y, dir.x)
+		var offset: float = (idx - float(n - 1) / 2.0) * SPREAD_SPACING
+		return base_pos + perp * offset
+	if mode == "rally":
+		# 围圈集合：队员绕集合点一圈（RALLY 紧凑成团）
+		var angle: float = idx * TAU / float(n)
+		return base_pos + Vector2(cos(angle), sin(angle)) * RALLY_RADIUS
+	return base_pos
+
+
+## 队伍级目标决策（反编译参考实装 D-B）：每 SQUAD_DECISION_INTERVAL 秒为每个战斗小队
+## 选一个共享攻击目标（排长决策 → 队员执行）。由 _process 调用。
+func _decide_squad_targets(delta: float) -> void:
+	if _squads.is_empty():
+		_squad_targets.clear()
+		return
+	_squad_decision_timer += delta
+	if _squad_decision_timer < SQUAD_DECISION_INTERVAL:
+		return
+	_squad_decision_timer = 0.0
+	for squad_id in _squads.keys():
+		if not is_combat_squad(squad_id):
+			_squad_targets.erase(squad_id)
+			continue
+		var leader: Node = get_squad_leader(squad_id)
+		var rep: Node = leader
+		# 排长失效时退化到第一个存活队员
+		if rep == null or not is_instance_valid(rep) or (rep.has_method("is_dead") and rep.is_dead()):
+			rep = null
+			for u in _squads[squad_id]["units"]:
+				if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+					rep = u
+					break
+		if rep == null:
+			_squad_targets.erase(squad_id)
+			continue
+		# 经队员拿 battle（不持有 battle 引用，避免耦合）；无 battle 不选目标
+		var battle: Node = rep.get_battle_instance() if rep.has_method("get_battle_instance") else null
+		if battle == null or not is_instance_valid(battle):
+			_squad_targets.erase(squad_id)
+			continue
+		var target: Node = ScriptTargetFinder.find_target(rep, { "battle": battle })
+		if target == null:
+			_squad_targets.erase(squad_id)
+		else:
+			_squad_targets[squad_id] = target
+
+
+## 队伍级共享攻击目标（队员查询；含有效性校验——目标死亡/失效返回 null）。
+func get_squad_target(squad_id: String) -> Node:
+	if not _squad_targets.has(squad_id):
+		return null
+	var t: Node = _squad_targets[squad_id]
+	if t == null or not is_instance_valid(t):
+		return null
+	if t.has_method("is_dead") and t.is_dead():
+		return null
+	return t
 
 
 func get_unit_squad(unit: Node) -> String:

@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+; 镐（Miner）——数值直译自解包附件数据，挂载骨=新骨 weapon_hand：
+;   附件 = Miner 皮肤 weapon 槽唯一附件（name→region "pickaxe1 (2)"）：
+;           rot=-90.49  xy=(68.28,-0.26)  s=0.69  wh=176x297（region 实际 113x190）
+;   数据源：external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt skins
+;   挂载骨世界角：Spine pickaxe1 @Miner-Stand1 t=0 = 123.96（镐扛肩姿势，boneSpine
+;   取 Miner 自己的 Stand 动画）；Godot weapon_hand @idle t=0 = 0.0
+;   Sprite.rotation = C − (123.96 + (-90.49)) − 0 = C − 33.47，C=0 → −33.47°
+;   （镐头朝后上、柄斜下——参考帧 ref_pickaxe.png 同款扛肩朝向）
+;   Sprite.scale  = K×0.69×(176/113, 297/190)，K=64/134.71=0.475
+;   GripPoint = ( q.x/(176×0.69)×113 , −q.y/(297×0.69)×190 )，q=R(−90.49°)·(−xy)
+;               = (0.3, 63.3)：手握柄端（纹理下端），与参考帧手位一致。
+;               旧版 (0.3, -63.3) y 符号反（握到镐头上），系旧链漏了 y 翻转
+[ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/pickaxe.png" id="1_tex"]
+
+[node name="Pickaxe" type="Node2D"]
+
+[node name="Sprite" type="Sprite2D" parent="."]
+rotation = -0.5843
+scale = Vector2(0.511, 0.512)
+texture = ExtResource("1_tex")
+
+[node name="GripPoint" type="Marker2D" parent="."]
+position = Vector2(0.3, 63.3)

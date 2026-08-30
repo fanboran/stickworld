@@ -21,6 +21,12 @@ extends RefCounted
 ##   - fixate_on: Node        盯防指定目标（存活且在 range 内则直接返回它）
 ##   - ignore_current_attackers: bool  忽略正被围攻的目标（battle.register_attacker 记录；防集火重叠）
 ##   - max_attackers_per_target: int   每目标最多攻击者数（配合上者，缺省 3）
+##
+## find_targets_in_arc() 额外支持（原版 MeleeAttack.NumberOfUnitsThatCanHit 的 AOE 挥击）：
+##   - facing: Vector2        挥击朝向（单位向量；缺省按 unit.get_facing() 取 ±x）
+##   - half_angle: float      扇形半角（度）
+##   - max_count: int         最多返回几个目标
+##   - force_first: Node      强制排在首位的单位（玩家/AI 锁定的主目标）
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 残血优先时的 HP 权重（score = distance + (1 - hp_ratio) * HP_WEIGHT）
@@ -47,9 +53,8 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 
 	# 候选敌人：优先显式传入，否则按阵营从 battle 取
 	var enemies: Array = opts.get("enemies", [])
-	if enemies.is_empty() and battle.has_method("get_enemies_of"):
-		var faction: int = unit.faction_id if "faction_id" in unit else 0
-		enemies = battle.get_enemies_of(faction)
+	if enemies.is_empty():
+		enemies = _collect_enemies(unit, battle)
 	if enemies.is_empty():
 		return null
 
@@ -84,6 +89,70 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 	if best == null and ignore_attackers:
 		return _nearest_enemy(unit, enemies, range)
 	return best
+
+
+## 候选敌人枚举（显式 opts.enemies 为空时按阵营从 battle 取）
+static func _collect_enemies(unit: Node, battle: Node) -> Array:
+	if battle == null or not battle.has_method("get_enemies_of"):
+		return []
+	var faction: int = unit.faction_id if "faction_id" in unit else 0
+	return battle.get_enemies_of(faction)
+
+
+## AOE 挥击目标查询（原版 MeleeAttack_Prototype.NumberOfUnitsThatCanHit 语义）：
+## 一次挥击打中身前**扇形**内的多个敌人，返回按距离升序的目标数组。
+##
+## 语义澄清：NumberOfUnitsThatCanHit 是"一次挥击能打中几人"（AOE），
+## 不是"最多几个人同时围攻同一个目标"（防集火）——后者是本文件
+## max_attackers_per_target 的职责，两者曾在本项目被混为一谈。
+##
+## opts 见文件头 find_target() 说明；max_count <= 0 时不限制人数。
+static func find_targets_in_arc(unit: Node, opts: Dictionary = {}) -> Array:
+	var out: Array = []
+	if unit == null or not is_instance_valid(unit):
+		return out
+	var battle: Node = opts.get("battle", null)
+	if battle == null and unit.has_method("get_battle_instance"):
+		battle = unit.get_battle_instance()
+	var enemies: Array = opts.get("enemies", [])
+	if enemies.is_empty():
+		enemies = _collect_enemies(unit, battle)
+	if enemies.is_empty():
+		return out
+
+	var range: float = opts.get("range", -1.0)
+	var max_count: int = opts.get("max_count", 1)
+	var half_angle: float = opts.get("half_angle", 55.0)
+	var facing: Vector2 = opts.get("facing", Vector2.ZERO)
+	if facing == Vector2.ZERO:
+		var f: int = unit.get_facing() if unit.has_method("get_facing") else 1
+		facing = Vector2(float(f), 0.0)
+	facing = facing.normalized()
+	var cos_limit: float = cos(deg_to_rad(half_angle))
+
+	# 主目标强制排首位（玩家/AI 锁定的人必须在结算名单里，否则"打不到我盯的人"）
+	var force_first: Node = opts.get("force_first", null)
+	if force_first != null and is_instance_valid(force_first) and not _is_dead(force_first):
+		if facing.dot((force_first.global_position - unit.global_position).normalized()) >= cos_limit:
+			out.append(force_first)
+
+	var scored: Array = []
+	for e in enemies:
+		if e == null or not is_instance_valid(e) or _is_dead(e) or e == force_first:
+			continue
+		var to_e: Vector2 = e.global_position - unit.global_position
+		var d: float = to_e.length()
+		if range > 0.0 and d > range:
+			continue
+		if to_e.normalized().dot(facing) < cos_limit:
+			continue
+		scored.append([d, e])
+	scored.sort_custom(func(a, b): return a[0] < b[0])
+	for pair in scored:
+		out.append(pair[1])
+	if max_count > 0 and out.size() > max_count:
+		out = out.slice(0, max_count)
+	return out
 
 
 ## 兜底最近目标（防集火过滤导致无目标可打时使用；跳过围攻数上限）。

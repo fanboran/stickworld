@@ -22,6 +22,8 @@ const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 var _runner: TestRunner
 var _helper: CombatTestSetup
 var _tests: Array = []
+## 攻击方锚点（_pin_pair 用：把单位钉回这里，排除 AI 位移干扰）
+var _atk_anchor: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -58,6 +60,21 @@ func _run_tests_async() -> void:
 	get_tree().quit(exit_code)
 
 
+## 把两个单位钉成固定间距（AI 会各自走开，测试期间需保持几何关系）。
+## atk 保持原位，def 固定在 atk 右侧 gap 像素处。
+func _pin_pair(atk: Node, def: Node, gap: float) -> void:
+	if atk == null or def == null:
+		return
+	if not is_instance_valid(atk) or not is_instance_valid(def):
+		return
+	atk.global_position = _atk_anchor
+	def.global_position = _atk_anchor + Vector2(gap, 0.0)
+	if atk.has_method("ai_stop"):
+		atk.ai_stop()
+	if def.has_method("ai_stop"):
+		def.ai_stop()
+
+
 ## 获取单位武器挂载点
 func _get_weapon(unit: Node) -> Node:
 	if unit == null or not unit.has_method("get_weapon"):
@@ -92,8 +109,8 @@ func _test_hit_in_range() -> void:
 		_runner.assert_true(false, "单位缺失")
 		return
 	# 把防守方移到攻击方 60px 内（近战剑长 80px）
-	var atk_pos: Vector2 = atk.global_position
-	def.global_position = atk_pos + Vector2(60, 0)
+	_atk_anchor = atk.global_position
+	_pin_pair(atk, def, 60.0)
 	await get_tree().process_frame
 	var wm: Node = _get_weapon(atk)
 	if wm == null:
@@ -107,10 +124,16 @@ func _test_hit_in_range() -> void:
 	var launched: bool = result.get("hit", false) or result.get("reason", "") == "striking"
 	_runner.assert_true(launched, "近距离应发起攻击，结果: %s" % str(result))
 	if launched:
-		# 轮询等待命中帧结算（STRIKE_FRAME_RATIO=0.45 × 动画 ≈0.6s）
-		# 击退冲量衰减 700/s，需在结算后立即采样：先等到 HP 变化那一帧抓击退
+		# 轮询等待命中帧结算（动画内嵌 Hit 事件，Swordwrath-Attack1 Hit@1.0s）
+		# 击退冲量衰减 700/s，需在结算后立即采样：先等到 HP 变化那一帧抓击退。
+		# 每帧把双方钉回原位：两个单位都由 AI 接管，命中帧（~1s）之前早跑开了，
+		# 不钉住就会因"目标跑出射程"被判空挥。
+		# 按**墙钟时间**轮询而非固定帧数：headless 无 vsync 时 process_frame 能跑到
+		# 120+ fps，固定 120 帧只覆盖不到 1 秒——而命中帧在动画 1.0s 处，会等不到。
 		var kb_captured: Vector2 = Vector2.ZERO
-		for i in range(120):
+		var t_start: int = Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t_start < 4000:
+			_pin_pair(atk, def, 60.0)
 			await get_tree().process_frame
 			var hp_now: float = def.get_health().hp if def.get_health() != null else 0.0
 			if hp_now < hp_before:
@@ -200,3 +223,4 @@ func _test_cooldown() -> void:
 	var second: Dictionary = wm.perform_attack(def)
 	_runner.assert_true(not second.get("hit", false), "冷却中第二次攻击应被拒绝")
 	_runner.assert_equal(second.get("reason", ""), "cooldown", "应拒绝为 cooldown")
+

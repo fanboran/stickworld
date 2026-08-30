@@ -32,15 +32,10 @@ const ANIM_SPEED_MULT: float = 1.4
 const IDLE_THRESHOLD: float = 5.0
 ## 火柴人渲染缩放（对齐 stickman_test.BASE_SCALE * 1.5，适配 DESIGN_HEIGHT=1080）
 const BASE_SCALE: float = 0.5
-## 主手武器类型 -> 攻击动画名（对应 WeaponMount.WeaponType 顺序：
-## 0=SWORD 1=SPEAR 2=BOW 3=PICKAXE 4=STAFF）
-const WEAPON_ATTACK_ANIM: Dictionary = {
-	0: "attack",          # SWORD：剑挥砍（Swordwrath-Attack1）
-	1: "attack_spear",    # SPEAR：矛刺（Spearton-Attack1）
-	2: "attack_bow",      # BOW：拉弓（Archidon-Draw）
-	3: "attack_pickaxe",  # PICKAXE：镐挥（Miner-Attack1）
-	4: "attack_staff",    # STAFF：法杖施法（Magikill-Spell1）
-}
+## 主手武器类型 -> 攻击动画名：单一真相源在 StickmanAnims.WEAPON_ATTACK_ANIM。
+## 表现侧（本文件 play_attack）与战斗侧（weapon_mount 订阅命中帧事件）共用同一张表，
+## 避免"播矛刺动画、却按剑的命中帧结算"的错配。
+const WEAPON_ATTACK_ANIM: Dictionary = preload("res://modules/units/scripts/rig/stickman_anims.gd").WEAPON_ATTACK_ANIM
 
 ## 视觉控制器组件脚本（动画播放/头顶进度条）
 const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/entity/visual_controller.gd")
@@ -857,11 +852,15 @@ func get_role() -> String:
 
 # ─────────────────────────────── 战斗 API（§8）────────────────────────────────
 
-## 死亡处理：停止移动、播放死亡动画、禁用受击、通知战斗实例
+## 死亡处理：停止移动、播放死亡动画、禁用受击、通知战斗实例。
+## 爆头致死播 Death-Headshot 专属动画（原版 Kill(isHeadShot) 分家语义）。
 func _on_died() -> void:
 	ai_stop()
 	velocity = Vector2.ZERO
-	_visual.play("dead")
+	var dead_anim: String = "dead"
+	if health_component != null and health_component.died_from_headshot:
+		dead_anim = "dead_headshot"
+	_visual.play(dead_anim)
 	# 禁用 hitbox 避免继续被攻击
 	if hitbox != null:
 		hitbox.set_deferred("monitorable", false)

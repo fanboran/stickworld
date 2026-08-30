@@ -4,8 +4,9 @@ extends Area2D
 ##
 ## 复刻 SWL Arrow 类特性：
 ## - 直线飞行，命中实体（BODY 层）或达最大射程
-## - 爆头判定 causesHeadShotAnimation：命中点在目标上部 1/4 → 爆头（管线加成+爆头动画）
-## - 插地 doesStickIn：射程尽头的箭插在地面，停留一段时间后淡出
+## - 爆头判定 causesHeadShotAnimation：命中点在目标上部 1/4 → 爆头（管线加值+爆头死亡动画）
+## - 插身 doesStickIn：命中后箭钉在受击者身上，随其移动，停留一段时间后淡出
+##   （原版"插身上"与 InGroundArrows"插地"是两条路径；我们射程尽头就地淡出，等价简化）
 ## - 对雕像减伤 0.3 / 对巨人减伤 0.66（DamagePipeline 内处理）
 ## - 伤害走 DamagePipeline 单入口（复刻 Unit.Damage 语义）
 ## - 拉弓力度 drawPower 决定伤害（WeaponMount 传入）
@@ -34,10 +35,13 @@ var _target: Node = null
 var _traveled: float = 0.0
 ## 拉弓力度 0~1（SWL drawPower：满弓伤害更高）
 var _draw_power: float = 1.0
-## 已插地（停止飞行，等待淡出）
+## 已插地/插身（停止飞行，等待淡出）
 var _stuck: bool = false
 ## 插地淡出计时
 var _stuck_timer: float = 0.0
+## 命中后是否插在受击者身上（原版 Arrow.doesStickIn 字段：插身上的箭 ≠
+## InGroundArrows 插地的箭，两条路径）。true = 命中后钉在目标身上随其移动。
+@export var does_stick_in: bool = true
 
 
 ## 发射参数：方向、伤害、射手、目标、拉弓力度（0~1）
@@ -108,6 +112,15 @@ func _hit(target: Node) -> void:
 	p.type = DamagePipeline.DAMAGE_TYPE.RANGED
 	# 爆头：箭命中点在目标上部（causesHeadShotAnimation 语义）
 	p.is_head_shot = _is_headshot(target, global_position)
+	# 爆头加值/暴击参数取自射手的武器配置（原版 Unit.headShotBonusDamage 等字段
+	# 是**每单位**配置的，不在管线里写死）
+	var wm: Node = _shooter.get_node_or_null("WeaponMount") if _shooter != null else null
+	if wm != null:
+		p.head_shot_bonus_damage = _num(wm, "head_shot_bonus_damage", p.head_shot_bonus_damage)
+		p.crit_damage_multiplier = _num(wm, "crit_damage_multiplier", p.crit_damage_multiplier)
+		p.crit_self_damage = _num(wm, "crit_bonus_damage_inflicted_to_self", p.crit_self_damage)
+		if _num(wm, "crit_chance", 0.0) > 0.0 and randf() < _num(wm, "crit_chance", 0.0):
+			p.is_crit = true
 	var dealt: float = DamagePipeline.apply(target, p)
 	# 登记攻击者（防集火；与近战一致）
 	if _shooter != null and _shooter.has_method("get_battle_instance"):
@@ -116,7 +129,33 @@ func _hit(target: Node) -> void:
 			battle.register_attacker(target, _shooter)
 	if dealt > 0.0 and target.has_method("apply_hit_reaction"):
 		target.apply_hit_reaction(_dir, dealt * KNOCKBACK_PER_DAMAGE)
-	queue_free()
+	# doesStickIn：箭钉在受击者身上随其移动，停留后淡出；否则就地消失
+	if does_stick_in and is_instance_valid(target):
+		_stick_into(target)
+	else:
+		queue_free()
+
+
+## 插在受击者身上：停用碰撞，换父到目标节点（保持世界位姿——箭钉在命中点，
+## 跟随单位移动），复用插地淡出计时。目标被释放时箭随场景树一并消失。
+func _stick_into(target: Node) -> void:
+	_stuck = true
+	_stuck_timer = 0.0
+	set_deferred("monitoring", false)
+	var xf: Transform2D = global_transform
+	var parent: Node = get_parent()
+	if parent != null:
+		parent.remove_child(self)
+	target.add_child(self)
+	global_transform = xf
+
+
+## 读取节点上的数值属性（属性不存在或类型不符时返回缺省值）。
+static func _num(node: Node, prop: String, fallback: float) -> float:
+	if node == null or not prop in node:
+		return fallback
+	var v: Variant = node.get(prop)
+	return float(v) if v != null else fallback
 
 
 ## 插地：箭停在原地并倾斜，等待淡出（复刻 SetSpriteRendererForInGround + fadeOutOver）

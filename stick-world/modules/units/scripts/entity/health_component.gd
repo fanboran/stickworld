@@ -32,6 +32,9 @@ extends Node
 var hp: float = 0.0
 ## 当前士气
 var morale: float = 0.0
+## 死亡原因：最后一击是否爆头（原版 Kill(isHeadShot) 参数——爆头致死播
+## Death-Headshot 专属死亡动画）。由 DamagePipeline 在爆头致死时置位。
+var died_from_headshot: bool = false
 
 
 func _ready() -> void:

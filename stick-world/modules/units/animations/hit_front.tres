@@ -26,3 +26,6 @@ tracks/1/keys = {
 "update": 0,
 "values": [-0.3342305517569141, -0.312763001957384, -0.1192059879112128, -0.3342305517569141]
 }
+metadata/anim_events = []
+metadata/hit_time = -1.0
+metadata/sound_events = []

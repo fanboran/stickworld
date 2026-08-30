@@ -12,7 +12,7 @@ tracks/0/keys = {
 "times": PackedFloat32Array(0, 1, 2),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [0.32532937257174305, 0.32532937257174305, 0.32532937257174305]
+"values": [0.35315091461676207, 0.33854345753968207, 0.33062008580909436]
 }
 tracks/1/type = "value"
 tracks/1/imported = false
@@ -24,7 +24,7 @@ tracks/1/keys = {
 "times": PackedFloat32Array(0, 1, 2),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [-1.3285446266180838, -1.3098696036217443, -1.3285446266180836]
+"values": [-1.1810126222531698, -1.1398629607587434, -1.1828668315229451]
 }
 tracks/2/type = "value"
 tracks/2/imported = false
@@ -36,7 +36,7 @@ tracks/2/keys = {
 "times": PackedFloat32Array(0, 1, 2),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [-0.47630035286925254, -0.4576253298729133, -0.47630035286925254]
+"values": [-0.5214127710067321, -0.5045963180784654, -0.4963619640693124]
 }
 tracks/3/type = "value"
 tracks/3/imported = false
@@ -48,7 +48,7 @@ tracks/3/keys = {
 "times": PackedFloat32Array(0, 1, 2),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [-0.6023131248632431, -0.5729915934297385, -0.6023131248632433]
+"values": [-0.5374303179819412, -0.5517194476429162, -0.5368504759751616]
 }
 tracks/4/type = "value"
 tracks/4/imported = false
@@ -60,7 +60,7 @@ tracks/4/keys = {
 "times": PackedFloat32Array(0, 1, 2),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [-1.0482447487477944, -1.0295697257514551, -1.0482447487477944]
+"values": [-1.0339737840310572, -1.0541032866781066, -1.042418335084395]
 }
 tracks/5/type = "value"
 tracks/5/imported = false
@@ -72,7 +72,7 @@ tracks/5/keys = {
 "times": PackedFloat32Array(0, 1, 2),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [-1.0208430794914833, -1.0021680564951438, -1.0208430794914831]
+"values": [-1.0377203590352553, -0.9957518042129162, -1.023041289857015]
 }
 tracks/6/type = "value"
 tracks/6/imported = false
@@ -84,5 +84,8 @@ tracks/6/keys = {
 "times": PackedFloat32Array(0, 1, 2),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [Vector2(0, 0), Vector2(0, 0), Vector2(0, 0)]
+"values": [Vector2(0, -0.34439445), Vector2(0, -0.34439445), Vector2(0, -0.34439445)]
 }
+metadata/anim_events = []
+metadata/hit_time = -1.0
+metadata/sound_events = []

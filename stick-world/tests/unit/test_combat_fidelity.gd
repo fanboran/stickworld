@@ -1,7 +1,7 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：武器/战斗翻译保真度（审计 docs/技术/规范/翻译保真度审计-武器战斗.md 补译项）。
+## 单元测试：武器/战斗翻译保真度（审计 docs/审计/专项/翻译保真度-武器战斗.md 补译项）。
 ##
 ## 覆盖"译走样/漏译"的补译结果，防止回退：
 ##   #1 命中帧读动画内嵌 Hit 事件真值（不再写死 0.45）

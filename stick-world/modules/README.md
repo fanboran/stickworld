@@ -995,7 +995,8 @@ config/
 | 开发规范               | [`docs/技术/规范/开发指南.md`](file:///f:/VSCode/game-2/docs/技术/规范/开发指南.md)                   |
 | 建筑系统教程             | [`docs/技术/教程/建筑系统教程.md`](file:///f:/VSCode/game-2/docs/技术/教程/建筑系统教程.md)               |
 | 项目进度               | [`docs/项目/项目进度.md`](file:///f:/VSCode/game-2/docs/项目/项目进度.md)                         |
-| GDD vs 实现差异        | [`docs/项目/GDD与实现差异分析.md`](file:///f:/VSCode/game-2/docs/项目/GDD与实现差异分析.md)             |
+| GDD vs 实现差异        | [`docs/审计/专项/GDD与实现差异分析.md`](file:///f:/VSCode/game-2/docs/审计/专项/GDD与实现差异分析.md)         |
+| 全项目审计快照           | [`docs/审计/全项目快照/2026-08-30.md`](file:///f:/VSCode/game-2/docs/审计/全项目快照/2026-08-30.md)     |
 | 贡献指南               | [`docs/CONTRIBUTING.md`](file:///f:/VSCode/game-2/docs/CONTRIBUTING.md)               |
 | 文档总索引              | [`docs/README.md`](file:///f:/VSCode/game-2/docs/README.md)                           |
 

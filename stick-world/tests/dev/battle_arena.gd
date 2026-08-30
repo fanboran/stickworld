@@ -35,17 +35,30 @@ func _ready() -> void:
 
 
 func _spawn_and_start() -> void:
-	# 等地图与系统装配完成
+	# 等默认村图装配完成
 	for i in 10:
 		await get_tree().process_frame
+	# 切到空旷战场地图（village 是玩家村，建筑/资源点干扰观察）
+	var loader: Node = _game_root.get("scene_loader")
+	if loader != null and loader.has_method("load_map"):
+		loader.load_map("battlefield")
+		# 等新图装配（旧图延迟销毁，get_current_map 稳定到 battlefield 再继续）
+		for i in 20:
+			await get_tree().process_frame
+			var m: Node2D = _game_root.get_current_map()
+			if m != null and "battlefield" in str(m.scene_file_path):
+				break
 	var map: Node2D = _game_root.get_current_map()
 	if map == null:
 		push_error("[Arena] 地图未加载")
 		return
-	# 移除 game_root 默认附身的玩家单位（演练场只有演练双方，避免局外单位干扰画面）
+	# 清空地图自带单位（battlefield 预置的双方阵营兵 + 默认附身玩家）——
+	# 演练场只保留自己刷的 24 个演练单位，保证"12v12"与观察画面纯净
 	for e in map.get_entities():
-		if e.has_method("is_possessed") and e.is_possessed():
+		if is_instance_valid(e):
 			e.queue_free()
+	for i in 3:
+		await get_tree().process_frame
 	# 接管相机：停用 camera_rig 的自动跟随（它每帧把相机拉回玩家位置）
 	var rig: Node = _game_root.get("camera_rig")
 	if rig != null:

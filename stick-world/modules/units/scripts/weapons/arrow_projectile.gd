@@ -138,10 +138,19 @@ func _hit(target: Node) -> void:
 
 ## 插在受击者身上：停用碰撞，换父到目标节点（保持世界位姿——箭钉在命中点，
 ## 跟随单位移动），复用插地淡出计时。目标被释放时箭随场景树一并消失。
+## 调用链在物理回调内（_on_body_entered）：碰撞开关与换父必须 call_deferred，
+## 否则报 "Removing a CollisionObject node during a physics callback"。
 func _stick_into(target: Node) -> void:
 	_stuck = true
 	_stuck_timer = 0.0
 	set_deferred("monitoring", false)
+	_stick_into_deferred.call_deferred(target)
+
+
+func _stick_into_deferred(target: Node) -> void:
+	if not is_instance_valid(target):
+		queue_free()
+		return
 	var xf: Transform2D = global_transform
 	var parent: Node = get_parent()
 	if parent != null:

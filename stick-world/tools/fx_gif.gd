@@ -30,6 +30,7 @@ var _camera_zoom := {
 	"day": Vector2.ONE,
 	"night": Vector2.ONE,
 	"closeup": Vector2(2.0, 2.0),
+	"authentic": Vector2.ONE,
 }
 
 var _stage: Node2D = null
@@ -57,6 +58,7 @@ func _run() -> void:
 	await _capture_scene("day", _build_day_stage)
 	await _capture_scene("night", _build_night_stage)
 	await _capture_scene("closeup", _build_closeup_stage)
+	await _capture_scene("authentic", _build_authentic_stage)
 	print("GIF FRAMES DONE -> %s" % OUT_DIR)
 	quit(0)
 
@@ -236,3 +238,110 @@ func _make_wall(rect: Rect2, tier: int) -> void:
 	n.add_child(wall)
 	_stage.add_child(n)
 	CrystalSparkles.attach_to(n, WorldZ.OVERLAY_HINT, "rainbow", tier)
+
+
+## authentic：原版美术复刻舞台——原版提取的水晶簇贴图 + 原版实机截取的岩壁带纹理，
+## 粒子按贴图 alpha 轮廓发射，主题与晶簇颜色一一对应（原版"每材料一色"），
+## 岩壁带以锚点网格挂 rainbow 通用盘（对齐原版"多个小块对象拼出密度"的机制）
+func _build_authentic_stage() -> void:
+	# 洞壁基底：原版无缝墙纹平铺 + 暖褐调（原版调色板为暖褐/深咖）
+	var wall_tex: Texture2D = load("res://modules/fx/assets/demo/cave_wall_seamless.png")
+	var bg := Sprite2D.new()
+	bg.texture = wall_tex
+	bg.centered = false
+	bg.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	bg.region_enabled = true
+	bg.region_rect = Rect2(0, 0, STAGE.x, STAGE.y)
+	bg.modulate = Color(0.66, 0.53, 0.40)
+	bg.z_index = -100
+	_stage.add_child(bg)
+	# 三条岩壁带（原版实机截取纹理：上/中/下），各自铺 rainbow 锚点网格
+	var band_top: Texture2D = load("res://modules/fx/assets/demo/rock_band_top.png")
+	var top := Sprite2D.new()
+	top.texture = band_top
+	top.centered = false
+	top.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	top.region_enabled = true
+	top.region_rect = Rect2(0, 0, STAGE.x, band_top.get_height())
+	top.position = Vector2(0, 10)
+	top.z_index = -90
+	_stage.add_child(top)
+	_make_band_anchors(Rect2(40, 16, STAGE.x - 80, band_top.get_height() - 10), 8, 8)
+	var band_tex: Texture2D = load("res://modules/fx/assets/demo/rock_band.png")
+	var band := Sprite2D.new()
+	band.texture = band_tex
+	band.centered = false
+	band.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	band.region_enabled = true
+	band.region_rect = Rect2(0, 0, STAGE.x, band_tex.get_height())
+	band.position = Vector2(0, 545)
+	band.z_index = -90
+	_stage.add_child(band)
+	_make_band_anchors(Rect2(40, 545, STAGE.x - 80, band_tex.get_height()), 8, 8)
+	var band_btm := Sprite2D.new()
+	band_btm.texture = band_tex
+	band_btm.centered = false
+	band_btm.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	band_btm.region_enabled = true
+	band_btm.region_rect = Rect2(0, 0, STAGE.x, 140)
+	band_btm.position = Vector2(0, 935)
+	band_btm.z_index = -90
+	_stage.add_child(band_btm)
+	_make_band_anchors(Rect2(40, 940, STAGE.x - 80, 130), 8, 6)
+	# 三簇原版水晶：贴图宿主 + 对应主题窄盘，沿弧线有机排列 + 接触阴影
+	_make_authentic_crystal("res://modules/fx/assets/demo/crystal_frost_sapphire.png",
+			Vector2(340, 700), 1.15, "sky", 8)
+	_make_authentic_crystal("res://modules/fx/assets/demo/crystal_arcane.png",
+			Vector2(900, 760), 1.25, "violet", 8)
+	_make_authentic_crystal("res://modules/fx/assets/demo/crystal_fire_citrine.png",
+			Vector2(1500, 720), 1.2, "gold", 8)
+	# 小碎晶点缀（错落）
+	_make_authentic_crystal("res://modules/fx/assets/demo/crystal_frost_sapphire.png",
+			Vector2(590, 545), 0.45, "sky", 3)
+	_make_authentic_crystal("res://modules/fx/assets/demo/crystal_fire_citrine.png",
+			Vector2(1250, 530), 0.4, "gold", 3)
+	_make_authentic_crystal("res://modules/fx/assets/demo/crystal_arcane.png",
+			Vector2(1120, 560), 0.5, "violet", 2)
+
+
+## 岩壁带锚点网格：原版密度 = 几十个小块对象各挂闪光组叠加。
+## 每个锚点一个小块宿主（面积钉在标定下限），rainbow 通用盘。
+func _make_band_anchors(rect: Rect2, tier: int, cols: int) -> void:
+	var rows := 3
+	var step_x := rect.size.x / float(cols)
+	var step_y := rect.size.y / float(rows)
+	for iy in rows:
+		for ix in cols:
+			var anchor := Node2D.new()
+			anchor.position = rect.position + Vector2(
+					(ix + 0.5) * step_x + (iy % 2) * step_x * 0.25,
+					(iy + 0.5) * step_y)
+			var poly := Polygon2D.new()
+			poly.color = Color(0, 0, 0, 0)  # 仅作发射/测量宿主，必须透明（默认白色会渲染成白块）
+			var s := 36.0
+			poly.polygon = PackedVector2Array([Vector2(-s, -s), Vector2(s, -s),
+					Vector2(s, s), Vector2(-s, s)])
+			anchor.add_child(poly)
+			# 锚点位置加随机抖动消机械感
+			anchor.position += Vector2(randf_range(-18, 18), randf_range(-10, 10))
+			_stage.add_child(anchor)
+			CrystalSparkles.attach_to(anchor, WorldZ.OVERLAY_HINT, "rainbow", tier,
+					0.008)  # 恒定小块面积：钉标定下限，对齐原版单块发射 mesh 量级
+
+
+## 原版贴图水晶宿主：Sprite2D 挂出土晶簇图 + 接触阴影，attach 后粒子按 alpha 轮廓发射
+func _make_authentic_crystal(tex_path: String, pos: Vector2, scl: float,
+		theme: String, tier: int) -> void:
+	var n := Node2D.new()
+	n.position = pos
+	var spr := Sprite2D.new()
+	spr.texture = load(tex_path)
+	spr.scale = Vector2.ONE * scl
+	spr.position = Vector2(0, -spr.texture.get_height() * scl * 0.5 + 24)
+	var shadow := Sprite2D.new()
+	shadow.texture = load("res://modules/fx/assets/demo/contact_shadow.png")
+	shadow.scale = Vector2(scl * spr.texture.get_width() / 240.0, scl * 0.5)
+	n.add_child(shadow)
+	n.add_child(spr)
+	_stage.add_child(n)
+	CrystalSparkles.attach_to(n, WorldZ.OVERLAY_HINT, theme, tier)

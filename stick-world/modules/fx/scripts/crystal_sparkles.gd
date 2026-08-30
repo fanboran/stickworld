@@ -64,8 +64,12 @@ const MAX_RATE_PER_SYSTEM := 2.0
 const PX_PER_UNIT := 100.0
 ## 子系统 startSize（单位）；基础层见 BASE_LAYER_SIZE
 const START_SIZE_UNITS := 0.13
-## 帧序列单帧像素尺寸（出土精灵 8×8，贴图已 4x nearest 预放大到 32×32 保采样质量）
-const FRAME_PX := 32
+## 帧序列画布尺寸：图集精灵尺寸阶梯 8px(圆点)→12/16→24px(大星)，
+## 统一画到 24×24 画布且内容保持原尺寸居中——圆点小/星大的层级差异由此而来
+## （用户实机观察"十字星比光斑大很大一圈"的机制）
+const FRAME_PX := 24
+## 帧层渲染四边形尺寸（单位）：= 画布 24px @100PPU，scale 曲线基准 1.0
+const RENDER_SIZE_UNITS := 0.24
 
 ## 强度子系统帧序列贴图（从 SpriteAtlas "CrystalSparks" 出土展开，
 ## 每层深度不同：-1 只到微星 6 帧 … -5 到大星 12 帧）
@@ -368,10 +372,9 @@ static func _build_size_curve() -> Curve:
 	return c
 
 
-## 尺寸曲线 × startSize → 贴图 scale 系数曲线（tex_px：贴图/帧像素尺寸）
-static func _build_scale_curve(tex_px: float) -> Curve:
+## 尺寸脉冲曲线 → 贴图 scale 系数曲线（base：画布对应的世界尺寸换算）
+static func _build_scale_curve(base: float) -> Curve:
 	var c := _build_size_curve()
-	var base: float = START_SIZE_UNITS * PX_PER_UNIT / tex_px
 	var scaled := Curve.new()
 	for i in c.get_point_count():
 		var pt := c.get_point_position(i)
@@ -460,6 +463,8 @@ static func _make_system(host: Node2D, meas: Dictionary, lifetime: float, tier: 
 
 	if seq_tex != null and frames > 1:
 		# UVModule Sprites 帧序列：圆点→微星→十字星→缩回，一生播一遍（anim_speed=1）
+		# 渲染四边形 = 画布 0.24 单位（scale base 1.0），帧内容原尺寸 →
+		# 圆点帧 8px / 大星帧 24px 的大小阶梯得以保留
 		p.texture = seq_tex
 		cam.particles_animation = true
 		cam.particles_anim_h_frames = frames
@@ -469,11 +474,11 @@ static func _make_system(host: Node2D, meas: Dictionary, lifetime: float, tier: 
 		p.anim_speed_max = 1.0
 		p.anim_offset_min = 0.0
 		p.anim_offset_max = 0.0
-		p.scale_amount_curve = _build_scale_curve(float(FRAME_PX))
+		p.scale_amount_curve = _build_scale_curve(RENDER_SIZE_UNITS * PX_PER_UNIT / float(FRAME_PX))
 	else:
-		# 基础层 / 帧贴图缺失：静态柔点
+		# 基础层 / 帧贴图缺失：静态柔点（64px 贴图 × startSize 0.05 → ~5px 微尘）
 		p.texture = _get_sparkle_tex()
-		p.scale_amount_curve = _build_scale_curve(64.0)
+		p.scale_amount_curve = _build_scale_curve(BASE_LAYER_SIZE * PX_PER_UNIT / 64.0)
 	p.material = cam
 
 	# startColor RandomColor(Fixed)：离散调色盘平台渐变

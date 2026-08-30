@@ -84,14 +84,33 @@ func play(anim_name: String) -> void:
 	if _entity._carrying and (anim_name == "walk" or anim_name == "idle"):
 		play_name = "walk_carry"
 	# 待机变体（反编译参考实装 B）：刚进入 idle 时随机一次并保持（防每帧切换闪变）。
+	# 站姿按武器类型分型（原版各兵种 Stand：剑士双变体池、矛/弓/镐/杖各一）。
 	# set_idle_variant 用 set_state_animation 把 idle state 的动画换成变体（共用 state），
 	# 因此这里仍 play("idle")（状态机有 idle 状态），不能 travel 变体名（状态机无 idle_v2 状态）。
 	if anim_name == "idle" and _entity._current_anim != "idle":
-		var variant: String = Anims.pick_stand_variant()
+		var variant: String = Anims.pick_stand_variant_for(_weapon_type())
 		if rig.has_method("set_idle_variant"):
 			rig.set_idle_variant(variant)
 	rig.play(play_name)
 	_entity._current_anim = anim_name
+
+
+## 当前武器类型（WeaponMount 未挂载时回落持剑 0）。
+func _weapon_type() -> int:
+	var wm: Node = _entity.get_node_or_null("WeaponMount")
+	if wm != null and "weapon_type" in wm:
+		return int(wm.weapon_type)
+	return 0
+
+
+## 强制重挑站姿（换武器后调用）：仅待机态立即生效，动作锁定/搬运用
+## walk_carry 时不打断，其余状态回 idle 时自然生效。
+func refresh_idle_stance() -> void:
+	if _entity._action_locked or _entity._carrying:
+		return
+	if _entity._current_anim == "idle":
+		_entity._current_anim = ""
+		play("idle")
 
 
 ## 设置动画播放速率（按当前速度缩放）。

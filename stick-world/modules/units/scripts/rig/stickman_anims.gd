@@ -9,6 +9,10 @@ extends RefCounted
 
 const ANIM_IDLE := "idle"
 const ANIM_IDLE_V2 := "idle_v2"
+const ANIM_IDLE_SPEAR := "idle_spear"
+const ANIM_IDLE_BOW := "idle_bow"
+const ANIM_IDLE_PICKAXE := "idle_pickaxe"
+const ANIM_IDLE_STAFF := "idle_staff"
 const ANIM_WALK := "walk"
 const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
@@ -54,6 +58,21 @@ const WEAPON_ATTACK_ANIM: Dictionary = {
 static func anim_for_weapon(weapon_type: int) -> String:
 	return WEAPON_ATTACK_ANIM.get(weapon_type, ANIM_ATTACK)
 
+## 武器类型 -> 持械站姿动画名（键序对齐 WeaponMount.WeaponType）。
+## 原版各兵种 Stand 动画：剑士 Swordwrath-Stand1/2、矛兵 Spearton-Stand1、
+## 弓手 Archidon-Stand1、矿工 Miner-Stand1、法师 Magikill-Stand1。
+const WEAPON_IDLE_ANIM: Dictionary = {
+	0: ANIM_IDLE,            # SWORD：持剑（变体池见 STAND_VARIANTS）
+	1: ANIM_IDLE_SPEAR,      # SPEAR：持矛
+	2: ANIM_IDLE_BOW,        # BOW：持弓
+	3: ANIM_IDLE_PICKAXE,    # PICKAXE：持镐
+	4: ANIM_IDLE_STAFF,      # STAFF：持杖
+}
+
+## 取武器类型对应的站姿动画名（未知类型回落持剑）
+static func idle_for_weapon(weapon_type: int) -> String:
+	return WEAPON_IDLE_ANIM.get(weapon_type, ANIM_IDLE)
+
 ## 待机变体池（stand 类别，防全员同帧）
 const STAND_VARIANTS: Array[String] = [ANIM_IDLE, ANIM_IDLE_V2]
 
@@ -73,6 +92,10 @@ static func setup_player(player: AnimationPlayer) -> void:
 	# 用 .tres 文件覆盖以确保完整动画
 	_load_anim(lib, ANIM_IDLE)
 	_load_anim(lib, ANIM_IDLE_V2)
+	_load_anim(lib, ANIM_IDLE_SPEAR)
+	_load_anim(lib, ANIM_IDLE_BOW)
+	_load_anim(lib, ANIM_IDLE_PICKAXE)
+	_load_anim(lib, ANIM_IDLE_STAFF)
 	_load_anim(lib, ANIM_WALK)
 	_load_anim(lib, ANIM_RUN)
 	_load_anim(lib, ANIM_ATTACK)
@@ -194,6 +217,15 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 ## 随机挑一个待机变体动画名（防全员同帧；进入待机时调用一次并保持）。
 static func pick_stand_variant() -> String:
 	return STAND_VARIANTS[randi() % STAND_VARIANTS.size()]
+
+
+## 按武器类型随机挑站姿：剑士从 Stand1/2 变体池取，其余兵种单一站姿
+## （原版数据每兵种只有 1 个 Stand；返回仍是"进入待机时调用一次并保持"语义）。
+static func pick_stand_variant_for(weapon_type: int) -> String:
+	var pool: Array[String] = [idle_for_weapon(weapon_type)]
+	if weapon_type == 0:
+		pool = STAND_VARIANTS
+	return pool[randi() % pool.size()]
 
 
 ## 动态切换 state 节点的动画资源（如 idle 状态换待机变体）。

@@ -351,6 +351,10 @@ func play(anim_name: String) -> void:
 	# 用 start() 强制重新起播，保证每次挥剑都完整走一遍命中帧。
 	if _state_machine.get_current_node() == anim_name and _is_oneshot(anim_name):
 		_state_machine.start(anim_name)
+		# 重播 = 新一轮播放周期：清除"已发结束信号"标记，否则第二刀播完
+		# _check_animation_finished 判 cur == _finished_sent_state 直接跳过，
+		# animation_finished 不发射 → 攻击播完不回切（移动锁下表现为卡死）
+		_finished_sent_state = ""
 		_current_anim = anim_name
 		return
 	_state_machine.travel(anim_name)

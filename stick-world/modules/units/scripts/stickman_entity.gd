@@ -218,15 +218,17 @@ func _is_mouse_over_ui() -> bool:
 
 
 func _ready() -> void:
-	# 装配子组件（VisualController / InteractionController）
-	_mount_components()
-	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
-	_apply_balance_data()
-	# 拿到 StickmanRig 和 IK markers 引用
+	# 先拿到 StickmanRig 和 IK markers 引用——必须在 _mount_components 之前：
+	# VisualController.setup 连接 rig.animation_finished（攻击播完回切），
+	# 顺序颠倒时 rig 为 null，连接静默丢失（曾致攻击动画播完永不回切）
 	var rig_host := get_node_or_null("RigHost")
 	if rig_host != null:
 		rig = rig_host.get_node_or_null("OutlineGroup/StickmanRig")
 		_markers_parent = rig_host.get_node_or_null("OutlineGroup/Node2D")
+	# 装配子组件（VisualController / InteractionController）
+	_mount_components()
+	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
+	_apply_balance_data()
 	# 获取 AIController 子节点（§7.1）
 	_ai_controller = get_node_or_null("AIController")
 	# 从模型 marker 动态计算 foot_offset（适配不同参考系）

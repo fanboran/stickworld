@@ -25,6 +25,13 @@ const FPS := 30             # 采样帧率 = 引擎 60fps ÷ 2（每 2 帧 1 采
 const CAPTURE_SEC := 3.0    # 每场景采集时长
 const FRAMES := int(CAPTURE_SEC * FPS)
 
+## 各场景相机缩放（closeup 放大 2x 让十字星形可辨）
+var _camera_zoom := {
+	"day": Vector2.ONE,
+	"night": Vector2.ONE,
+	"closeup": Vector2(2.0, 2.0),
+}
+
 var _stage: Node2D = null
 
 
@@ -49,6 +56,7 @@ func _run() -> void:
 	await process_frame
 	await _capture_scene("day", _build_day_stage)
 	await _capture_scene("night", _build_night_stage)
+	await _capture_scene("closeup", _build_closeup_stage)
 	print("GIF FRAMES DONE -> %s" % OUT_DIR)
 	quit(0)
 
@@ -56,6 +64,14 @@ func _run() -> void:
 ## 单场景采集：预热稳态 → 30fps 采样入内存 → 结束后统一落盘
 func _capture_scene(prefix: String, builder: Callable) -> void:
 	_clear_stage()
+	# 相机状态随场景重置（closeup 用 2x zoom 放大星形细节）
+	var cams: Array = []
+	for child in _stage.get_children():
+		if child is Camera2D:
+			cams.append(child)
+	var cam: Camera2D = cams[0] if cams.size() > 0 else null
+	cam.zoom = _camera_zoom.get(prefix, Vector2.ONE)
+	cam.position = STAGE * 0.5
 	builder.call()
 	# preprocess 预热 + 粒子进入稳态
 	for i in 30:
@@ -121,6 +137,8 @@ func _build_day_stage() -> void:
 	]
 	for s in specs:
 		_make_crystal(s["pos"], s["size"], s["theme"], s["tier"])
+	# 顶部岩壁带挂 rainbow（对齐原版 CrystalSparksBase 通用盘：岩壁五彩 vs 矿石单色）
+	_make_wall(Rect2(120, 60, 1680, 110), 8)
 
 
 ## night：游戏内夜间场景——压暗 + 灯笼暖光（USHADED 保色验收：夜色不吞主题色）
@@ -159,6 +177,18 @@ func _build_night_stage() -> void:
 	_stage.add_child(lamp)
 
 
+## closeup：2x 特写——单簇大水晶（矿石单色柔点+星形）+ 彩虹岩壁带（五彩），
+## 相机拉近后十字星形与多彩抽色肉眼可辨
+func _build_closeup_stage() -> void:
+	_add_rect(Polygon2D.new(), Rect2(Vector2.ZERO, STAGE), Color(0.76, 0.68, 0.52))
+	# 岩壁带（横贯画面下部）挂 rainbow——原版 CrystalSparksBase 通用盘
+	_make_wall(Rect2(300, 700, 1320, 160), 8)
+	# 大水晶（蓝白矿石簇）+ 两颗邻簇
+	_make_crystal(Vector2(700, 560), 200, "sky", 8)
+	_make_crystal(Vector2(460, 620), 90, "violet", 6)
+	_make_crystal(Vector2(1220, 600), 80, "gold", 6)
+
+
 # ─────────────────────────────── 构件 ────────────────────────────────
 
 func _add_rect(poly: Polygon2D, rect: Rect2, color: Color) -> void:
@@ -193,3 +223,16 @@ func _make_crystal(pos: Vector2, size: float, theme: String, tier: int) -> void:
 	n.add_child(facet)
 	_stage.add_child(n)
 	CrystalSparkles.attach_to(n, WorldZ.OVERLAY_HINT, theme, tier)
+
+
+## 岩壁长条（深灰岩石多边形）挂 rainbow 通用盘——原版"岩壁五彩"对应物
+func _make_wall(rect: Rect2, tier: int) -> void:
+	var n := Node2D.new()
+	var wall := Polygon2D.new()
+	wall.polygon = PackedVector2Array([rect.position,
+			Vector2(rect.end.x, rect.position.y), rect.end,
+			Vector2(rect.position.x, rect.end.y)])
+	wall.color = Color(0.42, 0.41, 0.39)
+	n.add_child(wall)
+	_stage.add_child(n)
+	CrystalSparkles.attach_to(n, WorldZ.OVERLAY_HINT, "rainbow", tier)

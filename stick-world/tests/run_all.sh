@@ -2,7 +2,7 @@
 # 测试编排器（bash 版，替代原 run_all.ps1）
 #
 # 设计（2026-08 测试架构）：
-#   - unit 层：单进程批量（batch_runner.tscn，9 套纯逻辑 <2s）
+#   - unit 层：单进程批量（batch_runner.tscn，套件数见 UNIT_SCRIPTS 清单）
 #   - integration / smoke 层：进程级并行池（默认 4，上限 8），套件间互不共享状态
 #   - 每套件耗时输出 + JSON 报告
 #
@@ -254,7 +254,7 @@ if [ "$run_unit" -eq 1 ]; then
 		t1=$(date +%s%3N)
 		total_pass=$((total_pass + 1))
 		unit_secs=$(awk "BEGIN{printf \"%.1f\", ($t1-$t0)/1000}")
-		echo "[PASS] unit 批量（9 套） [${unit_secs}s]"
+		echo "[PASS] unit 批量 [${unit_secs}s]"
 		report_entries+=("{\"suite\":\"unit(batch)\",\"result\":\"pass\",\"seconds\":$unit_secs}")
 	else
 		t1=$(date +%s%3N)

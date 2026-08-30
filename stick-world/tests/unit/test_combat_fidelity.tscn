@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/unit/test_combat_fidelity.gd" id="1_fidelity"]
+
+[node name="TestCombatFidelity" type="Node"]
+script = ExtResource("1_fidelity")

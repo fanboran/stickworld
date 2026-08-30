@@ -19,6 +19,9 @@ const ANIM_ATTACK_STAFF := "attack_staff"
 const ANIM_ATTACK_BOW := "attack_bow"
 const ANIM_BLOCK := "block"
 const ANIM_DEAD := "dead"
+## 爆头死亡（转译自解包 Death-Headshot）：爆头致死时替代 dead 播放（原版
+## Kill(isHeadShot) 参数分家——普通死亡与爆头死亡是两条动画）。
+const ANIM_DEAD_HEADSHOT := "dead_headshot"
 const ANIM_WALK_CARRY := "walk_carry"
 const ANIM_BUILD := "build"
 const ANIM_HIT := "hit"
@@ -33,6 +36,23 @@ const ATTACK_ANIMS: Array[String] = [
 	ANIM_ATTACK, ANIM_ATTACK_SPEAR, ANIM_ATTACK_PICKAXE,
 	ANIM_ATTACK_STAFF, ANIM_ATTACK_BOW,
 ]
+
+## 武器类型 -> 攻击动画名。键序对齐 WeaponMount.WeaponType
+## （0=SWORD 1=SPEAR 2=BOW 3=PICKAXE 4=STAFF）。
+## 单一真相源：实体播放攻击动画（stickman_entity.play_attack）与武器挂载
+## 订阅命中帧事件（weapon_mount）必须查同一张表，否则会出现"播矛刺动画、
+## 却按剑的命中帧结算"的错配。
+const WEAPON_ATTACK_ANIM: Dictionary = {
+	0: ANIM_ATTACK,          # SWORD：剑挥砍（Swordwrath-Attack1）
+	1: ANIM_ATTACK_SPEAR,    # SPEAR：矛刺（Spearton-Attack1）
+	2: ANIM_ATTACK_BOW,      # BOW：拉弓（Archidon-Draw）
+	3: ANIM_ATTACK_PICKAXE,  # PICKAXE：镐挥（Miner-Attack1）
+	4: ANIM_ATTACK_STAFF,    # STAFF：法杖施法（Magikill-Spell1）
+}
+
+## 取武器类型对应的攻击动画名（未知类型回落通用剑攻）
+static func anim_for_weapon(weapon_type: int) -> String:
+	return WEAPON_ATTACK_ANIM.get(weapon_type, ANIM_ATTACK)
 
 ## 待机变体池（stand 类别，防全员同帧）
 const STAND_VARIANTS: Array[String] = [ANIM_IDLE, ANIM_IDLE_V2]
@@ -62,6 +82,7 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_ATTACK_BOW)
 	_load_anim(lib, ANIM_BLOCK)
 	_load_anim(lib, ANIM_DEAD)
+	_load_anim(lib, ANIM_DEAD_HEADSHOT)
 	_load_anim(lib, ANIM_WALK_CARRY)
 	_load_anim(lib, ANIM_BUILD)
 	_load_anim(lib, ANIM_HIT_FRONT)
@@ -84,6 +105,7 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 		_add_state(sm, a)
 	_add_state(sm, ANIM_BLOCK)
 	_add_state(sm, ANIM_DEAD)
+	_add_state(sm, ANIM_DEAD_HEADSHOT)
 	_add_state(sm, ANIM_WALK_CARRY)
 	_add_state(sm, ANIM_BUILD)
 	# 过渡（sync=false 即 AT_START：新动画从头播放）。
@@ -97,19 +119,30 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	sm.add_transition(ANIM_WALK, ANIM_RUN, _smt(0.06))
 	sm.add_transition(ANIM_RUN, ANIM_WALK, _smt(0.06))
 	sm.add_transition(ANIM_RUN, ANIM_IDLE, _smt(0.1, false))
+	# 一次性动画（attack*/block/dead/hit/arrive，均为 LOOP_NONE）**必须**用
+	# AT_START（sync=false + reset=true）切入。
+	# 用 SYNC 的话新动画会从旧动画的当前进度映射过来：idle 播到 2.5s 时切 attack，
+	# attack 的播放位置一上来就是 1.x 秒——挥剑从半程开始播，动画内嵌的 Hit 事件
+	# （Swordwrath-Attack1 Hit@1.0s）瞬间被越过 → 命中帧对齐形同虚设；
+	# 切 dead 更严重：位置直接落在片尾，死亡动画几乎不播就发 animation_finished。
 	# 攻击状态（各武器专属）：从 idle/walk/run 可切入，播完回 idle
 	for a in ATTACK_ANIMS:
 		for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
-			sm.add_transition(s, a, _smt(0.1))
+			sm.add_transition(s, a, _smt(0.1, false))
 		sm.add_transition(a, ANIM_IDLE, _smt(0.12))
 	for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
-		sm.add_transition(s, ANIM_BLOCK, _smt(0.08))
+		sm.add_transition(s, ANIM_BLOCK, _smt(0.08, false))
 	sm.add_transition(ANIM_BLOCK, ANIM_IDLE, _smt(0.08))
-	sm.add_transition(ANIM_BLOCK, ANIM_DEAD, _smt(0.1))
-	sm.add_transition(ANIM_IDLE, ANIM_DEAD, _smt(0.15))
-	sm.add_transition(ANIM_WALK, ANIM_DEAD, _smt(0.15))
+	sm.add_transition(ANIM_BLOCK, ANIM_DEAD, _smt(0.1, false))
+	sm.add_transition(ANIM_IDLE, ANIM_DEAD, _smt(0.15, false))
+	sm.add_transition(ANIM_WALK, ANIM_DEAD, _smt(0.15, false))
 	for a in ATTACK_ANIMS:
-		sm.add_transition(a, ANIM_DEAD, _smt(0.15))
+		sm.add_transition(a, ANIM_DEAD, _smt(0.15, false))
+	# 爆头死亡（Death-Headshot 转译）：与普通死亡同款切入（终态，不回 idle）
+	for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
+		sm.add_transition(s, ANIM_DEAD_HEADSHOT, _smt(0.15, false))
+	for a in ATTACK_ANIMS:
+		sm.add_transition(a, ANIM_DEAD_HEADSHOT, _smt(0.15, false))
 	# 搬运动画过渡（搬运工 set_carrying 切换时）
 	sm.add_transition(ANIM_IDLE, ANIM_WALK_CARRY, _smt(0.08))
 	sm.add_transition(ANIM_WALK_CARRY, ANIM_IDLE, _smt(0.08))
@@ -130,19 +163,21 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	var from_states: Array[String] = [ANIM_IDLE, ANIM_WALK, ANIM_RUN]
 	from_states.append_array(ATTACK_ANIMS)
 	for s in from_states:
-		sm.add_transition(s, ANIM_HIT_FRONT, _smt(0.05))
-		sm.add_transition(s, ANIM_HIT_BACK, _smt(0.05))
+		sm.add_transition(s, ANIM_HIT_FRONT, _smt(0.05, false))
+		sm.add_transition(s, ANIM_HIT_BACK, _smt(0.05, false))
 	sm.add_transition(ANIM_HIT_FRONT, ANIM_IDLE, _smt(0.08))
 	sm.add_transition(ANIM_HIT_BACK, ANIM_IDLE, _smt(0.08))
-	sm.add_transition(ANIM_HIT_FRONT, ANIM_DEAD, _smt(0.1))
-	sm.add_transition(ANIM_HIT_BACK, ANIM_DEAD, _smt(0.1))
+	sm.add_transition(ANIM_HIT_FRONT, ANIM_DEAD, _smt(0.1, false))
+	sm.add_transition(ANIM_HIT_BACK, ANIM_DEAD, _smt(0.1, false))
+	sm.add_transition(ANIM_HIT_FRONT, ANIM_DEAD_HEADSHOT, _smt(0.1, false))
+	sm.add_transition(ANIM_HIT_BACK, ANIM_DEAD_HEADSHOT, _smt(0.1, false))
 	# 列阵到位动画（AI 完善批次 4，对应传奇 ArriveAtFormationAnimationSystem）：
 	# 主状态可切入 arrive；播完由 rig.animation_finished 回 idle（VisualController 处理）
 	_add_state(sm, ANIM_ARRIVE)
 	for s in from_states:
-		sm.add_transition(s, ANIM_ARRIVE, _smt(0.1))
+		sm.add_transition(s, ANIM_ARRIVE, _smt(0.1, false))
 	sm.add_transition(ANIM_ARRIVE, ANIM_IDLE, _smt(0.08))
-	sm.add_transition(ANIM_ARRIVE, ANIM_DEAD, _smt(0.1))
+	sm.add_transition(ANIM_ARRIVE, ANIM_DEAD, _smt(0.1, false))
 	# 先关联 player，再设 tree_root，最后激活
 	tree.anim_player = player.get_path()
 	tree.tree_root = sm

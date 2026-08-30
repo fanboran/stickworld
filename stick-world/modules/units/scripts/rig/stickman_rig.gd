@@ -75,10 +75,23 @@ var _hit_timer: float = -1.0
 var _hit_return_to: String = ANIM_IDLE
 ## 已发送 animation_finished 的 state（防重复触发；离开该 state 后重置）
 var _finished_sent_state: String = ""
+## 动画事件派发状态：当前跟踪的动画名
+var _event_anim: String = ""
+## 动画事件派发状态：上一帧播放位置（用于检测重播/循环回绕）
+var _event_last_pos: float = -1.0
+## 动画事件派发状态：本轮已发射的事件键集合（"事件名@时间"）
+var _fired_events: Dictionary = {}
 
 ## 动画播放结束信号（反编译参考实装 C）：LOOP_NONE 动画播完时发射（对应传奇 UpdateFinishAnimation）。
 ## 供攻击播完回切、受击播完回切、未来动作节奏（如 build 敲击）等使用。
 signal animation_finished(anim_name: String)
+
+## 动画内嵌事件信号（复刻 Spine animations[].events[] / 传奇 AnimationSpec.Events[]）。
+## 播放位置越过事件时间点时发射一次；切状态或播放位置回退（重播/循环）后重新计数。
+## 事件由 tools/baking/spine_import.gd 从解包 Spine JSON 导出为动画元数据：
+##   Hit（命中帧）/ Sound（音效，value=音效名）/ Drawn（弓拉满）/ Mine（矿工敲击）。
+## 消费方（WeaponMount）一律读真值，禁止再写"命中帧 = 动画进度 × 拍脑袋比例"。
+signal animation_event(anim_name: String, event_name: String, value: String)
 
 
 # ============================================================
@@ -107,6 +120,8 @@ func _process(_delta: float) -> void:
 			_current_anim = _hit_return_to
 	# 动画结束检测（反编译参考实装 C）：LOOP_NONE 动画播完发射 animation_finished
 	_check_animation_finished()
+	# 动画内嵌事件派发（Spine events[] 复刻）：越过事件时间点时发射 animation_event
+	_check_animation_events()
 
 
 ## LOOP_NONE 动画播完检测：当前 state 播放位置 >= 动画长度时发射 animation_finished（仅一次）。
@@ -128,6 +143,38 @@ func _check_animation_finished() -> void:
 	if len > 0.0 and pos >= len - 0.02:
 		_finished_sent_state = cur
 		animation_finished.emit(cur)
+
+
+## 动画内嵌事件派发：当前动画播放位置越过 anim_events 中任一事件时间点 → 发射一次。
+## 事件表来自动画资源元数据（spine_import 从 Spine JSON 导出；无元数据则静默跳过）。
+## 重播判定：切换动画、或播放位置回退（LOOP 动画回绕 / 重新 travel）→ 清空已发集合。
+func _check_animation_events() -> void:
+	if _state_machine == null or _anim_player == null:
+		return
+	var cur: String = _state_machine.get_current_node()
+	if cur.is_empty() or cur == "Start" or not _anim_player.has_animation(cur):
+		return
+	var anim: Animation = _anim_player.get_animation(cur)
+	if anim == null or not anim.has_meta("anim_events"):
+		return
+	var events: Array = anim.get_meta("anim_events")
+	if events.is_empty():
+		return
+	var pos: float = _state_machine.get_current_play_position()
+	if cur != _event_anim or pos < _event_last_pos - 0.001:
+		_event_anim = cur
+		_fired_events = {}
+	_event_last_pos = pos
+	for e in events:
+		var t: float = float(e["time"])
+		if pos < t:
+			continue
+		# 同帧多事件（如 Sound + Hit 同时点）各发一次：键含时间以区分
+		var key: String = "%s@%.4f" % [e["name"], t]
+		if _fired_events.has(key):
+			continue
+		_fired_events[key] = true
+		animation_event.emit(cur, str(e["name"]), str(e["string"]))
 
 
 # ============================================================
@@ -298,14 +345,38 @@ func play(anim_name: String) -> void:
 	# 切换到非 walk 动画时重置播放速率
 	if _anim_player != null and anim_name != ANIM_WALK:
 		_anim_player.speed_scale = 1.0
+	# 重播同一个一次性动画（连续攻击/连续受击）：travel 到**当前** state 是空操作，
+	# 播放位置会停在片尾（LOOP_NONE 播完位置钳在 length）→ 动画不会重头播，
+	# 内嵌 Hit 事件的时间一上来就被越过，第二次及以后的攻击会瞬间结算。
+	# 用 start() 强制重新起播，保证每次挥剑都完整走一遍命中帧。
+	if _state_machine.get_current_node() == anim_name and _is_oneshot(anim_name):
+		_state_machine.start(anim_name)
+		_current_anim = anim_name
+		return
 	_state_machine.travel(anim_name)
 	_current_anim = anim_name
 
 
-## 设置动画播放速率（用于 walk 速度匹配，p_speed=1.0 为原始速率）
+## 动画是否为一次性（LOOP_NONE，播完停在片尾）；找不到的动画按一次性处理。
+func _is_oneshot(anim_name: String) -> bool:
+	if _anim_player == null or not _anim_player.has_animation(anim_name):
+		return true
+	var anim: Animation = _anim_player.get_animation(anim_name)
+	return anim != null and anim.loop_mode == Animation.LOOP_NONE
+
+
+## 设置动画播放速率（用于 walk 速度匹配，p_speed=1.0 为原始速率）。
+## 只对**循环动画**（walk/run 等移动动画）生效：一次性动画（攻击/受击/死亡/列阵/
+## 格挡）一律按原始速率播放。否则单位站着不动时速率被压到 MIN_ANIM_SCALE(0.6)，
+## 挥剑动画被拖慢 40%，动画内嵌的 Hit 事件（Swordwrath-Attack1 Hit@1.0s）
+## 要到 1.6s+ 才走到——命中帧对齐就失去了意义。
 func set_anim_speed(p_speed: float) -> void:
-	if _anim_player != null:
-		_anim_player.speed_scale = clampf(p_speed, 0.0, 3.0)
+	if _anim_player == null:
+		return
+	if _is_oneshot(_current_anim):
+		_anim_player.speed_scale = 1.0
+		return
+	_anim_player.speed_scale = clampf(p_speed, 0.0, 3.0)
 
 
 ## 查询指定动画的播放进度（0~1）。仅当当前状态正在播放该动画时返回真实进度，
@@ -320,6 +391,41 @@ func get_anim_progress(anim_name: String) -> float:
 	if len <= 0.0:
 		return 1.0
 	return clampf(_state_machine.get_current_play_position() / len, 0.0, 1.0)
+
+
+## 查询指定动画的播放位置（秒）。仅当当前状态正在播放该动画时返回真实位置，
+## 否则返回 -1（未在播放）。用于把命中帧对齐到动画内嵌事件的绝对时间
+## （Spine Hit@1.0s 这类真值），而不是拍脑袋的进度比例。
+func get_anim_time(anim_name: String) -> float:
+	if _state_machine == null:
+		return -1.0
+	if _state_machine.get_current_node() != anim_name:
+		return -1.0
+	return _state_machine.get_current_play_position()
+
+
+## 查询动画内嵌事件时间（秒）。返回首个匹配事件的绝对时间；无该事件/无元数据返回 -1。
+## 供需要"提前知道命中时刻"的逻辑（如没有动画事件时的兜底、调试断言）使用；
+## 常规命中帧结算应订阅 animation_event 信号而非轮询。
+func get_anim_event_time(anim_name: String, event_name: String) -> float:
+	if _anim_player == null or not _anim_player.has_animation(anim_name):
+		return -1.0
+	var anim: Animation = _anim_player.get_animation(anim_name)
+	if anim == null or not anim.has_meta("anim_events"):
+		return -1.0
+	for e in anim.get_meta("anim_events"):
+		if str(e["name"]) == event_name:
+			return float(e["time"])
+	return -1.0
+
+
+## 查询动画时长（秒）；找不到返回 -1。与 get_anim_time 配合计算
+## "命中后动画可打断点"（AnimationCancelFractionOfAnimationAfterAttackHit）。
+func get_anim_length(anim_name: String) -> float:
+	if _anim_player == null or not _anim_player.has_animation(anim_name):
+		return -1.0
+	var anim: Animation = _anim_player.get_animation(anim_name)
+	return anim.length if anim != null else -1.0
 
 
 ## 受击插播（反编译参考实装 B）：打断任意动作插入 hit_front/hit_back，

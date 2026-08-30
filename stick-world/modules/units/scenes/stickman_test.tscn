@@ -6,16 +6,16 @@
 [sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_leg_outer"]
 target_nodepath = NodePath("../Node2D/outfoot")
 joint_one_bone_idx = 0
-joint_one_bone2d_node = NodePath("spine_root/thigh_outer")
+joint_one_bone2d_node = NodePath("hip/spine_root/thigh_outer")
 joint_two_bone_idx = 1
-joint_two_bone2d_node = NodePath("spine_root/thigh_outer/shin_outer")
+joint_two_bone2d_node = NodePath("hip/spine_root/thigh_outer/shin_outer")
 
 [sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_leg_inner"]
 target_nodepath = NodePath("../Node2D/innerfoot")
 joint_one_bone_idx = 3
-joint_one_bone2d_node = NodePath("spine_root/thigh_inner")
+joint_one_bone2d_node = NodePath("hip/spine_root/thigh_inner")
 joint_two_bone_idx = 4
-joint_two_bone2d_node = NodePath("spine_root/thigh_inner/shin_inner")
+joint_two_bone2d_node = NodePath("hip/spine_root/thigh_inner/shin_inner")
 
 [sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_arm_outer"]
 target_nodepath = NodePath("../Node2D/outhand")

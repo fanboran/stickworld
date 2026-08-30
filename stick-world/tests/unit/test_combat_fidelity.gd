@@ -394,25 +394,32 @@ func _test_headshot_death() -> void:
 	target2.queue_free()
 
 
-# ──────────────────── 武器持握数据（2026-08-30 审计修复，防回退）────────────────────
+# ──────────────────── 武器持握数据（2026-08-30 挂载骨重直译，防回退）────────────────────
 
-## 期望值译自各皮肤 weapon/Arrow1 附件数据（推导链见各 weapon_*.tscn 头注释）：
-## rot = 挂载骨 rest 世界角(pickaxe1=84.97 / Arrow1=75.01) + 附件 rot；
-## scale = K(0.475)×附件 s×(附件逻辑尺寸/region 像素)；grip = 握点纹理像素。
-## 曾被"目测调参"改坏（剑 scale 0.842 应 0.32、矛 -90° 应 -6.66° 等），钉死防漂移。
+## 期望值直译自各兵种皮肤 weapon/Arrow1 附件数据（推导链见各 weapon_*.tscn 头注释）：
+## rot = C − (挂载骨Spine世界角@该兵种Stand动画 + 附件rot) − 挂载骨Godot世界角(idle=0)，
+##       C=0（剑四候选 {0,±90,180} 截图对照忠实参考帧标定，C=0 与原版同向）；
+##       boneSpine 取各武器兵种自己的 Stand 动画（Swordwrath-Stand1=42.68 /
+##       Spearton-Stand1: pickaxe1=90.92、Arrow1=388.41 / Miner-Stand1=123.96 /
+##       Magikill-Stand=92.95 / Archidon-Stand1=38.01，数据源 _faithful/spine_pose.json 口径）
+## scale = K(0.475)×附件 s×(附件逻辑 wh/region 像素)；bow 为 mesh 仿射拟合值
+## grip = 手（挂载骨原点）握在纹理哪个点（px、中心原点 y-down）：
+##        q=R(−附件rot)·(−xy)（Spine y-up），grip=(q.x/(whW·s)·regW, −q.y/(whH·s)·regH)；
+##        bow 为 mesh 精确仿射逆映射。旧链的 grip y 符号反（剑握到刃尖/杖握到尾端），
+##        旧链 rot 用局部角 84.97 当世界角（剑竖直的假象），2026-08-30 修正钉死。
 const EXPECTED_GRIP: Dictionary = {
 	"res://modules/units/scenes/components/weapon_sword.tscn":
-		{"rot": -4.56, "scale": Vector2(0.324, 0.319), "grip": Vector2(6.5, -97.8)},
+		{"rot": 46.85, "scale": Vector2(0.483, 0.483), "grip": Vector2(4.4, 64.6)},
 	"res://modules/units/scenes/components/weapon_spear.tscn":
-		{"rot": -6.66, "scale": Vector2(0.616, 0.631), "grip": Vector2(0.8, -5.5)},
+		{"rot": 0.71, "scale": Vector2(0.616, 0.631), "grip": Vector2(0.8, 5.5)},
 	"res://modules/units/scenes/components/weapon_pickaxe.tscn":
-		{"rot": -5.52, "scale": Vector2(0.511, 0.512), "grip": Vector2(0.3, -63.3)},
+		{"rot": -33.47, "scale": Vector2(0.511, 0.512), "grip": Vector2(0.3, 63.3)},
 	"res://modules/units/scenes/components/weapon_magicstaff.tscn":
-		{"rot": -6.49, "scale": Vector2(0.480, 0.482), "grip": Vector2(2.0, 26.9)},
+		{"rot": -1.49, "scale": Vector2(0.480, 0.482), "grip": Vector2(1.9, -26.9)},
 	"res://modules/units/scenes/components/weapon_bow.tscn":
-		{"rot": 84.97, "scale": Vector2(0.475, 0.475), "grip": Vector2.ZERO},
+		{"rot": 55.61, "scale": Vector2(0.955, 0.965), "grip": Vector2(13.0, -0.8)},
 	"res://modules/units/scenes/components/weapon_shield.tscn":
-		{"rot": 42.69, "scale": Vector2(0.631, 0.632), "grip": Vector2(-3.5, -24.2)},
+		{"rot": 3.91, "scale": Vector2(0.631, 0.632), "grip": Vector2(-3.5, 24.2)},
 }
 
 

@@ -30,3 +30,6 @@ modules/texture_gen/materials/stone_band/reference/brick_*.png.import
 modules/texture_gen/materials/stone_band/reference/stone_band_ref_raw.png
 modules/texture_gen/materials/stone_band/reference/stone_band_ref_raw.png.import
 
+# 动画验收忠实版产物（spine_import --out-dir 直出、未洗稿，可随时重导）
+tools/baking/_faithful/
+

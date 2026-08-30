@@ -1,13 +1,27 @@
 [gd_scene load_steps=2 format=3]
 
+; 盾（Spearton）——数值直译自解包附件数据，挂载骨=新骨 shield_hand：
+;   附件 = Spearton 皮肤 Arrow1 槽唯一附件（键名 "Arrowskn"，name→region
+;           "classic-spearton-shield-0"）：rot=-32.32  xy=(21.15,24.67)  s=0.85
+;           wh=203x230（region 实际 130x147；与 default 皮肤数值相同）
+;   数据源：external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt skins
+;   挂载骨世界角：Spine Arrow1 @Spearton-Stand1 t=0 = 388.41（=28.41，
+;   boneSpine 取盾所属兵种 Spearton 自己的 Stand 动画）；
+;   Godot shield_hand @idle t=0 = 0.0（_faithful/rig_pose.json）
+;   Sprite.rotation = C − (388.41 + (-32.32)) − 0 = C − 356.09 → C=0 时 +3.91°
+;   （盾面近正对镜头、微倾，参考帧 ref_shield.png 同款）
+;   Sprite.scale  = K×0.85×(203/130, 230/147)，K=64/134.71=0.475
+;   GripPoint = ( q.x/(203×0.85)×130 , −q.y/(230×0.85)×147 )，q=R(−32.32°)·(−xy)
+;               = (-3.5, 24.2)：握点在盾面中心偏下（y-down 正=下方），与参考帧
+;               手位一致。旧版 (-3.5, -24.2) y 符号反。
 [ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/shield.png" id="1_tex"]
 
 [node name="Shield" type="Node2D"]
 
 [node name="Sprite" type="Sprite2D" parent="."]
-rotation = 32.32
-scale = Vector2(1.193, 1.196)
+rotation = 0.068242
+scale = Vector2(0.631, 0.632)
 texture = ExtResource("1_tex")
 
 [node name="GripPoint" type="Marker2D" parent="."]
-position = Vector2(-15.9, -18.5)
+position = Vector2(-3.5, 24.2)

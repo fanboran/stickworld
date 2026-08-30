@@ -12,14 +12,21 @@ const ATLAS_PATH := "F:/VSCode/game-2-aux/external/decompiled/legacy/spine_raw/�
 const PNG_PATH := "F:/VSCode/game-2-aux/external/decompiled/legacy/spine_raw/textures/universal.png"
 const OUTPUT_DIR := "res://modules/units/assets/textures/weapons/"
 
-## 提取清单：贴图名 -> 输出文件名
+## 提取清单：贴图名 -> 输出文件名。
+## region 名以各兵种皮肤 weapon/Arrow1 附件实际引用为准（不是想当然）：
+##   Swordwrath 剑=pickaxe（Swordwrath skin weapon 槽唯一附件名 "weapon"，其 name
+##   字段指向 region "pickaxe" 55x198——粗制棒刃，正是游戏里 Swordwrath 的剑；
+##   region "Swordbasic" 82x300 是 SwordwrathUnlocked 皮肤的长剑，曾错裁）；
+##   Spearton 矛/盾=classic-spearton-*、Magikill 杖=magicstaff、弓=Bow_Full1、
+##   **Miner 镐=pickaxe1 (2)**（region "pickaxe1" 74x127 是箭袋旁的另一张图，
+##   region "pickaxe" 55x198 虽名近但其实是剑——见上）。
 const EXTRACT: Dictionary = {
-	"Swordbasic":                   "sword.png",
+	"pickaxe":                      "sword.png",
 	"classic-spearton-spear-0":     "spear.png",
 	"classic-spearton-shield-0":    "shield.png",
 	"Bow_Full1":                    "bow.png",
 	"Arrow1":                      "arrow.png",
-	"pickaxe":                      "pickaxe.png",
+	"pickaxe1 (2)":                 "pickaxe.png",
 	"magicstaff":                   "magicstaff.png",
 }
 

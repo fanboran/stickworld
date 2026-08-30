@@ -1,13 +1,29 @@
 [gd_scene load_steps=2 format=3]
 
+; 弓（Archidon）——数值直译自解包 mesh 附件数据，挂载骨=新骨 weapon_hand：
+;   附件 = default 皮肤 weapon 槽 Bow_Full1（type=mesh；Archidon skin 无 weapon 槽
+;   覆盖，游戏运行时为弓手设置弓附件，故取 default 的 Bow_Full1）。
+;   mesh 无 rot/xy/s 字段，纹理经顶点(uv→vertices)贴到 pickaxe1 骨局部系——
+;   对 24 顶点做 uv·region→vertices 仿射拟合（max 残差 20/370 Spine 单位），
+;   等效"附件旋转" attRot_eff=-93.62°（Spine 系 texel→bone 仿射的极分解旋转角）。
+;   数据源：external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt skins.default
+;   挂载骨世界角：Spine pickaxe1 @Archidon-Stand1 t=0 = 38.01（boneSpine 取弓所属
+;   兵种自己的 Stand 动画，与其余武器同一口径）；Godot weapon_hand @idle t=0 = 0.0
+;   Sprite.rotation = C − (38.01 + (-93.62)) − 0 = C + 55.61，C=0 → 55.61°
+;   （与其余武器同一 C 标定：长弓在 idle 呈前上方斜持，与参考帧 ref_bow.png 同向）
+;   Sprite.scale  = Godot 轴对齐模型最小二乘拟合 (0.955, 0.965)（mesh 显示长度
+;   ≈370 Spine 单位×K，约为普通 region 弓 180 单位的 2 倍长——旧版 0.475 只有
+;   原版一半长）
+;   GripPoint = 骨原点(0,0) 的精确仿射逆映射 texel − 中心 = (13.0, -0.8)
+;   （握点在弓片中部偏弦侧，与参考帧手位一致；与旋转取值无关）
 [ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/bow.png" id="1_tex"]
 
 [node name="Bow" type="Node2D"]
 
 [node name="Sprite" type="Sprite2D" parent="."]
-rotation = 0.0
-scale = Vector2(0.899, 0.899)
+rotation = 0.97058
+scale = Vector2(0.955, 0.965)
 texture = ExtResource("1_tex")
 
 [node name="GripPoint" type="Marker2D" parent="."]
-position = Vector2(0, 0)
+position = Vector2(13, -0.8)

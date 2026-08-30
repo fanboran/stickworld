@@ -36,7 +36,15 @@ func enter(previous: String, params: Dictionary) -> void:
 		_battle = entity.get_battle_instance()
 	_arrived = false
 	_stay_timer = 0.0
+	# 进掩体 = 举盾（原版 IsBlocking() 姿态）：盾只在防御姿态下生效，
+	# 不是"挂着盾就无条件概率格挡"。
+	_set_blocking(true)
 	_compute_target()
+
+
+func exit(next: String) -> void:
+	_set_blocking(false)
+	super.exit(next)
 
 
 func update(delta: float) -> void:
@@ -76,6 +84,15 @@ func update(delta: float) -> void:
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
+
+## 切换举盾姿态（委托实体 WeaponMount.set_blocking）
+func _set_blocking(v: bool) -> void:
+	if entity == null or not entity.has_method("get_weapon"):
+		return
+	var weapon: Node = entity.get_weapon()
+	if weapon != null and weapon.has_method("set_blocking"):
+		weapon.set_blocking(v)
+
 
 ## 计算掩体目标位置
 func _compute_target() -> void:

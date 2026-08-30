@@ -2,7 +2,7 @@
 # 测试编排器（bash 版，替代原 run_all.ps1）
 #
 # 设计（2026-08 测试架构）：
-#   - unit 层：单进程批量（batch_runner.tscn，9 套纯逻辑 <2s）
+#   - unit 层：单进程批量（batch_runner.tscn，套件数见 UNIT_SCRIPTS 清单）
 #   - integration / smoke 层：进程级并行池（默认 4，上限 8），套件间互不共享状态
 #   - 每套件耗时输出 + JSON 报告
 #
@@ -82,6 +82,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_placement_grid_units.tscn"
 	"tests/integration/test_tactical_orders.tscn"
 	"tests/integration/test_save_roundtrip.tscn"
+	"tests/integration/test_anim_finished.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"

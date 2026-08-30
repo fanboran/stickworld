@@ -23,6 +23,12 @@ enum State {
 	DRAW,           ## 平局（双方同时覆灭）
 }
 
+# ─────────────────────────────── 常量（士气）────────────────────────────────
+## 伤亡恐慌：队友死亡时同阵营单位的最大士气损失（距离衰减）
+const ALLY_DEATH_MORALE_LOSS: float = 12.0
+## 伤亡恐慌影响半径（px）
+const MORALE_AFFECT_RANGE: float = 600.0
+
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 进攻方阵营 ID
 const FACTION_ATTACKER: int = 1
@@ -48,6 +54,9 @@ var _duration: float = 0.0
 var _casualties_attacker: int = 0
 ## 防守方伤亡数（死亡）
 var _casualties_defender: int = 0
+## 每目标当前攻击者数（防集火重叠；反编译参考实装 A 的 TODO 落地）。
+## 结构：target.instance_id -> {"count": int, "attackers": {attacker_iid: true}}
+var _target_attackers: Dictionary = {}
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -100,6 +109,71 @@ func on_unit_died(unit: Node) -> void:
 		_casualties_attacker += 1
 	elif unit in _units_defender:
 		_casualties_defender += 1
+	# 清理该目标上的攻击者计数（死亡后不再被围攻）
+	_target_attackers.erase(unit.get_instance_id())
+	# 伤亡恐慌（行业最佳实践）：同阵营存活单位按距离衰减掉士气（见队友倒下）
+	if unit.has_method("get_faction"):
+		_apply_casualty_morale_loss(unit.get_faction(), unit.global_position)
+
+
+## 伤亡恐慌：同阵营存活单位按距离衰减掉士气。
+## 距离 MORALE_AFFECT_RANGE 内的单位损失 LOSS × (1 - dist/range)。
+func _apply_casualty_morale_loss(faction: int, pos: Vector2) -> void:
+	for ally in get_allies_of(faction):
+		if not is_instance_valid(ally) or ally == null:
+			continue
+		if ally.has_method("is_dead") and ally.is_dead():
+			continue
+		if not ally.has_method("get_health"):
+			continue
+		var health: Node = ally.get_health()
+		if health == null or not health.has_method("lose_morale"):
+			continue
+		var dist: float = pos.distance_to(ally.global_position)
+		if dist > MORALE_AFFECT_RANGE:
+			continue
+		var loss: float = ALLY_DEATH_MORALE_LOSS * (1.0 - dist / MORALE_AFFECT_RANGE)
+		health.lose_morale(loss)
+
+
+# ─────────────────────────────── 攻击者计数（防集火重叠）────────────────────────────────
+
+## 登记一次攻击：target 被 attacker 攻击（weapon_mount.perform_attack 命中时调用）。
+## 同一攻击者只计一次（去重）。
+func register_attacker(target: Node, attacker: Node) -> void:
+	if target == null or attacker == null or not is_instance_valid(target) or not is_instance_valid(attacker):
+		return
+	var iid: int = target.get_instance_id()
+	if not _target_attackers.has(iid):
+		_target_attackers[iid] = {"count": 0, "attackers": {}}
+	var entry: Dictionary = _target_attackers[iid]
+	if not entry["attackers"].has(attacker.get_instance_id()):
+		entry["attackers"][attacker.get_instance_id()] = true
+		entry["count"] += 1
+
+
+## 撤销一次攻击（攻击者失效/停止攻击时；简化：目标死亡已统一清理）
+func unregister_attacker(target: Node, attacker: Node) -> void:
+	if target == null or attacker == null or not is_instance_valid(target):
+		return
+	var iid: int = target.get_instance_id()
+	if not _target_attackers.has(iid):
+		return
+	var entry: Dictionary = _target_attackers[iid]
+	if entry["attackers"].erase(attacker.get_instance_id()):
+		entry["count"] = maxi(0, entry["count"] - 1)
+	if entry["count"] <= 0:
+		_target_attackers.erase(iid)
+
+
+## 查询某目标当前被几个单位攻击（TargetFinder 防集火过滤用）。
+func get_attacker_count(target: Node) -> int:
+	if target == null or not is_instance_valid(target):
+		return 0
+	var entry: Variant = _target_attackers.get(target.get_instance_id(), null)
+	if entry == null:
+		return 0
+	return int(entry["count"])
 
 
 # ─────────────────────────────── 查询 API ────────────────────────────────
@@ -227,6 +301,7 @@ func _end(result: State) -> void:
 			unit.set_battle_instance(null)
 	_units_attacker.clear()
 	_units_defender.clear()
+	_target_attackers.clear()
 	if EventBus != null:
 		var attacker_wins: bool = result == State.ATTACKER_WIN
 		EventBus.battle_ended.emit(get_battle_id(), attacker_wins)

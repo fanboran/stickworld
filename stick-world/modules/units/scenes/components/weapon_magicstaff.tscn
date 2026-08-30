@@ -1,0 +1,24 @@
+[gd_scene load_steps=2 format=3]
+
+; 法杖（Magikill）——数值直译自解包附件数据，挂载骨=新骨 weapon_hand：
+;   附件 = Magikill 皮肤 weapon 槽唯一附件（name→region "magicstaff"）：
+;           rot=-91.46  xy=(-27.22,2.66)  s=0.65  wh=42x520（region 实际 27x333）
+;   数据源：external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt skins
+;   挂载骨世界角：Spine pickaxe1 @Magikill-Stand t=0 = 92.95（杖竖直，boneSpine 取
+;   Magikill 自己的 Stand 动画）；Godot weapon_hand @idle t=0 = 0.0
+;   Sprite.rotation = C − (92.95 + (-91.46)) − 0 = C − 1.49，C=0 → −1.49°（竖直、杖头朝上）
+;   Sprite.scale  = K×0.65×(42/27, 520/333)，K=64/134.71=0.475
+;   GripPoint = ( q.x/(42×0.65)×27 , −q.y/(520×0.65)×333 )，q=R(−91.46°)·(−xy)
+;               = (1.9, -26.9)：附件 xy 为负=杖中心在手上方，手握杖中上段（y 负=纹理
+;               中心上方），与参考帧 ref_staff.png 手位一致。旧版 (2.0, 26.9) y 反。
+[ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/magicstaff.png" id="1_tex"]
+
+[node name="Magicstaff" type="Node2D"]
+
+[node name="Sprite" type="Sprite2D" parent="."]
+rotation = -0.026007
+scale = Vector2(0.48, 0.482)
+texture = ExtResource("1_tex")
+
+[node name="GripPoint" type="Marker2D" parent="."]
+position = Vector2(1.9, -26.9)

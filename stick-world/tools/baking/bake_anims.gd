@@ -15,9 +15,13 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(OUTPUT_DIR)
 
 	_bake("idle", _data_idle(), 2.0, Animation.LOOP_LINEAR)
+	_bake("idle_v2", _data_idle_v2(), 2.0, Animation.LOOP_LINEAR)
 	_bake("walk", _data_walk(), 0.8, Animation.LOOP_LINEAR)
 	_bake("attack", _data_attack(), 0.6, Animation.LOOP_NONE)
 	_bake("dead", _data_dead(), 1.0, Animation.LOOP_NONE)
+	_bake("hit_front", _data_hit_front(), 0.3, Animation.LOOP_NONE)
+	_bake("hit_back", _data_hit_back(), 0.3, Animation.LOOP_NONE)
+	_bake("arrive", _data_arrive(), 0.4, Animation.LOOP_NONE)
 
 	print("=== 烘焙完成 ===")
 	get_tree().quit(0)
@@ -81,6 +85,51 @@ static func _data_idle() -> Array:
 		[16, [0.0, 5.0,  1.0, -4.0,  2.0, 0.0]],
 		[17, [0.0, -4.0, 1.0, 5.0,   2.0, 0.0]],
 		[9,  [0.0, 2.0,  1.0, -1.5,  2.0, 0.0]],
+	]
+
+
+## 待机变体 2（防全员同帧）：同 idle 骨架、幅度更大 + 相位微移，
+## 供 stand 变体池随机（对应遗产 StandAnimations[] + RandomAnimation）。
+static func _data_idle_v2() -> Array:
+	return [
+		[7,  [0.0, 6.0,  1.0, -4.0,  2.0, 0.0]],
+		[18, [0.0, 3.0,  1.0, -2.5,  2.0, 0.0]],
+		[16, [0.0, 7.0,  1.0, -6.0,  2.0, 0.0]],
+		[17, [0.0, -5.0, 1.0, 6.0,   2.0, 0.0]],
+		[9,  [0.0, 3.0,  1.0, -2.0,  2.0, 0.0]],
+	]
+
+
+## 受击（正面被打，后仰）：上身后仰 + 头后仰 + 手臂上扬，0.3s 内回位。
+## 经 AnimationNodeOneShot 插播，播完自动回原状态（对应遗产 SelectHitAnimation）。
+static func _data_hit_front() -> Array:
+	return [
+		[7,  [0.0, 10.0,  0.1, 15.0, 0.3, 0.0]],
+		[9,  [0.0, 15.0,  0.1, 20.0, 0.3, 0.0]],
+		[18, [0.0, -20.0, 0.1, -30.0, 0.3, 0.0]],
+		[19, [0.0, 15.0,  0.1, 25.0,  0.3, 0.0]],
+	]
+
+
+## 受击（背面被打，前扑）：上身前倾 + 头前低 + 手臂前探。
+static func _data_hit_back() -> Array:
+	return [
+		[7,  [0.0, -8.0,  0.1, -12.0, 0.3, 0.0]],
+		[9,  [0.0, -10.0, 0.1, -14.0, 0.3, 0.0]],
+		[18, [0.0, 15.0,  0.1, 20.0,  0.3, 0.0]],
+		[19, [0.0, -12.0, 0.1, -18.0, 0.3, 0.0]],
+	]
+
+
+## 列阵到位（AI 完善批次 4，对应传奇 ArriveAtFormationAnimationSystem）：
+## 到达队形位时立正挺胸——上身微挺 + 抬头 + 手臂小幅展开，0.4s 后回正。
+static func _data_arrive() -> Array:
+	return [
+		[7,  [0.0, -2.0, 0.15, 5.0,  0.4, 0.0]],
+		[9,  [0.0, -4.0, 0.15, 3.0,  0.4, 0.0]],
+		[18, [0.0, 4.0,  0.15, -3.0, 0.4, 0.0]],
+		[19, [0.0, -4.0, 0.15, 3.0,  0.4, 0.0]],
+		[16, [0.0, 3.0,  0.15, -2.0, 0.4, 0.0]],
 	]
 
 

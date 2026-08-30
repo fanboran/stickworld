@@ -31,6 +31,7 @@ const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scri
 const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
+const _WeaponPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/weapon_panel.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
 const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
@@ -70,6 +71,7 @@ func setup(root: GameRoot) -> void:
 	_setup_pause_menu_panel()
 	_setup_minimap()
 	_setup_zoom_bar()
+	_setup_weapon_panel()
 	_setup_possession_interface()
 	_setup_possess_panel()
 	_register_explore_handler()
@@ -423,6 +425,21 @@ func _setup_zoom_bar() -> void:
 	_root._zoom_bar = zb
 	if zb.has_method("setup"):
 		zb.setup(_root.camera_rig)
+
+
+
+
+## 创建武器调控面板并挂到 UIRoot（左上角；切换附身玩家主手武器/盾牌）。
+func _setup_weapon_panel() -> void:
+	if _root.ui_root == null:
+		return
+	var wp := Control.new()
+	wp.set_script(_WeaponPanelScript)
+	wp.name = "WeaponPanel"
+	_root.ui_root.add_to_slot("HudOverlay", wp)
+	_root._weapon_panel = wp
+	if wp.has_method("setup"):
+		wp.setup(_root)
 
 
 # ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────

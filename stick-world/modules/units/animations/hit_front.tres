@@ -1,0 +1,55 @@
+[gd_resource type="Animation" format=3]
+
+[resource]
+length = 0.6
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("hip/spine_root/lower_torso/chest_mid:rotation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.0667, 0.1333, 0.2, 0.2333, 0.4, 0.6),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [-0.05734779377441903, 0.038207907925542066, 0.13362036661918442, 0.10632751217125683, 0.09270154470580041, 0.024489858182188906, -0.05734779377441903]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.0667, 0.1333, 0.2, 0.2333, 0.4, 0.6),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [-0.012571806750322406, 0.01867684064217251, 0.04987864467402789, 0.0811272920665228, 0.07332684309443002, 0.03427774207633966, -0.012571806750322406]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head:rotation")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.0667, 0.1333, 0.2, 0.2333, 0.4, 0.6),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [-0.35923280886969855, -0.34733024013551295, -0.3354455139758474, -0.19239239572997466, -0.12097307464835848, -0.22928477043132597, -0.35923280886969855]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("hip/spine_root/lower_torso:rotation")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 0.0667, 0.1333, 0.2, 0.2333, 0.4, 0.6),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [-0.03342730760774782, 0.05627641111374969, 0.040147183533015, 0.023144712111496137, 0.014734656973342072, -0.011541410032216088, -0.040034564139607355]
+}
+metadata/anim_events = []
+metadata/hit_time = -1.0
+metadata/sound_events = []

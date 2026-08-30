@@ -279,8 +279,13 @@ func _test_player_attack() -> void:
 			weapon._cooldown_timer = 0.0
 		if attacker.has_method("_player_attack"):
 			attacker._player_attack()
-		# 等待足够时间让冷却恢复（每次 0.3s）
-		for j in 18:
+		# 命中帧在攻击动画内嵌 Hit 事件处结算（Swordwrath-Attack1 = 1.0s），
+		# 不是发起瞬间。按墙钟等待到命中帧之后，期间把目标钉在剑长内
+		# （目标由 AI 接管，等 1s 足够它走出射程 → 命中帧的二次距离校验会判空挥）。
+		var t_attack: int = Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t_attack < 1600:
+			if is_instance_valid(attacker) and is_instance_valid(target):
+				target.global_position = attacker.global_position + Vector2(50, 0)
 			await get_tree().process_frame
 	# 验证目标受到伤害
 	var hp_after: float = target_health.hp

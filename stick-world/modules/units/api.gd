@@ -3,7 +3,7 @@
 ## 本模块提供火柴人角色系统，包括：
 ## - StickmanRig: 渲染骨架（骨骼、纹理、动画、武器）
 ## - StickmanSkeleton: 骨骼数据与构建
-## - StickmanTextureGen: 纹理生成
+## - 矢量肢体渲染：Line2D/Polygon2D（stickman_skeleton.gd）
 ## - StickmanAnims: 动画系统
 ## - StickmanWeapon: 武器挂载
 ## - StickmanEntity: 物理+碰撞外壳（CharacterBody2D），持有 StickmanRig

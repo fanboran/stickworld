@@ -46,6 +46,10 @@ BONE_MAP = {
 ANIM_MAP = {
     'Swordwrath-Stand1': 'idle',
     'Swordwrath-Stand2': 'idle_v2',
+    'Spearton-Stand1': 'idle_spear',
+    'Archidon-Stand1': 'idle_bow',
+    'Miner-Stand1': 'idle_pickaxe',
+    'Magikill-Stand': 'idle_staff',
     'Swordwrath-Walk': 'walk',
     'Swordwrath-Run': 'run',
     'Swordwrath-Attack1': 'attack',

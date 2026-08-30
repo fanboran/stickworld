@@ -89,12 +89,15 @@ enum Mood {
 		_hit_event_time = -1.0
 		if is_inside_tree():
 			call_deferred("_reload_weapons")
+			# 持械站姿随武器分型（剑/矛/弓/镐/杖各一套 Stand），立即换姿
+			call_deferred("_refresh_owner_stance")
 ## 是否装备盾牌（挂左手 hand_outer）
 @export var shield_enabled: bool = true:
 	set(v):
 		shield_enabled = v
 		if is_inside_tree():
 			call_deferred("_reload_weapons")
+			call_deferred("_refresh_owner_stance")
 ## 单次命中伤害
 @export var damage: float = 15.0
 ## 攻击射程（像素），按武器类型初始化（WEAPON_RANGE）
@@ -765,6 +768,13 @@ func _get_effective_cooldown() -> float:
 
 
 ## 获取拥有此 WeaponMount 的 StickmanEntity（父节点）。
+## 换武器后让持有者立即换持械站姿（visual_controller.refresh_idle_stance）。
+func _refresh_owner_stance() -> void:
+	var e := get_owner_entity()
+	if e != null and e.has_method("refresh_stance"):
+		e.refresh_stance()
+
+
 func get_owner_entity() -> CharacterBody2D:
 	var p: Node = get_parent()
 	if p is CharacterBody2D:

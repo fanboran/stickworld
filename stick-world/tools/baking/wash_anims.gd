@@ -24,9 +24,10 @@ const ANIMATIONS: Array[String] = [
 	"idle", "idle_v2", "walk", "run", "attack", "dead",
 	"hit_front", "hit_back", "walk_carry", "build", "arrive", "dead_headshot", "block",
 	"attack_spear", "attack_pickaxe", "attack_staff", "attack_bow",
+	"idle_spear", "idle_bow", "idle_pickaxe", "idle_staff",
 ]
 ## 循环动画（可做相位/时长扰动）
-const LOOP_ANIMS: Array[String] = ["idle", "idle_v2", "walk", "run", "walk_carry", "build"]
+const LOOP_ANIMS: Array[String] = ["idle", "idle_v2", "idle_spear", "idle_bow", "idle_pickaxe", "idle_staff", "walk", "run", "walk_carry", "build"]
 
 const SEED := 20260817
 

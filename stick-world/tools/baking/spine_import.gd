@@ -58,6 +58,10 @@ const SPINE_TO_MY: Dictionary = {
 const ANIM_MAP: Dictionary = {
 	"idle":       {"spine": "Swordwrath-Stand1",       "loop": true},
 	"idle_v2":    {"spine": "Swordwrath-Stand2",       "loop": true},
+	"idle_spear":  {"spine": "Spearton-Stand1",       "loop": true},
+	"idle_bow":    {"spine": "Archidon-Stand1",       "loop": true},
+	"idle_pickaxe":{"spine": "Miner-Stand1",          "loop": true},
+	"idle_staff":  {"spine": "Magikill-Stand",         "loop": true},
 	"walk":       {"spine": "Swordwrath-Walk",         "loop": true},
 	"run":        {"spine": "Swordwrath-Run",          "loop": true},
 	"attack":     {"spine": "Swordwrath-Attack1",      "loop": false},

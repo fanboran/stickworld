@@ -14,6 +14,7 @@ var _runner: TestRunner
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("待机变体: pick_stand_variant 返回池内成员", _test_stand_variant_pool)
+	_runner.add_test("武器站姿: idle_for_weapon 五型映射", _test_weapon_idle_anim)
 	_runner.add_test("待机变体: 动态换 idle state 动画名", _test_set_state_animation)
 	_runner.add_test("受击: 状态机含 hit_front/hit_back 状态", _test_hit_states_exist)
 	_runner.add_test("受击: hit 与主状态有过渡", _test_hit_transitions)
@@ -39,6 +40,19 @@ func _test_stand_variant_pool() -> void:
 	for i in 20:
 		var v: String = Anims.pick_stand_variant()
 		_runner.assert_true(v in pool, "变体应在池内: %s" % v)
+
+
+## 武器站姿分型（原版各兵种 Stand）：五型映射正确 + 动画库资源存在 + pick 版本返回对应动画
+func _test_weapon_idle_anim() -> void:
+	var expected := {0: "idle", 1: "idle_spear", 2: "idle_bow", 3: "idle_pickaxe", 4: "idle_staff"}
+	for wtype in expected:
+		var got: String = Anims.idle_for_weapon(wtype)
+		_runner.assert_equal(got, expected[wtype], "武器 %d 站姿" % wtype)
+		var path := Anims.ANIM_DIR + got + ".tres"
+		_runner.assert_true(ResourceLoader.exists(path), "站姿资源应存在: %s" % path)
+		var picked: String = Anims.pick_stand_variant_for(wtype)
+		_runner.assert_true(picked == expected[wtype] or (wtype == 0 and picked in Anims.STAND_VARIANTS),
+				"pick 站姿应属该武器集合: %d -> %s" % [wtype, picked])
 
 
 func _test_set_state_animation() -> void:

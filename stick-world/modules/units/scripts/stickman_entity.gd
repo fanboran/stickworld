@@ -911,6 +911,13 @@ func play_attack() -> void:
 		_visual.play(anim)
 
 
+## 立即换持械站姿（换武器时由 WeaponMount 调用）：
+## 仅待机态立即生效；移动/攻击等状态不打断，回 idle 时按新武器自动选姿。
+func refresh_stance() -> void:
+	if _visual != null and _visual.has_method("refresh_idle_stance"):
+		_visual.refresh_idle_stance()
+
+
 ## 播放列阵到位动画（AI 完善批次 4）：到达队形位时立正挺胸，播完回 idle。
 func play_arrive() -> void:
 	if _visual != null and _visual.has_method("play"):

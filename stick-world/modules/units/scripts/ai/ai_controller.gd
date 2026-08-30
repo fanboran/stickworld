@@ -322,7 +322,8 @@ func _compute_state_modifiers(bi: Node, health: Node) -> Dictionary:
 		mods["surrounded"] = near >= SURROUND_MIN
 	# 背墙：身后（朝向反方向）WALL_LOOKBACK 距离内有掩体
 	if bi != null and bi.has_method("get_cover"):
-		var cover: Node = bi.get_cover()
+		# CoverSystem 是 RefCounted（纯逻辑），注解用 Variant 防类型不匹配报错
+		var cover = bi.get_cover()
 		if cover != null and cover.has_method("is_in_cover"):
 			var facing: int = _entity.get_facing() if _entity.has_method("get_facing") else 1
 			var back_pos: Vector2 = _entity.global_position - Vector2(facing, 0) * WALL_LOOKBACK

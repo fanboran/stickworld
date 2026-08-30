@@ -26,9 +26,9 @@ func _process(_delta: float) -> void:
 		var battles: Array = []
 		if gr != null and gr.get("_combat_api") != null:
 			var dir: Node = gr._combat_api.get("_director")
-			if dir != null and dir.get("_battles") != null and dir._battles.size() > 0:
+			if dir != null and dir.get("_battles") != null and dir._battles.size() > 0 					and is_instance_valid(dir._battles[0]):
 				var b: Node = dir._battles[0]
-				if is_instance_valid(b):
+				if true:
 					var ddead := 0
 					for u in b._units_defender:
 						if not is_instance_valid(u) or u.is_dead():
@@ -36,11 +36,14 @@ func _process(_delta: float) -> void:
 					battles = [b._state, b._count_alive(b._units_attacker), b._count_alive(b._units_defender), ddead]
 				else:
 					battles = ["battle_freed"]
+		var hp_info := "u0=freed"
 		var u0 = _arena._attacker[0]
-		var hc = u0.get("health_component")
-		print("[timeline] f=%d 我的计数 攻%d/守%d | u0.hp=%s max=%s | battle=%s" % [_frames,
+		if is_instance_valid(u0) and u0.get("health_component") != null:
+			var hc = u0.get("health_component")
+			hp_info = "u0.hp=%s max=%s" % [hc.get("hp"), hc.get("max_hp")]
+		print("[timeline] f=%d 我的计数 攻%d/守%d | %s | battle=%s" % [_frames,
 				_arena._count_alive(_arena._attacker), _arena._count_alive(_arena._defender),
-				hc.get("hp"), hc.get("max_hp"), battles])
+				hp_info, battles])
 	if _frames == 300 and not _shot_path.is_empty():
 		# 300 帧（~5s）：双方应已接战
 		var img: Image = get_viewport().get_texture().get_image()

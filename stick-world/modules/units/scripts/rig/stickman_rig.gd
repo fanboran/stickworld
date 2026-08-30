@@ -189,7 +189,11 @@ func _init_procedural_overlay() -> void:
 	overlay.name = "ProceduralOverlay"
 	overlay.set_script(OverlayScript)
 	add_child(overlay)
-	overlay.call("setup", self, self)
+	# OverlayScript 非 @tool：编辑器里本节点是 placeholder 实例，setup 不可调用。
+	# overlay 是纯运行时动态效果（速度惯性/攻击回弹/受击抖动），编辑器内无需接线；
+	# 未接线的 overlay 有 _skeleton 空值守卫，_physics_process 会静默返回。
+	if not Engine.is_editor_hint():
+		overlay.call("setup", self, self)
 
 
 func _init_bones() -> void:

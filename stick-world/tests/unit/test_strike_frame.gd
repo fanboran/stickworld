@@ -67,6 +67,7 @@ func _ready() -> void:
 	_runner.add_test("命中帧: 越过 Hit 事件时间才结算", _test_strike_at_event)
 	_runner.add_test("命中帧: 无事件数据时回退进度比例", _test_ratio_fallback)
 	_runner.add_test("命中帧: 动画未起播时宽限后兜底结算", _test_grace_fallback)
+	_runner.add_test("空挥: 无目标出动作无结算", _test_swing_no_target)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -115,6 +116,29 @@ func _test_no_early_strike() -> void:
 		wm._physics_process(0.05)
 	_runner.assert_approx(health.hp, hp0, 0.001,
 		"动画未到 Hit 事件时间（%.1fs）不应结算伤害" % HIT_TIME)
+	kit["owner"].queue_free()
+	kit["target"].queue_free()
+
+
+## 空挥（perform_swing，复刻原版 User Control 无目标挥击）：
+## 动画照播（_strike_fired 置位）、冷却进入，但无登记目标 → 不结算任何伤害
+func _test_swing_no_target() -> void:
+	var kit: Dictionary = _make_pair(HIT_TIME)
+	var wm: Node = kit["wm"]
+	var rig: Node = kit["rig"]
+	var health: Node = kit["health"]
+	var hp0: float = health.hp
+	rig.anim_time = 0.0
+	var swung: bool = wm.perform_swing()
+	_runner.assert_true(swung, "空挥应成功起挥（冷却外）")
+	# 推进越过命中帧（1.2s < 冷却 1.35s，保住冷却断言）：无目标不得结算、不得报错
+	for i in range(24):
+		rig.anim_time = HIT_TIME + 0.1
+		wm._physics_process(0.05)
+	_runner.assert_approx(health.hp, hp0, 0.001, "空挥不得结算伤害")
+	_runner.assert_gt(wm.get_cooldown_remaining(), 0.0, "空挥应进入冷却")
+	# 冷却中再挥应被拒
+	_runner.assert_false(wm.perform_swing(), "冷却中空挥应被拒")
 	kit["owner"].queue_free()
 	kit["target"].queue_free()
 

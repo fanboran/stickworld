@@ -29,7 +29,8 @@ func setup(game_root: Node) -> void:
 	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	position = PANEL_POS
 	_build_ui()
-	refresh()
+	# 不在此处 refresh：装配期 travel_handler 尚未就绪，查玩家会踩空引用；
+	# 首次刷新交给 _process 低频自刷（≤0.25s，此时装配已完成）
 
 
 func _process(delta: float) -> void:

@@ -135,6 +135,9 @@ func _hide_transition_overlay() -> void:
 
 ## 查找当前玩家实体（供 GameRoot.get_player_entity 转发）
 func find_player_entity() -> Node2D:
+	# 装配早期（system_setup 期间 HUD 面板 setup）_root 可能尚未注入，返回空而非报错
+	if _root == null:
+		return null
 	var map: Node2D = _root.get_current_map()
 	if map == null:
 		return null

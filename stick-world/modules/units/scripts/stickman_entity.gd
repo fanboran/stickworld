@@ -200,6 +200,11 @@ func _input(event: InputEvent) -> void:
 		_player_attack()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F:
+		# 空挥（复刻原版 User Control）：无目标也出攻击动作，纯动作无伤害
+		_player_swing()
+		if get_viewport() != null:
+			get_viewport().set_input_as_handled()
 
 
 ## 鼠标是否悬停在 UI 控件上（悬停时玩家左键不攻击，保证按钮可点）。
@@ -665,6 +670,14 @@ func _player_attack() -> void:
 	if target == null:
 		return
 	weapon_mount.perform_attack(target)
+
+
+## 玩家空挥（F 键，复刻原版 User Control）：无目标出攻击动作，纯动作无伤害。
+## 受冷却约束（can_attack），冷却中按 F 不响应。
+func _player_swing() -> void:
+	if weapon_mount == null or not weapon_mount.has_method("perform_swing"):
+		return
+	weapon_mount.perform_swing()
 
 
 ## 找最近敌人（不同阵营且存活）在武器射程内

@@ -49,7 +49,7 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 4)
 	panel.add_child(vbox)
 	var title := Label.new()
-	title.text = "武器（T循环 / B盾）"
+	title.text = "武器（T循环 / B盾 / F空挥）"
 	title.add_theme_font_size_override("font_size", 13)
 	vbox.add_child(title)
 	var row := HBoxContainer.new()

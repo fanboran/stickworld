@@ -420,6 +420,21 @@ func perform_attack(target: Node) -> Dictionary:
 	return result
 
 
+## 空挥（复刻原版 User Control：附身单位无目标也可出攻击动作）。
+## 播对应武器攻击动画 + 进冷却；不登记目标 → 命中帧 _strike() 无结算
+## （弓空挥 = 拉弓不放箭，与原版一致）。返回是否成功起挥（冷却中为 false）。
+func perform_swing() -> bool:
+	if not can_attack():
+		return false
+	_play_swing()
+	_pending_strike_target = null
+	_pending_strike_owner = get_owner_entity()
+	_strike_fired = false
+	_pending_strike_elapsed = 0.0
+	_cooldown_timer = _get_effective_cooldown()
+	return true
+
+
 ## 命中帧兜底比例：只在动画**没有** Hit 事件数据时使用（程序化动画/测试桩）。
 ## 有事件数据时一律用事件真值——解包数据里各武器命中点差异很大
 ## （剑 75%、矛 52%、弓 27%、镐 67%、杖 60%），写死 0.45 是拍脑袋。
@@ -453,6 +468,9 @@ func _try_strike_frame() -> void:
 	var target: Node = _pending_strike_target
 	var owner_entity: Node = _pending_strike_owner
 	_pending_strike_target = null
+	# 空挥（perform_swing 无登记目标）：纯动作，命中帧无结算
+	if target == null or not is_instance_valid(target):
+		return
 	# 挥到命中帧时二次确认距离（目标可能跑出射程：Saga AttackWhileStanding 同语义）
 	if owner_entity == null or not is_instance_valid(owner_entity):
 		return

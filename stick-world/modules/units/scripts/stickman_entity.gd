@@ -392,6 +392,12 @@ func _handle_player_input(delta: float) -> void:
 	if _player_build_timer > 0.0:
 		_apply_movement(delta, Vector2.ZERO, false, false)
 		return
+	# 攻击动作锁定（复刻原版 User Control：出招站定，动画播完恢复移动）。
+	# 攻击动画期间移动输入被忽略——否则按住方向键时 run/walk 每帧覆盖
+	# 攻击动画，F 空挥/左键攻击看起来"没反应"。
+	if _current_anim.begins_with("attack"):
+		_apply_movement(delta, Vector2.ZERO, false, false)
+		return
 	var dir := Vector2.ZERO
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 		dir.x -= 1.0

@@ -8,6 +8,12 @@ extends Node
 ## 运行方式：
 ##   godot --headless --path "F:/VSCode/game-2-aux/stick-world" res://tools/baking/spine_import.tscn
 ##
+## 用户参数（`--` 之后）：
+##   --only=a,b,c     只转换指定动画（增量，避免整份重建冲掉洗稿成果）
+##   --out-dir=路径   输出目录覆盖（支持 res:// 与绝对路径，不存在则自动创建；
+##                    缺省写 res://modules/units/animations/。忠实版验收用：
+##                    --out-dir=res://tools/baking/_faithful 直出未洗稿动画）
+##
 ## 设计说明：
 ##   - Spine 骨骼角 = 相对父骨骼 x 轴的绝对角（0° = 骨骼沿 +x 水平，姿势全靠 rotation）。
 ##   - 本项目 Bone2D：rotation = 0 时精灵已按 (px,py) 方向指向子骨骼（直立姿势），
@@ -22,6 +28,9 @@ extends Node
 
 const OUTPUT_DIR := "res://modules/units/animations/"
 const SPINE_FILE := "F:/VSCode/game-2-aux/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
+
+## 实际输出目录（--out-dir 覆盖；缺省 = OUTPUT_DIR，保持现行为不动）
+var _out_dir: String = OUTPUT_DIR
 
 ## Spine 骨骼名 -> 本项目骨骼 ID（只映射核心肢体骨骼）
 const SPINE_TO_MY: Dictionary = {
@@ -102,6 +111,14 @@ func _ready() -> void:
 	_build_ref(data, animations)
 	var ok: int = 0
 	var err: int = 0
+	# --out-dir=路径：输出目录覆盖（忠实版直出用）；目录不存在则创建
+	var out_dir := _parse_out_dir_arg()
+	if not out_dir.is_empty():
+		_out_dir = out_dir
+		if not _out_dir.ends_with("/"):
+			_out_dir += "/"
+		DirAccess.make_dir_recursive_absolute(_out_dir)
+		print("  输出目录覆盖: %s" % _out_dir)
 	# --only=a,b,c：只转换指定动画（增量，避免整份重建冲掉洗稿成果）
 	var only := _parse_only_arg()
 	for godot_name in ANIM_MAP.keys():
@@ -127,6 +144,14 @@ static func _parse_only_arg() -> PackedStringArray:
 		if arg.begins_with("--only="):
 			return arg.trim_prefix("--only=").split(",", false)
 	return PackedStringArray()
+
+
+## 解析 --out-dir=路径 用户参数；缺省空 = 用 OUTPUT_DIR。
+static func _parse_out_dir_arg() -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--out-dir="):
+			return arg.trim_prefix("--out-dir=")
+	return ""
 
 
 ## 转换单个 Spine 动画为 .tres
@@ -265,7 +290,7 @@ func _save_anim(anim_name: String, tracks: Array, length: float, loop_mode: int,
 			else:
 				anim.track_insert_key(track_idx, float(keys[i]), deg_to_rad(float(keys[i + 1])))
 			i += 2
-	var file_path := OUTPUT_DIR + anim_name + ".tres"
+	var file_path := _out_dir + anim_name + ".tres"
 	var err := ResourceSaver.save(anim, file_path)
 	if err == OK:
 		print("  OK  %s.tres (length=%.2f, tracks=%d, loop=%s, events=%s)" % [

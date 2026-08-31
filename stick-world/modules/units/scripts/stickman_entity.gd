@@ -36,6 +36,10 @@ const BASE_SCALE: float = 0.5
 ## 表现侧（本文件 play_attack）与战斗侧（weapon_mount 订阅命中帧事件）共用同一张表，
 ## 避免"播矛刺动画、却按剑的命中帧结算"的错配。
 const WEAPON_ATTACK_ANIM: Dictionary = preload("res://modules/units/scripts/rig/stickman_anims.gd").WEAPON_ATTACK_ANIM
+## 动画名/变体池（死亡与受击变体选择用）
+const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+## 状态效果组件脚本（BURN/POISON/SLOW/STUN；显式 preload 防 headless class_name 未注册）
+const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
 
 ## 视觉控制器组件脚本（动画播放/头顶进度条）
 const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/entity/visual_controller.gd")
@@ -90,6 +94,10 @@ var _construction_manager: Node = null
 var faction_id: int = 0
 ## 所属战斗实例引用（null=未参战）
 var _battle_instance: Node = null
+## 最后一次被敌方箭矢瞄准的时刻（s，Time.get_ticks_msec 换算；-999=无威胁）。
+## 由 WeaponMount._fire_arrow 出弓瞬间写入**目标**实体，供矛兵举盾感知
+## （SWL SpeartonAi.IsAnyArrowThreat / _lastArrowThreatTime 直译）。
+var arrow_threat_time: float = -999.0
 
 # ─────────────────────────────── 编队角色（编制预设派生）────────────────────────────────
 ## 角色类型（fighter/builder/worker，由编队预设写入，仅展示/标记；
@@ -134,14 +142,25 @@ var _hurt_tween: Tween = null
 var _hit_stun_timer: float = 0.0
 ## 受击硬直时长（秒）
 const HIT_STUN_DURATION: float = 0.2
+## 兵种移速倍率（WeaponMount 按行为档案 move_mult 写入：SWL 兵种机动性差异——
+## Swordwrath 轻快 1.3×、Spearton 沉稳 0.85×，全员同速 = 没有兵种机动性）
+var move_speed_mult: float = 1.0
+## 死亡后 Collider 禁用倒计时（s；-1=已禁用/未死。在 _physics_process 死亡分支计时，
+## 替代 SceneTreeTimer lambda——清场竞态下 lambda 捕获失效报错）
+var _dead_disable_timer: float = -1.0
+## 分离扫描帧计数（O(n²) 扫描隔物理帧跑，帧率优化）
+var _sep_frame_counter: int = 0
 ## 脱离战斗士气恢复速率（每秒；AI 完善批次 3）
 const REST_MORALE_REGEN: float = 4.0
 
 # ─────────────────────────────── 群体分离（防叠人/1字长蛇）────────────────────────────────
-## 分离检测半径（px）：与友军/任何单位过近时互相推开
-const SEPARATION_RADIUS: float = 42.0
+## 分离检测半径（px）：与友军/任何单位过近时互相推开——
+## 必须略大于碰撞体宽（≈52），否则中心距 42 时身体已深度重叠
+const SEPARATION_RADIUS: float = 54.0
 ## 分离推力系数（叠加到 AI 移动方向）
 const SEPARATION_FORCE: float = 1.6
+## 静态分离单帧位置修正上限（px）：N 路推力累加后仍 ≤ 此值，防瞬移（审计 P0-3）
+const MAX_SEPARATION_CORRECTION: float = 3.0
 ## 头顶血条组件引用（_mount_components 装配）
 var _health_bar: Node = null
 ## Collider 原始尺寸（_ready 时保存，_apply_scale 时乘以 BASE_SCALE）
@@ -227,6 +246,11 @@ func _ready() -> void:
 		_markers_parent = rig_host.get_node_or_null("OutlineGroup/Node2D")
 	# 装配子组件（VisualController / InteractionController）
 	_mount_components()
+	# 状态效果组件（SWL ApplyBurn/... + legend 状态 System 最小集：BURN/POISON/SLOW/STUN）
+	if get_node_or_null("StatusEffects") == null:
+		var se: Node = ScriptStatusEffects.new()
+		se.name = "StatusEffects"
+		add_child(se)
 	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
 	_apply_balance_data()
 	# 获取 AIController 子节点（§7.1）
@@ -327,6 +351,38 @@ func _calculate_foot_offset() -> float:
 
 
 func _physics_process(delta: float) -> void:
+	# 死亡收口（2026-08-31 审计 P0-1）：尸体没有物理帧——不跑 AI、不减速回切
+	# （正是这套回切把 0.8s 死亡动画在 0.25s 内覆盖成 walk/idle，尸体"站起来"）、
+	# 不做分离推挤（尸体不当墙、不滑行）、不受击退。
+	if is_dead():
+		velocity = Vector2.ZERO
+		_knockback_velocity = Vector2.ZERO
+		# 死亡 0.9s 后禁用 Collider（尸体不当墙）——在实体内计时，不用
+		# SceneTreeTimer lambda（清场 queue_free 后 lambda 捕获失效报错）
+		if _dead_disable_timer >= 0.0:
+			_dead_disable_timer -= delta
+			if _dead_disable_timer < 0.0:
+				var col := get_node_or_null("Collider") as CollisionShape2D
+				if col != null:
+					col.set_deferred("disabled", true)
+		_sync_markers_transform()
+		return
+	# 眩晕（SWL StunSystem 语义）：既不跑 AI 也不移动，瘫在原地
+	if is_stunned():
+		velocity = Vector2.ZERO
+		_ai_move_dir = Vector2.ZERO
+		_sync_markers_transform()
+		return
+	# TimeManager 暂停门禁（统一"暂停"语义）：空格暂停/战斗自动暂停时全停，
+	# 修复"假暂停"（此前单位物理/AI 不理会 TimeManager，暂停停不住战斗）
+	if TimeManager != null and TimeManager.is_paused():
+		_sync_markers_transform()
+		return
+	# y 排序（2.5D 遮挡正确性）：y 越大（屏幕越靠下=离镜头越近）z 越高——
+	# 修复"远处单位身体盖住近处单位的手/武器"（此前绘制顺序=生成顺序）
+	var zi := int(global_position.y * 0.1)
+	if zi != z_index:
+		z_index = zi
 	# 仅在被附身时处理玩家输入
 	if possessed:
 		_handle_player_input(delta)
@@ -336,8 +392,12 @@ func _physics_process(delta: float) -> void:
 			_ai_controller.physics_update(delta)
 		_handle_ai_input(delta)
 		# 静态分离：停住的单位也互相推开（移动方向修正只在移动时生效，
-		# 双方都停在射程边缘时会黏住——soft-body 位置修正解决）
-		_apply_static_separation()
+		# 双方都停在射程边缘时会黏住——soft-body 位置修正解决）。
+		# 帧率优化：O(n²) 全场扫描隔物理帧跑一次（48 人混战每帧两次全场扫描
+		# 是掉帧大头，隔帧修正 ±3px 视觉无感）
+		_sep_frame_counter += 1
+		if _sep_frame_counter % 2 == 0:
+			_apply_static_separation()
 
 	# 火柴人可在地面范围内上下左右移动（详见 §7.1.1）
 	velocity += _knockback_velocity
@@ -420,7 +480,9 @@ func _terrain_speed_mult() -> float:
 
 
 func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
-	var mult: float = _terrain_speed_mult()
+	var se: Node = get_status_effects()
+	var slow_mult: float = se.get_speed_mult() if se != null and se.has_method("get_speed_mult") else 1.0
+	var mult: float = _terrain_speed_mult() * move_speed_mult * slow_mult
 	var walk_cap: float = WALK_SPEED * mult
 	var run_cap: float = RUN_SPEED * mult
 	if _is_running:
@@ -444,7 +506,7 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 func _handle_deceleration(delta: float) -> void:
 	if _is_running:
 		_is_running = false
-		_current_speed = WALK_SPEED * _terrain_speed_mult()
+		_current_speed = WALK_SPEED * _terrain_speed_mult() * move_speed_mult
 		_visual.play("walk")
 	if _current_speed > 0:
 		_current_speed -= decel * delta
@@ -470,9 +532,12 @@ func _handle_ai_input(delta: float) -> void:
 
 ## 群体分离：扫描附近过近的单位（同图所有存活 CharacterBody2D），
 ## 距离越近推力越强，叠加到移动方向（RTS 单位移动标准做法，参考
-## Stick War Legacy clone 的 soft-body separation：位置推开 + 速度修正）。
+## StickmanEntity 的 soft-body separation：位置推开 + 速度修正）。
 func _apply_separation(dir: Vector2) -> Vector2:
 	if _map_ref == null or not is_instance_valid(_map_ref):
+		return dir
+	# 帧率优化：O(n²) 扫描隔物理帧跑（与静态分离共用帧计数）
+	if _sep_frame_counter % 2 != 0:
 		return dir
 	if not _map_ref.has_method("get_entities"):
 		return dir
@@ -498,11 +563,15 @@ func _apply_separation(dir: Vector2) -> Vector2:
 ## 静态分离（soft-body 位置修正）：对过近邻居直接推位置（重叠量各半，双向）。
 ## 与 _apply_separation 的区别：后者只在移动时生效；停住的单位（射程边缘
 ## 互停的敌我）靠本方法持续分开，解决"黏住"bug。参考 RtsGame.resolveSoftCollisions。
+## 2026-08-31 审计 P0-3：所有邻居的推力**先累加再限幅**——原实现对每路推力
+## 直接写坐标线性叠加（被 N 人围住 = N 路叠加无上限，一帧几十上百 px = 肉眼瞬移），
+## 现在单帧总修正 ≤ MAX_SEPARATION_CORRECTION。
 func _apply_static_separation() -> void:
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		return
 	if not _map_ref.has_method("get_entities"):
 		return
+	var total_push := Vector2.ZERO
 	for e in _map_ref.get_entities():
 		if e == self or not is_instance_valid(e):
 			continue
@@ -519,8 +588,12 @@ func _apply_static_separation() -> void:
 			offset = Vector2.UP
 			dist = 0.001
 		# 重叠量的一半推给自己（对方也在推自己，双向合计推开整个重叠量）
-		var push_dist: float = (SEPARATION_RADIUS - dist) * 0.5
-		global_position += offset.normalized() * push_dist
+		total_push += offset.normalized() * ((SEPARATION_RADIUS - dist) * 0.5)
+	if total_push == Vector2.ZERO:
+		return
+	if total_push.length() > MAX_SEPARATION_CORRECTION:
+		total_push = total_push.normalized() * MAX_SEPARATION_CORRECTION
+	global_position += total_push
 
 
 ## 获取头顶血条组件（供测试/调试）
@@ -541,7 +614,7 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 				_apply_scale()
 		if run:
 			_is_running = true
-			_current_speed = RUN_SPEED * _terrain_speed_mult()
+			_current_speed = RUN_SPEED * _terrain_speed_mult() * move_speed_mult
 			_visual.play("run")
 			_visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
 		else:
@@ -875,16 +948,27 @@ func get_role() -> String:
 
 ## 死亡处理：停止移动、播放死亡动画、禁用受击、通知战斗实例。
 ## 爆头致死播 Death-Headshot 专属动画（原版 Kill(isHeadShot) 分家语义）。
+## 2026-08-31 审计 P0-1 死亡收口：这里是一次性权威清理——
+## 清空速度/奔跑态/动作锁（防减速回切覆盖死亡动画）、延迟禁用 Collider
+## （尸体不当墙，消灭卡位源头；_physics_process 的死亡早退管住其余帧级行为）。
 func _on_died() -> void:
 	ai_stop()
 	velocity = Vector2.ZERO
-	var dead_anim: String = "dead"
-	if health_component != null and health_component.died_from_headshot:
-		dead_anim = "dead_headshot"
+	_knockback_velocity = Vector2.ZERO
+	_current_speed = 0.0
+	_is_running = false
+	# 建造动作锁会拦截 play("dead")——死亡优先级最高，强制解锁
+	_action_locked = false
+	# 死亡变体池（SWL 死亡变体随机）：普通死 Death1/2，爆头死 Headshot 系 8 变体
+	var dead_anim: String = Anims.pick_dead_anim(
+			health_component != null and health_component.died_from_headshot)
 	_visual.play(dead_anim)
 	# 禁用 hitbox 避免继续被攻击
 	if hitbox != null:
 		hitbox.set_deferred("monitorable", false)
+	# 死亡动画（0.8s）播完后由 _physics_process 死亡分支禁用 Collider：
+	# 尸体不当墙（卡位主因）。计时起点在此置位。
+	_dead_disable_timer = 0.9
 	# 通知战斗实例（由 BattleInstance 统计伤亡）
 	if _battle_instance != null and is_instance_valid(_battle_instance):
 		if _battle_instance.has_method("on_unit_died"):
@@ -892,8 +976,12 @@ func _on_died() -> void:
 
 
 ## 受击处理（反编译参考实装 B）：按攻击者方位 vs 自身朝向判定正面/背面，
-## 触发 hit_front（后仰）/ hit_back（前扑）插播。对应遗产 SelectHitAnimation。
-func _on_damaged(_amount: float, source: Node) -> void:
+## 触发受击插播。SelectHitAnimation 全量直译：部位(Head/Mid)×方向×强度(Big/Small)。
+func _on_damaged(amount: float, source: Node) -> void:
+	# 死亡保护：died 与 damaged 可能同帧连发（AOE 多段/集火补刀），
+	# 尸体不吃受击硬直、不播受击插播（否则覆盖死亡动画 → "尸体站起来"）
+	if is_dead():
+		return
 	if source == null or not is_instance_valid(source):
 		return
 	# 受击硬直：被打瞬间 AI 短暂停滞（行业最佳实践 hit stun）
@@ -902,13 +990,40 @@ func _on_damaged(_amount: float, source: Node) -> void:
 	var from_left: bool = source.global_position.x < global_position.x
 	var facing_right: bool = _facing > 0
 	var from_front: bool = from_left != facing_right
+	# 强度分级（SWL Big/Small 按伤害量级）；部位近似（头部命中概率 30%——
+	# 近战挥击/箭雨的头部命中，爆头致死走独立死亡链路不受此影响）
+	var big: bool = amount >= Anims.HIT_BIG_DAMAGE_THRESHOLD
+	var head: bool = randf() < 0.3
+	# 举盾中被击（招架系统配套反馈：Hit-Spearton-Block 池）
+	var blocking: bool = weapon_mount != null and is_instance_valid(weapon_mount) \
+			and weapon_mount.has_method("is_blocking") and weapon_mount.is_blocking()
 	if _visual != null and _visual.has_method("play_hit"):
-		_visual.play_hit(from_front)
+		_visual.play_hit(from_front, big, head, blocking)
 
 
 ## 是否处于受击硬直（>0 表示被打停中；AI 行为据此暂停行动）。
 func is_in_hit_stun() -> bool:
 	return _hit_stun_timer > 0.0
+
+
+# ─────────────────────────────── 状态效果（SWL ApplyBurn/... 直译）────────────────────────────────
+
+## 获取状态效果组件（_ready 装配；测试桩可能无）
+func get_status_effects() -> Node:
+	return get_node_or_null("StatusEffects")
+
+
+## 施加状态效果（BURN/POISON/SLOW/STUN；转发 StatusEffects.apply）
+func apply_status(type: int, duration: float, power: float = 0.0, source: Node = null) -> void:
+	var se: Node = get_status_effects()
+	if se != null and se.has_method("apply"):
+		se.apply(type, duration, power, source)
+
+
+## 是否被眩晕（AI 据此停滞：StunSystem 语义——被打晕时既不追也不打）
+func is_stunned() -> bool:
+	var se: Node = get_status_effects()
+	return se != null and se.has_method("has_stun") and se.has_stun()
 
 
 ## 士气自然恢复（AI 完善批次 3）：不在战斗中时按 REST_MORALE_REGEN 回士气。
@@ -951,9 +1066,13 @@ func play_block() -> void:
 		_visual.play("block")
 
 
-## 设置阵营 ID（由 BattleInstance 分配）
+## 设置阵营 ID（由 BattleInstance 分配）。
+## 同步头顶血条的阵营色（圆点/横条 = 阵营识别的唯一视觉来源，审计 P0-4）。
 func set_faction(fid: int) -> void:
 	faction_id = fid
+	if _health_bar != null and is_instance_valid(_health_bar) \
+			and _health_bar.has_method("set_faction"):
+		_health_bar.set_faction(fid)
 
 
 ## 获取阵营 ID

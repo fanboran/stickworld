@@ -23,6 +23,10 @@ extends Node2D
 ##   仅当动画确实没有事件数据（如程序化动画/测试桩）时才回退到 STRIKE_FRAME_RATIO_FALLBACK。
 
 const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+## 兵种行为档案（aim_scatter 等按武器类型读取）
+const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
+## 状态效果（法术击晕 STUN 类型引用；显式 preload 防 headless class_name 未注册）
+const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
 
 # ─────────────────────────────── 武器类型 ────────────────────────────────
 enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF }
@@ -39,8 +43,10 @@ const WEAPON_SCENE_PATHS: Dictionary = {
 const SHIELD_SCENE_PATH := "res://modules/units/scenes/components/weapon_shield.tscn"
 ## 箭矢投影物场景（弓远程攻击发射）
 const ARROW_SCENE_PATH := "res://modules/units/scenes/components/arrow.tscn"
-## 箭矢飞行速度（与 arrow_projectile.gd SPEED 一致，用于移动预判）
-const ARROW_SPEED: float = 640.0
+## 抛物线箭矢水平分速（px/s；竖直初速按距离解算，重力 ARROW_GRAVITY）
+const ARROW_VX: float = 850.0
+## 抛物线箭矢重力（px/s²）：900px 远射弧顶 ≈ 230px（越友军头顶），150px 内近似平射
+const ARROW_GRAVITY: float = 2000.0
 ## 箭矢预判系数（瞄移动目标时提前量 × 飞行时间 × 系数）
 const ARROW_LEAD_FACTOR: float = 0.7
 ## 放箭延迟兜底（s）：仅当 attack_bow 动画**没有** Hit 事件元数据时使用。
@@ -57,16 +63,21 @@ const BLOCK_RESET_INTERVAL: float = 0.6
 ## 正面格挡判定：来袭方向与朝向夹角余弦大于此值才算"正面"（≈ ±75° 扇区）。
 const BLOCK_FRONT_DOT: float = 0.25
 ## 各武器攻击射程（像素，含手臂长度）
+## STAFF 600 = SWL Magikill 施法距离（半屏级；原 90 是"法杖敲击"值，会造成
+## kite_range > 射程死锁：敌人一进保距圈就永远后撤永不还手）
+## BOW 1400 = SWL 弓手观感射程（约全屏宽）——抛物线弹道下站后排越顶抛射
 const WEAPON_RANGE: Dictionary = {
 	WeaponType.SWORD: 80.0,
-	WeaponType.SPEAR: 120.0,
-	WeaponType.BOW: 300.0,
+	WeaponType.SPEAR: 200.0,
+	WeaponType.BOW: 1400.0,
 	WeaponType.PICKAXE: 70.0,
-	WeaponType.STAFF: 90.0,
+	WeaponType.STAFF: 600.0,
 }
 ## HitStop 参数（命中顿帧）
 const HITSTOP_TIME_SCALE: float = 0.05
 const HITSTOP_DURATION: float = 0.06
+## HitStop 全局最小触发间隔（s）：多单位混战节流，0.3s 内至多冻结一次（审计 P0-2）
+const HITSTOP_MIN_INTERVAL: float = 0.3
 ## 受击击退力度（与伤害正相关）
 const KNOCKBACK_PER_DAMAGE: float = 16.0
 
@@ -145,8 +156,9 @@ var _weapon: Node2D = null
 var _shield: Node2D = null
 ## 当前情绪标签
 var _mood: Mood = Mood.STEADY
-## 弓延迟发射：pending 目标与倒计时（拉弓满弓再放箭，视觉对齐 attack_bow 动画）
-var _pending_bow_target: Node = null
+## 延迟结算：pending 目标与倒计时（弓=拉弓满弓放箭 / 杖=施法前摇到点结算，
+## 视觉对齐各自攻击动画）
+var _pending_ranged_target: Node = null
 var _bow_fire_timer: float = 0.0
 ## 举盾姿态（原版 IsBlocking()）：true 时该单位处于防御姿态，才可能格挡。
 ## 由 AI（守备/被压制）或玩家输入切换；仅持盾单位有效。
@@ -197,8 +209,9 @@ func _mount_weapons() -> void:
 		return
 	_weapon = _mount_one(scene, hand, "Weapon")
 	attack_range = WEAPON_RANGE.get(weapon_type, attack_range)
-	# 副手盾牌
-	if shield_enabled:
+	# 副手盾牌（**绑定矛兵**：原版也只有 Spearton 持盾，其余兵种无盾——
+	# 曾给全员挂盾导致"人手一面盾"的怪相，用户决策回归原版）
+	if shield_enabled and weapon_type == WeaponType.SPEAR:
 		_mount_shield(owner_entity)
 	# 订阅动画内嵌事件（命中帧 + 音效钩子）
 	_connect_rig_events(owner_entity)
@@ -291,6 +304,11 @@ func _reload_weapons() -> void:
 		_shield.queue_free()
 		_shield = null
 	_mount_weapons()
+	# 兵种移速（SWL 兵种机动性差异：档案 move_mult → 实体 move_speed_mult）
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity != null and "move_speed_mult" in owner_entity:
+		owner_entity.move_speed_mult = float(
+				ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("move_mult", 1.0))
 
 
 ## 查找武器骨 weapon_hand（SWL pickaxe1 补译；挂 hand_inner 手骨原点，
@@ -320,15 +338,18 @@ func _physics_process(delta: float) -> void:
 	if not _strike_fired:
 		_pending_strike_elapsed += delta
 	_try_strike_frame()
-	# 弓延迟发射：拉弓满弓时放箭（视觉对齐 attack_bow 动画）
-	if _pending_bow_target != null:
-		if is_instance_valid(_pending_bow_target):
+	# 延迟发射/施法结算：远程计时到点按武器类型分派（视觉对齐攻击动画）
+	if _pending_ranged_target != null:
+		if is_instance_valid(_pending_ranged_target):
 			_bow_fire_timer -= delta
 			if _bow_fire_timer <= 0.0:
-				_fire_arrow(_pending_bow_target)
-				_pending_bow_target = null
+				if weapon_type == WeaponType.BOW:
+					_fire_arrow(_pending_ranged_target)
+				else:
+					_cast_magic(_pending_ranged_target)
+				_pending_ranged_target = null
 		else:
-			_pending_bow_target = null
+			_pending_ranged_target = null
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -339,7 +360,7 @@ func _physics_process(delta: float) -> void:
 func can_attack() -> bool:
 	if _cooldown_timer <= 0.0:
 		return true
-	return _can_cancel_attack_anim()
+	return _cancel_window_latched or _can_cancel_attack_anim()
 
 
 ## 动画可打断判定：本次攻击已挥过命中帧，且当前动画播放位置越过了
@@ -365,7 +386,10 @@ func _can_cancel_attack_anim() -> bool:
 	var anim_len: float = rig.get_anim_length(_attack_anim_name())
 	var cancel_point: float = _hit_event_time \
 			+ animation_cancel_fraction * maxf(0.0, anim_len - _hit_event_time)
-	return t >= cancel_point
+	if t >= cancel_point:
+		_cancel_window_latched = true
+		return true
+	return false
 
 
 ## 当前冷却剩余时间
@@ -374,8 +398,10 @@ func get_cooldown_remaining() -> float:
 
 
 ## 执行一次攻击。
-## 近战（剑/矛/镐/法杖）：距离 + 命中率判定，命中则目标受击反馈。
+## 近战（剑/矛/镐）：距离 + 命中率判定，命中则目标受击反馈。
 ## 远程（弓）：发射箭矢投影物，命中由箭矢实际碰撞决定。
+## 施法（杖）：延迟结算（attack_staff 的 Spell Hit@1.0s 前摇到点直接结算，
+## SWL Magikill-Spell1 语义；弹道化见待办"魔法弹投射物"）。
 ## target: 目标 StickmanEntity（必须有 HealthComponent）
 ## 返回 {hit: bool, damage: float, reason: String}
 ## 复刻 Saga MeleeAttackSystem：攻击 = 播放动画 + 在命中帧（动画进度 STRIKE_FRAME_RATIO）
@@ -389,8 +415,8 @@ func perform_attack(target: Node) -> Dictionary:
 	if target == null or not is_instance_valid(target):
 		result["reason"] = "invalid_target"
 		return result
-	# 弓：远程射击（发射箭矢，命中由箭矢决定）
-	if weapon_type == WeaponType.BOW:
+	# 弓：发射箭矢（命中由箭矢决定）；杖：延迟施法结算
+	if weapon_type == WeaponType.BOW or weapon_type == WeaponType.STAFF:
 		return _attack_ranged(target)
 	var health: Node = _get_health(target)
 	if health == null or health.is_dead():
@@ -414,6 +440,7 @@ func perform_attack(target: Node) -> Dictionary:
 	_pending_strike_owner = owner_entity
 	_strike_fired = false
 	_pending_strike_elapsed = 0.0
+	_cancel_window_latched = false
 	# 进入冷却（含情绪修正）
 	_cooldown_timer = _get_effective_cooldown()
 	result["reason"] = "striking"
@@ -431,6 +458,7 @@ func perform_swing() -> bool:
 	_pending_strike_owner = get_owner_entity()
 	_strike_fired = false
 	_pending_strike_elapsed = 0.0
+	_cancel_window_latched = false
 	_cooldown_timer = _get_effective_cooldown()
 	return true
 
@@ -450,6 +478,10 @@ var _pending_strike_owner: Node = null
 var _strike_fired: bool = true
 ## 发起攻击后经过的时间（用于动画起播宽限判定）
 var _pending_strike_elapsed: float = 0.0
+## 可打断窗口锁存：动画一旦越过可打断点即置位，下次起挥时复位。
+## 决策（AI 轮询 can_attack）与执行（perform_attack）之间可能隔帧、动画时间
+## 已继续推进——锁存保证"看到窗口开着 → 出手必成"，不因查询时序丢攻击。
+var _cancel_window_latched: bool = false
 
 ## 命中帧结算（Saga MeleeAttackSystem.Strike）：
 ## 攻击动画播到 **Hit 事件时间** 时结算一次；无事件数据时回退到进度比例。
@@ -597,14 +629,15 @@ func _attack_ranged(target: Node) -> Dictionary:
 	if dist > attack_range:
 		result["reason"] = "out_of_range"
 		return result
-	_pending_bow_target = target
+	_pending_ranged_target = target
 	_bow_fire_timer = _get_bow_fire_delay()
 	result["reason"] = "fired"
 	_cooldown_timer = _get_effective_cooldown()
 	return result
 
 
-## 放箭延迟（s）：读 attack_bow 的 Hit 事件真值（Archidon-Draw Hit@0.5333s），
+## 放箭/施法结算延迟（s）：读攻击动画的 Hit 事件真值
+## （弓 Archidon-Draw Hit@0.5333s 满弓 / 杖 Magikill-Spell1 Hit@1.0s 施法前摇），
 ## 无事件数据时回退 BOW_FIRE_DELAY_FALLBACK。
 func _get_bow_fire_delay() -> float:
 	var owner_entity: CharacterBody2D = get_owner_entity()
@@ -617,7 +650,38 @@ func _get_bow_fire_delay() -> float:
 	return t if t >= 0.0 else BOW_FIRE_DELAY_FALLBACK
 
 
-## 发射箭矢：从射手胸口高度朝目标身体（含移动预判）直线发射。
+## 法术结算（SWL Magikill-Spell1 施法前摇到点）：不发射投射物，直接对目标
+## 结算 SPELL 伤害——格挡对法术无效（is_blockable=false，原版盾挡箭不挡魔法）。
+## 弹道化（魔法弹投射物可 miss）见待办"箭矢重力弹道"条目。
+func _cast_magic(target: Node) -> void:
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null or target == null or not is_instance_valid(target):
+		return
+	var health: Node = _get_health(target)
+	if health == null or health.is_dead():
+		return
+	var p := DamagePipeline.Params.new(damage, owner_entity)
+	p.direction = (target.global_position - owner_entity.global_position).normalized()
+	p.type = DamagePipeline.DAMAGE_TYPE.SPELL
+	p.is_blockable = false
+	var dealt: float = DamagePipeline.apply(target, p)
+	# 击晕（SWL Magikill 法术效果，StunSystem 语义）：被法术命中短暂眩晕——
+	# 给召唤护卫争取围堵时间；状态效果系统的首个消费者
+	if dealt > 0.0 and target.has_method("apply_status"):
+		target.apply_status(ScriptStatusEffects.Type.STUN, 0.5, 0.0, owner_entity)
+	# 登记攻击者（防集火；与箭矢一致）
+	if owner_entity.has_method("get_battle_instance"):
+		var battle: Node = owner_entity.get_battle_instance()
+		if battle != null and is_instance_valid(battle) and battle.has_method("register_attacker"):
+			battle.register_attacker(target, owner_entity)
+	if dealt > 0.0 and target.has_method("apply_hit_reaction"):
+		target.apply_hit_reaction(p.direction, dealt * KNOCKBACK_PER_DAMAGE)
+
+
+## 发射箭矢：从射手胸口**抛物线**发射（SWL Arrow.launchY/AimAngle 弹道）。
+## 固定重力 G，水平分速按距离解算，竖直初速度解抛物线过目标点——
+## 近距离平射、远距自动高弧越顶（友军前排不挡箭），这是弓手能站后排
+## 远程压制的物理基础（直线弹道会把箭全打在自己前排背上）。
 func _fire_arrow(target: Node) -> void:
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity == null:
@@ -629,10 +693,25 @@ func _fire_arrow(target: Node) -> void:
 	# 射手胸口（Collider 上部）与目标身体中心（Collider 位置）
 	var from: Vector2 = _body_pos(owner_entity) + Vector2(0, -70)
 	var aim_point: Vector2 = _body_pos(target)
-	var aim: Vector2 = aim_point - from
-	# 移动预判：目标速度 × 飞行时间 × 系数（瞄准移动目标）
+	# 抛物线解算（SWL AimAngle 语义）：飞行时间 T 按全距离取（基准速 ARROW_VX），
+	# 初速 = 直线分量(d/T) + 抛物线补偿(−½GT)——T 秒后恰好落到目标点，方向自洽
+	# （旧解算用 dist_x 且 lead 加进 vx/vy，纵深差大时方向失配 = "轨迹奇怪"根因）
+	var dist: float = from.distance_to(aim_point)
+	var t: float = clampf(dist / ARROW_VX, 0.12, 2.2)
+	# 移动预判：先按 T 平移目标点，再对**新目标点**解算（保证弹道自洽）
 	if target is CharacterBody2D:
-		aim += (target as CharacterBody2D).velocity * (aim.length() / ARROW_SPEED) * ARROW_LEAD_FACTOR
+		aim_point += (target as CharacterBody2D).velocity * t * ARROW_LEAD_FACTOR
+		dist = from.distance_to(aim_point)
+		t = clampf(dist / ARROW_VX, 0.12, 2.2)
+	var aim: Vector2 = aim_point - from
+	var vel := Vector2(aim.x / t, aim.y / t - 0.5 * ARROW_GRAVITY * t)
+	# SWL AimAngle 散布（currentShotBodyRandomness/NextGaussian）：出弓方向加高斯扰动，
+	# σ 取兵种档案 aim_scatter（rad）——箭雨自然散开，不再人人弹道全同
+	var scatter: float = float(ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("aim_scatter", 0.0))
+	if scatter > 0.0:
+		var u1: float = maxf(randf(), 0.0001)
+		var g: float = sqrt(-2.0 * log(u1)) * cos(TAU * randf())
+		vel = vel.rotated(g * scatter)
 	var arrow: Node2D = scene.instantiate()
 	var parent: Node = owner_entity.get_parent()
 	if parent == null:
@@ -641,7 +720,11 @@ func _fire_arrow(target: Node) -> void:
 	arrow.global_position = from
 	# SWL drawPower：拉弓满弓比例（BOW_FIRE_DELAY 计时结束 = 满弓 1.0）
 	if arrow.has_method("setup"):
-		arrow.call("setup", aim.normalized(), damage, owner_entity, target, 1.0)
+		arrow.call("setup", vel, damage, owner_entity, target, 1.0, ARROW_GRAVITY)
+	# 箭矢威胁标记（SWL SpeartonAi.IsAnyArrowThreat 感知源）：出弓瞬间通知目标，
+	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾
+	if target != null and is_instance_valid(target) and "arrow_threat_time" in target:
+		target.arrow_threat_time = Time.get_ticks_msec() / 1000.0
 
 
 ## 实体身体位置（Collider 世界坐标，缺省回落 global + 典型偏移）
@@ -685,6 +768,11 @@ func is_shield_blocking(incoming_dir: Vector2 = Vector2.ZERO) -> bool:
 ## 由 AI（守备/被压制）或玩家输入切换；无盾单位设了也挡不住。
 func set_blocking(v: bool) -> void:
 	_blocking = v
+
+
+## 是否处于举盾姿态（受击方选受击动画用：举盾被击走 Hit-Spearton-Block 池）
+func is_blocking() -> bool:
+	return _blocking
 
 
 ## 是否处于举盾姿态
@@ -734,9 +822,24 @@ func _play_swing() -> void:
 
 ## 命中顿帧：短暂冻结时间（打击感核心，参考 Stickman Burst Hit Stop 方案）。
 ## headless 下禁用（避免拖慢测试计时）。
+## 2026-08-31 审计 P0-2 规模节流：全局 Engine.time_scale 冻结是为 1v1 打击感
+## 设计的——24+ 单位混战每次近战命中都冻结整个世界，画面反复掉到 5% 速度
+## 且多个恢复 timer 互相覆盖。加全局最小触发间隔（0.3s 至多一次）。
+static var _last_hitstop_ms: int = -100000
+
 func _hitstop() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
+	# 2026-08-31 四轮审计：全局 time_scale 冻结只在**玩家附身单位命中**时触发——
+	# 48 人观察场每 0.3s 冻结全世界 0.06s = "又加速又卡顿掉帧"的元凶。
+	# AI 互殴的打击感由受击硬直/击退/红闪承担（原版 SWL 也不冻结全场）
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null or not owner_entity.is_possessed():
+		return
+	var now_ms: int = Time.get_ticks_msec()
+	if now_ms - _last_hitstop_ms < int(HITSTOP_MIN_INTERVAL * 1000.0):
+		return
+	_last_hitstop_ms = now_ms
 	Engine.time_scale = HITSTOP_TIME_SCALE
 	var tree := get_tree()
 	if tree != null:

@@ -50,6 +50,12 @@ const BASELINE: Dictionary = {
 	"summon_count": 0,                      ## 召唤护卫数量（SWL MagikillAi.ShouldCastSummon；0=无召唤）
 	"summon_cooldown": 12.0,                ## 召唤冷却（s）
 	"summon_hp": 40.0,                      ## 护卫 HP（minidon 脆皮）
+	"summon_body_scale": 0.65,              ## 护卫体型倍率（SWL minidon 比常规兵种小一圈）
+	"spell_aoe_radius": 0.0,                ## 法术命中点爆炸半径（px，SWL CastStun/StunOpponents 放倒一片；0=关）
+	"block_walk_anim": "",                  ## 持盾行军动画（盾姿态分层，计划 5；空=无持盾变体）
+	"block_idle_anim": "",                  ## 持盾待命动画（空=无）
+	"block_attack_pool": [],                ## 持盾攻击动画池（举盾时随机抽取，如三连刺）
+	"block_move_mult": 1.0,                 ## 持盾移速倍率（举盾行军更沉稳）
 }
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────
@@ -77,6 +83,11 @@ const CLASS_PROFILES: Dictionary = {
 		"move_mult": 0.85,
 		"block_after_attack": 0.7,
 		"formation_block": true,
+		# 盾姿态分层（计划 5，SWL Spearton 持盾形态）：端盾行军/待命/三连刺
+		"block_walk_anim": "block_walk",
+		"block_idle_anim": "block_crouch",
+		"block_attack_pool": ["block_attack_1", "block_attack_2", "block_attack_3"],
+		"block_move_mult": 0.8,
 	},
 	BOW: {
 		"kite_range": 500.0,
@@ -102,6 +113,8 @@ const CLASS_PROFILES: Dictionary = {
 		"summon_count": 2,
 		"summon_cooldown": 12.0,
 		"summon_hp": 40.0,
+		# 法术爆炸（SWL CastStun/StunOpponents 放倒一片：命中点范围伤害+击晕）
+		"spell_aoe_radius": 90.0,
 	},
 }
 

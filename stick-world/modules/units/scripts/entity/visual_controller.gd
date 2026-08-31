@@ -15,6 +15,8 @@ extends Node
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）
 const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+## 兵种行为档案（盾姿态分层：持盾动画组/池按武器类型查档案，计划 5）
+const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
 ## 动画整体播放倍率（×1.4 加速）
 const ANIM_SPEED_MULT: float = 1.4
@@ -28,6 +30,9 @@ const IDLE_THRESHOLD: float = 5.0
 var _entity: Node2D = null
 ## 头顶动作进度条节点
 var _action_progress_indicator: Node2D = null
+## 举盾姿态（盾姿态分层，计划 5）：true 时 walk/idle 换持盾变体、attack 走持盾池。
+## 由 WeaponMount.set_blocking 经实体 on_blocking_changed 驱动。
+var _blocking: bool = false
 
 
 func setup(entity: Node2D) -> void:
@@ -93,12 +98,81 @@ func play(anim_name: String) -> void:
 	# 站姿按武器类型分型（原版各兵种 Stand：剑士双变体池、矛/弓/镐/杖各一）。
 	# set_idle_variant 用 set_state_animation 把 idle state 的动画换成变体（共用 state），
 	# 因此这里仍 play("idle")（状态机有 idle 状态），不能 travel 变体名（状态机无 idle_v2 状态）。
-	if anim_name == "idle" and _entity._current_anim != "idle":
+	# 举盾时跳过变体重挑——idle state 由持盾待命动画占用（_apply_stance_anim）。
+	if anim_name == "idle" and _entity._current_anim != "idle" and not _blocking:
 		var variant: String = Anims.pick_stand_variant_for(_weapon_type())
 		if rig.has_method("set_idle_variant"):
 			rig.set_idle_variant(variant)
+	# 盾姿态分层（计划 5）：举盾时 walk/idle 换持盾变体（block_walk/block_crouch）
+	if _blocking and not _entity._carrying and (anim_name == "walk" or anim_name == "idle"):
+		_apply_stance_anim(anim_name)
 	rig.play(play_name)
 	_entity._current_anim = anim_name
+
+
+## 举盾/收盾切换（盾姿态分层，计划 5）：正在播 walk/idle 时立即换变体，
+## 其余状态回 walk/idle 时经 play() 自然生效。
+func set_block_stance(on: bool) -> void:
+	if on == _blocking:
+		return
+	_blocking = on
+	if _entity == null or _entity._action_locked or _entity._carrying:
+		return
+	if _entity._current_anim == "walk" or _entity._current_anim == "run":
+		_apply_stance_anim("walk")
+	elif _entity._current_anim == "idle":
+		_apply_stance_anim("idle")
+
+
+## 持盾变体换装（walk↔block_walk、idle↔block_crouch，动画名查兵种档案；
+## 收盾恢复基础动画——idle 回基础持械站姿，下次进 idle 变体重挑）。
+func _apply_stance_anim(kind: String) -> void:
+	var rig: Node2D = _entity.rig
+	if rig == null or not rig.has_method("set_state_anim"):
+		return
+	var wt: int = _weapon_type()
+	var prof: Dictionary = ScriptBehaviorProfiles.get_profile(wt)
+	if _blocking:
+		var walk_a: String = str(prof.get("block_walk_anim", ""))
+		var idle_a: String = str(prof.get("block_idle_anim", ""))
+		if kind == "walk" and not walk_a.is_empty():
+			rig.set_state_anim("walk", walk_a)
+		elif kind == "idle" and not idle_a.is_empty():
+			rig.set_state_anim("idle", idle_a)
+	else:
+		if kind == "walk":
+			rig.set_state_anim("walk", "walk")
+		elif kind == "idle":
+			rig.set_state_anim("idle", Anims.idle_for_weapon(wt))
+
+
+## 播放攻击动画（盾姿态分层入口）：举盾且有持盾攻击池 → 随机抽变体
+## （Spearton-Block-Attack1/2/3 三连刺）；否则/收盾恢复基础攻击动画。
+func play_attack(anim_name: String, blocking: bool) -> void:
+	var variant: String = anim_name
+	if blocking:
+		var pool: Array = ScriptBehaviorProfiles.get_profile(_weapon_type()).get("block_attack_pool", [])
+		if not pool.is_empty():
+			variant = str(pool[randi() % pool.size()])
+	_play_attack_variant(anim_name, variant)
+
+
+## 实际换装并起播攻击动画：state 名不变（事件/完成信号按 state 派发，
+## weapon_mount 命中帧订阅不受影响），只换 state 内的动画资源。
+func _play_attack_variant(base: String, variant: String) -> void:
+	var rig: Node2D = _entity.rig
+	if rig == null:
+		return
+	if rig.has_method("set_state_anim"):
+		rig.set_state_anim(base, variant)  # variant==base 即恢复基础动画
+	rig.play(base)
+	_entity._current_anim = base
+
+
+## 暂停冻结动画（TimeManager 暂停门禁配套）。
+func set_anim_paused(paused: bool) -> void:
+	if _entity != null and _entity.rig != null and _entity.rig.has_method("set_anim_paused"):
+		_entity.rig.set_anim_paused(paused)
 
 
 ## 当前武器类型（WeaponMount 未挂载时回落持剑 0）。

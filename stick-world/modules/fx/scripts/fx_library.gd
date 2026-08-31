@@ -11,6 +11,7 @@ extends RefCounted
 const BUILD_DUST := "build_dust"      ## 建造完工尘土
 const GATHER_DEBRIS := "gather_debris" ## 采集/收割飘屑
 const HIT_SPARK := "hit_spark"        ## 战斗打击火花
+const MAGIC_BLAST := "magic_blast"    ## 法术爆炸（Magikill 施法命中点，紫白星芒环形爆发）
 ## 环境闪光源 ID（AmbientSparkleSpawner 用，非 burst 语义）
 const AMBIENT_SPARKLE := "ambient_sparkle"
 
@@ -32,6 +33,8 @@ static func create_burst(effect_id: String) -> GPUParticles2D:
 			_config_debris(p)
 		HIT_SPARK:
 			_config_spark(p)
+		MAGIC_BLAST:
+			_config_magic_blast(p)
 		AMBIENT_SPARKLE:
 			_config_sparkle(p)
 		_:
@@ -200,6 +203,31 @@ static func _config_spark(p: GPUParticles2D) -> void:
 	var grad := Gradient.new()
 	grad.set_color(0, Color(1, 1, 1, 1))
 	grad.set_color(1, Color(1, 0.75, 0.3, 0.0))
+	m.color_ramp = _ramp_tex(grad)
+	p.process_material = m
+
+
+## ── 配置：法术爆炸（Magikill 命中点：紫白星芒大范围环形爆发，急阻尼定住成形）──
+static func _config_magic_blast(p: GPUParticles2D) -> void:
+	p.amount = 30
+	p.lifetime = 0.55
+	p.explosiveness = 1.0
+	p.texture = _star4(26)
+	var m := ParticleProcessMaterial.new()
+	m.direction = Vector3(0, -1, 0)
+	m.spread = 180.0
+	m.initial_velocity_min = 160.0
+	m.initial_velocity_max = 340.0
+	m.gravity = Vector3(0, 120, 0)
+	m.damping_min = 300.0
+	m.damping_max = 520.0
+	m.scale_min = 1.0
+	m.scale_max = 2.2
+	m.color = Color(0.78, 0.62, 1.0, 1.0)
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1, 1, 1, 1.0))
+	grad.set_color(0.4, Color(0.85, 0.7, 1.0, 0.9))
+	grad.set_color(1, Color(0.5, 0.3, 0.8, 0.0))
 	m.color_ramp = _ramp_tex(grad)
 	p.process_material = m
 

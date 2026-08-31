@@ -80,9 +80,26 @@ func update(delta: float) -> void:
 		if away.length() > 0.1:
 			_retreat_dir = away.normalized()
 
-	# 撤退移动（奔跑）
+	# 撤退移动（奔跑）：方向夹紧可走带——被逼到地图边缘时不再朝带外逃
+	# （贴墙站死观感根因，2026-09-01 观察场反馈），x/y 双向都被夹死 → finish 回决策
+	var move_dir := _retreat_dir
+	var gy: float = float(entity.get("ground_y")) if "ground_y" in entity else 0.0
+	var gb: float = float(entity.get("ground_bottom")) if "ground_bottom" in entity else 0.0
+	if gb > gy:
+		var pos: Vector2 = entity.global_position
+		if move_dir.y < 0.0 and pos.y <= gy + 20.0:
+			move_dir.y = 0.0
+		elif move_dir.y > 0.0 and pos.y >= gb - 20.0:
+			move_dir.y = 0.0
+		move_dir = move_dir.normalized() if move_dir.length_squared() > 0.0001 else Vector2.ZERO
+	if move_dir == Vector2.ZERO:
+		# 无路可退（贴边）：停止撤退，交还决策（脱火士气恢复后自然再接敌）
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
+		finish()
+		return
 	if entity.has_method("ai_move"):
-		entity.ai_move(_retreat_dir, true)
+		entity.ai_move(move_dir, true)
 
 	if _timer <= 0.0:
 		if entity.has_method("ai_stop"):

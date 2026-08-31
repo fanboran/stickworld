@@ -474,6 +474,12 @@ func get_ordered_behavior() -> String:
 	return _ordered_behavior
 
 
+## 获取当前命令参数（号令来源鉴别用：如编队动态跟队的 follow_order 标记，
+## FormationSystem 据此只回收/覆盖自己下的号令，不碰玩家号令）。
+func get_ordered_params() -> Dictionary:
+	return _ordered_params
+
+
 ## 是否有命令在执行。
 func has_order() -> bool:
 	return not _ordered_behavior.is_empty()

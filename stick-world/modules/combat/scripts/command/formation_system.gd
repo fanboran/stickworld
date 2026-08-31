@@ -16,6 +16,11 @@ extends Node
 ## 队伍级目标决策（反编译参考实装 D-B）：本系统每 SQUAD_DECISION_INTERVAL 秒为每个
 ## 战斗小队选一个**共享攻击目标**（排长决策 → 队员执行），队员在攻击行为里优先用
 ## 队伍目标（集火），否则各自寻敌。参考遗产 TeamAi / 传奇单位组目标同步。
+##
+## 编队动态跟队（SWL MoveInFormationBehindAnotherFormation + GapBetweenFormationGroups
+## 直译）：小队可锚定跟随另一小队（set_squad_follow_squad），每 0.5s tick 把后队未接战
+## 成员重下发到"前队质心 − 行进方向 × gap"的队形位（hold_on_arrive 驻留，接战即还战斗
+## 行为接管）；前队全灭/解散 → 自动解除锚定转自主决策。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 小队对应的组织层级（L1 = 最低层，排级）
@@ -30,6 +35,11 @@ const SPREAD_SPACING: float = 32.0
 const RALLY_RADIUS: float = 24.0
 ## 队伍级目标决策间隔（秒）：排长每此间隔重选一次共享攻击目标（反编译参考实装 D-B）
 const SQUAD_DECISION_INTERVAL: float = 0.5
+## 编队动态跟队默认间距（px，SWL GapBetweenFormationGroups 量级）：
+## 后队落点 = 前队质心 − 行进方向 × gap
+const FOLLOW_DEFAULT_GAP: float = 150.0
+## 跟队重下发死区（px）：成员距锚定队形位小于此值不重下号令（防抖动/防 arrive 动画重播）
+const FOLLOW_DEADZONE: float = 40.0
 ## 指挥官光环士气恢复速率（每秒；排长存活时队员士气恢复，AI 完善批次 3）
 const LEADER_MORALE_AURA: float = 3.0
 ## 公共目标选择核心（反编译参考实装 A；同模块 combat，显式 preload）
@@ -53,7 +63,8 @@ signal squad_disbanded(squad_id: String)
 ## OrganizationApi 引用（由 GameRoot 注入）
 var _org_api: Node = null
 ## squad_id -> {"units": Array[Node], "leader": Node, "preset_id": String,
-##              "work_types": Array[String], "role": String, "name": String}
+##              "work_types": Array[String], "role": String, "name": String,
+##              "follow_squad_id": String, "follow_gap": float}
 var _squads: Dictionary = {}
 ## unit.get_instance_id() -> squad_id（快速反查）
 var _unit_to_squad: Dictionary = {}
@@ -228,6 +239,8 @@ func create_squad(units: Array, squad_name: String = "", preset_id: String = DEF
 		"role": preset["default_role"],
 		"name": name_str,
 		"follow_player": false,
+		"follow_squad_id": "",
+		"follow_gap": 0.0,
 	}
 	# 发射信号
 	var unit_ids: Array = []
@@ -398,6 +411,8 @@ func _decide_squad_targets(delta: float) -> void:
 			_squad_targets.erase(squad_id)
 		else:
 			_squad_targets[squad_id] = target
+	# 编队动态跟队（SWL MoveInFormationBehindAnotherFormation 直译）：锚定小队落点维持
+	_update_squad_follows()
 
 
 ## 队伍级共享攻击目标（队员查询；含有效性校验——目标死亡/失效返回 null）。
@@ -460,6 +475,141 @@ func _remove_unit_from_squad(unit: Node) -> void:
 	# 同步到组织模块
 	if _org_api != null and _org_api.has_method("remove_stickman"):
 		_org_api.remove_stickman(squad_id, str(iid))
+
+
+# ──────────────────────── 编队动态跟队（内部）────────────────────────────────
+
+## 锚定小队落点维持（每 0.5s tick，与队伍目标决策共用节拍）：
+##   1. 前队解散/全灭 → 解除锚定，后队转自主决策（SWL 前队全灭不再跟队）
+##   2. 落点 = 前队质心 − 行进方向 × gap；行进方向取"后队质心 → 前队质心"
+##      （停驻接敌时依然稳定，不依赖速度采样，天然左右军镜像）
+##   3. 前队接敌 → 后队越过 gap 推进到战线支援（不带 hold 驻留，到位/接敌即
+##      交还战斗决策）——否则前队缠斗时后队永远钉在 gap 处"全员卡死"
+##   4. 未接战成员超出死区 → 重下 move 号令（hold_on_arrive 驻留 +
+##      engage_in_range：敌进射程即 finish 交还战斗行为）
+func _update_squad_follows() -> void:
+	for squad_id in _squads.keys():
+		if _squads[squad_id].get("follow_squad_id", "") != "":
+			_update_squad_follow(squad_id)
+
+
+## 单个锚定小队的落点计算与成员号令下发。
+func _update_squad_follow(squad_id: String) -> void:
+	var squad: Dictionary = _squads.get(squad_id, {})
+	if squad.is_empty():
+		return
+	# 与"跟随玩家"模式互斥（跟随玩家由 BehaviorFollow 决策，锚定号令会打断它）
+	if squad.get("follow_player", false):
+		return
+	var front_id: String = squad.get("follow_squad_id", "")
+	if front_id.is_empty():
+		return
+	# 前队解散 → 解除锚定
+	if not _squads.has(front_id):
+		clear_squad_follow(squad_id)
+		return
+	# 前队质心（仅存活成员；全灭 → 解除锚定转自主决策）
+	var front_centroid := Vector2.ZERO
+	var front_n: int = 0
+	for u in _squads[front_id]["units"]:
+		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+			front_centroid += u.global_position
+			front_n += 1
+	if front_n == 0:
+		clear_squad_follow(squad_id)
+		return
+	front_centroid /= float(front_n)
+	# 前队是否接敌（任一存活成员射程内有敌）：接敌 → 后队推进支援，不再钉在 gap 处
+	var front_engaged: bool = false
+	for u in _squads[front_id]["units"]:
+		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()) \
+				and _member_enemy_in_range(u):
+			front_engaged = true
+			break
+	# 后队存活成员与质心
+	var members: Array = []
+	var my_centroid := Vector2.ZERO
+	for u in squad["units"]:
+		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+			members.append(u)
+			my_centroid += u.global_position
+	if members.is_empty():
+		return
+	my_centroid /= float(members.size())
+	# 行进方向：后队质心 → 前队质心（退化 = 两队重叠，维持原位不推；
+	# 支援模式重叠时仍要推进，不提前返回）
+	var dir: Vector2 = front_centroid - my_centroid
+	if not front_engaged and dir.length_squared() < 1.0:
+		return
+	var anchor: Vector2 = front_centroid
+	if not front_engaged:
+		anchor = front_centroid - dir.normalized() * float(squad.get("follow_gap", FOLLOW_DEFAULT_GAP))
+	# 成员号令下发（接战/撤退/找掩体/被附身成员不打断；玩家号令不覆盖）
+	for u in members:
+		if u.has_method("is_possessed") and u.is_possessed():
+			continue
+		var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
+		if ai == null:
+			continue
+		if ai.has_method("get_current_behavior") \
+				and ai.get_current_behavior() in ["retreat", "seek_cover"]:
+			continue  # 士气驱动行为，不拽回队列
+		if _member_enemy_in_range(u):
+			continue  # 射程内有敌（含风筝窗口），交还给战斗行为
+		var slot: Vector2 = get_squad_dest(squad_id, u, anchor, "line")
+		# 已有他人号令（无 follow_order 标记 = 玩家/上级号令）→ 不覆盖
+		if ai.has_method("has_order") and ai.has_order():
+			if not (ai.has_method("get_ordered_params")
+					and ai.get_ordered_params().get("follow_order", false)):
+				continue
+			# 已有跟队号令且落点未漂出死区 → 不重复下发（防 travel 重入重播 arrive 动画）
+			if ai.has_method("get_ordered_behavior") and ai.get_ordered_behavior() == "move" \
+					and ai.get_ordered_params().get("target", Vector2.ZERO).distance_to(slot) <= FOLLOW_DEADZONE:
+				continue
+		ai.set_order("move", {
+			"target": slot,
+			"engage_in_range": true,
+			# 行军跟队驻留待命；支援推进不驻留——到位即 finish 交还战斗决策
+			"hold_on_arrive": not front_engaged,
+			"follow_order": true,
+		})
+
+
+## 成员主手射程内是否有存活敌人（跟队不打断接战成员；行为同 BehaviorMove 接敌检查）。
+func _member_enemy_in_range(u: Node) -> bool:
+	if not u.has_method("get_battle_instance"):
+		return false
+	var bi: Node = u.get_battle_instance()
+	if bi == null or not is_instance_valid(bi) \
+			or not bi.has_method("is_active") or not bi.is_active():
+		return false
+	var faction: int = u.get_faction() if u.has_method("get_faction") else 0
+	if faction == 0 or not bi.has_method("get_enemies_of"):
+		return false
+	var weapon: Node = u.get_weapon() if u.has_method("get_weapon") else null
+	var attack_range: float = float(weapon.attack_range) if weapon != null and "attack_range" in weapon else 100.0
+	for e in bi.get_enemies_of(faction):
+		if e == null or not is_instance_valid(e):
+			continue
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		if u.global_position.distance_to(e.global_position) <= attack_range:
+			return true
+	return false
+
+
+## 锚定链是否已包含 squad_id（防成环：设 A→B 前检查 B 的前向链是否回到 A）。
+func _follow_chain_has(squad_id: String, target_id: String) -> bool:
+	var cur: String = target_id
+	var hops: int = 0
+	while not cur.is_empty() and hops < 16:
+		if cur == squad_id:
+			return true
+		if not _squads.has(cur):
+			return false
+		cur = _squads[cur].get("follow_squad_id", "")
+		hops += 1
+	return false
 
 
 # ─────────────────────────────── 预设 API ────────────────────────────────
@@ -556,6 +706,58 @@ func is_unit_squad_following(unit: Node) -> bool:
 	if squad_id == "" or not _squads.has(squad_id):
 		return false
 	return _squads[squad_id].get("follow_player", false)
+
+
+# ──────────────────────────── 编队动态跟队（锚定跟随）────────────────────────────────
+
+## 设置小队锚定跟随另一小队（编队动态跟队，SWL MoveInFormationBehindAnotherFormation +
+## GapBetweenFormationGroups 直译）：后队落点 = 前队质心 − 行进方向 × gap，由
+## _decide_squad_targets 每 0.5s tick 维持；前队全灭/解散自动解除锚定转自主决策。
+## front_squad_id 传空 = 解除锚定。返回是否成功。
+func set_squad_follow_squad(squad_id: String, front_squad_id: String, gap: float = FOLLOW_DEFAULT_GAP) -> bool:
+	if not _squads.has(squad_id):
+		return false
+	if front_squad_id.is_empty():
+		clear_squad_follow(squad_id)
+		return true
+	if front_squad_id == squad_id or not _squads.has(front_squad_id):
+		return false
+	if _follow_chain_has(squad_id, front_squad_id):
+		return false  # 防锚定成环（A→B→…→A）
+	_squads[squad_id]["follow_squad_id"] = front_squad_id
+	_squads[squad_id]["follow_gap"] = maxf(0.0, gap)
+	_update_squad_follow(squad_id)  # 立即落一次位（不等下个 tick）
+	return true
+
+
+## 解除小队锚定跟随，转自主决策（前队全灭/玩家接管时调用）。
+## 仅回收跟队自己下的 move 号令（follow_order 标记鉴别），玩家号令不受影响。
+func clear_squad_follow(squad_id: String) -> void:
+	if not _squads.has(squad_id):
+		return
+	_squads[squad_id]["follow_squad_id"] = ""
+	_squads[squad_id]["follow_gap"] = 0.0
+	for u in _squads[squad_id]["units"]:
+		if not is_instance_valid(u):
+			continue
+		var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
+		if ai == null or not ai.has_method("has_order") or not ai.has_order():
+			continue
+		if not ai.has_method("get_ordered_behavior") or ai.get_ordered_behavior() != "move":
+			continue
+		if ai.has_method("get_ordered_params") \
+				and ai.get_ordered_params().get("follow_order", false):
+			ai.clear_order()
+
+
+## 查询锚定跟随信息（调试/测试用）：{"front": String, "gap": float}，未锚定返回 {}。
+func get_squad_follow(squad_id: String) -> Dictionary:
+	if not _squads.has(squad_id):
+		return {}
+	var front: String = _squads[squad_id].get("follow_squad_id", "")
+	if front.is_empty():
+		return {}
+	return { "front": front, "gap": _squads[squad_id].get("follow_gap", 0.0) }
 
 
 ## 获取小队名称。

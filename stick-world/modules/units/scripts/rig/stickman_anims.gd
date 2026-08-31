@@ -22,6 +22,15 @@ const ANIM_ATTACK_PICKAXE := "attack_pickaxe"
 const ANIM_ATTACK_STAFF := "attack_staff"
 const ANIM_ATTACK_BOW := "attack_bow"
 const ANIM_BLOCK := "block"
+## 盾姿态分层（计划 5，SWL Spearton 持盾形态组）：举盾时 walk/idle/attack
+## 经 set_state_animation 换持盾变体（不增状态节点，机制同死亡变体池）
+const ANIM_BLOCK_WALK := "block_walk"
+const ANIM_BLOCK_CROUCH := "block_crouch"
+const ANIM_BLOCK_ATTACK_1 := "block_attack_1"
+const ANIM_BLOCK_ATTACK_2 := "block_attack_2"
+const ANIM_BLOCK_ATTACK_3 := "block_attack_3"
+## 持盾攻击池（举盾矛兵攻击随机抽取，Spearton-Block-Attack1/2/3 三连刺）
+const BLOCK_ATTACK_ANIMS: Array[String] = [ANIM_BLOCK_ATTACK_1, ANIM_BLOCK_ATTACK_2, ANIM_BLOCK_ATTACK_3]
 const ANIM_DEAD := "dead"
 ## 爆头死亡（转译自解包 Death-Headshot）：爆头致死时替代 dead 播放（原版
 ## Kill(isHeadShot) 参数分家——普通死亡与爆头死亡是两条动画）。
@@ -164,6 +173,11 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_ATTACK_STAFF)
 	_load_anim(lib, ANIM_ATTACK_BOW)
 	_load_anim(lib, ANIM_BLOCK)
+	# 盾姿态分层（计划 5）：持盾行军/待命/三连刺变体入库
+	for a in [ANIM_BLOCK_WALK, ANIM_BLOCK_CROUCH]:
+		_load_anim(lib, a)
+	for a in BLOCK_ATTACK_ANIMS:
+		_load_anim(lib, a)
 	_load_anim(lib, ANIM_DEAD)
 	_load_anim(lib, ANIM_DEAD_HEADSHOT)
 	_load_anim(lib, ANIM_WALK_CARRY)

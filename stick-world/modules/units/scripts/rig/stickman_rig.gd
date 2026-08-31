@@ -392,6 +392,31 @@ func _is_oneshot(anim_name: String) -> bool:
 	return anim != null and anim.loop_mode == Animation.LOOP_NONE
 
 
+## 动态换主状态节点的动画资源（盾姿态分层，计划 5）：
+## walk↔block_walk、idle↔block_crouch、attack_spear↔block_attack_N——不增状态节点，
+## 机制同死亡变体池。事件/完成信号按 state 名派发（animation_event/finished 发
+## "attack_spear" 等状态名），换动画不影响 weapon_mount 命中帧订阅。
+## 返回是否成功（动画未入库/状态不存在时 false，调用方自行回退）。
+func set_state_anim(state_name: String, anim_name: String) -> bool:
+	if _anim_tree == null or _anim_player == null:
+		return false
+	if not _anim_player.has_animation(anim_name):
+		return false
+	var sm: AnimationNodeStateMachine = _anim_tree.tree_root as AnimationNodeStateMachine
+	if sm == null or not sm.has_node(state_name):
+		return false
+	Anims.set_state_animation(sm, state_name, anim_name)
+	return true
+
+
+## 暂停冻结动画（TimeManager 暂停门禁配套，修复"暂停只停位移肢体还动"）：
+## AnimationPlayer 速率归零；恢复时回 1.0（walk 速率由移动代码下一帧重设）。
+func set_anim_paused(paused: bool) -> void:
+	if _anim_player == null:
+		return
+	_anim_player.speed_scale = 0.0 if paused else 1.0
+
+
 ## 设置动画播放速率（用于 walk 速度匹配，p_speed=1.0 为原始速率）。
 ## 只对**循环动画**（walk/run 等移动动画）生效：一次性动画（攻击/受击/死亡/列阵/
 ## 格挡）一律按原始速率播放。否则单位站着不动时速率被压到 MIN_ANIM_SCALE(0.6)，

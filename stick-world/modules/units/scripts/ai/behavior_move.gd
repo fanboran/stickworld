@@ -9,6 +9,8 @@ extends BehaviorBase
 ## 可选字段：
 ##   - run: bool  是否奔跑（默认 false）
 ##   - engage_in_range: bool  接敌即战（敌人进入武器射程即打断移动转战斗）
+##   - hold_on_arrive: bool  到位驻留（编队动态跟队锚定用）：到达后行为不完成，
+##     站桩待命压制 AI 战斗决策"擅自冲锋"，敌人进射程（engage_in_range）仍打断
 
 ## 兵种行为档案（formation_block：盾兵行军盾不放下）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
@@ -24,6 +26,10 @@ const ENGAGE_CHECK_INTERVAL: float = 0.2
 var _target: Vector2 = Vector2.ZERO
 ## 是否奔跑
 var _running: bool = false
+## 是否已到达目标（hold_on_arrive 驻留态标记）
+var _arrived: bool = false
+## 到位驻留（编队动态跟队锚定）：到达后不 finish，原地待命
+var _hold_on_arrive: bool = false
 ## 列阵到位滞留倒计时（>0 表示已到达正在播 arrive）
 var _arrive_hold: float = 0.0
 ## 接敌即战（号令 engage_in_range=true 时启用）：敌人进入武器射程即打断移动
@@ -46,6 +52,8 @@ func enter(previous: String, params: Dictionary) -> void:
 		_target = entity.global_position if entity != null else Vector2.ZERO
 	_running = params.get("run", false)
 	_engage_in_range = params.get("engage_in_range", false)
+	_hold_on_arrive = params.get("hold_on_arrive", false)
+	_arrived = false
 	_engage_check_timer = 0.0
 	_update_formation_block(true)
 
@@ -78,34 +86,10 @@ func update(delta: float) -> void:
 		finish()
 		return
 
-	# 到达后的列阵到位滞留（AI 完善批次 4）：播 arrive 立正动画，播完再 finish
-	if _arrive_hold > 0.0:
-		_arrive_hold -= delta
-		if _arrive_hold <= 0.0:
-			finish()
-			if entity.has_method("ai_stop"):
-				entity.ai_stop()
-		return
-
-	var pos: Vector2 = entity.global_position
-	var dist: float = pos.distance_to(_target)
-
-	# 到达目标
-	if dist <= ARRIVAL_THRESHOLD:
-		if entity.has_method("ai_stop"):
-			entity.ai_stop()
-		# 编队成员到达队形位 → 播列阵动画并短暂滞留（对应传奇 ArriveAtFormationAnimationSystem）
-		if _is_squad_member():
-			if entity.has_method("play_arrive"):
-				entity.play_arrive()
-			_arrive_hold = ARRIVE_HOLD_DURATION
-		else:
-			finish()
-		return
-
-	# 接敌即战（2026-08-31 观察场审计）：推进途中敌人进入武器射程 → 打断移动，
+	# 接敌即战（2026-08-31 观察场审计）：推进/驻留途中敌人进入武器射程 → 打断移动，
 	# finish 后 AIController 清除命令转入战斗决策——远程班停在射程边缘输出，
 	# 近战班卡在攻击距离，不再被号令拽着冲过射程贴脸
+	# （前置检查：锚定驻留态也要能被接敌打断，交还战斗行为）
 	if _engage_in_range:
 		_engage_check_timer -= delta
 		if _engage_check_timer <= 0.0:
@@ -115,6 +99,40 @@ func update(delta: float) -> void:
 					entity.ai_stop()
 				finish()
 				return
+
+	# 到达后的列阵到位滞留（AI 完善批次 4）：播 arrive 立正动画，播完再 finish；
+	# hold_on_arrive（编队动态跟队）滞留结束不 finish，转入下方驻留分支
+	if _arrive_hold > 0.0:
+		_arrive_hold -= delta
+		if _arrive_hold <= 0.0 and not _hold_on_arrive:
+			finish()
+			if entity.has_method("ai_stop"):
+				entity.ai_stop()
+		return
+
+	# 到位驻留（hold_on_arrive，编队动态跟队）：站桩待命、行为不完成——
+	# 号令持续占用决策（压制"无令时战斗决策擅自冲锋"），敌人进射程由上方接敌检查打断
+	if _arrived:
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
+		return
+
+	var pos: Vector2 = entity.global_position
+	var dist: float = pos.distance_to(_target)
+
+	# 到达目标
+	if dist <= ARRIVAL_THRESHOLD:
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
+		_arrived = true
+		# 编队成员到达队形位 → 播列阵动画并短暂滞留（对应传奇 ArriveAtFormationAnimationSystem）
+		if _is_squad_member():
+			if entity.has_method("play_arrive"):
+				entity.play_arrive()
+			_arrive_hold = ARRIVE_HOLD_DURATION
+		elif not _hold_on_arrive:
+			finish()
+		return
 
 	# 计算移动方向并驱动 entity
 	var dir: Vector2 = (_target - pos).normalized()

@@ -39,8 +39,14 @@ var _target: Node = null
 var _traveled: float = 0.0
 ## 出射高度（落地判定基准）
 var _launch_y: float = 0.0
-## 已飞行时间（兜底寿命）
+## 已飞行时间（s；抛物线解算模式下与 _solve_time 比较判落地）
 var _flight_time: float = 0.0
+## 解算飞行时间（s，>0 = 抛物线解算模式）：飞满后继续沿弹道下落到瞄准点地面线
+## （_solve_ground_y）才插地——落点≈目标脚下，散布 miss 自然越过插在敌阵里；
+## 0 = 未传（旧调用），退回 GROUND_DROP 深度判定
+var _solve_time: float = 0.0
+## 瞄准点地面线（y；solve_time 模式下插地判定线）
+var _solve_ground_y: float = 0.0
 ## 拉弓力度 0~1（SWL drawPower：满弓伤害更高）
 var _draw_power: float = 1.0
 ## 已插地/插身（停止飞行，等待淡出）
@@ -52,15 +58,19 @@ var _stuck_timer: float = 0.0
 @export var does_stick_in: bool = true
 
 
-## 发射参数：初速度矢量、伤害、射手、目标、拉弓力度（0~1）、重力（缺省 0=直线，兼容旧调用）。
+## 发射参数：初速度矢量、伤害、射手、目标、拉弓力度（0~1）、重力（缺省 0=直线，兼容旧调用）、
+## 解算飞行时间（>0 = 抛物线解算模式）、瞄准点地面线（solve_time 模式下插地判定线，
+## 0 = 飞满 solve_time 即插）。
 ## 抛物线模式下 vel 含竖直初速（WeaponMount 按目标距离解算）。
-func setup(vel: Vector2, dmg: float, shooter: Node, target: Node = null, draw_power: float = 1.0, gravity: float = 0.0) -> void:
+func setup(vel: Vector2, dmg: float, shooter: Node, target: Node = null, draw_power: float = 1.0, gravity: float = 0.0, solve_time: float = 0.0, solve_ground_y: float = 0.0) -> void:
 	_vel = vel
 	_gravity = gravity
 	_damage = dmg
 	_shooter = shooter
 	_target = target
 	_draw_power = clampf(draw_power, 0.0, 1.0)
+	_solve_time = maxf(0.0, solve_time)
+	_solve_ground_y = solve_ground_y
 	rotation = _vel.angle()
 
 
@@ -73,6 +83,9 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# TimeManager 暂停门禁：与实体同一"暂停"语义（暂停时箭矢悬停，不继续飞）
+	if TimeManager != null and TimeManager.is_paused():
+		return
 	if _stuck:
 		# 插地淡出（SWL fadeOutOver）
 		_stuck_timer += delta
@@ -95,9 +108,21 @@ func _physics_process(delta: float) -> void:
 		if global_position.distance_to(body_pos) <= HIT_RADIUS:
 			_hit(_target)
 			return
-	# 落地：下落段且低于出射点 GROUND_DROP，或兜底寿命到 → 插地（复刻 doesStickIn）
-	if (_vel.y > 0.0 and global_position.y >= _launch_y + GROUND_DROP) \
-			or _flight_time >= MAX_FLIGHT_TIME:
+	# 落地判定（两条路径）：
+	# ① 抛物线解算模式（solve_time>0）：飞满解算时间后沿弹道继续下落，越过
+	#    瞄准点地面线即插——落点≈目标脚下，miss 自然插在敌阵（修复"低于出射点
+	#    500px 才插地=贴地小半圆插前线"观感 bug，2026-09-01 观察场反馈 9c）
+	# ② 旧调用（solve_time=0）：下落段低于出射点 GROUND_DROP，或兜底寿命到
+	var landed: bool = false
+	if _solve_time > 0.0:
+		landed = _flight_time >= _solve_time \
+				and (_solve_ground_y <= 0.0 or global_position.y >= _solve_ground_y)
+		if _solve_time > 0.0 and _flight_time >= _solve_time + MAX_FLIGHT_TIME:
+			landed = true  # 解算模式兜底（防极端弹道永生）
+	else:
+		landed = (_vel.y > 0.0 and global_position.y >= _launch_y + GROUND_DROP) \
+				or _flight_time >= MAX_FLIGHT_TIME
+	if landed:
 		_stick_ground()
 
 

@@ -18,6 +18,7 @@ const ANIM_WALK := "walk"
 const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
 const ANIM_DEAD := "dead"
+const ANIM_DEAD_HEADSHOT := "dead_headshot"
 const ANIM_HIT := "hit"
 const ANIM_HIT_FRONT := "hit_front"
 const ANIM_HIT_BACK := "hit_back"
@@ -71,6 +72,11 @@ var _weapon_l: Node2D
 var _rebuild_pending: bool = false
 ## 受击插播计时（>0 表示正在受击动画，倒计时结束后回切到 _hit_return_to）
 var _hit_timer: float = -1.0
+## 死亡终态（2026-08-31 观察场审计）：dead/dead_headshot 播出后置位，
+## rig 层拒绝一切后续动画请求（受击插播/硬直回切/攻击都不会再覆盖死亡动画）。
+## 场景：单位在受击硬直中被补刀打死——_on_died 播 dead，但 _hit_timer 仍在
+## 倒计时，计时到 0 travel(_hit_return_to) 会把死亡动画覆盖回站立（"尸体站起来"）。
+var _dead: bool = false
 ## 受击前状态（动画播完后回切）
 var _hit_return_to: String = ANIM_IDLE
 ## 已发送 animation_finished 的 state（防重复触发；离开该 state 后重置）
@@ -115,7 +121,7 @@ func _process(_delta: float) -> void:
 	# 受击插播倒计时：动画播完回切到受击前状态（反编译参考实装 B）
 	if _hit_timer > 0.0:
 		_hit_timer -= _delta
-		if _hit_timer <= 0.0 and _state_machine != null:
+		if _hit_timer <= 0.0 and _state_machine != null and not _dead:
 			_state_machine.travel(_hit_return_to)
 			_current_anim = _hit_return_to
 	# 动画结束检测（反编译参考实装 C）：LOOP_NONE 动画播完发射 animation_finished
@@ -346,6 +352,19 @@ func play(anim_name: String) -> void:
 			_state_machine = _anim_tree.get("parameters/playback")
 	if _state_machine == null:
 		return
+	# 死亡终态：dead 前缀动画（含变体池 dead_v2/dead_headshot_* 等）置位后
+	# 拒绝一切其他动画请求（见 _dead 注释）。变体名动态换入 dead/dead_headshot
+	# 状态节点后 travel 标准状态（不增状态节点，set_state_animation 同款机制）。
+	if anim_name.begins_with("dead"):
+		_dead = true
+		_hit_timer = -1.0
+		if anim_name != ANIM_DEAD and anim_name != ANIM_DEAD_HEADSHOT and _anim_tree != null:
+			var sm: AnimationNodeStateMachine = _anim_tree.tree_root as AnimationNodeStateMachine
+			var base: String = ANIM_DEAD_HEADSHOT if anim_name.begins_with("dead_headshot") else ANIM_DEAD
+			Anims.set_state_animation(sm, base, anim_name)
+			anim_name = base
+	elif _dead:
+		return
 	# 切换到非 walk 动画时重置播放速率
 	if _anim_player != null and anim_name != ANIM_WALK:
 		_anim_player.speed_scale = 1.0
@@ -436,9 +455,14 @@ func get_anim_length(anim_name: String) -> float:
 	return anim.length if anim != null else -1.0
 
 
-## 受击插播（反编译参考实装 B）：打断任意动作插入 hit_front/hit_back，
-## 动画播完（计时器）自动回切到受击前状态。from_front=true 正面受击（后仰）。
-func play_hit(from_front: bool) -> void:
+## 受击插播（反编译参考实装 B）：打断任意动作插入受击动画，播完（计时器）
+## 自动回切到受击前状态。变体池直译（SWL SelectHitAnimation：部位×方向×强度）——
+## hit_front/hit_back 状态节点动画**动态替换**为池中变体（不增状态节点）。
+## from_front=true 正面受击；big=true 强击（Mid Big 组）；head=true 部位在头；
+## blocking=true 举盾中被击（Hit-Spearton-Block 池，招架配套反馈）。
+func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking: bool = false) -> void:
+	if _dead:
+		return
 	if _state_machine == null:
 		if _anim_tree != null:
 			_state_machine = _anim_tree.get("parameters/playback")
@@ -447,10 +471,15 @@ func play_hit(from_front: bool) -> void:
 	# 连续受击时保留最初的返回状态（不因 hit 中途又被打而回切到 hit）
 	if _current_anim != ANIM_HIT_FRONT and _current_anim != ANIM_HIT_BACK:
 		_hit_return_to = _current_anim
-	var hit_name: String = ANIM_HIT_FRONT if from_front else ANIM_HIT_BACK
-	_state_machine.travel(hit_name)
-	_current_anim = hit_name
-	_hit_timer = _anim_length(hit_name)
+	var hit_state: String = ANIM_HIT_FRONT if from_front else ANIM_HIT_BACK
+	var chosen: String = Anims.pick_hit_anim(from_front, big, head, blocking)
+	# 动态替换 hit 状态节点的动画为选中变体（set_idle_variant 同款机制）
+	if _anim_tree != null:
+		var sm: AnimationNodeStateMachine = _anim_tree.tree_root as AnimationNodeStateMachine
+		Anims.set_state_animation(sm, hit_state, chosen)
+	_state_machine.travel(hit_state)
+	_current_anim = hit_state
+	_hit_timer = _anim_length(chosen)
 
 
 ## 切换 idle 状态的待机变体动画（stand 变体池；进入待机时调用一次并保持）。

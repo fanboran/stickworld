@@ -76,6 +76,12 @@ func play(anim_name: String) -> void:
 	var rig: Node2D = _entity.rig
 	if rig == null:
 		return
+	# 死亡终态门禁（2026-08-31 审计 P0-1）：dead 是 ANY→dead 的终态，
+	# 死后一切 walk/idle/attack 请求一律拒绝——防移动减速逻辑把死亡动画
+	# 在 0.25s 内覆盖成"尸体站起来"
+	if _entity.has_method("is_dead") and _entity.is_dead() \
+			and anim_name != "dead" and anim_name != "dead_headshot":
+		return
 	# 动作锁定时保持当前动作动画（如 build），不切走
 	if _entity._action_locked:
 		return
@@ -153,11 +159,12 @@ func clear_action() -> void:
 		play("idle")
 
 
-## 受击插播（反编译参考实装 B）：按方向触发 hit_front/hit_back，播完自动回原状态。
-func play_hit(from_front: bool) -> void:
+## 受击插播（反编译参考实装 B）：按方向触发受击动画，播完自动回原状态。
+## 变体池直译（SWL SelectHitAnimation）：big=强击 / head=头部部位 / blocking=举盾中被击
+func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking: bool = false) -> void:
 	var rig: Node2D = _entity.rig
 	if rig != null and rig.has_method("play_hit"):
-		rig.play_hit(from_front)
+		rig.play_hit(from_front, big, head, blocking)
 
 
 # ─────────────────────────────── 头顶动作进度条 ────────────────────────────────

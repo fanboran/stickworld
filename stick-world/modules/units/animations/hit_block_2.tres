@@ -1,0 +1,67 @@
+[gd_resource type="Animation" format=3]
+
+[resource]
+length = 0.5667
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("hip/spine_root/lower_torso/chest_mid:rotation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0.3333),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [-0.08883725892651137]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.1333, 0.5667),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [-0.01937315469713706, 0.14154620233674012, -0.01937315469713706]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer:rotation")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.1333, 0.5667),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [-0.08290313946973066, -0.23003439541285275, -0.08290313946973066]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso:rotation")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 0.1333, 0.5667),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [-0.05375614096142535, -0.012042771838761113, -0.05375614096142535]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head:rotation")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0, 0.1333, 0.5667),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [-0.3342305517569141, -0.23753931119642788, -0.3342305517569141]
+}
+metadata/anim_events = []
+metadata/hit_time = -1.0
+metadata/sound_events = []

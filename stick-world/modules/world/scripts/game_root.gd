@@ -786,7 +786,7 @@ func _update_debug_weapon_hud() -> void:
 		_weapon_panel.refresh()
 
 
-## 打开帝国功能空面板（经 ui_placeholder 模块，系统落地后替换真实面板）。
+## 打开帝国功能空面板（经 ui_global/placeholders，系统落地后替换真实面板）。
 ## 快捷键（K/O/J/L）与暂停菜单「帝国功能」共用此入口。
 func _open_placeholder_panel(preset_id: String) -> void:
 	if ui_root == null:

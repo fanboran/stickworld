@@ -374,7 +374,7 @@ func _test_headshot_death() -> void:
 	if anim != null:
 		_runner.assert_true(anim.loop_mode == Animation.LOOP_NONE, "死亡动画应为一次性")
 		var dead: Animation = load(ANIM_DIR + "dead.tres")
-		_runner.assert_true(anim != dead and not anim.length.is_equal_approx(dead.length),
+		_runner.assert_true(anim != dead and not is_equal_approx(anim.length, dead.length),
 			"爆头死亡与普通死亡应是不同动画（%.3f vs %.3f）" % [anim.length, dead.length])
 	# 标记：爆头致死 → died_from_headshot=true；普通致死 → false
 	var target := _make_dummy(25.0)

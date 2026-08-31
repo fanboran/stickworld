@@ -91,13 +91,27 @@ func _setup_ui_root() -> void:
 	ur.name = "UIRoot"
 	_root.add_child(ur)
 	_root.ui_root = ur
-	# 注入依赖（不自行向上遍历查找）：InputDispatcher 切换时同步面板
+	# 注入依赖（不自行向上遍历查找）：InputDispatcher 切换时同步面板；
+	# 模式→面板映射在本装配层完成（UIRoot 不依赖业务模块枚举，断 ui_global↔player_control 环）
 	if ur.has_method("setup"):
-		ur.setup(_root.input_dispatcher)
+		ur.setup(_root.input_dispatcher, _mode_to_panel_type)
 	# GlobalHUD 注入 CameraRig / GameRoot（居中/脱困/编制/设置按钮）
 	var hud: Control = ur.get_node_or_null(UIAPI.PATH_GLOBAL_HUD)
 	if hud != null and hud.has_method("setup"):
 		hud.setup(_root.camera_rig, _root)
+
+
+## 模式 → UI 面板类型映射（UIAPI.PanelType），装配时注入 UIRoot。
+func _mode_to_panel_type(mode: int) -> int:
+	match mode:
+		PlayerControlAPI.Mode.EXPLORE, PlayerControlAPI.Mode.INDOOR, PlayerControlAPI.Mode.BUILD:
+			return UIAPI.PanelType.VILLAGE
+		PlayerControlAPI.Mode.BATTLE:
+			return UIAPI.PanelType.BATTLE
+		PlayerControlAPI.Mode.POSSESS:
+			return UIAPI.PanelType.POSSESS
+		_:
+			return UIAPI.PanelType.VILLAGE
 
 
 ## 实例化 DebugOverlay 场景并挂为子节点。
@@ -697,6 +711,14 @@ func _setup_build_menu_deferred() -> void:
 func register_debug_drawers() -> void:
 	if DebugApi == null:
 		return
+	# 注入地图节点路径表：绘制器经 ctx 查节点，不反向 import WorldAPI（避免 debug_GUI↔world 依赖环）
+	DebugApi.set_ctx_extra("map_paths", {
+		"placement_grid": WorldAPI.PATH_MAP_PLACEMENT_GRID,
+		"building_host": WorldAPI.PATH_MAP_BUILDING_HOST,
+		"terrain_buildings": WorldAPI.PATH_MAP_TERRAIN_BUILDINGS,
+		"chunk_triggers": WorldAPI.PATH_MAP_CHUNK_TRIGGERS,
+		"entity_host": WorldAPI.PATH_MAP_ENTITY_HOST,
+	})
 	DebugApi.register_drawer("grid_drawer", Callable(_DebugDrawers, "draw_grid"))
 	DebugApi.register_drawer("barrier_drawer", Callable(_DebugDrawers, "draw_barriers"))
 	DebugApi.register_drawer("building_drawer", Callable(_DebugDrawers, "draw_buildings"))

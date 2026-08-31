@@ -12,7 +12,7 @@ extends CanvasLayer
 const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scripts/debug_ui_inspector.gd")
 const _FpsCounterScript: GDScript = preload("res://modules/ui_global/scripts/hud/fps_counter.gd")
 
-# UIAPI / PlayerControlAPI 是全局 class_name，无需 preload
+# UIAPI 是全局 class_name，无需 preload（模式枚举经映射器注入，不依赖 PlayerControlAPI）
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var global_hud: Control = get_node_or_null(UIAPI.PATH_GLOBAL_HUD)
@@ -88,10 +88,16 @@ func set_fps_counter_visible(visible: bool) -> void:
 		_fps_counter.visible = visible
 
 
-## 由 SystemSetup 装配时调用，注入 InputDispatcher（不自行向上遍历查找）。
-func setup(input_dispatcher: Node) -> void:
+## 模式→面板映射器（Callable(int mode) -> int，返回 UIAPI.PanelType）。
+## 由装配方注入，本模块不依赖业务模块的模式枚举（断 ui_global↔player_control 环）。
+var _mode_mapper: Callable = Callable()
+
+
+## 由 SystemSetup 装配时调用：注入 InputDispatcher 与模式→面板映射器。
+func setup(input_dispatcher: Node, mode_mapper: Callable = Callable()) -> void:
 	if input_dispatcher != null and input_dispatcher.has_signal("mode_changed"):
 		input_dispatcher.mode_changed.connect(_on_mode_changed)
+	_mode_mapper = mode_mapper
 
 
 ## 挂主题：全 UI 树走 StickTheme（黑玻璃窗 + 琥珀强调）。
@@ -115,25 +121,19 @@ func _bind_event_bus() -> void:
 # ─────────────────────────────── 模式切换响应 ────────────────────────────────
 
 func _on_mode_changed(_old_mode: int, new_mode: int) -> void:
-	# 把模式映射到面板类型
-	var panel_type: int = _mode_to_panel_type(new_mode)
+	# 映射器未注入（裸 UIRoot 环境）时不动面板
+	if not _mode_mapper.is_valid():
+		return
+	apply_mode_panel(int(_mode_mapper.call(new_mode)))
+
+
+## 切换模式面板（panel_type 为 UIAPI.PanelType；模式→面板映射由装配方负责）。
+func apply_mode_panel(panel_type: int) -> void:
 	if mode_panel and mode_panel.has_method("switch_to"):
 		mode_panel.switch_to(panel_type)
-	# 战斗模式打开时清空上下文面板
-	if new_mode == PlayerControlAPI.Mode.BATTLE:
+	# 战斗面板打开时清空上下文面板
+	if panel_type == UIAPI.PanelType.BATTLE:
 		clear_context()
-
-
-func _mode_to_panel_type(mode: int) -> int:
-	match mode:
-		PlayerControlAPI.Mode.EXPLORE, PlayerControlAPI.Mode.INDOOR, PlayerControlAPI.Mode.BUILD:
-			return UIAPI.PanelType.VILLAGE
-		PlayerControlAPI.Mode.BATTLE:
-			return UIAPI.PanelType.BATTLE
-		PlayerControlAPI.Mode.POSSESS:
-			return UIAPI.PanelType.POSSESS
-		_:
-			return UIAPI.PanelType.VILLAGE
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────

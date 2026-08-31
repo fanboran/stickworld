@@ -73,6 +73,27 @@ func get_drawers() -> Dictionary:
 	return _drawers
 
 
+# ─────────────────────────────── 上下文附加数据（装配层注入） ────────────────────────────────
+
+## 跨模块注入的调试上下文附加数据（如地图节点路径表，由装配层写入，本模块不自知其含义）
+var _ctx_extras: Dictionary = {}
+
+
+## 注入上下文附加数据（键值对；随每帧 ctx 下发给绘制器，面板可经 get_ctx_extra 读取）
+func set_ctx_extra(key: String, value) -> void:
+	_ctx_extras[key] = value
+
+
+## 读取上下文附加数据
+func get_ctx_extra(key: String, default: Variant = null) -> Variant:
+	return _ctx_extras.get(key, default)
+
+
+## 全量附加数据（DebugDrawControl 每帧并入 ctx）
+func ctx_extras() -> Dictionary:
+	return _ctx_extras
+
+
 # ─────────────────────────────── 绘制器独立开关 ────────────────────────────────
 
 ## 查询绘制器是否启用

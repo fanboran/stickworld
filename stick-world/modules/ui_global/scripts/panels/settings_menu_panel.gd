@@ -355,7 +355,8 @@ func _on_map_selected(map_id: String) -> void:
 	var current: String = _game_root.scene_loader.get_current_map_id() if _game_root.scene_loader.has_method("get_current_map_id") else ""
 	if map_id == current:
 		return
-	_game_root.scene_loader.travel_to_map(map_id, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
+	# 步行旅行、左侧进入（scene_loader 默认值）；不 import WorldAPI，避免 ui_global↔world 依赖环
+	_game_root.scene_loader.travel_to_map(map_id)
 
 
 # ─────────────────────────────── 回到主菜单 ────────────────────────────────

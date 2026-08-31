@@ -126,9 +126,11 @@ func _order_to_behavior(order_type: int) -> String:
 func _order_to_params(order_type: int, target_pos: Vector2) -> Dictionary:
 	match order_type:
 		OrderType.ADVANCE_ALL, OrderType.RALLY:
-			return {"target": target_pos}
+			# engage_in_range：推进途中敌人进入武器射程即停下接战（行为见 behavior_move），
+			# 否则 move 行为只认目标点，远程班会被号令拽着冲过射程贴脸（2026-08-31 观察场审计）
+			return {"target": target_pos, "engage_in_range": true}
 		OrderType.SPRINT:
-			return {"target": target_pos, "run": true}
+			return {"target": target_pos, "run": true, "engage_in_range": true}
 		OrderType.HOLD_POSITION:
 			return {}
 		OrderType.RETREAT:

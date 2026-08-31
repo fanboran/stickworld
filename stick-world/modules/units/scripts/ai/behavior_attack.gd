@@ -196,6 +196,7 @@ func update(delta: float) -> void:
 		# 风筝还击（SWL 弓手边撤边射）：前摇/弹道与移动解耦（延迟结算计时独立），
 		# 冷却好就边跑边放——不再被追着跑还不还手
 		if dist <= attack_range and weapon != null and weapon.has_method("can_attack") and weapon.can_attack():
+			_face_target()  # 回头面向目标开火（否则背身拉弓）
 			weapon.perform_attack(_target)
 			_aiming = false
 	elif dist <= attack_range:
@@ -203,6 +204,7 @@ func update(delta: float) -> void:
 		# 时长再放箭，放箭瞬间重掷（GenerateNextShotRandomness），节奏不再是卡冷却平A
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
+		_face_target()  # 开火面向目标（走位/漂移后可能侧身）
 		if _update_aim_rhythm(delta) and weapon != null and weapon.has_method("can_attack") and weapon.can_attack():
 			weapon.perform_attack(_target)
 			_aiming = false
@@ -317,6 +319,9 @@ func _gauss(mean: float, sigma: float) -> float:
 var _summon_cd: float = 0.0
 ## 间距避让节流计时（s）
 var _spacing_timer: float = 0.0
+## 本施法者召唤的护卫（存活跟踪：召唤封顶用——无上限时 12s 一轮人口爆炸，
+## 2026-09-01 观察场反馈"运行一段时间人越来越多"根因）
+var _summons_alive: Array = []
 
 ## PushApartTolerance（SWL 直译）：站桩输出时若友军贴得太近，向反方向微移
 ## 拉开（节流 0.4s，只调 y 向优先——不打断对敌朝向）
@@ -347,10 +352,16 @@ func _apply_push_apart(spacing: float, delta: float) -> void:
 
 ## ShouldCastSummon：档案 summon_count>0 且冷却就绪且敌人进入施法距离时，
 ## 在自身两侧召唤脆皮护卫（minidon）——原版法师的生存方案：护卫挡脸，
-## 法师站后排持续施法。护卫自动参战（同阵营同 battle）并被 AI 驱动。
+## 法师站后排持续施法。**同时存活数封顶 summon_count**：护卫阵亡后才补召
+## （仍受冷却），否则一场长仗每 12s 无限拉人，场上人口爆炸。
 func _update_summon(dist: float, delta: float) -> void:
 	var count: int = int(_p("summon_count", 0.0))
 	if count <= 0:
+		return
+	# 清理失效/死亡引用，统计存活
+	_summons_alive = _summons_alive.filter(func(s: Node) -> bool:
+		return is_instance_valid(s) and not (s.has_method("is_dead") and s.is_dead()))
+	if _summons_alive.size() >= count:
 		return
 	_summon_cd -= delta
 	if _summon_cd > 0.0:
@@ -358,7 +369,8 @@ func _update_summon(dist: float, delta: float) -> void:
 	if dist > _summon_trigger_range():
 		return
 	_summon_cd = _p("summon_cooldown", 12.0)
-	var spawned: Array = _spawn_minidons(count)
+	var spawned: Array = _spawn_minidons(mini(count - _summons_alive.size(), count))
+	_summons_alive.append_array(spawned)
 	if not spawned.is_empty() and entity.has_method("play_attack"):
 		entity.play_attack()  # 施法动画（Magikill-Spell1）
 
@@ -377,13 +389,23 @@ func _spawn_minidons(count: int) -> Array:
 	var host: Node = entity.get_parent()
 	if host == null:
 		return []
+	# SWL SpawnMinion 协程 + SummonGroundScorch 地面焦痕语义：护卫从施法者
+	# **面朝方向的正前方**冒出（横版语义"前"= facing ±x，2026-09-01 反馈修正——
+	# 此前用指向目标的二维向量，目标 y 漂移时出生点跑纵深处 = "正上方"观感），
+	# 沿纵深 y 排开；地面焦痕 FX 待素材批次补
+	var facing: float = 1.0
+	if entity != null and entity.has_method("get_facing"):
+		facing = float(entity.get_facing())
 	var spawned: Array = []
 	for i in count:
 		var e: Node2D = scene.instantiate()
 		host.add_child(e)
-		var side: float = -1.0 if i % 2 == 0 else 1.0
-		var off: Vector2 = Vector2(side * 40.0, (float(i) * 0.5 - count * 0.25) * 40.0)
-		e.global_position = entity.global_position + off
+		# SWL minidon 体型：比常规兵种小一圈（原版为 Minion prefab 配置，
+		# 本项目经 body_scale 数据字段等价实现；渲染+判定+血条同步缩放）
+		if e.has_method("set_body_scale"):
+			e.set_body_scale(_p("summon_body_scale", 0.65))
+		var lateral_y: float = (float(i) - (count - 1) * 0.5) * 44.0
+		e.global_position = entity.global_position + Vector2(facing * 72.0, lateral_y)
 		if e.has_method("set_possessed"):
 			e.set_possessed(false)
 		if e.has_method("set_faction") and entity.has_method("get_faction"):
@@ -410,6 +432,14 @@ func _spawn_minidons(count: int) -> Array:
 ## 读取兵种档案参数（缺省回落 fallback——对应原硬编码常量）。
 func _p(key: String, fallback: float) -> float:
 	return float(_profile.get(key, fallback))
+
+
+## 开火前面向目标（横向翻转）：风筝边撤边打、y 纵深漂移走位后都会侧身/背身，
+## 不回调会播"反向拉弓"。近战接敌方向天然朝目标，无需处理。
+func _face_target() -> void:
+	if entity != null and is_instance_valid(entity) and entity.has_method("face_towards"):
+		entity.face_towards(_target.global_position)
+
 
 ## 队伍级共享攻击目标（反编译参考实装 D-B）：本兵所属小队的排长决策目标。
 ## 无 formation / 无小队 / 无共享目标时返回 null（回退各自寻敌）。

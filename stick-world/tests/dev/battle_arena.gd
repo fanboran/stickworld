@@ -6,12 +6,14 @@ extends Node
 ##
 ## 编制（融合本作 FormationSystem 编制系统，审计 P1-1/P1-2）：
 ##   每方 3 个战斗小队（fp_combat_squad 预设 + 任命排长）：
-##     矛兵班 ×8（前排，射程 120 卡线）
-##     剑士班 ×10（中坚，2 排）
-##     火力班 ×6（杖×2 中排 + 弓×4 后排，射程 300 压制）
+##     矛兵班 ×8（先锋，射程 120 卡线）
+##     剑士班 ×10（中坚，2 排，锚定跟随矛班 gap 150）
+##     火力班 ×6（杖×2 + 弓×4，射程 300 压制，锚定跟随剑班 gap 150）
 ##   出生按武器射程纵深分排（矛前→剑→杖→弓后），排/列间距 ≥ 分离半径 42px。
-##   开战下达 ADVANCE_ALL（line 横排散开）——两军编队推进至中线交战；
-##   接战后 FormationSystem 排长集火 + 兵种行为档案（冲脸/持阵/风筝）接管。
+##   开战矛班下 ADVANCE_ALL（line 横排散开）压至中线交战；剑/火班由编队动态跟队
+##   （set_squad_follow_squad）锚定前队质心后方 gap 处，保持纵深推进、接战即还战斗；
+##   前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长集火 +
+##   兵种行为档案（冲脸/持阵/风筝）接管。
 ##
 ## 相机（审计 P0-6）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑全可用），
 ##   居中模式跟随"质心代理"（每帧 lerp），缩放取"战场可走带恰好占满 1080P 屏高"。
@@ -30,25 +32,27 @@ const W_BOW: int = 2
 const W_STAFF: int = 4
 
 ## 每方编制（rows 自前向后；front_x = 班最前排相对团队中心的 x，攻方朝 +x，
-## advance_x = 该班推进目标相对中线的 x，**正值=越过中线（敌方向），负值=停在己方侧**）：
-## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛前排卡线、剑中坚、杖弓后排（审计 P1-2）
+## advance_x = 该班推进目标相对中线的 x，**正值=越过中线（敌方向），负值=停在己方侧**；
+## follow_gap > 0 = 锚定跟随前一班（编队动态跟队），不下推进号令）：
+## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛先锋卡线、剑锚矛 gap150、火力锚剑 gap150
 const SQUAD_DEFS: Array = [
 	{
 		"name": "矛兵班",
 		"front_x": 150.0,
 		"advance_x": 60.0,
+		"follow_gap": 0.0,
 		"rows": [{ "weapon": W_SPEAR, "count": 8 }],
 	},
 	{
 		"name": "剑士班",
 		"front_x": 85.0,
-		"advance_x": 60.0,
+		"follow_gap": 150.0,
 		"rows": [{ "weapon": W_SWORD, "count": 5 }, { "weapon": W_SWORD, "count": 5 }],
 	},
 	{
 		"name": "火力班",
 		"front_x": -45.0,
-		"advance_x": -220.0,
+		"follow_gap": 150.0,
 		"rows": [{ "weapon": W_STAFF, "count": 2 }, { "weapon": W_BOW, "count": 4 }],
 	},
 ]
@@ -170,12 +174,15 @@ func _spawn_and_start() -> void:
 	for si in SQUAD_DEFS.size():
 		left_squad_ids.append(_make_squad(fs, squads_left[si], "%s·蓝" % SQUAD_DEFS[si]["name"]))
 		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % SQUAD_DEFS[si]["name"]))
-	# 编队前进（火柴人战争式）：号令 → CommandChain → AIController，
-	# ADVANCE_ALL 的 line 散开 = 小队横排推进；近战班压到中线，火力班停在后场输出
+	# 编队前进（火柴人战争式）：先锋班（未锚定）下 ADVANCE_ALL 压到目标线；
+	# 锚定班不下推进号令——落点由编队动态跟队 tick 维持（跟队行军 + 接战交还战斗）
 	var to: Node = _game_root.get_tactical_orders()
 	if to != null and to.has_method("issue"):
 		for si in SQUAD_DEFS.size():
-			var adv_x: float = float(SQUAD_DEFS[si]["advance_x"])
+			var def: Dictionary = SQUAD_DEFS[si]
+			if float(def.get("follow_gap", 0.0)) > 0.0:
+				continue  # 锚定班：剑班/火力班由动态跟队接管
+			var adv_x: float = float(def["advance_x"])
 			var lid: String = left_squad_ids[si]
 			var rid: String = right_squad_ids[si]
 			if not lid.is_empty():
@@ -184,6 +191,15 @@ func _spawn_and_start() -> void:
 				to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, rid, Vector2(mid_x - adv_x, spawn_y), 0)
 	else:
 		push_warning("[Arena] TacticalOrders 未就绪，编队前进跳过")
+	# 编队动态跟队（SWL MoveInFormationBehindAnotherFormation + GapBetweenFormationGroups
+	# 直译）：剑班锚矛班、火力班锚剑班，后队落点 = 前队质心 − 行进方向 × gap
+	if fs != null and fs.has_method("set_squad_follow_squad"):
+		for si in SQUAD_DEFS.size():
+			var gap: float = float(SQUAD_DEFS[si].get("follow_gap", 0.0))
+			if gap <= 0.0 or si == 0:
+				continue
+			fs.set_squad_follow_squad(left_squad_ids[si], left_squad_ids[si - 1], gap)
+			fs.set_squad_follow_squad(right_squad_ids[si], right_squad_ids[si - 1], gap)
 	_camera_following = true
 	_reveal()
 

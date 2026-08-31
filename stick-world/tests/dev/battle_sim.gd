@@ -152,6 +152,10 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 	while sim_time < SCENARIO_TIMEOUT:
 		await get_tree().create_timer(0.25).timeout
 		sim_time += 0.25
+		# 尸体淡出移除后引用失效（2026-09-01 尸体清理引入）：先从采样数组剔除
+		# freed 引用——类型化迭代 `for u: Node2D` 遇 freed 会报错中断本函数
+		left = left.filter(func(u: Node) -> bool: return is_instance_valid(u))
+		right = right.filter(func(u: Node) -> bool: return is_instance_valid(u))
 		# 战斗结束（BattleInstance 结束即 queue_free）→ 记录并退出循环
 		if battle == null or not is_instance_valid(battle):
 			battle_still_active = false

@@ -18,8 +18,9 @@ extends Node2D
 const OFFSET_Y: float = -110.0
 ## 视口裁剪外扩边距（px）：单位中心出屏这么远才藏血条，避免屏缘闪烁
 const VIEW_MARGIN: float = 64.0
-## 圆点半径（px）
-const DOT_RADIUS: float = 4.5
+## 圆点半径（px；2026-09-01 观察场反馈：0.55 缩放下 4.5px 只有 2.5 屏幕像素，
+## 满血友军"像没血条"——微调放大可见性，设计语言不变（满血=点，掉血=条））
+const DOT_RADIUS: float = 6.0
 ## 条高（px）
 const BAR_HEIGHT: float = 7.0
 ## 条宽 = clamp(BASE + max_hp × K, MIN, MAX)：长度与血量上限成正比
@@ -82,6 +83,13 @@ func _ready() -> void:
 	z_index = 1000
 	position.y = OFFSET_Y
 	visible = true
+
+
+## 设置体型缩放（minidon 等小体型单位）：血条高度/大小同步缩小。
+## 由实体 _apply_scale 转发调用。
+func set_body_scale(bs: float) -> void:
+	position.y = OFFSET_Y * bs
+	scale = Vector2(maxf(0.1, bs), maxf(0.1, bs))
 
 
 ## 绑定 HealthComponent（由实体装配时调用），自动监听受伤/恢复。

@@ -118,6 +118,8 @@ enum Mood {
 @export var cooldown: float = 1.35
 ## 基础命中率 [0,1]（近战高命中）
 @export var base_hit_chance: float = 0.9
+## 持盾移速倍率（盾姿态分层计划 5：举盾行军减速；_reload_weapons 按档案刷新）
+@export var block_move_mult: float = 1.0
 
 # ── 以下字段复刻原版 MeleeAttack_Prototype / Unit 的配置项，逐个单位可调 ──
 ## 一次挥击能打中的最大人数（原版 NumberOfUnitsThatCanHit）。
@@ -309,6 +311,9 @@ func _reload_weapons() -> void:
 	if owner_entity != null and "move_speed_mult" in owner_entity:
 		owner_entity.move_speed_mult = float(
 				ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("move_mult", 1.0))
+	# 持盾移速惩罚（盾姿态分层计划 5：举盾行军更沉稳，SPEAR 0.8）
+	block_move_mult = float(
+			ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("block_move_mult", 1.0))
 
 
 ## 查找武器骨 weapon_hand（SWL pickaxe1 补译；挂 hand_inner 手骨原点，
@@ -330,6 +335,9 @@ func _find_shield_bone(owner_entity: Node2D) -> Node2D:
 
 
 func _physics_process(delta: float) -> void:
+	# TimeManager 暂停门禁：与实体同一"暂停"语义（暂停时冷却/放箭计时/命中帧全停）
+	if TimeManager != null and TimeManager.is_paused():
+		return
 	update_cooldown(delta)
 	# 格挡重置冷却（原版 blockResetInterval）
 	if _block_reset_timer > 0.0:
@@ -650,9 +658,11 @@ func _get_bow_fire_delay() -> float:
 	return t if t >= 0.0 else BOW_FIRE_DELAY_FALLBACK
 
 
-## 法术结算（SWL Magikill-Spell1 施法前摇到点）：不发射投射物，直接对目标
-## 结算 SPELL 伤害——格挡对法术无效（is_blockable=false，原版盾挡箭不挡魔法）。
-## 弹道化（魔法弹投射物可 miss）见待办"箭矢重力弹道"条目。
+## 法术结算（SWL Magikill.CastStun 施法前摇到点）：对目标结算 SPELL 伤害——
+## 格挡对法术无效（is_blockable=false，原版盾挡箭不挡魔法）。
+## **命中点爆炸 AOE（放倒一片）**：对齐 dump Magikill.CastStun/StunOpponents/
+## unitsToDamage/STUN_RANGE 真值——命中点半径内敌人同时受击 + 击晕（2026-09-01 反馈 9e），
+## 半径挂档案 spell_aoe_radius（STAFF 90），并触发 MAGIC_BLAST 爆炸粒子。
 func _cast_magic(target: Node) -> void:
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity == null or target == null or not is_instance_valid(target):
@@ -676,6 +686,46 @@ func _cast_magic(target: Node) -> void:
 			battle.register_attacker(target, owner_entity)
 	if dealt > 0.0 and target.has_method("apply_hit_reaction"):
 		target.apply_hit_reaction(p.direction, dealt * KNOCKBACK_PER_DAMAGE)
+	# 命中点爆炸 AOE（放倒一片）+ 爆炸粒子
+	var aoe_radius: float = float(
+			ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("spell_aoe_radius", 0.0))
+	if aoe_radius > 0.0:
+		_apply_spell_blast(owner_entity, target, aoe_radius)
+	if owner_entity.get_tree() != null:
+		FxPool.spawn_burst(owner_entity.get_tree(), FxLibrary.MAGIC_BLAST,
+				_body_pos(target) + Vector2(0, -30))
+
+
+## 法术爆炸 AOE 结算（SWL StunOpponents 直译）：命中点 radius 内其他敌人
+## 受 50% SPELL 伤害 + 同步击晕——"放倒一片"的核心；主目标已在 _cast_magic 全额结算。
+func _apply_spell_blast(owner_entity: CharacterBody2D, center: Node, radius: float) -> void:
+	var faction: int = owner_entity.get_faction() if owner_entity.has_method("get_faction") else 0
+	if faction == 0 or not owner_entity.has_method("get_battle_instance"):
+		return
+	var battle: Node = owner_entity.get_battle_instance()
+	if battle == null or not is_instance_valid(battle) or not battle.has_method("get_enemies_of"):
+		return
+	var center_pos: Vector2 = (center as Node2D).global_position
+	for e in battle.get_enemies_of(faction):
+		if e == null or not is_instance_valid(e) or e == center:
+			continue
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		if not (e is Node2D):
+			continue
+		if (e as Node2D).global_position.distance_to(center_pos) > radius:
+			continue
+		var ep := DamagePipeline.Params.new(damage * 0.5, owner_entity)
+		ep.direction = ((e as Node2D).global_position - center_pos).normalized()
+		ep.type = DamagePipeline.DAMAGE_TYPE.SPLASH
+		ep.is_blockable = false
+		DamagePipeline.apply(e, ep)
+		if e.has_method("apply_status"):
+			e.apply_status(ScriptStatusEffects.Type.STUN, 0.5, 0.0, owner_entity)
+		if e.has_method("get_battle_instance"):
+			var b2: Node = e.get_battle_instance()
+			if b2 != null and is_instance_valid(b2) and b2.has_method("register_attacker"):
+				b2.register_attacker(e, owner_entity)
 
 
 ## 发射箭矢：从射手胸口**抛物线**发射（SWL Arrow.launchY/AimAngle 弹道）。
@@ -718,9 +768,11 @@ func _fire_arrow(target: Node) -> void:
 		parent = get_tree().current_scene
 	parent.add_child(arrow)
 	arrow.global_position = from
-	# SWL drawPower：拉弓满弓比例（BOW_FIRE_DELAY 计时结束 = 满弓 1.0）
+	# SWL drawPower：拉弓满弓比例（BOW_FIRE_DELAY 计时结束 = 满弓 1.0）；
+	# 传解算飞行时间 t + 瞄准点地面线（Collider 中心下方约半个身位≈地面）——
+	# 箭越过目标后落在目标脚下地面（miss 插进敌阵），不再"低于出射点 500px"插地（9c）
 	if arrow.has_method("setup"):
-		arrow.call("setup", vel, damage, owner_entity, target, 1.0, ARROW_GRAVITY)
+		arrow.call("setup", vel, damage, owner_entity, target, 1.0, ARROW_GRAVITY, t, aim_point.y + 65.0)
 	# 箭矢威胁标记（SWL SpeartonAi.IsAnyArrowThreat 感知源）：出弓瞬间通知目标，
 	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾
 	if target != null and is_instance_valid(target) and "arrow_threat_time" in target:
@@ -766,8 +818,15 @@ func is_shield_blocking(incoming_dir: Vector2 = Vector2.ZERO) -> bool:
 
 ## 举盾姿态（原版 IsBlocking()）：true = 该单位正处于防御姿态。
 ## 由 AI（守备/被压制）或玩家输入切换；无盾单位设了也挡不住。
+## 状态变化时通知持有实体（on_blocking_changed → VisualController 换持盾变体，
+## 盾姿态分层计划 5）。
 func set_blocking(v: bool) -> void:
+	if _blocking == v:
+		return
 	_blocking = v
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity != null and owner_entity.has_method("on_blocking_changed"):
+		owner_entity.on_blocking_changed(v)
 
 
 ## 是否处于举盾姿态（受击方选受击动画用：举盾被击走 Hit-Spearton-Block 池）
@@ -885,7 +944,16 @@ func _get_effective_cooldown() -> float:
 		Mood.EXCITED:
 			return cooldown * 0.85
 		_:
-			return cooldown
+			return cooldown * _user_controlled_speed_mult()
+
+
+## 主控攻速倍率（dump Unit 真值 USER_CONTROLLED_ATTACK_SPEED = 1.3：
+## 玩家主控出手节奏 ×1.3；非主控 1.0）
+func _user_controlled_speed_mult() -> float:
+	var e := get_owner_entity()
+	if e != null and e.has_method("is_possessed") and e.is_possessed():
+		return 1.3
+	return 1.0
 
 
 ## 获取拥有此 WeaponMount 的 StickmanEntity（父节点）。

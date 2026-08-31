@@ -66,6 +66,12 @@ const ANIM_MAP: Dictionary = {
 	"run":        {"spine": "Swordwrath-Run",          "loop": true},
 	"attack":     {"spine": "Swordwrath-Attack1",      "loop": false},
 	"block":      {"spine": "Swordwrath-Block",       "loop": false},
+	# 盾姿态分层（计划 5，SWL Spearton 持盾形态组）：端盾行军/待命/三连刺
+	"block_walk":      {"spine": "Spearton-Block-Walk",     "loop": true},
+	"block_crouch":    {"spine": "Spearton-Block-Crouch",   "loop": true},
+	"block_attack_1":  {"spine": "Spearton-Block-Attack1",  "loop": false},
+	"block_attack_2":  {"spine": "Spearton-Block-Attack2",  "loop": false},
+	"block_attack_3":  {"spine": "Spearton-Block-Attack3",  "loop": false},
 	"attack_spear":  {"spine": "Spearton-Attack1",     "loop": false},
 	"attack_pickaxe":{"spine": "Miner-Attack1",        "loop": false},
 	"attack_staff":  {"spine": "Magikill-Spell1",      "loop": false},

@@ -145,6 +145,23 @@ const HIT_STUN_DURATION: float = 0.2
 ## 兵种移速倍率（WeaponMount 按行为档案 move_mult 写入：SWL 兵种机动性差异——
 ## Swordwrath 轻快 1.3×、Spearton 沉稳 0.85×，全员同速 = 没有兵种机动性）
 var move_speed_mult: float = 1.0
+## 体型缩放倍率（SWL minidon 召唤护卫比常规兵种小一圈；1.0 = 正常体型）。
+## 影响 rig 渲染 + Collider/Range/Hitbox 判定 + 血条高度，经 set_body_scale 设置。
+var body_scale: float = 1.0
+## 上一帧是否暂停冻结动画（恢复时还原速率，见 _physics_process 暂停分支）
+var _anim_frozen: bool = false
+## 尸体停留时长（s；碰撞禁用后计时，之后淡出）——SWL 尸体 fadeOutOver 前的停留
+const CORPSE_LIFETIME: float = 4.0
+## 尸体淡出时长（s，透明度线性降到 0 后移除节点）
+const CORPSE_FADE: float = 1.2
+## 尸体淡出计时（<0 = 未启动；死亡碰撞禁用后置 CORPSE_LIFETIME）
+var _corpse_fade_timer: float = -1.0
+## 最近受击时刻（ms，脱火恢复判定）
+var _last_hit_ms: int = -999999
+## 战斗中脱火恢复：距上次受击超过此秒数视为脱离火线
+const COMBAT_MORALE_RECOVER_DELAY: float = 3.0
+## 脱火恢复速率倍率（相对 REST_MORALE_REGEN）
+const COMBAT_MORALE_RECOVER_FACTOR: float = 0.5
 ## 死亡后 Collider 禁用倒计时（s；-1=已禁用/未死。在 _physics_process 死亡分支计时，
 ## 替代 SceneTreeTimer lambda——清场竞态下 lambda 捕获失效报错）
 var _dead_disable_timer: float = -1.0
@@ -365,6 +382,16 @@ func _physics_process(delta: float) -> void:
 				var col := get_node_or_null("Collider") as CollisionShape2D
 				if col != null:
 					col.set_deferred("disabled", true)
+		# 尸体淡出（SWL fadeOutOver 语义，2026-09-01 观察场反馈：尸体永存
+		# 堆满战场）——碰撞禁用后停留 CORPSE_LIFETIME，再 CORPSE_FADE 淡入地里移除
+		elif _corpse_fade_timer < 0.0:
+			_corpse_fade_timer = CORPSE_LIFETIME
+		if _corpse_fade_timer >= 0.0:
+			_corpse_fade_timer -= delta
+			if _corpse_fade_timer <= 0.0:
+				queue_free()
+			elif _corpse_fade_timer < CORPSE_FADE:
+				modulate.a = clampf(_corpse_fade_timer / CORPSE_FADE, 0.0, 1.0)
 		_sync_markers_transform()
 		return
 	# 眩晕（SWL StunSystem 语义）：既不跑 AI 也不移动，瘫在原地
@@ -374,10 +401,20 @@ func _physics_process(delta: float) -> void:
 		_sync_markers_transform()
 		return
 	# TimeManager 暂停门禁（统一"暂停"语义）：空格暂停/战斗自动暂停时全停，
-	# 修复"假暂停"（此前单位物理/AI 不理会 TimeManager，暂停停不住战斗）
+	# 修复"假暂停"（此前单位物理/AI 不理会 TimeManager，暂停停不住战斗）。
+	# 动画同样冻结（2026-09-01 修复：暂停时 AnimationPlayer 在 idle 帧继续跑，
+	# 肢体还在动——第一次进暂停置速率 0，恢复时还原）
 	if TimeManager != null and TimeManager.is_paused():
+		if not _anim_frozen:
+			_anim_frozen = true
+			if _visual != null and _visual.has_method("set_anim_paused"):
+				_visual.set_anim_paused(true)
 		_sync_markers_transform()
 		return
+	if _anim_frozen:
+		_anim_frozen = false
+		if _visual != null and _visual.has_method("set_anim_paused"):
+			_visual.set_anim_paused(false)
 	# y 排序（2.5D 遮挡正确性）：y 越大（屏幕越靠下=离镜头越近）z 越高——
 	# 修复"远处单位身体盖住近处单位的手/武器"（此前绘制顺序=生成顺序）
 	var zi := int(global_position.y * 0.1)
@@ -445,6 +482,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		_interaction.try_interact()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_H:
 		escape_stuck()
+	else:
+		_handle_weapon_hotkey(event)
+
+
+## 主控热键换武器（1剑 2矛 3弓 4镐 5杖，对齐 WeaponMount.WeaponType）：
+## 物品栏系统的最小可用核心（原型阶段全武器开放，随时切换即换持械/攻击/射程）；
+## 完整背包 UI（格子/装备槽/拾取）立项见 AI复刻执行计划 §10。
+func _handle_weapon_hotkey(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	var idx: int = -1
+	match (event as InputEventKey).keycode:
+		KEY_1: idx = 0
+		KEY_2: idx = 1
+		KEY_3: idx = 2
+		KEY_4: idx = 3
+		KEY_5: idx = 4
+		_: return
+	if weapon_mount == null or not is_instance_valid(weapon_mount):
+		return
+	if "weapon_type" in weapon_mount and int(weapon_mount.weapon_type) == idx:
+		return  # 已是该武器
+	weapon_mount.weapon_type = idx
 
 
 # ─────────────────────────────── 玩家输入 ────────────────────────────────
@@ -454,10 +514,12 @@ func _handle_player_input(delta: float) -> void:
 	if _player_build_timer > 0.0:
 		_apply_movement(delta, Vector2.ZERO, false, false)
 		return
-	# 攻击动作锁定（复刻原版 User Control：出招站定，动画播完恢复移动）。
-	# 攻击动画期间移动输入被忽略——否则按住方向键时 run/walk 每帧覆盖
-	# 攻击动画，F 空挥/左键攻击看起来"没反应"。
-	if _current_anim.begins_with("attack"):
+	# 攻击动作锁定（仅近战）：出招站定，动画播完恢复移动——否则按住方向键时
+	# run/walk 每帧覆盖攻击动画，F 空挥/左键攻击看起来"没反应"。
+	# **远程（弓/杖）不锁**：SWL 原版主控可边撤退边走 A（dump Unit 真值
+	# USER_CONTROLLED_ATTACK_SPEED=1.3 只加攻速不停步），攻击动画与移动解耦，
+	# 移动侧不覆盖攻击动画（见 _handle_acceleration/_handle_deceleration 攻击保护）
+	if _current_anim.begins_with("attack") and not _is_ranged_weapon():
 		_apply_movement(delta, Vector2.ZERO, false, false)
 		return
 	var dir := Vector2.ZERO
@@ -479,12 +541,37 @@ func _terrain_speed_mult() -> float:
 	return 1.0
 
 
+## 持盾移速倍率（盾姿态分层，计划 5）：举盾时读 WeaponMount 上的档案
+## block_move_mult（SPEAR 0.8），未举盾/无字段 = 1.0。
+func _blocking_speed_mult() -> float:
+	if weapon_mount == null or not is_instance_valid(weapon_mount):
+		return 1.0
+	if not weapon_mount.has_method("is_blocking") or not weapon_mount.is_blocking():
+		return 1.0
+	if "block_move_mult" in weapon_mount:
+		return float(weapon_mount.block_move_mult)
+	return 1.0
+
+
+## 主手是否远程武器（弓/杖）：远程主控攻击不锁移动（走 A）。
+func _is_ranged_weapon() -> bool:
+	if weapon_mount == null or not is_instance_valid(weapon_mount) \
+			or not "weapon_type" in weapon_mount:
+		return false
+	return int(weapon_mount.weapon_type) == 2 or int(weapon_mount.weapon_type) == 4
+
+
 func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 	var se: Node = get_status_effects()
 	var slow_mult: float = se.get_speed_mult() if se != null and se.has_method("get_speed_mult") else 1.0
-	var mult: float = _terrain_speed_mult() * move_speed_mult * slow_mult
+	# 持盾移速惩罚（盾姿态分层，计划 5）：举盾行军更沉稳（档案 block_move_mult）
+	var block_mult: float = _blocking_speed_mult()
+	var mult: float = _terrain_speed_mult() * move_speed_mult * slow_mult * block_mult
 	var walk_cap: float = WALK_SPEED * mult
 	var run_cap: float = RUN_SPEED * mult
+	# 攻击动画期间不切移动动画（SWL 攻击与移动解耦：走 A 边跑边拉弓，
+	# 动画播完由 rig animation_finished 回切；否则 run/walk 每帧覆盖拉弓动画）
+	var attacking: bool = _current_anim.begins_with("attack")
 	if _is_running:
 		_current_speed = run_cap
 		return
@@ -492,12 +579,13 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 	if allow_run and _current_speed >= walk_cap:
 		_is_running = true
 		_current_speed = run_cap
-		_visual.play("run")
-		_visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
+		if not attacking:
+			_visual.play("run")
+			_visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
 	else:
 		# 不允许跑时，速度封顶在 walk_cap（受地形影响）
 		_current_speed = minf(_current_speed, walk_cap)
-		if _current_anim != "walk" and _current_anim != "run":
+		if not attacking and _current_anim != "walk" and _current_anim != "run":
 			_visual.play("walk")
 		if _current_anim == "walk" and not _is_running:
 			_visual.set_anim_speed(_current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT)
@@ -506,17 +594,21 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 func _handle_deceleration(delta: float) -> void:
 	if _is_running:
 		_is_running = false
-		_current_speed = WALK_SPEED * _terrain_speed_mult() * move_speed_mult
+		_current_speed = WALK_SPEED * _terrain_speed_mult() * move_speed_mult * _blocking_speed_mult()
 		_visual.play("walk")
+	# 攻击动画期间不切移动动画（同 _handle_acceleration：走 A 保护）
+	var attacking: bool = _current_anim.begins_with("attack")
 	if _current_speed > 0:
 		_current_speed -= decel * delta
 		if _current_speed <= IDLE_THRESHOLD:
 			_current_speed = 0.0
-			_visual.play("idle")
+			if not attacking:
+				_visual.play("idle")
 		else:
-			if _current_anim == "idle":
+			if not attacking and _current_anim == "idle":
 				_visual.play("walk")
-			_visual.set_anim_speed(_current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT)
+			if _current_anim == "walk" and not attacking:
+				_visual.set_anim_speed(_current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT)
 
 
 # ─────────────────────────────── AI 输入处理 ────────────────────────────────
@@ -635,7 +727,7 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 func _apply_scale() -> void:
 	if rig == null:
 		return
-	var s := BASE_SCALE
+	var s: float = BASE_SCALE * body_scale
 	rig.scale = Vector2(s * _facing, s)
 	# 同步缩放 Collider shape（Collider 不在 rig 层级下，不受 rig.scale 影响）
 	if _collider_base_size != Vector2.ZERO:
@@ -656,7 +748,17 @@ func _apply_scale() -> void:
 		if hb_shape != null and hb_shape.shape is RectangleShape2D:
 			(hb_shape.shape as RectangleShape2D).size = _hitbox_base_size * s
 			hb_shape.position.x = _hitbox_base_x * _facing
+	# 血条跟随体型（minidon 小一圈时血条高度/大小同步缩小，不再浮在半空）
+	if _health_bar != null and is_instance_valid(_health_bar) \
+			and _health_bar.has_method("set_body_scale"):
+		_health_bar.set_body_scale(body_scale)
 	_sync_markers_transform()
+
+
+## 设置体型缩放（SWL minidon 召唤护卫小一圈）：设置后立即重应用渲染/判定缩放。
+func set_body_scale(v: float) -> void:
+	body_scale = maxf(0.1, v)
+	_apply_scale()
 
 
 func _sync_markers_transform() -> void:
@@ -982,6 +1084,8 @@ func _on_damaged(amount: float, source: Node) -> void:
 	# 尸体不吃受击硬直、不播受击插播（否则覆盖死亡动画 → "尸体站起来"）
 	if is_dead():
 		return
+	# 最近受击时刻（战斗中脱火恢复判定用：≥3s 未受击才算"脱离火线"）
+	_last_hit_ms = Time.get_ticks_msec()
 	if source == null or not is_instance_valid(source):
 		return
 	# 受击硬直：被打瞬间 AI 短暂停滞（行业最佳实践 hit stun）
@@ -1026,7 +1130,9 @@ func is_stunned() -> bool:
 	return se != null and se.has_method("has_stun") and se.has_stun()
 
 
-## 士气自然恢复（AI 完善批次 3）：不在战斗中时按 REST_MORALE_REGEN 回士气。
+## 士气自然恢复（AI 完善批次 3）：不在战斗中时全速回；**战斗中但 ≥3s 未受击
+## （脱离火线）半速回**（2026-09-01 观察场反馈：怯战者退到后排后士气永不恢复 =
+## 原地再也不动——战斗不结束就该有机会重整再战）。
 func _apply_rest_morale_recovery(delta: float) -> void:
 	if health_component == null or not health_component.has_method("restore_morale"):
 		return
@@ -1034,6 +1140,11 @@ func _apply_rest_morale_recovery(delta: float) -> void:
 			and _battle_instance.has_method("is_active") and _battle_instance.is_active()
 	if not in_battle:
 		health_component.restore_morale(REST_MORALE_REGEN * delta)
+		return
+	# 战斗中脱火恢复：3s 未受击 → 半速（受火线压制时不回）
+	var since_hit: float = (Time.get_ticks_msec() - _last_hit_ms) / 1000.0
+	if since_hit >= COMBAT_MORALE_RECOVER_DELAY:
+		health_component.restore_morale(REST_MORALE_REGEN * COMBAT_MORALE_RECOVER_FACTOR * delta)
 
 
 ## 播放攻击动画（反编译参考实装 C）：攻击命中帧触发攻击动画，
@@ -1043,8 +1154,33 @@ func play_attack() -> void:
 	var anim := "attack"
 	if weapon_mount != null and "weapon_type" in weapon_mount:
 		anim = WEAPON_ATTACK_ANIM.get(int(weapon_mount.weapon_type), "attack")
-	if _visual != null and _visual.has_method("play"):
+	# 盾姿态分层（计划 5）：举盾时攻击动画走持盾池（Block-AttackN 随机），
+	# 由 VisualController 查兵种档案解析变体；state 名不变，命中帧订阅不受影响
+	var blocking: bool = weapon_mount != null and weapon_mount.has_method("is_blocking") \
+			and weapon_mount.is_blocking()
+	if _visual != null and _visual.has_method("play_attack"):
+		_visual.play_attack(anim, blocking)
+	elif _visual != null and _visual.has_method("play"):
 		_visual.play(anim)
+
+
+## 举盾姿态变化回调（盾姿态分层，计划 5）：WeaponMount.set_blocking 驱动，
+## 转发 VisualController 换持盾变体（walk/idle/attack 分层）。
+func on_blocking_changed(blocking: bool) -> void:
+	if _visual != null and _visual.has_method("set_block_stance"):
+		_visual.set_block_stance(blocking)
+
+
+## 面向指定世界坐标（横向翻转；AI 开火前调用——风筝撤退中开火必须回头
+## 面向目标，否则"背身拉弓"）。
+func face_towards(pos: Vector2) -> void:
+	var dx: float = pos.x - global_position.x
+	if absf(dx) < 1.0:
+		return
+	var new_facing := 1 if dx > 0.0 else -1
+	if new_facing != _facing:
+		_facing = new_facing
+		_apply_scale()
 
 
 ## 立即换持械站姿（换武器时由 WeaponMount 调用）：

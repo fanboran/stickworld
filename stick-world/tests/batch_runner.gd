@@ -26,6 +26,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_stickman_anims.gd",
 	"res://tests/unit/test_squad_dest.gd",
 	"res://tests/unit/test_squad_decision.gd",
+	"res://tests/unit/test_squad_follow.gd",
 	"res://tests/unit/test_state_modifiers.gd",
 	"res://tests/unit/test_ai_enhance.gd",
 	"res://tests/unit/test_ai_morale.gd",
@@ -63,6 +64,12 @@ func _run_one(path: String) -> void:
 	if script == null:
 		_failed.append(path + "（加载失败）")
 		return
+	# 全局时间状态隔离：前一套件触发的 battle_started 自动暂停会残留到本进程，
+	# 污染后续套件（2026-09-01 起 weapon_mount/arrow 挂了 TimeManager 暂停门禁，
+	# PAUSED 残留会让命中帧/冷却推进全部空转）
+	var tm: Node = get_node_or_null("/root/TimeManager")
+	if tm != null and "current_speed" in tm and int(tm.current_speed) != int(tm.Speed.X1):
+		tm.set_speed(tm.Speed.X1)
 	var inst: Node = script.new()
 	inst.name = path.get_file().get_basename()
 	add_child(inst)

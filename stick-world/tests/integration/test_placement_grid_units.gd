@@ -17,7 +17,7 @@ extends Node
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptPlacementGrid := preload("res://modules/world/scripts/placement/placement_grid.gd")
-const ScriptPlacementValidator := preload("res://modules/world/scripts/placement/placement_validator.gd")
+const ScriptPlacementValidator := preload("res://modules/construction/scripts/placement/placement_validator.gd")
 
 var _runner: TestRunner
 var _tests: Array = []

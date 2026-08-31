@@ -7,10 +7,10 @@
 [node name="BattlefieldMap" type="Node2D"]
 script = ExtResource("1_vmap")
 ground_y = 432.0
-ground_ratio = 0.6
+ground_ratio = 1.15
 map_left = 0.0
-map_right = 4096.0
-ground_bottom = 1080.0
+map_right = 6144.0
+ground_bottom = 1674.0
 
 [node name="PlacementGrid" type="Node" parent="."]
 script = ExtResource("2_grid")
@@ -20,7 +20,7 @@ grid_width = 128
 
 [node name="GroundPolygon" type="Polygon2D" parent="TerrainLayer"]
 color = Color(0.38, 0.45, 0.28, 1)
-polygon = PackedVector2Array(0, 432, 4096, 432, 4096, 1080, 0, 1080)
+polygon = PackedVector2Array(0, 432, 6144, 432, 6144, 1674, 0, 1674)
 
 [node name="GroundLine" type="Marker2D" parent="."]
 position = Vector2(0, 432)

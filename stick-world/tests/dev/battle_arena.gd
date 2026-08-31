@@ -1,23 +1,66 @@
 extends Node
-## 战斗演练场（观察用，非 CI 测试）：双方各 12 个混编士兵自动互殴。
+## 战斗演练场（观察用，非 CI 测试）：双方各 24 人、3 小队按武器分排编队推进互殴。
 ##
-## 用途：肉眼观察战斗画面自然度——站姿/走姿/挥砍/受击/死亡/武器跟腕/阵营对抗。
+## 用途：肉眼观察战斗画面自然度——编队推进/站姿/走姿/挥砍/受击/死亡/血条/阵营对抗。
 ## 入口：主菜单「战斗演练」→「大乱斗观察场」。
 ##
-## 热键：ESC 返回主菜单 · R 重新开局 · 空格 暂停/继续（TimeManager 速度）。
-## 编队：左方（攻方）剑×6 矛×3 弓×2 杖×1；右方（守方）同编队镜像。
+## 编制（融合本作 FormationSystem 编制系统，审计 P1-1/P1-2）：
+##   每方 3 个战斗小队（fp_combat_squad 预设 + 任命排长）：
+##     矛兵班 ×8（前排，射程 120 卡线）
+##     剑士班 ×10（中坚，2 排）
+##     火力班 ×6（杖×2 中排 + 弓×4 后排，射程 300 压制）
+##   出生按武器射程纵深分排（矛前→剑→杖→弓后），排/列间距 ≥ 分离半径 42px。
+##   开战下达 ADVANCE_ALL（line 横排散开）——两军编队推进至中线交战；
+##   接战后 FormationSystem 排长集火 + 兵种行为档案（冲脸/持阵/风筝）接管。
+##
+## 相机（审计 P0-6）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑全可用），
+##   居中模式跟随"质心代理"（每帧 lerp），缩放取"战场可走带恰好占满 1080P 屏高"。
+##
+## 热键：ESC 返回主菜单 · R 重新开局 · 空格 暂停/继续（TimeManager 全局暂停）。
 
 const _GameRootScene: PackedScene = preload("res://modules/world/scenes/game_root.tscn")
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 const _MainMenuScene := "res://modules/ui_global/scenes/menus/main_menu.tscn"
+const _TacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
 
-## 每方编队（weapon_type 序号：0 剑 1 矛 2 弓 3 镐 4 杖）
-const COMPOSITION: Array[int] = [0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 4]
-const TEAM_SIZE := 12
-## 左右两团的出生中心 x（相对地图中线）与团内散布
-const TEAM_OFFSET_X := 420.0
-const SPREAD_X := 55.0
-const SPREAD_Y := 26.0
+## 武器类型（对齐 WeaponMount.WeaponType：0 剑 1 矛 2 弓 3 镐 4 杖）
+const W_SWORD: int = 0
+const W_SPEAR: int = 1
+const W_BOW: int = 2
+const W_STAFF: int = 4
+
+## 每方编制（rows 自前向后；front_x = 班最前排相对团队中心的 x，攻方朝 +x，
+## advance_x = 该班推进目标相对中线的 x，**正值=越过中线（敌方向），负值=停在己方侧**）：
+## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛前排卡线、剑中坚、杖弓后排（审计 P1-2）
+const SQUAD_DEFS: Array = [
+	{
+		"name": "矛兵班",
+		"front_x": 150.0,
+		"advance_x": 60.0,
+		"rows": [{ "weapon": W_SPEAR, "count": 8 }],
+	},
+	{
+		"name": "剑士班",
+		"front_x": 85.0,
+		"advance_x": 60.0,
+		"rows": [{ "weapon": W_SWORD, "count": 5 }, { "weapon": W_SWORD, "count": 5 }],
+	},
+	{
+		"name": "火力班",
+		"front_x": -45.0,
+		"advance_x": -220.0,
+		"rows": [{ "weapon": W_STAFF, "count": 2 }, { "weapon": W_BOW, "count": 4 }],
+	},
+]
+## 排间距（px，SWL 队列：单位间约 1 个身位余量，此前 58 贴脸）
+const ROW_GAP: float = 110.0
+## 排内左右间距（px）
+const LINE_GAP: float = 90.0
+## 左右两团出生中心 x 相对地图中线的偏移（800：开战时两军最前排相距约 1300，
+## 正常游戏缩放（可视宽 1920）下双方同屏可见，冲锋段有观察余量）
+const TEAM_OFFSET_X: float = 800.0
+## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
+const SQUAD_PRESET := "fp_combat_squad"
 
 var _game_root: Node = null
 var _left_alive_label: Label = null
@@ -25,9 +68,16 @@ var _right_alive_label: Label = null
 var _hint_label: Label = null
 var _attacker: Array = []
 var _defender: Array = []
+## 相机跟随代理（camera_rig 居中模式目标；每帧 lerp 到存活质心）
+var _cam_proxy: Marker2D = null
+## 战斗开始后开启质心跟随
+var _camera_following: bool = false
+## 开场遮罩（防闪现主场景：GameRoot 先装配默认村图数帧才切 battlefield）
+var _cover: ColorRect = null
 
 
 func _ready() -> void:
+	_build_cover()
 	_game_root = _GameRootScene.instantiate()
 	add_child(_game_root)
 	_build_hud()
@@ -35,6 +85,8 @@ func _ready() -> void:
 
 
 func _spawn_and_start() -> void:
+	# 幽灵战斗抑制（审计 P0-7）：worldgen 不再为战场图预置敌军/启动遭遇战
+	_game_root.set("suppress_battlefield_enemies", true)
 	# 等默认村图装配完成
 	for i in 10:
 		await get_tree().process_frame
@@ -52,66 +104,135 @@ func _spawn_and_start() -> void:
 	if map == null:
 		push_error("[Arena] 地图未加载")
 		return
-	# 清空地图自带单位（battlefield 预置的双方阵营兵 + 默认附身玩家）——
-	# 演练场只保留自己刷的 24 个演练单位，保证"12v12"与观察画面纯净
+	# 清空地图自带单位（_on_map_loaded 刚 spawn 的玩家实体等）——
+	# 演练场只保留自己刷的 48 个演练单位，保证观察画面纯净
 	for e in map.get_entities():
 		if is_instance_valid(e):
 			e.queue_free()
 	for i in 3:
 		await get_tree().process_frame
-	# 接管相机：停用 camera_rig 的自动跟随（它每帧把相机拉回玩家位置）
-	var rig: Node = _game_root.get("camera_rig")
-	if rig != null:
-		rig.set_process(false)
-		rig.set_physics_process(false)
 	var mid_x: float = (map.map_left + map.map_right) * 0.5
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
-	for i in TEAM_SIZE:
-		var lt := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + (i % 6) * SPREAD_X,
-				spawn_y + (i / 6) * SPREAD_Y))
-		if lt != null:
-			_set_weapon(lt, COMPOSITION[i])
-			_attacker.append(lt)
-		var rt := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - (i % 6) * SPREAD_X,
-				spawn_y + (i / 6) * SPREAD_Y))
-		if rt != null:
-			_set_weapon(rt, COMPOSITION[i])
-			_defender.append(rt)
+	# 接管相机（审计 P0-6）：不停用 rig——滚轮缩放/边界钳制/平滑全保留；
+	# 居中模式跟随"质心代理"；缩放让可走带（ground band）恰好占满屏高
+	var rig: Node = _game_root.get("camera_rig")
+	if rig != null and rig.has_method("set_centered_mode"):
+		rig.set_centered_mode(true)
+		# 缩放对齐 SWL 战场观感：单位身高约占屏高 13%（SWL 1080P 下约 8~13%）——
+		# 正式游戏（村庄附身互动）user_zoom=1.0 合适，但 RTS 观战的镜头要远得多
+		# （此前 1.0 下单位占屏 24%，观感"镜头贴脸"）
+		if rig.has_method("set_user_zoom"):
+			rig.set_user_zoom(0.55)
+		_cam_proxy = Marker2D.new()
+		_cam_proxy.name = "ArenaCamProxy"
+		add_child(_cam_proxy)
+		_cam_proxy.global_position = Vector2(mid_x, spawn_y)
+		if rig.has_method("set_follow_target"):
+			rig.set_follow_target(_cam_proxy)
+		if rig.has_method("snap_to_follow_target"):
+			rig.snap_to_follow_target()
+	# 按编制分排出生（左攻右守，镜像）
+	var squads_left: Array = []
+	var squads_right: Array = []
+	var fs: Node = _game_root.get_formation_system()
+	for si in SQUAD_DEFS.size():
+		var def: Dictionary = SQUAD_DEFS[si]
+		var l_units: Array = []
+		var r_units: Array = []
+		var rows: Array = def["rows"]
+		for ri in rows.size():
+			var row: Dictionary = rows[ri]
+			var x_off: float = float(def["front_x"]) - ri * ROW_GAP
+			var count: int = int(row["count"])
+			for k in count:
+				var y: float = spawn_y + (float(k) - (count - 1) * 0.5) * LINE_GAP
+				var lt := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + x_off, y), int(row["weapon"]), fs)
+				if lt != null:
+					l_units.append(lt)
+					_attacker.append(lt)
+				var rt := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - x_off, y), int(row["weapon"]), fs)
+				if rt != null:
+					r_units.append(rt)
+					_defender.append(rt)
+		squads_left.append(l_units)
+		squads_right.append(r_units)
 		await get_tree().process_frame
 	var battle: Node = _game_root.start_test_battle(_attacker, _defender)
 	print("[Arena] 战斗开始: battle=", battle, " 左 %d 人 vs 右 %d 人" % [_attacker.size(), _defender.size()])
-	# 拉远相机看全场（camera_rig 已停用，直接设 Camera2D.zoom）
-	var cam: Camera2D = get_viewport().get_camera_2d()
-	if cam != null:
-		cam.zoom = Vector2(0.55, 0.55)
-	if cam != null:
-		cam.global_position = Vector2(mid_x, spawn_y)
-		_follow_center.call_deferred(cam)
+	# 开战自动暂停豁免（TimeManager._on_battle_started，game/auto_pause_battle 默认
+	# true 会把全局时间置 PAUSED）：观察场要直接开演，自动恢复 X1；空格仍可手动暂停
+	if TimeManager != null and TimeManager.is_paused():
+		TimeManager.set_speed(TimeManager.Speed.X1)
+	# 编队注入（审计 P1-1）：每方 3 小队（fp_combat_squad 预设）+ 任命排长——
+	# 排长每 0.5s 决策共享集火目标，line 阵型位随号令生效
+	var left_squad_ids: Array = []
+	var right_squad_ids: Array = []
+	for si in SQUAD_DEFS.size():
+		left_squad_ids.append(_make_squad(fs, squads_left[si], "%s·蓝" % SQUAD_DEFS[si]["name"]))
+		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % SQUAD_DEFS[si]["name"]))
+	# 编队前进（火柴人战争式）：号令 → CommandChain → AIController，
+	# ADVANCE_ALL 的 line 散开 = 小队横排推进；近战班压到中线，火力班停在后场输出
+	var to: Node = _game_root.get_tactical_orders()
+	if to != null and to.has_method("issue"):
+		for si in SQUAD_DEFS.size():
+			var adv_x: float = float(SQUAD_DEFS[si]["advance_x"])
+			var lid: String = left_squad_ids[si]
+			var rid: String = right_squad_ids[si]
+			if not lid.is_empty():
+				to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, lid, Vector2(mid_x + adv_x, spawn_y), 0)
+			if not rid.is_empty():
+				to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, rid, Vector2(mid_x - adv_x, spawn_y), 0)
+	else:
+		push_warning("[Arena] TacticalOrders 未就绪，编队前进跳过")
+	_camera_following = true
+	_reveal()
 
 
-## 相机跟随战场质心（单位散开后画面不丢人）
-func _follow_center(cam: Camera2D) -> void:
-	while is_inside_tree():
-		var all: Array = _attacker + _defender
-		var sum := Vector2.ZERO
-		var n := 0
-		for u in all:
-			if is_instance_valid(u) and not u.is_dead():
-				sum += u.global_position
-				n += 1
-		if n > 0 and cam != null:
-			cam.global_position = sum / n
-		await get_tree().create_timer(0.5).timeout
+# ─────────────────────────────── 开场遮罩 ────────────────────────────────
+
+## 全屏遮罩：盖住 GameRoot 装配默认村图 → 切 battlefield 之间的渲染帧，
+## 否则进入演练场会先闪现一下游戏主场景（2026-08-31 观察场审计）
+func _build_cover() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "ArenaCover"
+	layer.layer = 100
+	add_child(layer)
+	_cover = ColorRect.new()
+	_cover.color = Color(0.05, 0.05, 0.05)
+	_cover.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(_cover)
 
 
-## 设主手武器类型（weapon_type 在 WeaponMount 上，不在 entity）
-func _set_weapon(e: Node2D, wtype: int) -> void:
-	var wm: Node = e.get_node_or_null("WeaponMount")
-	if wm != null:
-		wm.weapon_type = wtype
+## 演出就绪（战场已加载、相机已对位）后淡出揭幕
+func _reveal() -> void:
+	if _cover == null or not is_instance_valid(_cover):
+		return
+	var tw := create_tween()
+	tw.tween_property(_cover, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(func() -> void:
+		if is_instance_valid(_cover):
+			_cover.get_parent().queue_free()
+		_cover = null
+	)
 
 
-func _spawn_unit(map: Node2D, pos: Vector2) -> Node2D:
+## 创建小队并任命排长（排长 = 队列中间成员）。返回 squad_id（失败返回 ""）。
+func _make_squad(fs: Node, units: Array, squad_name: String) -> String:
+	if fs == null or not is_instance_valid(fs) or units.is_empty():
+		return ""
+	var sid: String = ""
+	if fs.has_method("create_squad"):
+		sid = fs.create_squad(units, squad_name, SQUAD_PRESET)
+	if sid.is_empty():
+		return ""
+	var leader: Node = units[units.size() / 2]
+	if fs.has_method("assign_leader"):
+		fs.assign_leader(sid, leader)
+	return sid
+
+
+## 出生一个演练单位：脚部对齐 + 不附身 + 注入编队系统 + 设主手武器。
+func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
 	var e: Node2D = map.spawn_entity(_StickmanScene, pos)
 	if e == null:
 		return null
@@ -119,6 +240,13 @@ func _spawn_unit(map: Node2D, pos: Vector2) -> Node2D:
 		e.global_position.y = pos.y - e.foot_offset
 	if e.has_method("set_possessed"):
 		e.set_possessed(false)
+	# 编队系统注入（审计 P1-1）：职责过滤/小队集火查询需要
+	if fs != null and e.has_method("set_formation_system"):
+		e.set_formation_system(fs)
+	# 设主手武器类型（weapon_type 在 WeaponMount 上，重挂会同步 attack_range）
+	var wm: Node = e.get_node_or_null("WeaponMount")
+	if wm != null:
+		wm.weapon_type = wtype
 	# 防初始化竞态：hp 未就绪（<=0 会拖累战斗胜负判定）则自愈满血
 	var hc = e.get("health_component")
 	if hc != null and float(hc.get("hp")) <= 0.0:
@@ -126,8 +254,24 @@ func _spawn_unit(map: Node2D, pos: Vector2) -> Node2D:
 	return e
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_hud()
+	_update_camera(delta)
+
+
+## 质心跟随（审计 P0-6：每帧 lerp 平滑，替代旧 0.5s 定时器硬切）
+func _update_camera(delta: float) -> void:
+	if not _camera_following or _cam_proxy == null:
+		return
+	var sum_x: float = 0.0
+	var n: int = 0
+	for u in _attacker + _defender:
+		if is_instance_valid(u) and not u.is_dead():
+			sum_x += u.global_position.x
+			n += 1
+	if n > 0:
+		var target_x: float = sum_x / float(n)
+		_cam_proxy.global_position.x = lerpf(_cam_proxy.global_position.x, target_x, minf(1.0, 3.0 * delta))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -160,7 +304,7 @@ func _build_hud() -> void:
 	_left_alive_label = _make_label(layer, Vector2(16, 16), Color(0.55, 0.75, 1.0))
 	_right_alive_label = _make_label(layer, Vector2(16, 42), Color(1.0, 0.62, 0.55))
 	_hint_label = _make_label(layer, Vector2(16, 72), Color(0.8, 0.8, 0.8))
-	_hint_label.text = "演练场：ESC 返回主菜单 · R 重开 · 空格 暂停/继续"
+	_hint_label.text = "演练场：ESC 返回 · R 重开 · 空格 暂停 · 滚轮缩放"
 
 
 func _make_label(layer: CanvasLayer, pos: Vector2, color: Color) -> Label:
@@ -179,7 +323,7 @@ func _update_hud() -> void:
 	if _attacker.is_empty() or _defender.is_empty():
 		_left_alive_label.text = "蓝方（攻）集结中"
 		_right_alive_label.text = "红方（守）集结中"
-		_hint_label.text = "演练场：ESC 返回主菜单 · R 重开 · 空格 暂停/继续"
+		_hint_label.text = "演练场：ESC 返回 · R 重开 · 空格 暂停 · 滚轮缩放"
 		return
 	var la := _count_alive(_attacker)
 	var ra := _count_alive(_defender)
@@ -188,7 +332,7 @@ func _update_hud() -> void:
 	if la == 0 or ra == 0:
 		_hint_label.text = "战斗结束：%s 获胜 —— R 重开" % ("蓝方" if ra == 0 else "红方")
 	else:
-		_hint_label.text = "演练场：ESC 返回主菜单 · R 重开 · 空格 暂停/继续"
+		_hint_label.text = "演练场：ESC 返回 · R 重开 · 空格 暂停 · 滚轮缩放"
 
 
 func _count_alive(units: Array) -> int:

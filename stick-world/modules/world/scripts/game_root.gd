@@ -72,6 +72,9 @@ var _construction_api: Node = null
 # ─────────────────────────────── 战斗系统（§15 阶段 0.5）────────────────────────────────
 ## CombatApi 实例引用（运行时由 SystemSetup 装配）
 var _combat_api: Node = null
+## 战场预置敌军抑制开关（大乱斗观察场审计 P0-7）：工具场景置 true 后，
+## 进入战场图不再 spawn 遭遇战敌军/启动幽灵战斗，由场景自己组织战斗。
+var suppress_battlefield_enemies: bool = false
 
 # ─────────────────────────────── 框选系统（§15 阶段 0.6）────────────────────────────────
 ## SelectionSystem 实例引用（运行时由 SystemSetup 装配，挂到 UIRoot）
@@ -592,8 +595,9 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 			_worldgen.spawn_npcs(map, spawn_y)
 		# 跨图携带：spawn 随行编队成员并重建编队（带队出征）
 		var followers: Array = _spawn_travel_followers(map, player, spawn_y)
-		# 阶段 E：遭遇战战场 spawn 敌方火柴人 + 启动战斗（地图切换进入战场时触发）
-		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded:
+		# 阶段 E：遭遇战战场 spawn 敌方火柴人 + 启动战斗（地图切换进入战场时触发；
+		# 观察场等工具场景可置 suppress_battlefield_enemies 跳过，防幽灵战斗事件）
+		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded and not suppress_battlefield_enemies:
 			var allies: Array = [player]
 			allies.append_array(followers)
 			_worldgen.spawn_battlefield_enemies(map, allies, dev_enemy_count)

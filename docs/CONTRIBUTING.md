@@ -120,6 +120,18 @@ modules/player_control/
 
 - 新功能要有单元测试
 
+### 改脚本后必须 --import 重建类缓存
+
+新增/移动/删除带 `class_name` 的脚本后，headless 跑测试前必须先执行：
+
+```bash
+"F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --headless --import .
+```
+
+原因：Godot 把全局类清单缓存在 `.godot/global_script_class_cache.cfg`，
+改脚本不会自动刷新，headless 下表现为 class_name 解析失败（报"未声明"）。
+`--import` 即愈；`tests/run_all.sh` 与 `tools/check_godot_errors.sh` 均依赖缓存新鲜。
+
 ## 文档同步
 
 - 修改游戏设计 → 更新 `docs/设计/游戏设计文档.md`（GDD 是唯一真相源）

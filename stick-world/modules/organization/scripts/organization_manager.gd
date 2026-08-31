@@ -32,6 +32,7 @@ const VALID_POSITIONS: Array[String] = [
 
 const ScriptOrgState := preload("res://core/entities/organization_state.gd")
 const ScriptWorldState := preload("res://core/autoload/world_state.gd")
+const ScriptSerializer := preload("res://core/entities/world_state_serializer.gd")
 
 const TAG_TO_ENUM := {
 	"MILITARY": ScriptOrgState.Tag.MILITARY,
@@ -159,7 +160,7 @@ func get_organization(org_id: String) -> Dictionary:
 	var org := _get_org(org_id)
 	if org == null:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
-	return {"ok": true, "data": ScriptWorldState._organization_to_dict(org)}
+	return {"ok": true, "data": ScriptSerializer.organization_to_dict(org)}
 
 
 ## 获取下级组织 ID 列表
@@ -431,7 +432,7 @@ func export_as_preset(org_id: String) -> Dictionary:
 	if org == null:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
 	# 骨架阶段：返回组织数据的序列化副本作为预设数据
-	return {"ok": true, "data": ScriptWorldState._organization_to_dict(org)}
+	return {"ok": true, "data": ScriptSerializer.organization_to_dict(org)}
 
 
 # ===== 存档对接（2026-08 集中制：序列化格式与 WorldState 统一） =====
@@ -443,7 +444,7 @@ func export_as_preset(org_id: String) -> Dictionary:
 func get_save_data() -> Dictionary:
 	var orgs: Dictionary = {}
 	for org_id in organizations:
-		orgs[org_id] = ScriptWorldState._organization_to_dict(organizations[org_id])
+		orgs[org_id] = ScriptSerializer.organization_to_dict(organizations[org_id])
 	return {
 		"organizations": orgs,
 		"next_id": _next_id,
@@ -455,7 +456,7 @@ func load_save_data(data: Dictionary) -> void:
 	organizations.clear()
 	var orgs: Dictionary = data.get("organizations", {})
 	for org_id in orgs:
-		var state: ScriptOrgState = ScriptWorldState._organization_from_dict(orgs[org_id])
+		var state: ScriptOrgState = ScriptSerializer.organization_from_dict(orgs[org_id])
 		organizations[org_id] = state
 		if _world != null:
 			_world.register_organization(state)

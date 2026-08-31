@@ -13,7 +13,9 @@ const _COLOR_BORDER := Color(0, 0, 0, 0.8)
 
 
 func _ready() -> void:
-	z_index = WorldZ.OVERLAY_HEALTHBAR
+	# 绝对顶层（同血条：y 排序后相对 z 会被其他单位盖住）
+	z_as_relative = false
+	z_index = 1001
 	visible = false
 
 

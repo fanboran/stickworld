@@ -8,6 +8,112 @@
 
 ## [未发布]
 
+### 复刻覆盖率审计 + 全模块对账（2026-09-01，文档收尾）
+
+- **AI 层覆盖率审计（计划 §六）**：对账 `legacy_AI_classes.cs` 133 个原版 AI 行为函数——
+  严格覆盖 **34%** / 含近似 **49%**；缺口结构=整类（TeamAi 19/Meric/Giant/Zombie）+ 簇
+  （Formation 列队形 7/y 对齐 6/绕障 5）。据此立项批次 **11a 基类补全/11b Formation 列队形/
+  11c TeamAi 逐函数直译（7c 扩容 2.5 轮）/11d 并入数值校准/11e 玩法依赖挂总账**
+- **全模块对账（计划 §七）**：python 统计 `dump.cs`——SWL 游戏代码 363 类型/35 命名空间、
+  游戏性模块 14 个逐个对账；新立项 **12 特效扩容**（DirectionalBlood/ExplosionScorch/
+  GroundSlam/Rain 等原版 Effects 16 类）、Spell 基类先行（并入计划 4）、
+  InGameShop 并入 §10 物品栏、缺失兵种实体（CastleArchers/Statue/King/GiantBoss）待创始人拍板
+- **第六轮反馈立项（计划 §二.9 追加）**：9p 弓手朝纵深正上目标照射（y 对齐出手条件，并入 11a）/
+  9q 小鬼垂直坐标偏上（body_scale 未同步脚对齐，并入 9n）/ 9r 矛士姿势（候选 Stand2/Into-Stand）/
+  9s 剑士接近战空挥（并入 9k）
+- 全部待办清单见 [`待办事项.md`](项目/待办事项.md)；下一上下文从 **11a** 开工（计划 §一 开工指引）
+
+### 法术爆炸 AOE + 小鬼出生位置修正（2026-09-01，第五轮反馈）
+
+- **法术爆炸放倒一片（9e）**：dump 真值 `Magikill.CastStun/StunOpponents/unitsToDamage/STUN_RANGE`
+  ——原版法术=施法前摇+命中点**范围击晕+伤害**（无弹道，立项时的"魔法弹投射物"设想不保真已
+  修正）。实现：命中点 `spell_aoe_radius`（STAFF 90，档案）内敌人受 50% SPLASH 伤害 + 同步
+  击晕 0.5s；`MAGIC_BLAST` 紫白星芒爆炸粒子（FxLibrary 新效果 + FxPool 池化）
+- **小鬼出生位置修正（9n 追加）**：此前用指向目标的二维向量做"前方"，目标 y 漂移时出生点跑
+  纵深处 = "正上方"观感——横版语义"前"= **面朝方向（facing ±x）**，改为正前方 72px + 纵深 y
+  排开
+- **验证**：unit 批量 20/20、battle_sim daze=0
+
+### 主控走 A + 主控热键换武器（2026-09-01，第四轮反馈）
+
+- **走 A 修复（9o）**：玩家主控攻击时移动被锁死（攻击动画期间输入忽略）——原版主控可边撤退
+  边走 A。修复：①攻击锁死仅限**近战**（弓/杖远程不锁）；②攻击动画期间移动侧不再切
+  run/walk（acceleration/deceleration 加 attacking 保护，拉弓动画播完由 rig finished 回切），
+  AI 弓手 kite 边撤边射同步受益；③主控攻速 ×1.3（dump Unit 真值
+  `USER_CONTROLLED_ATTACK_SPEED=1.3`；顺带发现 `healthRegenPerSecondWhenUserControlled`
+  =主控自然回血为原版机制，并入 9j 脱战回血设计依据）
+- **主控热键换武器（物品栏最小核心，计划 §10）**：主控按 1~5 切剑/矛/弓/镐/杖——
+  weapon_type setter 已驱动重挂武器模型/持械站姿/攻击方式/射程/命中帧重解析。
+  完整 BG3/MC 式背包（格子 UI/装备槽/拾取/物品数据驱动）立项计划 §10
+- **验证**：unit 批量 20/20、possession 集成 2/2
+
+### 观察场第三轮反馈：箭矢落地 + 召唤语义对账（2026-09-01）
+
+- **箭矢落地修复（9c）**：插地判定原为"低于出射点屏幕 y 500px"（纵深战场观感=贴地小半圆、
+  插前线）——`_fire_arrow` 改传解算飞行时间 t + 瞄准点地面线：箭越过目标后落在**目标脚下
+  地面**，miss 沿弹道自然插进敌阵；旧调用退回 GROUND_DROP 路径兼容
+- **召唤护卫语义对账（9n，查 dump 真值）**：原版 `Minion : Unit` 是独立单位类（类体仅
+  UpdateDrag override，体型/血量全在 prefab 配置，代码层无 scale 逻辑）——出生位置此前
+  错做法师两侧，dump `SpawnMinion()` 协程 + `SummonGroundScorch` 焦痕语义 = **施法方向
+  前方地面冒出**，改为朝敌方向前方 72px + 横向散布；小体型经 `body_scale` 数据字段等价
+  prefab 缩放（0.65 近似值挂档案 `summon_body_scale`，真值待实测校准）；血量 40 原本
+  就有（`summon_hp`）。Minion prefab 数值真值对账挂复刻缺口总账
+- **验证**：unit 批量 20/20、battle_sim daze=0
+
+### 观察场第二轮反馈：人口爆炸/尸体堆积/怯战站死（2026-09-01）
+
+- **法师召唤封顶（9l）**：`_update_summon` 每 12s 无条件召 2 只、无存活上限——长仗人口爆炸
+  （"运行一段时间人这么多"根因，场上多出的"没血条的人"= 满血护卫，血条受过伤才展开）。
+  改为按施法者跟踪存活护卫数 ≤ summon_count，阵亡才补召（仍受冷却）
+- **尸体淡出（9m）**：尸体此前只禁碰撞、节点永存，战场越打越挤——碰撞禁用后停留 4s →
+  1.2s 淡入地里 → 移除（SWL fadeOutOver 语义）；battle_sim 采样数组每 tick 剔除 freed
+  引用（类型化迭代遇 freed 会中断统计——本轮曾致前三场景统计空 `{}`）
+- **怯战站死修复（9i）**：①士气恢复原只在"非战斗"走 → 战斗不结束怯战者永不恢复——
+  改为战斗中但 ≥3s 未受击也半速恢复（脱火重整）；②溃逃方向夹紧可走带，贴边无路可退
+  即 finish 交还决策（不再朝地图边缘墙里逃=背敌站死）
+- **血条圆点 4.5→6.0**：0.55 缩放下满血友军只剩 2.5 屏幕像素圆点，"像没血条"——
+  设计语言不变（满血=点/掉血=条），只提可见性
+- **立项未修**：9i+ 溃逃行为保真度（并入 7c）、9j 脱战回血（MOBA 延迟血条）、
+  9k 群体避让+空挥保真度（满血被堵/对空气挥刀/无让路）——见 [`AI复刻执行计划.md §二.9`](项目/AI复刻执行计划.md)
+- **验证**：unit 批量 20/20、formation 集成 4/4、battle_sim 6 场景全 daze=0
+  （镜像局打满全灭——士气恢复生效后不再有溃逃拖延）
+
+### 盾姿态分层动画 + 观察场首轮缺陷快修（2026-09-01）
+
+- **盾姿态分层动画（AI复刻计划项 5）**：spine_import 增量导入 `block_walk/block_crouch/block_attack_1~3`
+  （Spearton-Block-Walk/Crouch/Attack1/2/3，5/5）；SPEAR 档案增持盾动画组（walk→端盾行军、
+  idle→蹲姿待命、attack→三连刺随机池）+ `block_move_mult 0.8`（持盾移速降低）；visual_controller
+  盾姿态分层——`set_state_animation` 换 walk/idle/attack_spear 状态节点动画（不增节点，事件/完成
+  信号按 state 名派发，命中帧订阅不受影响）；WeaponMount.set_blocking 变化回调实体转发
+- **暂停真冻结（9a）**：AnimationPlayer 之前不受 TimeManager 门禁（暂停只停位移，肢体还动）——
+  实体暂停分支置 rig `set_anim_paused(true)` 恢复还原；arrow_projectile / weapon_mount._physics_process
+  同步挂门禁（暂停时箭矢悬停、冷却/放箭计时停）
+- **后队支援推进（9b，"打一半全员卡死"主因）**：跟队初版后队锚定在 gap 处 + hold 驻留永不接战——
+  前队接敌（任一成员射程内有敌）→ 后队锚点改为前队质心、不带 hold 推进支援，到位/接敌交还战斗
+- **反向拉弓（9g）**：弓手风筝撤退时朝向随移动翻转 → 背身拉弓——实体 `face_towards(pos)` +
+  behavior_attack 开火前面向目标
+- **批量测试隔离**：battle_started 自动暂停残留把 TimeManager 置 PAUSED，污染后续套件（命中帧/
+  冷却空转）——batch_runner 每套件前重置
+- **验证**：unit 批量 20/20、formation 集成 4/4、battle_sim daze=0；缺陷清单 9c/9d/9e/9f/9h
+  （弹道落地/射速/法师爆炸/无盾矛刺/卡死复验）已立项 [`AI复刻执行计划.md §二.9`](项目/AI复刻执行计划.md)
+
+### 编队动态跟队（SWL MoveInFormationBehindAnotherFormation 直译，2026-09）
+
+- **FormationSystem 锚定跟队**（`modules/combat/scripts/command/formation_system.gd`）：小队新增
+  `follow_squad_id`/`follow_gap` 字段 + `set_squad_follow_squad`/`clear_squad_follow`/`get_squad_follow`
+  API（自跟/前队不存在/锚定成环校验）；`_decide_squad_targets` 0.5s tick 维持后队落点 =
+  **前队质心 − 行进方向 × gap**（行进方向取"后队质心→前队质心"，停驻接敌依然稳定、左右军天然镜像）；
+  未接战成员漂出死区（40px）重下 move 号令（带 `follow_order` 来源标记，不覆盖玩家号令）；
+  前队全灭/解散自动解除锚定并回收跟队号令转自主决策
+- **BehaviorMove 到位驻留**（`hold_on_arrive` 参数）：锚定位到达后行为不 finish、站桩待命——
+  号令持续占用决策压制"无令时战斗决策擅自冲锋"，接敌检查前置（敌进射程仍打断交还战斗行为）；
+  AIController 补 `get_ordered_params()`（号令来源鉴别）
+- **观察场三班接线**（`tests/dev/battle_arena.gd`）：矛班=先锋（ADVANCE_ALL 压中线），
+  剑班锚矛班 gap150、火力班锚剑班 gap150——三班纵深推进，前队接敌停下后后队落点稳定
+- **验证**：新增 `tests/unit/test_squad_follow.gd` 9 用例（锚定校验/落点/死区防抖/玩家号令优先/
+  接战不打断/前队全灭回收号令），unit 批量 20/20 绿；`run_all.sh -Match formation` 4/4 绿；
+  battle_sim 全场景 daze=0、时长量级正常
+
 ### 全盘数据紧致化：战略图 JSON → 紧凑 bin（2026-08）
 
 - 运行时读取的 L1/L2/L3 `l*_world.json` 全部烘焙成同名紧凑 `.bin`（magic `LWDB` + `var_to_bytes`，工具 `tools/worldgen/l_world_bake.gd`，86 个 bin）

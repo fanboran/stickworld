@@ -57,6 +57,8 @@ class Params:
 	var splash_modifier: float = 0.5
 	## 击退冲量（0=无击退；近战/箭矢按 damage×16 传入）
 	var knockback: float = 0.0
+	## 是否状态伤害（DOT tick：不播受击动画/不硬直/不触发反伤，只扣血）
+	var is_status: bool = false
 
 	func _init(p_amount: float = 0.0, p_inflictor: Node = null) -> void:
 		amount = p_amount
@@ -113,6 +115,10 @@ static func apply(target: Node, p: Params) -> float:
 		self_p.is_blockable = false
 		self_p.is_crit = false
 		apply(p.inflictor, self_p)
+
+	# 状态伤害（DOT tick）到此为止：不反弹、不受击反应（is_status 语义）
+	if p.is_status:
+		return final_amount
 
 	# ── ④ 反伤链：ApplyDamageReflect（受击方把伤害反弹给攻击者）──
 	# 反伤量是**受击方**的配置（WeaponMount.reflect_damage，原版 CanReceiveReflectDamage
@@ -179,13 +185,20 @@ static func _try_block(target: Node, incoming_dir: Vector2) -> bool:
 
 ## 反伤尝试（原版 Unit.ApplyDamageReflect）：受击方 WeaponMount 配了 reflect_damage
 ## 时，把等量伤害反弹给攻击者。攻击者免疫条件走 CanReceiveReflectDamage 虚方法
-## 语义（缺省可被反伤）；反伤本身 REFLECT 类型、不可格挡、不可暴击。
+## 语义（缺省可被反伤）：优先查攻击者 WeaponMount 挂件（免疫通常配在武器挂点上），
+## 其次攻击者实体本体；都没有 → 缺省可被反伤。反伤本身 REFLECT 类型、不可格挡、
+## 不可暴击。
 static func _try_reflect(target: Node, inflictor: Node) -> void:
 	var wm: Node = target.get_node_or_null("WeaponMount")
 	if wm == null or not "reflect_damage" in wm:
 		return
 	var amount: float = float(wm.get("reflect_damage"))
 	if amount <= 0.0:
+		return
+	var receiver_wm: Node = inflictor.get_node_or_null("WeaponMount") \
+			if inflictor.has_method("get_node_or_null") else null
+	if receiver_wm != null and receiver_wm.has_method("can_receive_reflect_damage") \
+			and not receiver_wm.can_receive_reflect_damage():
 		return
 	if inflictor.has_method("can_receive_reflect_damage") \
 			and not inflictor.can_receive_reflect_damage():

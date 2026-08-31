@@ -8,6 +8,7 @@ signal test_done(code: int)
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptWS := preload("res://core/autoload/world_state.gd")
+const ScriptSerializer := preload("res://core/entities/world_state_serializer.gd")
 const ScriptStickmanState := preload("res://core/entities/stickman_state.gd")
 const ScriptOrgState := preload("res://core/entities/organization_state.gd")
 const ScriptRegionState := preload("res://core/entities/region_state.gd")
@@ -47,8 +48,8 @@ func _test_stickman() -> void:
 	s.traits.assign(["brave"])
 	s.location = Vector2(12.5, -8.0)
 	s.state = 2
-	var d: Dictionary = ScriptWS._stickman_to_dict(s)
-	var s2 = ScriptWS._stickman_from_dict(d)
+	var d: Dictionary = ScriptSerializer.stickman_to_dict(s)
+	var s2 = ScriptSerializer.stickman_from_dict(d)
 	_runner.assert_equal(s2.id, "sm_1", "id 保真")
 	_runner.assert_equal(s2.name, "阿强", "name 保真")
 	_runner.assert_equal(s2.race, 3, "race 保真")
@@ -77,8 +78,8 @@ func _test_organization() -> void:
 	o.current_project = "proj_1"
 	o.location = "r1"
 	o.state = 1
-	var d: Dictionary = ScriptWS._organization_to_dict(o)
-	var o2 = ScriptWS._organization_from_dict(d)
+	var d: Dictionary = ScriptSerializer.organization_to_dict(o)
+	var o2 = ScriptSerializer.organization_from_dict(d)
 	_runner.assert_equal(o2.id, "org_1", "id 保真")
 	_runner.assert_equal(o2.tier, 4, "tier 保真")
 	_runner.assert_equal(o2.child_orgs, ["org_2"], "child_orgs 保真")
@@ -106,8 +107,8 @@ func _test_region() -> void:
 	r.buildings.assign(["b1"])
 	r.organizations_present.assign(["org_1"])
 	r.battles_active.assign(["bt_1"])
-	var d: Dictionary = ScriptWS._region_to_dict(r)
-	var r2 = ScriptWS._region_from_dict(d)
+	var d: Dictionary = ScriptSerializer.region_to_dict(r)
+	var r2 = ScriptSerializer.region_from_dict(d)
 	_runner.assert_equal(r2.id, 5, "id 保真")
 	_runner.assert_equal(r2.is_coastal, true, "is_coastal 保真")
 	_runner.assert_equal(r2.center_position, Vector2(100.0, 200.0), "center_position 保真")
@@ -127,8 +128,8 @@ func _test_battle() -> void:
 	b.casualties_defender = 5
 	b.duration = 12.5
 	b.tactical_data = {"flank": true}
-	var d: Dictionary = ScriptWS._battle_to_dict(b)
-	var b2 = ScriptWS._battle_from_dict(d)
+	var d: Dictionary = ScriptSerializer.battle_to_dict(b)
+	var b2 = ScriptSerializer.battle_from_dict(d)
 	_runner.assert_equal(b2.region_id, "r1", "region_id 保真")
 	_runner.assert_equal(b2.state, 1, "state 保真")
 	_runner.assert_equal(b2.casualties_attacker, 3, "attacker 伤亡保真")
@@ -153,8 +154,8 @@ func _test_project() -> void:
 	p.start_time = 10.0
 	p.deadline = 20.0
 	p.result = {"done": true}
-	var d: Dictionary = ScriptWS._project_to_dict(p)
-	var p2 = ScriptWS._project_from_dict(d)
+	var d: Dictionary = ScriptSerializer.project_to_dict(p)
+	var p2 = ScriptSerializer.project_from_dict(d)
 	_runner.assert_equal(p2.owner_org_id, "org_1", "owner_org_id 保真")
 	_runner.assert_equal(p2.progress, 0.6, "progress 保真")
 	_runner.assert_equal(p2.assigned_resources, {"res_wood": 10.0}, "assigned_resources 保真")
@@ -174,8 +175,8 @@ func _test_supply_chain() -> void:
 	sc.route.assign([Vector2(0, 0), Vector2(30, 40)])
 	sc.state = 1
 	sc.efficiency = 0.9
-	var d: Dictionary = ScriptWS._supply_chain_to_dict(sc)
-	var sc2 = ScriptWS._supply_chain_from_dict(d)
+	var d: Dictionary = ScriptSerializer.supply_chain_to_dict(sc)
+	var sc2 = ScriptSerializer.supply_chain_from_dict(d)
 	_runner.assert_equal(sc2.origin_region, "r1", "origin 保真")
 	_runner.assert_equal(sc2.resource_type, "res_wood", "resource_type 保真")
 	_runner.assert_equal(sc2.quantity, 50.0, "quantity 保真")

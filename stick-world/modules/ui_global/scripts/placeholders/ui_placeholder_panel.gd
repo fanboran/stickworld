@@ -4,7 +4,7 @@ extends StickScreen
 ##
 ## 用法：UIPlaceholderPanel.open_panel(layer, preset_id)
 ## 内容区按预设生成演示骨架（让面板像样、可验收）；系统接入时替换为真实内容，
-## 并按 modules/ui_placeholder/api.gd 的说明移入对应业务模块。
+## 并按 placeholder_presets.gd 各项「将来接入点」移入对应业务模块。
 ##
 ## 游戏内经 UIModalStack EMPIRE_PANEL 层管理（同类单例：重复触发提到栈顶、
 ## 换预设替换不叠加——见 02 篇模态栈规则）；无 UIRoot 环境（模板预览）回退自管理。

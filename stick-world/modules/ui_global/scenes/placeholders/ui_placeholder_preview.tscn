@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://modules/ui_placeholder/scripts/ui_placeholder_preview.gd" id="1_preview"]
+[ext_resource type="Script" path="res://modules/ui_global/scripts/placeholders/ui_placeholder_preview.gd" id="1_preview"]
 
 [node name="UIPlaceholderPreview" type="Control"]
 layout_mode = 3
@@ -53,4 +53,4 @@ theme_override_constants/separation = 8
 
 [node name="FooterLabel" type="Label" parent="Window/MainVBox"]
 layout_mode = 2
-text = "接入点说明见 modules/ui_placeholder/api.gd"
+text = "接入点说明见 scripts/placeholders/placeholder_presets.gd"

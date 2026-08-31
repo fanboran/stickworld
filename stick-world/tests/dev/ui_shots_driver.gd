@@ -76,7 +76,7 @@ func run() -> void:
 		await _frames(2)
 	# ── 占位界面预览 ──
 	var preview: Control = (load(
-			"res://modules/ui_placeholder/scenes/ui_placeholder_preview.tscn") as PackedScene).instantiate()
+			"res://modules/ui_global/scenes/placeholders/ui_placeholder_preview.tscn") as PackedScene).instantiate()
 	get_tree().root.add_child(preview)
 	await _frames(5)
 	await _shot("08_placeholder_preview")

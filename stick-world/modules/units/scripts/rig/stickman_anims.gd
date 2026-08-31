@@ -33,6 +33,66 @@ const ANIM_HIT_FRONT := "hit_front"
 const ANIM_HIT_BACK := "hit_back"
 const ANIM_ARRIVE := "arrive"
 
+# ── 死亡/受击变体池（2026-08-31 全量直译 legacy 受击死亡体系）──────────
+## Death 组 ×10（普通死 2 + 爆头死 8：前扑/矛捅/矛兵形态等变体）
+const ANIM_DEAD_V2 := "dead_v2"
+const ANIM_DEAD_HEADSHOT_V2 := "dead_headshot_v2"
+const ANIM_DEAD_HS_FWD := "dead_headshot_fwd"
+const ANIM_DEAD_HS_FWD_SPEAR := "dead_headshot_fwd_spear"
+const ANIM_DEAD_HS_SPEAR := "dead_headshot_spear"
+const ANIM_DEAD_HS_SPEARTON := "dead_headshot_spearton"
+const ANIM_DEAD_HS_SPEARTON_SPEAR := "dead_headshot_spearton_spear"
+const ANIM_DEAD_HS2_SPEAR := "dead_headshot2_spear"
+## Hit 组 ×12（部位 Head/Mid × 方向 Front/Back × 强度 Big/Small + 盾格被击）
+const ANIM_HIT_MID_FRONT_BIG := "hit_mid_front_big"
+const ANIM_HIT_MID_BACK_BIG := "hit_mid_back_big"
+const ANIM_HIT_HEAD_FRONT_SMALL := "hit_head_front_small"
+const ANIM_HIT_HEAD_FRONT_SMALL2 := "hit_head_front_small2"
+const ANIM_HIT_HEAD_BACK_BIG := "hit_head_back_big"
+const ANIM_HIT_HEAD_BACK_SMALL := "hit_head_back_small"
+const ANIM_HIT_HEAD_BUTT := "hit_head_butt"
+const ANIM_HIT_HEAD_BUTT2 := "hit_head_butt2"
+const ANIM_HIT_BLOCK_1 := "hit_block_1"
+const ANIM_HIT_BLOCK_2 := "hit_block_2"
+
+## 死亡变体池（普通死：原版 Death1/Death2 随机）
+const DEAD_VARIANTS: Array[String] = [ANIM_DEAD, ANIM_DEAD_V2]
+## 爆头死亡变体池（原版 Death-Headshot 系 8 变体随机——含矛捅/前扑/矛兵形态）
+const DEAD_HEADSHOT_VARIANTS: Array[String] = [
+	ANIM_DEAD_HEADSHOT, ANIM_DEAD_HEADSHOT_V2, ANIM_DEAD_HS_FWD, ANIM_DEAD_HS_FWD_SPEAR,
+	ANIM_DEAD_HS_SPEAR, ANIM_DEAD_HS_SPEARTON, ANIM_DEAD_HS_SPEARTON_SPEAR, ANIM_DEAD_HS2_SPEAR,
+]
+## 受击池（SelectHitAnimation 直译：部位×方向，强度=Big/Small）
+const HIT_MID_FRONTS: Array[String] = [ANIM_HIT_FRONT, ANIM_HIT_MID_FRONT_BIG]
+const HIT_MID_BACKS: Array[String] = [ANIM_HIT_BACK, ANIM_HIT_MID_BACK_BIG]
+const HIT_HEAD_FRONTS: Array[String] = [ANIM_HIT_HEAD_FRONT_SMALL, ANIM_HIT_HEAD_FRONT_SMALL2, ANIM_HIT_HEAD_BUTT, ANIM_HIT_HEAD_BUTT2]
+const HIT_HEAD_BACKS: Array[String] = [ANIM_HIT_HEAD_BACK_BIG, ANIM_HIT_HEAD_BACK_SMALL]
+## 举盾中被击池（Hit-Spearton-Block：招架系统的配套受击反馈）
+const HIT_BLOCK_VARIANTS: Array[String] = [ANIM_HIT_BLOCK_1, ANIM_HIT_BLOCK_2]
+## 受击强度阈值（伤害 ≥ 此值播 Big 组，否则 Small；SWL Hit 强度分级近似）
+const HIT_BIG_DAMAGE_THRESHOLD: float = 12.0
+
+## 选受击动画（SWL SelectHitAnimation 直译）：部位(Head/Mid)×方向(Front/Back)×
+## 强度(Big/Small)，举盾被击走 Block 池。head=true 部位在头（爆头未致死/头顶对撞）。
+## 注意：类型化数组常量经三元表达式会退化为 untyped Array（运行时报
+## "Trying to assign array of type Array to Array[String]"），一律 if/else 直返。
+static func pick_hit_anim(from_front: bool, big: bool, head: bool, blocking: bool = false) -> String:
+	if blocking:
+		return HIT_BLOCK_VARIANTS[randi() % HIT_BLOCK_VARIANTS.size()]
+	if head:
+		if from_front:
+			return HIT_HEAD_FRONTS[randi() % HIT_HEAD_FRONTS.size()]
+		return HIT_HEAD_BACKS[randi() % HIT_HEAD_BACKS.size()]
+	if from_front:
+		return HIT_MID_FRONTS[1] if big else HIT_MID_FRONTS[0]
+	return HIT_MID_BACKS[1] if big else HIT_MID_BACKS[0]
+
+
+## 选死亡动画（原版死亡变体随机）：普通死 Death1/2，爆头死 Headshot 系 8 变体
+static func pick_dead_anim(headshot: bool) -> String:
+	var pool: Array[String] = DEAD_HEADSHOT_VARIANTS if headshot else DEAD_VARIANTS
+	return pool[randi() % pool.size()]
+
 const ANIM_DIR := "res://modules/units/animations/"
 
 ## 全部攻击动画（通用剑攻 + 各武器专属：矛刺/镐挥/法杖/拉弓）
@@ -110,6 +170,19 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_BUILD)
 	_load_anim(lib, ANIM_HIT_FRONT)
 	_load_anim(lib, ANIM_HIT_BACK)
+	# 死亡/受击变体池（legacy Death ×10 / Hit ×12 全量入库，2026-08-31）
+	for a in DEAD_VARIANTS:
+		if a != ANIM_DEAD:
+			_load_anim(lib, a)
+	for a in DEAD_HEADSHOT_VARIANTS:
+		if a != ANIM_DEAD_HEADSHOT:
+			_load_anim(lib, a)
+	for a in [ANIM_HIT_MID_FRONT_BIG, ANIM_HIT_MID_BACK_BIG,
+			ANIM_HIT_HEAD_FRONT_SMALL, ANIM_HIT_HEAD_FRONT_SMALL2,
+			ANIM_HIT_HEAD_BACK_BIG, ANIM_HIT_HEAD_BACK_SMALL,
+			ANIM_HIT_HEAD_BUTT, ANIM_HIT_HEAD_BUTT2,
+			ANIM_HIT_BLOCK_1, ANIM_HIT_BLOCK_2]:
+		_load_anim(lib, a)
 	_load_anim(lib, ANIM_ARRIVE)
 
 # ============================================================

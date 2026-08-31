@@ -1,0 +1,215 @@
+[gd_resource type="Animation" format=3]
+
+[resource]
+length = 2.4
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("hip/spine_root:rotation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.7667),
+"transitions": PackedFloat32Array(1, 1),
+"update": 0,
+"values": [0.0, 1.5015067554907218]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("hip/spine_root/thigh_outer:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.1333, 0.4667, 0.6667, 0.7, 0.8, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 1.4999359591639267, -0.0005235987755987528, 1.0264281330978653, 1.123119373658351, 0.480489143074039, 0.3649483465920143, 0.3649483465920143]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("hip/spine_root/thigh_inner:rotation")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.2333, 0.5, 0.6667, 0.7, 0.8, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -0.6606071218798536, 0.4183554217030408, -0.2808234766458877, -0.18413223608540197, -0.19268434942017384, -0.3082251459021985, -0.3082251459021985]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("hip/spine_root/lower_torso:rotation")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 0.2333, 0.7667, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -0.092851516206098, -0.01884955592153876, -0.01884955592153876, -0.01884955592153876]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("hip/spine_root/lower_torso/chest_mid:rotation")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0, 0.2333, 0.6667, 0.7667, 0.8333, 0.9, 0.9667, 1.0333, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -0.2537708732399753, -0.2537708732399753, 0.02408554367752173, -0.22636920398366447, -0.04607669225265049, -0.10314895879286476, -0.041364303272265625, -0.041364303272265625, -0.041364303272265625]
+}
+tracks/5/type = "value"
+tracks/5/imported = false
+tracks/5/enabled = true
+tracks/5/path = NodePath("hip/spine_root/thigh_outer/shin_outer:rotation")
+tracks/5/interp = 1
+tracks/5/loop_wrap = true
+tracks/5/keys = {
+"times": PackedFloat32Array(0, 0.2333, 0.4667, 0.6667, 0.7, 0.7667, 0.8, 0.8667, 0.9, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 1.0761700167797035, 0.39950586578150227, 0.4722860955896656, 0.4722860955896656, -0.00820304748437333, -0.4363323129985824, -0.19652407377456135, -0.3583160954344359, -0.3097959422289935, -0.3097959422289935]
+}
+tracks/6/type = "value"
+tracks/6/imported = false
+tracks/6/enabled = true
+tracks/6/path = NodePath("hip/spine_root/thigh_inner/shin_inner:rotation")
+tracks/6/interp = 1
+tracks/6/loop_wrap = true
+tracks/6/keys = {
+"times": PackedFloat32Array(0, 0.2333, 0.2667, 0.3, 0.3333, 0.4667, 0.6667, 0.7, 0.7667, 0.8, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 0.45937065912490743, 0.2988003679414293, 0.45256387504212975, 0.5808455750637129, 1.4289010586077577, 0.45937065912490743, 0.45937065912490743, 0.4284783313646081, 0.09250245035569966, 0.23212879051524604, 0.23212879051524604]
+}
+tracks/7/type = "value"
+tracks/7/imported = false
+tracks/7/enabled = true
+tracks/7/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso:rotation")
+tracks/7/interp = 1
+tracks/7/loop_wrap = true
+tracks/7/keys = {
+"times": PackedFloat32Array(0, 0.2333, 0.6667, 0.7667, 0.8333, 0.9, 0.9667, 1.0333, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -0.2539454061651749, -0.2539454061651749, -0.04677482395344793, -0.2972295716146341, -0.11693705988362016, -0.17400932642383443, -0.11222467090323529, -0.11222467090323529, -0.11222467090323529]
+}
+tracks/8/type = "value"
+tracks/8/imported = false
+tracks/8/enabled = true
+tracks/8/path = NodePath("hip/spine_root/thigh_outer/shin_outer/foot_outer:rotation")
+tracks/8/interp = 1
+tracks/8/loop_wrap = true
+tracks/8/keys = {
+"times": PackedFloat32Array(0, 0.4667, 0.7, 0.8, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 0.20210912738094358, 0.20210912738094358, 0.7290240285580316, 0.7290240285580316, 0.7290240285580316]
+}
+tracks/9/type = "value"
+tracks/9/imported = false
+tracks/9/enabled = true
+tracks/9/path = NodePath("hip/spine_root/thigh_inner/shin_inner/foot_inner:rotation")
+tracks/9/interp = 1
+tracks/9/loop_wrap = true
+tracks/9/keys = {
+"times": PackedFloat32Array(0, 0.2333, 0.6667, 0.7, 0.8, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 0.6066764479932288, 0.6066764479932288, 0.6066764479932288, 1.0082767088771243, 1.0082767088771243, 1.0082767088771243]
+}
+tracks/10/type = "value"
+tracks/10/imported = false
+tracks/10/enabled = true
+tracks/10/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer:rotation")
+tracks/10/interp = 1
+tracks/10/loop_wrap = true
+tracks/10/keys = {
+"times": PackedFloat32Array(0, 0.1667, 0.2, 0.2333, 0.2667, 0.3, 0.3333, 0.4, 0.4667, 0.5, 0.7, 0.8, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -2.252521932623882, -2.194053402682071, -2.1605430810437807, -2.1123719936887375, -1.9805996351631652, -2.0364501712269836, -1.9322540148829217, -1.5669566024405093, -1.6931439073596988, -1.5259413650186422, -3.081378794395989, -3.081378794395989, -3.081378794395989]
+}
+tracks/11/type = "value"
+tracks/11/imported = false
+tracks/11/enabled = true
+tracks/11/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner:rotation")
+tracks/11/interp = 1
+tracks/11/loop_wrap = true
+tracks/11/keys = {
+"times": PackedFloat32Array(0, 0.4667, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -2.1448351177758314, -2.1448351177758314, -2.1448351177758314]
+}
+tracks/12/type = "value"
+tracks/12/imported = false
+tracks/12/enabled = true
+tracks/12/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head:rotation")
+tracks/12/interp = 1
+tracks/12/loop_wrap = true
+tracks/12/keys = {
+"times": PackedFloat32Array(0, 0.6, 0.7667, 0.8333, 0.9, 0.9667, 1.0333, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -0.9941395419359701, -1.14196892957989, -1.392423677241076, -1.2121311655100622, -1.2692034320502765, -1.2074187765296773, -1.2074187765296773, -1.2074187765296773]
+}
+tracks/13/type = "value"
+tracks/13/imported = false
+tracks/13/enabled = true
+tracks/13/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer:rotation")
+tracks/13/interp = 1
+tracks/13/loop_wrap = true
+tracks/13/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.3333, 0.5, 0.6, 0.6333, 0.7, 0.7667, 0.8333, 0.8667, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -0.3886848244191374, -0.4679227724596798, -0.3251548396465435, -0.2710496328347194, -0.01186823891356156, 0.3221877799181534, -0.19949113350295197, -0.17767451785302288, 0.02844886680750749, 0.02844886680750749, 0.02844886680750749]
+}
+tracks/14/type = "value"
+tracks/14/imported = false
+tracks/14/enabled = true
+tracks/14/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner:rotation")
+tracks/14/interp = 1
+tracks/14/loop_wrap = true
+tracks/14/keys = {
+"times": PackedFloat32Array(0, 0.5, 0.6333, 0.7, 0.8, 0.8667, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, -0.007679448708775073, -0.2607521902479529, -0.30525808617380845, -0.35953782591083183, 0.13788101090755206, 0.13788101090755206, 0.13788101090755206]
+}
+tracks/15/type = "value"
+tracks/15/imported = false
+tracks/15/enabled = true
+tracks/15/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner/hand_inner/weapon_hand:rotation")
+tracks/15/interp = 1
+tracks/15/loop_wrap = true
+tracks/15/keys = {
+"times": PackedFloat32Array(0, 0.4667, 0.6667, 0.8333, 0.8667, 0.9, 0.9667, 1, 1.0333, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 0.7407177345463933, 0.48258353817643207, 0.8461356213668506, 1.0686651009961277, 0.9363691436949578, 1.1386528040011008, 1.0943214410004443, 1.114567260323579, 1.114567260323579, 1.114567260323579]
+}
+tracks/16/type = "value"
+tracks/16/imported = false
+tracks/16/enabled = true
+tracks/16/path = NodePath("hip:position")
+tracks/16/interp = 1
+tracks/16/loop_wrap = true
+tracks/16/keys = {
+"times": PackedFloat32Array(0, 1.2, 2.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector2(0, 0), Vector2(0, 0), Vector2(0, 0)]
+}
+metadata/anim_events = [{
+"name": "Sound",
+"string": "fall",
+"time": 0.6667
+}]
+metadata/hit_time = -1.0
+metadata/sound_events = [[0.6667, "fall"]]

@@ -20,6 +20,8 @@ func _draw() -> void:
 	# 获取当前地图实例（通过 GameRoot.get_current_map）
 	var map: Node2D = _get_current_map()
 	ctx["map"] = map
+	# 并入装配层注入的附加数据（如 map_paths 节点路径表，见 DebugApi.set_ctx_extra）
+	ctx.merge(DebugApi.ctx_extras())
 	# 调用所有已启用的绘制器
 	for drawer_name in DebugApi.get_drawers().keys():
 		if not DebugApi.is_drawer_enabled(drawer_name):

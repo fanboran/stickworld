@@ -69,7 +69,9 @@ func _update_text() -> void:
 	var map: Node2D = _get_current_map()
 	var entity_count: int = 0
 	if map != null and is_instance_valid(map):
-		var entity_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST)
+		# 实体宿主路径由 world 装配层注入（见 system_setup.register_debug_drawers），不 import WorldAPI
+		var map_paths: Dictionary = DebugApi.get_ctx_extra("map_paths", {}) if DebugApi else {}
+		var entity_host: Node2D = map.get_node_or_null(map_paths.get("entity_host", ""))
 		if entity_host != null:
 			entity_count = entity_host.get_child_count()
 	lines.append("实体: %d" % entity_count)
@@ -123,7 +125,8 @@ func _update_hovered() -> void:
 	if map == null:
 		_hovered_entity = null
 		return
-	var entity_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST)
+	var entity_host: Node2D = map.get_node_or_null(
+			(DebugApi.get_ctx_extra("map_paths", {}) if DebugApi else {}).get("entity_host", ""))
 	if entity_host == null:
 		_hovered_entity = null
 		return

@@ -9,6 +9,7 @@ extends RefCounted
 ##   - viewport_size: Vector2  视口尺寸
 ##   - effective_zoom: float   有效缩放
 ##   - map: Node2D             当前地图实例
+##   - map_paths: Dictionary   地图节点路径表（world 装配层注入，键见 system_setup.register_debug_drawers）
 
 ## 建筑名称缓存（def_id -> name_zh）
 static var _building_name_cache: Dictionary = {}
@@ -29,6 +30,12 @@ static func world_to_screen_size(world_size: float, ctx: Dictionary) -> float:
 	return world_size * zoom
 
 
+## 按注入的路径表从地图取子节点（路径由 world 装配层注入 ctx["map_paths"]，本模块不 import WorldAPI）
+static func _map_child(map: Node, ctx: Dictionary, key: String) -> Node:
+	var path: String = ctx.get("map_paths", {}).get(key, "")
+	return map.get_node_or_null(path) if path != "" else null
+
+
 # ─────────────────────────────── 绘制器 ────────────────────────────────
 
 ## PlacementGrid 竖向条带（绿=占用 红=不可建）+ 网格竖线
@@ -36,7 +43,7 @@ static func draw_grid(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
 		return
-	var grid: Node = map.get_node_or_null(WorldAPI.PATH_MAP_PLACEMENT_GRID)
+	var grid: Node = _map_child(map, ctx, "placement_grid")
 	if grid == null:
 		return
 	var cell_size: float = float(grid.get("CELL_SIZE")) if grid.get("CELL_SIZE") != null else 32.0
@@ -108,12 +115,12 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
 		return
-	var building_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST)
+	var building_host: Node2D = _map_child(map, ctx, "building_host")
 	if building_host != null:
 		for building in building_host.get_children():
 			_draw_building_outline(control, ctx, building, Color(1.0, 1.0, 1.0, 0.6))
 	# 地形建筑也绘制
-	var terrain_buildings: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS)
+	var terrain_buildings: Node2D = _map_child(map, ctx, "terrain_buildings")
 	if terrain_buildings != null:
 		for building in terrain_buildings.get_children():
 			_draw_building_outline(control, ctx, building, Color(0.8, 0.8, 0.8, 0.4))
@@ -177,7 +184,7 @@ static func draw_chunk_triggers(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
 		return
-	var chunk_triggers: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS)
+	var chunk_triggers: Node2D = _map_child(map, ctx, "chunk_triggers")
 	if chunk_triggers == null:
 		return
 	for child in chunk_triggers.get_children():
@@ -190,7 +197,7 @@ static func draw_entity_states(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
 		return
-	var entity_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST)
+	var entity_host: Node2D = _map_child(map, ctx, "entity_host")
 	if entity_host == null:
 		return
 	var font: Font = control.get_theme_default_font()
@@ -214,7 +221,7 @@ static func draw_entity_colliders(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
 		return
-	var entity_host: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST)
+	var entity_host: Node2D = _map_child(map, ctx, "entity_host")
 	if entity_host == null:
 		return
 	var fill_color := Color(0.2, 1.0, 1.0, 0.2)
@@ -298,10 +305,10 @@ static func draw_building_names(control: Control, ctx: Dictionary) -> void:
 	var font: Font = control.get_theme_default_font()
 	# 扫描 BuildingHost（动态建筑）
 	var hosts: Array[Node] = []
-	var bh: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST)
+	var bh: Node2D = _map_child(map, ctx, "building_host")
 	if bh != null:
 		hosts.append(bh)
-	var tb: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS)
+	var tb: Node2D = _map_child(map, ctx, "terrain_buildings")
 	if tb != null:
 		hosts.append(tb)
 	for host in hosts:

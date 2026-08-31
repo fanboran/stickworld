@@ -131,3 +131,9 @@ stick-world/Godot/
 
 # git worktree（F:\VSCode\game-2\.worktrees\ 下的多分支工作区，不入库）
 .worktrees/
+
+# 导出构建产物（export/ 下的说明文档仍入库，只忽略二进制产物）
+export/**/*.exe
+export/**/*.pck
+export/**/*.dll
+export/**/*.zip

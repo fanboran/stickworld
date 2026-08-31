@@ -9,6 +9,10 @@ extends Node
 ##   - issue_order：已实现（委托 TacticalOrders，经 CommandChain 逐层下达）；
 ##   - possess_commander：本属 player_control 职责（PossessionInterface），不在本模块。
 ## 以本文件实际签名为准。
+##
+## 公共类型契约：TargetFinder（公共目标选择核心，反编译参考实装 A）为对外公共类，
+## units 的战斗 AI（behavior_attack.gd）经其静态方法 find_target() 选目标。
+## 该引用属 headless 防御性路径 preload（行内 audit-exempt 标记），见审计工具豁免清单。
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## BattleDirector 实例引用（由 GameRoot 装配时注入）

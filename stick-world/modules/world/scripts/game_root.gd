@@ -24,6 +24,7 @@ const _SaveHandlerScript: GDScript = preload("res://modules/world/scripts/setup/
 const _TravelHandlerScript: GDScript = preload("res://modules/world/scripts/setup/travel_handler.gd")
 const _InitialContentScript: GDScript = preload("res://modules/world/scripts/setup/initial_content.gd")
 ## 世界加载覆盖层（消除启动加载期的死灰屏）
+## audit-exempt: 组合根装配 ui_global 组件，与 system_setup.gd 同性质
 const _WorldLoadingOverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/world_loading_overlay.gd")
 
 ## 测试村落地图场景（P0 硬编码）

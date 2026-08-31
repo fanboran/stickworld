@@ -8,8 +8,6 @@ extends Control
 ## 本面板共享状态，双方操作后都走 refresh()。
 ## 附身实体随地图切换重建，_process 低频自刷（0.25s）自动跟上。
 
-const _WeaponMountScript: GDScript = preload("res://modules/units/scripts/entity/weapon_mount.gd")
-
 ## 按钮顺序 = WeaponType 枚举序（SWORD/SPEAR/BOW/PICKAXE/STAFF）
 const WEAPON_LABELS: Array[String] = ["剑", "矛", "弓", "镐", "杖"]
 

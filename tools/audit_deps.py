@@ -109,6 +109,7 @@ for dirpath, _, files in os.walk(ROOT):
 # 2. 扫描每个文件，找 preload/load + class_name 引用
 file_deps = {}          # rel_path -> (module, set(module))
 preload_viol = []       # (rel_path, line, target)
+preload_exempt = []     # 行内 audit-exempt 标记豁免的（rel_path, line, target）
 assembler_preloads = 0
 for dirpath, _, files in os.walk(ROOT):
     if ".godot" in dirpath or "node_modules" in dirpath:
@@ -149,14 +150,19 @@ for dirpath, _, files in os.walk(ROOT):
         deps.discard(mod)       # 模块内部自引用不计入跨模块图
         file_deps[rel] = (mod, deps)
 
-        # 越界 preload（装配器单独统计）
+        # 越界 preload（装配器单独统计；行内 audit-exempt 标记显式豁免）
         for m in re.finditer(r'preload\(\s*["\']res://modules/([^/]+)/([^"\']+)["\']', code_keep_str):
             tgt_mod, tgt_path = m.group(1), m.group(2)
             if tgt_mod == mod or tgt_path.startswith("api.gd"):
                 continue
             line = code_keep_str[:m.start()].count("\n") + 1
+            # 标记写在注释里，而 code_keep_str 已剥注释——须回原文找（含前 2 行）
+            raw_lines = raw.split("\n")
+            ctx = "\n".join(raw_lines[max(0, line - 3):line])
             if rel in ASSEMBLER:
                 assembler_preloads += 1
+            elif "audit-exempt" in ctx:
+                preload_exempt.append((rel, line, f"modules/{tgt_mod}/{tgt_path}"))
             else:
                 preload_viol.append((rel, line, f"modules/{tgt_mod}/{tgt_path}"))
 
@@ -211,5 +217,10 @@ print("\n=== 跨模块 preload 到内部文件（非 api.gd）===")
 for rel, line, tgt in sorted(preload_viol):
     print(f"  {rel}:{line}: preload -> {tgt}")
 print(f"共 {len(preload_viol)} 处"
-      + (f"（另有装配器 {ASSEMBLER and 'system_setup.gd'} 的 {assembler_preloads} 处已豁免："
+      + (f"（另有装配器 {', '.join(sorted(ASSEMBLER))} 的 {assembler_preloads} 处已豁免："
          f"composition root 需按具体类型注入）" if assembler_preloads else ""))
+if preload_exempt:
+    print("\n=== 显式豁免（行内 audit-exempt 标记）===")
+    for rel, line, tgt in sorted(preload_exempt):
+        print(f"  {rel}:{line}: preload -> {tgt}")
+    print(f"共 {len(preload_exempt)} 处")

@@ -17,6 +17,8 @@ extends RefCounted
 ##   - enemies: Array         直接提供候选敌人数组（覆盖 battle 枚举）
 ##   - range: float           最大目标距离（-1 = 无限，缺省 -1）
 ##   - prefer_low_hp: bool    优先残血目标（排序时低血加权）
+##   - prefer_large: float    大目标偏好权重（SWL ArcherAi.AttackLargeTarget；max_hp 越大
+##                            距离分扣得越多，0=关）
 ##   - prefer_statue: bool    只选雕像/建筑类目标（按 is_in_group("statue") 或 has_method("is_statue") 判定）
 ##   - fixate_on: Node        盯防指定目标（存活且在 range 内则直接返回它）
 ##   - ignore_current_attackers: bool  忽略正被围攻的目标（battle.register_attacker 记录；防集火重叠）
@@ -31,6 +33,8 @@ extends RefCounted
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 残血优先时的 HP 权重（score = distance + (1 - hp_ratio) * HP_WEIGHT）
 const HP_WEIGHT: float = 300.0
+## 大目标偏好：每点 max_hp 抵扣的距离分（prefer_large=1 时 200hp 巨物 ≈ -60px 距离偏好）
+const LARGE_HP_WEIGHT: float = 0.3
 
 
 ## 选取最优目标。无可选目标返回 null。
@@ -60,6 +64,7 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 
 	var range: float = opts.get("range", -1.0)
 	var prefer_low_hp: bool = opts.get("prefer_low_hp", false)
+	var prefer_large: float = float(opts.get("prefer_large", 0.0))
 	var prefer_statue: bool = opts.get("prefer_statue", false)
 	var ignore_attackers: bool = opts.get("ignore_current_attackers", false)
 	var max_attackers: int = opts.get("max_attackers_per_target", 3)
@@ -82,6 +87,9 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 		var score: float = d
 		if prefer_low_hp:
 			score = d + (1.0 - _hp_ratio(e)) * HP_WEIGHT
+		# 大目标偏好（SWL AttackLargeTarget）：max_hp 越大距离分扣越多 → 弓手优先射巨物
+		if prefer_large > 0.0:
+			score -= _max_hp_of(e) * LARGE_HP_WEIGHT * prefer_large
 		if score < best_score:
 			best_score = score
 			best = e
@@ -186,6 +194,16 @@ static func _hp_ratio(e: Node) -> float:
 	if health == null or not health.has_method("get_hp_ratio"):
 		return 1.0
 	return health.get_hp_ratio()
+
+
+## 目标血量上限（大目标偏好用；读不到回落 0 = 无偏好加成）
+static func _max_hp_of(e: Node) -> float:
+	if not e.has_method("get_health"):
+		return 0.0
+	var health: Node = e.get_health()
+	if health == null or not "max_hp" in health:
+		return 0.0
+	return maxf(0.0, float(health.get("max_hp")))
 
 
 ## 是否雕像/建筑类目标（组 "statue" 或 is_statue 方法）

@@ -29,6 +29,9 @@ const ALLY_DEATH_MORALE_LOSS: float = 12.0
 ## 伤亡恐慌影响半径（px）
 const MORALE_AFFECT_RANGE: float = 600.0
 
+## 防集火计数的新鲜窗口（ms）：超过此间隔未再登记的攻击者视为停手，不再计数
+const ATTACKER_FRESH_WINDOW_MS: int = 3000
+
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 进攻方阵营 ID
 const FACTION_ATTACKER: int = 1
@@ -55,7 +58,9 @@ var _casualties_attacker: int = 0
 ## 防守方伤亡数（死亡）
 var _casualties_defender: int = 0
 ## 每目标当前攻击者数（防集火重叠；反编译参考实装 A 的 TODO 落地）。
-## 结构：target.instance_id -> {"count": int, "attackers": {attacker_iid: true}}
+## 结构：target.instance_id -> {"attackers": {attacker_iid: 最后登记 msec}}。
+## 计数按新鲜窗口衰减（审计 P1-3）：攻击者停手超过窗口后自动失效，
+## 无需依赖 unregister_attacker 被正确调用（原"只增不减"导致集火分配逐渐失真）。
 var _target_attackers: Dictionary = {}
 
 
@@ -95,6 +100,9 @@ func start() -> void:
 
 func _physics_process(delta: float) -> void:
 	if _state != State.ENGAGED:
+		return
+	# TimeManager 暂停门禁（审计 P1-5"假暂停"）：暂停语义全局统一，战斗停 tick
+	if TimeManager != null and TimeManager.is_paused():
 		return
 	_duration += delta
 	_director.tick(delta)
@@ -139,20 +147,19 @@ func _apply_casualty_morale_loss(faction: int, pos: Vector2) -> void:
 # ─────────────────────────────── 攻击者计数（防集火重叠）────────────────────────────────
 
 ## 登记一次攻击：target 被 attacker 攻击（weapon_mount.perform_attack 命中时调用）。
-## 同一攻击者只计一次（去重）。
+## 记录最后登记时间，计数按新鲜窗口自动衰减（见 get_attacker_count）。
 func register_attacker(target: Node, attacker: Node) -> void:
 	if target == null or attacker == null or not is_instance_valid(target) or not is_instance_valid(attacker):
 		return
 	var iid: int = target.get_instance_id()
 	if not _target_attackers.has(iid):
-		_target_attackers[iid] = {"count": 0, "attackers": {}}
+		_target_attackers[iid] = {"attackers": {}}
 	var entry: Dictionary = _target_attackers[iid]
-	if not entry["attackers"].has(attacker.get_instance_id()):
-		entry["attackers"][attacker.get_instance_id()] = true
-		entry["count"] += 1
+	# 刷新该攻击者的最后登记时间（持续攻击 = 持续占用攻击槽）
+	entry["attackers"][attacker.get_instance_id()] = Time.get_ticks_msec()
 
 
-## 撤销一次攻击（攻击者失效/停止攻击时；简化：目标死亡已统一清理）
+## 撤销一次攻击（攻击者失效/停止攻击时；兜底用——正常路径按新鲜窗口自动衰减）
 func unregister_attacker(target: Node, attacker: Node) -> void:
 	if target == null or attacker == null or not is_instance_valid(target):
 		return
@@ -160,20 +167,34 @@ func unregister_attacker(target: Node, attacker: Node) -> void:
 	if not _target_attackers.has(iid):
 		return
 	var entry: Dictionary = _target_attackers[iid]
-	if entry["attackers"].erase(attacker.get_instance_id()):
-		entry["count"] = maxi(0, entry["count"] - 1)
-	if entry["count"] <= 0:
+	entry["attackers"].erase(attacker.get_instance_id())
+	if entry["attackers"].is_empty():
 		_target_attackers.erase(iid)
 
 
 ## 查询某目标当前被几个单位攻击（TargetFinder 防集火过滤用）。
+## 只统计新鲜窗口内（ATTACKER_FRESH_WINDOW_MS）仍登记的攻击者，
+## 过期项顺带惰性清理——修复原"只增不减"导致的集火分配失真（审计 P1-3）。
 func get_attacker_count(target: Node) -> int:
 	if target == null or not is_instance_valid(target):
 		return 0
-	var entry: Variant = _target_attackers.get(target.get_instance_id(), null)
+	var iid: int = target.get_instance_id()
+	var entry: Variant = _target_attackers.get(iid, null)
 	if entry == null:
 		return 0
-	return int(entry["count"])
+	var now_ms: int = Time.get_ticks_msec()
+	var fresh: int = 0
+	var expired: Array = []
+	for attacker_iid in entry["attackers"].keys():
+		if now_ms - int(entry["attackers"][attacker_iid]) <= ATTACKER_FRESH_WINDOW_MS:
+			fresh += 1
+		else:
+			expired.append(attacker_iid)
+	for k in expired:
+		entry["attackers"].erase(k)
+	if entry["attackers"].is_empty():
+		_target_attackers.erase(iid)
+	return fresh
 
 
 # ─────────────────────────────── 查询 API ────────────────────────────────

@@ -230,6 +230,10 @@ func _test_start_battle() -> void:
 	_runner.assert_true(_battle != null, "battle_instance 应创建")
 	if _battle != null:
 		_runner.assert_true(_battle.is_active(), "battle_instance 应激活")
+	# 开战自动暂停（TimeManager._on_battle_started，game/auto_pause_battle 默认 true）
+	# 是给玩家的战场观察窗口——P1-5"假暂停"修复后单位会真停，测试模拟玩家立即恢复
+	if TimeManager != null and TimeManager.is_paused():
+		TimeManager.set_speed(TimeManager.Speed.X1)
 	await get_tree().process_frame
 
 

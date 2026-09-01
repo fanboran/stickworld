@@ -142,11 +142,12 @@ func _order_to_params(order_type: int, target_pos: Vector2) -> Dictionary:
 
 
 ## 号令类型 -> 队伍级目标点分配模式（反编译参考实装 D）：
-## "line" 推进横排散开（ADVANCE/SPRINT），"rally" 围圈集合，其余不散开。
+## "formation" row/col 阵列散开（ADVANCE/SPRINT，11b SWL Formation 直译），
+## "rally" 围圈集合，其余不散开。
 func _order_to_spread(order_type: int) -> String:
 	match order_type:
 		OrderType.ADVANCE_ALL, OrderType.SPRINT:
-			return "line"
+			return "formation"
 		OrderType.RALLY:
 			return "rally"
 		_:

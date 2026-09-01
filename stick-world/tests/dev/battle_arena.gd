@@ -10,7 +10,7 @@ extends Node
 ##     剑士班 ×10（中坚，2 排，锚定跟随矛班 gap 150）
 ##     火力班 ×6（杖×2 + 弓×4，射程 300 压制，锚定跟随剑班 gap 150）
 ##   出生按武器射程纵深分排（矛前→剑→杖→弓后），排/列间距 ≥ 分离半径 42px。
-##   开战矛班下 ADVANCE_ALL（line 横排散开）压至中线交战；剑/火班由编队动态跟队
+##   开战矛班下 ADVANCE_ALL（formation row/col 列阵）压至中线交战；剑/火班由编队动态跟队
 ##   （set_squad_follow_squad）锚定前队质心后方 gap 处，保持纵深推进、接战即还战斗；
 ##   前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长集火 +
 ##   兵种行为档案（冲脸/持阵/风筝）接管。
@@ -168,7 +168,7 @@ func _spawn_and_start() -> void:
 	if TimeManager != null and TimeManager.is_paused():
 		TimeManager.set_speed(TimeManager.Speed.X1)
 	# 编队注入（审计 P1-1）：每方 3 小队（fp_combat_squad 预设）+ 任命排长——
-	# 排长每 0.5s 决策共享集火目标，line 阵型位随号令生效
+	# 排长每 0.5s 决策共享集火目标，formation 列阵位随号令生效
 	var left_squad_ids: Array = []
 	var right_squad_ids: Array = []
 	for si in SQUAD_DEFS.size():

@@ -21,6 +21,12 @@ extends Node
 ## 直译）：小队可锚定跟随另一小队（set_squad_follow_squad），每 0.5s tick 把后队未接战
 ## 成员重下发到"前队质心 − 行进方向 × gap"的队形位（hold_on_arrive 驻留，接战即还战斗
 ## 行为接管）；前队全灭/解散 → 自动解除锚定转自主决策。
+##
+## 编队结构列阵（SWL Formation 类直译，批次 11b）：小队成员按 row/col 槽位排成阵列
+## （UNITS_PER_COLUMN 每列人数 / ROW_GAP 列间距），槽位表随成员增减自动重算（掉员补位，
+## FilterDownARandomRow 行收缩等价）；换位贪心缩短行军穿插（ShouldSwitchUnitsInFormation）；
+## get_squad_dest mode="formation" 取槽位落点，距落点过远转奔跑追赶
+## （UpdateCatchingUpToFormation），落定即稳定不重发号令（FormationPositionIsStable）。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 小队对应的组织层级（L1 = 最低层，排级）
@@ -40,6 +46,14 @@ const SQUAD_DECISION_INTERVAL: float = 0.5
 const FOLLOW_DEFAULT_GAP: float = 150.0
 ## 跟队重下发死区（px）：成员距锚定队形位小于此值不重下号令（防抖动/防 arrive 动画重播）
 const FOLLOW_DEADZONE: float = 40.0
+## 每列人数（SWL Formation.UNITS_PER_COLUMN 直译，11b）：同列单位沿垂直方向排开，
+## 多列沿行进方向反侧退 ROW_GAP。无 dump 数值真值，按三班 8~10 人取 3，待实测校准
+const UNITS_PER_COLUMN: int = 3
+## 列间距（px，SWL Formation.ROW_GAP 直译，11b；无 dump 真值，待实测校准）
+const ROW_GAP: float = 56.0
+## 追赶奔跑阈值（px，11b）：距槽位落点超过此值转奔跑追赶
+## （SWL UpdateCatchingUpToFormation；无 dump 真值，待实测校准）
+const CATCHUP_RUN_DIST: float = 140.0
 ## 指挥官光环士气恢复速率（每秒；排长存活时队员士气恢复，AI 完善批次 3）
 const LEADER_MORALE_AURA: float = 3.0
 ## 公共目标选择核心（反编译参考实装 A；同模块 combat，显式 preload）
@@ -64,7 +78,8 @@ signal squad_disbanded(squad_id: String)
 var _org_api: Node = null
 ## squad_id -> {"units": Array[Node], "leader": Node, "preset_id": String,
 ##              "work_types": Array[String], "role": String, "name": String,
-##              "follow_squad_id": String, "follow_gap": float}
+##              "follow_squad_id": String, "follow_gap": float,
+##              "slots": Dictionary(iid -> Vector2i(col, row), 11b 编队槽位)}
 var _squads: Dictionary = {}
 ## unit.get_instance_id() -> squad_id（快速反查）
 var _unit_to_squad: Dictionary = {}
@@ -155,8 +170,9 @@ func _process(_delta: float) -> void:
 		if units.is_empty():
 			to_disband.append(squad_id)
 		elif changed:
-			# 已同步组织模块（remove_stickman/remove_commander），无额外操作
-			pass
+			# 掉员自动补位（11b）：槽位随成员数重算，后列补前列空缺
+			# （FilterDownARandomRow 等价：列数收缩不留空列）
+			_assign_formation_slots(squad_id)
 	for sid in to_disband:
 		disband_squad(sid)
 	# 队伍级目标决策（反编译参考实装 D-B）：排长决策 → 队员执行
@@ -241,7 +257,10 @@ func create_squad(units: Array, squad_name: String = "", preset_id: String = DEF
 		"follow_player": false,
 		"follow_squad_id": "",
 		"follow_gap": 0.0,
+		"slots": {},
 	}
+	# 编队槽位初始分配（11b）
+	_assign_formation_slots(squad_id)
 	# 发射信号
 	var unit_ids: Array = []
 	for u in valid_units:
@@ -326,6 +345,8 @@ func add_unit(squad_id: String, unit: Node) -> bool:
 		unit.set_role(_squads[squad_id]["role"])
 	_squads[squad_id]["units"].append(unit)
 	_unit_to_squad[unit.get_instance_id()] = squad_id
+	# 入队补位（11b）：槽位随成员数重算
+	_assign_formation_slots(squad_id)
 	return true
 
 
@@ -350,18 +371,34 @@ func get_squad_leader(squad_id: String) -> Node:
 
 ## 队伍级目标点分配（反编译参考实装 D）：按单位在队内序号计算个性化目标点，
 ## 取代"全体同一点"——推进横排展开、集合围圈，配合实体 separation 防叠人。
-## mode: "line" 横排散开（推进/冲刺）/ "rally" 围圈（集合）/ 其它 返回 base_pos。
+## mode: "line" 横排散开（推进/冲刺）/ "rally" 围圈（集合）
+##     / "formation" row/col 阵列槽位落点（11b，SWL Formation 直译）/ 其它 返回 base_pos。
 ## 参考：遗产 TeamAi/Formation、传奇 Formations/FormationMember。
 func get_squad_dest(squad_id: String, unit: Node, base_pos: Vector2, mode: String = "") -> Vector2:
 	if not _squads.has(squad_id) or unit == null or not is_instance_valid(unit):
 		return base_pos
-	var units: Array = _squads[squad_id]["units"]
+	var squad: Dictionary = _squads[squad_id]
+	var units: Array = squad["units"]
 	var idx: int = units.find(unit)
 	if idx < 0:
 		return base_pos
 	var n: int = units.size()
 	if n <= 1:
 		return base_pos
+	if mode == "formation":
+		# 11b：取单位自己的槽位落点——前列贴 base_pos，后列沿行进方向反侧退
+		# ROW_GAP×col；无槽位（未分配/离队瞬间）退化横排
+		var slot: Vector2i = (squad.get("slots", {}) as Dictionary).get(
+				unit.get_instance_id(), Vector2i(-1, -1))
+		if slot.x < 0:
+			return get_squad_dest(squad_id, unit, base_pos, "line")
+		var anch: Dictionary = _squad_anchor(squad_id)
+		var facing: Vector2 = base_pos - anch["centroid"]
+		if facing.length_squared() < 1.0:
+			facing = anch["facing"]
+		else:
+			facing = facing.normalized()
+		return _slot_world(slot, base_pos, facing)
 	if mode == "line":
 		# 垂直于移动方向横排展开：间距 SPREAD_SPACING，相对中心左右交替
 		var dir: Vector2 = (base_pos - unit.global_position).normalized() if base_pos != unit.global_position else Vector2.RIGHT
@@ -475,6 +512,121 @@ func _remove_unit_from_squad(unit: Node) -> void:
 	# 同步到组织模块
 	if _org_api != null and _org_api.has_method("remove_stickman"):
 		_org_api.remove_stickman(squad_id, str(iid))
+	# 离队补位（11b）：原小队槽位随成员数重算
+	_assign_formation_slots(squad_id)
+
+
+# ──────────────────── 编队结构列阵（SWL Formation 直译，11b）────────────────────────────
+
+## 小队锚信息（11b 内部）：{"centroid": Vector2 存活成员质心,
+## "facing": Vector2 平均面向轴向（±x，退化回退 +x）}。
+## 槽位分配/落点判定的统一参考系（与 SWL Formation 以部队整体为参考一致）。
+func _squad_anchor(squad_id: String) -> Dictionary:
+	var centroid := Vector2.ZERO
+	var facing := Vector2.ZERO
+	var n: int = 0
+	if _squads.has(squad_id):
+		for u in _squads[squad_id]["units"]:
+			if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+				centroid += u.global_position
+				facing += _member_facing(u)
+				n += 1
+	if n > 0:
+		centroid /= float(n)
+		facing = facing.normalized() if facing.length_squared() > 0.001 else Vector2.RIGHT
+	return { "centroid": centroid, "facing": facing }
+
+
+## 成员面向轴向（±x；槽位成本评估用。实体有 get_facing 用真值，桩/无朝向回退 +x）
+func _member_facing(u: Node) -> Vector2:
+	if u != null and u.has_method("get_facing"):
+		return Vector2.LEFT if int(u.get_facing()) < 0 else Vector2.RIGHT
+	return Vector2.RIGHT
+
+
+## 槽位世界坐标（11b，SWL GetFormationXOffset 的列位移等价）：
+## 前列贴 base_pos，后列沿行进方向反侧退 ROW_GAP×col；
+## 同列以 base_pos 为中心沿垂直方向展开（间距 SPREAD_SPACING）。
+func _slot_world(slot: Vector2i, base_pos: Vector2, facing: Vector2) -> Vector2:
+	var perp := Vector2(-facing.y, facing.x)
+	var lateral: float = (float(slot.y) - float(UNITS_PER_COLUMN - 1) * 0.5) * SPREAD_SPACING
+	return base_pos - facing * (float(slot.x) * ROW_GAP) + perp * lateral
+
+
+## 编队槽位分配/重算（11b 核心入口，成员增减/死亡时调用）：
+##   - Add/Remove 等价：全队槽位重算，索引序 = 入队序（小队单兵种同质，
+##     入队序即 SWL formationOrder 组序等价）
+##   - FilterDownARandomRow 等价：列数 = ceil(人数/UNITS_PER_COLUMN) 随减员自动
+##     收缩、不留空列（SWL 按随机整行滤除；此处确定性重排，观感待实测校准）
+##   - ShouldSwitchUnitsInFormation 直译：贪心互换——互换两成员槽位后"人到槽"
+##     总行走距离缩短则换（前排让给更近的人，减少行军穿插）；锚 = 小队质心，
+##     朝向 = 平均面向
+func _assign_formation_slots(squad_id: String) -> void:
+	if not _squads.has(squad_id):
+		return
+	var squad: Dictionary = _squads[squad_id]
+	var alive: Array = []
+	for u in squad["units"]:
+		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+			alive.append(u)
+	if alive.is_empty():
+		squad["slots"] = {}
+		return
+	var slots: Dictionary = {}
+	for i in alive.size():
+		slots[alive[i].get_instance_id()] = Vector2i(
+				floori(float(i) / float(UNITS_PER_COLUMN)), i % UNITS_PER_COLUMN)
+	# ShouldSwitchUnitsInFormation 直译：贪心互换（锚/朝向以当前参考系评估）
+	var anch: Dictionary = _squad_anchor(squad_id)
+	var centroid: Vector2 = anch["centroid"]
+	var facing: Vector2 = anch["facing"]
+	var improved: bool = true
+	var guard: int = 0
+	while improved and guard < 8:  # 人数 ≤12，两两互换最多数轮收敛
+		guard += 1
+		improved = false
+		for a in range(alive.size()):
+			for b in range(a + 1, alive.size()):
+				var ua: Node = alive[a]
+				var ub: Node = alive[b]
+				var sa: Vector2i = slots[ua.get_instance_id()]
+				var sb: Vector2i = slots[ub.get_instance_id()]
+				var cost_before: float = \
+						ua.global_position.distance_to(_slot_world(sa, centroid, facing)) \
+						+ ub.global_position.distance_to(_slot_world(sb, centroid, facing))
+				var cost_after: float = \
+						ua.global_position.distance_to(_slot_world(sb, centroid, facing)) \
+						+ ub.global_position.distance_to(_slot_world(sa, centroid, facing))
+				if cost_after + 1.0 < cost_before:  # 1px 门槛防等距抖动
+					slots[ua.get_instance_id()] = sb
+					slots[ub.get_instance_id()] = sa
+					improved = true
+	squad["slots"] = slots
+
+
+## 落点稳定检测（SWL FormationPositionIsStable 直译，11b）：单位已在槽位落点
+## 死区（FOLLOW_DEADZONE）内即稳定——跟队 tick 不重发号令，防 travel 重入。
+func _formation_position_is_stable(unit: Node, slot_pos: Vector2) -> bool:
+	return is_instance_valid(unit) \
+			and unit.global_position.distance_to(slot_pos) <= FOLLOW_DEADZONE
+
+
+## 单位是否已在队形槽位落定（SWL IsInTheFormation 直译，11b）：有小队有槽位，
+## 且距"以小队质心为锚、平均面向"的槽位落点 ≤ FOLLOW_DEADZONE。
+## 供调试/测试/后续行为消费（跟队与推进 tick 各以自身锚判定，锚差异在死区量级内）。
+func is_unit_in_formation(unit: Node) -> bool:
+	if unit == null or not is_instance_valid(unit):
+		return false
+	var squad_id: String = _unit_to_squad.get(unit.get_instance_id(), "")
+	if squad_id.is_empty() or not _squads.has(squad_id):
+		return false
+	var slot: Vector2i = (_squads[squad_id].get("slots", {}) as Dictionary).get(
+			unit.get_instance_id(), Vector2i(-1, -1))
+	if slot.x < 0:
+		return false
+	var anch: Dictionary = _squad_anchor(squad_id)
+	return unit.global_position.distance_to(_slot_world(slot, anch["centroid"], anch["facing"])) \
+			<= FOLLOW_DEADZONE
 
 
 # ──────────────────────── 编队动态跟队（内部）────────────────────────────────
@@ -556,7 +708,11 @@ func _update_squad_follow(squad_id: String) -> void:
 			continue  # 士气驱动行为，不拽回队列
 		if _member_enemy_in_range(u):
 			continue  # 射程内有敌（含风筝窗口），交还给战斗行为
-		var slot: Vector2 = get_squad_dest(squad_id, u, anchor, "line")
+		var slot: Vector2 = get_squad_dest(squad_id, u, anchor, "formation")
+		# 落点稳定（SWL FormationPositionIsStable 直译，11b）：已在槽位死区内
+		# 不重发号令（无令也不发，防号令空转/动画重播）
+		if _formation_position_is_stable(u, slot):
+			continue
 		# 已有他人号令（无 follow_order 标记 = 玩家/上级号令）→ 不覆盖
 		if ai.has_method("has_order") and ai.has_order():
 			if not (ai.has_method("get_ordered_params")
@@ -566,9 +722,14 @@ func _update_squad_follow(squad_id: String) -> void:
 			if ai.has_method("get_ordered_behavior") and ai.get_ordered_behavior() == "move" \
 					and ai.get_ordered_params().get("target", Vector2.ZERO).distance_to(slot) <= FOLLOW_DEADZONE:
 				continue
+		# 追赶状态（SWL UpdateCatchingUpToFormation 直译，11b）：距槽位过远转
+		# 奔跑追赶（behavior_move 收盾疾跑，落定后恢复端盾）
+		var catching_up: bool = u.global_position.distance_to(slot) > CATCHUP_RUN_DIST
 		ai.set_order("move", {
 			"target": slot,
 			"engage_in_range": true,
+			"run": catching_up,
+			"catching_up": catching_up,
 			# 行军跟队驻留待命；支援推进不驻留——到位即 finish 交还战斗决策
 			"hold_on_arrive": not front_engaged,
 			"follow_order": true,

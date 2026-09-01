@@ -8,6 +8,33 @@
 
 ## [未发布]
 
+### 11a 基类补全簇 + 9q 小鬼脚对齐（2026-09-01，计划 P2/P3）
+
+- **y 对齐 6 函数直译（11a 核心）**：SWL `AdjustGoalYToMoveTowardsTarget` 系落 `behavior_attack.gd`
+  （`_should_adjust_y_towards_target` / `_determine_y_component` / `_apply_y_walk` 等），接敌 y 走位
+  从纯随机漂移改为**语义化对齐**（目标 y + 个性漂移带夹进可走带）；档案新增
+  `y_align_x_range`（对齐门槛）/`y_align_early`（远程提前对齐）/`y_align_strength`（走位分量强度）
+- **9p 弓手 y 对齐出手（11a 首个消费者）**：档案 `y_aim_tolerance`——射程内 |Δy| 超阈值时先
+  y 走位不出手（对齐 SWL `ShouldAim/CanAttack` 的 y 门槛语义），消除"朝纵深正上目标照射=故意射空"
+- **统一 Face 调用（11a）**：`behavior_base.gd` 新增 `face_target`/`face_position` 统一入口，
+  AI 面向逻辑全部收口（配合 9g 反向拉弓修复）
+- **IsUnderThreat 真值化（11a）**：`ai_controller.gd` 新增 `_is_under_threat`（THREAT_RANGE 内
+  存活敌人 >0），溃逃触发前置真值——无近身威胁不溃逃；另补 `IsTargetReallyClose` 独立阈值 +
+  `DetermineXRunPower` 入接近段
+- **9f 矛士戳刺攻击池**：`spine_import.gd` 增量导入 `Spearton-Attack2/3`（Hit 事件
+  @0.93s 真值），档案 `attack_pool` Attack1/2/3 随机混出，替换单一横扫观感
+- **9r 矛士站姿池**：增量导入 `Spearton-Into-Stand1/2`（~0.6s"落定成站姿"过渡），档案
+  `stand_pool` 随机抽取（`visual_controller._pick_idle_variant`），替换静态 Stand1
+- **9q 小鬼脚对齐随 body_scale**：`stickman_entity.gd` 新增 `_foot_offset_base`（body_scale=1
+  基准），`_apply_scale` 重算 `foot_offset` 并同步 Collider 尺寸/位置与命中框 y——缩放单位
+  （minidon 0.65×）脚落地不悬空；消费点（地面带约束/出生日/存档对齐）读缩放后真值
+- **修复 filter freed 对象报错**：`behavior_attack.gd` 召唤清理与 `battle_sim.gd` 采样剔除的
+  filter lambda 参数不再注解 `Node`（数组含已释放对象时类型转换报"Cannot convert Object to
+  Object"，靠 `is_instance_valid` 短路兜底）
+- **验证**：`spine_import.gd` --check-only 通过；battle_sim 6 场景全部正常收敛、零 ERROR
+- **覆盖率**：§三 更新 **34%→44%**（严格）/ 49%→**50%**（含近似）——y 走位簇 7 函数、溃逃簇、
+  面向簇、IsTargetReallyClose 转 ✅，DetermineXRunPower 转 ✅；下一项 P4（11b Formation 列队形）
+
 ### 复刻覆盖率审计 + 全模块对账（2026-09-01，文档收尾）
 
 - **AI 层覆盖率审计（计划 §三）**：对账 `legacy_AI_classes.cs` 133 个原版 AI 行为函数——

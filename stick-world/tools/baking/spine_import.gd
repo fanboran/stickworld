@@ -59,6 +59,10 @@ const ANIM_MAP: Dictionary = {
 	"idle":       {"spine": "Swordwrath-Stand1",       "loop": true},
 	"idle_v2":    {"spine": "Swordwrath-Stand2",       "loop": true},
 	"idle_spear":  {"spine": "Spearton-Stand1",       "loop": true},
+	# 9r 矛士站姿候选（Spearton-Stand1 静态帧观感不符 → Into-Stand1/2 落定帧
+	# 增量导入对比；二者为 ~0.6s"落定成站姿"过渡，LOOP_NONE 播完停在末帧）
+	"idle_spear_v2":{"spine": "Spearton-Into-Stand1", "loop": false},
+	"idle_spear_v3":{"spine": "Spearton-Into-Stand2", "loop": false},
 	"idle_bow":    {"spine": "Archidon-Stand1",       "loop": true},
 	"idle_pickaxe":{"spine": "Miner-Stand1",          "loop": true},
 	"idle_staff":  {"spine": "Magikill-Stand",         "loop": true},
@@ -73,6 +77,10 @@ const ANIM_MAP: Dictionary = {
 	"block_attack_2":  {"spine": "Spearton-Block-Attack2",  "loop": false},
 	"block_attack_3":  {"spine": "Spearton-Block-Attack3",  "loop": false},
 	"attack_spear":  {"spine": "Spearton-Attack1",     "loop": false},
+	# 9f 矛士攻击池候选（Spearton-Attack1 横扫观感不符 → Attack2/3 戳刺增量导入对比；
+	# 三者均带 Hit 事件：Attack1@0.8667 / Attack2@0.9333 / Attack3@0.9333）
+	"attack_spear_2":{"spine": "Spearton-Attack2",     "loop": false},
+	"attack_spear_3":{"spine": "Spearton-Attack3",     "loop": false},
 	"attack_pickaxe":{"spine": "Miner-Attack1",        "loop": false},
 	"attack_staff":  {"spine": "Magikill-Spell1",      "loop": false},
 	"attack_bow":    {"spine": "Archidon-Draw",        "loop": false},

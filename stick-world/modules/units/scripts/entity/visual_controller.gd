@@ -100,7 +100,7 @@ func play(anim_name: String) -> void:
 	# 因此这里仍 play("idle")（状态机有 idle 状态），不能 travel 变体名（状态机无 idle_v2 状态）。
 	# 举盾时跳过变体重挑——idle state 由持盾待命动画占用（_apply_stance_anim）。
 	if anim_name == "idle" and _entity._current_anim != "idle" and not _blocking:
-		var variant: String = Anims.pick_stand_variant_for(_weapon_type())
+		var variant: String = _pick_idle_variant()
 		if rig.has_method("set_idle_variant"):
 			rig.set_idle_variant(variant)
 	# 盾姿态分层（计划 5）：举盾时 walk/idle 换持盾变体（block_walk/block_crouch）
@@ -143,17 +143,32 @@ func _apply_stance_anim(kind: String) -> void:
 		if kind == "walk":
 			rig.set_state_anim("walk", "walk")
 		elif kind == "idle":
-			rig.set_state_anim("idle", Anims.idle_for_weapon(wt))
+			# 9r：收盾恢复站姿从兵种站姿池重挑（与 play() 进待机的挑选逻辑一致）
+			rig.set_state_anim("idle", _pick_idle_variant())
 
 
-## 播放攻击动画（盾姿态分层入口）：举盾且有持盾攻击池 → 随机抽变体
-## （Spearton-Block-Attack1/2/3 三连刺）；否则/收盾恢复基础攻击动画。
+## 挑选站姿变体（9r 站姿池直译）：档案 stand_pool 非空时随机抽取（如矛士
+## Into-Stand1/2"落定成站姿"），空池回落武器默认站姿（剑士 Stand1/2 变体池）。
+func _pick_idle_variant() -> String:
+	var wt: int = _weapon_type()
+	var pool: Array = ScriptBehaviorProfiles.get_profile(wt).get("stand_pool", [])
+	if not pool.is_empty():
+		return str(pool[randi() % pool.size()])
+	return Anims.pick_stand_variant_for(wt)
+
+
+## 播放攻击动画（盾姿态分层入口）：举盾走持盾攻击池（Spearton-Block-Attack1/2/3
+## 三连刺）；非举盾走档案 attack_pool（9f 矛士 Attack1/2/3 戳刺混出）；
+## 两池皆空/收盾恢复武器基础攻击动画。
 func play_attack(anim_name: String, blocking: bool) -> void:
 	var variant: String = anim_name
+	var pool: Array = []
 	if blocking:
-		var pool: Array = ScriptBehaviorProfiles.get_profile(_weapon_type()).get("block_attack_pool", [])
-		if not pool.is_empty():
-			variant = str(pool[randi() % pool.size()])
+		pool = ScriptBehaviorProfiles.get_profile(_weapon_type()).get("block_attack_pool", [])
+	else:
+		pool = ScriptBehaviorProfiles.get_profile(_weapon_type()).get("attack_pool", [])
+	if not pool.is_empty():
+		variant = str(pool[randi() % pool.size()])
 	_play_attack_variant(anim_name, variant)
 
 

@@ -43,6 +43,10 @@ const BASELINE: Dictionary = {
 	"arrow_block_hold": 0.8,                ## 威胁记忆窗口（s，_lastArrowThreatTime 对齐）
 	"y_drift_band": 30.0,                   ## y 纵深个性漂移半径（px，SWL personalityControlledY）
 	"y_drift_interval": Vector2(0.5, 1.2),  ## 漂移目标重掷区间（s，DIRECTION_CHANGE_FREQUENCY=0.5 对齐）
+	"y_align_x_range": 300.0,               ## 调 y 门槛：|Δx| 小于此才对齐目标 y（SWL IsCloseEnoughToAdjustYTowardsTarget；无 dump 真值，待实测校准）
+	"y_align_early": false,                 ## 提前对齐（SWL adjustYEarly 参数：远程兵种接敌全程调 y，近战只在近处）
+	"y_align_strength": 0.22,               ## y 对齐走位分量强度（0~1 叠加到移动方向）
+	"y_aim_tolerance": 0.0,                 ## 9p：射程内 |Δy| 超此值先 y 走位不出手（px；0=关。SWL ShouldAim/CanAttack 的 y 门槛近似，待实测校准）
 	"move_mult": 1.0,                       ## 移速倍率（SWL 兵种机动性：Swordwrath 轻快、Spearton 沉稳）
 	"block_after_attack": 0.0,              ## 攻击后举盾时长（s，SWL Ai.cooldownAfterAttackForBlock；0=关）
 	"formation_block": false,               ## 行军/待命举盾（SWL UpdateBlockWhenInFormation：盾兵行军盾不放下）
@@ -56,6 +60,8 @@ const BASELINE: Dictionary = {
 	"block_idle_anim": "",                  ## 持盾待命动画（空=无）
 	"block_attack_pool": [],                ## 持盾攻击动画池（举盾时随机抽取，如三连刺）
 	"block_move_mult": 1.0,                 ## 持盾移速倍率（举盾行军更沉稳）
+	"attack_pool": [],                      ## 攻击动画池（9f：非举盾攻击随机抽取；空=只用武器基础攻击动画。动画名对齐 stickman_anims）
+	"stand_pool": [],                       ## 站姿变体池（9r：进待机随机抽取；空=武器默认站姿。动画名对齐 stickman_anims）
 }
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────
@@ -88,6 +94,10 @@ const CLASS_PROFILES: Dictionary = {
 		"block_idle_anim": "block_crouch",
 		"block_attack_pool": ["block_attack_1", "block_attack_2", "block_attack_3"],
 		"block_move_mult": 0.8,
+		# 9f：戳刺攻击池（Attack1 横扫观感 + Attack2/3 戳刺，随机混出对比）
+		"attack_pool": ["attack_spear", "attack_spear_2", "attack_spear_3"],
+		# 9r：站姿候选池（Into-Stand1/2"落定成站姿"，与静态 Stand1 对比验收）
+		"stand_pool": ["idle_spear_v2", "idle_spear_v3"],
 	},
 	BOW: {
 		"kite_range": 500.0,
@@ -99,6 +109,11 @@ const CLASS_PROFILES: Dictionary = {
 		"aim_scatter": 0.035,
 		"prefer_large": 1.0,
 		"push_apart": 56.0,
+		# y 对齐（SWL ArcherAi.IsCloseEnoughToAdjustYTowardsTarget override：收紧调 y 门槛
+		# + adjustYEarly 提前对齐；9p 首个消费者：|Δy| 超容忍先走位不出手。阈值待实测校准）
+		"y_align_early": true,
+		"y_align_x_range": 240.0,
+		"y_aim_tolerance": 48.0,
 	},
 	PICKAXE: {
 		"hesitate_prob": 0.08,

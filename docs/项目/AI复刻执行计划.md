@@ -14,8 +14,8 @@
 | P1 | 9 | 观察场反馈缺陷清单（六轮验收积累，详表 §二 P1） | 余 ~1 | **17 项已修 ✅**，待修 9d/9h/9j/9k/9s |
 | P2 | 11a | Ai 基类补全簇（y 对齐 6 函数 + 统一 Face + IsUnderThreat 真值；含 9p 首个消费者） | 1.5 | **已完成 ✅**（2026-09-01，含 9f/9p/9r 同轮修） |
 | P3 | 9q | 小鬼脚对齐随 body_scale（可与 P2 同轮顺手修） | 0.3 | **已完成 ✅**（2026-09-01） |
-| P4 | 11b | Formation 列队形（row/col 阵列 + 落点稳定 + 追赶状态） | 1.5 | 待开工 **← 下一项** |
-| P5 | 2 | 数值校准（对表解包/wiki；含 11d 射速系） | 2 | 待开工 |
+| P4 | 11b | Formation 列队形（row/col 阵列 + 落点稳定 + 追赶状态） | 1.5 | **已完成 ✅**（2026-09-01） |
+| P5 | 2 | 数值校准（对表解包/wiki；含 11d 射速系） | 2 | 待开工 **← 下一项** |
 | P6 | 7c+11c | TeamAi 逐函数直译（19 函数，含 9i+ 溃逃增强） | 2.5 | 待开工 |
 | P7 | 7b | 祭司 Meric 兵种+治疗 | 1.5 | 待开工 |
 | P8 | 7a | 巨人兵种+抓掷（含 GutSpinner 投射物） | 2.5~3 | 待开工（风险项） |
@@ -31,7 +31,7 @@
 
 **合计约 14.5~17 轮**（不含 P12/P13）。执行顺序 = 表中 P1 → P13 自上而下。
 
-> **🔻 下一上下文开工指引（2026-09-01 P2/P3 收尾）**：P2（11a 基类补全簇，含 9p/9f/9r）与 P3（9q 小鬼脚对齐）已完成，battle_sim 回归零 ERROR，覆盖率 34%→**44%**（含近似 49%→**50%**，见 §三）。下一项从 **P4（11b Formation 列队形）** 开工（方案见 §二 P4 与 §三审计表"编队稳定/结构"两簇）。随后 P5 → P6 → P7 → P8。开工前先读 §二 P1 剩余缺陷清单（9d/9h/9j/9k/9s）与 §三审计表，**每轮改完更新 §三 覆盖数**。
+> **🔻 下一上下文开工指引（2026-09-01 P4 收尾）**：P4（11b Formation 列队形）已完成——formation_system 槽位制 row/col 阵列（UNITS_PER_COLUMN=3/ROW_GAP=56/追赶阈值 140 均待实测校准），ADVANCE_ALL/SPRINT 与跟队 tick 全走 formation 槽位落点，battle_sim 回归零 ERROR、21 套件全过，覆盖率 44%→**51%**（含近似 50%→**56%**，见 §三）。下一项从 **P5（批次 2 数值校准）** 开工（数据源与改动点见 §二 P5；含 11d 射速系与 9d 冷却校准）。随后 P6 → P7 → P8。开工前先读 §二 P1 剩余缺陷清单（9d/9h/9j/9k/9s）与 §三审计表，**每轮改完更新 §三 覆盖数**。
 
 ---
 
@@ -82,10 +82,11 @@
 - `_apply_scale`/foot_offset 乘 body_scale；出生 y 以法师脚部 y 为基准。验收：小鬼脚落地、不悬空。
 - **完成情况**：`stickman_entity.gd` 新增 `_foot_offset_base`（body_scale=1 基准，_ready 从 marker 计算一次），`_apply_scale` 重算 `foot_offset` 并同步缩放 Collider 尺寸/位置与命中框 y——全部消费点（地面带约束/出生日/存档对齐）读缩放后真值。
 
-### P4 · 批次 11b：Formation 列队形（~1.5 轮）
+### P4 · 批次 11b：Formation 列队形（~1.5 轮）✅ 2026-09-01 完成
 
 - **范围**（原版 `Formation` 类 7 函数 + 基类 3 函数）：row/col 阵列（`UNITS_PER_COLUMN/ROW_GAP/formationOrder`）+ `FormationPositionIsStable` 落点稳定检测 + `UpdateCatchingUpToFormation` 追赶状态 + `FilterDownARandomRow/ShouldSwitchUnitsInFormation` 补位换位。
 - **验收**：三班 row/col 阵列推进，掉员自动补位；§三 覆盖数更新（编队稳定/结构 ❌→✅）。
+- **完成情况**：[formation_system.gd](../stick-world/modules/combat/scripts/command/formation_system.gd) 落槽位制编队——小队新增 `slots`（iid→Vector2i(col,row)），`_assign_formation_slots` 在建队/入队/离队/掉员时全量重算（Add/Remove 直译；FilterDownARandomRow 等价=列数随减员收缩不留空列）；`ShouldSwitchUnitsInFormation` 直译为贪心互换（互换后总行走距离缩短则换，近者填前排）；`get_squad_dest` 新增 `"formation"` 模式（前列贴锚、后列退 ROW_GAP×col、同列横展 SPREAD_SPACING）；`_formation_position_is_stable`（死区内不重发号令）与 `is_unit_in_formation`（IsInTheFormation 直译）落查询侧；跟队 tick 与 ADVANCE_ALL/SPRINT 号令全切 formation 模式。追赶：距槽位 >140px 下 `run+catching_up` 号令（UpdateCatchingUpToFormation），[behavior_move.gd](../stick-world/modules/units/scripts/ai/behavior_move.gd) 追赶中收盾疾跑、落定恢复端盾（UpdateBlockWhenInFormation 真值语义）。新套件 `test_formation_slots`（槽位双射/落点/补位/换位/稳定 5 用例）；battle_sim 回归 6 场景正常收敛、21 套件全过。常量 UNITS_PER_COLUMN=3/ROW_GAP=56/CATCHUP_RUN_DIST=140 无 dump 真值，**待实测校准**。
 
 ### P5 · 批次 2：数值校准（2 轮）
 
@@ -162,7 +163,7 @@
 
 | 层 | 原版函数 | ✅ | ◐ | ❌ | 严格覆盖 | 含近似 |
 |---|---|---|---|---|---|---|
-| `Ai` 基类 | 55 | 37 | 3 | 15 | 67% | 73% |
+| `Ai` 基类 | 55 | 40 | 3 | 12 | 73% | 78% |
 | ArcherAi | 15 | 8 | 2 | 5 | 53% | 67% |
 | SpeartonAi | 5 | 4 | 0 | 1 | 80% | 80% |
 | MagikillAi | 5 | 5 | 0 | 0 | 100% | 100% |
@@ -173,8 +174,8 @@
 | TeamAi（P6） | 19 | 0 | 0 | 19 | 0% | 0% |
 | ZombieAi | 13 | 0 | 0 | 13 | 0% | 0% |
 | StatueAi/BarricadeAi | 2 | 0 | 0 | 2 | 0% | 0% |
-| Formation | 7 | 0 | 2 | 5 | 0% | 29% |
-| **合计** | **133** | **58** | **8** | **67** | **44%** | **50%** |
+| Formation | 7 | 7 | 0 | 0 | 100% | 100% |
+| **合计** | **133** | **68** | **6** | **59** | **51%** | **56%** |
 
 ### 逐簇对账（Ai 基类 55 函数）
 
@@ -182,8 +183,8 @@
 |---|---|---|---|
 | 主循环 | Update | ai_controller._make_decision + behavior_*.update（结构不同：状态机 vs 多分支） | ◐ |
 | 编队跟队 | MoveInFormationBehindAnotherFormation / MoveInFormationBehindFollowUnit / RunToFormationPosition / DetermineFormationTargetPosition / GapBetweenFormationGroups | formation_system._update_squad_follow / get_squad_dest / follow_gap | ✅ |
-| 编队稳定 | FormationPositionIsStable / UpdateCatchingUpToFormation / IsInTheFormation | （无：追赶状态/落点稳定检测缺失） | ❌ |
-| 编队结构 | Formation 类 7 函数（UNITS_PER_COLUMN/ROW_GAP/formationOrder/FilterDownARandomRow/ShouldSwitchUnitsInFormation/Add/Remove） | （小队制替代，无 row/col 阵列） | ❌ |
+| 编队稳定 | FormationPositionIsStable / UpdateCatchingUpToFormation / IsInTheFormation | formation_system `_formation_position_is_stable`（死区内不重发号令）/ 追赶 = 距槽位超阈值下 `run+catching_up`（behavior_move 收盾疾跑、落定恢复端盾）/ `is_unit_in_formation`（11b） | ✅ |
+| 编队结构 | Formation 类 7 函数（UNITS_PER_COLUMN/ROW_GAP/formationOrder/FilterDownARandomRow/ShouldSwitchUnitsInFormation/Add/Remove） | formation_system 槽位制（11b）：`slots` 成员↔槽位双射 + 增减员全量重算（Add/Remove 直译）+ 贪心换位近者填前排（ShouldSwitch 直译）+ 列随减员收缩（FilterDown 等价）；`get_squad_dest("formation")` 前列贴锚/后列退 ROW_GAP；常量 UNITS_PER_COLUMN=3/ROW_GAP=56 待实测校准 | ✅ |
 | 举盾 | UpdateBlock / UpdateBlockWhenInFormation | behavior_move._update_formation_block + attack._update_arrow_threat_block | ✅ |
 | 接近/走 A | RunToTarget / ShouldRunToTarget / IsTargetReallyClose / RunTowardsEnemyPosition / MoveToMiddleOfTheMap / MoveToWaypoint / SetWaypoint / AtWaypoint | behavior_attack 接近段 + 号令 move + engage_in_range（11a：`IsTargetReallyClose` 独立阈值已补；waypoint 系未做） | ◐ |
 | y 走位 | personalityControlledY / AdjustGoalYToMoveTowardsTarget / DetermineYComponentWhenRunningToTarget / CanAdjustYPositionOnly / ShouldAdjustYPositionTowardsTarget / CanWalkTowardsTarget / IsCloseEnoughToAdjustYTowardsTarget | behavior_attack y 对齐 6 函数直译（11a：替换纯随机漂移；档案 y_align_* 四参；9p `y_aim_tolerance` 为首个消费者） | ✅ |
@@ -210,8 +211,8 @@
 
 ### 结论
 
-- **AI 行为层真实覆盖率 ≈ 44%（严格）/ 50%（含近似）**（11a 完成后自 34%/49% 提升：y 走位簇 7 函数、IsUnderThreat、面向簇 3 函数、IsTargetReallyClose 由 ◐ 转 ✅，DetermineXRunPower 由 ❌ 转 ✅）——缺口集中在**整类**（TeamAi/Meric/Giant/Zombie）与**簇**（Formation 列队形、绕障），不是零散函数。
-- 消解路径：P4（Formation）→ P6（TeamAi）→ P7/P8（整类），全部完成后覆盖率预计 44% → 75%+。
+- **AI 行为层真实覆盖率 ≈ 51%（严格）/ 56%（含近似）**（11b 完成后自 44%/50% 提升：编队稳定簇 3 函数（FormationPositionIsStable/UpdateCatchingUpToFormation/IsInTheFormation）与 Formation 类 7 函数全部转 ✅）——缺口集中在**整类**（TeamAi/Meric/Giant/Zombie）与**簇**（绕障），不是零散函数。
+- 消解路径：P6（TeamAi）→ P7/P8（整类），全部完成后覆盖率预计 51% → 78%+。
 
 ---
 
@@ -223,7 +224,7 @@
 |---|---|---|---|
 | **Game 核心**（15） | GameController / LevelLoader / GameCamera / ObjectPool / RenderLayer / Barricades / Mines / InGameShop / AssetCache | game_root / scene_loader / camera_rig / FxPool / 资源建筑 | ◐ 骨架在；**InGameShop（战场商店）→ 并入批次 10 物品栏**；Mines 挖金经济=不同路线（村民经济），参考平衡 |
 | **Entities**（20） | Unit 基类 + 16 兵种/建筑（含 CastleArchers / King / GiantBoss / MainStatue / Statue / Minion / Zombie）+ Team + HealthBar + ConversionChannel | units 模块（stickman_entity + WeaponMount 单类多兵种）+ battle_instance 阵营 | ◐ 兵种数据化分型在；**缺：CastleArchers 城堡弓手、Statue/MainStatue（雕像=SWL 胜利目标）、King/GiantBoss（BOSS）、ConversionChannel（单位转化）**——雕像/BOSS 与本作大世界定位不同，按玩法批次决策 |
-| **Entities.Ai**（14） | 133 行为函数 | ai/ + command/ | **严格 44% / 含近似 50%**，逐函数对账见 §三 |
+| **Entities.Ai**（14） | 133 行为函数 | ai/ + command/ | **严格 51% / 含近似 56%**，逐函数对账见 §三 |
 | **Spells**（15） | Spell 基类 + ArrowVolley 箭雨 / HealSpell 群疗 / LightningStorm / LazerBeam / MinerGoldRush / RaiseGold / SpawnUnit / SpeartonMadness / SwordwrathRage / SummonElite / SummonGiant / SummonGoldenSpearton / TrainingHaste / TurretPower | ❌ 全缺（用户已拍板只要一部分：ArrowVolley + HealSpell） | **高参考**：Spell 基类统一"冷却/耗金/施放动画/效果"结构——P11 实施时先立基类再挂具体法术 |
 | **Effects**（16） | Blood / DirectionalBlood（方向血溅）/ ExplosionScorch（爆炸焦痕）/ GroundSlam（震地）/ LightningOnUnit / EarthquakeEffect / Rain / Cloud / StatueDeath / ArrowEffect / FollowUnit / StoneParticleSystem | fx 模块（4 效果：尘土/飘屑/火花/法爆） | **高参考**：血溅与爆炸焦痕是战斗观感大头，P10 扩容清单：血溅/焦痕/震地/雨云天气；焦痕同时是召唤/爆炸的地面标记（SpawnGroundScorch 同族） |
 | **Projectiles**（2） | Arrow（已深度参考）/ GutSpinner（巨人甩摆武器投射物） | arrow_projectile ✓ | Arrow 已对齐；GutSpinner 并入 P8 巨人批次 |

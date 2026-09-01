@@ -11,10 +11,10 @@
 
 | 顺序 | 批次 ID | 内容 | 估算（轮次） | 状态 |
 |---|---|---|---|---|
-| P1 | 9 | 观察场反馈缺陷清单（六轮验收积累，详表 §二 P1） | 余 ~1.5 | **13 项已修 ✅**，待修 9d/9f/9h/9j/9k/9p/9q/9r/9s |
-| P2 | 11a | Ai 基类补全簇（y 对齐 6 函数 + 统一 Face + IsUnderThreat 真值；含 9p 首个消费者） | 1.5 | 待开工 **← 下一项** |
-| P3 | 9q | 小鬼脚对齐随 body_scale（可与 P2 同轮顺手修） | 0.3 | 待开工 |
-| P4 | 11b | Formation 列队形（row/col 阵列 + 落点稳定 + 追赶状态） | 1.5 | 待开工 |
+| P1 | 9 | 观察场反馈缺陷清单（六轮验收积累，详表 §二 P1） | 余 ~1 | **17 项已修 ✅**，待修 9d/9h/9j/9k/9s |
+| P2 | 11a | Ai 基类补全簇（y 对齐 6 函数 + 统一 Face + IsUnderThreat 真值；含 9p 首个消费者） | 1.5 | **已完成 ✅**（2026-09-01，含 9f/9p/9r 同轮修） |
+| P3 | 9q | 小鬼脚对齐随 body_scale（可与 P2 同轮顺手修） | 0.3 | **已完成 ✅**（2026-09-01） |
+| P4 | 11b | Formation 列队形（row/col 阵列 + 落点稳定 + 追赶状态） | 1.5 | 待开工 **← 下一项** |
 | P5 | 2 | 数值校准（对表解包/wiki；含 11d 射速系） | 2 | 待开工 |
 | P6 | 7c+11c | TeamAi 逐函数直译（19 函数，含 9i+ 溃逃增强） | 2.5 | 待开工 |
 | P7 | 7b | 祭司 Meric 兵种+治疗 | 1.5 | 待开工 |
@@ -31,7 +31,7 @@
 
 **合计约 14.5~17 轮**（不含 P12/P13）。执行顺序 = 表中 P1 → P13 自上而下。
 
-> **🔻 下一上下文开工指引（2026-09-01 收尾）**：从 **P2（11a 基类补全簇）** 开工（方案见 §三审计表，含首个消费者 9p 弓手 y 对齐出手）；P3（9q 小鬼脚对齐）同轮顺手修。随后 P4 → P5 → P6 → P7 → P8。开工前先读 §二 P1 缺陷清单与 §三审计表，**每轮改完更新 §三 覆盖数**。
+> **🔻 下一上下文开工指引（2026-09-01 P2/P3 收尾）**：P2（11a 基类补全簇，含 9p/9f/9r）与 P3（9q 小鬼脚对齐）已完成，battle_sim 回归零 ERROR，覆盖率 34%→**44%**（含近似 49%→**50%**，见 §三）。下一项从 **P4（11b Formation 列队形）** 开工（方案见 §二 P4 与 §三审计表"编队稳定/结构"两簇）。随后 P5 → P6 → P7 → P8。开工前先读 §二 P1 剩余缺陷清单（9d/9h/9j/9k/9s）与 §三审计表，**每轮改完更新 §三 覆盖数**。
 
 ---
 
@@ -39,7 +39,7 @@
 
 ### P1 · 批次 9：观察场反馈缺陷清单（2026-08-31~09-01 六轮验收积累）
 
-#### 已修摘要（12 项 ✅）
+#### 已修摘要（16 项 ✅）
 
 | 项 | 一句话 | 关键实现 |
 |---|---|---|
@@ -53,33 +53,34 @@
 | 9m 尸体永存 | 只禁碰撞不清理 | 停留 4s → 1.2s 淡出移除（fadeOutOver 语义） |
 | 9n 召唤位置/体型 | 二维指向向量跑纵深；体型未做 | 面朝方向（facing ±x）正前方 72px + 纵深排开；`body_scale` 档案字段 |
 | 9o 主控走 A | 攻击动画锁死移动 + walk/run 覆盖拉弓 | 远程不锁移动 + attacking 动画保护 + 主控攻速 ×1.3（dump 真值） |
+| 9f 矛兵攻击不是戳刺 | 无盾矛攻只有 Attack1 横扫观感 | 攻击池 `Spearton-Attack1/2/3` 随机混出（Hit 事件 @0.87/0.93/0.93s 真值导入） |
+| 9p 弓手朝纵深正上目标照射 | y 偏移大时照出手=故意射空 | 11a y 对齐簇首个消费者：档案 `y_aim_tolerance`，射程内 \|Δy\| 超阈值先 y 走位不出手 |
+| 9q 小鬼垂直坐标偏上 | body_scale 缩 rig 但 foot_offset 未随缩放 | `_foot_offset_base` 基准 + `_apply_scale` 重算 foot_offset/Collider/命中框 y 全随 body_scale |
+| 9r 矛士站姿仍不对 | 静态 Stand1 观感不符 | 站姿池 `Into-Stand1/2`"落定成站姿"随机抽取（visual_controller `_pick_idle_variant`） |
 | 6 编队跟队 | （上一批次，已并入本清单联动） | 锚定字段 + hold_on_arrive + follow_order 标记 |
 | 5 盾姿态 | （上一批次，已并入本清单联动） | block_walk/crouch/block_attack_1~3 + 持盾减速 |
 
-#### 待修（9 项，按批次归属）
+#### 待修（5 项，按批次归属；9s 并入 9k 计）
 
 | 项 | 根因 | 修法 | 归属 |
 |---|---|---|---|
 | 9d 弓手射速不科学 | cooldown 1.35s（剑对齐值）未对 SWL 弓手攻速真值；冷却与动画时长无约束 | 对表 wiki/dump；加检查项"冷却 ≥ 攻击动画时长" | **P5（2）** |
-| 9f 矛兵攻击不是戳刺 | 无盾矛攻只有 Spearton-Attack1（横扫观感） | 候选 `Spearton-Attack2/3` 增量导入对比；连同 9r 一起验收 | **P2 同轮** |
 | 9h 卡死复验 | 9b 修后若仍现全员卡死 | 观察场调试 HUD（逐单位 行为/号令/眩晕/溃逃/锚定，热键开关）定位 | 复验后定 |
 | 9i+ 溃逃保真度增强 | 逃开后再战/保持招架/沿敌人垂直位游走/前排怯战试探接敌/包抄 | 并入 7c（姿态机天然覆盖"何时再战"） | **P6（7c）** |
 | 9j 脱战回血（MOBA 延迟血条） | 无 HP 恢复机制、血条无渐补表现 | 脱战 5s 后回、上限 25% max_hp；血条绿色延迟残影（复用 trail）；dump 依据 `healthRegenPerSecondWhenUserControlled` | **P1 内** |
 | 9k 群体避让 + 空挥 | 无 RTS 让路；近战无友军遮挡判定（隔队友出刀/对空气挥刀）；避战扎堆 | 移动绕行分量 + 出手前友军遮挡射线 + 攻击名额对表 `NumberOfUnitsThatCanHit` | **P1 内** |
-| 9p 弓手朝纵深正上目标照射 | 目标 y 偏移大时照出手（横轴观感=故意射空）；应先 y 走位保证接近水平持平、距离以水平为主导 | `CanAttack/ShouldAim` 加 \|Δy\| 阈值（超阈值先走位不出手）——11a y 对齐簇首个消费者 | **P2（11a）** |
-| 9q 小鬼垂直坐标偏上 | `body_scale` 缩 rig 但 foot_offset/脚对齐未随缩放（悬空 ≈0.35×脚距） | `_apply_scale`/foot_offset 乘 body_scale；出生 y 以法师脚部 y 为基准 | **P3** |
-| 9r 矛士站姿仍不对 | 持矛站姿 Spearton-Stand1 观感不符 | 候选 `Spearton-Stand2 / Into-Stand1/2` 增量导入对比 | **P2 同轮** |
 | 9s 剑士接近战对空气挥刀 | 接近中目标移速超命中帧二次确认窗口；can_attack 可打断尾段提前出手 | 出手时机门槛（目标速度×命中帧时长预判）+ 友军遮挡射线 + 挥空率进 battle_sim | **并入 9k** |
 
-### P2 · 批次 11a：Ai 基类补全簇（~1.5 轮）
+### P2 · 批次 11a：Ai 基类补全簇（~1.5 轮）✅ 2026-09-01 完成
 
 - **范围**（原版函数清单见 §三 逐簇对账）：y 对齐 6 函数语义化（`AdjustGoalYToMoveTowardsTarget` 系，替换纯随机漂移；首个消费者 = 9p 弓手 y 对齐出手）+ 统一 `Face` 调用 + `IsUnderThreat` 真值化 + `IsTargetReallyClose` + `DetermineXRunPower`。
 - **顺手修**：9f/9r（矛士戳刺与站姿增量导入）。
-- **验收**：弓手不再朝纵深大偏移目标出手；矛士站姿/戳刺观感对齐；§三 覆盖数更新（y 走位簇 ◐→✅）。
+- **完成情况**：y 对齐 6 函数直译落 `behavior_attack.gd`（`_should_adjust_y_towards_target` / `_determine_y_component` / `_apply_y_walk` 等，档案新增 `y_align_x_range` / `y_align_early` / `y_align_strength` / `y_aim_tolerance`）；`face_target`/`face_position` 统一入口落 `behavior_base.gd`；`_is_under_threat`（THREAT_RANGE 内存活敌人）落 `ai_controller.gd` 作为溃逃前置真值；9f 攻击池 `Attack1/2/3`、9r 站姿池 `Into-Stand1/2` 增量导入（`spine_import.gd`）+ 档案 `attack_pool`/`stand_pool` + `visual_controller` 随机抽取。**battle_sim 回归零 ERROR，6 场景全部正常收敛**（attack 占比 91%+，弓矛单挑交战距离中位 312px）。
 
-### P3 · 批次 9q：小鬼脚对齐（~0.3 轮）
+### P3 · 批次 9q：小鬼脚对齐（~0.3 轮）✅ 2026-09-01 完成
 
 - `_apply_scale`/foot_offset 乘 body_scale；出生 y 以法师脚部 y 为基准。验收：小鬼脚落地、不悬空。
+- **完成情况**：`stickman_entity.gd` 新增 `_foot_offset_base`（body_scale=1 基准，_ready 从 marker 计算一次），`_apply_scale` 重算 `foot_offset` 并同步缩放 Collider 尺寸/位置与命中框 y——全部消费点（地面带约束/出生日/存档对齐）读缩放后真值。
 
 ### P4 · 批次 11b：Formation 列队形（~1.5 轮）
 
@@ -161,7 +162,7 @@
 
 | 层 | 原版函数 | ✅ | ◐ | ❌ | 严格覆盖 | 含近似 |
 |---|---|---|---|---|---|---|
-| `Ai` 基类 | 55 | 24 | 15 | 16 | 44% | 71% |
+| `Ai` 基类 | 55 | 37 | 3 | 15 | 67% | 73% |
 | ArcherAi | 15 | 8 | 2 | 5 | 53% | 67% |
 | SpeartonAi | 5 | 4 | 0 | 1 | 80% | 80% |
 | MagikillAi | 5 | 5 | 0 | 0 | 100% | 100% |
@@ -173,7 +174,7 @@
 | ZombieAi | 13 | 0 | 0 | 13 | 0% | 0% |
 | StatueAi/BarricadeAi | 2 | 0 | 0 | 2 | 0% | 0% |
 | Formation | 7 | 0 | 2 | 5 | 0% | 29% |
-| **合计** | **133** | **45** | **20** | **68** | **34%** | **49%** |
+| **合计** | **133** | **58** | **8** | **67** | **44%** | **50%** |
 
 ### 逐簇对账（Ai 基类 55 函数）
 
@@ -184,16 +185,16 @@
 | 编队稳定 | FormationPositionIsStable / UpdateCatchingUpToFormation / IsInTheFormation | （无：追赶状态/落点稳定检测缺失） | ❌ |
 | 编队结构 | Formation 类 7 函数（UNITS_PER_COLUMN/ROW_GAP/formationOrder/FilterDownARandomRow/ShouldSwitchUnitsInFormation/Add/Remove） | （小队制替代，无 row/col 阵列） | ❌ |
 | 举盾 | UpdateBlock / UpdateBlockWhenInFormation | behavior_move._update_formation_block + attack._update_arrow_threat_block | ✅ |
-| 接近/走 A | RunToTarget / ShouldRunToTarget / IsTargetReallyClose / RunTowardsEnemyPosition / MoveToMiddleOfTheMap / MoveToWaypoint / SetWaypoint / AtWaypoint | behavior_attack 接近段 + 号令 move + engage_in_range（IsTargetReallyClose 无独立阈值） | ◐ |
-| y 走位 | personalityControlledY / AdjustGoalYToMoveTowardsTarget / DetermineYComponentWhenRunningToTarget / CanAdjustYPositionOnly / ShouldAdjustYPositionTowardsTarget / CanWalkTowardsTarget / IsCloseEnoughToAdjustYTowardsTarget | behavior_attack._apply_y_drift（个性漂移在；"朝目标 y 对齐"的 6 函数语义只有近似） | ◐ |
+| 接近/走 A | RunToTarget / ShouldRunToTarget / IsTargetReallyClose / RunTowardsEnemyPosition / MoveToMiddleOfTheMap / MoveToWaypoint / SetWaypoint / AtWaypoint | behavior_attack 接近段 + 号令 move + engage_in_range（11a：`IsTargetReallyClose` 独立阈值已补；waypoint 系未做） | ◐ |
+| y 走位 | personalityControlledY / AdjustGoalYToMoveTowardsTarget / DetermineYComponentWhenRunningToTarget / CanAdjustYPositionOnly / ShouldAdjustYPositionTowardsTarget / CanWalkTowardsTarget / IsCloseEnoughToAdjustYTowardsTarget | behavior_attack y 对齐 6 函数直译（11a：替换纯随机漂移；档案 y_align_* 四参；9p `y_aim_tolerance` 为首个消费者） | ✅ |
 | 绕障 | RestrictTargetSpotWhenBehindWall / AdjustXSoWeDontRunToBehindWall / AdjustPositionOffStatue / IsMovingPastStatue / DetermineGoalYToAvoidStatue | （无城墙/雕像玩法；掩体仅 seek_cover） | ❌（玩法依赖） |
 | 预判 | PredictedPosition | 箭矢 ARROW_LEAD_FACTOR 移动预判 | ◐ |
 | 目标 | UpdateTarget / IsValidForForwardOnlyTarget / OnlyTargetsUnitsForward / InAgroRange / CanAttack / AiDistance | TargetFinder.find_target + 射程/集火（前向限制/威胁分级部分缺失） | ◐ |
 | 攻击 | Attack / AttackFromRange / GetTargetAttackSpot | behavior_attack 攻击段 + 远程延迟发射 + 攻击槽位外圈 | ✅ |
-| 溃逃 | NeedsToRunAway / IsUnderThreat | ai_controller 士气分支 + behavior_retreat（IsUnderThreat 无独立真值） | ◐ |
-| 面向 | FaceDirection / SetNaturalFacingDirection / Face | _apply_movement 朝向 + face_towards（AI 统一 Face 调用缺失） | ◐ |
+| 溃逃 | NeedsToRunAway / IsUnderThreat | ai_controller 士气分支 + behavior_retreat（11a：`_is_under_threat` THREAT_RANGE 内存活敌人真值化，无威胁不溃逃） | ✅ |
+| 面向 | FaceDirection / SetNaturalFacingDirection / Face | behavior_base `face_target`/`face_position` 统一入口（11a：AI 面向调用全部收口） | ✅ |
 | 主控 | IsBeingUserControlledByPro | possessed + USER_CONTROLLED_ATTACK_SPEED 1.3 | ✅ |
-| 杂项 | DetermineXRunPower / IsPositionBacktracking / AlwaysAttacks / ShouldStand* 3 虚函数 | （散布在档案/未做） | ❌ |
+| 杂项 | DetermineXRunPower / IsPositionBacktracking / AlwaysAttacks / ShouldStand* 3 虚函数 | DetermineXRunPower 已入接近段（11a）；IsPositionBacktracking/AlwaysAttacks/ShouldStand* 散布在档案或未做 | ◐ |
 
 ### 兵种 Ai 类缺口（批次方案）
 
@@ -209,8 +210,8 @@
 
 ### 结论
 
-- **AI 行为层真实覆盖率 ≈ 34%（严格）/ 49%（含近似）**——缺口集中在**整类**（TeamAi/Meric/Giant/Zombie）与**簇**（Formation 列队形、y 对齐、绕障），不是零散函数。
-- 消解路径：P2（y 对齐簇/面向/威胁）→ P4（Formation）→ P6（TeamAi）→ P7/P8（整类），全部完成后覆盖率预计 34% → 75%+。
+- **AI 行为层真实覆盖率 ≈ 44%（严格）/ 50%（含近似）**（11a 完成后自 34%/49% 提升：y 走位簇 7 函数、IsUnderThreat、面向簇 3 函数、IsTargetReallyClose 由 ◐ 转 ✅，DetermineXRunPower 由 ❌ 转 ✅）——缺口集中在**整类**（TeamAi/Meric/Giant/Zombie）与**簇**（Formation 列队形、绕障），不是零散函数。
+- 消解路径：P4（Formation）→ P6（TeamAi）→ P7/P8（整类），全部完成后覆盖率预计 44% → 75%+。
 
 ---
 
@@ -222,7 +223,7 @@
 |---|---|---|---|
 | **Game 核心**（15） | GameController / LevelLoader / GameCamera / ObjectPool / RenderLayer / Barricades / Mines / InGameShop / AssetCache | game_root / scene_loader / camera_rig / FxPool / 资源建筑 | ◐ 骨架在；**InGameShop（战场商店）→ 并入批次 10 物品栏**；Mines 挖金经济=不同路线（村民经济），参考平衡 |
 | **Entities**（20） | Unit 基类 + 16 兵种/建筑（含 CastleArchers / King / GiantBoss / MainStatue / Statue / Minion / Zombie）+ Team + HealthBar + ConversionChannel | units 模块（stickman_entity + WeaponMount 单类多兵种）+ battle_instance 阵营 | ◐ 兵种数据化分型在；**缺：CastleArchers 城堡弓手、Statue/MainStatue（雕像=SWL 胜利目标）、King/GiantBoss（BOSS）、ConversionChannel（单位转化）**——雕像/BOSS 与本作大世界定位不同，按玩法批次决策 |
-| **Entities.Ai**（14） | 133 行为函数 | ai/ + command/ | **严格 34% / 含近似 49%**，逐函数对账见 §三 |
+| **Entities.Ai**（14） | 133 行为函数 | ai/ + command/ | **严格 44% / 含近似 50%**，逐函数对账见 §三 |
 | **Spells**（15） | Spell 基类 + ArrowVolley 箭雨 / HealSpell 群疗 / LightningStorm / LazerBeam / MinerGoldRush / RaiseGold / SpawnUnit / SpeartonMadness / SwordwrathRage / SummonElite / SummonGiant / SummonGoldenSpearton / TrainingHaste / TurretPower | ❌ 全缺（用户已拍板只要一部分：ArrowVolley + HealSpell） | **高参考**：Spell 基类统一"冷却/耗金/施放动画/效果"结构——P11 实施时先立基类再挂具体法术 |
 | **Effects**（16） | Blood / DirectionalBlood（方向血溅）/ ExplosionScorch（爆炸焦痕）/ GroundSlam（震地）/ LightningOnUnit / EarthquakeEffect / Rain / Cloud / StatueDeath / ArrowEffect / FollowUnit / StoneParticleSystem | fx 模块（4 效果：尘土/飘屑/火花/法爆） | **高参考**：血溅与爆炸焦痕是战斗观感大头，P10 扩容清单：血溅/焦痕/震地/雨云天气；焦痕同时是召唤/爆炸的地面标记（SpawnGroundScorch 同族） |
 | **Projectiles**（2） | Arrow（已深度参考）/ GutSpinner（巨人甩摆武器投射物） | arrow_projectile ✓ | Arrow 已对齐；GutSpinner 并入 P8 巨人批次 |

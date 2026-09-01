@@ -72,8 +72,13 @@ var ground_bottom: float = 882.0
 var map_left: float = 0.0
 ## X 活动范围右边界（由 MapInstance 注入）
 var map_right: float = 8192.0
-## 脚部到节点原点的 Y 偏移（由 _ready 从模型 marker 动态计算，正值=脚在下方）
+## 脚部到节点原点的 Y 偏移（_ready 从模型 marker 动态计算 × body_scale——
+## 9q：缩放单位（如 minidon 0.65×）的脚必须随体型上移，否则悬空 ≈0.35×脚距。
+## 基准值存 _foot_offset_base，_apply_scale 时重算；全部消费点（地面带约束/
+## 出生日/存档对齐）直接读本字段即得缩放后真值）
 var foot_offset: float = 45.0
+## foot_offset 基准值（body_scale=1.0 时的脚距，_ready 计算一次）
+var _foot_offset_base: float = 45.0
 
 # ─────────────────────────────── 通行障碍（§7.1.2）────────────────────────────────
 ## 地图引用（供地形倍率/交互/脱困查询，由 VillageMap.spawn_entity 注入）
@@ -188,10 +193,14 @@ var _range_base_size: Vector2 = Vector2.ZERO
 var _collider_base_x: float = 0.0
 ## Range 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
 var _range_base_x: float = 0.0
+## Range 基准 Y 偏移（BASE_SCALE 后、body_scale=1.0 基线；9q y 偏移随体型缩放）
+var _range_base_y: float = 0.0
 ## Hitbox 子 CollisionShape2D 原始尺寸（受击判定，与 Collider 同步缩放）
 var _hitbox_base_size: Vector2 = Vector2.ZERO
 ## Hitbox 子 CollisionShape2D 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
 var _hitbox_base_x: float = 0.0
+## Hitbox 基准 Y 偏移（BASE_SCALE 后基线；9q y 偏移随体型缩放）
+var _hitbox_base_y: float = 0.0
 
 # ─────────────────────────────── 战斗组件引用（§7.1）────────────────────────────────
 @onready var health_component: Node = get_node_or_null("HealthComponent")
@@ -272,8 +281,10 @@ func _ready() -> void:
 	_apply_balance_data()
 	# 获取 AIController 子节点（§7.1）
 	_ai_controller = get_node_or_null("AIController")
-	# 从模型 marker 动态计算 foot_offset（适配不同参考系）
-	foot_offset = _calculate_foot_offset()
+	# 从模型 marker 动态计算 foot_offset 基准（适配不同参考系）；
+	# 实际 foot_offset = 基准 × body_scale（_apply_scale 内重算，9q）
+	_foot_offset_base = _calculate_foot_offset()
+	foot_offset = _foot_offset_base
 	# 碰撞体移到脚部位置（保留原始 X 偏移并缩放，不硬编码为 0）
 	var col := get_node_or_null("Collider") as CollisionShape2D
 	if col != null:
@@ -292,6 +303,7 @@ func _ready() -> void:
 		# Range position 也需要缩放（编辑器中的值基于原始大小，运行时需乘以 BASE_SCALE）
 		_range_base_x = rng.position.x * BASE_SCALE
 		rng.position *= BASE_SCALE
+		_range_base_y = rng.position.y
 	# Hitbox 子 CollisionShape2D 同步缩放并保存原始尺寸/偏移
 	if hitbox != null:
 		var hb_shape := hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
@@ -300,6 +312,7 @@ func _ready() -> void:
 			_hitbox_base_size = (hb_shape.shape as RectangleShape2D).size
 			_hitbox_base_x = hb_shape.position.x * BASE_SCALE
 			hb_shape.position *= BASE_SCALE
+			_hitbox_base_y = hb_shape.position.y
 	# 应用初始缩放
 	_apply_scale()
 	# 播放 idle
@@ -729,6 +742,8 @@ func _apply_scale() -> void:
 		return
 	var s: float = BASE_SCALE * body_scale
 	rig.scale = Vector2(s * _facing, s)
+	# 9q：foot_offset 随体型重算（缩放单位脚随体型上移；消费点全部读本字段）
+	foot_offset = _foot_offset_base * body_scale
 	# 同步缩放 Collider shape（Collider 不在 rig 层级下，不受 rig.scale 影响）
 	if _collider_base_size != Vector2.ZERO:
 		var col := get_node_or_null("Collider") as CollisionShape2D
@@ -736,18 +751,22 @@ func _apply_scale() -> void:
 			(col.shape as RectangleShape2D).size = _collider_base_size * s
 			# X 偏移随朝向镜像（原点不在碰撞箱中心时，翻转需镜像偏移）
 			col.position.x = _collider_base_x * _facing
+			# 9q：Y 偏移（脚部位置）随体型缩放，Collider 跟到缩放后的脚上
+			col.position.y = foot_offset
 	# 同步缩放 Range shape（悬停检测范围，与 Collider 同步缩放）
 	if _range_base_size != Vector2.ZERO:
 		var rng := get_node_or_null("Range") as CollisionShape2D
 		if rng != null and rng.shape is RectangleShape2D:
 			(rng.shape as RectangleShape2D).size = _range_base_size * s
 			rng.position.x = _range_base_x * _facing
+			rng.position.y = _range_base_y * body_scale
 	# 同步缩放 Hitbox 子 shape（受击判定，与 Collider 同步缩放）
 	if _hitbox_base_size != Vector2.ZERO and hitbox != null:
 		var hb_shape := hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
 		if hb_shape != null and hb_shape.shape is RectangleShape2D:
 			(hb_shape.shape as RectangleShape2D).size = _hitbox_base_size * s
 			hb_shape.position.x = _hitbox_base_x * _facing
+			hb_shape.position.y = _hitbox_base_y * body_scale
 	# 血条跟随体型（minidon 小一圈时血条高度/大小同步缩小，不再浮在半空）
 	if _health_bar != null and is_instance_valid(_health_bar) \
 			and _health_bar.has_method("set_body_scale"):

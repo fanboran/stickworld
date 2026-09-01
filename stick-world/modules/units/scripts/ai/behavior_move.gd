@@ -11,6 +11,8 @@ extends BehaviorBase
 ##   - engage_in_range: bool  接敌即战（敌人进入武器射程即打断移动转战斗）
 ##   - hold_on_arrive: bool  到位驻留（编队动态跟队锚定用）：到达后行为不完成，
 ##     站桩待命压制 AI 战斗决策"擅自冲锋"，敌人进射程（engage_in_range）仍打断
+##   - catching_up: bool  追赶队形（编队跟队/列阵下发，SWL UpdateCatchingUpToFormation）：
+##     落后槽位过远的归位跑——收盾疾跑，落定后恢复行军盾
 
 ## 兵种行为档案（formation_block：盾兵行军盾不放下）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
@@ -38,6 +40,8 @@ var _engage_in_range: bool = false
 var _engage_check_timer: float = 0.0
 ## 行军举盾开关（档案 formation_block：SWL UpdateBlockWhenInFormation）
 var _formation_blocking: bool = false
+## 追赶队形（SWL UpdateCatchingUpToFormation 直译，11b）：归位跑收盾，落定恢复端盾
+var _catching_up: bool = false
 
 
 func _ready() -> void:
@@ -53,6 +57,7 @@ func enter(previous: String, params: Dictionary) -> void:
 	_running = params.get("run", false)
 	_engage_in_range = params.get("engage_in_range", false)
 	_hold_on_arrive = params.get("hold_on_arrive", false)
+	_catching_up = params.get("catching_up", false)
 	_arrived = false
 	_engage_check_timer = 0.0
 	_update_formation_block(true)
@@ -65,10 +70,14 @@ func exit(next: String) -> void:
 
 
 ## 行军举盾（SWL UpdateBlockWhenInFormation 直译）：档案 formation_block=true 的
-## 盾兵在行军/待命全程举盾（Spearton 端盾行军姿态），进战斗后由 attack 行为接管
+## 盾兵在行军/待命全程举盾（Spearton 端盾行军姿态），进战斗后由 attack 行为接管。
+## 追赶归位跑不举盾（SWL UpdateBlockWhenInFormation(isCatchingUpToFormation)：
+## 落后收盾疾跑），落定后由到达分支恢复端盾
 func _update_formation_block(on: bool) -> void:
 	if on == _formation_blocking:
 		return
+	if on and _catching_up:
+		return  # 追赶中不端盾（落定后到达分支再开）
 	var weapon: Node = entity.get_weapon() if entity != null and entity.has_method("get_weapon") else null
 	if weapon == null or not weapon.has_method("set_blocking"):
 		return
@@ -125,6 +134,10 @@ func update(delta: float) -> void:
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
 		_arrived = true
+		# 追赶落定（11b）：恢复行军端盾（SWL 落位后 UpdateBlockWhenInFormation 端盾）
+		if _catching_up:
+			_catching_up = false
+			_update_formation_block(true)
 		# 编队成员到达队形位 → 播列阵动画并短暂滞留（对应传奇 ArriveAtFormationAnimationSystem）
 		if _is_squad_member():
 			if entity.has_method("play_arrive"):

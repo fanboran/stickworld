@@ -8,6 +8,27 @@
 
 ## [未发布]
 
+### 11b Formation 列队形（2026-09-01，计划 P4）
+
+- **槽位制 row/col 阵列（Formation 类 7 函数直译）**：`formation_system.gd` 小队新增
+  `slots`（成员↔槽位 Vector2i(col,row) 双射），`_assign_formation_slots` 在建队/入队/离队/
+  掉员时全量重算（Add/Remove 直译；`FilterDownARandomRow` 等价=列数随减员自动收缩不留空列）；
+  `ShouldSwitchUnitsInFormation` 直译为贪心互换——互换后两人到槽总距离缩短则换，近者填前排
+- **formation 槽位落点**：`get_squad_dest` 新增 `"formation"` 模式（前列贴锚、后列沿行进
+  反侧退 ROW_GAP×col、同列以锚为中心横展）；ADVANCE_ALL/SPRINT 号令与编队动态跟队 tick
+  全部切换 formation 模式——三班 row/col 阵列推进、掉员自动补位
+- **追赶状态（UpdateCatchingUpToFormation 直译）**：距槽位超过 `CATCHUP_RUN_DIST`(140px) 下
+  `run+catching_up` 号令，`behavior_move.gd` 追赶归位跑收盾疾跑、落定恢复端盾
+  （`UpdateBlockWhenInFormation(isCatchingUpToFormation)` 真值语义）
+- **落点稳定（FormationPositionIsStable/IsInTheFormation 直译）**：`_formation_position_is_stable`
+  死区内不重发号令（防号令空转/动画重播）；`is_unit_in_formation` 查询供调试/后续行为消费
+- **常量待实测校准**：`UNITS_PER_COLUMN=3` / `ROW_GAP=56` / `CATCHUP_RUN_DIST=140` 无 dump
+  数值真值，按观察场三班 8~10 人与既有间距体系取值
+- **验证**：新单元套件 `test_formation_slots`（槽位双射/落点/补位/换位/稳定 5 用例）；
+  batch_runner 21/21 套件全过；battle_sim 6 场景正常收敛、零 ERROR
+- **覆盖率**：§三 更新 **44%→51%**（严格）/ 50%→**56%**（含近似）——编队稳定簇 3 函数与
+  Formation 类 7 函数全部转 ✅；下一项 P5（批次 2 数值校准）
+
 ### 11a 基类补全簇 + 9q 小鬼脚对齐（2026-09-01，计划 P2/P3）
 
 - **y 对齐 6 函数直译（11a 核心）**：SWL `AdjustGoalYToMoveTowardsTarget` 系落 `behavior_attack.gd`

@@ -10,6 +10,10 @@ extends RefCounted
 const ANIM_IDLE := "idle"
 const ANIM_IDLE_V2 := "idle_v2"
 const ANIM_IDLE_SPEAR := "idle_spear"
+## 9r 矛士站姿候选（Spearton-Into-Stand1/2"落定成站姿"，LOOP_NONE 播完停末帧；
+## 经档案 stand_pool 随机抽取，与静态 Stand1 对比验收）
+const ANIM_IDLE_SPEAR_V2 := "idle_spear_v2"
+const ANIM_IDLE_SPEAR_V3 := "idle_spear_v3"
 const ANIM_IDLE_BOW := "idle_bow"
 const ANIM_IDLE_PICKAXE := "idle_pickaxe"
 const ANIM_IDLE_STAFF := "idle_staff"
@@ -18,6 +22,9 @@ const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
 ## 各武器专属攻击动画（转译自解包 Spine 数据，见 tools/baking/spine_import.gd）
 const ANIM_ATTACK_SPEAR := "attack_spear"
+## 9f 矛士攻击池候选（Spearton-Attack2/3 戳刺变体，经档案 attack_pool 随机抽取）
+const ANIM_ATTACK_SPEAR_2 := "attack_spear_2"
+const ANIM_ATTACK_SPEAR_3 := "attack_spear_3"
 const ANIM_ATTACK_PICKAXE := "attack_pickaxe"
 const ANIM_ATTACK_STAFF := "attack_staff"
 const ANIM_ATTACK_BOW := "attack_bow"
@@ -162,6 +169,8 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_IDLE)
 	_load_anim(lib, ANIM_IDLE_V2)
 	_load_anim(lib, ANIM_IDLE_SPEAR)
+	_load_anim(lib, ANIM_IDLE_SPEAR_V2)
+	_load_anim(lib, ANIM_IDLE_SPEAR_V3)
 	_load_anim(lib, ANIM_IDLE_BOW)
 	_load_anim(lib, ANIM_IDLE_PICKAXE)
 	_load_anim(lib, ANIM_IDLE_STAFF)
@@ -169,6 +178,8 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_RUN)
 	_load_anim(lib, ANIM_ATTACK)
 	_load_anim(lib, ANIM_ATTACK_SPEAR)
+	_load_anim(lib, ANIM_ATTACK_SPEAR_2)
+	_load_anim(lib, ANIM_ATTACK_SPEAR_3)
 	_load_anim(lib, ANIM_ATTACK_PICKAXE)
 	_load_anim(lib, ANIM_ATTACK_STAFF)
 	_load_anim(lib, ANIM_ATTACK_BOW)

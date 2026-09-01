@@ -51,3 +51,24 @@ func is_finished() -> bool:
 ## 此行为是否处于激活状态。
 func is_active() -> bool:
 	return _active
+
+
+# ─────────────────────────────── 统一面向（SWL Ai.Face 直译）────────────────────────────────
+
+## AI 统一面向入口（SWL Ai.Face(Unit u) 直译）：所有"面向目标/单位"的切换
+## 收敛到此（底层走实体 face_towards 横向翻转）——散落各行为的 open fire 前
+## 回头、走位后侧身统一处理，防"反向拉弓/背身挥刀"回归。
+func face_target(target: Node) -> void:
+	if entity == null or not is_instance_valid(entity) \
+			or target == null or not is_instance_valid(target):
+		return
+	if entity.has_method("face_towards"):
+		entity.face_towards(target.global_position)
+
+
+## 面向指定点（SWL FaceDirection 语义近亲：按点定朝向而非 ±1 枚举）。
+func face_position(pos: Vector2) -> void:
+	if entity == null or not is_instance_valid(entity):
+		return
+	if entity.has_method("face_towards"):
+		entity.face_towards(pos)

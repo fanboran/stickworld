@@ -33,6 +33,10 @@ const LOW_HP_THRESHOLD: float = 0.3
 const COVER_NEARBY_RANGE: float = 200.0
 ## 追击范围倍数（行业最佳实践：目标超出攻击范围 × LEASH_MULT 则放弃追击，防追到天涯海角）
 const LEASH_MULT: float = 4.0
+## y 对齐死区（px，dump 无真值 → 待实测校准）：|Δy| 小于此值视为已对齐不再走位
+const Y_ALIGN_DY_THRESHOLD: float = 16.0
+## IsTargetReallyClose 阈值倍数（半射程近似，dump 无真值 → 待实测校准）
+const REALLY_CLOSE_MULT: float = 0.5
 
 # ─────────────────────────────── @export（概率钩子，§7.4）────────────────────────────────
 ## 擅自冲锋概率（每次接近时）
@@ -64,8 +68,9 @@ var _profile: Dictionary = {}
 var _aiming: bool = false
 var _aim_timer: float = 0.0
 var _aim_target: Node = null
-## y 纵深个性漂移（SWL personalityControlledY 直译）：漂移目标 Y 与重掷计时
-var _drift_y: float = 0.0
+## y 纵深个性漂移（SWL personalityControlledY 直译）：相对目标 y 的个性偏移与重掷计时
+## （11a 改造：漂移从"独立随机游走"并入 y 对齐 6 函数的 goal_y，见 _adjust_goal_y）
+var _drift_offset: float = 0.0
 var _drift_timer: float = 0.0
 ## 攻击后举盾截止时刻（s；SWL Ai.cooldownAfterAttackForBlock 直译——
 ## 矛兵攻击完举盾瞬间防反打，"盾墙"手感来源）
@@ -96,6 +101,7 @@ func enter(previous: String, params: Dictionary) -> void:
 	_aim_target = null
 	_aim_timer = 0.0
 	_drift_timer = 0.0
+	_drift_offset = 0.0
 
 
 func update(delta: float) -> void:
@@ -205,6 +211,15 @@ func update(delta: float) -> void:
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
 		_face_target()  # 开火面向目标（走位/漂移后可能侧身）
+		# 9p（SWL ShouldAim/CanAttack 的 y 门槛，档案 y_aim_tolerance）：|Δy| 超容忍时
+		# 先 y 走位保证接近水平持平、距离以水平为主导，不出手——否则横轴观感=故意射空
+		var aim_tol: float = _p("y_aim_tolerance", 0.0)
+		var dy_align: float = _target.global_position.y - entity.global_position.y
+		if aim_tol > 0.0 and absf(dy_align) > aim_tol and _can_adjust_y_position_only(attack_range):
+			if entity.has_method("ai_move"):
+				entity.ai_move(Vector2(0.0, signf(dy_align)), false)
+			_update_aim_rhythm(delta)  # 持瞄节奏照常走，y 对齐即放箭
+			return
 		if _update_aim_rhythm(delta) and weapon != null and weapon.has_method("can_attack") and weapon.can_attack():
 			weapon.perform_attack(_target)
 			_aiming = false
@@ -218,20 +233,26 @@ func update(delta: float) -> void:
 		if _p("push_apart", 0.0) > 0.0:
 			_apply_push_apart(_p("push_apart", 0.0), delta)
 	else:
+		var to_target: Vector2 = _target.global_position - entity.global_position
+		# IsTargetReallyClose（SWL 直译）：贴身目标绕开攻击槽位外圈等位，直接压上
+		var really_close: bool = _is_target_really_close(dist, attack_range)
 		# 攻击槽位（SWL GetTargetAttackSpot/NumberOfUnitsThatCanHit）：目标贴身名额
 		# 已满时在**外圈等位**（射程 1.25 倍处徘徊），不硬挤进人堆——"后排无所事事
 		# 硬挤"的解法；等位期间远程照常输出，近战等前排空位
 		var attack_radius: float = maxf(attack_range * 0.85, 24.0)
-		if _battle != null and _battle.has_method("get_attacker_count") \
+		if not really_close and _battle != null and _battle.has_method("get_attacker_count") \
 				and _battle.get_attacker_count(_target) >= 3:
 			attack_radius = maxf(attack_range * 1.25, 100.0)
-		var to_target: Vector2 = _target.global_position - entity.global_position
-		var desired_pos: Vector2 = _target.global_position + to_target.normalized() * attack_radius
+		var desired_pos: Vector2 = _target.global_position if really_close \
+				else _target.global_position + to_target.normalized() * attack_radius
 		var dir: Vector2 = (desired_pos - entity.global_position).normalized()
-		# y 轴纵深走位（SWL AdjustGoalYToMoveTowardsTarget + personalityControlledY 直译）：
-		# 接敌途中朝个性纵深位偏移，人群自然铺开不挤一条横线
-		dir = _apply_y_drift(dir, delta)
-		var run: bool = randf() < (RAGE_PUSH_PROB if _rage else _p("aggressive_push_prob", prob_aggressive_push))
+		# y 轴纵深走位（SWL y 对齐 6 函数直译）：接敌途中朝目标 y（带个性漂移带）对齐，
+		# 人群自然铺开不挤一条横线
+		dir = _apply_y_walk(dir, delta)
+		# DetermineXRunPower（SWL 直译）：远跑近走；近身爆发交给冲锋掷骰
+		var run: bool = _determine_x_run_power(desired_pos, attack_range) >= 1.0
+		if not run and randf() < (RAGE_PUSH_PROB if _rage else _p("aggressive_push_prob", prob_aggressive_push)):
+			run = true
 		if entity.has_method("ai_move"):
 			entity.ai_move(dir, run)
 
@@ -282,29 +303,90 @@ func _update_arrow_threat_block(weapon: Node) -> void:
 	weapon.set_blocking(want)
 
 
-## y 轴纵深个性漂移（SWL AdjustGoalYToMoveTowardsTarget + personalityControlledY 直译）：
-## 接敌移动方向上叠加朝"个性纵深位"的分量，每 y_drift_interval 重掷一次目标 Y，
-## 可走带 = entity.ground_y ~ ground_bottom（MapInstance 注入的同款约束字段）。
-func _apply_y_drift(dir: Vector2, delta: float) -> Vector2:
-	var band: float = _p("y_drift_band", 0.0)
-	if band <= 0.0 or dir == Vector2.ZERO:
+## ─── y 对齐 6 函数（SWL Ai 基类直译，dump legacy_AI_classes.cs L156-184）───
+## 接敌 y 走位不是纯随机漂移：ShouldAdjustYPositionTowardsTarget 判定（门槛 =
+## IsCloseEnoughToAdjustYTowardsTarget / adjustYEarly）→ DetermineYComponentWhenRunningToTarget
+## 出 y 分量 → AdjustGoalYToMoveTowardsTarget 把"目标 y + 个性漂移带"夹进可走带。
+## CanAdjustYPositionOnly = x 已到位只调 y（9p 射程内分支消费者）。
+## CanWalkTowardsTarget = 可直走（绕障/城墙玩法未复刻，挂 11e 总账，恒真）。
+
+## 接敌 y 走位合成：ShouldAdjust 判定通过时把 y 对齐分量叠加进移动方向。
+func _apply_y_walk(dir: Vector2, delta: float) -> Vector2:
+	if dir == Vector2.ZERO or not _should_adjust_y_towards_target():
 		return dir
-	# 接敌方向不以水平为主（绕后/背身包抄）时不漂移——纯 y 走位在侧视里
+	# 接敌方向不以水平为主（绕后/背身包抄）时不调 y——纯 y 走位在侧视里
 	# 观感是"背对敌人朝队友走"（2026-08-31 四轮审计）
 	if absf(dir.x) < 0.4:
 		return dir
+	var y_comp: float = _determine_y_component(delta)
+	if absf(y_comp) <= 0.0:
+		return dir
+	return (dir + Vector2(0.0, y_comp)).normalized()
+
+
+## ShouldAdjustYPositionTowardsTarget（dump L181）：目标 y 未对齐（超死区）且
+## 可朝目标走，且（提前对齐 || 水平已足够近）→ true。
+func _should_adjust_y_towards_target() -> bool:
+	if not _can_walk_towards_target():
+		return false
+	var band: float = _p("y_drift_band", 0.0)
+	if band <= 0.0:
+		return false
+	if absf(_target.global_position.y - entity.global_position.y) <= Y_ALIGN_DY_THRESHOLD:
+		return false
+	# adjustYEarly（远程兵种提前对齐）跳过"足够近"门槛（dump RunToPosition 参数）
+	if _p("y_align_early", 0.0) <= 0.5 and not _is_close_enough_to_adjust_y():
+		return false
+	return true
+
+
+## IsCloseEnoughToAdjustYTowardsTarget（dump L184；ArcherAi L245 override 收紧 →
+## 档案 y_align_x_range 分型）：|Δx| 足够近才调 y，远处浪费走位、弓手靠抛物线覆盖。
+func _is_close_enough_to_adjust_y() -> bool:
+	var dx: float = absf(_target.global_position.x - entity.global_position.x)
+	return dx <= _p("y_align_x_range", 300.0)
+
+
+## CanWalkTowardsTarget（dump L178）：目标存活可直走。城墙/雕像绕障未复刻
+## （RestrictTargetSpotWhenBehindWall 系挂 11e 总账），恒真直译。
+func _can_walk_towards_target() -> bool:
+	return _target != null and is_instance_valid(_target) \
+			and not (_target.has_method("is_dead") and _target.is_dead())
+
+
+## CanAdjustYPositionOnly（dump L175）：x 已在攻击半径内但 y 未对齐 → 纯 y 走位
+## （水平已到位不再横移，只补纵深）。9p 射程内分支消费者。
+func _can_adjust_y_position_only(attack_radius: float) -> bool:
+	if not _can_walk_towards_target() or entity == null:
+		return false
+	var dx: float = absf(_target.global_position.x - entity.global_position.x)
+	return dx <= attack_radius
+
+
+## DetermineYComponentWhenRunningToTarget（dump L157）：跑向目标时的 y 分量
+## （±y_align_strength，goal_y 死区内不出分量）。
+func _determine_y_component(delta: float) -> float:
+	# 个性漂移偏移重掷（DIRECTION_CHANGE_FREQUENCY=0.5s 节奏对齐）
 	_drift_timer -= delta
 	if _drift_timer <= 0.0:
 		var iv: Vector2 = _profile.get("y_drift_interval", Vector2(0.5, 1.2))
 		_drift_timer = randf_range(iv.x, iv.y)
-		var gy: float = float(entity.get("ground_y")) if "ground_y" in entity else 0.0
-		var gb: float = float(entity.get("ground_bottom")) if "ground_bottom" in entity else 0.0
-		if gb > gy:
-			_drift_y = clampf(entity.global_position.y + randf_range(-band, band), gy + 20.0, gb - 20.0)
-	var dy: float = _drift_y - entity.global_position.y
+		_drift_offset = randf_range(-_p("y_drift_band", 0.0), _p("y_drift_band", 0.0))
+	var dy: float = _adjust_goal_y() - entity.global_position.y
 	if absf(dy) < 10.0:
-		return dir
-	return (dir + Vector2(0.0, signf(dy)) * 0.22).normalized()
+		return 0.0
+	return signf(dy) * _p("y_align_strength", 0.22)
+
+
+## AdjustGoalYToMoveTowardsTarget（dump L169）：goal_y = 目标 y + 个性漂移偏移
+## （personalityControlledY 语义），夹紧可走带（MapInstance 注入的 ground_y~ground_bottom）。
+func _adjust_goal_y() -> float:
+	var ty: float = _target.global_position.y + _drift_offset
+	var gy: float = float(entity.get("ground_y")) if "ground_y" in entity else 0.0
+	var gb: float = float(entity.get("ground_bottom")) if "ground_bottom" in entity else 0.0
+	if gb > gy:
+		return clampf(ty, gy + 20.0, gb - 20.0)
+	return ty
 
 
 ## Box-Muller 高斯采样（SWL NextGaussian 对齐）
@@ -358,8 +440,9 @@ func _update_summon(dist: float, delta: float) -> void:
 	var count: int = int(_p("summon_count", 0.0))
 	if count <= 0:
 		return
-	# 清理失效/死亡引用，统计存活
-	_summons_alive = _summons_alive.filter(func(s: Node) -> bool:
+	# 清理失效/死亡引用，统计存活（参数不注解 Node：数组里存有已释放对象时
+	# 类型转换直接报错"Cannot convert Object to Object"，靠 is_instance_valid 短路兜底）
+	_summons_alive = _summons_alive.filter(func(s) -> bool:
 		return is_instance_valid(s) and not (s.has_method("is_dead") and s.is_dead()))
 	if _summons_alive.size() >= count:
 		return
@@ -397,6 +480,10 @@ func _spawn_minidons(count: int) -> Array:
 	if entity != null and entity.has_method("get_facing"):
 		facing = float(entity.get_facing())
 	var spawned: Array = []
+	# 9q：出生 y 以施法者**脚部** y 为基准（root 参考系不随 body_scale 对齐，
+	# 缩放单位的脚部必须按 foot_offset 换算——foot_offset 已随 body_scale 缩放）
+	var caster_foot: float = float(entity.get("foot_offset")) if "foot_offset" in entity else 0.0
+	var feet_y: float = entity.global_position.y + caster_foot
 	for i in count:
 		var e: Node2D = scene.instantiate()
 		host.add_child(e)
@@ -405,7 +492,10 @@ func _spawn_minidons(count: int) -> Array:
 		if e.has_method("set_body_scale"):
 			e.set_body_scale(_p("summon_body_scale", 0.65))
 		var lateral_y: float = (float(i) - (count - 1) * 0.5) * 44.0
-		e.global_position = entity.global_position + Vector2(facing * 72.0, lateral_y)
+		# 9q：护卫脚落在"法师脚部 y + 纵深排开"上，root 反推（护卫自身 foot_offset 已随缩放）
+		var e_foot: float = float(e.get("foot_offset")) if "foot_offset" in e else 0.0
+		e.global_position = Vector2(entity.global_position.x + facing * 72.0,
+				feet_y + lateral_y - e_foot)
 		if e.has_method("set_possessed"):
 			e.set_possessed(false)
 		if e.has_method("set_faction") and entity.has_method("get_faction"):
@@ -434,11 +524,24 @@ func _p(key: String, fallback: float) -> float:
 	return float(_profile.get(key, fallback))
 
 
-## 开火前面向目标（横向翻转）：风筝边撤边打、y 纵深漂移走位后都会侧身/背身，
+## 开火前面向目标（横向翻转）——统一 Face 入口（SWL Ai.Face 直译，
+## 见 behavior_base.face_target）：风筝边撤边打、y 纵深走位后都会侧身/背身，
 ## 不回调会播"反向拉弓"。近战接敌方向天然朝目标，无需处理。
 func _face_target() -> void:
-	if entity != null and is_instance_valid(entity) and entity.has_method("face_towards"):
-		entity.face_towards(_target.global_position)
+	face_target(_target)
+
+
+## IsTargetReallyClose（SWL Ai 直译）：目标贴身（≈半射程内）——绕开攻击槽位
+## 外圈等位直接压上。
+func _is_target_really_close(dist: float, attack_range: float) -> bool:
+	return dist <= maxf(attack_range * REALLY_CLOSE_MULT, 40.0)
+
+
+## DetermineXRunPower（SWL Ai 直译）：水平推进强度 0~1——远处全速逼近（run），
+## 近处收步（walk）。阈值 = 1.5×射程（dump 无真值 → 待实测校准）。
+func _determine_x_run_power(desired_pos: Vector2, attack_range: float) -> float:
+	var dx: float = absf(desired_pos.x - entity.global_position.x)
+	return clampf(dx / maxf(attack_range * 1.5, 1.0), 0.0, 1.0)
 
 
 ## 队伍级共享攻击目标（反编译参考实装 D-B）：本兵所属小队的排长决策目标。

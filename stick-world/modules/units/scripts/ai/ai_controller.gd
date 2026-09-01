@@ -32,6 +32,9 @@ const WANDER_PROBABILITY: float = 0.0
 ## 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙 背水一战。
 ## 被围判定：SURROUND_RANGE 内敌对单位 >= SURROUND_MIN 视为被围
 const SURROUND_RANGE: float = 120.0
+## 威胁判定距离（SWL Ai.IsUnderThreat：近身有活敌即被威胁；
+## dump 无数值真值，取被围半径同量级，待实测校准）
+const THREAT_RANGE: float = 140.0
 ## 被围所需敌对单位数
 const SURROUND_MIN: int = 2
 ## 背墙判定：身后此距离内有掩体视为背墙
@@ -269,14 +272,18 @@ func _try_combat() -> bool:
 			return true
 	var bi_param: Dictionary = {"battle": bi}
 	var health: Node = _entity.get_health() if _entity.has_method("get_health") else null
-	# 溃逃或士气极低 -> retreat
+	# 溃逃或士气极低 -> retreat（IsUnderThreat 真值化：低士气且**确有近身威胁**
+	# 才溃逃；脱战低士气不强制溃逃，交由士气自然恢复——9i 配套）
 	if health != null:
 		if health.has_method("is_routed") and health.is_routed():
 			_state_machine.travel("retreat", bi_param)
 			return true
 		if health.has_method("get_morale_ratio") and health.get_morale_ratio() < 0.25:
-			_state_machine.travel("retreat", bi_param)
-			return true
+			if _is_under_threat(bi):
+				_state_machine.travel("retreat", bi_param)
+				return true
+			# 脱战低士气：不进战斗决策（避免 travel→finish 抖动），原地待命回士气
+			return false
 		# 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙背水一战
 		var mods: Dictionary = _compute_state_modifiers(bi, health)
 		if _should_rage(mods, health):
@@ -293,6 +300,24 @@ func _try_combat() -> bool:
 	# 默认 -> attack
 	_state_machine.travel("attack", bi_param)
 	return true
+
+
+## IsUnderThreat 真值化（SWL Ai.IsUnderThreat 直译）：THREAT_RANGE 内存活敌人
+## 数 > 0 = 被威胁。溃逃触发的前置真值（无近身威胁不溃逃，9i 配套）。
+func _is_under_threat(bi: Node) -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_enemies_of"):
+		return false
+	var pos: Vector2 = _entity.global_position
+	for e in bi.get_enemies_of(_entity.get_faction()):
+		if e == null or not is_instance_valid(e):
+			continue
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		if pos.distance_to(e.global_position) <= THREAT_RANGE:
+			return true
+	return false
 
 
 ## 状态调制检测（反编译参考实装 E）：低血 / 溃逃 / 被围 / 背墙。

@@ -11,7 +11,6 @@ const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hu
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var speed_label: Label = get_node_or_null("MarginContainer/HBoxContainer/SpeedLabel")
 @onready var time_label: Label = get_node_or_null("MarginContainer/HBoxContainer/TimeLabel")
-@onready var notification_label: Label = get_node_or_null("NotificationLabel")
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
@@ -77,12 +76,12 @@ func _bind_event_bus() -> void:
 
 
 func _on_battle_started(_battle_id: String) -> void:
-	show_notification("战斗", "一场战斗开始了", "info")
+	_notify("战斗", "一场战斗开始了", "info")
 
 
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 	var result: String = "进攻方获胜" if victory else "防守方获胜"
-	show_notification("战斗", "战斗结束：%s" % result, "info")
+	_notify("战斗", "战斗结束：%s" % result, "info")
 
 
 # ─────────────────────────────── 更新显示 ────────────────────────────────
@@ -120,26 +119,10 @@ func _on_pause_changed(_paused: bool) -> void:
 
 # ─────────────────────────────── 通知 ────────────────────────────────
 
-## 显示通知（P0 阶段简单文本显示，5 秒后清空）
-func show_notification(title: String, body: String, level: String) -> void:
-	if notification_label == null:
-		return
-	var prefix: String = ""
-	match level:
-		"info":
-			prefix = "[i]"
-		"warn":
-			prefix = "[!]"
-		"error":
-			prefix = "[X]"
-	notification_label.text = "%s %s — %s" % [prefix, title, body]
-	var tree := get_tree()
-	if tree:
-		tree.create_timer(5.0).timeout.connect(func():
-			# 自身已释放时不再访问成员（防 freed 实例访问）
-			if is_instance_valid(self) and notification_label != null and is_instance_valid(notification_label):
-				notification_label.text = ""
-		)
+## 发一条通知（统一走 EventBus ui_notification → UIRoot 左下堆叠 feed）
+func _notify(title: String, body: String, level: String = "info") -> void:
+	if EventBus != null and EventBus.has_signal("ui_notification"):
+		EventBus.ui_notification.emit(title, body, level)
 
 
 # ─────────────────────────────── 居中模式 ────────────────────────────────
@@ -173,14 +156,14 @@ func _update_centered_button_text() -> void:
 func _on_stuck_button_pressed() -> void:
 	var gr := _game_root
 	if gr == null:
-		show_notification("脱困", "未找到游戏根节点", "error")
+		_notify("脱困", "未找到游戏根节点", "error")
 		return
 	var e: Node2D = gr.get_player_entity() if gr.has_method("get_player_entity") else null
 	if e == null or not is_instance_valid(e) or not e.has_method("escape_stuck"):
-		show_notification("脱困", "未找到玩家实体", "error")
+		_notify("脱困", "未找到玩家实体", "error")
 		return
 	e.escape_stuck()
-	show_notification("脱困", "已随机传送到附近空旷地带", "info")
+	_notify("脱困", "已随机传送到附近空旷地带", "info")
 
 
 # ─────────────────────────────── 编制管理窗口 ────────────────────────────────
@@ -189,7 +172,7 @@ func _on_stuck_button_pressed() -> void:
 func _on_formation_button_pressed() -> void:
 	var gr := _game_root
 	if gr == null:
-		show_notification("编制", "未找到游戏根节点", "error")
+		_notify("编制", "未找到游戏根节点", "error")
 		return
 	if gr.has_method("toggle_formation_panel"):
 		gr.toggle_formation_panel()
@@ -201,7 +184,7 @@ func _on_formation_button_pressed() -> void:
 func _on_settings_button_pressed() -> void:
 	var gr := _game_root
 	if gr == null:
-		show_notification("设置", "未找到游戏根节点", "error")
+		_notify("设置", "未找到游戏根节点", "error")
 		return
 	if gr.has_method("toggle_settings_menu"):
 		gr.toggle_settings_menu()

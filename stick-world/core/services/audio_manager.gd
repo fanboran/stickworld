@@ -2,17 +2,24 @@ extends Node
 ## 音频管理器（BGM、SFX）。
 ##
 ## 提供 play_bgm / stop_bgm / play_sfx 等方法。
-## 所有音量受 ConfigManager 统一控制。
+## 音量的唯一消费方：通道音量（master/bgm/sfx）应用到 AudioServer 总线
+## （Master / BGM / SFX，缺总线时自动创建并路由到 Master），
+## 播放器只挂总线、不再各自叠 volume_db；存储仍由 ConfigManager 统一持有。
 ##
-## ⚠️ 接线状态（2026-08 审计）：全项目无消费方（音效未实现），autoload 注册保留，
-## P1 音效接入时启用。
+## ⚠️ 音效资产状态：play_sfx / play_event 框架已就绪，但项目尚无音频文件，
+## 调用会静默跳过；P1 音效接入时放入 res://assets/audio/ 即生效。
 
 signal bgm_playing(path: String)
 signal bgm_stopped()
 
-# BGM 播放器（常驻）
+## AudioServer 总线名（设置面板音量 → 总线的映射目标）
+const BUS_MASTER := "Master"
+const BUS_BGM := "BGM"
+const BUS_SFX := "SFX"
+
+# BGM 播放器（常驻，挂 BGM 总线）
 var _bgm_player: AudioStreamPlayer = null
-# 同时播放中的 SFX 列表
+# 同时播放中的 SFX 列表（挂 SFX 总线）
 var _sfx_players: Array = []
 
 var _current_bgm_path: String = ""
@@ -33,8 +40,9 @@ var _master_before_mute: float = 1.0
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	_ensure_buses()
 	_bgm_player = AudioStreamPlayer.new()
-	_bgm_player.bus = "Master"
+	_bgm_player.bus = BUS_BGM
 	_bgm_player.name = "_BGMPlayer"
 	add_child(_bgm_player)
 
@@ -64,20 +72,37 @@ func _apply_initial_volumes() -> void:
 			var raw = ConfigManager.get_value(key)
 			if raw != null:
 				_volumes[ch] = float(raw)
-	_apply_volumes_to_players()
+	_apply_volumes_to_buses()
 
 
 func _on_volume_changed(channel: String, value: float) -> void:
 	_volumes[channel] = value
-	_apply_volumes_to_players()
+	_apply_volumes_to_buses()
 
 
-func _apply_volumes_to_players() -> void:
-	if _bgm_player:
-		_bgm_player.volume_db = _to_db(float(_volumes["master"]) * float(_volumes["bgm"]))
-	for p in _sfx_players:
-		if p and is_instance_valid(p):
-			p.volume_db = _to_db(float(_volumes["master"]) * float(_volumes["sfx"]))
+## 确保 BGM / SFX 总线存在并路由到 Master（默认工程只有 Master 一条总线）。
+func _ensure_buses() -> void:
+	for bus_name in [BUS_BGM, BUS_SFX]:
+		if AudioServer.get_bus_index(bus_name) != -1:
+			continue
+		var idx: int = AudioServer.bus_count
+		AudioServer.add_bus(idx)
+		AudioServer.set_bus_name(idx, bus_name)
+		AudioServer.set_bus_send(idx, BUS_MASTER)
+
+
+## 通道音量 → AudioServer 总线（线性 0~1 → dB）。
+func _apply_volumes_to_buses() -> void:
+	_set_bus_volume_db(BUS_MASTER, float(_volumes["master"]))
+	_set_bus_volume_db(BUS_BGM, float(_volumes["bgm"]))
+	_set_bus_volume_db(BUS_SFX, float(_volumes["sfx"]))
+
+
+func _set_bus_volume_db(bus_name: String, linear: float) -> void:
+	var idx: int = AudioServer.get_bus_index(bus_name)
+	if idx < 0:
+		return
+	AudioServer.set_bus_volume_db(idx, _to_db(linear))
 
 
 # ─────────────────────────────── BGM 播放 ────────────────────────────────
@@ -96,7 +121,6 @@ func play_bgm(path: String, loop: bool = true) -> void:
 	elif stream is AudioStreamOggVorbis:
 		stream.loop = loop
 	_bgm_player.stream = stream
-	_bgm_player.volume_db = _to_db(float(_volumes["master"]) * float(_volumes["bgm"]))
 	_bgm_player.play()
 	_current_bgm_path = path
 	bgm_playing.emit(path)
@@ -121,9 +145,8 @@ func play_sfx(path: String) -> AudioStreamPlayer:
 		push_warning("[AudioManager] 加载 SFX 失败: %s" % path)
 		return null
 	var player: AudioStreamPlayer = AudioStreamPlayer.new()
-	player.bus = "Master"
+	player.bus = BUS_SFX
 	player.stream = stream
-	player.volume_db = _to_db(float(_volumes["master"]) * float(_volumes["sfx"]))
 	add_child(player)
 	_sfx_players.append(player)
 	player.finished.connect(_on_sfx_finished.bind(player))
@@ -230,7 +253,7 @@ func set_volume(channel: String, value: float) -> void:
 		_volumes[channel] = clamped
 	if ConfigManager:
 		ConfigManager.set_volume(channel, clamped)
-	_apply_volumes_to_players()
+	_apply_volumes_to_buses()
 
 
 func get_volume(channel: String) -> float:

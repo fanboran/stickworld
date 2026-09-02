@@ -11,6 +11,7 @@ extends CanvasLayer
 
 const _DebugUiInspectorScript: GDScript = preload("res://modules/ui_global/scripts/debug_ui_inspector.gd")
 const _FpsCounterScript: GDScript = preload("res://modules/ui_global/scripts/hud/fps_counter.gd")
+const _NotificationFeedScript: GDScript = preload("res://modules/ui_global/scripts/hud/notification_feed.gd")
 
 # UIAPI 是全局 class_name，无需 preload（模式枚举经映射器注入，不依赖 PlayerControlAPI）
 
@@ -24,6 +25,8 @@ const _FpsCounterScript: GDScript = preload("res://modules/ui_global/scripts/hud
 var modal_stack: UIModalStack = null
 ## FPS 计数器（设置面板 video/show_fps 开关驱动）
 var _fps_counter: Label = null
+## 通知流（左下堆叠 feed，EventBus ui_notification 驱动）
+var _notification_feed: NotificationFeed = null
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -32,6 +35,7 @@ func _ready() -> void:
 	add_to_group("ui_root")
 	_apply_slot_z_orders()
 	_setup_modal_stack()
+	_setup_notification_feed()
 	_bind_event_bus()
 	_apply_theme()
 	_setup_ui_inspector()
@@ -59,6 +63,20 @@ func _setup_modal_stack() -> void:
 ## 取模态栈（供 GameRoot / StickKit 等调用）
 func get_modal_stack() -> UIModalStack:
 	return modal_stack
+
+
+## 装配通知流（左下堆叠 feed，挂 HudOverlay 槽；无该槽的裸环境直接挂 UIRoot）
+func _setup_notification_feed() -> void:
+	var feed: NotificationFeed = _NotificationFeedScript.new()
+	feed.name = "NotificationFeed"
+	if not add_to_slot("HudOverlay", feed):
+		add_child(feed)
+	_notification_feed = feed
+
+
+## 取通知流（供测试/调试调用）
+func get_notification_feed() -> NotificationFeed:
+	return _notification_feed
 
 
 ## F3 调试模式 UI 名称检查器（挂最上层，DebugApi 可见时生效）
@@ -194,6 +212,6 @@ func add_to_slot(slot_name: String, node: Node) -> bool:
 # ─────────────────────────────── 通知 ────────────────────────────────
 
 func _on_notification(title: String, body: String, level: String) -> void:
-	# P0 阶段：转发给 GlobalHUD 显示
-	if global_hud and global_hud.has_method("show_notification"):
-		global_hud.show_notification(title, body, level)
+	# 转发左下堆叠 feed（多通知并存，自动过期，04-游戏内HUD §六）
+	if _notification_feed != null:
+		_notification_feed.push_notification(title, body, level)

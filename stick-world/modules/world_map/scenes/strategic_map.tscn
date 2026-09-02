@@ -1,10 +1,12 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://modules/world_map/scripts/strategic_map_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_renderer.gd" id="2_renderer"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_camera.gd" id="3_camera"]
 [ext_resource type="Script" path="res://modules/world_map/api.gd" id="4_api"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/l3_zoom_indicator.gd" id="5_hud"]
+[ext_resource type="Script" path="res://modules/world_map/ui/granularity_indicator.gd" id="6_gind"]
+[ext_resource type="Script" path="res://modules/world_map/ui/settlement_tooltip.gd" id="7_tip"]
 
 [node name="StrategicMap" type="CanvasLayer"]
 
@@ -25,3 +27,11 @@ script = ExtResource("4_api")
 [node name="ZoomIndicator" type="Control" parent="."]
 script = ExtResource("5_hud")
 visible = false
+
+[node name="GranularityIndicator" type="PanelContainer" parent="."]
+script = ExtResource("6_gind")
+visible = false
+view_level = "L1"
+
+[node name="SettlementTooltip" type="PanelContainer" parent="."]
+script = ExtResource("7_tip")

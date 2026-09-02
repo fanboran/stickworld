@@ -69,6 +69,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_strategic_map_p0.tscn"
 	"tests/integration/test_l3_strategic_map.tscn"
 	"tests/integration/test_l2_strategic_map.tscn"
+	"tests/integration/test_strategic_map_ui.tscn"
 	"tests/integration/test_squad_travel.tscn"
 	"tests/integration/test_melee_combat.tscn"
 	"tests/integration/test_combat_feedback.tscn"

@@ -28,6 +28,9 @@ var data: L2WorldData = null
 ## 底部 HUD（缩放条 + 显示模式按钮，CanvasLayer 直接子）
 var _hud: Control = null
 
+## 粒度指示器（CanvasLayer 直接子节点，显隐由本控制器同步；open 时更新文案）
+var _indicator: GranularityIndicator = null
+
 var _current_region_id: String = ""
 
 
@@ -52,6 +55,11 @@ func _auto_find_components() -> void:
 			map_renderer = child
 		elif child is MapCamera and map_camera == null:
 			map_camera = child
+	# 指示器挂 CanvasLayer 直下（Control 挂 Node2D 下 anchor 参照矩形为 0 会跑位）
+	if _indicator == null:
+		var layer := get_parent()
+		if layer != null:
+			_indicator = layer.get_node_or_null("GranularityIndicator") as GranularityIndicator
 	if _hud == null:
 		var layer := get_parent()
 		if layer != null:
@@ -70,9 +78,7 @@ func _input(event: InputEvent) -> void:
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_ESCAPE:
 			# ESC 返回 L3（地图整体仍开着，不关地图、不恢复场景图输入）
-			visible = false
-			if _hud != null:
-				_hud.visible = false
+			set_view_visible(false)
 			back_requested.emit()
 			get_viewport().set_input_as_handled()
 
@@ -97,16 +103,12 @@ func _handle_l1_click(screen_pos: Vector2) -> void:
 		l1_view.back_requested.connect(_on_l1_back)
 	# 隐藏 L2，打开 L1（L1 ESC 经 back_requested 恢复本视图）
 	l1_view.call("open_l1", gl)
-	visible = false
-	if _hud != null:
-		_hud.visible = false
+	set_view_visible(false)
 
 
 ## L1 返回（ESC）：恢复 L2 显示
 func _on_l1_back() -> void:
-	visible = true
-	if _hud != null:
-		_hud.visible = true
+	set_view_visible(true)
 
 
 ## 打开指定 L2 地区视图（region_id 形如 region_001）
@@ -147,6 +149,21 @@ func open(region_id: String) -> void:
 	visible = true
 	if _hud != null:
 		_hud.visible = true
+	# 粒度指示：L2 层级 + 当前地区 ID（提示文案由组件按 view_level 生成）
+	if _indicator != null:
+		var rid: String = data.region_id if data != null and not data.region_id.is_empty() else _current_region_id
+		_indicator.set_view("L2", rid)
+		_indicator.visible = true
+
+
+## 视图整体显隐（Content + HUD + 指示器）——L3 控制器联动关闭/恢复时调用，
+## 与 open() 内的显隐逻辑保持一致（M 关闭重开、下钻切换都同步粒度指示器）
+func set_view_visible(v: bool) -> void:
+	visible = v
+	if _hud != null:
+		_hud.visible = v
+	if _indicator != null:
+		_indicator.visible = v
 
 
 func get_current_region_id() -> String:

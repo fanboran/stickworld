@@ -1974,7 +1974,8 @@ function exportTxt(){ // 编辑闭环：导出完整源文件（状态/依赖/�
   +(n.prs&&n.prs.length?" | 前置="+n.prs.join(","):"")
   +(n.domain&&n.domain.length?" | 域="+(Array.isArray(n.domain)?n.domain.join(","):n.domain):"")+(n.tree?" | 树="+n.tree:"")
   +(n.x!=null?" | 位置="+n.px.toFixed(1)+","+n.py.toFixed(1):"")  // 「自动重排」后 x 置 null，不写位置＝保留 dagre 自由态
-  +(n.exempt?" | 豁免=1":"")+(n.doc?" | 文档="+n.doc:"")+(n.note?" | 注="+n.note:"")+"\n";});
+  +(n.exempt?" | 豁免=1":"")+(n.tier?" | 级="+n.tier:"")+(n.claim?" | 认领="+n.claim:"")
+  +(n.doc?" | 文档="+n.doc:"")+(n.note?" | 注="+n.note:"")+"\n";});
  const a=document.createElement("a");
  a.href=URL.createObjectURL(new Blob([out],{type:"text/plain;charset=utf-8"}));
  a.download="任务依赖图.txt";a.click();}

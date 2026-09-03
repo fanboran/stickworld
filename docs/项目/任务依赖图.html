@@ -4819,6 +4819,8 @@ function submitTaskForm(){
   const tag="已拆解为 "+id;
   if(!(pn.note||"").includes(tag))pn.note=(pn.note?pn.note+"；":"")+tag;
   markEdit(planParent);measureCards();rebuildView();}
+ closeRel();  // 拆解表单关闭浮窗（若开）
+}
 function doRelease(id){const n=byId[id];if(!n)return;
  if(n.claim){log_event("release",id,n.claim);}
  n.claim="";markEdit(id);showPanel(n);dirty=true;}

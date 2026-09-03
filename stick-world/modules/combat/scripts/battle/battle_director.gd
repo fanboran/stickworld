@@ -32,8 +32,8 @@ func set_formation_system(formation: Node) -> void:
 	_formation_system = formation
 
 
-## 每帧裁剪已释放的战斗实例（BattleInstance 结束时会 queue_free）。
-## 修复：此前 _battles 只 append 永不清理，结束战斗残留为失效引用。
+## 兜底裁剪已释放的战斗实例（正常路径经 battle_finished 信号在结束时及时注销；
+## 此处仅覆盖异常路径：外部直接 free、场景树整体卸载等漏发信号的场景）。
 func _process(_delta: float) -> void:
 	if _battles.is_empty():
 		return
@@ -68,7 +68,14 @@ func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array) 
 	anchor.add_child(bi)
 	bi.start()
 	_battles.append(bi)
+	# 订阅结束信号：战斗结束时（_end 内、queue_free 前）及时注销本实例，防 _battles 膨胀
+	bi.battle_finished.connect(_on_battle_finished)
 	return bi
+
+
+## 战斗结束回调（BattleInstance.battle_finished）：及时注销，防 _battles 残留失效引用
+func _on_battle_finished(battle: Node) -> void:
+	_battles.erase(battle)
 
 
 ## 是否有进行中的战斗
@@ -88,7 +95,7 @@ func get_active_battles() -> Array:
 	return result
 
 
-## 获取所有战斗（含已结束）
+## 获取当前登记的所有战斗（结束的实例经 battle_finished 信号及时注销，不再保留）
 func get_all_battles() -> Array:
 	return _battles
 

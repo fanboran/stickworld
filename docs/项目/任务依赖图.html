@@ -5,8 +5,10 @@
  :root{--bg:#0f1216;--panel:#161b22;--panel2:#1c222b;--line:#2a313a;--txt:#e6edf3;--sub:#9aa7b4;--acc:#58a6ff}
  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;font-size:13px}
- #bar{position:fixed;inset:0 0 auto 0;height:46px;display:flex;align-items:center;gap:8px;
-   padding:0 12px;background:#161b22ee;backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:20}
+ #bar{position:fixed;inset:0 0 auto 0;display:flex;flex-direction:column;gap:5px;
+   padding:7px 12px 8px;background:#161b22ee;backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:20}
+ #bar .row{display:flex;align-items:center;gap:8px;min-width:0}
+ #barRow2{overflow-x:auto;scrollbar-width:thin}
  #bar b{font-size:14px;letter-spacing:.5px;white-space:nowrap}
  #bar .btn{background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--txt);
    padding:5px 11px;cursor:pointer;font-size:12px;white-space:nowrap}
@@ -14,16 +16,17 @@
  #search{background:#0d1117;border:1px solid var(--line);border-radius:6px;color:var(--txt);
    padding:5px 10px;font-size:12px;width:160px;outline:none}
  #search:focus{border-color:var(--acc)}
- #legend{display:flex;gap:7px;font-size:11px;align-items:center;flex-wrap:wrap}
+ #legend{display:flex;gap:7px;font-size:11px;align-items:center;flex-shrink:0}
+ #legend>span{white-space:nowrap;flex-shrink:0}
  .sw{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:-1px}
- #lanes{display:flex;gap:5px;flex-wrap:wrap}
+ #lanes{display:flex;gap:5px;flex-shrink:0}
  .lchip{font-size:11px;padding:3px 9px;border-radius:10px;border:1px solid var(--line);cursor:pointer;
-   background:var(--panel2);user-select:none;white-space:nowrap}
+   background:var(--panel2);user-select:none;white-space:nowrap;flex-shrink:0}
  .lchip.off{opacity:.35;text-decoration:line-through}
  #checkChip{font-size:11px;padding:3px 9px;border-radius:10px;cursor:pointer}
  #readyChip,#critChip{font-size:11px;padding:3px 9px;border-radius:10px;cursor:pointer;
    background:#1c222b;border:1px solid var(--line);white-space:nowrap}
- #panel{position:fixed;top:56px;right:10px;width:320px;max-height:72vh;overflow:auto;
+ #panel{position:fixed;top:92px;right:10px;width:320px;max-height:72vh;overflow:auto;
    background:#161b22f5;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
    font-size:12.5px;display:none;z-index:20;line-height:1.75;box-shadow:0 8px 30px #0009}
  #panel h3{margin:0 0 4px;font-size:14.5px}
@@ -44,7 +47,7 @@
    background:#161b22cc;border:1px solid var(--line);border-radius:6px;padding:3px 8px}
  canvas#cv{display:block;position:fixed;inset:0}
 </style></head><body>
-<div id="bar"><b>任务依赖图</b>
+<div id="bar"><div class="row"><b>任务依赖图</b>
  <input id="search" placeholder="搜索 id / 名称 / 备注…">
  <button class="btn" onclick="locateActive()">定位当前</button>
  <button class="btn" onclick="fitAll()">适配全图</button>
@@ -56,8 +59,11 @@
  <span id="checkChip"></span>
  <span id="readyChip" title="就绪集=前置全齐可立即派活；点击只高亮就绪节点（调度视角）"></span>
  <span id="critChip" title="关键路径=未完成子图最长链；点击高亮链上节点（加并发只能压非关键路径）"></span>
+</div>
+<div class="row" id="barRow2">
  <span id="legend"></span>
- <span id="lanes"></span>
+ <span id="lanes" title="单击=显隐该线 · 双击=聚拢到画面中央（前沿列左/后沿列右）"></span>
+</div>
 </div>
 <div id="panel"></div>
 <div id="msgs"></div>
@@ -3902,6 +3908,7 @@ const ACTIVE=new Set(["进行中","待验收","完成"]);
 const COL={"完成":"#3fb950","待验收":"#58a6ff","进行中":"#4c8dff","可开工":"#2dd4bf","阻塞":"#d29922","冻结":"#8b949e","放弃":"#6e7681"};
 const LANE_COL=["#58a6ff","#bc8cff","#39c5cf","#e3b341","#ff7b72","#7ee787","#f778ba","#79c0ff"];
 const FRAME_PAD=18,FRAME_TOP=34;
+const BAR_H=80;  // 顶栏双排总高：画布内容/分隔墙/聚拢标注从这条线以下开始
 let dpr=1,VW=0,VH=0;
 let nodes=DATA.nodes,edges=DATA.edges,lanes=DATA.lanes;
 const manual0=nodes.some(n=>n.x!=null);
@@ -4121,8 +4128,8 @@ function drawFocusLines(){if(!focusLane||!focusLines)return;
  const draw=(wx,color,label)=>{const sx=wx*view.k+view.x;
   if(sx<-20||sx>VW+20)return;
   ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash([8,5]);
-  ctx.beginPath();ctx.moveTo(sx,46);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle=color;ctx.fillText(label,sx+8,64);};
+  ctx.beginPath();ctx.moveTo(sx,BAR_H);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=color;ctx.fillText(label,sx+8,BAR_H+16);};
  if(focusLines.pre!=null)draw(focusLines.pre,"#d29922","◤ 前沿（外部前置）");
  if(focusLines.post!=null)draw(focusLines.post,"#2dd4bf","后继（外部被依赖）◢");
  ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
@@ -4141,16 +4148,16 @@ function enforceDivide(){if(divideX==null)return;
 function drawDivide(){if(!showDivide||divideX==null)return;
  const sx=divideX*view.k+view.x;
  ctx.setTransform(dpr,0,0,dpr,0,0);
- ctx.fillStyle="#3fb9500a";ctx.fillRect(0,46,sx,VH-46);
+ ctx.fillStyle="#3fb9500a";ctx.fillRect(0,BAR_H,sx,VH-BAR_H);
  ctx.strokeStyle="#3fb95066";ctx.lineWidth=1.5;ctx.setLineDash([10,6]);
- ctx.beginPath();ctx.moveTo(sx,46);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
+ ctx.beginPath();ctx.moveTo(sx,BAR_H);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
  ctx.strokeStyle=divideHover?"#3fb950":"#3fb95066";ctx.lineWidth=divideHover?2.5:1.5;
- ctx.setLineDash([10,6]);ctx.beginPath();ctx.moveTo(sx,46);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
+ ctx.setLineDash([10,6]);ctx.beginPath();ctx.moveTo(sx,BAR_H);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
  ctx.fillStyle="#3fb950";fontSmall();ctx.textAlign="left";
- ctx.fillText("✂ 已完成（左）",Math.max(4,sx-110),60);
- ctx.fillStyle="#d29922";ctx.fillText("未完成（右）",sx+10,60);
+ ctx.fillText("✂ 已完成（左）",Math.max(4,sx-110),BAR_H+14);
+ ctx.fillStyle="#d29922";ctx.fillText("未完成（右）",sx+10,BAR_H+14);
  ctx.fillStyle="#9aa7b4";ctx.font='10px sans-serif';
- ctx.fillText("⟷ 可拖动：右区整体平移·两侧独立",Math.max(4,sx-110),74);
+ ctx.fillText("⟷ 可拖动：右区整体平移·两侧独立",Math.max(4,sx-110),BAR_H+28);
  ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
 function drawMini(){mctx.setTransform(1,0,0,1,0,0);mctx.clearRect(0,0,180,120);
  const g=graphBBox();if(!g)return;
@@ -4170,11 +4177,11 @@ function graphBBox(){const vis=VN.filter(n=>!focusLane||n._f!=="other");
   w:Math.max(...xs.map((v,i)=>v+vis[i].cw))-Math.min(...xs)+120,
   h:Math.max(...ys.map((v,i)=>v+vis[i].ch))-Math.min(...ys)+140};}
 function centerOn(wx,wy,k){if(k)view.k=k;
- view.x=VW/2-wx*view.k;view.y=Math.max(46,VH/2-wy*view.k);dirty=true;}
+ view.x=VW/2-wx*view.k;view.y=Math.max(BAR_H,VH/2-wy*view.k);dirty=true;}
 function fitAll(){const g=graphBBox();
  view.k=Math.min((VW-30)/g.w,(VH-100)/g.h,1.2);
  view.x=(VW-g.w*view.k)/2-g.minX*view.k;
- view.y=Math.max(46,(VH-g.h*view.k)/2)-g.minY*view.k;dirty=true;}
+ view.y=Math.max(BAR_H,(VH-g.h*view.k)/2)-g.minY*view.k;dirty=true;}
 function locateActive(){const act=VN.filter(n=>ACTIVE.has(n.status)||n.status==="可开工");
  const t=act.length?act:VN;
  const xs=t.map(n=>n.px+n.cw/2),ys=t.map(n=>n.py+n.ch/2);

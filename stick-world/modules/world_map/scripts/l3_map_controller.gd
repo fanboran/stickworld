@@ -58,17 +58,15 @@ func set_l2_view(view: L2MapController) -> void:
 
 
 func _auto_find_components() -> void:
-	for child in get_children():
-		if child is L3MapRenderer and map_renderer == null:
-			map_renderer = child
-		elif child is MapCamera and map_camera == null:
-			map_camera = child
+	if map_renderer == null:
+		map_renderer = MapControllerUtil.find_child(self, func(c: Node) -> bool: return c is L3MapRenderer) as L3MapRenderer
+	if map_camera == null:
+		map_camera = MapControllerUtil.find_child(self, func(c: Node) -> bool: return c is MapCamera) as MapCamera
 	# 缩放指示条 + 粒度指示器（CanvasLayer 直接子节点；Control 挂 Node2D 下 anchor 会跑位）
-	var layer := get_parent()
-	if _zoom_indicator == null and layer != null:
-		_zoom_indicator = layer.get_node_or_null("ZoomIndicator")
-	if _indicator == null and layer != null:
-		_indicator = layer.get_node_or_null("GranularityIndicator") as GranularityIndicator
+	if _zoom_indicator == null:
+		_zoom_indicator = MapControllerUtil.find_sibling(self, "ZoomIndicator")
+	if _indicator == null:
+		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
 
 
 func _input(event: InputEvent) -> void:

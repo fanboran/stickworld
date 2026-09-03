@@ -36,22 +36,22 @@ func _ready() -> void:
 	_draw_control.name = "DebugDrawControl"
 	_draw_control.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_draw_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_draw_control.set_script(load("res://modules/debug_GUI/scripts/debug_draw_control.gd"))
+	_draw_control.set_script(load("res://modules/debug_gui/scripts/debug_draw_control.gd"))
 	add_child(_draw_control)
 	# 创建可拖动调试面板
 	_debug_panel = Control.new()
 	_debug_panel.name = "DebugPanel"
-	_debug_panel.set_script(load("res://modules/debug_GUI/scripts/debug_panel.gd"))
+	_debug_panel.set_script(load("res://modules/debug_gui/scripts/debug_panel.gd"))
 	add_child(_debug_panel)
 	# 创建实体信息文本框
 	_entity_info_panel = Control.new()
 	_entity_info_panel.name = "DebugInfoPanel"
-	_entity_info_panel.set_script(load("res://modules/debug_GUI/scripts/debug_info_panel.gd"))
+	_entity_info_panel.set_script(load("res://modules/debug_gui/scripts/debug_info_panel.gd"))
 	add_child(_entity_info_panel)
 	# 创建交互式调试工具面板（F4：特效试放/市场/环境/建筑）
 	_tools_panel = Control.new()
 	_tools_panel.name = "DebugToolsPanel"
-	_tools_panel.set_script(load("res://modules/debug_GUI/scripts/debug_tools_panel.gd"))
+	_tools_panel.set_script(load("res://modules/debug_gui/scripts/debug_tools_panel.gd"))
 	add_child(_tools_panel)
 	# 连接 DebugApi 信号
 	if DebugApi != null:

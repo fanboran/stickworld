@@ -7,17 +7,6 @@ extends BuildingExterior
 ## 后续替换方向：木箱贴图（木板纹+包角）、麻袋手绘、货物种类随库存变化。
 
 
-func _get_palette() -> Dictionary:
-	return {
-		"C_THATCH_BACK": Color(0.60, 0.45, 0.24),
-		"C_THATCH_MAIN": Color(0.74, 0.57, 0.31),
-		"C_THATCH_LEFT": Color(0.66, 0.50, 0.27),
-		"C_WOOD_FRONT": Color(0.46, 0.32, 0.18),
-		"C_WOOD_BACK": Color(0.34, 0.24, 0.14),
-		"C_WOOD_BEAM": Color(0.38, 0.27, 0.16),
-		"C_WOOD_STRUT": Color(0.41, 0.29, 0.17),
-	}
-
 
 func _post_build(ext: Node2D) -> void:
 	var pal := _get_palette()

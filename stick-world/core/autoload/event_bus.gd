@@ -89,9 +89,9 @@ extends Node
 # 附身结束：PossessionInterface -> UI、Units、TimeManager
 @warning_ignore("unused_signal") signal possession_ended(entity)
 
-# ─────────────────────────────── 调试可见性（debug_GUI → 生产解耦）──────────────────────────────
+# ─────────────────────────────── 调试可见性（debug_gui → 生产解耦）──────────────────────────────
 # 调试覆盖层显隐广播：生产代码（如 resource_node 调试标签）订阅此信号，
-# 避免生产模块直接依赖 debug_GUI autoload（2026-08 修复依赖反转）。
+# 避免生产模块直接依赖 debug_gui autoload（2026-08 修复依赖反转）。
 @warning_ignore("unused_signal") signal debug_visibility_changed(visible: bool)
 
 # ─────────────────────────────── 室内 / 建筑交互（§5.2）──────────────────────────────

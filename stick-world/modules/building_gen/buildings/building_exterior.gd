@@ -6,15 +6,27 @@ extends Building
 ## 三个建筑脚本原先 133 行逐字节相同（仅 7 个颜色常量不同），
 ## 现统一为：本基类承载全部节点装配/纹理生成/helper 逻辑，子类只提供调色板。
 ##
-## 子类实现：
-##   func _get_palette() -> Dictionary:
-##       return {"C_THATCH_BACK": Color(...), "C_THATCH_MAIN": ..., "C_THATCH_LEFT": ...,
-##               "C_WOOD_FRONT": ..., "C_WOOD_BACK": ..., "C_WOOD_BEAM": ..., "C_WOOD_STRUT": ...}
+## 子类提供：
+##   场景根节点注入 palette（BuildingPalette .tres，7 色，键名见 BuildingPalette）。
 
 
-## 子类调色板（7 色，键名见上方说明）
+## 子类调色板（BuildingPalette .tres；未注入时构建外观将告警并跳过）
+@export var palette: BuildingPalette
+
+
+## 调色板字典视图（消费点按键取色的统一入口）
 func _get_palette() -> Dictionary:
-	return {}
+	if palette == null:
+		return {}
+	return {
+		"C_THATCH_BACK": palette.C_THATCH_BACK,
+		"C_THATCH_MAIN": palette.C_THATCH_MAIN,
+		"C_THATCH_LEFT": palette.C_THATCH_LEFT,
+		"C_WOOD_FRONT": palette.C_WOOD_FRONT,
+		"C_WOOD_BACK": palette.C_WOOD_BACK,
+		"C_WOOD_BEAM": palette.C_WOOD_BEAM,
+		"C_WOOD_STRUT": palette.C_WOOD_STRUT,
+	}
 
 
 # 纹理尺寸
@@ -88,15 +100,15 @@ func _build_exterior() -> void:
 	var right_edge: float = float(width) * 32.0 - EXT_OFFSET_X
 
 	# 生成纹理
-	var tex_bw   = TextureGenApi.make_straw_thatch(BW_TEX_W, BW_TEX_H, pal.C_THATCH_BACK)
-	var tex_bp   = TextureGenApi.make_wood_pillar(BP_TEX_W, BP_TEX_H, pal.C_WOOD_BACK)
-	var tex_fp   = TextureGenApi.make_wood_pillar(FP_TEX_W, FP_TEX_H, pal.C_WOOD_FRONT)
-	var tex_bm   = TextureGenApi.make_wood_pillar(BM_TEX_W, BM_TEX_H, pal.C_WOOD_BEAM)
-	var tex_vs   = TextureGenApi.make_wood_pillar(VS_TEX_W, VS_TEX_H, pal.C_WOOD_BEAM)
-	var tex_ss   = TextureGenApi.make_wood_pillar(SS_TEX_W, SS_TEX_H, pal.C_WOOD_STRUT)
+	var tex_bw   = TextureGenAPI.make_straw_thatch(BW_TEX_W, BW_TEX_H, pal.C_THATCH_BACK)
+	var tex_bp   = TextureGenAPI.make_wood_pillar(BP_TEX_W, BP_TEX_H, pal.C_WOOD_BACK)
+	var tex_fp   = TextureGenAPI.make_wood_pillar(FP_TEX_W, FP_TEX_H, pal.C_WOOD_FRONT)
+	var tex_bm   = TextureGenAPI.make_wood_pillar(BM_TEX_W, BM_TEX_H, pal.C_WOOD_BEAM)
+	var tex_vs   = TextureGenAPI.make_wood_pillar(VS_TEX_W, VS_TEX_H, pal.C_WOOD_BEAM)
+	var tex_ss   = TextureGenAPI.make_wood_pillar(SS_TEX_W, SS_TEX_H, pal.C_WOOD_STRUT)
 	var tex_sb   = _make_slanted_beam_tex(pal.C_WOOD_BEAM)
-	var tex_th_main  = TextureGenApi.make_straw_thatch(64, 64, pal.C_THATCH_MAIN)
-	var tex_th_left  = TextureGenApi.make_straw_thatch(64, 64, pal.C_THATCH_LEFT)
+	var tex_th_main  = TextureGenAPI.make_straw_thatch(64, 64, pal.C_THATCH_MAIN)
+	var tex_th_left  = TextureGenAPI.make_straw_thatch(64, 64, pal.C_THATCH_LEFT)
 
 	# ── L1 后景墙（左端固定 + 右端锚右边界 + 中间拉伸）──
 	var l1 := _nc("L1_BackWall", ext)
@@ -202,4 +214,4 @@ func _make_slanted_beam_tex(color: Color) -> ImageTexture:
 	var slant  := 64.0
 	var height := 110.0
 	var length := sqrt(slant * slant + height * height)
-	return TextureGenApi.make_wood_pillar(23, ceili(length), color)
+	return TextureGenAPI.make_wood_pillar(23, ceili(length), color)

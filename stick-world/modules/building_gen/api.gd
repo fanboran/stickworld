@@ -8,7 +8,7 @@ extends Node
 ## construction/world 等模块可用 is/as 判型并读写 Building.State 状态；
 ## 除该类型外仍禁止引用本模块内部脚本（先例：combat/api.gd 的 TargetFinder 契约）。
 ##
-## 材质纹理生成已迁移至 modules/texture_gen/，详见 TextureGenApi。
+## 材质纹理生成已迁移至 modules/texture_gen/，详见 TextureGenAPI。
 
 # ===== 公共信号 =====
 

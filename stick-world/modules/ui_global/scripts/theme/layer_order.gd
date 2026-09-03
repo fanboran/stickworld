@@ -13,7 +13,7 @@ extends RefCounted
 const HUD := 1
 ## 世界加载覆盖层（game_root 下独立 CanvasLayer，须高于 UIRoot）
 const WORLD_LOADING := 10
-## 调试覆盖层（debug_GUI，F3）
+## 调试覆盖层（debug_gui，F3）
 const DEBUG_OVERLAY := 20
 ## 战略图 L1（Tab）
 const STRATEGIC_L1 := 100

@@ -20,3 +20,12 @@ static func full_rect(script: GDScript, node_name: String) -> Control:
 	c.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	c.grow_vertical = Control.GROW_DIRECTION_BOTH
 	return c
+
+
+## 创建带脚本的角落 HUD 部件（不自设 anchor——由部件脚本自身 _ready 决定锚定，
+## 并挂到 UIRoot.add_to_slot 的有尺寸槽）。与 full_rect 的分工见头注释。
+static func widget(script: GDScript, node_name: String) -> Control:
+	var c := Control.new()
+	c.set_script(script)
+	c.name = node_name
+	return c

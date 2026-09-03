@@ -32,7 +32,7 @@
 | `environment`          | 跨场景天空/天气/光照/震动              | 🟡 仅光照      |
 | `player_control`       | 输入分发 + 框选/编队 + 附身           | ✅ P0.7 完整   |
 | `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
-| `debug_GUI`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
+| `debug_gui`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
 
 > **已废弃**：~~`modules/world_map/scripts/world_map_controller.gd`~~ 已删除（重构为 `strategic_map_controller.gd`；P0 新 0.9 进一步重写为 L1 单层，旧三级粒度框架弃用，见 [待办事项.md](../../docs/项目/待办事项.md) 高优先级）。
 
@@ -461,7 +461,7 @@ UIRoot
 
 ***
 
-#### `modules/debug_GUI/` — 调试覆盖层
+#### `modules/debug_gui/` — 调试覆盖层
 
 **职责**：F3 切换的调试可视化（F3 默认开启）。
 
@@ -942,7 +942,7 @@ config/
 | `BalanceConfig` | `core/autoload/balance_config.gd`      | 平衡变量加载（`balance_changed` 热重载） | 🟡 预留     |
 | `AudioManager`  | `core/services/audio_manager.gd`       | 音频播放（P1 音效实现时接线）            | 🟡 预留     |
 | `SaveManager`   | `core/autoload/save_manager.gd`        | 存档/读档（SQLite）                | ✅ 活跃     |
-| `DebugApi`      | `modules/debug_GUI/api.gd`             | 调试覆盖层管理                     | ✅ 活跃     |
+| `DebugApi`      | `modules/debug_gui/api.gd`             | 调试覆盖层管理                     | ✅ 活跃     |
 
 **初始化顺序**（自上而下，project.godot 声明序）：`EventBus → WorldState → ConfigManager → TimeManager → BalanceConfig → AudioManager → SaveManager → DebugApi`
 

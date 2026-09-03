@@ -26,7 +26,7 @@ var _debug_label: Label = null
 func _ready() -> void:
 	add_to_group("resource_node")
 	_apply_visual()
-	# 2026-08 修复依赖反转：经 EventBus 订阅调试可见性（生产代码不再依赖 debug_GUI autoload）
+	# 2026-08 修复依赖反转：经 EventBus 订阅调试可见性（生产代码不再依赖 debug_gui autoload）
 	if EventBus != null and EventBus.has_signal("debug_visibility_changed"):
 		EventBus.debug_visibility_changed.connect(_update_debug_visibility)
 

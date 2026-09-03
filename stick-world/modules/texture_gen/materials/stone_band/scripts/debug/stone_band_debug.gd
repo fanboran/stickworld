@@ -1,23 +1,9 @@
 @tool
-extends Node2D
+extends MaterialDebugPanel
 ## 蓝灰石檐材质调试场景
 
-var _sprite: Sprite2D
-var _material: ShaderMaterial
-
-
-func _ready() -> void:
-	_sprite = get_node_or_null("Sprite2D") as Sprite2D
-	if _sprite == null:
-		push_warning("[StoneBandDebug] 缺少 Sprite2D 节点")
-		return
-
-	_material = _sprite.material as ShaderMaterial
-	if _material == null:
-		push_warning("[StoneBandDebug] Sprite2D 缺少 ShaderMaterial")
-		return
-
-	_build_ui()
+func warning_tag() -> String:
+	return "StoneBandDebug"
 
 
 func _build_ui() -> void:
@@ -76,39 +62,3 @@ func _build_ui() -> void:
 	_add_slider(vbox, "color_block_blend", 0.0, 1.0, 0.5, 0.05)
 
 
-func _add_slider(
-	parent: Control, label_text: String, min_v: float, max_v: float,
-	default_v: float, step: float, uniform_name: String = "", component: int = -1
-) -> HSlider:
-	var label := Label.new()
-	label.text = "%s: %s" % [label_text, str(default_v)]
-	label.name = "Label_" + label_text.replace(".", "_")
-	parent.add_child(label)
-
-	var slider := HSlider.new()
-	slider.name = label_text.replace(".", "_")
-	slider.min_value = min_v
-	slider.max_value = max_v
-	slider.value = default_v
-	slider.step = step
-	slider.custom_minimum_size = Vector2(0, 24)
-
-	var target := uniform_name if uniform_name != "" else label_text
-
-	slider.value_changed.connect(func(v: float) -> void:
-		label.text = "%s: %.3f" % [label_text, v]
-		if component < 0:
-			_material.set_shader_parameter(target, v)
-		else:
-			var vec = _material.get_shader_parameter(target)
-			vec[component] = v
-			_material.set_shader_parameter(target, vec)
-	)
-	parent.add_child(slider)
-	return slider
-
-
-func _separator() -> HSeparator:
-	var sep := HSeparator.new()
-	sep.custom_minimum_size = Vector2(0, 8)
-	return sep

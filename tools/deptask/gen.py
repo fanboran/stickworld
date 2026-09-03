@@ -1770,6 +1770,23 @@ function buildDash(){const P=DATA.producer||{},d=document.getElementById("dash")
   +P.gates.map(g=>"<div class='gate'><span class='nm' onclick='jumpTo(\""+g.id+"\")' title='"+g.id+"'>"+g.name
    +"</span><span class='bar'><i style='width:"+(g.total?Math.round(100*g.done/g.total):0)+"%'></i></span><span class='pc'>"
    +g.done+"/"+g.total+"</span></div>").join("")+"</div>");
+ // 👥 AI 负载（真实认领=字段 + 调度日志统计）
+ const claimedNow=nodes.filter(n=>n.claim&&n.status!=="完成");
+ const byAg={};
+ (DATA.simlog&&DATA.simlog.events||[]).forEach(e=>{
+  if(!e.agent||e.agent==="unknown")return;
+  byAg[e.agent]=byAg[e.agent]||{done:0,claims:0};
+  if(e.action==="done")byAg[e.agent].done++;
+  if(e.action==="claim")byAg[e.agent].claims++;
+ });
+ let agCard="<div class='card'><h4>👥 AI 负载（谁在做什么）</h4>";
+ agCard+="<div class='laneHead' style='margin:4px 14px 2px'>◉ 认领中（真实认领）</div>";
+ agCard+=claimedNow.length?claimedNow.map(n=>tch(n," <span style='color:var(--amber)'>◉ "+n.claim+"</span>")).join(""):"<div class='ph' style='margin:4px 14px'>无认领中任务——用 claim <id> --by <AI名> 认领</div>";
+ if(Object.keys(byAg).length){
+  agCard+="<div class='laneHead' style='margin:8px 14px 2px'>调度日志统计</div>";
+  agCard+=Object.keys(byAg).map(a2=>"<div class='grow'><span class='dot' style='background:"+agentColor(a2)+"'></span><span class='nm'>"+a2+"</span><span style='color:var(--dim2);font:600 10px "+MONO+"'>完成 "+byAg[a2].done+" · 认领 "+byAg[a2].claims+"</span></div>").join("");}
+ agCard+="</div>";
+ R.push(agCard);
  const ws=(chk.warns||[]).slice(0,12),es=chk.errors||[];
  R.push("<div class='card'><h4>⚠ 审计线索</h4>"
   +(es.length?es.map(e=>"<div class='warn'>"+e+"</div>").join(""):"")

@@ -40,8 +40,8 @@
 | StickmanState | `core/entities/stickman_state.gd` | ⚠️ 需更新 | Race 枚举与 Excel 不一致：代码为 PLAINS/VOLCANIC/SPRING/DESERT/OCEAN/FOREST/TUNDRA/MUTANT，Excel 已改为 平原/火山/雪地/巨人/术师人/矮人/半人马/羽翼 8 原生种族；Variant 枚举应改为 base_template 字段（未完成） |
 | OrganizationState | `core/entities/organization_state.gd` | ✅ 完整 | 五层级、五标签、自主权等级、编制模板、士气阈值 |
 | BattleState | `core/entities/battle_state.gd` | ⚠️ 基础 | 仅定义了状态枚举+基本字段 |
-| ResourceState | `core/entities/resource_state.gd` | ✅ 已更新 | food 相关已删除（grep 零匹配） |
-| TechnologyState | `core/entities/technology_state.gd` | ⚠️ 需更新 | 代码仍是 AVAILABLE/RESEARCHING 状态机 + research_progress/research_cost 字段，未改为征服获得 |
+| ResourceState | 无独立状态类：资源定义在 `config/resources/resources.tres`，运行时库存与结算在 `modules/resources/` | ✅ 已更新 | food 相关已删除（grep 零匹配） |
+| TechnologyState | 无实体类（科技系统模块待重建） | ⚠️ 待落地 | 设计为征服获得即解锁、无状态机（见 04-科技系统.md）；实体类随科技系统阶段 1 重建实现 |
 | RegionState | `core/entities/region_state.gd` | ✅ 完整 | 含控制度、基建、建筑/组织/战斗引用。文化同化字段暂不用 |
 | ProjectState | `core/entities/project_state.gd` | ✅ 完整 | 六种项目类型、子项目分解、资源分配 |
 | SupplyChainState | `core/entities/supply_chain_state.gd` | ✅ 完整 | 路线节点、承运组织、效率追踪 |
@@ -51,14 +51,14 @@
 | 文件 | 实现内容 |
 |------|----------|
 | `api.gd` | 地块查询、归属操作、地图模式切换、相机控制、势力颜色——全部实现 |
-| `world_map_controller.gd` | 输入处理（左右键点击、Tab切换模式、ESC取消、Home重置、F1调试） |
-| `map_renderer.gd` | 完整的地块渲染、选中高亮、标签显示 |
-| `map_camera.gd` | 拖拽平移、滚轮缩放、边界限制 |
-| `map_mode_manager.gd` | 政治/地形/资源/文化等多种地图模式 |
-| `region_definitions.gd` | 地块数据定义 |
-| `world_map_data.gd` | 地块集合管理、归属查询、邻接地块查询 |
-| `region_info_panel.gd` | 地块信息面板 UI |
-| `map_mode_switcher.gd` | 模式切换器 UI |
+| `scripts/strategic_map_controller.gd` | 战略图总控（L1/L2/L3 粒度切换、聚落进入、输入分发） |
+| `scripts/l3_map_controller.gd` / `l3_map_renderer.gd` | L3 大世界控制与渲染 |
+| `scripts/l2_map_controller.gd` / `l2_map_renderer.gd` | L2 地区控制与渲染 |
+| `scripts/map_camera.gd` | 拖拽平移、滚轮缩放、边界限制 |
+| `scripts/map_renderer.gd` | 地块渲染、选中高亮、标签显示 |
+| `data/l1_world_data.gd`（及 l2/l3） | 轻量容器：从 JSON+PNG 加载地块/道路/政治/出生点数据 |
+| `data/tile_data.gd` / `settlement_ref.gd` / `resource_deposit.gd` / `road_segment.gd` / `l1_tile_def.gd` | 战略图 Resource 数据类 |
+| `ui/granularity_indicator.gd` / `settlement_tooltip.gd` | 粒度指示器、聚落悬浮提示 UI |
 
 扩张逻辑（军事征服/外交合并）⚠️ 部分实现：阶段 0.8 已实现战略图进入聚落（enter_settlement + EventBus.travel_requested）和地图间切换，但军事征服/外交合并核心逻辑仍未实现。战略图闭环见 P0-4。
 

@@ -16,6 +16,11 @@ const ScriptBattleAIDirector := preload("res://modules/combat/scripts/battle/bat
 const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 
+# ─────────────────────────────── 信号 ────────────────────────────────
+## 战斗结束（胜负/平局判定完成，实例即将 queue_free）。
+## BattleDirector 订阅此信号及时从 _battles 注销本实例（防引用泄漏）。
+signal battle_finished(battle: Node)
+
 # ─────────────────────────────── 状态枚举 ────────────────────────────────
 enum State {
 	PREPARING,      ## 准备阶段
@@ -390,5 +395,7 @@ func _end(result: State) -> void:
 	if EventBus != null:
 		var attacker_wins: bool = result == State.ATTACKER_WIN
 		EventBus.battle_ended.emit(get_battle_id(), attacker_wins)
-	# 结束即释放：Director 只持有引用列表，下一帧会裁剪失效项
+	# 通知登记方（BattleDirector）及时注销本实例（防 _battles 残留失效引用），随后自身释放
+	battle_finished.emit(self)
+	# 结束即释放：Director 的帧裁剪兜底仅覆盖异常路径（如外部直接 free 漏发信号）
 	queue_free()

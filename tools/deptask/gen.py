@@ -14,7 +14,9 @@
 源文件语法（一行一记录，# 开头为注释，全角竖线 | 分隔字段）：
 
     线序: 主线, UI线, ...                  # 泳道（分组框）顺序
-    任务 <id> | 名称=... | 线=... | 状态=... | [前置=a,b] | [域=...] | [树=...] | [位置=x,y] | [豁免=1] | [注=...]
+    任务 <id> | 名称=... | 线=... | 状态=... | [前置=a,b] | [域=...] | [树=...] | [位置=x,y] | [豁免=1] | [文档=...] | [级=微] | [注=...]
+    （级=微：几轮可完成的随手挂载项，画布矮卡、豁免无后沿/阻塞无因审计；
+      前置含自身=自复验回路（审计/复验类任务），合法且不算未完成前置）
     里程碑 <id> | ...                      # 同任务，卡片带 ◆
     <a> -> <b>                             # a 是 b 的前置：a 完成前 b 不得开工
 
@@ -59,7 +61,7 @@ from pathlib import Path
 
 STATUSES = ["完成", "待验收", "进行中", "可开工", "阻塞", "冻结", "放弃"]
 ACTIVE = {"进行中", "待验收", "完成"}
-FIELDS = {"名称", "线", "状态", "前置", "域", "树", "位置", "豁免", "注", "文档"}
+FIELDS = {"名称", "线", "状态", "前置", "域", "树", "位置", "豁免", "注", "文档", "级"}
 
 
 def parse(src: str):
@@ -111,7 +113,7 @@ def parse(src: str):
             continue
         node = {"id": nid, "kind": kind, "name": nid, "lane": "", "status": "可开工",
                 "prs": [], "domain": [], "tree": "", "note": "", "pos": None,
-                "exempt": False, "doc": "", "line": ln}
+                "exempt": False, "doc": "", "tier": "", "line": ln}
         for kv in rest.split("|"):
             if "=" not in kv:
                 errors.append(("E", ln, f"{nid}: 字段缺 '=': {kv.strip()}"))
@@ -144,6 +146,8 @@ def parse(src: str):
                 node["note"] = v
             elif k == "文档":
                 node["doc"] = v
+            elif k == "级":
+                node["tier"] = v
             else:
                 errors.append(("W", ln, f"{nid}: 未知字段 {k}（可用: {'/'.join(sorted(FIELDS))}）"))
         if nid in nodes:
@@ -169,7 +173,7 @@ def redundant_edges(nodes):
     """传递约简：前置 a→b 若可经 b 的其它前置传递到达，则 a→b 冗余。"""
     red = set()
     for nid, n in nodes.items():
-        ps = [p for p in n["prs"] if p in nodes]
+        ps = [p for p in n["prs"] if p in nodes and p != nid]  # 自环不参与冗余判定
         if len(ps) < 2:
             continue
         anc = {p: _closure(nodes[p]["prs"], nodes) for p in ps}
@@ -246,7 +250,7 @@ def ready_set(nodes):
     for i, n in nodes.items():
         if n["status"] in ("完成", "冻结", "放弃"):
             continue
-        if all(p in done for p in n["prs"]):
+        if all(p in done for p in n["prs"] if p != n["id"]):
             out.append(i)
     return out
 
@@ -319,7 +323,7 @@ def validate(nodes, edges, lane_order, clusters):
         if n["lane"] and lane_order and n["lane"] not in lane_order:
             warns.append(f"W 行{n['line']}: {n['id']} 泳道 {n['lane']} 不在 线序")
 
-    adj = {i: [p for p in nodes[i]["prs"] if p in nodes] for i in nodes}
+    adj = {i: [p for p in nodes[i]["prs"] if p in nodes and p != i] for i in nodes}  # 自环=自复验
     color = {i: 0 for i in adj}
     reported = set()
     for start in adj:
@@ -350,7 +354,7 @@ def validate(nodes, edges, lane_order, clusters):
     done = {i for i in nodes if nodes[i]["status"] == "完成"}
     for n in nodes.values():
         if (n["status"] in ACTIVE or n["status"] == "可开工") and not n["exempt"]:
-            unmet = [p for p in n["prs"] if p not in done]
+            unmet = [p for p in n["prs"] if p != n["id"] and p not in done]  # 自环不算未完成前置
             if unmet:
                 errs.append(f"E 行{n['line']}: {n['id']} 状态={n['status']} 但前置未完成: {','.join(unmet)}"
                             f"（确需并行先行则加 豁免=1 并在 注 里写理由）")
@@ -371,6 +375,8 @@ def validate(nodes, edges, lane_order, clusters):
     # 阻塞无因：标阻塞/冻结却没有任何前置——依赖图必须能解释"为什么现在不能做"。
     # 源头任务一律 前置=root（root 是唯一无前置节点，完成态）。
     for n in nodes.values():
+        if n["tier"] == "微":
+            continue  # 微任务：随手挂载项，豁免阻塞无因审计
         if n["status"] in ("阻塞", "冻结") and not n["prs"] and n["id"] != "root":
             errs.append(f"E 行{n['line']}: {n['id']} 阻塞无因——状态={n['status']} 但没有任何前置，"
                         f"须补真实前置或前置到 root（表示仅因优先级未排期）")
@@ -400,6 +406,8 @@ def validate(nodes, edges, lane_order, clusters):
     for e in edges:
         dependents.add(e["a"])  # a=被依赖的前置提供者；叶子=从不作为 a 的节点
     for n in nodes.values():
+        if n["tier"] == "微":
+            continue  # 微任务豁免无后沿审计
         if n["status"] not in ("完成", "放弃") and n["id"] not in dependents \
                 and n["id"] not in terminal:
             warns.append(f"W 行{n['line']}: {n['id']} 无后沿（产出无消费方）——确认它服务于什么目标；"
@@ -443,7 +451,7 @@ def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, rea
         "lanes": lane_order,
         "nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "lane": n["lane"],
                    "status": n["status"], "prs": n["prs"], "domain": n["domain"],
-                   "tree": n["tree"], "note": n["note"], "exempt": n["exempt"], "doc": n["doc"],
+                   "tree": n["tree"], "note": n["note"], "exempt": n["exempt"], "doc": n["doc"], "tier": n["tier"],
                    "x": n["pos"][0] if n["pos"] else None,
                    "y": n["pos"][1] if n["pos"] else None} for n in nodes.values()],
         "edges": [{"a": e["a"], "b": e["b"]} for e in edges],
@@ -589,6 +597,13 @@ HTML = r"""<!DOCTYPE html>
  .kv span{display:block;font-size:9.5px;color:var(--dim2)}
  .kv b{font:700 13px var(--mono);color:var(--text)}
  .kv b.g{color:var(--green)}.kv b.y{color:var(--amber)}.kv b.c{color:var(--acc)}
+ /* ── 相关项浮窗（左下小窗） ── */
+ #relwin{position:fixed;left:262px;bottom:44px;width:320px;max-height:62vh;overflow:auto;display:none;
+   flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:6px;
+   z-index:30;box-shadow:0 8px 24px #000a}
+ #relwin .phead{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12.5px;color:#eaf6ff;
+   border-bottom:1px solid var(--line)}
+ #relwin .pbody{overflow:auto}
  /* ── 检查器上下文行 ── */
  .ctxrow{margin:5px 14px 0;font:600 10.5px var(--mono);color:var(--dim2);letter-spacing:.2px}
  /* ── 右键菜单 / 弹窗（LOGIC-8：直角+1px 线，无阴影） ── */
@@ -614,7 +629,9 @@ HTML = r"""<!DOCTYPE html>
  #dash{position:fixed;left:0;right:0;bottom:0;display:none;overflow:auto;background:var(--bg);z-index:10;
    padding:clamp(10px,2vw,20px) clamp(10px,3vw,24px) 26px}
  #dash .layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;max-width:1500px;margin:0 auto}
- #dash .col{display:flex;flex-direction:column;gap:14px;min-width:0}
+ #dash .col{display:flex;flex-direction:column;gap:14px;min-width:0;align-items:stretch}
+ #dash .col>.card:last-child{flex:1;min-height:180px;display:flex;flex-direction:column}
+ #dash .col>.card:last-child>div{flex:1;min-height:100px}
  #dash .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:1px;
    background:var(--line);border:1px solid var(--line2)}
  @media (max-width:1000px){#dash .layout{grid-template-columns:1fr}}
@@ -682,6 +699,7 @@ HTML = r"""<!DOCTYPE html>
 </div>
 </div>
 <div id="ctx"></div>
+<div id="relwin" title="相关项浮窗：点击行定位，⤢ 跳全图"></div>
 <div id="modal"><div><h3 id="ntTitle">➕ 新建任务</h3>
  <label>id（英文标识符）<input id="ntId" placeholder="如 tech_rebuild2"></label>
  <label>名称<input id="ntName" placeholder="一句话说清交付物"></label>
@@ -813,6 +831,9 @@ function measureCards(){fontCard();
   let w=0;n.lines.forEach(L=>w=Math.max(w,ctx.measureText(L).width));
   fontSmall();const pw=ctx.measureText(n.status+(n.exempt?" ·豁免":"")).width+16;
   const idw=ctx.measureText(n.id).width;
+  if(n.tier==="微"){ // 微任务：单行矮卡（几轮可完成的挂载项）
+   n.lines=wrap(n.name,150,1);
+   n.cw=Math.max(96,Math.min(170,w+20));n.ch=26;return;}
   n.cw=Math.max(128,Math.min(202,Math.max(w+22,pw+10,idw+18)));
   n.ch=11+n.lines.length*17+7+18;});}
 function dagreLayout(){
@@ -862,6 +883,36 @@ function edgeGeom(e){ // litegraph SPLINE_LINK：控制点 = 端口方向 × 0.2
  return{x1,y1,x2,y2,c1x:x1+dx,c1y:y1,c2x:x2-dx,c2y:y2};}
 function edgeBad(e){const a=vById[e.a],b=vById[e.b];
  return a&&b&&a.status!=="完成"&&ACTIVE.has(b.status);}
+function laneBandLayout(){ // 泳道带状布局：每条线一条水平带，任务按依赖深度从左到右
+ const vis=VN.filter(n=>visNode(n));
+ const visIds=new Set(vis.map(n=>n.id));
+ const deps={},depth={},visiting=new Set();
+ vis.forEach(n=>deps[n.id]=(n.prs||[]).filter(p=>visIds.has(p)&&p!==n.id));
+ function dp(i){if(depth[i]!=null)return depth[i];if(visiting.has(i))return 0;
+  visiting.add(i);
+  const d=deps[i].length?1+Math.max(...deps[i].map(dp)):0;
+  visiting.delete(i);depth[i]=d;return d;}
+ vis.forEach(n=>dp(n.id));
+ const laneIdx={};lanes.forEach((l,i)=>laneIdx[l]=i);
+ const doneVis=vis.filter(n=>n.status==="完成"),undoneVis=vis.filter(n=>n.status!=="完成");
+ function place(set,x0){
+  const bands={};
+  set.forEach(n=>{const li=laneIdx[n.lane]!=null?laneIdx[n.lane]:999;bands[li]=bands[li]||[];bands[li].push(n);});
+  let yBase=30;
+  Object.keys(bands).map(Number).sort((a,b)=>a-b).forEach(li=>{
+   const arr=bands[li].sort((a,b)=>(depth[a.id]-depth[b.id])||(a.id<b.id?-1:1));
+   let rowY=yBase,lastEnd=-1e9;
+   arr.forEach(n=>{
+    let x=x0+depth[n.id]*230;
+    if(x<lastEnd+10){x=lastEnd+10;rowY+=n.ch+8;}  // 同带放不下→带内换行
+    n.px=x;n.py=rowY;lastEnd=Math.max(lastEnd,x+n.cw);});
+   yBase=rowY+30+16;});
+  return yBase;}
+ let endY=place(doneVis,30);
+ const dMax=doneVis.length?Math.max(...doneVis.map(n=>n.px+n.cw)):0;
+ endY=Math.max(endY,place(undoneVis,dMax+110));
+ divideX=(doneVis.length?dMax:0)+55;
+ computePorts();}
 function laneFrames(){
  const fr={};
  VN.forEach(n=>{if(!n.lane||!visNode(n))return;
@@ -906,10 +957,20 @@ function draw(){
   const on=lit(e.a)&&lit(e.b),bad=edgeBad(e),isSel=selEdge&&selEdge.a===e.a&&selEdge.b===e.b;
   const g=edgeGeom(e);
   const isCrit=cs&&cs.has(e.a)&&cs.has(e.b);
-  ctx.strokeStyle=isSel?"#fde047":(isCrit?"#fde047":(bad?"#f87171":(on?"#38bdf8dd":"#2a3950")));
-  ctx.lineWidth=(isSel||isCrit)?2.4:((on||bad)?2:1.2);
+  const sameLane=a.lane&&a.lane===b.lane;
+  const li=lanes.indexOf(a.lane),laneC=LANE_COL[(li<0?0:li)%LANE_COL.length];
+  let color,w;
+  if(isSel||isCrit){color="#fde047";w=2.4;}                       // 选中边/关键路径=亮黄
+  else if(bad){color="#f87171";w=2;}                              // 违规=红
+  else if(hi===e.b){color="#38bdf8";w=2.2;}                       // 悬停节点的上游入边=天蓝
+  else if(hi===e.a){color="#fbbf24";w=2.2;}                       // 悬停节点的下游出边=琥珀
+  else if(on){color="#38bdf8dd";w=2;}                             // 链高亮
+  else if(sameLane){color=laneC+"88";w=1.5;}                      // 同泳道=领域色
+  else{color="#243348";w=1;}                                      // 跨泳道=暗灰细
+  ctx.strokeStyle=color;ctx.lineWidth=w;
   if(isCrit){ctx.setLineDash([9,7]);ctx.lineDashOffset=-(animT*0.55)%16;
    ctx.shadowColor="#fde047";ctx.shadowBlur=8;}
+  else if(sameLane){ctx.setLineDash([]);}
   let ea=on?1:((hi||cs)?0.12:0.85);
   if(isCrit)ea=1;
   if(focusLane&&vById[e.a]&&vById[e.b]&&vById[e.a]._f==="other"&&vById[e.b]._f==="other")ea*=0.1;
@@ -954,9 +1015,17 @@ function draw(){
   ctx.fillStyle=c+"26";roundRect(ctx,x+9,y+h-24,pw,16,8);ctx.fill();
   ctx.fillStyle=c;ctx.fillText(st,x+15,y+h-12);
   if(n.tree){ctx.fillStyle="#6e7a87";ctx.fillText("⌂ "+n.tree,x+9+pw+8,y+h-12);}
+  if(n.tier==="微"){ // 微任务单行：点+名称+状态字
+   ctx.fillStyle=c;ctx.beginPath();ctx.arc(x+10,y+h/2,3,0,7);ctx.fill();
+   ctx.fillStyle="#c9d4e0";fontSmall();ctx.fillText(n.name,x+18,y+16);
+   ctx.fillStyle=c;ctx.fillText(n.status,x+w-ctx.measureText(n.status).width-8,y+16);
+   ctx.globalAlpha=1;return;}
   if(n.id!==sel&&selSet.has(n.id)){ctx.strokeStyle="#f472b688";roundRect(ctx,x-2,y-2,w+4,h+4,9);ctx.stroke();}
   if(n.id===hover&&n.id!==sel){ctx.strokeStyle="#93c5fd";ctx.lineWidth=1.5;roundRect(ctx,x-3,y-3,w+6,h+6,9);ctx.stroke();}
   if(editedIds.has(n.id)){ctx.fillStyle="#e3b341";ctx.beginPath();ctx.arc(x+w-7,y+7,3.5,0,7);ctx.fill();}
+  if((n.prs||[]).indexOf(n.id)>=0){ // 自环=自复验回路：右上 ◌ 弧箭头
+   ctx.strokeStyle=c;ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(x+w-15,y+9,4.5,-0.6,4.2);ctx.stroke();
+   ctx.fillStyle=c;ctx.beginPath();ctx.moveTo(x+w-9,y+13);ctx.lineTo(x+w-11.5,y+8.5);ctx.lineTo(x+w-6.5,y+9.5);ctx.closePath();ctx.fill();}
   ctx.globalAlpha=1;});
  ctx.textAlign="left";
  // 框选矩形 / 连线预览（屏幕层）
@@ -1046,7 +1115,7 @@ function locateActive(){const act=VN.filter(n=>ACTIVE.has(n.status)||n.status===
  const xs=t.map(n=>n.px+n.cw/2),ys=t.map(n=>n.py+n.ch/2);
  centerOn((Math.min(...xs)+Math.max(...xs))/2,(Math.min(...ys)+Math.max(...ys))/2,1);}
 function relayout(){focusLane=null;focusLines=null;VN.forEach(n=>{if(!n.isCluster){n.x=null;n.y=null;}});
- divideX=null;dagreLayout();rebuildView();locateActive();dirty=true;}
+ divideX=null;laneBandLayout();rebuildView();fitAll();dirty=true;}
 let focusLane=null,focusLines=null,focusSnapshot=null;  // 快照：进入聚拢前的各节点坐标，退出时恢复（手动布局不丢）
 function applyFocus(){
  if(!focusLane){initDivide();rebuildView();locateActive();dirty=true;return;}  // 防呆分支：不走 relayout（会清手动布局）
@@ -1082,7 +1151,8 @@ function showPanel(n){const p=document.getElementById("inspector");
  if(inCrit>0)ctxBits.push("🛤 关键路径第 "+(inCrit+1)+" 跳");
  if(n.kind==="里程碑")ctxBits.push("收口门");
  p.innerHTML="<h3>"+(n.kind==="里程碑"?"◆ ":"")+n.name+"</h3>"
- +"<div class='ctxrow'>"+ctxBits.map(x=>"<span"+(x.indexOf("🛤")>=0?" style='color:var(--amber)'":"")+">"+x+"</span>").join(" · ")+"</div>"
+ +"<div class='ctxrow'>"+ctxBits.map(x=>"<span"+(x.indexOf("🛤")>=0?" style='color:var(--amber)'":"")+">"+x+"</span>").join(" · ")
+ +"<span style='float:right;cursor:pointer;color:#79b8ff' title='相关项小窗：前置/被依赖迷你卡' onclick=\"relPopup('+n.id+')\">⧉ 浮窗</span></div>"
  +"<div style='margin:6px 14px 0'><span class='tag' style='cursor:default;color:"+COL[n.status]+"'>"+n.status+"</span>"
  +(n.lane?"<span class='tag' style='cursor:default'>"+n.lane+"</span>":"")
  +(n.tree?"<span class='tag' style='cursor:default'>⌂ "+n.tree+"</span>":"")+"</div>"
@@ -1404,7 +1474,26 @@ function setView(v,force){const prev=curView;
  dirty=true;}
 function jumpTo(id){setView("graph");jump(id);}
 function sideSelect(id){const n=byId[id];if(!n)return;
- sel=id;selSet=new Set([id]);selEdge=null;hi=id;showPanel(n);dirty=true;}
+ sel=id;selSet=new Set([id]);selEdge=null;hi=id;showPanel(n);
+ centerOn(n.px+n.cw/2,n.py+n.ch/2,Math.max(view.k,0.85));  // 特写：相机平移聚焦到该项
+ dirty=true;}
+// ── 相关项浮窗（左下小窗：中心任务+前置列+被依赖列迷你卡） ──
+function relPopup(id){const n=byId[id];if(!n)return;
+ const mrow=t=>"<div class='lst' onclick='sideSelect(\""+t.id+"\")'>"
+  +"<span class='dot' style='background:"+(COL[t.status]||"#888")+"'></span>"
+  +"<span class='lid'>"+t.id+"</span><span class='lname'>"+t.name+"</span>"
+  +"<span class='lgo' onclick='event.stopPropagation();jumpTo(\""+t.id+"\")'>⤢</span></div>";
+ let h="<div class='phead'><b>"+(n.kind==="里程碑"?"◆ ":"")+esc(n.name)+"</b>"
+  +"<span style='margin-left:auto;cursor:pointer;color:var(--dim2)' onclick='closeRel()'>✕</span></div>"
+  +"<div class='pbody'>";
+ h+="<div class='pane-head' style='position:static'>前置 "+(n.prs||[]).length+"</div>";
+ h+=n.prs&&n.prs.length?n.prs.map(p=>byId[p]?mrow(byId[p]):"").join(""):"<div class='ph'>无</div>";
+ h+="<div class='pane-head' style='position:static'>被依赖 "+(blocksOf[n.id]||[]).length+"</div>";
+ h+=blocksOf[n.id].length?blocksOf[n.id].map(p=>byId[p]?mrow(byId[p]):"").join(""):"<div class='ph'>无</div>";
+ h+="</div>";
+ const w=document.getElementById("relwin");
+ w.innerHTML=h;w.style.display="flex";}
+function closeRel(){document.getElementById("relwin").style.display="none";}
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
 function sideRow(n){return"<div class='lst"+(n.status==="进行中"?" active":"")+"' onclick='sideSelect(\""+n.id+"\")' title=\""+esc(n.name)+"（点击详情，⤢ 跳全图）\">"
  +"<span class='dot' style='background:"+(COL[n.status]||"#888")+"'></span>"
@@ -1428,7 +1517,7 @@ function buildSide(v){const L=document.getElementById("sideL");let h="";
  const live=n=>n.status!=="完成"&&n.status!=="放弃";
  const active=nodes.filter(n=>n.status==="进行中"||n.status==="待验收");
  const ready=nodes.filter(n=>live(n)&&n.status!=="冻结"
-  &&(n.prs||[]).every(p=>byId[p]&&byId[p].status==="完成"));
+  &&(n.prs||[]).every(p=>p===n.id||(byId[p]&&byId[p].status==="完成")));
  // 顶部 kv 状态条（LOGIC-8 status-strip：六格等宽）
  const nDone=nodes.filter(n=>n.status==="完成").length,
        nAct=nodes.filter(n=>n.status==="进行中"||n.status==="待验收").length,
@@ -1484,7 +1573,7 @@ function buildSide(v){const L=document.getElementById("sideL");let h="";
  document.getElementById("sideR").style.top=BAR_H+"px";}
 function buildDash(){const P=DATA.producer||{},d=document.getElementById("dash");const LIMIT=6;
  const liveReady=nodes.filter(n=>n.status!=="完成"&&n.status!=="冻结"&&n.status!=="放弃"
-  &&(n.prs||[]).every(p=>byId[p]&&byId[p].status==="完成"));
+  &&(n.prs||[]).every(p=>p===n.id||(byId[p]&&byId[p].status==="完成")));
  const S=Object.assign({},P.stats||{},{ready:liveReady.length});
  const tch=(n,extra)=>"<span class='tchip' onclick='jumpTo(\""+n.id+"\")'>"
   +"<span class='dot' style='background:"+(COL[n.status]||"#888")+"'></span>"+n.name

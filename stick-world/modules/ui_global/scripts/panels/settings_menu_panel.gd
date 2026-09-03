@@ -271,6 +271,12 @@ func _apply_live_setting(key: String, value: Variant) -> void:
 		"audio/master_volume":
 			if AudioManager and AudioManager.has_method("set_volume"):
 				AudioManager.set_volume("master", float(value) / 100.0)
+		"audio/bgm_volume":
+			if AudioManager and AudioManager.has_method("set_volume"):
+				AudioManager.set_volume("bgm", float(value) / 100.0)
+		"audio/sfx_volume":
+			if AudioManager and AudioManager.has_method("set_volume"):
+				AudioManager.set_volume("sfx", float(value) / 100.0)
 		"audio/mute_when_unfocused":
 			if AudioManager and AudioManager.has_method("set_mute_on_unfocus"):
 				AudioManager.set_mute_on_unfocus(bool(value))
@@ -375,8 +381,9 @@ func _on_return_to_menu_confirmed() -> void:
 
 # ─────────────────────────────── 设置项 schema ────────────────────────────────
 
-## 音量键（面板域 0~100 百分比；存储域 0~1 线性，见 _on_apply 换算）
-const _VOLUME_KEYS: Array[String] = ["audio/master_volume", "audio/music_volume", "audio/sfx_volume"]
+## 音量键（面板域 0~100 百分比；存储域 0~1 线性，通道与 ConfigManager.VOLUME_CHANNELS
+## 一致：master/bgm/sfx，见 _on_apply 换算）
+const _VOLUME_KEYS: Array[String] = ["audio/master_volume", "audio/bgm_volume", "audio/sfx_volume"]
 
 const SETTINGS_SCHEMA: Array[Dictionary] = [
 	{
@@ -400,8 +407,8 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		"id": "audio", "title": "音频",
 		"fields": [
 			{"key": "audio/master_volume", "label": "主音量", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80},
-			{"key": "audio/music_volume", "label": "音乐", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 60, "implemented": false},
-			{"key": "audio/sfx_volume", "label": "音效", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80, "implemented": false},
+			{"key": "audio/bgm_volume", "label": "音乐", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 70},
+			{"key": "audio/sfx_volume", "label": "音效", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 90},
 			{"key": "audio/mute_when_unfocused", "label": "失焦时静音", "type": "toggle", "default": true},
 		],
 	},

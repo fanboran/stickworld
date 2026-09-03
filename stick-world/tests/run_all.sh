@@ -84,6 +84,8 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_tactical_orders.tscn"
 	"tests/integration/test_save_roundtrip.tscn"
 	"tests/integration/test_anim_finished.tscn"
+	"tests/integration/test_settings_apply.tscn"
+	"tests/integration/test_notification_feed.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -166,7 +168,9 @@ affected_suites() {
 				picked["tests/integration/test_menu_navigation.tscn"]=1
 				picked["tests/integration/test_modal_stack.tscn"]=1
 				picked["tests/integration/test_esc_key_input.tscn"]=1
-				picked["tests/integration/test_ui_layout.tscn"]=1 ;;
+				picked["tests/integration/test_ui_layout.tscn"]=1
+				picked["tests/integration/test_settings_apply.tscn"]=1
+				picked["tests/integration/test_notification_feed.tscn"]=1 ;;
 			stick-world/modules/resources/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1 ;;
 			stick-world/modules/organization/*)

@@ -1654,7 +1654,7 @@ function toggleTower(){towerMode=!towerMode;
     flyTo(n.px+n.cw/2,n.py+n.ch/2,1.0);}
    else{towerMode=false;const b2=document.getElementById("towerBtn");if(b2)b2.classList.remove("on");}}
   towerRAF=requestAnimationFrame(step);};
- towerLast=0;towerRAF=requestAnimationFrame(step);
+ towerLast=0;towerRAF=requestAnimationFrame(step);}
 function applyLayout(mode){ // 0=泳道带状 1=dagre 交叉最小化
  if(curView==="graph"){laneBandLayout();}else{dagreLayout();}
  rebuildView();fitAll();dirty=true;}

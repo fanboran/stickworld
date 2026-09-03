@@ -62,7 +62,13 @@ const _HealthBarScript: GDScript = preload("res://modules/units/scripts/entity/h
 ## 在飞箭矢伤害估计（11d MissingArrowsTolerance 消费口径）：WeaponMount 发射
 ## 箭矢时累加满伤害，箭矢终态（命中/插地）扣减——行为层据此避免对将死目标浪费箭。
 ## 估计口径允许偏差（箭可能命中非登记目标）。
-var incoming_arrow_damage: float = 0.0
+## 状态承载在 IncomingThreatLedger（与 arrow_threat_time 同账本），此为兼容委托。
+var incoming_arrow_damage: float:
+	get: return _threat_ledger.incoming_arrow_damage
+	set(value): _threat_ledger.incoming_arrow_damage = value
+
+## 箭矢威胁账本（在飞伤害估计 + 威胁时刻，语义方法见 IncomingThreatLedger）
+var _threat_ledger := IncomingThreatLedger.new()
 
 ## 移动加速度（px/s²）
 @export var accel: float = 600.0
@@ -108,7 +114,10 @@ var _battle_instance: Node = null
 ## 最后一次被敌方箭矢瞄准的时刻（s，Time.get_ticks_msec 换算；-999=无威胁）。
 ## 由 WeaponMount._fire_arrow 出弓瞬间写入**目标**实体，供矛兵举盾感知
 ## （SWL SpeartonAi.IsAnyArrowThreat / _lastArrowThreatTime 直译）。
-var arrow_threat_time: float = -999.0
+## 状态承载在 _threat_ledger，此为兼容委托（duck-typing 协议不变）。
+var arrow_threat_time: float:
+	get: return _threat_ledger.arrow_threat_time
+	set(value): _threat_ledger.arrow_threat_time = value
 
 # ─────────────────────────────── 编队角色（编制预设派生）────────────────────────────────
 ## 角色类型（fighter/builder/worker，由编队预设写入，仅展示/标记；

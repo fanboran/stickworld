@@ -1964,8 +1964,9 @@ function drawGantt(){const c=gantt;if(!c||c.width<10)return;
   if(ganttHover===j.id||(hi===j.id)){ // 双向联动：主图悬停 ↔ 运行图条高亮
    gtx.strokeStyle="#ffffffcc";gtx.lineWidth=1.5;
    gtx.strokeRect(x0-1.5,y-1.5,Math.max(4,x1-x0)+3,rowH-3);
-   if(ganttHover===j.id){ // 悬停浮签：全名+agent+时段
-    const tip=j.id+" · "+(j.agent||"?")+" · T"+j.t0+"→"+(j.done?("T"+j.t1):"运行中");
+   if(ganttHover===j.id){ // 悬停浮签：全名+agent+时段+认领时长
+    const dur=claimDurText(j.id);
+    const tip=j.id+" · "+(j.agent||"?")+" · T"+j.t0+"→"+(j.done?("T"+j.t1):"运行中")+(dur&&j.done===false?dur:"");
     gtx.font="600 10px "+MONO;
     const tw=gtx.measureText(tip).width+14;
     let tx=Math.min(x1+6,W-tw-4);let ty=y-24;if(ty<padT)ty=y+rowH+2;

@@ -822,6 +822,7 @@ HTML = r"""<!DOCTYPE html>
  <b>✂ 拆解</b>：策划 AI 拆解入口——右键任务→拆解为子任务，表单预填前置=父任务、id 自动编号<br>
  <b>编辑闭环</b>：改状态/连边/新建后节点右上角亮●角标——点「⬇ 导出源」下载完整 txt，
  覆盖 docs/项目/任务依赖图.txt 后跑 <b>python tools/deptask/gen.py --check</b>（有错误禁派活）<br>
+ <b>快捷键</b>：N 新建 · F 适配 · T 塔台巡航 · G 泳道带重排 · L 活跃面 · D 底栏折叠 · C 关键路径 · R 就绪集 · 1-6 切视图<br>
  <b>底栏</b>（Tab 键折叠）：▦运行图=泳道带×时间的任务条（火车运行图：滚轮缩放/拖拽平移/点条跳主图，
  运行中条=右缘琥珀光标，描边色=认领 agent）· ≡调度日志=事件流（悬停行联动主图高亮）<br>
  <b>vbar 工具条</b>：布局（▦泳道带/⟲交叉最小）· 状态七态筛选 · ◌微任务/✓完成区显隐 · 数据源（全部/真实/SIM）· 缩放组 · ✈塔台巡航（镜头 3.2s/站轮巡已认领任务）<br>
@@ -1126,7 +1127,7 @@ function draw(){
    ctx.fillText("已完 "+n._clusterDone+"/"+n._clusterN+" · 点击展开/收起",x+11,y+h-1);}
   ctx.fillStyle="#e6edf3";fontCard();ctx.textAlign="left";
   n.lines.forEach((L,i)=>ctx.fillText(L,x+18+((n.kind==="里程碑"&&i===0)?13:0),y+23+i*17));
-  fontSmall();const st=n.status+(n.exempt?" ·豁免":"");
+  fontSmall();const st=n.claim&&n.status!=="完成"?(n.claim+" · 已认领"):(n.status+(n.exempt?" ·豁免":""));
   const pw=ctx.measureText(st).width+12;
   ctx.fillStyle=c+"1f";roundRect(ctx,x+9,y+h-24,pw,16,3);ctx.fill();
   ctx.fillStyle=c;ctx.fillText(st,x+15,y+h-12);
@@ -1347,6 +1348,7 @@ function showCtx(ev){const c=document.getElementById("ctx");let h="";
    +"<div class='ci' onclick=\"setStatusAll('阻塞')\">⏸ 阻塞</div>"
    +"<div class='ci' onclick=\"setStatusAll('冻结')\">❄ 冻结</div>"
    +"<div class='ci' onclick=\"setStatusAll('放弃')\">✕ 放弃</div>"
+   +"<div class='ci' onclick=\"doRelease('"+single+"')\">🔓 释放认领</div>"
    +"<div class='ci' onclick='openTaskForm(\""+single+"\")'>✎ 编辑任务…</div>"
    +"<div class='ci' onclick='openTaskForm(null,\""+single+"\")'>✂ 拆解为子任务…</div>"
    +"<div class='ci' onclick='delTask(\""+single+"\")'>🗑 删除任务</div>"
@@ -1499,6 +1501,9 @@ function submitTaskForm(){
  newPrs.forEach(p=>{if(byId[p])addEdge(p,id);else alert("前置不存在，已跳过："+p);});
  markEdit(id);measureCards();rebuildView();buildSide(curView);closeModal();
  sel=id;selSet=new Set([id]);jump(id);}
+function doRelease(id){const n=byId[id];if(!n)return;
+ if(n.claim){log_event("release",id,n.claim);}
+ n.claim="";markEdit(id);showPanel(n);dirty=true;}
 function delTask(id){const n=byId[id];if(!n)return;
  const linked=edges.filter(e=>e.a===id||e.b===id).length;
  if(!confirm("删除任务「"+n.name+"」（"+id+"）及其 "+linked+" 条依赖边？\n此操作导出后生效，源文件覆盖前可反悔。"))return;

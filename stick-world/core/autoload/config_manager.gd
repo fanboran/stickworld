@@ -146,6 +146,8 @@ func get_volume(channel: String) -> float:
 	return 0.8
 
 
+## 设置音量（通道：master/bgm/sfx，线性 0~1）。本方法只负责存储与信号，
+## 总线应用由订阅 volume_changed 的 AudioManager 统一执行（单一写者）。
 func set_volume(channel: String, value: float) -> void:
 	if VOLUME_CHANNELS.find(channel) == -1:
 		push_warning("[ConfigManager] 未知音量通道: %s" % channel)
@@ -154,9 +156,6 @@ func set_volume(channel: String, value: float) -> void:
 	var key: String = "audio/%s_volume" % channel
 	set_value(key, clamped)
 	volume_changed.emit(channel, clamped)
-	if channel == "master":
-		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"),
-			linear_to_db(clamped))
 
 
 static func linear_to_db(value: float) -> float:

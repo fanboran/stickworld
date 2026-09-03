@@ -1674,7 +1674,7 @@ function toggleTower(){towerMode=!towerMode;
   if(ts-towerLast>3200){towerLast=ts;
    const claimed=nodes.filter(n=>n.claim&&n.status!=="完成");
    if(claimed.length){const n=claimed[towerIdx%claimed.length];towerIdx++;
-    hi=n.id;sel=n.id;selSet=new Set([n.id]);showPanel(n);
+    hi=n.id;sel=n.id;selSet=new Set([n.id]);showPanel(n);relPopup(n.id);
     flyTo(n.px+n.cw/2,n.py+n.ch/2,1.0);}
    else{towerMode=false;const b2=document.getElementById("towerBtn");if(b2)b2.classList.remove("on");}}
   towerRAF=requestAnimationFrame(step);};

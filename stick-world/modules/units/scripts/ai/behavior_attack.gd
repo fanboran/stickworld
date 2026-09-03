@@ -532,9 +532,11 @@ func _summon_trigger_range() -> float:
 func _spawn_minidons(count: int) -> Array:
 	var scene: PackedScene = load("res://modules/units/scenes/stickman_entity.tscn")
 	if scene == null:
+		push_warning("[BehaviorAttack] 护卫场景加载失败，取消召唤")
 		return []
 	var host: Node = entity.get_parent()
 	if host == null:
+		push_warning("[BehaviorAttack] 施法者无宿主节点，取消召唤")
 		return []
 	# SWL SpawnMinion 协程 + SummonGroundScorch 地面焦痕语义：护卫从施法者
 	# **面朝方向的正前方**冒出（横版语义"前"= facing ±x，2026-09-01 反馈修正——

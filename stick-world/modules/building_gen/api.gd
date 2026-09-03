@@ -4,6 +4,10 @@ extends Node
 ## 外部模块只能通过本文件定义的信号和方法与本模块交互。
 ## 禁止跨模块直接引用 building_gen 内部脚本的方法。
 ##
+## 公共类型契约：Building（scripts/building.gd，全局 class_name）为对外公共实体类型，
+## construction/world 等模块可用 is/as 判型并读写 Building.State 状态；
+## 除该类型外仍禁止引用本模块内部脚本（先例：combat/api.gd 的 TargetFinder 契约）。
+##
 ## 材质纹理生成已迁移至 modules/texture_gen/，详见 TextureGenApi。
 
 # ===== 公共信号 =====
@@ -36,6 +40,7 @@ const _BUILDING_SCENE_PATHS := {
 ## 场景模板归属本模块，路径映射只在模块内部维护，外部模块不得硬编码内部路径。
 static func load_building_scene(def_id: String) -> PackedScene:
 	if not _BUILDING_SCENE_PATHS.has(def_id):
+		push_warning("[BuildingGen] 未知建筑 def_id: %s" % def_id)
 		return null
 	return load("res://modules/building_gen/" + _BUILDING_SCENE_PATHS[def_id]) as PackedScene
 

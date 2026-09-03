@@ -51,6 +51,7 @@ func load_defs() -> void:
 		return
 	var res: Resource = load(res_path)
 	if res == null or not (res.get("variables") is Dictionary):
+		push_warning("[ConstructionManager] 建筑定义表加载失败或格式异常: %s" % res_path)
 		return
 	var data: Array = res.variables.get("data", [])
 	for entry in data:

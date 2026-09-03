@@ -21,6 +21,8 @@ static func attach(scene: PackedScene, bone_id: int, bones: Dictionary) -> Node2
 	if bone_id == Skeleton.WEAPON_ATTACH_R and scene == null:
 		if ResourceLoader.exists(DEFAULT_WEAPON_PATH):
 			scene = load(DEFAULT_WEAPON_PATH)
+		if scene == null:
+			push_warning("[StickmanWeapon] 默认武器加载失败，右手将空手: %s" % DEFAULT_WEAPON_PATH)
 	if scene == null:
 		return null
 

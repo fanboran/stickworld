@@ -117,7 +117,7 @@
 | 信号 | 参数 | 发射方 | 接收方 | 说明 |
 |------|------|--------|--------|------|
 | `balance_changed` | - | BalanceConfig | 订阅方 | 平衡配置热重载（预留，暂无消费方） |
-| `debug_visibility_changed` | visible: bool | debug_GUI | 生产模块调试标签 | 调试覆盖层显隐 |
+| `debug_visibility_changed` | visible: bool | debug_gui | 生产模块调试标签 | 调试覆盖层显隐 |
 
 ---
 

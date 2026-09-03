@@ -70,14 +70,16 @@ func _on_game_saving(_slot_index: int) -> void:
 	if map != null and map.has_method("save_resource_nodes_to_db"):
 		map.save_resource_nodes_to_db(db, slot_id, map_id)
 	# 5. 更新 save_meta.current_map_id
-	db.query_with_bindings(_SQL_META_UPDATE_MAP, [map_id, slot_id])
+	if not db.query_with_bindings(_SQL_META_UPDATE_MAP, [map_id, slot_id]):
+		push_error("[SaveHandler] save_meta.current_map_id 更新失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
 
 
 ## 保存实体到 DB
 func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 	if map == null:
 		return
-	db.query_with_bindings(_SQL_ENT_DELETE, [slot_id, map_id])
+	if not db.query_with_bindings(_SQL_ENT_DELETE, [slot_id, map_id]):
+		push_error("[SaveHandler] entities 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
 	var idx: int = 0
 	for entity in map.get_entities():
 		if not is_instance_valid(entity):
@@ -87,7 +89,7 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 		var extra: Dictionary = {}
 		if "faction_id" in entity:
 			extra["faction_id"] = entity.faction_id
-		db.insert_row("entities", {
+		if not db.insert_row("entities", {
 			"slot_id": slot_id, "map_id": map_id,
 			"entity_id": "ent_%04d" % idx,
 			"entity_type": "stickman",
@@ -97,7 +99,8 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 			"facing": facing,
 			"is_player": is_player,
 			"extra_data": JSON.stringify(extra),
-		})
+		}):
+			push_error("[SaveHandler] 实体写入失败 slot=%d map=%s id=ent_%04d: %s" % [slot_id, map_id, idx, str(db.error_message)])
 		idx += 1
 
 

@@ -367,7 +367,8 @@ func _ensure_schema() -> void:
 	if _db == null:
 		return
 	for stmt in _SCHEMA_SQLS:
-		_db.query(stmt)
+		if not _db.query(stmt):
+			push_error("[SaveManager] 建表语句执行失败: %s…（%s）" % [stmt.left(48), str(_db.error_message)])
 	_migrate_schema()
 
 
@@ -398,8 +399,9 @@ func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version:
 	if not rows.is_empty():
 		created_at = str(rows[0].get("created_at", datetime))
 	# 先尝试删除旧记录（save_meta 主键是 slot_id）
-	_db.query_with_bindings(_SQL_META_DELETE, [slot_id])
-	_db.insert_row(_T_SAVE_META, {
+	if not _db.query_with_bindings(_SQL_META_DELETE, [slot_id]):
+		push_error("[SaveManager] save_meta 旧记录删除失败 slot=%d: %s" % [slot_id, str(_db.error_message)])
+	if not _db.insert_row(_T_SAVE_META, {
 		"slot_id": slot_id,
 		"save_name": "",
 		"created_at": created_at,
@@ -407,7 +409,8 @@ func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version:
 		"playtime_seconds": playtime,
 		"version": version,
 		"current_map_id": "",
-	})
+	}):
+		push_error("[SaveManager] save_meta 元数据写入失败 slot=%d: %s" % [slot_id, str(_db.error_message)])
 
 
 func _accumulate_playtime() -> float:

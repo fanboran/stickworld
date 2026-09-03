@@ -30,13 +30,14 @@ func setup(root: Node) -> void:
 ## 保存建筑和建造项目到 DB
 func save_to_db(db, slot_id: int, map_id: String) -> void:
 	# 建筑
-	db.query_with_bindings(_SQL_BLD_DELETE, [slot_id, map_id])
+	if not db.query_with_bindings(_SQL_BLD_DELETE, [slot_id, map_id]):
+		push_error("[BuildingPersistence] buildings 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
 	for b_id in _root._buildings.keys():
 		var b: Node = _root._buildings[b_id]
 		if not is_instance_valid(b) or not (b is Building):
 			continue
 		var typed: Building = b as Building
-		db.insert_row("buildings", {
+		if not db.insert_row("buildings", {
 			"slot_id": slot_id, "building_id": b_id, "map_id": map_id,
 			"def_id": typed.def_id, "cell_x": typed.cell_x,
 			"width": typed.width, "state": typed.state,
@@ -45,20 +46,23 @@ func save_to_db(db, slot_id: int, map_id: String) -> void:
 			"wall_tier": typed.wall_tier,
 			"is_gate": 1 if typed.is_gate else 0,
 			"region_id": str(typed.get_meta("region_id", "")),
-		})
+		}):
+			push_error("[BuildingPersistence] 建筑写入失败 slot=%d map=%s id=%s: %s" % [slot_id, map_id, str(b_id), str(db.error_message)])
 	# 建造项目（只存未完工的）
-	db.query_with_bindings(_SQL_PRJ_DELETE, [slot_id, map_id])
+	if not db.query_with_bindings(_SQL_PRJ_DELETE, [slot_id, map_id]):
+		push_error("[BuildingPersistence] construction_projects 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
 	for p_id in _root._projects.keys():
 		var p: ScriptConstructionProject = _root._projects[p_id]
 		if p.state == ScriptConstructionProject.State.OPERATIONAL:
 			continue
-		db.insert_row("construction_projects", {
+		if not db.insert_row("construction_projects", {
 			"slot_id": slot_id, "project_id": p_id, "map_id": map_id,
 			"def_id": p.def_id, "cell_x": p.cell_x, "width": p.width,
 			"state": p.state, "total_work": p.total_work,
 			"current_work": p.current_work, "region_id": p.region_id,
 			"material_progress": p.material_progress,
-		})
+		}):
+			push_error("[BuildingPersistence] 建造项目写入失败 slot=%d map=%s id=%s: %s" % [slot_id, map_id, str(p_id), str(db.error_message)])
 
 
 ## 从 DB 恢复建筑和建造项目

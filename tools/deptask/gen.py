@@ -1503,7 +1503,12 @@ function submitTaskForm(){
  nodes.push(n);byId[id]=n;prsOf[id]=[];blocksOf[id]=[];
  newPrs.forEach(p=>{if(byId[p])addEdge(p,id);else alert("前置不存在，已跳过："+p);});
  markEdit(id);measureCards();rebuildView();buildSide(curView);closeModal();
- sel=id;selSet=new Set([id]);jump(id);}
+ sel=id;selSet=new Set([id]);jump(id);
+ if(planParent&&byId[planParent]){  // 父任务自动化：注记"已拆解为"
+  const pn=byId[planParent];
+  const tag="已拆解为 "+id;
+  if(!(pn.note||"").includes(tag))pn.note=(pn.note?pn.note+"；":"")+tag;
+  markEdit(planParent);measureCards();rebuildView();}
 function doRelease(id){const n=byId[id];if(!n)return;
  if(n.claim){log_event("release",id,n.claim);}
  n.claim="";markEdit(id);showPanel(n);dirty=true;}

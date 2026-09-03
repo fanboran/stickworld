@@ -154,7 +154,7 @@
 
 # ───────────── 玩法系统（科技/法律/外交/成就/组织/装备/输入） ─────────────
 任务 tech_rebuild | 名称=科技模块重建（征服获得制：战斗胜利解锁+事件获取，无研究状态机） | 线=玩法系统 | 状态=阻塞 | 前置=content_techtree,docs_governance,eventbus_hygiene | 域=modules/technology | 文档=docs/设计/系统/04-科技系统.md | 注=征服给科技的来源=战斗胜负判定（已有）；实现前文档校准+信号总线卫生；原 setup_root_refactor/main_done 门拆除——新模块自建 api+总线信号，装配接线点小，与装配收敛并行推进
-任务 expansion_module | 名称=扩张系统模块创建（03-扩张系统.md：目录未创建） | 线=玩法系统 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/expansion | 文档=docs/设计/系统/03-扩张系统.md | 注=领土扩张依赖战略图三层（已就绪）
+任务 expansion_module | 名称=扩张系统模块创建（03-扩张系统.md：目录未创建；含归属变更→战略图刷新接线） | 线=玩法系统 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/expansion | 文档=docs/设计/系统/03-扩张系统.md | 注=领土扩张依赖战略图三层（已就绪）；含归属变更→战略图刷新接线（世界地图数据流 §8.5）
 任务 diplomacy | 名称=外交系统（路线图阶段2） | 线=玩法系统 | 状态=阻塞 | 前置=region_entity | 注=外交对象=多政权——依赖 Region 建模+战略图（后者已就绪）；hist_l3_l2_l1 冗余前置已删
 任务 achievement_module | 名称=游戏内成就系统实现（07-成就系统.md，模块未创建） | 线=玩法系统 | 状态=阻塞 | 前置=dec_achievements,eventbus_hygiene | 域=modules/achievement | 文档=docs/设计/系统/07-成就系统.md | 注=按定稿成就列表实现；成就解锁走事件总线
 任务 law_module | 名称=法律系统实现（颁布/可量化效果/不可量化叙事后果/废除代价/道德分支，冰汽时代式） | 线=玩法系统 | 状态=阻塞 | 前置=content_lawtree | 域=modules/law | 文档=docs/设计/游戏设计文档.md | 注=GDD §七；改造人伦理分支作为可选法律分支（§7.2）；org_driven/region 冗余前置已删（经法律树设计传递——设计已收敛其需求）
@@ -276,6 +276,9 @@
 任务 hist_resource_pricing | 名称=系统深化批次（资源供需定价引擎+CombatApi+F9 热重载+fx 粒子池+夜间光照） | 线=基线 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08-22 第三/四批整改
 任务 hist_arena_obs | 名称=大乱斗观察场（8 轮审计修复+翻译保真度审计+fx 全量考古 B8~B14） | 线=基线 | 状态=完成 | 前置=hist_resource_pricing | 注=2026-08-29~31，AI 复刻的前置验收场
 任务 hist_coverage_audit | 名称=AI 复刻覆盖率审计+SWL 全模块对账（34%→立项 11a~11e/12 批次） | 线=基线 | 状态=完成 | 前置=hist_arena_obs | 注=2026-09-01
+
+
+
 
 
 

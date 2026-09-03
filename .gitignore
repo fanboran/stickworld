@@ -2,7 +2,10 @@
 # stick-world/docs 是指向 ../../docs 的本地 symlink（core.symlinks=false 无法追踪）
 stick-world/docs
 .import/
-export/*
+# 忽略导出产物，保留说明文档（export_presets 输出到 export/stick-world/ 子目录）
+export/**
+!export/**/
+!export/*.md
 !export/.gitkeep
 *.translation
 **/.godot/
@@ -26,6 +29,7 @@ gdextension_crash_on_quit.txt
 .workbuddy/
 .mcp/
 .codebuddy/
+.zcode/
 
 # AI 工具本地运行时产物
 **/__pycache__/
@@ -95,6 +99,8 @@ coverage/
 # 测试输出临时文件
 test_*.txt
 stick-world/test_*.txt
+# 战斗模拟诊断输出（tests/dev/battle_sim 的 headless 运行日志，可随时重生成）
+battle_sim_*.txt
 stick-world/stderr.txt
 stick-world/stdout.txt
 

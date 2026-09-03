@@ -22,34 +22,34 @@
 #   校验: python tools/deptask/gen.py --check   生成: python tools/deptask/gen.py
 #   模块级（代码）依赖见 docs/技术/架构/模块依赖关系.md —— 与本图互补，勿混写
 # ============================================================
-线序: 复刻主线, UI线, 配置存档, 战略图, 地图系统, 经济循环, 玩法系统, 叙事设计, 工程债, 宣发运营, 决策, 门
+线序: 基线, 复刻主线, UI线, 配置存档, 战略图, 地图系统, 经济循环, 玩法系统, 叙事设计, 工程债, 宣发运营, 决策, 里程碑
 
-任务 root | 名称=项目起点（火柴人大战略+工厂自动化） | 线=门 | 状态=完成 | 注=唯一无前置节点：一切依赖链的源头
+任务 root | 名称=项目起点（火柴人大战略+工厂自动化） | 线=里程碑 | 状态=完成 | 注=唯一无前置节点：一切依赖链的源头
 
-# ───────────── 门（里程碑：收口/外部通道/发布链） ─────────────
-里程碑 p0_prototype | 名称=P0 原型 0.1~0.8+新0.9 全部完成 | 线=门 | 状态=完成 | 前置=hist_p0_close,hist_l3_l2_l1
-里程碑 p0_accept | 名称=创始人人工验收原型循环（建造→编队→任命→下令→战斗→附身→跨图→战略图） | 线=门 | 状态=可开工 | 前置=p0_prototype | 注=等创始人亲自跑一遍确认"层级管理→好玩"假设；fun_done/demo_release/mkt_pricing 均以其为前沿
-任务 ext_art | 名称=外部美术资产通道（手绘贴图/音效采购/录制交付） | 线=门 | 状态=阻塞 | 前置=root | 豁免=1 | 注=外部产能门：阻塞语义=等待外部交付而非排期问题；asset_p1~p7 素材替换群的前沿。资产需求清单见待办 PLACEHOLDER 表
-里程碑 ui_lane_closed | 名称=UI 线收线合并 | 线=门 | 状态=完成 | 前置=ui_feed | 注=2026-09-03 随 merge_main_1 三线收线合并（ui_settings+ui_feed 已入 main）
-里程碑 merge_main_1 | 名称=本轮并行收线合并回 main | 线=门 | 状态=完成 | 前置=ui_feed,balance_fix,strat_ui | 注=协调者统一合并+待办两条误诊勘误（2026-09-03 收线：P7 提交+三线合并+全量测试绿）
-里程碑 aux_retire | 名称=废弃 game-2-aux，.temp 收编 gitignore，协调文档/依赖图/工具入库 | 线=门 | 状态=完成 | 前置=merge_main_1 | 注=后沿：产出=并行开发规范落地（.temp 模式）（2026-09-03：三工作树+三分支已删，.temp 入 gitignore）
-里程碑 excel_unfreeze | 名称=解除 Excel 真实导出冻结 | 线=门 | 状态=冻结 | 前置=merge_main_1,p8_giant | 注=tres 手调校准值合并前，源表脱节禁真导出
-里程碑 main_done | 名称=主线 SWL 复刻批次收尾合并 | 线=门 | 状态=阻塞 | 前置=p12_skins,p13_sfx,debt_9h,debt_9j,debt_9k | 注=复刻内容收口；2026-09-03 巨门拆除——只保留真实内容依赖（balance_tuning/localization/dec_unit_weapon_attrs/equipment 域互斥改走调度），units/combat 工程债群与决策任务不再假挂本门
-里程碑 map_refactor_done | 名称=地图重构收口（扩张/城墙/城外/出城/城镇朝向/地面贴图/建筑深化） | 线=门 | 状态=阻塞 | 前置=town_expansion,wall_as_building,outside_environment,exit_mechanism,city_direction_roads,town_ground_textures,dec_map_editor,building_levels
-里程碑 battle_modes_done | 名称=战场类型收口（遭遇/攻城/守城/spawn 动态/持续战/工程战/跨度/道路遭遇） | 线=门 | 状态=阻塞 | 前置=battle_siege_attack,battle_spawn_dynamic,battle_persistence,siege_engineering,battlefield_width,road_encounter
-里程碑 econ_loop_done | 名称=经济循环收口（资源产出→队列→建造过程化→物流→市场→持久化） | 线=门 | 状态=阻塞 | 前置=construction_process,logistics_module,market_finance,resources_persistence,p9_shop_hud,excel_fix,dec_process_luxury
-里程碑 gdd_systems_done | 名称=GDD 系统补全收口（科技/扩张/外交/成就/法律/三层命令/组织驱动/室内） | 线=门 | 状态=阻塞 | 前置=tech_rebuild,expansion_module,diplomacy,achievement_module,law_module,autonomy_tactics,interior_system
-里程碑 sim_units_done | 名称=模拟与个体收口（个体属性/装备/寻路/实体拆分/AI 数据驱动/战斗收敛） | 线=门 | 状态=阻塞 | 前置=equipment_system,path_finding,entity_split,ai_controller_datadriven,battle_convergence,p11e_cluster,idle_behavior,time_control_rules
-里程碑 ui_mature_done | 名称=UI 成熟收口（tscn 迁移/小地图样式/存档界面/附身完整版/读档完整性/战术面板扩展/工作区预设/缩放密度适配/风格演变） | 线=门 | 状态=阻塞 | 前置=ui_ctrl_to_tscn,ui_minimap_style,ui_save_panel,save_readback,tactical_panel_ext,ui_workspace_presets,zoom_info_density,ui_style_evolution
-里程碑 content_freeze | 名称=内容冻结（游戏本体内容齐=对照 GDD 预想状态） | 线=门 | 状态=阻塞 | 前置=map_refactor_done,battle_modes_done,econ_loop_done,gdd_systems_done,sim_units_done,ui_mature_done,god_view,weather_env,town_battle_inplace,asphalt_resource,variant_units,fast_travel,conn_disconnect_guard,setup_root_refactor,forge_process_anim,content_hero_power,content_helpers,dec_road_events,dec_unit_weapon_attrs,slope_map | 注=对照 GDD 预想状态逐段核对（2026-09-03 GDD 逐段排查）；六门+全工程治理（信号/装配）+内容类设计终稿的统一 deadline；复刻收尾经 dec_unit_weapon_attrs 传递可达（对照复刻数值）
-任务 fun_done | 名称=好玩性验证（试玩测试+反馈迭代，确认核心循环好玩） | 线=门 | 状态=阻塞 | 前置=p0_accept | 注=项目核心风险=「层级管理→好玩」假设——发布前必须验证成立
-任务 release_date | 名称=发布日期确定 | 线=门 | 状态=阻塞 | 前置=content_freeze,fun_done | 注=内容齐+好玩确认后才定档
-里程碑 launch_prep | 名称=发布准备收口（打磨群：平衡/UX/本地化/Steam/商店页/定价） | 线=门 | 状态=阻塞 | 前置=balance_tuning,polish_ux,localization,steam_integration,mkt_store_page,mkt_pricing
-里程碑 release_gate | 名称=发布收口（好玩确认+日期确定+内容冻结+发布准备） | 线=门 | 状态=阻塞 | 前置=release_date,launch_prep
-里程碑 launch | 名称=正式发布 | 线=门 | 状态=阻塞 | 前置=release_gate,mkt_materials
-里程碑 live_ops | 名称=阶段4 持续运营 | 线=门 | 状态=阻塞 | 前置=launch
-里程碑 demo_content | 名称=Demo 内容收口（环境/模式/演练场/实体表现/观感特效） | 线=门 | 状态=阻塞 | 前置=weather_env,river_gen,mode_variants,arena_duel,arena_formation,arena_spell,asset_p1_particles,entity_lying_90deg,fx_directional_blood,fx_explosion_scorch,fx_ground_slam,fx_rain_cloud
-里程碑 demo_release | 名称=第一个可玩 Demo 发布 | 线=门 | 状态=阻塞 | 前置=demo_content,p0_accept,hp_default_zero,asset_p2_light,asset_p4_banner,asset_p5_crate,asset_p7_demo,ci_enable | 注=天气/河流等系统管线的后沿——第一个可玩版本；Demo 范围由创始人划定后微调前置；CI 防护在对外版本前必须就位
+# ───────────── 里程碑（收口门/外部通道/发布链；历史完成节点在「基线」线） ─────────────
+里程碑 p0_prototype | 名称=P0 原型 0.1~0.8+新0.9 全部完成 | 线=里程碑 | 状态=完成 | 前置=hist_p0_close,hist_l3_l2_l1
+里程碑 p0_accept | 名称=创始人人工验收原型循环（建造→编队→任命→下令→战斗→附身→跨图→战略图） | 线=里程碑 | 状态=可开工 | 前置=p0_prototype | 注=等创始人亲自跑一遍确认"层级管理→好玩"假设；fun_done/demo_release/mkt_pricing 均以其为前沿
+任务 ext_art | 名称=外部美术资产通道（手绘贴图/音效采购/录制交付） | 线=里程碑 | 状态=阻塞 | 前置=root | 豁免=1 | 注=外部产能门：阻塞语义=等待外部交付而非排期问题；asset_p1~p7 素材替换群的前沿。资产需求清单见待办 PLACEHOLDER 表
+里程碑 ui_lane_closed | 名称=UI 线收线合并 | 线=里程碑 | 状态=完成 | 前置=ui_feed | 注=2026-09-03 随 merge_main_1 三线收线合并（ui_settings+ui_feed 已入 main）
+里程碑 merge_main_1 | 名称=本轮并行收线合并回 main | 线=里程碑 | 状态=完成 | 前置=ui_feed,balance_fix,strat_ui | 注=协调者统一合并+待办两条误诊勘误（2026-09-03 收线：P7 提交+三线合并+全量测试绿）
+里程碑 aux_retire | 名称=废弃 game-2-aux，.temp 收编 gitignore，协调文档/依赖图/工具入库 | 线=里程碑 | 状态=完成 | 前置=merge_main_1 | 注=后沿：产出=并行开发规范落地（.temp 模式）（2026-09-03：三工作树+三分支已删，.temp 入 gitignore）
+里程碑 excel_unfreeze | 名称=解除 Excel 真实导出冻结 | 线=里程碑 | 状态=冻结 | 前置=merge_main_1,p8_giant | 注=tres 手调校准值合并前，源表脱节禁真导出
+里程碑 main_done | 名称=主线 SWL 复刻批次收尾合并 | 线=里程碑 | 状态=阻塞 | 前置=p12_skins,p13_sfx,debt_9h,debt_9j,debt_9k | 注=复刻内容收口；2026-09-03 巨门拆除——只保留真实内容依赖（balance_tuning/localization/dec_unit_weapon_attrs/equipment 域互斥改走调度），units/combat 工程债群与决策任务不再假挂本门
+里程碑 map_refactor_done | 名称=地图重构收口（扩张/城墙/城外/出城/城镇朝向/地面贴图/建筑深化） | 线=里程碑 | 状态=阻塞 | 前置=town_expansion,wall_as_building,outside_environment,exit_mechanism,city_direction_roads,town_ground_textures,dec_map_editor,building_levels
+里程碑 battle_modes_done | 名称=战场类型收口（遭遇/攻城/守城/spawn 动态/持续战/工程战/跨度/道路遭遇） | 线=里程碑 | 状态=阻塞 | 前置=battle_siege_attack,battle_spawn_dynamic,battle_persistence,siege_engineering,battlefield_width,road_encounter
+里程碑 econ_loop_done | 名称=经济循环收口（资源产出→队列→建造过程化→物流→市场→持久化） | 线=里程碑 | 状态=阻塞 | 前置=construction_process,logistics_module,market_finance,resources_persistence,p9_shop_hud,excel_fix,dec_process_luxury
+里程碑 gdd_systems_done | 名称=GDD 系统补全收口（科技/扩张/外交/成就/法律/三层命令/组织驱动/室内） | 线=里程碑 | 状态=阻塞 | 前置=tech_rebuild,expansion_module,diplomacy,achievement_module,law_module,autonomy_tactics,interior_system
+里程碑 sim_units_done | 名称=模拟与个体收口（个体属性/装备/寻路/实体拆分/AI 数据驱动/战斗收敛） | 线=里程碑 | 状态=阻塞 | 前置=equipment_system,path_finding,entity_split,ai_controller_datadriven,battle_convergence,p11e_cluster,idle_behavior,time_control_rules
+里程碑 ui_mature_done | 名称=UI 成熟收口（tscn 迁移/小地图样式/存档界面/附身完整版/读档完整性/战术面板扩展/工作区预设/缩放密度适配/风格演变） | 线=里程碑 | 状态=阻塞 | 前置=ui_ctrl_to_tscn,ui_minimap_style,ui_save_panel,save_readback,tactical_panel_ext,ui_workspace_presets,zoom_info_density,ui_style_evolution
+里程碑 content_freeze | 名称=内容冻结（游戏本体内容齐=对照 GDD 预想状态） | 线=里程碑 | 状态=阻塞 | 前置=map_refactor_done,battle_modes_done,econ_loop_done,gdd_systems_done,sim_units_done,ui_mature_done,god_view,weather_env,town_battle_inplace,asphalt_resource,variant_units,fast_travel,conn_disconnect_guard,setup_root_refactor,forge_process_anim,content_hero_power,content_helpers,dec_road_events,dec_unit_weapon_attrs,slope_map | 注=对照 GDD 预想状态逐段核对（2026-09-03 GDD 逐段排查）；六门+全工程治理（信号/装配）+内容类设计终稿的统一 deadline；复刻收尾经 dec_unit_weapon_attrs 传递可达（对照复刻数值）
+任务 fun_done | 名称=好玩性验证（试玩测试+反馈迭代，确认核心循环好玩） | 线=里程碑 | 状态=阻塞 | 前置=p0_accept | 注=项目核心风险=「层级管理→好玩」假设——发布前必须验证成立
+任务 release_date | 名称=发布日期确定 | 线=里程碑 | 状态=阻塞 | 前置=content_freeze,fun_done | 注=内容齐+好玩确认后才定档
+里程碑 launch_prep | 名称=发布准备收口（打磨群：平衡/UX/本地化/Steam/商店页/定价） | 线=里程碑 | 状态=阻塞 | 前置=balance_tuning,polish_ux,localization,steam_integration,mkt_store_page,mkt_pricing
+里程碑 release_gate | 名称=发布收口（好玩确认+日期确定+内容冻结+发布准备） | 线=里程碑 | 状态=阻塞 | 前置=release_date,launch_prep
+里程碑 launch | 名称=正式发布 | 线=里程碑 | 状态=阻塞 | 前置=release_gate,mkt_materials
+里程碑 live_ops | 名称=阶段4 持续运营 | 线=里程碑 | 状态=阻塞 | 前置=launch
+里程碑 demo_content | 名称=Demo 内容收口（环境/模式/演练场/实体表现/观感特效） | 线=里程碑 | 状态=阻塞 | 前置=weather_env,river_gen,mode_variants,arena_duel,arena_formation,arena_spell,asset_p1_particles,entity_lying_90deg,fx_directional_blood,fx_explosion_scorch,fx_ground_slam,fx_rain_cloud
+里程碑 demo_release | 名称=第一个可玩 Demo 发布 | 线=里程碑 | 状态=阻塞 | 前置=demo_content,p0_accept,hp_default_zero,asset_p2_light,asset_p4_banner,asset_p5_crate,asset_p7_demo,ci_enable | 注=天气/河流等系统管线的后沿——第一个可玩版本；Demo 范围由创始人划定后微调前置；CI 防护在对外版本前必须就位
 
 # ───────────── 复刻主线（combat/units/fx/法术/物品栏 全域） ─────────────
 任务 p1_arena_fixes | 名称=观察场反馈缺陷 16 项修复 | 线=复刻主线 | 状态=完成 | 前置=p0_prototype,hist_arena_obs | 域=modules/combat,modules/units | 注=复刻批次 P1；2026-08-31~09-01 六轮验收
@@ -239,32 +239,32 @@
 簇 cluster_battle_modes | 名称=战场类型重构包（三类型+spawn+持续战+工程战） | 成员=battle_encounter,battle_siege_attack,battle_siege_defense,battle_spawn_dynamic,battle_persistence,siege_engineering | 注=原地图重构包拆分；共享域 modules/combat
 
 # ───────────── 2026-09-03 历史补录（git 494 提交对账：立项→规划→基建→渲染→原型→收口→深化） ─────────────
-任务 hist_gdd | 名称=立项：GDD v2.0+设计支柱+核心循环+世界观+商业分析 | 线=门 | 状态=完成 | 前置=root | 注=2026-06-21 首批 10 提交
-任务 hist_arch_docs | 名称=技术架构文档体系（核心实体/EventBus信号/模块API契约/数据流全景） | 线=门 | 状态=完成 | 前置=root
-任务 hist_core_skeleton | 名称=模块化架构+core 骨架（EventBus/ConfigManager/SaveManager/SceneManager+测试框架） | 线=门 | 状态=完成 | 前置=root
-任务 hist_project_mgmt | 名称=项目管理规则（AGENTS.md/CI-DI 流程/待办体系/godot_ai 工具库） | 线=门 | 状态=完成 | 前置=root
-任务 hist_infra_expand | 名称=核心基础设施扩展（WorldState 实体注册/序列化+organization/resources 模块骨架+Autoload） | 线=门 | 状态=完成 | 前置=hist_core_skeleton,hist_arch_docs
-任务 hist_excel_pipeline | 名称=Excel 数据管线+BalanceConfig 热加载+配置迁移 | 线=门 | 状态=完成 | 前置=hist_infra_expand
-任务 hist_docs_cn | 名称=文档体系中文化重组+设计文档精简+架构文档 v3 | 线=门 | 状态=完成 | 前置=hist_gdd,hist_arch_docs
-任务 hist_render_bake | 名称=火柴人渲染管线（SWL Swordwrath 骨架+纹理烘焙 4x+mipmaps+Skeleton2D 骨骼重构+动画 .tres 化） | 线=门 | 状态=完成 | 前置=hist_infra_expand | 注=2026-07-10~12；units 594 提交热区的起点
-任务 hist_entity | 名称=StickmanEntity 物理实体+运动系统（CharacterBody2D+速度/翻转） | 线=门 | 状态=完成 | 前置=hist_render_bake | 注=2026-07-13；行为 AI/战斗/附身的公共载体
-任务 hist_p01 | 名称=GameRoot 常驻主场景骨架+世界模块+村落地图搭建+UI 模块雏形（GlobalHUD/ModePanel） | 线=门 | 状态=完成 | 前置=hist_core_skeleton | 注=阶段 0.1；2026-07-13
-任务 hist_p02 | 名称=BuildMask 建筑禁放区+WalkBarrier/PassageBarrier 通行障碍+DebugOverlay 调试覆盖层+时钟 widget | 线=门 | 状态=完成 | 前置=hist_p01 | 注=阶段 0.2；2026-07-14
-任务 hist_p03 | 名称=火柴人行为 AI 基础（AIController 状态机+行为雏形） | 线=门 | 状态=完成 | 前置=hist_entity | 注=阶段 0.3；2026-07-17；依赖实体与动画，与地图禁放区无依赖
-任务 hist_p04 | 名称=建筑节点结构基类+选址+建造+派工系统+工人工作行为 | 线=门 | 状态=完成 | 前置=hist_p02,hist_p03 | 注=阶段 0.4；2026-07-17；hist_infra_expand 冗余前置已删（经 hist_p03 传递）
-任务 hist_p05 | 名称=小队级战斗（battle_instance 阵营/伤亡统计/胜负判定+导演） | 线=门 | 状态=完成 | 前置=hist_p03 | 注=阶段 0.5；2026-07-17
-任务 hist_p06a | 名称=框选系统+编队系统（selection_system/formation_system） | 线=门 | 状态=完成 | 前置=hist_p05 | 注=阶段 0.6 前半；2026-07-17
-任务 hist_p06b | 名称=战术号令+指挥链+BattlePanel/Minimap UI（tactical_orders/command_chain） | 线=门 | 状态=完成 | 前置=hist_p06a | 注=阶段 0.6 后半；2026-07-17
-任务 hist_p07 | 名称=玩家附身系统（PossessionInterface 附身链路） | 线=门 | 状态=完成 | 前置=hist_p06a | 注=阶段 0.7；附身与号令指挥链是并行特性；hist_entity 冗余前置已删（经 hist_p06a 传递）
-任务 hist_p08a | 名称=多场景衔接+跨图带队出征（SceneLoader 多图切换+战场重建+遭遇战参战） | 线=门 | 状态=完成 | 前置=hist_p02,hist_p05 | 注=阶段 0.8 前半；ChunkTrigger 方案将被地图重构（exit_mechanism）替换
-任务 hist_p08b | 名称=队伍类型编制系统（编制预设/职责范围/FormationPanel 管理窗口） | 线=门 | 状态=完成 | 前置=hist_p06a | 注=阶段 0.8 后半
-任务 hist_worldgen_terrain | 名称=程序化地形生成（8192 锁定高度场+fBm 海岸扰动+分形大陆三角网格两阶段合成） | 线=门 | 状态=完成 | 前置=hist_core_skeleton | 注=2026-07-15~16；Azgaar 模板法被分形大陆方案替代，河流追踪一版推翻（08a 需求重做中→river_gen）
-任务 hist_strategic_redesign | 名称=战略图模块重新设计（数据层/控制器/UI 组件，旧框架归档） | 线=门 | 状态=完成 | 前置=hist_worldgen_terrain
-任务 hist_l3_l2_l1 | 名称=世界生成三层落地（L3 大陆→L2 13 区→L1 389 地块→3203 城市细分+L1/L2/L3 视图+导出管线） | 线=门 | 状态=完成 | 前置=hist_strategic_redesign | 注=08 上旬~中旬，world_map 299 提交主段
-任务 hist_p0_close | 名称=收口执行计划（数据清理/EnterTrigger/资源接入/数据驱动+测试链稳定化 S1-4+战斗链路 S2-1） | 线=门 | 状态=完成 | 前置=hist_p08b | 注=阶段 P0 收口；2026-08 上旬
-任务 hist_audit_rounds | 名称=架构审计三轮+Top10 修复+文档校准+仓库卫生（audit_cycle 工具） | 线=门 | 状态=完成 | 前置=hist_p0_close | 注=2026-08-04~16
-任务 hist_save_sqlite | 名称=存档 SQLite 化（buildings 表+schema 迁移+WorldState 信号直写+双轨合并） | 线=门 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08-22；hist_p0_close 冗余前置已删（经 hist_audit_rounds 传递）
-任务 hist_ui_system | 名称=UI 体系落地（主菜单/载入/暂停/设置/存档面板+分层重构+4 弹窗模板+模态栈+懒加载） | 线=门 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08；hist_p08b 冗余前置已删（经 hist_audit_rounds 传递）
-任务 hist_resource_pricing | 名称=系统深化批次（资源供需定价引擎+CombatApi+F9 热重载+fx 粒子池+夜间光照） | 线=门 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08-22 第三/四批整改
-任务 hist_arena_obs | 名称=大乱斗观察场（8 轮审计修复+翻译保真度审计+fx 全量考古 B8~B14） | 线=门 | 状态=完成 | 前置=hist_resource_pricing | 注=2026-08-29~31，AI 复刻的前置验收场
-任务 hist_coverage_audit | 名称=AI 复刻覆盖率审计+SWL 全模块对账（34%→立项 11a~11e/12 批次） | 线=门 | 状态=完成 | 前置=hist_arena_obs | 注=2026-09-01
+任务 hist_gdd | 名称=立项：GDD v2.0+设计支柱+核心循环+世界观+商业分析 | 线=基线 | 状态=完成 | 前置=root | 注=2026-06-21 首批 10 提交
+任务 hist_arch_docs | 名称=技术架构文档体系（核心实体/EventBus信号/模块API契约/数据流全景） | 线=基线 | 状态=完成 | 前置=root
+任务 hist_core_skeleton | 名称=模块化架构+core 骨架（EventBus/ConfigManager/SaveManager/SceneManager+测试框架） | 线=基线 | 状态=完成 | 前置=root
+任务 hist_project_mgmt | 名称=项目管理规则（AGENTS.md/CI-DI 流程/待办体系/godot_ai 工具库） | 线=基线 | 状态=完成 | 前置=root
+任务 hist_infra_expand | 名称=核心基础设施扩展（WorldState 实体注册/序列化+organization/resources 模块骨架+Autoload） | 线=基线 | 状态=完成 | 前置=hist_core_skeleton,hist_arch_docs
+任务 hist_excel_pipeline | 名称=Excel 数据管线+BalanceConfig 热加载+配置迁移 | 线=基线 | 状态=完成 | 前置=hist_infra_expand
+任务 hist_docs_cn | 名称=文档体系中文化重组+设计文档精简+架构文档 v3 | 线=基线 | 状态=完成 | 前置=hist_gdd,hist_arch_docs
+任务 hist_render_bake | 名称=火柴人渲染管线（SWL Swordwrath 骨架+纹理烘焙 4x+mipmaps+Skeleton2D 骨骼重构+动画 .tres 化） | 线=基线 | 状态=完成 | 前置=hist_infra_expand | 注=2026-07-10~12；units 594 提交热区的起点
+任务 hist_entity | 名称=StickmanEntity 物理实体+运动系统（CharacterBody2D+速度/翻转） | 线=基线 | 状态=完成 | 前置=hist_render_bake | 注=2026-07-13；行为 AI/战斗/附身的公共载体
+任务 hist_p01 | 名称=GameRoot 常驻主场景骨架+世界模块+村落地图搭建+UI 模块雏形（GlobalHUD/ModePanel） | 线=基线 | 状态=完成 | 前置=hist_core_skeleton | 注=阶段 0.1；2026-07-13
+任务 hist_p02 | 名称=BuildMask 建筑禁放区+WalkBarrier/PassageBarrier 通行障碍+DebugOverlay 调试覆盖层+时钟 widget | 线=基线 | 状态=完成 | 前置=hist_p01 | 注=阶段 0.2；2026-07-14
+任务 hist_p03 | 名称=火柴人行为 AI 基础（AIController 状态机+行为雏形） | 线=基线 | 状态=完成 | 前置=hist_entity | 注=阶段 0.3；2026-07-17；依赖实体与动画，与地图禁放区无依赖
+任务 hist_p04 | 名称=建筑节点结构基类+选址+建造+派工系统+工人工作行为 | 线=基线 | 状态=完成 | 前置=hist_p02,hist_p03 | 注=阶段 0.4；2026-07-17；hist_infra_expand 冗余前置已删（经 hist_p03 传递）
+任务 hist_p05 | 名称=小队级战斗（battle_instance 阵营/伤亡统计/胜负判定+导演） | 线=基线 | 状态=完成 | 前置=hist_p03 | 注=阶段 0.5；2026-07-17
+任务 hist_p06a | 名称=框选系统+编队系统（selection_system/formation_system） | 线=基线 | 状态=完成 | 前置=hist_p05 | 注=阶段 0.6 前半；2026-07-17
+任务 hist_p06b | 名称=战术号令+指挥链+BattlePanel/Minimap UI（tactical_orders/command_chain） | 线=基线 | 状态=完成 | 前置=hist_p06a | 注=阶段 0.6 后半；2026-07-17
+任务 hist_p07 | 名称=玩家附身系统（PossessionInterface 附身链路） | 线=基线 | 状态=完成 | 前置=hist_p06a | 注=阶段 0.7；附身与号令指挥链是并行特性；hist_entity 冗余前置已删（经 hist_p06a 传递）
+任务 hist_p08a | 名称=多场景衔接+跨图带队出征（SceneLoader 多图切换+战场重建+遭遇战参战） | 线=基线 | 状态=完成 | 前置=hist_p02,hist_p05 | 注=阶段 0.8 前半；ChunkTrigger 方案将被地图重构（exit_mechanism）替换
+任务 hist_p08b | 名称=队伍类型编制系统（编制预设/职责范围/FormationPanel 管理窗口） | 线=基线 | 状态=完成 | 前置=hist_p06a | 注=阶段 0.8 后半
+任务 hist_worldgen_terrain | 名称=程序化地形生成（8192 锁定高度场+fBm 海岸扰动+分形大陆三角网格两阶段合成） | 线=基线 | 状态=完成 | 前置=hist_core_skeleton | 注=2026-07-15~16；Azgaar 模板法被分形大陆方案替代，河流追踪一版推翻（08a 需求重做中→river_gen）
+任务 hist_strategic_redesign | 名称=战略图模块重新设计（数据层/控制器/UI 组件，旧框架归档） | 线=基线 | 状态=完成 | 前置=hist_worldgen_terrain
+任务 hist_l3_l2_l1 | 名称=世界生成三层落地（L3 大陆→L2 13 区→L1 389 地块→3203 城市细分+L1/L2/L3 视图+导出管线） | 线=基线 | 状态=完成 | 前置=hist_strategic_redesign | 注=08 上旬~中旬，world_map 299 提交主段
+任务 hist_p0_close | 名称=收口执行计划（数据清理/EnterTrigger/资源接入/数据驱动+测试链稳定化 S1-4+战斗链路 S2-1） | 线=基线 | 状态=完成 | 前置=hist_p08b | 注=阶段 P0 收口；2026-08 上旬
+任务 hist_audit_rounds | 名称=架构审计三轮+Top10 修复+文档校准+仓库卫生（audit_cycle 工具） | 线=基线 | 状态=完成 | 前置=hist_p0_close | 注=2026-08-04~16
+任务 hist_save_sqlite | 名称=存档 SQLite 化（buildings 表+schema 迁移+WorldState 信号直写+双轨合并） | 线=基线 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08-22；hist_p0_close 冗余前置已删（经 hist_audit_rounds 传递）
+任务 hist_ui_system | 名称=UI 体系落地（主菜单/载入/暂停/设置/存档面板+分层重构+4 弹窗模板+模态栈+懒加载） | 线=基线 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08；hist_p08b 冗余前置已删（经 hist_audit_rounds 传递）
+任务 hist_resource_pricing | 名称=系统深化批次（资源供需定价引擎+CombatApi+F9 热重载+fx 粒子池+夜间光照） | 线=基线 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08-22 第三/四批整改
+任务 hist_arena_obs | 名称=大乱斗观察场（8 轮审计修复+翻译保真度审计+fx 全量考古 B8~B14） | 线=基线 | 状态=完成 | 前置=hist_resource_pricing | 注=2026-08-29~31，AI 复刻的前置验收场
+任务 hist_coverage_audit | 名称=AI 复刻覆盖率审计+SWL 全模块对账（34%→立项 11a~11e/12 批次） | 线=基线 | 状态=完成 | 前置=hist_arena_obs | 注=2026-09-01

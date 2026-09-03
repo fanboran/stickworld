@@ -58,7 +58,7 @@ from pathlib import Path
 
 STATUSES = ["完成", "待验收", "进行中", "可开工", "阻塞", "冻结", "放弃"]
 ACTIVE = {"进行中", "待验收", "完成"}
-FIELDS = {"名称", "线", "状态", "前置", "域", "树", "位置", "豁免", "注"}
+FIELDS = {"名称", "线", "状态", "前置", "域", "树", "位置", "豁免", "注", "文档"}
 
 
 def parse(src: str):
@@ -110,7 +110,7 @@ def parse(src: str):
             continue
         node = {"id": nid, "kind": kind, "name": nid, "lane": "", "status": "可开工",
                 "prs": [], "domain": [], "tree": "", "note": "", "pos": None,
-                "exempt": False, "line": ln}
+                "exempt": False, "doc": "", "line": ln}
         for kv in rest.split("|"):
             if "=" not in kv:
                 errors.append(("E", ln, f"{nid}: 字段缺 '=': {kv.strip()}"))
@@ -141,6 +141,8 @@ def parse(src: str):
                 node["exempt"] = v in ("1", "true", "是")
             elif k == "注":
                 node["note"] = v
+            elif k == "文档":
+                node["doc"] = v
             else:
                 errors.append(("W", ln, f"{nid}: 未知字段 {k}（可用: {'/'.join(sorted(FIELDS))}）"))
         if nid in nodes:
@@ -400,12 +402,35 @@ def validate(nodes, edges, lane_order, clusters):
     return errs, warns
 
 
-def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready=None, crit=None) -> str:
+def producer_data(nodes, ready, crit, limit=6):
+    """制作人视图聚合数据：统计 / 派活组合 / 里程碑进度（收口门燃尽）。"""
+    combo = dispatch_suggestion(nodes, ready, crit, limit)
+    gates = []
+    for n in nodes.values():
+        if n["kind"] != "里程碑":
+            continue
+        ds = [d for d in descendants_of(n["id"], nodes) if nodes[d]["status"] != "放弃"]
+        done = sum(1 for d in ds if nodes[d]["status"] == "完成")
+        gates.append({"id": n["id"], "name": n["name"], "done": done, "total": len(ds)})
+    gates.sort(key=lambda g: (g["done"] >= g["total"], -(g["total"] - g["done"])))
+    stats = {
+        "nodes": len(nodes),
+        "done": sum(1 for n in nodes.values() if n["status"] == "完成"),
+        "active": sum(1 for n in nodes.values() if n["status"] in ("进行中", "待验收")),
+        "ready": len(ready),
+        "blocked": sum(1 for n in nodes.values() if n["status"] == "阻塞"),
+        "frozen": sum(1 for n in nodes.values() if n["status"] == "冻结"),
+    }
+    ready_list = [{"id": i, "name": nodes[i]["name"], "lane": nodes[i]["lane"]} for i in sorted(ready)]
+    return {"ready": ready_list, "combo": combo, "crit": crit, "gates": gates, "stats": stats}
+
+
+def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready=None, crit=None, producer=None) -> str:
     data = {
         "lanes": lane_order,
         "nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "lane": n["lane"],
                    "status": n["status"], "prs": n["prs"], "domain": ",".join(n["domain"]),
-                   "tree": n["tree"], "note": n["note"], "exempt": n["exempt"],
+                   "tree": n["tree"], "note": n["note"], "exempt": n["exempt"], "doc": n["doc"],
                    "x": n["pos"][0] if n["pos"] else None,
                    "y": n["pos"][1] if n["pos"] else None} for n in nodes.values()],
         "edges": [{"a": e["a"], "b": e["b"]} for e in edges],
@@ -413,6 +438,7 @@ def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, rea
         "divideX": divide_hint,
         "ready": sorted(ready or []),
         "crit": crit or [],
+        "producer": producer or {},
         "clusters": [{"id": c["id"], "name": c["name"], "members": c["members"],
                     "note": c["note"], "folded": c["folded"]} for c in clusters],
     }
@@ -481,53 +507,119 @@ HTML = r"""<!DOCTYPE html>
  #zoom{position:fixed;left:12px;bottom:12px;font-size:11px;color:var(--sub);z-index:15;
    background:#161b22cc;border:1px solid var(--line);border-radius:6px;padding:3px 8px}
  canvas#cv{display:block;position:fixed;inset:0}
+ /* ── 视图页签（岗位工作台） ── */
+ #viewTabs{gap:4px}
+ .vtab{font-size:11.5px;padding:2px 11px;border-radius:16px;border:1px solid #ffffff10;cursor:pointer;
+   background:#161b22;color:#9aa7b4;user-select:none;white-space:nowrap;flex-shrink:0;transition:all .15s}
+ .vtab:hover{color:var(--txt);border-color:#3d4754}
+ .vtab.on{background:#58a6ff1f;border-color:#58a6ff66;color:#79b8ff;font-weight:600}
+ /* ── 右键菜单 / 弹窗 ── */
+ #ctx{position:fixed;display:none;background:#1c222bf2;border:1px solid #3d4754;border-radius:9px;
+   padding:5px 0;z-index:50;min-width:170px;box-shadow:0 10px 30px #000a;font-size:12px;max-height:60vh;overflow:auto}
+ #ctx .ch{color:var(--sub);font-size:10.5px;padding:4px 14px 2px;letter-spacing:1px}
+ #ctx .ci{padding:5px 14px;cursor:pointer;white-space:nowrap}
+ #ctx .ci:hover{background:#58a6ff22}
+ #modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:60}
+ #modal>div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 22px;
+   width:340px;display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+ #modal h3{margin:0 0 4px;font-size:14.5px}
+ #modal label{display:flex;flex-direction:column;gap:3px;color:var(--sub)}
+ #modal input,#modal select{background:#0d1117;border:1px solid var(--line);border-radius:6px;color:var(--txt);
+   padding:5px 8px;font-size:12px;outline:none}
+ #modal input:focus,#modal select:focus{border-color:var(--acc)}
+ #modal .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+ #modal .go{background:#58a6ff22;border:1px solid #58a6ff55;color:#79b8ff;border-radius:7px;
+   padding:6px 16px;cursor:pointer;font-size:12.5px}
+ #modal .no{background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:7px;
+   padding:6px 12px;cursor:pointer;font-size:12.5px}
+ /* ── 制作人仪表盘 ── */
+ #dash{position:fixed;left:0;right:0;bottom:0;display:none;overflow:auto;background:var(--bg);z-index:10;
+   padding:16px 18px 26px}
+ #dash .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;max-width:1500px}
+ #dash .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 15px}
+ #dash .card h4{margin:0 0 9px;font-size:13px;color:var(--acc);letter-spacing:.5px}
+ #dash .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+ #dash .stat{background:#0d1117;border:1px solid var(--line);border-radius:8px;padding:8px 10px;text-align:center}
+ #dash .stat b{font-size:20px;display:block}
+ #dash .stat span{font-size:10.5px;color:var(--sub)}
+ .tchip{display:inline-block;background:#1c222b;border:1px solid #ffffff12;border-radius:6px;padding:2px 8px;
+   margin:2px 3px 2px 0;font-size:11.5px;cursor:pointer;color:#c9d4e0;white-space:nowrap;transition:all .12s}
+ .tchip:hover{border-color:var(--acc);color:var(--acc)}
+ .tchip .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:0}
+ #dash .laneHead{font-size:11px;color:var(--sub);margin:7px 0 2px;letter-spacing:1px}
+ #dash .bar{height:7px;background:#0d1117;border:1px solid #2a313a;border-radius:4px;overflow:hidden;flex:1}
+ #dash .bar i{display:block;height:100%;background:linear-gradient(90deg,#2dd4bf,#3fb950)}
+ #dash .gate{display:flex;align-items:center;gap:9px;margin:6px 0;font-size:11.5px}
+ #dash .gate .nm{width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+ #dash .gate .nm:hover{color:var(--acc)}
+ #dash .gate .pc{width:46px;text-align:right;color:var(--sub);font-size:10.5px}
+ #dash .warn{font-size:11.5px;color:#d29922;line-height:1.7;word-break:break-all}
+ #dash .hint{font-size:10.5px;color:#6e7a87;margin-top:6px}
  @media (max-width:1150px){#bar .sub{display:none}#search{width:130px}}
  @media (max-width:860px){#legend{display:none}#bar .btn{padding:4px 7px;font-size:11.5px}#search{width:110px}}
 </style></head><body>
-<div id="bar"><div class="row"><b>任务依赖图</b><span class="sub">DAG 调度台</span>
+<div id="bar"><div class="row"><b title="任务依赖图 · 唯一真相源 docs/项目/任务依赖图.txt">任务依赖图</b><span class="sub">DAG 调度台</span>
  <span class="sep"></span>
  <input id="search" placeholder="搜索 id / 名称 / 备注…">
  <span class="sep"></span>
- <button class="btn" onclick="locateActive()">定位当前</button>
- <button class="btn" onclick="fitAll()">适配全图</button>
- <span class="sep"></span>
- <button class="btn" onclick="relayout()">自动重排</button>
- <button class="btn" onclick="saveTxt()">保存布局</button>
- <button class="btn" onclick="showDivide=!showDivide;dirty=true">完成分割线</button>
- <span class="sep"></span>
- <button class="btn primary" onclick="toggleMsgs()">校验结果</button>
- <button class="btn" onclick="document.getElementById('help').style.display='flex'">帮助</button>
+ <button class="btn" onclick="locateActive()" title="定位到进行中/可开工任务区（活跃面）">⌖ 当前面</button>
+ <button class="btn" onclick="fitAll()" title="缩放至全图可见">⛶ 全图</button>
+ <button class="btn" onclick="relayout()" title="dagre 重新分层布线（交叉最小化；会清除手动布局）">⟲ 重排</button>
+ <button class="btn" id="exportBtn" onclick="exportTxt()" title="导出完整源文件（含状态/依赖/布局编辑）→ 覆盖 docs/项目/任务依赖图.txt → 跑 --check 校验">⬇ 导出源</button>
+ <button class="btn" onclick="showDivide=!showDivide;dirty=true" title="完成/未完成分割墙显隐（拖墙=右区整体平移）">✂ 分割墙</button>
+ <button class="btn" onclick="document.getElementById('help').style.display='flex'" title="操作说明">? 帮助</button>
  <div class="chips">
-  <span id="checkChip"></span>
-  <span id="readyChip" title="就绪集=前置全齐可立即派活；点击只高亮就绪节点（调度视角）"></span>
-  <span id="critChip" title="关键路径=未完成子图最长链；点击高亮链上节点（加并发只能压非关键路径）"></span>
+  <span id="checkChip" title="校验器结果——错误=环/悬空引用/前置未完成就开工（有错误禁止派活）；警告=状态滞后/冗余依赖/域冲突/无后沿（审计线索）。点击展开明细"></span>
+  <span id="readyChip" title="就绪集：前置全部完成、可立即派活的任务数。点击只高亮这些节点（调度视角）"></span>
+  <span id="critChip" title="关键路径：未完成子图最长链跳数（加并发只能压非关键路径，关键路径靠拆依赖/拆任务）。点击高亮链上节点"></span>
  </div>
 </div>
 <div class="row" id="barRow2">
  <span id="legend"></span>
  <span class="sep"></span>
- <span id="lanes" title="单击=显隐该线 · 双击=聚拢到画面中央（前沿列左/后沿列右）"></span>
+ <span id="lanes" title="单击=聚拢该线居中（再点退出，显隐/布局状态保留） · Alt+单击=显隐该线"></span>
+</div>
+<div class="row" id="viewTabs">
+ <span class="vtab on" data-v="graph">🗺 全图 DAG</span>
+ <span class="vtab" data-v="producer" title="派活台：今天派什么 / 什么卡住 / 离里程碑多远">🧭 制作人</span>
+ <span class="vtab" data-v="eng" title="代码线工程板：模块开发/重构/技术债">⚙ 程序</span>
+ <span class="vtab" data-v="design" title="设计产出板：细化设计/决策项">📐 策划</span>
+ <span class="vtab" data-v="art" title="资产板：素材替换/外部采购通道">🎨 美术</span>
+ <span class="vtab" data-v="qa" title="质量板：缺陷/待验收/测试链/Demo 收口">🧪 测试</span>
 </div>
 </div>
+<div id="ctx"></div>
+<div id="modal"><div><h3>➕ 新建任务</h3>
+ <label>id（英文标识符）<input id="ntId" placeholder="如 tech_rebuild2"></label>
+ <label>名称<input id="ntName" placeholder="一句话说清交付物"></label>
+ <label>线<select id="ntLane"></select></label>
+ <label>状态<select id="ntStatus"></select></label>
+ <label>前置（逗号分隔 id，可留空）<input id="ntPrs" placeholder="root"></label>
+ <label>域（逗号分隔文件/目录，可留空）<input id="ntDomain" placeholder="modules/xxx"></label>
+ <label>关联文档（可留空）<input id="ntDoc" placeholder="docs/设计/系统/xx.md"></label>
+ <label>注<input id="ntNote"></label>
+ <div class="btns"><button class="no" onclick="closeModal()">取消</button><button class="go" onclick="submitNewTask()">创建</button></div>
+</div></div>
+<div id="dash"></div>
 <div id="panel"></div>
 <div id="msgs"></div>
 <div id="help"><div>
- <b>任务依赖图 · 操作</b><br>
- 拖节点 = 移动 · 拖空白 = 平移 · 滚轮 = 缩放<br>
- 点节点 = 详情（前置/被依赖可点击跳转）<br>
- 悬停 = 高亮上下游依赖链（上游 = 要先完成的）<br>
- 双击节点 = 居中放大 · 双击空白 = 适配全图<br>
- 搜索框回车 = 跳到第一个匹配 · Esc = 清除<br>
- 右下小地图 = 点击/拖动跳转 · 泳道胶囊 Alt+单击 = 显隐该线<br>
- <b>▣ 封装簇</b> = 点击折叠卡片展开成员，点虚线框标签收起；拖动簇=整体平移<br>
- <b>◎ 聚拢</b> = 单击泳道胶囊：该线居中，前沿（外部前置）列左、后沿（外部被依赖）列右，无关淡出；再点同胶囊退出（进入前坐标自动恢复，手动布局不丢）<br>
- <b>✂ 分隔墙</b> = 左完成右未完成；拖墙=右区整体平移；节点拖动被墙挡住，只有状态变完成才移到左侧<br>
- <b>🚦 可派</b> = 就绪集（前置全齐）——协调者的派活候选清单；点击只高亮这些节点<br>
- <b>🛤 关键路径</b> = 未完成子图最长链——压缩它靠拆依赖/拆任务，加并发只能压非关键路径<br>
- <b>自动重排</b> = dagre 重新分层布线（交叉最小化）<br>
- <b>保存布局</b> = 把当前位置写回源文件（下次打开即手动布局）<br>
- <span style="color:var(--sub)">红边 = 前置未完成却已开工（违规）· 虚线框 = 豁免校验 ·
- 布局引擎 dagre（mermaid 同款）+ litegraph 式端口贝塞尔</span>
+ <b>任务依赖图 · 操作（对标 Shader Graph / ComfyUI）</b><br>
+ <b>视图</b>：顶栏第三排页签——全图 DAG / 🧭制作人（派活台）/ ⚙程序 / 📐策划 / 🎨美术 / 🧪测试；URL #view= 可直达<br>
+ <b>框选</b>：左键拖空白画虚线框，松开选中框内任务；Shift+点=加选/减选；Esc 清选<br>
+ <b>平移</b>：中键拖 / 右键拖 / 空格+左键拖（三通道）；滚轮=缩放；双击空白=适配全图<br>
+ <b>移动</b>：拖节点=移动；框选后拖任一选中节点=批量移动（自动遵守分割墙）<br>
+ <b>建依赖</b>：从卡片<b>右缘外 9px 热区</b>按下拖到目标卡片松开 = a→b 前置边（会防自环/重复）<br>
+ <b>删依赖</b>：点边选中（高亮）后按 Del；或右键边→删除依赖<br>
+ <b>右键菜单</b>：选中任务右键=批量改状态（7 态）/复制 id；空白右键=新建任务/全图/重排<br>
+ <b>编辑闭环</b>：改状态/连边/新建后节点右上角亮●角标——点「⬇ 导出源」下载完整 txt，
+ 覆盖 docs/项目/任务依赖图.txt 后跑 <b>python tools/deptask/gen.py --check</b>（有错误禁派活）<br>
+ <b>调度 chips</b>：✓校验 / 🚦可派（就绪集高亮）/ 🛤关键路径（最长链高亮）<br>
+ <b>泳道胶囊</b>：单击=聚拢该线（前沿列左/后沿列右，再点退出且坐标不丢）· Alt+单击=显隐<br>
+ 点节点=详情（前置/被依赖/关联文档可点跳转）· 悬停=高亮上下游依赖链 · 双击节点=居中放大<br>
+ 右下小地图=点击/拖动跳转 · 拖分割墙=右区整体平移（节点只有变完成才能过墙）<br>
+ <span style="color:var(--sub)">布局引擎 dagre（mermaid 同款）+ litegraph 式端口贝塞尔 ·
+ 源文件一行一记录语法见 任务依赖图.txt 头注释</span>
 </div></div>
 <canvas id="cv"></canvas>
 <canvas id="mini" width="180" height="120"></canvas>
@@ -553,7 +645,8 @@ const prsOf={},blocksOf={};
 nodes.forEach(n=>{prsOf[n.id]=[];blocksOf[n.id]=[];});
 edges.forEach(e=>{if(prsOf[e.b]){prsOf[e.b].push(e.a);blocksOf[e.a].push(e.b);}});
 nodes.forEach(n=>{(n.prs||[]).forEach(p=>{if(prsOf[n.id].indexOf(p)<0)prsOf[n.id].push(p);});});
-let view={x:0,y:0,k:1},sel=null,hover=null,drag=null,hi=null,q="",dirty=true;
+let view={x:0,y:0,k:1},sel=null,selSet=new Set(),selEdge=null,hover=null,drag=null,hi=null,q="",dirty=true;
+let spaceDown=false,editedIds=new Set(),dirtyEdits=false;
 let laneVis={};lanes.forEach(l=>laneVis[l]=true);
 // ── 簇（封装任务簇）：折叠时成员由虚拟簇节点代替，边聚合重定向 ──
 const CLUSTERS=DATA.clusters||[];
@@ -600,7 +693,9 @@ function measureOne(n,maxW){ // 单节点卡片测量（簇节点用更大宽度
 function ancestors(id){const s=new Set(),st=[id];while(st.length){(prsOf[st.pop()]||[]).forEach(p=>{if(!s.has(p)){s.add(p);st.push(p);}});}return s;}
 function descendants(id){const s=new Set(),st=[id];while(st.length){(blocksOf[st.pop()]||[]).forEach(b=>{if(!s.has(b)){s.add(b);st.push(b);}});}return s;}
 function laneHidden(l){return l&&laneVis[l]===false;}
-function nodeVisible(n){return !laneHidden(n.lane)&&(!q||n._hit);}
+let viewFilter={};  // 岗位视图过滤（页签切换设置）：lanes=可见线集合 / ids=按任务判定函数
+function visNode(n){return !laneHidden(n.lane)&&(!viewFilter.lanes||viewFilter.lanes.has(n.lane))&&(!viewFilter.ids||viewFilter.ids(n));}
+function nodeVisible(n){return visNode(n)&&(!q||n._hit);}
 function resize(){dpr=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;
  BAR_H=document.getElementById("bar").offsetHeight||80;  // 窄屏换行/媒体查询后顶栏高度跟随实测
  cv.width=VW*dpr;cv.height=VH*dpr;cv.style.width=VW+"px";cv.style.height=VH+"px";dirty=true;}
@@ -671,7 +766,7 @@ function edgeBad(e){const a=vById[e.a],b=vById[e.b];
  return a&&b&&a.status!=="完成"&&ACTIVE.has(b.status);}
 function laneFrames(){
  const fr={};
- VN.forEach(n=>{if(!n.lane)return;
+ VN.forEach(n=>{if(!n.lane||!visNode(n))return;
   const f=fr[n.lane]||(fr[n.lane]={minX:1e9,minY:1e9,maxX:-1e9,maxY:-1e9,n:0});
   f.minX=Math.min(f.minX,n.px);f.minY=Math.min(f.minY,n.py);
   f.maxX=Math.max(f.maxX,n.px+n.cw);f.maxY=Math.max(f.maxY,n.py+n.ch);f.n++;});
@@ -703,11 +798,11 @@ function draw(){
  const cs=(critOnly&&CRIT.length)?new Set(CRIT):null;
  const lit=id=>(!hi&&!cs)||id===hi||(anc&&anc.has(id))||(des&&des.has(id))||(cs&&cs.has(id));
  // 边（端口对端口贝塞尔）
- VE.forEach(e=>{const a=vById[e.a],b=vById[e.b];if(!a||!b||laneHidden(a.lane)||laneHidden(b.lane))return;
-  const on=lit(e.a)&&lit(e.b),bad=edgeBad(e);
+ VE.forEach(e=>{const a=vById[e.a],b=vById[e.b];if(!a||!b||!visNode(a)||!visNode(b))return;
+  const on=lit(e.a)&&lit(e.b),bad=edgeBad(e),isSel=selEdge&&selEdge.a===e.a&&selEdge.b===e.b;
   const g=edgeGeom(e);
-  ctx.strokeStyle=bad?"#f85149":(on?"#58a6ffdd":"#3d4a5c");
-  ctx.lineWidth=(on||bad)?2:1.2;
+  ctx.strokeStyle=isSel?"#ffd35c":(bad?"#f85149":(on?"#58a6ffdd":"#3d4a5c"));
+  ctx.lineWidth=isSel?3:((on||bad)?2:1.2);
   let ea=on?1:((hi||cs)?0.12:0.85);
   if(focusLane&&vById[e.a]&&vById[e.b]&&vById[e.a]._f==="other"&&vById[e.b]._f==="other")ea*=0.1;
   ctx.globalAlpha=ea;
@@ -752,9 +847,23 @@ function draw(){
   ctx.fillStyle=c+"26";roundRect(ctx,x+9,y+h-24,pw,16,8);ctx.fill();
   ctx.fillStyle=c;ctx.fillText(st,x+15,y+h-12);
   if(n.tree){ctx.fillStyle="#6e7a87";ctx.fillText("⌂ "+n.tree,x+9+pw+8,y+h-12);}
+  if(n.id!==sel&&selSet.has(n.id)){ctx.strokeStyle="#58a6ff88";roundRect(ctx,x-2,y-2,w+4,h+4,11);ctx.stroke();}
   if(n.id===sel||n.id===hover){ctx.strokeStyle="#ffffff38";roundRect(ctx,x-3,y-3,w+6,h+6,12);ctx.stroke();}
+  if(editedIds.has(n.id)){ctx.fillStyle="#e3b341";ctx.beginPath();ctx.arc(x+w-7,y+7,3.5,0,7);ctx.fill();}
   ctx.globalAlpha=1;});
  ctx.textAlign="left";
+ // 框选矩形 / 连线预览（屏幕层）
+ if(drag&&drag.box){ctx.setTransform(dpr,0,0,dpr,0,0);
+  const x=Math.min(drag.sx,drag.cx),y=Math.min(drag.sy,drag.cy),
+        w=Math.abs(drag.cx-drag.sx),h=Math.abs(drag.cy-drag.sy);
+  ctx.fillStyle="#58a6ff1c";ctx.fillRect(x,y,w,h);
+  ctx.strokeStyle="#58a6ff";ctx.setLineDash([5,4]);ctx.lineWidth=1;ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);
+  ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
+ if(drag&&drag.link){const a=byId[drag.from];
+  if(a){const x1=a.px+a.cw,y1=a.py+a.ch/2,x2=(drag.cx-view.x)/view.k,y2=(drag.cy-view.y)/view.k;
+   const q3=Math.hypot(x2-x1,y2-y1)||1,dx=Math.max(30,q3*0.25);
+   ctx.strokeStyle="#2dd4bf";ctx.lineWidth=2;ctx.setLineDash([6,4]);
+   ctx.beginPath();ctx.moveTo(x1,y1);ctx.bezierCurveTo(x1+dx,y1,x2-dx,y2,x2,y2);ctx.stroke();ctx.setLineDash([]);}}
  drawDivide();
  drawFocusLines();
  drawMini();drawZoom();
@@ -799,7 +908,7 @@ function drawDivide(){if(!showDivide||divideX==null)return;
 function drawMini(){mctx.setTransform(1,0,0,1,0,0);mctx.clearRect(0,0,180,120);
  const g=graphBBox();if(!g)return;
  const s=Math.min(168/g.w,104/g.h),ox=(180-g.w*s)/2,oy=(120-g.h*s)/2;
- VN.forEach(n=>{if(laneHidden(n.lane))return;
+ VN.forEach(n=>{if(!visNode(n))return;
   mctx.fillStyle=COL[n.status];
   mctx.fillRect(ox+(n.px-g.minX)*s,oy+(n.py-g.minY)*s,Math.max(2,n.cw*s),Math.max(1.5,n.ch*s));});
  const wx=(-view.x)/view.k,wy=(-view.y)/view.k;
@@ -851,13 +960,16 @@ function applyFocus(){
  if(inS.length&&extP.length)focusLines={pre:(Math.max(...extP.map(n=>n.px+n.cw))+Math.min(...inS.map(n=>n.px)))/2};
  if(extB.length)focusLines={...focusLines,post:(Math.max(...inS.map(n=>n.px+n.cw))+Math.min(...extB.map(n=>n.px)))/2};
  computePorts();dirty=true;}
+function docHref(p){return "../"+String(p).replace(/^docs\//,"");}
 function showPanel(n){const p=document.getElementById("panel");
  const chip=(id)=>{const t=byId[id];return"<span class='tag' onclick='jump(\""+id+"\")'>"+(t?t.name:id)+" · "+(t?t.status:"?")+"</span>";};
  p.innerHTML="<h3>"+(n.kind==="里程碑"?"◆ ":"")+n.name+"</h3>"
  +"<div><span class='tag' style='cursor:default;color:"+COL[n.status]+"'>"+n.status+"</span>"
  +(n.lane?"<span class='tag' style='cursor:default'>"+n.lane+"</span>":"")
  +(n.tree?"<span class='tag' style='cursor:default'>⌂ "+n.tree+"</span>":"")+"</div>"
+ +(selSet.size>1?"<div class='row'>已框选 "+selSet.size+" 个（拖动批量移动 / 右键批量改状态）</div>":"")
  +(n.domain?"<div class='row'>文件域："+n.domain+"</div>":"")
+ +(n.doc?"<div class='row'>📄 <a style='color:#79b8ff' href='"+docHref(n.doc)+"'>"+n.doc+"</a></div>":"")
  +(n.prs&&n.prs.length?"<div class='row'>前置（点击跳转）：<br>"+n.prs.map(chip).join("")+"</div>":"")
  +(blocksOf[n.id].length?"<div class='row'>被依赖：<br>"+blocksOf[n.id].map(chip).join("")+"</div>":"")
  +(n.note?"<div class='row' style='color:#c3cdd8'>"+n.note+"</div>":"")
@@ -865,51 +977,154 @@ function showPanel(n){const p=document.getElementById("panel");
  +"<div class='row' style='color:#555'>"+n.id+"</div>";
  p.style.display="block";}
 function jump(id){const cid=memberOf[id];if(cid&&folded[cid]){folded[cid]=false;rebuildView();}
- const n=byId[id];if(!n)return;sel=id;centerOn(n.px+n.cw/2,n.py+n.ch/2,1.1);showPanel(n);}
-// ── 交互 ──
+ const n=byId[id];if(!n)return;sel=id;selSet=new Set([id]);selEdge=null;
+ centerOn(n.px+n.cw/2,n.py+n.ch/2,1.1);showPanel(n);}
+// ── 交互（对标 Shader Graph / ComfyUI：左键框选，中键/右键/空格+左键平移，端口连线建边） ──
 function toWorld(ev){return{x:(ev.clientX-view.x)/view.k,y:(ev.clientY-view.y)/view.k};}
 function nodeAt(x,y){for(let i=VN.length-1;i>=0;i--){const n=VN[i];
  if(!nodeVisible(n))continue;
  if(x>=n.px&&x<=n.px+n.cw&&y>=n.py&&y<=n.py+n.ch)return n;}return null;}
+function portAt(x,y){for(let i=VN.length-1;i>=0;i--){const n=VN[i];   // 输出热区：右缘外 9px
+ if(!nodeVisible(n)||n.isCluster)continue;
+ if(x>=n.px+n.cw-1&&x<=n.px+n.cw+9&&y>=n.py&&y<=n.py+n.ch)return n;}return null;}
+function bez(t,g){const u=1-t;return{x:u*u*u*g.x1+3*u*u*t*g.c1x+3*u*t*t*g.c2x+t*t*t*g.x2,
+ y:u*u*u*g.y1+3*u*u*t*g.c1y+3*u*t*t*g.c2y+t*t*t*g.y2};}
+function edgeAt(x,y){let best=null,bd=8;VE.forEach(e=>{const g=edgeGeom(e);
+ for(let i=0;i<=16;i++){const q2=bez(i/16,g),d=Math.hypot(q2.x-x,q2.y-y);if(d<bd){bd=d;best=e;}}});
+ return best;}
+function markEdit(id){editedIds.add(id);dirtyEdits=true;
+ const b=document.getElementById("exportBtn");if(b)b.textContent="⬇ 导出源 ●";}
+function addEdge(a,b){if(a===b||!byId[b])return false;
+ const t=byId[b];
+ if(t.prs.indexOf(a)>=0&&edges.some(e=>e.a===a&&e.b===b))return false;  // 已存在=幂等拒绝
+ if(t.prs.indexOf(a)<0)t.prs.push(a);
+ if(!edges.some(e=>e.a===a&&e.b===b))edges.push({a,b});
+ markEdit(a);markEdit(b);return true;}
+function delEdge(e){const i=edges.findIndex(x=>x.a===e.a&&x.b===e.b);if(i>=0)edges.splice(i,1);
+ const t=byId[e.b];if(t){const j=t.prs.indexOf(e.a);if(j>=0)t.prs.splice(j,1);}
+ markEdit(e.a);markEdit(e.b);selEdge=null;rebuildView();dirty=true;}
+function setStatusAll(s){if(!selSet.size)return;
+ selSet.forEach(id=>{const n=byId[id];if(n)n.status=s;});
+ [...selSet].forEach(markEdit);rebuildView();hideCtx();dirty=true;}
+function copySelIds(){navigator.clipboard&&navigator.clipboard.writeText([...selSet].join(","));
+ hideCtx();}
+function hideCtx(){document.getElementById("ctx").style.display="none";}
+function showCtx(ev){const c=document.getElementById("ctx");let h="";
+ if(selEdge)h+="<div class='ci' onclick='delEdgeSel()'>🗑 删除依赖 "+selEdge.a+" → "+selEdge.b+"</div>";
+ const p=toWorld(ev),hit=nodeAt(p.x,p.y);
+ if(selSet.size>1||((hit||selSet.size===1)&&!selEdge)){
+  const ids=[...selSet];
+  h+="<div class='ch'>"+(ids.length>1?"已选 "+ids.length+" 个任务 → 批量状态：":(ids[0]||hit.id)+" → 状态：")+"</div>";
+  STATUS.forEach(s=>{h+="<div class='ci' onclick=\"setStatusAll('"+s+"')\">"+s+"</div>";});
+  h+="<div class='ci' onclick='copySelIds()'>📋 复制所选 id</div>";
+ }else if(!selEdge){
+  h+="<div class='ci' onclick='openNewTask()'>➕ 新建任务…</div>"+
+     "<div class='ci' onclick='fitAll();hideCtx()'>⛶ 适配全图</div>"+
+     "<div class='ci' onclick='relayout();hideCtx()'>⟲ 自动重排</div>";}
+ c.innerHTML=h;c.style.display="block";
+ c.style.left=Math.min(ev.clientX,innerWidth-190)+"px";
+ c.style.top=Math.min(ev.clientY,innerHeight-28*c.querySelectorAll(".ci").length-20)+"px";}
+function delEdgeSel(){if(selEdge)delEdge(selEdge);hideCtx();}
+document.addEventListener("mousedown",ev=>{if(!ev.target.closest("#ctx"))hideCtx();},true);
+cv.oncontextmenu=ev=>ev.preventDefault();
+let lastRmb=null;  // 右键按下点：mouseup 会先清 drag，contextmenu 后到——用位移判断是否"右键无拖动"
+cv.addEventListener("contextmenu",ev=>{
+ if(lastRmb&&Math.hypot(ev.clientX-lastRmb.x,ev.clientY-lastRmb.y)<4)showCtx(ev);
+ lastRmb=null;});
 cv.onmousedown=ev=>{const p=toWorld(ev);
+ if(ev.button===1||ev.button===2||(ev.button===0&&spaceDown)){   // 平移三通道
+  if(ev.button===2)lastRmb={x:ev.clientX,y:ev.clientY};
+  drag={pan:true,sx:ev.clientX,sy:ev.clientY,ox:view.x,oy:view.y,rmb:ev.button===2};return;}
+ if(ev.button!==0)return;
+ if(inMini(ev)){drag={mini:true};miniJump(ev);return;}
  if(showDivide&&divideX!=null&&Math.abs(ev.clientX-(divideX*view.k+view.x))<7){
   drag={divide:true,sx:ev.clientX,ox:divideX};return;}
+ const port=portAt(p.x,p.y);                    // 输出端口热区：起连线
+ if(port){drag={link:true,from:port.id,sx:ev.clientX,sy:ev.clientY,cx:ev.clientX,cy:ev.clientY};return;}
+ const e=(!nodeAt(p.x,p.y))?edgeAt(p.x,p.y):null; // 点边=选中边（Del 删除）
+ if(e){selEdge=e;sel=null;selSet=new Set();dirty=true;return;}
  const n=nodeAt(p.x,p.y);
- if(ev.button===0&&n){drag={n,dx:p.x-n.px,dy:p.y-n.py,sx:ev.clientX,sy:ev.clientY,moved:false};sel=n.id;showPanel(n);}
- else if(inMini(ev)){drag={mini:true};miniJump(ev);}
- else{drag={pan:true,sx:ev.clientX,sy:ev.clientY,ox:view.x,oy:view.y,moved:true};
-  if(ev.button===0){sel=null;hi=null;document.getElementById("panel").style.display="none";}}
+ if(n){
+  if(ev.shiftKey){if(selSet.has(n.id)&&selSet.size>1)selSet.delete(n.id);else selSet.add(n.id);
+   sel=n.id;showPanel(n);dirty=true;return;}
+  sel=n.id;selEdge=null;if(!selSet.has(n.id))selSet=new Set([n.id]);
+  showPanel(n);
+  drag={n,dx:p.x-n.px,dy:p.y-n.py,sx:ev.clientX,sy:ev.clientY,moved:false,
+   group:[...(n.isCluster?[n]:[...selSet])].filter(m=>m&&m.px!=null)
+        .map(m=>({m,dx:p.x-m.px,dy:p.y-m.py}))};
+ }else drag={box:true,sx:ev.clientX,sy:ev.clientY,cx:ev.clientX,cy:ev.clientY};
  dirty=true;};
 addEventListener("mousemove",ev=>{if(!drag)return;
  if(drag.mini){miniJump(ev);return;}
  if(drag.divide){const dx=(ev.clientX-drag.sx)/view.k;divideX=drag.ox+dx;enforceDivide();dirty=true;return;}
+ if(drag.box){drag.cx=ev.clientX;drag.cy=ev.clientY;dirty=true;return;}
+ if(drag.link){drag.cx=ev.clientX;drag.cy=ev.clientY;dirty=true;return;}
  if(drag.moved===false&&Math.hypot(ev.clientX-drag.sx,ev.clientY-drag.sy)>4)drag.moved=true;
  if(drag.pan){view.x=drag.ox+ev.clientX-drag.sx;view.y=drag.oy+ev.clientY-drag.sy;}
- else{const p=toWorld(ev);let nx=p.x-drag.dx,ny=p.y-drag.dy;
-  const doneSide=drag.n.status==="完成";
-  if(showDivide&&divideX!=null&&!drag.n.isCluster){
-   if(doneSide)nx=Math.min(nx,divideX-8-drag.n.cw);else nx=Math.max(nx,divideX+8);}
-  const dx=nx-drag.n.px,dy=ny-drag.n.py;
-  drag.n.px=nx;drag.n.py=ny;
-  if(drag.n.isCluster){drag.n.isCluster.members.forEach(id=>{const m=byId[id];m.px+=dx;m.py+=dy;});}
-  else{drag.n.x=drag.n.px;drag.n.y=drag.n.py;}  // 标记手动位置：保存布局时写「位置=」
+ else if(drag.group){const p=toWorld(ev);       // 单/批量移动（簇卡片带动成员，各守分割墙）
+  drag.group.forEach(g=>{let nx=p.x-g.dx,ny=p.y-g.dy;
+   const doneSide=g.m.status==="完成";
+   if(showDivide&&divideX!=null&&!g.m.isCluster){
+    if(doneSide)nx=Math.min(nx,divideX-8-g.m.cw);else nx=Math.max(nx,divideX+8);}
+   const dx=nx-g.m.px,dy=ny-g.m.py;
+   g.m.px=nx;g.m.py=ny;
+   if(g.m.isCluster){g.m.isCluster.members.forEach(id=>{const m=byId[id];m.px+=dx;m.py+=dy;});}
+   else{g.m.x=nx;g.m.y=ny;}});
   computePorts();}  // 端口 y 是缓存值，拖动必须重算，否则贝塞尔垂直方向不跟随
  dirty=true;});
 addEventListener("mouseup",ev=>{
- if(drag&&drag.n&&drag.n.isCluster&&!drag.moved){folded[drag.n.isCluster.id]=!folded[drag.n.isCluster.id];rebuildView();}
+ if(drag&&drag.box){
+  const x1=Math.min(drag.sx,drag.cx),x2=Math.max(drag.sx,drag.cx),
+        y1=Math.min(drag.sy,drag.cy),y2=Math.max(drag.sy,drag.cy);
+  if(x2-x1>6||y2-y1>6){
+   const a={x:(x1-view.x)/view.k,y:(y1-view.y)/view.k},b={x:(x2-view.x)/view.k,y:(y2-view.y)/view.k};
+   const hit=[];VN.forEach(n=>{if(!nodeVisible(n)||n.isCluster)return;
+    if(n.px+n.cw>a.x&&n.px<b.x&&n.py+n.ch>a.y&&n.py<b.y)hit.push(n.id);});
+   selSet=new Set(hit);sel=hit[0]||null;selEdge=null;
+   if(sel)showPanel(byId[sel]);else document.getElementById("panel").style.display="none";
+  }else{sel=null;selSet=new Set();selEdge=null;hi=null;
+   document.getElementById("panel").style.display="none";}
+ }else if(drag&&drag.link){
+  const p=toWorld(ev),t=nodeAt(p.x,p.y);
+  if(t&&t.id!==drag.from&&addEdge(drag.from,t.id)){rebuildView();showPanel(t);}
+ }else if(drag&&drag.n&&drag.n.isCluster&&!drag.moved){
+  folded[drag.n.isCluster.id]=!folded[drag.n.isCluster.id];rebuildView();}
  drag=null;dirty=true;});
 cv.onmousemove=ev=>{if(drag)return;const p=toWorld(ev);
  divideHover=showDivide&&divideX!=null&&Math.abs(ev.clientX-(divideX*view.k+view.x))<7;
- const n=nodeAt(p.x,p.y);
+ const n=nodeAt(p.x,p.y),po=portAt(p.x,p.y),ed=n?null:edgeAt(p.x,p.y);
  hover=n?n.id:null;hi=n?n.id:null;
- cv.style.cursor=divideHover?"col-resize":(n?"grab":"default");dirty=true;};
+ cv.style.cursor=divideHover?"col-resize":(po?"crosshair":(n?"grab":(ed?"pointer":(spaceDown?"grab":"crosshair"))));
+ dirty=true;};
 cv.onmouseleave=()=>{if(!sel){hi=null;dirty=true;}};
 cv.ondblclick=ev=>{const p=toWorld(ev);const n=nodeAt(p.x,p.y);
- if(n){sel=n.id;centerOn(n.px+n.cw/2,n.py+n.ch/2,1.15);showPanel(n);}
+ if(n){sel=n.id;selSet=new Set([n.id]);centerOn(n.px+n.cw/2,n.py+n.ch/2,1.15);showPanel(n);}
  else fitAll();};
 cv.onwheel=ev=>{ev.preventDefault();const f=ev.deltaY<0?1.13:0.885;const r=toWorld(ev);
  view.k=Math.min(2.5,Math.max(0.2,view.k*f));
  view.x=ev.clientX-r.x*view.k;view.y=ev.clientY-r.y*view.k;dirty=true;};
+// ── 新建任务弹窗 ──
+function openNewTask(){const m=document.getElementById("modal");m.style.display="flex";
+ const ls=document.getElementById("ntLane");
+ ls.innerHTML=lanes.map(l=>"<option>"+l+"</option>").join("");
+ const st=document.getElementById("ntStatus");
+ st.innerHTML=STATUS.map(s=>"<option"+(s==="可开工"?" selected":"")+">"+s+"</option>").join("");
+ document.getElementById("ntId").focus();}
+function closeModal(){document.getElementById("modal").style.display="none";}
+function submitNewTask(){const id=document.getElementById("ntId").value.trim();
+ if(!id){alert("id 必填");return;}
+ if(byId[id]){alert("id 已存在："+id);return;}
+ const n={id,kind:"任务",name:document.getElementById("ntName").value.trim()||id,
+  lane:document.getElementById("ntLane").value,status:document.getElementById("ntStatus").value,
+  prs:[],domain:(document.getElementById("ntDomain").value||"").split(/[,;]/).map(s=>s.trim()).filter(Boolean),
+  tree:"",note:document.getElementById("ntNote").value.trim(),
+  doc:document.getElementById("ntDoc").value.trim(),x:null,y:null,px:0,py:0,
+  lines:[],cw:150,ch:56,inP:[],outP:[],_hit:false};
+ nodes.push(n);byId[n.id]=n;prsOf[n.id]=[];blocksOf[n.id]=[];
+ (document.getElementById("ntPrs").value||"").split(",").map(s=>s.trim()).filter(Boolean)
+  .forEach(p=>addEdge(p,id));
+ markEdit(id);measureCards();rebuildView();closeModal();
+ sel=id;selSet=new Set([id]);jump(id);}
 function inMini(ev){const r=mini.getBoundingClientRect();
  return ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom;}
 function miniJump(ev){if(!mini._map)return;const{g,s,ox,oy}=mini._map;const r=mini.getBoundingClientRect();
@@ -936,9 +1151,11 @@ lanes.forEach((l,i)=>{const c=document.createElement("span");c.className="lchip"
  lanesBox.appendChild(c);});
 const chk=DATA.check||{errors:[],warns:[]};
 const chipEl=document.getElementById("checkChip");
-chipEl.textContent="✓ "+chk.errors.length+"E / "+chk.warns.length+"W";
-chipEl.style.background=chk.errors.length?"#f8514933":"#3fb95033";
-chipEl.style.color=chk.errors.length?"#f85149":"#3fb950";
+chipEl.textContent=chk.errors.length?("✗ "+chk.errors.length+" 错误"+(chk.warns.length?" · "+chk.warns.length+" 警告":""))
+ :(chk.warns.length?("⚠ 通过 · "+chk.warns.length+" 警告"):"✓ 校验通过");
+chipEl.style.background=chk.errors.length?"#f8514933":(chk.warns.length?"#d2992233":"#3fb95033");
+chipEl.style.color=chk.errors.length?"#f85149":(chk.warns.length?"#d29922":"#3fb950");
+chipEl.onclick=toggleMsgs;
 // ── 调度视角开关：就绪集高亮 / 关键路径高亮 ──
 const READY=DATA.ready||[],CRIT=DATA.crit||[];
 let readyOnly=false,critOnly=false;
@@ -967,9 +1184,75 @@ searchBox.onkeydown=ev=>{if(ev.key==="Enter"){const hit=nodes.find(n=>n._hit);if
 function applySearch(){if(!q){nodes.forEach(n=>n._hit=false);return;}
  const lower=q.toLowerCase();
  nodes.forEach(n=>n._hit=(n.id+" "+n.name+" "+n.note).toLowerCase().includes(lower));}
-addEventListener("keydown",ev=>{if(ev.key==="Escape"&&document.activeElement!==searchBox){
- sel=null;hi=null;document.getElementById("panel").style.display="none";dirty=true;}});
-function saveTxt(){let out="# 任务依赖图（可视化工具导出，可直接覆盖源文件）\n";
+addEventListener("keydown",ev=>{
+ const inField=document.activeElement===searchBox||/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
+ if(ev.code==="Space"&&!inField){spaceDown=true;cv.style.cursor="grab";ev.preventDefault();return;}
+ if(ev.key==="Escape"){if(document.getElementById("ctx").style.display==="block"){hideCtx();return;}
+  if(document.getElementById("modal").style.display==="flex"){closeModal();return;}
+  sel=null;selSet=new Set();selEdge=null;hi=null;
+  document.getElementById("panel").style.display="none";dirty=true;return;}
+ if(inField)return;
+ if((ev.key==="Delete"||ev.key==="Backspace")&&selEdge){delEdge(selEdge);}});
+addEventListener("keyup",ev=>{if(ev.code==="Space"){spaceDown=false;cv.style.cursor="default";dirty=true;}});
+// ── 岗位视图体系（同一份 DAG 的不同投影；hash 路由 #view=xxx 可直达/分享） ──
+const VIEWS={
+ graph:{},
+ producer:{},
+ eng:{lanes:new Set(["复刻主线","UI线","配置存档","战略图","地图系统","经济循环","玩法系统","工程债","里程碑"])},
+ design:{lanes:new Set(["叙事设计","决策","玩法系统","经济循环","里程碑"])},
+ art:{ids:n=>/^(asset_|ext_art|fx_|p12_skins)/.test(n.id)||n.lane==="美术"},
+ qa:{ids:n=>/^(debt_|test_|ci_|arena_)/.test(n.id)||n.status==="待验收"||/^(demo_|hp_default_zero)/.test(n.id)}
+};
+let curView="graph";
+function setView(v){curView=v;
+ if(location.hash!=="#view="+v)location.hash="#view="+v;
+ document.querySelectorAll(".vtab").forEach(t=>t.classList.toggle("on",t.dataset.v===v));
+ viewFilter=VIEWS[v]||{};
+ const dash=document.getElementById("dash"),showDash=v==="producer";
+ dash.style.display=showDash?"block":"none";
+ ["cv","mini","zoom"].forEach(id2=>{document.getElementById(id2).style.visibility=showDash?"hidden":"visible";});
+ if(showDash){dash.style.top=BAR_H+"px";buildDash();return;}
+ rebuildView();fitAll();dirty=true;}
+function jumpTo(id){setView("graph");jump(id);}
+function buildDash(){const P=DATA.producer||{},S=P.stats||{},d=document.getElementById("dash");
+ const liveReady=nodes.filter(n=>n.status!=="完成"&&n.status!=="冻结"&&n.status!=="放弃"
+  &&(n.prs||[]).every(p=>byId[p]&&byId[p].status==="完成"));
+ const tch=(n,extra)=>"<span class='tchip' onclick='jumpTo(\""+n.id+"\")'>"
+  +"<span class='dot' style='background:"+(COL[n.status]||"#888")+"'></span>"+n.name
+  +(extra||"")+"</span>";
+ let h="<div class='grid'>";
+ h+="<div class='card' style='grid-column:1/-1'><h4>📊 项目快照</h4><div class='stats'>"
+  +[["任务总数",S.nodes,""],["已完成",S.done,"#3fb950"],["进行/待验收",S.active,"#4c8dff"],
+    ["就绪可派",liveReady.length,"#2dd4bf"],["阻塞(前置未齐)",S.blocked,"#d29922"],["冻结(有意延后)",S.frozen,"#8b949e"]]
+   .map(x=>"<div class='stat'><b style='color:"+x[2]+"'>"+x[1]+"</b><span>"+x[0]+"</span></div>").join("")
+  +"</div><div class='hint'>就绪集为实时计算；改状态/连边后本页即时生效（其余卡片重新生成后更新）</div></div>";
+ if((P.combo||[]).length)h+="<div class='card'><h4>🚦 建议派活组合（域互斥 ≤6 线）</h4>"
+  +P.combo.map(id=>byId[id]?tch(byId[id]," <span style='color:#6e7a87'>"+byId[id].lane+"</span>"):"").join("")+"</div>";
+ if((P.crit||[]).length)h+="<div class='card'><h4>🛤 关键路径（"+(P.crit.length-1)+" 跳）</h4><div style='line-height:2.1'>"
+  +P.crit.map((id,i)=>byId[id]?(i?"<span style='color:#6e7a87'> → </span>":"")+tch(byId[id]):"").join("")+"</div>"
+  +"<div class='hint'>压缩关键路径靠拆依赖/拆任务/外购前置；加并发只能压非关键路径</div></div>";
+ const byLane={};liveReady.forEach(n=>{(byLane[n.lane||"（无线）"]=byLane[n.lane||"（无线）"]||[]).push(n);});
+ h+="<div class='card'><h4>📦 就绪集 "+liveReady.length+" 个（点击跳全图定位）</h4><div style='max-height:340px;overflow:auto'>";
+ Object.keys(byLane).sort().forEach(ln=>{h+="<div class='laneHead'>"+ln+" · "+byLane[ln].length+"</div>"
+  +byLane[ln].map(n=>tch(n)).join("");});
+ h+="</div></div>";
+ if((P.gates||[]).length)h+="<div class='card'><h4>◆ 里程碑燃尽</h4>"
+  +P.gates.map(g=>"<div class='gate'><span class='nm' onclick='jumpTo(\""+g.id+"\")' title='"+g.id+"'>"+g.name
+   +"</span><span class='bar'><i style='width:"+(g.total?Math.round(100*g.done/g.total):0)+"%'></i></span><span class='pc'>"
+   +g.done+"/"+g.total+"</span></div>").join("")+"</div>";
+ const ws=(chk.warns||[]).slice(0,12),es=chk.errors||[];
+ h+="<div class='card'><h4>⚠ 审计线索</h4>"
+  +(es.length?es.map(e=>"<div class='warn'>"+e+"</div>").join(""):"")
+  +(ws.length?ws.map(w=>"<div class='warn'>"+w+"</div>").join(""):"<div class='hint'>无警告</div>")+"</div>";
+ h+="</div>";d.innerHTML=h;}
+document.querySelectorAll(".vtab").forEach(t=>{t.onclick=()=>setView(t.dataset.v);});
+function exportTxt(){ // 编辑闭环：导出完整源文件（状态/依赖/布局/新任务全含）→ 覆盖源 txt → --check
+ const bad=[];
+ nodes.forEach(n=>{(n.prs||[]).forEach(p=>{
+  if(p===n.id)bad.push(n.id+" 自环前置");
+  else if(!byId[p])bad.push(n.id+" 前置悬空 "+p);});});
+ if(bad.length&&!confirm("发现 "+bad.length+" 处问题（导出后 --check 会报 ERROR）：\n"+bad.slice(0,6).join("\n")+"\n仍要导出吗？"))return;
+ let out="# 任务依赖图（看板导出——覆盖 docs/项目/任务依赖图.txt 后运行 python tools/deptask/gen.py --check）\n";
  out+="# 校验: python tools/deptask/gen.py --check   生成: python tools/deptask/gen.py\n";
  out+="线序: "+lanes.join(", ")+"\n";
  if(divideX!=null)out+="分割线: "+Math.round(divideX)+"\n";
@@ -980,10 +1263,10 @@ function saveTxt(){let out="# 任务依赖图（可视化工具导出，可直�
   +" | 名称="+n.name+" | 线="+n.lane+" | 状态="+n.status
   +(n.prs&&n.prs.length?" | 前置="+n.prs.join(","):"")
   +(n.domain?" | 域="+n.domain:"")+(n.tree?" | 树="+n.tree:"")
-  +(n.x!=null?" | 位置="+n.px.toFixed(1)+","+n.py.toFixed(1):"")  // 「自动重排」后 x 置 null，保存时不写位置＝保留 dagre 自由态
-  +(n.exempt?" | 豁免=1":"")+(n.note?" | 注="+n.note:"")+"\n";});
+  +(n.x!=null?" | 位置="+n.px.toFixed(1)+","+n.py.toFixed(1):"")  // 「自动重排」后 x 置 null，不写位置＝保留 dagre 自由态
+  +(n.exempt?" | 豁免=1":"")+(n.doc?" | 文档="+n.doc:"")+(n.note?" | 注="+n.note:"")+"\n";});
  const a=document.createElement("a");
- a.href=URL.createObjectURL(new Blob([out],{type:"text/plain"}));
+ a.href=URL.createObjectURL(new Blob([out],{type:"text/plain;charset=utf-8"}));
  a.download="任务依赖图.txt";a.click();}
 // ── 启动 ──
 measureCards();
@@ -993,6 +1276,8 @@ if(manual0){nodes.forEach(n=>{n.px=n.x;n.py=n.y;});rebuildView();}
 else dagreLayout();            // 对视图集布局并回写成员坐标
 rebuildView();                 // 布局后重建：折叠簇卡片取新质心
 locateActive();
+setView((location.hash.match(/view=(\w+)/)||[])[1]||"graph");   // hash 路由：#view=producer 直达
+addEventListener("hashchange",()=>{const v=(location.hash.match(/view=(\w+)/)||[])[1];if(v&&v!==curView)setView(v);});
 let _last=0;
 requestAnimationFrame(function loop(ts){if(dirty&&ts-_last>16){draw();_last=ts;}
  requestAnimationFrame(loop);});
@@ -1039,7 +1324,8 @@ def main():
         return 0
     out = root / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready, crit),
+    prod = producer_data(nodes, ready, crit, args.lanes)
+    out.write_text(gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready, crit, prod),
                    encoding="utf-8")
     print(f"已生成 {out}")
     return 0

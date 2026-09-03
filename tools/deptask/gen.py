@@ -428,27 +428,38 @@ HTML = r"""<!DOCTYPE html>
  :root{--bg:#0f1216;--panel:#161b22;--panel2:#1c222b;--line:#2a313a;--txt:#e6edf3;--sub:#9aa7b4;--acc:#58a6ff}
  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;font-size:13px}
- #bar{position:fixed;inset:0 0 auto 0;display:flex;flex-direction:column;gap:5px;
-   padding:7px 12px 8px;background:#161b22ee;backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:20}
+ #bar{position:fixed;inset:0 0 auto 0;display:flex;flex-direction:column;gap:6px;
+   padding:8px 14px;background:linear-gradient(180deg,#1a212b,#141920);
+   border-bottom:1px solid var(--line);box-shadow:0 4px 16px #0007;z-index:20}
  #bar .row{display:flex;align-items:center;gap:8px;min-width:0}
+ #bar .sep{width:1px;height:16px;background:var(--line);flex-shrink:0}
+ #bar .sub{font-size:10.5px;color:var(--sub);letter-spacing:2px;white-space:nowrap;margin-top:1px}
+ #bar b{font-size:14.5px;letter-spacing:1px;white-space:nowrap;display:flex;align-items:center;gap:7px}
+ #bar b::before{content:"";width:10px;height:10px;border-radius:3px;flex-shrink:0;
+   background:linear-gradient(135deg,#58a6ff,#bc8cff);box-shadow:0 0 8px #58a6ff66}
+ #bar .chips{margin-left:auto;display:flex;gap:6px;flex-shrink:0}
+ #bar .btn{background:transparent;border:1px solid var(--line);border-radius:7px;color:#c9d4e0;
+   padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap;transition:all .15s}
+ #bar .btn:hover{background:#232b36;border-color:#3d4754;color:var(--txt)}
+ #bar .btn:active{transform:translateY(1px)}
+ #bar .btn.primary{background:#58a6ff1a;border-color:#58a6ff44;color:#79b8ff}
+ #bar .btn.primary:hover{background:#58a6ff2e;border-color:#58a6ff77}
+ #search{background:#0d1117;border:1px solid var(--line);border-radius:16px;color:var(--txt);
+   padding:4px 12px;font-size:12px;width:170px;outline:none;transition:all .15s}
+ #search:focus{border-color:var(--acc);box-shadow:0 0 0 2px #58a6ff22;width:200px}
  #barRow2{overflow-x:auto;scrollbar-width:thin}
- #bar b{font-size:14px;letter-spacing:.5px;white-space:nowrap}
- #bar .btn{background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--txt);
-   padding:5px 11px;cursor:pointer;font-size:12px;white-space:nowrap}
- #bar .btn:hover{background:#242c37;border-color:#3d4754}
- #search{background:#0d1117;border:1px solid var(--line);border-radius:6px;color:var(--txt);
-   padding:5px 10px;font-size:12px;width:160px;outline:none}
- #search:focus{border-color:var(--acc)}
- #legend{display:flex;gap:7px;font-size:11px;align-items:center;flex-shrink:0}
+ #barRow2::-webkit-scrollbar{height:5px}
+ #barRow2::-webkit-scrollbar-thumb{background:#2a313a;border-radius:3px}
+ #legend{display:flex;gap:9px;font-size:10.5px;color:var(--sub);align-items:center;flex-shrink:0}
  #legend>span{white-space:nowrap;flex-shrink:0}
- .sw{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:-1px}
+ .sw{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:-1px}
  #lanes{display:flex;gap:5px;flex-shrink:0}
- .lchip{font-size:11px;padding:3px 9px;border-radius:10px;border:1px solid var(--line);cursor:pointer;
-   background:var(--panel2);user-select:none;white-space:nowrap;flex-shrink:0}
+ .lchip{font-size:11px;padding:2px 9px;border-radius:20px;border:1px solid #ffffff10;cursor:pointer;
+   background:#1c222b;color:#c9d4e0;user-select:none;white-space:nowrap;flex-shrink:0;transition:all .15s}
+ .lchip:hover{background:#242c37;border-color:#3d4754}
  .lchip.off{opacity:.35;text-decoration:line-through}
- #checkChip{font-size:11px;padding:3px 9px;border-radius:10px;cursor:pointer}
- #readyChip,#critChip{font-size:11px;padding:3px 9px;border-radius:10px;cursor:pointer;
-   background:#1c222b;border:1px solid var(--line);white-space:nowrap}
+ #checkChip,#readyChip,#critChip{font-size:11px;padding:3px 10px;border-radius:20px;cursor:pointer;
+   background:#0d1117;border:1px solid var(--line);white-space:nowrap;transition:border-color .15s}
  #panel{position:fixed;top:92px;right:10px;width:320px;max-height:72vh;overflow:auto;
    background:#161b22f5;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
    font-size:12.5px;display:none;z-index:20;line-height:1.75;box-shadow:0 8px 30px #0009}
@@ -470,21 +481,28 @@ HTML = r"""<!DOCTYPE html>
    background:#161b22cc;border:1px solid var(--line);border-radius:6px;padding:3px 8px}
  canvas#cv{display:block;position:fixed;inset:0}
 </style></head><body>
-<div id="bar"><div class="row"><b>任务依赖图</b>
+<div id="bar"><div class="row"><b>任务依赖图</b><span class="sub">DAG 调度台</span>
+ <span class="sep"></span>
  <input id="search" placeholder="搜索 id / 名称 / 备注…">
+ <span class="sep"></span>
  <button class="btn" onclick="locateActive()">定位当前</button>
  <button class="btn" onclick="fitAll()">适配全图</button>
+ <span class="sep"></span>
  <button class="btn" onclick="relayout()">自动重排</button>
  <button class="btn" onclick="saveTxt()">保存布局</button>
  <button class="btn" onclick="showDivide=!showDivide;dirty=true">完成分割线</button>
- <button class="btn" onclick="toggleMsgs()">校验结果</button>
+ <span class="sep"></span>
+ <button class="btn primary" onclick="toggleMsgs()">校验结果</button>
  <button class="btn" onclick="document.getElementById('help').style.display='flex'">帮助</button>
- <span id="checkChip"></span>
- <span id="readyChip" title="就绪集=前置全齐可立即派活；点击只高亮就绪节点（调度视角）"></span>
- <span id="critChip" title="关键路径=未完成子图最长链；点击高亮链上节点（加并发只能压非关键路径）"></span>
+ <div class="chips">
+  <span id="checkChip"></span>
+  <span id="readyChip" title="就绪集=前置全齐可立即派活；点击只高亮就绪节点（调度视角）"></span>
+  <span id="critChip" title="关键路径=未完成子图最长链；点击高亮链上节点（加并发只能压非关键路径）"></span>
+ </div>
 </div>
 <div class="row" id="barRow2">
  <span id="legend"></span>
+ <span class="sep"></span>
  <span id="lanes" title="单击=显隐该线 · 双击=聚拢到画面中央（前沿列左/后沿列右）"></span>
 </div>
 </div>
@@ -915,9 +933,11 @@ let readyOnly=false,critOnly=false;
 const rchip=document.getElementById("readyChip");
 rchip.textContent="🚦 可派 "+READY.length;
 rchip.style.color=READY.length?"#2dd4bf":"#8b949e";
+rchip.style.background=READY.length?"#2dd4bf14":"#8b949e0d";
 const cchip=document.getElementById("critChip");
 cchip.textContent="🛤 关键路径 "+Math.max(0,CRIT.length-1)+" 跳";
 cchip.style.color=CRIT.length?"#e3b341":"#8b949e";
+cchip.style.background=CRIT.length?"#e3b34114":"#8b949e0d";
 function refreshChips(){rchip.style.borderColor=readyOnly?"#2dd4bf":"#2a313a";
  cchip.style.borderColor=critOnly?"#e3b341":"#2a313a";}
 rchip.onclick=()=>{readyOnly=!readyOnly;critOnly=false;refreshChips();dirty=true;};

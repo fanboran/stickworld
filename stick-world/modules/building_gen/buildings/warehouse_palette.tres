@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BuildingPalette" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modules/building_gen/buildings/building_palette.gd" id="1_pal"]
+
+[resource]
+script = ExtResource("1_pal")
+C_THATCH_BACK = Color(0.6, 0.45, 0.24, 1)
+C_THATCH_MAIN = Color(0.74, 0.57, 0.31, 1)
+C_THATCH_LEFT = Color(0.66, 0.5, 0.27, 1)
+C_WOOD_FRONT = Color(0.46, 0.32, 0.18, 1)
+C_WOOD_BACK = Color(0.34, 0.24, 0.14, 1)
+C_WOOD_BEAM = Color(0.38, 0.27, 0.16, 1)
+C_WOOD_STRUT = Color(0.41, 0.29, 0.17, 1)

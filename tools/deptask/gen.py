@@ -1868,6 +1868,7 @@ function simEvents(){const evs=(DATA.simlog&&DATA.simlog.events)||[];
  if(agentFilter)out=out.filter(e=>e.agent===agentFilter||out.some(q=>q.agent===agentFilter&&q.task===e.task));
  return out;}
 function parseT(ts){const m=/T(\d+)/.exec(ts||"");return m?parseInt(m[1],10):0;}
+let ganttJobs={};  // 运行图任务聚合（drawGantt 写入，hover/点击命中复用）
 function drawGantt(){const c=gantt;if(!c||c.width<10)return;
  const evs=simEvents();
  gtx.setTransform(dpr,0,0,dpr,0,0);

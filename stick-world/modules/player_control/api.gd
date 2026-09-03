@@ -4,10 +4,10 @@ extends RefCounted
 ##
 ## 本模块提供玩家输入与控制：
 ## - InputDispatcher 输入模式分发
-## - SelectionSystem 框选/选择 —— P0.6 阶段
-## - FormationSystem 编队 —— P0.6 阶段
-## - TacticalOrders 战术指令 —— P0.6 阶段
 ## - PossessionInterface 附身操控 -- P0.7 阶段
+##
+## 框选/编队/战术指令（SelectionSystem/FormationSystem/TacticalOrders）
+## 实现在 combat 模块 scripts/command/，经 GameRoot 装配注入协同。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §7.1.3、§7.5、§八.3。
 ##

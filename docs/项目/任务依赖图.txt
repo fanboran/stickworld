@@ -59,7 +59,7 @@
 任务 p5_numbers | 名称=数值校准（SWL wiki 真值 6 兵种 HP/伤害/冷却/价格+per-weapon 射速） | 线=复刻主线 | 状态=完成 | 前置=p4_11b | 域=config/units/stickmen.tres | 注=批次 2/11d/9d；2026-09-02 完成，手写 tres 未合并
 任务 p6_teamai | 名称=TeamAi 逐函数直译（21 函数+三态姿态机+号令映射器+手动号令保护期） | 线=复刻主线 | 状态=完成 | 前置=p5_numbers | 域=modules/combat | 注=批次 7c+11c；覆盖率 53%→62%
 任务 p7_meric | 名称=祭司 Meric（治疗 AI 选最低血友军+后排站位+Heal 动画接入） | 线=复刻主线 | 状态=待验收 | 前置=p6_teamai | 域=modules/units,modules/combat | 树=game-2 | 注=批次 7b；待 6.2 观察场人工验收
-任务 debt_9h | 名称=观察场卡死复验 | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/combat | 注=缺陷 9h；观察场验收发现的缺陷——与祭司批次无内容依赖
+任务 debt_9h | 名称=观察场卡死复验 | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs,debt_9h | 域=modules/combat | 注=缺陷 9h；观察场验收发现的缺陷——与祭司批次无内容依赖；自环=修复完成后需再验一轮（自复验回路）
 任务 debt_9j | 名称=脱战回血（MOBA 延迟血条） | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/units,modules/ui_global | 注=缺陷 9j
 任务 debt_9k | 名称=群体避让+空挥保真 | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/units | 注=缺陷 9k/9s
 任务 p8_giant | 名称=巨人兵种+抓掷技能（风险项） | 线=复刻主线 | 状态=可开工 | 前置=p6_teamai | 域=modules/units,config/units/stickmen.tres | 注=批次 7a；还要编辑数值表；与祭司批次并行：兵种复刻批次互不依赖，单线程排期属执行约束非依赖
@@ -201,6 +201,9 @@
 任务 construction_split | 名称=construction_manager 拆上帝对象+32/390/96 魔法数收编 | 线=工程债 | 状态=可开工 | 前置=hist_p04 | 域=modules/construction
 任务 work_crew_taskboard | 名称=WorkCrewAssigner 扩展任务板（搬运/建造分发，决策执行解耦） | 线=工程债 | 状态=阻塞 | 前置=construction_split | 域=modules/construction,modules/units | 文档=docs/设计/系统/01-组织系统.md | 注=参考监狱建筑师/环世界 Job 系统
 任务 texture_gen_regression | 名称=texture_gen 渲染回归测试+残留 .import 历史路径清理（当前零覆盖） | 线=工程债 | 状态=可开工 | 前置=hist_render_bake | 域=tools | 注=后沿：烘焙管线防回归（building_b3_b4 的前置）；顺手清理 reference 下指向 building_gen/materials 的历史路径
+任务 micro_battles_leak | 名称=battle_director._battles 积累已释放引用清理（_end 注销） | 线=工程债 | 状态=可开工 | 前置=hist_p05 | 级=微 | 域=modules/combat | 注=微任务：性能无损但持续膨胀，顺手修
+任务 micro_menu_nav | 名称=test_menu_navigation 既有 2 断言失败修复（调试区按钮/步行出口） | 线=工程债 | 状态=可开工 | 前置=hist_p0_close | 级=微 | 域=tests | 注=微任务：改动前后均复现的既有失败
+任务 micro_doc_tech | 名称=文档漂移：科技状态字段校准 | 线=工程债 | 状态=可开工 | 前置=hist_docs_cn | 级=微 | 域=docs | 注=微任务：一行校准，防 AI 读漂移文档
 任务 ci_enable | 名称=CI 启用（ci.yml.disabled 模板激活）+AGENTS/trae 双规则文件收敛 | 线=工程债 | 状态=阻塞 | 前置=test_stability_2 | 域=.github,docs | 注=后沿：并行开发的回归防护；含 GdUnit4 迁移评估（P0-7）；测试链二期稳定后启用；对外版本（demo_release）前必须就位
 任务 excel_fix | 名称=export_excel.py 映射表修复（中文孤儿目录+formations 命名漂移） | 线=工程债 | 状态=冻结 | 前置=excel_unfreeze | 域=tools | 注=冻结令：tres 手调校准未合并前禁碰；后沿=经济循环收口（经济/科技表扩展导出不再漂移）
 任务 asset_p1_particles | 名称=手绘粒子贴图替换运行时软圆点+逐效果调参 | 线=工程债 | 状态=阻塞 | 前置=hist_resource_pricing,ext_art | 域=modules/fx,assets | 注=素材清单 P1；粒子池（FxPool/FxLibrary）已就绪才知道要什么贴图；外部依赖=美术资产（ext_art 门）

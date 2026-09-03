@@ -448,7 +448,28 @@ def producer_data(nodes, ready, crit, limit=6):
     return {"ready": ready_list, "combo": combo, "crit": crit, "gates": gates, "stats": stats}
 
 
-def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready=None, crit=None, producer=None) -> str:
+def load_simlog(root):
+    """调度日志注入：真实 docs/项目/调度日志.jsonl 与 .temp/sim_log.jsonl 模拟数据合并（带 src 标记）。"""
+    import json
+    evs = []
+    for rel, tag in (("docs/项目/调度日志.jsonl", "real"), (".temp/sim_log.jsonl", "sim")):
+        f = root / rel
+        if not f.exists():
+            continue
+        for ln in f.read_text(encoding="utf-8").splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                rec = json.loads(ln)
+                rec["src"] = tag
+                evs.append(rec)
+            except ValueError:
+                pass
+    return {"source": "+".join(sorted({e.get("src", "?") for e in evs})) or "", "events": evs[-800:]}
+
+
+def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready=None, crit=None, producer=None, root=None) -> str:
     data = {
         "lanes": lane_order,
         "nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "lane": n["lane"],
@@ -462,6 +483,7 @@ def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, rea
         "ready": sorted(ready or []),
         "crit": crit or [],
         "producer": producer or {},
+        "simlog": load_simlog(root),
         "clusters": [{"id": c["id"], "name": c["name"], "members": c["members"],
                     "note": c["note"], "folded": c["folded"]} for c in clusters],
     }
@@ -601,6 +623,22 @@ HTML = r"""<!DOCTYPE html>
    padding:0 14px;font:11px/1 var(--mono);color:var(--sub);z-index:14;
    background:linear-gradient(180deg,rgba(6,10,17,0),rgba(6,10,17,.94));pointer-events:none}
  #cfoot #cfR{color:#93a7c0}
+ /* ── 底部 IDE 面板（dock：运行图/调度日志，可折叠） ── */
+ #dock{position:fixed;left:0;right:0;bottom:0;height:38vh;min-height:220px;display:none;flex-direction:column;
+   background:var(--panel);border-top:1px solid var(--line2);z-index:18}
+ #dock.folded{height:30px}
+ #dockBar{display:flex;align-items:center;gap:1px;background:var(--bg2);border-bottom:1px solid var(--line);
+   padding:0 8px;height:30px;flex:0 0 auto}
+ .dtab{font-size:11.5px;padding:4px 12px;cursor:pointer;background:transparent;border:0;color:var(--dim);white-space:nowrap}
+ .dtab:hover{color:var(--txt)}
+ .dtab.on{background:#16273c;color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
+ #dockInfo{margin-left:auto;font:600 10px var(--mono);color:var(--dim2)}
+ #dockFold{cursor:pointer;color:var(--sub);padding:2px 8px;font-size:12px}
+ #dockFold:hover{color:var(--acc)}
+ #dockBody{flex:1 1 auto;min-height:0;position:relative}
+ #dock.folded #dockBody{display:none}
+ #gantt{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+ #logList{position:absolute;inset:0;overflow-y:auto;padding:4px 0}
  /* ── 相关项浮窗（左下小窗） ── */
  #relwin{position:fixed;left:262px;bottom:44px;width:320px;max-height:62vh;overflow:auto;display:none;
    flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:6px;
@@ -616,6 +654,22 @@ HTML = r"""<!DOCTYPE html>
  .kv span{display:block;font-size:9.5px;color:var(--dim2)}
  .kv b{font:700 13px var(--mono);color:var(--text)}
  .kv b.g{color:var(--green)}.kv b.y{color:var(--amber)}.kv b.c{color:var(--acc)}
+ /* ── 底部 IDE 面板（dock：运行图/调度日志，可折叠） ── */
+ #dock{position:fixed;left:0;right:0;bottom:0;height:38vh;min-height:220px;display:none;flex-direction:column;
+   background:var(--panel);border-top:1px solid var(--line2);z-index:18}
+ #dock.folded{height:30px}
+ #dockBar{display:flex;align-items:center;gap:1px;background:var(--bg2);border-bottom:1px solid var(--line);
+   padding:0 8px;height:30px;flex:0 0 auto}
+ .dtab{font-size:11.5px;padding:4px 12px;cursor:pointer;background:transparent;border:0;color:var(--dim);white-space:nowrap}
+ .dtab:hover{color:var(--txt)}
+ .dtab.on{background:#16273c;color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
+ #dockInfo{margin-left:auto;font:600 10px var(--mono);color:var(--dim2)}
+ #dockFold{cursor:pointer;color:var(--sub);padding:2px 8px;font-size:12px}
+ #dockFold:hover{color:var(--acc)}
+ #dockBody{flex:1 1 auto;min-height:0;position:relative}
+ #dock.folded #dockBody{display:none}
+ #gantt{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+ #logList{position:absolute;inset:0;overflow-y:auto;padding:4px 0}
  /* ── 相关项浮窗（左下小窗） ── */
  #relwin{position:fixed;left:262px;bottom:44px;width:320px;max-height:62vh;overflow:auto;display:none;
    flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:6px;
@@ -718,6 +772,18 @@ HTML = r"""<!DOCTYPE html>
 </div>
 </div>
 <div id="ctx"></div>
+<div id="dock">
+ <div id="dockBar">
+  <span class="dtab on" data-t="gantt">▦ 运行图</span>
+  <span class="dtab" data-t="log">≡ 调度日志</span>
+  <span id="dockInfo"></span>
+  <span id="dockFold" title="折叠/展开底栏（Tab 键）">▾</span>
+ </div>
+ <div id="dockBody">
+  <canvas id="gantt"></canvas>
+  <div id="logList"></div>
+ </div>
+</div>
 <div id="relwin" title="相关项浮窗：点击行定位，⤢ 跳全图"></div>
 <div id="modal"><div><h3 id="ntTitle">➕ 新建任务</h3>
  <label>id（英文标识符）<input id="ntId" placeholder="如 tech_rebuild2"></label>
@@ -732,6 +798,18 @@ HTML = r"""<!DOCTYPE html>
 </div></div>
 <div id="dash"></div>
 <div id="vbar"></div>
+<div id="dock">
+ <div id="dockBar">
+  <span class="dtab on" data-t="gantt">▦ 运行图</span>
+  <span class="dtab" data-t="log">≡ 调度日志</span>
+  <span id="dockInfo"></span>
+  <span id="dockFold" title="折叠/展开底栏（Tab 键）">▾</span>
+ </div>
+ <div id="dockBody">
+  <canvas id="gantt"></canvas>
+  <div id="logList"></div>
+ </div>
+</div>
 <div id="relwin" title="相关项浮窗：点击行定位，⤢ 跳全图"></div>
 <div id="sideL" class="side"></div>
 <div id="sideR" class="side"><div id="inspector"><div class="ph">点选任务查看详情（前置/被依赖/关联文档可点跳转）</div></div></div>
@@ -1493,7 +1571,7 @@ const VIEWS={
  art:{ids:n=>/^(asset_|ext_art|fx_|p12_skins)/.test(n.id)||n.lane==="美术"},
  qa:{ids:n=>/^(debt_|test_|ci_|arena_)/.test(n.id)||n.status==="待验收"||/^(demo_|hp_default_zero)/.test(n.id)}
 };
-let curView="graph",viewSnapshot=null;
+let curView=null,viewSnapshot=null;  // 初始 null：启动 setView 必须完整跑一遍 UI 初始化（幂等守卫只拦重复调用）
 function setView(v,force){const prev=curView;
  if(!VIEWS[v])v="graph";                       // hash 手输未知视图 → 回退全图
  if(prev===v&&!force)return;                   // 同页签幂等：二次快照会把投影态当原始态
@@ -1509,6 +1587,8 @@ function setView(v,force){const prev=curView;
  const vbel=document.getElementById("vbar");
  vbel.style.display=showDash?"none":"flex";
  if(!showDash){const sw=sideW();vbel.style.top=BAR_H+"px";vbel.style.left=sw.L+"px";vbel.style.right=sw.R+"px";buildVbar();}
+ const dkel=document.getElementById("dock");
+ dkel.style.display=showDash?"none":"flex";
  if(showDash){dash.style.top=BAR_H+"px";buildDash();return;}
  // 岗位视图 = 布局投影：进入时快照全图坐标 → 对可见子集重新 dagre（隐藏节点不再占位）→ 退出恢复
  // 切视图前清聚拢/关键路径残留：focusLane 的 _f 淡出标记会污染新视图
@@ -1681,6 +1761,132 @@ function buildDash(){const P=DATA.producer||{},d=document.getElementById("dash")
  document.getElementById("dashL").innerHTML=L.join("");
  document.getElementById("dashR").innerHTML=R.join("");}
 document.querySelectorAll(".vtab").forEach(t=>{t.onclick=()=>setView(t.dataset.v);});
+
+// ── 底部 IDE 面板（dock）：运行图（火车运行图式）/ 调度日志 ──
+const dock=document.getElementById("dock"),gantt=document.getElementById("gantt"),gtx=gantt.getContext("2d");
+let dockFolded=false,dockTab="gantt";
+document.getElementById("dockFold").onclick=()=>{dockFolded=!dockFolded;
+ dock.classList.toggle("folded",dockFolded);
+ document.getElementById("dockFold").textContent=dockFolded?"▴":"▾";
+ sizeGantt();dirty=true;};
+document.querySelectorAll(".dtab").forEach(t=>{t.onclick=()=>{
+ dockTab=t.dataset.t;
+ document.querySelectorAll(".dtab").forEach(x=>x.classList.toggle("on",x.dataset.t===dockTab));
+ document.getElementById("gantt").style.display=dockTab==="gantt"?"block":"none";
+ document.getElementById("logList").style.display=dockTab==="log"?"block":"none";
+ if(dockTab==="log")buildLogList();else{sizeGantt();drawGantt();}
+};});
+function toggleDock(){dockFolded=!dockFolded;dock.classList.toggle("folded",dockFolded);
+ document.getElementById("dockFold").textContent=dockFolded?"▴":"▾";
+ sizeGantt();if(dockTab==="log")buildLogList();dirty=true;}
+addEventListener("keydown",ev=>{if(ev.key==="Tab"&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){
+ ev.preventDefault();toggleDock();}});
+function sizeGantt(){const c=gantt;if(!c)return;const r=c.getBoundingClientRect();
+ if(r.width<10)return;c.width=r.width*dpr;c.height=r.height*dpr;}
+const AGENT_COL=["#38bdf8","#a78bfa","#4ade80","#facc15","#f472b6","#22d3ee","#fb923c","#94a3b8"];
+function agentColor(a){let h=0;for(const ch of a)h=(h*31+ch.charCodeAt(0))>>>0;return AGENT_COL[h%AGENT_COL.length];}
+function parseT(ts){const m=/T(\d+)/.exec(ts||"");return m?parseInt(m[1],10):0;}
+function drawGantt(){const c=gantt;if(!c||c.width<10)return;
+ const evs=(DATA.simlog&&DATA.simlog.events)||[];
+ gtx.setTransform(dpr,0,0,dpr,0,0);
+ const W=c.width/dpr,H=c.height/dpr;
+ gtx.fillStyle="#070c14";gtx.fillRect(0,0,W,H);
+ if(view.k*40>=9){gtx.strokeStyle="#0e1725";gtx.lineWidth=1;gtx.beginPath();
+  for(let x=0;x<W;x+=40){gtx.moveTo(x,0);gtx.lineTo(x,H);}for(let y=0;y<H;y+=40){gtx.moveTo(0,y);gtx.lineTo(W,y);}gtx.stroke();}
+ if(!evs.length){gtx.fillStyle="#55677f";gtx.font="12px system-ui";
+  gtx.fillText("无调度数据——运行 python tools/deptask/gen.py sim --agents 6 --rounds 60 生成模拟日志",20,H/2);return;}
+ // 任务聚合：task → {agent,lane,t0,t1,done}
+ const jobs={};
+ evs.forEach(e=>{const j=jobs[e.task]||(jobs[e.task]={lane:e.note||"",agent:e.agent,t0:1e9,t1:-1,done:false});
+  if(e.action==="claim"){j.t0=Math.min(j.t0,parseT(e.ts));j.agent=e.agent;j.lane=e.note||j.lane;}
+  if(e.action==="done"){j.t1=Math.min(j.t1,parseT(e.ts));j.done=true;j.agent=e.agent;}});
+ const list=Object.keys(jobs).map(id=>Object.assign({id},jobs[id]));
+ let tMax=0;list.forEach(j=>{tMax=Math.max(tMax,j.done?j.t1+2:j.t0+6);});
+ const padL=8,padT=8,padB=18,rowH=15;
+ // 泳道带（复用 lanes 顺序 + 杂项兜底）
+ const laneKeys=[];list.forEach(j=>{if(laneKeys.indexOf(j.lane)<0)laneKeys.push(j.lane);});
+ lanes.forEach(l=>{if(laneKeys.indexOf(l)<0)laneKeys.push(l);});
+ const bandOf={},bandNames=[];let bi=0;
+ laneKeys.forEach(l=>{bandOf[l]=bi;bandNames.push(l);bi++;});
+ const innerH=H-padT-padB,bandH=Math.min(46,innerH/bandNames.length);
+ // x 缩放：滚轮/拖拽平移（存 ganttView）
+ if(!ganttView)ganttView={t0:0,t1:tMax};
+ const span=ganttView.t1-ganttView.t0||1;
+ const X=t=>padL+(t-ganttView.t0)/span*(W-padL-8);
+ // 刻度
+ gtx.font="600 9px "+MONO;gtx.fillStyle="#55677f";
+ const stepT=Math.max(1,Math.round(span/12/5)*5);
+ for(let t=Math.ceil(ganttView.t0/stepT)*stepT;t<=ganttView.t1;t+=stepT){
+  const x=X(t);gtx.strokeStyle="#101927";gtx.beginPath();gtx.moveTo(x,padT);gtx.lineTo(x,H-padB);gtx.stroke();
+  gtx.fillText("T"+String(t).padStart(3,"0"),x+3,H-padB+11);}
+ // 泳道带底 + 名称
+ bandNames.forEach((l,i)=>{const y=padT+i*bandH;
+  if(bi%2===0){gtx.fillStyle="#0b111c";gtx.fillRect(0,y,W,bandH);}
+  const li=lanes.indexOf(l),lc=LANE_COL[(li<0?0:li)%LANE_COL.length];
+  gtx.fillStyle=lc+"22";gtx.fillRect(0,y,44,bandH);
+  gtx.fillStyle=lc;gtx.font="600 8.5px "+MONO;
+  gtx.save();gtx.translate(8,y+bandH/2+3);gtx.fillText(l.length>5?l.slice(0,5):l,0,0);gtx.restore();});
+ // 任务条：同带子行贪心
+ const rows={};
+ const sorted=list.slice().sort((a,b)=>a.t0-b.t0);
+ gtx.font="600 8px "+MONO;
+ sorted.forEach(j=>{const b=bandOf[j.lane]!=null?bandOf[j.lane]:bandNames.length-1;
+  const y0=padT+b*bandH;
+  let sub=0;
+  while(rows[b+":"+sub]!=null&&rows[b+":"+sub]>j.t0)sub++;
+  rows[b+":"+sub]=j.done?j.t1+2:1e9;
+  const x0=Math.max(padL,X(j.t0)),x1=j.done?X(j.t1+1):W-4;
+  if(x1<0||x0>W)return;
+  const y=y0+4+sub*(rowH-3);
+  if(y>y0+bandH-4)return;   // 带满溢出跳过（缩放或过滤可看全）
+  const li=lanes.indexOf(j.lane),lc=LANE_COL[(li<0?0:li)%LANE_COL.length];
+  const ac=agentColor(j.agent);
+  gtx.fillStyle=j.done?lc+"55":ac+"33";
+  gtx.fillRect(x0,y,Math.max(3,x1-x0),rowH-6);
+  gtx.strokeStyle=j.done?lc:ac;gtx.lineWidth=1;gtx.strokeRect(x0+.5,y+.5,Math.max(3,x1-x0)-1,rowH-7);
+  if(!j.done){ // 运行中=右缘琥珀光标条
+   gtx.fillStyle="#fde047";gtx.fillRect(x1-2,y,2,rowH-6);}
+  if(x1-x0>34){gtx.fillStyle="#c9d4e0";gtx.fillText(j.id,x0+3,y+8);}});
+ // 图例
+ gtx.fillStyle="#556777";gtx.font="9px system-ui";
+ gtx.fillText("■ 完成  ▌运行中（琥珀光标）  颜色=泳道域 / 描边=认领 agent  ·  滚轮缩放 · 拖拽平移 · 点条跳主图",padL,H-4);}
+let ganttView=null,gDrag=null;
+gantt.addEventListener("wheel",ev=>{ev.preventDefault();
+ const evs=(DATA.simlog&&DATA.simlog.events)||[];if(!evs.length)return;
+ let tMax=0;evs.forEach(e=>{tMax=Math.max(tMax,parseT(e.ts)+2);});
+ if(!ganttView)ganttView={t0:0,t1:tMax};
+ const f=ev.deltaY<0?0.8:1.25;
+ const anchor=ganttView.t0+(ev.offsetX-8)/(gantt.clientWidth-16)*(ganttView.t1-ganttView.t0);
+ let span=(ganttView.t1-ganttView.t0)*f;span=Math.min(tMax*2,Math.max(8,span));
+ ganttView.t0=Math.max(0,anchor-(anchor-ganttView.t0)*f);
+ ganttView.t1=ganttView.t0+span;drawGantt();},{passive:false});
+gantt.addEventListener("pointerdown",ev=>{gDrag={x:ev.clientX,t0:ganttView?ganttView.t0:0,t1:ganttView?ganttView.t1:0};
+ try{gantt.setPointerCapture(ev.pointerId);}catch(e2){}});
+gantt.addEventListener("pointermove",ev=>{if(!gDrag||!ganttView)return;
+ const span=gDrag.t1-gDrag.t0,d=(ev.clientX-gDrag.x)/(gantt.clientWidth-16)*span;
+ let t0=gDrag.t0-d;ganttView={t0:Math.max(0,t0),t1:Math.max(8,t0+span)};
+ if(ganttView.t0===0)ganttView.t1=Math.max(ganttView.t1,span);drawGantt();});
+gantt.addEventListener("pointerup",()=>{gDrag=null;});
+gantt.addEventListener("click",ev=>{ // 点条跳主图对应任务
+ const evs=(DATA.simlog&&DATA.simlog.events)||[];if(!evs.length)return;
+ const rect=gantt.getBoundingClientRect(),x=ev.clientX-rect.left,y=ev.clientY-rect.top;
+ const span=ganttView.t1-ganttView.t0,W=gantt.clientWidth-16;
+ const jobs={};
+ evs.forEach(e=>{const j=jobs[e.task]||(jobs[e.task]={lane:e.note||"",t0:1e9,t1:-1,done:false});
+  if(e.action==="claim"){j.t0=Math.min(j.t0,parseT(e.ts));j.lane=e.note||j.lane;}
+  if(e.action==="done"){j.t1=Math.min(j.t1,parseT(e.ts));j.done=true;}});
+ const hit=Object.keys(jobs).find(id=>{const j=jobs[id];
+  const x0=8+(j.t0-ganttView.t0)/span*W,x1=j.done?8+(j.t1+1-ganttView.t0)/span*W:W+8;
+  return x>=x0-4&&x<=x1+4;});
+ if(hit){setView("graph");jump(hit);}});
+function buildLogList(){const evs=((DATA.simlog&&DATA.simlog.events)||[]).slice().reverse();
+ const el=document.getElementById("logList");
+ el.innerHTML=evs.map(e=>"<div class='lst' onclick='sideSelect(\""+e.task+"\")'>"
+  +"<span class='dot' style='background:"+agentColor(e.agent)+"'></span>"
+  +"<span class='lid'>"+e.ts+"</span><span class='lname'>"+e.agent+" → "+e.action+" "+e.task+"</span>"
+  +"<span class='lgo'>⤢</span></div>").join("")
+  ||"<div class='ph'>无调度日志</div>";}
+window.addEventListener("resize",()=>{sizeGantt();drawGantt();});
 function exportTxt(){ // 编辑闭环：导出完整源文件（状态/依赖/布局/新任务全含）→ 覆盖源 txt → --check
  const bad=[];
  nodes.forEach(n=>{(n.prs||[]).forEach(p=>{
@@ -1711,7 +1917,7 @@ if(manual0){nodes.forEach(n=>{n.px=n.x;n.py=n.y;});rebuildView();}
 else dagreLayout();            // 对视图集布局并回写成员坐标
 rebuildView();                 // 布局后重建：折叠簇卡片取新质心
 locateActive();
-setView((location.hash.match(/view=(\w+)/)||[])[1]||"graph");   // hash 路由：#view=producer 直达
+setView((location.hash.match(/view=(\w+)/)||[])[1]||"graph",true);   // hash 路由：#view=producer 直达；force=启动强制初始化
 addEventListener("hashchange",()=>{const v=(location.hash.match(/view=(\w+)/)||[])[1];if(v&&v!==curView)setView(v);});
 let _last=0;
 requestAnimationFrame(function loop(ts){if(critOnly){animT++;dirty=true;}  // 蚂蚁线流光：仅关键路径模式常驻重绘
@@ -1949,7 +2155,7 @@ def main():
     out = root / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     prod = producer_data(nodes, ready, crit, args.lanes)
-    out.write_text(gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready, crit, prod),
+    out.write_text(gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready, crit, prod, root),
                    encoding="utf-8")
     print(f"已生成 {out}")
     return 0

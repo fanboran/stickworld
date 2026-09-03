@@ -19,19 +19,36 @@
     <a> -> <b>                             # a 是 b 的前置：a 完成前 b 不得开工
 
 状态：完成 / 待验收 / 进行中 / 可开工 / 阻塞 / 冻结 / 放弃
+状态语义（调度模型）：
+  可开工  = 前置已全部完成、协调者可立即派活（由 DAG 派生，不是手填愿望）
+  阻塞    = 前置未齐（阻塞无因 = ERROR；前置齐却标阻塞 = W 状态滞后）
+             外部依赖（美术资产/创始人窗口等）建显式门节点承载，不用"阻塞"空挂
+  冻结    = 有意延后（冻结令/占位），前置可有可无但须注说明
+  域=     文件域 token，供并行冲突检测——同域互斥是**调度约束**不是依赖，
+             先后由协调者派活时裁决，不得写成 前置=
 
 校验规则（--check 退出码 1 = 有 ERROR）：
   E 悬空引用 / 环 / 重复 id
   E 派活违规   可开工/进行中/待验收/完成 的任务存在未完成前置且无 豁免=1（派活闸门）
+  W 状态滞后   状态=阻塞 但前置已全部完成（应改 可开工，或补真实前置/挂外部门）
+  W 冗余前置   前置可经其它前置传递到达（图保持最小，假深度会误导读图与调度）
   W 域冲突     两个 进行中 任务声明了相同 域 token（合并冲突热点）
   W 未知泳道   线= 不在 线序 里
+  W 无后沿     未完成且无消费方（launch 后代=终局交付，豁免）
+
+调度报告（每次运行输出，铁路调度模型）：
+  就绪集        前置全齐、可立即派活的任务（按线分组）
+  建议派活组合  就绪集内按关键路径优先 + 域互斥贪心选出的并行组合（≤ 并行线上限）
+  波次          未完成子图拓扑分层（波 n = 最少还要等 n 道串行工序）
+  关键路径      最长链（加并发只能压非关键路径，关键路径要靠拆依赖/拆任务）
 
 布局：源里没有任何 位置= 时，页面用 dagre 自动布局；「保存布局」把当前坐标写进源文件
 （冻结为手动布局）；页面「自动重排」可清掉回 dagre。位置=x,y 单位为世界像素。
 
 用法：
-  python tools/deptask/gen.py                 # 生成 docs/项目/任务依赖图.html
-  python tools/deptask/gen.py --check         # 只校验
+  python tools/deptask/gen.py                 # 校验 + 调度报告 + 生成 docs/项目/任务依赖图.html
+  python tools/deptask/gen.py --check         # 只校验 + 调度报告（不生成）
+  python tools/deptask/gen.py --lanes 8       # 建议派活组合的并行线上限（默认 6）
 """
 import argparse
 import json
@@ -133,6 +150,147 @@ def parse(src: str):
     return nodes, edges, lane_order, errors, clusters, globals().get("_divide_hint")
 
 
+def _closure(start_sets, nodes):
+    """从若干起点沿前置方向求传递闭包（全部祖先）。"""
+    seen, st = set(), list(start_sets)
+    while st:
+        q = st.pop()
+        if q in seen or q not in nodes:
+            continue
+        seen.add(q)
+        st.extend(nodes[q]["prs"])
+    return seen
+
+
+def redundant_edges(nodes):
+    """传递约简：前置 a→b 若可经 b 的其它前置传递到达，则 a→b 冗余。"""
+    red = set()
+    for nid, n in nodes.items():
+        ps = [p for p in n["prs"] if p in nodes]
+        if len(ps) < 2:
+            continue
+        anc = {p: _closure(nodes[p]["prs"], nodes) for p in ps}
+        for a in ps:
+            if any(a in anc[p2] for p2 in ps if p2 != a):
+                red.add((a, nid))
+    return red
+
+
+def descendants_of(nid, nodes):
+    """沿"被依赖"方向求全部后代（依赖 nid 的任务，传递）。"""
+    succ = {}
+    for n in nodes.values():
+        for p in n["prs"]:
+            succ.setdefault(p, []).append(n["id"])
+    seen, st = set(), [nid]
+    while st:
+        for b in succ.get(st.pop(), []):
+            if b not in seen:
+                seen.add(b)
+                st.append(b)
+    return seen
+
+
+def wave_levels(nodes):
+    """未完成子图拓扑分层：波 0 = 前置全齐（就绪）；波 n = 最少还要等 n 道串行工序。"""
+    done = {i for i, n in nodes.items() if n["status"] == "完成"}
+    pend = {i for i, n in nodes.items() if n["status"] not in ("完成", "放弃")}
+    level = {}
+
+    def lv(i):
+        if i in level:
+            return level[i]
+        unmet = [p for p in nodes[i]["prs"] if p in nodes and p not in done]
+        level[i] = 0 if not unmet else 1 + max(lv(p) for p in unmet if p in pend)
+        return level[i]
+
+    for i in pend:
+        lv(i)
+    return {i: level[i] for i in pend}
+
+
+def critical_path(nodes):
+    """未完成子图最长链（按边数），返回 [端, …, 起点]（起点在前）。"""
+    lv = wave_levels(nodes)
+    if not lv:
+        return []
+    done = {i for i, n in nodes.items() if n["status"] == "完成"}
+    tail = max(lv, key=lambda i: lv[i])
+    chain, cur = [], tail
+    while lv.get(cur, 0) > 0:
+        chain.append(cur)
+        unmet = [p for p in nodes[cur]["prs"] if p in nodes and p not in done]
+        cur = max(unmet, key=lambda p: lv.get(p, 0))
+    chain.append(cur)
+    return list(reversed(chain))
+
+
+def ready_set(nodes):
+    """就绪集：未完成、未冻结、未放弃、前置全齐——协调者可立即派活的全集。"""
+    done = {i for i, n in nodes.items() if n["status"] == "完成"}
+    out = []
+    for i, n in nodes.items():
+        if n["status"] in ("完成", "冻结", "放弃"):
+            continue
+        if all(p in done for p in n["prs"]):
+            out.append(i)
+    return out
+
+
+def dispatch_suggestion(nodes, ready, crit, limit=6):
+    """建议派活组合：关键路径优先 + 域互斥贪心（空域视作全域冲突，保守不并行）。"""
+    crit_set = set(crit)
+    order = sorted(ready, key=lambda i: (i not in crit_set, -len(descendants_of(i, nodes))))
+    picked, used = [], set()
+    for i in order:
+        dom = set(nodes[i]["domain"])
+        if not dom:
+            continue  # 无域声明=范围不明，保守不进组合（可派，但需协调者先补域）
+        if dom & used:
+            continue
+        used |= dom
+        picked.append(i)
+        if len(picked) >= limit:
+            break
+    return picked
+
+
+def schedule_report(nodes, limit=6):
+    """铁路调度报告：就绪集 / 状态滞后 / 波次 / 关键路径 / 建议派活组合。"""
+    done = {i for i, n in nodes.items() if n["status"] == "完成"}
+    ready = ready_set(nodes)
+    crit = critical_path(nodes)
+    lines = ["—— 调度报告 ——"]
+
+    by_lane = {}
+    for i in ready:
+        by_lane.setdefault(nodes[i]["lane"] or "（无线）", []).append(i)
+    lines.append(f"就绪集 {len(ready)} 个（前置全齐，可立即派活；按线分组）：")
+    for lane in sorted(by_lane, key=lambda l: -len(by_lane[l])):
+        ids = sorted(by_lane[lane])
+        lines.append(f"  [{lane}] {len(ids)}: {' '.join(ids)}")
+
+    stale = [i for i in ready if nodes[i]["status"] == "阻塞" and not nodes[i]["exempt"]]
+    if stale:
+        lines.append(f"状态滞后 {len(stale)} 个（前置齐但标阻塞，见 W——改 可开工 或补真实前置）")
+
+    lv = wave_levels(nodes)
+    waves = {}
+    for i, l in lv.items():
+        waves.setdefault(l, []).append(i)
+    if waves:
+        ws = " · ".join(f"波{k}={len(waves[k])}" for k in sorted(waves))
+        lines.append(f"波次（未完成子图，波 n=最少还要等 n 道串行工序）：{ws}")
+    if crit:
+        lines.append(f"关键路径（{len(crit) - 1} 跳）：{' → '.join(crit)}")
+
+    picked = dispatch_suggestion(nodes, ready, crit, limit)
+    if picked:
+        desc = "，".join(f"{i}（{nodes[i]['lane']}）" for i in picked)
+        lines.append(f"建议派活组合（关键路径优先+域互斥，≤{limit} 并行线）：{desc}")
+    return "\n".join(lines), ready, crit
+
+
 def validate(nodes, edges, lane_order, clusters):
     errs, warns = [], []
     ids = set(nodes)
@@ -182,6 +340,19 @@ def validate(nodes, edges, lane_order, clusters):
                 errs.append(f"E 行{n['line']}: {n['id']} 状态={n['status']} 但前置未完成: {','.join(unmet)}"
                             f"（确需并行先行则加 豁免=1 并在 注 里写理由）")
 
+    # 状态滞后：前置已全部完成却标"阻塞"——阻塞 专指前置未齐，
+    # "没排期/外部依赖"不是阻塞的理由（外部依赖建门节点，排期由协调者在就绪集内裁量）。
+    for n in nodes.values():
+        if n["status"] == "阻塞" and not n["exempt"] and n["prs"] and \
+                all(p in done for p in n["prs"]):
+            warns.append(f"W 行{n['line']}: {n['id']} 状态滞后——前置已全部完成却标阻塞；"
+                         f"改 可开工（排期先后由协调者裁量）或补真实前置/挂外部门节点")
+
+    # 冗余前置：a→b 可经 b 的其它前置传递到达——图必须保持最小，
+    # 假深度会让人误以为串行更长、并发更少。
+    for a, b in sorted(redundant_edges(nodes)):
+        warns.append(f"W: 前置 {a} -> {b} 冗余（可经其它前置传递到达），删除以保持最小依赖")
+
     # 阻塞无因：标阻塞/冻结却没有任何前置——依赖图必须能解释"为什么现在不能做"。
     # 源头任务一律 前置=root（root 是唯一无前置节点，完成态）。
     for n in nodes.values():
@@ -207,12 +378,15 @@ def validate(nodes, edges, lane_order, clusters):
                 member_owner[m] = c["id"]
 
     # 无后沿叶子：未完成且没有任何被依赖——逐个确认产出消费方；
-    # 琐碎修复类（改一行文档/单条清理）不该独立存在，应合并进有后沿的任务或降级为附属步骤
+    # 琐碎修复类（改一行文档/单条清理）不该独立存在，应合并进有后沿的任务或降级为附属步骤。
+    # 例外：launch 的后代是终局交付（发布后的产出即终点），天然无后沿。
+    terminal = descendants_of("launch", nodes) if "launch" in nodes else set()
     dependents = set()
     for e in edges:
         dependents.add(e["a"])  # a=被依赖的前置提供者；叶子=从不作为 a 的节点
     for n in nodes.values():
-        if n["status"] not in ("完成", "放弃") and n["id"] not in dependents:
+        if n["status"] not in ("完成", "放弃") and n["id"] not in dependents \
+                and n["id"] not in terminal:
             warns.append(f"W 行{n['line']}: {n['id']} 无后沿（产出无消费方）——确认它服务于什么目标；"
                          f"琐碎修复应合并进有后沿的任务或移出规划图")
 
@@ -226,7 +400,7 @@ def validate(nodes, edges, lane_order, clusters):
     return errs, warns
 
 
-def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint) -> str:
+def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready=None, crit=None) -> str:
     data = {
         "lanes": lane_order,
         "nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "lane": n["lane"],
@@ -237,6 +411,8 @@ def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint) -> 
         "edges": [{"a": e["a"], "b": e["b"]} for e in edges],
         "check": {"errors": errors, "warns": warns},
         "divideX": divide_hint,
+        "ready": sorted(ready or []),
+        "crit": crit or [],
         "clusters": [{"id": c["id"], "name": c["name"], "members": c["members"],
                     "note": c["note"], "folded": c["folded"]} for c in clusters],
     }
@@ -268,6 +444,8 @@ HTML = r"""<!DOCTYPE html>
    background:var(--panel2);user-select:none;white-space:nowrap}
  .lchip.off{opacity:.35;text-decoration:line-through}
  #checkChip{font-size:11px;padding:3px 9px;border-radius:10px;cursor:pointer}
+ #readyChip,#critChip{font-size:11px;padding:3px 9px;border-radius:10px;cursor:pointer;
+   background:#1c222b;border:1px solid var(--line);white-space:nowrap}
  #panel{position:fixed;top:56px;right:10px;width:320px;max-height:72vh;overflow:auto;
    background:#161b22f5;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
    font-size:12.5px;display:none;z-index:20;line-height:1.75;box-shadow:0 8px 30px #0009}
@@ -299,6 +477,8 @@ HTML = r"""<!DOCTYPE html>
  <button class="btn" onclick="toggleMsgs()">校验结果</button>
  <button class="btn" onclick="document.getElementById('help').style.display='flex'">帮助</button>
  <span id="checkChip"></span>
+ <span id="readyChip" title="就绪集=前置全齐可立即派活；点击只高亮就绪节点（调度视角）"></span>
+ <span id="critChip" title="关键路径=未完成子图最长链；点击高亮链上节点（加并发只能压非关键路径）"></span>
  <span id="legend"></span>
  <span id="lanes"></span>
 </div>
@@ -315,6 +495,8 @@ HTML = r"""<!DOCTYPE html>
  <b>▣ 封装簇</b> = 点击折叠卡片展开成员，点虚线框标签收起；拖动簇=整体平移<br>
  <b>◎ 聚拢</b> = 双击泳道胶囊：该线居中，前沿（外部前置）列左、后沿（外部被依赖）列右，无关淡出；再双击退出<br>
  <b>✂ 分隔墙</b> = 左完成右未完成；拖墙=右区整体平移；节点拖动被墙挡住，只有状态变完成才移到左侧<br>
+ <b>🚦 可派</b> = 就绪集（前置全齐）——协调者的派活候选清单；点击只高亮这些节点<br>
+ <b>🛤 关键路径</b> = 未完成子图最长链——压缩它靠拆依赖/拆任务，加并发只能压非关键路径<br>
  <b>自动重排</b> = dagre 重新分层布线（交叉最小化）<br>
  <b>保存布局</b> = 把当前位置写回源文件（下次打开即手动布局）<br>
  <span style="color:var(--sub)">红边 = 前置未完成却已开工（违规）· 虚线框 = 豁免校验 ·
@@ -488,14 +670,15 @@ function draw(){
   ctx.fillStyle=lc+"cc";fontSmall();ctx.textAlign="left";
   ctx.fillText("▣ "+c.name+"（点击收起）",x0+10,y0+14);});
  const anc=hi?ancestors(hi):null,des=hi?descendants(hi):null;
- const lit=id=>!hi||id===hi||(anc&&anc.has(id))||(des&&des.has(id));
+ const cs=(critOnly&&CRIT.length)?new Set(CRIT):null;
+ const lit=id=>(!hi&&!cs)||id===hi||(anc&&anc.has(id))||(des&&des.has(id))||(cs&&cs.has(id));
  // 边（端口对端口贝塞尔）
  VE.forEach(e=>{const a=vById[e.a],b=vById[e.b];if(!a||!b||laneHidden(a.lane)||laneHidden(b.lane))return;
   const on=lit(e.a)&&lit(e.b),bad=edgeBad(e);
   const g=edgeGeom(e);
   ctx.strokeStyle=bad?"#f85149":(on?"#58a6ffdd":"#3d4a5c");
   ctx.lineWidth=(on||bad)?2:1.2;
-  let ea=on?1:(hi?0.12:0.85);
+  let ea=on?1:((hi||cs)?0.12:0.85);
   if(focusLane&&vById[e.a]&&vById[e.b]&&vById[e.a]._f==="other"&&vById[e.b]._f==="other")ea*=0.1;
   ctx.globalAlpha=ea;
   ctx.beginPath();ctx.moveTo(g.x1,g.y1);
@@ -514,6 +697,8 @@ function draw(){
  order.forEach(n=>{if(!nodeVisible(n))return;
   let dim=q?(n._hit?1:0.1):(hi?(n.id===hi||anc.has(n.id)||des.has(n.id)?1:0.16):1);
   if(focusLane&&n._f==="other")dim*=0.13;
+  if(readyOnly&&n.status!=="完成"&&READY.indexOf(n.id)<0)dim*=0.08;
+  if(cs&&!hi&&!cs.has(n.id))dim*=0.12;
   const x=n.px,y=n.py,w=n.cw,h=n.ch,c=COL[n.status];
   const li=lanes.indexOf(n.lane),lc=LANE_COL[(li<0?0:li)%LANE_COL.length];
   ctx.globalAlpha=dim;
@@ -717,6 +902,19 @@ const chipEl=document.getElementById("checkChip");
 chipEl.textContent="✓ "+chk.errors.length+"E / "+chk.warns.length+"W";
 chipEl.style.background=chk.errors.length?"#f8514933":"#3fb95033";
 chipEl.style.color=chk.errors.length?"#f85149":"#3fb950";
+// ── 调度视角开关：就绪集高亮 / 关键路径高亮 ──
+const READY=DATA.ready||[],CRIT=DATA.crit||[];
+let readyOnly=false,critOnly=false;
+const rchip=document.getElementById("readyChip");
+rchip.textContent="🚦 可派 "+READY.length;
+rchip.style.color=READY.length?"#2dd4bf":"#8b949e";
+const cchip=document.getElementById("critChip");
+cchip.textContent="🛤 关键路径 "+Math.max(0,CRIT.length-1)+" 跳";
+cchip.style.color=CRIT.length?"#e3b341":"#8b949e";
+function refreshChips(){rchip.style.borderColor=readyOnly?"#2dd4bf":"#2a313a";
+ cchip.style.borderColor=critOnly?"#e3b341":"#2a313a";}
+rchip.onclick=()=>{readyOnly=!readyOnly;critOnly=false;refreshChips();dirty=true;};
+cchip.onclick=()=>{critOnly=!critOnly;readyOnly=false;refreshChips();dirty=true;};
 function toggleMsgs(){const m=document.getElementById("msgs");
  if(m.style.display==="block"){m.style.display="none";return;}
  m.innerHTML=(chk.errors.length?chk.errors.map(e=>"<div class='e'>"+e+"</div>").join(""):"<div class='e' style='opacity:.6'>无 ERROR</div>")
@@ -767,7 +965,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("-s", "--src", default="docs/项目/任务依赖图.txt")
     ap.add_argument("-o", "--out", default="docs/项目/任务依赖图.html")
-    ap.add_argument("--check", action="store_true", help="只校验不生成")
+    ap.add_argument("--check", action="store_true", help="只校验+调度报告不生成")
+    ap.add_argument("--lanes", type=int, default=6, help="建议派活组合的并行线上限（默认 6）")
     args = ap.parse_args()
     root = Path(__file__).resolve().parents[2]
     src = root / args.src
@@ -793,13 +992,16 @@ def main():
     for e in errors:
         print(e)
     print(f"—— {len(nodes)} 节点 / {len(edges)} 边 / {len(clusters)} 簇，{len(errors)} 错误 / {len(warns)} 警告")
+    report, ready, crit = schedule_report(nodes, args.lanes)
+    print(report)
     if errors:
         return 1
     if args.check:
         return 0
     out = root / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint), encoding="utf-8")
+    out.write_text(gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, ready, crit),
+                   encoding="utf-8")
     print(f"已生成 {out}")
     return 0
 

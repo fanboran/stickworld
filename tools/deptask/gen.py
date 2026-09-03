@@ -1861,7 +1861,7 @@ function drawGantt(){const c=gantt;if(!c||c.width<10)return;
  if(!evs.length){gtx.fillStyle="#55677f";gtx.font="12px system-ui";
   gtx.fillText("无调度数据——运行 python tools/deptask/gen.py sim --agents 6 --rounds 60 生成模拟日志",20,H/2);return;}
  // 任务聚合：task → {agent,lane,t0,t1,done}
- const jobs={};
+ const jobs=ganttJobs={};  // 提升为模块级：hover/点击命中复用
  evs.forEach(e=>{const j=jobs[e.task]||(jobs[e.task]={lane:e.note||"",agent:e.agent,t0:1e9,t1:-1,done:false});
   if(e.action==="claim"){j.t0=Math.min(j.t0,parseT(e.ts));j.agent=e.agent;j.lane=e.note||j.lane;}
   if(e.action==="done"){j.t1=Math.min(j.t1,parseT(e.ts));j.done=true;j.agent=e.agent;}});
@@ -1953,7 +1953,7 @@ let ganttHover=null;
 function hitTaskAt(x,y){ // 命中检测：运行图任务条（复用 drawGantt 的布局参数）
  const evs=simEvents();if(!evs.length)return null;
  const span=ganttView.t1-ganttView.t0,W=gantt.clientWidth-16;
- const jobs={};
+ const jobs=ganttJobs;  // 复用 drawGantt 聚合
  evs.forEach(e=>{const j=jobs[e.task]||(jobs[e.task]={lane:e.note||"",t0:1e9,t1:-1,done:false,agent:e.agent});
   if(e.action==="claim"){j.t0=Math.min(j.t0,parseT(e.ts));j.lane=e.note||j.lane;j.agent=e.agent;}
   if(e.action==="done"){j.t1=Math.min(j.t1,parseT(e.ts));j.done=true;}});

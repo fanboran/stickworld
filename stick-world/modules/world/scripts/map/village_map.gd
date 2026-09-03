@@ -403,14 +403,16 @@ func _get_building_width(building: Node) -> float:
 
 
 func save_to_db(db, slot_id: int, p_map_id: String) -> void:
-	db.query_with_bindings(_SQL_MAPS_DELETE, [slot_id, p_map_id])
-	db.insert_row("maps", {
+	if not db.query_with_bindings(_SQL_MAPS_DELETE, [slot_id, p_map_id]):
+		push_error("[VillageMap] maps 旧边界清理失败 slot=%d map=%s: %s" % [slot_id, p_map_id, str(db.error_message)])
+	if not db.insert_row("maps", {
 		"slot_id": slot_id, "map_id": p_map_id,
 		"town_center_world_x": town_center_world_x,
 		"map_left_cell": map_left_cell, "map_right_cell": map_right_cell,
 		"city_left_x": _get_city_left_x(), "city_right_x": _get_city_right_x(),
 		"ground_y": ground_y, "ground_bottom": ground_bottom,
-	})
+	}):
+		push_error("[VillageMap] 地图边界写入失败 slot=%d map=%s: %s" % [slot_id, p_map_id, str(db.error_message)])
 
 
 ## 取地图上全部资源点（供建造清场等查询，替代全局 group 扫描）
@@ -426,18 +428,20 @@ func get_resource_nodes() -> Array:
 
 ## 保存资源点到 DB
 func save_resource_nodes_to_db(db, slot_id: int, p_map_id: String) -> void:
-	db.query_with_bindings(_SQL_NODES_DELETE, [slot_id, p_map_id])
+	if not db.query_with_bindings(_SQL_NODES_DELETE, [slot_id, p_map_id]):
+		push_error("[VillageMap] resource_nodes 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, p_map_id, str(db.error_message)])
 	if decoration_layer == null:
 		return
 	var idx: int = 0
 	for node in decoration_layer.get_children():
 		if node is ScriptResourceNode and not node.is_depleted():
-			db.insert_row("resource_nodes", {
+			if not db.insert_row("resource_nodes", {
 				"slot_id": slot_id, "map_id": p_map_id,
 				"node_id": "rn_%04d" % idx,
 				"pos_x": node.global_position.x, "pos_y": node.global_position.y,
 				"resource_type": node.resource_type, "amount": node.amount,
-			})
+			}):
+				push_error("[VillageMap] 资源点写入失败 slot=%d map=%s id=rn_%04d: %s" % [slot_id, p_map_id, idx, str(db.error_message)])
 			idx += 1
 
 

@@ -50,12 +50,14 @@ func _on_game_saving(_slot_index: int) -> void:
 	var slot_id: int = SaveManager.get_current_slot() if SaveManager.has_method("get_current_slot") else -1
 	if db == null or slot_id < 0:
 		return
-	db.query_with_bindings(_SQL_WS_DELETE, [slot_id])
-	db.insert_row("world_state", {
+	if not db.query_with_bindings(_SQL_WS_DELETE, [slot_id]):
+		push_error("[WorldState] world_state 旧状态清理失败 slot=%d: %s" % [slot_id, str(db.error_message)])
+	if not db.insert_row("world_state", {
 		"slot_id": slot_id,
 		"module_name": "world_state",
 		"data": JSON.stringify(get_save_data()),
-	})
+	}):
+		push_error("[WorldState] world_state 状态写入失败 slot=%d: %s" % [slot_id, str(db.error_message)])
 
 
 ## 读档回调：从 world_state 表恢复；旧档回退读 legacy_modules（见 _read_legacy_world_state）

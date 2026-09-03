@@ -1,0 +1,16 @@
+[gd_scene load_steps=2 format=3]
+
+; 祭司法杖（Meric）——P7 批次 7b，结构照 weapon_magicstaff.tscn。
+; L2 降级：meric-staff 贴图工具链未覆盖（[meric.atlas].txt 缺），首版复用 Magicstaff 贴图占位。
+; 挂待办登记：贴图替换 + GripPoint 实测校准（待 meric 图集导出后）。
+[ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/magicstaff.png" id="1_tex"]
+
+[node name="Mericstaff" type="Node2D"]
+
+[node name="Sprite" type="Sprite2D" parent="."]
+rotation = -0.026007
+scale = Vector2(0.48, 0.482)
+texture = ExtResource("1_tex")
+
+[node name="GripPoint" type="Marker2D" parent="."]
+position = Vector2(1.9, -26.9)

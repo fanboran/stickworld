@@ -18,6 +18,7 @@ const SPEAR: int = 1
 const BOW: int = 2
 const PICKAXE: int = 3
 const STAFF: int = 4
+const MERIC: int = 5
 
 # ─────────────────────────────── 基线（人性基线，RWR default.ai 思路）────────────────────────────────
 ## 所有兵种共享的默认行为参数。字段说明：
@@ -47,6 +48,7 @@ const BASELINE: Dictionary = {
 	"y_align_early": false,                 ## 提前对齐（SWL adjustYEarly 参数：远程兵种接敌全程调 y，近战只在近处）
 	"y_align_strength": 0.22,               ## y 对齐走位分量强度（0~1 叠加到移动方向）
 	"y_aim_tolerance": 0.0,                 ## 9p：射程内 |Δy| 超此值先 y 走位不出手（px；0=关。SWL ShouldAim/CanAttack 的 y 门槛近似，待实测校准）
+	"missing_arrows_tolerance": 0.0,        ## 11d 弓手脱靶容忍（dump ArcherAi.MissingArrowsTolerance）：目标在飞箭伤害估计超出"击杀所需+此值"即不出手（HP 点；0=关）
 	"move_mult": 1.0,                       ## 移速倍率（SWL 兵种机动性：Swordwrath 轻快、Spearton 沉稳）
 	"block_after_attack": 0.0,              ## 攻击后举盾时长（s，SWL Ai.cooldownAfterAttackForBlock；0=关）
 	"formation_block": false,               ## 行军/待命举盾（SWL UpdateBlockWhenInFormation：盾兵行军盾不放下）
@@ -62,6 +64,31 @@ const BASELINE: Dictionary = {
 	"block_move_mult": 1.0,                 ## 持盾移速倍率（举盾行军更沉稳）
 	"attack_pool": [],                      ## 攻击动画池（9f：非举盾攻击随机抽取；空=只用武器基础攻击动画。动画名对齐 stickman_anims）
 	"stand_pool": [],                       ## 站姿变体池（9r：进待机随机抽取；空=武器默认站姿。动画名对齐 stickman_anims）
+	# ── 9i+ 溃逃保真五项增强（P6 批次 7c：能力开关，默认全关 = 零回归）──
+	# 消费函数与降级路径：开关关 / 姿态查询不可用（未注册阵营 AI）→ 既有行为。
+	# 全部只改走位/决策取向，不触碰选目标、出手、伤害管线。数值均待实测校准。
+	"rout_reengage_enabled": false,         ## 逃开后再战（ai_controller._try_combat 脱战低士气分支）
+	"re_engage_morale": 0.15,               ## 再战所需士气比例（0~1；需 < 低士气阈值 0.25 才在脱战分支内触发，待实测校准）
+	"retreat_keep_block": false,            ## 保持招架（behavior_retreat：持盾兵种撤退全程举盾）
+	"rout_strafe_enabled": false,           ## 垂直位游走（behavior_retreat：撤退叠加垂直横向分量）
+	"rout_strafe_strength": 0.35,           ## 横向分量强度（0~1 叠加到撤退方向）
+	"test_engage_enabled": false,           ## 前排怯战试探接敌（ai_controller：脱战低士气脉冲接敌）
+	"test_pulse_on": 2.0,                   ## 试探接敌脉冲开启时长（s）
+	"test_pulse_off": 3.0,                  ## 试探接敌脉冲关闭时长（s）
+	"test_engage_range": 480.0,             ## 试探接敌触发距离（px，射程边缘近似）
+	"flank_enabled": false,                 ## 包抄走位（behavior_attack：侧翼单位接近叠加侧向分量）
+	"flank_y_offset": 120.0,                ## 侧翼判定：相对本方质心 y 偏移绝对值阈值（px）
+	"flank_side_strength": 0.40,            ## 包抄侧向分量强度（0~1）
+	# ── P7 批次 7b 治疗档案族（祭司 Meric；全部默认"关闭/零"，非祭司无消费路径 = 零回归）──
+	# dump MericAi 全部 3 行为函数与 Meric 实体层治疗方法（CastHeal/CanCastHeal/IsCastingHeal）
+	# 均无方法体：healAmount/healCooldown 字段名真值存在，数值全部语义推断（待实测校准）。
+	"heal_enabled": false,                  ## 治疗能力开关（MericAi 直译消费端 behavior_heal）
+	"heal_amount": 0.0,                     ## 单次治疗总量（HP 点，dump healAmount 字段名真值；HOT 均分到 tick）
+	"heal_cooldown": 0.0,                   ## 治疗冷却（s，dump healCooldown 字段名真值；MERIC 档须 ≥ 施法动画时长，9d 同款校验）
+	"heal_range": 0.0,                      ## 治疗射程（px，语义推断待实测校准）
+	"heal_duration": 0.0,                   ## HOT 持续时长（s，总量均分 per_tick）
+	"heal_scan_interval": 0.5,              ## 治疗目标扫视周期（s，MericAi.UpdateTarget 节流推断）
+	"rear_line": false,                     ## 后排站位（FormationSystem 尾列取向；duck 查询不跨模块 preload）
 }
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────
@@ -114,6 +141,9 @@ const CLASS_PROFILES: Dictionary = {
 		"y_align_early": true,
 		"y_align_x_range": 240.0,
 		"y_aim_tolerance": 48.0,
+		# 11d 弓手脱靶容忍（MissingArrowsTolerance 直译：对将死目标浪费箭的阈值）。
+		# 半箭伤害（基础 10 的 1 倍）起步，无 dump 真值 → 待实测校准
+		"missing_arrows_tolerance": 10.0,
 	},
 	PICKAXE: {
 		"hesitate_prob": 0.08,
@@ -126,10 +156,26 @@ const CLASS_PROFILES: Dictionary = {
 		"y_drift_band": 15.0,
 		"move_mult": 0.9,
 		"summon_count": 2,
-		"summon_cooldown": 12.0,
+		# 召唤冷却校准（P5 批次 2）：SWL wiki 法师召唤冷却 ~5s（原 12s 为近似值）
+		"summon_cooldown": 5.0,
 		"summon_hp": 40.0,
 		# 法术爆炸（SWL CastStun/StunOpponents 放倒一片：命中点范围伤害+击晕）
 		"spell_aoe_radius": 90.0,
+	},
+	MERIC: {
+		# P7 批次 7b 祭司（SWL Meric）：本地无 wiki 真值，全推断初值待实测校准（决策点 7）
+		"heal_enabled": true,
+		"heal_amount": 30.0,          ## 单次治疗总量（HP 点，待实测校准）
+		"heal_cooldown": 3.0,         ## 治疗冷却 ≥ 施法动画时长（heal_meric_* 全长实测后校准，9d 同款硬约束）
+		"heal_range": 400.0,          ## 治疗射程（px，语义推断待实测校准）
+		"heal_duration": 3.0,         ## HOT 持续（s，总量均分 per_tick = amount × TICK / duration）
+		"heal_scan_interval": 0.5,    ## 目标扫视周期（s）
+		"kite_range": 260.0,          ## 被近身保距撤离（决策点 4：撤而不打；置 0 无损切换为站定）
+		"kite_run": true,             ## 撤离奔跑
+		"rear_line": true,            ## 后排站位（FormationSystem 尾列取向）
+		"move_mult": 0.7,             ## 脆皮辅助移速（< 法师 0.9，待实测校准）
+		"hesitate_prob": 0.05,        ## 犹豫概率（辅助个性）
+		"y_drift_band": 15.0,         ## y 纵深漂移半径（同法师）
 	},
 }
 

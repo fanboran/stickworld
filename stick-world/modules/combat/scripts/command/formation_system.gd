@@ -572,6 +572,7 @@ func _assign_formation_slots(squad_id: String) -> void:
 	if alive.is_empty():
 		squad["slots"] = {}
 		return
+
 	var slots: Dictionary = {}
 	for i in alive.size():
 		slots[alive[i].get_instance_id()] = Vector2i(

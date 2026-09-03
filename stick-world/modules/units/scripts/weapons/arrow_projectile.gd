@@ -56,6 +56,9 @@ var _stuck_timer: float = 0.0
 ## 命中后是否插在受击者身上（原版 Arrow.doesStickIn 字段：插身上的箭 ≠
 ## InGroundArrows 插地的箭，两条路径）。true = 命中后钉在目标身上随其移动。
 @export var does_stick_in: bool = true
+## 在飞伤害登记目标（11d MissingArrowsTolerance 估计口径）：发射时锁定，
+## 箭矢终态（命中任意敌人/插地）扣减其 incoming_arrow_damage
+var _registered_target: Node = null
 
 
 ## 发射参数：初速度矢量、伤害、射手、目标、拉弓力度（0~1）、重力（缺省 0=直线，兼容旧调用）、
@@ -72,6 +75,9 @@ func setup(vel: Vector2, dmg: float, shooter: Node, target: Node = null, draw_po
 	_solve_time = maxf(0.0, solve_time)
 	_solve_ground_y = solve_ground_y
 	rotation = _vel.angle()
+	# 11d 在飞伤害登记目标（终态扣减，见 _clear_incoming）
+	if target != null and is_instance_valid(target) and "incoming_arrow_damage" in target:
+		_registered_target = target
 
 
 func _ready() -> void:
@@ -169,6 +175,8 @@ func _is_headshot(target: Node, hit_pos: Vector2) -> bool:
 
 
 func _hit(target: Node) -> void:
+	# 箭矢终态：扣减在飞伤害估计（无论实际命中者是否登记目标——估计口径允许偏差）
+	_clear_incoming()
 	# ── 伤害走 DamagePipeline 单入口（SWL Unit.Damage 复刻）──
 	var p := DamagePipeline.Params.new(_damage * (0.6 + 0.4 * _draw_power), _shooter)
 	p.direction = _vel.normalized()
@@ -234,8 +242,21 @@ static func _num(node: Node, prop: String, fallback: float) -> float:
 func _stick_ground() -> void:
 	_stuck = true
 	_stuck_timer = 0.0
+	# 箭矢终态：扣减在飞伤害估计（这箭没打中任何人，登记作废）
+	_clear_incoming()
 	# 监测引用失效（目标死后箭还在飞 → 立即插地）
 	if _target != null and not is_instance_valid(_target):
 		_target = null
 	# 视觉：插地角度微微下倾
 	rotation = _vel.angle() + 0.15
+
+
+## 扣减登记目标头上的在飞伤害估计（11d MissingArrowsTolerance 估计口径；
+## 箭矢所有终态调用一次，幂等：_registered_target 置空防重复扣减）
+func _clear_incoming() -> void:
+	if _registered_target == null:
+		return
+	if is_instance_valid(_registered_target) and "incoming_arrow_damage" in _registered_target:
+		_registered_target.incoming_arrow_damage = maxf(
+				0.0, _registered_target.incoming_arrow_damage - _damage)
+	_registered_target = null

@@ -41,6 +41,7 @@ const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
 ## 状态效果组件脚本（BURN/POISON/SLOW/STUN；显式 preload 防 headless class_name 未注册）
 const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
 
+
 ## 视觉控制器组件脚本（动画播放/头顶进度条）
 const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/entity/visual_controller.gd")
 ## 交互控制器组件脚本（按E交互/提示弹窗）
@@ -57,6 +58,11 @@ const _HealthBarScript: GDScript = preload("res://modules/units/scripts/entity/h
 
 ## 兵种数据 ID（对齐 config/units/stickmen.tres 的行 id；默认平原步兵）
 @export var stickman_def_id: String = "stm_plain_001"
+
+## 在飞箭矢伤害估计（11d MissingArrowsTolerance 消费口径）：WeaponMount 发射
+## 箭矢时累加满伤害，箭矢终态（命中/插地）扣减——行为层据此避免对将死目标浪费箭。
+## 估计口径允许偏差（箭可能命中非登记目标）。
+var incoming_arrow_damage: float = 0.0
 
 ## 移动加速度（px/s²）
 @export var accel: float = 600.0
@@ -1063,6 +1069,7 @@ func set_role(r: String) -> void:
 ## 获取角色类型（空=未编队）。
 func get_role() -> String:
 	return role
+
 
 
 # ─────────────────────────────── 战斗 API（§8）────────────────────────────────

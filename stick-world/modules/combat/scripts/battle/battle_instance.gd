@@ -13,6 +13,8 @@ extends Node
 
 const ScriptCoverSystem := preload("res://modules/combat/scripts/battle/cover_system.gd")
 const ScriptBattleAIDirector := preload("res://modules/combat/scripts/battle/battle_ai_director.gd")
+const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
+const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 
 # ─────────────────────────────── 状态枚举 ────────────────────────────────
 enum State {
@@ -62,6 +64,11 @@ var _casualties_defender: int = 0
 ## 计数按新鲜窗口衰减（审计 P1-3）：攻击者停手超过窗口后自动失效，
 ## 无需依赖 unregister_attacker 被正确调用（原"只增不减"导致集火分配逐渐失真）。
 var _target_attackers: Dictionary = {}
+## 阵营 AI 姿态机（P6 TeamAi 直译）：faction -> TeamAi（注册制，未注册不创建 = 零开销零回归）
+var _team_ai: Dictionary = {}
+## 号令/编队系统引用（装配注入，enable_team_ai 时透传 TeamAi）
+var _order_refs_orders: Node = null
+var _order_refs_formation: Node = null
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -106,6 +113,11 @@ func _physics_process(delta: float) -> void:
 		return
 	_duration += delta
 	_director.tick(delta)
+	# 阵营 AI tick（P6 TeamAi：注册判空，未注册零开销；内部低频节流 + 门禁双保险）
+	for faction in _team_ai.keys():
+		var tai: ScriptTeamAi = _team_ai[faction]
+		if tai != null:
+			tai.tick(delta)
 	_check_victory()
 
 
@@ -286,6 +298,52 @@ func get_alive_count(faction: int) -> int:
 	return _count_alive(units)
 
 
+# ─────────────────────────────── 阵营 AI（P6 TeamAi 直译）────────────────────────────────
+
+## 注册制开关：启用指定阵营的 TeamAi 姿态机（默认不启用 = 零回归闸门）。
+## 每阵营至多一个，重复注册忽略并告警；overrides 透传 TeamAiProfiles 覆盖（扫参用）。
+## orders/formation 引用经 set_order_refs 注入（未注入时姿态决策照跑、号令跳过）。
+func enable_team_ai(faction: int, overrides: Dictionary = {}) -> void:
+	if faction != FACTION_ATTACKER and faction != FACTION_DEFENDER:
+		push_warning("[BattleInstance] enable_team_ai 非法阵营 %d" % faction)
+		return
+	if _team_ai.has(faction):
+		push_warning("[BattleInstance] 阵营 %d 已注册 TeamAi，忽略重复注册" % faction)
+		return
+	var tai: ScriptTeamAi = ScriptTeamAi.new()
+	tai.setup(self, faction, _order_refs_orders, _order_refs_formation, overrides)
+	_team_ai[faction] = tai
+
+
+## 姿态机查询（单位级 9i+ 消费端经 entity.get_battle_instance() duck 调用；未注册返回 null）
+func get_team_ai(faction: int) -> Variant:
+	return _team_ai.get(faction, null)
+
+
+## 阵营侧锚点：己方出生侧 x（anchor_margin 内收）+ 战场 y 中带。
+## 供 TeamAi 驻守判定与 GARRISON 号令目标消费（纯查询，不依赖 TeamAi）。
+## 约束：按"faction 1 = 左进攻方 / faction 2 = 右防守方"既有常量约定，攻城战反向布阵待扩展。
+func get_faction_side_anchor(faction: int) -> Vector2:
+	var ml: float = _map.map_left if _map != null and is_instance_valid(_map) and "map_left" in _map else 0.0
+	var mr: float = _map.map_right if _map != null and is_instance_valid(_map) and "map_right" in _map else 8192.0
+	var gy: float = _map.ground_y if _map != null and is_instance_valid(_map) and "ground_y" in _map else 0.0
+	var gb: float = _map.ground_bottom if _map != null and is_instance_valid(_map) and "ground_bottom" in _map else 1080.0
+	var margin: float = float(ScriptTeamAiProfiles.DEFAULTS.get("anchor_margin", 260.0))
+	var x: float = (ml + margin) if faction == FACTION_ATTACKER else (mr - margin)
+	return Vector2(x, (gy + gb) * 0.5)
+
+
+## 装配注入（BattleDirector.start_battle_at 在 bi.setup(map) 后透传；须在 enable_team_ai 前）
+func set_order_refs(orders: Node, formation: Node) -> void:
+	_order_refs_orders = orders
+	_order_refs_formation = formation
+	# 已注册的 TeamAi 补注入（兼容后注册引用的场景）
+	for faction in _team_ai.keys():
+		var tai: ScriptTeamAi = _team_ai[faction]
+		if tai != null:
+			tai.set_order_refs(orders, formation)
+
+
 # ─────────────────────────────── 内部 ────────────────────────────────
 
 ## 检查胜负条件：一方全灭则另一方胜
@@ -323,6 +381,12 @@ func _end(result: State) -> void:
 	_units_attacker.clear()
 	_units_defender.clear()
 	_target_attackers.clear()
+	# 阵营 AI 消亡：断开 EventBus 订阅（防 freed 悬空连接），随宿主 queue_free 整体释放
+	for faction in _team_ai.keys():
+		var tai: ScriptTeamAi = _team_ai[faction]
+		if tai != null:
+			tai.dispose()
+	_team_ai.clear()
 	if EventBus != null:
 		var attacker_wins: bool = result == State.ATTACKER_WIN
 		EventBus.battle_ended.emit(get_battle_id(), attacker_wins)

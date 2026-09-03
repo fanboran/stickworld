@@ -28,6 +28,10 @@ const ANIM_ATTACK_SPEAR_3 := "attack_spear_3"
 const ANIM_ATTACK_PICKAXE := "attack_pickaxe"
 const ANIM_ATTACK_STAFF := "attack_staff"
 const ANIM_ATTACK_BOW := "attack_bow"
+## 祭司治疗动画池（Meric-Heal1/Heal2，P7 批次 7b：dump healingAnimation 字段直译候选）
+## 动画资产由任务 3.2 多骨架导入产出；本批先落常量供编译，运行时 _load_anim 缺资源只 push_warning
+const ANIM_HEAL_MERIC_1 := "heal_meric_1"
+const ANIM_HEAL_MERIC_2 := "heal_meric_2"
 const ANIM_BLOCK := "block"
 ## 盾姿态分层（计划 5，SWL Spearton 持盾形态组）：举盾时 walk/idle/attack
 ## 经 set_state_animation 换持盾变体（不增状态节点，机制同死亡变体池）
@@ -109,6 +113,12 @@ static func pick_dead_anim(headshot: bool) -> String:
 	var pool: Array[String] = DEAD_HEADSHOT_VARIANTS if headshot else DEAD_VARIANTS
 	return pool[randi() % pool.size()]
 
+
+## 选治疗动画（祭司 Meric-Heal1/Heal2 随机，dump healingAnimation 字段直译）
+## P7 批次 7b：供 WeaponMount.cast_heal 注入 healing_animation 字段
+static func pick_heal_anim() -> String:
+	return HEAL_ANIMS[randi() % HEAL_ANIMS.size()]
+
 const ANIM_DIR := "res://modules/units/animations/"
 
 ## 全部攻击动画（通用剑攻 + 各武器专属：矛刺/镐挥/法杖/拉弓）
@@ -116,6 +126,9 @@ const ATTACK_ANIMS: Array[String] = [
 	ANIM_ATTACK, ANIM_ATTACK_SPEAR, ANIM_ATTACK_PICKAXE,
 	ANIM_ATTACK_STAFF, ANIM_ATTACK_BOW,
 ]
+
+## 祭司治疗动画池（类型化数组直初始化，不经三元退化为 untyped，§七.4）
+const HEAL_ANIMS: Array[String] = [ANIM_HEAL_MERIC_1, ANIM_HEAL_MERIC_2]
 
 ## 武器类型 -> 攻击动画名。键序对齐 WeaponMount.WeaponType
 ## （0=SWORD 1=SPEAR 2=BOW 3=PICKAXE 4=STAFF）。
@@ -183,6 +196,9 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_ATTACK_PICKAXE)
 	_load_anim(lib, ANIM_ATTACK_STAFF)
 	_load_anim(lib, ANIM_ATTACK_BOW)
+	# 祭司治疗动画（P7 批次 7b：Meric-Heal1/Heal2，资产由任务 3.2 导入）
+	for a in HEAL_ANIMS:
+		_load_anim(lib, a)
 	_load_anim(lib, ANIM_BLOCK)
 	# 盾姿态分层（计划 5）：持盾行军/待命/三连刺变体入库
 	for a in [ANIM_BLOCK_WALK, ANIM_BLOCK_CROUCH]:
@@ -250,6 +266,7 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	for a in ATTACK_ANIMS:
 		for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
 			sm.add_transition(s, a, _smt(0.1, false))
+
 		sm.add_transition(a, ANIM_IDLE, _smt(0.12))
 	for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
 		sm.add_transition(s, ANIM_BLOCK, _smt(0.08, false))
@@ -259,11 +276,13 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	sm.add_transition(ANIM_WALK, ANIM_DEAD, _smt(0.15, false))
 	for a in ATTACK_ANIMS:
 		sm.add_transition(a, ANIM_DEAD, _smt(0.15, false))
+
 	# 爆头死亡（Death-Headshot 转译）：与普通死亡同款切入（终态，不回 idle）
 	for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
 		sm.add_transition(s, ANIM_DEAD_HEADSHOT, _smt(0.15, false))
 	for a in ATTACK_ANIMS:
 		sm.add_transition(a, ANIM_DEAD_HEADSHOT, _smt(0.15, false))
+
 	# 搬运动画过渡（搬运工 set_carrying 切换时）
 	sm.add_transition(ANIM_IDLE, ANIM_WALK_CARRY, _smt(0.08))
 	sm.add_transition(ANIM_WALK_CARRY, ANIM_IDLE, _smt(0.08))

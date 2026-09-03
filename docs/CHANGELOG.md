@@ -8,6 +8,45 @@
 
 ## [未发布]
 
+### 观察场升级为默认主场景 + 对战预设控制面板（2026-09-02）
+
+- **主场景切换**：`project.godot` `run/main_scene` 从主菜单改为 `tests/dev/battle_arena.tscn`
+  ——F5 直进对战观察场验收（主菜单仍可从 ESC 返回）
+- **对战预设三档**（`PRESETS`，点底部按钮或 1/2/3 切换并立即重开，static `_preset_idx`
+  跨重开保持所选档位）：**遭遇战·16**（矛8/剑4/火力4）/ **标准战役·48**（默认，
+  矛16/剑20/火力12）/ **大军压境·96**（矛32/剑40/火力24，杖8弓16）
+- **控制面板**：底部居中 PanelContainer——预设按钮组（当前档位锁定高亮）+「重开 (R)」；
+  战斗 log 带预设名与双方人数；headless 实测 48v48 零脚本错误
+
+### 批次 2 数值校准：SWL 真值落表 + 9d 射速 + 11d 弓手补全（2026-09-02，计划 P5）
+
+- **数值表落 config/units/stickmen.tres（P5 主体）**：新增 6 行 SWL 校准 def
+  （sword/spear/bow/miner/staff/giant），字段 `base_hp/base_attack/attack_cooldown/
+  head_shot_bonus_damage/asphalt_cost`，数据源 = SWL wiki（namu，当前版 Normal 模式
+  面板值）+ 价格源交叉验证——剑 80HP/12伤/1.0s/125金、矛 440/15/2.0s/500、
+  弓 70/10+爆头加值22/2.0s/300、矿工 100/10/0.8s/150、法师 150/50爆炸/7.0s/1200
+  （召唤冷却档案同步校准 12s→**5.0s** 对齐 wiki）、巨人 1000/25/2.5s/1500（P8 消费）
+- **数值消费链（weapon_mount.gd）**：新增 `WEAPON_DEF_ID`（weapon_type→def 映射）+
+  `_apply_balance_calibration`——`_reload_weapons` 时整行读 BalanceConfig 覆盖
+  伤害/冷却/爆头加值，HP 首次装载时校准（换武器不动当前 HP，装备迁移归 P9）；
+  `_ready` 改为 deferred 完整 `_reload_weapons`，场景预置 weapon_type 的兵种也吃校准
+- **9d 射速校准 + 冷却检查项**：per-weapon 冷却取代全局 1.35s（弓 2.0s=拉弓动画
+  全长、矛 2.0s、法师 7.0s）；`_check_cooldown_vs_anim` 校验（硬约束=冷却 ≥ 命中帧、
+  软提示=冷却 < 动画全长依赖打断语义、每武器只告警一次）；**修复边界 bug**——
+  冷却 ≤ 命中帧时长时每次重挥都在命中帧结算前打断自己（1剑v1剑 45s 打不死，
+  can_attack 增补"上一击未挥到命中帧不许重挥"门禁后 10.25s 正常收敛）
+- **11d ArcherAi 补全**：`MissingArrowsTolerance` 直译（档案 `missing_arrows_tolerance`，
+  BOW=10 待实测校准）——目标在飞箭伤害估计超出"击杀所需+容忍度"即不出手
+  （`_arrows_wasted` 门禁接风筝还击与站桩两分支；`incoming_arrow_damage` 由
+  WeaponMount 发射登记、箭矢终态扣减）；`NextGaussian(mean, std, min, max)` 三参版
+  直译（Box-Muller + 区间重掷/钳制），`_fire_arrow` 散布改走该入口（±2σ 截断）
+- **验证**：battle_sim 6 场景——1剑v1剑 10.25s、10剑v10剑 15.25s、10剑v20剑 9.25s、
+  1矛v1剑 14.25s（矛克剑 ✓）、1弓v1矛 33.25s（矛克弓 ✓）全部收敛；镜像混编 45s
+  拉锯（16/20 存活，矛 440HP 坦克肉度符合原版）；行为占比 attack 88~100%、
+  ranged_engage 中位 319~581px；全量测试 run_all.sh 21/21
+- **覆盖率**：§三 更新 51%→**53%**（严格）/ 56%→**57%**（含近似）——ArcherAi
+  MissingArrowsTolerance/NextGaussian 转 ✅（15 函数中 10✅）；下一项 P6（7c+11c TeamAi）
+
 ### 11b Formation 列队形（2026-09-01，计划 P4）
 
 - **槽位制 row/col 阵列（Formation 类 7 函数直译）**：`formation_system.gd` 小队新增

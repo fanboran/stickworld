@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="火柴人帝国模拟"
-run/main_scene="res://modules/ui_global/scenes/menus/main_menu.tscn"
+run/main_scene="res://tests/dev/battle_arena.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 

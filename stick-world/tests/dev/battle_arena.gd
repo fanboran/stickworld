@@ -1,14 +1,16 @@
 extends Node
-## 战斗演练场（观察用，非 CI 测试）：双方各 24 人、3 小队按武器分排编队推进互殴。
+## 战斗演练场（观察用，非 CI 测试）：按预设双方各 16~96 人、3 小队按武器分排编队推进互殴。
 ##
 ## 用途：肉眼观察战斗画面自然度——编队推进/站姿/走姿/挥砍/受击/死亡/血条/阵营对抗。
-## 入口：主菜单「战斗演练」→「大乱斗观察场」。
+## 入口：项目主场景（F5 直进）或主菜单「战斗演练」→「大乱斗观察场」。
+## 控制面板（底部居中）：预设按钮（遭遇战·16 / 标准战役·48 / 大军压境·96，点按或
+## 1/2/3 切换并立即重开，static _preset_idx 跨重开保持）+「重开 (R)」按钮。
 ##
-## 编制（融合本作 FormationSystem 编制系统，审计 P1-1/P1-2）：
+## 编制（融合本作 FormationSystem 编制系统，审计 P1-1/P1-2；每班人数随预设缩放）：
 ##   每方 3 个战斗小队（fp_combat_squad 预设 + 任命排长）：
-##     矛兵班 ×8（先锋，射程 120 卡线）
-##     剑士班 ×10（中坚，2 排，锚定跟随矛班 gap 150）
-##     火力班 ×6（杖×2 + 弓×4，射程 300 压制，锚定跟随剑班 gap 150）
+##     矛兵班（先锋，射程 120 卡线，1~4 排 ×8）
+##     剑士班（中坚，锚定跟随矛班 gap 150，1~4 排 ×4~10）
+##     火力班（杖+弓，射程 300 压制，锚定跟随剑班 gap 150，1~3 排）
 ##   出生按武器射程纵深分排（矛前→剑→杖→弓后），排/列间距 ≥ 分离半径 42px。
 ##   开战矛班下 ADVANCE_ALL（formation row/col 列阵）压至中线交战；剑/火班由编队动态跟队
 ##   （set_squad_follow_squad）锚定前队质心后方 gap 处，保持纵深推进、接战即还战斗；
@@ -29,33 +31,84 @@ const _TacticalOrders := preload("res://modules/combat/scripts/command/tactical_
 const W_SWORD: int = 0
 const W_SPEAR: int = 1
 const W_BOW: int = 2
+const W_PICKAXE: int = 3
 const W_STAFF: int = 4
+const W_MERIC: int = 5
 
-## 每方编制（rows 自前向后；front_x = 班最前排相对团队中心的 x，攻方朝 +x，
+## 每方编制 rows 自前向后；front_x = 班最前排相对团队中心的 x，攻方朝 +x，
 ## advance_x = 该班推进目标相对中线的 x，**正值=越过中线（敌方向），负值=停在己方侧**；
 ## follow_gap > 0 = 锚定跟随前一班（编队动态跟队），不下推进号令）：
 ## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛先锋卡线、剑锚矛 gap150、火力锚剑 gap150
-const SQUAD_DEFS: Array = [
+##
+## 对战预设（控制面板 1/2/3 切换，重开保持所选档位）：
+const PRESETS: Array = [
 	{
-		"name": "矛兵班",
-		"front_x": 150.0,
-		"advance_x": 60.0,
-		"follow_gap": 0.0,
-		"rows": [{ "weapon": W_SPEAR, "count": 8 }],
+		"name": "遭遇战·16",
+		"squads": [
+			{
+				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"rows": [{ "weapon": W_SPEAR, "count": 8 }],
+			},
+			{
+				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SWORD, "count": 4 }],
+			},
+			{
+				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_STAFF, "count": 1 }, { "weapon": W_BOW, "count": 3 }, { "weapon": W_MERIC, "count": 1 }],
+			},
+		],
 	},
 	{
-		"name": "剑士班",
-		"front_x": 85.0,
-		"follow_gap": 150.0,
-		"rows": [{ "weapon": W_SWORD, "count": 5 }, { "weapon": W_SWORD, "count": 5 }],
+		"name": "标准战役·48",
+		"squads": [
+			{
+				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"rows": [{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 }],
+			},
+			{
+				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 }],
+			},
+			{
+				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
+			},
+		],
 	},
 	{
-		"name": "火力班",
-		"front_x": -45.0,
-		"follow_gap": 150.0,
-		"rows": [{ "weapon": W_STAFF, "count": 2 }, { "weapon": W_BOW, "count": 4 }],
+		"name": "大军压境·96",
+		"squads": [
+			{
+				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"rows": [
+					{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 },
+					{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 },
+				],
+			},
+			{
+				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
+				"rows": [
+					{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 },
+					{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 },
+				],
+			},
+			{
+				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
+				"rows": [
+					{ "weapon": W_STAFF, "count": 8 },
+					{ "weapon": W_BOW, "count": 8 }, { "weapon": W_BOW, "count": 8 },
+				],
+			},
+			{
+				"name": "治疗班", "front_x": -135.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_MERIC, "count": 2 }],
+			},
+		],
 	},
 ]
+## 当前预设下标（static：场景 reload 重开/切预设后保持所选档位）
+static var _preset_idx: int = 1
 ## 排间距（px，SWL 队列：单位间约 1 个身位余量，此前 58 贴脸）
 const ROW_GAP: float = 110.0
 ## 排内左右间距（px）
@@ -70,6 +123,8 @@ var _game_root: Node = null
 var _left_alive_label: Label = null
 var _right_alive_label: Label = null
 var _hint_label: Label = null
+## 控制面板预设按钮组（下标对齐 PRESETS）
+var _preset_buttons: Array = []
 var _attacker: Array = []
 var _defender: Array = []
 ## 相机跟随代理（camera_rig 居中模式目标；每帧 lerp 到存活质心）
@@ -109,7 +164,7 @@ func _spawn_and_start() -> void:
 		push_error("[Arena] 地图未加载")
 		return
 	# 清空地图自带单位（_on_map_loaded 刚 spawn 的玩家实体等）——
-	# 演练场只保留自己刷的 48 个演练单位，保证观察画面纯净
+	# 演练场只保留自己刷的 96 个演练单位，保证观察画面纯净
 	for e in map.get_entities():
 		if is_instance_valid(e):
 			e.queue_free()
@@ -136,11 +191,12 @@ func _spawn_and_start() -> void:
 		if rig.has_method("snap_to_follow_target"):
 			rig.snap_to_follow_target()
 	# 按编制分排出生（左攻右守，镜像）
+	var squad_defs: Array = PRESETS[_preset_idx]["squads"]
 	var squads_left: Array = []
 	var squads_right: Array = []
 	var fs: Node = _game_root.get_formation_system()
-	for si in SQUAD_DEFS.size():
-		var def: Dictionary = SQUAD_DEFS[si]
+	for si in squad_defs.size():
+		var def: Dictionary = squad_defs[si]
 		var l_units: Array = []
 		var r_units: Array = []
 		var rows: Array = def["rows"]
@@ -162,7 +218,7 @@ func _spawn_and_start() -> void:
 		squads_right.append(r_units)
 		await get_tree().process_frame
 	var battle: Node = _game_root.start_test_battle(_attacker, _defender)
-	print("[Arena] 战斗开始: battle=", battle, " 左 %d 人 vs 右 %d 人" % [_attacker.size(), _defender.size()])
+	print("[Arena] 预设[%s] 战斗开始: battle=%s 左 %d 人 vs 右 %d 人" % [PRESETS[_preset_idx]["name"], battle, _attacker.size(), _defender.size()])
 	# 开战自动暂停豁免（TimeManager._on_battle_started，game/auto_pause_battle 默认
 	# true 会把全局时间置 PAUSED）：观察场要直接开演，自动恢复 X1；空格仍可手动暂停
 	if TimeManager != null and TimeManager.is_paused():
@@ -171,15 +227,15 @@ func _spawn_and_start() -> void:
 	# 排长每 0.5s 决策共享集火目标，formation 列阵位随号令生效
 	var left_squad_ids: Array = []
 	var right_squad_ids: Array = []
-	for si in SQUAD_DEFS.size():
-		left_squad_ids.append(_make_squad(fs, squads_left[si], "%s·蓝" % SQUAD_DEFS[si]["name"]))
-		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % SQUAD_DEFS[si]["name"]))
+	for si in squad_defs.size():
+		left_squad_ids.append(_make_squad(fs, squads_left[si], "%s·蓝" % squad_defs[si]["name"]))
+		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % squad_defs[si]["name"]))
 	# 编队前进（火柴人战争式）：先锋班（未锚定）下 ADVANCE_ALL 压到目标线；
 	# 锚定班不下推进号令——落点由编队动态跟队 tick 维持（跟队行军 + 接战交还战斗）
 	var to: Node = _game_root.get_tactical_orders()
 	if to != null and to.has_method("issue"):
-		for si in SQUAD_DEFS.size():
-			var def: Dictionary = SQUAD_DEFS[si]
+		for si in squad_defs.size():
+			var def: Dictionary = squad_defs[si]
 			if float(def.get("follow_gap", 0.0)) > 0.0:
 				continue  # 锚定班：剑班/火力班由动态跟队接管
 			var adv_x: float = float(def["advance_x"])
@@ -194,8 +250,8 @@ func _spawn_and_start() -> void:
 	# 编队动态跟队（SWL MoveInFormationBehindAnotherFormation + GapBetweenFormationGroups
 	# 直译）：剑班锚矛班、火力班锚剑班，后队落点 = 前队质心 − 行进方向 × gap
 	if fs != null and fs.has_method("set_squad_follow_squad"):
-		for si in SQUAD_DEFS.size():
-			var gap: float = float(SQUAD_DEFS[si].get("follow_gap", 0.0))
+		for si in squad_defs.size():
+			var gap: float = float(squad_defs[si].get("follow_gap", 0.0))
 			if gap <= 0.0 or si == 0:
 				continue
 			fs.set_squad_follow_squad(left_squad_ids[si], left_squad_ids[si - 1], gap)
@@ -299,6 +355,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_tree().reload_current_scene()
 			KEY_SPACE:
 				_toggle_pause()
+			KEY_1, KEY_2, KEY_3:
+				_switch_preset(int(event.keycode) - int(KEY_1))
+
+
+## 切换对战预设并立即重开（static _preset_idx 跨 reload 保持所选档位）。
+func _switch_preset(idx: int) -> void:
+	if idx < 0 or idx >= PRESETS.size() or idx == _preset_idx:
+		return
+	_preset_idx = idx
+	get_tree().reload_current_scene()
 
 
 func _toggle_pause() -> void:
@@ -320,7 +386,48 @@ func _build_hud() -> void:
 	_left_alive_label = _make_label(layer, Vector2(16, 16), Color(0.55, 0.75, 1.0))
 	_right_alive_label = _make_label(layer, Vector2(16, 42), Color(1.0, 0.62, 0.55))
 	_hint_label = _make_label(layer, Vector2(16, 72), Color(0.8, 0.8, 0.8))
-	_hint_label.text = "演练场：ESC 返回 · R 重开 · 空格 暂停 · 滚轮缩放"
+	_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
+	# 控制面板（底部居中）：对战预设按钮组 + 重开按钮——点按立即重开
+	var panel := PanelContainer.new()
+	panel.name = "ControlPanel"
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.08, 0.1, 0.75)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 10.0
+	sb.content_margin_right = 10.0
+	sb.content_margin_top = 6.0
+	sb.content_margin_bottom = 6.0
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	panel.position.y -= 16.0
+	layer.add_child(panel)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	panel.add_child(row)
+	for pi in PRESETS.size():
+		var btn := Button.new()
+		btn.text = "%d·%s" % [pi + 1, PRESETS[pi]["name"]]
+		btn.add_theme_font_size_override("font_size", 15)
+		btn.pressed.connect(_switch_preset.bind(pi))
+		btn.toggle_mode = true
+		row.add_child(btn)
+		_preset_buttons.append(btn)
+	var restart := Button.new()
+	restart.text = "重开 (R)"
+	restart.add_theme_font_size_override("font_size", 15)
+	restart.pressed.connect(func() -> void: get_tree().reload_current_scene())
+	row.add_child(restart)
+	_refresh_preset_buttons()
+
+
+## 预设按钮高亮态（当前档位按下锁定）
+func _refresh_preset_buttons() -> void:
+	for pi in _preset_buttons.size():
+		var btn: Button = _preset_buttons[pi]
+		btn.set_pressed_no_signal(pi == _preset_idx)
+		btn.disabled = pi == _preset_idx
 
 
 func _make_label(layer: CanvasLayer, pos: Vector2, color: Color) -> Label:
@@ -339,16 +446,16 @@ func _update_hud() -> void:
 	if _attacker.is_empty() or _defender.is_empty():
 		_left_alive_label.text = "蓝方（攻）集结中"
 		_right_alive_label.text = "红方（守）集结中"
-		_hint_label.text = "演练场：ESC 返回 · R 重开 · 空格 暂停 · 滚轮缩放"
+		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
 		return
 	var la := _count_alive(_attacker)
 	var ra := _count_alive(_defender)
 	_left_alive_label.text = "蓝方（攻）存活 %d / %d" % [la, _attacker.size()]
 	_right_alive_label.text = "红方（守）存活 %d / %d" % [ra, _defender.size()]
 	if la == 0 or ra == 0:
-		_hint_label.text = "战斗结束：%s 获胜 —— R 重开" % ("蓝方" if ra == 0 else "红方")
+		_hint_label.text = "战斗结束：%s 获胜 —— R 重开 / 换预设" % ("蓝方" if ra == 0 else "红方")
 	else:
-		_hint_label.text = "演练场：ESC 返回 · R 重开 · 空格 暂停 · 滚轮缩放"
+		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
 
 
 func _count_alive(units: Array) -> int:

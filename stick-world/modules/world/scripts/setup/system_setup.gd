@@ -198,6 +198,12 @@ func _setup_combat_api_deferred() -> void:
 	# 号令委托入口（CombatApi.issue_order → TacticalOrders）
 	if _root._tactical_orders != null and _root._combat_api.has_method("set_tactical_orders"):
 		_root._combat_api.set_tactical_orders(_root._tactical_orders)
+	# 阵营 AI 装配注入（P6 TeamAi：BattleDirector 透传给 BattleInstance.enable_team_ai 消费）
+	if _root.battle_director != null:
+		if _root._tactical_orders != null and _root.battle_director.has_method("set_tactical_orders"):
+			_root.battle_director.set_tactical_orders(_root._tactical_orders)
+		if _root._formation_system != null and _root.battle_director.has_method("set_formation_system"):
+			_root.battle_director.set_formation_system(_root._formation_system)
 
 
 # ─────────────────────────────── 资源系统装配（P0-9）────────────────────────────────

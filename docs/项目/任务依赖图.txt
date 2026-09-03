@@ -62,7 +62,7 @@
 任务 debt_9h | 名称=观察场卡死复验 | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs,debt_9h | 域=modules/combat | 注=缺陷 9h；观察场验收发现的缺陷——与祭司批次无内容依赖；自环=修复完成后需再验一轮（自复验回路）
 任务 debt_9j | 名称=脱战回血（MOBA 延迟血条） | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/units,modules/ui_global | 注=缺陷 9j
 任务 debt_9k | 名称=群体避让+空挥保真 | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/units | 注=缺陷 9k/9s
-任务 p8_giant | 名称=巨人兵种+抓掷技能（风险项） | 线=复刻主线 | 状态=可开工 | 前置=p6_teamai | 域=modules/units,config/units/stickmen.tres | 注=批次 7a；还要编辑数值表；与祭司批次并行：兵种复刻批次互不依赖，单线程排期属执行约束非依赖
+任务 p8_giant | 名称=巨人兵种+抓掷技能（风险项） | 线=复刻主线 | 状态=可开工 | 前置=p6_teamai | 域=modules/units,config/units/stickmen.tres | 注=批次 7a；还要编辑数值表；与祭司批次并行：兵种复刻批次互不依赖，单线程排期属执行约束非依赖 | 认领=exec-alpha
 任务 p9_inventory | 名称=背包与装备槽核心（InventoryComponent/装备槽位/物品 def 引用） | 线=复刻主线 | 状态=可开工 | 前置=ui_lane_closed | 域=modules/ui_global,modules/units | 注=批次 10 前半；原版物品栏形态参考（InGameShop/HudInventory）；UI 线已收线故解锁
 任务 p9_shop_hud | 名称=战场商店+物品条 HUD（InGameShop/HudInventory 形态） | 线=复刻主线 | 状态=阻塞 | 前置=p9_inventory | 域=modules/ui_global,modules/combat | 注=批次 10 后半；含战斗物资消耗（武器/弹药资源化）；后沿=经济循环收口（战场商店是经济×战斗交叉点）
 任务 fx_directional_blood | 名称=方向血溅特效（按命中方向喷溅） | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/fx | 注=批次 12；Effects 对照；后沿=demo_content（观感验收）
@@ -116,7 +116,7 @@
 任务 settlement_maps | 名称=聚落可玩地图（SettlementGenerator：seed+biome+级别+产业→MapDefinition） | 线=战略图 | 状态=冻结 | 前置=mapdef_class,prop_library,dec_village_def,biome_gen | 文档=docs/设计/系统/08-程序化世界生成.md | 注=按村落定义（dec_village_def 产出）生成；零件齐前做了也是脚手架（并行协调 §五 冻结令）；含敌方预置与资源点布置
 任务 enter_settlement_wire | 名称=双击城市进入接线（初始建筑 spawn 改造+重烘焙 bin） | 线=战略图 | 状态=阻塞 | 前置=settlement_maps | 域=modules/world_map,modules/world | 文档=docs/技术/架构/世界地图数据流.md | 注=实测：初始建筑仅游戏首载 spawn（game_root._on_map_loaded）
 任务 city_direction_roads | 名称=城镇朝向决定道路方向（左/右边界出口） | 线=战略图 | 状态=阻塞 | 前置=enter_settlement_wire | 文档=docs/技术/架构/场景与战斗/地图与场景图.md | 注=依赖战略图+聚落可进入
-任务 region_entity | 名称=Region 实体建模（地块归属/控制度，现为占位字符串 test_region） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=core/autoload/world_state.gd,modules/world_map | 文档=docs/技术/架构/世界地图数据流.md | 注=Region 对应战略图三层地块（已就绪）；含生成端 political_data（state_expander 政权/联盟/归属）；下游面大（外交/法律/文明差异），就绪即应优先排期
+任务 region_entity | 名称=Region 实体建模（地块归属/控制度，现为占位字符串 test_region） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=core/autoload/world_state.gd,modules/world_map | 文档=docs/技术/架构/世界地图数据流.md | 注=Region 对应战略图三层地块（已就绪）；含生成端 political_data（state_expander 政权/联盟/归属）；下游面大（外交/法律/文明差异），就绪即应优先排期 | 认领=exec-beta
 任务 river_gen | 名称=河流算法管线（08a-河流算法需求.md） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=tools | 文档=docs/设计/系统/08a-河流算法需求.md | 注=地形管线（分形大陆/高度场）之上重做河流；一版已被推翻；后沿=demo_content
 任务 biome_gen | 名称=群系生成（Whittaker 温湿矩阵+高度场 10 seed 候选挑选+迭代式河流密度调整） | 线=战略图 | 状态=可开工 | 前置=hist_worldgen_terrain | 域=tools | 文档=docs/设计/系统/08-程序化世界生成.md | 注=覆盖率补漏（08 篇 §二十一待办）；群系是聚落产业/差异化贴图的上游；后沿=settlement_maps（biome 输入）
 任务 strat_deepen | 名称=战略图深化（granularity_manager 三级粒度自动切换+settlement_renderer 动态聚落建筑群+Shader 化描边替代 _draw+拼接预览+风格化底图管线） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 文档=docs/技术/架构/战略图架构.md | 注=覆盖率补漏（路线图阶段1-7/战略图架构 SM-2~SM-5，冻结文件 settlement_renderer/granularity_manager/map_mode_manager/stitched_preview 待启用）；后沿=zoom_info_density（信息密度适配建在粒度机制上）
@@ -276,6 +276,8 @@
 任务 hist_resource_pricing | 名称=系统深化批次（资源供需定价引擎+CombatApi+F9 热重载+fx 粒子池+夜间光照） | 线=基线 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08-22 第三/四批整改
 任务 hist_arena_obs | 名称=大乱斗观察场（8 轮审计修复+翻译保真度审计+fx 全量考古 B8~B14） | 线=基线 | 状态=完成 | 前置=hist_resource_pricing | 注=2026-08-29~31，AI 复刻的前置验收场
 任务 hist_coverage_audit | 名称=AI 复刻覆盖率审计+SWL 全模块对账（34%→立项 11a~11e/12 批次） | 线=基线 | 状态=完成 | 前置=hist_arena_obs | 注=2026-09-01
+
+
 
 
 

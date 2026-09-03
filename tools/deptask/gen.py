@@ -1078,6 +1078,8 @@ function draw(){
   else if(bad){color="#f87171";w=2;}                              // 违规=红
   else if(hi===e.b){color="#38bdf8";w=2.2;}                       // 悬停节点的上游入边=天蓝
   else if(hi===e.a){color="#fbbf24";w=2.2;}                       // 悬停节点的下游出边=琥珀
+  else if(byId[e.b]&&byId[e.b].claim&&byId[e.b].status!=="完成"){ // 认领任务的前置=agent 色细线（工位占用）
+   color=agentColor(byId[e.b].claim)+"99";w=1.3;}
   else if(on){color="#38bdf8dd";w=2;}                             // 链高亮
   else if(sameLane){color=laneC+"88";w=1.5;}                      // 同泳道=领域色
   else{color="#243348";w=1;}                                      // 跨泳道=暗灰细
@@ -1129,6 +1131,15 @@ function draw(){
   ctx.fillStyle=c+"1f";roundRect(ctx,x+9,y+h-24,pw,16,3);ctx.fill();
   ctx.fillStyle=c;ctx.fillText(st,x+15,y+h-12);
   if(n.tree){ctx.fillStyle="#6e7a87";ctx.fillText("⌂ "+n.tree,x+9+pw+8,y+h-12);}
+  const claimed=n.claim&&n.status!=="完成"&&n.status!=="放弃";
+  if(claimed){ // 已认领：agent 色边框+呼吸辉光+角标（机场调度"航班占用"标识）
+   const ac=agentColor(n.claim);
+   ctx.strokeStyle=ac;ctx.lineWidth=2.2;
+   const pulse=0.5+0.5*Math.sin(animT*0.07);
+   ctx.shadowColor=ac;ctx.shadowBlur=3+5*pulse;
+   roundRect(ctx,x,y,w,h,4);ctx.stroke();ctx.shadowBlur=0;
+   ctx.fillStyle=ac;ctx.font="700 9px "+MONO;
+   ctx.fillText("◉ "+n.claim,x+w-10-ctx.measureText("◉ "+n.claim).width,y+14);}
   if(n.tier==="微"){ // 微任务单行：点+名称+状态字
    ctx.fillStyle=c;ctx.beginPath();ctx.arc(x+10,y+h/2,3,0,7);ctx.fill();
    ctx.fillStyle="#c9d4e0";fontSmall();ctx.fillText(n.name,x+18,y+16);
@@ -1279,7 +1290,8 @@ function showPanel(n){const p=document.getElementById("inspector");
  +"　<span style='cursor:pointer;color:#79b8ff' title='相关项小窗：前置/被依赖迷你卡' onclick='relPopup(this.dataset.t)' data-t='"+n.id+"'>⧉ 浮窗</span></div>"
  +"<div style='margin:6px 14px 0'><span class='tag' style='cursor:default;color:"+COL[n.status]+"'>"+n.status+"</span>"
  +(n.lane?"<span class='tag' style='cursor:default'>"+n.lane+"</span>":"")
- +(n.tree?"<span class='tag' style='cursor:default'>⌂ "+n.tree+"</span>":"")+"</div>"
+ +(n.tree?"<span class='tag' style='cursor:default'>⌂ "+n.tree+"</span>":"")
+ +(n.claim?"<span class='tag' style='cursor:default;color:var(--amber)'>◉ 认领者 "+n.claim+"</span>":"")+"</div>"
  +(selSet.size>1?"<div class='row'>已框选 "+selSet.size+" 个（拖动批量移动 / 右键批量改状态）</div>":"")
  +(n.domain&&n.domain.length?"<div class='row'>文件域："+n.domain.join(", ")+"</div>":"")
  +(n.doc?"<div class='row'>📄 <a style='color:#79b8ff' href='"+docHref(n.doc)+"'>"+n.doc+"</a></div>":"")
@@ -1920,7 +1932,7 @@ locateActive();
 setView((location.hash.match(/view=(\w+)/)||[])[1]||"graph",true);   // hash 路由：#view=producer 直达；force=启动强制初始化
 addEventListener("hashchange",()=>{const v=(location.hash.match(/view=(\w+)/)||[])[1];if(v&&v!==curView)setView(v);});
 let _last=0;
-requestAnimationFrame(function loop(ts){if(critOnly){animT++;dirty=true;}  // 蚂蚁线流光：仅关键路径模式常驻重绘
+requestAnimationFrame(function loop(ts){if(critOnly||nodes.some(n=>n.claim)){animT++;dirty=true;}  // 蚂蚁线/认领呼吸：仅有关键路径模式或已认领任务时常驻重绘
  if(dirty&&ts-_last>16){draw();_last=ts;}
  requestAnimationFrame(loop);});
 </script></body></html>

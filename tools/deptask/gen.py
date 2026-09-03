@@ -431,7 +431,7 @@ HTML = r"""<!DOCTYPE html>
  #bar{position:fixed;inset:0 0 auto 0;display:flex;flex-direction:column;gap:6px;
    padding:8px 14px;background:linear-gradient(180deg,#1a212b,#141920);
    border-bottom:1px solid var(--line);box-shadow:0 4px 16px #0007;z-index:20}
- #bar .row{display:flex;align-items:center;gap:8px;min-width:0}
+ #bar .row{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
  #bar .sep{width:1px;height:16px;background:var(--line);flex-shrink:0}
  #bar .sub{font-size:10.5px;color:var(--sub);letter-spacing:2px;white-space:nowrap;margin-top:1px}
  #bar b{font-size:14.5px;letter-spacing:1px;white-space:nowrap;display:flex;align-items:center;gap:7px}
@@ -457,6 +457,7 @@ HTML = r"""<!DOCTYPE html>
  .lchip{font-size:11px;padding:2px 9px;border-radius:20px;border:1px solid #ffffff10;cursor:pointer;
    background:#1c222b;color:#c9d4e0;user-select:none;white-space:nowrap;flex-shrink:0;transition:all .15s}
  .lchip:hover{background:#242c37;border-color:#3d4754}
+ .lchip.focus{border-color:var(--acc);color:var(--acc);background:#58a6ff1a}
  .lchip.off{opacity:.35;text-decoration:line-through}
  #checkChip,#readyChip,#critChip{font-size:11px;padding:3px 10px;border-radius:20px;cursor:pointer;
    background:#0d1117;border:1px solid var(--line);white-space:nowrap;transition:border-color .15s}
@@ -480,6 +481,8 @@ HTML = r"""<!DOCTYPE html>
  #zoom{position:fixed;left:12px;bottom:12px;font-size:11px;color:var(--sub);z-index:15;
    background:#161b22cc;border:1px solid var(--line);border-radius:6px;padding:3px 8px}
  canvas#cv{display:block;position:fixed;inset:0}
+ @media (max-width:1150px){#bar .sub{display:none}#search{width:130px}}
+ @media (max-width:860px){#legend{display:none}#bar .btn{padding:4px 7px;font-size:11.5px}#search{width:110px}}
 </style></head><body>
 <div id="bar"><div class="row"><b>任务依赖图</b><span class="sub">DAG 调度台</span>
  <span class="sep"></span>
@@ -515,9 +518,9 @@ HTML = r"""<!DOCTYPE html>
  悬停 = 高亮上下游依赖链（上游 = 要先完成的）<br>
  双击节点 = 居中放大 · 双击空白 = 适配全图<br>
  搜索框回车 = 跳到第一个匹配 · Esc = 清除<br>
- 右下小地图 = 点击/拖动跳转 · 泳道胶囊 = 显隐该线<br>
+ 右下小地图 = 点击/拖动跳转 · 泳道胶囊 Alt+单击 = 显隐该线<br>
  <b>▣ 封装簇</b> = 点击折叠卡片展开成员，点虚线框标签收起；拖动簇=整体平移<br>
- <b>◎ 聚拢</b> = 双击泳道胶囊：该线居中，前沿（外部前置）列左、后沿（外部被依赖）列右，无关淡出；再双击退出<br>
+ <b>◎ 聚拢</b> = 单击泳道胶囊：该线居中，前沿（外部前置）列左、后沿（外部被依赖）列右，无关淡出；再点同胶囊退出（进入前坐标自动恢复，手动布局不丢）<br>
  <b>✂ 分隔墙</b> = 左完成右未完成；拖墙=右区整体平移；节点拖动被墙挡住，只有状态变完成才移到左侧<br>
  <b>🚦 可派</b> = 就绪集（前置全齐）——协调者的派活候选清单；点击只高亮这些节点<br>
  <b>🛤 关键路径</b> = 未完成子图最长链——压缩它靠拆依赖/拆任务，加并发只能压非关键路径<br>
@@ -540,7 +543,7 @@ const ACTIVE=new Set(["进行中","待验收","完成"]);
 const COL={"完成":"#3fb950","待验收":"#58a6ff","进行中":"#4c8dff","可开工":"#2dd4bf","阻塞":"#d29922","冻结":"#8b949e","放弃":"#6e7681"};
 const LANE_COL=["#58a6ff","#bc8cff","#39c5cf","#e3b341","#ff7b72","#7ee787","#f778ba","#79c0ff"];
 const FRAME_PAD=18,FRAME_TOP=34;
-const BAR_H=80;  // 顶栏双排总高：画布内容/分隔墙/聚拢标注从这条线以下开始
+let BAR_H=80;  // 顶栏实际高度（resize 动态测量）：画布内容/分隔墙/聚拢标注从这条线以下开始
 let dpr=1,VW=0,VH=0;
 let nodes=DATA.nodes,edges=DATA.edges,lanes=DATA.lanes;
 const manual0=nodes.some(n=>n.x!=null);
@@ -580,9 +583,10 @@ function rebuildView(){
   if(a===b)return;const k=a+"→"+b;if(seen[k])return;seen[k]=1;VE.push({a,b});});
  const vc=VN.filter(n=>n.isCluster);
  vc.forEach(v=>measureOne(v,236));
- if(divideX==null){const done=VN.filter(n=>n.status==="完成");
+ // 聚拢模式与完成分割墙互斥：墙的左右强制对齐会拉散聚拢的 core/pre/post 布局
+ if(!focusLane&&divideX==null){const done=VN.filter(n=>n.status==="完成");
   if(done.length)divideX=Math.max(...done.map(n=>n.px+n.cw))+34;}
- enforceDivide();
+ if(!focusLane)enforceDivide();
  computePorts();}
 function measureOne(n,maxW){ // 单节点卡片测量（簇节点用更大宽度）
  n.lines=wrap(n.name,maxW,2);
@@ -598,6 +602,7 @@ function descendants(id){const s=new Set(),st=[id];while(st.length){(blocksOf[st
 function laneHidden(l){return l&&laneVis[l]===false;}
 function nodeVisible(n){return !laneHidden(n.lane)&&(!q||n._hit);}
 function resize(){dpr=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;
+ BAR_H=document.getElementById("bar").offsetHeight||80;  // 窄屏换行/媒体查询后顶栏高度跟随实测
  cv.width=VW*dpr;cv.height=VH*dpr;cv.style.width=VW+"px";cv.style.height=VH+"px";dirty=true;}
 addEventListener("resize",resize);resize();
 function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);
@@ -820,17 +825,18 @@ function locateActive(){const act=VN.filter(n=>ACTIVE.has(n.status)||n.status===
  centerOn((Math.min(...xs)+Math.max(...xs))/2,(Math.min(...ys)+Math.max(...ys))/2,1);}
 function relayout(){focusLane=null;focusLines=null;VN.forEach(n=>{if(!n.isCluster){n.x=null;n.y=null;}});
  divideX=null;dagreLayout();rebuildView();locateActive();dirty=true;}
-let focusLane=null,focusLines=null;
+let focusLane=null,focusLines=null,focusSnapshot=null;  // 快照：进入聚拢前的各节点坐标，退出时恢复（手动布局不丢）
 function applyFocus(){
- if(!focusLane){divideX=null;dagreLayout();rebuildView();locateActive();dirty=true;return;}
- const inS=VN.filter(n=>n.lane===focusLane);
+ if(!focusLane){initDivide();rebuildView();locateActive();dirty=true;return;}  // 防呆分支：不走 relayout（会清手动布局）
+ const vis=n=>!laneHidden(n.lane);  // 被隐藏的线不参与聚拢布局（显隐与聚拢正交）
+ const inS=VN.filter(n=>n.lane===focusLane&&vis(n));
  const inIds=new Set(inS.map(n=>n.id));
  const isPre=n=>VE.some(e=>e.a===n.id&&inIds.has(e.b));
  const isBlk=n=>VE.some(e=>e.b===n.id&&inIds.has(e.a));
- const extP=VN.filter(n=>!n.isCluster&&!inIds.has(n.id)&&isPre(n)&&!isBlk(n));
- const extB=VN.filter(n=>!n.isCluster&&!inIds.has(n.id)&&isBlk(n)&&!isPre(n));
- const both=VN.filter(n=>!n.isCluster&&!inIds.has(n.id)&&isPre(n)&&isBlk(n));
- const others=VN.filter(n=>!n.isCluster&&n!==null&&!inIds.has(n.id)&&!extP.includes(n)&&!extB.includes(n)&&!both.includes(n));
+ const extP=VN.filter(n=>!n.isCluster&&vis(n)&&!inIds.has(n.id)&&isPre(n)&&!isBlk(n));
+ const extB=VN.filter(n=>!n.isCluster&&vis(n)&&!inIds.has(n.id)&&isBlk(n)&&!isPre(n));
+ const both=VN.filter(n=>!n.isCluster&&vis(n)&&!inIds.has(n.id)&&isPre(n)&&isBlk(n));
+ const others=VN.filter(n=>!n.isCluster&&vis(n)&&n!==null&&!inIds.has(n.id)&&!extP.includes(n)&&!extB.includes(n)&&!both.includes(n));
  const clus=VN.filter(n=>n.isCluster);
  VN.forEach(n=>n._f="other");
  inS.forEach(n=>n._f="core");extP.forEach(n=>n._f="pre");
@@ -914,12 +920,18 @@ document.getElementById("legend").innerHTML=STATUS.map(s=>"<span><span class='sw
 const lanesBox=document.getElementById("lanes");
 lanes.forEach((l,i)=>{const c=document.createElement("span");c.className="lchip";
  c.innerHTML='<span class="sw" style="background:'+LANE_COL[i%LANE_COL.length]+'"></span>'+l;
- c.onclick=()=>{laneVis[l]=!laneVis[l];c.classList.toggle("off",!laneVis[l]);dirty=true;};
- c.title="单击=显隐该线 · 双击=聚拢到画面中央（观察前后沿边界）";
- c.ondblclick=ev=>{ev.preventDefault();focusLane=(focusLane===l)?null:l;focusLines=null;
-  Object.keys(laneVis).forEach(k=>laneVis[k]=true);
-  lanesBox.querySelectorAll(".lchip").forEach(x=>x.classList.remove("off"));
-  if(focusLane){rebuildView();applyFocus();fitAll();}else{rebuildView();relayout();}
+ c.title="单击=聚拢该线居中（再点退出，显隐/布局状态保留） · Alt+单击=显隐该线";
+ c.onclick=ev=>{
+  if(ev.altKey){laneVis[l]=!laneVis[l];c.classList.toggle("off",!laneVis[l]);dirty=true;return;}
+  if(focusLane===l){  // 退出聚拢：恢复进入前坐标与分割墙，不清手动布局
+   focusLane=null;c.classList.remove("focus");
+   if(focusSnapshot){focusSnapshot.forEach(a=>{a[0].px=a[1];a[0].py=a[2];});focusSnapshot=null;}
+   initDivide();rebuildView();fitAll();}
+  else{  // 进入聚拢：快照坐标 → 墙互斥 → 分区布局
+   lanesBox.querySelectorAll(".lchip.focus").forEach(x=>x.classList.remove("focus"));
+   focusLane=l;focusLines=null;c.classList.add("focus");
+   focusSnapshot=nodes.map(n=>[n,n.px,n.py]);
+   divideX=null;rebuildView();applyFocus();fitAll();}
   dirty=true;};
  lanesBox.appendChild(c);});
 const chk=DATA.check||{errors:[],warns:[]};

@@ -895,7 +895,7 @@ config/
 
 ## 9. EventBus 信号分类
 
-> 完整信号清单见 `core/autoload/event_bus.gd`（2026-08 清理后仅保留已接线信号）。
+> 完整信号清单见 `core/autoload/event_bus.gd`（仅保留已接线信号）。
 > 资源/科技/组织/建筑等**状态变更类信号由对应模块 api.gd 自建**，EventBus 不重复声明。
 
 ### 9.1 状态变更类（模块 api.gd 自建，不经过 EventBus）
@@ -903,7 +903,7 @@ config/
 | 类别 | 模块 | 信号 |
 | -- | -- | -- |
 | 资源 | `resources/api.gd` | `resource_changed` / `resource_not_enough` / `price_changed` |
-| 建筑 | `construction/api.gd` | `building_started` / `building_completed` / `building_removed` / `building_damaged` / `building_upgraded`（参数统一 `building_id, region_id`） |
+| 建筑 | `construction/api.gd` | `building_started` / `building_completed` / `building_removed` / `building_damaged` / `building_upgraded` / `building_repaired`（参数统一 `building_id, region_id`） |
 | 组织 | `organization/api.gd` | `org_created` / `org_restructured` / `org_disbanded` |
 
 ### 9.2 跨模块事件（EventBus 转发）
@@ -911,12 +911,12 @@ config/
 | 类别 | 信号 |
 | -- | -- |
 | 生命周期 | `game_started` / `game_loaded` / `game_saving` / `game_saved` / `game_paused` / `game_resumed` |
-| 战斗 | `battle_started(battle_id)` / `battle_ended(battle_id, victory)` |
+| 战斗 | `battle_started(battle_id)` / `battle_ended(battle_id, victory)` / `team_ai_stance_changed(battle_id, faction, from_stance, to_stance, reason)` / `heal_cast(battle_id, caster_id, target_id, anim_name)` |
 | 编队 | `selection_changed` / `squad_created` / `order_issued` / `commander_assigned` |
 | 场景/旅行 | `travel_requested` / `travel_started` / `travel_completed` / `map_loaded` / `map_unloaded` / `chunk_loaded` / `chunk_unloaded` |
 | 战略图 | `strategic_map_opened` / `strategic_map_closed` |
 | 附身 | `possession_started(entity)` / `possession_ended(entity)` |
-| UI | `ui_notification` / `ui_toggle_pause_requested` |
+| UI | `ui_notification` |
 | 室内交互 | `interior_entered` / `interior_exited` / `mega_interior_entered` / `mega_interior_exited` |
 | 其他 | `balance_changed` / `debug_visibility_changed` |
 
@@ -925,7 +925,7 @@ config/
 1. **不循环发射**：A 发射信号触发 B，B 不能在做完后发射原信号回去
 2. **参数不可变**：信号参数是快照副本
 3. **单向事件流**：信号从数据层 → UI 层
-4. **safe\_emit**：发射前检查信号是否存在
+4. **类型化发射**：直接用类型化 `.emit()` 发射（信号名拼写错误在编译期暴露），不做运行时存在性检查
 
 ***
 

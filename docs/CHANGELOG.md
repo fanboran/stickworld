@@ -8,6 +8,18 @@
 
 ## [未发布]
 
+### 架构契约回写与已知问题清理（2026-09-03）
+
+系统性审计后的契约文档对齐批次；变更过程记录自各架构文档正文迁入本节。
+
+- **核心实体与状态机**：实体清单对齐 `core/entities/` 实际 6 个状态类 + `WorldStateSerializer`；标注 Building（building_gen）/ Resource（resources.tres + modules/resources）/ Technology（无实体类）的实现位置；移除头部时间戳与"已于/原为"变更句式
+- **模块API契约**：科技模块章节压缩为"阶段 1 重建"占位（研究制契约作废，改征服获得，过程记录迁此）；补 units / world / player_control / environment / fx / debug_GUI 六章契约（原仅覆盖 7 模块）；修正签名漂移——world_map `initialize(json_path, base_dir)` 2 参、`spawn_operational_building(def_id, cell_x, width)`；§九依赖图模块清单更新为 13 个已实现模块
+- **EventBus 契约**（系统交互与EventBus.md + modules/README.md §9 + event_bus.gd 头注释）：信号目录补 `team_ai_stance_changed` / `heal_cast`（对齐 event_bus.gd 共 32 信号）；§2.2 补 `building_repaired`；移除已废除的 safe_emit 使用准则（改类型化 `.emit()`）；删除死信号 `ui_toggle_pause_requested` 条目
+- **场景与战斗架构 §六**：P0-2~P0-5 / P0-9~P0-11 / P0-13~P0-17 已解决项的"现象（原始）→现状"过程记录迁出正文，正文保留未决技术债（P0-1 Chunk 流式加载空壳、P0-6 total_work 硬编码、P0-7 GdUnit4 迁移决策、P0-8 RefCounted 持 Node 引用、P0-12 战斗收束延后）与已解决项现状速查表
+- **世界地图旧数据层删除的文档同步**：`region_definitions.gd` / `continent_data.gd` / `region_data.gd` / `landmark_ref.gd` 四个零引用旧类已删除（战略图架构.md §9.3、世界地图数据流.md §〇/§六、核心实体与状态机、GDD与实现差异分析的对应表述统一改为现状）
+- **建筑与定居点**：资源清单权威来源表述规范为"以 GDD 经济系统.md §2 为准"；删除早期占位场景的历史说明
+- **死链与深度修复**：AI复刻执行计划 6 处、归档/P0重审方案 1 处相对深度；编辑器工具索引删 bake_textures 条目、generate.py 表述修正并补录约 20 个未收录工具；UI/README 占位界面改指 `modules/ui_global/`；Excel数据管线表清单对齐实际 12 张表
+
 ### 看板布局品质对齐 LOGIC-8 骨架 + 自适应修复（2026-09-03）
 
 - **dash 自适应修复**：顶栏高度（BAR_H）实测值此前只在切入制作人页时设置一次，窗口缩放/窄屏换行后 dash 顶部错位——现随 resize 持续同步；dash 内容列宽 `min(330px,100%)` + 千字级 clamp 内边距，窄屏单列降级

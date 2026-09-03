@@ -75,10 +75,11 @@
 
 ---
 
-## 占位界面模块（`modules/ui_placeholder/`）
+## 占位界面（`modules/ui_global/`）
 
-依赖系统（科技/物流/成就/组织报表等）尚未建立的**大界面空面板**集中放在此模块，
-样式与入口已就绪，系统接入时替换填充。详见 [`modules/ui_placeholder/`](../../../stick-world/modules/ui_placeholder/api.gd)
+依赖系统（科技/物流/成就/组织报表等）尚未建立的**大界面空面板**集中在 ui_global 模块
+（`scripts/placeholders/` + `scenes/placeholders/`），样式与入口已就绪，系统接入时替换填充。
+详见 [`modules/ui_global/api.gd`](../../../stick-world/modules/ui_global/api.gd)
 与 `02-界面框架.md` §4.4；验收入口 F6 运行 `ui_placeholder_preview.tscn`。
 
 ---

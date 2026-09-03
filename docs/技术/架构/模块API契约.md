@@ -1,6 +1,6 @@
 # 模块 API 规范
 
-> 底层架构第四阶段：8 个玩法模块的 api.gd 公共接口定义。
+> 底层架构第四阶段：各玩法模块的 api.gd 公共接口定义。
 > 函数签名 + 前置条件 + 后置条件。不含实现细节。
 
 ---
@@ -52,8 +52,8 @@ func repair_building(building_id: String, org_id: String) -> Dictionary
 > # [Q] 创建项目并调 BuildingGen.generate(def) 产出节点
 >
 > # 直接生成（绕过建造过程，用于 InitialBuildingsList）
-> func spawn_operational_building(building_def: BuildingDef, cell_x: int) -> Dictionary
-> # [Q] 瞬间生成 OPERATIONAL 状态的 BuildingEntity，挂到 BuildingHost
+> func spawn_operational_building(def_id: String, cell_x: int, width: int = 1) -> Dictionary
+> # [Q] 按 def_id 瞬间生成 OPERATIONAL 状态的 Building，挂到 BuildingHost
 >
 > # 后期追加模块到已有建筑
 > func add_module_to_building(building_id: String, layer_index: int, module_id: String, cell_pos: Vector2i) -> Dictionary
@@ -123,32 +123,10 @@ static func apply_thatch_cpu(polygon) -> void
 
 ---
 
-## 二、科技模块（已删除，阶段 1 按新策略重建）
+## 二、科技模块（阶段 1 按新策略重建，契约以届时实现为准）
 
-> 原 `modules/technology/` 空壳模块已删除（Demo 阶段未启用，全部接口返回"模块未初始化"）。
-> 阶段 1 将按 `docs/设计/系统/04-科技系统.md` 的"征服获得"策略重建，契约以届时实现为准。
-> 历史设计（研究制，已作废）：
-
-```gdscript
-# 研究
-func start_research(tech_id: String, org_id: String) -> Dictionary
-# [P] tech 状态=AVAILABLE, org 存在且标签=RESEARCH
-# [Q] tech 状态=RESEARCHING, 发射 tech_started
-
-# 查询
-func get_available_techs() -> Array[String]
-func get_researching_techs() -> Array[Dictionary]
-func get_unlocked_techs() -> Array[String]
-func get_tech_state(tech_id: String) -> Dictionary
-
-# 分配
-func assign_researchers(org_id: String, researcher_ids: Array[String]) -> Dictionary
-# [P] researcher 的 assigned_org = org_id
-
-# 暂停/恢复
-func pause_research(tech_id: String) -> Dictionary
-func resume_research(tech_id: String) -> Dictionary
-```
+> 科技系统按"征服获得即解锁"设计（无研究状态机），模块当前未实现。
+> 重建时以 [`../../设计/系统/04-科技系统.md`](../../设计/系统/04-科技系统.md) 的策略为准补充契约。
 
 ---
 
@@ -331,16 +309,23 @@ func check_and_unlock(badge_id: String) -> Dictionary
 
 ## 九、模块间 API 依赖图
 
-> 仅含已实现模块（construction / resources / organization / combat）。technology（已删除）、expansion / logistics / achievement（未实现）为阶段 2 设计契约，实现时补充出边。
+> 仅含已实现模块（construction / building_gen / texture_gen / resources / organization / combat / world_map / world / units / player_control / environment / fx / debug_GUI）。
+> technology（见 §二）、expansion / logistics / achievement（未实现）为阶段 2 设计契约，实现时补充出边。
+> world 为组装根：SystemSetup 集中装配各模块组件，跨模块依赖汇聚于此而非散布（详见 场景与战斗架构.md）。
 
 ```
 construction ──-> resources (消耗建材)
+             ──-> building_gen (经 api 加载建筑场景; Building 为其公共类型)
 resources    ──-> (无出向 API 依赖, 通过 EventBus 通信)
 organization ──-> resources (征兵消耗沥青)
              ──-> construction (建设组织)
              ──-> combat (军事组织)
 combat       ──-> resources (消耗弹药/食物)
              ──-> organization (伤亡)
+             ──-> units (经公共类型 TargetFinder / StickmanEntity)
+world_map    ──-> ui_global (主题工具箱 StickKit/StickTheme/StickStyle)
+world        ──-> 各模块 (组装根 SystemSetup 集中装配)
+units        ──-> player_control (经 PlayerControlAPI 注册表取 InputDispatcher)
 ```
 
 ---
@@ -355,8 +340,8 @@ combat       ──-> resources (消耗弹药/食物)
 > 战略图开/关通知走 EventBus（`strategic_map_opened` / `strategic_map_closed`），进入场景图走 `EventBus.travel_requested`。
 
 ```gdscript
-# 初始化（3 参，由 system_setup 装配时调用）
-func initialize(l1_json_path: String, config_dir: String) -> void
+# 初始化（由 system_setup 装配时调用）
+func initialize(json_path: String, base_dir: String) -> void
 # [Q] 加载 L1 世界数据（8 聚落 + 空聚落 + MST 道路 + 边界索引图）
 
 # 查询
@@ -377,4 +362,133 @@ func close_strategic_map() -> void
 signal settlement_clicked(settlement_id: String)
 signal settlement_activated(settlement_id: String)
 signal region_hovered(tile_id: String, settlement_id: String)
+```
+
+---
+
+## 十一、单位模块 `modules/units/api.gd`（UnitsAPI）
+
+> 类型契约 + 资源路径层：外部模块经全局 class_name（StickmanEntity/StickmanRig/AIController 等）的公共方法交互；
+> 实体场景经 `UnitsAPI.STICKMAN_ENTITY_SCENE` 常量引用（替代直接 preload 内部路径）。
+
+```gdscript
+# 场景资源（外部实例化火柴人实体的统一入口）
+const STICKMAN_ENTITY_SCENE: PackedScene
+
+# StickmanRig 公共 API（渲染骨架）
+play(anim_name: String)              # 播放动画
+get_current_anim() -> String
+get_bone_by_id(id: int) -> Node2D
+get_bone_ids() -> Array
+# 常量：ANIM_IDLE / ANIM_WALK / ANIM_ATTACK / ANIM_DEAD
+#       WeaponType（SWORD / SPEAR / BOW / SHIELD / UNARMED）
+
+# StickmanEntity 公共 API（物理+碰撞外壳）
+set_possessed(bool) / is_possessed() -> bool
+get_facing() -> int                  # 1=右，-1=左
+ai_move(dir: Vector2, run: bool) / ai_stop()
+get_ai_controller() -> Node
+set_ground_constraints(...)          # 注入地面约束参数
+set_map_reference(map: Node2D)       # 注入地图引用
+# 常量：WALK_SPEED / RUN_SPEED / BASE_SCALE
+
+# AIController 公共 API
+get_current_behavior() -> String     # 当前行为名（idle/move/...）
+get_state_machine() -> BehaviorStateMachine
+```
+
+---
+
+## 十二、世界模块 `modules/world/api.gd`（WorldAPI）
+
+> 常量与枚举契约层：GameRoot / MapInstance 的节点路径约定（修改 GameRoot 节点结构需同步该文件）。
+> 场景旅行信号经 EventBus（map_loaded / map_unloaded / travel_started / travel_completed），本模块订阅 game_paused / game_resumed。
+
+```gdscript
+# GameRoot 常驻子节点相对路径
+const PATH_ENVIRONMENT / PATH_CAMERA_RIG / PATH_SCENE_LOADER / PATH_INPUT_DISPATCHER
+const PATH_WORLD_CHUNK_HOST / PATH_UI_ROOT / PATH_BATTLE_DIRECTOR
+
+# MapInstance 子节点相对路径（节选，全表见 api.gd）
+const PATH_MAP_PLACEMENT_GRID / PATH_MAP_TERRAIN_LAYER / PATH_MAP_BUILDING_HOST
+const PATH_MAP_ENTITY_HOST / PATH_MAP_WALK_BARRIER / PATH_MAP_FOREGROUND_LAYER
+
+enum MapType { VILLAGE, BATTLEFIELD, ROAD, INDOOR, MEGA_INTERIOR }
+enum TravelMode { WALK, FAST_TRAVEL, TELEPORT }
+enum EntrySide { LEFT, RIGHT }
+```
+
+---
+
+## 十三、玩家控制模块 `modules/player_control/api.gd`（PlayerControlAPI）
+
+```gdscript
+enum Mode { NONE, EXPLORE, BUILD, BATTLE, POSSESS, INDOOR, UI }
+
+# InputDispatcher 注册表（GameRoot 装配时注册；units 等模块经此获取，替代 group 反查）
+static func register_input_dispatcher(dispatcher: Node) -> void
+static func get_input_dispatcher() -> Node
+
+# PossessionInterface 公共 API（附身操控）
+get_possessed_entity() -> Node2D
+possess(entity: Node2D) -> void
+release() -> void
+```
+
+> 信号契约：`InputDispatcher.mode_changed(old_mode: int, new_mode: int)`。
+> 附身流程（BATTLE 框选 → 附身按钮 → set_possessed + 相机跟随 + TimeManager 降速 → WASD/左键/ESC）见 api.gd 头注释。
+
+---
+
+## 十四、环境模块 `modules/environment/api.gd`（EnvironmentAPI）
+
+> P0 阶段仅实现时间→光照映射（CanvasModulate 按 LIGHT_KEYFRAMES 插值）；天空/天气/地面震动/生物群系为 P1 规划。
+
+```gdscript
+const HOURS_PER_DAY: int = 24
+const LIGHT_KEYFRAMES: Array  # 时间[小时] -> CanvasModulate.color（深夜/黎明/早晨/正午/下午/黄昏/入夜 共 8 关键帧）
+```
+
+---
+
+## 十五、特效模块 `modules/fx/api.gd`
+
+> 无状态特效服务：无 api 节点实例、无信号契约。对外入口是全局类 FxPool 的静态方法（组查找模式，业务方不持有池节点引用）。
+
+```gdscript
+# 业务方调用示例（效果 ID 常量表见 FxLibrary：BUILD_DUST / GATHER_DEBRIS / HIT_SPARK 等）
+FxPool.spawn_burst(get_tree(), FxLibrary.HIT_SPARK, global_position)
+```
+
+> 池实例由 SystemSetup 挂载到 GameRoot（group "fx_pool"）；无池环境（纯逻辑测试）spawn_burst 静默跳过不报错。
+> 依赖方向：fx → core 单向（WorldZ z 序常量），任何模块可安全依赖 fx。
+
+---
+
+## 十六、调试模块 `modules/debug_GUI/api.gd`（DebugApi，autoload 单例）
+
+> 唯一以 autoload 注册的模块级 api（project.godot: `DebugApi`）。生产模块经 `EventBus.debug_visibility_changed`
+> 订阅调试显隐（避免依赖 debug_GUI autoload）；绘制器注册等管理操作直连 DebugApi。
+
+```gdscript
+# 信号
+signal visibility_changed(is_visible: bool)
+signal legend_visibility_changed(is_visible: bool)
+signal drawer_enabled_changed(drawer_name: String, enabled: bool)
+signal tools_visibility_changed(is_visible: bool)   # 交互式工具面板，独立于 F3 总开关
+
+# 绘制器注册（各模块注册自己的调试绘制器）
+func register_drawer(drawer_name: String, drawer: Callable) -> void
+func unregister_drawer(drawer_name: String) -> void
+func set_drawer_enabled(drawer_name: String, enabled: bool) -> void
+func toggle_drawer(drawer_name: String) -> void
+
+# 全局可见性
+func toggle_visibility() -> void          # F3 切换
+func set_overlay_visible(v: bool) -> void
+func is_visible() -> bool
+
+# 调试上下文附加数据（装配层注入，随每帧 ctx 下发给绘制器）
+func set_ctx_extra(key: String, value) -> void
+func get_ctx_extra(key: String, default: Variant = null) -> Variant
 ```

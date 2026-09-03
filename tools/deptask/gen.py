@@ -1106,7 +1106,9 @@ function draw(){
   if(isCrit){ctx.setLineDash([]);ctx.shadowBlur=0;}});
  // 节点
  const order=VN.slice().sort((a,b)=>((a.id===hi||a.id===sel)?1:0)-((b.id===hi||b.id===sel)?1:0));
+ const vp={x0:-view.x/view.k-60,y0:-view.y/view.k-60,x1:(VW-view.x)/view.k+60,y1:(VH-view.y)/view.k+60};
  order.forEach(n=>{if(!nodeVisible(n))return;
+  if(n.px+n.cw<vp.x0||n.px>vp.x1||n.py+n.ch<vp.y0||n.py>vp.y1)return;  // 视口裁剪：大数据流畅关键
   let dim=q?(n._hit?1:0.1):(hi?(n.id===hi||anc.has(n.id)||des.has(n.id)?1:0.16):1);
   if(focusLane&&n._f==="other")dim*=0.13;
   if(readyOnly&&n.status!=="完成"&&READY.indexOf(n.id)<0)dim*=0.08;

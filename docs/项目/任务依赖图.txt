@@ -169,7 +169,7 @@
 任务 entity_merch | 名称=实体周边可能性调研 | 线=宣发运营 | 状态=阻塞 | 前置=launch | 注=后沿：产出=周边调研结论（终局交付）
 
 里程碑 ui_lane_closed | 名称=UI 线收线合并 | 线=门 | 状态=阻塞 | 前置=ui_settings,ui_feed
-里程碑 merge_main_1 | 名称=本轮并行收线合并回 main | 线=门 | 状态=阻塞 | 前置=ui_feed,balance_fix,strat_ui | 注=协调者统一合并+待办两条误诊勘误
+里程碑 merge_main_1 | 名称=本轮并行收线合并回 main | 线=门 | 状态=完成 | 前置=ui_feed,balance_fix,strat_ui | 注=协调者统一合并+待办两条误诊勘误（2026-09-03 收线：P7 提交+三线合并+全量测试绿）
 里程碑 map_refactor_done | 名称=地图重构收口（扩张/城墙/城外/出城/城镇朝向/地面贴图/建筑深化） | 线=门 | 状态=阻塞 | 前置=map_refactor_design,town_expansion,wall_as_building,outside_environment,exit_mechanism,city_direction_roads,town_ground_textures,building_b3_b4
 里程碑 battle_modes_done | 名称=战场类型收口（遭遇/攻城/守城/spawn 动态/持续战/工程战/跨度/道路遭遇） | 线=门 | 状态=阻塞 | 前置=battle_encounter,battle_siege_attack,battle_siege_defense,battle_spawn_dynamic,battle_persistence,siege_engineering,battlefield_width,road_encounter
 里程碑 econ_loop_done | 名称=经济循环收口（资源产出→队列→建造过程化→物流→市场→持久化） | 线=门 | 状态=阻塞 | 前置=resource_production,queue_system,construction_process,logistics_module,market_finance,worldstate_resource_ledger,resources_persistence,p9_shop_hud
@@ -182,7 +182,7 @@
 里程碑 launch_prep | 名称=发布准备收口（打磨群：平衡/UX/本地化/Steam/商店页/定价） | 线=门 | 状态=阻塞 | 前置=balance_tuning,polish_ux,localization,steam_integration,mkt_store_page,mkt_pricing
 里程碑 demo_content | 名称=Demo 内容收口（环境/模式/演练场/实体表现） | 线=门 | 状态=阻塞 | 前置=weather_env,river_gen,mode_variants,arena_duel,arena_formation,arena_spell,asset_p1_particles,entity_lying_90deg
 里程碑 demo_release | 名称=第一个可玩 Demo 发布 | 线=门 | 状态=阻塞 | 前置=demo_content,p0_accept,hp_default_zero,asset_p2_light,asset_p4_banner,asset_p5_crate,asset_p7_demo | 注=天气/河流等系统管线的后沿——第一个可玩版本；Demo 范围由创始人划定后微调前置
-里程碑 aux_retire | 名称=废弃 game-2-aux，.temp 收编 gitignore，协调文档/依赖图/工具入库 | 线=门 | 状态=阻塞 | 前置=merge_main_1 | 注=后沿：产出=并行开发规范落地（.temp 模式）
+里程碑 aux_retire | 名称=废弃 game-2-aux，.temp 收编 gitignore，协调文档/依赖图/工具入库 | 线=门 | 状态=完成 | 前置=merge_main_1 | 注=后沿：产出=并行开发规范落地（.temp 模式）（2026-09-03：三工作树+三分支已删，.temp 入 gitignore）
 里程碑 excel_unfreeze | 名称=解除 Excel 真实导出冻结 | 线=门 | 状态=冻结 | 前置=merge_main_1,p8_giant | 注=tres 手调校准值合并前，源表脱节禁真导出
 
 # ───────────── 2026-09-03 历史补录（git 494 提交对账：立项→规划→基建→渲染→原型→收口→深化） ─────────────

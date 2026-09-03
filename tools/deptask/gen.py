@@ -202,26 +202,31 @@ def descendants_of(nid, nodes):
 
 def wave_levels(nodes):
     """未完成子图拓扑分层：波 0 = 前置全齐（就绪）；波 n = 最少还要等 n 道串行工序。
-    环安全：回边上的节点按波 0 处理（环本身已被 validate 报 ERROR，报告仍需可输出）。"""
+    Kahn 拓扑排序 O(V+E)——环内节点 indeg 永不归零，自然落波 0（环由 validate 报 ERROR）。"""
+    from collections import deque
     done = {i for i, n in nodes.items() if n["status"] == "完成"}
     pend = {i for i, n in nodes.items() if n["status"] not in ("完成", "放弃")}
-    level = {}
-    visiting = set()
-
-    def lv(i):
-        if i in level:
-            return level[i]
-        if i in visiting:
-            return 0  # 环回边：不再递归
-        visiting.add(i)
-        unmet = [p for p in nodes[i]["prs"] if p in nodes and p not in done]
-        result = 0 if not unmet else 1 + max(lv(p) for p in unmet if p in pend)
-        visiting.discard(i)
-        level[i] = result
-        return result
-
+    indeg = {}
+    children = {}
     for i in pend:
-        lv(i)
+        ps = [q for q in nodes[i]["prs"] if q in pend]
+        indeg[i] = len(ps)
+        for q in ps:
+            children.setdefault(q, []).append(i)
+    level = {}
+    dq = deque(i for i in pend if indeg[i] == 0)
+    for i in dq:
+        level[i] = 0
+    while dq:
+        x = dq.popleft()
+        for c in children.get(x, []):
+            indeg[c] -= 1
+            if level.get(c, -1) < level[x] + 1:
+                level[c] = level[x] + 1
+            if indeg[c] == 0:
+                dq.append(c)
+    for i in pend:
+        level.setdefault(i, 0)  # 环残留
     return {i: level[i] for i in pend}
 
 
@@ -1858,7 +1863,10 @@ function drawGantt(){const c=gantt;if(!c||c.width<10)return;
   gtx.strokeStyle=j.done?lc:ac;gtx.lineWidth=1;gtx.strokeRect(x0+.5,y+.5,Math.max(3,x1-x0)-1,rowH-7);
   if(!j.done){ // 运行中=右缘琥珀光标条
    gtx.fillStyle="#fde047";gtx.fillRect(x1-2,y,2,rowH-6);}
-  if(x1-x0>34){gtx.fillStyle="#c9d4e0";gtx.fillText(j.id,x0+3,y+8);}});
+  if(x1-x0>34){gtx.fillStyle="#c9d4e0";gtx.fillText(j.id,x0+3,y+8);}
+  if(ganttHover===j.id||(hi===j.id)){ // 双向联动：主图悬停 ↔ 运行图条高亮
+   gtx.strokeStyle="#ffffffcc";gtx.lineWidth=1.5;
+   gtx.strokeRect(x0-1.5,y-1.5,Math.max(4,x1-x0)+3,rowH-3);}});
  // 图例
  gtx.fillStyle="#556777";gtx.font="9px system-ui";
  gtx.fillText("■ 完成  ▌运行中（琥珀光标）  颜色=泳道域 / 描边=认领 agent  ·  滚轮缩放 · 拖拽平移 · 点条跳主图",padL,H-4);}
@@ -1874,26 +1882,40 @@ gantt.addEventListener("wheel",ev=>{ev.preventDefault();
  ganttView.t1=ganttView.t0+span;drawGantt();},{passive:false});
 gantt.addEventListener("pointerdown",ev=>{gDrag={x:ev.clientX,t0:ganttView?ganttView.t0:0,t1:ganttView?ganttView.t1:0};
  try{gantt.setPointerCapture(ev.pointerId);}catch(e2){}});
-gantt.addEventListener("pointermove",ev=>{if(!gDrag||!ganttView)return;
+gantt.addEventListener("pointermove",ev=>{
+ if(!gDrag&&ganttView){const rect=gantt.getBoundingClientRect();
+  ganttHover=hitTaskAt(ev.clientX-rect.left,ev.clientY-rect.top);
+  if(ganttHover){hi=ganttHover;dirty=true;}   // 双向联动：运行图悬停 → 主图节点高亮
+  else if(hi&&selSet.size===0&&!sel){hi=null;dirty=true;}
+  return;}
+ if(!gDrag||!ganttView)return;
  const span=gDrag.t1-gDrag.t0,d=(ev.clientX-gDrag.x)/(gantt.clientWidth-16)*span;
  let t0=gDrag.t0-d;ganttView={t0:Math.max(0,t0),t1:Math.max(8,t0+span)};
  if(ganttView.t0===0)ganttView.t1=Math.max(ganttView.t1,span);drawGantt();});
 gantt.addEventListener("pointerup",()=>{gDrag=null;});
-gantt.addEventListener("click",ev=>{ // 点条跳主图对应任务
- const evs=(DATA.simlog&&DATA.simlog.events)||[];if(!evs.length)return;
- const rect=gantt.getBoundingClientRect(),x=ev.clientX-rect.left,y=ev.clientY-rect.top;
+let ganttHover=null;
+function hitTaskAt(x,y){ // 命中检测：运行图任务条（复用 drawGantt 的布局参数）
+ const evs=(DATA.simlog&&DATA.simlog.events)||[];if(!evs.length)return null;
  const span=ganttView.t1-ganttView.t0,W=gantt.clientWidth-16;
  const jobs={};
- evs.forEach(e=>{const j=jobs[e.task]||(jobs[e.task]={lane:e.note||"",t0:1e9,t1:-1,done:false});
-  if(e.action==="claim"){j.t0=Math.min(j.t0,parseT(e.ts));j.lane=e.note||j.lane;}
+ evs.forEach(e=>{const j=jobs[e.task]||(jobs[e.task]={lane:e.note||"",t0:1e9,t1:-1,done:false,agent:e.agent});
+  if(e.action==="claim"){j.t0=Math.min(j.t0,parseT(e.ts));j.lane=e.note||j.lane;j.agent=e.agent;}
   if(e.action==="done"){j.t1=Math.min(j.t1,parseT(e.ts));j.done=true;}});
+ const bandKeys=[];Object.keys(jobs).forEach(id=>{if(bandKeys.indexOf(jobs[id].lane)<0)bandKeys.push(jobs[id].lane);});
+ lanes.forEach(l=>{if(bandKeys.indexOf(l)<0)bandKeys.push(l);});
+ const padT=8,bandH=Math.min(46,(gantt.clientHeight-26)/bandKeys.length);
  const hit=Object.keys(jobs).find(id=>{const j=jobs[id];
+  const b=bandKeys.indexOf(j.lane),y0=padT+b*bandH;
   const x0=8+(j.t0-ganttView.t0)/span*W,x1=j.done?8+(j.t1+1-ganttView.t0)/span*W:W+8;
-  return x>=x0-4&&x<=x1+4;});
+  return y>=y0&&y<=y0+bandH&&x>=x0-4&&x<=x1+4;});
+ return hit;}
+gantt.addEventListener("click",ev=>{ // 点条跳主图对应任务
+ const rect=gantt.getBoundingClientRect();
+ const hit=hitTaskAt(ev.clientX-rect.left,ev.clientY-rect.top);
  if(hit){setView("graph");jump(hit);}});
 function buildLogList(){const evs=((DATA.simlog&&DATA.simlog.events)||[]).slice().reverse();
  const el=document.getElementById("logList");
- el.innerHTML=evs.map(e=>"<div class='lst' onclick='sideSelect(\""+e.task+"\")'>"
+ el.innerHTML=evs.map(e=>"<div class='lst' onclick='sideSelect(\""+e.task+"\")' onmouseenter='hi=\""+e.task+"\";dirty=true'>"
   +"<span class='dot' style='background:"+agentColor(e.agent)+"'></span>"
   +"<span class='lid'>"+e.ts+"</span><span class='lname'>"+e.agent+" → "+e.action+" "+e.task+"</span>"
   +"<span class='lgo'>⤢</span></div>").join("")

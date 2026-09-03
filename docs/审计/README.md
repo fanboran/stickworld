@@ -26,6 +26,14 @@
 3. **规范与审计分离**。`docs/技术/规范/` 放"应该怎么做"，
    审计结论"实际做得怎样"放本目录。
 
+## 审计范围约定
+
+例行审计（全量快照 / 专项）**不覆盖**以下对象，发现的问题不立项、不计分：
+
+- **CI/CD 持续集成**：workflow 状态、codecov、pre-commit 安装情况等质量管理基建不在审计范围（2026-09-03 约定）。
+- **不入库目录**：`external/`（参考项目）、`node_modules/`（vendor 库）、`stick-world/addons/godot-sqlite/`（第三方插件）、`.godot/`、`export/` 产物。
+- **一次性脚本**：已 gitignore 的 `tools/clean_*` / `extract_*` / `trim_*` / `sam_*` 系列素材脚本。
+
 ## 索引
 
 ### 专项

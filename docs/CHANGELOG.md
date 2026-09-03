@@ -8,6 +8,11 @@
 
 ## [未发布]
 
+### 两项未竟子项收口（2026-09-04）
+
+- **test_melee_combat 冷却用例并行池间歇失败已修复**：DIAG 插桩实证真根因为**用例间击退位移泄漏**（并行负载下挥砍用例的命中帧结算拖进冷却用例等待窗口，击退把防御者推出剑长，first/second 均被判 out_of_range）——修正早前"动画打断窗口"推测。修复为用例内确定性摆位（pending 落地后重设防御者位置并清残余速度），并行 12+ 轮稳定通过
+- **stickman_entity 协议级收口**：新建 `IncomingThreatLedger` 账本（在飞箭矢伤害估计 + 箭矢威胁时刻，register/settle/mark/is_threatened 语义方法），实体侧 `incoming_arrow_damage`/`arrow_threat_time` 改 property 委托——WeaponMount 出弓登记、arrow_projectile 终态结算、behavior/team_ai 感知读取的 duck-typing 协议零改动；新增 test_incoming_threat_ledger 5 用例（unit 批量 29 套）
+
 ### 审计挂载任务治理批次（2026-09-04）
 
 - **命名统一**：`UIKit.gd`→`uikit.gd`、`modules/debug_GUI/`→`modules/debug_gui/`（project.godot autoload 路径与全部引用同步）、`TextureGenApi`→`TextureGenAPI`（DebugApi 为 autoload 单例名不在该约定内）

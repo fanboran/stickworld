@@ -211,8 +211,6 @@ func _test_cooldown() -> void:
 	if wm == null:
 		_runner.assert_true(false, "WeaponMount 为空")
 		return
-	def.global_position = atk.global_position + Vector2(50, 0)
-	await get_tree().process_frame
 	# 等上一用例遗留的未结算挥砍落地（P5 命中帧门禁：挥砍未到命中帧时拒绝新攻击）。
 	# 按真实时间等（headless 下 process_frame 快于 physics tick，帧数等待不可靠）；
 	# 上限 8s 兜底并行池 CPU 争用（物理 tick 变慢时动画推进同步变慢）
@@ -220,6 +218,12 @@ func _test_cooldown() -> void:
 	while wm.has_pending_strike() and waited < 8.0:
 		await get_tree().create_timer(0.1).timeout
 		waited += 0.1
+	# 落地后再摆位：上用例的命中帧结算可能落在本等待窗口内，击退会把 def 推出
+	# 剑长（并行负载下时序不定，曾致本用例被判 out_of_range）——位置/残余速度
+	# 须在等待结束后最后确定
+	def.velocity = Vector2.ZERO
+	def.global_position = atk.global_position + Vector2(50, 0)
+	await get_tree().process_frame
 	# 第一次攻击（主动确保冷却恢复 + 固定命中率）
 	wm.update_cooldown(10.0)
 	wm.base_hit_chance = 1.0
@@ -228,6 +232,6 @@ func _test_cooldown() -> void:
 	_runner.assert_true(first_launched, "第一次攻击应发起 reason=%s pending=%s cd=%.2f" % [first.get("reason", ""), wm.has_pending_strike(), wm.get_cooldown_remaining()])
 	# 立即第二次攻击：冷却拒绝
 	var second: Dictionary = wm.perform_attack(def)
-	_runner.assert_true(not second.get("hit", false), "冷却中第二次攻击应被拒绝")
-	_runner.assert_equal(second.get("reason", ""), "cooldown", "应拒绝为 cooldown")
+	_runner.assert_true(not second.get("hit", false), "冷却中第二次攻击应被拒绝 actual=%s" % [second])
+	_runner.assert_equal(second.get("reason", ""), "cooldown", "应拒绝为 cooldown actual=%s" % [second])
 

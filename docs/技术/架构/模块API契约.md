@@ -309,7 +309,7 @@ func check_and_unlock(badge_id: String) -> Dictionary
 
 ## 九、模块间 API 依赖图
 
-> 仅含已实现模块（construction / building_gen / texture_gen / resources / organization / combat / world_map / world / units / player_control / environment / fx / debug_GUI）。
+> 仅含已实现模块（construction / building_gen / texture_gen / resources / organization / combat / world_map / world / units / player_control / environment / fx / debug_gui）。
 > technology（见 §二）、expansion / logistics / achievement（未实现）为阶段 2 设计契约，实现时补充出边。
 > world 为组装根：SystemSetup 集中装配各模块组件，跨模块依赖汇聚于此而非散布（详见 场景与战斗架构.md）。
 
@@ -465,10 +465,10 @@ FxPool.spawn_burst(get_tree(), FxLibrary.HIT_SPARK, global_position)
 
 ---
 
-## 十六、调试模块 `modules/debug_GUI/api.gd`（DebugApi，autoload 单例）
+## 十六、调试模块 `modules/debug_gui/api.gd`（DebugApi，autoload 单例）
 
 > 唯一以 autoload 注册的模块级 api（project.godot: `DebugApi`）。生产模块经 `EventBus.debug_visibility_changed`
-> 订阅调试显隐（避免依赖 debug_GUI autoload）；绘制器注册等管理操作直连 DebugApi。
+> 订阅调试显隐（避免依赖 debug_gui autoload）；绘制器注册等管理操作直连 DebugApi。
 
 ```gdscript
 # 信号

@@ -360,7 +360,7 @@ hide_legend()
 
 | 场景 | 做法 |
 |------|------|
-| 全屏面板/UI 根 | `UIKit.full_rect(script, name)`（[UIKit.gd](../../../../stick-world/modules/ui_global/scripts/UIKit.gd)，强制 FULL_RECT + 双向 grow） |
+| 全屏面板/UI 根 | `UIKit.full_rect(script, name)`（[uikit.gd](../../../../stick-world/modules/ui_global/scripts/uikit.gd)，强制 FULL_RECT + 双向 grow） |
 | 角落 HUD 部件（小地图/缩放条/建造按钮） | 自设 anchor + `UIRoot.add_to_slot("HudOverlay", ...)` |
 | 弹窗/面板类 | 挂 ModalOverlay / ModePanel 等有尺寸槽 |
 

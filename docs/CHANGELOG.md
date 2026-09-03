@@ -8,6 +8,17 @@
 
 ## [未发布]
 
+### 审计挂载任务治理批次（2026-09-04）
+
+- **命名统一**：`UIKit.gd`→`uikit.gd`、`modules/debug_GUI/`→`modules/debug_gui/`（project.godot autoload 路径与全部引用同步）、`TextureGenApi`→`TextureGenAPI`（DebugApi 为 autoload 单例名不在该约定内）
+- **重复代码下沉 ×3**：texture_gen 四调试面板提公共基类 `MaterialDebugPanel`；building_gen 建筑调色板数据化（`BuildingPalette` Resource + 3 个 .tres 场景注入）；world_map 三控制器提 `MapControllerUtil` 查找原语
+- **Control.new() 灰区迁移**：UIKit 新增 `widget()` 助手（角落 HUD 部件合规出口），system_setup 六处 HUD 部件、game_root 加载覆盖层、ui_root F3 检查器迁移
+- **数值入管线**：18 个战斗/移动/编队手感变量落 Excel 平衡变量表（回填 + 新增共 31 行）→ `config/balance/variables.tres`；weapon_mount/stickman_entity/formation_system 改 var + BalanceConfig 校准（行缺失回退代码默认零回归）；平衡变量.xlsx 补 `#output_dir` 元数据行走正路导出
+- **weapon_mount 拆分**：弹道解算（`ArrowBallistics`）/格挡判定（`BlockResolver`）/顿帧触发（`HitstopController`）拆为无状态/薄状态子组件，本体改薄委托
+- **测试补缺**：新增 test_texture_gen_api（8 用例）/test_fx（7 用例）入 unit 批量、test_debug_api（4 用例冒烟）入 integration 套件表
+- **核实纠偏**：world⇄ui_global"26 处耦合"经 audit_deps.py 实证为注释级引用（ui_global 零出向依赖、全工程 0 环），无需解耦；stickman_entity"存档对齐/箭矢估计外移"经核实为 duck-typing 字段协议无可外移块
+- **新发现登记**：Excel 导出管线与现有 config 目录映射脱节（17 表平行输出、重导出丢 uid 头）；test_melee_combat 冷却用例并行池间歇失败根因（打断窗口 × 残留动画位置 × AnimationTree 重入不归零）——均见待办事项
+
 ### AI 调度塔台 Round 1-6：认领接口/多AI模拟器/火车运行图/压测（2026-09-04）
 
 - **CLI 认领接口（执行 AI 自发认领的机制）**：`claim <id> --by <AI名>`（防双认领/前置未完成拦截/自环豁免）、

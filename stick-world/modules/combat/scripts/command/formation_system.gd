@@ -36,24 +36,24 @@ const DEFAULT_PRESET_ID := "fp_combat_squad"
 ## 预设配置文件路径
 const PRESET_CONFIG_PATH := "res://config/formations/formation_presets.tres"
 ## 队形散开间距（px）：推进横排相邻队员间隔（反编译参考实装 D）
-const SPREAD_SPACING: float = 32.0
+var SPREAD_SPACING: float = 32.0
 ## 集合围圈半径（px）：RALLY 集结时队员绕圈距离
 const RALLY_RADIUS: float = 24.0
 ## 队伍级目标决策间隔（秒）：排长每此间隔重选一次共享攻击目标（反编译参考实装 D-B）
 const SQUAD_DECISION_INTERVAL: float = 0.5
 ## 编队动态跟队默认间距（px，SWL GapBetweenFormationGroups 量级）：
 ## 后队落点 = 前队质心 − 行进方向 × gap
-const FOLLOW_DEFAULT_GAP: float = 150.0
+var FOLLOW_DEFAULT_GAP: float = 150.0
 ## 跟队重下发死区（px）：成员距锚定队形位小于此值不重下号令（防抖动/防 arrive 动画重播）
 const FOLLOW_DEADZONE: float = 40.0
 ## 每列人数（SWL Formation.UNITS_PER_COLUMN 直译，11b）：同列单位沿垂直方向排开，
 ## 多列沿行进方向反侧退 ROW_GAP。无 dump 数值真值，按三班 8~10 人取 3，待实测校准
 const UNITS_PER_COLUMN: int = 3
 ## 列间距（px，SWL Formation.ROW_GAP 直译，11b；无 dump 真值，待实测校准）
-const ROW_GAP: float = 56.0
+var ROW_GAP: float = 56.0
 ## 追赶奔跑阈值（px，11b）：距槽位落点超过此值转奔跑追赶
 ## （SWL UpdateCatchingUpToFormation；无 dump 真值，待实测校准）
-const CATCHUP_RUN_DIST: float = 140.0
+var CATCHUP_RUN_DIST: float = 140.0
 ## 指挥官光环士气恢复速率（每秒；排长存活时队员士气恢复，AI 完善批次 3）
 const LEADER_MORALE_AURA: float = 3.0
 ## 公共目标选择核心（反编译参考实装 A；同模块 combat，显式 preload）
@@ -99,6 +99,7 @@ var _squad_decision_timer: float = 0.0
 
 ## 由 GameRoot 装配时注入 OrganizationApi 引用
 func setup(org_api: Node) -> void:
+	_apply_balance_tuning()
 	_org_api = org_api
 	_load_presets()
 
@@ -992,3 +993,31 @@ func restore_squads(snapshots: Array, entity_map: Dictionary) -> int:
 			set_squad_follow(squad_id, true)
 		restored += 1
 	return restored
+
+
+## 编队几何数值校准：balance.variables（Excel 平衡变量表）覆盖代码默认。
+## 在 setup（装配注入点）调用；unit 测试直接 new() 不触发，不依赖 autoload。
+func _apply_balance_tuning() -> void:
+	if BalanceConfig == null or BalanceConfig.data.is_empty():
+		return
+	var rows_v: Variant = BalanceConfig.get_value("balance.variables")
+	if not (rows_v is Array):
+		return
+	var by_id := {}
+	for row: Dictionary in rows_v:
+		if row.has("id"):
+			by_id[row["id"]] = row.get("value")
+	for entry: Array in [["var_spread_spacing", SPREAD_SPACING], ["var_follow_default_gap", FOLLOW_DEFAULT_GAP],
+			["var_row_gap", ROW_GAP], ["var_catchup_run_dist", CATCHUP_RUN_DIST]]:
+		var v: Variant = by_id.get(entry[0])
+		if not (v is float or v is int):
+			continue
+		match entry[0]:
+			"var_spread_spacing":
+				SPREAD_SPACING = float(v)
+			"var_follow_default_gap":
+				FOLLOW_DEFAULT_GAP = float(v)
+			"var_row_gap":
+				ROW_GAP = float(v)
+			"var_catchup_run_dist":
+				CATCHUP_RUN_DIST = float(v)

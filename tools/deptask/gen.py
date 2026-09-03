@@ -429,7 +429,7 @@ def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, rea
     data = {
         "lanes": lane_order,
         "nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "lane": n["lane"],
-                   "status": n["status"], "prs": n["prs"], "domain": ",".join(n["domain"]),
+                   "status": n["status"], "prs": n["prs"], "domain": n["domain"],
                    "tree": n["tree"], "note": n["note"], "exempt": n["exempt"], "doc": n["doc"],
                    "x": n["pos"][0] if n["pos"] else None,
                    "y": n["pos"][1] if n["pos"] else None} for n in nodes.values()],
@@ -519,9 +519,48 @@ HTML = r"""<!DOCTYPE html>
    max-width:480px;line-height:2.1;font-size:12.5px}
  #help b{color:var(--acc)}
  /* ── 小地图 / 缩放 ── */
- #mini{position:fixed;right:12px;bottom:12px;border:1px solid var(--line2);background:#0a111ccc;
+ /* ── 三栏 IDE 布局（LOGIC-8 main 骨架：左岗位栏 / canvas / 右检查器） ── */
+ .side{position:fixed;bottom:0;background:var(--panel);display:none;flex-direction:column;
+   overflow-y:auto;overflow-x:hidden;z-index:15;scrollbar-width:thin}
+ #sideL{left:0;width:248px;border-right:1px solid var(--line2)}
+ #sideR{right:0;width:308px;border-left:1px solid var(--line2);padding:0 0 10px}
+ .side .pane-head{padding:8px 12px 6px;font-size:11px;font-weight:600;color:var(--acc2);
+   letter-spacing:.4px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+ .side .pane-head .hint{color:var(--dim2);font-size:10px;font-weight:400;margin-left:6px}
+ #inspector{padding:0 0 8px}
+ #inspector h3{margin:0;padding:9px 14px 7px;font-size:13px;font-weight:650;letter-spacing:.3px;
+   border-bottom:1px solid var(--line);color:#eaf6ff}
+ #inspector .tag{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+   padding:0 7px;margin:2px 4px 2px 0;font-size:11.5px;cursor:pointer;color:#93a7c0}
+ #inspector .tag:hover{border-color:var(--acc);color:var(--acc)}
+ #inspector .row{color:var(--sub);margin:6px 14px 0}
+ #inspector .ph{color:var(--dim2);font-size:11px;padding:12px 14px}
+ /* 清单行（机器码清单式：左侧 2px 状态条 + 三列 grid + 等宽 id） */
+ .lst{display:grid;grid-template-columns:10px minmax(76px,auto) 1fr 18px;gap:6px;align-items:center;
+   padding:3px 10px 3px 8px;font-size:11.5px;line-height:1.5;color:#93a7c0;
+   border-left:2px solid transparent;cursor:pointer}
+ .lst:hover{background:#131e2e;color:var(--txt)}
+ .lst.active{background:#16324a;border-left-color:var(--amber);color:#eaf6ff}
+ .lst .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+ .lst .lid{font:600 10.5px var(--mono);color:var(--dim2);overflow:hidden;text-overflow:ellipsis}
+ .lst .lname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .lst .lgo{color:var(--dim2);text-align:center}
+ .lst .lgo:hover{color:var(--acc)}
+ .lst.grp{grid-template-columns:10px 1fr auto;border-bottom:1px solid var(--line)}
+ .lst .cnt{font:700 10.5px var(--mono);color:var(--dim2)}
+ .gbar{height:6px;background:var(--panel2);border:1px solid var(--line);flex:1}
+ .gbar i{display:block;height:100%;background:var(--green)}
+ .grow{display:flex;align-items:center;gap:8px;padding:4px 12px;font-size:11.5px}
+ .grow .nm{width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+ .grow .nm:hover{color:var(--acc)}
+ .grow .pc{font:700 10px var(--mono);color:var(--dim2)}
+ .extStrip{margin:8px 12px;padding:8px 10px;background:#0c2a33;border:1px solid #155e75;border-radius:4px;
+   font-size:11.5px;line-height:1.6}
+ .extStrip b{color:#a5f3fc}
+ .extStrip .st{font:700 10.5px var(--mono);color:var(--amber)}
+ #mini{position:fixed;left:258px;bottom:12px;border:1px solid var(--line2);background:#0a111ccc;
    z-index:15;cursor:crosshair}
- #zoom{position:fixed;left:12px;bottom:12px;font:600 10px var(--mono);color:var(--dim2);z-index:15;
+ #zoom{position:fixed;left:258px;bottom:140px;font:600 10px var(--mono);color:var(--dim2);z-index:15;
    background:#0a111ccc;border:1px solid var(--line);padding:3px 8px}
  canvas#cv{display:block;position:fixed;inset:0;cursor:crosshair}
  /* ── 右键菜单 / 弹窗（LOGIC-8：直角+1px 线，无阴影） ── */
@@ -545,9 +584,9 @@ HTML = r"""<!DOCTYPE html>
    padding:6px 12px;cursor:pointer;font-size:12.5px}
  /* ── 制作人仪表盘（LOGIC-8 右栏：1px 缝网格/紫罗兰小节标题/kv 状态格） ── */
  #dash{position:fixed;left:0;right:0;bottom:0;display:none;overflow:auto;background:var(--bg);z-index:10;
-   padding:14px 16px 26px}
- #dash .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1px;
-   max-width:1500px;background:var(--line);border:1px solid var(--line2)}
+   padding:clamp(10px,2vw,20px) clamp(10px,3vw,24px) 26px}
+ #dash .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:1px;
+   max-width:1500px;margin:0 auto;background:var(--line);border:1px solid var(--line2)}
  #dash .card{background:var(--panel);padding:0 0 12px}
  #dash .card h4{margin:0;padding:8px 14px 6px;font-size:11px;font-weight:600;color:var(--acc2);
    letter-spacing:.4px;border-bottom:1px solid var(--line)}
@@ -564,8 +603,8 @@ HTML = r"""<!DOCTYPE html>
  #dash .laneHead{font-size:10px;color:var(--acc2);margin:8px 0 3px;letter-spacing:.4px}
  #dash .bar{height:6px;background:var(--panel2);border:1px solid var(--line);flex:1}
  #dash .bar i{display:block;height:100%;background:var(--green)}
- #dash .gate{display:flex;align-items:center;gap:9px;margin:7px 14px;font-size:11.5px}
- #dash .gate .nm{width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+ #dash .gate{display:flex;align-items:center;gap:9px;margin:7px 14px;font-size:11.5px;min-width:0}
+ #dash .gate .nm{width:min(150px,38vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;flex-shrink:0}
  #dash .gate .nm:hover{color:var(--acc)}
  #dash .gate .pc{width:52px;text-align:right;color:var(--dim2);font:700 10.5px var(--mono)}
  #dash .warn{font-size:11.5px;color:var(--amber);line-height:1.7;word-break:break-all;margin:4px 14px 0}
@@ -576,7 +615,10 @@ HTML = r"""<!DOCTYPE html>
  ::-webkit-scrollbar-thumb{background:#21334b;border-radius:5px}
  ::-webkit-scrollbar-thumb:hover{background:#2d466a}
  @media (max-width:1150px){#bar .sub{display:none}#search{width:130px}}
- @media (max-width:860px){#legend{display:none}#bar .btn{padding:4px 8px;font-size:11.5px}#search{width:110px}}
+ @media (max-width:860px){#legend{display:none}#bar .btn{padding:4px 8px;font-size:11.5px}#search{width:110px}
+  #sideL{width:200px}#sideR{width:250px}
+  #dash .stats{grid-template-columns:repeat(2,1fr)}
+  .lst .lname{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}}
 </style></head><body>
 <div id="bar"><div class="row"><b class="logo" title="任务依赖图 · 唯一真相源 docs/项目/任务依赖图.txt">任务依赖图</b><span class="sub">DAG 调度台</span>
  <span class="sep"></span>
@@ -609,7 +651,7 @@ HTML = r"""<!DOCTYPE html>
 </div>
 </div>
 <div id="ctx"></div>
-<div id="modal"><div><h3>➕ 新建任务</h3>
+<div id="modal"><div><h3 id="ntTitle">➕ 新建任务</h3>
  <label>id（英文标识符）<input id="ntId" placeholder="如 tech_rebuild2"></label>
  <label>名称<input id="ntName" placeholder="一句话说清交付物"></label>
  <label>线<select id="ntLane"></select></label>
@@ -618,10 +660,11 @@ HTML = r"""<!DOCTYPE html>
  <label>域（逗号分隔文件/目录，可留空）<input id="ntDomain" placeholder="modules/xxx"></label>
  <label>关联文档（可留空）<input id="ntDoc" placeholder="docs/设计/系统/xx.md"></label>
  <label>注<input id="ntNote"></label>
- <div class="btns"><button class="no" onclick="closeModal()">取消</button><button class="go" onclick="submitNewTask()">创建</button></div>
+ <div class="btns"><button class="no" onclick="closeModal()">取消</button><button class="go" id="ntGo" onclick="submitTaskForm()">创建</button></div>
 </div></div>
 <div id="dash"></div>
-<div id="panel"></div>
+<div id="sideL" class="side"></div>
+<div id="sideR" class="side"><div id="inspector"><div class="ph">点选任务查看详情（前置/被依赖/关联文档可点跳转）</div></div></div>
 <div id="msgs"></div>
 <div id="help"><div>
  <b>任务依赖图 · 操作（对标 Shader Graph / ComfyUI）</b><br>
@@ -718,6 +761,7 @@ function visNode(n){return !laneHidden(n.lane)&&(!viewFilter.lanes||viewFilter.l
 function nodeVisible(n){return visNode(n)&&(!q||n._hit);}
 function resize(){dpr=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;
  BAR_H=document.getElementById("bar").offsetHeight||80;  // 窄屏换行/媒体查询后顶栏高度跟随实测
+ const top=BAR_H+"px";["sideL","sideR"].forEach(id2=>{const el=document.getElementById(id2);if(el)el.style.top=top;});
  cv.width=VW*dpr;cv.height=VH*dpr;cv.style.width=VW+"px";cv.style.height=VH+"px";dirty=true;}
 addEventListener("resize",resize);resize();
 function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);
@@ -740,8 +784,10 @@ function measureCards(){fontCard();
   n.cw=Math.max(128,Math.min(202,Math.max(w+22,pw+10,idw+18)));
   n.ch=11+n.lines.length*17+7+18;});}
 function dagreLayout(){
- // 分区布局：完成子图与未完成子图各自独立 dagre，墙 = 两区中缝（自动重排与分隔墙的配合点）
- const D=VN.filter(n=>n.status==="完成"),U=VN.filter(n=>n.status!=="完成");
+ // 分区布局：完成子图与未完成子图各自独立 dagre，墙 = 两区中缝
+ // 关键：只排「可见」节点——岗位视图过滤掉的任务不参与分层，否则隐藏节点占位把可见任务撑散
+ const vis=VN.filter(n=>visNode(n));
+ const D=vis.filter(n=>n.status==="完成"),U=vis.filter(n=>n.status!=="完成");
  layoutSub(D,30);
  const dRight=D.length?Math.max(...D.map(n=>n.px+n.cw)):0;
  layoutSub(U,dRight+110);
@@ -945,17 +991,19 @@ function drawMini(){mctx.setTransform(1,0,0,1,0,0);mctx.clearRect(0,0,180,120);
  mctx.strokeRect(ox+(wx-g.minX)*s,oy+(wy-g.minY)*s,VW/view.k*s,VH/view.k*s);
  mini._map={s,ox,oy,g};}
 function drawZoom(){document.getElementById("zoom").textContent=Math.round(view.k*100)+"%";}
-function graphBBox(){const vis=VN.filter(n=>!focusLane||n._f!=="other");
+function graphBBox(){const vis=VN.filter(n=>visNode(n)&&(!focusLane||n._f!=="other"));
  if(!vis.length)return null;
  const xs=vis.map(n=>n.px),ys=vis.map(n=>n.py);
  return{minX:Math.min(...xs)-60,minY:Math.min(...ys)-80,
   w:Math.max(...xs.map((v,i)=>v+vis[i].cw))-Math.min(...xs)+120,
   h:Math.max(...ys.map((v,i)=>v+vis[i].ch))-Math.min(...ys)+140};}
-function centerOn(wx,wy,k){if(k)view.k=k;
- view.x=VW/2-wx*view.k;view.y=Math.max(BAR_H,VH/2-wy*view.k);dirty=true;}
-function fitAll(){const g=graphBBox();
- view.k=Math.min((VW-30)/g.w,(VH-100)/g.h,1.2);
- view.x=(VW-g.w*view.k)/2-g.minX*view.k;
+function sideW(){const l=document.getElementById("sideL"),r=document.getElementById("sideR");
+ return{L:(l&&l.style.display!=="none")?248:0,R:(r&&r.style.display!=="none")?308:0};}
+function centerOn(wx,wy,k){const s=sideW();if(k)view.k=k;
+ view.x=s.L+(VW-s.L-s.R)/2-wx*view.k;view.y=Math.max(BAR_H,VH/2-wy*view.k);dirty=true;}
+function fitAll(){const g=graphBBox();const s=sideW();
+ view.k=Math.min((VW-s.L-s.R-30)/g.w,(VH-BAR_H-40)/g.h,1.2);
+ view.x=s.L+(VW-s.L-s.R-g.w*view.k)/2-g.minX*view.k;
  view.y=Math.max(BAR_H,(VH-g.h*view.k)/2)-g.minY*view.k;dirty=true;}
 function locateActive(){const act=VN.filter(n=>ACTIVE.has(n.status)||n.status==="可开工");
  const t=act.length?act:VN;
@@ -990,21 +1038,21 @@ function applyFocus(){
  if(extB.length)focusLines={...focusLines,post:(Math.max(...inS.map(n=>n.px+n.cw))+Math.min(...extB.map(n=>n.px)))/2};
  computePorts();dirty=true;}
 function docHref(p){return "../"+String(p).replace(/^docs\//,"");}
-function showPanel(n){const p=document.getElementById("panel");
+function showPanel(n){const p=document.getElementById("inspector");
  const chip=(id)=>{const t=byId[id];return"<span class='tag' onclick='jump(\""+id+"\")'>"+(t?t.name:id)+" · "+(t?t.status:"?")+"</span>";};
  p.innerHTML="<h3>"+(n.kind==="里程碑"?"◆ ":"")+n.name+"</h3>"
- +"<div><span class='tag' style='cursor:default;color:"+COL[n.status]+"'>"+n.status+"</span>"
+ +"<div style='margin:6px 14px 0'><span class='tag' style='cursor:default;color:"+COL[n.status]+"'>"+n.status+"</span>"
  +(n.lane?"<span class='tag' style='cursor:default'>"+n.lane+"</span>":"")
  +(n.tree?"<span class='tag' style='cursor:default'>⌂ "+n.tree+"</span>":"")+"</div>"
  +(selSet.size>1?"<div class='row'>已框选 "+selSet.size+" 个（拖动批量移动 / 右键批量改状态）</div>":"")
- +(n.domain?"<div class='row'>文件域："+n.domain+"</div>":"")
+ +(n.domain&&n.domain.length?"<div class='row'>文件域："+n.domain.join(", ")+"</div>":"")
  +(n.doc?"<div class='row'>📄 <a style='color:#79b8ff' href='"+docHref(n.doc)+"'>"+n.doc+"</a></div>":"")
  +(n.prs&&n.prs.length?"<div class='row'>前置（点击跳转）：<br>"+n.prs.map(chip).join("")+"</div>":"")
  +(blocksOf[n.id].length?"<div class='row'>被依赖：<br>"+blocksOf[n.id].map(chip).join("")+"</div>":"")
  +(n.note?"<div class='row' style='color:#c3cdd8'>"+n.note+"</div>":"")
- +(n.exempt?"<div class='row' style='color:#d29922'>⚠ 豁免派活校验（见注）</div>":"")
- +"<div class='row' style='color:#555'>"+n.id+"</div>";
- p.style.display="block";}
+ +(n.exempt?"<div class='row' style='color:var(--amber)'>⚠ 豁免派活校验（见注）</div>":"")
+ +"<div class='row' style='color:#55677f;font:600 10px var(--mono)'>"+n.id+"</div>";
+ if(curView!=="producer")document.getElementById("sideR").style.display="flex";}
 function jump(id){const cid=memberOf[id];if(cid&&folded[cid]){folded[cid]=false;rebuildView();}
  const n=byId[id];if(!n)return;sel=id;selSet=new Set([id]);selEdge=null;
  centerOn(n.px+n.cw/2,n.py+n.ch/2,1.1);showPanel(n);}
@@ -1041,13 +1089,26 @@ function hideCtx(){document.getElementById("ctx").style.display="none";}
 function showCtx(ev){const c=document.getElementById("ctx");let h="";
  if(selEdge)h+="<div class='ci' onclick='delEdgeSel()'>🗑 删除依赖 "+selEdge.a+" → "+selEdge.b+"</div>";
  const p=toWorld(ev),hit=nodeAt(p.x,p.y);
- if(selSet.size>1||((hit||selSet.size===1)&&!selEdge)){
-  const ids=[...selSet];
-  h+="<div class='ch'>"+(ids.length>1?"已选 "+ids.length+" 个任务 → 批量状态：":(ids[0]||hit.id)+" → 状态：")+"</div>";
-  STATUS.forEach(s=>{h+="<div class='ci' onclick=\"setStatusAll('"+s+"')\">"+s+"</div>";});
+ const single=(hit&&hit.id)||(selSet.size===1?[...selSet][0]:null);
+ if(single&&!selEdge){
+  h+="<div class='ch'>"+single+" →</div>"
+   +"<div class='ci' onclick=\"setStatusAll('进行中')\">▶ 进行中</div>"
+   +"<div class='ci' onclick=\"setStatusAll('待验收')\">🔍 待验收</div>"
+   +"<div class='ci' onclick=\"setStatusAll('完成')\">✓ 完成</div>"
+   +"<div class='ci' onclick=\"setStatusAll('可开工')\">🚦 可开工</div>"
+   +"<div class='ci' onclick=\"setStatusAll('阻塞')\">⏸ 阻塞</div>"
+   +"<div class='ci' onclick=\"setStatusAll('冻结')\">❄ 冻结</div>"
+   +"<div class='ci' onclick=\"setStatusAll('放弃')\">✕ 放弃</div>"
+   +"<div class='ci' onclick='openTaskForm(\""+single+"\")'>✎ 编辑任务…</div>"
+   +"<div class='ci' onclick='delTask(\""+single+"\")'>🗑 删除任务</div>"
+   +"<div class='ci' onclick='copySelIds()'>📋 复制 id</div>";
+ }else if(selSet.size>1&&!selEdge){
+  h+="<div class='ch'>已选 "+selSet.size+" 个 → 批量状态：</div>";
+  ["完成","待验收","进行中","可开工","阻塞","冻结","放弃"].forEach(s=>{
+   h+="<div class='ci' onclick=\"setStatusAll('"+s+"')\">"+s+"</div>";});
   h+="<div class='ci' onclick='copySelIds()'>📋 复制所选 id</div>";
  }else if(!selEdge){
-  h+="<div class='ci' onclick='openNewTask()'>➕ 新建任务…</div>"+
+  h+="<div class='ci' onclick='openTaskForm()'>➕ 新建任务…</div>"+
      "<div class='ci' onclick='fitAll();hideCtx()'>⛶ 适配全图</div>"+
      "<div class='ci' onclick='relayout();hideCtx()'>⟲ 自动重排</div>";}
  c.innerHTML=h;c.style.display="block";
@@ -1060,30 +1121,36 @@ let lastRmb=null;  // 右键按下点：mouseup 会先清 drag，contextmenu 后
 cv.addEventListener("contextmenu",ev=>{
  if(lastRmb&&Math.hypot(ev.clientX-lastRmb.x,ev.clientY-lastRmb.y)<4)showCtx(ev);
  lastRmb=null;});
-cv.onmousedown=ev=>{const p=toWorld(ev);
+cv.onpointerdown=ev=>{const p=toWorld(ev);
  if(ev.button===1||ev.button===2||(ev.button===0&&spaceDown)){   // 平移三通道
   if(ev.button===2)lastRmb={x:ev.clientX,y:ev.clientY};
-  drag={pan:true,sx:ev.clientX,sy:ev.clientY,ox:view.x,oy:view.y,rmb:ev.button===2};return;}
- if(ev.button!==0)return;
- if(inMini(ev)){drag={mini:true};miniJump(ev);return;}
- if(showDivide&&divideX!=null&&Math.abs(ev.clientX-(divideX*view.k+view.x))<7){
-  drag={divide:true,sx:ev.clientX,ox:divideX};return;}
- const port=portAt(p.x,p.y);                    // 输出端口热区：起连线
- if(port){drag={link:true,from:port.id,sx:ev.clientX,sy:ev.clientY,cx:ev.clientX,cy:ev.clientY};return;}
- const e=(!nodeAt(p.x,p.y))?edgeAt(p.x,p.y):null; // 点边=选中边（Del 删除）
- if(e){selEdge=e;sel=null;selSet=new Set();dirty=true;return;}
- const n=nodeAt(p.x,p.y);
- if(n){
-  if(ev.shiftKey){if(selSet.has(n.id)&&selSet.size>1)selSet.delete(n.id);else selSet.add(n.id);
-   sel=n.id;showPanel(n);dirty=true;return;}
-  sel=n.id;selEdge=null;if(!selSet.has(n.id))selSet=new Set([n.id]);
-  showPanel(n);
-  drag={n,dx:p.x-n.px,dy:p.y-n.py,sx:ev.clientX,sy:ev.clientY,moved:false,
-   group:[...(n.isCluster?[n]:[...selSet])].filter(m=>m&&m.px!=null)
-        .map(m=>({m,dx:p.x-m.px,dy:p.y-m.py}))};
- }else drag={box:true,sx:ev.clientX,sy:ev.clientY,cx:ev.clientX,cy:ev.clientY};
+  drag={pan:true,sx:ev.clientX,sy:ev.clientY,ox:view.x,oy:view.y,rmb:ev.button===2};}
+ else if(ev.button!==0){return;}
+ else if(inMini(ev)){drag={mini:true};miniJump(ev);}
+ else if(showDivide&&divideX!=null&&Math.abs(ev.clientX-(divideX*view.k+view.x))<7){
+  drag={divide:true,sx:ev.clientX,ox:divideX};}
+ else{
+  const port=portAt(p.x,p.y);                    // 输出端口热区：起连线
+  if(port){drag={link:true,from:port.id,sx:ev.clientX,sy:ev.clientY,cx:ev.clientX,cy:ev.clientY};}
+  else{
+   const e0=(!nodeAt(p.x,p.y))?edgeAt(p.x,p.y):null; // 点边=选中边（Del 删除）
+   if(e0){selEdge=e0;sel=null;selSet=new Set();dirty=true;}
+   else{
+    const n=nodeAt(p.x,p.y);
+    if(n){
+     if(ev.shiftKey){if(selSet.has(n.id)&&selSet.size>1)selSet.delete(n.id);else selSet.add(n.id);
+      sel=n.id;showPanel(n);dirty=true;return;}
+     sel=n.id;selEdge=null;if(!selSet.has(n.id))selSet=new Set([n.id]);
+     showPanel(n);
+     drag={n,dx:p.x-n.px,dy:p.y-n.py,sx:ev.clientX,sy:ev.clientY,moved:false,
+      group:[...(n.isCluster?[n]:[...selSet])].filter(m=>m&&m.px!=null)
+           .map(m=>({m,dx:p.x-m.px,dy:p.y-m.py}))};
+    }else drag={box:true,sx:ev.clientX,sy:ev.clientY,cx:ev.clientX,cy:ev.clientY};
+   }}}
+ // 指针捕获：拖动中鼠标移出窗口/画布仍持续收到 move/up，杜绝"出界回来抽搐"
+ try{cv.setPointerCapture(ev.pointerId);}catch(e2){}
  dirty=true;};
-addEventListener("mousemove",ev=>{if(!drag)return;
+cv.addEventListener("pointermove",ev=>{if(!drag)return;
  if(drag.mini){miniJump(ev);return;}
  if(drag.divide){const dx=(ev.clientX-drag.sx)/view.k;divideX=drag.ox+dx;enforceDivide();dirty=true;return;}
  if(drag.box){drag.cx=ev.clientX;drag.cy=ev.clientY;dirty=true;return;}
@@ -1101,7 +1168,7 @@ addEventListener("mousemove",ev=>{if(!drag)return;
    else{g.m.x=nx;g.m.y=ny;}});
   computePorts();}  // 端口 y 是缓存值，拖动必须重算，否则贝塞尔垂直方向不跟随
  dirty=true;});
-addEventListener("mouseup",ev=>{
+cv.addEventListener("pointerup",ev=>{
  if(drag&&drag.box){
   const x1=Math.min(drag.sx,drag.cx),x2=Math.max(drag.sx,drag.cx),
         y1=Math.min(drag.sy,drag.cy),y2=Math.max(drag.sy,drag.cy);
@@ -1110,50 +1177,85 @@ addEventListener("mouseup",ev=>{
    const hit=[];VN.forEach(n=>{if(!nodeVisible(n)||n.isCluster)return;
     if(n.px+n.cw>a.x&&n.px<b.x&&n.py+n.ch>a.y&&n.py<b.y)hit.push(n.id);});
    selSet=new Set(hit);sel=hit[0]||null;selEdge=null;
-   if(sel)showPanel(byId[sel]);else document.getElementById("panel").style.display="none";
+   if(sel)showPanel(byId[sel]);else document.getElementById("inspector").innerHTML="<div class='ph'>框选 "+selSet.size+" 个任务</div>";
   }else{sel=null;selSet=new Set();selEdge=null;hi=null;
-   document.getElementById("panel").style.display="none";}
+   document.getElementById("inspector").innerHTML="<div class='ph'>点选任务查看详情</div>";}
  }else if(drag&&drag.link){
   const p=toWorld(ev),t=nodeAt(p.x,p.y);
   if(t&&t.id!==drag.from&&addEdge(drag.from,t.id)){rebuildView();showPanel(t);}
  }else if(drag&&drag.n&&drag.n.isCluster&&!drag.moved){
   folded[drag.n.isCluster.id]=!folded[drag.n.isCluster.id];rebuildView();}
+ try{cv.releasePointerCapture(ev.pointerId);}catch(e2){}
  drag=null;dirty=true;});
-cv.onmousemove=ev=>{if(drag)return;const p=toWorld(ev);
+cv.onpointerleave=ev=>{if(!drag){hi=null;dirty=true;}};
+cv.addEventListener("pointermove",ev=>{if(drag)return;const p=toWorld(ev);
  divideHover=showDivide&&divideX!=null&&Math.abs(ev.clientX-(divideX*view.k+view.x))<7;
  const n=nodeAt(p.x,p.y),po=portAt(p.x,p.y),ed=n?null:edgeAt(p.x,p.y);
  hover=n?n.id:null;hi=n?n.id:null;
  cv.style.cursor=divideHover?"col-resize":(po?"crosshair":(n?"grab":(ed?"pointer":(spaceDown?"grab":"crosshair"))));
- dirty=true;};
-cv.onmouseleave=()=>{if(!sel){hi=null;dirty=true;}};
+ dirty=true;});
+cv.onpointerleave=ev2=>{if(!drag&&!sel){hi=null;dirty=true;}};
 cv.ondblclick=ev=>{const p=toWorld(ev);const n=nodeAt(p.x,p.y);
  if(n){sel=n.id;selSet=new Set([n.id]);centerOn(n.px+n.cw/2,n.py+n.ch/2,1.15);showPanel(n);}
  else fitAll();};
 cv.onwheel=ev=>{ev.preventDefault();const f=ev.deltaY<0?1.13:0.885;const r=toWorld(ev);
  view.k=Math.min(2.5,Math.max(0.2,view.k*f));
  view.x=ev.clientX-r.x*view.k;view.y=ev.clientY-r.y*view.k;dirty=true;};
-// ── 新建任务弹窗 ──
-function openNewTask(){const m=document.getElementById("modal");m.style.display="flex";
+// ── 新建/编辑任务弹窗（同一表单双模式；编辑时 id 锁定） ──
+let editTarget=null;
+function openTaskForm(editId){editTarget=editId||null;
+ const m=document.getElementById("modal");m.style.display="flex";
+ document.getElementById("ntTitle").textContent=editId?("✎ 编辑任务 · "+editId):"➕ 新建任务";
+ document.getElementById("ntGo").textContent=editId?"保存":"创建";
+ const idIn=document.getElementById("ntId");
+ idIn.value=editId||"";idIn.disabled=!!editId;   // id 是全部引用的锚点，编辑时锁定
+ idIn.parentElement.style.display=editId?"none":"flex";
+ const n=editId?byId[editId]:null;
+ document.getElementById("ntName").value=n?n.name:"";
  const ls=document.getElementById("ntLane");
- ls.innerHTML=lanes.map(l=>"<option>"+l+"</option>").join("");
+ ls.innerHTML=lanes.map(l=>"<option"+(n&&n.lane===l?" selected":"")+">"+l+"</option>").join("");
  const st=document.getElementById("ntStatus");
- st.innerHTML=STATUS.map(s=>"<option"+(s==="可开工"?" selected":"")+">"+s+"</option>").join("");
- document.getElementById("ntId").focus();}
-function closeModal(){document.getElementById("modal").style.display="none";}
-function submitNewTask(){const id=document.getElementById("ntId").value.trim();
+ st.innerHTML=STATUS.map(s=>"<option"+((n?n.status:"可开工")===s?" selected":"")+">"+s+"</option>").join("");
+ document.getElementById("ntPrs").value=n?(n.prs||[]).join(","):"";
+ document.getElementById("ntDomain").value=n?((Array.isArray(n.domain)?n.domain:(n.domain||"").split(",")).filter(Boolean)).join(","):"";
+ document.getElementById("ntDoc").value=n?(n.doc||""):"";
+ document.getElementById("ntNote").value=n?(n.note||""):"";
+ hideCtx();
+ if(!editId)document.getElementById("ntName").focus();}
+function closeModal(){document.getElementById("modal").style.display="none";editTarget=null;}
+function submitTaskForm(){
+ const name=document.getElementById("ntName").value.trim();
+ const lane=document.getElementById("ntLane").value,status=document.getElementById("ntStatus").value;
+ const domain=(document.getElementById("ntDomain").value||"").split(/[,;]/).map(s=>s.trim()).filter(Boolean);
+ const doc=document.getElementById("ntDoc").value.trim(),note=document.getElementById("ntNote").value.trim();
+ const newPrs=(document.getElementById("ntPrs").value||"").split(",").map(s=>s.trim()).filter(Boolean);
+ if(editTarget){const n=byId[editTarget];
+  if(!n){closeModal();return;}
+  n.name=name||n.name;n.lane=lane;n.status=status;n.domain=domain;n.doc=doc;n.note=note;
+  (n.prs||[]).filter(p=>!newPrs.includes(p)).forEach(p=>delEdge({a:p,b:editTarget}));
+  newPrs.filter(p=>!(n.prs||[]).includes(p)).forEach(p=>{if(byId[p])addEdge(p,editTarget);
+   else alert("前置不存在，已跳过："+p);});
+  markEdit(editTarget);measureCards();rebuildView();showPanel(n);buildSide(curView);closeModal();return;}
+ const id=document.getElementById("ntId").value.trim();
  if(!id){alert("id 必填");return;}
  if(byId[id]){alert("id 已存在："+id);return;}
- const n={id,kind:"任务",name:document.getElementById("ntName").value.trim()||id,
-  lane:document.getElementById("ntLane").value,status:document.getElementById("ntStatus").value,
-  prs:[],domain:(document.getElementById("ntDomain").value||"").split(/[,;]/).map(s=>s.trim()).filter(Boolean),
-  tree:"",note:document.getElementById("ntNote").value.trim(),
-  doc:document.getElementById("ntDoc").value.trim(),x:null,y:null,px:0,py:0,
-  lines:[],cw:150,ch:56,inP:[],outP:[],_hit:false};
- nodes.push(n);byId[n.id]=n;prsOf[n.id]=[];blocksOf[n.id]=[];
- (document.getElementById("ntPrs").value||"").split(",").map(s=>s.trim()).filter(Boolean)
-  .forEach(p=>addEdge(p,id));
- markEdit(id);measureCards();rebuildView();closeModal();
+ const n={id,kind:"任务",name:name||id,lane,status,prs:[],domain,tree:"",note,doc,
+  x:null,y:null,px:0,py:0,lines:[],cw:150,ch:56,inP:[],outP:[],_hit:false};
+ nodes.push(n);byId[id]=n;prsOf[id]=[];blocksOf[id]=[];
+ newPrs.forEach(p=>{if(byId[p])addEdge(p,id);else alert("前置不存在，已跳过："+p);});
+ markEdit(id);measureCards();rebuildView();buildSide(curView);closeModal();
  sel=id;selSet=new Set([id]);jump(id);}
+function delTask(id){const n=byId[id];if(!n)return;
+ const linked=edges.filter(e=>e.a===id||e.b===id).length;
+ if(!confirm("删除任务「"+n.name+"」（"+id+"）及其 "+linked+" 条依赖边？\n此操作导出后生效，源文件覆盖前可反悔。"))return;
+ edges=edges.filter(e=>e.a!==id&&e.b!==id);
+ CLUSTERS.forEach(c=>{const i=c.members.indexOf(id);if(i>=0)c.members.splice(i,1);});
+ nodes.splice(nodes.indexOf(n),1);
+ delete byId[id];delete prsOf[id];delete blocksOf[id];
+ delete memberOf[id];
+ sel=null;selSet=new Set();selEdge=null;hi=null;
+ markEdit(id);measureCards();rebuildView();buildSide(curView);
+ document.getElementById("inspector").innerHTML="<div class='ph'>已删除 "+id+"</div>";dirty=true;}
 function inMini(ev){const r=mini.getBoundingClientRect();
  return ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom;}
 function miniJump(ev){if(!mini._map)return;const{g,s,ox,oy}=mini._map;const r=mini.getBoundingClientRect();
@@ -1220,7 +1322,7 @@ addEventListener("keydown",ev=>{
  if(ev.key==="Escape"){if(document.getElementById("ctx").style.display==="block"){hideCtx();return;}
   if(document.getElementById("modal").style.display==="flex"){closeModal();return;}
   sel=null;selSet=new Set();selEdge=null;hi=null;
-  document.getElementById("panel").style.display="none";dirty=true;return;}
+  document.getElementById("inspector").innerHTML="<div class='ph'>点选任务查看详情</div>";dirty=true;return;}
  if(inField)return;
  if((ev.key==="Delete"||ev.key==="Backspace")&&selEdge){delEdge(selEdge);}});
 addEventListener("keyup",ev=>{if(ev.code==="Space"){spaceDown=false;cv.style.cursor="default";dirty=true;}});
@@ -1233,17 +1335,94 @@ const VIEWS={
  art:{ids:n=>/^(asset_|ext_art|fx_|p12_skins)/.test(n.id)||n.lane==="美术"},
  qa:{ids:n=>/^(debt_|test_|ci_|arena_)/.test(n.id)||n.status==="待验收"||/^(demo_|hp_default_zero)/.test(n.id)}
 };
-let curView="graph";
-function setView(v){curView=v;
+let curView="graph",viewSnapshot=null;
+function setView(v){const prev=curView;curView=v;
  if(location.hash!=="#view="+v)location.hash="#view="+v;
  document.querySelectorAll(".vtab").forEach(t=>t.classList.toggle("on",t.dataset.v===v));
  viewFilter=VIEWS[v]||{};
  const dash=document.getElementById("dash"),showDash=v==="producer";
  dash.style.display=showDash?"block":"none";
  ["cv","mini","zoom"].forEach(id2=>{document.getElementById(id2).style.visibility=showDash?"hidden":"visible";});
+ document.getElementById("sideL").style.display=showDash?"none":"flex";
+ document.getElementById("sideR").style.display=showDash?"none":"flex";
  if(showDash){dash.style.top=BAR_H+"px";buildDash();return;}
- rebuildView();fitAll();dirty=true;}
+ // 岗位视图 = 布局投影：进入时快照全图坐标 → 对可见子集重新 dagre（隐藏节点不再占位）→ 退出恢复
+ if(prev!==v&&viewSnapshot){viewSnapshot.forEach(a=>{a[0].px=a[1];a[0].py=a[2];});viewSnapshot=null;}
+ if(v!=="graph"){viewSnapshot=nodes.map(n=>[n,n.px,n.py]);}
+ rebuildView();
+ if(v!=="graph"){dagreLayout();rebuildView();fitAll();}
+ else{locateActive();}
+ buildSide(v);
+ dirty=true;}
 function jumpTo(id){setView("graph");jump(id);}
+function sideSelect(id){const n=byId[id];if(!n)return;
+ sel=id;selSet=new Set([id]);selEdge=null;hi=id;showPanel(n);dirty=true;}
+function sideRow(n){return"<div class='lst"+(n.status==="进行中"?" active":"")+"' onclick='sideSelect(\""+n.id+"\")' title=\""+n.name+"（点击详情，⤢ 跳全图）\">"
+ +"<span class='dot' style='background:"+(COL[n.status]||"#888")+"'></span>"
+ +"<span class='lid'>"+n.id+"</span><span class='lname'>"+n.name+"</span>"
+ +"<span class='lgo' title='跳全图定位' onclick='event.stopPropagation();jumpTo(\""+n.id+"\")'>⤢</span></div>";}
+function sideHead(t,hint){return"<div class='pane-head'>"+t+(hint?"<span class='hint'>"+hint+"</span>":"")+"</div>";}
+function gateProgress(gid,label){ // 收口门进度内嵌（点击展开成员清单）
+ const g=byId[gid];if(!g)return"";
+ const ds=blocksOf[gid]||[],done=ds.filter(d=>byId[d]&&byId[d].status==="完成").length;
+ const pct=ds.length?Math.round(100*done/ds.length):0;
+ let h="<div class='grow' onclick='toggleGate(\""+gid+"\")' title='点击展开/收起成员'>"
+  +"<span class='nm' style='color:#eaf6ff'>◆ "+(label||g.name)+"</span>"
+  +"<span class='gbar'><i style='width:"+pct+"%'></i></span><span class='pc'>"+done+"/"+ds.length+"</span></div>";
+ if(window["_g_"+gid]){
+  h+="<div style='max-height:200px;overflow:auto'>";
+  ds.forEach(d=>{if(byId[d])h+=sideRow(byId[d]);});
+  h+="</div>";}
+ return h;}
+function toggleGate(gid){window["_g_"+gid]=!window["_g_"+gid];buildSide(curView);}
+function buildSide(v){const L=document.getElementById("sideL");let h="";
+ const live=n=>n.status!=="完成"&&n.status!=="放弃";
+ const active=nodes.filter(n=>n.status==="进行中"||n.status==="待验收");
+ const ready=nodes.filter(n=>live(n)&&n.status!=="冻结"
+  &&(n.prs||[]).every(p=>byId[p]&&byId[p].status==="完成"));
+ if(v==="eng"){
+  h+=sideHead("⚙ 进行中 / 待验收","代码线");
+  h+=active.filter(n=>n.lane!=="宣发运营").map(sideRow).join("")||"<div class='ph'>无</div>";
+  h+=sideHead("🚦 就绪可派","前置全齐");
+  h+=ready.filter(n=>n.lane!=="叙事设计"&&n.lane!=="决策"&&n.lane!=="宣发运营").map(sideRow).join("")||"<div class='ph'>无</div>";
+  const dom={};active.forEach(n=>(n.domain||[]).forEach(d=>{if(d)dom[d]=n.id;}));
+  h+=sideHead("⚡ 文件域占用","并行写必冲突");
+  h+=Object.keys(dom).map(d=>"<div class='lst grp' title='进行中任务正占用此域'><span></span><span class='lid' style='overflow:visible'>"+d+"</span><span class='lname' style='text-align:right'>"+dom[d]+"</span><span></span></div>").join("");
+ }else if(v==="design"){
+  const dec=nodes.filter(n=>/^dec_/.test(n.id)&&live(n));
+  h+=sideHead("🏛 等创始人拍板","零代码成本·解锁下游");
+  h+=dec.map(n=>sideRow(n)).join("")||"<div class='ph'>无待决策项</div>";
+  h+=sideHead("📐 设计产出清单","叙事/玩法/经济设计");
+  h+=nodes.filter(n=>n.lane==="叙事设计"&&live(n)).map(sideRow).join("")
+   +nodes.filter(n=>n.lane==="玩法系统"&&/^(content_|autonomy_|idle_|god_view)/.test(n.id)&&live(n)).map(sideRow).join("");
+ }else if(v==="art"){
+  const ext=byId.ext_art;
+  h+=sideHead("📡 外部资产通道","采购/自制交付状态");
+  h+="<div class='extStrip'><b>ext_art 外部美术资产通道</b><br>状态：<span class='st'>"+ext.status.toUpperCase()+"</span> —— 等待外部交付（手绘贴图/音效采购）。<br>下方 P1~P7 素材替换全部挂此通道：通道不开，资产任务只能做程序侧准备。需求单=待办 PLACEHOLDER 表。</div>";
+  h+=sideHead("🎨 素材替换清单","点击行看详情");
+  h+=nodes.filter(n=>/^(asset_p|fx_directional|fx_explosion|fx_ground|fx_rain|p12_skins)/.test(n.id)).sort((a,b)=>a.id.localeCompare(b.id)).map(sideRow).join("");
+  h+=sideHead("🧰 程序侧配套","材质/粒子管线");
+  h+=nodes.filter(n=>/^(texture_gen_regression|weather_env|behavior_)/.test(n.id)||n.id==="p3_thatch").map(sideRow).join("");
+ }else if(v==="qa"){
+  h+=sideHead("🐞 缺陷清单","观察场验收遗留");
+  h+=nodes.filter(n=>/^debt_/.test(n.id)).map(sideRow).join("")||"<div class='ph'>无</div>";
+  h+=sideHead("🔍 待验收","需人工/游戏内确认");
+  h+=active.filter(n=>n.status==="待验收").map(sideRow).join("")||"<div class='ph'>无</div>";
+  h+=sideHead("🧰 测试基建","稳定性/CI");
+  h+=nodes.filter(n=>/^(test_stability|ci_enable|texture_gen_regression)/.test(n.id)).map(sideRow).join("");
+  h+=sideHead("◆ Demo 收口进度","点击展开成员");
+  h+=gateProgress("demo_content","Demo 内容收口")+gateProgress("demo_release","Demo 发布");
+ }else{ // graph 全图
+  h+=sideHead("🚦 就绪集 top","前置全齐可派活");
+  h+=ready.slice(0,14).map(sideRow).join("")||"<div class='ph'>无</div>";
+  h+=sideHead("🗂 泳道","任务数");
+  const cnt={};nodes.forEach(n=>{if(live(n))cnt[n.lane]=(cnt[n.lane]||0)+1;});
+  h+=Object.keys(cnt).map(l=>"<div class='lst grp'><span></span><span class='lname'>"+l+"</span><span class='cnt'>"+cnt[l]+"</span><span></span></div>").join("");
+  h+=sideHead("ℹ 操作","常用");
+  h+="<div class='ph'>左键拖空白=框选 · 中/右键/空格+拖=平移<br>右缘拖线=建依赖 · 右键=批量/编辑<br>🛤 关键路径=琥珀蚂蚁线 · Alt+点泳道=显隐</div>";
+ }
+ L.innerHTML=h;L.style.top=BAR_H+"px";
+ document.getElementById("sideR").style.top=BAR_H+"px";}
 function buildDash(){const P=DATA.producer||{},S=P.stats||{},d=document.getElementById("dash");
  const liveReady=nodes.filter(n=>n.status!=="完成"&&n.status!=="冻结"&&n.status!=="放弃"
   &&(n.prs||[]).every(p=>byId[p]&&byId[p].status==="完成"));
@@ -1292,7 +1471,7 @@ function exportTxt(){ // 编辑闭环：导出完整源文件（状态/依赖/�
  nodes.forEach(n=>{out+=(n.kind==="里程碑"?"里程碑 ":"任务 ")+n.id
   +" | 名称="+n.name+" | 线="+n.lane+" | 状态="+n.status
   +(n.prs&&n.prs.length?" | 前置="+n.prs.join(","):"")
-  +(n.domain?" | 域="+n.domain:"")+(n.tree?" | 树="+n.tree:"")
+  +(n.domain&&n.domain.length?" | 域="+(Array.isArray(n.domain)?n.domain.join(","):n.domain):"")+(n.tree?" | 树="+n.tree:"")
   +(n.x!=null?" | 位置="+n.px.toFixed(1)+","+n.py.toFixed(1):"")  // 「自动重排」后 x 置 null，不写位置＝保留 dagre 自由态
   +(n.exempt?" | 豁免=1":"")+(n.doc?" | 文档="+n.doc:"")+(n.note?" | 注="+n.note:"")+"\n";});
  const a=document.createElement("a");

@@ -263,6 +263,9 @@ func _ensure_action_indicator() -> void:
 	if _action_progress_indicator != null and is_instance_valid(_action_progress_indicator):
 		return
 	var cls := load("res://modules/units/scripts/entity/action_progress_indicator.gd")
+	if cls == null:
+		push_warning("[VisualController] 动作进度条脚本加载失败，跳过创建")
+		return
 	_action_progress_indicator = cls.new()
 	_action_progress_indicator.position = Vector2(0, -130.0)  # 头顶上方
 	_entity.add_child(_action_progress_indicator)

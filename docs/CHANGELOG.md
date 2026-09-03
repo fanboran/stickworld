@@ -8,6 +8,13 @@
 
 ## [未发布]
 
+### 三条并行开发线收线合并（2026-09-03）
+
+- **配置线**（parallel/datapipe）：`BalanceConfig` autoload 阶段自装载数据，修复热重载前空字典导致的全量警告与数值回退（含 `test_balance_config` 套件）
+- **战略图线**（parallel/worldgen）：战略图 UI 三件套——粒度指示器（L1/L2/L3 层级+地块号+ESC 语义）、聚落 tooltip（hover 跟随）、L1/L3 视图互斥（含 `test_strategic_map_ui` 套件）
+- **UI 线**（parallel/aux-dev）：设置项真实生效（音量接 AudioServer BGM/SFX 总线、FPS 计数器修复、重启恢复 round-trip）+ 通知升级左下堆叠 feed（多通知并存/自动过期/超限移除最旧，含 `test_settings_apply` / `test_notification_feed` 套件）
+- 三线 git 零冲突合并；**合并后首次 headless 运行前需 `godot --headless --import` 重建全局 class 缓存**（新脚本的 class_name 注册），否则运行时报 "Could not find type" 连锁编译失败（新脚本编译失败 → 依赖它的脚本全部连锁失败）
+
 ### 观察场升级为默认主场景 + 对战预设控制面板（2026-09-02）
 
 - **主场景切换**：`project.godot` `run/main_scene` 从主菜单改为 `tests/dev/battle_arena.tscn`

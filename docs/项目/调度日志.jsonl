@@ -1,0 +1,8 @@
+{"ts": "2026-09-04T01:15:51", "agent": "test-exec-01", "action": "claim", "task": "micro_doc_tech", "note": "工程债"}
+{"ts": "2026-09-04T01:15:52", "agent": "test-exec-01", "action": "release", "task": "micro_doc_tech"}
+{"ts": "2026-09-04T01:15:52", "agent": "test-exec-01", "action": "done", "task": "micro_doc_tech", "note": "工程债"}
+{"ts": "2026-09-04T01:16:40", "agent": "test-02", "action": "done", "task": "micro_doc_tech", "note": "工程债"}
+{"ts": "2026-09-04T01:16:59", "agent": "test-03", "action": "claim", "task": "micro_doc_tech", "note": "工程债"}
+{"ts": "2026-09-04T01:16:59", "agent": "test-03", "action": "done", "task": "micro_doc_tech", "note": "工程债"}
+{"ts": "2026-09-04T01:27:39", "agent": "qa-01", "action": "claim", "task": "micro_doc_tech", "note": "工程债"}
+{"ts": "2026-09-04T01:27:39", "agent": "qa-01", "action": "done", "task": "micro_doc_tech", "note": "工程债"}

@@ -25,6 +25,12 @@ var supply_chains: Dictionary = {}      # {id: SupplyChainState}
 ## 当前游戏时刻（小时 0.0 ~ 24.0，由 EnvironmentSystem 推进与写入）
 var game_time: float = 0.0
 
+# SQL 白名单：表名/列名为固定常量；运行时值（slot_id）一律经 ? 绑定
+# （query_with_bindings），禁止字符串拼接进 SQL。
+const _SQL_WS_SELECT := "SELECT data FROM world_state WHERE slot_id = ? AND module_name = 'world_state'"
+const _SQL_WS_DELETE := "DELETE FROM world_state WHERE slot_id = ?"
+const _SQL_LEGACY_SELECT := "SELECT data FROM legacy_modules WHERE slot_id = ? AND module_name = 'world_state'"
+
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
@@ -44,7 +50,7 @@ func _on_game_saving(_slot_index: int) -> void:
 	var slot_id: int = SaveManager.get_current_slot() if SaveManager.has_method("get_current_slot") else -1
 	if db == null or slot_id < 0:
 		return
-	db.delete_rows("world_state", "slot_id = %d" % slot_id)
+	db.query_with_bindings(_SQL_WS_DELETE, [slot_id])
 	db.insert_row("world_state", {
 		"slot_id": slot_id,
 		"module_name": "world_state",
@@ -57,7 +63,9 @@ func _on_game_loaded(slot_index: int) -> void:
 	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
 	if db == null:
 		return
-	var rows: Array = db.select_rows("world_state", "slot_id = %d AND module_name = 'world_state'" % slot_index, ["data"])
+	var rows: Array = []
+	if db.query_with_bindings(_SQL_WS_SELECT, [slot_index]):
+		rows = db.query_result
 	if rows.is_empty():
 		rows = _read_legacy_world_state(db, slot_index)
 	var data: Dictionary = {}
@@ -74,7 +82,10 @@ func _read_legacy_world_state(db, slot_id: int) -> Array:
 	var tables: Array = db.select_rows("sqlite_master", "type = 'table' AND name = 'legacy_modules'", ["name"])
 	if tables.is_empty():
 		return []
-	return db.select_rows("legacy_modules", "slot_id = %d AND module_name = 'world_state'" % slot_id, ["data"])
+	var rows: Array = []
+	if db.query_with_bindings(_SQL_LEGACY_SELECT, [slot_id]):
+		rows = db.query_result
+	return rows
 
 
 # ─────────────────────────────── 实体注册 ────────────────────────────────

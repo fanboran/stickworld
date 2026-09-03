@@ -10,6 +10,13 @@ extends Node
 
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 
+# SQL 白名单：表名/列名为固定常量；运行时值（slot_id/map_id）一律经 ? 绑定
+# （query_with_bindings），禁止字符串拼接进 SQL。
+const _SQL_BLD_DELETE := "DELETE FROM buildings WHERE slot_id = ? AND map_id = ?"
+const _SQL_BLD_SELECT := "SELECT * FROM buildings WHERE slot_id = ? AND map_id = ?"
+const _SQL_PRJ_DELETE := "DELETE FROM construction_projects WHERE slot_id = ? AND map_id = ?"
+const _SQL_PRJ_SELECT := "SELECT * FROM construction_projects WHERE slot_id = ? AND map_id = ?"
+
 var _root: Node = null
 
 
@@ -23,7 +30,7 @@ func setup(root: Node) -> void:
 ## 保存建筑和建造项目到 DB
 func save_to_db(db, slot_id: int, map_id: String) -> void:
 	# 建筑
-	db.delete_rows("buildings", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+	db.query_with_bindings(_SQL_BLD_DELETE, [slot_id, map_id])
 	for b_id in _root._buildings.keys():
 		var b: Node = _root._buildings[b_id]
 		if not is_instance_valid(b) or not (b is Building):
@@ -40,7 +47,7 @@ func save_to_db(db, slot_id: int, map_id: String) -> void:
 			"region_id": str(typed.get_meta("region_id", "")),
 		})
 	# 建造项目（只存未完工的）
-	db.delete_rows("construction_projects", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+	db.query_with_bindings(_SQL_PRJ_DELETE, [slot_id, map_id])
 	for p_id in _root._projects.keys():
 		var p: ScriptConstructionProject = _root._projects[p_id]
 		if p.state == ScriptConstructionProject.State.OPERATIONAL:
@@ -59,8 +66,9 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 	# 清空当前运行时状态
 	_clear_all_buildings_and_projects()
 	# 恢复建筑（用 spawn_operational_building 重建，再修正状态）
-	var bld_rows: Array = db.select_rows("buildings",
-		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+	var bld_rows: Array = []
+	if db.query_with_bindings(_SQL_BLD_SELECT, [slot_id, map_id]):
+		bld_rows = db.query_result
 	for row in bld_rows:
 		var def_id: String = str(row["def_id"])
 		var cx: int = int(row["cell_x"])
@@ -82,8 +90,9 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 			if b != null:
 				_root._building_to_id[b] = str(row["building_id"])
 	# 恢复建造项目
-	var proj_rows: Array = db.select_rows("construction_projects",
-		"slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+	var proj_rows: Array = []
+	if db.query_with_bindings(_SQL_PRJ_SELECT, [slot_id, map_id]):
+		proj_rows = db.query_result
 	for row in proj_rows:
 		_restore_project_from_row(row)
 	# 更新 ID 计数器（建筑实例 id 为纯数字无前缀）

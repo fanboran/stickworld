@@ -10,6 +10,13 @@ extends Node
 const SLOT_COUNT := 5
 const SAVE_DIR := "user://saves"
 
+# SQL 白名单：表名无法经 ? 参数化，统一定义为常量；运行时值一律走 ? 绑定
+# （query_with_bindings），禁止字符串拼接进 SQL。
+const _T_SAVE_META := "save_meta"
+const _SQL_META_SELECT_ALL := "SELECT * FROM save_meta WHERE slot_id = ?"
+const _SQL_META_SELECT_CREATED := "SELECT created_at FROM save_meta WHERE slot_id = ?"
+const _SQL_META_DELETE := "DELETE FROM save_meta WHERE slot_id = ?"
+
 var _auto_save_timer: float = 0.0
 var _auto_save_slot: int = 0
 var _auto_save_enabled: bool = true
@@ -205,10 +212,10 @@ func save_game(slot_index: int) -> bool:
 	_current_slot = slot_index
 	_ensure_schema()
 
-	# 注：不用外层 BEGIN/COMMIT 包裹整段写库 —— godot-sqlite 的 delete_rows/insert_row/
-	# select_rows/update_rows 内部各自开启并提交事务（2026-08-15 实测确认），外层事务会与
-	# 其嵌套冲突（每次写库刷 2 条 ERROR 日志），且首个 helper 的内部 COMMIT 会提前提交外层
-	# 事务，最后的 COMMIT 必然失败。每条语句的原子性由 helper 自身保证。
+	# 注：不用外层 BEGIN/COMMIT 包裹整段写库 —— godot-sqlite 的每次写库调用
+	# （query_with_bindings / insert_row 等）独立执行并提交（autocommit，2026-08-15 实测确认），
+	# 外层事务会与其嵌套冲突（每次写库刷 2 条 ERROR 日志），且首个语句的隐式 COMMIT 会
+	# 提前提交外层事务，最后的 COMMIT 必然失败。每条语句的原子性由 autocommit 保证。
 
 	# 写元数据
 	var now := Time.get_date_string_from_system() + " " + Time.get_time_string_from_system()
@@ -286,7 +293,9 @@ func get_slot_info(slot_index: int) -> Dictionary:
 		db.path = db_path
 		if not db.open_db():
 			return info
-		var rows: Array = db.select_rows("save_meta", "slot_id = %d" % slot_index, ["*"])
+		var rows: Array = []
+		if db.query_with_bindings(_SQL_META_SELECT_ALL, [slot_index]):
+			rows = db.query_result
 		db.close_db()
 		if rows.is_empty():
 			return info
@@ -382,13 +391,15 @@ func _migrate_schema() -> void:
 
 ## 写入或更新 save_meta（保留首次创建时间，只更新 updated_at）
 func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version: int) -> void:
-	var rows: Array = _db.select_rows("save_meta", "slot_id = %d" % slot_id, ["created_at"])
+	var rows: Array = []
+	if _db.query_with_bindings(_SQL_META_SELECT_CREATED, [slot_id]):
+		rows = _db.query_result
 	var created_at: String = datetime
 	if not rows.is_empty():
 		created_at = str(rows[0].get("created_at", datetime))
 	# 先尝试删除旧记录（save_meta 主键是 slot_id）
-	_db.delete_rows("save_meta", "slot_id = %d" % slot_id)
-	_db.insert_row("save_meta", {
+	_db.query_with_bindings(_SQL_META_DELETE, [slot_id])
+	_db.insert_row(_T_SAVE_META, {
 		"slot_id": slot_id,
 		"save_name": "",
 		"created_at": created_at,

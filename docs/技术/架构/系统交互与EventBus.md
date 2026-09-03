@@ -44,7 +44,7 @@
 
 ## 二、EventBus 事件目录（现行）
 
-> 与 `core/autoload/event_bus.gd` 逐条对齐（2026-08 清理后）。共 30 个信号。
+> 与 `core/autoload/event_bus.gd` 逐条对齐。共 32 个信号。
 
 ### 2.1 生命周期事件
 
@@ -65,6 +65,7 @@
 | 建筑 | `building_started` / `building_completed` / `building_removed`（construction/api.gd） | building_id: String, region_id: String |
 | 建筑 | `building_damaged`（construction/api.gd） | building_id: String, damage_amount: float |
 | 建筑 | `building_upgraded`（construction/api.gd） | building_id: String, old_tier: int, new_tier: int |
+| 建筑 | `building_repaired`（construction/api.gd） | building_id: String, repair_amount: float |
 | 组织 | `org_created` / `org_restructured` / `org_disbanded`（organization/api.gd） | org_id: String |
 
 ### 2.3 战斗事件
@@ -73,6 +74,8 @@
 |------|------|--------|--------|----------|
 | `battle_started` | battle_id: String | 战斗系统 | UI、扩张系统 | 战斗开始 |
 | `battle_ended` | battle_id: String, victory: bool | 战斗系统 | UI、扩张系统 | 战斗结束 |
+| `team_ai_stance_changed` | battle_id: String, faction: int, from_stance: int, to_stance: int, reason: String | TeamAi | 调试 HUD、测试断言 | 阵营 AI 姿态切换（单向广播，暂无生产订户；0=GARRISON/1=DEFEND/2=ATTACK） |
+| `heal_cast` | battle_id: String, caster_id: int, target_id: int, anim_name: String | WeaponMount | battle_sim 采样 | 治疗施放（单向广播，可观测性通道；anim_name ∈ {heal_meric_1, heal_meric_2}） |
 
 ### 2.4 编队事件
 
@@ -123,5 +126,5 @@
 1. **不循环发射**：A 发射信号触发 B，B 不能在做完后发射原信号回去
 2. **参数不可变**：信号参数是快照副本
 3. **单向事件流**：信号从数据层 → UI 层
-4. **safe_emit**：发射前检查信号是否存在
+4. **类型化发射**：直接用类型化 `.emit()` 发射（信号名拼写错误在编译期暴露），不做运行时存在性检查
 5. **不预先占位**：未实现系统不提前声明信号；实现时按当时契约声明，并同步本文档与 `modules/README.md §9`

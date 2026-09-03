@@ -13,6 +13,7 @@ extends Node
 ## - 单向广播（生产 emit 无订户，2026-08 审计标注，UI/外部接入时连接）：
 ##   game_saved（SaveManager 广播）、balance_changed（热重载预留）、
 ##   battle_started/battle_ended（战斗生命周期）、selection_changed/squad_created/order_issued（编队 UI 数据通道）、
+##   team_ai_stance_changed/heal_cast（战斗可观测性：调试 HUD/测试断言接入时连接）、
 ##   chunk_loaded/chunk_unloaded（scene_loader 本地+EventBus 双发：生产消费方连本地信号，外部/测试连 EventBus）
 
 # 信号是公共 API，供其他模块 connect/emit。

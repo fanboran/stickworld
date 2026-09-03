@@ -41,8 +41,13 @@
 | `资源数据.xlsx` | 资源定义 | 食物、木材、石料、铁锭等 |
 | `建筑数据.xlsx` | 建筑定义 | 民居、农场、工坊、兵营等 |
 | `单位数据.xlsx` | 单位定义 | 兵种、武器、防具 |
-| `科技树.xlsx` | 科技树 | 科技层级、前置条件、解锁内容 |
+| `制造.xlsx` | 制造配方 | 可制造物品与材料消耗 |
+| `战斗战术.xlsx` | 战术档案 | 阵营 AI 姿态/战术参数 |
+| `扩张数据.xlsx` | 扩张 | 文明差异、势力、地区数据 |
+| `法律系统.xlsx` | 法律 | 可颁布法律条目 |
+| `法术科技.xlsx` / `管理科技.xlsx` | 科技两表 | 法术与管理类科技的层级、前置、解锁 |
 | `编制预设.xlsx` | 组织预设 | 军事编制、科学院架构 |
+| `运输数据.xlsx` | 物流 | 运输路线/运力参数 |
 
 ### 2.2 Sheet 格式规范
 
@@ -427,15 +432,10 @@ python tools/pipeline/export_excel.py
 ```
 stick-world/
 ├── config/
-│   ├── excel/                          ← Excel 源文件（策划改这里）
-│   │   ├── 平衡变量.xlsx
-│   │   ├── 资源数据.xlsx
-│   │   ├── 建筑数据.xlsx
-│   │   ├── 单位数据.xlsx
-│   │   ├── 科技树.xlsx
-│   │   ├── 编制预设.xlsx
-│   │   ├── generate_excel.py           ← 批量生成 Excel 模板
-│   │   └── generate_org_tech.py        ← 生成组织和科技树 Excel
+│   ├── excel/                          ← Excel 源文件（策划改这里，共 12 张表）
+│   │   ├── 平衡变量.xlsx / 资源数据.xlsx / 建筑数据.xlsx / 单位数据.xlsx
+│   │   ├── 制造.xlsx / 战斗战术.xlsx / 扩张数据.xlsx / 法律系统.xlsx
+│   │   ├── 法术科技.xlsx / 管理科技.xlsx / 编制预设.xlsx / 运输数据.xlsx
 │   ├── balance/
 │   │   ├── balance_resource.gd         ← .tres 资源基类
 │   │   └── variables.tres              ← 导出产物（游戏读这个）
@@ -445,11 +445,13 @@ stick-world/
 │   │   └── buildings.tres
 │   └── ...
 ├── tools/
-│   └── export_excel.py                 ← 导出脚本
+│   └── pipeline/
+│       └── export_excel.py             ← 导出脚本（xlsx → .tres）
 ├── core/
 │   └── autoload/
 │       └── balance_config.gd           ← 游戏内读取接口
 └── docs/
-    └── technical/
-        └── excel-pipeline.md           ← 本文档
+    └── 技术/
+        └── 教程/
+            └── Excel数据管线.md        ← 本文档
 ```

@@ -11,6 +11,18 @@ extends Node
 ## toast 反馈经 EventBus.ui_notification）。balance_changed 信号本身仍无生产订户，
 ## 实体侧消费（如单位实时刷新属性）待 P1 数据驱动深化时接线。
 
+# ─────────────────────────────── 生命周期 ────────────────────────────────
+
+## autoload 阶段即完成装载：任何在 GameRoot 装配（SystemSetup.setup）之前
+## 实例化的实体（如模块 _ready 里直接 new 的单位）都会查询平衡数据，
+## 不能等显式 reload() 才有数据，否则静默回退 @export 默认值。
+## 顺序耦合检查：reload() 仅依赖 EventBus（autoload 首位，_ready 先于本节点触发），
+## 不依赖 ConfigManager，无加载顺序风险；SystemSetup.setup() 里原有的显式
+## reload() 变为幂等重扫，保留无害。
+func _ready() -> void:
+	reload()
+
+
 # ─────────────────────────────── 数据 ───────────────────────────────────
 
 ## 所有平衡变量缓存。
@@ -30,6 +42,12 @@ var _type_paths: Array[String] = []
 ## 也支持 "units.stickmen"（返回行数组）或 "units.stickmen.stm_plain_001"（返回行字典）。
 ## 路径不存在时返回 null 并打印警告。
 func get_value(path: String) -> Variant:
+	# 数据为空：给精确警告（尚未装载/装载失败），而非误导性的"路径不存在"。
+	# 空数据下任何路径都不可能命中，直接短路返回。
+	if data.is_empty():
+		push_warning("[BalanceConfig] 平衡数据为空（尚未装载或 config/ 下无 .tres），查询 '%s' 返回 null" % path)
+		return null
+
 	# 直接命中（类型路径或行路径）
 	if data.has(path):
 		return data[path]
@@ -64,6 +82,9 @@ func get_value(path: String) -> Variant:
 ## 返回指定类型的所有行数据数组。
 ## 如 get_all_of_type("units.stickmen") 返回所有火柴人数据。
 func get_all_of_type(type_path: String) -> Array:
+	if data.is_empty():
+		push_warning("[BalanceConfig] 平衡数据为空（尚未装载或 config/ 下无 .tres），查询 '%s' 返回空数组" % type_path)
+		return []
 	if data.has(type_path):
 		return data[type_path]
 	push_warning("[BalanceConfig] 类型路径 '%s' 不存在" % type_path)

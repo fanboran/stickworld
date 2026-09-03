@@ -1157,6 +1157,16 @@ function draw(){
    ctx.fillStyle=c;ctx.beginPath();ctx.moveTo(x+w-9,y+13);ctx.lineTo(x+w-11.5,y+8.5);ctx.lineTo(x+w-6.5,y+9.5);ctx.closePath();ctx.fill();}
   ctx.globalAlpha=1;});
  ctx.textAlign="left";
+ // ✈ 塔台巡航指示条（屏幕层顶部中央）
+ if(towerMode){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const txt="✈ 塔台巡航中"+(sel&&byId[sel]?" · "+sel:"");
+  ctx.font="600 13px "+MONO;
+  const tw=ctx.measureText(txt).width;
+  ctx.fillStyle="#0c2a33";ctx.fillRect(VW/2-tw/2-14,BAR_H+8,tw+28,30);
+  ctx.strokeStyle="#22d3ee";ctx.lineWidth=1;ctx.strokeRect(VW/2-tw/2-14,BAR_H+8,tw+28,30);
+  ctx.fillStyle="#a5f3fc";ctx.fillText(txt,VW/2-tw/2,BAR_H+28);
+  ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
  // 框选矩形 / 连线预览（屏幕层）
  if(drag&&drag.box){ctx.setTransform(dpr,0,0,dpr,0,0);
   const x=Math.min(drag.sx,drag.cx),y=Math.min(drag.sy,drag.cy),
@@ -1220,7 +1230,8 @@ function drawMini(){mctx.setTransform(1,0,0,1,0,0);mctx.clearRect(0,0,180,120);
  mctx.strokeStyle="#58a6ff";mctx.lineWidth=1;
  mctx.strokeRect(ox+(wx-g.minX)*s,oy+(wy-g.minY)*s,VW/view.k*s,VH/view.k*s);
  mini._map={s,ox,oy,g};}
-function drawZoom(){const cfL=document.getElementById("cfL");if(!cfL)return;
+function drawZoom(){
+ if(!dockFolded&&dockTab==="gantt")drawGantt();  // 主图变化时同步运行图条const cfL=document.getElementById("cfL");if(!cfL)return;
  const vis=VN.filter(n=>visNode(n)).length;
  cfL.textContent="可见 "+vis+"/"+nodes.length+" · "+Math.round(view.k*100)+"%";
  document.getElementById("cfR").textContent="🚦 就绪 "+READY.length+" · 🛤 关键路径 "+Math.max(0,CRIT.length-1)+" 跳";

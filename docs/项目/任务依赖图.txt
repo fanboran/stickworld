@@ -1,0 +1,255 @@
+# ============================================================
+# 任务依赖图（整个项目从头到尾的全量任务 DAG —— 唯一真相源）
+# 覆盖：AI复刻执行计划 / 待办事项.md 全部条目 / 路线图阶段0~4（含宣发运营）/ 并行协调
+# 语法:
+#   线序: 泳道1, 泳道2, ...                     （从左到右）
+#   任务 <id> | 名称= | 线= | 状态= | 前置=a,b | [域=] | [树=] | [位置=x,y] | [豁免=1] | [注=]
+#   里程碑 <id> | ...                          （画◆；前置= 字段是依赖唯一真相源）
+# 状态: 完成/待验收/进行中/可开工/阻塞/冻结/放弃
+# 铁律:
+#   1. root 是唯一无前置节点（无法再前沿的任务源），一切依赖链最终到达它
+#   2. 阻塞/冻结 必须有前置（校验器 E 阻塞无因）——图必须能解释"为什么现在不能做"
+#   3. 可开工/进行中/待验收/完成 的前置必须全部完成（豁免=1 须写理由）
+#   4. 协调者只可派「可开工」；域= 供进行中冲突检测（合并冲突热点）
+#   5. 前置=工作内容依赖（技术上需要什么），不是执行时间顺序——同天提交的两个任务可能互不依赖
+#   6. 本图跟随最新设计实时变化：设计推翻某成果时，同步移除/改写对应完成节点
+#      （如河流追踪一版被推翻→从完成区移出，river_gen 阻塞重做）；git 顺序≠依赖
+#   校验: python tools/deptask/gen.py --check   生成: python tools/deptask/gen.py
+#   模块级（代码）依赖见 docs/技术/架构/模块依赖关系.md —— 与本图互补，勿混写
+# ============================================================
+线序: 复刻主线, UI线, 配置存档, 战略图, 工程债, 地图系统, 内容设计, 决策, 宣发运营, 门
+
+任务 root | 名称=项目起点（火柴人大战略+工厂自动化） | 线=门 | 状态=完成 | 注=唯一无前置节点：一切依赖链的源头
+
+里程碑 p0_prototype | 名称=P0 原型 0.1~0.8+新0.9 全部完成 | 线=门 | 状态=完成 | 前置=hist_p0_close,hist_l3_l2_l1
+里程碑 p0_accept | 名称=创始人人工验收原型循环（建造→编队→任命→下令→战斗→附身→跨图→战略图） | 线=门 | 状态=可开工 | 前置=p0_prototype | 注=等创始人亲自跑一遍确认"层级管理→好玩"假设
+里程碑 release_gate | 名称=发布收口（好玩确认+日期确定+内容冻结+发布准备） | 线=门 | 状态=阻塞 | 前置=fun_done,release_date,content_freeze,launch_prep
+里程碑 launch | 名称=正式发布 | 线=门 | 状态=阻塞 | 前置=release_gate,mkt_materials
+里程碑 live_ops | 名称=阶段4 持续运营 | 线=门 | 状态=阻塞 | 前置=launch
+
+任务 p1_arena_fixes | 名称=观察场反馈缺陷 16 项修复 | 线=复刻主线 | 状态=完成 | 前置=p0_prototype,hist_arena_obs | 域=modules/combat,modules/units | 注=复刻批次 P1；2026-08-31~09-01 六轮验收
+任务 p2_11a | 名称=Ai 基类补全簇（y 对齐 6 函数+统一 Face+IsUnderThreat 真值） | 线=复刻主线 | 状态=完成 | 前置=p1_arena_fixes | 注=批次 11a
+任务 p3_9q | 名称=小鬼脚对齐（foot_offset/Collider/命中框随 body_scale 缩放） | 线=复刻主线 | 状态=完成 | 前置=p2_11a | 注=批次 9q
+任务 p4_11b | 名称=Formation 列队形（row/col 槽位+落点稳定+追赶收盾疾跑+贪心换位） | 线=复刻主线 | 状态=完成 | 前置=p3_9q | 注=批次 11b；覆盖率 44%→51%
+任务 p5_numbers | 名称=数值校准（SWL wiki 真值 6 兵种 HP/伤害/冷却/价格+per-weapon 射速） | 线=复刻主线 | 状态=完成 | 前置=p4_11b | 域=config/units/stickmen.tres | 注=批次 2/11d/9d；2026-09-02 完成，手写 tres 未合并
+任务 p6_teamai | 名称=TeamAi 逐函数直译（21 函数+三态姿态机+号令映射器+手动号令保护期） | 线=复刻主线 | 状态=完成 | 前置=p5_numbers | 域=modules/combat | 注=批次 7c+11c；覆盖率 53%→62%
+任务 p7_meric | 名称=祭司 Meric（治疗 AI 选最低血友军+后排站位+Heal 动画接入） | 线=复刻主线 | 状态=进行中 | 前置=p6_teamai | 域=modules/units,modules/combat | 树=game-2 | 注=批次 7b
+任务 debt_9h | 名称=观察场卡死复验 | 线=复刻主线 | 状态=阻塞 | 前置=hist_arena_obs| 域=modules/combat | 注=缺陷 9h；观察场验收发现的缺陷——与祭司批次无内容依赖
+任务 debt_9j | 名称=脱战回血（MOBA 延迟血条） | 线=复刻主线 | 状态=阻塞 | 前置=hist_arena_obs| 域=modules/units,modules/ui_global | 注=缺陷 9j
+任务 debt_9k | 名称=群体避让+空挥保真 | 线=复刻主线 | 状态=阻塞 | 前置=hist_arena_obs| 域=modules/units | 注=缺陷 9k/9s
+任务 p8_giant | 名称=巨人兵种+抓掷技能（风险项） | 线=复刻主线 | 状态=阻塞 | 前置=p6_teamai| 域=modules/units,config/units/stickmen.tres | 注=批次 7a；还要编辑数值表；与祭司批次并行：兵种复刻批次互不依赖，单线程排期属执行约束非依赖
+任务 p9_inventory | 名称=背包与装备槽核心（InventoryComponent/装备槽位/物品 def 引用） | 线=复刻主线 | 状态=阻塞 | 前置=ui_lane_closed,hist_p08b| 域=modules/ui_global,modules/units | 注=批次 10 前半；原版物品栏形态参考
+任务 p9_shop_hud | 名称=战场商店+物品条 HUD（InGameShop/HudInventory 形态） | 线=复刻主线 | 状态=阻塞 | 前置=p9_inventory | 域=modules/ui_global,modules/combat | 注=批次 10 后半；后沿=经济循环收口（战场商店是经济×战斗交叉点）
+任务 fx_directional_blood | 名称=方向血溅特效（按命中方向喷溅） | 线=复刻主线 | 状态=阻塞 | 前置=hist_arena_obs| 域=modules/fx | 注=批次 12；Effects 对照；特效与巨人批次无内容依赖
+任务 fx_explosion_scorch | 名称=爆炸焦痕特效（兼召唤/爆炸地面标记） | 线=复刻主线 | 状态=阻塞 | 前置=hist_arena_obs| 域=modules/fx | 注=批次 12
+任务 fx_ground_slam | 名称=震地特效（GroundSlam 冲击波） | 线=复刻主线 | 状态=阻塞 | 前置=hist_arena_obs| 域=modules/fx | 注=批次 12
+任务 fx_rain_cloud | 名称=天气观感特效（Rain+Cloud 云雨） | 线=复刻主线 | 状态=阻塞 | 前置=hist_arena_obs| 域=modules/fx | 注=批次 12；与世界环境天气（weather_env）分工
+任务 spell_base_class | 名称=Spell 基类（冷却/耗金/施放动画/效果统一结构） | 线=复刻主线 | 状态=阻塞 | 前置=hist_p05,hist_infra_expand| 域=modules/combat | 注=批次 4 前半；原版 15 法术统一结构；法术与巨人批次无内容依赖
+任务 spell_arrow_heal | 名称=具体法术：ArrowVolley 箭雨+HealSpell 治疗（挂基类） | 线=复刻主线 | 状态=阻塞 | 前置=spell_base_class | 域=modules/combat | 注=批次 4 后半；其余 12 法术按需
+簇 cluster_fx | 名称=战斗观感特效包（Effects 对照） | 成员=fx_directional_blood,fx_explosion_scorch,fx_ground_slam,fx_rain_cloud | 注=批次 12 拆分；四特效相互独立可并行
+任务 p12_skins | 名称=阵营皮肤 | 线=复刻主线 | 状态=阻塞 | 前置=p7_meric,p8_giant,p9_inventory| 注=批次 3；皮肤覆盖全部复刻兵种；特效/法术独立管线
+任务 p13_sfx | 名称=音效接线（SFX_EVENTS 表→音频资产落地） | 线=复刻主线 | 状态=阻塞 | 前置=p6_teamai,asset_p6_audio | 域=assets/audio | 注=批次 1；资产到位后接线可验收
+任务 p11e_cluster | 名称=玩法依赖 AI 簇（Zombie Pounce 召唤/Statue/Barricade/CastleArcher/MinerAi 路障互殴） | 线=复刻主线 | 状态=冻结 | 前置=dec_unit_roster | 域=modules/units,modules/combat | 注=批次 11e；后沿=模拟与个体收口
+任务 mode_variants | 名称=模式变体（无尽尸潮/超级乱斗观察场变体） | 线=复刻主线 | 状态=冻结 | 前置=main_done | 注=复刻单位齐后才有变体素材
+任务 arena_duel | 名称=观察场扩展：单挑观察场（1v1 各武器对位看站姿/挥砍） | 线=复刻主线 | 状态=阻塞 | 前置=p7_meric
+任务 arena_formation | 名称=观察场扩展：编队配置化（UI 调兵替代硬编码 COMPOSITION） | 线=复刻主线 | 状态=阻塞 | 前置=p7_meric | 域=modules/ui_global
+任务 arena_spell | 名称=观察场扩展：箭雨/法术演示场 | 线=复刻主线 | 状态=阻塞 | 前置=spell_arrow_heal
+里程碑 main_done | 名称=主线 SWL 复刻批次收尾合并 | 线=门 | 状态=阻塞 | 前置=p12_skins,p13_sfx,debt_9h,debt_9j,debt_9k
+任务 eventbus_hygiene | 名称=EventBus 信号治理（清理零订户地图信号+确认 api 状态信号消费方/balance_changed 零发零订） | 线=工程债 | 状态=阻塞 | 前置=main_done | 域=core/autoload/event_bus.gd | 注=后沿：科技/成就等新模块挂信号前先保证总线卫生；event_bus 为主线 WIP
+
+任务 ui_modal_stack | 名称=UI 模态栈 UIModalStack（层键字典+逐层pop+输入屏蔽） | 线=UI线 | 状态=完成 | 前置=hist_ui_system | 域=modules/ui_global | 注=已落地；待办里该条目是陈旧的，收线时勘误
+任务 ui_settings | 名称=设置项真实生效（窗口模式/音量/FPS） | 线=UI线 | 状态=完成 | 前置=hist_ui_system | 域=modules/ui_global | 树=game-2-aux | 注=已提交 574c5a0，待协调者验收
+任务 ui_feed | 名称=通知 feed 堆叠（多条可见/过期/上限） | 线=UI线 | 状态=完成 | 前置=ui_settings | 域=modules/ui_global | 树=game-2-aux | 注=已提交 6d2ca59：左下堆叠 feed 多通知并存+自动过期+超限移除；测试 2/2 绿
+任务 ui_quickbar | 名称=游戏内快捷栏（接模式/指令，替代 hud_template 演示） | 线=UI线 | 状态=阻塞 | 前置=ui_feed | 域=modules/ui_global
+任务 ui_panel_village | 名称=Village 村落面板迁 4 模板+StickTheme | 线=UI线 | 状态=阻塞 | 前置=ui_quickbar | 域=modules/ui_global | 注=业务面板迁移 1/4
+任务 ui_panel_battle | 名称=Battle 战斗面板迁 4 模板+StickTheme | 线=UI线 | 状态=阻塞 | 前置=ui_quickbar | 域=modules/ui_global | 注=业务面板迁移 2/4
+任务 ui_panel_possess | 名称=Possess 附身面板迁 4 模板+StickTheme | 线=UI线 | 状态=阻塞 | 前置=ui_quickbar | 域=modules/ui_global | 注=业务面板迁移 3/4
+任务 ui_panel_buildmenu | 名称=BuildMenu 建造菜单迁 4 模板+StickTheme | 线=UI线 | 状态=阻塞 | 前置=ui_quickbar | 域=modules/ui_global | 注=业务面板迁移 4/4
+任务 ui_ctrl_to_tscn | 名称=代码建 UI 控件迁回 .tscn（PossessPanel/SavePanel/SettingsMenuPanel/ResourceBar/ZoomBar/DebugOverlay 共 6 处） | 线=UI线 | 状态=阻塞 | 前置=ui_panel_village,ui_panel_battle,naming_fix | 域=modules/ui_global | 注=场景是布局唯一真相源；6 处同类迁移一批做完
+任务 ui_minimap_style | 名称=小地图/缩放条样式统一走 StickTheme | 线=UI线 | 状态=阻塞 | 前置=ui_panel_village,ui_panel_battle | 域=modules/ui_global
+任务 ui_save_panel | 名称=手动存档/读档界面（槽位管理+读档入口） | 线=UI线 | 状态=阻塞 | 前置=ui_panel_village,ui_panel_battle | 域=modules/ui_global | 注=SaveManager/quick_save 框架已就绪
+任务 ui_possess_full | 名称=附身系统完整版（多层级附身/AI 协奏/指挥链延迟=0/自主决策权限 UI 化） | 线=UI线 | 状态=阻塞 | 前置=hist_p07,hist_p06b,autonomy_tactics | 域=modules/player_control,modules/ui_global | 注=依赖三层命令系统中层机制（autonomy_tactics）
+
+任务 balance_fix | 名称=BalanceConfig 装载时机修复（autoload 自装载+精确警告） | 线=配置存档 | 状态=完成 | 前置=hist_excel_pipeline,hist_save_sqlite | 域=core/autoload/balance_config.gd | 树=.temp/datapipe | 注=已提交 312563f：单测 6/6 绿；待办里"路径解析坏"是误诊，收线时勘误
+任务 save_hardening | 名称=存档加固（事务返回值检查+SQL 参数化+schema 版本化迁移） | 线=配置存档 | 状态=可开工 | 前置=hist_save_sqlite | 域=core/autoload/save_manager.gd | 注=insert 返回值不检查+6 处 SQL 拼接+save_meta.version 恒写 2
+任务 worldstate_split | 名称=world_state.gd 483 行拆出序列化器 | 线=配置存档 | 状态=阻塞 | 前置=save_hardening | 域=core/autoload/world_state.gd | 注=序列化职责占 65%
+任务 worldstate_resource_ledger | 名称=ResourceState 扩展为库存台账（ResourceLedgerState）后迁移集中制 | 线=配置存档 | 状态=阻塞 | 前置=worldstate_split | 域=core/autoload/world_state.gd,modules/resources
+任务 save_readback | 名称=读档完整性（建筑/工地/派工/资源/编队全量恢复） | 线=配置存档 | 状态=阻塞 | 前置=worldstate_split | 域=core/autoload/save_manager.gd
+
+任务 strat_ui | 名称=战略图 UI 补充（聚落 tooltip/粒度指示/模式切换+world_map_panel 归档收尾） | 线=战略图 | 状态=完成 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 树=.temp/worldgen
+任务 mapdef_class | 名称=MapDefinition 契约类立项实现 | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 注=前置缺口：类全库不存在；优先级低于进行线，排期由协调者裁量
+任务 prop_library | 名称=城市填充物零件库（民居/装饰/室内道具） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/building_gen | 注=现状仅兵营/仓库/茅草屋/城墙/城门
+任务 settlement_maps | 名称=聚落可玩地图（SettlementGenerator：seed+biome+级别+产业→MapDefinition） | 线=战略图 | 状态=冻结 | 前置=mapdef_class,prop_library,dec_village_def | 注=按村落定义（dec_village_def 产出）生成；零件齐前做了也是脚手架
+任务 enter_settlement_wire | 名称=双击城市进入接线（初始建筑 spawn 改造+重烘焙 bin） | 线=战略图 | 状态=阻塞 | 前置=settlement_maps | 域=modules/world_map,modules/world | 注=实测：初始建筑仅游戏首载 spawn（game_root._on_map_loaded）
+任务 city_direction_roads | 名称=城镇朝向决定道路方向（左/右边界出口） | 线=战略图 | 状态=阻塞 | 前置=enter_settlement_wire | 注=依赖战略图+聚落可进入
+
+任务 path_finding | 名称=寻路避障（直线移动硬弹回卡死→局部避障或 A*） | 线=工程债 | 状态=阻塞 | 前置=main_done | 域=modules/units | 注=units 域被复刻主线占用
+任务 entity_split | 名称=stickman_entity.gd 1018 行按职责拆分 | 线=工程债 | 状态=阻塞 | 前置=main_done | 域=modules/units
+任务 entity_lying_90deg | 名称=独立场景实体全身渲染横躺 90°（Bone2D rest 与运行时分歧） | 线=工程债 | 状态=阻塞 | 前置=main_done | 域=modules/units
+任务 hp_default_zero | 名称=HealthComponent.hp 默认 0 语义复核（未初始化=尸体） | 线=工程债 | 状态=阻塞 | 前置=main_done | 域=modules/units
+任务 ai_controller_datadriven | 名称=AIController 决策优先级数据驱动化（.tres 配置） | 线=工程债 | 状态=阻塞 | 前置=main_done | 域=modules/units
+任务 combat_units_decouple | 名称=combat⇄units 双向实体级耦合解耦（FormationSystem 走契约） | 线=工程债 | 状态=阻塞 | 前置=main_done | 域=modules/combat,modules/units
+任务 battle_convergence | 名称=战斗收敛判定（溃散收束/尸体处理/溃兵回场+battle_director._battles 积累引用清理） | 线=工程债 | 状态=阻塞 | 前置=main_done | 域=modules/combat | 注=依赖战斗与碰撞系统稳定；director 卫生顺手修
+任务 setup_root_refactor | 名称=装配根越界收敛（system_setup 27 个 preload→各模块自建出入口） | 线=工程债 | 状态=阻塞 | 前置=combat_units_decouple| 域=modules/world | 注=装配收敛依赖模块解耦先行（world⇄combat 有意环等）
+任务 worldapi_path_constants | 名称=world/api.gd 22 个 PATH 常量收敛为查询方法 | 线=工程债 | 状态=阻塞 | 前置=hist_p02 | 域=modules/world | 注=消费方 DebugOverlay 已存在（阶段 0.2），收敛须同步改其调用
+任务 units_pc_reverse_edge | 名称=units→player_control api 反向边评估（改注入） | 线=工程债 | 状态=阻塞 | 前置=input_refactor | 域=modules/units,modules/player_control | 注=待输入系统重构时一并评估；后沿：评估结论消费方=注入改造决策（input_refactor 完成后评估）
+任务 conn_disconnect_guard | 名称=全工程 connect 无 disconnect 防护统一治理 | 线=工程债 | 状态=阻塞 | 前置=merge_main_1 | 域=core,modules | 注=全工程治理须避开并行任务窗口，本轮收线后进行；后沿：后沿=后续全部开发的信号安全（软后沿：防并行 AI 重复连接）
+任务 behavior_tree_eval | 名称=可编辑行为树评估（LimboAI vs 自研 HBT，BehaviorBase 适配 BTNode） | 线=工程债 | 状态=阻塞 | 前置=hist_p03 | 注=评估对象=行为 AI 现状（AIController 状态机）；后沿：后沿=行为树演进选型决策（个体系统迭代的技术路线）
+任务 construction_split | 名称=construction_manager 拆上帝对象+32/390/96 魔法数收编 | 线=工程债 | 状态=可开工 | 前置=hist_p04 | 域=modules/construction
+任务 work_crew_taskboard | 名称=WorkCrewAssigner 扩展任务板（搬运/建造分发，决策执行解耦） | 线=工程债 | 状态=阻塞 | 前置=construction_split | 域=modules/construction,modules/units | 注=参考监狱建筑师/环世界 Job 系统
+任务 texture_gen_regression | 名称=texture_gen 渲染回归测试+残留 .import 历史路径清理（当前零覆盖） | 线=工程债 | 状态=可开工 | 前置=hist_render_bake | 域=tools | 注=后沿：烘焙管线防回归；顺手清理 reference 下指向 building_gen/materials 的历史路径
+任务 naming_fix | 名称=命名违规修复（debug_GUI 目录/UIKit.gd 文件名 snake_case） | 线=工程债 | 状态=阻塞 | 前置=ui_lane_closed | 域=modules/debug_GUI,modules/ui_global | 注=UIKit.gd 在 UI 线域——收线后才能动
+任务 ci_enable | 名称=CI 启用（ci.yml.disabled 模板激活）+AGENTS/trae 双规则文件收敛 | 线=工程债 | 状态=阻塞 | 前置=test_stability_2 | 域=.github,docs | 注=后沿：并行开发的回归防护；测试链二期稳定后启用
+任务 excel_fix | 名称=export_excel.py 映射表修复（中文孤儿目录+formations 命名漂移） | 线=工程债 | 状态=冻结 | 前置=excel_unfreeze | 域=tools | 注=冻结令：tres 手调校准未合并前禁碰；后沿=后续数据表扩展（经济/科技表）导出不再漂移
+任务 asset_p1_particles | 名称=手绘粒子贴图替换运行时软圆点+逐效果调参 | 线=工程债 | 状态=阻塞 | 前置=hist_resource_pricing | 域=modules/fx,assets | 注=素材清单 P1；粒子池（FxPool/FxLibrary）已就绪才知道要什么贴图；外部依赖=美术资产
+任务 asset_p2_light | 名称=逐光源布点（火把/窗光挂 PointLight2D，CampLight 退化为调试） | 线=工程债 | 状态=阻塞 | 前置=hist_resource_pricing | 域=modules/environment | 注=素材清单 P2；在时间光照/夜间压暗（已落地）之上布点；外部依赖=美术资产
+任务 asset_p3_thatch | 名称=屋顶材质美术调参或手绘贴图混合程序化草束 | 线=工程债 | 状态=阻塞 | 前置=hist_p04 | 域=modules/building_gen | 注=素材清单 P3；材质系统（thatch.gdshader）已存在；外部依赖=美术资产
+任务 asset_p4_banner | 名称=军旗手绘贴图+摆动动画+纹章盾徽替换几何军旗 | 线=工程债 | 状态=阻塞 | 前置=hist_resource_pricing | 域=modules/building_gen | 注=素材清单 P4；barracks 差异化挂件（第四批整改）之上替换；外部依赖=美术资产
+任务 asset_p5_crate | 名称=木板纹货箱+麻袋手绘替换 warehouse 几何货堆（货物随库存变化） | 线=工程债 | 状态=阻塞 | 前置=hist_resource_pricing | 域=modules/building_gen | 注=素材清单 P5；warehouse 挂件（第四批整改）之上替换；外部依赖=美术资产
+任务 asset_p6_audio | 名称=录制/采购 ogg 音效入 assets/audio/sfx（SFX_EVENTS 表即生效） | 线=工程债 | 状态=阻塞 | 前置=audio_music_plan | 域=assets | 注=素材清单 P6；按音效方案定稿采购
+任务 asset_p7_demo | 名称=水晶簇/岩壁带/墙纹自制手绘替换+发布导出排除 demo 目录 | 线=工程债 | 状态=阻塞 | 前置=hist_arena_obs | 域=modules/fx,assets | 注=素材清单 P7；fx 考古 B8~B14 管线之上替换；外部依赖=美术资产
+
+任务 dec_map_refactor | 名称=决策：地图系统架构重构方案范围确认（9 项创始人诉求打包） | 线=决策 | 状态=阻塞 | 前置=hist_p0_close | 注=对照 P0 原型现状拍板 9 项诉求的范围与顺序
+任务 dec_map_editor | 名称=决策：地图编辑器方案（改 .tscn/独立编辑器/Godot 插件三选一） | 线=决策 | 状态=阻塞 | 前置=settlement_maps | 注=真实触发=聚落地图生成落地后批量做图需求出现；后沿：产出=选型决策，消费方=地图编辑器立项（未建，决策后立）
+任务 dec_data_storage | 名称=决策：建筑存档 JSON vs Resource vs 混合 | 线=决策 | 状态=阻塞 | 前置=hist_save_sqlite | 注=对照 SQLite 存档现状（buildings 表/WorldState 直写）做决策；后沿：产出=存储决策，消费方=数据驱动设计与存档扩展
+任务 dec_unit_roster | 名称=决策：缺失兵种实体（CastleArchers/Statue 战争目标/King/GiantBoss/ConversionChannel） | 线=决策 | 状态=阻塞 | 前置=main_done | 注=需创始人拍板，依赖大世界玩法定位；Statue 可抽象为战争目标建筑
+任务 dec_achievements | 名称=决策：成就图章完整列表 | 线=决策 | 状态=阻塞 | 前置=hist_p0_close | 注=原型玩法定型后才知道哪些成就可做
+
+任务 map_refactor_design | 名称=基于创始人诉求重设计地图系统架构方案 | 线=地图系统 | 状态=阻塞 | 前置=dec_map_refactor,worldapi_path_constants | 注=打包：城镇扩张/城墙 Building/城外环境/出城/战场类型/持续战/工程战
+任务 battle_encounter | 名称=遭遇战类型（行军途中遇敌开战，战场两端按 dec_battle_endspawn 模式部署） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design,dec_battle_endspawn | 域=modules/combat,modules/world | 注=战场类型扩展之一
+任务 battle_siege_attack | 名称=攻城战类型（破城门/拆城墙入城） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design | 域=modules/combat | 注=战场类型扩展之二
+任务 battle_siege_defense | 名称=守城战类型（依托城墙阵地防守） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design | 域=modules/combat | 注=战场类型扩展之三
+任务 town_expansion | 名称=城镇动态扩张（map_left/map_right 可变） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design | 域=modules/world
+任务 wall_as_building | 名称=城墙改为 Building 类型（可建造/破坏/多层，旧墙保留+新墙新建） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design | 域=modules/world,modules/construction
+任务 outside_environment | 名称=城外环境（城墙外 100 格自然地带，城内外贴图差异化） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design | 域=modules/world
+任务 exit_mechanism | 名称=出城机制重构（边界 20 格弹大世界按钮/顶边界走触发，弃 ChunkTrigger） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design | 域=modules/world,modules/player_control
+任务 battle_spawn_dynamic | 名称=战场 spawn 动态化（随行军方向决定位置，不固定左边） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design | 域=modules/combat
+任务 battle_persistence | 名称=战场持续性（玩家撤退回城后战斗不停止，AI 自动指挥） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design | 域=modules/combat
+任务 siege_engineering | 名称=工程战/攻城战（我方阵地=城墙，需攻破城门入城） | 线=地图系统 | 状态=阻塞 | 前置=map_refactor_design,battle_siege_defense | 域=modules/combat | 注=依赖守城战机制
+任务 battlefield_width | 名称=战场垂直跨度大幅加宽（米拉奇战纪式，方便排兵布阵） | 线=地图系统 | 状态=阻塞 | 前置=hist_p01 | 域=modules/world | 注=依赖战场地图绘制基础（已存在），做完即可——与工人循环/验收无内容依赖
+任务 road_encounter | 名称=道路遭遇战（行军遇敌触发战斗，低自由度全面战争式行军） | 线=地图系统 | 状态=阻塞 | 前置=enter_settlement_wire,battle_encounter | 域=modules/world,modules/combat | 注=依赖战略图+行军系统+遭遇战类型
+任务 town_ground_textures | 名称=城镇地面贴图差异化（矿业/农业/军事） | 线=地图系统 | 状态=可开工 | 前置=hist_p02 | 域=modules/world,assets
+
+任务 tech_rebuild | 名称=科技模块重建（征服获得制：战斗胜利解锁+事件获取，无研究状态机） | 线=内容设计 | 状态=阻塞 | 前置=content_techtree,hist_p05,docs_governance,eventbus_hygiene,setup_root_refactor | 域=modules/technology | 注=征服给科技的来源=战斗胜负判定（已有）；实现前文档校准+信号总线卫生
+任务 content_techtree | 名称=确定完整科技树结构 | 线=内容设计 | 状态=阻塞 | 前置=hist_gdd,hist_p05 | 注=细化设计依赖 GDD 总纲；征服获得制依赖战斗胜负判定（04-科技系统.md）
+任务 content_lawtree | 名称=确定法律分支树 | 线=内容设计 | 状态=阻塞 | 前置=hist_ui_system,org_driven_behavior,region_entity,ui_panel_buildmenu| 注=GDD 之下的细化设计；需创始人参与
+任务 content_civ_diff | 名称=各文明初始条件与差异化 | 线=内容设计 | 状态=阻塞 | 前置=hist_l3_l2_l1,region_entity| 注=GDD 之下的细化设计；需创始人参与
+任务 content_cube_story | 名称=上古魔方获取剧情 | 线=内容设计 | 状态=阻塞 | 前置=content_civ_diff,p0_prototype| 注=GDD 世界观之上的剧情细化；需创始人参与
+任务 content_hero_power | 名称=主角力量来源设定 | 线=内容设计 | 状态=阻塞 | 前置=content_civ_diff,p0_prototype| 注=GDD 世界观之上的剧情细化；需创始人参与；后沿：产出等剧情系统立项消费（设计终稿）
+任务 content_helpers | 名称=两个帮手设定 | 线=内容设计 | 状态=阻塞 | 前置=content_civ_diff,p0_prototype| 注=GDD 世界观之上的剧情细化；需创始人参与；后沿：产出等剧情系统立项消费（设计终稿）
+任务 autonomy_tactics | 名称=编制默认战术与自主决策权限机制（三层命令系统中层：autonomy_level 控制编制默认战术覆盖单位本能） | 线=内容设计 | 状态=阻塞 | 前置=hist_p06b,org_driven_behavior | 域=modules/combat,modules/organization | 注=GDD §6.1 三层命令系统：玩家指令(高)→编制默认战术(中,本条)→单位本能(低)
+任务 idle_behavior | 名称=待机行为：火柴人无事可做时原地播放待机动画（behavior_wander 随机游走改为待机） | 线=内容设计 | 状态=阻塞 | 前置=hist_p03 | 域=modules/units | 注=GDD §6.1 创始人确认项；后沿=sim_units_done（个体行为成熟）
+任务 law_module | 名称=法律系统实现（颁布/可量化效果/不可量化叙事后果/废除代价/道德分支，冰汽时代式） | 线=内容设计 | 状态=阻塞 | 前置=content_lawtree,region_entity,org_driven_behavior | 域=modules/law | 注=GDD §七；改造人伦理分支作为可选法律分支（§7.2）
+任务 time_control_rules | 名称=时间控制规则（自动暂停：战斗开始/重大事件/法律颁布；自动减慢：切微观操作） | 线=内容设计 | 状态=阻塞 | 前置=hist_core_skeleton | 域=core/autoload | 注=GDD §八：多级流速+暂停/1x/2x/4x 已有（TimeManager），本条是规则层
+任务 forge_process_anim | 名称=装备打造过程可视化（铁匠铺'看到打造过程'的感觉） | 线=内容设计 | 状态=阻塞 | 前置=equipment_system | 域=modules/building_gen,modules/units | 注=GDD §九美术方向；后沿：产出服务装备系统表现层（玩家体验）
+任务 asphalt_resource | 名称=黑色沥青战略资源机制（矿脉分布生成+采集+火柴人构成设定落地） | 线=内容设计 | 状态=阻塞 | 前置=hist_l3_l2_l1,hist_gdd | 域=tools,modules/resources | 注=GDD §五：火柴人由黑色沥青构成——稀有战略资源；矿脉分布属世界观待补充
+任务 variant_units | 名称=畸形变体单位（半人马/长臂/翼人等次级单位，巨人另列 p8_giant） | 线=复刻主线 | 状态=冻结 | 前置=dec_unit_roster,p8_giant | 域=modules/units | 注=GDD §五 次级单位；范围随 dec_unit_roster 拍板
+任务 individual_attrs | 名称=火柴人个体属性标签系统（力量/智力/敏捷/工艺/指挥→行为树与工作适配） | 线=内容设计 | 状态=阻塞 | 前置=hist_p03 | 域=modules/units | 注=属性挂实体、影响行为树——依赖行为 AI（已有）；参考世界盒子，先基础后迭代
+任务 equipment_system | 名称=装备系统（个体装备+编制装备配置：武器/护甲/工具影响属性和行为） | 线=内容设计 | 状态=阻塞 | 前置=individual_attrs,p9_inventory,main_done | 域=modules/units | 注=GDD §3.2 编制管理含层级装备配置（FormationPanel 装备预设）+个体装备；依赖个体属性+物品栏+复刻收尾
+任务 dec_village_def | 名称=设计：各村落 VillageDefinition.tres 内容 | 线=内容设计 | 状态=阻塞 | 前置=hist_gdd,hist_l3_l2_l1| 注=GDD 聚落章节细化；村落地图已存在可对照
+任务 dec_battle_endspawn | 名称=设计：战场地图两端建筑模式（预设阵地 vs 现场部署） | 线=内容设计 | 状态=阻塞 | 前置=hist_p08a,hist_p08b| 注=GDD 战斗章节细化；战斗系统已存在可对照
+任务 dec_palace_interior | 名称=设计：大建筑（宫殿）内部场景 | 线=内容设计 | 状态=阻塞 | 前置=building_b3_b4| 注=GDD 建筑章节之上的细化设计
+任务 dec_road_events | 名称=设计：道路上随机事件机制 | 线=内容设计 | 状态=阻塞 | 前置=hist_gdd,hist_p08a| 注=GDD 核心循环之上的细化设计；后沿：产出等道路事件实现立项消费（设计终稿）
+任务 dec_unit_weapon_attrs | 名称=设计：兵种类型与武器属性（影响 Hitbox/伤害计算） | 线=内容设计 | 状态=阻塞 | 前置=main_done | 注=后沿：产出等自定义兵种设计消费（对照复刻数值）
+任务 dec_process_luxury | 名称=设计：加工品/奢侈品具体资源列表（GDD §2.2 待补充） | 线=内容设计 | 状态=阻塞 | 前置=p9_inventory,resource_production| 注=GDD 经济章节之上的细化设计；后沿：产出等物品生态/合成系统立项消费
+
+任务 balance_tuning | 名称=平衡性调优 | 线=宣发运营 | 状态=阻塞 | 前置=main_done | 注=复刻批次收尾后数值/行为定型，平衡才有对象；battle_sim 仿真器已就绪
+任务 polish_ux | 名称=UI/UX 打磨（含 PossessPanel 改信号驱动、hover_indicator 移出 _process） | 线=宣发运营 | 状态=阻塞 | 前置=hist_ui_system,ui_panel_village,ui_panel_battle,ui_panel_possess,ui_panel_buildmenu | 域=modules/ui_global | 注=性能优化点（每帧字符串拼接/每帧全量遍历）随打磨一并做
+任务 audio_music_plan | 名称=音效/音乐方案确定 | 线=宣发运营 | 状态=阻塞 | 前置=hist_coverage_audit | 注=SWL 对账后知道原版音效全貌+游戏事件清单（SFX_EVENTS）
+任务 localization | 名称=本地化 | 线=宣发运营 | 状态=阻塞 | 前置=main_done | 注=外部依赖=文本量收口（复刻+内容任务群完成）
+任务 mkt_pricing | 名称=定价策略确定 | 线=宣发运营 | 状态=阻塞 | 前置=hist_gdd,p0_accept| 注=对照 OPC 商业分析（立项首批）+内容规模决策
+任务 mkt_accounts | 名称=平台/开发者账号准备（Steam 等，宣发前唯一可先行项） | 线=宣发运营 | 状态=阻塞 | 前置=root | 注=创始人原话：宣发材料收集前，此前最多准备好账号啥的；后沿：产出=账号可用（宣发前置条件）
+任务 mkt_promo_plan | 名称=宣发计划 | 线=宣发运营 | 状态=阻塞 | 前置=demo_release,hist_gdd| 注=对照商业分析定卖点；宣发领先发布数月启动
+任务 mkt_store_page | 名称=商店页面 | 线=宣发运营 | 状态=阻塞 | 前置=mkt_promo_plan
+任务 mkt_materials | 名称=营销物料 | 线=宣发运营 | 状态=阻塞 | 前置=asset_p1_particles,asset_p4_banner,mkt_promo_plan
+任务 steam_integration | 名称=Steam 集成（成就/云存档） | 线=宣发运营 | 状态=阻塞 | 前置=dec_achievements | 注=成就列表定稿+存档系统（已有）
+任务 dlc_new_civs | 名称=DLC：新文明/新地图 | 线=宣发运营 | 状态=阻塞 | 前置=live_ops | 注=后沿：产出=运营期内容（终局交付）
+任务 workshop | 名称=创意工坊 | 线=宣发运营 | 状态=阻塞 | 前置=live_ops | 注=后沿：产出=运营期 UGC（终局交付）
+任务 community | 名称=社区活动 | 线=宣发运营 | 状态=阻塞 | 前置=launch | 注=后沿：产出=玩家社区（终局交付）
+任务 entity_merch | 名称=实体周边可能性调研 | 线=宣发运营 | 状态=阻塞 | 前置=launch | 注=后沿：产出=周边调研结论（终局交付）
+
+里程碑 ui_lane_closed | 名称=UI 线收线合并 | 线=门 | 状态=阻塞 | 前置=ui_settings,ui_feed
+里程碑 merge_main_1 | 名称=本轮并行收线合并回 main | 线=门 | 状态=阻塞 | 前置=ui_feed,balance_fix,strat_ui | 注=协调者统一合并+待办两条误诊勘误
+里程碑 map_refactor_done | 名称=地图重构收口（扩张/城墙/城外/出城/城镇朝向/地面贴图/建筑深化） | 线=门 | 状态=阻塞 | 前置=map_refactor_design,town_expansion,wall_as_building,outside_environment,exit_mechanism,city_direction_roads,town_ground_textures,building_b3_b4
+里程碑 battle_modes_done | 名称=战场类型收口（遭遇/攻城/守城/spawn 动态/持续战/工程战/跨度/道路遭遇） | 线=门 | 状态=阻塞 | 前置=battle_encounter,battle_siege_attack,battle_siege_defense,battle_spawn_dynamic,battle_persistence,siege_engineering,battlefield_width,road_encounter
+里程碑 econ_loop_done | 名称=经济循环收口（资源产出→队列→建造过程化→物流→市场→持久化） | 线=门 | 状态=阻塞 | 前置=resource_production,queue_system,construction_process,logistics_module,market_finance,worldstate_resource_ledger,resources_persistence,p9_shop_hud
+里程碑 gdd_systems_done | 名称=GDD 系统补全收口（科技/扩张/外交/成就/法律/三层命令/组织驱动/室内） | 线=门 | 状态=阻塞 | 前置=tech_rebuild,expansion_module,diplomacy,achievement_module,law_module,autonomy_tactics,org_driven_behavior,interior_system
+里程碑 sim_units_done | 名称=模拟与个体收口（个体属性/装备/寻路/实体拆分/AI 数据驱动/战斗收敛） | 线=门 | 状态=阻塞 | 前置=individual_attrs,equipment_system,path_finding,entity_split,ai_controller_datadriven,battle_convergence,p11e_cluster,idle_behavior,time_control_rules
+里程碑 ui_mature_done | 名称=UI 成熟收口（tscn 迁移/小地图样式/存档界面/附身完整版/读档完整性/战术面板扩展/工作区预设/缩放密度适配） | 线=门 | 状态=阻塞 | 前置=ui_ctrl_to_tscn,ui_minimap_style,ui_save_panel,ui_possess_full,save_readback,tactical_panel_ext,ui_workspace_presets,zoom_info_density
+里程碑 content_freeze | 名称=内容冻结（游戏本体内容齐=对照 GDD 预想状态） | 线=门 | 状态=阻塞 | 前置=main_done,map_refactor_done,battle_modes_done,econ_loop_done,gdd_systems_done,sim_units_done,ui_mature_done,god_view,weather_env,town_battle_inplace,asphalt_resource,variant_units,fast_travel| 注=对照 GDD 预想状态逐段核对（2026-09-03 GDD 逐段排查）
+任务 fun_done | 名称=好玩性验证（试玩测试+反馈迭代，确认核心循环好玩） | 线=门 | 状态=阻塞 | 前置=p0_accept | 注=项目核心风险=「层级管理→好玩」假设——发布前必须验证成立
+任务 release_date | 名称=发布日期确定 | 线=门 | 状态=阻塞 | 前置=content_freeze,fun_done | 注=内容齐+好玩确认后才定档
+里程碑 launch_prep | 名称=发布准备收口（打磨群：平衡/UX/本地化/Steam/商店页/定价） | 线=门 | 状态=阻塞 | 前置=balance_tuning,polish_ux,localization,steam_integration,mkt_store_page,mkt_pricing
+里程碑 demo_content | 名称=Demo 内容收口（环境/模式/演练场/实体表现） | 线=门 | 状态=阻塞 | 前置=weather_env,river_gen,mode_variants,arena_duel,arena_formation,arena_spell,asset_p1_particles,entity_lying_90deg
+里程碑 demo_release | 名称=第一个可玩 Demo 发布 | 线=门 | 状态=阻塞 | 前置=demo_content,p0_accept,hp_default_zero,asset_p2_light,asset_p4_banner,asset_p5_crate,asset_p7_demo | 注=天气/河流等系统管线的后沿——第一个可玩版本；Demo 范围由创始人划定后微调前置
+里程碑 aux_retire | 名称=废弃 game-2-aux，.temp 收编 gitignore，协调文档/依赖图/工具入库 | 线=门 | 状态=阻塞 | 前置=merge_main_1 | 注=后沿：产出=并行开发规范落地（.temp 模式）
+里程碑 excel_unfreeze | 名称=解除 Excel 真实导出冻结 | 线=门 | 状态=冻结 | 前置=merge_main_1,p8_giant | 注=tres 手调校准值合并前，源表脱节禁真导出
+
+# ───────────── 2026-09-03 历史补录（git 494 提交对账：立项→规划→基建→渲染→原型→收口→深化） ─────────────
+任务 hist_gdd | 名称=立项：GDD v2.0+设计支柱+核心循环+世界观+商业分析 | 线=门 | 状态=完成 | 前置=root | 注=2026-06-21 首批 10 提交
+任务 hist_arch_docs | 名称=技术架构文档体系（核心实体/EventBus信号/模块API契约/数据流全景） | 线=门 | 状态=完成 | 前置=root
+任务 hist_core_skeleton | 名称=模块化架构+core 骨架（EventBus/ConfigManager/SaveManager/SceneManager+测试框架） | 线=门 | 状态=完成 | 前置=root
+任务 hist_project_mgmt | 名称=项目管理规则（AGENTS.md/CI-DI 流程/待办体系/godot_ai 工具库） | 线=门 | 状态=完成 | 前置=root
+任务 hist_infra_expand | 名称=核心基础设施扩展（WorldState 实体注册/序列化+organization/resources 模块骨架+Autoload） | 线=门 | 状态=完成 | 前置=hist_core_skeleton,hist_arch_docs
+任务 hist_excel_pipeline | 名称=Excel 数据管线+BalanceConfig 热加载+配置迁移 | 线=门 | 状态=完成 | 前置=hist_infra_expand
+任务 hist_docs_cn | 名称=文档体系中文化重组+设计文档精简+架构文档 v3 | 线=门 | 状态=完成 | 前置=hist_gdd,hist_arch_docs
+任务 docs_governance | 名称=文档校准批次（科技字段漂移/模块API契约补 units/world_map 参数矛盾/数据流 §2.1 标注/pc_api 归属统一） | 线=工程债 | 状态=可开工 | 前置=hist_docs_cn | 域=docs | 注=后沿：阶段 1 实现任务（input_refactor/tech_rebuild）开工前校准文档，防 AI 被漂移文档误导——曾致 SettlementGenerator 误派
+任务 hist_render_bake | 名称=火柴人渲染管线（SWL Swordwrath 骨架+纹理烘焙 4x+mipmaps+Skeleton2D 骨骼重构+动画 .tres 化） | 线=门 | 状态=完成 | 前置=hist_infra_expand | 注=2026-07-10~12；units 594 提交热区的起点
+任务 hist_entity | 名称=StickmanEntity 物理实体+运动系统（CharacterBody2D+速度/翻转） | 线=门 | 状态=完成 | 前置=hist_render_bake | 注=2026-07-13；行为 AI/战斗/附身的公共载体
+任务 hist_p01 | 名称=GameRoot 常驻主场景骨架+世界模块+村落地图搭建+UI 模块雏形（GlobalHUD/ModePanel） | 线=门 | 状态=完成 | 前置=hist_core_skeleton | 注=阶段 0.1；2026-07-13
+任务 hist_p02 | 名称=BuildMask 建筑禁放区+WalkBarrier/PassageBarrier 通行障碍+DebugOverlay 调试覆盖层+时钟 widget | 线=门 | 状态=完成 | 前置=hist_p01 | 注=阶段 0.2；2026-07-14
+任务 hist_p03 | 名称=火柴人行为 AI 基础（AIController 状态机+行为雏形） | 线=门 | 状态=完成 | 前置=hist_entity | 注=阶段 0.3；2026-07-17；依赖实体与动画，与地图禁放区无依赖
+任务 hist_p04 | 名称=建筑节点结构基类+选址+建造+派工系统+工人工作行为 | 线=门 | 状态=完成 | 前置=hist_p02,hist_p03,hist_infra_expand | 注=阶段 0.4；2026-07-17
+任务 hist_p05 | 名称=小队级战斗（battle_instance 阵营/伤亡统计/胜负判定+导演） | 线=门 | 状态=完成 | 前置=hist_p03 | 注=阶段 0.5；2026-07-17
+任务 hist_p06a | 名称=框选系统+编队系统（selection_system/formation_system） | 线=门 | 状态=完成 | 前置=hist_p05 | 注=阶段 0.6 前半；2026-07-17
+任务 hist_p06b | 名称=战术号令+指挥链+BattlePanel/Minimap UI（tactical_orders/command_chain） | 线=门 | 状态=完成 | 前置=hist_p06a | 注=阶段 0.6 后半；2026-07-17
+任务 input_refactor | 名称=输入系统重构（09-输入与操作复刻.md：SWL 输入操作对齐） | 线=内容设计 | 状态=阻塞 | 前置=hist_p06b,docs_governance | 域=modules/player_control | 注=开工前文档校准（09 篇与 API 契约对齐）
+任务 hist_p07 | 名称=玩家附身系统（PossessionInterface 附身链路） | 线=门 | 状态=完成 | 前置=hist_entity,hist_p06a| 注=阶段 0.7；附身与号令指挥链是并行特性
+任务 hist_p08a | 名称=多场景衔接+跨图带队出征（SceneLoader 多图切换+战场重建+遭遇战参战） | 线=门 | 状态=完成 | 前置=hist_p02,hist_p05 | 注=阶段 0.8 前半；ChunkTrigger 方案将被地图重构（exit_mechanism）替换
+任务 hist_p08b | 名称=队伍类型编制系统（编制预设/职责范围/FormationPanel 管理窗口） | 线=门 | 状态=完成 | 前置=hist_p06a| 注=阶段 0.8 后半
+任务 hist_worldgen_terrain | 名称=程序化地形生成（8192 锁定高度场+fBm 海岸扰动+分形大陆三角网格两阶段合成） | 线=门 | 状态=完成 | 前置=hist_core_skeleton | 注=2026-07-15~16；Azgaar 模板法被分形大陆方案替代，河流追踪一版推翻（08a 需求重做中→river_gen）
+任务 hist_strategic_redesign | 名称=战略图模块重新设计（数据层/控制器/UI 组件，旧框架归档） | 线=门 | 状态=完成 | 前置=hist_worldgen_terrain
+任务 hist_l3_l2_l1 | 名称=世界生成三层落地（L3 大陆→L2 13 区→L1 389 地块→3203 城市细分+L1/L2/L3 视图+导出管线） | 线=门 | 状态=完成 | 前置=hist_strategic_redesign | 注=08 上旬~中旬，world_map 299 提交主段
+任务 hist_p0_close | 名称=收口执行计划（数据清理/EnterTrigger/资源接入/数据驱动+测试链稳定化 S1-4+战斗链路 S2-1） | 线=门 | 状态=完成 | 前置=hist_p08b | 注=阶段 P0 收口；2026-08 上旬
+任务 test_stability_2 | 名称=测试链稳定化二期（菜单导航断言/反馈超时/26-28 抖动/退出泄漏 teardown/顺序依赖与裸帧等待） | 线=工程债 | 状态=可开工 | 前置=hist_p0_close | 域=tests | 注=后沿：CI 启用需稳定测试基线；一期=S1-4（P0 收口）
+任务 hist_audit_rounds | 名称=架构审计三轮+Top10 修复+文档校准+仓库卫生（audit_cycle 工具） | 线=门 | 状态=完成 | 前置=hist_p0_close | 注=2026-08-04~16
+任务 hist_save_sqlite | 名称=存档 SQLite 化（buildings 表+schema 迁移+WorldState 信号直写+双轨合并） | 线=门 | 状态=完成 | 前置=hist_p0_close,hist_audit_rounds | 注=2026-08-22
+任务 hist_ui_system | 名称=UI 体系落地（主菜单/载入/暂停/设置/存档面板+分层重构+4 弹窗模板+模态栈+懒加载） | 线=门 | 状态=完成 | 前置=hist_p08b,hist_audit_rounds | 注=2026-08
+任务 hist_resource_pricing | 名称=系统深化批次（资源供需定价引擎+CombatApi+F9 热重载+fx 粒子池+夜间光照） | 线=门 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08-22 第三/四批整改
+任务 hist_arena_obs | 名称=大乱斗观察场（8 轮审计修复+翻译保真度审计+fx 全量考古 B8~B14） | 线=门 | 状态=完成 | 前置=hist_resource_pricing | 注=2026-08-29~31，AI 复刻的前置验收场
+任务 hist_coverage_audit | 名称=AI 复刻覆盖率审计+SWL 全模块对账（34%→立项 11a~11e/12 批次） | 线=门 | 状态=完成 | 前置=hist_arena_obs | 注=2026-09-01
+
+
+# ───────────── 2026-09-03 全项目分模块审计补充（覆盖率缺口 + git 历史对账） ─────────────
+任务 org_driven_behavior | 名称=组织驱动行为深化（load_preset/树状层级 UI/工程组织→建造 军事组织→战斗自动映射） | 线=内容设计 | 状态=阻塞 | 前置=work_crew_taskboard | 域=modules/organization | 注=断链点6：组织自动派活依赖任务板（WorkCrewAssigner 任务板）
+任务 resource_production | 名称=资源生产建筑接入（采集/产出→resources 供需循环） | 线=内容设计 | 状态=阻塞 | 前置=hist_p04,hist_infra_expand | 域=modules/resources,modules/construction | 注=断链点5：生产建筑（建造系统）×资源模块（infra 骨架）对接
+任务 queue_system | 名称=建造/生产队列系统（工作队列与生产排序） | 线=地图系统 | 状态=阻塞 | 前置=resource_production | 域=modules/construction,modules/units | 注=采矿循环有了才谈队列排序
+任务 construction_process | 名称=建筑建造过程系统（即时建造→工地多阶段过程化） | 线=地图系统 | 状态=阻塞 | 前置=queue_system | 域=modules/construction | 注=链条：经济→采矿→循环→队列→建造过程化
+任务 resources_persistence | 名称=资源库存持久化进存档（当前每次新游戏重置） | 线=配置存档 | 状态=阻塞 | 前置=worldstate_resource_ledger | 域=core/autoload/save_manager.gd,modules/resources
+任务 expansion_module | 名称=扩张系统模块创建（03-扩张系统.md：目录未创建） | 线=内容设计 | 状态=阻塞 | 前置=hist_l3_l2_l1 | 域=modules/expansion | 注=领土扩张依赖战略图三层（已就绪）
+任务 logistics_module | 名称=物流系统+SupplyChain 模块创建（06-物流系统.md） | 线=内容设计 | 状态=阻塞 | 前置=resource_production | 域=modules/logistics | 注=物流运的是资源——依赖资源产出循环
+任务 market_finance | 名称=市场机制+金融工具（路线图阶段2） | 线=内容设计 | 状态=阻塞 | 前置=hist_resource_pricing,resource_production | 域=modules/resources | 注=市场依赖定价引擎（已落地）+资源产出循环
+任务 diplomacy | 名称=外交系统（路线图阶段2） | 线=内容设计 | 状态=阻塞 | 前置=region_entity,hist_l3_l2_l1 | 注=外交对象=多政权——依赖 Region 建模+战略图
+任务 achievement_module | 名称=游戏内成就系统实现（07-成就系统.md，模块未创建） | 线=内容设计 | 状态=阻塞 | 前置=dec_achievements,eventbus_hygiene | 域=modules/achievement | 注=按定稿成就列表实现；成就解锁走事件总线
+任务 interior_system | 名称=室内系统（小建筑双层透明化：前墙半透明非传送+大建筑传送独立场景） | 线=地图系统 | 状态=阻塞 | 前置=building_b3_b4,construction_process,dec_palace_interior| 域=modules/world,modules/building_gen | 注=GDD §6.7：双层透明化（看得见师傅打铁）与大建筑传送是两类；随建筑深化+建造过程化之后
+任务 building_b3_b4 | 名称=建筑 B3 模块系统+B4 多材质混合深化 | 线=地图系统 | 状态=阻塞 | 前置=asset_p3_thatch,hist_p04,texture_gen_regression| 域=modules/building_gen | 注=建筑节点结构基类（阶段 0.4）之上深化
+任务 region_entity | 名称=Region 实体建模（地块归属/控制度，现为占位字符串 test_region） | 线=战略图 | 状态=阻塞 | 前置=hist_l3_l2_l1 | 域=core/autoload/world_state.gd,modules/world_map | 注=Region 对应战略图三层地块（已就绪）
+任务 god_view | 名称=上帝视角+上古魔方功能（路线图阶段2） | 线=内容设计 | 状态=阻塞 | 前置=content_cube_story | 注=能力来源=上古魔方剧情
+任务 tactical_panel_ext | 名称=战术指令面板扩展（预设号令全集：前进/冲刺/坚守/撤退/找掩体/压制射击/侧翼包抄/集结溃兵+行为概率钩子配置） | 线=UI线 | 状态=阻塞 | 前置=ui_possess_full,autonomy_tactics | 域=modules/ui_global,modules/combat | 注=GDD §6.1 预设号令与战场导演概率钩子的玩家配置入口
+任务 river_gen | 名称=河流算法管线（08a-河流算法需求.md） | 线=战略图 | 状态=阻塞 | 前置=hist_l3_l2_l1 | 域=tools | 注=地形管线（分形大陆/高度场）之上重做河流；一版已被推翻
+任务 weather_env | 名称=environment 天气/天空/震动系统（🟡 时间光照已有） | 线=地图系统 | 状态=阻塞 | 前置=hist_resource_pricing | 域=modules/environment | 注=在时间光照（CanvasModulate+夜间）之上扩展；与 fx_rain_cloud 观感特效分工
+任务 not_replicated | 名称=范围决策：不复刻清单（平台服务≈40类型/Levels 关卡制/UserInterface 159类） | 线=决策 | 状态=放弃 | 前置=hist_gdd | 注=已决策不复刻：IAP/广告/云同步/成就/AB 测试（战略图路线替代关卡制；UX 流程按需参考）
+
+簇 cluster_settlement | 名称=聚落可玩地图链（SettlementGenerator） | 成员=mapdef_class,prop_library,settlement_maps,enter_settlement_wire | 注=前置缺口：MapDefinition 类不存在+零件库仅 5 种建筑；解锁后打通双击城市进入
+簇 cluster_story | 名称=叙事与世界观设定包 | 成员=content_cube_story,content_hero_power,content_helpers,content_civ_diff,content_lawtree | 注=单进边 alpha_start；纯设定类无代码域
+簇 cluster_mkt | 名称=宣发与发布运营包 | 成员=mkt_promo_plan,mkt_store_page,mkt_materials,localization,mkt_pricing | 注=Beta 后启动；宣发链 mkt_promo_plan 单进单出
+簇 cluster_map_layout | 名称=地图布局重构包（扩张/城墙/城外/出城） | 成员=map_refactor_design,town_expansion,wall_as_building,outside_environment,exit_mechanism | 注=原地图重构包拆分；共享域 modules/world
+簇 cluster_battle_modes | 名称=战场类型重构包（三类型+spawn+持续战+工程战） | 成员=battle_encounter,battle_siege_attack,battle_siege_defense,battle_spawn_dynamic,battle_persistence,siege_engineering | 注=原地图重构包拆分；共享域 modules/combat
+# ───────────── GDD v4.0 逐段排查补录（2026-09-03：每个设计内容都要有任务点） ─────────────
+任务 fast_travel | 名称=快速旅行（战略图选已探索目标+行进中过场+消耗游戏时间；战斗中禁止） | 线=战略图 | 状态=阻塞 | 前置=enter_settlement_wire,hist_l3_l2_l1 | 域=modules/world_map,modules/world | 注=GDD §6.3 旅行系统：步行(道路)/快速旅行(本条)/传送(大建筑)——设定解释为主角走过去了
+任务 slope_map | 名称=山坡地图独立类型（SlopeMap：阶梯地形+相机倾斜，不污染通用地图架构） | 线=地图系统 | 状态=冻结 | 前置=root | 域=modules/world | 注=GDD §6.7 明确'实际开发时再实现'——占位防遗漏；后沿：产出等山坡玩法立项（GDD 明确缓做）
+任务 building_levels | 名称=建筑等级系统（同型号不同等级=同场景+不同 Resource 数据） | 线=地图系统 | 状态=阻塞 | 前置=building_b3_b4 | 域=modules/building_gen | 注=GDD §6.7 建筑复用机制：型号决定场景、等级决定数据；后沿：产出服务建筑复用玩法（村落差异化）
+任务 ui_style_evolution | 名称=UI 风格随玩家层级演变（粗糙→精致→魔方投影→传说） | 线=UI线 | 状态=阻塞 | 前置=org_driven_behavior,hist_ui_system | 域=modules/ui_global | 注=GDD §九美术方向；后沿：产出服务最终 UI 观感（阶段 2 打磨收尾）
+任务 town_battle_inplace | 名称=城镇就地变战场（战斗触发不切场景：就地挂载战斗实例+建筑可被破坏+战后恢复城镇模式） | 线=地图系统 | 状态=阻塞 | 前置=battle_siege_defense,map_refactor_design | 域=modules/combat,modules/world | 注=GDD §6.1：玩家体验'家园被袭'的紧张感
+任务 ui_workspace_presets | 名称=组织面板工作区预设（军事/科研/工程/行政/商业标签切换 UI 布局，Blender 式；完整功能列表始终可展开） | 线=UI线 | 状态=阻塞 | 前置=ui_panel_buildmenu,org_driven_behavior | 域=modules/ui_global | 注=GDD §3.3 通用项目管理系统的 UI 形态
+任务 zoom_info_density | 名称=缩放信息密度适配（滚轮个体→帝国版图连续缩放，各级别自动适配界面与信息密度） | 线=UI线 | 状态=阻塞 | 前置=hist_ui_system,hist_l3_l2_l1 | 域=modules/ui_global | 注=GDD §四 无缝缩放：CameraRig 三层缩放已实现，本条是各级别 UI/信息密度适配

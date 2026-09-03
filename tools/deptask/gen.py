@@ -1635,8 +1635,26 @@ function buildVbar(){const v=document.getElementById("vbar");let h="";
   +"<button class='vt' onclick='view.k=Math.max(0.2,view.k/1.25);dirty=true'>－</button>"
   +"<button class='vt' onclick='fitAll()'>⤢ 适配</button>"
   +"<button class='vt' onclick='locateActive()'>⌖ 活跃面</button>"
-  +"</span>";
+  +"</span><span class='sep'></span>";
+ h+="<span class='vg'><button class='vt"+(towerMode?" on":"")+"' id='towerBtn' onclick='toggleTower()' title='塔台巡航：镜头自动轮巡全部已认领任务（机场调度监控模式）'>✈ 塔台巡航</button></span>";
  v.innerHTML=h;}
+
+// ── 塔台巡航：镜头自动轮巡已认领任务（机场调度监控模式） ──
+let towerMode=false,towerRAF=null,towerIdx=0,towerLast=0;
+function toggleTower(){towerMode=!towerMode;
+ const b=document.getElementById("towerBtn");if(b)b.classList.toggle("on",towerMode);
+ if(towerRAF){cancelAnimationFrame(towerRAF);towerRAF=null;}
+ if(!towerMode)return;
+ const step=ts=>{ // 3.2s/站：flyTo 下一认领任务
+  if(!towerMode){towerRAF=null;return;}
+  if(ts-towerLast>3200){towerLast=ts;
+   const claimed=nodes.filter(n=>n.claim&&n.status!=="完成");
+   if(claimed.length){const n=claimed[towerIdx%claimed.length];towerIdx++;
+    hi=n.id;sel=n.id;selSet=new Set([n.id]);showPanel(n);
+    flyTo(n.px+n.cw/2,n.py+n.ch/2,1.0);}
+   else{towerMode=false;const b2=document.getElementById("towerBtn");if(b2)b2.classList.remove("on");}}
+  towerRAF=requestAnimationFrame(step);};
+ towerLast=0;towerRAF=requestAnimationFrame(step);
 function applyLayout(mode){ // 0=泳道带状 1=dagre 交叉最小化
  if(curView==="graph"){laneBandLayout();}else{dagreLayout();}
  rebuildView();fitAll();dirty=true;}

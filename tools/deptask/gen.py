@@ -538,7 +538,7 @@ HTML = r"""<!DOCTYPE html>
  #sideL{left:0;width:248px;border-right:1px solid var(--line2)}
  #sideR{right:0;width:308px;border-left:1px solid var(--line2);padding:0 0 10px}
  .side .pane-head{padding:8px 12px 6px;font-size:11px;font-weight:600;color:var(--acc2);
-   letter-spacing:.4px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+   letter-spacing:.4px;border-bottom:1px solid var(--line);position:sticky;top:76px;background:var(--panel);z-index:2}
  .side .pane-head .hint{color:var(--dim2);font-size:10px;font-weight:400;margin-left:6px}
  #inspector{padding:0 0 8px}
  #inspector h3{margin:0;padding:9px 14px 7px;font-size:13px;font-weight:650;letter-spacing:.3px;
@@ -576,6 +576,21 @@ HTML = r"""<!DOCTYPE html>
  #zoom{position:fixed;left:258px;bottom:140px;font:600 10px var(--mono);color:var(--dim2);z-index:15;
    background:#0a111ccc;border:1px solid var(--line);padding:3px 8px}
  canvas#cv{display:block;position:fixed;inset:0;cursor:crosshair}
+ /* ── canvas 底部渐隐信息条（LOGIC-8 canvas-foot/wave-info 角色） ── */
+ #cfoot{position:fixed;left:0;right:0;bottom:0;height:24px;display:flex;align-items:center;gap:16px;
+   padding:0 14px;font:11px/1 var(--mono);color:var(--sub);z-index:14;
+   background:linear-gradient(180deg,rgba(6,10,17,0),rgba(6,10,17,.94));pointer-events:none}
+ #cfoot #cfR{color:#93a7c0}
+ /* ── kv 状态格条（LOGIC-8 status-strip：1px 缝网格+等宽数值） ── */
+ .strip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
+   border-bottom:1px solid var(--line2)}
+ #dash .strip{grid-template-columns:repeat(6,1fr);border:1px solid var(--line2);margin:0 auto 14px;max-width:1500px}
+ .kv{background:var(--panel2);padding:6px 2px;text-align:center;overflow:hidden}
+ .kv span{display:block;font-size:9.5px;color:var(--dim2)}
+ .kv b{font:700 13px var(--mono);color:var(--text)}
+ .kv b.g{color:var(--green)}.kv b.y{color:var(--amber)}.kv b.c{color:var(--acc)}
+ /* ── 检查器上下文行 ── */
+ .ctxrow{margin:5px 14px 0;font:600 10.5px var(--mono);color:var(--dim2);letter-spacing:.2px}
  /* ── 右键菜单 / 弹窗（LOGIC-8：直角+1px 线，无阴影） ── */
  #ctx{position:fixed;display:none;background:var(--panel);border:1px solid var(--line2);border-radius:4px;
    padding:5px 0;z-index:50;min-width:170px;font-size:12px;max-height:60vh;overflow:auto}
@@ -598,8 +613,11 @@ HTML = r"""<!DOCTYPE html>
  /* ── 制作人仪表盘（LOGIC-8 右栏：1px 缝网格/紫罗兰小节标题/kv 状态格） ── */
  #dash{position:fixed;left:0;right:0;bottom:0;display:none;overflow:auto;background:var(--bg);z-index:10;
    padding:clamp(10px,2vw,20px) clamp(10px,3vw,24px) 26px}
+ #dash .layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;max-width:1500px;margin:0 auto}
+ #dash .col{display:flex;flex-direction:column;gap:14px;min-width:0}
  #dash .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:1px;
-   max-width:1500px;margin:0 auto;background:var(--line);border:1px solid var(--line2)}
+   background:var(--line);border:1px solid var(--line2)}
+ @media (max-width:1000px){#dash .layout{grid-template-columns:1fr}}
  #dash .card{background:var(--panel);padding:0 0 12px}
  #dash .card h4{margin:0;padding:8px 14px 6px;font-size:11px;font-weight:600;color:var(--acc2);
    letter-spacing:.4px;border-bottom:1px solid var(--line)}
@@ -699,7 +717,7 @@ HTML = r"""<!DOCTYPE html>
 </div></div>
 <canvas id="cv"></canvas>
 <canvas id="mini" width="180" height="120"></canvas>
-<div id="zoom"></div>
+<div id="cfoot"><span id="cfL"></span><span id="cfR" style="margin-left:auto"></span></div>
 <script>/*__DAGRE__*/</script>
 <script>const DATA=/*__DATA__*/null;</script>
 <script>
@@ -774,7 +792,8 @@ function visNode(n){return !laneHidden(n.lane)&&(!viewFilter.lanes||viewFilter.l
 function nodeVisible(n){return visNode(n)&&(!q||n._hit);}
 function resize(){dpr=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;
  BAR_H=document.getElementById("bar").offsetHeight||80;  // 窄屏换行/媒体查询后顶栏高度跟随实测
- const top=BAR_H+"px";["sideL","sideR"].forEach(id2=>{const el=document.getElementById(id2);if(el)el.style.top=top;});
+ const top=BAR_H+"px";["sideL","sideR","dash"].forEach(id2=>{const el=document.getElementById(id2);
+  if(el&&el.style.display!=="none")el.style.top=top;});
  cv.width=VW*dpr;cv.height=VH*dpr;cv.style.width=VW+"px";cv.style.height=VH+"px";dirty=true;}
 addEventListener("resize",resize);resize();
 function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);
@@ -1003,7 +1022,11 @@ function drawMini(){mctx.setTransform(1,0,0,1,0,0);mctx.clearRect(0,0,180,120);
  mctx.strokeStyle="#58a6ff";mctx.lineWidth=1;
  mctx.strokeRect(ox+(wx-g.minX)*s,oy+(wy-g.minY)*s,VW/view.k*s,VH/view.k*s);
  mini._map={s,ox,oy,g};}
-function drawZoom(){document.getElementById("zoom").textContent=Math.round(view.k*100)+"%";}
+function drawZoom(){const cfL=document.getElementById("cfL");if(!cfL)return;
+ const vis=VN.filter(n=>visNode(n)).length;
+ cfL.textContent="可见 "+vis+"/"+nodes.length+" · "+Math.round(view.k*100)+"%";
+ document.getElementById("cfR").textContent="🚦 就绪 "+READY.length+" · 🛤 关键路径 "+Math.max(0,CRIT.length-1)+" 跳";
+ document.getElementById("cfoot").style.display=(curView==="producer")?"none":"flex";}
 function graphBBox(){const vis=VN.filter(n=>visNode(n)&&(!focusLane||n._f!=="other"));
  if(!vis.length)return null;
  const xs=vis.map(n=>n.px),ys=vis.map(n=>n.py);
@@ -1053,7 +1076,13 @@ function applyFocus(){
 function docHref(p){return "../"+String(p).replace(/^docs\//,"");}
 function showPanel(n){const p=document.getElementById("inspector");
  const chip=(id)=>{const t=byId[id];return"<span class='tag' onclick='jump(\""+id+"\")'>"+(t?t.name:id)+" · "+(t?t.status:"?")+"</span>";};
+ const inReady=READY.indexOf(n.id),inCrit=CRIT.indexOf(n.id);
+ const ctxBits=["前置 "+((n.prs||[]).length),"被依赖 "+(blocksOf[n.id].length)];
+ if(inReady>=0)ctxBits.push("🚦 就绪中");
+ if(inCrit>0)ctxBits.push("🛤 关键路径第 "+(inCrit+1)+" 跳");
+ if(n.kind==="里程碑")ctxBits.push("收口门");
  p.innerHTML="<h3>"+(n.kind==="里程碑"?"◆ ":"")+n.name+"</h3>"
+ +"<div class='ctxrow'>"+ctxBits.map(x=>"<span"+(x.indexOf("🛤")>=0?" style='color:var(--amber)'":"")+">"+x+"</span>").join(" · ")+"</div>"
  +"<div style='margin:6px 14px 0'><span class='tag' style='cursor:default;color:"+COL[n.status]+"'>"+n.status+"</span>"
  +(n.lane?"<span class='tag' style='cursor:default'>"+n.lane+"</span>":"")
  +(n.tree?"<span class='tag' style='cursor:default'>⌂ "+n.tree+"</span>":"")+"</div>"
@@ -1358,7 +1387,7 @@ function setView(v,force){const prev=curView;
  viewFilter=VIEWS[v]||{};
  const dash=document.getElementById("dash"),showDash=v==="producer";
  dash.style.display=showDash?"block":"none";
- ["cv","mini","zoom"].forEach(id2=>{document.getElementById(id2).style.visibility=showDash?"hidden":"visible";});
+ ["cv","mini","cfoot"].forEach(id2=>{const el=document.getElementById(id2);if(el)el.style.visibility=showDash?"hidden":"visible";});
  document.getElementById("sideL").style.display=showDash?"none":"flex";
  document.getElementById("sideR").style.display=showDash?"none":"flex";
  if(showDash){dash.style.top=BAR_H+"px";buildDash();return;}
@@ -1400,6 +1429,16 @@ function buildSide(v){const L=document.getElementById("sideL");let h="";
  const active=nodes.filter(n=>n.status==="进行中"||n.status==="待验收");
  const ready=nodes.filter(n=>live(n)&&n.status!=="冻结"
   &&(n.prs||[]).every(p=>byId[p]&&byId[p].status==="完成"));
+ // 顶部 kv 状态条（LOGIC-8 status-strip：六格等宽）
+ const nDone=nodes.filter(n=>n.status==="完成").length,
+       nAct=nodes.filter(n=>n.status==="进行中"||n.status==="待验收").length,
+       nReady=ready.length,
+       nBlk=nodes.filter(n=>n.status==="阻塞").length,
+       nFrz=nodes.filter(n=>n.status==="冻结").length;
+ h+="<div class='strip'>"
+  +[["任务",nodes.length,""],["完成",nDone,"g"],["进行",nAct,"c"],["就绪",nReady,"g"],["阻塞",nBlk,"y"],["冻结",nFrz,""]]
+   .map(x=>"<div class='kv'><span>"+x[0]+"</span><b class='"+x[2]+"'>"+x[1]+"</b></div>").join("")
+  +"</div>";
  if(v==="eng"){
   h+=sideHead("⚙ 进行中 / 待验收","代码线");
   h+=active.filter(n=>n.lane!=="宣发运营").map(sideRow).join("")||"<div class='ph'>无</div>";
@@ -1443,38 +1482,40 @@ function buildSide(v){const L=document.getElementById("sideL");let h="";
  }
  L.innerHTML=h;L.style.top=BAR_H+"px";
  document.getElementById("sideR").style.top=BAR_H+"px";}
-function buildDash(){const P=DATA.producer||{},d=document.getElementById("dash");
+function buildDash(){const P=DATA.producer||{},d=document.getElementById("dash");const LIMIT=6;
  const liveReady=nodes.filter(n=>n.status!=="完成"&&n.status!=="冻结"&&n.status!=="放弃"
   &&(n.prs||[]).every(p=>byId[p]&&byId[p].status==="完成"));
  const S=Object.assign({},P.stats||{},{ready:liveReady.length});
  const tch=(n,extra)=>"<span class='tchip' onclick='jumpTo(\""+n.id+"\")'>"
   +"<span class='dot' style='background:"+(COL[n.status]||"#888")+"'></span>"+n.name
   +(extra||"")+"</span>";
- let h="<div class='grid'>";
- h+="<div class='card' style='grid-column:1/-1'><h4>📊 项目快照</h4><div class='stats'>"
-  +[["任务总数",S.nodes,""],["已完成",S.done,"#3fb950"],["进行/待验收",S.active,"#4c8dff"],
-    ["就绪可派",liveReady.length,"#2dd4bf"],["阻塞(前置未齐)",S.blocked,"#d29922"],["冻结(有意延后)",S.frozen,"#8b949e"]]
-   .map(x=>"<div class='stat'><b style='color:"+x[2]+"'>"+x[1]+"</b><span>"+x[0]+"</span></div>").join("")
-  +"</div><div class='hint'>就绪集为实时计算；改状态/连边后本页即时生效（其余卡片重新生成后更新）</div></div>";
- if((P.combo||[]).length)h+="<div class='card'><h4>🚦 建议派活组合（域互斥 ≤6 线）</h4>"
-  +P.combo.map(id=>byId[id]?tch(byId[id]," <span style='color:#6e7a87'>"+byId[id].lane+"</span>"):"").join("")+"</div>";
- if((P.crit||[]).length)h+="<div class='card'><h4>🛤 关键路径（"+(P.crit.length-1)+" 跳）</h4><div style='line-height:2.1'>"
+  let h="<div class='strip'>"
+  +[["任务总数",S.nodes,""],["已完成",S.done,"g"],["进行/待验收",S.active,"c"],
+    ["就绪可派",S.ready,"g"],["阻塞",S.blocked,"y"],["冻结",S.frozen,""]]
+   .map(x=>"<div class='kv'><span>"+x[0]+"</span><b class='"+x[2]+"'>"+x[1]+"</b></div>").join("")
+  +"</div><div class='layout'><div class='col' id='dashL'></div><div class='col' id='dashR'></div>";
+ const L=[],R=[];
+ if((P.combo||[]).length)L.push("<div class='card'><h4>🚦 建议派活组合（域互斥 ≤"+LIMIT+" 线）</h4>"
+  +P.combo.map(id=>byId[id]?tch(byId[id]," <span style='color:#6e7a87'>"+byId[id].lane+"</span>"):"").join("")+"</div>");
+ if((P.crit||[]).length)L.push("<div class='card'><h4>🛤 关键路径（"+(P.crit.length-1)+" 跳）</h4><div style='line-height:2.1'>"
   +P.crit.map((id,i)=>byId[id]?(i?"<span style='color:#6e7a87'> → </span>":"")+tch(byId[id]):"").join("")+"</div>"
-  +"<div class='hint'>压缩关键路径靠拆依赖/拆任务/外购前置；加并发只能压非关键路径</div></div>";
+  +"<div class='hint' style='margin:6px 14px 0'>压缩关键路径靠拆依赖/拆任务/外购前置；加并发只能压非关键路径</div></div>");
  const byLane={};liveReady.forEach(n=>{(byLane[n.lane||"（无线）"]=byLane[n.lane||"（无线）"]||[]).push(n);});
- h+="<div class='card'><h4>📦 就绪集 "+liveReady.length+" 个（点击跳全图定位）</h4><div style='max-height:340px;overflow:auto'>";
- Object.keys(byLane).sort().forEach(ln=>{h+="<div class='laneHead'>"+ln+" · "+byLane[ln].length+"</div>"
-  +byLane[ln].map(n=>tch(n)).join("");});
- h+="</div></div>";
- if((P.gates||[]).length)h+="<div class='card'><h4>◆ 里程碑燃尽</h4>"
+ L.push("<div class='card'><h4>📦 就绪集 "+liveReady.length+" 个（点击行在图上定位）</h4><div style='max-height:340px;overflow:auto'>");
+ Object.keys(byLane).sort().forEach(ln=>{L.push("<div class='laneHead'>"+ln+" · "+byLane[ln].length+"</div>"
+  +byLane[ln].map(n=>tch(n)).join(""));});
+ L.push("</div></div>");
+ if((P.gates||[]).length)R.push("<div class='card'><h4>◆ 里程碑燃尽</h4>"
   +P.gates.map(g=>"<div class='gate'><span class='nm' onclick='jumpTo(\""+g.id+"\")' title='"+g.id+"'>"+g.name
    +"</span><span class='bar'><i style='width:"+(g.total?Math.round(100*g.done/g.total):0)+"%'></i></span><span class='pc'>"
-   +g.done+"/"+g.total+"</span></div>").join("")+"</div>";
+   +g.done+"/"+g.total+"</span></div>").join("")+"</div>");
  const ws=(chk.warns||[]).slice(0,12),es=chk.errors||[];
- h+="<div class='card'><h4>⚠ 审计线索</h4>"
+ R.push("<div class='card'><h4>⚠ 审计线索</h4>"
   +(es.length?es.map(e=>"<div class='warn'>"+e+"</div>").join(""):"")
-  +(ws.length?ws.map(w=>"<div class='warn'>"+w+"</div>").join(""):"<div class='hint'>无警告</div>")+"</div>";
- h+="</div>";d.innerHTML=h;}
+  +(ws.length?ws.map(w=>"<div class='warn'>"+w+"</div>").join(""):"<div class='hint' style='margin:4px 14px'>无警告</div>")+"</div>");
+ d.innerHTML=h;
+ document.getElementById("dashL").innerHTML=L.join("");
+ document.getElementById("dashR").innerHTML=R.join("");}
 document.querySelectorAll(".vtab").forEach(t=>{t.onclick=()=>setView(t.dataset.v);});
 function exportTxt(){ // 编辑闭环：导出完整源文件（状态/依赖/布局/新任务全含）→ 覆盖源 txt → --check
  const bad=[];

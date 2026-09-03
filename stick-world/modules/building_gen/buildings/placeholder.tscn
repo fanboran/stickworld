@@ -1,12 +1,14 @@
 [gd_scene format=3 uid="uid://c2xr5ftdidmgm"]
 
 [ext_resource type="Script" path="res://modules/building_gen/buildings/thatch_hut.gd" id="1_building"]
+[ext_resource type="Resource" path="res://modules/building_gen/buildings/thatch_hut_palette.tres" id="2_palette"]
 
 [sub_resource type="RectangleShape2D" id="rect_passage"]
 size = Vector2(512, 390)
 
 [node name="Placeholder" type="Node2D"]
 script = ExtResource("1_building")
+palette = ExtResource("2_palette")
 def_id = "placeholder"
 width = 16
 

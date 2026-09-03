@@ -7,17 +7,6 @@ extends BuildingExterior
 ## 后续替换方向：手绘军旗贴图、盾徽纹章、旗杆摆动动画。
 
 
-func _get_palette() -> Dictionary:
-	return {
-		"C_THATCH_BACK": Color(0.44, 0.32, 0.17),
-		"C_THATCH_MAIN": Color(0.58, 0.43, 0.23),
-		"C_THATCH_LEFT": Color(0.50, 0.37, 0.20),
-		"C_WOOD_FRONT": Color(0.33, 0.22, 0.12),
-		"C_WOOD_BACK": Color(0.25, 0.17, 0.10),
-		"C_WOOD_BEAM": Color(0.28, 0.19, 0.11),
-		"C_WOOD_STRUT": Color(0.30, 0.21, 0.12),
-	}
-
 
 func _post_build(ext: Node2D) -> void:
 	var pal := _get_palette()
@@ -26,7 +15,7 @@ func _post_build(ext: Node2D) -> void:
 	# 檐口军旗：旗杆（细柱）+ 垂幅（双色条带），挂右端屋顶上方
 	var l5 := ext.get_node_or_null("L5_Roof") as Node2D
 	if l5 != null:
-		var pole_tex = TextureGenApi.make_wood_pillar(8, 96, pal.C_WOOD_BEAM)
+		var pole_tex = TextureGenAPI.make_wood_pillar(8, 96, pal.C_WOOD_BEAM)
 		_a(l5, _sprite2d("BannerPole", Vector2(right_edge - 30.0, -392), pole_tex))
 		# 垂幅：红底 + 下缘三角剪角（两段多边形近似）
 		var flag_red := make_solid_poly("BannerCloth", Vector2(-26, 74),

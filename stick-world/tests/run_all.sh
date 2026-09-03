@@ -86,6 +86,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_anim_finished.tscn"
 	"tests/integration/test_settings_apply.tscn"
 	"tests/integration/test_notification_feed.tscn"
+	"tests/integration/test_debug_api.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -116,6 +117,7 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_battle_ui.tscn"]=90
 	["tests/integration/test_formation_system_assembly.tscn"]=90
 	["tests/integration/test_tactical_orders.tscn"]=90
+	["tests/integration/test_debug_api.tscn"]=90
 )
 DEFAULT_TIMEOUT=90
 
@@ -163,6 +165,8 @@ affected_suites() {
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/smoke/test_new_game_smoke.tscn"]=1
 				picked["tests/smoke/test_cross_map_travel.tscn"]=1 ;;
+			stick-world/modules/debug_gui/*|stick-world/modules/debug_GUI/*)
+				picked["tests/integration/test_debug_api.tscn"]=1 ;;
 			stick-world/modules/ui_global/*)
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1

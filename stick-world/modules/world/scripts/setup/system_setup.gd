@@ -14,7 +14,7 @@ extends Node
 ## 只做装配，不做业务逻辑；业务逻辑保持在 GameRoot 主脚本与各子系统内。
 
 const _ExploreHandlerScript: GDScript = preload("res://modules/player_control/scripts/explore_handler.gd")
-const _DebugDrawers: GDScript = preload("res://modules/debug_GUI/scripts/debug_drawers.gd")
+const _DebugDrawers: GDScript = preload("res://modules/debug_gui/scripts/debug_drawers.gd")
 const _ConstructionManagerScript: GDScript = preload("res://modules/construction/scripts/construction_manager.gd")
 const _ConstructionApiScript: GDScript = preload("res://modules/construction/api.gd")
 const _BattleDirectorScript: GDScript = preload("res://modules/combat/scripts/battle/battle_director.gd")
@@ -46,7 +46,7 @@ const _HoverIndicatorScript: GDScript = preload("res://modules/ui_global/scripts
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/scripts/indicators/middle_scroll_overlay.gd")
 const _BuildMenuScript: GDScript = preload("res://modules/construction/ui/build_menu.gd")
 const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_root.tscn")
-const _DebugOverlayScene: PackedScene = preload("res://modules/debug_GUI/scenes/debug_overlay.tscn")
+const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/debug_overlay.tscn")
 
 var _root: GameRoot
 
@@ -115,7 +115,7 @@ func _mode_to_panel_type(mode: int) -> int:
 
 
 ## 实例化 DebugOverlay 场景并挂为子节点。
-## 调试覆盖层从 debug_GUI 模块自包含场景加载，不再内嵌于 game_root.tscn。
+## 调试覆盖层从 debug_gui 模块自包含场景加载，不再内嵌于 game_root.tscn。
 func _setup_debug_overlay() -> void:
 	if _root.get_node_or_null("DebugOverlay") != null:
 		return  # 已存在，避免重复添加
@@ -425,9 +425,7 @@ func _setup_pause_menu_panel_deferred() -> void:
 func _setup_minimap() -> void:
 	if _root.ui_root == null:
 		return
-	var mm := Control.new()
-	mm.set_script(_MinimapScript)
-	mm.name = "Minimap"
+	var mm := UIKit.widget(_MinimapScript, "Minimap")
 	_root.ui_root.add_to_slot("HudOverlay", mm)
 	_root._minimap = mm
 	if mm.has_method("setup"):
@@ -438,9 +436,7 @@ func _setup_minimap() -> void:
 func _setup_zoom_bar() -> void:
 	if _root.ui_root == null:
 		return
-	var zb := Control.new()
-	zb.set_script(_ZoomBarScript)
-	zb.name = "ZoomBar"
+	var zb := UIKit.widget(_ZoomBarScript, "ZoomBar")
 	_root.ui_root.add_to_slot("HudOverlay", zb)
 	_root._zoom_bar = zb
 	if zb.has_method("setup"):
@@ -453,9 +449,7 @@ func _setup_zoom_bar() -> void:
 func _setup_weapon_panel() -> void:
 	if _root.ui_root == null:
 		return
-	var wp := Control.new()
-	wp.set_script(_WeaponPanelScript)
-	wp.name = "WeaponPanel"
+	var wp := UIKit.widget(_WeaponPanelScript, "WeaponPanel")
 	_root.ui_root.add_to_slot("HudOverlay", wp)
 	_root._weapon_panel = wp
 	if wp.has_method("setup"):
@@ -657,9 +651,7 @@ func _on_world_map_travel(target_map_id: String, entry_side: int) -> void:
 
 func _setup_game_ui() -> void:
 	# 主控单位圆圈（屏幕空间绘制，挂 HudOverlay 槽，坐标系与视口一致）
-	_root._possession_indicator = Control.new()
-	_root._possession_indicator.set_script(_PossessionIndicatorScript)
-	_root._possession_indicator.name = "PossessionIndicator"
+	_root._possession_indicator = UIKit.widget(_PossessionIndicatorScript, "PossessionIndicator")
 	_root._possession_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _root._possession_indicator.has_method("setup"):
 		_root._possession_indicator.setup(_root.camera_rig, _root)
@@ -668,9 +660,7 @@ func _setup_game_ui() -> void:
 	else:
 		_root.add_child(_root._possession_indicator)
 	# 鼠标悬停方框
-	_root._hover_indicator = Control.new()
-	_root._hover_indicator.set_script(_HoverIndicatorScript)
-	_root._hover_indicator.name = "HoverIndicator"
+	_root._hover_indicator = UIKit.widget(_HoverIndicatorScript, "HoverIndicator")
 	_root._hover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _root._hover_indicator.has_method("setup"):
 		_root._hover_indicator.setup(_root.camera_rig, _root)
@@ -679,9 +669,7 @@ func _setup_game_ui() -> void:
 	else:
 		_root.add_child(_root._hover_indicator)
 	# 中键滚动图标
-	_root._middle_scroll_overlay = Control.new()
-	_root._middle_scroll_overlay.set_script(_MiddleScrollOverlayScript)
-	_root._middle_scroll_overlay.name = "MiddleScrollOverlay"
+	_root._middle_scroll_overlay = UIKit.widget(_MiddleScrollOverlayScript, "MiddleScrollOverlay")
 	_root._middle_scroll_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _root._middle_scroll_overlay.has_method("setup"):
 		_root._middle_scroll_overlay.setup(_root.camera_rig)
@@ -717,7 +705,7 @@ func _setup_build_menu_deferred() -> void:
 func register_debug_drawers() -> void:
 	if DebugApi == null:
 		return
-	# 注入地图节点路径表：绘制器经 ctx 查节点，不反向 import WorldAPI（避免 debug_GUI↔world 依赖环）
+	# 注入地图节点路径表：绘制器经 ctx 查节点，不反向 import WorldAPI（避免 debug_gui↔world 依赖环）
 	DebugApi.set_ctx_extra("map_paths", {
 		"placement_grid": WorldAPI.PATH_MAP_PLACEMENT_GRID,
 		"building_host": WorldAPI.PATH_MAP_BUILDING_HOST,

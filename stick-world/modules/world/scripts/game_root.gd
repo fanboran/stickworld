@@ -444,9 +444,7 @@ func _setup_world_loading_overlay() -> void:
 	layer.name = "WorldLoadingLayer"
 	layer.layer = LayerOrder.WORLD_LOADING
 	add_child(layer)
-	var ov := Control.new()
-	ov.set_script(_WorldLoadingOverlayScript)
-	ov.name = "WorldLoadingOverlay"
+	var ov := UIKit.full_rect(_WorldLoadingOverlayScript, "WorldLoadingOverlay")
 	layer.add_child(ov)
 	_world_loading_overlay = ov
 

@@ -81,9 +81,7 @@ func get_notification_feed() -> NotificationFeed:
 
 ## F3 调试模式 UI 名称检查器（挂最上层，DebugApi 可见时生效）
 func _setup_ui_inspector() -> void:
-	var inspector := Control.new()
-	inspector.set_script(_DebugUiInspectorScript)
-	inspector.name = "UiInspector"
+	var inspector := UIKit.full_rect(_DebugUiInspectorScript, "UiInspector")
 	inspector.z_index = LayerOrder.Z_INSPECTOR
 	add_child(inspector)
 

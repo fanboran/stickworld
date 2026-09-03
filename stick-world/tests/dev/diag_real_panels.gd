@@ -5,7 +5,7 @@ extends Control
 
 const _MainMenuScene: PackedScene = preload("res://modules/ui_global/scenes/menus/main_menu.tscn")
 const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
-const _UIKitScript: GDScript = preload("res://modules/ui_global/scripts/UIKit.gd")
+const _UIKitScript: GDScript = preload("res://modules/ui_global/scripts/uikit.gd")
 
 var _frames: int = 0
 var _shot_path: String = ""

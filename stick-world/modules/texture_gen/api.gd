@@ -1,4 +1,4 @@
-class_name TextureGenApi
+class_name TextureGenAPI
 extends RefCounted
 ## 纹理生成模块（texture_gen）公共接口契约
 ##
@@ -8,11 +8,11 @@ extends RefCounted
 ## 使用示例：
 ## ```gdscript
 ## # CPU 程序化贴图
-## var tex = TextureGenApi.make_wood_pillar(64, 128)
-## var mat = TextureGenApi.create_thatch_material(tex)
+## var tex = TextureGenAPI.make_wood_pillar(64, 128)
+## var mat = TextureGenAPI.create_thatch_material(tex)
 ##
 ## # GPU Shader 材质
-## var shader_mat = TextureGenApi.load_shader_material("stone_wall")
+## var shader_mat = TextureGenAPI.load_shader_material("stone_wall")
 ## some_sprite.material = shader_mat
 ## shader_mat.set_shader_parameter("seed", 42)
 ## ```
@@ -76,7 +76,7 @@ static func load_shader_material(material_id: StringName) -> ShaderMaterial:
 	var shader_path := "res://modules/texture_gen/materials/%s/shaders/%s.gdshader" % [material_id, material_id]
 	var shader: Shader = load(shader_path)
 	if shader == null:
-		push_error("[TextureGenApi] shader 不存在: %s（id 未注册？见 list_materials）" % shader_path)
+		push_error("[TextureGenAPI] shader 不存在: %s（id 未注册？见 list_materials）" % shader_path)
 		return null
 	var mat := ShaderMaterial.new()
 	mat.shader = shader

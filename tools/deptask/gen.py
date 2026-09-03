@@ -42,8 +42,9 @@
   波次          未完成子图拓扑分层（波 n = 最少还要等 n 道串行工序）
   关键路径      最长链（加并发只能压非关键路径，关键路径要靠拆依赖/拆任务）
 
-布局：源里没有任何 位置= 时，页面用 dagre 自动布局；「保存布局」把当前坐标写进源文件
-（冻结为手动布局）；页面「自动重排」可清掉回 dagre。位置=x,y 单位为世界像素。
+布局：源里没有任何 位置= 时，页面用 dagre 自动布局；「⬇ 导出源」把当前坐标连同
+状态/依赖编辑写进导出的源文件（覆盖源 txt 即冻结为手动布局）；页面「自动重排」可清掉回 dagre。
+位置=x,y 单位为世界像素。
 
 用法：
   python tools/deptask/gen.py                 # 校验 + 调度报告 + 生成 docs/项目/任务依赖图.html
@@ -194,17 +195,24 @@ def descendants_of(nid, nodes):
 
 
 def wave_levels(nodes):
-    """未完成子图拓扑分层：波 0 = 前置全齐（就绪）；波 n = 最少还要等 n 道串行工序。"""
+    """未完成子图拓扑分层：波 0 = 前置全齐（就绪）；波 n = 最少还要等 n 道串行工序。
+    环安全：回边上的节点按波 0 处理（环本身已被 validate 报 ERROR，报告仍需可输出）。"""
     done = {i for i, n in nodes.items() if n["status"] == "完成"}
     pend = {i for i, n in nodes.items() if n["status"] not in ("完成", "放弃")}
     level = {}
+    visiting = set()
 
     def lv(i):
         if i in level:
             return level[i]
+        if i in visiting:
+            return 0  # 环回边：不再递归
+        visiting.add(i)
         unmet = [p for p in nodes[i]["prs"] if p in nodes and p not in done]
-        level[i] = 0 if not unmet else 1 + max(lv(p) for p in unmet if p in pend)
-        return level[i]
+        result = 0 if not unmet else 1 + max(lv(p) for p in unmet if p in pend)
+        visiting.discard(i)
+        level[i] = result
+        return result
 
     for i in pend:
         lv(i)
@@ -212,16 +220,20 @@ def wave_levels(nodes):
 
 
 def critical_path(nodes):
-    """未完成子图最长链（按边数），返回 [端, …, 起点]（起点在前）。"""
+    """未完成子图最长链（按边数），返回 [端, …, 起点]（起点在前）。
+    visited 防护：环（自环/互环）会让链回走打转——遇已访问节点即停（环由 validate 报 ERROR）。"""
     lv = wave_levels(nodes)
     if not lv:
         return []
     done = {i for i, n in nodes.items() if n["status"] == "完成"}
     tail = max(lv, key=lambda i: lv[i])
-    chain, cur = [], tail
-    while lv.get(cur, 0) > 0:
+    chain, cur, visited = [], tail, set()
+    while lv.get(cur, 0) > 0 and cur not in visited:
+        visited.add(cur)
         chain.append(cur)
         unmet = [p for p in nodes[cur]["prs"] if p in nodes and p not in done]
+        if not unmet:
+            break
         cur = max(unmet, key=lambda p: lv.get(p, 0))
     chain.append(cur)
     return list(reversed(chain))
@@ -307,28 +319,29 @@ def validate(nodes, edges, lane_order, clusters):
         if n["lane"] and lane_order and n["lane"] not in lane_order:
             warns.append(f"W 行{n['line']}: {n['id']} 泳道 {n['lane']} 不在 线序")
 
-    adj = {i: nodes[i]["prs"] for i in nodes if i in nodes}
+    adj = {i: [p for p in nodes[i]["prs"] if p in nodes] for i in nodes}
     color = {i: 0 for i in adj}
+    reported = set()
     for start in adj:
         if color[start]:
             continue
         stack = [(start, iter(adj[start]))]
         color[start] = 1
         while stack:
-            node_it = stack[-1]
+            node_id, it = stack[-1]
             nxt = None
-            for child in node_it[1]:
-                if child not in adj:
-                    continue
+            for child in it:
                 if color[child] == 1:
-                    errs.append("E: 前置链成环，涉及 " + child)
-                    stack = []
-                    break
+                    if child not in reported:
+                        reported.add(child)
+                        errs.append("E: 前置链成环，涉及 " + child
+                                    + "（环上任务的前置/被依赖无法收敛，须拆环）")
+                    continue
                 if color[child] == 0:
                     nxt = child
                     break
             if nxt is None:
-                color[node_it[0]] = 2
+                color[node_id] = 2
                 stack.pop()
             else:
                 color[nxt] = 1
@@ -1336,7 +1349,10 @@ const VIEWS={
  qa:{ids:n=>/^(debt_|test_|ci_|arena_)/.test(n.id)||n.status==="待验收"||/^(demo_|hp_default_zero)/.test(n.id)}
 };
 let curView="graph",viewSnapshot=null;
-function setView(v){const prev=curView;curView=v;
+function setView(v,force){const prev=curView;
+ if(!VIEWS[v])v="graph";                       // hash 手输未知视图 → 回退全图
+ if(prev===v&&!force)return;                   // 同页签幂等：二次快照会把投影态当原始态
+ curView=v;
  if(location.hash!=="#view="+v)location.hash="#view="+v;
  document.querySelectorAll(".vtab").forEach(t=>t.classList.toggle("on",t.dataset.v===v));
  viewFilter=VIEWS[v]||{};
@@ -1347,6 +1363,9 @@ function setView(v){const prev=curView;curView=v;
  document.getElementById("sideR").style.display=showDash?"none":"flex";
  if(showDash){dash.style.top=BAR_H+"px";buildDash();return;}
  // 岗位视图 = 布局投影：进入时快照全图坐标 → 对可见子集重新 dagre（隐藏节点不再占位）→ 退出恢复
+ // 切视图前清聚拢/关键路径残留：focusLane 的 _f 淡出标记会污染新视图
+ focusLane=null;focusLines=null;critOnly=false;refreshChips();
+ VN.forEach(n=>{delete n._f;});
  if(prev!==v&&viewSnapshot){viewSnapshot.forEach(a=>{a[0].px=a[1];a[0].py=a[2];});viewSnapshot=null;}
  if(v!=="graph"){viewSnapshot=nodes.map(n=>[n,n.px,n.py]);}
  rebuildView();
@@ -1357,7 +1376,8 @@ function setView(v){const prev=curView;curView=v;
 function jumpTo(id){setView("graph");jump(id);}
 function sideSelect(id){const n=byId[id];if(!n)return;
  sel=id;selSet=new Set([id]);selEdge=null;hi=id;showPanel(n);dirty=true;}
-function sideRow(n){return"<div class='lst"+(n.status==="进行中"?" active":"")+"' onclick='sideSelect(\""+n.id+"\")' title=\""+n.name+"（点击详情，⤢ 跳全图）\">"
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
+function sideRow(n){return"<div class='lst"+(n.status==="进行中"?" active":"")+"' onclick='sideSelect(\""+n.id+"\")' title=\""+esc(n.name)+"（点击详情，⤢ 跳全图）\">"
  +"<span class='dot' style='background:"+(COL[n.status]||"#888")+"'></span>"
  +"<span class='lid'>"+n.id+"</span><span class='lname'>"+n.name+"</span>"
  +"<span class='lgo' title='跳全图定位' onclick='event.stopPropagation();jumpTo(\""+n.id+"\")'>⤢</span></div>";}
@@ -1423,9 +1443,10 @@ function buildSide(v){const L=document.getElementById("sideL");let h="";
  }
  L.innerHTML=h;L.style.top=BAR_H+"px";
  document.getElementById("sideR").style.top=BAR_H+"px";}
-function buildDash(){const P=DATA.producer||{},S=P.stats||{},d=document.getElementById("dash");
+function buildDash(){const P=DATA.producer||{},d=document.getElementById("dash");
  const liveReady=nodes.filter(n=>n.status!=="完成"&&n.status!=="冻结"&&n.status!=="放弃"
   &&(n.prs||[]).every(p=>byId[p]&&byId[p].status==="完成"));
+ const S=Object.assign({},P.stats||{},{ready:liveReady.length});
  const tch=(n,extra)=>"<span class='tchip' onclick='jumpTo(\""+n.id+"\")'>"
   +"<span class='dot' style='background:"+(COL[n.status]||"#888")+"'></span>"+n.name
   +(extra||"")+"</span>";

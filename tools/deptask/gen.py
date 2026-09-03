@@ -1578,7 +1578,19 @@ addEventListener("keydown",ev=>{
   sel=null;selSet=new Set();selEdge=null;hi=null;
   document.getElementById("inspector").innerHTML="<div class='ph'>点选任务查看详情</div>";dirty=true;return;}
  if(inField)return;
- if((ev.key==="Delete"||ev.key==="Backspace")&&selEdge){delEdge(selEdge);}});
+ if((ev.key==="Delete"||ev.key==="Backspace")&&selEdge){delEdge(selEdge);return;}
+ // 工业软件快捷键组（大写锁定不敏感）
+ const k=ev.key.toLowerCase();
+ if(k==="n"){openTaskForm();return;}
+ if(k==="f"){fitAll();return;}
+ if(k==="t"){toggleTower();return;}
+ if(k==="g"){applyLayout(0);return;}
+ if(k==="l"){locateActive();return;}
+ if(k==="d"){toggleDock();return;}
+ if(k==="c"){critOnly=!critOnly;refreshChips();dirty=true;return;}
+ if(k==="r"){readyOnly=!readyOnly;critOnly=false;refreshChips();dirty=true;return;}
+ const vi=parseInt(ev.key);
+ if(vi>=1&&vi<=6){const vs=["graph","producer","eng","design","art","qa"];setView(vs[vi-1]);}});
 addEventListener("keyup",ev=>{if(ev.code==="Space"){spaceDown=false;cv.style.cursor="default";dirty=true;}});
 // ── 岗位视图体系（同一份 DAG 的不同投影；hash 路由 #view=xxx 可直达/分享） ──
 const VIEWS={
@@ -1914,7 +1926,15 @@ function drawGantt(){const c=gantt;if(!c||c.width<10)return;
   if(x1-x0>34){gtx.fillStyle="#c9d4e0";gtx.fillText(j.id,x0+3,y+8);}
   if(ganttHover===j.id||(hi===j.id)){ // 双向联动：主图悬停 ↔ 运行图条高亮
    gtx.strokeStyle="#ffffffcc";gtx.lineWidth=1.5;
-   gtx.strokeRect(x0-1.5,y-1.5,Math.max(4,x1-x0)+3,rowH-3);}});
+   gtx.strokeRect(x0-1.5,y-1.5,Math.max(4,x1-x0)+3,rowH-3);
+   if(ganttHover===j.id){ // 悬停浮签：全名+agent+时段
+    const tip=j.id+" · "+(j.agent||"?")+" · T"+j.t0+"→"+(j.done?("T"+j.t1):"运行中");
+    gtx.font="600 10px "+MONO;
+    const tw=gtx.measureText(tip).width+14;
+    let tx=Math.min(x1+6,W-tw-4);let ty=y-24;if(ty<padT)ty=y+rowH+2;
+    gtx.fillStyle="#0d1522f0";gtx.fillRect(tx,ty,tw,19);
+    gtx.strokeStyle="#2b3f5a";gtx.lineWidth=1;gtx.strokeRect(tx+.5,ty+.5,tw-1,18);
+    gtx.fillStyle="#eaf6ff";gtx.fillText(tip,tx+7,ty+13);}}});
  // 图例
  gtx.fillStyle="#556777";gtx.font="9px system-ui";
   gtx.fillText("■ 完成  ▌运行中（琥珀光标）  颜色=泳道域 / 描边=认领 agent  ·  滚轮缩放 · 拖拽平移 · 点条跳主图",padL,H-4);

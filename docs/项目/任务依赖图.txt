@@ -276,3 +276,16 @@
 任务 hist_resource_pricing | 名称=系统深化批次（资源供需定价引擎+CombatApi+F9 热重载+fx 粒子池+夜间光照） | 线=基线 | 状态=完成 | 前置=hist_audit_rounds | 注=2026-08-22 第三/四批整改
 任务 hist_arena_obs | 名称=大乱斗观察场（8 轮审计修复+翻译保真度审计+fx 全量考古 B8~B14） | 线=基线 | 状态=完成 | 前置=hist_resource_pricing | 注=2026-08-29~31，AI 复刻的前置验收场
 任务 hist_coverage_audit | 名称=AI 复刻覆盖率审计+SWL 全模块对账（34%→立项 11a~11e/12 批次） | 线=基线 | 状态=完成 | 前置=hist_arena_obs | 注=2026-09-01
+
+
+
+
+
+
+
+
+
+
+
+
+

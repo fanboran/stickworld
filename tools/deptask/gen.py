@@ -781,6 +781,7 @@ HTML = r"""<!DOCTYPE html>
  <div id="dockBar">
   <span class="dtab on" data-t="gantt">▦ 运行图</span>
   <span class="dtab" data-t="log">≡ 调度日志</span>
+  <span id="srcSwitch" style="display:flex;gap:1px;margin-left:8px"></span>
   <span id="dockInfo"></span>
   <span id="dockFold" title="折叠/展开底栏（Tab 键）">▾</span>
  </div>
@@ -803,18 +804,6 @@ HTML = r"""<!DOCTYPE html>
 </div></div>
 <div id="dash"></div>
 <div id="vbar"></div>
-<div id="dock">
- <div id="dockBar">
-  <span class="dtab on" data-t="gantt">▦ 运行图</span>
-  <span class="dtab" data-t="log">≡ 调度日志</span>
-  <span id="dockInfo"></span>
-  <span id="dockFold" title="折叠/展开底栏（Tab 键）">▾</span>
- </div>
- <div id="dockBody">
-  <canvas id="gantt"></canvas>
-  <div id="logList"></div>
- </div>
-</div>
 <div id="relwin" title="相关项浮窗：点击行定位，⤢ 跳全图"></div>
 <div id="sideL" class="side"></div>
 <div id="sideR" class="side"><div id="inspector"><div class="ph">点选任务查看详情（前置/被依赖/关联文档可点跳转）</div></div></div>
@@ -1635,7 +1624,10 @@ function buildVbar(){const v=document.getElementById("vbar");let h="";
   +"<button class='vt' onclick='view.k=Math.max(0.2,view.k/1.25);dirty=true'>－</button>"
   +"<button class='vt' onclick='fitAll()'>⤢ 适配</button>"
   +"<button class='vt' onclick='locateActive()'>⌖ 活跃面</button>"
-  +"</span><span class='sep'></span>";
+  +"</span><span class='sep'></span><span class='lbl'>数据源</span><span class='vg' id='srcSwitch2'>"
+  +"<button class='vt on' onclick=\"setGanttSource('all')\">全部</button>"
+  +"<button class='vt' onclick=\"setGanttSource('real')\">真实</button>"
+  +"<button class='vt' onclick=\"setGanttSource('sim')\">SIM</button></span>";
  h+="<span class='vg'><button class='vt"+(towerMode?" on":"")+"' id='towerBtn' onclick='toggleTower()' title='塔台巡航：镜头自动轮巡全部已认领任务（机场调度监控模式）'>✈ 塔台巡航</button></span>";
  v.innerHTML=h;}
 
@@ -1821,6 +1813,10 @@ document.getElementById("dockFold").onclick=()=>{dockFolded=!dockFolded;
  dock.classList.toggle("folded",dockFolded);
  document.getElementById("dockFold").textContent=dockFolded?"▴":"▾";
  sizeGantt();dirty=true;};
+document.querySelectorAll("#srcSwitch").forEach(sw=>{sw.addEventListener("click",ev=>{
+ const b=ev.target.closest("[data-src]");if(!b)return;ganttSource=b.dataset.src;
+ sw.querySelectorAll("[data-src]").forEach(x=>x.classList.toggle("on",x===b));
+ sw._built=false;sizeGantt();drawGantt();});});
 document.querySelectorAll(".dtab").forEach(t=>{t.onclick=()=>{
  dockTab=t.dataset.t;
  document.querySelectorAll(".dtab").forEach(x=>x.classList.toggle("on",x.dataset.t===dockTab));
@@ -1837,9 +1833,14 @@ function sizeGantt(){const c=gantt;if(!c)return;const r=c.getBoundingClientRect(
  if(r.width<10)return;c.width=r.width*dpr;c.height=r.height*dpr;}
 const AGENT_COL=["#38bdf8","#a78bfa","#4ade80","#facc15","#f472b6","#22d3ee","#fb923c","#94a3b8"];
 function agentColor(a){let h=0;for(const ch of a)h=(h*31+ch.charCodeAt(0))>>>0;return AGENT_COL[h%AGENT_COL.length];}
+let ganttSource="all",agentFilter=null;
+function simEvents(){const evs=(DATA.simlog&&DATA.simlog.events)||[];
+ let out=ganttSource==="all"?evs:evs.filter(e=>(e.src||"real")===ganttSource||ganttSource==="real"&&e.src!=="sim");
+ if(agentFilter)out=out.filter(e=>e.agent===agentFilter||out.some(q=>q.agent===agentFilter&&q.task===e.task));
+ return out;}
 function parseT(ts){const m=/T(\d+)/.exec(ts||"");return m?parseInt(m[1],10):0;}
 function drawGantt(){const c=gantt;if(!c||c.width<10)return;
- const evs=(DATA.simlog&&DATA.simlog.events)||[];
+ const evs=simEvents();
  gtx.setTransform(dpr,0,0,dpr,0,0);
  const W=c.width/dpr,H=c.height/dpr;
  gtx.fillStyle="#070c14";gtx.fillRect(0,0,W,H);
@@ -1904,10 +1905,18 @@ function drawGantt(){const c=gantt;if(!c||c.width<10)return;
    gtx.strokeRect(x0-1.5,y-1.5,Math.max(4,x1-x0)+3,rowH-3);}});
  // 图例
  gtx.fillStyle="#556777";gtx.font="9px system-ui";
- gtx.fillText("■ 完成  ▌运行中（琥珀光标）  颜色=泳道域 / 描边=认领 agent  ·  滚轮缩放 · 拖拽平移 · 点条跳主图",padL,H-4);}
+  gtx.fillText("■ 完成  ▌运行中（琥珀光标）  颜色=泳道域 / 描边=认领 agent  ·  滚轮缩放 · 拖拽平移 · 点条跳主图",padL,H-4);
+  const sw=document.getElementById("srcSwitch");
+  if(sw&&!sw._built){sw._built=true;
+   const agents=[];evs.forEach(e=>{if(e.agent&&agents.indexOf(e.agent)<0)agents.push(e.agent);});
+   sw.innerHTML="<span class='vt' style='border:0;cursor:default;color:var(--dim2)'>agent:</span>"+agents.map(a2=>"<button class='vt' data-ag='"+a2+"' style='border-left:3px solid "+agentColor(a2)+"' onclick=\"setAgentFilter('"+a2+"')\">"+a2+"</button>").join("")
+    +"<button class='vt on' data-ag='' onclick=\"setAgentFilter(null)\">全部</button>";}}
+function setAgentFilter(a){agentFilter=a||null;
+ document.querySelectorAll("#srcSwitch [data-ag]").forEach(b2=>b2.classList.toggle("on",b2.dataset.ag===agentFilter));
+ drawGantt();}
 let ganttView=null,gDrag=null;
 gantt.addEventListener("wheel",ev=>{ev.preventDefault();
- const evs=(DATA.simlog&&DATA.simlog.events)||[];if(!evs.length)return;
+ const evs=simEvents();if(!evs.length)return;
  let tMax=0;evs.forEach(e=>{tMax=Math.max(tMax,parseT(e.ts)+2);});
  if(!ganttView)ganttView={t0:0,t1:tMax};
  const f=ev.deltaY<0?0.8:1.25;
@@ -1930,7 +1939,7 @@ gantt.addEventListener("pointermove",ev=>{
 gantt.addEventListener("pointerup",()=>{gDrag=null;});
 let ganttHover=null;
 function hitTaskAt(x,y){ // 命中检测：运行图任务条（复用 drawGantt 的布局参数）
- const evs=(DATA.simlog&&DATA.simlog.events)||[];if(!evs.length)return null;
+ const evs=simEvents();if(!evs.length)return null;
  const span=ganttView.t1-ganttView.t0,W=gantt.clientWidth-16;
  const jobs={};
  evs.forEach(e=>{const j=jobs[e.task]||(jobs[e.task]={lane:e.note||"",t0:1e9,t1:-1,done:false,agent:e.agent});
@@ -1948,7 +1957,7 @@ gantt.addEventListener("click",ev=>{ // 点条跳主图对应任务
  const rect=gantt.getBoundingClientRect();
  const hit=hitTaskAt(ev.clientX-rect.left,ev.clientY-rect.top);
  if(hit){setView("graph");jump(hit);}});
-function buildLogList(){const evs=((DATA.simlog&&DATA.simlog.events)||[]).slice().reverse();
+function buildLogList(){const evs=simEvents().slice().reverse();
  const el=document.getElementById("logList");
  el.innerHTML=evs.map(e=>"<div class='lst' onclick='sideSelect(\""+e.task+"\")' onmouseenter='hi=\""+e.task+"\";dirty=true'>"
   +"<span class='dot' style='background:"+agentColor(e.agent)+"'></span>"

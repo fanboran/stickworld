@@ -1142,7 +1142,8 @@ function draw(){
    ctx.shadowColor=ac;ctx.shadowBlur=3+5*pulse;
    roundRect(ctx,x,y,w,h,4);ctx.stroke();ctx.shadowBlur=0;
    ctx.fillStyle=ac;ctx.font="700 9px "+MONO;
-   ctx.fillText("◉ "+n.claim,x+w-10-ctx.measureText("◉ "+n.claim).width,y+14);}
+   const tag="◉ "+n.claim+claimDurText(n.id);
+   ctx.fillText(tag,x+w-10-ctx.measureText(tag).width,y+14);}
   if(n.tier==="微"){ // 微任务单行：点+名称+状态字
    ctx.fillStyle=c;ctx.beginPath();ctx.arc(x+10,y+h/2,3,0,7);ctx.fill();
    ctx.fillStyle="#c9d4e0";fontSmall();ctx.fillText(n.name,x+18,y+16);
@@ -1864,6 +1865,16 @@ function sizeGantt(){const c=gantt;if(!c)return;const r=c.getBoundingClientRect(
  if(r.width<10)return;c.width=r.width*dpr;c.height=r.height*dpr;}
 const AGENT_COL=["#38bdf8","#a78bfa","#4ade80","#facc15","#f472b6","#22d3ee","#fb923c","#94a3b8"];
 function agentColor(a){let h=0;for(const ch of a)h=(h*31+ch.charCodeAt(0))>>>0;return AGENT_COL[h%AGENT_COL.length];}
+function claimDuration(task){ // 认领时长（分钟）：从真实调度日志回放
+ const evs=(DATA.simlog&&DATA.simlog.events)||[];
+ let t0=null;
+ for(let i=evs.length-1;i>=0;i--){const e=evs[i];
+  if(e.task===task&&e.action==="claim")t0=e.ts;}
+ if(!t0)return null;
+ const t=new Date(t0.replace(" ","T"));
+ if(isNaN(t))return null;
+ return Math.max(0,Math.round((Date.now()-t)/60000))+"min";}
+function claimDurText(task){const m=claimDuration(task);return m?(" · "+m):"";}
 let ganttSource="all",agentFilter=null;
 function simEvents(){const evs=(DATA.simlog&&DATA.simlog.events)||[];
  let out=ganttSource==="all"?evs:evs.filter(e=>(e.src||"real")===ganttSource||ganttSource==="real"&&e.src!=="sim");
@@ -1968,7 +1979,7 @@ gantt.addEventListener("pointerdown",ev=>{gDrag={x:ev.clientX,t0:ganttView?gantt
  try{gantt.setPointerCapture(ev.pointerId);}catch(e2){}});
 gantt.addEventListener("pointermove",ev=>{
  if(!gDrag&&ganttView){const rect=gantt.getBoundingClientRect();
-  ganttHover=hitTaskAt(ev.clientX-rect.left,ev.clientY-rect.top);
+  ganttHover=hitGantt(ev.clientX-rect.left,ev.clientY-rect.top);
   if(ganttHover){hi=ganttHover;dirty=true;}   // 双向联动：运行图悬停 → 主图节点高亮
   else if(hi&&selSet.size===0&&!sel){hi=null;dirty=true;}
   return;}
@@ -1978,25 +1989,36 @@ gantt.addEventListener("pointermove",ev=>{
  if(ganttView.t0===0)ganttView.t1=Math.max(ganttView.t1,span);drawGantt();});
 gantt.addEventListener("pointerup",()=>{gDrag=null;});
 let ganttHover=null;
-function hitTaskAt(x,y){ // 命中检测：运行图任务条（复用 drawGantt 的布局参数）
+function hitGantt(x,y){ // 命中检测：{type:"task",id} 或 {type:"band",lane}（空带区域=聚拢该泳道）
  const evs=simEvents();if(!evs.length)return null;
  const span=ganttView.t1-ganttView.t0,W=gantt.clientWidth-16;
- const jobs=ganttJobs;  // 复用 drawGantt 聚合
- evs.forEach(e=>{const j=jobs[e.task]||(jobs[e.task]={lane:e.note||"",t0:1e9,t1:-1,done:false,agent:e.agent});
-  if(e.action==="claim"){j.t0=Math.min(j.t0,parseT(e.ts));j.lane=e.note||j.lane;j.agent=e.agent;}
-  if(e.action==="done"){j.t1=Math.min(j.t1,parseT(e.ts));j.done=true;}});
- const bandKeys=[];Object.keys(jobs).forEach(id=>{if(bandKeys.indexOf(jobs[id].lane)<0)bandKeys.push(jobs[id].lane);});
- lanes.forEach(l=>{if(bandKeys.indexOf(l)<0)bandKeys.push(l);});
+ const bandKeys=[];Object.keys(ganttJobs).forEach(id=>{if(bandKeys.indexOf(ganttJobs[id].lane)<0)bandKeys.push(ganttJobs[id].lane);});
  const padT=8,bandH=Math.min(46,(gantt.clientHeight-26)/bandKeys.length);
- const hit=Object.keys(jobs).find(id=>{const j=jobs[id];
+ const hit=Object.keys(ganttJobs).find(id=>{const j=ganttJobs[id];
   const b=bandKeys.indexOf(j.lane),y0=padT+b*bandH;
   const x0=8+(j.t0-ganttView.t0)/span*W,x1=j.done?8+(j.t1+1-ganttView.t0)/span*W:W+8;
   return y>=y0&&y<=y0+bandH&&x>=x0-4&&x<=x1+4;});
- return hit;}
-gantt.addEventListener("click",ev=>{ // 点条跳主图对应任务
+ if(hit)return{type:"task",id:hit};
+ const bi=Math.floor((y-padT)/bandH);
+ return (bi>=0&&bi<bandKeys.length)?{type:"band",lane:bandKeys[bi]}:null;}
+gantt.addEventListener("click",ev=>{ // 点条=跳主图特写；点空带=主图聚拢该泳道
  const rect=gantt.getBoundingClientRect();
- const hit=hitTaskAt(ev.clientX-rect.left,ev.clientY-rect.top);
- if(hit){setView("graph");jump(hit);}});
+ const hit2=hitGantt(ev.clientX-rect.left,ev.clientY-rect.top);
+ if(!hit2)return;
+ if(hit2.type==="task"){setView("graph");jump(hit2.id);}
+ else if(hit2.type==="band"){setView("graph");
+  const chip=[].find.call(document.querySelectorAll(".lchip"),x=>x.textContent.indexOf(hit2.lane)>=0);
+  if(chip)chip.click();  // 复用泳道胶囊单击=聚拢该线
+ }});
+gantt.addEventListener("click",ev=>{ // 点条=跳主图特写；点空带=主图聚拢该泳道
+ const rect=gantt.getBoundingClientRect();
+ const hit=hitGantt(ev.clientX-rect.left,ev.clientY-rect.top);
+ if(!hit)return;
+ if(hit.type==="task"){setView("graph");jump(hit.id);}
+ else if(hit.type==="band"){setView("graph");
+  const chip=[].find.call(document.querySelectorAll(".lchip"),x=>x.textContent.indexOf(hit.lane)>=0);
+  if(chip)chip.click();  // 复用泳道胶囊单击=聚拢该线
+ }});
 function buildLogList(){const evs=simEvents().slice().reverse();
  const el=document.getElementById("logList");
  el.innerHTML=evs.map(e=>"<div class='lst' onclick='sideSelect(\""+e.task+"\")' onmouseenter='hi=\""+e.task+"\";dirty=true'>"

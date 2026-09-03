@@ -516,7 +516,17 @@ HTML = r"""<!DOCTYPE html>
  .lchip:hover{background:var(--lift);border-color:#3a5678;color:var(--txt)}
  .lchip.off{opacity:.3;text-decoration:line-through}
  .lchip.focus{border-color:var(--acc);color:var(--acc);background:#12304a}
- /* ── 视图页签（LOGIC-8 tabs：1px 缝 + inset 下划线 active） ── */
+ /* ── 画布工具条（LOGIC-8 view-bar：分组 tiny 按钮密集排列） ── */
+ #vbar{position:fixed;display:none;align-items:center;gap:1px;background:var(--line);
+   border-bottom:1px solid var(--line2);padding:4px 8px;z-index:16;overflow-x:auto;scrollbar-width:none}
+ #vbar .vg{display:flex;gap:1px;align-items:center;flex-shrink:0}
+ #vbar .sep{width:1px;height:16px;background:var(--line2);margin:0 7px;flex-shrink:0}
+ #vbar .vt{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:4px;
+   padding:3px 8px;font:500 11px/1.2 system-ui,sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0}
+ #vbar .vt:hover{color:var(--txt);border-color:#3a5678}
+ #vbar .vt.on{background:#12304a;border-color:var(--acc);color:var(--acc)}
+ #vbar .lbl{font-size:9.5px;color:var(--dim2);letter-spacing:.5px;flex-shrink:0}
+ /* ── 视图页签（岗位工作台） ── */
  #viewTabs{gap:1px;background:var(--line);flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
  .vtab{font-size:11.5px;padding:5px 12px;border:0;cursor:pointer;background:var(--panel2);
    color:var(--sub);user-select:none;white-space:nowrap;flex-shrink:0}
@@ -589,6 +599,13 @@ HTML = r"""<!DOCTYPE html>
    padding:0 14px;font:11px/1 var(--mono);color:var(--sub);z-index:14;
    background:linear-gradient(180deg,rgba(6,10,17,0),rgba(6,10,17,.94));pointer-events:none}
  #cfoot #cfR{color:#93a7c0}
+ /* ── 相关项浮窗（左下小窗） ── */
+ #relwin{position:fixed;left:262px;bottom:44px;width:320px;max-height:62vh;overflow:auto;display:none;
+   flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:6px;
+   z-index:30;box-shadow:0 8px 24px #000a}
+ #relwin .phead{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12.5px;color:#eaf6ff;
+   border-bottom:1px solid var(--line)}
+ #relwin .pbody{overflow:auto}
  /* ── kv 状态格条（LOGIC-8 status-strip：1px 缝网格+等宽数值） ── */
  .strip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
    border-bottom:1px solid var(--line2)}
@@ -712,6 +729,8 @@ HTML = r"""<!DOCTYPE html>
  <div class="btns"><button class="no" onclick="closeModal()">取消</button><button class="go" id="ntGo" onclick="submitTaskForm()">创建</button></div>
 </div></div>
 <div id="dash"></div>
+<div id="vbar"></div>
+<div id="relwin" title="相关项浮窗：点击行定位，⤢ 跳全图"></div>
 <div id="sideL" class="side"></div>
 <div id="sideR" class="side"><div id="inspector"><div class="ph">点选任务查看详情（前置/被依赖/关联文档可点跳转）</div></div></div>
 <div id="msgs"></div>
@@ -749,6 +768,8 @@ const LANE_COL=["#38bdf8","#a78bfa","#fb923c","#4ade80","#facc15","#f472b6","#22
 const FRAME_PAD=18,FRAME_TOP=34;
 let BAR_H=80;  // 顶栏实际高度（resize 动态测量）：画布内容/分隔墙/聚拢标注从这条线以下开始
 let dpr=1,VW=0,VH=0,animT=0;
+const MONO='ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace';
+const FONT_SM='11px "Segoe UI","Microsoft YaHei",sans-serif';
 let nodes=DATA.nodes,edges=DATA.edges,lanes=DATA.lanes;
 const manual0=nodes.some(n=>n.x!=null);
 nodes.forEach(n=>{n.px=n.x!=null?n.x:0;n.py=n.y!=null?n.y:0;n.lines=[];n.cw=150;n.ch=56;n.inP=[];n.outP=[];});
@@ -806,7 +827,15 @@ function ancestors(id){const s=new Set(),st=[id];while(st.length){(prsOf[st.pop(
 function descendants(id){const s=new Set(),st=[id];while(st.length){(blocksOf[st.pop()]||[]).forEach(b=>{if(!s.has(b)){s.add(b);st.push(b);}});}return s;}
 function laneHidden(l){return l&&laneVis[l]===false;}
 let viewFilter={};  // 岗位视图过滤（页签切换设置）：lanes=可见线集合 / ids=按任务判定函数
-function visNode(n){return !laneHidden(n.lane)&&(!viewFilter.lanes||viewFilter.lanes.has(n.lane))&&(!viewFilter.ids||viewFilter.ids(n));}
+let statusFilter=new Set(),microOn=true,doneOn=true;  // view-bar 筛选态（跨视图保留）
+function visNode(n){
+ if(laneHidden(n.lane))return false;
+ if(viewFilter.lanes&&!viewFilter.lanes.has(n.lane))return false;
+ if(viewFilter.ids&&!viewFilter.ids(n))return false;
+ if(statusFilter.size&&!statusFilter.has(n.status))return false;
+ if(n.tier==="微"&&!microOn)return false;
+ if(n.status==="完成"&&!doneOn)return false;
+ return true;}
 function nodeVisible(n){return visNode(n)&&(!q||n._hit);}
 function resize(){dpr=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;
  BAR_H=document.getElementById("bar").offsetHeight||80;  // 窄屏换行/媒体查询后顶栏高度跟随实测
@@ -883,7 +912,8 @@ function edgeGeom(e){ // litegraph SPLINE_LINK：控制点 = 端口方向 × 0.2
  return{x1,y1,x2,y2,c1x:x1+dx,c1y:y1,c2x:x2-dx,c2y:y2};}
 function edgeBad(e){const a=vById[e.a],b=vById[e.b];
  return a&&b&&a.status!=="完成"&&ACTIVE.has(b.status);}
-function laneBandLayout(){ // 泳道带状布局：每条线一条水平带，任务按依赖深度从左到右
+const COLW=240;
+function laneBandLayout(){ // 泳道带状布局 v2：行=泳道水平带，列=依赖深度（同带同深度垂直堆叠）——横平竖直
  const vis=VN.filter(n=>visNode(n));
  const visIds=new Set(vis.map(n=>n.id));
  const deps={},depth={},visiting=new Set();
@@ -901,12 +931,15 @@ function laneBandLayout(){ // 泳道带状布局：每条线一条水平带，�
   let yBase=30;
   Object.keys(bands).map(Number).sort((a,b)=>a-b).forEach(li=>{
    const arr=bands[li].sort((a,b)=>(depth[a.id]-depth[b.id])||(a.id<b.id?-1:1));
-   let rowY=yBase,lastEnd=-1e9;
-   arr.forEach(n=>{
-    let x=x0+depth[n.id]*230;
-    if(x<lastEnd+10){x=lastEnd+10;rowY+=n.ch+8;}  // 同带放不下→带内换行
-    n.px=x;n.py=rowY;lastEnd=Math.max(lastEnd,x+n.cw);});
-   yBase=rowY+30+16;});
+     const cols={};                                   // depth 列 → 垂直堆叠队列
+   arr.forEach(n=>{(cols[depth[n.id]]=cols[depth[n.id]]||[]).push(n);});
+   let bandH=0;
+   Object.keys(cols).map(Number).sort((a,b)=>a-b).forEach(d=>{
+    cols[d].forEach((n,i)=>{
+     n.px=x0+d*COLW;
+     n.py=yBase+i*(n.ch+8);
+     bandH=Math.max(bandH,(i+1)*(n.ch+8));});});
+   yBase+=bandH+24;});
   return yBase;}
  let endY=place(doneVis,30);
  const dMax=doneVis.length?Math.max(...doneVis.map(n=>n.px+n.cw)):0;
@@ -936,17 +969,18 @@ function draw(){
   const c=LANE_COL[i%LANE_COL.length];
   const x=f.minX-FRAME_PAD,y=f.minY-FRAME_PAD-FRAME_TOP+14;
   const w=f.maxX-f.minX+FRAME_PAD*2,h=f.maxY-f.minY+FRAME_PAD*2+FRAME_TOP-14;
-  ctx.fillStyle=c+"0a";roundRect(ctx,x,y,w,h,14);ctx.fill();
-  ctx.strokeStyle=c+"2e";ctx.lineWidth=1.2;ctx.stroke();
-  ctx.fillStyle=c+"cc";fontSmall();
-  ctx.fillText("◤ "+ln+" · "+f.n,x+12,y+15);});
+  ctx.fillStyle=c+"09";roundRect(ctx,x,y,w,h,3);ctx.fill();
+  ctx.strokeStyle=c+"33";ctx.lineWidth=1;ctx.stroke();
+  ctx.fillStyle=c;ctx.font="600 10px "+MONO;
+  ctx.fillText("[ "+ln+" · "+f.n+" ]",x+12,y+15);
+  ctx.font=FONT_SM;});
  CLUSTERS.forEach(c=>{if(folded[c.id])return;
   const ms=c.members.map(id=>byId[id]).filter(Boolean);if(!ms.length)return;
   const x0=Math.min(...ms.map(m=>m.px))-12,y0=Math.min(...ms.map(m=>m.py))-26;
   const x1=Math.max(...ms.map(m=>m.px+m.cw))+12,y1=Math.max(...ms.map(m=>m.py+m.ch))+12;
   const li=lanes.indexOf(ms[0].lane),lc=LANE_COL[(li<0?0:li)%LANE_COL.length];
-  ctx.strokeStyle=lc+"55";ctx.lineWidth=1.2;ctx.setLineDash([7,5]);
-  roundRect(ctx,x0,y0,x1-x0,y1-y0,12);ctx.stroke();ctx.setLineDash([]);
+  ctx.strokeStyle=lc+"55";ctx.lineWidth=1;ctx.setLineDash([6,4]);
+  roundRect(ctx,x0,y0,x1-x0,y1-y0,3);ctx.stroke();ctx.setLineDash([]);
   ctx.fillStyle=lc+"cc";fontSmall();ctx.textAlign="left";
   ctx.fillText("▣ "+c.name+"（点击收起）",x0+10,y0+14);});
  const anc=hi?ancestors(hi):null,des=hi?descendants(hi):null;
@@ -998,10 +1032,10 @@ function draw(){
   const li=lanes.indexOf(n.lane),lc=LANE_COL[(li<0?0:li)%LANE_COL.length];
   ctx.globalAlpha=dim;
   const isDone=n.status==="完成";
-  ctx.fillStyle=isDone?lc+"1a":"#111a29";roundRect(ctx,x,y,w,h,7);ctx.fill();  // 完成=泳道色淡底（区分领域）
-  ctx.strokeStyle=n.id===sel?"#f472b6":(isDone?lc:c);ctx.lineWidth=n.id===sel?2:1.2;  // 完成=泳道色边框
-  if(n.exempt)ctx.setLineDash([5,3]);
-  roundRect(ctx,x,y,w,h,10);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=isDone?lc+"1a":"#111a29";roundRect(ctx,x,y,w,h,4);ctx.fill();  // 完成=泳道色淡底（区分领域）
+  ctx.strokeStyle=n.id===sel?"#f472b6":(isDone?lc:"#2b3f5a");ctx.lineWidth=n.id===sel?2:(n.tier==="微"?1:1.2);  // 完成=泳道色边框
+  if(n.exempt)ctx.setLineDash([4,3]);
+  roundRect(ctx,x,y,w,h,4);ctx.stroke();ctx.setLineDash([]);
   ctx.fillStyle=lc;ctx.fillRect(x+1,y+1,4,h-2);            // 泳道色条
   ctx.fillStyle=c;ctx.fillRect(x+5,y+6,3,h-12);            // 状态色条
   if(n.kind==="里程碑"){ctx.fillStyle=c;ctx.font='11px sans-serif';ctx.fillText("◆",x+14,y+17);}
@@ -1012,7 +1046,7 @@ function draw(){
   n.lines.forEach((L,i)=>ctx.fillText(L,x+18+((n.kind==="里程碑"&&i===0)?13:0),y+23+i*17));
   fontSmall();const st=n.status+(n.exempt?" ·豁免":"");
   const pw=ctx.measureText(st).width+12;
-  ctx.fillStyle=c+"26";roundRect(ctx,x+9,y+h-24,pw,16,8);ctx.fill();
+  ctx.fillStyle=c+"1f";roundRect(ctx,x+9,y+h-24,pw,16,3);ctx.fill();
   ctx.fillStyle=c;ctx.fillText(st,x+15,y+h-12);
   if(n.tree){ctx.fillStyle="#6e7a87";ctx.fillText("⌂ "+n.tree,x+9+pw+8,y+h-12);}
   if(n.tier==="微"){ // 微任务单行：点+名称+状态字
@@ -1103,7 +1137,17 @@ function graphBBox(){const vis=VN.filter(n=>visNode(n)&&(!focusLane||n._f!=="oth
   w:Math.max(...xs.map((v,i)=>v+vis[i].cw))-Math.min(...xs)+120,
   h:Math.max(...ys.map((v,i)=>v+vis[i].ch))-Math.min(...ys)+140};}
 function sideW(){const l=document.getElementById("sideL"),r=document.getElementById("sideR");
- return{L:(l&&l.style.display!=="none")?248:0,R:(r&&r.style.display!=="none")?308:0};}
+ return{L:(l&&l.style.display!=="none")?(l.offsetWidth||248):0,R:(r&&r.style.display!=="none")?(r.offsetWidth||308):0};}
+let flyRAF=null;
+function flyTo(wx,wy,k){ // 特写镜头：缓动飞向目标（侧栏避让后的可视中心）
+ const s=sideW();k=k||view.k;
+ const tx=s.L+(VW-s.L-s.R)/2-wx*k,ty=Math.max(BAR_H,VH/2-wy*k);
+ const f={x:view.x,y:view.y,k:view.k},st=performance.now(),dur=460;
+ if(flyRAF)cancelAnimationFrame(flyRAF);
+ const step=ts=>{const u=Math.min(1,(ts-st)/dur),e=u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+  view.x=f.x+(tx-f.x)*e;view.y=f.y+(ty-f.y)*e;view.k=f.k+(k-f.k)*e;dirty=true;
+  if(u<1)flyRAF=requestAnimationFrame(step);};
+ flyRAF=requestAnimationFrame(step);}
 function centerOn(wx,wy,k){const s=sideW();if(k)view.k=k;
  view.x=s.L+(VW-s.L-s.R)/2-wx*view.k;view.y=Math.max(BAR_H,VH/2-wy*view.k);dirty=true;}
 function fitAll(){const g=graphBBox();const s=sideW();
@@ -1151,8 +1195,8 @@ function showPanel(n){const p=document.getElementById("inspector");
  if(inCrit>0)ctxBits.push("🛤 关键路径第 "+(inCrit+1)+" 跳");
  if(n.kind==="里程碑")ctxBits.push("收口门");
  p.innerHTML="<h3>"+(n.kind==="里程碑"?"◆ ":"")+n.name+"</h3>"
- +"<div class='ctxrow'>"+ctxBits.map(x=>"<span"+(x.indexOf("🛤")>=0?" style='color:var(--amber)'":"")+">"+x+"</span>").join(" · ")
- +"<span style='float:right;cursor:pointer;color:#79b8ff' title='相关项小窗：前置/被依赖迷你卡' onclick=\"relPopup('+n.id+')\">⧉ 浮窗</span></div>"
+ +"<div class='ctxrow'>"+ctxBits.map(function(x){return "<span"+(x.indexOf("🛤")>=0?" style='color:var(--amber)'":"")+">"+x+"</span>";}).join(" · ")
+ +"　<span style='cursor:pointer;color:#79b8ff' title='相关项小窗：前置/被依赖迷你卡' onclick='relPopup(this.dataset.t)' data-t='"+n.id+"'>⧉ 浮窗</span></div>"
  +"<div style='margin:6px 14px 0'><span class='tag' style='cursor:default;color:"+COL[n.status]+"'>"+n.status+"</span>"
  +(n.lane?"<span class='tag' style='cursor:default'>"+n.lane+"</span>":"")
  +(n.tree?"<span class='tag' style='cursor:default'>⌂ "+n.tree+"</span>":"")+"</div>"
@@ -1167,7 +1211,7 @@ function showPanel(n){const p=document.getElementById("inspector");
  if(curView!=="producer")document.getElementById("sideR").style.display="flex";}
 function jump(id){const cid=memberOf[id];if(cid&&folded[cid]){folded[cid]=false;rebuildView();}
  const n=byId[id];if(!n)return;sel=id;selSet=new Set([id]);selEdge=null;
- centerOn(n.px+n.cw/2,n.py+n.ch/2,1.1);showPanel(n);}
+ showPanel(n);flyTo(n.px+n.cw/2,n.py+n.ch/2,1.05);}
 // ── 交互（对标 Shader Graph / ComfyUI：左键框选，中键/右键/空格+左键平移，端口连线建边） ──
 function toWorld(ev){return{x:(ev.clientX-view.x)/view.k,y:(ev.clientY-view.y)/view.k};}
 function nodeAt(x,y){for(let i=VN.length-1;i>=0;i--){const n=VN[i];
@@ -1233,7 +1277,7 @@ let lastRmb=null;  // 右键按下点：mouseup 会先清 drag，contextmenu 后
 cv.addEventListener("contextmenu",ev=>{
  if(lastRmb&&Math.hypot(ev.clientX-lastRmb.x,ev.clientY-lastRmb.y)<4)showCtx(ev);
  lastRmb=null;});
-cv.onpointerdown=ev=>{const p=toWorld(ev);
+cv.onpointerdown=ev=>{if(flyRAF){cancelAnimationFrame(flyRAF);flyRAF=null;}const p=toWorld(ev);
  if(ev.button===1||ev.button===2||(ev.button===0&&spaceDown)){   // 平移三通道
   if(ev.button===2)lastRmb={x:ev.clientX,y:ev.clientY};
   drag={pan:true,sx:ev.clientX,sy:ev.clientY,ox:view.x,oy:view.y,rmb:ev.button===2};}
@@ -1308,7 +1352,7 @@ cv.addEventListener("pointermove",ev=>{if(drag)return;const p=toWorld(ev);
  dirty=true;});
 cv.onpointerleave=ev2=>{if(!drag&&!sel){hi=null;dirty=true;}};
 cv.ondblclick=ev=>{const p=toWorld(ev);const n=nodeAt(p.x,p.y);
- if(n){sel=n.id;selSet=new Set([n.id]);centerOn(n.px+n.cw/2,n.py+n.ch/2,1.15);showPanel(n);}
+ if(n){sel=n.id;selSet=new Set([n.id]);showPanel(n);flyTo(n.px+n.cw/2,n.py+n.ch/2,1.15);}
  else fitAll();};
 cv.onwheel=ev=>{ev.preventDefault();const f=ev.deltaY<0?1.13:0.885;const r=toWorld(ev);
  view.k=Math.min(2.5,Math.max(0.2,view.k*f));
@@ -1460,6 +1504,9 @@ function setView(v,force){const prev=curView;
  ["cv","mini","cfoot"].forEach(id2=>{const el=document.getElementById(id2);if(el)el.style.visibility=showDash?"hidden":"visible";});
  document.getElementById("sideL").style.display=showDash?"none":"flex";
  document.getElementById("sideR").style.display=showDash?"none":"flex";
+ const vbel=document.getElementById("vbar");
+ vbel.style.display=showDash?"none":"flex";
+ if(!showDash){const sw=sideW();vbel.style.top=BAR_H+"px";vbel.style.left=sw.L+"px";vbel.style.right=sw.R+"px";buildVbar();}
  if(showDash){dash.style.top=BAR_H+"px";buildDash();return;}
  // 岗位视图 = 布局投影：进入时快照全图坐标 → 对可见子集重新 dagre（隐藏节点不再占位）→ 退出恢复
  // 切视图前清聚拢/关键路径残留：focusLane 的 _f 淡出标记会污染新视图
@@ -1473,9 +1520,35 @@ function setView(v,force){const prev=curView;
  buildSide(v);
  dirty=true;}
 function jumpTo(id){setView("graph");jump(id);}
+function buildVbar(){const v=document.getElementById("vbar");let h="";
+ h+="<span class='lbl'>布局</span><span class='vg'>"
+  +"<button class='vt on' onclick='applyLayout(0)'>▦ 泳道带</button>"
+  +"<button class='vt' onclick='applyLayout(1)'>⟲ 交叉最小</button></span><span class='sep'></span>";
+ h+="<span class='lbl'>状态</span><span class='vg'>"
+  +STATUS.map(function(st){return "<button class='vt"+(statusFilter.has(st)?" on":"")+"' style='border-left:3px solid "+COL[st]+"' onclick=\"toggleStatus('"+st+"')\">"+st+"</button>";}).join("")
+  +"</span><span class='sep'></span>";
+ h+="<span class='vg'>"
+  +"<button class='vt"+(microOn?" on":"")+"' onclick='microOn=!microOn;refilter()'>◌ 微任务</button>"
+  +"<button class='vt"+(doneOn?" on":"")+"' onclick='doneOn=!doneOn;refilter()'>✓ 完成区</button>"
+  +"</span><span class='sep'></span>";
+ h+="<span class='vg'>"
+  +"<button class='vt' onclick='view.k=Math.min(2.5,view.k*1.25);dirty=true'>＋</button>"
+  +"<button class='vt' onclick='view.k=Math.max(0.2,view.k/1.25);dirty=true'>－</button>"
+  +"<button class='vt' onclick='fitAll()'>⤢ 适配</button>"
+  +"<button class='vt' onclick='locateActive()'>⌖ 活跃面</button>"
+  +"</span>";
+ v.innerHTML=h;}
+function applyLayout(mode){ // 0=泳道带状 1=dagre 交叉最小化
+ if(curView==="graph"){laneBandLayout();}else{dagreLayout();}
+ rebuildView();fitAll();dirty=true;}
+function toggleStatus(st){statusFilter.has(st)?statusFilter.delete(st):statusFilter.add(st);
+ buildVbar();refilter();}
+function refilter(){rebuildView();
+ if(curView==="graph"){laneBandLayout();}else{dagreLayout();}
+ rebuildView();fitAll();dirty=true;}
 function sideSelect(id){const n=byId[id];if(!n)return;
  sel=id;selSet=new Set([id]);selEdge=null;hi=id;showPanel(n);
- centerOn(n.px+n.cw/2,n.py+n.ch/2,Math.max(view.k,0.85));  // 特写：相机平移聚焦到该项
+ flyTo(n.px+n.cw/2,n.py+n.ch/2,Math.max(view.k,0.85));  // 特写：相机平移聚焦到该项
  dirty=true;}
 // ── 相关项浮窗（左下小窗：中心任务+前置列+被依赖列迷你卡） ──
 function relPopup(id){const n=byId[id];if(!n)return;

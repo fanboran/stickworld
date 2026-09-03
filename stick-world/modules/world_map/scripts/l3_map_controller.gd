@@ -18,6 +18,9 @@ class_name L3MapController
 ## 缩放指示条（CanvasLayer 直接子节点，open/close 同步显隐）
 var _zoom_indicator: Control = null
 
+## 粒度指示器（CanvasLayer 直接子节点，显隐由本控制器同步；open 时更新文案）
+var _indicator: GranularityIndicator = null
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放状态）
 var _view_initialized: bool = false
 
@@ -34,6 +37,17 @@ func _ready() -> void:
 	# 渲染器悬停检测需要相机做屏幕->地图坐标换算
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
+	# 视图互斥（L1 层号 100 低于 L3 的 101，L1 打开会整个被盖住）：Tab 打开 L1 时
+	# （唯一发 strategic_map_opened 的路径）本视图若仍可见则一并收起，保证
+	# "新打开的视图 = 玩家看到的视图"；L3 收起连带 L2（close 内已处理）
+	if EventBus != null and not EventBus.strategic_map_opened.is_connected(_on_l1_opened):
+		EventBus.strategic_map_opened.connect(_on_l1_opened)
+
+
+## L1（Tab）打开：本视图（含下钻中的 L2）自动收起，避免被盖住的隐形视图
+func _on_l1_opened() -> void:
+	if visible or (l2_view != null and l2_view.visible):
+		close()
 
 
 ## 注入 L2 下钻视图（由 SystemSetup 装配时调用，晚于 _ready）
@@ -49,11 +63,12 @@ func _auto_find_components() -> void:
 			map_renderer = child
 		elif child is MapCamera and map_camera == null:
 			map_camera = child
-	# 缩放指示条（CanvasLayer 直接子节点）
-	if _zoom_indicator == null:
-		var layer := get_parent()
-		if layer != null:
-			_zoom_indicator = layer.get_node_or_null("ZoomIndicator")
+	# 缩放指示条 + 粒度指示器（CanvasLayer 直接子节点；Control 挂 Node2D 下 anchor 会跑位）
+	var layer := get_parent()
+	if _zoom_indicator == null and layer != null:
+		_zoom_indicator = layer.get_node_or_null("ZoomIndicator")
+	if _indicator == null and layer != null:
+		_indicator = layer.get_node_or_null("GranularityIndicator") as GranularityIndicator
 
 
 func _input(event: InputEvent) -> void:
@@ -107,6 +122,8 @@ func _open_l2(label: int) -> void:
 	visible = false
 	if _zoom_indicator != null:
 		_zoom_indicator.visible = false
+	if _indicator != null:
+		_indicator.visible = false  # L2 有自己的指示器
 	l2_view.open("region_%03d" % label)
 
 
@@ -116,6 +133,9 @@ func _on_l2_back() -> void:
 	visible = true
 	if _zoom_indicator != null:
 		_zoom_indicator.visible = true
+	if _indicator != null:
+		_indicator.set_view("L3")
+		_indicator.visible = true
 
 
 ## 打开 L3 地图（M 键触发）
@@ -140,22 +160,35 @@ func open() -> void:
 	if _l2_active and l2_view != null:
 		# 恢复 L2 视图（相机状态保留），L3 保持隐藏（指示条隐藏）
 		visible = false
-		l2_view.visible = true
 		if _zoom_indicator != null:
 			_zoom_indicator.visible = false
+		if _indicator != null:
+			_indicator.visible = false
+		if l2_view.has_method("set_view_visible"):
+			l2_view.call("set_view_visible", true)  # 含 L2 的 HUD/指示器
+		else:
+			l2_view.visible = true
 	else:
 		visible = true
 		if _zoom_indicator != null:
 			_zoom_indicator.visible = true
+		if _indicator != null:
+			_indicator.set_view("L3")
+			_indicator.visible = true
 
 
 ## 关闭 L3 地图（ESC / M 键）
 func close() -> void:
 	if _zoom_indicator != null:
 		_zoom_indicator.visible = false
+	if _indicator != null:
+		_indicator.visible = false
 	# 若在 L2 视图内，一起隐藏（保留状态，重开时恢复）
 	if l2_view != null and l2_view.visible:
-		l2_view.visible = false
+		if l2_view.has_method("set_view_visible"):
+			l2_view.call("set_view_visible", false)  # 含 L2 的 HUD/指示器
+		else:
+			l2_view.visible = false
 	visible = false
 	# 通知 system_setup 恢复场景图输入
 	if EventBus != null:

@@ -39,6 +39,11 @@ const DEFAULT_ZOOM_MULT := 1.0
 ## 底部 HUD（CanvasLayer 直接子节点，open/close 同步显隐）
 var _hud: Control = null
 
+## 粒度指示器 + 聚落 tooltip（CanvasLayer 直接子节点，open/close 同步显隐；
+## 文案更新在 open()，tooltip 内容由其 _process 轮询渲染器 hover 状态）
+var _indicator: GranularityIndicator = null
+var _tooltip: Control = null
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放）
 var _view_initialized: bool = false
 
@@ -79,6 +84,14 @@ func _auto_find_components() -> void:
 			map_camera = child
 		elif child.name.to_lower() == "api" and api == null:
 			api = child
+	# 指示器/tooltip 挂 CanvasLayer 直下（Control 挂 Node2D 下 anchor 参照矩形为 0 会跑位），
+	# 显隐由本控制器与 _hud 一同同步
+	var layer := get_parent()
+	if layer != null:
+		if _indicator == null:
+			_indicator = layer.get_node_or_null("GranularityIndicator") as GranularityIndicator
+		if _tooltip == null:
+			_tooltip = layer.get_node_or_null("SettlementTooltip")
 
 
 func _input(event: InputEvent) -> void:
@@ -106,10 +119,19 @@ func handle_escape() -> bool:
 		visible = false
 		if _hud != null:
 			_hud.visible = false
+		_set_overlay_visible(false)
 		back_requested.emit()
 	else:
 		close()
 	return true
+
+
+## 指示器/tooltip 显隐同步（CanvasLayer 直下子节点，不随 Content 自动隐藏）
+func _set_overlay_visible(v: bool) -> void:
+	if _indicator != null:
+		_indicator.visible = v
+	if _tooltip != null and _tooltip.has_method("reset"):
+		_tooltip.call("reset")  # 复位 hover 记忆，重开后按当前鼠标位置重新评估
 
 
 func _handle_left_click(screen_pos: Vector2) -> void:
@@ -195,6 +217,11 @@ func open() -> void:
 						msize * default_zoom * 0.5, msize * default_zoom * 0.5))
 	if _hud != null:
 		_hud.visible = true
+	# 粒度指示：层级 + 当前地块号 + ESC 语义（直开=关闭 / 下钻=返回 L2）
+	if _indicator != null and api != null and api.has_method("get_current_l1_label"):
+		var l1_label: int = api.get_current_l1_label()
+		_indicator.set_view("L1", "#%d" % l1_label, _drill_from_l2)
+	_set_overlay_visible(true)
 	if EventBus != null:
 		EventBus.strategic_map_opened.emit()
 
@@ -204,5 +231,6 @@ func close() -> void:
 	visible = false
 	if _hud != null:
 		_hud.visible = false
+	_set_overlay_visible(false)
 	if EventBus != null:
 		EventBus.strategic_map_closed.emit()

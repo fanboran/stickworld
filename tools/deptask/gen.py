@@ -61,7 +61,7 @@ from pathlib import Path
 
 STATUSES = ["完成", "待验收", "进行中", "可开工", "阻塞", "冻结", "放弃"]
 ACTIVE = {"进行中", "待验收", "完成"}
-FIELDS = {"名称", "线", "状态", "前置", "域", "树", "位置", "豁免", "注", "文档", "级"}
+FIELDS = {"名称", "线", "状态", "前置", "域", "树", "位置", "豁免", "注", "文档", "级", "认领"}
 
 
 def parse(src: str):
@@ -113,7 +113,7 @@ def parse(src: str):
             continue
         node = {"id": nid, "kind": kind, "name": nid, "lane": "", "status": "可开工",
                 "prs": [], "domain": [], "tree": "", "note": "", "pos": None,
-                "exempt": False, "doc": "", "tier": "", "line": ln}
+                "exempt": False, "doc": "", "tier": "", "claim": "", "line": ln}
         for kv in rest.split("|"):
             if "=" not in kv:
                 errors.append(("E", ln, f"{nid}: 字段缺 '=': {kv.strip()}"))
@@ -148,6 +148,8 @@ def parse(src: str):
                 node["doc"] = v
             elif k == "级":
                 node["tier"] = v
+            elif k == "认领":
+                node["claim"] = v
             else:
                 errors.append(("W", ln, f"{nid}: 未知字段 {k}（可用: {'/'.join(sorted(FIELDS))}）"))
         if nid in nodes:
@@ -451,7 +453,7 @@ def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, rea
         "lanes": lane_order,
         "nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "lane": n["lane"],
                    "status": n["status"], "prs": n["prs"], "domain": n["domain"],
-                   "tree": n["tree"], "note": n["note"], "exempt": n["exempt"], "doc": n["doc"], "tier": n["tier"],
+                   "tree": n["tree"], "note": n["note"], "exempt": n["exempt"], "doc": n["doc"], "tier": n["tier"], "claim": n["claim"],
                    "x": n["pos"][0] if n["pos"] else None,
                    "y": n["pos"][1] if n["pos"] else None} for n in nodes.values()],
         "edges": [{"a": e["a"], "b": e["b"]} for e in edges],
@@ -1719,7 +1721,195 @@ requestAnimationFrame(function loop(ts){if(critOnly){animT++;dirty=true;}  // �
 """
 
 
+# ───────────── AI 调度 CLI：claim / release / done / sim（执行 AI 的自发认领接口） ─────────────
+LOG_PATH = Path(__file__).resolve().parents[2] / "docs" / "项目" / "调度日志.jsonl"
+
+
+def log_event(action, task, agent, extra=""):
+    import json, datetime
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    rec = {"ts": datetime.datetime.now().isoformat(timespec="seconds"),
+           "agent": agent, "action": action, "task": task}
+    if extra:
+        rec["note"] = extra
+    with LOG_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def set_field_in_txt(src_path, nid, field, value):
+    """就地替换任务行内字段（其它行字节不动）。value=None 删除该字段。
+    实现：按 " | " 切分为字段数组后定点替换/删除/追加——无正则边界问题。"""
+    text = src_path.read_text(encoding="utf-8")
+    out = []
+    hit = False
+    prefix_task = "任务 " + nid + " "
+    prefix_ms = "里程碑 " + nid + " "
+    for ln in text.split("\n"):
+        if ln.startswith(prefix_task) or ln.startswith(prefix_ms):
+            hit = True
+            parts = ln.split(" | ")
+            if value is None:
+                parts = [q for q in parts if not q.startswith(field + "=")]
+            else:
+                tgt = field + "=" + value
+                for i, q in enumerate(parts):
+                    if q.startswith(field + "="):
+                        parts[i] = tgt
+                        break
+                else:
+                    parts.append(tgt)
+            ln = " | ".join(parts)
+        out.append(ln)
+    if not hit:
+        return False
+    src_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return True
+
+
+def cmd_claim(src_path, nid, agent):
+    nodes, edges, lane_order, perr, clusters, _ = parse(src_path.read_text(encoding="utf-8"))
+    if nid not in nodes:
+        print("E: 任务不存在: " + nid)
+        return 1
+    n = nodes[nid]
+    if n["status"] in ("完成", "放弃"):
+        print("E: 任务已" + n["status"] + ": " + nid)
+        return 1
+    if n["claim"]:
+        print("E: 已被认领: " + nid + " → " + n["claim"])
+        return 1
+    unmet = [q for q in n["prs"] if q != nid and nodes.get(q, {"status": ""})["status"] != "完成"]
+    if unmet:
+        print("E: 前置未完成，禁止认领: " + nid + " ← " + ",".join(unmet))
+        return 1
+    if not set_field_in_txt(src_path, nid, "认领", agent):
+        print("E: 写回失败")
+        return 1
+    log_event("claim", nid, agent, n["lane"])
+    print("✓ " + agent + " 认领 " + nid + "（" + n["name"] + "）")
+    return 0
+
+
+def cmd_release(src_path, nid, agent=""):
+    nodes, edges, lane_order, perr, clusters, _ = parse(src_path.read_text(encoding="utf-8"))
+    if nid not in nodes:
+        print("E: 任务不存在: " + nid)
+        return 1
+    cur = nodes[nid]["claim"]
+    if not cur:
+        print("E: 未被认领: " + nid)
+        return 1
+    if agent and cur != agent:
+        print("E: 认领者是 " + cur + "，不是 " + agent)
+        return 1
+    set_field_in_txt(src_path, nid, "认领", None)
+    log_event("release", nid, cur)
+    print("✓ 释放 " + nid + "（原认领 " + cur + "）")
+    return 0
+
+
+def cmd_done(src_path, nid, agent):
+    nodes, edges, lane_order, perr, clusters, _ = parse(src_path.read_text(encoding="utf-8"))
+    if nid not in nodes:
+        print("E: 任务不存在: " + nid)
+        return 1
+    set_field_in_txt(src_path, nid, "状态", "完成")
+    set_field_in_txt(src_path, nid, "认领", None)
+    log_event("done", nid, agent, nodes[nid]["lane"])
+    print("✓ " + nid + " 完成（" + agent + "）")
+    return 0
+
+
+def cmd_sim(src_path, agents_n, rounds, seed=7):
+    """多 AI 调度模拟：按就绪集认领→执行→完成，写模拟日志（供运行图/压力测试）。"""
+    import random, json, datetime
+    rng = random.Random(seed)
+    nodes, edges, lane_order, perr, clusters, _ = parse(src_path.read_text(encoding="utf-8"))
+    AGENTS = ["exec-%02d" % i for i in range(1, agents_n + 1)]
+    speed = {a: rng.uniform(0.6, 1.6) for a in AGENTS}
+    spec = {a: rng.choice(["复刻主线", "工程债", "UI线", "战略图", "地图系统", "玩法系统", "叙事设计", "决策"]) for a in AGENTS}
+    t = 0
+    claims = {}  # task → (agent, claim_t)
+    log = []
+    out = Path(".temp/sim_log.jsonl")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    done_count = 0
+    for t in range(rounds):
+        # 认领：每个空闲 agent 从就绪集挑任务（专长线优先，否则关键路径优先近似=被依赖数最多）
+        for a in AGENTS:
+            if any(v[0] == a for v in claims.values()):
+                continue
+            cand = []
+            for nid, n in nodes.items():
+                if n["status"] != "可开工" or nid in claims or nid in done_count if False else nid in claims:
+                    continue
+            for nid, n in nodes.items():
+                if n["status"] != "可开工" or nid in claims:
+                    continue
+                if any(q in claims for q in n["prs"]):
+                    continue
+                all_done = all((q not in nodes) or nodes[q]["status"] == "完成" for q in n["prs"])
+                if not all_done:
+                    continue
+                w = 3 if n["lane"] == spec[a] else 1
+                cand.append((rng.random() < 0.9, w, nid))
+            pool = [c[2] for c in cand if c[0]]
+            if pool:
+                pick = max(pool, key=lambda nid: (nodes[nid]["lane"] == spec[a], sum(1 for n2 in nodes.values() if nid in n2["prs"]), -len(nid)))
+                claims[pick] = (a, t)
+                log.append({"ts": "T%03d" % t, "agent": a, "action": "claim", "task": pick, "note": nodes[pick]["lane"]})
+        # 完成：按速度概率完成
+        for nid in list(claims):
+            a, t0 = claims[nid]
+            dur = max(1, int(round(2 / speed[a])))
+            if t - t0 >= dur and rng.random() < 0.5:
+                nodes[nid]["status"] = "完成"
+                nodes[nid]["claim"] = ""
+                log.append({"ts": "T%03d" % t, "agent": a, "action": "done", "task": nid, "note": nodes[nid]["lane"]})
+                done_count += 1
+                del claims[nid]
+    with out.open("w", encoding="utf-8") as f:
+        for rec in log:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    print("sim 完成：%d agents × %d 轮 → %d 事件，完成 %d 任务 → %s" % (agents_n, rounds, len(log), done_count, out))
+    return 0
+
+
 def main():
+    # 子命令分发：claim/release/done/sim（AI 调度接口），无子命令=默认校验+生成
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("claim", "release", "done", "sim"):
+        cmd = argv[0]
+        rest = argv[1:]
+        root0 = Path(__file__).resolve().parents[2]
+        src0 = root0 / "docs" / "项目" / "任务依赖图.txt"
+        if cmd == "claim":
+            if not rest:
+                print("用法: claim <id> --by <AI名>")
+                return 1
+            nid = rest[0]
+            by = "unknown"
+            if "--by" in rest:
+                by = rest[rest.index("--by") + 1]
+            return cmd_claim(src0, nid, by)
+        if cmd == "release":
+            if not rest:
+                print("用法: release <id> [原认领者]")
+                return 1
+            return cmd_release(src0, rest[0], rest[1] if len(rest) > 1 else "")
+        if cmd == "done":
+            if not rest:
+                print("用法: done <id> --by <AI名>")
+                return 1
+            by = rest[rest.index("--by") + 1] if "--by" in rest else "unknown"
+            return cmd_done(src0, rest[0], by)
+        if cmd == "sim":
+            agents_n, rounds = 6, 40
+            if "--agents" in rest:
+                agents_n = int(rest[rest.index("--agents") + 1])
+            if "--rounds" in rest:
+                rounds = int(rest[rest.index("--rounds") + 1])
+            return cmd_sim(src0, agents_n, rounds)
     ap = argparse.ArgumentParser()
     ap.add_argument("-s", "--src", default="docs/项目/任务依赖图.txt")
     ap.add_argument("-o", "--out", default="docs/项目/任务依赖图.html")

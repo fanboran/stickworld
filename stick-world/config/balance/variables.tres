@@ -1,23 +1,298 @@
-[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3 uid="uid://e1ec3d83dce9"]
+[gd_resource type="Resource" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
+resource_name = "variables"
+_meta = {
+	"resource_name": "variables",
+	"version": "0.1.0",
+	"description": "从 config/excel/平衡变量.xlsx → variables sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/平衡变量.xlsx",
+	"source_sheet": "variables"
+}
 variables = {
-"data": [
-    {"id": "var_attack_base", "category": "combat", "value": 10, "min": 1, "max": 100, "step": 1, "description": "基础攻击力"},
-    {"id": "var_defense_base", "category": "combat", "value": 5, "min": 1, "max": 100, "step": 1, "description": "基础防御力"},
-    {"id": "var_tax_rate", "category": "economy", "value": 0.15, "min": 0, "max": 0.5, "step": 0.01, "description": "基础税率"},
-    {"id": "var_trade_efficiency", "category": "economy", "value": 1, "min": 0.1, "max": 5, "step": 0.1, "description": "贸易效率倍率"},
-    {"id": "var_org_maintenance", "category": "org", "value": 10, "min": 1, "max": 100, "step": 1, "description": "组织每回合维护费"},
-    {"id": "var_org_loyalty_decay", "category": "org", "value": 0.5, "min": 0, "max": 5, "step": 0.1, "description": "组织忠诚度每回合衰减"},
-    {"id": "var_expand_cost_base", "category": "expansion", "value": 200, "min": 50, "max": 1000, "step": 10, "description": "扩张基础消耗"},
-    {"id": "var_expand_cooldown", "category": "expansion", "value": 5, "min": 1, "max": 30, "step": 1, "description": "扩张冷却回合数"},
-    {"id": "var_supply_range", "category": "logistics", "value": 10, "min": 1, "max": 50, "step": 1, "description": "补给线最大范围"},
-    {"id": "var_transport_speed", "category": "logistics", "value": 1, "min": 0.1, "max": 5, "step": 0.1, "description": "运输速度倍率"},
-    {"id": "var_pop_happiness_base", "category": "population", "value": 50, "min": 0, "max": 100, "step": 1, "description": "基础幸福度"},
-    {"id": "var_game_speed", "category": "global", "value": 1, "min": 0.25, "max": 4, "step": 0.25, "description": "游戏速度倍率"},
-    {"id": "var_day_duration", "category": "global", "value": 10, "min": 1, "max": 60, "step": 1, "description": "每回合代表天数"}
-]
+	"data": [
+		{
+			"id": "var_game_speed",
+			"category": "global",
+			"value": 1,
+			"min": 0.25,
+			"max": 4,
+			"step": 0.25,
+			"description": "游戏速度倍率"
+		},
+		{
+			"id": "var_day_duration",
+			"category": "global",
+			"value": 10,
+			"min": 1,
+			"max": 60,
+			"step": 1,
+			"description": "每回合代表天数"
+		},
+		{
+			"id": "var_attack_base",
+			"category": "combat",
+			"value": 10,
+			"min": 1,
+			"max": 100,
+			"step": 1,
+			"description": "基础攻击力"
+		},
+		{
+			"id": "var_defense_base",
+			"category": "combat",
+			"value": 5,
+			"min": 1,
+			"max": 100,
+			"step": 1,
+			"description": "基础防御力"
+		},
+		{
+			"id": "var_tax_rate",
+			"category": "economy",
+			"value": 0.15,
+			"min": 0,
+			"max": 0.5,
+			"step": 0.01,
+			"description": "基础税率"
+		},
+		{
+			"id": "var_trade_efficiency",
+			"category": "economy",
+			"value": 1,
+			"min": 0.1,
+			"max": 5,
+			"step": 0.1,
+			"description": "贸易效率倍率"
+		},
+		{
+			"id": "var_org_maintenance",
+			"category": "org",
+			"value": 10,
+			"min": 1,
+			"max": 100,
+			"step": 1,
+			"description": "组织每回合维护费"
+		},
+		{
+			"id": "var_org_loyalty_decay",
+			"category": "org",
+			"value": 0.5,
+			"min": 0,
+			"max": 5,
+			"step": 0.1,
+			"description": "组织忠诚度每回合衰减"
+		},
+		{
+			"id": "var_expand_cost_base",
+			"category": "expansion",
+			"value": 200,
+			"min": 50,
+			"max": 1000,
+			"step": 10,
+			"description": "扩张基础消耗"
+		},
+		{
+			"id": "var_expand_cooldown",
+			"category": "expansion",
+			"value": 5,
+			"min": 1,
+			"max": 30,
+			"step": 1,
+			"description": "扩张冷却回合数"
+		},
+		{
+			"id": "var_supply_range",
+			"category": "logistics",
+			"value": 10,
+			"min": 1,
+			"max": 50,
+			"step": 1,
+			"description": "补给线最大范围"
+		},
+		{
+			"id": "var_transport_speed",
+			"category": "logistics",
+			"value": 1,
+			"min": 0.1,
+			"max": 5,
+			"step": 0.1,
+			"description": "运输速度倍率"
+		},
+		{
+			"id": "var_pop_happiness_base",
+			"category": "population",
+			"value": 50,
+			"min": 0,
+			"max": 100,
+			"step": 1,
+			"description": "基础幸福度"
+		},
+		{
+			"id": "var_arrow_vx",
+			"category": "combat",
+			"value": 850,
+			"min": 0,
+			"max": 2000,
+			"step": 10,
+			"description": "抛物线箭矢水平分速（px/s）"
+		},
+		{
+			"id": "var_arrow_gravity",
+			"category": "combat",
+			"value": 2000,
+			"min": 0,
+			"max": 5000,
+			"step": 10,
+			"description": "抛物线箭矢重力（px/s²）"
+		},
+		{
+			"id": "var_arrow_lead_factor",
+			"category": "combat",
+			"value": 0.7,
+			"min": 0,
+			"max": 2,
+			"step": 0.05,
+			"description": "箭矢预判系数"
+		},
+		{
+			"id": "var_block_chance",
+			"category": "combat",
+			"value": 0.35,
+			"min": 0,
+			"max": 1,
+			"step": 0.01,
+			"description": "盾牌格挡率（被命中减伤概率）"
+		},
+		{
+			"id": "var_block_damage_factor",
+			"category": "combat",
+			"value": 0.15,
+			"min": 0,
+			"max": 1,
+			"step": 0.01,
+			"description": "格挡减伤系数（剩余伤害比例）"
+		},
+		{
+			"id": "var_block_reset_interval",
+			"category": "combat",
+			"value": 0.6,
+			"min": 0,
+			"max": 3,
+			"step": 0.05,
+			"description": "格挡重置间隔（s）"
+		},
+		{
+			"id": "var_block_front_dot",
+			"category": "combat",
+			"value": 0.25,
+			"min": -1,
+			"max": 1,
+			"step": 0.01,
+			"description": "正面格挡判定方向余弦阈值"
+		},
+		{
+			"id": "var_hitstop_time_scale",
+			"category": "combat",
+			"value": 0.05,
+			"min": 0,
+			"max": 1,
+			"step": 0.01,
+			"description": "命中顿帧时间缩放"
+		},
+		{
+			"id": "var_hitstop_duration",
+			"category": "combat",
+			"value": 0.06,
+			"min": 0,
+			"max": 0.5,
+			"step": 0.01,
+			"description": "命中顿帧时长（s）"
+		},
+		{
+			"id": "var_hitstop_min_interval",
+			"category": "combat",
+			"value": 0.3,
+			"min": 0,
+			"max": 2,
+			"step": 0.05,
+			"description": "顿帧全局最小触发间隔（s）"
+		},
+		{
+			"id": "var_knockback_per_damage",
+			"category": "combat",
+			"value": 16,
+			"min": 0,
+			"max": 100,
+			"step": 0.5,
+			"description": "受击击退力度（每点伤害）"
+		},
+		{
+			"id": "var_walk_speed",
+			"category": "movement",
+			"value": 160,
+			"min": 40,
+			"max": 600,
+			"step": 5,
+			"description": "火柴人步行速度（px/s）"
+		},
+		{
+			"id": "var_run_speed",
+			"category": "movement",
+			"value": 208,
+			"min": 40,
+			"max": 800,
+			"step": 5,
+			"description": "火柴人跑步速度（px/s）"
+		},
+		{
+			"id": "var_base_scale",
+			"category": "movement",
+			"value": 0.5,
+			"min": 0.25,
+			"max": 2,
+			"step": 0.05,
+			"description": "火柴人基础视觉缩放"
+		},
+		{
+			"id": "var_spread_spacing",
+			"category": "formation",
+			"value": 32,
+			"min": 8,
+			"max": 128,
+			"step": 1,
+			"description": "散开编队间距（px）"
+		},
+		{
+			"id": "var_follow_default_gap",
+			"category": "formation",
+			"value": 150,
+			"min": 40,
+			"max": 400,
+			"step": 5,
+			"description": "跟随默认间距（px）"
+		},
+		{
+			"id": "var_row_gap",
+			"category": "formation",
+			"value": 56,
+			"min": 16,
+			"max": 160,
+			"step": 1,
+			"description": "编队列间距（px）"
+		},
+		{
+			"id": "var_catchup_run_dist",
+			"category": "formation",
+			"value": 140,
+			"min": 40,
+			"max": 400,
+			"step": 5,
+			"description": "跟随切跑距离（px）"
+		}
+	]
 }

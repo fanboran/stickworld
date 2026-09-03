@@ -45,24 +45,24 @@ const SHIELD_SCENE_PATH := "res://modules/units/scenes/components/weapon_shield.
 ## 箭矢投影物场景（弓远程攻击发射）
 const ARROW_SCENE_PATH := "res://modules/units/scenes/components/arrow.tscn"
 ## 抛物线箭矢水平分速（px/s；竖直初速按距离解算，重力 ARROW_GRAVITY）
-const ARROW_VX: float = 850.0
+var ARROW_VX: float = 850.0
 ## 抛物线箭矢重力（px/s²）：900px 远射弧顶 ≈ 230px（越友军头顶），150px 内近似平射
-const ARROW_GRAVITY: float = 2000.0
+var ARROW_GRAVITY: float = 2000.0
 ## 箭矢预判系数（瞄移动目标时提前量 × 飞行时间 × 系数）
-const ARROW_LEAD_FACTOR: float = 0.7
+var ARROW_LEAD_FACTOR: float = 0.7
 ## 放箭延迟兜底（s）：仅当 attack_bow 动画**没有** Hit 事件元数据时使用。
 ## 有事件时以事件真值为准（Archidon-Draw Drawn@0.5s / Hit@0.5333s，全长 2.0s）——
 ## 拉弓动画在 0.5s 拉满（Drawn），0.5333s 放箭（Hit），而不是拍脑袋的 0.75s。
 const BOW_FIRE_DELAY_FALLBACK: float = 0.5333
 ## 盾牌格挡率（持盾被近战/箭矢命中时减伤概率；原版 blockChance 同为概率掷骰）
-const BLOCK_CHANCE: float = 0.35
+var BLOCK_CHANCE: float = 0.35
 ## 格挡减伤系数（剩余伤害比例）
-const BLOCK_DAMAGE_FACTOR: float = 0.15
+var BLOCK_DAMAGE_FACTOR: float = 0.15
 ## 格挡重置间隔（s）：一次成功格挡后，这段时间内不能再格挡。
 ## 复刻原版 blockResetInterval——无此节流时高攻速单位会被盾牌无限吃掉伤害。
-const BLOCK_RESET_INTERVAL: float = 0.6
+var BLOCK_RESET_INTERVAL: float = 0.6
 ## 正面格挡判定：来袭方向与朝向夹角余弦大于此值才算"正面"（≈ ±75° 扇区）。
-const BLOCK_FRONT_DOT: float = 0.25
+var BLOCK_FRONT_DOT: float = 0.25
 ## 各武器攻击射程（像素，含手臂长度）
 ## STAFF 600 = SWL Magikill 施法距离（半屏级；原 90 是"法杖敲击"值，会造成
 ## kite_range > 射程死锁：敌人一进保距圈就永远后撤永不还手）
@@ -76,12 +76,12 @@ const WEAPON_RANGE: Dictionary = {
 	WeaponType.MERIC: 400.0,  ## heal_range 兜底语义（唯一真相源仍为行为档案 heal_range，待实测校准）
 }
 ## HitStop 参数（命中顿帧）
-const HITSTOP_TIME_SCALE: float = 0.05
-const HITSTOP_DURATION: float = 0.06
+var HITSTOP_TIME_SCALE: float = 0.05
+var HITSTOP_DURATION: float = 0.06
 ## HitStop 全局最小触发间隔（s）：多单位混战节流，0.3s 内至多冻结一次（审计 P0-2）
-const HITSTOP_MIN_INTERVAL: float = 0.3
+var HITSTOP_MIN_INTERVAL: float = 0.3
 ## 受击击退力度（与伤害正相关）
-const KNOCKBACK_PER_DAMAGE: float = 16.0
+var KNOCKBACK_PER_DAMAGE: float = 16.0
 
 # ─────────────────────────────── 情绪标签（§7.4，battle_ai_director 设置）────────────────────────────────
 ## 战场导演打的情绪标签，影响命中与冷却
@@ -387,6 +387,36 @@ func _apply_balance_calibration() -> void:
 				health.hp = hp
 			_hp_calibrated = true
 	_check_cooldown_vs_anim()
+	_apply_global_tuning()
+
+
+## 全局手感数值校准：从 balance.variables（Excel 平衡变量表 var_* 行）读
+## 弹道/格挡/HITSTOP/击退覆盖代码默认。行缺失保持默认，零回归。
+func _apply_global_tuning() -> void:
+	var rows_v: Variant = BalanceConfig.get_value("balance.variables")
+	if not (rows_v is Array):
+		return
+	var by_id := {}
+	for tuning_row: Dictionary in rows_v:
+		if tuning_row.has("id"):
+			by_id[tuning_row["id"]] = tuning_row.get("value")
+	ARROW_VX = _tuned(by_id, "var_arrow_vx", ARROW_VX)
+	ARROW_GRAVITY = _tuned(by_id, "var_arrow_gravity", ARROW_GRAVITY)
+	ARROW_LEAD_FACTOR = _tuned(by_id, "var_arrow_lead_factor", ARROW_LEAD_FACTOR)
+	BLOCK_CHANCE = _tuned(by_id, "var_block_chance", BLOCK_CHANCE)
+	BLOCK_DAMAGE_FACTOR = _tuned(by_id, "var_block_damage_factor", BLOCK_DAMAGE_FACTOR)
+	BLOCK_RESET_INTERVAL = _tuned(by_id, "var_block_reset_interval", BLOCK_RESET_INTERVAL)
+	BLOCK_FRONT_DOT = _tuned(by_id, "var_block_front_dot", BLOCK_FRONT_DOT)
+	HITSTOP_TIME_SCALE = _tuned(by_id, "var_hitstop_time_scale", HITSTOP_TIME_SCALE)
+	HITSTOP_DURATION = _tuned(by_id, "var_hitstop_duration", HITSTOP_DURATION)
+	HITSTOP_MIN_INTERVAL = _tuned(by_id, "var_hitstop_min_interval", HITSTOP_MIN_INTERVAL)
+	KNOCKBACK_PER_DAMAGE = _tuned(by_id, "var_knockback_per_damage", KNOCKBACK_PER_DAMAGE)
+
+
+## 单变量取值：行存在且 value 为数值时返回 value，否则回退 fallback
+func _tuned(by_id: Dictionary, id: String, fallback: float) -> float:
+	var v: Variant = by_id.get(id)
+	return float(v) if (v is float or v is int) else fallback
 
 
 ## 冷却 vs 动画检查告警去重（每武器类型只告警一次，防逐单位刷屏）
@@ -857,24 +887,17 @@ func _fire_arrow(target: Node) -> void:
 	# 射手胸口（Collider 上部）与目标身体中心（Collider 位置）
 	var from: Vector2 = _body_pos(owner_entity) + Vector2(0, -70)
 	var aim_point: Vector2 = _body_pos(target)
-	# 抛物线解算（SWL AimAngle 语义）：飞行时间 T 按全距离取（基准速 ARROW_VX），
-	# 初速 = 直线分量(d/T) + 抛物线补偿(−½GT)——T 秒后恰好落到目标点，方向自洽
-	# （旧解算用 dist_x 且 lead 加进 vx/vy，纵深差大时方向失配 = "轨迹奇怪"根因）
-	var dist: float = from.distance_to(aim_point)
-	var t: float = clampf(dist / ARROW_VX, 0.12, 2.2)
-	# 移动预判：先按 T 平移目标点，再对**新目标点**解算（保证弹道自洽）
-	if target is CharacterBody2D:
-		aim_point += (target as CharacterBody2D).velocity * t * ARROW_LEAD_FACTOR
-		dist = from.distance_to(aim_point)
-		t = clampf(dist / ARROW_VX, 0.12, 2.2)
-	var aim: Vector2 = aim_point - from
-	var vel := Vector2(aim.x / t, aim.y / t - 0.5 * ARROW_GRAVITY * t)
+	# 抛物线解算（SWL AimAngle 语义）+ 移动目标预判迭代 → ArrowBallistics
+	var target_vel: Vector2 = (target as CharacterBody2D).velocity if target is CharacterBody2D else Vector2.ZERO
+	var solution: Dictionary = ArrowBallistics.solve(from, aim_point, target_vel, ARROW_VX, ARROW_LEAD_FACTOR, ARROW_GRAVITY)
+	var vel: Vector2 = solution["vel"]
+	var t: float = solution["t"]
+	aim_point = solution["aim_point"]
 	# SWL AimAngle 散布（currentShotBodyRandomness/NextGaussian）：出弓方向加高斯扰动，
-	# σ 取兵种档案 aim_scatter（rad）——箭雨自然散开，不再人人弹道全同。
-	# NextGaussian(mean, std, min, max) 三参版直译（11d）：±2σ 截断（dump 无真值，待实测校准）
+	# σ 取兵种档案 aim_scatter（rad）——箭雨自然散开，不再人人弹道全同
 	var scatter: float = float(ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("aim_scatter", 0.0))
 	if scatter > 0.0:
-		vel = vel.rotated(next_gaussian(0.0, scatter, -2.0 * scatter, 2.0 * scatter))
+		vel = vel.rotated(ArrowBallistics.next_gaussian(0.0, scatter, -2.0 * scatter, 2.0 * scatter))
 	var arrow: Node2D = scene.instantiate()
 	var parent: Node = owner_entity.get_parent()
 	if parent == null:
@@ -894,27 +917,6 @@ func _fire_arrow(target: Node) -> void:
 	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾
 	if target != null and is_instance_valid(target) and "arrow_threat_time" in target:
 		target.arrow_threat_time = Time.get_ticks_msec() / 1000.0
-
-
-## 高斯随机数（dump ArcherAi.NextGaussian 三参/四参版直译，11d）：
-## Box-Muller 采样 + [min, max] 截断——先重掷 4 次取落区间值，仍不中则钳制
-## （原版截断策略无真值，重掷为等价近似）。std ≤ 0 直接返回均值。
-static func next_gaussian(mean: float = 0.0, standard_deviation: float = 1.0, min_v: float = NAN, max_v: float = NAN) -> float:
-	if standard_deviation <= 0.0:
-		return mean
-	var g: float = 0.0
-	var v: float = mean
-	for i in range(4):
-		var u1: float = maxf(randf(), 0.0001)
-		g = sqrt(-2.0 * log(u1)) * cos(TAU * randf())
-		v = mean + g * standard_deviation
-		if (is_nan(min_v) or v >= min_v) and (is_nan(max_v) or v <= max_v):
-			return v
-	if not is_nan(min_v):
-		v = maxf(v, min_v)
-	if not is_nan(max_v):
-		v = minf(v, max_v)
-	return v
 
 
 ## 实体身体位置（Collider 世界坐标，缺省回落 global + 典型偏移）
@@ -949,9 +951,10 @@ func is_shield_blocking(incoming_dir: Vector2 = Vector2.ZERO) -> bool:
 		return false
 	if _block_reset_timer > 0.0:
 		return false
-	if incoming_dir != Vector2.ZERO and not _is_frontal(incoming_dir):
+	var facing := _owner_facing_value()
+	if not BlockResolver.is_frontal(incoming_dir, facing, BLOCK_FRONT_DOT):
 		return false
-	return randf() < BLOCK_CHANCE
+	return BlockResolver.roll_block(BLOCK_CHANCE)
 
 
 ## 举盾姿态（原版 IsBlocking()）：true = 该单位正处于防御姿态。
@@ -992,13 +995,15 @@ func can_receive_reflect_damage() -> bool:
 ## 正面判定：来袭方向（攻击者→自己）与自身朝向相反 ⇒ 从正面打来。
 ## facing=+1 面向右 ⇒ 来自右侧的攻击（incoming_dir.x > 0）是正面。
 func _is_frontal(incoming_dir: Vector2) -> bool:
+	return BlockResolver.is_frontal(incoming_dir, _owner_facing_value(), BLOCK_FRONT_DOT)
+
+
+## 持有实体朝向（缺省 1.0 = 面向右）
+func _owner_facing_value() -> float:
 	var owner_entity: Node = get_owner_entity()
-	var facing: float = 1.0
 	if owner_entity != null and owner_entity.has_method("get_facing"):
-		facing = float(owner_entity.get_facing())
-	if facing == 0.0:
-		return true
-	return incoming_dir.normalized().dot(Vector2(signf(facing), 0.0)) >= BLOCK_FRONT_DOT
+		return float(owner_entity.get_facing())
+	return 1.0
 
 
 ## 是否正在挥砍（程序化挥砍已移除，挥砍由攻击动画驱动，恒 false）
@@ -1084,28 +1089,10 @@ func _play_swing() -> void:
 ## 2026-08-31 审计 P0-2 规模节流：全局 Engine.time_scale 冻结是为 1v1 打击感
 ## 设计的——24+ 单位混战每次近战命中都冻结整个世界，画面反复掉到 5% 速度
 ## 且多个恢复 timer 互相覆盖。加全局最小触发间隔（0.3s 至多一次）。
-static var _last_hitstop_ms: int = -100000
+static var _hitstop_ctrl := HitstopController.new()
 
 func _hitstop() -> void:
-	if DisplayServer.get_name() == "headless":
-		return
-	# 2026-08-31 四轮审计：全局 time_scale 冻结只在**玩家附身单位命中**时触发——
-	# 48 人观察场每 0.3s 冻结全世界 0.06s = "又加速又卡顿掉帧"的元凶。
-	# AI 互殴的打击感由受击硬直/击退/红闪承担（原版 SWL 也不冻结全场）
-	var owner_entity: CharacterBody2D = get_owner_entity()
-	if owner_entity == null or not owner_entity.is_possessed():
-		return
-	var now_ms: int = Time.get_ticks_msec()
-	if now_ms - _last_hitstop_ms < int(HITSTOP_MIN_INTERVAL * 1000.0):
-		return
-	_last_hitstop_ms = now_ms
-	Engine.time_scale = HITSTOP_TIME_SCALE
-	var tree := get_tree()
-	if tree != null:
-		# ignore_time_scale=true：恢复定时器不受冻结影响
-		tree.create_timer(HITSTOP_DURATION, true, false, true).timeout.connect(func():
-			Engine.time_scale = 1.0
-		)
+	_hitstop_ctrl.try_trigger(get_owner_entity(), get_tree(), HITSTOP_TIME_SCALE, HITSTOP_DURATION, HITSTOP_MIN_INTERVAL)
 
 
 ## 获取目标实体的 HealthComponent

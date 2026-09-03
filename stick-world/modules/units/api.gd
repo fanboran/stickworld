@@ -35,7 +35,7 @@
 ## 常量：
 ##   - StickmanRig.ANIM_IDLE / ANIM_WALK / ANIM_ATTACK / ANIM_DEAD
 ##   - StickmanRig.WeaponType (SWORD, SPEAR, BOW, SHIELD, UNARMED)
-##   - StickmanEntity.WALK_SPEED / RUN_SPEED / BASE_SCALE
+##   - StickmanEntity.WALK_SPEED / RUN_SPEED / BASE_SCALE（实例数值，可被平衡校准覆盖）
 ##
 ## 信号：
 ##   （当前模块不对外发射信号，预留扩展）

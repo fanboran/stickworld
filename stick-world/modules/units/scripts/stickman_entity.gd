@@ -21,9 +21,9 @@ extends CharacterBody2D
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 基础行走速度（px/s）—— ×1.6 加速后
-const WALK_SPEED: float = 160.0
+var WALK_SPEED: float = 160.0
 ## 奔跑速度—— ×1.6 加速后
-const RUN_SPEED: float = 208.0
+var RUN_SPEED: float = 208.0
 ## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT）
 const WALK_ANIM_BASE: float = 100.0
 ## 动画整体播放倍率（×1.4 加速，与 visual_controller.gd 一致）
@@ -31,7 +31,7 @@ const ANIM_SPEED_MULT: float = 1.4
 ## 切到 idle 的速度阈值
 const IDLE_THRESHOLD: float = 5.0
 ## 火柴人渲染缩放（对齐 stickman_test.BASE_SCALE * 1.5，适配 DESIGN_HEIGHT=1080）
-const BASE_SCALE: float = 0.5
+var BASE_SCALE: float = 0.5
 ## 主手武器类型 -> 攻击动画名：单一真相源在 StickmanAnims.WEAPON_ATTACK_ANIM。
 ## 表现侧（本文件 play_attack）与战斗侧（weapon_mount 订阅命中帧事件）共用同一张表，
 ## 避免"播矛刺动画、却按剑的命中帧结算"的错配。
@@ -342,6 +342,30 @@ func _apply_balance_data() -> void:
 		health_component.hp = float(base_hp)
 	if weapon_mount != null and (base_attack is float or base_attack is int) and float(base_attack) > 0.0:
 		weapon_mount.damage = float(base_attack)
+	_apply_movement_tuning()
+
+
+## 移动/缩放数值校准：balance.variables（Excel 平衡变量表）覆盖代码默认。
+## 在 _ready 内先于首次 _apply_scale() 执行，缩放/碰撞体按校准后值构建。
+func _apply_movement_tuning() -> void:
+	if BalanceConfig == null or BalanceConfig.data.is_empty():
+		return
+	var rows_v: Variant = BalanceConfig.get_value("balance.variables")
+	if not (rows_v is Array):
+		return
+	var by_id := {}
+	for row: Dictionary in rows_v:
+		if row.has("id"):
+			by_id[row["id"]] = row.get("value")
+	var walk: Variant = by_id.get("var_walk_speed")
+	if walk is float or walk is int:
+		WALK_SPEED = float(walk)
+	var run: Variant = by_id.get("var_run_speed")
+	if run is float or run is int:
+		RUN_SPEED = float(run)
+	var scale: Variant = by_id.get("var_base_scale")
+	if scale is float or scale is int:
+		BASE_SCALE = float(scale)
 
 
 ## 实例化并挂载子组件（VisualController / InteractionController / HealthBar）。

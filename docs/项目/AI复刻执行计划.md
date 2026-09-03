@@ -11,14 +11,14 @@
 
 | 顺序 | 批次 ID | 内容 | 估算（轮次） | 状态 |
 |---|---|---|---|---|
-| P1 | 9 | 观察场反馈缺陷清单（六轮验收积累，详表 §二 P1） | 余 ~1 | **17 项已修 ✅**，待修 9d/9h/9j/9k/9s |
+| P1 | 9 | 观察场反馈缺陷清单（六轮验收积累，详表 §二 P1） | 余 ~1 | **18 项已修 ✅**（9d 并入 P5），待修 9h/9j/9k/9s |
 | P2 | 11a | Ai 基类补全簇（y 对齐 6 函数 + 统一 Face + IsUnderThreat 真值；含 9p 首个消费者） | 1.5 | **已完成 ✅**（2026-09-01，含 9f/9p/9r 同轮修） |
 | P3 | 9q | 小鬼脚对齐随 body_scale（可与 P2 同轮顺手修） | 0.3 | **已完成 ✅**（2026-09-01） |
 | P4 | 11b | Formation 列队形（row/col 阵列 + 落点稳定 + 追赶状态） | 1.5 | **已完成 ✅**（2026-09-01） |
-| P5 | 2 | 数值校准（对表解包/wiki；含 11d 射速系） | 2 | 待开工 **← 下一项** |
-| P6 | 7c+11c | TeamAi 逐函数直译（19 函数，含 9i+ 溃逃增强） | 2.5 | 待开工 |
-| P7 | 7b | 祭司 Meric 兵种+治疗 | 1.5 | 待开工 |
-| P8 | 7a | 巨人兵种+抓掷（含 GutSpinner 投射物） | 2.5~3 | 待开工（风险项） |
+| P5 | 2 | 数值校准（对表解包/wiki；含 11d 射速系） | 2 | **已完成 ✅**（2026-09-02，wiki 真值落表 + 9d + 11d；录屏实测抽查待用户验收） |
+| P6 | 7c+11c | TeamAi 逐函数直译（21 函数，含 9i+ 溃逃增强） | 2.5 | **已完成 ✅**（2026-09-03，21 函数直译 + 9i+ 五项增强 + 3 套件 30 用例） |
+| P7 | 7b | 祭司 Meric 兵种+治疗 | 1.5 | **已完成 ✅**（2026-09-03，MericAi 3 函数直译 + HEAL 持续回复 + 后排站位 + L2 降级通用动画 + 12 用例套件） |
+| P8 | 7a | 巨人兵种+抓掷（含 GutSpinner 投射物） | 2.5~3 | 待开工 **← 下一项**（风险项） |
 | P9 | 10 | 物品栏系统（BG3/MC 式；热键核心已落地） | 2~3 | 核心 ✅，UI 待开工 |
 | P10 | 12 | 特效扩容（血溅/焦痕/震地/天气，对齐原版 Effects 16 类） | 1 | 待开工 |
 | P11 | 4 | 法术一部分（**Spell 基类先行**；建议 ArrowVolley + HealSpell） | 1~2 | 用户确认范围后做 |
@@ -31,7 +31,7 @@
 
 **合计约 14.5~17 轮**（不含 P12/P13）。执行顺序 = 表中 P1 → P13 自上而下。
 
-> **🔻 下一上下文开工指引（2026-09-01 P4 收尾）**：P4（11b Formation 列队形）已完成——formation_system 槽位制 row/col 阵列（UNITS_PER_COLUMN=3/ROW_GAP=56/追赶阈值 140 均待实测校准），ADVANCE_ALL/SPRINT 与跟队 tick 全走 formation 槽位落点，battle_sim 回归零 ERROR、21 套件全过，覆盖率 44%→**51%**（含近似 50%→**56%**，见 §三）。下一项从 **P5（批次 2 数值校准）** 开工（数据源与改动点见 §二 P5；含 11d 射速系与 9d 冷却校准）。随后 P6 → P7 → P8。开工前先读 §二 P1 剩余缺陷清单（9d/9h/9j/9k/9s）与 §三审计表，**每轮改完更新 §三 覆盖数**。
+> **🔻 下一上下文开工指引（2026-09-03 P7 收尾）**：P7（批次 7b 祭司 Meric 兵种+治疗）已完成——MericAi 3 函数（Update/CanAttack/UpdateTarget）逐函数直译落 `behavior_heal.gd`（无桩），WeaponMount 治疗 3 方法（can_cast_heal/cast_heal/is_casting_heal）+ 3 字段直译，StatusEffects HEAL 类型 + `_apply_hot` 正向结算（禁入 DamagePipeline），TargetFinder.find_weakest_ally 血量最低友军筛选（含自身），后排站位（is_rear_line + FormationSystem 尾列取向），kite 撤而不打，施法停移。**L2 降级**：Spine 源数据 `[meric].txt` 缺失，祭司用通用动画（治疗功能不受阻），weapon_mericstaff.tscn 复用 magicstaff 贴图。12 用例单元套件全过（test_meric_heal），既有 25 套件零回归，battle_sim 扩展 2 场景 + heal_cast 指标采样。覆盖率 53%→**55%**（MericAi 0%→**100%**，见 §三）。**关键 BUG 修复**：ai_controller `_try_combat` 缩进错位致全单位 idle（已修）。下一项从 **P8（批次 7a 巨人兵种+抓掷）** 开工。**每轮改完更新 §三 覆盖数**。
 
 ---
 
@@ -64,7 +64,7 @@
 
 | 项 | 根因 | 修法 | 归属 |
 |---|---|---|---|
-| 9d 弓手射速不科学 | cooldown 1.35s（剑对齐值）未对 SWL 弓手攻速真值；冷却与动画时长无约束 | 对表 wiki/dump；加检查项"冷却 ≥ 攻击动画时长" | **P5（2）** |
+| ~~9d 弓手射速不科学~~ | cooldown 1.35s（剑对齐值）未对 SWL 弓手攻速真值；冷却与动画时长无约束 | **已修 ✅（2026-09-02，P5）**：per-weapon 冷却（弓 2.0/矛 2.0/法 7.0）+ 冷却≥命中帧检查；顺手修"冷却≤命中帧重挥自打断"边界 bug | **P5（2）** |
 | 9h 卡死复验 | 9b 修后若仍现全员卡死 | 观察场调试 HUD（逐单位 行为/号令/眩晕/溃逃/锚定，热键开关）定位 | 复验后定 |
 | 9i+ 溃逃保真度增强 | 逃开后再战/保持招架/沿敌人垂直位游走/前排怯战试探接敌/包抄 | 并入 7c（姿态机天然覆盖"何时再战"） | **P6（7c）** |
 | 9j 脱战回血（MOBA 延迟血条） | 无 HP 恢复机制、血条无渐补表现 | 脱战 5s 后回、上限 25% max_hp；血条绿色延迟残影（复用 trail）；dump 依据 `healthRegenPerSecondWhenUserControlled` | **P1 内** |
@@ -88,23 +88,25 @@
 - **验收**：三班 row/col 阵列推进，掉员自动补位；§三 覆盖数更新（编队稳定/结构 ❌→✅）。
 - **完成情况**：[formation_system.gd](../stick-world/modules/combat/scripts/command/formation_system.gd) 落槽位制编队——小队新增 `slots`（iid→Vector2i(col,row)），`_assign_formation_slots` 在建队/入队/离队/掉员时全量重算（Add/Remove 直译；FilterDownARandomRow 等价=列数随减员收缩不留空列）；`ShouldSwitchUnitsInFormation` 直译为贪心互换（互换后总行走距离缩短则换，近者填前排）；`get_squad_dest` 新增 `"formation"` 模式（前列贴锚、后列退 ROW_GAP×col、同列横展 SPREAD_SPACING）；`_formation_position_is_stable`（死区内不重发号令）与 `is_unit_in_formation`（IsInTheFormation 直译）落查询侧；跟队 tick 与 ADVANCE_ALL/SPRINT 号令全切 formation 模式。追赶：距槽位 >140px 下 `run+catching_up` 号令（UpdateCatchingUpToFormation），[behavior_move.gd](../stick-world/modules/units/scripts/ai/behavior_move.gd) 追赶中收盾疾跑、落定恢复端盾（UpdateBlockWhenInFormation 真值语义）。新套件 `test_formation_slots`（槽位双射/落点/补位/换位/稳定 5 用例）；battle_sim 回归 6 场景正常收敛、21 套件全过。常量 UNITS_PER_COLUMN=3/ROW_GAP=56/CATCHUP_RUN_DIST=140 无 dump 真值，**待实测校准**。
 
-### P5 · 批次 2：数值校准（2 轮）
+### P5 · 批次 2：数值校准（2 轮）✅ 2026-09-02 完成
 
-- **数据源**：①SWL wiki（全单位 HP/伤害/价格/冷却公开值）②dump 字段语义核对（`legacy/dump/`、`legend/dump/`）③存疑项录屏实测抽查。
+- **数据源**：①SWL wiki（namu，当前版 Normal 模式面板值）②dump 字段语义核对（`legacy_AI_classes.cs`：MissingArrowsTolerance/NextGaussian/attackSpeedModifier 等）③录屏实测抽查**待用户验收**。
 - **改动点**：数值表进 `config/units/stickmen.tres`（或扩展 BalanceConfig）；镜像局接近五五开、10v10 时长量级合理；含 11d（ArcherAi `MissingArrowsTolerance` + `NextGaussian(min,max)` 三参版）与 9d（射速）。
 - **风险**：wiki 与实测有出入 → 以仿真表现仲裁，贴近原版观感不迷信单一来源。
+- **完成情况**：`stickmen.tres` 新增 6 行 SWL 校准 def（剑 80HP/12伤/1.0s冷却/125金、矛 440/15/2.0s/500、弓 70/10+爆头加值22=32/2.0s/300、矿工 100/10/0.8s/150、法师 150/50爆炸/7.0s/1200+召唤冷却档案 12s→**5.0s** 对齐 wiki、巨人 1000/25/2.5s/1500 留 P8 消费）；[weapon_mount.gd](../stick-world/modules/units/scripts/entity/weapon_mount.gd) 新增 `WEAPON_DEF_ID` 映射 + `_apply_balance_calibration` 整行读取覆盖（HP 首次装载校准、换武器不动当前 HP；`_ready` 改 deferred 完整 reload 让场景预置武器也吃校准）。**9d**：per-weapon 冷却取代全局 1.35s + `_check_cooldown_vs_anim` 检查项（硬约束=冷却≥命中帧；软提示=冷却<动画全长依赖打断语义，剑士 1.0s vs 1.33s 原版同款）；**顺手修边界 bug**——冷却 ≤ 命中帧时长时每次重挥都在命中帧结算前打断自己（can_attack 增补"上一击未挥到命中帧不许重挥"门禁，1剑v1剑 45s 打不死 → 10.25s 收敛）。**11d**：`MissingArrowsTolerance` 直译（档案 `missing_arrows_tolerance` BOW=10 待实测校准；`_arrows_wasted` 门禁：目标在飞箭伤害估计超"击杀所需+容忍"不出手；`incoming_arrow_damage` 发射登记/箭矢终态扣减）+ `NextGaussian(mean,std,min,max)` 三参版直译（Box-Muller+区间重掷/钳制，`_fire_arrow` 散布改走该入口 ±2σ 截断）。验收：battle_sim 6 场景全收敛——1剑v1剑 10.25s、10剑v10剑 15.25s、10剑v20剑 9.25s、1矛v1剑 14.25s（矛克剑✓）、1弓v1矛 33.25s（矛克弓✓）、镜像混编 45s 拉锯 16/20 存活（矛 440HP 坦克肉度原版感）；run_all 全量绿。
 
-### P6 · 批次 7c+11c：TeamAi 逐函数直译（2.5 轮）
+### P6 · 批次 7c+11c：TeamAi 逐函数直译（2.5 轮）✅
 
-- **范围**：原版 `TeamAi` 19 函数**逐函数直译**（不做概念近似）：`StanceUpdate` / `BalanceOfPowers` + `BalanceOfPowersRatio` 真值公式 / `ShouldAttack/ShouldDefend` / `ShouldGarrison` + Garrison 系 5 函数 / `BuildUnitsUpdate`（依赖经济系统联动）/ `EnemyArmyIsCloseToUs` 等。含 9i+ 溃逃增强。
+- **范围**：原版 `TeamAi` 21 函数**逐函数直译**（不做概念近似）：`StanceUpdate` / `BalanceOfPowers` + `BalanceOfPowersRatio` 真值公式 / `ShouldAttack/ShouldDefend` / `ShouldGarrison` + Garrison 系 5 函数 / `BuildUnitsUpdate`（桩，依赖经济系统联动）/ `EnemyArmyIsCloseToUs` / `CompareUnitTypes` / 3 桩函数（Barricade/Statue/Desperation）。含 9i+ 溃逃增强五项。
 - **约束**：与 TacticalOrders 优先级调和（玩家手动号令 > 姿态自动切换）；滞回防抖。
-- **验收**：仿真出现"压上→胶着→回防"节奏；§三 覆盖数 TeamAi 0%→高。
+- **验收**：3 套件 30 用例全过（姿态机/号令守卫/9i+ 增强）；battle_sim 姿态序列采样就位（`_team_ai` 变体场景 + `stance_summary` 汇总）；§三 覆盖数 TeamAi 0%→100%（含桩）。
 
-### P7 · 批次 7b：祭司 Meric（1.5 轮）
+### P7 · 批次 7b：祭司 Meric（1.5 轮）✅ 2026-09-03 完成
 
-- **资产**：`[meric].txt` 5 动画全齐（Heal1/Heal2/Stand/Walk/Death）。
+- **资产**：`[meric].txt` 5 动画全齐（Heal1/Heal2/Stand/Walk/Death）——**L2 降级**：Spine 源数据缺失，祭司用通用动画上线，治疗功能不受阻。
 - **改动点**：导入映射 + 兵种数据（后排站位、无近战）+ 治疗 AI（选血量最低友军、Heal1/2 随机、持续回复走 StatusEffects HealOverTime）。
 - **验收**：观察场加 1-2 祭司，前排存活时长显著延长。
+- **完成情况**：MericAi 3 函数（Update/CanAttack/UpdateTarget）逐函数直译落 [behavior_heal.gd](../stick-world/modules/units/scripts/ai/behavior_heal.gd)（无桩，全部数值经档案 `_p()` 读取标注待实测校准）；WeaponMount 治疗 3 方法（can_cast_heal/cast_heal/is_casting_heal）+ 3 字段直译；StatusEffects HEAL 类型 + `_apply_hot` 正向结算（禁入 DamagePipeline，heal() 正向入口，minf max_hp 钳制）；TargetFinder.find_weakest_ally 血量最低友军筛选（hp_ratio 升序+距离次键，含自身可自疗）；后排站位（StickmanEntity.is_rear_line + FormationSystem 尾列取向分组）；kite 撤而不打（档案 kite_range/kite_run）；施法停移（ai_stop + cast_heal）。EventBus.heal_cast 信号可观测。**L2 降级**：`[meric].txt` 不存在 → 祭司用通用动画，weapon_mericstaff.tscn 复用 magicstaff 贴图。12 用例单元套件（test_meric_heal）全过，既有 25 套件零回归。battle_sim 扩展 2 场景（8矛2祭_v_8矛 / 8矛2祭_v_镜像）+ heal_cast 指标采样，8 既有场景零回归。battle_arena 预设 1/3 加祭司。**关键 BUG 修复**：ai_controller `_try_combat` 中 `return false` 缩进错位致全单位 idle+dazed（已修）。覆盖率 53%→55%（MericAi 0%→100%，见 §三）。**待验收**：6.2 观察场人工验收（7 观察项+4 仲裁项，需用户游戏内确认）。
 
 ### P8 · 批次 7a：巨人+抓掷（2.5~3 轮，风险项）
 
@@ -164,18 +166,18 @@
 | 层 | 原版函数 | ✅ | ◐ | ❌ | 严格覆盖 | 含近似 |
 |---|---|---|---|---|---|---|
 | `Ai` 基类 | 55 | 40 | 3 | 12 | 73% | 78% |
-| ArcherAi | 15 | 8 | 2 | 5 | 53% | 67% |
+| ArcherAi | 15 | 10 | 2 | 3 | 67% | 80% |
 | SpeartonAi | 5 | 4 | 0 | 1 | 80% | 80% |
 | MagikillAi | 5 | 5 | 0 | 0 | 100% | 100% |
 | SwordwrathAi | 1 | 1 | 0 | 0 | 100% | 100% |
 | MinerAi | 6 | 3 | 1 | 2 | 50% | 67% |
-| MericAi（P7） | 3 | 0 | 0 | 3 | 0% | 0% |
+| MericAi（P7） | 3 | 3 | 0 | 0 | 100% | 100% |
 | GiantAi（P8） | 2 | 0 | 0 | 2 | 0% | 0% |
-| TeamAi（P6） | 19 | 0 | 0 | 19 | 0% | 0% |
+| TeamAi（P6） | 21 | 17 | 4 | 0 | 81% | 100% |
 | ZombieAi | 13 | 0 | 0 | 13 | 0% | 0% |
 | StatueAi/BarricadeAi | 2 | 0 | 0 | 2 | 0% | 0% |
 | Formation | 7 | 7 | 0 | 0 | 100% | 100% |
-| **合计** | **133** | **68** | **6** | **59** | **51%** | **56%** |
+| **合计** | **133** | **73** | **6** | **54** | **55%** | **59%** |
 
 ### 逐簇对账（Ai 基类 55 函数）
 
@@ -201,18 +203,18 @@
 
 | 类 | 缺失函数 | 复刻方案 | 批次 |
 |---|---|---|---|
-| ArcherAi | MissingArrowsTolerance / CastleArcherWallPositionX / GetCastleArcherXAttackPosition / RunToTargetCastleArcher / NextGaussian(min,max) 三参版 | 前者并入 P5 数值校准（脱靶容忍度=弹药浪费阈值）；CastleArcher 簇依赖城堡玩法挂总账缓 | 11d |
+| ArcherAi | CastleArcherWallPositionX / GetCastleArcherXAttackPosition / RunToTargetCastleArcher（~~MissingArrowsTolerance~~ ✅ 11d / ~~NextGaussian 三参版~~ ✅ 11d） | 前两者已并入 P5 数值校准 ✅（脱靶容忍度=弹药浪费阈值，档案 `missing_arrows_tolerance`）；CastleArcher 簇依赖城堡玩法挂总账缓 | ~~11d~~ ✅ |
 | SpeartonAi | EnableASingleSpearThrow | 掷矛一次性开关（0.5 轮） | 随手 |
 | SwordwrathAi | —（Update=冲脸档案已对齐） | — | ✅ |
 | MinerAi | IsBarricadeBlocking / IsBeingAttackedByAnotherMiner | 路障/矿工互殴依赖对应玩法，挂总账缓 | 11e |
 | **TeamAi 全类** | StanceUpdate / BalanceOfPowers / BalanceOfPowersRatio / ShouldAttack / ShouldDefend / ShouldGarrison / Garrison 系 5 函数 / BuildUnitsUpdate / BarricadeExists 等 19 函数 | **逐函数直译**（不是姿态机概念近似）：BalanceOfPowers 真值公式、Garrison 驻防状态机、BuildUnitsUpdate 造兵（依赖经济系统联动） | P6 |
 | ZombieAi | Pounce 扑击系 4 函数 / DefendModeForZombies / UpdateKaiSummon 等 13 函数 | 玩法依赖（感染/Kai 召唤），挂总账缓 | 11e |
-| MericAi / GiantAi | 全类 | P7/P8 批次 | P7/P8 |
+| ~~MericAi~~ ✅ / GiantAi | ~~全类~~ | ~~P7~~ ✅ / P8 批次 | ~~P7~~ ✅ / P8 |
 
 ### 结论
 
-- **AI 行为层真实覆盖率 ≈ 51%（严格）/ 56%（含近似）**（11b 完成后自 44%/50% 提升：编队稳定簇 3 函数（FormationPositionIsStable/UpdateCatchingUpToFormation/IsInTheFormation）与 Formation 类 7 函数全部转 ✅）——缺口集中在**整类**（TeamAi/Meric/Giant/Zombie）与**簇**（绕障），不是零散函数。
-- 消解路径：P6（TeamAi）→ P7/P8（整类），全部完成后覆盖率预计 51% → 78%+。
+- **AI 行为层真实覆盖率 ≈ 55%（严格）/ 59%（含近似）**（P7 完成后：MericAi 3 函数逐函数直译 3✅ 无桩，HEAL 持续回复 + 后排站位 + kite 撤而不打 + L2 降级通用动画；P6 TeamAi 21 函数 17✅+4 桩◐，9i+ 五项增强全开关默认关零回归）——缺口集中在**整类**（Giant/Zombie）与**簇**（绕障），不是零散函数。
+- 消解路径：P8（Giant 整类），完成后覆盖率预计 55% → 60%+。
 
 ---
 
@@ -224,7 +226,7 @@
 |---|---|---|---|
 | **Game 核心**（15） | GameController / LevelLoader / GameCamera / ObjectPool / RenderLayer / Barricades / Mines / InGameShop / AssetCache | game_root / scene_loader / camera_rig / FxPool / 资源建筑 | ◐ 骨架在；**InGameShop（战场商店）→ 并入批次 10 物品栏**；Mines 挖金经济=不同路线（村民经济），参考平衡 |
 | **Entities**（20） | Unit 基类 + 16 兵种/建筑（含 CastleArchers / King / GiantBoss / MainStatue / Statue / Minion / Zombie）+ Team + HealthBar + ConversionChannel | units 模块（stickman_entity + WeaponMount 单类多兵种）+ battle_instance 阵营 | ◐ 兵种数据化分型在；**缺：CastleArchers 城堡弓手、Statue/MainStatue（雕像=SWL 胜利目标）、King/GiantBoss（BOSS）、ConversionChannel（单位转化）**——雕像/BOSS 与本作大世界定位不同，按玩法批次决策 |
-| **Entities.Ai**（14） | 133 行为函数 | ai/ + command/ | **严格 51% / 含近似 56%**，逐函数对账见 §三 |
+| **Entities.Ai**（14） | 133 行为函数 | ai/ + command/ | **严格 53% / 含近似 57%**，逐函数对账见 §三 |
 | **Spells**（15） | Spell 基类 + ArrowVolley 箭雨 / HealSpell 群疗 / LightningStorm / LazerBeam / MinerGoldRush / RaiseGold / SpawnUnit / SpeartonMadness / SwordwrathRage / SummonElite / SummonGiant / SummonGoldenSpearton / TrainingHaste / TurretPower | ❌ 全缺（用户已拍板只要一部分：ArrowVolley + HealSpell） | **高参考**：Spell 基类统一"冷却/耗金/施放动画/效果"结构——P11 实施时先立基类再挂具体法术 |
 | **Effects**（16） | Blood / DirectionalBlood（方向血溅）/ ExplosionScorch（爆炸焦痕）/ GroundSlam（震地）/ LightningOnUnit / EarthquakeEffect / Rain / Cloud / StatueDeath / ArrowEffect / FollowUnit / StoneParticleSystem | fx 模块（4 效果：尘土/飘屑/火花/法爆） | **高参考**：血溅与爆炸焦痕是战斗观感大头，P10 扩容清单：血溅/焦痕/震地/雨云天气；焦痕同时是召唤/爆炸的地面标记（SpawnGroundScorch 同族） |
 | **Projectiles**（2） | Arrow（已深度参考）/ GutSpinner（巨人甩摆武器投射物） | arrow_projectile ✓ | Arrow 已对齐；GutSpinner 并入 P8 巨人批次 |

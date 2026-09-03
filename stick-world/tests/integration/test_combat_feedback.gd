@@ -89,7 +89,7 @@ func _test_bar_visibility() -> void:
 	if health == null:
 		_runner.assert_true(false, "HealthComponent 缺失")
 		return
-	health.take_damage(30.0)
+	health.take_damage(health.max_hp * 0.3)  # 按 max_hp 比例扣血（P5 校准后 HP 不再固定 100）
 	for i in 20:
 		await get_tree().process_frame
 	_runner.assert_true(bar.get("_ever_damaged"), "掉血后应进入横条形态")

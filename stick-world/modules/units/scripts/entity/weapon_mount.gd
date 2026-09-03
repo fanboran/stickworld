@@ -29,7 +29,7 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
 
 # ─────────────────────────────── 武器类型 ────────────────────────────────
-enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF }
+enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF, MERIC }
 
 ## 武器类型 -> 武器场景（贴图由 extract_weapons.gd 从解包图集裁剪）
 const WEAPON_SCENE_PATHS: Dictionary = {
@@ -38,6 +38,7 @@ const WEAPON_SCENE_PATHS: Dictionary = {
 	WeaponType.BOW: "res://modules/units/scenes/components/weapon_bow.tscn",
 	WeaponType.PICKAXE: "res://modules/units/scenes/components/weapon_pickaxe.tscn",
 	WeaponType.STAFF: "res://modules/units/scenes/components/weapon_magicstaff.tscn",
+	WeaponType.MERIC: "res://modules/units/scenes/components/weapon_mericstaff.tscn",
 }
 ## 盾牌场景（挂左手）
 const SHIELD_SCENE_PATH := "res://modules/units/scenes/components/weapon_shield.tscn"
@@ -72,6 +73,7 @@ const WEAPON_RANGE: Dictionary = {
 	WeaponType.BOW: 1400.0,
 	WeaponType.PICKAXE: 70.0,
 	WeaponType.STAFF: 600.0,
+	WeaponType.MERIC: 400.0,  ## heal_range 兜底语义（唯一真相源仍为行为档案 heal_range，待实测校准）
 }
 ## HitStop 参数（命中顿帧）
 const HITSTOP_TIME_SCALE: float = 0.05
@@ -172,6 +174,16 @@ var _hit_event_time: float = -1.0
 ## Hit 事件时间是否已解析（换武器时重置）
 var _hit_time_resolved: bool = false
 
+# ── 治疗能力族（P7 批次 7b：Meric 实体层 CastHeal/CanCastHeal/IsCastingHeal 直译）──
+## 当前治疗动画名（dump healingAnimation 字段直译，运行时经 StickmanAnims.pick_heal_anim 随机注入）
+var healing_animation: String = ""
+## 上次治疗施放时间（dump lastHealTime 直译；时钟源 = _now() 现实秒，对齐 StatusEffects 混源先例）
+var _last_heal_time: float = -1.0e9
+## 上次治疗特效生成时间（dump lastHealEffectSpawn 直译；特效挂 P10，本批仅施放时刷计时无消费逻辑）
+var _last_heal_effect_spawn: float = -1.0e9
+## 施法标志位（IsCastingHeal 直译：比查询 rig 动画名更可测，unit 测试直接置位）
+var _heal_anim_playing: bool = false
+
 ## 动画内嵌事件转发（Spine events[] 语义）。
 ## 目前用于 Sound:* 音效钩子；音效资产落地后按 SFX_PATHS 登记即可发声。
 signal weapon_anim_event(anim_name: String, event_name: String, value: String)
@@ -186,7 +198,9 @@ const SFX_PATHS: Dictionary = {}
 func _ready() -> void:
 	# 延迟挂载：WeaponMount 是实体子节点，_ready 先于实体执行，
 	# 此时 entity.rig 尚未赋值（实体 _ready 里获取），deferred 保证顺序。
-	call_deferred("_mount_weapons")
+	# 用完整 _reload_weapons（内含 _mount_weapons + 档案刷新 + 数值校准），
+	# 使场景文件预置 weapon_type 的兵种也能吃到数值校准（P5 批次 2）。
+	call_deferred("_reload_weapons")
 
 
 ## 挂载主手武器 + 副手盾牌到手骨骼（跟随手臂摆动）。
@@ -257,7 +271,7 @@ func _mount_one(scene: PackedScene, bone: Node2D, node_name: String) -> Node2D:
 	return instance
 
 
-## 惰性连接 rig.animation_event（Spine events[] 复刻信号）。
+## 惰性连接 rig.animation_event（Spine events[] 复刻信号）+ animation_finished（治疗动画收尾）。
 func _connect_rig_events(owner_entity: Node) -> void:
 	var rig: Node = owner_entity.get("rig") if "rig" in owner_entity else null
 	if rig == null or not rig.has_signal("animation_event"):
@@ -265,6 +279,10 @@ func _connect_rig_events(owner_entity: Node) -> void:
 	if rig.animation_event.is_connected(_on_rig_anim_event):
 		return
 	rig.animation_event.connect(_on_rig_anim_event)
+	# 治疗动画播完收尾（P7 批次 7b：heal_meric_* 结束 → _heal_anim_playing = false）
+	if rig.has_signal("animation_finished") \
+			and not rig.animation_finished.is_connected(_on_rig_animation_finished):
+		rig.animation_finished.connect(_on_rig_animation_finished)
 
 
 ## 动画事件回调：命中帧结算 + 音效事件转发。
@@ -278,6 +296,12 @@ func _on_rig_anim_event(anim_name: String, event_name: String, value: String) ->
 			_try_strike_frame()
 		"Sound":
 			_play_event_sfx(value)
+
+
+## 动画播完回调（P7 批次 7b）：治疗系动画结束 → 清施法标志位。
+func _on_rig_animation_finished(anim_name: String) -> void:
+	if anim_name in Anims.HEAL_ANIMS:
+		_heal_anim_playing = false
 
 
 ## 动画内嵌音效事件：查 SFX_PATHS 表播放（表为空则只转发信号、不发声）。
@@ -314,6 +338,85 @@ func _reload_weapons() -> void:
 	# 持盾移速惩罚（盾姿态分层计划 5：举盾行军更沉稳，SPEAR 0.8）
 	block_move_mult = float(
 			ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("block_move_mult", 1.0))
+	# P5 数值校准（批次 2）：按武器类型从 BalanceConfig 读 SWL 真值覆盖默认
+	_apply_balance_calibration()
+
+
+## 武器类型 → 兵种数值 def（config/units/stickmen.tres 行 id）。
+## P5 数值校准：HP/伤害/冷却以 SWL wiki Normal 模式面板值为真值落表，
+## 武器挂载在 _reload_weapons 时按此映射读 BalanceConfig 覆盖 @export 默认。
+const WEAPON_DEF_ID: Dictionary = {
+	WeaponType.SWORD: "stm_sword_001",
+	WeaponType.SPEAR: "stm_spear_001",
+	WeaponType.BOW: "stm_bow_001",
+	WeaponType.PICKAXE: "stm_miner_001",
+	WeaponType.STAFF: "stm_staff_001",
+	WeaponType.MERIC: "stm_meric_001",
+}
+## HP 校准只做一次（出生满血基线）；换武器只迁移伤害/冷却/爆头加值，
+## 不动当前 HP（主控换武器不应回血/扣血，装备迁移归 P9 物品栏）。
+var _hp_calibrated: bool = false
+
+
+## 从 BalanceConfig 读兵种数值并覆盖（读不到/未装载保持 @export 默认，零回归）。
+## 数据源：stickmen.tres SWL 校准行（P5 批次 2，namu wiki Normal 模式面板值）。
+## 整行读取（get_value(行路径) 返回行字典）——逐字段 get_value 会对缺列行刷警告。
+func _apply_balance_calibration() -> void:
+	if BalanceConfig == null or BalanceConfig.data.is_empty():
+		return  # 独立测试场景未装载 BalanceConfig（system_setup 未跑），跳过避免刷警告
+	var def_id: String = str(WEAPON_DEF_ID.get(weapon_type, ""))
+	if def_id.is_empty():
+		return
+	var row_v: Variant = BalanceConfig.get_value("units.stickmen." + def_id)
+	if not (row_v is Dictionary):
+		return
+	var row: Dictionary = row_v
+	if row.has("base_attack") and float(row["base_attack"]) > 0.0:
+		damage = float(row["base_attack"])
+	if row.has("attack_cooldown") and float(row["attack_cooldown"]) > 0.0:
+		cooldown = float(row["attack_cooldown"])
+	if row.has("head_shot_bonus_damage"):
+		head_shot_bonus_damage = float(row["head_shot_bonus_damage"])
+	if not _hp_calibrated and row.has("base_hp") and float(row["base_hp"]) > 0.0:
+		var hp := float(row["base_hp"])
+		var owner_entity: CharacterBody2D = get_owner_entity()
+		if owner_entity != null and owner_entity.has_method("get_health"):
+			var health: Node = owner_entity.get_health()
+			if health != null and "max_hp" in health:
+				health.max_hp = hp
+				health.hp = hp
+			_hp_calibrated = true
+	_check_cooldown_vs_anim()
+
+
+## 冷却 vs 动画检查告警去重（每武器类型只告警一次，防逐单位刷屏）
+static var _cooldown_warned: Dictionary = {}
+
+
+## 9d 检查项：冷却与攻击动画的约束校验。
+## 硬约束：冷却 ≥ 命中帧时间（否则动画没挥到命中帧就重挥，永远打不出伤害）；
+## 软提示：冷却 < 动画全长为原版合法语义——命中帧后尾段可被打断
+## （AnimationCancelFraction；原版剑士攻速 1.0/s vs 攻击动画 1.33s 即同款）。
+func _check_cooldown_vs_anim() -> void:
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null or not "rig" in owner_entity:
+		return
+	var rig: Node = owner_entity.get("rig")
+	if rig == null or not rig.has_method("get_anim_length"):
+		return
+	_resolve_hit_event_time()
+	var anim_name := _attack_anim_name()
+	var anim_len: float = rig.get_anim_length(anim_name)
+	if anim_len <= 0.0:
+		return
+	if _hit_event_time >= 0.0 and cooldown < _hit_event_time:
+		if not _cooldown_warned.has(weapon_type):
+			_cooldown_warned[weapon_type] = true
+			push_warning("[WeaponMount] 冷却 %.2fs < 命中帧 %.2fs（%s）：命中帧前重挥，永远打不出伤害" % [cooldown, _hit_event_time, anim_name])
+	elif cooldown < anim_len:
+		if not _cooldown_warned.has(weapon_type):
+			_cooldown_warned[weapon_type] = true
+			push_warning("[WeaponMount] 冷却 %.2fs < 攻击动画时长 %.2fs（%s）：依赖命中帧后打断语义（原版剑士同款）" % [cooldown, anim_len, anim_name])
 
 
 ## 查找武器骨 weapon_hand（SWL pickaxe1 补译；挂 hand_inner 手骨原点，
@@ -365,10 +468,16 @@ func _physics_process(delta: float) -> void:
 ## 是否可以攻击。
 ## 冷却结束 → 可以；冷却未走完但命中帧已过、动画播进"可打断尾段"
 ## （原版 AnimationCancelFractionOfAnimationAfterAttackHit）→ 也可以提前出手。
+## 9d 边界修复：冷却已到但**上一击尚未挥到命中帧**时不许重挥——
+## 冷却 ≤ 命中帧时长时（如剑 1.0s 冷却 vs 1.0s 命中帧），每次重挥都会
+## 在命中帧结算前打断自己，永远打不出伤害。对齐原版"命中帧后才可打断"语义。
 func can_attack() -> bool:
-	if _cooldown_timer <= 0.0:
-		return true
-	return _cancel_window_latched or _can_cancel_attack_anim()
+	if _cooldown_timer > 0.0:
+		return _cancel_window_latched or _can_cancel_attack_anim()
+	# 上一击已登记目标但还没到命中帧：等它结算（空挥/已结算不拦）
+	if _pending_strike_target != null and not _strike_fired:
+		return false
+	return true
 
 
 ## 动画可打断判定：本次攻击已挥过命中帧，且当前动画播放位置越过了
@@ -403,6 +512,11 @@ func _can_cancel_attack_anim() -> bool:
 ## 当前冷却剩余时间
 func get_cooldown_remaining() -> float:
 	return _cooldown_timer
+
+
+## 是否有未结算的挥砍（已发起、命中帧未到；can_attack 命中帧门禁的查询面）
+func has_pending_strike() -> bool:
+	return _pending_strike_target != null and not _strike_fired
 
 
 ## 执行一次攻击。
@@ -756,12 +870,11 @@ func _fire_arrow(target: Node) -> void:
 	var aim: Vector2 = aim_point - from
 	var vel := Vector2(aim.x / t, aim.y / t - 0.5 * ARROW_GRAVITY * t)
 	# SWL AimAngle 散布（currentShotBodyRandomness/NextGaussian）：出弓方向加高斯扰动，
-	# σ 取兵种档案 aim_scatter（rad）——箭雨自然散开，不再人人弹道全同
+	# σ 取兵种档案 aim_scatter（rad）——箭雨自然散开，不再人人弹道全同。
+	# NextGaussian(mean, std, min, max) 三参版直译（11d）：±2σ 截断（dump 无真值，待实测校准）
 	var scatter: float = float(ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("aim_scatter", 0.0))
 	if scatter > 0.0:
-		var u1: float = maxf(randf(), 0.0001)
-		var g: float = sqrt(-2.0 * log(u1)) * cos(TAU * randf())
-		vel = vel.rotated(g * scatter)
+		vel = vel.rotated(next_gaussian(0.0, scatter, -2.0 * scatter, 2.0 * scatter))
 	var arrow: Node2D = scene.instantiate()
 	var parent: Node = owner_entity.get_parent()
 	if parent == null:
@@ -773,10 +886,35 @@ func _fire_arrow(target: Node) -> void:
 	# 箭越过目标后落在目标脚下地面（miss 插进敌阵），不再"低于出射点 500px"插地（9c）
 	if arrow.has_method("setup"):
 		arrow.call("setup", vel, damage, owner_entity, target, 1.0, ARROW_GRAVITY, t, aim_point.y + 65.0)
+	# MissingArrowsTolerance 估计口径（11d）：在飞箭矢按满伤害登记到目标头上，
+	# 弓手出手前据此避免对将死目标浪费箭（箭矢终态扣减，见 arrow_projectile）
+	if target != null and is_instance_valid(target) and "incoming_arrow_damage" in target:
+		target.incoming_arrow_damage += damage
 	# 箭矢威胁标记（SWL SpeartonAi.IsAnyArrowThreat 感知源）：出弓瞬间通知目标，
 	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾
 	if target != null and is_instance_valid(target) and "arrow_threat_time" in target:
 		target.arrow_threat_time = Time.get_ticks_msec() / 1000.0
+
+
+## 高斯随机数（dump ArcherAi.NextGaussian 三参/四参版直译，11d）：
+## Box-Muller 采样 + [min, max] 截断——先重掷 4 次取落区间值，仍不中则钳制
+## （原版截断策略无真值，重掷为等价近似）。std ≤ 0 直接返回均值。
+static func next_gaussian(mean: float = 0.0, standard_deviation: float = 1.0, min_v: float = NAN, max_v: float = NAN) -> float:
+	if standard_deviation <= 0.0:
+		return mean
+	var g: float = 0.0
+	var v: float = mean
+	for i in range(4):
+		var u1: float = maxf(randf(), 0.0001)
+		g = sqrt(-2.0 * log(u1)) * cos(TAU * randf())
+		v = mean + g * standard_deviation
+		if (is_nan(min_v) or v >= min_v) and (is_nan(max_v) or v <= max_v):
+			return v
+	if not is_nan(min_v):
+		v = maxf(v, min_v)
+	if not is_nan(max_v):
+		v = minf(v, max_v)
+	return v
 
 
 ## 实体身体位置（Collider 世界坐标，缺省回落 global + 典型偏移）
@@ -866,6 +1004,68 @@ func _is_frontal(incoming_dir: Vector2) -> bool:
 ## 是否正在挥砍（程序化挥砍已移除，挥砍由攻击动画驱动，恒 false）
 func is_swinging() -> bool:
 	return false
+
+
+# ─────────────────────────────── 治疗能力（P7 批次 7b：Meric 实体层直译）────────────────────────────────
+## CanCastHeal 直译：冷却满 ∧ 非施法中。dump 无方法体真值，语义推断（待实测校准）。
+## 档案经既有 ScriptBehaviorProfiles preload 读取；heal_cooldown=0 时恒真（BASELINE 默认）。
+func can_cast_heal() -> bool:
+	var profile: Dictionary = ScriptBehaviorProfiles.get_profile(int(weapon_type))
+	var cd: float = float(profile.get("heal_cooldown", 0.0))
+	if cd <= 0.0:
+		return not _heal_anim_playing
+	return (_now() - _last_heal_time >= cd) and not _heal_anim_playing
+
+
+## CastHeal 直译；签名差异声明：原版无参目标由宿主字段隐含，本项目显式传 target 保类型安全，语义等价。
+## dump 无方法体真值，语义推断（待实测校准）。
+## 流程：target 防御 → 随机注入 healing_animation → 播放 → apply_status(HEAL) → 刷新计时 → 发射 EventBus.heal_cast
+func cast_heal(target: Node) -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	if target.has_method("is_dead") and target.is_dead():
+		return
+	var profile: Dictionary = ScriptBehaviorProfiles.get_profile(int(weapon_type))
+	var heal_amount: float = float(profile.get("heal_amount", 0.0))
+	var heal_duration: float = float(profile.get("heal_duration", 0.0))
+	# 随机注入治疗动画名（dump healingAnimation 字段直译）
+	healing_animation = Anims.pick_heal_anim()
+	_heal_anim_playing = true
+	# 播放治疗动画（经宿主 rig，参照 _play_swing 消费链）
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity != null:
+		var rig: Node = owner_entity.get("rig") if "rig" in owner_entity else null
+		if rig != null and rig.has_method("play"):
+			rig.play(healing_animation)
+	# HOT 均分：per_tick = heal_amount × TICK_INTERVAL / heal_duration（spec §6.2.2.4）
+	if heal_amount > 0.0 and heal_duration > 0.0 \
+			and target.has_method("apply_status"):
+		var per_tick: float = heal_amount * ScriptStatusEffects.TICK_INTERVAL / heal_duration
+		target.apply_status(ScriptStatusEffects.Type.HEAL, heal_duration, per_tick, self)
+	# 刷新计时（dump lastHealTime/lastHealEffectSpawn 直译）
+	_last_heal_time = _now()
+	_last_heal_effect_spawn = _now()
+	# 发射治疗施放信号（spec §5.4.3 可观测性）
+	var eb: Node = get_node_or_null("/root/EventBus")
+	if eb != null and eb.has_signal("heal_cast"):
+		var battle_id: String = ""
+		if owner_entity != null and owner_entity.has_method("get_battle_instance"):
+			var bi: Node = owner_entity.get_battle_instance()
+			if bi != null and bi.has_method("get_battle_id"):
+				battle_id = bi.get_battle_id()
+		var caster_id: int = owner_entity.get_instance_id() if owner_entity != null else 0
+		var target_id: int = target.get_instance_id()
+		eb.heal_cast.emit(battle_id, caster_id, target_id, healing_animation)
+
+
+## IsCastingHeal 直译：返回施法标志位（比查询 rig 动画名更可测，unit 测试直接置位）。
+func is_casting_heal() -> bool:
+	return _heal_anim_playing
+
+
+## 现实秒时钟源（对齐 StatusEffects._now 混源先例）
+func _now() -> float:
+	return Time.get_ticks_msec() / 1000.0
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────

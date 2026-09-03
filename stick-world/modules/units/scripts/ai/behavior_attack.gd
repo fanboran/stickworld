@@ -201,7 +201,8 @@ func update(delta: float) -> void:
 			entity.ai_move(away, _p("kite_run", 0.0) > 0.5)
 		# 风筝还击（SWL 弓手边撤边射）：前摇/弹道与移动解耦（延迟结算计时独立），
 		# 冷却好就边跑边放——不再被追着跑还不还手
-		if dist <= attack_range and weapon != null and weapon.has_method("can_attack") and weapon.can_attack():
+		if dist <= attack_range and weapon != null and weapon.has_method("can_attack") \
+				and weapon.can_attack() and not _arrows_wasted(_target, weapon):
 			_face_target()  # 回头面向目标开火（否则背身拉弓）
 			weapon.perform_attack(_target)
 			_aiming = false
@@ -220,7 +221,8 @@ func update(delta: float) -> void:
 				entity.ai_move(Vector2(0.0, signf(dy_align)), false)
 			_update_aim_rhythm(delta)  # 持瞄节奏照常走，y 对齐即放箭
 			return
-		if _update_aim_rhythm(delta) and weapon != null and weapon.has_method("can_attack") and weapon.can_attack():
+		if _update_aim_rhythm(delta) and weapon != null and weapon.has_method("can_attack") \
+				and weapon.can_attack() and not _arrows_wasted(_target, weapon):
 			weapon.perform_attack(_target)
 			_aiming = false
 			# 攻击后举盾（cooldownAfterAttackForBlock）：矛兵攻击完一拍盾防反打
@@ -249,6 +251,9 @@ func update(delta: float) -> void:
 		# y 轴纵深走位（SWL y 对齐 6 函数直译）：接敌途中朝目标 y（带个性漂移带）对齐，
 		# 人群自然铺开不挤一条横线
 		dir = _apply_y_walk(dir, delta)
+		# 9i+ 包抄走位（P6 批次 7c，design §2.1.3.6 #5，档案开关默认关 = 零回归）：
+		# 侧翼单位（相对本方存活质心 y 偏移超阈值）接近方向叠加侧向分量，形成绕击取向
+		dir = _apply_flank(dir)
 		# DetermineXRunPower（SWL 直译）：远跑近走；近身爆发交给冲锋掷骰
 		var run: bool = _determine_x_run_power(desired_pos, attack_range) >= 1.0
 		if not run and randf() < (RAGE_PUSH_PROB if _rage else _p("aggressive_push_prob", prob_aggressive_push)):
@@ -284,6 +289,27 @@ func _update_aim_rhythm(delta: float) -> bool:
 		_aim_timer = _gauss((hold.x + hold.y) * 0.5, maxf(0.05, (hold.y - hold.x) / 3.0))
 	_aim_timer -= delta
 	return _aim_timer <= 0.0
+
+
+## 弓手脱靶容忍（dump ArcherAi.MissingArrowsTolerance 语义直译，11d：弹药浪费阈值）。
+## 目标头上在飞箭矢伤害估计已超出"击杀所需 + 容忍度"（预测超杀 > tolerance）
+## 时本次不出手——原版弓手对将死目标换靶不浪费箭，集火 DPS 显著提升。
+## 在飞伤害由 WeaponMount 发射时登记、箭矢终态扣减（arrow_projectile）。
+## 容忍度取档案 missing_arrows_tolerance（0=关，近战不受此门禁）。
+func _arrows_wasted(target: Node, weapon: Node) -> bool:
+	var tol: float = _p("missing_arrows_tolerance", 0.0)
+	if tol <= 0.0 or target == null or not is_instance_valid(target):
+		return false
+	if not "incoming_arrow_damage" in target:
+		return false
+	var incoming: float = float(target.get("incoming_arrow_damage"))
+	if incoming <= 0.0:
+		return false
+	var health: Node = target.get_health() if target.has_method("get_health") else null
+	if health == null or not "hp" in health:
+		return false
+	# 预测超杀 = 在飞伤害 − 目标剩余 HP；超出容忍度则本次不出手（继续持瞄）
+	return (incoming - float(health.hp)) > tol
 
 
 ## 姿态举盾聚合（SWL 直译）：
@@ -322,6 +348,44 @@ func _apply_y_walk(dir: Vector2, delta: float) -> Vector2:
 	if absf(y_comp) <= 0.0:
 		return dir
 	return (dir + Vector2(0.0, y_comp)).normalized()
+
+
+## 9i+ 包抄走位（P6 批次 7c，design §2.1.3.6 #5，档案开关默认关 = 零回归）。
+## 侧翼单位（相对本方存活质心 y 偏移绝对值 ≥ flank_y_offset）接近方向叠加侧向分量，
+## 符号由侧翼侧决定，形成绕击取向；开关关或非侧翼 → 原方向不变。
+func _apply_flank(dir: Vector2) -> Vector2:
+	if dir == Vector2.ZERO or not bool(_p_b("flank_enabled", false)):
+		return dir
+	if _battle == null or not is_instance_valid(_battle) or not _battle.has_method("get_allies_of"):
+		return dir
+	if not entity.has_method("get_faction"):
+		return dir
+	# 本方存活质心 y
+	var sum_y: float = 0.0
+	var n: int = 0
+	for u in _battle.get_allies_of(entity.get_faction()):
+		if u == null or not is_instance_valid(u):
+			continue
+		if u.has_method("is_dead") and u.is_dead():
+			continue
+		sum_y += u.global_position.y
+		n += 1
+	if n <= 1:
+		return dir
+	var mid_y: float = sum_y / float(n)
+	var dy: float = entity.global_position.y - mid_y
+	var threshold: float = float(_p("flank_y_offset", 120.0))
+	if absf(dy) < threshold:
+		return dir
+	# 侧向分量符号：单位偏上 → 向下绕（+y），偏下 → 向上绕（−y），形成包抄
+	var side_sign: float = signf(dy)
+	var strength: float = float(_p("flank_side_strength", 0.40))
+	return (dir + Vector2(0.0, side_sign * strength)).normalized()
+
+
+## 档案布尔字段读取（_p 只读 float，布尔单独入口）
+func _p_b(key: String, fallback: bool) -> bool:
+	return bool(_profile.get(key, fallback))
 
 
 ## ShouldAdjustYPositionTowardsTarget（dump L181）：目标 y 未对齐（超死区）且

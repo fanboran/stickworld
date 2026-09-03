@@ -17,6 +17,14 @@ extends Node
 ##     attack 站桩是有效输出不算；move 带方向也不算（除非根本没挪窝）
 ##   - ranged_engage_dist：弓/杖单位与最近敌人的距离采样（均值/中位）
 ##   - behavior 分布：各行为采样占比
+##
+## P6 阵营 AI 扩展（7c+11c）：
+##   - 场景名含 _team_ai 的变体双开 enable_team_ai(1/2)，采样姿态序列
+##   - stance_seq：每 0.25s 记录双方姿态 {t, l, r}（0=GARRISON/1=DEFEND/2=ATTACK）
+##   - stance_summary：各姿态占比/切换次数/是否到达 ATTACK/GARRISON
+##   - 人工验收：运行后查 stance_summary，期望"先 ATTACK 压上、损耗后 DEFEND/GARRISON 回防"；
+##     l_switches=0 → 姿态机未生效（查 enable_team_ai 是否调用）；
+##     GARRISON 占比高 → 驻守触发集过敏感（调 enemy_close_dist/no_defender_floor）
 
 const _GameRootScene: PackedScene = preload("res://modules/world/scenes/game_root.tscn")
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
@@ -26,6 +34,7 @@ const W_SWORD: int = 0
 const W_SPEAR: int = 1
 const W_BOW: int = 2
 const W_STAFF: int = 4
+const W_MERIC: int = 5
 
 ## 场景矩阵：left/right = 兵种数组（数量即人数）
 const SCENARIOS: Array = [
@@ -58,6 +67,49 @@ const SCENARIOS: Array = [
 	{ "name": "1剑_v_1剑", "left": [W_SWORD], "right": [W_SWORD] },
 	{ "name": "1矛_v_1剑", "left": [W_SPEAR], "right": [W_SWORD] },
 	{ "name": "1弓_v_1矛", "left": [W_BOW], "right": [W_SPEAR] },
+	# ── P6 阵营 AI 变体（双开 enable_team_ai，采样姿态序列）──
+	{
+		"name": "10剑_v_10剑_team_ai",
+		"left": [W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD],
+		"right": [W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD],
+		"team_ai": true,
+	},
+	{
+		"name": "混编8矛8剑2杖2弓_v_镜像_team_ai",
+		"left": [
+			W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR,
+			W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD,
+			W_STAFF, W_STAFF, W_BOW, W_BOW,
+		],
+		"right": [
+			W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR,
+			W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD, W_SWORD,
+			W_STAFF, W_STAFF, W_BOW, W_BOW,
+		],
+		"team_ai": true,
+	},
+	# ── P7 祭司对照场景（单侧/双侧治疗收敛曲线）──
+	{
+		"name": "8矛2祭_v_8矛",
+		"left": [
+			W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR,
+			W_MERIC, W_MERIC,
+		],
+		"right": [
+			W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR,
+		],
+	},
+	{
+		"name": "8矛2祭_v_镜像",
+		"left": [
+			W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR,
+			W_MERIC, W_MERIC,
+		],
+		"right": [
+			W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR, W_SPEAR,
+			W_MERIC, W_MERIC,
+		],
+	},
 ]
 
 ## 每场景最长模拟时长（游戏秒）
@@ -139,6 +191,13 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 	if TimeManager != null and TimeManager.is_paused():
 		TimeManager.set_speed(TimeManager.Speed.X1)
 
+	# P6 阵营 AI：双开 enable_team_ai（注册制，不注册零回归）
+	var team_ai_on: bool = bool(sc.get("team_ai", false))
+	if team_ai_on and battle != null and is_instance_valid(battle) \
+			and battle.has_method("enable_team_ai"):
+		battle.enable_team_ai(1)
+		battle.enable_team_ai(2)
+
 	# ── 采样循环 ──
 	var behavior_count: Dictionary = {}
 	var samples: int = 0
@@ -149,6 +208,13 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 	var dazed: Dictionary = {}          # iid -> {weapon, faction}
 	var last_pos: Dictionary = {}       # iid -> Vector2
 	var sim_time: float = 0.0
+	var stance_seq: Array = []          # P6 姿态序列采样 [{t, l, r}]
+	var heal_cast_count: int = 0        # P7 heal_cast 信号计数
+	var eb: Node = get_node_or_null("/root/EventBus")
+	var heal_handler: Callable = func(_bid: String, _caster: int, _target: int, _anim: String) -> void:
+		heal_cast_count += 1
+	if eb != null and eb.has_signal("heal_cast"):
+		eb.heal_cast.connect(heal_handler)
 	while sim_time < SCENARIO_TIMEOUT:
 		await get_tree().create_timer(0.25).timeout
 		sim_time += 0.25
@@ -166,6 +232,16 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 			battle_still_active = false
 			break
 		samples += 1
+		# P6 姿态序列采样（team_ai 开时每周期记录双方姿态）
+		if team_ai_on and battle != null and is_instance_valid(battle) \
+				and battle.has_method("get_team_ai"):
+			var tl: Variant = battle.get_team_ai(1)
+			var tr: Variant = battle.get_team_ai(2)
+			stance_seq.append({
+				"t": snappedf(sim_time, 0.25),
+				"l": int(tl.get_stance()) if tl != null and is_instance_valid(tl) and tl.has_method("get_stance") else -1,
+				"r": int(tr.get_stance()) if tr != null and is_instance_valid(tr) and tr.has_method("get_stance") else -1,
+			})
 		for u: Node2D in left + right:
 			if not is_instance_valid(u) or u.is_dead():
 				continue
@@ -215,8 +291,14 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 		"daze_units": dazed.size(),
 		"ranged_engage_avg": snappedf(dist_avg, 1.0),
 		"ranged_engage_median": snappedf(dist_median, 1.0),
+		"heal_casts": heal_cast_count,
 	}
+	if team_ai_on:
+		result["stance_seq"] = stance_seq
+		result["stance_summary"] = _summarize_stance_seq(stance_seq)
 	# 清场
+	if eb != null and eb.has_signal("heal_cast") and eb.heal_cast.is_connected(heal_handler):
+		eb.heal_cast.disconnect(heal_handler)
 	for u in left + right:
 		if is_instance_valid(u):
 			u.queue_free()
@@ -270,3 +352,46 @@ func _count_alive(units: Array) -> int:
 				and not u.health_component.is_dead():
 			n += 1
 	return n
+
+
+## P6 姿态序列汇总（验收断言数据：压上→胶着→回防节奏分析）。
+## 返回双方各姿态占比、切换次数、是否出现 ATTACK→DEFEND/GARRISON 迁移。
+## 人工验收：占比应体现"先 ATTACK 压上、力量损耗后 DEFEND/GARRISON 回防"节奏；
+## 切换次数 0 = 姿态机未生效（检查 enable_team_ai 是否调用）；GARRISON 占比高 = 驻守触发集过敏感。
+func _summarize_stance_seq(seq: Array) -> Dictionary:
+	if seq.is_empty():
+		return {"error": "空序列"}
+	var l_counts: Dictionary = {0: 0, 1: 0, 2: 0}
+	var r_counts: Dictionary = {0: 0, 1: 0, 2: 0}
+	var l_switches: int = 0
+	var r_switches: int = 0
+	var prev_l: int = -1
+	var prev_r: int = -1
+	for s in seq:
+		var l: int = int(s["l"])
+		var r: int = int(s["r"])
+		if l >= 0:
+			l_counts[l] = int(l_counts.get(l, 0)) + 1
+			if prev_l >= 0 and l != prev_l:
+				l_switches += 1
+			prev_l = l
+		if r >= 0:
+			r_counts[r] = int(r_counts.get(r, 0)) + 1
+			if prev_r >= 0 and r != prev_r:
+				r_switches += 1
+			prev_r = r
+	var total: int = seq.size()
+	return {
+		"l_pct": {0: snappedf(float(l_counts[0]) / total * 100, 1.0),
+				1: snappedf(float(l_counts[1]) / total * 100, 1.0),
+				2: snappedf(float(l_counts[2]) / total * 100, 1.0)},
+		"r_pct": {0: snappedf(float(r_counts[0]) / total * 100, 1.0),
+				1: snappedf(float(r_counts[1]) / total * 100, 1.0),
+				2: snappedf(float(r_counts[2]) / total * 100, 1.0)},
+		"l_switches": l_switches,
+		"r_switches": r_switches,
+		"l_reached_attack": l_counts[2] > 0,
+		"r_reached_attack": r_counts[2] > 0,
+		"l_reached_garrison": l_counts[0] > 0,
+		"r_reached_garrison": r_counts[0] > 0,
+	}

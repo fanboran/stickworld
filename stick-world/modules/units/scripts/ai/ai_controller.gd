@@ -19,8 +19,11 @@ const ScriptBehaviorMove := preload("res://modules/units/scripts/ai/behavior_mov
 const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
 const ScriptBehaviorSeekCover := preload("res://modules/units/scripts/ai/behavior_seek_cover.gd")
 const ScriptBehaviorRetreat := preload("res://modules/units/scripts/ai/behavior_retreat.gd")
+
 const ScriptBehaviorHaul := preload("res://modules/units/scripts/ai/behavior_haul.gd")
 const ScriptBehaviorFollow := preload("res://modules/units/scripts/ai/behavior_follow.gd")
+const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
+const ScriptBehaviorHeal := preload("res://modules/units/scripts/ai/behavior_heal.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）
@@ -28,6 +31,11 @@ const DECISION_INTERVAL: float = 0.3
 ## idle 后切换到 wander 的概率（当前 0：工人无事做原地待机，不随机漫游。
 ## BehaviorWander 行为本体保留，敌人 AI / 闲逛功能启用时调大此值即可）
 const WANDER_PROBABILITY: float = 0.0
+
+## TeamAi 姿态枚举（对齐 TeamAi.STANCE_* / dump Team.Stance 序；本地常量避免跨模块依赖）
+const TEAM_AI_STANCE_GARRISON: int = 0
+const TEAM_AI_STANCE_DEFEND: int = 1
+const TEAM_AI_STANCE_ATTACK: int = 2
 
 ## 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙 背水一战。
 ## 被围判定：SURROUND_RANGE 内敌对单位 >= SURROUND_MIN 视为被围
@@ -59,6 +67,9 @@ var _state_machine: BehaviorStateMachine = null
 var _decision_timer: float = 0.0
 ## 上一帧是否被附身（用于检测附身状态变化）
 var _was_possessed: bool = false
+## 9i+ 试探接敌脉冲状态（test_engage_enabled 开时在脱战低士气分支消费）
+var _test_pulse_active: bool = false
+var _test_pulse_until: float = -1.0e9
 
 # ─────────────────────────────── 命令覆盖（§8.3 战术号令）────────────────────────────────
 ## 当前下达的命令行为名（空=无命令，由 AI 自主决策）
@@ -149,6 +160,15 @@ func _setup_state_machine() -> void:
 	retreat.entity = _entity
 	_state_machine.add_child(retreat)
 	_state_machine.register_behavior(retreat)
+
+	# 治疗行为（P7 批次 7b：MericAi 直译宿主）
+	var heal := ScriptBehaviorHeal.new()
+	heal.name = "BehaviorHeal"
+	heal.behavior_name = "heal"
+	heal.entity = _entity
+	_state_machine.add_child(heal)
+	_state_machine.register_behavior(heal)
+
 
 	# 初始行为：闲置
 	_state_machine.travel("idle")
@@ -267,7 +287,7 @@ func _try_combat() -> bool:
 		return false
 	# 战斗行为进行中且未完成 -> 保持
 	var current: String = _state_machine.get_current_behavior_name()
-	if current in ["attack", "seek_cover", "retreat"]:
+	if current in ["attack", "seek_cover", "retreat", "heal"]:
 		if not _state_machine.is_current_finished():
 			return true
 	var bi_param: Dictionary = {"battle": bi}
@@ -282,24 +302,40 @@ func _try_combat() -> bool:
 			if _is_under_threat(bi):
 				_state_machine.travel("retreat", bi_param)
 				return true
-			# 脱战低士气：不进战斗决策（避免 travel→finish 抖动），原地待命回士气
-			return false
-		# 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙背水一战
-		var mods: Dictionary = _compute_state_modifiers(bi, health)
-		if _should_rage(mods, health):
-			var rage_param: Dictionary = bi_param.duplicate()
-			rage_param["rage"] = true
-			_state_machine.travel("attack", rage_param)
-			return true
-		# HP 低且附近有掩体 -> seek_cover
-		if health.has_method("get_hp_ratio") and health.get_hp_ratio() < 0.4:
-			var cover = bi.get_cover() if bi.has_method("get_cover") else null
-			if cover != null and cover.has_method("has_covers") and cover.has_covers():
-				_state_machine.travel("seek_cover", bi_param)
+			# 脱战低士气：9i+ 增强（逃开后再战 + 前排试探接敌，档案开关默认关 = 既有行为）
+			if _try_rout_reengage(bi, bi_param, health):
 				return true
-	# 默认 -> attack
-	_state_machine.travel("attack", bi_param)
+			# 既有行为：不进战斗决策（避免 travel→finish 抖动），原地待命回士气
+			return false
+	# 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙背水一战
+	var mods: Dictionary = _compute_state_modifiers(bi, health)
+	if _should_rage(mods, health):
+		var rage_param: Dictionary = bi_param.duplicate()
+		rage_param["rage"] = true
+		_state_machine.travel("attack", rage_param)
+		return true
+	# HP 低且附近有掩体 -> seek_cover
+	if health != null and health.has_method("get_hp_ratio") and health.get_hp_ratio() < 0.4:
+		var cover = bi.get_cover() if bi.has_method("get_cover") else null
+		if cover != null and cover.has_method("has_covers") and cover.has_covers():
+			_state_machine.travel("seek_cover", bi_param)
+			return true
+	# 默认 -> attack（MERIC 祭司路由到 heal，P7 批次 7b）
+	if _is_meric():
+		_state_machine.travel("heal", bi_param)
+	else:
+		_state_machine.travel("attack", bi_param)
 	return true
+
+
+## 是否祭司兵种（MERIC 路由判定，P7 批次 7b）
+func _is_meric() -> bool:
+	if _entity == null or not is_instance_valid(_entity) or not _entity.has_method("get_weapon"):
+		return false
+	var w: Node = _entity.get_weapon()
+	if w == null or not is_instance_valid(w) or "weapon_type" not in w:
+		return false
+	return int(w.weapon_type) == ScriptBehaviorProfiles.MERIC
 
 
 ## IsUnderThreat 真值化（SWL Ai.IsUnderThreat 直译）：THREAT_RANGE 内存活敌人
@@ -318,6 +354,73 @@ func _is_under_threat(bi: Node) -> bool:
 		if pos.distance_to(e.global_position) <= THREAT_RANGE:
 			return true
 	return false
+
+
+## 9i+ 逃开后再战 + 前排试探接敌（P6 批次 7c，design §2.1.3.6 #1/#4）。
+## 全部档案开关默认关 = 返回 false → 既有"原地待命"行为；姿态查询不可用降级同。
+## 仅改决策取向，不触碰选目标、出手、伤害管线；手动号令执行中不生效（命令覆盖优先）。
+func _try_rout_reengage(bi: Node, bi_param: Dictionary, health: Node) -> bool:
+	var profile: Dictionary = _get_behavior_profile()
+	var reengage_on: bool = bool(profile.get("rout_reengage_enabled", false))
+	var test_on: bool = bool(profile.get("test_engage_enabled", false))
+	if not reengage_on and not test_on:
+		return false
+	# GARRISON 维持待命（归队由锚点号令覆盖）；查询不可用降级为 DEFEND（保守不压上）
+	var stance: int = _query_team_stance(bi)
+	if stance == TEAM_AI_STANCE_GARRISON:
+		return false
+	# 仅 ATTACK/DEFEND 姿态下执行再战/试探（stance 查询失败降级 DEFEND 也允许）
+	var morale_ratio: float = 1.0
+	if health != null and health.has_method("get_morale_ratio"):
+		morale_ratio = health.get_morale_ratio()
+	# #1 逃开后再战：士气过再战线 → 重进 attack（重返战线）
+	if reengage_on and morale_ratio >= float(profile.get("re_engage_morale", 0.15)):
+		_state_machine.travel("attack", bi_param)
+		return true
+	# #4 前排怯战试探接敌：脉冲周期在"允许进 attack / 维持待命"间切换
+	if test_on:
+		# 手动号令执行中不生效（命令覆盖优先，spec §5.6.3.2）
+		if not _ordered_behavior.is_empty():
+			return false
+		if bi == null or not is_instance_valid(bi) or not bi.has_method("get_nearest_enemy"):
+			return false
+		var enemy: Node = bi.get_nearest_enemy(_entity)
+		if enemy == null or not is_instance_valid(enemy):
+			return false
+		var dist: float = _entity.global_position.distance_to(enemy.global_position)
+		if dist > float(profile.get("test_engage_range", 480.0)):
+			return false
+		# 脉冲推进（时间戳法，无需在 physics_update 推进独立计时器）
+		var now: float = bi.get_duration() if bi.has_method("get_duration") else 0.0
+		if now >= _test_pulse_until:
+			_test_pulse_active = not _test_pulse_active
+			_test_pulse_until = now + (float(profile.get("test_pulse_on", 2.0)) if _test_pulse_active \
+					else float(profile.get("test_pulse_off", 3.0)))
+		if _test_pulse_active:
+			_state_machine.travel("attack", bi_param)
+			return true
+	return false
+
+
+## 读取当前兵种行为档案（RWR 基线+覆盖；无武器回落 SWORD 基线）
+func _get_behavior_profile() -> Dictionary:
+	if _entity != null and is_instance_valid(_entity) and _entity.has_method("get_weapon"):
+		var w: Node = _entity.get_weapon()
+		if w != null and is_instance_valid(w) and "weapon_type" in w:
+			return ScriptBehaviorProfiles.get_profile(int(w.get("weapon_type")))
+	return ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
+
+
+## 查询所属阵营的 TeamAi 姿态（duck 调用 + has_method 防御；未注册/查询不可用降级 DEFEND）
+func _query_team_stance(bi: Node) -> int:
+	if _entity == null or not is_instance_valid(_entity) or not _entity.has_method("get_faction"):
+		return TEAM_AI_STANCE_DEFEND
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_team_ai"):
+		return TEAM_AI_STANCE_DEFEND
+	var tai: Variant = bi.get_team_ai(_entity.get_faction())
+	if tai == null or not is_instance_valid(tai) or not tai.has_method("get_stance"):
+		return TEAM_AI_STANCE_DEFEND
+	return int(tai.get_stance())
 
 
 ## 状态调制检测（反编译参考实装 E）：低血 / 溃逃 / 被围 / 背墙。

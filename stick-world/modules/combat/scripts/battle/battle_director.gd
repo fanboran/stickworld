@@ -17,6 +17,19 @@ const ScriptBattleInstance := preload("res://modules/combat/scripts/battle/battl
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 活跃的 BattleInstance 列表
 var _battles: Array = []
+## 号令/编队系统引用（SystemSetup 装配注入，start_battle_at 透传给 BattleInstance 的阵营 AI）
+var _tactical_orders: Node = null
+var _formation_system: Node = null
+
+
+## 注入号令系统引用（SystemSetup 装配时调用；既有注入模式复制）
+func set_tactical_orders(orders: Node) -> void:
+	_tactical_orders = orders
+
+
+## 注入编队系统引用（SystemSetup 装配时调用）
+func set_formation_system(formation: Node) -> void:
+	_formation_system = formation
 
 
 ## 每帧裁剪已释放的战斗实例（BattleInstance 结束时会 queue_free）。
@@ -45,6 +58,9 @@ func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array) 
 	var bi: Node = ScriptBattleInstance.new()
 	bi.name = "BattleInstance"
 	bi.setup(map)
+	# 装配注入透传（P6 阵营 AI：enable_team_ai 时 TeamAi 消费号令/编队引用）
+	if bi.has_method("set_order_refs"):
+		bi.set_order_refs(_tactical_orders, _formation_system)
 	for u in attacker_units:
 		bi.add_unit(u, ScriptBattleInstance.FACTION_ATTACKER)
 	for u in defender_units:

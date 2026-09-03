@@ -1342,6 +1342,7 @@ function showCtx(ev){const c=document.getElementById("ctx");let h="";
    +"<div class='ci' onclick=\"setStatusAll('冻结')\">❄ 冻结</div>"
    +"<div class='ci' onclick=\"setStatusAll('放弃')\">✕ 放弃</div>"
    +"<div class='ci' onclick='openTaskForm(\""+single+"\")'>✎ 编辑任务…</div>"
+   +"<div class='ci' onclick='openTaskForm(null,\""+single+"\")'>✂ 拆解为子任务…</div>"
    +"<div class='ci' onclick='delTask(\""+single+"\")'>🗑 删除任务</div>"
    +"<div class='ci' onclick='copySelIds()'>📋 复制 id</div>";
  }else if(selSet.size>1&&!selEdge){
@@ -1445,9 +1446,12 @@ cv.onwheel=ev=>{ev.preventDefault();const f=ev.deltaY<0?1.13:0.885;const r=toWor
  view.x=ev.clientX-r.x*view.k;view.y=ev.clientY-r.y*view.k;dirty=true;};
 // ── 新建/编辑任务弹窗（同一表单双模式；编辑时 id 锁定） ──
 let editTarget=null;
-function openTaskForm(editId){editTarget=editId||null;
+let planParent=null;
+function openTaskForm(editId,parentId){editTarget=editId||null;planParent=parentId||null;
  const m=document.getElementById("modal");m.style.display="flex";
- document.getElementById("ntTitle").textContent=editId?("✎ 编辑任务 · "+editId):"➕ 新建任务";
+ document.getElementById("ntTitle").textContent=editId?("✎ 编辑任务 · "+editId)
+  :(planParent?("✂ 拆解 "+planParent+" → 子任务"):"➕ 新建任务");
+ document.getElementById("ntGo").textContent=(editId||planParent)?"创建子任务":"创建";
  document.getElementById("ntGo").textContent=editId?"保存":"创建";
  const idIn=document.getElementById("ntId");
  idIn.value=editId||"";idIn.disabled=!!editId;   // id 是全部引用的锚点，编辑时锁定
@@ -1458,7 +1462,7 @@ function openTaskForm(editId){editTarget=editId||null;
  ls.innerHTML=lanes.map(l=>"<option"+(n&&n.lane===l?" selected":"")+">"+l+"</option>").join("");
  const st=document.getElementById("ntStatus");
  st.innerHTML=STATUS.map(s=>"<option"+((n?n.status:"可开工")===s?" selected":"")+">"+s+"</option>").join("");
- document.getElementById("ntPrs").value=n?(n.prs||[]).join(","):"";
+ document.getElementById("ntPrs").value=n?(n.prs||[]).join(","):(planParent||"");
  document.getElementById("ntDomain").value=n?((Array.isArray(n.domain)?n.domain:(n.domain||"").split(",")).filter(Boolean)).join(","):"";
  document.getElementById("ntDoc").value=n?(n.doc||""):"";
  document.getElementById("ntNote").value=n?(n.note||""):"";
@@ -1478,7 +1482,9 @@ function submitTaskForm(){
   newPrs.filter(p=>!(n.prs||[]).includes(p)).forEach(p=>{if(byId[p])addEdge(p,editTarget);
    else alert("前置不存在，已跳过："+p);});
   markEdit(editTarget);measureCards();rebuildView();showPanel(n);buildSide(curView);closeModal();return;}
- const id=document.getElementById("ntId").value.trim();
+ let id=document.getElementById("ntId").value.trim();
+ if(planParent&&!id){let k=1;while(byId[planParent+"-"+k])k++;id=planParent+"-"+k;
+  document.getElementById("ntId").value=id;}
  if(!id){alert("id 必填");return;}
  if(byId[id]){alert("id 已存在："+id);return;}
  const n={id,kind:"任务",name:name||id,lane,status,prs:[],domain,tree:"",note,doc,

@@ -32,6 +32,13 @@ const _TerrainRendererScript: GDScript = preload("res://modules/world/scripts/ma
 const _ResourceGenScript: GDScript = preload("res://modules/world/scripts/map/resource_gen.gd")
 const ScriptResourceNode := preload("res://modules/world/scripts/map/resource_node.gd")
 
+# SQL 白名单：表名/列名为固定常量；运行时值（slot_id/map_id）一律经 ? 绑定
+# （query_with_bindings），禁止字符串拼接进 SQL。
+const _SQL_MAPS_DELETE := "DELETE FROM maps WHERE slot_id = ? AND map_id = ?"
+const _SQL_MAPS_SELECT := "SELECT * FROM maps WHERE slot_id = ? AND map_id = ?"
+const _SQL_NODES_DELETE := "DELETE FROM resource_nodes WHERE slot_id = ? AND map_id = ?"
+const _SQL_NODES_SELECT := "SELECT * FROM resource_nodes WHERE slot_id = ? AND map_id = ?"
+
 # ─────────────────────────────── 地图元数据（§3.4.1）────────────────────────────────
 ## 建筑下基准线偏移（地平线向下像素数）：所有房屋类建筑底部对齐到 ground_y + 此值。
 ## 不是按格子计算，而是固定像素偏移（当前 96px，后续可调整为 100/200 等）。
@@ -396,14 +403,16 @@ func _get_building_width(building: Node) -> float:
 
 
 func save_to_db(db, slot_id: int, p_map_id: String) -> void:
-	db.delete_rows("maps", "slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id])
-	db.insert_row("maps", {
+	if not db.query_with_bindings(_SQL_MAPS_DELETE, [slot_id, p_map_id]):
+		push_error("[VillageMap] maps 旧边界清理失败 slot=%d map=%s: %s" % [slot_id, p_map_id, str(db.error_message)])
+	if not db.insert_row("maps", {
 		"slot_id": slot_id, "map_id": p_map_id,
 		"town_center_world_x": town_center_world_x,
 		"map_left_cell": map_left_cell, "map_right_cell": map_right_cell,
 		"city_left_x": _get_city_left_x(), "city_right_x": _get_city_right_x(),
 		"ground_y": ground_y, "ground_bottom": ground_bottom,
-	})
+	}):
+		push_error("[VillageMap] 地图边界写入失败 slot=%d map=%s: %s" % [slot_id, p_map_id, str(db.error_message)])
 
 
 ## 取地图上全部资源点（供建造清场等查询，替代全局 group 扫描）
@@ -419,25 +428,28 @@ func get_resource_nodes() -> Array:
 
 ## 保存资源点到 DB
 func save_resource_nodes_to_db(db, slot_id: int, p_map_id: String) -> void:
-	db.delete_rows("resource_nodes", "slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id])
+	if not db.query_with_bindings(_SQL_NODES_DELETE, [slot_id, p_map_id]):
+		push_error("[VillageMap] resource_nodes 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, p_map_id, str(db.error_message)])
 	if decoration_layer == null:
 		return
 	var idx: int = 0
 	for node in decoration_layer.get_children():
 		if node is ScriptResourceNode and not node.is_depleted():
-			db.insert_row("resource_nodes", {
+			if not db.insert_row("resource_nodes", {
 				"slot_id": slot_id, "map_id": p_map_id,
 				"node_id": "rn_%04d" % idx,
 				"pos_x": node.global_position.x, "pos_y": node.global_position.y,
 				"resource_type": node.resource_type, "amount": node.amount,
-			})
+			}):
+				push_error("[VillageMap] 资源点写入失败 slot=%d map=%s id=rn_%04d: %s" % [slot_id, p_map_id, idx, str(db.error_message)])
 			idx += 1
 
 
 ## 从 DB 恢复地图边界
 func load_from_db(db, slot_id: int, p_map_id: String) -> void:
-	var rows: Array = db.select_rows("maps",
-		"slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id], ["*"])
+	var rows: Array = []
+	if db.query_with_bindings(_SQL_MAPS_SELECT, [slot_id, p_map_id]):
+		rows = db.query_result
 	if rows.is_empty():
 		_init_dynamic_bounds()
 		return
@@ -474,8 +486,9 @@ func load_resource_nodes_from_db(db, slot_id: int, p_map_id: String) -> void:
 	for node in decoration_layer.get_children():
 		if node is ScriptResourceNode:
 			node.queue_free()
-	var rows: Array = db.select_rows("resource_nodes",
-		"slot_id = %d AND map_id = '%s'" % [slot_id, p_map_id], ["*"])
+	var rows: Array = []
+	if db.query_with_bindings(_SQL_NODES_SELECT, [slot_id, p_map_id]):
+		rows = db.query_result
 	for row in rows:
 		var node: Node2D = ScriptResourceNode.new()
 		node.resource_type = int(row["resource_type"])

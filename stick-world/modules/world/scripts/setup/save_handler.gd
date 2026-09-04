@@ -13,6 +13,13 @@ extends Node
 
 var _root: GameRoot
 
+# SQL 白名单：表名/列名为固定常量；运行时值（slot_id/map_id）一律经 ? 绑定
+# （query_with_bindings），禁止字符串拼接进 SQL。
+const _SQL_META_UPDATE_MAP := "UPDATE save_meta SET current_map_id = ? WHERE slot_id = ?"
+const _SQL_META_SELECT_MAP := "SELECT current_map_id FROM save_meta WHERE slot_id = ?"
+const _SQL_ENT_DELETE := "DELETE FROM entities WHERE slot_id = ? AND map_id = ?"
+const _SQL_ENT_SELECT := "SELECT * FROM entities WHERE slot_id = ? AND map_id = ?"
+
 
 func setup(root: GameRoot) -> void:
 	_root = root
@@ -63,14 +70,16 @@ func _on_game_saving(_slot_index: int) -> void:
 	if map != null and map.has_method("save_resource_nodes_to_db"):
 		map.save_resource_nodes_to_db(db, slot_id, map_id)
 	# 5. 更新 save_meta.current_map_id
-	db.update_rows("save_meta", "slot_id = %d" % slot_id, {"current_map_id": map_id})
+	if not db.query_with_bindings(_SQL_META_UPDATE_MAP, [map_id, slot_id]):
+		push_error("[SaveHandler] save_meta.current_map_id 更新失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
 
 
 ## 保存实体到 DB
 func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 	if map == null:
 		return
-	db.delete_rows("entities", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id])
+	if not db.query_with_bindings(_SQL_ENT_DELETE, [slot_id, map_id]):
+		push_error("[SaveHandler] entities 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
 	var idx: int = 0
 	for entity in map.get_entities():
 		if not is_instance_valid(entity):
@@ -80,7 +89,7 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 		var extra: Dictionary = {}
 		if "faction_id" in entity:
 			extra["faction_id"] = entity.faction_id
-		db.insert_row("entities", {
+		if not db.insert_row("entities", {
 			"slot_id": slot_id, "map_id": map_id,
 			"entity_id": "ent_%04d" % idx,
 			"entity_type": "stickman",
@@ -90,7 +99,8 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 			"facing": facing,
 			"is_player": is_player,
 			"extra_data": JSON.stringify(extra),
-		})
+		}):
+			push_error("[SaveHandler] 实体写入失败 slot=%d map=%s id=ent_%04d: %s" % [slot_id, map_id, idx, str(db.error_message)])
 		idx += 1
 
 
@@ -100,7 +110,9 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 func _on_game_loaded(slot_index: int) -> void:
 	var db = SaveManager.get_db() if SaveManager and SaveManager.has_method("get_db") else null
 	if db != null:
-		var rows: Array = db.select_rows("save_meta", "slot_id = %d" % slot_index, ["current_map_id"])
+		var rows: Array = []
+		if db.query_with_bindings(_SQL_META_SELECT_MAP, [slot_index]):
+			rows = db.query_result
 		if not rows.is_empty():
 			_root._cached_load_map_id = str(rows[0].get("current_map_id", ""))
 	# 兜底：存档缺地图信息（空档/损坏档/无图状态下存的档）时回退新游戏开局，
@@ -191,7 +203,9 @@ func _restore_from_save(map: Node2D, map_id: String) -> void:
 
 ## 从 DB 恢复实体
 func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
-	var rows: Array = db.select_rows("entities", "slot_id = %d AND map_id = '%s'" % [slot_id, map_id], ["*"])
+	var rows: Array = []
+	if db.query_with_bindings(_SQL_ENT_SELECT, [slot_id, map_id]):
+		rows = db.query_result
 	for row in rows:
 		var pos := Vector2(float(row["pos_x"]), float(row["pos_y"]))
 		var entity: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, pos)

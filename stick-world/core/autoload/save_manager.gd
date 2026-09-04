@@ -10,6 +10,20 @@ extends Node
 const SLOT_COUNT := 5
 const SAVE_DIR := "user://saves"
 
+# SQL 白名单：表名无法经 ? 参数化，统一定义为常量；运行时值一律走 ? 绑定
+# （query_with_bindings），禁止字符串拼接进 SQL。
+const _T_SAVE_META := "save_meta"
+const _SQL_META_SELECT_ALL := "SELECT * FROM save_meta WHERE slot_id = ?"
+const _SQL_META_SELECT_CREATED := "SELECT created_at FROM save_meta WHERE slot_id = ?"
+const _SQL_META_DELETE := "DELETE FROM save_meta WHERE slot_id = ?"
+
+# ── schema 版本化（PRAGMA user_version）──
+## 当前支持的存档 schema 版本。v2 = 现行建表 SQL 的表结构（save_meta.version 所写数值）；
+## 0 = 版本化机制启用前的旧档（表结构与 v2 等价，视为受支持）。
+## 引入不兼容表结构变更时：本常量增一，并在 _migrate_loaded_schema 追加逐级迁移分支。
+const CURRENT_SCHEMA_VERSION := 2
+const _SQL_PRAGMA_USER_VERSION_GET := "PRAGMA user_version"
+
 var _auto_save_timer: float = 0.0
 var _auto_save_slot: int = 0
 var _auto_save_enabled: bool = true
@@ -205,14 +219,14 @@ func save_game(slot_index: int) -> bool:
 	_current_slot = slot_index
 	_ensure_schema()
 
-	# 注：不用外层 BEGIN/COMMIT 包裹整段写库 —— godot-sqlite 的 delete_rows/insert_row/
-	# select_rows/update_rows 内部各自开启并提交事务（2026-08-15 实测确认），外层事务会与
-	# 其嵌套冲突（每次写库刷 2 条 ERROR 日志），且首个 helper 的内部 COMMIT 会提前提交外层
-	# 事务，最后的 COMMIT 必然失败。每条语句的原子性由 helper 自身保证。
+	# 注：不用外层 BEGIN/COMMIT 包裹整段写库 —— godot-sqlite 的每次写库调用
+	# （query_with_bindings / insert_row 等）独立执行并提交（autocommit，2026-08-15 实测确认），
+	# 外层事务会与其嵌套冲突（每次写库刷 2 条 ERROR 日志），且首个语句的隐式 COMMIT 会
+	# 提前提交外层事务，最后的 COMMIT 必然失败。每条语句的原子性由 autocommit 保证。
 
-	# 写元数据
+	# 写元数据（version 列与 schema 版本同源，仍为 2，存档格式不变）
 	var now := Time.get_date_string_from_system() + " " + Time.get_time_string_from_system()
-	_upsert_save_meta(slot_index, now, _accumulate_playtime(), 2)
+	_upsert_save_meta(slot_index, now, _accumulate_playtime(), CURRENT_SCHEMA_VERSION)
 
 	# 模块接口：emit game_saving 信号，模块在回调中用 get_db() 写表
 	# 必须在 DB 打开后 emit，否则 get_db() 返回 null
@@ -244,6 +258,25 @@ func load_game(slot_index: int) -> bool:
 	if _db == null:
 		return false
 	_current_slot = slot_index
+
+	# schema 版本门禁：存档版本高于当前支持 = 来自更新版本的游戏，
+	# 贸然读取可能损坏数据（降级写坏），push_error 并拒绝读档。
+	var schema_version: int = _read_schema_version(_db)
+	if schema_version > CURRENT_SCHEMA_VERSION:
+		push_error("[SaveManager] 拒绝读取存档槽位 %d：schema 版本 %d 高于当前支持 %d（存档可能来自更新版本的游戏）"
+			% [slot_index, schema_version, CURRENT_SCHEMA_VERSION])
+		_db.close_db()
+		_db = null
+		_current_slot = -1
+		return false
+	# 版本低于当前支持：走迁移分支升级（当前无实际迁移，仅占位结构）
+	if not _migrate_loaded_schema(schema_version):
+		push_error("[SaveManager] 存档槽位 %d schema 迁移失败（v%d → v%d），拒绝读档"
+			% [slot_index, schema_version, CURRENT_SCHEMA_VERSION])
+		_db.close_db()
+		_db = null
+		_current_slot = -1
+		return false
 
 	# 模块接口：发射 game_loaded 信号，模块自行读表
 	# DB 保持打开，等 GameRoot 场景恢复后调 end_load() 关闭；
@@ -286,7 +319,9 @@ func get_slot_info(slot_index: int) -> Dictionary:
 		db.path = db_path
 		if not db.open_db():
 			return info
-		var rows: Array = db.select_rows("save_meta", "slot_id = %d" % slot_index, ["*"])
+		var rows: Array = []
+		if db.query_with_bindings(_SQL_META_SELECT_ALL, [slot_index]):
+			rows = db.query_result
 		db.close_db()
 		if rows.is_empty():
 			return info
@@ -358,8 +393,11 @@ func _ensure_schema() -> void:
 	if _db == null:
 		return
 	for stmt in _SCHEMA_SQLS:
-		_db.query(stmt)
+		if not _db.query(stmt):
+			push_error("[SaveManager] 建表语句执行失败: %s…（%s）" % [stmt.left(48), str(_db.error_message)])
 	_migrate_schema()
+	# 表结构就绪后盖章 schema 版本：旧档（user_version=0）在下次存档时自动升级标记
+	_stamp_schema_version()
 
 
 ## 旧库迁移：construction_projects 补 material_progress 列。
@@ -380,15 +418,58 @@ func _migrate_schema() -> void:
 		push_warning("[SaveManager] construction_projects 补列 material_progress 失败，未完工项目存档将丢失")
 
 
+## 读取存档 schema 版本（PRAGMA user_version）。
+## 读取失败/无版本标记返回 0（视为版本化启用前的旧档，不据此拒绝读档）。
+func _read_schema_version(db) -> int:
+	if db == null:
+		return 0
+	if not db.query(_SQL_PRAGMA_USER_VERSION_GET):
+		push_warning("[SaveManager] 读取 schema 版本失败: %s" % str(db.error_message))
+		return 0
+	var rows: Array = db.query_result
+	if rows.is_empty():
+		return 0
+	return int(rows[0].get("user_version", 0))
+
+
+## 存档路径：把 schema 版本戳升到当前支持值（幂等）。
+## 仅在 _ensure_schema（建表/补列完成）后调用；旧档下次存档即自动盖章升级。
+func _stamp_schema_version() -> void:
+	if _db == null:
+		return
+	# PRAGMA 赋值不支持参数绑定，值来自内部常量（非运行时输入），格式化安全
+	if not _db.query("PRAGMA user_version = %d" % CURRENT_SCHEMA_VERSION):
+		push_error("[SaveManager] schema 版本戳写入失败（user_version=%d）: %s"
+			% [CURRENT_SCHEMA_VERSION, str(_db.error_message)])
+
+
+## 读档路径：schema 版本低于当前支持时的逐级迁移分支（当前为占位结构，无实际迁移）。
+## version == 0：版本化机制启用前的旧档，表结构与 v2 等价（material_progress 缺列
+## 由 _migrate_schema 在存档路径补列、读档按缺省值兜底），直接放行。
+## 返回 false = 迁移失败，调用方应拒绝读档（半迁移状态比读不出更危险）。
+func _migrate_loaded_schema(from_version: int) -> bool:
+	if from_version >= CURRENT_SCHEMA_VERSION:
+		return true
+	# 占位：未来不兼容变更时在此追加迁移分支，示例——
+	# if from_version < 3:
+	# 	if not _db.query("ALTER TABLE …"):
+	# 		push_error("[SaveManager] v2→v3 迁移失败: %s" % str(_db.error_message))
+	# 		return false
+	return true
+
+
 ## 写入或更新 save_meta（保留首次创建时间，只更新 updated_at）
 func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version: int) -> void:
-	var rows: Array = _db.select_rows("save_meta", "slot_id = %d" % slot_id, ["created_at"])
+	var rows: Array = []
+	if _db.query_with_bindings(_SQL_META_SELECT_CREATED, [slot_id]):
+		rows = _db.query_result
 	var created_at: String = datetime
 	if not rows.is_empty():
 		created_at = str(rows[0].get("created_at", datetime))
 	# 先尝试删除旧记录（save_meta 主键是 slot_id）
-	_db.delete_rows("save_meta", "slot_id = %d" % slot_id)
-	_db.insert_row("save_meta", {
+	if not _db.query_with_bindings(_SQL_META_DELETE, [slot_id]):
+		push_error("[SaveManager] save_meta 旧记录删除失败 slot=%d: %s" % [slot_id, str(_db.error_message)])
+	if not _db.insert_row(_T_SAVE_META, {
 		"slot_id": slot_id,
 		"save_name": "",
 		"created_at": created_at,
@@ -396,7 +477,8 @@ func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version:
 		"playtime_seconds": playtime,
 		"version": version,
 		"current_map_id": "",
-	})
+	}):
+		push_error("[SaveManager] save_meta 元数据写入失败 slot=%d: %s" % [slot_id, str(_db.error_message)])
 
 
 func _accumulate_playtime() -> float:

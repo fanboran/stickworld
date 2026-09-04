@@ -2,11 +2,15 @@ class_name SkyDecor
 extends Node2D
 ## 天空装饰层 —— Terraria/ Kingdom 式多层视差背景（Demo 精品感主升级）。
 ##
-## 层次（远→近，视差因子 = 跟随相机的比例，1.0=钉死屏幕 / 0.0=钉死世界）：
-##   天空渐变(1.0) → 云(0.12+自漂移) → 远山(0.55) → 远树线(0.7) → 雾带(0.7)
-##   → 近树线(0.88) → 游戏世界(0.0)
-## 贴图均 tools/ai/gen_sky_decor.py 程序化生成；由 VillageMap/road_map._ready 挂载。
+## 层次（远→近；factor = 内容相对相机的扫动速率，1.0=钉死世界（同前景）/
+## 0.0=钉死屏幕（无限远），层位移 = cam_x × (1 - factor)）：
+##   星野+月亮(0.08，夜现) → 飞鸟群(0.35，昼现) → 远山(0.55) → 远树线(0.7)
+##   → 雾带(0.7) → 近树线(0.88) → 云(0.55/0.42+自漂移) → 游戏世界(1.0)
+## 贴图均 tools/ai/gen_sky_decor.py 程序化生成；星野/飞鸟为程序绘制零贴图；
+## 由 VillageMap/road_map._ready 挂载。
 
+const SkyStarsScript := preload("res://modules/world/scripts/map/sky_stars.gd")
+const SkyBirdsScript := preload("res://modules/world/scripts/map/sky_birds.gd")
 const TEX_MOUNTAINS := "res://assets/sky/mountains.png"
 const TEX_TREELINE_FAR := "res://assets/sky/treeline_far.png"
 const TEX_TREELINE_NEAR := "res://assets/sky/treeline_near.png"
@@ -30,6 +34,8 @@ var _cam_ready: bool = false
 
 func _ready() -> void:
 	z_index = -6
+	_build_stars()
+	_build_birds()
 	_build_layer(TEX_MOUNTAINS, 0.55, 0.0, Color(1, 1, 1))
 	_build_layer(TEX_TREELINE_FAR, 0.70, 0.0, Color(1, 1, 1))
 	_build_fog()
@@ -37,6 +43,22 @@ func _ready() -> void:
 	_build_clouds()
 	# 相机引用惰性获取（GameRoot.CameraRig）
 	call_deferred("_find_camera")
+
+
+## 星野+月亮（最底层、无限远；夜间淡入，见 sky_stars.gd）
+func _build_stars() -> void:
+	var stars: Node2D = SkyStarsScript.new()
+	stars.name = "Stars"
+	add_child(stars)
+	_layers.append({"node": stars, "factor": SkyStarsScript.FACTOR})
+
+
+## 远空飞鸟群（星野之上山层之下，会被山脊遮挡出纵深；昼间活动，见 sky_birds.gd）
+func _build_birds() -> void:
+	var birds: Node2D = SkyBirdsScript.new()
+	birds.name = "Birds"
+	add_child(birds)
+	_layers.append({"node": birds, "factor": SkyBirdsScript.FACTOR})
 
 
 ## 构建一个视差层：region 平铺超宽（两端冗余覆盖视差位移），底边贴地平线
@@ -110,7 +132,7 @@ func _process(delta: float) -> void:
 	_update_clouds(delta)
 
 
-## 视差：层 x = 相机 x × (1 - factor)（factor=0 世界钉死 / 1 屏幕钉死）
+## 视差：层 x = 相机 x × (1 - factor)（factor=0 屏幕钉死=无限远 / 1 世界钉死=前景）
 func _apply_parallax() -> void:
 	var cam_x: float = _cam.global_position.x
 	for layer in _layers:

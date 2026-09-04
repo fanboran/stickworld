@@ -58,9 +58,50 @@ func _ready() -> void:
 	var cam_moved: float = cx1 - cx0
 	var expect: float = cam_moved * (1.0 - 0.55)
 	print("[PARALLAX] cam_moved=%.0f mountains_moved=%.0f expect=%.0f" % [cam_moved, moved, expect])
-	if absf(moved - expect) < 30.0 and moved > 50.0:
-		print("[OK] 视差生效（山层按 55%% 因子跟随）")
-		get_tree().quit(0)
-	else:
+	if not (absf(moved - expect) < 30.0 and absf(moved) > 50.0):
 		print("[FAIL] 视差不符")
 		get_tree().quit(1)
+		return
+	print("[OK] 视差生效（山层按 55%% 因子跟随）")
+
+	# ── 天空生命感（星野/月亮/飞鸟）──
+	var stars: Node = sky.get_node_or_null("Stars")
+	var birds: Node = sky.get_node_or_null("Birds")
+	if stars == null or birds == null:
+		print("[FAIL] 星空/飞鸟层未挂载")
+		get_tree().quit(1)
+		return
+	if stars.get_star_count() < 300:
+		print("[FAIL] 星星数量不足: %d" % stars.get_star_count())
+		get_tree().quit(1)
+		return
+	var env: Node = _game_root.get_node_or_null("EnvironmentSystem")
+	if env == null:
+		print("[FAIL] EnvironmentSystem 未找到")
+		get_tree().quit(1)
+		return
+	# 夜晚 22:00 → 星野淡入（lerp 2/s，1.6s 后应 > 0.7）
+	env.set_time_of_day(22.0)
+	await get_tree().create_timer(1.6).timeout
+	var night: float = stars.get_night_factor()
+	print("[STARS] night_factor=%.2f" % night)
+	if night < 0.7:
+		print("[FAIL] 夜间星野未淡入")
+		get_tree().quit(1)
+		return
+	print("[OK] 夜空星野淡入（22:00）")
+	# 正午 12:00 → 飞鸟群确定性生成
+	env.set_time_of_day(12.0)
+	await get_tree().create_timer(1.0).timeout
+	birds.spawn_flock()
+	var n_birds: int = birds.get_bird_count()
+	print("[BIRDS] flock_size=%d" % n_birds)
+	if n_birds < 3 or n_birds > 5:
+		print("[FAIL] 飞鸟群数量异常")
+		get_tree().quit(1)
+		return
+	print("[OK] 白昼飞鸟群生成（12:00）")
+	# 复原时间后收尾
+	env.set_time_of_day(8.0)
+	print("[PASS] 视差 + 天空生命感全部验证通过")
+	get_tree().quit(0)

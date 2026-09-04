@@ -66,6 +66,17 @@ func try_interact() -> void:
 			_try_harvest_resource_node(target as Node2D)
 
 
+## 按住 E 的连续交互（采集手感）：动作锁解除后自动续作，由实体物理帧驱动。
+## 单次按下仍走 try_interact（_unhandled_input），本方法只负责"按住"的续采。
+func try_hold_interact() -> void:
+	if not Input.is_key_pressed(KEY_E):
+		return
+	# 敲击动作锁期间不重复触发（1.8s 一拍，与单次交互同节奏）
+	if float(_entity.get("_player_build_timer")) > 0.0:
+		return
+	try_interact()
+
+
 ## 对资源点执行一次采集：harvest 扣储量 → 经 ResourcesApi 入库 → 播放敲击动作。
 func _try_harvest_resource_node(rn: Node2D) -> void:
 	if rn == null or not is_instance_valid(rn) or not rn.has_method("harvest"):

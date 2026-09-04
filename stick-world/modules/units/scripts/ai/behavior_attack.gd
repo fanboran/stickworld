@@ -75,6 +75,15 @@ var _drift_timer: float = 0.0
 ## 攻击后举盾截止时刻（s；SWL Ai.cooldownAfterAttackForBlock 直译——
 ## 矛兵攻击完举盾瞬间防反打，"盾墙"手感来源）
 var _post_block_until: float = 0.0
+# ── 灵动化（RWR 士兵的"不安分"，Demo P5）──
+## 战斗微移步：射程内站桩输出时的随机小步（横移计时/方向/持续时间）
+var _strafe_timer: float = 0.0
+var _strafe_dir: float = 0.0
+var _strafe_hold: float = 0.0
+## 受击规避：被打醒后小概率侧移一小步（边沿检测只在第一帧掷骰）
+var _in_stun_prev: bool = false
+var _evade_hold: float = 0.0
+var _evade_dir: float = 0.0
 
 
 func _ready() -> void:
@@ -111,10 +120,23 @@ func update(delta: float) -> void:
 	if entity.has_method("is_dead") and entity.is_dead():
 		finish()
 		return
-	# 受击硬直（行业最佳实践 hit stun）：被打瞬间短暂停滞，不追不打
-	if entity.has_method("is_in_hit_stun") and entity.is_in_hit_stun():
+	# 受击硬直（行业最佳实践 hit stun）：被打瞬间短暂停滞，不追不打；
+	# 醒后小概率规避小跳（RWR 士兵被打了会挪窝，不站桩吃第二下）
+	var stunned: bool = entity.has_method("is_in_hit_stun") and entity.is_in_hit_stun()
+	if stunned:
+		if not _in_stun_prev and _evade_hold <= 0.0:
+			if randf() < 0.30:
+				_evade_hold = 0.35
+				_evade_dir = 1.0 if randf() < 0.5 else -1.0
+		_in_stun_prev = true
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
+		return
+	_in_stun_prev = false
+	if _evade_hold > 0.0:
+		_evade_hold -= delta
+		if entity.has_method("ai_move"):
+			entity.ai_move(Vector2(0.0, _evade_dir), false)
 		return
 	if _battle == null or not is_instance_valid(_battle) or not _battle.has_method("is_active") or not _battle.is_active():
 		if entity.has_method("ai_stop"):
@@ -231,6 +253,17 @@ func update(delta: float) -> void:
 			# 攻击命中帧触发攻击动画（反编译参考实装 C）：播完由 rig.animation_finished 回切
 			if entity.has_method("play_attack"):
 				entity.play_attack()
+		# 战斗微移步（RWR"不安分"感）：站桩输出时随机小步横移，活着的感觉
+		_strafe_timer -= delta
+		if _strafe_timer <= 0.0:
+			_strafe_timer = randf_range(1.5, 3.5)
+			if randf() < 0.35:
+				_strafe_dir = 1.0 if randf() < 0.5 else -1.0
+				_strafe_hold = 0.30
+		if _strafe_hold > 0.0:
+			_strafe_hold -= delta
+			if entity.has_method("ai_move"):
+				entity.ai_move(Vector2(0.0, _strafe_dir), false)
 		# 射手容错间距（SWL PushApartTolerance）：站桩输出时与友军保持间距
 		if _p("push_apart", 0.0) > 0.0:
 			_apply_push_apart(_p("push_apart", 0.0), delta)

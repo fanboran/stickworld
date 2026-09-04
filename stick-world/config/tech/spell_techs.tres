@@ -1,0 +1,59 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "spell_techs"
+_meta = {
+	"resource_name": "spell_techs",
+	"version": "0.1.0",
+	"description": "从 config/excel/法术科技.xlsx → spell_techs sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/法术科技.xlsx",
+	"source_sheet": "spell_techs"
+}
+variables = {
+	"data": [
+		{
+			"id": "spell_elemental_fire",
+			"name_zh": "火焰法术",
+			"category": "elemental",
+			"prerequisites": null,
+			"unlocks": "火球术,火焰附魔",
+			"description": "基础元素法术，术士可施放"
+		},
+		{
+			"id": "spell_elemental_ice",
+			"name_zh": "冰霜法术",
+			"category": "elemental",
+			"prerequisites": null,
+			"unlocks": "冰箭术,冻结陷阱",
+			"description": "冰系法术，雪地火柴人倾向"
+		},
+		{
+			"id": "spell_enchant_weapon",
+			"name_zh": "武器附魔",
+			"category": "enchant",
+			"prerequisites": "spell_elemental_fire",
+			"unlocks": "火焰剑,冰霜弓",
+			"description": "为武器附加元素伤害"
+		},
+		{
+			"id": "spell_heal",
+			"name_zh": "治疗术",
+			"category": "restoration",
+			"prerequisites": null,
+			"unlocks": "战场急救,回春术",
+			"description": "恢复友方单位生命值"
+		},
+		{
+			"id": "spell_summon_basic",
+			"name_zh": "基础召唤",
+			"category": "summon",
+			"prerequisites": null,
+			"unlocks": "召唤低级单位",
+			"description": "消耗沥青召唤临时作战单位"
+		}
+	]
+}

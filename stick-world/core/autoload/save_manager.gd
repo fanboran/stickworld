@@ -36,6 +36,10 @@ var _current_slot: int = -1
 ## 下次启动（GameRoot 装配后）要读取的存档槽位；-1 = 正常新游戏。
 ## 主菜单「继续游戏/读取存档」设置后切换场景，GameRoot 启动时消费并复位。
 var boot_load_slot: int = -1
+
+## 最近一次 load_game 失败的原因（用户可读文案；"" = 未失败/已成功）。
+## load_game 返回 false 时调用方可读取此字段弹 ui_notification（无 UI 路径仍只有 push_error）。
+var last_load_fail_reason: String = ""
 # 读档兜底计时器：game_loaded 后若场景恢复失败/无当前地图，超时强制关闭 DB
 var _load_guard: Timer = null
 
@@ -241,12 +245,15 @@ func save_game(slot_index: int) -> bool:
 
 
 func load_game(slot_index: int) -> bool:
+	last_load_fail_reason = ""
 	if slot_index < 0 or slot_index >= SLOT_COUNT:
 		push_warning("[SaveManager] 存档槽越界: %d" % slot_index)
+		last_load_fail_reason = "存档槽位无效"
 		return false
 
 	if not slot_exists(slot_index):
 		push_warning("[SaveManager] 存档不存在: %s" % _slot_path(slot_index))
+		last_load_fail_reason = "存档不存在"
 		return false
 	# 防御：同上，读档入口先关残留连接
 	if _db != null:
@@ -256,6 +263,7 @@ func load_game(slot_index: int) -> bool:
 
 	_db = _open_db_for_slot(slot_index)
 	if _db == null:
+		last_load_fail_reason = "存档文件无法打开"
 		return false
 	_current_slot = slot_index
 
@@ -265,6 +273,7 @@ func load_game(slot_index: int) -> bool:
 	if schema_version > CURRENT_SCHEMA_VERSION:
 		push_error("[SaveManager] 拒绝读取存档槽位 %d：schema 版本 %d 高于当前支持 %d（存档可能来自更新版本的游戏）"
 			% [slot_index, schema_version, CURRENT_SCHEMA_VERSION])
+		last_load_fail_reason = "存档版本高于当前游戏（可能来自更新版本），拒绝读取"
 		_db.close_db()
 		_db = null
 		_current_slot = -1
@@ -273,6 +282,7 @@ func load_game(slot_index: int) -> bool:
 	if not _migrate_loaded_schema(schema_version):
 		push_error("[SaveManager] 存档槽位 %d schema 迁移失败（v%d → v%d），拒绝读档"
 			% [slot_index, schema_version, CURRENT_SCHEMA_VERSION])
+		last_load_fail_reason = "存档格式迁移失败（存档可能已损坏）"
 		_db.close_db()
 		_db = null
 		_current_slot = -1

@@ -1,0 +1,59 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "admin_techs"
+_meta = {
+	"resource_name": "admin_techs",
+	"version": "0.1.0",
+	"description": "从 config/excel/管理科技.xlsx → admin_techs sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/管理科技.xlsx",
+	"source_sheet": "admin_techs"
+}
+variables = {
+	"data": [
+		{
+			"id": "mgmt_writing",
+			"name_zh": "文字记录",
+			"category": "administration",
+			"prerequisites": null,
+			"unlocks": "书记官,泥板记录",
+			"description": "从口头管理过渡到书面记录"
+		},
+		{
+			"id": "mgmt_accounting",
+			"name_zh": "基础会计",
+			"category": "administration",
+			"prerequisites": "mgmt_writing",
+			"unlocks": "双镜记账法,税收核算",
+			"description": "财政收入精度翻倍"
+		},
+		{
+			"id": "mgmt_bureaucracy",
+			"name_zh": "官僚体系",
+			"category": "administration",
+			"prerequisites": "mgmt_writing",
+			"unlocks": "官僚机构,层级报表",
+			"description": "解锁多层行政架构"
+		},
+		{
+			"id": "mgmt_formation",
+			"name_zh": "阵型指挥",
+			"category": "military",
+			"prerequisites": null,
+			"unlocks": "方阵,盾墙,侧翼包抄",
+			"description": "战术级指挥能力"
+		},
+		{
+			"id": "mgmt_logistics",
+			"name_zh": "后勤组织",
+			"category": "military",
+			"prerequisites": "mgmt_writing",
+			"unlocks": "补给链,运输调度",
+			"description": "解锁物流网络规划"
+		}
+	]
+}

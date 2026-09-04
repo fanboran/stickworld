@@ -273,10 +273,46 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	label.add_theme_constant_override("outline_size", 4)
 	label.z_index = 90
-	tree.current_scene.add_child(label)
+	# deferred：伤害结算发生在物理帧内，同帧改树会挤掉其他节点的帧处理（血条时序交扰）
+	tree.current_scene.add_child.call_deferred(label)
 	label.global_position = pos + Vector2(randf_range(-14.0, 14.0), -56.0)
 	var tween := label.create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(label, "position:y", label.position.y - 44.0, 0.7).set_ease(Tween.EASE_OUT)
 	tween.tween_property(label, "modulate:a", 0.0, 0.45).set_delay(0.25)
 	tween.chain().tween_callback(label.queue_free)
+
+
+## 挥砍剑光弧 —— 命中帧在攻击者朝向画一道渐隐弧光（白/金），0.16s 消散。
+## angle_rad: 弧光朝向（世界角）；flip_v: 攻击者面朝左时镜像弧线。
+static func spawn_slash_arc(tree: SceneTree, pos: Vector2, angle_rad: float, crit: bool = false) -> void:
+	if tree == null or tree.current_scene == null:
+		return
+	var arc := Polygon2D.new()
+	var seg: int = 20
+	var r0: float = 14.0
+	var r1: float = 44.0
+	var spread: float = 2.2  # 弧张角（rad，约 126°）
+	var pts := PackedVector2Array()
+	var colors := PackedColorArray()
+	var base := Color(1.0, 0.97, 0.85, 0.85) if crit else Color(0.95, 0.97, 1.0, 0.7)
+	for i in seg + 1:
+		var t: float = float(i) / float(seg)
+		var a: float = angle_rad - spread * 0.5 + spread * t
+		var dir := Vector2(cos(a), sin(a))
+		pts.append(dir * r1)
+		pts.append(dir * r0)
+		# 外缘亮、内缘淡（顶点色渐变，成对推入：外/内）
+		colors.append(Color(base.r, base.g, base.b, base.a))
+		colors.append(Color(base.r, base.g, base.b, base.a * 0.15))
+	arc.polygon = pts
+	arc.vertex_colors = colors
+	arc.position = pos
+	arc.rotation = 0.0
+	arc.z_index = 85
+	tree.current_scene.add_child(arc)
+	var tw := arc.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(arc, "scale", Vector2(1.25, 1.25), 0.16)
+	tw.tween_property(arc, "modulate:a", 0.0, 0.16)
+	tw.chain().tween_callback(arc.queue_free)

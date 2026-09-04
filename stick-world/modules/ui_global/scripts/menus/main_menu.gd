@@ -252,10 +252,16 @@ func _build_background() -> void:
 		move_child(c, 1)
 		_cloud_rects.append(c)
 		_cloud_base_ys.append(c.position.y)
+	# 远空飞鸟（自绘剪影，与游戏内 sky_birds 同视觉语言；云上山下）
+	var birds: Node2D = MenuBirdsScript.new()
+	birds.name = "MenuBirds"
+	add_child(birds)
+	move_child(birds, 2)
 
 const SkyDecorMountains := "res://assets/sky/mountains.png"
 const SkyDecorCloudA := "res://assets/sky/cloud_a.png"
 const SkyDecorCloudB := "res://assets/sky/cloud_b.png"
+const MenuBirdsScript := preload("res://modules/ui_global/scripts/menus/menu_birds.gd")
 var _cloud_rects: Array = []
 
 

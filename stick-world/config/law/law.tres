@@ -1,0 +1,55 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "law"
+_meta = {
+	"resource_name": "law",
+	"version": "0.1.0",
+	"description": "从 config/excel/法律系统.xlsx → law sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/法律系统.xlsx",
+	"source_sheet": "law"
+}
+variables = {
+	"data": [
+		{
+			"id": "law_conscription",
+			"name_zh": "征兵令",
+			"category": "military",
+			"effect_quantifiable": "+30%征兵速度",
+			"effect_narrative": "民间不满,逃兵增加",
+			"repeal_cost": "军心涣散3个月",
+			"description": "强制征召平民入伍"
+		},
+		{
+			"id": "law_war_tax",
+			"name_zh": "战时税",
+			"category": "economy",
+			"effect_quantifiable": "+15%税收",
+			"effect_narrative": "商业活力下降",
+			"repeal_cost": "经济衰退2个月",
+			"description": "战争期间提高税率"
+		},
+		{
+			"id": "law_public_education",
+			"name_zh": "公学制",
+			"category": "social",
+			"effect_quantifiable": "+20%识字率",
+			"effect_narrative": "贵族不满",
+			"repeal_cost": "知识阶层抗议",
+			"description": "国家出资建设学堂"
+		},
+		{
+			"id": "law_slavery",
+			"name_zh": "奴役合法化",
+			"category": "social",
+			"effect_quantifiable": "可奴役巨人/战俘",
+			"effect_narrative": "国际声誉暴跌",
+			"repeal_cost": "大规模起义风险",
+			"description": "允许奴役非火柴人种族"
+		}
+	]
+}

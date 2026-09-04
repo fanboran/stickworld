@@ -9,7 +9,7 @@ extends RefCounted
 ## 框选/编队/战术指令（SelectionSystem/FormationSystem/TacticalOrders）
 ## 实现在 combat 模块 scripts/command/，经 GameRoot 装配注入协同。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.1.3、§7.5、§八.3。
+## 详见 docs/技术/架构/场景与战斗/战斗与AI.md §7.1.3、§7.5、§8.3。
 ##
 ## PossessionInterface 公共 API：
 ##   - get_possessed_entity() -> Node2D    获取当前附身实体

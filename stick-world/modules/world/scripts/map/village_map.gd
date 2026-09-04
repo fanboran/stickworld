@@ -114,6 +114,10 @@ func _mount_sky_decor() -> void:
 	sky.map_left = map_left
 	sky.map_right = map_right
 	add_child(sky)
+	# 环境浮尘（空气感；相机视野内 60 粒微光）
+	var motes := AmbientMotes.new()
+	motes.name = "AmbientMotes"
+	add_child(motes)
 
 
 ## 实例化并挂载子组件（TerrainRenderer / ResourceGen）。

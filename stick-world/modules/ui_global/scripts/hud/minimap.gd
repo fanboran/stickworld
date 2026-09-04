@@ -156,6 +156,12 @@ func _draw_player_dot(ground_y_px: float) -> void:
 		return
 	var dot_x: float = _world_to_minimap_x(player.global_position.x)
 	# 角色点在地面线上（Y 固定，详见 §10.4.4）
+	# 呼吸光环（脉动）：1.2s 周期，3px 实心点外圈 3→6px 渐隐
+	var phase: float = fmod(Time.get_ticks_msec() / 1000.0, 1.2) / 1.2
+	var halo_r: float = 3.0 + phase * 3.0
+	var halo := COLOR_PLAYER
+	halo.a = 0.5 * (1.0 - phase)
+	draw_circle(Vector2(dot_x, ground_y_px), halo_r, halo)
 	draw_circle(Vector2(dot_x, ground_y_px), 3.0, COLOR_PLAYER)
 
 

@@ -64,11 +64,12 @@ func _ready() -> void:
 		return
 	print("[OK] 视差生效（山层按 55%% 因子跟随）")
 
-	# ── 天空生命感（星野/月亮/飞鸟）──
+	# ── 天空生命感（星野/月亮/飞鸟/萤火虫）──
 	var stars: Node = sky.get_node_or_null("Stars")
 	var birds: Node = sky.get_node_or_null("Birds")
-	if stars == null or birds == null:
-		print("[FAIL] 星空/飞鸟层未挂载")
+	var flies: Node = m.get_node_or_null("Fireflies")
+	if stars == null or birds == null or flies == null:
+		print("[FAIL] 星空/飞鸟/萤火虫层未挂载")
 		get_tree().quit(1)
 		return
 	if stars.get_star_count() < 300:
@@ -89,7 +90,13 @@ func _ready() -> void:
 		print("[FAIL] 夜间星野未淡入")
 		get_tree().quit(1)
 		return
-	print("[OK] 夜空星野淡入（22:00）")
+	var flies_night: float = flies.get_night_factor()
+	print("[FIREFLIES] night_factor=%.2f" % flies_night)
+	if flies_night < 0.7:
+		print("[FAIL] 夜间萤火虫未淡入")
+		get_tree().quit(1)
+		return
+	print("[OK] 夜空星野淡入（22:00）+ 萤火虫入野")
 	# 正午 12:00 → 飞鸟群确定性生成
 	env.set_time_of_day(12.0)
 	await get_tree().create_timer(1.0).timeout

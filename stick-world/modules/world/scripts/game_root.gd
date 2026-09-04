@@ -417,8 +417,16 @@ func _load_start_village() -> void:
 		SaveManager.boot_load_slot = -1
 		print_verbose("[GameRoot] 启动读档: 槽位 %d" % boot_slot)
 		_show_loading("正在读取存档…")
-		load_game_from_slot(boot_slot)
-		return
+		var boot_accepted: bool = false
+		if _save_system != null and _save_system.has_method("load_game_from_slot"):
+			boot_accepted = _save_system.load_game_from_slot(boot_slot)
+		if boot_accepted:
+			return
+		# 拒读（版本过高/迁移失败/存档不存在）：不 return，落到下方新游戏开局——
+		# 与 SaveHandler._on_game_loaded「缺地图信息回退新游戏」同一兜底哲学，
+		# 避免加载遮罩永久停留黑屏；失败原因已由 SaveHandler 经 ui_notification 提示
+		# （此时 UIRoot 已装配，通知随遮罩淡出可见）。
+		print_verbose("[GameRoot] 启动读档被拒（槽位 %d），回退新游戏" % boot_slot)
 	# 新游戏：重置游戏时间（防上一局残留）
 	if WorldState and "game_time" in WorldState:
 		WorldState.game_time = 0.0
@@ -627,10 +635,11 @@ func start_demo_building_at(cell_x: int) -> Dictionary:
 
 # ─────────────────────────────── 存档转发（实现见 SaveHandler 子模块）────────────────────────────────
 
-## 外部调用：启动读档流程
-func load_game_from_slot(slot_index: int) -> void:
+## 外部调用：启动读档流程（返回 false = 拒读，见 SaveHandler.load_game_from_slot）
+func load_game_from_slot(slot_index: int) -> bool:
 	if _save_system != null and _save_system.has_method("load_game_from_slot"):
-		_save_system.load_game_from_slot(slot_index)
+		return _save_system.load_game_from_slot(slot_index)
+	return false
 
 
 ## 切换存档面板可见性

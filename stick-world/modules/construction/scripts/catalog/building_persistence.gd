@@ -113,10 +113,7 @@ func _clear_all_buildings_and_projects() -> void:
 	_root._building_to_id.clear()
 	_root._projects.clear()
 	# 阶段 E：清理进度条
-	for indicator in _root._project_indicators.values():
-		if is_instance_valid(indicator):
-			(indicator as Node).queue_free()
-	_root._project_indicators.clear()
+	_root._indicators.clear_all()
 
 
 ## 从行数据恢复一个建造项目
@@ -146,9 +143,7 @@ func _restore_project_from_row(row: Dictionary) -> void:
 	if _root._assigner != null:
 		_root._assigner.add_project(project)
 	# 阶段 E：恢复进度条 + 监听进度
-	_root._create_progress_indicator(project)
-	if not project.progress_changed.is_connected(_root._on_project_progress):
-		project.progress_changed.connect(_root._on_project_progress)
+	_root._indicators.track(project)
 
 
 ## 计算下一个 ID（避免恢复后冲突）

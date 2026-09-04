@@ -105,6 +105,9 @@ func harvest(qty: int) -> int:
 func _play_harvest_feedback(gained: int) -> void:
 	if gained > 0:
 		_spawn_gain_label(gained)
+		if AudioManager != null:
+			AudioManager.play_event("harvest_hit")
+			AudioManager.play_event("harvest_gain")
 		var tween := create_tween()
 		tween.tween_property(self, "scale", Vector2(1.18, 0.82), 0.08)
 		tween.tween_property(self, "scale", Vector2.ONE, 0.14)

@@ -11,6 +11,13 @@ Excel 格式约定:
     - 第 2 行: 中文字段说明（跳过）
     - 第 3 行起: 数据行
 
+导出行为约定:
+    - 存在验证错误（空 id / 重复 id / 全空行 / 必填列缺失 / 引用悬空）时
+      默认拒绝导出，退出码 1，须修复数据后重试
+    - id 为空的数据行永远不会写入 .tres（防 {id: null} 垃圾行进产物）；
+      全空行同样只在报错中出现，从不写入产物
+    - 重导出时保留目标 .tres 头部已有的 uid="uid://..."（若存在）
+
 输出:
     config/excel/<文件名>.xlsx → config/<文件名>/<sheet名>.tres
 """
@@ -287,9 +294,11 @@ def parse_sheet_with_raw(ws):
         - 第 2/3 行: 中文说明（跳过）
         - 第 3/4 行起: 数据
 
-    返回: (raw_headers, clean_headers, data_rows, errors, metadata)
+    返回: (raw_headers, clean_headers, data_rows, errors, metadata, blank_rows)
+    blank_rows: 数据区中全空行的 Excel 行号列表（计入验证错误，不静默丢弃）
     """
     errors = []
+    blank_rows = []
     rows = list(ws.iter_rows(min_row=1, values_only=True))
 
     # 检测元数据行
@@ -301,7 +310,7 @@ def parse_sheet_with_raw(ws):
 
     if len(rows) < 3:
         errors.append("数据不足（至少需要 3 行：表头 + 说明 + 数据）")
-        return [], [], [], errors, metadata
+        return [], [], [], errors, metadata, blank_rows
 
     # 原始字段名（含 * 标记）
     raw_headers = [str(c).strip() if c is not None else "" for c in rows[0]]
@@ -318,7 +327,7 @@ def parse_sheet_with_raw(ws):
         seen.add(h)
 
     if errors:
-        return raw_headers, clean_headers, [], errors, metadata
+        return raw_headers, clean_headers, [], errors, metadata, blank_rows
 
     # 数据行
     data_rows = []
@@ -335,8 +344,10 @@ def parse_sheet_with_raw(ws):
 
         if row_has_data:
             data_rows.append(row_data)
+        else:
+            blank_rows.append(row_idx)
 
-    return raw_headers, clean_headers, data_rows, errors, metadata
+    return raw_headers, clean_headers, data_rows, errors, metadata, blank_rows
 
 
 # ---------------------------------------------------------------------------
@@ -484,6 +495,7 @@ def export_all(dry_run=False):
     all_parsed = {}  # {(file_name, sheet_name): (headers, data_rows, raw_headers)}
     all_meta = {}    # {file_name: metadata_dict} 用于获取 output_dir
     all_ids_map = {}  # {sheet_name: set of ids}
+    all_blank_rows = {}  # {(file_name, sheet_name): [excel 行号]} 全空行
 
     # ── 第一遍：解析所有 Sheet ──
     print("=" * 60)
@@ -502,7 +514,7 @@ def export_all(dry_run=False):
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            raw_headers, headers, data_rows, sheet_errors, metadata = parse_sheet_with_raw(ws)
+            raw_headers, headers, data_rows, sheet_errors, metadata, blank_rows = parse_sheet_with_raw(ws)
 
             if sheet_errors:
                 for err in sheet_errors:
@@ -511,6 +523,7 @@ def export_all(dry_run=False):
 
             key = (file_name, sheet_name)
             all_parsed[key] = (headers, data_rows, raw_headers)
+            all_blank_rows[key] = blank_rows
 
             # 记录元数据（第一个 sheet 的 metadata 作为整个文件的 metadata）
             if file_name not in all_meta and metadata:
@@ -535,6 +548,12 @@ def export_all(dry_run=False):
     print("=" * 60)
 
     for (file_name, sheet_name), (headers, data_rows, raw_headers) in all_parsed.items():
+        # 全空行检查（计入硬错误，不静默丢弃）
+        for row_idx in all_blank_rows.get((file_name, sheet_name), []):
+            all_errors.append(
+                f"[{file_name}] Sheet '{sheet_name}' 第 {row_idx} 行: 全空行（无任何数据）"
+            )
+
         # 必填列检查
         req_errors = validate_required_columns(file_name, sheet_name, raw_headers, data_rows)
         all_errors.extend(req_errors)
@@ -559,11 +578,10 @@ def export_all(dry_run=False):
         return len(all_errors) == 0
 
     if all_errors:
-        print(f"\n⚠️  存在 {len(all_errors)} 个验证错误，是否继续导出？(y/n): ", end="")
-        choice = input().strip().lower()
-        if choice != "y":
-            print("已取消导出。")
-            return False
+        # 硬错误默认拒绝导出：垃圾行（如 {id: null}）曾借此混入产物
+        print(f"\n❌ 存在 {len(all_errors)} 个验证错误，已拒绝导出。")
+        print("   请修复上述数据后重新运行。")
+        return False
 
     # ── 第三遍：导出 .tres ──
     print(f"\n{'=' * 60}")
@@ -572,6 +590,16 @@ def export_all(dry_run=False):
 
     exported_count = 0
     for (file_name, sheet_name), (headers, data_rows, _) in all_parsed.items():
+        # 空 id 行最后防线：无论何种情况都不写入产物（防 {id: null} 垃圾行）
+        if "id" in headers:
+            kept_rows = []
+            for row_idx, row in enumerate(data_rows, start=3):
+                if row.get("id") is None:
+                    print(f"  ⛔ 跳过空 id 行: [{file_name}] Sheet '{sheet_name}' 第 {row_idx} 行")
+                else:
+                    kept_rows.append(row)
+            data_rows = kept_rows
+
         # 输出目录: 优先使用 Excel 元数据中的 output_dir，否则用文件名
         base_name = Path(file_name).stem
         meta = all_meta.get(file_name, {})
@@ -604,8 +632,6 @@ def export_all(dry_run=False):
     # ── 总结 ──
     print(f"\n{'=' * 60}")
     print(f"✅ 导出完成: {exported_count} 个 .tres 文件")
-    if all_errors:
-        print(f"⚠️  验证警告: {len(all_errors)} 个（已跳过导出）")
     print("=" * 60)
     return True
 

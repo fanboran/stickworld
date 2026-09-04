@@ -375,14 +375,16 @@ func _apply_balance_calibration() -> void:
 	if not (row_v is Dictionary):
 		return
 	var row: Dictionary = row_v
-	if row.has("base_attack") and float(row["base_attack"]) > 0.0:
-		damage = float(row["base_attack"])
-	if row.has("attack_cooldown") and float(row["attack_cooldown"]) > 0.0:
-		cooldown = float(row["attack_cooldown"])
-	if row.has("head_shot_bonus_damage"):
-		head_shot_bonus_damage = float(row["head_shot_bonus_damage"])
-	if not _hp_calibrated and row.has("base_hp") and float(row["base_hp"]) > 0.0:
-		var hp := float(row["base_hp"])
+	# Excel 空单元格经管线导出为 null：float(null) 会抛"Nonexistent float constructor"，
+	# 数值列统一先判 null 再转换，缺列/空值保持代码默认（零回归）
+	if _num_or_zero(row, "base_attack") > 0.0:
+		damage = _num_or_zero(row, "base_attack")
+	if _num_or_zero(row, "attack_cooldown") > 0.0:
+		cooldown = _num_or_zero(row, "attack_cooldown")
+	if row.get("head_shot_bonus_damage") != null:
+		head_shot_bonus_damage = _num_or_zero(row, "head_shot_bonus_damage")
+	if not _hp_calibrated and _num_or_zero(row, "base_hp") > 0.0:
+		var hp: float = _num_or_zero(row, "base_hp")
 		var owner_entity: CharacterBody2D = get_owner_entity()
 		if owner_entity != null and owner_entity.has_method("get_health"):
 			var health: Node = owner_entity.get_health()
@@ -392,6 +394,14 @@ func _apply_balance_calibration() -> void:
 			_hp_calibrated = true
 	_check_cooldown_vs_anim()
 	_apply_global_tuning()
+
+
+## 配置行数值字段安全读取：null/缺键返回 0.0（float(null) 在运行时会抛错）
+func _num_or_zero(row: Dictionary, key: String) -> float:
+	var v: Variant = row.get(key)
+	if v == null:
+		return 0.0
+	return float(v)
 
 
 ## 全局手感数值校准：从 balance.variables（Excel 平衡变量表 var_* 行）读

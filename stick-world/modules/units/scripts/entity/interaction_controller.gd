@@ -2,8 +2,8 @@ extends Node
 ## 火柴人交互控制器 —— 玩家按 E 交互 + 交互提示弹窗。
 ##
 ## 职责：
-## - 查找当前可交互目标（工地 / 仓库）并返回提示文字
-## - 玩家按 E 执行交互（交付材料 / 敲击建造 / 取放材料）
+## - 查找当前可交互目标（工地 / 仓库 / 资源点）并返回提示文字
+## - 玩家按 E 执行交互（交付材料 / 敲击建造 / 取放材料 / 采集）
 ## - 交互提示弹窗（挂到地图前景层，跟随目标建筑显示）
 ##
 ## 由 StickmanEntity._ready 挂载为 InteractionController 子节点并调用 setup(entity)，
@@ -18,6 +18,17 @@ const INTERACT_VERT_TOL: float = 40.0
 ## 工地主体高度（与 ConstructionProject._create_barrier 默认障碍高一致）
 const PROJECT_BODY_HEIGHT: float = 390.0
 
+## 采集判定范围（与资源点中心的 X/Y 距离，px；地面带宽 3 格内可采）
+const HARVEST_X_RANGE: float = 72.0
+const HARVEST_Y_RANGE: float = 96.0
+## 单次采集量（一次敲击动作的产出）
+const HARVEST_PER_ACTION: int = 20
+## 手动采集入库的 region（与开局资源、建造扣减同账）
+const HARVEST_REGION: String = "test_region"
+
+## ResourcesApi 惰性缓存（挂 GameRoot 下，名字固定；经模块 API 入库，不直连内部）
+var _resources_api_cache: Node = null
+
 
 func setup(entity: Node2D) -> void:
 	_entity = entity
@@ -25,35 +36,76 @@ func setup(entity: Node2D) -> void:
 
 # ─────────────────────────────── 玩家交互（按E）────────────────────────────────
 
-## 玩家附身时按E：在仓库附近取材料，在工地附近交付/建造。
+## 玩家附身时按E：仓库取放材料、工地交付/建造、资源点采集。
 func try_interact() -> void:
-	if _entity.get_construction_manager() == null:
-		return
 	var info: Dictionary = _find_interact_target()
 	if info.is_empty():
 		return
 	var target = info.get("target", null)
 	if target == null:
 		return
-	# 工地交互
-	if target is RefCounted:
-		var project: RefCounted = target as RefCounted
-		if _entity.is_carrying():
-			project.deliver_material()
-			_entity.set_carrying(false)
-		elif not project.needs_material():
-			# 敲击一次：推进建造进度 + 播放 build 动画
-			var per_hit: float = project.total_work / 8.0
-			project.add_build_progress(per_hit)
-			_entity.set_action_anim("build")
-			_entity.set_player_build_timer(1.8)
-	# 仓库交互
-	elif target is Node2D:
-		if _entity.is_carrying():
-			# 扔回材料到仓库
-			_entity.set_carrying(false)
-		else:
-			_entity.set_carrying(true)
+	match String(info.get("kind", "")):
+		"project":
+			var project: RefCounted = target as RefCounted
+			if _entity.is_carrying():
+				project.deliver_material()
+				_entity.set_carrying(false)
+			elif not project.needs_material():
+				# 敲击一次：推进建造进度 + 播放 build 动画
+				var per_hit: float = project.total_work / 8.0
+				project.add_build_progress(per_hit)
+				_entity.set_action_anim("build")
+				_entity.set_player_build_timer(1.8)
+		"warehouse":
+			if _entity.is_carrying():
+				# 扔回材料到仓库
+				_entity.set_carrying(false)
+			else:
+				_entity.set_carrying(true)
+		"resource":
+			_try_harvest_resource_node(target as Node2D)
+
+
+## 对资源点执行一次采集：harvest 扣储量 → 经 ResourcesApi 入库 → 播放敲击动作。
+func _try_harvest_resource_node(rn: Node2D) -> void:
+	if rn == null or not is_instance_valid(rn) or not rn.has_method("harvest"):
+		return
+	var gained: int = rn.harvest(HARVEST_PER_ACTION)
+	if gained <= 0:
+		return
+	var api: Node = _get_resources_api()
+	if api != null and api.has_method("produce"):
+		api.produce(String(rn.get_resource_id()), gained, HARVEST_REGION, "手动采集")
+	_entity.set_action_anim("build")
+	_entity.set_player_build_timer(1.8)
+
+
+## 惰性获取 ResourcesApi（GameRoot 下具名节点；采集入库必须走模块 API）
+func _get_resources_api() -> Node:
+	if _resources_api_cache != null and is_instance_valid(_resources_api_cache):
+		return _resources_api_cache
+	var scene_root: Node = _entity.get_tree().current_scene
+	if scene_root != null:
+		_resources_api_cache = scene_root.find_child("ResourcesApi", true, false)
+	return _resources_api_cache
+
+
+## 找采集范围内的最近资源点（resource_node 组全局扫描，地图内节点数 ~几十，开销可忽略）
+func _find_nearest_resource_node() -> Node2D:
+	var best: Node2D = null
+	var best_dist: float = INF
+	for node in _entity.get_tree().get_nodes_in_group("resource_node"):
+		var rn := node as Node2D
+		if rn == null or not is_instance_valid(rn) or not rn.is_inside_tree():
+			continue
+		var dx: float = absf(rn.global_position.x - _entity.global_position.x)
+		var dy: float = absf(rn.global_position.y - _entity.global_position.y)
+		if dx > HARVEST_X_RANGE or dy > HARVEST_Y_RANGE:
+			continue
+		if dx + dy < best_dist:
+			best_dist = dx + dy
+			best = rn
+	return best
 
 
 # ─────────────────────────────── 交互目标检测 ────────────────────────────────
@@ -122,34 +174,40 @@ func _is_near_building(building: Node2D) -> bool:
 	return _is_y_in_building_zone(float(bounds.top), float(bounds.bottom))
 
 
-## 查找当前可交互目标及提示文字。返回 {target, hint, center_x} 或空。
+## 查找当前可交互目标及提示文字。返回 {target, kind, hint, center_x, hint_y} 或空。
+## 优先级：工地 > 仓库 > 资源点（工地/仓库依赖 ConstructionApi，资源点独立可用）
 func _find_interact_target() -> Dictionary:
-	if _entity.get_construction_manager() == null:
-		return {}
-	# 优先：工地
-	var project: RefCounted = _entity.get_construction_manager().get_nearest_project(_entity.global_position)
-	if project != null and _is_near_project(project):
-		var left_x: float = float(project.cell_x) * 32.0
-		var right_x: float = left_x + float(project.width) * 32.0
-		var cx: float = (left_x + right_x) * 0.5
-		var hint: String = ""
-		if _entity.is_carrying():
-			hint = "按E交付材料"
-		elif project.needs_material():
-			hint = "材料不足，等待搬运"
-		else:
-			hint = "按E敲击建造"
-		return {"target": project, "hint": hint, "center_x": cx}
-	# 仓库
-	var warehouse: Node2D = _entity.get_construction_manager().get_nearest_warehouse(_entity.global_position)
-	if warehouse != null and _is_near_building(warehouse):
-		var bounds: Dictionary = _get_building_barrier_bounds(warehouse)
-		var hint: String = ""
-		if _entity.is_carrying():
-			hint = "按E放回材料"
-		else:
-			hint = "按E拿起建材"
-		return {"target": warehouse, "hint": hint, "center_x": float(bounds.center)}
+	if _entity.get_construction_manager() != null:
+		# 优先：工地
+		var project: RefCounted = _entity.get_construction_manager().get_nearest_project(_entity.global_position)
+		if project != null and _is_near_project(project):
+			var left_x: float = float(project.cell_x) * 32.0
+			var right_x: float = left_x + float(project.width) * 32.0
+			var cx: float = (left_x + right_x) * 0.5
+			var hint: String = ""
+			if _entity.is_carrying():
+				hint = "按E交付材料"
+			elif project.needs_material():
+				hint = "材料不足，等待搬运"
+			else:
+				hint = "按E敲击建造"
+			return {"target": project, "kind": "project", "hint": hint, "center_x": cx, "hint_y": -1.0}
+		# 仓库
+		var warehouse: Node2D = _entity.get_construction_manager().get_nearest_warehouse(_entity.global_position)
+		if warehouse != null and _is_near_building(warehouse):
+			var bounds: Dictionary = _get_building_barrier_bounds(warehouse)
+			var hint: String = ""
+			if _entity.is_carrying():
+				hint = "按E放回材料"
+			else:
+				hint = "按E拿起建材"
+			return {"target": warehouse, "kind": "warehouse", "hint": hint, "center_x": float(bounds.center), "hint_y": -1.0}
+	# 资源点（采集）
+	var rn: Node2D = _find_nearest_resource_node()
+	if rn != null:
+		var hint: String = "按E采集%s（剩 %d）" % [rn.get_display_name(), rn.amount]
+		return {"target": rn, "kind": "resource", "hint": hint,
+				"center_x": rn.global_position.x, "hint_y": rn.global_position.y - 72.0}
 	return {}
 
 
@@ -208,10 +266,10 @@ func _hide_interact_hint() -> void:
 		_interact_hint_node.visible = false
 
 
-## 更新交互提示（玩家附身时，靠近仓库/工地在建筑上方显示弹窗）。
+## 更新交互提示（玩家附身时，靠近仓库/工地/资源点在目标上方显示弹窗）。
 ## 由实体 _physics_process 每帧调用。
 func update_hint() -> void:
-	if not _entity.is_possessed() or _entity.get_construction_manager() == null or _entity.get_map() == null:
+	if not _entity.is_possessed() or _entity.get_map() == null:
 		_hide_interact_hint()
 		return
 	_ensure_interact_hint()
@@ -221,9 +279,12 @@ func update_hint() -> void:
 	if info.is_empty():
 		_hide_interact_hint()
 		return
-	# 弹窗显示在目标建筑上方
-	var map: Node2D = _entity.get_map()
-	var ground_y: float = map.get("ground_y") if map != null and "ground_y" in map else 810.0
-	_interact_hint_node.global_position = Vector2(float(info.center_x), ground_y - 280.0)
+	# 弹窗位置：资源点在节点上方（hint_y），建筑沿用地面线上方固定高度
+	var hint_y: float = float(info.get("hint_y", -1.0))
+	if hint_y < 0.0:
+		var map: Node2D = _entity.get_map()
+		var ground_y: float = map.get("ground_y") if map != null and "ground_y" in map else 810.0
+		hint_y = ground_y - 280.0
+	_interact_hint_node.global_position = Vector2(float(info.center_x), hint_y)
 	_interact_hint_label.text = String(info.hint)
 	_interact_hint_node.visible = true

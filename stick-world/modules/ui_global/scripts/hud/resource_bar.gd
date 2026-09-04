@@ -78,10 +78,11 @@ func _connect_signals() -> void:
 func _on_resource_changed(resource_id: String, amount: float, delta: float, _region_id: String) -> void:
 	if not _labels.has(resource_id):
 		return
-	_update_label(resource_id, amount)
-	# 扣减时数量变红闪烁 0.5s
+	# 扣减红闪 0.5s / 增加绿闪 0.6s（采集正向反馈）
 	if delta < 0.0:
 		_flash_red(resource_id)
+	elif delta > 0.0:
+		_flash_green(resource_id)
 
 
 # ─────────────────────────────── 刷新 ────────────────────────────────
@@ -103,6 +104,19 @@ func _update_label(resource_id: String, amount: float) -> void:
 
 
 ## 数量变红闪烁 0.5s
+func _flash_green(resource_id: String) -> void:
+	# 增加资源时数量短暂变绿提亮（采集/入库的正向确认）
+	var lbl: Label = _labels.get(resource_id)
+	if lbl == null or not is_instance_valid(lbl):
+		return
+	lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
+	var tween := create_tween()
+	tween.tween_interval(0.45)
+	tween.tween_property(lbl, "modulate", Color.WHITE, 0.25)
+	tween.tween_callback(func() -> void:
+		lbl.add_theme_color_override("font_color", Color.WHITE))
+
+
 func _flash_red(resource_id: String) -> void:
 	var lbl: Label = _labels.get(resource_id)
 	if lbl == null or not is_instance_valid(lbl):

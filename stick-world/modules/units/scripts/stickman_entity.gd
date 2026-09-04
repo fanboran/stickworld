@@ -1135,6 +1135,13 @@ func _on_died() -> void:
 	if _battle_instance != null and is_instance_valid(_battle_instance):
 		if _battle_instance.has_method("on_unit_died"):
 			_battle_instance.on_unit_died(self)
+	# Demo 收敛：尸体滞留 5s 后淡出退场（战场清爽不堆尸；附身实体除外——
+	# 玩家视点所在的身体不做异步自毁）
+	if not possessed:
+		var fade := create_tween()
+		fade.tween_interval(5.0)
+		fade.tween_property(self, "modulate:a", 0.0, 1.4)
+		fade.tween_callback(queue_free)
 
 
 ## 受击处理（反编译参考实装 B）：按攻击者方位 vs 自身朝向判定正面/背面，

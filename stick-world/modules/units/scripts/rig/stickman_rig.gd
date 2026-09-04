@@ -246,6 +246,13 @@ func _init_ik() -> void:
 		var b := get_bone(idx)
 		if b:
 			bone_name_to_idx[b.name] = idx
+	# NodePath 解析失败的修改器必须整条移除（收集后倒序删，避免中途移位）。
+	# 约束：TwoBoneIK 的 joint idx 在 tscn 里是"写死的历史值"，只有 NodePath 解析
+	# 成功时才会被 _init_ik 按骨名校正。解析失败却保留修改器 = 残留 idx 继续生效，
+	# 会误驱动别的骨骼——08-30"独立场景全身横躺 ~90°"事故根因：骨链重排后
+	# 腿 IK NodePath 失配，残留 idx (0,1)=新链的 (hip,spine_root)，腿 IK 把
+	# 根骨 hip 拽向脚部目标 → 全身横躺（详见 tools/baking/render_weapon_check.gd 头注释）。
+	var _dead_mods: PackedInt64Array = []
 	for i in range(stack.modification_count):
 		var mod := stack.get_modification(i) as SkeletonModification2DTwoBoneIK
 		if mod == null:
@@ -254,22 +261,24 @@ func _init_ik() -> void:
 		# 通过 NodePath 找到 Bone2D 节点，再用名称查实际索引
 		var bone1 := get_node_or_null(mod.joint_one_bone2d_node) as Bone2D
 		var bone2 := get_node_or_null(mod.joint_two_bone2d_node) as Bone2D
-		if bone1:
-			var idx1: int = bone_name_to_idx.get(bone1.name, -1)
-			if idx1 >= 0:
-				mod.joint_one_bone_idx = idx1
-		else:
-			push_warning("[IK] mod ", i, ": bone1 NodePath 解析失败: ", mod.joint_one_bone2d_node)
-		if bone2:
-			var idx2: int = bone_name_to_idx.get(bone2.name, -1)
-			if idx2 >= 0:
-				mod.joint_two_bone_idx = idx2
-		else:
-			push_warning("[IK] mod ", i, ": bone2 NodePath 解析失败: ", mod.joint_two_bone2d_node)
+		if bone1 == null or bone2 == null:
+			push_warning("[IK] mod ", i, " 关节骨 NodePath 解析失败（bone1=",
+					mod.joint_one_bone2d_node, " bone2=", mod.joint_two_bone2d_node,
+					"），已移除该修改器，防止残留 joint idx 误驱动其他骨骼")
+			_dead_mods.append(i)
+			continue
+		var idx1: int = bone_name_to_idx.get(bone1.name, -1)
+		if idx1 >= 0:
+			mod.joint_one_bone_idx = idx1
+		var idx2: int = bone_name_to_idx.get(bone2.name, -1)
+		if idx2 >= 0:
+			mod.joint_two_bone_idx = idx2
 		# 检查目标节点
 		var target := get_node_or_null(mod.target_nodepath) as Node2D
 		if target == null:
 			push_warning("[IK] mod ", i, ": target NodePath 解析失败: ", mod.target_nodepath)
+	for j in range(_dead_mods.size() - 1, -1, -1):
+		stack.delete_modification(_dead_mods[j])
 	# 延迟一帧启用 IK：Skeleton2D + IK 在 _ready 后首帧不保证解算，
 	# 先禁用栈、等一个帧周期再启用，让解算自然完成（替代"前 0.25s 模拟移动"的 workaround）
 	if not Engine.is_editor_hint():

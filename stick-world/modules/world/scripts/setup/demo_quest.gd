@@ -19,6 +19,7 @@ signal all_completed
 const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
 const _VictoryOverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/victory_overlay.gd")
 const _OpeningHintScript: GDScript = preload("res://modules/ui_global/scripts/overlays/opening_hint_overlay.gd")
+const _BattleBannerScript: GDScript = preload("res://modules/ui_global/scripts/overlays/battle_banner.gd")
 
 var _quests: Array = []
 var _index: int = -1
@@ -198,7 +199,19 @@ func _on_squad_created(_squad_id: String, _unit_ids: Array) -> void:
 		_pending_done["squad"] = true
 
 
+func _show_battle_banner(victory: bool) -> void:
+	if _ui_root == null:
+		return
+	var banner: Control = _ui_root.get_node_or_null("HudOverlay/BattleBanner")
+	if banner == null:
+		banner = UIKit.full_rect(_BattleBannerScript, "BattleBanner")
+		if not _ui_root.add_to_slot("HudOverlay", banner):
+			return
+	banner.show_banner(victory)
+
+
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
+	_show_battle_banner(victory)
 	# victory 语义 = 进攻方获胜；Demo 中玩家为歼灭战场守军的一方。
 	# 若实测语义相反（防守方视角），仅需翻转此布尔。
 	if victory:

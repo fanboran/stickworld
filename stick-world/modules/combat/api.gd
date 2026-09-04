@@ -13,6 +13,14 @@ extends Node
 ## 公共类型契约：TargetFinder（公共目标选择核心，反编译参考实装 A）为对外公共类，
 ## units 的战斗 AI（behavior_attack.gd）经其静态方法 find_target() 选目标。
 ## 该引用属 headless 防御性路径 preload（行内 audit-exempt 标记），见审计工具豁免清单。
+##
+## 编队职责查询契约：FormationSystem 为 combat 内部类，units 侧禁止 class_name/preload
+## 引用——实例经 world 装配器注入 StickmanEntity.set_formation_system(fs: Node)（弱类型
+## Node），units 侧（ai_controller.gd）只依赖 duck 协议（has_method 门禁，未注入时放行）：
+##   - is_work_allowed(unit: Node, work_type: String) -> bool（未注入/未编队视为允许）
+##   - is_unit_squad_following(unit: Node) -> bool（未注入视为不跟随）
+## 工作类型字符串对齐 FormationSystem.WorkType（units/ai_controller.gd 持本地常量副本
+## WORK_COMBAT/WORK_BUILD/WORK_HAUL/WORK_FORAGE，避免跨模块依赖）。
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## BattleDirector 实例引用（由 GameRoot 装配时注入）

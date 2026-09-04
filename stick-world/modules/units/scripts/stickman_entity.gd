@@ -1084,6 +1084,7 @@ func _exit_tree() -> void:
 
 
 ## 由 GameRoot spawn 时注入 FormationSystem 引用（供 AIController 查询队伍职责）。
+## 弱类型 Node 注入 + duck 协议，契约声明见 modules/combat/api.gd 头部"编队职责查询契约"。
 ## 未注入（如测试直生实体）时视为"未编队"，不限制行为。
 func set_formation_system(fs: Node) -> void:
 	_formation_system = fs

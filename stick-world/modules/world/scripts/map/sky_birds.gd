@@ -44,8 +44,9 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-## 生成一群鸟：从可见窗外一侧入场，斜纵队（前鸟高后鸟低），3-5 只
-func spawn_flock() -> void:
+## 生成一群鸟：从可见窗外一侧入场，斜纵队（前鸟高后鸟低），3-5 只；
+## in_view=true 直接收在画面内侧边缘（快照/录屏确定性入镜用）
+func spawn_flock(in_view: bool = false) -> void:
 	var dir: int = 1 if randf() < 0.5 else -1
 	var count: int = randi_range(3, 5)
 	var birds: Array = []
@@ -57,11 +58,12 @@ func spawn_flock() -> void:
 			"flap": randf_range(7.0, 10.0),
 			"scale": randf_range(0.8, 1.15),
 		})
+	var edge: float = WINDOW_HALF - 250.0 if in_view else WINDOW_HALF + MARGIN
 	_flock = {
 		"dir": dir,
 		"speed": randf_range(60.0, 85.0),
 		"y": randf_range(120.0, 320.0),
-		"x": _window_center_x() - dir * (WINDOW_HALF + MARGIN),
+		"x": _window_center_x() - dir * edge,
 		"birds": birds,
 	}
 	_play_chirp()

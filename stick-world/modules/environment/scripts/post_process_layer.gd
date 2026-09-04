@@ -15,6 +15,13 @@ var _rect: ColorRect = null
 var _mat: ShaderMaterial = null
 var _env_system: Node = null
 var _time_acc: float = 0.0
+## 颗粒强度覆盖（>=0 生效）：录 GIF 用——颗粒是逐帧噪声，会让 GIF 增量压缩失效
+var _grain_override: float = -1.0
+
+
+## 覆盖胶片颗粒强度（录屏/截图场景降噪用；负值恢复昼夜自动）
+func set_grain_override(v: float) -> void:
+	_grain_override = v
 
 
 func _ready() -> void:
@@ -46,4 +53,7 @@ func _process(delta: float) -> void:
 	_mat.set_shader_parameter("top_light", 0.05 + 0.09 * day_t)
 	# 夜晚整体冷暗，颗粒稍增（胶片夜戏感）
 	_mat.set_shader_parameter("warm_tint", Vector3(1.045 - 0.05 * (1.0 - day_t), 1.0, 0.945 + 0.07 * (1.0 - day_t)))
-	_mat.set_shader_parameter("grain_strength", 0.045 + 0.02 * (1.0 - day_t))
+	var grain: float = 0.045 + 0.02 * (1.0 - day_t)
+	if _grain_override >= 0.0:
+		grain = _grain_override
+	_mat.set_shader_parameter("grain_strength", grain)

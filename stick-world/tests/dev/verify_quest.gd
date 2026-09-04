@@ -78,6 +78,33 @@ func _run() -> void:
 	else:
 		_pass("战斗目标完成 → 胜利结算触发")
 
+	# ── 乱序容错回归：重开一局，先触发后续目标事件再完成首个目标 ──
+	_game_root.queue_free()
+	_game_root = GameRootScene.instantiate()
+	add_child(_game_root)
+	for i in 20:
+		await get_tree().process_frame
+	quest = _game_root.get_node_or_null("DemoQuest")
+	res_api = get_tree().current_scene.find_child("ResourcesApi", true, false)
+	c_api = _game_root.get("get_construction_api").call() if _game_root.has_method("get_construction_api") else null
+	if quest == null or res_api == null or c_api == null:
+		_fail("乱序局装配失败")
+		return
+	c_api.building_completed.emit("b_o1", "test_region")
+	EventBus.squad_created.emit("sq_o1", [])
+	EventBus.battle_ended.emit("bt_o1", true)
+	await get_tree().process_frame
+	if int(quest.get("_index")) != 0:
+		_fail("乱序事件不应推进当前目标（_index=%d）" % int(quest.get("_index")))
+	else:
+		_pass("乱序事件已记账未推进")
+	res_api.produce("res_wood", 60.0, "test_region", "乱序采集")
+	await get_tree().create_timer(0.3).timeout
+	if not bool(quest.get("_victory_shown")):
+		_fail("乱序完成后未一路跳到胜利（_index=%d pending=%s）" % [int(quest.get("_index")), str(quest.get("_pending_done"))])
+	else:
+		_pass("乱序容错：采集完成后跳过已达成目标直达胜利")
+
 	# 胜利画面挂载检查
 	var ui_root: Node = _game_root.get("ui_root") if "ui_root" in _game_root else null
 	var victory: Node = ui_root.get_node_or_null("ModalOverlay/VictoryOverlay") if ui_root != null else null

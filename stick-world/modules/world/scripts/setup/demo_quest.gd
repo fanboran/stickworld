@@ -35,6 +35,9 @@ var _build_count: int = 0
 var _squad_count: int = 0
 var _battle_win_count: int = 0
 var _victory_shown: bool = false
+## 乱序完成登记：玩家不按引导顺序玩（先建好后采集等）时，未轮到的目标
+## 完成事件先记账，推进到该目标时直接跳过——目标链永不卡死
+var _pending_done: Dictionary = {}
 
 
 ## 由 SystemSetup 装配调用（此时初始资源已发放，基线安全）
@@ -77,9 +80,15 @@ func _bind_signals() -> void:
 
 # ─────────────────────────────── 目标推进 ────────────────────────────────
 
-## 推进到下一个目标；全部完成则触发胜利结算
+## 推进到下一个目标；已乱序完成的目标直接跳过；全部完成则触发胜利结算
 func _advance() -> void:
 	_index += 1
+	while _index < _quests.size() and _pending_done.has(String(_quests[_index].id)):
+		var skipped: Dictionary = _quests[_index]
+		if _panel != null:
+			_panel.mark_done(String(skipped.title))
+		quest_completed.emit(String(skipped.id))
+		_index += 1
 	if _index >= _quests.size():
 		_finish_all()
 		return
@@ -87,6 +96,9 @@ func _advance() -> void:
 		return
 	var q: Dictionary = _quests[_index]
 	_panel.show_quest(String(q.title), String(q.desc), _progress_text(q))
+	# 采集类目标推进时立即检查一次（乱序期间可能已采够）
+	if String(q.id) == "harvest" and _quest_progress(q) >= float(q.target):
+		_complete_current()
 
 
 func _progress_text(q: Dictionary) -> String:
@@ -144,12 +156,16 @@ func _on_building_completed(_building_id: String, _region_id: String) -> void:
 	_build_count += 1
 	if _is_current("build"):
 		_complete_current()
+	else:
+		_pending_done["build"] = true
 
 
 func _on_squad_created(_squad_id: String, _unit_ids: Array) -> void:
 	_squad_count += 1
 	if _is_current("squad"):
 		_complete_current()
+	else:
+		_pending_done["squad"] = true
 
 
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
@@ -159,6 +175,8 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 		_battle_win_count += 1
 	if _is_current("battle") and victory:
 		_complete_current()
+	elif victory:
+		_pending_done["battle"] = true
 
 
 func _is_current(quest_id: String) -> bool:

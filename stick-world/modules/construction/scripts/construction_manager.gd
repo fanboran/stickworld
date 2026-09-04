@@ -15,13 +15,19 @@ extends Node
 ##   - org_id（组织 ID）参数保留但忽略
 ##
 ## 子节点：
-##   BuildingCatalog     —— 建筑场景注册表与建筑定义（building_catalog.gd）
-##   BuildingPersistence —— SQLite 存档/读档（building_persistence.gd）
+##   BuildingCatalog     —— 建筑场景注册表与建筑定义（catalog/building_catalog.gd）
+##   BuildingPersistence —— SQLite 存档/读档（catalog/building_persistence.gd）
+##
+## 持有组件（RefCounted，随 manager 生命周期）：
+##   WorkCrewAssigner    —— 派工系统（work_crew_assigner.gd）
+##   BuildingCosts       —— 建造成本提取与扣减（building_costs.gd，P0-9）
+##   BuildProgressTracker —— 建造进度条跟踪（build_progress_tracker.gd，阶段 E）
 
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 const ScriptWorkCrewAssigner := preload("res://modules/construction/scripts/work_crew_assigner.gd")
 const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
-const ScriptBuildProgressIndicator := preload("res://modules/construction/scripts/build_progress_indicator.gd")
+const ScriptBuildingCosts := preload("res://modules/construction/scripts/building_costs.gd")
+const ScriptBuildProgressTracker := preload("res://modules/construction/scripts/build_progress_tracker.gd")
 
 const _BuildingCatalogScript: GDScript = preload("res://modules/construction/scripts/catalog/building_catalog.gd")
 const _BuildingPersistenceScript: GDScript = preload("res://modules/construction/scripts/catalog/building_persistence.gd")
@@ -50,8 +56,10 @@ var _resources_api: Node = null
 ## 建筑定义缓存 {def_id: Dictionary}（P0-6 数据驱动；同样由 building_catalog 跨脚本读写）
 @warning_ignore("unused_private_class_variable")
 var _building_defs_cache: Dictionary = {}
-## 建造项目 -> 进度条指示器映射（阶段 E 双进度条）
-var _project_indicators: Dictionary = {}
+## 建造成本系统（P0-9，提取与扣减）
+var _costs: ScriptBuildingCosts = ScriptBuildingCosts.new()
+## 建造进度条跟踪器（阶段 E 双进度条）
+var _indicators: ScriptBuildProgressTracker = ScriptBuildProgressTracker.new()
 
 # ─────────────────────────────── 子组件引用 ────────────────────────────────
 ## 建筑目录系统（场景注册/定义加载，_ready 装配）
@@ -107,6 +115,8 @@ func set_map(map: Node2D) -> void:
 		# 触发 "Trying to cast a freed object" 报错（详见 P0 收口执行计划）。
 		_persistence._clear_all_buildings_and_projects()
 	_map = map
+	# 阶段 E：进度条跟踪器同步地图引用
+	_indicators.set_map(map)
 
 
 # ─────────────────────────────── 资源系统注入 ────────────────────────────────
@@ -116,6 +126,8 @@ func set_map(map: Node2D) -> void:
 ## 导致 _resources_api 恒为 null，资源检查/扣减/清场回收永久静默失效。
 func set_resources_api(resources_api: Node) -> void:
 	_resources_api = resources_api
+	# P0-9：成本系统同步注入（扣减/回滚经 BuildingCosts 执行）
+	_costs.set_resources_api(resources_api)
 
 
 func get_map() -> Node2D:
@@ -231,7 +243,7 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	# P0-9 资源检查（校验与扣减放在选址/实体校验之后：此前先扣资源再校验，
 	# 校验失败会白扣资源，2026-08 审计修复）
 	if _resources_api != null:
-		var cost_result := _check_and_consume_cost(building_type, region_id)
+		var cost_result := _costs.check_and_consume(def, region_id, "建造:%s" % building_type)
 		if not cost_result.ok:
 			return {"ok": false, "error": "资源不足: %s" % cost_result.reason}
 	# 阶段 F：建造自动清场（砍树给木材）
@@ -248,9 +260,7 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	if not project.completed.is_connected(_on_project_completed):
 		project.completed.connect(_on_project_completed)
 	# 阶段 E：创建双进度条指示器 + 监听进度
-	_create_progress_indicator(project)
-	if not project.progress_changed.is_connected(_on_project_progress):
-		project.progress_changed.connect(_on_project_progress)
+	_indicators.track(project)
 	return {
 		"ok": true,
 		"project_id": project_id,
@@ -260,57 +270,12 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	}
 
 
-# ─────────────────────────────── 资源检查与扣减（P0-9）────────────────────────────────
-
-## 检查并扣减建造资源。返回 {ok:true} 或 {ok:false, reason}
-func _check_and_consume_cost(building_type: String, region_id: String) -> Dictionary:
-	if _resources_api == null:
-		return {"ok": true}  # 资源系统未接入，跳过检查
-	var def: Dictionary = _catalog.get_def(building_type)
-	if def.is_empty():
-		return {"ok": true}  # 无定义，跳过
-	var costs: Dictionary = _def_build_costs(def, 1.0)
-	if costs.is_empty():
-		return {"ok": true}
-	return _consume_costs(costs, region_id, "建造:%s" % building_type)
-
-
-## 从建筑定义提取资源成本字典（可乘系数：升级 0.5、修理按损伤比例）
-func _def_build_costs(def: Dictionary, factor: float = 1.0) -> Dictionary:
-	var costs: Dictionary = {}
-	for key in ["build_cost_wood", "build_cost_stone", "build_cost_metal"]:
-		if def.has(key) and float(def[key]) > 0:
-			var res_id: String = key.replace("build_cost_", "res_")
-			# build_cost_wood -> res_wood, build_cost_metal -> res_metal_ore（特殊映射）
-			if key == "build_cost_metal":
-				res_id = "res_metal_ore"
-			costs[res_id] = ceilf(float(def[key]) * factor)
-	return costs
-
-
-## 统一扣费入口：先全量检查，再逐项扣减；中途失败回滚已扣部分。
-func _consume_costs(costs: Dictionary, region_id: String, reason: String) -> Dictionary:
-	for res_id in costs.keys():
-		var stock: float = _resources_api.get_stock(res_id, region_id)
-		if stock < costs[res_id]:
-			return {"ok": false, "reason": "缺少 %s (需要 %d, 现有 %d)" % [res_id, costs[res_id], stock]}
-	var consumed: Array = []
-	for res_id in costs.keys():
-		var result: Dictionary = _resources_api.consume(res_id, costs[res_id], region_id, reason)
-		if not result.get("ok", false):
-			for entry in consumed:
-				_resources_api.produce(entry.res_id, entry.amount, region_id, "建造扣减回滚")
-			return {"ok": false, "reason": "扣减失败: %s" % result.get("error", "")}
-		consumed.append({"res_id": res_id, "amount": costs[res_id]})
-	return {"ok": true}
-
-
 # ─────────────────────────────── 项目完工回调 ────────────────────────────────
 
 ## 项目完工：把 Building 注册到 _buildings，分配 building_id
 func _on_project_completed(project: ScriptConstructionProject, building: Node) -> void:
 	# 阶段 E：移除建造进度条
-	_remove_progress_indicator(project.project_id)
+	_indicators.untrack(project.project_id)
 	if building == null:
 		return
 	var building_id := "%04d" % _next_building_id
@@ -331,39 +296,6 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 		_update_city_terrain_mask()
 	# 转发给 api.gd（building_completed 信号）
 	building_completed.emit(building_id, project.region_id)
-
-
-# ─────────────────────────────── 建造进度条（阶段 E）────────────────────────────────
-
-## 为项目创建双进度条指示器，挂到 map.BuildMaskLayer
-func _create_progress_indicator(project: ScriptConstructionProject) -> void:
-	if _map == null:
-		return
-	var mask_layer: Node2D = _map.get("build_mask_layer") if "build_mask_layer" in _map else null
-	if mask_layer == null:
-		mask_layer = _map.get_node_or_null("BuildMaskLayer")
-	if mask_layer == null:
-		return
-	var indicator: Node2D = ScriptBuildProgressIndicator.new()
-	indicator.setup(project.cell_x, project.width, float(_map.get("ground_y") if "ground_y" in _map else 810.0))
-	mask_layer.add_child(indicator)
-	_project_indicators[project.project_id] = indicator
-	indicator.update_progress(project.get_material_progress(), project.get_progress())
-
-
-## 项目进度变化回调：更新进度条
-func _on_project_progress(project: ScriptConstructionProject, _progress: float) -> void:
-	var indicator: Node2D = _project_indicators.get(project.project_id)
-	if indicator != null and is_instance_valid(indicator):
-		indicator.update_progress(project.get_material_progress(), project.get_progress())
-
-
-## 移除项目进度条（完工/取消时调用）
-func _remove_progress_indicator(project_id: String) -> void:
-	var indicator: Node2D = _project_indicators.get(project_id)
-	if indicator != null and is_instance_valid(indicator):
-		indicator.queue_free()
-	_project_indicators.erase(project_id)
 
 
 # ─────────────────────────────── 城墙地形遮罩更新（阶段 F）────────────────────────────────
@@ -657,7 +589,7 @@ func upgrade_building(building_id: String) -> Dictionary:
 	if _resources_api != null:
 		var def: Dictionary = _catalog.get_def(typed.def_id)
 		if not def.is_empty():
-			var cost_result := _consume_costs(_def_build_costs(def, 0.5), region_id, "升级:%s" % typed.def_id)
+			var cost_result := _costs.consume(_costs.extract_def_costs(def, 0.5), region_id, "升级:%s" % typed.def_id)
 			if not cost_result.get("ok", false):
 				return cost_result
 	typed.upgrade_level += 1
@@ -686,8 +618,8 @@ func repair_building(building_id: String, _org_id: String) -> Dictionary:
 	if _resources_api != null:
 		var def: Dictionary = _catalog.get_def(typed.def_id)
 		if not def.is_empty():
-			var cost_result := _consume_costs(
-					_def_build_costs(def, 0.3 * missing_ratio), region_id, "修理:%s" % typed.def_id)
+			var cost_result := _costs.consume(
+					_costs.extract_def_costs(def, 0.3 * missing_ratio), region_id, "修理:%s" % typed.def_id)
 			if not cost_result.get("ok", false):
 				return cost_result
 	typed.health = typed.max_health

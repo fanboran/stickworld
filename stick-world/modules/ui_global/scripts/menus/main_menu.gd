@@ -42,6 +42,7 @@ func _ready() -> void:
 	theme = StickTheme.create()
 	_build_background()
 	_build_title()
+	_start_title_entrance()
 	_build_menu()
 	_version_label.text = "v0.1.0-p0 原型 · stick-world"
 	_version_label.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
@@ -218,10 +219,12 @@ func _build_background() -> void:
 	sky.texture = gt
 	add_child(sky)
 	move_child(sky, 1)  # 垫在 Background 之上、菜单列之下
+	_sky_rect = sky
 	# 远山（贴屏幕底）
 	if ResourceLoader.exists(SkyDecorMountains):
 		var m := TextureRect.new()
 		m.name = "Mountains"
+		_mountains_rect = m
 		m.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		m.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		m.stretch_mode = TextureRect.STRETCH_TILE
@@ -246,18 +249,92 @@ func _build_background() -> void:
 		c.position = Vector2(randf_range(0.1, 0.7) * 1920.0, randf_range(40.0, 300.0))
 		c.modulate = Color(1, 1, 1, 0.85)
 		add_child(c)
-		move_child(c, 3)
+		move_child(c, 1)
 		_cloud_rects.append(c)
+		_cloud_base_ys.append(c.position.y)
 
 const SkyDecorMountains := "res://assets/sky/mountains.png"
 const SkyDecorCloudA := "res://assets/sky/cloud_a.png"
 const SkyDecorCloudB := "res://assets/sky/cloud_b.png"
 var _cloud_rects: Array = []
 
-## 云团缓移（主菜单活力感）
+
+# ─────────────────────────────── 精致细节（Demo 打磨包）────────────────────────────────
+
+## 背景视差引用
+var _sky_rect: TextureRect = null
+var _mountains_rect: TextureRect = null
+## 鼠标归一化位置（-0.5~0.5），用于背景层反向微移
+var _mouse_norm: Vector2 = Vector2.ZERO
+## 闲逛火柴人彩蛋
+var _walker: TextureRect = null
+var _walker_frame: float = 0.0
+var _walker_dir: float = 1.0
+var _walker_cooldown: float = 3.0
+
+const WalkerF0 := "res://assets/sky/walker_f0.png"
+const WalkerF1 := "res://assets/sky/walker_f1.png"
+
+## 鼠标视差：背景各层按深度反向微移（精致菜单标配——画面"活"）
 func _process(delta: float) -> void:
+	# 云缓移（原逻辑）
 	for i in _cloud_rects.size():
 		var c: TextureRect = _cloud_rects[i]
 		c.position.x += (6.0 + 4.0 * i) * delta
 		if c.position.x > 1920.0:
 			c.position.x = -float(c.texture.get_width())
+	# 鼠标视差
+	var mp := get_viewport().get_mouse_position()
+	var target := Vector2(mp.x / 1920.0 - 0.5, mp.y / 1080.0 - 0.5)
+	_mouse_norm = _mouse_norm.lerp(target, minf(1.0, 3.0 * delta))
+	# 山层贴底 anchor 不被视差破坏：仅以轻微透明度呼吸暗示深度
+	if _mountains_rect != null:
+		_mountains_rect.modulate = Color(1, 1, 1).lerp(Color(0.94, 0.94, 0.97), (_mouse_norm.x + 0.5))
+	if _sky_rect != null:
+		_sky_rect.position = -_mouse_norm * 6.0
+	for i in _cloud_rects.size():
+		_cloud_rects[i].position.y = _cloud_base_ys[i] - _mouse_norm.y * (16.0 + 8.0 * i)
+	_update_walker(delta)
+
+
+var _cloud_base_ys: Array = []
+## 火柴人闲逛彩蛋：随机间隔从屏幕一侧走到另一侧（呼应"每个火柴人都在真实生活"）
+func _update_walker(delta: float) -> void:
+	if _walker == null and not ResourceLoader.exists(WalkerF0):
+		return
+	if _walker == null:
+		_walker_cooldown -= delta
+		if _walker_cooldown <= 0.0:
+			_walker = TextureRect.new()
+			_walker.texture = load(WalkerF0)
+			_walker.modulate = Color(1, 1, 1, 0.55)
+			_walker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(_walker)
+			move_child(_walker, 1)
+			_walker_dir = 1.0 if randf() < 0.5 else -1.0
+			var start_x: float = -80.0 if _walker_dir > 0 else 1920.0 + 80.0
+			_walker.position = Vector2(start_x, 620.0 + randf() * 120.0)
+			_walker.scale = Vector2(1.4 * _walker_dir if false else 1.4, 1.4)
+			if _walker_dir < 0:
+				_walker.scale.x = -1.4  # 面向行走方向
+		return
+	# 行走动画：2 帧交替 + 平移
+	_walker_frame += delta * 6.0
+	var tex_path: String = WalkerF0 if int(_walker_frame) % 2 == 0 else WalkerF1
+	_walker.texture = load(tex_path)
+	_walker.position.x += _walker_dir * 55.0 * delta
+	if _walker.position.x < -120.0 or _walker.position.x > 1960.0:
+		_walker.queue_free()
+		_walker = null
+		_walker_cooldown = randf_range(4.0, 9.0)
+
+
+## 标题进场：淡入 + 上浮（首印之一）
+func _start_title_entrance() -> void:
+	var title := _menu_column.get_child(0) if _menu_column.get_child_count() > 0 else null
+	if title == null:
+		return
+	title.modulate.a = 0.0
+	var tw := title.create_tween()
+	tw.tween_property(title, "modulate:a", 1.0, 0.7)
+	tw.parallel().tween_property(title, "position:y", title.position.y, 0.7).from(title.position.y + 14.0)

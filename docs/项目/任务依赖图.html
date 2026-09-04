@@ -5208,7 +5208,13 @@ function simEvents(){const evs=(DATA.simlog&&DATA.simlog.events)||[];
  let out=ganttSource==="all"?evs:evs.filter(e=>(e.src||"real")===ganttSource||ganttSource==="real"&&e.src!=="sim");
  if(agentFilter)out=out.filter(e=>e.agent===agentFilter||out.some(q=>q.agent===agentFilter&&q.task===e.task));
  return out;}
-function parseT(ts){const m=/T(\d+)/.exec(ts||"");return m?parseInt(m[1],10):0;}
+let SIM_T0=null;
+function parseT(ts){ // 统一时间轴：sim 的 T 轮次与真实 ISO 时间都映射为相对分钟
+ if(/^T\d+$/.test(ts||""))return parseInt(ts.slice(1),10);
+ const t=new Date((ts||"").replace(" ","T"));
+ if(isNaN(t))return 0;
+ if(SIM_T0===null||t<SIM_T0)SIM_T0=t;
+ return Math.max(0,Math.round((t-SIM_T0)/60000));}
 let ganttJobs={};  // 运行图任务聚合（drawGantt 写入，hover/点击命中复用）
 function drawGantt(){const c=gantt;if(!c||c.width<10)return;
  const evs=simEvents();
@@ -5248,6 +5254,7 @@ function drawGantt(){const c=gantt;if(!c||c.width<10)return;
   if(bi%2===0){gtx.fillStyle="#0b111c";gtx.fillRect(0,y,W,bandH);}
   const li=lanes.indexOf(l),lc=LANE_COL[(li<0?0:li)%LANE_COL.length];
   gtx.fillStyle=lc+"22";gtx.fillRect(0,y,44,bandH);
+  if(ganttHoverBand===l){gtx.fillStyle=lc+"14";gtx.fillRect(0,y,W,bandH);}
   gtx.fillStyle=lc;gtx.font="600 8.5px "+MONO;
   gtx.save();gtx.translate(8,y+bandH/2+3);gtx.fillText(l.length>5?l.slice(0,5):l,0,0);gtx.restore();});
  // 任务条：同带子行贪心
@@ -5308,7 +5315,9 @@ gantt.addEventListener("pointerdown",ev=>{gDrag={x:ev.clientX,t0:ganttView?gantt
  try{gantt.setPointerCapture(ev.pointerId);}catch(e2){}});
 gantt.addEventListener("pointermove",ev=>{
  if(!gDrag&&ganttView){const rect=gantt.getBoundingClientRect();
-  ganttHover=hitGantt(ev.clientX-rect.left,ev.clientY-rect.top);
+  const hit=hitGantt(ev.clientX-rect.left,ev.clientY-rect.top);
+  ganttHover=hit&&hit.type==="task"?hit.id:null;
+  ganttHoverBand=hit&&hit.type==="band"?hit.lane:(ganttHover?(ganttJobs[ganttHover]||{}).lane:ganttHoverBand);
   if(ganttHover){hi=ganttHover;dirty=true;}   // 双向联动：运行图悬停 → 主图节点高亮
   else if(hi&&selSet.size===0&&!sel){hi=null;dirty=true;}
   return;}
@@ -5317,7 +5326,7 @@ gantt.addEventListener("pointermove",ev=>{
  let t0=gDrag.t0-d;ganttView={t0:Math.max(0,t0),t1:Math.max(8,t0+span)};
  if(ganttView.t0===0)ganttView.t1=Math.max(ganttView.t1,span);drawGantt();});
 gantt.addEventListener("pointerup",()=>{gDrag=null;});
-let ganttHover=null;
+let ganttHover=null,ganttHoverBand=null;
 function hitGantt(x,y){ // 命中检测：{type:"task",id} 或 {type:"band",lane}（空带区域=聚拢该泳道）
  const evs=simEvents();if(!evs.length)return null;
  const span=ganttView.t1-ganttView.t0,W=gantt.clientWidth-16;

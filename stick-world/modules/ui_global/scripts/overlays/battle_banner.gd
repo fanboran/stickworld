@@ -36,6 +36,15 @@ func _ready() -> void:
 
 
 ## 显示横幅（victory=true 金色"大捷"，false 灰蓝"败退"），3s 后淡出
+## 遭遇战预告（红字短横幅，1.6s）
+func show_preview() -> void:
+	_label.text = "遭 遇 战 ！"
+	_label.add_theme_color_override("font_color", Color(0.95, 0.4, 0.32))
+	_label.add_theme_color_override("font_outline_color", Color(0.2, 0.02, 0.0, 0.95))
+	_sub.text = "战斗开始——按空格暂停布置"
+	_show_common(1.6)
+
+
 func show_banner(victory: bool) -> void:
 	if victory:
 		_label.text = "大 捷"
@@ -47,15 +56,18 @@ func show_banner(victory: bool) -> void:
 		_label.add_theme_color_override("font_color", Color(0.6, 0.66, 0.75))
 		_label.add_theme_color_override("font_outline_color", Color(0.08, 0.1, 0.16, 0.95))
 		_sub.text = "重整旗鼓，再战"
-	_sub.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	_show_common(2.2)
+
+
+## 横幅动画公共段：弹入 → hold 秒 → 淡出
+func _show_common(hold: float) -> void:
 	visible = true
 	modulate.a = 0.0
 	scale = Vector2(1.0, 1.0)
 	pivot_offset = Vector2(960.0, 140.0)
 	var tw := create_tween()
 	tw.tween_property(self, "modulate:a", 1.0, 0.3)
-	tw.parallel().tween_property(self, "scale", Vector2.ONE, 0.4).from(Vector2(1.12, 1.12))\
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	tw.tween_interval(2.2)
+	tw.parallel().tween_property(self, "scale", Vector2.ONE, 0.4).from(Vector2(1.12, 1.12)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_interval(hold)
 	tw.tween_property(self, "modulate:a", 0.0, 0.6)
 	tw.tween_callback(func() -> void: visible = false)

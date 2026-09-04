@@ -4846,6 +4846,29 @@ function delTask(id){const n=byId[id];if(!n)return;
  sel=null;selSet=new Set();selEdge=null;hi=null;
  markEdit(id);measureCards();rebuildView();buildSide(curView);
  document.getElementById("inspector").innerHTML="<div class='ph'>已删除 "+id+"</div>";dirty=true;}
+function exportTxt(){ // 编辑闭环：导出完整源文件（状态/依赖/布局/新任务全含）→ 覆盖源 txt → --check
+ const bad=[];
+ nodes.forEach(n=>{(n.prs||[]).forEach(p=>{
+  if(p===n.id)bad.push(n.id+" 自环前置");
+  else if(!byId[p])bad.push(n.id+" 前置悬空 "+p);});});
+ if(bad.length&&!confirm("发现 "+bad.length+" 处问题（导出后 --check 会报 ERROR）：\n"+bad.slice(0,6).join("\n")+"\n仍要导出吗？"))return;
+ let out="# 任务依赖图（看板导出——覆盖 docs/项目/任务依赖图.txt 后运行 python tools/deptask/gen.py --check）\n";
+ out+="# 校验: python tools/deptask/gen.py --check   生成: python tools/deptask/gen.py\n";
+ out+="线序: "+lanes.join(", ")+"\n";
+ if(divideX!=null)out+="分割线: "+Math.round(divideX)+"\n";
+ out+="\n";
+ CLUSTERS.forEach(c=>{out+="簇 "+c.id+" | 名称="+c.name+" | 成员="+c.members.join(",")
+  +(folded[c.id]?" | 折叠=1":"")+(c.note?" | 注="+c.note:"")+"\n";});
+ nodes.forEach(n=>{out+=(n.kind==="里程碑"?"里程碑 ":"任务 ")+n.id
+  +" | 名称="+n.name+" | 线="+n.lane+" | 状态="+n.status
+  +(n.prs&&n.prs.length?" | 前置="+n.prs.join(","):"")
+  +(n.domain&&n.domain.length?" | 域="+(Array.isArray(n.domain)?n.domain.join(","):n.domain):"")+(n.tree?" | 树="+n.tree:"")
+  +(n.x!=null?" | 位置="+n.px.toFixed(1)+","+n.py.toFixed(1):"")  // 「自动重排」后 x 置 null，不写位置＝保留 dagre 自由态
+  +(n.exempt?" | 豁免=1":"")+(n.tier?" | 级="+n.tier:"")+(n.claim?" | 认领="+n.claim:"")
+  +(n.doc?" | 文档="+n.doc:"")+(n.note?" | 注="+n.note:"")+"\n";});
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob([out],{type:"text/plain;charset=utf-8"}));
+ a.download="任务依赖图.txt";a.click();}
 function inMini(ev){const r=mini.getBoundingClientRect();
  return ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom;}
 function miniJump(ev){if(!mini._map)return;const{g,s,ox,oy}=mini._map;const r=mini.getBoundingClientRect();
@@ -5365,29 +5388,6 @@ function buildLogList(){const evs=simEvents().slice().reverse();
   +"<span class='lgo'>⤢</span></div>").join("")
   ||"<div class='ph'>无调度日志</div>";}
 window.addEventListener("resize",()=>{sizeGantt();drawGantt();});
-function exportTxt(){ // 编辑闭环：导出完整源文件（状态/依赖/布局/新任务全含）→ 覆盖源 txt → --check
- const bad=[];
- nodes.forEach(n=>{(n.prs||[]).forEach(p=>{
-  if(p===n.id)bad.push(n.id+" 自环前置");
-  else if(!byId[p])bad.push(n.id+" 前置悬空 "+p);});});
- if(bad.length&&!confirm("发现 "+bad.length+" 处问题（导出后 --check 会报 ERROR）：\n"+bad.slice(0,6).join("\n")+"\n仍要导出吗？"))return;
- let out="# 任务依赖图（看板导出——覆盖 docs/项目/任务依赖图.txt 后运行 python tools/deptask/gen.py --check）\n";
- out+="# 校验: python tools/deptask/gen.py --check   生成: python tools/deptask/gen.py\n";
- out+="线序: "+lanes.join(", ")+"\n";
- if(divideX!=null)out+="分割线: "+Math.round(divideX)+"\n";
- out+="\n";
- CLUSTERS.forEach(c=>{out+="簇 "+c.id+" | 名称="+c.name+" | 成员="+c.members.join(",")
-  +(folded[c.id]?" | 折叠=1":"")+(c.note?" | 注="+c.note:"")+"\n";});
- nodes.forEach(n=>{out+=(n.kind==="里程碑"?"里程碑 ":"任务 ")+n.id
-  +" | 名称="+n.name+" | 线="+n.lane+" | 状态="+n.status
-  +(n.prs&&n.prs.length?" | 前置="+n.prs.join(","):"")
-  +(n.domain&&n.domain.length?" | 域="+(Array.isArray(n.domain)?n.domain.join(","):n.domain):"")+(n.tree?" | 树="+n.tree:"")
-  +(n.x!=null?" | 位置="+n.px.toFixed(1)+","+n.py.toFixed(1):"")  // 「自动重排」后 x 置 null，不写位置＝保留 dagre 自由态
-  +(n.exempt?" | 豁免=1":"")+(n.tier?" | 级="+n.tier:"")+(n.claim?" | 认领="+n.claim:"")
-  +(n.doc?" | 文档="+n.doc:"")+(n.note?" | 注="+n.note:"")+"\n";});
- const a=document.createElement("a");
- a.href=URL.createObjectURL(new Blob([out],{type:"text/plain;charset=utf-8"}));
- a.download="任务依赖图.txt";a.click();}
 // ── 启动 ──
 measureCards();
 if(!manual0)divideX=null;
@@ -5402,4 +5402,5 @@ let _last=0;
 requestAnimationFrame(function loop(ts){if(critOnly||nodes.some(n=>n.claim)){animT++;dirty=true;}  // 蚂蚁线/认领呼吸：仅有关键路径模式或已认领任务时常驻重绘
  if(dirty&&ts-_last>16){draw();_last=ts;}
  requestAnimationFrame(loop);});
+
 </script></body></html>

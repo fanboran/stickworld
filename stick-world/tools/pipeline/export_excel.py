@@ -39,6 +39,9 @@ REQUIRED_COLUMN_SUFFIX = "*"
 # 引用列模式：xxx_id 格式
 REF_COLUMN_PATTERN = re.compile(r"^(.+)_id$")
 
+# .tres 资源声明行中的 uid 属性（Godot 4.4+ 持久资源 uid）
+UID_ATTR_PATTERN = re.compile(r'\buid="(uid://[^"]+)"')
+
 
 # ---------------------------------------------------------------------------
 # 类型检测与转换
@@ -187,12 +190,33 @@ def format_dict_as_godot(data, indent=0):
 # .tres 文件生成
 # ---------------------------------------------------------------------------
 
-def generate_tres(resource_name, data_rows, source_file, source_sheet, description=""):
+def read_existing_uid(tres_path):
+    """读取已存在 .tres 资源声明行（首行）中的 uid，无则返回 None。
+
+    Godot 4.4+ 为每个资源分配持久 uid，其他资源可能按 uid 引用它；
+    重导出时必须原样保留，否则引用断裂。只扫描首行（[gd_resource ...]），
+    不会误取 [ext_resource] 引用的外部 uid。
+    """
+    if not tres_path.exists():
+        return None
+    try:
+        with open(tres_path, "r", encoding="utf-8") as f:
+            first_line = f.readline()
+    except OSError:
+        return None
+    m = UID_ATTR_PATTERN.search(first_line)
+    return m.group(1) if m else None
+
+
+def generate_tres(resource_name, data_rows, source_file, source_sheet, description="", uid=None):
     """生成 .tres 文件内容字符串。
 
     使用现有 balance_resource.gd 作为基类，将数据存入 variables.data。
+    uid: 目标文件已有的资源 uid（如 "uid://xxx"），原样写入声明行；
+    None 则不写（不伪造新 uid，uid 由 Godot 编辑器分配）。
     """
-    header = f"""[gd_resource type="Resource" load_steps=2 format=3]
+    uid_attr = f' uid="{uid}"' if uid else ""
+    header = f"""[gd_resource type="Resource" load_steps=2 format=3{uid_attr}]
 
 [ext_resource type="Script" path="{BALANCE_RESOURCE_SCRIPT}" id="1"]
 
@@ -557,6 +581,9 @@ def export_all(dry_run=False):
 
         output_path = output_dir / f"{sheet_name}.tres"
 
+        # uid 保留：目标已存在且头部带 uid 时原样继承，避免重导出断引用
+        existing_uid = read_existing_uid(output_path)
+
         # 生成 .tres 内容
         description = f"从 config/excel/{file_name} → {sheet_name} sheet 自动生成"
         tres_content = generate_tres(
@@ -565,6 +592,7 @@ def export_all(dry_run=False):
             source_file=f"config/excel/{file_name}",
             source_sheet=sheet_name,
             description=description,
+            uid=existing_uid,
         )
 
         with open(output_path, "w", encoding="utf-8") as f:

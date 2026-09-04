@@ -44,11 +44,13 @@ func _update_debug_visibility(_v: bool = false) -> void:
 const _TEXTURE_PATHS: Dictionary = {
 	ResourceType.WOOD: "res://assets/resources/tree_paint.png",
 	ResourceType.STONE: "res://assets/resources/stone_paint.png",
+	ResourceType.METAL: "res://assets/resources/metal_paint.png",
 }
 ## 贴图显示尺寸（px，宽高）
 const _TEXTURE_SIZES: Dictionary = {
 	ResourceType.WOOD: Vector2(108.0, 108.0),
 	ResourceType.STONE: Vector2(76.0, 76.0),
+	ResourceType.METAL: Vector2(72.0, 72.0),
 }
 
 

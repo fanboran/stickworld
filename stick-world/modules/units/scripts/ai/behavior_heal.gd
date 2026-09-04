@@ -16,7 +16,9 @@ extends BehaviorBase
 ##
 ## params: battle（缺省取 entity.get_battle_instance()）
 
-# 显式 preload（§七.3 headless 防御性路径）
+# 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）
+# audit-exempt: headless 防御性路径 preload（经 api 转发会重新依赖 class_name 注册，
+# 失去防御意义）；TargetFinder 为 combat 对外公共类型（combat/api.gd 已声明契约）
 const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 

@@ -1,0 +1,115 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "vehicles"
+_meta = {
+	"resource_name": "vehicles",
+	"version": "0.1.0",
+	"description": "从 config/excel/运输数据.xlsx → vehicles sheet 自动生成",
+	"category": "excel_export",
+	"source_file": "config/excel/运输数据.xlsx",
+	"source_sheet": "vehicles"
+}
+variables = {
+	"data": [
+		{
+			"id": "veh_handcart",
+			"name_zh": "手推车",
+			"carrier_type": "wagon",
+			"can_carry_people": "否",
+			"passenger_capacity": 0,
+			"cargo_capacity": 3,
+			"attack": 0,
+			"build_material": "木材",
+			"build_workload": 10,
+			"notes": "单人推行，纯货运"
+		},
+		{
+			"id": "veh_wagon",
+			"name_zh": "货运马车",
+			"carrier_type": "wagon",
+			"can_carry_people": "是",
+			"passenger_capacity": 2,
+			"cargo_capacity": 5,
+			"attack": 0,
+			"build_material": "木材,金属",
+			"build_workload": 30,
+			"notes": "可载人载货，支持两班倒轮流驾驶"
+		},
+		{
+			"id": "veh_sled",
+			"name_zh": "雪橇",
+			"carrier_type": "sled",
+			"can_carry_people": "是",
+			"passenger_capacity": 2,
+			"cargo_capacity": 4,
+			"attack": 0,
+			"build_material": "木材",
+			"build_workload": 15,
+			"notes": "雪地专用，可载人，支持两班倒"
+		},
+		{
+			"id": "veh_transport_boat",
+			"name_zh": "运输船",
+			"carrier_type": "boat",
+			"can_carry_people": "是",
+			"passenger_capacity": 4,
+			"cargo_capacity": 6,
+			"attack": 0,
+			"build_material": "木材",
+			"build_workload": 40,
+			"notes": "沿河运输，可载人，支持两班倒"
+		},
+		{
+			"id": "veh_cargo_ship",
+			"name_zh": "货船",
+			"carrier_type": "ship",
+			"can_carry_people": "是",
+			"passenger_capacity": 10,
+			"cargo_capacity": 20,
+			"attack": 0,
+			"build_material": "木材,金属",
+			"build_workload": 80,
+			"notes": "远洋运输，可载人，支持两班倒"
+		},
+		{
+			"id": "veh_catapult",
+			"name_zh": "投石车",
+			"carrier_type": "wagon",
+			"can_carry_people": "否",
+			"passenger_capacity": 0,
+			"cargo_capacity": 0,
+			"attack": 30,
+			"build_material": "木材,金属",
+			"build_workload": 60,
+			"notes": "攻城武器，攻击力 30，需拖拽移动。攻击模式硬编码"
+		},
+		{
+			"id": "veh_siege_tower",
+			"name_zh": "攻城塔",
+			"carrier_type": "wagon",
+			"can_carry_people": "是",
+			"passenger_capacity": 6,
+			"cargo_capacity": 0,
+			"attack": 0,
+			"build_material": "木材,金属",
+			"build_workload": 100,
+			"notes": "搭载士兵越过城墙，需拖拽移动"
+		},
+		{
+			"id": "veh_ram",
+			"name_zh": "冲车",
+			"carrier_type": "wagon",
+			"can_carry_people": "否",
+			"passenger_capacity": 0,
+			"cargo_capacity": 0,
+			"attack": 50,
+			"build_material": "木材,金属",
+			"build_workload": 50,
+			"notes": "攻城武器，攻击力 50(对城门加成)，攻击模式硬编码"
+		}
+	]
+}

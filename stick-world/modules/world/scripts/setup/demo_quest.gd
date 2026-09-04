@@ -56,6 +56,8 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 	_start_msec = Time.get_ticks_msec()
 	_bind_signals()
 	_advance()
+	# 开局操作指引（30 秒反馈原则：进场 1 秒内告诉玩家基础操作）
+	_notify("欢迎来到火柴人大战略", "WASD 移动 · E 采集/交互 · Q 战斗模式 · Tab 战略图 · ESC 暂停")
 
 
 # ─────────────────────────────── 信号绑定 ────────────────────────────────

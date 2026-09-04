@@ -76,7 +76,7 @@ const BASELINE: Dictionary = {
 	"test_pulse_on": 2.0,                   ## 试探接敌脉冲开启时长（s）
 	"test_pulse_off": 3.0,                  ## 试探接敌脉冲关闭时长（s）
 	"test_engage_range": 480.0,             ## 试探接敌触发距离（px，射程边缘近似）
-	"flank_enabled": false,                 ## 包抄走位（behavior_attack：侧翼单位接近叠加侧向分量）
+	"flank_enabled": true,                 ## 包抄走位（behavior_attack：侧翼单位接近叠加侧向分量）
 	"flank_y_offset": 120.0,                ## 侧翼判定：相对本方质心 y 偏移绝对值阈值（px）
 	"flank_side_strength": 0.40,            ## 包抄侧向分量强度（0~1）
 	# ── P7 批次 7b 治疗档案族（祭司 Meric；全部默认"关闭/零"，非祭司无消费路径 = 零回归）──

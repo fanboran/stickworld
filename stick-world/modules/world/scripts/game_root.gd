@@ -178,7 +178,7 @@ var _save_panel: Control = null
 ## travel_started 时收集的编队快照（跨图携带），map_loaded 后恢复
 var _pending_squad_snapshots: Array = []
 ## 遭遇战敌方数量（dev 场景可调，默认 4）
-var dev_enemy_count: int = 4
+var dev_enemy_count: int = 3
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────

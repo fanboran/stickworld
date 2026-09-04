@@ -22,6 +22,7 @@ enum ResourceType {
 var _is_depleted: bool = false
 var _debug_label: Label = null
 var _body_rect: ColorRect = null
+var _body_sprite: Sprite2D = null
 var _initial_amount: int = 0
 
 
@@ -39,20 +40,43 @@ func _update_debug_visibility(_v: bool = false) -> void:
 		_debug_label.visible = _v
 
 
+## 手绘笔触贴图（程序参考图 + mona-3 逆向油画算法拟合，见 tools/ai/stroke_paint.py）
+const _TEXTURE_PATHS: Dictionary = {
+	ResourceType.WOOD: "res://assets/resources/tree_paint.png",
+	ResourceType.STONE: "res://assets/resources/stone_paint.png",
+}
+## 贴图显示尺寸（px，宽高）
+const _TEXTURE_SIZES: Dictionary = {
+	ResourceType.WOOD: Vector2(108.0, 108.0),
+	ResourceType.STONE: Vector2(76.0, 76.0),
+}
+
+
 func _apply_visual() -> void:
-	# 简单色块表示资源点（P0 占位，正式版用贴图）
-	var colors: Array[Color] = [
-		Color(0.2, 0.5, 0.2),  # WOOD=绿
-		Color(0.5, 0.5, 0.5),  # STONE=灰
-		Color(0.6, 0.3, 0.2),  # METAL=棕
-	]
-	var color: Color = colors[resource_type] if resource_type < colors.size() else Color.WHITE
-	var rect := ColorRect.new()
-	rect.color = color
-	rect.size = Vector2(node_size, node_size)
-	rect.position = Vector2(-node_size * 0.5, -node_size * 0.5)
-	add_child(rect)
-	_body_rect = rect
+	var tex_path: String = String(_TEXTURE_PATHS.get(resource_type, ""))
+	if not tex_path.is_empty() and ResourceLoader.exists(tex_path):
+		# 笔触贴图分支：底边对齐节点底（地面接触线）
+		var spr := Sprite2D.new()
+		spr.texture = load(tex_path)
+		var size: Vector2 = _TEXTURE_SIZES.get(resource_type, Vector2(64.0, 64.0))
+		spr.scale = size / Vector2(spr.texture.get_width(), spr.texture.get_height())
+		spr.position = Vector2(0.0, node_size * 0.5 - size.y * 0.5)
+		add_child(spr)
+		_body_sprite = spr
+	else:
+		# 简单色块表示资源点（铁矿暂无贴图，P0 占位）
+		var colors: Array[Color] = [
+			Color(0.2, 0.5, 0.2),  # WOOD=绿
+			Color(0.5, 0.5, 0.5),  # STONE=灰
+			Color(0.6, 0.3, 0.2),  # METAL=棕
+		]
+		var color: Color = colors[resource_type] if resource_type < colors.size() else Color.WHITE
+		var rect := ColorRect.new()
+		rect.color = color
+		rect.size = Vector2(node_size, node_size)
+		rect.position = Vector2(-node_size * 0.5, -node_size * 0.5)
+		add_child(rect)
+		_body_rect = rect
 	# 调试标签：显示资源类型名（F3 开关控制）
 	_debug_label = Label.new()
 	_debug_label.text = _get_type_name()
@@ -84,6 +108,8 @@ func _play_harvest_feedback(gained: int) -> void:
 		tween.tween_property(self, "scale", Vector2.ONE, 0.14)
 	if _body_rect != null:
 		_body_rect.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
+	elif _body_sprite != null:
+		_body_sprite.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
 
 
 ## 资源点上方飘出 "+N 资材" 的增益数字（0.8s 上浮淡出后自毁）

@@ -24,6 +24,7 @@ var _debug_label: Label = null
 var _body_rect: ColorRect = null
 var _body_sprite: Sprite2D = null
 var _initial_amount: int = 0
+var _crit_gain: bool = false
 
 
 func _ready() -> void:
@@ -93,6 +94,9 @@ func harvest(qty: int) -> int:
 	if _is_depleted:
 		return 0
 	var actual: int = mini(qty, amount)
+	if randf() < 0.12:
+		actual = mini(qty * 2, amount)
+		_crit_gain = true
 	amount -= actual
 	_play_harvest_feedback(actual)
 	if amount <= 0:
@@ -104,7 +108,8 @@ func harvest(qty: int) -> int:
 ## 采集即时反馈：挤压弹跳 + 飘字 + 剩余量渐隐（GDD 核心循环"采集成功的微奖励"）
 func _play_harvest_feedback(gained: int) -> void:
 	if gained > 0:
-		_spawn_gain_label(gained)
+		_spawn_gain_label(gained, _crit_gain)
+		_crit_gain = false
 		if AudioManager != null:
 			AudioManager.play_event("harvest_hit")
 			AudioManager.play_event("harvest_gain")
@@ -118,11 +123,11 @@ func _play_harvest_feedback(gained: int) -> void:
 
 
 ## 资源点上方飘出 "+N 资材" 的增益数字（0.8s 上浮淡出后自毁）
-func _spawn_gain_label(gained: int) -> void:
+func _spawn_gain_label(gained: int, crit: bool = false) -> void:
 	var label := Label.new()
-	label.text = "+%d %s" % [gained, _get_type_name()]
-	label.add_theme_font_size_override("font_size", 16)
-	label.add_theme_color_override("font_color", Color(1.0, 0.93, 0.65))
+	label.text = ("暴击 +%d %s!" % [gained, _get_type_name()]) if crit else ("+%d %s" % [gained, _get_type_name()])
+	label.add_theme_font_size_override("font_size", 20 if crit else 16)
+	label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.25) if crit else Color(1.0, 0.93, 0.65))
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	label.add_theme_constant_override("outline_size", 4)
 	label.position = Vector2(-36, -44)

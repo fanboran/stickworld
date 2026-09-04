@@ -76,7 +76,7 @@ func _bind_event_bus() -> void:
 
 
 func _on_battle_started(_battle_id: String) -> void:
-	_notify("战斗", "一场战斗开始了", "info")
+	_notify("战斗开始", "已自动暂停布置战术——按 空格 恢复开打", "info")
 
 
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
@@ -89,10 +89,15 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 func _update_speed_display() -> void:
 	if speed_label == null or TimeManager == null:
 		return
+	# 暂停态醒目化（战斗自动暂停的可发现性——玩家第一眼看到"怎么继续"）
+	if TimeManager.is_paused():
+		speed_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.35))
+	else:
+		speed_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
 	var text: String = "速度: "
 	match TimeManager.current_speed:
 		TimeManager.Speed.PAUSED:
-			text += "暂停"
+			text += "暂停（空格继续）"
 		TimeManager.Speed.X1:
 			text += "1x"
 		TimeManager.Speed.X2:

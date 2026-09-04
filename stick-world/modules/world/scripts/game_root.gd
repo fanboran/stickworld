@@ -756,6 +756,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif ek.keycode == KEY_T:
 		_debug_cycle_weapon()
 		get_viewport().set_input_as_handled()
+	# 空格切换暂停（Demo：战斗自动暂停后的直觉恢复键；模态打开时 ESC 栈优先，
+	# 空格仅在世界层生效）
+	elif ek.keycode == KEY_SPACE:
+		if TimeManager != null:
+			TimeManager.toggle_pause()
+		get_viewport().set_input_as_handled()
 	elif ek.keycode == KEY_B:
 		_debug_toggle_shield()
 		get_viewport().set_input_as_handled()

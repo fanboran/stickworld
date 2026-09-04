@@ -37,7 +37,7 @@ func _ready() -> void:
 	for line: String in [
 		"WASD 移动　·　E 采集 / 交互（可按住连采）",
 		"Q 战斗模式（左键攻击 / 框选）　·　1-5 换武器",
-		"Tab 战略图　·　ESC 暂停",
+		"Tab 战略图　·　空格 暂停/继续",
 		"跟随右上角「阶段目标」推进 Demo",
 	]:
 		var l := Label.new()

@@ -55,7 +55,7 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 		{"id": "squad", "title": "组建一个编队",
 			"desc": "顶栏「编制」创建编队（或 Q 切战斗模式框选士兵）", "target": 1.0},
 		{"id": "battle", "title": "赢得一场战斗",
-			"desc": "带士兵向右行军穿过道路，在战场消灭全部敌人", "target": 1.0},
+			"desc": "向右穿图到战场，Q 战斗模式左键砍杀敌人（1-5 换武器）；也可框选士兵右键下令", "target": 1.0},
 	]
 	# 读档启动：玩家已有进度，不重新引导（目标全达成、不弹胜利结算）
 	if SaveManager != null and SaveManager.boot_load_slot >= 0:

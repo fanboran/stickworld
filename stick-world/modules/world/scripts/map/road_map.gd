@@ -29,6 +29,17 @@ func _ready() -> void:
 	super()
 	_sync_ground_line()
 	_apply_road_texture()
+	_mount_sky_decor()
+
+
+## 天空装饰层（与村庄地图一致：远山平铺 + 漂移云，Demo 精品感）
+func _mount_sky_decor() -> void:
+	var sky := SkyDecor.new()
+	sky.name = "SkyDecor"
+	sky.horizon_y = ground_y
+	sky.map_left = map_left
+	sky.map_right = map_right
+	add_child(sky)
 
 
 func _sync_ground_line() -> void:

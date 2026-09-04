@@ -49,4 +49,4 @@
 | `selection_changed` | unit_ids: Array | SelectionSystem | UI | 框选/选择变化 |
 | `squad_created` | squad_id, unit_ids | FormationSystem | UI、Organization | 编队创建 |
 | `order_issued` | order_type, target_squad_id, source_tier | TacticalOrders | UI、Units | 下达号令（source_tier=发令层级，0=玩家直接指挥） |
-| `commander_assigned` | squad_id, unit_id | Organization | UI | 任命指挥官 |
+| `commander_assigned` | squad_id, unit_id | FormationSystem | UI | 任命指挥官 |

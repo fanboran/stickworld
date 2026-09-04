@@ -5,11 +5,21 @@ export_excel.py —— 将 config/excel/*.xlsx 导出为 Godot .tres 资源文�
 用法:
     python tools/pipeline/export_excel.py              # 导出所有
     python tools/pipeline/export_excel.py --dry-run    # 只校验不导出
+    python tools/pipeline/export_excel.py --yes        # 有验证错误时跳过阻断，强制导出
+    python tools/pipeline/export_excel.py -y           # 同 --yes（短参数）
 
 Excel 格式约定:
     - 第 1 行: 英文字段名（.tres 的键）
     - 第 2 行: 中文字段说明（跳过）
     - 第 3 行起: 数据行
+
+导出行为约定:
+    - 存在验证错误（空 id / 重复 id / 全空行 / 必填列缺失 / 引用悬空）时
+      默认拒绝导出，退出码 1，须修复数据后重试；
+      --yes / -y 可跳过阻断强制导出（供自动化脚本使用）
+    - id 为空的数据行永远不会写入 .tres（防 {id: null} 垃圾行进产物），
+      --yes 强制导出时同样跳过；全空行同样只在报错中出现，从不写入产物
+    - 重导出时保留目标 .tres 头部已有的 uid="uid://..."（若存在）
 
 输出:
     config/excel/<文件名>.xlsx → config/<文件名>/<sheet名>.tres
@@ -38,6 +48,9 @@ REQUIRED_COLUMN_SUFFIX = "*"
 
 # 引用列模式：xxx_id 格式
 REF_COLUMN_PATTERN = re.compile(r"^(.+)_id$")
+
+# .tres 资源声明行中的 uid 属性（Godot 4.4+ 持久资源 uid）
+UID_ATTR_PATTERN = re.compile(r'\buid="(uid://[^"]+)"')
 
 
 # ---------------------------------------------------------------------------
@@ -187,12 +200,33 @@ def format_dict_as_godot(data, indent=0):
 # .tres 文件生成
 # ---------------------------------------------------------------------------
 
-def generate_tres(resource_name, data_rows, source_file, source_sheet, description=""):
+def read_existing_uid(tres_path):
+    """读取已存在 .tres 资源声明行（首行）中的 uid，无则返回 None。
+
+    Godot 4.4+ 为每个资源分配持久 uid，其他资源可能按 uid 引用它；
+    重导出时必须原样保留，否则引用断裂。只扫描首行（[gd_resource ...]），
+    不会误取 [ext_resource] 引用的外部 uid。
+    """
+    if not tres_path.exists():
+        return None
+    try:
+        with open(tres_path, "r", encoding="utf-8") as f:
+            first_line = f.readline()
+    except OSError:
+        return None
+    m = UID_ATTR_PATTERN.search(first_line)
+    return m.group(1) if m else None
+
+
+def generate_tres(resource_name, data_rows, source_file, source_sheet, description="", uid=None):
     """生成 .tres 文件内容字符串。
 
     使用现有 balance_resource.gd 作为基类，将数据存入 variables.data。
+    uid: 目标文件已有的资源 uid（如 "uid://xxx"），原样写入声明行；
+    None 则不写（不伪造新 uid，uid 由 Godot 编辑器分配）。
     """
-    header = f"""[gd_resource type="Resource" load_steps=2 format=3]
+    uid_attr = f' uid="{uid}"' if uid else ""
+    header = f"""[gd_resource type="Resource" load_steps=2 format=3{uid_attr}]
 
 [ext_resource type="Script" path="{BALANCE_RESOURCE_SCRIPT}" id="1"]
 
@@ -263,9 +297,11 @@ def parse_sheet_with_raw(ws):
         - 第 2/3 行: 中文说明（跳过）
         - 第 3/4 行起: 数据
 
-    返回: (raw_headers, clean_headers, data_rows, errors, metadata)
+    返回: (raw_headers, clean_headers, data_rows, errors, metadata, blank_rows)
+    blank_rows: 数据区中全空行的 Excel 行号列表（计入验证错误，不静默丢弃）
     """
     errors = []
+    blank_rows = []
     rows = list(ws.iter_rows(min_row=1, values_only=True))
 
     # 检测元数据行
@@ -277,7 +313,7 @@ def parse_sheet_with_raw(ws):
 
     if len(rows) < 3:
         errors.append("数据不足（至少需要 3 行：表头 + 说明 + 数据）")
-        return [], [], [], errors, metadata
+        return [], [], [], errors, metadata, blank_rows
 
     # 原始字段名（含 * 标记）
     raw_headers = [str(c).strip() if c is not None else "" for c in rows[0]]
@@ -294,7 +330,7 @@ def parse_sheet_with_raw(ws):
         seen.add(h)
 
     if errors:
-        return raw_headers, clean_headers, [], errors, metadata
+        return raw_headers, clean_headers, [], errors, metadata, blank_rows
 
     # 数据行
     data_rows = []
@@ -311,8 +347,10 @@ def parse_sheet_with_raw(ws):
 
         if row_has_data:
             data_rows.append(row_data)
+        else:
+            blank_rows.append(row_idx)
 
-    return raw_headers, clean_headers, data_rows, errors, metadata
+    return raw_headers, clean_headers, data_rows, errors, metadata, blank_rows
 
 
 # ---------------------------------------------------------------------------
@@ -447,8 +485,12 @@ def find_excel_files():
     return sorted(EXCEL_DIR.glob("*.xlsx"))
 
 
-def export_all(dry_run=False):
-    """主入口：扫描、解析、验证、导出。"""
+def export_all(dry_run=False, assume_yes=False):
+    """主入口：扫描、解析、验证、导出。
+
+    assume_yes: --yes/-y 非交互确认，存在验证错误时跳过阻断强制导出
+    （空 id 行仍会被跳过，不写入产物）。
+    """
     import openpyxl
 
     excel_files = find_excel_files()
@@ -460,6 +502,7 @@ def export_all(dry_run=False):
     all_parsed = {}  # {(file_name, sheet_name): (headers, data_rows, raw_headers)}
     all_meta = {}    # {file_name: metadata_dict} 用于获取 output_dir
     all_ids_map = {}  # {sheet_name: set of ids}
+    all_blank_rows = {}  # {(file_name, sheet_name): [excel 行号]} 全空行
 
     # ── 第一遍：解析所有 Sheet ──
     print("=" * 60)
@@ -478,7 +521,7 @@ def export_all(dry_run=False):
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            raw_headers, headers, data_rows, sheet_errors, metadata = parse_sheet_with_raw(ws)
+            raw_headers, headers, data_rows, sheet_errors, metadata, blank_rows = parse_sheet_with_raw(ws)
 
             if sheet_errors:
                 for err in sheet_errors:
@@ -487,6 +530,7 @@ def export_all(dry_run=False):
 
             key = (file_name, sheet_name)
             all_parsed[key] = (headers, data_rows, raw_headers)
+            all_blank_rows[key] = blank_rows
 
             # 记录元数据（第一个 sheet 的 metadata 作为整个文件的 metadata）
             if file_name not in all_meta and metadata:
@@ -511,6 +555,12 @@ def export_all(dry_run=False):
     print("=" * 60)
 
     for (file_name, sheet_name), (headers, data_rows, raw_headers) in all_parsed.items():
+        # 全空行检查（计入硬错误，不静默丢弃）
+        for row_idx in all_blank_rows.get((file_name, sheet_name), []):
+            all_errors.append(
+                f"[{file_name}] Sheet '{sheet_name}' 第 {row_idx} 行: 全空行（无任何数据）"
+            )
+
         # 必填列检查
         req_errors = validate_required_columns(file_name, sheet_name, raw_headers, data_rows)
         all_errors.extend(req_errors)
@@ -535,10 +585,14 @@ def export_all(dry_run=False):
         return len(all_errors) == 0
 
     if all_errors:
-        print(f"\n⚠️  存在 {len(all_errors)} 个验证错误，是否继续导出？(y/n): ", end="")
-        choice = input().strip().lower()
-        if choice != "y":
-            print("已取消导出。")
+        if assume_yes:
+            print(f"\n⚠️  已指定 --yes：跳过 {len(all_errors)} 个验证错误的阻断，强制导出"
+                  f"（空 id 行仍会被跳过）")
+        else:
+            # 硬错误默认拒绝导出：垃圾行（如 {id: null}）曾借此混入产物
+            print(f"\n❌ 存在 {len(all_errors)} 个验证错误，已拒绝导出。")
+            print("   请修复上述数据后重新运行；如确认要忽略错误强制导出，"
+                  "请使用 --yes（或 -y）。")
             return False
 
     # ── 第三遍：导出 .tres ──
@@ -548,6 +602,16 @@ def export_all(dry_run=False):
 
     exported_count = 0
     for (file_name, sheet_name), (headers, data_rows, _) in all_parsed.items():
+        # 空 id 行最后防线：无论何种情况都不写入产物（防 {id: null} 垃圾行）
+        if "id" in headers:
+            kept_rows = []
+            for row_idx, row in enumerate(data_rows, start=3):
+                if row.get("id") is None:
+                    print(f"  ⛔ 跳过空 id 行: [{file_name}] Sheet '{sheet_name}' 第 {row_idx} 行")
+                else:
+                    kept_rows.append(row)
+            data_rows = kept_rows
+
         # 输出目录: 优先使用 Excel 元数据中的 output_dir，否则用文件名
         base_name = Path(file_name).stem
         meta = all_meta.get(file_name, {})
@@ -557,6 +621,9 @@ def export_all(dry_run=False):
 
         output_path = output_dir / f"{sheet_name}.tres"
 
+        # uid 保留：目标已存在且头部带 uid 时原样继承，避免重导出断引用
+        existing_uid = read_existing_uid(output_path)
+
         # 生成 .tres 内容
         description = f"从 config/excel/{file_name} → {sheet_name} sheet 自动生成"
         tres_content = generate_tres(
@@ -565,9 +632,12 @@ def export_all(dry_run=False):
             source_file=f"config/excel/{file_name}",
             source_sheet=sheet_name,
             description=description,
+            uid=existing_uid,
         )
 
-        with open(output_path, "w", encoding="utf-8") as f:
+        # newline="\n"：强制 LF 换行（.gitattributes 要求 *.tres 为 LF），
+        # 否则 Windows 文本模式写 CRLF，与仓库产物产生换行符 diff，破坏幂等导出
+        with open(output_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(tres_content)
 
         exported_count += 1
@@ -576,8 +646,6 @@ def export_all(dry_run=False):
     # ── 总结 ──
     print(f"\n{'=' * 60}")
     print(f"✅ 导出完成: {exported_count} 个 .tres 文件")
-    if all_errors:
-        print(f"⚠️  验证警告: {len(all_errors)} 个（已跳过导出）")
     print("=" * 60)
     return True
 
@@ -587,17 +655,22 @@ def export_all(dry_run=False):
 # ---------------------------------------------------------------------------
 
 def main():
-    dry_run = "--dry-run" in sys.argv
+    args = sys.argv[1:]
+    dry_run = "--dry-run" in args
+    assume_yes = "--yes" in args or "-y" in args
 
     print("=" * 60)
     print("  stick-world Excel → .tres 导出工具")
     print("=" * 60)
     print(f"  Excel 目录: {EXCEL_DIR}")
     print(f"  输出目录:   {CONFIG_DIR}")
-    print(f"  模式:       {'干跑（只校验）' if dry_run else '正式导出'}")
+    mode = "干跑（只校验）" if dry_run else "正式导出"
+    if assume_yes:
+        mode += "（--yes 强制）"
+    print(f"  模式:       {mode}")
     print("=" * 60)
 
-    success = export_all(dry_run=dry_run)
+    success = export_all(dry_run=dry_run, assume_yes=assume_yes)
     sys.exit(0 if success else 1)
 
 

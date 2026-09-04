@@ -5,8 +5,7 @@ function openTaskForm(editId,parentId){editTarget=editId||null;planParent=parent
  const m=document.getElementById("modal");m.style.display="flex";
  document.getElementById("ntTitle").textContent=editId?("✎ 编辑任务 · "+editId)
   :(planParent?("✂ 拆解 "+planParent+" → 子任务"):"➕ 新建任务");
- document.getElementById("ntGo").textContent=(editId||planParent)?"创建子任务":"创建";
- document.getElementById("ntGo").textContent=editId?"保存":"创建";
+ document.getElementById("ntGo").textContent=editId?"保存":(planParent?"创建子任务":"创建");
  const idIn=document.getElementById("ntId");
  idIn.value=editId||"";idIn.disabled=!!editId;   // id 是全部引用的锚点，编辑时锁定
  idIn.parentElement.style.display=editId?"none":"flex";

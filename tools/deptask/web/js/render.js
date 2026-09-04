@@ -195,7 +195,8 @@ function drawMini(){mctx.setTransform(1,0,0,1,0,0);mctx.clearRect(0,0,180,120);
  mctx.strokeRect(ox+(wx-g.minX)*s,oy+(wy-g.minY)*s,VW/view.k*s,VH/view.k*s);
  mini._map={s,ox,oy,g};}
 function drawZoom(){
- if(!dockFolded&&dockTab==="gantt")drawGantt();  // 主图变化时同步运行图条const cfL=document.getElementById("cfL");if(!cfL)return;
+ if(!dockFolded&&dockTab==="gantt")drawGantt();  // 主图变化时同步运行图条
+ const cfL=document.getElementById("cfL");if(!cfL)return;
  const vis=VN.filter(n=>visNode(n)).length;
  cfL.textContent="可见 "+vis+"/"+nodes.length+" · "+Math.round(view.k*100)+"%";
  document.getElementById("cfR").textContent="🚦 就绪 "+READY.length+" · 🛤 关键路径 "+Math.max(0,CRIT.length-1)+" 跳";

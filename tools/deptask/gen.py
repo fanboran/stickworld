@@ -506,7 +506,7 @@ def gen_html(nodes, edges, lane_order, errors, warns, clusters, divide_hint, rea
     app = "".join((WEB_DIR / "js" / f).read_text(encoding="utf-8") for f in APP_JS)
     return (html.replace("/*__CSS__*/", css)
                 .replace("/*__DAGRE__*/", js)
-                .replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False))
+                .replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
                 .replace("/*__APP__*/", app))
 
 

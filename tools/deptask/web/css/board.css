@@ -48,7 +48,7 @@
    border-bottom:1px solid var(--line2);padding:4px 8px;z-index:16;overflow-x:auto;scrollbar-width:none}
  #vbar .vg{display:flex;gap:1px;align-items:center;flex-shrink:0}
  #vbar .sep{width:1px;height:16px;background:var(--line2);margin:0 7px;flex-shrink:0}
- #vbar .vt{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:4px;
+ #vbar .vt{background:var(--panel2);border:1px solid var(--line);color:var(--dim2);border-radius:4px;
    padding:3px 8px;font:500 11px/1.2 system-ui,sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0}
  #vbar .vt:hover{color:var(--txt);border-color:#3a5678}
  #vbar .vt.on{background:#12304a;border-color:var(--acc);color:var(--acc)}
@@ -59,16 +59,7 @@
    color:var(--sub);user-select:none;white-space:nowrap;flex-shrink:0}
  .vtab:hover{color:var(--txt)}
  .vtab.on{background:#16273c;color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
- /* ── 详情面板 / 消息 / 帮助 ── */
- #panel{position:fixed;top:92px;right:10px;width:320px;max-height:72vh;overflow:auto;
-   background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:0 0 10px;
-   font-size:12.5px;display:none;z-index:20;line-height:1.75}
- #panel h3{margin:0;padding:9px 14px 7px;font-size:13px;font-weight:650;letter-spacing:.3px;
-   border-bottom:1px solid var(--line);color:#eaf6ff}
- #panel .tag{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:4px;
-   padding:0 7px;margin:2px 4px 2px 0;font-size:11.5px;cursor:pointer;color:#93a7c0}
- #panel .tag:hover{border-color:var(--acc);color:var(--acc)}
- #panel .row{color:var(--sub);margin:6px 14px 0}
+ /* ── 消息 / 帮助（详情面板已由 #inspector 承担） ── */
  #msgs{position:fixed;bottom:0;left:0;right:0;max-height:34vh;overflow:auto;background:var(--panel);
    border-top:1px solid var(--line2);font-size:12px;padding:8px 14px;display:none;z-index:20;line-height:1.9}
  #msgs .e{color:var(--red)}#msgs .w{color:var(--amber)}
@@ -83,7 +74,8 @@
  #sideL{left:0;width:248px;border-right:1px solid var(--line2)}
  #sideR{right:0;width:308px;border-left:1px solid var(--line2);padding:0 0 10px}
  .side .pane-head{padding:8px 12px 6px;font-size:11px;font-weight:600;color:var(--acc2);
-   letter-spacing:.4px;border-bottom:1px solid var(--line);position:sticky;top:76px;background:var(--panel);z-index:2}
+   letter-spacing:.4px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+ /* 粘性锚=scrollport 顶（.side 自身从 BAR_H 起，top:0 才能贴住面板可视顶；76px 是旧顶栏高度的遗留，会滑进顶栏后面） */
  .side .pane-head .hint{color:var(--dim2);font-size:10px;font-weight:400;margin-left:6px}
  #inspector{padding:0 0 8px}
  #inspector h3{margin:0;padding:9px 14px 7px;font-size:13px;font-weight:650;letter-spacing:.3px;
@@ -118,8 +110,6 @@
  .extStrip .st{font:700 10.5px var(--mono);color:var(--amber)}
  #mini{position:fixed;left:258px;bottom:12px;border:1px solid var(--line2);background:#0a111ccc;
    z-index:15;cursor:crosshair}
- #zoom{position:fixed;left:258px;bottom:140px;font:600 10px var(--mono);color:var(--dim2);z-index:15;
-   background:#0a111ccc;border:1px solid var(--line);padding:3px 8px}
  canvas#cv{display:block;position:fixed;inset:0;cursor:crosshair}
  /* ── canvas 底部渐隐信息条（LOGIC-8 canvas-foot/wave-info 角色） ── */
  #cfoot{position:fixed;left:0;right:0;bottom:0;height:24px;display:flex;align-items:center;gap:16px;
@@ -132,7 +122,7 @@
  #dock.folded{height:30px}
  #dockBar{display:flex;align-items:center;gap:1px;background:var(--bg2);border-bottom:1px solid var(--line);
    padding:0 8px;height:30px;flex:0 0 auto}
- .dtab{font-size:11.5px;padding:4px 12px;cursor:pointer;background:transparent;border:0;color:var(--dim);white-space:nowrap}
+ .dtab{font-size:11.5px;padding:4px 12px;cursor:pointer;background:transparent;border:0;color:var(--dim2);white-space:nowrap}
  .dtab:hover{color:var(--txt)}
  .dtab.on{background:#16273c;color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
  #dockInfo{margin-left:auto;font:600 10px var(--mono);color:var(--dim2)}
@@ -141,7 +131,8 @@
  #dockBody{flex:1 1 auto;min-height:0;position:relative}
  #dock.folded #dockBody{display:none}
  #gantt{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
- #logList{position:absolute;inset:0;overflow-y:auto;padding:4px 0}
+ #logList{position:absolute;inset:0;overflow-y:auto;padding:4px 0;display:none}
+ /* logList 默认 display:none：与 #gantt 同为 inset:0 叠层，若默认 block 会整面盖住运行图吃掉全部指针事件 */
  /* ── 相关项浮窗（左下小窗） ── */
  #relwin{position:fixed;left:262px;bottom:44px;width:320px;max-height:62vh;overflow:auto;display:none;
    flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:6px;
@@ -155,31 +146,8 @@
  #dash .strip{grid-template-columns:repeat(6,1fr);border:1px solid var(--line2);margin:0 auto 14px;max-width:1500px}
  .kv{background:var(--panel2);padding:6px 2px;text-align:center;overflow:hidden}
  .kv span{display:block;font-size:9.5px;color:var(--dim2)}
- .kv b{font:700 13px var(--mono);color:var(--text)}
+ .kv b{font:700 13px var(--mono);color:var(--txt)}
  .kv b.g{color:var(--green)}.kv b.y{color:var(--amber)}.kv b.c{color:var(--acc)}
- /* ── 底部 IDE 面板（dock：运行图/调度日志，可折叠） ── */
- #dock{position:fixed;left:0;right:0;bottom:0;height:38vh;min-height:220px;display:none;flex-direction:column;
-   background:var(--panel);border-top:1px solid var(--line2);z-index:18}
- #dock.folded{height:30px}
- #dockBar{display:flex;align-items:center;gap:1px;background:var(--bg2);border-bottom:1px solid var(--line);
-   padding:0 8px;height:30px;flex:0 0 auto}
- .dtab{font-size:11.5px;padding:4px 12px;cursor:pointer;background:transparent;border:0;color:var(--dim);white-space:nowrap}
- .dtab:hover{color:var(--txt)}
- .dtab.on{background:#16273c;color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
- #dockInfo{margin-left:auto;font:600 10px var(--mono);color:var(--dim2)}
- #dockFold{cursor:pointer;color:var(--sub);padding:2px 8px;font-size:12px}
- #dockFold:hover{color:var(--acc)}
- #dockBody{flex:1 1 auto;min-height:0;position:relative}
- #dock.folded #dockBody{display:none}
- #gantt{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
- #logList{position:absolute;inset:0;overflow-y:auto;padding:4px 0}
- /* ── 相关项浮窗（左下小窗） ── */
- #relwin{position:fixed;left:262px;bottom:44px;width:320px;max-height:62vh;overflow:auto;display:none;
-   flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:6px;
-   z-index:30;box-shadow:0 8px 24px #000a}
- #relwin .phead{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12.5px;color:#eaf6ff;
-   border-bottom:1px solid var(--line)}
- #relwin .pbody{overflow:auto}
  /* ── 检查器上下文行 ── */
  .ctxrow{margin:5px 14px 0;font:600 10.5px var(--mono);color:var(--dim2);letter-spacing:.2px}
  /* ── 右键菜单 / 弹窗（LOGIC-8：直角+1px 线，无阴影） ── */

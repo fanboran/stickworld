@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>任务依赖图</title>
+<style>/*__CSS__*/</style></head><body>
+<div id="bar"><div class="row"><b class="logo" title="任务依赖图 · 唯一真相源 docs/项目/任务依赖图.txt">任务依赖图</b><span class="sub">DAG 调度台</span>
+ <span class="sep"></span>
+ <input id="search" placeholder="搜索 id / 名称 / 备注…">
+ <span class="sep"></span>
+ <button class="btn" onclick="locateActive()" title="定位到进行中/可开工任务区（活跃面）">⌖ 当前面</button>
+ <button class="btn" onclick="fitAll()" title="缩放至全图可见">⛶ 全图</button>
+ <button class="btn" onclick="relayout()" title="dagre 重新分层布线（交叉最小化；会清除手动布局）">⟲ 重排</button>
+ <button class="btn" id="exportBtn" onclick="exportTxt()" title="导出完整源文件（含状态/依赖/布局编辑）→ 覆盖 docs/项目/任务依赖图.txt → 跑 --check 校验">⬇ 导出源</button>
+ <button class="btn" onclick="showDivide=!showDivide;this.classList.toggle('on',showDivide);dirty=true" title="完成/未完成分割墙显隐（拖墙=右区整体平移）">✂ 分割墙</button>
+ <button class="btn" onclick="document.getElementById('help').style.display='flex'" title="操作说明">? 帮助</button>
+ <div class="chips">
+  <span id="checkChip" title="校验器结果——错误=环/悬空引用/前置未完成就开工（有错误禁止派活）；警告=状态滞后/冗余依赖/域冲突/无后沿（审计线索）。点击展开明细"></span>
+  <span id="readyChip" title="就绪集：前置全部完成、可立即派活的任务数。点击只高亮这些节点（调度视角）"></span>
+  <span id="critChip" title="关键路径：未完成子图最长链跳数（加并发只能压非关键路径，关键路径靠拆依赖/拆任务）。点击高亮链上节点"></span>
+ </div>
+</div>
+<div class="row" id="barRow2">
+ <span id="legend"></span>
+ <span class="sep"></span>
+ <span id="lanes" title="单击=聚拢该线居中（再点退出，显隐/布局状态保留） · Alt+单击=显隐该线"></span>
+</div>
+<div class="row" id="viewTabs">
+ <span class="vtab on" data-v="graph">🗺 全图 DAG</span>
+ <span class="vtab" data-v="producer" title="派活台：今天派什么 / 什么卡住 / 离里程碑多远">🧭 制作人</span>
+ <span class="vtab" data-v="eng" title="代码线工程板：模块开发/重构/技术债">⚙ 程序</span>
+ <span class="vtab" data-v="design" title="设计产出板：细化设计/决策项">📐 策划</span>
+ <span class="vtab" data-v="art" title="资产板：素材替换/外部采购通道">🎨 美术</span>
+ <span class="vtab" data-v="qa" title="质量板：缺陷/待验收/测试链/Demo 收口">🧪 测试</span>
+</div>
+</div>
+<div id="ctx"></div>
+<div id="dock">
+ <div id="dockBar">
+  <span class="dtab on" data-t="gantt">▦ 运行图</span>
+  <span class="dtab" data-t="log">≡ 调度日志</span>
+  <span id="srcSwitch" style="display:flex;gap:1px;margin-left:8px"></span>
+  <span id="dockInfo"></span>
+  <span id="dockFold" title="折叠/展开底栏（Tab 键）">▾</span>
+ </div>
+ <div id="dockBody">
+  <canvas id="gantt"></canvas>
+  <div id="logList"></div>
+ </div>
+</div>
+<div id="relwin" title="相关项浮窗：点击行定位，⤢ 跳全图"></div>
+<div id="modal"><div><h3 id="ntTitle">➕ 新建任务</h3>
+ <label>id（英文标识符）<input id="ntId" placeholder="如 tech_rebuild2"></label>
+ <label>名称<input id="ntName" placeholder="一句话说清交付物"></label>
+ <label>线<select id="ntLane"></select></label>
+ <label>状态<select id="ntStatus"></select></label>
+ <label>前置（逗号分隔 id，可留空）<input id="ntPrs" placeholder="root"></label>
+ <label>域（逗号分隔文件/目录，可留空）<input id="ntDomain" placeholder="modules/xxx"></label>
+ <label>关联文档（可留空）<input id="ntDoc" placeholder="docs/设计/系统/xx.md"></label>
+ <label>注<input id="ntNote"></label>
+ <div class="btns"><button class="no" onclick="closeModal()">取消</button><button class="go" id="ntGo" onclick="submitTaskForm()">创建</button></div>
+</div></div>
+<div id="dash"></div>
+<div id="vbar"></div>
+<div id="relwin" title="相关项浮窗：点击行定位，⤢ 跳全图"></div>
+<div id="sideL" class="side"></div>
+<div id="sideR" class="side"><div id="inspector"><div class="ph">点选任务查看详情（前置/被依赖/关联文档可点跳转）</div></div></div>
+<div id="msgs"></div>
+<div id="help"><div>
+ <b>任务依赖图 · 操作（对标 Shader Graph / ComfyUI）</b><br>
+ <b>视图</b>：顶栏第三排页签——全图 DAG / 🧭制作人（派活台）/ ⚙程序 / 📐策划 / 🎨美术 / 🧪测试；URL #view= 可直达<br>
+ <b>框选</b>：左键拖空白画虚线框，松开选中框内任务；Shift+点=加选/减选；Esc 清选<br>
+ <b>平移</b>：中键拖 / 右键拖 / 空格+左键拖（三通道）；滚轮=缩放；双击空白=适配全图<br>
+ <b>移动</b>：拖节点=移动；框选后拖任一选中节点=批量移动（自动遵守分割墙）<br>
+ <b>建依赖</b>：从卡片<b>右缘外 9px 热区</b>按下拖到目标卡片松开 = a→b 前置边（会防自环/重复）<br>
+ <b>删依赖</b>：点边选中（高亮）后按 Del；或右键边→删除依赖<br>
+ <b>右键菜单</b>：选中任务右键=批量改状态（7 态）/✎编辑/✂拆解为子任务/🗑删除/复制 id；空白右键=新建任务<br>
+ <b>认领（AI 调度接口）</b>：CLI <span style="font-family:var(--mono)">python tools/deptask/gen.py claim &lt;id&gt; --by &lt;AI名&gt;</span>
+ ——认领后卡片 ◉agent 色边框呼吸+工位占用边；done 完成日志入底栏<br>
+ <b>✂ 拆解</b>：策划 AI 拆解入口——右键任务→拆解为子任务，表单预填前置=父任务、id 自动编号<br>
+ <b>编辑闭环</b>：改状态/连边/新建后节点右上角亮●角标——点「⬇ 导出源」下载完整 txt，
+ 覆盖 docs/项目/任务依赖图.txt 后跑 <b>python tools/deptask/gen.py --check</b>（有错误禁派活）<br>
+ <b>快捷键</b>：N 新建 · F 适配 · T 塔台巡航 · G 泳道带重排 · L 活跃面 · D 底栏折叠 · C 关键路径 · R 就绪集 · 1-6 切视图<br>
+ <b>底栏</b>（Tab 键折叠）：▦运行图=泳道带×时间的任务条（火车运行图：滚轮缩放/拖拽平移/点条跳主图，
+ 运行中条=右缘琥珀光标，描边色=认领 agent）· ≡调度日志=事件流（悬停行联动主图高亮）<br>
+ <b>vbar 工具条</b>：布局（▦泳道带/⟲交叉最小）· 状态七态筛选 · ◌微任务/✓完成区显隐 · 数据源（全部/真实/SIM）· 缩放组 · ✈塔台巡航（镜头 3.2s/站轮巡已认领任务）<br>
+ <b>调度 chips</b>：✓校验 / 🚦可派（就绪集高亮）/ 🛤关键路径（最长链琥珀蚂蚁线）<br>
+ <b>泳道胶囊</b>：单击=聚拢该线（前沿列左/后沿列右，再点退出且坐标不丢）· Alt+单击=显隐<br>
+ 点节点=详情（前置/被依赖/关联文档可点跳转）· 悬停=高亮上下游依赖链 · 双击节点=居中放大<br>
+ 右下小地图=点击/拖动跳转 · 拖分割墙=右区整体平移（节点只有变完成才能过墙）<br>
+ <span style="color:var(--sub)">布局引擎 dagre（mermaid 同款）+ litegraph 式端口贝塞尔 ·
+ 源文件一行一记录语法见 任务依赖图.txt 头注释</span>
+</div></div>
+<canvas id="cv"></canvas>
+<canvas id="mini" width="180" height="120"></canvas>
+<div id="cfoot"><span id="cfL"></span><span id="cfR" style="margin-left:auto"></span></div>
+<script>/*__DAGRE__*/</script>
+<script>const DATA=/*__DATA__*/null;</script>
+<script>
+/*__APP__*/
+</script></body></html>

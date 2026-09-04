@@ -92,6 +92,7 @@ def gen_all(out_dir):
           _mix(_noise(0.05, 0.5, lp=2500), _tone(196, 0.09, 0.4, decay=0.03)))
     _save(os.path.join(out_dir, "harvest_gain.wav"), _tone(1318.5, 0.16, 0.35, decay=0.05))
     _save(os.path.join(out_dir, "quest_done.wav"), _seq([(A5, 1), (1174.7, 1.8)], 0.1, gap=0.015))
+    _save(os.path.join(out_dir, "ui_hover.wav"), _tone(880, 0.04, 0.16, decay=0.015))
 
 
 if __name__ == "__main__":

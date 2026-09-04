@@ -214,6 +214,7 @@ const SFX_EVENTS := {
 	"harvest_hit":        "res://assets/audio/sfx/harvest_hit.wav",
 	"harvest_gain":       "res://assets/audio/sfx/harvest_gain.wav",
 	"quest_done":         "res://assets/audio/sfx/quest_done.wav",
+	"ui_hover":           "res://assets/audio/sfx/ui_hover.wav",
 }
 
 ## 按语义事件名播放。资产未就位时静默跳过（print_verbose，不刷警告）。

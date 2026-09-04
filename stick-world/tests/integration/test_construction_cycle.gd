@@ -1,7 +1,9 @@
 extends Node
 ## 集成测试：建造循环（选址→派工→建造→完工→注册）。
 ## fixture：真 village_a.tscn + ConstructionManager，不用 GameRoot。
-## 用例间共享 fixture（_map/_cm 惰性初始化一次），但各用例断言独立主题。
+## 用例间共享 fixture（_map/_cm 惰性初始化一次），但各用例断言独立主题；
+## 用例自清理：开工不收尾的项目须 cancel（try_assign 按列表序先到先得，
+## PLANNED 残留项目会劫持后续用例派工），工人用毕注销，测试实体用毕移除。
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -84,6 +86,32 @@ func _worker() -> Node:
 	return w
 
 
+## 清理用例残留的未完工项目（用例间共享 _cm 夹具的顺序依赖防护）。
+## WorkCrewAssigner.try_assign 按 _projects 列表序先到先得派工
+## （work_crew_assigner.gd try_assign），前一用例开工后不收尾的 PLANNED 项目
+## 会劫持后一用例的 try_assign（工人被派去建残留项目而非本用例项目）。
+## 经 assigner 黑盒取项目对象：注册一次性工人派工即得；
+## 调用方须保证此刻该残留项目是唯一接受派工的项目（前序用例均已清理）。
+func _cancel_leftover_project(project_id: String) -> void:
+	if project_id.is_empty():
+		_runner.assert_true(false, "清理失败：project_id 为空")
+		return
+	var worker := _worker()
+	_cm.register_worker(worker)
+	if not _cm.try_assign_worker(worker):
+		_runner.assert_true(false, "清理失败：无项目可派工（应派到 %s）" % project_id)
+		_cm.unregister_worker(worker)
+		return
+	var project: ScriptConstructionProject = _cm.get_assigner().get_worker_project(worker) as ScriptConstructionProject
+	if project == null or project.project_id != project_id:
+		var got: String = project.project_id if project != null else "null"
+		_runner.assert_true(false, "清理失败：try_assign 派到 %s 而非 %s（前序用例残留未清？）" % [got, project_id])
+		_cm.unregister_worker(worker)
+		return
+	project.cancel()
+	_cm.unregister_worker(worker)
+
+
 func _test_no_map() -> void:
 	var cm := ScriptConstructionManager.new()
 	var r: Dictionary = cm.start_construction_at("r1", "placeholder", 12)
@@ -121,6 +149,8 @@ func _test_full_cycle() -> void:
 	st = _cm.get_project_state(project_id)
 	_runner.assert_equal(st.get("state", -1), ScriptConstructionProject.State.OPERATIONAL, "完工后应 OPERATIONAL")
 	_runner.assert_equal(st.get("progress", 0.0), 1.0, "进度应为 1")
+	# 清理：完工后工人回空闲池，注销防残留（残留空闲工人会污染后续用例的派工前提）
+	_cm.unregister_worker(worker)
 
 
 func _test_insufficient_resources() -> void:
@@ -150,20 +180,31 @@ func _test_resources_consumed() -> void:
 	_runner.assert_equal(fake.consumed_total, 15.0, "应按成本扣减 wood10+stone5=15，实际: %s" % fake.consumed_total)
 	_cm.set_resources_api(null)
 	_cm.clear_building_def("placeholder")
+	# 清理：本用例开工的项目不收尾会以 PLANNED 残留（接受派工），
+	# 劫持后续用例的 try_assign（按列表序先到先得）
+	_cancel_leftover_project(str(r.get("project_id", "")))
 
 
 func _test_building_registry() -> void:
 	await _ensure_setup()
-	# 已通过 _test_full_cycle 完工一栋（cell_x=14），这里再走一遍完整循环验证登记
+	# 本用例自建项目验证登记（不依赖 _test_full_cycle 的残留建筑满足断言）
 	var start: Dictionary = _cm.start_construction_at("r1", "placeholder", 30)
 	_runner.assert_true(start.get("ok", false), "开工应成功: %s" % start.get("error", ""))
+	var project_id: String = str(start.get("project_id", ""))
 	var worker := _worker()
 	_cm.register_worker(worker)
 	_runner.assert_true(_cm.try_assign_worker(worker), "派工应成功")
 	var project: RefCounted = _cm.get_assigner().get_worker_project(worker)
 	_runner.assert_not_null(project, "工人应有项目")
+	# 顺序依赖防护：try_assign 按项目列表序先到先得，若前序用例残留
+	# PLANNED 项目，工人会被派去建残留项目而非本用例项目（曾发生：
+	# 资源/实体阻挡用例的残留项目劫持派工，完工的是残留项目）
+	if project != null:
+		_runner.assert_equal(str(project.get("project_id")), project_id, "工人应派到本用例项目")
 	project.deliver_material(1.0)
 	project.add_build_progress(float(project.total_work))
+	var my_state: Dictionary = _cm.get_project_state(project_id)
+	_runner.assert_equal(my_state.get("state", -1), ScriptConstructionProject.State.OPERATIONAL, "本用例项目应完工登记")
 	var buildings: Array = _cm.get_buildings_in_region("r1")
 	_runner.assert_true(buildings.size() >= 1, "应有已完工建筑登记")
 	var found: bool = false
@@ -173,6 +214,8 @@ func _test_building_registry() -> void:
 			found = true
 			break
 	_runner.assert_true(found, "至少一栋建筑为 OPERATIONAL")
+	# 清理：工人注销防残留
+	_cm.unregister_worker(worker)
 
 
 func _test_entity_blocking() -> void:
@@ -202,6 +245,10 @@ func _test_entity_blocking() -> void:
 	await get_tree().physics_frame
 	var r3: Dictionary = _cm.spawn_operational_building("placeholder", cell_x, 2)
 	_runner.assert_true(r3.get("ok", false), "实体离开后应可放置: %s" % r3.get("error", ""))
+	# 清理：r4 开工验证产生的项目以 PLANNED 残留（接受派工），取消之防劫持
+	# 后续用例的 try_assign；测试实体也移出地图，不留共享夹具残留
+	_cancel_leftover_project(str(r4.get("project_id", "")))
+	e.queue_free()
 
 
 func _test_escape_stuck() -> void:
@@ -239,3 +286,5 @@ func _test_escape_stuck() -> void:
 	var map_right: float = float(_map.map_right) if "map_right" in _map else 8192.0
 	_runner.assert_true(e.global_position.x >= -50.0 and e.global_position.x <= map_right + 50.0,
 		"脱困位置应在地图范围内，x=%.0f" % e.global_position.x)
+	# 清理：测试实体移出共享夹具（地图），不留残留实体给后续用例
+	e.queue_free()

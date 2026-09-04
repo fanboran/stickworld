@@ -87,6 +87,28 @@ func _unpossess_player() -> void:
 			e.set_possessed(false)
 
 
+## 重置单位瞬态（用例边界防残留）：清残余速度 / AI 移动分量，取消附身。
+## 不传 list 时重置全部测试单位。用于消除"前一用例的移动/击退/附身状态
+## 泄漏进后一用例"的顺序依赖（先例：test_melee_combat.gd _test_cooldown——
+## 位置/速度须在等待上一用例效果落地后最后确定）。
+func reset_units(list: Array = []) -> void:
+	var targets: Array = list if not list.is_empty() else units
+	for u in targets:
+		if u == null or not is_instance_valid(u):
+			continue
+		# AI 移动分量清零（公开方法；无该方法时退回白盒直写）
+		if u.has_method("ai_stop"):
+			u.ai_stop()
+		elif u.get("_ai_move_dir") != null:
+			u.set("_ai_move_dir", Vector2.ZERO)
+		# 残余速度清零（CharacterBody2D.velocity）
+		if "velocity" in u:
+			u.velocity = Vector2.ZERO
+		# 取消附身（附身单位不受 AI 驱动，会改变后一用例的跟随/攻击前提）
+		if u.has_method("set_possessed"):
+			u.set_possessed(false)
+
+
 ## 包含指定下标单位的最小世界矩形（带 padding）
 func rect_for_units(indices: Array, padding: float = 25.0) -> Rect2:
 	var min_x: float = INF

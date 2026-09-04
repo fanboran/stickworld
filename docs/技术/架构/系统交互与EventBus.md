@@ -83,6 +83,7 @@
 |------|------|--------|--------|----------|
 | `selection_changed` | unit_ids: Array | SelectionSystem | UI | 框选变化 |
 | `squad_created` | squad_id: String, unit_ids: Array | FormationSystem | UI、Organization | 编队创建 |
+| `quest_advanced` | quest_id: String | DemoQuest（world） | Construction UI | Demo 阶段目标推进（建造目标激活时按钮呼吸强调） |
 | `order_issued` | order_type: int, target_squad_id: String, source_tier: int | TacticalOrders | UI、Units | 号令下达（source_tier=发令层级，0=玩家直接指挥） |
 | `commander_assigned` | squad_id: String, unit_id: int | FormationSystem | UI | 任命指挥官 |
 

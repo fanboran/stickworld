@@ -102,6 +102,9 @@ func _advance() -> void:
 		return
 	var q: Dictionary = _quests[_index]
 	_panel.show_quest(String(q.title), String(q.desc), _progress_text(q))
+	if EventBus != null and EventBus.has_signal("quest_advanced"):
+		EventBus.quest_advanced.emit(String(q.id))
+	_update_battle_arrow(String(q.id))
 	# 采集类目标推进时立即检查一次（乱序期间可能已采够）
 	if String(q.id) == "harvest" and _quest_progress(q) >= float(q.target):
 		_complete_current()
@@ -189,6 +192,51 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 
 func _is_current(quest_id: String) -> bool:
 	return _index >= 0 and _index < _quests.size() and String(_quests[_index].id) == quest_id
+
+
+# ─────────────────────────────── 战场方向指示 ────────────────────────────────
+
+## 战斗目标激活时屏幕右缘呼吸箭头（"向右行军去战场"的空间引导）
+var _battle_arrow: Control = null
+
+func _update_battle_arrow(quest_id: String) -> void:
+	if quest_id == "battle":
+		_show_battle_arrow()
+	else:
+		_hide_battle_arrow()
+
+func _show_battle_arrow() -> void:
+	if _battle_arrow != null and is_instance_valid(_battle_arrow):
+		return
+	if _ui_root == null:
+		return
+	_battle_arrow = Control.new()  # 非 UI 根，纯承载容器（子节点自理 anchor）
+	_battle_arrow.name = "BattleArrow"
+	_battle_arrow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_battle_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lbl := Label.new()
+	lbl.text = "▶ 战场"
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.62, 0.3))
+	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	lbl.add_theme_constant_override("outline_size", 5)
+	lbl.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	lbl.offset_left = -110.0
+	lbl.offset_right = -24.0
+	lbl.offset_top = -20.0
+	lbl.offset_bottom = 20.0
+	_battle_arrow.add_child(lbl)
+	var tw := lbl.create_tween().set_loops()
+	tw.tween_property(lbl, "modulate:a", 0.35, 0.7)
+	tw.tween_property(lbl, "modulate:a", 1.0, 0.7)
+	if not _ui_root.add_to_slot("HudOverlay", _battle_arrow):
+		_battle_arrow.queue_free()
+		_battle_arrow = null
+
+func _hide_battle_arrow() -> void:
+	if _battle_arrow != null and is_instance_valid(_battle_arrow):
+		_battle_arrow.queue_free()
+	_battle_arrow = null
 
 
 # ─────────────────────────────── 胜利结算 ────────────────────────────────

@@ -77,6 +77,9 @@ const _COST_FIELD_ZH: Dictionary = {
 
 ## 由 GameRoot 调用，注入引用并构建 UI。
 func setup(game_root: Node) -> void:
+	# Demo 引导：建造目标激活时按钮呼吸高亮（quest_advanced 信号驱动）
+	if EventBus != null and EventBus.has_signal("quest_advanced"):
+		EventBus.quest_advanced.connect(_on_quest_advanced)
 	# 始终接收输入（即使游戏暂停，建造菜单仍可取消）
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_process_input(true)
@@ -516,3 +519,23 @@ func _get_mouse_world_y() -> float:
 func _show_notify(msg: String) -> void:
 	if EventBus != null and EventBus.has_signal("ui_notification"):
 		EventBus.ui_notification.emit("建造", msg, "info")
+
+
+# ─────────────────────────────── Demo 引导强调 ────────────────────────────────
+
+var _pulse_tween: Tween = null
+
+func _on_quest_advanced(quest_id: String) -> void:
+	_stop_build_pulse()
+	if quest_id != "build" or _toggle_btn == null or not is_instance_valid(_toggle_btn):
+		return
+	_pulse_tween = _toggle_btn.create_tween().set_loops()
+	_pulse_tween.tween_property(_toggle_btn, "modulate", Color(1.35, 1.15, 0.8), 0.6)
+	_pulse_tween.tween_property(_toggle_btn, "modulate", Color.WHITE, 0.6)
+
+func _stop_build_pulse() -> void:
+	if _pulse_tween != null and _pulse_tween.is_valid():
+		_pulse_tween.kill()
+		_pulse_tween = null
+	if _toggle_btn != null and is_instance_valid(_toggle_btn):
+		_toggle_btn.modulate = Color.WHITE

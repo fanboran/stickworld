@@ -4,7 +4,7 @@ extends Node2D
 ##
 ## 挂在 SkyDecor 星空层之上、山层之下（factor 0.35，比山更远的扫动速率，
 ## 会被山脊短暂遮挡——纵深感的免费细节）。扑翼为两段折线的正弦摆动，
-## 夜间淡出（鸟归巢）。debug_spawn_flock() 供验证脚本确定性触发。
+## 夜间淡出（鸟归巢）。spawn_flock() 供验证脚本确定性触发。
 
 ## 视差因子（SkyDecor 注册用）
 const FACTOR: float = 0.35

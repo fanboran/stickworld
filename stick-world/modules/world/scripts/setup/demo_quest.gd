@@ -101,6 +101,8 @@ func _bind_signals() -> void:
 			EventBus.squad_created.connect(_on_squad_created)
 		if EventBus.has_signal("battle_ended"):
 			EventBus.battle_ended.connect(_on_battle_ended)
+		if EventBus.has_signal("battle_started"):
+			EventBus.battle_started.connect(_on_battle_started)
 
 
 # ─────────────────────────────── 目标推进 ────────────────────────────────
@@ -208,6 +210,18 @@ func _show_battle_banner(victory: bool) -> void:
 		if not _ui_root.add_to_slot("HudOverlay", banner):
 			return
 	banner.show_banner(victory)
+
+
+## 遭遇战预告横幅（红字，短暂）
+func _on_battle_started(_battle_id: String) -> void:
+	if _ui_root == null:
+		return
+	var banner: Control = _ui_root.get_node_or_null("HudOverlay/BattleBanner")
+	if banner == null:
+		banner = UIKit.full_rect(_BattleBannerScript, "BattleBanner")
+		if not _ui_root.add_to_slot("HudOverlay", banner):
+			return
+	banner.show_preview()
 
 
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:

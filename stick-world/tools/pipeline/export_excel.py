@@ -5,6 +5,8 @@ export_excel.py —— 将 config/excel/*.xlsx 导出为 Godot .tres 资源文�
 用法:
     python tools/pipeline/export_excel.py              # 导出所有
     python tools/pipeline/export_excel.py --dry-run    # 只校验不导出
+    python tools/pipeline/export_excel.py --yes        # 有验证错误时跳过阻断，强制导出
+    python tools/pipeline/export_excel.py -y           # 同 --yes（短参数）
 
 Excel 格式约定:
     - 第 1 行: 英文字段名（.tres 的键）
@@ -13,9 +15,10 @@ Excel 格式约定:
 
 导出行为约定:
     - 存在验证错误（空 id / 重复 id / 全空行 / 必填列缺失 / 引用悬空）时
-      默认拒绝导出，退出码 1，须修复数据后重试
-    - id 为空的数据行永远不会写入 .tres（防 {id: null} 垃圾行进产物）；
-      全空行同样只在报错中出现，从不写入产物
+      默认拒绝导出，退出码 1，须修复数据后重试；
+      --yes / -y 可跳过阻断强制导出（供自动化脚本使用）
+    - id 为空的数据行永远不会写入 .tres（防 {id: null} 垃圾行进产物），
+      --yes 强制导出时同样跳过；全空行同样只在报错中出现，从不写入产物
     - 重导出时保留目标 .tres 头部已有的 uid="uid://..."（若存在）
 
 输出:
@@ -482,8 +485,12 @@ def find_excel_files():
     return sorted(EXCEL_DIR.glob("*.xlsx"))
 
 
-def export_all(dry_run=False):
-    """主入口：扫描、解析、验证、导出。"""
+def export_all(dry_run=False, assume_yes=False):
+    """主入口：扫描、解析、验证、导出。
+
+    assume_yes: --yes/-y 非交互确认，存在验证错误时跳过阻断强制导出
+    （空 id 行仍会被跳过，不写入产物）。
+    """
     import openpyxl
 
     excel_files = find_excel_files()
@@ -578,10 +585,15 @@ def export_all(dry_run=False):
         return len(all_errors) == 0
 
     if all_errors:
-        # 硬错误默认拒绝导出：垃圾行（如 {id: null}）曾借此混入产物
-        print(f"\n❌ 存在 {len(all_errors)} 个验证错误，已拒绝导出。")
-        print("   请修复上述数据后重新运行。")
-        return False
+        if assume_yes:
+            print(f"\n⚠️  已指定 --yes：跳过 {len(all_errors)} 个验证错误的阻断，强制导出"
+                  f"（空 id 行仍会被跳过）")
+        else:
+            # 硬错误默认拒绝导出：垃圾行（如 {id: null}）曾借此混入产物
+            print(f"\n❌ 存在 {len(all_errors)} 个验证错误，已拒绝导出。")
+            print("   请修复上述数据后重新运行；如确认要忽略错误强制导出，"
+                  "请使用 --yes（或 -y）。")
+            return False
 
     # ── 第三遍：导出 .tres ──
     print(f"\n{'=' * 60}")
@@ -641,17 +653,22 @@ def export_all(dry_run=False):
 # ---------------------------------------------------------------------------
 
 def main():
-    dry_run = "--dry-run" in sys.argv
+    args = sys.argv[1:]
+    dry_run = "--dry-run" in args
+    assume_yes = "--yes" in args or "-y" in args
 
     print("=" * 60)
     print("  stick-world Excel → .tres 导出工具")
     print("=" * 60)
     print(f"  Excel 目录: {EXCEL_DIR}")
     print(f"  输出目录:   {CONFIG_DIR}")
-    print(f"  模式:       {'干跑（只校验）' if dry_run else '正式导出'}")
+    mode = "干跑（只校验）" if dry_run else "正式导出"
+    if assume_yes:
+        mode += "（--yes 强制）"
+    print(f"  模式:       {mode}")
     print("=" * 60)
 
-    success = export_all(dry_run=dry_run)
+    success = export_all(dry_run=dry_run, assume_yes=assume_yes)
     sys.exit(0 if success else 1)
 
 

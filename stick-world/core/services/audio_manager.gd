@@ -233,7 +233,9 @@ func play_event(event_name: String) -> void:
 func _wire_event_bus() -> void:
 	if not EventBus or not EventBus.has_signal("battle_started"):
 		return
-	EventBus.game_started.connect(func() -> void: play_event("game_started"))
+	EventBus.game_started.connect(func() -> void:
+		play_event("game_started")
+		play_bgm("res://assets/audio/bgm/ambient_pad.wav"))
 	EventBus.game_saved.connect(func(_slot: int) -> void: play_event("game_saved"))
 	EventBus.battle_started.connect(func(_battle_id: String) -> void: play_event("battle_started"))
 	EventBus.battle_ended.connect(func(_battle_id: String, victory: bool) -> void:

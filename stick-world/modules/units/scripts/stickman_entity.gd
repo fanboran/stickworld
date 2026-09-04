@@ -292,6 +292,8 @@ func _ready() -> void:
 		var se: Node = ScriptStatusEffects.new()
 		se.name = "StatusEffects"
 		add_child(se)
+	# 接触阴影（Demo 打磨：脚底椭圆软阴影，Terraria 式落地感；纯视觉 z 垫底）
+	_spawn_contact_shadow()
 	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
 	_apply_balance_data()
 	# 获取 AIController 子节点（§7.1）
@@ -778,6 +780,27 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 
 
 # ─────────────────────────────── 渲染同步 ────────────────────────────────
+
+## 脚底接触阴影：径向渐变纹理压扁为椭圆，跟随 foot_offset（体型缩放同步）
+func _spawn_contact_shadow() -> void:
+	var spr := Sprite2D.new()
+	spr.name = "ContactShadow"
+	var tex := GradientTexture2D.new()
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	tex.width = 64
+	tex.height = 64
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0, 0, 0, 0.34))
+	grad.set_color(1, Color(0, 0, 0, 0.0))
+	tex.gradient = grad
+	spr.texture = tex
+	spr.scale = Vector2(0.9, 0.26)  # 压成椭圆
+	spr.position = Vector2(0.0, foot_offset + 2.0)
+	spr.z_index = -2  # 垫在身体与地图装饰之下
+	add_child(spr)
+
 
 func _apply_scale() -> void:
 	if rig == null:

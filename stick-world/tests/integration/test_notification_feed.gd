@@ -94,8 +94,8 @@ func _test_global_hud_route() -> void:
 	_runner.assert_equal(_feed.visible_count(), expected,
 			"GlobalHUD 战斗开始通知应经 EventBus 进入 feed（满容量时挤掉最旧）")
 	var l: Label = _label_of(_feed.visible_count() - 1)
-	_runner.assert_true(String(l.text).contains("一场战斗开始了"),
-			"通知内容应为战斗开始文案")
+	_runner.assert_true(String(l.text).contains("已自动暂停"),
+			"通知内容应为战斗开始+自动暂停教学文案")
 
 
 func _test_auto_expire() -> void:

@@ -199,18 +199,21 @@ func _restore_master() -> void:
 
 # ─────────────────────────────── SFX 事件框架（2026-08-22）────────────────────────────────
 
-## 语义化事件 → 音效资产映射表（PLACEHOLDER：项目尚无音频文件，路径为约定占位；
-## 资产到位后按此表放入 res://assets/audio/sfx/ 即生效，调用点零改动）。
-## 替换清单见 docs/项目/待办事项.md「PLACEHOLDER 素材替换」。
+## 语义化事件 → 音效资产映射表。资产由 tools/ai/gen_sfx.py 程序化合成（WAV），
+## 按表放入 res://assets/audio/sfx/ 即生效，调用点零改动。
 const SFX_EVENTS := {
-	"ui_click":           "res://assets/audio/sfx/ui_click.ogg",
-	"ui_confirm":         "res://assets/audio/sfx/ui_confirm.ogg",
-	"game_started":       "res://assets/audio/sfx/game_started.ogg",
-	"game_saved":         "res://assets/audio/sfx/game_saved.ogg",
-	"build_complete":     "res://assets/audio/sfx/build_complete.ogg",
-	"battle_started":     "res://assets/audio/sfx/battle_started.ogg",
-	"battle_ended_win":   "res://assets/audio/sfx/battle_ended_win.ogg",
-	"battle_ended_lose":  "res://assets/audio/sfx/battle_ended_lose.ogg",
+	"ui_click":           "res://assets/audio/sfx/ui_click.wav",
+	"ui_confirm":         "res://assets/audio/sfx/ui_confirm.wav",
+	"game_started":       "res://assets/audio/sfx/game_started.wav",
+	"game_saved":         "res://assets/audio/sfx/game_saved.wav",
+	"build_complete":     "res://assets/audio/sfx/build_complete.wav",
+	"battle_started":     "res://assets/audio/sfx/battle_started.wav",
+	"battle_ended_win":   "res://assets/audio/sfx/battle_ended_win.wav",
+	"battle_ended_lose":  "res://assets/audio/sfx/battle_ended_lose.wav",
+	# Demo 冲刺新增（tools/ai/gen_sfx.py 程序化合成）
+	"harvest_hit":        "res://assets/audio/sfx/harvest_hit.wav",
+	"harvest_gain":       "res://assets/audio/sfx/harvest_gain.wav",
+	"quest_done":         "res://assets/audio/sfx/quest_done.wav",
 }
 
 ## 按语义事件名播放。资产未就位时静默跳过（print_verbose，不刷警告）。

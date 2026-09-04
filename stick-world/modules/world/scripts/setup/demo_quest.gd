@@ -123,6 +123,8 @@ func _complete_current() -> void:
 	if _panel != null:
 		_panel.mark_done(String(q.title))
 	_notify("目标完成", "✓ %s" % String(q.title))
+	if AudioManager != null:
+		AudioManager.play_event("quest_done")
 	quest_completed.emit(String(q.id))
 	_advance()
 
@@ -193,6 +195,8 @@ func _show_victory() -> void:
 	if not _ui_root.add_to_slot("ModalOverlay", overlay):
 		overlay.queue_free()
 		return
+	if AudioManager != null:
+		AudioManager.play_event("battle_ended_win")
 	var elapsed_sec: float = (Time.get_ticks_msec() - _start_msec) / 1000.0
 	var minutes: int = int(elapsed_sec) / 60
 	var seconds: int = int(elapsed_sec) % 60

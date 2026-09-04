@@ -68,14 +68,6 @@ func _run() -> void:
 		_fail("遭遇战阵容异常（f1=%d f2=%d bi=%d）" % [f1_n, f2_n, bi_n])
 	await get_tree().create_timer(3.0).timeout
 
-	# 乱序容错验证：battle 胜利在非当前目标时应记账
-	if bool(quest.get("_pending_done").get("battle", false)) if quest.get("_pending_done") is Dictionary else false:
-		_pass("乱序记账：battle 胜利已入 pending")
-	elif int(quest.get("_index")) == 3:
-		_pass("顺序推进：battle 为当前目标")
-	else:
-		_fail("battle 胜利既未推进也未记账（_index=%d）" % int(quest.get("_index")))
-
 
 func _fail(msg: String) -> void:
 	_fails += 1

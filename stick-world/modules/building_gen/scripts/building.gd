@@ -118,14 +118,21 @@ func _ready() -> void:
 
 ## 从建筑定义 Dictionary 应用数据驱动字段
 func apply_building_def(def: Dictionary) -> void:
-	_interior_mode = int(def.get("interior_mode", 0))
-	mega_interior_map_id = String(def.get("mega_interior_map_id", ""))
+	_interior_mode = int(_field(def, "interior_mode", 0))
+	mega_interior_map_id = String(_field(def, "mega_interior_map_id", ""))
 	# 阶段 F：城墙字段
-	wall_tier = int(def.get("wall_tier", 0))
-	can_stand_on = bool(def.get("can_stand_on", false))
-	is_gate = bool(def.get("is_gate", false))
-	max_health = float(def.get("max_hp", 100.0))
+	wall_tier = int(_field(def, "wall_tier", 0))
+	can_stand_on = bool(_field(def, "can_stand_on", false))
+	is_gate = bool(_field(def, "is_gate", false))
+	max_health = float(_field(def, "max_hp", 100.0))
 	health = max_health
+
+
+## 配置字段安全读取：Excel 空单元格经管线导出为 null，null 强转构造会抛运行时错，
+## 统一回落到默认值
+static func _field(def: Dictionary, key: String, default: Variant) -> Variant:
+	var v: Variant = def.get(key)
+	return default if v == null else v
 
 
 # ─────────────────────────────── 子节点查找 ────────────────────────────────

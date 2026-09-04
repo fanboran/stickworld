@@ -21,10 +21,13 @@ enum ResourceType {
 
 var _is_depleted: bool = false
 var _debug_label: Label = null
+var _body_rect: ColorRect = null
+var _initial_amount: int = 0
 
 
 func _ready() -> void:
 	add_to_group("resource_node")
+	_initial_amount = maxi(amount, 1)
 	_apply_visual()
 	# 2026-08 修复依赖反转：经 EventBus 订阅调试可见性（生产代码不再依赖 debug_gui autoload）
 	if EventBus != null and EventBus.has_signal("debug_visibility_changed"):
@@ -49,6 +52,7 @@ func _apply_visual() -> void:
 	rect.size = Vector2(node_size, node_size)
 	rect.position = Vector2(-node_size * 0.5, -node_size * 0.5)
 	add_child(rect)
+	_body_rect = rect
 	# 调试标签：显示资源类型名（F3 开关控制）
 	_debug_label = Label.new()
 	_debug_label.text = _get_type_name()
@@ -64,10 +68,41 @@ func harvest(qty: int) -> int:
 		return 0
 	var actual: int = mini(qty, amount)
 	amount -= actual
+	_play_harvest_feedback(actual)
 	if amount <= 0:
 		_is_depleted = true
 		queue_free()
 	return actual
+
+
+## 采集即时反馈：挤压弹跳 + 飘字 + 剩余量渐隐（GDD 核心循环"采集成功的微奖励"）
+func _play_harvest_feedback(gained: int) -> void:
+	if gained > 0:
+		_spawn_gain_label(gained)
+		var tween := create_tween()
+		tween.tween_property(self, "scale", Vector2(1.18, 0.82), 0.08)
+		tween.tween_property(self, "scale", Vector2.ONE, 0.14)
+	if _body_rect != null:
+		_body_rect.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
+
+
+## 资源点上方飘出 "+N 资材" 的增益数字（0.8s 上浮淡出后自毁）
+func _spawn_gain_label(gained: int) -> void:
+	var label := Label.new()
+	label.text = "+%d %s" % [gained, _get_type_name()]
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Color(1.0, 0.93, 0.65))
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	label.add_theme_constant_override("outline_size", 4)
+	label.position = Vector2(-36, -44)
+	label.size = Vector2(72, 20)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(label)
+	var tween := label.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position:y", -96.0, 0.8).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, 0.6).set_delay(0.25)
+	tween.chain().tween_callback(label.queue_free)
 
 
 func is_depleted() -> bool:
@@ -81,6 +116,15 @@ func _get_type_name() -> String:
 		ResourceType.STONE: return "石"
 		ResourceType.METAL: return "铁"
 	return "?"
+
+
+## 交互提示用：资源类型完整中文名
+func get_display_name() -> String:
+	match resource_type:
+		ResourceType.WOOD: return "木材"
+		ResourceType.STONE: return "石料"
+		ResourceType.METAL: return "铁矿"
+	return "资源"
 
 
 ## 获取对应的资源 ID

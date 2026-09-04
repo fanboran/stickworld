@@ -118,6 +118,10 @@ func _mount_sky_decor() -> void:
 	var motes := AmbientMotes.new()
 	motes.name = "AmbientMotes"
 	add_child(motes)
+	# 夜间萤火虫（星月在天、萤火在野——昼夜视觉语言的地面层）
+	var flies := Fireflies.new()
+	flies.name = "Fireflies"
+	add_child(flies)
 
 
 ## 实例化并挂载子组件（TerrainRenderer / ResourceGen）。

@@ -635,7 +635,9 @@ def export_all(dry_run=False, assume_yes=False):
             uid=existing_uid,
         )
 
-        with open(output_path, "w", encoding="utf-8") as f:
+        # newline="\n"：强制 LF 换行（.gitattributes 要求 *.tres 为 LF），
+        # 否则 Windows 文本模式写 CRLF，与仓库产物产生换行符 diff，破坏幂等导出
+        with open(output_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(tres_content)
 
         exported_count += 1

@@ -72,8 +72,9 @@
  #help b{color:var(--acc)}
  /* ── 小地图 / 缩放 ── */
  /* ── 三栏 IDE 布局（LOGIC-8 main 骨架：左岗位栏 / canvas / 右检查器） ── */
- .side{position:fixed;bottom:0;background:var(--panel);display:none;flex-direction:column;
+ .side{position:fixed;bottom:24px;background:var(--panel);display:none;flex-direction:column;
    overflow-y:auto;overflow-x:hidden;z-index:15;scrollbar-width:thin}
+ /* bottom:24px 让出 cfoot 状态条（VS Code 惯例：状态条常驻最底，侧栏不压它） */
  #sideL{left:0;width:248px;border-right:1px solid var(--line2)}
  #sideR{right:0;width:308px;border-left:1px solid var(--line2);padding:0 0 10px}
  .side .pane-head{padding:8px 12px 6px;font-size:11px;font-weight:600;color:var(--acc2);
@@ -111,8 +112,10 @@
    font-size:11.5px;line-height:1.6}
  .extStrip b{color:#a5f3fc}
  .extStrip .st{font:700 10.5px var(--mono);color:var(--amber)}
- #mini{position:fixed;left:258px;bottom:12px;border:1px solid var(--line2);background:#0a111ccc;
+ #mini{position:fixed;right:320px;bottom:32px;border:1px solid var(--line2);background:#0a111ccc;
    z-index:15;cursor:crosshair}
+ /* 小地图=右下角（React Flow MiniMap 默认 bottom-right 惯例）；right:320 避开 sideR 检查器栏，
+    bottom 让出状态条——曾左下角压 cfoot 文字又与相关项浮窗挤在一起 */
  canvas#cv{display:block;position:fixed;inset:0;cursor:crosshair}
  /* ── canvas 底部渐隐信息条（LOGIC-8 canvas-foot/wave-info 角色） ── */
  #cfoot{position:fixed;left:0;right:0;bottom:0;height:24px;display:flex;align-items:center;gap:16px;
@@ -129,6 +132,9 @@
  .dtab:hover{color:var(--txt)}
  .dtab.on{background:#16273c;color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
  #dockInfo{margin-left:auto;font:600 10px var(--mono);color:var(--dim2)}
+ #agentSel{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:4px;
+   font:500 11px system-ui,"Segoe UI",sans-serif;padding:2px 6px;outline:none;height:22px;cursor:pointer}
+ #agentSel:focus{border-color:var(--acc)}
  #dockFold{cursor:pointer;color:var(--sub);padding:2px 8px;font-size:12px}
  #dockFold:hover{color:var(--acc)}
  #dockBody{flex:1 1 auto;min-height:0;position:relative}

@@ -160,7 +160,10 @@ function drawFocusLines(){if(!focusLane||!focusLines)return;
   if(sx<-20||sx>VW+20)return;
   ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash([8,5]);
   ctx.beginPath();ctx.moveTo(sx,BAR_H);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle=color;ctx.fillText(label,sx+8,BAR_H+42);};  // 标注在 vbar 之下（曾 BAR_H+16 被工具条盖住）
+  // 文字加底衬 chip：悬浮标注在任何画布内容（节点/边/泳道框标签）上都保持可读
+  const tw=ctx.measureText(label).width;
+  ctx.fillStyle="#0a111ccc";ctx.fillRect(sx+4,BAR_H+42-13,tw+10,18);
+  ctx.fillStyle=color;ctx.fillText(label,sx+9,BAR_H+42);};  // 标注在 vbar 之下（曾 BAR_H+16 被工具条盖住）
  if(focusLines.pre!=null)draw(focusLines.pre,"#fbbf24","◤ 前沿（外部前置）");
  if(focusLines.post!=null)draw(focusLines.post,"#22d3ee","后继（外部被依赖）◢");
  ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
@@ -185,10 +188,16 @@ function drawDivide(){if(!showDivide||divideX==null)return;
  ctx.strokeStyle=divideHover?"#22d3a0":"#22d3a066";ctx.lineWidth=divideHover?2.5:1.5;
  ctx.setLineDash([10,6]);ctx.beginPath();ctx.moveTo(sx,BAR_H);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
  ctx.fillStyle="#22d3a0";fontSmall();ctx.textAlign="left";
- ctx.fillText("✂ 已完成（左）",Math.max(4,sx-110),BAR_H+42);
- ctx.fillStyle="#fbbf24";ctx.fillText("未完成（右）",sx+10,BAR_H+42);
+ // 墙标签放墙线底部：顶部标注带留给聚拢标线/塔台横幅（曾全部挤在 BAR_H+42 同层互相叠字）
+ const chip=(txt,color,dx2,dy2)=>{const tw=ctx.measureText(txt).width;
+  ctx.fillStyle="#0a111ccc";ctx.fillRect(Math.max(4,sx-110)+dx2-3,VH-64+dy2-11,tw+8,16);
+  ctx.fillStyle=color;ctx.fillText(txt,Math.max(4,sx-110)+dx2,VH-64+dy2);};
+ chip("✂ 已完成（左）","#22d3a0",0,0);
+ chip("未完成（右）","#fbbf24",122,0);
  ctx.fillStyle="#9aa7b4";ctx.font='10px sans-serif';
- ctx.fillText("⟷ 可拖动：右区整体平移·两侧独立",Math.max(4,sx-110),BAR_H+56);  // 标签在 vbar 之下（曾 BAR_H+14/28 被盖）
+ const hint="⟷ 可拖动：右区整体平移·两侧独立";
+ ctx.fillStyle="#0a111ccc";ctx.fillRect(Math.max(4,sx-110)-3,VH-48-10,ctx.measureText(hint).width+8,14);
+ ctx.fillText(hint,Math.max(4,sx-110),VH-48);
  ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
 function drawMini(){mctx.setTransform(1,0,0,1,0,0);mctx.clearRect(0,0,180,120);
  const g=graphBBox();if(!g)return;

@@ -81,6 +81,8 @@ function resize(){dpr=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;
  BAR_H=document.getElementById("bar").offsetHeight||80;  // 窄屏换行/媒体查询后顶栏高度跟随实测
  const top=BAR_H+"px";["sideL","sideR","dash"].forEach(id2=>{const el=document.getElementById(id2);
   if(el&&el.style.display!=="none")el.style.top=top;});
+ const vb=document.getElementById("vbar");  // vbar 也要跟随：曾漏同步——顶栏后长高时 vbar 停在旧 top 被顶栏压住
+ if(vb&&vb.style.display!=="none"){vb.style.top=top;const sw=sideW();vb.style.left=sw.L+"px";vb.style.right=sw.R+"px";}
  cv.width=VW*dpr;cv.height=VH*dpr;cv.style.width=VW+"px";cv.style.height=VH+"px";dirty=true;}
 addEventListener("resize",resize);resize();
 function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);

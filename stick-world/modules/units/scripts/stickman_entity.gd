@@ -521,6 +521,9 @@ func _physics_process(delta: float) -> void:
 			clear_action()
 	# 玩家交互提示（靠近仓库/工地时显示）
 	_interaction.update_hint()
+	# 按住 E 连续采集（动作锁解除后自动续作）
+	if possessed:
+		_interaction.try_hold_interact()
 
 
 # ─────────────────────────────── 玩家输入（按E / H 由交互控制器处理）────────────────────────────────

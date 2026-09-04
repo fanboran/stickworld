@@ -18,6 +18,7 @@ signal all_completed
 
 const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
 const _VictoryOverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/victory_overlay.gd")
+const _OpeningHintScript: GDScript = preload("res://modules/ui_global/scripts/overlays/opening_hint_overlay.gd")
 
 var _quests: Array = []
 var _index: int = -1
@@ -59,6 +60,11 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 	_start_msec = Time.get_ticks_msec()
 	_bind_signals()
 	_advance()
+	# 开局中央大提示（6 秒淡出/任意键关）——比通知 feed 更显眼的首次引导
+	if _ui_root != null:
+		var opening: Control = UIKit.full_rect(_OpeningHintScript, "OpeningHint")
+		if not _ui_root.add_to_slot("HudOverlay", opening):
+			opening.queue_free()
 	# 开局操作指引（30 秒反馈原则：进场 1 秒内告诉玩家基础操作）
 	_notify("欢迎来到火柴人大战略", "WASD 移动 · E 采集/交互 · Q 战斗模式 · Tab 战略图 · ESC 暂停")
 

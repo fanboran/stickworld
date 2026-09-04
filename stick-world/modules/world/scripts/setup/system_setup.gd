@@ -47,6 +47,8 @@ const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/sc
 const _BuildMenuScript: GDScript = preload("res://modules/construction/ui/build_menu.gd")
 const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_root.tscn")
 const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/debug_overlay.tscn")
+const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
+const _DemoQuestScript: GDScript = preload("res://modules/world/scripts/setup/demo_quest.gd")
 
 var _root: GameRoot
 
@@ -78,6 +80,8 @@ func setup(root: GameRoot) -> void:
 	_setup_boundary_detector()
 	_setup_game_ui()
 	_setup_build_menu()
+	# Demo 目标链最后装（deferred：需在资源初始发放之后做基线快照）
+	call_deferred("_setup_demo_quest_deferred")
 
 
 # ─────────────────────────────── UI / Debug 覆盖层装配 ────────────────────────────────
@@ -725,3 +729,23 @@ func register_debug_drawers() -> void:
 	DebugApi.register_drawer("building_names", Callable(_DebugDrawers, "draw_building_names"))
 	DebugApi.register_drawer("world_ruler", Callable(_DebugDrawers, "draw_world_ruler"))
 	DebugApi.register_drawer("entity_info", Callable(_DebugDrawers, "draw_entity_info"))
+
+
+# ─────────────────────────────── Demo 目标链装配 ────────────────────────────────
+
+## 装配求职 Demo 目标链（四阶段引导 + 胜利结算）。
+## deferred 时机：晚于 _setup_resources_api_deferred（deferred 队列 FIFO），
+## 保证初始资源已发放、DemoQuest 的采集基线快照不被初始资源污染。
+func _setup_demo_quest_deferred() -> void:
+	if _root.ui_root == null or _root._resources_api == null:
+		return
+	var panel: Control = _QuestPanelScript.new()
+	panel.name = "QuestPanel"
+	if not _root.ui_root.add_to_slot("HudOverlay", panel):
+		panel.queue_free()
+		return
+	var quest := Node.new()
+	quest.set_script(_DemoQuestScript)
+	quest.name = "DemoQuest"
+	_root.add_child(quest)
+	quest.setup(panel, _root._resources_api, _root._construction_api, _root.ui_root)

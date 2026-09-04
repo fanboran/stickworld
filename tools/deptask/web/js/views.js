@@ -107,6 +107,7 @@ function setView(v,force){const prev=curView;
  if(!showDash){const sw=sideW();vbel.style.top=BAR_H+"px";vbel.style.left=sw.L+"px";vbel.style.right=sw.R+"px";buildVbar();}
  const dkel=document.getElementById("dock");
  dkel.style.display=showDash?"none":"flex";
+ if(typeof syncOverlays==="function")syncOverlays();  // dock 显隐变化 → 小地图/浮窗抬升同步
  if(showDash){dash.style.top=BAR_H+"px";buildDash();return;}
  // 岗位视图 = 布局投影：进入时快照全图坐标 → 对可见子集重新 dagre（隐藏节点不再占位）→ 退出恢复
  // 切视图前清聚拢/关键路径残留：focusLane 的 _f 淡出标记会污染新视图
@@ -122,8 +123,8 @@ function setView(v,force){const prev=curView;
 function jumpTo(id){setView("graph");jump(id);}
 function buildVbar(){const v=document.getElementById("vbar");let h="";
  h+="<span class='lbl'>布局</span><span class='vg'>"
-  +"<button class='vt on' onclick='applyLayout(0)'>▦ 泳道带</button>"
-  +"<button class='vt' onclick='applyLayout(1)'>⟲ 交叉最小</button></span><span class='sep'></span>";
+  +"<button class='vt"+(layoutMode===0?" on":"")+"' data-lo='0' onclick='applyLayout(0)'>▦ 泳道带</button>"
+  +"<button class='vt"+(layoutMode===1?" on":"")+"' data-lo='1' onclick='applyLayout(1)'>⟲ 交叉最小</button></span><span class='sep'></span>";
  h+="<span class='lbl'>状态</span><span class='vg'>"
   +STATUS.map(function(st){return "<button class='vt"+(statusFilter.has(st)?" on":"")+"' style='border-left:3px solid "+COL[st]+"' onclick=\"toggleStatus('"+st+"')\">"+st+"</button>";}).join("")
   +"</span><span class='sep'></span>";
@@ -137,9 +138,9 @@ function buildVbar(){const v=document.getElementById("vbar");let h="";
   +"<button class='vt' onclick='fitAll()'>⤢ 适配</button>"
   +"<button class='vt' onclick='locateActive()'>⌖ 活跃面</button>"
   +"</span><span class='sep'></span><span class='lbl'>数据源</span><span class='vg' id='srcSwitch2'>"
-  +"<button class='vt on' onclick=\"setGanttSource('all')\">全部</button>"
-  +"<button class='vt' onclick=\"setGanttSource('real')\">真实</button>"
-  +"<button class='vt' onclick=\"setGanttSource('sim')\">SIM</button></span>";
+  +"<button class='vt"+(ganttSource==="all"?" on":"")+"' data-src='all' onclick=\"setGanttSource('all')\">全部</button>"
+  +"<button class='vt"+(ganttSource==="real"?" on":"")+"' data-src='real' onclick=\"setGanttSource('real')\">真实</button>"
+  +"<button class='vt"+(ganttSource==="sim"?" on":"")+"' data-src='sim' onclick=\"setGanttSource('sim')\">SIM</button></span>";
  h+="<span class='vg'><button class='vt"+(towerMode?" on":"")+"' id='towerBtn' onclick='toggleTower()' title='塔台巡航：镜头自动轮巡全部已认领任务（机场调度监控模式）'>✈ 塔台巡航</button></span>";
  v.innerHTML=h;}
 
@@ -159,14 +160,21 @@ function toggleTower(){towerMode=!towerMode;
    else{towerMode=false;const b2=document.getElementById("towerBtn");if(b2)b2.classList.remove("on");}}
   towerRAF=requestAnimationFrame(step);};
  towerLast=0;towerRAF=requestAnimationFrame(step);}
+let layoutMode=0;  // 0=泳道带 1=dagre 交叉最小（vbar 布局按钮 on 态跟随）
 function applyLayout(mode){ // 0=泳道带状 1=dagre 交叉最小化
+ layoutMode=mode||0;
  if(curView==="graph"){laneBandLayout();}else{dagreLayout();}
- rebuildView();fitAll();dirty=true;}
+ rebuildView();fitAll();
+ const vb=document.getElementById("vbar");
+ if(vb.style.display!=="none")vb.querySelectorAll("[data-lo]").forEach(b=>b.classList.toggle("on",b.dataset.lo===String(layoutMode)));
+ dirty=true;}
 function toggleStatus(st){statusFilter.has(st)?statusFilter.delete(st):statusFilter.add(st);
  buildVbar();refilter();}
 function refilter(){rebuildView();
  if(curView==="graph"){laneBandLayout();}else{dagreLayout();}
- rebuildView();fitAll();dirty=true;}
+ rebuildView();fitAll();
+ const vb=document.getElementById("vbar");   // 显隐筛选按钮的 on 态同步（此前只改数据不重绘按钮，视觉滞后）
+ if(vb.style.display!=="none"){buildVbar();}dirty=true;}
 function sideSelect(id){const n=byId[id];if(!n)return;
  sel=id;selSet=new Set([id]);selEdge=null;hi=id;showPanel(n);
  flyTo(n.px+n.cw/2,n.py+n.ch/2,Math.max(view.k,0.85));  // 特写：相机平移聚焦到该项
@@ -238,9 +246,10 @@ function buildSide(v){const L=document.getElementById("sideL");let h="";
   h+=nodes.filter(n=>n.lane==="叙事设计"&&live(n)).map(sideRow).join("")
    +nodes.filter(n=>n.lane==="玩法系统"&&/^(content_|autonomy_|idle_|god_view)/.test(n.id)&&live(n)).map(sideRow).join("");
  }else if(v==="art"){
-  const ext=byId.ext_art;
+  const ext=byId.ext_art;   // 外部通道是普通任务节点，图上可能不存在——防御避免整栏渲染崩溃
   h+=sideHead("📡 外部资产通道","采购/自制交付状态");
-  h+="<div class='extStrip'><b>ext_art 外部美术资产通道</b><br>状态：<span class='st'>"+ext.status.toUpperCase()+"</span> —— 等待外部交付（手绘贴图/音效采购）。<br>下方 P1~P7 素材替换全部挂此通道：通道不开，资产任务只能做程序侧准备。需求单=待办 PLACEHOLDER 表。</div>";
+  h+=ext?"<div class='extStrip'><b>ext_art 外部美术资产通道</b><br>状态：<span class='st'>"+String(ext.status||"—").toUpperCase()+"</span> —— 等待外部交付（手绘贴图/音效采购）。<br>下方 P1~P7 素材替换全部挂此通道：通道不开，资产任务只能做程序侧准备。需求单=待办 PLACEHOLDER 表。</div>"
+    :"<div class='extStrip'><b>ext_art 外部美术资产通道</b><br>状态：<span class='st'>未建立</span> —— 图上暂无该门节点，素材替换任务失去统一阻塞源，请在源 txt 立项 ext_art。</div>";
   h+=sideHead("🎨 素材替换清单","点击行看详情");
   h+=nodes.filter(n=>/^(asset_p|fx_directional|fx_explosion|fx_ground|fx_rain|p12_skins)/.test(n.id)).sort((a,b)=>a.id.localeCompare(b.id)).map(sideRow).join("");
   h+=sideHead("🧰 程序侧配套","材质/粒子管线");

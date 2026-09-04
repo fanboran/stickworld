@@ -3,7 +3,9 @@ function sideW(){const l=document.getElementById("sideL"),r=document.getElementB
 let flyRAF=null;
 function flyTo(wx,wy,k){ // 特写镜头：缓动飞向目标（侧栏避让后的可视中心）
  const s=sideW();k=k||view.k;
- const tx=s.L+(VW-s.L-s.R)/2-wx*k,ty=Math.max(BAR_H,VH/2-wy*k);
+ // min 钳制：仅当世界顶部会被卷到顶栏之下时才贴顶（短图防留白）。
+ // 曾用 max——目标在世界深处时镜头被钉死在图顶，跳转/塔台巡航对全图 95% 任务失效
+ const tx=s.L+(VW-s.L-s.R)/2-wx*k,ty=Math.min(BAR_H,VH/2-wy*k);
  const f={x:view.x,y:view.y,k:view.k},st=performance.now(),dur=460;
  if(flyRAF)cancelAnimationFrame(flyRAF);
  const step=ts=>{const u=Math.min(1,(ts-st)/dur),e=u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
@@ -11,15 +13,20 @@ function flyTo(wx,wy,k){ // 特写镜头：缓动飞向目标（侧栏避让后�
   if(u<1)flyRAF=requestAnimationFrame(step);};
  flyRAF=requestAnimationFrame(step);}
 function centerOn(wx,wy,k){const s=sideW();if(k)view.k=k;
- view.x=s.L+(VW-s.L-s.R)/2-wx*view.k;view.y=Math.max(BAR_H,VH/2-wy*view.k);dirty=true;}
+ view.x=s.L+(VW-s.L-s.R)/2-wx*view.k;view.y=Math.min(BAR_H,VH/2-wy*view.k);dirty=true;}
 function fitAll(){const g=graphBBox();const s=sideW();
  view.k=Math.min((VW-s.L-s.R-30)/g.w,(VH-BAR_H-40)/g.h,1.2);
  view.x=s.L+(VW-s.L-s.R-g.w*view.k)/2-g.minX*view.k;
  view.y=Math.max(BAR_H,(VH-g.h*view.k)/2)-g.minY*view.k;dirty=true;}
 function locateActive(){const act=VN.filter(n=>ACTIVE.has(n.status)||n.status==="可开工");
  const t=act.length?act:VN;
- const xs=t.map(n=>n.px+n.cw/2),ys=t.map(n=>n.py+n.ch/2);
- centerOn((Math.min(...xs)+Math.max(...xs))/2,(Math.min(...ys)+Math.max(...ys))/2,1);}
+ // 中位数锚定+就近任务：活跃任务常散布全图（dagre 高图可达数千 px），
+ // 包围盒中心会落在稀疏空档——首屏"只有线没有节点"。中位点附近的活跃任务才是真正的任务区
+ const med=arr=>{const s=arr.slice().sort((a,b)=>a-b);return s.length?s[s.length>>1]:0;};
+ const mx=med(t.map(n=>n.px+n.cw/2)),my=med(t.map(n=>n.py+n.ch/2));
+ let best=t[0],bd=Infinity;
+ t.forEach(n=>{const d=(n.px+n.cw/2-mx)**2+(n.py+n.ch/2-my)**2;if(d<bd){bd=d;best=n;}});
+ centerOn(best.px+best.cw/2,best.py+best.ch/2,1);}
 function relayout(){focusLane=null;focusLines=null;VN.forEach(n=>{if(!n.isCluster){n.x=null;n.y=null;}});
  divideX=null;laneBandLayout();rebuildView();fitAll();dirty=true;}
 let focusLane=null,focusLines=null,focusSnapshot=null;  // 快照：进入聚拢前的各节点坐标，退出时恢复（手动布局不丢）

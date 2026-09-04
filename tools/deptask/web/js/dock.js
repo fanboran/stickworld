@@ -62,8 +62,8 @@ function drawGantt(){const c=gantt;if(!c)return;
  const evs=simEvents();
  gtx.setTransform(dpr,0,0,dpr,0,0);
  const W=c.width/dpr,H=c.height/dpr;
- gtx.fillStyle="#070c14";gtx.fillRect(0,0,W,H);
- gtx.strokeStyle="#0e1725";gtx.lineWidth=1;gtx.beginPath();
+ gtx.fillStyle="#080c14";gtx.fillRect(0,0,W,H);   // 与主画布同底色（曾 #070c14，两画布底色漂移）
+ gtx.strokeStyle="#101927";gtx.lineWidth=1;gtx.beginPath();
  for(let x=0;x<W;x+=40){gtx.moveTo(x,0);gtx.lineTo(x,H);}for(let y=0;y<H;y+=40){gtx.moveTo(0,y);gtx.lineTo(W,y);}gtx.stroke();
  if(!evs.length){gtx.fillStyle="#55677f";gtx.font="12px system-ui";
   gtx.fillText("无调度数据——运行 python tools/deptask/gen.py sim --agents 6 --rounds 60 生成模拟日志",20,H/2);return;}
@@ -96,11 +96,11 @@ function drawGantt(){const c=gantt;if(!c)return;
  bandNames.forEach((l,i)=>{const y=padT+i*bandH;
   if(i%2===1){gtx.fillStyle="#0b111c";gtx.fillRect(0,y,W,bandH);}   // 隔带条纹（此前误用 band 总数 parity，要么全涂要么全不涂）
   const li=lanes.indexOf(l),lc=LANE_COL[(li<0?0:li)%LANE_COL.length];
-  gtx.fillStyle=lc+"22";gtx.fillRect(0,y,44,bandH);
+  gtx.fillStyle=lc+"22";gtx.fillRect(0,y,64,bandH);
   if(ganttHoverBand===l){gtx.fillStyle=lc+"14";gtx.fillRect(0,y,W,bandH);}
   gtx.fillStyle=lc;gtx.font="600 8.5px "+MONO;
   gtx.save();gtx.translate(8,y+bandH/2+3);
-  let lab=l;while(lab&&gtx.measureText(lab).width>36)lab=lab.slice(0,-1);  // 44px 色块内自适应截断（中文 5 字即溢出）
+  let lab=l;while(lab&&gtx.measureText(lab).width>52)lab=lab.slice(0,-1);  // 64px 色块内自适应截断（4-5 个汉字完整可读）
   gtx.fillText(lab,0,0);gtx.restore();});
  // 任务条：同带子行贪心
  const rows={};

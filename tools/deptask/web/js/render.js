@@ -93,25 +93,31 @@ function draw(){
    ctx.fillText("已完 "+n._clusterDone+"/"+n._clusterN+" · 点击展开/收起",x+11,y+h-1);}
   ctx.fillStyle="#e6edf3";fontCard();ctx.textAlign="left";
   n.lines.forEach((L,i)=>ctx.fillText(L,x+18+((n.kind==="里程碑"&&i===0)?13:0),y+23+i*17));
-  fontSmall();const st=n.claim&&n.status!=="完成"?(n.claim+" · 已认领"):(n.status+(n.exempt?" ·豁免":""));
-  const pw=ctx.measureText(st).width+12;
-  ctx.fillStyle=c+"1f";roundRect(ctx,x+9,y+h-24,pw,16,3);ctx.fill();
-  ctx.fillStyle=c;ctx.fillText(st,x+15,y+h-12);
-  if(n.tree){ctx.fillStyle="#6e7a87";ctx.fillText("⌂ "+n.tree,x+9+pw+8,y+h-12);}
   const claimed=n.claim&&n.status!=="完成"&&n.status!=="放弃";
-  if(claimed){ // 已认领：agent 色边框+呼吸辉光+角标（机场调度"航班占用"标识）
+  if(n.tier!=="微"){ // 状态胶囊（微任务单行卡自带状态字，跳过）
+   fontSmall();
+   const st=claimed?(n.claim+" · 已认领"+claimDurText(n.id)):(n.status+(n.exempt?" ·豁免":""));
+   const stCol=claimed?agentColor(n.claim):c;   // 认领态胶囊=agent 色（认领标识只此一处+边框辉光，不再画顶部角标——曾与标题/编辑点三重叠加）
+   const pw=ctx.measureText(st).width+12;
+   ctx.fillStyle=stCol+"1f";roundRect(ctx,x+9,y+h-24,pw,16,3);ctx.fill();
+   ctx.fillStyle=stCol;ctx.fillText(st,x+15,y+h-12);
+   if(n.tree){ // 树注只在不溢出时画（曾无限宽直接冲出卡外）
+    const tstr="⌂ "+n.tree,tw=ctx.measureText(tstr).width;
+    if(x+9+pw+8+tw<x+w-6){ctx.fillStyle="#6e7a87";ctx.fillText(tstr,x+9+pw+8,y+h-12);}}}
+  if(claimed){ // 已认领：agent 色边框+呼吸辉光（机场调度"航班占用"标识）
    const ac=agentColor(n.claim);
    ctx.strokeStyle=ac;ctx.lineWidth=2.2;
    const pulse=0.5+0.5*Math.sin(animT*0.07);
    ctx.shadowColor=ac;ctx.shadowBlur=3+5*pulse;
    roundRect(ctx,x,y,w,h,4);ctx.stroke();ctx.shadowBlur=0;
-   ctx.fillStyle=ac;ctx.font="700 9px "+MONO;
-   const tag="◉ "+n.claim+claimDurText(n.id);
-   ctx.fillText(tag,x+w-10-ctx.measureText(tag).width,y+14);}
-  if(n.tier==="微"){ // 微任务单行：点+名称+状态字
+   if(n.id===sel){ // 选中态外扩环：认领色内框+粉色外框并存（曾内框被认领色重绘吞掉选中指示）
+    ctx.strokeStyle="#f472b6";ctx.lineWidth=2;roundRect(ctx,x-3,y-3,w+6,h+6,7);ctx.stroke();}}
+  if(n.tier==="微"){ // 微任务单行：点+名称+状态字（认领态右移状态字让位 ◉）
    ctx.fillStyle=c;ctx.beginPath();ctx.arc(x+10,y+h/2,3,0,7);ctx.fill();
    ctx.fillStyle="#c9d4e0";fontSmall();ctx.fillText(n.name,x+18,y+16);
-   ctx.fillStyle=c;ctx.fillText(n.status,x+w-ctx.measureText(n.status).width-8,y+16);
+   const mst=(claimed?"◉ ":"")+n.status;
+   ctx.fillStyle=claimed?agentColor(n.claim):c;
+   ctx.fillText(mst,x+w-ctx.measureText(mst).width-8,y+16);
    ctx.globalAlpha=1;return;}
   if(n.id!==sel&&selSet.has(n.id)){ctx.strokeStyle="#f472b688";roundRect(ctx,x-2,y-2,w+4,h+4,9);ctx.stroke();}
   if(n.id===hover&&n.id!==sel){ctx.strokeStyle="#93c5fd";ctx.lineWidth=1.5;roundRect(ctx,x-3,y-3,w+6,h+6,9);ctx.stroke();}
@@ -127,9 +133,9 @@ function draw(){
   const txt="✈ 塔台巡航中"+(sel&&byId[sel]?" · "+sel:"");
   ctx.font="600 13px "+MONO;
   const tw=ctx.measureText(txt).width;
-  ctx.fillStyle="#0c2a33";ctx.fillRect(VW/2-tw/2-14,BAR_H+8,tw+28,30);
-  ctx.strokeStyle="#22d3ee";ctx.lineWidth=1;ctx.strokeRect(VW/2-tw/2-14,BAR_H+8,tw+28,30);
-  ctx.fillStyle="#a5f3fc";ctx.fillText(txt,VW/2-tw/2,BAR_H+28);
+  ctx.fillStyle="#0c2a33";ctx.fillRect(VW/2-tw/2-14,BAR_H+36,tw+28,30);
+  ctx.strokeStyle="#22d3ee";ctx.lineWidth=1;ctx.strokeRect(VW/2-tw/2-14,BAR_H+36,tw+28,30);
+  ctx.fillStyle="#a5f3fc";ctx.fillText(txt,VW/2-tw/2,BAR_H+56);  // 横幅在 vbar 之下（BAR_H+36 起，曾被工具条盖住上半）
   ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
  // 框选矩形 / 连线预览（屏幕层）
  if(drag&&drag.box){ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -154,7 +160,7 @@ function drawFocusLines(){if(!focusLane||!focusLines)return;
   if(sx<-20||sx>VW+20)return;
   ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash([8,5]);
   ctx.beginPath();ctx.moveTo(sx,BAR_H);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle=color;ctx.fillText(label,sx+8,BAR_H+16);};
+  ctx.fillStyle=color;ctx.fillText(label,sx+8,BAR_H+42);};  // 标注在 vbar 之下（曾 BAR_H+16 被工具条盖住）
  if(focusLines.pre!=null)draw(focusLines.pre,"#fbbf24","◤ 前沿（外部前置）");
  if(focusLines.post!=null)draw(focusLines.post,"#22d3ee","后继（外部被依赖）◢");
  ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
@@ -179,10 +185,10 @@ function drawDivide(){if(!showDivide||divideX==null)return;
  ctx.strokeStyle=divideHover?"#22d3a0":"#22d3a066";ctx.lineWidth=divideHover?2.5:1.5;
  ctx.setLineDash([10,6]);ctx.beginPath();ctx.moveTo(sx,BAR_H);ctx.lineTo(sx,VH);ctx.stroke();ctx.setLineDash([]);
  ctx.fillStyle="#22d3a0";fontSmall();ctx.textAlign="left";
- ctx.fillText("✂ 已完成（左）",Math.max(4,sx-110),BAR_H+14);
- ctx.fillStyle="#fbbf24";ctx.fillText("未完成（右）",sx+10,BAR_H+14);
+ ctx.fillText("✂ 已完成（左）",Math.max(4,sx-110),BAR_H+42);
+ ctx.fillStyle="#fbbf24";ctx.fillText("未完成（右）",sx+10,BAR_H+42);
  ctx.fillStyle="#9aa7b4";ctx.font='10px sans-serif';
- ctx.fillText("⟷ 可拖动：右区整体平移·两侧独立",Math.max(4,sx-110),BAR_H+28);
+ ctx.fillText("⟷ 可拖动：右区整体平移·两侧独立",Math.max(4,sx-110),BAR_H+56);  // 标签在 vbar 之下（曾 BAR_H+14/28 被盖）
  ctx.setTransform(dpr*view.k,0,0,dpr*view.k,dpr*view.x,dpr*view.y);}
 function drawMini(){mctx.setTransform(1,0,0,1,0,0);mctx.clearRect(0,0,180,120);
  const g=graphBBox();if(!g)return;

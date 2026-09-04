@@ -57,6 +57,10 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 		{"id": "battle", "title": "赢得一场战斗",
 			"desc": "带士兵向右行军穿过道路，在战场消灭全部敌人", "target": 1.0},
 	]
+	# 读档启动：玩家已有进度，不重新引导（目标全达成、不弹胜利结算）
+	if SaveManager != null and SaveManager.boot_load_slot >= 0:
+		_skip_all_for_loaded_save()
+		return
 	_start_msec = Time.get_ticks_msec()
 	_bind_signals()
 	_advance()
@@ -67,6 +71,16 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 			opening.queue_free()
 	# 开局操作指引（30 秒反馈原则：进场 1 秒内告诉玩家基础操作）
 	_notify("欢迎来到火柴人大战略", "WASD 移动 · E 采集/交互 · Q 战斗模式 · Tab 战略图 · ESC 暂停")
+
+
+## 读档局：全部目标直接标记完成（不弹胜利、不发推进信号）
+func _skip_all_for_loaded_save() -> void:
+	_index = _quests.size()
+	_victory_shown = true
+	if _panel != null:
+		for q in _quests:
+			_panel.mark_done(String(q.title))
+		_panel.show_all_done()
 
 
 # ─────────────────────────────── 信号绑定 ────────────────────────────────

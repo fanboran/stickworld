@@ -103,6 +103,17 @@ func _ready() -> void:
 	_sync_build_mask()
 	_register_terrain_buildings()
 	_init_dynamic_bounds()
+	_mount_sky_decor()
+
+
+## 天空装饰层（远山平铺 + 漂移云，Demo 精品感；贴图程序化生成见 tools/ai/gen_sky_decor.py）
+func _mount_sky_decor() -> void:
+	var sky := SkyDecor.new()
+	sky.name = "SkyDecor"
+	sky.horizon_y = ground_y
+	sky.map_left = map_left
+	sky.map_right = map_right
+	add_child(sky)
 
 
 ## 实例化并挂载子组件（TerrainRenderer / ResourceGen）。

@@ -71,6 +71,8 @@ static func button(parent: Control, text: String, callback: Callable = Callable(
 	# hover 微缩放（精致细节：按钮"浮起"感；pivot 居中避免缩放偏移）
 	b.pivot_offset = Vector2(0, height * 0.5)
 	b.mouse_entered.connect(func() -> void:
+		if AudioManager and AudioManager.has_method("play_event"):
+			AudioManager.play_event("ui_hover")
 		var tw := b.create_tween()
 		tw.tween_property(b, "scale", Vector2(1.03, 1.03), 0.08))
 	b.mouse_exited.connect(func() -> void:

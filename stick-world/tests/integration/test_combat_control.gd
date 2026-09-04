@@ -91,6 +91,10 @@ func _test_q_toggle_mode() -> void:
 	player._toggle_combat_mode()
 	await get_tree().process_frame
 	player.set_possessed(false)
+	# 恢复 CombatTestSetup 的基线模式（BATTLE）：_toggle_combat_mode 是无状态转发
+	# （读 dispatcher 现值取反），本用例结束时停在 EXPLORE，不还原会把模式残留
+	# 带进后续用例的运行前提
+	dispatcher.set_mode(PlayerControlAPI.Mode.BATTLE)
 
 
 ## 跟随：小队开启跟随后，成员 AI 决策进入 follow 行为
@@ -98,6 +102,9 @@ func _test_follow_behavior() -> void:
 	if _formation == null:
 		_runner.assert_true(false, "FormationSystem 为空")
 		return
+	# 用例前置自足：重置参与者瞬态（清附身/残余速度），不依赖前序用例的结束状态
+	var player: Node = _helper.units[0]
+	_helper.reset_units([player, _helper.units[1], _helper.units[2]])
 	# 用 units[1..2] 建小队（无战斗职责的工人队即可）
 	var squad_id: String = _formation.create_squad([_helper.units[1], _helper.units[2]], "随行队", "fp_worker_crew")
 	_runner.assert_true(not squad_id.is_empty(), "小队应创建成功")
@@ -105,7 +112,6 @@ func _test_follow_behavior() -> void:
 	_runner.assert_true(_formation.set_squad_follow(squad_id, true), "开启跟随应成功")
 	_runner.assert_true(_formation.is_squad_following(squad_id), "跟随状态应生效")
 	# 有玩家（possessed 实体）时成员应进入 follow
-	var player: Node = _helper.units[0]
 	if player.has_method("set_possessed"):
 		player.set_possessed(true)
 	await get_tree().process_frame
@@ -117,8 +123,12 @@ func _test_follow_behavior() -> void:
 		return
 	var behavior: String = ai.get_current_behavior()
 	_runner.assert_equal(behavior, "follow", "成员行为应为 follow，实际: %s" % behavior)
-	# 清理：关闭跟随
+	# 清理：关闭跟随、解散小队、取消附身——小队/附身残留会改变后续用例前提
+	# （BehaviorFollow 按 map.get_possessed_entity() 找跟随目标，依赖 possessed 实体）
 	_formation.set_squad_follow(squad_id, false)
+	if player.has_method("set_possessed"):
+		player.set_possessed(false)
+	_formation.disband_squad(squad_id)
 
 
 ## 跟随：成员向玩家位置靠近
@@ -126,11 +136,16 @@ func _test_follow_moves() -> void:
 	if _formation == null:
 		_runner.assert_true(false, "FormationSystem 为空")
 		return
-	var squad_id: String = _formation.get_unit_squad(_helper.units[1])
-	if squad_id.is_empty():
-		_runner.assert_true(false, "找不到随行队")
-		return
 	var player: Node = _helper.units[0]
+	# 用例前置自足：自行附身 + 自建小队（不复用上一用例的"随行队"——
+	# 那是隐式顺序依赖：上一用例不建队/已解散时本用例直接"找不到随行队"）
+	_helper.reset_units([player, _helper.units[1]])
+	if player.has_method("set_possessed"):
+		player.set_possessed(true)
+	var squad_id: String = _formation.create_squad([_helper.units[1]], "随行队-移动", "fp_worker_crew")
+	_runner.assert_true(not squad_id.is_empty(), "小队应创建成功")
+	if squad_id.is_empty():
+		return
 	# 玩家在 (1200, 500)，成员远在 (3000, 500)
 	player.global_position = Vector2(1200, 500)
 	_helper.units[1].global_position = Vector2(3000, 500)
@@ -141,7 +156,11 @@ func _test_follow_moves() -> void:
 	await get_tree().create_timer(2.5).timeout
 	var dist_after: float = _helper.units[1].global_position.distance_to(player.global_position)
 	_runner.assert_true(dist_after < dist_before, "成员应向玩家靠近，before=%.0f after=%.0f" % [dist_before, dist_after])
+	# 清理：跟随/附身/小队全撤，不把移动中状态留给展开用例
 	_formation.set_squad_follow(squad_id, false)
+	if player.has_method("set_possessed"):
+		player.set_possessed(false)
+	_formation.disband_squad(squad_id)
 
 
 ## 攻击展开：保角环绕使同线攻击者从不同方位接近目标（防 1 字长蛇）
@@ -154,6 +173,8 @@ func _test_attack_spread() -> void:
 	if attacker_a == null or attacker_b == null or target == null:
 		_runner.assert_true(false, "单位缺失")
 		return
+	# 用例前置自足：清前序用例残留（附身/残余速度/AI 移动分量），重置后最后摆位
+	_helper.reset_units([attacker_a, attacker_b, target])
 	attacker_a.global_position = Vector2(1000, 500)
 	attacker_b.global_position = Vector2(1000, 400)  # 相对目标 (1200,500) 方位约 26.5°
 	target.global_position = Vector2(1200, 500)

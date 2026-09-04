@@ -80,6 +80,8 @@ func show_victory(stats: Dictionary) -> void:
 	box.add_child(btn)
 
 	visible = true
+	# 胜利彩带（顶部撒落）
+	FxLibrary.spawn_confetti(get_tree())
 	# 入场：卡片从 0.85 缩放弹入 + 整体淡入
 	_card.scale = Vector2(0.85, 0.85)
 	modulate.a = 0.0

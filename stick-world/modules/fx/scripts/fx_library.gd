@@ -316,3 +316,38 @@ static func spawn_slash_arc(tree: SceneTree, pos: Vector2, angle_rad: float, cri
 	tw.tween_property(arc, "scale", Vector2(1.25, 1.25), 0.16)
 	tw.tween_property(arc, "modulate:a", 0.0, 0.16)
 	tw.chain().tween_callback(arc.queue_free)
+
+
+## 胜利彩带 —— 全屏顶部撒落彩色纸屑（胜利画面专用，3s 自然落尽后自毁）。
+static func spawn_confetti(tree: SceneTree) -> void:
+	if tree == null or tree.current_scene == null:
+		return
+	var host := Node2D.new()
+	host.name = "Confetti"
+	host.z_index = 95
+	tree.current_scene.add_child(host)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(Time.get_ticks_msec())
+	var palette: Array[Color] = [
+		Color(1.0, 0.84, 0.4), Color(0.95, 0.5, 0.4), Color(0.5, 0.85, 0.6),
+		Color(0.5, 0.75, 0.95), Color(0.85, 0.6, 0.95),
+	]
+	for i in 80:
+		var rect := ColorRect.new()
+		rect.color = palette[i % palette.size()]
+		rect.size = Vector2(rng.randf_range(4, 8), rng.randf_range(8, 14))
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rect.position = Vector2(rng.randf_range(0, 1920), rng.randf_range(-560, -16))
+		rect.rotation = rng.randf_range(0, TAU)
+		host.add_child(rect)
+		var fall: float = rng.randf_range(2.2, 3.4)
+		var sway: float = rng.randf_range(30, 90)
+		var spin: float = rng.randf_range(-3.0, 3.0)
+		var tw := rect.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(rect, "position:y", 1120.0, fall).set_ease(Tween.EASE_IN)
+		tw.tween_property(rect, "position:x", rect.position.x + sway, fall)
+		tw.tween_property(rect, "rotation", rect.rotation + spin, fall)
+	var sweep := host.create_tween()
+	sweep.tween_interval(3.8)
+	sweep.tween_callback(host.queue_free)

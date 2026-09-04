@@ -65,10 +65,10 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# 任意按键提前关闭（鼠标点击不算——开局误点常见）
-	if event is InputEventKey and event.pressed:
+	# 任意按键提前关闭（鼠标点击不算——开局误点常见）。
+	# 不消费事件、不拦 ESC：ESC 属于暂停/模态语义，引导层不得吞键
+	if event is InputEventKey and event.pressed and event.keycode != KEY_ESCAPE:
 		_hide_now()
-		get_viewport().set_input_as_handled()
 
 
 func _hide_now() -> void:

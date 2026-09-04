@@ -22,8 +22,8 @@ const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
 
 ## 随行队伍人数（不含玩家）
 const PARTY_SIZE: int = 3
-## 敌方人数（spawn_battlefield_enemies 固定 4）
-const ENEMY_COUNT: int = 4
+## 敌方人数（game_root.dev_enemy_count 默认值，Demo 冲刺从 4 调至 3——亲征可行性）
+const ENEMY_COUNT: int = 3
 
 var _runner: TestRunner
 var _helper: CombatTestSetup

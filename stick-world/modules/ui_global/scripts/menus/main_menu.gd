@@ -40,6 +40,7 @@ var _load_panel: Control = null
 
 func _ready() -> void:
 	theme = StickTheme.create()
+	_build_background()
 	_build_title()
 	_build_menu()
 	_version_label.text = "v0.1.0-p0 原型 · stick-world"
@@ -192,3 +193,71 @@ func _open_settings_panel() -> void:
 	add_child(_settings_panel)
 	if _settings_panel.has_method("open"):
 		_settings_panel.open()
+
+# ─────────────────────────────── 背景装饰（Demo 第一印象）────────────────────────────────
+
+## 主菜单背景：天空暖色渐变 + 远山剪影 + 漂移云（复用 sky 装饰贴图，与游戏内一致）
+func _build_background() -> void:
+	# 天空垂直渐变（上暖金 → 下深蓝灰，黄金时刻）
+	var sky := TextureRect.new()
+	sky.name = "SkyGradient"
+	sky.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sky.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sky.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	sky.stretch_mode = TextureRect.STRETCH_SCALE
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0.96, 0.78, 0.55))
+	grad.set_color(1, Color(0.16, 0.19, 0.27))
+	grad.add_point(0.45, Color(0.66, 0.55, 0.52))
+	var gt := GradientTexture2D.new()
+	gt.fill_from = Vector2(0, 0)
+	gt.fill_to = Vector2(0, 1)
+	gt.gradient = grad
+	gt.width = 8
+	gt.height = 512
+	sky.texture = gt
+	add_child(sky)
+	move_child(sky, 1)  # 垫在 Background 之上、菜单列之下
+	# 远山（贴屏幕底）
+	if ResourceLoader.exists(SkyDecorMountains):
+		var m := TextureRect.new()
+		m.name = "Mountains"
+		m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		m.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		m.stretch_mode = TextureRect.STRETCH_TILE
+		m.texture = load(SkyDecorMountains)
+		m.anchor_left = 0.0
+		m.anchor_right = 1.0
+		m.anchor_top = 1.0
+		m.anchor_bottom = 1.0
+		m.offset_top = -300.0
+		m.offset_bottom = 0.0
+		m.modulate = Color(0.9, 0.86, 0.84)
+		add_child(m)
+		move_child(m, 2)
+	# 漂移云（两团，_process 缓移）
+	_cloud_rects = []
+	for tex_path in [SkyDecorCloudA, SkyDecorCloudB]:
+		if not ResourceLoader.exists(tex_path):
+			continue
+		var c := TextureRect.new()
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		c.texture = load(tex_path)
+		c.position = Vector2(randf_range(0.1, 0.7) * 1920.0, randf_range(40.0, 300.0))
+		c.modulate = Color(1, 1, 1, 0.85)
+		add_child(c)
+		move_child(c, 3)
+		_cloud_rects.append(c)
+
+const SkyDecorMountains := "res://assets/sky/mountains.png"
+const SkyDecorCloudA := "res://assets/sky/cloud_a.png"
+const SkyDecorCloudB := "res://assets/sky/cloud_b.png"
+var _cloud_rects: Array = []
+
+## 云团缓移（主菜单活力感）
+func _process(delta: float) -> void:
+	for i in _cloud_rects.size():
+		var c: TextureRect = _cloud_rects[i]
+		c.position.x += (6.0 + 4.0 * i) * delta
+		if c.position.x > 1920.0:
+			c.position.x = -float(c.texture.get_width())

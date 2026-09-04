@@ -2,11 +2,34 @@ extends Node
 ## 武器持握画面验收截图工具（裸骨架直出，对照 tools/render_swl_ref.py 忠实参考帧）。
 ##
 ## 为什么用裸骨架：StickmanSkeleton.build_from_scratch 与 dump_rig_pose.gd 同款
-## （rest=全骨世界角 0，正是 weapon_mount 挂载公式假设的"挂载帧"）；实体管线
-## （stickman_entity + AnimationTree/IK）在独立场景下全身渲染会横躺——预存在的
-## 独立问题（骨骼 global_transform 打印为直立、渲染却旋转 ~90°，伴随 Godot
-## "Using transform rotation for bone angle" 刷屏），与武器 tscn 数据无关，
-## 待单独排查。武器验收关心的是武器相对挂载骨的方向/长度/握点，裸骨架即可对照。
+## （rest=全骨世界角 0，正是 weapon_mount 挂载公式假设的"挂载帧"），且不依赖
+## autoload/物理帧/AnimationTree，截图可复现性最好。
+##
+## [已结案] 曾登记的"实体在独立场景下全身渲染横躺 ~90°"（骨骼 global_transform
+## 打印直立、渲染却横躺，伴随 "Using transform rotation for bone angle" 刷屏）
+## 根因链（2026-09-03 排查结论，最小复现见 tools/baking/diag_entity_pose_root.tscn）：
+##   1. 骨链重排（fd95bf6，新增 spine_root/chest_mid/weapon_hand/shield_hand，共 23 骨）
+##      后，stickman_test.tscn 的**腿 IK NodePath 仍指向旧链**（"spine_root/thigh_outer"，
+##      缺 hip/ 前缀）→ 运行时解析失败；
+##   2. StickmanRig._init_ik 对解析失败的修改器只告警、不处理 → tscn 里写死的
+##      残留 joint_bone_idx (0,1)/(3,4) 继续生效——在新骨链里 0=hip、1=spine_root，
+##      即**腿 IK 把根骨 hip 拽向脚部 IK 目标** → 全身绕 hip 旋转 ~90° 横躺；
+##   3. "打印直立、渲染横躺"的表象是引擎机制：Skeleton2D 修改器在骨架内部
+##      process 阶段以 local_pose_override 写入 Bone2D 渲染变换，常规 process
+##      阶段又从 cache_transform 还原（Godot skeleton_2d.cpp
+##      execute_modifications，非持久 override）——常规阶段采样的
+##      global_transform 永远是"未解算"的直立值，渲染看到的才是 override 后姿态；
+##   4. "Using transform rotation for bone angle" 刷屏是另一独立小问题（骨
+##      auto_calculate=true 时无 Bone2D 子骨的骨在构建期告警，见 Bone2D
+##      calculate_length_and_rotation），与横躺无因果，已由 build_from_scratch
+##      显式 auto_calculate=false 消除；
+##   5. 当时"播 idle/不播动画/关 IK 三配置均横躺"的原因：动画 .tres 轨道路径
+##      同批失效（idle 实际没播）；外部关 IK 会被 rig._init_ik 的 call_deferred
+##      重新启用（配置没真正关上）。
+## 修复：d63fc57（腿 IK 路径补 hip/ 前缀 + auto_calculate=false）已在主路径消除
+## 症状；_init_ik 加固为"NodePath 解析失败的修改器整条移除"（防同类静默劫持复发）。
+## 实体管线独立场景渲染已验证直立（diag_entity_pose_root 三探针对照）。
+## 本工具保留裸骨架直出（可复现性最好），不再是对 bug 的绕开。
 ##
 ## 输出 stick-world/tools/baking/_faithful/shot_*.png：
 ##   ① C 实验：剑 4 候选 Sprite.rotation = C + 46.85；

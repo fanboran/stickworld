@@ -22,6 +22,15 @@ StickmanEntity (CharacterBody2D)        ← 物理+碰撞
 
 **关键**：`StickmanRig` 不动（已实现的 IK/动画保留），外层包一个 `CharacterBody2D` 承担物理与移动。AI 通过 `rig.play("walk")` + `rig.set_anim_speed(...)` 驱动渲染，通过 `CharacterBody2D.velocity` 驱动物理。
 
+#### 7.1.0 骨架 IK 已知坑（TwoBoneIK joint idx 与骨链强耦合）
+
+StickmanRig 的 TwoBoneIK 修改器有两层强约束，破坏任意一层都会出现**全身渲染横躺 ~90°** 而骨骼 `global_transform` 打印直立的诡异表现：
+
+- **tscn 里写死的 `joint_one/two_bone_idx` 是历史值**，只有 NodePath（如 `hip/spine_root/thigh_outer`）在运行时解析成功时才会被 `_init_ik` 按骨名校正。骨链重排后若不同步更新 NodePath，残留 idx 会指向别的骨（idx 0 = 根骨 hip）——腿 IK 拽根骨 = 全身横躺。
+- **"打印直立、渲染横躺"是引擎机制**：Skeleton2D 修改器在骨架内部 process 阶段以 local_pose_override 写入渲染变换，常规 process 阶段从 cache_transform 还原（非持久 override）——常规阶段采样 `global_transform` 永远是未解算的直立值，渲染看到的才是 override 后姿态。排查时不要相信常规 process 期的打印。
+
+防护：`_init_ik` 对 NodePath 解析失败的修改器整条移除（防残留 idx 劫持）。最小复现/对照工具：`tools/baking/diag_entity_pose_root.tscn`（实体 / 裸骨架 / 无 IK 三探针 + 像素包围盒判定）；完整根因链见 `tools/baking/render_weapon_check.gd` 头注释。
+
 #### 7.1.1 地面约束（Y 范围 + X 边界）
 
 火柴人可在地面区域内上下左右自由移动（不是锁死在 ground_y 一条线）：

@@ -66,6 +66,8 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 	_start_msec = Time.get_ticks_msec()
 	_bind_signals()
 	_advance()
+	_play_opening_camera()
+	# 开局中央大提示（6 秒淡出/任意键关）——比通知 feed 更显眼的首次引导
 	# 开局中央大提示（6 秒淡出/任意键关）——比通知 feed 更显眼的首次引导
 	if _ui_root != null:
 		var opening: Control = UIKit.full_rect(_OpeningHintScript, "OpeningHint")
@@ -209,6 +211,25 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 
 func _is_current(quest_id: String) -> bool:
 	return _index >= 0 and _index < _quests.size() and String(_quests[_index].id) == quest_id
+
+
+# ─────────────────────────────── 开场运镜（Demo 电影感）────────────────────────────────
+
+## 开场：相机从远景（zoom 0.45）缓推到玩家（正常 zoom），2.6s——"从大战略落向个体"
+## 的开场叙事，暗合 GDD 尺度跃迁支柱。期间输入不受影响（运镜只动相机）。
+func _play_opening_camera() -> void:
+	var root: Node = get_parent()
+	var cam: Node2D = root.get_node_or_null("CameraRig") if root != null else null
+	var player: Node2D = null
+	if root != null and root.has_method("get_player_entity"):
+		player = root.get_player_entity()
+	if cam == null or player == null or not cam.has_method("set_user_zoom_raw"):
+		return
+	var normal_zoom: float = cam.user_zoom if "user_zoom" in cam else 1.0
+	cam.set_user_zoom_raw(0.45)
+	var tw := cam.create_tween()
+	tw.tween_interval(0.35)
+	tw.tween_method(func(v: float) -> void: cam.set_user_zoom_raw(v), 0.45, normal_zoom, 2.2)		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 
 
 # ─────────────────────────────── 村民气泡（世界内引导）────────────────────────────────

@@ -310,6 +310,11 @@ func _compute_return_target_x() -> float:
 ## 瞬时对准跟随目标（进入游戏/读档/跨图时调用）：
 ## 1/4 区域跟随机制下玩家只在触发线（1/4/3/4）被拉回，进入时若相机初始 X 与玩家 X 不一致，
 ## 玩家会停在 1/4 或 3/4 处而非屏幕中心。此方法把相机立即对准玩家（水平居中，clamp 内）。
+## 运镜专用：直接设用户缩放（不经滚轮步进；开场推镜用）
+func set_user_zoom_raw(v: float) -> void:
+	user_zoom = v
+
+
 func snap_to_follow_target() -> void:
 	if follow_target != null and is_instance_valid(follow_target):
 		global_position.x = _clamp_camera_x(follow_target.global_position.x)

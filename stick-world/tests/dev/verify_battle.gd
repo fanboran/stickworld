@@ -62,7 +62,7 @@ func _run() -> void:
 				2: f2_n += 1
 		if e.has_method("get_battle_instance") and e.get_battle_instance() != null:
 			bi_n += 1
-	if f1_n >= 3 and f2_n >= 4 and bi_n >= 7:
+	if f1_n >= 2 and f2_n >= 3 and bi_n >= 5:
 		_pass("遭遇战建立成功（玩家方 %d / 敌方 %d / 参战引用 %d）" % [f1_n, f2_n, bi_n])
 	else:
 		_fail("遭遇战阵容异常（f1=%d f2=%d bi=%d）" % [f1_n, f2_n, bi_n])

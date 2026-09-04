@@ -83,9 +83,83 @@ def gen_cloud(path, seed=1):
     print("[sky] cloud ->", path)
 
 
+
+
+def _tree_ridge(rnd, base_y, h, color, W=2048, H=320):
+	"""Kingdom 式树线剪影：三角树冠连续排布，平铺无缝。"""
+	img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+	d = ImageDraw.Draw(img)
+	x = -40.0
+	while x < W + 40:
+		tw = rnd.uniform(26, 54)
+		th = h * rnd.uniform(0.55, 1.15)
+		top = base_y - th
+		mid = base_y - th * 0.45
+		d.polygon([
+			(x, base_y),
+			(x + tw * 0.28, mid),
+			(x + tw * 0.5 + rnd.uniform(-6, 6), top),
+			(x + tw * 0.74, mid),
+			(x + tw, base_y),
+		], fill=color)
+		x += tw * rnd.uniform(0.62, 0.9)
+	return img.filter(ImageFilter.GaussianBlur(0.8))
+
+
+def gen_treeline(path, seed, base_ratio, h, color):
+	H = 320
+	img = _tree_ridge(random.Random(seed), int(H * base_ratio), h, color, H=H)
+	img.save(path)
+	print("[sky] treeline ->", path)
+
+
+def gen_fog(path):
+	"""横向雾带（Kingdom 大气透视）：上下羽化的白带。"""
+	Wf, Hf = 1024, 128
+	arr = np.zeros((Hf, Wf, 4), np.uint8)
+	yy = np.arange(Hf)[:, None] / Hf
+	vert = np.clip(1.0 - np.abs(yy - 0.55) / 0.45, 0, 1) ** 1.6
+	arr[..., 0:3] = 226
+	arr[..., 3] = (vert * 150).astype(np.uint8)
+	Image.fromarray(arr, "RGBA").filter(ImageFilter.GaussianBlur(6)).save(path)
+	print("[sky] fog ->", path)
+
+
+def gen_menu_stickman(path, frame):
+	"""主菜单彩蛋：简笔火柴人剪影走路帧（2 帧循环）。"""
+	S = 96
+	img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+	d = ImageDraw.Draw(img)
+	c = (24, 26, 32, 255)
+	cx = S * 0.5
+	d.ellipse((cx - 9, 10, cx + 9, 28), fill=c)
+	d.line([(cx, 28), (cx, 56)], fill=c, width=5)
+	swing = 10 if frame == 0 else -10
+	d.line([(cx, 36), (cx - 14, 36 + swing)], fill=c, width=4)
+	d.line([(cx, 36), (cx + 14, 36 - swing)], fill=c, width=4)
+	d.line([(cx, 56), (cx - 12 + swing * 0.6, 84)], fill=c, width=5)
+	d.line([(cx, 56), (cx + 12 - swing * 0.6, 84)], fill=c, width=5)
+	img.save(path)
+	print("[sky] menu stickman f%d ->" % frame, path)
+
+
 if __name__ == "__main__":
     out = sys.argv[1] if len(sys.argv) > 1 else "assets/sky"
     os.makedirs(out, exist_ok=True)
     gen_mountains(os.path.join(out, "mountains.png"))
     gen_cloud(os.path.join(out, "cloud_a.png"), seed=1)
     gen_cloud(os.path.join(out, "cloud_b.png"), seed=7)
+    gen_treeline(os.path.join(out, "treeline_far.png"), seed=51,
+                 base_ratio=0.86, h=120, color=(52, 72, 58, 235))
+    gen_treeline(os.path.join(out, "treeline_near.png"), seed=77,
+                 base_ratio=0.94, h=170, color=(30, 44, 38, 255))
+    gen_fog(os.path.join(out, "fog_band.png"))
+    gen_menu_stickman(os.path.join(out, "walker_f0.png"), frame=0)
+    gen_menu_stickman(os.path.join(out, "walker_f1.png"), frame=1)
+    gen_treeline(os.path.join(out, "treeline_far.png"), seed=51,
+                 base_ratio=0.86, h=120, color=(52, 72, 58, 235))
+    gen_treeline(os.path.join(out, "treeline_near.png"), seed=77,
+                 base_ratio=0.94, h=170, color=(30, 44, 38, 255))
+    gen_fog(os.path.join(out, "fog_band.png"))
+    gen_menu_stickman(os.path.join(out, "walker_f0.png"), frame=0)
+    gen_menu_stickman(os.path.join(out, "walker_f1.png"), frame=1)

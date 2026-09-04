@@ -90,11 +90,15 @@ func _test_bar_visibility() -> void:
 		_runner.assert_true(false, "HealthComponent 缺失")
 		return
 	health.take_damage(health.max_hp * 0.3)  # 按 max_hp 比例扣血（P5 校准后 HP 不再固定 100）
-	for i in 20:
+	# 条件等待：展开动画 EXPAND_SPEED=7/s 需 ~0.15s；固定帧数在负载波动下时序脆弱
+	# （特效 tween 抬高帧耗时会挤占）——等 _expand 达标或 90 帧超时
+	var wait: int = 0
+	while wait < 90 and float(bar.get("_expand")) <= 0.9:
 		await get_tree().process_frame
+		wait += 1
 	_runner.assert_true(bar.get("_ever_damaged"), "掉血后应进入横条形态")
 	_runner.assert_true(float(bar.get("_expand")) > 0.9,
-		"掉血后横条应展开完成，实际 %f" % float(bar.get("_expand")))
+		"掉血后横条应展开完成，实际 %f（等待 %d 帧）" % [float(bar.get("_expand")), wait])
 	_runner.assert_true(absf(float(bar.get("_ratio")) - 0.7) < 0.001,
 		"比例应约 0.7，实际: %f" % float(bar.get("_ratio")))
 	# 治疗恢复满血：退回圆点形态

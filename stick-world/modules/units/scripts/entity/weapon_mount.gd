@@ -675,6 +675,11 @@ func _try_strike_frame() -> void:
 	var dist: float = owner_entity.global_position.distance_to(target.global_position)
 	if dist > attack_range * 1.25:
 		return
+	# 剑光弧（Demo 打磨：命中帧朝目标方向斩击弧光；近战才显——远程有弹道）
+	var wt: int = int(weapon_type) if "weapon_type" in self else 0
+	if wt != WeaponType.BOW:
+		var ang: float = (target.global_position - owner_entity.global_position).angle()
+		FxLibrary.spawn_slash_arc(owner_entity.get_tree(), owner_entity.global_position + Vector2(0, -30), ang, wt == WeaponType.SWORD)
 	# 情绪修正命中率（犹豫/恐慌时挥空）
 	if randf() > _get_effective_hit_chance():
 		return

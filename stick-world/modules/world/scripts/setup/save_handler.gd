@@ -40,8 +40,8 @@ func setup(root: GameRoot) -> void:
 
 
 ## SavePanel 读档回调（SavePanel 不反向依赖 world，由本子系统注入）
-func _on_load_slot(slot_index: int) -> void:
-	load_game_from_slot(slot_index)
+func _on_load_slot(slot_index: int) -> bool:
+	return load_game_from_slot(slot_index)
 
 
 # ─────────────────────────────── 保存流程 ────────────────────────────────
@@ -127,18 +127,39 @@ func _on_game_loaded(slot_index: int) -> void:
 	call_deferred("_load_map_for_save")
 
 
-## 外部调用：启动读档流程
-func load_game_from_slot(slot_index: int) -> void:
+## 外部调用：启动读档流程。
+## 返回 false = 拒读（版本过高/迁移失败/存档不存在等，原因见 SaveManager.last_load_fail_reason）：
+## 已弹 ui_notification，且不动当前世界（旧地图清理移到受理之后）。
+func load_game_from_slot(slot_index: int) -> bool:
 	_root._pending_save_load = true
+	# 先试读：拒读（game_loaded 不发射、恢复流程不启动）时保持当前世界原状
+	var accepted: bool = false
+	if SaveManager and SaveManager.has_method("load_game"):
+		accepted = SaveManager.load_game(slot_index)
+	if not accepted:
+		_root._pending_save_load = false
+		_notify_load_failed(slot_index)
+		return false
+	# 读档已受理（game_loaded 已同步发射，地图恢复走 call_deferred）：
 	# 清理当前地图实例（如果存在）
 	if _root.world_chunk_host != null and _root.world_chunk_host.get_child_count() > 0:
 		var old_map: Node2D = _root.world_chunk_host.get_child(0) as Node2D
 		if old_map:
 			old_map.queue_free()
 		_root._initial_map_loaded = false
-	# 调用 SaveManager.load_game（会 emit game_loaded -> _on_game_loaded -> 加载地图）
-	if SaveManager and SaveManager.has_method("load_game"):
-		SaveManager.load_game(slot_index)
+	return true
+
+
+## 读档失败的用户可见反馈（走 EventBus ui_notification → UIRoot 左下通知 feed）。
+## boot 主菜单阶段无 UIRoot 时 emit 会被静默丢弃，只剩 push_error（客观限制，无害）。
+func _notify_load_failed(slot_index: int) -> void:
+	var reason: String = ""
+	if SaveManager and "last_load_fail_reason" in SaveManager:
+		reason = str(SaveManager.last_load_fail_reason)
+	if reason.is_empty():
+		reason = "未知原因"
+	if EventBus != null and EventBus.has_signal("ui_notification"):
+		EventBus.ui_notification.emit("读档失败", "槽位 %d：%s" % [slot_index, reason], "error")
 
 
 ## 读档时加载缓存的地图
@@ -263,3 +284,6 @@ func quick_load() -> void:
 		print_verbose("[GameRoot] 快速读取槽位 0")
 	else:
 		push_warning("[GameRoot] 槽位 0 无存档")
+		# 用户可见反馈（游戏内快捷键路径，UIRoot 必已装配）
+		if EventBus != null and EventBus.has_signal("ui_notification"):
+			EventBus.ui_notification.emit("读档失败", "槽位 0 无存档", "error")

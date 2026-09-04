@@ -43,12 +43,22 @@ func _build_ui() -> void:
 		var entry := HBoxContainer.new()
 		entry.add_theme_constant_override("separation", 6)
 		entry.alignment = BoxContainer.ALIGNMENT_CENTER
-		# 色块图标
-		var icon := ColorRect.new()
-		icon.color = res["color"]
-		icon.custom_minimum_size = Vector2(14, 14)
-		entry.add_child(icon)
-		_icons[res["id"]] = icon
+		# 图标：优先笔触贴图（Demo 美术管线产物），缺图回退色块
+		var icon_tex_path: String = _icon_texture_path(String(res["id"]))
+		if not icon_tex_path.is_empty() and ResourceLoader.exists(icon_tex_path):
+			var icon := TextureRect.new()
+			icon.texture = load(icon_tex_path)
+			icon.custom_minimum_size = Vector2(18, 18)
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			entry.add_child(icon)
+			_icons[res["id"]] = icon
+		else:
+			var icon := ColorRect.new()
+			icon.color = res["color"]
+			icon.custom_minimum_size = Vector2(14, 14)
+			entry.add_child(icon)
+			_icons[res["id"]] = icon
 		# 名称
 		var name_lbl := Label.new()
 		name_lbl.text = res["name_zh"]
@@ -125,3 +135,12 @@ func _flash_red(resource_id: String) -> void:
 	var tween := create_tween()
 	tween.tween_interval(0.5)
 	tween.tween_property(lbl, "theme_override_colors/font_color", Color.WHITE, 0.3)
+
+
+## 资源 id → 笔触贴图路径（与资源点同源美术）
+func _icon_texture_path(resource_id: String) -> String:
+	match resource_id:
+		"res_wood": return "res://assets/resources/tree_paint.png"
+		"res_stone": return "res://assets/resources/stone_paint.png"
+		"res_metal_ore": return "res://assets/resources/metal_paint.png"
+	return ""

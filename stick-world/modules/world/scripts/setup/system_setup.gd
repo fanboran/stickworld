@@ -80,6 +80,7 @@ func setup(root: GameRoot) -> void:
 	_setup_boundary_detector()
 	_setup_game_ui()
 	_setup_build_menu()
+	_setup_post_process()
 	# Demo 目标链最后装（deferred：需在资源初始发放之后做基线快照）
 	call_deferred("_setup_demo_quest_deferred")
 
@@ -749,3 +750,15 @@ func _setup_demo_quest_deferred() -> void:
 	quest.name = "DemoQuest"
 	_root.add_child(quest)
 	quest.setup(panel, _root._resources_api, _root._construction_api, _root.ui_root)
+
+
+# ─────────────────────────────── 后处理层装配（Demo P3）────────────────────────────────
+
+## 全屏后处理层：暖色分级/太阳炫光/渐晕/色差/颗粒（layer 0.5，压世界不压 UI）。
+func _setup_post_process() -> void:
+	var layer := PostProcessLayer.new()
+	layer.name = "PostProcess"
+	_root.add_child(layer)
+	var env: Node = _root.get_node_or_null("EnvironmentSystem")
+	if env != null:
+		layer.bind_env(env)

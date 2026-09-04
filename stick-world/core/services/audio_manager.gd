@@ -215,6 +215,10 @@ const SFX_EVENTS := {
 	"harvest_gain":       "res://assets/audio/sfx/harvest_gain.wav",
 	"quest_done":         "res://assets/audio/sfx/quest_done.wav",
 	"ui_hover":           "res://assets/audio/sfx/ui_hover.wav",
+	# 天空生命感：远处鸟啁啾（与飞鸟群生成配对，三变体随机）
+	"bird_chirp_a":       "res://assets/audio/sfx/bird_chirp_a.wav",
+	"bird_chirp_b":       "res://assets/audio/sfx/bird_chirp_b.wav",
+	"bird_chirp_c":       "res://assets/audio/sfx/bird_chirp_c.wav",
 }
 
 ## 按语义事件名播放。资产未就位时静默跳过（print_verbose，不刷警告）。

@@ -64,6 +64,15 @@ func spawn_flock() -> void:
 		"x": _window_center_x() - dir * (WINDOW_HALF + MARGIN),
 		"birds": birds,
 	}
+	_play_chirp()
+
+
+## 远处一声啁啾（视听配对：鸟群入镜时鸣叫；三变体随机）
+func _play_chirp() -> void:
+	if AudioManager == null:
+		return
+	var pick: int = randi() % 3
+	AudioManager.play_event("bird_chirp_%s" % ["a", "b", "c"][pick])
 
 
 func _draw() -> void:

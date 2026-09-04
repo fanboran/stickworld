@@ -73,6 +73,15 @@ C5, E5, G5, C6 = 523.25, 659.25, 783.99, 1046.5
 A4, B4, D5, F5, A5 = 440.0, 493.88, 587.33, 698.46, 880.0
 
 
+def _sweep(f0, f1, dur, vol=0.3):
+    """线性频率扫掠单音（鸟啁啾用）"""
+    n = int(SR * dur)
+    t = np.arange(n) / SR
+    freq = np.linspace(f0, f1, n)
+    phase = 2 * np.pi * np.cumsum(freq) / SR
+    return np.sin(phase) * _env(n, attack=0.004, decay=dur / 2.5) * vol
+
+
 def gen_all(out_dir):
     os.makedirs(out_dir, exist_ok=True)
     _save(os.path.join(out_dir, "ui_click.wav"), _mix(_noise(0.045, 0.35), _tone(1150, 0.05, 0.3)))
@@ -93,6 +102,16 @@ def gen_all(out_dir):
     _save(os.path.join(out_dir, "harvest_gain.wav"), _tone(1318.5, 0.16, 0.35, decay=0.05))
     _save(os.path.join(out_dir, "quest_done.wav"), _seq([(A5, 1), (1174.7, 1.8)], 0.1, gap=0.015))
     _save(os.path.join(out_dir, "ui_hover.wav"), _tone(880, 0.04, 0.16, decay=0.015))
+    # 天空生命感：远处鸟啁啾三变体（音量压低做距离感，与飞鸟生成配对播放）
+    _save(os.path.join(out_dir, "bird_chirp_a.wav"),
+          _mix(_sweep(2300, 3100, 0.09, 0.16),
+               np.concatenate([np.zeros(int(SR * 0.10)), _sweep(2500, 3400, 0.11, 0.14)])))
+    _b_parts = [np.concatenate([np.zeros(int(SR * 0.07 * i)), _sweep(f0, f1, 0.07, 0.13)])
+                for i, (f0, f1) in enumerate([(3400, 2600), (3200, 2500), (3600, 2700)])]
+    _save(os.path.join(out_dir, "bird_chirp_b.wav"), _mix(*_b_parts))
+    _t_n = int(SR * 0.22)
+    _trem = 1.0 + 0.25 * np.sin(2 * np.pi * 38 * np.arange(_t_n) / SR)
+    _save(os.path.join(out_dir, "bird_chirp_c.wav"), _sweep(2800, 2200, 0.22, 0.15) * _trem)
 
 
 if __name__ == "__main__":

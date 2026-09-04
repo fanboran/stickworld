@@ -76,7 +76,7 @@ const BASELINE: Dictionary = {
 	"test_pulse_on": 2.0,                   ## 试探接敌脉冲开启时长（s）
 	"test_pulse_off": 3.0,                  ## 试探接敌脉冲关闭时长（s）
 	"test_engage_range": 480.0,             ## 试探接敌触发距离（px，射程边缘近似）
-	"flank_enabled": true,                 ## 包抄走位（behavior_attack：侧翼单位接近叠加侧向分量）
+	"flank_enabled": false,                 ## 包抄走位（behavior_attack：侧翼单位接近叠加侧向分量）
 	"flank_y_offset": 120.0,                ## 侧翼判定：相对本方质心 y 偏移绝对值阈值（px）
 	"flank_side_strength": 0.40,            ## 包抄侧向分量强度（0~1）
 	# ── P7 批次 7b 治疗档案族（祭司 Meric；全部默认"关闭/零"，非祭司无消费路径 = 零回归）──
@@ -106,11 +106,14 @@ const CLASS_PROFILES: Dictionary = {
 		"acquire_interval": 0.4,
 		"y_drift_band": 40.0,
 		"move_mult": 1.3,
+		# Demo P5 灵动化：剑兵侧翼包抄（兵种级覆盖；基线默认关是零回归闸门）
+		"flank_enabled": true,
 	},
 	SPEAR: {
 		"aggressive_push_prob": 0.0,
 		"hesitate_prob": 0.0,
 		"leash_mult": 3.0,
+		"flank_enabled": true,
 		"arrow_threat_block": true,
 		"y_drift_band": 15.0,
 		"move_mult": 0.85,

@@ -27,21 +27,29 @@ const TICK_MIN: float = 2.0
 const TICK_MAX: float = 5.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
-## 关联的战斗实例（BattleInstance）
-var _battle: Node = null
+## 关联的战斗实例（BattleInstance）——weakref 弱引用持有（架构债 P0-8）。
+## 本类 extends RefCounted，生命周期不与 Node 绑定：BattleInstance 被
+## queue_free 后强引用会悬垂（非 null 的 freed instance），访问即报错。
+## 一律经 _get_battle() 取实例，禁止直接读本字段。
+var _battle_ref: WeakRef = null
 ## 距下次刷新的倒计时
 var _timer: float = 3.0
 
 
 ## 关联战斗实例
 func setup(battle: Node) -> void:
-	_battle = battle
+	_battle_ref = weakref(battle)
 	_reset_interval()
+
+
+## 取关联的战斗实例；未关联或已被释放时返回 null（唯一合法访问路径）。
+func _get_battle() -> Node:
+	return _battle_ref.get_ref() if _battle_ref != null else null
 
 
 ## 每帧推进（由 BattleInstance._physics_process 调用）
 func tick(delta: float) -> void:
-	if _battle == null:
+	if _get_battle() == null:
 		return
 	_timer -= delta
 	if _timer <= 0.0:
@@ -51,9 +59,10 @@ func tick(delta: float) -> void:
 
 ## 给所有参战单位打情绪标签
 func assign_moods() -> void:
-	if _battle == null or not _battle.has_method("get_all_units"):
+	var battle: Node = _get_battle()
+	if battle == null or not battle.has_method("get_all_units"):
 		return
-	for unit in _battle.get_all_units():
+	for unit in battle.get_all_units():
 		if not is_instance_valid(unit):
 			continue
 		if unit.has_method("is_dead") and unit.is_dead():

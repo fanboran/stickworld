@@ -27,6 +27,10 @@ const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 ## 状态效果（法术击晕 STUN 类型引用；显式 preload 防 headless class_name 未注册）
 const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
+## 目标查找器（AOE 挥击扇形搜索）；显式 preload 防 headless class_name 未注册
+# audit-exempt: headless 防御性路径 preload（经 api 转发会重新依赖 class_name 注册，
+# 失去防御意义）；TargetFinder 为 combat 对外公共类型（combat/api.gd 已声明契约）
+const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
 
 # ─────────────────────────────── 武器类型 ────────────────────────────────
 enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF, MERIC }
@@ -725,7 +729,7 @@ func _collect_strike_targets(owner_entity: Node, main_target: Node) -> Array:
 	if max_count <= 1:
 		return [main_target]
 	var facing: Vector2 = _owner_facing(owner_entity, main_target)
-	var found: Array = TargetFinder.find_targets_in_arc(owner_entity, {
+	var found: Array = ScriptTargetFinder.find_targets_in_arc(owner_entity, {
 		"range": attack_range * 1.25,
 		"half_angle": strike_arc_half_angle,
 		"max_count": max_count,

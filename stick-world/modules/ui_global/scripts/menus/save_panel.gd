@@ -92,7 +92,11 @@ func _on_save(slot: int) -> void:
 
 func _on_load(slot: int) -> void:
 	if _load_callback.is_valid():
-		_load_callback.call(slot)
+		var ok: Variant = _load_callback.call(slot)
+		# 拒读（回调返回 false，原因已弹 ui_notification）时保持面板打开，便于换槽重试；
+		# 主菜单 _boot_load 回调无返回值（null），照常关闭并走场景切换
+		if ok == false:
+			return
 	close()
 
 

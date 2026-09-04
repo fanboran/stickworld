@@ -81,6 +81,7 @@ func setup(root: GameRoot) -> void:
 	_setup_game_ui()
 	_setup_build_menu()
 	_setup_post_process()
+	_setup_map_transition()
 	# Demo 目标链最后装（deferred：需在资源初始发放之后做基线快照）
 	call_deferred("_setup_demo_quest_deferred")
 
@@ -762,3 +763,12 @@ func _setup_post_process() -> void:
 	var env: Node = _root.get_node_or_null("EnvironmentSystem")
 	if env != null:
 		layer.bind_env(env)
+
+
+# ─────────────────────────────── 转场遮罩装配（Demo P3）────────────────────────────────
+
+## 地图切换黑场转场（travel_started 渐黑 / travel_completed 渐明，零侵入）。
+func _setup_map_transition() -> void:
+	var overlay := MapTransitionOverlay.new()
+	overlay.name = "MapTransition"
+	_root.add_child(overlay)

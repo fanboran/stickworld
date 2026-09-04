@@ -26,7 +26,7 @@
  #search{background:var(--panel2);border:1px solid var(--line2);border-radius:6px;color:var(--txt);
    padding:4px 10px;font-size:12px;width:170px;outline:none;transition:border-color .12s}
  #search:focus{border-color:var(--acc)}
- #checkChip,#readyChip,#critChip{font:600 11px/1.4 system-ui,sans-serif;padding:4px 10px;border-radius:5px;
+ #checkChip,#readyChip,#critChip{font:600 11px/1.4 system-ui,sans-serif;padding:4px 10px;border-radius:4px;
    cursor:pointer;background:var(--panel2);border:1px solid var(--line);white-space:nowrap;
    transition:border-color .12s}
  /* ── 图例 / 泳道胶囊 ── */
@@ -44,15 +44,18 @@
  .lchip.off{opacity:.3;text-decoration:line-through}
  .lchip.focus{border-color:var(--acc);color:var(--acc);background:#12304a}
  /* ── 画布工具条（LOGIC-8 view-bar：分组 tiny 按钮密集排列） ── */
- #vbar{position:fixed;display:none;align-items:center;gap:1px;background:var(--line);
+ #vbar{position:fixed;display:none;align-items:center;gap:1px;background:var(--panel);
    border-bottom:1px solid var(--line2);padding:4px 8px;z-index:16;overflow-x:auto;scrollbar-width:none}
+ /* .vt 是全局 tiny 按钮族：vbar 工具钮与 dock 栏 agent 筛选钮共用（曾误写成 #vbar .vt，
+    dock 里的 agent 按钮吃不到样式→浏览器默认灰底 Arial 且 44px 高溢出 dockBar） */
+ .vt{background:var(--panel2);border:1px solid var(--line);color:var(--dim2);border-radius:4px;
+   padding:3px 8px;font:500 11px/1.2 system-ui,sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0}
+ .vt:hover{color:var(--txt);border-color:#3a5678}
+ .vt.on{background:#12304a;border-color:var(--acc);color:var(--acc)}
  #vbar .vg{display:flex;gap:1px;align-items:center;flex-shrink:0}
  #vbar .sep{width:1px;height:16px;background:var(--line2);margin:0 7px;flex-shrink:0}
- #vbar .vt{background:var(--panel2);border:1px solid var(--line);color:var(--dim2);border-radius:4px;
-   padding:3px 8px;font:500 11px/1.2 system-ui,sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0}
- #vbar .vt:hover{color:var(--txt);border-color:#3a5678}
- #vbar .vt.on{background:#12304a;border-color:var(--acc);color:var(--acc)}
  #vbar .lbl{font-size:9.5px;color:var(--dim2);letter-spacing:.5px;flex-shrink:0}
+ #srcSwitch{align-items:center;overflow:hidden}
  /* ── 视图页签（岗位工作台） ── */
  #viewTabs{gap:1px;background:var(--line);flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
  .vtab{font-size:11.5px;padding:5px 12px;border:0;cursor:pointer;background:var(--panel2);
@@ -65,7 +68,7 @@
  #msgs .e{color:var(--red)}#msgs .w{color:var(--amber)}
  #help{position:fixed;inset:0;background:#000a;display:none;z-index:40;align-items:center;justify-content:center}
  #help>div{background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:20px 26px;
-   max-width:480px;line-height:2.1;font-size:12.5px}
+   max-width:480px;line-height:2.1;font-size:12.5px;box-shadow:0 8px 24px #000a}
  #help b{color:var(--acc)}
  /* ── 小地图 / 缩放 ── */
  /* ── 三栏 IDE 布局（LOGIC-8 main 骨架：左岗位栏 / canvas / 右检查器） ── */
@@ -150,15 +153,16 @@
  .kv b.g{color:var(--green)}.kv b.y{color:var(--amber)}.kv b.c{color:var(--acc)}
  /* ── 检查器上下文行 ── */
  .ctxrow{margin:5px 14px 0;font:600 10.5px var(--mono);color:var(--dim2);letter-spacing:.2px}
- /* ── 右键菜单 / 弹窗（LOGIC-8：直角+1px 线，无阴影） ── */
- #ctx{position:fixed;display:none;background:var(--panel);border:1px solid var(--line2);border-radius:4px;
-   padding:5px 0;z-index:50;min-width:170px;font-size:12px;max-height:60vh;overflow:auto}
+ /* ── 浮层族（LOGIC-8：统一 6px 圆角 + line2 描边 + 同款投影；ctx/弹窗/浮窗/帮助同语言） ── */
+ #ctx{position:fixed;display:none;background:var(--panel);border:1px solid var(--line2);border-radius:6px;
+   padding:5px 0;z-index:50;min-width:170px;font-size:12px;max-height:60vh;overflow:auto;
+   box-shadow:0 8px 24px #000a}
  #ctx .ch{color:var(--acc2);font-size:10px;padding:4px 14px 2px;letter-spacing:.4px}
  #ctx .ci{padding:5px 14px;cursor:pointer;white-space:nowrap;color:#93a7c0}
  #ctx .ci:hover{background:var(--lift);color:var(--txt)}
  #modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:60}
  #modal>div{background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:18px 22px;
-   width:340px;display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+   width:340px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;box-shadow:0 8px 24px #000a}
  #modal h3{margin:0 0 4px;font-size:13px;font-weight:650;letter-spacing:.3px;color:var(--acc2)}
  #modal label{display:flex;flex-direction:column;gap:3px;color:var(--sub);font-size:11px}
  #modal input,#modal select{background:var(--panel2);border:1px solid var(--line2);border-radius:5px;

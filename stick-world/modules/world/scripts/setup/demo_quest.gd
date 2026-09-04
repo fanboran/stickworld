@@ -39,6 +39,8 @@ var _victory_shown: bool = false
 ## 乱序完成登记：玩家不按引导顺序玩（先建好后采集等）时，未轮到的目标
 ## 完成事件先记账，推进到该目标时直接跳过——目标链永不卡死
 var _pending_done: Dictionary = {}
+## 村民气泡（世界内引导）：目标推进时村民"说话"
+var _bubble: VillagerBubble = null
 
 
 ## 由 SystemSetup 装配调用（此时初始资源已发放，基线安全）
@@ -119,6 +121,7 @@ func _advance() -> void:
 	if EventBus != null and EventBus.has_signal("quest_advanced"):
 		EventBus.quest_advanced.emit(String(q.id))
 	_update_battle_arrow(String(q.id))
+	_villager_speak(String(q.id))
 	# 采集类目标推进时立即检查一次（乱序期间可能已采够）
 	if String(q.id) == "harvest" and _quest_progress(q) >= float(q.target):
 		_complete_current()
@@ -206,6 +209,41 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 
 func _is_current(quest_id: String) -> bool:
 	return _index >= 0 and _index < _quests.size() and String(_quests[_index].id) == quest_id
+
+
+# ─────────────────────────────── 村民气泡（世界内引导）────────────────────────────────
+
+## 台词表：每个目标由村民之口说出（引导世界内化，而非纯 UI 弹窗）
+const _VILLAGER_LINES: Dictionary = {
+	"harvest": "村里的储备快见底了，东边的树和石头都能采！按住 E 别松手～",
+	"build": "材料够了就盖点什么吧！点右下角「建造」，选好后靠近敲几下。",
+	"squad": "人多力量大。顶栏「编制」把伙伴们编成一队，跟我们一起干！",
+	"battle": "东边战场打起来了！带弟兄们过去，Q 切战斗模式，跟他们拼了！",
+}
+
+func _villager_speak(quest_id: String) -> void:
+	if not _VILLAGER_LINES.has(quest_id):
+		return
+	if _bubble == null or not is_instance_valid(_bubble):
+		var npc := _find_any_villager()
+		if npc == null:
+			return
+		_bubble = VillagerBubble.new()
+		_bubble.name = "VillagerBubble"
+		npc.add_child(_bubble)
+	_bubble.speak(String(_VILLAGER_LINES[quest_id]), 4.5)
+
+## 找一个非附身村民（气泡宿主；NPC 生成晚于装配，惰性+失败静默）
+func _find_any_villager() -> Node2D:
+	var root: Node = get_parent()
+	var map: Node2D = root.get_current_map() if root != null and root.has_method("get_current_map") else null
+	if map == null or not map.has_method("get_entities"):
+		return null
+	for e in map.get_entities():
+		var ent := e as Node2D
+		if ent != null and is_instance_valid(ent) and ent.has_method("is_possessed") 				and not ent.is_possessed() and ent.has_method("is_dead") and not ent.is_dead():
+			return ent
+	return null
 
 
 # ─────────────────────────────── 战场方向指示 ────────────────────────────────

@@ -88,10 +88,9 @@ def gen_all(out_dir):
     此处不再生成，避免重跑覆盖：
       ui_click / ui_confirm / game_started / build_complete / harvest_hit_{a,b,c}
       / harvest_wood / harvest_gain / quest_done / ui_hover / unit_hurt / game_saved
+      / battle_started
     """
     os.makedirs(out_dir, exist_ok=True)
-    _save(os.path.join(out_dir, "battle_started.wav"),
-          _mix(_tone(82.4, 0.5, 0.6, decay=0.18), _seq([(D5, 1)], 0.12, vol=0.3)))
     _save(os.path.join(out_dir, "battle_ended_win.wav"),
           _seq([(C5, 1), (E5, 1), (G5, 1), (C6, 2.2)], 0.12, gap=0.02))
     _save(os.path.join(out_dir, "battle_ended_lose.wav"),

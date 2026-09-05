@@ -192,8 +192,8 @@ static func _gen_tree_struct(rng: RandomNumberGenerator, P: Dictionary) -> Dicti
 	var cy: float = leaf_ground - trunk_h - r_main * float(P["crown_lift"])
 	var blobs: Array = []
 	var branches: Array = []
-	var cluster_top: float = cy + r_main + 60.0
-	var cluster_bot: float = ground_y - 200.0
+	var cluster_top: float = cy + r_main + 40.0
+	var cluster_bot: float = ground_y - 350.0
 	var n_cluster: int = rng.randi_range(0, 5)
 	var used_y: Array = []
 	for ci: int in n_cluster:
@@ -204,7 +204,7 @@ static func _gen_tree_struct(rng: RandomNumberGenerator, P: Dictionary) -> Dicti
 			oy = rng.randf_range(cluster_top, cluster_bot)
 			ok = true
 			for uy: float in used_y:
-				if absf(oy - uy) < 90.0:
+				if absf(oy - uy) < 50.0:
 					ok = false
 					break
 			if ok:
@@ -227,10 +227,10 @@ static func _gen_tree_struct(rng: RandomNumberGenerator, P: Dictionary) -> Dicti
 			var tt := i / 9.0
 			var uu := 1.0 - tt
 			path.append(uu * uu * origin + 2.0 * uu * tt * ctrl + tt * tt * tip)
-		branches.append({"path": path, "w0": 10.0, "w1": 7.0, "tip": tip})
-		# 枝端簇（半径 30-60：横排 2 圆 + 下垂缕）
+		branches.append({"path": path, "w0": 17.0, "w1": 12.0, "tip": tip})
+		# 枝端簇（半径 15-30：用户指令"侧枝叶子直径小一半"；横排 2 圆 + 下垂缕）
 		var dir_x: float = signf(tip.x - origin.x)
-		var cr := rng.randf_range(30.0, 60.0)
+		var cr := rng.randf_range(15.0, 30.0)
 		blobs.append({"c": tip + Vector2(dir_x * cr * 0.3, -cr * 0.1), "r": cr})
 		blobs.append({"c": tip + Vector2(dir_x * cr * 1.0, 0.0), "r": cr * 0.8})
 		blobs.append({"c": tip + Vector2(dir_x * cr * 0.5, cr * 0.8), "r": cr * 0.5})
@@ -670,11 +670,10 @@ class _Region:
 				var bc_j := mini(c / cb, nb_x - 1)
 				flow[r * TP.GW + c] = 0.5 * atan2(
 					float(uy[br_i * nb_x + bc_j]), float(ux[br_i * nb_x + bc_j]))
-		# 冠部螺旋注入：每团一个绕圈切向场（add_spiral 移植）
+		# 冠部流场=随机方向场（用户指令：各方向笔触都要有——螺旋/切向场全弃）
 		if region == 2:
-			for b: Dictionary in wire["blobs"]:
-				var bc: Vector2 = b["c"]
-				_add_spiral(bc, float(b["r"]) * 1.30, 0.55)
+			for i: int in TP.NC:
+				flow[i] = rng.randf_range(0.0, TAU)
 
 
 	func _gate(a: Vector3, b: Vector3) -> float:

@@ -64,11 +64,14 @@ func _ready() -> void:
 
 
 func _build_panel() -> void:
+	# UI 必须挂 CanvasLayer：挂 Node2D 下会被 Camera2D 变换带出屏幕（滑条静默不可见）
+	var ui_layer := CanvasLayer.new()
+	add_child(ui_layer)
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	panel.offset_bottom = 118.0
 	panel.modulate = Color(1, 1, 1, 0.93)
-	add_child(panel)
+	ui_layer.add_child(panel)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.add_child(scroll)

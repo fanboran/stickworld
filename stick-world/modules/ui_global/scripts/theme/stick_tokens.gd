@@ -58,20 +58,23 @@ const BTN_BG_DISABLED := Color(1.0, 1.0, 1.0, 0.03)
 
 # ─────────────────────────────── 字号 ────────────────────────────────
 
+## 全局字号整档基准（2026-09-06 用户指示整体加大一点：每档 +1~2）
 ## 主菜单游戏名/全屏大标题
-const FONT_DISPLAY := 34
+const FONT_DISPLAY := 36
+## 战果横幅专用大字（battle_banner 仪式感；2026-09-06 用户批准新增档）
+const FONT_BANNER := 44
 ## 面板大标题
-const FONT_TITLE := 22
+const FONT_TITLE := 24
 ## 正文/按钮
-const FONT_BODY := 14
+const FONT_BODY := 15
 ## HUD 常读信息（武器面板/资源数量/观察场统计）：比正文大一档
-const FONT_HUD := 16
+const FONT_HUD := 17
 ## 区块小标题（全大写感/分节）
-const FONT_SECTION := 13
+const FONT_SECTION := 14
 ## 提示/辅助
-const FONT_HINT := 11
+const FONT_HINT := 12
 ## 角标/徽标/极密列表
-const FONT_TINY := 10
+const FONT_TINY := 11
 
 # ─────────────────────────────── 形状 ────────────────────────────────
 

@@ -24,7 +24,7 @@ const PARAM_DEFS := [
 	["crown_lift", "冠心上提", 0.30, 0.00, 0.60, 0.01, 2],
 	["hat_n", "帽圈子团数", 8.0, 4.0, 14.0, 1.0, 0],
 	["branch_prob", "枝概率", 0.48, 0.10, 0.90, 0.01, 2],
-	["stroke_len", "笔长(px)", 11.0, 5.0, 24.0, 0.5, 1],
+	["stroke_len", "笔长(px)", 9.0, 5.0, 24.0, 0.5, 1],
 	["stroke_w", "笔宽(px)", 3.5, 1.5, 6.0, 0.1, 1],
 	["crown_density", "冠笔密度", 1.0, 0.3, 2.5, 0.05, 2],
 ]
@@ -50,7 +50,8 @@ func _ready() -> void:
 	_build_panel()
 	_build_previews()
 	_cam = Camera2D.new()
-	_cam.position = Vector2(680, 760)
+	_cam.position = Vector2(1040, 1480)  # 三排几何中心
+	_cam.zoom = Vector2(0.30, 0.30)  # 一屏收全 3×3
 	add_child(_cam)
 	_cam.make_current()
 	_refresh_all()
@@ -145,7 +146,7 @@ func _process(delta: float) -> void:
 		dir.y -= 1.0
 	if Input.is_key_pressed(KEY_S):
 		dir.y += 1.0
-	_cam.position += dir * 900.0 * delta
+	_cam.position += dir * 900.0 * delta / maxf(_cam.zoom.x, 0.05)
 	if _dirty:
 		_debounce += delta
 		if _debounce >= 0.15:
@@ -247,23 +248,37 @@ func gen_strokes(t: Dictionary, seed: int) -> Array:
 		var shade := 1.0 - absf(fx + 0.35) * 0.9
 		var col := TRUNK_C.lerp(TRUNK_L, clampf(shade, 0.0, 1.0))
 		col = col.lightened(rng.randf_range(-0.03, 0.03))
-		var yy: float = float(t["trunk_top_y"]) + rng.randf_range(0.0, sl * 0.4)
+		var yy: float = float(t["trunk_top_y"]) + rng.randf_range(0.0, sl * 0.6)
 		while yy < ground:
 			var hf: float = (ground - yy) / full_h  # 0 顶 1 底
 			var w_at: float = lerpf(t["w_top"], t["w_base"], hf)
 			var axis_x: float = lerpf(t["trunk_top_x"], t["trunk_bot_x"], hf)
-			var l: float = minf(sl * rng.randf_range(0.8, 1.3), ground - yy)
-			var px := axis_x + fx * w_at * 0.42 + rng.randf_range(-1.2, 1.2)
-			var top := Vector2(px + rng.randf_range(-0.8, 0.8), yy)
-			var bot := Vector2(px + rng.randf_range(-0.8, 0.8), yy + l)
-			pens.append({"a": top, "b": bot, "c": col, "w": sw * rng.randf_range(0.85, 1.2)})
-			yy += l * 0.6
+			var l: float = minf(sl * rng.randf_range(0.5, 1.5), ground - yy)
+			var px := axis_x + fx * w_at * 0.42 + rng.randf_range(-2.0, 2.0)
+			var skew := rng.randf_range(-2.5, 2.5)
+			var top := Vector2(px + rng.randf_range(-1.2, 1.2), yy)
+			var bot := Vector2(px + skew, yy + l)
+			pens.append({"a": top, "b": bot, "c": col, "w": sw * rng.randf_range(0.8, 1.25)})
+			yy += l * 0.95 + sl * 0.15  # 笔间留缝：短笔拼接而非连成长线
 
-	# ── 枝笔（圆头折线两段，粗到细）──
+	# ── 枝笔：沿贝塞尔弧撒短笔拼接（宽度从 w0 渐变到 w1，方向沿枝+抖动）──
 	for br in t["branches"]:
-		var mid: Vector2 = br["o"].lerp(br["t"], 0.5) + Vector2(0, -10.0)
-		pens.append({"a": br["o"], "b": mid, "c": TRUNK_D, "w": br["w0"]})
-		pens.append({"a": mid, "b": br["t"], "c": TRUNK_D, "w": (br["w0"] + br["w1"]) * 0.5})
+		var o: Vector2 = br["o"]
+		var tip: Vector2 = br["t"]
+		var ctrl: Vector2 = o.lerp(tip, 0.5) + Vector2(0, -10.0)
+		var n_pen := 7
+		for i in n_pen:
+			var f0 := i / float(n_pen)
+			var f1 := (i + 1.0) / float(n_pen)
+			var bez := func(f: float) -> Vector2:
+				return o.lerp(ctrl, f).lerp(ctrl.lerp(tip, f), f)
+			var pa: Vector2 = bez.call(f0)
+			var pb: Vector2 = bez.call(f1)
+			var mid := (pa + pb) * 0.5 + Vector2(rng.randf_range(-1.5, 1.5), rng.randf_range(-1.0, 1.0))
+			var w: float = lerpf(br["w0"], br["w1"], (f0 + f1) * 0.5) * rng.randf_range(0.85, 1.1)
+			var col := TRUNK_D.lightened(rng.randf_range(-0.03, 0.05))
+			pens.append({"a": pa, "b": mid, "c": col, "w": w})
+			pens.append({"a": mid, "b": pb, "c": col, "w": w * 0.95})
 
 	# ── 冠笔（绕团切向，左上受光三档；撒到团半径 1.02 铺满）──
 	for b in t["blobs"]:
@@ -272,21 +287,21 @@ func gen_strokes(t: Dictionary, seed: int) -> Array:
 		var n: int = int(br_r * br_r * 0.085 * float(_params["crown_density"]))
 		for i in n:
 			var a := rng.randf_range(0.0, TAU)
-			var d := sqrt(rng.randf()) * br_r * 1.02
+			var d := sqrt(rng.randf()) * br_r * 0.95
 			var pos: Vector2 = c + Vector2(cos(a), sin(a)) * d
 			var tang: float = a + PI * 0.5 + rng.randf_range(-0.35, 0.35)
 			var rand_ang := rng.randf_range(0.0, TAU)
-			var mix_a := atan2(lerpf(sin(tang), sin(rand_ang), 0.55),
-				lerpf(cos(tang), cos(rand_ang), 0.55))
+			var mix_a := atan2(lerpf(sin(tang), sin(rand_ang), 0.35),
+				lerpf(cos(tang), cos(rand_ang), 0.35))
 			var dir := Vector2(cos(mix_a), sin(mix_a))
 			var l: float = sl * rng.randf_range(0.6, 1.4)
 			var w: float = sw * rng.randf_range(0.7, 1.3)
 			var loff: float = (pos - c - Vector2(-br_r * 0.3, -br_r * 0.34)).length() / maxf(br_r, 1.0)
 			var base := LEAF_L if loff < 0.55 else (LEAF_M if loff < 1.0 else LEAF_D)
 			var col := Color.from_hsv(
-				fposmod(base.h + rng.randf_range(-0.02, 0.02), 1.0),
-				clampf(base.s + rng.randf_range(-0.10, 0.10), 0.25, 0.95),
-				clampf(base.v + rng.randf_range(-0.12, 0.12), 0.25, 1.0))
+				fposmod(base.h + rng.randf_range(-0.01, 0.01), 1.0),
+				clampf(base.s + rng.randf_range(-0.06, 0.06), 0.30, 0.90),
+				clampf(base.v + rng.randf_range(-0.08, 0.08), 0.30, 1.0))
 			pens.append({"a": pos - dir * l * 0.5, "b": pos + dir * l * 0.5, "c": col, "w": w})
 	return pens
 

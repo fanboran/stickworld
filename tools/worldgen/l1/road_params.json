@@ -1,20 +1,27 @@
 {
- "_注释": "L1 路网生成参数（road_generate.py）。A* cost = 步长 × w(cell)，w = 1 + k_slope×|∇h|×disc + k_river(河) + k_lake(湖)，海洋不可通行。g 值单位 = 等效平路世界 px。",
+ "_注释": "L1 路网生成参数（road_generate.py，P3.5 贴地形重做）。边权 = 步长(px) × max(0.6, 1 + 上/下坡方向代价 + 静态加成)，静态加成 = 谷脊TPI + 河湖 + 群系 + 蜿蜒噪声，海洋不可通行。g 值单位 = 等效平路世界 px。坡度单位 = 每 px 高度 ×1000（平原≈1，山地≈26-40）。",
 
- "grid_res": 1024,
- "k_slope": 18.0,
+ "grid_res": 4096,
+ "astar_bbox_pad": 140,
+ "astar_window_max": 6000000,
+
+ "k_slope_up": 2.5,
+ "k_slope_down": 0.8,
+ "k_tpi": 8.0,
+ "tpi_radius_px": 50,
+
  "k_river": 6.0,
  "k_lake": 24.0,
+ "biome_cost": {"2": 0.15, "3": 0.05, "4": 0.35, "5": 0.4, "6": 3.0},
 
- "pass_depth": 0.06,
- "pass_window": 14,
- "pass_discount": 0.5,
- "pass_radius": 3,
+ "noise_seed": 20260906,
+ "noise_wavelength_px": 180,
+ "noise_octaves": 2,
+ "noise_decay": 0.55,
+ "noise_amp": 3.5,
 
  "t3_knn": 2,
- "astar_bbox_pad": 80,
- "astar_max_expand": 300000,
 
- "chaikin_passes": 3,
- "dp_tolerance": 6.0
+ "chaikin_passes": 2,
+ "dp_tolerance": 3.0
 }

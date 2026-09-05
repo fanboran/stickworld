@@ -44,6 +44,10 @@ var _hud: Control = null
 var _indicator: GranularityIndicator = null
 var _tooltip: Control = null
 
+## 视图名牌 + 图例（CanvasLayer 直接子节点，同批显隐；内容在 open() 喂）
+var _title_bar: MapTitleBar = null
+var _legend: MapLegend = null
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放）
 var _view_initialized: bool = false
 
@@ -89,6 +93,10 @@ func _auto_find_components() -> void:
 		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
 	if _tooltip == null:
 		_tooltip = MapControllerUtil.find_sibling(self, "SettlementTooltip")
+	if _title_bar == null:
+		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
+	if _legend == null:
+		_legend = MapControllerUtil.find_sibling(self, "MapLegend") as MapLegend
 
 
 func _input(event: InputEvent) -> void:
@@ -123,10 +131,14 @@ func handle_escape() -> bool:
 	return true
 
 
-## 指示器/tooltip 显隐同步（CanvasLayer 直下子节点，不随 Content 自动隐藏）
+## 指示器/名牌/图例/tooltip 显隐同步（CanvasLayer 直下子节点，不随 Content 自动隐藏）
 func _set_overlay_visible(v: bool) -> void:
 	if _indicator != null:
 		_indicator.visible = v
+	if _title_bar != null:
+		_title_bar.visible = v
+	if _legend != null:
+		_legend.set_shown(v)
 	if _tooltip != null and _tooltip.has_method("reset"):
 		_tooltip.call("reset")  # 复位 hover 记忆，重开后按当前鼠标位置重新评估
 
@@ -218,9 +230,50 @@ func open() -> void:
 	if _indicator != null and api != null and api.has_method("get_current_l1_label"):
 		var l1_label: int = api.get_current_l1_label()
 		_indicator.set_view("L1", "#%d" % l1_label, _drill_from_l2)
+		if _title_bar != null:
+			_update_title_bar(l1_label)
+	_fill_legend()
 	_set_overlay_visible(true)
 	if EventBus != null:
 		EventBus.strategic_map_opened.emit()
+
+
+## 名牌内容：地块 #N + 聚落数概览
+func _update_title_bar(l1_label: int) -> void:
+	if _title_bar == null:
+		return
+	var n_settlements := 0
+	if api != null and api.has_method("get_data"):
+		var data: L1WorldData = api.get_data()
+		if data != null:
+			for tile in data.tiles:
+				if tile.settlement != null:
+					n_settlements += 1
+	var subtitle := "%d 聚落" % n_settlements if n_settlements > 0 else ""
+	_title_bar.set_content("L1", "地块 #%d" % l1_label, subtitle)
+
+
+## 图例：政权色条目（与地图填充同色源 get_state_color）。
+## Phase B 模式系统实装后，切模式时按模式换 set_title/set_entries 内容。
+func _fill_legend() -> void:
+	if _legend == null or api == null or not api.has_method("get_states"):
+		return
+	var data: L1WorldData = api.get_data() if api.has_method("get_data") else null
+	if data == null:
+		return
+	var states: Dictionary = api.get_states()
+	var entries: Array = []
+	for state_id in states:
+		var info: Dictionary = states[state_id]
+		entries.append({
+			"color": data.get_state_color(state_id),
+			"text": str(info.get("name", state_id)),
+		})
+	if entries.is_empty():
+		_legend.set_entries(entries)  # 空态：set_shown 自动保持隐藏
+		return
+	_legend.set_title("政权")
+	_legend.set_entries(entries)
 
 
 ## 关闭战略图（恢复场景图输入，由接线方/ESC 调用）

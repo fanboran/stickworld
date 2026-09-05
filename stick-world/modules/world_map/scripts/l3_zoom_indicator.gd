@@ -15,11 +15,12 @@ class_name MapHUD
 const H := 56.0
 
 const BTN_W := 150.0
-const BTN_H := 32.0
+const BTN_H := StickTokens.BTN_H
 const SLIDER_W := 240.0
 const SLIDER_H := 28.0
 const LABEL_W := 60.0
-const GAP := 10.0
+## 控件间距（设计语言五档 4/6/8/12/16 取 12）
+const GAP := 12.0
 
 ## 滑块允许的缩放倍数范围（相对默认缩放）
 const MIN_MULT := 0.5
@@ -77,7 +78,7 @@ func set_default_zoom(z: float) -> void:
 
 
 func _build_widgets() -> void:
-	var x: float = 12.0
+	var x: float = StickTokens.SCREEN_MARGIN
 	# 细分模式按钮（仅 L3 有 toggle_display_mode）
 	if _renderer != null and _renderer.has_method("toggle_display_mode"):
 		_mode_btn = StickKit.button(self, "细分:关", _on_mode_pressed,
@@ -105,7 +106,7 @@ func _build_widgets() -> void:
 	_zoom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_zoom_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_zoom_label)
-	_dock_bottom_left(_zoom_label, x + SLIDER_W + 8.0, LABEL_W, SLIDER_H)
+	_dock_bottom_left(_zoom_label, x + SLIDER_W + GAP, LABEL_W, SLIDER_H)
 	_update_label()
 	# 100% 刻度（叠在滑块内底部，对准 grabber 中心）
 	_ruler = ColorRect.new()
@@ -115,13 +116,13 @@ func _build_widgets() -> void:
 	_update_ruler()
 
 
-## 停靠到控件左下角（距左下 12px，与屏幕安全边距一致）
+## 停靠到控件左下角（距左下 SCREEN_MARGIN，与屏幕安全边距一致）
 func _dock_bottom_left(node: Control, x: float, w: float, h: float) -> void:
 	node.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	node.offset_left = x
-	node.offset_top = -12.0 - h
+	node.offset_top = -StickTokens.SCREEN_MARGIN - h
 	node.offset_right = x + w
-	node.offset_bottom = -12.0
+	node.offset_bottom = -StickTokens.SCREEN_MARGIN
 
 
 func _update_ruler() -> void:

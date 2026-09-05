@@ -49,7 +49,7 @@ func show_victory(stats: Dictionary) -> void:
 	box.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "火柴人大战略 —— 求职 Demo 阶段目标全部达成"
+	subtitle.text = "火柴人大战略 —— 阶段目标全部达成"
 	subtitle.add_theme_font_size_override("font_size", 13)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_color_override("font_color", Color(0.7, 0.73, 0.78))

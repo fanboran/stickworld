@@ -55,14 +55,16 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 		if range_ck < 0.0 or unit.global_position.distance_to(fixate_on.global_position) <= range_ck:
 			return fixate_on
 
-	# 候选敌人：优先显式传入，否则按阵营从 battle 取
+	# 候选敌人：优先显式传入，否则按阵营从 battle 取。
+	# 战斗性能优化：range>0 时用地图空间网格预筛（半径内候选），
+	# 替代全敌列表逐个打分；候选已过滤死者（battle 存活列表缓存）
 	var enemies: Array = opts.get("enemies", [])
+	var range: float = opts.get("range", -1.0)
 	if enemies.is_empty():
-		enemies = _collect_enemies(unit, battle)
+		enemies = _collect_enemies(unit, battle, range)
 	if enemies.is_empty():
 		return null
 
-	var range: float = opts.get("range", -1.0)
 	var prefer_low_hp: bool = opts.get("prefer_low_hp", false)
 	var prefer_large: float = float(opts.get("prefer_large", 0.0))
 	var prefer_statue: bool = opts.get("prefer_statue", false)
@@ -101,11 +103,36 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 
 
 ## 候选敌人枚举（显式 opts.enemies 为空时按阵营从 battle 取）
-static func _collect_enemies(unit: Node, battle: Node) -> Array:
-	if battle == null or not battle.has_method("get_enemies_of"):
+## 候选敌人枚举（显式 opts.enemies 为空时按阵营从 battle 取）。
+## range>0 且单位已参战（faction≠0）且有地图网格时走邻域预筛
+## （cell 64px，+16px 余量覆盖帧内位移）；faction 0 走 battle 列表原语义。
+static func _collect_enemies(unit: Node, battle: Node, range: float = -1.0) -> Array:
+	var caller_faction: int = unit.faction_id if "faction_id" in unit else 0
+	if range > 0.0 and caller_faction != 0 and unit is Node2D and unit.has_method("get_map"):
+		var map: Node = unit.get_map()
+		if map != null and is_instance_valid(map) and map.has_method("query_neighbors"):
+			var out: Array = []
+			for e in map.query_neighbors(unit.global_position, range + 16.0):
+				if e == null or not is_instance_valid(e) or e == unit:
+					continue
+				if e.has_method("is_dead") and e.is_dead():
+					continue
+				if not e.has_method("get_faction"):
+					continue
+				var ef: int = e.get_faction()
+				# 阵营语义与 battle.get_enemies_of 对齐：候选未参战(0)不可为目标
+				if ef == 0 or ef == caller_faction:
+					continue
+				out.append(e)
+			return out
+	if battle == null:
 		return []
-	var faction: int = unit.faction_id if "faction_id" in unit else 0
-	return battle.get_enemies_of(faction)
+	# 存活列表缓存（battle 每物理帧过滤一次；死亡目标本就会被下方 _is_dead 再拦一道）
+	if battle.has_method("get_alive_enemies_of"):
+		return battle.get_alive_enemies_of(caller_faction)
+	if battle.has_method("get_enemies_of"):
+		return battle.get_enemies_of(caller_faction)
+	return []
 
 
 ## AOE 挥击目标查询（原版 MeleeAttack_Prototype.NumberOfUnitsThatCanHit 语义）：
@@ -125,7 +152,7 @@ static func find_targets_in_arc(unit: Node, opts: Dictionary = {}) -> Array:
 		battle = unit.get_battle_instance()
 	var enemies: Array = opts.get("enemies", [])
 	if enemies.is_empty():
-		enemies = _collect_enemies(unit, battle)
+		enemies = _collect_enemies(unit, battle, opts.get("range", -1.0))
 	if enemies.is_empty():
 		return out
 
@@ -224,7 +251,7 @@ static func find_weakest_ally(unit: Node, opts: Dictionary = {}) -> Node:
 	if battle == null or not is_instance_valid(battle):
 		if unit.has_method("get_battle_instance"):
 			battle = unit.get_battle_instance()
-	if battle == null or not is_instance_valid(battle) or not battle.has_method("get_allies_of"):
+	if battle == null or not is_instance_valid(battle):
 		return null
 	var faction: int = unit.get_faction() if unit.has_method("get_faction") else 0
 	if faction == 0:
@@ -234,7 +261,10 @@ static func find_weakest_ally(unit: Node, opts: Dictionary = {}) -> Node:
 	var best: Node = null
 	var best_ratio: float = 2.0
 	var best_dist: float = 0.0
-	for ally in battle.get_allies_of(faction):
+	# 存活盟友缓存（每物理帧过滤一次；候选本就要求 hp<1，存活过滤语义一致）
+	var allies: Array = battle.get_alive_allies_of(faction) \
+			if battle.has_method("get_alive_allies_of") else battle.get_allies_of(faction)
+	for ally in allies:
 		if ally == null or not is_instance_valid(ally):
 			continue
 		if _is_dead(ally):

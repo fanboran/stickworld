@@ -233,6 +233,37 @@ func get_allies_of(faction: int) -> Array:
 	return _units_attacker if faction == FACTION_ATTACKER else _units_defender
 
 
+## 存活敌对单位列表（战斗性能优化：每物理帧过滤缓存一次——
+## 此前每个目标选择调用方都在循环里逐个 has_method+is_dead 鸭式判死，
+## 196 单位混战每秒数万次纯浪费；所有消费方本就跳过死者，语义不变）
+func get_alive_enemies_of(faction: int) -> Array:
+	_rebuild_alive_cache()
+	return _alive_defender if faction == FACTION_ATTACKER else _alive_attacker
+
+
+## 存活盟友单位列表（同上，阵营侧）
+func get_alive_allies_of(faction: int) -> Array:
+	_rebuild_alive_cache()
+	return _alive_attacker if faction == FACTION_ATTACKER else _alive_defender
+
+
+var _alive_cache_frame: int = -1
+var _alive_attacker: Array = []
+var _alive_defender: Array = []
+
+
+func _rebuild_alive_cache() -> void:
+	if _alive_cache_frame == Engine.get_physics_frames():
+		return
+	_alive_cache_frame = Engine.get_physics_frames()
+	_alive_attacker = _units_attacker.filter(_is_alive_unit)
+	_alive_defender = _units_defender.filter(_is_alive_unit)
+
+
+static func _is_alive_unit(u) -> bool:
+	return u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead())
+
+
 ## 获取所有参战单位
 func get_all_units() -> Array:
 	return _units_attacker + _units_defender

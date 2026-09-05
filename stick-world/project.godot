@@ -58,14 +58,9 @@ ws_port_override=9581
 
 [physics]
 
-3d/physics_engine="Jolt Physics"
 common/physics_ticks_per_second=30
-# 人群战斗性能：物理/逻辑 tick 30Hz（百人级混战标准做法）——所有逐 tick
-# 脚本与物理成本直接减半，移动/冷却/击退均按 delta 速率语义自动补偿
-
-[rendering]
-
-rendering_device/driver.windows="d3d12"
+3d/physics_engine="Jolt Physics"
+"#äººç¾¤æææ§è½ï¼ç©ç/é»è¾tick30Hzï¼ç¾äººçº§æ··ææ ååæ³ï¼ââææétick#èæ¬ä¸ç©çææ¬ç´æ¥ååï¼ç§»å¨/å·å´/å»éåædeltaéçè¯­ä¹èªå¨è¡¥å¿[rendering]rendering_device/driver.windows"="d3d12"
 renderer/rendering_method.mobile="forward_plus"
 anti_aliasing/quality/msaa_2d=2
 anti_aliasing/quality/msaa_3d=2

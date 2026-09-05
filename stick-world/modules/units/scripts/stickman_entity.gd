@@ -187,6 +187,12 @@ const COMBAT_MORALE_RECOVER_FACTOR: float = 0.5
 var _dead_disable_timer: float = -1.0
 ## 分离扫描帧计数（O(n²) 扫描隔物理帧跑，帧率优化）
 var _sep_frame_counter: int = 0
+## AI 半频节拍计数与相位（0/1 错开均摊负载）；分离扫描节流分频——
+## 60Hz 物理下隔帧（=30Hz），30Hz 物理下逐帧（维持有效频率）
+var _ai_tick_counter: int = 0
+var _ai_phase: int = 0
+var _ai_rate_div: int = 2
+var _sep_rate_div: int = 2
 ## 脱离战斗士气恢复速率（每秒；AI 完善批次 3）
 const REST_MORALE_REGEN: float = 4.0
 
@@ -298,6 +304,10 @@ func _ready() -> void:
 	_apply_balance_data()
 	# 获取 AIController 子节点（§7.1）
 	_ai_controller = get_node_or_null("AIController")
+	_ai_phase = int(get_instance_id() % 2)
+	if Engine.get_physics_ticks_per_second() < 60:
+		_ai_rate_div = 1
+		_sep_rate_div = 1
 	# 从模型 marker 动态计算 foot_offset 基准（适配不同参考系）；
 	# 实际 foot_offset = 基准 × body_scale（_apply_scale 内重算，9q）
 	_foot_offset_base = _calculate_foot_offset()
@@ -478,16 +488,19 @@ func _physics_process(delta: float) -> void:
 	if possessed:
 		_handle_player_input(delta)
 	else:
-		# AI 控制：先让 AIController 决策（设置 _ai_move_dir），再处理移动
-		if _ai_controller != null and _ai_controller.has_method("physics_update"):
-			_ai_controller.physics_update(delta)
+		# AI 控制：先让 AIController 决策（设置 _ai_move_dir），再处理移动。
+		# 战斗性能优化：AI 决策与行为状态机降到 30Hz（隔物理帧、传倍增 delta
+		# 保持计时/加速度速率；移动仍逐帧平滑；相位按实例奇偶均摊负载）
+		_ai_tick_counter += 1
+		if _ai_controller != null and _ai_controller.has_method("physics_update") \
+				and _ai_tick_counter % _ai_rate_div == _ai_phase % _ai_rate_div:
+			_ai_controller.physics_update(delta * float(_ai_rate_div))
 		_handle_ai_input(delta)
 		# 静态分离：停住的单位也互相推开（移动方向修正只在移动时生效，
 		# 双方都停在射程边缘时会黏住——soft-body 位置修正解决）。
-		# 帧率优化：O(n²) 全场扫描隔物理帧跑一次（48 人混战每帧两次全场扫描
-		# 是掉帧大头，隔帧修正 ±3px 视觉无感）
+		# 帧率优化：邻域扫描隔物理帧跑（60Hz 物理=30Hz 分离；30Hz 物理下逐帧）
 		_sep_frame_counter += 1
-		if _sep_frame_counter % 2 == 0:
+		if _sep_frame_counter % _sep_rate_div == 0:
 			_apply_static_separation()
 
 	# 火柴人可在地面范围内上下左右移动（详见 §7.1.1）
@@ -685,8 +698,8 @@ func _handle_ai_input(delta: float) -> void:
 func _apply_separation(dir: Vector2) -> Vector2:
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		return dir
-	# 帧率优化：O(n²) 扫描隔物理帧跑（与静态分离共用帧计数）
-	if _sep_frame_counter % 2 != 0:
+	# 帧率优化：分离扫描隔物理帧跑（与静态分离共用帧计数）
+	if _sep_frame_counter % _sep_rate_div != 0:
 		return dir
 	if not _map_ref.has_method("query_neighbors"):
 		return dir

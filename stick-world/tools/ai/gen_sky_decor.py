@@ -145,7 +145,7 @@ def _tree_ridge(rnd, base_y, h, color, W=2048, H=320):
 	# 底部体积渐变（numpy 按深度乘暗：保留树干间隙的透气感，不做实心底带）
 	arr = np.asarray(out, dtype=np.float32)
 	Hh = arr.shape[0]
-	yy = np.arange(Hh)[:, None]
+	yy = np.arange(Hh)[:, None, None]  # (H,1,1)：对 (H,W,3) 逐行广播
 	fade_start = base_y - h * 0.35
 	dark = np.clip(1.0 - 0.28 * np.clip((yy - fade_start) / max(base_y - fade_start, 1), 0, 1), 0.72, 1.0)
 	arr[..., 0:3] *= dark

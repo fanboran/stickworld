@@ -13,8 +13,9 @@ extends Control
 
 ## 立方体基础尺寸
 const CUBE_SIZE: float = 30.0
-## 网格间距（均匀排布）
-const GRID_SPACING: float = 64.0
+## 网格间距（均匀排布）；泰拉瑞亚式背景美学：稀疏而非铺满
+## （128 → 1080p 约 135 个；曾 64 → 510 个密得像瓷砖，且 draw 调用翻四倍）
+const GRID_SPACING: float = 128.0
 ## 网格随机抖动幅度（避免死板对齐）
 const JITTER: float = 8.0
 ## 鼠标排斥半径（px）
@@ -90,9 +91,11 @@ func _rebuild_grid_if_needed() -> void:
 				"size": sz,
 				"radius": sz * 0.24,
 				"phase": rng.randf_range(0.0, TAU),
-				"speed": rng.randf_range(-0.9, 1.1),
+				# 泰拉瑞亚式背景运动密度：极慢（~30s 一圈，盯着看才发现在动）；
+				# 曾 -0.9~1.1 rad/s（每秒约 60°）快得像风扇
+				"speed": rng.randf_range(-0.15, 0.2),
 				"bob_phase": rng.randf_range(0.0, TAU),
-				"bob_amp": rng.randf_range(0.0, 5.0),
+				"bob_amp": rng.randf_range(0.0, 3.0),
 			})
 
 
@@ -105,7 +108,7 @@ func _draw() -> void:
 	for c in _cubes:
 		var base: Vector2 = c["pos"]
 		var push := _repulsion(base)
-		var bob := Vector2(0.0, sin(_time * 1.1 + c["bob_phase"]) * c["bob_amp"])
+		var bob := Vector2(0.0, sin(_time * 0.35 + c["bob_phase"]) * c["bob_amp"])
 		var ang: float = c["phase"] + _time * c["speed"]
 		_draw_cube(base + push + bob, c["size"], c["radius"], ang)
 

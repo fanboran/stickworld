@@ -132,6 +132,9 @@ func _physics_process(delta: float) -> void:
 	# 更新手动控制（拖动 + 边缘）
 	_update_manual_control(delta)
 	# 中键滚动（红警风格：鼠标偏离锚点方向 = 相机移动方向）
+	# 暂停时掐灭存量状态（按住中键开 ESC 的情况），防继续平移
+	if _middle_scrolling and TimeManager and TimeManager.is_paused():
+		_middle_scrolling = false
 	if _middle_scrolling:
 		var mouse_pos: Vector2 = get_viewport().get_mouse_position()
 		var mouse_delta: Vector2 = mouse_pos - _middle_anchor
@@ -329,6 +332,12 @@ func _compute_follow_x(delta: float) -> float:
 # ─────────────────────────────── 手动控制 ────────────────────────────────
 
 func _update_edge_scroll() -> void:
+	# 暂停（模态打开）时冻结：边缘滚动读视口鼠标位置、不经输入派发，
+	# _unhandled_input 的暂停拦截管不到它（ESC 界面鼠标蹭边屏幕平移的根因）
+	if TimeManager and TimeManager.is_paused():
+		if _edge_scroll_dir != 0:
+			_edge_scroll_dir = 0
+		return
 	# 总开关：建造放置期间关闭，防止拖动边界时相机边缘滚动干扰；
 	# 用户偏好开关（设置面板 control/edge_scroll）与总开关取交集
 	if not _edge_scroll_enabled or not _user_edge_scroll_enabled:

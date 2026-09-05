@@ -346,6 +346,14 @@ func _is_under_threat(bi: Node) -> bool:
 	return _count_enemies_near(_entity.global_position, THREAT_RANGE, bi) > 0
 
 
+## 公开威胁查询（血条脱战渐隐等 UI 消费）：近身有活敌 = 在战
+func is_under_threat() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	var bi: Node = _entity.get_battle_instance() if _entity.has_method("get_battle_instance") else null
+	return _is_under_threat(bi)
+
+
 ## 半径内存活敌对单位数（战斗性能优化：地图空间网格邻域查询，
 ## 替代对战斗敌对列表的全量线性扫描；未参战/无地图网格时回落旧全扫路径）
 func _count_enemies_near(pos: Vector2, radius: float, bi: Node) -> int:

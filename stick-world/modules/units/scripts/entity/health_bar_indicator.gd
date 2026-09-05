@@ -80,6 +80,25 @@ var _wobble_timer: float = 0.0
 ## 抖动/展开动画计时
 var _anim_time: float = 0.0
 
+# ── 显示状态（2026-09-06 用户指示三改：跟头对齐/脱战渐隐/悬浮显示）──
+## 显示系数 0~1：在战渐显、脱战渐隐（modulate.a 过渡，无硬切）；
+## 初始 0——出生脱战不闪现，入战才渐显
+var _shown: float = 0.0
+## 在战（近身有活敌）——节流查询，不每帧算
+var _in_combat: bool = false
+var _threat_timer: float = 0.0
+## 威胁查询节拍（s）：渐隐本身平滑，10Hz 足够
+const THREAT_CHECK_INTERVAL := 0.1
+## 鼠标悬浮半径（世界 px，实体原点起算）
+const HOVER_RADIUS := 36.0
+## 渐隐速度（每秒系数变化量；~0.33s 全程过渡）
+const FADE_SPEED := 3.0
+## 头部骨骼节点（跟头 x 对齐；找到前回退实体原点）
+var _head_node: Node2D = null
+var _head_find_tried: bool = false
+## 头骨骼路径（颈根——头球中心与颈根 x 基本一致，水平对齐够用）
+const HEAD_NODE_PATH := "hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head"
+
 
 func _ready() -> void:
 	# 绝对顶层：单位按 y 排序 z_index（0~140+）后，血条作为子节点若用相对 z
@@ -119,6 +138,17 @@ func set_faction(fid: int) -> void:
 
 func _process(delta: float) -> void:
 	_anim_time += delta
+	# 跟头 x 对齐：头球中心水平跟随（动画摆头时标记贴着头走）
+	_follow_head()
+	# 显示状态机：在战 / 掉血未满 / 悬浮的血量不满单位 → 显示；否则渐隐
+	_threat_timer -= delta
+	if _threat_timer <= 0.0:
+		_threat_timer = THREAT_CHECK_INTERVAL
+		_in_combat = _check_in_combat()
+	var hover: bool = _is_hovered()
+	var show: bool = _in_combat or _ever_damaged or hover
+	_shown = move_toward(_shown, 1.0 if show else 0.0, FADE_SPEED * delta)
+	modulate.a = _shown
 	# boiling line：定期重掷扰动相位（手绘逐帧抖动感）。
 	# 战斗性能优化：仅掉过血（横条形态）才抖——满血圆点无抖动细节，
 	# 混战时 ~200 根满血条每 0.12s 的无条件重画（多边形重建+三角化）是纯浪费
@@ -191,7 +221,7 @@ func _refresh() -> void:
 # ─────────────────────────────── 绘制 ────────────────────────────────
 
 func _draw() -> void:
-	if not visible or _ratio <= 0.0:
+	if not visible or _ratio <= 0.0 or _shown <= 0.01:
 		return
 	var color: Color = FACTION_COLORS.get(_faction, COLOR_NEUTRAL)
 	# 低血：填充明度闪烁（不用红色——红=低血会与红方语义撞色，改暗化+闪）
@@ -289,6 +319,47 @@ func _draw_wobbly_rect(r: Rect2, fill: Color, outline: Color) -> void:
 func _wobble(i: int) -> float:
 	var v: float = sin(float(i) * 127.1 + float(_wobble_seed) * 0.3117) * 43758.5453
 	return fposmod(v, 1.0) - 0.5
+
+
+# ────────────────── 显示状态辅助（跟头/在战/悬浮）──────────────────
+
+## 标记 x 对齐角色头部圆球中心（颈根骨骼世界 x；动画摆头时贴着头走）
+func _follow_head() -> void:
+	if _head_node == null and not _head_find_tried:
+		_head_find_tried = true
+		var entity := get_parent()
+		if entity != null:
+			var rig: Node = entity.get_node_or_null("RigHost/OutlineGroup/StickmanRig")
+			if rig != null:
+				_head_node = rig.get_node_or_null(HEAD_NODE_PATH) as Node2D
+	if _head_node != null and is_instance_valid(_head_node):
+		var entity := get_parent() as Node2D
+		if entity != null:
+			# 头骨骼世界 x → 实体局部坐标（除实体缩放；y 恒 OFFSET_Y 不跟）
+			position.x = (_head_node.global_position.x - entity.global_position.x) \
+					/ maxf(absf(entity.scale.x), 0.01)
+
+
+## 在战判定：近身有活敌（AI IsUnderThreat 真值，公开包装）
+func _check_in_combat() -> bool:
+	var entity := get_parent()
+	if entity == null or not is_instance_valid(entity):
+		return false
+	var ai: Node = entity.get_node_or_null("AIController")
+	if ai != null and ai.has_method("is_under_threat"):
+		return ai.is_under_threat()
+	return false
+
+
+## 鼠标悬浮：指针距实体原点 HOVER_RADIUS 内且血量不满 → 强制显示横条
+func _is_hovered() -> bool:
+	if _ratio >= 1.0:
+		return false
+	var entity := get_parent() as Node2D
+	if entity == null:
+		return false
+	return get_global_mouse_position().distance_squared_to(entity.global_position) \
+			< HOVER_RADIUS * HOVER_RADIUS
 
 
 ## 手绘感圆点轮廓（半径带扰动）

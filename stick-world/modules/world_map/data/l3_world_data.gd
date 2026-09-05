@@ -62,13 +62,14 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 		world.sea_links.append(sd)
 	# 老 L1 视觉层（可选加载，不影响 L2 交互；bin 优先）
 	var l1_path := "%s/l3_l1.json" % base_dir
-	if FileAccess.file_exists(l1_path):
+	# 导出包只含 .bin（JSON 被排除），gate 须认 bin，否则视觉层静默丢失
+	if FileAccess.file_exists(l1_path) or FileAccess.file_exists(_bin_of(l1_path)):
 		var l1_data := _read_data_dict(l1_path)
 		if not l1_data.is_empty():
 			world.l1_tiles = l1_data.get("tiles", [])
 	# 城市视觉层（可选；L3"模式:城市"用；bin 优先）
 	var city_path := "%s/l3_city.json" % base_dir
-	if FileAccess.file_exists(city_path):
+	if FileAccess.file_exists(city_path) or FileAccess.file_exists(_bin_of(city_path)):
 		var city_data := _read_data_dict(city_path)
 		if not city_data.is_empty():
 			world.city_tiles = city_data.get("tiles", [])
@@ -145,8 +146,12 @@ func get_region_color(_label: int) -> Color:
 ## 读取 l*_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，见 tools/worldgen/l_world_bake.gd），
 ## bin 缺失/格式不符（Godot 升级等）自动回退 JSON。JSON 回退时把 polygon 顶点统一转成
 ## PackedVector2Array(Vector2(x,y))，与 bin 产物一致（下游只面对一种形态）。
+static func _bin_of(json_path: String) -> String:
+	return json_path.get_basename() + ".bin"
+
+
 static func _read_data_dict(json_path: String) -> Dictionary:
-	var bin_path := json_path.get_basename() + ".bin"
+	var bin_path := _bin_of(json_path)
 	if FileAccess.file_exists(bin_path):
 		var f := FileAccess.open(bin_path, FileAccess.READ)
 		if f != null:

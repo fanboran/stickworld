@@ -306,8 +306,18 @@ static var _cached_birth_spawn_id := ""
 static func _birth_spawn_id() -> String:
 	if _cached_birth_spawn_id.is_empty():
 		var path := "res://config/strategic_map/l1_world.json"
-		if FileAccess.file_exists(path):
-			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-			if parsed is Dictionary:
-				_cached_birth_spawn_id = str((parsed as Dictionary).get("spawn_settlement_id", ""))
+		var parsed: Variant = null
+		# 导出包只有 .bin（JSON 被排除），bin 优先读取
+		var bin_path := path.get_basename() + ".bin"
+		if FileAccess.file_exists(bin_path):
+			var f := FileAccess.open(bin_path, FileAccess.READ)
+			if f != null and f.get_buffer(4).get_string_from_ascii() == "LWDB":
+				f.get_16()  # ver
+				var got: Variant = bytes_to_var(f.get_buffer(f.get_length()))
+				if got is Dictionary:
+					parsed = got
+		if parsed == null and FileAccess.file_exists(path):
+			parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if parsed is Dictionary:
+			_cached_birth_spawn_id = str((parsed as Dictionary).get("spawn_settlement_id", ""))
 	return _cached_birth_spawn_id

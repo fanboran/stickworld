@@ -36,6 +36,12 @@ custom_minimum_size = Vector2(31, 31)
 size_flags_vertical = 4
 script = ExtResource("6_gear")
 
+[node name="PlaceholderPreviewButton" type="Button" parent="MarginContainer/HBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 31)
+size_flags_vertical = 4
+text = "预览"
+
 [node name="SpeedLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=1073199118]
 layout_mode = 2
 vertical_alignment = 1

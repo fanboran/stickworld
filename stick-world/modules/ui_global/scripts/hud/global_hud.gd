@@ -15,6 +15,8 @@ const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hu
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
 @onready var settings_button: Button = get_node_or_null("MarginContainer/HBoxContainer/SettingsButton")
+## 占位界面预览入口（开发用）：打开占位预览面板（大界面空面板陈列）
+@onready var placeholder_preview_button: Button = get_node_or_null("MarginContainer/HBoxContainer/PlaceholderPreviewButton")
 ## 材料面板（顶栏下方横条，ResourceBar 挂这里）
 @onready var _resource_host: PanelContainer = get_node_or_null("ResourceBarHost")
 
@@ -54,6 +56,8 @@ func _ready() -> void:
 		formation_button.pressed.connect(_on_formation_button_pressed)
 	if settings_button != null:
 		settings_button.pressed.connect(_on_settings_button_pressed)
+	if placeholder_preview_button != null:
+		placeholder_preview_button.pressed.connect(_on_placeholder_preview_pressed)
 
 
 func _process(_delta: float) -> void:
@@ -183,6 +187,24 @@ func _on_formation_button_pressed() -> void:
 
 
 # ─────────────────────────────── 设置菜单（齿轮按钮）────────────────────────────────
+
+## 打开占位界面预览（开发用：大界面空面板陈列；经 ModalOverlay 模态展示）
+func _on_placeholder_preview_pressed() -> void:
+	var gr := _game_root
+	if gr == null or not ("ui_root" in gr):
+		return
+	var overlay: Node = gr.ui_root
+	var modal: Control = overlay.get_slot("ModalOverlay")
+	if modal == null:
+		return
+	# 复用暂停菜单的帝国功能陈列入口（同款模态栈管理，ESC 逐层退）
+	var pv: Control = preload("res://modules/ui_global/scenes/placeholders/ui_placeholder_preview.tscn").instantiate()
+	pv.name = "PlaceholderPreviewInGame"
+	modal.add_child(pv)
+	var stack := UIModalStack.find(modal)
+	if stack != null:
+		stack.push(pv, UIModalStack.Layer.EMPIRE_PANEL)
+
 
 ## 打开/关闭设置菜单（调试地图选择/速度控制）
 func _on_settings_button_pressed() -> void:

@@ -33,6 +33,13 @@ var neighbors: Array = []
 ## 湖泊多边形（浅蓝显示）：[[(y,x),...]]（context 坐标）
 var lakes: Array = []
 
+## 河流折线（B3，[y,x] 顶点与 L2 惯例一致）：[{"pts": PackedVector2Array(x,y), "w": float}]
+var rivers: Array = []
+
+## 城市（C2 blob，blob_bake.py 注入）：[{"id": String, "pos": Vector2(context 坐标),
+## "level": int, "score": float(已含每局扰动), "cap": PackedFloat32Array(16 方向容量)}]
+var cities: Array = []
+
 ## 地区名（region_001 等）
 var region_id: String = ""
 
@@ -46,6 +53,9 @@ var neighbor_border_segs: Array = []
 
 ## 城市模式贴图（l2_city_preview.png，context 尺寸 RGBA：tiles 区域填城市蒙版色，其余透明）
 var city_preview_texture: Texture2D = null
+
+## 地形模式底图（l2_terrain.png，context 尺寸 RGBA：程序着色地形，世界边界外虚空透明）
+var terrain_texture: Texture2D = null
 
 var _tile_by_label: Dictionary = {}
 
@@ -68,11 +78,17 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	world.tiles_offset = Vector2i(int(toff[0]), int(toff[1]))
 	world.neighbors = data.get("neighbors", [])
 	world.lakes = data.get("lakes", [])
+	world.rivers = _rivers_from(data.get("rivers", []))
+	world.cities = _cities_from(data.get("cities", []))
 	world.load_baked_geom("%s/l2_geom.bin" % base_dir)
 	# 城市模式贴图（可选）
 	var cprev_path := "%s/l2_city_preview.png" % base_dir
 	if ResourceLoader.exists(cprev_path):
 		world.city_preview_texture = load(cprev_path) as Texture2D
+	# 地形模式底图（可选，B2 程序着色产物）
+	var terrain_path := "%s/l2_terrain.png" % base_dir
+	if ResourceLoader.exists(terrain_path):
+		world.terrain_texture = load(terrain_path) as Texture2D
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l2_base_2048.png")]
 	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l2_tiles_index_2048.png")]
 	var border_path := "%s/%s" % [base_dir, data.get("border_texture", "l2_tiles_border_2048.png")]
@@ -235,3 +251,63 @@ static func _to_vec2(poly: Array) -> PackedVector2Array:
 		var p: Array = poly[i]
 		arr[i] = Vector2(float(p[1]), float(p[0]))  # json [y,x] → Vector2(x,y)
 	return arr
+
+
+## 河流归一化（B3）：json 的 {"pts": [[y,x],...], "w": f} → {"pts": PackedVector2Array(x,y), "w": float}
+## bin 路径 pts 保持 json 原样（l_world_bake 未转换 rivers），此处统一转渲染坐标
+static func _rivers_from(arr: Array) -> Array:
+	var out: Array = []
+	for rv in arr:
+		var d: Dictionary = rv if rv is Dictionary else {}
+		var pts_var: Variant = d.get("pts", [])
+		var pts := PackedVector2Array()
+		if pts_var is PackedVector2Array:
+			pts = pts_var
+		elif pts_var is Array:
+			pts = _to_vec2(pts_var)
+		if pts.size() >= 2:
+			out.append({"pts": pts, "w": float(d.get("w", 2.0))})
+	return out
+
+
+## 城市归一化（C2）：json 的 {"id","pos":[y,x],"level","population_score","blob_capacity"}
+## → 渲染形态（pos→Vector2(x,y)、capacity→PackedFloat32Array、score 就地做每局扰动，
+## 出生聚落免疫——出生 id 从出生包顶层读一次缓存，与 L1WorldData 装配同口径）
+static func _cities_from(arr: Array) -> Array:
+	var out: Array = []
+	for c in arr:
+		var d: Dictionary = c if c is Dictionary else {}
+		var sid: String = str(d.get("id", ""))
+		if sid.is_empty():
+			continue
+		var pos_arr: Array = d.get("pos", [0, 0])
+		var city := {
+			"id": sid,
+			"pos": Vector2(float(pos_arr[1]), float(pos_arr[0])),   # json [y,x] → (x,y)
+			"level": int(d.get("level", 1)),
+			"score": SettlementRef.jitter_population_score(
+				float(d.get("population_score", 0.0)), sid,
+				WorldState.run_seed if WorldState else 0,
+				sid == _birth_spawn_id()),
+			"cap": PackedFloat32Array(),
+		}
+		var cap_var: Variant = d.get("blob_capacity", [])
+		if cap_var is Array and (cap_var as Array).size() == SettlementBlob.direction_count():
+			for v in cap_var:
+				city["cap"].append(float(v))
+		out.append(city)
+	return out
+
+
+## 出生聚落 id（出生包顶层字段；静态缓存——13 个 L2 包逐个加载时只读一次）
+static var _cached_birth_spawn_id := ""
+
+
+static func _birth_spawn_id() -> String:
+	if _cached_birth_spawn_id.is_empty():
+		var path := "res://config/strategic_map/l1_world.json"
+		if FileAccess.file_exists(path):
+			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+			if parsed is Dictionary:
+				_cached_birth_spawn_id = str((parsed as Dictionary).get("spawn_settlement_id", ""))
+	return _cached_birth_spawn_id

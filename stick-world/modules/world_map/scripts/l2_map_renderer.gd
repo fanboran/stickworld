@@ -15,6 +15,11 @@ enum DisplayMode { MODE_L1, MODE_CITY }
 var _data: L2WorldData = null
 var _camera: MapCamera = null
 
+## 当前地图模式（B4 TERRAIN/POLITICAL，MapModeManager 广播 → 控制器转发）。
+## 地形底图层（B2 产 l2_terrain.png）与政权叠加层（Phase F）落地前两模式渲染一致
+## （回退现状着色），本字段为届时分层绘制的接入口
+var map_mode: int = MapModeManager.Mode.TERRAIN
+
 ## 恒城市模式（L2 即"具体到城市"的视图）；不再提供 toggle_display_mode（无细分按钮）
 var display_mode: int = DisplayMode.MODE_CITY
 
@@ -41,15 +46,27 @@ const TILE_BORDER_WIDTH := 5.2   # 原 4 ×1.3
 
 ## 海洋背景色
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
-## 湖泊（深色系，比海洋更深更沉）
-const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
+## 湖泊（对齐 B2 底图湖色 terrain_params.json colors.lake；mesh 顶点色由 l2_bake 烘入）
+const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
+## 河流（B3）：与 L3/L2 底图预渲染河流同色；POLITICAL 模式矢量叠加（TERRAIN 底图已含，不重复画）
+const RIVER_COLOR := Color(46.0 / 255.0, 102.0 / 255.0, 140.0 / 255.0)
+const RIVER_MIN_WIDTH := 2.5
 ## 相邻地区（灰色，不上色）
 const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
+
+## 城市建成区 blob（C2）：L2 分档缩小系数（地图单位，画在河流之上、hover 之下）；
+## 描边随三角化合并进 line mesh（百城级零逐条 draw）
+const BLOB_L2_SCALE := 0.3
+const BLOB_FILL := Color(0.62, 0.57, 0.50, 0.92)
+const BLOB_EDGE := Color(0.24, 0.20, 0.15)
+const BLOB_EDGE_WIDTH := 3.0          # 地图单位（L2 视野大，随缩放自然变化）
 
 var _static_mesh: ArrayMesh = null       # 当前地区地块（彩色）
 var _neighbors_mesh: ArrayMesh = null    # 相邻地区（灰色）
 var _lakes_mesh: ArrayMesh = null        # 湖泊（浅蓝）
 var _holes_mesh: ArrayMesh = null        # 当前地块洞（海洋色）
+var _blob_fill_mesh: ArrayMesh = null    # 城市建成区 blob 填充（C2，set_data 烘焙一次）
+var _blob_line_mesh: ArrayMesh = null    # blob 描边（line list，同批烘焙）
 var _tiles_offset := Vector2.ZERO        # 当前地区 bbox 原点在 context 中的位置
 var _context_size := Vector2.ONE
 var _tile_border_segs: Array = []        # 地块描边段（烘焙，已合并共线段并滤除湖泊/边缘段）
@@ -66,6 +83,14 @@ func set_camera(camera: MapCamera) -> void:
 	_camera = camera
 
 
+## 地图模式切换（控制器在 open() 时也推一次当前模式——跨视图全局状态）
+func set_map_mode(mode: int) -> void:
+	if mode == map_mode:
+		return
+	map_mode = mode
+	queue_redraw()
+
+
 func refresh() -> void:
 	queue_redraw()
 
@@ -76,6 +101,8 @@ func _build_static_mesh() -> void:
 	_neighbors_mesh = null
 	_lakes_mesh = null
 	_holes_mesh = null
+	_blob_fill_mesh = null
+	_blob_line_mesh = null
 	if _data == null:
 		return
 	_tiles_offset = Vector2(_data.tiles_offset[0], _data.tiles_offset[1])
@@ -93,6 +120,60 @@ func _build_static_mesh() -> void:
 	# 描边段（烘焙时已合并共线段并滤除边缘段）
 	_tile_border_segs = _data.tile_border_segs
 	_neighbor_border_segs = _data.neighbor_border_segs
+	_bake_blob_meshes()
+
+
+## 烘焙城市 blob 层：全部城市轮廓（L2 缩放）三角化合并一张填充 mesh + 一张 line list
+## 描边（百城级每帧只 2 次 draw_mesh；population_score 本局不变，set_data 一次即可）
+func _bake_blob_meshes() -> void:
+	var verts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var tris := PackedInt32Array()
+	var lverts := PackedVector2Array()
+	for city in _data.cities:
+		var outline := SettlementBlob.generate_outline(
+			str(city["id"]), int(city["level"]), city["cap"], float(city["score"]))
+		if outline.size() < 3:
+			continue
+		var pos: Vector2 = city["pos"]
+		var base := verts.size()
+		for i in outline.size():
+			verts.append(pos + outline[i] * BLOB_L2_SCALE)
+			cols.append(BLOB_FILL)
+		var t := Geometry2D.triangulate_polygon(outline)
+		if t.is_empty():
+			continue
+		for idx in t:
+			tris.append(base + idx)
+		for i in outline.size():
+			var a := pos + outline[i] * BLOB_L2_SCALE
+			var b := pos + outline[(i + 1) % outline.size()] * BLOB_L2_SCALE
+			lverts.append(a)
+			lverts.append(b)
+	_blob_fill_mesh = _mesh_from_arrays(verts, cols, tris, Mesh.PRIMITIVE_TRIANGLES)
+	_blob_line_mesh = _mesh_from_arrays(lverts, PackedColorArray(), PackedInt32Array(), Mesh.PRIMITIVE_LINES)
+
+
+## 顶点 2D 数组 → ArrayMesh（lines 时 colors/indices 可空，逐顶点补边色）
+func _mesh_from_arrays(verts: PackedVector2Array, cols: PackedColorArray,
+		tris: PackedInt32Array, prim: int) -> ArrayMesh:
+	if verts.is_empty():
+		return null
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	if prim == Mesh.PRIMITIVE_LINES:
+		var lc := PackedColorArray()
+		lc.resize(verts.size())
+		for i in verts.size():
+			lc[i] = BLOB_EDGE
+		arr[Mesh.ARRAY_COLOR] = lc
+	else:
+		arr[Mesh.ARRAY_COLOR] = cols
+		arr[Mesh.ARRAY_INDEX] = tris
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(prim, arr)
+	return mesh
 
 
 func _make_mesh_from_baked(baked: Dictionary) -> ArrayMesh:
@@ -139,26 +220,32 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if _data == null:
 		return
-	# 1. 海洋背景（context 尺寸）
+	# 地形模式（B2）：程序着色底图替代填充层（湖泊/海洋/邻居地形已在纹理内）
+	var terrain := map_mode == MapModeManager.Mode.TERRAIN and _data.terrain_texture != null
+	# 1. 海洋背景（context 尺寸；地形纹理的虚空透明区透出此色）
 	draw_rect(Rect2(Vector2.ZERO, _context_size), OCEAN_COLOR)
-	# 2. 湖泊（浅蓝）
-	if _lakes_mesh != null:
-		draw_mesh(_lakes_mesh, null)
-	# 3. 相邻地区（灰色）
-	if _neighbors_mesh != null:
-		draw_mesh(_neighbors_mesh, null)
-	if display_mode == DisplayMode.MODE_CITY:
-		# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）
-		if _data.city_preview_texture != null:
-			draw_texture_rect(_data.city_preview_texture,
-				Rect2(Vector2.ZERO, _context_size), false)
+	if terrain:
+		draw_texture_rect(_data.terrain_texture,
+			Rect2(Vector2.ZERO, _context_size), false)
 	else:
-		# 4. 当前地区地块（彩色）
-		if _static_mesh != null:
-			draw_mesh(_static_mesh, null)
-		# 5. 当前地块洞（海洋色）
-		if _holes_mesh != null:
-			draw_mesh(_holes_mesh, null)
+		# 2. 湖泊（浅蓝）
+		if _lakes_mesh != null:
+			draw_mesh(_lakes_mesh, null)
+		# 3. 相邻地区（灰色）
+		if _neighbors_mesh != null:
+			draw_mesh(_neighbors_mesh, null)
+		if display_mode == DisplayMode.MODE_CITY:
+			# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）
+			if _data.city_preview_texture != null:
+				draw_texture_rect(_data.city_preview_texture,
+					Rect2(Vector2.ZERO, _context_size), false)
+		else:
+			# 4. 当前地区地块（彩色）
+			if _static_mesh != null:
+				draw_mesh(_static_mesh, null)
+			# 5. 当前地块洞（海洋色）
+			if _holes_mesh != null:
+				draw_mesh(_holes_mesh, null)
 	# 5.5 地块常驻描边（地图绝对粗细，放大超屏幕上限时 clamp）
 	var twidth := TILE_BORDER_WIDTH
 	if _camera != null and _camera.has_method("get_zoom"):
@@ -174,8 +261,21 @@ func _draw() -> void:
 			draw_line(seg[0], seg[1], BORDER_COLOR, bw, true)
 	# 6.5 湖泊绘制到最上层：覆盖灰色相邻地区/非地块区（湖是水域，不应被灰影盖住）。
 	# 地块内湖泊已作洞（5 步洞网格同色），此处再绘一次湖泊多边形，确保非地块区的湖也显现。
-	if _lakes_mesh != null:
+	# 地形模式下纹理已含湖色，跳过（避免纯色湖 mesh 盖掉纹理湖渐变）。
+	if _lakes_mesh != null and not terrain:
 		draw_mesh(_lakes_mesh, null)
+	# 6.6 河流矢量（B3）：POLITICAL 模式叠加（TERRAIN 底图已含河流，不重复画）。
+	# 画在湖泊上层之外的水系表达——河折线止于湖岸/海岸（生成端 mask 同源），画湖后即可。
+	if not terrain:
+		for rv in _data.rivers:
+			var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
+			if rpts.size() >= 2:
+				draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
+	# 6.7 城市建成区 blob（C2）：填充 + 描边两张合并 mesh（set_data 烘焙一次，两模式恒画）
+	if _blob_fill_mesh != null:
+		draw_mesh(_blob_fill_mesh, null)
+	if _blob_line_mesh != null:
+		draw_mesh(_blob_line_mesh, null)
 	# 7. hover 地块轮廓描边（灰，最上层；固定屏幕像素粗细，不随缩放）
 	var hpolys: Array = hovered_tile.get("polygons", [hovered_tile.get("polygon", [])])
 	for hp in hpolys:

@@ -13,8 +13,9 @@ const PUSH_DURATION: float = 3.0
 
 ## 出行提示信号（direction: "north"/"south"）
 signal boundary_prompt(direction: String, show: bool)
-## 请求打开大世界地图
-signal open_world_map_requested()
+## 请求打开大世界地图。full_map：true = 边界自动触发（直接开 L1 大图，原语义）；
+## false = 玩家按 Tab（走三态循环，由 SystemSetup 分发）
+signal open_world_map_requested(full_map: bool)
 
 var _map: Node2D = null
 var _game_root: Node = null
@@ -59,7 +60,7 @@ func _physics_process(delta: float) -> void:
 		if (px - map_left) < 32.0:
 			_push_timer += delta
 			if _push_timer >= PUSH_DURATION:
-				open_world_map_requested.emit()
+				open_world_map_requested.emit(true)
 				_push_timer = 0.0
 		else:
 			_push_timer = 0.0
@@ -70,7 +71,7 @@ func _physics_process(delta: float) -> void:
 		if (map_right - px) < 32.0:
 			_push_timer += delta
 			if _push_timer >= PUSH_DURATION:
-				open_world_map_requested.emit()
+				open_world_map_requested.emit(true)
 				_push_timer = 0.0
 		else:
 			_push_timer = 0.0
@@ -83,5 +84,5 @@ func _physics_process(delta: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
-		open_world_map_requested.emit()
+		open_world_map_requested.emit(false)
 		get_viewport().set_input_as_handled()

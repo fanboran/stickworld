@@ -14,6 +14,6 @@ func _draw() -> void:
 	var center := size * 0.5
 	var radius := minf(size.x, size.y) * 0.4
 	# 底环（低透明）
-	draw_arc(center, radius, 0.0, TAU, 24, StickTokens.BORDER, 3.0)
+	draw_arc(center, radius, 0.0, TAU, 48, StickTokens.BORDER, 3.0, true)
 	# 前景弧（琥珀，约 1/4 圆，绕圆心旋转）
-	draw_arc(center, radius, _angle, _angle + TAU * 0.25, 24, StickTokens.ACCENT, 3.0)
+	draw_arc(center, radius, _angle, _angle + TAU * 0.25, 48, StickTokens.ACCENT, 3.0, true)

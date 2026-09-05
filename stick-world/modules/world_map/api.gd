@@ -68,6 +68,23 @@ func initialize(json_path: String, base_dir: String) -> void:
 			_renderer.set_data(_data)
 		if _camera != null and _camera.has_method("set_data"):
 			_camera.set_data(_data)
+	# C2 blob 实时变动：建设系统广播 settlement_updated -> 当前/出生数据中该聚落
+	# 规模刷新 + 当前视图单城重算（L2/L3 为烘焙静态层，本局规模不变不重算）
+	if EventBus != null and not EventBus.settlement_updated.is_connected(_on_settlement_updated):
+		EventBus.settlement_updated.connect(_on_settlement_updated)
+
+
+## settlement_updated 订阅：更新内存规模 + 当前 L1 视图 blob 单城重算
+func _on_settlement_updated(settlement_id: String, population_score: float) -> void:
+	for data in [_data, _birth_data]:
+		if data == null:
+			continue
+		var sref: SettlementRef = data.get_settlement(settlement_id)
+		if sref == null:
+			continue
+		sref.population_score = clampf(population_score, 0.0, 1.0)
+		if data == _data and _renderer != null and _renderer.has_method("invalidate_blob"):
+			_renderer.invalidate_blob(settlement_id)
 
 
 func is_initialized() -> bool:
@@ -114,6 +131,26 @@ func get_current_l1_label() -> int:
 	return _current_l1_label
 
 
+## 玩家位置动态接线（F2/C1，总体设计 §5.6）：玩家所在场景图 map_id → 反查当前 L1
+## 数据中的聚落 → 更新图钉 + 当前地块描边（set_current_tile）。
+## 命中返回 true；map_id 为空 / 数据未加载 / 不在当前 L1（其他 L1 包未加载）返回 false，
+## 此时三处标记保持出生默认——D 期进城闭环回填 settlement.map_id 后自然生效。
+## 跨 L1 移动时的 set_player_l1（Tab 跟随）与 set_player_region（M 描边）依赖 pack
+## 解析，同在 D 期接线（controller.set_player_l1 / l3_map_renderer.set_player_region 入口已备）。
+func set_player_map(map_id: String) -> bool:
+	if map_id.is_empty() or _data == null or _renderer == null:
+		return false
+	for tile in _data.tiles:
+		var s = tile.settlement
+		if s != null and s.map_id == map_id:
+			if _renderer.has_method("set_current_tile"):
+				_renderer.set_current_tile(tile.tile_id)
+			if _renderer.has_method("set_player_pin"):
+				_renderer.set_player_pin(s.position)
+			return true
+	return false
+
+
 func get_data() -> L1WorldData:
 	return _data
 
@@ -143,7 +180,7 @@ func get_tiles() -> Array:
 	return _data.tiles
 
 
-## 获取所有道路（像素坐标点列）
+## 获取所有道路：[{"pts": PackedVector2Array, "tier": "DIRT"/"PAVED", "length_px": float}]
 func get_roads() -> Array:
 	if _data == null:
 		return []
@@ -186,6 +223,18 @@ func map_to_screen(map_pos: Vector2) -> Vector2:
 	if _camera != null and _camera.has_method("map_to_screen"):
 		return _camera.map_to_screen(map_pos)
 	return map_pos
+
+
+# ===== 地图模式（B4，MapModeManager）=====
+
+## 设置地图模式（MapModeManager.Mode.TERRAIN / POLITICAL；跨视图全局生效并广播）
+func set_map_mode(mode: int) -> void:
+	MapModeManager.set_mode(mode)
+
+
+## 当前地图模式（MapModeManager.Mode 枚举值）
+func get_map_mode() -> int:
+	return MapModeManager.current_mode
 
 
 # ===== 政治属性（只读查询） =====

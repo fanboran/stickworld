@@ -36,7 +36,7 @@ func _draw() -> void:
 		return
 	var anchor: Vector2 = camera.get_middle_anchor()
 	# 圆圈
-	draw_arc(anchor, CIRCLE_RADIUS, 0, TAU, 32, ICON_COLOR, 1.5)
+	draw_arc(anchor, CIRCLE_RADIUS, 0, TAU, 48, ICON_COLOR, 1.5, true)
 	# 4 方向箭头
 	_draw_arrow(anchor + Vector2(0, -CIRCLE_RADIUS - ARROW_GAP), Vector2(0, -1))  # 上
 	_draw_arrow(anchor + Vector2(0, CIRCLE_RADIUS + ARROW_GAP), Vector2(0, 1))    # 下

@@ -18,16 +18,17 @@ const STAR_SPAN_X: float = 9800.0
 const STAR_TOP: float = 80.0
 const STAR_BOTTOM: float = 640.0
 const REDRAW_HZ: float = 12.0
-## 极光：条带步进、整体强度、色相每秒推进（一夜≈25s 转 0.55 圈，绿→青→蓝→紫）、
-## 条带定义 [基线y, 振幅, 频率, 色相偏移]——偏移使三带呈空间色相差
-## （AuroraSky.cs：hue = 时间 + cos(带内t×2π×2.5)×0.1，sat=1，lum 底0.5顶1.0）
+## 极光：条带步进、整体强度、色相缓慢漂移（漂移限幅在绿→青→紫区间内，
+## 不再全色相轮转——轮转会扫过红/黄，夜空验收不似极光）、
+## 条带定义 [基线y, 振幅, 频率, 色相偏移]——偏移使三带呈绿/青/紫主色
+## （AuroraSky.cs：sat=1，lum 底0.5顶1.0）
 const AURORA_STEP: float = 24.0
-const AURORA_ALPHA: float = 0.34
-const AURORA_HUE_SPEED: float = 0.022
+const AURORA_ALPHA: float = 0.26
+const AURORA_HUE_SPEED: float = 0.004
 const AURORA_RIBBONS: Array = [
-	[150.0, 64.0, 0.0042, 0.00],
-	[205.0, 88.0, 0.0031, 0.10],
-	[258.0, 52.0, 0.0056, 0.55],
+	[150.0, 64.0, 0.0042, 0.40],
+	[205.0, 88.0, 0.0031, 0.46],
+	[258.0, 52.0, 0.0056, 0.72],
 ]
 ## 日月（Terraria 昼 54000 tick ≈ 我们 5..21 时；夜 19..5 时）
 const SUN_HOUR_START: float = 5.0
@@ -215,8 +216,9 @@ func _on_aurora_draw() -> void:
 					+ amp * 0.35 * sin(x * freq * 2.7 - _time * 0.6)
 			if h > 8.0:
 				var t: float = (x - x_left) / STAR_SPAN_X  # 带内参数 0..1
+				# 带内色相微调制限幅 ±0.04：可见窗内不再扫过红/黄色区
 				var hue: float = fmod(_time * AURORA_HUE_SPEED + hue_off
-						+ cos(t * TAU * 2.5) * 0.1, 1.0)
+						+ cos(t * TAU * 2.5) * 0.04, 1.0)
 				var core := Color.from_hsv(hue, 0.95, 0.85)
 				# 列强度沿帷幕走向起伏（涟漪感）
 				var band: float = 0.55 + 0.45 * sin(x * freq * 0.5 + _time * 0.22 + y0)
@@ -252,19 +254,21 @@ static func _celestial_pos(t: float, center_x: float) -> Dictionary:
 	}
 
 
-## 太阳：暖金圆盘 + 双层光晕，晨昏放大贴地（白昼可见，夜间淡出）
+## 太阳：暖金圆盘 + 双层光晕，晨昏放大贴地（白昼可见，夜间淡出）。
+## 淡出跟天空底色亮度而非 CanvasModulate——黄昏 19:00 粉峰时 CM 亮度已跌到
+## ~0.55（day_t≈0.014），按 day_t 淡出太阳会提前消失，与"日落粉峰+橙红太阳
+## 贴地平线"的画面不同步；天空底色此时仍亮（粉 lum≈0.58），20:30 前后才暗灭。
 func _draw_sun(center_x: float, hour: float, cm: Color) -> void:
-	var day_t: float = 1.0 - _night
-	if day_t <= 0.01:
-		return
 	var t: float = _traverse(hour, SUN_HOUR_START, SUN_HOUR_END)
 	if t < 0.0:
+		return
+	var a: float = clampf((EnvironmentAPI.sample_sky_bg_color(hour).get_luminance() - 0.25) / 0.30, 0.0, 1.0)
+	if a <= 0.01:
 		return
 	var c: Dictionary = _celestial_pos(t, center_x)
 	var p: Vector2 = c["pos"]
 	var s: float = c["scale"]
 	var r: float = 34.0 * s
-	var a: float = day_t
 	# 晨昏偏橙（SetBackColor 午后→日落暖红 ramp 的简化连续版）
 	var warm: float = clampf(c["p"] * 1.4, 0.0, 1.0)
 	var disc := Color(1.0, 0.92 - 0.18 * warm, 0.62 - 0.12 * warm, a)

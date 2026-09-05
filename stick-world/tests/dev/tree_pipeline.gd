@@ -14,8 +14,8 @@ extends RefCounted
 ## pen 约定：{a: Vector2, b: Vector2, c: Color(eff 混合后), w: int(像素宽), g: int}
 ## g：0=干笔触 1=枝直绘 2=冠笔触；绘制顺序 = 列表顺序（冠最后 = alpha-over 在上）。
 
-const W := 384
-const H := 672
+const W := 416
+const H := 912
 const GRID := 4
 const GW := W / GRID  # 96
 const GH := H / GRID  # 168
@@ -29,14 +29,13 @@ const K_SCALE := 2.625
 ## 枝叶区干段拉长——枝分布空间随之变稀，顺带缓解枝堆叠）
 const DEFAULT_PARAMS := {
 	"height_factor": 1.00,
-	"bare_frac": 0.25,
-	"trunk_frac": 0.85,
-	"trunk_w": 0.042,
-	"crown_r_coef": 0.52,
-	"crown_cap": 0.30,
-	"crown_lift": 0.30,
-	"hat_n": 8.0,
-	"branch_prob": 0.48,
+	"bare_frac": 0.28,
+	"trunk_frac": 0.71,
+	"trunk_w": 0.055,
+	"crown_r_coef": 0.97,
+	"crown_cap": 0.43,
+	"crown_lift": 0.00,
+	"hat_n": 12.0,
 	"seg_n": 9.0,
 }
 
@@ -167,31 +166,15 @@ static func _gen_tree_struct(rng: RandomNumberGenerator, P: Dictionary) -> Dicti
 	for i: int in xs.size():
 		xs[i] -= cx_mean - W * 0.5
 
-	# 枝叶干段：首末段强制普通，中间段按样式池出枝（同侧枝不连续）
+	# 枝叶干段：全部 plain（侧枝/侧簇由独立的簇逻辑生成，段样式已废弃）
 	var segs: Array = []
-	var last_l := false
-	var last_r := false
-	var bp := float(P["branch_prob"])
 	for i: int in n_seg:
 		var y_top: float = leaf_ground - (i + 1) * seg_h
 		var y_bot: float = leaf_ground - i * seg_h
 		var f := (i + 0.5) / n_seg
 		var w := w_base + (w_top - w_base) * f
-		var style := "plain"
-		if i != 0 and i != n_seg - 1:
-			var r := rng.randf()
-			var can_l := not last_l
-			var can_r := not last_r
-			if r < (1.0 - 2.0 * bp) or (not can_l and not can_r):
-				style = "plain"
-			elif can_l and (r < (1.0 - bp) or not can_r):
-				style = "left"
-			elif can_r:
-				style = "right"
-		last_l = style == "left"
-		last_r = style == "right"
 		segs.append({"xc": (xs[i] + xs[i + 1]) * 0.5, "y_top": y_top, "y_bot": y_bot,
-			"w": w, "style": style})
+			"w": w, "style": "plain"})
 
 	# 底部裸干延长段（2-4 段 plain，宽度接续 w_base，无任何枝）
 	var n_bare: int = rng.randi_range(2, 4)
@@ -200,49 +183,68 @@ static func _gen_tree_struct(rng: RandomNumberGenerator, P: Dictionary) -> Dicti
 		segs.insert(0, {"xc": xs[0], "y_top": ground_y - (j + 1) * bare_seg_h,
 			"y_bot": ground_y - j * bare_seg_h, "w": w_base + 2.0, "style": "plain"})
 
-	# 侧枝：二次贝塞尔路径（10 点），短、斜上
-	var branches: Array = []
-	for s: Dictionary in segs:
-		var sty := String(s["style"])
-		if sty != "left" and sty != "right":
-			continue
-		if rng.randf() < 0.25:
-			continue
-		var side := -1.0 if sty == "left" else 1.0
-		var oy: float = float(s["y_bot"]) - seg_h * rng.randf_range(0.3, 0.7)
-		var length: float = w_base * rng.randf_range(2.2, 3.4)
-		var ang := deg_to_rad(rng.randf_range(28.0, 52.0))
-		var origin := Vector2(float(s["xc"]) + side * float(s["w"]) * 0.45, oy)
-		var tip := origin + length * Vector2(side * sin(ang), -cos(ang))
-		var ctrl := origin + length * 0.5 * Vector2(side * sin(ang) * 0.4, -1.0)
-		var path := PackedVector2Array()
-		for i: int in 10:
-			var t := i / 9.0
-			var u := 1.0 - t
-			path.append(u * u * origin + 2.0 * u * t * ctrl + t * t * tip)
-		branches.append({"path": path, "w0": w_base * 0.62, "w1": w_base * 0.36, "tip": tip})
-
-	# 顶帽：主团 + 帽圈子团 + 底缘下垂团 + 枝端团，每团带 2-3 个错位子圆
+	# 冠几何（供枝分布定冠底界）
 	var crown_h: float = leaf_zone - trunk_h
 	var r_main: float = minf(crown_h * float(P["crown_r_coef"]), W * float(P["crown_cap"]))
+	var crown_bottom_y: float = leaf_ground - trunk_h - r_main * float(P["crown_lift"]) 		+ r_main * 1.05
+	# 侧枝+侧簇（用户规格：枝长 100 近水平±15°；0-5 个全随机；簇 y∈[根+200,
+	# 冠底-60] 不与冠重叠；簇半径 30-60）
 	var cy: float = leaf_ground - trunk_h - r_main * float(P["crown_lift"])
+	var blobs: Array = []
+	var branches: Array = []
+	var cluster_top: float = cy + r_main + 60.0
+	var cluster_bot: float = ground_y - 200.0
+	var n_cluster: int = rng.randi_range(0, 5)
+	var used_y: Array = []
+	for ci: int in n_cluster:
+		var side := 1.0 if rng.randf() < 0.5 else -1.0
+		var oy := 0.0
+		var ok := false
+		for _try: int in 8:
+			oy = rng.randf_range(cluster_top, cluster_bot)
+			ok = true
+			for uy: float in used_y:
+				if absf(oy - uy) < 90.0:
+					ok = false
+					break
+			if ok:
+				break
+		if not ok:
+			continue
+		used_y.append(oy)
+		var ang := deg_to_rad(rng.randf_range(-15.0, 15.0))
+		var axis_x := W * 0.5
+		for sg: Dictionary in segs:
+			if oy <= float(sg["y_bot"]) and oy >= float(sg["y_top"]):
+				axis_x = float(sg["xc"])
+				break
+		var side2 := 1.0 if rng.randf() < 0.5 else -1.0
+		var origin := Vector2(axis_x + side2 * 20.0, oy)
+		var tip := origin + Vector2(side2 * 100.0 * cos(ang), -100.0 * sin(ang))
+		var ctrl := origin + Vector2(side2 * 50.0, -8.0)
+		var path := PackedVector2Array()
+		for i: int in 10:
+			var tt := i / 9.0
+			var uu := 1.0 - tt
+			path.append(uu * uu * origin + 2.0 * uu * tt * ctrl + tt * tt * tip)
+		branches.append({"path": path, "w0": 10.0, "w1": 7.0, "tip": tip})
+		# 枝端簇（半径 30-60：横排 2 圆 + 下垂缕）
+		var dir_x: float = signf(tip.x - origin.x)
+		var cr := rng.randf_range(30.0, 60.0)
+		blobs.append({"c": tip + Vector2(dir_x * cr * 0.3, -cr * 0.1), "r": cr})
+		blobs.append({"c": tip + Vector2(dir_x * cr * 1.0, 0.0), "r": cr * 0.8})
+		blobs.append({"c": tip + Vector2(dir_x * cr * 0.5, cr * 0.8), "r": cr * 0.5})
+
+	# 顶帽：主团 + 表面簇（冠主体）
 	var trunk_top_x: float = xs[xs.size() - 1]
-	var blobs: Array = [{"c": Vector2(trunk_top_x, cy), "r": r_main}]
-	var n_hat: int = maxi(3, int(float(P["hat_n"])) + rng.randi_range(-2, 2))
+	blobs.append({"c": Vector2(trunk_top_x, cy), "r": r_main})
+	var n_hat: int = maxi(4, int(float(P["hat_n"])) + rng.randi_range(-2, 2))
 	for k: int in n_hat:
 		var a := k / float(n_hat) * TAU + rng.randf_range(-0.22, 0.22)
-		var d := r_main * rng.randf_range(0.68, 1.0)
-		blobs.append({"c": Vector2(trunk_top_x + d * cos(a), cy + d * sin(a) * 0.85),
-			"r": r_main * rng.randf_range(0.38, 0.58)})
-	for _i: int in rng.randi_range(2, 3):
-		var a := PI + rng.randf_range(-0.6, 0.6)
-		var d := r_main * rng.randf_range(0.8, 1.0)
-		var by := minf(cy + d * sin(a) * 0.8, ground_y - r_main * 0.45 * 0.8)
-		blobs.append({"c": Vector2(trunk_top_x + d * cos(a), by),
-			"r": r_main * rng.randf_range(0.30, 0.45)})
-	# 枝端叶团已删（2026-09-05 用户终版方向：高瘦树=光杆+顶团。枝端团曾把
-	# 绿色拖到树干中部——实测 trunk_frac 0.90→0.93 渲染干冠比仅 0.90→0.96，
-	# 冠底被枝端团钉死，任何比例参数都调不动，且"树冠和枝叶融合"观感源于此）
+		var d := r_main * rng.randf_range(0.35, 1.0)
+		# 表面簇半径 30-60（用户规格，更正：先前误作直径）
+		blobs.append({"c": Vector2(trunk_top_x + d * cos(a), cy + d * sin(a) * 0.9),
+			"r": rng.randf_range(30.0, 60.0)})
 	for b: Dictionary in blobs:
 		var subs: Array = []
 		var bc0: Vector2 = b["c"]
@@ -395,17 +397,18 @@ class _Region:
 		canv.resize(TP.NCC)
 		err.resize(TP.NC)
 		errs.resize(TP.NC)
-		# 画布初始 = 参考灰度模糊（经典 underpaint 底色）
-		var gray := PackedFloat32Array()
-		gray.resize(TP.NC)
-		for i: int in TP.NC:
-			gray[i] = (refc[i * 3] + refc[i * 3 + 1] + refc[i * 3 + 2]) / 3.0
-		gray = _smooth(gray, 2.0)
-		gray = _smooth(gray, 2.0)
-		for i: int in TP.NC:
-			canv[i * 3] = gray[i]
-			canv[i * 3 + 1] = gray[i]
-			canv[i * 3 + 2] = gray[i]
+		# 画布初始 = 参考色逐通道模糊（underpaint 底色）。
+		# 基线用灰度（结构密实、灰 glaze 藏在冠内部）；现结构=大圆+离散簇，
+		# 簇间隙暴露 glaze 灰笔 → 改彩色底，glaze 混出淡绿而非灰
+		for ch: int in 3:
+			var ch_arr := PackedFloat32Array()
+			ch_arr.resize(TP.NC)
+			for i: int in TP.NC:
+				ch_arr[i] = refc[i * 3 + ch]
+			ch_arr = _smooth(ch_arr, 2.0)
+			ch_arr = _smooth(ch_arr, 2.0)
+			for i: int in TP.NC:
+				canv[i * 3 + ch] = ch_arr[i]
 		_sync()
 
 
@@ -481,11 +484,9 @@ class _Region:
 			circles.append_array(b["sub"])
 			for cir: Vector3 in circles:
 				_blob_dome(cir, light, mid, dark)
-		# 蒙版：团圆并集（含子圆）+ 整体椭圆填充（团间空隙 = 内部）
-		var min_x := 1e9
-		var max_x := -1e9
-		var min_y := 1e9
-		var max_y := -1e9
+		# 蒙版：团圆并集（含子圆）。
+		# 基线的"包围盒椭圆填充"已删——离散簇结构下它会把侧簇框进一个巨大
+		# 竖椭圆，冠层笔刷顺椭圆铺满树干（用户"树冠是竖椭圆"观感的根源）
 		for b: Dictionary in wire["blobs"]:
 			var bc: Vector2 = b["c"]
 			var br_r: float = b["r"]
@@ -493,16 +494,6 @@ class _Region:
 			circles.append_array(b["sub"])
 			for cir: Vector3 in circles:
 				_fill_circle_mask(cir.x, cir.y, cir.z)
-				min_x = minf(min_x, cir.x - cir.z)
-				max_x = maxf(max_x, cir.x + cir.z)
-				min_y = minf(min_y, cir.y - cir.z)
-				max_y = maxf(max_y, cir.y + cir.z)
-		if min_x < max_x:
-			var ecx := (min_x + max_x) / 2.0
-			var ecy := (min_y + max_y) / 2.0
-			var erx := (max_x - min_x) * 0.47
-			var ery := (max_y - min_y) * 0.47
-			_fill_ellipse_mask(ecx, ecy, erx, ery)
 
 
 	## 单团受光 dome（render_crown_ref 等效：每格 2×2 子采样求均值后 0.25/0.75 叠合）。
@@ -737,6 +728,9 @@ class _Region:
 				imp_in / float(maxi(n_in, 1)), imp_out / float(maxi(n_out, 1))])
 		for layer: Dictionary in TP.LAYERS:
 			var n: int = int(float(total) * float(layer["ratio"]))
+			# 干区跳过 glaze：笔长(78px)超干宽(50px)，罩染笔伸出干缘在透明底显灰刺
+			if region == 0 and String(layer["name"]) == "glaze":
+				n = 0
 			var layer_stat := {"name": String(layer["name"]), "req": n, "got": 0}
 			stats[stats_key].append(layer_stat)
 			if n == 0:
@@ -779,15 +773,16 @@ class _Region:
 		return pens
 
 
-	## 初始画布可视化/重放用：canv → RGB Image（灰度模糊参考 = underpaint 底色）
+	## 初始画布重放用：canv → RGB Image（逐通道彩色；灰度会让 glaze 笔混出灰绿）
 	func canvas_init_img() -> Image:
 		var img := Image.create(TP.W, TP.H, false, Image.FORMAT_RGB8)
 		for row: int in TP.GH:
 			for col_i: int in TP.GW:
 				var i := row * TP.GW + col_i
-				var v := clampf(canv[i * 3] / 255.0, 0.0, 1.0)
-				img.fill_rect(Rect2i(col_i * TP.GRID, row * TP.GRID, TP.GRID, TP.GRID),
-					Color(v, v, v))
+				var c := Color(clampf(canv[i * 3] / 255.0, 0.0, 1.0),
+					clampf(canv[i * 3 + 1] / 255.0, 0.0, 1.0),
+					clampf(canv[i * 3 + 2] / 255.0, 0.0, 1.0))
+				img.fill_rect(Rect2i(col_i * TP.GRID, row * TP.GRID, TP.GRID, TP.GRID), c)
 		return img
 
 

@@ -80,10 +80,15 @@ func _process(delta: float) -> void:
 				min_dist = minf(min_dist, absf(t.global_position.x - spawn_x))
 			print("[DiagTreeIngame] trees=%d avg_fps=%.1f nearest_tree_to_spawn=%.0fpx" %
 				[trees.size(), 60.0 / maxf(_delta_acc / float(_frames), 0.0001), min_dist])
-			if min_dist < 1920.0 + 1280.0:
-				print("[FAIL] 净空带内仍有树（最近 %.0fpx < 3200px）——梯度未生效" % min_dist)
+			# 净空线：土路半宽 1280 + 净空 960 = 2240（2026-09-06 "略近一段"版梯度）
+			if min_dist < 2240.0:
+				print("[FAIL] 净空带内仍有树（最近 %.0fpx < 2240px）——梯度未生效" % min_dist)
 				get_tree().quit(1)
 				return
+			var stones: int = get_tree().get_nodes_in_group("resource_node").filter(
+				func(n: Node) -> bool: return n.get("resource_type") != 0).size()
+			print("[DiagTreeIngame] rocks=%d rock_per_tree=%.2f（用户预期：远低于 1）" %
+				[stones, float(stones) / maxf(float(trees.size()), 1.0)])
 			print("[PASS] 游戏内毛线团树渲染 + 实时翻动 + 净空梯度验证通过")
 			get_tree().quit(0)
 

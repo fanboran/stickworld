@@ -273,13 +273,13 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 			label = null
 	if label == null:
 		label = Label.new()
-		label.add_theme_constant_override("outline_size", 4)
+		label.add_theme_constant_override("outline_size", 6)
 		label.z_index = 90
 		# deferred：伤害结算发生在物理帧内，同帧改树会挤掉其他节点的帧处理（血条时序交扰）
 		tree.current_scene.add_child.call_deferred(label)
 	label.visible = true
 	label.text = str(int(round(amount)))
-	label.add_theme_font_size_override("font_size", 22 if crit else 15)
+	label.add_theme_font_size_override("font_size", 34 if crit else 24)
 	if crit:
 		label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.35))
 		label.add_theme_color_override("font_outline_color", Color(0.45, 0.2, 0.0, 0.9))
@@ -287,11 +287,11 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 		label.add_theme_color_override("font_color", Color(0.95, 0.95, 0.98))
 		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	# current_scene 在原点，local==global；随机水平偏移防数字完全重叠
-	label.position = pos + Vector2(randf_range(-14.0, 14.0), -56.0)
+	label.position = pos + Vector2(randf_range(-16.0, 16.0), -62.0)
 	label.modulate.a = 1.0
 	var tween := label.create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(label, "position:y", label.position.y - 44.0, 0.7).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "position:y", label.position.y - 52.0, 0.7).set_ease(Tween.EASE_OUT)
 	tween.tween_property(label, "modulate:a", 0.0, 0.45).set_delay(0.25)
 	tween.chain().tween_callback(func() -> void:
 		if is_instance_valid(label):

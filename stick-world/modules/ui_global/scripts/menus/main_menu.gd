@@ -19,6 +19,8 @@ const GAME_ROOT_SCENE := "res://modules/world/scenes/game_root.tscn"
 ## 载入屏（主菜单 → 游戏 的过渡画面）
 const LOADING_SCENE := "res://modules/ui_global/scenes/menus/loading_screen.tscn"
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
+## 手绘云（背景漂移云；与世界天空同选型期四风格混排）
+const SketchCloudScript: GDScript = preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
 
 ## 菜单项数据：id / 文案 / 视觉档位
 const MENU_ITEMS: Array[Dictionary] = [
@@ -248,15 +250,13 @@ func _build_background() -> void:
 		m.modulate = Color(0.9, 0.86, 0.84)
 		add_child(m)
 		move_child(m, 2)
-	# 漂移云（两团，_process 缓移）——云上山前（index 4 = 山层之上；
-	# 此前 move_child 到 1 被全屏天空渐变整层盖住不可见）
+	# 漂移云（手绘云三朵，四风格随机混排同世界选型期；_process 缓移）——
+	# 山之上、菜单之下（index 4）
 	_cloud_rects = []
-	for tex_path in [SkyDecorCloudA, SkyDecorCloudB]:
-		if not ResourceLoader.exists(tex_path):
-			continue
-		var c := TextureRect.new()
-		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		c.texture = load(tex_path)
+	for i in 3:
+		var c: Node2D = SketchCloudScript.new()
+		c.set("style", [5, 5, 5, 4][i % 4])
+		c.set("cloud_size", Vector2(200.0, 83.0) * randf_range(0.85, 1.2))
 		c.position = Vector2(randf_range(0.1, 0.7) * 1920.0, randf_range(40.0, 300.0))
 		c.modulate = Color(1, 1, 1, 0.85)
 		add_child(c)
@@ -294,12 +294,12 @@ const WalkerF1 := "res://assets/sky/walker_f1.png"
 
 ## 鼠标视差：背景各层按深度反向微移（精致菜单标配——画面"活"）
 func _process(delta: float) -> void:
-	# 云缓移（原逻辑）
+	# 云缓移（原逻辑；回绕宽度按 cloud_size）
 	for i in _cloud_rects.size():
-		var c: TextureRect = _cloud_rects[i]
+		var c: Node2D = _cloud_rects[i]
 		c.position.x += (6.0 + 4.0 * i) * delta
 		if c.position.x > 1920.0:
-			c.position.x = -float(c.texture.get_width())
+			c.position.x = -float((c.get("cloud_size") as Vector2).x)
 	# 鼠标视差
 	var mp := get_viewport().get_mouse_position()
 	var target := Vector2(mp.x / 1920.0 - 0.5, mp.y / 1080.0 - 0.5)

@@ -147,6 +147,11 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 			var pos_arr: Array = sd.get("position_px", [0, 0])
 			sref.position = Vector2(float(pos_arr[0]), float(pos_arr[1]))
 			sref.map_id = sd.get("map_id", "")
+			# 16 方向地形容量（C2 blob；生成端烘焙，长度不符忽略走均匀回退）
+			var cap_var: Variant = sd.get("blob_capacity", [])
+			if cap_var is Array and (cap_var as Array).size() == SettlementBlob.direction_count():
+				for v in cap_var:
+					sref.blob_capacity.append(float(v))
 			sref.population_score = SettlementRef.jitter_population_score(
 				float(sd.get("population_score", 0.0)), sref.settlement_id,
 				WorldState.run_seed if WorldState else 0,

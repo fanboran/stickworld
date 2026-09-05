@@ -271,9 +271,11 @@ func _update_title_bar(l1_label: int) -> void:
 ## 图例内容随地图模式切换（B4，走 MapLegend.set_title/set_entries）：
 ## TERRAIN = 地物水系（海洋/湖泊；B2 群系底图落地后在此追加群系色条目）
 ## POLITICAL = 政权色条目（与地图填充同色源 get_state_color）
+## 两模式末尾恒附「城镇建成区」（C2 blob 与行政区划分层的图例说明，风险表点名项）
 func _fill_legend() -> void:
 	if _legend == null:
 		return
+	var blob_entry := {"color": MapRenderer.BLOB_FILL, "text": "城镇建成区"}
 	if MapModeManager.current_mode == MapModeManager.Mode.TERRAIN:
 		_legend.set_title("地形")
 		var entries := [
@@ -281,6 +283,7 @@ func _fill_legend() -> void:
 			{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
 		]
 		entries.append_array(MapRenderer.BIOME_LEGEND)
+		entries.append(blob_entry)
 		_legend.set_entries(entries)
 		return
 	if api == null or not api.has_method("get_states"):
@@ -296,8 +299,9 @@ func _fill_legend() -> void:
 			"color": data.get_state_color(state_id),
 			"text": str(info.get("name", state_id)),
 		})
-	if entries.is_empty():
-		_legend.set_entries(entries)  # 空态：set_shown 自动保持隐藏
+	entries.append(blob_entry)
+	if states.is_empty():
+		_legend.set_entries([])  # 空态：set_shown 自动保持隐藏
 		return
 	_legend.set_title("政权")
 	_legend.set_entries(entries)

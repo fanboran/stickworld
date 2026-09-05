@@ -72,6 +72,15 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 		var city_data := _read_data_dict(city_path)
 		if not city_data.is_empty():
 			world.city_tiles = city_data.get("tiles", [])
+	# C2 blob：population_score 就地做每局扰动（出生免疫，与 L1/L2 装配同口径；
+	# label→settlement_city_%03d 与生成端 id 规则一致）
+	for t in world.city_tiles:
+		var td: Dictionary = t
+		var sid := "settlement_city_%03d" % int(td.get("label", 0))
+		td["population_score"] = SettlementRef.jitter_population_score(
+			float(td.get("population_score", 0.0)), sid,
+			WorldState.run_seed if WorldState else 0,
+			sid == L2WorldData._birth_spawn_id())
 	# 老 L1 索引图（hover 查询，l3_l1_index_8192.png）**异步加载**：8192 PNG 解码约
 	# 158ms，由 L3MapRenderer 在后台线程解码（Image.load_png_from_buffer，纯 CPU 线程安全），
 	# 完成前 query_l1_at_map_pos 因 l1_index_image 为 null 自然返回空（hover 静默），

@@ -41,19 +41,27 @@ func bind_env(env_system: Node) -> void:
 	_env_system = env_system
 
 
+## 炫光淡入淡出系数（暂停淡出/恢复淡入——全屏光斑压在 ESC 菜单面板周围很扎眼）
+var _flare_fade: float = 1.0
+
+
 func _process(delta: float) -> void:
 	_time_acc += delta
 	_mat.set_shader_parameter("time_seed", _time_acc)
+	# 暂停（ESC 菜单/模态）时炫光快速淡出，恢复时淡入
+	if TimeManager != null and TimeManager.is_paused():
+		_flare_fade = maxf(0.0, _flare_fade - 4.0 * delta)
+	else:
+		_flare_fade = minf(1.0, _flare_fade + 2.0 * delta)
 	if _env_system == null or not _env_system.has_method("get_current_light_color"):
 		return
 	# 环境亮度（CanvasModulate luminance）：白天≈1，夜晚被压暗
 	var lum: float = _env_system.get_current_light_color().get_luminance()
 	var day_t: float = clampf((lum - 0.55) / 0.35, 0.0, 1.0)
-	_mat.set_shader_parameter("flare_intensity", 0.22 + 0.78 * day_t)
+	_mat.set_shader_parameter("flare_intensity", (0.22 + 0.78 * day_t) * _flare_fade)
 	_mat.set_shader_parameter("top_light", 0.05 + 0.09 * day_t)
 	# 夜晚整体冷暗，颗粒稍增（胶片夜戏感）
 	_mat.set_shader_parameter("warm_tint", Vector3(1.045 - 0.05 * (1.0 - day_t), 1.0, 0.945 + 0.07 * (1.0 - day_t)))
-	var grain: float = 0.045 + 0.02 * (1.0 - day_t)
-	if _grain_override >= 0.0:
-		grain = _grain_override
-	_mat.set_shader_parameter("grain_strength", grain)
+	# 胶片颗粒已移除（2026-09-06 用户指示：白色噪点观感差；参数保留兼容，
+	# 恒 0 强度——shader 与录屏 override 接口不再动）
+	_mat.set_shader_parameter("grain_strength", 0.0)

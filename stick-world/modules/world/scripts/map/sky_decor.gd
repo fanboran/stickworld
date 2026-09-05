@@ -74,8 +74,9 @@ var _cam_ready: bool = false
 ## 雨强度（Weather 注入）：云 alpha 上限提高（Terraria 雨天云浓）
 var _rainy: float = 0.0
 
-## 云池规模（Terraria 200 槽 rand(200) 数量；本项目屏幅小，32 朵密度足够）
-const CLOUD_POOL: int = 32
+## 云池规模（Terraria 原版 numClouds=rand(200) 世界随机、实际画面常见个位数到
+## 十几朵；本项目 14 朵 → 视野带内 14、屏内约 9。曾 32 朵密得像挤早高峰）
+const CLOUD_POOL: int = 14
 ## 云出生带（相对地平线向上，比例×天空高）。原版云带很宽：DrawClouds 各 pass
 ## 的 y ∈ 约[-0.5H, +0.45H]（含 bgTopY 偏移，H=屏高）——云从贴近树线一直飘到
 ## 树线上方的纯天空区（不是只挤在树线后）。远云更高——小云再上移同构。
@@ -220,9 +221,11 @@ func _process(delta: float) -> void:
 	if _cam_ready and _cam != null and is_instance_valid(_cam):
 		_apply_parallax()
 		_update_tile_layers()
-	# 风：缓慢正弦起伏（周期 ~2 分钟，双向漂；Terraria windSpeedCurrent 简化版）
+	# 风：缓慢正弦起伏（周期 ~2 分钟，双向漂；Terraria windSpeedCurrent 简化版）。
+	# 幅度 0.6：原版常态风速偏小（峰值档最近云 ~86px/s，可察觉的舒缓漂移）；
+	# 曾 1.1（最近云 158px/s、横穿一屏 12s——用户质疑「变化这么快」的来源）
 	_wind_t += delta
-	_wind = sin(_wind_t * 0.05) * 1.1
+	_wind = sin(_wind_t * 0.05) * 0.6
 	_update_clouds(delta)
 
 

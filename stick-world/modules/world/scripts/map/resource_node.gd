@@ -97,8 +97,31 @@ func _visual_rng() -> RandomNumberGenerator:
 	return rng
 
 
+## 树程序化视觉（终版架构：干/枝算法直绘 + 毛线团树叶实时飘动，种子驱动）
+const _TreePainting := preload("res://modules/world/scripts/map/tree_painting.gd")
+
+var _body_painting: Node2D = null
+
+
 func _apply_visual() -> void:
 	var vrng := _visual_rng()
+	# 树走程序化组装（2026-09-05 终版架构）：位置哈希种子 → 干直绘 + 侧枝 + 毛线团，
+	# 每棵树独一无二；显示基准对齐旧贴图（总高 750 = 局部 880 × 0.852）
+	if resource_type == ResourceType.WOOD:
+		var painting: Node2D = _TreePainting.new()
+		painting.setup(vrng.randi())
+		var s: float = 750.0 / 880.0 * vrng.randf_range(0.85, 1.25)
+		var flip: float = -1.0 if vrng.randf() < 0.5 else 1.0
+		painting.scale = Vector2(s * flip, s)
+		# 树根对齐节点底（地面接触线，与旧贴图分支同规则）
+		painting.position = Vector2(0.0, node_size * 0.5)
+		# 轻微明度/冷暖抖动（±5%）：同一种子两次摆放也不同
+		var dv := vrng.randf_range(-0.05, 0.05)
+		var dw := vrng.randf_range(-0.03, 0.03)
+		painting.modulate = Color(1.0 + dv + dw, 1.0 + dv, 1.0 + dv - dw, 1.0)
+		add_child(painting)
+		_body_painting = painting
+		return
 	var paths: Array = _TEXTURE_POOLS.get(resource_type, [])
 	var tex_path: String = String(_TEXTURE_FALLBACK.get(resource_type, ""))
 	if not paths.is_empty():
@@ -114,9 +137,9 @@ func _apply_visual() -> void:
 		spr.scale = size / Vector2(spr.texture.get_width(), spr.texture.get_height())
 		spr.flip_h = vrng.randf() < 0.5
 		# 轻微明度/冷暖抖动（±5%）：同一变体两次摆放也不同
-		var dv := vrng.randf_range(-0.05, 0.05)
-		var dw := vrng.randf_range(-0.03, 0.03)
-		spr.modulate = Color(1.0 + dv + dw, 1.0 + dv, 1.0 + dv - dw, 1.0)
+		var dv2 := vrng.randf_range(-0.05, 0.05)
+		var dw2 := vrng.randf_range(-0.03, 0.03)
+		spr.modulate = Color(1.0 + dv2 + dw2, 1.0 + dv2, 1.0 + dv2 - dw2, 1.0)
 		spr.position = Vector2(0.0, node_size * 0.5 - size.y * 0.5)
 		add_child(spr)
 		_body_sprite = spr
@@ -164,6 +187,9 @@ func _play_harvest_feedback(gained: int) -> void:
 	if gained > 0:
 		_spawn_gain_label(gained, _crit_gain)
 		_crit_gain = false
+		# 树的采集反馈：树冠闪各色绿光（不在根部）
+		if _body_painting != null and _body_painting.has_method("flash_leaves"):
+			_body_painting.flash_leaves()
 		if AudioManager != null:
 			# 敲击音分材质（Terraria 同构）：树=砍草音，石/矿=挖掘音（三变体随机）
 			if resource_type == ResourceType.WOOD:
@@ -178,6 +204,8 @@ func _play_harvest_feedback(gained: int) -> void:
 		_body_rect.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
 	elif _body_sprite != null:
 		_body_sprite.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
+	elif _body_painting != null:
+		_body_painting.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
 
 
 ## 资源点上方飘出 "+N 资材" 的增益数字（0.8s 上浮淡出后自毁）

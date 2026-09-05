@@ -174,13 +174,13 @@ func _draw_branch(br: Dictionary) -> void:
 	for i in n + 1:
 		var t := float(i) / float(n)
 		pts.append(origin.lerp(ctrl, t).lerp(ctrl.lerp(tip, t), t))
-	# 锥形主线：分段画，宽 8 → 5
+	# 锥形主线：分段画，宽 18 → 12（用户要求：起码主干 1/3 粗，主干 50 → 18 起）
 	for i in pts.size() - 1:
-		draw_line(pts[i], pts[i + 1], BRANCH_COL, lerpf(8.0, 5.0, float(i) / float(n)))
+		draw_line(pts[i], pts[i + 1], BRANCH_COL, lerpf(18.0, 12.0, float(i) / float(n)))
 	# 上缘高光（第二根线，根部粗往梢部淡出）
 	var hi := PackedVector2Array()
 	for i in pts.size():
-		hi.append(pts[i] + Vector2(0.0, -2.4))
+		hi.append(pts[i] + Vector2(0.0, -4.0))
 	var hc := BRANCH_HI_COL
 	hc.a = 0.55
-	draw_polyline(hi, hc, 2.6)
+	draw_polyline(hi, hc, 4.0)

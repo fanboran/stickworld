@@ -2,5 +2,5 @@
 
 [ext_resource type="Script" path="res://tests/integration/test_ui_overlap.gd" id="1"]
 
-[node name="TestUIOverlap" type="Node"]
+[node name="TestUIOverlap" type="Control"]
 script = ExtResource("1")

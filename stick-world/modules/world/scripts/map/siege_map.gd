@@ -23,7 +23,7 @@ const SiegeDirectorScript := preload("res://modules/world/scripts/map/siege_dire
 ## 放玩家活动带上方 ~ground_y+430，正侧视立面朝左右两侧）
 @export var wall_foot_y: float = 980.0
 ## 弓箭手数
-@export var garrison_archers: int = 4
+@export var garrison_archers: int = 6
 
 var _siege_wall: SiegeWall = null
 
@@ -61,6 +61,7 @@ func _setup_siege_scenery() -> void:
 	director.set_script(SiegeDirectorScript)
 	director.name = "SiegeDirector"
 	director.archer_count = garrison_archers
+	director.city_target_x = (city_left + city_right) * 0.5
 	add_child(director)
 	director.setup(self, _siege_wall)
 

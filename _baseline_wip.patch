@@ -1,0 +1,415 @@
+diff --git "a/docs/\346\274\224\347\244\272/\344\270\273\350\217\234\345\215\225.jpg" "b/docs/\346\274\224\347\244\272/\344\270\273\350\217\234\345\215\225.jpg"
+deleted file mode 100644
+index b219e99d..00000000
+Binary files "a/docs/\346\274\224\347\244\272/\344\270\273\350\217\234\345\215\225.jpg" and /dev/null differ
+diff --git "a/docs/\346\274\224\347\244\272/\344\270\273\350\217\234\345\215\225.jpg.import" "b/docs/\346\274\224\347\244\272/\344\270\273\350\217\234\345\215\225.jpg.import"
+deleted file mode 100644
+index 1790bebf..00000000
+--- "a/docs/\346\274\224\347\244\272/\344\270\273\350\217\234\345\215\225.jpg.import"
++++ /dev/null
+@@ -1,40 +0,0 @@
+-[remap]
+-
+-importer="texture"
+-type="CompressedTexture2D"
+-uid="uid://dwhjxbw2uk36"
+-path="res://.godot/imported/主菜单.jpg-9e53ba1b402cf4c69141a2f81517a132.ctex"
+-metadata={
+-"vram_texture": false
+-}
+-
+-[deps]
+-
+-source_file="res://docs/演示/主菜单.jpg"
+-dest_files=["res://.godot/imported/主菜单.jpg-9e53ba1b402cf4c69141a2f81517a132.ctex"]
+-
+-[params]
+-
+-compress/mode=0
+-compress/high_quality=false
+-compress/lossy_quality=0.7
+-compress/uastc_level=0
+-compress/rdo_quality_loss=0.0
+-compress/hdr_compression=1
+-compress/normal_map=0
+-compress/channel_pack=0
+-mipmaps/generate=false
+-mipmaps/limit=-1
+-roughness/mode=0
+-roughness/src_normal=""
+-process/channel_remap/red=0
+-process/channel_remap/green=1
+-process/channel_remap/blue=2
+-process/channel_remap/alpha=3
+-process/fix_alpha_border=true
+-process/premult_alpha=false
+-process/normal_map_invert_y=false
+-process/hdr_as_srgb=false
+-process/hdr_clamp_exposure=false
+-process/size_limit=0
+-detect_3d/compress_to=1
+diff --git "a/docs/\346\274\224\347\244\272/\345\244\234\347\251\272\346\230\237\351\207\216.gif" "b/docs/\346\274\224\347\244\272/\345\244\234\347\251\272\346\230\237\351\207\216.gif"
+deleted file mode 100644
+index d4b465f3..00000000
+Binary files "a/docs/\346\274\224\347\244\272/\345\244\234\347\251\272\346\230\237\351\207\216.gif" and /dev/null differ
+diff --git "a/docs/\346\274\224\347\244\272/\345\274\200\345\261\200\346\235\221\345\272\204.jpg" "b/docs/\346\274\224\347\244\272/\345\274\200\345\261\200\346\235\221\345\272\204.jpg"
+deleted file mode 100644
+index 3e660c0f..00000000
+Binary files "a/docs/\346\274\224\347\244\272/\345\274\200\345\261\200\346\235\221\345\272\204.jpg" and /dev/null differ
+diff --git "a/docs/\346\274\224\347\244\272/\345\274\200\345\261\200\346\235\221\345\272\204.jpg.import" "b/docs/\346\274\224\347\244\272/\345\274\200\345\261\200\346\235\221\345\272\204.jpg.import"
+deleted file mode 100644
+index 1b01eaa1..00000000
+--- "a/docs/\346\274\224\347\244\272/\345\274\200\345\261\200\346\235\221\345\272\204.jpg.import"
++++ /dev/null
+@@ -1,40 +0,0 @@
+-[remap]
+-
+-importer="texture"
+-type="CompressedTexture2D"
+-uid="uid://2uibi268ugjm"
+-path="res://.godot/imported/开局村庄.jpg-e6b1172a2e95c3f0464e364d5d1c9206.ctex"
+-metadata={
+-"vram_texture": false
+-}
+-
+-[deps]
+-
+-source_file="res://docs/演示/开局村庄.jpg"
+-dest_files=["res://.godot/imported/开局村庄.jpg-e6b1172a2e95c3f0464e364d5d1c9206.ctex"]
+-
+-[params]
+-
+-compress/mode=0
+-compress/high_quality=false
+-compress/lossy_quality=0.7
+-compress/uastc_level=0
+-compress/rdo_quality_loss=0.0
+-compress/hdr_compression=1
+-compress/normal_map=0
+-compress/channel_pack=0
+-mipmaps/generate=false
+-mipmaps/limit=-1
+-roughness/mode=0
+-roughness/src_normal=""
+-process/channel_remap/red=0
+-process/channel_remap/green=1
+-process/channel_remap/blue=2
+-process/channel_remap/alpha=3
+-process/fix_alpha_border=true
+-process/premult_alpha=false
+-process/normal_map_invert_y=false
+-process/hdr_as_srgb=false
+-process/hdr_clamp_exposure=false
+-process/size_limit=0
+-detect_3d/compress_to=1
+diff --git "a/docs/\346\274\224\347\244\272/\346\211\213\347\273\230\347\232\256\350\202\244\351\242\204\350\247\210.png" "b/docs/\346\274\224\347\244\272/\346\211\213\347\273\230\347\232\256\350\202\244\351\242\204\350\247\210.png"
+deleted file mode 100644
+index 0d99415f..00000000
+Binary files "a/docs/\346\274\224\347\244\272/\346\211\213\347\273\230\347\232\256\350\202\244\351\242\204\350\247\210.png" and /dev/null differ
+diff --git "a/docs/\346\274\224\347\244\272/\346\211\213\347\273\230\347\232\256\350\202\244\351\242\204\350\247\210.png.import" "b/docs/\346\274\224\347\244\272/\346\211\213\347\273\230\347\232\256\350\202\244\351\242\204\350\247\210.png.import"
+deleted file mode 100644
+index 213b04e3..00000000
+--- "a/docs/\346\274\224\347\244\272/\346\211\213\347\273\230\347\232\256\350\202\244\351\242\204\350\247\210.png.import"
++++ /dev/null
+@@ -1,40 +0,0 @@
+-[remap]
+-
+-importer="texture"
+-type="CompressedTexture2D"
+-uid="uid://cy3qbp7a1hy3i"
+-path="res://.godot/imported/手绘皮肤预览.png-e9140379db86c36a85a8a7251fcdb0c7.ctex"
+-metadata={
+-"vram_texture": false
+-}
+-
+-[deps]
+-
+-source_file="res://docs/演示/手绘皮肤预览.png"
+-dest_files=["res://.godot/imported/手绘皮肤预览.png-e9140379db86c36a85a8a7251fcdb0c7.ctex"]
+-
+-[params]
+-
+-compress/mode=0
+-compress/high_quality=false
+-compress/lossy_quality=0.7
+-compress/uastc_level=0
+-compress/rdo_quality_loss=0.0
+-compress/hdr_compression=1
+-compress/normal_map=0
+-compress/channel_pack=0
+-mipmaps/generate=false
+-mipmaps/limit=-1
+-roughness/mode=0
+-roughness/src_normal=""
+-process/channel_remap/red=0
+-process/channel_remap/green=1
+-process/channel_remap/blue=2
+-process/channel_remap/alpha=3
+-process/fix_alpha_border=true
+-process/premult_alpha=false
+-process/normal_map_invert_y=false
+-process/hdr_as_srgb=false
+-process/hdr_clamp_exposure=false
+-process/size_limit=0
+-detect_3d/compress_to=1
+diff --git "a/docs/\346\274\224\347\244\272/\346\240\221\346\234\250\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png" "b/docs/\346\274\224\347\244\272/\346\240\221\346\234\250\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png"
+deleted file mode 100644
+index 38f7d89e..00000000
+Binary files "a/docs/\346\274\224\347\244\272/\346\240\221\346\234\250\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png" and /dev/null differ
+diff --git "a/docs/\346\274\224\347\244\272/\346\240\221\346\234\250\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png.import" "b/docs/\346\274\224\347\244\272/\346\240\221\346\234\250\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png.import"
+deleted file mode 100644
+index ae393800..00000000
+--- "a/docs/\346\274\224\347\244\272/\346\240\221\346\234\250\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png.import"
++++ /dev/null
+@@ -1,40 +0,0 @@
+-[remap]
+-
+-importer="texture"
+-type="CompressedTexture2D"
+-uid="uid://dkumbwo3k0ljq"
+-path="res://.godot/imported/树木贴图_笔触拟合.png-a612b36f6e871fa0720347643694b654.ctex"
+-metadata={
+-"vram_texture": false
+-}
+-
+-[deps]
+-
+-source_file="res://docs/演示/树木贴图_笔触拟合.png"
+-dest_files=["res://.godot/imported/树木贴图_笔触拟合.png-a612b36f6e871fa0720347643694b654.ctex"]
+-
+-[params]
+-
+-compress/mode=0
+-compress/high_quality=false
+-compress/lossy_quality=0.7
+-compress/uastc_level=0
+-compress/rdo_quality_loss=0.0
+-compress/hdr_compression=1
+-compress/normal_map=0
+-compress/channel_pack=0
+-mipmaps/generate=false
+-mipmaps/limit=-1
+-roughness/mode=0
+-roughness/src_normal=""
+-process/channel_remap/red=0
+-process/channel_remap/green=1
+-process/channel_remap/blue=2
+-process/channel_remap/alpha=3
+-process/fix_alpha_border=true
+-process/premult_alpha=false
+-process/normal_map_invert_y=false
+-process/hdr_as_srgb=false
+-process/hdr_clamp_exposure=false
+-process/size_limit=0
+-detect_3d/compress_to=1
+diff --git "a/docs/\346\274\224\347\244\272/\346\274\224\347\244\272\351\207\207\351\233\206.gif" "b/docs/\346\274\224\347\244\272/\346\274\224\347\244\272\351\207\207\351\233\206.gif"
+deleted file mode 100644
+index c55ffcac..00000000
+Binary files "a/docs/\346\274\224\347\244\272/\346\274\224\347\244\272\351\207\207\351\233\206.gif" and /dev/null differ
+diff --git "a/docs/\346\274\224\347\244\272/\347\237\263\345\244\264\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png" "b/docs/\346\274\224\347\244\272/\347\237\263\345\244\264\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png"
+deleted file mode 100644
+index c2524745..00000000
+Binary files "a/docs/\346\274\224\347\244\272/\347\237\263\345\244\264\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png" and /dev/null differ
+diff --git "a/docs/\346\274\224\347\244\272/\347\237\263\345\244\264\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png.import" "b/docs/\346\274\224\347\244\272/\347\237\263\345\244\264\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png.import"
+deleted file mode 100644
+index 0ea9a7ab..00000000
+--- "a/docs/\346\274\224\347\244\272/\347\237\263\345\244\264\350\264\264\345\233\276_\347\254\224\350\247\246\346\213\237\345\220\210.png.import"
++++ /dev/null
+@@ -1,40 +0,0 @@
+-[remap]
+-
+-importer="texture"
+-type="CompressedTexture2D"
+-uid="uid://bmuxxmfu22jp3"
+-path="res://.godot/imported/石头贴图_笔触拟合.png-44c7bd7ec7179c3e870305e4ebc710c9.ctex"
+-metadata={
+-"vram_texture": false
+-}
+-
+-[deps]
+-
+-source_file="res://docs/演示/石头贴图_笔触拟合.png"
+-dest_files=["res://.godot/imported/石头贴图_笔触拟合.png-44c7bd7ec7179c3e870305e4ebc710c9.ctex"]
+-
+-[params]
+-
+-compress/mode=0
+-compress/high_quality=false
+-compress/lossy_quality=0.7
+-compress/uastc_level=0
+-compress/rdo_quality_loss=0.0
+-compress/hdr_compression=1
+-compress/normal_map=0
+-compress/channel_pack=0
+-mipmaps/generate=false
+-mipmaps/limit=-1
+-roughness/mode=0
+-roughness/src_normal=""
+-process/channel_remap/red=0
+-process/channel_remap/green=1
+-process/channel_remap/blue=2
+-process/channel_remap/alpha=3
+-process/fix_alpha_border=true
+-process/premult_alpha=false
+-process/normal_map_invert_y=false
+-process/hdr_as_srgb=false
+-process/hdr_clamp_exposure=false
+-process/size_limit=0
+-detect_3d/compress_to=1
+diff --git a/stick-world/modules/ui_global/scripts/sketch/sketch_button.gd b/stick-world/modules/ui_global/scripts/sketch/sketch_button.gd
+index 391bf410..a5b52dfb 100644
+--- a/stick-world/modules/ui_global/scripts/sketch/sketch_button.gd
++++ b/stick-world/modules/ui_global/scripts/sketch/sketch_button.gd
+@@ -22,24 +22,19 @@ var _seed: int = 0
+ var _timer: float = 0.0
+ 
+ 
++var _last_dark: bool = false
++
+ func _ready() -> void:
+ 	_apply_flats()
+-	_apply_text_colors()
+ 	resized.connect(queue_redraw)
+-	mouse_entered.connect(_apply_text_colors)
+-	mouse_exited.connect(_apply_text_colors)
+ 
+ 
+-## 字色策略（只在 NORMAL/ink 分支动手，绝不覆盖工厂给 ACCENT/DANGER 设的语义字色）：
+-## - ACCENT/DANGER：白 + 伪粗（StickKit._setup_button 工厂设置），此处直接返回
+-## - NORMAL：常态白；hover 底变白 10% → 反黑（唯一反黑场景）
+-## - ink（亮背景如主菜单天空）：永远黑
++## 字色固定不变色（hover 反黑实验已撤——闪烁与状态错乱代价 > 收益）：
++## - ink（亮背景如主菜单天空）= 黑字
++## - 其余（黑底常态/hover/ACCENT/DANGER）= 白字，状态切换只换底图不换字色
+ func _apply_text_colors() -> void:
+-	if kind != Kind.NORMAL and ink.a <= 0.0:
+-		return
+-	var dark: bool = ink.a > 0.0 or (kind == Kind.NORMAL and is_hovered())
+-	var c := Color(0.05, 0.04, 0.03) if dark else StickTokens.TEXT
+-	for state in ["font_color", "font_hover_color", "font_focus_color"]:
++	var c := Color(0.05, 0.04, 0.03) if ink.a > 0.0 else StickTokens.TEXT
++	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
+ 		add_theme_color_override(state, c)
+ 
+ 
+diff --git a/stick-world/modules/world/scripts/map/sky_decor.gd b/stick-world/modules/world/scripts/map/sky_decor.gd
+index 70e6f5da..31d78e2d 100644
+--- a/stick-world/modules/world/scripts/map/sky_decor.gd
++++ b/stick-world/modules/world/scripts/map/sky_decor.gd
+@@ -109,10 +109,14 @@ func _ready() -> void:
+ 	call_deferred("_find_camera")
+ 
+ 
+-## 星野+月亮（最底层、无限远；夜间淡入，见 sky_stars.gd）
++## 星野+月亮（夜间淡入，见 sky_stars.gd）。z_index=1：抬到本层背景贴图
++## （山/树线 z=0）之上——背景贴图 86%+ 不透明且层顶铺满天空区，星/月/极光
++## 画在其下会被完全盖住（2026-09-06 夜空验收截图确认）；白天星野 gate=0
++## 不绘制，日间观感不变。相对 z=1 → 全局 -5，仍在地面(z=0)/单位之下。
+ func _build_stars() -> void:
+ 	var stars: Node2D = SkyStarsScript.new()
+ 	stars.name = "Stars"
++	stars.z_index = 1
+ 	add_child(stars)
+ 	_layers.append({"node": stars, "factor": SkyStarsScript.FACTOR})
+ 
+diff --git a/stick-world/modules/world/scripts/map/sky_stars.gd b/stick-world/modules/world/scripts/map/sky_stars.gd
+index 0a8571a6..922a5aaf 100644
+--- a/stick-world/modules/world/scripts/map/sky_stars.gd
++++ b/stick-world/modules/world/scripts/map/sky_stars.gd
+@@ -18,16 +18,17 @@ const STAR_SPAN_X: float = 9800.0
+ const STAR_TOP: float = 80.0
+ const STAR_BOTTOM: float = 640.0
+ const REDRAW_HZ: float = 12.0
+-## 极光：条带步进、整体强度、色相每秒推进（一夜≈25s 转 0.55 圈，绿→青→蓝→紫）、
+-## 条带定义 [基线y, 振幅, 频率, 色相偏移]——偏移使三带呈空间色相差
+-## （AuroraSky.cs：hue = 时间 + cos(带内t×2π×2.5)×0.1，sat=1，lum 底0.5顶1.0）
++## 极光：条带步进、整体强度、色相缓慢漂移（漂移限幅在绿→青→紫区间内，
++## 不再全色相轮转——轮转会扫过红/黄，夜空验收不似极光）、
++## 条带定义 [基线y, 振幅, 频率, 色相偏移]——偏移使三带呈绿/青/紫主色
++## （AuroraSky.cs：sat=1，lum 底0.5顶1.0）
+ const AURORA_STEP: float = 24.0
+-const AURORA_ALPHA: float = 0.34
+-const AURORA_HUE_SPEED: float = 0.022
++const AURORA_ALPHA: float = 0.26
++const AURORA_HUE_SPEED: float = 0.004
+ const AURORA_RIBBONS: Array = [
+-	[150.0, 64.0, 0.0042, 0.00],
+-	[205.0, 88.0, 0.0031, 0.10],
+-	[258.0, 52.0, 0.0056, 0.55],
++	[150.0, 64.0, 0.0042, 0.40],
++	[205.0, 88.0, 0.0031, 0.46],
++	[258.0, 52.0, 0.0056, 0.72],
+ ]
+ ## 日月（Terraria 昼 54000 tick ≈ 我们 5..21 时；夜 19..5 时）
+ const SUN_HOUR_START: float = 5.0
+@@ -215,8 +216,9 @@ func _on_aurora_draw() -> void:
+ 					+ amp * 0.35 * sin(x * freq * 2.7 - _time * 0.6)
+ 			if h > 8.0:
+ 				var t: float = (x - x_left) / STAR_SPAN_X  # 带内参数 0..1
++				# 带内色相微调制限幅 ±0.04：可见窗内不再扫过红/黄色区
+ 				var hue: float = fmod(_time * AURORA_HUE_SPEED + hue_off
+-						+ cos(t * TAU * 2.5) * 0.1, 1.0)
++						+ cos(t * TAU * 2.5) * 0.04, 1.0)
+ 				var core := Color.from_hsv(hue, 0.95, 0.85)
+ 				# 列强度沿帷幕走向起伏（涟漪感）
+ 				var band: float = 0.55 + 0.45 * sin(x * freq * 0.5 + _time * 0.22 + y0)
+@@ -252,19 +254,21 @@ static func _celestial_pos(t: float, center_x: float) -> Dictionary:
+ 	}
+ 
+ 
+-## 太阳：暖金圆盘 + 双层光晕，晨昏放大贴地（白昼可见，夜间淡出）
++## 太阳：暖金圆盘 + 双层光晕，晨昏放大贴地（白昼可见，夜间淡出）。
++## 淡出跟天空底色亮度而非 CanvasModulate——黄昏 19:00 粉峰时 CM 亮度已跌到
++## ~0.55（day_t≈0.014），按 day_t 淡出太阳会提前消失，与"日落粉峰+橙红太阳
++## 贴地平线"的画面不同步；天空底色此时仍亮（粉 lum≈0.58），20:30 前后才暗灭。
+ func _draw_sun(center_x: float, hour: float, cm: Color) -> void:
+-	var day_t: float = 1.0 - _night
+-	if day_t <= 0.01:
+-		return
+ 	var t: float = _traverse(hour, SUN_HOUR_START, SUN_HOUR_END)
+ 	if t < 0.0:
+ 		return
++	var a: float = clampf((EnvironmentAPI.sample_sky_bg_color(hour).get_luminance() - 0.25) / 0.30, 0.0, 1.0)
++	if a <= 0.01:
++		return
+ 	var c: Dictionary = _celestial_pos(t, center_x)
+ 	var p: Vector2 = c["pos"]
+ 	var s: float = c["scale"]
+ 	var r: float = 34.0 * s
+-	var a: float = day_t
+ 	# 晨昏偏橙（SetBackColor 午后→日落暖红 ramp 的简化连续版）
+ 	var warm: float = clampf(c["p"] * 1.4, 0.0, 1.0)
+ 	var disc := Color(1.0, 0.92 - 0.18 * warm, 0.62 - 0.12 * warm, a)
+diff --git a/stick-world/tests/dev/diag_sky_layers.gd b/stick-world/tests/dev/diag_sky_layers.gd
+index e70ee586..c876d703 100644
+--- a/stick-world/tests/dev/diag_sky_layers.gd
++++ b/stick-world/tests/dev/diag_sky_layers.gd
+@@ -25,7 +25,8 @@ func _ready() -> void:
+ 	var cam: Camera2D = gr.get_node_or_null("CameraRig")
+ 	print("[PROBE] cam=", cam.global_position, " zoom=", cam.zoom)
+ 	var vt: Transform2D = get_viewport().get_canvas_transform()
+-	print("[PROBE] canvas_transform=", vt, " view_rect=", Rect2(-vt.origin / vt.scale.x, Vector2(1920, 1080) / vt.scale.x))
++	var sc: float = vt.get_scale().x
++	print("[PROBE] canvas_transform=", vt, " view_rect=", Rect2(-vt.origin / sc, Vector2(1920, 1080) / sc))
+ 
+ 	var sky: Node2D = gr.get_node_or_null("WorldChunkHost/VillageMap/SkyDecor")
+ 	if sky == null:
+diff --git a/stick-world/tests/dev/snapshot_night.gd b/stick-world/tests/dev/snapshot_night.gd
+index 38925ec0..0b998481 100644
+--- a/stick-world/tests/dev/snapshot_night.gd
++++ b/stick-world/tests/dev/snapshot_night.gd
+@@ -21,10 +21,13 @@ func _ready() -> void:
+ 	_game_root = GameRootScene.instantiate()
+ 	add_child(_game_root)
+ 	await get_tree().create_timer(1.5).timeout
+-	# 切目标时刻：星野 lerp 2/s，等 2.5s 到满强度再截
++	# 切目标时刻：星野 lerp 2/s，等 2.5s 到满强度再截。
++	# 冻结时间流速（默认 60s/天会在预热等待里漂掉 ~1.6 游戏小时，
++	# 19.5 请求拍到 20:21——粉色峰值 19.0 关键帧根本拍不到）
+ 	var env: Node = _game_root.get_node_or_null("EnvironmentSystem")
+ 	if env != null and env.has_method("set_time_of_day"):
+ 		env.set_time_of_day(float(at))
++		env.set_seconds_per_day(1000000.0)
+ 	await get_tree().create_timer(2.5).timeout
+ 	var img := get_viewport().get_texture().get_image()
+ 	img.save_png(out)

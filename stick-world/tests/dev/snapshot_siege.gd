@@ -46,8 +46,10 @@ func _ready() -> void:
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(out)
 	print("[SNAPSHOT] saved: ", out)
-	# 波次推进后再截一张（战斗进行态）
-	await get_tree().create_timer(14.0).timeout
+	# 波次推进观察窗：覆盖第 2/3 波（wave_interval=22s），期间保持时间流速
+	for i in 5:
+		await get_tree().create_timer(9.0).timeout
+		TimeManager.resume()
 	var out2 := out.replace(".png", "_battle.png")
 	var img2 := get_viewport().get_texture().get_image()
 	img2.save_png(out2)

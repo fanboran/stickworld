@@ -73,6 +73,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_squad_travel.tscn"
 	"tests/integration/test_melee_combat.tscn"
 	"tests/integration/test_combat_feedback.tscn"
+	"tests/integration/test_fx_damage_text.tscn"
 	"tests/integration/test_combat_control.tscn"
 	"tests/integration/test_menu_navigation.tscn"
 	"tests/integration/test_modal_stack.tscn"

@@ -261,8 +261,9 @@ static func _ramp_tex(grad: Gradient) -> Texture2D:
 ## 池化后 Label 只建一次反复改文本/位置重飘；场景切换后失效引用自动丢弃）
 static var _damage_text_pool: Array = []
 
-## 在目标头顶飘伤害数字（白=普通 / 金=暴击·爆头）；0.7s 上浮淡出后回池。
-## combat 管线（DamagePipeline.apply）结算后调用；fx 挂目标宿主层，不进战斗逻辑。
+## 在目标头顶飘伤害数字（白=普通 / 金=暴击·爆头）；出生弹性回落 + 恒定屏上尺寸
+## （字号/偏移按相机 zoom 反向放大并钳制，拉远观战大军时数字不缩成蚂蚁）；
+## 0.7s 上浮淡出后回池。combat 管线（DamagePipeline.apply）结算后调用；fx 挂目标宿主层，不进战斗逻辑。
 static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit: bool) -> void:
 	if tree == null or tree.current_scene == null:
 		return
@@ -273,13 +274,19 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 			label = null
 	if label == null:
 		label = Label.new()
-		label.add_theme_constant_override("outline_size", 6)
 		label.z_index = 90
 		# deferred：伤害结算发生在物理帧内，同帧改树会挤掉其他节点的帧处理（血条时序交扰）
 		tree.current_scene.add_child.call_deferred(label)
+	# 恒定屏上尺寸：基准字号除以相机 zoom 再钳制；inv_zoom 同比例缩放偏移量
+	var cam := tree.root.get_viewport().get_camera_2d()
+	var zoom: float = clampf(cam.zoom.x if cam != null else 1.0, 0.35, 3.0)
+	var base_px: float = 34.0 if crit else 24.0
+	var font_px: int = int(round(clampf(base_px / zoom, 22.0, 56.0)))
+	var inv_zoom: float = float(font_px) / base_px
 	label.visible = true
 	label.text = str(int(round(amount)))
-	label.add_theme_font_size_override("font_size", 34 if crit else 24)
+	label.add_theme_font_size_override("font_size", font_px)
+	label.add_theme_constant_override("outline_size", clampi(font_px / 4, 4, 12))
 	if crit:
 		label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.35))
 		label.add_theme_color_override("font_outline_color", Color(0.45, 0.2, 0.0, 0.9))
@@ -287,16 +294,26 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 		label.add_theme_color_override("font_color", Color(0.95, 0.95, 0.98))
 		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	# current_scene 在原点，local==global；随机水平偏移防数字完全重叠
-	label.position = pos + Vector2(randf_range(-16.0, 16.0), -62.0)
+	label.position = pos + Vector2(randf_range(-16.0, 16.0) * inv_zoom, -62.0 * inv_zoom)
 	label.modulate.a = 1.0
+	label.rotation = 0.0
+	# 出生弹性：放大起手回落带轻微回弹（TRANS_BACK 过冲）；暴击冲击更强并带一点歪斜回正
+	label.reset_size()
+	label.pivot_offset = label.size * 0.5
+	label.scale = Vector2.ONE * (1.55 if crit else 1.3)
 	var tween := label.create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(label, "position:y", label.position.y - 52.0, 0.7).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "scale", Vector2.ONE, 0.18 if crit else 0.13) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	if crit:
+		label.rotation = randf_range(-0.09, 0.09)
+		tween.tween_property(label, "rotation", 0.0, 0.22).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "position:y", label.position.y - 52.0 * inv_zoom, 0.7).set_ease(Tween.EASE_OUT)
 	tween.tween_property(label, "modulate:a", 0.0, 0.45).set_delay(0.25)
 	tween.chain().tween_callback(func() -> void:
 		if is_instance_valid(label):
 			label.visible = false
-			_damage_text_pool.append(label))
+		_damage_text_pool.append(label))
 
 
 ## 挥砍剑光弧 —— 命中帧在攻击者朝向画一道渐隐弧光（白/金），0.16s 消散。

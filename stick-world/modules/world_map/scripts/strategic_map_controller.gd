@@ -281,6 +281,7 @@ func _fill_legend() -> void:
 			{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
 		]
 		entries.append_array(MapRenderer.BIOME_LEGEND)
+		entries.append_array(MapRenderer.ROAD_LEGEND)
 		_legend.set_entries(entries)
 		return
 	if api == null or not api.has_method("get_states"):
@@ -299,6 +300,7 @@ func _fill_legend() -> void:
 	if entries.is_empty():
 		_legend.set_entries(entries)  # 空态：set_shown 自动保持隐藏
 		return
+	entries.append_array(MapRenderer.ROAD_LEGEND)
 	_legend.set_title("政权")
 	_legend.set_entries(entries)
 

@@ -34,6 +34,9 @@ var _cached_segs: PackedVector2Array = PackedVector2Array()
 var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
 ## 邻居老 L1 块空心轮廓（每块一条闭合折线，A3 空心化）
 var _cached_neighbor_outlines: Array[PackedVector2Array] = []
+## 道路分级缓存（F5，set_data 后构建一次）：土路虚线段对（draw_multiline）+ 官道折线组
+var _road_dirt_segs: PackedVector2Array = PackedVector2Array()
+var _road_paved_lines: Array[PackedVector2Array] = []
 var _segs_valid: bool = false
 
 ## 静态色块层 ArrayMesh（城市色块 / 湖泊各自一张，set_data 后烘焙一次；描边/轮廓/hover 仍动态）。
@@ -49,6 +52,21 @@ const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
 ## 下限保证缩到整图适配（zoom≈0.77）时细河仍可见
 const RIVER_COLOR := Color(46.0 / 255.0, 102.0 / 255.0, 140.0 / 255.0)
 const RIVER_MIN_WIDTH := 2.0
+
+## 道路（F5/E2 渲染分级，总体设计 §5.9）：色与生成端特写 road_closeup.py STYLE 同源
+## （改色两端同步）；宽度 = context 比例（地图单位，随缩放变粗细，与河流同策略）
+const ROAD_COLOR_DIRT := Color(196.0 / 255.0, 160.0 / 255.0, 96.0 / 255.0)
+const ROAD_COLOR_PAVED := Color(255.0 / 255.0, 186.0 / 255.0, 72.0 / 255.0)
+const ROAD_WIDTH_DIRT := 0.0045
+const ROAD_WIDTH_PAVED := 0.0065
+## 土路虚线的实段/空段长（context 比例）
+const ROAD_DASH := 0.012
+const ROAD_GAP := 0.009
+## 图例条目（控制器 _fill_legend 两种模式共用追加；虚线/实线以文字标注）
+const ROAD_LEGEND: Array[Dictionary] = [
+	{"color": ROAD_COLOR_DIRT, "text": "土路（虚线）"},
+	{"color": ROAD_COLOR_PAVED, "text": "官道（实线）"},
+]
 
 ## 群系图例色（B2 地形底图色板的 L1 图例入口；基色与生成端
 ## tools/worldgen/l3/biome_generate.py BIOME_COLORS 同源，改色两端同步）
@@ -237,11 +255,23 @@ func _draw() -> void:
 	var zz: float = 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
-	# 1. 静态色块层（城市色块 → 河流 → 湖泊 → 描边/轮廓/hover 动态层）
+	# 1. 静态色块层（城市色块 → 道路 → 河流 → 湖泊 → 描边/轮廓/hover 动态层）
 	if _tiles_mesh == null:
 		_bake_base_meshes()
 	if _tiles_mesh != null:
 		draw_mesh(_tiles_mesh, null)
+	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓/道路分级）——道路层也消费，提前到此构建
+	if not _segs_valid:
+		_build_cached_geometry()
+	# 1.4 道路（F5/E2 渲染分级）：官道实线 / 土路虚线，画在城市块之上、河流之下
+	#（人工特征压地块色，自然水系压道路——河路交叉处河在上；路避水由生成端保证）
+	if _road_dirt_segs.size() >= 2 or not _road_paved_lines.is_empty():
+		if _road_dirt_segs.size() >= 2:
+			draw_multiline(_road_dirt_segs, ROAD_COLOR_DIRT,
+					maxf(ctx_size.x * ROAD_WIDTH_DIRT, 1.0), true)
+		for line in _road_paved_lines:
+			draw_polyline(line, ROAD_COLOR_PAVED,
+					maxf(ctx_size.x * ROAD_WIDTH_PAVED, 1.2), true)
 	# 1.5 河流（B3）：矢量折线叠加，画在湖泊之下（河入湖由湖面覆盖）、城市块之上
 	for rv in _data.rivers:
 		var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
@@ -259,9 +289,6 @@ func _draw() -> void:
 			if tile.polygon.size() < 3:
 				continue
 			draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
-	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓，首帧构建一次复用）
-	if not _segs_valid:
-		_build_cached_geometry()
 	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
 	var nbw: float = NEIGHBOR_BORDER_WIDTH
 	if zz > 0.0001:
@@ -463,7 +490,46 @@ func _build_cached_geometry() -> void:
 			_cached_segs.append(b)
 	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环，多环串接已在数据侧消除）
 	_cached_l1_closed = _closed(_data.l1_polygon)
+	# 道路分级（F5）：官道整折线走实线；土路按 dash/gap 弧长切段走虚线
+	_road_dirt_segs = PackedVector2Array()
+	_road_paved_lines = []
+	var ctx_x := maxf(float(_data.context_size.x), 1.0)
+	var dash := ctx_x * ROAD_DASH
+	var gap := ctx_x * ROAD_GAP
+	for rd in _data.roads:
+		var pts: PackedVector2Array = rd.get("pts", PackedVector2Array())
+		if pts.size() < 2:
+			continue
+		if str(rd.get("tier", "DIRT")) == "PAVED":
+			_road_paved_lines.append(pts)
+		else:
+			_append_dashed(_road_dirt_segs, pts, dash, gap)
 	_segs_valid = true
+
+
+## 折线按 dash/gap 交替弧长切段（土路虚线）：实段点对 append 到 segs（draw_multiline 消费）。
+## 相位沿折线连续（跨顶点不断火），末尾残段按剩余长度截断。
+func _append_dashed(segs: PackedVector2Array, pts: PackedVector2Array,
+		dash: float, gap: float) -> void:
+	var drawing := true
+	var remain := dash
+	for i in range(pts.size() - 1):
+		var a := pts[i]
+		var b := pts[i + 1]
+		var seg_len := a.distance_to(b)
+		if seg_len <= 0.0001:
+			continue
+		var walked := 0.0
+		while walked < seg_len - 0.0001:
+			var step := minf(remain, seg_len - walked)
+			if drawing:
+				segs.append(a.lerp(b, walked / seg_len))
+				segs.append(a.lerp(b, (walked + step) / seg_len))
+			walked += step
+			remain -= step
+			if remain <= 0.0001:
+				drawing = not drawing
+				remain = dash if drawing else gap
 
 
 ## 湖多边形包围盒（外扩 tol）——邻湖判定预筛用

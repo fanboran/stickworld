@@ -163,7 +163,7 @@ func get_tiles() -> Array:
 	return _data.tiles
 
 
-## 获取所有道路（像素坐标点列）
+## 获取所有道路：[{"pts": PackedVector2Array, "tier": "DIRT"/"PAVED", "length_px": float}]
 func get_roads() -> Array:
 	if _data == null:
 		return []

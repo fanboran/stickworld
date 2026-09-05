@@ -288,6 +288,7 @@ var _walker: TextureRect = null
 var _walker_frame: float = 0.0
 var _walker_dir: float = 1.0
 var _walker_cooldown: float = 3.0
+var _walker_last_frame: int = -1
 
 const WalkerF0 := "res://assets/sky/walker_f0.png"
 const WalkerF1 := "res://assets/sky/walker_f1.png"
@@ -335,10 +336,13 @@ func _update_walker(delta: float) -> void:
 			if _walker_dir < 0:
 				_walker.scale.x = -1.4  # 面向行走方向
 		return
-	# 行走动画：2 帧交替 + 平移
+	# 行走动画：2 帧交替 + 平移（帧号变化才 load/赋值 texture——每帧赋值
+	# 触发 TextureRect 重绘 + 路径字符串构造，主菜单常驻 _process 白烧）
 	_walker_frame += delta * 6.0
-	var tex_path: String = WalkerF0 if int(_walker_frame) % 2 == 0 else WalkerF1
-	_walker.texture = load(tex_path)
+	var frame: int = int(_walker_frame) % 2
+	if frame != _walker_last_frame:
+		_walker_last_frame = frame
+		_walker.texture = load(WalkerF0 if frame == 0 else WalkerF1)
 	_walker.position.x += _walker_dir * 55.0 * delta
 	if _walker.position.x < -120.0 or _walker.position.x > 1960.0:
 		_walker.queue_free()

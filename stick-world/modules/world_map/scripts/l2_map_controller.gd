@@ -81,6 +81,9 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
+			# GUI 先决（同 L1 控制器）：悬停控件（HUD 模式条/滑块）时点击归 UI，防穿透下钻 L1
+			if get_viewport().gui_get_hovered_control() != null:
+				return
 			_handle_l1_click(mb.position)
 	if event is InputEventKey and event.pressed:
 		var key: InputEventKey = event as InputEventKey

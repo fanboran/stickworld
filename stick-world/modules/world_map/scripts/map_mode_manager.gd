@@ -15,7 +15,9 @@ class_name MapModeManager
 ## 模式变更信号（本实例所在视图的 HUD/图例/渲染器订阅）
 signal mode_changed(mode: int)
 
-enum Mode { TERRAIN, POLITICAL }
+enum Mode { TERRAIN, POLITICAL, RESOURCE, LOGISTICS }
+## RESOURCE（资源）/ LOGISTICS（物流）本轮不实装：HUD 模式条置灰占位（创始人要求
+## 提前预留覆盖层入口），数据接入后启用；STICKMAN/BATTLEFRONT（战略图架构 §八）届时再补枚举
 
 ## 全局当前模式（默认 TERRAIN——创始人要求默认地形图）
 static var current_mode: int = Mode.TERRAIN
@@ -27,6 +29,8 @@ static var _instances: Array[MapModeManager] = []
 const MODE_NAMES := {
 	Mode.TERRAIN: "地形",
 	Mode.POLITICAL: "政治",
+	Mode.RESOURCE: "资源",
+	Mode.LOGISTICS: "物流",
 }
 
 

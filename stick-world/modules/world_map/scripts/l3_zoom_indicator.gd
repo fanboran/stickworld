@@ -17,6 +17,8 @@ const H := 56.0
 
 const BTN_W := 150.0
 const BTN_H := StickTokens.BTN_H
+## 小号按钮高（模式条全排 + 细分按钮统一用此高度，顶底对齐）
+const BTN_H_SM := StickTokens.BTN_H_SM
 const MODE_BTN_W := 56.0
 const SLIDER_W := 240.0
 const SLIDER_H := 28.0
@@ -67,7 +69,16 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	offset_top = -H
 	offset_bottom = 0.0
-	mouse_filter = Control.MOUSE_FILTER_PASS
+	# 根 STOP：底部横条整条 = 不可穿透区（F1 验收反馈），点击不落到地图地块上；
+	# 地图拖拽/滚轮走 MapCamera._input（先于 GUI），不受本条影响
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	# 可见 UI 外壳（次窗体底"玻璃横条"，与图例同款样式）
+	var shell := Panel.new()
+	shell.name = "Shell"
+	shell.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shell.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	shell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(shell)
 	_build_widgets()
 
 
@@ -102,15 +113,25 @@ func _build_widgets() -> void:
 		_dock_bottom_left(_terrain_btn, x, MODE_BTN_W, StickTokens.BTN_H_SM)
 		x += MODE_BTN_W + GAP
 		_political_btn = _make_mode_button("政治", MapModeManager.Mode.POLITICAL)
-		_dock_bottom_left(_political_btn, x, MODE_BTN_W, StickTokens.BTN_H_SM)
+		_dock_bottom_left(_political_btn, x, MODE_BTN_W, BTN_H_SM)
 		x += MODE_BTN_W + GAP
 		_sync_mode_buttons()
+		# 资源/物流覆盖层入口预留（创始人要求）：枚举已留、数据未接，置灰占位
+		for r in [["资源", "未开放：资源覆盖层数据接入后启用"],
+				["物流", "未开放：物流覆盖层数据接入后启用"]]:
+			var rb := StickKit.button(self, r[0], Callable(),
+					StickKit.ButtonKind.NORMAL, BTN_H_SM)
+			rb.disabled = true
+			rb.tooltip_text = r[1]
+			rb.custom_minimum_size = Vector2(MODE_BTN_W, BTN_H_SM)
+			_dock_bottom_left(rb, x, MODE_BTN_W, BTN_H_SM)
+			x += MODE_BTN_W + GAP
 	# 细分模式按钮（仅 L3 有 toggle_display_mode）
 	if _renderer != null and _renderer.has_method("toggle_display_mode"):
 		_mode_btn = StickKit.button(self, "细分:关", _on_mode_pressed,
-				StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
-		_mode_btn.custom_minimum_size = Vector2(BTN_W, BTN_H)
-		_dock_bottom_left(_mode_btn, x, BTN_W, BTN_H)
+				StickKit.ButtonKind.NORMAL, BTN_H_SM)
+		_mode_btn.custom_minimum_size = Vector2(BTN_W, BTN_H_SM)
+		_dock_bottom_left(_mode_btn, x, BTN_W, BTN_H_SM)
 		_update_mode_text()
 		x += BTN_W + GAP
 	# 缩放滑块

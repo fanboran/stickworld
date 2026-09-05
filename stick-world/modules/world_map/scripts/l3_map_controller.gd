@@ -108,6 +108,9 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
+		# GUI 先决（同 L1 控制器）：悬停控件（HUD 模式条/细分按钮）时点击归 UI，防穿透下钻
+		if get_viewport().gui_get_hovered_control() != null:
+			return
 		if _try_open_l2_at_screen(event.position):
 			get_viewport().set_input_as_handled()
 

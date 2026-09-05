@@ -120,19 +120,22 @@ func _in_view() -> bool:
 	return screen.has_point(xform * global_position)
 
 
+## 共享单例 RNG（每次取用前重播种）：全部调用点均为"取用即用即弃"、无嵌套
+## 获取，重播种与 new+seed 产生完全相同的序列——省掉每团每秒数百次对象分配
+var _shared_rng := RandomNumberGenerator.new()
+
+
 ## 固定来源 RNG（轮廓/结构用，跨姿态稳定）——整数混合哈希（无字符串构造，
 ## _strand_rng 每团每秒调用数百次，字符串分配曾是卡顿源）
 func _stable_rng(slot: int) -> RandomNumberGenerator:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = absi((base_seed * 73856093) ^ (slot * 19349663) ^ 0x5F356495)
-	return rng
+	_shared_rng.seed = absi((base_seed * 73856093) ^ (slot * 19349663) ^ 0x5F356495)
+	return _shared_rng
 
 
 ## 姿态 RNG（内部笔触用，随区姿态计数翻动）
 func _strand_rng(variant: int, i: int) -> RandomNumberGenerator:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = absi((base_seed * 73856093) ^ (variant * 19349663) ^ ((i + 1) * 83492791))
-	return rng
+	_shared_rng.seed = absi((base_seed * 73856093) ^ (variant * 19349663) ^ ((i + 1) * 83492791))
+	return _shared_rng
 
 
 ## 连续波浪轮廓：7-10 个鼓包沿圆周均匀+抖动分布，高斯钟形融合成一条连续曲线；

@@ -4,7 +4,7 @@ extends Node2D
 ##
 ## 状态机：晴（90-180s）↔ 雨（45-90s，强度 ramp 0→1→0 即 cloudAlpha 同构）。
 ## 雨粒子：屏幕跟随带内斜线（速度含风分量，rotation 沿速度——Rain 粒子带
-## 旋转的同构），密度随强度。雨声循环（gen_sfx rain_loop 无缝白噪）经
+## 旋转的同构），密度随强度。雨声循环（gen_sfx rain_loop 分层雨声）经
 ## AudioManager 天气通道播放。开局 90s 保护期（Demo 第一分钟要好看）。
 ## 雨天云层加浓：通知兄弟 SkyDecor 提高云 alpha 上限。
 

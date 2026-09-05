@@ -1,0 +1,24 @@
+{
+  "K": 16,
+  "sample_points": 72,
+  "gamma": 0.7,
+  "harmonics": {
+    "n": [2, 3, 5],
+    "amp": [0.1, 0.06, 0.04]
+  },
+  "levels": {
+    "1": {"base": 12, "g_max": 8},
+    "2": {"base": 25, "g_max": 15},
+    "3": {"base": 50, "g_max": 40},
+    "4": {"base": 100, "g_max": 50},
+    "5": {"base": 150, "g_max": 70}
+  },
+  "slope_ref": 0.004,
+  "water_cap": {"river_lake": 0.15, "sea": 0.0},
+  "jitter": {"base": 0.6, "amp": 0.4},
+  "probe_radius": 260,
+  "probe_step": 2,
+  "l2_scale": 0.3,
+  "l3_scale": 0.12,
+  "l3_min_level": 2
+}

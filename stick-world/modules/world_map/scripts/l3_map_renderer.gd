@@ -60,6 +60,15 @@ var _l1_mesh: ArrayMesh = null
 var _l1_holes_mesh: ArrayMesh = null
 var _debug_was_visible: bool = false
 
+## 城市建成区 blob（C2）：L3 分档——T1 不画 / T2+ 团块（缩放系数 + 级别下限）；
+## 全陆 1040 城轮廓三角化合并 2 张 mesh（填充 + 描边 line list），set_data 烘焙一次
+const BLOB_L3_SCALE := 0.12
+const BLOB_L3_MIN_LEVEL := 2
+const BLOB_FILL := Color(0.66, 0.61, 0.54, 0.94)
+const BLOB_EDGE := Color(0.20, 0.17, 0.12, 0.9)
+var _blob_fill_mesh: ArrayMesh = null
+var _blob_line_mesh: ArrayMesh = null
+
 ## 异步后台加载（8192 PNG 解码不阻塞主线程）：l1_index（hover 查询）+ city_preview（城市模式底图）+ terrain（地形模式底图）
 var _l1_index_thread: Thread = null
 var _l1_index_result: Image = null
@@ -152,6 +161,81 @@ func _build_static_meshes() -> void:
 		_l1_mesh = built[0]
 	if built[1] != null:
 		_l1_holes_mesh = built[1]
+	_bake_blob_meshes()
+
+
+## 烘焙城市 blob 层：city_tiles（anchor 优先，回退地块质心 centroid[x,y]）× L3 缩放
+## → 填充 + 描边 line list 两张合并 mesh（每帧 2 次 draw_mesh；T1 按分档跳过）
+func _bake_blob_meshes() -> void:
+	_blob_fill_mesh = null
+	_blob_line_mesh = null
+	var verts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var tris := PackedInt32Array()
+	var lverts := PackedVector2Array()
+	for t in _data.city_tiles:
+		var td: Dictionary = t
+		var level := int(td.get("level", 1))
+		if level < BLOB_L3_MIN_LEVEL:
+			continue
+		var cap_var: Variant = td.get("blob_capacity", [])
+		var cap := PackedFloat32Array()
+		if cap_var is PackedFloat32Array:
+			cap = cap_var
+		elif cap_var is Array:
+			for v in cap_var:
+				cap.append(float(v))
+		var anchor: Array = td.get("anchor", [])
+		var centroid: Array = td.get("centroid", [])
+		var src: Array = anchor if anchor.size() >= 2 else centroid
+		if src.size() < 2:
+			continue
+		var sid := "settlement_city_%03d" % int(td.get("label", 0))
+		var outline := SettlementBlob.generate_outline(
+			sid, level, cap, float(td.get("population_score", 0.0)))
+		if outline.size() < 3:
+			continue
+		var pos := Vector2(float(src[0]), float(src[1]))
+		var scaled := PackedVector2Array()
+		scaled.resize(outline.size())
+		for i in outline.size():
+			scaled[i] = pos + outline[i] * BLOB_L3_SCALE
+		var tri := Geometry2D.triangulate_polygon(scaled)
+		if tri.is_empty():
+			continue
+		var base := verts.size()
+		for v in scaled:
+			verts.append(v)
+			cols.append(BLOB_FILL)
+		for idx in tri:
+			tris.append(base + idx)
+		for i in scaled.size():
+			lverts.append(scaled[i])
+			lverts.append(scaled[(i + 1) % scaled.size()])
+	_blob_fill_mesh = _mesh_from_arrays(verts, cols, tris, Mesh.PRIMITIVE_TRIANGLES)
+	_blob_line_mesh = _mesh_from_arrays(lverts, PackedColorArray(), PackedInt32Array(), Mesh.PRIMITIVE_LINES)
+
+
+## 顶点 2D 数组 → ArrayMesh（lines 时逐顶点补边色）
+func _mesh_from_arrays(verts: PackedVector2Array, cols: PackedColorArray,
+		tris: PackedInt32Array, prim: int) -> ArrayMesh:
+	if verts.is_empty():
+		return null
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	if prim == Mesh.PRIMITIVE_LINES:
+		var lc := PackedColorArray()
+		lc.resize(verts.size())
+		for i in verts.size():
+			lc[i] = BLOB_EDGE
+		arr[Mesh.ARRAY_COLOR] = lc
+	else:
+		arr[Mesh.ARRAY_COLOR] = cols
+		arr[Mesh.ARRAY_INDEX] = tris
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(prim, arr)
+	return mesh
 
 
 func _build_layer_mesh(tiles: Array) -> Array:
@@ -362,6 +446,11 @@ func _draw() -> void:
 			draw_mesh(_l1_mesh, null)
 		if _l1_holes_mesh != null:
 			draw_mesh(_l1_holes_mesh, null)
+	# 2.5 城市建成区 blob（C2）：T2+ 团块叠在底图之上、L2 边界描边之下（两显示模式恒画）
+	if _blob_fill_mesh != null:
+		draw_mesh(_blob_fill_mesh, null)
+	if _blob_line_mesh != null:
+		draw_mesh(_blob_line_mesh, null)
 	# 3. L2 地区常驻描边（标识可下钻单元）
 	_draw_l2_borders()
 	# 3.5 玩家当前所在 L2 地区：整区蓝光流动描边（"你在这里"）

@@ -77,6 +77,17 @@ func _test_world_state_roundtrip() -> void:
 func _test_l1_load_wiring() -> void:
 	var world = L1WorldData.load_from("res://config/strategic_map/l1_world.json", "res://config/strategic_map")
 	_runner.assert_true(world != null and world.tiles.size() == 8, "出生 L1 装配 8 地块")
+	# 出生城免疫断言用动态基准（C2 起 population_score 由 blob_bake 统一全大陆分位尺回写）
+	var spawn_base := -1.0
+	for t in world.tiles:
+		var s = t.settlement
+		if s != null and s.settlement_id == world.spawn_settlement_id:
+			var raw = JSON.parse_string(FileAccess.get_file_as_string(
+				"res://config/strategic_map/l1_world.json"))
+			for td in raw["tiles"]:
+				var sd = td.get("settlement")
+				if sd != null and sd.get("settlement_id") == world.spawn_settlement_id:
+					spawn_base = float(sd.get("population_score", 0.0))
 	var with_score := 0
 	var spawn_base_ok := false
 	for t in world.tiles:
@@ -86,7 +97,7 @@ func _test_l1_load_wiring() -> void:
 		if s.population_score > 0.0:
 			with_score += 1
 		if s.settlement_id == world.spawn_settlement_id:
-			# run_seed=0（headless 未开局）→ 出生城免疫，等于基准 0.8
-			spawn_base_ok = absf(s.population_score - 0.8) < 1e-6
+			# run_seed=0（headless 未开局）→ 出生城免疫，装配值等于 JSON 基准
+			spawn_base_ok = spawn_base > 0.0 and absf(s.population_score - spawn_base) < 1e-6
 	_runner.assert_equal(with_score, 8, "8 城 population_score 均从 JSON 读出且非零")
-	_runner.assert_true(spawn_base_ok, "出生聚落 population_score 等于基准 0.8（免疫）")
+	_runner.assert_true(spawn_base_ok, "出生聚落 population_score 等于 JSON 基准（免疫）")

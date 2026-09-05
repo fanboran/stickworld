@@ -122,6 +122,17 @@ func _mount_sky_decor() -> void:
 	var flies := Fireflies.new()
 	flies.name = "Fireflies"
 	add_child(flies)
+	# 边缘海 ×2（K2C：走到岛屿尽头就是海）——左海贴出生点、右海接战场出口
+	var sea_l := Pond.new()
+	sea_l.name = "SeaLeft"
+	sea_l.pond_width = 1200.0
+	sea_l.position = Vector2(-1050.0, ground_y + 6.0)
+	add_child(sea_l)
+	var sea_r := Pond.new()
+	sea_r.name = "SeaRight"
+	sea_r.pond_width = 1100.0
+	sea_r.position = Vector2(7060.0, ground_y + 6.0)
+	add_child(sea_r)
 
 
 ## 实例化并挂载子组件（TerrainRenderer / ResourceGen）。

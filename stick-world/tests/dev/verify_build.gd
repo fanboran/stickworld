@@ -80,9 +80,74 @@ func _run() -> void:
 	# tests/dev/verify_quest.gd（building_completed 真信号驱动目标链）
 	_pass("材料交付/完工链交由 test_construction_cycle 覆盖")
 
+	# 5) 建造菜单缺口引导：库存清空 → 条目出现红字"缺 …"；补足 → 恢复可点
+	var build_menu: Node = _find_build_menu()
+	if build_menu != null and build_menu.has_method("_refresh_list"):
+		# 清空三种建材（consume 不足即拒，按当前库存精确扣）
+		for rid in ["res_wood", "res_stone", "res_metal_ore"]:
+			var s: float = float(res_api.get_stock(rid, "test_region"))
+			if s > 0.0:
+				res_api.consume(rid, s, "test_region", "验证清仓")
+		build_menu._refresh_list()
+		await get_tree().process_frame
+		var miss_text: String = _collect_list_text(build_menu)
+		if miss_text.contains("缺") and miss_text.contains("按 E 采集"):
+			_pass("材料不足红字引导出现（%s）" % _first_missing(miss_text))
+		else:
+			_fail("缺口提示未出现，列表文本: %s" % miss_text.substr(0, 120))
+		res_api.produce("res_wood", 99999.0, "test_region", "验证补足")
+		res_api.produce("res_stone", 99999.0, "test_region", "验证补足")
+		res_api.produce("res_metal_ore", 99999.0, "test_region", "验证补足")
+		build_menu._refresh_list()
+		await get_tree().process_frame
+		if not _collect_list_text(build_menu).contains("缺"):
+			_pass("补足材料后缺口提示消失")
+		else:
+			_fail("补足后缺口提示未消失")
+	else:
+		_fail("BuildMenu 未找到")
+
 
 	# 6) DemoQuest 推进验证
 	_pass("DemoQuest 目标链验证见 verify_quest（7/7）")
+
+
+## 找 BuildMenu 节点（GameRoot 装配，按特征方法找）
+func _find_build_menu() -> Node:
+	return _scan_build_menu(_game_root)
+
+
+func _scan_build_menu(root: Node) -> Node:
+	if root.get_script() != null and str(root.get_script().get_instance_base_type()) == "Control" \
+			and root.has_method("_refresh_list") and root.has_method("_can_afford"):
+		return root
+	for c in root.get_children():
+		var found: Node = _scan_build_menu(c)
+		if found != null:
+			return found
+	return null
+
+
+## 拼接建造列表全部 Label 文本
+func _collect_list_text(build_menu: Node) -> String:
+	var container: Node = build_menu.get("_list_container")
+	if container == null:
+		return ""
+	var out := ""
+	for entry in container.get_children():
+		for sub in entry.get_children():
+			if sub is Label:
+				out += (sub as Label).text + " | "
+	return out
+
+
+## 取第一条"缺 …"原文（日志用）
+func _first_missing(text: String) -> String:
+	var idx: int = text.find("缺 ")
+	if idx < 0:
+		return "?"
+	var end_idx: int = text.find(" | ", idx)
+	return text.substr(idx, (end_idx if end_idx > idx else text.length()) - idx)
 
 
 func _fail(msg: String) -> void:

@@ -36,6 +36,8 @@ const MENU_ITEMS: Array[Dictionary] = [
 
 var _settings_panel: Control = null
 var _load_panel: Control = null
+## 标题（呼吸动画用）
+var _title: Label = null
 
 
 func _ready() -> void:
@@ -51,11 +53,15 @@ func _ready() -> void:
 
 func _build_title() -> void:
 	var title := StickKit.label(_menu_column, "火柴人帝国模拟", StickKit.LabelKind.TITLE)
-	title.add_theme_font_size_override("font_size", StickTokens.FONT_DISPLAY)
+	# 标题加大一档（用户指示；48 = FONT_DISPLAY 34 的展示级放大）
+	title.add_theme_font_size_override("font_size", 48)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# 亮天空上的白字配黑描边（贴纸感），墨色与血条 COLOR_OUTLINE 同源
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.03, 0.92))
-	title.add_theme_constant_override("outline_size", 6)
+	title.add_theme_constant_override("outline_size", 8)
+	# 呼吸缩放以中心为锚
+	title.resized.connect(func() -> void: title.pivot_offset = title.size * 0.5)
+	_title = title
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 24)
 	_menu_column.add_child(spacer)
@@ -70,6 +76,9 @@ func _build_menu() -> void:
 				_on_menu_pressed.bind(item), item["kind"], StickTokens.BTN_H_LG)
 		# 浮在暖金天空上的按钮用深墨描边（白描边在亮背景上不可见）
 		btn.ink = Color(0.05, 0.04, 0.03, 1.0)
+		# 按钮文字改黑（用户指示）：暖黑与 ink 描边同族，亮天空上黑字比白字稳
+		for col_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+			btn.add_theme_color_override(col_name, Color(0.1, 0.08, 0.06))
 		if item["id"] == "continue":
 			btn.disabled = not _has_continue_save()
 
@@ -107,6 +116,7 @@ const TEST_SCENES: Array[Dictionary] = [
 	{"name": "大乱斗观察场（12v12 混编自动互殴）", "path": "res://tests/dev/battle_arena.tscn"},
 	{"name": "单位动作画廊（全员单位×全部动作对比）", "path": "res://tests/dev/unit_action_gallery.tscn"},
 	{"name": "手绘皮肤全族陈列（自绘沸腾 + StickHand 字体）", "path": "res://tests/dev/sketch_compare.tscn"},
+	{"name": "手绘云候选陈列（动漫体积/油画厚涂）", "path": "res://tests/dev/sketch_cloud_gallery.tscn"},
 ]
 
 var _arena_panel: Control = null
@@ -235,7 +245,8 @@ func _build_background() -> void:
 		m.modulate = Color(0.9, 0.86, 0.84)
 		add_child(m)
 		move_child(m, 2)
-	# 漂移云（两团，_process 缓移）
+	# 漂移云（两团，_process 缓移）——云上山前（index 4 = 山层之上；
+	# 此前 move_child 到 1 被全屏天空渐变整层盖住不可见）
 	_cloud_rects = []
 	for tex_path in [SkyDecorCloudA, SkyDecorCloudB]:
 		if not ResourceLoader.exists(tex_path):
@@ -246,7 +257,7 @@ func _build_background() -> void:
 		c.position = Vector2(randf_range(0.1, 0.7) * 1920.0, randf_range(40.0, 300.0))
 		c.modulate = Color(1, 1, 1, 0.85)
 		add_child(c)
-		move_child(c, 1)
+		move_child(c, 4)
 		_cloud_rects.append(c)
 		_cloud_base_ys.append(c.position.y)
 	# 远空飞鸟（自绘剪影，与游戏内 sky_birds 同视觉语言；云上山下）
@@ -341,3 +352,14 @@ func _start_title_entrance() -> void:
 	var tw := title.create_tween()
 	tw.tween_property(title, "modulate:a", 1.0, 0.7)
 	tw.parallel().tween_property(title, "position:y", title.position.y, 0.7).from(title.position.y + 14.0)
+	# 入场完接呼吸（用户指示：标题缓慢脉动；正弦缓动无弹跳，2.6s 一个周期）
+	tw.tween_callback(_start_title_breath.bind(title))
+
+
+## 标题呼吸：scale 1.0 → 1.04 → 1.0 循环（中心锚点在 _build_title 的 resized 里设）
+func _start_title_breath(title: Label) -> void:
+	var tw := title.create_tween().set_loops()
+	tw.tween_property(title, "scale", Vector2(1.04, 1.04), 1.3) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(title, "scale", Vector2.ONE, 1.3) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)

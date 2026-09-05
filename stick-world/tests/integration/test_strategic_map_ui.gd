@@ -3,7 +3,8 @@ extends Node
 ## 验证：
 ##   - L1/L2/L3 三视图各挂 GranularityIndicator，open 后层级指示与当前状态一致
 ##     （L1 直开 vs 下钻的 ESC 语义、L2 地区号、L3 静态文案）
-##   - SettlementTooltip 悬停内容：名称/级别/政权；map_id 为空显示"未开放进入"不误导
+##   - SettlementTooltip 悬停内容：名称/级别/政权；map_id 非空显示"双击进入"（P5 回填后
+##     出生 8 城即此形态），为空显示"未开放进入"不误导（69 包外圈聚落）
 ##   - 视图互斥：L1（Tab）打开时 L3（含下钻 L2）自动收起（L1 层号低会被整个盖住）
 
 @warning_ignore("shadowed_global_identifier")
@@ -43,8 +44,8 @@ func _ready() -> void:
 	_runner.add_test("L1 直开（Tab）：层级指示 + 关闭提示", _test_l1_indicator_direct, true)
 	_runner.add_test("L1 下钻：地块号切换 + ESC 返回地区提示", _test_l1_indicator_drill, true)
 	_runner.add_test("L1 名牌 + 图例：地块名/聚落数/模式驱动图例（地形↔政权）", _test_l1_title_legend, true)
-	_runner.add_test("tooltip 聚落内容：名称/级别/政权/未开放进入", _test_tooltip_content, true)
-	_runner.add_test("tooltip map_id 非空：双击进入", _test_tooltip_enterable, true)
+	_runner.add_test("tooltip 聚落内容：名称/级别/政权/双击进入", _test_tooltip_content, true)
+	_runner.add_test("tooltip map_id 为空：未开放进入", _test_tooltip_enterable, true)
 	_runner.add_test("tooltip 空聚落/无数据：隐藏不误导", _test_tooltip_hidden, true)
 	_runner.add_test("L2 打开：层级指示 + 当前地区号", _test_l2_indicator, true)
 	_runner.add_test("L3 打开：层级指示 + 关闭提示", _test_l3_indicator, true)
@@ -216,9 +217,9 @@ func _test_tooltip_content() -> void:
 	var owner_name: String = info.get("name", "")
 	_runner.assert_true(not owner_name.is_empty(), "tile 应有归属政权")
 	_runner.assert_true(_tooltip._owner_label.text.contains(owner_name), "显示政权名 %s（实测 %s）" % [owner_name, _tooltip._owner_label.text])
-	# map_id 为空 → 明确"未开放进入"
-	_runner.assert_true(s.map_id.is_empty(), "前置：出生聚落 map_id 为空")
-	_runner.assert_true(_tooltip._enter_label.text == "未开放进入", "空 map_id 显示未开放进入（实测 %s）" % _tooltip._enter_label.text)
+	# P5 进城闭环：出生 8 城 map_id 已回填（l1_settlement_XX）→ 显示"双击进入"
+	_runner.assert_true(not s.map_id.is_empty(), "前置：出生聚落 map_id 已回填")
+	_runner.assert_true(_tooltip._enter_label.text == "双击进入", "非空 map_id 显示双击进入（实测 %s）" % _tooltip._enter_label.text)
 	_runner.assert_true(_tooltip._enter_label.visible, "进入状态行可见")
 
 
@@ -226,7 +227,7 @@ func _test_tooltip_enterable() -> void:
 	if _tooltip == null:
 		_runner.assert_true(false, "前置装配缺失")
 		return
-	# 构造 map_id 非空的聚落（未来可进入形态）
+	# 构造 map_id 为空的聚落（未开放形态：69 包外圈聚落/未来地图未挂）
 	var tile := L1TileDef.new()
 	tile.tile_id = "test_tile"
 	tile.owner_state_id = "state_test"
@@ -234,11 +235,11 @@ func _test_tooltip_enterable() -> void:
 	s.settlement_id = "settlement_test"
 	s.name = "测试城"
 	s.level = 3
-	s.map_id = "some_map"
+	s.map_id = ""
 	tile.settlement = s
 	_tooltip.update_for_tile(tile)
-	_runner.assert_true(_tooltip.visible, "map_id 非空聚落显示 tooltip")
-	_runner.assert_true(_tooltip._enter_label.text == "双击进入", "map_id 非空显示双击进入（实测 %s）" % _tooltip._enter_label.text)
+	_runner.assert_true(_tooltip.visible, "空 map_id 聚落仍显示 tooltip")
+	_runner.assert_true(_tooltip._enter_label.text == "未开放进入", "空 map_id 显示未开放进入（实测 %s）" % _tooltip._enter_label.text)
 
 
 func _test_tooltip_hidden() -> void:

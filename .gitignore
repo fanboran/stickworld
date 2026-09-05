@@ -53,6 +53,9 @@ tools/filter_*.py
 tools/worldgen/output/**
 !tools/worldgen/output/locked/
 !tools/worldgen/output/locked/**
+# Demo 工作量展示素材（创始人指示入库留档，见 tools/worldgen/README.md §Demo）
+!tools/worldgen/output/l3_terrain.png
+!tools/worldgen/output/l2_preview_*.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

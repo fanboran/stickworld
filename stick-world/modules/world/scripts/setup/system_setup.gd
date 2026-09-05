@@ -548,6 +548,23 @@ func _setup_boundary_detector() -> void:
 	# 战略图关闭 -> 恢复场景图输入（api.close_strategic_map / ESC 都发此信号）
 	if EventBus != null:
 		EventBus.strategic_map_closed.connect(_on_strategic_map_closed)
+	# F2/C1 玩家位置动态接线（总体设计 §5.6）：每次场景图加载 → world_map api
+	# 反查所在聚落，更新图钉 + 当前地块描边（跨 L1 的 region/Tab 跟随留 D 期）
+	if _root.scene_loader != null and _root.scene_loader.has_signal("map_loaded") \
+			and not _root.scene_loader.map_loaded.is_connected(_on_player_map_changed):
+		_root.scene_loader.map_loaded.connect(_on_player_map_changed)
+
+
+## 玩家所在场景图变化（F2/C1）：经 world_map api 反查所在聚落。
+## api 未初始化（战略图懒加载未触发）时跳过——图钉默认锚出生聚落，语义仍正确。
+func _on_player_map_changed(map_id: String, _map_type: int) -> void:
+	if _root._strategic_map == null:
+		return
+	var content: Node = _root._strategic_map.get_node_or_null("Content")
+	var api: Node = content.get_node_or_null("Api") if content != null else null
+	if api != null and api.has_method("is_initialized") and api.is_initialized() \
+			and api.has_method("set_player_map"):
+		api.set_player_map(map_id)
 
 
 ## 战略图懒加载：首次打开（Tab / M / 边界提示）才实例化并初始化。

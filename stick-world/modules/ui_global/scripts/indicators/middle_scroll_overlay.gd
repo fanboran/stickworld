@@ -12,6 +12,8 @@ const ARROW_LEN: float = 10.0
 const ARROW_GAP: float = 6.0
 
 var _camera_rig: Node = null
+## 上帧是否滚动中（用于"结束补一次清屏"的零重绘判定）
+var _last_scrolling: bool = false
 
 
 func setup(camera_rig: Node) -> void:
@@ -25,7 +27,13 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	size = get_viewport_rect().size
-	queue_redraw()
+	# 仅中键滚动期间重绘（图标随锚点移动）；滚动结束的那帧补一次重绘清屏
+	var scrolling: bool = _camera_rig != null \
+			and _camera_rig.has_method("is_middle_scrolling") \
+			and _camera_rig.is_middle_scrolling()
+	if scrolling or _last_scrolling:
+		queue_redraw()
+	_last_scrolling = scrolling
 
 
 func _draw() -> void:

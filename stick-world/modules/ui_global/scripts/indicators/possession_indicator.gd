@@ -16,6 +16,8 @@ const FLAT_Y: float = 12.0
 
 var _camera_rig: Node = null
 var _game_root: Node = null
+## 上帧是否有附身实体（用于"消失时补一次清屏"的零重绘判定）
+var _last_had_player: bool = false
 
 
 func setup(camera_rig: Node, game_root: Node) -> void:
@@ -30,7 +32,12 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	size = get_viewport_rect().size
-	queue_redraw()
+	# 无附身实体时零重绘；有附身时椭圆逐帧跟随移动，逐帧重绘是必要的；
+	# 实体消失的那帧补一次重绘清屏
+	var has_player: bool = _get_possessed_entity() != null
+	if has_player or _last_had_player:
+		queue_redraw()
+	_last_had_player = has_player
 
 
 func _draw() -> void:

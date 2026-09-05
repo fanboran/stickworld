@@ -1,0 +1,13 @@
+{
+  "_说明": [
+    "场景图地区/城市报幕数据（UI 交接 §8 #5：进入地区时的中央大字幕）。",
+    "键 = 场景图 map_id（SceneLoader 注册 id，即 EventBus.map_loaded 信号第一个参数）。",
+    "值 = 报幕内容：title 主标题（必填）、subtitle 副标题（可选，缺省不显示副行）。",
+    "规则：未配置的 map_id 一律不播报幕；下划线开头的键是文档说明，解析时跳过。",
+    "现有 map_id：village_a（出生地）/ village_b / road_a_b / mega_interior / battlefield / forest_zone。",
+    "战略图聚落（settlement）接入场景图后，同样按其 map_id 在此登记。"
+  ],
+  "village_a": {
+    "title": "起始之地"
+  }
+}

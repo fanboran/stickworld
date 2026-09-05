@@ -39,6 +39,21 @@ enum Level {
 @export var layout_seed: int = 0
 
 
+## 每局扰动幅度（总体设计 §5.7/C3：基准 population_score ±15%）
+const POPULATION_JITTER := 0.15
+
+
+## population_score 每局扰动（确定性：hash(settlement_id) + run_seed 派生）。
+## 出生聚落免疫（规格 §0.16）；基准值 ≤ 0 视为未设，不扰动。
+## run_seed 由 WorldState 持有并随存档保存 → 读档后逐点一致。
+static func jitter_population_score(base: float, settlement_id: String, run_seed: int, is_spawn: bool) -> float:
+	if is_spawn or base <= 0.0:
+		return base
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(settlement_id) + run_seed
+	return clampf(base * (1.0 + rng.randf_range(-POPULATION_JITTER, POPULATION_JITTER)), 0.0, 1.0)
+
+
 ## 获取建筑群占地半径（像素，L1 地图坐标系）
 ## 详见 docs/技术/架构/战略图架构.md §4.6
 func get_footprint_radius() -> float:

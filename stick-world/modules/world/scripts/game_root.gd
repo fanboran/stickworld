@@ -427,9 +427,11 @@ func _load_start_village() -> void:
 		# 避免加载遮罩永久停留黑屏；失败原因已由 SaveHandler 经 ui_notification 提示
 		# （此时 UIRoot 已装配，通知随遮罩淡出可见）。
 		print_verbose("[GameRoot] 启动读档被拒（槽位 %d），回退新游戏" % boot_slot)
-	# 新游戏：重置游戏时间（防上一局残留）
+	# 新游戏：重置游戏时间 + 本局随机种子（防上一局残留；读档路径经 load_save_data 恢复种子）
 	if WorldState and "game_time" in WorldState:
 		WorldState.game_time = 0.0
+	if WorldState and WorldState.has_method("start_new_run"):
+		WorldState.start_new_run()
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
 	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
 	print_verbose("[GameRoot] 开始新游戏")

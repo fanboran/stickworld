@@ -136,6 +136,10 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 			var pos_arr: Array = sd.get("position_px", [0, 0])
 			sref.position = Vector2(float(pos_arr[0]), float(pos_arr[1]))
 			sref.map_id = sd.get("map_id", "")
+			sref.population_score = SettlementRef.jitter_population_score(
+				float(sd.get("population_score", 0.0)), sref.settlement_id,
+				WorldState.run_seed if WorldState else 0,
+				sref.settlement_id == world.spawn_settlement_id)
 			tile.settlement = sref
 		world.tiles.append(tile)
 		world._tile_by_id[tile.tile_id] = tile

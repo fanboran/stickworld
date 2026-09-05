@@ -36,16 +36,16 @@ import stroke_paint  # noqa: E402  (同目录，笔触拟合复用其 paint() �
 # 笔宽严格对齐参考画布比例（1200 宽底笔 12.2/detail 1.6 → 384 宽 = 1%/0.13%）：
 # 底笔粗则几千笔互相糊叠，视觉只剩"几百笔粗抹"；detail 阈值放宽防提前收笔
 THIN_LAYERS = [
-    dict(name="underpainting", ratio=0.18, w0=2.2, w1=1.8, ln=18, alpha=0.98,
+    dict(name="underpainting", ratio=0.20, w0=3.6, w1=2.8, ln=22, alpha=0.98,
          typ="Q", region="full", jit=0.24, mode="walk", p_jump=0.95, csteps=6,
          band_jit=0.28),
-    dict(name="body", ratio=0.40, w0=1.6, w1=1.15, ln=10, alpha=0.97,
+    dict(name="body", ratio=0.42, w0=2.4, w1=1.7, ln=11, alpha=0.97,
          typ="Q", region="full", jit=0.20, mode="band", p_end=0.01, csteps=6,
          band_jit=0.22, color_break=True),
-    dict(name="detail", ratio=0.36, w0=0.85, w1=0.5, ln=6, alpha=0.90,
+    dict(name="detail", ratio=0.32, w0=0.9, w1=0.55, ln=8, alpha=0.90,
          typ="Z", region="full", jit=0.9, mode="scatter", csteps=5,
-         refine=True, err_thresh=0.12, color_break=True),
-    dict(name="glaze", ratio=0.06, w0=2.0, w1=1.6, ln=22, alpha=0.10,
+         refine=True, err_thresh=0.06, color_break=True),
+    dict(name="glaze", ratio=0.06, w0=3.0, w1=2.4, ln=26, alpha=0.12,
          typ="Q", region="full", jit=0.5, mode="scatter", csteps=6),
 ]
 
@@ -482,13 +482,13 @@ def build(kind, idx, rng):
         render_crown_mask(s, W, H).save(crown_mask)
         trunk_png = os.path.join(REF_DIR, f"tree_v{idx}_trunk.png")
         crown_png = os.path.join(REF_DIR, f"tree_v{idx}_crown.png")
-        stroke_paint.paint(trunk_ref, trunk_png, 1800, trunk_mask, size=(W, H),
+        stroke_paint.paint(trunk_ref, trunk_png, 1400, trunk_mask, size=(W, H),
                            bg=tuple(float(c) for c in TRUNK_COLORS[1]), layers=THIN_LAYERS)
         # 流场螺旋注入（mona-3 spirals）：每个叶团中心一个绕圈切向场，
         # 笔触沿团弧线组织排列（手绘树冠的环形笔触感），横穿团缘的笔大幅减少
         crown_spirals = [(b["c"][0], b["c"][1], b["r"] * 1.30, 0.55)
                          for b in s["blobs"]]
-        stroke_paint.paint(crown_ref, crown_png, 3600, crown_mask, size=(W, H),
+        stroke_paint.paint(crown_ref, crown_png, 3400, crown_mask, size=(W, H),
                            bg=tuple(float(c) for c in s["palette"][1]), layers=THIN_LAYERS,
                            spirals=crown_spirals)
         trunk_img = Image.open(trunk_png).convert("RGBA")

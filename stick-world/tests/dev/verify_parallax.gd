@@ -54,16 +54,22 @@ func _ready() -> void:
 	await get_tree().create_timer(1.2).timeout
 	var mx1: float = mountains.position.x
 	var cx1: float = cam.global_position.x
-	var moved: float = mx1 - mx0
 	var cam_moved: float = cx1 - cx0
-	var expect: float = cam_moved * (1.0 - 0.15)
-	# modulo 回绕平铺：位移与期望的差是 tile 宽的整数倍（层 sprite 相位在 [0,tile_w) 回绕）
+	# modulo 回绕平铺：sprite 原始 position 含 (2-parallax) 速率的贴图宽度回绕跳变，
+	# 直接比位移会误判——改测"内容相位"（position - cam_x 对 tile_w 取模），
+	# 其变化率恰为视差 (1-parallax)（内容相对相机的滚动速率）
 	var tile_w: float = mountains.texture.get_width() * mountains.scale.x
-	var drift: float = fmod(moved - expect, tile_w)
-	drift = minf(absf(drift), absf(drift - tile_w))
-	print("[PARALLAX] cam_moved=%.0f mountains_moved=%.0f expect=%.0f tile_w=%.0f drift=%.1f"
-			% [cam_moved, moved, expect, tile_w, drift])
-	if not (drift < 30.0 and absf(moved) > 50.0):
+	var phase0: float = fmod(mx0 - cx0, tile_w)
+	var phase1: float = fmod(mx1 - cx1, tile_w)
+	var moved: float = phase1 - phase0
+	if moved > tile_w * 0.5:
+		moved -= tile_w
+	elif moved < -tile_w * 0.5:
+		moved += tile_w
+	var expect: float = cam_moved * (1.0 - 0.15)
+	print("[PARALLAX] cam_moved=%.0f content_moved=%.0f expect=%.0f tile_w=%.0f"
+			% [cam_moved, moved, expect, tile_w])
+	if not (absf(moved - expect) < 30.0 and absf(moved) > 50.0):
 		print("[FAIL] 视差不符")
 		get_tree().quit(1)
 		return

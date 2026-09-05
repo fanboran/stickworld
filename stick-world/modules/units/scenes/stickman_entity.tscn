@@ -19,7 +19,8 @@ size = Vector2(90, 277)
 [node name="StickmanEntity" type="CharacterBody2D" unique_id=655489722]
 position = Vector2(-8.5, -130)
 collision_layer = 2
-collision_mask = 3
+# 单位间不物理互撞（防叠人由空间网格软分离负责，人群战斗性能核心）；仅撞地形/障碍层1
+collision_mask = 1
 script = ExtResource("1_entity")
 
 [node name="RigHost" parent="." unique_id=1566456611 instance=ExtResource("2_rig_scene")]

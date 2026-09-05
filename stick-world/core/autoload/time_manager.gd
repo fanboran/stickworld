@@ -31,6 +31,10 @@ var auto_slow_on_possess: bool = true
 
 ## 启动时应用设置面板持久化项（附身自动减速 / 战斗自动暂停）。
 func _ready() -> void:
+	# 物理/逻辑 tick 30Hz（人群战斗性能核心：所有逐 tick 成本减半，速率语义按
+	# delta 自动补偿）。project.godot 里的同名配置实测未生效（原因未明），
+	# 此处运行时强制执行，单一真相源。
+	Engine.physics_ticks_per_second = 30
 	if ConfigManager:
 		if ConfigManager.has_key("game/slow_on_possess"):
 			auto_slow_on_possess = bool(ConfigManager.get_value("game/slow_on_possess"))

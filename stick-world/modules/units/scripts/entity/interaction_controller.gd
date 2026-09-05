@@ -1,9 +1,9 @@
 extends Node
-## 火柴人交互控制器 —— 玩家按 E 交互 + 交互提示弹窗。
+## 火柴人交互控制器 —— 玩家按 F 交互 + 交互提示弹窗。
 ##
 ## 职责：
 ## - 查找当前可交互目标（工地 / 仓库 / 资源点）并返回提示文字
-## - 玩家按 E 执行交互（交付材料 / 敲击建造 / 取放材料 / 采集）
+## - 玩家按 F 执行交互（交付材料 / 敲击建造 / 取放材料 / 采集）
 ## - 交互提示弹窗（挂到地图前景层，跟随目标建筑显示）
 ##
 ## 由 StickmanEntity._ready 挂载为 InteractionController 子节点并调用 setup(entity)，
@@ -34,9 +34,10 @@ func setup(entity: Node2D) -> void:
 	_entity = entity
 
 
-# ─────────────────────────────── 玩家交互（按E）────────────────────────────────
+# ─────────────────────────────── 玩家交互（按F）────────────────────────────────
 
-## 玩家附身时按E：仓库取放材料、工地交付/建造、资源点采集。
+## 玩家附身时按F：仓库取放材料、工地交付/建造、资源点采集。
+## （原为 E 键，E 让位背包装备系统）
 func try_interact() -> void:
 	var info: Dictionary = _find_interact_target()
 	if info.is_empty():
@@ -66,10 +67,10 @@ func try_interact() -> void:
 			_try_harvest_resource_node(target as Node2D)
 
 
-## 按住 E 的连续交互（采集手感）：动作锁解除后自动续作，由实体物理帧驱动。
+## 按住 F 的连续交互（采集手感）：动作锁解除后自动续作，由实体物理帧驱动。
 ## 单次按下仍走 try_interact（_unhandled_input），本方法只负责"按住"的续采。
 func try_hold_interact() -> void:
-	if not Input.is_key_pressed(KEY_E):
+	if not Input.is_key_pressed(KEY_F):
 		return
 	# 敲击动作锁期间不重复触发（1.8s 一拍，与单次交互同节奏）
 	if float(_entity.get("_player_build_timer")) > 0.0:
@@ -197,11 +198,11 @@ func _find_interact_target() -> Dictionary:
 			var cx: float = (left_x + right_x) * 0.5
 			var hint: String = ""
 			if _entity.is_carrying():
-				hint = "按E交付材料"
+				hint = "按F交付材料"
 			elif project.needs_material():
 				hint = "材料不足，等待搬运"
 			else:
-				hint = "按E敲击建造"
+				hint = "按F敲击建造"
 			return {"target": project, "kind": "project", "hint": hint, "center_x": cx, "hint_y": -1.0}
 		# 仓库
 		var warehouse: Node2D = _entity.get_construction_manager().get_nearest_warehouse(_entity.global_position)
@@ -209,14 +210,14 @@ func _find_interact_target() -> Dictionary:
 			var bounds: Dictionary = _get_building_barrier_bounds(warehouse)
 			var hint: String = ""
 			if _entity.is_carrying():
-				hint = "按E放回材料"
+				hint = "按F放回材料"
 			else:
-				hint = "按E拿起建材"
+				hint = "按F拿起建材"
 			return {"target": warehouse, "kind": "warehouse", "hint": hint, "center_x": float(bounds.center), "hint_y": -1.0}
 	# 资源点（采集）
 	var rn: Node2D = _find_nearest_resource_node()
 	if rn != null:
-		var hint: String = "按E采集%s（剩 %d）" % [rn.get_display_name(), rn.amount]
+		var hint: String = "按F采集%s（剩 %d）" % [rn.get_display_name(), rn.amount]
 		return {"target": rn, "kind": "resource", "hint": hint,
 				"center_x": rn.global_position.x, "hint_y": rn.global_position.y - 72.0}
 	return {}

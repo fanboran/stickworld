@@ -196,7 +196,7 @@ func _create_build_entry(def_id: String, def: Dictionary) -> Control:
 		var missing: String = _missing_summary(def)
 		if not missing.is_empty():
 			var miss := Label.new()
-			miss.text = "缺 %s —— 按 E 采集可获取" % missing
+			miss.text = "缺 %s —— 按 F 采集可获取" % missing
 			miss.add_theme_font_size_override("font_size", 11)
 			miss.add_theme_color_override("font_color", Color(0.95, 0.55, 0.45))
 			vbox.add_child(miss)

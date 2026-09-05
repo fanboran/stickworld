@@ -91,6 +91,10 @@ static func apply(target: Node, p: Params) -> float:
 			final_amount *= DAMAGE_REDUCTION_TO_STATUE
 		elif _is_massive(target):
 			final_amount *= DAMAGE_REDUCTION_TO_MASSIVE
+	# 护甲减伤（背包装备系统：三件加和，get_armor_factor 单入口；
+	# 反伤不吃护甲——那是对自己身体的伤害）
+	if p.type != DAMAGE_TYPE.REFLECT and target.has_method("get_armor_factor"):
+		final_amount *= float(target.get_armor_factor())
 	# 格挡判定（举盾姿态 + 正面来袭 + 概率）：减伤 85%，播放格挡动画；
 	# 不可格挡类型（法术/反伤/溅射）跳过。成功格挡后进入 blockResetInterval 冷却。
 	if p.is_blockable and _try_block(target, p.direction):

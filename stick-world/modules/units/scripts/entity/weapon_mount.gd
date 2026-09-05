@@ -33,7 +33,7 @@ const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_
 const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
 
 # ─────────────────────────────── 武器类型 ────────────────────────────────
-enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF, MERIC }
+enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF, MERIC, NONE }
 
 ## 武器类型 -> 武器场景（贴图由 extract_weapons.gd 从解包图集裁剪）
 const WEAPON_SCENE_PATHS: Dictionary = {
@@ -119,10 +119,19 @@ enum Mood {
 			call_deferred("_reload_weapons")
 			# 持械站姿随武器分型（剑/矛/弓/镐/杖各一套 Stand），立即换姿
 			call_deferred("_refresh_owner_stance")
-## 是否装备盾牌（挂左手 hand_outer）
+## 是否装备盾牌（挂左手 hand_outer）。兵种默认盾：仅 SPEAR 挂模型
+## （原版只有 Spearton 持盾，其余兵种此位恒 true 但不显示——语义是"可格挡兵种"）
 @export var shield_enabled: bool = true:
 	set(v):
 		shield_enabled = v
+		if is_inside_tree():
+			call_deferred("_reload_weapons")
+			call_deferred("_refresh_owner_stance")
+## 副手显式装备盾（背包装备系统写入，任意武器配盾；与兵种默认盾独立——
+## 玩家 RPG 装备语义，NPC 不感知）。格挡判定只看盾实例，两条路殊途同归。
+@export var equipped_shield: bool = false:
+	set(v):
+		equipped_shield = v
 		if is_inside_tree():
 			call_deferred("_reload_weapons")
 			call_deferred("_refresh_owner_stance")
@@ -258,19 +267,24 @@ func _mount_weapons() -> void:
 	if hand == null:
 		push_warning("[WeaponMount] 未找到主手骨骼（hand_inner），无法挂武器")
 		return
-	var scene_path: String = WEAPON_SCENE_PATHS.get(weapon_type, "")
-	if scene_path.is_empty():
-		push_warning("[WeaponMount] 未知武器类型: %d" % weapon_type)
-		return
-	var scene: PackedScene = load(scene_path)
-	if scene == null:
-		push_warning("[WeaponMount] 武器场景加载失败: %s" % scene_path)
-		return
-	_weapon = _mount_one(scene, hand, "Weapon")
-	attack_range = WEAPON_RANGE.get(weapon_type, attack_range)
+	# NONE = 徒手（背包装备系统卸空主手）：不挂武器模型，射程归零不可攻击
+	if weapon_type == WeaponType.NONE:
+		attack_range = 0.0
+	else:
+		var scene_path: String = WEAPON_SCENE_PATHS.get(weapon_type, "")
+		if scene_path.is_empty():
+			push_warning("[WeaponMount] 未知武器类型: %d" % weapon_type)
+			return
+		var scene: PackedScene = load(scene_path)
+		if scene == null:
+			push_warning("[WeaponMount] 武器场景加载失败: %s" % scene_path)
+			return
+		_weapon = _mount_one(scene, hand, "Weapon")
+		attack_range = WEAPON_RANGE.get(weapon_type, attack_range)
 	# 副手盾牌（**绑定矛兵**：原版也只有 Spearton 持盾，其余兵种无盾——
-	# 曾给全员挂盾导致"人手一面盾"的怪相，用户决策回归原版）
-	if shield_enabled and weapon_type == WeaponType.SPEAR:
+	# 曾给全员挂盾导致"人手一面盾"的怪相，用户决策回归原版；
+	# equipped_shield = 玩家背包副手装备盾，任意武器可配）
+	if (shield_enabled and weapon_type == WeaponType.SPEAR) or equipped_shield:
 		_mount_shield(owner_entity)
 	# 订阅动画内嵌事件（命中帧 + 音效钩子）
 	_connect_rig_events(owner_entity)
@@ -570,6 +584,9 @@ func _physics_process(delta: float) -> void:
 ## 冷却 ≤ 命中帧时长时（如剑 1.0s 冷却 vs 1.0s 命中帧），每次重挥都会
 ## 在命中帧结算前打断自己，永远打不出伤害。对齐原版"命中帧后才可打断"语义。
 func can_attack() -> bool:
+	# 徒手（背包装备系统主手卸空）不可攻击——玩家空手即无威胁
+	if weapon_type == WeaponType.NONE:
+		return false
 	if _cooldown_timer > 0.0:
 		return _cancel_window_latched or _can_cancel_attack_anim()
 	# 上一击已登记目标但还没到命中帧：等它结算（空挥/已结算不拦）

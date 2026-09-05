@@ -91,3 +91,14 @@ static func _build_defs() -> void:
 	_def("con_bandage", "绷带", ItemDef.Category.CONSUMABLE, 99, "",
 			{"heal_amount": 30.0}, -1, false,
 			"简单包扎，回复 30 点生命。数字键或点击 Hotbar 使用。")
+	# ── 矿物（背包可携带的采出物；堆叠限量——石材多、钻石稀缺。
+	# 建造材料（木板等）不进背包：搬运占用双手（InteractionController
+	# 的 carrying 机制），走区域仓库/工地交付链路）
+	_def("mat_stone", "石料", ItemDef.Category.MATERIAL, 50, "",
+			{"weight": 2}, -1, false, "采出的普通石材。")
+	_def("mat_iron", "铁矿石", ItemDef.Category.MATERIAL, 30, "",
+			{"weight": 3}, -1, false, "含铁的矿石，冶炼的原料。")
+	_def("mat_gold", "金砂", ItemDef.Category.MATERIAL, 20, "",
+			{"weight": 3}, -1, false, "闪亮的天然金，硬通货。")
+	_def("mat_diamond", "钻石", ItemDef.Category.MATERIAL, 10, "",
+			{"weight": 1}, -1, false, "稀有晶体，价值连城。")

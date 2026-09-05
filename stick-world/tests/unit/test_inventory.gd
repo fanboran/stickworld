@@ -31,6 +31,9 @@ func _ready() -> void:
 	_runner.add_test("序列化-roundtrip", _test_serialize_roundtrip)
 	_runner.add_test("武器-NONE徒手不可攻击", _test_weapon_mount_none)
 	_runner.add_test("初始套装-发放齐全", _test_starter_kit)
+	_runner.add_test("矿物-堆叠限量", _test_mineral_stack_limits)
+	_runner.add_test("矿物-非装备类", _test_mineral_not_equipment)
+	_runner.add_test("状态效果-list_active", _test_status_list_active)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -329,3 +332,45 @@ func _test_starter_kit() -> void:
 	_runner.assert_true(_has_exactly(inv, &"con_bandage", 5), "背包绷带 5")
 	_runner.assert_approx(inv.armor_damage_reduction(), 0.13, 0.0001, "布三件 0.04+0.05+0.04")
 	service.free()
+
+
+func _test_mineral_stack_limits() -> void:
+	# 堆叠限量：石 50 / 铁 30 / 金 20 / 钻 10（用户定稿"材料只存一定量"）
+	var cases: Dictionary = {
+		&"mat_stone": 50, &"mat_iron": 30, &"mat_gold": 20, &"mat_diamond": 10,
+	}
+	for id in cases:
+		var def: ItemDef = ItemDB.get_def(id)
+		_runner.assert_not_null(def, "%s 已定义" % id)
+		if def == null:
+			continue
+		_runner.assert_equal(def.max_stack, cases[id], "%s 堆叠上限" % id)
+		_runner.assert_equal(def.category, ItemDef.Category.MATERIAL, "%s 是矿物类" % id)
+	# 超量分散：51 块石头 → 50 + 1 两格
+	var inv := _make_inv()
+	inv.add_item(&"mat_stone", 51)
+	_runner.assert_equal(inv.get_slot(0).count, 50, "首格堆满 50")
+	_runner.assert_equal(inv.get_slot(1).count, 1, "余 1 落第二格")
+
+
+func _test_mineral_not_equipment() -> void:
+	var inv := _make_inv()
+	inv.add_item(&"mat_gold", 5)
+	_runner.assert_equal(inv.slot_for_index(0), -1, "矿物无装备槽")
+	_runner.assert_false(inv.equip_from_backpack(0), "矿物装备失败")
+
+
+func _test_status_list_active() -> void:
+	# 不进树直接驱动 _effects 私有结构（headless 准入：无 autoload 无树）
+	var se: Node = preload("res://modules/units/scripts/entity/status_effects.gd").new()
+	_runner.assert_true(se.list_active().is_empty(), "初始无效果")
+	se._effects = {
+		0: {"until": se._now() + 2.5, "power": 3.0, "source": null, "next_tick": 0.5},
+		3: {"until": se._now() - 1.0, "power": 0.0, "source": null, "next_tick": 0.5},
+	}
+	var actives: Array = se.list_active()
+	_runner.assert_equal(actives.size(), 1, "过期效果不列出")
+	_runner.assert_equal(int(actives[0]["type"]), 0, "燃烧在列")
+	_runner.assert_gt(float(actives[0]["remain"]), 2.0, "剩余时长正确")
+	_runner.assert_approx(float(actives[0]["power"]), 3.0, 0.001, "强度带出")
+	se.free()

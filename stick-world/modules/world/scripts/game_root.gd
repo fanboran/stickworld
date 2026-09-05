@@ -103,6 +103,8 @@ var _zoom_bar: Control = null
 var inventory_service: Node = null
 ## 背包界面（InventoryScreen；E 键开关，SystemSetup 装配）
 var _inventory_screen: Control = null
+## 角色属性面板（StatsScreen；C 键开关，SystemSetup 装配）
+var _stats_panel: Control = null
 
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
 ## PossessionInterface 实例引用（运行时由 SystemSetup 装配）
@@ -758,6 +760,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif ek.keycode == KEY_E:
 		toggle_inventory()
 		get_viewport().set_input_as_handled()
+	# C 开关角色属性面板（属性/伤痕状态/装备概览）
+	elif ek.keycode == KEY_C:
+		toggle_stats_panel()
+		get_viewport().set_input_as_handled()
 	# 数字 1-4：使用 Hotbar 物品格（消耗品；同 Hotbar 点击）
 	elif ek.keycode >= KEY_1 and ek.keycode <= KEY_4:
 		_use_hotbar_slot(ek.keycode - KEY_1)
@@ -777,21 +783,31 @@ func _unhandled_input(event: InputEvent) -> void:
 ## 开关背包界面（E 键）：开着则关；其他模态开着则让位（ESC 先退栈）；
 ## 无模态则压栈打开（自动暂停 + 遮罩）。Hotbar 的 E 动作格同路。
 func toggle_inventory() -> void:
-	if _inventory_screen == null:
+	_toggle_modal_panel(_inventory_screen, UIModalStack.Layer.INVENTORY)
+
+
+## 开关角色属性面板（C 键）：与背包同款模态规则。Hotbar 的 C 动作格同路。
+func toggle_stats_panel() -> void:
+	_toggle_modal_panel(_stats_panel, UIModalStack.Layer.STATS)
+
+
+## 模态面板开关公共路径：开着关 / 其他模态开着让位 / 压栈打开
+func _toggle_modal_panel(panel: Control, layer: int) -> void:
+	if panel == null:
 		return
 	var stack := _get_modal_stack()
-	if _inventory_screen.is_open():
+	if panel.is_open():
 		if stack != null:
-			stack.pop(UIModalStack.Layer.INVENTORY)
+			stack.pop(layer)
 		else:
-			_inventory_screen.close()
+			panel.close()
 		return
 	if stack != null:
 		if stack.is_any_open():
 			return
-		stack.push(_inventory_screen, UIModalStack.Layer.INVENTORY)
+		stack.push(panel, layer)
 	else:
-		_inventory_screen.open()
+		panel.open()
 
 
 ## 使用 Hotbar 物品格（数字键 1-4；转发背包服务，需附身实体承接效果）

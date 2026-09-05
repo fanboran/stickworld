@@ -210,5 +210,11 @@ func _draw_action_icon() -> void:
 			draw_rect(Rect2(c + Vector2(-12, -6), Vector2(24, 18)), false, ink, w)
 			draw_rect(Rect2(c + Vector2(-7, -12), Vector2(14, 7)), false, ink, w)
 			draw_line(c + Vector2(-3, -6), c + Vector2(-3, 0), ink, w)
+		"stats":
+			# 属性：人形剪影（头圆 + 肩身三角）
+			draw_arc(c + Vector2(0, -9), 5.0, 0, TAU, 10, ink, w)
+			draw_line(c + Vector2(-9, 8), c + Vector2(0, -1), ink, w)
+			draw_line(c + Vector2(9, 8), c + Vector2(0, -1), ink, w)
+			draw_line(c + Vector2(0, -1), c + Vector2(0, 8), ink, w)
 		_:
 			draw_rect(Rect2(c + Vector2(-8, -8), Vector2(16, 16)), false, ink, w)

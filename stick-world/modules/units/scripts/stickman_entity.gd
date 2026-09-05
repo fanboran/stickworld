@@ -170,6 +170,9 @@ var armor_speed_factor: float = 1.0
 ## 护甲减伤率（背包装备系统写入：三件 damage_reduction 加和，封顶 0.6）。
 ## DamagePipeline 单位类型减伤段经 get_armor_factor() 消费
 var armor_damage_reduction: float = 0.0
+## 个体属性标签（GDD §6.1 世界盒子式：影响适合的工作与战斗行为；
+## 出生掷骰 基础10±3，行为消费按批次接线）。键：str/int/agi/cft/cmd
+var attributes: Dictionary = {}
 ## 体型缩放倍率（SWL minidon 召唤护卫比常规兵种小一圈；1.0 = 正常体型）。
 ## 影响 rig 渲染 + Collider/Range/Hitbox 判定 + 血条高度，经 set_body_scale 设置。
 var body_scale: float = 1.0
@@ -296,6 +299,15 @@ func _is_mouse_over_ui() -> bool:
 
 
 func _ready() -> void:
+	# 个体属性出生掷骰（基础 10 ± 3；行为/AI 消费按批次接线）
+	if attributes.is_empty():
+		attributes = {
+			"str": 7 + randi() % 7,
+			"int": 7 + randi() % 7,
+			"agi": 7 + randi() % 7,
+			"cft": 7 + randi() % 7,
+			"cmd": 7 + randi() % 7,
+		}
 	# 先拿到 StickmanRig 和 IK markers 引用——必须在 _mount_components 之前：
 	# VisualController.setup 连接 rig.animation_finished（攻击播完回切），
 	# 顺序颠倒时 rig 为 null，连接静默丢失（曾致攻击动画播完永不回切）
@@ -621,8 +633,10 @@ func _is_ranged_weapon() -> bool:
 
 
 ## 玩家按住/松开右键：举盾格挡（副手盾；无盾实体设了姿态也挡不住，
-## 见 WeaponMount.is_shield_blocking 三重判定）。
+## 见 WeaponMount.is_shield_blocking 三重判定）。搬运材料时双手被占不举盾。
 func _set_player_blocking(v: bool) -> void:
+	if v and is_carrying():
+		return
 	if weapon_mount == null or not is_instance_valid(weapon_mount):
 		return
 	if weapon_mount.has_method("set_blocking"):
@@ -955,8 +969,11 @@ func get_map() -> Node2D:
 
 # ─────────────────────────────── 玩家攻击（§7.5）────────────────────────────────
 
-## 玩家附身时鼠标左键攻击：找最近敌人InRange并执行攻击
+## 玩家附身时鼠标左键攻击：找最近敌人InRange并执行攻击。
+## 搬运材料时双手被占用（放下前不可攻击）。
 func _player_attack() -> void:
+	if is_carrying():
+		return
 	if weapon_mount == null or not weapon_mount.has_method("can_attack"):
 		return
 	if not weapon_mount.can_attack():
@@ -967,9 +984,11 @@ func _player_attack() -> void:
 	weapon_mount.perform_attack(target)
 
 
-## 玩家空挥（F 键，复刻原版 User Control）：无目标出攻击动作，纯动作无伤害。
-## 受冷却约束（can_attack），冷却中按 F 不响应。
+## 玩家空挥（G 键，复刻原版 User Control）：无目标出攻击动作，纯动作无伤害。
+## 受冷却约束（can_attack），冷却中按 G 不响应；搬运中双手被占同样不响应。
 func _player_swing() -> void:
+	if is_carrying():
+		return
 	if weapon_mount == null or not weapon_mount.has_method("perform_swing"):
 		return
 	weapon_mount.perform_swing()

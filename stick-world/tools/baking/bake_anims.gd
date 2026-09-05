@@ -4,6 +4,10 @@ extends Node
 ##
 ## 运行方式:
 ##   godot --headless --path "f:/VSCode/game-2/stick-world" res://tools/baking/bake_anims.tscn
+##
+## ⚠️ 管线顺序：本脚本会**整体重写** .tres（含曲线），冲掉 inject_anim_events
+## 注入的 Hit 事件元数据（hit_time 等，命中帧对齐依赖）——重烘焙后必须重跑
+## inject_anim_events.tscn 恢复；其 Spine 源缺失时至少 git checkout 恢复旧 tres。
 
 const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
 
@@ -22,6 +26,8 @@ func _ready() -> void:
 	_bake("hit_front", _data_hit_front(), 0.3, Animation.LOOP_NONE)
 	_bake("hit_back", _data_hit_back(), 0.3, Animation.LOOP_NONE)
 	_bake("arrive", _data_arrive(), 0.4, Animation.LOOP_NONE)
+	_bake("heal_meric_1", _data_heal_meric_1(), 1.2, Animation.LOOP_NONE)
+	_bake("heal_meric_2", _data_heal_meric_2(), 1.3, Animation.LOOP_NONE)
 
 	print("=== 烘焙完成 ===")
 	get_tree().quit(0)
@@ -130,6 +136,33 @@ static func _data_arrive() -> Array:
 		[18, [0.0, 4.0,  0.15, -3.0, 0.4, 0.0]],
 		[19, [0.0, -4.0, 0.15, 3.0,  0.4, 0.0]],
 		[16, [0.0, 3.0,  0.15, -2.0, 0.4, 0.0]],
+	]
+
+
+## 祭司治疗施法 1（P7 批次 7b 补烘焙）：高举法杖式——武器手举过头顶 +
+## 左手张开 + 上身微仰抬头，0.9s 维持辉映，1.2s 收势回位。
+## heal_cooldown=3.0 ≥ 动画全长（behavior_profiles 同款硬约束），时长勿超 3s。
+static func _data_heal_meric_1() -> Array:
+	return [
+		[19, [0.0, 0.0,  0.3, -120.0, 0.9, -110.0, 1.2, 0.0]],
+		[14, [0.0, 0.0,  0.3, -20.0,  0.9, -25.0,  1.2, 0.0]],
+		[23, [0.0, 0.0,  0.3, 15.0,   0.9, 10.0,   1.2, 0.0]],
+		[7,  [0.0, 0.0,  0.3, -8.0,   0.9, -6.0,   1.2, 0.0]],
+		[18, [0.0, 0.0,  0.3, 45.0,   0.9, 40.0,   1.2, 0.0]],
+		[9,  [0.0, 0.0,  0.3, -6.0,   0.9, -5.0,   1.2, 0.0]],
+	]
+
+
+## 祭司治疗施法 2：胸前咏唱式——武器手收在胸前小幅画圈 + 上身前倾低头
+## （查看伤员），1.3s 收势。与 1 号共用骨骼，姿态节奏错开防重复感。
+static func _data_heal_meric_2() -> Array:
+	return [
+		[19, [0.0, 0.0,  0.25, -60.0, 0.55, -45.0, 0.85, -65.0, 1.3, 0.0]],
+		[14, [0.0, 0.0,  0.25, -70.0, 0.55, -55.0, 0.85, -75.0, 1.3, 0.0]],
+		[23, [0.0, 0.0,  0.25, -10.0, 0.55, 5.0,   0.85, -12.0, 1.3, 0.0]],
+		[7,  [0.0, 0.0,  0.25, 6.0,   0.85, 5.0,   1.3, 0.0]],
+		[9,  [0.0, 0.0,  0.25, 8.0,   0.85, 7.0,   1.3, 0.0]],
+		[18, [0.0, 0.0,  0.25, 20.0,  0.85, 15.0,  1.3, 0.0]],
 	]
 
 

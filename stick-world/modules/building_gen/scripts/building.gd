@@ -118,14 +118,39 @@ func _ready() -> void:
 
 ## 从建筑定义 Dictionary 应用数据驱动字段
 func apply_building_def(def: Dictionary) -> void:
-	_interior_mode = int(def.get("interior_mode", 0))
-	mega_interior_map_id = String(def.get("mega_interior_map_id", ""))
+	# buildings.tres 由 Excel 管线生成：空单元格导出为 null（key 在、值为 null），
+	# 而 Variant 构造 String/int/bool/float 均不接受 null（Nonexistent constructor），
+	# 一律走 null 安全取值（null = 未填 = 回退值）
+	_interior_mode = _def_int(def, "interior_mode", 0)
+	mega_interior_map_id = _def_string(def, "mega_interior_map_id", "")
 	# 阶段 F：城墙字段
-	wall_tier = int(def.get("wall_tier", 0))
-	can_stand_on = bool(def.get("can_stand_on", false))
-	is_gate = bool(def.get("is_gate", false))
-	max_health = float(def.get("max_hp", 100.0))
+	wall_tier = _def_int(def, "wall_tier", 0)
+	can_stand_on = _def_bool(def, "can_stand_on", false)
+	is_gate = _def_bool(def, "is_gate", false)
+	max_health = _def_float(def, "max_hp", 100.0)
 	health = max_health
+
+
+# ── null 安全取值（Excel 管线空单元格 = null；Variant 构造不接受 null）──
+
+static func _def_string(def: Dictionary, key: String, fallback: String) -> String:
+	var v: Variant = def.get(key, fallback)
+	return String(v) if v != null else fallback
+
+
+static func _def_int(def: Dictionary, key: String, fallback: int) -> int:
+	var v: Variant = def.get(key, fallback)
+	return int(v) if v != null else fallback
+
+
+static func _def_bool(def: Dictionary, key: String, fallback: bool) -> bool:
+	var v: Variant = def.get(key, fallback)
+	return bool(v) if v != null else fallback
+
+
+static func _def_float(def: Dictionary, key: String, fallback: float) -> float:
+	var v: Variant = def.get(key, fallback)
+	return float(v) if v != null else fallback
 
 
 # ─────────────────────────────── 子节点查找 ────────────────────────────────

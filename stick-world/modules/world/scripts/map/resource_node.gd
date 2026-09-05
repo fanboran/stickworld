@@ -80,9 +80,9 @@ const _TEXTURE_FALLBACK: Dictionary = {
 	ResourceType.METAL: "res://assets/resources/metal_paint.png",
 }
 ## 贴图显示基线尺寸（px，宽高）；实例再乘 0.85~1.25 随机抖动
-## 树 570×998 等比缩放贴图 384×672，树体显示约火柴人身高（260px）的 4 倍
+## 树 342×750（贴图 416×912 等比）：大半屏高（视口 1080），干显示 ≈41px≈一人宽
 const _TEXTURE_SIZES: Dictionary = {
-	ResourceType.WOOD: Vector2(570.0, 998.0),
+	ResourceType.WOOD: Vector2(342.0, 750.0),
 	ResourceType.STONE: Vector2(120.0, 94.0),
 	ResourceType.METAL: Vector2(120.0, 94.0),
 }

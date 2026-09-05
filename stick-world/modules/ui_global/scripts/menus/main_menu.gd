@@ -105,8 +105,6 @@ func _on_menu_pressed(item: Dictionary) -> void:
 ## 场景清单在此登记：名称 + 场景路径；新测试场景加一行即可。
 const TEST_SCENES: Array[Dictionary] = [
 	{"name": "大乱斗观察场（12v12 混编自动互殴）", "path": "res://tests/dev/battle_arena.tscn"},
-	{"name": "树石变体画廊（资源贴图验收）", "path": "res://tests/dev/tree_gallery.tscn"},
-	{"name": "树形参数实验室（实时滑条调参）", "path": "res://tests/dev/tree_param_lab.tscn"},
 	{"name": "单位动作画廊（全员单位×全部动作对比）", "path": "res://tests/dev/unit_action_gallery.tscn"},
 	{"name": "手绘皮肤全族陈列（自绘沸腾 + StickHand 字体）", "path": "res://tests/dev/sketch_compare.tscn"},
 ]

@@ -284,6 +284,7 @@ func _fill_legend() -> void:
 		]
 		entries.append_array(MapRenderer.BIOME_LEGEND)
 		entries.append(blob_entry)
+		entries.append_array(MapRenderer.ROAD_LEGEND)
 		_legend.set_entries(entries)
 		return
 	if api == null or not api.has_method("get_states"):
@@ -303,6 +304,7 @@ func _fill_legend() -> void:
 	if states.is_empty():
 		_legend.set_entries([])  # 空态：set_shown 自动保持隐藏
 		return
+	entries.append_array(MapRenderer.ROAD_LEGEND)
 	_legend.set_title("政权")
 	_legend.set_entries(entries)
 

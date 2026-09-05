@@ -19,6 +19,8 @@ const BUS_SFX := "SFX"
 
 # BGM 播放器（常驻，挂 BGM 总线）
 var _bgm_player: AudioStreamPlayer = null
+# 天气循环播放器（常驻，挂 SFX 总线；雨声等环境层）
+var _weather_player: AudioStreamPlayer = null
 # 同时播放中的 SFX 列表（挂 SFX 总线）
 var _sfx_players: Array = []
 
@@ -45,6 +47,10 @@ func _ready() -> void:
 	_bgm_player.bus = BUS_BGM
 	_bgm_player.name = "_BGMPlayer"
 	add_child(_bgm_player)
+	_weather_player = AudioStreamPlayer.new()
+	_weather_player.bus = BUS_SFX
+	_weather_player.name = "_WeatherPlayer"
+	add_child(_weather_player)
 
 	_apply_initial_volumes()
 
@@ -159,6 +165,33 @@ func _on_sfx_finished(player: AudioStreamPlayer) -> void:
 		_sfx_players.erase(player)
 	if is_instance_valid(player):
 		player.queue_free()
+
+
+# ─────────────────────────────── 天气环境层（雨声等循环）────────────────────────────────
+
+## 循环播放天气音（雨声）；volume_linear 随强度刷新，切 asset 幂等
+func play_weather(path: String, volume_linear: float = 0.5) -> void:
+	if _weather_player == null or not ResourceLoader.exists(path):
+		return
+	var stream: AudioStream = _weather_player.stream
+	if stream == null or stream.resource_path != path:
+		stream = load(path)
+		if stream == null:
+			return
+		if stream is AudioStreamWAV:
+			# WAV 无缝循环：loop_end=帧数（16bit 单声道 → 字节数/2）
+			(stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+			(stream as AudioStreamWAV).loop_begin = 0
+			(stream as AudioStreamWAV).loop_end = (stream as AudioStreamWAV).data.size() / 2
+		_weather_player.stream = stream
+	_weather_player.volume_db = _to_db(clampf(volume_linear, 0.001, 1.0))
+	if not _weather_player.playing:
+		_weather_player.play()
+
+
+func stop_weather() -> void:
+	if _weather_player != null and _weather_player.playing:
+		_weather_player.stop()
 
 
 # ─────────────────────────────── 失焦静音 ────────────────────────────────

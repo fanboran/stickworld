@@ -11,15 +11,11 @@ extends Node2D
 
 const SkyStarsScript := preload("res://modules/world/scripts/map/sky_stars.gd")
 const SkyBirdsScript := preload("res://modules/world/scripts/map/sky_birds.gd")
+const StrokeCloudScript := preload("res://modules/world/scripts/map/stroke_cloud.gd")
 const TEX_MOUNTAINS := "res://assets/sky/mountains.png"
 const TEX_TREELINE_FAR := "res://assets/sky/treeline_far.png"
 const TEX_TREELINE_NEAR := "res://assets/sky/treeline_near.png"
 const TEX_FOG := "res://assets/sky/fog_band.png"
-const CLOUD_TEXS: Array = [
-	"res://assets/sky/cloud_a.png",
-	"res://assets/sky/cloud_b.png",
-	"res://assets/sky/cloud_c.png",
-]
 
 ## 地平线 y（与地图 ground_y 一致，山/树底贴地平线）
 var horizon_y: float = 810.0
@@ -42,9 +38,11 @@ var _env: Node = null
 var _rng := RandomNumberGenerator.new()
 var _cam: Camera2D = null
 var _cam_ready: bool = false
+## 雨强度（Weather 注入）：云 alpha 上限提高 + 云色压暗（Terraria 雨天云浓）
+var _rainy: float = 0.0
 
 ## 云池规模（Terraria 200 槽 rand(200) 数量；我们屏幅小，12 朵足够密度）
-const CLOUD_POOL: int = 12
+const CLOUD_POOL: int = 18
 ## 云出生带（相对地平线向上；远云更高——小云再上移）
 const CLOUD_Y_TOP: float = 190.0
 const CLOUD_Y_BOTTOM: float = 640.0
@@ -117,24 +115,18 @@ func _build_fog() -> void:
 func _build_clouds() -> void:
 	_rng.seed = 20260905
 	for i in CLOUD_POOL:
-		var tex_path: String = CLOUD_TEXS[i % CLOUD_TEXS.size()]
-		if not ResourceLoader.exists(tex_path):
-			continue
-		var spr := Sprite2D.new()
-		spr.texture = load(tex_path)
+		var cloud: Node2D = StrokeCloudScript.new()
 		var scale_f: float = _rng.randf_range(0.7, 1.3)
-		spr.scale = Vector2(scale_f, scale_f)
+		cloud.scale = Vector2(scale_f, scale_f)
 		# 出生带：远云（小）更高——Terraria 小云再上移的同构；
 		# 初始分布相机出生带（x≈0 一带），之后由风与相机回拉自然演进
 		var y: float = _rng.randf_range(CLOUD_Y_TOP, CLOUD_Y_BOTTOM) \
 				- (1.3 - scale_f) * 120.0
-		spr.position = Vector2(_rng.randf_range(-1200.0, 1200.0), y)
-		add_child(spr)
+		cloud.position = Vector2(_rng.randf_range(-1200.0, 1200.0), y)
+		add_child(cloud)
 		_clouds.append({
-			"node": spr,
+			"node": cloud,
 			"p": _cloud_parallax(scale_f),   # Cloud.GetParallax 直译
-			"rot": 0.0,
-			"rot_spd": 0.0,
 			"alpha": _rng.randf_range(0.35, 0.85),  # 首批直接半亮，后续渐入
 			"dying": false,
 		})
@@ -178,7 +170,6 @@ func _process(delta: float) -> void:
 	_wind_t += delta
 	_wind = sin(_wind_t * 0.05) * 1.1
 	_update_clouds(delta)
-	_tint_clouds()
 
 
 ## 视差：层 x = 相机 x × (1 - factor)（factor=0 屏幕钉死=无限远 / 1 世界钉死=前景）
@@ -199,60 +190,58 @@ func _update_clouds(delta: float) -> void:
 	var cam_move: float = cam_x - _last_cam_x
 	_last_cam_x = cam_x
 	for c in _clouds:
-		var spr: Sprite2D = c["node"]
-		if spr == null or not is_instance_valid(spr):
+		var cloud: Node2D = c["node"]
+		if cloud == null or not is_instance_valid(cloud):
 			continue
 		var p: float = c["p"]
 		# 风驱动 ×9×视差（Cloud.cs:401）+ 相机横移按视差回拉（Cloud.cs:321）
-		spr.position.x += _wind * 9.0 * p * delta * 60.0
-		spr.position.x -= cam_move * p
-		# 摇摆：rSpeed 随机游走 ±0.0002/帧，rotation 夹 ±0.02 rad
-		c["rot_spd"] = clampf(float(c["rot_spd"]) + _rng.randf_range(-0.0002, 0.00022), -0.0002, 0.0002)
-		c["rot"] = clampf(float(c["rot"]) + float(c["rot_spd"]) * delta * 60.0, -0.02, 0.02)
-		spr.rotation = c["rot"]
-		# 软生灭：出带渐隐 → 对侧重生渐显
+		cloud.position.x += _wind * 9.0 * p * delta * 60.0
+		cloud.position.x -= cam_move * p
+		# 软生灭：出带渐隐 → 对侧重生渐显（雨天云更浓：上限 0.92→1.0）
 		if c["dying"]:
 			c["alpha"] = float(c["alpha"]) - 0.06 * delta
 			if float(c["alpha"]) <= 0.0:
 				_respawn_cloud(c, cam_x)
 		else:
-			c["alpha"] = minf(float(c["alpha"]) + 0.06 * delta, 0.92)
-			if spr.position.x < cam_x - 1400.0 or spr.position.x > cam_x + 1400.0:
+			c["alpha"] = minf(float(c["alpha"]) + 0.06 * delta, 0.92 + 0.08 * _rainy)
+			if cloud.position.x < cam_x - 1400.0 or cloud.position.x > cam_x + 1400.0:
 				c["dying"] = true
+		# 笔触云内部生灭（换血）+ 云级 alpha/光照注入
+		cloud.update_cloud(delta, signf(_wind) if absf(_wind) > 0.05 else 1.0)
+		cloud.set_cloud_alpha(float(c["alpha"]))
+		cloud.set_sky_light(_env_light().darkened(0.25 * _rainy))
 
 
 ## 云重生：风向对侧入场，重掷尺度（视差档随之变化）与出生带
 func _respawn_cloud(c: Dictionary, cam_x: float) -> void:
-	var spr: Sprite2D = c["node"]
+	var cloud: Node2D = c["node"]
 	var scale_f: float = _rng.randf_range(0.7, 1.3)
-	var tex_path: String = CLOUD_TEXS[_rng.randi() % CLOUD_TEXS.size()]
-	if ResourceLoader.exists(tex_path):
-		spr.texture = load(tex_path)
-	spr.scale = Vector2(scale_f, scale_f)
+	cloud.scale = Vector2(scale_f, scale_f)
 	var dir: float = signf(_wind) if absf(_wind) > 0.05 else 1.0
-	spr.position.x = cam_x - dir * 1350.0
-	spr.position.y = _rng.randf_range(CLOUD_Y_TOP, CLOUD_Y_BOTTOM) - (1.3 - scale_f) * 120.0
+	cloud.position.x = cam_x - dir * 1350.0
+	cloud.position.y = _rng.randf_range(CLOUD_Y_TOP, CLOUD_Y_BOTTOM) - (1.3 - scale_f) * 120.0
 	c["p"] = _cloud_parallax(scale_f)
 	c["alpha"] = 0.0
 	c["dying"] = false
-	c["rot"] = 0.0
-	c["rot_spd"] = 0.0
 
 
-## 云色继承天空光照（Cloud.cloudColor：bgColor×scale×alpha 同构——夜里云
-## 自动变暗、黄昏自动染暖，零特判）
-func _tint_clouds() -> void:
+## 天空光照色（云色继承：Cloud.cloudColor 同构）
+func _env_light() -> Color:
 	if _env == null or not is_instance_valid(_env):
 		_env = _find_env()
-		if _env == null:
-			return
-	if not _env.has_method("get_current_light_color"):
-		return
-	var light: Color = _env.get_current_light_color()
-	for c in _clouds:
-		var spr: Sprite2D = c["node"]
-		if spr != null and is_instance_valid(spr):
-			spr.modulate = Color(light.r, light.g, light.b, float(c["alpha"]))
+	if _env == null or not _env.has_method("get_current_light_color"):
+		return Color.WHITE
+	return _env.get_current_light_color()
+
+
+## 雨强度注入（Weather 调用）：云加浓压暗
+func set_rainy(t: float) -> void:
+	_rainy = clampf(t, 0.0, 1.0)
+
+
+## 当前雨强度（验证脚本用）
+func get_rainy() -> float:
+	return _rainy
 
 
 func _find_env() -> Node:

@@ -39,6 +39,9 @@ var _time: float = 0.0
 ## 夜间强度（0=白天 1=深夜，平滑过渡）
 var _night: float = 0.0
 var _redraw_acc: float = 99.0
+## 游戏内天数（夜→昼跳变检测递增；Terraria Main.cs:20207 每晚 moonPhase++ 同构）
+var _day_count: int = 0
+var _last_hour: float = 12.0
 
 
 func _ready() -> void:
@@ -58,12 +61,21 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	_night = lerpf(_night, 1.0 - _day_factor(), clampf(delta * 2.0, 0.0, 1.0))
+	_advance_day_count()
 	_update_shooting_star(delta)
 	# 日月/星野/极光全程有内容（白昼太阳也在走），恒节流重绘
 	_redraw_acc += delta
 	if _redraw_acc >= 1.0 / REDRAW_HZ:
 		_redraw_acc = 0.0
 		queue_redraw()
+
+
+## 天数推进：hour 从深夜（>21）跳回清晨（<8）= 新的一天（每夜月相 +1 的计数基础）
+func _advance_day_count() -> void:
+	var hour: float = _env_time()
+	if _last_hour > 21.0 and hour < 8.0:
+		_day_count += 1
+	_last_hour = hour
 
 
 func _draw() -> void:
@@ -209,7 +221,8 @@ func _draw_sun(center_x: float, hour: float) -> void:
 	draw_circle(p, r, disc)
 
 
-## 月亮：奶油圆盘 + 光晕 + 环形山，沿夜径运行（夜间可见）
+## 月亮：奶油圆盘 + 光晕 + 环形山 + **月相**（8 相随天数，Terraria 每晚
+## moonPhase++ 同构）——阴影圆从一侧扫过月面近似盈亏
 func _draw_moon_path(center_x: float, hour: float) -> void:
 	if _night <= 0.01:
 		return
@@ -227,6 +240,12 @@ func _draw_moon_path(center_x: float, hour: float) -> void:
 	draw_circle(p + Vector2(-8, -5) * s, 5.5 * s, crater)
 	draw_circle(p + Vector2(7, 6) * s, 4.0 * s, crater)
 	draw_circle(p + Vector2(9, -9) * s, 2.6 * s, crater)
+	# 月相：phase 0..7（0=满月 4=新月），阴影圆横向偏移扫过月面；
+	# off = 1.5r×(1-p/4)：p0=+1.5r(全露/满) → p4=0(全遮/新) → p7=-1.125r(反向娥眉)
+	var phase: int = _day_count % 8
+	var shadow_r: float = r * 1.04
+	var off: float = (1.0 - float(phase) / 4.0) * shadow_r * 1.5
+	draw_circle(p + Vector2(off, 0.0), shadow_r, Color(0.10, 0.12, 0.20, 0.96 * _night))
 
 
 # ─────────────────────────────── 工具 ────────────────────────────────

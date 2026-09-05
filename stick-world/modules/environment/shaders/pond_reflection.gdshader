@@ -43,11 +43,10 @@ void fragment() {
 	col += glint * 0.09;
 	// 水面线亮边（月色 meniscus）
 	col += (1.0 - smoothstep(0.0, 0.005, suv.y - line_uv_y)) * vec3(0.55, 0.75, 0.85) * 0.28;
-	// 岸沫（K2C：岸边滚动的白色泡沫条带）：两端边缘带内横向条带随时间滚动
-	float edge_d = min(UV.x, width_px - UV.x);
-	float foam_zone = 1.0 - smoothstep(0.0, foam_width, edge_d);
-	float bands = 0.5 + 0.5 * sin(UV.y * 0.9 - time_seed * 1.6 + sin(UV.x * 0.045) * 2.2);
-	float foam = foam_zone * (0.45 + 0.55 * bands) * (1.0 - 0.5 * depth_t) * foam_strength;
+	// 岸沫（K2C：水线滚动的白色泡沫条带）：沿整条水面线横向滚动（波纹条随时间流）
+	float foam_zone = 1.0 - smoothstep(0.0, foam_width, UV.y);
+	float bands = 0.5 + 0.5 * sin(UV.x * 0.12 - time_seed * 1.6 + sin(UV.y * 0.09) * 2.2);
+	float foam = foam_zone * (0.45 + 0.55 * bands) * foam_strength;
 	col = mix(col, vec3(0.93, 0.97, 1.0), clamp(foam, 0.0, 1.0));
 	COLOR = vec4(col, water_alpha);
 }

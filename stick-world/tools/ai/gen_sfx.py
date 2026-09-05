@@ -112,6 +112,22 @@ def gen_all(out_dir):
     _t_n = int(SR * 0.22)
     _trem = 1.0 + 0.25 * np.sin(2 * np.pi * 38 * np.arange(_t_n) / SR)
     _save(os.path.join(out_dir, "bird_chirp_c.wav"), _sweep(2800, 2200, 0.22, 0.15) * _trem)
+    # 天气层：雨声 3s 无缝循环（低通白噪 + 首尾交叉淡化）
+    _save(os.path.join(out_dir, "rain_loop.wav"), _rain_loop(3.0, 0.38))
+
+
+def _rain_loop(dur, vol):
+    """低通白噪雨声，首尾 crossfade 无缝循环"""
+    fade = int(SR * 0.25)
+    n = int(SR * dur)
+    rng = np.random.default_rng(11)
+    raw = rng.normal(0, 1, n + fade)
+    k = max(1, int(SR / 1400))  # 低通 ~1.4kHz（雨的沙沙感）
+    raw = np.convolve(raw, np.ones(k) / k, mode="same")
+    head = raw[:fade].copy()
+    raw[:fade] = head * np.linspace(0, 1, fade) + raw[n:n + fade] * np.linspace(1, 0, fade)
+    out = raw[:n]
+    return out / (np.max(np.abs(out)) + 1e-6) * vol
 
 
 if __name__ == "__main__":

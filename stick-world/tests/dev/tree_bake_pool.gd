@@ -6,7 +6,7 @@ const TP := preload("res://tests/dev/tree_pipeline.gd")
 
 func _init() -> void:
 	for i: int in 10:
-		var tree: Dictionary = TP.build_tree(8000 + i * 13, {}, 2000, 5000)
+		var tree: Dictionary = TP.build_tree(8000 + i * 13, {}, 4000, 9000)
 		var img := TP.rasterize(tree["pens"], tree["trunk_canvas"], tree["crown_canvas"])
 		img.save_png("res://assets/resources/tree_paint_tree_v%d.png" % i)
 		print("[bake] v%d 完成（落笔 %d）" % [i, (tree["pens"] as Array).size()])

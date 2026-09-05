@@ -37,6 +37,8 @@ const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/ro
 const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/mega_interior.tscn")
 ## 遭遇战战场地图场景（阶段 F）
 const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
+## 守城战战场地图场景（右端城墙+波次敌军，接在遭遇战之后）
+const _SIEGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/siege_battlefield.tscn")
 ## 森林附属区域场景（阶段 F）
 const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/forest_zone.tscn")
 ## 玩家火柴人实体场景（2026-08 收敛：经 UnitsAPI 常量引用，替代直接 preload 内部路径）
@@ -53,6 +55,8 @@ const VILLAGE_B_MAP_ID := "village_b"
 const MEGA_INTERIOR_MAP_ID := "mega_interior"
 ## 遭遇战战场地图 ID（阶段 F）
 const BATTLEFIELD_MAP_ID := "battlefield"
+## 守城战战场地图 ID（右端城墙+波次敌军）
+const SIEGE_MAP_ID := "siege_battlefield"
 ## 森林附属区域地图 ID（阶段 F）
 const FOREST_ZONE_MAP_ID := "forest_zone"
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
@@ -392,6 +396,8 @@ func _register_default_maps() -> void:
 	scene_loader.register_map(MEGA_INTERIOR_MAP_ID, _MEGA_INTERIOR_SCENE, WorldAPI.MapType.MEGA_INTERIOR)
 	# 阶段 F：注册遭遇战战场地图
 	scene_loader.register_map(BATTLEFIELD_MAP_ID, _BATTLEFIELD_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
+	# 守城战战场地图（遭遇战右出即达；城防布景+波次敌军由 SiegeDirector 组织）
+	scene_loader.register_map(SIEGE_MAP_ID, _SIEGE_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 阶段 F：注册森林附属区域
 	scene_loader.register_map(FOREST_ZONE_MAP_ID, _FOREST_ZONE_SCENE, WorldAPI.MapType.VILLAGE)
 	# 配置地图出口（步行衔接，详见 §6.2）
@@ -402,8 +408,11 @@ func _register_default_maps() -> void:
 	# 阶段 F：健全地图系统（任何地图可步行回村，链式衔接：村↔战场↔森林）
 	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
-	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	# 守城图右端继续通森林（保留森林附属区域可达：村↔战场↔守城↔森林）
+	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, SIEGE_MAP_ID, WorldAPI.EntrySide.RIGHT)
 
 
 func _load_start_village() -> void:

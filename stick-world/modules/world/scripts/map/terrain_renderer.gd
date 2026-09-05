@@ -40,6 +40,13 @@ uniform float city_left_x = -99999.0;   // 城内左边界（世界坐标）
 uniform float city_right_x = -99999.0;  // 城内右边界（世界坐标）
 uniform float city_fade = 320.0;        // 过渡带宽度（10 格 = 320px）
 
+// 守城战地形自然化：硬地皮边缘噪声参差 + 泥土路带（与硬地皮同色系融合）
+uniform float natural_edge = 0.0;       // 0=旧直线硬边界；1=fbm 参差边界
+uniform float road_x0 = 99999.0;        // 泥土路带左界（世界坐标）
+uniform float road_x1 = -99999.0;       // 泥土路带右界（世界坐标）
+uniform float road_y0 = -99999.0;       // 路带 y 上缘（踩踏带窗：路是"中间踩出来的"）
+uniform float road_y1 = 99999.0;        // 路带 y 下缘
+
 // 传递顶点局部坐标（= 世界坐标）到 fragment，避免 fragment 中 VERTEX 是视空间导致贴图不跟随世界
 varying vec2 world_pos;
 
@@ -119,10 +126,38 @@ void fragment() {
 	float tint = 1.0 + (n - 0.5) * 2.0 * color_jitter;
 	COLOR.rgb *= tint;
 
-	// 阶段 F §5.7.3：城内/城外地形混合
-	float city_factor = smoothstep(city_left_x - city_fade, city_left_x + city_fade, world_pos.x)
-		* (1.0 - smoothstep(city_right_x - city_fade, city_right_x + city_fade, world_pos.x));
+	// 阶段 F §5.7.3：城内/城外地形混合（natural_edge=1 时边界走低频 fbm 扰动，
+	// 硬地皮边缘参差化——左右边界各自独立噪声相位，避免同波形对称感）
+	float edge_amp = natural_edge * 110.0;
+	float wx_l = world_pos.x + (fbm(vec2(world_pos.x * 0.004, world_pos.y * 0.011)) - 0.5) * 2.0 * edge_amp;
+	float wx_r = world_pos.x + (fbm(vec2(world_pos.x * 0.004 + 37.0, world_pos.y * 0.013)) - 0.5) * 2.0 * edge_amp;
+	float city_factor = smoothstep(city_left_x - city_fade, city_left_x + city_fade, wx_l)
+		* (1.0 - smoothstep(city_right_x - city_fade, city_right_x + city_fade, wx_r));
 	COLOR = mix(COLOR, city_color, city_factor * 1.0);
+
+	// 泥土路带：与硬地皮同色系但略深（被踩踏的裸土），边缘同款 fbm 参差；
+	// 路身叠踩踏不均的低频明暗 + 高频石子颗粒。路在草地上明显、伸进硬地皮
+	// 后按 city_factor 渐隐——路端与硬地皮无接缝，自然衔接。
+	float road_left = min(road_x0, road_x1);
+	float road_right = max(road_x0, road_x1);
+	float road_mask = smoothstep(road_left - 46.0, road_left + 46.0, wx_l)
+		* (1.0 - smoothstep(road_right - 46.0, road_right + 46.0, wx_r));
+	// y 向踩踏带窗：路的上下缘也走 fbm 参差（人走出来的路宽窄不一）
+	float road_top = min(road_y0, road_y1);
+	float road_bot = max(road_y0, road_y1);
+	float wy_t = world_pos.y + (fbm(vec2(world_pos.x * 0.006, world_pos.y * 0.004)) - 0.5) * 2.0 * edge_amp;
+	float wy_b = world_pos.y + (fbm(vec2(world_pos.x * 0.005 + 53.0, world_pos.y * 0.004)) - 0.5) * 2.0 * edge_amp;
+	road_mask *= smoothstep(road_top - 40.0, road_top + 40.0, wy_t)
+		* (1.0 - smoothstep(road_bot - 40.0, road_bot + 40.0, wy_b));
+	if (road_mask > 0.001) {
+		vec3 road_col = city_color.rgb * vec3(0.86, 0.83, 0.80);
+		float tread = fbm(world_pos * vec2(0.003, 0.009));
+		road_col *= 0.80 + tread * 0.40;
+		float pebble = hash21(floor(world_pos * 0.55));
+		road_col *= 1.0 + (pebble - 0.5) * 0.30 * step(0.60, pebble);
+		vec3 road_mix = mix(COLOR.rgb, road_col, road_mask * (1.0 - city_factor * 0.9));
+		COLOR = vec4(road_mix, COLOR.a);
+	}
 }
 """
 
@@ -175,6 +210,34 @@ func set_city_bounds(left_x: float, right_x: float) -> void:
 		return
 	gp.material.set_shader_parameter("city_left_x", left_x)
 	gp.material.set_shader_parameter("city_right_x", right_x)
+
+
+## 守城战自然化外观开关：硬地皮 fbm 参差边界开启（泥路视觉改走 shader，
+## 不再叠纯色多边形）。必须在 apply_grass_texture 之后调用。
+func enable_natural_ground() -> void:
+	if _root.terrain_layer == null:
+		return
+	var gp: Polygon2D = _root.terrain_layer.get_node_or_null("GroundPolygon")
+	if gp == null or gp.material == null:
+		return
+	gp.material.set_shader_parameter("natural_edge", 1.0)
+
+
+## 设置泥土路带（世界坐标 x 范围 + y 踩踏窗）——shader 路带视觉；同时刷新
+## 地形数据层的土路多边形（数据兼容），但其可见性交给 shader（自然边缘）。
+func set_road_range(x0: float, x1: float, y0: float = -99999.0, y1: float = 99999.0) -> void:
+	if _root.terrain_layer == null:
+		return
+	var gp: Polygon2D = _root.terrain_layer.get_node_or_null("GroundPolygon")
+	if gp == null or gp.material == null:
+		return
+	gp.material.set_shader_parameter("road_x0", minf(x0, x1))
+	gp.material.set_shader_parameter("road_x1", maxf(x0, x1))
+	gp.material.set_shader_parameter("road_y0", minf(y0, y1))
+	gp.material.set_shader_parameter("road_y1", maxf(y0, y1))
+	# 数据层多边形仍由 update_dirt_road_visual 维护，这里只藏视觉
+	if _root._dirt_road_poly != null:
+		_root._dirt_road_poly.visible = false
 
 
 ## 阶段 F：根据城墙建筑列表自动计算城内范围并更新地形遮罩。

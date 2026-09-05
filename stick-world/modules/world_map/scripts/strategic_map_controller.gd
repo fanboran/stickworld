@@ -114,6 +114,10 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
+			# GUI 先决：指针悬停在控件上（HUD 模式条/滑块/名牌等）时点击归 UI。
+			# 本回调先于 GUI 处理执行，不判空会穿透点选 HUD 底下的地块（F1 验收反馈）
+			if get_viewport().gui_get_hovered_control() != null:
+				return
 			_handle_left_click(mb.position)
 	# ESC：统一走 handle_escape（下钻返回 L2 / 关闭地图）；消费事件防止
 	# GameRoot 再收到后弹暂停菜单（GameRoot 也通过 handle_escape 分发，双路径互斥）

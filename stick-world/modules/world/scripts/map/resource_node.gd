@@ -187,6 +187,9 @@ func _play_harvest_feedback(gained: int) -> void:
 	if gained > 0:
 		_spawn_gain_label(gained, _crit_gain)
 		_crit_gain = false
+		# 树的采集反馈：树冠闪各色绿光（不在根部）
+		if _body_painting != null and _body_painting.has_method("flash_leaves"):
+			_body_painting.flash_leaves()
 		if AudioManager != null:
 			# 敲击音分材质（Terraria 同构）：树=砍草音，石/矿=挖掘音（三变体随机）
 			if resource_type == ResourceType.WOOD:

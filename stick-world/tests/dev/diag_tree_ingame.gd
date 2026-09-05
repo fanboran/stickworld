@@ -74,10 +74,13 @@ func _process(_delta: float) -> void:
 
 
 func _find_tree() -> Node2D:
+	# 找 |x| 最大（离出生点最远=满密度林区）的 WOOD 树
+	var best: Node2D = null
 	for n in get_tree().get_nodes_in_group("resource_node"):
 		if n is Node2D and not n.is_depleted() and n.resource_type == 0:
-			return n
-	return null
+			if best == null or absf((n as Node2D).global_position.x) > absf(best.global_position.x):
+				best = n
+	return best
 
 
 func _diff_pixels(a: Image, b: Image) -> int:

@@ -85,6 +85,35 @@ func _too_close(px: float, py: float, nodes: Array) -> bool:
 	return false
 
 
+## 树林区梯度（用户 2026-09-06）：距硬化地面（土路带）一个屏幕（1920px）内不长树，
+## 再花一个屏幕从稀疏渐密，之外达到基线 2 倍密度（森林感）。石/铁不受限。
+const FOREST_CLEAR_CELLS := 60    ## 1920px / 32px：硬化区旁净空（一屏）
+const FOREST_RAMP_CELLS := 60    ## 再 60 格（又一屏）渐密
+const FOREST_DENSITY_MULT := 2.0 ## 最密处 = 基线密度的倍数
+
+## 该 cell 的树密度倍率（0 = 不长树；FOREST_DENSITY_MULT = 满密度）
+func _forest_rate(cell_x: int, road_min: int, road_max: int) -> float:
+	if road_min > road_max:
+		return FOREST_DENSITY_MULT  # 无硬化区（异常兜底）：不限制
+	var dist: int = maxi(maxi(road_min - cell_x, cell_x - road_max), 0)
+	if dist <= FOREST_CLEAR_CELLS:
+		return 0.0
+	var ramp: float = clampf(
+		float(dist - FOREST_CLEAR_CELLS) / float(FOREST_RAMP_CELLS), 0.0, 1.0)
+	return ramp * FOREST_DENSITY_MULT
+
+
+## 扫描 cell 范围内的土路带边界（硬化区），供林区梯度用
+func _road_cell_bounds(a: int, b: int) -> Vector2i:
+	var lo := 1 << 30
+	var hi := -(1 << 30)
+	for cx in range(a, b):
+		if _root.get_terrain_type_at_cell(cx) == _root.TERRAIN_DIRT_ROAD:
+			lo = mini(lo, cx)
+			hi = maxi(hi, cx)
+	return Vector2i(lo, hi)
+
+
 ## 在指定 cell 范围内按生态群落程序化生成自然资源点。
 ## start_cell / end_cell: cell_x 范围
 ## density: 期望密度（0.0~1.0，语义=每格期望资源数，与旧逐格概率版总量一致）
@@ -96,7 +125,11 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 	# 保证 start <= end，避免调用端传反范围
 	var a: int = mini(start_cell, end_cell)
 	var b: int = maxi(start_cell, end_cell)
-	var target: int = int((b - a) * clampf(density, 0.0, 1.0))
+	var road := _road_cell_bounds(a, b)
+	# target 扩容：树权重 0.55 × 2 倍密度 → 总量 ≈1.55×基线（石/铁供给率不变，
+	# 近区树被梯度全拒时由 attempts 上限自然收口，不会灌满石/铁）
+	var target: int = int((b - a) * clampf(density, 0.0, 1.0)
+		* (1.0 + (FOREST_DENSITY_MULT - 1.0) * 0.55))
 	var max_attempts: int = target * 8 + 16
 	var attempts: int = 0
 	var rows: int = get_terrain_row_count()
@@ -120,10 +153,16 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 			# 硬化路面/土路上不可能长资源
 			if _root.get_terrain_type_at_cell(cx) == _root.TERRAIN_DIRT_ROAD:
 				continue
+			var rtype0 := _pick_type(kind)
+			# 树受林区梯度约束：距硬化区一屏净空 → 一屏渐密 → 满密度 2×基线
+			if rtype0 == 0:
+				var rate := _forest_rate(cx, road.x, road.y)
+				if randf() * FOREST_DENSITY_MULT >= rate:
+					continue
 			if _too_close(px, py, nodes):
 				continue
 			var node: Node2D = ScriptResourceNode.new()
-			var rtype := _pick_type(kind)
+			var rtype := rtype0
 			node.resource_type = rtype
 			# 储量按类型：大树给更多木（树变高变大后单株价值同步提升）
 			match rtype:

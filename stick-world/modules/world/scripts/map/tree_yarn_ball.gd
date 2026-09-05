@@ -84,7 +84,7 @@ func _gen_bumps() -> void:
 		var up := 1.0 if sin(a) < -0.05 else 0.42
 		_bumps.append({
 			"a": a,
-			"amp": radius * rng.randf_range(0.10, 0.20) * up,
+			"amp": radius * rng.randf_range(0.14, 0.26) * up,
 		})
 
 
@@ -204,4 +204,4 @@ func _draw_outline(lw: float) -> void:
 			var jj := (j + (OUTLINE_SEGS / 2 if half == 1 else 0)) % OUTLINE_SEGS
 			var r: float = _outline_radius(th) * (1.0 + float(jitter[jj]))
 			pts.append(Vector2(cos(th), sin(th)) * r)
-		draw_polyline(pts, col_dn if half == 0 else col_up, lw * 1.15)
+		draw_polyline(pts, col_dn if half == 0 else col_up, lw * 1.3)

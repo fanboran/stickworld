@@ -1,12 +1,14 @@
 class_name TreeYarnBall
 extends Node2D
-## 毛线团树叶球 —— 终版架构的树叶实时渲染（用户 2026-09-05 定稿原话：
-## "给我一个毛线团一样的一个球就行了……每秒都动态一次……随风飘动的感觉"）。
+## 毛线团树叶球 —— 终版架构的树叶实时渲染（用户 2026-09-06 反馈修正版）。
 ##
-## 画法：深绿实心圆底衬（密不透风 + 冠形是圆）+ 球内随机弦线折线化
-## （各方向均匀、统一粗细、上亮下暗三档绿出体积）。
-## 动态：每秒翻一次姿态——40% 线重掷（风吹乱一部分叶）、60% 基线不动（连续感），
-## 与 SketchCloud YARN 的姿态翻动同语言（节拍放慢到 1s，用户规格"每秒动态一次"）。
+## 画法（用户定稿语言）："小学生画树的那种线条……像毛线团一样织在一起，
+## 不是有个边界把线条强行截断了，而是线条本身就是有着自己的规律算法
+## 绘制出来的"——**无底衬、无蒙版、无截断**，全部笔触 = 弧线：
+##   · 绕心弧：锚点距离/角度/跨度参数化，锚点越靠外弧越长（自然贴出圆轮廓）
+##   · 自由弧：随机方向 + 弦心距算好不出界，弯曲方向随机（织感、各方向都有）
+## 线宽统一档 + 少量粗短笔做层次（"优化的粗细"），密度靠笔数堆满（密不透风）。
+## 动态：每秒翻一次姿态——40% 笔重摇（风吹乱一部分叶）、60% 不动（连续感）。
 ## 种子确定性：同 base_seed 同貌（resource_node 位置哈希保证读档同树同貌）。
 
 ## 翻动节拍（用户规格：每秒动态一次）
@@ -57,26 +59,62 @@ func _strand_rng(variant: int, i: int) -> RandomNumberGenerator:
 
 
 func _draw() -> void:
-	# 底衬：深绿实心圆——密不透风（红线：线条要密）、轮廓是圆（红线：不是刺球）；
-	# 压暗到明显深于线色，乱线才读得出来（毛线团的缠绕感）
-	var under: Color = (_palette[2] as Color).darkened(0.38)
-	under.a = 1.0
-	draw_circle(Vector2.ZERO, radius * 0.97, under)
-	# 线数按面积密度：大团封顶 330，小团保底 30（密不透风，宁过头不不足）
-	var n_total := clampi(int(radius * radius / 100.0), 30, 330)
-	# 统一粗细（红线：不要混特别细的线条），仅 ±10% 手抖
-	var lw := clampf(radius * 0.055, 4.0, 8.0)
+	# 笔数按面积密度：大团封顶 360、小团保底 40——纯笔触堆满（密不透风，
+	# 无底衬下靠覆盖倍率 ≥2.5x 保证任何点都有笔压着）
+	var n_total := clampi(int(radius * radius / 95.0), 40, 360)
+	# 线宽基准（统一粗细红线 + "优化的粗细"：±15% 手抖 + 12% 粗短笔层次）
+	var lw := clampf(radius * 0.055, 5.5, 9.0)
 	for i in n_total:
 		var is_base := (i % 10) >= int(SWAP_FRACTION * 10.0)
-		_draw_strand(_strand_rng(0 if is_base else _variant, i), lw)
+		var rng := _strand_rng(0 if is_base else _variant, i)
+		if rng.randf() < 0.5:
+			_draw_orbit_arc(rng, lw)
+		else:
+			_draw_free_arc(rng, lw)
 
 
-## 一根毛线：球内随机方向的弦，折线化出弯（端点收在 0.94R 内保圆轮廓）
-func _draw_strand(rng: RandomNumberGenerator, lw: float) -> void:
+## 三档色按落笔高度：上亮下暗（局部 y 向下为正）——球体感
+func _band_color(y: float, rng: RandomNumberGenerator) -> Color:
+	var band := 1
+	if y < -radius * 0.2:
+		band = 0
+	elif y > radius * 0.2:
+		band = 2
+	var col: Color = _palette[band]
+	# 同档内轻微明度抖动（±4%）：笔触之间的呼吸感
+	col = col.lightened(rng.randf_range(-0.04, 0.04))
+	col.a = 1.0
+	return col
+
+
+## 绕心弧：锚点距球心 a，沿圆周走一段——毛线团"绕线"的本体。
+## 锚点越靠外跨度越大（贴轮廓长弧），最外笔触的包络自然形成圆边，
+## 线径向噪声 ≤3% 半径（松而不刺，红线：冠是圆不是刺球）
+func _draw_orbit_arc(rng: RandomNumberGenerator, lw: float) -> void:
+	var a := radius * rng.randf_range(0.18, 0.96)
+	var th0 := rng.randf() * TAU
+	var sign := 1.0 if rng.randf() < 0.5 else -1.0
+	var sweep: float = deg_to_rad(rng.randf_range(30.0, 140.0)) * (0.4 + 0.6 * a / radius)
+	var r_jit := radius * rng.randf_range(0.0, 0.03)
+	var pts := PackedVector2Array()
+	var n := 6
+	for j in n + 1:
+		var t := float(j) / float(n)
+		var th := th0 + sign * sweep * t
+		var r := a + sin(t * PI) * r_jit
+		pts.append(Vector2(cos(th), sin(th)) * r)
+	var wide := 1.35 if rng.randf() < 0.12 else 1.0
+	draw_polyline(pts, _band_color((pts[0].y + pts[n].y) * 0.5, rng),
+		lw * rng.randf_range(0.85, 1.15) * wide)
+
+
+## 自由弧：随机方向的弯弧（二次贝塞尔），弦心距算好不出界——
+## 各方向都有（红线：不要绕圈），弯向随机 = 毛线团的"织"
+func _draw_free_arc(rng: RandomNumberGenerator, lw: float) -> void:
 	var th := rng.randf() * TAU
-	var d := rng.randf_range(-0.85, 0.85) * radius
-	var r_in := radius * 0.94
-	var half := sqrt(maxf(r_in * r_in - d * d, 0.0))
+	var d := rng.randf_range(-0.82, 0.82) * radius
+	var r_in := radius * 0.95
+	var half := sqrt(maxf(r_in * r_in - d * d, 0.0)) * rng.randf_range(0.55, 0.95)
 	if half < lw * 1.5:
 		return
 	var dir := Vector2(cos(th), sin(th))
@@ -84,18 +122,11 @@ func _draw_strand(rng: RandomNumberGenerator, lw: float) -> void:
 	var mid := nrm * d
 	var p0 := mid - dir * half
 	var p1 := mid + dir * half
+	var ctrl := mid + nrm * rng.randf_range(-1.0, 1.0) * half * 0.35
 	var pts := PackedVector2Array()
-	pts.append(p0 + dir * rng.randf_range(0.0, 3.0))
-	for k in 2:
-		var t := float(k + 1) / 3.0
-		pts.append(p0.lerp(p1, t) + nrm * rng.randf_range(-1.0, 1.0) * half * 0.18)
-	pts.append(p1 - dir * rng.randf_range(0.0, 3.0))
-	# 三档色按弦高位置：上亮下暗（局部 y 向下为正）——毛线团的体积感
-	var band := 1
-	if mid.y < -radius * 0.2:
-		band = 0
-	elif mid.y > radius * 0.2:
-		band = 2
-	var col: Color = (_palette[band] as Color).lightened(0.05 if band == 0 else 0.0)
-	col.a = 1.0
-	draw_polyline(pts, col, lw * rng.randf_range(0.9, 1.1))
+	var n := 5
+	for j in n + 1:
+		var t := float(j) / float(n)
+		pts.append(p0.lerp(ctrl, t).lerp(ctrl.lerp(p1, t), t))
+	var wide := 1.35 if rng.randf() < 0.12 else 1.0
+	draw_polyline(pts, _band_color(mid.y, rng), lw * rng.randf_range(0.85, 1.15) * wide)

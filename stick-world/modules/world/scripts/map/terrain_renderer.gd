@@ -155,6 +155,18 @@ void fragment() {
 		road_col *= 0.80 + tread * 0.40;
 		float pebble = hash21(floor(world_pos * 0.55));
 		road_col *= 1.0 + (pebble - 0.5) * 0.30 * step(0.60, pebble);
+		// 车辙：路中央两条暗带（y 随 x 缓慢起伏——像推车走出来的辙）
+		float road_mid = (road_top + road_bot) * 0.5;
+		float rut_span = (road_bot - road_top);
+		float ry1 = road_mid - rut_span * 0.14 + sin(world_pos.x * 0.004) * 18.0;
+		float ry2 = road_mid + rut_span * 0.14 + sin(world_pos.x * 0.004 + 2.1) * 18.0;
+		float ruts = (1.0 - smoothstep(8.0, 26.0, abs(world_pos.y - ry1)))
+			+ (1.0 - smoothstep(8.0, 26.0, abs(world_pos.y - ry2)));
+		road_col *= 1.0 - clamp(ruts, 0.0, 1.0) * 0.14;
+		// 路内残草斑：踩踏不彻底的角落长回草（低频噪声阈值）
+		float weed = fbm(world_pos * vec2(0.006, 0.018));
+		vec3 grass_tint = vec3(0.42, 0.50, 0.30);
+		road_col = mix(road_col, grass_tint, smoothstep(0.62, 0.78, weed) * 0.5);
 		vec3 road_mix = mix(COLOR.rgb, road_col, road_mask * (1.0 - city_factor * 0.9));
 		COLOR = vec4(road_mix, COLOR.a);
 	}

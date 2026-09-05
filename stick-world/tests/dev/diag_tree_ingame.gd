@@ -11,6 +11,7 @@ var _frames: int = 0
 var _stage: int = 0
 var _shot1: Image = null
 var _game_root: Node = null
+var _delta_acc := 0.0
 
 
 func _ready() -> void:
@@ -19,8 +20,9 @@ func _ready() -> void:
 	add_child(_game_root)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_frames += 1
+	_delta_acc += delta
 	match _stage:
 		0:
 			if _frames < 150:  # 等地图/资源点生成完
@@ -69,8 +71,25 @@ func _process(_delta: float) -> void:
 				print("[FAIL] 游戏内两帧几乎无差异，树叶未翻动")
 				get_tree().quit(1)
 				return
-			print("[PASS] 游戏内毛线团树渲染 + 实时翻动验证通过")
+			# 性能与梯度核查：平均 FPS + 全图树数 + 净空带无树
+			var trees: Array = get_tree().get_nodes_in_group("resource_node").filter(
+				func(n: Node) -> bool: return n.get("resource_type") == 0)
+			var min_dist := 1e12
+			var spawn_x := 0.0
+			for t: Node2D in trees:
+				min_dist = minf(min_dist, absf(t.global_position.x - spawn_x))
+			print("[DiagTreeIngame] trees=%d avg_fps=%.1f nearest_tree_to_spawn=%.0fpx" %
+				[trees.size(), 60.0 / maxf(_delta_acc / float(_frames), 0.0001), min_dist])
+			if min_dist < 1920.0 + 1280.0:
+				print("[FAIL] 净空带内仍有树（最近 %.0fpx < 3200px）——梯度未生效" % min_dist)
+				get_tree().quit(1)
+				return
+			print("[PASS] 游戏内毛线团树渲染 + 实时翻动 + 净空梯度验证通过")
 			get_tree().quit(0)
+
+
+func _process_wrap_unused() -> void:
+	pass
 
 
 func _find_tree() -> Node2D:

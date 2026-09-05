@@ -39,37 +39,58 @@ var palette_idx := -1
 
 var _timer := 0.0
 var _variant := 0
+var _interval := SWAP_INTERVAL
+var _reenter_redraw := false
 var _palette: Array = PALETTES[0]
 var _bumps: Array = []  # {a: 角度, amp: 幅度}——连续波浪轮廓的鼓包
 
 
 func _ready() -> void:
 	_palette = PALETTES[(abs(base_seed) if palette_idx < 0 else palette_idx) % PALETTES.size()]
+	# 翻动节拍错峰（±12%，种子派生保持确定性）：避免全图树同帧重绘的尖峰
+	_interval = SWAP_INTERVAL * (0.88 + 0.24 * _stable_rng(77).randf())
 	_gen_bumps()
 	queue_redraw()
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
+	# 视口外零开销（性能大头=几百棵视口外树每秒全量重绘，全部跳过）；回屏补一次重绘
+	if not _in_view():
+		_reenter_redraw = true
 		return
+	if _reenter_redraw:
+		_reenter_redraw = false
+		queue_redraw()
 	_timer += delta
-	if _timer >= SWAP_INTERVAL:
-		_timer = fmod(_timer, SWAP_INTERVAL)
+	if _timer >= _interval:
+		_timer = fmod(_timer, _interval)
 		_variant = (_variant + 1) % VARIANTS
 		queue_redraw()
 
 
-## 固定来源 RNG（轮廓/结构用，跨姿态稳定）
+## 球（含缩放后半径 + 余量）是否与视口相交
+func _in_view() -> bool:
+	var vp := get_viewport()
+	if vp == null:
+		return true
+	var xform := vp.get_canvas_transform()
+	var screen := Rect2(Vector2.ZERO, vp.get_visible_rect().size).grow(
+		radius * absf(global_scale.x) + 80.0)
+	return screen.has_point(xform * global_position)
+
+
+## 固定来源 RNG（轮廓/结构用，跨姿态稳定）——整数混合哈希（无字符串构造，
+## _strand_rng 每团每秒调用数百次，字符串分配曾是卡顿源）
 func _stable_rng(slot: int) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("%d/stable/%d" % [base_seed, slot])
+	rng.seed = absi((base_seed * 73856093) ^ (slot * 19349663) ^ 0x5F356495)
 	return rng
 
 
 ## 姿态 RNG（内部笔触用，随 _variant 翻动）
 func _strand_rng(variant: int, i: int) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("%d/%d/%d" % [base_seed, variant, i])
+	rng.seed = absi((base_seed * 73856093) ^ (variant * 19349663) ^ ((i + 1) * 83492791))
 	return rng
 
 

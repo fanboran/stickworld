@@ -22,7 +22,10 @@ static func ensure_driver(tree: SceneTree) -> void:
 	if _driver != null and is_instance_valid(_driver):
 		return
 	_driver = _FrameDriver.new()
-	tree.root.add_child(_driver)
+	# deferred：首次调用常发生在 UIRoot._ready（root 正忙于子树 ready 传播），
+	# 同步 add 到 root 会报 "Parent node is busy setting up children" 并丢帧驱动；
+	# 延到空闲帧挂载（沸腾晚一帧启动，无感）
+	tree.root.add_child.call_deferred(_driver)
 
 
 ## 注册九宫格 stylebox 到帧轮换（SketchStyle._box 内部调用）

@@ -1,0 +1,20 @@
+{
+ "_注释": "L1 路网生成参数（road_generate.py）。A* cost = 步长 × w(cell)，w = 1 + k_slope×|∇h|×disc + k_river(河) + k_lake(湖)，海洋不可通行。g 值单位 = 等效平路世界 px。",
+
+ "grid_res": 1024,
+ "k_slope": 18.0,
+ "k_river": 6.0,
+ "k_lake": 24.0,
+
+ "pass_depth": 0.06,
+ "pass_window": 14,
+ "pass_discount": 0.5,
+ "pass_radius": 3,
+
+ "t3_knn": 2,
+ "astar_bbox_pad": 80,
+ "astar_max_expand": 300000,
+
+ "chaikin_passes": 2,
+ "dp_tolerance": 12.0
+}

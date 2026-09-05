@@ -191,7 +191,7 @@ func _draw_ripple(now: int) -> void:
 	var p: float = elapsed / RIPPLE_DUR_MS
 	var radius: float = 6.0 + p * 26.0
 	var alpha: float = (1.0 - p) * 0.5
-	draw_arc(_triangle_center(_ripple_side), radius, 0.0, TAU, 32, Color(0.5, 0.8, 1.0, alpha), 2.0)
+	draw_arc(_triangle_center(_ripple_side), radius, 0.0, TAU, 48, Color(0.5, 0.8, 1.0, alpha), 2.0, true)
 
 
 ## 震动角：端格绕中心左右震动两下，幅度衰减到 0（结束后复位震动侧）

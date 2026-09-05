@@ -28,7 +28,9 @@ static func bold() -> FontVariation:
 ## 手写正文字体（游戏内 UI 默认字体；文件缺失时回退 null = 引擎默认）
 static func hand() -> FontFile:
 	if _hand == null:
-		if FileAccess.file_exists(HAND_PATH):
+		# ResourceLoader.exists 走导入重映射——导出包里原始 .ttf 不在 pck，
+		# FileAccess.file_exists 会误判缺失（编辑器两端行为不一致）
+		if ResourceLoader.exists(HAND_PATH):
 			_hand = load(HAND_PATH) as FontFile
 		else:
 			push_warning("[SketchFonts] 自制字体缺失：%s，回退引擎默认" % HAND_PATH)

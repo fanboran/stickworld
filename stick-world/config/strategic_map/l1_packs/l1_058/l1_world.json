@@ -59416,27 +59416,143 @@
  "roads": [
   {
    "from": "settlement_city_935",
-   "to": "settlement_city_933"
+   "to": "settlement_city_933",
+   "tier": "DIRT",
+   "length_px": 836.6,
+   "polyline": [
+    [
+     625.38,
+     1191.46
+    ],
+    [
+     539.5,
+     1101.0
+    ],
+    [
+     522.0,
+     1049.0
+    ],
+    [
+     546.0,
+     849.0
+    ],
+    [
+     538.5,
+     709.0
+    ],
+    [
+     615.0,
+     623.0
+    ],
+    [
+     667.0,
+     604.5
+    ],
+    [
+     777.0,
+     620.5
+    ],
+    [
+     803.87,
+     641.19
+    ]
+   ]
   },
   {
    "from": "settlement_city_933",
-   "to": "settlement_city_934"
+   "to": "settlement_city_934",
+   "tier": "DIRT",
+   "length_px": 114.6,
+   "polyline": [
+    [
+     803.87,
+     641.19
+    ],
+    [
+     918.47,
+     638.07
+    ]
+   ]
   },
   {
    "from": "settlement_city_933",
-   "to": "settlement_city_932"
+   "to": "settlement_city_932",
+   "tier": "DIRT",
+   "length_px": 122.9,
+   "polyline": [
+    [
+     803.87,
+     641.19
+    ],
+    [
+     771.5,
+     613.0
+    ],
+    [
+     741.66,
+     538.84
+    ]
+   ]
   },
   {
    "from": "settlement_city_932",
-   "to": "settlement_city_931"
+   "to": "settlement_city_931",
+   "tier": "DIRT",
+   "length_px": 167.4,
+   "polyline": [
+    [
+     741.66,
+     538.84
+    ],
+    [
+     616.43,
+     427.82
+    ]
+   ]
   },
   {
    "from": "settlement_city_931",
-   "to": "settlement_city_929"
+   "to": "settlement_city_929",
+   "tier": "DIRT",
+   "length_px": 218.8,
+   "polyline": [
+    [
+     616.43,
+     427.82
+    ],
+    [
+     689.5,
+     419.0
+    ],
+    [
+     697.5,
+     325.0
+    ],
+    [
+     679.0,
+     308.0
+    ],
+    [
+     654.19,
+     314.85
+    ]
+   ]
   },
   {
    "from": "settlement_city_929",
-   "to": "settlement_city_930"
+   "to": "settlement_city_930",
+   "tier": "DIRT",
+   "length_px": 134.8,
+   "polyline": [
+    [
+     654.19,
+     314.85
+    ],
+    [
+     788.94,
+     313.79
+    ]
+   ]
   }
  ],
  "neighbors": [

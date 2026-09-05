@@ -21272,7 +21272,31 @@
   },
   {
    "from": "settlement_city_939",
-   "to": "settlement_city_940"
+   "to": "settlement_city_940",
+   "tier": "DIRT",
+   "length_px": 172.3,
+   "polyline": [
+    [
+     994.78,
+     1096.16
+    ],
+    [
+     960.5,
+     1116.0
+    ],
+    [
+     960.0,
+     1168.0
+    ],
+    [
+     969.5,
+     1212.0
+    ],
+    [
+     995.95,
+     1235.94
+    ]
+   ]
   },
   {
    "from": "settlement_city_936",

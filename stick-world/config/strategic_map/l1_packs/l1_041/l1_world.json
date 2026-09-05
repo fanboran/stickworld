@@ -11939,11 +11939,47 @@
  "roads": [
   {
    "from": "settlement_city_706",
-   "to": "settlement_city_705"
+   "to": "settlement_city_705",
+   "tier": "DIRT",
+   "length_px": 282.0,
+   "polyline": [
+    [
+     325.83,
+     460.9
+    ],
+    [
+     386.0,
+     284.0
+    ],
+    [
+     436.0,
+     271.0
+    ],
+    [
+     465.69,
+     302.79
+    ]
+   ]
   },
   {
    "from": "settlement_city_705",
-   "to": "settlement_city_704"
+   "to": "settlement_city_704",
+   "tier": "DIRT",
+   "length_px": 166.0,
+   "polyline": [
+    [
+     465.69,
+     302.79
+    ],
+    [
+     398.0,
+     239.5
+    ],
+    [
+     324.69,
+     237.4
+    ]
+   ]
   },
   {
    "from": "settlement_city_704",

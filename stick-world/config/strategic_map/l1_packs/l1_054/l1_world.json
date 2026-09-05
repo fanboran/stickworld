@@ -15289,7 +15289,23 @@
   },
   {
    "from": "settlement_city_874",
-   "to": "settlement_city_872"
+   "to": "settlement_city_872",
+   "tier": "DIRT",
+   "length_px": 133.9,
+   "polyline": [
+    [
+     227.0,
+     469.0
+    ],
+    [
+     294.0,
+     386.0
+    ],
+    [
+     320.0,
+     378.0
+    ]
+   ]
   },
   {
    "from": "settlement_city_872",
@@ -15297,7 +15313,15 @@
   },
   {
    "from": "settlement_city_871",
-   "to": "settlement_city_870"
+   "to": "settlement_city_870",
+   "tier": "DIRT",
+   "length_px": 0,
+   "polyline": [
+    [
+     199.0,
+     184.0
+    ]
+   ]
   }
  ],
  "neighbors": [

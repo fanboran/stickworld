@@ -30414,15 +30414,63 @@
  "roads": [
   {
    "from": "settlement_city_864",
-   "to": "settlement_city_865"
+   "to": "settlement_city_865",
+   "tier": "DIRT",
+   "length_px": 308.5,
+   "polyline": [
+    [
+     375.4,
+     636.3
+    ],
+    [
+     441.0,
+     691.5
+    ],
+    [
+     517.0,
+     692.0
+    ],
+    [
+     577.0,
+     636.5
+    ],
+    [
+     642.03,
+     635.17
+    ]
+   ]
   },
   {
    "from": "settlement_city_865",
-   "to": "settlement_city_862"
+   "to": "settlement_city_862",
+   "tier": "DIRT",
+   "length_px": 186.8,
+   "polyline": [
+    [
+     642.03,
+     635.17
+    ],
+    [
+     609.34,
+     451.25
+    ]
+   ]
   },
   {
    "from": "settlement_city_862",
-   "to": "settlement_city_863"
+   "to": "settlement_city_863",
+   "tier": "DIRT",
+   "length_px": 181.1,
+   "polyline": [
+    [
+     609.34,
+     451.25
+    ],
+    [
+     790.41,
+     451.58
+    ]
+   ]
   },
   {
    "from": "settlement_city_863",

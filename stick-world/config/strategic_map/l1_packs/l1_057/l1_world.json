@@ -33820,7 +33820,19 @@
   },
   {
    "from": "settlement_city_923",
-   "to": "settlement_city_924"
+   "to": "settlement_city_924",
+   "tier": "DIRT",
+   "length_px": 142.4,
+   "polyline": [
+    [
+     1277.55,
+     996.48
+    ],
+    [
+     1401.11,
+     1067.36
+    ]
+   ]
   },
   {
    "from": "settlement_city_924",

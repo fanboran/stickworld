@@ -15977,7 +15977,19 @@
  "roads": [
   {
    "from": "settlement_city_951",
-   "to": "settlement_city_952"
+   "to": "settlement_city_952",
+   "tier": "DIRT",
+   "length_px": 75.5,
+   "polyline": [
+    [
+     324.8,
+     306.99
+    ],
+    [
+     261.2,
+     347.66
+    ]
+   ]
   }
  ],
  "neighbors": [

@@ -28429,15 +28429,67 @@
  "roads": [
   {
    "from": "settlement_city_105",
-   "to": "settlement_city_104"
+   "to": "settlement_city_104",
+   "tier": "DIRT",
+   "length_px": 97.1,
+   "polyline": [
+    [
+     626.87,
+     547.61
+    ],
+    [
+     554.29,
+     612.04
+    ]
+   ]
   },
   {
    "from": "settlement_city_105",
-   "to": "settlement_city_103"
+   "to": "settlement_city_103",
+   "tier": "DIRT",
+   "length_px": 149.3,
+   "polyline": [
+    [
+     626.87,
+     547.61
+    ],
+    [
+     698.57,
+     416.62
+    ]
+   ]
   },
   {
    "from": "settlement_city_104",
-   "to": "settlement_city_106"
+   "to": "settlement_city_106",
+   "tier": "DIRT",
+   "length_px": 545.3,
+   "polyline": [
+    [
+     554.29,
+     612.04
+    ],
+    [
+     461.0,
+     710.5
+    ],
+    [
+     357.0,
+     711.5
+    ],
+    [
+     207.0,
+     571.0
+    ],
+    [
+     172.5,
+     519.0
+    ],
+    [
+     180.0,
+     482.0
+    ]
+   ]
   }
  ],
  "neighbors": [

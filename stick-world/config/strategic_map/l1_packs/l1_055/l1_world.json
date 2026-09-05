@@ -25599,11 +25599,51 @@
   },
   {
    "from": "settlement_city_877",
-   "to": "settlement_city_878"
+   "to": "settlement_city_878",
+   "tier": "DIRT",
+   "length_px": 227.1,
+   "polyline": [
+    [
+     358.91,
+     743.37
+    ],
+    [
+     480.0,
+     743.0
+    ],
+    [
+     575.62,
+     788.87
+    ]
+   ]
   },
   {
    "from": "settlement_city_878",
-   "to": "settlement_city_876"
+   "to": "settlement_city_876",
+   "tier": "DIRT",
+   "length_px": 382.8,
+   "polyline": [
+    [
+     575.62,
+     788.87
+    ],
+    [
+     491.5,
+     678.0
+    ],
+    [
+     483.0,
+     602.0
+    ],
+    [
+     522.0,
+     552.5
+    ],
+    [
+     619.3,
+     515.4
+    ]
+   ]
   },
   {
    "from": "settlement_city_878",

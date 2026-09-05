@@ -102926,59 +102926,279 @@
  "roads": [
   {
    "from": "settlement_city_830",
-   "to": "settlement_city_827"
+   "to": "settlement_city_827",
+   "tier": "DIRT",
+   "length_px": 163.4,
+   "polyline": [
+    [
+     653.06,
+     1024.55
+    ],
+    [
+     618.0,
+     938.0
+    ],
+    [
+     552.09,
+     914.25
+    ]
+   ]
   },
   {
    "from": "settlement_city_830",
-   "to": "settlement_city_828"
+   "to": "settlement_city_828",
+   "tier": "DIRT",
+   "length_px": 209.4,
+   "polyline": [
+    [
+     653.06,
+     1024.55
+    ],
+    [
+     723.5,
+     1012.5
+    ],
+    [
+     802.0,
+     928.0
+    ],
+    [
+     792.99,
+     907.24
+    ]
+   ]
   },
   {
    "from": "settlement_city_828",
-   "to": "settlement_city_825"
+   "to": "settlement_city_825",
+   "tier": "DIRT",
+   "length_px": 228.2,
+   "polyline": [
+    [
+     792.99,
+     907.24
+    ],
+    [
+     861.0,
+     834.0
+    ],
+    [
+     821.5,
+     780.0
+    ],
+    [
+     824.48,
+     718.75
+    ]
+   ]
   },
   {
    "from": "settlement_city_825",
-   "to": "settlement_city_826"
+   "to": "settlement_city_826",
+   "tier": "DIRT",
+   "length_px": 116.6,
+   "polyline": [
+    [
+     824.48,
+     718.75
+    ],
+    [
+     937.89,
+     745.69
+    ]
+   ]
   },
   {
    "from": "settlement_city_826",
-   "to": "settlement_city_829"
+   "to": "settlement_city_829",
+   "tier": "DIRT",
+   "length_px": 121.2,
+   "polyline": [
+    [
+     937.89,
+     745.69
+    ],
+    [
+     981.16,
+     858.95
+    ]
+   ]
   },
   {
    "from": "settlement_city_829",
-   "to": "settlement_city_832"
+   "to": "settlement_city_832",
+   "tier": "DIRT",
+   "length_px": 220.4,
+   "polyline": [
+    [
+     981.16,
+     858.95
+    ],
+    [
+     1038.5,
+     990.0
+    ],
+    [
+     1090.3,
+     1047.46
+    ]
+   ]
   },
   {
    "from": "settlement_city_832",
-   "to": "settlement_city_831"
+   "to": "settlement_city_831",
+   "tier": "DIRT",
+   "length_px": 113.3,
+   "polyline": [
+    [
+     1090.3,
+     1047.46
+    ],
+    [
+     982.68,
+     1082.77
+    ]
+   ]
   },
   {
    "from": "settlement_city_825",
-   "to": "settlement_city_823"
+   "to": "settlement_city_823",
+   "tier": "DIRT",
+   "length_px": 246.4,
+   "polyline": [
+    [
+     824.48,
+     718.75
+    ],
+    [
+     838.5,
+     580.0
+    ],
+    [
+     926.04,
+     518.5
+    ]
+   ]
   },
   {
    "from": "settlement_city_823",
-   "to": "settlement_city_822"
+   "to": "settlement_city_822",
+   "tier": "DIRT",
+   "length_px": 171.6,
+   "polyline": [
+    [
+     926.04,
+     518.5
+    ],
+    [
+     884.0,
+     555.0
+    ],
+    [
+     789.19,
+     488.3
+    ]
+   ]
   },
   {
    "from": "settlement_city_822",
-   "to": "settlement_city_819"
+   "to": "settlement_city_819",
+   "tier": "DIRT",
+   "length_px": 77.1,
+   "polyline": [
+    [
+     789.19,
+     488.3
+    ],
+    [
+     741.92,
+     427.43
+    ]
+   ]
   },
   {
    "from": "settlement_city_822",
-   "to": "settlement_city_821"
+   "to": "settlement_city_821",
+   "tier": "DIRT",
+   "length_px": 223.3,
+   "polyline": [
+    [
+     789.19,
+     488.3
+    ],
+    [
+     732.0,
+     470.5
+    ],
+    [
+     648.0,
+     538.0
+    ],
+    [
+     633.68,
+     591.78
+    ]
+   ]
   },
   {
    "from": "settlement_city_821",
-   "to": "settlement_city_824"
+   "to": "settlement_city_824",
+   "tier": "DIRT",
+   "length_px": 111.3,
+   "polyline": [
+    [
+     633.68,
+     591.78
+    ],
+    [
+     597.5,
+     630.0
+    ],
+    [
+     600.68,
+     688.58
+    ]
+   ]
   },
   {
    "from": "settlement_city_821",
-   "to": "settlement_city_820"
+   "to": "settlement_city_820",
+   "tier": "DIRT",
+   "length_px": 213.5,
+   "polyline": [
+    [
+     633.68,
+     591.78
+    ],
+    [
+     580.0,
+     533.5
+    ],
+    [
+     446.42,
+     520.02
+    ]
+   ]
   },
   {
    "from": "settlement_city_820",
-   "to": "settlement_city_818"
+   "to": "settlement_city_818",
+   "tier": "DIRT",
+   "length_px": 199.1,
+   "polyline": [
+    [
+     446.42,
+     520.02
+    ],
+    [
+     396.0,
+     477.5
+    ],
+    [
+     266.9,
+     444.81
+    ]
+   ]
   }
  ],
  "neighbors": [

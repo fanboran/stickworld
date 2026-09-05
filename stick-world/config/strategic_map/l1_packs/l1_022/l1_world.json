@@ -56032,43 +56032,203 @@
  "roads": [
   {
    "from": "settlement_city_369",
-   "to": "settlement_city_365"
+   "to": "settlement_city_365",
+   "tier": "DIRT",
+   "length_px": 104.7,
+   "polyline": [
+    [
+     592.05,
+     746.29
+    ],
+    [
+     582.0,
+     692.0
+    ],
+    [
+     597.17,
+     644.87
+    ]
+   ]
   },
   {
    "from": "settlement_city_365",
-   "to": "settlement_city_366"
+   "to": "settlement_city_366",
+   "tier": "DIRT",
+   "length_px": 120.5,
+   "polyline": [
+    [
+     597.17,
+     644.87
+    ],
+    [
+     615.0,
+     625.5
+    ],
+    [
+     671.0,
+     619.0
+    ],
+    [
+     694.23,
+     648.86
+    ]
+   ]
   },
   {
    "from": "settlement_city_366",
-   "to": "settlement_city_370"
+   "to": "settlement_city_370",
+   "tier": "DIRT",
+   "length_px": 93.7,
+   "polyline": [
+    [
+     694.23,
+     648.86
+    ],
+    [
+     707.99,
+     741.55
+    ]
+   ]
   },
   {
    "from": "settlement_city_366",
-   "to": "settlement_city_363"
+   "to": "settlement_city_363",
+   "tier": "DIRT",
+   "length_px": 139.9,
+   "polyline": [
+    [
+     694.23,
+     648.86
+    ],
+    [
+     694.88,
+     508.94
+    ]
+   ]
   },
   {
    "from": "settlement_city_363",
-   "to": "settlement_city_364"
+   "to": "settlement_city_364",
+   "tier": "DIRT",
+   "length_px": 140.7,
+   "polyline": [
+    [
+     694.88,
+     508.94
+    ],
+    [
+     775.0,
+     465.5
+    ],
+    [
+     824.58,
+     463.92
+    ]
+   ]
   },
   {
    "from": "settlement_city_364",
-   "to": "settlement_city_367"
+   "to": "settlement_city_367",
+   "tier": "DIRT",
+   "length_px": 291.7,
+   "polyline": [
+    [
+     824.58,
+     463.92
+    ],
+    [
+     774.0,
+     508.0
+    ],
+    [
+     801.0,
+     596.0
+    ],
+    [
+     883.0,
+     617.0
+    ],
+    [
+     914.83,
+     581.25
+    ]
+   ]
   },
   {
    "from": "settlement_city_367",
-   "to": "settlement_city_368"
+   "to": "settlement_city_368",
+   "tier": "DIRT",
+   "length_px": 108.6,
+   "polyline": [
+    [
+     914.83,
+     581.25
+    ],
+    [
+     998.8,
+     650.17
+    ]
+   ]
   },
   {
    "from": "settlement_city_365",
-   "to": "settlement_city_362"
+   "to": "settlement_city_362",
+   "tier": "DIRT",
+   "length_px": 163.1,
+   "polyline": [
+    [
+     597.17,
+     644.87
+    ],
+    [
+     556.5,
+     544.0
+    ],
+    [
+     518.7,
+     505.0
+    ]
+   ]
   },
   {
    "from": "settlement_city_363",
-   "to": "settlement_city_361"
+   "to": "settlement_city_361",
+   "tier": "DIRT",
+   "length_px": 206.7,
+   "polyline": [
+    [
+     694.88,
+     508.94
+    ],
+    [
+     662.0,
+     454.0
+    ],
+    [
+     663.2,
+     311.29
+    ]
+   ]
   },
   {
    "from": "settlement_city_361",
-   "to": "settlement_city_360"
+   "to": "settlement_city_360",
+   "tier": "DIRT",
+   "length_px": 158.6,
+   "polyline": [
+    [
+     663.2,
+     311.29
+    ],
+    [
+     755.0,
+     236.0
+    ],
+    [
+     772.23,
+     200.02
+    ]
+   ]
   }
  ],
  "neighbors": [

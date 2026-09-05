@@ -119,6 +119,7 @@ func setup(input_dispatcher: Node, mode_mapper: Callable = Callable()) -> void:
 ## 挂主题：全 UI 树走 StickTheme（游戏内手绘涂鸦 + 琥珀强调）。
 ## 主题层在 modules/ui_global/scripts/theme/，模板层提升为正式共享层。
 func _apply_theme() -> void:
+	SketchTextures.ensure_driver(get_tree())
 	var t: Theme = StickTheme.create()
 	for slot_name in ["GlobalHUD", "ModePanel", "ContextPanel", "ResourceBar",
 			"ModalOverlay", "HudOverlay", "SystemOverlay"]:

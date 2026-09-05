@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://modules/ui_global/scenes/overlays/modal_overlay.tscn" id="7_mo_scene"]
 
 [node name="UIRoot" type="CanvasLayer" unique_id=1942486944]
+layer = 1
 script = ExtResource("1_ui_root")
 
 [node name="GlobalHUD" parent="." instance=ExtResource("2_hud_scene")]

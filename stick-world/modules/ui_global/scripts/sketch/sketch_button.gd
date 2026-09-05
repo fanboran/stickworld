@@ -23,87 +23,42 @@ var _timer: float = 0.0
 
 
 func _ready() -> void:
-	_seed = randi()
 	_apply_flats()
+	_apply_text_colors()
 	resized.connect(queue_redraw)
+	mouse_entered.connect(_apply_text_colors)
+	mouse_exited.connect(_apply_text_colors)
 
 
-func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	_timer += delta
-	if _timer >= SketchDraw.WOBBLE_INTERVAL:
-		_timer = 0.0
-		_seed = randi()
-		queue_redraw()
+## hover 反黑只对 NORMAL（底变白 10% 后白字失对比）；ACCENT/DANGER 字色恒定
+func _apply_text_colors() -> void:
+	var hovering := is_hovered()
+	var dark := ink.a > 0.0 or (kind == Kind.NORMAL and hovering)
+	var c := Color(0.05, 0.04, 0.03) if dark else StickTokens.TEXT
+	for state in ["font_color", "font_hover_color", "font_focus_color"]:
+		add_theme_color_override(state, c)
 
 
-func _draw() -> void:
-	var border := _border_for(get_draw_mode())
-	if ink.a > 0.0 and border.a > 0.0:
-		border = Color(ink.r, ink.g, ink.b, clampf(border.a * 3.0, ink.a * 0.8, 1.0))
-	if border.a <= 0.0:
-		return
-	SketchDraw.draw_panel(self, Rect2(Vector2.ZERO, size), _seed,
-			Color.TRANSPARENT, border, SketchDraw.OUTLINE_WIDTH, _corner_for(size))
-
-
-## 四态底色 = 无描边 Flat（描边让位给 _draw 手绘线）
+## 四态贴图（kind 映射槽位；沸腾由 SketchTextures 帧驱动）
 func _apply_flats() -> void:
+	var base := "btn"
+	match kind:
+		Kind.ACCENT: base = "accent"
+		Kind.DANGER: base = "danger"
 	for state in ["normal", "hover", "pressed", "disabled"]:
-		add_theme_stylebox_override(state, _flat(state, kind))
+		var slot := StringName("%s_%s" % [base, state])
+		if SketchTextures._frame_sets.is_empty():
+			SketchTextures._load_all()
+		if not SketchTextures._frame_sets.has(slot):
+			slot = &"btn_normal"
+		add_theme_stylebox_override(state, _box(slot))
 	add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 
-static func _flat(state: String, k: Kind) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = _skin_for(state, k)[0]
-	s.content_margin_left = StickTokens.PAD_X + 2
-	s.content_margin_right = StickTokens.PAD_X + 2
-	s.content_margin_top = 2
-	s.content_margin_bottom = 2
-	return s
+static var _box_cache: Dictionary = {}
 
 
-static func _border_for(mode: int) -> Color:
-	if mode == BaseButton.DRAW_DISABLED:
-		return Color.TRANSPARENT
-	if mode == BaseButton.DRAW_HOVER:
-		return StickTokens.BORDER_STRONG
-	if mode == BaseButton.DRAW_PRESSED:
-		return Color(StickTokens.ACCENT, 0.9)
-	return StickTokens.BORDER
-
-
-static func _skin_for(state: String, k: Kind) -> Array:
-	var disabled: bool = state == "disabled"
-	match k:
-		Kind.ACCENT:
-			if disabled:
-				return [StickTokens.BTN_BG_DISABLED]
-			if state == "hover":
-				return [Color(StickTokens.ACCENT, 0.26)]
-			if state == "pressed":
-				return [Color(StickTokens.ACCENT, 0.08)]
-			return [StickTokens.ACCENT_BG]
-		Kind.DANGER:
-			if disabled:
-				return [StickTokens.BTN_BG_DISABLED]
-			if state == "hover":
-				return [Color(StickTokens.DANGER, 0.26)]
-			if state == "pressed":
-				return [Color(StickTokens.DANGER, 0.10)]
-			return [StickTokens.DANGER_BG]
-		_:
-			if disabled:
-				return [StickTokens.BTN_BG_DISABLED]
-			if state == "hover":
-				return [StickTokens.BTN_BG_HOVER]
-			if state == "pressed":
-				return [StickTokens.BTN_BG_PRESSED]
-			return [StickTokens.BTN_BG]
-
-
-## 圆角随高度缩放：矮按钮圆角小一点，保持"正常按钮"轮廓
-func _corner_for(s: Vector2) -> float:
-	return clampf(SketchDraw.CORNER_R * s.y / 34.0, 3.0, SketchDraw.CORNER_R)
+static func _box(slot: StringName) -> StyleBoxTexture:
+	if not _box_cache.has(slot):
+		_box_cache[slot] = SketchStyle._box(slot, StickTokens.PAD_X + 2, 2)
+	return _box_cache[slot]

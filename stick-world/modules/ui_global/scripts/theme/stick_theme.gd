@@ -36,8 +36,8 @@ static func create(skin_mode: int = Mode.SKETCH) -> Theme:
 					"CheckButton", "ProgressBar", "TabContainer", "ItemList", "TooltipLabel",
 					"PopupMenu"]:
 				t.set_font("font", type, hand)
-	var s := GlassStyle
-	_apply_button(t, s)
+	var s := SketchStyle if skin_mode == Mode.SKETCH else GlassStyle
+	_apply_button(t, s, skin_mode)
 	_apply_label(t)
 	_apply_panel(t, s)
 	_apply_inputs(t, s)
@@ -57,7 +57,7 @@ static func refresh(root: Control, skin_mode: int = Mode.SKETCH) -> void:
 
 # ─────────────────────────────── 控件装配 ────────────────────────────────
 
-static func _apply_button(t: Theme, s: Object) -> void:
+static func _apply_button(t: Theme, s: Object, skin_mode: int = Mode.SKETCH) -> void:
 	t.set_stylebox("normal", "Button", s.button_normal())
 	t.set_stylebox("hover", "Button", s.button_hover())
 	t.set_stylebox("pressed", "Button", s.button_pressed())
@@ -83,13 +83,16 @@ static func _apply_panel(t: Theme, s: Object) -> void:
 static func _apply_inputs(t: Theme, s: Object) -> void:
 	# LineEdit
 	t.set_stylebox("normal", "LineEdit", s.groove())
-	var fb := (s.groove() as StyleBoxFlat).duplicate()
-	fb.border_color = StickTokens.ACCENT
-	fb.border_width_left = StickTokens.BORDER_W
-	fb.border_width_top = StickTokens.BORDER_W
-	fb.border_width_right = StickTokens.BORDER_W
-	fb.border_width_bottom = StickTokens.BORDER_W
-	t.set_stylebox("focus", "LineEdit", fb)
+	if s == GlassStyle:
+		var fb := (s.groove() as StyleBoxFlat).duplicate()
+		fb.border_color = StickTokens.ACCENT
+		fb.border_width_left = StickTokens.BORDER_W
+		fb.border_width_top = StickTokens.BORDER_W
+		fb.border_width_right = StickTokens.BORDER_W
+		fb.border_width_bottom = StickTokens.BORDER_W
+		t.set_stylebox("focus", "LineEdit", fb)
+	else:
+		t.set_stylebox("focus", "LineEdit", s.groove_focus())
 	t.set_color("font_color", "LineEdit", StickTokens.TEXT)
 	t.set_color("font_placeholder_color", "LineEdit", StickTokens.TEXT_FAINT)
 	t.set_color("caret_color", "LineEdit", StickTokens.ACCENT)

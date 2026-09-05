@@ -71,6 +71,19 @@ const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
 const LABEL_SIZE := 30.0
 ## F3 城市编号屏幕上限（像素）：仅高缩放时封顶防"雷霆大字"，默认缩放不受影响
 const LABEL_SCREEN_CAP := 40.0
+
+# 玩家图钉（F2/C1，总体设计 §5.6：琥珀色图钉，唯一允许的图标类美术——此处程序化绘制）
+const PIN_COLOR := Color(1.0, 0.72, 0.11)
+const PIN_OUTLINE := Color(0.25, 0.15, 0.02)
+const PIN_HEAD_RADIUS := 11.0
+const PIN_TAIL_LEN := 20.0
+const PIN_LABEL := "你在这里"
+const PIN_LABEL_SIZE := 22.0
+
+## 玩家图钉（L1 地图坐标；默认 = 出生聚落，api.set_player_map 动态更新）
+var _pin_pos := Vector2.ZERO
+var _pin_visible := false
+
 var _debug_was_visible: bool = false
 
 ## 当前所在城市地块蓝光流动描边（"你在这里"，细粒度层级）：
@@ -98,6 +111,9 @@ func set_data(data: L1WorldData) -> void:
 			if tile.settlement != null \
 					and tile.settlement.settlement_id == _data.spawn_settlement_id:
 				_current_tile_id = tile.tile_id
+				# 图钉默认锚出生聚落（F2/C1；api.set_player_map 动态更新）
+				_pin_pos = tile.settlement.position
+				_pin_visible = true
 				break
 	_build_glow_outline()
 	queue_redraw()
@@ -275,6 +291,9 @@ func _draw() -> void:
 	# 8. F3 调试：城市编号（标在聚落位置）
 	if DebugApi != null and DebugApi.is_visible():
 		_draw_city_labels()
+	# 9. 玩家图钉（F2/C1：琥珀色图钉 + 「你在这里」标注，画在最上层）
+	if _pin_visible:
+		_draw_player_pin(zz)
 
 
 ## 闭合多边形点列（首尾相连）
@@ -284,6 +303,52 @@ func _closed(pts: PackedVector2Array) -> PackedVector2Array:
 	var out := pts.duplicate()
 	out.append(out[0])
 	return out
+
+
+## 设置玩家图钉位置（L1 地图坐标 = 所在聚落 position_px；api.set_player_map 接线）
+func set_player_pin(map_pos: Vector2) -> void:
+	_pin_pos = map_pos
+	_pin_visible = true
+	queue_redraw()
+
+
+## 隐藏玩家图钉（玩家当前不在本 L1 的任何聚落时）
+func clear_player_pin() -> void:
+	if not _pin_visible:
+		return
+	_pin_visible = false
+	queue_redraw()
+
+
+## 琥珀色图钉：圆头 + 尾针 + 白点 + 「你在这里」标注（总体设计 §5.6；
+## 程序化绘制，属"仅 UI 标记"豁免，不引素材）
+func _draw_player_pin(zz: float) -> void:
+	var head_r: float = PIN_HEAD_RADIUS
+	var tail_len: float = PIN_TAIL_LEN
+	if zz > 0.0001:
+		head_r = PIN_HEAD_RADIUS / zz
+		tail_len = PIN_TAIL_LEN / zz
+	var tail_tip := _pin_pos + Vector2(0.0, tail_len)
+	# 尾针（三角）
+	draw_colored_polygon(PackedVector2Array([
+		_pin_pos + Vector2(-head_r * 0.45, 0.0),
+		_pin_pos + Vector2(head_r * 0.45, 0.0),
+		tail_tip,
+	]), PIN_COLOR)
+	# 圆头 + 深色描边 + 白点
+	draw_circle(_pin_pos, head_r, PIN_COLOR)
+	draw_arc(_pin_pos, head_r, 0.0, TAU, 48, PIN_OUTLINE, maxf(1.0, head_r * 0.22), true)
+	draw_circle(_pin_pos, head_r * 0.38, Color.WHITE)
+	# 「你在这里」标注（尾针下方，屏幕字号封顶同城市标签口径）
+	var font := ThemeDB.fallback_font
+	var fs: float = PIN_LABEL_SIZE
+	if zz > 0.0001:
+		fs = minf(PIN_LABEL_SIZE, LABEL_SCREEN_CAP / zz)
+	var txt_pos := tail_tip + Vector2(0.0, fs * 0.9)
+	var halo: float = maxf(1.5, fs * 0.12)
+	for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
+		draw_string(font, txt_pos + off * halo, PIN_LABEL, HORIZONTAL_ALIGNMENT_CENTER, -1, fs, LABEL_BG)
+	draw_string(font, txt_pos, PIN_LABEL, HORIZONTAL_ALIGNMENT_CENTER, -1, fs, PIN_COLOR)
 
 
 ## 邻湖判定容差（地图单元）：边中点距湖多边形 ≤ 该值视为"地块-湖泊"边界不描边。

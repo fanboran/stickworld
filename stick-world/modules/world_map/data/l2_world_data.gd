@@ -33,6 +33,9 @@ var neighbors: Array = []
 ## 湖泊多边形（浅蓝显示）：[[(y,x),...]]（context 坐标）
 var lakes: Array = []
 
+## 河流折线（B3，[y,x] 顶点与 L2 惯例一致）：[{"pts": PackedVector2Array(x,y), "w": float}]
+var rivers: Array = []
+
 ## 地区名（region_001 等）
 var region_id: String = ""
 
@@ -71,6 +74,7 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	world.tiles_offset = Vector2i(int(toff[0]), int(toff[1]))
 	world.neighbors = data.get("neighbors", [])
 	world.lakes = data.get("lakes", [])
+	world.rivers = _rivers_from(data.get("rivers", []))
 	world.load_baked_geom("%s/l2_geom.bin" % base_dir)
 	# 城市模式贴图（可选）
 	var cprev_path := "%s/l2_city_preview.png" % base_dir
@@ -242,3 +246,20 @@ static func _to_vec2(poly: Array) -> PackedVector2Array:
 		var p: Array = poly[i]
 		arr[i] = Vector2(float(p[1]), float(p[0]))  # json [y,x] → Vector2(x,y)
 	return arr
+
+
+## 河流归一化（B3）：json 的 {"pts": [[y,x],...], "w": f} → {"pts": PackedVector2Array(x,y), "w": float}
+## bin 路径 pts 保持 json 原样（l_world_bake 未转换 rivers），此处统一转渲染坐标
+static func _rivers_from(arr: Array) -> Array:
+	var out: Array = []
+	for rv in arr:
+		var d: Dictionary = rv if rv is Dictionary else {}
+		var pts_var: Variant = d.get("pts", [])
+		var pts := PackedVector2Array()
+		if pts_var is PackedVector2Array:
+			pts = pts_var
+		elif pts_var is Array:
+			pts = _to_vec2(pts_var)
+		if pts.size() >= 2:
+			out.append({"pts": pts, "w": float(d.get("w", 2.0))})
+	return out

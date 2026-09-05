@@ -29,7 +29,7 @@ func _ready() -> void:
 
 	var title := Label.new()
 	title.text = "欢迎来到火柴人大战略"
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", StickTokens.FONT_TITLE)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_color_override("font_color", Color(1.0, 0.84, 0.45))
 	box.add_child(title)

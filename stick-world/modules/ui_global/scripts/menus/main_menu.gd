@@ -77,10 +77,11 @@ func _build_menu() -> void:
 		# 浮在暖金天空上的按钮用深墨描边（白描边在亮背景上不可见）
 		btn.ink = Color(0.05, 0.04, 0.03, 1.0)
 		# 按钮文字改黑（用户指示）：暖黑与 ink 描边同族，亮天空上黑字比白字稳
-		# 字号小一圈（16→14）：手绘字体笔画粗，16px 黑字糊成一团（用户反馈）
+		# 字号加大一圈（16→18，用户指示「弄大一小圈」——上次读反成缩小已纠正：
+		# 等粗手绘体字号越大笔画间距越开，黑字反而更清晰）
 		for col_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 			btn.add_theme_color_override(col_name, Color(0.1, 0.08, 0.06))
-		btn.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
+		btn.add_theme_font_size_override("font_size", 18)
 		if item["id"] == "continue":
 			btn.disabled = not _has_continue_save()
 

@@ -58,6 +58,15 @@ var ARROW_LEAD_FACTOR: float = 0.7
 ## 有事件时以事件真值为准（Archidon-Draw Drawn@0.5s / Hit@0.5333s，全长 2.0s）——
 ## 拉弓动画在 0.5s 拉满（Drawn），0.5333s 放箭（Hit），而不是拍脑袋的 0.75s。
 const BOW_FIRE_DELAY_FALLBACK: float = 0.5333
+## RWR sustained_fire 连射散布（media/packages ak47.weapon：grow_step=0.40/发）：
+## 每放一箭散布热度 +0.40（上限 1.2），实际散布 σ × (1+热度)；恢复率原值 1.2/s
+## 是 ~10发/s 步枪节奏，我方弓 ~0.5发/s，按射速比缩到 0.10/s——连放 3 箭 σ≈1.6x、
+## 6 箭到顶 2.2x，脱战 ~12s 回满（"连射越打越散、会停火收敛"的距离感）
+const SUSTAINED_FIRE_GROW := 0.40
+const SUSTAINED_FIRE_DIMINISH := 0.10
+const SUSTAINED_FIRE_HEAT_MAX := 1.2
+## 散布热度（0..HEAT_MAX；behavior_attack 据此做 RWR 点射停顿）
+var _sustained_fire_heat: float = 0.0
 ## 盾牌格挡率（持盾被近战/箭矢命中时减伤概率；原版 blockChance 同为概率掷骰）
 var BLOCK_CHANCE: float = 0.35
 ## 格挡减伤系数（剩余伤害比例）
@@ -558,6 +567,11 @@ func get_cooldown_remaining() -> float:
 	return _cooldown_timer
 
 
+## RWR sustained_fire 散布热度（0..1.2；behavior_attack 的点射停顿判定源）
+func get_sustained_fire_heat() -> float:
+	return _sustained_fire_heat
+
+
 ## 是否有未结算的挥砍（已发起、命中帧未到；can_attack 命中帧门禁的查询面）
 func has_pending_strike() -> bool:
 	return _pending_strike_target != null and not _strike_fired
@@ -783,6 +797,8 @@ func _resolve_hit_event_time() -> void:
 func update_cooldown(delta: float) -> void:
 	if _cooldown_timer > 0.0:
 		_cooldown_timer = maxf(0.0, _cooldown_timer - delta)
+	# RWR sustained_fire 停火恢复（diminish_rate）：散布热度随时间回落
+	_sustained_fire_heat = maxf(0.0, _sustained_fire_heat - SUSTAINED_FIRE_DIMINISH * delta)
 
 
 # ─────────────────────────────── 远程攻击（弓）────────────────────────────────
@@ -913,10 +929,13 @@ func _fire_arrow(target: Node) -> void:
 	var t: float = solution["t"]
 	aim_point = solution["aim_point"]
 	# SWL AimAngle 散布（currentShotBodyRandomness/NextGaussian）：出弓方向加高斯扰动，
-	# σ 取兵种档案 aim_scatter（rad）——箭雨自然散开，不再人人弹道全同
-	var scatter: float = float(ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("aim_scatter", 0.0))
+	# σ 取兵种档案 aim_scatter（rad）× RWR sustained_fire 热度放大（连射越打越散）——
+	# 箭雨自然散开，不再人人弹道全同
+	var scatter: float = float(ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("aim_scatter", 0.0)) \
+			* (1.0 + _sustained_fire_heat)
 	if scatter > 0.0:
 		vel = vel.rotated(ArrowBallistics.next_gaussian(0.0, scatter, -2.0 * scatter, 2.0 * scatter))
+	_sustained_fire_heat = minf(_sustained_fire_heat + SUSTAINED_FIRE_GROW, SUSTAINED_FIRE_HEAT_MAX)
 	var arrow: Node2D = scene.instantiate()
 	var parent: Node = owner_entity.get_parent()
 	if parent == null:

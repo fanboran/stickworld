@@ -26,6 +26,13 @@ const BODY_HEIGHT := 130.0
 const GROUND_DROP: float = 500.0
 ## 兜底寿命（s）：超时强制插地（防极端弹道永生）
 const MAX_FLIGHT_TIME: float = 6.0
+## RWR 击杀概率飞行时间衰减（ak47.weapon kill_decay_start_time=0.33/end=0.68 直译、
+## 按 HP 制与箭速 850px/s 换算）：命中≠全额伤害——贴脸（飞行 ≤0.35s ≈ 300px）满伤，
+## 0.35~0.75s 线性衰减到远距 0.5 倍下限（≈640px 外）。远程压制不等于远程狙杀，
+## 贴脸必杀、远距轻伤的距离感核心。
+const KILL_DECAY_START: float = 0.35
+const KILL_DECAY_END: float = 0.75
+const KILL_DECAY_FLOOR: float = 0.5
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 飞行速度矢量（px/s；vel.y 每帧 += gravity×delta = 抛物线）
@@ -174,11 +181,23 @@ func _is_headshot(target: Node, hit_pos: Vector2) -> bool:
 	return hit_pos.y < body_pos.y - BODY_HEIGHT * HEADSHOT_Y_RATIO
 
 
+## 飞行时间衰减系数（RWR kill_decay 线性带：贴脸 1.0 → 远距 KILL_DECAY_FLOOR）
+static func _flight_decay(t: float) -> float:
+	if t <= KILL_DECAY_START:
+		return 1.0
+	if t >= KILL_DECAY_END:
+		return KILL_DECAY_FLOOR
+	var k: float = (t - KILL_DECAY_START) / (KILL_DECAY_END - KILL_DECAY_START)
+	return 1.0 + (KILL_DECAY_FLOOR - 1.0) * k
+
+
 func _hit(target: Node) -> void:
 	# 箭矢终态：扣减在飞伤害估计（无论实际命中者是否登记目标——估计口径允许偏差）
 	_clear_incoming()
 	# ── 伤害走 DamagePipeline 单入口（SWL Unit.Damage 复刻）──
-	var p := DamagePipeline.Params.new(_damage * (0.6 + 0.4 * _draw_power), _shooter)
+	# RWR 飞行时间衰减乘在基础伤上（远距轻伤，见 KILL_DECAY_* 注释）
+	var p := DamagePipeline.Params.new(
+			_damage * _flight_decay(_flight_time) * (0.6 + 0.4 * _draw_power), _shooter)
 	p.direction = _vel.normalized()
 	p.type = DamagePipeline.DAMAGE_TYPE.RANGED
 	# 爆头：箭命中点在目标上部（causesHeadShotAnimation 语义）

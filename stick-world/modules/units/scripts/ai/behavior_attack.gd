@@ -307,6 +307,12 @@ func exit(next: String) -> void:
 
 # ─────────────────────────────── 兵种机制（legacy 直译）────────────────────────────────
 
+## RWR 点射停顿（ai_burst_wait_time[_variance] 语义适配）：连射散布过热时
+## 下一箭前插入长停顿（持瞄 ×1.8~3.2 随机倍）等散布恢复——"会点射不无脑扫射"
+const BURST_HEAT_THRESHOLD := 0.8
+const BURST_WAIT_MULT := Vector2(1.8, 3.2)
+
+
 ## 拉弓瞄准节奏（SWL ArcherAi.ShouldAim/isAiming/GenerateNextShotRandomness 直译）。
 ## 档案 aim_hold 有值时：进入射程先"持瞄"高斯随机时长再放箭；换目标重掷。
 ## 返回 true = 持瞄结束可放箭（无瞄准档案的兵种直接放行）。
@@ -320,6 +326,10 @@ func _update_aim_rhythm(delta: float) -> bool:
 	if not _aiming:
 		_aiming = true
 		_aim_timer = _gauss((hold.x + hold.y) * 0.5, maxf(0.05, (hold.y - hold.x) / 3.0))
+		var weapon: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+		if weapon != null and weapon.has_method("get_sustained_fire_heat") \
+				and weapon.get_sustained_fire_heat() >= BURST_HEAT_THRESHOLD:
+			_aim_timer *= randf_range(BURST_WAIT_MULT.x, BURST_WAIT_MULT.y)
 	_aim_timer -= delta
 	return _aim_timer <= 0.0
 

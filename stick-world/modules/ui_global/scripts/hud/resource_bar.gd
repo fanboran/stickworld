@@ -67,7 +67,7 @@ func _build_ui() -> void:
 		# 数量
 		var qty_lbl := Label.new()
 		qty_lbl.text = "0"
-		qty_lbl.add_theme_font_size_override("font_size", 14)
+		qty_lbl.add_theme_font_size_override("font_size", StickTokens.FONT_HUD)
 		qty_lbl.add_theme_color_override("font_color", Color.WHITE)
 		entry.add_child(qty_lbl)
 		_labels[res["id"]] = qty_lbl

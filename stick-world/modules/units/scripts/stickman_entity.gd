@@ -679,7 +679,7 @@ func _handle_ai_input(delta: float) -> void:
 	_apply_movement(delta, dir, _ai_running, false)
 
 
-## 群体分离：扫描附近过近的单位（同图所有存活 CharacterBody2D），
+## 群体分离：扫描附近过近的单位（地图空间网格邻域查询），
 ## 距离越近推力越强，叠加到移动方向（RTS 单位移动标准做法，参考
 ## StickmanEntity 的 soft-body separation：位置推开 + 速度修正）。
 func _apply_separation(dir: Vector2) -> Vector2:
@@ -688,10 +688,10 @@ func _apply_separation(dir: Vector2) -> Vector2:
 	# 帧率优化：O(n²) 扫描隔物理帧跑（与静态分离共用帧计数）
 	if _sep_frame_counter % 2 != 0:
 		return dir
-	if not _map_ref.has_method("get_entities"):
+	if not _map_ref.has_method("query_neighbors"):
 		return dir
 	var push := Vector2.ZERO
-	for e in _map_ref.get_entities():
+	for e in _map_ref.query_neighbors(global_position, SEPARATION_RADIUS):
 		if e == self or not is_instance_valid(e):
 			continue
 		if not (e is CharacterBody2D):
@@ -718,10 +718,11 @@ func _apply_separation(dir: Vector2) -> Vector2:
 func _apply_static_separation() -> void:
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		return
-	if not _map_ref.has_method("get_entities"):
+	if not _map_ref.has_method("query_neighbors"):
 		return
 	var total_push := Vector2.ZERO
-	for e in _map_ref.get_entities():
+	# +8px 余量：网格位置是本帧重建时刻的快照，覆盖帧内已发生的位移
+	for e in _map_ref.query_neighbors(global_position, SEPARATION_RADIUS + 8.0):
 		if e == self or not is_instance_valid(e):
 			continue
 		if not (e is CharacterBody2D):
@@ -781,21 +782,32 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 
 # ─────────────────────────────── 渲染同步 ────────────────────────────────
 
-## 脚底接触阴影：径向渐变纹理压扁为椭圆，跟随 foot_offset（体型缩放同步）
+## 脚底接触阴影：径向渐变纹理压扁为椭圆，跟随 foot_offset（体型缩放同步）。
+## 纹理全单位共享一张（静态缓存）——此前每单位运行时生成一张 GradientTexture2D，
+## 196 单位混战=196 份冗余纹理与上传
+static var _contact_shadow_tex: GradientTexture2D = null
+
+
+static func _get_contact_shadow_tex() -> GradientTexture2D:
+	if _contact_shadow_tex == null:
+		var tex := GradientTexture2D.new()
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(0.5, 0.0)
+		tex.width = 64
+		tex.height = 64
+		var grad := Gradient.new()
+		grad.set_color(0, Color(0, 0, 0, 0.34))
+		grad.set_color(1, Color(0, 0, 0, 0.0))
+		tex.gradient = grad
+		_contact_shadow_tex = tex
+	return _contact_shadow_tex
+
+
 func _spawn_contact_shadow() -> void:
 	var spr := Sprite2D.new()
 	spr.name = "ContactShadow"
-	var tex := GradientTexture2D.new()
-	tex.fill = GradientTexture2D.FILL_RADIAL
-	tex.fill_from = Vector2(0.5, 0.5)
-	tex.fill_to = Vector2(0.5, 0.0)
-	tex.width = 64
-	tex.height = 64
-	var grad := Gradient.new()
-	grad.set_color(0, Color(0, 0, 0, 0.34))
-	grad.set_color(1, Color(0, 0, 0, 0.0))
-	tex.gradient = grad
-	spr.texture = tex
+	spr.texture = _get_contact_shadow_tex()
 	spr.scale = Vector2(0.9, 0.26)  # 压成椭圆
 	spr.position = Vector2(0.0, foot_offset + 2.0)
 	spr.z_index = -2  # 垫在身体与地图装饰之下
@@ -1183,7 +1195,7 @@ func _on_damaged(amount: float, source: Node) -> void:
 		return
 	# 受击硬直：被打瞬间 AI 短暂停滞（行业最佳实践 hit stun）
 	_hit_stun_timer = HIT_STUN_DURATION
-	# 受击音（Terraria Player_Hit 同构；AudioManager 重触发停旧实例 → 大团战不叠音墙）
+	# 受击音（SWL pain 痛叫三变体；AudioManager 重触发停旧实例 → 大团战不叠音墙）
 	if AudioManager != null:
 		AudioManager.play_event("unit_hurt")
 	# 攻击者在自身朝向侧 = 正面受击（后仰）；否则背面受击（前扑）

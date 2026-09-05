@@ -14,9 +14,8 @@ var _label: Label = null
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	_panel = PanelContainer.new()
+	_panel = SketchPanel.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_panel.add_theme_stylebox_override("panel", StickStyle.window_panel())
 	_label = Label.new()
 	_label.add_theme_font_size_override("font_size", StickTokens.FONT_TINY)
 	_panel.add_child(_label)

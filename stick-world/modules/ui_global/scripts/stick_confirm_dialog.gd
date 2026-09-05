@@ -30,25 +30,29 @@ func setup(title: String, message: String, on_confirm: Callable,
 	_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_dim)
 	# 居中窗口（anchor 归零 + 相对 dim 计算；Godot 的 position setter 配 anchor 会失效）
-	_window = PanelContainer.new()
-	_window.add_theme_stylebox_override("panel", StickStyle.window_panel())
-	_window.custom_minimum_size = Vector2(360, 0)
-	_dim.add_child(_window)
+	_window = StickKit.panel(_dim, SketchPanel.Tone.DARK)
+	_window.custom_minimum_size = Vector2(440, 0)
 	_window.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_window.resized.connect(func():
 		if is_instance_valid(_window) and is_instance_valid(_dim):
 			_window.position = (_dim.size - _window.size) * 0.5
 	)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", 14)
 	_window.add_child(box)
-	StickKit.label(box, title, StickKit.LabelKind.SECTION)
+	# 标题居中大字，消息居中自动换行，按钮居中成对——小确认框不摆官僚架势
+	var title_l := StickKit.label(box, title, StickKit.LabelKind.BODY)
+	title_l.add_theme_font_size_override("font_size", 18)
+	title_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var msg := StickKit.label(box, message, StickKit.LabelKind.BODY)
+	msg.modulate = StickTokens.TEXT_DIM
 	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var btn_row := StickKit.row(box, 8)
-	btn_row.alignment = BoxContainer.ALIGNMENT_END
-	StickKit.button(btn_row, "取消", close)
-	StickKit.button(btn_row, confirm_text, _on_confirm_pressed, kind)
+	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var btn_row := StickKit.row(box, 12)
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	StickKit.auto_button(btn_row, "取消", close, StickKit.ButtonKind.NORMAL, 34.0)
+	StickKit.auto_button(btn_row, confirm_text, _on_confirm_pressed, kind, 34.0)
 
 
 func _on_confirm_pressed() -> void:

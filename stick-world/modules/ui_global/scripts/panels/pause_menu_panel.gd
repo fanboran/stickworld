@@ -33,15 +33,15 @@ func setup(game_root: Node) -> void:
 
 ## 构建内容：动作按钮列表（继续/设置/存档/回主菜单）
 func _build_content() -> void:
-	StickKit.button(_body, "继续游戏", close, StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_LG)
-	StickKit.button(_body, "设置", _on_settings, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
-	StickKit.button(_body, "存档管理", _on_save_panel, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+	StickKit.sketch_button(_body, "继续游戏", close, StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_LG)
+	StickKit.sketch_button(_body, "设置", _on_settings, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+	StickKit.sketch_button(_body, "存档管理", _on_save_panel, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
 	# 帝国功能（空面板占位，内容留白但入口可达；系统接入后替换真实面板）
 	var sec := StickKit.section(_body, "帝国功能")
 	for entry in EMPIRE_ENTRIES:
-		StickKit.button(sec, entry["label"], _open_placeholder.bind(entry["id"]),
+		StickKit.sketch_button(sec, entry["label"], _open_placeholder.bind(entry["id"]),
 				StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
-	StickKit.button(_body, "保存并回到主菜单", _on_return_menu, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+	StickKit.sketch_button(_body, "保存并回到主菜单", _on_return_menu, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
 
 
 ## 打开帝国功能空面板（叠放在暂停菜单上：ModalOverlay 层序在暂停菜单之后，遮罩盖住它；

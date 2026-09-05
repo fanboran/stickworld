@@ -12,6 +12,7 @@ ground_y = 810.0
 ground_ratio = 0.25
 map_left = 0.0
 map_right = 4096.0
+sky_biome = "forest"
 ground_bottom = 1080.0
 
 [node name="PlacementGrid" type="Node" parent="."]

@@ -1,4 +1,4 @@
-extends PanelContainer
+extends SketchPanel
 class_name GranularityIndicator
 ## 战略图粒度指示器 —— 当前所处层级（L1/L2/L3）+ 按键操作提示
 ##
@@ -37,8 +37,8 @@ const LEVEL_TITLES := {
 
 
 func _ready() -> void:
-	theme = StickTheme.create()
-	add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	theme = StickTheme.create()  # 子控件字体/字色（面板底已由 SketchPanel 自绘）
+	tone = Tone.LIGHT
 	# 右上角停靠：StickKit.dock 设全量 anchors+offsets（SCREEN_MARGIN 安全边距，不贴边）。
 	# 不用 set_anchors_preset 单独设 anchors——它默认保持原视觉矩形，CanvasLayer 直下
 	# 首次布局时 offset 残留大负值会把面板拉成通栏。

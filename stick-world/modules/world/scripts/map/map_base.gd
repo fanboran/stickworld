@@ -23,6 +23,12 @@ extends Node2D
 @export var map_right: float = 8192.0
 ## 地面底部 Y（火柴人可走区域底部）
 @export var ground_bottom: float = 1080.0
+## 正下方水带开关（K2C 布局原型；Demo 阶段默认封印——战场 ground_y 偏高时
+## 水带会横在屏幕中央，且未适配缩放，待地面构图定稿后重做，见待办事项）
+@export var enable_water: bool = false
+## 天空背景地形组（Terraria 各地形一套独立贴图）：
+## "mountains"=纯远山（村落/战场/道路等开阔地）、"forest"=远山+森林树线
+@export var sky_biome: String = "mountains"
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var entity_host: Node2D = get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST)
@@ -42,6 +48,9 @@ func _ready() -> void:
 	# 火柴人 y-sort：Y 越大（越靠下）渲染越靠顶层
 	if entity_host != null:
 		entity_host.y_sort_enabled = true
+		# 实体进出树即失效缓存（spawn/死亡清理的当帧查询必须看到最新列表）
+		entity_host.child_entered_tree.connect(_invalidate_entity_cache)
+		entity_host.child_exiting_tree.connect(_invalidate_entity_cache)
 	# 建筑 y-sort（排序原点 = 基线，见各摆放处 y_sort_origin 设置）
 	if building_host != null:
 		building_host.y_sort_enabled = true
@@ -100,11 +109,58 @@ func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
 	return instance
 
 
-## 获取所有 StickmanEntity
+## 获取所有 StickmanEntity。
+## 性能（战斗优化）：每物理帧只重建一次缓存——此前每次调用都
+## entity_host.get_children() 新分配数组，196 单位混战时每帧几十次调用
+## 是显著的分配压力；树结构变化（spawn/queue_free）自动失效重建。
 func get_entities() -> Array:
-	if entity_host == null:
-		return []
-	return entity_host.get_children()
+	if _entity_cache_frame != Engine.get_physics_frames():
+		_rebuild_entity_cache()
+	return _entity_cache
+
+
+## 空间邻域查询（战斗性能优化核心）：统一网格（cell=GRID_CELL）按半径取候选，
+## 替代各单位逐帧对全实体列表的 O(n²) 线性扫描。网格与实体缓存同帧重建；
+## 位置为本帧网格重建时刻的快照（帧内位移 ≤ 单帧步长，查询半径留余量即可）。
+func query_neighbors(pos: Vector2, radius: float) -> Array:
+	if _entity_cache_frame != Engine.get_physics_frames():
+		_rebuild_entity_cache()
+	var out: Array = []
+	var min_c := Vector2i(floori((pos.x - radius) / GRID_CELL), floori((pos.y - radius) / GRID_CELL))
+	var max_c := Vector2i(floori((pos.x + radius) / GRID_CELL), floori((pos.y + radius) / GRID_CELL))
+	for cy in range(min_c.y, max_c.y + 1):
+		for cx in range(min_c.x, max_c.x + 1):
+			# 注：缺键返回 Nil（不能直接赋类型化 Array）；空键高频出现，避免 [] 缺省值分配
+			var cell = _entity_grid.get(Vector2i(cx, cy))
+			if cell != null:
+				out.append_array(cell)
+	return out
+
+
+# ─────────────────────────────── 实体缓存/空间网格（内部）────────────────────────────────
+## 网格边长（px）：略大于分离半径与近战威胁半径，3×3 邻域即可覆盖常用查询
+const GRID_CELL: float = 64.0
+var _entity_cache_frame: int = -1
+var _entity_cache: Array = []
+var _entity_grid: Dictionary = {}
+
+
+func _rebuild_entity_cache() -> void:
+	_entity_cache_frame = Engine.get_physics_frames()
+	_entity_cache = entity_host.get_children() if entity_host != null else []
+	_entity_grid.clear()
+	for e in _entity_cache:
+		if e == null or not is_instance_valid(e) or not e is Node2D:
+			continue
+		var key := Vector2i(
+				floori((e as Node2D).global_position.x / GRID_CELL),
+				floori((e as Node2D).global_position.y / GRID_CELL))
+		var cell: Array = _entity_grid.get_or_add(key, [])
+		cell.append(e)
+
+
+func _invalidate_entity_cache(_node: Node) -> void:
+	_entity_cache_frame = -1
 
 
 ## 获取玩家附身的实体（如有）

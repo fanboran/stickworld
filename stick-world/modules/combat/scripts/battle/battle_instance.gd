@@ -60,6 +60,8 @@ var _units_defender: Array = []
 var _state: State = State.PREPARING
 ## 战斗持续时长（秒）
 var _duration: float = 0.0
+## 胜负清点节流计时（每 0.5s 清点一次存活，替代每物理帧 O(n)×2 扫描）
+var _victory_check_timer: float = 0.0
 ## 进攻方伤亡数（死亡）
 var _casualties_attacker: int = 0
 ## 防守方伤亡数（死亡）
@@ -123,7 +125,12 @@ func _physics_process(delta: float) -> void:
 		var tai: ScriptTeamAi = _team_ai[faction]
 		if tai != null:
 			tai.tick(delta)
-	_check_victory()
+	# 胜负清点节流（战斗性能优化）：全灭判定每 0.5s 一次足够——
+	# 此前每物理帧两次 O(n) 存活扫描，196 人混战纯浪费
+	_victory_check_timer -= delta
+	if _victory_check_timer <= 0.0:
+		_victory_check_timer = 0.5
+		_check_victory()
 
 
 # ─────────────────────────────── 单位事件 ────────────────────────────────

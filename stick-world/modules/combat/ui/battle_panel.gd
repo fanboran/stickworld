@@ -99,7 +99,7 @@ func _build_ui() -> void:
 	var action_hbox := HBoxContainer.new()
 	action_hbox.add_theme_constant_override("separation", 6)
 	action_section.add_child(action_hbox)
-	_open_formation_btn = StickKit.button(action_hbox, "打开编制窗口", _on_open_formation_pressed)
+	_open_formation_btn = StickKit.sketch_button(action_hbox, "打开编制窗口", _on_open_formation_pressed)
 
 	# 分隔线
 	StickKit.vseparator(hbox)
@@ -109,11 +109,11 @@ func _build_ui() -> void:
 	var possess_hbox := HBoxContainer.new()
 	possess_hbox.add_theme_constant_override("separation", 6)
 	possess_section.add_child(possess_hbox)
-	_possess_btn = StickKit.button(possess_hbox, "附身选中单位", _on_possess_pressed)
+	_possess_btn = StickKit.sketch_button(possess_hbox, "附身选中单位", _on_possess_pressed)
 
 
 func _create_order_button(parent: Container, text: String, order_type: int) -> void:
-	var btn := StickKit.button(parent, text, Callable(self, "_on_order_pressed").bind(order_type))
+	var btn := StickKit.sketch_button(parent, text, Callable(self, "_on_order_pressed").bind(order_type))
 	_order_buttons[order_type] = btn
 
 

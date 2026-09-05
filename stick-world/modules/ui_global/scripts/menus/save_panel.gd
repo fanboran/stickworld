@@ -39,7 +39,7 @@ func _build_content() -> void:
 	_slot_container = VBoxContainer.new()
 	_slot_container.add_theme_constant_override("separation", 8)
 	_body.add_child(_slot_container)
-	StickKit.button(_footer, "关闭", close)
+	StickKit.auto_button(_footer, "关闭", close)
 
 
 func _refresh_slots() -> void:
@@ -74,12 +74,12 @@ func _create_slot_row(slot: int, info: Dictionary) -> HBoxContainer:
 	hbox.add_child(label)
 	# 保存按钮（只读模式隐藏）
 	if not read_only:
-		StickKit.button(hbox, "保存", _on_save.bind(slot), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+		StickKit.auto_button(hbox, "保存", _on_save.bind(slot), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 	# 读取按钮
-	var btn_load := StickKit.button(hbox, "读取", _on_load.bind(slot), StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_SM)
+	var btn_load := StickKit.auto_button(hbox, "读取", _on_load.bind(slot), StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_SM)
 	btn_load.disabled = not info.get("exists", false)
 	# 删除按钮
-	var btn_del := StickKit.button(hbox, "删除", _on_delete.bind(slot), StickKit.ButtonKind.DANGER, StickTokens.BTN_H_SM)
+	var btn_del := StickKit.auto_button(hbox, "删除", _on_delete.bind(slot), StickKit.ButtonKind.DANGER, StickTokens.BTN_H_SM)
 	btn_del.disabled = not info.get("exists", false)
 	return hbox
 

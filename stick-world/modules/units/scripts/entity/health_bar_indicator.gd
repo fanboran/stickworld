@@ -114,9 +114,11 @@ func set_faction(fid: int) -> void:
 
 func _process(delta: float) -> void:
 	_anim_time += delta
-	# boiling line：定期重掷扰动相位（手绘逐帧抖动感）
+	# boiling line：定期重掷扰动相位（手绘逐帧抖动感）。
+	# 战斗性能优化：仅掉过血（横条形态）才抖——满血圆点无抖动细节，
+	# 混战时 ~200 根满血条每 0.12s 的无条件重画（多边形重建+三角化）是纯浪费
 	_wobble_timer += delta
-	if _wobble_timer >= WOBBLE_INTERVAL:
+	if _wobble_timer >= WOBBLE_INTERVAL and _ever_damaged:
 		_wobble_timer = 0.0
 		_wobble_seed = randi()
 		queue_redraw()
@@ -159,6 +161,7 @@ func _on_healed(_amount: float) -> void:
 func _on_died() -> void:
 	_ratio = 0.0
 	visible = false
+	set_process(false)  # 战斗性能优化：死单位血条不再每帧跑 _process
 	queue_redraw()
 
 

@@ -69,7 +69,7 @@ func _build_content() -> void:
 	scroll.add_child(_content_vbox)
 	# 分类列按钮
 	for cat in SETTINGS_SCHEMA:
-		var btn := StickKit.button(_category_column, cat["title"],
+		var btn := StickKit.auto_button(_category_column, cat["title"],
 				_select_category.bind(cat["id"]), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_category_buttons[cat["id"]] = btn
@@ -77,11 +77,11 @@ func _build_content() -> void:
 	_init_values()
 	_select_category("game")
 	# 底栏：应用 / 恢复默认 / 回主菜单（仅游戏内）/ 关闭
-	StickKit.button(_footer, "恢复默认", _on_reset_defaults)
-	StickKit.button(_footer, "应用", _on_apply, StickKit.ButtonKind.ACCENT)
+	StickKit.auto_button(_footer, "恢复默认", _on_reset_defaults)
+	StickKit.auto_button(_footer, "应用", _on_apply, StickKit.ButtonKind.ACCENT)
 	if _game_root != null:
-		StickKit.button(_footer, "保存并回到主菜单", _on_return_to_menu_pressed)
-	StickKit.button(_footer, "关闭（ESC）", close)
+		StickKit.auto_button(_footer, "保存并回到主菜单", _on_return_to_menu_pressed)
+	StickKit.auto_button(_footer, "关闭（ESC）", close)
 
 
 ## 初始值：schema 默认（可被 ConfigManager 已存值覆盖）
@@ -110,11 +110,15 @@ func _normalize_stored_value(key: String, raw: Variant) -> Variant:
 
 func _select_category(cat_id: String) -> void:
 	_active_category = cat_id
-	# 分类按钮高亮（选中态琥珀描边）
+	# 分类按钮高亮：游戏内 SketchButton 切 kind（手绘琥珀描边）；
+	# 主菜单原生 Button 走 override（玻璃琥珀底）
 	for id in _category_buttons:
 		var btn: Button = _category_buttons[id]
-		if id == cat_id:
-			btn.add_theme_stylebox_override("normal", StickStyle.accent_normal())
+		var selected: bool = id == cat_id
+		if btn is SketchButton:
+			btn.kind = SketchButton.Kind.ACCENT if selected else SketchButton.Kind.NORMAL
+		elif selected:
+			btn.add_theme_stylebox_override("normal", GlassStyle.accent_normal())
 			btn.add_theme_color_override("font_color", StickTokens.ACCENT)
 		else:
 			btn.remove_theme_stylebox_override("normal")
@@ -174,7 +178,7 @@ func _add_speed_buttons() -> void:
 		"4x": TimeManager.Speed.X4,
 	}
 	for label_text: String in speed_map.keys():
-		var btn := StickKit.button(row, label_text, func():
+		var btn := StickKit.auto_button(row, label_text, func():
 			if TimeManager != null:
 				TimeManager.set_speed(speed_map[label_text])
 		, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
@@ -349,7 +353,7 @@ func _get_registered_map_ids() -> Array:
 
 
 func _add_map_button(map_id: String) -> void:
-	var btn := StickKit.button(_content_vbox, "前往 %s" % MAP_DISPLAY_NAMES.get(map_id, map_id),
+	var btn := StickKit.auto_button(_content_vbox, "前往 %s" % MAP_DISPLAY_NAMES.get(map_id, map_id),
 			_on_map_selected.bind(map_id), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 

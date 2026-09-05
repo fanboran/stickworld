@@ -257,12 +257,27 @@ static func _ramp_tex(grad: Gradient) -> Texture2D:
 
 # ─────────────────────────────── 伤害飘字（Demo 打磨包）────────────────────────────────
 
-## 在目标头顶飘伤害数字（白=普通 / 金=暴击·爆头）；0.7s 上浮淡出自毁。
+## 飘字复用池（战斗性能优化：混战每秒几十次 Label.new+Tween 创建销毁，
+## 池化后 Label 只建一次反复改文本/位置重飘；场景切换后失效引用自动丢弃）
+static var _damage_text_pool: Array = []
+
+## 在目标头顶飘伤害数字（白=普通 / 金=暴击·爆头）；0.7s 上浮淡出后回池。
 ## combat 管线（DamagePipeline.apply）结算后调用；fx 挂目标宿主层，不进战斗逻辑。
 static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit: bool) -> void:
 	if tree == null or tree.current_scene == null:
 		return
-	var label := Label.new()
+	var label: Label = null
+	if not _damage_text_pool.is_empty():
+		label = _damage_text_pool.pop_back()
+		if not is_instance_valid(label):
+			label = null
+	if label == null:
+		label = Label.new()
+		label.add_theme_constant_override("outline_size", 4)
+		label.z_index = 90
+		# deferred：伤害结算发生在物理帧内，同帧改树会挤掉其他节点的帧处理（血条时序交扰）
+		tree.current_scene.add_child.call_deferred(label)
+	label.visible = true
 	label.text = str(int(round(amount)))
 	label.add_theme_font_size_override("font_size", 22 if crit else 15)
 	if crit:
@@ -271,16 +286,17 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 	else:
 		label.add_theme_color_override("font_color", Color(0.95, 0.95, 0.98))
 		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	label.add_theme_constant_override("outline_size", 4)
-	label.z_index = 90
-	# deferred：伤害结算发生在物理帧内，同帧改树会挤掉其他节点的帧处理（血条时序交扰）
-	tree.current_scene.add_child.call_deferred(label)
-	label.global_position = pos + Vector2(randf_range(-14.0, 14.0), -56.0)
+	# current_scene 在原点，local==global；随机水平偏移防数字完全重叠
+	label.position = pos + Vector2(randf_range(-14.0, 14.0), -56.0)
+	label.modulate.a = 1.0
 	var tween := label.create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(label, "position:y", label.position.y - 44.0, 0.7).set_ease(Tween.EASE_OUT)
 	tween.tween_property(label, "modulate:a", 0.0, 0.45).set_delay(0.25)
-	tween.chain().tween_callback(label.queue_free)
+	tween.chain().tween_callback(func() -> void:
+		if is_instance_valid(label):
+			label.visible = false
+			_damage_text_pool.append(label))
 
 
 ## 挥砍剑光弧 —— 命中帧在攻击者朝向画一道渐隐弧光（白/金），0.16s 消散。

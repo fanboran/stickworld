@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://c3rcx8nmhgudt"]
+
+[ext_resource type="Script" path="res://tests/dev/sketch_compare.gd" id="1"]
+
+[node name="SketchCompare" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1")

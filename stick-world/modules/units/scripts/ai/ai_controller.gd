@@ -343,17 +343,45 @@ func _is_meric() -> bool:
 func _is_under_threat(bi: Node) -> bool:
 	if _entity == null or not is_instance_valid(_entity):
 		return false
+	return _count_enemies_near(_entity.global_position, THREAT_RANGE, bi) > 0
+
+
+## 半径内存活敌对单位数（战斗性能优化：地图空间网格邻域查询，
+## 替代对战斗敌对列表的全量线性扫描；未参战/无地图网格时回落旧全扫路径）
+func _count_enemies_near(pos: Vector2, radius: float, bi: Node) -> int:
+	if _entity == null or not is_instance_valid(_entity):
+		return 0
+	var faction: int = _entity.get_faction() if _entity.has_method("get_faction") else 0
+	var map: Node = _entity.get_map() if _entity.has_method("get_map") else null
+	if faction != 0 and map != null and is_instance_valid(map) and map.has_method("query_neighbors"):
+		var n: int = 0
+		for e in map.query_neighbors(pos, radius + 8.0):
+			if e == null or not is_instance_valid(e) or e == _entity:
+				continue
+			if not (e is CharacterBody2D):
+				continue
+			if e.has_method("is_dead") and e.is_dead():
+				continue
+			if not e.has_method("get_faction"):
+				continue
+			var ef: int = e.get_faction()
+			if ef == 0 or ef == faction:
+				continue
+			if pos.distance_to(e.global_position) <= radius:
+				n += 1
+		return n
+	# 回落：战斗实例敌对列表全扫（旧语义，测试桩/中立目标路径）
 	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_enemies_of"):
-		return false
-	var pos: Vector2 = _entity.global_position
-	for e in bi.get_enemies_of(_entity.get_faction()):
+		return 0
+	var n2: int = 0
+	for e in bi.get_enemies_of(faction):
 		if e == null or not is_instance_valid(e):
 			continue
 		if e.has_method("is_dead") and e.is_dead():
 			continue
-		if pos.distance_to(e.global_position) <= THREAT_RANGE:
-			return true
-	return false
+		if pos.distance_to(e.global_position) <= radius:
+			n2 += 1
+	return n2
 
 
 ## 9i+ 逃开后再战 + 前排试探接敌（P6 批次 7c，design §2.1.3.6 #1/#4）。
@@ -435,19 +463,10 @@ func _compute_state_modifiers(bi: Node, health: Node) -> Dictionary:
 	if health != null:
 		mods["low_hp"] = health.has_method("get_hp_ratio") and health.get_hp_ratio() < RAGE_LOW_HP
 		mods["routing"] = health.has_method("is_routed") and health.is_routed()
-	# 被围：SURROUND_RANGE 内敌对单位数 >= SURROUND_MIN
-	if bi != null and bi.has_method("get_enemies_of"):
-		var enemies: Array = bi.get_enemies_of(_entity.get_faction())
-		var near: int = 0
-		var pos: Vector2 = _entity.global_position
-		for e in enemies:
-			if e == null or not is_instance_valid(e):
-				continue
-			if e.has_method("is_dead") and e.is_dead():
-				continue
-			if pos.distance_to(e.global_position) <= SURROUND_RANGE:
-				near += 1
-		mods["surrounded"] = near >= SURROUND_MIN
+	# 被围：SURROUND_RANGE 内敌对单位数 >= SURROUND_MIN（空间网格邻域查询）
+	if bi != null:
+		mods["surrounded"] = _count_enemies_near(
+				_entity.global_position, SURROUND_RANGE, bi) >= SURROUND_MIN
 	# 背墙：身后（朝向反方向）WALL_LOOKBACK 距离内有掩体
 	if bi != null and bi.has_method("get_cover"):
 		# CoverSystem 是 RefCounted（纯逻辑），注解用 Variant 防类型不匹配报错

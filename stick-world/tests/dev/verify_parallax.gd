@@ -31,10 +31,10 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 
-	# 记录山层当前位置（factor 0.55）与云（0.55 漂移另有）
+	# 记录远山层当前位置（Terraria BackMountains：视差 0.15，modulo 回绕平铺）
 	var mountains: Sprite2D = null
 	for c in sky.get_children():
-		if c is Sprite2D and c.texture != null and c.texture.resource_path.contains("mountains"):
+		if c is Sprite2D and c.texture != null and c.texture.resource_path.contains("mountain"):
 			mountains = c
 			break
 	if mountains == null:
@@ -56,13 +56,18 @@ func _ready() -> void:
 	var cx1: float = cam.global_position.x
 	var moved: float = mx1 - mx0
 	var cam_moved: float = cx1 - cx0
-	var expect: float = cam_moved * (1.0 - 0.55)
-	print("[PARALLAX] cam_moved=%.0f mountains_moved=%.0f expect=%.0f" % [cam_moved, moved, expect])
-	if not (absf(moved - expect) < 30.0 and absf(moved) > 50.0):
+	var expect: float = cam_moved * (1.0 - 0.15)
+	# modulo 回绕平铺：位移与期望的差是 tile 宽的整数倍（层 sprite 相位在 [0,tile_w) 回绕）
+	var tile_w: float = mountains.texture.get_width() * mountains.scale.x
+	var drift: float = fmod(moved - expect, tile_w)
+	drift = minf(absf(drift), absf(drift - tile_w))
+	print("[PARALLAX] cam_moved=%.0f mountains_moved=%.0f expect=%.0f tile_w=%.0f drift=%.1f"
+			% [cam_moved, moved, expect, tile_w, drift])
+	if not (drift < 30.0 and absf(moved) > 50.0):
 		print("[FAIL] 视差不符")
 		get_tree().quit(1)
 		return
-	print("[OK] 视差生效（山层按 55%% 因子跟随）")
+	print("[OK] 视差生效（远山按 Terraria 0.15 视差 + modulo 回绕平铺）")
 
 	# ── 天空生命感（星野/月亮/飞鸟/萤火虫）──
 	var stars: Node = sky.get_node_or_null("Stars")

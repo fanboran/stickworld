@@ -327,8 +327,16 @@ func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
 
 
 func _process(delta: float) -> void:
-	_update_hud()
+	# HUD 存活计数节流 0.25s（战斗性能优化：每帧 O(n) 双列表扫描不参与观察）
+	_hud_timer -= delta
+	if _hud_timer <= 0.0:
+		_hud_timer = 0.25
+		_update_hud()
 	_update_camera(delta)
+
+
+## HUD 节流计时
+var _hud_timer: float = 0.0
 
 
 ## 质心跟随（审计 P0-6：每帧 lerp 平滑，替代旧 0.5s 定时器硬切）
@@ -383,21 +391,30 @@ func _build_hud() -> void:
 	layer.name = "ArenaHud"
 	layer.layer = 50
 	add_child(layer)
-	_left_alive_label = _make_label(layer, Vector2(16, 16), Color(0.55, 0.75, 1.0))
-	_right_alive_label = _make_label(layer, Vector2(16, 42), Color(1.0, 0.62, 0.55))
-	_hint_label = _make_label(layer, Vector2(16, 72), Color(0.8, 0.8, 0.8))
+	# 主题容器：整层吃 StickTheme（手写字体 + Flat 兜底），别再裸 Label
+	var ui_root := Control.new()
+	ui_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ui_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.theme = StickTheme.create()
+	layer.add_child(ui_root)
+	# 左上战况板：手绘面板托底（浮在画面上不与场景亮部打架），token 字号
+	var board := SketchPanel.new()
+	board.tone = SketchPanel.Tone.LIGHT
+	# 避让左上常驻的 debug 启动图例（约 y12-120）：从 y132 起
+	board.position = Vector2(16, 132)
+	board.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(board)
+	var board_v := VBoxContainer.new()
+	board_v.add_theme_constant_override("separation", 4)
+	board.add_child(board_v)
+	_left_alive_label = _make_label(board_v, Vector2.ZERO, Color(0.55, 0.75, 1.0), StickTokens.FONT_HUD)
+	_right_alive_label = _make_label(board_v, Vector2.ZERO, Color(1.0, 0.62, 0.55), StickTokens.FONT_HUD)
+	_hint_label = _make_label(board_v, Vector2.ZERO, Color(0.8, 0.8, 0.8), StickTokens.FONT_HINT)
 	_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
 	# 控制面板（底部居中）：对战预设按钮组 + 重开按钮——点按立即重开
-	var panel := PanelContainer.new()
+	var panel := SketchPanel.new()
 	panel.name = "ControlPanel"
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.08, 0.1, 0.75)
-	sb.set_corner_radius_all(6)
-	sb.content_margin_left = 10.0
-	sb.content_margin_right = 10.0
-	sb.content_margin_top = 6.0
-	sb.content_margin_bottom = 6.0
-	panel.add_theme_stylebox_override("panel", sb)
+	panel.tone = SketchPanel.Tone.LIGHT
 	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -407,18 +424,13 @@ func _build_hud() -> void:
 	row.add_theme_constant_override("separation", 8)
 	panel.add_child(row)
 	for pi in PRESETS.size():
-		var btn := Button.new()
-		btn.text = "%d·%s" % [pi + 1, PRESETS[pi]["name"]]
-		btn.add_theme_font_size_override("font_size", 15)
-		btn.pressed.connect(_switch_preset.bind(pi))
+		var btn := StickKit.sketch_button(row, "%d·%s" % [pi + 1, PRESETS[pi]["name"]],
+				_switch_preset.bind(pi), StickKit.ButtonKind.NORMAL, 30.0)
 		btn.toggle_mode = true
-		row.add_child(btn)
 		_preset_buttons.append(btn)
-	var restart := Button.new()
-	restart.text = "重开 (R)"
-	restart.add_theme_font_size_override("font_size", 15)
-	restart.pressed.connect(func() -> void: get_tree().reload_current_scene())
-	row.add_child(restart)
+	StickKit.sketch_button(row, "重开 (R)",
+			func() -> void: get_tree().reload_current_scene(),
+			StickKit.ButtonKind.NORMAL, 30.0)
 	_refresh_preset_buttons()
 
 
@@ -430,12 +442,11 @@ func _refresh_preset_buttons() -> void:
 		btn.disabled = pi == _preset_idx
 
 
-func _make_label(layer: CanvasLayer, pos: Vector2, color: Color) -> Label:
+func _make_label(parent: Control, _pos: Vector2, color: Color, size: int) -> Label:
 	var l := Label.new()
-	l.position = pos
-	l.add_theme_font_size_override("font_size", 18)
+	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
-	layer.add_child(l)
+	parent.add_child(l)
 	return l
 
 

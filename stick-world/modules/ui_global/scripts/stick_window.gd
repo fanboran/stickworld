@@ -37,11 +37,9 @@ func _ready() -> void:
 func _build_window() -> void:
 	# 根不拦截鼠标 → 面板外事件穿透到游戏（可交互）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_panel = PanelContainer.new()
-	_panel.add_theme_stylebox_override("panel", StickStyle.window_panel())
+	_panel = StickKit.panel(self, SketchPanel.Tone.DARK)  # 工厂内部已挂载
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_panel.custom_minimum_size = window_size
-	add_child(_panel)
 	_position_panel()
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
@@ -57,11 +55,9 @@ func _build_window() -> void:
 	title_bar.add_child(title)
 	if behavior == Behavior.FLOATING:
 		title_bar.gui_input.connect(_on_title_input)
-	var close_btn := Button.new()
-	close_btn.text = "✕"
+	var close_btn := StickKit.auto_button(title_bar, "✕", close,
+			StickKit.ButtonKind.NORMAL, 30.0)
 	close_btn.custom_minimum_size = Vector2(30, 30)
-	close_btn.pressed.connect(close)
-	title_bar.add_child(close_btn)
 	# 内容区
 	_body = VBoxContainer.new()
 	_body.add_theme_constant_override("separation", 8)

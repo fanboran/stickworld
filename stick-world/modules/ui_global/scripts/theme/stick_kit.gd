@@ -52,16 +52,38 @@ static func button(parent: Control, text: String, callback: Callable = Callable(
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, height)
+	_setup_button(b, callback, kind)
+	parent.add_child(b)
+	return b
+
+
+## 手绘按钮（游戏内默认）：boiling 自绘四态底，交互行为与 button() 完全一致
+static func sketch_button(parent: Control, text: String, callback: Callable = Callable(),
+		kind: ButtonKind = ButtonKind.NORMAL, height: float = StickTokens.BTN_H) -> SketchButton:
+	var b := SketchButton.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(0, height)
+	_setup_button(b, callback, kind)
+	parent.add_child(b)
+	return b
+
+
+## 按钮公共装配：点击音 + kind 文字色 + hover 微缩放
+static func _setup_button(b: Button, callback: Callable, kind: ButtonKind) -> void:
 	# 统一 UI 点击音（AudioManager 框架先行，资产未就位时静默跳过）
 	b.pressed.connect(func() -> void:
 		if AudioManager and AudioManager.has_method("play_event"):
 			AudioManager.play_event("ui_click"))
 	match kind:
 		ButtonKind.ACCENT:
+			# Flat override：对原生 Button 生效；SketchButton 在 _ready 用 Empty 覆盖后自绘
 			b.add_theme_stylebox_override("normal", StickStyle.accent_normal())
 			b.add_theme_stylebox_override("hover", StickStyle.accent_hover())
 			b.add_theme_stylebox_override("pressed", StickStyle.accent_pressed())
 			b.add_theme_color_override("font_color", StickTokens.ACCENT)
+			# 琥珀字加黑描边：深底亮底都可读（血条"亮色+黑描边"同语言）
+			b.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.03, 0.9))
+			b.add_theme_constant_override("outline_size", 3)
 		ButtonKind.DANGER:
 			b.add_theme_stylebox_override("normal", StickStyle.danger_normal())
 			b.add_theme_stylebox_override("hover", StickStyle.danger_hover())
@@ -69,7 +91,7 @@ static func button(parent: Control, text: String, callback: Callable = Callable(
 	if callback.is_valid():
 		b.pressed.connect(callback)
 	# hover 微缩放（精致细节：按钮"浮起"感；pivot 居中避免缩放偏移）
-	b.pivot_offset = Vector2(0, height * 0.5)
+	b.pivot_offset = Vector2(0, b.custom_minimum_size.y * 0.5)
 	b.mouse_entered.connect(func() -> void:
 		if AudioManager and AudioManager.has_method("play_event"):
 			AudioManager.play_event("ui_hover")
@@ -78,8 +100,6 @@ static func button(parent: Control, text: String, callback: Callable = Callable(
 	b.mouse_exited.connect(func() -> void:
 		var tw := b.create_tween()
 		tw.tween_property(b, "scale", Vector2.ONE, 0.1))
-	parent.add_child(b)
-	return b
 
 
 # ─────────────────────────────── 区块 ────────────────────────────────
@@ -101,13 +121,34 @@ static func row(parent: Control, separation: int = 8) -> HBoxContainer:
 	return h
 
 
-static func separator(parent: Control) -> void:
-	parent.add_child(HSeparator.new())
-
-
 ## 竖直分隔线（横向 HUD 行内分节用，替代旧 PanelKit.add_separator）
 static func vseparator(parent: Control) -> void:
 	parent.add_child(VSeparator.new())
+
+
+## 水平分隔线：手绘波浪线
+static func separator(parent: Control) -> void:
+	var sep := SketchSeparator.new()
+	sep.direction = SketchSeparator.Dir.HORIZONTAL
+	parent.add_child(sep)
+
+
+# ─────────────────────────────── 皮肤路由 ────────────────────────────────
+# 手绘涂鸦是全局唯一皮肤（主菜单与游戏内统一）；auto_* 是历史名保留的别名。
+# 玻璃样式（GlassStyle）仅存于 theme 兜底与对照陈列。
+
+## 面板：直出手绘 SketchPanel（DARK/LIGHT）
+static func panel(parent: Control, tone: int = 0) -> PanelContainer:
+	var p := SketchPanel.new()
+	p.tone = tone
+	parent.add_child(p)
+	return p
+
+
+## 按钮：直出手绘 SketchButton（auto_button 为旧调用名保留）
+static func auto_button(parent: Control, text: String, callback: Callable = Callable(),
+		kind: ButtonKind = ButtonKind.NORMAL, height: float = StickTokens.BTN_H) -> Button:
+	return sketch_button(parent, text, callback, kind, height)
 
 
 # ─────────────────────────────── 键值行 ────────────────────────────────
@@ -223,8 +264,7 @@ static func _system_overlay(layer: Control) -> Control:
 ## 在指定层弹一条 toast（自动淡出销毁）。底部居中。
 static func toast(layer: Control, text: String, kind: String = "info") -> void:
 	layer = _system_overlay(layer)
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", StickStyle.window_panel())
+	var panel := panel(layer, SketchPanel.Tone.DARK)
 	var l := label(panel, text, LabelKind.BODY,
 			StickTokens.INFO if kind == "info" else (StickTokens.WARN if kind == "warn" else StickTokens.DANGER))
 	l.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)

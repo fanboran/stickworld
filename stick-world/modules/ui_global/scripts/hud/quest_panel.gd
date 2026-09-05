@@ -1,4 +1,4 @@
-extends PanelContainer
+extends SketchPanel
 ## Demo 阶段目标卡 —— 右上角常驻小卡：当前目标 + 进度 + 已完成列表。
 ##
 ## 纯被动显示部件：由 DemoQuest（装配逻辑组件）调用 show_quest / mark_done 驱动，
@@ -19,9 +19,10 @@ func _ready() -> void:
 	offset_right = -16.0
 	offset_top = 132.0
 	grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	super._ready()  # SketchPanel：手绘底 + 沸腾
+	tone = Tone.LIGHT
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	custom_minimum_size = Vector2(282, 0)
-	add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 5)

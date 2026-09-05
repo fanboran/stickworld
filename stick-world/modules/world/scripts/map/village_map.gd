@@ -106,13 +106,14 @@ func _ready() -> void:
 	_mount_sky_decor()
 
 
-## 天空装饰层（远山平铺 + 漂移云，Demo 精品感；贴图程序化生成见 tools/ai/gen_sky_decor.py）
+## 天空装饰层（Terraria 原版贴图多层视差背景，按地形选组；贴图提取见 tools/ai/extract_terraria_sky.py）
 func _mount_sky_decor() -> void:
 	var sky := SkyDecor.new()
 	sky.name = "SkyDecor"
 	sky.horizon_y = ground_y
 	sky.map_left = map_left
 	sky.map_right = map_right
+	sky.biome = sky_biome
 	add_child(sky)
 	# 环境浮尘（空气感；相机视野内 60 粒微光）
 	var motes := AmbientMotes.new()
@@ -123,13 +124,15 @@ func _mount_sky_decor() -> void:
 	flies.name = "Fireflies"
 	add_child(flies)
 	# 正下方水（K2C 布局：水面在可行走区域正下方横贯全图——单位站堤岸、
-	# 水在脚下；镜像倒影映天景，水线滚动白沫）
-	var water := Pond.new()
-	water.name = "WaterBelow"
-	water.pond_width = (map_right - map_left) + 1000.0
-	water.pond_depth = 170.0
-	water.position = Vector2(map_left - 500.0, ground_y + 120.0)
-	add_child(water)
+	# 水在脚下；镜像倒影映天景，水线滚动白沫）。战场（enable_water=false）
+	# 不挂——ground_y=432 时水带会横在屏幕中央
+	if enable_water:
+		var water := Pond.new()
+		water.name = "WaterBelow"
+		water.pond_width = (map_right - map_left) + 1000.0
+		water.pond_depth = 170.0
+		water.position = Vector2(map_left - 500.0, ground_y + 120.0)
+		add_child(water)
 	# 天气（Terraria 式降雨状态机：斜线雨 + 雨声循环 + 云层加浓；开局 90s 保护）
 	var weather := Weather.new()
 	weather.name = "Weather"

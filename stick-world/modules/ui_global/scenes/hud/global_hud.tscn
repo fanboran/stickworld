@@ -1,7 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" uid="uid://bhvemj6s8akro" path="res://modules/ui_global/scripts/hud/global_hud.gd" id="2_hud"]
 [ext_resource type="Script" uid="uid://cn4f70s21pher" path="res://modules/ui_global/scripts/hud/clock_widget.gd" id="5_clock"]
+[ext_resource type="Script" path="res://modules/ui_global/scripts/sketch/sketch_panel.gd" id="4_sketchpanel"]
+[ext_resource type="Script" path="res://modules/ui_global/scripts/sketch/sketch_gear_button.gd" id="6_gear"]
 
 [node name="GlobalHUD" type="Control" unique_id=381952387]
 layout_mode = 3
@@ -28,21 +30,17 @@ theme_override_constants/margin_bottom = 8
 layout_mode = 2
 theme_override_constants/separation = 24
 
+[node name="SettingsButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787555]
+layout_mode = 2
+custom_minimum_size = Vector2(36, 36)
+size_flags_vertical = 4
+script = ExtResource("6_gear")
+
 [node name="SpeedLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=1073199118]
 layout_mode = 2
 vertical_alignment = 1
 text = "速度: 1x"
 
-[node name="SettingsButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787555]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 30)
-size_flags_vertical = 4
-text = "⚙"
-
-[node name="TimeLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=238169416]
-layout_mode = 2
-vertical_alignment = 1
-text = "时间: 08:00"
 
 [node name="CenteredButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787552]
 layout_mode = 2
@@ -70,6 +68,21 @@ offset_top = 64.0
 offset_right = 8.0
 offset_bottom = 64.0
 mouse_filter = 2
+tone = 1
+script = ExtResource("4_sketchpanel")
+
+[node name="TimeLabel" type="Label" parent="." unique_id=238169416]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -104.0
+offset_top = 80.0
+offset_right = -8.0
+offset_bottom = 102.0
+grow_horizontal = 0
+horizontal_alignment = 2
+text = "时间: 08:00"
 
 [node name="ClockWidget" type="Control" parent="." unique_id=691686855]
 layout_mode = 1

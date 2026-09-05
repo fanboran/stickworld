@@ -55,6 +55,11 @@ func _append(rects: Array, label: String, node: CanvasItem) -> void:
 		return  # 世界空间指示器不参与屏幕矩形断言
 	if r.size.length() < 4.0:
 		return
+	# 全屏布局根（BuildMenu/DebugInfoPanel 等铺满视口的容器）不算可视部件：
+	# 它们与一切的"重叠"只是容器包含，真实按钮/内容自有局部定位
+	var vp := node.get_viewport_rect().size if node is Control else Vector2(1920, 1080)
+	if r.size.x * r.size.y > vp.x * vp.y * 0.5:
+		return
 	rects.append([label, r])
 
 

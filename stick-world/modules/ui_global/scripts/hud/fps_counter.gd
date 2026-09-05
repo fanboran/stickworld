@@ -9,10 +9,11 @@ var _timer: float = 0.0
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	# 钟表(y12-76) → 时间文字(y80-102) → FPS 再往下，右上纵向三件套
 	offset_left = -80.0
-	offset_top = 84.0
+	offset_top = 108.0
 	offset_right = -12.0
-	offset_bottom = 104.0
+	offset_bottom = 128.0
 	horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	modulate = StickTokens.TEXT_DIM

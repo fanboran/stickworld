@@ -17,12 +17,12 @@ var fade_seconds: float = StickTokens.T_PANEL
 
 
 func _ready() -> void:
-	# 左下角：贴左 12px、离底 12px、高 228px（自设 anchor，不依赖父级布局）
+	# 左下角：贴左 12px、离底 96px（避让底部 ModePanel 高 78 + 空隙）
 	set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	offset_left = 12.0
-	offset_top = -240.0
+	offset_top = -324.0
 	offset_right = 380.0
-	offset_bottom = -12.0
+	offset_bottom = -96.0
 	grow_horizontal = Control.GROW_DIRECTION_END
 	grow_vertical = Control.GROW_DIRECTION_BEGIN
 	# 新通知贴底；HUD 部件不拦截输入

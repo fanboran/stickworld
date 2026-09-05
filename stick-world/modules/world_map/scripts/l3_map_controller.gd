@@ -24,6 +24,14 @@ var _indicator: GranularityIndicator = null
 ## 视图名牌（CanvasLayer 直接子节点，同批显隐；open 时喂"大世界 · N 地区"）
 var _title_bar: MapTitleBar = null
 
+## 全屏海洋背景（CanvasLayer 首个子节点，z 最低）。显隐跟 M 会话而非 Content：
+## 下钻 L2 时保留（L2 层号 102 更高，内容盖在其上，下钻仍在全屏海洋会话内）
+var _ocean_background: Control = null
+
+## 全屏初始缩放的上下限位余量（屏幕像素）：初始地图高度 = 视口高 + 2×余量，
+## 打开即满足"上下边界不进屏"，同时作为相机 min_zoom 的锁定值（再缩小边界必进屏）
+const FIT_BUFFER := 64.0
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放状态）
 var _view_initialized: bool = false
 
@@ -72,6 +80,8 @@ func _auto_find_components() -> void:
 		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
 	if _title_bar == null:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
+	if _ocean_background == null:
+		_ocean_background = MapControllerUtil.find_sibling(self, "OceanBackground")
 
 
 func _input(event: InputEvent) -> void:
@@ -146,12 +156,12 @@ func _on_l2_back() -> void:
 		_title_bar.visible = true
 
 
-## 打开 L3 地图（M 键触发）
+## 打开 L3 地图（M 键触发）—— 全屏海洋底（场景图不再透出）
 ## 保留上次状态：相机位置/缩放不变；若上次关闭时在 L2 视图内，恢复 L2 显示
 func open() -> void:
+	_set_ocean_background_visible(true)
 	if not _view_initialized:
 		_view_initialized = true
-		# 初始视角：默认缩放 0.36（看更大范围），屏幕中心 = 地图中心
 		var map_size := 2048.0
 		if map_renderer != null and map_renderer.get_data() != null:
 			map_size = float(map_renderer.get_data().size)
@@ -159,12 +169,24 @@ func open() -> void:
 			var vp := get_viewport()
 			if vp != null:
 				var vp_size: Vector2 = vp.get_visible_rect().size
-				map_camera.set_zoom(0.36)
-				# 默认缩放 0.36 = 100%（HUD 百分比按此归一化显示）
+				# 全屏适配缩放：地图高度 = 视口高 + 上下限位余量（初始即"边界不进屏"，
+				# 余量外是同色海洋背景，全屏观感）。同时锁定 min_zoom——再缩小则上下
+				# 边界必然进入屏幕，与限位目标矛盾
+				var fit_zoom: float = (vp_size.y + FIT_BUFFER * 2.0) / map_size
+				map_camera.min_zoom = fit_zoom
+				map_camera.set_zoom(fit_zoom)
+				# 全屏适配 = 100%（HUD 百分比按此归一化显示）
 				if _zoom_indicator != null and _zoom_indicator.has_method("set_default_zoom"):
-					_zoom_indicator.set_default_zoom(0.36)
+					_zoom_indicator.set_default_zoom(fit_zoom)
+				# 相机限位：上下严格（边界外扩余量不进屏）/ 左右宽松（宽屏下地图窄于
+				# 视口时两侧露出同色海洋，仅防地图被完全移出屏幕）
+				if map_camera.has_method("set_viewport_clamp"):
+					map_camera.set_viewport_clamp(MapCamera.ClampMode.CLAMP_LOOSE,
+							MapCamera.ClampMode.CLAMP_STRICT,
+							Rect2(0.0, 0.0, map_size, map_size), FIT_BUFFER)
 				if map_camera.has_method("set_offset"):
-					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size * 0.36 * 0.5, map_size * 0.36 * 0.5))
+					# 初始地图居中（上下各留余量在屏外，左右居中对称）
+					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size, map_size) * fit_zoom * 0.5)
 	if _l2_active and l2_view != null:
 		# 恢复 L2 视图（相机状态保留），L3 保持隐藏（指示条隐藏）
 		visible = false
@@ -190,8 +212,9 @@ func open() -> void:
 			_title_bar.visible = true
 
 
-## 关闭 L3 地图（ESC / M 键）
+## 关闭 L3 地图（ESC / M 键）—— 收起海洋背景，回场景图
 func close() -> void:
+	_set_ocean_background_visible(false)
 	if _zoom_indicator != null:
 		_zoom_indicator.visible = false
 	if _indicator != null:
@@ -219,3 +242,9 @@ func _update_title_bar() -> void:
 		n_regions = map_renderer.get_data().regions.size()
 	var subtitle := "%d 地区" % n_regions if n_regions > 0 else ""
 	_title_bar.set_content("L3", "大世界", subtitle)
+
+
+## 海洋背景显隐（open/close 调用；下钻 L2 / L2 返回不调用 = 会话内常显）
+func _set_ocean_background_visible(v: bool) -> void:
+	if _ocean_background != null:
+		_ocean_background.visible = v

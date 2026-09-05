@@ -67,7 +67,12 @@ func set_default_zoom(z: float) -> void:
 	default_zoom = z
 	if _slider != null:
 		_block_slider_signal = true
-		_slider.min_value = default_zoom * MIN_MULT
+		# 滑块下限不得低于相机硬限（如 L3 全屏模式 min_zoom=适配缩放），
+		# 否则滑块可设出被相机 clamp 拒绝的值，显示与实际缩放脱节
+		var cam_min := 0.0
+		if _camera != null and "min_zoom" in _camera:
+			cam_min = float(_camera.min_zoom)
+		_slider.min_value = maxf(default_zoom * MIN_MULT, cam_min)
 		_slider.max_value = default_zoom * MAX_MULT
 		# 直接落到当前相机缩放，避免 range clamp 触发 value_changed 反向写相机
 		var cur: float = _camera.get_zoom() if _camera != null and _camera.has_method("get_zoom") else z

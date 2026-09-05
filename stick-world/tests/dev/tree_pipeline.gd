@@ -240,7 +240,11 @@ static func _gen_tree_struct(rng: RandomNumberGenerator, P: Dictionary) -> Dicti
 			"r": r_main * rng.randf_range(0.30, 0.45)})
 	for br: Dictionary in branches:
 		var tip: Vector2 = br["tip"]
-		blobs.append({"c": Vector2(tip.x, tip.y - 4.0), "r": r_main * rng.randf_range(0.26, 0.4)})
+		# 枝端叶团（用户反馈增量：基线 Python 版 r=0.26-0.4×r_main 太小，枝梢裸露
+		# 观感"秃枝"；加大到 0.42-0.6 且中心向枝根回缩 18% 盖住梢部）
+		var origin0: Vector2 = (br["path"] as PackedVector2Array)[0]
+		var bc := tip.lerp(origin0, 0.18) + Vector2(0.0, -4.0)
+		blobs.append({"c": bc, "r": r_main * rng.randf_range(0.42, 0.6)})
 	for b: Dictionary in blobs:
 		var subs: Array = []
 		var bc0: Vector2 = b["c"]

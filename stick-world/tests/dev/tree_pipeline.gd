@@ -24,11 +24,13 @@ const NCC := NC * 3
 ## stroke_paint.paint 的整体笔宽/笔长缩放（max(W,H)/256；THIN_LAYERS 基值 × 此值）
 const K_SCALE := 2.625
 
-## 结构参数默认值 = gen_trees.DEFAULT_PARAMS（用户认可基线，勿动）
+## 结构参数默认值（= gen_trees.DEFAULT_PARAMS 基础上，2026-09-05 用户指令
+## "把树干拉长点"：bare_frac 0.13→0.20 底部裸干延长、trunk_frac 0.60→0.68
+## 枝叶区干段拉长——枝分布空间随之变稀，顺带缓解枝堆叠）
 const DEFAULT_PARAMS := {
 	"height_factor": 1.00,
-	"bare_frac": 0.13,
-	"trunk_frac": 0.60,
+	"bare_frac": 0.20,
+	"trunk_frac": 0.68,
 	"trunk_w": 0.042,
 	"crown_r_coef": 0.52,
 	"crown_cap": 0.30,

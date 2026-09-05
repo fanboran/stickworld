@@ -5,7 +5,8 @@ class_name MapRenderer
 ## 数据来自 l1_world.json（含 context_size/neighbors/lakes，坐标 = context 局部）。
 ## 全部矢量绘制（地块少），任意缩放清晰，不依赖底图纹理。
 ## 分层（context 坐标系，含邻居老 L1 块扩展区域，与 L2MapRenderer 一致）：
-##   海洋背景 -> 湖泊(浅蓝) -> 当前 L1 城市块(政权色) -> 邻居老 L1 块(灰色空心描边)
+##   海洋背景 -> 湖泊(浅蓝) -> 当前 L1 城市块(政权色) -> 河流 -> 湖泊(mesh)
+##   -> 城市建成区 blob(C2) -> 邻居老 L1 块(灰色空心描边)
 ##   -> 城市描边 + 出生 L1 权威轮廓(深色) -> hover 描边(灰) -> 内容区纸边黑框
 ##   -> F3 地块编号
 ## 邻居块空心化（A3）：只描边不填充，聚焦本 L1；context 外缘画黑线"纸张边界"。
@@ -41,6 +42,10 @@ var _segs_valid: bool = false
 ## Geometry2D.triangulate_polygon 一次三角剖分 → 每帧 2 次 draw_mesh，免每帧 earcut（8 城 4750 点 + 湖）。
 var _tiles_mesh: ArrayMesh = null
 var _lakes_mesh: ArrayMesh = null
+
+## 城市建成区 blob 轮廓缓存（settlement_id → 以聚落锚点为中心的 context 坐标折线；
+## 形状只随 population_score 变化——settlement_updated 事件单城重算，不随 zoom/hover 变）
+var _blob_outlines: Dictionary = {}
 
 ## 配色（与 L2MapRenderer 完全一致；水体色与 B2 底图 terrain_params.json colors 同源，改色两端同步）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
@@ -80,6 +85,14 @@ const CITY_DOT_RADIUS := 3.0
 const CITY_DOT_RING_WIDTH := 1.0
 const CITY_DOT_COLOR := Color(0.95, 0.95, 0.9)
 const CITY_DOT_RING := Color(0.12, 0.12, 0.12)
+## 城市建成区 blob（C2，总体设计 §5.7）：卫星图式暖灰团块叠在地块填充之上、
+## 描边层之下（城界线保持清晰——与行政区划显式分层，风险表点名项）。
+## T4+ 白描边 / T5 金描边（当前数据只到 T3，代码支持全级）
+const BLOB_FILL := Color(0.62, 0.57, 0.50, 0.92)
+const BLOB_EDGE := Color(0.24, 0.20, 0.15)
+const BLOB_EDGE_T4 := Color(0.95, 0.95, 0.92)
+const BLOB_EDGE_T5 := Color(1.0, 0.83, 0.25)
+const BLOB_EDGE_WIDTH := 1.5
 ## F3 调试：城市编号
 const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
@@ -122,6 +135,7 @@ func set_data(data: L1WorldData) -> void:
 	_segs_valid = false
 	_tiles_mesh = null
 	_lakes_mesh = null
+	_bake_blob_outlines()
 	_current_tile_id = ""
 	# 当前所在地块默认 = 出生聚落所在块（玩家跨城移动后由 set_current_tile 切换）
 	if _data != null and not _data.spawn_settlement_id.is_empty():
@@ -147,6 +161,40 @@ func set_current_tile(tile_id: String) -> void:
 			_build_glow_outline()
 			queue_redraw()
 			return
+
+
+## 烘焙全部聚落 blob 轮廓（set_data 一次；s = 装配侧 population_score，含每局扰动）
+func _bake_blob_outlines() -> void:
+	_blob_outlines = {}
+	if _data == null:
+		return
+	for tile in _data.tiles:
+		if tile.settlement == null:
+			continue
+		_blob_outlines[tile.settlement.settlement_id] = _outline_for(tile.settlement)
+
+
+## 单城 blob 重算（EventBus.settlement_updated → api 调用；SettlementRef.population_score
+## 已由 api 更新，这里只重生成轮廓。不在当前数据中的 id 忽略）
+func invalidate_blob(settlement_id: String) -> void:
+	if _data == null or not _blob_outlines.has(settlement_id):
+		return
+	var sref := _data.get_settlement(settlement_id)
+	if sref == null:
+		return
+	_blob_outlines[settlement_id] = _outline_for(sref)
+	queue_redraw()
+
+
+## 单聚落轮廓（锚点平移到聚落位置；catmull-rom 72 点由 SettlementBlob 保证）
+func _outline_for(sref: SettlementRef) -> PackedVector2Array:
+	var local := SettlementBlob.generate_outline(
+		sref.settlement_id, sref.level, sref.blob_capacity, sref.population_score)
+	var pts := PackedVector2Array()
+	pts.resize(local.size())
+	for i in local.size():
+		pts[i] = local[i] + sref.position
+	return pts
 
 
 ## 构建当前地块流动描边分段缓存
@@ -262,6 +310,25 @@ func _draw() -> void:
 	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓，首帧构建一次复用）
 	if not _segs_valid:
 		_build_cached_geometry()
+	# 2.5 城市建成区 blob（C2）：暖灰填充 + 分级描边，画在城界描边之下（行政区划保持清晰）；
+	#    半径为地图单位（随缩放，与地块多边形一致），描边宽屏幕像素固定
+	var bew: float = BLOB_EDGE_WIDTH
+	if zz > 0.0001:
+		bew = BLOB_EDGE_WIDTH / zz
+	for tile in _data.tiles:
+		var sref := tile.settlement
+		if sref == null:
+			continue
+		var outline: PackedVector2Array = _blob_outlines.get(sref.settlement_id, PackedVector2Array())
+		if outline.size() < 3:
+			continue
+		draw_colored_polygon(outline, BLOB_FILL)
+		var edge := BLOB_EDGE
+		if sref.level >= 5:
+			edge = BLOB_EDGE_T5
+		elif sref.level >= 4:
+			edge = BLOB_EDGE_T4
+		draw_polyline(_closed(outline), edge, bew, true)
 	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
 	var nbw: float = NEIGHBOR_BORDER_WIDTH
 	if zz > 0.0001:

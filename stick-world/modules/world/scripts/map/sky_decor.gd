@@ -105,6 +105,7 @@ func _ready() -> void:
 	if not _cloud_passes.has("closest"):
 		_build_cloud_pass("closest")
 	_build_clouds()
+	_build_haze()
 	# 相机引用惰性获取（GameRoot.CameraRig）
 	call_deferred("_find_camera")
 
@@ -115,6 +116,47 @@ func _build_stars() -> void:
 	stars.name = "Stars"
 	add_child(stars)
 	_layers.append({"node": stars, "factor": SkyStarsScript.FACTOR})
+
+
+## 地平线雾带（大气透视层）——远山/树线脚与地面交界处的垂直渐变雾，
+## 盖住背景层贴图底边与地平线的生硬切线。雾在"无穷远"（视差=0），只跟随相机；
+## 颜色用固定暖灰白，昼氛围由 CanvasModulate 全局昼夜统一染色（夜雾自动转暗蓝）。
+## 层序在 sky_decor 内最后（背景层之上），地平线以下由地面多边形（z=0）自然盖住。
+const HAZE_HEIGHT: float = 210.0
+const HAZE_ALPHA: float = 0.52
+const HAZE_COLOR := Color(0.87, 0.86, 0.82)
+var _haze: Sprite2D = null
+
+func _build_haze() -> void:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b, 0.0))
+	grad.set_color(1, Color(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b, HAZE_ALPHA))
+	# 渐变主体压在靠下 1/3：远山大部分轮廓可见，只有山脚沉进雾里
+	grad.add_point(0.42, Color(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b, 0.0))
+	grad.add_point(0.78, Color(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b, HAZE_ALPHA * 0.55))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	# 垂直渐变：FILL_LINEAR + fill 向量自上而下（枚举无 VERTICAL 变体）
+	tex.fill = GradientTexture2D.FILL_LINEAR
+	tex.fill_from = Vector2(0.0, 0.0)
+	tex.fill_to = Vector2(0.0, 1.0)
+	tex.width = 64
+	tex.height = 256
+	_haze = Sprite2D.new()
+	_haze.name = "HorizonHaze"
+	_haze.texture = tex
+	_haze.centered = false
+	add_child(_haze)
+
+
+## 雾带对齐视野：宽覆盖视野 + 余量，底边锚在地平线（超出部分被地面盖住）
+func _update_haze() -> void:
+	if _haze == null or _cam == null or not is_instance_valid(_cam):
+		return
+	var view_w: float = get_viewport_rect().size.x / maxf(_cam.zoom.x, 0.05)
+	_haze.scale = Vector2((view_w + 800.0) / 64.0, HAZE_HEIGHT / 256.0)
+	_haze.position = Vector2(_cam.global_position.x - (view_w + 800.0) * 0.5,
+			horizon_y - HAZE_HEIGHT)
 
 
 ## 远空飞鸟群（星野之上、山层之下，会被山脊遮挡出纵深；昼间活动，见 sky_birds.gd）
@@ -221,6 +263,7 @@ func _process(delta: float) -> void:
 	if _cam_ready and _cam != null and is_instance_valid(_cam):
 		_apply_parallax()
 		_update_tile_layers()
+		_update_haze()
 	# 风：缓慢正弦起伏（周期 ~2 分钟，双向漂；Terraria windSpeedCurrent 简化版）。
 	# 幅度 0.6：原版常态风速偏小（峰值档最近云 ~86px/s，可察觉的舒缓漂移）；
 	# 曾 1.1（最近云 158px/s、横穿一屏 12s——用户质疑「变化这么快」的来源）

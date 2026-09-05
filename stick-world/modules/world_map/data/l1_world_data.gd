@@ -52,6 +52,13 @@ var neighbors: Array = []
 ## 湖泊多边形（浅蓝显示）：[[(x,y),...]]（context 坐标）
 var lakes: Array = []
 
+## 河流折线（B3，与 L2/L3 底图同源 mask 骨架化提取）：
+## [{"pts": PackedVector2Array(context 坐标), "w": float(地图单位宽)}]
+var rivers: Array = []
+
+## context 左上角在 8192 世界坐标中的原点（生成端注入；跨 L1 定位/河流裁切用）
+var world_origin := Vector2i.ZERO
+
 ## 状态（tile_id -> L1TileDef 快速索引）
 var _tile_by_id: Dictionary = {}
 
@@ -80,6 +87,10 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 		world.context_size = Vector2i(int(csz[0]), int(csz[1]))
 	world.neighbors = data.get("neighbors", [])
 	world.lakes = data.get("lakes", [])
+	world.rivers = _rivers_from(data.get("rivers", []))
+	var worg: Array = data.get("world_origin", [])
+	if worg.size() >= 2:
+		world.world_origin = Vector2i(int(worg[0]), int(worg[1]))
 
 	# 底图 + 索引图
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l1_base.png")]
@@ -218,6 +229,19 @@ static func _polygon_from(arr: Array) -> PackedVector2Array:
 		if pt is Array and pt.size() >= 2:
 			poly.append(Vector2(float(pt[0]), float(pt[1])))
 	return poly
+
+
+## 河流折线归一化：json 的 {"pts": [[x,y],...], "w": float} → PackedVector2Array
+## （bin/json 同构处理：L1 bin 为 json 原样序列化，pts 始终是 Array of [x,y]；
+## 不足 2 点的无效条目跳过）
+static func _rivers_from(arr: Array) -> Array:
+	var out: Array = []
+	for rv in arr:
+		var d: Dictionary = rv if rv is Dictionary else {}
+		var pts := _polygon_from(d.get("pts", []))
+		if pts.size() >= 2:
+			out.append({"pts": pts, "w": float(d.get("w", 2.0))})
+	return out
 
 
 ## 读取 l1_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，原样序列化——L1 顶点序

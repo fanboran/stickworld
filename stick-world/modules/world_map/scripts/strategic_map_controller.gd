@@ -276,10 +276,12 @@ func _fill_legend() -> void:
 		return
 	if MapModeManager.current_mode == MapModeManager.Mode.TERRAIN:
 		_legend.set_title("地形")
-		_legend.set_entries([
+		var entries := [
 			{"color": MapRenderer.OCEAN_COLOR, "text": "海洋"},
 			{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
-		])
+		]
+		entries.append_array(MapRenderer.BIOME_LEGEND)
+		_legend.set_entries(entries)
 		return
 	if api == null or not api.has_method("get_states"):
 		return

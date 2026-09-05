@@ -11,8 +11,12 @@ tools/worldgen/
 ├── README.md              # 本文档
 ├── requirements.txt       # Python 依赖
 ├── .gitignore             # 忽略 _backup/ 备份与中间产物
-├── l3/                    # L3 大陆生成 + 地区划分（活跃）
+├── l3/                    # L3 大陆生成 + 群系 + 地形着色 + 地区划分（活跃）
 │   ├── fractal_continent.py        # 分形大陆（8K 高度场 + 河流）
+│   ├── biome_generate.py           # 群系生成（Whittaker 温湿矩阵 → biome_labels_2048.npy + 炎热大陆热区）
+│   ├── biome_params.json           # 群系参数（温度/降水/干旱带/雨影/热区，全外置可调）
+│   ├── terrain_render.py           # 程序着色地形底图（l3_terrain.png + L2 每地区裁切，--install 入 config）
+│   ├── terrain_params.json         # 着色参数（hillshade/明度/岩石雪线/海洋渐变/海岸线/热区暖调）
 │   ├── region_split.py             # 地区划分（watershed 沿地形切分）
 │   └── region_preview_annotated.py # 地区标注预览
 ├── l2_export/             # L2/L3 网格提取 + 烘焙 + 全部视图导出（活跃，本次核心）
@@ -60,7 +64,22 @@ fractal_continent.py ──▶ locked/（8K 大陆 + 高度场 + 河流）
              └─▶ export_l2_maps.py / merge_* / update_tiles_coastline.py ──▶ L1 地块 tiles
                   └─▶ export_l2_view_packs.py ──▶ l2_view_packs/ + config/strategic_map/l2_packs/
                   └─▶ export_l3_view.py ──▶ l3_view/ + config/strategic_map/
+biome_generate.py ──▶ output/biome_labels_2048.npy + biome_hot_zone_2048.png（群系/热区）
+   └─▶ terrain_render.py --install ──▶ output/l3_terrain.png + l2_packs/*/l2_terrain.png
+        ──▶ config/strategic_map/l3_terrain.png + l2_packs/*/l2_terrain.png（游戏内 TERRAIN 模式底图）
 ```
+
+## Demo 工作量展示素材
+
+创始人指示：以下预览图作为对外 Demo 展示的工作量佐证（已 gitignore 白名单入库，路径相对 `tools/worldgen/output/`）：
+
+| 文件 | 内容 |
+|------|------|
+| `l3_terrain.png` | 全大陆程序着色地形图（2048²）：七群系 + hillshade 山体阴影 + 河湖海渐变 + 炎热大陆暖调 |
+| `l2_preview_region_008.png` | 炎热大陆（region_008）特写预览（1600² 缩版） |
+| `l2_preview_region_013.png` | 出生地区（region_013）特写预览（1600² 缩版） |
+
+> 重生成：`python l3/terrain_render.py --install` 出全量底图后，用 PIL 对地区裁切 `thumbnail((1600,1600))` 重出缩版（命名保持 `l2_preview_region_XXX.png` 以命中 gitignore 白名单）。
 
 ## 运行注意
 

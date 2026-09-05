@@ -26,6 +26,9 @@ func _ready() -> void:
 	add_theme_icon_override("grabber", _empty_tex)
 	add_theme_icon_override("grabber_highlight", _empty_tex)
 	add_theme_icon_override("grabber_disabled", _empty_tex)
+	# 引擎 tick 也置空（会被自绘凹槽盖没导致看不见），由 _draw 按 tick_count 自绘接管：
+	# 机制保持原生 tick_count 属性（外部设值即出刻度），渲染走手绘层
+	add_theme_icon_override("tick", _empty_tex)
 	# 命中区：默认高度太薄难拖拽，24px 舒适（SHRINK_CENTER 下不挤行）
 	custom_minimum_size.y = maxf(custom_minimum_size.y, 24.0)
 	value_changed.connect(func(_v: float) -> void: queue_redraw())
@@ -43,7 +46,7 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-## 滑块圆点半径（供外部对齐刻度：zoom_bar 100% 刻度用同一圆心公式）
+## 滑块圆点半径
 static func grabber_radius(height: float) -> float:
 	return clampf(height * 0.42, 5.0, 9.0)
 
@@ -60,6 +63,16 @@ func _draw() -> void:
 	# 凹槽底 + 上下边缘波浪墨线（draw_wavy_line 抖动不随矩形缩小——draw_panel 的
 	# amp_for 会把 6px 细条的扰动缩到近零，沸腾感全无的教训）
 	draw_rect(track, StickTokens.GROOVE_BG)
+	# 原生 tick_count 机制的自绘渲染：均匀短竖线，上下各露凹槽 1.5px
+	# （原生语义：tick 在填充下层，被琥珀笔画盖住中段属预期）
+	if tick_count >= 2:
+		var tick_c := Color(StickTokens.BORDER.r, StickTokens.BORDER.g, StickTokens.BORDER.b, 0.38)
+		var cy := size.y * 0.5
+		for i in tick_count:
+			var t := float(i) / float(tick_count - 1)
+			var tx: float = track.position.x + track.size.x * t
+			draw_line(Vector2(tx, cy - track_h * 0.5 - 1.5),
+					Vector2(tx, cy + track_h * 0.5 + 1.5), tick_c, 1.3)
 	SketchDraw.draw_wavy_line(self, track.position, Vector2(track.end.x, track.position.y),
 			_seed, outline, 1.3)
 	SketchDraw.draw_wavy_line(self, Vector2(track.position.x, track.end.y), track.end,

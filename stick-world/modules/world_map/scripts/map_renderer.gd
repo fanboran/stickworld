@@ -36,13 +36,19 @@ var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
 var _cached_neighbor_outlines: Array[PackedVector2Array] = []
 var _segs_valid: bool = false
 
-## 静态色块层 ArrayMesh（海洋+湖泊+城市色块，set_data 后烘焙一次；描边/轮廓/hover 仍动态）。
-## Geometry2D.triangulate_polygon 一次三角剖分 → 每帧 1 次 draw_mesh，免每帧 earcut（8 城 4750 点 + 湖）。
-var _base_mesh: ArrayMesh = null
+## 静态色块层 ArrayMesh（城市色块 / 湖泊各自一张，set_data 后烘焙一次；描边/轮廓/hover 仍动态）。
+## 拆两层：河流通篇画在中间（tiles 之上、湖泊之下——河入湖被湖面覆盖，河穿城市块正常显示）。
+## Geometry2D.triangulate_polygon 一次三角剖分 → 每帧 2 次 draw_mesh，免每帧 earcut（8 城 4750 点 + 湖）。
+var _tiles_mesh: ArrayMesh = null
+var _lakes_mesh: ArrayMesh = null
 
-## 配色（与 L2MapRenderer 完全一致）
+## 配色（与 L2MapRenderer 完全一致；水体色与 B2 底图 terrain_params.json colors 同源，改色两端同步）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
-const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
+const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
+## 河流（B3）：与 L2/L3 底图预渲染河流同色；宽度 = 生成端 EDT 实测河宽（地图单位），
+## 下限保证缩到整图适配（zoom≈0.77）时细河仍可见
+const RIVER_COLOR := Color(46.0 / 255.0, 102.0 / 255.0, 140.0 / 255.0)
+const RIVER_MIN_WIDTH := 2.0
 
 ## 群系图例色（B2 地形底图色板的 L1 图例入口；基色与生成端
 ## tools/worldgen/l3/biome_generate.py BIOME_COLORS 同源，改色两端同步）
@@ -114,7 +120,8 @@ var _glow_time := 0.0
 func set_data(data: L1WorldData) -> void:
 	_data = data
 	_segs_valid = false
-	_base_mesh = null
+	_tiles_mesh = null
+	_lakes_mesh = null
 	_current_tile_id = ""
 	# 当前所在地块默认 = 出生聚落所在块（玩家跨城移动后由 set_current_tile 切换）
 	if _data != null and not _data.spawn_settlement_id.is_empty():
@@ -230,12 +237,19 @@ func _draw() -> void:
 	var zz: float = 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
-	# 1. 静态色块层（海洋+湖泊+城市色块 → 单张 ArrayMesh，描边/轮廓/hover 仍动态画）
-	if _base_mesh == null:
-		_bake_base_mesh()
-	if _base_mesh != null:
-		draw_mesh(_base_mesh, null)
-	else:
+	# 1. 静态色块层（城市色块 → 河流 → 湖泊 → 描边/轮廓/hover 动态层）
+	if _tiles_mesh == null:
+		_bake_base_meshes()
+	if _tiles_mesh != null:
+		draw_mesh(_tiles_mesh, null)
+	# 1.5 河流（B3）：矢量折线叠加，画在湖泊之下（河入湖由湖面覆盖）、城市块之上
+	for rv in _data.rivers:
+		var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
+		if rpts.size() >= 2:
+			draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
+	if _lakes_mesh != null:
+		draw_mesh(_lakes_mesh, null)
+	if _tiles_mesh == null:
 		# 回退：数据异常时逐层绘制（邻居空心：只描边，见第 4.5 层）
 		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
 		for lake in _data.lakes:
@@ -371,24 +385,30 @@ func _lake_edge_tol() -> float:
 	return tol
 
 
-## 烘焙静态色块层：海洋(矩形)/湖泊/城市色块 → 单张 ArrayMesh（顶点色，三角形独立顶点）。
+## 烘焙静态色块层：城市色块与湖泊各一张 ArrayMesh（顶点色，三角形独立顶点）。
 ## Geometry2D.triangulate_polygon 一次性 earcut（C++，含凹多边形），仅 set_data / 首帧调用一次。
 ## 邻居老 L1 块不参与（A3 空心化：只描边不填充，轮廓走 _build_cached_geometry 缓存）。
-func _bake_base_mesh() -> void:
-	_base_mesh = null
+## 拆两张 mesh：河流画在两层层间（tiles 上、lakes 下），见 _draw 1.5 层。
+func _bake_base_meshes() -> void:
+	_tiles_mesh = null
+	_lakes_mesh = null
 	var ctx := _data.context_size
 	if ctx.x <= 0 or ctx.y <= 0:
 		return
-	# 收集 (多边形, 颜色)：顺序 = 原绘制顺序（湖泊最后画，盖城市色块——
-	# 湖泊弧线与城市块交界处由湖弧线决定，严丝合缝无缝隙；export 已裁剪城市块不覆盖湖）
-	var pairs: Array = []  # [[PackedVector2Array, Color], ...]
-	# 海洋 = 全矩形底
+	# 收集 (多边形, 颜色)：海洋 = 全矩形底由渲染器背景承担（OCEAN 回退分支 + 相机外区域）
+	var tile_pairs: Array = []   # [[PackedVector2Array, Color], ...]
+	var lake_pairs: Array = []
 	for tile in _data.tiles:
 		if tile.polygon.size() >= 3:
-			pairs.append([tile.polygon, _data.get_state_color(tile.owner_state_id)])
+			tile_pairs.append([tile.polygon, _data.get_state_color(tile.owner_state_id)])
 	for lake in _data.lakes:
-		pairs.append([_pts(lake), LAKE_COLOR])
-	# 三角剖分 + 顶点色（每三角形独立顶点，避免共享顶点颜色冲突）
+		lake_pairs.append([_pts(lake), LAKE_COLOR])
+	_tiles_mesh = _mesh_from_pairs(tile_pairs)
+	_lakes_mesh = _mesh_from_pairs(lake_pairs)
+
+
+## 多边形组 → 顶点色 ArrayMesh（每三角形独立顶点，避免共享顶点颜色冲突）
+func _mesh_from_pairs(pairs: Array) -> ArrayMesh:
 	var verts := PackedVector2Array()
 	var cols := PackedColorArray()
 	for pair in pairs:
@@ -403,14 +423,14 @@ func _bake_base_mesh() -> void:
 				verts.append(pts[tris[i + k]])
 				cols.append(pair[1])
 	if verts.is_empty():
-		return
+		return null
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_COLOR] = cols
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	_base_mesh = mesh
+	return mesh
 
 
 ## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓

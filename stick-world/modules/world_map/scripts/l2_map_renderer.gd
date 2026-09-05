@@ -46,8 +46,11 @@ const TILE_BORDER_WIDTH := 5.2   # 原 4 ×1.3
 
 ## 海洋背景色
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
-## 湖泊（深色系，比海洋更深更沉）
-const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
+## 湖泊（对齐 B2 底图湖色 terrain_params.json colors.lake；mesh 顶点色由 l2_bake 烘入）
+const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
+## 河流（B3）：与 L3/L2 底图预渲染河流同色；POLITICAL 模式矢量叠加（TERRAIN 底图已含，不重复画）
+const RIVER_COLOR := Color(46.0 / 255.0, 102.0 / 255.0, 140.0 / 255.0)
+const RIVER_MIN_WIDTH := 2.5
 ## 相邻地区（灰色，不上色）
 const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
 
@@ -196,6 +199,13 @@ func _draw() -> void:
 	# 地形模式下纹理已含湖色，跳过（避免纯色湖 mesh 盖掉纹理湖渐变）。
 	if _lakes_mesh != null and not terrain:
 		draw_mesh(_lakes_mesh, null)
+	# 6.6 河流矢量（B3）：POLITICAL 模式叠加（TERRAIN 底图已含河流，不重复画）。
+	# 画在湖泊上层之外的水系表达——河折线止于湖岸/海岸（生成端 mask 同源），画湖后即可。
+	if not terrain:
+		for rv in _data.rivers:
+			var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
+			if rpts.size() >= 2:
+				draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
 	# 7. hover 地块轮廓描边（灰，最上层；固定屏幕像素粗细，不随缩放）
 	var hpolys: Array = hovered_tile.get("polygons", [hovered_tile.get("polygon", [])])
 	for hp in hpolys:

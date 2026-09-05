@@ -42,7 +42,7 @@ GAME_DIR = os.path.normpath(os.path.join(
 
 OCEAN_COLOR = (30, 55, 95)
 NEIGHBOR_COLOR = (115, 115, 115)   # Color(0.45,0.45,0.45)
-LAKE_COLOR = (28, 50, 82)
+LAKE_COLOR = (72, 116, 158)        # 对齐 B2 底图湖色（terrain_params.json colors.lake）
 
 
 def mst(pts):

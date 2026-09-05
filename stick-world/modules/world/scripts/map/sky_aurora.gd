@@ -330,12 +330,16 @@ static func _hue_to_rgb(p: float, q: float, t: float) -> float:
 	return p
 
 
-## 月亮归一化位置（本项目月亮轨迹 → 原版 LastCelestialBodyPosition 同构分数）
+## 月亮归一化位置（本项目月亮轨迹 → 原版 LastCelestialBodyPosition 同构分数）。
+## 原版该位置是屏幕空间；这里顶点已 +off（center_x-960）抵消视差窗口平移
+## （屏幕 = 本地 + (960-center_x)），月亮本地坐标须加同一平移才与顶点同空间，
+## 否则侧带收拢点会比屏上月亮横偏 |off|（相机偏离 960 时达数百像素）。
 func _moon_frac() -> Vector2:
 	var t: float = SkyStars._traverse(_hour, 19.0, 29.0)
 	if t < 0.0:
 		return Vector2(0.5, 0.2)
 	var pos: Vector2 = SkyStars._celestial_pos(t, _center_x)["pos"]
+	pos.x += VIRTUAL.x * 0.5 - _center_x   # 本地 → 顶点(屏幕对齐)空间
 	return pos / VIRTUAL
 
 

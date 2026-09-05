@@ -62,10 +62,14 @@ func _in_view() -> bool:
 	return screen.has_point(xform * global_position)
 
 
+## 共享单例 RNG（每次取用前重播种）：调用点均为"取用即用即弃"、无嵌套获取，
+## 重播种与 new+seed 产生完全相同的序列——省掉每石每秒上百次对象分配
+var _shared_rng := RandomNumberGenerator.new()
+
+
 func _rng(slot: int) -> RandomNumberGenerator:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = absi((base_seed * 73856093) ^ (slot * 19349663) ^ 0x5F356495)
-	return rng
+	_shared_rng.seed = absi((base_seed * 73856093) ^ (slot * 19349663) ^ 0x5F356495)
+	return _shared_rng
 
 
 ## 岩块轮廓：极坐标顶点（半径 0.72-1.08 × 基准），角度=均匀格+小幅抖动

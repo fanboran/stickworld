@@ -631,7 +631,11 @@ func _toggle_l3_strategic_map() -> void:
 ## Tab / 边界触发入口（A3 三态循环）。
 ## full_map=true（边界自动触发，如顶边界持续推进）：直接开 L1 大图（保留原"出城看图"语义）；
 ## full_map=false（玩家按 Tab）：关闭 → 顶部小地图 → 原 Tab 大图 → 关闭 循环。
+## M（L3/L2）会话期间忽略：新开视图 = 玩家所见的互斥原则——否则状态机在 L3 海洋层下
+## 悄悄切态（L1 被盖住打开），M 一关 L1 意外弹出。
 func _open_strategic_map(full_map: bool) -> void:
+	if _is_l3_session_active():
+		return
 	_ensure_strategic_maps()
 	if full_map:
 		if _tab_state != TabMapState.FULL_L1:
@@ -647,6 +651,20 @@ func _open_strategic_map(full_map: bool) -> void:
 			_open_l1_full_map()
 		TabMapState.FULL_L1:
 			_close_l1_full_map()
+
+
+## M 会话是否激活（L3 可见，或下钻中的 L2 可见——L3 隐藏但 _l2_active 保留）
+func _is_l3_session_active() -> bool:
+	if _root._strategic_map_l3 == null:
+		return false
+	var l3_content: Node = _root._strategic_map_l3.get_node_or_null("Content")
+	if l3_content == null:
+		return false
+	if l3_content.visible:
+		return true
+	var l2_active: Variant = l3_content.get("_l2_active")
+	return l2_active != null and bool(l2_active) and l3_content.l2_view != null \
+			and l3_content.l2_view.visible
 
 
 ## 顶部小地图区双窗显隐

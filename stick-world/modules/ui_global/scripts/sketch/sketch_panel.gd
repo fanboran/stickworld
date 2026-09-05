@@ -19,6 +19,11 @@ enum Tone { DARK, LIGHT }
 @export var outline_override := Color.TRANSPARENT
 ## 圆角半径（自动钳到不塌陷）
 @export var corner_radius: float = SketchDraw.CORNER_R
+## 紧凑内边距（小对话框：内容有多少占多少，不摆大面板的架子）
+@export var compact := false:
+	set(v):
+		compact = v
+		_apply_padding()
 
 var _seed: int = 0
 var _timer: float = 0.0
@@ -26,21 +31,29 @@ var _timer: float = 0.0
 
 func _ready() -> void:
 	_seed = randi()
-	# 引擎默认面板置空，content_margin 保留内边距（自绘底铺满全 rect）
-	var sb := StyleBoxEmpty.new()
-	match tone:
-		Tone.DARK:
-			sb.content_margin_left = StickTokens.PAD_X * 2
-			sb.content_margin_right = StickTokens.PAD_X * 2
-			sb.content_margin_top = StickTokens.PAD_Y * 2
-			sb.content_margin_bottom = StickTokens.PAD_Y * 2
-		Tone.LIGHT:
-			sb.content_margin_left = StickTokens.PAD_X + 4
-			sb.content_margin_right = StickTokens.PAD_X + 4
-			sb.content_margin_top = StickTokens.PAD_Y + 3
-			sb.content_margin_bottom = StickTokens.PAD_Y + 3
-	add_theme_stylebox_override("panel", sb)
+	_apply_padding()
 	resized.connect(queue_redraw)
+
+
+## 内边距档位：紧凑 12/7（对话框）；常规 DARK 24/12（大弹窗）、LIGHT 16/9（HUD 条）
+func _apply_padding() -> void:
+	var sb := StyleBoxEmpty.new()
+	if compact:
+		sb.content_margin_left = 12
+		sb.content_margin_right = 12
+		sb.content_margin_top = 7
+		sb.content_margin_bottom = 7
+	elif tone == Tone.DARK:
+		sb.content_margin_left = StickTokens.PAD_X * 2
+		sb.content_margin_right = StickTokens.PAD_X * 2
+		sb.content_margin_top = StickTokens.PAD_Y * 2
+		sb.content_margin_bottom = StickTokens.PAD_Y * 2
+	else:
+		sb.content_margin_left = StickTokens.PAD_X + 4
+		sb.content_margin_right = StickTokens.PAD_X + 4
+		sb.content_margin_top = StickTokens.PAD_Y + 3
+		sb.content_margin_bottom = StickTokens.PAD_Y + 3
+	add_theme_stylebox_override("panel", sb)
 
 
 func _process(delta: float) -> void:

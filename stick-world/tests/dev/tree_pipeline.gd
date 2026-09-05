@@ -77,31 +77,64 @@ static func build_tree(p_seed: int, P: Dictionary, trunk_n: int, crown_n: int,
 	var stats := {}
 	var trunk_rng := RandomNumberGenerator.new()
 	trunk_rng.seed = p_seed + 1
-	var trunk_pens: Array = _Region.new(wire, 0, trunk_rng).gen(w_scale, ln_scale, trunk_n, stats)
+	var trunk_region := _Region.new(wire, 0, trunk_rng)
+	var trunk_pens: Array = trunk_region.gen(w_scale, ln_scale, trunk_n, stats)
 	var branch_pens := _branch_pens(wire)
 	var crown_rng := RandomNumberGenerator.new()
 	crown_rng.seed = p_seed + 2
-	var crown_pens: Array = _Region.new(wire, 2, crown_rng).gen(w_scale, ln_scale, crown_n, stats)
+	var crown_region := _Region.new(wire, 2, crown_rng)
+	var crown_pens: Array = crown_region.gen(w_scale, ln_scale, crown_n, stats)
 	var pens: Array = []
 	pens.append_array(trunk_pens)
 	pens.append_array(branch_pens)
 	pens.append_array(crown_pens)
 	stats["branch"] = branch_pens.size()
-	return {"wire": wire, "pens": pens, "stats": stats}
+	return {"wire": wire, "pens": pens, "stats": stats,
+		"trunk_canvas": (trunk_region as _Region).canvas_init_img(),
+		"crown_canvas": crown_region.canvas_init_img()}
 
 
-## 笔列表 → 全分辨率 RGBA 贴图（圆头笔胶囊栅格化，alpha = 笔并集硬边 0/255）
-static func rasterize(pens: Array) -> Image:
-	var trunk_rgb := Image.create(W, H, false, Image.FORMAT_RGB8)
-	var trunk_a := Image.create(W, H, false, Image.FORMAT_L8)
-	var crown_rgb := Image.create(W, H, false, Image.FORMAT_RGB8)
-	var crown_a := Image.create(W, H, false, Image.FORMAT_L8)
+## [调试] 导出某种子的冠区参考色可视化（与 Python render_crown_ref 目检对齐用）
+static func debug_crown_ref(p_seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = p_seed
+	var wire := _gen_tree_struct(rng, DEFAULT_PARAMS)
+	var r := RandomNumberGenerator.new()
+	r.seed = p_seed + 2
+	var reg := _Region.new(wire, 2, r)
+	var img := Image.create(W, H, false, Image.FORMAT_RGB8)
+	for row: int in GH:
+		for col: int in GW:
+			var i := row * GW + col
+			var c := Color(
+				clampf(refc_of(reg, i * 3) / 255.0, 0.0, 1.0),
+				clampf(refc_of(reg, i * 3 + 1) / 255.0, 0.0, 1.0),
+				clampf(refc_of(reg, i * 3 + 2) / 255.0, 0.0, 1.0))
+			img.fill_rect(Rect2i(col * GRID, row * GRID, GRID, GRID), c)
+	return img
+
+
+static func refc_of(reg: _Region, idx: int) -> float:
+	return reg.refc[idx]
+
+
+## 笔列表 → 全分辨率 RGBA 贴图。
+## 像素级模拟画布重放（与 Python stamp_canvas 同构）：eff = col×alpha +
+## 画布中点色×(1-alpha)，alpha = 笔并集硬边。干/冠各用自己区域的初始画布
+## （参考灰度模糊），笔按分区重放后 alpha-over 合成。
+## 直绘枝笔（g=1）alpha=1 纯色直接盖。
+static func rasterize(pens: Array, trunk_canvas: Image, crown_canvas: Image) -> Image:
+	var rgb := [trunk_canvas.duplicate(), crown_canvas.duplicate()]
+	var alp := [
+		Image.create(W, H, false, Image.FORMAT_L8),
+		Image.create(W, H, false, Image.FORMAT_L8),
+	]
 	for p: Dictionary in pens:
-		if int(p["g"]) == 2:
-			_stamp_img(crown_rgb, crown_a, p)
-		else:
-			_stamp_img(trunk_rgb, trunk_a, p)
-	return _alpha_over(trunk_rgb, trunk_a, crown_rgb, crown_a)
+		var g: int = p["g"]
+		var canvas: Image = rgb[0] if g != 2 else rgb[1]
+		var alpha: Image = alp[0] if g != 2 else alp[1]
+		_stamp_img(canvas, alpha, p)
+	return _alpha_over(rgb[0], alp[0], rgb[1], alp[1])
 
 
 # ─────────────────────── 树结构：Terraria 段堆叠（gen_tree_struct 直译） ───────────────────────
@@ -310,7 +343,7 @@ class _Region:
 
 	const TP := preload("res://tests/dev/tree_pipeline.gd")
 	## 调试统计开关（env TREE_PIPE_DBG=1）：打印 imp 场与选点分布诊断
-	const DBG := OS.get_environment("TREE_PIPE_DBG")
+	static var DBG := OS.get_environment("TREE_PIPE_DBG")
 
 
 	var region := 0  # 0=干 2=冠
@@ -470,7 +503,9 @@ class _Region:
 			_fill_ellipse_mask(ecx, ecy, erx, ery)
 
 
-	## 单团受光 dome（render_crown_ref 格点等效：格中心求值 + 0.25/0.75 叠合）
+	## 单团受光 dome（render_crown_ref 等效：每格 2×2 子采样求均值后 0.25/0.75 叠合）。
+	## dome 斜坡陡（亮核直径仅 5-8 格），格中心单点采样会漏峰值、暗环被平滑成
+	## 整圈"描边"——实测参考图 P90 低 17 级、暗区多 65%，子采样恢复像素级平均。
 	func _blob_dome(cir: Vector3, light: Vector3, mid: Vector3, dark: Vector3) -> void:
 		var sx := cir.x
 		var sy := cir.y
@@ -482,22 +517,33 @@ class _Region:
 		var cr := clampi(int(sy / TP.GRID), 0, TP.GH - 1)
 		for row: int in range(maxi(0, cr - r_cell), mini(TP.GH, cr + r_cell + 1)):
 			for col: int in range(maxi(0, cc - r_cell), mini(TP.GW, cc + r_cell + 1)):
-				var px := (col + 0.5) * TP.GRID
-				var py := (row + 0.5) * TP.GRID
-				var d := sqrt((px - lx) * (px - lx) + (py - ly) * (py - ly)) / maxf(sr, 1.0)
-				if d >= 1.35:
+				var acc := Vector3(0.0, 0.0, 0.0)
+				var n_sub := 0
+				for sy_i: int in 2:
+					for sx_i: int in 2:
+						var px := (col + 0.25 + 0.5 * sx_i) * TP.GRID
+						var py := (row + 0.25 + 0.5 * sy_i) * TP.GRID
+						var d := sqrt((px - lx) * (px - lx) + (py - ly) * (py - ly)) \
+							/ maxf(sr, 1.0)
+						if d >= 1.35:
+							continue
+						n_sub += 1
+						var dome: float = clampf(1.0 - (d - 0.55) / 0.5, 0.0, 1.0)
+						var vshade := 0.82 + 0.10 * (1.0 - (py - sy) / maxf(sr, 1.0))
+						for ch: int in 3:
+							var base: float = mid[ch] * vshade
+							var col_v: float = base * (0.78 + 0.55 * dome)
+							if dome > 0.75:
+								col_v += (light[ch] - base) * 0.45
+							if dome < 0.18:
+								col_v += (dark[ch] - base) * 0.55
+							acc[ch] += col_v
+				if n_sub == 0:
 					continue
-				var dome: float = clampf(1.0 - (d - 0.55) / 0.5, 0.0, 1.0)
-				var vshade := 0.82 + 0.10 * (1.0 - (py - sy) / maxf(sr, 1.0))
 				var idx := row * TP.GW + col
 				for ch: int in 3:
-					var base: float = mid[ch] * vshade
-					var col_v: float = base * (0.78 + 0.55 * dome)
-					if dome > 0.75:
-						col_v += (light[ch] - base) * 0.45
-					if dome < 0.18:
-						col_v += (dark[ch] - base) * 0.55
-					refc[idx * 3 + ch] = refc[idx * 3 + ch] * 0.25 + col_v * 0.75
+					refc[idx * 3 + ch] = refc[idx * 3 + ch] * 0.25 \
+						+ (acc[ch] / float(n_sub)) * 0.75
 
 
 		## ── 流场：块级结构张量 + 颜色门控扩散（build_flow_regional 移植） ──
@@ -731,6 +777,18 @@ class _Region:
 		return pens
 
 
+	## 初始画布可视化/重放用：canv → RGB Image（灰度模糊参考 = underpaint 底色）
+	func canvas_init_img() -> Image:
+		var img := Image.create(TP.W, TP.H, false, Image.FORMAT_RGB8)
+		for row: int in TP.GH:
+			for col_i: int in TP.GW:
+				var i := row * TP.GW + col_i
+				var v := clampf(canv[i * 3] / 255.0, 0.0, 1.0)
+				img.fill_rect(Rect2i(col_i * TP.GRID, row * TP.GRID, TP.GRID, TP.GRID),
+					Color(v, v, v))
+		return img
+
+
 	## 选点：细化层=误差加权采样（前缀和二分）；其余=24 贪心扫描（pick_start 移植）
 	func _pick_start(refine: bool, thresh_in: float) -> int:
 		if refine:
@@ -821,8 +879,9 @@ class _Region:
 			clampi(int(float(col.z) * alpha + canv[cell * 3 + 2] * (1.0 - alpha)), 0, 255))
 		var wd := maxi(1, int(roundf(w)))
 		_stamp_cells(x0, y0, x1, y1, wd, eff)
+		# pen 存 col 原色+alpha（eff 混合在 rasterize 的像素画布上做，与 PY 同构）
 		pens.append({"a": Vector2(x0, y0), "b": Vector2(x1, y1),
-			"c": Color8(eff.x, eff.y, eff.z), "w": wd, "g": region})
+			"c": Color8(col.x, col.y, col.z), "w": wd, "g": region, "al": alpha})
 		since_sync += 1
 		if since_sync >= 256:
 			_sync()
@@ -1058,12 +1117,23 @@ static func _erf(x: float) -> float:
 	return sg * y
 
 
-## 圆头笔胶囊：沿段 0.5px 步进盖圆
-static func _stamp_img(rgb: Image, alpha: Image, p: Dictionary) -> void:
+## 圆头笔 stamp 进模拟画布（stamp_canvas 同构）：eff=col×alpha+画布中点×(1-alpha)，
+## 画布 RGB 就地更新；alpha 并集画布 stamp 255（硬边）。枝直绘笔 al=1 纯色盖。
+static func _stamp_img(canvas: Image, alpha: Image, p: Dictionary) -> void:
 	var a: Vector2 = p["a"]
 	var b: Vector2 = p["b"]
 	var wd: int = p["w"]
+	var al: float = p.get("al", 1.0)
 	var col: Color = p["c"]
+	var mid_x := clampi(int((a.x + b.x) * 0.5), 0, W - 1)
+	var mid_y := clampi(int((a.y + b.y) * 0.5), 0, H - 1)
+	var eff := col
+	if al < 0.999:
+		var under := canvas.get_pixel(mid_x, mid_y)
+		eff = Color(
+			col.r * al + under.r * (1.0 - al),
+			col.g * al + under.g * (1.0 - al),
+			col.b * al + under.b * (1.0 - al))
 	var r := maxf(wd * 0.5, 0.5)
 	var d := a.distance_to(b)
 	var steps := maxi(1, int(d * 2.0))
@@ -1082,7 +1152,7 @@ static func _stamp_img(rgb: Image, alpha: Image, p: Dictionary) -> void:
 			if rx1 < rx0:
 				continue
 			for x: int in range(rx0, rx1 + 1):
-				rgb.set_pixel(x, y, col)
+				canvas.set_pixel(x, y, eff)
 				alpha.set_pixel(x, y, Color(1, 1, 1))
 
 

@@ -16,12 +16,14 @@ func _init() -> void:
 	out_dir = root.path_join("../temp/stroke_ref/gdlab").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	print("=== GD 管线产出（默认参数 = 基线） ===")
+	# 参考色可视化（与 Python render_crown_ref 对齐目检）
+	TP.debug_crown_ref(7000).save_png(out_dir.path_join("gd_crown_ref.png"))
 	for i: int in 4:
 		var sd := 7000 + i * 173
 		var t0 := Time.get_ticks_msec()
 		var tree: Dictionary = TP.build_tree(sd, {}, 1400, 3400)
 		var t1 := Time.get_ticks_msec()
-		var img := TP.rasterize(tree["pens"])
+		var img := TP.rasterize(tree["pens"], tree["trunk_canvas"], tree["crown_canvas"])
 		var t2 := Time.get_ticks_msec()
 		img.save_png(out_dir.path_join("gd_v%d.png" % i))
 		var m := analyze(img)

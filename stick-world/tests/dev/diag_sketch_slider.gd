@@ -34,6 +34,14 @@ func _ready() -> void:
 	_slider60.value = 60.0
 	_slider60.custom_minimum_size = Vector2(420, 0)
 	box.add_child(_slider60)
+	# 原生 tick_count 刻度机制演示（均匀 6 档）
+	var s_tick := SketchHSlider.new()
+	s_tick.min_value = 0.0
+	s_tick.max_value = 100.0
+	s_tick.value = 30.0
+	s_tick.tick_count = 6
+	s_tick.custom_minimum_size = Vector2(420, 0)
+	box.add_child(s_tick)
 	DirAccess.make_dir_recursive_absolute(SHOT_DIR)
 
 

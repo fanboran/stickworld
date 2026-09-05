@@ -46,17 +46,9 @@ func _build_ui() -> void:
 	_slider.offset_bottom = BAR_HEIGHT
 	_slider.value_changed.connect(_on_slider_changed)
 	add_child(_slider)
-	# 默认缩放（100%）刻度：叠在条内底部（贴近下缘，滑块圆点不覆盖该区域）。
-	# 位置按 SketchHSlider 滑块圆心公式对准 1.0（圆心范围 [grab_r, W-grab_r]）
-	var grab_r: float = SketchHSlider.grabber_radius(BAR_HEIGHT)
-	var tick_x: float = (1.0 - _slider.min_value) / (_slider.max_value - _slider.min_value) \
-			* (BAR_WIDTH - grab_r * 2.0) + grab_r
-	var ruler := ColorRect.new()
-	ruler.color = Color(StickTokens.ACCENT, 0.75)
-	ruler.position = Vector2(tick_x - 1.0, BAR_HEIGHT - 5.0)
-	ruler.size = Vector2(2.0, 4.0)
-	ruler.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(ruler)
+	# 缩放档位刻度：原生 tick_count 机制（0.5~2.0 每 0.1 一档 = 16 档，
+	# 默认 100% 恰落在刻度上）；刻度渲染由 SketchHSlider 自绘接管
+	_slider.tick_count = 16
 	# 百分比标签：放在条右侧（条宽之外），不与条组成对齐体
 	_label = Label.new()
 	_label.set_anchors_preset(Control.PRESET_TOP_LEFT)

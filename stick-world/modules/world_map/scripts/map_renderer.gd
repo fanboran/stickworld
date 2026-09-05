@@ -177,7 +177,7 @@ func _draw() -> void:
 		if tile.settlement == null:
 			continue
 		draw_circle(tile.settlement.position, dot_r, CITY_DOT_COLOR)
-		draw_arc(tile.settlement.position, dot_r, 0.0, TAU, 16, CITY_DOT_RING, ring_w)
+		draw_arc(tile.settlement.position, dot_r, 0.0, TAU, 48, CITY_DOT_RING, ring_w, true)
 	# 7. hover 城市块描边（屏幕像素固定）
 	if not hovered_tile_id.is_empty():
 		var hw: float = HOVER_WIDTH

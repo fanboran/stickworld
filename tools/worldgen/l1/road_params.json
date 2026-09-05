@@ -15,6 +15,6 @@
  "astar_bbox_pad": 80,
  "astar_max_expand": 300000,
 
- "chaikin_passes": 2,
- "dp_tolerance": 12.0
+ "chaikin_passes": 3,
+ "dp_tolerance": 6.0
 }

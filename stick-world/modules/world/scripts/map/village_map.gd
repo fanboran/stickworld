@@ -31,6 +31,8 @@ extends MapBase
 const _TerrainRendererScript: GDScript = preload("res://modules/world/scripts/map/terrain_renderer.gd")
 const _ResourceGenScript: GDScript = preload("res://modules/world/scripts/map/resource_gen.gd")
 const ScriptResourceNode := preload("res://modules/world/scripts/map/resource_node.gd")
+## 林区梯度常量来源（新开局生成与存档恢复共用同一规则）
+const _ResourceGen := preload("res://modules/world/scripts/map/resource_gen.gd")
 
 # SQL 白名单：表名/列名为固定常量；运行时值（slot_id/map_id）一律经 ? 绑定
 # （query_with_bindings），禁止字符串拼接进 SQL。
@@ -524,8 +526,27 @@ func load_resource_nodes_from_db(db, slot_id: int, p_map_id: String) -> void:
 	if db.query_with_bindings(_SQL_NODES_SELECT, [slot_id, p_map_id]):
 		rows = db.query_result
 	for row in rows:
+		# 林区梯度（与 resource_gen 新开局同规则）：旧存档里贴着硬化区的树
+		# 是旧密度规则撒的，恢复时丢弃不摆（指示：距硬化区一屏净空起树）
+		if int(row["resource_type"]) == 0 and _violates_forest_clear(float(row["pos_x"])):
+			continue
 		var node: Node2D = ScriptResourceNode.new()
 		node.resource_type = int(row["resource_type"])
 		node.amount = int(row["amount"])
 		node.position = Vector2(float(row["pos_x"]), float(row["pos_y"]))
 		decoration_layer.add_child(node)
+
+
+## 世界 x 坐标是否落在硬化区一屏净空带内（true = 该处不该有树）
+func _violates_forest_clear(world_x: float) -> bool:
+	var lo := 1 << 30
+	var hi := -(1 << 30)
+	for cx: int in _terrain_types.keys():
+		if _terrain_types[cx] == TERRAIN_DIRT_ROAD:
+			lo = mini(lo, cx)
+			hi = maxi(hi, cx)
+	if lo > hi:
+		return false
+	var cell := int(world_x / 32.0)
+	var dist: int = maxi(maxi(lo - cell, cell - hi), 0)
+	return dist <= _ResourceGen.FOREST_CLEAR_CELLS

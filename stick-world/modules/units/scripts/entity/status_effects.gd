@@ -58,6 +58,18 @@ func has_effect(type: int) -> bool:
 	return _effects.has(type) and _effects[type]["until"] > _now()
 
 
+## 列出当前激活效果（属性面板消费）：[{type, remain, power}]
+func list_active() -> Array:
+	var now: float = _now()
+	var out: Array = []
+	for key in _effects:
+		var e: Dictionary = _effects[key]
+		var remain: float = e["until"] - now
+		if remain > 0.0:
+			out.append({"type": key, "remain": remain, "power": e["power"]})
+	return out
+
+
 ## 移速倍率（SLOW 生效时 0.5，否则 1.0）
 func get_speed_mult() -> float:
 	return SLOW_SPEED_MULT if has_effect(Type.SLOW) else 1.0

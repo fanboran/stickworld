@@ -64,6 +64,9 @@ func _build() -> void:
 	var inv_btn := _make_action("inventory", "E")
 	inv_btn.action_pressed.connect(_on_open_inventory)
 	row.add_child(inv_btn)
+	var stats_btn := _make_action("stats", "C")
+	stats_btn.action_pressed.connect(_on_open_stats)
+	row.add_child(stats_btn)
 
 
 func _make_cell(mode: int, cap: String) -> ItemSlotWidget:
@@ -110,3 +113,9 @@ func _on_use_item(index: int) -> void:
 func _on_open_inventory(_w: ItemSlotWidget = null) -> void:
 	if _game_root != null and _game_root.has_method("toggle_inventory"):
 		_game_root.toggle_inventory()
+
+
+## 打开角色属性面板（C 动作格点击）
+func _on_open_stats(_w: ItemSlotWidget = null) -> void:
+	if _game_root != null and _game_root.has_method("toggle_stats_panel"):
+		_game_root.toggle_stats_panel()

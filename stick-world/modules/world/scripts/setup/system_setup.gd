@@ -33,6 +33,7 @@ const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/mi
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
 const _InventoryServiceScript: GDScript = preload("res://modules/inventory/scripts/inventory_service.gd")
 const _InventoryScreenScript: GDScript = preload("res://modules/inventory/ui/inventory_screen.gd")
+const _StatsScreenScript: GDScript = preload("res://modules/inventory/ui/stats_screen.gd")
 const _HotbarScript: GDScript = preload("res://modules/inventory/ui/hotbar.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
@@ -453,10 +454,11 @@ func _setup_zoom_bar() -> void:
 
 # ─────────────────────────────── 背包装备系统装配（modules/inventory）────────────────────────────────
 
-## 装配背包装备系统三件套：
+## 装配背包装备系统四件套：
 ##   1. InventoryService（GameRoot 子节点：玩家背包 + 装备→附身实体桥接）
 ##   2. Hotbar（HudOverlay 底部常驻物品栏：主副手/Hotbar 物品/动作快捷键三组）
 ##   3. InventoryScreen（ModalOverlay 模态背包：E 键开关，UIModalStack.INVENTORY）
+##   4. StatsScreen（ModalOverlay 角色属性面板：C 键开关，UIModalStack.STATS）
 func _setup_inventory() -> void:
 	if _root.ui_root == null:
 		return
@@ -477,6 +479,12 @@ func _setup_inventory() -> void:
 	_root._inventory_screen = inv
 	if inv.has_method("setup"):
 		inv.setup(_root, service)
+	var stats := UIKit.full_rect(_StatsScreenScript, "StatsScreen")
+	if not _root.ui_root.add_to_slot("ModalOverlay", stats):
+		return
+	_root._stats_panel = stats
+	if stats.has_method("setup"):
+		stats.setup(_root, service)
 
 
 # ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────

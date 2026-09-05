@@ -51,7 +51,7 @@ extends Node
 # anim_name ∈ {"heal_meric_1","heal_meric_2"}（随机分布统计源，spec §5.4.3）
 @warning_ignore("unused_signal") signal heal_cast(battle_id: String, caster_id: int, target_id: int, anim_name: String)
 
-# ─────────────────────────────── Demo 引导（求职 Demo 冲刺）────────────────────────────────
+# ─────────────────────────────── Demo 引导（演示冲刺）────────────────────────────────
 # 阶段目标推进：DemoQuest -> UI（建造按钮强调等注意力引导）
 @warning_ignore("unused_signal") signal quest_advanced(quest_id: String)
 

@@ -1,5 +1,5 @@
 shader_type canvas_item;
-// 全屏后处理栈（求职 Demo"精品感"渲染层）
+// 全屏后处理栈（游戏演示"精品感"渲染层）
 // 六层叠加：边缘色差 → 暖色分级 → 顶部天光 → 太阳炫光(glow/streak/ghost) → 渐晕 → 胶片颗粒
 // 挂 CanvasLayer(0.5) 的全屏 ColorRect：压在游戏世界之上、UI(CanvasLayer 1) 之下。
 

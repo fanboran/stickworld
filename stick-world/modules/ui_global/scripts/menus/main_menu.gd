@@ -53,16 +53,6 @@ func _build_title() -> void:
 	var title := StickKit.label(_menu_column, "火柴人帝国模拟", StickKit.LabelKind.TITLE)
 	title.add_theme_font_size_override("font_size", StickTokens.FONT_DISPLAY)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var subtitle := StickKit.label(_menu_column, "从部落到大帝国 · 亲手设计，看它自转", StickKit.LabelKind.HINT)
-	subtitle.add_theme_color_override("font_color", StickTokens.TEXT_DIM)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# Demo 版标识：让首次打开的人 3 秒内知道这是什么、玩什么
-	var demo_tag := StickKit.label(_menu_column,
-		"求职 Demo · 新游戏含阶段目标引导（采集 → 建造 → 编队 → 战斗）",
-		StickKit.LabelKind.HINT)
-	demo_tag.add_theme_color_override("font_color", Color(1.0, 0.84, 0.45))
-	demo_tag.add_theme_font_size_override("font_size", 13)
-	demo_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 24)
 	_menu_column.add_child(spacer)

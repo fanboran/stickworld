@@ -735,7 +735,7 @@ func register_debug_drawers() -> void:
 
 # ─────────────────────────────── Demo 目标链装配 ────────────────────────────────
 
-## 装配求职 Demo 目标链（四阶段引导 + 胜利结算）。
+## 装配演示目标链（四阶段引导 + 胜利结算）。
 ## deferred 时机：晚于 _setup_resources_api_deferred（deferred 队列 FIFO），
 ## 保证初始资源已发放、DemoQuest 的采集基线快照不被初始资源污染。
 func _setup_demo_quest_deferred() -> void:

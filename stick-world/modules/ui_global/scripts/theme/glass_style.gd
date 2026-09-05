@@ -80,11 +80,22 @@ static func tab_hover() -> StyleBoxFlat:
 
 
 static func tab_selected() -> StyleBoxFlat:
-	var s := _make(StickTokens.ACCENT_BG, Color.TRANSPARENT, StickTokens.RADIUS,
+	# 选中态琥珀只上底不上字：琥珀 14% 底，选中下划线由 SketchTabContainer
+	# 自绘琥珀马克笔底线承担（静态兜底不再画直边底线盖住手绘线）
+	return _make(StickTokens.ACCENT_BG, Color.TRANSPARENT, StickTokens.RADIUS,
 			StickTokens.PAD_X + 4, StickTokens.PAD_Y + 2)
-	s.border_width_bottom = 2
-	s.border_color = StickTokens.ACCENT
-	return s
+
+
+# ─────────────────────────────── 弹出菜单（OptionButton 下拉等）────────────────────────────────
+
+## 弹出菜单底：黑玻璃小面板（紧凑内边距）
+static func menu_panel() -> StyleBoxFlat:
+	return _make(StickTokens.WINDOW_BG, StickTokens.BORDER, StickTokens.RADIUS, 6, 4)
+
+
+## 弹出菜单悬停项
+static func menu_hover() -> StyleBoxFlat:
+	return _make(StickTokens.BTN_BG_HOVER, Color.TRANSPARENT, StickTokens.RADIUS, 6, 2)
 
 
 # ─────────────────────────────── 进度条 ────────────────────────────────

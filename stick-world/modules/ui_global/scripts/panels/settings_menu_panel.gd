@@ -216,7 +216,7 @@ func _add_field_row(field: Dictionary) -> void:
 			s.value_changed.connect(func(v: float): _values[key] = v)
 			widget = s
 		"option":
-			var o := OptionButton.new()
+			var o := SketchOptionButton.new()
 			for i in field["options"].size():
 				o.add_item(field["options"][i], i)
 			o.selected = _values[key]
@@ -225,7 +225,7 @@ func _add_field_row(field: Dictionary) -> void:
 			o.item_selected.connect(func(idx: int): _values[key] = idx)
 			widget = o
 		"toggle":
-			var c := CheckButton.new()
+			var c := SketchCheckButton.new()
 			c.button_pressed = _values[key]
 			row.add_child(c)
 			c.toggled.connect(func(on: bool): _values[key] = on)

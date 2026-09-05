@@ -66,6 +66,13 @@ func _build() -> void:
 		merlons.position = Vector2(-total_width * 0.5, wall_top - TEX_MERLON_H)
 		merlons.scale = Vector2(total_width / float(TEX_SEG_W), 1.0)
 		add_child(merlons)
+	# 墙脚接地阴影：底边向上渐隐的暗带（立面"立"在地上的重量感）
+	var shadow := ColorRect.new()
+	shadow.name = "FootShadow"
+	shadow.color = Color(0.0, 0.0, 0.0, 0.22)
+	shadow.position = Vector2(-total_width * 0.5, -26.0)
+	shadow.size = Vector2(total_width, 26.0)
+	add_child(shadow)
 	# 城门立面（底边对齐墙脚、居中）
 	if gate_tex != null:
 		var gate := Sprite2D.new()

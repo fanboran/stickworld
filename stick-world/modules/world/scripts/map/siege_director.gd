@@ -13,7 +13,7 @@ extends Node
 const StICKMAN_FALLBACK := preload("res://modules/units/scenes/stickman_entity.tscn")
 
 ## 波次节奏（秒）
-@export var wave_interval: float = 22.0
+@export var wave_interval: float = 25.0
 ## 首波人数 / 每波递增 / 人数封顶
 @export var wave_base: int = 3
 @export var wave_ramp: int = 1
@@ -32,6 +32,10 @@ var _started: bool = false
 var _rng := RandomNumberGenerator.new()
 ## 我方守军登记（弓箭手等由导演布防的单位；首波开战时作为守方名单）
 var _garrison: Array = []
+## 守城陷落标志（守军尽后置位；陷落波次直插城内）
+var _breached: bool = false
+## 城内目标 x（陷落推进终点；由地图 setup 注入硬地皮中心）
+var city_target_x: float = 2400.0
 
 
 func setup(map: Node2D, wall: SiegeWall) -> void:
@@ -80,15 +84,16 @@ func _deploy_garrison() -> void:
 		if u.has_method("set_possessed"):
 			u.set_possessed(false)
 		_set_body_color(u, Color(0.25, 0.42, 0.80))
+		u.set_meta("siege_slot_x", pos.x)
 		_garrison.append(u)
 		placed += 1
-	if _root != null and _root.is_verbose_enabled():
-		print_verbose("[SiegeDirector] 布防完成: 弓箭手 %d/%d 上墙" % [placed, archer_count])
+	print_verbose("[SiegeDirector] 布防完成: 弓箭手 %d/%d 上墙" % [placed, archer_count])
 
 
 func _process(delta: float) -> void:
 	if _map == null or _wall == null:
 		return
+	_clamp_garrison()
 	_wave_timer += delta
 	var due: float = first_wave_delay if not _started else wave_interval
 	if _wave_timer < due:
@@ -96,6 +101,22 @@ func _process(delta: float) -> void:
 	_wave_timer = 0.0
 	_started = true
 	_spawn_wave()
+
+
+## 驻守钳制：弓箭手驻垛口位不追敌（战斗 AI 的接敌/风筝会让远程沿墙顶
+## 横向飘走——y 被 ground 约束锁定后表现为"空中横移"）。x 偏移超带宽拉回。
+const SLOT_CLAMP := 24.0
+
+func _clamp_garrison() -> void:
+	for g in _garrison:
+		if not is_instance_valid(g) or (g.has_method("is_dead") and g.is_dead()):
+			continue
+		if not g.has_meta("siege_slot_x"):
+			continue
+		var slot_x: float = float(g.get_meta("siege_slot_x"))
+		var off: float = g.global_position.x - slot_x
+		if absf(off) > SLOT_CLAMP:
+			g.global_position.x = slot_x + signf(off) * SLOT_CLAMP
 
 
 ## 刷一波进攻方（右端列队入场），并入当前战斗（无战斗则首波开战）
@@ -119,10 +140,14 @@ func _spawn_wave() -> void:
 		if e.has_method("set_possessed"):
 			e.set_possessed(false)
 		_set_body_color(e, Color(0.82, 0.22, 0.22))
+		e.set_meta("siege_attacker", true)
 		spawned.append(e)
 	if spawned.is_empty():
 		return
-	_join_battle(spawned)
+	if _breached:
+		_breach()
+	else:
+		_join_battle(spawned)
 	print("[SiegeDirector] 第 %d 波敌军来袭: %d 人" % [_wave_num, spawned.size()])
 
 
@@ -131,14 +156,43 @@ func _join_battle(new_attackers: Array) -> void:
 	var api: Node = _combat_api()
 	var battle: Node = _active_battle(api)
 	var defenders: Array = _alive_blue_units()
-	print("[SiegeDirector] join_battle: api=%s battle=%s defenders=%d" % [api, battle, defenders.size()])
 	if battle != null and battle.has_method("add_unit"):
 		for u in new_attackers:
 			battle.add_unit(u, 1)   # FACTION_ATTACKER
 		return
+	if defenders.is_empty():
+		# 守军已尽：守城陷落。不再开空战（守方无人战斗秒结），在场敌人
+		# 改下"向城内推进"的号令（视觉上长驱直入），后续波次同样推进。
+		_breach()
+		return
 	if api != null and api.has_method("start_battle"):
-		var b: Node = api.start_battle(_map, new_attackers, defenders)
-		print("[SiegeDirector] start_battle -> ", b)
+		api.start_battle(_map, new_attackers, defenders)
+
+
+## 守城陷落：全场进攻方 set_order(move) 直插城内（town 大门 → 硬地皮中心）
+func _breach() -> void:
+	if _breached:
+		return
+	_breached = true
+	print("[SiegeDirector] 守军已尽，城门失守！敌军涌入城内")
+	var target := Vector2(city_target_x, _map.ground_y + 300.0)
+	for u in _all_attackers():
+		if is_instance_valid(u) and u.has_method("get_ai_controller"):
+			var ai: Node = u.get_ai_controller()
+			if ai != null and ai.has_method("set_order"):
+				ai.set_order("move", {"target": target, "run": true})
+
+
+func _all_attackers() -> Array:
+	var host: Node2D = _map.get_node_or_null("EntityHost") as Node2D
+	var result: Array = []
+	if host == null:
+		return result
+	for u in host.get_children():
+		# 进攻方 = 导演刷的红色敌人（spawn 时登记）
+		if is_instance_valid(u) and u.has_meta("siege_attacker"):
+			result.append(u)
+	return result
 
 
 ## 当前地图的活动战斗（CombatApi → BattleDirector 链；BattleInstance 的地图引用在 _map）

@@ -14,6 +14,8 @@ const CORNER_WIDTH: float = 2.0
 
 var _hovered_entity: Node2D = null
 var _hovered_range: CollisionShape2D = null
+## 悬停扫描节流：全实体命中扫描 10Hz 足够（悬停框呼吸仍逐帧重绘）
+var _scan_acc: float = 0.0
 var _breath_time: float = 0.0
 
 var _camera_rig: Node = null
@@ -33,14 +35,23 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_breath_time += delta
 	size = get_viewport_rect().size
-	# 模态/暂停时（时间冻结）不显示悬停反馈，避免反馈漏过遮罩层
+	# 模态/暂停时（时间冻结）不显示悬停反馈，避免反馈漏过遮罩层；
+	# 仅在「原悬停框还在屏上」时补一次清屏重绘，暂停期不再每帧重绘
 	if TimeManager and TimeManager.is_paused():
-		_hovered_entity = null
-		_hovered_range = null
-		queue_redraw()
+		if _hovered_entity != null:
+			_hovered_entity = null
+			_hovered_range = null
+			queue_redraw()
 		return
-	_update_hovered()
-	queue_redraw()
+	# 仅悬停中（呼吸动画需逐帧）或目标刚变化（清旧框/画新框）时重绘；
+	# 全实体扫描降到 10Hz——无悬停的绝大多数帧零重绘、扫描也按节拍走
+	var prev: Node2D = _hovered_entity
+	_scan_acc += delta
+	if _scan_acc >= 0.1:
+		_scan_acc = 0.0
+		_update_hovered()
+	if _hovered_entity != null or prev != null:
+		queue_redraw()
 
 
 func _draw() -> void:

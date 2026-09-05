@@ -88,6 +88,9 @@ func _on_possession_ended(_entity) -> void:
 # ─────────────────────────────── 刷新 ────────────────────────────────
 
 func _process(_delta: float) -> void:
+	# 面板不可见（未附身/面板隐藏）时不做每帧字符串重建
+	if not is_visible_in_tree():
+		return
 	_refresh_info()
 
 

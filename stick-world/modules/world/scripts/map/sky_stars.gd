@@ -248,10 +248,11 @@ func _draw_moon_path(center_x: float, hour: float, cm: Color) -> void:
 	draw_circle(p + Vector2(7, 6) * s, 4.0 * s, crater)
 	draw_circle(p + Vector2(9, -9) * s, 2.6 * s, crater)
 	# 月相：phase 0..7（0=满月 4=新月），阴影圆横向偏移扫过月面；
-	# off = 1.5r×(1-p/4)：p0=+1.5r(全露/满) → p4=0(全遮/新) → p7=-1.125r(反向娥眉)
+	# off 满偏 2.2r（阴影半径 1.04r → 满月时完全跳出月盘，不咬边）
+	# p0=+2.2r(满月全露) → p4=0(全遮/新) → p7=-1.65r(反向娥眉)
 	var phase: int = _day_count % 8
 	var shadow_r: float = r * 1.04
-	var off: float = (1.0 - float(phase) / 4.0) * shadow_r * 1.5
+	var off: float = (1.0 - float(phase) / 4.0) * shadow_r * 2.115
 	draw_circle(p + Vector2(off, 0.0), shadow_r,
 			EnvironmentAPI.unmodulate(EnvironmentAPI.sample_sky_bg_color(hour), cm))
 

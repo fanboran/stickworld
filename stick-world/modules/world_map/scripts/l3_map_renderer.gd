@@ -13,6 +13,11 @@ enum DisplayMode { MODE_L1, MODE_CITY }
 var _data: L3WorldData = null
 var _camera: MapCamera = null
 
+## 当前地图模式（B4 TERRAIN/POLITICAL，MapModeManager 广播 → 控制器转发）。
+## 地形底图层（B2 产 l3_terrain.png）与政权叠加层（Phase F）落地前两模式渲染一致
+## （回退现状着色），本字段为届时分层绘制的接入口
+var map_mode: int = MapModeManager.Mode.TERRAIN
+
 ## 当前显示模式
 var display_mode: int = DisplayMode.MODE_L1
 
@@ -103,6 +108,14 @@ func get_data() -> L3WorldData:
 
 func set_camera(camera: MapCamera) -> void:
 	_camera = camera
+
+
+## 地图模式切换（控制器在 open() 时也推一次当前模式——跨视图全局状态）
+func set_map_mode(mode: int) -> void:
+	if mode == map_mode:
+		return
+	map_mode = mode
+	queue_redraw()
 
 
 func refresh() -> void:

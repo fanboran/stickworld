@@ -30,6 +30,7 @@ const _FormationPanelScript: GDScript = preload("res://modules/combat/ui/formati
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
 const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
+const _L1ThumbnailScript: GDScript = preload("res://modules/world_map/ui/l1_thumbnail.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
 const _WeaponPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/weapon_panel.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
@@ -49,6 +50,16 @@ const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_roo
 const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/debug_overlay.tscn")
 
 var _root: GameRoot
+
+# ─────────────────────────────── Tab 三态（A3） ────────────────────────────────
+
+## Tab 键循环：关闭 → 顶部小地图（双窗）→ 原 Tab 大图 → 关闭。
+## 顶部小地图区双窗 = Minimap（本城市俯视）+ L1Thumbnail（出生 L1 世界缩略）。
+enum TabMapState { HIDDEN, TOP_MINIMAPS, FULL_L1 }
+
+var _tab_state: int = TabMapState.HIDDEN
+## L1 世界缩略窗（与 Minimap 并列）
+var _l1_thumbnail: Control = null
 
 
 func setup(root: GameRoot) -> void:
@@ -421,7 +432,8 @@ func _setup_pause_menu_panel_deferred() -> void:
 
 # ─────────────────────────────── 小地图装配（§15 阶段 0.6）────────────────────────────────
 
-## 创建 Minimap 并挂到 UIRoot。详见 §10.4。
+## 创建顶部小地图区双窗（Minimap + L1 缩略窗）并挂到 UIRoot。详见 §10.4。
+## 双窗默认隐藏（A3 Tab 三态控制，HIDDEN 态顶部小地图区整体收起）
 func _setup_minimap() -> void:
 	if _root.ui_root == null:
 		return
@@ -430,6 +442,15 @@ func _setup_minimap() -> void:
 	_root._minimap = mm
 	if mm.has_method("setup"):
 		mm.setup(_root)
+	mm.visible = false
+	# L1 世界缩略窗（贴 Minimap 右侧并列；点击 = 切到 L1 大图）
+	_l1_thumbnail = UIKit.widget(_L1ThumbnailScript, "L1Thumbnail")
+	_root.ui_root.add_to_slot("HudOverlay", _l1_thumbnail)
+	if _l1_thumbnail.has_signal("open_l1_requested"):
+		_l1_thumbnail.open_l1_requested.connect(_on_l1_thumbnail_clicked)
+	if _l1_thumbnail.has_method("place_right_of_minimap"):
+		_l1_thumbnail.place_right_of_minimap(mm)
+	_l1_thumbnail.visible = false
 
 
 ## 创建 ZoomBar 并挂到 UIRoot，位于小地图下方。
@@ -607,25 +628,72 @@ func _toggle_l3_strategic_map() -> void:
 		_pause_scene_input(true)
 
 
-func _open_strategic_map() -> void:
+## Tab / 边界触发入口（A3 三态循环）。
+## full_map=true（边界自动触发，如顶边界持续推进）：直接开 L1 大图（保留原"出城看图"语义）；
+## full_map=false（玩家按 Tab）：关闭 → 顶部小地图 → 原 Tab 大图 → 关闭 循环。
+func _open_strategic_map(full_map: bool) -> void:
 	_ensure_strategic_maps()
+	if full_map:
+		if _tab_state != TabMapState.FULL_L1:
+			_set_top_minimaps_visible(false)
+			_open_l1_full_map()
+		return
+	match _tab_state:
+		TabMapState.HIDDEN:
+			_set_top_minimaps_visible(true)
+			_tab_state = TabMapState.TOP_MINIMAPS
+		TabMapState.TOP_MINIMAPS:
+			_set_top_minimaps_visible(false)
+			_open_l1_full_map()
+		TabMapState.FULL_L1:
+			_close_l1_full_map()
+
+
+## 顶部小地图区双窗显隐
+func _set_top_minimaps_visible(v: bool) -> void:
+	if _root._minimap != null:
+		_root._minimap.visible = v
+	if _l1_thumbnail != null:
+		_l1_thumbnail.visible = v
+
+
+## 打开 L1 大图（三态第三态；顶部小地图区先收起——"与大图切换显示"）
+func _open_l1_full_map() -> void:
 	if _root._strategic_map == null:
 		return
 	# 战略图是 CanvasLayer，控制器在 Content 子节点（visible 控制全层显隐）
 	var content: Node = _root._strategic_map.get_node_or_null("Content")
 	if content == null or not content.has_method("open"):
 		return
-	if content.visible:
-		# 再按 Tab：关闭地图（恢复场景图输入）
+	content.open()
+	_pause_scene_input(true)
+	_tab_state = TabMapState.FULL_L1
+
+
+## 关闭 L1 大图（close 发 strategic_map_closed → _on_strategic_map_closed 归位 HIDDEN）
+func _close_l1_full_map() -> void:
+	var content: Node = _root._strategic_map.get_node_or_null("Content") \
+			if _root._strategic_map != null else null
+	if content != null and content.visible and content.has_method("close"):
 		content.close()
-		_pause_scene_input(false)
 	else:
-		content.open()
-		_pause_scene_input(true)
+		_tab_state = TabMapState.HIDDEN
+
+
+## L1 缩略窗点击 = 顶部小地图 → 大图（与 Tab 第二次按下等效）
+func _on_l1_thumbnail_clicked() -> void:
+	if _tab_state != TabMapState.TOP_MINIMAPS:
+		return
+	_set_top_minimaps_visible(false)
+	_open_l1_full_map()
 
 
 func _on_strategic_map_closed() -> void:
 	_pause_scene_input(false)
+	# L1 大图任何路径关闭（ESC / Tab / M 互斥）都归位三态起点；
+	# TOP_MINIMAPS 态下的 M 开关 L3 不影响（其 close 也发此信号，但此时不在 FULL_L1）
+	if _tab_state == TabMapState.FULL_L1:
+		_tab_state = TabMapState.HIDDEN
 
 
 ## 暂停/恢复场景图输入（战略图打开时场景图不响应输入）

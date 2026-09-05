@@ -4,9 +4,11 @@ class_name MapRenderer
 ##
 ## 数据来自 l1_world.json（含 context_size/neighbors/lakes，坐标 = context 局部）。
 ## 全部矢量绘制（地块少），任意缩放清晰，不依赖底图纹理。
-## 分层（context 坐标系，含灰色邻居 L1 块扩展区域，与 L2MapRenderer 一致）：
-##   海洋背景 -> 湖泊(浅蓝) -> 邻居老 L1 块(灰色) -> 当前 L1 城市块(政权色)
-##   -> 城市描边 + 出生 L1 权威轮廓(深色) -> hover 描边(灰) -> F3 地块编号
+## 分层（context 坐标系，含邻居老 L1 块扩展区域，与 L2MapRenderer 一致）：
+##   海洋背景 -> 湖泊(浅蓝) -> 当前 L1 城市块(政权色) -> 邻居老 L1 块(灰色空心描边)
+##   -> 城市描边 + 出生 L1 权威轮廓(深色) -> hover 描边(灰) -> 内容区纸边黑框
+##   -> F3 地块编号
+## 邻居块空心化（A3）：只描边不填充，聚焦本 L1；context 外缘画黑线"纸张边界"。
 ##
 ## 交互：hover 命中城市块（经相机换算 + 索引图查询），点击选中由控制器经 api 处理。
 
@@ -19,22 +21,29 @@ var _camera: MapCamera = null
 ## 当前悬停的地块 ID（""=无）
 var hovered_tile_id: String = ""
 
-## 性能缓存：城市描边段 + 出生 L1 轮廓（不随 zoom/hover 变化，set_data 后首帧构建一次复用）。
+## 性能缓存：城市描边段 + 出生 L1 轮廓 + 邻居空心轮廓（不随 zoom/hover 变化，set_data 后首帧构建一次复用）。
 ## 原实现每帧重建描边段并对每段遍历湖全部边做距离计算（4668 段 × 湖边数 ≈ 百万级），
 ## hover 每帧触发 → 卡顿源；缓存后 hover 重绘 = 1 次 draw_multiline。
 var _cached_segs: PackedVector2Array = PackedVector2Array()
 ## 出生 L1 权威轮廓（主大陆单环，闭合；export 已保证 l1_polygon 只含最大环）
 var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
+## 邻居老 L1 块空心轮廓（每块一条闭合折线，A3 空心化）
+var _cached_neighbor_outlines: Array[PackedVector2Array] = []
 var _segs_valid: bool = false
 
-## 静态色块层 ArrayMesh（海洋+湖泊+邻居+城市色块，set_data 后烘焙一次；描边/轮廓/hover 仍动态）。
-## Geometry2D.triangulate_polygon 一次三角剖分 → 每帧 1 次 draw_mesh，免每帧 earcut（8 城 4750 点 + 邻居 1623 点 + 湖）。
+## 静态色块层 ArrayMesh（海洋+湖泊+城市色块，set_data 后烘焙一次；描边/轮廓/hover 仍动态）。
+## Geometry2D.triangulate_polygon 一次三角剖分 → 每帧 1 次 draw_mesh，免每帧 earcut（8 城 4750 点 + 湖）。
 var _base_mesh: ArrayMesh = null
 
 ## 配色（与 L2MapRenderer 完全一致）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
+## 邻居老 L1 块（A3 空心化：灰色轮廓线，不填充）
 const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
+const NEIGHBOR_BORDER_WIDTH := 2.0
+## 内容区"纸张边界"黑框（context 外缘，A3）
+const PAPER_BORDER_COLOR := Color(0.08, 0.08, 0.08)
+const PAPER_BORDER_WIDTH := 4.0
 ## 城市常驻描边（内部城界；屏幕像素固定、细，不随缩放变化——避免缩放时粗细跳变）
 const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
 const TILE_BORDER_WIDTH := 2.0
@@ -132,32 +141,35 @@ func _draw() -> void:
 	var zz: float = 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
-	# 1. 静态色块层（海洋+湖泊+邻居+城市色块 → 单张 ArrayMesh，描边/轮廓/hover 仍动态画）
+	# 1. 静态色块层（海洋+湖泊+城市色块 → 单张 ArrayMesh，描边/轮廓/hover 仍动态画）
 	if _base_mesh == null:
 		_bake_base_mesh()
 	if _base_mesh != null:
 		draw_mesh(_base_mesh, null)
 	else:
-		# 回退：数据异常时逐层绘制
+		# 回退：数据异常时逐层绘制（邻居空心：只描边，见第 4.5 层）
 		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
 		for lake in _data.lakes:
 			if (lake as Array).size() >= 3:
 				draw_colored_polygon(_pts(lake), LAKE_COLOR)
-		for nb in _data.neighbors:
-			for poly in nb.get("polygons", []):
-				if (poly as Array).size() >= 3:
-					draw_colored_polygon(_pts(poly), NEIGHBOR_COLOR)
 		for tile in _data.tiles:
 			if tile.polygon.size() < 3:
 				continue
 			draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
+	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓，首帧构建一次复用）
+	if not _segs_valid:
+		_build_cached_geometry()
+	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
+	var nbw: float = NEIGHBOR_BORDER_WIDTH
+	if zz > 0.0001:
+		nbw = NEIGHBOR_BORDER_WIDTH / zz
+	for outline in _cached_neighbor_outlines:
+		draw_polyline(outline, NEIGHBOR_COLOR, nbw, true)
 	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）。
 	#    描边段不随 zoom/hover 变化 → 缓存复用（原每帧重建 = 4668 段 × 湖边数 距离计算，hover 卡顿源）
 	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:
 		tw = TILE_BORDER_WIDTH / zz
-	if not _segs_valid:
-		_build_cached_geometry()
 	if _cached_segs.size() >= 2:
 		draw_multiline(_cached_segs, TILE_BORDER_COLOR, tw, true)
 	# 6. 出生 L1 权威轮廓（屏幕像素固定，略粗区分出生块；邻居分界同理）
@@ -187,6 +199,11 @@ func _draw() -> void:
 			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
 				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)
 				break
+	# 7.5 内容区"纸张边界"黑框（context 外缘，A3；压住贴边内容 = 装裱观感，屏幕像素固定）
+	var pw: float = PAPER_BORDER_WIDTH
+	if zz > 0.0001:
+		pw = PAPER_BORDER_WIDTH / zz
+	draw_rect(Rect2(Vector2.ZERO, ctx_size), PAPER_BORDER_COLOR, false, pw)
 	# 8. F3 调试：城市编号（标在聚落位置）
 	if DebugApi != null and DebugApi.is_visible():
 		_draw_city_labels()
@@ -210,20 +227,18 @@ func _lake_edge_tol() -> float:
 	return tol
 
 
-## 烘焙静态色块层：海洋(矩形)/湖泊/邻居/城市色块 → 单张 ArrayMesh（顶点色，三角形独立顶点）。
+## 烘焙静态色块层：海洋(矩形)/湖泊/城市色块 → 单张 ArrayMesh（顶点色，三角形独立顶点）。
 ## Geometry2D.triangulate_polygon 一次性 earcut（C++，含凹多边形），仅 set_data / 首帧调用一次。
+## 邻居老 L1 块不参与（A3 空心化：只描边不填充，轮廓走 _build_cached_geometry 缓存）。
 func _bake_base_mesh() -> void:
 	_base_mesh = null
 	var ctx := _data.context_size
 	if ctx.x <= 0 or ctx.y <= 0:
 		return
-	# 收集 (多边形, 颜色)：顺序 = 原绘制顺序（湖泊最后画，盖邻居/城市色块——
+	# 收集 (多边形, 颜色)：顺序 = 原绘制顺序（湖泊最后画，盖城市色块——
 	# 湖泊弧线与城市块交界处由湖弧线决定，严丝合缝无缝隙；export 已裁剪城市块不覆盖湖）
 	var pairs: Array = []  # [[PackedVector2Array, Color], ...]
 	# 海洋 = 全矩形底
-	for nb in _data.neighbors:
-		for poly in nb.get("polygons", []):
-			pairs.append([_pts(poly), NEIGHBOR_COLOR])
 	for tile in _data.tiles:
 		if tile.polygon.size() >= 3:
 			pairs.append([tile.polygon, _data.get_state_color(tile.owner_state_id)])
@@ -254,11 +269,17 @@ func _bake_base_mesh() -> void:
 	_base_mesh = mesh
 
 
-## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓。
-## 仅 set_data / 首帧调用一次。
+## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓
+## + 邻居空心轮廓（A3）。仅 set_data / 首帧调用一次。
 func _build_cached_geometry() -> void:
 	_cached_segs = PackedVector2Array()
 	_cached_l1_closed = PackedVector2Array()
+	_cached_neighbor_outlines = []
+	for nb in _data.neighbors:
+		for poly in nb.get("polygons", []):
+			var pts := _pts(poly)
+			if pts.size() >= 3:
+				_cached_neighbor_outlines.append(_closed(pts))
 	var lake_tol := _lake_edge_tol()
 	# 湖 bbox（外扩 tol）预筛：段中点不在任何湖 bbox 内 → 直接非邻湖，省精确距离计算
 	var lake_boxes: Array[Rect2] = []

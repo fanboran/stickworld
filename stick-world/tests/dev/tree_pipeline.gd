@@ -29,8 +29,8 @@ const K_SCALE := 2.625
 ## 枝叶区干段拉长——枝分布空间随之变稀，顺带缓解枝堆叠）
 const DEFAULT_PARAMS := {
 	"height_factor": 1.00,
-	"bare_frac": 0.20,
-	"trunk_frac": 0.68,
+	"bare_frac": 0.25,
+	"trunk_frac": 0.85,
 	"trunk_w": 0.042,
 	"crown_r_coef": 0.52,
 	"crown_cap": 0.30,
@@ -240,13 +240,9 @@ static func _gen_tree_struct(rng: RandomNumberGenerator, P: Dictionary) -> Dicti
 		var by := minf(cy + d * sin(a) * 0.8, ground_y - r_main * 0.45 * 0.8)
 		blobs.append({"c": Vector2(trunk_top_x + d * cos(a), by),
 			"r": r_main * rng.randf_range(0.30, 0.45)})
-	for br: Dictionary in branches:
-		var tip: Vector2 = br["tip"]
-		# 枝端小叶团（= 基线 Python 版参数：r=0.26-0.4×r_main，中心在梢上方——
-		# 枝露在冠外、端头独立小叶团，与主冠不相连。勿加大回缩：会与冠融合成
-		# 长条（2026-09-05 用户反馈"树冠和枝干的叶子融合在一起了，之前不是
-		# 这样的"），0.42-0.6 版已回退）
-		blobs.append({"c": Vector2(tip.x, tip.y - 4.0), "r": r_main * rng.randf_range(0.26, 0.4)})
+	# 枝端叶团已删（2026-09-05 用户终版方向：高瘦树=光杆+顶团。枝端团曾把
+	# 绿色拖到树干中部——实测 trunk_frac 0.90→0.93 渲染干冠比仅 0.90→0.96，
+	# 冠底被枝端团钉死，任何比例参数都调不动，且"树冠和枝叶融合"观感源于此）
 	for b: Dictionary in blobs:
 		var subs: Array = []
 		var bc0: Vector2 = b["c"]

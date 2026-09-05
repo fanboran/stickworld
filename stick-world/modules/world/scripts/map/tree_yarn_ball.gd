@@ -26,10 +26,12 @@ const PALETTES: Array = [
 	[Color8(172, 196, 96), Color8(122, 164, 72), Color8(82, 126, 54)],
 ]
 
-## 团半径（用户规格：冠 180 / 侧簇 15-30）
+## 团半径（用户规格：冠 180 / 侧簇 30-60）
 var radius := 60.0
 ## 确定性种子（位置哈希派生）
 var base_seed := 0
+## 色板下标（-1 = 按 base_seed 自选；由 TreePainting 统一指定 → 整树同色板）
+var palette_idx := -1
 
 var _timer := 0.0
 var _variant := 0
@@ -37,7 +39,7 @@ var _palette: Array = PALETTES[0]
 
 
 func _ready() -> void:
-	_palette = PALETTES[abs(base_seed) % PALETTES.size()]
+	_palette = PALETTES[(abs(base_seed) if palette_idx < 0 else palette_idx) % PALETTES.size()]
 	queue_redraw()
 
 

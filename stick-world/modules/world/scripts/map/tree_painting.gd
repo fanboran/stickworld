@@ -14,12 +14,18 @@ extends Node2D
 const TRUNK_H := 700.0
 const TRUNK_W_BASE := 50.0
 const TRUNK_W_TOP := 30.0
-const CROWN_R := 180.0
-## 侧枝规格
+## 冠云朵结构（用户 2026-09-06：别只是单个整圆，若干小团在大圆一圈，云朵那种）
+const CROWN_MAIN_R := 118.0   ## 中心主团
+const CROWN_RING_N := [6, 8]  ## 外圈团数量区间
+const CROWN_BLOB_R := [42.0, 60.0]  ## 外圈团半径区间
+const CROWN_ENVELOPE := 180.0 ## 冠整体包络半径（用户规格 r180）
+## 侧枝规格（2026-09-06 修正：水平±15° → 斜向上 45° 左右；左右交替均衡分布；
+## 侧簇直径翻倍：半径 15-30 → 30-60）
 const BRANCH_LEN := 100.0
-const BRANCH_ANG_MAX := 15.0
-const CLUSTER_R_MIN := 15.0
-const CLUSTER_R_MAX := 30.0
+const BRANCH_ANG_MIN := 30.0
+const BRANCH_ANG_MAX := 60.0
+const CLUSTER_R_MIN := 30.0
+const CLUSTER_R_MAX := 60.0
 ## 侧簇 y 带（局部 y 向上为负）：冠底 -520 再留 40 间隙 ~ 离地 350
 const CLUSTER_Y_TOP := -480.0
 const CLUSTER_Y_BOT := -350.0
@@ -56,8 +62,9 @@ func setup(tree_seed: int) -> void:
 			"alpha": rng.randf_range(0.24, 0.42),
 			"w": rng.randf_range(3.0, 4.6),
 		})
-	# 侧枝：0-5 个全随机，y 带内间距 ≥50（用户规格）
+	# 侧枝：0-5 个全随机，y 带内间距 ≥50（用户规格）；左右交替分配保证均衡
 	var n_br := rng.randi_range(0, 5)
+	var flip := 1.0 if rng.randf() < 0.5 else -1.0
 	var used_y: Array = []
 	for i in n_br:
 		var y := 0.0
@@ -76,32 +83,51 @@ func setup(tree_seed: int) -> void:
 		used_y.append(y)
 		_branches.append({
 			"y": y,
-			"side": 1.0 if rng.randf() < 0.5 else -1.0,
-			"ang": deg_to_rad(rng.randf_range(-BRANCH_ANG_MAX, BRANCH_ANG_MAX)),
+			"side": flip if i % 2 == 0 else -flip,
+			"ang": deg_to_rad(rng.randf_range(BRANCH_ANG_MIN, BRANCH_ANG_MAX)),
 			"r_cluster": rng.randf_range(CLUSTER_R_MIN, CLUSTER_R_MAX),
 		})
-	# 毛线团：干顶 1 个大团（冠）+ 枝端小团（侧簇），先冠后簇
-	var crown := TreeYarnBall.new()
-	crown.radius = CROWN_R
-	crown.base_seed = _seed + 101
-	crown.position = Vector2(0.0, -TRUNK_H)
-	add_child(crown)
-	_yarns.append(crown)
+	# 冠 = 云朵多瓣：中心主团 + 外圈小团沿包络上半圈鼓出（团外缘贴 CROWN_ENVELOPE，
+	# 下半部由主团收圆——上鼓下收的云朵轮廓，底部不与侧簇带冲突）
+	var crown_top := Vector2(0.0, -TRUNK_H)
+	var crown_blobs: Array = [{"c": crown_top, "r": CROWN_MAIN_R}]
+	var n_hat: int = rng.randi_range(CROWN_RING_N[0], CROWN_RING_N[1])
+	for k in n_hat:
+		var a := -PI + (float(k) + 0.5) / float(n_hat) * PI + rng.randf_range(-0.15, 0.15)
+		var hr: float = rng.randf_range(CROWN_BLOB_R[0], CROWN_BLOB_R[1])
+		var d: float = CROWN_ENVELOPE - hr * 0.75
+		crown_blobs.append({"c": Vector2(crown_top.x + cos(a) * d,
+			crown_top.y + sin(a) * d * 0.92), "r": hr})
+	# 毛线团装配：冠（主团+外圈团同色板）+ 枝端侧簇
+	var pal_idx: int = rng.randi() % TreeYarnBall.PALETTES.size()
+	for k in crown_blobs.size():
+		var blob: Dictionary = crown_blobs[k]
+		var yb := TreeYarnBall.new()
+		yb.radius = blob["r"]
+		yb.base_seed = _seed + 101 + k * 41
+		yb.palette_idx = pal_idx
+		yb.position = blob["c"]
+		add_child(yb)
+		_yarns.append(yb)
 	for i in _branches.size():
 		var br: Dictionary = _branches[i]
-		var dir := Vector2(br["side"] * cos(br["ang"]), -sin(br["ang"]))
+		var side: float = br["side"]
+		var dir := Vector2(side * cos(br["ang"]), -sin(br["ang"]))
 		var rc: float = br["r_cluster"]
-		var tip := Vector2(br["side"] * 8.0, br["y"]) + dir * BRANCH_LEN
-		# 硬要求：侧簇不与冠重叠（冠心距 ≥ 冠半径 + 簇半径 + 10 间隙），
-		# 不满足则沿枝收回至刚好满足（正常规格数值下不会触发，纯保险）
+		var tip := Vector2(side * 8.0, br["y"]) + dir * BRANCH_LEN
+		# 硬要求：侧簇不与冠的任何团重叠（团心距 ≥ 两半径和 + 10 间隙），
+		# 不满足则沿远离该团方向推出到刚好满足
 		var cc: Vector2 = tip + dir * rc * 0.25
-		var need := CROWN_R + rc + 10.0
-		var dist := cc.distance_to(Vector2(0.0, -TRUNK_H))
-		if dist < need:
-			cc -= dir * (need - dist)
+		for blob: Dictionary in crown_blobs:
+			var bc: Vector2 = blob["c"]
+			var need: float = float(blob["r"]) + rc + 10.0
+			var dist := cc.distance_to(bc)
+			if dist < need:
+				cc += (cc - bc).normalized() * (need - dist)
 		var cl := TreeYarnBall.new()
 		cl.radius = rc
 		cl.base_seed = _seed + 211 + i * 37
+		cl.palette_idx = pal_idx
 		cl.position = cc
 		add_child(cl)
 		_yarns.append(cl)

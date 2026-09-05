@@ -40,7 +40,7 @@ BG_DIST_SOFT = 34.0   # 大于此 → 不透明（之间线性羽化）
 
 
 def paint(src: str, dst: str, total: int = 1600, mask_path: str = "",
-          size=None, bg=(250.0, 250.0, 250.0)) -> None:
+          size=None, bg=(250.0, 250.0, 250.0), layers=None, spirals=None) -> None:
     im = Image.open(src).convert("RGB")
     if size is not None:
         im = im.resize(size, Image.LANCZOS)
@@ -50,32 +50,39 @@ def paint(src: str, dst: str, total: int = 1600, mask_path: str = "",
     H, W = img.shape[:2]
     # 笔宽/笔长按画布相对 256 基准等比缩放（不同尺寸贴图的笔触颗粒度一致）
     k = max(W, H) / 256.0
-    layers = GAME_LAYERS if k == 1.0 else [
+    base_layers = layers if layers is not None else GAME_LAYERS
+    layers = base_layers if k == 1.0 else [
         dict(l, w0=l["w0"] * k, w1=l["w1"] * k, ln=l["ln"] * k)
-        for l in GAME_LAYERS
+        for l in base_layers
     ]
-    gen = StrokeGenerator(img, total, layers=layers)
+    # mask = 笔触原子模式：蒙版只做"笔中心在内→整笔保留（含超出部分）/在外→
+    # 整笔丢弃"的硬判定，不做任何羽化/渐变；输出 alpha = 笔触并集（hard 0/255）
+    mask_arr = None
+    if mask_path and os.path.exists(mask_path):
+        m = Image.open(mask_path).convert("L")
+        if m.size != (W, H):
+            m = m.resize((W, H), Image.NEAREST)
+        mask_arr = np.asarray(m).astype(np.float32) / 255.0
+    gen = StrokeGenerator(img, total, layers=layers, spirals=spirals, mask=mask_arr)
     blocks, got = gen.run()
     print(f"[stroke] {os.path.basename(src)}: {got} 笔 "
           + ", ".join(f"{n}×{len(s)}" for n, s in blocks))
     canvas = gen.canvas_img.convert("RGB")  # 模拟画布即输入尺寸
 
     arr = np.asarray(canvas).astype(np.float32)
-    if mask_path and os.path.exists(mask_path):
-        # 形状 mask 抠图（精确）：mask 已羽化，直接归一 0~1
-        m = Image.open(mask_path).convert("L")
-        if m.size != (W, H):
-            m = m.resize((W, H), Image.LANCZOS)
-        alpha = np.asarray(m).astype(np.float32) / 255.0
+    if mask_arr is not None:
+        # 笔触并集 alpha（hard 0/255，形状 = 笔的并集，边缘是圆头笔端弧线）
+        alpha = np.asarray(gen.alpha_canvas).astype(np.float32)
+        out = np.dstack([arr, alpha]).astype(np.uint8)
     else:
         # 回退：底色距羽化抠图（罩染层会污染底色，尽量提供 mask）
         dist = np.abs(arr - np.asarray(bg, np.float32)).sum(-1)
         alpha = np.clip((dist - BG_DIST_HARD) / (BG_DIST_SOFT - BG_DIST_HARD), 0.0, 1.0)
-    # 预乘消底：半透明像素把底色残留按 (1-alpha) 削掉
-    keep = alpha[..., None]
-    bg_arr = np.asarray(bg, np.float32)[None, None, :]
-    rgb = np.clip((arr - bg_arr * (1.0 - keep)) / np.maximum(keep, 1e-3), 0, 255)
-    out = np.dstack([rgb, alpha * 255.0]).astype(np.uint8)
+        # 预乘消底：半透明像素把底色残留按 (1-alpha) 削掉（仅色距路径需要）
+        keep = alpha[..., None]
+        bg_arr = np.asarray(bg, np.float32)[None, None, :]
+        rgb = np.clip((arr - bg_arr * (1.0 - keep)) / np.maximum(keep, 1e-3), 0, 255)
+        out = np.dstack([rgb, alpha * 255.0]).astype(np.uint8)
     Image.fromarray(out, "RGBA").save(dst)
     cov = float((alpha > 0.5).mean())
     print(f"[stroke] -> {dst}（不透明覆盖率 {cov:.0%}）")

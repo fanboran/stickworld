@@ -30,6 +30,8 @@ var _crit_gain: bool = false
 func _ready() -> void:
 	add_to_group("resource_node")
 	_initial_amount = maxi(amount, 1)
+	# 2.5D 纵深排序（与 stickman_entity 同款）：变高后的树在纵深带上前后遮挡正确
+	z_index = int(global_position.y * 0.1)
 	_apply_visual()
 	# 2026-08 修复依赖反转：经 EventBus 订阅调试可见性（生产代码不再依赖 debug_gui autoload）
 	if EventBus != null and EventBus.has_signal("debug_visibility_changed"):
@@ -41,28 +43,80 @@ func _update_debug_visibility(_v: bool = false) -> void:
 		_debug_label.visible = _v
 
 
-## 手绘笔触贴图（程序参考图 + mona-3 逆向油画算法拟合，见 tools/ai/stroke_paint.py）
-const _TEXTURE_PATHS: Dictionary = {
+## 笔触变体贴图池（tools/ai/gen_trees.py：树/石结构参数化直绘透明画布 + 笔触拟合，
+## 结构蒙版精确出 RGBA，零抠图零白边；每变体参数随机 = 天然多种多样）
+const _TEXTURE_POOLS: Dictionary = {
+	ResourceType.WOOD: [
+		"res://assets/resources/tree_paint_tree_v0.png",
+		"res://assets/resources/tree_paint_tree_v1.png",
+		"res://assets/resources/tree_paint_tree_v2.png",
+		"res://assets/resources/tree_paint_tree_v3.png",
+		"res://assets/resources/tree_paint_tree_v4.png",
+		"res://assets/resources/tree_paint_tree_v5.png",
+		"res://assets/resources/tree_paint_tree_v6.png",
+		"res://assets/resources/tree_paint_tree_v7.png",
+		"res://assets/resources/tree_paint_tree_v8.png",
+		"res://assets/resources/tree_paint_tree_v9.png",
+	],
+	ResourceType.STONE: [
+		"res://assets/resources/stone_paint_stone_v0.png",
+		"res://assets/resources/stone_paint_stone_v1.png",
+		"res://assets/resources/stone_paint_stone_v2.png",
+		"res://assets/resources/stone_paint_stone_v3.png",
+		"res://assets/resources/stone_paint_stone_v4.png",
+		"res://assets/resources/stone_paint_stone_v5.png",
+	],
+	ResourceType.METAL: [
+		"res://assets/resources/metal_paint_metal_v0.png",
+		"res://assets/resources/metal_paint_metal_v1.png",
+		"res://assets/resources/metal_paint_metal_v2.png",
+		"res://assets/resources/metal_paint_metal_v3.png",
+	],
+}
+## 变体池缺失时的兜底单张（旧管线产物，保持兼容）
+const _TEXTURE_FALLBACK: Dictionary = {
 	ResourceType.WOOD: "res://assets/resources/tree_paint.png",
 	ResourceType.STONE: "res://assets/resources/stone_paint.png",
 	ResourceType.METAL: "res://assets/resources/metal_paint.png",
 }
-## 贴图显示尺寸（px，宽高）
+## 贴图显示基线尺寸（px，宽高）；实例再乘 0.85~1.25 随机抖动
+## 树 570×998 等比缩放贴图 384×672，树体显示约火柴人身高（260px）的 4 倍
 const _TEXTURE_SIZES: Dictionary = {
-	ResourceType.WOOD: Vector2(108.0, 108.0),
-	ResourceType.STONE: Vector2(76.0, 76.0),
-	ResourceType.METAL: Vector2(72.0, 72.0),
+	ResourceType.WOOD: Vector2(570.0, 998.0),
+	ResourceType.STONE: Vector2(120.0, 94.0),
+	ResourceType.METAL: Vector2(120.0, 94.0),
 }
 
 
+## 外观确定性 RNG：以世界位置哈希为种子——位置随存档持久化，
+## 读档后同一棵树选到同样的变体/缩放/翻转/色偏（存档同树同貌）
+func _visual_rng() -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	var p := global_position
+	rng.seed = int(abs(fmod(p.x * 7919.0 + p.y * 104729.0, 2147483647.0)))
+	return rng
+
+
 func _apply_visual() -> void:
-	var tex_path: String = String(_TEXTURE_PATHS.get(resource_type, ""))
+	var vrng := _visual_rng()
+	var paths: Array = _TEXTURE_POOLS.get(resource_type, [])
+	var tex_path: String = String(_TEXTURE_FALLBACK.get(resource_type, ""))
+	if not paths.is_empty():
+		var pick: String = String(paths[vrng.randi() % paths.size()])
+		if ResourceLoader.exists(pick):
+			tex_path = pick
 	if not tex_path.is_empty() and ResourceLoader.exists(tex_path):
 		# 笔触贴图分支：底边对齐节点底（地面接触线）
 		var spr := Sprite2D.new()
 		spr.texture = load(tex_path)
-		var size: Vector2 = _TEXTURE_SIZES.get(resource_type, Vector2(64.0, 64.0))
+		var size: Vector2 = (_TEXTURE_SIZES.get(resource_type, Vector2(64.0, 64.0))
+			* vrng.randf_range(0.85, 1.25))
 		spr.scale = size / Vector2(spr.texture.get_width(), spr.texture.get_height())
+		spr.flip_h = vrng.randf() < 0.5
+		# 轻微明度/冷暖抖动（±5%）：同一变体两次摆放也不同
+		var dv := vrng.randf_range(-0.05, 0.05)
+		var dw := vrng.randf_range(-0.03, 0.03)
+		spr.modulate = Color(1.0 + dv + dw, 1.0 + dv, 1.0 + dv - dw, 1.0)
 		spr.position = Vector2(0.0, node_size * 0.5 - size.y * 0.5)
 		add_child(spr)
 		_body_sprite = spr

@@ -189,10 +189,17 @@ func _create_build_entry(def_id: String, def: Dictionary) -> Control:
 	cost_label.add_theme_font_size_override("font_size", 11)
 	cost_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75))
 	vbox.add_child(cost_label)
-	# 资源不足时灰显按钮
+	# 资源不足时灰显按钮 + 红字缺口提示（新手引导：缺什么、去哪补）
 	if not _can_afford(def):
 		btn.disabled = true
 		btn.modulate = Color(0.6, 0.6, 0.6)
+		var missing: String = _missing_summary(def)
+		if not missing.is_empty():
+			var miss := Label.new()
+			miss.text = "缺 %s —— 按 E 采集可获取" % missing
+			miss.add_theme_font_size_override("font_size", 11)
+			miss.add_theme_color_override("font_color", Color(0.95, 0.55, 0.45))
+			vbox.add_child(miss)
 	# 把按钮存到 entry 元数据，便于刷新
 	vbox.set_meta("btn", btn)
 	vbox.set_meta("def", def)
@@ -224,6 +231,20 @@ func _can_afford(def: Dictionary) -> bool:
 		if stock < v:
 			return false
 	return true
+
+
+## 汇总资源缺口（"木 20 · 石 40"；无缺口返回空串）
+func _missing_summary(def: Dictionary) -> String:
+	var parts: Array = []
+	for field: String in _COST_FIELD_TO_RESOURCE.keys():
+		var v: float = float(def.get(field, 0))
+		if v <= 0:
+			continue
+		var res_id: String = _COST_FIELD_TO_RESOURCE[field]
+		var stock: float = _resources_api.get_stock(res_id, _BUILD_REGION) if _resources_api != null and _resources_api.has_method("get_stock") else 0.0
+		if stock < v:
+			parts.append("%s %d" % [_COST_FIELD_ZH.get(field, field), int(ceil(v - stock))])
+	return " · ".join(parts)
 
 
 # ─────────────────────────────── 信号回调 ────────────────────────────────

@@ -64,22 +64,42 @@ def gen_mountains(path):
 
 
 def gen_cloud(path, seed=1):
-    """软云团 512x180：多椭圆白簇 → 大模糊 → 轻顶部亮/底部暗。"""
-    Wc, Hc = 512, 180
-    img = Image.new("RGBA", (Wc, Hc), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
+    """Terraria 式平顶积云 512x200：圆簇叠出蓬松顶部 + 底边裁平，
+    顶部亮/底部灰蓝的体积分明着色，仅 2px 轻模糊保持边缘可读（旧版大模糊糊成无定形团）。"""
+    Wc, Hc = 512, 200
     rnd = random.Random(seed)
-    cx = Wc * 0.5
-    for i in range(9):
-        ox = rnd.uniform(-140, 140)
-        oy = rnd.uniform(-30, 24)
-        rw = rnd.uniform(70, 150)
-        rh = rw * rnd.uniform(0.30, 0.42)
-        a = int(rnd.uniform(120, 175))
-        d.ellipse((cx + ox - rw, Hc * 0.52 + oy - rh, cx + ox + rw, Hc * 0.52 + oy + rh),
-                  fill=(252, 250, 246, a))
-    img = img.filter(ImageFilter.GaussianBlur(14))
-    img.save(path)
+    base_y = Hc * 0.62  # 云底基线（裁平线）
+    # alpha 蒙版：圆簇轮廓
+    mask = Image.new("L", (Wc, Hc), 0)
+    md = ImageDraw.Draw(mask)
+    # 主轴大 puff（中央胖两端小，经典的积云剪影）
+    n = 7
+    for i in range(n):
+        t = i / (n - 1)
+        ox = (t - 0.5) * Wc * 0.72
+        r = (1.0 - abs(t - 0.28) * 1.1) * rnd.uniform(46, 62) + 30
+        cy = base_y - r * rnd.uniform(0.55, 0.8)
+        md.ellipse((Wc * 0.5 + ox - r, cy - r, Wc * 0.5 + ox + r, cy + r), fill=255)
+    # 顶部小凸起 puff（蓬松感）
+    for i in range(5):
+        ox = rnd.uniform(-Wc * 0.32, Wc * 0.32)
+        r = rnd.uniform(14, 26)
+        cy = base_y - rnd.uniform(62, 88)
+        md.ellipse((Wc * 0.5 + ox - r, cy - r, Wc * 0.5 + ox + r, cy + r), fill=255)
+    # 底部垫底宽椭圆（把簇底连成整体）
+    md.ellipse((Wc * 0.14, base_y - 34, Wc * 0.86, base_y + 10), fill=255)
+    # 底边裁平（积云标志性的平底）
+    md.rectangle((0, base_y + 2, Wc, Hc), fill=0)
+    mask = mask.filter(ImageFilter.GaussianBlur(2))
+    # 着色：顶亮白 → 底灰蓝（体积感），沿蒙版内垂直渐变
+    top_c, bot_c = (255, 253, 248), (203, 211, 222)
+    yy = np.linspace(0.0, 1.0, Hc)[:, None]
+    grad = np.zeros((Hc, Wc, 3), dtype=np.float32)
+    for c in range(3):
+        grad[:, :, c] = top_c[c] + (bot_c[c] - top_c[c]) * yy
+    a = np.asarray(mask, dtype=np.float32) / 255.0
+    out = np.dstack([grad, (a * 235)[:, :, None]]).astype(np.uint8)
+    Image.fromarray(out, "RGBA").save(path)
     print("[sky] cloud ->", path)
 
 
@@ -149,6 +169,7 @@ if __name__ == "__main__":
     gen_mountains(os.path.join(out, "mountains.png"))
     gen_cloud(os.path.join(out, "cloud_a.png"), seed=1)
     gen_cloud(os.path.join(out, "cloud_b.png"), seed=7)
+    gen_cloud(os.path.join(out, "cloud_c.png"), seed=23)
     gen_treeline(os.path.join(out, "treeline_far.png"), seed=51,
                  base_ratio=0.86, h=120, color=(52, 72, 58, 235))
     gen_treeline(os.path.join(out, "treeline_near.png"), seed=77,

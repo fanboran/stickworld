@@ -6,8 +6,8 @@ extends Node
 ## （Master / BGM / SFX，缺总线时自动创建并路由到 Master），
 ## 播放器只挂总线、不再各自叠 volume_db；存储仍由 ConfigManager 统一持有。
 ##
-## ⚠️ 音效资产状态：play_sfx / play_event 框架已就绪，但项目尚无音频文件，
-## 调用会静默跳过；P1 音效接入时放入 res://assets/audio/ 即生效。
+## ⚠️ 音效资产状态：SFX 已接入（Terraria 提取件 + 程序合成，见 SFX_EVENTS 表）；
+## 提取件登记于 docs/项目/素材替换清单.md，公开前须替换。
 
 signal bgm_playing(path: String)
 signal bgm_stopped()
@@ -232,8 +232,9 @@ func _restore_master() -> void:
 
 # ─────────────────────────────── SFX 事件框架（2026-08-22）────────────────────────────────
 
-## 语义化事件 → 音效资产映射表。资产由 tools/ai/gen_sfx.py 程序化合成（WAV），
-## 按表放入 res://assets/audio/sfx/ 即生效，调用点零改动。
+## 语义化事件 → 音效资产映射表（值可单路径或路径数组=随机变体）。
+## 采集/UI 等反馈音为 Terraria 提取件，其余由 tools/ai/gen_sfx.py 程序化合成
+## （WAV），按表放入 res://assets/audio/sfx/ 即生效，调用点零改动。
 const SFX_EVENTS := {
 	"ui_click":           "res://assets/audio/sfx/ui_click.wav",
 	"ui_confirm":         "res://assets/audio/sfx/ui_confirm.wav",
@@ -243,27 +244,58 @@ const SFX_EVENTS := {
 	"battle_started":     "res://assets/audio/sfx/battle_started.wav",
 	"battle_ended_win":   "res://assets/audio/sfx/battle_ended_win.wav",
 	"battle_ended_lose":  "res://assets/audio/sfx/battle_ended_lose.wav",
-	# Demo 冲刺新增（tools/ai/gen_sfx.py 程序化合成）
-	"harvest_hit":        "res://assets/audio/sfx/harvest_hit.wav",
+	# 采集/UI 反馈音为 Terraria 提取件（tools/ai/extract_terraria_sfx.py，
+	# 登记于 docs/项目/素材替换清单.md）；敲击用 Dig 三变体随机、树木用砍草音
+	"harvest_hit": [
+		"res://assets/audio/sfx/harvest_hit_a.wav",
+		"res://assets/audio/sfx/harvest_hit_b.wav",
+		"res://assets/audio/sfx/harvest_hit_c.wav",
+	],
+	"harvest_wood":       "res://assets/audio/sfx/harvest_wood.wav",
 	"harvest_gain":       "res://assets/audio/sfx/harvest_gain.wav",
 	"quest_done":         "res://assets/audio/sfx/quest_done.wav",
 	"ui_hover":           "res://assets/audio/sfx/ui_hover.wav",
+	"unit_hurt":          "res://assets/audio/sfx/unit_hurt.wav",
 	# 天空生命感：远处鸟啁啾（与飞鸟群生成配对，三变体随机）
 	"bird_chirp_a":       "res://assets/audio/sfx/bird_chirp_a.wav",
 	"bird_chirp_b":       "res://assets/audio/sfx/bird_chirp_b.wav",
 	"bird_chirp_c":       "res://assets/audio/sfx/bird_chirp_c.wav",
 }
 
-## 按语义事件名播放。资产未就位时静默跳过（print_verbose，不刷警告）。
+## 每事件最后一次播放器（重触发先停旧实例，防同音效叠成音墙）
+var _event_players: Dictionary = {}
+## 随机音高抖动幅度（Terraria LegacySoundPlayer 的 Pitch 抖动同构：
+## 相同音效连播时靠音高微差避免"机关枪式的机械重复感"）
+const PITCH_JITTER := 0.05
+
+
+## 按语义事件名播放（Terraria LegacySoundPlayer.PlaySound 同构）：
+## 同事件重触发先停上一个实例（Stop-and-restart 防叠音），并加随机音高抖动。
+## 值为数组时 = 变体池随机挑一（Dig_0/1/2 同构）。资产未就位时静默跳过。
 func play_event(event_name: String) -> void:
 	if not SFX_EVENTS.has(event_name):
 		push_warning("[AudioManager] 未注册的音效事件: %s" % event_name)
 		return
-	var path: String = SFX_EVENTS[event_name]
-	if not ResourceLoader.exists(path):
-		print_verbose("[AudioManager] 音效资产未就位，跳过: %s" % path)
+	var entry: Variant = SFX_EVENTS[event_name]
+	var paths: Array = entry if entry is Array else [entry]
+	var path: String = ""
+	for p in paths:
+		if ResourceLoader.exists(p):
+			path = p
+			break
+	if paths.size() > 1 and not path.is_empty():
+		path = paths[randi() % paths.size()]
+	if path.is_empty():
+		print_verbose("[AudioManager] 音效资产未就位，跳过: %s" % event_name)
 		return
-	play_sfx(path)
+	var prev = _event_players.get(event_name)
+	if prev != null and is_instance_valid(prev) and prev.playing:
+		prev.stop()
+	var player := play_sfx(path)
+	if player == null:
+		return
+	player.pitch_scale = 1.0 + randf_range(-PITCH_JITTER, PITCH_JITTER)
+	_event_players[event_name] = player
 
 
 ## 接线 EventBus 全局生命周期信号（战斗/存档；UI 点击由 StickKit 直接调 play_event）

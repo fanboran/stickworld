@@ -30,10 +30,14 @@ func _ready() -> void:
 	mouse_exited.connect(_apply_text_colors)
 
 
-## hover 反黑只对 NORMAL（底变白 10% 后白字失对比）；ACCENT/DANGER 字色恒定
+## 字色策略（只在 NORMAL/ink 分支动手，绝不覆盖工厂给 ACCENT/DANGER 设的语义字色）：
+## - ACCENT/DANGER：白 + 伪粗（StickKit._setup_button 工厂设置），此处直接返回
+## - NORMAL：常态白；hover 底变白 10% → 反黑（唯一反黑场景）
+## - ink（亮背景如主菜单天空）：永远黑
 func _apply_text_colors() -> void:
-	var hovering := is_hovered()
-	var dark := ink.a > 0.0 or (kind == Kind.NORMAL and hovering)
+	if kind != Kind.NORMAL and ink.a <= 0.0:
+		return
+	var dark: bool = ink.a > 0.0 or (kind == Kind.NORMAL and is_hovered())
 	var c := Color(0.05, 0.04, 0.03) if dark else StickTokens.TEXT
 	for state in ["font_color", "font_hover_color", "font_focus_color"]:
 		add_theme_color_override(state, c)

@@ -158,7 +158,7 @@ func queue_refresh() -> void:
 	if _refresh_queued:
 		return
 	_refresh_queued = true
-	_refresh.call_deferred()
+	refresh.call_deferred()
 
 
 func refresh() -> void:

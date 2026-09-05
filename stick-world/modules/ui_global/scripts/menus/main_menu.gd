@@ -331,7 +331,7 @@ func _update_walker(delta: float) -> void:
 			_walker_dir = 1.0 if randf() < 0.5 else -1.0
 			var start_x: float = -80.0 if _walker_dir > 0 else 1920.0 + 80.0
 			_walker.position = Vector2(start_x, 620.0 + randf() * 120.0)
-			_walker.scale = Vector2(1.4 * _walker_dir if false else 1.4, 1.4)
+			_walker.scale = Vector2(1.4, 1.4)
 			if _walker_dir < 0:
 				_walker.scale.x = -1.4  # 面向行走方向
 		return

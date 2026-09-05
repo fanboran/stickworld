@@ -167,7 +167,8 @@ func unregister_supply_chain(entity_id: String) -> void:
 ## 根据实体类型和 ID 查找实体。
 ## 支持的 entity_type：stickmen, organizations, regions, battles, projects, supply_chains
 func get_entity(entity_type: String, entity_id: String) -> Variant:
-	var container: Dictionary = _get_container(entity_type)
+	# Variant 接收：_get_container 未知类型返回 null，typed Dictionary 赋值会先崩
+	var container: Variant = _get_container(entity_type)
 	if container == null:
 		push_warning("[WorldState] 未知实体类型: %s" % entity_type)
 		return null
@@ -177,7 +178,7 @@ func get_entity(entity_type: String, entity_id: String) -> Variant:
 ## 按条件过滤查询实体。
 ## filter 接收一个实体参数，返回 bool。返回匹配实体的数组。
 func query_entities(entity_type: String, filter: Callable) -> Array:
-	var container: Dictionary = _get_container(entity_type)
+	var container: Variant = _get_container(entity_type)
 	if container == null:
 		push_warning("[WorldState] 未知实体类型: %s" % entity_type)
 		return []

@@ -269,7 +269,7 @@ static func toast(layer: Control, text: String, kind: String = "info") -> void:
 	var l := label(panel, text, LabelKind.BODY,
 			StickTokens.INFO if kind == "info" else (StickTokens.WARN if kind == "warn" else StickTokens.DANGER))
 	l.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
-	layer.add_child(panel)
+	# panel() 工厂内部已 add_child，此处不得重复挂父（会报 already has a parent）
 	_toast_apply_width_limit(panel, l, text, layer)
 	# 绝对定位（anchor 归零），底部居中、离底 80px；不混用 anchor 与 position setter
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)

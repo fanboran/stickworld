@@ -18,8 +18,11 @@ signal action_pressed(widget: ItemSlotWidget)
 var mode: int = Mode.BACKPACK
 ## 背包格下标；EQUIP 模式 = PlayerInventory.SlotType
 var slot_index: int = -1
-## 显示的物品堆（null = 空格）
-var stack: ItemStack = null
+## 显示的物品堆（null = 空格）；赋值即重绘，换装/拾取后无需等 wobble 周期才刷新
+var stack: ItemStack = null:
+	set(v):
+		stack = v
+		queue_redraw()
 ## 格下按键标注（空 = 无 caption，控件高度收回到 CELL）
 var caption: String = ""
 ## 高亮描边（Hotbar 镜像行 / 可装备提示）

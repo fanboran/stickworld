@@ -60,7 +60,7 @@ static func _load_all() -> void:
 			var tex := load("%s%s_f%d.png" % [DIR, slot, i]) as Texture2D
 			if tex == null:
 				push_warning("[SketchTextures] 贴图缺失：%s_f%d" % [slot, i])
-				return
+				continue  # 单 slot 缺图只弃该 slot，不中断其余 slot 加载
 			frames.append(tex)
 		_frame_sets[StringName(slot)] = frames
 

@@ -8,7 +8,7 @@ extends Control
 ## 战斗组点击 = 打开背包；物品组点击/数字键 = 使用；动作组 E 格点击 = 开背包。
 ## 数据驱动：订阅 PlayerInventory 信号刷新，不轮询。
 
-const GROUP_GAP: int = 26.0
+const GROUP_GAP: float = 26.0
 const OFFSET_ABOVE_MODE_PANEL: float = 88.0
 
 var _service: InventoryService = null

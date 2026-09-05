@@ -20,7 +20,8 @@ extends Node
 ##   - is_work_allowed(unit: Node, work_type: String) -> bool（未注入/未编队视为允许）
 ##   - is_unit_squad_following(unit: Node) -> bool（未注入视为不跟随）
 ## 工作类型字符串对齐 FormationSystem.WorkType（units/ai_controller.gd 持本地常量副本
-## WORK_COMBAT/WORK_BUILD/WORK_HAUL/WORK_FORAGE，避免跨模块依赖）。
+## WORK_COMBAT/WORK_BUILD/WORK_HAUL/WORK_TRANSPORT/WORK_FORAGE，避免跨模块依赖；
+## WORK_HAUL 为全员基础能力，is_work_allowed 恒放行。
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## BattleDirector 实例引用（由 GameRoot 装配时注入）

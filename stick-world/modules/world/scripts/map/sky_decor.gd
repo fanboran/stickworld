@@ -16,6 +16,8 @@ extends Node2D
 
 const SkyStarsScript := preload("res://modules/world/scripts/map/sky_stars.gd")
 const SkyBirdsScript := preload("res://modules/world/scripts/map/sky_birds.gd")
+## 手绘云渲染器（选型对比期：四风格混排上天，用户选定后收敛单风格）
+const SketchCloudScript := preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
 
 ## 地形背景组 —— Terraria 每种地形一套独立贴图（WorldGen.SetForestBGSet /
 ## SetDesertBGSet 等按地形分发），本项目按地图 sky_biome 选组：
@@ -158,15 +160,13 @@ func _build_clouds() -> void:
 	for p in TEX_CLOUDS:
 		if ResourceLoader.exists(p):
 			_cloud_texs.append(load(p))
-	if _cloud_texs.is_empty():
-		return
 	for i in CLOUD_POOL:
-		var cloud := Sprite2D.new()
-		cloud.centered = true
+		var cloud: Node2D = SketchCloudScript.new()
 		var scale_f: float = _rng.randf_range(0.7, 1.3)
-		cloud.scale = Vector2(scale_f, scale_f) * 1.35
-		cloud.flip_h = _rng.randf() < 0.5
-		cloud.texture = _cloud_texs[_rng.randi() % _cloud_texs.size()]
+		# 手绘云四风格均匀混排（选型对比期）：F1/F2/F3/E2 = 枚举 5/5/5/4 的前三
+		cloud.set("style", [5, 5, 5, 4][i % 4])
+		# 尺寸=深度档（与原贴图 scale×1.35 同量级）
+		cloud.set("cloud_size", Vector2(300.0, 125.0) * scale_f * 1.35)
 		var pass_name: String = "distant" if scale_f < 1.0 else ("closer" if scale_f < 1.15 else "closest")
 		(_cloud_passes[pass_name] as Node2D).add_child(cloud)
 		# 出生带：远云（小）更高——Terraria 小云再上移的同构
@@ -291,14 +291,12 @@ func _update_clouds(delta: float) -> void:
 		cloud.rotation = sin(_wind_t * 0.11 + float(c["phase"])) * 0.01
 
 
-## 云重生：风向对侧入场，重掷贴图/尺度（视差档与深度 pass 随之变化）与出生带
+## 云重生：风向对侧入场，重掷风格（四候选均匀）与尺度（视差档/深度 pass 随之变化）
 func _respawn_cloud(c: Dictionary, cam_x: float, band_half: float) -> void:
-	var cloud: Sprite2D = c["node"]
+	var cloud: Node2D = c["node"]
 	var scale_f: float = _rng.randf_range(0.7, 1.3)
-	cloud.scale = Vector2(scale_f, scale_f) * 1.35
-	cloud.flip_h = _rng.randf() < 0.5
-	if not _cloud_texs.is_empty():
-		cloud.texture = _cloud_texs[_rng.randi() % _cloud_texs.size()]
+	cloud.set("cloud_size", Vector2(300.0, 125.0) * scale_f * 1.35)
+	cloud.set("style", [5, 5, 5, 4][_rng.randi() % 4])
 	# 尺度变档 → 换深度 pass（远/中/近云的遮挡关系随尺度联动）
 	var pass_name: String = "distant" if scale_f < 1.0 else ("closer" if scale_f < 1.15 else "closest")
 	var holder: Node2D = _cloud_passes[pass_name]

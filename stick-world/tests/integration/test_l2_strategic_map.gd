@@ -238,18 +238,21 @@ func _test_drilldown() -> void:
 		_runner.assert_true(l2_hud != null and not l2_hud.visible, "返回后 L2 HUD 隐藏")
 
 		# M 关闭整图 -> 重开：保留相机状态；若在 L2 内则恢复 L2 视图
-		var l3_zoom_before: float = cam.get_zoom()
-		var l3_off_before: Vector2 = cam.get_offset()
-		cam.set_zoom(l3_zoom_before * 0.5)  # 模拟用户缩放/拖动
-		cam.set_offset(l3_off_before + Vector2(100, -50))
+		# A3 全屏化：缩放下限锁定适配缩放（模拟用户只能放大），拖动偏移会被
+		# 视口限位拉回合法域——记录 clamp 后实际值作为"用户状态"基准
+		cam.set_zoom(cam.get_zoom() * 1.6)  # 模拟用户放大（缩小已被 min_zoom 禁止）
+		cam.set_offset(cam.get_offset() + Vector2(100, -50))  # 模拟用户拖动
+		await get_tree().process_frame  # 让限位 clamp 生效
+		var l3_zoom_kept: float = cam.get_zoom()
+		var l3_off_kept: Vector2 = cam.get_offset()
 		_l3_content.close()  # M 关闭
 		await get_tree().process_frame
 		_runner.assert_true(not _l3_content.visible, "M 关闭后 L3 隐藏")
 		_l3_content.open()  # M 重开
 		await get_tree().process_frame
 		_runner.assert_true(_l3_content.visible, "M 重开后 L3 可见")
-		_runner.assert_true(absf(cam.get_zoom() - l3_zoom_before * 0.5) < 0.01
-				and cam.get_offset().distance_to(l3_off_before + Vector2(100, -50)) < 1.0,
+		_runner.assert_true(absf(cam.get_zoom() - l3_zoom_kept) < 0.01
+				and cam.get_offset().distance_to(l3_off_kept) < 1.0,
 				"M 重开后相机位置/缩放保留")
 
 		# 下钻 L2 后 M 关闭 -> 重开恢复 L2 视图

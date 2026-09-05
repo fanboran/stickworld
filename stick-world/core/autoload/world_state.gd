@@ -25,6 +25,15 @@ var supply_chains: Dictionary = {}      # {id: SupplyChainState}
 ## 当前游戏时刻（小时 0.0 ~ 24.0，由 EnvironmentSystem 推进与写入）
 var game_time: float = 0.0
 
+## 本局随机种子（新开局随机一次，随存档保存/恢复；读档后逐点复现本局扰动，
+## 供 population_score ±15% 每局扰动等确定性随机使用，总体设计 §5.7）
+var run_seed: int = 0
+
+
+## 新开局：重置本局种子（GameRoot 新游戏分支调用；读档路径走 load_save_data 恢复）
+func start_new_run() -> void:
+	run_seed = randi()
+
 # SQL 白名单：表名/列名为固定常量；运行时值（slot_id）一律经 ? 绑定
 # （query_with_bindings），禁止字符串拼接进 SQL。
 const _SQL_WS_SELECT := "SELECT data FROM world_state WHERE slot_id = ? AND module_name = 'world_state'"
@@ -230,6 +239,7 @@ func _clean_container(container: Dictionary) -> void:
 func get_save_data() -> Dictionary:
 	return {
 		"game_time": game_time,
+		"run_seed": run_seed,
 		"stickmen": WorldStateSerializer.serialize_dict(stickmen, WorldStateSerializer.stickman_to_dict),
 		"organizations": WorldStateSerializer.serialize_dict(organizations, WorldStateSerializer.organization_to_dict),
 		"regions": WorldStateSerializer.serialize_dict(regions, WorldStateSerializer.region_to_dict),
@@ -242,6 +252,7 @@ func get_save_data() -> Dictionary:
 ## 反序列化恢复所有实体状态。（由 SaveManager 调用）
 func load_save_data(data: Dictionary) -> void:
 	game_time = data.get("game_time", 0.0)
+	run_seed = int(data.get("run_seed", 0))
 	stickmen = WorldStateSerializer.deserialize_dict(data.get("stickmen", {}), WorldStateSerializer.stickman_from_dict)
 	organizations = WorldStateSerializer.deserialize_dict(data.get("organizations", {}), WorldStateSerializer.organization_from_dict)
 	regions = WorldStateSerializer.deserialize_dict(data.get("regions", {}), WorldStateSerializer.region_from_dict)

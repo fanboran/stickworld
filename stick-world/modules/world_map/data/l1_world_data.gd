@@ -28,8 +28,9 @@ var mask_image: Image = null
 ## L1 地块列表（1 地块 = 1 聚落或空）
 var tiles: Array[L1TileDef] = []
 
-## 道路（聚落间 MST，像素坐标点列）
-var roads: Array[PackedVector2Array] = []
+## 道路（E1/P3.5 贴地形折线，F5 渲染分级）：
+## [{"pts": PackedVector2Array(context 坐标), "tier": "DIRT"/"PAVED", "length_px": float}]
+var roads: Array = []
 
 ## 政权（state_id -> 信息）
 var states: Dictionary = {}
@@ -51,6 +52,13 @@ var neighbors: Array = []
 
 ## 湖泊多边形（浅蓝显示）：[[(x,y),...]]（context 坐标）
 var lakes: Array = []
+
+## 河流折线（B3，与 L2/L3 底图同源 mask 骨架化提取）：
+## [{"pts": PackedVector2Array(context 坐标), "w": float(地图单位宽)}]
+var rivers: Array = []
+
+## context 左上角在 8192 世界坐标中的原点（生成端注入；跨 L1 定位/河流裁切用）
+var world_origin := Vector2i.ZERO
 
 ## 状态（tile_id -> L1TileDef 快速索引）
 var _tile_by_id: Dictionary = {}
@@ -80,6 +88,10 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 		world.context_size = Vector2i(int(csz[0]), int(csz[1]))
 	world.neighbors = data.get("neighbors", [])
 	world.lakes = data.get("lakes", [])
+	world.rivers = _rivers_from(data.get("rivers", []))
+	var worg: Array = data.get("world_origin", [])
+	if worg.size() >= 2:
+		world.world_origin = Vector2i(int(worg[0]), int(worg[1]))
 
 	# 底图 + 索引图
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l1_base.png")]
@@ -136,24 +148,21 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 			var pos_arr: Array = sd.get("position_px", [0, 0])
 			sref.position = Vector2(float(pos_arr[0]), float(pos_arr[1]))
 			sref.map_id = sd.get("map_id", "")
+			# 16 方向地形容量（C2 blob；生成端烘焙，长度不符忽略走均匀回退）
+			var cap_var: Variant = sd.get("blob_capacity", [])
+			if cap_var is Array and (cap_var as Array).size() == SettlementBlob.direction_count():
+				for v in cap_var:
+					sref.blob_capacity.append(float(v))
+			sref.population_score = SettlementRef.jitter_population_score(
+				float(sd.get("population_score", 0.0)), sref.settlement_id,
+				WorldState.run_seed if WorldState else 0,
+				sref.settlement_id == world.spawn_settlement_id)
 			tile.settlement = sref
 		world.tiles.append(tile)
 		world._tile_by_id[tile.tile_id] = tile
 
-	# 道路
-	for rd in (data.get("roads", []) as Array):
-		var rd_dict: Dictionary = rd
-		var from_tile: L1TileDef = world._tile_by_id.get(
-			world._tile_id_of_settlement(rd_dict.get("from", "")), null)
-		var to_tile: L1TileDef = world._tile_by_id.get(
-			world._tile_id_of_settlement(rd_dict.get("to", "")), null)
-		if from_tile == null or to_tile == null:
-			continue
-		if from_tile.settlement == null or to_tile.settlement == null:
-			continue
-		world.roads.append(PackedVector2Array([
-			from_tile.settlement.position, to_tile.settlement.position
-		]))
+	# 道路（F5 结构化：贴地形折线 + tier 分级；无 polyline 回退两端聚落直线）
+	world.roads = _roads_from(data.get("roads", []), world.tiles)
 	return world
 
 
@@ -187,14 +196,6 @@ func get_state_color(state_id: String) -> Color:
 	return info.get("color", Color.GRAY)
 
 
-## settlement_id -> 所属 tile_id（道路连接用）
-func _tile_id_of_settlement(settlement_id: String) -> String:
-	for tile in tiles:
-		if tile.settlement != null and tile.settlement.settlement_id == settlement_id:
-			return tile.tile_id
-	return ""
-
-
 ## 生成器数据兜底：无 owner_state_id 时按首都归属推导
 func _find_state_for_settlement(tile_dict: Dictionary, state_map: Dictionary) -> String:
 	var sd: Variant = tile_dict.get("settlement")
@@ -214,6 +215,46 @@ static func _polygon_from(arr: Array) -> PackedVector2Array:
 		if pt is Array and pt.size() >= 2:
 			poly.append(Vector2(float(pt[0]), float(pt[1])))
 	return poly
+
+
+## 河流折线归一化：json 的 {"pts": [[x,y],...], "w": float} → PackedVector2Array
+## （bin/json 同构处理：L1 bin 为 json 原样序列化，pts 始终是 Array of [x,y]；
+## 不足 2 点的无效条目跳过）
+static func _rivers_from(arr: Array) -> Array:
+	var out: Array = []
+	for rv in arr:
+		var d: Dictionary = rv if rv is Dictionary else {}
+		var pts := _polygon_from(d.get("pts", []))
+		if pts.size() >= 2:
+			out.append({"pts": pts, "w": float(d.get("w", 2.0))})
+	return out
+
+
+## 道路归一化：json {"from","to","tier","length_px","polyline":[[x,y],...]} →
+## {"pts": PackedVector2Array, "tier": String, "length_px": float}。
+## polyline ≥2 点用之（P3.5 贴地形折线）；缺失/无效回退 from/to 聚落直线
+## （§5.9 向后兼容口径，旧包 MST 直连线）；两端聚落都未知则跳过该条。
+static func _roads_from(arr: Array, tiles: Array[L1TileDef]) -> Array:
+	var out: Array = []
+	var pos_by_sid: Dictionary = {}
+	for t in tiles:
+		if t.settlement != null:
+			pos_by_sid[t.settlement.settlement_id] = t.settlement.position
+	for rd in arr:
+		var d: Dictionary = rd if rd is Dictionary else {}
+		var pts := _polygon_from(d.get("polyline", []))
+		if pts.size() < 2:
+			var a: Variant = pos_by_sid.get(str(d.get("from", "")))
+			var b: Variant = pos_by_sid.get(str(d.get("to", "")))
+			if a == null or b == null:
+				continue
+			pts = PackedVector2Array([a as Vector2, b as Vector2])
+		out.append({
+			"pts": pts,
+			"tier": str(d.get("tier", "DIRT")),
+			"length_px": float(d.get("length_px", 0.0)),
+		})
+	return out
 
 
 ## 读取 l1_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，原样序列化——L1 顶点序

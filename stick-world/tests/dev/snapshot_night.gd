@@ -21,10 +21,13 @@ func _ready() -> void:
 	_game_root = GameRootScene.instantiate()
 	add_child(_game_root)
 	await get_tree().create_timer(1.5).timeout
-	# 切目标时刻：星野 lerp 2/s，等 2.5s 到满强度再截
+	# 切目标时刻：星野 lerp 2/s，等 2.5s 到满强度再截。
+	# 冻结时间流速（默认 60s/天会在预热等待里漂掉 ~1.6 游戏小时，
+	# 19.5 请求拍到 20:21——粉色峰值 19.0 关键帧根本拍不到）
 	var env: Node = _game_root.get_node_or_null("EnvironmentSystem")
 	if env != null and env.has_method("set_time_of_day"):
 		env.set_time_of_day(float(at))
+		env.set_seconds_per_day(1000000.0)
 	await get_tree().create_timer(2.5).timeout
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(out)

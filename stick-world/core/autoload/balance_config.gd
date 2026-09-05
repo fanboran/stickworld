@@ -164,7 +164,9 @@ func _load_tres(full_path: String, type_path: String) -> void:
 		return
 
 	var balance_res: BalanceResource = res as BalanceResource
-	var rows: Array = balance_res.variables.get("data", [])
+	# 装载侧统一消毒：Excel 空单元格导出为 null，剥除后消费侧
+	# has()/get() 语义一致（详见 BalanceResource.sanitized_rows）
+	var rows: Array = BalanceResource.sanitized_rows(balance_res)
 
 	# 存储类型路径 → 行数组
 	data[type_path] = rows

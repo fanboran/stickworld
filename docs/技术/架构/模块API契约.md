@@ -358,6 +358,13 @@ func enter_settlement(settlement_id: String) -> void
 func close_strategic_map() -> void
 # [Q] 控制器 visible=false 并发射 EventBus.strategic_map_closed（恢复场景图输入）
 
+# 地图模式（B4：TERRAIN 默认 / POLITICAL，三视图共享全局静态 MapModeManager.current_mode）
+func set_map_mode(mode: int) -> void
+# [Q] 切换全局模式并广播（HUD 模式条/图例/渲染器同步）；重复设置静默
+
+func get_map_mode() -> int
+# [Q] 返回 MapModeManager.Mode 枚举值
+
 # 模块本地信号
 signal settlement_clicked(settlement_id: String)
 signal settlement_activated(settlement_id: String)

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/integration/test_fx_damage_text.gd" id="1_fxtext"]
+
+[node name="TestFxDamageText" type="Node"]
+script = ExtResource("1_fxtext")

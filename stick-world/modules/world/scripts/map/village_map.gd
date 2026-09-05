@@ -122,17 +122,18 @@ func _mount_sky_decor() -> void:
 	var flies := Fireflies.new()
 	flies.name = "Fireflies"
 	add_child(flies)
-	# 边缘海 ×2（K2C：走到岛屿尽头就是海）——左海贴出生点、右海接战场出口
-	var sea_l := Pond.new()
-	sea_l.name = "SeaLeft"
-	sea_l.pond_width = 1200.0
-	sea_l.position = Vector2(-1050.0, ground_y + 6.0)
-	add_child(sea_l)
-	var sea_r := Pond.new()
-	sea_r.name = "SeaRight"
-	sea_r.pond_width = 1100.0
-	sea_r.position = Vector2(7060.0, ground_y + 6.0)
-	add_child(sea_r)
+	# 正下方水（K2C 布局：水面在可行走区域正下方横贯全图——单位站堤岸、
+	# 水在脚下；镜像倒影映天景，水线滚动白沫）
+	var water := Pond.new()
+	water.name = "WaterBelow"
+	water.pond_width = (map_right - map_left) + 1000.0
+	water.pond_depth = 170.0
+	water.position = Vector2(map_left - 500.0, ground_y + 120.0)
+	add_child(water)
+	# 天气（Terraria 式降雨状态机：斜线雨 + 雨声循环 + 云层加浓；开局 90s 保护）
+	var weather := Weather.new()
+	weather.name = "Weather"
+	add_child(weather)
 
 
 ## 实例化并挂载子组件（TerrainRenderer / ResourceGen）。

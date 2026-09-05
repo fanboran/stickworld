@@ -1,11 +1,11 @@
 class_name Pond
 extends Node2D
-## 边缘海 —— Kingdom Two Crowns 式水面（镜像倒影 + 岸沫，pond_reflection.gdshader）。
+## 水面 —— Kingdom Two Crowns 布局（镜像倒影 + 水线白沫，pond_reflection.gdshader）。
 ##
-## 挂 village_map 地图两端（z=DECORATION：地面之上、建筑与单位之前——岸边
-## 语义，地面多边形 z=0 不透明会盖住更低的层）。玩家走到岛屿尽头就是海
-## （K2C 布局语义）。倒影映绘制序在水之前的天景（星月/极光/云/远山），
-## 岸沫为两端边缘滚动的白色条带（K2C 调研结论）。
+## 挂 village_map 可行走区域**正下方**横贯全图（K2C 语义：单位站堤岸、水在
+## 脚下），z=DECORATION（地面之上、建筑与单位之前——地面多边形 z=0 不透明
+## 会盖住更低的层）。倒影映绘制序在水之前的天景（星月/极光/云/远山/建筑），
+## 岸沫为沿水线滚动的白色条带（K2C 调研结论）。
 ## 水面线屏幕 uv 每帧由本脚本写入 shader（相机移动/变焦自动跟随）；
 ## 昼夜压暗与 SkyStars/PostProcessLayer 同式。
 

@@ -12,9 +12,9 @@ func _ready() -> void:
 	add_child(_game_root)
 	await get_tree().create_timer(2.0).timeout
 	var map: Node = _game_root.get_current_map()
-	var pond: Node2D = map.get_node_or_null("SeaLeft") if map != null else null
+	var pond: Node2D = map.get_node_or_null("WaterBelow") if map != null else null
 	if pond == null:
-		print("[DIAG] FAIL: SeaLeft 未找到")
+		print("[DIAG] FAIL: WaterBelow 未找到")
 		get_tree().quit(1)
 		return
 	var cam: Camera2D = _game_root.get_node_or_null("CameraRig")

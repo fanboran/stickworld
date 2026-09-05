@@ -108,6 +108,22 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	print("[OK] 白昼飞鸟群生成（12:00）")
+	# ── 天气雨链：强制降雨 → 强度 ramp + 云层加浓响应 ──
+	var weather: Node = m.get_node_or_null("Weather")
+	if weather == null:
+		print("[FAIL] Weather 未挂载")
+		get_tree().quit(1)
+		return
+	weather.force_rain(true)
+	await get_tree().create_timer(2.2).timeout
+	var rain_t: float = weather.get_rain_intensity()
+	print("[RAIN] intensity=%.2f sky_rainy=%.2f" % [rain_t, sky.get_rainy()])
+	if rain_t < 0.2 or sky.get_rainy() < 0.2:
+		print("[FAIL] 降雨强度/云响应未达预期")
+		get_tree().quit(1)
+		return
+	weather.force_rain(false)
+	print("[OK] 降雨链路（强度 ramp + 云层加浓）")
 	# 复原时间后收尾
 	env.set_time_of_day(8.0)
 	print("[PASS] 视差 + 天空生命感全部验证通过")

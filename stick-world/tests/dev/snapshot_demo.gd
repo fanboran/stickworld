@@ -24,7 +24,7 @@ func _ready() -> void:
 	if cam != null:
 		print("[SNAP-DIAG] cam center=%s zoom=%s" % [cam.get_screen_center_position(), cam.zoom])
 	var map: Node = _game_root.get_current_map()
-	var pond: Node2D = map.get_node_or_null("SeaLeft") if map != null else null
+	var pond: Node2D = map.get_node_or_null("WaterBelow") if map != null else null
 	if pond != null:
 		var vp := get_viewport()
 		var sp: Vector2 = vp.get_canvas_transform() * pond.global_position

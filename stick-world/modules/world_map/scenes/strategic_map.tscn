@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://modules/world_map/scripts/strategic_map_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_renderer.gd" id="2_renderer"]
@@ -7,6 +7,8 @@
 [ext_resource type="Script" path="res://modules/world_map/scripts/l3_zoom_indicator.gd" id="5_hud"]
 [ext_resource type="Script" path="res://modules/world_map/ui/granularity_indicator.gd" id="6_gind"]
 [ext_resource type="Script" path="res://modules/world_map/ui/settlement_tooltip.gd" id="7_tip"]
+[ext_resource type="Script" path="res://modules/world_map/ui/map_title_bar.gd" id="8_title"]
+[ext_resource type="Script" path="res://modules/world_map/ui/map_legend.gd" id="9_legend"]
 
 [node name="StrategicMap" type="CanvasLayer"]
 
@@ -35,3 +37,11 @@ view_level = "L1"
 
 [node name="SettlementTooltip" type="PanelContainer" parent="."]
 script = ExtResource("7_tip")
+
+[node name="MapTitleBar" type="PanelContainer" parent="."]
+script = ExtResource("8_title")
+visible = false
+
+[node name="MapLegend" type="PanelContainer" parent="."]
+script = ExtResource("9_legend")
+visible = false

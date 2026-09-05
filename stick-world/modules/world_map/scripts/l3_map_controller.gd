@@ -21,6 +21,9 @@ var _zoom_indicator: Control = null
 ## 粒度指示器（CanvasLayer 直接子节点，显隐由本控制器同步；open 时更新文案）
 var _indicator: GranularityIndicator = null
 
+## 视图名牌（CanvasLayer 直接子节点，同批显隐；open 时喂"大世界 · N 地区"）
+var _title_bar: MapTitleBar = null
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放状态）
 var _view_initialized: bool = false
 
@@ -67,6 +70,8 @@ func _auto_find_components() -> void:
 		_zoom_indicator = MapControllerUtil.find_sibling(self, "ZoomIndicator")
 	if _indicator == null:
 		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
+	if _title_bar == null:
+		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 
 
 func _input(event: InputEvent) -> void:
@@ -122,6 +127,8 @@ func _open_l2(label: int) -> void:
 		_zoom_indicator.visible = false
 	if _indicator != null:
 		_indicator.visible = false  # L2 有自己的指示器
+	if _title_bar != null:
+		_title_bar.visible = false  # L2 有自己的名牌
 	l2_view.open("region_%03d" % label)
 
 
@@ -134,6 +141,9 @@ func _on_l2_back() -> void:
 	if _indicator != null:
 		_indicator.set_view("L3")
 		_indicator.visible = true
+	if _title_bar != null:
+		_update_title_bar()
+		_title_bar.visible = true
 
 
 ## 打开 L3 地图（M 键触发）
@@ -162,6 +172,8 @@ func open() -> void:
 			_zoom_indicator.visible = false
 		if _indicator != null:
 			_indicator.visible = false
+		if _title_bar != null:
+			_title_bar.visible = false
 		if l2_view.has_method("set_view_visible"):
 			l2_view.call("set_view_visible", true)  # 含 L2 的 HUD/指示器
 		else:
@@ -173,6 +185,9 @@ func open() -> void:
 		if _indicator != null:
 			_indicator.set_view("L3")
 			_indicator.visible = true
+		if _title_bar != null:
+			_update_title_bar()
+			_title_bar.visible = true
 
 
 ## 关闭 L3 地图（ESC / M 键）
@@ -181,6 +196,8 @@ func close() -> void:
 		_zoom_indicator.visible = false
 	if _indicator != null:
 		_indicator.visible = false
+	if _title_bar != null:
+		_title_bar.visible = false
 	# 若在 L2 视图内，一起隐藏（保留状态，重开时恢复）
 	if l2_view != null and l2_view.visible:
 		if l2_view.has_method("set_view_visible"):
@@ -191,3 +208,14 @@ func close() -> void:
 	# 通知 system_setup 恢复场景图输入
 	if EventBus != null:
 		EventBus.strategic_map_closed.emit()
+
+
+## 名牌内容：大世界 + 地区数概览（数据未加载时降级只显名称）
+func _update_title_bar() -> void:
+	if _title_bar == null:
+		return
+	var n_regions: int = 0
+	if map_renderer != null and map_renderer.get_data() != null:
+		n_regions = map_renderer.get_data().regions.size()
+	var subtitle := "%d 地区" % n_regions if n_regions > 0 else ""
+	_title_bar.set_content("L3", "大世界", subtitle)

@@ -31,6 +31,9 @@ var _hud: Control = null
 ## 粒度指示器（CanvasLayer 直接子节点，显隐由本控制器同步；open 时更新文案）
 var _indicator: GranularityIndicator = null
 
+## 视图名牌（CanvasLayer 直接子节点，同批显隐；open 时喂"地区 N · N 地块"）
+var _title_bar: MapTitleBar = null
+
 var _current_region_id: String = ""
 
 
@@ -57,6 +60,8 @@ func _auto_find_components() -> void:
 	# 指示器挂 CanvasLayer 直下（Control 挂 Node2D 下 anchor 参照矩形为 0 会跑位）
 	if _indicator == null:
 		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
+	if _title_bar == null:
+		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _hud == null:
 		_hud = MapControllerUtil.find_sibling(self, "ZoomIndicator")
 
@@ -149,9 +154,28 @@ func open(region_id: String) -> void:
 		var rid: String = data.region_id if data != null and not data.region_id.is_empty() else _current_region_id
 		_indicator.set_view("L2", rid)
 		_indicator.visible = true
+	# 名牌：地区 N + 地块数概览（region_001 -> "地区 1"；数据未加载时降级只显 ID）
+	if _title_bar != null:
+		_update_title_bar()
+		_title_bar.visible = true
 
 
-## 视图整体显隐（Content + HUD + 指示器）——L3 控制器联动关闭/恢复时调用，
+## 名牌内容：地区序号 + 地块数概览
+func _update_title_bar() -> void:
+	if _title_bar == null:
+		return
+	var rid: String = data.region_id if data != null and not data.region_id.is_empty() else _current_region_id
+	var title := "地区 %s" % rid
+	var n_tiles: int = data.tiles.size() if data != null else 0
+	var subtitle := "%d 地块" % n_tiles if n_tiles > 0 else ""
+	if rid.begins_with("region_"):
+		var num := rid.substr("region_".length())
+		if num.is_valid_int():
+			title = "地区 %d" % num.to_int()
+	_title_bar.set_content("L2", title, subtitle)
+
+
+## 视图整体显隐（Content + HUD + 指示器 + 名牌）——L3 控制器联动关闭/恢复时调用，
 ## 与 open() 内的显隐逻辑保持一致（M 关闭重开、下钻切换都同步粒度指示器）
 func set_view_visible(v: bool) -> void:
 	visible = v
@@ -159,6 +183,8 @@ func set_view_visible(v: bool) -> void:
 		_hud.visible = v
 	if _indicator != null:
 		_indicator.visible = v
+	if _title_bar != null:
+		_title_bar.visible = v
 
 
 func get_current_region_id() -> String:

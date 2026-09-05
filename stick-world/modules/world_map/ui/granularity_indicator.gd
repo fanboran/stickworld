@@ -50,7 +50,7 @@ func _ready() -> void:
 
 func _build_widgets() -> void:
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
+	vbox.add_theme_constant_override("separation", 4)
 	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(vbox)
 	_title_label = StickKit.label(vbox, "", StickKit.LabelKind.BODY, StickTokens.ACCENT)

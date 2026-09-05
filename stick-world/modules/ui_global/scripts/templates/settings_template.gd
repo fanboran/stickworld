@@ -154,7 +154,7 @@ func _build_field(field: Dictionary) -> void:
 				value_label.text = str(int(v))
 			)
 		"option":
-			var opt := OptionButton.new()
+			var opt := SketchOptionButton.new()
 			for i in field["options"].size():
 				opt.add_item(field["options"][i], i)
 			opt.selected = _values[key]
@@ -162,7 +162,7 @@ func _build_field(field: Dictionary) -> void:
 			row.add_child(opt)
 			opt.item_selected.connect(func(idx: int): _values[key] = idx)
 		"toggle":
-			var chk := CheckButton.new()
+			var chk := SketchCheckButton.new()
 			chk.button_pressed = _values[key]
 			row.add_child(chk)
 			chk.toggled.connect(func(on: bool): _values[key] = on)

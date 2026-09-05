@@ -12,7 +12,7 @@ const INDEX_SCENE := "res://modules/ui_global/scenes/templates/template_index.ts
 
 ## 分组清单（构建函数 _build_<id>）
 const SECTIONS: Array[String] = [
-	"buttons", "labels", "inputs", "sliders", "lists", "feedback",
+	"buttons", "labels", "inputs", "tabs", "sliders", "lists", "feedback",
 ]
 
 @onready var _content: VBoxContainer = $Window/MainVBox/Scroll/ContentVBox
@@ -73,20 +73,45 @@ func _build_inputs() -> void:
 	edit.placeholder_text = "输入帝国名称…"
 	edit.custom_minimum_size = Vector2(220, StickTokens.BTN_H)
 	row1.add_child(edit)
-	var row2 := StickKit.field_row(sec, "下拉选项", "OptionButton")
-	var opt := OptionButton.new()
+	var row2 := StickKit.field_row(sec, "下拉选项", "SketchOptionButton")
+	var opt := SketchOptionButton.new()
 	for item in ["低", "中", "高", "极高"]:
 		opt.add_item(item)
 	opt.selected = 1
 	opt.custom_minimum_size = Vector2(160, StickTokens.BTN_H)
 	row2.add_child(opt)
-	var row3 := StickKit.field_row(sec, "开关", "CheckButton / CheckBox")
-	var toggle := CheckButton.new()
+	var row3 := StickKit.field_row(sec, "开关", "SketchCheckButton / SketchCheckBox")
+	var toggle := SketchCheckButton.new()
 	toggle.button_pressed = true
 	row3.add_child(toggle)
-	var chk := CheckBox.new()
-	chk.text = "复选项"
+	var toggle_off := SketchCheckButton.new()
+	row3.add_child(toggle_off)
+	var chk := SketchCheckBox.new()
+	chk.text = "复选项（选中）"
+	chk.button_pressed = true
 	row3.add_child(chk)
+	var chk_off := SketchCheckBox.new()
+	chk_off.text = "复选项"
+	row3.add_child(chk_off)
+
+
+# ─────────────────────────────── 页签 ────────────────────────────────
+
+func _build_tabs() -> void:
+	var sec := StickKit.section(_content, "页签 / TABS")
+	var tabs := SketchTabContainer.new()
+	tabs.custom_minimum_size = Vector2(0, 130)
+	for title in ["总览", "编制", "科技"]:
+		var page := MarginContainer.new()
+		page.name = title
+		page.add_theme_constant_override("margin_left", 8)
+		page.add_theme_constant_override("margin_top", 8)
+		var l := Label.new()
+		l.text = "「%s」页内容 —— 选中页签带琥珀马克笔底线" % title
+		page.add_child(l)
+		tabs.add_child(page)
+		tabs.set_tab_title(page.get_index(), title)
+	sec.add_child(tabs)
 
 
 # ─────────────────────────────── 滑条与进度 ────────────────────────────────

@@ -27,6 +27,28 @@ const CORNER_R: float = 7.0
 const ARC_STEPS: int = 4
 
 
+## 1px 空纹理（shared）：覆盖引擎原生图标用（SketchHSlider 滑块等，不影响布局处）
+static var _empty_tex: ImageTexture = null
+
+static func empty_texture() -> ImageTexture:
+	if _empty_tex == null:
+		_empty_tex = ImageTexture.create_from_image(
+				Image.create_empty(1, 1, false, Image.FORMAT_RGBA8))
+	return _empty_tex
+
+
+## 指定尺寸的全透明纹理（shared，按尺寸缓存）：覆盖引擎图标并占住图标槽位——
+## CheckBox/CheckButton 的最小宽度 = 图标宽 + h_separation，1px 空纹理会让控件
+## 塌成 1px 宽（ScrollContainer 等裁剪容器里自绘描边被剪没的教训）
+static var _blank_tex_cache: Dictionary = {}
+
+static func blank_texture(size: Vector2i) -> ImageTexture:
+	if not _blank_tex_cache.has(size):
+		_blank_tex_cache[size] = ImageTexture.create_from_image(
+				Image.create_empty(size.x, size.y, false, Image.FORMAT_RGBA8))
+	return _blank_tex_cache[size]
+
+
 ## 确定性伪噪声（-0.5~0.5）：seed 变化 = boiling 逐帧重掷（与血条同公式）
 static func wobble(i: int, seed: int) -> float:
 	var v: float = sin(float(i) * 127.1 + float(seed) * 0.3117) * 43758.5453

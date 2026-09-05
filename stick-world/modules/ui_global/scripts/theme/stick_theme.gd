@@ -12,6 +12,10 @@ extends RefCounted
 ##   SketchButton 等，血条同源沸腾）承担
 ## - GLASS：主菜单/载入屏 —— 引擎默认字体，完全原样
 ##
+## 原生控件兜底的手绘感：CheckBox/CheckButton/OptionButton 的勾选框/拨动开关/
+## 下拉箭头由 SketchIcons 生成定型扰动图标（boiling 版走 SketchCheckBox/
+## SketchCheckButton/SketchOptionButton 控件类）；PopupMenu 弹出菜单走黑玻璃。
+##
 ## 覆盖控件：Button / Label / Panel / PanelContainer / LineEdit / OptionButton /
 ## CheckBox / CheckButton / HSlider / ProgressBar / TabContainer / ItemList /
 ## HSeparator / VSeparator / TooltipPanel。
@@ -29,7 +33,8 @@ static func create(skin_mode: int = Mode.SKETCH) -> Theme:
 			t.default_font_size = StickTokens.FONT_BODY
 			# default_font 兜底对部分控件（Button 等）不可靠——显式设字体
 			for type in ["Button", "Label", "LineEdit", "OptionButton", "CheckBox",
-					"CheckButton", "ProgressBar", "TabContainer", "ItemList", "TooltipLabel"]:
+					"CheckButton", "ProgressBar", "TabContainer", "ItemList", "TooltipLabel",
+					"PopupMenu"]:
 				t.set_font("font", type, hand)
 	var s := GlassStyle
 	_apply_button(t, s)
@@ -41,6 +46,7 @@ static func create(skin_mode: int = Mode.SKETCH) -> Theme:
 	_apply_tabs(t, s)
 	_apply_list(t, s)
 	_apply_misc(t, s)
+	_apply_popup(t, s)
 	return t
 
 
@@ -93,9 +99,26 @@ static func _apply_inputs(t: Theme, s: Object) -> void:
 		t.set_stylebox(state, "OptionButton", t.get_stylebox(state, "Button"))
 	t.set_color("font_color", "OptionButton", StickTokens.TEXT)
 	t.set_font_size("font_size", "OptionButton", StickTokens.FONT_BODY)
-	# CheckBox / CheckButton：文字色即可（勾选图形用引擎默认，P1 换自绘图标）
+	# CheckBox / CheckButton：手绘兜底图标（定型扰动，boiling 版走 Sketch* 控件类）
+	t.set_icon("checked", "CheckBox", SketchIcons.checkbox(true))
+	t.set_icon("unchecked", "CheckBox", SketchIcons.checkbox(false))
+	t.set_icon("checked_disabled", "CheckBox", SketchIcons.checkbox(true, true))
+	t.set_icon("unchecked_disabled", "CheckBox", SketchIcons.checkbox(false, true))
+	t.set_icon("checked", "CheckButton", SketchIcons.toggle(true))
+	t.set_icon("unchecked", "CheckButton", SketchIcons.toggle(false))
+	t.set_icon("checked_disabled", "CheckButton", SketchIcons.toggle(true, true))
+	t.set_icon("unchecked_disabled", "CheckButton", SketchIcons.toggle(false, true))
+	# OptionButton 下拉箭头：手绘 ∨
+	t.set_icon("arrow", "OptionButton", SketchIcons.arrow())
+	# 主题类型回退会沿基类链吃到 Button 的玻璃 stylebox（选中态变琥珀边框大胶囊），
+	# 显式置空 = 回归"图标 + 文字"的原生布局
 	for type in ["CheckBox", "CheckButton"]:
+		for sb in ["normal", "hover", "pressed", "disabled", "focus"]:
+			t.set_stylebox(sb, type, _empty_focus())
 		t.set_color("font_color", type, StickTokens.TEXT)
+		t.set_color("font_hover_color", type, StickTokens.TEXT)
+		t.set_color("font_pressed_color", type, StickTokens.TEXT)
+		t.set_color("font_hover_pressed_color", type, StickTokens.TEXT)
 		t.set_color("font_disabled_color", type, StickTokens.TEXT_DISABLED)
 		t.set_font_size("font_size", type, StickTokens.FONT_BODY)
 
@@ -121,7 +144,8 @@ static func _apply_tabs(t: Theme, s: Object) -> void:
 	t.set_stylebox("tab_hovered", "TabContainer", s.tab_hover())
 	t.set_stylebox("tab_unselected", "TabContainer", s.tab_normal())
 	t.set_stylebox("panel", "TabContainer", s.window_panel_light())
-	t.set_color("font_selected_color", "TabContainer", StickTokens.ACCENT)
+	t.set_stylebox("tab_focus", "TabContainer", _empty_focus())
+	t.set_color("font_selected_color", "TabContainer", StickTokens.TEXT)
 	t.set_color("font_unselected_color", "TabContainer", StickTokens.TEXT_DIM)
 	t.set_color("font_hovered_color", "TabContainer", StickTokens.TEXT)
 	t.set_font_size("font_size", "TabContainer", StickTokens.FONT_BODY)
@@ -143,6 +167,19 @@ static func _apply_misc(t: Theme, s: Object) -> void:
 	t.set_stylebox("panel", "TooltipPanel", s.window_panel())
 	t.set_color("font_color", "TooltipLabel", StickTokens.TEXT)
 	t.set_font_size("font_size", "TooltipLabel", StickTokens.FONT_HINT)
+
+
+## 弹出菜单（OptionButton 下拉等）：黑玻璃窗 + 低对比悬停（不走使用点，全局兜底）
+static func _apply_popup(t: Theme, s: Object) -> void:
+	t.set_stylebox("panel", "PopupMenu", s.menu_panel())
+	t.set_stylebox("hover", "PopupMenu", s.menu_hover())
+	t.set_stylebox("separator", "PopupMenu", s.separator())
+	t.set_color("font_color", "PopupMenu", StickTokens.TEXT)
+	t.set_color("font_hover_color", "PopupMenu", StickTokens.TEXT)
+	t.set_color("font_disabled_color", "PopupMenu", StickTokens.TEXT_DISABLED)
+	t.set_color("font_separator_color", "PopupMenu", StickTokens.TEXT_FAINT)
+	t.set_color("font_accelerator_color", "PopupMenu", StickTokens.TEXT_DIM)
+	t.set_font_size("font_size", "PopupMenu", StickTokens.FONT_BODY)
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────

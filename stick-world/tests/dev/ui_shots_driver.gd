@@ -88,6 +88,19 @@ func run() -> void:
 	await _shot("10_placeholder_empire")
 	preview.queue_free()
 	await _frames(3)
+	# ── 组件陈列页（手绘控件族全览：按钮/输入/页签/滑条…）──
+	var gallery: Control = (load(
+			"res://modules/ui_global/scenes/templates/component_gallery.tscn") as PackedScene).instantiate()
+	var world := get_tree().current_scene
+	if world != null:
+		world.visible = false  # 陈列页要纯净底，别让游戏画面透进来
+	get_tree().root.add_child(gallery)
+	await _frames(5)
+	await _shot("12_component_gallery")
+	gallery.queue_free()
+	if world != null:
+		world.visible = true
+	await _frames(3)
 	print("=== UI SHOTS DONE ===")
 	get_tree().quit()
 

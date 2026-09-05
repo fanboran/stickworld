@@ -60,11 +60,14 @@ const LEADER_MORALE_AURA: float = 3.0
 const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
 
 ## 工作类型（RimWorld 式抽象职责，见 docs 设计 §二）
+## 搬运（HAUL）是全员基础能力，不受职责范围限制（见 is_work_allowed）；
+## 运输（TRANSPORT）是跨城市运输/物资运往前线的物流职责（物流系统预留）。
 const WorkType := {
-	COMBAT = "WORK_COMBAT",   ## 战斗/掩体/撤退/接号令
-	BUILD = "WORK_BUILD",     ## 工地建造
-	HAUL = "WORK_HAUL",       ## 搬运材料
-	FORAGE = "WORK_FORAGE",   ## 采集劳作（预留）
+	COMBAT = "WORK_COMBAT",       ## 战斗/掩体/撤退/接号令
+	BUILD = "WORK_BUILD",         ## 工地建造
+	HAUL = "WORK_HAUL",           ## 搬运材料（全员基础能力）
+	TRANSPORT = "WORK_TRANSPORT", ## 运输队：跨城市运输/物资运往前线（物流系统预留）
+	FORAGE = "WORK_FORAGE",       ## 采集劳作（预留）
 }
 
 # ─────────────────────────────── 信号 ────────────────────────────────
@@ -828,8 +831,11 @@ func set_squad_work_types(squad_id: String, work_types: Array) -> bool:
 
 
 ## 判断单位是否允许执行某工作类型。
-## 未编队单位视为全能（允许一切）；编队单位受队伍职责范围限制。
+## 未编队单位视为全能（允许一切）；编队单位受队伍职责范围限制，
+## 但搬运（WORK_HAUL）是全员基础能力恒放行——不存在搬不了东西的单位。
 func is_work_allowed(unit: Node, work_type: String) -> bool:
+	if work_type == WorkType.HAUL:
+		return true
 	if unit == null or not is_instance_valid(unit):
 		return true
 	var squad_id: String = _unit_to_squad.get(unit.get_instance_id(), "")

@@ -6,7 +6,8 @@ extends Node2D
 ## - 日月运行：Main.DrawSunAndMoon 直译（线性横穿 + 抛物线高度 + 地平线放大）。
 ## - 星星：Star.cs 同构——twinkle 反弹式往返 [0.6,1.0] 同时驱动大小与透明度，
 ##   1/40 大星尺寸×2 且闪烁/自转减半，四芒 sparkle 随自转。
-## - 极光：AuroraSky.cs 同构——HSL 色相随时间轮转（绿→青→蓝→紫），ADD 混合。
+## - 极光：AuroraSky.cs + VertexStrip.cs 逐行移植（sky_aurora.gd，140 段三角带
+##   逐顶点 HSL，月相决定带数与形态）。
 ## 夜晚地表被 CanvasModulate 压至剪影，星/月/极光/流星经 EnvironmentAPI.
 ## unmodulate 除法补偿穿透压暗（泰拉瑞亚星星 alpha 独立于天色手算的同构）；
 ## 天空底色由 EnvironmentSystem 写入清屏色（不被 CanvasModulate 染）。
@@ -18,18 +19,6 @@ const STAR_SPAN_X: float = 9800.0
 const STAR_TOP: float = 80.0
 const STAR_BOTTOM: float = 640.0
 const REDRAW_HZ: float = 12.0
-## 极光：条带步进、整体强度、色相缓慢漂移（漂移限幅在绿→青→紫区间内，
-## 不再全色相轮转——轮转会扫过红/黄，夜空验收不似极光）、
-## 条带定义 [基线y, 振幅, 频率, 色相偏移]——偏移使三带呈绿/青/紫主色
-## （AuroraSky.cs：sat=1，lum 底0.5顶1.0）
-const AURORA_STEP: float = 24.0
-const AURORA_ALPHA: float = 0.26
-const AURORA_HUE_SPEED: float = 0.004
-const AURORA_RIBBONS: Array = [
-	[150.0, 64.0, 0.0042, 0.40],
-	[205.0, 88.0, 0.0031, 0.46],
-	[258.0, 52.0, 0.0056, 0.72],
-]
 ## 日月（Terraria 昼 54000 tick ≈ 我们 5..21 时；夜 19..5 时）
 const SUN_HOUR_START: float = 5.0
 const SUN_HOUR_END: float = 21.0
@@ -49,7 +38,8 @@ var _night: float = 0.0
 ## 天空亮度门控（天空越亮星/极光越淡；Terraria `255-skyR-25≤0 整片不画`的软版）
 var _sky_gate: float = 0.0
 var _redraw_acc: float = 99.0
-## 极光专用 ADD 混合子层（混合模式是节点级材质，星/月/太阳仍走默认 mix）
+## 极光（AuroraSky.cs + VertexStrip.cs 逐行移植，见 sky_aurora.gd）
+const SkyAuroraScript := preload("res://modules/world/scripts/map/sky_aurora.gd")
 var _aurora: Node2D = null
 ## 游戏内天数（夜→昼跳变检测递增；Terraria Main.cs:20207 每晚 moonPhase++ 同构）
 var _day_count: int = 0
@@ -75,12 +65,8 @@ func _ready() -> void:
 			"rot_v": (rng.randf_range(0.05, 0.5) if big else 0.0)
 					* (1.0 if rng.randf() < 0.5 else -1.0),
 		})
-	_aurora = Node2D.new()
+	_aurora = SkyAuroraScript.new()
 	_aurora.name = "Aurora"
-	var mat := CanvasItemMaterial.new()
-	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	_aurora.material = mat
-	_aurora.draw.connect(_on_aurora_draw)
 	add_child(_aurora)
 
 
@@ -101,13 +87,14 @@ func _process(delta: float) -> void:
 			s["tw_v"] = absf(s["tw_v"])
 		if s["big"]:
 			s["rot"] += s["rot_v"] * delta
-	# 日月/星野/极光全程有内容（白昼太阳也在走），恒节流重绘
+	# 日月/星野全程有内容（白昼太阳也在走），恒节流重绘；极光自调度（sky_aurora）
 	_redraw_acc += delta
 	if _redraw_acc >= 1.0 / REDRAW_HZ:
 		_redraw_acc = 0.0
 		queue_redraw()
-		if _aurora != null:
-			_aurora.queue_redraw()
+	if _aurora != null:
+		_aurora.bind_frame(_night, _env_time(), _window_center_x(), _day_count % 8,
+				float(_env.get("seconds_per_day") if _env != null else 60.0))
 
 
 ## 天数推进：hour 从深夜（>21）跳回清晨（<8）= 新的一天（每夜月相 +1 的计数基础）
@@ -190,44 +177,6 @@ func _draw_shooting_star(cm: Color) -> void:
 	draw_line(mid, tail, EnvironmentAPI.unmodulate(Color(0.85, 0.9, 1.0, a * 0.45), cm), 1.5)
 	draw_line(tail, tail.lerp(head, -0.35), EnvironmentAPI.unmodulate(Color(0.8, 0.85, 1.0, a * 0.2), cm), 1.0)
 	draw_circle(head, 1.8, EnvironmentAPI.unmodulate(Color(1, 1, 1, a), cm))
-
-
-# ─────────────────────────────── 极光 ────────────────────────────────
-
-## 极光（AuroraSky.cs 同构）：色相随游戏时间轮转 + 带内 cos 微调制，竖条帷幕
-## 沿正弦起伏、列强度沿走向起伏；亮度沿带向上渐亮（lum 0.5→1.0 的两段近似）。
-## 画在 ADD 混合子层上——黑天上呈自发光。**横跨全图**（非窗口）。
-func _on_aurora_draw() -> void:
-	var gate: float = _night * _sky_gate
-	if _aurora == null or gate <= 0.01:
-		return
-	var cm: Color = _current_cm()
-	var base_a: float = AURORA_ALPHA * gate
-	var drift: float = sin(_time * 0.05) * 90.0
-	var x_left: float = -STAR_SPAN_X * 0.5 + drift
-	for rb in AURORA_RIBBONS:
-		var y0: float = rb[0]
-		var amp: float = rb[1]
-		var freq: float = rb[2]
-		var hue_off: float = rb[3]
-		var x: float = x_left
-		while x < STAR_SPAN_X * 0.5 + drift:
-			var h: float = amp * (0.6 + 0.4 * sin(x * freq + _time * 0.35)) \
-					+ amp * 0.35 * sin(x * freq * 2.7 - _time * 0.6)
-			if h > 8.0:
-				var t: float = (x - x_left) / STAR_SPAN_X  # 带内参数 0..1
-				# 带内色相微调制限幅 ±0.04：可见窗内不再扫过红/黄色区
-				var hue: float = fmod(_time * AURORA_HUE_SPEED + hue_off
-						+ cos(t * TAU * 2.5) * 0.04, 1.0)
-				var core := Color.from_hsv(hue, 0.95, 0.85)
-				# 列强度沿帷幕走向起伏（涟漪感）
-				var band: float = 0.55 + 0.45 * sin(x * freq * 0.5 + _time * 0.22 + y0)
-				var mid_y: float = y0 - h * 0.45
-				_aurora.draw_rect(Rect2(x, mid_y, AURORA_STEP * 0.9, h * 0.45),
-						EnvironmentAPI.unmodulate(Color(core.r, core.g, core.b, base_a * band), cm))
-				_aurora.draw_rect(Rect2(x, y0 - h, AURORA_STEP * 0.9, h * 0.55),
-						EnvironmentAPI.unmodulate(Color(core.r * 0.8, core.g, core.b, base_a * band * 0.35), cm))
-			x += AURORA_STEP
 
 
 # ─────────────────────────────── 日月（Terraria 公式） ────────────────────────────────

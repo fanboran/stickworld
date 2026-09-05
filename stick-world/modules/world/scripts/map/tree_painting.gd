@@ -65,14 +65,13 @@ func setup(tree_seed: int) -> void:
 	_root_drop = hw0 * (rng.randf_range(0.70, 0.90) if _root_arc else rng.randf_range(0.22, 0.32))
 	_wob_phase_l = rng.randf_range(0.0, TAU)
 	_wob_phase_r = rng.randf_range(0.0, TAU)
-	# 伤痕（生活常识频率：约 1/4 的树有一处，一棵最多 1 个）：
-	# 圆形节疤直径≈树干粗细，或纵向长条裂纹 30-70
+	# 树干表面只有纵向长条裂纹（30-70，顺干方向，约 1/4 的树一条）——
+	# 圆形节疤已删（用户 2026-09-06："树干上的圆圈不是让你删了吗"）
 	if rng.randf() < 0.25:
 		_scars.append({
-			"type": "circle" if rng.randf() < 0.6 else "stripe",
+			"type": "stripe",
 			"frac": rng.randf_range(0.15, 0.85),
 			"x_off": rng.randf_range(-0.35, 0.35),
-			"r": TRUNK_W_BASE * rng.randf_range(0.42, 0.55),
 			"len": rng.randf_range(30.0, 70.0),
 		})
 	# 侧枝：0-5 个全随机，y 带内间距 ≥50（用户规格）；左右交替分配保证均衡
@@ -229,31 +228,19 @@ func _trunk_pt(t: float, u: float, cx: float, hw0: float) -> Vector2:
 	return Vector2(x, y)
 
 
-## 伤痕（较少见）：圆圈节疤（深色环）或纵向长条裂纹（深色粗线）
+## 树干裂纹：纵向长条（顺干方向，深色）——树皮的自然裂纹，唯一的干面伤痕
 func _draw_scar(s: Dictionary) -> void:
 	var t: float = s["frac"]
 	var y := -TRUNK_H * t
-	var half := _half_w(t, 1.0)
-	var c := Vector2(_axis_x(t) + float(s["x_off"]) * half * 0.9, y)
 	var col := BARK_COL.darkened(0.25)
 	col.a = 0.85
-	if s["type"] == "circle":
-		var n := 12
-		var pts := PackedVector2Array()
-		for j in n:
-			var a := TAU * float(j) / float(n)
-			pts.append(c + Vector2(cos(a), sin(a) * 0.85) * float(s["r"]))
-		pts.append(pts[0])
-		draw_polyline(pts, col, 5.0)
-		draw_circle(c, float(s["r"]) * 0.28, col)
-	else:
-		var pts := PackedVector2Array()
-		for j in 3:
-			var tt := float(j) / 2.0
-			var y2 := y - float(s["len"]) * 0.5 + float(s["len"]) * tt
-			var t2: float = clampf(-y2 / TRUNK_H, 0.0, 1.0)
-			pts.append(Vector2(_axis_x(t2) + float(s["x_off"]) * _half_w(t2, 1.0) * 0.9, y2))
-		draw_polyline(pts, col, 5.0)
+	var pts := PackedVector2Array()
+	for j in 3:
+		var tt := float(j) / 2.0
+		var y2 := y - float(s["len"]) * 0.5 + float(s["len"]) * tt
+		var t2: float = clampf(-y2 / TRUNK_H, 0.0, 1.0)
+		pts.append(Vector2(_axis_x(t2) + float(s["x_off"]) * _half_w(t2, 1.0) * 0.9, y2))
+	draw_polyline(pts, col, 5.0)
 
 
 ## 侧枝：斜向上 45° 档的上拱曲线，锥形主线 + 上缘高光 = 双线体积感（用户规格）；

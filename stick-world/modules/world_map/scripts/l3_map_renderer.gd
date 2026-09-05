@@ -60,11 +60,13 @@ var _l1_mesh: ArrayMesh = null
 var _l1_holes_mesh: ArrayMesh = null
 var _debug_was_visible: bool = false
 
-## 异步后台加载（8192 PNG 解码不阻塞主线程）：l1_index（hover 查询）+ city_preview（城市模式底图）
+## 异步后台加载（8192 PNG 解码不阻塞主线程）：l1_index（hover 查询）+ city_preview（城市模式底图）+ terrain（地形模式底图）
 var _l1_index_thread: Thread = null
 var _l1_index_result: Image = null
 var _city_preview_thread: Thread = null
 var _city_preview_result: Image = null
+var _terrain_thread: Thread = null
+var _terrain_result: Image = null
 
 
 func set_data(data: L3WorldData) -> void:
@@ -72,6 +74,7 @@ func set_data(data: L3WorldData) -> void:
 	_build_static_meshes()
 	_build_glow_outlines()
 	_ensure_l1_index()
+	_ensure_terrain()
 	queue_redraw()
 
 
@@ -280,6 +283,36 @@ func _load_city_preview_async() -> void:
 		_city_preview_result = img
 
 
+## 异步加载：地形模式底图（B2 程序着色 l3_terrain.png，TERRAIN 为默认模式 → set_data 即触发）
+func _ensure_terrain() -> void:
+	if _data == null or _data.terrain_texture != null or _terrain_thread != null:
+		return
+	_terrain_thread = Thread.new()
+	_terrain_thread.start(_load_terrain_async)
+
+
+func _load_terrain_async() -> void:
+	var f := FileAccess.open("res://config/strategic_map/l3_terrain.png", FileAccess.READ)
+	if f == null:
+		return
+	var img := Image.new()
+	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
+		_terrain_result = img
+
+
+## 节点退出前 join 全部后台线程——未完成的 Thread 直接销毁在 Windows 上会段错误
+func _exit_tree() -> void:
+	if _l1_index_thread != null:
+		_l1_index_thread.wait_to_finish()
+		_l1_index_thread = null
+	if _city_preview_thread != null:
+		_city_preview_thread.wait_to_finish()
+		_city_preview_thread = null
+	if _terrain_thread != null:
+		_terrain_thread.wait_to_finish()
+		_terrain_thread = null
+
+
 ## 每帧检查后台线程：解码完成 → wait_to_finish + 取结果（ImageTexture 需主线程创建）
 func _poll_async_loads() -> void:
 	if _data == null:
@@ -297,6 +330,13 @@ func _poll_async_loads() -> void:
 			_data.city_preview_texture = ImageTexture.create_from_image(_city_preview_result)
 			_city_preview_result = null
 			queue_redraw()
+	if _terrain_thread != null and not _terrain_thread.is_alive():
+		_terrain_thread.wait_to_finish()
+		_terrain_thread = null
+		if _terrain_result != null:
+			_data.terrain_texture = ImageTexture.create_from_image(_terrain_result)
+			_terrain_result = null
+			queue_redraw()
 
 
 func _draw() -> void:
@@ -304,7 +344,12 @@ func _draw() -> void:
 		return
 	# 1. 海洋背景
 	draw_rect(Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), OCEAN_COLOR)
-	if display_mode == DisplayMode.MODE_CITY:
+	if map_mode == MapModeManager.Mode.TERRAIN and _data.terrain_texture != null:
+		# 地形模式（B2）：程序着色底图铺满全图（2048 纹理拉伸到 8192 网格，与 city_preview 同法）；
+		# 异步加载完成前回退现状填充层，解码完成后 queue_redraw 自动切上
+		draw_texture_rect(_data.terrain_texture,
+			Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)
+	elif display_mode == DisplayMode.MODE_CITY:
 		# 城市模式：直接贴 city_preview 栅格图（花花绿绿、零剖分、快）
 		_ensure_city_preview()
 		if _data.city_preview_texture != null:

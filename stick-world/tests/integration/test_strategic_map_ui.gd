@@ -154,12 +154,12 @@ func _test_l1_title_legend() -> void:
 		"名牌显示玩家所在 L1（实测 %s）" % _l1_title_bar._title_label.text)
 	_runner.assert_true(_l1_title_bar._subtitle_label.text == "8 聚落",
 		"副标题聚落数（实测 %s）" % _l1_title_bar._subtitle_label.text)
-	# 图例（B4 默认 TERRAIN 地形模式）：地物水系条目（海洋/湖泊）
+	# 图例（B4 默认 TERRAIN 地形模式）：地物水系 + B2 群系色条目（共 8：海洋/湖泊/平原/森林/荒漠/冰原/水源带/火山）
 	_runner.assert_true(_l1_legend.visible, "open 后图例可见")
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 地形",
 		"地形模式图例标题（实测 %s）" % _l1_legend._title_label.text)
-	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 2,
-		"地形模式 2 条目（海洋/湖泊，实测 %d）" % _l1_legend._entries_box.get_child_count())
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 8,
+		"地形模式 8 条目（实测 %d）" % _l1_legend._entries_box.get_child_count())
 	# 切政治模式：8 城邦政权色条目，色块与地图填充同色源（get_state_color）
 	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 政权",

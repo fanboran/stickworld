@@ -13,19 +13,22 @@ extends Node
 const TERRAIN_CELL_SIZE_Y: float = 32.0
 const ScriptResourceNode := preload("res://modules/world/scripts/map/resource_node.gd")
 
-## 生态群落表：按群落生成而非逐格均匀撒点（树成林、石成场、铁矿成露头）。
-## weight=群落出现权重；size=[最少,最多]成员数；radius=散布半径（格）；
-## types=[类型, 占比]——群落内同生态为主、自然混生少量伴生种。
+## 生态群落表（2026-09-06 用户重定调）：石头在森林里、密度远低于树
+## （很多棵树才一个石头，与树互斥株距=长石头处不长树）；矿（铁/金/钻）
+## 更稀疏地藏在林间缝隙。weight=群落出现权重；size=[最少,最多]成员数；
+## radius=散布半径（格）；types=[类型, 占比]。
 const _COMMUNITY_KINDS: Array = [
-	{"weight": 0.55, "size": Vector2i(5, 10), "radius": 4.5,
-		"types": [[0, 0.85], [1, 0.15]]},  # 树林：树为主夹零星岩石
-	{"weight": 0.30, "size": Vector2i(3, 6), "radius": 2.2,
-		"types": [[1, 0.80], [0, 0.20]]},  # 石场：岩石为主夹零星树
-	{"weight": 0.15, "size": Vector2i(2, 4), "radius": 1.8,
-		"types": [[2, 0.70], [1, 0.30]]},  # 铁矿露头：稀有，伴生岩石
+	{"weight": 0.88, "size": Vector2i(6, 12), "radius": 4.5,
+		"types": [[0, 0.93], [1, 0.07]]},  # 树林：树为主，偶有一块伴生石
+	{"weight": 0.08, "size": Vector2i(1, 2), "radius": 1.2,
+		"types": [[1, 0.55], [2, 0.25], [3, 0.12], [4, 0.08]]},  # 林间岩块：石为主偶带矿
+	{"weight": 0.04, "size": Vector2i(1, 2), "radius": 1.0,
+		"types": [[2, 0.45], [3, 0.33], [4, 0.22]]},  # 矿脉露头：稀有
 ]
-## 群落内最小株距（px）：树冠交叠成墙、树干不贴干（树显示 500px 宽冠）
-const MIN_SPACING: float = 72.0
+## 群落内最小株距（px）：树冠交叠成墙、树干不贴干；石/树互斥同用此距
+## （72→64：2026-09-06 密度实收——56 时全图 378 棵超"2 倍"目标过多，
+## 64 实测约 2.5-3 倍且树墙感保留）
+const MIN_SPACING: float = 64.0
 
 var _root: Node2D = null
 
@@ -85,10 +88,11 @@ func _too_close(px: float, py: float, nodes: Array) -> bool:
 	return false
 
 
-## 树林区梯度（用户 2026-09-06）：距硬化地面（土路带）一个屏幕（1920px）内不长树，
-## 再花一个屏幕从稀疏渐密，之外达到基线 2 倍密度（森林感）。石/铁不受限。
-const FOREST_CLEAR_CELLS := 60    ## 1920px / 32px：硬化区旁净空（一屏）
-const FOREST_RAMP_CELLS := 60    ## 再 60 格（又一屏）渐密
+## 树林区梯度（用户 2026-09-06：树"略近一段出现"即可 + 稀疏→密集过渡可感知）：
+## 距硬化地面（土路带）约半屏（960px）净空，再约 0.75 屏渐密，之外满密度 2×。
+## 石/矿同样走梯度（石头在森林里，村庄净空区干净）。
+const FOREST_CLEAR_CELLS := 30    ## 960px / 32px：硬化区旁净空
+const FOREST_RAMP_CELLS := 45    ## 再 45 格渐密
 const FOREST_DENSITY_MULT := 2.0 ## 最密处 = 基线密度的倍数
 
 ## 该 cell 的树密度倍率（0 = 不长树；FOREST_DENSITY_MULT = 满密度）
@@ -126,11 +130,11 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 	var a: int = mini(start_cell, end_cell)
 	var b: int = maxi(start_cell, end_cell)
 	var road := _road_cell_bounds(a, b)
-	# target 扩容：树权重 0.55 × 2 倍密度 → 总量 ≈1.55×基线（石/铁供给率不变，
-	# 近区树被梯度全拒时由 attempts 上限自然收口，不会灌满石/铁）
+	# target 扩容：树权重 0.88 × 2 倍密度 → 总量 ≈1.88×基线（attempts 上限同步放宽，
+	# 间距 56 后成员放置成功率升，远端能真正填到 2 倍密度）
 	var target: int = int((b - a) * clampf(density, 0.0, 1.0)
-		* (1.0 + (FOREST_DENSITY_MULT - 1.0) * 0.55))
-	var max_attempts: int = target * 8 + 16
+		* (1.0 + (FOREST_DENSITY_MULT - 1.0) * 0.88))
+	var max_attempts: int = target * 12 + 16
 	var attempts: int = 0
 	var rows: int = get_terrain_row_count()
 	while nodes.size() < target and attempts < max_attempts:
@@ -154,21 +158,21 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 			if _root.get_terrain_type_at_cell(cx) == _root.TERRAIN_DIRT_ROAD:
 				continue
 			var rtype0 := _pick_type(kind)
-			# 树受林区梯度约束：距硬化区一屏净空 → 一屏渐密 → 满密度 2×基线
-			if rtype0 == 0:
-				var rate := _forest_rate(cx, road.x, road.y)
-				if randf() * FOREST_DENSITY_MULT >= rate:
-					continue
+			# 林区梯度：全部资源走同一规则（石/矿在森林里，净空带干净无资源）
+			var rate := _forest_rate(cx, road.x, road.y)
+			if randf() * FOREST_DENSITY_MULT >= rate:
+				continue
 			if _too_close(px, py, nodes):
 				continue
 			var node: Node2D = ScriptResourceNode.new()
-			var rtype := rtype0
-			node.resource_type = rtype
-			# 储量按类型：大树给更多木（树变高变大后单株价值同步提升）
-			match rtype:
+			node.resource_type = rtype0
+			# 储量按类型：大树给更多木；稀有矿储少而值高
+			match rtype0:
 				0: node.amount = 150 + randi_range(0, 170)  # WOOD
 				1: node.amount = 100 + randi_range(0, 80)   # STONE
-				_: node.amount = 80 + randi_range(0, 60)    # METAL
+				2: node.amount = 80 + randi_range(0, 60)    # METAL
+				3: node.amount = 40 + randi_range(0, 30)    # DIAMOND
+				_: node.amount = 60 + randi_range(0, 40)    # GOLD
 			node.position = Vector2(px, py)
 			_root.decoration_layer.add_child(node)
 			nodes.append(node)

@@ -39,9 +39,11 @@ var _bend_phase := 0.0
 var _flare_l := 10.0
 var _flare_r := 10.0
 var _root_arc := true    # 根脚形状：true=半圆弧（默认），false=浅波浪（偶尔变化）
+var _bark_p1 := 0.0      # 树皮噪声场相位（setup 定值）
+var _bark_p2 := 0.0
+var _root_drop := 30.0   # 根脚下垂深度（setup 定值，绘制不可随机）
 var _wob_phase_l := 0.0
 var _wob_phase_r := 0.0
-var _root_drop := 30.0   # 根脚下垂深度（setup 定值，绘制不可随机）
 var _scars: Array = []        # {type, frac, x_off, r/len}
 var _branches: Array = []     # {y, side, ang, r_cluster, cluster_c}
 var _yarns: Array = []        # 子节点引用（冠 + 侧簇）
@@ -53,12 +55,14 @@ func setup(tree_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = tree_seed
 	_bend_phase = rng.randf_range(0.0, TAU)
-	_flare_l = rng.randf_range(7.0, 14.0)
-	_flare_r = rng.randf_range(7.0, 14.0)
+	_flare_l = rng.randf_range(4.0, 8.0)
+	_flare_r = rng.randf_range(4.0, 8.0)
+	_bark_p1 = rng.randf_range(0.0, TAU)
+	_bark_p2 = rng.randf_range(0.0, TAU)
 	_root_arc = rng.randf() > 0.15  # 85% 半圆弧俯视底，15% 浅波浪破单调
 	# 下垂深度：半圆弧 ≈ 底半宽（俯视圆底面），波浪版浅
 	var hw0 := TRUNK_W_BASE * 0.5 + (_flare_l + _flare_r) * 0.5
-	_root_drop = hw0 * (rng.randf_range(0.85, 1.05) if _root_arc else rng.randf_range(0.25, 0.4))
+	_root_drop = hw0 * (rng.randf_range(0.70, 0.90) if _root_arc else rng.randf_range(0.22, 0.32))
 	_wob_phase_l = rng.randf_range(0.0, TAU)
 	_wob_phase_r = rng.randf_range(0.0, TAU)
 	# 伤痕（生活常识频率：约 1/4 的树有一处，一棵最多 1 个）：
@@ -182,10 +186,15 @@ func _root_arc_y(x: float, cx: float, half_w0: float) -> float:
 
 
 ## 竖条光照色：圆柱体横向连续渐变（两侧暗中心亮，sqrt 圆柱光照），
-## 沿高度缓慢提亮（t 0→1 明度 0.94→1.03）——连续渐变，无斑块
+## 沿高度缓慢提亮（t 0→1 明度 0.94→1.03）；
+## + 树皮质感：**竖纹**噪声场（u 方向多周期=干身多条竖纹、t 方向低频漂移=
+## 纹路随高度缓慢弯——真实木纹流；u/t 均连续 → 条带间无断层）
 func _trunk_band_color(u_mid: float, t: float) -> Color:
 	var light := 0.80 + 0.36 * sqrt(maxf(1.0 - u_mid * u_mid, 0.0))
 	var v := 0.94 + 0.09 * t
+	var ripple: float = 0.065 * sin(u_mid * 16.0 - t * 2.5 + _bark_p1) \
+		+ 0.040 * sin(u_mid * 29.0 + t * 1.7 + _bark_p2)
+	light += ripple
 	var c := Color(TRUNK_COL.r * light * v, TRUNK_COL.g * light * v, TRUNK_COL.b * light * v)
 	c.a = 1.0
 	return c

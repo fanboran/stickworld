@@ -9,11 +9,13 @@ extends HBoxContainer
 var _resources_api: Node = null
 
 # ─────────────────────────────── 配置 ────────────────────────────────
-## P0 初始资源 3 种（创始人 2026-07-29 确认）
+## 资源 5 种（木/石/铁 + 2026-09-06 新增钻石/黄金）
 const _DISPLAY_RESOURCES: Array = [
 	{"id": "res_wood", "name_zh": "木材", "color": Color(0.55, 0.35, 0.18)},
 	{"id": "res_stone", "name_zh": "石料", "color": Color(0.6, 0.6, 0.62)},
 	{"id": "res_metal_ore", "name_zh": "铁矿", "color": Color(0.7, 0.45, 0.25)},
+	{"id": "res_gold", "name_zh": "黄金", "color": Color(0.92, 0.78, 0.25)},
+	{"id": "res_diamond", "name_zh": "钻石", "color": Color(0.5, 0.85, 0.95)},
 ]
 
 # ─────────────────────────────── UI 元素 ────────────────────────────────

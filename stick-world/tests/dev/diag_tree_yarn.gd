@@ -37,6 +37,23 @@ func _ready() -> void:
 		painting.modulate = Color(1.0 + dv, 1.0 + dv * 0.6, 1.0 - dv * 0.6)
 		painting.position = Vector2(240.0 + float(i) * 230.0, 940.0)
 		add_child(painting)
+	# 一排石/金/钻岩块变体（前景草地，resource_node._ROCK_KINDS 同款参数；
+	# 铁矿保留原贴图不在陈列——形状本来就是好的）
+	var kinds: Array = [
+		[[Color8(150, 154, 160), Color8(114, 120, 128), Color8(80, 86, 94)], Color8(196, 200, 206), 0.10],
+		[[Color8(158, 138, 96), Color8(122, 104, 72), Color8(90, 76, 54)], Color8(255, 214, 74), 0.75],
+		[[Color8(136, 156, 170), Color8(104, 124, 142), Color8(76, 92, 108)], Color8(150, 240, 255), 0.85],
+		[[Color8(150, 154, 160), Color8(114, 120, 128), Color8(80, 86, 94)], Color8(196, 200, 206), 0.10],
+	]
+	for i in kinds.size():
+		var rock := RockPainting.new()
+		rock.radius = 58.0 + float(i % 2) * 12.0
+		rock.base_seed = 9000 + i * 37
+		rock.palette = kinds[i][0]
+		rock.vein_color = kinds[i][1]
+		rock.vein_ratio = kinds[i][2]
+		rock.position = Vector2(360.0 + float(i) * 440.0, 1040.0)
+		add_child(rock)
 
 
 func _process(_delta: float) -> void:

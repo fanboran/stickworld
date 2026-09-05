@@ -10,6 +10,8 @@ enum ResourceType {
 	WOOD,    ## 树木 -> res_wood
 	STONE,   ## 石头 -> res_stone
 	METAL,   ## 铁矿 -> res_metal_ore
+	DIAMOND, ## 钻石 -> res_diamond
+	GOLD,    ## 黄金 -> res_gold
 }
 
 ## 资源类型（对应 ResourceType 枚举）
@@ -23,6 +25,7 @@ var _is_depleted: bool = false
 var _debug_label: Label = null
 var _body_rect: ColorRect = null
 var _body_sprite: Sprite2D = null
+var _body_rock: Node2D = null
 var _initial_amount: int = 0
 var _crit_gain: bool = false
 
@@ -99,6 +102,8 @@ func _visual_rng() -> RandomNumberGenerator:
 
 ## 树程序化视觉（终版架构：干/枝算法直绘 + 毛线团树叶实时飘动，种子驱动）
 const _TreePainting := preload("res://modules/world/scripts/map/tree_painting.gd")
+## 岩块程序化视觉（石/金/钻；铁矿保留原贴图）
+const _RockPainting := preload("res://modules/world/scripts/map/rock_painting.gd")
 
 var _body_painting: Node2D = null
 
@@ -121,7 +126,54 @@ func _apply_visual() -> void:
 		painting.modulate = Color(1.0 + dv + dw, 1.0 + dv, 1.0 + dv - dw, 1.0)
 		add_child(painting)
 		_body_painting = painting
-		return
+	# 石/金/钻走程序化岩块（2026-09-06 用户定调：不规则棱角块+密实笔触+分叉
+	# 矿脉枝干，非圆形；铁矿原贴图形状本来就好看，保留贴图不动）
+	elif _ROCK_KINDS.has(resource_type):
+		var kind: Dictionary = _ROCK_KINDS[resource_type]
+		var rock: Node2D = _RockPainting.new()
+		var rr: float = vrng.randf_range(56.0, 82.0)  # 显示高 ~90-120px（半人~一人高）
+		rock.set("radius", rr)
+		rock.set("base_seed", vrng.randi())
+		rock.set("palette", kind["palette"])
+		rock.set("vein_color", kind["vein"])
+		rock.set("vein_ratio", kind["vein_ratio"])
+		# 块底（局部 y ≈ +0.64×radius 的平底）贴齐地面接触线
+		rock.position = Vector2(0.0, node_size * 0.5 - rr * 0.64)
+		var flip_r: float = -1.0 if vrng.randf() < 0.5 else 1.0
+		rock.scale = Vector2(flip_r * vrng.randf_range(0.9, 1.1), vrng.randf_range(0.9, 1.1))
+		add_child(rock)
+		_body_rock = rock
+	else:
+		_apply_legacy_texture_visual(vrng)
+	# 调试标签：显示资源类型名（F3 开关控制）
+	_debug_label = Label.new()
+	_debug_label.text = _get_type_name()
+	_debug_label.add_theme_font_size_override("font_size", 10)
+	_debug_label.position = Vector2(-node_size * 0.5, node_size * 0.5)
+	add_child(_debug_label)
+	_update_debug_visibility()
+
+
+## 石/矿种参数表（METAL 铁矿不在此列——原贴图形状保留）：底色板（浅/中/深三档）
+## + 矿脉色与占比（石头=灰系+极淡灰纹；金=土黄+亮金脉；钻=青灰+冰蓝脉）
+const _ROCK_KINDS: Dictionary = {
+	ResourceType.STONE: {
+		"palette": [Color8(150, 154, 160), Color8(114, 120, 128), Color8(80, 86, 94)],
+		"vein": Color8(196, 200, 206), "vein_ratio": 0.10,
+	},
+	ResourceType.GOLD: {
+		"palette": [Color8(158, 138, 96), Color8(122, 104, 72), Color8(90, 76, 54)],
+		"vein": Color8(255, 214, 74), "vein_ratio": 0.55,
+	},
+	ResourceType.DIAMOND: {
+		"palette": [Color8(136, 156, 170), Color8(104, 124, 142), Color8(76, 92, 108)],
+		"vein": Color8(150, 240, 255), "vein_ratio": 0.85,
+	},
+}
+
+
+## 旧贴图分支（兜底兼容，程序化分支之外的资源类型走这里）
+func _apply_legacy_texture_visual(vrng: RandomNumberGenerator) -> void:
 	var paths: Array = _TEXTURE_POOLS.get(resource_type, [])
 	var tex_path: String = String(_TEXTURE_FALLBACK.get(resource_type, ""))
 	if not paths.is_empty():
@@ -144,11 +196,13 @@ func _apply_visual() -> void:
 		add_child(spr)
 		_body_sprite = spr
 	else:
-		# 简单色块表示资源点（铁矿暂无贴图，P0 占位）
+		# 简单色块表示资源点（P0 占位）
 		var colors: Array[Color] = [
 			Color(0.2, 0.5, 0.2),  # WOOD=绿
 			Color(0.5, 0.5, 0.5),  # STONE=灰
 			Color(0.6, 0.3, 0.2),  # METAL=棕
+			Color(0.4, 0.8, 0.9),  # DIAMOND=冰蓝
+			Color(0.9, 0.8, 0.2),  # GOLD=金黄
 		]
 		var color: Color = colors[resource_type] if resource_type < colors.size() else Color.WHITE
 		var rect := ColorRect.new()
@@ -157,13 +211,6 @@ func _apply_visual() -> void:
 		rect.position = Vector2(-node_size * 0.5, -node_size * 0.5)
 		add_child(rect)
 		_body_rect = rect
-	# 调试标签：显示资源类型名（F3 开关控制）
-	_debug_label = Label.new()
-	_debug_label.text = _get_type_name()
-	_debug_label.add_theme_font_size_override("font_size", 10)
-	_debug_label.position = Vector2(-node_size * 0.5, node_size * 0.5)
-	add_child(_debug_label)
-	_update_debug_visibility()
 
 
 ## 采集指定数量，返回实际采集量
@@ -206,6 +253,8 @@ func _play_harvest_feedback(gained: int) -> void:
 		_body_sprite.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
 	elif _body_painting != null:
 		_body_painting.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
+	elif _body_rock != null:
+		_body_rock.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
 
 
 ## 资源点上方飘出 "+N 资材" 的增益数字（0.8s 上浮淡出后自毁）
@@ -237,6 +286,8 @@ func _get_type_name() -> String:
 		ResourceType.WOOD: return "木"
 		ResourceType.STONE: return "石"
 		ResourceType.METAL: return "铁"
+		ResourceType.DIAMOND: return "钻"
+		ResourceType.GOLD: return "金"
 	return "?"
 
 
@@ -246,6 +297,8 @@ func get_display_name() -> String:
 		ResourceType.WOOD: return "木材"
 		ResourceType.STONE: return "石料"
 		ResourceType.METAL: return "铁矿"
+		ResourceType.DIAMOND: return "钻石"
+		ResourceType.GOLD: return "黄金"
 	return "资源"
 
 
@@ -255,6 +308,8 @@ func get_resource_id() -> String:
 		ResourceType.WOOD: return "res_wood"
 		ResourceType.STONE: return "res_stone"
 		ResourceType.METAL: return "res_metal_ore"
+		ResourceType.DIAMOND: return "res_diamond"
+		ResourceType.GOLD: return "res_gold"
 	return ""
 
 

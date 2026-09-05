@@ -526,9 +526,9 @@ func load_resource_nodes_from_db(db, slot_id: int, p_map_id: String) -> void:
 	if db.query_with_bindings(_SQL_NODES_SELECT, [slot_id, p_map_id]):
 		rows = db.query_result
 	for row in rows:
-		# 林区梯度（与 resource_gen 新开局同规则）：旧存档里贴着硬化区的树
-		# 是旧密度规则撒的，恢复时丢弃不摆（指示：距硬化区一屏净空起树）
-		if int(row["resource_type"]) == 0 and _violates_forest_clear(float(row["pos_x"])):
+		# 林区梯度（与 resource_gen 新开局同规则）：旧存档里贴着硬化区的资源
+		# 是旧密度规则撒的，恢复时丢弃不摆（净空带内无树无石无矿）
+		if _violates_forest_clear(float(row["pos_x"])):
 			continue
 		var node: Node2D = ScriptResourceNode.new()
 		node.resource_type = int(row["resource_type"])

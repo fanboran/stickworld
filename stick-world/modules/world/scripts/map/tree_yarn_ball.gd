@@ -19,8 +19,6 @@ const SWAP_INTERVAL := 1.0
 const VARIANTS := 4
 ## 每拍重掷的线占比
 const SWAP_FRACTION := 0.4
-## 轮廓采样段数（连续波浪线的平滑度）
-const OUTLINE_SEGS := 56
 
 ## 叶色板（tree_pipeline.LEAF_PALETTES 同款：用户审美验收过的绿）
 const PALETTES: Array = [
@@ -36,6 +34,15 @@ var radius := 60.0
 var base_seed := 0
 ## 色板下标（-1 = 按 base_seed 自选；由 TreePainting 统一指定 → 整树同色板）
 var palette_idx := -1
+## 石头模式：y 压缩（块状 0.7 左右；1.0 = 球形树叶）
+var squash := 1.0
+## 石头模式：上下圈都鼓包（树叶只鼓上半圈）
+var round_top_only := true
+## 直接指定色板（石头/矿系；非空时优先于 PALETTES/palette_idx）
+var palette_override: Array = []
+## 矿脉笔颜色与占比（石头里"透露出各种矿物的枝干"；0 = 无矿脉）
+var vein_color := Color.WHITE
+var vein_ratio := 0.0
 
 var _timer := 0.0
 var _variant := 0
@@ -46,7 +53,8 @@ var _bumps: Array = []  # {a: 角度, amp: 幅度}——连续波浪轮廓的鼓
 
 
 func _ready() -> void:
-	_palette = PALETTES[(abs(base_seed) if palette_idx < 0 else palette_idx) % PALETTES.size()]
+	_palette = palette_override if not palette_override.is_empty() \
+		else PALETTES[(abs(base_seed) if palette_idx < 0 else palette_idx) % PALETTES.size()]
 	# 翻动节拍错峰（±12%，种子派生保持确定性）：避免全图树同帧重绘的尖峰
 	_interval = SWAP_INTERVAL * (0.88 + 0.24 * _stable_rng(77).randf())
 	_gen_bumps()
@@ -95,7 +103,7 @@ func _strand_rng(variant: int, i: int) -> RandomNumberGenerator:
 
 
 ## 连续波浪轮廓：7-10 个鼓包沿圆周均匀+抖动分布，高斯钟形融合成一条连续曲线；
-## 上半圈（Godot y 向下，sin<0 为上）鼓包大、下半圈收平——云朵上鼓下收
+## 树叶=上半圈鼓包大（云朵上鼓下收）；石头=上下圈都鼓（不规则块状）
 func _gen_bumps() -> void:
 	var rng := _stable_rng(97)
 	_bumps.clear()
@@ -103,6 +111,8 @@ func _gen_bumps() -> void:
 	for k in n:
 		var a := TAU * float(k) / float(n) + rng.randf_range(-0.18, 0.18)
 		var up := 1.0 if sin(a) < -0.05 else 0.42
+		if not round_top_only:
+			up = rng.randf_range(0.6, 1.0)
 		_bumps.append({
 			"a": a,
 			"amp": radius * rng.randf_range(0.14, 0.26) * up,
@@ -140,11 +150,15 @@ func _draw() -> void:
 			_draw_orbit_arc(rng, lw)
 		else:
 			_draw_free_arc(rng, lw)
-	_draw_outline(lw)
 
 
-## 三档色按落笔高度：上亮下暗（局部 y 向下为正）——球体感
+## 三档色按落笔高度：上亮下暗（局部 y 向下为正）——球体感；
+## 矿脉模式：按占比返回矿脉亮色（石头里"透露出各种矿物的枝干"）
 func _band_color(y: float, rng: RandomNumberGenerator) -> Color:
+	if vein_ratio > 0.0 and rng.randf() < vein_ratio:
+		var vc: Color = vein_color.lightened(rng.randf_range(-0.08, 0.18))
+		vc.a = 1.0
+		return vc
 	var band := 1
 	if y < -radius * 0.2:
 		band = 0
@@ -161,12 +175,13 @@ func _band_color(y: float, rng: RandomNumberGenerator) -> Color:
 func _draw_orbit_arc(rng: RandomNumberGenerator, lw: float) -> void:
 	var th0 := rng.randf() * TAU
 	var sign := 1.0 if rng.randf() < 0.5 else -1.0
-	var sweep: float = deg_to_rad(rng.randf_range(30.0, 140.0))
+	# 弧长上限 75°（贴边弧断续化——长弧连段会读成描边线）
+	var sweep: float = deg_to_rad(rng.randf_range(30.0, 75.0))
 	# 弧中点角度的轮廓半径决定锚点带（靠外 sweep 放大成长弧）
 	var th_mid := th0 + sign * sweep * 0.5
-	var r_max := _outline_radius(th_mid) * 0.965
+	var r_max := _outline_radius(th_mid) * 0.95
 	var a := rng.randf_range(0.18, 1.0) * r_max
-	sweep *= 0.4 + 0.6 * clampf(a / (radius * 0.965), 0.0, 1.0)
+	sweep *= 0.4 + 0.6 * clampf(a / (radius * 0.95), 0.0, 1.0)
 	var r_jit := radius * rng.randf_range(0.0, 0.03)
 	var pts := PackedVector2Array()
 	var n := 6
@@ -174,7 +189,7 @@ func _draw_orbit_arc(rng: RandomNumberGenerator, lw: float) -> void:
 		var t := float(j) / float(n)
 		var th := th0 + sign * sweep * t
 		var r := a + sin(t * PI) * r_jit
-		pts.append(Vector2(cos(th), sin(th)) * r)
+		pts.append(Vector2(cos(th) * r, sin(th) * r * squash))
 	var wide := 1.35 if rng.randf() < 0.12 else 1.0
 	draw_polyline(pts, _band_color((pts[0].y + pts[n].y) * 0.5, rng),
 		lw * rng.randf_range(0.85, 1.15) * wide)
@@ -199,33 +214,12 @@ func _draw_free_arc(rng: RandomNumberGenerator, lw: float) -> void:
 	var n := 5
 	for j in n + 1:
 		var t := float(j) / float(n)
-		pts.append(p0.lerp(ctrl, t).lerp(ctrl.lerp(p1, t), t))
+		var p: Vector2 = p0.lerp(ctrl, t).lerp(ctrl.lerp(p1, t), t)
+		p.y *= squash
+		pts.append(p)
 	var wide := 1.35 if rng.randf() < 0.12 else 1.0
 	draw_polyline(pts, _band_color(mid.y, rng), lw * rng.randf_range(0.85, 1.15) * wide)
 
 
 
 
-## 连续波浪轮廓线（外圈圆圈，用户点名要回）：上亮下暗分两半画，
-## 半径外移 lw×0.45 —— 内缘压进贴边笔触层，皮馅咬合无缝（修复
-## v7"轮廓与填料之间空隙"的皮馅分离）；粗一档 + 逐点微扰（手绘抖动）
-func _draw_outline(lw: float) -> void:
-	var rng := _stable_rng(31)
-	var jitter: Array = []
-	for j in OUTLINE_SEGS:
-		jitter.append(rng.randf_range(-0.012, 0.012))
-	var col_up: Color = (_palette[1] as Color).lightened(0.06)
-	col_up.a = 1.0
-	var col_dn: Color = (_palette[2] as Color).lightened(0.04)
-	col_dn.a = 1.0
-	# Godot y 向下：θ∈[0,PI]（sin>0）是下半圈用暗色，θ∈[PI,TAU] 是上半圈用亮色；
-	# 两条半 polyline，θ=0/PI 处同 jitter 同点衔接（笔迹连续）
-	for half in 2:
-		var pts := PackedVector2Array()
-		var th0 := PI * float(half)
-		for j in OUTLINE_SEGS / 2 + 1:
-			var th := th0 + PI * float(j) / float(OUTLINE_SEGS / 2.0)
-			var jj := (j + (OUTLINE_SEGS / 2 if half == 1 else 0)) % OUTLINE_SEGS
-			var r: float = (_outline_radius(th) + lw * 0.45) * (1.0 + float(jitter[jj]))
-			pts.append(Vector2(cos(th), sin(th)) * r)
-		draw_polyline(pts, col_dn if half == 0 else col_up, lw * 1.3)

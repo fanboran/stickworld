@@ -37,7 +37,7 @@ func _anchor_below_minimap() -> void:
 
 func _build_ui() -> void:
 	# 滑块：条本体宽 = BAR_WIDTH（与小地图同宽对齐），不把文字让进条内
-	_slider = HSlider.new()
+	_slider = SketchHSlider.new()
 	_slider.min_value = 0.5
 	_slider.max_value = 2.0
 	_slider.step = 0.1
@@ -46,12 +46,11 @@ func _build_ui() -> void:
 	_slider.offset_bottom = BAR_HEIGHT
 	_slider.value_changed.connect(_on_slider_changed)
 	add_child(_slider)
-	# 默认缩放（100%）刻度：叠在条内底部（贴近下缘，拉柄圆形不覆盖该区域），
-	# 位置按 grabber 中心公式对准 1.0
-	var grabber_tex: Texture2D = _slider.get_theme_icon("grabber", "HSlider")
-	var grabber_w: float = grabber_tex.get_width() if grabber_tex != null else 16.0
+	# 默认缩放（100%）刻度：叠在条内底部（贴近下缘，滑块圆点不覆盖该区域）。
+	# 位置按 SketchHSlider 滑块圆心公式对准 1.0（圆心范围 [grab_r, W-grab_r]）
+	var grab_r: float = SketchHSlider.grabber_radius(BAR_HEIGHT)
 	var tick_x: float = (1.0 - _slider.min_value) / (_slider.max_value - _slider.min_value) \
-			* (BAR_WIDTH - grabber_w) + grabber_w * 0.5
+			* (BAR_WIDTH - grab_r * 2.0) + grab_r
 	var ruler := ColorRect.new()
 	ruler.color = Color(StickTokens.ACCENT, 0.75)
 	ruler.position = Vector2(tick_x - 1.0, BAR_HEIGHT - 5.0)

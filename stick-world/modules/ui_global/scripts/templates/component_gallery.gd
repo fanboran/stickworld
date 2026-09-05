@@ -94,7 +94,7 @@ func _build_inputs() -> void:
 func _build_sliders() -> void:
 	var sec := StickKit.section(_content, "滑条与进度 / SLIDER & PROGRESS")
 	var row1 := StickKit.field_row(sec, "滑条", "HSlider")
-	var slider := HSlider.new()
+	var slider := SketchHSlider.new()
 	slider.min_value = 0
 	slider.max_value = 100
 	slider.value = 65

@@ -370,7 +370,7 @@ func _build_env_tab(parent: VBoxContainer) -> void:
 	time_label.name = "TimeLabel"
 	parent.add_child(time_label)
 
-	var slider := HSlider.new()
+	var slider := SketchHSlider.new()
 	slider.name = "TimeSlider"
 	slider.min_value = 0.0
 	slider.max_value = 24.0

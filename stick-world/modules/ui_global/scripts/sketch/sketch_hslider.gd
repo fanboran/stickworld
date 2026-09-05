@@ -43,11 +43,16 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
+## 滑块圆点半径（供外部对齐刻度：zoom_bar 100% 刻度用同一圆心公式）
+static func grabber_radius(height: float) -> float:
+	return clampf(height * 0.42, 5.0, 9.0)
+
+
 func _draw() -> void:
 	var ratio := 0.0
 	if max_value > min_value:
 		ratio = clampf((value - min_value) / (max_value - min_value), 0.0, 1.0)
-	var grab_r := clampf(size.y * 0.42, 5.0, 9.0)
+	var grab_r := grabber_radius(size.y)
 	# 轨道区：水平让出滑块半径（滑块圆心的活动范围），垂直居中细条
 	var track_h := 6.0
 	var track := Rect2(grab_r, (size.y - track_h) * 0.5, size.x - grab_r * 2.0, track_h)

@@ -152,26 +152,32 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if _data == null:
 		return
-	# 1. 海洋背景（context 尺寸）
+	# 地形模式（B2）：程序着色底图替代填充层（湖泊/海洋/邻居地形已在纹理内）
+	var terrain := map_mode == MapModeManager.Mode.TERRAIN and _data.terrain_texture != null
+	# 1. 海洋背景（context 尺寸；地形纹理的虚空透明区透出此色）
 	draw_rect(Rect2(Vector2.ZERO, _context_size), OCEAN_COLOR)
-	# 2. 湖泊（浅蓝）
-	if _lakes_mesh != null:
-		draw_mesh(_lakes_mesh, null)
-	# 3. 相邻地区（灰色）
-	if _neighbors_mesh != null:
-		draw_mesh(_neighbors_mesh, null)
-	if display_mode == DisplayMode.MODE_CITY:
-		# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）
-		if _data.city_preview_texture != null:
-			draw_texture_rect(_data.city_preview_texture,
-				Rect2(Vector2.ZERO, _context_size), false)
+	if terrain:
+		draw_texture_rect(_data.terrain_texture,
+			Rect2(Vector2.ZERO, _context_size), false)
 	else:
-		# 4. 当前地区地块（彩色）
-		if _static_mesh != null:
-			draw_mesh(_static_mesh, null)
-		# 5. 当前地块洞（海洋色）
-		if _holes_mesh != null:
-			draw_mesh(_holes_mesh, null)
+		# 2. 湖泊（浅蓝）
+		if _lakes_mesh != null:
+			draw_mesh(_lakes_mesh, null)
+		# 3. 相邻地区（灰色）
+		if _neighbors_mesh != null:
+			draw_mesh(_neighbors_mesh, null)
+		if display_mode == DisplayMode.MODE_CITY:
+			# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）
+			if _data.city_preview_texture != null:
+				draw_texture_rect(_data.city_preview_texture,
+					Rect2(Vector2.ZERO, _context_size), false)
+		else:
+			# 4. 当前地区地块（彩色）
+			if _static_mesh != null:
+				draw_mesh(_static_mesh, null)
+			# 5. 当前地块洞（海洋色）
+			if _holes_mesh != null:
+				draw_mesh(_holes_mesh, null)
 	# 5.5 地块常驻描边（地图绝对粗细，放大超屏幕上限时 clamp）
 	var twidth := TILE_BORDER_WIDTH
 	if _camera != null and _camera.has_method("get_zoom"):
@@ -187,7 +193,8 @@ func _draw() -> void:
 			draw_line(seg[0], seg[1], BORDER_COLOR, bw, true)
 	# 6.5 湖泊绘制到最上层：覆盖灰色相邻地区/非地块区（湖是水域，不应被灰影盖住）。
 	# 地块内湖泊已作洞（5 步洞网格同色），此处再绘一次湖泊多边形，确保非地块区的湖也显现。
-	if _lakes_mesh != null:
+	# 地形模式下纹理已含湖色，跳过（避免纯色湖 mesh 盖掉纹理湖渐变）。
+	if _lakes_mesh != null and not terrain:
 		draw_mesh(_lakes_mesh, null)
 	# 7. hover 地块轮廓描边（灰，最上层；固定屏幕像素粗细，不随缩放）
 	var hpolys: Array = hovered_tile.get("polygons", [hovered_tile.get("polygon", [])])

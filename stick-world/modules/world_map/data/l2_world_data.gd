@@ -47,6 +47,9 @@ var neighbor_border_segs: Array = []
 ## 城市模式贴图（l2_city_preview.png，context 尺寸 RGBA：tiles 区域填城市蒙版色，其余透明）
 var city_preview_texture: Texture2D = null
 
+## 地形模式底图（l2_terrain.png，context 尺寸 RGBA：程序着色地形，世界边界外虚空透明）
+var terrain_texture: Texture2D = null
+
 var _tile_by_label: Dictionary = {}
 
 
@@ -73,6 +76,10 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	var cprev_path := "%s/l2_city_preview.png" % base_dir
 	if ResourceLoader.exists(cprev_path):
 		world.city_preview_texture = load(cprev_path) as Texture2D
+	# 地形模式底图（可选，B2 程序着色产物）
+	var terrain_path := "%s/l2_terrain.png" % base_dir
+	if ResourceLoader.exists(terrain_path):
+		world.terrain_texture = load(terrain_path) as Texture2D
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l2_base_2048.png")]
 	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l2_tiles_index_2048.png")]
 	var border_path := "%s/%s" % [base_dir, data.get("border_texture", "l2_tiles_border_2048.png")]

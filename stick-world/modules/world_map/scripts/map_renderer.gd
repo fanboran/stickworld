@@ -43,6 +43,17 @@ var _base_mesh: ArrayMesh = null
 ## 配色（与 L2MapRenderer 完全一致）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 const LAKE_COLOR := Color(28.0 / 255.0, 50.0 / 255.0, 82.0 / 255.0)
+
+## 群系图例色（B2 地形底图色板的 L1 图例入口；基色与生成端
+## tools/worldgen/l3/biome_generate.py BIOME_COLORS 同源，改色两端同步）
+const BIOME_LEGEND: Array[Dictionary] = [
+	{"color": Color(130.0 / 255.0, 170.0 / 255.0, 90.0 / 255.0), "text": "平原"},
+	{"color": Color(70.0 / 255.0, 120.0 / 255.0, 62.0 / 255.0), "text": "森林"},
+	{"color": Color(208.0 / 255.0, 182.0 / 255.0, 122.0 / 255.0), "text": "荒漠"},
+	{"color": Color(228.0 / 255.0, 233.0 / 255.0, 238.0 / 255.0), "text": "冰原"},
+	{"color": Color(95.0 / 255.0, 160.0 / 255.0, 195.0 / 255.0), "text": "水源带"},
+	{"color": Color(118.0 / 255.0, 62.0 / 255.0, 54.0 / 255.0), "text": "火山"},
+]
 ## 邻居老 L1 块（A3 空心化：灰色轮廓线，不填充）
 const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
 const NEIGHBOR_BORDER_WIDTH := 2.0

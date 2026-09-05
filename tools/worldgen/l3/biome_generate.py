@@ -26,6 +26,7 @@ from scipy.ndimage import distance_transform_edt, binary_dilation, gaussian_filt
 from PIL import Image, ImageDraw, ImageFont
 import random
 import json
+import math
 import os
 import sys
 import argparse
@@ -128,8 +129,8 @@ def climate_biomes(temp, precip, land, th):
     return b
 
 
-def place_volcanoes(labels, elev, land, size, seed, vp, spawn_xy):
-    """独立放置火山区：高海拔 ∧ 低频热点 ∧ 距出生点下限，贪心撒 N 个蚀变圆。"""
+def pick_volcano_sites(elev, land, size, seed, vp, spawn_xy):
+    """火山选址：高海拔 ∧ 低频热点 ∧ 距出生点下限 ∧ 彼此间距下限，贪心取 count 个。"""
     rng = random.Random(seed + 303)
     hot_small = fft_fbm(256, seed + 304, vp["hotspot_beta"])
     hotspot = np.asarray(Image.fromarray((hot_small * 255).astype(np.uint8), mode="L")
@@ -142,9 +143,7 @@ def place_volcanoes(labels, elev, land, size, seed, vp, spawn_xy):
     sx, sy = spawn_xy
     order = list(range(len(cand[0])))
     rng.shuffle(order)
-    r_min, r_max = vp["radius_px"]
     picked = []
-    yy, xx = np.mgrid[0:size, 0:size]
     for i in order:
         cy, cx = int(cand[0][i]), int(cand[1][i])
         if (cx - sx) ** 2 + (cy - sy) ** 2 < vp["min_dist_spawn_px"] ** 2:
@@ -156,19 +155,81 @@ def place_volcanoes(labels, elev, land, size, seed, vp, spawn_xy):
             break
     if not picked:
         print("   ⚠ 火山候选全被出生距离/间距约束淘汰", flush=True)
-        return picked
+    return picked
 
-    for cy, cx in picked:
+
+def apply_volcanoes(labels, land, size, seed, vp, sites):
+    """火山蚀变圆应用：中心实心、边缘概率蚀变（p = 1 − d²/r²），不规则边缘更自然。"""
+    rng = random.Random(seed + 303)
+    # 消耗掉与选址阶段等量的 rng 状态后再逐圆取半径/种子，保证与选址-应用拆分前同序可复现
+    r_min, r_max = vp["radius_px"]
+    yy, xx = np.mgrid[0:size, 0:size]
+    for cy, cx in sites:
         r = rng.uniform(r_min, r_max)
         d2 = (yy - cy) ** 2 + (xx - cx) ** 2
         inside = (d2 < r * r) & land
         if vp["edge_decay"]:
-            # 边缘概率蚀变（p = 1 − d²/r²），不规则边缘更自然
             p = np.clip(1.0 - d2 / (r * r), 0.0, 1.0)
             keep = np.random.RandomState(rng.randint(0, 1 << 30)).rand(size, size) < p
             inside = inside & keep
         labels[inside] = VOLCANIC
-    return picked
+
+
+def pick_supernatural_hot_zone(ref_labels, elev, land, size, seed, hzp, spawn_xy, volcano_sites):
+    """超自然炎热大陆选址：面积≈一个 L2 地块的圆形区，避开独有地形（冰原/荒漠带、
+    主山脉、出生地区、火山），落在普通平原/森林主导的陆地上——炎热化后有反差。
+
+    用无热区温湿判定的参考群系做约束统计，返回圆心 (cy, cx)，半径由 area_px 推导。
+    """
+    pp = hzp["placement"]
+    r = math.sqrt(hzp["area_px"] / math.pi)
+    rng = random.Random(seed + 404)
+
+    # 圆盘采样模板（固定 400 点，确定性）
+    n_disk = 400
+    disk = np.random.RandomState(seed + 405).rand(n_disk, 2)
+    disk[:, 0] = disk[:, 0] * 2 - 1
+    disk[:, 1] = disk[:, 1] * 2 - 1
+    disk = disk[disk[:, 0] ** 2 + disk[:, 1] ** 2 <= 1.0][:256] * r  # (256, 2) 半径内偏移
+
+    # 候选中心网格扫描
+    step = 16
+    cys, cxs = np.mgrid[r:size - r:step, r:size - r:step]
+    centers = np.column_stack([cys.ravel(), cxs.ravel()]).astype(np.float32)  # (N, 2)
+
+    # 展开采样：(N, 256) 索引
+    sy = (centers[:, 0:1] + disk[:, 0][None, :]).astype(np.int32).ravel()
+    sx = (centers[:, 1:2] + disk[:, 1][None, :]).astype(np.int32).ravel()
+    land_v = land[sy, sx].reshape(len(centers), -1)
+    ref_v = ref_labels[sy, sx].reshape(len(centers), -1)
+    elev_v = elev[sy, sx].reshape(len(centers), -1)
+
+    m = (land_v.mean(axis=1) >= pp["min_land_ratio"])
+    m &= (ref_v == ICE).mean(axis=1) <= pp["ice_ratio_max"]
+    m &= (ref_v == DESERT).mean(axis=1) <= pp["desert_ratio_max"]
+    m &= ((ref_v == PLAINS) | (ref_v == FOREST)).mean(axis=1) >= pp["plains_forest_min"]
+    m &= elev_v.mean(axis=1) <= pp["max_mean_elev"]
+    sx0, sy0 = spawn_xy
+    m &= (centers[:, 1] - sx0) ** 2 + (centers[:, 0] - sy0) ** 2 >= pp["min_dist_spawn_px"] ** 2
+    for py, px in volcano_sites:
+        m &= (centers[:, 1] - px) ** 2 + (centers[:, 0] - py) ** 2 >= pp["min_dist_volcano_px"] ** 2
+
+    ok = np.where(m)[0]
+    if len(ok) == 0:
+        print("   ⚠ 无超自然炎热大陆合格位置，放宽 plains_forest_min 后重试", flush=True)
+        return None
+    center = centers[rng.choice(ok)]
+    cy, cx = float(center[0]), float(center[1])
+    print(f"   超自然炎热大陆: 中心 ({cx:.0f},{cy:.0f}) 半径 {r:.0f}px（≈{hzp['area_px'] / 10000:.1f}万px²）", flush=True)
+    return (cy, cx)
+
+
+def hot_zone_falloff(size, center, r, core_ratio):
+    """热区温度增益场：中心 core 恒定 1，边缘 smoothstep 衰减到 0。"""
+    yy, xx = np.mgrid[0:size, 0:size]
+    d = np.sqrt((yy - center[0]) ** 2 + (xx - center[1]) ** 2)
+    t = np.clip((d - core_ratio * r) / ((1.0 - core_ratio) * r), 0.0, 1.0)
+    return (1.0 - (3.0 * t * t - 2.0 * t * t * t)).astype(np.float32)
 
 
 def apply_source(labels, lake, river, band_px):
@@ -201,8 +262,8 @@ def evaluate_spawn(labels, land, region_mask, plains_min):
     return ok, f"出生地区(region_013): {dist} → 平原{plains * 100:.1f}% {'✅ PASS' if ok else '❌ FAIL'}"
 
 
-def render_preview(labels, elev, size, spawn_xy, volcanoes, out_path):
-    """彩色预览：群系色 × 高度明度 + 出生地区描边 + 图例（含全图占比）。"""
+def render_preview(labels, elev, size, spawn_xy, volcanoes, hot_center, hot_r, out_path, core_ratio=0.65):
+    """彩色预览：群系色 × 高度明度 + 出生地区描边 + 超自然炎热大陆虚线圈 + 图例（含全图占比）。"""
     lut = np.zeros((7, 3), dtype=np.uint8)
     for i in range(7):
         lut[i] = BIOME_COLORS[i]
@@ -214,6 +275,11 @@ def render_preview(labels, elev, size, spawn_xy, volcanoes, out_path):
     # 海洋离岸渐变（近岸浅），观感更接近最终底图
     ocean = labels == OCEAN
     rgb[ocean] = np.array(BIOME_COLORS[OCEAN], dtype=np.float32)
+    # 超自然炎热大陆：暖色偏移（R 增 B 减，随 falloff 渐变），模拟 B2 着色的炎热观感
+    if hot_center is not None:
+        fz = hot_zone_falloff(size, hot_center, hot_r, core_ratio)[:, :, None]
+        warm = np.array([42.0, 10.0, -18.0], dtype=np.float32)
+        rgb = np.clip(rgb + fz * warm, 0, 255)
     img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
 
     draw = ImageDraw.Draw(img, "RGBA")
@@ -227,6 +293,17 @@ def render_preview(labels, elev, size, spawn_xy, volcanoes, out_path):
     draw.ellipse([sx - 7, sy - 7, sx + 7, sy + 7], outline=(255, 70, 60), width=3)
     for cy, cx in volcanoes:
         draw.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], outline=(255, 140, 40), width=2)
+    if hot_center is not None:
+        hcy, hcx = hot_center
+        # 虚线圈：赤橙描边 + 中心标注
+        n_dash = 48
+        import math as _m
+        for i in range(n_dash):
+            a0 = i / n_dash * 2 * _m.pi
+            a1 = a0 + _m.pi / n_dash
+            draw.arc([hcx - hot_r, hcy - hot_r, hcx + hot_r, hcy + hot_r],
+                     _m.degrees(a0), _m.degrees(a1), fill=(255, 90, 40), width=4)
+        draw.ellipse([hcx - 5, hcy - 5, hcx + 5, hcy + 5], fill=(255, 90, 40))
 
     # 底部图例条
     land_counts = np.bincount(labels[~ocean], minlength=7)
@@ -245,7 +322,7 @@ def render_preview(labels, elev, size, spawn_xy, volcanoes, out_path):
         ld.rectangle([x, size + 18, x + 34, size + 50], fill=BIOME_COLORS[i])
         ld.text((x + 42, size + 22), f"{BIOME_NAMES[i]} {ratios[i] * 100:.1f}%", font=font_small, fill=(230, 230, 230))
         x += 42 + 22 + ld.textlength(f"{BIOME_NAMES[i]} 00.0%", font=font_small)
-    ld.text((20, size + 56), f"出生聚落 ●红圈  火山 ○橙圈  红边=出生地区 region_013", font=font_small, fill=(160, 165, 175))
+    ld.text((20, size + 56), f"出生聚落 ●红圈  火山 ○橙圈  红边=出生地区 region_013  橙虚线圈=超自然炎热大陆", font=font_small, fill=(160, 165, 175))
     canvas.save(out_path)
     print(f"   保存 {out_path} ({os.path.getsize(out_path) / 1024:.0f} KB)", flush=True)
 
@@ -275,20 +352,47 @@ def run_once(params, elev, land, lake, river, region_mask, want_preview):
     if sig > 0:
         temp = gaussian_filter(temp, sig)
         precip = gaussian_filter(precip, sig)
+
+    # 火山选址（只依赖海拔/热点/掩码，不受热区影响）
+    volcano_sites = pick_volcano_sites(elev, land, size, seed, params["volcanic"], spawn_xy)
+
+    # 超自然炎热大陆：用无热区参考群系选址 → 温度叠加增益 → 群系按炎热重判
+    hzp = params["supernatural_hot_zone"]
+    hot_center = tuple(hzp["center"]) if hzp.get("center") else \
+        pick_supernatural_hot_zone(climate_biomes(temp, precip, land, params["thresholds"]),
+                                   elev, land, size, seed, hzp, spawn_xy, volcano_sites)
+    hot_r = math.sqrt(hzp["area_px"] / math.pi)
+    if hot_center is not None:
+        temp = temp + hzp["temp_boost"] * hot_zone_falloff(size, hot_center, hot_r, hzp["core_ratio"])
+
     labels = climate_biomes(temp, precip, land, params["thresholds"])
-    volcanoes = place_volcanoes(labels, elev, land, size, seed, params["volcanic"], spawn_xy)
+    apply_volcanoes(labels, land, size, seed, params["volcanic"], volcano_sites)
     apply_source(labels, lake, river, params["source_band_px"])
 
     ok, report = evaluate_spawn(labels, land, region_mask, params["spawn"]["plains_ratio_min"])
     land_counts = np.bincount(labels[land].ravel(), minlength=7)
     ratios = land_counts / land_counts.sum()
     print("   陆地: " + " ".join(f"{BIOME_NAMES[i]}{ratios[i] * 100:.1f}%" for i in range(7)), flush=True)
+    if hot_center is not None:
+        yy, xx = np.mgrid[0:size, 0:size]
+        d2 = (yy - hot_center[0]) ** 2 + (xx - hot_center[1]) ** 2
+        core = (d2 < (hot_r * 0.65) ** 2) & land
+        hz_counts = np.bincount(labels[core], minlength=7)
+        hz_r = hz_counts / hz_counts.sum()
+        print("   热区核心: " + " ".join(f"{BIOME_NAMES[i]}{hz_r[i] * 100:.0f}%" for i in range(7) if hz_counts[i] > 0)
+              + f"，温度中位 {np.median(temp[core]):.2f}（t_hot={params['thresholds']['t_hot']}）", flush=True)
     print("   " + report, flush=True)
 
     if want_preview:
-        render_preview(labels, elev, size, spawn_xy, volcanoes,
-                       os.path.join(OUTPUT_DIR, "biome_preview_2048.png"))
-    return labels, ok
+        render_preview(labels, elev, size, spawn_xy, volcano_sites, hot_center, hot_r,
+                       os.path.join(OUTPUT_DIR, "biome_preview_2048.png"), hzp["core_ratio"])
+    # 热区增益场单独存（B2 着色做炎热色调用）
+    if hot_center is not None:
+        falloff = (hot_zone_falloff(size, hot_center, hot_r, hzp["core_ratio"]) * 255).astype(np.uint8)
+        hz_path = os.path.join(OUTPUT_DIR, "biome_hot_zone_2048.png")
+        Image.fromarray(falloff, mode="L").save(hz_path)
+        print(f"   保存 {hz_path}", flush=True)
+    return labels, ok, hot_center
 
 
 def main():
@@ -308,20 +412,22 @@ def main():
     region_mask = load_spawn_region(size)
 
     print("2. 生成 + 硬验收...", flush=True)
-    labels, ok = run_once(params, elev, land, lake, river, region_mask, want_preview=True)
+    labels, ok, hot_center = run_once(params, elev, land, lake, river, region_mask, want_preview=True)
 
     attempt = 0
     while not ok and attempt < args.search:
         attempt += 1
         params["seed_offset"] += 1
         print(f"   → 重试 seed_offset={params['seed_offset']}", flush=True)
-        labels, ok = run_once(params, elev, land, lake, river, region_mask, want_preview=(attempt == args.search or ok))
+        labels, ok, hot_center = run_once(params, elev, land, lake, river, region_mask,
+                                          want_preview=(attempt == args.search or ok))
 
     if not ok:
         print(f"❌ 出生验收仍未通过（已尝试 {1 + attempt} 个 seed），请手调 biome_params.json 温湿参数", flush=True)
         sys.exit(1)
 
-    # 通过后：写回生效 seed_offset + 标签图
+    # 通过后：写回生效 seed_offset + 热区圆心（复现用）+ 标签图
+    params["supernatural_hot_zone"]["center"] = list(hot_center) if hot_center else None
     json.dump(params, open(PARAMS_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     out = os.path.join(OUTPUT_DIR, f"biome_labels_{size}.npy")
     np.save(out, labels)

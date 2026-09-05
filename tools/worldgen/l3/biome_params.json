@@ -45,6 +45,24 @@
     ],
     "edge_decay": true
   },
+  "supernatural_hot_zone": {
+    "area_px": 56000,
+    "temp_boost": 0.45,
+    "core_ratio": 0.65,
+    "placement": {
+      "min_dist_spawn_px": 500,
+      "min_dist_volcano_px": 150,
+      "min_land_ratio": 0.85,
+      "max_mean_elev": 0.3,
+      "ice_ratio_max": 0.15,
+      "desert_ratio_max": 0.15,
+      "plains_forest_min": 0.5
+    },
+    "center": [
+      965.5115966796875,
+      293.5116271972656
+    ]
+  },
   "spawn": {
     "region_id": "region_013",
     "world_px_2048": [

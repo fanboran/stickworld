@@ -79,11 +79,11 @@ var _rainy: float = 0.0
 ## 云池规模（Terraria 原版 numClouds=rand(200) 世界随机、实际画面常见个位数到
 ## 十几朵；本项目 14 朵 → 视野带内 14、屏内约 9。曾 32 朵密得像挤早高峰）
 const CLOUD_POOL: int = 14
-## 云出生带（相对地平线向上，比例×天空高）。原版云带很宽：DrawClouds 各 pass
-## 的 y ∈ 约[-0.5H, +0.45H]（含 bgTopY 偏移，H=屏高）——云从贴近树线一直飘到
-## 树线上方的纯天空区（不是只挤在树线后）。远云更高——小云再上移同构。
+## 云出生带（相对地平线向上，比例×天空高）。2026-09-06 用户指示：云只出现在
+## 屏幕上 1/3——带压到天空顶部区（bot 0.25→0.62：带高从 0.83 天空压到 0.46，
+## 靠近顶带）。远云更高——小云再上移同构。
 const CLOUD_Y_TOP_R: float = 1.08
-const CLOUD_Y_BOT_R: float = 0.25
+const CLOUD_Y_BOT_R: float = 0.62
 var _cloud_texs: Array = []
 
 
@@ -165,8 +165,8 @@ func _build_clouds() -> void:
 		var scale_f: float = _rng.randf_range(0.7, 1.3)
 		# 手绘云四风格均匀混排（选型对比期）：F1/F2/F3/E2 = 枚举 5/5/5/4 的前三
 		cloud.set("style", [5, 5, 5, 4][i % 4])
-		# 尺寸=深度档（与原贴图 scale×1.35 同量级）
-		cloud.set("cloud_size", Vector2(300.0, 125.0) * scale_f * 1.35)
+		# 尺寸=深度档（2026-09-06 用户指示减小 1/3：基准 300×125 → 200×83）
+		cloud.set("cloud_size", Vector2(200.0, 83.0) * scale_f * 1.35)
 		var pass_name: String = "distant" if scale_f < 1.0 else ("closer" if scale_f < 1.15 else "closest")
 		(_cloud_passes[pass_name] as Node2D).add_child(cloud)
 		# 出生带：远云（小）更高——Terraria 小云再上移的同构
@@ -295,7 +295,7 @@ func _update_clouds(delta: float) -> void:
 func _respawn_cloud(c: Dictionary, cam_x: float, band_half: float) -> void:
 	var cloud: Node2D = c["node"]
 	var scale_f: float = _rng.randf_range(0.7, 1.3)
-	cloud.set("cloud_size", Vector2(300.0, 125.0) * scale_f * 1.35)
+	cloud.set("cloud_size", Vector2(200.0, 83.0) * scale_f * 1.35)
 	cloud.set("style", [5, 5, 5, 4][_rng.randi() % 4])
 	# 尺度变档 → 换深度 pass（远/中/近云的遮挡关系随尺度联动）
 	var pass_name: String = "distant" if scale_f < 1.0 else ("closer" if scale_f < 1.15 else "closest")

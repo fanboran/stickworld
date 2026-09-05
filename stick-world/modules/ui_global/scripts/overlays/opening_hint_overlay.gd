@@ -11,7 +11,8 @@ func _ready() -> void:
 	name = "OpeningHint"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	_card = PanelContainer.new()
+	_card = SketchPanel.new()
+	_card.tone = SketchPanel.Tone.LIGHT
 	_card.set_anchors_preset(Control.PRESET_CENTER)
 	_card.anchor_left = 0.5
 	_card.anchor_right = 0.5
@@ -20,7 +21,7 @@ func _ready() -> void:
 	_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_card.offset_left = -300.0
 	_card.offset_right = 300.0
-	_card.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	pass
 	add_child(_card)
 
 	var box := VBoxContainer.new()

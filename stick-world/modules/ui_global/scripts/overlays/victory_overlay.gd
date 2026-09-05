@@ -16,7 +16,8 @@ func _ready() -> void:
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 
-	_card = PanelContainer.new()
+	_card = SketchPanel.new()
+	_card.tone = SketchPanel.Tone.LIGHT
 	_card.set_anchors_preset(Control.PRESET_CENTER)
 	_card.anchor_left = 0.5
 	_card.anchor_right = 0.5
@@ -26,7 +27,6 @@ func _ready() -> void:
 	_card.offset_right = 260.0
 	_card.offset_top = -190.0
 	_card.offset_bottom = 190.0
-	_card.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	add_child(_card)
 	visible = false
 

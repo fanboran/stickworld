@@ -53,6 +53,9 @@ func _build_title() -> void:
 	var title := StickKit.label(_menu_column, "火柴人帝国模拟", StickKit.LabelKind.TITLE)
 	title.add_theme_font_size_override("font_size", StickTokens.FONT_DISPLAY)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# 亮天空上的白字配黑描边（贴纸感），墨色与血条 COLOR_OUTLINE 同源
+	title.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.03, 0.92))
+	title.add_theme_constant_override("outline_size", 6)
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 24)
 	_menu_column.add_child(spacer)
@@ -63,8 +66,10 @@ func _build_menu() -> void:
 		# 开发专用入口（测试场景等）在非 debug 构建下不显示
 		if item.get("debug_only", false) and not OS.is_debug_build():
 			continue
-		var btn := StickKit.button(_menu_column, item["label"],
+		var btn := StickKit.sketch_button(_menu_column, item["label"],
 				_on_menu_pressed.bind(item), item["kind"], StickTokens.BTN_H_LG)
+		# 浮在暖金天空上的按钮用深墨描边（白描边在亮背景上不可见）
+		btn.ink = Color(0.05, 0.04, 0.03, 1.0)
 		if item["id"] == "continue":
 			btn.disabled = not _has_continue_save()
 
@@ -100,6 +105,10 @@ func _on_menu_pressed(item: Dictionary) -> void:
 ## 场景清单在此登记：名称 + 场景路径；新测试场景加一行即可。
 const TEST_SCENES: Array[Dictionary] = [
 	{"name": "大乱斗观察场（12v12 混编自动互殴）", "path": "res://tests/dev/battle_arena.tscn"},
+	{"name": "树石变体画廊（资源贴图验收）", "path": "res://tests/dev/tree_gallery.tscn"},
+	{"name": "树形参数实验室（实时滑条调参）", "path": "res://tests/dev/tree_param_lab.tscn"},
+	{"name": "单位动作画廊（全员单位×全部动作对比）", "path": "res://tests/dev/unit_action_gallery.tscn"},
+	{"name": "手绘皮肤全族陈列（自绘沸腾 + StickHand 字体）", "path": "res://tests/dev/sketch_compare.tscn"},
 ]
 
 var _arena_panel: Control = null
@@ -112,7 +121,7 @@ func _open_arena_panel() -> void:
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 	_arena_panel = dim
-	var panel := PanelContainer.new()
+	var panel := SketchPanel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
@@ -126,10 +135,10 @@ func _open_arena_panel() -> void:
 	vbox.add_child(title)
 	for scene_info in TEST_SCENES:
 		# StickKit.button 内部已挂到 vbox，不再手动 add_child（重复挂父会报错）
-		StickKit.button(vbox, scene_info["name"],
+		StickKit.sketch_button(vbox, scene_info["name"],
 				func(): get_tree().change_scene_to_file(scene_info["path"]),
 				StickKit.ButtonKind.ACCENT, StickTokens.BTN_H)
-	StickKit.button(vbox, "返回", _close_arena_panel,
+	StickKit.sketch_button(vbox, "返回", _close_arena_panel,
 			StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 
 
@@ -248,7 +257,7 @@ func _build_background() -> void:
 	add_child(birds)
 	move_child(birds, 2)
 
-const SkyDecorMountains := "res://assets/sky/mountains.png"
+const SkyDecorMountains := "res://assets/sky/bg_mountain_far.png"
 const SkyDecorCloudA := "res://assets/sky/cloud_a.png"
 const SkyDecorCloudB := "res://assets/sky/cloud_b.png"
 const MenuBirdsScript := preload("res://modules/ui_global/scripts/menus/menu_birds.gd")

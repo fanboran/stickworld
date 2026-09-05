@@ -80,7 +80,7 @@ func _build_widgets() -> void:
 	var x: float = 12.0
 	# 细分模式按钮（仅 L3 有 toggle_display_mode）
 	if _renderer != null and _renderer.has_method("toggle_display_mode"):
-		_mode_btn = StickKit.button(self, "细分:关", _on_mode_pressed,
+		_mode_btn = StickKit.sketch_button(self, "细分:关", _on_mode_pressed,
 				StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 		_mode_btn.custom_minimum_size = Vector2(BTN_W, BTN_H)
 		_dock_bottom_left(_mode_btn, x, BTN_W, BTN_H)

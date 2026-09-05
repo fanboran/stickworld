@@ -1,4 +1,4 @@
-extends PanelContainer
+extends SketchPanel
 class_name SettlementTooltip
 ## 聚落悬停提示 —— L1 地块视图下鼠标悬停聚落时显示信息
 ##
@@ -37,8 +37,8 @@ var _shown_tile_id: String = ""
 
 
 func _ready() -> void:
-	theme = StickTheme.create()
-	add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	theme = StickTheme.create()  # 子控件字体/字色（面板底已由 SketchPanel 自绘）
+	tone = Tone.LIGHT
 	# 跟随鼠标的动态浮层：位置每帧按指针 + 偏移计算并夹进安全矩形（避开顶部/底部 HUD），
 	# 初始放在屏外由首次更新落位；不拦截任何鼠标输入
 	mouse_filter = Control.MOUSE_FILTER_IGNORE

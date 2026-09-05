@@ -11,6 +11,7 @@ ground_ratio = 1.15
 map_left = 0.0
 map_right = 6144.0
 ground_bottom = 1674.0
+enable_water = false
 
 [node name="PlacementGrid" type="Node" parent="."]
 script = ExtResource("2_grid")

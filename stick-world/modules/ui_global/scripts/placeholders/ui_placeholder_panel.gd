@@ -68,7 +68,7 @@ func _build_content() -> void:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body.add_child(note)
 	# 底栏
-	StickKit.button(_footer, "关闭（ESC）", close)
+	StickKit.auto_button(_footer, "关闭（ESC）", close)
 
 
 ## 演示骨架：每面板一小组占位元素，让界面"像样"（系统接入后整体替换）
@@ -130,8 +130,8 @@ func _build_demo_body() -> void:
 
 
 func _node_card(text: String) -> PanelContainer:
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	var card := SketchPanel.new()
+	card.tone = SketchPanel.Tone.LIGHT
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)

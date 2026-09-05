@@ -10,7 +10,7 @@ const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hu
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var speed_label: Label = get_node_or_null("MarginContainer/HBoxContainer/SpeedLabel")
-@onready var time_label: Label = get_node_or_null("MarginContainer/HBoxContainer/TimeLabel")
+@onready var time_label: Label = get_node_or_null("TimeLabel")  # 钟表盘正下方（宽度变化不再挤顶栏按钮）
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
@@ -34,7 +34,6 @@ func attach_resources(resources_api: Node) -> Control:
 		return _resource_bar
 	if _resource_host == null:
 		return null
-	_resource_host.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	_resource_bar = _ResourceBarScript.new()
 	_resource_bar.name = "ResourceBar"
 	_resource_host.add_child(_resource_bar)

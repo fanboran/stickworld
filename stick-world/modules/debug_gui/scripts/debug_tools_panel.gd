@@ -118,9 +118,8 @@ func _sys_label(missing_hint: String) -> Label:
 # ─────────────────────────────── UI 骨架 ────────────────────────────────
 
 func _build_ui() -> void:
-	var panel := PanelContainer.new()
+	var panel := SketchPanel.new()
 	panel.name = "Panel"
-	panel.add_theme_stylebox_override("panel", StickStyle.window_panel())
 	panel.position = Vector2(24, 90)
 	panel.custom_minimum_size = Vector2(440, 0)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -144,7 +143,7 @@ func _build_ui() -> void:
 	tab_row.add_theme_constant_override("separation", 4)
 	vbox.add_child(tab_row)
 	for tab_name in TAB_NAMES:
-		var b := StickKit.button(tab_row, tab_name, _switch_tab.bind(tab_name))
+		var b := StickKit.sketch_button(tab_row, tab_name, _switch_tab.bind(tab_name))
 		b.toggle_mode = true
 		_tabs[tab_name + "_btn"] = b
 
@@ -204,18 +203,18 @@ func _build_fx_tab(parent: VBoxContainer) -> void:
 	row1.add_theme_constant_override("separation", 6)
 	parent.add_child(row1)
 	for fx_id in FX_IDS:
-		StickKit.button(row1, FX_LABELS[fx_id], _spawn_fx_at_view_center.bind(fx_id))
+		StickKit.sketch_button(row1, FX_LABELS[fx_id], _spawn_fx_at_view_center.bind(fx_id))
 
 	var row2 := HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 6)
 	parent.add_child(row2)
 	for fx_id in FX_IDS:
-		var b := StickKit.button(row2, "点放:" + FX_LABELS[fx_id], _arm_place_mode.bind(fx_id))
+		var b := StickKit.sketch_button(row2, "点放:" + FX_LABELS[fx_id], _arm_place_mode.bind(fx_id))
 		b.toggle_mode = true
 		_tabs["place_" + fx_id] = b
 
-	StickKit.button(parent, "压力测试：三效果 × 各10 连发", _stress_test_fx)
-	StickKit.button(parent, "挂载水晶闪光：全部资源点（持续闪烁，对齐药剂工艺）", _attach_all_sparkles)
+	StickKit.sketch_button(parent, "压力测试：三效果 × 各10 连发", _stress_test_fx)
+	StickKit.sketch_button(parent, "挂载水晶闪光：全部资源点（持续闪烁，对齐药剂工艺）", _attach_all_sparkles)
 
 
 ## 对全部资源点挂载 CrystalSparkles 持续闪烁系统（药工 SpriteParticleApplier 等价）
@@ -275,9 +274,9 @@ func _build_market_tab(parent: VBoxContainer) -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 6)
 	parent.add_child(head)
-	StickKit.button(head, "强制结算一次", _force_market_tick)
-	StickKit.button(head, "+50 全资源", _market_add_all.bind(true))
-	StickKit.button(head, "-50 全资源", _market_add_all.bind(false))
+	StickKit.sketch_button(head, "强制结算一次", _force_market_tick)
+	StickKit.sketch_button(head, "+50 全资源", _market_add_all.bind(true))
+	StickKit.sketch_button(head, "-50 全资源", _market_add_all.bind(false))
 
 	var rows := VBoxContainer.new()
 	rows.name = "Rows"
@@ -327,8 +326,8 @@ func _market_row(res_id: String, res_name: String, region_id: String, base_price
 			StickKit.LabelKind.BODY)
 	l.custom_minimum_size = Vector2(320, 0)
 	l.tooltip_text = "基准价 %.2f · 相对基准偏离 %s" % [base_price, drift]
-	StickKit.button(row, "+50", _adjust_stock.bind(res_id, region_id, MARKET_ADJUST_AMOUNT))
-	StickKit.button(row, "-50", _adjust_stock.bind(res_id, region_id, -MARKET_ADJUST_AMOUNT))
+	StickKit.sketch_button(row, "+50", _adjust_stock.bind(res_id, region_id, MARKET_ADJUST_AMOUNT))
+	StickKit.sketch_button(row, "-50", _adjust_stock.bind(res_id, region_id, -MARKET_ADJUST_AMOUNT))
 	return row
 
 
@@ -449,10 +448,10 @@ func _rebuild_building_rows() -> void:
 				"%s Lv%d %s 血%.0f/%.0f" % [b.def_id, level, state_text, b.health, b.max_health],
 				StickKit.LabelKind.BODY)
 		l.custom_minimum_size = Vector2(280, 0)
-		StickKit.button(row, "升级", func() -> void:
+		StickKit.sketch_button(row, "升级", func() -> void:
 			var r: Dictionary = _construction.upgrade_building(building_id)
 			EventBus.ui_notification.emit("升级建筑", str(r), "info"))
-		StickKit.button(row, "修理", func() -> void:
+		StickKit.sketch_button(row, "修理", func() -> void:
 			var r: Dictionary = _construction.repair_building(building_id, "")
 			EventBus.ui_notification.emit("修理建筑", str(r), "info"))
 		rows.add_child(row)

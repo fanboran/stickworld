@@ -112,6 +112,11 @@ func _ready() -> void:
 	# 程序化叠加层（Stick Fight 关节物理/惯性风格；纯算法，动画之上叠加）
 	_init_procedural_overlay()
 
+## 隔帧计数（战斗性能优化）：动画结束/事件检测为"越过时间点"语义，
+## 30Hz 采样不漏事件（最多晚 1 帧触发），196 单位混战省一半逐帧检测开销
+var _tick_frame_counter: int = 0
+
+
 func _process(_delta: float) -> void:
 	if _state_machine == null and _anim_tree != null:
 		_state_machine = _anim_tree.get("parameters/playback")
@@ -124,6 +129,9 @@ func _process(_delta: float) -> void:
 		if _hit_timer <= 0.0 and _state_machine != null and not _dead:
 			_state_machine.travel(_hit_return_to)
 			_current_anim = _hit_return_to
+	_tick_frame_counter += 1
+	if _tick_frame_counter % 2 != 0:
+		return
 	# 动画结束检测（反编译参考实装 C）：LOOP_NONE 动画播完发射 animation_finished
 	_check_animation_finished()
 	# 动画内嵌事件派发（Spine events[] 复刻）：越过事件时间点时发射 animation_event

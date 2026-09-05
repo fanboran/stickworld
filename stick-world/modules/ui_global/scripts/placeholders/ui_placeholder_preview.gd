@@ -24,8 +24,8 @@ func _ready() -> void:
 
 
 func _make_card(preset: Dictionary) -> PanelContainer:
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	var card := SketchPanel.new()
+	card.tone = SketchPanel.Tone.LIGHT
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	card.add_child(row)
@@ -34,7 +34,7 @@ func _make_card(preset: Dictionary) -> PanelContainer:
 	row.add_child(text_box)
 	StickKit.label(text_box, preset["title"], StickKit.LabelKind.BODY)
 	StickKit.label(text_box, preset["desc"], StickKit.LabelKind.HINT)
-	var open_btn := StickKit.button(row, "打开 →", func():
+	var open_btn := StickKit.auto_button(row, "打开 →", func():
 		UIPlaceholderPanel.open_panel(self, preset["id"])
 	, StickKit.ButtonKind.ACCENT, StickTokens.BTN_H)
 	open_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER

@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://uioverlaqat1"]
+
+[ext_resource type="Script" path="res://tests/integration/test_ui_overlap.gd" id="1"]
+
+[node name="TestUIOverlap" type="Node"]
+script = ExtResource("1")

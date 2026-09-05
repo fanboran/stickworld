@@ -1,0 +1,17 @@
+{
+ "ok": true,
+ "seed": 4242,
+ "params": {
+  "height_factor": 1.0,
+  "bare_frac": 0.13,
+  "trunk_frac": 0.6,
+  "trunk_w": 0.042,
+  "crown_r_coef": 0.52,
+  "crown_cap": 0.3,
+  "crown_lift": 0.3,
+  "hat_n": 8,
+  "branch_prob": 0.48,
+  "seg_n": 9,
+  "preview_scale": 1.0
+ }
+}

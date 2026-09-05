@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://du08svohrt5bl"]
+
+[ext_resource type="Script" path="res://tests/dev/sketch_preview.gd" id="1"]
+
+[node name="SketchPreview" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1")

@@ -48,6 +48,8 @@ const WEAPON_SCENE_PATHS: Dictionary = {
 const SHIELD_SCENE_PATH := "res://modules/units/scenes/components/weapon_shield.tscn"
 ## 箭矢投影物场景（弓远程攻击发射）
 const ARROW_SCENE_PATH := "res://modules/units/scenes/components/arrow.tscn"
+## 箭矢场景预加载（战斗性能优化：此前每箭 load() 走一次资源路径解析）
+const ARROW_SCENE: PackedScene = preload("res://modules/units/scenes/components/arrow.tscn")
 ## 抛物线箭矢水平分速（px/s；竖直初速按距离解算，重力 ARROW_GRAVITY）
 var ARROW_VX: float = 850.0
 ## 抛物线箭矢重力（px/s²）：900px 远射弧顶 ≈ 230px（越友军头顶），150px 内近似平射
@@ -201,9 +203,37 @@ var _heal_anim_playing: bool = false
 ## 目前用于 Sound:* 音效钩子；音效资产落地后按 SFX_PATHS 登记即可发声。
 signal weapon_anim_event(anim_name: String, event_name: String, value: String)
 
-## Spine 事件 string（如 "Swoosh"/"Thump"/"MagikillBlast"）→ 音效资源路径。
-## 表为空 = 音效资产未落地，事件只发信号不发声（不会出现加载报错）。
-const SFX_PATHS: Dictionary = {}
+## Spine 事件 string（如 "Swoosh"/"Thump"/"MagikillBlast"）→ 音效资源路径
+## （值可单路径或路径数组=随机变体）。取值与动画 metadata/anim_events 的
+## Sound.string 同名同源（SWL 原事件名，资产为 SWL 提取件，见
+## tools/ai/extract_swl_sfx.py 与 docs/项目/素材替换清单.md）。
+## 缺表项 = 该事件只发信号不发声（不会出现加载报错）。
+const SFX_PATHS: Dictionary = {
+	"Swoosh": [
+		"res://assets/audio/sfx/swoosh_a.wav",
+		"res://assets/audio/sfx/swoosh_b.wav",
+		"res://assets/audio/sfx/swoosh_c.wav",
+		"res://assets/audio/sfx/swoosh_d.wav",
+	],
+	"headbutt1":     "res://assets/audio/sfx/headbutt.wav",
+	"MagikillBlast": [
+		"res://assets/audio/sfx/magikill_blast_a.wav",
+		"res://assets/audio/sfx/magikill_blast_b.wav",
+	],
+	"Thump": [
+		"res://assets/audio/sfx/thump_a.wav",
+		"res://assets/audio/sfx/thump_b.wav",
+	],
+	"fall": [
+		"res://assets/audio/sfx/bodyfall_a.wav",
+		"res://assets/audio/sfx/bodyfall_b.wav",
+		"res://assets/audio/sfx/bodyfall_c.wav",
+	],
+	"clang": [
+		"res://assets/audio/sfx/clang_a.wav",
+		"res://assets/audio/sfx/clang_b.wav",
+	],
+}
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -317,14 +347,29 @@ func _on_rig_animation_finished(anim_name: String) -> void:
 		_heal_anim_playing = false
 
 
-## 动画内嵌音效事件：查 SFX_PATHS 表播放（表为空则只转发信号、不发声）。
+## 动画内嵌音效事件：查 SFX_PATHS 表播放（缺表项只转发信号、不发声）。
+## 值为数组时随机挑一（SWL 同名事件变体），随机音高抖动与
+## AudioManager.PITCH_JITTER 同参（连播防"机关枪式"机械重复感）。
+const SFX_PITCH_JITTER := 0.05
+
 func _play_event_sfx(sfx_name: String) -> void:
-	var path: String = SFX_PATHS.get(sfx_name, "")
-	if path.is_empty():
+	var entry: Variant = SFX_PATHS.get(sfx_name, "")
+	if entry == null or (entry is String and entry.is_empty()):
 		return
+	var paths: Array = entry if entry is Array else [entry]
 	var am: Node = get_node_or_null("/root/AudioManager")
-	if am != null and am.has_method("play_sfx"):
-		am.play_sfx(path)
+	if am == null or not am.has_method("play_sfx"):
+		return
+	# 变体池随机挑一（资产未就位时静默跳过，与 play_event 容错口径一致）
+	var existing: Array = []
+	for p in paths:
+		if ResourceLoader.exists(p):
+			existing.append(p)
+	if existing.is_empty():
+		return
+	var player: AudioStreamPlayer = am.play_sfx(existing[randi() % existing.size()])
+	if player != null:
+		player.pitch_scale = 1.0 + randf_range(-SFX_PITCH_JITTER, SFX_PITCH_JITTER)
 
 
 ## 本武器的攻击动画名（与实体 play_attack 共用 StickmanAnims 的映射表）
@@ -915,7 +960,7 @@ func _fire_arrow(target: Node) -> void:
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity == null:
 		return
-	var scene: PackedScene = load(ARROW_SCENE_PATH)
+	var scene: PackedScene = ARROW_SCENE
 	if scene == null:
 		push_warning("[WeaponMount] 箭矢场景加载失败: %s" % ARROW_SCENE_PATH)
 		return

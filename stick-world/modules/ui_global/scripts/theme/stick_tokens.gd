@@ -64,6 +64,8 @@ const FONT_DISPLAY := 34
 const FONT_TITLE := 22
 ## 正文/按钮
 const FONT_BODY := 14
+## HUD 常读信息（武器面板/资源数量/观察场统计）：比正文大一档
+const FONT_HUD := 16
 ## 区块小标题（全大写感/分节）
 const FONT_SECTION := 13
 ## 提示/辅助

@@ -37,9 +37,9 @@ func push_notification(title: String, body: String, level: String = "info") -> v
 		var oldest: Node = get_child(0)
 		remove_child(oldest)
 		oldest.queue_free()
-	var panel := PanelContainer.new()
+	var panel := SketchPanel.new()
+	panel.tone = SketchPanel.Tone.LIGHT
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	var color := StickTokens.INFO
 	match level:
 		"warn":

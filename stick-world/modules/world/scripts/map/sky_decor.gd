@@ -1,71 +1,106 @@
 class_name SkyDecor
 extends Node2D
-## 天空装饰层 —— Terraria/ Kingdom 式多层视差背景（Demo 精品感主升级）。
+## 天空装饰层 —— Terraria 原版贴图多层视差背景（Demo 资产政策：机制+贴图皆源自反编译）。
 ##
-## 层次（远→近；factor = 内容相对相机的扫动速率，1.0=钉死世界（同前景）/
-## 0.0=钉死屏幕（无限远），层位移 = cam_x × (1 - factor)）：
-##   星野+月亮(0.08，夜现) → 飞鸟群(0.35，昼现) → 远山(0.55) → 远树线(0.7)
-##   → 雾带(0.7) → 近树线(0.88) → 云(0.55/0.42+自漂移) → 游戏世界(1.0)
-## 贴图由 tools/ai/ 程序化生成（山/树线/雾 gen_sky_decor.py、笔触云 gen_cloud_stroke.py
-## 走 stroke_paint 油画管线）；星野/飞鸟为程序绘制零贴图；
-## 由 VillageMap/road_map._ready 挂载。
+## 贴图：Terraria Content/Images XNB 提取（Background_7/8 远山、9/10/11 森林三层、
+## Cloud_0-3 云，tools/ai/extract_terraria_sky.py；已登记 docs/项目/素材替换清单.md）。
+## 公式：Terraria 反编译源码（Main.cs DrawSurfaceBG / Cloud.cs，见
+## docs/技术/参考逆向/天空与水体逆向笔记.md §三/§五）。
+##
+## 层次（远→近，绘制序；factor=视差扫动速率）：
+##   星野(0.08) → 飞鸟(0.35) → 云·远档(scale<1.0) → 远山(0.15) → 近山(0.2)
+##   → 云·中档(1.0~1.15) → 树线远(0.4) → 云·近档(≥1.15) → 树线中(0.43) → 树线近(0.49)
+## 平铺：modulo 回绕（Main.cs :53724 同构）——任意相机位置无缝、无超宽贴图冗余。
+## Staging：层顶/底按天空高度比例（Terraria 近层顶更低、远层从近层上方探出）。
+## 由 VillageMap._ready 挂载。
 
 const SkyStarsScript := preload("res://modules/world/scripts/map/sky_stars.gd")
 const SkyBirdsScript := preload("res://modules/world/scripts/map/sky_birds.gd")
-const TEX_MOUNTAINS := "res://assets/sky/mountains.png"
-const TEX_TREELINE_FAR := "res://assets/sky/treeline_far.png"
-const TEX_TREELINE_NEAR := "res://assets/sky/treeline_near.png"
-const TEX_FOG := "res://assets/sky/fog_band.png"
-## 笔触云贴图 ×3（tools/ai/gen_cloud_stroke.py：stroke_paint 管线与树/石同质感）
+
+## 地形背景组 —— Terraria 每种地形一套独立贴图（WorldGen.SetForestBGSet /
+## SetDesertBGSet 等按地形分发），本项目按地图 sky_biome 选组：
+##   mountains：远山×2（村落/战场/道路等开阔地——无树线）
+##   forest：远山×2 + 森林树线×3（森林图专用，进入树林才有树）
+## 层定义数值为 Terraria Main.cs DrawSurfaceBG 反编译直译：
+## bgScale 为原版层缩放；top 为"层顶距地平线高度"（原版 bgTopY 公式在
+## 地表取景 magic=-0.85、地平线在屏中 540px 时的值：bgTopY=magic*coef_a+coef_b+30）。
+## 运行时整体再乘 sky_ratio（我方天空高/540），让构图比例与原版一致地适配任意地图。
+const BIOME_SETS: Dictionary = {
+	"mountains": [
+		{"tex": "res://assets/sky/bg_mountain_far.png", "parallax": 0.15, "top": 525.0, "bg_scale": 1.00},
+		{"tex": "res://assets/sky/bg_mountain_near.png", "parallax": 0.20, "top": 440.0, "bg_scale": 1.15},
+	],
+	"forest": [
+		{"tex": "res://assets/sky/bg_mountain_far.png", "parallax": 0.15, "top": 525.0, "bg_scale": 1.00},
+		{"tex": "res://assets/sky/bg_mountain_near.png", "parallax": 0.20, "top": 440.0, "bg_scale": 1.15},
+		{"tex": "res://assets/sky/bg_trees_far.png", "parallax": 0.40, "top": 540.0, "bg_scale": 1.25},
+		{"tex": "res://assets/sky/bg_trees_mid.png", "parallax": 0.43, "top": 417.0, "bg_scale": 1.31},
+		{"tex": "res://assets/sky/bg_trees_near.png", "parallax": 0.49, "top": 295.0, "bg_scale": 1.34},
+	],
+}
+## 当前地形背景组（由 VillageMap/road_map 按地图 sky_biome 注入）
+var biome: String = "mountains"
+## 原版地表取景的地平线屏高（bgTopY 公式的基准；我方按 sky_h/该值 等比适配）
+const TERRARIA_HORIZON_PX: float = 540.0
+## 云贴图（Terraria Cloud_0-3 四变体）
 const TEX_CLOUDS: Array[String] = [
 	"res://assets/sky/cloud_a.png",
 	"res://assets/sky/cloud_b.png",
 	"res://assets/sky/cloud_c.png",
+	"res://assets/sky/cloud_d.png",
 ]
-## 贴图 512x256 相对世界云尺度偏大，统一缩放（scale_f 仍按 0.7~1.3 分视差三档）
-const CLOUD_TEX_SCALE: float = 0.55
 
-## 地平线 y（与地图 ground_y 一致，山/树底贴地平线）
+## 地平线 y（与地图 ground_y 一致，层 staging 以此为锚）
 var horizon_y: float = 810.0
-## 地图横向范围
+## 地图横向范围（不再用于平铺，仅元数据兼容）
 var map_left: float = 0.0
 var map_right: float = 8192.0
 
-## 视差层注册表 [{node, factor, y_offset, tex_h}]
+## 视差层注册表 [{node, factor}]（星野/飞鸟等 position.x = cam_x*(1-factor) 机制）
 var _layers: Array = []
-## Terraria 式云池（Cloud.cs 逆向）：尺寸=深度（scale 分档视差）、全局风驱动、
-## Alpha 渐入渐出软生灭、极慢摇摆、云色继承天空光照色（夜里云自动变暗）
+## 平铺背景层注册表（modulo 回绕机制，与 _layers 分开驱动）
+var _tile_layers: Array = []
+## Terraria 式云池（Cloud.cs 逆向）：尺寸=深度、全局风驱动、Alpha 软生灭、
+## 三档深度 pass 穿插在背景层之间（远云在山后、近云在树前）
 var _clouds: Array = []
-## 全局风（缓慢起伏；Terraria windSpeedCurrent 的简化版）
+var _cloud_passes: Dictionary = {}   # 档位 → Node2D 容器
 var _wind: float = 0.9
 var _wind_t: float = 0.0
-## 上一帧相机 x（云按各自视差被相机回拉，Cloud.cs:321 同构）
 var _last_cam_x: float = 0.0
-## 环境系统（云色随昼夜）
 var _env: Node = null
 var _rng := RandomNumberGenerator.new()
 var _cam: Camera2D = null
 var _cam_ready: bool = false
-## 雨强度（Weather 注入）：云 alpha 上限提高 + 云色压暗（Terraria 雨天云浓）
+## 雨强度（Weather 注入）：云 alpha 上限提高（Terraria 雨天云浓）
 var _rainy: float = 0.0
 
-## 云池规模（Terraria 200 槽 rand(200) 数量；我们屏幅小，12 朵足够密度）
-const CLOUD_POOL: int = 18
-## 云出生带（相对地平线向上；远云更高——小云再上移）
-const CLOUD_Y_TOP: float = 190.0
-const CLOUD_Y_BOTTOM: float = 640.0
-## 云贴图缓存（build 时加载一次）
+## 云池规模（Terraria 200 槽 rand(200) 数量；本项目屏幅小，32 朵密度足够）
+const CLOUD_POOL: int = 32
+## 云出生带（相对地平线向上，比例×天空高）。原版云带很宽：DrawClouds 各 pass
+## 的 y ∈ 约[-0.5H, +0.45H]（含 bgTopY 偏移，H=屏高）——云从贴近树线一直飘到
+## 树线上方的纯天空区（不是只挤在树线后）。远云更高——小云再上移同构。
+const CLOUD_Y_TOP_R: float = 1.08
+const CLOUD_Y_BOT_R: float = 0.25
 var _cloud_texs: Array = []
 
 
 func _ready() -> void:
 	z_index = -6
+	var set: Array = BIOME_SETS.get(biome, BIOME_SETS["mountains"])
+	# 云三档穿插：远云在首层山后；中云在两山之间；近云在树线远层之后
+	# （无树线的地形组则垫在最后一层之后）——Terraria DrawSurfaceBG 绘制序
+	var closest_after: int = 2 if set.size() > 2 else set.size() - 1
 	_build_stars()
 	_build_birds()
-	_build_layer(TEX_MOUNTAINS, 0.55, 0.0, Color(1, 1, 1))
-	_build_layer(TEX_TREELINE_FAR, 0.70, 0.0, Color(1, 1, 1))
-	_build_fog()
-	_build_layer(TEX_TREELINE_NEAR, 0.88, 0.0, Color(1, 1, 1))
+	_build_cloud_pass("distant")
+	for i in set.size():
+		if i == closest_after + 1:
+			_build_cloud_pass("closest")
+		if i == 1:
+			_build_cloud_pass("closer")
+		_build_layer(set[i])
+	if not _cloud_passes.has("closest"):
+		_build_cloud_pass("closest")
 	_build_clouds()
 	# 相机引用惰性获取（GameRoot.CameraRig）
 	call_deferred("_find_camera")
@@ -79,7 +114,7 @@ func _build_stars() -> void:
 	_layers.append({"node": stars, "factor": SkyStarsScript.FACTOR})
 
 
-## 远空飞鸟群（星野之上山层之下，会被山脊遮挡出纵深；昼间活动，见 sky_birds.gd）
+## 远空飞鸟群（星野之上、山层之下，会被山脊遮挡出纵深；昼间活动，见 sky_birds.gd）
 func _build_birds() -> void:
 	var birds: Node2D = SkyBirdsScript.new()
 	birds.name = "Birds"
@@ -87,39 +122,34 @@ func _build_birds() -> void:
 	_layers.append({"node": birds, "factor": SkyBirdsScript.FACTOR})
 
 
-## 构建一个视差层：region 平铺超宽（两端冗余覆盖视差位移），底边贴地平线
-func _build_layer(tex_path: String, factor: float, y_extra: float, tint: Color) -> void:
-	if not ResourceLoader.exists(tex_path):
+## 构建平铺背景层：Terraria 层缩放 × sky_ratio，层顶锚定地平线上方 top 像素；
+## 纹理 repeat + 超宽 region（modulo 每帧驱动）
+func _build_layer(def: Dictionary) -> void:
+	if not ResourceLoader.exists(def["tex"]):
+		push_warning("[SkyDecor] 背景贴图缺失: %s" % def["tex"])
 		return
+	var tex: Texture2D = load(def["tex"])
+	var sky_ratio: float = horizon_y / TERRARIA_HORIZON_PX
+	var scl: float = float(def["bg_scale"]) * sky_ratio
+	var top_y: float = horizon_y - float(def["top"]) * sky_ratio
 	var spr := Sprite2D.new()
-	spr.texture = load(tex_path)
-	var tex_h: float = spr.texture.get_height()
+	spr.name = String(def["tex"]).get_file().get_basename()
+	spr.texture = tex
 	spr.centered = false
-	spr.position = Vector2(0, horizon_y - tex_h + y_extra)
-	spr.modulate = tint
-	# 平铺宽度 = 地图宽 + 两端视差冗余（factor 越小位移越大）
-	var slack: float = (1.0 - factor) * 4000.0 + 400.0
-	spr.region_enabled = true
-	spr.region_rect = Rect2(map_left - slack, 0, (map_right - map_left) + slack * 2.0, tex_h)
+	spr.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	spr.scale = Vector2(scl, scl)
+	spr.position = Vector2(0.0, top_y)
 	add_child(spr)
-	_layers.append({"node": spr, "factor": factor})
+	_tile_layers.append({"node": spr, "parallax": float(def["parallax"]),
+			"tile_w": float(tex.get_width()) * scl, "tex_h": float(tex.get_height())})
 
 
-## 雾带：压在远树线与近树线之间（大气透视），随 0.7 层视差
-func _build_fog() -> void:
-	if not ResourceLoader.exists(TEX_FOG):
-		return
-	var spr := Sprite2D.new()
-	spr.texture = load(TEX_FOG)
-	var tex_h: float = spr.texture.get_height()
-	spr.centered = false
-	spr.position = Vector2(0, horizon_y - tex_h + 6.0)
-	spr.modulate = Color(1, 1, 1, 0.75)
-	var slack: float = 2000.0
-	spr.region_enabled = true
-	spr.region_rect = Rect2(map_left - slack, 0, (map_right - map_left) + slack * 2.0, tex_h)
-	add_child(spr)
-	_layers.append({"node": spr, "factor": 0.70})
+## 云深度 pass 容器（穿插在背景层之间制造前后遮挡）
+func _build_cloud_pass(pass_name: String) -> void:
+	var holder := Node2D.new()
+	holder.name = "Clouds_" + pass_name
+	add_child(holder)
+	_cloud_passes[pass_name] = holder
 
 
 func _build_clouds() -> void:
@@ -132,18 +162,22 @@ func _build_clouds() -> void:
 	for i in CLOUD_POOL:
 		var cloud := Sprite2D.new()
 		cloud.centered = true
-		cloud.texture = _cloud_texs[_rng.randi() % _cloud_texs.size()]
 		var scale_f: float = _rng.randf_range(0.7, 1.3)
-		cloud.scale = Vector2(scale_f, scale_f) * CLOUD_TEX_SCALE
-		# 出生带：远云（小）更高——Terraria 小云再上移的同构；
-		# 初始分布相机出生带（x≈0 一带），之后由风与相机回拉自然演进
-		var y: float = _rng.randf_range(CLOUD_Y_TOP, CLOUD_Y_BOTTOM) \
-				- (1.3 - scale_f) * 120.0
-		cloud.position = Vector2(_rng.randf_range(-1200.0, 1200.0), y)
-		add_child(cloud)
+		cloud.scale = Vector2(scale_f, scale_f) * 1.35
+		cloud.flip_h = _rng.randf() < 0.5
+		cloud.texture = _cloud_texs[_rng.randi() % _cloud_texs.size()]
+		var pass_name: String = "distant" if scale_f < 1.0 else ("closer" if scale_f < 1.15 else "closest")
+		(_cloud_passes[pass_name] as Node2D).add_child(cloud)
+		# 出生带：远云（小）更高——Terraria 小云再上移的同构
+		var sky_h: float = maxf(horizon_y, 320.0)
+		var band_top: float = horizon_y - sky_h * CLOUD_Y_TOP_R
+		var band_h: float = sky_h * (CLOUD_Y_TOP_R - CLOUD_Y_BOT_R)
+		var y: float = _rng.randf_range(0.0, band_h) + band_top - (1.3 - scale_f) * 0.12 * sky_h
+		cloud.position = Vector2(_rng.randf_range(-1700.0, 1700.0), y)
 		_clouds.append({
 			"node": cloud,
 			"p": _cloud_parallax(scale_f),   # Cloud.GetParallax 直译
+			"scale_f": scale_f,
 			"alpha": _rng.randf_range(0.35, 0.85),  # 首批直接半亮，后续渐入
 			"dying": false,
 			"phase": _rng.randf() * TAU,     # 极慢摇摆的相位
@@ -179,18 +213,20 @@ func _find_camera() -> void:
 		_last_cam_x = _cam.global_position.x
 		# 立即对齐一次视差，防首帧跳变
 		_apply_parallax()
+		_update_tile_layers()
 
 
 func _process(delta: float) -> void:
 	if _cam_ready and _cam != null and is_instance_valid(_cam):
 		_apply_parallax()
-	# 风：缓慢正弦起伏（周期 ~2 分钟，双向漂）
+		_update_tile_layers()
+	# 风：缓慢正弦起伏（周期 ~2 分钟，双向漂；Terraria windSpeedCurrent 简化版）
 	_wind_t += delta
 	_wind = sin(_wind_t * 0.05) * 1.1
 	_update_clouds(delta)
 
 
-## 视差：层 x = 相机 x × (1 - factor)（factor=0 屏幕钉死=无限远 / 1 世界钉死=前景）
+## 视差：星野/飞鸟等层 x = 相机 x × (1 - factor)
 func _apply_parallax() -> void:
 	var cam_x: float = _cam.global_position.x
 	for layer in _layers:
@@ -201,13 +237,32 @@ func _apply_parallax() -> void:
 		node.position.x = cam_x * (1.0 - factor)
 
 
+## 平铺背景层 modulo 回绕（Main.cs :53724 bgStartX 同构）：
+## 相位 = cam_x×parallax 对 tile_w 取模，层 sprite 覆盖视野宽 + 2 tile 冗余
+func _update_tile_layers() -> void:
+	var view_w: float = get_viewport_rect().size.x / maxf(_cam.zoom.x, 0.05)
+	var view_left: float = _cam.global_position.x - view_w * 0.5
+	for tl in _tile_layers:
+		var spr: Sprite2D = tl["node"]
+		if spr == null or not is_instance_valid(spr):
+			continue
+		var w: float = float(tl["tile_w"])
+		var phase: float = fmod(_cam.global_position.x * float(tl["parallax"]) - view_left, w)
+		if phase < 0.0:
+			phase += w
+		spr.position.x = view_left - phase
+		spr.region_enabled = true
+		spr.region_rect = Rect2(0.0, 0.0, view_w + w * 2.0, float(tl["tex_h"]))
+
+
 ## Terraria 云更新（Cloud.Update 直译；云是相机跟随带内的屏域实体，
-## 出带 ±1400px 软退场——任意取景密度恒定，不随全图摊薄）
+## 出视野带 ±600px 软退场——任意取景密度恒定，不随全图摊薄）
 func _update_clouds(delta: float) -> void:
 	var cam_x: float = _cam.global_position.x if _cam != null and is_instance_valid(_cam) else 0.0
 	var cam_move: float = cam_x - _last_cam_x
 	_last_cam_x = cam_x
-	var _light_darkened: Color = _env_light().darkened(0.25 * _rainy)
+	var view_w: float = get_viewport_rect().size.x / maxf(_cam.zoom.x if _cam != null else 1.0, 0.05)
+	var band_half: float = view_w * 0.5 + 600.0
 	for c in _clouds:
 		var cloud: Node2D = c["node"]
 		if cloud == null or not is_instance_valid(cloud):
@@ -220,43 +275,46 @@ func _update_clouds(delta: float) -> void:
 		if c["dying"]:
 			c["alpha"] = float(c["alpha"]) - 0.06 * delta
 			if float(c["alpha"]) <= 0.0:
-				_respawn_cloud(c, cam_x)
+				_respawn_cloud(c, cam_x, band_half)
 		else:
 			c["alpha"] = minf(float(c["alpha"]) + 0.06 * delta, 0.92 + 0.08 * _rainy)
-			if cloud.position.x < cam_x - 1400.0 or cloud.position.x > cam_x + 1400.0:
+			if cloud.position.x < cam_x - band_half or cloud.position.x > cam_x + band_half:
 				c["dying"] = true
-		# 云级 alpha/光照注入（贴图云：modulate 乘光照色，夜里自动变暗）
-		cloud.modulate = Color(_light_darkened.r, _light_darkened.g,
-				_light_darkened.b, float(c["alpha"]))
+		# 云级 alpha：尺度越大越实（Cloud.cloudColor 的 scale×Alpha 同构；
+		# 颜色不手动染色——CanvasModulate 全局昼夜染色已覆盖云与背景层）
+		var opacity: float = float(c["alpha"]) * lerpf(0.72, 1.0, (float(c["scale_f"]) - 0.7) / 0.6)
+		cloud.modulate = Color(1.0, 1.0, 1.0, opacity)
 		# 极慢摇摆（Cloud 微幅摆动同构，±0.6°）
 		cloud.rotation = sin(_wind_t * 0.11 + float(c["phase"])) * 0.01
 
 
-## 云重生：风向对侧入场，重掷贴图/尺度（视差档随之变化）与出生带
-func _respawn_cloud(c: Dictionary, cam_x: float) -> void:
+## 云重生：风向对侧入场，重掷贴图/尺度（视差档与深度 pass 随之变化）与出生带
+func _respawn_cloud(c: Dictionary, cam_x: float, band_half: float) -> void:
 	var cloud: Sprite2D = c["node"]
 	var scale_f: float = _rng.randf_range(0.7, 1.3)
-	cloud.scale = Vector2(scale_f, scale_f) * CLOUD_TEX_SCALE
+	cloud.scale = Vector2(scale_f, scale_f) * 1.35
+	cloud.flip_h = _rng.randf() < 0.5
 	if not _cloud_texs.is_empty():
 		cloud.texture = _cloud_texs[_rng.randi() % _cloud_texs.size()]
+	# 尺度变档 → 换深度 pass（远/中/近云的遮挡关系随尺度联动）
+	var pass_name: String = "distant" if scale_f < 1.0 else ("closer" if scale_f < 1.15 else "closest")
+	var holder: Node2D = _cloud_passes[pass_name]
+	if cloud.get_parent() != holder:
+		cloud.get_parent().remove_child(cloud)
+		holder.add_child(cloud)
 	var dir: float = signf(_wind) if absf(_wind) > 0.05 else 1.0
-	cloud.position.x = cam_x - dir * 1350.0
-	cloud.position.y = _rng.randf_range(CLOUD_Y_TOP, CLOUD_Y_BOTTOM) - (1.3 - scale_f) * 120.0
+	cloud.position.x = cam_x - dir * (band_half - 300.0)
+	var sky_h: float = maxf(horizon_y, 320.0)
+	var band_top: float = horizon_y - sky_h * CLOUD_Y_TOP_R
+	var band_h: float = sky_h * (CLOUD_Y_TOP_R - CLOUD_Y_BOT_R)
+	cloud.position.y = _rng.randf_range(0.0, band_h) + band_top - (1.3 - scale_f) * 0.12 * sky_h
 	c["p"] = _cloud_parallax(scale_f)
+	c["scale_f"] = scale_f
 	c["alpha"] = 0.0
 	c["dying"] = false
 
 
-## 天空光照色（云色继承：Cloud.cloudColor 同构）
-func _env_light() -> Color:
-	if _env == null or not is_instance_valid(_env):
-		_env = _find_env()
-	if _env == null or not _env.has_method("get_current_light_color"):
-		return Color.WHITE
-	return _env.get_current_light_color()
-
-
-## 雨强度注入（Weather 调用）：云加浓压暗
+## 雨强度注入（Weather 调用）：云加浓
 func set_rainy(t: float) -> void:
 	_rainy = clampf(t, 0.0, 1.0)
 
@@ -264,16 +322,3 @@ func set_rainy(t: float) -> void:
 ## 当前雨强度（验证脚本用）
 func get_rainy() -> float:
 	return _rainy
-
-
-func _find_env() -> Node:
-	var env := get_tree().root.get_node_or_null("GameRoot/EnvironmentSystem")
-	if env != null:
-		return env
-	var a := get_parent()
-	while a != null:
-		var e := a.get_node_or_null("EnvironmentSystem")
-		if e != null:
-			return e
-		a = a.get_parent()
-	return null

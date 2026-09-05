@@ -513,19 +513,37 @@ var _spacing_timer: float = 0.0
 var _summons_alive: Array = []
 
 ## PushApartTolerance（SWL 直译）：站桩输出时若友军贴得太近，向反方向微移
-## 拉开（节流 0.4s，只调 y 向优先——不打断对敌朝向）
+## 拉开（节流 0.4s，只调 y 向优先——不打断对敌朝向）。
+## 战斗性能优化：地图空间网格邻域查询替代全友军列表扫描
 func _apply_push_apart(spacing: float, delta: float) -> void:
 	_spacing_timer -= delta
 	if _spacing_timer > 0.0:
 		return
 	_spacing_timer = 0.4
+	var faction: int = entity.get_faction() if entity.has_method("get_faction") else 0
+	var pos: Vector2 = entity.global_position
+	var map: Node = entity.get_map() if entity.has_method("get_map") else null
+	if faction != 0 and map != null and is_instance_valid(map) and map.has_method("query_neighbors"):
+		for a in map.query_neighbors(pos, spacing + 8.0):
+			if a == null or not is_instance_valid(a) or a == entity:
+				continue
+			if a.has_method("is_dead") and a.is_dead():
+				continue
+			if not a.has_method("get_faction") or a.get_faction() != faction:
+				continue
+			var d: float = pos.distance_to(a.global_position)
+			if d < spacing and d > 0.01:
+				var away: Vector2 = (pos - a.global_position).normalized()
+				if entity.has_method("ai_move"):
+					entity.ai_move(away * 0.6, false)
+				return
+		return
+	# 回落：战斗友军列表全扫（旧语义）
 	if not entity.has_method("get_battle_instance"):
 		return
 	var bi: Node = entity.get_battle_instance()
 	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_allies_of"):
 		return
-	var faction: int = entity.get_faction() if entity.has_method("get_faction") else 0
-	var pos: Vector2 = entity.global_position
 	for a in bi.get_allies_of(faction):
 		if a == null or not is_instance_valid(a) or a == entity:
 			continue

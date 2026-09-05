@@ -62,7 +62,7 @@ func _build_ui() -> void:
 	var action_hbox := HBoxContainer.new()
 	action_hbox.add_theme_constant_override("separation", 6)
 	action_section.add_child(action_hbox)
-	_release_btn = StickKit.button(action_hbox, "退出附身 (ESC)", _on_release_pressed)
+	_release_btn = StickKit.sketch_button(action_hbox, "退出附身 (ESC)", _on_release_pressed)
 
 
 # ─────────────────────────────── 信号连接 ────────────────────────────────

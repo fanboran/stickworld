@@ -6,8 +6,9 @@ extends Node
 ## （Master / BGM / SFX，缺总线时自动创建并路由到 Master），
 ## 播放器只挂总线、不再各自叠 volume_db；存储仍由 ConfigManager 统一持有。
 ##
-## ⚠️ 音效资产状态：SFX 已接入（Terraria 提取件 + 程序合成，见 SFX_EVENTS 表）；
-## 提取件登记于 docs/项目/素材替换清单.md，公开前须替换。
+## ⚠️ 音效资产状态：SFX 已接入（战斗系为 SWL 提取件，采集/UI 为 Terraria 提取件，
+## 其余程序合成，见 SFX_EVENTS 表）；提取件登记于 docs/项目/素材替换清单.md，
+## 公开前须替换。
 
 signal bgm_playing(path: String)
 signal bgm_stopped()
@@ -233,6 +234,7 @@ func _restore_master() -> void:
 # ─────────────────────────────── SFX 事件框架（2026-08-22）────────────────────────────────
 
 ## 语义化事件 → 音效资产映射表（值可单路径或路径数组=随机变体）。
+## 战斗系（开战/胜负/受击）为 SWL 提取件（tools/ai/extract_swl_sfx.py），
 ## 采集/UI 等反馈音为 Terraria 提取件，其余由 tools/ai/gen_sfx.py 程序化合成
 ## （WAV），按表放入 res://assets/audio/sfx/ 即生效，调用点零改动。
 const SFX_EVENTS := {
@@ -241,6 +243,7 @@ const SFX_EVENTS := {
 	"game_started":       "res://assets/audio/sfx/game_started.wav",
 	"game_saved":         "res://assets/audio/sfx/game_saved.wav",
 	"build_complete":     "res://assets/audio/sfx/build_complete.wav",
+	# 战斗生命周期三件套：SWL 战役关卡 开战号角/胜利/失败 sting（同一音乐家族）
 	"battle_started":     "res://assets/audio/sfx/battle_started.wav",
 	"battle_ended_win":   "res://assets/audio/sfx/battle_ended_win.wav",
 	"battle_ended_lose":  "res://assets/audio/sfx/battle_ended_lose.wav",
@@ -255,7 +258,12 @@ const SFX_EVENTS := {
 	"harvest_gain":       "res://assets/audio/sfx/harvest_gain.wav",
 	"quest_done":         "res://assets/audio/sfx/quest_done.wav",
 	"ui_hover":           "res://assets/audio/sfx/ui_hover.wav",
-	"unit_hurt":          "res://assets/audio/sfx/unit_hurt.wav",
+	# 火柴人受击：SWL pain 痛叫三变体随机（响度对齐旧件基线）
+	"unit_hurt": [
+		"res://assets/audio/sfx/unit_hurt_a.wav",
+		"res://assets/audio/sfx/unit_hurt_b.wav",
+		"res://assets/audio/sfx/unit_hurt_c.wav",
+	],
 	# 天空生命感：远处鸟啁啾（与飞鸟群生成配对，三变体随机）
 	"bird_chirp_a":       "res://assets/audio/sfx/bird_chirp_a.wav",
 	"bird_chirp_b":       "res://assets/audio/sfx/bird_chirp_b.wav",

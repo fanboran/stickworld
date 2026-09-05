@@ -188,6 +188,18 @@ func map_to_screen(map_pos: Vector2) -> Vector2:
 	return map_pos
 
 
+# ===== 地图模式（B4，MapModeManager）=====
+
+## 设置地图模式（MapModeManager.Mode.TERRAIN / POLITICAL；跨视图全局生效并广播）
+func set_map_mode(mode: int) -> void:
+	MapModeManager.set_mode(mode)
+
+
+## 当前地图模式（MapModeManager.Mode 枚举值）
+func get_map_mode() -> int:
+	return MapModeManager.current_mode
+
+
 # ===== 政治属性（只读查询） =====
 
 func get_state_color(state_id: String) -> Color:

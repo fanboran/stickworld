@@ -15,6 +15,11 @@ class_name MapRenderer
 ## 关联的 L1 世界数据
 var _data: L1WorldData = null
 
+## 当前地图模式（B4 TERRAIN/POLITICAL，MapModeManager 广播 → 控制器转发）。
+## 地形底图层（B2 产 PNG）与政权叠加层（Phase F）落地前两模式渲染一致（回退现状着色），
+## 本字段为届时分层绘制的接入口
+var map_mode: int = MapModeManager.Mode.TERRAIN
+
 ## 相机引用（悬停检测做 screen->map 坐标换算）
 var _camera: MapCamera = null
 
@@ -123,6 +128,14 @@ func _build_glow_outline() -> void:
 
 func set_camera(camera: MapCamera) -> void:
 	_camera = camera
+
+
+## 地图模式切换（控制器在 open() 时也推一次当前模式——跨视图全局状态）
+func set_map_mode(mode: int) -> void:
+	if mode == map_mode:
+		return
+	map_mode = mode
+	queue_redraw()
 
 
 ## 接口保留（api.select 调用）；选中高亮交给 hover/控制器

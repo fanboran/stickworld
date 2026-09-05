@@ -48,6 +48,9 @@ var _tooltip: Control = null
 var _title_bar: MapTitleBar = null
 var _legend: MapLegend = null
 
+## 地图模式管理器（Content 子节点，B4：TERRAIN 默认/POLITICAL；图例/渲染器随模式切换）
+var _mode_manager: MapModeManager = null
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放）
 var _view_initialized: bool = false
 
@@ -73,6 +76,9 @@ func _ready() -> void:
 	# 缩放/平移后即时重绘：描边/轮廓宽度跟随新 zoom（消除粗细滞后跳变）
 	if map_camera != null and map_camera.has_method("set_map_renderer"):
 		map_camera.set_map_renderer(map_renderer)
+	# 地图模式（B4）：切模式 → 渲染器换层 + 图例换内容（HUD 模式条自行订阅广播）
+	if _mode_manager != null and not _mode_manager.mode_changed.is_connected(_on_map_mode_changed):
+		_mode_manager.mode_changed.connect(_on_map_mode_changed)
 	# 底部 HUD（CanvasLayer 直接子节点）
 	var layer := get_parent()
 	if layer != null:
@@ -97,6 +103,8 @@ func _auto_find_components() -> void:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _legend == null:
 		_legend = MapControllerUtil.find_sibling(self, "MapLegend") as MapLegend
+	if _mode_manager == null:
+		_mode_manager = MapControllerUtil.find_child(self, func(c: Node) -> bool: return c is MapModeManager) as MapModeManager
 
 
 func _input(event: InputEvent) -> void:
@@ -226,6 +234,9 @@ func open() -> void:
 						msize * default_zoom * 0.5, msize * default_zoom * 0.5))
 	if _hud != null:
 		_hud.visible = true
+	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)
 	# 粒度指示：层级 + 当前地块号 + ESC 语义（直开=关闭 / 下钻=返回 L2）
 	if _indicator != null and api != null and api.has_method("get_current_l1_label"):
 		var l1_label: int = api.get_current_l1_label()
@@ -253,10 +264,20 @@ func _update_title_bar(l1_label: int) -> void:
 	_title_bar.set_content("L1", "地块 #%d" % l1_label, subtitle)
 
 
-## 图例：政权色条目（与地图填充同色源 get_state_color）。
-## Phase B 模式系统实装后，切模式时按模式换 set_title/set_entries 内容。
+## 图例内容随地图模式切换（B4，走 MapLegend.set_title/set_entries）：
+## TERRAIN = 地物水系（海洋/湖泊；B2 群系底图落地后在此追加群系色条目）
+## POLITICAL = 政权色条目（与地图填充同色源 get_state_color）
 func _fill_legend() -> void:
-	if _legend == null or api == null or not api.has_method("get_states"):
+	if _legend == null:
+		return
+	if MapModeManager.current_mode == MapModeManager.Mode.TERRAIN:
+		_legend.set_title("地形")
+		_legend.set_entries([
+			{"color": MapRenderer.OCEAN_COLOR, "text": "海洋"},
+			{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
+		])
+		return
+	if api == null or not api.has_method("get_states"):
 		return
 	var data: L1WorldData = api.get_data() if api.has_method("get_data") else null
 	if data == null:
@@ -274,6 +295,13 @@ func _fill_legend() -> void:
 		return
 	_legend.set_title("政权")
 	_legend.set_entries(entries)
+
+
+## 地图模式切换（MapModeManager 广播）：渲染器换层 + 图例换内容
+func _on_map_mode_changed(_mode: int) -> void:
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)
+	_fill_legend()
 
 
 ## 关闭战略图（恢复场景图输入，由接线方/ESC 调用）

@@ -28,6 +28,9 @@ var _title_bar: MapTitleBar = null
 ## 下钻 L2 时保留（L2 层号 102 更高，内容盖在其上，下钻仍在全屏海洋会话内）
 var _ocean_background: Control = null
 
+## 地图模式管理器（Content 子节点，B4：切模式转发渲染器）
+var _mode_manager: MapModeManager = null
+
 ## 全屏初始视角的上下海洋边距（屏幕像素）：地图数据贴陆地裁切（边缘即陆地），
 ## 初始视野须"向外放出海洋"——完整地图可见 + 上下各留本边距的海岸带（同色背景延伸）
 const OCEAN_MARGIN := 64.0
@@ -48,6 +51,9 @@ func _ready() -> void:
 	# 渲染器悬停检测需要相机做屏幕->地图坐标换算
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
+	# 地图模式（B4）：切模式 → 渲染器换层（地形底图/政权叠加层数据落地前仅记录）
+	if _mode_manager != null and not _mode_manager.mode_changed.is_connected(_on_map_mode_changed):
+		_mode_manager.mode_changed.connect(_on_map_mode_changed)
 	# 视图互斥（L1 层号 100 低于 L3 的 101，L1 打开会整个被盖住）：Tab 打开 L1 时
 	# （唯一发 strategic_map_opened 的路径）本视图若仍可见则一并收起，保证
 	# "新打开的视图 = 玩家看到的视图"；L3 收起连带 L2（close 内已处理）
@@ -82,6 +88,8 @@ func _auto_find_components() -> void:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _ocean_background == null:
 		_ocean_background = MapControllerUtil.find_sibling(self, "OceanBackground")
+	if _mode_manager == null:
+		_mode_manager = MapControllerUtil.find_child(self, func(c: Node) -> bool: return c is MapModeManager) as MapModeManager
 
 
 func _input(event: InputEvent) -> void:
@@ -160,6 +168,9 @@ func _on_l2_back() -> void:
 ## 保留上次状态：相机位置/缩放不变；若上次关闭时在 L2 视图内，恢复 L2 显示
 func open() -> void:
 	_set_ocean_background_visible(true)
+	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)
 	if not _view_initialized:
 		_view_initialized = true
 		var map_size := 2048.0
@@ -251,3 +262,9 @@ func _update_title_bar() -> void:
 func _set_ocean_background_visible(v: bool) -> void:
 	if _ocean_background != null:
 		_ocean_background.visible = v
+
+
+## 地图模式变更（B4 广播）：转发渲染器（地形底图/政权叠加层数据落地前仅记录模式）
+func _on_map_mode_changed(_mode: int) -> void:
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)

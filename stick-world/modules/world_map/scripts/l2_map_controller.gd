@@ -34,6 +34,9 @@ var _indicator: GranularityIndicator = null
 ## 视图名牌（CanvasLayer 直接子节点，同批显隐；open 时喂"地区 N · N 地块"）
 var _title_bar: MapTitleBar = null
 
+## 地图模式管理器（Content 子节点，B4：切模式转发渲染器）
+var _mode_manager: MapModeManager = null
+
 var _current_region_id: String = ""
 
 
@@ -45,6 +48,9 @@ func _ready() -> void:
 		canvas.layer = LayerOrder.STRATEGIC_L2
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
+	# 地图模式（B4）：切模式 → 渲染器换层（地形底图/政权叠加层数据落地前仅记录）
+	if _mode_manager != null and not _mode_manager.mode_changed.is_connected(_on_map_mode_changed):
+		_mode_manager.mode_changed.connect(_on_map_mode_changed)
 
 
 ## 注入 L1 下钻视图（由接线方调用）
@@ -64,6 +70,8 @@ func _auto_find_components() -> void:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _hud == null:
 		_hud = MapControllerUtil.find_sibling(self, "ZoomIndicator")
+	if _mode_manager == null:
+		_mode_manager = MapControllerUtil.find_child(self, func(c: Node) -> bool: return c is MapModeManager) as MapModeManager
 
 
 func _input(event: InputEvent) -> void:
@@ -147,6 +155,9 @@ func open(region_id: String) -> void:
 					map_camera.set_offset(vp_size * 0.5 - Vector2(
 						float(msize.x) * default_zoom * 0.5, float(msize.y) * default_zoom * 0.5))
 	visible = true
+	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)
 	if _hud != null:
 		_hud.visible = true
 	# 粒度指示：L2 层级 + 当前地区 ID（提示文案由组件按 view_level 生成）
@@ -189,3 +200,9 @@ func set_view_visible(v: bool) -> void:
 
 func get_current_region_id() -> String:
 	return _current_region_id
+
+
+## 地图模式变更（B4 广播）：转发渲染器（地形底图/政权叠加层数据落地前仅记录模式）
+func _on_map_mode_changed(_mode: int) -> void:
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)

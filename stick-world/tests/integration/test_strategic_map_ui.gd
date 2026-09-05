@@ -42,7 +42,7 @@ func _ready() -> void:
 	_runner.add_test("L1 场景装配：粒度指示器 + 聚落 tooltip", _test_l1_assembly, true)
 	_runner.add_test("L1 直开（Tab）：层级指示 + 关闭提示", _test_l1_indicator_direct, true)
 	_runner.add_test("L1 下钻：地块号切换 + ESC 返回地区提示", _test_l1_indicator_drill, true)
-	_runner.add_test("L1 名牌 + 图例：地块名/聚落数/政权色条目", _test_l1_title_legend, true)
+	_runner.add_test("L1 名牌 + 图例：地块名/聚落数/模式驱动图例（地形↔政权）", _test_l1_title_legend, true)
 	_runner.add_test("tooltip 聚落内容：名称/级别/政权/未开放进入", _test_tooltip_content, true)
 	_runner.add_test("tooltip map_id 非空：双击进入", _test_tooltip_enterable, true)
 	_runner.add_test("tooltip 空聚落/无数据：隐藏不误导", _test_tooltip_hidden, true)
@@ -68,6 +68,17 @@ func _test_l1_assembly() -> void:
 	_l1_title_bar = _l1_scene.get_node_or_null("MapTitleBar") as MapTitleBar
 	_l1_legend = _l1_scene.get_node_or_null("MapLegend") as MapLegend
 	_runner.assert_true(_l1_api != null, "L1 场景应含 Api")
+	# B4 模式系统：Content 挂 MapModeManager + HUD 地形/政治双模式按钮
+	var mode_mgr: Node = _l1_content.get_node_or_null("MapModeManager")
+	_runner.assert_true(mode_mgr != null, "L1 Content 下应挂 MapModeManager（B4）")
+	var hud: Control = _l1_scene.get_node_or_null("ZoomIndicator")
+	if hud != null:
+		var n_mode_btns := 0
+		for ch in hud.get_children():
+			if ch is Button and ch.toggle_mode:
+				n_mode_btns += 1
+		_runner.assert_true(n_mode_btns == 2,
+			"L1 HUD 应有地形/政治双模式按钮（实测 %d）" % n_mode_btns)
 	_runner.assert_true(_l1_indicator != null, "L1 Content 下应挂 GranularityIndicator")
 	_runner.assert_true(_tooltip != null, "L1 Content 下应挂 SettlementTooltip")
 	_runner.assert_true(_l1_title_bar != null, "L1 应挂 MapTitleBar")
@@ -143,10 +154,16 @@ func _test_l1_title_legend() -> void:
 		"名牌显示玩家所在 L1（实测 %s）" % _l1_title_bar._title_label.text)
 	_runner.assert_true(_l1_title_bar._subtitle_label.text == "8 聚落",
 		"副标题聚落数（实测 %s）" % _l1_title_bar._subtitle_label.text)
-	# 图例：8 城邦政权色条目，色块与地图填充同色源（get_state_color）
-	_runner.assert_true(_l1_legend.visible, "open 后图例可见（出生 L1 有 8 城邦）")
+	# 图例（B4 默认 TERRAIN 地形模式）：地物水系条目（海洋/湖泊）
+	_runner.assert_true(_l1_legend.visible, "open 后图例可见")
+	_runner.assert_true(_l1_legend._title_label.text == "图例 · 地形",
+		"地形模式图例标题（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 2,
+		"地形模式 2 条目（海洋/湖泊，实测 %d）" % _l1_legend._entries_box.get_child_count())
+	# 切政治模式：8 城邦政权色条目，色块与地图填充同色源（get_state_color）
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 政权",
-		"图例标题（实测 %s）" % _l1_legend._title_label.text)
+		"政治模式图例标题（实测 %s）" % _l1_legend._title_label.text)
 	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 8,
 		"8 城邦条目（实测 %d）" % _l1_legend._entries_box.get_child_count())
 	var states: Dictionary = _l1_api.get_states()
@@ -158,6 +175,8 @@ func _test_l1_title_legend() -> void:
 	var text_label: Label = first_entry.get_child(1)
 	_runner.assert_true(text_label.text == str(states[first_id].get("name", first_id)),
 		"首条目文字 = 政权名（实测 %s）" % text_label.text)
+	# 复位地形模式（模式是全局静态，防污染本文件后续用例）
+	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
 	# 空态：清空条目后 set_shown 不再显示（Phase B 模式无图例内容的语义）
 	_l1_legend.set_entries([])
 	_l1_legend.set_shown(true)

@@ -14,7 +14,6 @@ const PreviewNode := preload("res://tests/dev/tree_preview_node.gd")
 
 const BAKE_COUNT := 10
 const MAIN_SEED := 7000
-const VARIANT_SEEDS := [7100, 7200, 7300]
 
 ## 结构滑条 = 基线 DEFAULT_PARAMS；笔触滑条 = 拟合笔数/笔宽缩放
 const PARAM_DEFS := [
@@ -48,6 +47,7 @@ var _worker_busy := false
 var _main_version := 0
 var _baking := false
 var _bake_done := 0
+var _variant_base := 7100
 
 
 func _ready() -> void:
@@ -90,6 +90,10 @@ func _build_panel() -> void:
 	copy_btn.text = "复制参数JSON"
 	copy_btn.pressed.connect(_copy_params)
 	action_row.add_child(copy_btn)
+	var var_btn := Button.new()
+	var_btn.text = "换一批种子"
+	var_btn.pressed.connect(_next_variants)
+	action_row.add_child(var_btn)
 	_status_label = Label.new()
 	_status_label.text = "就绪：主预览=成品；第二排=管线阶段；第三排=变体"
 	_status_label.add_theme_font_size_override("font_size", 13)
@@ -198,7 +202,17 @@ func _enqueue_main() -> void:
 			_queue.remove_at(j)  # 丢掉排队中的旧参数任务，烘焙任务保留
 	_queue.append({"seed": MAIN_SEED, "kind": "main", "idx": _main_version})
 	for i: int in _variant_nodes.size():
-		_queue.append({"seed": VARIANT_SEEDS[i], "kind": "variant", "idx": i})
+		_queue.append({"seed": _variant_base + i * 100, "kind": "variant", "idx": i})
+
+
+## 变体排换 3 个新种子（不动主预览参数）
+func _next_variants() -> void:
+	_variant_base += 300
+	for j: int in range(_queue.size() - 1, -1, -1):
+		if String(_queue[j]["kind"]) == "variant":
+			_queue.remove_at(j)
+	for i: int in _variant_nodes.size():
+		_queue.append({"seed": _variant_base + i * 100, "kind": "variant", "idx": i})
 
 
 func _bake_pool() -> void:

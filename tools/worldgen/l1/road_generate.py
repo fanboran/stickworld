@@ -10,7 +10,7 @@
 cost = 步长 × (1 + k_slope×|∇h| + k_river(河) + k_lake(湖))，海洋不可通行；
 山口豁免 = 沿两城连线剖面找鞍点（两侧窗内峰比凹点高 ≥ pass_depth），
 山口邻近格坡度惩罚减免——「经山口穿山不在山顶硬穿」。
-后处理：Chaikin ×chaikin_passes 平滑 + DP(dp_tolerance) 简化；
+后处理：DP(dp_tolerance) 先收栅格台阶 → Chaikin ×chaikin_passes 磨圆拐角（顺序不可反）；
 每条路 {from, to, tier(DIRT/PAVED), length_px, polyline[]}。
 
 产出（覆盖写回，json 保持 indent=1 与原字段序）：
@@ -441,7 +441,9 @@ def main():
                     y * (RES // grid) + (RES // grid) // 2) for x, y in path]
             pts[0] = pos_by_sid[sa]
             pts[-1] = pos_by_sid[sb]
-            pts = dp_simplify(chaikin(pts, p["chaikin_passes"]), p["dp_tolerance"])
+            # 顺序不可反：先 DP 把 8 方向栅格台阶收成长直段，再 Chaikin 把拐角磨圆。
+            # 反过来（先平滑再 DP）DP 会把刚磨出的圆角全删回直线，产出纯折线。
+            pts = chaikin(dp_simplify(pts, p["dp_tolerance"]), p["chaikin_passes"])
         roads_global.append({
             "from": sa, "to": sb, "tier": e["tier"], "origin": e["origin"],
             "length_px": round(polyline_len(pts), 1),

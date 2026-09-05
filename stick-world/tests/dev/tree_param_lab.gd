@@ -48,6 +48,10 @@ var _main_version := 0
 var _baking := false
 var _bake_done := 0
 var _variant_base := 7100
+# 布局拖拽：按住任意预览树拖到想要的位置；「复位布局」恢复默认
+var _drag_node: PreviewNode = null
+var _drag_off := Vector2.ZERO
+var _default_origins: Array = []
 
 
 func _ready() -> void:
@@ -97,6 +101,10 @@ func _build_panel() -> void:
 	var_btn.text = "换一批种子"
 	var_btn.pressed.connect(_next_variants)
 	action_row.add_child(var_btn)
+	var reset_btn := Button.new()
+	reset_btn.text = "复位布局"
+	reset_btn.pressed.connect(_reset_layout)
+	action_row.add_child(reset_btn)
 	_status_label = Label.new()
 	_status_label.text = "就绪：主预览=成品；第二排=管线阶段；第三排=变体"
 	_status_label.add_theme_font_size_override("font_size", 13)
@@ -151,6 +159,26 @@ func _build_previews() -> void:
 		node.display_origin = Vector2(400 + i * 560, 1420)
 		add_child(node)
 		_variant_nodes.append(node)
+	_record_default_layout()
+
+
+func _all_previews() -> Array:
+	var all: Array = [_main_node]
+	all.append_array(_stage_nodes)
+	all.append_array(_variant_nodes)
+	return all
+
+
+func _record_default_layout() -> void:
+	_default_origins.clear()
+	for node: PreviewNode in _all_previews():
+		_default_origins.append(node.display_origin)
+
+
+func _reset_layout() -> void:
+	for i: int in _all_previews().size():
+		(_all_previews()[i] as PreviewNode).display_origin = _default_origins[i]
+		(_all_previews()[i] as PreviewNode).queue_redraw()
 
 
 func _copy_params() -> void:
@@ -164,6 +192,27 @@ func _input(event: InputEvent) -> void:
 			_cam.zoom = (_cam.zoom * 1.12).clampf(0.12, 1.0)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
 			_cam.zoom = (_cam.zoom / 1.12).clampf(0.12, 1.0)
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				var wp := get_global_mouse_position()
+				for node: PreviewNode in _all_previews():
+					if _hit_tree(node, wp):
+						_drag_node = node
+						_drag_off = node.display_origin - wp
+						break
+			else:
+				_drag_node = null
+	elif event is InputEventMouseMotion and _drag_node != null:
+		_drag_node.display_origin = get_global_mouse_position() + _drag_off
+		_drag_node.queue_redraw()
+
+
+## 命中测试：点在树贴图矩形内（锚点=中轴×地面线）
+func _hit_tree(node: PreviewNode, wp: Vector2) -> bool:
+	var w := float(TP.W) * node.display_scale
+	var h := float(TP.H) * node.display_scale
+	var top_left := node.display_origin - Vector2(w * 0.5, 660.0 * node.display_scale)
+	return Rect2(top_left, Vector2(w, h)).has_point(wp)
 
 
 func _exit_tree() -> void:

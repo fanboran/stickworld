@@ -408,7 +408,9 @@ func _update_env_readout() -> void:
 	var camp := get_tree().root.get_node_or_null(
 			"GameRoot/EnvironmentSystem/CampLight") as PointLight2D
 	if camp != null:
-		readout.text += "\nCampLight energy %.2f（夜间渐亮 · 替换项 P2）" % camp.energy
+		var enabled: bool = _env.get("camp_light_enabled")
+		readout.text += "\nCampLight energy %.2f（%s）" % [camp.energy,
+				"已启用 · 夜间渐亮" if enabled else "默认关（camp_light_enabled=false）"]
 
 
 # ─────────────────────────────── 页签：建筑 ────────────────────────────────

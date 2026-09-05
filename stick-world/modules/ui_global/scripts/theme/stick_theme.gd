@@ -61,7 +61,7 @@ static func _apply_button(t: Theme, s: Object) -> void:
 	t.set_color("font_hover_color", "Button", StickTokens.TEXT)
 	t.set_color("font_pressed_color", "Button", StickTokens.ACCENT)
 	t.set_color("font_disabled_color", "Button", StickTokens.TEXT_DISABLED)
-	t.set_font_size("font_size", "Button", StickTokens.FONT_BODY)
+	t.set_font_size("font_size", "Button", StickTokens.FONT_HUD)
 
 
 static func _apply_label(t: Theme) -> void:

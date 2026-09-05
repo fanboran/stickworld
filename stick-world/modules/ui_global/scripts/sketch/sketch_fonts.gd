@@ -10,6 +10,19 @@ extends RefCounted
 const HAND_PATH := "res://assets/fonts/StickHand-Regular.ttf"
 
 static var _hand: FontFile
+static var _bold: FontVariation
+
+
+## 手写加粗（伪粗：FreeType embolden 外扩轮廓，站酷快乐体无 Bold 字重）
+static func bold() -> FontVariation:
+	if _bold == null:
+		var base := hand()
+		if base == null:
+			return null
+		_bold = FontVariation.new()
+		_bold.base_font = base
+		_bold.variation_embolden = 0.6
+	return _bold
 
 
 ## 手写正文字体（游戏内 UI 默认字体；文件缺失时回退 null = 引擎默认）

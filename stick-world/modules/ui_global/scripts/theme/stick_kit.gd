@@ -80,10 +80,11 @@ static func _setup_button(b: Button, callback: Callable, kind: ButtonKind) -> vo
 			b.add_theme_stylebox_override("normal", StickStyle.accent_normal())
 			b.add_theme_stylebox_override("hover", StickStyle.accent_hover())
 			b.add_theme_stylebox_override("pressed", StickStyle.accent_pressed())
-			b.add_theme_color_override("font_color", StickTokens.ACCENT)
-			# 琥珀字加黑描边：深底亮底都可读（血条"亮色+黑描边"同语言）
-			b.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.03, 0.9))
-			b.add_theme_constant_override("outline_size", 3)
+			# 强调按钮字：白 + 伪粗（区分靠琥珀底，不靠字色）
+			b.add_theme_color_override("font_color", StickTokens.TEXT)
+			var bold := SketchFonts.bold()
+			if bold != null:
+				b.add_theme_font_override("font", bold)
 		ButtonKind.DANGER:
 			b.add_theme_stylebox_override("normal", StickStyle.danger_normal())
 			b.add_theme_stylebox_override("hover", StickStyle.danger_hover())

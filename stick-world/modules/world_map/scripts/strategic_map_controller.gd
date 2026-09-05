@@ -121,7 +121,7 @@ func _input(event: InputEvent) -> void:
 			_handle_left_click(mb.position)
 	# ESC：统一走 handle_escape（下钻返回 L2 / 关闭地图）；消费事件防止
 	# GameRoot 再收到后弹暂停菜单（GameRoot 也通过 handle_escape 分发，双路径互斥）
-	elif event is InputEventKey and event.pressed:
+	elif event is InputEventKey and event.pressed and not event.is_echo():
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_ESCAPE:
 			handle_escape()

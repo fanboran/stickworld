@@ -168,6 +168,14 @@ func _on_sfx_finished(player: AudioStreamPlayer) -> void:
 		player.queue_free()
 
 
+## 立即回收一个 SFX 播放器。手动 stop() 不触发 finished（Godot 语义：
+## finished 仅自然播完时发出），必须显式出列+释放，否则节点永久泄漏。
+func _discard_sfx_player(player: AudioStreamPlayer) -> void:
+	player.stop()
+	_sfx_players.erase(player)
+	player.queue_free()
+
+
 # ─────────────────────────────── 天气环境层（雨声等循环）────────────────────────────────
 
 ## 循环播放天气音（雨声）；volume_linear 随强度刷新，切 asset 幂等
@@ -286,19 +294,18 @@ func play_event(event_name: String) -> void:
 		return
 	var entry: Variant = SFX_EVENTS[event_name]
 	var paths: Array = entry if entry is Array else [entry]
-	var path: String = ""
+	# 先收集存在资产再随机：变体池"部分就位"时随机选中缺失资产会静默丢音
+	var valid: Array = []
 	for p in paths:
 		if ResourceLoader.exists(p):
-			path = p
-			break
-	if paths.size() > 1 and not path.is_empty():
-		path = paths[randi() % paths.size()]
-	if path.is_empty():
+			valid.append(p)
+	if valid.is_empty():
 		print_verbose("[AudioManager] 音效资产未就位，跳过: %s" % event_name)
 		return
+	var path: String = valid[randi() % valid.size()]
 	var prev = _event_players.get(event_name)
 	if prev != null and is_instance_valid(prev) and prev.playing:
-		prev.stop()
+		_discard_sfx_player(prev)
 	var player := play_sfx(path)
 	if player == null:
 		return
@@ -325,7 +332,7 @@ func stop_all_sfx() -> void:
 		snapshot.append(p)
 	for p in snapshot:
 		if p and is_instance_valid(p):
-			p.stop()
+			_discard_sfx_player(p)
 
 
 # ─────────────────────────────── 音量控制 ────────────────────────────────

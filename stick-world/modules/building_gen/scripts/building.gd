@@ -84,6 +84,8 @@ var _interior_is_transparent: bool = false
 var _transparent_alpha: float = 0.3
 ## 透明化渐变时长（秒，默认 0.2）
 var _fade_duration: float = 0.2
+## 进行中的透明化 Tween（快速进出触发区时先 kill 旧渐变，避免双 Tween 争写 alpha 回闪）
+var _fade_tween: Tween = null
 ## 室内模式枚举（默认 NONE，后续从数据表读取）
 var _interior_mode: int = 0  # 0=NONE, 1=TRANSPARENT, 2=TELEPORT
 ## 大建筑内部地图 ID（仅 TELEPORT 模式，P0 硬编码）
@@ -374,8 +376,10 @@ func _set_transparent(on: bool) -> void:
 	_interior_is_transparent = on
 	if _wall_front != null:
 		var target_alpha: float = _transparent_alpha if on else 1.0
-		var tween := create_tween()
-		tween.tween_property(_wall_front, "modulate:a", target_alpha, _fade_duration)
+		if _fade_tween != null and _fade_tween.is_valid():
+			_fade_tween.kill()
+		_fade_tween = create_tween()
+		_fade_tween.tween_property(_wall_front, "modulate:a", target_alpha, _fade_duration)
 	if _interior != null:
 		_interior.visible = on
 

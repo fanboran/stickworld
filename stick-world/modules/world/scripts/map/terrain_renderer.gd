@@ -253,11 +253,12 @@ func get_city_right_x() -> float:
 
 # ─────────────────────────────── 纹理文件查找与加载 ────────────────────────────────
 
-## 在 assets/environment/ 目录下查找 grassland 开头的图片文件，返回绝对路径
+## 在 assets/environment/ 目录下查找 grassland 开头的图片文件，返回 res:// 路径。
+## 直接枚举 res://（DirAccess/FileAccess 原生支持导出包）——globalize_path
+## 只在编辑器有真实目录，导出后失效会静默丢草地贴图
 func _find_grass_texture() -> String:
 	var dir_path := "res://assets/environment"
-	var abs_dir := ProjectSettings.globalize_path(dir_path)
-	var dir := DirAccess.open(abs_dir)
+	var dir := DirAccess.open(dir_path)
 	if dir == null:
 		return ""
 	var exts := [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tga"]
@@ -268,8 +269,8 @@ func _find_grass_texture() -> String:
 			var lower := file_name.to_lower()
 			if lower.begins_with("grassland"):
 				for ext in exts:
-					if lower.ends_with(ext):
-						return abs_dir + "/" + file_name
+				if lower.ends_with(ext):
+					return dir_path + "/" + file_name
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	return ""

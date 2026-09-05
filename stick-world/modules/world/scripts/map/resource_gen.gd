@@ -151,7 +151,7 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 			var px: float = center_px + _gauss() * float(kind["radius"]) * PlacementGrid.CELL_SIZE
 			var row: int = clampi(center_row + int(round(_gauss() * 1.4)), 0, maxi(0, rows - 1))
 			var py: float = _root.ground_y + row * TERRAIN_CELL_SIZE_Y + TERRAIN_CELL_SIZE_Y * 0.5
-			var cx: int = int(px / PlacementGrid.CELL_SIZE)
+			var cx: int = floori(px / PlacementGrid.CELL_SIZE)
 			if cx < a or cx >= b:
 				continue
 			# 硬化路面/土路上不可能长资源

@@ -85,7 +85,7 @@ func _input(event: InputEvent) -> void:
 			if get_viewport().gui_get_hovered_control() != null:
 				return
 			_handle_l1_click(mb.position)
-	if event is InputEventKey and event.pressed:
+	if event is InputEventKey and event.pressed and not event.is_echo():
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_ESCAPE:
 			# ESC 返回 L3（地图整体仍开着，不关地图、不恢复场景图输入）

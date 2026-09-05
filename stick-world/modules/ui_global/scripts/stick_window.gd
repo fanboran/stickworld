@@ -139,7 +139,7 @@ func is_open() -> bool:
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+	if event is InputEventKey and event.pressed and not event.is_echo() and event.keycode == KEY_ESCAPE:
 		close()
 		get_viewport().set_input_as_handled()
 		return

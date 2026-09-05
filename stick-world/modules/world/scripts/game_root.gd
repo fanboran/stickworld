@@ -99,8 +99,10 @@ var _minimap: Control = null
 @warning_ignore("unused_private_class_variable")
 var _zoom_bar: Control = null
 
-## 武器调控面板（左上角，WeaponPanel；T/B 快捷键与面板共享状态）
-var _weapon_panel: Control = null
+## 背包服务（InventoryService；装备→附身实体桥接，SystemSetup 装配）
+var inventory_service: Node = null
+## 背包界面（InventoryScreen；E 键开关，SystemSetup 装配）
+var _inventory_screen: Control = null
 
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
 ## PossessionInterface 实例引用（运行时由 SystemSetup 装配）
@@ -565,7 +567,7 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 			# 附身玩家实体（地图切换时需重新附身新实体）
 		if player.has_method("set_possessed"):
 			player.set_possessed(true)
-		# 玩家也注入 ConstructionManager（按E搬运/建造交互需要）
+		# 玩家也注入 ConstructionManager（按F搬运/建造交互需要）
 		if player.has_method("set_construction_manager") and _construction_api != null:
 			player.set_construction_manager(_construction_api)
 		# 玩家注入 FormationSystem（编队职责查询）
@@ -752,9 +754,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif ek.keycode == KEY_L:
 		_open_placeholder_panel("logistics")
 		get_viewport().set_input_as_handled()
-	# 武器调试（T 循环主手 / B 开关盾牌）：仅附身玩家可用，方便观察渲染
-	elif ek.keycode == KEY_T:
-		_debug_cycle_weapon()
+	# E 开关背包（背包装备系统；其他模态打开时让位给 ESC 栈）
+	elif ek.keycode == KEY_E:
+		toggle_inventory()
+		get_viewport().set_input_as_handled()
+	# 数字 1-4：使用 Hotbar 物品格（消耗品；同 Hotbar 点击）
+	elif ek.keycode >= KEY_1 and ek.keycode <= KEY_4:
+		_use_hotbar_slot(ek.keycode - KEY_1)
 		get_viewport().set_input_as_handled()
 	# 空格切换暂停（Demo：战斗自动暂停后的直觉恢复键；模态打开时 ESC 栈优先，
 	# 空格仅在世界层生效）
@@ -762,45 +768,36 @@ func _unhandled_input(event: InputEvent) -> void:
 		if TimeManager != null:
 			TimeManager.toggle_pause()
 		get_viewport().set_input_as_handled()
-	elif ek.keycode == KEY_B:
-		_debug_toggle_shield()
-		get_viewport().set_input_as_handled()
 	# ESC：统一模态/暂停菜单栈控制（见 _handle_escape）
 	elif ek.keycode == KEY_ESCAPE:
 		if _handle_escape():
 			get_viewport().set_input_as_handled()
 
 
-## 武器调试：附身玩家循环主手武器（剑→矛→弓→镐→法杖）
-func _debug_cycle_weapon() -> void:
-	var player := get_player_entity()
-	if player == null:
+## 开关背包界面（E 键）：开着则关；其他模态开着则让位（ESC 先退栈）；
+## 无模态则压栈打开（自动暂停 + 遮罩）。Hotbar 的 E 动作格同路。
+func toggle_inventory() -> void:
+	if _inventory_screen == null:
 		return
-	var wm: Node = player.get_node_or_null("WeaponMount")
-	if wm == null:
+	var stack := _get_modal_stack()
+	if _inventory_screen.is_open():
+		if stack != null:
+			stack.pop(UIModalStack.Layer.INVENTORY)
+		else:
+			_inventory_screen.close()
 		return
-	var cur: int = wm.weapon_type
-	wm.weapon_type = (cur + 1) % 5
-	_update_debug_weapon_hud()
+	if stack != null:
+		if stack.is_any_open():
+			return
+		stack.push(_inventory_screen, UIModalStack.Layer.INVENTORY)
+	else:
+		_inventory_screen.open()
 
 
-## 武器调试：附身玩家开关盾牌
-func _debug_toggle_shield() -> void:
-	var player := get_player_entity()
-	if player == null:
-		return
-	var wm: Node = player.get_node_or_null("WeaponMount")
-	if wm == null:
-		return
-	wm.shield_enabled = not wm.shield_enabled
-	_update_debug_weapon_hud()
-
-
-## 刷新武器调控面板（T/B 快捷键切换后调用；面板自读附身玩家状态）。
-## 旧 CanvasLayer 文字标签已迁移到 WeaponPanel（UI 槽位规范）。
-func _update_debug_weapon_hud() -> void:
-	if _weapon_panel != null and _weapon_panel.has_method("refresh"):
-		_weapon_panel.refresh()
+## 使用 Hotbar 物品格（数字键 1-4；转发背包服务，需附身实体承接效果）
+func _use_hotbar_slot(index: int) -> void:
+	if inventory_service != null and inventory_service.has_method("use_hotbar_item"):
+		inventory_service.use_hotbar_item(index)
 
 
 ## 打开帝国功能空面板（经 ui_global/placeholders，系统落地后替换真实面板）。

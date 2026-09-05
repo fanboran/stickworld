@@ -16,7 +16,7 @@ extends CharacterBody2D
 ##   │   ├── StickmanRig (Skeleton2D)
 ##   │   └── Node2D (IK markers parent)
 ##   ├── VisualController (Node, visual_controller.gd —— 动画播放/头顶进度条)
-##   ├── InteractionController (Node, interaction_controller.gd —— 按E交互/提示弹窗)
+##   ├── InteractionController (Node, interaction_controller.gd —— 按F交互/提示弹窗)
 ##   └── CollisionShape2D
 
 # ─────────────────────────────── 常量 ────────────────────────────────
@@ -44,7 +44,7 @@ const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_
 
 ## 视觉控制器组件脚本（动画播放/头顶进度条）
 const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/entity/visual_controller.gd")
-## 交互控制器组件脚本（按E交互/提示弹窗）
+## 交互控制器组件脚本（按F交互/提示弹窗）
 const _InteractionControllerScript: GDScript = preload("res://modules/units/scripts/entity/interaction_controller.gd")
 ## 头顶血条组件脚本（受击后显示 HP，满血隐藏）
 const _HealthBarScript: GDScript = preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
@@ -142,7 +142,7 @@ var _carrying: bool = false
 ## （由 visual_controller 跨脚本读写，故加忽略）
 @warning_ignore("unused_private_class_variable")
 var _action_locked: bool = false
-## 玩家按E建造的动画计时器（>0 表示正在播放 build 动画）
+## 玩家按F建造的动画计时器（>0 表示正在播放 build 动画）
 var _player_build_timer: float = 0.0
 ## 朝向（1=右，-1=左）
 var _facing: int = 1
@@ -165,6 +165,11 @@ const HIT_STUN_DURATION: float = 0.2
 ## 兵种移速倍率（WeaponMount 按行为档案 move_mult 写入：SWL 兵种机动性差异——
 ## Swordwrath 轻快 1.3×、Spearton 沉稳 0.85×，全员同速 = 没有兵种机动性）
 var move_speed_mult: float = 1.0
+## 护甲移速乘子（背包装备系统写入：三件 speed_penalty 乘积；1.0 = 无护甲）
+var armor_speed_factor: float = 1.0
+## 护甲减伤率（背包装备系统写入：三件 damage_reduction 加和，封顶 0.6）。
+## DamagePipeline 单位类型减伤段经 get_armor_factor() 消费
+var armor_damage_reduction: float = 0.0
 ## 体型缩放倍率（SWL minidon 召唤护卫比常规兵种小一圈；1.0 = 正常体型）。
 ## 影响 rig 渲染 + Collider/Range/Hitbox 判定 + 血条高度，经 set_body_scale 设置。
 var body_scale: float = 1.0
@@ -231,7 +236,7 @@ var _hitbox_base_y: float = 0.0
 # ─────────────────────────────── 子组件引用 ────────────────────────────────
 ## 视觉控制器（动画播放/头顶进度条，_ready 装配）
 var _visual: Node = null
-## 交互控制器（按E交互/提示弹窗，_ready 装配）
+## 交互控制器（按F交互/提示弹窗，_ready 装配）
 var _interaction: Node = null
 
 
@@ -266,7 +271,14 @@ func _input(event: InputEvent) -> void:
 		_player_attack()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_F:
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		# 副手盾：按住右键举盾、松开放下（UI 上按下不触发；松开总生效）
+		if event.pressed and _is_mouse_over_ui():
+			return
+		_set_player_blocking(event.pressed)
+		if event.pressed:
+			get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_G:
 		# 空挥（复刻原版 User Control）：无目标也出攻击动作，纯动作无伤害
 		_player_swing()
 		if get_viewport() != null:
@@ -526,7 +538,7 @@ func _physics_process(delta: float) -> void:
 	# X 边界约束
 	global_position.x = clampf(global_position.x, map_left, map_right)
 	_sync_markers_transform()
-	# 玩家建造动画计时（按E敲击后 1.8 秒解除动作锁定）
+	# 玩家建造动画计时（按F敲击后 1.8 秒解除动作锁定）
 	if _player_build_timer > 0.0:
 		_player_build_timer -= delta
 		set_action_progress(1.0 - _player_build_timer / 1.8)
@@ -541,40 +553,17 @@ func _physics_process(delta: float) -> void:
 		_interaction.try_hold_interact()
 
 
-# ─────────────────────────────── 玩家输入（按E / H 由交互控制器处理）────────────────────────────────
+# ─────────────────────────────── 玩家输入（按F / H 由交互控制器处理）────────────────────────────────
 
-## 玩家附身时按E：交互（取放材料 / 敲击建造，实现见 InteractionController）。
+## 玩家附身时按F：交互（取放材料 / 敲击建造，实现见 InteractionController）。
 ## 按H：脱离卡死。
 func _unhandled_input(event: InputEvent) -> void:
 	if not possessed:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_E:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
 		_interaction.try_interact()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_H:
 		escape_stuck()
-	else:
-		_handle_weapon_hotkey(event)
-
-
-## 主控热键换武器（1剑 2矛 3弓 4镐 5杖，对齐 WeaponMount.WeaponType）：
-## 物品栏系统的最小可用核心（原型阶段全武器开放，随时切换即换持械/攻击/射程）；
-## 完整背包 UI（格子/装备槽/拾取）立项见 AI复刻执行计划 §10。
-func _handle_weapon_hotkey(event: InputEvent) -> void:
-	if not (event is InputEventKey and event.pressed and not event.echo):
-		return
-	var idx: int = -1
-	match (event as InputEventKey).keycode:
-		KEY_1: idx = 0
-		KEY_2: idx = 1
-		KEY_3: idx = 2
-		KEY_4: idx = 3
-		KEY_5: idx = 4
-		_: return
-	if weapon_mount == null or not is_instance_valid(weapon_mount):
-		return
-	if "weapon_type" in weapon_mount and int(weapon_mount.weapon_type) == idx:
-		return  # 已是该武器
-	weapon_mount.weapon_type = idx
 
 
 # ─────────────────────────────── 玩家输入 ────────────────────────────────
@@ -631,12 +620,26 @@ func _is_ranged_weapon() -> bool:
 	return int(weapon_mount.weapon_type) == 2 or int(weapon_mount.weapon_type) == 4
 
 
+## 玩家按住/松开右键：举盾格挡（副手盾；无盾实体设了姿态也挡不住，
+## 见 WeaponMount.is_shield_blocking 三重判定）。
+func _set_player_blocking(v: bool) -> void:
+	if weapon_mount == null or not is_instance_valid(weapon_mount):
+		return
+	if weapon_mount.has_method("set_blocking"):
+		weapon_mount.set_blocking(v)
+
+
+## 护甲减伤余率（DamagePipeline 消费：0.82 = 三件锁子减伤 18%）。
+func get_armor_factor() -> float:
+	return 1.0 - clampf(armor_damage_reduction, 0.0, 1.0)
+
+
 func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 	var se: Node = get_status_effects()
 	var slow_mult: float = se.get_speed_mult() if se != null and se.has_method("get_speed_mult") else 1.0
 	# 持盾移速惩罚（盾姿态分层，计划 5）：举盾行军更沉稳（档案 block_move_mult）
 	var block_mult: float = _blocking_speed_mult()
-	var mult: float = _terrain_speed_mult() * move_speed_mult * slow_mult * block_mult
+	var mult: float = _terrain_speed_mult() * move_speed_mult * slow_mult * block_mult * armor_speed_factor
 	var walk_cap: float = WALK_SPEED * mult
 	var run_cap: float = RUN_SPEED * mult
 	# 攻击动画期间不切移动动画（SWL 攻击与移动解耦：走 A 边跑边拉弓，
@@ -664,7 +667,7 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 func _handle_deceleration(delta: float) -> void:
 	if _is_running:
 		_is_running = false
-		_current_speed = WALK_SPEED * _terrain_speed_mult() * move_speed_mult * _blocking_speed_mult()
+		_current_speed = WALK_SPEED * _terrain_speed_mult() * move_speed_mult * _blocking_speed_mult() * armor_speed_factor
 		_visual.play("walk")
 	# 攻击动画期间不切移动动画（同 _handle_acceleration：走 A 保护）
 	var attacking: bool = _current_anim.begins_with("attack")

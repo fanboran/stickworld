@@ -52,9 +52,9 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 	_ui_root = ui_root
 	_quests = [
 		{"id": "harvest", "title": "采集资源",
-			"desc": "WASD 移动，靠近树木或岩石，按 E 采集", "target": 60.0},
+			"desc": "WASD 移动，靠近树木或岩石，按 F 采集", "target": 60.0},
 		{"id": "build", "title": "建造一座建筑",
-			"desc": "右下角「建造」→ 选建筑 → 左键放置 → 靠近按 E 施工", "target": 1.0},
+			"desc": "右下角「建造」→ 选建筑 → 左键放置 → 靠近按 F 施工", "target": 1.0},
 		{"id": "squad", "title": "组建一个编队",
 			"desc": "顶栏「编制」创建编队（或 Q 切战斗模式框选士兵）", "target": 1.0},
 		{"id": "battle", "title": "赢得一场战斗",

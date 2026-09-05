@@ -19,7 +19,8 @@ enum Layer {
 	SETTINGS,      ## 1 设置
 	SAVE_PANEL,    ## 2 存档管理
 	EMPIRE_PANEL,  ## 3 帝国功能空面板（K/O/J/L，同类单例，替换不叠加）
-	CONFIRM,       ## 4 最顶：确认框（SystemOverlay，ESC = 取消）
+	INVENTORY,     ## 4 背包（E 键；确认框需盖在其上）
+	CONFIRM,       ## 5 最顶：确认框（SystemOverlay，ESC = 取消）
 }
 ## 无层
 const NONE := -1

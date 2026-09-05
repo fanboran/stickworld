@@ -7,7 +7,7 @@ extends Node
 ## 参与两两断言的部件节点名（system_setup/UIKit.widget 命名 + tscn 节点名）
 const TARGET_NAMES := [
 	"QuestPanel", "Minimap", "ZoomBar", "ResourceBarHost", "ClockWidget",
-	"TimeLabel", "ModePanel", "NotificationFeed", "WeaponPanel", "BuildMenu",
+	"TimeLabel", "ModePanel", "NotificationFeed", "Hotbar", "BuildMenu",
 	"DebugInfoPanel",
 ]
 

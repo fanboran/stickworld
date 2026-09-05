@@ -31,7 +31,9 @@ const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scri
 const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
-const _WeaponPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/weapon_panel.gd")
+const _InventoryServiceScript: GDScript = preload("res://modules/inventory/scripts/inventory_service.gd")
+const _InventoryScreenScript: GDScript = preload("res://modules/inventory/ui/inventory_screen.gd")
+const _HotbarScript: GDScript = preload("res://modules/inventory/ui/hotbar.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
 const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
@@ -73,7 +75,7 @@ func setup(root: GameRoot) -> void:
 	_setup_pause_menu_panel()
 	_setup_minimap()
 	_setup_zoom_bar()
-	_setup_weapon_panel()
+	_setup_inventory()
 	_setup_possession_interface()
 	_setup_possess_panel()
 	_register_explore_handler()
@@ -449,17 +451,32 @@ func _setup_zoom_bar() -> void:
 		zb.setup(_root.camera_rig)
 
 
+# ─────────────────────────────── 背包装备系统装配（modules/inventory）────────────────────────────────
 
-
-## 创建武器调控面板并挂到 UIRoot（左上角；切换附身玩家主手武器/盾牌）。
-func _setup_weapon_panel() -> void:
+## 装配背包装备系统三件套：
+##   1. InventoryService（GameRoot 子节点：玩家背包 + 装备→附身实体桥接）
+##   2. Hotbar（HudOverlay 底部常驻物品栏：主副手/Hotbar 物品/动作快捷键三组）
+##   3. InventoryScreen（ModalOverlay 模态背包：E 键开关，UIModalStack.INVENTORY）
+func _setup_inventory() -> void:
 	if _root.ui_root == null:
 		return
-	var wp := UIKit.widget(_WeaponPanelScript, "WeaponPanel")
-	_root.ui_root.add_to_slot("HudOverlay", wp)
-	_root._weapon_panel = wp
-	if wp.has_method("setup"):
-		wp.setup(_root)
+	var service := Node.new()
+	service.set_script(_InventoryServiceScript)
+	service.name = "InventoryService"
+	_root.add_child(service)
+	if service.has_method("setup"):
+		service.setup(_root)
+	_root.inventory_service = service
+	var hb := UIKit.widget(_HotbarScript, "Hotbar")
+	_root.ui_root.add_to_slot("HudOverlay", hb)
+	if hb.has_method("setup"):
+		hb.setup(_root, service)
+	var inv := UIKit.full_rect(_InventoryScreenScript, "InventoryScreen")
+	if not _root.ui_root.add_to_slot("ModalOverlay", inv):
+		return
+	_root._inventory_screen = inv
+	if inv.has_method("setup"):
+		inv.setup(_root, service)
 
 
 # ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────

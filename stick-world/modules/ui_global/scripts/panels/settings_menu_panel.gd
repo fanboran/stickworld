@@ -205,7 +205,7 @@ func _add_field_row(field: Dictionary) -> void:
 	var widget: Control = null
 	match field["type"]:
 		"slider":
-			var s := HSlider.new()
+			var s: HSlider = SketchHSlider.new()
 			s.min_value = field["min"]
 			s.max_value = field["max"]
 			s.step = field["step"]

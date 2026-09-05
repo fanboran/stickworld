@@ -1,0 +1,43 @@
+{
+  "hillshade": {
+    "sigma": 2.5,
+    "strength": 0.15,
+    "light_az_deg": 315
+  },
+  "elevation": {
+    "light_low": 0.94,
+    "light_high": 1.07,
+    "light_start": 0.15,
+    "light_end": 0.95,
+    "rock_start": 0.52,
+    "rock_end": 0.75,
+    "rock_blend": 0.8,
+    "snow_start": 0.8,
+    "snow_end": 0.9
+  },
+  "colors": {
+    "rock": [148, 142, 132],
+    "snow": [238, 242, 246],
+    "ocean_near": [58, 102, 142],
+    "ocean_far": [30, 55, 95],
+    "lake": [72, 116, 158],
+    "river": [46, 102, 140]
+  },
+  "ocean": {
+    "shelf_px": 56,
+    "gamma": 0.45
+  },
+  "coast": {
+    "darken": 0.78,
+    "width_px": 2
+  },
+  "hot_zone": {
+    "r_shift": 42,
+    "g_shift": 6,
+    "b_shift": -18
+  },
+  "output": {
+    "l3_size": 2048,
+    "block": 1024
+  }
+}

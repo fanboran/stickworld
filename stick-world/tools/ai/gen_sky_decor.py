@@ -106,24 +106,50 @@ def gen_cloud(path, seed=1):
 
 
 def _tree_ridge(rnd, base_y, h, color, W=2048, H=320):
-	"""Kingdom 式树线剪影：三角树冠连续排布，平铺无缝。"""
+	"""Terraria 式茂密树线：每树双冠团（主干+侧枝团）+ 间隙起伏 + 顶部受光渐变，
+	底部向基线加深（大气体积感）。平铺无缝。"""
 	img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
 	d = ImageDraw.Draw(img)
+	c_top = tuple(min(255, int(c * 1.18)) for c in color[:3]) + (255,)
+	c_mid = color
+	c_base = tuple(int(c * 0.72) for c in color[:3]) + (255,)
 	x = -40.0
 	while x < W + 40:
-		tw = rnd.uniform(26, 54)
-		th = h * rnd.uniform(0.55, 1.15)
+		tw = rnd.uniform(24, 50)
+		th = h * rnd.uniform(0.55, 1.2)
 		top = base_y - th
 		mid = base_y - th * 0.45
+		# 主冠（三段折线）
 		d.polygon([
 			(x, base_y),
 			(x + tw * 0.28, mid),
 			(x + tw * 0.5 + rnd.uniform(-6, 6), top),
 			(x + tw * 0.74, mid),
 			(x + tw, base_y),
-		], fill=color)
-		x += tw * rnd.uniform(0.62, 0.9)
-	return img.filter(ImageFilter.GaussianBlur(0.8))
+		], fill=c_mid)
+		# 侧枝团（双冠层次：左或右侧叠一团小冠）
+		side = -1 if rnd.random() < 0.5 else 1
+		cx = x + tw * (0.5 + side * 0.42)
+		cy = base_y - th * rnd.uniform(0.35, 0.62)
+		cr = tw * rnd.uniform(0.22, 0.38)
+		d.ellipse((cx - cr, cy - cr * rnd.uniform(0.8, 1.1),
+		           cx + cr, cy + cr * rnd.uniform(0.8, 1.1)), fill=c_mid)
+		# 顶部受光冠尖（亮色小三角盖顶）
+		d.polygon([
+			(x + tw * 0.30, top + th * 0.22),
+			(x + tw * 0.5 + rnd.uniform(-5, 5), top - 2),
+			(x + tw * 0.70, top + th * 0.22),
+		], fill=c_top)
+		x += tw * rnd.uniform(0.58, 0.88)  # 更密（重叠多一点）
+	out = img.filter(ImageFilter.GaussianBlur(0.8))
+	# 底部体积渐变（numpy 按深度乘暗：保留树干间隙的透气感，不做实心底带）
+	arr = np.asarray(out, dtype=np.float32)
+	Hh = arr.shape[0]
+	yy = np.arange(Hh)[:, None]
+	fade_start = base_y - h * 0.35
+	dark = np.clip(1.0 - 0.28 * np.clip((yy - fade_start) / max(base_y - fade_start, 1), 0, 1), 0.72, 1.0)
+	arr[..., 0:3] *= dark
+	return Image.fromarray(arr.astype(np.uint8), "RGBA")
 
 
 def gen_treeline(path, seed, base_ratio, h, color):

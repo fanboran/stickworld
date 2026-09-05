@@ -119,7 +119,6 @@ func _draw() -> void:
 			_draw_orbit_arc(rng, lw)
 		else:
 			_draw_free_arc(rng, lw)
-	_draw_outline(lw)
 
 
 ## 三档色按落笔高度：上亮下暗（局部 y 向下为正）——球体感
@@ -183,25 +182,3 @@ func _draw_free_arc(rng: RandomNumberGenerator, lw: float) -> void:
 	draw_polyline(pts, _band_color(mid.y, rng), lw * rng.randf_range(0.85, 1.15) * wide)
 
 
-## 连续波浪轮廓线：一条 polyline 圈（上亮下暗分两半画，接缝在左右水平处），
-## 粗一档（lw×1.15）+ 逐点半径微扰（手绘抖动）——小学生一笔画云的轮廓
-func _draw_outline(lw: float) -> void:
-	var rng := _stable_rng(31)
-	var jitter: Array = []
-	for j in OUTLINE_SEGS:
-		jitter.append(rng.randf_range(-0.012, 0.012))
-	var col_up: Color = (_palette[1] as Color).lightened(0.06)
-	col_up.a = 1.0
-	var col_dn: Color = (_palette[2] as Color).lightened(0.04)
-	col_dn.a = 1.0
-	# Godot y 向下：θ∈[0,PI]（sin>0）是下半圈用暗色，θ∈[PI,TAU] 是上半圈用亮色；
-	# 两条半 polyline，θ=0/PI 处同 jitter 同点衔接（笔迹连续）
-	for half in 2:
-		var pts := PackedVector2Array()
-		var th0 := PI * float(half)
-		for j in OUTLINE_SEGS / 2 + 1:
-			var th := th0 + PI * float(j) / float(OUTLINE_SEGS / 2.0)
-			var jj := (j + (OUTLINE_SEGS / 2 if half == 1 else 0)) % OUTLINE_SEGS
-			var r: float = _outline_radius(th) * (1.0 + float(jitter[jj]))
-			pts.append(Vector2(cos(th), sin(th)) * r)
-		draw_polyline(pts, col_dn if half == 0 else col_up, lw * 1.3)

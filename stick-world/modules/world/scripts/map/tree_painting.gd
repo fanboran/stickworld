@@ -38,11 +38,11 @@ var _seed := 0
 var _bend_phase := 0.0
 var _flare_l := 10.0
 var _flare_r := 10.0
-var _root_drop := 8.0
+var _root_arc := true    # 根脚形状：true=半圆弧（默认），false=浅波浪（偶尔变化）
 var _wob_phase_l := 0.0
 var _wob_phase_r := 0.0
-var _bark_offsets: Array = []  # {frac, alpha, w}
-var _scars: Array = []        # {type, frac, x_off, r/len, w}
+var _root_drop := 30.0   # 根脚下垂深度（setup 定值，绘制不可随机）
+var _scars: Array = []        # {type, frac, x_off, r/len}
 var _branches: Array = []     # {y, side, ang, r_cluster, cluster_c}
 var _yarns: Array = []        # 子节点引用（冠 + 侧簇）
 
@@ -55,29 +55,22 @@ func setup(tree_seed: int) -> void:
 	_bend_phase = rng.randf_range(0.0, TAU)
 	_flare_l = rng.randf_range(7.0, 14.0)
 	_flare_r = rng.randf_range(7.0, 14.0)
-	_root_drop = rng.randf_range(12.0, 20.0)  # 根脚俯视角弧线的下垂深度
+	_root_arc = rng.randf() > 0.15  # 85% 半圆弧俯视底，15% 浅波浪破单调
+	# 下垂深度：半圆弧 ≈ 底半宽（俯视圆底面），波浪版浅
+	var hw0 := TRUNK_W_BASE * 0.5 + (_flare_l + _flare_r) * 0.5
+	_root_drop = hw0 * (rng.randf_range(0.85, 1.05) if _root_arc else rng.randf_range(0.25, 0.4))
 	_wob_phase_l = rng.randf_range(0.0, TAU)
 	_wob_phase_r = rng.randf_range(0.0, TAU)
-	# 树皮线：10-14 条，横偏 + 深浅 + 宽各随机（全部顺干方向）；
-	# 30% 为亮带（深浅扰动的"浅"），其余为暗线（"深"）
-	var n_bark := rng.randi_range(10, 14)
-	for i in n_bark:
-		_bark_offsets.append({
-			"frac": rng.randf_range(-0.72, 0.72),
-			"alpha": rng.randf_range(0.24, 0.42),
-			"w": rng.randf_range(3.0, 4.6),
-			"light": rng.randf() < 0.3,
+	# 伤痕（生活常识频率：约 1/4 的树有一处，一棵最多 1 个）：
+	# 圆形节疤直径≈树干粗细，或纵向长条裂纹 30-70
+	if rng.randf() < 0.25:
+		_scars.append({
+			"type": "circle" if rng.randf() < 0.6 else "stripe",
+			"frac": rng.randf_range(0.15, 0.85),
+			"x_off": rng.randf_range(-0.35, 0.35),
+			"r": TRUNK_W_BASE * rng.randf_range(0.42, 0.55),
+			"len": rng.randf_range(30.0, 70.0),
 		})
-	# 伤痕（较少见：55% 的树无疤，有疤 1-3 处）：圆圈节疤或纵向长条裂纹
-	if rng.randf() < 0.45:
-		for _s in rng.randi_range(1, 3):
-			_scars.append({
-				"type": "circle" if rng.randf() < 0.5 else "stripe",
-				"frac": rng.randf_range(0.08, 0.88),
-				"x_off": rng.randf_range(-0.5, 0.5),
-				"r": rng.randf_range(4.0, 8.0),
-				"len": rng.randf_range(10.0, 24.0),
-			})
 	# 侧枝：0-5 个全随机，y 带内间距 ≥50（用户规格）；左右交替分配保证均衡
 	var n_br := rng.randi_range(0, 5)
 	var flip := 1.0 if rng.randf() < 0.5 else -1.0
@@ -171,51 +164,60 @@ func _draw() -> void:
 	for br: Dictionary in _branches:
 		_draw_branch(br)
 	_draw_trunk()
-	for b: Dictionary in _bark_offsets:
-		_draw_bark_line(b)
 	for s: Dictionary in _scars:
 		_draw_scar(s)
 
 
-## 干：左右轮廓点合成的多边形（直绘，不走笔触拟合）；
-## 根脚是俯视角弧线（中间下垂的浅弧，不是水平直线）
+## 根脚下垂深度：setup 定值（半圆弧版 ≈ 底半宽，波浪版浅）
+func _root_arc_drop(_half_w0: float) -> float:
+	return _root_drop
+
+
+## 根脚弧线在 x 处的下垂量：半圆（椭圆下半，sqrt 圆弧）或浅波浪（偶尔）
+func _root_arc_y(x: float, cx: float, half_w0: float) -> float:
+	var u: float = clampf((x - cx) / half_w0, -1.0, 1.0)
+	if _root_arc:
+		return _root_arc_drop(half_w0) * sqrt(maxf(1.0 - u * u, 0.0))
+	return _root_arc_drop(half_w0) * sin((u + 1.0) * PI * 0.5)
+
+
+## 竖条光照色：圆柱体横向连续渐变（两侧暗中心亮，sqrt 圆柱光照），
+## 沿高度缓慢提亮（t 0→1 明度 0.94→1.03）——连续渐变，无斑块
+func _trunk_band_color(u_mid: float, t: float) -> Color:
+	var light := 0.80 + 0.36 * sqrt(maxf(1.0 - u_mid * u_mid, 0.0))
+	var v := 0.94 + 0.09 * t
+	var c := Color(TRUNK_COL.r * light * v, TRUNK_COL.g * light * v, TRUNK_COL.b * light * v)
+	c.a = 1.0
+	return c
+
+
+## 干：12×2 网格四边形拼合 → 横向圆柱光照连续渐变 + 高度缓慢渐变；
+## 顶点全部按真实轮廓（中轴弯曲/宽度锥度）取样，底部沿半圆弧收边
 func _draw_trunk() -> void:
-	var n := 14
-	var right := PackedVector2Array()
-	var left := PackedVector2Array()
-	for i in n + 1:
-		var t := float(i) / float(n)
-		var y := -TRUNK_H * t
-		var xc := _axis_x(t)
-		right.append(Vector2(xc + _half_w(t, 1.0), y))
-		left.append(Vector2(xc - _half_w(t, -1.0), y))
-	var poly := PackedVector2Array()
-	poly.append_array(right)
-	left.reverse()
-	poly.append_array(left)  # 左顶 → 左底
-	# 底边弧线：左脚 → 右脚，中间按正弦下垂（俯视角的圆弧地平，非水平线）
-	for j in 4:
-		var t := float(j + 1) / 5.0
-		var x := lerpf(left[0].x, right[0].x, t)
-		poly.append(Vector2(x, sin(t * PI) * _root_drop))
-	var col := TRUNK_COL
-	col.a = 1.0
-	draw_colored_polygon(poly, col)
+	var bands := 12
+	var rows := 2
+	# 轮廓点：t 高度（0=根 1=顶）、u 横向（-1..1）；根行 y 用弧线下垂
+	var cx := _axis_x(0.0)
+	var hw0 := _half_w(0.0, 1.0)
+	for row in rows:
+		var t0 := float(row) / float(rows)
+		var t1 := float(row + 1) / float(rows)
+		for i in bands:
+			var u0 := -1.0 + 2.0 * float(i) / float(bands)
+			var u1 := -1.0 + 2.0 * float(i + 1) / float(bands)
+			var col := _trunk_band_color((u0 + u1) * 0.5, (t0 + t1) * 0.5)
+			var quad := PackedVector2Array([
+				_trunk_pt(t0, u0, cx, hw0), _trunk_pt(t0, u1, cx, hw0),
+				_trunk_pt(t1, u1, cx, hw0), _trunk_pt(t1, u0, cx, hw0)])
+			draw_colored_polygon(quad, col)
 
 
-## 树皮线：一条 = 顺干方向的折线（红线：干上线条必须顺干方向）；
-## 30% 亮带（浅色提亮）+ 70% 暗线——深浅扰动
-func _draw_bark_line(b: Dictionary) -> void:
-	var frac: float = b["frac"]
-	var pts := PackedVector2Array()
-	var n := 7
-	for i in n + 1:
-		var t := 0.02 + (float(i) / float(n)) * 0.95
-		var x := _axis_x(t) + frac * _half_w(t, signf(frac)) * 0.82
-		pts.append(Vector2(x, -TRUNK_H * t))
-	var col: Color = (TRUNK_COL.lightened(0.5) if b.get("light", false) else BARK_COL)
-	col.a = float(b["alpha"]) * (0.75 if b.get("light", false) else 1.0)
-	draw_polyline(pts, col, float(b["w"]))
+func _trunk_pt(t: float, u: float, cx: float, hw0: float) -> Vector2:
+	var x := _axis_x(t) + u * _half_w(t, u)
+	var y := -TRUNK_H * t
+	if t <= 0.0:
+		y += _root_arc_y(x, cx, hw0)
+	return Vector2(x, y)
 
 
 ## 伤痕（较少见）：圆圈节疤（深色环）或纵向长条裂纹（深色粗线）
@@ -227,14 +229,14 @@ func _draw_scar(s: Dictionary) -> void:
 	var col := BARK_COL.darkened(0.25)
 	col.a = 0.85
 	if s["type"] == "circle":
-		var n := 10
+		var n := 12
 		var pts := PackedVector2Array()
 		for j in n:
 			var a := TAU * float(j) / float(n)
-			pts.append(c + Vector2(cos(a), sin(a) * 0.8) * float(s["r"]))
+			pts.append(c + Vector2(cos(a), sin(a) * 0.85) * float(s["r"]))
 		pts.append(pts[0])
-		draw_polyline(pts, col, 3.2)
-		draw_circle(c, float(s["r"]) * 0.3, col)
+		draw_polyline(pts, col, 5.0)
+		draw_circle(c, float(s["r"]) * 0.28, col)
 	else:
 		var pts := PackedVector2Array()
 		for j in 3:
@@ -242,7 +244,7 @@ func _draw_scar(s: Dictionary) -> void:
 			var y2 := y - float(s["len"]) * 0.5 + float(s["len"]) * tt
 			var t2: float = clampf(-y2 / TRUNK_H, 0.0, 1.0)
 			pts.append(Vector2(_axis_x(t2) + float(s["x_off"]) * _half_w(t2, 1.0) * 0.9, y2))
-		draw_polyline(pts, col, 3.6)
+		draw_polyline(pts, col, 5.0)
 
 
 ## 侧枝：斜向上 45° 档的上拱曲线，锥形主线 + 上缘高光 = 双线体积感（用户规格）；

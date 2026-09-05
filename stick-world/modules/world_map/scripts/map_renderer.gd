@@ -68,12 +68,57 @@ const LABEL_SIZE := 30.0
 const LABEL_SCREEN_CAP := 40.0
 var _debug_was_visible: bool = false
 
+## 当前所在城市地块蓝光流动描边（"你在这里"，细粒度层级）：
+## 含玩家当前聚落的地块（出生 = spawn 聚落所在块）。Phase C 玩家跨城移动后经
+## set_current_tile 动态更新（现阶段恒出生块）。双色不透明，与 M 大世界同视觉语言
+var _current_tile_id: String = ""
+const GLOW_A := Color(0.35, 0.85, 1.0)
+const GLOW_B := Color(0.15, 0.45, 0.95)
+## 描边宽（屏幕像素固定，与其他描边一致策略）
+const GLOW_WIDTH := 4.0
+## 当前地块轮廓分段缓存（几何不变，重采样一次复用）
+var _glow_outline: PackedVector2Array = PackedVector2Array()
+## 流动动画相位（秒）
+var _glow_time := 0.0
+
 
 func set_data(data: L1WorldData) -> void:
 	_data = data
 	_segs_valid = false
 	_base_mesh = null
+	_current_tile_id = ""
+	# 当前所在地块默认 = 出生聚落所在块（玩家跨城移动后由 set_current_tile 切换）
+	if _data != null and not _data.spawn_settlement_id.is_empty():
+		for tile in _data.tiles:
+			if tile.settlement != null \
+					and tile.settlement.settlement_id == _data.spawn_settlement_id:
+				_current_tile_id = tile.tile_id
+				break
+	_build_glow_outline()
 	queue_redraw()
+
+
+## 设置玩家当前所在地块（Phase C 动态跟踪入口；未知 id 忽略）
+func set_current_tile(tile_id: String) -> void:
+	if tile_id == _current_tile_id:
+		return
+	for tile in _data.tiles:
+		if tile.tile_id == tile_id:
+			_current_tile_id = tile_id
+			_build_glow_outline()
+			queue_redraw()
+			return
+
+
+## 构建当前地块流动描边分段缓存
+func _build_glow_outline() -> void:
+	_glow_outline = PackedVector2Array()
+	if _data == null or _current_tile_id.is_empty():
+		return
+	for tile in _data.tiles:
+		if tile.tile_id == _current_tile_id and tile.polygon.size() >= 3:
+			_glow_outline = FlowOutline.resample_closed(tile.polygon)
+			return
 
 
 func set_camera(camera: MapCamera) -> void:
@@ -107,9 +152,13 @@ func refresh() -> void:
 	queue_redraw()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not is_visible_in_tree() or _data == null:
 		return
+	# 当前地块流动光动画：相位推进 + 每帧重绘（静态层均缓存，成本低）
+	if not _glow_outline.is_empty():
+		_glow_time += delta
+		queue_redraw()
 	# 屏幕坐标 -> 地图坐标（一次换算，与 api.query_at_screen 同路径；
 	# 不能用 get_global_mouse_position——它已按节点 transform 逆变换过，再换算会双重扭曲）
 	var viewport := get_viewport()
@@ -199,7 +248,13 @@ func _draw() -> void:
 			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
 				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)
 				break
-	# 7.5 内容区"纸张边界"黑框（context 外缘，A3；压住贴边内容 = 装裱观感，屏幕像素固定）
+	# 7.5 当前所在城市地块：蓝光流动描边（"你在这里"；屏幕像素固定，画在纸边框内）
+	if _glow_outline.size() >= 3:
+		var gwid: float = GLOW_WIDTH
+		if zz > 0.0001:
+			gwid = GLOW_WIDTH / zz
+		FlowOutline.draw_flow(self, _glow_outline, GLOW_A, GLOW_B, _glow_time, gwid)
+	# 7.8 内容区"纸张边界"黑框（context 外缘，A3；压住贴边内容 = 装裱观感，屏幕像素固定）
 	var pw: float = PAPER_BORDER_WIDTH
 	if zz > 0.0001:
 		pw = PAPER_BORDER_WIDTH / zz

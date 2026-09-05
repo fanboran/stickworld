@@ -1,17 +1,19 @@
 class_name FlowOutline
 extends RefCounted
-## 蓝光流动描边 —— 闭合折线沿线的亮度波流动（"你在这里"当前位置高亮动画）。
+## 蓝光流动描边 —— 闭合折线沿线的**色调**流动（两种蓝色调往返过渡，均不透明）。
 ##
 ## 用法：几何不变，先 resample_closed 缓存等弧长分段点列（避免每帧重采样），
-## 之后每帧把时间传给 draw_flow（相位沿线移动，亮度呈正弦波）。
-## 两处消费：L1Thumbnail（出生 L1 轮廓，窗口像素坐标）与 L3MapRenderer
-## （玩家所在老 L1 轮廓，8192 渲染坐标）。
+## 之后每帧把时间传给 draw_flow（相位沿线移动，色调呈正弦波往返）。
+## 消费：L1Thumbnail（出生 L1 轮廓）、L3MapRenderer（所在 L2 地区）、
+## MapRenderer（当前城市地块）——"你在这里"标记统一视觉语言。
+##
+## 定标（创始人 2026-09-05）：不透明、靠两种蓝色调区分层级，不用透明度闪烁。
 
 ## 自适应分段的目标段长（地图/窗口单位）；段数 clamp 24..192
 const SEG_LEN_HINT := 8.0
-## 亮度波流速（圈/秒）——约 5.5s 绕轮廓一周，温和不抢注意力
+## 色调波流速（圈/秒）——约 5.5s 绕轮廓一周，温和不抢注意力
 const FLOW_SPEED := 0.18
-## 波谷亮度占比（1=无波动，0.35=谷底仍保留 35% 亮度）
+## 波谷混合占比（1=无波动纯 A 色，0.35=谷底仍有 35% 向 B 色过渡）
 const FLOW_FLOOR := 0.35
 
 
@@ -51,10 +53,10 @@ static func resample_closed(pts: PackedVector2Array, segments: int = -1) -> Pack
 	return out
 
 
-## 流动光描边：亮度 = FLOOR + (1-FLOOR) × (0.5+0.5·sin(TAU·(k − t·speed)))，
-## 相位随时间前移 → 亮波沿线流动。base.a 作为峰值 alpha。
-static func draw_flow(canvas: CanvasItem, pts: PackedVector2Array, base: Color,
-		t: float, width: float) -> void:
+## 流动光描边：色调在 color_a ↔ color_b 间正弦往返（相位随时间前移 → 色带沿线
+## 流动）。两色按调用方给定值原样绘制（A3 定标：不透明双色，无透明度衰减）
+static func draw_flow(canvas: CanvasItem, pts: PackedVector2Array, color_a: Color,
+		color_b: Color, t: float, width: float) -> void:
 	var n := pts.size()
 	if n < 3:
 		return
@@ -62,4 +64,4 @@ static func draw_flow(canvas: CanvasItem, pts: PackedVector2Array, base: Color,
 		var k := float(i) / float(n)
 		var wave: float = FLOW_FLOOR + (1.0 - FLOW_FLOOR) \
 				* (0.5 + 0.5 * sin(TAU * (k - t * FLOW_SPEED)))
-		canvas.draw_line(pts[i], pts[(i + 1) % n], Color(base, base.a * wave), width, true)
+		canvas.draw_line(pts[i], pts[(i + 1) % n], color_a.lerp(color_b, wave), width, true)

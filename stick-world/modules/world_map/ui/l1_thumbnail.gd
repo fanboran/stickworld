@@ -29,14 +29,16 @@ const BORDER_COLOR := Color(0.15, 0.15, 0.15, 0.9)
 ## 底图路径（出生 L1 视图上下文，export_l1_view_context.py 产出）
 const BASE_TEXTURE_PATH := "res://config/strategic_map/l1_base.png"
 
-## 当前位置流动描边（天蓝调，与 M 大世界的青蓝调区分层级）
-const GLOW_COLOR := Color(0.40, 0.72, 1.0, 0.95)
+## 当前位置流动描边（双色不透明：天蓝 ↔ 深蓝，与 M 大世界同视觉语言）+ 出生城市
+## 中心标记（白点 + 蓝色脉冲扩散环，周期秒）
+const GLOW_A := Color(0.45, 0.78, 1.0)
+const GLOW_B := Color(0.20, 0.50, 0.95)
 const GLOW_WIDTH := 2.0
-## 出生城市中心标记：白点 + 蓝色脉冲扩散环（周期秒）
 const MARK_DOT_RADIUS := 2.5
 const MARK_COLOR := Color(1.0, 1.0, 1.0, 0.95)
 const PULSE_PERIOD := 1.4
 const PULSE_MAX_RADIUS := 8.0
+const PULSE_COLOR := Color(0.35, 0.70, 1.0)
 
 var _texture: Texture2D = null
 ## L1 世界数据（装配层喂；为空时无当前位置标记，仅静态底图）
@@ -97,15 +99,15 @@ func _draw() -> void:
 	else:
 		# 占位（与 Minimap 占位观感一致）
 		draw_rect(rect, Color(0.2, 0.2, 0.2, 0.8), true)
-	# 当前位置：出生 L1 天蓝流动光描边
+	# 当前位置：出生 L1 双色蓝流动光描边
 	if _glow_outline.size() >= 3:
-		FlowOutline.draw_flow(self, _glow_outline, GLOW_COLOR, _anim_time, GLOW_WIDTH)
+		FlowOutline.draw_flow(self, _glow_outline, GLOW_A, GLOW_B, _anim_time, GLOW_WIDTH)
 	# 当前位置：出生城市中心标记（白点 + 蓝色脉冲扩散环）
 	if _spawn_pos.x >= 0.0:
 		draw_circle(_spawn_pos, MARK_DOT_RADIUS, MARK_COLOR)
 		var ph := fmod(_anim_time / PULSE_PERIOD, 1.0)
 		var pr := MARK_DOT_RADIUS + ph * (PULSE_MAX_RADIUS - MARK_DOT_RADIUS)
-		draw_arc(_spawn_pos, pr, 0.0, TAU, 32, Color(GLOW_COLOR, 1.0 - ph), 1.5, true)
+		draw_arc(_spawn_pos, pr, 0.0, TAU, 32, Color(PULSE_COLOR, 1.0 - ph), 1.5, true)
 	draw_rect(rect, BORDER_COLOR, false, BORDER_WIDTH)
 
 

@@ -20,59 +20,31 @@ enum Tone { DARK, LIGHT }
 ## 圆角半径（自动钳到不塌陷）
 @export var corner_radius: float = SketchDraw.CORNER_R
 ## 紧凑内边距（小对话框：内容有多少占多少，不摆大面板的架子）
-@export var compact := false:
-	set(v):
-		compact = v
-		_apply_padding()
+@export var compact := false
 
 var _seed: int = 0
 var _timer: float = 0.0
 
 
 func _ready() -> void:
-	_seed = randi()
-	_apply_padding()
-	resized.connect(queue_redraw)
+	# 贴图皮肤：九宫格沸腾贴图（SketchTextures 全局帧驱动轮换）
+	var slot := &"panel_light" if tone == Tone.LIGHT else &"panel"
+	var pad_x := 12 if compact else (PANEL_PAD_X if tone == Tone.DARK else PAD_LIGHT_X)
+	var pad_y := 7 if compact else (PANEL_PAD_Y if tone == Tone.DARK else PAD_LIGHT_Y)
+	add_theme_stylebox_override("panel", _box(slot, pad_x, pad_y))
 
 
-## 内边距档位：紧凑 12/7（对话框）；常规 DARK 24/12（大弹窗）、LIGHT 16/9（HUD 条）
-func _apply_padding() -> void:
-	var sb := StyleBoxEmpty.new()
-	if compact:
-		sb.content_margin_left = 12
-		sb.content_margin_right = 12
-		sb.content_margin_top = 7
-		sb.content_margin_bottom = 7
-	elif tone == Tone.DARK:
-		sb.content_margin_left = StickTokens.PAD_X * 2
-		sb.content_margin_right = StickTokens.PAD_X * 2
-		sb.content_margin_top = StickTokens.PAD_Y * 2
-		sb.content_margin_bottom = StickTokens.PAD_Y * 2
-	else:
-		sb.content_margin_left = StickTokens.PAD_X + 4
-		sb.content_margin_right = StickTokens.PAD_X + 4
-		sb.content_margin_top = StickTokens.PAD_Y + 3
-		sb.content_margin_bottom = StickTokens.PAD_Y + 3
-	add_theme_stylebox_override("panel", sb)
+static var _box_cache: Dictionary = {}
 
 
-func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	# boiling：与血条同节拍重掷相位
-	_timer += delta
-	if _timer >= SketchDraw.WOBBLE_INTERVAL:
-		_timer = 0.0
-		_seed = randi()
-		queue_redraw()
+static func _box(slot: StringName, pad_x: int, pad_y: int) -> StyleBoxTexture:
+	var key := "%s|%d|%d" % [slot, pad_x, pad_y]
+	if not _box_cache.has(key):
+		_box_cache[key] = SketchStyle._box(slot, pad_x, pad_y)
+	return _box_cache[key]
 
 
-func _draw() -> void:
-	var fill := fill_override
-	var outline := outline_override
-	if fill == Color.TRANSPARENT:
-		fill = StickTokens.WINDOW_BG if tone == Tone.DARK else StickTokens.WINDOW_BG_LIGHT
-	if outline == Color.TRANSPARENT:
-		outline = StickTokens.BORDER
-	SketchDraw.draw_panel(self, Rect2(Vector2.ZERO, size), _seed, fill, outline,
-			SketchDraw.OUTLINE_WIDTH, corner_radius)
+const PANEL_PAD_X := 16
+const PANEL_PAD_Y := 12
+const PAD_LIGHT_X := 16
+const PAD_LIGHT_Y := 9

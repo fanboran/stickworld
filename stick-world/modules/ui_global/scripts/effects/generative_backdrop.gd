@@ -1,10 +1,10 @@
 class_name GenerativeBackdrop
 extends Control
-## 生成艺术模态背景 —— 全屏遮罩 + 均匀排布的旋转圆润立方体 + 鼠标排斥 + 光标范围光效。
+## 生成艺术模态背景 —— 全屏遮罩 + 均匀排布的旋转圆润立方体 + 鼠标排斥。
 ##
-## 前端常见的那种「背景生成艺术」：立方体网格均匀排布、各自随机旋转；鼠标靠近被排斥开，
-## 鼠标周围带一圈柔和光晕。Godot 侧用单个 _draw 自绘实现（一次绘制全部，不建节点树，
-## 60fps 下 60+ 个立方体 + 光晕约百次 draw 调用，仅模态打开时运行）。
+## 前端常见的那种「背景生成艺术」：立方体网格均匀排布、各自随机旋转；鼠标靠近被排斥开。
+## Godot 侧用单个 _draw 自绘实现（一次绘制全部，不建节点树，
+## 60fps 下 60+ 个立方体约百次 draw 调用，仅模态打开时运行）。
 ##
 ## 用法：作为模态遮罩使用（StickScreen._bg / StickConfirmDialog._dim），全屏铺满；
 ## 自身消费鼠标（STOP + 吞掉事件，防穿透相机）。
@@ -21,10 +21,6 @@ const JITTER: float = 8.0
 const REPULSION_RADIUS: float = 250.0
 ## 排斥最大位移（px）
 const REPULSION_STRENGTH: float = 52.0
-## 光标光晕半径（px）——柔和径向渐变，非同心圈
-const GLOW_RADIUS: float = 120.0
-## 光晕呼吸脉动幅度（alpha 上下摆）
-const GLOW_PULSE: float = 0.06
 
 ## 遮罩压暗色（背景变暗部分，立方体叠加其上）
 var dim_color: Color = Color(0.02, 0.03, 0.06, 0.5)
@@ -112,9 +108,6 @@ func _draw() -> void:
 		var bob := Vector2(0.0, sin(_time * 1.1 + c["bob_phase"]) * c["bob_amp"])
 		var ang: float = c["phase"] + _time * c["speed"]
 		_draw_cube(base + push + bob, c["size"], c["radius"], ang)
-	# 3. 光标范围光效
-	if _mouse_valid:
-		_draw_glow(_mouse)
 
 
 ## 鼠标排斥：半径内平滑推开（平方衰减）
@@ -158,23 +151,3 @@ func _rounded_rect(rect: Rect2, radius: float, color: Color) -> void:
 	_sb_cache.border_width_right = 0
 	_sb_cache.border_width_bottom = 0
 	draw_style_box(_sb_cache, rect)
-
-
-## 光标光效：径向渐变贴图一张画完（无同心圈/无跳变），随时间缓慢呼吸脉动
-var _glow_tex: GradientTexture2D = null
-
-func _draw_glow(pos: Vector2) -> void:
-	if _glow_tex == null:
-		var g := Gradient.new()
-		g.set_color(0, Color(1.0, 0.93, 0.78, 0.32))
-		g.set_color(1, Color(1.0, 0.93, 0.78, 0.0))
-		_glow_tex = GradientTexture2D.new()
-		_glow_tex.gradient = g
-		_glow_tex.fill = GradientTexture2D.FILL_RADIAL
-		_glow_tex.fill_from = Vector2(0.5, 0.5)
-		_glow_tex.fill_to = Vector2(1.0, 0.5)
-		_glow_tex.width = 128
-		_glow_tex.height = 128
-	var breath: float = 1.0 + sin(_time * 1.6) * GLOW_PULSE
-	var r: float = GLOW_RADIUS
-	draw_texture_rect(_glow_tex, Rect2(pos - Vector2(r, r), Vector2(r * 2.0, r * 2.0)), false, Color(1.0, 1.0, 1.0, breath))

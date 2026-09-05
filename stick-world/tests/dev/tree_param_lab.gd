@@ -35,6 +35,7 @@ var _status_label: Label
 var _dirty := true
 var _debounce := 0.0
 var _previews: Array = []
+var _pipeline_nodes: Array = []
 
 const LEAF_L := Color(0.58, 0.72, 0.34)
 const LEAF_M := Color(0.42, 0.61, 0.27)
@@ -51,8 +52,8 @@ func _ready() -> void:
 	_build_previews()
 	_cam = Camera2D.new()
 	# 下移让出顶部面板（118px ≈ 屏高 18%）；zoom 0.19 一屏收全 3×3
-	_cam.position = Vector2(1040, 1480 + 300)
-	_cam.zoom = Vector2(0.19, 0.19)
+	_cam.position = Vector2(1040, 1480 + 640)
+	_cam.zoom = Vector2(0.155, 0.155)
 	add_child(_cam)
 	_cam.make_current()
 	_refresh_all()
@@ -74,18 +75,21 @@ func _build_panel() -> void:
 	scroll.add_child(grid)
 	for d in PARAM_DEFS:
 		grid.add_child(_make_slider(d[0], d[1], d[2], d[3], d[4], d[5], d[6]))
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 12)
+	grid.add_child(action_row)
 	var bake_btn := Button.new()
 	bake_btn.text = "烘焙变体池(10棵)"
 	bake_btn.pressed.connect(_bake_pool)
-	grid.add_child(bake_btn)
+	action_row.add_child(bake_btn)
 	var copy_btn := Button.new()
 	copy_btn.text = "复制参数JSON"
 	copy_btn.pressed.connect(_copy_params)
-	grid.add_child(copy_btn)
+	action_row.add_child(copy_btn)
 	_status_label = Label.new()
-	_status_label.text = "就绪（树逐笔生长 = 渲染过程；WASD 平移看三排）"
+	_status_label.text = "就绪：上三排=变体预览（逐笔生长）；第四排=管线阶段分解"
 	_status_label.add_theme_font_size_override("font_size", 13)
-	grid.add_child(_status_label)
+	action_row.add_child(_status_label)
 
 
 func _make_slider(key: String, label: String, def: float, lo: float, hi: float,
@@ -115,12 +119,16 @@ func _build_previews() -> void:
 			var node := preload("res://tests/dev/tree_preview_node.gd").new()
 			add_child(node)
 			_previews.append(node)
+	for i in 4:
+		var node := preload("res://tests/dev/tree_preview_node.gd").new()
+		add_child(node)
+		_pipeline_nodes.append(node)
 	# 三条地面线
 	_draw_ground_lines()
 
 
 func _draw_ground_lines() -> void:
-	for r in GRID:
+	for r in GRID + 1:
 		var line := Line2D.new()
 		line.width = 6.0
 		line.default_color = Color(0.42, 0.52, 0.33)
@@ -175,6 +183,45 @@ func _refresh_all() -> void:
 			var pens := gen_strokes(_gen_tree(seed), seed + 1)
 			(_previews[idx] as Node2D).setup(pens,
 				Vector2(360 + c * 640, 300 + r * 1180), 1.484, r * 0.2)
+	_refresh_pipeline_row()
+
+
+## 第四排：管线阶段分解（同种子四阶段，文字标记各是哪个中间态）
+func _refresh_pipeline_row() -> void:
+	var seed := SEED_BASE + 37
+	var tree := _gen_tree(seed)
+	var pens := gen_strokes(tree, seed + 1)
+	var n_trunk := 0
+	var n_crown := 0
+	for p in pens:
+		if p.get("g", 0) == 0:
+			n_trunk += 1
+		elif p.get("g", 0) == 1:
+			n_crown += 1
+	var y := 300 + GRID * 1180
+	var stages := [
+		["① 结构轮廓（干/枝/冠 线框）", null],
+		["② 干笔触（整根短笔拼接）", pens.slice(0, n_trunk)],
+		["③ + 冠笔触（绕团撒笔）", pens.slice(0, n_trunk + n_crown)],
+		["④ + 枝绘制（最终）", pens],
+	]
+	for i in stages.size():
+		var node: Node2D = _pipeline_nodes[i]
+		var pn: Node2D = node
+		if stages[i][1] == null:
+			(pn as Object).set("wire_tree", tree)
+			(pn as Object).set("pens", [])
+			(pn as Object).set("progress", 1.0)
+			(pn as Object).set("_done", true)
+		else:
+			(pn as Object).set("pens", stages[i][1])
+			(pn as Object).set("wire_tree", {})
+			(pn as Object).set("progress", 1.0)
+			(pn as Object).set("_done", true)
+		(pn as Object).set("label", stages[i][0])
+		(pn as Object).set("display_origin", Vector2(360 + i * 640, y))
+		(pn as Object).set("display_scale", 1.484)
+		(pn as Object).call("queue_redraw")
 
 
 # ─────────────────────────── 结构生成 ───────────────────────────
@@ -238,8 +285,9 @@ func _gen_tree(seed: int) -> Dictionary:
 		var by: float = minf(cy + d * sin(a) * 0.8, ground - r_main * 0.36)
 		blobs.append({"c": Vector2(trunk_top_x + d * cos(a), by), "r": r_main * rng.randf_range(0.30, 0.45)})
 	for br in branches:
-		blobs.append({"c": Vector2(br["t"].x, br["t"].y - 4.0),
-			"r": r_main * rng.randf_range(0.26, 0.4)})
+		# 叶团中心向枝根侧回退 25%：盖住枝端而非悬空偏离
+		var leaf_c: Vector2 = br["t"].lerp(br["o"], 0.25) + Vector2(0, -3.0)
+		blobs.append({"c": leaf_c, "r": r_main * rng.randf_range(0.26, 0.4)})
 	return {"branches": branches, "blobs": blobs, "ground": ground, "W": W, "H": H,
 		"trunk_bot_x": trunk_bot_x, "trunk_top_x": trunk_top_x,
 		"trunk_top_y": trunk_top_y, "full_h": full_h, "w_base": w_base, "w_top": w_top}
@@ -273,29 +321,11 @@ func gen_strokes(t: Dictionary, seed: int) -> Array:
 			var skew := rng.randf_range(-2.5, 2.5)
 			var top := Vector2(px + rng.randf_range(-1.2, 1.2), yy)
 			var bot := Vector2(px + skew, yy + l)
-			pens.append({"a": top, "b": bot, "c": col, "w": sw * rng.randf_range(0.8, 1.25)})
+			pens.append({"a": top, "b": bot, "c": col, "w": sw * rng.randf_range(0.8, 1.25), "g": 0})
 			yy += l * 0.95 + sl * 0.15  # 笔间留缝：短笔拼接而非连成长线
 
-	# ── 枝笔：沿贝塞尔弧撒短笔拼接（宽度从 w0 渐变到 w1，方向沿枝+抖动）──
-	for br in t["branches"]:
-		var o: Vector2 = br["o"]
-		var tip: Vector2 = br["t"]
-		var ctrl: Vector2 = o.lerp(tip, 0.5) + Vector2(0, -10.0)
-		var n_pen := 7
-		for i in n_pen:
-			var f0 := i / float(n_pen)
-			var f1 := (i + 1.0) / float(n_pen)
-			var bez := func(f: float) -> Vector2:
-				return o.lerp(ctrl, f).lerp(ctrl.lerp(tip, f), f)
-			var pa: Vector2 = bez.call(f0)
-			var pb: Vector2 = bez.call(f1)
-			var mid := (pa + pb) * 0.5 + Vector2(rng.randf_range(-1.5, 1.5), rng.randf_range(-1.0, 1.0))
-			var w: float = lerpf(br["w0"], br["w1"], (f0 + f1) * 0.5) * rng.randf_range(0.85, 1.1)
-			var col := TRUNK_D.lightened(rng.randf_range(-0.03, 0.05))
-			pens.append({"a": pa, "b": mid, "c": col, "w": w})
-			pens.append({"a": mid, "b": pb, "c": col, "w": w * 0.95})
-
-	# ── 冠笔（绕团切向，左上受光三档；撒到团半径 1.02 铺满）──
+	# ── 冠笔（绕团切向，左上受光三档；撒到团半径 1.02 铺满）——先于枝，
+	#    枝最后画压在冠上（冠不再盖住枝丫）──
 	for b in t["blobs"]:
 		var c: Vector2 = b["c"]
 		var br_r: float = b["r"]
@@ -319,7 +349,7 @@ func gen_strokes(t: Dictionary, seed: int) -> Array:
 				fposmod(base.h + rng.randf_range(-0.01, 0.01), 1.0),
 				clampf(base.s + rng.randf_range(-0.06, 0.06), 0.30, 0.90),
 				clampf(base.v + rng.randf_range(-0.08, 0.08), 0.30, 1.0))
-			pens.append({"a": pos - dir * l * 0.5, "b": pos + dir * l * 0.5, "c": col, "w": w})
+			pens.append({"a": pos - dir * l * 0.5, "b": pos + dir * l * 0.5, "c": col, "w": w, "g": 1})
 	return pens
 
 

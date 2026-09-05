@@ -207,8 +207,8 @@ func _draw_action_icon() -> void:
 			draw_polyline(pts, ink, w, true)
 		"inventory":
 			# 背包：圆角方箱 + 盖 + 扣
-			draw_rect(Rect2(c + Vector2(-12, -6), Vector2(24, 18)), false, ink, w)
-			draw_rect(Rect2(c + Vector2(-7, -12), Vector2(14, 7)), false, ink, w)
+			draw_rect(Rect2(c + Vector2(-12, -6), Vector2(24, 18)), ink, false, w)
+			draw_rect(Rect2(c + Vector2(-7, -12), Vector2(14, 7)), ink, false, w)
 			draw_line(c + Vector2(-3, -6), c + Vector2(-3, 0), ink, w)
 		"stats":
 			# 属性：人形剪影（头圆 + 肩身三角）
@@ -217,4 +217,4 @@ func _draw_action_icon() -> void:
 			draw_line(c + Vector2(9, 8), c + Vector2(0, -1), ink, w)
 			draw_line(c + Vector2(0, -1), c + Vector2(0, 8), ink, w)
 		_:
-			draw_rect(Rect2(c + Vector2(-8, -8), Vector2(16, 16)), false, ink, w)
+			draw_rect(Rect2(c + Vector2(-8, -8), Vector2(16, 16)), ink, false, w)

@@ -24,12 +24,13 @@ func _ready() -> void:
 	add_child(box)
 
 	_label = Label.new()
+	# 44 无对应 token（FONT_DISPLAY 34 差 10px）：战果仪式感横幅大字，档位待定夺（上报项）
 	_label.add_theme_font_size_override("font_size", 44)
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_label)
 
 	_sub = Label.new()
-	_sub.add_theme_font_size_override("font_size", 15)
+	_sub.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
 	_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_sub.add_theme_color_override("font_color", Color(0.85, 0.85, 0.88))
 	box.add_child(_sub)

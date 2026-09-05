@@ -316,7 +316,7 @@ func _show_battle_arrow() -> void:
 	_battle_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var lbl := Label.new()
 	lbl.text = "▶ 战场"
-	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.add_theme_font_size_override("font_size", StickTokens.FONT_TITLE)
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.62, 0.3))
 	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	lbl.add_theme_constant_override("outline_size", 5)

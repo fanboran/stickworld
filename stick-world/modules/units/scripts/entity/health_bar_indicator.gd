@@ -47,7 +47,8 @@ const EXPAND_SPEED: float = 7.0
 ## 阵营色（对齐 BattleInstance.FACTION_ATTACKER/DEFENDER；0 = 中性灰）
 const FACTION_COLORS: Dictionary = {
 	1: Color(0.38, 0.58, 0.98),  ## 蓝方（进攻）
-	2: Color(0.88, 0.32, 0.26),  ## 红方（防守）
+	2: Color(0.98, 0.44, 0.35),  ## 红方（防守）；2026-09-05 提亮一档：暗光场景下
+	                             ## 旧值 (0.88,0.32,0.26) 被压到 (100,28,27)，黑笔画旁不可辨
 }
 const COLOR_NEUTRAL := Color(0.75, 0.75, 0.72)
 const COLOR_BG := Color(0.08, 0.07, 0.06, 0.72)

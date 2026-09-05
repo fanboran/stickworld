@@ -21,7 +21,6 @@ func _ready() -> void:
 	_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_card.offset_left = -300.0
 	_card.offset_right = 300.0
-	pass
 	add_child(_card)
 
 	var box := VBoxContainer.new()
@@ -43,14 +42,14 @@ func _ready() -> void:
 	]:
 		var l := Label.new()
 		l.text = line
-		l.add_theme_font_size_override("font_size", 14)
+		l.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		l.add_theme_color_override("font_color", Color(0.92, 0.93, 0.95))
 		box.add_child(l)
 
 	var hint := Label.new()
 	hint.text = "按任意键关闭"
-	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.modulate = Color(1, 1, 1, 0.45)
 	box.add_child(hint)

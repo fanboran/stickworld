@@ -35,18 +35,18 @@ func _ready() -> void:
 	box.add_child(_title_label)
 
 	_current_title = Label.new()
-	_current_title.add_theme_font_size_override("font_size", 14)
+	_current_title.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
 	_current_title.add_theme_color_override("font_color", Color(0.95, 0.95, 0.95))
 	box.add_child(_current_title)
 
 	_current_desc = Label.new()
-	_current_desc.add_theme_font_size_override("font_size", 12)
+	_current_desc.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	_current_desc.add_theme_color_override("font_color", Color(0.72, 0.75, 0.8))
 	_current_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_current_desc)
 
 	_progress_label = Label.new()
-	_progress_label.add_theme_font_size_override("font_size", 13)
+	_progress_label.add_theme_font_size_override("font_size", StickTokens.FONT_SECTION)
 	_progress_label.add_theme_color_override("font_color", Color(0.55, 0.85, 0.6))
 	box.add_child(_progress_label)
 
@@ -72,7 +72,7 @@ func show_quest(title: String, desc: String, progress_text: String = "") -> void
 func mark_done(title: String) -> void:
 	var done := Label.new()
 	done.text = "✓ %s" % title
-	done.add_theme_font_size_override("font_size", 12)
+	done.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	done.add_theme_color_override("font_color", Color(0.45, 0.75, 0.5))
 	_done_box.add_child(done)
 

@@ -46,7 +46,7 @@ func _add_slider(
 	label.name = "Label_" + label_text.replace(".", "_")
 	parent.add_child(label)
 
-	var slider := HSlider.new()
+	var slider := SketchHSlider.new()
 	slider.name = label_text.replace(".", "_")
 	slider.min_value = min_v
 	slider.max_value = max_v

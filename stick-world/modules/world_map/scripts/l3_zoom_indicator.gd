@@ -86,8 +86,8 @@ func _build_widgets() -> void:
 		_dock_bottom_left(_mode_btn, x, BTN_W, BTN_H)
 		_update_mode_text()
 		x += BTN_W + GAP
-	# 缩放滑块
-	_slider = HSlider.new()
+	# 缩放滑块（手绘涂鸦控件族）
+	_slider = SketchHSlider.new()
 	_slider.min_value = default_zoom * MIN_MULT
 	_slider.max_value = default_zoom * MAX_MULT
 	_slider.step = 0.001

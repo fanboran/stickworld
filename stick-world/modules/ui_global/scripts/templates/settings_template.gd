@@ -139,7 +139,7 @@ func _build_field(field: Dictionary) -> void:
 			var value_label := StickKit.label(row, "", StickKit.LabelKind.BODY)
 			value_label.custom_minimum_size = Vector2(44, 0)
 			value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			var slider := HSlider.new()
+			var slider := SketchHSlider.new()
 			slider.min_value = field["min"]
 			slider.max_value = field["max"]
 			slider.step = field["step"]

@@ -66,7 +66,9 @@ func _process(_delta: float) -> void:
 
 func _draw() -> void:
 	if label != "":
-		draw_string(ThemeDB.fallback_font, Vector2(-80, 34), label,
+		# 标签画在各自树顶上方（锚点 y=660，贴图顶 ≈ origin.y - 660×scale）
+		var label_pos := display_origin + Vector2(-80.0, -660.0 * display_scale + 26.0)
+		draw_string(ThemeDB.fallback_font, label_pos, label,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(0.1, 0.1, 0.12))
 	match mode:
 		"wire":

@@ -224,7 +224,9 @@ func _poll_worker() -> void:
 			var tree: Dictionary = result["tree"]
 			var tex := ImageTexture.create_from_image(result["img"])
 			_main_node.setup_tex(tex, _main_node.display_origin, _main_node.display_scale)
-			_refresh_stage_row(tree)
+			var imgs: Array = result["stage_imgs"]
+			imgs.append(result["img"])  # ④最终 = 主成品图
+			_refresh_stage_row(tree, imgs)
 		elif kind == "variant" and int(result["idx"]) < _variant_nodes.size():
 			var node: PreviewNode = _variant_nodes[int(result["idx"])]
 			var tex2 := ImageTexture.create_from_image(result["img"])
@@ -256,30 +258,40 @@ func _poll_worker() -> void:
 		var img := TP.rasterize(tree["pens"], tree["trunk_canvas"], tree["crown_canvas"])
 		if kind2 == "bake":
 			img.save_png("res://assets/resources/tree_paint_tree_v%d.png" % idx)
-		return {"kind": kind2, "ver": ver, "idx": idx, "tree": tree, "img": img})
+			return {"kind": kind2, "ver": ver, "idx": idx, "tree": tree, "img": img}
+		# 主/变体任务：顺带栅格化管线阶段②(干)③(+枝)；④=最终复用 img
+		var n_trunk := 0
+		var n_branch := 0
+		for pen: Dictionary in tree["pens"]:
+			var g := int(pen["g"])
+			if g == 0:
+				n_trunk += 1
+			elif g == 1:
+				n_branch += 1
+		var stage_imgs: Array = []
+		if kind2 == "main":
+			var pens: Array = tree["pens"]
+			stage_imgs.append(TP.rasterize(pens.slice(0, n_trunk),
+				tree["trunk_canvas"], tree["crown_canvas"]))
+			stage_imgs.append(TP.rasterize(pens.slice(0, n_trunk + n_branch),
+				tree["trunk_canvas"], tree["crown_canvas"]))
+		return {"kind": kind2, "ver": ver, "idx": idx, "tree": tree, "img": img,
+			"stage_imgs": stage_imgs})
 
 
-func _refresh_stage_row(tree: Dictionary) -> void:
-	# ①结构线框 ②+干笔触(g=0) ③+枝(g=1) ④+冠笔触=最终；pens 直绘
-	var pens: Array = tree["pens"]
-	var n_trunk := 0
-	var n_branch := 0
-	for p: Dictionary in pens:
-		var g := int(p["g"])
-		if g == 0:
-			n_trunk += 1
-		elif g == 1:
-			n_branch += 1
+func _refresh_stage_row(tree: Dictionary, stage_imgs: Array) -> void:
+	# ①结构线框（draw 直绘）②③④=真实栅格化中间产物贴图（与成品同视觉）
 	var stages := [
-		["① 结构线框", true, []],
-		["② + 干笔触", false, pens.slice(0, n_trunk)],
-		["③ + 枝直绘", false, pens.slice(0, n_trunk + n_branch)],
-		["④ + 冠笔触 = 最终", false, pens],
+		["① 结构线框", true, null],
+		["② + 干笔触", false, stage_imgs[0]],
+		["③ + 枝直绘", false, stage_imgs[1]],
+		["④ + 冠笔触 = 最终", false, stage_imgs[2]],
 	]
 	for i: int in stages.size():
-		var node: Node2D = _stage_nodes[i]
+		var node: PreviewNode = _stage_nodes[i]
 		node.label = String(stages[i][0])
 		if bool(stages[i][1]):
 			node.setup_wire(tree["wire"], node.display_origin, node.display_scale)
 		else:
-			node.setup(stages[i][2], node.display_origin, node.display_scale, i * 0.15)
+			var stex := ImageTexture.create_from_image(stages[i][2])
+			node.setup_tex(stex, node.display_origin, node.display_scale)

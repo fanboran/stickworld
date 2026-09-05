@@ -8,8 +8,9 @@ extends SketchButton
 
 func _ready() -> void:
 	super._ready()  # 基类已连 resized→queue_redraw，不重复
-	# 正圆：宽高一致由 custom_minimum_size 保证（36x36）
-	custom_minimum_size = Vector2(36, 36)
+	# 正圆：宽高一致由 custom_minimum_size 保证；31px 与顶栏文字按钮实测高度对齐
+	# （文字按钮 min 30 被 16 号字撑到实测 31，顶栏等高不变式见 test_ui_layout）
+	custom_minimum_size = Vector2(31, 31)
 
 
 func _draw() -> void:

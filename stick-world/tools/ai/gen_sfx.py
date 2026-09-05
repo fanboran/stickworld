@@ -40,24 +40,6 @@ def _noise(dur, vol=0.4, lp=None):
     return w * _env(n, attack=0.001) * vol
 
 
-def _seq(notes, note_dur=0.09, gap=0.01, vol=0.5):
-    """音符序列 (freq, dur_mult)"""
-    parts = []
-    for f, m in notes:
-        parts.append(_tone(f, note_dur * m, vol=vol))
-        parts.append(np.zeros(int(SR * gap)))
-    return np.concatenate(parts)
-
-
-def _mix(*parts):
-    """长度不齐的多轨混合：零填充到最长后相加"""
-    n = max(len(p) for p in parts)
-    out = np.zeros(n)
-    for p in parts:
-        out[:len(p)] += p
-    return out
-
-
 def _save(path, data):
     data = np.clip(data, -0.95, 0.95)
     pcm = (data * 32767).astype(np.int16)
@@ -69,17 +51,69 @@ def _save(path, data):
     print("[sfx]", os.path.basename(path), "%.2fs" % (len(data) / SR))
 
 
-C5, E5, G5, C6 = 523.25, 659.25, 783.99, 1046.5
-A4, B4, D5, F5, A5 = 440.0, 493.88, 587.33, 698.46, 880.0
-
-
-def _sweep(f0, f1, dur, vol=0.3):
-    """线性频率扫掠单音（鸟啁啾用）"""
+def _chirp(f0, f1, dur, vol, fm_depth=0.05, fm_rate=30.0, bright=0.4, seed=0):
+    """单音节鸟啾：指数频率轨迹（真鸟滑音多为指数型）+ 喉部 FM 颤动
+    + 一次泛音（鸣管谐波）+ 呼吸气声，钟形音节包络。"""
     n = int(SR * dur)
     t = np.arange(n) / SR
-    freq = np.linspace(f0, f1, n)
-    phase = 2 * np.pi * np.cumsum(freq) / SR
-    return np.sin(phase) * _env(n, attack=0.004, decay=dur / 2.5) * vol
+    freq = f0 * (f1 / f0) ** (t / dur)
+    vib = 1.0 + fm_depth * np.sin(2 * np.pi * fm_rate * t)
+    phase = 2 * np.pi * np.cumsum(freq * vib) / SR
+    tone = np.sin(phase) + bright * 0.35 * np.sin(2 * phase)
+    rng = np.random.default_rng(seed)
+    k = max(1, int(SR / 6000))  # 6kHz 低通气声
+    breath = np.convolve(rng.normal(0, 1, n), np.ones(k) / k, mode="same") * 0.22
+    env = np.sin(np.pi * t / dur) ** 1.5
+    return (tone * 0.8 + breath) * env * vol
+
+
+def _phrase(syls, gap=0.06):
+    """音节序列拼装：[(f0, f1, dur, vol, kwargs...), ...] 交替静默"""
+    parts = []
+    for s in syls:
+        parts.append(_chirp(*s[:4], **(s[4] if len(s) > 4 else {})))
+        parts.append(np.zeros(int(SR * gap)))
+    return np.concatenate(parts)
+
+
+def _rain_loop(dur, vol):
+    """分层雨声无缝循环（FFT 域滤波天然周期化，重跑零 seam）：
+    远雨垫(brown) + 沙沙(pink 带通) + 细雨嘶(高通) + 稀疏大雨滴瞬态
+    + 慢强度起伏（周期取循环整数分频保无缝）。"""
+    n = int(SR * dur)
+    freqs = np.fft.rfftfreq(n, 1 / SR)
+    rng = np.random.default_rng(11)
+
+    def _shaped_noise(resp):
+        """白噪 → rfft 乘频响 → irfft：循环卷积，结果首尾无缝"""
+        white = rng.normal(0, 1, n)
+        return np.fft.irfft(np.fft.rfft(white) * resp, n)
+
+    def _band(lo, hi, tilt):
+        resp = np.zeros_like(freqs)
+        m = (freqs >= lo) & (freqs <= hi)
+        resp[m] = (freqs[m] / hi) ** tilt
+        return resp
+
+    bed = _shaped_noise(_band(20, 400, -1.5))       # 远雨垫（brown 质感轰鸣）
+    hiss = _shaped_noise(_band(200, 2400, -0.6))    # 密雨沙沙（pink 带通）
+    fine = _shaped_noise(_band(2500, 9000, 0.3))    # 细雨嘶（轻高频）
+    # 稀疏大雨滴："啪嗒"瞬态（2-8ms 噪声脉冲 ×30ms 指数衰减），避开首尾 0.15s
+    drops = np.zeros(n)
+    for _ in range(int(dur * 7)):
+        pos = rng.integers(int(0.15 * SR), n - int(0.15 * SR))
+        m = rng.integers(int(0.002 * SR), int(0.008 * SR))
+        drop = rng.normal(0, 1, m) * np.exp(-np.arange(m) / (0.03 * SR))
+        drops[pos:pos + m] += drop * rng.uniform(0.5, 1.0)
+    k = max(1, int(SR / 3000))
+    drops = np.convolve(drops, np.ones(k) / k, mode="same")
+    # 慢呼吸起伏：每循环 2 个周期（整数分频保无缝）
+    lfo = 1.0 + 0.15 * np.sin(2 * np.pi * 2 * np.arange(n) / n)
+    out = (0.55 * bed / (np.max(np.abs(bed)) + 1e-6)
+           + 1.0 * hiss / (np.max(np.abs(hiss)) + 1e-6)
+           + 0.30 * fine / (np.max(np.abs(fine)) + 1e-6)
+           + 0.55 * drops / (np.max(np.abs(drops)) + 1e-6)) * lfo
+    return out / (np.max(np.abs(out)) + 1e-6) * vol
 
 
 def gen_all(out_dir):
@@ -88,39 +122,25 @@ def gen_all(out_dir):
     此处不再生成，避免重跑覆盖：
       ui_click / ui_confirm / game_started / build_complete / harvest_hit_{a,b,c}
       / harvest_wood / harvest_gain / quest_done / ui_hover / unit_hurt / game_saved
-      / battle_started
+      / battle_started / battle_ended_win / battle_ended_lose
     """
     os.makedirs(out_dir, exist_ok=True)
-    _save(os.path.join(out_dir, "battle_ended_win.wav"),
-          _seq([(C5, 1), (E5, 1), (G5, 1), (C6, 2.2)], 0.12, gap=0.02))
-    _save(os.path.join(out_dir, "battle_ended_lose.wav"),
-          _seq([(F5, 1), (D5, 1), (B4, 1), (392.0, 2.2)], 0.13, gap=0.03, vol=0.45))
-    # 天空生命感：远处鸟啁啾三变体（音量压低做距离感，与飞鸟生成配对播放）
+    # 天空生命感：远处鸟啁啾三变体（音节拟真：指数滑音+FM 颤音+气声）
+    # a=柳莺式上行音节×3；b=雀式单音节快速颤音；c=斑鸠式低频双音"咕-咕"
     _save(os.path.join(out_dir, "bird_chirp_a.wav"),
-          _mix(_sweep(2300, 3100, 0.09, 0.16),
-               np.concatenate([np.zeros(int(SR * 0.10)), _sweep(2500, 3400, 0.11, 0.14)])))
-    _b_parts = [np.concatenate([np.zeros(int(SR * 0.07 * i)), _sweep(f0, f1, 0.07, 0.13)])
-                for i, (f0, f1) in enumerate([(3400, 2600), (3200, 2500), (3600, 2700)])]
-    _save(os.path.join(out_dir, "bird_chirp_b.wav"), _mix(*_b_parts))
-    _t_n = int(SR * 0.22)
-    _trem = 1.0 + 0.25 * np.sin(2 * np.pi * 38 * np.arange(_t_n) / SR)
-    _save(os.path.join(out_dir, "bird_chirp_c.wav"), _sweep(2800, 2200, 0.22, 0.15) * _trem)
-    # 天气层：雨声 3s 无缝循环（低通白噪 + 首尾交叉淡化）
-    _save(os.path.join(out_dir, "rain_loop.wav"), _rain_loop(3.0, 0.38))
-
-
-def _rain_loop(dur, vol):
-    """低通白噪雨声，首尾 crossfade 无缝循环"""
-    fade = int(SR * 0.25)
-    n = int(SR * dur)
-    rng = np.random.default_rng(11)
-    raw = rng.normal(0, 1, n + fade)
-    k = max(1, int(SR / 1400))  # 低通 ~1.4kHz（雨的沙沙感）
-    raw = np.convolve(raw, np.ones(k) / k, mode="same")
-    head = raw[:fade].copy()
-    raw[:fade] = head * np.linspace(0, 1, fade) + raw[n:n + fade] * np.linspace(1, 0, fade)
-    out = raw[:n]
-    return out / (np.max(np.abs(out)) + 1e-6) * vol
+          _phrase([(2600, 3300, 0.09, 0.15, {"fm_rate": 24.0}),
+                   (2700, 3400, 0.09, 0.14, {"fm_rate": 24.0}),
+                   (2800, 3500, 0.11, 0.13, {"fm_rate": 24.0})], gap=0.11))
+    _save(os.path.join(out_dir, "bird_chirp_b.wav"),
+          _phrase([(3400, 2800, 0.28, 0.15, {"fm_depth": 0.10, "fm_rate": 34.0}),
+                   (3500, 2900, 0.22, 0.12, {"fm_depth": 0.10, "fm_rate": 34.0})],
+                  gap=0.14))
+    _save(os.path.join(out_dir, "bird_chirp_c.wav"),
+          _phrase([(900, 640, 0.20, 0.16, {"fm_rate": 14.0, "bright": 0.2}),
+                   (860, 600, 0.26, 0.13, {"fm_rate": 14.0, "bright": 0.2})],
+                  gap=0.16))
+    # 天气层：雨声 4s 无缝循环（分层雨声：垫/沙沙/细雨/雨滴瞬态）
+    _save(os.path.join(out_dir, "rain_loop.wav"), _rain_loop(4.0, 0.38))
 
 
 if __name__ == "__main__":

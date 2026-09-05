@@ -48,7 +48,7 @@ func _ready() -> void:
 	_build_title()
 	_start_title_entrance()
 	_build_menu()
-	_version_label.text = "v0.1.0-p0 原型 · stick-world"
+	_version_label.text = "v0.5.0 Demo · stick-world"
 	_version_label.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	_version_label.modulate = StickTokens.TEXT_FAINT
 

@@ -269,8 +269,8 @@ func _find_grass_texture() -> String:
 			var lower := file_name.to_lower()
 			if lower.begins_with("grassland"):
 				for ext in exts:
-				if lower.ends_with(ext):
-					return dir_path + "/" + file_name
+					if lower.ends_with(ext):
+						return dir_path + "/" + file_name
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	return ""

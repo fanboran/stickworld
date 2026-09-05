@@ -24,7 +24,7 @@ const PARAM_DEFS := [
 	["crown_lift", "冠心上提", 0.30, 0.00, 0.60, 0.01, 2],
 	["hat_n", "帽圈子团数", 8.0, 4.0, 14.0, 1.0, 0],
 	["branch_prob", "枝概率", 0.48, 0.10, 0.90, 0.01, 2],
-	["stroke_len", "笔长(px)", 9.0, 5.0, 24.0, 0.5, 1],
+	["stroke_len", "笔长(px)", 18.0, 5.0, 30.0, 0.5, 1],
 	["stroke_w", "笔宽(px)", 3.5, 1.5, 6.0, 0.1, 1],
 	["crown_density", "冠笔密度", 1.0, 0.3, 2.5, 0.05, 2],
 ]
@@ -50,8 +50,9 @@ func _ready() -> void:
 	_build_panel()
 	_build_previews()
 	_cam = Camera2D.new()
-	_cam.position = Vector2(1040, 1480)  # 三排几何中心
-	_cam.zoom = Vector2(0.30, 0.30)  # 一屏收全 3×3
+	# 下移让出顶部面板（118px ≈ 屏高 18%）；zoom 0.19 一屏收全 3×3
+	_cam.position = Vector2(1040, 1480 + 300)
+	_cam.zoom = Vector2(0.19, 0.19)
 	add_child(_cam)
 	_cam.make_current()
 	_refresh_all()
@@ -133,6 +134,15 @@ func _copy_params() -> void:
 	_status_label.text = "参数已复制到剪贴板"
 
 
+func _input(event: InputEvent) -> void:
+	# 滚轮缩放：看整屏 3×3 ↔ 拉近看单棵笔触细节
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+			_cam.zoom = (_cam.zoom * 1.12).clampf(0.12, 1.0)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+			_cam.zoom = (_cam.zoom / 1.12).clampf(0.12, 1.0)
+
+
 func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("ui_cancel"):
 		get_tree().change_scene_to_file("res://modules/ui_global/scenes/menus/main_menu.tscn")
@@ -212,11 +222,16 @@ func _gen_tree(seed: int) -> Dictionary:
 	var cy: float = trunk_top_y - r_main * float(p["crown_lift"])
 	var blobs: Array = [{"c": Vector2(trunk_top_x, cy), "r": r_main}]
 	var hat_n := int(float(p["hat_n"]))
+	var last_ang := -10.0
 	for k in hat_n:
-		var a := k / float(hat_n) * TAU + rng.randf_range(-0.22, 0.22)
-		var d: float = r_main * rng.randf_range(0.68, 1.0)
-		blobs.append({"c": Vector2(trunk_top_x + d * cos(a), cy + d * sin(a) * 0.85),
-			"r": r_main * rng.randf_range(0.38, 0.58)})
+		# 角度随机+最小间距（去均匀环分布——均匀分布让冠呈规则圆形）
+		var a := rng.randf_range(0.0, TAU)
+		if absf(angle_difference(a, last_ang)) < TAU / float(hat_n) * 0.5:
+			a += TAU / float(hat_n)
+		last_ang = a
+		var d: float = r_main * rng.randf_range(0.60, 1.05)
+		blobs.append({"c": Vector2(trunk_top_x + d * cos(a), cy + d * sin(a) * rng.randf_range(0.6, 0.95)),
+			"r": r_main * rng.randf_range(0.30, 0.55)})
 	for k in rng.randi_range(2, 3):
 		var a := PI + rng.randf_range(-0.6, 0.6)
 		var d: float = r_main * rng.randf_range(0.8, 1.0)
@@ -287,7 +302,7 @@ func gen_strokes(t: Dictionary, seed: int) -> Array:
 		var n: int = int(br_r * br_r * 0.085 * float(_params["crown_density"]))
 		for i in n:
 			var a := rng.randf_range(0.0, TAU)
-			var d := sqrt(rng.randf()) * br_r * 0.95
+			var d := sqrt(rng.randf()) * br_r * 1.15  # 越界撒点：参差外缘而非圆盘边
 			var pos: Vector2 = c + Vector2(cos(a), sin(a)) * d
 			var tang: float = a + PI * 0.5 + rng.randf_range(-0.35, 0.35)
 			var rand_ang := rng.randf_range(0.0, TAU)
@@ -297,6 +312,8 @@ func gen_strokes(t: Dictionary, seed: int) -> Array:
 			var l: float = sl * rng.randf_range(0.6, 1.4)
 			var w: float = sw * rng.randf_range(0.7, 1.3)
 			var loff: float = (pos - c - Vector2(-br_r * 0.3, -br_r * 0.34)).length() / maxf(br_r, 1.0)
+			if loff > 0.9:
+				w *= 0.7  # 边缘笔更细：外缘参差破碎（拟合版笔越界的视觉等效）
 			var base := LEAF_L if loff < 0.55 else (LEAF_M if loff < 1.0 else LEAF_D)
 			var col := Color.from_hsv(
 				fposmod(base.h + rng.randf_range(-0.01, 0.01), 1.0),

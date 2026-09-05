@@ -6,16 +6,24 @@ extends Node2D
 ## 0.0=钉死屏幕（无限远），层位移 = cam_x × (1 - factor)）：
 ##   星野+月亮(0.08，夜现) → 飞鸟群(0.35，昼现) → 远山(0.55) → 远树线(0.7)
 ##   → 雾带(0.7) → 近树线(0.88) → 云(0.55/0.42+自漂移) → 游戏世界(1.0)
-## 贴图均 tools/ai/gen_sky_decor.py 程序化生成；星野/飞鸟为程序绘制零贴图；
+## 贴图由 tools/ai/ 程序化生成（山/树线/雾 gen_sky_decor.py、笔触云 gen_cloud_stroke.py
+## 走 stroke_paint 油画管线）；星野/飞鸟为程序绘制零贴图；
 ## 由 VillageMap/road_map._ready 挂载。
 
 const SkyStarsScript := preload("res://modules/world/scripts/map/sky_stars.gd")
 const SkyBirdsScript := preload("res://modules/world/scripts/map/sky_birds.gd")
-const StrokeCloudScript := preload("res://modules/world/scripts/map/stroke_cloud.gd")
 const TEX_MOUNTAINS := "res://assets/sky/mountains.png"
 const TEX_TREELINE_FAR := "res://assets/sky/treeline_far.png"
 const TEX_TREELINE_NEAR := "res://assets/sky/treeline_near.png"
 const TEX_FOG := "res://assets/sky/fog_band.png"
+## 笔触云贴图 ×3（tools/ai/gen_cloud_stroke.py：stroke_paint 管线与树/石同质感）
+const TEX_CLOUDS: Array[String] = [
+	"res://assets/sky/cloud_a.png",
+	"res://assets/sky/cloud_b.png",
+	"res://assets/sky/cloud_c.png",
+]
+## 贴图 512x256 相对世界云尺度偏大，统一缩放（scale_f 仍按 0.7~1.3 分视差三档）
+const CLOUD_TEX_SCALE: float = 0.55
 
 ## 地平线 y（与地图 ground_y 一致，山/树底贴地平线）
 var horizon_y: float = 810.0
@@ -46,6 +54,8 @@ const CLOUD_POOL: int = 18
 ## 云出生带（相对地平线向上；远云更高——小云再上移）
 const CLOUD_Y_TOP: float = 190.0
 const CLOUD_Y_BOTTOM: float = 640.0
+## 云贴图缓存（build 时加载一次）
+var _cloud_texs: Array = []
 
 
 func _ready() -> void:
@@ -114,10 +124,17 @@ func _build_fog() -> void:
 
 func _build_clouds() -> void:
 	_rng.seed = 20260905
+	for p in TEX_CLOUDS:
+		if ResourceLoader.exists(p):
+			_cloud_texs.append(load(p))
+	if _cloud_texs.is_empty():
+		return
 	for i in CLOUD_POOL:
-		var cloud: Node2D = StrokeCloudScript.new()
+		var cloud := Sprite2D.new()
+		cloud.centered = true
+		cloud.texture = _cloud_texs[_rng.randi() % _cloud_texs.size()]
 		var scale_f: float = _rng.randf_range(0.7, 1.3)
-		cloud.scale = Vector2(scale_f, scale_f)
+		cloud.scale = Vector2(scale_f, scale_f) * CLOUD_TEX_SCALE
 		# 出生带：远云（小）更高——Terraria 小云再上移的同构；
 		# 初始分布相机出生带（x≈0 一带），之后由风与相机回拉自然演进
 		var y: float = _rng.randf_range(CLOUD_Y_TOP, CLOUD_Y_BOTTOM) \
@@ -129,6 +146,7 @@ func _build_clouds() -> void:
 			"p": _cloud_parallax(scale_f),   # Cloud.GetParallax 直译
 			"alpha": _rng.randf_range(0.35, 0.85),  # 首批直接半亮，后续渐入
 			"dying": false,
+			"phase": _rng.randf() * TAU,     # 极慢摇摆的相位
 		})
 
 
@@ -189,6 +207,7 @@ func _update_clouds(delta: float) -> void:
 	var cam_x: float = _cam.global_position.x if _cam != null and is_instance_valid(_cam) else 0.0
 	var cam_move: float = cam_x - _last_cam_x
 	_last_cam_x = cam_x
+	var _light_darkened: Color = _env_light().darkened(0.25 * _rainy)
 	for c in _clouds:
 		var cloud: Node2D = c["node"]
 		if cloud == null or not is_instance_valid(cloud):
@@ -206,17 +225,20 @@ func _update_clouds(delta: float) -> void:
 			c["alpha"] = minf(float(c["alpha"]) + 0.06 * delta, 0.92 + 0.08 * _rainy)
 			if cloud.position.x < cam_x - 1400.0 or cloud.position.x > cam_x + 1400.0:
 				c["dying"] = true
-		# 笔触云内部生灭（换血）+ 云级 alpha/光照注入
-		cloud.update_cloud(delta, signf(_wind) if absf(_wind) > 0.05 else 1.0)
-		cloud.set_cloud_alpha(float(c["alpha"]))
-		cloud.set_sky_light(_env_light().darkened(0.25 * _rainy))
+		# 云级 alpha/光照注入（贴图云：modulate 乘光照色，夜里自动变暗）
+		cloud.modulate = Color(_light_darkened.r, _light_darkened.g,
+				_light_darkened.b, float(c["alpha"]))
+		# 极慢摇摆（Cloud 微幅摆动同构，±0.6°）
+		cloud.rotation = sin(_wind_t * 0.11 + float(c["phase"])) * 0.01
 
 
-## 云重生：风向对侧入场，重掷尺度（视差档随之变化）与出生带
+## 云重生：风向对侧入场，重掷贴图/尺度（视差档随之变化）与出生带
 func _respawn_cloud(c: Dictionary, cam_x: float) -> void:
-	var cloud: Node2D = c["node"]
+	var cloud: Sprite2D = c["node"]
 	var scale_f: float = _rng.randf_range(0.7, 1.3)
-	cloud.scale = Vector2(scale_f, scale_f)
+	cloud.scale = Vector2(scale_f, scale_f) * CLOUD_TEX_SCALE
+	if not _cloud_texs.is_empty():
+		cloud.texture = _cloud_texs[_rng.randi() % _cloud_texs.size()]
 	var dir: float = signf(_wind) if absf(_wind) > 0.05 else 1.0
 	cloud.position.x = cam_x - dir * 1350.0
 	cloud.position.y = _rng.randf_range(CLOUD_Y_TOP, CLOUD_Y_BOTTOM) - (1.3 - scale_f) * 120.0

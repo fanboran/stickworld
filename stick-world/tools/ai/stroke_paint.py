@@ -6,7 +6,9 @@
 针对游戏小贴图（256px 档）调小笔数与笔宽；白底参考图按色距抠 alpha。
 
 用法：
-    python stroke_paint.py <参考图.png> <输出.png> [总笔数]
+    python stroke_paint.py <参考图.png> <输出.png> [总笔数] [mask.png]
+库内调用可传 size（画布尺寸，默认缩到 256 兼容旧调用）与 bg（参考图底色，
+用于半透明边缘的预乘消底；白云等浅色主体须改用 mask 抠图避免误抠）。
 """
 import os
 import sys
@@ -37,34 +39,42 @@ BG_DIST_HARD = 16.0   # 与白底色距小于此 → 全透明
 BG_DIST_SOFT = 34.0   # 大于此 → 不透明（之间线性羽化）
 
 
-def paint(src: str, dst: str, total: int = 1600, mask_path: str = "") -> None:
+def paint(src: str, dst: str, total: int = 1600, mask_path: str = "",
+          size=None, bg=(250.0, 250.0, 250.0)) -> None:
     im = Image.open(src).convert("RGB")
-    if im.size != (256, 256):
+    if size is not None:
+        im = im.resize(size, Image.LANCZOS)
+    elif im.size != (256, 256):
         im = im.resize((256, 256), Image.LANCZOS)
     img = np.asarray(im).astype(np.float32)
-
-    gen = StrokeGenerator(img, total, layers=GAME_LAYERS)
+    H, W = img.shape[:2]
+    # 笔宽/笔长按画布相对 256 基准等比缩放（不同尺寸贴图的笔触颗粒度一致）
+    k = max(W, H) / 256.0
+    layers = GAME_LAYERS if k == 1.0 else [
+        dict(l, w0=l["w0"] * k, w1=l["w1"] * k, ln=l["ln"] * k)
+        for l in GAME_LAYERS
+    ]
+    gen = StrokeGenerator(img, total, layers=layers)
     blocks, got = gen.run()
     print(f"[stroke] {os.path.basename(src)}: {got} 笔 "
           + ", ".join(f"{n}×{len(s)}" for n, s in blocks))
-    canvas = gen.canvas_img.convert("RGB")
-    if canvas.size != (256, 256):
-        canvas = canvas.resize((256, 256), Image.LANCZOS)
+    canvas = gen.canvas_img.convert("RGB")  # 模拟画布即输入尺寸
 
     arr = np.asarray(canvas).astype(np.float32)
     if mask_path and os.path.exists(mask_path):
         # 形状 mask 抠图（精确）：mask 已羽化，直接归一 0~1
         m = Image.open(mask_path).convert("L")
-        if m.size != (256, 256):
-            m = m.resize((256, 256), Image.LANCZOS)
+        if m.size != (W, H):
+            m = m.resize((W, H), Image.LANCZOS)
         alpha = np.asarray(m).astype(np.float32) / 255.0
     else:
-        # 回退：白底色距羽化抠图（罩染层会污染白底，尽量提供 mask）
-        dist = np.abs(arr - 250.0).sum(-1)
+        # 回退：底色距羽化抠图（罩染层会污染底色，尽量提供 mask）
+        dist = np.abs(arr - np.asarray(bg, np.float32)).sum(-1)
         alpha = np.clip((dist - BG_DIST_HARD) / (BG_DIST_SOFT - BG_DIST_HARD), 0.0, 1.0)
-    # 预乘消白：半透明像素把白色残留按 (1-alpha) 削掉
+    # 预乘消底：半透明像素把底色残留按 (1-alpha) 削掉
     keep = alpha[..., None]
-    rgb = np.clip((arr - 250.0 * (1.0 - keep)) / np.maximum(keep, 1e-3), 0, 255)
+    bg_arr = np.asarray(bg, np.float32)[None, None, :]
+    rgb = np.clip((arr - bg_arr * (1.0 - keep)) / np.maximum(keep, 1e-3), 0, 255)
     out = np.dstack([rgb, alpha * 255.0]).astype(np.uint8)
     Image.fromarray(out, "RGBA").save(dst)
     cov = float((alpha > 0.5).mean())

@@ -13,6 +13,9 @@ var _dim: Control = null
 var _window: PanelContainer = null
 var _on_confirm: Callable = Callable()
 
+## 消息单行宽度上限（超此才折行；紧凑自适应，不摆大面板的架子）
+const MSG_MAX_WIDTH := 480.0
+
 
 ## 构建骨架（子类/工厂调用）
 func setup(title: String, message: String, on_confirm: Callable,
@@ -57,8 +60,17 @@ func setup(title: String, message: String, on_confirm: Callable,
 	title_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var msg := StickKit.label(box, message, StickKit.LabelKind.BODY)
 	msg.modulate = StickTokens.TEXT_DIM
-	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# 消息单行展示，超宽才换行：无宽度约束时 autowrap Label 的 min 宽会塌缩到
+	# 单字宽（中文按字断行），长消息被折成一行一字把窗口撑出数倍高度
+	var font := msg.get_theme_font(&"font")
+	if font != null:
+		var font_size: int = msg.get_theme_font_size(&"font")
+		var text_w := font.get_string_size(message, HORIZONTAL_ALIGNMENT_LEFT,
+				-1, font_size).x
+		if text_w > MSG_MAX_WIDTH:
+			msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			msg.custom_minimum_size.x = MSG_MAX_WIDTH
 	var btn_row := StickKit.row(box, 10)
 	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	btn_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER

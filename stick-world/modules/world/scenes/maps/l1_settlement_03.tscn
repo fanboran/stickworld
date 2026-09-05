@@ -1,0 +1,55 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://modules/world/scripts/map/village_map.gd" id="1_vmap"]
+[ext_resource type="Script" path="res://modules/world/scripts/placement/placement_grid.gd" id="2_grid"]
+[ext_resource type="Script" path="res://modules/world/scripts/map/initial_buildings_list.gd" id="3_ibl"]
+[ext_resource type="Script" path="res://tools/dev/map_grid_drawer.gd" id="4_grid_drawer"]
+
+[node name="城市1" type="Node2D"]
+script = ExtResource("1_vmap")
+
+[node name="PlacementGrid" type="Node" parent="."]
+script = ExtResource("2_grid")
+grid_width = 192
+
+[node name="TerrainLayer" type="Node2D" parent="."]
+
+[node name="GroundPolygon" type="Polygon2D" parent="TerrainLayer"]
+position = Vector2(-131, -1)
+color = Color(0.45, 0.55, 0.32, 1)
+polygon = PackedVector2Array(0, 810, 6144, 810, 6144, 1080, 0, 1080)
+
+[node name="GroundLine" type="Marker2D" parent="."]
+position = Vector2(0, 810)
+
+[node name="MapGridDrawer" type="Node2D" parent="."]
+script = ExtResource("4_grid_drawer")
+
+[node name="DecorationLayer" type="Node2D" parent="."]
+z_index = 1
+
+[node name="BuildingHost" type="Node2D" parent="."]
+z_index = 2
+
+[node name="TerrainBuildings" type="Node2D" parent="."]
+z_index = 2
+
+[node name="InitialBuildingsList" type="Node" parent="."]
+script = ExtResource("3_ibl")
+building_defs = Array[Dictionary]([])
+defs_json_path = "res://config/strategic_map/buildings/l1_settlement_03.json"
+
+[node name="WalkBarrier" type="Node2D" parent="."]
+
+[node name="BuildMaskLayer" type="Node2D" parent="."]
+
+[node name="ForegroundLayer" type="Node2D" parent="."]
+z_index = 10
+
+[node name="EntityHost" type="Node2D" parent="."]
+z_index = 3
+
+; 城内不设 ChunkTrigger 出口：顶到边界 3 秒由 MapBoundaryDetector 开 L1 大图回战略图
+[node name="ChunkTriggers" type="Node2D" parent="."]
+
+[node name="BattleAnchor" type="Node2D" parent="."]

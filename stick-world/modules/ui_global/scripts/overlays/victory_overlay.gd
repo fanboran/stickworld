@@ -18,16 +18,9 @@ func _ready() -> void:
 
 	_card = SketchPanel.new()
 	_card.tone = SketchPanel.Tone.LIGHT
-	_card.set_anchors_preset(Control.PRESET_CENTER)
-	_card.anchor_left = 0.5
-	_card.anchor_right = 0.5
-	_card.anchor_top = 0.5
-	_card.anchor_bottom = 0.5
-	_card.offset_left = -260.0
-	_card.offset_right = 260.0
-	_card.offset_top = -190.0
-	_card.offset_bottom = 190.0
 	add_child(_card)
+	# 固定尺寸结算卡 520×380 居中（anchor 方案，替代手写四边 offset）
+	StickKit.center_on_screen(_card, Vector2(520, 380))
 	visible = false
 
 
@@ -50,7 +43,7 @@ func show_victory(stats: Dictionary) -> void:
 
 	var subtitle := Label.new()
 	subtitle.text = "火柴人大战略 —— 阶段目标全部达成"
-	subtitle.add_theme_font_size_override("font_size", 13)
+	subtitle.add_theme_font_size_override("font_size", StickTokens.FONT_SECTION)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_color_override("font_color", Color(0.7, 0.73, 0.78))
 	box.add_child(subtitle)
@@ -61,14 +54,14 @@ func show_victory(stats: Dictionary) -> void:
 		int(stats.get("harvest", 0)), int(stats.get("builds", 0)),
 		int(stats.get("squads", 0)), int(stats.get("battles", 0)),
 	]
-	stats_line.add_theme_font_size_override("font_size", 14)
+	stats_line.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
 	stats_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stats_line.add_theme_color_override("font_color", Color(0.9, 0.92, 0.9))
 	box.add_child(stats_line)
 
 	var hint := Label.new()
 	hint.text = "自由沙盒已开放：Tab 战略图 / Q 战斗指挥 / 附身任意士兵微操"
-	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_color_override("font_color", Color(0.6, 0.63, 0.68))
 	box.add_child(hint)

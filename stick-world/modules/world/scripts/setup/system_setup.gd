@@ -644,6 +644,7 @@ func _open_strategic_map(full_map: bool) -> void:
 		return
 	match _tab_state:
 		TabMapState.HIDDEN:
+			_feed_thumbnail_data()
 			_set_top_minimaps_visible(true)
 			_tab_state = TabMapState.TOP_MINIMAPS
 		TabMapState.TOP_MINIMAPS:
@@ -673,6 +674,19 @@ func _set_top_minimaps_visible(v: bool) -> void:
 		_root._minimap.visible = v
 	if _l1_thumbnail != null:
 		_l1_thumbnail.visible = v
+
+
+## 喂 L1 缩略窗世界数据（当前位置标记数据源）：从 L1 战略图 api 取已初始化的
+## L1WorldData（ensure 后必就绪；幂等，每次进入顶部小地图态时刷新）
+func _feed_thumbnail_data() -> void:
+	if _l1_thumbnail == null or not _l1_thumbnail.has_method("set_map_data"):
+		return
+	var content: Node = _root._strategic_map.get_node_or_null("Content") \
+			if _root._strategic_map != null else null
+	var api: Node = content.get_node_or_null("Api") if content != null else null
+	if api != null and api.has_method("is_initialized") and api.is_initialized() \
+			and api.has_method("get_data"):
+		_l1_thumbnail.set_map_data(api.get_data())
 
 
 ## 打开 L1 大图（三态第三态；顶部小地图区先收起——"与大图切换显示"）

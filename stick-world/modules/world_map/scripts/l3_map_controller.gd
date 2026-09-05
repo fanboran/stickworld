@@ -28,9 +28,9 @@ var _title_bar: MapTitleBar = null
 ## 下钻 L2 时保留（L2 层号 102 更高，内容盖在其上，下钻仍在全屏海洋会话内）
 var _ocean_background: Control = null
 
-## 全屏初始缩放的上下限位余量（屏幕像素）：初始地图高度 = 视口高 + 2×余量，
-## 打开即满足"上下边界不进屏"，同时作为相机 min_zoom 的锁定值（再缩小边界必进屏）
-const FIT_BUFFER := 64.0
+## 全屏初始视角的上下海洋边距（屏幕像素）：地图数据贴陆地裁切（边缘即陆地），
+## 初始视野须"向外放出海洋"——完整地图可见 + 上下各留本边距的海岸带（同色背景延伸）
+const OCEAN_MARGIN := 64.0
 
 ## 首次打开时设置初始视角（之后保留用户位置/缩放状态）
 var _view_initialized: bool = false
@@ -169,23 +169,26 @@ func open() -> void:
 			var vp := get_viewport()
 			if vp != null:
 				var vp_size: Vector2 = vp.get_visible_rect().size
-				# 全屏适配缩放：地图高度 = 视口高 + 上下限位余量（初始即"边界不进屏"，
-				# 余量外是同色海洋背景，全屏观感）。同时锁定 min_zoom——再缩小则上下
-				# 边界必然进入屏幕，与限位目标矛盾
-				var fit_zoom: float = (vp_size.y + FIT_BUFFER * 2.0) / map_size
+				# 全屏适配缩放：完整地图高度 = 视口高 − 2×海洋边距（打开即整图可见，
+				# 上下各露 OCEAN_MARGIN 海洋带，不向内裁切地图）。同时锁定 min_zoom——
+				# 再缩小则地图+海洋带撑不满视口，视野将越出限位矩形
+				var fit_zoom: float = maxf((vp_size.y - OCEAN_MARGIN * 2.0) / map_size, 0.001)
 				map_camera.min_zoom = fit_zoom
 				map_camera.set_zoom(fit_zoom)
 				# 全屏适配 = 100%（HUD 百分比按此归一化显示）
 				if _zoom_indicator != null and _zoom_indicator.has_method("set_default_zoom"):
 					_zoom_indicator.set_default_zoom(fit_zoom)
-				# 相机限位：上下严格（边界外扩余量不进屏）/ 左右宽松（宽屏下地图窄于
-				# 视口时两侧露出同色海洋，仅防地图被完全移出屏幕）
+				# 相机限位（创始人语义：视野不越出"地图 + 外扩海洋带"矩形，即含缓冲的
+				# 边界不许进屏——平移最多露出一条海洋带，不许把地图移出到空背景）：
+				# 上下严格（bounds 上下外扩海洋带）/ 左右宽松（仅防完全移出屏幕）
 				if map_camera.has_method("set_viewport_clamp"):
+					var margin_map: float = OCEAN_MARGIN / fit_zoom
 					map_camera.set_viewport_clamp(MapCamera.ClampMode.CLAMP_LOOSE,
 							MapCamera.ClampMode.CLAMP_STRICT,
-							Rect2(0.0, 0.0, map_size, map_size), FIT_BUFFER)
+							Rect2(0.0, -margin_map, map_size, map_size + margin_map * 2.0),
+							0.0)
 				if map_camera.has_method("set_offset"):
-					# 初始地图居中（上下各留余量在屏外，左右居中对称）
+					# 初始地图居中（上下各留海洋边距，左右居中对称）
 					map_camera.set_offset(vp_size * 0.5 - Vector2(map_size, map_size) * fit_zoom * 0.5)
 	if _l2_active and l2_view != null:
 		# 恢复 L2 视图（相机状态保留），L3 保持隐藏（指示条隐藏）

@@ -11,14 +11,14 @@ extends Node2D
 ## 锚点半径按波浪轮廓 radius_at(θ) 收紧，无蒙版无截断、不出界。
 ## 密度按周长线性给笔数（笔长随半径缩放，覆盖倍率恒定 ≥2.5x——
 ## 宁过头不不足，v4 曾因平方公式+clamp 底漏成筛子）。
-## 动态：每秒 40% 笔重摇（风吹乱叶），60% 不动（连续感）。
+## 动态：斑块交错更新（A/B 云斑区每半秒交替翻动，见 SWAP_INTERVAL 注）。
 
-## 翻动节拍（用户规格：每秒动态一次）
+## 翻动节拍（用户 2026-09-06 交错更新定稿）：每半拍翻一个斑块区，两区交替——
+## 同一棵冠"这里动了那里静、下一次反过来"，模拟风吹过冠的推进感
+## （旗帜飘动的常用动画手法）。半拍 = SWAP_INTERVAL × 0.5（每区实际周期仍 1s）。
 const SWAP_INTERVAL := 1.0
-## 姿态变体数
-const VARIANTS := 4
-## 每拍重掷的线占比
-const SWAP_FRACTION := 0.4
+## 斑块区查表上限（笔触数上限同量级）
+const ZONE_CAP := 520
 
 ## 叶色板（tree_pipeline.LEAF_PALETTES 同款：用户审美验收过的绿）
 const PALETTES: Array = [
@@ -45,19 +45,26 @@ var vein_color := Color.WHITE
 var vein_ratio := 0.0
 
 var _timer := 0.0
-var _variant := 0
+var _phase := 0        # 当前活动斑块区 0/1（每半拍交替）
+var _var_a := 0        # A 区姿态计数（翻动 +2 递增，不重复）
+var _var_b := 1        # B 区姿态计数（奇数，与 A 流空间分离）
+var _patch_p1 := 0.0   # 斑块场相位（setup 派生）
+var _patch_p2 := 0.0
 var _interval := SWAP_INTERVAL
 var _reenter_redraw := false
 var _palette: Array = PALETTES[0]
-var _bumps: Array = []  # {a: 角度, amp: 幅度}——连续波浪轮廓的鼓包
+var _bumps: Array = []   # {a: 角度, amp: 幅度}——连续波浪轮廓的鼓包
+var _zone_tab: Array = []  # 笔触序号 → 斑块区 0/1（噪声场预生成，跨姿态稳定）
+var _hint_tab: Array = []  # 笔触序号 → 落点角提示（稳定，几何在 hint 邻域）
 
 
 func _ready() -> void:
 	_palette = palette_override if not palette_override.is_empty() \
 		else PALETTES[(abs(base_seed) if palette_idx < 0 else palette_idx) % PALETTES.size()]
 	# 翻动节拍错峰（±12%，种子派生保持确定性）：避免全图树同帧重绘的尖峰
-	_interval = SWAP_INTERVAL * (0.88 + 0.24 * _stable_rng(77).randf())
+	_interval = SWAP_INTERVAL * 0.5 * (0.88 + 0.24 * _stable_rng(77).randf())
 	_gen_bumps()
+	_gen_zones()
 	queue_redraw()
 
 
@@ -72,8 +79,34 @@ func _process(delta: float) -> void:
 	_timer += delta
 	if _timer >= _interval:
 		_timer = fmod(_timer, _interval)
-		_variant = (_variant + 1) % VARIANTS
+		# 交替翻区：只递增活动区的姿态计数（静区姿态原样保持）
+		_phase = 1 - _phase
+		if _phase == 0:
+			_var_a += 2
+		else:
+			_var_b += 2
 		queue_redraw()
+
+
+## 斑块分区场：落点角 → 0/1。三频角向正弦叠加 → 冠被分成 2-4 个不规则
+## 云斑状区域（非左右/上下机械切分），边界随种子相位变化
+func _patch_zone(th: float) -> int:
+	var f := sin(th * 2.0 + _patch_p1) + 0.7 * sin(th * 3.0 - _patch_p2) \
+		+ 0.4 * sin(th * 5.0 + _patch_p1 * 1.7)
+	return 0 if f >= 0.0 else 1
+
+
+## 预生成每条笔触的落点角提示与区属（稳定流一次算好，绘制期零随机成本）
+func _gen_zones() -> void:
+	var rng := _stable_rng(55)
+	_patch_p1 = rng.randf() * TAU
+	_patch_p2 = rng.randf() * TAU
+	_zone_tab.clear()
+	_hint_tab.clear()
+	for i in ZONE_CAP:
+		var th := rng.randf() * TAU
+		_hint_tab.append(th)
+		_zone_tab.append(_patch_zone(th))
 
 
 ## 球（含缩放后半径 + 余量）是否与视口相交
@@ -95,7 +128,7 @@ func _stable_rng(slot: int) -> RandomNumberGenerator:
 	return rng
 
 
-## 姿态 RNG（内部笔触用，随 _variant 翻动）
+## 姿态 RNG（内部笔触用，随区姿态计数翻动）
 func _strand_rng(variant: int, i: int) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = absi((base_seed * 73856093) ^ (variant * 19349663) ^ ((i + 1) * 83492791))
@@ -144,12 +177,17 @@ func _draw() -> void:
 	# 笔数按周长线性（笔长随半径缩放 → 覆盖倍率恒定；系数 14 宁过头不不足）
 	var n_total := clampi(roundi(14.0 * radius / lw), 70, 520)
 	for i in n_total:
-		var is_base := (i % 10) >= int(SWAP_FRACTION * 10.0)
-		var rng := _strand_rng(0 if is_base else _variant, i)
+		# 交错更新（用户 2026-09-06 定稿）：笔触按落点角的平滑噪声场分成
+		# 不规则斑块 A/B 两区（非左右/上下机械切分），活动区的笔用本区姿态流
+		# （每半拍翻一区、姿态递增不重复），静区保持自己的姿态不动
+		var zone: int = _zone_tab[i % _zone_tab.size()]
+		var v: int = _var_a if zone == 0 else _var_b
+		var rng := _strand_rng(v, i)
+		var th_hint: float = _hint_tab[i % _hint_tab.size()]
 		if rng.randf() < 0.5:
-			_draw_orbit_arc(rng, lw)
+			_draw_orbit_arc(rng, lw, th_hint)
 		else:
-			_draw_free_arc(rng, lw)
+			_draw_free_arc(rng, lw, th_hint)
 
 
 ## 三档色按落笔高度：上亮下暗（局部 y 向下为正）——球体感；
@@ -171,9 +209,10 @@ func _band_color(y: float, rng: RandomNumberGenerator) -> Color:
 
 
 ## 绕心弧：锚点距球心 a，沿圆周走一段——毛线团"绕线"的本体。
-## 锚点上限按波浪轮廓收紧（无截断，位置天然合法），越靠外的弧越长贴轮廓
-func _draw_orbit_arc(rng: RandomNumberGenerator, lw: float) -> void:
-	var th0 := rng.randf() * TAU
+## 锚点上限按波浪轮廓收紧（无截断，位置天然合法），越靠外的弧越长贴轮廓；
+## 落点角 = hint（决定斑块区属，跨姿态稳定）+ 几何流小抖动
+func _draw_orbit_arc(rng: RandomNumberGenerator, lw: float, th_hint: float) -> void:
+	var th0 := th_hint + rng.randf_range(-0.25, 0.25)
 	var sign := 1.0 if rng.randf() < 0.5 else -1.0
 	# 弧长上限 75°（贴边弧断续化——长弧连段会读成描边线）
 	var sweep: float = deg_to_rad(rng.randf_range(30.0, 75.0))
@@ -196,9 +235,10 @@ func _draw_orbit_arc(rng: RandomNumberGenerator, lw: float) -> void:
 
 
 ## 自由弧：随机方向的弯弧（二次贝塞尔），可用半径按锚点方向的波浪轮廓算——
-## 各方向都有（红线：不要绕圈），弯向随机 = 毛线团的"织"
-func _draw_free_arc(rng: RandomNumberGenerator, lw: float) -> void:
-	var th := rng.randf() * TAU
+## 各方向都有（红线：不要绕圈），弯向随机 = 毛线团的"织"；
+## 落点角 = hint（斑块区属）+ 几何流小抖动
+func _draw_free_arc(rng: RandomNumberGenerator, lw: float, th_hint: float) -> void:
+	var th := th_hint + rng.randf_range(-0.25, 0.25)
 	var d := rng.randf_range(-0.82, 0.82) * radius
 	var mid := Vector2(-sin(th), cos(th)) * d
 	var r_in: float = _outline_radius(atan2(mid.y, mid.x)) * 0.955

@@ -6,6 +6,8 @@ class_name L1Thumbnail
 ##   ① 本城市地图 = Minimap（ui_global）   ② 本窗 = 出生 L1 世界缩略
 ## 内容 = config/strategic_map/l1_base.png（出生 L1 视图上下文底图，与 Tab 大图
 ## 同源数据、同色系），静态缩放显示，零运行时生成。
+## 当前位置标记（A3 验收增补）：出生 L1 轮廓天蓝流动光描边 + 出生城市中心
+## 标记（白点 + 蓝色脉冲扩散环）——数据来自 L1WorldData（装配层喂数）。
 ## 交互：左键点击 → 发 open_l1_requested（装配层接线切到"原 Tab 大图"态）。
 ##
 ## 布局：自定位（Minimap 右侧贴边、同高并列），与 Minimap 一致的一次性定位策略
@@ -27,7 +29,24 @@ const BORDER_COLOR := Color(0.15, 0.15, 0.15, 0.9)
 ## 底图路径（出生 L1 视图上下文，export_l1_view_context.py 产出）
 const BASE_TEXTURE_PATH := "res://config/strategic_map/l1_base.png"
 
+## 当前位置流动描边（天蓝调，与 M 大世界的青蓝调区分层级）
+const GLOW_COLOR := Color(0.40, 0.72, 1.0, 0.95)
+const GLOW_WIDTH := 2.0
+## 出生城市中心标记：白点 + 蓝色脉冲扩散环（周期秒）
+const MARK_DOT_RADIUS := 2.5
+const MARK_COLOR := Color(1.0, 1.0, 1.0, 0.95)
+const PULSE_PERIOD := 1.4
+const PULSE_MAX_RADIUS := 8.0
+
 var _texture: Texture2D = null
+## L1 世界数据（装配层喂；为空时无当前位置标记，仅静态底图）
+var _map_data: L1WorldData = null
+## 出生 L1 轮廓分段缓存（窗口像素坐标，SIZE 固定可直接烘焙）
+var _glow_outline: PackedVector2Array = PackedVector2Array()
+## 出生聚落位置（窗口像素坐标；负值=无）
+var _spawn_pos := Vector2(-1.0, -1.0)
+## 动画相位（秒）
+var _anim_time := 0.0
 
 
 func _ready() -> void:
@@ -37,10 +56,38 @@ func _ready() -> void:
 		push_warning("[L1Thumbnail] 底图缺失: %s" % BASE_TEXTURE_PATH)
 
 
+func _process(delta: float) -> void:
+	if not visible:
+		return
+	_anim_time += delta
+	queue_redraw()
+
+
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		open_l1_requested.emit()
+
+
+## 喂 L1 世界数据（幂等，装配层每次进入顶部小地图态时调用）：
+## 解析出生 L1 轮廓与出生聚落位置，烘焙到窗口像素坐标缓存
+func set_map_data(data: L1WorldData) -> void:
+	_map_data = data
+	_glow_outline = PackedVector2Array()
+	_spawn_pos = Vector2(-1.0, -1.0)
+	if data != null:
+		var ctx := Vector2(maxf(float(data.context_size.x), 1.0),
+				maxf(float(data.context_size.y), 1.0))
+		var scale := Vector2(SIZE.x / ctx.x, SIZE.y / ctx.y)
+		var outline := FlowOutline.resample_closed(data.l1_polygon, 96)
+		for p in outline:
+			_glow_outline.append(p * scale)
+		for tile in data.tiles:
+			if tile.settlement != null \
+					and tile.settlement.settlement_id == data.spawn_settlement_id:
+				_spawn_pos = tile.settlement.position * scale
+				break
+	queue_redraw()
 
 
 func _draw() -> void:
@@ -50,6 +97,15 @@ func _draw() -> void:
 	else:
 		# 占位（与 Minimap 占位观感一致）
 		draw_rect(rect, Color(0.2, 0.2, 0.2, 0.8), true)
+	# 当前位置：出生 L1 天蓝流动光描边
+	if _glow_outline.size() >= 3:
+		FlowOutline.draw_flow(self, _glow_outline, GLOW_COLOR, _anim_time, GLOW_WIDTH)
+	# 当前位置：出生城市中心标记（白点 + 蓝色脉冲扩散环）
+	if _spawn_pos.x >= 0.0:
+		draw_circle(_spawn_pos, MARK_DOT_RADIUS, MARK_COLOR)
+		var ph := fmod(_anim_time / PULSE_PERIOD, 1.0)
+		var pr := MARK_DOT_RADIUS + ph * (PULSE_MAX_RADIUS - MARK_DOT_RADIUS)
+		draw_arc(_spawn_pos, pr, 0.0, TAU, 32, Color(GLOW_COLOR, 1.0 - ph), 1.5, true)
 	draw_rect(rect, BORDER_COLOR, false, BORDER_WIDTH)
 
 

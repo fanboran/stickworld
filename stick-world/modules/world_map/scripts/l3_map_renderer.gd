@@ -36,6 +36,19 @@ const L2_LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const L2_LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
 const L2_LABEL_SIZE := 40.0
 
+## 玩家当前所在老 L1（全局 label；出生=69）。青蓝流动光描边标记"你在这里"。
+## Phase C 接入玩家跨 L1 移动后改由事件动态更新（现阶段恒出生块）
+var player_l1_label: int = 69
+## 当前所在老 L1 的流动描边色（青蓝调，与 Tab 缩略窗的天蓝调区分层级）
+const PLAYER_GLOW_COLOR := Color(0.30, 0.85, 1.0, 0.95)
+const PLAYER_GLOW_MAP_WIDTH := 8.0   # 地图单位固定宽（不随缩放）
+const PLAYER_GLOW_SCREEN_CAP := 16.0 # 极端放大时屏幕像素上限
+
+## 当前所在老 L1 轮廓的等弧长分段缓存（几何不变，重采样一次复用）
+var _glow_outlines: Array[PackedVector2Array] = []
+## 流动动画相位（秒）
+var _glow_time := 0.0
+
 var _l1_mesh: ArrayMesh = null
 var _l1_holes_mesh: ArrayMesh = null
 var _debug_was_visible: bool = false
@@ -50,8 +63,36 @@ var _city_preview_result: Image = null
 func set_data(data: L3WorldData) -> void:
 	_data = data
 	_build_static_meshes()
+	_build_glow_outlines()
 	_ensure_l1_index()
 	queue_redraw()
+
+
+## 设置玩家当前所在老 L1（Phase C 动态跟踪入口；变化时重建描边缓存）
+func set_player_l1(label: int) -> void:
+	if label == player_l1_label:
+		return
+	player_l1_label = label
+	_build_glow_outlines()
+	queue_redraw()
+
+
+## 构建当前所在老 L1 的流动描边分段缓存（polygons 顶点可能为 Vector2 或 [y,x]，
+## 与 _draw_hover_l1 同口径换算）
+func _build_glow_outlines() -> void:
+	_glow_outlines = []
+	if _data == null or player_l1_label <= 0:
+		return
+	for t in _data.l1_tiles:
+		if int(t.get("label", 0)) != player_l1_label:
+			continue
+		for poly in t.get("polygons", []):
+			var pts := PackedVector2Array()
+			for pp in poly:
+				pts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
+			var resampled := FlowOutline.resample_closed(pts)
+			if resampled.size() >= 3:
+				_glow_outlines.append(resampled)
 
 
 func get_data() -> L3WorldData:
@@ -159,8 +200,12 @@ func _build_layer_mesh(tiles: Array) -> Array:
 	return [fill_mesh, holes_mesh]
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_poll_async_loads()
+	# 当前位置流动光动画：相位推进 + 每帧重绘（mesh 均为缓存一次性 draw 命令，成本低）
+	if visible and not _glow_outlines.is_empty():
+		_glow_time += delta
+		queue_redraw()
 	if not visible or _data == null:
 		return
 	var viewport := get_viewport()
@@ -259,6 +304,15 @@ func _draw() -> void:
 			draw_mesh(_l1_holes_mesh, null)
 	# 3. L2 地区常驻描边（标识可下钻单元）
 	_draw_l2_borders()
+	# 3.5 玩家当前所在老 L1：青蓝流动光描边（"你在这里"）
+	if not _glow_outlines.is_empty():
+		var gw := PLAYER_GLOW_MAP_WIDTH
+		if _camera != null and _camera.has_method("get_zoom"):
+			var gz: float = _camera.get_zoom()
+			if gz > 0.0001:
+				gw = minf(PLAYER_GLOW_MAP_WIDTH, PLAYER_GLOW_SCREEN_CAP / gz)
+		for outline in _glow_outlines:
+			FlowOutline.draw_flow(self, outline, PLAYER_GLOW_COLOR, _glow_time, gw)
 	# 4. hover 老 L1 高亮（黄线轮廓）
 	_draw_hover_l1()
 	# 5. L2 地区编号（F3 调试模式）

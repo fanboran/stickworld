@@ -268,6 +268,13 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 			sm.add_transition(s, a, _smt(0.1, false))
 
 		sm.add_transition(a, ANIM_IDLE, _smt(0.12))
+	# 祭司治疗施法（P7 补接线）：与攻击同款模式——LOOP_NONE 一次性动画，
+	# AT_START 切入防吃进度，播完回 idle（WeaponMount.cast_heal 驱动 travel）
+	for a in HEAL_ANIMS:
+		_add_state(sm, a)
+		for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
+			sm.add_transition(s, a, _smt(0.1, false))
+		sm.add_transition(a, ANIM_IDLE, _smt(0.12))
 	for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
 		sm.add_transition(s, ANIM_BLOCK, _smt(0.08, false))
 	sm.add_transition(ANIM_BLOCK, ANIM_IDLE, _smt(0.08))

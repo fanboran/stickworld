@@ -1183,6 +1183,9 @@ func _on_damaged(amount: float, source: Node) -> void:
 		return
 	# 受击硬直：被打瞬间 AI 短暂停滞（行业最佳实践 hit stun）
 	_hit_stun_timer = HIT_STUN_DURATION
+	# 受击音（Terraria Player_Hit 同构；AudioManager 重触发停旧实例 → 大团战不叠音墙）
+	if AudioManager != null:
+		AudioManager.play_event("unit_hurt")
 	# 攻击者在自身朝向侧 = 正面受击（后仰）；否则背面受击（前扑）
 	var from_left: bool = source.global_position.x < global_position.x
 	var facing_right: bool = _facing > 0

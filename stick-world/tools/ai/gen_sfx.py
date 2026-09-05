@@ -83,25 +83,20 @@ def _sweep(f0, f1, dur, vol=0.3):
 
 
 def gen_all(out_dir):
+    """本脚本只合成仍由程序生成的音效；下列事件已换成 Terraria 提取件
+    （tools/ai/extract_terraria_sfx.py，见 docs/项目/素材替换清单.md），
+    此处不再生成，避免重跑覆盖：
+      ui_click / ui_confirm / game_started / build_complete / harvest_hit_{a,b,c}
+      / harvest_wood / harvest_gain / quest_done / ui_hover / unit_hurt
+    """
     os.makedirs(out_dir, exist_ok=True)
-    _save(os.path.join(out_dir, "ui_click.wav"), _mix(_noise(0.045, 0.35), _tone(1150, 0.05, 0.3)))
-    _save(os.path.join(out_dir, "ui_confirm.wav"), _seq([(A4, 1), (C6, 1)], 0.09))
-    _save(os.path.join(out_dir, "game_started.wav"), _seq([(C5, 1), (E5, 1), (G5, 1.6)], 0.11))
     _save(os.path.join(out_dir, "game_saved.wav"), _seq([(G5, 1), (C6, 1)], 0.1))
-    _save(os.path.join(out_dir, "build_complete.wav"),
-          _mix(_tone(130.8, 0.35, 0.55, decay=0.12), _noise(0.25, 0.18, lp=900)))
     _save(os.path.join(out_dir, "battle_started.wav"),
           _mix(_tone(82.4, 0.5, 0.6, decay=0.18), _seq([(D5, 1)], 0.12, vol=0.3)))
     _save(os.path.join(out_dir, "battle_ended_win.wav"),
           _seq([(C5, 1), (E5, 1), (G5, 1), (C6, 2.2)], 0.12, gap=0.02))
     _save(os.path.join(out_dir, "battle_ended_lose.wav"),
           _seq([(F5, 1), (D5, 1), (B4, 1), (392.0, 2.2)], 0.13, gap=0.03, vol=0.45))
-    # Demo 新增事件
-    _save(os.path.join(out_dir, "harvest_hit.wav"),
-          _mix(_noise(0.05, 0.5, lp=2500), _tone(196, 0.09, 0.4, decay=0.03)))
-    _save(os.path.join(out_dir, "harvest_gain.wav"), _tone(1318.5, 0.16, 0.35, decay=0.05))
-    _save(os.path.join(out_dir, "quest_done.wav"), _seq([(A5, 1), (1174.7, 1.8)], 0.1, gap=0.015))
-    _save(os.path.join(out_dir, "ui_hover.wav"), _tone(880, 0.04, 0.16, decay=0.015))
     # 天空生命感：远处鸟啁啾三变体（音量压低做距离感，与飞鸟生成配对播放）
     _save(os.path.join(out_dir, "bird_chirp_a.wav"),
           _mix(_sweep(2300, 3100, 0.09, 0.16),

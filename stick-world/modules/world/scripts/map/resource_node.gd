@@ -111,7 +111,11 @@ func _play_harvest_feedback(gained: int) -> void:
 		_spawn_gain_label(gained, _crit_gain)
 		_crit_gain = false
 		if AudioManager != null:
-			AudioManager.play_event("harvest_hit")
+			# 敲击音分材质（Terraria 同构）：树=砍草音，石/矿=挖掘音（三变体随机）
+			if resource_type == ResourceType.WOOD:
+				AudioManager.play_event("harvest_wood")
+			else:
+				AudioManager.play_event("harvest_hit")
 			AudioManager.play_event("harvest_gain")
 		var tween := create_tween()
 		tween.tween_property(self, "scale", Vector2(1.18, 0.82), 0.08)

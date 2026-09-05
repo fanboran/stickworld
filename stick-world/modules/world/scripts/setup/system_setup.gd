@@ -432,8 +432,9 @@ func _setup_pause_menu_panel_deferred() -> void:
 
 # ─────────────────────────────── 小地图装配（§15 阶段 0.6）────────────────────────────────
 
-## 创建顶部小地图区双窗（Minimap + L1 缩略窗）并挂到 UIRoot。详见 §10.4。
-## 双窗默认隐藏（A3 Tab 三态控制，HIDDEN 态顶部小地图区整体收起）
+## 创建顶部小地图区（Minimap + L1 缩略窗）并挂到 UIRoot。详见 §10.4。
+## Minimap（本城市俯视）**常驻恒显**——Tab 三态不影响（创始人反馈）；
+## 仅 L1 缩略窗由 Tab 三态控制，默认隐藏。
 func _setup_minimap() -> void:
 	if _root.ui_root == null:
 		return
@@ -442,7 +443,7 @@ func _setup_minimap() -> void:
 	_root._minimap = mm
 	if mm.has_method("setup"):
 		mm.setup(_root)
-	mm.visible = false
+	mm.visible = true
 	# L1 世界缩略窗（贴 Minimap 右侧并列；点击 = 切到 L1 大图）
 	_l1_thumbnail = UIKit.widget(_L1ThumbnailScript, "L1Thumbnail")
 	_root.ui_root.add_to_slot("HudOverlay", _l1_thumbnail)
@@ -628,9 +629,10 @@ func _toggle_l3_strategic_map() -> void:
 		_pause_scene_input(true)
 
 
-## Tab / 边界触发入口（A3 三态循环）。
+## Tab / 边界触发入口（A3 三态循环；F1 验收反馈修订：Minimap 常驻不受 Tab 影响）。
 ## full_map=true（边界自动触发，如顶边界持续推进）：直接开 L1 大图（保留原"出城看图"语义）；
-## full_map=false（玩家按 Tab）：关闭 → 顶部小地图 → 原 Tab 大图 → 关闭 循环。
+## full_map=false（玩家按 Tab）：缩略窗关 → 缩略窗开 → 原 Tab 大图 → 缩略窗关 循环
+## （当前城市 Minimap 三态全程常驻，只有 L1 缩略窗随态显隐）。
 ## M（L3/L2）会话期间忽略：新开视图 = 玩家所见的互斥原则——否则状态机在 L3 海洋层下
 ## 悄悄切态（L1 被盖住打开），M 一关 L1 意外弹出。
 func _open_strategic_map(full_map: bool) -> void:
@@ -639,16 +641,16 @@ func _open_strategic_map(full_map: bool) -> void:
 	_ensure_strategic_maps()
 	if full_map:
 		if _tab_state != TabMapState.FULL_L1:
-			_set_top_minimaps_visible(false)
+			_set_l1_thumbnail_visible(false)
 			_open_l1_full_map()
 		return
 	match _tab_state:
 		TabMapState.HIDDEN:
 			_feed_thumbnail_data()
-			_set_top_minimaps_visible(true)
+			_set_l1_thumbnail_visible(true)
 			_tab_state = TabMapState.TOP_MINIMAPS
 		TabMapState.TOP_MINIMAPS:
-			_set_top_minimaps_visible(false)
+			_set_l1_thumbnail_visible(false)
 			_open_l1_full_map()
 		TabMapState.FULL_L1:
 			_close_l1_full_map()
@@ -668,10 +670,8 @@ func _is_l3_session_active() -> bool:
 			and l3_content.l2_view.visible
 
 
-## 顶部小地图区双窗显隐
-func _set_top_minimaps_visible(v: bool) -> void:
-	if _root._minimap != null:
-		_root._minimap.visible = v
+## L1 缩略窗显隐（Tab 三态唯一作用对象；Minimap 常驻不在此列——创始人反馈）
+func _set_l1_thumbnail_visible(v: bool) -> void:
 	if _l1_thumbnail != null:
 		_l1_thumbnail.visible = v
 
@@ -689,7 +689,7 @@ func _feed_thumbnail_data() -> void:
 		_l1_thumbnail.set_map_data(api.get_data())
 
 
-## 打开 L1 大图（三态第三态；顶部小地图区先收起——"与大图切换显示"）
+## 打开 L1 大图（三态第三态；L1 缩略窗先收起，Minimap 常驻不动）
 func _open_l1_full_map() -> void:
 	if _root._strategic_map == null:
 		return
@@ -712,11 +712,11 @@ func _close_l1_full_map() -> void:
 		_tab_state = TabMapState.HIDDEN
 
 
-## L1 缩略窗点击 = 顶部小地图 → 大图（与 Tab 第二次按下等效）
+## L1 缩略窗点击 = 缩略窗态 → 大图（与 Tab 第二次按下等效；Minimap 常驻不动）
 func _on_l1_thumbnail_clicked() -> void:
 	if _tab_state != TabMapState.TOP_MINIMAPS:
 		return
-	_set_top_minimaps_visible(false)
+	_set_l1_thumbnail_visible(false)
 	_open_l1_full_map()
 
 

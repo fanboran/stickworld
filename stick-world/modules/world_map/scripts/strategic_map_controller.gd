@@ -44,6 +44,13 @@ var _hud: Control = null
 var _indicator: GranularityIndicator = null
 var _tooltip: Control = null
 
+## 旅行方式弹窗（P6/E3，CanvasLayer 直接子节点；双击聚落弹出[走过去|快速旅行|取消]）
+var _travel_dialog: TravelDialog = null
+## 快速旅行执行中（路由高亮展示期，忽略新的双击激活）
+var _fast_travel_pending: bool = false
+## 路由高亮展示时长（秒；「途经路径高亮」反馈，随后即时传送——调试期免费设定）
+const FAST_TRAVEL_HIGHLIGHT_SEC: float = 0.8
+
 ## 视图名牌 + 图例（CanvasLayer 直接子节点，同批显隐；内容在 open() 喂）
 var _title_bar: MapTitleBar = null
 var _legend: MapLegend = null
@@ -99,6 +106,11 @@ func _auto_find_components() -> void:
 		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
 	if _tooltip == null:
 		_tooltip = MapControllerUtil.find_sibling(self, "SettlementTooltip")
+	if _travel_dialog == null:
+		_travel_dialog = MapControllerUtil.find_sibling(self, "TravelDialog") as TravelDialog
+		if _travel_dialog != null \
+				and not _travel_dialog.travel_confirmed.is_connected(_on_travel_confirmed):
+			_travel_dialog.travel_confirmed.connect(_on_travel_confirmed)
 	if _title_bar == null:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _legend == null:
@@ -129,8 +141,11 @@ func _input(event: InputEvent) -> void:
 
 
 ## ESC 语义（由 GameRoot._handle_escape 统一分发，战略图打开时优先于暂停菜单）：
-## 从 L2 下钻进入则返回 L2；否则关闭战略图
+## 旅行弹窗开 → 仅关弹窗；从 L2 下钻进入则返回 L2；否则关闭战略图
 func handle_escape() -> bool:
+	if _travel_dialog != null and _travel_dialog.is_open():
+		_travel_dialog.close()
+		return true
 	if _drill_from_l2:
 		_drill_from_l2 = false
 		visible = false
@@ -175,11 +190,80 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 	_last_click_time = now
 	_last_click_settlement = settlement.settlement_id
 	if is_double and double_click_enter:
-		api.enter_settlement(settlement.settlement_id)
+		_handle_settlement_activation(settlement.settlement_id)
 	elif left_click_selects:
 		api.select(settlement.settlement_id)
 		if api.has_signal("settlement_clicked"):
 			api.settlement_clicked.emit(settlement.settlement_id)
+
+
+## 双击聚落分流（P6/E3 交互流，总体设计 §5.10）：
+##   无 map_id → 不动作（tooltip 已提示「未开放进入」）
+##   SELF（已在此聚落）→ 直接进城（不构成旅行，无弹窗）
+##   其余 → 弹旅行方式窗[走过去|快速旅行|取消]（快速旅行可达性在窗内展示）
+## 快速旅行高亮展示期（_fast_travel_pending）忽略新激活。
+func _handle_settlement_activation(settlement_id: String) -> void:
+	if api == null or not api.has_method("get_travel_status"):
+		return
+	if _fast_travel_pending:
+		return
+	var status: Dictionary = api.get_travel_status(settlement_id)
+	var code: String = str(status.get("code", ""))
+	if code == "NO_SCENE":
+		# 与旧口径一致：无 map_id 聚落双击不进入（api.enter_settlement 会 push_warning）
+		api.enter_settlement(settlement_id)
+		return
+	if code == "SELF":
+		api.enter_settlement(settlement_id)
+		return
+	if _travel_dialog == null:
+		# 弹窗缺失兜底：直接进（保持 P5 行为，不因 UI 缺位锁死进城）
+		api.enter_settlement(settlement_id)
+		return
+	var sref: SettlementRef = api.get_settlement_ref(settlement_id) if api.has_method("get_settlement_ref") else null
+	var display_name: String = sref.name if sref != null and not sref.name.is_empty() else settlement_id
+	_travel_dialog.open_for(settlement_id, display_name, status)
+
+
+## 弹窗确认旅行方式：WALK 调试期直达（E4/F6 接管后走道路场景）；
+## FAST 高亮途经路径 → 延时展示 → 执行（api 侧二次校验）
+func _on_travel_confirmed(settlement_id: String, mode: int) -> void:
+	if api == null or not api.has_method("enter_settlement"):
+		return
+	if mode == WorldAPI.TravelMode.FAST_TRAVEL:
+		_start_fast_travel(settlement_id)
+	else:
+		api.enter_settlement(settlement_id, mode)
+
+
+## 快速旅行执行：途经路径高亮（§5.10「长距离自动显示导航路径」）→
+## 短暂展示后即时传送（调试期免费）。api.fast_travel_to 内部二次校验可达性。
+func _start_fast_travel(settlement_id: String) -> void:
+	var status: Dictionary = api.get_travel_status(settlement_id)
+	if str(status.get("code", "")) != "OK":
+		return
+	_fast_travel_pending = true
+	if map_renderer != null and map_renderer.has_method("set_route_highlight"):
+		map_renderer.set_route_highlight(status.get("roads", []), _route_nodes(status.get("path", [])))
+	await get_tree().create_timer(FAST_TRAVEL_HIGHLIGHT_SEC).timeout
+	_fast_travel_pending = false
+	if map_renderer != null and map_renderer.has_method("clear_route_highlight"):
+		map_renderer.clear_route_highlight()
+	if not is_visible_in_tree():
+		return  # 展示期间视图被关闭（ESC/边界触发），放弃传送
+	api.fast_travel_to(settlement_id)
+
+
+## 途经聚落序列 → 地图坐标节点（路由高亮的圆点标记）
+func _route_nodes(path: Array) -> PackedVector2Array:
+	var nodes := PackedVector2Array()
+	if api == null or not api.has_method("get_settlement_ref"):
+		return nodes
+	for sid in path:
+		var sref: SettlementRef = api.get_settlement_ref(sid)
+		if sref != null:
+			nodes.append(sref.position)
+	return nodes
 
 
 ## 打开指定老 L1 地图（L2 点击 L1 下钻）：加载数据 + 重置视角适配新 context。
@@ -319,6 +403,10 @@ func _on_map_mode_changed(_mode: int) -> void:
 ## 关闭战略图（恢复场景图输入，由接线方/ESC 调用）
 func close() -> void:
 	visible = false
+	if _travel_dialog != null and _travel_dialog.is_open():
+		_travel_dialog.close()
+	if map_renderer != null and map_renderer.has_method("clear_route_highlight"):
+		map_renderer.clear_route_highlight()
 	if _hud != null:
 		_hud.visible = false
 	_set_overlay_visible(false)

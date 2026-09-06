@@ -128,6 +128,15 @@ const PIN_TAIL_LEN := 20.0
 const PIN_LABEL := "你在这里"
 const PIN_LABEL_SIZE := 22.0
 
+## 快速旅行路由高亮（P6/E3「途经路径高亮」）：途经道路亮琥珀加粗 + 途经聚落
+## 节点白描边空心圆，画在水系之上（湖不再遮高亮，路径反馈连续可见）
+const ROUTE_HIGHLIGHT_COLOR := Color(1.0, 0.72, 0.11, 0.95)
+const ROUTE_HIGHLIGHT_WIDTH := 0.008
+const ROUTE_NODE_RADIUS := 6.0
+## 路由高亮数据（api.get_travel_status 的 roads/path → context 折线 + 节点位置）
+var _route_road_pts: Array[PackedVector2Array] = []
+var _route_nodes: PackedVector2Array = PackedVector2Array()
+
 ## 玩家图钉（L1 地图坐标；默认 = 出生聚落，api.set_player_map 动态更新）
 var _pin_pos := Vector2.ZERO
 var _pin_visible := false
@@ -153,6 +162,8 @@ func set_data(data: L1WorldData) -> void:
 	_segs_valid = false
 	_tiles_mesh = null
 	_lakes_mesh = null
+	_route_road_pts.clear()
+	_route_nodes = PackedVector2Array()
 	_bake_blob_outlines()
 	_current_tile_id = ""
 	# 当前所在地块默认 = 出生聚落所在块（玩家跨城移动后由 set_current_tile 切换）
@@ -327,6 +338,16 @@ func _draw() -> void:
 			draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
 	if _lakes_mesh != null:
 		draw_mesh(_lakes_mesh, null)
+	# 1.6 快速旅行路由高亮（P6）：途经道路亮色加粗 + 节点空心圆（水系之上）
+	if not _route_road_pts.is_empty():
+		var rw: float = maxf(ctx_size.x * ROUTE_HIGHLIGHT_WIDTH, 2.0)
+		for pts in _route_road_pts:
+			draw_polyline(pts, ROUTE_HIGHLIGHT_COLOR, rw, true)
+		var nr: float = ROUTE_NODE_RADIUS
+		if zz > 0.0001:
+			nr = ROUTE_NODE_RADIUS / zz
+		for pos in _route_nodes:
+			draw_arc(pos, nr, 0.0, TAU, 48, Color.WHITE, maxf(rw * 0.35, 1.0), true)
 	if _tiles_mesh == null:
 		# 回退：数据异常时逐层绘制（邻居空心：只描边，见第 4.5 层）
 		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
@@ -436,6 +457,29 @@ func clear_player_pin() -> void:
 	if not _pin_visible:
 		return
 	_pin_visible = false
+	queue_redraw()
+
+
+## 设置快速旅行路由高亮（P6）：roads = api.get_travel_status 的 "roads"
+## （途经道路条目，取其 pts），nodes = 途经聚落位置序列（"path" 对应
+## SettlementRef.position）。切换数据/关闭视图时经 clear_route_highlight 清除。
+func set_route_highlight(roads: Array, nodes: PackedVector2Array) -> void:
+	_route_road_pts.clear()
+	for rd in roads:
+		var d: Dictionary = rd if rd is Dictionary else {}
+		var pts: PackedVector2Array = d.get("pts", PackedVector2Array())
+		if pts.size() >= 2:
+			_route_road_pts.append(pts)
+	_route_nodes = nodes
+	queue_redraw()
+
+
+## 清除快速旅行路由高亮（无高亮时幂等）
+func clear_route_highlight() -> void:
+	if _route_road_pts.is_empty() and _route_nodes.is_empty():
+		return
+	_route_road_pts.clear()
+	_route_nodes = PackedVector2Array()
 	queue_redraw()
 
 

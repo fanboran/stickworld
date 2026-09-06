@@ -205,9 +205,10 @@ func _emit_event_bus(signal_name: String, args: Array) -> void:
 			EventBus.emit_signal(signal_name, args[0], args[1], args[2])
 
 
-## EventBus.travel_requested 信号处理（战略图 -> 场景图）
-func _on_travel_requested(map_id: String) -> void:
-	travel_to_map(map_id, WorldAPI.TravelMode.FAST_TRAVEL, WorldAPI.EntrySide.LEFT)
+## EventBus.travel_requested 信号处理（战略图 -> 场景图）。
+## travel_mode 透传（P6 契约：WALK/FAST_TRAVEL；缺省按 FAST_TRAVEL 兼容旧发射方）
+func _on_travel_requested(map_id: String, travel_mode: int = WorldAPI.TravelMode.FAST_TRAVEL) -> void:
+	travel_to_map(map_id, travel_mode, WorldAPI.EntrySide.LEFT)
 
 
 # ─────────────────────────────── 查询 ────────────────────────────────

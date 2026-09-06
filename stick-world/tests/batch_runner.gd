@@ -49,6 +49,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_settlement_blob.gd",
 	"res://tests/unit/test_road_parse.gd",
 	"res://tests/unit/test_settlement_entry.gd",
+	"res://tests/unit/test_travel_planner.gd",
 ]
 
 const PER_TEST_TIMEOUT_SEC: float = 30.0

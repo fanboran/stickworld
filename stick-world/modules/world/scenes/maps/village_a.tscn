@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://d0wab6rfsdona"]
 
-[ext_resource type="Script" uid="uid://e6o0yc67qlyl" path="res://modules/world/scripts/map/village_map.gd" id="1_vmap"]
+[ext_resource type="Script" path="res://modules/world/scripts/map/town_siege.gd" id="1_vmap"]
 [ext_resource type="Script" uid="uid://bnt0k4kto231k" path="res://modules/world/scripts/placement/placement_grid.gd" id="2_grid"]
 [ext_resource type="Script" uid="uid://cqxakicqelpkj" path="res://modules/world/scripts/map/initial_buildings_list.gd" id="3_ibl"]
 [ext_resource type="Script" uid="uid://7ko7iiaifff4" path="res://tools/dev/map_grid_drawer.gd" id="4_grid_drawer"]
@@ -11,6 +11,11 @@ size = Vector2(64, 270)
 
 [node name="VillageMap" type="Node2D" unique_id=1514933581]
 script = ExtResource("1_vmap")
+city_left = -1280.0
+city_right = 1280.0
+left_wall_x = -1900.0
+right_wall_x = 1900.0
+gate_prompt_x = 1600.0
 
 [node name="PlacementGrid" type="Node" parent="." unique_id=866086613]
 script = ExtResource("2_grid")

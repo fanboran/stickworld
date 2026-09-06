@@ -408,11 +408,11 @@ func _register_default_maps() -> void:
 	# 阶段 F：健全地图系统（任何地图可步行回村，链式衔接：村↔战场↔森林）
 	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT)
-	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	# 守城图右端继续通森林（保留森林附属区域可达：村↔战场↔守城↔森林）
-	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
-	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, SIEGE_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	# 守城图（独立区域）左出回村A：仅作为 travel 目标登记；平时进出走村A城门选项
+	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	# 恢复原链：遭遇战场右出通森林（守城图独立后不再串链）
+	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 
 
 func _load_start_village() -> void:

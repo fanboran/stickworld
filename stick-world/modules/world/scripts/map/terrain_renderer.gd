@@ -13,6 +13,9 @@ extends Node
 const GRASS_TILE_SIZE: float = 512.0
 
 var _root: Node2D = null
+## 自然地形模式（enable_natural_ground 后为 true）：土路视觉走 shader，
+## 纯色多边形只做数据兜底不再显示
+var _natural_ground: bool = false
 
 
 func setup(root: Node2D) -> void:
@@ -81,6 +84,18 @@ float fbm(vec2 p) {
 	return v;
 }
 
+// 踩踏地面肌理：低频明暗 + 石子颗粒 + 残草斑（weed_amt 控回草强度）。
+// 硬地皮与泥土路共用同一套踩踏语言——衔接才自然（修"纯色糊块"观感）。
+vec3 trample(vec3 base, vec2 wp, float weed_amt) {
+	// 高频踩踏明暗（83×42px 级细块——泥巴质感；低频会产生"大砖块"网格错觉）
+	float tread = fbm(wp * vec2(0.012, 0.024));
+	base *= 0.86 + tread * 0.22;
+	float pebble = hash21(floor(wp * 0.55));
+	base *= 1.0 + (pebble - 0.5) * 0.20 * step(0.68, pebble);
+	float weed = fbm(wp * vec2(0.006, 0.018));
+	return mix(base, vec3(0.42, 0.50, 0.30), smoothstep(0.60, 0.78, weed) * weed_amt);
+}
+
 // 格子内到最近边缘的距离 [0, 0.5]
 float edge_dist(vec2 local_uv) {
 	return min(min(local_uv.x, 1.0 - local_uv.x), min(local_uv.y, 1.0 - local_uv.y));
@@ -133,7 +148,8 @@ void fragment() {
 	float wx_r = world_pos.x + (fbm(vec2(world_pos.x * 0.004 + 37.0, world_pos.y * 0.013)) - 0.5) * 2.0 * edge_amp;
 	float city_factor = smoothstep(city_left_x - city_fade, city_left_x + city_fade, wx_l)
 		* (1.0 - smoothstep(city_right_x - city_fade, city_right_x + city_fade, wx_r));
-	COLOR = mix(COLOR, city_color, city_factor * 1.0);
+	vec3 city_rgb = trample(city_color.rgb, world_pos, 0.45);
+	COLOR = vec4(mix(COLOR.rgb, city_rgb, city_factor), COLOR.a);
 
 	// 泥土路带：与硬地皮同色系但略深（被踩踏的裸土），边缘同款 fbm 参差；
 	// 路身叠踩踏不均的低频明暗 + 高频石子颗粒。路在草地上明显、伸进硬地皮
@@ -150,11 +166,7 @@ void fragment() {
 	road_mask *= smoothstep(road_top - 40.0, road_top + 40.0, wy_t)
 		* (1.0 - smoothstep(road_bot - 40.0, road_bot + 40.0, wy_b));
 	if (road_mask > 0.001) {
-		vec3 road_col = city_color.rgb * vec3(0.86, 0.83, 0.80);
-		float tread = fbm(world_pos * vec2(0.003, 0.009));
-		road_col *= 0.80 + tread * 0.40;
-		float pebble = hash21(floor(world_pos * 0.55));
-		road_col *= 1.0 + (pebble - 0.5) * 0.30 * step(0.60, pebble);
+		vec3 road_col = trample(city_color.rgb * vec3(0.86, 0.83, 0.80), world_pos, 0.30);
 		// 车辙：路中央两条暗带（y 随 x 缓慢起伏——像推车走出来的辙）
 		float road_mid = (road_top + road_bot) * 0.5;
 		float rut_span = (road_bot - road_top);
@@ -163,10 +175,6 @@ void fragment() {
 		float ruts = (1.0 - smoothstep(8.0, 26.0, abs(world_pos.y - ry1)))
 			+ (1.0 - smoothstep(8.0, 26.0, abs(world_pos.y - ry2)));
 		road_col *= 1.0 - clamp(ruts, 0.0, 1.0) * 0.14;
-		// 路内残草斑：踩踏不彻底的角落长回草（低频噪声阈值）
-		float weed = fbm(world_pos * vec2(0.006, 0.018));
-		vec3 grass_tint = vec3(0.42, 0.50, 0.30);
-		road_col = mix(road_col, grass_tint, smoothstep(0.62, 0.78, weed) * 0.5);
 		vec3 road_mix = mix(COLOR.rgb, road_col, road_mask * (1.0 - city_factor * 0.9));
 		COLOR = vec4(road_mix, COLOR.a);
 	}
@@ -233,6 +241,9 @@ func enable_natural_ground() -> void:
 	if gp == null or gp.material == null:
 		return
 	gp.material.set_shader_parameter("natural_edge", 1.0)
+	_natural_ground = true
+	if _root._dirt_road_poly != null:
+		_root._dirt_road_poly.visible = false
 
 
 ## 设置泥土路带（世界坐标 x 范围 + y 踩踏窗）——shader 路带视觉；同时刷新
@@ -298,6 +309,8 @@ func update_dirt_road_visual() -> void:
 		Vector2(x0, _root.ground_y), Vector2(x1, _root.ground_y),
 		Vector2(x1, _root.ground_bottom), Vector2(x0, _root.ground_bottom),
 	])
+	# 自然地形模式：路面视觉由 shader 踩踏肌理承担，纯色多边形不再显示
+	_root._dirt_road_poly.visible = not _natural_ground
 
 
 ## 获取城内左边界（从 Shader 参数读）

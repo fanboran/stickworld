@@ -9,14 +9,14 @@ const OUT_DIR := "res://assets/environment"
 
 
 func _init() -> void:
-	# 城墙段：512×478 墙身（运行时按 region 竖向裁切拼接）+ 34 垛口
-	var seg := StoneBrickGen.make_crenellated(512, 478, 20260906, 34, 56, Vector2i(64, 30))
+	# 城墙段：512×512 纯侧砖立面（无垛口——齿朝战场侧看不见，墙顶走马道+矮墙）
+	var seg := StoneBrickGen.make_wall(512, 512, 20260906, Vector2i(64, 30), false)
 	var err1 := seg.save_png(_out("siege_wall_seg.png"))
-	# 城门：440×280 立面（与 SiegeWall.GATE_H 对齐），门洞 150×170
-	var gate := StoneBrickGen.make_gate(440, 280, 20260907, Vector2i(150, 170))
-	var err2 := gate.save_png(_out("siege_gate.png"))
-	print("[bake_siege] wall_seg(%dx%d) err=%d, gate(%dx%d) err=%d" % [
-		seg.get_width(), seg.get_height(), err1, gate.get_width(), gate.get_height(), err2])
+	# 城墙马道面（俯视砖铺：无受光渐变，战场视角的墙顶上表面）
+	var top := StoneBrickGen.make_wall(512, 320, 20260908, Vector2i(56, 30), true)
+	var err2 := top.save_png(_out("siege_top_face.png"))
+	print("[bake_siege] wall_seg(%dx%d) err=%d, top(%dx%d) err=%d" % [
+		seg.get_width(), seg.get_height(), err1, top.get_width(), top.get_height(), err2])
 	quit(0 if err1 == OK and err2 == OK else 1)
 
 

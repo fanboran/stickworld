@@ -41,6 +41,7 @@ func _ready() -> void:
 	loader.travel_to_map("siege_battlefield", WorldAPI.TravelMode.TELEPORT,
 			WorldAPI.EntrySide.LEFT)
 	await get_tree().create_timer(3.5).timeout
+	var fmap: Node2D = _game_root.get_current_map()
 	TimeManager.resume()
 	# 等首波 + 巡墙跑起来
 	await get_tree().create_timer(6.0).timeout
@@ -48,6 +49,18 @@ func _ready() -> void:
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(out)
 	print("[SNAPSHOT] saved field: ", out)
+	# ③ 战场向右走全图验证：玩家传到右段 x=5600（远端），相机应跟随到那里
+	var fplayer: Node2D = _find_player(fmap)
+	if fplayer != null:
+		fplayer.global_position = Vector2(5600.0, fplayer.global_position.y)
+		if cam_rig != null and cam_rig.has_method("snap_to_follow_target"):
+			cam_rig.snap_to_follow_target()
+	await get_tree().create_timer(1.0).timeout
+	TimeManager.resume()
+	var out3 := out.replace(".png", "_right.png")
+	var img3 := get_viewport().get_texture().get_image()
+	img3.save_png(out3)
+	print("[SNAPSHOT] saved field-right: ", out3, " player_x=", fplayer.global_position.x if fplayer != null else -1.0)
 	# 波次推进一张
 	for i in 3:
 		await get_tree().create_timer(9.0).timeout
@@ -56,7 +69,6 @@ func _ready() -> void:
 	var img2 := get_viewport().get_texture().get_image()
 	img2.save_png(out2)
 	print("[SNAPSHOT] saved battle: ", out2)
-	var fmap: Node2D = _game_root.get_current_map()
 	var director: Node = fmap.get_node_or_null("SiegeDirector") if fmap != null else null
 	if director != null:
 		print("[SNAPSHOT] 波数: ", director.get_wave_num())

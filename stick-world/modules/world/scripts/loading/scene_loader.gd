@@ -86,18 +86,27 @@ func register_map_exit(map_id: String, exit_side: int, target_map_id: String, ta
 	var key := "left" if exit_side == WorldAPI.EntrySide.LEFT else "right"
 	if not _map_exits.has(map_id):
 		_map_exits[map_id] = {}
-	_map_exits[map_id][key] = {
+	if not _map_exits[map_id].has(key):
+		_map_exits[map_id][key] = []
+	# 数组存储：同一方向可注册多条道路（地图与场景图 §5.5.5——一方向多条道路可选）
+	_map_exits[map_id][key].append({
 		"target": target_map_id,
 		"entry": target_entry_side,
-	}
+	})
 
 
-## 查询地图出口
+## 查询地图出口（兼容取第一条；同方向多路时用 get_map_exits）
 func get_map_exit(map_id: String, exit_side: int) -> Dictionary:
+	var arr := get_map_exits(map_id, exit_side)
+	return arr[0] if not arr.is_empty() else {}
+
+
+## 查询地图某方向全部出口（一方向多条道路可选，§5.5.5）
+func get_map_exits(map_id: String, exit_side: int) -> Array:
 	var key := "left" if exit_side == WorldAPI.EntrySide.LEFT else "right"
 	if not _map_exits.has(map_id):
-		return {}
-	return _map_exits[map_id].get(key, {})
+		return []
+	return _map_exits[map_id].get(key, [])
 
 
 ## 获取全部已注册地图 ID（供大世界地图面板动态生成目的地）。

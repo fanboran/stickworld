@@ -118,8 +118,6 @@ func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> Ar
 		# 不附身（AI 接管）
 		if e.has_method("set_possessed"):
 			e.set_possessed(false)
-		# 红色身体区分敌方
-		set_unit_body_color(e, Color(0.82, 0.22, 0.22))
 		enemies.append(e)
 	# 启动战斗：玩家方（进攻）vs 敌方（防守）
 	if not enemies.is_empty():
@@ -145,15 +143,5 @@ func _spawn_ally_unit(map: Node2D, idx: int) -> Node2D:
 		e.set_construction_manager(_root.get_construction_api())
 	if e.has_method("set_formation_system") and _root._formation_system != null:
 		e.set_formation_system(_root._formation_system)
-	# 蓝色身体区分友军（红=敌）
-	set_unit_body_color(e, Color(0.35, 0.55, 0.95))
 	return e
 
-
-## 设置火柴人身体颜色（用于阵营视觉区分）
-func set_unit_body_color(entity: Node2D, color: Color) -> void:
-	if not is_instance_valid(entity):
-		return
-	var r = entity.get("rig") if "rig" in entity else null
-	if r != null and "body_color" in r:
-		r.body_color = color

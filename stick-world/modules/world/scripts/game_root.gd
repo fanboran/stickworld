@@ -537,7 +537,7 @@ func _spawn_travel_followers(map: Node2D, player: Node2D, spawn_y: float) -> Arr
 
 
 ## 通用地图加载回调（初始加载 + 地图切换共用）
-func _on_map_loaded(map_id: String, _map_type: int) -> void:
+func _on_map_loaded(map_id: String, map_type: int) -> void:
 	var map: Node2D = scene_loader.get_current_map() if scene_loader.has_method("get_current_map") else null
 	if map == null or not map.has_method("spawn_entity"):
 		return
@@ -628,6 +628,8 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
+	# F6 步行旅行（总体设计 §5.10 E5）：道路场景出口按队列状态刷新；进出聚落 = 队列终点/回退
+	_consume_walk_state(map_id, map_type)
 	# 注册调试绘制器
 	_bootstrap.register_debug_drawers()
 	# 世界就绪：淡出加载覆盖（玩家已生成、相机已跟随）
@@ -640,6 +642,42 @@ func request_map_travel(target_map_id: String, entry_side: int) -> void:
 	if scene_loader == null or not scene_loader.has_method("travel_to_map"):
 		return
 	scene_loader.travel_to_map(target_map_id, WorldAPI.TravelMode.WALK, entry_side)
+
+
+# ─────────────────────────────── 步行旅行（F6/E5，总体设计 §5.10）───────────────────────────────
+
+## 步行状态消费（每次 map_loaded 调用）：
+## - 道路场景：校正 walk_index + 按队列位置刷新左右出口（register_map_exit，
+##   ChunkTrigger target 留空走出口配置——同一场景正向/反向出去目标不同）
+## - 聚落场景：命中终点（步行完成进城）或出发聚落（中途折返）→ 清队列
+func _consume_walk_state(map_id: String, map_type: int) -> void:
+	if WorldState == null:
+		return
+	if map_type == WorldAPI.MapType.ROAD:
+		if WorldState.walk_legs.is_empty():
+			return  # 非步行上下文（防御；存档已跳过 road 场景，读档不会落此处）
+		var index := -1
+		for i in WorldState.walk_legs.size():
+			if str(WorldState.walk_legs[i].get("road_id", "")) == map_id:
+				index = i
+				break
+		if index < 0:
+			WorldState.reset_walk()
+			return
+		WorldState.walk_index = index
+		# 左出口：第一段 → 回出发聚落；否则 → 上一段道路（均从其 RIGHT 侧进入）
+		var left_target: String = WorldState.walk_origin_map_id if index == 0 \
+				else str(WorldState.walk_legs[index - 1].get("road_id", ""))
+		# 右出口：最后一段 → 进终点聚落；否则 → 下一段道路（均从其 LEFT 侧进入）
+		var right_target: String = WorldState.walk_target_map_id if index == WorldState.walk_legs.size() - 1 \
+				else str(WorldState.walk_legs[index + 1].get("road_id", ""))
+		if not left_target.is_empty():
+			scene_loader.register_map_exit(map_id, WorldAPI.EntrySide.LEFT, left_target, WorldAPI.EntrySide.RIGHT)
+		if not right_target.is_empty():
+			scene_loader.register_map_exit(map_id, WorldAPI.EntrySide.RIGHT, right_target, WorldAPI.EntrySide.LEFT)
+	elif WorldState.is_walking() \
+			and (map_id == WorldState.walk_target_map_id or map_id == WorldState.walk_origin_map_id):
+		WorldState.reset_walk()  # 进城（终点）或折返回出发聚落：步行结束
 
 
 ## 主动按指定 cell_x 触发建造（供调试 / 集成测试调用）。

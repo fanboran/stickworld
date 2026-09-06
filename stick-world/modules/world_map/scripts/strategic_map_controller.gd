@@ -111,6 +111,9 @@ func _auto_find_components() -> void:
 		if _travel_dialog != null \
 				and not _travel_dialog.travel_confirmed.is_connected(_on_travel_confirmed):
 			_travel_dialog.travel_confirmed.connect(_on_travel_confirmed)
+		# 步行可达性复核（F6）：弹窗按 get_walk_status 适配「走过去」按钮
+		if _travel_dialog != null and api != null and api.has_method("get_walk_status"):
+			_travel_dialog.walk_status_fn = get_walk_status_checked
 	if _title_bar == null:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _legend == null:
@@ -225,15 +228,24 @@ func _handle_settlement_activation(settlement_id: String) -> void:
 	_travel_dialog.open_for(settlement_id, display_name, status)
 
 
-## 弹窗确认旅行方式：WALK 调试期直达（E4/F6 接管后走道路场景）；
+## 弹窗确认旅行方式：WALK → api.walk_to（F6 步行道路场景流程，逐段走到终点进城）；
 ## FAST 高亮途经路径 → 延时展示 → 执行（api 侧二次校验）
 func _on_travel_confirmed(settlement_id: String, mode: int) -> void:
-	if api == null or not api.has_method("enter_settlement"):
+	if api == null:
 		return
 	if mode == WorldAPI.TravelMode.FAST_TRAVEL:
 		_start_fast_travel(settlement_id)
+	elif api.has_method("walk_to"):
+		api.walk_to(settlement_id)
 	else:
 		api.enter_settlement(settlement_id, mode)
+
+
+## 步行可达性复核（travel_dialog.walk_status_fn 消费）：转发 api.get_walk_status
+func get_walk_status_checked(settlement_id: String) -> Dictionary:
+	if api != null and api.has_method("get_walk_status"):
+		return api.get_walk_status(settlement_id)
+	return {"ok": false, "reason": "步行不可用"}
 
 
 ## 快速旅行执行：途经路径高亮（§5.10「长距离自动显示导航路径」）→

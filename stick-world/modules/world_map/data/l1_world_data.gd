@@ -231,11 +231,13 @@ static func _rivers_from(arr: Array) -> Array:
 	return out
 
 
-## 道路归一化：json {"from","to","tier","length_px","polyline":[[x,y],...]} →
-## {"pts": PackedVector2Array, "from": String, "to": String, "tier": String, "length_px": float}。
+## 道路归一化：json {"from","to","tier","length_px","polyline":[[x,y],...],"biomes":[int...]}
+## → {"pts": PackedVector2Array, "from": String, "to": String, "tier": String,
+## "length_px": float, "biomes": PackedInt32Array}。
 ## polyline ≥2 点用之（P3.5 贴地形折线）；缺失/无效回退 from/to 聚落直线
 ## （§5.9 向后兼容口径，旧包 MST 直连线）；两端聚落都未知则跳过该条。
 ## from/to 端点透传（P6 快速旅行路网图消费；F5 渲染只读 pts/tier 不受影响）。
+## biomes 沿线群系标签透传（F6 道路场景色带消费；缺省空数组，消费端按 tier 兜底单色）。
 static func _roads_from(arr: Array, tiles: Array[L1TileDef]) -> Array:
 	var out: Array = []
 	var pos_by_sid: Dictionary = {}
@@ -253,12 +255,16 @@ static func _roads_from(arr: Array, tiles: Array[L1TileDef]) -> Array:
 			if a == null or b == null:
 				continue
 			pts = PackedVector2Array([a as Vector2, b as Vector2])
+		var biomes := PackedInt32Array()
+		for v in d.get("biomes", []):
+			biomes.append(int(v))
 		out.append({
 			"pts": pts,
 			"from": from_id,
 			"to": to_id,
 			"tier": str(d.get("tier", "DIRT")),
 			"length_px": float(d.get("length_px", 0.0)),
+			"biomes": biomes,
 		})
 	return out
 

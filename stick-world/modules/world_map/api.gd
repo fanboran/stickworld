@@ -304,6 +304,85 @@ func fast_travel_to(settlement_id: String) -> bool:
 	return enter_settlement(settlement_id, WorldAPI.TravelMode.FAST_TRAVEL)
 
 
+# ===== 步行旅行（F6/E5，总体设计 §5.10）=====
+
+## 步行可达性判定（区别于快速旅行：**不要求已到访**——走过去正是解锁到访的手段；
+## 但同样要求路网连通 ∧ 未被不可通过区切断 ∧ 非战斗）。
+## 返回 {"ok": bool, "reason": String(空=可走), "roads": Array[途经道路按行进序]}。
+func get_walk_status(settlement_id: String) -> Dictionary:
+	var result := {"ok": false, "reason": "", "roads": []}
+	if not _is_initialized or _travel_planner == null:
+		result["reason"] = "世界数据未加载"
+		return result
+	var settlement: SettlementRef = get_settlement_ref(settlement_id)
+	if settlement == null:
+		result["reason"] = "聚落不存在"
+		return result
+	if settlement.map_id.is_empty():
+		result["reason"] = "未开放进入"
+		return result
+	if is_battle_active():
+		result["reason"] = "战斗中禁止旅行"
+		return result
+	if settlement_id == _player_settlement_id:
+		result["reason"] = "已在此处"
+		return result
+	if _blocked_set().has(settlement_id):
+		result["reason"] = "目标在不可通过区"
+		return result
+	var route := _travel_planner.find_path(_player_settlement_id, settlement_id, _blocked_set())
+	if route["path"].is_empty():
+		result["reason"] = "路网不连通"
+		return result
+	result["ok"] = true
+	result["roads"] = route["roads"]
+	return result
+
+
+## 步行出发（「走过去」）：组装 WorldState 步行队列（逐段道路场景，终点进城），
+## 发射 travel_requested(第一段道路场景 id, WALK) → SceneLoader 懒生成道路场景。
+## [P] get_walk_status 可走
+## [Q] WorldState.walk_legs 非空；战略图关闭；场景图进入第一段道路场景
+func walk_to(settlement_id: String) -> bool:
+	var status := get_walk_status(settlement_id)
+	if not status["ok"]:
+		push_warning("[WorldMapApi] 步行被拒绝（%s：%s）" % [settlement_id, status["reason"]])
+		return false
+	var roads: Array = status["roads"]
+	if roads.is_empty():
+		return false
+	WorldState.reset_walk()
+	var legs: Array = []
+	for rd in roads:
+		var from_id := str(rd.get("from", ""))
+		var to_id := str(rd.get("to", ""))
+		var from_map := get_settlement_ref(from_id).map_id if get_settlement_ref(from_id) != null else ""
+		var to_map := get_settlement_ref(to_id).map_id if get_settlement_ref(to_id) != null else ""
+		if from_map.is_empty() or to_map.is_empty():
+			push_warning("[WorldMapApi] 道路端点聚落无 map_id，步行中断: %s→%s" % [from_id, to_id])
+			WorldState.reset_walk()
+			return false
+		legs.append({
+			# road_id = road_<edge_key>（两端聚落排序拼接，a-b 与 b-a 同路同 id；
+			# 生成器/场景缓存只消费此 id，不重复维护规则）
+			"road_id": "road_" + TravelPlanner.edge_key(from_id, to_id).replace("|", "_"),
+			"road": rd,
+			"from_map_id": from_map,
+			"to_map_id": to_map,
+		})
+	var target: SettlementRef = get_settlement_ref(settlement_id)
+	WorldState.walk_legs = legs
+	WorldState.walk_index = 0
+	WorldState.walk_target_map_id = target.map_id
+	WorldState.walk_origin_map_id = get_settlement_ref(str(roads[0].get("from", ""))).map_id
+	# 发射旅行请求（第一段道路场景）-> SceneLoader 监听并懒生成
+	if EventBus != null:
+		EventBus.travel_requested.emit(WorldState.walk_legs[0]["road_id"], WorldAPI.TravelMode.WALK)
+	# 关闭战略图
+	close_strategic_map()
+	return true
+
+
 # ===== 查询 =====
 
 ## 根据屏幕坐标查询命中的聚落

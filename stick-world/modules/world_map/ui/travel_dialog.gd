@@ -9,10 +9,12 @@ class_name TravelDialog
 ##
 ## 按状态（api.get_travel_status 的 code）适配：
 ##   OK          [走过去] [快速旅行✦] —— 快速旅行亮色可用
-##   UNVISITED/UNREACHABLE/BLOCKED [走过去] [快速旅行(置灰+原因)]
+##   UNVISITED   [走过去✦] [快速旅行(置灰+原因)] —— 走过去解锁到访（连通性由
+##               api.get_walk_status 复核，不连通同样置灰）
+##   UNREACHABLE/BLOCKED/NO_SCENE [走过去(置灰+原因)] [快速旅行(置灰+原因)]
 ##   BATTLE      仅 [取消] + 警示行（战斗中禁止一切旅行）
-## 走过去调试期与快速旅行同为即时直达（E4/F6 步行道路场景接入后走 RoadMap 流程）；
-## NO_SCENE / SELF 不开本弹窗（控制器前置分流）。
+## 走过去 = api.walk_to 步行道路场景流程（F6）；NO_SCENE / SELF 不开本弹窗
+## （控制器前置分流）。
 
 ## 玩家确认旅行方式：mode = WorldAPI.TravelMode.WALK / FAST_TRAVEL
 signal travel_confirmed(settlement_id: String, mode: int)
@@ -27,6 +29,9 @@ var _walk_btn: Button = null
 var _fast_btn: Button = null
 ## 当前弹窗目标（空 = 关闭态）
 var _settlement_id: String = ""
+## 步行状态复核钩子（装配注入：func(settlement_id) -> Dictionary {ok, reason}；
+## 弹窗不直接依赖 api 实例——控制器连接时绑定）
+var walk_status_fn: Callable = Callable()
 
 
 func _ready() -> void:
@@ -79,9 +84,12 @@ func open_for(settlement_id: String, settlement_name: String, status: Dictionary
 	_settlement_id = settlement_id
 	var code: String = str(status.get("code", ""))
 	_title_label.text = "%s · 旅行" % (settlement_name if not settlement_name.is_empty() else settlement_id)
-	var can_travel: bool = code != "BATTLE"  # 战斗中禁止一切旅行
-	_walk_btn.disabled = not can_travel
-	_walk_btn.tooltip_text = "" if can_travel else "战斗中禁止旅行"
+	# 走过去：路网连通即可（不要求已到访）；连通性走 walk_status_fn 复核
+	var walk := {"ok": code == "OK", "reason": ""}
+	if code != "OK" and walk_status_fn.is_valid():
+		walk = walk_status_fn.call(settlement_id)
+	_walk_btn.disabled = not bool(walk.get("ok", false))
+	_walk_btn.tooltip_text = "" if bool(walk.get("ok", false)) else str(walk.get("reason", "不可步行到达"))
 	if code == "OK":
 		var hops: int = int(status.get("hops", 0))
 		var length_px: float = float(status.get("length_px", 0.0))
@@ -92,7 +100,8 @@ func open_for(settlement_id: String, settlement_name: String, status: Dictionary
 		_fast_btn.tooltip_text = ""
 	else:
 		var reason: String = str(status.get("reason", "不可用"))
-		_status_label.text = "快速旅行不可用：%s\n（可先「走过去」亲自到达，解锁此城）" % reason
+		var hint := "（可先「走过去」亲自到达，解锁此城）" if code == "UNVISITED" else "（步行亦不可达：%s）" % _walk_btn.tooltip_text
+		_status_label.text = "快速旅行不可用：%s\n%s" % [reason, hint]
 		_status_label.modulate = StickTokens.WARN
 		_fast_btn.disabled = true
 		_fast_btn.tooltip_text = reason

@@ -9,8 +9,7 @@ class_name SettlementTooltip
 ## 数据源：每帧轮询 MapRenderer.hovered_tile_id（渲染器已做悬停命中检测），
 ## 内容更新抽成 update_for_tile 供测试直接调用（headless 下 _process 不运行）。
 ##
-## 内容：聚落名称 / 级别 / 归属政权 / 进入状态。
-## map_id 为空的聚落（当前 8 城全部如此）明确显示"未开放进入"，不误导玩家双击。
+## 内容：聚落名称 / 级别 / 归属政权 / 进入状态（P6：按快速旅行可达性显示提示）。
 
 ## 鼠标指针到面板左上角的偏移（面板出现在指针右下侧）
 const CURSOR_OFFSET := Vector2(18.0, 18.0)
@@ -116,17 +115,38 @@ func update_for_tile(tile: L1TileDef) -> void:
 	_level_label.text = "级别 T%d · %s" % [s.level, lvl_name]
 	var owner_name := _owner_display_name(tile)
 	_owner_label.text = "政权 %s" % owner_name
-	# 进入状态：map_id 为空 = 场景图未开放，明确提示不误导
+	# 进入状态（P6 快速旅行语义，§5.10）：无 map_id = 未开放；SELF = 当前位置；
+	# 可达 = 双击弹旅行窗；不可达 = 注明原因（走过去仍可，见弹窗）
 	if s.map_id.is_empty():
 		_enter_label.text = "未开放进入"
 		_enter_label.modulate = StickTokens.WARN
 	else:
-		_enter_label.text = "双击进入"
-		_enter_label.modulate = StickTokens.SUCCESS
+		var status_text := _travel_status_text(s.settlement_id)
+		_enter_label.text = status_text
+		_enter_label.modulate = StickTokens.SUCCESS \
+				if status_text.begins_with("双击") else StickTokens.WARN
 	_enter_label.visible = true
 	_shown_tile_id = tile.tile_id
 	visible = true
 	_follow_mouse()
+
+
+## 双击行为提示文案（api 可达性查询；api 未初始化时回退通用提示）
+func _travel_status_text(settlement_id: String) -> String:
+	if _api == null or not _api.has_method("get_travel_status"):
+		return "双击进入"
+	var status: Dictionary = _api.get_travel_status(settlement_id)
+	match str(status.get("code", "")):
+		"SELF":
+			return "当前位置 · 双击进入"
+		"OK":
+			var hops: int = int(status.get("hops", 0))
+			return "双击出发 · 快速旅行可达（途经 %d 站）" % maxi(hops, 0)
+		"BATTLE":
+			return "战斗中禁止旅行（可走过去）"
+		_:
+			var reason: String = str(status.get("reason", "不可用"))
+			return "双击走过去 · 快速旅行不可用：%s" % reason
 
 
 ## 归属政权显示名（states 缺失/无主兜底）

@@ -28,6 +28,8 @@ func _ready() -> void:
 	_runner.add_test("L1 结构对齐 L2：HUD 缩放条 + 整图适配默认=100% + 居中", _test_l2_like_hud, true)
 	_runner.add_test("Tab 跟随玩家当前 L1：下钻是临时查看、不改变 Tab", _test_tab_follows_player_l1, true)
 	_runner.add_test("城市块已裁剪湖泊：陆地与湖泊无缝无重叠", _test_lake_city_no_overlap, true)
+	_runner.add_test("快速旅行：可达性状态机（P6：已到访/连通/阻断/战斗）", _test_fast_travel_status, true)
+	_runner.add_test("快速旅行：执行与 travel_mode 透传 + 弹窗挂载（P6）", _test_fast_travel_exec, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -218,7 +220,7 @@ func _test_enter() -> void:
 			break
 	var emitted: Array = []
 	if EventBus != null:
-		EventBus.travel_requested.connect(func(m: String): emitted.append(m))
+		EventBus.travel_requested.connect(func(m: String, _mode: int): emitted.append(m))
 	if target_id.is_empty():
 		# 城市层现状：全部城市无 map_id -> 双击/enter 不应触发旅行
 		_api.enter_settlement(data.spawn_settlement_id)
@@ -251,7 +253,7 @@ func _test_empty_enter() -> void:
 		return
 	var emitted: Array = []
 	if EventBus != null:
-		EventBus.travel_requested.connect(func(m: String): emitted.append(m))
+		EventBus.travel_requested.connect(func(m: String, _mode: int): emitted.append(m))
 	_api.enter_settlement(empty_id)
 	await get_tree().process_frame
 	_runner.assert_true(emitted.is_empty(), "无 map_id 聚落不应发射 travel_requested")
@@ -337,3 +339,95 @@ func _test_l2_like_hud() -> void:
 			"L1 重开保留用户位置/缩放（结构对齐 L2）")
 	_content.close()
 	await get_tree().process_frame
+
+
+## 任取一个非出生、有 map_id 的聚落（P6 用例辅助）
+func _first_other_settlement(data: RefCounted) -> String:
+	for tile in data.tiles:
+		if tile.settlement != null and not tile.settlement.map_id.is_empty() \
+				and tile.settlement.settlement_id != data.spawn_settlement_id:
+			return tile.settlement.settlement_id
+	return ""
+
+
+func _test_fast_travel_status() -> void:
+	# P6 快速旅行可达性状态机（创始人拍板语义：已到访 ∧ 路网连通 ∧ 未被不可通过区切断）
+	if _api == null or not _api.is_initialized():
+		_runner.assert_true(false, "前置数据加载失败，跳过")
+		return
+	var data: RefCounted = _api.get_data()
+	WorldState.visited_settlements = {}
+	_api.set_block_filter(Callable())
+	# 出生聚落恒已到访且为玩家初始所在 → SELF；其他城开局未到访 → UNVISITED
+	_runner.assert_true(str(_api.get_travel_status(data.spawn_settlement_id)["code"]) == "SELF",
+			"出生聚落 = SELF（双击直接进）")
+	var target := _first_other_settlement(data)
+	if target.is_empty():
+		_runner.assert_true(false, "无其他可进入聚落可测")
+		return
+	var st: Dictionary = _api.get_travel_status(target)
+	_runner.assert_true(str(st["code"]) == "UNVISITED", "未到访城 = UNVISITED")
+	# 到访后：出生 L1 MST 全连通 → OK，带 path/roads（高亮层消费）
+	WorldState.visited_settlements[target] = true
+	st = _api.get_travel_status(target)
+	_runner.assert_true(str(st["code"]) == "OK", "已到访且路网连通 = OK")
+	_runner.assert_true((st["path"] as Array).size() >= 2, "路径含起终点")
+	_runner.assert_true((st["roads"] as Array).size() >= 1, "途经道路非空")
+	# 阻断钩子（P7 敌占区注入点）：目标在不可通过区 → BLOCKED
+	_api.set_block_filter(func(sid: String) -> bool: return sid == target)
+	st = _api.get_travel_status(target)
+	_runner.assert_true(str(st["code"]) == "BLOCKED", "目标被阻断 = BLOCKED")
+	_api.set_block_filter(Callable())
+	# 战斗中禁用 → 战斗结束恢复
+	EventBus.battle_started.emit("p6_test_battle")
+	st = _api.get_travel_status(target)
+	_runner.assert_true(str(st["code"]) == "BATTLE", "战斗中 = BATTLE")
+	EventBus.battle_ended.emit("p6_test_battle", true)
+	st = _api.get_travel_status(target)
+	_runner.assert_true(str(st["code"]) == "OK", "战斗结束恢复 OK")
+	WorldState.visited_settlements = {}
+
+
+func _test_fast_travel_exec() -> void:
+	# 快速旅行执行链 + travel_requested(mode) 透传 + TravelDialog 挂载
+	if _api == null or not _api.is_initialized():
+		_runner.assert_true(false, "前置数据加载失败，跳过")
+		return
+	var data: RefCounted = _api.get_data()
+	var target := _first_other_settlement(data)
+	if target.is_empty():
+		_runner.assert_true(false, "无其他可进入聚落可测")
+		return
+	WorldState.visited_settlements = {}
+	# 未到访：fast_travel_to 拒绝（不发射）
+	var emitted: Array = []
+	var cb := func(mid: String, mode: int) -> void: emitted.append([mid, mode])
+	EventBus.travel_requested.connect(cb)
+	_runner.assert_true(not _api.fast_travel_to(target), "未到访拒绝快速旅行")
+	_runner.assert_true(emitted.is_empty(), "拒绝时不发射 travel_requested")
+	# 到访：发射 (map_id, FAST_TRAVEL)
+	WorldState.visited_settlements[target] = true
+	var expected_map: String = _api.get_settlement_ref(target).map_id
+	_runner.assert_true(_api.fast_travel_to(target), "已到访执行快速旅行成功")
+	_runner.assert_true(emitted.size() == 1, "发射一次 travel_requested（实测 %d）" % emitted.size())
+	if emitted.size() >= 1:
+		_runner.assert_true(str(emitted[0][0]) == expected_map, "参数 = 目标 map_id")
+		_runner.assert_true(int(emitted[0][1]) == WorldAPI.TravelMode.FAST_TRAVEL,
+				"travel_mode = FAST_TRAVEL")
+	# enter_settlement 的 mode 透传（走过去 = WALK，调试期同直达）
+	_api.enter_settlement(target, WorldAPI.TravelMode.WALK)
+	_runner.assert_true(emitted.size() == 2 and int(emitted[1][1]) == WorldAPI.TravelMode.WALK,
+			"enter_settlement(mode=WALK) 透传 travel_requested")
+	EventBus.travel_requested.disconnect(cb)
+	WorldState.visited_settlements = {}
+	# 弹窗挂载（CanvasLayer 直下，strategic_map.tscn 注册）
+	var dialog: Node = _map.get_node_or_null("TravelDialog")
+	_runner.assert_true(dialog != null and dialog.has_method("open_for"),
+			"TravelDialog 挂载于 CanvasLayer 直下")
+	if dialog != null:
+		_runner.assert_true(not dialog.is_open(), "弹窗初始关闭")
+		dialog.open_for(target, "测试城", {"code": "UNVISITED", "reason": "尚未到访",
+				"path": [], "roads": [], "hops": 0, "length_px": 0.0})
+		_runner.assert_true(dialog.is_open(), "open_for 后打开")
+		dialog.close()
+		_runner.assert_true(not dialog.is_open(), "close 后关闭")

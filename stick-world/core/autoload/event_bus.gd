@@ -62,8 +62,10 @@ extends Node
 @warning_ignore("unused_signal") signal commander_assigned(squad_id: String, unit_id: int)
 
 # ─────────────────────────────── 场景 / 地图 / 旅行（§14.1 / §14.2）────────────────────────────────
-# 旅行请求：战略图 -> SceneLoader（玩家点击聚落进入场景图）
-@warning_ignore("unused_signal") signal travel_requested(map_id: String)
+# 旅行请求：战略图 -> SceneLoader（玩家点击聚落进入场景图）。
+# travel_mode 取 WorldAPI.TravelMode（WALK/FAST_TRAVEL；此处用 int 避免 core 依赖模块类），
+# 调试期 WALK 同为直达（步行道路场景 E4/F6 接管后走 RoadMap 流程）
+@warning_ignore("unused_signal") signal travel_requested(map_id: String, travel_mode: int)
 # 地图加载完成：SceneLoader -> UI / Environment
 @warning_ignore("unused_signal") signal map_loaded(map_id: String, map_type: int)
 # 地图卸载完成：SceneLoader -> UI

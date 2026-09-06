@@ -1,9 +1,0 @@
-{
-    "files.exclude": {
-        ".workbuddy": true,
-        ".codebuddy": true,
-        "**/*.uid": true,
-		"**/*.import": true
-	},
-	"godotTools.editorPath.godot4": "f:\\SteamLibrary\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe"
-}

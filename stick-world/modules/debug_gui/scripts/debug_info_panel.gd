@@ -23,6 +23,9 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	# F3 关闭后可见，但 _process 仍在全实体扫描+重建文本——隐藏即整帧跳过
+	if not visible:
+		return
 	size = get_viewport_rect().size
 	_update_hovered()
 	_update_text()

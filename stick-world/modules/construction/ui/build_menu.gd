@@ -250,6 +250,9 @@ func _missing_summary(def: Dictionary) -> String:
 # ─────────────────────────────── 信号回调 ────────────────────────────────
 
 func _on_resource_changed(_rid: String, _amt: float, _delta: float, _region: String) -> void:
+	# 隐藏期间跳过重建（resource_changed 高频触发）；打开路径 _on_toggle_pressed 必刷新
+	if _list_panel == null or not _list_panel.visible:
+		return
 	_refresh_list()
 
 

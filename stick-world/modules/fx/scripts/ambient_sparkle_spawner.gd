@@ -14,8 +14,12 @@ extends Node
 
 ## 扫描周期
 const SCAN_INTERVAL := 0.5
-## 视野外多远仍提前挂载（像素）；出视野不卸载，避免边界反复抖动
+## 视野外多远仍提前挂载（像素）
 const VIEW_MARGIN := 320.0
+## 卸载迟滞带：出视野再远 800px 才卸载（挂载界 320 / 卸载界 1120），
+## 视野边界附近来回走不会触发挂/卸抖动。长局走图下离屏粒子
+## （每点 5 个 CPUParticles2D）不再持续 CPU 模拟——地基型累积开销
+const DETACH_EXTRA := 800.0
 
 var _accum: float = 0.0
 
@@ -38,12 +42,12 @@ func _scan_and_attach() -> void:
 		var node := n as Node2D
 		if node == null:
 			continue
-		if _has_sparkles(node):
-			continue
-		if not _near_view(node):
-			continue
-		CrystalSparkles.attach_to(node, WorldZ.OVERLAY_HINT,
-				_theme_for(node), _tier_for(node))
+		if _near_view(node):
+			if not _has_sparkles(node):
+				CrystalSparkles.attach_to(node, WorldZ.OVERLAY_HINT,
+						_theme_for(node), _tier_for(node))
+		elif _far_from_view(node) and _has_sparkles(node):
+			_detach_sparkles(node)
 
 
 ## 只给视野附近的资源点挂粒子（原版也只对激活区域跑发射）
@@ -58,6 +62,27 @@ func _near_view(node: Node2D) -> bool:
 	half += Vector2(VIEW_MARGIN, VIEW_MARGIN)
 	return absf(node.global_position.x - cam.global_position.x) <= half.x \
 			and absf(node.global_position.y - cam.global_position.y) <= half.y
+
+
+## 远超视野（含迟滞带）才卸载；任一轴越界即算远
+func _far_from_view(node: Node2D) -> bool:
+	var vp := node.get_viewport()
+	if vp == null:
+		return false
+	var cam := vp.get_camera_2d()
+	if cam == null:
+		return false
+	var half := Vector2(vp.get_visible_rect().size) * 0.5 * cam.zoom
+	half += Vector2(VIEW_MARGIN + DETACH_EXTRA, VIEW_MARGIN + DETACH_EXTRA)
+	return absf(node.global_position.x - cam.global_position.x) > half.x \
+			or absf(node.global_position.y - cam.global_position.y) > half.y
+
+
+## 卸载即 queue_free 组件（attach_to 自包含，再入视野时重挂全量重建）
+func _detach_sparkles(node: Node2D) -> void:
+	for child in node.get_children():
+		if child is CrystalSparkles:
+			child.queue_free()
 
 
 ## 主题分配：按资源类型稳定映射（对齐药工"每材料一色"）；

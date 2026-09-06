@@ -123,7 +123,16 @@ func _draw_starfield(cm: Color) -> void:
 	var gate: float = _night * _sky_gate
 	if gate <= 0.01:
 		return
+	# 可见窗裁剪：星野横向铺满全图 9800px 而视口只占约 1/8，屏外星跳过
+	# （星不移动、窗界稳定，余量 300px 覆盖大星光芒外伸，视觉无差）
+	var half_w: float = 2200.0  # 无相机时兜底放宽（宁多画不漏画）
+	var cam := get_viewport().get_camera_2d()
+	if cam != null:
+		half_w = get_viewport_rect().size.x / (2.0 * absf(cam.zoom.x)) + 300.0
+	var center_x: float = _window_center_x()
 	for s in _stars:
+		if absf(float(s["x"]) - center_x) > half_w:
+			continue
 		var tw: float = s["tw"]
 		var a: float = gate * 0.9 * tw
 		var col := EnvironmentAPI.unmodulate(Color(0.92, 0.94, 1.0, a), cm)

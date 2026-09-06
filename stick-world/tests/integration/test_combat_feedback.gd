@@ -149,13 +149,15 @@ func _test_separation_pushes() -> void:
 	# b 移到 a 正右方 20px（远小于分离半径 42px）
 	_place_x(a, 1000.0)
 	_place_x(b, a.global_position.x + 20.0)
-	await get_tree().process_frame
+	await get_tree().physics_frame
 	# a 朝右移动（dir=+x），b 在右方应把 a 的移动方向推开（x 速度下降/y 偏离）
 	if not a.has_method("ai_move"):
 		_runner.assert_true(false, "实体缺 ai_move")
 		return
 	a.ai_move(Vector2(1, 0), false)
-	await get_tree().process_frame
+	# 物理行为断言等物理帧（30Hz 物理 + headless 高渲染帧率下，
+	# process_frame 不保证物理帧已跑——分离修正在 _physics_process 里）
+	await get_tree().physics_frame
 	# 读 a 的 velocity（物理帧已应用分离修正）
 	var vel: Vector2 = a.velocity
 	# 纯右向 = (speed, 0)；被推开后应偏离 x 轴（y 分量非零或 x 速度低于全速）
@@ -172,9 +174,9 @@ func _test_separation_far() -> void:
 		return
 	_place_x(a, 2000.0)
 	_place_x(b, a.global_position.x + 400.0)  # 400px 远
-	await get_tree().process_frame
+	await get_tree().physics_frame
 	a.ai_move(Vector2(1, 0), false)
-	await get_tree().process_frame
+	await get_tree().physics_frame
 	var vel: Vector2 = a.velocity
 	# 远处无邻居：速度应基本沿 +x（y 分量≈0）
 	_runner.assert_true(absf(vel.y) < 5.0, "远处无邻居时不应被推开，vel=%s" % str(vel))

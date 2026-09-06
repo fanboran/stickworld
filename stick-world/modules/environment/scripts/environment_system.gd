@@ -15,6 +15,10 @@ extends Node
 ## 时间推进速度（现实秒 : 游戏小时）。默认 60 秒 = 24 小时。
 @export var seconds_per_day: float = 60.0
 
+## 跟随玩家的营火光开关（默认关：2026-09-06 用户指示去掉角色夜晚自发光，
+## 泰拉瑞亚夜晚无随身光源，地表靠剪影+星光辨识；P2 逐光源布点时再启用）
+@export var camp_light_enabled: bool = false
+
 ## 当前时间（0.0 ~ 24.0）
 @export var time_of_day: float = 8.0:
 	set(v):
@@ -78,9 +82,13 @@ func _ensure_camp_light() -> void:
 	add_child(_camp_light)
 
 
-## 光强随环境亮度反相（越夜越亮），位置跟踪玩家（附身实体）脚下
+## 光强随环境亮度反相（越夜越亮），位置跟踪玩家（附身实体）脚下。
+## 默认关闭（camp_light_enabled=false）：energy 归零，仅保留节点供调试面板读取。
 func _update_camp_light() -> void:
 	if _canvas_modulate == null or _camp_light == null:
+		return
+	if not camp_light_enabled:
+		_camp_light.energy = 0.0
 		return
 	var brightness: float = _canvas_modulate.color.get_luminance()
 	var t: float = clampf((0.72 - brightness) / 0.34, 0.0, 1.0)
@@ -127,24 +135,15 @@ func _ensure_canvas_modulate() -> void:
 func _update_lighting() -> void:
 	if _canvas_modulate == null:
 		return
-	_canvas_modulate.color = _sample_light_color(time_of_day)
+	_canvas_modulate.color = EnvironmentAPI.sample_light_color(time_of_day)
+	# 天空底色走清屏色（Terraria ColorOfTheSkies 同构）：不经过 CanvasModulate，
+	# 星/月在黑天上保持亮度、云与背景贴图仍由 CanvasModulate 染色
+	RenderingServer.set_default_clear_color(EnvironmentAPI.sample_sky_bg_color(time_of_day))
 
 
 ## 按关键帧插值采样光照颜色
 static func _sample_light_color(hour: float) -> Color:
-	var frames: Array = EnvironmentAPI.LIGHT_KEYFRAMES
-	# 找到 hour 落在哪两个关键帧之间
-	for i in range(frames.size() - 1):
-		var a: Dictionary = frames[i]
-		var b: Dictionary = frames[i + 1]
-		if hour >= a["hour"] and hour <= b["hour"]:
-			var span: float = b["hour"] - a["hour"]
-			if span <= 0.0:
-				return a["color"]
-			var t: float = (hour - a["hour"]) / span
-			return a["color"].lerp(b["color"], t)
-	# 兜底
-	return frames[0]["color"]
+	return EnvironmentAPI.sample_light_color(hour)
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────

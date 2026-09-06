@@ -22,20 +22,19 @@ var _seed: int = 0
 var _timer: float = 0.0
 
 
+var _last_dark: bool = false
+
 func _ready() -> void:
 	_apply_flats()
-	_apply_text_colors()
 	resized.connect(queue_redraw)
-	mouse_entered.connect(_apply_text_colors)
-	mouse_exited.connect(_apply_text_colors)
 
 
-## hover 反黑只对 NORMAL（底变白 10% 后白字失对比）；ACCENT/DANGER 字色恒定
+## 字色固定不变色（hover 反黑实验已撤——闪烁与状态错乱代价 > 收益）：
+## - ink（亮背景如主菜单天空）= 黑字
+## - 其余（黑底常态/hover/ACCENT/DANGER）= 白字，状态切换只换底图不换字色
 func _apply_text_colors() -> void:
-	var hovering := is_hovered()
-	var dark := ink.a > 0.0 or (kind == Kind.NORMAL and hovering)
-	var c := Color(0.05, 0.04, 0.03) if dark else StickTokens.TEXT
-	for state in ["font_color", "font_hover_color", "font_focus_color"]:
+	var c := Color(0.05, 0.04, 0.03) if ink.a > 0.0 else StickTokens.TEXT
+	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
 		add_theme_color_override(state, c)
 
 

@@ -165,6 +165,10 @@ func _process(delta: float) -> void:
 		return
 	_auto_save_timer += delta
 	if _auto_save_timer >= interval:
+		# 读档恢复窗口/写档进行中 _db 仍打开：此刻自动存档会强关连接、
+		# 把半恢复状态写进档——推迟，窗口关闭（end_load）后立即补存
+		if _db != null:
+			return
 		_auto_save_timer = 0.0
 		save_game(_auto_save_slot)
 
@@ -329,6 +333,8 @@ func get_slot_info(slot_index: int) -> Dictionary:
 		db.path = db_path
 		if not db.open_db():
 			return info
+		# 与 _open_db_for_slot 对齐：SavePanel 列表查询遇写锁时不静默失败
+		db.query("PRAGMA busy_timeout = 5000")
 		var rows: Array = []
 		if db.query_with_bindings(_SQL_META_SELECT_ALL, [slot_index]):
 			rows = db.query_result

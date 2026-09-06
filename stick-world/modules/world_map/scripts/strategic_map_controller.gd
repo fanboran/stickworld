@@ -44,6 +44,13 @@ var _hud: Control = null
 var _indicator: GranularityIndicator = null
 var _tooltip: Control = null
 
+## 视图名牌 + 图例（CanvasLayer 直接子节点，同批显隐；内容在 open() 喂）
+var _title_bar: MapTitleBar = null
+var _legend: MapLegend = null
+
+## 地图模式管理器（Content 子节点，B4：TERRAIN 默认/POLITICAL；图例/渲染器随模式切换）
+var _mode_manager: MapModeManager = null
+
 ## 首次打开时设置初始视角（之后保留用户位置/缩放）
 var _view_initialized: bool = false
 
@@ -69,6 +76,9 @@ func _ready() -> void:
 	# 缩放/平移后即时重绘：描边/轮廓宽度跟随新 zoom（消除粗细滞后跳变）
 	if map_camera != null and map_camera.has_method("set_map_renderer"):
 		map_camera.set_map_renderer(map_renderer)
+	# 地图模式（B4）：切模式 → 渲染器换层 + 图例换内容（HUD 模式条自行订阅广播）
+	if _mode_manager != null and not _mode_manager.mode_changed.is_connected(_on_map_mode_changed):
+		_mode_manager.mode_changed.connect(_on_map_mode_changed)
 	# 底部 HUD（CanvasLayer 直接子节点）
 	var layer := get_parent()
 	if layer != null:
@@ -89,6 +99,12 @@ func _auto_find_components() -> void:
 		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
 	if _tooltip == null:
 		_tooltip = MapControllerUtil.find_sibling(self, "SettlementTooltip")
+	if _title_bar == null:
+		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
+	if _legend == null:
+		_legend = MapControllerUtil.find_sibling(self, "MapLegend") as MapLegend
+	if _mode_manager == null:
+		_mode_manager = MapControllerUtil.find_child(self, func(c: Node) -> bool: return c is MapModeManager) as MapModeManager
 
 
 func _input(event: InputEvent) -> void:
@@ -98,10 +114,14 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
+			# GUI 先决：指针悬停在控件上（HUD 模式条/滑块/名牌等）时点击归 UI。
+			# 本回调先于 GUI 处理执行，不判空会穿透点选 HUD 底下的地块（F1 验收反馈）
+			if get_viewport().gui_get_hovered_control() != null:
+				return
 			_handle_left_click(mb.position)
 	# ESC：统一走 handle_escape（下钻返回 L2 / 关闭地图）；消费事件防止
 	# GameRoot 再收到后弹暂停菜单（GameRoot 也通过 handle_escape 分发，双路径互斥）
-	elif event is InputEventKey and event.pressed:
+	elif event is InputEventKey and event.pressed and not event.is_echo():
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_ESCAPE:
 			handle_escape()
@@ -123,10 +143,14 @@ func handle_escape() -> bool:
 	return true
 
 
-## 指示器/tooltip 显隐同步（CanvasLayer 直下子节点，不随 Content 自动隐藏）
+## 指示器/名牌/图例/tooltip 显隐同步（CanvasLayer 直下子节点，不随 Content 自动隐藏）
 func _set_overlay_visible(v: bool) -> void:
 	if _indicator != null:
 		_indicator.visible = v
+	if _title_bar != null:
+		_title_bar.visible = v
+	if _legend != null:
+		_legend.set_shown(v)
 	if _tooltip != null and _tooltip.has_method("reset"):
 		_tooltip.call("reset")  # 复位 hover 记忆，重开后按当前鼠标位置重新评估
 
@@ -214,13 +238,82 @@ func open() -> void:
 						msize * default_zoom * 0.5, msize * default_zoom * 0.5))
 	if _hud != null:
 		_hud.visible = true
+	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)
 	# 粒度指示：层级 + 当前地块号 + ESC 语义（直开=关闭 / 下钻=返回 L2）
 	if _indicator != null and api != null and api.has_method("get_current_l1_label"):
 		var l1_label: int = api.get_current_l1_label()
 		_indicator.set_view("L1", "#%d" % l1_label, _drill_from_l2)
+		if _title_bar != null:
+			_update_title_bar(l1_label)
+	_fill_legend()
 	_set_overlay_visible(true)
 	if EventBus != null:
 		EventBus.strategic_map_opened.emit()
+
+
+## 名牌内容：地块 #N + 聚落数概览
+func _update_title_bar(l1_label: int) -> void:
+	if _title_bar == null:
+		return
+	var n_settlements := 0
+	if api != null and api.has_method("get_data"):
+		var data: L1WorldData = api.get_data()
+		if data != null:
+			for tile in data.tiles:
+				if tile.settlement != null:
+					n_settlements += 1
+	var subtitle := "%d 聚落" % n_settlements if n_settlements > 0 else ""
+	_title_bar.set_content("L1", "地块 #%d" % l1_label, subtitle)
+
+
+## 图例内容随地图模式切换（B4，走 MapLegend.set_title/set_entries）：
+## TERRAIN = 地物水系（海洋/湖泊；B2 群系底图落地后在此追加群系色条目）
+## POLITICAL = 政权色条目（与地图填充同色源 get_state_color）
+## 两模式末尾恒附「城镇建成区」（C2 blob 与行政区划分层的图例说明，风险表点名项）
+func _fill_legend() -> void:
+	if _legend == null:
+		return
+	var blob_entry := {"color": MapRenderer.BLOB_FILL, "text": "城镇建成区"}
+	if MapModeManager.current_mode == MapModeManager.Mode.TERRAIN:
+		_legend.set_title("地形")
+		var entries := [
+			{"color": MapRenderer.OCEAN_COLOR, "text": "海洋"},
+			{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
+		]
+		entries.append_array(MapRenderer.BIOME_LEGEND)
+		entries.append(blob_entry)
+		entries.append_array(MapRenderer.ROAD_LEGEND)
+		_legend.set_entries(entries)
+		return
+	if api == null or not api.has_method("get_states"):
+		return
+	var data: L1WorldData = api.get_data() if api.has_method("get_data") else null
+	if data == null:
+		return
+	var states: Dictionary = api.get_states()
+	var entries: Array = []
+	for state_id in states:
+		var info: Dictionary = states[state_id]
+		entries.append({
+			"color": data.get_state_color(state_id),
+			"text": str(info.get("name", state_id)),
+		})
+	entries.append(blob_entry)
+	if states.is_empty():
+		_legend.set_entries([])  # 空态：set_shown 自动保持隐藏
+		return
+	entries.append_array(MapRenderer.ROAD_LEGEND)
+	_legend.set_title("政权")
+	_legend.set_entries(entries)
+
+
+## 地图模式切换（MapModeManager 广播）：渲染器换层 + 图例换内容
+func _on_map_mode_changed(_mode: int) -> void:
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)
+	_fill_legend()
 
 
 ## 关闭战略图（恢复场景图输入，由接线方/ESC 调用）

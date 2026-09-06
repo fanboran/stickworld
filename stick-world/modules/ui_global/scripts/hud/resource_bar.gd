@@ -124,7 +124,8 @@ func _flash_green(resource_id: String) -> void:
 	lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
 	var tween := create_tween()
 	tween.tween_interval(0.45)
-	tween.tween_property(lbl, "modulate", Color.WHITE, 0.25)
+	# 与 _flash_red 同路径：补间 font_color 本身（modulate 恒 WHITE，补间它绿字不会渐隐）
+	tween.tween_property(lbl, "theme_override_colors/font_color", Color.WHITE, 0.25)
 	tween.tween_callback(func() -> void:
 		lbl.add_theme_color_override("font_color", Color.WHITE))
 

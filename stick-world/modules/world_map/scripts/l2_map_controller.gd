@@ -31,6 +31,12 @@ var _hud: Control = null
 ## 粒度指示器（CanvasLayer 直接子节点，显隐由本控制器同步；open 时更新文案）
 var _indicator: GranularityIndicator = null
 
+## 视图名牌（CanvasLayer 直接子节点，同批显隐；open 时喂"地区 N · N 地块"）
+var _title_bar: MapTitleBar = null
+
+## 地图模式管理器（Content 子节点，B4：切模式转发渲染器）
+var _mode_manager: MapModeManager = null
+
 var _current_region_id: String = ""
 
 
@@ -42,6 +48,9 @@ func _ready() -> void:
 		canvas.layer = LayerOrder.STRATEGIC_L2
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
+	# 地图模式（B4）：切模式 → 渲染器换层（地形底图/政权叠加层数据落地前仅记录）
+	if _mode_manager != null and not _mode_manager.mode_changed.is_connected(_on_map_mode_changed):
+		_mode_manager.mode_changed.connect(_on_map_mode_changed)
 
 
 ## 注入 L1 下钻视图（由接线方调用）
@@ -57,8 +66,12 @@ func _auto_find_components() -> void:
 	# 指示器挂 CanvasLayer 直下（Control 挂 Node2D 下 anchor 参照矩形为 0 会跑位）
 	if _indicator == null:
 		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
+	if _title_bar == null:
+		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _hud == null:
 		_hud = MapControllerUtil.find_sibling(self, "ZoomIndicator")
+	if _mode_manager == null:
+		_mode_manager = MapControllerUtil.find_child(self, func(c: Node) -> bool: return c is MapModeManager) as MapModeManager
 
 
 func _input(event: InputEvent) -> void:
@@ -68,8 +81,11 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
+			# GUI 先决（同 L1 控制器）：悬停控件（HUD 模式条/滑块）时点击归 UI，防穿透下钻 L1
+			if get_viewport().gui_get_hovered_control() != null:
+				return
 			_handle_l1_click(mb.position)
-	if event is InputEventKey and event.pressed:
+	if event is InputEventKey and event.pressed and not event.is_echo():
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_ESCAPE:
 			# ESC 返回 L3（地图整体仍开着，不关地图、不恢复场景图输入）
@@ -142,6 +158,9 @@ func open(region_id: String) -> void:
 					map_camera.set_offset(vp_size * 0.5 - Vector2(
 						float(msize.x) * default_zoom * 0.5, float(msize.y) * default_zoom * 0.5))
 	visible = true
+	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)
 	if _hud != null:
 		_hud.visible = true
 	# 粒度指示：L2 层级 + 当前地区 ID（提示文案由组件按 view_level 生成）
@@ -149,9 +168,28 @@ func open(region_id: String) -> void:
 		var rid: String = data.region_id if data != null and not data.region_id.is_empty() else _current_region_id
 		_indicator.set_view("L2", rid)
 		_indicator.visible = true
+	# 名牌：地区 N + 地块数概览（region_001 -> "地区 1"；数据未加载时降级只显 ID）
+	if _title_bar != null:
+		_update_title_bar()
+		_title_bar.visible = true
 
 
-## 视图整体显隐（Content + HUD + 指示器）——L3 控制器联动关闭/恢复时调用，
+## 名牌内容：地区序号 + 地块数概览
+func _update_title_bar() -> void:
+	if _title_bar == null:
+		return
+	var rid: String = data.region_id if data != null and not data.region_id.is_empty() else _current_region_id
+	var title := "地区 %s" % rid
+	var n_tiles: int = data.tiles.size() if data != null else 0
+	var subtitle := "%d 地块" % n_tiles if n_tiles > 0 else ""
+	if rid.begins_with("region_"):
+		var num := rid.substr("region_".length())
+		if num.is_valid_int():
+			title = "地区 %d" % num.to_int()
+	_title_bar.set_content("L2", title, subtitle)
+
+
+## 视图整体显隐（Content + HUD + 指示器 + 名牌）——L3 控制器联动关闭/恢复时调用，
 ## 与 open() 内的显隐逻辑保持一致（M 关闭重开、下钻切换都同步粒度指示器）
 func set_view_visible(v: bool) -> void:
 	visible = v
@@ -159,7 +197,15 @@ func set_view_visible(v: bool) -> void:
 		_hud.visible = v
 	if _indicator != null:
 		_indicator.visible = v
+	if _title_bar != null:
+		_title_bar.visible = v
 
 
 func get_current_region_id() -> String:
 	return _current_region_id
+
+
+## 地图模式变更（B4 广播）：转发渲染器（地形底图/政权叠加层数据落地前仅记录模式）
+func _on_map_mode_changed(_mode: int) -> void:
+	if map_renderer != null and map_renderer.has_method("set_map_mode"):
+		map_renderer.set_map_mode(MapModeManager.current_mode)

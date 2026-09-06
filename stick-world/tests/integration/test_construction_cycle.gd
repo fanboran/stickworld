@@ -51,6 +51,7 @@ func _ready() -> void:
 	_runner.add_test("建造: 选址范围内有实体时拒绝放置（防人进建筑被卡）", _test_entity_blocking, true)
 	_runner.add_test("建造: 脱离卡死随机传送到空旷地带", _test_escape_stuck, true)
 	_runner.add_test("建造: 完工建筑登记与查询", _test_building_registry, true)
+	_runner.add_test("建造: apply_building_def 对 Excel 空单元格 null 字段容忍（2026-09 回归：String(null) 构造崩）", _test_apply_def_null_fields, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -216,6 +217,35 @@ func _test_building_registry() -> void:
 	_runner.assert_true(found, "至少一栋建筑为 OPERATIONAL")
 	# 清理：工人注销防残留
 	_cm.unregister_worker(worker)
+
+
+func _test_apply_def_null_fields() -> void:
+	# 复现 buildings.tres 真实形态（Excel 管线：空单元格导出为 null，key 在、值为 null）。
+	# 2026-09 回归：四表重导后 null 字段引爆 String/int/bool(null) 的
+	# Nonexistent constructor，读档 spawn 初始草棚即崩
+	var def := {
+		"interior_mode": 0,
+		"mega_interior_map_id": null,
+		"wall_tier": null,
+		"can_stand_on": null,
+		"is_gate": null,
+		"max_hp": 100,
+	}
+	var b := ScriptBuilding.new()
+	add_child(b)
+	b.apply_building_def(def)
+	_runner.assert_true(b.mega_interior_map_id == "", "null mega_interior_map_id 回退空串（实测 %s）" % b.mega_interior_map_id)
+	_runner.assert_true(b.wall_tier == 0, "null wall_tier 回退 0（实测 %d）" % b.wall_tier)
+	_runner.assert_true(not b.can_stand_on, "null can_stand_on 回退 false")
+	_runner.assert_true(not b.is_gate, "null is_gate 回退 false")
+	_runner.assert_true(is_equal_approx(b.max_health, 100.0), "max_hp 正常取值 100（实测 %f）" % b.max_health)
+	# 正常值路径不受影响
+	b.apply_building_def({"interior_mode": 2, "mega_interior_map_id": "mega_01",
+			"wall_tier": 2, "can_stand_on": true, "is_gate": true, "max_hp": 800})
+	_runner.assert_true(b.mega_interior_map_id == "mega_01", "字符串值正常应用（实测 %s）" % b.mega_interior_map_id)
+	_runner.assert_true(b.wall_tier == 2 and b.can_stand_on and b.is_gate, "城墙字段正常应用")
+	_runner.assert_true(is_equal_approx(b.max_health, 800.0), "max_hp 覆盖应用（实测 %f）" % b.max_health)
+	b.queue_free()
 
 
 func _test_entity_blocking() -> void:

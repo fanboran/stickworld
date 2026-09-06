@@ -158,7 +158,7 @@ def _collect_tile_tris(world):
 def _collect_hole_tris(world):
     """收集地块洞 mesh 三角形（海洋色/湖泊色）。"""
     OCEAN = (30, 55, 95)
-    LAKE = (28, 50, 82)
+    LAKE = (72, 116, 158)   # 对齐 B2 底图湖色（terrain_params.json colors.lake）
     out = []
     for t in world["tiles"]:
         for hole in t.get("holes", []):
@@ -171,7 +171,7 @@ def _collect_hole_tris(world):
 
 def _collect_lake_tris(world):
     """收集湖泊 mesh 三角形。"""
-    LAKE = (28, 50, 82)
+    LAKE = (72, 116, 158)   # 对齐 B2 底图湖色（terrain_params.json colors.lake）
     out = []
     for poly in world["lakes"]:
         for tri in _triangulate_ring(poly):

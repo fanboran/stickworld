@@ -1,6 +1,6 @@
 extends Node
 ## 集成测试：P0 新 0.9 基础战略图（L1 单层）
-## 验证：L1 数据加载（出生 L1 城市划分）/ 城市点命中查询 / 双击进入（城市暂无 map_id 不可进）/ 打开关闭输入暂停恢复
+## 验证：L1 数据加载（出生 L1 城市划分）/ 城市点命中查询 / 双击进入（P5 回填 map_id 后可进）/ 打开关闭输入暂停恢复
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -22,7 +22,7 @@ func _ready() -> void:
 	_runner.add_test("L1 数据加载：出生 L1 城市划分", _test_load, true)
 	_runner.add_test("索引图命中查询（P 社机制）", _test_query, true)
 	_runner.add_test("悬停坐标换算（open 后 offset/zoom 非零）", _test_hover_mapping, true)
-	_runner.add_test("城市聚落暂无 map_id：双击不可进入", _test_enter, true)
+	_runner.add_test("城市聚落双击进入：travel_requested（P5 回填 map_id）", _test_enter, true)
 	_runner.add_test("无 map_id 聚落不可进入", _test_empty_enter, true)
 	_runner.add_test("打开/关闭暂停恢复场景图输入", _test_pause_resume, true)
 	_runner.add_test("L1 结构对齐 L2：HUD 缩放条 + 整图适配默认=100% + 居中", _test_l2_like_hud, true)
@@ -98,18 +98,22 @@ func _test_load() -> void:
 	_runner.assert_true(data != null, "data 非空")
 	if data == null:
 		return
-	# 出生 L1 城市划分：每城市 = 1 地块 1 聚落（暂无 map_id），每城市独立政权，MST 道路
+	# 出生 L1 城市划分：每城市 = 1 地块 1 聚落（P5 已回填 map_id），每城市独立政权，MST 道路
 	_runner.assert_true(data.tiles.size() >= 2, "地块数应 >= 2（出生 L1 城市数，实测 %d）" % data.tiles.size())
 	var settled: int = 0
-	var no_map: int = 0
+	var mapped: int = 0
+	var bad_prefix: int = 0
 	for tile in data.tiles:
 		if tile.settlement != null:
 			settled += 1
-			if tile.settlement.map_id.is_empty():
-				no_map += 1
+			if not tile.settlement.map_id.is_empty():
+				mapped += 1
+				if not tile.settlement.map_id.begins_with("l1_settlement_"):
+					bad_prefix += 1
 	_runner.assert_true(settled == data.tiles.size(), "每个城市地块都应有聚落（实测 %d/%d）" % [settled, data.tiles.size()])
-	_runner.assert_true(no_map == data.tiles.size(),
-		"城市聚落暂无 map_id（不可进入，实测 %d/%d）" % [no_map, data.tiles.size()])
+	_runner.assert_true(mapped == data.tiles.size(),
+		"城市聚落 map_id 已回填可进入（P5，实测 %d/%d）" % [mapped, data.tiles.size()])
+	_runner.assert_true(bad_prefix == 0, "map_id 应为 l1_settlement_ 前缀（异常 %d 个）" % bad_prefix)
 	_runner.assert_true(data.roads.size() >= data.tiles.size() - 1,
 		"道路数应 >= 城市数-1（MST 连通，实测 %d/%d）" % [data.roads.size(), data.tiles.size()])
 	_runner.assert_true(data.states.size() == data.tiles.size(),

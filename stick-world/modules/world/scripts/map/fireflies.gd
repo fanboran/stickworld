@@ -61,6 +61,8 @@ func _draw() -> void:
 		_drawn = false
 		return
 	_drawn = true
+	# 发光体除法补偿：穿透 CanvasModulate 夜间压暗（星月同款，见 EnvironmentAPI）
+	var cm: Color = _current_cm()
 	var center: Vector2 = _cam.get_screen_center_position()
 	for sd in _seeds:
 		var p := Vector2(
@@ -72,8 +74,17 @@ func _draw() -> void:
 		if a < 0.02:
 			continue
 		# 柔光晕 + 亮核
-		draw_circle(p, sd["size"] * 3.2, Color(0.78, 1.0, 0.45, 0.10 * a))
-		draw_circle(p, sd["size"], Color(0.85, 1.0, 0.55, 0.9 * a))
+		draw_circle(p, sd["size"] * 3.2, EnvironmentAPI.unmodulate(Color(0.78, 1.0, 0.45, 0.10 * a), cm))
+		draw_circle(p, sd["size"], EnvironmentAPI.unmodulate(Color(0.85, 1.0, 0.55, 0.9 * a), cm))
+
+
+## 当前 CanvasModulate 色（补偿除法用；env 缺失按白 = 不补偿）
+func _current_cm() -> Color:
+	if _env == null or not is_instance_valid(_env):
+		_env = _find_env()
+	if _env != null and _env.has_method("get_current_light_color"):
+		return _env.get_current_light_color()
+	return Color.WHITE
 
 
 ## 昼夜因子（与 SkyStars 同式：生产路径 → 祖先链兜底）

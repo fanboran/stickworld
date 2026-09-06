@@ -472,9 +472,9 @@ func _physics_process(delta: float) -> void:
 					col.set_deferred("disabled", true)
 		# 尸体淡出（SWL fadeOutOver 语义，2026-09-01 观察场反馈：尸体永存
 		# 堆满战场）——碰撞禁用后停留 CORPSE_LIFETIME，再 CORPSE_FADE 淡入地里移除
-		elif _corpse_fade_timer < 0.0:
+		elif not possessed and _corpse_fade_timer < 0.0:
 			_corpse_fade_timer = CORPSE_LIFETIME
-		if _corpse_fade_timer >= 0.0:
+		if not possessed and _corpse_fade_timer >= 0.0:
 			_corpse_fade_timer -= delta
 			if _corpse_fade_timer <= 0.0:
 				queue_free()

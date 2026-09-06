@@ -61,7 +61,7 @@ func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO
 	if units.is_empty():
 		push_warning("[TacticalOrders] 小队 %s 无有效单位" % squad_id)
 		return false
-	# 战斗号令仅限战斗职责小队（建造队/工人队拒绝）
+	# 战斗号令仅限战斗职责小队（建造队/劳工队/运输队拒绝）
 	if _formation_system.has_method("is_combat_squad") and not _formation_system.is_combat_squad(squad_id):
 		push_warning("[TacticalOrders] 小队 %s 无战斗职责，拒绝号令" % squad_id)
 		return false

@@ -7,10 +7,13 @@ extends Node2D
 
 const COUNT: int = 56
 const AREA_HALF: Vector2 = Vector2(1400.0, 500.0)
+## 重绘节流：尘粒漂移缓慢，30Hz 与逐帧视觉无差（对齐 fireflies 的节流做法）
+const REDRAW_HZ: float = 30.0
 ## 相机引用（粒子分布在相机中心周围）
 var _cam: Camera2D = null
 var _seeds: Array = []
 var _t: float = 0.0
+var _redraw_acc: float = 99.0  # 首帧必重绘
 
 
 func _ready() -> void:
@@ -37,7 +40,10 @@ func _process(delta: float) -> void:
 	_t += delta
 	if _cam == null:
 		_cam = get_viewport().get_camera_2d()
-	queue_redraw()
+	_redraw_acc += delta
+	if _redraw_acc >= 1.0 / REDRAW_HZ:
+		_redraw_acc = 0.0
+		queue_redraw()
 
 
 func _draw() -> void:

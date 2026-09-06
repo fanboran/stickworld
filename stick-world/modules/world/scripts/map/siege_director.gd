@@ -94,7 +94,6 @@ func _deploy_garrison() -> void:
 					_map.map_left, _map.map_right)
 		if u.has_method("set_possessed"):
 			u.set_possessed(false)
-		_set_body_color(u, Color(0.25, 0.42, 0.80))
 		u.set_meta("siege_slot_x", pos.x)
 		u.set_meta("siege_phase", phase_off * placed)
 		_garrison.append(u)
@@ -156,7 +155,6 @@ func _deploy_squad() -> void:
 			u.weapon_mount.weapon_type = entry[0]
 		if u.has_method("set_possessed"):
 			u.set_possessed(false)
-		_set_body_color(u, Color(0.25, 0.42, 0.80))
 		_garrison.append(u)
 	print_verbose("[SiegeDirector] 守军小队布阵: %d 人" % loadout.size())
 
@@ -209,7 +207,6 @@ func _spawn_wave() -> void:
 			e.global_position.y = y - e.foot_offset
 		if e.has_method("set_possessed"):
 			e.set_possessed(false)
-		_set_body_color(e, Color(0.82, 0.22, 0.22))
 		e.set_meta("siege_attacker", true)
 		spawned.append(e)
 	if spawned.is_empty():
@@ -276,7 +273,7 @@ func _active_battle(api: Node) -> Node:
 
 
 ## 蓝方存活守军（导演布防的弓箭手 + 被附身的玩家）：首波开战时的守方名单。
-## 不按染色判定——实体上无 body_color 字段，靠导演自己登记的花名册最可靠。
+## 不按外观判定——靠导演自己登记的花名册（garrison）+ 附身玩家。
 func _alive_blue_units() -> Array:
 	var result: Array = []
 	for u in _garrison:
@@ -301,23 +298,6 @@ func _combat_api() -> Node:
 	if _root != null and "_combat_api" in _root:
 		return _root._combat_api
 	return null
-
-
-func _set_body_color(u: Node2D, color: Color) -> void:
-	# 染色方式与 initial_content.set_unit_body_color 同径：找身体绘制节点
-	# （兼容 rig 子节点名差异，找不到就跳过——只影响辨识不影响玩法）
-	var candidates: Array = []
-	if u.get("rig") != null:
-		candidates.append(u.rig)
-	for child in u.get_children():
-		candidates.append(child)
-	for c in candidates:
-		if c != null and is_instance_valid(c) and ("body_color" in c):
-			c.body_color = color
-			return
-	# 实体级 body_color 备选（部分消费方读实体字段）
-	if "body_color" in u:
-		u.body_color = color
 
 
 ## 已刷波数（验证脚本用）

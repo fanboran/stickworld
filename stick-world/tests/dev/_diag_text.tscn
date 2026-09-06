@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://diagtext99"]
+[gd_scene format=3 uid="uid://diagtexuba"]
 
 [ext_resource type="Script" path="res://tests/dev/_diag_text.gd" id="1"]
 

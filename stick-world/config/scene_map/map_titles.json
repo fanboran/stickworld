@@ -9,5 +9,21 @@
   ],
   "village_a": {
     "title": "起始之地"
+  },
+  "village_b": {
+    "title": "村落B"
+  },
+  "road_a_b": {
+    "title": "村间道路",
+    "subtitle": "连接起始之地与村落B"
+  },
+  "battlefield": {
+    "title": "遭遇战场"
+  },
+  "forest_zone": {
+    "title": "东侧森林"
+  },
+  "siege_battlefield": {
+    "title": "城郊战场"
   }
 }

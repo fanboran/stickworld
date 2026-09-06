@@ -9,7 +9,11 @@ const SiegeFieldScript := preload("res://modules/world/scripts/map/siege_field.g
 ## 触发线（世界 x；玩家越过弹出，退回 ~120px 收起）
 var gate_prompt_x: float = 1600.0
 
+const TITLES_PATH := "res://config/scene_map/map_titles.json"
+
 var _map: Node2D = null
+var _map_id: String = ""
+var _titles_cache: Dictionary = {}
 var _panel: Control = null
 var _root: Node = null          # GameRoot（scene_loader）
 var _shown: bool = false
@@ -114,20 +118,80 @@ func _build_panel() -> Control:
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85))
 	col.add_child(title)
+	# 固定项：守城 Demo / 出城逛战场（同一张城郊战场图的两种模式）
 	for entry: Dictionary in [
 		{"text": "⚔ 开守城战（Demo）", "act": "siege"},
 		{"text": "出城逛战场", "act": "field"},
-		{"text": "去隔壁地区（道路）", "act": "road"},
-		{"text": "收起", "act": "close"},
 	]:
 		var btn := Button.new()
 		btn.text = entry["text"]
 		btn.pressed.connect(_on_choice.bind(entry["act"]))
 		col.add_child(btn)
+	# 动态项：本方向注册的全部道路出口（一方向多条道路可选，地图与场景图 §5.5.5），
+	# 文案写真实目的地村名（道路图追到对侧村庄）
+	if _map_id.is_empty():
+		_map_id = _owner_map_id()
+	var sl: Node = _root.scene_loader if _root != null else null
+	if sl != null and sl.has_method("get_map_exits"):
+		for exit_info: Dictionary in sl.get_map_exits(_map_id, WorldAPI.EntrySide.RIGHT):
+			var btn2 := Button.new()
+			btn2.text = _dest_label(sl, String(exit_info["target"]))
+			btn2.pressed.connect(_on_choice.bind("travel:" + String(exit_info["target"])))
+			col.add_child(btn2)
+	var btn3 := Button.new()
+	btn3.text = "收起"
+	btn3.pressed.connect(_on_choice.bind("close"))
+	col.add_child(btn3)
 	return box
 
 
+## 目的地显示名：地区报幕表（config/scene_map/map_titles.json）优先；
+## 道路图查它对侧出口接的村庄——"沿村间道路去 村落B"
+func _dest_label(sl: Node, map_id: String) -> String:
+	var title := _title_of(map_id)
+	# 道路图：目的地是路对面的村庄——文案写村庄名（“沿村间道路去 村落B”）
+	if map_id.begins_with("road") and sl.has_method("get_map_exits"):
+		for far: Dictionary in sl.get_map_exits(map_id, WorldAPI.EntrySide.LEFT):
+			if String(far["target"]) == _map_id:
+				continue   # 路的另一头接的是出发点自己，跳过
+			var far_title := _title_of(String(far["target"]))
+			if not far_title.is_empty():
+				return "沿%s去 %s" % [title if not title.is_empty() else "道路", far_title]
+		for far: Dictionary in sl.get_map_exits(map_id, WorldAPI.EntrySide.RIGHT):
+			if String(far["target"]) == _map_id:
+				continue
+			var far_title := _title_of(String(far["target"]))
+			if not far_title.is_empty():
+				return "沿%s去 %s" % [title if not title.is_empty() else "道路", far_title]
+	if title.is_empty():
+		return "去 " + map_id
+	return "去 " + title
+
+
+## 地区名（map_titles.json title；未配置回退 map_id）
+func _title_of(map_id: String) -> String:
+	if _titles_cache.is_empty() and ResourceLoader.exists(TITLES_PATH):
+		var f := FileAccess.open(TITLES_PATH, FileAccess.READ)
+		if f != null:
+			var parsed: Variant = JSON.parse_string(f.get_as_text())
+			if parsed is Dictionary:
+				_titles_cache = parsed
+	if _titles_cache.has(map_id) and _titles_cache[map_id] is Dictionary:
+		return String(_titles_cache[map_id].get("title", ""))
+	return ""
+
+
+func _owner_map_id() -> String:
+	var sl: Node = _root.scene_loader if _root != null else null
+	if sl != null and "current_map_id" in sl:
+		return String(sl.current_map_id)
+	return ""
+
+
 func _on_choice(act: String) -> void:
+	if act.begins_with("travel:"):
+		_travel(act.trim_prefix("travel:"))
+		return
 	match act:
 		"siege":
 			SiegeFieldScript.pending_siege_mode = true
@@ -135,8 +199,6 @@ func _on_choice(act: String) -> void:
 		"field":
 			SiegeFieldScript.pending_siege_mode = false
 			_travel("siege_battlefield")
-		"road":
-			_travel("road_a_b")
 		"close":
 			_hide()
 

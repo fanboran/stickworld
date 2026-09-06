@@ -36,3 +36,4 @@ tools/baking/_faithful/
 
 # AI 生图密钥（本地私有，绝不提交）
 tools/ai/.env
+snapshot_siege_out*

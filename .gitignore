@@ -152,3 +152,6 @@ export/**/*.dll
 export/**/*.zip
 简历-游戏客户端实习-范博然.md
 temp/swl_audio/
+
+# 诊断截图等临时产物（不入库）
+temp/

@@ -9,7 +9,7 @@
 
 ## 🎮 下载游玩
 
-**[下载 Windows 版 v0.5.0（点击跳转 Release）](https://github.com/fanboran/stickworld/releases/latest)** —— 解压后双击 `stick-world.exe`，无需安装（Windows 10/11 64 位）。
+**[下载 Windows 版 v0.2（点击跳转 Release）](https://github.com/fanboran/stickworld/releases/latest)** —— 解压后双击 `stick-world.exe`，无需安装（Windows 10/11 64 位）。
 
 ## 游戏实机画面
 
@@ -97,7 +97,7 @@ bash stick-world/tests/run_all.sh
 
 ## 开发状态与路线
 
-**v0.5.0（当前）**：首个公开可玩 Demo——内置目标引导与胜利结算，通关后开放自由沙盒。
+**v0.2（当前）**：首个公开可玩 Demo——内置目标引导与胜利结算，通关后开放自由沙盒。
 规划中：科技树/物流/扩张系统、战略图聚落下钻、Chunk 流式加载（见[待办事项](docs/项目/待办事项.md)）。
 
 ## 文档

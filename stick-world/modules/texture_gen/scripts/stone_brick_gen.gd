@@ -20,7 +20,10 @@ const PALE := {
 
 ## 生成一整面石砖墙（不透明，RGB）。
 ## brick_size: 基准砖块像素尺寸；seed 控制整张砖排布。
-static func make_wall(w: int, h: int, seed_value: int = 0, brick_size: Vector2i = Vector2i(64, 30)) -> Image:
+## flat_light: true=俯视顶面（无左上受光/右下落影，砖色均匀+轻噪点——上表面
+## 砖铺地的观感）；false=侧立面（斜向明暗塑体积）。
+static func make_wall(w: int, h: int, seed_value: int = 0,
+		brick_size: Vector2i = Vector2i(64, 30), flat_light: bool = false) -> Image:
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
@@ -44,7 +47,7 @@ static func make_wall(w: int, h: int, seed_value: int = 0, brick_size: Vector2i 
 			var bw: int = (cuts[i + 1] - bx) if i + 1 < cuts.size() else (w - bx)
 			var gap: int = 3
 			_draw_brick(img, rng, Rect2i(bx + gap / 2, row["y"] + gap / 2,
-					maxi(bw - gap, 4), maxi(row["h"] - gap, 4)))
+					maxi(bw - gap, 4), maxi(row["h"] - gap, 4)), flat_light)
 	# 全墙斑驳（风化污渍：低频噪声明暗）
 	_weather(img, rng, 0.10)
 	return img
@@ -114,8 +117,9 @@ static func _row_cuts(rng: RandomNumberGenerator, w: int, brick_w: int, row_idx:
 	return cuts
 
 
-## 画单块砖：受光渐变底色 + 手绘边缘起伏 + 斑驳 + 低概率裂纹
-static func _draw_brick(img: Image, rng: RandomNumberGenerator, r: Rect2i) -> void:
+## 画单块砖：受光渐变底色 + 手绘边缘起伏 + 斑驳 + 低概率裂纹（flat=俯视无光照）
+static func _draw_brick(img: Image, rng: RandomNumberGenerator, r: Rect2i,
+		flat: bool = false) -> void:
 	var tone := rng.randf_range(-0.10, 0.10)
 	var base := PALE["mid"].lerp(PALE["light"], rng.randf_range(0.15, 0.6)) as Color
 	base = Color(maxf(base.r + tone, 0.0), maxf(base.g + tone, 0.0), maxf(base.b + tone, 0.0))
@@ -134,9 +138,13 @@ static func _draw_brick(img: Image, rng: RandomNumberGenerator, r: Rect2i) -> vo
 			if edge < 1.0 + wob * 0.5:
 				continue   # 留给缝隙色
 			var c := base
-			# 左上受光 / 右下落影（斜向明度梯度）
-			var t := (float(xx - r.position.x) / r.size.x + float(yy - r.position.y) / r.size.y) * 0.5
-			c = c.lerp(dark, clampf(t * 0.38, 0.0, 0.38))
+			if flat:
+				# 俯视面：无斜向受光，仅极轻的逐砖明度呼吸
+				c = c.lerp(dark, tone * 0.5 + 0.04)
+			else:
+				# 左上受光 / 右下落影（斜向明度梯度）
+				var t := (float(xx - r.position.x) / r.size.x + float(yy - r.position.y) / r.size.y) * 0.5
+				c = c.lerp(dark, clampf(t * 0.38, 0.0, 0.38))
 			# 内部斑驳（伪随机颗粒+块状色斑）
 			var grain := fmod(sin(xx * 12.9898 + yy * 78.233) * 43758.5453, 1.0)
 			c = c.lerp(dark, absf(grain) * 0.10)

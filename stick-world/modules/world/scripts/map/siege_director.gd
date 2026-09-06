@@ -20,15 +20,23 @@ const StICKMAN_FALLBACK := preload("res://modules/units/scenes/stickman_entity.t
 @export var wave_cap: int = 9
 ## 首波前缓冲（秒）：给玩家落位时间
 @export var first_wave_delay: float = 4.0
+## 开战触发线（世界 x）：>0 时玩家越过此线才开波次计时（守城 Demo=玩家出镇赴墙）；
+## <=0 进图即计时（独立守城地图用）。
+@export var wave_trigger_x: float = -1.0
 ## 城墙弓箭手数
 @export var archer_count: int = 4
+## 波次敌军开关（守城模式开；自由出城模式关——墙上只有巡防弓手）
+@export var waves_enabled: bool = true
+## 守军地面小队开关（12v12 类：守城模式布一队混编在墙前列阵）
+@export var squad_enabled: bool = true
 
 var _map: Node2D = null
 var _wall: SiegeWall = null
 var _root: Node = null            # GameRoot（取单位场景/CombatApi）
 var _wave_timer: float = 0.0
 var _wave_num: int = 0
-var _started: bool = false
+var _started: bool = false      # 首波已发
+var _triggered: bool = false    # 开战计时已触发（触发线模式：玩家出镇置位）
 var _rng := RandomNumberGenerator.new()
 ## 我方守军登记（弓箭手等由导演布防的单位；首波开战时作为守方名单）
 var _garrison: Array = []
@@ -51,9 +59,12 @@ func setup(map: Node2D, wall: SiegeWall) -> void:
 		n = n.get_parent()
 	# 等地图实体宿主就绪后再布防（地图 _ready 链条尾部）
 	call_deferred("_deploy_garrison")
+	if squad_enabled:
+		call_deferred("_deploy_squad")
 
 
-## 我方布防：弓箭手上墙（墙顶约束），存活的守军并入场守方阵营由首战统一注册。
+## 我方布防：巡墙弓箭手——贴墙立面上下来回跑动射击（人站在城墙上）。
+## x 钳在墙面 8 格内，y 在垛口线下 patrol 带内正弦往返；武器 BOW。
 func _deploy_garrison() -> void:
 	if _map == null or _wall == null:
 		return
@@ -61,39 +72,114 @@ func _deploy_garrison() -> void:
 	if scene == null:
 		return
 	var slots: Array[float] = _wall.get_archer_slots()
-	var platform_local_y: float = _wall.get_platform_y()
-	var platform_world_y: float = _wall.global_position.y + platform_local_y
+	var patrol: Vector2 = _wall.get_patrol_range()
 	var placed := 0
-	for slot_x in slots:
+	# 巡墙相位错开：上下交错，开局就是"在墙上跑动"的样子
+	var phase_off: float = TAU / maxf(float(slots.size()), 1.0)
+	for si in slots.size():
 		if placed >= archer_count:
 			break
-		var pos := Vector2(_wall.global_position.x + slot_x, platform_world_y)
+		var spawn_y: float = patrol.y - 30.0
+		var pos := Vector2(_wall.get_wall_x() + slots[si], spawn_y)
 		var u: Node2D = _map.spawn_entity(scene, pos)
 		if u == null:
 			continue
 		if u.get("foot_offset") != null:
-			u.global_position.y = platform_world_y - u.foot_offset
-		# 弓箭手：spawn 当帧设武器类型（WeaponMount 的 _reload_weapons 是
-		# deferred 的，此刻设置仍在其前，帧末统一重载生效）
+			u.global_position.y = spawn_y - u.foot_offset
 		if u.get("weapon_mount") != null:
 			u.weapon_mount.weapon_type = WeaponMount.WeaponType.BOW
-		# 墙顶承重线约束：y 活动带压到垛口平台，防 AI 走位坠墙
+		# 巡墙约束：y 活动带 = 巡逻带（防 AI 走位坠墙），x 由钳制管
 		if u.has_method("set_ground_constraints"):
-			u.set_ground_constraints(platform_world_y, platform_world_y + 8.0,
+			u.set_ground_constraints(patrol.x, patrol.y + 8.0,
 					_map.map_left, _map.map_right)
 		if u.has_method("set_possessed"):
 			u.set_possessed(false)
 		_set_body_color(u, Color(0.25, 0.42, 0.80))
 		u.set_meta("siege_slot_x", pos.x)
+		u.set_meta("siege_phase", phase_off * placed)
 		_garrison.append(u)
 		placed += 1
-	print_verbose("[SiegeDirector] 布防完成: 弓箭手 %d/%d 上墙" % [placed, archer_count])
+	print_verbose("[SiegeDirector] 布防完成: 巡墙弓箭手 %d/%d" % [placed, archer_count])
+
+
+## 巡墙驱动：y 正弦往返（相位错开）+ x 钳回墙面（AI 接敌/风筝会横移）
+func _clamp_garrison(delta: float) -> void:
+	if _garrison.is_empty() or _wall == null:
+		return
+	var patrol: Vector2 = _wall.get_patrol_range()
+	var mid_y: float = (patrol.x + patrol.y) * 0.5
+	var amp: float = (patrol.y - patrol.x) * 0.5
+	_patrol_t += delta
+	for g in _garrison:
+		if not is_instance_valid(g) or (g.has_method("is_dead") and g.is_dead()):
+			continue
+		if not g.has_meta("siege_slot_x"):
+			continue
+		var slot_x: float = float(g.get_meta("siege_slot_x"))
+		var ph: float = float(g.get_meta("siege_phase", 0.0))
+		var off: float = g.global_position.x - slot_x
+		if absf(off) > SLOT_CLAMP:
+			g.global_position.x = slot_x + signf(off) * SLOT_CLAMP
+		# 垂直巡墙：慢速往返（周期 ~9s），被击退/走位后拉回巡逻线
+		var target_y: float = mid_y + sin(_patrol_t * 0.7 + ph) * amp
+		g.global_position.y = lerpf(g.global_position.y, target_y, minf(delta * 3.0, 1.0))
+
+
+var _patrol_t: float = 0.0
+## 驻位水平钳制带宽（墙面 8 格内的小幅让位）
+const SLOT_CLAMP := 20.0
+
+
+## 守军地面小队（12v12 类）：墙前列阵的混编队（剑/矛/弓），并入守方名单。
+func _deploy_squad() -> void:
+	if _map == null or _wall == null or _root == null:
+		return
+	var scene: PackedScene = _stickman_scene()
+	if scene == null:
+		return
+	var spawn_y: float = _map.ground_y + (_map.ground_bottom - _map.ground_y) * 0.5
+	var base_x: float = _wall.get_wall_x() + 320.0
+	# [兵种武器, 距墙 x 偏移]——矛兵顶前排、剑兵次之、弓手后排
+	var loadout: Array = [
+		[WeaponMount.WeaponType.SPEAR, 60.0], [WeaponMount.WeaponType.SPEAR, 120.0],
+		[WeaponMount.WeaponType.SWORD, 180.0], [WeaponMount.WeaponType.SWORD, 240.0],
+		[WeaponMount.WeaponType.SWORD, 300.0], [WeaponMount.WeaponType.BOW, 380.0],
+	]
+	for entry in loadout:
+		var pos := Vector2(base_x + entry[1], spawn_y)
+		var u: Node2D = _map.spawn_entity(scene, pos)
+		if u == null:
+			continue
+		if u.get("foot_offset") != null:
+			u.global_position.y = spawn_y - u.foot_offset
+		if u.get("weapon_mount") != null:
+			u.weapon_mount.weapon_type = entry[0]
+		if u.has_method("set_possessed"):
+			u.set_possessed(false)
+		_set_body_color(u, Color(0.25, 0.42, 0.80))
+		_garrison.append(u)
+	print_verbose("[SiegeDirector] 守军小队布阵: %d 人" % loadout.size())
 
 
 func _process(delta: float) -> void:
 	if _map == null or _wall == null:
 		return
-	_clamp_garrison()
+	_clamp_garrison(delta)
+	if not waves_enabled:
+		return
+	# 开战触发线：玩家未出镇（未越过触发线）不计时——开局采集/建造流程不被攻打
+	if not _triggered and wave_trigger_x > 0.0:
+		var host: Node2D = _map.get_node_or_null("EntityHost") as Node2D
+		var in_position := false
+		if host != null:
+			for u in host.get_children():
+				if is_instance_valid(u) and u.has_method("is_possessed") and u.is_possessed():
+					in_position = u.global_position.x >= wave_trigger_x
+					break
+		if not in_position:
+			return
+		print("[SiegeDirector] 玩家已赴城墙，敌军斥候现身……")
+	_triggered = true
 	_wave_timer += delta
 	var due: float = first_wave_delay if not _started else wave_interval
 	if _wave_timer < due:
@@ -101,22 +187,6 @@ func _process(delta: float) -> void:
 	_wave_timer = 0.0
 	_started = true
 	_spawn_wave()
-
-
-## 驻守钳制：弓箭手驻垛口位不追敌（战斗 AI 的接敌/风筝会让远程沿墙顶
-## 横向飘走——y 被 ground 约束锁定后表现为"空中横移"）。x 偏移超带宽拉回。
-const SLOT_CLAMP := 24.0
-
-func _clamp_garrison() -> void:
-	for g in _garrison:
-		if not is_instance_valid(g) or (g.has_method("is_dead") and g.is_dead()):
-			continue
-		if not g.has_meta("siege_slot_x"):
-			continue
-		var slot_x: float = float(g.get_meta("siege_slot_x"))
-		var off: float = g.global_position.x - slot_x
-		if absf(off) > SLOT_CLAMP:
-			g.global_position.x = slot_x + signf(off) * SLOT_CLAMP
 
 
 ## 刷一波进攻方（右端列队入场），并入当前战斗（无战斗则首波开战）

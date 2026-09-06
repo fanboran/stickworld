@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c4cbb5e3rl6su"
-path="res://.godot/imported/siege_gate.png-ffd7120f6a2cc640353934a77d8e1166.ctex"
+uid="uid://bck5fjxvco7ae"
+path="res://.godot/imported/siege_top_face.png-c71958f92751f2755ced47eaf30a6dd6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/environment/siege_gate.png"
-dest_files=["res://.godot/imported/siege_gate.png-ffd7120f6a2cc640353934a77d8e1166.ctex"]
+source_file="res://assets/environment/siege_top_face.png"
+dest_files=["res://.godot/imported/siege_top_face.png-c71958f92751f2755ced47eaf30a6dd6.ctex"]
 
 [params]
 

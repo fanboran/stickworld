@@ -302,8 +302,10 @@ func _run_phase_4_tests() -> void:
 		var player: Node2D = map.get_possessed_entity()
 		_runner.assert_true(player != null, "应有玩家附身实体")
 		if player:
-			# ENTRY_RIGHT: spawn_x = map_right - 150 = 8192 - 150 = 8042
-			_runner.assert_true(absf(player.global_position.x - 8042.0) < 10.0, "玩家应在右侧入口附近 (x≈8042)")
+			# ENTRY_RIGHT: spawn_x = map_right - 150（村A右缘已收窄到右城墙外 2160）
+			var expect_x: float = float(map.map_right) - 150.0
+			_runner.assert_true(absf(player.global_position.x - expect_x) < 10.0,
+					"玩家应在右侧入口附近 (x≈%d)" % int(expect_x))
 	_runner.end_test()
 
 	_runner.begin_test("SceneLoader: last_entry_side 记录正确")

@@ -349,6 +349,9 @@ func set_dirt_road_range(start_cell: int, end_cell: int) -> void:
 	_terrain.update_dirt_road_visual()
 	# 同步 grass shader 的 city_bounds，让土路范围显示土黄色（覆盖草地）
 	_terrain.set_city_bounds(road_left_x, road_right_x)
+	# 村庄硬地皮走自然地形（fbm 参差边界 + 踩踏肌理），拒绝纯色糊块
+	if _terrain.has_method("enable_natural_ground"):
+		_terrain.enable_natural_ground()
 
 
 ## 获取 cell 的地形类型（未设置默认 GRASS）。

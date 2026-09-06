@@ -25,6 +25,10 @@ var city_tiles: Array = []
 var city_preview_texture: Texture2D = null
 ## 地形模式底图（l3_terrain.png，B2 程序着色：群系基色×高度明度+hillshade+水体+海岸线）
 var terrain_texture: Texture2D = null
+## 政治模式底图（l3_political.png，P7 政权简化版：城市地块 × 政权色，出生 8 邦原色）
+var political_texture: Texture2D = null
+## 政权表（P7，l3_city.json 顶层 "states"）：state_id -> {name,capital,culture,alliance,color,...}
+var states: Dictionary = {}
 ## 老 L1 索引图（label 直编 2048）：hover 查询返回老 L1 地块
 var l1_index_image: Image = null
 
@@ -72,6 +76,9 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 		var city_data := _read_data_dict(city_path)
 		if not city_data.is_empty():
 			world.city_tiles = city_data.get("tiles", [])
+			# 政权表（P7 state_expand_lite 注入顶层；缺字段时为空表，渲染回退现状）
+			for sd in (city_data.get("states", {}) as Dictionary):
+				world.states[sd] = city_data["states"][sd]
 	# C2 blob：population_score 就地做每局扰动（出生免疫，与 L1/L2 装配同口径；
 	# label→settlement_city_%03d 与生成端 id 规则一致）
 	for t in world.city_tiles:

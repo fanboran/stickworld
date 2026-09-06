@@ -17,6 +17,8 @@ tools/worldgen/
 │   ├── biome_params.json           # 群系参数（温度/降水/干旱带/雨影/热区，全外置可调）
 │   ├── terrain_render.py           # 程序着色地形底图（l3_terrain.png + L2 每地区裁切，--install 入 config）
 │   ├── terrain_params.json         # 着色参数（hillshade/明度/岩石雪线/海洋渐变/海岸线/热区暖调）
+│   ├── state_expand_lite.py        # 政权简化版（P7：文化圈锚点 flood-fill + 都城扩张 → political_data.json + 政权底图，--dry-run 免写）
+│   ├── state_params.json           # 政权参数（文化圈锚点/命名表/flood 与扩张系数/容量上限，全外置可调）
 │   ├── region_split.py             # 地区划分（watershed 沿地形切分）
 │   └── region_preview_annotated.py # 地区标注预览
 ├── l2_export/             # L2/L3 网格提取 + 烘焙 + 全部视图导出（活跃，本次核心）

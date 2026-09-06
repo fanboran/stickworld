@@ -2,6 +2,8 @@ extends Node2D
 class_name L3MapRenderer
 ## L3 大世界渲染器 —— 静态几何缓存（ArrayMesh）+ hover 老 L1 高亮 + 双显示模式
 ##
+## 地图模式（B4，MapModeManager 全局）：TERRAIN 地形底图 / POLITICAL 政权底图（P7），
+## 其余显示模式为政治贴图异步加载完成前的回退层。
 ## 显示模式（模式按钮切换，见 l3_zoom_indicator）：
 ##   MODE_L1   : 底 = 69 块老 L1 地块（鲜艳配色）
 ##   MODE_CITY : 底 = 1038 块城市（像 city_preview 花花绿绿）
@@ -76,6 +78,8 @@ var _city_preview_thread: Thread = null
 var _city_preview_result: Image = null
 var _terrain_thread: Thread = null
 var _terrain_result: Image = null
+var _political_thread: Thread = null
+var _political_result: Image = null
 
 
 func set_data(data: L3WorldData) -> void:
@@ -127,6 +131,8 @@ func set_map_mode(mode: int) -> void:
 	if mode == map_mode:
 		return
 	map_mode = mode
+	if mode == MapModeManager.Mode.POLITICAL:
+		_ensure_political()
 	queue_redraw()
 
 
@@ -367,6 +373,23 @@ func _load_city_preview_async() -> void:
 		_city_preview_result = img
 
 
+## 异步加载：政治模式底图（P7 政权色 l3_political.png，切到 POLITICAL 时按需触发）
+func _ensure_political() -> void:
+	if _data == null or _data.political_texture != null or _political_thread != null:
+		return
+	_political_thread = Thread.new()
+	_political_thread.start(_load_political_async)
+
+
+func _load_political_async() -> void:
+	var f := FileAccess.open("res://config/strategic_map/l3_political.png", FileAccess.READ)
+	if f == null:
+		return
+	var img := Image.new()
+	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
+		_political_result = img
+
+
 ## 异步加载：地形模式底图（B2 程序着色 l3_terrain.png，TERRAIN 为默认模式 → set_data 即触发）
 func _ensure_terrain() -> void:
 	if _data == null or _data.terrain_texture != null or _terrain_thread != null:
@@ -395,6 +418,9 @@ func _exit_tree() -> void:
 	if _terrain_thread != null:
 		_terrain_thread.wait_to_finish()
 		_terrain_thread = null
+	if _political_thread != null:
+		_political_thread.wait_to_finish()
+		_political_thread = null
 
 
 ## 每帧检查后台线程：解码完成 → wait_to_finish + 取结果（ImageTexture 需主线程创建）
@@ -421,6 +447,13 @@ func _poll_async_loads() -> void:
 			_data.terrain_texture = ImageTexture.create_from_image(_terrain_result)
 			_terrain_result = null
 			queue_redraw()
+	if _political_thread != null and not _political_thread.is_alive():
+		_political_thread.wait_to_finish()
+		_political_thread = null
+		if _political_result != null:
+			_data.political_texture = ImageTexture.create_from_image(_political_result)
+			_political_result = null
+			queue_redraw()
 
 
 func _draw() -> void:
@@ -433,6 +466,23 @@ func _draw() -> void:
 		# 异步加载完成前回退现状填充层，解码完成后 queue_redraw 自动切上
 		draw_texture_rect(_data.terrain_texture,
 			Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)
+	elif map_mode == MapModeManager.Mode.POLITICAL and _data.political_texture != null:
+		# 政治模式（P7）：政权色底图铺满全图（2048 纹理拉伸到 8192 网格，同法）；
+		# 异步加载完成前回退现状着色（城市贴图/老 L1 mesh），解码完成后自动切上
+		draw_texture_rect(_data.political_texture,
+			Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)
+	elif map_mode == MapModeManager.Mode.POLITICAL:
+		_ensure_political()
+		if display_mode == DisplayMode.MODE_CITY:
+			_ensure_city_preview()
+			if _data.city_preview_texture != null:
+				draw_texture_rect(_data.city_preview_texture,
+					Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)
+		else:
+			if _l1_mesh != null:
+				draw_mesh(_l1_mesh, null)
+			if _l1_holes_mesh != null:
+				draw_mesh(_l1_holes_mesh, null)
 	elif display_mode == DisplayMode.MODE_CITY:
 		# 城市模式：直接贴 city_preview 栅格图（花花绿绿、零剖分、快）
 		_ensure_city_preview()

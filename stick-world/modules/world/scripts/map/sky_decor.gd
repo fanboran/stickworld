@@ -110,10 +110,14 @@ func _ready() -> void:
 	call_deferred("_find_camera")
 
 
-## 星野+月亮（最底层、无限远；夜间淡入，见 sky_stars.gd）
+## 星野+月亮（夜间淡入，见 sky_stars.gd）。z_index=1：抬到本层背景贴图
+## （山/树线 z=0）之上——背景贴图 86%+ 不透明且层顶铺满天空区，星/月/极光
+## 画在其下会被完全盖住（2026-09-06 夜空验收截图确认）；白天星野 gate=0
+## 不绘制，日间观感不变。相对 z=1 → 全局 -5，仍在地面(z=0)/单位之下。
 func _build_stars() -> void:
 	var stars: Node2D = SkyStarsScript.new()
 	stars.name = "Stars"
+	stars.z_index = 1
 	add_child(stars)
 	_layers.append({"node": stars, "factor": SkyStarsScript.FACTOR})
 

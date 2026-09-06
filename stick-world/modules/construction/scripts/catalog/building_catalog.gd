@@ -53,7 +53,9 @@ func load_defs() -> void:
 	if res == null or not (res.get("variables") is Dictionary):
 		push_warning("[ConstructionManager] 建筑定义表加载失败或格式异常: %s" % res_path)
 		return
-	var data: Array = res.variables.get("data", [])
+	# 装载侧统一消毒：Excel 空单元格导出为 null（如 mega_interior_map_id），
+	# 剥除后消费侧 has()/get() 语义一致（详见 BalanceResource.sanitized_rows）
+	var data: Array = BalanceResource.sanitized_rows(res as BalanceResource)
 	for entry in data:
 		if entry is Dictionary and entry.has("id"):
 			_root._building_defs_cache[entry["id"]] = entry

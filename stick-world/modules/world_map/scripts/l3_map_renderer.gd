@@ -13,6 +13,11 @@ enum DisplayMode { MODE_L1, MODE_CITY }
 var _data: L3WorldData = null
 var _camera: MapCamera = null
 
+## 当前地图模式（B4 TERRAIN/POLITICAL，MapModeManager 广播 → 控制器转发）。
+## 地形底图层（B2 产 l3_terrain.png）与政权叠加层（Phase F）落地前两模式渲染一致
+## （回退现状着色），本字段为届时分层绘制的接入口
+var map_mode: int = MapModeManager.Mode.TERRAIN
+
 ## 当前显示模式
 var display_mode: int = DisplayMode.MODE_L1
 
@@ -36,22 +41,77 @@ const L2_LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
 const L2_LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
 const L2_LABEL_SIZE := 40.0
 
+## 玩家当前所在 L2 地区（全局 label；出生=13 即 region_013，含老 L1 #69）。
+## **整个地区**陆地带蓝光流动描边（"你在这里"，粗粒度层级）。
+## Phase C 接入玩家跨区移动后改由事件动态更新（现阶段恒出生区）
+var player_region_label: int = 13
+## 地区描边双色（亮青蓝 ↔ 深蓝，均不透明；色调流动替代透明度闪烁——A3 定标）
+const PLAYER_GLOW_A := Color(0.35, 0.85, 1.0)
+const PLAYER_GLOW_B := Color(0.15, 0.45, 0.95)
+const PLAYER_GLOW_MAP_WIDTH := 10.0  # 地图单位固定宽（不随缩放；地区轮廓比地块大一档）
+const PLAYER_GLOW_SCREEN_CAP := 20.0 # 极端放大时屏幕像素上限
+
+## 当前所在老 L1 轮廓的等弧长分段缓存（几何不变，重采样一次复用）
+var _glow_outlines: Array[PackedVector2Array] = []
+## 流动动画相位（秒）
+var _glow_time := 0.0
+
 var _l1_mesh: ArrayMesh = null
 var _l1_holes_mesh: ArrayMesh = null
 var _debug_was_visible: bool = false
 
-## 异步后台加载（8192 PNG 解码不阻塞主线程）：l1_index（hover 查询）+ city_preview（城市模式底图）
+## 城市建成区 blob（C2）：L3 分档——T1 不画 / T2+ 团块（缩放系数 + 级别下限）；
+## 全陆 1040 城轮廓三角化合并 2 张 mesh（填充 + 描边 line list），set_data 烘焙一次
+const BLOB_L3_SCALE := 0.12
+const BLOB_L3_MIN_LEVEL := 2
+const BLOB_FILL := Color(0.66, 0.61, 0.54, 0.94)
+const BLOB_EDGE := Color(0.20, 0.17, 0.12, 0.9)
+var _blob_fill_mesh: ArrayMesh = null
+var _blob_line_mesh: ArrayMesh = null
+
+## 异步后台加载（8192 PNG 解码不阻塞主线程）：l1_index（hover 查询）+ city_preview（城市模式底图）+ terrain（地形模式底图）
 var _l1_index_thread: Thread = null
 var _l1_index_result: Image = null
 var _city_preview_thread: Thread = null
 var _city_preview_result: Image = null
+var _terrain_thread: Thread = null
+var _terrain_result: Image = null
 
 
 func set_data(data: L3WorldData) -> void:
 	_data = data
 	_build_static_meshes()
+	_build_glow_outlines()
 	_ensure_l1_index()
+	_ensure_terrain()
 	queue_redraw()
+
+
+## 设置玩家当前所在 L2 地区（Phase C 动态跟踪入口；变化时重建描边缓存）
+func set_player_region(label: int) -> void:
+	if label == player_region_label:
+		return
+	player_region_label = label
+	_build_glow_outlines()
+	queue_redraw()
+
+
+## 构建所在 L2 地区的流动描边分段缓存：该地区全部陆地多边形（land_polygons，
+## 顶点 [y,x] 或 Vector2，与 _draw_l2_borders 同口径换算）
+func _build_glow_outlines() -> void:
+	_glow_outlines = []
+	if _data == null or player_region_label <= 0:
+		return
+	for r in _data.regions:
+		if int(r.get("label", 0)) != player_region_label:
+			continue
+		for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
+			var pts := PackedVector2Array()
+			for pp in poly:
+				pts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
+			var resampled := FlowOutline.resample_closed(pts)
+			if resampled.size() >= 3:
+				_glow_outlines.append(resampled)
 
 
 func get_data() -> L3WorldData:
@@ -60,6 +120,14 @@ func get_data() -> L3WorldData:
 
 func set_camera(camera: MapCamera) -> void:
 	_camera = camera
+
+
+## 地图模式切换（控制器在 open() 时也推一次当前模式——跨视图全局状态）
+func set_map_mode(mode: int) -> void:
+	if mode == map_mode:
+		return
+	map_mode = mode
+	queue_redraw()
 
 
 func refresh() -> void:
@@ -93,6 +161,81 @@ func _build_static_meshes() -> void:
 		_l1_mesh = built[0]
 	if built[1] != null:
 		_l1_holes_mesh = built[1]
+	_bake_blob_meshes()
+
+
+## 烘焙城市 blob 层：city_tiles（anchor 优先，回退地块质心 centroid[x,y]）× L3 缩放
+## → 填充 + 描边 line list 两张合并 mesh（每帧 2 次 draw_mesh；T1 按分档跳过）
+func _bake_blob_meshes() -> void:
+	_blob_fill_mesh = null
+	_blob_line_mesh = null
+	var verts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var tris := PackedInt32Array()
+	var lverts := PackedVector2Array()
+	for t in _data.city_tiles:
+		var td: Dictionary = t
+		var level := int(td.get("level", 1))
+		if level < BLOB_L3_MIN_LEVEL:
+			continue
+		var cap_var: Variant = td.get("blob_capacity", [])
+		var cap := PackedFloat32Array()
+		if cap_var is PackedFloat32Array:
+			cap = cap_var
+		elif cap_var is Array:
+			for v in cap_var:
+				cap.append(float(v))
+		var anchor: Array = td.get("anchor", [])
+		var centroid: Array = td.get("centroid", [])
+		var src: Array = anchor if anchor.size() >= 2 else centroid
+		if src.size() < 2:
+			continue
+		var sid := "settlement_city_%03d" % int(td.get("label", 0))
+		var outline := SettlementBlob.generate_outline(
+			sid, level, cap, float(td.get("population_score", 0.0)))
+		if outline.size() < 3:
+			continue
+		var pos := Vector2(float(src[0]), float(src[1]))
+		var scaled := PackedVector2Array()
+		scaled.resize(outline.size())
+		for i in outline.size():
+			scaled[i] = pos + outline[i] * BLOB_L3_SCALE
+		var tri := Geometry2D.triangulate_polygon(scaled)
+		if tri.is_empty():
+			continue
+		var base := verts.size()
+		for v in scaled:
+			verts.append(v)
+			cols.append(BLOB_FILL)
+		for idx in tri:
+			tris.append(base + idx)
+		for i in scaled.size():
+			lverts.append(scaled[i])
+			lverts.append(scaled[(i + 1) % scaled.size()])
+	_blob_fill_mesh = _mesh_from_arrays(verts, cols, tris, Mesh.PRIMITIVE_TRIANGLES)
+	_blob_line_mesh = _mesh_from_arrays(lverts, PackedColorArray(), PackedInt32Array(), Mesh.PRIMITIVE_LINES)
+
+
+## 顶点 2D 数组 → ArrayMesh（lines 时逐顶点补边色）
+func _mesh_from_arrays(verts: PackedVector2Array, cols: PackedColorArray,
+		tris: PackedInt32Array, prim: int) -> ArrayMesh:
+	if verts.is_empty():
+		return null
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	if prim == Mesh.PRIMITIVE_LINES:
+		var lc := PackedColorArray()
+		lc.resize(verts.size())
+		for i in verts.size():
+			lc[i] = BLOB_EDGE
+		arr[Mesh.ARRAY_COLOR] = lc
+	else:
+		arr[Mesh.ARRAY_COLOR] = cols
+		arr[Mesh.ARRAY_INDEX] = tris
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(prim, arr)
+	return mesh
 
 
 func _build_layer_mesh(tiles: Array) -> Array:
@@ -159,8 +302,12 @@ func _build_layer_mesh(tiles: Array) -> Array:
 	return [fill_mesh, holes_mesh]
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_poll_async_loads()
+	# 当前位置流动光动画：相位推进 + 每帧重绘（mesh 均为缓存一次性 draw 命令，成本低）
+	if visible and not _glow_outlines.is_empty():
+		_glow_time += delta
+		queue_redraw()
 	if not visible or _data == null:
 		return
 	var viewport := get_viewport()
@@ -220,6 +367,36 @@ func _load_city_preview_async() -> void:
 		_city_preview_result = img
 
 
+## 异步加载：地形模式底图（B2 程序着色 l3_terrain.png，TERRAIN 为默认模式 → set_data 即触发）
+func _ensure_terrain() -> void:
+	if _data == null or _data.terrain_texture != null or _terrain_thread != null:
+		return
+	_terrain_thread = Thread.new()
+	_terrain_thread.start(_load_terrain_async)
+
+
+func _load_terrain_async() -> void:
+	var f := FileAccess.open("res://config/strategic_map/l3_terrain.png", FileAccess.READ)
+	if f == null:
+		return
+	var img := Image.new()
+	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
+		_terrain_result = img
+
+
+## 节点退出前 join 全部后台线程——未完成的 Thread 直接销毁在 Windows 上会段错误
+func _exit_tree() -> void:
+	if _l1_index_thread != null:
+		_l1_index_thread.wait_to_finish()
+		_l1_index_thread = null
+	if _city_preview_thread != null:
+		_city_preview_thread.wait_to_finish()
+		_city_preview_thread = null
+	if _terrain_thread != null:
+		_terrain_thread.wait_to_finish()
+		_terrain_thread = null
+
+
 ## 每帧检查后台线程：解码完成 → wait_to_finish + 取结果（ImageTexture 需主线程创建）
 func _poll_async_loads() -> void:
 	if _data == null:
@@ -237,6 +414,13 @@ func _poll_async_loads() -> void:
 			_data.city_preview_texture = ImageTexture.create_from_image(_city_preview_result)
 			_city_preview_result = null
 			queue_redraw()
+	if _terrain_thread != null and not _terrain_thread.is_alive():
+		_terrain_thread.wait_to_finish()
+		_terrain_thread = null
+		if _terrain_result != null:
+			_data.terrain_texture = ImageTexture.create_from_image(_terrain_result)
+			_terrain_result = null
+			queue_redraw()
 
 
 func _draw() -> void:
@@ -244,7 +428,12 @@ func _draw() -> void:
 		return
 	# 1. 海洋背景
 	draw_rect(Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), OCEAN_COLOR)
-	if display_mode == DisplayMode.MODE_CITY:
+	if map_mode == MapModeManager.Mode.TERRAIN and _data.terrain_texture != null:
+		# 地形模式（B2）：程序着色底图铺满全图（2048 纹理拉伸到 8192 网格，与 city_preview 同法）；
+		# 异步加载完成前回退现状填充层，解码完成后 queue_redraw 自动切上
+		draw_texture_rect(_data.terrain_texture,
+			Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)
+	elif display_mode == DisplayMode.MODE_CITY:
 		# 城市模式：直接贴 city_preview 栅格图（花花绿绿、零剖分、快）
 		_ensure_city_preview()
 		if _data.city_preview_texture != null:
@@ -257,8 +446,22 @@ func _draw() -> void:
 			draw_mesh(_l1_mesh, null)
 		if _l1_holes_mesh != null:
 			draw_mesh(_l1_holes_mesh, null)
+	# 2.5 城市建成区 blob（C2）：T2+ 团块叠在底图之上、L2 边界描边之下（两显示模式恒画）
+	if _blob_fill_mesh != null:
+		draw_mesh(_blob_fill_mesh, null)
+	if _blob_line_mesh != null:
+		draw_mesh(_blob_line_mesh, null)
 	# 3. L2 地区常驻描边（标识可下钻单元）
 	_draw_l2_borders()
+	# 3.5 玩家当前所在 L2 地区：整区蓝光流动描边（"你在这里"）
+	if not _glow_outlines.is_empty():
+		var gw := PLAYER_GLOW_MAP_WIDTH
+		if _camera != null and _camera.has_method("get_zoom"):
+			var gz: float = _camera.get_zoom()
+			if gz > 0.0001:
+				gw = minf(PLAYER_GLOW_MAP_WIDTH, PLAYER_GLOW_SCREEN_CAP / gz)
+		for outline in _glow_outlines:
+			FlowOutline.draw_flow(self, outline, PLAYER_GLOW_A, PLAYER_GLOW_B, _glow_time, gw)
 	# 4. hover 老 L1 高亮（黄线轮廓）
 	_draw_hover_l1()
 	# 5. L2 地区编号（F3 调试模式）

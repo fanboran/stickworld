@@ -84,6 +84,9 @@ extends Node
 @warning_ignore("unused_signal") signal strategic_map_opened
 # 战略图关闭：world_map -> UI / InputDispatcher
 @warning_ignore("unused_signal") signal strategic_map_closed
+# 聚落规模变化（construction/事件系统 -> world_map）：payload 带新 population_score，
+# 战略图 L1 重算该聚落建成区 blob（总体设计 §5.7 实时变动；发射方建设系统接线前测试代发）
+@warning_ignore("unused_signal") signal settlement_updated(settlement_id: String, population_score: float)
 
 # ─────────────────────────────── UI 通用信号 ───────────────────────────────
 

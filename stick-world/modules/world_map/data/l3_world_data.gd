@@ -23,6 +23,8 @@ var l1_tiles: Array = []
 var city_tiles: Array = []
 ## 城市模式栅格贴图（l3_city_preview_8192.png，即 city_preview，花花绿绿最大方）
 var city_preview_texture: Texture2D = null
+## 地形模式底图（l3_terrain.png，B2 程序着色：群系基色×高度明度+hillshade+水体+海岸线）
+var terrain_texture: Texture2D = null
 ## 老 L1 索引图（label 直编 2048）：hover 查询返回老 L1 地块
 var l1_index_image: Image = null
 
@@ -60,16 +62,26 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 		world.sea_links.append(sd)
 	# 老 L1 视觉层（可选加载，不影响 L2 交互；bin 优先）
 	var l1_path := "%s/l3_l1.json" % base_dir
-	if FileAccess.file_exists(l1_path):
+	# 导出包只含 .bin（JSON 被排除），gate 须认 bin，否则视觉层静默丢失
+	if FileAccess.file_exists(l1_path) or FileAccess.file_exists(_bin_of(l1_path)):
 		var l1_data := _read_data_dict(l1_path)
 		if not l1_data.is_empty():
 			world.l1_tiles = l1_data.get("tiles", [])
 	# 城市视觉层（可选；L3"模式:城市"用；bin 优先）
 	var city_path := "%s/l3_city.json" % base_dir
-	if FileAccess.file_exists(city_path):
+	if FileAccess.file_exists(city_path) or FileAccess.file_exists(_bin_of(city_path)):
 		var city_data := _read_data_dict(city_path)
 		if not city_data.is_empty():
 			world.city_tiles = city_data.get("tiles", [])
+	# C2 blob：population_score 就地做每局扰动（出生免疫，与 L1/L2 装配同口径；
+	# label→settlement_city_%03d 与生成端 id 规则一致）
+	for t in world.city_tiles:
+		var td: Dictionary = t
+		var sid := "settlement_city_%03d" % int(td.get("label", 0))
+		td["population_score"] = SettlementRef.jitter_population_score(
+			float(td.get("population_score", 0.0)), sid,
+			WorldState.run_seed if WorldState else 0,
+			sid == L2WorldData._birth_spawn_id())
 	# 老 L1 索引图（hover 查询，l3_l1_index_8192.png）**异步加载**：8192 PNG 解码约
 	# 158ms，由 L3MapRenderer 在后台线程解码（Image.load_png_from_buffer，纯 CPU 线程安全），
 	# 完成前 query_l1_at_map_pos 因 l1_index_image 为 null 自然返回空（hover 静默），
@@ -134,8 +146,12 @@ func get_region_color(_label: int) -> Color:
 ## 读取 l*_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，见 tools/worldgen/l_world_bake.gd），
 ## bin 缺失/格式不符（Godot 升级等）自动回退 JSON。JSON 回退时把 polygon 顶点统一转成
 ## PackedVector2Array(Vector2(x,y))，与 bin 产物一致（下游只面对一种形态）。
+static func _bin_of(json_path: String) -> String:
+	return json_path.get_basename() + ".bin"
+
+
 static func _read_data_dict(json_path: String) -> Dictionary:
-	var bin_path := json_path.get_basename() + ".bin"
+	var bin_path := _bin_of(json_path)
 	if FileAccess.file_exists(bin_path):
 		var f := FileAccess.open(bin_path, FileAccess.READ)
 		if f != null:

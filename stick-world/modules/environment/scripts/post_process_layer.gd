@@ -59,7 +59,9 @@ func _process(delta: float) -> void:
 	var lum: float = _env_system.get_current_light_color().get_luminance()
 	var day_t: float = clampf((lum - 0.55) / 0.35, 0.0, 1.0)
 	_mat.set_shader_parameter("flare_intensity", (0.22 + 0.78 * day_t) * _flare_fade)
-	_mat.set_shader_parameter("top_light", 0.05 + 0.09 * day_t)
+	# 顶部天光：白天 0.14 峰值，夜晚压到 0.02 残辉（夜空底色已由清屏色接管，
+	# 暖调天光叠黑天会发脏——2026-09-06 夜空压暗配套调整）
+	_mat.set_shader_parameter("top_light", 0.02 + 0.12 * day_t)
 	# 夜晚整体冷暗，颗粒稍增（胶片夜戏感）
 	_mat.set_shader_parameter("warm_tint", Vector3(1.045 - 0.05 * (1.0 - day_t), 1.0, 0.945 + 0.07 * (1.0 - day_t)))
 	# 胶片颗粒已移除（2026-09-06 用户指示：白色噪点观感差；参数保留兼容，

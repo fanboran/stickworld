@@ -7,10 +7,11 @@ extends Node
 ## 退出码：0 全部通过，1 有失败
 ##
 ## 测试覆盖：
-##   - 编制预设加载（战斗班/建造队/工人队）
+##   - 编制预设加载（战斗班/建造队/劳工队/运输队）
 ##   - 按预设创建编队（组织标签映射 + 成员角色写入）
 ##   - 职责范围查询 / 调整（set_squad_work_types）
-##   - is_work_allowed 行为过滤（编队单位受限，未编队全能）
+##   - is_work_allowed 行为过滤（编队单位受限，未编队全能；
+##     搬运 WORK_HAUL 为全员基础能力恒放行）
 ##   - is_combat_squad 战斗职责判定
 ##   - TacticalOrders 拒绝非战斗职责小队的号令
 ##
@@ -44,6 +45,7 @@ func _register_tests() -> void:
 	_tests.append({"name": "预设: 按预设建队映射组织标签", "fn": Callable(self, "_test_create_with_preset"), "async": true})
 	_tests.append({"name": "职责: 工作类型查询与过滤", "fn": Callable(self, "_test_work_types_and_filter"), "async": true})
 	_tests.append({"name": "职责: 调整职责范围", "fn": Callable(self, "_test_set_work_types"), "async": true})
+	_tests.append({"name": "预设: 运输队创建与标签映射", "fn": Callable(self, "_test_transport_convoy"), "async": true})
 	_tests.append({"name": "号令: 非战斗小队被拒绝", "fn": Callable(self, "_test_tactical_reject"), "async": true})
 	_tests.append({"name": "角色: 编队写入与移出清除", "fn": Callable(self, "_test_role_write_clear"), "async": true})
 
@@ -93,17 +95,24 @@ func _test_presets_loaded() -> void:
 		return
 	_runner.assert_true(_formation.has_method("get_all_presets"), "应提供 get_all_presets")
 	var presets: Array = _formation.get_all_presets()
-	_runner.assert_true(presets.size() >= 3, "应至少有 3 个预设（战斗班/建造队/工人队）")
+	_runner.assert_true(presets.size() >= 4, "应至少有 4 个预设（战斗班/建造队/劳工队/运输队）")
 	var ids: Array = []
 	for p in presets:
 		ids.append(p.get("id", ""))
 	_runner.assert_true("fp_combat_squad" in ids, "应包含 fp_combat_squad")
 	_runner.assert_true("fp_builder_crew" in ids, "应包含 fp_builder_crew")
 	_runner.assert_true("fp_worker_crew" in ids, "应包含 fp_worker_crew")
+	_runner.assert_true("fp_transport_convoy" in ids, "应包含 fp_transport_convoy")
 	# 校验战斗班预设字段
 	var combat: Dictionary = _formation.get_preset("fp_combat_squad")
 	_runner.assert_equal(combat.get("tag", ""), "MILITARY", "战斗班标签应为 MILITARY")
 	_runner.assert_true("WORK_COMBAT" in combat.get("work_types", []), "战斗班职责应含 WORK_COMBAT")
+	# 校验劳工队改名与运输队预设字段
+	var worker: Dictionary = _formation.get_preset("fp_worker_crew")
+	_runner.assert_equal(worker.get("name", ""), "劳工队", "fp_worker_crew 应改名劳工队")
+	var convoy: Dictionary = _formation.get_preset("fp_transport_convoy")
+	_runner.assert_equal(convoy.get("tag", ""), "LOGISTICS", "运输队标签应为 LOGISTICS")
+	_runner.assert_true("WORK_TRANSPORT" in convoy.get("work_types", []), "运输队职责应含 WORK_TRANSPORT")
 
 
 # ─────────────────────────────── 异步测试 ────────────────────────────────
@@ -124,12 +133,12 @@ func _test_create_with_preset() -> void:
 	# 成员角色写入
 	_runner.assert_equal(_helper.units[0].get_role(), "builder", "成员 role 应为 builder")
 	_runner.assert_equal(_formation.get_squad_preset(squad_id), "fp_builder_crew", "squad preset 应记录")
-	# 工人队（LABOR 标签）
+	# 劳工队（LABOR 标签）
 	var worker_id: String = _formation.create_squad([_helper.units[2]], "", "fp_worker_crew")
-	_runner.assert_true(not worker_id.is_empty(), "工人队应创建成功")
+	_runner.assert_true(not worker_id.is_empty(), "劳工队应创建成功")
 	if _org_api != null:
 		var worg: Dictionary = _org_api.get_organization(worker_id)
-		_runner.assert_equal(worg.get("data", {}).get("tag", -1), OrganizationState.Tag.LABOR, "工人队组织标签应为 LABOR")
+		_runner.assert_equal(worg.get("data", {}).get("tag", -1), OrganizationState.Tag.LABOR, "劳工队组织标签应为 LABOR")
 	# 战斗班（默认预设）
 	var combat_id: String = _formation.create_squad([_helper.units[3], _helper.units[4]])
 	_runner.assert_true(not combat_id.is_empty(), "默认预设战斗班应创建成功")
@@ -153,11 +162,12 @@ func _test_work_types_and_filter() -> void:
 	_runner.assert_true(_formation.is_work_allowed(_helper.units[0], "WORK_BUILD"), "建造队允许建造")
 	_runner.assert_true(_formation.is_work_allowed(_helper.units[0], "WORK_HAUL"), "建造队允许搬运")
 	_runner.assert_true(not _formation.is_work_allowed(_helper.units[0], "WORK_COMBAT"), "建造队禁止战斗")
-	# 战斗班：允许战斗，禁止建造
+	# 战斗班：允许战斗，禁止建造；搬运为全员基础能力不受职责限制
 	var combat_id: String = _formation.get_unit_squad(_helper.units[3])
 	_runner.assert_true(not combat_id.is_empty(), "unit 3 应在战斗班")
 	_runner.assert_true(_formation.is_work_allowed(_helper.units[3], "WORK_COMBAT"), "战斗班允许战斗")
 	_runner.assert_true(not _formation.is_work_allowed(_helper.units[3], "WORK_BUILD"), "战斗班禁止建造")
+	_runner.assert_true(_formation.is_work_allowed(_helper.units[3], "WORK_HAUL"), "战斗班也允许搬运（全员基础能力）")
 	# 未编队单位全能
 	_runner.assert_true(_formation.is_work_allowed(_helper.units[5], "WORK_BUILD"), "未编队单位应允许建造")
 	_runner.assert_true(_formation.is_work_allowed(_helper.units[5], "WORK_COMBAT"), "未编队单位应允许战斗")
@@ -175,14 +185,30 @@ func _test_set_work_types() -> void:
 	if combat_id.is_empty():
 		_runner.assert_true(false, "找不到战斗班")
 		return
-	# 给战斗班加搬运职责（"职责可调整"）
-	var ok: bool = _formation.set_squad_work_types(combat_id, ["WORK_COMBAT", "WORK_HAUL"])
+	# 给战斗班加建造职责（"职责可调整"；搬运恒放行不作为调整依据）
+	var ok: bool = _formation.set_squad_work_types(combat_id, ["WORK_COMBAT", "WORK_BUILD"])
 	_runner.assert_true(ok, "调整职责应成功")
 	var wts: Array = _formation.get_squad_work_types(combat_id)
-	_runner.assert_true("WORK_HAUL" in wts, "职责应包含 WORK_HAUL")
-	_runner.assert_true(_formation.is_work_allowed(_helper.units[3], "WORK_HAUL"), "调整后应允许搬运")
+	_runner.assert_true("WORK_BUILD" in wts, "职责应包含 WORK_BUILD")
+	_runner.assert_true(_formation.is_work_allowed(_helper.units[3], "WORK_BUILD"), "调整后应允许建造")
 	# 恢复原状（后续测试依赖）
 	_formation.set_squad_work_types(combat_id, ["WORK_COMBAT"])
+
+
+## 运输队：LOGISTICS 标签映射 + 运输职责查询（用未编队的 unit 5 创建，
+## 放在"未编队全能"断言之后执行，不污染其前置条件）
+func _test_transport_convoy() -> void:
+	if _formation == null:
+		_runner.assert_true(false, "FormationSystem 为空")
+		return
+	var convoy_id: String = _formation.create_squad([_helper.units[5]], "", "fp_transport_convoy")
+	_runner.assert_true(not convoy_id.is_empty(), "运输队应创建成功")
+	if _org_api != null:
+		var org: Dictionary = _org_api.get_organization(convoy_id)
+		_runner.assert_equal(org.get("data", {}).get("tag", -1), OrganizationState.Tag.LOGISTICS, "运输队组织标签应为 LOGISTICS")
+	_runner.assert_equal(_formation.get_squad_preset(convoy_id), "fp_transport_convoy", "运输队 preset 应记录")
+	_runner.assert_true(_formation.is_work_allowed(_helper.units[5], "WORK_TRANSPORT"), "运输队允许运输职责")
+	_runner.assert_true(not _formation.is_combat_squad(convoy_id), "运输队不应判定为战斗小队")
 
 
 ## TacticalOrders 拒绝非战斗职责小队
@@ -213,10 +239,10 @@ func _test_role_write_clear() -> void:
 		return
 	var worker_id: String = _formation.get_unit_squad(_helper.units[2])
 	if worker_id.is_empty():
-		_runner.assert_true(false, "找不到工人队")
+		_runner.assert_true(false, "找不到劳工队")
 		return
 	var u: Node = _helper.units[2]
-	_runner.assert_equal(u.get_role(), "worker", "工人队成员 role 应为 worker")
+	_runner.assert_equal(u.get_role(), "worker", "劳工队成员 role 应为 worker")
 	# 移出后角色清除
 	_formation.remove_unit(u)
 	_runner.assert_equal(u.get_role(), "", "移出后 role 应清空")

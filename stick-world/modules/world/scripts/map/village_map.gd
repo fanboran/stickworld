@@ -361,7 +361,7 @@ func get_terrain_type_at_cell(cell_x: int) -> int:
 
 ## 获取世界坐标 X 对应的地形类型。
 func get_terrain_type_at_x(world_x: float) -> int:
-	return get_terrain_type_at_cell(int(world_x / 32.0))
+	return get_terrain_type_at_cell(floori(world_x / 32.0))
 
 
 ## 获取世界坐标 X 处的移动速度倍率（土路=1.0，非土路=0.8）。
@@ -509,8 +509,8 @@ func load_from_db(db, slot_id: int, p_map_id: String) -> void:
 	if clx > -99990.0:
 		_terrain.set_city_bounds(clx, crx)
 		# 从 city_bounds 恢复土路地形类型（cell 范围）
-		var start_cell: int = int(clx / 32.0)
-		var end_cell: int = int(crx / 32.0)
+		var start_cell: int = floori(clx / 32.0)
+		var end_cell: int = floori(crx / 32.0)
 		for cx in range(start_cell, end_cell):
 			_terrain_types[cx] = TERRAIN_DIRT_ROAD
 		_terrain.update_dirt_road_visual()
@@ -550,6 +550,6 @@ func _violates_forest_clear(world_x: float) -> bool:
 			hi = maxi(hi, cx)
 	if lo > hi:
 		return false
-	var cell := int(world_x / 32.0)
+	var cell := floori(world_x / 32.0)
 	var dist: int = maxi(maxi(lo - cell, cell - hi), 0)
 	return dist <= _ResourceGen.FOREST_CLEAR_CELLS

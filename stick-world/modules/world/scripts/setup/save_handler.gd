@@ -250,8 +250,8 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 			if entity.has_method("set_possessed"):
 				entity.set_possessed(false)
 		# 玩家与 NPC 都注入 ConstructionManager（玩家按F交互需要）
-		if entity.has_method("set_construction_manager") and _root._construction_manager != null:
-			entity.set_construction_manager(_root._construction_manager)
+		if entity.has_method("set_construction_manager") and _root._construction_api != null:
+			entity.set_construction_manager(_root._construction_api)
 
 
 # ─────────────────────────────── 对外接口（由 GameRoot 转发） ────────────────────────────────

@@ -22,6 +22,8 @@ context = 出生 L1 贴近裁剪正方形（默认边距 45，地块近距离特
 
 用法：
   python tools/worldgen/l1/export_l1_view_context.py [--start-l1 69] [--margin 15]
+  python tools/worldgen/l1/export_l1_view_context.py --panorama [--panorama-size 2048]
+      # F8：不写 config，只渲染 L1 世界全景 preview（缩略窗底图候选，总体设计 §5.12.3）
 """
 import argparse
 import json
@@ -42,7 +44,7 @@ GAME_DIR = os.path.normpath(os.path.join(
 
 OCEAN_COLOR = (30, 55, 95)
 NEIGHBOR_COLOR = (115, 115, 115)   # Color(0.45,0.45,0.45)
-LAKE_COLOR = (28, 50, 82)
+LAKE_COLOR = (72, 116, 158)        # 对齐 B2 底图湖色（terrain_params.json colors.lake）
 
 
 def mst(pts):
@@ -251,6 +253,67 @@ def jsonable(o):
     return o
 
 
+def render_panorama(out_size=2048):
+    """L1 世界全景 preview（F8 缩略窗底图候选，总体设计 §5.12.3 定标表）。
+
+    与 l1_base.png 同一套配色规则（OCEAN/NEIGHBOR/LAKE + 城市政权色），
+    范围 = 全部老 L1 块（69 块 + 1040 城）的陆地世界：海洋底 → 灰陆地 →
+    城市政权色（city_data.json rgb，与各 l1 包 states 同色源）→ 湖泊。
+    8192 原生上色（LUT 查表，免逐城市全图扫描）→ 陆地 bbox 正方形裁切
+    （外扩 5%）→ LANCZOS 降采样。
+
+    产出 output/l1_panorama_preview.png + 同名 sidecar json
+    （world_bbox = 裁切窗在 8192 世界坐标的原点与边长，供运行时坐标映射：
+    全景图像素 → 世界坐标 = px × side/out_size + (x0, y0)）。
+    """
+    citydata = json.load(open(os.path.join(V2_DIR, "city_data.json"), encoding="utf-8"))
+    legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_8192.npy")).astype(np.int32)
+    city_labels = np.load(os.path.join(V2_DIR, "city_labels_8192.npy")).astype(np.int32)
+    lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
+    res = legacy.shape[0]
+
+    print("[P] 8192 上色（LUT 查表）...")
+    max_lbl = int(city_labels.max())
+    city_lut = np.full((max_lbl + 1, 3), NEIGHBOR_COLOR, dtype=np.uint8)
+    n_colored = 0
+    for c in citydata["cities"]:
+        lbl = int(c["label"])
+        if 0 < lbl <= max_lbl:
+            city_lut[lbl] = tuple(int(v) for v in c["rgb"])
+            n_colored += 1
+    img = np.full((res, res, 3), OCEAN_COLOR, dtype=np.uint8)
+    land = legacy > 0
+    img[land] = NEIGHBOR_COLOR
+    cm = city_labels > 0
+    img[cm] = city_lut[city_labels[cm]]
+    del cm
+    img[lake] = LAKE_COLOR
+
+    print("[P] 陆地 bbox 正方形裁切（外扩 5%%）→ LANCZOS → %d ..." % out_size)
+    ys, xs = np.where(land)
+    del land
+    bx0, bx1 = int(xs.min()), int(xs.max())
+    by0, by1 = int(ys.min()), int(ys.max())
+    side = int((max(bx1 - bx0, by1 - by0) + 1) * 1.05)
+    side = min(side, res)
+    cx, cy = (bx0 + bx1) // 2, (by0 + by1) // 2
+    half = side // 2
+    x0 = max(0, min(cx - half, res - side))
+    y0 = max(0, min(cy - half, res - side))
+    crop = img[y0:y0 + side, x0:x0 + side]
+    del img
+    out = Image.fromarray(crop).resize((out_size, out_size), Image.LANCZOS)
+    out_path = os.path.join(HERE, "output", "l1_panorama_preview.png")
+    out.save(out_path)
+    meta = {"res": res, "world_bbox": [x0, y0, side], "out_size": out_size,
+            "cities_colored": n_colored}
+    with open(os.path.join(HERE, "output", "l1_panorama_preview.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=1)
+    print("完成：全景 %d²（源窗口 %d² @ (%d,%d)），城市 %d 上色" % (
+        out_size, side, x0, y0, n_colored))
+    print("  -> %s" % out_path)
+
+
 def main():
     ap = argparse.ArgumentParser(description="出生老 L1 视图上下文导出（Tab 数据源）")
     ap.add_argument("--start-l1", type=int, default=69,
@@ -259,7 +322,14 @@ def main():
                     help="输出目录（默认 config/strategic_map 单份；L2 下钻批量用 l1_packs/l1_%03d）")
     ap.add_argument("--margin", type=int, default=45,
                     help="context 边距（出生 L1 贴近裁剪正方形四周留的空隙；地块近距离特写）")
+    ap.add_argument("--panorama", action="store_true",
+                    help="F8：只渲染 L1 世界全景 preview（不写 config），见 render_panorama")
+    ap.add_argument("--panorama-size", type=int, default=2048,
+                    help="全景 preview 输出边长（默认 2048）")
     args = ap.parse_args()
+    if args.panorama:
+        render_panorama(args.panorama_size)
+        return
     # L1 Tab 全链路 8192 原生精度；旧 2048 回退已移除（city_data 升 8192 后 2048 分支坐标 scale=0 损坏）
     res = 8192
     lab_l1 = args.start_l1

@@ -15,6 +15,8 @@ const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hu
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
 @onready var settings_button: Button = get_node_or_null("MarginContainer/HBoxContainer/SettingsButton")
+## 占位界面预览入口（开发用）：打开占位预览面板（大界面空面板陈列）
+@onready var placeholder_preview_button: Button = get_node_or_null("MarginContainer/HBoxContainer/PlaceholderPreviewButton")
 ## 材料面板（顶栏下方横条，ResourceBar 挂这里）
 @onready var _resource_host: PanelContainer = get_node_or_null("ResourceBarHost")
 
@@ -54,6 +56,8 @@ func _ready() -> void:
 		formation_button.pressed.connect(_on_formation_button_pressed)
 	if settings_button != null:
 		settings_button.pressed.connect(_on_settings_button_pressed)
+	if placeholder_preview_button != null:
+		placeholder_preview_button.pressed.connect(_on_placeholder_preview_pressed)
 
 
 func _process(_delta: float) -> void:
@@ -88,11 +92,7 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 func _update_speed_display() -> void:
 	if speed_label == null or TimeManager == null:
 		return
-	# 暂停态醒目化（战斗自动暂停的可发现性——玩家第一眼看到"怎么继续"）
-	if TimeManager.is_paused():
-		speed_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.35))
-	else:
-		speed_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+	var paused: bool = TimeManager.is_paused()
 	var text: String = "速度: "
 	match TimeManager.current_speed:
 		TimeManager.Speed.PAUSED:
@@ -103,18 +103,28 @@ func _update_speed_display() -> void:
 			text += "2x"
 		TimeManager.Speed.X4:
 			text += "4x"
-	speed_label.text = text
+	# 脏检查：内容/配色没变就不碰 Label（每帧 text/color 赋值触发重排，全程白烧）
+	if text != _last_speed_text:
+		_last_speed_text = text
+		speed_label.text = text
+	if int(paused) != _last_speed_paused:
+		_last_speed_paused = int(paused)
+		# 暂停态醒目化（战斗自动暂停的可发现性——玩家第一眼看到"怎么继续"）
+		speed_label.add_theme_color_override("font_color",
+				Color(1.0, 0.55, 0.35) if paused else Color(0.9, 0.9, 0.9))
 
 
 func _update_time_display() -> void:
 	if time_label == null:
 		return
-	# 优先从 WorldState 读取
+	# 优先从 WorldState 读取；按"当日分钟数"脏检查，分钟没跳过不重写
 	if WorldState:
 		var t: float = WorldState.game_time
-		var hour: int = int(t) % 24
-		var minute: int = int((t - int(t)) * 60.0)
-		time_label.text = "时间: %02d:%02d" % [hour, minute]
+		var minute_of_day: int = int(t * 60.0) % 1440
+		if minute_of_day == _last_minute_of_day:
+			return
+		_last_minute_of_day = minute_of_day
+		time_label.text = "时间: %02d:%02d" % [minute_of_day / 60, minute_of_day % 60]
 
 
 func _on_pause_changed(_paused: bool) -> void:
@@ -135,6 +145,10 @@ var _camera_rig: Node = null
 var _game_root: Node = null
 ## 顶栏内嵌资源条（attach_resources 注入）
 var _resource_bar: Control = null
+## 速度/时间显示脏检查缓存（-1 = 从未写过，首帧必写）
+var _last_speed_text: String = ""
+var _last_speed_paused: int = -1
+var _last_minute_of_day: int = -1
 
 
 func _on_centered_button_pressed() -> void:
@@ -183,6 +197,24 @@ func _on_formation_button_pressed() -> void:
 
 
 # ─────────────────────────────── 设置菜单（齿轮按钮）────────────────────────────────
+
+## 打开占位界面预览（开发用：大界面空面板陈列；经 ModalOverlay 模态展示）
+func _on_placeholder_preview_pressed() -> void:
+	var gr := _game_root
+	if gr == null or not ("ui_root" in gr):
+		return
+	var overlay: Node = gr.ui_root
+	var modal: Control = overlay.get_slot("ModalOverlay")
+	if modal == null:
+		return
+	# 复用暂停菜单的帝国功能陈列入口（同款模态栈管理，ESC 逐层退）
+	var pv: Control = preload("res://modules/ui_global/scenes/placeholders/ui_placeholder_preview.tscn").instantiate()
+	pv.name = "PlaceholderPreviewInGame"
+	modal.add_child(pv)
+	var stack := UIModalStack.find(modal)
+	if stack != null:
+		stack.push(pv, UIModalStack.Layer.EMPIRE_PANEL)
+
 
 ## 打开/关闭设置菜单（调试地图选择/速度控制）
 func _on_settings_button_pressed() -> void:

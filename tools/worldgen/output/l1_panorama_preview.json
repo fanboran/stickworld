@@ -1,0 +1,10 @@
+{
+ "res": 8192,
+ "world_bbox": [
+  0,
+  0,
+  8192
+ ],
+ "out_size": 2048,
+ "cities_colored": 1040
+}

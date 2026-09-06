@@ -65,7 +65,7 @@ func _show_common(hold: float) -> void:
 	visible = true
 	modulate.a = 0.0
 	scale = Vector2(1.0, 1.0)
-	pivot_offset = Vector2(960.0, 140.0)
+	pivot_offset = Vector2(get_viewport_rect().size.x * 0.5, 140.0)  # 水平居中锚点，非 1080p 也不偏
 	var tw := create_tween()
 	tw.tween_property(self, "modulate:a", 1.0, 0.3)
 	tw.parallel().tween_property(self, "scale", Vector2.ONE, 0.4).from(Vector2(1.12, 1.12)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)

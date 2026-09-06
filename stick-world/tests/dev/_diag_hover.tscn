@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://diaghover9"]
+
+[ext_resource type="Script" path="res://tests/dev/_diag_hover.gd" id="1"]
+
+[node name="DiagHover" type="Control"]
+anchors_preset = 0
+script = ExtResource("1")

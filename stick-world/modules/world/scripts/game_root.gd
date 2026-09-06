@@ -41,6 +41,18 @@ const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/
 const _SIEGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/siege_battlefield.tscn")
 ## 森林附属区域场景（阶段 F）
 const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/forest_zone.tscn")
+## L1 八城邦聚落场景（P5 进城闭环；tools/worldgen/l1/settlement_mapgen.py 产出，
+## map_id 与 l1_world.json 的 settlement.map_id 一一对应）
+const _L1_SETTLEMENT_SCENES: Array[PackedScene] = [
+	preload("res://modules/world/scenes/maps/l1_settlement_00.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_01.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_02.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_03.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_04.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_05.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_06.tscn"),
+	preload("res://modules/world/scenes/maps/l1_settlement_07.tscn"),
+]
 ## 玩家火柴人实体场景（2026-08 收敛：经 UnitsAPI 常量引用，替代直接 preload 内部路径）
 const _UnitsApiScript: GDScript = preload("res://modules/units/api.gd")
 const _STICKMAN_ENTITY_SCENE: PackedScene = _UnitsApiScript.STICKMAN_ENTITY_SCENE
@@ -400,6 +412,10 @@ func _register_default_maps() -> void:
 	scene_loader.register_map(SIEGE_MAP_ID, _SIEGE_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 阶段 F：注册森林附属区域
 	scene_loader.register_map(FOREST_ZONE_MAP_ID, _FOREST_ZONE_SCENE, WorldAPI.MapType.VILLAGE)
+	# P5/D1：注册 L1 八城邦聚落图（城内边界不配 register_map_exit——玩家顶到边界
+	# 3 秒由 MapBoundaryDetector 开 L1 大图回战略图，双击下一城再进）
+	for i: int in _L1_SETTLEMENT_SCENES.size():
+		scene_loader.register_map("l1_settlement_%02d" % i, _L1_SETTLEMENT_SCENES[i], WorldAPI.MapType.VILLAGE)
 	# 配置地图出口（步行衔接，详见 §6.2）
 	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
@@ -440,9 +456,11 @@ func _load_start_village() -> void:
 		# 避免加载遮罩永久停留黑屏；失败原因已由 SaveHandler 经 ui_notification 提示
 		# （此时 UIRoot 已装配，通知随遮罩淡出可见）。
 		print_verbose("[GameRoot] 启动读档被拒（槽位 %d），回退新游戏" % boot_slot)
-	# 新游戏：重置游戏时间（防上一局残留）
+	# 新游戏：重置游戏时间 + 本局随机种子（防上一局残留；读档路径经 load_save_data 恢复种子）
 	if WorldState and "game_time" in WorldState:
 		WorldState.game_time = 0.0
+	if WorldState and WorldState.has_method("start_new_run"):
+		WorldState.start_new_run()
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
 	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
 	print_verbose("[GameRoot] 开始新游戏")

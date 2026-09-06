@@ -8,6 +8,7 @@ variables = {
 "data": [
     {"id": "fp_combat_squad", "name": "战斗班", "tag": "MILITARY", "work_types": ["WORK_COMBAT"], "default_role": "fighter"},
     {"id": "fp_builder_crew", "name": "建造队", "tag": "ENGINEERING", "work_types": ["WORK_BUILD", "WORK_HAUL"], "default_role": "builder"},
-    {"id": "fp_worker_crew", "name": "工人队", "tag": "LABOR", "work_types": ["WORK_HAUL", "WORK_FORAGE"], "default_role": "worker"}
+    {"id": "fp_worker_crew", "name": "劳工队", "tag": "LABOR", "work_types": ["WORK_HAUL", "WORK_FORAGE"], "default_role": "worker"},
+    {"id": "fp_transport_convoy", "name": "运输队", "tag": "LOGISTICS", "work_types": ["WORK_TRANSPORT"], "default_role": "transporter"}
 ]
 }

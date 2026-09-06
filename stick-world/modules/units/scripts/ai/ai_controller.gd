@@ -502,7 +502,6 @@ func _should_rage(mods: Dictionary, health: Node) -> bool:
 			morale_ratio = health.get_morale_ratio()
 		return morale_ratio > RAGE_MORALE_THRESHOLD
 	return false
-	return true
 
 
 ## 尝试进入 work 行为。如果工人被派工到活跃项目，travel("work", {project})。

@@ -100,6 +100,8 @@
 
 **注意**：如果你写 `[1, 2, 3]` 但 JSON 格式不对（比如写成了 `[1, 2, 3` 少了个括号），脚本会把它当作普通字符串处理，不会报错但也不会变成数组。
 
+**空白单元格 = null 的消费约定**：导出器把空单元格输出为 `null`（key 在、值为 null）。装载侧已统一消毒——`BalanceResource.sanitized_rows()` 在 `BalanceConfig._load_tres` 与 `BuildingCatalog.load_defs` 装表时**剥除值为 null 的字典字段**，消费侧读到的行里 null 字段等同 key 不存在（`row.has(k)` 为 false、`def.get(k, default)` 走默认值）。原因：GDScript 的 `String()/int()/bool()/float()` 构造不接受 null（`Nonexistent constructor` 运行时崩）。新的装表路径必须走 `sanitized_rows()`，不要直接 `res.variables.get("data")` 取行。
+
 ### 2.5 图片处理
 
 如果想在 Excel 里嵌入图片（比如单位图标），需要**将图片嵌入到单元格内**（不是链接外部文件）。导出脚本会自动提取嵌入的图片，保存到 `assets/` 目录，并在 `.tres` 中记录资源路径。

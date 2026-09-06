@@ -311,7 +311,7 @@ func _draw() -> void:
 			continue
 		var screen_pos: Vector2 = canvas_xform * u.global_position
 		# 椭圆形环（略扁，贴合地面透视）
-		draw_arc(screen_pos, RING_RADIUS, 0.0, TAU, 36, RING_COLOR, 2.0)
+		draw_arc(screen_pos, RING_RADIUS, 0.0, TAU, 48, RING_COLOR, 2.0, true)
 
 
 # ─────────────────────────────── 查询 API ────────────────────────────────

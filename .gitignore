@@ -53,6 +53,12 @@ tools/filter_*.py
 tools/worldgen/output/**
 !tools/worldgen/output/locked/
 !tools/worldgen/output/locked/**
+# Demo 工作量展示素材（创始人指示入库留档，见 tools/worldgen/README.md §Demo）
+!tools/worldgen/output/l3_terrain.png
+!tools/worldgen/output/l2_preview_*.png
+# F8 缩略窗全景 preview（候选底图素材 + 坐标映射 sidecar，见交接档 Flash 队列 F8）
+!tools/worldgen/output/l1_panorama_preview.png
+!tools/worldgen/output/l1_panorama_preview.json
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）
@@ -146,3 +152,6 @@ export/**/*.dll
 export/**/*.zip
 简历-游戏客户端实习-范博然.md
 temp/swl_audio/
+
+# 诊断截图等临时产物（不入库）
+temp/

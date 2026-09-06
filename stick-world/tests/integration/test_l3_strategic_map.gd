@@ -40,6 +40,9 @@ func _test_load() -> void:
 	if _renderer == null:
 		return
 	_data = L3WorldData.load_from(L3_JSON_PATH, L3_BASE_DIR)
+	# 对齐真实装配（system_setup 会 set_data）：渲染器持数据后 open() 的初始视角
+	# 才能用真实地图边长（8192）适配，否则回退默认 2048
+	_renderer.set_data(_data)
 	# l1_index 由 L3MapRenderer 后台异步解码（load_from 不阻塞，先为 null）；
 	# 测试同步注入等价结果（同一 PNG 解码），供 hover 查询用
 	_runner.assert_true(_data.l1_index_image == null, "l1_index 应异步加载（load_from 后为空）")
@@ -203,9 +206,25 @@ func _test_hud() -> void:
 	if _content.has_method("open"):
 		_content.open()
 	await get_tree().process_frame
-	# 默认缩放归一化：0.36 即 100%
+	# 默认缩放归一化（A3 全屏化）：open() 按视口/地图尺寸动态适配并把该缩放
+	# 同步为 HUD default（=100%）；HUD 不再回退固定 0.36
 	_runner.assert_true(hud.has_method("set_default_zoom"), "HUD 应有 set_default_zoom")
-	hud.call("set_default_zoom", 0.36)
+	var cam: Node = _content.get_node_or_null("MapCamera")
+	var hud_default: float = float(hud.get("default_zoom"))
+	_runner.assert_true(cam != null and absf(hud_default - float(cam.get_zoom())) < 0.001,
+			"open() 后 HUD 默认缩放应等于相机当前缩放（动态适配，实测 default=%.3f zoom=%.3f）"
+			% [hud_default, float(cam.get_zoom()) if cam != null else -1.0])
+	# 相机缩放下限 = 全屏适配缩放（再缩小则地图+海洋带撑不满视口，视野越出限位矩形）
+	_runner.assert_true(cam != null and absf(float(cam.get("min_zoom")) - hud_default) < 0.001,
+			"min_zoom 应锁定全屏适配缩放")
+	# A3 验收修正锚点：初始视角整图可见（上下各留海洋边距，不向内裁切地图）——
+	# 地图上下边界必须在屏幕内，且距屏缘 ≥ 32px（海洋边距 64px 的宽松容差）
+	var vp_h: float = get_viewport().get_visible_rect().size.y
+	var edge_top: float = float(cam.get_offset().y)
+	var edge_bottom: float = edge_top + 8192.0 * hud_default
+	_runner.assert_true(edge_top >= 32.0, "地图上边应在屏内留海洋边距（实测 %.1f）" % edge_top)
+	_runner.assert_true(edge_bottom <= vp_h - 32.0,
+			"地图下边应在屏内留海洋边距（实测 %.1f / %.1f）" % [edge_bottom, vp_h])
 	await get_tree().process_frame
 	var label: Label = null
 	var slider: HSlider = null

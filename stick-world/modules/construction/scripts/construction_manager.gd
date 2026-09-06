@@ -74,8 +74,9 @@ var _persistence: Node = null
 signal building_completed(building_id: String, region_id: String)
 ## 建筑被拆除
 signal building_removed(building_id: String, region_id: String)
-## 建筑升级完成（新等级）
-signal building_upgraded(building_id: String, upgrade_level: int)
+## 建筑升级完成（旧等级→新等级；发射点与 api.gd 转发均为 3 参，
+## 声明少参会让 emit 运行时报错、api 层转发永不触发）
+signal building_upgraded(building_id: String, old_level: int, new_level: int)
 ## 建筑修理完成
 signal building_repaired(building_id: String)
 

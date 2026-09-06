@@ -42,6 +42,25 @@ var _drag_offset_start: Vector2 = Vector2.ZERO
 ## 当前粒度的边界约束（世界坐标）
 var _bounds: Rect2 = Rect2(-4096, -2048, 8192, 4096)
 
+# ─────────────────────────────── 视口限位（A3 全屏 L3 用） ────────────────────────────────
+
+## 视口限位模式（各轴独立策略，默认全关不影响 L1/L2）
+enum ClampMode {
+	CLAMP_OFF = 0,    # 不限位
+	CLAMP_STRICT = 1, # 严格：地图边界外扩 buffer 后不得进入屏幕（配 min_zoom 保证可行）
+	CLAMP_LOOSE = 2,  # 宽松：地图不得完全移出屏幕（轴两端各保留 keep 像素在屏内）
+}
+
+## X/Y 轴限位模式
+var _clamp_x: int = ClampMode.CLAMP_OFF
+var _clamp_y: int = ClampMode.CLAMP_OFF
+## 限位数据域（地图世界坐标矩形；屏幕坐标 S = offset + M * zoom）
+var _clamp_bounds: Rect2 = Rect2()
+## CLAMP_STRICT：边界需退出屏幕的最小余量（屏幕像素）
+var _clamp_buffer: float = 0.0
+## CLAMP_LOOSE：地图至少留在屏幕内的轴长（屏幕像素）
+var _clamp_keep: float = 96.0
+
 ## 设置数据容器引用（L1 单层数据，用于聚焦/边界）
 var _data: L1WorldData = null
 
@@ -110,6 +129,7 @@ func _zoom_at_point(screen_pos: Vector2, delta_zoom: float) -> void:
 func _apply_transform() -> void:
 	if target == null:
 		return
+	_apply_clamp()
 	target.position = _offset
 	target.scale = Vector2(_zoom_level, _zoom_level)
 
@@ -195,6 +215,69 @@ func map_to_screen(map_pos: Vector2) -> Vector2:
 ## 设置当前粒度的边界约束（粒度切换时调用）
 func set_bounds(bounds: Rect2) -> void:
 	_bounds = bounds
+
+
+## 配置视口限位（各轴独立策略）。bounds = 地图内容世界坐标矩形；
+## buffer/keep 含义见 ClampMode。CLAMP_STRICT 轴需保证 bounds 轴长 × zoom ≥ 视口轴长 + 2×buffer
+## （否则区间为空，兜底居中）——调用方应同步把 min_zoom 设为该轴的适配缩放。
+func set_viewport_clamp(x_mode: int, y_mode: int, bounds: Rect2,
+		buffer: float = 64.0, keep: float = 96.0) -> void:
+	_clamp_x = x_mode
+	_clamp_y = y_mode
+	_clamp_bounds = bounds
+	_clamp_buffer = buffer
+	_clamp_keep = keep
+
+
+## 关闭视口限位（恢复自由平移）
+func clear_viewport_clamp() -> void:
+	_clamp_x = ClampMode.CLAMP_OFF
+	_clamp_y = ClampMode.CLAMP_OFF
+
+
+## 每帧按策略 clamp 偏移（_apply_transform 内调用，覆盖拖拽/缩放/set_offset 全路径）。
+## 屏幕坐标：地图点 M 的屏幕位置 = offset + M × zoom，故地图轴起点屏幕坐标 = offset + bounds.pos × zoom。
+func _apply_clamp() -> void:
+	if _clamp_x == ClampMode.CLAMP_OFF and _clamp_y == ClampMode.CLAMP_OFF:
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var vp_size: Vector2 = vp.get_visible_rect().size
+	var axis_len: Vector2 = _clamp_bounds.size * _zoom_level
+	var origin: Vector2 = _clamp_bounds.position * _zoom_level
+	if _clamp_y == ClampMode.CLAMP_STRICT:
+		_offset.y = _clamp_axis_strict(
+				_offset.y + origin.y, axis_len.y, vp_size.y, _clamp_buffer) - origin.y
+	elif _clamp_y == ClampMode.CLAMP_LOOSE:
+		_offset.y = _clamp_axis_loose(
+				_offset.y + origin.y, axis_len.y, vp_size.y, _clamp_keep) - origin.y
+	if _clamp_x == ClampMode.CLAMP_STRICT:
+		_offset.x = _clamp_axis_strict(
+				_offset.x + origin.x, axis_len.x, vp_size.x, _clamp_buffer) - origin.x
+	elif _clamp_x == ClampMode.CLAMP_LOOSE:
+		_offset.x = _clamp_axis_loose(
+				_offset.x + origin.x, axis_len.x, vp_size.x, _clamp_keep) - origin.x
+
+
+## 严格轴 clamp：起点（地图该轴上边）屏幕坐标 ∈ [视口长+buffer-地图屏长, -buffer]。
+## 区间空（地图屏长不足，如 resize 后 zoom 偏小）时兜底居中。
+static func _clamp_axis_strict(start: float, len: float, vlen: float, buffer: float) -> float:
+	var lo: float = vlen + buffer - len
+	var hi: float = -buffer
+	if lo > hi:
+		return (vlen - len) * 0.5
+	return clampf(start, lo, hi)
+
+
+## 宽松轴 clamp：地图两端各保留 keep 像素在屏内，即起点 ∈ [keep-地图屏长, 视口长-keep]。
+## 区间空（地图屏长 + 视口长 < 2×keep，极端情况）时兜底居中。
+static func _clamp_axis_loose(start: float, len: float, vlen: float, keep: float) -> float:
+	var lo: float = keep - len
+	var hi: float = vlen - keep
+	if lo > hi:
+		return (vlen - len) * 0.5
+	return clampf(start, lo, hi)
 
 
 ## 设置数据容器引用（L1 单层数据，用于聚焦/边界）

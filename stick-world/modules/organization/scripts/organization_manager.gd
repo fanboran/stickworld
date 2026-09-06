@@ -17,7 +17,7 @@ const TIER_MAX: int = 5
 
 ## 有效标签
 const VALID_TAGS: Array[String] = [
-	"MILITARY", "RESEARCH", "ENGINEERING", "ADMINISTRATION", "COMMERCE", "LABOR"
+	"MILITARY", "RESEARCH", "ENGINEERING", "ADMINISTRATION", "COMMERCE", "LABOR", "LOGISTICS"
 ]
 
 ## 有效自主权限级别
@@ -41,6 +41,7 @@ const TAG_TO_ENUM := {
 	"ADMINISTRATION": ScriptOrgState.Tag.ADMINISTRATION,
 	"COMMERCE": ScriptOrgState.Tag.COMMERCE,
 	"LABOR": ScriptOrgState.Tag.LABOR,
+	"LOGISTICS": ScriptOrgState.Tag.LOGISTICS,
 }
 
 const AUTONOMY_TO_ENUM := {

@@ -16,6 +16,7 @@ enum Tag {
 	ADMINISTRATION, ## 行政
 	COMMERCE,       ## 商队
 	LABOR,          ## 劳工队
+	LOGISTICS,      ## 运输队（跨城市运输/物资运往前线）
 }
 
 enum AutonomyLevel {

@@ -83,8 +83,10 @@ func get_max_cell() -> int:
 # ─────────────────────────────── 坐标转换 ────────────────────────────────
 
 ## 世界坐标 X -> 条带坐标
+## 负 cell 合法（expand_to 支持负坐标），必须 floor 而非 int 截断：
+## 截断会把 (-CELL,0) 误归 cell 0，且与 cell_to_world 往返破裂
 func world_to_cell(world_pos: Vector2) -> int:
-	return int(world_pos.x / CELL_SIZE)
+	return floori(world_pos.x / CELL_SIZE)
 
 
 ## 条带坐标 -> 世界坐标 X（条带中心点）

@@ -235,8 +235,13 @@ func _draw() -> void:
 		if _neighbors_mesh != null:
 			draw_mesh(_neighbors_mesh, null)
 		if display_mode == DisplayMode.MODE_CITY:
-			# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）
-			if _data.city_preview_texture != null:
+			# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）；
+			# 政治模式（P7）优先政权色贴图（城市地块按国着色，观感同源仅换色表）
+			var political := map_mode == MapModeManager.Mode.POLITICAL 					and _data.political_texture != null
+			if political:
+				draw_texture_rect(_data.political_texture,
+					Rect2(Vector2.ZERO, _context_size), false)
+			elif _data.city_preview_texture != null:
 				draw_texture_rect(_data.city_preview_texture,
 					Rect2(Vector2.ZERO, _context_size), false)
 		else:

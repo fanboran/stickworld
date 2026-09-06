@@ -30,6 +30,8 @@ gdextension_crash_on_quit.txt
 .mcp/
 .codebuddy/
 .zcode/
+.arts/
+.codegraph/
 
 # AI 工具本地运行时产物
 **/__pycache__/

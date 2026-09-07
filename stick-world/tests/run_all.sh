@@ -88,6 +88,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_settings_apply.tscn"
 	"tests/integration/test_notification_feed.tscn"
 	"tests/integration/test_debug_api.tscn"
+	"tests/integration/test_expansion_territories.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -168,6 +169,8 @@ affected_suites() {
 				picked["tests/smoke/test_cross_map_travel.tscn"]=1 ;;
 			stick-world/modules/debug_gui/*|stick-world/modules/debug_GUI/*)
 				picked["tests/integration/test_debug_api.tscn"]=1 ;;
+			stick-world/modules/expansion/*)
+				picked["tests/integration/test_expansion_territories.tscn"]=1 ;;
 			stick-world/modules/ui_global/*)
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1

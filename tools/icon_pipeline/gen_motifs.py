@@ -115,12 +115,67 @@ def fit_ortho(scene, margin=1.06):
     cam.data.ortho_scale = max(ext.x, ext.y) * margin
 
 
-def render_two(scene, tag, t):
-    """先 shade 后 ID：母题对象全部单槽，原位替换材质，无钳零问题"""
+def _cel_bake_mat():
+    """面烘色材质：读网格的 FACE 域顶点色 'cel_tone' 直出发光（不受光）。
+    单槽 discipline 不破——每对象仍 1 材质，面级颜色走属性。"""
+    m = bpy.data.materials.get('_cel_bake')
+    if m:
+        return m
+    m = bpy.data.materials.new('_cel_bake')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    emi = nt.nodes.new('ShaderNodeEmission')
+    try:
+        a = nt.nodes.new('ShaderNodeAttribute')
+        a.attribute_name = 'cel_tone'
+        nt.links.new(a.outputs[0], emi.inputs[0])
+    except Exception:
+        pass
+    nt.links.new(emi.outputs[0], out.inputs[0])
+    return m
+
+
+def bake_flat_faces(scene):
+    """平面着色网格：按「面法线·主光方向」量化三档灰烘进顶点色——
+    每个平面恰好一色，朝向不同色不同（cel 一面一色惯例；来源方向=相机基
+    向量，与 setup 主光一致：左上主光）。平滑网格（球/胶囊/环/曲线管）
+    保持白色漫反射受光走经典渐变分档——sphere 的球形光由此而来。
+    倒角等修改器生成的新面从相邻基面插值属性=柔和棱过渡。"""
+    cam = scene.camera
+    R = cam.matrix_world.to_3x3()
+    ldir = (R @ Vector((-3.0, 2.6, 0.6))).normalized()
+    bake = _cel_bake_mat()
     white = shade_mat('_w')
     for o in scene.objects:
-        if o.type == 'MESH':
+        if o.type != 'MESH':
+            continue
+        polys = o.data.polygons
+        if polys and all(p.use_smooth for p in polys):
             o.data.materials[0] = white
+            continue
+        attr = o.data.color_attributes.get('cel_tone')
+        if attr is None:
+            attr = o.data.color_attributes.new('cel_tone', 'FLOAT_COLOR', 'FACE')
+        for p in polys:
+            t = p.normal.dot(ldir)
+            g = 0.92 if t > 0.5 else (0.62 if t > 0.2 else 0.32)
+            attr.data[p.index].color = (g, g, g, 1.0)
+        o.data.materials[0] = bake
+
+
+def render_two(scene, tag, t, classic=False):
+    """shade pass：平面物体面烘色、曲面物体受光；再 ID pass。
+    母题对象全部单槽，原位替换材质，无钳零问题。classic=True 全白模受光
+    （已验收豁免母题的全链路旧管线，逐字节承诺）"""
+    if not classic:
+        bake_flat_faces(scene)
+    else:
+        white = shade_mat('_w')
+        for o in scene.objects:
+            if o.type == 'MESH':
+                o.data.materials[0] = white
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_shade.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, t, "shade")
@@ -144,7 +199,7 @@ for m in M.MOTIFS:
             scene = setup(m["az"], m["el"], t * 2, m["key_e"])
             m["build"]()
             fit_ortho(scene, m["margin"])
-            render_two(scene, m["tag"], t)
+            render_two(scene, m["tag"], t, m.get("classic", False))
         except Exception:
             fails.append((m["tag"], t, traceback.format_exc()))
 

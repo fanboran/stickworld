@@ -82,35 +82,36 @@ def cel(tag, fake, target, out_ink=None, nids=10):
 
     # 自适应明度拉伸：多面同亮度的图标（整体偏亮/偏平）cel 后糊成剪影
     # （Cube=六边形、椅背座面连体）——根因是分档阈值固定，而明度场
-    # 动态范围因图标而异。按采样域 p5/p98 无条件拉伸到 0..1，让不同朝向
-    # 的面落不同色带——光源角度差还原成色差，无需内部线条。
-    # 豁免表内的已验收图标完全跳过（逐字节不变）。
-    if tag not in NO_STRETCH:
-        lv = L[samp]
-        lo, hi = np.percentile(lv, 5), np.percentile(lv, 98)
-        L = np.clip((L - lo) / max(1e-6, hi - lo), 0.0, 1.0)
-
-    # 档位：豁免图标走旧固定阈值（逐字节承诺）；其余用一维 k-means 三簇——
-    # 档位切在直方图结构上：均匀面整面同档（不从中间劈开），渐变按簇分档。
-    # 固定阈值对「单峰+拖尾」直方图（椅子：可见面全朝相机同亮+弱渐变）
-    # 只会切出大片同色（83% 像素挤最亮档）。
+    # 档位与拉伸：豁免图标走旧路径（固定阈值+不拉伸，逐字节承诺）。
+    # 其余：采样域明度展宽足够（多面/曲面形体）→ 按采样域 p5/p98 拉伸到
+    # 0..1（光源角度差还原成色差，无需内部线条）+ 一维 k-means 三簇——
+    # 档位切在直方图结构上，均匀面整面同档不从中间劈开；展宽过窄（单面
+    # 物体如罗盘盘面）说明整个图标基本一个面，拉伸+k-means 只会在量化
+    # 噪声上劈簇出噪点 → 固定阈值，一面一个色。
     if tag in NO_STRETCH:
         th = (0.5,) if target <= 64 else (0.36, 0.68)
         band = np.digitize(L, th)
     else:
         lv = L[samp]
-        c = np.percentile(lv, [16.7, 50.0, 83.3]).astype(np.float32)
-        for _ in range(12):
+        lo, hi = np.percentile(lv, 5), np.percentile(lv, 98)
+        if hi - lo >= 0.15:
+            L = np.clip((L - lo) / max(1e-6, hi - lo), 0.0, 1.0)
+            lv = L[samp]
+            c = np.percentile(lv, [16.7, 50.0, 83.3]).astype(np.float32)
+            for _ in range(12):
+                mids = ((c[0] + c[1]) / 2, (c[1] + c[2]) / 2)
+                b_ = np.digitize(lv, mids)
+                for k_ in range(3):
+                    sel = lv[b_ == k_]
+                    if sel.size:
+                        c[k_] = sel.mean()
+            c = np.sort(c)
             mids = ((c[0] + c[1]) / 2, (c[1] + c[2]) / 2)
-            b_ = np.digitize(lv, mids)
-            for k_ in range(3):
-                sel = lv[b_ == k_]
-                if sel.size:
-                    c[k_] = sel.mean()
-        c = np.sort(c)
-        mids = ((c[0] + c[1]) / 2, (c[1] + c[2]) / 2)
-        th = (0.36, 0.68)   # 仅供 ramp_at 判断档位数（k-means 恒三档）
-        band = np.digitize(L, mids)
+            th = (0.36, 0.68)   # 仅供 ramp_at 判断档位数（k-means 恒三档）
+            band = np.digitize(L, mids)
+        else:
+            th = (0.36, 0.68)
+            band = np.digitize(L, th)
     RAMPS = {
         0: [(0.38, 0.40, 0.45), (0.55, 0.57, 0.62), (0.74, 0.76, 0.80)],
         1: [(0.30, 0.32, 0.36), (0.47, 0.49, 0.54), (0.62, 0.64, 0.68)],

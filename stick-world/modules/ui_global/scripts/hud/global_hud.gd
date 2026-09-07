@@ -83,7 +83,8 @@ func _on_battle_started(_battle_id: String) -> void:
 
 
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
-	var result: String = "进攻方获胜" if victory else "防守方获胜"
+	# victory 语义 = 玩家阵营胜（C2 修正；攻方/守方双场景下按阵营报我方胜负）
+	var result: String = "我方获胜" if victory else "我方战败"
 	_notify("战斗", "战斗结束：%s" % result, "info")
 
 

@@ -226,8 +226,8 @@ func _on_battle_started(_battle_id: String) -> void:
 
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 	_show_battle_banner(victory)
-	# victory 语义 = 进攻方获胜；Demo 中玩家为歼灭战场守军的一方。
-	# 若实测语义相反（防守方视角），仅需翻转此布尔。
+	# victory 语义 = 玩家阵营胜（C2 修正，BattleInstance.player_faction 基准）。
+	# Demo 中玩家即进攻方，行为与旧 attacker 语义一致。
 	if victory:
 		_battle_win_count += 1
 	if _is_current("battle") and victory:

@@ -42,9 +42,12 @@ extends Node
 # ─────────────────────────────── 战斗 ────────────────────────────────
 
 @warning_ignore("unused_signal") signal battle_started(battle_id: String)
+## victory = 玩家阵营胜（BattleInstance.player_faction 基准，C2 征服循环修正；
+## 未设置 player_faction 时默认攻方 = 旧 attacker 语义兼容）
 @warning_ignore("unused_signal") signal battle_ended(battle_id: String, victory: bool)
-# 阵营 AI 姿态变更（TeamAi -> 调试 HUD/测试断言）：from/to_stance 值序 0=GARRISON/1=DEFEND/2=ATTACK
-# （对齐 dump Team.Stance 枚举序）
+# 阵营 AI 姿态变更（TeamAi -> 调试 HUD/测试断言）：from/to_stance 值序
+# 0=GARRISON/1=DEFEND/2=ATTACK（对齐 dump Team.Stance 枚举序）；
+# 3=ROUT 为本作扩展（敌将撤仗终态，据点战专用，见出征与领地架构 §4.2）
 @warning_ignore("unused_signal") signal team_ai_stance_changed(battle_id: String, faction: int, from_stance: int, to_stance: int, reason: String)
 # 治疗施放（WeaponMount.cast_heal -> battle_sim 采样/可观测性，P7 批次 7b）：
 # battle_id 经施法者 get_battle_instance().get_battle_id()；caster/target 用 instance_id；

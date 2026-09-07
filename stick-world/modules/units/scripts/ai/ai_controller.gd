@@ -32,10 +32,12 @@ const DECISION_INTERVAL: float = 0.3
 ## BehaviorWander 行为本体保留，敌人 AI / 闲逛功能启用时调大此值即可）
 const WANDER_PROBABILITY: float = 0.0
 
-## TeamAi 姿态枚举（对齐 TeamAi.STANCE_* / dump Team.Stance 序；本地常量避免跨模块依赖）
+## TeamAi 姿态枚举（对齐 TeamAi.STANCE_* / dump Team.Stance 序；本地常量避免跨模块依赖。
+## 3=ROUT 敌将撤仗终态，本作扩展——出征与领地架构 §4.2）
 const TEAM_AI_STANCE_GARRISON: int = 0
 const TEAM_AI_STANCE_DEFEND: int = 1
 const TEAM_AI_STANCE_ATTACK: int = 2
+const TEAM_AI_STANCE_ROUT: int = 3
 
 ## 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙 背水一战。
 ## 被围判定：SURROUND_RANGE 内敌对单位 >= SURROUND_MIN 视为被围
@@ -401,9 +403,10 @@ func _try_rout_reengage(bi: Node, bi_param: Dictionary, health: Node) -> bool:
 	var test_on: bool = bool(profile.get("test_engage_enabled", false))
 	if not reengage_on and not test_on:
 		return false
-	# GARRISON 维持待命（归队由锚点号令覆盖）；查询不可用降级为 DEFEND（保守不压上）
+	# GARRISON 维持待命（归队由锚点号令覆盖）；ROUT 战役撤离不再接敌（C3：全军撤；
+	# 个别溃兵被 ROUT 撤离号令周期重发拉回，此处再战通道同样关闭）；查询不可用降级为 DEFEND（保守不压上）
 	var stance: int = _query_team_stance(bi)
-	if stance == TEAM_AI_STANCE_GARRISON:
+	if stance == TEAM_AI_STANCE_GARRISON or stance == TEAM_AI_STANCE_ROUT:
 		return false
 	# 仅 ATTACK/DEFEND 姿态下执行再战/试探（stance 查询失败降级 DEFEND 也允许）
 	var morale_ratio: float = 1.0

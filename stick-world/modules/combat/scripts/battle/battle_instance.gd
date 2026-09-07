@@ -10,6 +10,11 @@ extends Node
 ## BattleAnchor 节点就是本实例的挂载点。无战斗时为空。
 ##
 ## 状态流转：PREPARING -> ENGAGED -> ATTACKER_WIN / DEFENDER_WIN / DRAW
+##
+## victory 语义（C2 征服循环）：battle_ended(battle_id, victory) 的 victory = **玩家阵营胜**
+## （_player_faction 与胜方一致），非攻方胜。未 set_player_faction 时默认攻方 = 旧测试兼容。
+## 战役撤离（C3）：单位带 departed 标记（撤至地图边缘离场）计非存活——
+## 守军全部离场或全灭同样触发战斗收束。
 
 const ScriptCoverSystem := preload("res://modules/combat/scripts/battle/cover_system.gd")
 const ScriptBattleAIDirector := preload("res://modules/combat/scripts/battle/battle_ai_director.gd")
@@ -76,6 +81,8 @@ var _team_ai: Dictionary = {}
 ## 号令/编队系统引用（装配注入，enable_team_ai 时透传 TeamAi）
 var _order_refs_orders: Node = null
 var _order_refs_formation: Node = null
+## 玩家阵营（victory 语义基准；默认攻方 = 未传时保旧 attacker 语义兼容）
+var _player_faction: int = FACTION_ATTACKER
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -95,6 +102,9 @@ func setup(map: Node2D) -> void:
 func add_unit(unit: Node, faction: int) -> void:
 	if not is_instance_valid(unit):
 		return
+	# 离场标记复位（单位实体跨战斗存活，上一场的 departed 不带入本场）
+	if "departed" in unit:
+		unit.set("departed", false)
 	if unit.has_method("set_faction"):
 		unit.set_faction(faction)
 	if unit.has_method("set_battle_instance"):
@@ -261,7 +271,11 @@ func _rebuild_alive_cache() -> void:
 
 
 static func _is_alive_unit(u) -> bool:
-	return u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead())
+	if u == null or not is_instance_valid(u):
+		return false
+	if u.has_method("is_dead") and u.is_dead():
+		return false
+	return not _is_departed(u)
 
 
 ## 获取所有参战单位
@@ -387,9 +401,24 @@ func set_order_refs(orders: Node, formation: Node) -> void:
 			tai.set_order_refs(orders, formation)
 
 
+# ─────────────────────────────── 玩家阵营（C2 victory 语义）────────────────────────
+
+## 设置玩家阵营（victory 语义基准：battle_ended 的 victory = 玩家阵营胜）。
+## 须在 start() 前调用；未调用时默认攻方（旧 attacker 语义，测试兼容）。
+func set_player_faction(faction: int) -> void:
+	if faction != FACTION_ATTACKER and faction != FACTION_DEFENDER:
+		push_warning("[BattleInstance] set_player_faction 非法阵营 %d，忽略" % faction)
+		return
+	_player_faction = faction
+
+
+func get_player_faction() -> int:
+	return _player_faction
+
+
 # ─────────────────────────────── 内部 ────────────────────────────────
 
-## 检查胜负条件：一方全灭则另一方胜
+## 检查胜负条件：一方全灭（含战役撤离离场）则另一方胜
 func _check_victory() -> void:
 	var a_alive: int = _count_alive(_units_attacker)
 	var b_alive: int = _count_alive(_units_defender)
@@ -401,15 +430,22 @@ func _check_victory() -> void:
 		_end(State.ATTACKER_WIN)
 
 
+## 存活计数：死亡与离场（departed，撤至地图边缘）均计非存活
 func _count_alive(units: Array) -> int:
 	var n: int = 0
 	for u in units:
-		if is_instance_valid(u):
-			if u.has_method("is_dead") and not u.is_dead():
-				n += 1
-			elif not u.has_method("is_dead"):
-				n += 1
+		if not is_instance_valid(u):
+			continue
+		if u.has_method("is_dead") and u.is_dead():
+			continue
+		if _is_departed(u):
+			continue
+		n += 1
 	return n
+
+
+static func _is_departed(u) -> bool:
+	return u != null and "departed" in u and bool(u.get("departed"))
 
 
 func _end(result: State) -> void:
@@ -417,7 +453,8 @@ func _end(result: State) -> void:
 	if _state != State.ENGAGED:
 		return
 	_state = result
-	# 清理单位身上的战斗引用（AI 依据 battle_instance 判参战，结束后应立即解除）
+	# 清理单位身上的战斗引用（AI 依据 battle_instance 判参战，结束后应立即解除）。
+	# departed 保持置位（战后可查离场状态/溃兵视觉），下一场 add_unit 时复位。
 	for unit in _units_attacker + _units_defender:
 		if is_instance_valid(unit) and unit.has_method("set_battle_instance"):
 			unit.set_battle_instance(null)
@@ -431,8 +468,8 @@ func _end(result: State) -> void:
 			tai.dispose()
 	_team_ai.clear()
 	if EventBus != null:
-		var attacker_wins: bool = result == State.ATTACKER_WIN
-		EventBus.battle_ended.emit(get_battle_id(), attacker_wins)
+		var player_wins: bool = get_winner() == _player_faction
+		EventBus.battle_ended.emit(get_battle_id(), player_wins)
 	# 通知登记方（BattleDirector）及时注销本实例（防 _battles 残留失效引用），随后自身释放
 	battle_finished.emit(self)
 	# 结束即释放：Director 的帧裁剪兜底仅覆盖异常路径（如外部直接 free 漏发信号）

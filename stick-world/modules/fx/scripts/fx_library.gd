@@ -116,7 +116,12 @@ static func _config_sparkle(p: GPUParticles2D) -> void:
 
 ## 四角星芒贴图：中心亮点 + 横竖光臂（原版药剂工艺水晶闪光的核心视觉）
 ## ⚠️ PLACEHOLDER：程序化近似；替换项 P1 换手绘十字光斑（可加衍射芒线）
+## 按直径缓存（同尺寸消费方共享一张：池多次扩容/多特效同径重复生成纯浪费）
+static var _star4_cache: Dictionary = {}
+
 static func _star4(diameter: int) -> Texture2D:
+	if _star4_cache.has(diameter):
+		return _star4_cache[diameter]
 	var img := Image.create(diameter, diameter, false, Image.FORMAT_RGBA8)
 	var c := float(diameter) * 0.5
 	for y in diameter:
@@ -133,6 +138,7 @@ static func _star4(diameter: int) -> Texture2D:
 			var a: float = clampf(base, 0.0, 1.0)
 			img.set_pixel(x, y, Color(1, 1, 1, a))
 	var tex := ImageTexture.create_from_image(img)
+	_star4_cache[diameter] = tex
 	return tex
 
 

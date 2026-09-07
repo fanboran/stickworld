@@ -243,9 +243,39 @@ static func measure_host(host: Node2D) -> Dictionary:
 
 # ─────────────────────────── 发射区点集采样 ───────────────────────────
 
+## 贴图 alpha 采样点缓存（键=贴图资源路径，值=贴图内坐标点集）：
+## texture.get_image() 是 GPU→CPU 回读（压缩纹理还要解压一遍），同贴图只在
+## 首个宿主挂载时算一次；迟滞带内重挂时直接命中缓存。
+static var _tex_alpha_cache: Dictionary = {}
+
+
+static func _tex_alpha_points(tex: Texture2D) -> PackedVector2Array:
+	var path := tex.resource_path
+	if not path.is_empty() and _tex_alpha_cache.has(path):
+		return _tex_alpha_cache[path]
+	var img := tex.get_image()
+	if img == null:
+		return PackedVector2Array()
+	if img.is_compressed():
+		img.decompress()
+	var w := img.get_width()
+	var h := img.get_height()
+	if w <= 0 or h <= 0:
+		return PackedVector2Array()
+	var step := maxi(1, mini(w, h) / 24)
+	var raw := PackedVector2Array()
+	for y in range(0, h, step):
+		for x in range(0, w, step):
+			if img.get_pixel(x, y).a > 0.1:
+				raw.append(Vector2(x + 0.5, y + 0.5))
+	if not path.is_empty():
+		_tex_alpha_cache[path] = raw
+	return raw
+
+
 ## 采样宿主可见轮廓为发射点集（对齐药工"精灵轮廓 Mesh"发射形状）。
-## Sprite2D 按 alpha 采样 / Polygon2D 三角化内采样 / ColorRect 网格采样；
-## 采不到点返回空数组 → 调用方回退矩形。
+## Sprite2D 按 alpha 采样（贴图解码回读结果按路径缓存）/ Polygon2D 三角化内采样 /
+## ColorRect 网格采样；采不到点返回空数组 → 调用方回退矩形。
 static func sample_host_points(host: Node2D, max_points: int = 64) -> PackedVector2Array:
 	if host == null:
 		return PackedVector2Array()
@@ -254,12 +284,10 @@ static func sample_host_points(host: Node2D, max_points: int = 64) -> PackedVect
 			var spr := child as Sprite2D
 			if spr.texture == null:
 				continue
-			var img := spr.texture.get_image()
-			if img == null:
+			var raw := _tex_alpha_points(spr.texture)
+			if raw.is_empty():
 				continue
-			if img.is_compressed():
-				img.decompress()
-			var pts := _sample_image_alpha(img, spr, max_points)
+			var pts := _pick_and_transform(raw, spr, max_points)
 			if not pts.is_empty():
 				return pts
 		elif child is Polygon2D:
@@ -274,28 +302,20 @@ static func sample_host_points(host: Node2D, max_points: int = 64) -> PackedVect
 	return PackedVector2Array()
 
 
-static func _sample_image_alpha(img: Image, spr: Sprite2D, max_points: int) -> PackedVector2Array:
-	var w := img.get_width()
-	var h := img.get_height()
-	if w <= 0 or h <= 0:
-		return PackedVector2Array()
-	var step := maxi(1, mini(w, h) / 24)
-	var raw := PackedVector2Array()
-	for y in range(0, h, step):
-		for x in range(0, w, step):
-			if img.get_pixel(x, y).a > 0.1:
-				raw.append(Vector2(x + 0.5, y + 0.5))
-	if raw.is_empty():
-		return PackedVector2Array()
-	if raw.size() > max_points:
-		var stride := float(raw.size()) / float(max_points)
-		var picked := PackedVector2Array()
-		for i in max_points:
-			picked.append(raw[mini(int(float(i) * stride), raw.size() - 1)])
-		raw = picked
+## 超额抽稀 + 贴图坐标 → 宿主局部坐标（廉价部分逐宿主做，重活只进缓存）
+static func _pick_and_transform(raw: PackedVector2Array, spr: Sprite2D, max_points: int) -> PackedVector2Array:
+	var w := int(spr.texture.get_width())
+	var h := int(spr.texture.get_height())
 	var tex_size := Vector2(w, h)
+	var picked := raw
+	if picked.size() > max_points:
+		var stride := float(picked.size()) / float(max_points)
+		var slim := PackedVector2Array()
+		for i in max_points:
+			slim.append(picked[mini(int(float(i) * stride), picked.size() - 1)])
+		picked = slim
 	var out := PackedVector2Array()
-	for p in raw:
+	for p in picked:
 		var off := p - tex_size * 0.5
 		if not spr.centered:
 			off = p

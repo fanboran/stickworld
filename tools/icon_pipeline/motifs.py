@@ -315,7 +315,7 @@ def _m_boat():
     box((0.30, 0.10, 0.16), (-0.42, 0, 0.64), rot=(0, math.radians(28), 0), pid=3)
 
 
-@motif("wagon", "货运板车")
+@motif("wagon", "货运板车", fake=(0.10, 0.03, 0.28))
 def _m_wagon():
     box((1.15, 0.62, 0.30), (0, 0, 0.52), bev=0.06, pid=3)
     for x in (-0.38, 0.38):
@@ -342,7 +342,7 @@ def _m_barrel():
     tor(0.30, 0.035, (0, 0, 0.88), rot=(math.radians(90), 0, 0), pid=3)
 
 
-@motif("crate", "板条箱")
+@motif("crate", "板条箱", fake=(0.10, 0.03, 0.26))
 def _m_crate():
     box((0.85, 0.85, 0.75), (0, 0, 0.42), bev=0.05, pid=3)
     box((1.02, 0.05, 0.16), (0, -0.44, 0.42), rot=(0, math.radians(38), 0), pid=8)
@@ -350,7 +350,7 @@ def _m_crate():
     box((0.90, 0.90, 0.10), (0, 0, 0.84), pid=3)
 
 
-@motif("lantern", "提灯")
+@motif("lantern", "提灯", fake=(0.10, 0.03, 0.30))
 def _m_lantern():
     box((0.55, 0.55, 0.10), (0, 0, 0.10), bev=0.03, pid=2)
     box((0.40, 0.40, 0.50), (0, 0, 0.42), pid=8)
@@ -426,7 +426,7 @@ def _m_scroll():
     cyl(0.09, 0.05, (0.18, -0.05, 0.55), rot=(math.radians(90), 0, 0), pid=4)
 
 
-@motif("chair", "高背椅")
+@motif("chair", "高背椅", fake=(0.10, 0.04, 0.38))
 def _m_chair():
     box((0.72, 0.62, 0.12), (0, 0, 0.52), bev=0.04, pid=3)
     box((0.72, 0.10, 0.95), (0, 0.26, 1.05), bev=0.04, pid=3)
@@ -600,7 +600,7 @@ def _m_sling():
     sph(0.12, (0, 0, 0.99), pid=7)
 
 
-@motif("cannon", "小炮")
+@motif("cannon", "小炮", fake=(0.10, 0.03, 0.26))
 def _m_cannon():
     cyl(0.19, 0.95, (-0.05, 0, 0.62), rot=(0, math.radians(90), math.radians(-6)), pid=2)
     tor(0.21, 0.05, (-0.55, 0, 0.60), rot=(0, math.radians(90), 0), pid=8)
@@ -652,7 +652,7 @@ def _m_campfire():
     sph(0.16, (0, 0, 0.42), scale=(0.85, 0.85, 1.30), pid=8)
 
 
-@motif("watchtower", "瞭望塔")
+@motif("watchtower", "瞭望塔", fake=(0.10, 0.03, 0.30))
 def _m_watchtower():
     box((0.95, 0.80, 0.95), (0, 0, 0.48), bev=0.05, pid=3)
     box((1.25, 1.05, 0.14), (0, 0, 1.02), pid=3)

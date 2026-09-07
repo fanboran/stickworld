@@ -25,11 +25,11 @@ import math
 MOTIFS = []
 
 
-def motif(tag, label, fake=(0.10, 0.02, 0.18), az=32, el=22, key_e=4.5, margin=1.06):
+def motif(tag, label, fake=None, az=32, el=22, key_e=4.5, margin=1.06, classic=False):
     def deco(fn):
         MOTIFS.append({"tag": "mot_" + tag, "name": tag, "label": label,
                        "fake": fake, "az": az, "el": el, "key_e": key_e,
-                       "margin": margin, "build": fn})
+                       "margin": margin, "classic": classic, "build": fn})
         return fn
     return deco
 
@@ -315,7 +315,7 @@ def _m_boat():
     box((0.30, 0.10, 0.16), (-0.42, 0, 0.64), rot=(0, math.radians(28), 0), pid=3)
 
 
-@motif("wagon", "货运板车", fake=(0.10, 0.03, 0.28))
+@motif("wagon", "货运板车")
 def _m_wagon():
     box((1.15, 0.62, 0.30), (0, 0, 0.52), bev=0.06, pid=3)
     for x in (-0.38, 0.38):
@@ -342,7 +342,7 @@ def _m_barrel():
     tor(0.30, 0.035, (0, 0, 0.88), rot=(math.radians(90), 0, 0), pid=3)
 
 
-@motif("crate", "板条箱", fake=(0.10, 0.03, 0.26))
+@motif("crate", "板条箱")
 def _m_crate():
     box((0.85, 0.85, 0.75), (0, 0, 0.42), bev=0.05, pid=3)
     box((1.02, 0.05, 0.16), (0, -0.44, 0.42), rot=(0, math.radians(38), 0), pid=8)
@@ -350,7 +350,7 @@ def _m_crate():
     box((0.90, 0.90, 0.10), (0, 0, 0.84), pid=3)
 
 
-@motif("lantern", "提灯", fake=(0.10, 0.03, 0.30))
+@motif("lantern", "提灯")
 def _m_lantern():
     box((0.55, 0.55, 0.10), (0, 0, 0.10), bev=0.03, pid=2)
     box((0.40, 0.40, 0.50), (0, 0, 0.42), pid=8)
@@ -359,7 +359,7 @@ def _m_lantern():
     tor(0.12, 0.035, (0, 0, 1.04), rot=(math.radians(90), 0, 0), pid=2)
 
 
-@motif("signpost", "路牌")
+@motif("signpost", "路牌", fake=(0.10, 0.02, 0.18), classic=True)
 def _m_signpost():
     cyl(0.06, 1.30, (0, 0, 0.65), pid=3)
     box((0.85, 0.07, 0.30), (0.05, 0, 0.98), rot=(0, math.radians(6), math.radians(4)), bev=0.04, pid=6)
@@ -403,14 +403,14 @@ def _m_fish():
 
 
 # ── 组织权力 ────────────────────────────────────────────────────────────────
-@motif("seal", "印章", az=14, el=8, key_e=7.0, fake=(0.10, 0.05, 0.40))
+@motif("seal", "印章", az=14, el=8, key_e=7.0)
 def _m_seal():
     box((0.55, 0.55, 0.42), (0, 0, 0.36), bev=0.08, pid=8)
     sph(0.22, (0, 0, 0.72), scale=(1, 1, 0.8), pid=8)
     box((0.50, 0.50, 0.07), (0, 0, 0.10), pid=4)
 
 
-@motif("flag", "旗帜", az=24, el=14, key_e=6.0, fake=(0.10, 0.04, 0.35))
+@motif("flag", "旗帜", az=24, el=14, key_e=6.0)
 def _m_flag():
     cyl(0.045, 1.65, (0, 0, 0.82), pid=3)
     sph(0.07, (0, 0, 1.68), pid=8)
@@ -418,7 +418,7 @@ def _m_flag():
     box((0.60, 0.05, 0.26), (0.44, 0, 1.10), rot=(0, 0, math.radians(-4)), pid=4)
 
 
-@motif("scroll", "卷轴", az=24, el=12, key_e=6.0, fake=(0.10, 0.05, 0.38))
+@motif("scroll", "卷轴", az=24, el=12, key_e=6.0)
 def _m_scroll():
     cyl(0.07, 1.05, (0, 0, 1.05), rot=(0, math.radians(90), 0), pid=8)
     cyl(0.16, 0.98, (0, 0, 1.05), rot=(0, math.radians(90), 0), pid=6)
@@ -426,7 +426,7 @@ def _m_scroll():
     cyl(0.09, 0.05, (0.18, -0.05, 0.55), rot=(math.radians(90), 0, 0), pid=4)
 
 
-@motif("chair", "高背椅", fake=(0.10, 0.04, 0.38))
+@motif("chair", "高背椅")
 def _m_chair():
     box((0.72, 0.62, 0.12), (0, 0, 0.52), bev=0.04, pid=3)
     box((0.72, 0.10, 0.95), (0, 0.26, 1.05), bev=0.04, pid=3)
@@ -445,7 +445,7 @@ def _m_whistle():
     box((0.10, 0.14, 0.34), (0.05, 0, 0.62), rot=(0, math.radians(8), 0), pid=8)
 
 
-@motif("keys", "钥匙串")
+@motif("keys", "钥匙串", fake=(0.10, 0.02, 0.18), classic=True)
 def _m_keys():
     tor(0.28, 0.065, (0, 0, 0.85), rot=(math.radians(90), 0, 0), pid=8)
     tor(0.13, 0.05, (0.14, -0.04, 0.42), rot=(0, math.radians(90), 0), pid=2)
@@ -457,7 +457,7 @@ def _m_keys():
     box((0.14, 0.06, 0.07), (-0.18, 0.03, 0.20), rot=(math.radians(20), 0, 0), pid=4)
 
 
-@motif("ledger", "账本", az=20, el=10, key_e=6.0, fake=(0.10, 0.05, 0.38))
+@motif("ledger", "账本", az=20, el=10, key_e=6.0, fake=(0.10, 0.05, 0.38), classic=True)
 def _m_ledger():
     box((0.82, 0.20, 1.02), (0, 0, 0.55), bev=0.05, pid=4)
     box((0.74, 0.14, 0.94), (0.03, -0.05, 0.55), pid=6)
@@ -493,7 +493,7 @@ def _m_gear():
     cyl(0.16, 0.26, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=8)
 
 
-@motif("book_open", "摊开的书", az=20, el=10, key_e=6.0, fake=(0.10, 0.05, 0.38))
+@motif("book_open", "摊开的书", az=20, el=10, key_e=6.0)
 def _m_book_open():
     # 浅 V 页面朝相机（绕 Y 斜置）；白页在前（-y 朝相机）、红封面垫后
     box((0.66, 0.06, 0.50), (-0.30, 0.03, 0.48), rot=(0, math.radians(-17), 0), pid=4)
@@ -539,7 +539,7 @@ def _m_telescope():
 
 
 # ── 战斗 ────────────────────────────────────────────────────────────────────
-@motif("sword", "短剑")
+@motif("sword", "短剑", fake=(0.10, 0.02, 0.18), classic=True)
 def _m_sword():
     box((0.30, 0.09, 1.15), (0, 0, 0.76), bev=0.04, pid=2)
     box((0.20, 0.06, 0.26), (0, 0, 1.42), rot=(0, math.radians(45), 0), pid=2)
@@ -600,7 +600,7 @@ def _m_sling():
     sph(0.12, (0, 0, 0.99), pid=7)
 
 
-@motif("cannon", "小炮", fake=(0.10, 0.03, 0.26))
+@motif("cannon", "小炮")
 def _m_cannon():
     cyl(0.19, 0.95, (-0.05, 0, 0.62), rot=(0, math.radians(90), math.radians(-6)), pid=2)
     tor(0.21, 0.05, (-0.55, 0, 0.60), rot=(0, math.radians(90), 0), pid=8)
@@ -612,14 +612,14 @@ def _m_cannon():
 
 
 # ── 扩张探索 ────────────────────────────────────────────────────────────────
-@motif("maproll", "卷地图", az=20, el=10, key_e=6.0, fake=(0.10, 0.05, 0.38))
+@motif("maproll", "卷地图", az=20, el=10, key_e=6.0)
 def _m_maproll():
     cyl(0.13, 1.00, (0, 0, 1.00), rot=(0, math.radians(90), 0), pid=6)
     box((0.86, 0.05, 0.80), (0.05, 0, 0.45), bev=0.03, pid=6)
     cyl(0.08, 0.04, (0.16, -0.05, 0.52), rot=(math.radians(90), 0, 0), pid=4)
 
 
-@motif("compass_nav", "罗盘", az=14, el=8, key_e=7.0, fake=(0.10, 0.05, 0.40))
+@motif("compass_nav", "罗盘", az=14, el=8, key_e=7.0)
 def _m_compass_nav():
     cyl(0.50, 0.15, (0, 0, 0.12), rot=(math.radians(90), 0, 0), pid=8)
     tor(0.50, 0.05, (0, 0, 0.12), rot=(math.radians(90), 0, 0), pid=2)
@@ -652,7 +652,7 @@ def _m_campfire():
     sph(0.16, (0, 0, 0.42), scale=(0.85, 0.85, 1.30), pid=8)
 
 
-@motif("watchtower", "瞭望塔", fake=(0.10, 0.03, 0.30))
+@motif("watchtower", "瞭望塔")
 def _m_watchtower():
     box((0.95, 0.80, 0.95), (0, 0, 0.48), bev=0.05, pid=3)
     box((1.25, 1.05, 0.14), (0, 0, 1.02), pid=3)
@@ -668,7 +668,7 @@ def _m_heart_balloon():
     tube([(0, 0, -0.06), (0.06, 0, -0.34), (-0.05, 0, -0.60), (0.04, 0, -0.82)], 0.024, pid=6, chaikin=2)
 
 
-@motif("button_hand", "按按钮小手", az=24, el=14, key_e=6.0, fake=(0.10, 0.05, 0.35))
+@motif("button_hand", "按按钮小手", az=24, el=14, key_e=6.0)
 def _m_button_hand():
     box((0.95, 0.70, 0.16), (0, 0, 0.08), bev=0.04, pid=2)
     cyl(0.28, 0.13, (0, 0, 0.22), rot=(math.radians(90), 0, 0), pid=4)
@@ -685,7 +685,7 @@ def _m_foxtail():
     sph(0.20, (0.14, 0, 0.68), scale=(0.9, 0.10, 0.28), rot=(0, 0, math.radians(50)), pid=5)
 
 
-@motif("bone", "狗骨头")
+@motif("bone", "狗骨头", fake=(0.10, 0.02, 0.18))
 def _m_bone():
     cap(0.11, 0.62, (0, 0, 0.35), rot=(0, math.radians(90), math.radians(-10)), pid=6)
     for sx in (-1, 1):
@@ -709,13 +709,13 @@ def _m_dango():
         sph(0.21, (math.sin(math.radians(22)) * (z - 0.52), 0, z), segs=(48, 32), pid=pid)
 
 
-@motif("riceball", "饭团", az=24, el=12, key_e=6.0, fake=(0.10, 0.05, 0.38))
+@motif("riceball", "饭团", az=24, el=12, key_e=6.0)
 def _m_riceball():
     sph(0.52, (0, 0, 0.45), scale=(1.15, 0.9, 0.85), pid=6)
     box((0.44, 0.07, 0.42), (0, -0.36, 0.20), rot=(math.radians(-58), 0, 0), pid=7)
 
 
-@motif("medal", "奖章", az=14, el=8, key_e=7.0, fake=(0.10, 0.05, 0.40))
+@motif("medal", "奖章", az=14, el=8, key_e=7.0)
 def _m_medal():
     cyl(0.44, 0.10, (0, 0, 0.28), rot=(math.radians(90), 0, 0), pid=8)
     cyl(0.27, 0.13, (0, 0, 0.28), rot=(math.radians(90), 0, 0), pid=8)
@@ -723,7 +723,7 @@ def _m_medal():
     box((0.26, 0.05, 0.55), (0.16, 0, 0.82), rot=(0, 0, math.radians(14)), pid=4)
 
 
-@motif("star_badge", "星章", az=14, el=8, key_e=7.0, fake=(0.10, 0.05, 0.40))
+@motif("star_badge", "星章", az=14, el=8, key_e=7.0)
 def _m_star_badge():
     pts = []
     for i in range(10):

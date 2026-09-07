@@ -102,6 +102,8 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 	# 更新 ID 计数器（建筑实例 id 为纯数字无前缀）
 	_root._next_building_id = _calc_next_id(_root._buildings.keys(), "") + 1
 	_root._next_project_id = _calc_next_id(_root._projects.keys(), "proj_") + 1
+	# 直写注册表收尾：同步仓库子集缓存失效
+	_root._on_buildings_changed()
 
 
 ## 清空所有建筑和项目（读档前调用）
@@ -112,6 +114,7 @@ func _clear_all_buildings_and_projects() -> void:
 	_root._buildings.clear()
 	_root._building_to_id.clear()
 	_root._projects.clear()
+	_root._on_buildings_changed()
 	# 阶段 E：清理进度条
 	_root._indicators.clear_all()
 

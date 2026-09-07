@@ -88,6 +88,8 @@ func add_item(def_id: StringName, count: int = 1) -> int:
 	var def: ItemDef = ItemDB.get_def(def_id)
 	if def == null or count <= 0:
 		return count
+	# 有真实变更才发信号：背包满拾取失败时不触发全 UI refresh 空转
+	var changed: bool = false
 	# 可堆叠物先合并
 	if def.max_stack > 1:
 		for i in slots.size():
@@ -98,6 +100,7 @@ func add_item(def_id: StringName, count: int = 1) -> int:
 				if take > 0:
 					s.count += take
 					count -= take
+					changed = true
 					if count <= 0:
 						inventory_changed.emit()
 						return 0
@@ -108,9 +111,11 @@ func add_item(def_id: StringName, count: int = 1) -> int:
 			var put: int = mini(def.max_stack, count)
 			slots[i] = ItemStack.new(def_id, put)
 			count -= put
+			changed = true
 			if count <= 0:
 				break
-	inventory_changed.emit()
+	if changed:
+		inventory_changed.emit()
 	return count
 
 

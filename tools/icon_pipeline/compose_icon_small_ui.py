@@ -173,7 +173,18 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     op = a[..., 3] > 128
     op_img = Image.fromarray((op * 255).astype(np.uint8))
     ero3 = np.asarray(op_img.filter(ImageFilter.MinFilter(3))) > 120
-    ring = (op & ~ero3).astype(np.float32)
+    # 描边环基线（2026-09-08 描边内缩排查）：软路径从视觉轮廓（alpha>16，软边
+    # 最外沿）向内画环——墨骑在轮廓上。旧版从 alpha>128（软边中点）起画，
+    # 外侧半条软边只剩填充色=高分图「描边内缩+色晕」。
+    # 豁免路径保留旧环定义：其 LANCZOS 缩放会把二值 alpha 重新糊出软边，
+    # vis≠op，换基线会破坏逐字节承诺。
+    if tag not in NO_STRETCH:
+        vis = a[..., 3] > 16
+        vis_img = Image.fromarray((vis * 255).astype(np.uint8))
+        ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
+        ring = (vis & ~ero_vis).astype(np.float32)
+    else:
+        ring = (op & ~ero3).astype(np.float32)
     # 描边宽度档（ICON_STROKE，默认 1.0）：>1 时向内加第二圈——
     # 1.5=半权重内圈，2.0=满权重内圈（共 2px）。仅外轮廓圈，ID 结合缝线不动
     stroke = float(os.environ.get("ICON_STROKE", "1.0"))

@@ -343,12 +343,14 @@ class _FakeBattle extends Node:
 class _FakeOrders extends Node:
 	var calls: Array = []
 
-	func issue(order_type: int, squad_id: String, target_pos: Vector2, source_tier: int) -> bool:
+	func issue(order_type: int, squad_id: String, target_pos: Vector2, source_tier: int,
+			extra_params: Dictionary = {}) -> bool:
 		calls.append({
 			"order_type": order_type,
 			"squad_id": squad_id,
 			"target": target_pos,
 			"source_tier": source_tier,
+			"extra_params": extra_params,
 		})
 		return true
 

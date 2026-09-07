@@ -383,9 +383,11 @@ func get_pause_menu_panel() -> Control:
 
 ## 启动一场测试战斗（供遭遇战/测试调用）。
 ## attacker_units / defender_units: StickmanEntity 数组
+## player_faction: 玩家阵营（victory 语义基准；默认攻方。守城战等玩家为守方的战斗传 2）
 ## 返回 BattleInstance（失败返回 null）
 ## 统一走 CombatApi（不再直调 battle_director，2026-08 审计收敛）
-func start_test_battle(attacker_units: Array, defender_units: Array) -> Node:
+func start_test_battle(attacker_units: Array, defender_units: Array,
+		player_faction: int = 1) -> Node:
 	if _combat_api == null or not _combat_api.has_method("start_battle"):
 		push_warning("[GameRoot] CombatApi 未就绪")
 		return null
@@ -393,7 +395,7 @@ func start_test_battle(attacker_units: Array, defender_units: Array) -> Node:
 	if map == null:
 		push_warning("[GameRoot] 当前无地图，无法启动战斗")
 		return null
-	return _combat_api.start_battle(map, attacker_units, defender_units)
+	return _combat_api.start_battle(map, attacker_units, defender_units, player_faction)
 
 
 # ─────────────────────────────── 地图注册与加载 ────────────────────────────────

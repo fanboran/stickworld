@@ -109,6 +109,10 @@ var _construction_manager: Node = null
 # ─────────────────────────────── 战斗（§7.1 / §8）────────────────────────────────
 ## 阵营 ID（0=未参战，1/2=敌对双方，由 BattleInstance 分配）
 var faction_id: int = 0
+## 战役撤离离场标记（C3 敌将撤仗）：RETREAT 号令撤至地图边缘时置位，
+## BattleInstance._count_alive 计非存活（守军全部离场 = 据点攻陷）。
+## 实体保留不销毁（溃兵视觉）；BattleInstance add_unit/_end 复位。
+var departed: bool = false
 ## 所属战斗实例引用（null=未参战）
 var _battle_instance: Node = null
 ## 最后一次被敌方箭矢瞄准的时刻（s，Time.get_ticks_msec 换算；-999=无威胁）。

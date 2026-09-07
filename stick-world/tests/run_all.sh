@@ -89,6 +89,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_notification_feed.tscn"
 	"tests/integration/test_debug_api.tscn"
 	"tests/integration/test_expansion_territories.tscn"
+	"tests/integration/test_battle_retreat.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -99,11 +100,12 @@ declare -A SUITE_TIMEOUT=(
 	# 每套件超时：长套件按串行实测 ×2 取整，短套件统一 ≥90s
 	# （2026-08 审计校准：并行 6 下 CPU 争用系数实测最高 ~2.5x，短套件 60s 边界会碰运气误杀）
 	["tests/integration/test_battle_lifecycle.tscn"]=120
+	["tests/integration/test_battle_retreat.tscn"]=180
 	["tests/integration/test_selection_formation.tscn"]=90
 	["tests/integration/test_possession.tscn"]=90
 	["tests/integration/test_village_map.tscn"]=90
 	["tests/smoke/test_cross_map_travel.tscn"]=120
-	["tests/smoke/test_new_game_smoke.tscn"]=120
+	["tests/smoke/test_new_game_smoke.tscn"]=150
 	["tests/integration/test_ai_behaviors.tscn"]=90
 	["tests/integration/test_game_root_assembly.tscn"]=90
 	["tests/integration/test_formation_presets.tscn"]=110
@@ -140,7 +142,8 @@ affected_suites() {
 				picked["tests/integration/test_melee_combat.tscn"]=1
 				picked["tests/integration/test_combat_feedback.tscn"]=1
 				picked["tests/integration/test_combat_control.tscn"]=1
-				picked["tests/integration/test_placement_grid_units.tscn"]=1 ;;
+				picked["tests/integration/test_placement_grid_units.tscn"]=1
+				picked["tests/integration/test_battle_retreat.tscn"]=1 ;;
 			stick-world/modules/combat/*)
 				picked["tests/integration/test_battle_lifecycle.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1
@@ -151,7 +154,8 @@ affected_suites() {
 				picked["tests/integration/test_squad_travel.tscn"]=1
 				picked["tests/integration/test_melee_combat.tscn"]=1
 				picked["tests/integration/test_combat_feedback.tscn"]=1
-				picked["tests/integration/test_combat_control.tscn"]=1 ;;
+				picked["tests/integration/test_combat_control.tscn"]=1
+				picked["tests/integration/test_battle_retreat.tscn"]=1 ;;
 			stick-world/modules/construction/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1
 				picked["tests/integration/test_placement_grid_units.tscn"]=1 ;;

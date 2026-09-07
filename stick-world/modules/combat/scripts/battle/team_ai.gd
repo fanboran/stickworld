@@ -8,6 +8,12 @@ extends RefCounted
 ## 经 TacticalOrders.issue(source_tier=1) 对本阵营战斗小队下发号令。
 ## 不碰单位级决策与编队槽位；玩家手动号令 > 姿态自动号令 >（单位溃逃例外由 AIController 既有保障）。
 ##
+## C3 敌将撤仗扩展（出征与领地架构 §4.2）：第四姿态 ROUT（单向终态）——
+## 战役评估三阈值（伤亡率/战损比/相持超时，retreat_* 参数，据点战经 overrides 注入
+## territories.commander.retreat_thresholds；默认全负 = 不评估，普通战斗维持全灭判定）
+## 任一满足即全军 RETREAT(evacuate) 有序撤至己方侧边缘离场（单位 departed 计非存活）。
+## ROUT 维持期每决策周期重发撤离号令（单位溃逃会清空命令，重发保撤离不中断）。
+##
 ## 真值声明（§七.9）：dump TeamAi 21 个行为函数均为 IL2CPP 签名级导出、**无方法体**，
 ## 所有数值阈值为语义推断初值（legend TeamAiParameters 字段结构参考），**均待实测校准**；
 ## 方法名保留 dump 原名蛇形化，便于执行计划 §三 审计逐函数对账。
@@ -17,10 +23,12 @@ const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_
 const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-## 姿态枚举（0=GARRISON/1=DEFEND/2=ATTACK，对齐 dump Team.Stance 枚举序）
+## 姿态枚举（0=GARRISON/1=DEFEND/2=ATTACK，对齐 dump Team.Stance 枚举序；
+## 3=ROUT 敌将撤仗终态，本作扩展——出征与领地架构 §4.2）
 const STANCE_GARRISON: int = 0
 const STANCE_DEFEND: int = 1
 const STANCE_ATTACK: int = 2
+const STANCE_ROUT: int = 3
 ## 自动号令发令层级（TeamAi 统一 tier=1；玩家手动号令 tier=0）
 const SOURCE_TIER_AI: int = 1
 ## 玩家手动号令层级（EventBus.order_issued 的 source_tier 语义）
@@ -143,16 +151,27 @@ func update() -> void:
 	build_units_update()
 
 
-## [dump #2 StanceUpdate] 姿态机决策编排（组合顺序无 dump 真值：驻守触发集 > 力量条件，
-## 理由：驻守条件是生存开关，被力量条件压过会导致濒危阵营继续压上——设计决策，待实测校准）。
+## [dump #2 StanceUpdate] 姿态机决策编排（组合顺序无 dump 真值：撤仗评估 > 驻守触发集 > 力量条件，
+## 理由：驻守条件是生存开关，被力量条件压过会导致濒危阵营继续压上——设计决策，待实测校准；
+## 撤仗是战役级终局决策（C3），一切战术姿态之上的"这仗不能打了"）。
 func stance_update() -> void:
 	_refresh_snapshot()
+	# ROUT 单向终态：撤仗不回头，维持期每决策周期重发撤离号令
+	# （单位溃逃例外会清空命令，重发保撤离不中断直至全员离场/全灭）
+	if _stance == STANCE_ROUT:
+		_issue_stance_orders()
+		return
 	# 本方无军事单位：决策静默空转（无号令对象）
 	if _num_military <= 0:
 		return
 	# 初始力量基线（首个有效快照登记，供 no_defender_floor 比例分母）
 	if _initial_own_strength < 0.0:
 		_initial_own_strength = _own_strength
+	# 敌将撤仗评估（C3，最高优先）：三阈值任一满足即全军 ROUT；
+	# 阈值未注入（默认全负）恒假——普通战斗零回归闸门在此兑现
+	if should_rout():
+		_set_stance(STANCE_ROUT, _rout_reason())
+		return
 	# 驻守触发集优先于力量条件（非 GARRISON 态；受全姿态切换冷却节流）
 	if _stance != STANCE_GARRISON:
 		if _can_change_stance() and should_garrison():
@@ -315,6 +334,51 @@ func build_units_update() -> void:
 		compare_unit_types(ScriptTeamAiProfiles.SWORD, ScriptTeamAiProfiles.SPEAR)
 
 
+# ─────────────────────────────── 战役撤仗评估（C3 扩展，非 dump 直译）────────────────────────────────
+
+## 三阈值任一满足即应撤仗（"这仗不能打了"）：should_rout 的谓词形态（调试/测试断言用）。
+## 阈值未注入（retreat_* 全默认负）恒假 = 普通战斗维持全灭判定的注册制闸门。
+func should_rout() -> bool:
+	return not _rout_reason().is_empty()
+
+
+## 撤仗原因（空串 = 不撤）：
+##   retreat_casualty_rate  伤亡率 = 本方伤亡/初始兵力超阈（守军打光了）
+##   retreat_loss_ratio     战损比 = 本方伤亡/敌方伤亡超阈（打不动对面，换命亏）
+##   retreat_timeout        相持超时 = 战斗持续秒数超阈（拿不下据点，无意义消耗）
+## 评估通过后由调用方切 ROUT；本方法纯查询无副作用。
+func _rout_reason() -> String:
+	var casualty_rate_th: float = float(_p["retreat_casualty_rate"])
+	var loss_ratio_th: float = float(_p["retreat_loss_ratio"])
+	var timeout_th: float = float(_p["retreat_timeout"])
+	if casualty_rate_th <= 0.0 and loss_ratio_th <= 0.0 and timeout_th <= 0.0:
+		return ""
+	if _battle == null or not is_instance_valid(_battle) or not _battle.has_method("get_casualties"):
+		return ""
+	var enemy_faction: int = 2 if _faction == 1 else 1
+	var own_losses: int = int(_battle.get_casualties(_faction))
+	var enemy_losses: int = int(_battle.get_casualties(enemy_faction))
+	if casualty_rate_th > 0.0:
+		var total: int = _own_initial_count()
+		if total > 0 and float(own_losses) / float(total) > casualty_rate_th:
+			return "retreat_casualty_rate"
+	if loss_ratio_th > 0.0 and own_losses > 0 and enemy_losses > 0 \
+			and float(own_losses) / float(enemy_losses) > loss_ratio_th:
+		return "retreat_loss_ratio"
+	if timeout_th > 0.0 and _now() > timeout_th:
+		return "retreat_timeout"
+	return ""
+
+
+## 初始参战兵力（伤亡率分母）：本方当前存活军事单位 + 累计伤亡 = 开局基数。
+## 动态重算而非首快照登记（首个决策周期在开战 1s 后，先减员会低估基数）；
+## P0 据点战无中途增援，值恒定；增援接入后改为 add_unit 时点登记。
+func _own_initial_count() -> int:
+	if _battle == null or not is_instance_valid(_battle) or not _battle.has_method("get_casualties"):
+		return 0
+	return _num_military + int(_battle.get_casualties(_faction))
+
+
 # ─────────────────────────────── 快照刷新（每决策周期重建，O(n)）────────────────────────────────
 
 ## 遍历双方存活单位各至多一次：军事单位数/力量值/质心/投射物威胁布尔。
@@ -425,13 +489,16 @@ func _set_stance(to: int, reason: String) -> void:
 
 ## 姿态→号令映射器（TeamAi 的唯一执行通道：只消费 TacticalOrders.issue，不改号令系统行为）。
 ## ATTACK → ADVANCE_ALL 敌军质心（formation 散开）；DEFEND → ADVANCE_ALL 本方质心（回聚合
-## 防线坚守）；GARRISON → RALLY 己方锚点（围圈驻点，途中 engage_in_range 近身自卫）。
-## 目标点取切换时刻快照；仅姿态切换时下发一次（维持期不重发，防号令风暴）。
+## 防线坚守）；GARRISON → RALLY 己方锚点（围圈驻点，途中 engage_in_range 近身自卫）；
+## ROUT → RETREAT(evacuate) 全军战役撤离（撤至己方侧边缘登记 departed，C3 敌将撤仗）。
+## 目标点取切换时刻快照；常规姿态仅切换时下发一次（维持期不重发，防号令风暴），
+## ROUT 例外——维持期由 stance_update 每决策周期重发（溃逃抢占兜底，见 §4.2）。
 func _issue_stance_orders() -> void:
 	if _orders == null or not is_instance_valid(_orders) or not _orders.has_method("issue"):
 		return
 	var order_type: int = -1
 	var target := Vector2.ZERO
+	var extra_params: Dictionary = {}
 	match _stance:
 		STANCE_ATTACK:
 			order_type = ScriptTacticalOrders.OrderType.ADVANCE_ALL
@@ -442,6 +509,9 @@ func _issue_stance_orders() -> void:
 		STANCE_GARRISON:
 			order_type = ScriptTacticalOrders.OrderType.RALLY
 			target = get_garrison_anchor()
+		STANCE_ROUT:
+			order_type = ScriptTacticalOrders.OrderType.RETREAT
+			extra_params = {"evacuate": true}
 		_:
 			return
 	if _formation == null or not is_instance_valid(_formation) or not _formation.has_method("get_all_squads"):
@@ -455,7 +525,7 @@ func _issue_stance_orders() -> void:
 		if _is_manual_order_active(squad_id):
 			continue
 		# issue 拒绝（职责校验/空队）→ 跳过不重试，下一决策周期随姿态重评自然恢复
-		_orders.issue(order_type, squad_id, target, SOURCE_TIER_AI)
+		_orders.issue(order_type, squad_id, target, SOURCE_TIER_AI, extra_params)
 
 
 ## 本阵营战斗小队判定：成员 get_faction 多数派 == 本阵营 ∧ is_combat_squad。

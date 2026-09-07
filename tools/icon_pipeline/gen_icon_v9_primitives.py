@@ -5,7 +5,8 @@
 import bpy, math, os, sys
 from mathutils import Vector
 
-OUT = os.path.dirname(os.path.abspath(__file__))
+# 渲染中间产物统一落 <仓库根>/temp/（compose_icon_small_ui.py 从同一处读），CWD 无关
+OUT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "temp"))
 RES_BASE = 1024
 
 

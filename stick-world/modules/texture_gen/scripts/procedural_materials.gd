@@ -2,11 +2,18 @@ class_name ProceduralMaterials
 extends RefCounted
 ## 程序化材质贴图生成器 —— 用代码生成木材/稻草/石材纹理，不依赖外部 PNG。
 
+## 同参贴图静态缓存：seed 全部由尺寸/参数哈希决定（同参必同图），村庄 N 栋同款
+## 建筑每栋重生成同张图纯浪费。ImageTexture 创建后不可变，多 Sprite2D 共享安全。
+static var _tex_cache: Dictionary = {}
+
 
 # ═══════════════════════ 木材 ═══════════════════════
 
 ## 竖纹木柱贴图（w × h）
 static func make_wood_pillar(w: int, h: int, base_color: Color = Color(0.45, 0.30, 0.15)) -> ImageTexture:
+	var key := "wood_pillar|%d|%d|%s" % [w, h, base_color]
+	if _tex_cache.has(key):
+		return _tex_cache[key]
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("wood_pillar_%dx%d" % [w, h])
@@ -24,11 +31,15 @@ static func make_wood_pillar(w: int, h: int, base_color: Color = Color(0.45, 0.3
 	for x in range(w):
 		img.set_pixel(x, 0, base_color * 0.75)
 		img.set_pixel(x, h - 1, base_color * 0.75)
-	return ImageTexture.create_from_image(img)
+	_tex_cache[key] = ImageTexture.create_from_image(img)
+	return _tex_cache[key]
 
 
 ## 横纹木板贴图（w × h，用于内部物体）
 static func make_wood_plank(w: int, h: int, base_color: Color = Color(0.50, 0.33, 0.18)) -> ImageTexture:
+	var key := "wood_plank|%d|%d|%s" % [w, h, base_color]
+	if _tex_cache.has(key):
+		return _tex_cache[key]
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("wood_plank_%dx%d" % [w, h])
@@ -46,13 +57,17 @@ static func make_wood_plank(w: int, h: int, base_color: Color = Color(0.50, 0.33
 			for x in range(w):
 				var existing := img.get_pixel(x, y)
 				img.set_pixel(x, y, existing * 0.5)
-	return ImageTexture.create_from_image(img)
+	_tex_cache[key] = ImageTexture.create_from_image(img)
+	return _tex_cache[key]
 
 
 # ═══════════════════════ 稻草 ═══════════════════════
 
 ## 稻草顶棚贴图（w × h，纤维质感）
 static func make_straw_thatch(w: int, h: int, base_color: Color = Color(0.72, 0.60, 0.30)) -> ImageTexture:
+	var key := "straw_thatch|%d|%d|%s" % [w, h, base_color]
+	if _tex_cache.has(key):
+		return _tex_cache[key]
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("straw_thatch_%dx%d" % [w, h])
@@ -65,7 +80,8 @@ static func make_straw_thatch(w: int, h: int, base_color: Color = Color(0.72, 0.
 				c = c.darkened(0.08)
 			c.a = 1.0
 			img.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(img)
+	_tex_cache[key] = ImageTexture.create_from_image(img)
+	return _tex_cache[key]
 
 
 # ═══════════════════════ 层叠茅草 ═══════════════════════
@@ -73,6 +89,9 @@ static func make_straw_thatch(w: int, h: int, base_color: Color = Color(0.72, 0.
 ## 简化版层叠茅草屋顶贴图（横向 tileable）
 ## 斜向茅草束 + 底边垂挂 + 外框描边
 static func make_thatch_layered(w: int, h: int, seed_value: int = 0) -> ImageTexture:
+	var key := "thatch_layered|%d|%d|%d" % [w, h, seed_value]
+	if _tex_cache.has(key):
+		return _tex_cache[key]
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("thatch_layered_%dx%d_s%d" % [w, h, seed_value])
@@ -130,7 +149,8 @@ static func make_thatch_layered(w: int, h: int, seed_value: int = 0) -> ImageTex
 		img.set_pixel(0, y, edge_color)
 		img.set_pixel(w - 1, y, edge_color)
 
-	return ImageTexture.create_from_image(img)
+	_tex_cache[key] = ImageTexture.create_from_image(img)
+	return _tex_cache[key]
 
 
 ## 为多边形生成指定尺寸的茅草贴图（带 seed 控制随机性）
@@ -191,6 +211,9 @@ static func _draw_hair_strand(img: Image, x: int, y: int, length: float, color: 
 
 ## 深色石质贴图（高炉用）
 static func make_stone_dark(w: int, h: int, base_color: Color = Color(0.25, 0.22, 0.20)) -> ImageTexture:
+	var key := "stone_dark|%d|%d|%s" % [w, h, base_color]
+	if _tex_cache.has(key):
+		return _tex_cache[key]
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("stone_dark_%dx%d" % [w, h])
@@ -200,7 +223,8 @@ static func make_stone_dark(w: int, h: int, base_color: Color = Color(0.25, 0.22
 			var c := base_color * shade
 			c.a = 1.0
 			img.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(img)
+	_tex_cache[key] = ImageTexture.create_from_image(img)
+	return _tex_cache[key]
 
 
 ## 铁色贴图（铁砧用）
@@ -210,6 +234,10 @@ static func make_metal_iron(w: int, h: int) -> ImageTexture:
 
 ## 纯色矩形贴图
 static func make_solid(w: int, h: int, color: Color) -> ImageTexture:
+	var key := "solid|%d|%d|%s" % [w, h, color]
+	if _tex_cache.has(key):
+		return _tex_cache[key]
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(color)
-	return ImageTexture.create_from_image(img)
+	_tex_cache[key] = ImageTexture.create_from_image(img)
+	return _tex_cache[key]

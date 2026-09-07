@@ -10,7 +10,7 @@
 
 ## 设计目标
 
-1. **窗户不是海报**：界面是纯黑半透明的"玻璃窗"，游戏画面永远透出来——黑色沥青世界观的天然延续。
+1. **窗户不是海报**：界面是纯黑半透明的"玻璃窗"，游戏画面永远透出来——火柴人黑色世界观的天然延续。
 2. **一套 token 管全部**：颜色/字号/间距/圆角集中在 `StickTokens`，换肤 = 换一个 token 文件。
 3. **内容数据驱动**：加一个菜单项/设置项/工作区 = 加一行数据，不写 UI 代码。
 4. **按需呈现**：信息密度服从当前管理层级（L1 个体 → L5 帝国），随缩放渐隐渐显。
@@ -49,9 +49,9 @@
 | 脚本 | 职责 |
 |------|------|
 | `stick_tokens.gd`（StickTokens） | 全部视觉常量：颜色/字号/间距/圆角/时长 |
-| `stick_style.gd`（StickStyle） | StyleBox 工厂：窗体/按钮族/标签页/进度条/分隔线 |
+| `stick_style.gd`（StickStyle） | StyleBox 构造器：窗体/按钮族/标签页/进度条/分隔线 |
 | `stick_theme.gd`（StickTheme） | 打包成可挂根节点的 Theme（`theme = StickTheme.create()`） |
-| `stick_kit.gd`（StickKit） | 组件装配工厂：label/button/section/toast/confirm |
+| `stick_kit.gd`（StickKit） | 组件装配器：label/button/section/toast/confirm |
 
 ---
 
@@ -61,7 +61,7 @@
   SettingsMenuPanel / SavePanel 等）在向 `.tscn` 迁移时顺手换用 StickTheme。
 - 现有 `core/ui_framework/`（UITheme 常量 / BaseScreen / PanelKit）继续有效；
   StickTheme 是其演进方向——字号常量已对齐（22/13/14/11），Token 集是超集。
-- 布局铁律不变：场景是布局唯一真相源，模板全部遵守（骨架在 `.tscn`，内容工厂装配）。
+- 布局铁律不变：场景是布局唯一真相源，模板全部遵守（骨架在 `.tscn`，内容由 StickKit 装配）。
 
 ---
 
@@ -91,7 +91,7 @@
 - **启动/流程**：主菜单接入（继续/新游戏/读档/设置/退出）、载入屏（过渡型）、**战略图懒加载**（启动 20.8s→3.2s）、世界加载覆盖层（真实加载有指示、无死灰屏）
 - **统一模态栈（缺口 2）**：`UIModalStack`（ui_modal_stack.gd）层键字典 + 逐层 pop（PAUSE_MENU/SETTINGS/SAVE_PANEL/EMPIRE_PANEL/CONFIRM），替代 `GameRoot._handle_escape` 特判；输入屏蔽随栈统一（首层入栈暂停、栈空恢复；压上层自动盖住下层防双重遮罩）；确认框已栈化（ESC=取消），占位面板同类单例（重复触发提到栈顶、换预设替换）
 - **分层**：ModalOverlay 盖住全部 UI（z=50）、模态打开自动暂停 + 遮罩消费鼠标 + 相机输入暂停兜底（防穿透）
-- **弹窗体系**：4 种行为模板（`StickScreen`=MODAL / `StickWindow`=FLOATING/DOCK/POPOVER，见 05 §六）、编制菜单已归 FLOATING（可拖动、不变灰）、暂停菜单（帝国功能组 + K/O/J/L 快捷键直达空面板）
+- **弹窗体系**：4 种行为模板（`StickScreen`=MODAL / `StickWindow`=FLOATING/DOCK/POPOVER，见 05 §六）、编制菜单已归 FLOATING（可拖动、不变灰）、暂停菜单（功能面板组 + K/O/J/L 快捷键直达空面板）
 - **统一层号**：`LayerOrder`（layer_order.gd）+ `SystemOverlay` 系统层（toast/确认框挂它，不随调用者）
 - **约束与自检**：布局铁律 + 截图自检 `tests/dev/ui_shots.tscn`（见 09）
 - **防 UI 重合通用方案**：HUD 预留区 + 安全矩形（`StickKit.safe_rect` / `clamp_to_safe_rect`，顶栏 104px/底栏 88px 避让），`StickWindow` FLOATING/POPOVER 初始定位自动夹紧；回归测试 `tests/integration/test_ui_layout.tscn`（顶栏按钮↔材料条不重叠 + 弹窗不盖 HUD，headless 可跑）；材料条（ResourceBarHost）移至顶栏下方（y=64，不再压按钮行）

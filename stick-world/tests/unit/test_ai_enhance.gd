@@ -213,6 +213,9 @@ func _test_hit_stun() -> void:
 	_runner.assert_true(attacker.stop_calls > 0, "硬直中应调 ai_stop 停止")
 	_runner.assert_true(beh._target == null, "硬直中不应推进目标获取")
 	attacker.stun = false
+	# 清掉硬直中可能掷中的 30% 规避小跳（_evade_hold 0.35s 内不获取目标），
+	# 否则本用例约三成概率随机失败（未播种 RNG 的 flake）
+	beh._evade_hold = 0.0
 	beh.update(0.01)
 	_runner.assert_true(beh._target != null, "硬直结束后应恢复目标获取")
 

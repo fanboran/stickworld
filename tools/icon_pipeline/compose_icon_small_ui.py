@@ -134,7 +134,28 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     # 注：v9 交接文档曾记载「锤头三面锁档」，实测其条件 len(th)==3 对二元组
     # 档位表永远为假——从未生效，已验收样张本来就是纯光场分档。分支已删除。
 
-    rgba = np.dstack([out, solid * 255.0])
+    # 超分抗锯齿：渲染是 2x SSAA+64x MSAA，边缘 alpha 本来平滑——保留软 alpha，
+    # BOX 面积平均缩放（纯平均无负瓣零振铃），边缘半透明带细腻；描边仍在最终
+    # 尺寸上画不受影响。豁免图标走旧硬边+LANCZOS 路径（逐字节承诺）。
+    soft = tag not in NO_STRETCH
+    if soft:
+        # 软 alpha 边缘环填部件色：环上 part=-1，取最近实心像素的部件色，
+        # 防 BOX 平均把黑底 RGB 混进边缘出黑边
+        fill = part.copy()
+        for _ in range(4):
+            holes = (sa[..., 3] > 0) & (fill < 0)
+            if not holes.any():
+                break
+            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                sh = np.roll(fill, (dy, dx), axis=(0, 1))
+                m = (fill < 0) & (sh >= 0)
+                fill[m] = sh[m]
+        for pid, ramp in RAMPS.items():
+            m = (fill == pid) & (part < 0) & (sa[..., 3] > 0)
+            if m.any():
+                out[m] = np.array([ramp_at(ramp, b) for b in band[m]]) * 255
+
+    rgba = np.dstack([out, sa[..., 3] if soft else solid * 255.0])
     img = Image.fromarray(np.clip(rgba, 0, 255).astype(np.uint8), "RGBA")
 
     ys, xs = np.where(np.asarray(img)[..., 3] > 40)
@@ -144,7 +165,7 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     sq = Image.new("RGBA", (side, side), (0, 0, 0, 0))
     sq.paste(crop, ((side - crop.width) // 2, (side - crop.height) // 2))
     inner = target - max(1, round(target * 0.008) * 2)
-    small = sq.resize((inner, inner), Image.LANCZOS)
+    small = sq.resize((inner, inner), Image.BOX if soft else Image.LANCZOS)
     cv = Image.new("RGBA", (target, target), (0, 0, 0, 0))
     cv.paste(small, ((target - inner) // 2, (target - inner) // 2))
 
@@ -153,6 +174,12 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     op_img = Image.fromarray((op * 255).astype(np.uint8))
     ero3 = np.asarray(op_img.filter(ImageFilter.MinFilter(3))) > 120
     ring = (op & ~ero3).astype(np.float32)
+    # 描边宽度档（ICON_STROKE，默认 1.0）：>1 时向内加第二圈——
+    # 1.5=半权重内圈，2.0=满权重内圈（共 2px）。仅外轮廓圈，ID 结合缝线不动
+    stroke = float(os.environ.get("ICON_STROKE", "1.0"))
+    if stroke > 1.0:
+        ero5 = np.asarray(op_img.filter(ImageFilter.MinFilter(5))) > 120
+        ring = ring + min(1.0, stroke - 1.0) * (ero3 & ~ero5)
     if target >= 128:
         ero5 = np.asarray(op_img.filter(ImageFilter.MinFilter(5))) > 120
         ring = ring + np.where(ero3 & ~ero5, 0.3 if target == 128 else 0.4, 0.0)

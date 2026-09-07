@@ -34,22 +34,6 @@ func _process(delta: float) -> void:
 	_scan_and_attach()
 
 
-func _scan_and_attach() -> void:
-	var nodes: Array = get_tree().get_nodes_in_group("resource_node")
-	for n in nodes:
-		if not is_instance_valid(n):
-			continue
-		var node := n as Node2D
-		if node == null:
-			continue
-		if _near_view(node):
-			if not _has_sparkles(node):
-				CrystalSparkles.attach_to(node, WorldZ.OVERLAY_HINT,
-						_theme_for(node), _tier_for(node))
-		elif _far_from_view(node) and _has_sparkles(node):
-			_detach_sparkles(node)
-
-
 ## 本次扫描的视口/相机缓存（数百节点每 0.5s 各查一遍 get_viewport+get_camera_2d
 ## 纯属重复——首个节点初始化，本次扫描内全部复用）
 var _scan_vp: Viewport = null

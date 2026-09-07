@@ -102,3 +102,17 @@ bash tools/check_godot_errors.sh -Head 10
 | 编辑器 `Parse Error: Expected '['`（8 个测试 tscn/gd） | 文件带 UTF-8 BOM（对方 AI 编辑器保存引入）；headless 测试容忍 BOM 故全绿 | 去除 BOM（2026-08-05） |
 | `get_child_orgs` 返回类型崩溃 | 无类型 Array 赋给 `Array[String]` 返回值 | 显式构造类型化数组 |
 | `from_dict` 系列 typed Array 赋值崩溃 | `duplicate()` 返回无类型 Array 赋给 typed Array 字段 | 改用 `.assign()` |
+| 调试场景脚本 Parse Error 后 headless 进程挂死 | 场景以无脚本形态照常实例化，`_ready`/`quit()` 永不执行，主循环无限空转 | 调试类 headless 运行一律套 `timeout` 兜底（见 §五） |
+
+## 五、headless 临时脚本的挂死陷阱（timeout 兜底约定）
+
+**陷阱**：以场景路径跑临时调试脚本（`godot --headless --path . res://tests/dev/xxx.tscn`）时，若脚本报 Parse Error，场景**以无脚本形态照常实例化**——`_ready` 不执行，脚本里的 `quit()` 永远不会被调用，Godot 主循环无限空转，进程挂死。直接把 `.gd` 路径当场景传同理：主场景加载不出任何可执行逻辑，headless 下同样无限挂起。两者都不会打印测预期的输出，只会静默吊住进程（后台运行时表现为任务永不完成）。
+
+**约定**：临时/调试类 headless 运行一律套 `timeout` 兜底，任何解析/加载失败都有保底终结：
+
+```bash
+timeout 90 godot --headless --path . res://tests/dev/xxx.tscn -- --fresh-start
+```
+
+正式测试套件不受此影响：`run_all.sh` 自带 SUITE_TIMEOUT 超时表兜底，且套件脚本持续被测试体系维护、不会带病运行。
+

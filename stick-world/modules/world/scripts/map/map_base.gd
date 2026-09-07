@@ -87,7 +87,9 @@ func get_map_width() -> float:
 
 ## 生成实体到 EntityHost，注入地面约束参数与地图引用。
 ## 兼容注入（has_method 防御）：set_ground_constraints / set_map_reference / set_last_valid_position
-func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
+## def_id: 兵种档案 id（config/units/stickmen.tres 行 id，映射 StickmanEntity.stickman_def_id）。
+## 必须在 add_child 前设置——实体 _ready 经 _apply_balance_data 拉取兵种数值。
+func spawn_entity(entity_scene: PackedScene, p_position: Vector2, def_id: String = "") -> Node2D:
 	if entity_host == null or entity_scene == null:
 		push_error("[MapBase] 无法生成实体: entity_host 或 scene 为空")
 		return null
@@ -95,6 +97,8 @@ func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
 	if instance == null:
 		push_error("[MapBase] 实体场景实例化失败")
 		return null
+	if not def_id.is_empty() and "stickman_def_id" in instance:
+		instance.stickman_def_id = def_id
 	entity_host.add_child(instance)
 	instance.global_position = p_position
 	# 刷新初始有效位置（实体 _ready 中默认 (0,0)，此处修正）

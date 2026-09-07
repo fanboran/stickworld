@@ -35,7 +35,7 @@ const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/ma
 const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/road_a_b.tscn")
 ## 测试大建筑内部地图场景（阶段 0.9.5 传送切换）
 const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/mega_interior.tscn")
-## 遭遇战战场地图场景（阶段 F）
+## 遭遇战战场地图场景（已退役为 dev 验证图，出征与领地架构 §4.3：进图不自动开战）
 const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
 ## 守城战战场地图场景（右端城墙+波次敌军，接在遭遇战之后）
 const _SIEGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/siege_battlefield.tscn")
@@ -65,7 +65,7 @@ const ROAD_MAP_ID := "road_a_b"
 const VILLAGE_B_MAP_ID := "village_b"
 ## 测试大建筑内部地图 ID
 const MEGA_INTERIOR_MAP_ID := "mega_interior"
-## 遭遇战战场地图 ID（阶段 F）
+## 遭遇战战场地图 ID（dev 验证图；注册与步行出口保留供 dev 直达）
 const BATTLEFIELD_MAP_ID := "battlefield"
 ## 守城战战场地图 ID（右端城墙+波次敌军）
 const SIEGE_MAP_ID := "siege_battlefield"
@@ -88,9 +88,6 @@ var _construction_api: Node = null
 # ─────────────────────────────── 战斗系统（§15 阶段 0.5）────────────────────────────────
 ## CombatApi 实例引用（运行时由 SystemSetup 装配）
 var _combat_api: Node = null
-## 战场预置敌军抑制开关（大乱斗观察场审计 P0-7）：工具场景置 true 后，
-## 进入战场图不再 spawn 遭遇战敌军/启动幽灵战斗，由场景自己组织战斗。
-var suppress_battlefield_enemies: bool = false
 
 # ─────────────────────────────── 框选系统（§15 阶段 0.6）────────────────────────────────
 ## SelectionSystem 实例引用（运行时由 SystemSetup 装配，挂到 UIRoot）
@@ -197,8 +194,6 @@ var _save_panel: Control = null
 # ─────────────────────────────── 跨图携带（带队出征）────────────────────────────────
 ## travel_started 时收集的编队快照（跨图携带），map_loaded 后恢复
 var _pending_squad_snapshots: Array = []
-## 遭遇战敌方数量（dev 场景可调，默认 4）
-var dev_enemy_count: int = 3
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -633,14 +628,11 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 			_worldgen.spawn_npcs(map, spawn_y)
 		# 跨图携带：spawn 随行编队成员并重建编队（带队出征）
-		var followers: Array = _spawn_travel_followers(map, player, spawn_y)
-		# 阶段 E：遭遇战战场 spawn 敌方火柴人 + 启动战斗（地图切换进入战场时触发；
-		# 观察场等工具场景可置 suppress_battlefield_enemies 跳过，防幽灵战斗事件）
-		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded and not suppress_battlefield_enemies:
-			var allies: Array = [player]
-			allies.append_array(followers)
-			_worldgen.spawn_battlefield_enemies(map, allies, dev_enemy_count)
-	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
+		_spawn_travel_followers(map, player, spawn_y)
+		# 战场图（battlefield）已退役为 dev 验证图（出征与领地架构 §4.3）：进图不再
+		# 自动刷敌开战；dev 验证走 tests/dev/verify_battle.gd 直达调
+		# InitialContent.spawn_battlefield_enemies 组织遭遇战。
+		# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# F6 步行旅行（总体设计 §5.10 E5）：道路场景出口按队列状态刷新；进出聚落 = 队列终点/回退

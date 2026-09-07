@@ -39,6 +39,9 @@ FACE_LOCK = {t[0] for t in TAGS[:7]}
 # 旧 tag 的 ID 候选锁定为前 5 色：10 色全开会让红/黄材质的 AA 混合中间色
 # （恰好=新橙 (1,.5,0)）在接缝处改判家族，破坏逐字节回归
 NIDS = {t[0]: 5 for t in TAGS[:7]}
+# 明度自适应拉伸豁免：创始人点名的已验收图标，一字节不许动
+NO_STRETCH = {"icon_heart_v9", "icon_hammer_v9", "mot_bone", "mot_keys",
+              "mot_ledger", "mot_signpost", "mot_sword"}
 
 
 def cel(tag, fake, target, out_ink=None, nids=10):
@@ -64,6 +67,16 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         yy, xx = np.mgrid[0:H, 0:W]
         d = np.sqrt(((xx - W * lx) / W) ** 2 + ((yy - H * ly) / H) ** 2)
         L = np.clip(L * (1 - k * d), 0.05, 1.2)
+
+    # 自适应明度拉伸：多面同亮度的图标（整体偏亮/偏平）cel 后糊成剪影
+    # （Cube=六边形、椅背座面连体）——根因是分档阈值固定 0.5，而明度场
+    # 动态范围因图标而异，中亮图标全落亮档。按实体像素 p5/p98 无条件拉伸
+    # 到 0..1，让不同朝向的面落不同色带——光源角度差还原成色差，无需内部线条。
+    # 豁免表内的已验收图标完全跳过（逐字节不变）。
+    if tag not in NO_STRETCH and solid.any():
+        lv = L[solid]
+        lo, hi = np.percentile(lv, 5), np.percentile(lv, 98)
+        L = np.clip((L - lo) / max(1e-6, hi - lo), 0.0, 1.0)
 
     th = (0.5,) if target <= 64 else (0.36, 0.68)
     band = np.digitize(L, th)

@@ -102,7 +102,7 @@ PAGE = """<!DOCTYPE html>
 <div id="toast"></div>
 <script>
 const ICONS = __ICONS__;
-const KEY = "icon_review_v1";
+const KEY = "icon_review_v2";
 const state = {};
 ICONS.forEach(ic => state[ic.name] = { model_ok: null, note: "" });
 

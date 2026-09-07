@@ -1,6 +1,6 @@
 class_name StickStyle
 extends RefCounted
-## StyleBox 样式工厂 —— Flat 玻璃样式分发（= GlassStyle 同实现）。
+## StyleBox 样式构造器 —— Flat 玻璃样式分发（= GlassStyle 同实现）。
 ##
 ## 游戏内主视觉走自绘控件（scripts/sketch/，血条同源沸腾）；
 ## StickStyle 只服务 Theme 兜底与开发模板（templates/）的 StyleBox 需求。

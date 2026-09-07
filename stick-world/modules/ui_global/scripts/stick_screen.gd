@@ -47,7 +47,7 @@ func _build_screen() -> void:
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_bg)
 	# 居中面板（游戏内手绘沸腾 / 主菜单玻璃；统一内边距，不手写 position）
-	_panel = StickKit.panel(self, SketchPanel.Tone.DARK)  # 工厂内部已挂载
+	_panel = StickKit.panel(self, SketchPanel.Tone.DARK)  # 内部已挂载
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 12)
 	_panel.add_child(vbox)

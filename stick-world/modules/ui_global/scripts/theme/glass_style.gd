@@ -1,6 +1,6 @@
 class_name GlassStyle
 extends RefCounted
-## 玻璃窗 StyleBox 工厂（StyleBoxFlat 实现）—— 主菜单 / 载入屏专用变体。
+## 玻璃窗 StyleBox 生成器（StyleBoxFlat 实现）—— 主菜单 / 载入屏专用变体。
 ##
 ## 「窗户不是海报」的原始实现：纯白极低 alpha 底 + 1px 低透明白描边 + 小圆角。
 ## 与 SketchStyle（手绘皮肤）接口一一对应，StickTheme 按 Mode 分流。

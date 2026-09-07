@@ -49,6 +49,52 @@ const INFO := Color(0.55, 0.78, 1.0)
 ## 警告/不足
 const WARN := Color(0.98, 0.82, 0.3)
 
+# ─────────────────────────────── 色彩 · 内容色板 ────────────────────────────────
+
+## 内容色是"画在画面里的颜色"（纹章填色、组织标签色、图标、地图/报表点缀），不是操作色——
+## 操作引导仍只有琥珀一个强调色，内容色不参与按钮/选中态。
+## **派生原则**：全部颜色从游戏贴图盘点派生（草地/背景山树线/武器木盾/资源土石/UI 琥珀），
+## 只做"黑玻璃上可读"的明度/饱和微调；红/紫为纹章与阵营补缺色，从语义红派生降饱和。
+## 盘点明细见 docs/设计/UI/01-设计语言.md §2.6；作用域 = 全局内容色（含 3D→滤镜
+## 图标管线的 LUT 量化目标），不是全屏后处理，也不限 UI 局部。
+const CONTENT_PALETTE: Array[Color] = [
+	# 草绿族（派生自地面 grassland/地面色 #84b43c/#6c9c3c/#54843c）
+	Color(0.78, 0.72, 0.48), Color(0.66, 0.76, 0.34), Color(0.48, 0.68, 0.32), Color(0.33, 0.52, 0.28),
+	# 青碧族（派生自背景树线/近山 #3c8484/#549cb4/#246c54）
+	Color(0.30, 0.58, 0.52), Color(0.35, 0.62, 0.64), Color(0.20, 0.42, 0.38),
+	# 天蓝族（派生自远山/云 #6c9ccc/#cce4fc）
+	Color(0.42, 0.62, 0.80), Color(0.35, 0.48, 0.66),
+	# 琥珀棕族（UI 琥珀同源 + 木建筑/木盾 #845424/#6c3c0c）
+	Color(0.95, 0.68, 0.25), Color(0.62, 0.44, 0.26), Color(0.45, 0.30, 0.18), Color(0.80, 0.68, 0.42),
+	# 土石族（派生自资源图标 #6c543c/#9c9c9c/#848484）
+	Color(0.52, 0.42, 0.30), Color(0.62, 0.52, 0.40), Color(0.62, 0.62, 0.58), Color(0.44, 0.45, 0.47),
+	# 红族（阵营/战旗补缺：自语义红 DANGER 降饱和压暗）
+	Color(0.66, 0.36, 0.30), Color(0.52, 0.27, 0.25),
+	# 紫族（补缺 1 色）
+	Color(0.48, 0.38, 0.52),
+]
+## 共 20 色。族序：草绿→青碧→天蓝→琥珀棕→土石→红→紫。
+const CONTENT_PALETTE_NAMES: Dictionary = {
+	&"wheat": 0, &"meadow": 1, &"grass": 2, &"forest": 3,
+	&"teal_tree": 4, &"lake": 5, &"pine": 6,
+	&"sky_blue": 7, &"dusk_blue": 8,
+	&"amber": 9, &"wood": 10, &"umber": 11, &"sand": 12,
+	&"earth": 13, &"clay": 14, &"stone": 15, &"iron": 16,
+	&"brick": 17, &"blood_earth": 18,
+	&"grape": 19,
+}
+
+## 按名取内容色；未知名回退 ACCENT 并告警
+static func content_color(id: StringName) -> Color:
+	if CONTENT_PALETTE_NAMES.has(id):
+		return CONTENT_PALETTE[CONTENT_PALETTE_NAMES[id]]
+	push_warning("[StickTokens] 未知内容色: %s" % id)
+	return ACCENT
+
+## 按索引环取内容色（hash % len 场景），越界自动回绕
+static func content_color_at(i: int) -> Color:
+	return CONTENT_PALETTE[wrapi(i, 0, CONTENT_PALETTE.size())]
+
 # ─────────────────────────────── 色彩 · 按钮态 ────────────────────────────────
 
 const BTN_BG := Color(1.0, 1.0, 1.0, 0.07)

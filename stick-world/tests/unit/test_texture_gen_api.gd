@@ -1,7 +1,7 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：TextureGenAPI 程序化贴图与材质工厂。
+## 单元测试：TextureGenAPI 程序化贴图与材质生成器。
 ## 纯静态函数测试：不进场景树、不碰 autoload；生成器 seed 确定性（hash 种子）可做像素级断言。
 
 @warning_ignore("shadowed_global_identifier")
@@ -15,7 +15,7 @@ func _ready() -> void:
 	_runner.add_test("TextureGenAPI: list_materials 非空且四材质齐备", _test_list_materials)
 	_runner.add_test("TextureGenAPI: has_material 命中与未命中", _test_has_material)
 	_runner.add_test("TextureGenAPI: make_solid 尺寸与颜色", _test_make_solid)
-	_runner.add_test("TextureGenAPI: CPU 贴图工厂返回请求尺寸", _test_cpu_factories_dims)
+	_runner.add_test("TextureGenAPI: CPU 贴图生成器返回请求尺寸", _test_cpu_factories_dims)
 	_runner.add_test("TextureGenAPI: 同 seed 生成逐字节一致（确定性）", _test_seed_determinism)
 	_runner.add_test("TextureGenAPI: create_thatch_material 绑定 Shader", _test_thatch_material)
 	_runner.add_test("TextureGenAPI: load_shader_material 已注册/未注册", _test_load_shader)

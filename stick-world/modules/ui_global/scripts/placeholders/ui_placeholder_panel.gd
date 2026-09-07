@@ -87,13 +87,7 @@ func _build_demo_body() -> void:
 			_body.add_child(_node_card("商队 B — 东海岸"))
 			_body.add_child(_node_card("干线 · 中央物流网"))
 		"collection":
-			var grid := GridContainer.new()
-			grid.columns = 4
-			grid.add_theme_constant_override("h_separation", 8)
-			grid.add_theme_constant_override("v_separation", 8)
-			_body.add_child(grid)
-			for i in range(8):
-				grid.add_child(_node_card("图鉴 %d" % (i + 1)))
+			_body.add_child(_node_card("🏅  已获得成就  1 / 1"))
 		"empire_overview":
 			for stat in [["人口", 12540], ["编制数", 12], ["国库", 3480]]:
 				var row := HBoxContainer.new()

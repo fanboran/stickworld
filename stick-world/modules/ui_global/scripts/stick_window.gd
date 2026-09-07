@@ -37,7 +37,7 @@ func _ready() -> void:
 func _build_window() -> void:
 	# 根不拦截鼠标 → 面板外事件穿透到游戏（可交互）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_panel = StickKit.panel(self, SketchPanel.Tone.DARK)  # 工厂内部已挂载
+	_panel = StickKit.panel(self, SketchPanel.Tone.DARK)  # 内部已挂载
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_panel.custom_minimum_size = window_size
 	_position_panel()

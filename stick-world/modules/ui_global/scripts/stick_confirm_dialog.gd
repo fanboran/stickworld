@@ -7,7 +7,7 @@ extends Control
 ## 全屏遮罩 + 居中窗口（anchor 方案，不手写 position）；点遮罩不关闭
 ## （确认框白名单 ❌，必须显式选择）。关闭即销毁（queue_free）。
 ##
-## 用法：通常经 StickKit.confirm() 工厂创建（保持旧签名），不直接 new。
+## 用法：通常经 StickKit.confirm() 创建（保持旧签名），不直接 new。
 
 var _dim: Control = null
 var _window: PanelContainer = null
@@ -17,7 +17,7 @@ var _on_confirm: Callable = Callable()
 const MSG_MAX_WIDTH := 480.0
 
 
-## 构建骨架（子类/工厂调用）
+## 构建骨架（子类/构造入口调用）
 func setup(title: String, message: String, on_confirm: Callable,
 		confirm_text: String, kind: int) -> void:
 	_on_confirm = on_confirm

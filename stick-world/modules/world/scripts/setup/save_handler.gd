@@ -28,7 +28,7 @@ func setup(root: GameRoot) -> void:
 			EventBus.game_saving.connect(_on_game_saving)
 		if EventBus.has_signal("game_loaded"):
 			EventBus.game_loaded.connect(_on_game_loaded)
-	# 实例化存档面板（经 UIAPI 工厂，全屏 UI 根挂 ModalOverlay 槽）
+	# 实例化存档面板（经 UIAPI 构造，全屏 UI 根挂 ModalOverlay 槽）
 	_root._save_panel = UIAPI.create_save_panel()
 	_root._save_panel.visible = false
 	if _root.ui_root != null:

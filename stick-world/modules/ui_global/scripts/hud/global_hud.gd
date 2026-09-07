@@ -207,7 +207,7 @@ func _on_placeholder_preview_pressed() -> void:
 	var modal: Control = overlay.get_slot("ModalOverlay")
 	if modal == null:
 		return
-	# 复用暂停菜单的帝国功能陈列入口（同款模态栈管理，ESC 逐层退）
+	# 复用暂停菜单的功能面板陈列入口（同款模态栈管理，ESC 逐层退）
 	var pv: Control = preload("res://modules/ui_global/scenes/placeholders/ui_placeholder_preview.tscn").instantiate()
 	pv.name = "PlaceholderPreviewInGame"
 	modal.add_child(pv)

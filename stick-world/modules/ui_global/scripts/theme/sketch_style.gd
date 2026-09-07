@@ -1,6 +1,6 @@
 class_name SketchStyle
 extends RefCounted
-## 手绘贴图 StyleBox 工厂 —— SketchTextures 沸腾贴图组装成九宫格 StyleBoxTexture。
+## 手绘贴图 StyleBox 生成器 —— SketchTextures 沸腾贴图组装成九宫格 StyleBoxTexture。
 ##
 ## MARGIN=10：矮按钮（30px）上下边带只占 20px，中心内容区剩 10px 不挤压。
 ## 边 TILE 平铺（cos 周期噪声无缝）、角固定、中心纯色拉伸。

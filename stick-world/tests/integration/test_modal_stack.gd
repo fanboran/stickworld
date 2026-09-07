@@ -113,7 +113,7 @@ func _test_placeholder_singleton() -> void:
 	var second: Control = stack.get_entry(UIModalStack.Layer.EMPIRE_PANEL)
 	_runner.assert_true(second != null and second != first, "换预设应替换旧实例")
 	var second_preset: Dictionary = second.get("_preset") if second != null and second.get("_preset") is Dictionary else {}
-	_runner.assert_equal(second_preset.get("id", ""), "empire_overview", "新实例应为帝国总览预设")
+	_runner.assert_equal(second_preset.get("id", ""), "empire_overview", "新实例应为总览报表预设")
 	var ph_count: int = 0
 	for child in gr.ui_root.get_slot("ModalOverlay").get_children():
 		if child.name.begins_with("UIPlaceholder_"):

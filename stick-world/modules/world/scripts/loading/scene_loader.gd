@@ -138,6 +138,8 @@ func load_map(map_id: String) -> Node2D:
 ## entry_side: WorldAPI.EntrySide.LEFT / RIGHT（进入新地图的方向）
 func travel_to_map(map_id: String, mode: int = WorldAPI.TravelMode.WALK, entry_side: int = WorldAPI.EntrySide.LEFT) -> Node2D:
 	if not _registered_maps.has(map_id):
+		_ensure_road_registered(map_id)
+	if not _registered_maps.has(map_id):
 		push_error("[SceneLoader] 未注册的地图: %s" % map_id)
 		return null
 
@@ -214,9 +216,24 @@ func _emit_event_bus(signal_name: String, args: Array) -> void:
 			EventBus.emit_signal(signal_name, args[0], args[1], args[2])
 
 
-## EventBus.travel_requested 信号处理（战略图 -> 场景图）
-func _on_travel_requested(map_id: String) -> void:
-	travel_to_map(map_id, WorldAPI.TravelMode.FAST_TRAVEL, WorldAPI.EntrySide.LEFT)
+## EventBus.travel_requested 信号处理（战略图 -> 场景图）。
+## travel_mode 透传（P6 契约：WALK/FAST_TRAVEL；缺省按 FAST_TRAVEL 兼容旧发射方）
+func _on_travel_requested(map_id: String, travel_mode: int = WorldAPI.TravelMode.FAST_TRAVEL) -> void:
+	travel_to_map(map_id, travel_mode, WorldAPI.EntrySide.LEFT)
+
+
+## 道路场景懒生成注册（F6/E4）：地图 id 命中步行队列段时，用 RoadMapGenerator
+## 现场生成 PackedScene 并注册（会话内缓存复用，不落盘）。非道路 id 或队列无此段
+## 则不动（后续 push_error 未注册照旧）。
+func _ensure_road_registered(map_id: String) -> void:
+	if not map_id.begins_with("road_") or WorldState == null:
+		return
+	for leg in WorldState.walk_legs:
+		if str(leg.get("road_id", "")) == map_id:
+			var packed := RoadMapGenerator.build(leg)
+			if packed != null:
+				register_map(map_id, packed, WorldAPI.MapType.ROAD)
+			return
 
 
 # ─────────────────────────────── 查询 ────────────────────────────────

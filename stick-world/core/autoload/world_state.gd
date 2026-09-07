@@ -29,10 +29,42 @@ var game_time: float = 0.0
 ## 供 population_score ±15% 每局扰动等确定性随机使用，总体设计 §5.7）
 var run_seed: int = 0
 
+## 已到访聚落（P6 快速旅行语义，总体设计 §5.10）：{settlement_id: true}。
+## 玩家进入聚落场景（map_loaded 反查命中）时由 world_map api 写入；
+## 出生聚落不落此表——api 判定时恒视为已到访（不依赖开局加载时序）
+var visited_settlements: Dictionary = {}
+
+## ── 步行旅行队列（F6/E5，瞬态不进存档——读档恒回出发聚落）──
+## 途经道路段序列（按行进序）：[{road_id, road(道路数据条目), from_map_id, to_map_id}]。
+## road_id 即道路场景 id（road_map_generator 生成/缓存键）；from/to_map_id 为两端
+## 聚落场景 id（出口触发目标）。由 world_map api.walk_to 组装，GameRoot 消费推进。
+var walk_legs: Array = []
+## 当前所在段下标（进入道路场景时由 GameRoot 依 road_id 反查校正）
+var walk_index: int = -1
+## 步行终点聚落场景 id（最后一段走完进城）；空 = 无步行进行中
+var walk_target_map_id: String = ""
+## 步行出发聚落场景 id（第一段往回走 = 回这里）
+var walk_origin_map_id: String = ""
+
 
 ## 新开局：重置本局种子（GameRoot 新游戏分支调用；读档路径走 load_save_data 恢复）
 func start_new_run() -> void:
 	run_seed = randi()
+	visited_settlements = {}
+	reset_walk()
+
+
+## 清空步行队列（步行完成/读档/新开局）
+func reset_walk() -> void:
+	walk_legs = []
+	walk_index = -1
+	walk_target_map_id = ""
+	walk_origin_map_id = ""
+
+
+## 步行是否进行中（在道路场景上）
+func is_walking() -> bool:
+	return not walk_legs.is_empty()
 
 # SQL 白名单：表名/列名为固定常量；运行时值（slot_id）一律经 ? 绑定
 # （query_with_bindings），禁止字符串拼接进 SQL。
@@ -241,6 +273,7 @@ func get_save_data() -> Dictionary:
 	return {
 		"game_time": game_time,
 		"run_seed": run_seed,
+		"visited_settlements": visited_settlements.keys(),
 		"stickmen": WorldStateSerializer.serialize_dict(stickmen, WorldStateSerializer.stickman_to_dict),
 		"organizations": WorldStateSerializer.serialize_dict(organizations, WorldStateSerializer.organization_to_dict),
 		"regions": WorldStateSerializer.serialize_dict(regions, WorldStateSerializer.region_to_dict),
@@ -254,6 +287,10 @@ func get_save_data() -> Dictionary:
 func load_save_data(data: Dictionary) -> void:
 	game_time = data.get("game_time", 0.0)
 	run_seed = int(data.get("run_seed", 0))
+	visited_settlements = {}
+	for sid in data.get("visited_settlements", []):
+		visited_settlements[str(sid)] = true
+	reset_walk()  # 步行队列瞬态不进存档——读档恒从聚落出发
 	stickmen = WorldStateSerializer.deserialize_dict(data.get("stickmen", {}), WorldStateSerializer.stickman_from_dict)
 	organizations = WorldStateSerializer.deserialize_dict(data.get("organizations", {}), WorldStateSerializer.organization_from_dict)
 	regions = WorldStateSerializer.deserialize_dict(data.get("regions", {}), WorldStateSerializer.region_from_dict)

@@ -1,0 +1,171 @@
+{
+  "seed": 20260906,
+  "culture_flood": {
+    "comment": "文化圈栅格 flood-fill 的 cost 系数（2048 级；进入像素代价 = 1 + k_slope*|grad| + k_river*河 + 群系加成）",
+    "k_slope": 350.0,
+    "k_river": 6.0,
+    "k_desert": 0.5,
+    "k_ice": 0.6,
+    "k_cross_region": 30.0
+  },
+  "expansion": {
+    "comment": "城图扩张：边权 = dist * (1 + k_culture*跨文化 + k_terrain*连线高度std + k_barren*贫瘠 + k_sea*跨海)",
+    "knear": 8,
+    "max_edge_px": 520,
+    "k_culture": 2.2,
+    "k_terrain": 8.0,
+    "k_barren": 0.8,
+    "k_sea": 3.0,
+    "sea_edge_ratio": 0.3,
+    "cap_per_state": 48
+  },
+  "capital_min_sep_px": 280,
+  "birth": {
+    "region": 13,
+    "comment": "出生老 L1 的 8 城邦沿用 l1_world.json 既有 states（色/名/id 不变），不参与扩张；region_013 其余城碎成小政权（便于初期扩张）"
+  },
+  "cultures": [
+    {
+      "id": "plain",
+      "label": "平原",
+      "regions": [
+        13
+      ],
+      "n_states": 4,
+      "names": [
+        "河湾同盟",
+        "东原邦联",
+        "西麦丘联盟",
+        "南渡自由市",
+        "北塬公国"
+      ]
+    },
+    {
+      "id": "polar",
+      "label": "极北",
+      "regions": [
+        1,
+        2,
+        3,
+        9
+      ],
+      "per_region_states": true,
+      "name_prefix": "极北霜原·",
+      "names": [
+        "冰牙部",
+        "白原部",
+        "冻星部",
+        "雪松部",
+        "长夜部"
+      ]
+    },
+    {
+      "id": "giant",
+      "label": "霜峰",
+      "regions": [
+        7
+      ],
+      "n_states": 1,
+      "names": [
+        "霜峰氏族",
+        "霜峰·北峰盟",
+        "雪线盟"
+      ]
+    },
+    {
+      "id": "fire",
+      "label": "炽焰",
+      "regions": [
+        8
+      ],
+      "n_states": 1,
+      "names": [
+        "炽焰王庭",
+        "炽焰·南炉盟",
+        "炉边盟"
+      ]
+    },
+    {
+      "id": "golden",
+      "label": "金穗",
+      "regions": [
+        5,
+        12
+      ],
+      "n_states": 1,
+      "names": [
+        "金穗王国",
+        "金穗·南境伯国",
+        "麦浪邦"
+      ]
+    },
+    {
+      "id": "forest",
+      "label": "翠荫",
+      "regions": [
+        4
+      ],
+      "n_states": 1,
+      "names": [
+        "翠荫林邦",
+        "翠荫·雨林盟"
+      ]
+    },
+    {
+      "id": "nomad",
+      "label": "风驰",
+      "regions": [
+        6
+      ],
+      "n_states": 2,
+      "names": [
+        "风驰游帐",
+        "黑云帐",
+        "灰马部"
+      ]
+    },
+    {
+      "id": "desert",
+      "label": "黄沙",
+      "regions": [
+        10
+      ],
+      "south_seed_regions": [
+        6,
+        11
+      ],
+      "n_states": 2,
+      "names": [
+        "黄沙商邦",
+        "西绿洲商邦",
+        "南砾邦",
+        "赤盐邦",
+        "砂王领"
+      ]
+    },
+    {
+      "id": "water",
+      "label": "沧澜",
+      "regions": [
+        11
+      ],
+      "n_states": 1,
+      "names": [
+        "沧澜千屿",
+        "沧澜·外岛社",
+        "环礁社"
+      ]
+    }
+  ],
+  "special_cultures": {
+    "comment": "非占领文化：只作城的文化标签（culture 字段），政权归属按地理邻接分配",
+    "source": {
+      "label": "清源",
+      "biome": 5
+    },
+    "volcanic": {
+      "label": "熔岩",
+      "biome": 6
+    }
+  }
+}

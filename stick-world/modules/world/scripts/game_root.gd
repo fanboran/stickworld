@@ -770,7 +770,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif ek.keycode == KEY_S and (ek.ctrl_pressed or ek.meta_pressed):
 		toggle_save_panel()
 		get_viewport().set_input_as_handled()
-	# 帝国功能界面快捷键（K/O/J/L → 空面板占位；系统落地后替换真实面板）
+	# 功能面板快捷键（K/O/J/L → 空面板占位；系统落地后替换真实面板）
 	elif ek.keycode == KEY_K:
 		_open_placeholder_panel("tech_tree")
 		get_viewport().set_input_as_handled()
@@ -843,8 +843,8 @@ func _use_hotbar_slot(index: int) -> void:
 		inventory_service.use_hotbar_item(index)
 
 
-## 打开帝国功能空面板（经 ui_global/placeholders，系统落地后替换真实面板）。
-## 快捷键（K/O/J/L）与暂停菜单「帝国功能」共用此入口。
+## 打开功能空面板（经 ui_global/placeholders，系统落地后替换真实面板）。
+## 快捷键（K/O/J/L）与暂停菜单「功能」分区共用此入口。
 func _open_placeholder_panel(preset_id: String) -> void:
 	if ui_root == null:
 		return

@@ -14,12 +14,12 @@ const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 
 var _game_root: Node = null
 
-## 帝国功能入口（依赖系统未建 → 打开空面板占位；系统落地后替换为真实面板）
+## 功能面板入口（依赖系统未建 → 打开空面板占位；系统落地后替换为真实面板）
 const EMPIRE_ENTRIES: Array[Dictionary] = [
-	{"id": "empire_overview", "label": "帝国总览"},
+	{"id": "empire_overview", "label": "总览报表"},
 	{"id": "tech_tree", "label": "科技树"},
 	{"id": "logistics", "label": "物流网络"},
-	{"id": "collection", "label": "图鉴 / 成就"},
+	{"id": "collection", "label": "成就"},
 ]
 
 
@@ -36,15 +36,16 @@ func _build_content() -> void:
 	StickKit.sketch_button(_body, "继续游戏", close, StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_LG)
 	StickKit.sketch_button(_body, "设置", _on_settings, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
 	StickKit.sketch_button(_body, "存档管理", _on_save_panel, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
-	# 帝国功能（空面板占位，内容留白但入口可达；系统接入后替换真实面板）
-	var sec := StickKit.section(_body, "帝国功能")
+	# 功能面板（空面板占位，内容留白但入口可达；系统接入后替换真实面板）。
+	# 分区不用「帝国」等头衔预设——开局玩家尚非帝国，头衔跃升需游戏内其他组织承认。
+	var sec := StickKit.section(_body, "功能")
 	for entry in EMPIRE_ENTRIES:
 		StickKit.sketch_button(sec, entry["label"], _open_placeholder.bind(entry["id"]),
 				StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 	StickKit.sketch_button(_body, "保存并回到主菜单", _on_return_menu, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
 
 
-## 打开帝国功能空面板（叠放在暂停菜单上：ModalOverlay 层序在暂停菜单之后，遮罩盖住它；
+## 打开功能空面板（叠放在暂停菜单上：ModalOverlay 层序在暂停菜单之后，遮罩盖住它；
 ## ESC 先关占位面板、再关暂停菜单，逐层返回）
 func _open_placeholder(preset_id: String) -> void:
 	var layer := get_parent() as Control

@@ -18,7 +18,7 @@ enum Layer {
 	PAUSE_MENU,    ## 0 最底：暂停菜单（ESC 空栈时的默认目标）
 	SETTINGS,      ## 1 设置
 	SAVE_PANEL,    ## 2 存档管理
-	EMPIRE_PANEL,  ## 3 帝国功能空面板（K/O/J/L，同类单例，替换不叠加）
+	EMPIRE_PANEL,  ## 3 功能大界面空面板（K/O/J/L，同类单例，替换不叠加）
 	INVENTORY,     ## 4 背包（E 键；确认框需盖在其上）
 	STATS,         ## 5 角色属性面板（C 键）
 	CONFIRM,       ## 6 最顶：确认框（SystemOverlay，ESC = 取消）

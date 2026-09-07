@@ -1,8 +1,8 @@
 class_name StickKit
 extends RefCounted
-## 组件装配工厂 —— 模板共用的小型控件生产线。
+## 组件装配器 —— 模板共用的小型控件构造入口。
 ##
-## 设计：界面骨架放 .tscn（锚定布局），内容用本工厂按数据装配（加一项 = 加一行数据）。
+## 设计：界面骨架放 .tscn（锚定布局），内容用本装配器按数据装配（加一项 = 加一行数据）。
 ## 所有控件从 StickTokens 取样式，不手写字面量颜色/字号。
 ##
 ## 用法：
@@ -269,7 +269,7 @@ static func toast(layer: Control, text: String, kind: String = "info") -> void:
 	var l := label(panel, text, LabelKind.BODY,
 			StickTokens.INFO if kind == "info" else (StickTokens.WARN if kind == "warn" else StickTokens.DANGER))
 	l.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
-	# panel() 工厂内部已 add_child，此处不得重复挂父（会报 already has a parent）
+	# panel() 内部已 add_child，此处不得重复挂父（会报 already has a parent）
 	_toast_apply_width_limit(panel, l, text, layer)
 	# 绝对定位（anchor 归零），底部居中、离底 80px；不混用 anchor 与 position setter
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)

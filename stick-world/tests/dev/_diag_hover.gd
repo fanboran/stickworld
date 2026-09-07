@@ -4,7 +4,7 @@ func _ready() -> void:
 	var col := VBoxContainer.new()
 	col.position = Vector2(100, 100)
 	add_child(col)
-	# 复刻 StickKit 工厂调用顺序：new → _setup_button（含字色 override）→ add_child
+	# 复刻 StickKit 构造调用顺序：new → _setup_button（含字色 override）→ add_child
 	var b := SketchButton.new()
 	b.text = "暂停菜单同款 NORMAL"
 	b.custom_minimum_size = Vector2(0, 44)

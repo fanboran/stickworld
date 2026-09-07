@@ -1,6 +1,6 @@
 class_name SketchIcons
 extends Object
-## 手绘图标纹理工厂 —— CheckBox / CheckButton / OptionButton 的主题兜底图标。
+## 手绘图标纹理生成器 —— CheckBox / CheckButton / OptionButton 的主题兜底图标。
 ##
 ## Theme 层全局生效（未换 Sketch* 控件类的使用点也吃到手绘感）；纹理表达不了
 ## boiling（逐帧重掷要控件类 _draw），所以这里的扰动是「定型」的：每个图形按
@@ -168,7 +168,7 @@ static func _composite(img: Image, x: int, y: int, a: float, color: Color) -> vo
 	img.set_pixel(x, y, Color(r, g, b, out_a))
 
 
-## 纹理工厂：按 key 缓存，painter 收到 Image 逐层绘制
+## 纹理生成器：按 key 缓存，painter 收到 Image 逐层绘制
 static func _tex(key: String, size: Vector2i, painter: Callable) -> ImageTexture:
 	if _cache.has(key):
 		return _cache[key]

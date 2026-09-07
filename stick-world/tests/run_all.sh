@@ -90,6 +90,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_debug_api.tscn"
 	"tests/integration/test_expansion_territories.tscn"
 	"tests/integration/test_battle_retreat.tscn"
+	"tests/integration/test_garrison_spawner.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -101,6 +102,7 @@ declare -A SUITE_TIMEOUT=(
 	# （2026-08 审计校准：并行 6 下 CPU 争用系数实测最高 ~2.5x，短套件 60s 边界会碰运气误杀）
 	["tests/integration/test_battle_lifecycle.tscn"]=120
 	["tests/integration/test_battle_retreat.tscn"]=180
+	["tests/integration/test_garrison_spawner.tscn"]=120
 	["tests/integration/test_selection_formation.tscn"]=90
 	["tests/integration/test_possession.tscn"]=90
 	["tests/integration/test_village_map.tscn"]=90
@@ -166,6 +168,7 @@ affected_suites() {
 			stick-world/modules/world/*|stick-world/tools/check_godot_errors.sh)
 				picked["tests/integration/test_game_root_assembly.tscn"]=1
 				picked["tests/integration/test_village_map.tscn"]=1
+				picked["tests/integration/test_garrison_spawner.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1
 				picked["tests/integration/test_modal_stack.tscn"]=1
 				picked["tests/integration/test_battle_ui.tscn"]=1
@@ -174,7 +177,8 @@ affected_suites() {
 			stick-world/modules/debug_gui/*|stick-world/modules/debug_GUI/*)
 				picked["tests/integration/test_debug_api.tscn"]=1 ;;
 			stick-world/modules/expansion/*)
-				picked["tests/integration/test_expansion_territories.tscn"]=1 ;;
+				picked["tests/integration/test_expansion_territories.tscn"]=1
+				picked["tests/integration/test_garrison_spawner.tscn"]=1 ;;
 			stick-world/modules/ui_global/*)
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1

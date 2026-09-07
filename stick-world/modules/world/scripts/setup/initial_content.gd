@@ -80,7 +80,9 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 
 # ─────────────────────────────── 战场敌人 ────────────────────────────────
 
-## 阶段 E：遭遇战战场生成敌方火柴人并启动战斗。
+## 遭遇战战场生成敌方火柴人并启动战斗（battlefield 退役后的 dev 直达入口，
+## 出征与领地架构 §4.3——正式进图不再自动调用，由 tests/dev/verify_battle.gd
+## 等验证脚本直达组织遭遇战）。
 ## 我方为红色阵营（视觉区分），玩家方（allies：玩家 + 随行编队）为进攻方。
 ## count: 敌方数量（默认 4，dev 场景可调）。
 ## 默认步兵补位：allies 少于 MIN_DEFAULT_INFANTRY 时补 spawn 蓝方基础步兵

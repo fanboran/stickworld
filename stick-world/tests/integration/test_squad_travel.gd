@@ -9,9 +9,9 @@ extends Node
 ## 测试覆盖：
 ##   - 村庄编成战斗班（preset/排长/职责）
 ##   - 跨图到战场：编队快照（export_squads）-> 跟随者 spawn -> 重建（restore_squads）
-##   - 战场地图实体数（玩家 + 随行 + 敌方）
+##   - 战场地图实体数（玩家 + 随行；战场已退役自动刷敌，架构 §4.3）
 ##   - 重建后编队完整（成员数/preset/排长）
-##   - 遭遇战已启动且双方人数正确（玩家+随行 vs 敌方）
+##   - 直达组织遭遇战（玩家+随行 vs 自刷敌方）且双方人数正确
 ##
 ## 公共 setup 在 tests/helpers/combat_test_setup.gd。
 
@@ -22,7 +22,7 @@ const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
 
 ## 随行队伍人数（不含玩家）
 const PARTY_SIZE: int = 3
-## 敌方人数（game_root.dev_enemy_count 默认值，Demo 冲刺从 4 调至 3——亲征可行性）
+## 直达开战的敌方人数（模拟原遭遇战规模）
 const ENEMY_COUNT: int = 3
 
 var _runner: TestRunner
@@ -100,7 +100,7 @@ func _test_travel_with_squad() -> void:
 	# 等待新地图加载与跟随者 spawn（map_loaded 同步执行，多等几帧稳妥）
 	for i in 4:
 		await get_tree().process_frame
-	# 战场实体数 = 玩家(1) + 随行(PARTY_SIZE) + 敌方(ENEMY_COUNT)
+	# 战场实体数 = 玩家(1) + 随行(PARTY_SIZE)——战场进图不再自动刷敌（架构 §4.3）
 	var map: Node2D = _helper.game_root.scene_loader.get_current_map()
 	_runner.assert_true(map != null, "战场地图应已加载")
 	if map == null or not map.has_method("get_entities"):
@@ -110,7 +110,7 @@ func _test_travel_with_squad() -> void:
 	for e in entities:
 		if is_instance_valid(e) and e is CharacterBody2D and not (e.has_method("is_dead") and e.is_dead()):
 			alive += 1
-	_runner.assert_equal(alive, 1 + PARTY_SIZE + ENEMY_COUNT, "战场实体数应为 %d（玩家+%d 随行+%d 敌）" % [1 + PARTY_SIZE + ENEMY_COUNT, PARTY_SIZE, ENEMY_COUNT])
+	_runner.assert_equal(alive, 1 + PARTY_SIZE, "战场实体数应为 %d（玩家+%d 随行，无预置敌）" % [1 + PARTY_SIZE, PARTY_SIZE])
 
 
 ## 重建后编队信息完整恢复
@@ -139,20 +139,44 @@ func _test_squad_restored() -> void:
 			_runner.assert_equal(u.get_role(), "fighter", "成员角色应恢复为 fighter")
 
 
-## 遭遇战已启动，双方人数正确
+## 遭遇战已启动，双方人数正确（战场进图不再自动刷敌——测试直达组织遭遇战，
+## 验证跨图后开战链路可用；正式接敌编排归 ConquestManager，批次 C5）
 func _test_battle_started() -> void:
 	if _battle_director == null or not _battle_director.has_method("has_active_battle"):
 		_runner.assert_true(false, "BattleDirector 为空")
 		return
+	var map: Node2D = _helper.game_root.scene_loader.get_current_map()
+	var player: Node2D = _helper.game_root.get_player_entity()
+	if map == null or player == null:
+		_runner.assert_true(false, "战场地图或玩家实体缺失")
+		return
+	# 自刷敌方（右端列队，照 initial_content 布势）
+	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
+	var enemies: Array = []
+	for i in ENEMY_COUNT:
+		var e: Node2D = map.spawn_entity(CombatTestSetup.STICKMAN_SCENE,
+				Vector2(map.map_right - 300.0 - i * 60.0, spawn_y))
+		if e == null:
+			continue
+		if e.get("foot_offset") != null:
+			e.global_position.y = spawn_y - e.foot_offset
+		if e.has_method("set_possessed"):
+			e.set_possessed(false)
+		enemies.append(e)
+	_runner.assert_equal(enemies.size(), ENEMY_COUNT, "敌方应刷出 %d 人" % ENEMY_COUNT)
+	# 攻方 = 玩家 + 随行编队（跨图重建后的编队成员）
+	var attackers: Array = [player]
+	var squads: Array = _formation.get_all_squads()
+	if not squads.is_empty():
+		for u in _formation.get_squad_units(squads[0]):
+			if is_instance_valid(u):
+				attackers.append(u)
+	var bi: Node = _helper.game_root.start_test_battle(attackers, enemies)
+	_runner.assert_true(bi != null, "遭遇战应启动成功")
+	if bi == null or not _battle_director.has_method("get_active_battles"):
+		return
 	_runner.assert_true(_battle_director.has_active_battle(), "战场应有活跃战斗")
-	if not _battle_director.has_active_battle() or not _battle_director.has_method("get_active_battles"):
-		return
-	var battles: Array = _battle_director.get_active_battles()
-	_runner.assert_true(not battles.is_empty(), "应有战斗实例")
-	if battles.is_empty():
-		return
-	var bi: Node = battles[0]
-	# 进攻方 = 玩家 + 随行
+	# 进攻方 = 玩家 + 随行；防守方 = 自刷敌方
 	var attacker_alive: int = bi.get_alive_count(1) if bi.has_method("get_alive_count") else -1
 	var defender_alive: int = bi.get_alive_count(2) if bi.has_method("get_alive_count") else -1
 	_runner.assert_equal(attacker_alive, 1 + PARTY_SIZE, "进攻方人数应为 %d（玩家+随行）" % (1 + PARTY_SIZE))

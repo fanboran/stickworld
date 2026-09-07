@@ -1,7 +1,9 @@
 extends Node
 ## 遭遇战全流程实测（dev 层）——验证 Demo 目标 4 的真实可达成性：
-## 直达 battlefield → 遭遇战自动开打并自动暂停（auto_pause_battle 设计）→
-## 模拟玩家空格恢复 → AI 自主接战互搏 → battle_ended 分出胜负。
+## 直达 battlefield → 直达调用 InitialContent.spawn_battlefield_enemies 组织遭遇战
+## （battlefield 退役后 game_root 进图不再自动刷敌，出征与领地架构 §4.3）→
+## 自动暂停（auto_pause_battle 设计）→ 模拟玩家空格恢复 → AI 自主接战互搏 →
+## battle_ended 分出胜负。
 ## 根因记录：暂停期间一切单位冻结（含 AI 决策循环），解除后接战链自动工作。
 
 const GameRootScene := preload("res://modules/world/scenes/game_root.tscn")
@@ -40,6 +42,17 @@ func _run() -> void:
 		return
 	sl.travel_to_map("battlefield", WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
 	for i in 30:
+		await get_tree().process_frame
+
+	# 直达组织遭遇战：玩家方（攻方）vs 刷出的敌方
+	var gen: Node = _game_root.get("_worldgen")
+	var player: Node2D = _game_root.get_player_entity()
+	if gen == null or not gen.has_method("spawn_battlefield_enemies") or player == null:
+		_fail("直达刷敌入口不可用（InitialContent.spawn_battlefield_enemies）")
+		return
+	var field_map: Node2D = _game_root.get_current_map()
+	gen.spawn_battlefield_enemies(field_map, [player], 3)
+	for i in 5:
 		await get_tree().process_frame
 
 	# 1) 建战断言（恢复前，单位还在）：阵容正确 + 参战引用回填 + 自动暂停生效

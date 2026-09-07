@@ -2,8 +2,12 @@
 """v9 批量合成：注册表驱动，全部图标（锤/心/基本体测试组）过同一 cel 管线，
 输出三档尺寸 + 网格验收图"""
 import sys
+import os
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+# 读 <仓库根>/temp/ 渲染中间产物，写 <仓库根>/temp/icons/ 成品，CWD 无关
+BASE = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "temp"))
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 INK = np.array([18, 14, 9])
@@ -22,8 +26,8 @@ SIZES = (64, 128, 256)
 
 
 def cel(tag, fake, target, out_ink=None):
-    shade = Image.open(f"temp/{tag}_{target}_shade.png").convert("RGBA")
-    idim = Image.open(f"temp/{tag}_{target}_id.png").convert("RGBA")
+    shade = Image.open(os.path.join(BASE, f"{tag}_{target}_shade.png")).convert("RGBA")
+    idim = Image.open(os.path.join(BASE, f"{tag}_{target}_id.png")).convert("RGBA")
     sa = np.asarray(shade).astype(np.float32)
     ia = np.asarray(idim).astype(np.float32)
     H, W = sa.shape[:2]
@@ -137,6 +141,7 @@ def checkerboard(size, cell=16):
 
 # ── 批处理：全部图标出三档尺寸 ──
 results = {}
+os.makedirs(os.path.join(BASE, "icons"), exist_ok=True)
 FT = font(32, True)
 FN = font(15)
 for tag, label, fake in TAGS:
@@ -144,7 +149,7 @@ for tag, label, fake in TAGS:
     for t in SIZES:
         icons[t] = cel(tag, fake, t)
         name = tag.replace("icon_", "").replace("_v9", "").replace("test_", "")
-        icons[t].save(f"temp/icons/{name}_{t}.png")
+        icons[t].save(os.path.join(BASE, "icons", f"{name}_{t}.png"))
     results[tag] = (label, icons)
     print(f"[{tag}] done")
 
@@ -175,5 +180,5 @@ for r, (tag, (label, icons)) in enumerate(results.items()):
 
 noise = Image.effect_noise((CW // 4, CH // 4), 18).resize((CW, CH)).filter(ImageFilter.GaussianBlur(1))
 canvas = Image.composite(Image.new("RGB", (CW, CH), (255, 255, 255)), canvas, noise.point(lambda v: max(0, v - 252) * 2))
-canvas.save("temp/icon_test_preview.png")
+canvas.save(os.path.join(BASE, "icon_test_preview.png"))
 print("saved grid")

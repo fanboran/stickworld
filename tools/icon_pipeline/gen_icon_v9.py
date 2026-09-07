@@ -9,7 +9,10 @@
 import bpy, math, os, sys
 from mathutils import Vector
 
-OUT = os.path.dirname(os.path.abspath(__file__))
+# 渲染中间产物统一落 <仓库根>/temp/（compose_icon_small_ui.py 从同一处读）；
+# 锚定脚本位置，CWD 无关。历史注：本脚本曾住在 temp/ 内，dirname(__file__) 恰为其别名。
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "temp"))
 RES = 1024
 
 

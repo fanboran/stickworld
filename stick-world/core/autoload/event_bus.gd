@@ -90,6 +90,16 @@ extends Node
 # 战略图 L1 重算该聚落建成区 blob（总体设计 §5.7 实时变动；发射方建设系统接线前测试代发）
 @warning_ignore("unused_signal") signal settlement_updated(settlement_id: String, population_score: float)
 
+# ─────────────────────────────── 出征 / 领地（出征与领地架构 §六）────────────────────────────────
+# 领地状态变更：ConquestManager（批次 C5）-> 出城选项/征伐面板刷新；
+# new_state 取 TerritoryRegistry.State（int 广播，core 不依赖模块类）
+@warning_ignore("unused_signal") signal territory_state_changed(territory_id: String, new_state: int)
+# 地块归属变更：ConquestManager -> 战略图政治模式聚落/地块染色（世界地图数据流 §7.3
+# 契约的发射方落实）；region_id 发 tile 级 id（架构 §9.1 P 社化预留：据点=地块入口，归属按面建模）
+@warning_ignore("unused_signal") signal region_owner_changed(region_id: String, new_owner: String)
+# 解锁发放：ConquestManager -> 建筑系统/装备系统等（各系统自听此信号；P0 示例：箭塔建筑型号）
+@warning_ignore("unused_signal") signal unlock_granted(unlock_id: String)
+
 # ─────────────────────────────── UI 通用信号 ───────────────────────────────
 
 @warning_ignore("unused_signal") signal ui_notification(title: String, body: String, level: String)

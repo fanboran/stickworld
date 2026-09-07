@@ -1,0 +1,89 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "territories"
+_meta = {
+	"resource_name": "territories",
+	"version": "0.1.0",
+	"description": "领地（敌据点）配置。字段规范见 docs/技术/架构/出征与领地架构.md §2.1；首版手写，数值定稿后迁 config/excel/扩张数据.xlsx territories sheet 重导出",
+	"category": "handwritten",
+	"source": "handwritten",
+	"ai_proposal": "据点命名/守军编成/奖励数值/撤仗阈值均为 AI 提案，实测定稿",
+	"field_notes": {
+		"garrison[].profile": "兵种档案 = config/units/stickmen.tres 的单位 id（GarrisonSpawner 按 id 经 UnitsApi 刷出）",
+		"garrison[].tier": "战术档位 = config/combat/tactics.tres 的战术 id",
+		"commander.retreat_thresholds": "敌将撤仗评估阈值：casualty_rate 伤亡率 / loss_ratio 战损比 / timeout 相持秒数",
+		"entry_side": "玩家进入方位（守军布阵参考）：0=西（左）",
+		"settlement_key": "L1 世界包聚落 id（settlement.settlement_id），占领后染色目标",
+		"tile_key": "所属地块 id（tile_id），region_owner_changed 发此级 id（架构 §9.1）"
+	}
+}
+variables = {
+	"data": [
+		{
+			"id": "ter_bandit_camp_01",
+			"name_zh": "黑石营地",
+			"map_id": "l1_settlement_02",
+			"settlement_key": "settlement_city_1035",
+			"tile_key": "city_1035",
+			"garrison": [
+				{"profile": "stm_sword_001", "count": 2, "tier": "tac_defensive"},
+				{"profile": "stm_bow_001", "count": 1, "tier": "tac_defensive"}
+			],
+			"commander": {
+				"profile": "stm_sword_001",
+				"retreat_thresholds": {"casualty_rate": 0.7, "loss_ratio": 4.0, "timeout": 75.0}
+			},
+			"rewards": {
+				"resources": {"res_wood": 30, "res_stone": 20},
+				"unlocks": []
+			},
+			"entry_side": 0
+		},
+		{
+			"id": "ter_bandit_camp_02",
+			"name_zh": "赤岭寨",
+			"map_id": "l1_settlement_03",
+			"settlement_key": "settlement_city_1036",
+			"tile_key": "city_1036",
+			"garrison": [
+				{"profile": "stm_spear_001", "count": 3, "tier": "tac_defensive"},
+				{"profile": "stm_bow_001", "count": 2, "tier": "tac_defensive"}
+			],
+			"commander": {
+				"profile": "stm_spear_001",
+				"retreat_thresholds": {"casualty_rate": 0.6, "loss_ratio": 3.0, "timeout": 90.0}
+			},
+			"rewards": {
+				"resources": {"res_wood": 40, "res_stone": 40, "res_iron_ingot": 20},
+				"unlocks": ["unlock_arrow_tower"]
+			},
+			"entry_side": 0
+		},
+		{
+			"id": "ter_warlord_keep_01",
+			"name_zh": "铁腕要塞",
+			"map_id": "l1_settlement_04",
+			"settlement_key": "settlement_city_1037",
+			"tile_key": "city_1037",
+			"garrison": [
+				{"profile": "stm_sword_001", "count": 4, "tier": "tac_defensive"},
+				{"profile": "stm_spear_001", "count": 2, "tier": "tac_defensive"},
+				{"profile": "stm_bow_001", "count": 1, "tier": "tac_defensive"},
+				{"profile": "stm_staff_001", "count": 1, "tier": "tac_defensive"}
+			],
+			"commander": {
+				"profile": "stm_staff_001",
+				"retreat_thresholds": {"casualty_rate": 0.5, "loss_ratio": 2.5, "timeout": 120.0}
+			},
+			"rewards": {
+				"resources": {"res_stone": 60, "res_iron_ingot": 40},
+				"unlocks": []
+			},
+			"entry_side": 0
+		}
+	]
+}

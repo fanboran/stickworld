@@ -28,8 +28,9 @@ var mask_image: Image = null
 ## L1 地块列表（1 地块 = 1 聚落或空）
 var tiles: Array[L1TileDef] = []
 
-## 道路（E1/P3.5 贴地形折线，F5 渲染分级）：
-## [{"pts": PackedVector2Array(context 坐标), "tier": "DIRT"/"PAVED", "length_px": float}]
+## 道路（E1/P3.5 贴地形折线，F5 渲染分级，P6 路网图消费端点）：
+## [{"pts": PackedVector2Array(context 坐标), "from": String, "to": String,
+##    "tier": "DIRT"/"PAVED", "length_px": float}]
 var roads: Array = []
 
 ## 政权（state_id -> 信息）
@@ -230,10 +231,13 @@ static func _rivers_from(arr: Array) -> Array:
 	return out
 
 
-## 道路归一化：json {"from","to","tier","length_px","polyline":[[x,y],...]} →
-## {"pts": PackedVector2Array, "tier": String, "length_px": float}。
+## 道路归一化：json {"from","to","tier","length_px","polyline":[[x,y],...],"biomes":[int...]}
+## → {"pts": PackedVector2Array, "from": String, "to": String, "tier": String,
+## "length_px": float, "biomes": PackedInt32Array}。
 ## polyline ≥2 点用之（P3.5 贴地形折线）；缺失/无效回退 from/to 聚落直线
 ## （§5.9 向后兼容口径，旧包 MST 直连线）；两端聚落都未知则跳过该条。
+## from/to 端点透传（P6 快速旅行路网图消费；F5 渲染只读 pts/tier 不受影响）。
+## biomes 沿线群系标签透传（F6 道路场景色带消费；缺省空数组，消费端按 tier 兜底单色）。
 static func _roads_from(arr: Array, tiles: Array[L1TileDef]) -> Array:
 	var out: Array = []
 	var pos_by_sid: Dictionary = {}
@@ -242,17 +246,25 @@ static func _roads_from(arr: Array, tiles: Array[L1TileDef]) -> Array:
 			pos_by_sid[t.settlement.settlement_id] = t.settlement.position
 	for rd in arr:
 		var d: Dictionary = rd if rd is Dictionary else {}
+		var from_id := str(d.get("from", ""))
+		var to_id := str(d.get("to", ""))
 		var pts := _polygon_from(d.get("polyline", []))
 		if pts.size() < 2:
-			var a: Variant = pos_by_sid.get(str(d.get("from", "")))
-			var b: Variant = pos_by_sid.get(str(d.get("to", "")))
+			var a: Variant = pos_by_sid.get(from_id)
+			var b: Variant = pos_by_sid.get(to_id)
 			if a == null or b == null:
 				continue
 			pts = PackedVector2Array([a as Vector2, b as Vector2])
+		var biomes := PackedInt32Array()
+		for v in d.get("biomes", []):
+			biomes.append(int(v))
 		out.append({
 			"pts": pts,
+			"from": from_id,
+			"to": to_id,
 			"tier": str(d.get("tier", "DIRT")),
 			"length_px": float(d.get("length_px", 0.0)),
+			"biomes": biomes,
 		})
 	return out
 

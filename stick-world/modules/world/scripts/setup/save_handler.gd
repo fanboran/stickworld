@@ -58,6 +58,10 @@ func _on_game_saving(_slot_index: int) -> void:
 	var map_id: String = ""
 	if _root.scene_loader and "current_map_id" in _root.scene_loader:
 		map_id = _root.scene_loader.current_map_id
+	# F6 步行中（道路场景）跳过本次存档：道路场景不落盘（会话内缓存），
+	# 读档恒回上次成功存档的聚落，避免 meta.current_map_id 指向无法恢复的 road_*
+	if map_id.begins_with("road_"):
+		return
 	# 1. 地图边界 -> maps 表
 	if map != null and map.has_method("save_to_db"):
 		map.save_to_db(db, slot_id, map_id)
@@ -115,6 +119,10 @@ func _on_game_loaded(slot_index: int) -> void:
 			rows = db.query_result
 		if not rows.is_empty():
 			_root._cached_load_map_id = str(rows[0].get("current_map_id", ""))
+		# F6 防御：road_* 不入档（步行中存档被跳过），旧档异常带出时回退出生城
+		if _root._cached_load_map_id.begins_with("road_"):
+			push_warning("[SaveHandler] 存档指向道路场景（异常档），回退出生城")
+			_root._cached_load_map_id = "l1_settlement_00"
 	# 兜底：存档缺地图信息（空档/损坏档/无图状态下存的档）时回退新游戏开局，
 	# 绝不能不加载地图（否则黑屏只剩 UI）
 	if _root._cached_load_map_id.is_empty():

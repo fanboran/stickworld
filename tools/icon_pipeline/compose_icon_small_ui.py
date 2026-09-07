@@ -34,8 +34,6 @@ TAGS = [
 ] + _MOTIFS
 SIZES = (64, 128, 256)
 
-# 旧 tag 沿用「三面锁档」：pid 0/1/2 在 ≥128px 压单档（锤三面灰阶+基本体既有语言）
-FACE_LOCK = {t[0] for t in TAGS[:7]}
 # 旧 tag 的 ID 候选锁定为前 5 色：10 色全开会让红/黄材质的 AA 混合中间色
 # （恰好=新橙 (1,.5,0)）在接缝处改判家族，破坏逐字节回归
 NIDS = {t[0]: 5 for t in TAGS[:7]}
@@ -78,7 +76,11 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         lo, hi = np.percentile(lv, 5), np.percentile(lv, 98)
         L = np.clip((L - lo) / max(1e-6, hi - lo), 0.0, 1.0)
 
-    th = (0.5,) if target <= 64 else (0.36, 0.68)
+    # 64px 档位：默认与 128/256 同为三档（两档切不尽三张面，中亮面并入亮档
+    # =Cube 三面两色/椅子双面不分）；豁免图标沿用旧两档（逐字节承诺）
+    th = (0.36, 0.68)
+    if target <= 64 and tag in NO_STRETCH:
+        th = (0.5,)
     band = np.digitize(L, th)
     RAMPS = {
         0: [(0.38, 0.40, 0.45), (0.55, 0.57, 0.62), (0.74, 0.76, 0.80)],
@@ -99,8 +101,8 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         if not m.any():
             continue
         out[m] = np.array([ramp_at(ramp, b) for b in band[m]]) * 255
-        if tag in FACE_LOCK and pid in (0, 1, 2) and len(th) == 3:
-            out[m] = np.array(ramp[{0: 2, 1: 1, 2: 0}[pid]]) * 255   # 锤头三面锁档（旧 tag 专用）
+    # 注：v9 交接文档曾记载「锤头三面锁档」，实测其条件 len(th)==3 对二元组
+    # 档位表永远为假——从未生效，已验收样张本来就是纯光场分档。分支已删除。
 
     rgba = np.dstack([out, solid * 255.0])
     img = Image.fromarray(np.clip(rgba, 0, 255).astype(np.uint8), "RGBA")

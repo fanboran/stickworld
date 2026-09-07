@@ -11,6 +11,16 @@ BASE = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 ICON_DIR = os.path.join(BASE, "icons")
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+# 排序：旧 7 枚在前，其余按 motifs 注册表的分类顺序（生产工具→物流→…→火柴人）；
+# 中文文件名按码点排序无意义，必须挂注册表
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import motifs as _M
+    _ORDER = ["锻造锤", "爱心", "立方体", "正球", "圆柱", "圆锥", "圆环"] + [m["label"] for m in _M.MOTIFS]
+except Exception as _e:
+    print("registry unavailable, fallback alphabetical:", _e)
+    _ORDER = []
+
 
 def font(sz):
     for p in ("C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf"):
@@ -31,7 +41,8 @@ def checker(size, cell=8):
     return b
 
 
-names = sorted(f[:-7] for f in os.listdir(ICON_DIR) if f.endswith("_64.png"))
+names = [f[:-7] for f in os.listdir(ICON_DIR) if f.endswith("_64.png")]
+names.sort(key=lambda n: (_ORDER.index(n) if n in _ORDER else 999, n))
 FN = font(13)
 FT = font(18)
 issues = []

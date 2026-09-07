@@ -145,10 +145,10 @@ func _on_frame() -> void:
 	var delta: float = get_process_delta_time()
 	_time += delta
 
-	# 当前动画（从 rig 读取）
+	# 当前动画（从 rig 读取；走公共 getter，每渲染帧反射 get() 属性查找太贵）
 	var anim: String = ""
-	if _rig != null and _rig.get("_current_anim") != null:
-		anim = _rig.get("_current_anim")
+	if _rig != null and _rig.has_method("get_current_anim"):
+		anim = _rig.get_current_anim()
 	if anim != _last_anim:
 		# 动画切换事件
 		if anim == "attack":

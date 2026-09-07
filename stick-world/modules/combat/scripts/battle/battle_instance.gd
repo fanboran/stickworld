@@ -276,15 +276,16 @@ func get_nearest_enemy(unit: Node) -> Node:
 	var faction: int = unit.faction_id if "faction_id" in unit else 0
 	var enemies: Array = get_enemies_of(faction)
 	var best: Node = null
-	var best_dist: float = INF
+	var best_dist_sq: float = INF
 	for e in enemies:
 		if not is_instance_valid(e):
 			continue
 		if e.has_method("is_dead") and e.is_dead():
 			continue
-		var d: float = unit.global_position.distance_to(e.global_position)
-		if d < best_dist:
-			best_dist = d
+		# 平方距离比较（只需序不需真值，免每候选一次开方）
+		var d_sq: float = unit.global_position.distance_squared_to(e.global_position)
+		if d_sq < best_dist_sq:
+			best_dist_sq = d_sq
 			best = e
 	return best
 

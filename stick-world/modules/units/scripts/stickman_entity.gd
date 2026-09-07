@@ -318,10 +318,12 @@ func _ready() -> void:
 	# 装配子组件（VisualController / InteractionController）
 	_mount_components()
 	# 状态效果组件（SWL ApplyBurn/... + legend 状态 System 最小集：BURN/POISON/SLOW/STUN）
-	if get_node_or_null("StatusEffects") == null:
+	_status_effects = get_node_or_null("StatusEffects")
+	if _status_effects == null:
 		var se: Node = ScriptStatusEffects.new()
 		se.name = "StatusEffects"
 		add_child(se)
+		_status_effects = se
 	# 接触阴影（Demo 打磨：脚底椭圆软阴影，Terraria 式落地感；纯视觉 z 垫底）
 	_spawn_contact_shadow()
 	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
@@ -1255,9 +1257,15 @@ func is_in_hit_stun() -> bool:
 
 # ─────────────────────────────── 状态效果（SWL ApplyBurn/... 直译）────────────────────────────────
 
+## 状态效果组件缓存（_ready 装配后生命周期内不变；is_stunned 每物理帧
+## 查询走缓存，免每帧 get_node 路径解析）
+var _status_effects: Node = null
+
 ## 获取状态效果组件（_ready 装配；测试桩可能无）
 func get_status_effects() -> Node:
-	return get_node_or_null("StatusEffects")
+	if _status_effects == null or not is_instance_valid(_status_effects):
+		_status_effects = get_node_or_null("StatusEffects")
+	return _status_effects
 
 
 ## 施加状态效果（BURN/POISON/SLOW/STUN；转发 StatusEffects.apply）

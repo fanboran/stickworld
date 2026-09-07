@@ -190,8 +190,8 @@ def build_heart(scene):
     for i, (x, y) in enumerate(pts):
         spl.points[i].co = (x, y + 0.15, 0.0, 1.0)
     spl.use_cyclic_u = True
-    cu.extrude = 0.17
-    cu.bevel_depth = 0.06
+    cu.extrude = 0.34      # 厚枕形：创始人二轮反馈"不够鼓"，厚度 0.17→0.34
+    cu.bevel_depth = 0.10
     cu.fill_mode = 'BOTH'
     ob = bpy.data.objects.new('Heart', cu)
     scene.collection.objects.link(ob)
@@ -262,9 +262,10 @@ for t in (64, 128, 256):
                   {oname: [id_h[n] for n in names] for oname, names in hmap.items()})
     sys.stdout.flush()
 
-# ── 爱心（3/4 视角，与母题库统一；2026-09-08 创始人要求立体感+斜角度）──
+# ── 爱心（3/4 视角，与母题库统一；2026-09-08 创始人要求立体感+斜角度，
+#    二轮反馈仍不够鼓 → 厚度加倍 + 方位角加大侧面占比）──
 for t in (64, 128, 256):
-    scene = setup(32, 22, t * 2, 5.0)
+    scene = setup(38, 22, t * 2, 5.0)
     emap = build_heart(scene)
     fit_ortho(scene)
 

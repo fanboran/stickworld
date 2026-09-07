@@ -198,8 +198,9 @@ def tube(pts, radius=0.07, pid=3, chaikin=2, closed=False, loc=(0, 0, 0), rot=No
     return _finish(ob, pid)
 
 
-def heart_mesh(scale=1.0, loc=(0, 0, 0), pid=4, extrude=0.17, bevel=0.06, lift=0.15):
-    """心形（连续曲线处处 C¹，鞍部可折角）——v9 验证过的轮廓，此处缩放复用"""
+def heart_mesh(scale=1.0, loc=(0, 0, 0), pid=4, extrude=0.28, bevel=0.085, lift=0.15):
+    """心形（连续曲线处处 C¹，鞍部可折角）——v9 验证过的轮廓，此处缩放复用。
+    默认厚枕形（创始人 2026-09-08 二轮反馈：爱心/气球立体感不足要更鼓）"""
     import bpy
     base = [
         (0.00, 0.42), (-0.20, 0.70), (-0.52, 0.86), (-0.84, 0.72),
@@ -247,6 +248,60 @@ def pyramid(size, depth, loc=(0, 0, 0), pid=6):
     return ob
 
 
+def crystal(r, h_body, h_tip, loc=(0, 0, 0), rot=None, pid=9):
+    """六棱水晶 = 六棱柱 + 六棱尖（flat 刻面，柱轴沿局部 Z）。矿石专用：
+    创始人 2026-09-08 定向不做石头嵌晶、直接做水晶形；六面 flat 烘色后
+    朝向不同面不同色 = 水晶棱面感（4 棱 pyramid 的加密版，同属刻面许可）"""
+    import bpy
+    from mathutils import Euler, Vector
+    ax = Euler(rot or (0, 0, 0), 'XYZ').to_matrix() @ Vector((0, 0, 1))
+    cyl(r, h_body, loc, rot, verts=6, pid=pid)
+    c = loc[0] + ax.x * (h_body + h_tip) / 2, loc[1] + ax.y * (h_body + h_tip) / 2, \
+        loc[2] + ax.z * (h_body + h_tip) / 2
+    bpy.ops.mesh.primitive_cone_add(vertices=6, radius1=r, radius2=0.0,
+                                    depth=h_tip, location=c, rotation=rot or (0, 0, 0))
+    ob = bpy.context.object
+    for p in ob.data.polygons:
+        p.use_smooth = False
+    _base_mat(ob)
+    ob["pid"] = pid
+    return ob
+
+
+def drop_mesh(scale=1.0, loc=(0, 0, 0), pid=4, extrude=0.22, bevel=0.065):
+    """水滴/火舌形实心挤出（圆底 + 收尖，连续曲线同 heart_mesh 范式）。
+    篝火专用：椭球火焰被创始人判"像鸡蛋"，水滴轮廓才是火的语言"""
+    import bpy
+    base = [
+        (0.06, 0.98), (0.10, 0.86), (0.17, 0.71), (0.27, 0.52), (0.34, 0.26),
+        (0.30, 0.02), (0.16, -0.12), (0.0, -0.16), (-0.16, -0.12), (-0.30, 0.02),
+        (-0.34, 0.26), (-0.27, 0.52), (-0.17, 0.71), (-0.10, 0.86),
+    ]
+    for _ in range(2):
+        out = []
+        n = len(base)
+        for i in range(n):
+            a, b = base[i], base[(i + 1) % n]
+            out.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
+            out.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
+        base = out
+    cu = bpy.data.curves.new('drop', 'CURVE')
+    spl = cu.splines.new('POLY')
+    spl.points.add(len(base) - 1)
+    for i, (x, y) in enumerate(base):
+        spl.points[i].co = (x * scale, y * scale, 0.0, 1.0)
+    spl.use_cyclic_u = True
+    cu.extrude = extrude * scale
+    cu.bevel_depth = bevel * scale
+    cu.fill_mode = 'BOTH'
+    ob = bpy.data.objects.new('Drop', cu)
+    bpy.context.scene.collection.objects.link(ob)
+    ob = _finish(ob, pid)
+    ob.rotation_euler = (math.radians(90), 0, 0)
+    ob.location = loc
+    return ob
+
+
 def _stick(pose):
     """火柴人（墨炭身体 + 米白大头）。pose: dict(armL, armR, legL, legR) 为绕 Y 角度
     （0=垂下，正=向 +X 抬）。返回手/脚世界坐标供道具对接。"""
@@ -271,16 +326,16 @@ def _stick(pose):
 @motif("pick", "十字镐")
 def _m_pick():
     cyl(0.07, 1.15, (0, 0, 0), rot=(0, 0, math.radians(20)), pid=3)
-    box((0.30, 0.14, 0.16), (0.20, 0, 0.52), rot=(0, 0, math.radians(20)), pid=2)
-    box((0.34, 0.13, 0.14), (-0.42, 0, 0.28), rot=(0, math.radians(24), math.radians(20)), pid=2)
-    box((0.30, 0.13, 0.12), (0.44, 0, 0.36), rot=(0, math.radians(-24), math.radians(20)), pid=2)
+    # 镐头=单根弯管贯穿柄顶（旧三块 box 左翼与中块不重叠=分离观感）
+    tube([(-0.60, 0, 0.26), (-0.32, 0, 0.45), (0.02, 0, 0.53),
+          (0.36, 0, 0.45), (0.62, 0, 0.22)], 0.075, pid=2, chaikin=2)
 
 
 @motif("axe", "斧头")
 def _m_axe():
-    cyl(0.07, 1.25, (0, 0, 0), pid=3)
-    box((0.20, 0.34, 0.42), (0.24, 0, 0.42), bev=0.07, pid=2)
-    box((0.16, 0.20, 0.30), (0.44, 0, 0.42), rot=(0, math.radians(18), 0), pid=2)
+    cyl(0.065, 1.20, (0, 0, 0.20), pid=3)
+    # 刃=立薄圆盘（rot X90 同齿轮语言）：圆盘轮廓即弧形刃口，盘内缘嵌柄
+    cyl(0.32, 0.085, (0.33, 0, 0.55), rot=(math.radians(90), 0, 0), pid=2)
 
 
 @motif("saw", "木锯")
@@ -291,9 +346,10 @@ def _m_saw():
 
 @motif("shovel", "铁锹")
 def _m_shovel():
-    cyl(0.07, 1.00, (0, 0, 0.38), pid=3)
-    box((0.14, 0.14, 0.16), (0, 0, 0.98), bev=0.04, pid=3)
-    sph(0.32, (0, 0, -0.36), scale=(1.0, 0.38, 1.15), pid=2)
+    cyl(0.06, 1.10, (0, 0, 0.40), pid=3)
+    tor(0.13, 0.045, (0, 0, 1.00), rot=(math.radians(90), 0, 0), pid=3)   # D 形握把
+    box((0.30, 0.10, 0.13), (0, 0, -0.02), pid=2)                          # 肩部
+    box((0.46, 0.09, 0.52), (0, 0, -0.33), bev=0.05, pid=2)                # 方铲头（椭球=勺子观感）
 
 
 @motif("handcart", "手推车")
@@ -379,19 +435,24 @@ def _m_bread():
 
 @motif("gold_coin", "金币")
 def _m_gold_coin():
-    cyl(0.48, 0.13, (0, 0, 0.10), rot=(math.radians(90), 0, 0), pid=8)
-    cyl(0.33, 0.16, (0, 0, 0.10), rot=(math.radians(90), 0, 0), pid=8)
-    box((0.17, 0.17, 0.18), (0, 0, 0.10), pid=7)
+    # rot X90 后盘厚沿 Y：外盘 y0~0.12 / 环凸 0.05 / 凸台凸 0.08 —— 环+台侧壁
+    # 保证左下侧也有法线差分界（旧版凸台只凸 0.015，背光侧融入盘面）
+    cyl(0.48, 0.12, (0, 0, 0.06), rot=(math.radians(90), 0, 0), pid=8)
+    tor(0.35, 0.05, (0, 0, 0.12), rot=(math.radians(90), 0, 0), pid=8)
+    cyl(0.28, 0.20, (0, 0, 0.10), rot=(math.radians(90), 0, 0), pid=8)
+    box((0.15, 0.21, 0.15), (0, 0, 0.10), pid=7)
 
 
 @motif("ore", "矿石")
 def _m_ore():
-    sph(0.48, (0, 0, 0.32), scale=(1.2, 0.95, 0.85), rot=(0, 0, math.radians(15)), pid=2)
-    # 晶体=4 棱平锥（帐篷同款刻意棱面许可）：椭球无尖角，64px 读不出晶尖
-    pyramid(0.17, 0.62, (0.16, 0.05, 0.78), pid=9)
-    pyramid(0.14, 0.46, (-0.26, 0, 0.66), pid=9)
-    pyramid(0.12, 0.38, (-0.02, 0.06, 0.72), pid=9)
-    sph(0.18, (0.46, 0, 0.22), pid=2)
+    # 创始人 2026-09-08 定向：不做石头嵌晶，整体做成水晶形（好建模可读）
+    sph(0.30, (0, 0, 0.16), scale=(1.35, 0.95, 0.55), pid=1)            # 低矮石基座
+    crystal(0.17, 0.42, 0.34, (-0.04, 0.02, 0.55),
+            rot=(math.radians(-8), 0, math.radians(6)), pid=9)
+    crystal(0.13, 0.30, 0.26, (0.30, -0.06, 0.44),
+            rot=(math.radians(16), math.radians(18), math.radians(-14)), pid=9)
+    crystal(0.11, 0.24, 0.22, (-0.34, -0.08, 0.40),
+            rot=(math.radians(10), math.radians(-20), math.radians(18)), pid=5)
 
 
 @motif("fish", "小鱼干")
@@ -403,11 +464,17 @@ def _m_fish():
 
 
 # ── 组织权力 ────────────────────────────────────────────────────────────────
-@motif("seal", "印章", az=14, el=8, key_e=7.0)
+@motif("seal", "印章", az=18, el=12, key_e=6.5)
 def _m_seal():
-    box((0.55, 0.55, 0.42), (0, 0, 0.36), bev=0.08, pid=8)
-    sph(0.22, (0, 0, 0.72), scale=(1, 1, 0.8), pid=8)
-    box((0.50, 0.50, 0.07), (0, 0, 0.10), pid=4)
+    # 创始人 2026-09-08 定向：现代公章（红圆盘+柄），不要中式玉玺
+    from mathutils import Euler, Vector
+    tilt = math.radians(26)
+    ax = Euler((tilt, 0, 0), 'XYZ').to_matrix() @ Vector((0, 0, 1))   # 章面法线
+    cyl(0.46, 0.14, (0, 0, 0.10), rot=(tilt, 0, 0), pid=4)           # 红章盘（斜置露章面）
+    off = ax * 0.30
+    cyl(0.115, 0.42, (off.x, off.y, 0.10 + off.z), rot=(tilt, 0, 0), pid=3)  # 木柄沿法线
+    off2 = ax * 0.56
+    sph(0.16, (off2.x, off2.y, 0.10 + off2.z), scale=(1, 1, 0.8), pid=3)     # 顶帽
 
 
 @motif("flag", "旗帜", az=24, el=14, key_e=6.0)
@@ -493,21 +560,22 @@ def _m_gear():
     cyl(0.16, 0.26, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=8)
 
 
-@motif("book_open", "摊开的书", az=20, el=10, key_e=6.0)
-def _m_book_open():
-    # 浅 V 页面朝相机（绕 Y 斜置）；白页在前（-y 朝相机）、红封面垫后
-    box((0.66, 0.06, 0.50), (-0.30, 0.03, 0.48), rot=(0, math.radians(-17), 0), pid=4)
-    box((0.66, 0.06, 0.50), (0.30, 0.03, 0.48), rot=(0, math.radians(17), 0), pid=4)
-    box((0.60, 0.05, 0.44), (-0.29, -0.04, 0.52), rot=(0, math.radians(-17), 0), pid=6)
-    box((0.60, 0.05, 0.44), (0.29, -0.04, 0.52), rot=(0, math.radians(17), 0), pid=6)
-    box((0.92, 0.30, 0.09), (0, 0, 0.14), bev=0.03, pid=4)
+@motif("books", "两本书", az=20, el=12, key_e=6.0)
+def _m_books():
+    # 创始人 2026-09-08 定向：本来就要两本书（书堆），不做摊开单本
+    # 每本=封面壳（四侧+底封面色）+ 顶面露白页（页略小内缩）
+    box((0.95, 0.62, 0.20), (0, 0, 0.11), bev=0.03, pid=4)
+    box((0.88, 0.55, 0.10), (0.02, 0, 0.24), pid=6)
+    box((0.80, 0.52, 0.17), (0.03, 0.02, 0.38), rot=(0, 0, math.radians(14)), bev=0.03, pid=9)
+    box((0.74, 0.46, 0.09), (0.05, 0.00, 0.49), rot=(0, 0, math.radians(14)), pid=6)
 
 
 @motif("magnifier", "放大镜")
 def _m_magnifier():
     tor(0.42, 0.085, (0, 0, 0.75), rot=(math.radians(90), 0, 0), pid=2)
     cyl(0.34, 0.05, (0, 0, 0.75), rot=(math.radians(90), 0, 0), pid=6)
-    cyl(0.065, 0.62, (0.38, 0, 0.22), rot=(0, math.radians(38), 0), pid=3, bev=0.02)
+    # 柄=弯管，起点埋进环体下缘（旧直杆上端悬空=镜柄分离观感）
+    tube([(0.02, 0, 0.28), (0.30, 0, 0.10), (0.55, 0, -0.16)], 0.07, pid=3, chaikin=2)
 
 
 @motif("mortar", "研钵")
@@ -519,14 +587,18 @@ def _m_mortar():
 
 @motif("abacus", "算盘", az=24, el=16)
 def _m_abacus():
-    box((1.05, 0.10, 0.14), (0, 0, 1.02), pid=3)
-    box((1.05, 0.10, 0.14), (0, 0, 0.12), pid=3)
-    box((0.10, 0.10, 1.02), (-0.48, 0, 0.57), pid=3)
-    box((0.10, 0.10, 1.02), (0.48, 0, 0.57), pid=3)
-    for i, x in enumerate((-0.24, 0, 0.24)):
-        cyl(0.03, 0.86, (x, 0, 0.57), rot=(math.radians(90), 0, 0), pid=2)
-        for j in range(4):
-            sph(0.085, (x, -0.24 + j * 0.16, 0.57), segs=(32, 20), pid=(8, 4, 6)[i])
+    box((1.05, 0.10, 0.14), (0, 0, 1.02), pid=3)      # 上梁
+    box((1.05, 0.10, 0.14), (0, 0, 0.12), pid=3)      # 下梁
+    box((0.10, 0.10, 1.02), (-0.48, 0, 0.57), pid=3)  # 左柱
+    box((0.10, 0.10, 1.02), (0.48, 0, 0.57), pid=3)   # 右柱
+    box((1.05, 0.09, 0.11), (0, 0, 0.58), pid=8)      # 中梁（算盘身份特征）
+    # 档沿 X 横穿左右柱、珠串在档上（旧版档沿 Y 穿框平面 = 珠面与框垂直）
+    for z, pids in ((0.84, (8, 4, 6)), (0.33, (4, 8, 6, 4))):
+        cyl(0.028, 0.88, (0, 0, z), rot=(0, math.radians(90), 0), pid=2)
+        n = len(pids)
+        for j in range(n):
+            x = -0.33 + j * (0.66 / max(1, n - 1))
+            sph(0.085, (x, 0, z), segs=(32, 20), pid=pids[j])
 
 
 @motif("telescope", "望远镜")
@@ -568,11 +640,12 @@ def _m_bow():
     for i in range(13):
         a = math.radians(-62 + i * (124 / 12))
         pts.append((math.cos(a) * 0.72, 0, 0.55 + math.sin(a) * 0.72))
-    tube(pts, 0.095, pid=3, chaikin=2)
-    cyl(0.022, 1.26, (-0.20, 0, 0.55), pid=6)
-    cyl(0.05, 1.02, (-0.12, 0, 0.55), rot=(0, math.radians(90), 0), pid=2)
-    sph(0.08, (-0.66, 0, 0.55), scale=(0.6, 0.6, 1.6), pid=2)
-    box((0.13, 0.20, 0.06), (0.32, 0, 0.55), rot=(0, 0, math.radians(20)), pid=4)
+    tube(pts, 0.095, pid=3, chaikin=2)              # 弓臂（端点 x≈0.338, z=0.55±0.636）
+    cyl(0.02, 1.28, (0.335, 0, 0.55), pid=6)        # 弦：直连弓臂两端（旧版悬在 x=-0.2 脱离）
+    cyl(0.045, 0.95, (-0.13, 0, 0.55), rot=(0, math.radians(90), 0), pid=2)   # 箭杆，尾端扣弦
+    sph(0.075, (-0.64, 0, 0.55), scale=(0.6, 0.6, 1.6),
+        rot=(0, math.radians(90), 0), pid=2)        # 箭头长轴对齐箭杆（X 向）
+    box((0.13, 0.20, 0.06), (-0.56, 0, 0.55), rot=(0, 0, math.radians(20)), pid=4)  # 尾羽
 
 
 @motif("drum", "战鼓")
@@ -605,8 +678,8 @@ def _m_cannon():
     cyl(0.19, 0.95, (-0.05, 0, 0.62), rot=(0, math.radians(90), math.radians(-6)), pid=2)
     tor(0.21, 0.05, (-0.55, 0, 0.60), rot=(0, math.radians(90), 0), pid=8)
     for x in (-0.28, 0.28):
-        tor(0.22, 0.07, (x, -0.26, 0.22), rot=(0, math.radians(90), 0), pid=3)
-        tor(0.22, 0.07, (x, 0.26, 0.22), rot=(0, math.radians(90), 0), pid=3)
+        tor(0.22, 0.07, (x, -0.26, 0.22), rot=(math.radians(90), 0, 0), pid=3)
+        tor(0.22, 0.07, (x, 0.26, 0.22), rot=(math.radians(90), 0, 0), pid=3)
     box((0.55, 0.42, 0.14), (0, 0, 0.44), pid=3)
     sph(0.15, (0.52, 0, 0.66), pid=7)
 
@@ -619,13 +692,30 @@ def _m_maproll():
     cyl(0.08, 0.04, (0.16, -0.05, 0.52), rot=(math.radians(90), 0, 0), pid=4)
 
 
-@motif("compass_nav", "罗盘", az=14, el=8, key_e=7.0)
+@motif("compass_nav", "罗盘", az=14, el=10, key_e=7.0)
 def _m_compass_nav():
-    cyl(0.50, 0.15, (0, 0, 0.12), rot=(math.radians(90), 0, 0), pid=8)
-    tor(0.50, 0.05, (0, 0, 0.12), rot=(math.radians(90), 0, 0), pid=2)
-    sph(0.30, (0, -0.02, 0.26), scale=(0.28, 0.16, 1.05), pid=4)
-    sph(0.30, (0, 0.02, 0.26), scale=(0.28, 0.16, 1.05), rot=(0, 0, math.radians(180)), pid=6)
-    sph(0.08, (0, 0, 0.28), pid=2)
+    import bpy
+    tor(0.50, 0.055, (0, 0, 0.10), rot=(math.radians(90), 0, 0), pid=8)   # 金环
+    cyl(0.46, 0.11, (0, 0, 0.10), rot=(math.radians(90), 0, 0), pid=6)    # 米白表盘
+    # 双色菱形指针（红北白南，4 棱刻面压扁）。⚠️ 相机在 -y 侧（v9 教训：
+    # 部件前后关系按相机定），指针/刻点必须放盘面之前（-y），放 +y 会被盘面挡住
+    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.17, depth=0.32,
+                                    location=(0, -0.04, 0.26), rotation=(0, 0, math.radians(45)))
+    north = bpy.context.object          # 尖朝 +Z（北），尖 z=0.42 让开 N 刻点
+    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.17, depth=0.42,
+                                    location=(0, -0.04, -0.11), rotation=(math.radians(180), 0, math.radians(45)))
+    south = bpy.context.object          # 尖朝 -Z（南），尖 z=-0.32 让开 S 刻点
+    for ob in (north, south):
+        ob.scale = (1, 0.4, 1)
+        for p in ob.data.polygons:
+            p.use_smooth = False
+        _base_mat(ob)
+    north["pid"] = 4
+    south["pid"] = 6
+    # 四方位刻点（菱形小块，N/E/S/W），同样在盘前
+    for x, z in ((0, 0.36), (0.36, 0), (0, -0.36), (-0.36, 0)):
+        box((0.09, 0.08, 0.09), (x, -0.02, z), rot=(0, 0, math.radians(45)), pid=2)
+    sph(0.055, (0, -0.06, 0.10), pid=2)  # 中心轴帽
 
 
 @motif("horseshoe", "马蹄铁")
@@ -646,10 +736,10 @@ def _m_tent():
 
 @motif("campfire", "篝火")
 def _m_campfire():
-    for i, a in enumerate((0, 60, 120)):
-        cyl(0.075, 0.85, (0, 0, 0.10), rot=(math.radians(90), 0, math.radians(a)), pid=3)
-    sph(0.26, (0, 0, 0.48), scale=(0.85, 0.85, 1.35), pid=4)
-    sph(0.16, (0, 0, 0.42), scale=(0.85, 0.85, 1.30), pid=8)
+    for a in (0, 60, 120):
+        cyl(0.075, 0.85, (0, 0, 0.08), rot=(math.radians(90), 0, math.radians(a)), pid=3)
+    drop_mesh(1.0, (0, 0, 0.06), pid=4, extrude=0.24, bevel=0.07)   # 外焰红（水滴轮廓）
+    drop_mesh(0.58, (0, 0, 0.26), pid=8, extrude=0.20, bevel=0.055)  # 内焰金
 
 
 @motif("watchtower", "瞭望塔")
@@ -663,7 +753,7 @@ def _m_watchtower():
 # ── 可爱生活 ────────────────────────────────────────────────────────────────
 @motif("heart_balloon", "心形气球")
 def _m_heart_balloon():
-    heart_mesh(scale=0.72, loc=(0, 0, 0.55), pid=4, extrude=0.16, bevel=0.055)
+    heart_mesh(scale=0.72, loc=(0, 0, 0.55), pid=4, extrude=0.24, bevel=0.075)
     box((0.11, 0.11, 0.10), (0, 0, -0.03), rot=(0, math.radians(45), 0), pid=4)
     tube([(0, 0, -0.06), (0.06, 0, -0.34), (-0.05, 0, -0.60), (0.04, 0, -0.82)], 0.024, pid=6, chaikin=2)
 

@@ -57,6 +57,11 @@ const PLAYER_GLOW_SCREEN_CAP := 20.0 # 极端放大时屏幕像素上限
 var _glow_outlines: Array[PackedVector2Array] = []
 ## 流动动画相位（秒）
 var _glow_time := 0.0
+## L2 边界折线缓存（set_data 一次转换；此前每帧重建 13 地区/153 多边形/21 万顶点）
+var _l2_border_polylines: Array[PackedVector2Array] = []
+## hover 老 L1 折线缓存（hover 换地块时重建一次）
+var _hover_polylines: Array[PackedVector2Array] = []
+var _hover_cache_label: int = -1
 
 var _l1_mesh: ArrayMesh = null
 var _l1_holes_mesh: ArrayMesh = null
@@ -86,6 +91,7 @@ func set_data(data: L3WorldData) -> void:
 	_data = data
 	_build_static_meshes()
 	_build_glow_outlines()
+	_build_l2_border_cache()
 	_ensure_l1_index()
 	_ensure_terrain()
 	queue_redraw()
@@ -310,11 +316,14 @@ func _build_layer_mesh(tiles: Array) -> Array:
 
 func _process(delta: float) -> void:
 	_poll_async_loads()
+	# 可见性口径用 is_visible_in_tree：L3 关闭只藏父级 Content，自身 visible 恒真，
+	# 用 visible 判会让 hover 像素查询在关图后每帧空跑
+	var shown := is_visible_in_tree()
 	# 当前位置流动光动画：相位推进 + 每帧重绘（mesh 均为缓存一次性 draw 命令，成本低）
-	if visible and not _glow_outlines.is_empty():
+	if shown and not _glow_outlines.is_empty():
 		_glow_time += delta
 		queue_redraw()
-	if not visible or _data == null:
+	if not shown or _data == null:
 		return
 	var viewport := get_viewport()
 	if viewport == null:
@@ -472,7 +481,8 @@ func _draw() -> void:
 		draw_texture_rect(_data.political_texture,
 			Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)
 	elif map_mode == MapModeManager.Mode.POLITICAL:
-		_ensure_political()
+		# 政治贴图加载由 set_map_mode 触发（draw pass 内不起线程——文件缺失时
+		# 此处每帧重试会变成线程风暴）
 		if display_mode == DisplayMode.MODE_CITY:
 			_ensure_city_preview()
 			if _data.city_preview_texture != null:
@@ -519,17 +529,29 @@ func _draw() -> void:
 		_draw_l2_labels()
 
 
-func _draw_l2_borders() -> void:
-	var bw := BORDER_WIDTH()
+## 转换 L2 边界多边形为闭合折线缓存（顶点 [y,x] 数组 / Vector2 双口径，
+## 与 _build_glow_outlines 同法）。几何只随 set_data 变化，转换一次终局复用。
+func _build_l2_border_cache() -> void:
+	_l2_border_polylines = []
+	if _data == null:
+		return
 	for r in _data.regions:
 		for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
 			if poly.size() < 3:
 				continue
 			var bpts := PackedVector2Array()
-			for pp in poly:
-				bpts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
-			bpts.append(bpts[0])
-			draw_polyline(bpts, L2_BORDER_COLOR, bw, true)
+			bpts.resize(poly.size() + 1)
+			for i in poly.size():
+				var pp = poly[i]
+				bpts[i] = pp if pp is Vector2 else Vector2(pp[1], pp[0])
+			bpts[poly.size()] = bpts[0]
+			_l2_border_polylines.append(bpts)
+
+
+func _draw_l2_borders() -> void:
+	var bw := BORDER_WIDTH()
+	for bpts in _l2_border_polylines:
+		draw_polyline(bpts, L2_BORDER_COLOR, bw, true)
 
 
 func BORDER_WIDTH() -> float:
@@ -544,19 +566,26 @@ func BORDER_WIDTH() -> float:
 func _draw_hover_l1() -> void:
 	if hovered_l1.is_empty():
 		return
-	var hpolys: Array = hovered_l1.get("polygons", [])
-	for hp in hpolys:
-		if hp.size() < 3:
-			continue
-		var hpts := PackedVector2Array()
-		for pp in hp:
-			hpts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
-		hpts.append(hpts[0])
-		var hw := HOVER_MAP_WIDTH
-		if _camera != null and _camera.has_method("get_zoom"):
-			var z: float = _camera.get_zoom()
-			if z > 0.0001:
-				hw = minf(HOVER_MAP_WIDTH, HOVER_SCREEN_CAP / z)
+	var label := int(hovered_l1.get("label", -1))
+	if label != _hover_cache_label:
+		_hover_cache_label = label
+		_hover_polylines = []
+		for hp in hovered_l1.get("polygons", []):
+			if hp.size() < 3:
+				continue
+			var hpts := PackedVector2Array()
+			hpts.resize(hp.size() + 1)
+			for i in hp.size():
+				var pp = hp[i]
+				hpts[i] = pp if pp is Vector2 else Vector2(pp[1], pp[0])
+			hpts[hp.size()] = hpts[0]
+			_hover_polylines.append(hpts)
+	var hw := HOVER_MAP_WIDTH
+	if _camera != null and _camera.has_method("get_zoom"):
+		var z: float = _camera.get_zoom()
+		if z > 0.0001:
+			hw = minf(HOVER_MAP_WIDTH, HOVER_SCREEN_CAP / z)
+	for hpts in _hover_polylines:
 		draw_polyline(hpts, HOVER_COLOR, hw, true)
 
 

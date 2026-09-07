@@ -71,6 +71,10 @@ var _tiles_offset := Vector2.ZERO        # 当前地区 bbox 原点在 context �
 var _context_size := Vector2.ONE
 var _tile_border_segs: Array = []        # 地块描边段（烘焙，已合并共线段并滤除湖泊/边缘段）
 var _neighbor_border_segs: Array = []    # 相邻地区分界线段（烘焙，同上）
+## 描边段展平缓存（[p0,p1,p0,p1,…] 成对段表）：set_data 转换一次，
+## _draw 走 2 次 draw_multiline（此前逐段 draw_line 每次重绘 3 万+条命令）
+var _tile_border_points := PackedVector2Array()
+var _neighbor_border_points := PackedVector2Array()
 
 
 func set_data(data: L2WorldData) -> void:
@@ -120,7 +124,23 @@ func _build_static_mesh() -> void:
 	# 描边段（烘焙时已合并共线段并滤除边缘段）
 	_tile_border_segs = _data.tile_border_segs
 	_neighbor_border_segs = _data.neighbor_border_segs
+	_tile_border_points = _flatten_segments(_tile_border_segs)
+	_neighbor_border_points = _flatten_segments(_neighbor_border_segs)
 	_bake_blob_meshes()
+
+
+## 段表 [p0,p1] × n → 成对展平段表（draw_multiline 消费格式）
+func _flatten_segments(segs: Array) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	if segs.is_empty():
+		return pts
+	pts.resize(segs.size() * 2)
+	var i := 0
+	for seg in segs:
+		pts[i] = seg[0]
+		pts[i + 1] = seg[1]
+		i += 2
+	return pts
 
 
 ## 烘焙城市 blob 层：全部城市轮廓（L2 缩放）三角化合并一张填充 mesh + 一张 line list
@@ -193,7 +213,9 @@ func _make_mesh_from_baked(baked: Dictionary) -> ArrayMesh:
 
 
 func _process(_delta: float) -> void:
-	if not visible or _data == null:
+	# 可见性口径用 is_visible_in_tree：L2 关闭只藏父级，自身 visible 恒真，
+	# 用 visible 判会让 hover 像素查询在关图后每帧空跑
+	if not is_visible_in_tree() or _data == null:
 		return
 	var viewport := get_viewport()
 	if viewport == null:
@@ -237,7 +259,8 @@ func _draw() -> void:
 		if display_mode == DisplayMode.MODE_CITY:
 			# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）；
 			# 政治模式（P7）优先政权色贴图（城市地块按国着色，观感同源仅换色表）
-			var political := map_mode == MapModeManager.Mode.POLITICAL 					and _data.political_texture != null
+			var political := map_mode == MapModeManager.Mode.POLITICAL \
+					and _data.political_texture != null
 			if political:
 				draw_texture_rect(_data.political_texture,
 					Rect2(Vector2.ZERO, _context_size), false)
@@ -251,19 +274,19 @@ func _draw() -> void:
 			# 5. 当前地块洞（海洋色）
 			if _holes_mesh != null:
 				draw_mesh(_holes_mesh, null)
-	# 5.5 地块常驻描边（地图绝对粗细，放大超屏幕上限时 clamp）
+	# 5.5 地块常驻描边（地图绝对粗细，放大超屏幕上限时 clamp）——
+	# 单次 draw_multiline 画全部段（此前逐段 draw_line 1.8 万+条命令）
 	var twidth := TILE_BORDER_WIDTH
 	if _camera != null and _camera.has_method("get_zoom"):
 		var zz: float = _camera.get_zoom()
 		if zz > 0.0001:
 			twidth = minf(TILE_BORDER_WIDTH, 7.8 / zz)
-	for seg in _tile_border_segs:
-		draw_line(seg[0], seg[1], TILE_BORDER_COLOR, twidth, true)
+	if not _tile_border_points.is_empty():
+		draw_multiline(_tile_border_points, TILE_BORDER_COLOR, twidth, true)
 	# 6. 相邻地区分界线（深色，抗锯齿矢量线；已烘焙合并共线段）
-	if not _neighbor_border_segs.is_empty():
+	if not _neighbor_border_points.is_empty():
 		var bw := BORDER_WIDTH()
-		for seg in _neighbor_border_segs:
-			draw_line(seg[0], seg[1], BORDER_COLOR, bw, true)
+		draw_multiline(_neighbor_border_points, BORDER_COLOR, bw, true)
 	# 6.5 湖泊绘制到最上层：覆盖灰色相邻地区/非地块区（湖是水域，不应被灰影盖住）。
 	# 地块内湖泊已作洞（5 步洞网格同色），此处再绘一次湖泊多边形，确保非地块区的湖也显现。
 	# 地形模式下纹理已含湖色，跳过（避免纯色湖 mesh 盖掉纹理湖渐变）。

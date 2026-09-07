@@ -120,7 +120,9 @@ func is_battle_active() -> bool:
 
 ## settlement_updated 订阅：更新内存规模 + 当前 L1 视图 blob 单城重算
 func _on_settlement_updated(settlement_id: String, population_score: float) -> void:
-	for data in [_data, _birth_data]:
+	# Tab 常态下 _data 就是 _birth_data：去重，防同一份数据处理两遍（blob 失效两连发）
+	var datas: Array = [_data] if _data == _birth_data else [_data, _birth_data]
+	for data in datas:
 		if data == null:
 			continue
 		var sref: SettlementRef = data.get_settlement(settlement_id)
@@ -327,10 +329,11 @@ func get_walk_status(settlement_id: String) -> Dictionary:
 	if settlement_id == _player_settlement_id:
 		result["reason"] = "已在此处"
 		return result
-	if _blocked_set().has(settlement_id):
+	var blocked: Dictionary = _blocked_set()
+	if blocked.has(settlement_id):
 		result["reason"] = "目标在不可通过区"
 		return result
-	var route := _travel_planner.find_path(_player_settlement_id, settlement_id, _blocked_set())
+	var route := _travel_planner.find_path(_player_settlement_id, settlement_id, blocked)
 	if route["path"].is_empty():
 		result["reason"] = "路网不连通"
 		return result
@@ -356,8 +359,10 @@ func walk_to(settlement_id: String) -> bool:
 	for rd in roads:
 		var from_id := str(rd.get("from", ""))
 		var to_id := str(rd.get("to", ""))
-		var from_map := get_settlement_ref(from_id).map_id if get_settlement_ref(from_id) != null else ""
-		var to_map := get_settlement_ref(to_id).map_id if get_settlement_ref(to_id) != null else ""
+		var from_ref: SettlementRef = get_settlement_ref(from_id)
+		var to_ref: SettlementRef = get_settlement_ref(to_id)
+		var from_map := from_ref.map_id if from_ref != null else ""
+		var to_map := to_ref.map_id if to_ref != null else ""
 		if from_map.is_empty() or to_map.is_empty():
 			push_warning("[WorldMapApi] 道路端点聚落无 map_id，步行中断: %s→%s" % [from_id, to_id])
 			WorldState.reset_walk()

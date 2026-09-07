@@ -59,7 +59,10 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not visible:
+	if not is_visible_in_tree():
+		return
+	# 无动画元素（无流动轮廓、无出生标记）时内容纯静态，跳过每帧重绘
+	if _glow_outline.size() < 3 and _spawn_pos.x < 0.0:
 		return
 	_anim_time += delta
 	queue_redraw()

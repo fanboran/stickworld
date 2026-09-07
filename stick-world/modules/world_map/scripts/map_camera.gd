@@ -75,6 +75,12 @@ func _ready() -> void:
 					break
 
 
+## 上次应用到目标的变换（Node2D position/scale setter 无等值早退，重复写会脏化
+## transform 传播；3 个视图相机首次打开后常驻，无变化帧直接跳过）
+var _last_applied_offset := Vector2.INF
+var _last_applied_zoom := -1.0
+
+
 func _process(_delta: float) -> void:
 	if target == null:
 		return
@@ -130,8 +136,15 @@ func _apply_transform() -> void:
 	if target == null:
 		return
 	_apply_clamp()
+	# 偏移/缩放无变化且目标未被外部改动时跳过写（比较远快于 setter + 全树传播）
+	var want_scale := Vector2(_zoom_level, _zoom_level)
+	if _offset == _last_applied_offset and _zoom_level == _last_applied_zoom \
+			and target.position == _offset and target.scale == want_scale:
+		return
+	_last_applied_offset = _offset
+	_last_applied_zoom = _zoom_level
 	target.position = _offset
-	target.scale = Vector2(_zoom_level, _zoom_level)
+	target.scale = want_scale
 
 
 ## 聚焦到指定 ID 的中心（SM-1 已实现，2026-08-22）

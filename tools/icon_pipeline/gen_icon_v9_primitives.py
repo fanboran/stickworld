@@ -146,7 +146,10 @@ def build_primitive(scene, kind):
         bpy.ops.mesh.primitive_cone_add(radius1=0.75, radius2=0.0, depth=1.6, vertices=64,
                                         location=(0, 0, 0))
         ob = bpy.context.object
-        smooth(ob)
+        # flat 刻面：subsurf 会把锥尖圆化成"水滴"（创始人 2026-09-08 反馈）；
+        # 64 棱 flat 的微 banding 由 compose 的 cel 三档量化吸收
+        for p in ob.data.polygons:
+            p.use_smooth = False
     elif kind == "torus":
         bpy.ops.mesh.primitive_torus_add(major_radius=0.72, minor_radius=0.28,
                                          major_segments=72, minor_segments=36,

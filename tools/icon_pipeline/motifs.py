@@ -661,7 +661,7 @@ def _m_watchtower():
 
 
 # ── 可爱生活 ────────────────────────────────────────────────────────────────
-@motif("heart_balloon", "心形气球", az=12, el=6, key_e=7.0, fake=(0.10, 0.06, 0.45))
+@motif("heart_balloon", "心形气球")
 def _m_heart_balloon():
     heart_mesh(scale=0.72, loc=(0, 0, 0.55), pid=4, extrude=0.16, bevel=0.055)
     box((0.11, 0.11, 0.10), (0, 0, -0.03), rot=(0, math.radians(45), 0), pid=4)

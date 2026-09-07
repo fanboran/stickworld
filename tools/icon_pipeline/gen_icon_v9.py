@@ -262,9 +262,9 @@ for t in (64, 128, 256):
                   {oname: [id_h[n] for n in names] for oname, names in hmap.items()})
     sys.stdout.flush()
 
-# ── 爱心（能量 7.0：平面脸受光少需提亮）──
+# ── 爱心（3/4 视角，与母题库统一；2026-09-08 创始人要求立体感+斜角度）──
 for t in (64, 128, 256):
-    scene = setup(14, 8, t * 2, ENERGY["icon_heart_v9"])
+    scene = setup(32, 22, t * 2, 5.0)
     emap = build_heart(scene)
     fit_ortho(scene)
 

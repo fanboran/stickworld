@@ -25,7 +25,7 @@ INK = np.array([18, 14, 9])
 # (tag, 中文名, 假光参数 or None)
 TAGS = [
     ("icon_hammer_v9", "锻造锤", (0.10, 0.02, 0.20)),
-    ("icon_heart_v9", "爱心", (0.12, 0.05, 0.45)),
+    ("icon_heart_v9", "爱心", None),
     ("test_cube_v9", "立方体", None),
     ("test_sphere_v9", "正球", None),
     ("test_cylinder_v9", "圆柱", None),
@@ -38,7 +38,7 @@ SIZES = (64, 128, 256)
 # （恰好=新橙 (1,.5,0)）在接缝处改判家族，破坏逐字节回归
 NIDS = {t[0]: 5 for t in TAGS[:7]}
 # 明度自适应拉伸豁免：创始人点名的已验收图标，一字节不许动
-NO_STRETCH = {"icon_heart_v9", "icon_hammer_v9", "mot_bone", "mot_keys",
+NO_STRETCH = {"icon_hammer_v9", "mot_bone", "mot_keys",
               "mot_ledger", "mot_signpost", "mot_sword"}
 
 
@@ -215,8 +215,7 @@ for tag, label, fake in TAGS:
     icons = {}
     for t in SIZES:
         icons[t] = cel(tag, fake, t, nids=NIDS.get(tag, 10))
-        name = _NAME.get(tag) or tag.replace("icon_", "").replace("_v9", "").replace("test_", "")
-        icons[t].save(os.path.join(BASE, "icons", f"{name}_{t}.png"))
+        icons[t].save(os.path.join(BASE, "icons", f"{label}_{t}.png"))   # 成品文件名=中文名
     results[tag] = (label, icons)
     print(f"[{tag}] done")
 

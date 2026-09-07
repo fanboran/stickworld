@@ -36,8 +36,10 @@ const _BuildingPersistenceScript: GDScript = preload("res://modules/construction
 
 ## 派工系统
 var _assigner: ScriptWorkCrewAssigner = null
-## 活跃项目列表 {project_id → ConstructionProject}
+## 活跃项目列表 {project_id → ConstructionProject}（_physics_process 只 tick 本表）
 var _projects: Dictionary = {}
+## 已完工项目 {project_id → ConstructionProject}（不再 tick，保留供 get_project_state 查询）
+var _finished_projects: Dictionary = {}
 ## 已完工建筑注册表 {building_id → Building}
 var _buildings: Dictionary = {}
 ## 建筑 → building_id 反查（用于 demolish）
@@ -228,7 +230,7 @@ func _physics_process(delta: float) -> void:
 	# 暂停门禁（对齐 resources/api.gd 的统一"暂停"语义）：暂停时工地进度不推进
 	if TimeManager != null and TimeManager.is_paused():
 		return
-	# 推进所有活跃项目
+	# 推进所有活跃项目（完工项目移入 _finished_projects，本循环不再随历史建造数增长）
 	for p in _projects.values():
 		if p is ScriptConstructionProject:
 			(p as ScriptConstructionProject).tick(delta)
@@ -304,9 +306,10 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 func _on_project_completed(project: ScriptConstructionProject, building: Node) -> void:
 	# 阶段 E：移除建造进度条
 	_indicators.untrack(project.project_id)
-	# 完工项目出表（此前只增不删：完工项目 RefCounted 永久堆积，
-	# _physics_process 30Hz 遍历量随历史建造数单调增长）
+	# 完工项目移出活跃表（此前只增不删，_physics_process 30Hz 遍历量随历史建造数
+	# 单调增长）；转入 _finished_projects 保留查询（get_project_state 测试契约）
 	_projects.erase(project.project_id)
+	_finished_projects[project.project_id] = project
 	if building == null:
 		return
 	var building_id := "%04d" % _next_building_id
@@ -430,11 +433,15 @@ func get_building_state(building_id: String) -> Dictionary:
 	}
 
 
-## 查询项目状态（P0 扩展接口，供测试/调试用）
+## 查询项目状态（P0 扩展接口，供测试/调试用）。活跃与已完工项目均可查。
 func get_project_state(project_id: String) -> Dictionary:
-	if not _projects.has(project_id):
+	var p: ScriptConstructionProject = null
+	if _projects.has(project_id):
+		p = _projects[project_id] as ScriptConstructionProject
+	elif _finished_projects.has(project_id):
+		p = _finished_projects[project_id] as ScriptConstructionProject
+	if p == null:
 		return {"ok": false, "error": "项目不存在: %s" % project_id}
-	var p: ScriptConstructionProject = _projects[project_id] as ScriptConstructionProject
 	return {
 		"ok": true,
 		"project_id": project_id,
@@ -447,9 +454,9 @@ func get_project_state(project_id: String) -> Dictionary:
 	}
 
 
-## 获取所有项目 ID（供测试用）
+## 获取所有项目 ID（供测试用，含已完工）
 func get_all_project_ids() -> Array:
-	return _projects.keys()
+	return _projects.keys() + _finished_projects.keys()
 
 
 # ─────────────────────────────── 拆除 ────────────────────────────────

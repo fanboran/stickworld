@@ -121,7 +121,9 @@ func _test_crit() -> void:
 		return
 	_runner.assert_equal(lb.get_theme_font_size("font_size"), 34, "暴击字号 34")
 	_runner.assert_equal(lb.get_theme_constant("outline_size"), 8, "暴击描边 34/4=8")
-	_runner.assert_true(absf(lb.rotation) > 0.001, "暴击起手应带歪斜，实际 %f" % lb.rotation)
+	# spawn 对所有飘字先置 rotation=0，暴击才赋连续随机歪斜（±0.09）：
+	# 断言"被写过"而非">0.001"——连续随机值有 ~1.1% 概率落在阈值内成随机 flake
+	_runner.assert_true(lb.rotation != 0.0, "暴击起手应带歪斜，实际 %f" % lb.rotation)
 	await get_tree().create_timer(0.35).timeout
 	_runner.assert_true(absf(lb.rotation) < 0.02, "歪斜应在 0.22s 内回正，实际 %f" % lb.rotation)
 	_runner.assert_true(lb.scale.x < 1.05, "弹性回落应接近 1，实际 %f" % lb.scale.x)

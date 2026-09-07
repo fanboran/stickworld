@@ -114,6 +114,7 @@ func _clear_all_buildings_and_projects() -> void:
 	_root._buildings.clear()
 	_root._building_to_id.clear()
 	_root._projects.clear()
+	_root._finished_projects.clear()
 	_root._on_buildings_changed()
 	# 阶段 E：清理进度条
 	_root._indicators.clear_all()

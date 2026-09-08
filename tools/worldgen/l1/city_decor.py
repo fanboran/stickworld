@@ -39,9 +39,9 @@ PALETTE = {
     "turf_base": (0.33, 0.44, 0.21),    # 草皮带基色（贴近 grassland.png 均色）
     "turf_alt": (0.29, 0.40, 0.19),     # 草皮带暗斑
     "road": (0.58, 0.46, 0.30),         # 土路（踩踏裸土）
-    "stone": (0.58, 0.55, 0.48),        # 石板亮面（暖灰，读感=铺装广场而非石墙）
-    "stone_alt": (0.49, 0.46, 0.40),    # 石板暗面
-    "seam": (0.36, 0.34, 0.31),         # 板缝
+    "stone": (0.56, 0.50, 0.40),        # 石板亮面（暖土灰，明度贴近土路读感=铺地）
+    "stone_alt": (0.51, 0.46, 0.38),    # 石板暗面（与亮面差收窄，压"石墙"感）
+    "seam": (0.43, 0.39, 0.32),         # 板缝（浅缝，明度差小=铺装而非砌块）
     "farmland_soil": (0.40, 0.32, 0.21),  # 田垄土
     "farmland_crop": (0.34, 0.51, 0.21),  # 垄上作物
     "lamp_pole": (0.16, 0.15, 0.18),    # 灯柱铁色
@@ -120,7 +120,8 @@ def plan_decor(layout: dict, profile: dict, config: dict) -> dict:
     for lo, hi, t in layout.get("landmark_zones", []):
         if t != "market":
             continue  # 石板带=市场广场语义；其余地标净空区保持地面留白
-        pr = (max(lo * cell_w, inner_l), ground_y, min(hi * cell_w, inner_r), GROUND_BOTTOM)
+        # 深度只取土路带下沿→地底（主街穿越广场顶部，铺地而非满条带立面的读感）
+        pr = (max(lo * cell_w, inner_l), road_bot, min(hi * cell_w, inner_r), GROUND_BOTTOM)
         plaza_rects.append(pr)
         bands.append({"name": "GroundPlaza%d" % len(plaza_rects), "style": 2, "rect": pr})
 

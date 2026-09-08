@@ -33,6 +33,8 @@ const _BUILDING_SCENE_PATHS := {
 	# 2026-08-22：兵营/仓库脱离共用草棚外壳，各自程序化差异化外观（PLACEHOLDER 几何挂件）
 	"barracks": "buildings/barracks.tscn",
 	"warehouse": "buildings/warehouse.tscn",
+	# 铁匠铺 Lv1：开放锻造棚（石炉/烟囱/铁砧/工作台挂件），参考图 buildings/reference/smithy_lv1.png
+	"smithy_lv1": "buildings/smithy_lv1.tscn",
 }
 
 

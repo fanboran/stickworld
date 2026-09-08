@@ -616,10 +616,15 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 进入即对准玩家（水平居中；1/4 跟随机制下不 snap 会在触发线偏移）
 		if camera_rig != null and camera_rig.has_method("snap_to_follow_target"):
 			camera_rig.snap_to_follow_target()
-		# 仅初始加载时 spawn 初始建筑、NPC 和演示建造
+		# 初始建筑每图都 spawn：InitialBuildingsList 是每图一份的 defs（L1 城邦/据点全靠它），
+		# 限首图会让其余城永远是空城。场景每次切图重新实例化、BuildingHost 从零开始，
+		# 天然无重复；meta 兜底同实例重入。
+		if not map.has_meta("initial_buildings_spawned"):
+			map.set_meta("initial_buildings_spawned", true)
+			_worldgen.spawn_initial_buildings(map)
+		# 仅初始加载时 spawn 村庄仓库、土路资源与 NPC（出生村专属）
 		if not _initial_map_loaded:
 			_initial_map_loaded = true
-			_worldgen.spawn_initial_buildings(map)
 			# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
 			_worldgen.spawn_initial_warehouse()
 			# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）

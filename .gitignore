@@ -61,6 +61,8 @@ tools/worldgen/output/**
 # F8 缩略窗全景 preview（候选底图素材 + 坐标映射 sidecar，见交接档 Flash 队列 F8）
 !tools/worldgen/output/l1_panorama_preview.png
 !tools/worldgen/output/l1_panorama_preview.json
+# R3 地块边缘平滑特写对比图（观感验收素材，见交接档 R 系列 R3）
+!tools/worldgen/output/smooth_closeup_*.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

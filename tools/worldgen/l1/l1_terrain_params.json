@@ -1,0 +1,7 @@
+{
+  "inherits": "../l3/terrain_params.json",
+  "l1": {
+    "biome_blend_sigma": 1.2,
+    "texture_name": "l1_terrain.png"
+  }
+}

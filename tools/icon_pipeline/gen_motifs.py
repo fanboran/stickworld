@@ -351,6 +351,7 @@ def render_two(scene, tag, t, classic=False, margin=1.06):
             o.hide_render = True
             continue
         if o.type == 'MESH':
+            o.hide_render = False   # 墨线 pass 曾隐藏原体——ID 前必须解封（曾致 ID 全黑、全库误涂墨炭）
             o.data.materials[0] = flat_mat(f"_id{o['pid']}", M.ID_COLORS[o['pid']])
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_id.png")
     bpy.ops.render.render(write_still=True)

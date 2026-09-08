@@ -233,6 +233,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        try:
+            self._do_get()
+        except (ConnectionError, BrokenPipeError, TimeoutError):
+            pass            # 浏览器中断连接不许杀进程（2026-09-08 曾整服务崩掉）
+
+    def _do_get(self):
         path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
         if path in ("/", "/index.html"):
             html = PAGE.replace("__ICONS__", json.dumps(ICONS, ensure_ascii=False)) \
@@ -256,6 +262,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"{}", "application/json")
 
     def do_POST(self):
+        try:
+            self._do_post()
+        except (ConnectionError, BrokenPipeError, TimeoutError):
+            pass
+
+    def _do_post(self):
         if self.path != "/api/save":
             self._send(404, b"{}", "application/json")
             return

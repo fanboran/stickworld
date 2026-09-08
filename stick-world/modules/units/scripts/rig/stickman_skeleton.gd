@@ -293,14 +293,20 @@ static func _build_limb(
 	return container
 
 
-## 根部开口的 U 形描边多边形（Polygon2D）：
-## 上边 (-H,-R)→(H,-R)、末端半圆弧（圆心 (H,0) 半径 R，-90°→+90°）、
-## 下边 (H,R)→(-H,R)，根部以直线段闭合（平口，无端帽弧）。
-## 局部坐标与 Line2D 版描边一致：-x 朝肢根、+x 朝肢端。
+## 根部开口的 U 形描边多边形（Polygon2D），带 open_root_half_len meta 供
+## apply_outline_zoom 识别重建。局部坐标与 Line2D 版描边一致：-x 朝肢根、+x 朝肢端。
 static func _make_open_root_stroke(lname: String, half_len: float, radius: float, color: Color) -> Polygon2D:
 	var p := Polygon2D.new()
 	p.name = lname
 	p.color = color
+	p.polygon = _open_root_pts(half_len, radius)
+	p.set_meta("open_root_half_len", half_len)
+	return p
+
+
+## U 形描边顶点：上边 (-H,-R)→(H,-R)、末端半圆弧（圆心 (H,0) 半径 R，-90°→+90°）、
+## 下边 (H,R)→(-H,R)，根部以直线段闭合（平口，无端帽弧）。
+static func _open_root_pts(half_len: float, radius: float) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	pts.append(Vector2(-half_len, -radius))
 	pts.append(Vector2(half_len, -radius))
@@ -310,8 +316,7 @@ static func _make_open_root_stroke(lname: String, half_len: float, radius: float
 		pts.append(Vector2(half_len, 0) + Vector2(cos(a), sin(a)) * radius)
 	pts.append(Vector2(half_len, radius))
 	pts.append(Vector2(-half_len, radius))
-	p.polygon = pts
-	return p
+	return pts
 
 
 static func _make_line(lname: String, pts: PackedVector2Array, width: float, color: Color) -> Line2D:
@@ -381,7 +386,8 @@ static func outline_world_width(canvas_scale: float) -> float:
 
 
 ## 描边宽度缩放补偿刷新（画布缩放变化时由 StickmanRig 批量调用，低频）：
-## 线段肢体 stroke 宽 = 填充宽 + 2×eff；头部圆 stroke 重建 40 边形（半径 = r + eff）。
+## 线段肢体 stroke 宽 = 填充宽 + 2×eff；头部圆 stroke 重建 40 边形（半径 = r + eff）；
+## 前臂 U 形描边（open_root_half_len meta 标记）按 radius = 填充宽/2 + eff 重建顶点。
 ## 只改描边层几何，不动填充层与颜色；缩放未变时无需调用。
 static func apply_outline_zoom(sprites: Dictionary, eff: float) -> void:
 	var all_data := SKELETON_DATA.merged(EXTRA_LIMBS, true)
@@ -395,6 +401,9 @@ static func apply_outline_zoom(sprites: Dictionary, eff: float) -> void:
 		var fill := limb.get_node_or_null("fill")
 		if stroke is Line2D and fill is Line2D:
 			(stroke as Line2D).width = (fill as Line2D).width + eff * 2.0
+		elif stroke is Polygon2D and fill is Line2D and stroke.has_meta("open_root_half_len"):
+			var r_u: float = (fill as Line2D).width / 2.0 + eff
+			(stroke as Polygon2D).polygon = _open_root_pts(stroke.get_meta("open_root_half_len"), r_u)
 		elif stroke is Polygon2D and fill is Polygon2D:
 			var r: float = _circle_radius(fill as Polygon2D)
 			if r > 0.0:

@@ -134,18 +134,25 @@ static func make_bench(node_name: String, w: float = 96.0) -> Node2D:
 	return root
 
 
-## 凳子（单人情侣凳：面 + 三腿可见二）
+## 凳子（凳面 + 双斜腿 + 横撑；独立复审修复：加大尺寸提亮木色，避免不可读）
 static func make_stool(node_name: String) -> Node2D:
 	var root := Node2D.new()
 	root.name = node_name
-	_sprite(root, "Top", Vector2(0, -22), TextureGenAPI.make_wood_plank(26, 8, WOOD_LIGHT))
+	_sprite(root, "Top", Vector2(0, -28), TextureGenAPI.make_wood_plank(36, 9, WOOD_LIGHT))
 	for i in 2:
 		var leg := Sprite2D.new()
 		leg.name = "Leg%d" % i
-		leg.texture = TextureGenAPI.make_wood_pillar(6, 18, WOOD_DARK)
-		leg.position = Vector2(-7.0 + float(i) * 14.0, -9)
+		leg.texture = TextureGenAPI.make_wood_pillar(8, 24, WOOD_MID)
+		leg.position = Vector2(-10.0 + float(i) * 20.0, -12)
 		leg.rotation = -0.08 + float(i) * 0.16
 		root.add_child(leg)
+	var brace := Polygon2D.new()
+	brace.name = "Brace"
+	brace.polygon = PackedVector2Array([
+		Vector2(-12, -2), Vector2(12, -2), Vector2(12, 2), Vector2(-12, 2)])
+	brace.color = WOOD_DARK
+	brace.position = Vector2(0, -12)
+	root.add_child(brace)
 	return root
 
 
@@ -236,27 +243,53 @@ static func make_weapon_rack(node_name: String, w: float = 120.0) -> Node2D:
 	return root
 
 
-## 储物矮箱（带盖木箱，盖沿+锁扣）
-static func make_chest(node_name: String, w: float = 56.0) -> Node2D:
+## 储物矮箱（独立复审修复：放大提亮 + 竖板缝 + 包角压条 + 锁扣，盖上布卷生活物）
+static func make_chest(node_name: String, w: float = 64.0) -> Node2D:
 	var root := Node2D.new()
 	root.name = node_name
-	_sprite(root, "Body", Vector2(0, -18), TextureGenAPI.make_wood_plank(int(w), 30, WOOD_MID))
+	# 箱体：亮木横板（提亮到 WOOD_LIGHT，暗棕在进屋态背景里不可读）
+	_sprite(root, "Body", Vector2(0, -20), TextureGenAPI.make_wood_plank(int(w), 36, WOOD_LIGHT))
+	# 竖板缝 ×2（暗色细条，交代拼板结构）
+	for i in 2:
+		var seam := Polygon2D.new()
+		seam.name = "Seam%d" % i
+		var x := -w * 0.5 + w * (0.34 + float(i) * 0.32)
+		seam.polygon = PackedVector2Array([
+			Vector2(x - 1.5, -38), Vector2(x + 1.5, -38), Vector2(x + 1.5, -2), Vector2(x - 1.5, -2)])
+		seam.color = WOOD_DARK
+		root.add_child(seam)
+	# 左右包角压条（深色竖条贴两缘）
+	for i in 2:
+		var cap := Polygon2D.new()
+		cap.name = "Cap%d" % i
+		var cx := -w * 0.5 + float(i) * w
+		cap.polygon = PackedVector2Array([
+			Vector2(cx - 4, -38), Vector2(cx + 4, -38), Vector2(cx + 4, -2), Vector2(cx - 4, -2)])
+		cap.color = WOOD_DARK
+		root.add_child(cap)
 	# 盖沿（略宽、深色）
 	var lid := Polygon2D.new()
 	lid.name = "Lid"
 	lid.polygon = PackedVector2Array([
 		Vector2(-w * 0.5 - 4, -4), Vector2(w * 0.5 + 4, -4), Vector2(w * 0.5 + 4, 4), Vector2(-w * 0.5 - 4, 4)])
 	lid.color = WOOD_DARK
-	lid.position = Vector2(0, -34)
+	lid.position = Vector2(0, -40)
 	root.add_child(lid)
-	# 锁扣（黄铜小块）
+	# 锁扣（暗铜小块，避免亮黄孤立点）
 	var lock := Polygon2D.new()
 	lock.name = "Lock"
 	lock.polygon = PackedVector2Array([
 		Vector2(-4, -6), Vector2(4, -6), Vector2(4, 6), Vector2(-4, 6)])
-	lock.color = Color(0.72, 0.58, 0.26)
-	lock.position = Vector2(0, -32)
+	lock.color = Color(0.52, 0.42, 0.20)
+	lock.position = Vector2(0, -40)
 	root.add_child(lock)
+	# 盖上小布卷（生活物）
+	var roll := Polygon2D.new()
+	roll.name = "ClothRoll"
+	roll.polygon = _ellipse_pts(8.0, 4.0, 10)
+	roll.color = Color(0.58, 0.42, 0.28)
+	roll.position = Vector2(w * 0.24, -48)
+	root.add_child(roll)
 	return root
 
 

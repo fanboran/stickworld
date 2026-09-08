@@ -199,10 +199,10 @@ func _furnish_interior(props: Node2D) -> void:
 	var tools := InteriorProps.make_hang_tools("HangTools")
 	tools.position = Vector2(198, -228)
 	props.add_child(tools)
-	# 后墙：煤斗挂串（深色，铁匠铺储煤）
-	var hang := InteriorProps.make_hang_string("HangCoalBag", Color(0.28, 0.28, 0.30))
-	hang.position = Vector2(430, -230)
-	props.add_child(hang)
+	# 横梁下挂灯（暖光；独立复审 MINOR：原灰蓝煤斗挂串语义弱，换读得懂的挂灯）
+	var lamp := InteriorProps.make_lamp("HangLamp")
+	lamp.position = Vector2(430, -222)
+	props.add_child(lamp)
 
 
 ## 坡面茅草纹理：layered 茅草按梯形/平行四边形坡面逐行裁剪、坡面外透明。

@@ -313,10 +313,64 @@ def _toon_mat():
     return m
 
 
-def render_passes(scene, tag, id_slots, toon=False):
-    """ID 先渲（此时 material_index 新鲜），再清空渲 shade。toon=True 时 shade
-    挂 toon 材质（渲染端分档，爱心用）；False 保持白模受光连续明度（锤的
-    classic 语义——compose 假光依赖连续明度场）"""
+def _ink_mat():
+    """描边壳材质：纯墨色 emission+背面剔除（反向壳原理）。
+    （与 gen_motifs.py 逐字一致）"""
+    m = bpy.data.materials.get('_ink_shell')
+    if m:
+        return m
+    m = bpy.data.materials.new('_ink_shell')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    emi = nt.nodes.new('ShaderNodeEmission')
+    emi.inputs[0].default_value = (18 / 255, 14 / 255, 9 / 255, 1.0)
+    nt.links.new(emi.outputs[0], out.inputs[0])
+    m.use_backface_culling = True
+    return m
+
+
+def build_ink_shells(scene, target):
+    """反向壳描边（C 阶段）：每个 mesh 复制+SOLIDIFY 外扩成壳，纯墨只渲背面。
+    壳边缘=几何边缘（MSAA 真抗锯齿）；ID/ink pass 可见性由调用方控制。
+    （与 gen_motifs.py 逐字一致）"""
+    import bmesh
+    cam = scene.camera
+    px = {64: 2.2, 128: 2.6, 256: 3.0}.get(target, 2.2)
+    thickness = cam.data.ortho_scale * px / target
+    ink = _ink_mat()
+    for o in list(scene.objects):
+        if o.type != 'MESH' or o.get('is_ink_shell'):
+            continue
+        sh = o.copy()
+        sh.data = o.data.copy()
+        sh['is_ink_shell'] = 1
+        sol = sh.modifiers.new('ink_shell', 'SOLIDIFY')
+        sol.thickness = thickness
+        sol.offset = -1
+        flipped = False
+        try:
+            sol.use_flip = True
+            flipped = True
+        except AttributeError:
+            pass
+        if not flipped:
+            bm = bmesh.new()
+            bm.from_mesh(sh.data)
+            bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+            bm.to_mesh(sh.data)
+            bm.free()
+        sh.data.materials.clear()
+        sh.data.materials.append(ink)
+        scene.collection.objects.link(sh)
+
+
+def render_passes(scene, tag, id_slots, toon=False, target=64, margin=1.06):
+    """ID 先渲（此时 material_index 新鲜）；C 阶段三分 pass：shade（原体+壳）、
+    ink（只有壳）、ID 复用首段（壳不存在）。toon=True 时 shade 挂 toon 材质
+    （爱心径向场）；锤保持白模（compose 假光依赖连续明度场）。
+    壳在 ID 时不创建（ID 先渲），shade 前建壳+二次取景"""
     for o in scene.objects:
         if o.type != 'MESH':
             continue
@@ -329,21 +383,32 @@ def render_passes(scene, tag, id_slots, toon=False):
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "id")
 
+    build_ink_shells(scene, target)
+    fit_ortho(scene, margin)   # 二次取景：描边壳外扩纳入画框
+    for o in scene.objects:
+        if o.get('is_ink_shell'):
+            o.hide_render = True   # shade 保持纯 cel
     if toon:
         for o in scene.objects:
-            if o.type == 'MESH':
+            if o.type == 'MESH' and not o.get('is_ink_shell'):
                 o.data.materials.clear()
                 o.data.materials.append(_toon_mat())
     else:
         white = shade_mat('shade_all')
         for o in scene.objects:
-            if o.type != 'MESH':
-                continue
-            o.data.materials.clear()
-            o.data.materials.append(white)
+            if o.type == 'MESH' and not o.get('is_ink_shell'):
+                o.data.materials.clear()
+                o.data.materials.append(white)
     scene.render.filepath = os.path.join(OUT, f"{tag}_shade.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "shade")
+
+    for o in scene.objects:
+        if o.type == 'MESH':
+            o.hide_render = not bool(o.get('is_ink_shell'))
+    scene.render.filepath = os.path.join(OUT, f"{tag}_ink.png")
+    bpy.ops.render.render(write_still=True)
+    print("rendered", tag, "ink")
 
 
 ID_COLS = {
@@ -359,7 +424,8 @@ for t in (64, 128, 256):
     fit_ortho(scene)
     id_h = {n: flat_mat('id_' + n, ID_COLS[n]) for n in ID_COLS}
     render_passes(scene, f"icon_hammer_v9_{t}",
-                  {oname: [id_h[n] for n in names] for oname, names in hmap.items()})
+                  {oname: [id_h[n] for n in names] for oname, names in hmap.items()},
+                  target=t)
     sys.stdout.flush()
 
 # ── 爱心（3/4 视角，与母题库统一；2026-09-08 创始人要求立体感+斜角度，
@@ -389,5 +455,5 @@ for t in (64, 128, 256):
     id_e = {n: flat_mat('id_' + n, ID_COLS[n]) for n in ID_COLS}
     render_passes(scene, f"icon_heart_v9_{t}",
                   {oname: [id_e[n] for n in names] for oname, names in emap.items()},
-                  toon=True)
+                  toon=True, target=t)
     sys.stdout.flush()

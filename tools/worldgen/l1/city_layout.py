@@ -180,6 +180,7 @@ def plan_layout(profile: dict, config: dict) -> dict:
     # ── 右街区：校场（紧邻城门右侧，conquest 专属）→ 地标按 order → 民居 ──
     cur = gate_x + gate_w
     anchor = None
+    reserve_start = None
     if conquest:
         cur += rng.randint(2, 4)  # 城门与校场间巷道
         reserve_start = cur
@@ -225,6 +226,11 @@ def plan_layout(profile: dict, config: dict) -> dict:
         "anchor": anchor,
         "landmarks": marks,
         "landmark_zones": zones,
+        # 消费端扩展字段（批次 3 装饰层）：可用区 cell 范围 + 校场带 cell 范围
+        # （只读数据，不改变 rng 序——同 seed 布局与批次 2 逐字节一致）
+        "usable": [s, e],
+        "reserve_band": ([reserve_start, reserve_start + RESERVE_CELLS]
+                         if reserve_start is not None else None),
     }
     verify_layout(layout, cell_w)
     return layout

@@ -57,8 +57,10 @@ var city_preview_texture: Texture2D = null
 ## 地形模式底图（l2_terrain.png，context 尺寸 RGBA：程序着色地形，世界边界外虚空透明）
 var terrain_texture: Texture2D = null
 
-## 政治模式底图（l2_political_preview.png，P7：城市地块 × 政权色，非城透明露出底层）
-var political_texture: Texture2D = null
+## 政权 ID mask（l2_political_id.png，R7/R9：context 尺寸单通道，像素值 = 政权
+## lut_index 1..80，0 = 海/无，254 = 湖泊，255 = 邻区灰底）。颜色不烘焙，
+## 由 PoliticalLut 运行时查表上色（改 LUT 即全图换色）
+var political_id_texture: Texture2D = null
 
 ## 政权表（P7，l2_world.json 顶层 "states"）：state_id -> {name,capital,culture,alliance,color,...}
 var states: Dictionary = {}
@@ -97,10 +99,10 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	var terrain_path := "%s/l2_terrain.png" % base_dir
 	if ResourceLoader.exists(terrain_path):
 		world.terrain_texture = load(terrain_path) as Texture2D
-	# 政治模式底图（可选，P7 政权色贴图）
-	var political_path := "%s/l2_political_preview.png" % base_dir
+	# 政权 ID mask（可选，R7/R9 政权 ID 烘焙 + 运行时 LUT 上色）
+	var political_path := "%s/l2_political_id.png" % base_dir
 	if ResourceLoader.exists(political_path):
-		world.political_texture = load(political_path) as Texture2D
+		world.political_id_texture = load(political_path) as Texture2D
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l2_base_2048.png")]
 	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l2_tiles_index_2048.png")]
 	var border_path := "%s/%s" % [base_dir, data.get("border_texture", "l2_tiles_border_2048.png")]

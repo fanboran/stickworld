@@ -2,8 +2,9 @@ extends Node2D
 class_name L3MapRenderer
 ## L3 大世界渲染器 —— 静态几何缓存（ArrayMesh）+ hover 老 L1 高亮 + 双显示模式
 ##
-## 地图模式（B4，MapModeManager 全局）：TERRAIN 地形底图 / POLITICAL 政权底图（P7），
-## 其余显示模式为政治贴图异步加载完成前的回退层。
+## 地图模式（B4，MapModeManager 全局）：TERRAIN 地形底图 / POLITICAL 政权 ID mask
+## + LUT 查表上色（R7/R9，改 LUT 即全图换色零重烘），
+## 其余显示模式为政治着色层就绪前的回退层。
 ## 显示模式（模式按钮切换，见 l3_zoom_indicator）：
 ##   MODE_L1   : 底 = 69 块老 L1 地块（鲜艳配色）
 ##   MODE_CITY : 底 = 1038 块城市（像 city_preview 花花绿绿）
@@ -72,6 +73,11 @@ var _terrain_result: Image = null
 var _political_thread: Thread = null
 var _political_result: Image = null
 
+## 政治模式着色层（R7/R9：政权 ID mask + PoliticalLut 查表 shader，z=-1 垫底，
+## 上层 L2 界线/玩家光流/hover 由本节点 _draw 照常画）。null = mask 未解码完
+## （POLITICAL 模式回退现状着色）
+var _political_layer: Sprite2D = null
+
 
 func set_data(data: L3WorldData) -> void:
 	_data = data
@@ -124,6 +130,8 @@ func set_map_mode(mode: int) -> void:
 	map_mode = mode
 	if mode == MapModeManager.Mode.POLITICAL:
 		_ensure_political()
+	if _political_layer != null:
+		_political_layer.visible = mode == MapModeManager.Mode.POLITICAL
 	queue_redraw()
 
 
@@ -292,16 +300,17 @@ func _load_city_preview_async() -> void:
 		_city_preview_result = img
 
 
-## 异步加载：政治模式底图（P7 政权色 l3_political.png，切到 POLITICAL 时按需触发）
+## 异步加载：政治模式政权 ID mask（R7/R9：l3_political_id_8192.png，像素值 =
+## 政权 lut_index；切到 POLITICAL 时按需触发， PoliticalLut 查表上色不烘焙）
 func _ensure_political() -> void:
-	if _data == null or _data.political_texture != null or _political_thread != null:
+	if _data == null or _political_layer != null or _political_thread != null:
 		return
 	_political_thread = Thread.new()
 	_political_thread.start(_load_political_async)
 
 
 func _load_political_async() -> void:
-	var f := FileAccess.open("res://config/strategic_map/l3_political.png", FileAccess.READ)
+	var f := FileAccess.open("res://config/strategic_map/l3_political_id_8192.png", FileAccess.READ)
 	if f == null:
 		return
 	var img := Image.new()
@@ -370,26 +379,52 @@ func _poll_async_loads() -> void:
 		_political_thread.wait_to_finish()
 		_political_thread = null
 		if _political_result != null:
-			_data.political_texture = ImageTexture.create_from_image(_political_result)
+			_data.political_id_image = _political_result
 			_political_result = null
+			_build_political_layer()
 			queue_redraw()
+
+
+## 构建政治模式着色层：ID mask 纹理 + 共享 PoliticalLut 的查表 shader（z=-1 垫底）。
+## 颜色不进纹理——改 LUT（PoliticalLut.set_state_color）即全图即时换色，零重烘。
+func _build_political_layer() -> void:
+	if _political_layer != null or _data == null or _data.political_id_image == null:
+		return
+	var lut := PoliticalLut.shared_from_states(_data.states)
+	if lut == null:
+		return
+	var mask_tex := ImageTexture.create_from_image(_data.political_id_image)
+	var mat := ShaderMaterial.new()
+	mat.shader = PoliticalLut.COLORIZE_SHADER
+	mat.set_shader_parameter("id_mask", mask_tex)
+	mat.set_shader_parameter("lut", lut.texture)
+	_political_layer = Sprite2D.new()
+	_political_layer.texture = mask_tex
+	_political_layer.centered = false
+	_political_layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_political_layer.material = mat
+	# z=-1（相对）：垫在本节点 _draw 的界线/光流/hover 之下、替代海洋底色
+	_political_layer.z_index = -1
+	_political_layer.visible = map_mode == MapModeManager.Mode.POLITICAL
+	add_child(_political_layer)
 
 
 func _draw() -> void:
 	if _data == null:
 		return
-	# 1. 海洋背景
-	draw_rect(Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), OCEAN_COLOR)
+	# 政治模式且着色层就绪：ID mask shader 层（z=-1）已垫底铺满全图（含海洋色
+	# 空区），本节点只画上层矢量；未就绪时照常画海洋底 + 回退现状着色
+	var political_ready := map_mode == MapModeManager.Mode.POLITICAL 			and _political_layer != null
+	if not political_ready:
+		# 1. 海洋背景
+		draw_rect(Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), OCEAN_COLOR)
 	if map_mode == MapModeManager.Mode.TERRAIN and _data.terrain_texture != null:
 		# 地形模式（B2）：程序着色底图铺满全图（2048 纹理拉伸到 8192 网格，与 city_preview 同法）；
 		# 异步加载完成前回退现状填充层，解码完成后 queue_redraw 自动切上
 		draw_texture_rect(_data.terrain_texture,
 			Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)
-	elif map_mode == MapModeManager.Mode.POLITICAL and _data.political_texture != null:
-		# 政治模式（P7）：政权色底图铺满全图（2048 纹理拉伸到 8192 网格，同法）；
-		# 异步加载完成前回退现状着色（城市贴图/老 L1 mesh），解码完成后自动切上
-		draw_texture_rect(_data.political_texture,
-			Rect2(Vector2.ZERO, Vector2(float(_data.size), float(_data.size))), false)
+	elif political_ready:
+		pass  # 政治模式（R7/R9）：政权 ID mask + LUT 查表层已垫底，此处只画上层矢量
 	elif map_mode == MapModeManager.Mode.POLITICAL:
 		_ensure_political()
 		if display_mode == DisplayMode.MODE_CITY:

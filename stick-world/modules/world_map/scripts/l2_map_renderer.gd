@@ -63,10 +63,15 @@ var _context_size := Vector2.ONE
 var _tile_border_segs: Array = []        # 地块描边段（烘焙，已合并共线段并滤除湖泊/边缘段）
 var _neighbor_border_segs: Array = []    # 相邻地区分界线段（烘焙，同上）
 
+## 政治模式着色层（R7/R9：政权 ID mask + PoliticalLut 查表 shader；mask 含
+## 海洋/湖泊/邻区底色保留码，垫底后本节点跳过 1/2/3 层，界线/河流/hover 照常画）
+var _political_layer: Sprite2D = null
+
 
 func set_data(data: L2WorldData) -> void:
 	_data = data
 	_build_static_mesh()
+	_ensure_political_layer()
 	queue_redraw()
 
 
@@ -74,11 +79,37 @@ func set_camera(camera: MapCamera) -> void:
 	_camera = camera
 
 
+## 政权 ID mask 着色层（R7/R9）：贴图随包同步加载，LUT 全游戏共享一份
+## （PoliticalLut.shared_from_states 首调构建）——改 LUT 即 L2/L3/图例全换色
+func _ensure_political_layer() -> void:
+	if _political_layer != null or _data == null or _data.political_id_texture == null:
+		return
+	var lut := PoliticalLut.shared_from_states(_data.states)
+	if lut == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = PoliticalLut.COLORIZE_SHADER
+	mat.set_shader_parameter("id_mask", _data.political_id_texture)
+	mat.set_shader_parameter("lut", lut.texture)
+	_political_layer = Sprite2D.new()
+	_political_layer.texture = _data.political_id_texture
+	_political_layer.centered = false
+	_political_layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_political_layer.material = mat
+	# z=-1（相对）：垫在本节点 _draw 的界线/河流/hover 之下
+	_political_layer.z_index = -1
+	_political_layer.visible = map_mode == MapModeManager.Mode.POLITICAL
+	add_child(_political_layer)
+
+
 ## 地图模式切换（控制器在 open() 时也推一次当前模式——跨视图全局状态）
 func set_map_mode(mode: int) -> void:
 	if mode == map_mode:
 		return
 	map_mode = mode
+	_ensure_political_layer()
+	if _political_layer != null:
+		_political_layer.visible = mode == MapModeManager.Mode.POLITICAL
 	queue_redraw()
 
 
@@ -157,11 +188,17 @@ func _draw() -> void:
 		return
 	# 地形模式（B2）：程序着色底图替代填充层（湖泊/海洋/邻居地形已在纹理内）
 	var terrain := map_mode == MapModeManager.Mode.TERRAIN and _data.terrain_texture != null
+	# 政治模式（R7/R9）：政权 ID mask shader 层已垫底（mask 含海洋/湖泊/邻区底色
+	# 保留码），本节点跳过 1/2/3 层直出；层未就绪（贴图缺失）时回退城市贴图
+	var political := map_mode == MapModeManager.Mode.POLITICAL 				and _political_layer != null
 	# 1. 海洋背景（context 尺寸；地形纹理的虚空透明区透出此色）
-	draw_rect(Rect2(Vector2.ZERO, _context_size), OCEAN_COLOR)
+	if not political:
+		draw_rect(Rect2(Vector2.ZERO, _context_size), OCEAN_COLOR)
 	if terrain:
 		draw_texture_rect(_data.terrain_texture,
 			Rect2(Vector2.ZERO, _context_size), false)
+	elif political:
+		pass  # 政权 ID + LUT 查表层已垫底
 	else:
 		# 2. 湖泊（浅蓝）
 		if _lakes_mesh != null:
@@ -170,13 +207,8 @@ func _draw() -> void:
 		if _neighbors_mesh != null:
 			draw_mesh(_neighbors_mesh, null)
 		if display_mode == DisplayMode.MODE_CITY:
-			# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）；
-			# 政治模式（P7）优先政权色贴图（城市地块按国着色，观感同源仅换色表）
-			var political := map_mode == MapModeManager.Mode.POLITICAL 					and _data.political_texture != null
-			if political:
-				draw_texture_rect(_data.political_texture,
-					Rect2(Vector2.ZERO, _context_size), false)
-			elif _data.city_preview_texture != null:
+			# 城市模式：铺该地区城市蒙版贴图（tiles 区域填城市色，其余透明露底层）
+			if _data.city_preview_texture != null:
 				draw_texture_rect(_data.city_preview_texture,
 					Rect2(Vector2.ZERO, _context_size), false)
 		else:

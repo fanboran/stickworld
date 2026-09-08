@@ -377,17 +377,24 @@ func _fill_legend() -> void:
 		_legend.set_entries(MapRenderer.ROAD_LEGEND)
 		return
 	if mode == MapModeManager.Mode.POLITICAL:
-		var data: L1WorldData = api.get_data() if api != null and api.has_method("get_data") else null
-		var states: Dictionary = api.get_states() if api != null and api.has_method("get_states") else {}
-		if data == null:
-			return
+		# R7 80 国：图例只展示族色+明度档的代表性子集（每文化圈聚合一条 +
+		# 城邦聚合一条，不塞 80 条）；LUT 缺失时回退出生 8 城邦逐条（旧口径）。
+		# 色源 = PoliticalLut（与 L2/L3 政治模式同一份运行时 LUT，改 LUT 全局生效）
 		var pol_entries: Array = []
-		for state_id in states:
-			var info: Dictionary = states[state_id]
-			pol_entries.append({
-				"color": data.get_state_color(state_id),
-				"text": str(info.get("name", state_id)),
-			})
+		var lut := PoliticalLut.load_shared()
+		if lut != null:
+			pol_entries = _political_legend_entries(lut)
+		else:
+			var data: L1WorldData = api.get_data() if api != null and api.has_method("get_data") else null
+			var states: Dictionary = api.get_states() if api != null and api.has_method("get_states") else {}
+			if data == null:
+				return
+			for state_id in states:
+				var info: Dictionary = states[state_id]
+				pol_entries.append({
+					"color": data.get_state_color(state_id),
+					"text": str(info.get("name", state_id)),
+				})
 		if pol_entries.is_empty():
 			_legend.set_entries([])  # 空态：set_shown 自动保持隐藏
 			return
@@ -403,6 +410,47 @@ func _fill_legend() -> void:
 	entries.append_array(MapRenderer.BIOME_LEGEND)
 	entries.append({"color": MapRenderer.BLOB_FILL, "text": "城镇建成区"})
 	_legend.set_entries(entries)
+
+
+## 政治图例的代表性子集（R7）：每文化圈一条（色 = 圈内最大国的政权色，
+## 文本 = 「族标签 ×N 国」）+ 自由城邦聚合一条，按规模降序
+func _political_legend_entries(lut: PoliticalLut) -> Array:
+	var by_culture := {}
+	var n_city_state := 0
+	var cs_color := Color(0.6, 0.6, 0.6)
+	for sid in lut.states:
+		var info: Dictionary = lut.states[sid]
+		if bool(info.get("is_city_state", false)):
+			n_city_state += 1
+			if n_city_state == 1:
+				cs_color = lut.color_of(sid)
+			continue
+		var cu := str(info.get("culture", ""))
+		if not by_culture.has(cu):
+			by_culture[cu] = {
+				"label": str(info.get("culture_label", cu)),
+				"n": 0, "max_cities": -1, "color": cs_color,
+			}
+		var e: Dictionary = by_culture[cu]
+		e["n"] += 1
+		var nc := int(info.get("n_cities", 0))
+		if nc > int(e["max_cities"]):
+			e["max_cities"] = nc
+			e["color"] = lut.color_of(sid)
+	var grouped: Array = []
+	for cu in by_culture:
+		var e: Dictionary = by_culture[cu]
+		grouped.append({
+			"color": e["color"],
+			"text": "%s ×%d 国" % [e["label"], e["n"]],
+			"_n": int(e["n"]),
+		})
+	grouped.sort_custom(func(a, b): return int(a["_n"]) > int(b["_n"]))
+	for e in grouped:
+		e.erase("_n")
+	if n_city_state > 0:
+		grouped.append({"color": cs_color, "text": "自由城邦 ×%d" % n_city_state})
+	return grouped
 
 
 ## 地图模式切换（MapModeManager 广播）：渲染器换层 + 图例换内容

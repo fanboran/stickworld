@@ -162,74 +162,6 @@ def build_hammer(scene):
     return {h.name: ['handle'], head.name: ['head_top', 'head_front', 'head_side']}
 
 
-def heart_outline():
-    base = [
-        (0.00, 0.42), (-0.20, 0.70), (-0.52, 0.86), (-0.84, 0.72),
-        (-1.00, 0.36), (-0.94, 0.00), (-0.70, -0.42), (-0.36, -0.72),
-        (0.00, -0.98),
-        (0.36, -0.72), (0.70, -0.42), (0.94, 0.00), (1.00, 0.36),
-        (0.84, 0.72), (0.52, 0.86), (0.20, 0.70),
-    ]
-    for _ in range(3):
-        out = []
-        n = len(base)
-        for i in range(n):
-            a, b = base[i], base[(i + 1) % n]
-            out.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
-            out.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
-        base = out
-    return base
-
-
-def build_heart(scene):
-    red = diffuse_mat('red', (0.78, 0.26, 0.22))
-    pts = heart_outline()
-    cu = bpy.data.curves.new('heart', 'CURVE')
-    spl = cu.splines.new('POLY')
-    spl.points.add(len(pts) - 1)
-    for i, (x, y) in enumerate(pts):
-        spl.points[i].co = (x, y + 0.15, 0.0, 1.0)
-    spl.use_cyclic_u = True
-    cu.extrude = 0.34      # 厚枕形：创始人二轮反馈"不够鼓"，厚度 0.17→0.34
-    cu.bevel_depth = 0.10
-    cu.fill_mode = 'BOTH'
-    ob = bpy.data.objects.new('Heart', cu)
-    scene.collection.objects.link(ob)
-    bpy.ops.object.select_all(action='DESELECT')
-    ob.select_set(True)
-    bpy.context.view_layer.objects.active = ob
-    bpy.ops.object.convert(target='MESH')
-    ob = bpy.context.object
-    ob.rotation_euler = (math.radians(90), 0, 0)
-    # 法线一致化：曲线盖面法线方向不确定，翻转会让正面渲染全黑
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    bpy.ops.object.mode_set(mode='OBJECT')
-    ob.data.materials.append(red)
-    for p_ in ob.data.polygons:
-        p_.use_smooth = True
-    # 气球式鼓包（2026-09-08 审计：挤出枕形读成「有厚度」；二轮反馈正面仍是一
-    # 整块明面——CAST 对无内部顶点的整面填充无效，鼓不起来；三轮发现扇形三角
-    # 化填充直接 CAST 会出水平波纹）。REMESH 体素重建均匀拓扑 → SUBSURF 平滑
-    # → CAST 球化，正面成真正的弧面穹顶；factor 压低保住轮廓读法
-    rm = ob.modifiers.new('remesh', 'REMESH')
-    rm.mode = 'VOXEL'
-    rm.voxel_size = 0.05
-    ss = ob.modifiers.new('subdiv', 'SUBSURF')
-    ss.levels = 1
-    ss.render_levels = 2
-    puff = ob.modifiers.new('puff', 'CAST')
-    try:
-        if puff.type != 'SPHERE':
-            puff.type = 'SPHERE'   # 5.2 只读（默认即 SPHERE），旧版本可写
-    except AttributeError:
-        pass
-    print("cast type:", puff.type)
-    puff.factor = 0.22
-    return {ob.name: ['heart']}
-
-
 def fix_head_faces(scene):
     """ID pass 前按法线重指派锤头三面（防钳零）"""
     for o in scene.objects:
@@ -254,7 +186,7 @@ def _toon_band_grays(steps):
 def _toon_mat():
     """曲面 toon 材质（D 着色器分档）：漫反射 → ShaderToRGB → 明度 →
     ColorRamp 窄过渡带量化 → Emission。TOON_LO/HI/STEPS 环境变量默认
-    0.76/0.95/3，可场景中途改（爱心头灯径向场用 0.60/0.88），材质按签名缓存。
+    0.76/0.95/3，材质按参数签名缓存。
     ShaderToRGB 仅 EEVEE 支持；不可用时回退白模受光。（与 gen_motifs.py 逐字一致）"""
     import os
     steps = max(2, int(os.environ.get('TOON_STEPS', '3')))
@@ -369,7 +301,7 @@ def build_ink_shells(scene, target):
 def render_passes(scene, tag, id_slots, toon=False, target=64, margin=1.06):
     """ID 先渲（此时 material_index 新鲜）；C 阶段三分 pass：shade（原体+壳）、
     ink（只有壳）、ID 复用首段（壳不存在）。toon=True 时 shade 挂 toon 材质
-    （爱心径向场）；锤保持白模（compose 假光依赖连续明度场）。
+    （保留给母题库特殊件）；锤保持白模（compose 假光依赖连续明度场）。
     壳在 ID 时不创建（ID 先渲），shade 前建壳+二次取景"""
     for o in scene.objects:
         if o.type != 'MESH':
@@ -413,11 +345,10 @@ def render_passes(scene, tag, id_slots, toon=False, target=64, margin=1.06):
 
 ID_COLS = {
     "head_top": (1, 0, 0), "head_front": (0, 1, 0), "head_side": (0, 0, 1),
-    "handle": (1, 1, 0), "heart": (1, 0, 1),
+    "handle": (1, 1, 0),
 }
 
 # 分尺寸渲染（render-per-LOD）：每个目标尺寸独立出图，线宽/细节量在目标像素域定义
-ENERGY = {"icon_heart_v9": 7.0}   # 平面脸受光少，单独提亮（其余默认 4.5）
 for t in (64, 128, 256):
     scene = setup(32, 30, t * 2)
     hmap = build_hammer(scene)
@@ -426,34 +357,4 @@ for t in (64, 128, 256):
     render_passes(scene, f"icon_hammer_v9_{t}",
                   {oname: [id_h[n] for n in names] for oname, names in hmap.items()},
                   target=t)
-    sys.stdout.flush()
-
-# ── 爱心（3/4 视角，与母题库统一；2026-09-08 创始人要求立体感+斜角度，
-#    二轮反馈仍不够鼓 → 厚度加倍+方位角加大；三轮 SUBSURF+CAST 穹顶。
-#    四轮：3/4 侧光下穹顶正面仍一大块明面——气球读法要「中心亮四周暗」的
-#    径向渐变，改头灯位主光（相机轴略偏上；「头灯无内部差」教训只针对平面
-#    件，穹顶恰好要头灯）+ 光强 3.3 + 径向场专属断点 ──
-from mathutils import Euler, Vector as _V
-for t in (64, 128, 256):
-    # 头灯径向场专属断点：实测爱心 shade 文件域明度分位（缘 0.4/面 0.73-0.92），
-    # 0.60/0.88 切出 暗缘-中面-亮心 三档=气球读法；其余图标走全局默认
-    # 0.76/0.95（_toon_mat 按参数签名自动重建材质）
-    os.environ['TOON_LO'] = '0.60'
-    os.environ['TOON_HI'] = '0.88'
-    scene = setup(38, 22, t * 2, 4.2)
-    emap = build_heart(scene)
-    # 头灯位主光：灯放相机正后方略偏上，穹顶正面获得径向明度场
-    cam = scene.camera
-    R = cam.matrix_world.to_3x3()
-    sun = scene.objects['Key']
-    pos = cam.matrix_world.translation + R @ _V((0.0, 1.2, 0.5))
-    sun.location = pos
-    d = _V((0, 0, 0)) - pos
-    sun.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
-    fit_ortho(scene)
-
-    id_e = {n: flat_mat('id_' + n, ID_COLS[n]) for n in ID_COLS}
-    render_passes(scene, f"icon_heart_v9_{t}",
-                  {oname: [id_e[n] for n in names] for oname, names in emap.items()},
-                  toon=True, target=t)
     sys.stdout.flush()

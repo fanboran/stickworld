@@ -22,10 +22,11 @@ RESULT = os.path.join(ROOT, "temp", "review_result.json")
 sys.path.insert(0, HERE)
 import motifs as M
 
-OLD7 = [("锻造锤", "icon_hammer_v9"), ("爱心", "icon_heart_v9"),
+OLD7 = [("锻造锤", "icon_hammer_v9"),
         ("立方体", "test_cube_v9"), ("正球", "test_sphere_v9"),
         ("圆柱", "test_cylinder_v9"), ("圆锥", "test_cone_v9"),
         ("圆环", "test_torus_v9")]
+# 爱心已并入 motifs 注册表（mot_heart），随注册表段列出
 _ALL = [{"name": n, "tag": t} for n, t in OLD7] + \
        [{"name": m["label"], "tag": m["tag"]} for m in M.MOTIFS]
 

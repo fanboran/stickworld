@@ -50,6 +50,16 @@ var _lakes_mesh: ArrayMesh = null
 ## 形状只随 population_score 变化——settlement_updated 事件单城重算，不随 zoom/hover 变）
 var _blob_outlines: Dictionary = {}
 
+## 地形模式静态底图（R9 静态层烘焙化）：本包 l1_terrain.png（B2 同管线 per-L1 烘焙，
+## 已含地形/群系/河湖/海洋），TERRAIN 模式画在最底层，贴图坐标 ↔ context 坐标 1:1
+## （与 l1_base.png 同系无 offset）。异步后台线程解码（l3_map_renderer 三线程同款样板：
+## FileAcess 直读不需 .import；Thread 未 join 直接销毁在 Windows 会段错误——
+## _exit_tree / set_data 换包前统一 wait_to_finish）。解码完成前回退现状矢量管线。
+## 政权色不烘焙（R9 裁决）——POLITICAL 模式保持运行时矢量政权色填充不变。
+var _terrain_texture: Texture2D = null
+var _terrain_thread: Thread = null
+var _terrain_result: Image = null
+
 ## 配色（与 L2MapRenderer 完全一致；水体色与 B2 底图 terrain_params.json colors 同源，改色两端同步）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
 const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
@@ -175,6 +185,10 @@ func set_data(data: L1WorldData) -> void:
 	_lakes_mesh = null
 	_route_road_pts.clear()
 	_route_nodes = PackedVector2Array()
+	# 换包：旧贴图/旧线程作废（join 防未完成 Thread 销毁段错误，见 _join_terrain_thread）
+	_join_terrain_thread()
+	_terrain_texture = null
+	_terrain_result = null
 	_bake_blob_outlines()
 	_current_tile_id = ""
 	# 当前所在地块默认 = 出生聚落所在块（玩家跨城移动后由 set_current_tile 切换）
@@ -190,6 +204,9 @@ func set_data(data: L1WorldData) -> void:
 				_player_state_color = _data.get_state_color(tile.owner_state_id)
 				break
 	_build_glow_outline()
+	# TERRAIN 为默认模式：切包即触发本包地形贴图异步加载（POLITICAL 下按需，见 set_map_mode）
+	if map_mode == MapModeManager.Mode.TERRAIN:
+		_ensure_terrain()
 	queue_redraw()
 
 
@@ -270,6 +287,9 @@ func set_map_mode(mode: int) -> void:
 	if mode == map_mode:
 		return
 	map_mode = mode
+	# 切回地形模式时按需触发贴图加载（首帧/政治模式期间未加载过）
+	if mode == MapModeManager.Mode.TERRAIN:
+		_ensure_terrain()
 	queue_redraw()
 
 
@@ -300,7 +320,55 @@ func refresh() -> void:
 	queue_redraw()
 
 
+## ===== 地形模式底图异步加载（R9；l3_map_renderer 三线程同款样板）=====
+## 后台线程 FileAccess 直读 + PNG 解码（纯 CPU、线程安全，主线程零阻塞）；
+## 路径经 bind 传入（线程内不读 _data——set_data 换包期间无竞态）。
+## 完成前 TERRAIN 模式回退现状矢量管线，解码完成后 queue_redraw 自动切上。
+func _ensure_terrain() -> void:
+	if _data == null or _terrain_texture != null or _terrain_thread != null:
+		return
+	var path := "%s/l1_terrain.png" % _data.base_dir
+	if not FileAccess.file_exists(path):
+		return
+	_terrain_thread = Thread.new()
+	_terrain_thread.start(_load_terrain_async.bind(path))
+
+
+func _load_terrain_async(path: String) -> void:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return
+	var img := Image.new()
+	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
+		_terrain_result = img
+
+
+## join 后台线程并丢弃未消费结果（set_data 换包 / _exit_tree 销毁前必须调用——
+## 未完成的 Thread 直接销毁在 Windows 上会段错误）
+func _join_terrain_thread() -> void:
+	if _terrain_thread != null:
+		_terrain_thread.wait_to_finish()
+		_terrain_thread = null
+	_terrain_result = null
+
+
+## 每帧检查后台线程：解码完成 → wait_to_finish + 主线程建 ImageTexture
+func _poll_terrain_load() -> void:
+	if _terrain_thread != null and not _terrain_thread.is_alive():
+		_terrain_thread.wait_to_finish()
+		_terrain_thread = null
+		if _terrain_result != null:
+			_terrain_texture = ImageTexture.create_from_image(_terrain_result)
+			_terrain_result = null
+			queue_redraw()
+
+
+func _exit_tree() -> void:
+	_join_terrain_thread()
+
+
 func _process(delta: float) -> void:
+	_poll_terrain_load()
 	if not is_visible_in_tree() or _data == null:
 		return
 	# 动画相位推进：当前城流动光 + 玩家位置脉冲环（有任一动画即逐帧重绘；
@@ -345,30 +413,39 @@ func _draw() -> void:
 	var zz: float = 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
-	# 1. 静态色块层（城市色块 → 道路 → 河流 → 湖泊 → 描边/轮廓/hover 动态层）
-	if _tiles_mesh == null:
-		_bake_base_meshes()
-	if _tiles_mesh != null:
-		draw_mesh(_tiles_mesh, null)
-	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓/道路分级）——道路层也消费，提前到此构建
+	# 0. 地形模式静态底图（R9 静态层烘焙化）：本包烘焙贴图画在最底层，
+	#    贴图坐标 ↔ context 坐标 1:1（与 l1_base.png 同系无 offset）。
+	#    贴图已含地形/群系/河湖/海洋——政权色填充与矢量道路/河湖跳过（避免双画）；
+	#    解码完成前回退现状矢量管线（下方），完成后 _poll_terrain_load 自动重绘切换。
+	#    POLITICAL 不烘焙（R9 裁决：政权色会随游戏进程变化，保持运行时矢量填充）
+	var terrain_base: bool = map_mode == MapModeManager.Mode.TERRAIN and _terrain_texture != null
+	if terrain_base:
+		draw_texture_rect(_terrain_texture, Rect2(Vector2.ZERO, ctx_size), false)
+	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓/道路分级）——描边/轮廓层两模式都消费
 	if not _segs_valid:
 		_build_cached_geometry()
-	# 1.4 道路（F5/E2 渲染分级）：官道实线 / 土路虚线，画在城市块之上、河流之下
-	#（人工特征压地块色，自然水系压道路——河路交叉处河在上；路避水由生成端保证）
-	if _road_dirt_segs.size() >= 2 or not _road_paved_lines.is_empty():
-		if _road_dirt_segs.size() >= 2:
-			draw_multiline(_road_dirt_segs, ROAD_COLOR_DIRT,
-					maxf(ctx_size.x * ROAD_WIDTH_DIRT, 1.0), true)
-		for line in _road_paved_lines:
-			draw_polyline(line, ROAD_COLOR_PAVED,
-					maxf(ctx_size.x * ROAD_WIDTH_PAVED, 1.2), true)
-	# 1.5 河流（B3）：矢量折线叠加，画在湖泊之下（河入湖由湖面覆盖）、城市块之上
-	for rv in _data.rivers:
-		var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
-		if rpts.size() >= 2:
-			draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
-	if _lakes_mesh != null:
-		draw_mesh(_lakes_mesh, null)
+	# 1. 静态色块层（城市色块 → 道路 → 河流 → 湖泊）；TERRAIN 贴图已承担本层（防双画）
+	if not terrain_base:
+		if _tiles_mesh == null:
+			_bake_base_meshes()
+		if _tiles_mesh != null:
+			draw_mesh(_tiles_mesh, null)
+		# 1.4 道路（F5/E2 渲染分级）：官道实线 / 土路虚线，画在城市块之上、河流之下
+		#（人工特征压地块色，自然水系压道路——河路交叉处河在上；路避水由生成端保证）
+		if _road_dirt_segs.size() >= 2 or not _road_paved_lines.is_empty():
+			if _road_dirt_segs.size() >= 2:
+				draw_multiline(_road_dirt_segs, ROAD_COLOR_DIRT,
+						maxf(ctx_size.x * ROAD_WIDTH_DIRT, 1.0), true)
+			for line in _road_paved_lines:
+				draw_polyline(line, ROAD_COLOR_PAVED,
+						maxf(ctx_size.x * ROAD_WIDTH_PAVED, 1.2), true)
+		# 1.5 河流（B3）：矢量折线叠加，画在湖泊之下（河入湖由湖面覆盖）、城市块之上
+		for rv in _data.rivers:
+			var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
+			if rpts.size() >= 2:
+				draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
+		if _lakes_mesh != null:
+			draw_mesh(_lakes_mesh, null)
 	# 1.6 快速旅行路由高亮（P6）：途经道路亮色加粗 + 节点空心圆（水系之上）
 	if not _route_road_pts.is_empty():
 		var rw: float = maxf(ctx_size.x * ROUTE_HIGHLIGHT_WIDTH, 2.0)
@@ -379,7 +456,7 @@ func _draw() -> void:
 			nr = ROUTE_NODE_RADIUS / zz
 		for pos in _route_nodes:
 			draw_arc(pos, nr, 0.0, TAU, 48, Color.WHITE, maxf(rw * 0.35, 1.0), true)
-	if _tiles_mesh == null:
+	if _tiles_mesh == null and not terrain_base:
 		# 回退：数据异常时逐层绘制（邻居空心：只描边，见第 4.5 层）
 		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
 		for lake in _data.lakes:

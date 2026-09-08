@@ -93,6 +93,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_garrison_spawner.tscn"
 	"tests/integration/test_conquest_flow.tscn"
 	"tests/integration/test_conquest_e2e.tscn"
+	"tests/integration/test_town_life_harvest.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -107,6 +108,7 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_garrison_spawner.tscn"]=120
 	["tests/integration/test_conquest_flow.tscn"]=180
 	["tests/integration/test_conquest_e2e.tscn"]=180
+	["tests/integration/test_town_life_harvest.tscn"]=150
 	["tests/integration/test_selection_formation.tscn"]=90
 	["tests/integration/test_possession.tscn"]=90
 	["tests/integration/test_village_map.tscn"]=90
@@ -169,7 +171,10 @@ affected_suites() {
 				picked["tests/integration/test_strategic_map_p0.tscn"]=1
 				picked["tests/integration/test_l2_strategic_map.tscn"]=1
 				picked["tests/integration/test_l3_strategic_map.tscn"]=1 ;;
+			stick-world/modules/town_life/*|stick-world/config/town_life/*)
+				picked["tests/integration/test_town_life_harvest.tscn"]=1 ;;
 			stick-world/modules/world/*|stick-world/tools/check_godot_errors.sh)
+				picked["tests/integration/test_town_life_harvest.tscn"]=1
 				picked["tests/integration/test_game_root_assembly.tscn"]=1
 				picked["tests/integration/test_village_map.tscn"]=1
 				picked["tests/integration/test_garrison_spawner.tscn"]=1

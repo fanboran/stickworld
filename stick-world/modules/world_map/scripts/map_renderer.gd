@@ -13,6 +13,13 @@ class_name MapRenderer
 ## 标记、快速旅行路由高亮（琥珀虚线——虚线的正确语用位置，§7.2-4）、纸边框。
 ## 静态层贴图缺失时回退矢量管线（政权色填充 + 实线道路分级——R6 废虚线）。
 ##
+## 线条语言（R8 层2）：地图线条 = 手绘马克笔，与 UI 控件边框同源（MapSketch，
+## wobble 公式/采样密度/boiling 节拍直接复用 SketchDraw）。
+##   静态线（城界/出生轮廓/邻居轮廓/河流）：固定 seed（几何 id/坐标 hash 派生，
+##   MapSketch DJB2）**不沸腾**；wobble 在缓存构建时做一次
+##   动态线（hover/路由高亮/玩家脉冲环/当前城笔触）：boiling 0.12s 重掷（血条同拍）
+## 线宽/色全部走 MapTokens（本文件零字面量）；琥珀只出现在路由高亮（操作语义）。
+##
 ## 建成区 blob V2（§R5，创始人拍板随人口增长动态化）：每包三档严格嵌套贴图
 ## （blob_low/mid/high.png，high ⊆ mid ⊆ low）逐层叠加 = 每城烘焙档形状；
 ## 运行时按扰动后 population_score 判档（0.35/0.65，SettlementBlob.tier_of），
@@ -39,7 +46,9 @@ var _camera: MapCamera = null
 ## 当前悬停的地块 ID（""=无）
 var hovered_tile_id: String = ""
 
-## 性能缓存：城市描边段 + 出生 L1 轮廓 + 邻居空心轮廓（不随 zoom/hover 变化，set_data 后首帧构建一次复用）。
+## 性能缓存：城市描边段 + 出生 L1 轮廓 + 邻居空心轮廓 + 河流折线（R8 层2 起存的是
+## **手绘扰动后**的点列——wobble 在缓存构建时做一次，几何不变则扰动不变，不沸腾；
+## 不随 zoom/hover 变化，set_data 后首帧构建一次复用）。
 ## 原实现每帧重建描边段并对每段遍历湖全部边做距离计算（4668 段 × 湖边数 ≈ 百万级），
 ## hover 每帧触发 → 卡顿源；缓存后 hover 重绘 = 1 次 draw_multiline。
 var _cached_segs: PackedVector2Array = PackedVector2Array()
@@ -47,6 +56,9 @@ var _cached_segs: PackedVector2Array = PackedVector2Array()
 var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
 ## 邻居老 L1 块空心轮廓（每块一条闭合折线，A3 空心化）
 var _cached_neighbor_outlines: Array[PackedVector2Array] = []
+## 河流折线（矢量回退层消费；手绘扰动后，seed = 河流序固定）+ 平行宽度表
+var _river_lines: Array[PackedVector2Array] = []
+var _river_widths: PackedFloat32Array = PackedFloat32Array()
 ## 道路分级缓存（R6 实线分级，set_data 后构建一次）：土路/官道折线组。
 ## 运行时矢量仅交通模式贴图缺失回退时绘制——正常观感走 l1_travel.png 贴图
 ## （道路 casing 已烘焙，§R4：地形/政治模式不显示道路）
@@ -103,99 +115,86 @@ var _tex_slot: Dictionary = {}
 ## 待加载队列（模式切换/set_data 时按需补充）
 var _load_queue: Array[Dictionary] = []
 
-## 配色（与 L2MapRenderer 完全一致；水体色与 B2 底图 terrain_params.json colors 同源，改色两端同步）
-const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
-const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
-## 河流（B3）：与 L2/L3 底图预渲染河流同色；宽度 = 生成端 EDT 实测河宽（地图单位），
-## 下限保证缩到整图适配（zoom≈0.77）时细河仍可见
-const RIVER_COLOR := Color(46.0 / 255.0, 102.0 / 255.0, 140.0 / 255.0)
-const RIVER_MIN_WIDTH := 2.0
+## ===== 线条/色彩 token（R8 层2）：真相源在 MapTokens，本文件零色值/线宽字面量 =====
+## 语义色槽：内容线 = 群系色派生（生成端同源）；交互线（hover）= BORDER_STRONG；
+## 操作线（路由高亮）= ACCENT（琥珀唯一合法位置）；玩家位置 = 玩家国色（运行时取）。
+## 下列 const 为绘制代码的本地别名（含 strategic_map_controller 图例引用的公共入口）。
 
-## 道路（R6 渲染端：实线分级，废 F5 虚线；色与生成端 casing 面色同源——
-## l1_terrain_params.json travel.face_color，改色两端同步）。
-## 宽度 = 地图单位（贴图坐标 ↔ context 1:1，与烘焙面宽同值；河流同策略）；
-## 正常观感走 l1_travel.png 贴图（casing 双层），矢量仅交通模式回退时绘制
-const ROAD_COLOR_DIRT := Color(166.0 / 255.0, 122.0 / 255.0, 60.0 / 255.0)
-const ROAD_COLOR_PAVED := Color(198.0 / 255.0, 132.0 / 255.0, 82.0 / 255.0)
-const ROAD_WIDTH_DIRT := 1.2
-const ROAD_WIDTH_PAVED := 3.0
-## 图例条目（控制器 _fill_legend 按模式取用；R6 废虚线——不再标注线型，
-## 文字定「土路/官道」，§R4 交通模式图例）
+## 配色（与 L2MapRenderer 一致；水体色与 B2 底图 terrain_params.json colors 同源，改色两端同步）
+const OCEAN_COLOR := MapTokens.L1_OCEAN
+const LAKE_COLOR := MapTokens.L1_LAKE
+## 河流（B3）：宽度 = 生成端 EDT 实测河宽（地图单位），下限保证缩到整图适配时细河仍可见
+const RIVER_COLOR := MapTokens.L1_RIVER
+const RIVER_MIN_WIDTH := MapTokens.L1_RIVER_MIN_WIDTH
+
+## 道路（R6 实线分级；色与生成端 casing 面色 l1_terrain_params.json travel.face_color 同源）
+const ROAD_COLOR_DIRT := MapTokens.L1_ROAD_DIRT
+const ROAD_COLOR_PAVED := MapTokens.L1_ROAD_PAVED
+const ROAD_WIDTH_DIRT := MapTokens.L1_ROAD_WIDTH_DIRT
+const ROAD_WIDTH_PAVED := MapTokens.L1_ROAD_WIDTH_PAVED
+## 图例条目（控制器 _fill_legend 按模式取用；R6 废虚线——文字定「土路/官道」）
 const ROAD_LEGEND: Array[Dictionary] = [
-	{"color": ROAD_COLOR_DIRT, "text": "土路"},
-	{"color": ROAD_COLOR_PAVED, "text": "官道"},
+	{"color": MapTokens.L1_ROAD_DIRT, "text": "土路"},
+	{"color": MapTokens.L1_ROAD_PAVED, "text": "官道"},
 ]
 
-## 群系图例色（B2 地形底图色板的 L1 图例入口；基色与生成端
-## tools/worldgen/l3/biome_generate.py BIOME_COLORS 同源，改色两端同步）
-const BIOME_LEGEND: Array[Dictionary] = [
-	{"color": Color(130.0 / 255.0, 170.0 / 255.0, 90.0 / 255.0), "text": "平原"},
-	{"color": Color(70.0 / 255.0, 120.0 / 255.0, 62.0 / 255.0), "text": "森林"},
-	{"color": Color(208.0 / 255.0, 182.0 / 255.0, 122.0 / 255.0), "text": "荒漠"},
-	{"color": Color(228.0 / 255.0, 233.0 / 255.0, 238.0 / 255.0), "text": "冰原"},
-	{"color": Color(95.0 / 255.0, 160.0 / 255.0, 195.0 / 255.0), "text": "水源带"},
-	{"color": Color(118.0 / 255.0, 62.0 / 255.0, 54.0 / 255.0), "text": "火山"},
-]
+## 群系图例色（B2 地形底图色板的 L1 图例入口；与生成端 biome_generate.py 同源）
+const BIOME_LEGEND: Array[Dictionary] = MapTokens.BIOME_LEGEND
+
 ## 邻居老 L1 块（A3 空心化：灰色轮廓线，不填充）
-const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
-const NEIGHBOR_BORDER_WIDTH := 2.0
+const NEIGHBOR_COLOR := MapTokens.L1_NEIGHBOR_COLOR
+const NEIGHBOR_BORDER_WIDTH := MapTokens.L1_NEIGHBOR_BORDER_WIDTH
 ## 内容区"纸张边界"黑框（context 外缘，A3）
-const PAPER_BORDER_COLOR := Color(0.08, 0.08, 0.08)
-const PAPER_BORDER_WIDTH := 4.0
+const PAPER_BORDER_COLOR := MapTokens.L1_PAPER_BORDER_COLOR
+const PAPER_BORDER_WIDTH := MapTokens.L1_PAPER_BORDER_WIDTH
 ## 城市常驻描边（内部城界；屏幕像素固定、细，不随缩放变化——避免缩放时粗细跳变）
-const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
-const TILE_BORDER_WIDTH := 2.0
+const TILE_BORDER_COLOR := MapTokens.L1_TILE_BORDER_COLOR
+const TILE_BORDER_WIDTH := MapTokens.L1_TILE_BORDER_WIDTH
 ## 出生 L1 轮廓 / 邻居分界（屏幕像素固定，略粗区分出生块边界）
-const BORDER_COLOR := Color(0.25, 0.25, 0.25)
-const BORDER_WIDTH := 2.5
-## hover 描边（屏幕像素固定）
-const HOVER_COLOR := Color(0.55, 0.55, 0.55)
-const HOVER_WIDTH := 3.0
+const BORDER_COLOR := MapTokens.L1_BORDER_COLOR
+const BORDER_WIDTH := MapTokens.L1_BORDER_WIDTH
+## hover 描边（交互线槽 = StickTokens.BORDER_STRONG，R8 层2 语义归位；屏幕像素固定）
+const HOVER_COLOR := MapTokens.L1_HOVER_COLOR
+const HOVER_WIDTH := MapTokens.L1_HOVER_WIDTH
 ## 城市中心标记点（小圆点 + 细环，屏幕像素固定；画在聚落位置，指示城市中心）
-const CITY_DOT_RADIUS := 3.0
-const CITY_DOT_RING_WIDTH := 1.0
-const CITY_DOT_COLOR := Color(0.95, 0.95, 0.9)
-const CITY_DOT_RING := Color(0.12, 0.12, 0.12)
-## 城市建成区（C2/§R5）：烘焙贴图填充底色近似值（生成端概览同款暖灰 198,188,170——
-## 实际填充从周边群系色派生，此处为图例/矢量回退的近似常量，改色两端同步）。
-## 画在城界描边之下（行政区划显式分层，风险表点名项）。
-## T4+ 白描边 / T5 金描边（当前数据只到 T3，代码支持全级；矢量回退层用）
-const BLOB_FILL := Color(198.0 / 255.0, 188.0 / 255.0, 170.0 / 255.0)
-const BLOB_EDGE := Color(0.24, 0.20, 0.15)
-const BLOB_EDGE_T4 := Color(0.95, 0.95, 0.92)
-const BLOB_EDGE_T5 := Color(1.0, 0.83, 0.25)
-const BLOB_EDGE_WIDTH := 1.5
-## F3 调试：城市编号
-const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
-const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
-## F3 城市编号字号（地图单元，原生渲染）：8192 级 context 城市约 180 地图单元，
-## 30 号在默认整图适配（zoom≈0.77）下约 23px 屏幕，字号随地图缩放（原生行为）
-const LABEL_SIZE := 30.0
-## F3 城市编号屏幕上限（像素）：仅高缩放时封顶防"雷霆大字"，默认缩放不受影响
-const LABEL_SCREEN_CAP := 40.0
+const CITY_DOT_RADIUS := MapTokens.L1_CITY_DOT_RADIUS
+const CITY_DOT_RING_WIDTH := MapTokens.L1_CITY_DOT_RING_WIDTH
+const CITY_DOT_COLOR := MapTokens.L1_CITY_DOT_COLOR
+const CITY_DOT_RING := MapTokens.L1_CITY_DOT_RING
+## 城市建成区（C2/§R5）：烘焙贴图填充底色近似值（生成端同源，改色两端同步）。
+## T4+ 白描边 / T5 金描边（内容色板琥珀棕——R8 层2 语义归位；矢量回退层用）
+const BLOB_FILL := MapTokens.L1_BLOB_FILL
+const BLOB_EDGE := MapTokens.L1_BLOB_EDGE
+const BLOB_EDGE_T4 := MapTokens.L1_BLOB_EDGE_T4
+const BLOB_EDGE_T5 := MapTokens.L1_BLOB_EDGE_T5
+const BLOB_EDGE_WIDTH := MapTokens.L1_BLOB_EDGE_WIDTH
+## F3 调试：城市编号（调试域专色，非地图语义色）
+const LABEL_COLOR := MapTokens.DEBUG_INK
+const LABEL_BG := MapTokens.DEBUG_BG
+## F3 城市编号字号（地图单元，原生渲染）
+const LABEL_SIZE := MapTokens.L1_LABEL_SIZE
+const LABEL_SCREEN_CAP := MapTokens.L1_LABEL_SCREEN_CAP
 
 ## 玩家位置标记（R2，GPS 范式，§7.3-6 规范表）：中心 4px 玩家国色点（白描边）+
-## 12px 静态细环 + 1.5s 周期向外扩散淡出脉冲环（12→36px，alpha 0.5→0）。
-## 玩家位置是内容语义——色取玩家所在地块政权色（政权色体系内），非琥珀操作色；
-## 全部尺寸屏幕像素固定（÷zoom 换算）
-const PLAYER_DOT_RADIUS := 4.0
-const PLAYER_DOT_OUTLINE_W := 1.5
-const PLAYER_RING_RADIUS := 12.0
-const PLAYER_RING_WIDTH := 1.0
-const PLAYER_PULSE_FROM := 12.0
-const PLAYER_PULSE_TO := 36.0
-const PLAYER_PULSE_PERIOD := 1.5
-const PLAYER_PULSE_ALPHA := 0.5
+## 12px 静态细环 + 1.5s 周期向外扩散淡出脉冲环。色取所在地块政权色（内容语义）。
+## 全部尺寸屏幕像素固定（÷zoom 换算）；环手绘化（R8 层2）
+const PLAYER_DOT_RADIUS := MapTokens.L1_PLAYER_DOT_RADIUS
+const PLAYER_DOT_OUTLINE_W := MapTokens.L1_PLAYER_DOT_OUTLINE_W
+const PLAYER_RING_RADIUS := MapTokens.L1_PLAYER_RING_RADIUS
+const PLAYER_RING_WIDTH := MapTokens.L1_PLAYER_RING_WIDTH
+const PLAYER_PULSE_FROM := MapTokens.L1_PLAYER_PULSE_FROM
+const PLAYER_PULSE_TO := MapTokens.L1_PLAYER_PULSE_TO
+const PLAYER_PULSE_PERIOD := MapTokens.L1_PLAYER_PULSE_PERIOD
+const PLAYER_PULSE_ALPHA := MapTokens.L1_PLAYER_PULSE_ALPHA
 
 ## 快速旅行路由高亮（P6/E3「途经路径高亮」）：途经道路亮琥珀虚线加粗 + 途经聚落
-## 节点白描边空心圆，画在水系之上（湖不再遮高亮，路径反馈连续可见）。
-## 虚线 = UI 操作语义的正确位置（§7.2-4：正式道路实线，虚线只给行军/路线预览类 UI；
-## R6 已废道路虚线，虚线只剩这里）
-const ROUTE_HIGHLIGHT_COLOR := Color(1.0, 0.72, 0.11, 0.95)
-const ROUTE_HIGHLIGHT_WIDTH := 0.008
-const ROUTE_DASH := 0.014
-const ROUTE_GAP := 0.010
-const ROUTE_NODE_RADIUS := 6.0
+## 节点白描边空心圆，画在水系之上。虚线 = UI 操作语义的正确位置（§7.2-4）；
+## 琥珀 = 操作线槽 StickTokens.ACCENT（R8 层2：地图上琥珀的唯一合法位置）
+const ROUTE_HIGHLIGHT_COLOR := MapTokens.L1_ROUTE_COLOR
+const ROUTE_HIGHLIGHT_WIDTH := MapTokens.L1_ROUTE_WIDTH_RATIO
+const ROUTE_DASH := MapTokens.L1_ROUTE_DASH_RATIO
+const ROUTE_GAP := MapTokens.L1_ROUTE_GAP_RATIO
+const ROUTE_NODE_RADIUS := MapTokens.L1_ROUTE_NODE_RADIUS
 ## 路由高亮数据（api.get_travel_status 的 roads/path → context 折线 + 节点位置）
 var _route_road_pts: Array[PackedVector2Array] = []
 var _route_nodes: PackedVector2Array = PackedVector2Array()
@@ -212,18 +211,23 @@ var _debug_was_visible: bool = false
 ## 几何 = 该城建成区 blob 轮廓（R2——与城市本体图形共用同一几何，描边与建成区
 ## 轮廓逐像素重合；原整地块多边形描边与城市轮廓不重合，已废）。
 ## 含玩家当前聚落的地块（出生 = spawn 聚落所在块），跨城移动后经 set_current_tile 更新。
-## 双色不透明，与 M 大世界同视觉语言
+## 双色不透明，与 M 大世界同视觉语言；R8 层2：流动语义保留（FlowOutline 色带），
+## 叠加 boiling 手绘笔触（0.12s 重掷扰动点列，血条同拍）
 var _current_tile_id: String = ""
-const GLOW_A := Color(0.35, 0.85, 1.0)
-const GLOW_B := Color(0.15, 0.45, 0.95)
+const GLOW_A := MapTokens.L1_GLOW_A
+const GLOW_B := MapTokens.L1_GLOW_B
 ## 描边宽（屏幕像素固定，与其他描边一致策略）
-const GLOW_WIDTH := 4.0
+const GLOW_WIDTH := MapTokens.L1_GLOW_WIDTH
 ## 当前城 blob 轮廓分段缓存（几何不变，重采样一次复用）
 var _glow_outline: PackedVector2Array = PackedVector2Array()
 ## 流动动画相位（秒）
 var _glow_time := 0.0
 ## 玩家位置脉冲环相位（秒，PLAYER_PULSE_PERIOD 周期循环）
 var _pulse_time := 0.0
+## boiling 时钟/帧号（R8 层2 动态线节拍）：动态线（hover/路由/脉冲环/当前城笔触）
+## seed = _boiling_frame，每 SketchDraw.WOBBLE_INTERVAL 0.12s 重掷——血条同拍
+var _boiling_time := 0.0
+var _boiling_frame := 0
 
 
 func set_data(data: L1WorldData) -> void:
@@ -599,8 +603,8 @@ func _process(delta: float) -> void:
 	_process_overlay_queue()
 	if not is_visible_in_tree() or _data == null:
 		return
-	# 动画相位推进：当前城流动光 + 玩家位置脉冲环（有任一动画即逐帧重绘；
-	# 静态层均缓存，成本低）
+	# 动画相位推进：当前城流动光 + 玩家位置脉冲环 + 动态线 boiling（有任一动画即逐帧
+	# 重绘；静态层均缓存，成本低）。boiling = 0.12s 重掷一次（血条同拍），seed 变化才重绘
 	var animating := false
 	if not _glow_outline.is_empty():
 		_glow_time += delta
@@ -608,6 +612,19 @@ func _process(delta: float) -> void:
 	if _player_visible:
 		_pulse_time += delta
 		animating = true
+	# 动态线 boiling 时钟（hover/路由高亮/玩家脉冲环/当前城笔触共用）：
+	# 每 0.12s 重掷一次帧号（血条同拍），帧号变化才触发重绘
+	var has_dynamic := not hovered_tile_id.is_empty() or not _route_road_pts.is_empty() \
+			or _player_visible or not _glow_outline.is_empty()
+	if has_dynamic:
+		_boiling_time += delta
+		var frame := MapSketch.boiling_seed(_boiling_time)
+		if frame != _boiling_frame:
+			_boiling_frame = frame
+			animating = true
+	else:
+		_boiling_time = 0.0
+		_boiling_frame = 0
 	if animating:
 		queue_redraw()
 	# 屏幕坐标 -> 地图坐标（一次换算，与 api.query_at_screen 同路径；
@@ -665,27 +682,33 @@ func _draw() -> void:
 				draw_polyline(line, ROAD_COLOR_DIRT, maxf(ROAD_WIDTH_DIRT, 1.0), true)
 			for line in _road_paved_lines:
 				draw_polyline(line, ROAD_COLOR_PAVED, maxf(ROAD_WIDTH_PAVED, 1.2), true)
-		# 1.5 河流（B3）：矢量折线叠加，画在湖泊之下（河入湖由湖面覆盖）、城市块之上
-		for rv in _data.rivers:
-			var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
-			if rpts.size() >= 2:
-				draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
+		# 1.5 河流（B3）：手绘扰动折线（缓存，seed=河流序固定），画在湖泊之下
+		#     （河入湖由湖面覆盖）、城市块之上
+		for ri in _river_lines.size():
+			draw_polyline(_river_lines[ri], RIVER_COLOR, _river_widths[ri], true)
 		if _lakes_mesh != null:
 			draw_mesh(_lakes_mesh, null)
 	# 1.6 快速旅行路由高亮（P6）：途经道路琥珀虚线加粗 + 节点空心圆（全模式——
-	#     UI 操作语义的虚线，§7.2-4；水系之上连续可见）
+	#     UI 操作语义的虚线，§7.2-4；水系之上连续可见）。
+	#     R8 层2：操作线 = ACCENT；boiling 手绘笔触（0.12s 重掷，扰动点列再切虚线）
 	if not _route_road_pts.is_empty():
 		var rw: float = maxf(ctx_size.x * ROUTE_HIGHLIGHT_WIDTH, 2.0)
 		var dash_segs := PackedVector2Array()
-		for pts in _route_road_pts:
-			_append_dashed(dash_segs, pts, ctx_size.x * ROUTE_DASH, ctx_size.x * ROUTE_GAP)
+		for ri in _route_road_pts.size():
+			var wpts := MapSketch.wobble_polyline(_route_road_pts[ri],
+				MapSketch.id_seed("route", ri) + _boiling_frame, rw, false)
+			MapSketch.dash_segments(dash_segs, wpts,
+				ctx_size.x * ROUTE_DASH, ctx_size.x * ROUTE_GAP)
 		if dash_segs.size() >= 2:
 			draw_multiline(dash_segs, ROUTE_HIGHLIGHT_COLOR, rw, true)
 		var nr: float = ROUTE_NODE_RADIUS
 		if zz > 0.0001:
 			nr = ROUTE_NODE_RADIUS / zz
 		for pos in _route_nodes:
-			draw_arc(pos, nr, 0.0, TAU, 48, Color.WHITE, maxf(rw * 0.35, 1.0), true)
+			var nring := MapSketch.wobble_ring(pos, nr,
+				MapSketch.vertex_seed(pos) + _boiling_frame, maxf(rw * 0.35, 1.0))
+			nring.append(nring[0])
+			draw_polyline(nring, Color.WHITE, maxf(rw * 0.35, 1.0), true)
 	if _tiles_mesh == null and not terrain_base:
 		# 回退：数据异常时逐层绘制（邻居空心：只描边，见第 4.5 层）
 		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
@@ -770,21 +793,29 @@ func _draw() -> void:
 			continue
 		draw_circle(tile.settlement.position, dot_r, CITY_DOT_COLOR)
 		draw_arc(tile.settlement.position, dot_r, 0.0, TAU, 48, CITY_DOT_RING, ring_w, true)
-	# 7. hover 城市块描边（屏幕像素固定）
+	# 7. hover 城市块描边（交互线槽；屏幕像素固定；boiling 手绘笔触——"活"的笔触
+	#    只给交互层，R8 层2）
 	if not hovered_tile_id.is_empty():
 		var hw: float = HOVER_WIDTH
 		if zz > 0.0001:
 			hw = HOVER_WIDTH / zz
 		for tile in _data.tiles:
 			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
-				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)
+				var wpts := MapSketch.wobble_polyline(tile.polygon,
+					MapSketch.id_seed(hovered_tile_id, 7) + _boiling_frame, hw, true)
+				wpts.append(wpts[0])
+				draw_polyline(wpts, HOVER_COLOR, hw, true)
 				break
-	# 7.5 当前所在城市地块：蓝光流动描边（"你在这里"；屏幕像素固定，画在纸边框内）
+	# 7.5 当前所在城市地块：蓝光流动描边（"你在这里"；屏幕像素固定，画在纸边框内）。
+	#     R8 层2：FlowOutline 流动语义保留（色调波沿线移动），叠加 boiling 手绘
+	#     笔触（扰动点列重采样后再走色带）——一套动画语言，不打架
 	if _glow_outline.size() >= 3:
 		var gwid: float = GLOW_WIDTH
 		if zz > 0.0001:
 			gwid = GLOW_WIDTH / zz
-		FlowOutline.draw_flow(self, _glow_outline, GLOW_A, GLOW_B, _glow_time, gwid)
+		var gwobble := MapSketch.wobble_polyline(_glow_outline,
+			MapSketch.id_seed(_current_tile_id) + _boiling_frame, gwid, true)
+		FlowOutline.draw_flow(self, gwobble, GLOW_A, GLOW_B, _glow_time, gwid)
 	# 7.8 内容区"纸张边界"黑框（context 外缘，A3；压住贴边内容 = 装裱观感，屏幕像素固定）
 	var pw: float = PAPER_BORDER_WIDTH
 	if zz > 0.0001:
@@ -852,8 +883,10 @@ func clear_route_highlight() -> void:
 	queue_redraw()
 
 
-## 玩家位置标记（R2，替代拟物图钉）：中心 4px 玩家国色点（白描边）+ 12px 静态细环
-## + 1.5s 周期脉冲扩散环（12→36px，alpha 0.5→0，玩家国色）。全部屏幕像素固定。
+## 玩家位置标记（R2，替代拟物图钉；R8 层2 环手绘化）：中心 4px 玩家国色点（白描边）
+## + 12px 手绘静态细环（固定 seed=位置 hash，位置不变笔触不变）
+## + 1.5s 周期脉冲扩散环（boiling 重掷的手绘闭合环，12→36px alpha 0.5→0，玩家国色）。
+## 全部屏幕像素固定。
 func _draw_player_marker(zz: float) -> void:
 	var dot_r := PLAYER_DOT_RADIUS
 	var dot_ow := PLAYER_DOT_OUTLINE_W
@@ -868,15 +901,19 @@ func _draw_player_marker(zz: float) -> void:
 		ring_w /= zz
 		p_from /= zz
 		p_to /= zz
-	# 静态细环（白，半透明度略降避免喧宾夺主）
-	var ring_col := Color(1.0, 1.0, 1.0, 0.75)
-	draw_arc(_player_pos, ring_r, 0.0, TAU, 48, ring_col, ring_w, true)
-	# 脉冲扩散环：0→1 相位，半径 12→36px、alpha 0.5→0，玩家国色
+	# 静态细环（手绘化：固定 seed——不沸腾；白，半透明度略降避免喧宾夺主）
+	var ring_seed := MapSketch.vertex_seed(_player_pos)
+	var ring := MapSketch.wobble_ring(_player_pos, ring_r, ring_seed, ring_w)
+	ring.append(ring[0])
+	draw_polyline(ring, MapTokens.L1_PLAYER_RING_COLOR, ring_w, true)
+	# 脉冲扩散环（手绘化 boiling 闭合环）：0→1 相位，半径 12→36px、alpha 0.5→0，玩家国色
 	var t := fmod(_pulse_time, PLAYER_PULSE_PERIOD) / PLAYER_PULSE_PERIOD
 	var pa := lerpf(PLAYER_PULSE_ALPHA, 0.0, t)
 	if pa > 0.01:
-		draw_arc(_player_pos, lerpf(p_from, p_to, t), 0.0, TAU, 48,
-				Color(_player_state_color, pa), ring_w, true)
+		var pulse := MapSketch.wobble_ring(_player_pos, lerpf(p_from, p_to, t),
+			ring_seed + _boiling_frame, ring_w)
+		pulse.append(pulse[0])
+		draw_polyline(pulse, Color(_player_state_color, pa), ring_w, true)
 	# 中心点：玩家国色填充 + 白描边
 	draw_circle(_player_pos, dot_r, _player_state_color)
 	draw_arc(_player_pos, dot_r, 0.0, TAU, 48, Color.WHITE, dot_ow, true)
@@ -940,24 +977,37 @@ func _mesh_from_pairs(pairs: Array) -> ArrayMesh:
 
 
 ## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓
-## + 邻居空心轮廓（A3）。仅 set_data / 首帧调用一次。
+## + 邻居空心轮廓（A3）+ 河流折线。仅 set_data / 首帧调用一次。
+## R8 层2：缓存存**手绘扰动后**点列——静态线固定 seed（几何 id/坐标 hash 派生，
+## MapSketch DJB2 混合）不沸腾；wobble 在构建时做一次，几何不变则扰动不变。
 func _build_cached_geometry() -> void:
 	_cached_segs = PackedVector2Array()
 	_cached_l1_closed = PackedVector2Array()
 	_cached_neighbor_outlines = []
-	for nb in _data.neighbors:
-		for poly in nb.get("polygons", []):
+	_river_lines = []
+	_river_widths = PackedFloat32Array()
+	# 邻居空心轮廓（手绘化：seed = 邻居序，固定）
+	for ni in _data.neighbors.size():
+		for poly in _data.neighbors[ni].get("polygons", []):
 			var pts := _pts(poly)
 			if pts.size() >= 3:
-				_cached_neighbor_outlines.append(_closed(pts))
+				var wpts := MapSketch.wobble_polyline(pts,
+					MapSketch.id_seed("neighbor", ni), NEIGHBOR_BORDER_WIDTH, true)
+				wpts.append(wpts[0])
+				_cached_neighbor_outlines.append(wpts)
 	var lake_tol := _lake_edge_tol()
 	# 湖 bbox（外扩 tol）预筛：段中点不在任何湖 bbox 内 → 直接非邻湖，省精确距离计算
 	var lake_boxes: Array[Rect2] = []
 	for lake in _data.lakes:
 		lake_boxes.append(_lake_bbox(lake, lake_tol))
+	# 城界描边段：无向边去重（相邻 tile 共享边只描一次——扰动后两份笔触才不会叠成
+	# 模糊双线）→ 每边按 tile_id hash seed 手绘扰动（顶点拖拽式：共享端点扰动一致，
+	# 折线连续无缝）
+	var seen_edges := {}
 	for tile in _data.tiles:
 		if tile.polygon.size() < 3:
 			continue
+		var tseed := MapSketch.id_seed(tile.tile_id)
 		var pts := tile.polygon
 		var n := pts.size()
 		for i in range(n):
@@ -965,10 +1015,29 @@ func _build_cached_geometry() -> void:
 			var b := pts[(i + 1) % n]
 			if _edge_touches_lake_fast(a, b, lake_tol, lake_boxes):
 				continue
-			_cached_segs.append(a)
-			_cached_segs.append(b)
-	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环，多环串接已在数据侧消除）
-	_cached_l1_closed = _closed(_data.l1_polygon)
+			var key := MapSketch.edge_key(a, b)
+			if seen_edges.has(key):
+				continue
+			seen_edges[key] = true
+			var wpts := MapSketch.wobble_polyline(PackedVector2Array([a, b]),
+				tseed, TILE_BORDER_WIDTH, false)
+			_append_polyline_segs(_cached_segs, wpts)
+	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环）——手绘化固定 seed
+	if _data.l1_polygon.size() >= 3:
+		var l1w := MapSketch.wobble_polyline(_data.l1_polygon,
+			MapSketch.id_seed("l1_polygon"), BORDER_WIDTH, true)
+		if l1w.size() >= 3:
+			l1w.append(l1w[0])
+			_cached_l1_closed = l1w
+	# 河流折线（矢量回退层；seed = 河流序固定，宽随河流数据）
+	for ri in _data.rivers.size():
+		var rv: Dictionary = _data.rivers[ri]
+		var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
+		if rpts.size() >= 2:
+			var rw := maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH)
+			_river_lines.append(MapSketch.wobble_polyline(rpts,
+				MapSketch.id_seed("river", ri), rw, false))
+			_river_widths.append(rw)
 	# 道路分级（R6 实线分级，废 F5 虚线切分）：土路细 / 官道粗；
 	# 仅交通模式矢量回退时绘制（正常观感走 l1_travel.png 贴图）
 	_road_dirt_lines = []
@@ -984,30 +1053,18 @@ func _build_cached_geometry() -> void:
 	_segs_valid = true
 
 
-## 折线按 dash/gap 交替弧长切段（琥珀虚线）：实段点对 append 到 segs（draw_multiline 消费）。
-## 相位沿折线连续（跨顶点不断火），末尾残段按剩余长度截断。
-## 消费方 = 快速旅行路由高亮（R6 废道路虚线后，虚线只剩 UI 操作语义这一处）。
-func _append_dashed(segs: PackedVector2Array, pts: PackedVector2Array,
-		dash: float, gap: float) -> void:
-	var drawing := true
-	var remain := dash
+## 折线展开为点对 append（draw_multiline 消费：[p0,p1, p1,p2, ...]）
+func _append_polyline_segs(segs: PackedVector2Array, pts: PackedVector2Array) -> void:
 	for i in range(pts.size() - 1):
-		var a := pts[i]
-		var b := pts[i + 1]
-		var seg_len := a.distance_to(b)
-		if seg_len <= 0.0001:
-			continue
-		var walked := 0.0
-		while walked < seg_len - 0.0001:
-			var step := minf(remain, seg_len - walked)
-			if drawing:
-				segs.append(a.lerp(b, walked / seg_len))
-				segs.append(a.lerp(b, (walked + step) / seg_len))
-			walked += step
-			remain -= step
-			if remain <= 0.0001:
-				drawing = not drawing
-				remain = dash if drawing else gap
+		segs.append(pts[i])
+		segs.append(pts[i + 1])
+
+
+## 无向边去重 key：已迁 `MapSketch.edge_key`（L1 城界共享边去重 / L3 国界邻接共用）。
+
+
+## 折线按 dash/gap 弧长切段：已迁 `MapSketch.dash_segments`（R8 层2 通用化——
+## 路由高亮与 L2/L3 政治模式虚线界线共用同一实现）。
 
 
 ## 湖多边形包围盒（外扩 tol）——邻湖判定预筛用

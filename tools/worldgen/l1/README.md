@@ -29,7 +29,21 @@
   石板带只落在市场净空区（`city_decor.verify_decor` 规划期 assert）。
 - 确定性：装饰用独立 rng 流（seed 掺盐），布局 rng 序未被触动——重生成时
   建筑 JSON 逐字节不变，装饰随 seed 变化。
-- 性能量级：每城装饰物件 30~46 组（约 120~190 个 Polygon2D 节点），无逐草绘制。
+- 性能量级：每城装饰物件 22~50 组（约 90~200 个 Polygon2D 节点，矿区/军镇
+  刻意荒凉疏朗、商城密集），无逐草绘制。
+
+## 分城风格（批次 4）
+
+一城一 profile，三轴拉开（差异在氛围不在画风，同属 L1 文化圈）：
+
+| 轴 | profile 字段 | 说明 |
+|---|---|---|
+| 分带构成 | `density` / `decor.road_h` / landmarks 里 market 条目 dict 形式 `plaza` 覆盖 / `decor.farmland`（true=1 块、int n=最多 n 块，落位受 ≥560px 无建筑间隙约束） | 民居密度 / 土路宽窄 / 石板广场大小 / 田块数 |
+| 装饰密度 | `decor.lamp_count·lamp_spacing·trees·bushes·clutter_market·clutter_warehouse·clutter_mix` | `clutter_mix`=[barrel,crate,hay] 权重（渔村偏桶、矿堡偏箱、粮集偏草垛） |
+| 时段/色调 | `tone`（默认 noon） | 引用 `city_decor.TONES` 五档：noon 正午 / dawn 清晨冷青 / gold 午后暖金 / dusk 黄昏粉橙 / overcast 阴雾铁灰；渲染端统一乘 PALETTE 取色烘进 tscn（分带 shader uniform + 装饰颜色），零运行时开销、不换皮不换 shader；天空与昼夜循环是全局系统，不逐城调 |
+
+八城逐城配比与依据见 `city_profiles.json`（AI 提案·待定）。城墙带逐 cell
+落位（城墙 def 外观为单 cell 宽定宽体，多 cell 段落位会出幽灵矩形碎片）。
 
 ## 重生成流程
 
@@ -43,7 +57,9 @@ bash stick-world/tools/check_godot_errors.sh && bash stick-world/tests/run_all.s
 ## 配置口子（city_profiles.json）
 
 - `defaults.decor`：装饰基准参数（road_h/lamp_count/lamp_spacing/trees/bushes/
-  clutter_market/clutter_warehouse/farmland），每城 `decor` 字段可单项覆盖。
+  clutter_market/clutter_warehouse/clutter_mix/farmland），每城 `decor` 字段可单项覆盖。
+- `tone`（defaults 或每城）：分城时段/色调档，见上表；档位表在 `city_decor.TONES`。
 - 地标规格（宽度/净空）在 `city_layout.py LANDMARK_SPECS`，profile 的 landmarks
   条目可用 dict 形式覆盖 width/plaza。
-- 配色统一在 `city_decor.PALETTE`（L1 同一文化圈，城间差异来自配比，不换皮）。
+- 配色统一在 `city_decor.PALETTE`（L1 同一文化圈，城间差异来自配比与 tone
+  轻量偏移，不换皮）。

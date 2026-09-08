@@ -6,6 +6,9 @@ extends Node
 ##   - assign_village_job 轮转分配（index % 职业数）+ set_profession 写入
 ##   - 着装应用（rig.body_color = uniform 色；weapon_mount.weapon_type = tool 映射）
 ##   - duck 协议降级（无 set_profession/rig/weapon_mount 的实体安全跳过）
+## 覆盖批次 4（人口扩充与配比）验收面：
+##   - count_work_capacity：真建筑槽位累计 / 占位表兜底容量 1 / 无处可干 0
+##   - assign_village_jobs 配比分配：quota 上限、工位容量约束、配额满待业池
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -48,6 +51,9 @@ func _ready() -> void:
 	_runner.add_test("轮转分配: 三实体得三职业 + 越界取模", _test_assign_rotation)
 	_runner.add_test("着装应用: body_color 与 weapon_type", _test_appearance)
 	_runner.add_test("duck 降级: 裸实体安全返回空", _test_duck_degrade)
+	_runner.add_test("配比: 工位容量计数（真建筑/占位兜底/无处可干）", _test_count_work_capacity)
+	_runner.add_test("配比: 批量分配（quota+工位容量约束、配额满待业）", _test_assign_village_jobs)
+	_runner.add_test("配比: 无工位职业全待业（容量 0 不分配）", _test_jobs_capacity_zero_idle)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -127,3 +133,71 @@ func _test_duck_degrade() -> void:
 	_runner.assert_equal(id, "", "接不住职业的实体返回空（未分配）")
 	# null 实体安全
 	_runner.assert_equal(TownLifeAPI.assign_village_job(null, 0), "", "null 实体安全返回空")
+
+
+# ───────────────────────── 批次 4：村庄职业配比 ────────────────────────────────
+
+func _test_count_work_capacity() -> void:
+	# 本套件无建筑环境：smithy_lv1 走占位表兜底（批次 3 语义 = "村子有打铁需求"）
+	var e := FakeEntity.new()
+	add_child(e)  # 容量计数借实体取场景树
+	_runner.assert_equal(ProfessionRegistry.count_work_capacity(e, "smithy_lv1"), 1,
+			"无真建筑但占位表覆盖 smithy_lv1 → 容量 1（占位计入配比的兜底）")
+	_runner.assert_equal(ProfessionRegistry.count_work_capacity(e, "no_such_shop"), 0,
+			"占位表未覆盖且无建筑 → 容量 0")
+	_runner.assert_equal(ProfessionRegistry.count_work_capacity(e, ""), 0,
+			"空 def 容量 0（资源点职业不走工位约束）")
+	_runner.assert_equal(ProfessionRegistry.count_work_capacity(null, "smithy_lv1"), 0,
+			"null 参照实体安全返回 0")
+	e.queue_free()
+
+
+func _test_assign_village_jobs() -> void:
+	# 无建筑环境：铁匠容量 = 占位兜底 1。断言值随 professions.tres quota 联动
+	#（当前 blacksmith 1 / lumberjack 3 / miner 3）。
+	var entities: Array = []
+	for i in 10:
+		var e := FakeEntity.new()
+		e.rig = FakeRig.new()
+		e.weapon_mount = FakeMount.new()
+		add_child(e)
+		entities.append(e)
+	var stats: Dictionary = TownLifeAPI.assign_village_jobs(entities)
+	var jobs: Dictionary = stats.get("jobs", {})
+	_runner.assert_equal(int(jobs.get("blacksmith", 0)), 1, "铁匠配额 1（quota=1 与占位容量 1 取小）")
+	_runner.assert_equal(int(jobs.get("lumberjack", 0)), 3, "伐木工配额 3（quota=3，资源点职业不受工位约束）")
+	_runner.assert_equal(int(jobs.get("miner", 0)), 3, "矿工配额 3（quota=3，资源点职业不受工位约束）")
+	_runner.assert_equal(int(stats.get("idle", 0)), 3, "配额外村民进待业池 3 人")
+	# 职业确实写入实体、着装同步应用（铁匠 uniform #7a4a21）
+	var smith_count: int = 0
+	for e in entities:
+		var pid := String(e.get_profession())
+		if pid == "blacksmith":
+			smith_count += 1
+			_runner.assert_equal(e.rig.body_color, Color("#7a4a21"), "铁匠着装已应用")
+	_runner.assert_equal(smith_count, int(jobs.get("blacksmith", 0)), "实体侧职业计数与统计一致")
+	for e in entities:
+		e.queue_free()
+
+
+func _test_jobs_capacity_zero_idle() -> void:
+	# 注入自定义档案（静态缓存，用例退出恢复）：容量 0 的工位职业不分配；
+	# 资源点职业按 quota 上限分配；配额外全待业。
+	var saved: Array = ProfessionRegistry._cached
+	ProfessionRegistry._cached = [
+		{"id": "mason", "name_zh": "石匠", "work_site_def": "no_such_shop", "quota": 2, "uniform": "#888888"},
+		{"id": "farmer", "name_zh": "农夫", "work_site_def": "", "quota": 1, "uniform": "#aabb88"},
+	]
+	var entities: Array = []
+	for i in 4:
+		var e := FakeEntity.new()
+		add_child(e)
+		entities.append(e)
+	var stats: Dictionary = TownLifeAPI.assign_village_jobs(entities)
+	var jobs: Dictionary = stats.get("jobs", {})
+	_runner.assert_false(jobs.has("mason"), "容量 0 的工位职业不参与分配（无处可干不上岗）")
+	_runner.assert_equal(int(jobs.get("farmer", 0)), 1, "资源点职业按 quota 分配 1 人")
+	_runner.assert_equal(int(stats.get("idle", 0)), 3, "其余 3 人全部待业")
+	ProfessionRegistry._cached = saved
+	for e in entities:
+		e.queue_free()

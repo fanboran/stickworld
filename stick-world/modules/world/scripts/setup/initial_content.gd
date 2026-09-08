@@ -45,19 +45,22 @@ func spawn_initial_buildings(map: Node2D) -> void:
 			push_warning("[GameRoot] 初始建筑生成失败: %s cell_x=%d: %s" % [def_id, cell_x, result.get("error", "未知错误")])
 
 
-## 预置村庄初始草棚（搬运系统取货点 + 玩家出生点右侧的草棚，放在出生点右侧土路区）
+## 预置主街东端民居（搬运系统送货/取货点）：placeholder 兼任仓库，
+## 与 InitialBuildingsList 的初始布局衔接成完整主街——
+## 西村口民居(-51) → 石造仓库(-34) → 铁匠铺(-17) → 宅邸地标(1) → 东侧民居(17)，
+## 全部落在出生土路区（cell -40±40 的净空带内，不长树），巷道 2 格。
 func spawn_initial_warehouse() -> void:
 	var construction_api: Node = _root.get_construction_api() if _root.has_method("get_construction_api") else null
 	if construction_api != null and construction_api.has_method("spawn_operational_building"):
-		construction_api.spawn_operational_building("placeholder", 15, 16)
+		construction_api.spawn_operational_building("placeholder", 17, 16)
 
 
 # ─────────────────────────────── NPC 生成 ────────────────────────────────
 
 ## 生成 NPC 村民，分布在玩家右侧不同 X 位置，不附身（AI 接管）。
 func spawn_npcs(map: Node2D, spawn_y: float) -> void:
-	# NPC 生成在仓库右侧，避开仓库 PassageBarrier（cell 15~31, X 480~992）
-	var npc_start_x: float = 1050.0
+	# NPC 生成在东侧民居右缘之外，避开民居 PassageBarrier（cell 17~33, X 544~1088）
+	var npc_start_x: float = 1100.0
 	for i in _root.NPC_COUNT:
 		var x: float = npc_start_x + 200.0 * i
 		# 确保在地图边界内

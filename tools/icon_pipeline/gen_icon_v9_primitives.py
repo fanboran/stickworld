@@ -161,6 +161,115 @@ def build_primitive(scene, kind):
     return ob, col
 
 
+def _cel_bake_mat():
+    """面烘色材质：读网格的 FACE 域顶点色 'cel_tone' 直出发光（不受光）。
+    单槽 discipline 不破——每对象仍 1 材质，面级颜色走属性。（与 gen_motifs.py 逐字一致）"""
+    m = bpy.data.materials.get('_cel_bake')
+    if m:
+        return m
+    m = bpy.data.materials.new('_cel_bake')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    emi = nt.nodes.new('ShaderNodeEmission')
+    try:
+        a = nt.nodes.new('ShaderNodeAttribute')
+        a.attribute_name = 'cel_tone'
+        nt.links.new(a.outputs[0], emi.inputs[0])
+    except Exception:
+        pass
+    nt.links.new(emi.outputs[0], out.inputs[0])
+    return m
+
+
+def _srgb_inv(f):
+    """文件域灰度 → 线性域：渲染 'Standard' 视图变换仍做 sRGB 显示编码，
+    要出图恰为文件域 cel 灰（0.32/0.62/0.92），材质里须存线性值。"""
+    return f / 12.92 if f <= 0.04045 else ((f + 0.055) / 1.055) ** 2.4
+
+
+def _toon_band_grays(steps):
+    """N 档 cel 灰（文件域均布 0.32..0.92）与其线性域值"""
+    fs = [0.32 + (0.92 - 0.32) * i / (steps - 1) for i in range(steps)]
+    return fs, [_srgb_inv(f) for f in fs]
+
+
+def _toon_mat():
+    """曲面 toon 材质（D 着色器分档）：漫反射光照 → ShaderToRGB → 明度 →
+    ColorRamp 常量量化 N 档灰（出图=文件域 0.32/0.62/0.92）→ Emission。
+    断点 TOON_LO/TOON_HI（文件域默认 0.35/0.70）、档数 TOON_STEPS 环境变量
+    （与 gen_motifs/compose 共享）。ShaderToRGB 仅 EEVEE 支持；不可用时回退
+    白模受光。（与 gen_motifs.py 逐字一致）"""
+    import os
+    steps = max(2, int(os.environ.get('TOON_STEPS', '3')))
+    lo = float(os.environ.get('TOON_LO', '0.35'))
+    hi = float(os.environ.get('TOON_HI', '0.70'))
+    m = bpy.data.materials.get('_toon')
+    if m:
+        return m
+    m = bpy.data.materials.new('_toon')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    try:
+        diff = nt.nodes.new('ShaderNodeBsdfDiffuse')
+        diff.inputs[0].default_value = (0.85, 0.85, 0.85, 1.0)
+        s2r = nt.nodes.new('ShaderNodeShaderToRGB')
+        bw = nt.nodes.new('ShaderNodeRGBToBW')
+        ramp = nt.nodes.new('ShaderNodeValToRGB')
+        ramp.color_ramp.interpolation = 'CONSTANT'
+        elems = ramp.color_ramp.elements
+        while len(elems) > 1:
+            elems.remove(elems[-1])
+        poss = [0.0] + [_srgb_inv(lo + (hi - lo) * (i + 1) / (steps - 1)) for i in range(steps - 1)]
+        _, grays = _toon_band_grays(steps)
+        for i, p in enumerate(poss):
+            e = elems[0] if i == 0 else elems.new(min(p, 0.999))
+            e.color = (grays[i], grays[i], grays[i], 1.0)
+        nt.links.new(diff.outputs[0], s2r.inputs[0])
+        nt.links.new(s2r.outputs[0], bw.inputs[0])
+        nt.links.new(bw.outputs[0], ramp.inputs[0])
+        emi = nt.nodes.new('ShaderNodeEmission')
+        nt.links.new(ramp.outputs[0], emi.inputs[0])
+        nt.links.new(emi.outputs[0], out.inputs[0])
+    except Exception:
+        print("toon shader unavailable, fallback to white diffuse")
+        sys.stdout.flush()
+        diff = nt.nodes.new('ShaderNodeBsdfDiffuse')
+        diff.inputs[0].default_value = (0.85, 0.85, 0.85, 1.0)
+        nt.links.new(diff.outputs[0], out.inputs[0])
+    return m
+
+
+def bake_flat_faces(scene):
+    """平面着色网格按「面法线·主光方向」量化三档灰烘进顶点色（一面一色，
+    烘色灰存线性域）；平滑网格走 toon 材质着色器分档。（与 gen_motifs.py 逐字一致）"""
+    cam = scene.camera
+    R = cam.matrix_world.to_3x3()
+    ldir = (R @ Vector((-3.0, 2.6, 0.6))).normalized()
+    bake = _cel_bake_mat()
+    toon = _toon_mat()
+    _, grays = _toon_band_grays(3)   # [lin(0.32), lin(0.62), lin(0.92)] 暗/中/亮
+    g_dark, g_mid, g_bright = grays
+    for o in scene.objects:
+        if o.type != 'MESH':
+            continue
+        polys = o.data.polygons
+        if polys and all(p.use_smooth for p in polys):
+            o.data.materials[0] = toon
+            continue
+        attr = o.data.color_attributes.get('cel_tone')
+        if attr is None:
+            attr = o.data.color_attributes.new('cel_tone', 'FLOAT_COLOR', 'FACE')
+        for p in polys:
+            t = p.normal.dot(ldir)
+            g = g_bright if t > 0.5 else (g_mid if t > 0.2 else g_dark)
+            attr.data[p.index].color = (g, g, g, 1.0)
+        o.data.materials[0] = bake
+
+
 def render_passes(scene, tag, id_mat):
     for o in scene.objects:
         if o.type != 'MESH':
@@ -170,12 +279,7 @@ def render_passes(scene, tag, id_mat):
     scene.render.filepath = os.path.join(OUT, f"{tag}_id.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "id")
-    white = shade_mat('shade_all')
-    for o in scene.objects:
-        if o.type != 'MESH':
-            continue
-        o.data.materials.clear()
-        o.data.materials.append(white)
+    bake_flat_faces(scene)   # D 分档：平面面烘色/曲面 toon，取代白模受光
     scene.render.filepath = os.path.join(OUT, f"{tag}_shade.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "shade")

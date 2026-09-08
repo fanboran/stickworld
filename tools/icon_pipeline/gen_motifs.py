@@ -137,38 +137,106 @@ def _cel_bake_mat():
     return m
 
 
+def _srgb_inv(f):
+    """文件域灰度 → 线性域：渲染 'Standard' 视图变换仍做 sRGB 显示编码，
+    要出图恰为文件域 cel 灰（0.32/0.62/0.92），材质里须存线性值。"""
+    return f / 12.92 if f <= 0.04045 else ((f + 0.055) / 1.055) ** 2.4
+
+
+def _toon_band_grays(steps):
+    """N 档 cel 灰（文件域均布 0.32..0.92）与其线性域值"""
+    fs = [0.32 + (0.92 - 0.32) * i / (steps - 1) for i in range(steps)]
+    return fs, [_srgb_inv(f) for f in fs]
+
+
+def _toon_mat():
+    """曲面 toon 材质（D 着色器分档）：白模漫反射受光 → ShaderToRGB → 明度 →
+    ColorRamp 常量插值量化 N 档 → Emission。shade pass 出图即文件域 cel 灰阶
+    （三档 0.32/0.62/0.92），compose 只按灰阶查表映射色带，不再拉伸/聚类。
+    断点 TOON_LO/TOON_HI 默认 0.35/0.70（文件域，与 v1 k-means 三簇切点对齐；
+    进材质前经 _srgb_inv 换算线性域）、档数 TOON_STEPS（默认 3）环境变量化，
+    供创始人验收调优。ShaderToRGB 仅 EEVEE 支持；节点不可用时回退白模受光
+    （compose 用同一断点查表，语义等价兜底）。"""
+    import os
+    steps = max(2, int(os.environ.get('TOON_STEPS', '3')))
+    lo = float(os.environ.get('TOON_LO', '0.35'))
+    hi = float(os.environ.get('TOON_HI', '0.70'))
+    m = bpy.data.materials.get('_toon')
+    if m:
+        return m
+    m = bpy.data.materials.new('_toon')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    try:
+        diff = nt.nodes.new('ShaderNodeBsdfDiffuse')
+        diff.inputs[0].default_value = (0.85, 0.85, 0.85, 1.0)
+        s2r = nt.nodes.new('ShaderNodeShaderToRGB')
+        bw = nt.nodes.new('ShaderNodeRGBToBW')
+        ramp = nt.nodes.new('ShaderNodeValToRGB')
+        ramp.color_ramp.interpolation = 'CONSTANT'
+        elems = ramp.color_ramp.elements
+        while len(elems) > 1:
+            elems.remove(elems[-1])
+        # 站位：首站钉 0.0，其余均布 LO..HI（文件域换算线性；CONSTANT 插值=
+        # 左站色 holding 到下站）；站色=线性域 cel 灰
+        poss = [0.0] + [_srgb_inv(lo + (hi - lo) * (i + 1) / (steps - 1)) for i in range(steps - 1)]
+        _, grays = _toon_band_grays(steps)
+        for i, p in enumerate(poss):
+            e = elems[0] if i == 0 else elems.new(min(p, 0.999))
+            e.color = (grays[i], grays[i], grays[i], 1.0)
+        nt.links.new(diff.outputs[0], s2r.inputs[0])
+        nt.links.new(s2r.outputs[0], bw.inputs[0])
+        nt.links.new(bw.outputs[0], ramp.inputs[0])
+        emi = nt.nodes.new('ShaderNodeEmission')
+        nt.links.new(ramp.outputs[0], emi.inputs[0])
+        nt.links.new(emi.outputs[0], out.inputs[0])
+    except Exception:
+        print("toon shader unavailable, fallback to white diffuse")
+        sys.stdout.flush()
+        diff = nt.nodes.new('ShaderNodeBsdfDiffuse')
+        diff.inputs[0].default_value = (0.85, 0.85, 0.85, 1.0)
+        nt.links.new(diff.outputs[0], out.inputs[0])
+    return m
+
+
 def bake_flat_faces(scene):
     """平面着色网格：按「面法线·主光方向」量化三档灰烘进顶点色——
     每个平面恰好一色，朝向不同色不同（cel 一面一色惯例；来源方向=相机基
     向量，与 setup 主光一致：左上主光）。平滑网格（球/胶囊/环/曲线管）
-    保持白色漫反射受光走经典渐变分档——sphere 的球形光由此而来。
+    走 toon 材质：着色器内把漫反射光照量化成同三档灰（D 分档，取代
+    v1 的白模受光→图像域 k-means）。烘色灰存线性域（出图=文件域三档灰）。
     倒角等修改器生成的新面从相邻基面插值属性=柔和棱过渡。"""
     cam = scene.camera
     R = cam.matrix_world.to_3x3()
     ldir = (R @ Vector((-3.0, 2.6, 0.6))).normalized()
     bake = _cel_bake_mat()
-    white = shade_mat('_w')
+    toon = _toon_mat()
+    _, grays = _toon_band_grays(3)   # [lin(0.32), lin(0.62), lin(0.92)] 暗/中/亮
+    g_dark, g_mid, g_bright = grays
     for o in scene.objects:
         if o.type != 'MESH':
             continue
         polys = o.data.polygons
         if polys and all(p.use_smooth for p in polys):
-            o.data.materials[0] = white
+            o.data.materials[0] = toon
             continue
         attr = o.data.color_attributes.get('cel_tone')
         if attr is None:
             attr = o.data.color_attributes.new('cel_tone', 'FLOAT_COLOR', 'FACE')
         for p in polys:
             t = p.normal.dot(ldir)
-            g = 0.92 if t > 0.5 else (0.62 if t > 0.2 else 0.32)
+            g = g_bright if t > 0.5 else (g_mid if t > 0.2 else g_dark)
             attr.data[p.index].color = (g, g, g, 1.0)
         o.data.materials[0] = bake
 
 
 def render_two(scene, tag, t, classic=False):
-    """shade pass：平面物体面烘色、曲面物体受光；再 ID pass。
-    母题对象全部单槽，原位替换材质，无钳零问题。classic=True 全白模受光
-    （已验收豁免母题的全链路旧管线，逐字节承诺）"""
+    """shade pass：平面物体面烘色、曲面物体 toon 着色器分档（输出即 cel 灰阶）；
+    再 ID pass。母题对象全部单槽，原位替换材质，无钳零问题。classic=True
+    全白模受光连续明度（豁免母题 v1 渲染语义——其 compose 侧假光依赖连续
+    明度场，保留；对应 v9 套件旧管线）"""
     if not classic:
         bake_flat_faces(scene)
     else:

@@ -72,11 +72,10 @@ func _ready() -> void:
 	# 根 STOP：底部横条整条 = 不可穿透区（F1 验收反馈），点击不落到地图地块上；
 	# 地图拖拽/滚轮走 MapCamera._input（先于 GUI），不受本条影响
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	# 可见 UI 外壳（次窗体底"玻璃横条"，与图例同款样式）
+	# 可见 UI 外壳（Panel 回退主题自带 SketchStyle 手绘贴图横条，R8 层1 换肤）
 	var shell := Panel.new()
 	shell.name = "Shell"
 	shell.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shell.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	shell.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shell)
 	_build_widgets()

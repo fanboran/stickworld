@@ -32,7 +32,7 @@ _ALL = [{"name": n, "tag": t} for n, t in OLD7] + \
 # 既往轮次已标「满意」的不再进待标区（结果档案 temp/review_result_round*.json 全量合并）；
 # RECHECK = 已满意但后续轮次重做过、需复验的名字
 import glob as _glob
-RECHECK = set()
+RECHECK = {"药瓶"}   # round3 已满意但按创始人指令重做透明瓶，仍需复验
 
 def _prev_ok_names():
     ok = set()

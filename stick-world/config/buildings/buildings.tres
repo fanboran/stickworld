@@ -334,6 +334,26 @@ variables = {
 			"wall_tier": null,
 			"can_stand_on": null,
 			"is_gate": null
+		},
+		{
+			"id": "stone_warehouse",
+			"name_zh": "石造仓库",
+			"type": "warehouse",
+			"tier": 2,
+			"width": 16,
+			"build_time": 120,
+			"build_cost_wood": 80,
+			"build_cost_stone": 220,
+			"build_cost_metal": 60,
+			"max_hp": 650,
+			"workers_required": 0,
+			"interior_mode": 0,
+			"mega_interior_map_id": null,
+			"description": "厚石墙仓储建筑，储重物抗风雪",
+			"unlocked_by_tech": null,
+			"wall_tier": null,
+			"can_stand_on": null,
+			"is_gate": null
 		}
 	]
 }

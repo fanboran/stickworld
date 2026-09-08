@@ -26,6 +26,10 @@ func _get_palette() -> Dictionary:
 		"C_WOOD_BACK": palette.C_WOOD_BACK,
 		"C_WOOD_BEAM": palette.C_WOOD_BEAM,
 		"C_WOOD_STRUT": palette.C_WOOD_STRUT,
+		# 石作三色（批次 2；旧 .tres 缺这些键时由脚本默认值兜底，向后兼容）
+		"C_STONE_MAIN": palette.C_STONE_MAIN,
+		"C_STONE_DARK": palette.C_STONE_DARK,
+		"C_STONE_JOINT": palette.C_STONE_JOINT,
 	}
 
 
@@ -215,3 +219,100 @@ func _make_slanted_beam_tex(color: Color) -> ImageTexture:
 	var height := 110.0
 	var length := sqrt(slant * slant + height * height)
 	return TextureGenAPI.make_wood_pillar(23, ceili(length), color)
+
+
+# ═══════════════ 石作装配（批次 2：石头结构件化） ═══════════════
+# 材质路径结论（详见交接档「渲染环境关键发现」）：本环境 Polygon2D 的纹理 uv
+# 采样与 ShaderMaterial 均坍缩为平均色（tools/baking/render_stone_probe.gd 实测），
+# Sprite2D 是唯一可靠显示路径。石作一律 CPU 生成纹理（StoneBrickGen）+ Sprite2D。
+
+## 石作纹理静态缓存（跨实例/跨建筑复用；key 含尺寸/seed/色板摘要）
+static var _stone_tex_cache: Dictionary = {}
+
+## 石墙基准砖尺寸（像素，桌面结构件观感）
+const STONE_BRICK := Vector2i(56, 28)
+
+
+## 从调色板组装 StoneBrickGen 色板 dict（light 由 MAIN 提亮派生，保证同色系）
+func _stone_palette() -> Dictionary:
+	var pal := _get_palette()
+	var main: Color = pal.get("C_STONE_MAIN", Color(0.62, 0.585, 0.52))
+	return {
+		"light": main.lightened(0.10),
+		"mid": main,
+		"dark": pal.get("C_STONE_DARK", Color(0.45, 0.42, 0.37)),
+		"mortar": pal.get("C_STONE_JOINT", Color(0.33, 0.30, 0.26)),
+	}
+
+
+static func _stone_cache_key(mode: String, w: int, h: int, seed_value: int, spal: Dictionary) -> String:
+	var ck := ""
+	for k: String in ["light", "mid", "dark", "mortar"]:
+		var c: Color = spal[k]
+		ck += "%d_%d_%d;" % [int(c.r8), int(c.g8), int(c.b8)]
+	return "%s_%d_%d_%d_%s" % [mode, w, h, seed_value, ck]
+
+
+## Image → ImageTexture（进静态缓存；同参数重复装配零开销）
+func _stone_tex_from(img: Image, key: String) -> ImageTexture:
+	if _stone_tex_cache.has(key):
+		return _stone_tex_cache[key]
+	var tex := ImageTexture.create_from_image(img)
+	_stone_tex_cache[key] = tex
+	return tex
+
+
+## 生成石墙面 Image（未缓存版，供开洞/角石等定制面在手改后自行 _stone_tex_from）
+func _stone_wall_img(w: int, h: int, seed_value: int) -> Image:
+	return StoneBrickGen.make_wall(w, h, seed_value, STONE_BRICK, false, _stone_palette())
+
+
+## 整面石墙纹理（缓存版）
+func _stone_wall_tex(w: int, h: int, seed_value: int) -> ImageTexture:
+	var spal := _stone_palette()
+	return _stone_tex_from(
+		StoneBrickGen.make_wall(w, h, seed_value, STONE_BRICK, false, spal),
+		_stone_cache_key("wall", w, h, seed_value, spal))
+
+
+## 垛口石墙纹理（顶部城垛 alpha 镂空；墙身 h + 垛口 merlon_h）
+func _stone_crenellated_tex(w: int, h: int, seed_value: int, merlon_h: int = 30) -> ImageTexture:
+	var spal := _stone_palette()
+	return _stone_tex_from(
+		StoneBrickGen.make_crenellated(w, h, seed_value, merlon_h, 56, STONE_BRICK, spal),
+		_stone_cache_key("cren_%d" % merlon_h, w, h, seed_value, spal))
+
+
+## 石带纹理（蓝灰整石腰线 + 滴水痕；与暖石墙面对比出楼层分隔）
+func _stone_band_tex(w: int, h: int, seed_value: int) -> ImageTexture:
+	var spal := _stone_palette()
+	return _stone_tex_from(
+		StoneBrickGen.make_band(w, h, seed_value, {}, Vector2i(maxi(w / 4, 60), maxi(h, 20))),
+		_stone_cache_key("band", w, h, seed_value, spal))
+
+
+## 石墙段 Sprite2D（centered 于 pos）
+func _stone_wall(parent: Node2D, node_name: String, pos: Vector2,
+		w: int, h: int, seed_value: int) -> Sprite2D:
+	var s := _sprite2d(node_name, pos, _stone_wall_tex(w, h, seed_value))
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_a(parent, s)
+	return s
+
+
+## 垛口石墙段 Sprite2D（centered 于 pos；纹理含顶部垛口，故 Sprite 顶对齐 pos.y - h）
+func _stone_crenellated(parent: Node2D, node_name: String, pos: Vector2,
+		w: int, h: int, seed_value: int, merlon_h: int = 30) -> Sprite2D:
+	var s := _sprite2d(node_name, pos, _stone_crenellated_tex(w, h, seed_value, merlon_h))
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_a(parent, s)
+	return s
+
+
+## 石带 Sprite2D（centered 于 pos）
+func _stone_band(parent: Node2D, node_name: String, pos: Vector2,
+		w: int, h: int, seed_value: int) -> Sprite2D:
+	var s := _sprite2d(node_name, pos, _stone_band_tex(w, h, seed_value))
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_a(parent, s)
+	return s

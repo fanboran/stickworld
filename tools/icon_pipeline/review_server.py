@@ -26,8 +26,25 @@ OLD7 = [("锻造锤", "icon_hammer_v9"), ("爱心", "icon_heart_v9"),
         ("立方体", "test_cube_v9"), ("正球", "test_sphere_v9"),
         ("圆柱", "test_cylinder_v9"), ("圆锥", "test_cone_v9"),
         ("圆环", "test_torus_v9")]
-ICONS = [{"name": n, "tag": t} for n, t in OLD7] + \
-        [{"name": m["label"], "tag": m["tag"]} for m in M.MOTIFS]
+_ALL = [{"name": n, "tag": t} for n, t in OLD7] + \
+       [{"name": m["label"], "tag": m["tag"]} for m in M.MOTIFS]
+
+# 上一轮已标「满意」的不再进待标区（结果档案 temp/review_result_round3.json）；
+# RECHECK = 上轮满意但本轮按创始人指令重做过，仍需复验
+PREV_RESULT = os.path.join(ROOT, "temp", "review_result_round3.json")
+RECHECK = {"药瓶"}
+
+def _prev_ok_names():
+    try:
+        with open(PREV_RESULT, encoding="utf-8") as f:
+            data = json.load(f)
+        return {it["name"] for it in data.get("items", []) if it.get("model_ok") is True}
+    except Exception:
+        return set()
+
+_PREV_OK = _prev_ok_names()
+ICONS = [ic for ic in _ALL if ic["name"] not in _PREV_OK or ic["name"] in RECHECK]
+HIDDEN_OK = len(_ALL) - len(ICONS)
 
 PAGE = """<!DOCTYPE html>
 <html lang="zh">
@@ -86,7 +103,7 @@ PAGE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>图标建模验收 <span class="hint">__TOTAL__ 枚 · 点击图标可放大看 128/256 渲染</span></h1>
+  <h1>图标建模验收 <span class="hint">__TOTAL__ 枚待标（另有 __HIDDEN__ 枚上轮已满意已隐藏）· 点击图标可放大看 128/256 渲染</span></h1>
   <div class="hint">只评 <b>建模</b>（形体 / 比例 / 部件连接 / 一眼认得出是什么）。配色、描边、光影不用反馈。
        标「不满意」可以写备注，也可以 <b>不写</b>——留空的由 AI 直读 64px 原图自查问题。</div>
   <div id="bar">
@@ -102,7 +119,7 @@ PAGE = """<!DOCTYPE html>
 <div id="toast"></div>
 <script>
 const ICONS = __ICONS__;
-const KEY = "icon_review_v2";
+const KEY = "icon_review_v3";
 const state = {};
 ICONS.forEach(ic => state[ic.name] = { model_ok: null, note: "" });
 
@@ -216,7 +233,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
         if path in ("/", "/index.html"):
             html = PAGE.replace("__ICONS__", json.dumps(ICONS, ensure_ascii=False)) \
-                       .replace("__TOTAL__", str(len(ICONS)))
+                       .replace("__TOTAL__", str(len(ICONS))) \
+                       .replace("__HIDDEN__", str(HIDDEN_OK))
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
         elif path == "/api/state":
             if os.path.exists(RESULT):

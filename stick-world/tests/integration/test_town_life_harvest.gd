@@ -52,6 +52,13 @@ func _setup_world() -> void:
 	add_child(_game_root)
 	for i in 10:
 		await get_tree().process_frame
+	# 调慢游戏时钟（小镇生活批次 3 起村民有工作/休息节律：默认 60s=1 游戏日时
+	# 工作日仅 27.5 真实秒，本套件 90s 增长窗口必撞 19 点收工线致村民集体收工、
+	# 库存停止增长——批次 2 遗留回归面）。600s=1 日后 90s 窗口仅推进 3.6 游戏小时，
+	# 全程处于工作时段；本套件验证经济闭环不验节律，节律归 worksite 套件。
+	var env: Node = _game_root.get_node_or_null("EnvironmentSystem")
+	if env != null and env.has_method("set_seconds_per_day"):
+		env.set_seconds_per_day(600.0)
 
 
 func _test_harvest_economy() -> void:

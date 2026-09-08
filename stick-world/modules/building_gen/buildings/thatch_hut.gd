@@ -41,14 +41,15 @@ func _furnish_interior(props: Node2D) -> void:
 		stool.position = Vector2(243.0 + float(i) * 104.0, 0)
 		props.add_child(stool)
 	# 右区：储物矮箱 + 木桶（锚右缘）
-	var chest := InteriorProps.make_chest("Chest", 54.0)
+	var chest := InteriorProps.make_chest("Chest", 64.0)
 	chest.position = Vector2(w - 92, 0)
 	props.add_child(chest)
 	var barrel := InteriorProps.make_barrel("Barrel", 50.0)
 	barrel.position = Vector2(w - 40, 0)
 	props.add_child(barrel)
-	# 后墙：干辣椒串（挂横梁下，暖色生活气）
+	# 辣椒串挂横梁下餐桌上方（独立复审修复：x≥300 才是梁的清晰可见段——
+	# 左半段梁被半透明左坡覆盖，挂那里读作悬空）
 	var hang := InteriorProps.make_hang_string("HangChili", Color(0.72, 0.26, 0.14))
-	hang.position = Vector2(w * 0.42, -230)
+	hang.position = Vector2(330, -230)
 	props.add_child(hang)
 

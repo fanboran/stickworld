@@ -10,31 +10,33 @@ extends BuildingExterior
 
 func _post_build(ext: Node2D) -> void:
 	var pal := _get_palette()
-	var right_edge: float = float(width) * 32.0 - EXT_OFFSET_X
 
-	# 檐口军旗：旗杆（细柱）+ 垂幅（双色条带），挂右端屋顶上方
-	var l5 := ext.get_node_or_null("L5_Roof") as Node2D
-	if l5 != null:
-		var pole_tex = TextureGenAPI.make_wood_pillar(8, 96, pal.C_WOOD_BEAM)
-		_a(l5, _sprite2d("BannerPole", Vector2(right_edge - 30.0, -392), pole_tex))
-		# 垂幅：红底 + 下缘三角剪角（两段多边形近似）
+	# 军旗 + 盾饰统一挂 L4 前景柱层（独立复审修复）：
+	# 原军旗挂 L5 屋顶右端外、盾饰悬在室内半空——进屋态 L4/L5 淡出后，
+	# 两者脱离轮廓依托呈"空中悬浮物"。改锚到前柱：旗立右二柱顶、盾贴柱身，
+	# 淡出后仍读作"柱上旗/挂柱盾"。
+	var l4 := ext.get_node_or_null("L4_FrontWall") as Node2D
+	if l4 != null:
+		# 前柱位（Exterior 局部）：-205 / -0.5 / 204（16 格），柱顶 y≈-221
+		# 军旗：旗杆立右二柱（x=204）顶上，杆底接柱顶
+		var pole_x := 204.0
+		var pole_tex = TextureGenAPI.make_wood_pillar(8, 92, pal.C_WOOD_BEAM)
+		_a(l4, _sprite2d("BannerPole", Vector2(pole_x, -267), pole_tex))
+		# 垂幅：红底 + 下缘三角剪角（两段多边形近似），垂在旗杆侧
 		var flag_red := make_solid_poly("BannerCloth", Vector2(-26, 74),
 				pal.get("C_ACCENT", Color(0.62, 0.18, 0.14)))
-		flag_red.position = Vector2(right_edge + 4.0, -352)
-		_a(l5, flag_red)
+		flag_red.position = Vector2(pole_x + 30.0, -288)
+		_a(l4, flag_red)
 		# 中带浅条纹
 		var flag_stripe := make_solid_poly("BannerStripe", Vector2(-26, 22),
 				Color(0.88, 0.80, 0.60))
-		flag_stripe.position = Vector2(right_edge + 4.0, -336)
-		_a(l5, flag_stripe)
-
-	# 前墙盾牌圆饰 ×2（八边形近似圆，深底浅缘）
-	var l4 := ext.get_node_or_null("L4_FrontWall") as Node2D
-	if l4 != null:
+		flag_stripe.position = Vector2(pole_x + 30.0, -272)
+		_a(l4, flag_stripe)
+		# 盾牌圆饰 ×2 贴前柱身（八边形近似圆，深底浅缘）
 		for i in 2:
 			var shield := make_shield("Shield%d" % i, 34.0,
 					Color(0.70, 0.58, 0.38), Color(0.24, 0.16, 0.10))
-			shield.position = Vector2(70.0 + float(i) * 130.0, -140)
+			shield.position = Vector2(-0.5 + float(i) * 204.5, -140)
 			_a(l4, shield)
 
 

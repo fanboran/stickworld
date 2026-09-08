@@ -33,7 +33,7 @@
 | 批次 | 级别 | 任务 | 依赖 | 验收门 | 新会话必读 |
 |---|---|---|---|---|---|
 | **1** | Pro | **职业档案系统**：ProfessionDef(.tres/config) + 村民 spawn 职业分配 + 职业着装（身体色/工具变体，pickaxe 已有）+ 待业/在职状态 | 无 | 村里可见不同着装的村民（视觉 Subagent 截图）+ run_all 绿 | 本档侦察结论；`ai_controller.gd` 行为注册 |
-| **2** | Pro | **采集行为族（BehaviorHarvest）**：工作循环（寻位→移动→劳作动画钩子→产出入账）三变体（伐木/挖矿/打铁）；树/矿脉资源点实体（ depletion+重生节拍，AI 提案）；打铁=矿→锭转化 | 1 | 集成测试：无人干预 N 分钟后 res_wood/ore/ingot 库存增长；视觉验收（村里有人在干活） | `formation_system.gd` WorkType；`resources/api.gd` |
+| **2** | Pro | **采集行为族（BehaviorHarvest）**：工作循环（寻位→移动→劳作动画钩子→产出入账）三变体（伐木/挖矿/打铁）；树/矿脉资源点实体（ depletion+重生节拍，AI 提案）；打铁=矿→锭转化 | 1 | 集成测试：无人干预 N 分钟后 res_wood/ore/ingot 库存增长；视觉验收（村里有人在干活） | `formation_system.gd` WorkType；`resources/api.gd`；批次 1 落地物（见下） |
 | **3** | Pro | **工作场所运转**：WorkSlots 消费（NPC 就近找工位上班；铁砧工位 A 线到位前 placeholder）+ 工作/休息节律 + wander 打开 | 2 | NPC 白天在岗劳作、空闲走动的观感（视觉 Subagent 时间序列截图） | `building.gd` Interior 契约；A 线交接档 |
 | **4** | Flash | **人口扩充与配比**：NPC_COUNT 2→8~12、职业配比随建筑走（有铁匠铺才有铁匠）+ 编队征用劳工的互斥（在岗 NPC 被征入伍则离岗） | 3 | 村镇生活感整体验收 + run_all 绿（menu/smoke 组） | E 线兵源设计（人口概念对齐） |
 
@@ -43,10 +43,21 @@
 
 | 批次 | 状态 | 提交 | 备注 |
 |---|---|---|---|
-| 1 | ⬜ 未开工 | — | |
+| 1 | ✅ 完成 | 294b9f5d | 三职业着装可见（视觉 Subagent PASS，截图 `stick-world/tests/dev/professions_out.png`）；run_all 绿（3 失败项单跑全绿=并行 flaky，与本批无关） |
 | 2 | ⬜ 未开工 | — | |
 | 3 | ⬜ 未开工 | — | |
 | 4 | ⬜ 未开工 | — | |
+
+## 批次 1 落地物（批次 2 新会话必读）
+
+- **模块**：`modules/town_life/`——`scripts/profession_registry.gd`（ProfessionRegistry：档案读取/轮转分配/着装应用，静态无状态）+ `api.gd`（TownLifeAPI 契约：assign_village_job/get_professions/get_profession）。
+- **配置**：`config/town_life/professions.tres`（BalanceResource 行数组；读取照 formation_system 先例直读 .tres 带 static 缓存，不依赖 autoload）。字段 id/name_zh/work_site_def/product/cycle/tool/uniform——work_site_def/product/cycle 已落配置待批次 2/3 消费。
+- **实体协议**：`stickman_entity.set_profession/get_profession`（弱类型 id，**空串=待业**；批次 4 征兵离岗走 set_profession("")）。
+- **挂接点**：`initial_content.spawn_npcs` 调 `TownLifeAPI.assign_village_job(npc, i)`（轮转 index % 职业数；真实 NPC_COUNT=2 → 只分到铁匠+伐木工）。
+- **工具暂代**：铁匠 pickaxe 代锤、伐木工 sword 代斧（TOOL_WEAPONS 映射表在 registry；批次 2 上专属工具模型时只改配置与映射）。
+- **资源 id 真名**（resources.tres）：`res_wood / res_stone / res_metal_ore / res_iron_ingot / res_black_asphalt / res_silk`——设计要点里的"res_ore"真名是 **res_metal_ore**。
+- **dev 截图场景**：`tests/dev/snapshot_professions.tscn`（真渲染：`godot --path stick-world res://tests/dev/snapshot_professions.tscn`；补 spawn 矿工凑三职业同框 + stdout 打印职业/颜色证据）。
+- **已知未验证**：着装色与地图背景在不同时段（夜晚）的对比度未测；NPC_COUNT 扩充在批次 4。
 
 ## 关键决策速查
 

@@ -80,7 +80,9 @@ func _test_determinism() -> void:
 	for i in da.get_child_count():
 		var pa: PackedVector2Array = (da.get_child(i) as Polygon2D).polygon
 		var pb: PackedVector2Array = (db.get_child(i) as Polygon2D).polygon
-		if not pa.is_equal_approx(pb):
+		# PackedVector2Array 无 is_equal_approx（4.7 静态分析报 parse error）：
+		# 确定性 seed 下应逐点相等，直接 == 比较
+		if pa != pb:
 			same = false
 			break
 	_runner.assert_true(same, "装饰形状逐点一致")

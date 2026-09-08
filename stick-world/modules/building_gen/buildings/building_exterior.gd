@@ -69,8 +69,10 @@ func _fill_pillars(fixed_xs: Array, right_x: float, pitch: float) -> Array:
 
 
 func _ready() -> void:
+	_ensure_interaction_zone()  # 先建场景缺失件，super 的 _lookup_children 统一连接触发信号
 	super()
 	_build_exterior()
+	_build_interior()
 	_apply_state_visual()
 
 
@@ -86,6 +88,8 @@ func rebuild_exterior() -> void:
 		ext.remove_child(child)
 		child.queue_free()
 	_build_exterior()
+	_build_interior()
+	_resize_interaction_zone()
 	_apply_state_visual()
 
 
@@ -173,7 +177,32 @@ func _build_exterior() -> void:
 	_a(l5, rl1)
 
 	# 子类差异化挂件（旗帜/货箱等；2026-08-22 兵营/仓库脱离共用外壳）
+	_upgrade_backwall()
 	_post_build(ext)
+
+
+## 后墙纹理升级：straw_thatch 在 Polygon2D 上的 uv 采样在本环境坍缩（平涂 + alpha 平均，
+## 后墙近乎消失→进屋态黑背景、墙挂件浮空）。统一换 thatch_layered（批次 1 smithy 同款），
+## 色调由 _backwall_tint() 提供（smithy 的 _post_build 会再覆盖为金色，顺序：先基类后子类）。
+func _upgrade_backwall() -> void:
+	var ext := get_node_or_null("Exterior") as Node2D
+	if ext == null:
+		return
+	var l1 := ext.get_node_or_null("L1_BackWall") as Node2D
+	if l1 == null:
+		return
+	var bw := l1.get_node_or_null("BackWallTop") as Polygon2D
+	if bw == null:
+		return
+	bw.texture = TextureGenAPI.make_thatch_layered(512, 128, 2)
+	bw.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	bw.self_modulate = _backwall_tint()
+
+
+## 后墙茅草色调（子类可覆盖，与各自调色板呼应）。
+## thatch_layered 原色偏暗，需要 >1 的提亮乘色才能在进屋态背景里读出墙面。
+func _backwall_tint() -> Color:
+	return Color(1.12, 1.0, 0.76)
 
 
 ## 子类可选覆盖：在标准外壳构建完成后追加差异化挂件。
@@ -181,6 +210,119 @@ func _build_exterior() -> void:
 ## 替换清单见 docs/项目/待办事项.md「PLACEHOLDER 素材替换」。
 func _post_build(_ext: Node2D) -> void:
 	pass
+
+
+# ── 室内内饰系统（批次 4）──────────────────────────────────
+
+## 前景遮挡层名：进屋透明化时整体渐变（屋顶/前景柱淡出，露出 Interior）。
+## L3_FrontItems 是棚内中景挂件（铁匠炉/砧等室内设备），保留可见不淡出。
+## 基类 building.gd 的 WallFront 单节点契约不适配分层程序化外壳，
+## 故本类覆盖 _set_transparent 对前景层逐层渐变（等价视觉）。
+const FRONT_LAYERS := ["L4_FrontWall", "L5_Roof"]
+
+## InteractionZone 碰撞体尺寸（与 PassageBarrier footprint 同型）
+const ZONE_HEIGHT := 390.0
+const ZONE_CY := -190.0
+## 玩家/NPC 实体所在物理层（StickmanEntity collision_layer=2）
+const ENTITY_LAYER := 2
+
+
+func _build_interior() -> void:
+	var interior := get_node_or_null("Interior") as Node2D
+	if interior == null:
+		interior = Node2D.new()
+		interior.name = "Interior"
+		add_child(interior)
+	# 刷新基类成员引用：程序化 Interior 晚于 _lookup_children 创建，
+	# 不刷新的话基类 _set_transparent 里 Interior.visible 切换会被 null 守卫跳过
+	_interior = interior
+	# Floor / Props 容器补齐（smithy 场景自带 Interior/WorkSlots，WorkSlots 保留不动）
+	var floor_node := interior.get_node_or_null("Floor") as Node2D
+	if floor_node == null:
+		floor_node = Node2D.new()
+		floor_node.name = "Floor"
+		interior.add_child(floor_node)
+	var props := interior.get_node_or_null("Props") as Node2D
+	if props == null:
+		props = Node2D.new()
+		props.name = "Props"
+		interior.add_child(props)
+	# 重建语义（rebuild_exterior 时按新宽度重摆）：清 Floor/Props 旧内容
+	for container in [floor_node, props]:
+		for child in container.get_children():
+			container.remove_child(child)
+			child.queue_free()
+	_furnish_floor(floor_node)
+	_furnish_interior(props)
+	interior.visible = false
+
+
+## 子类可选覆盖：室内地面（floor 容器，按 width 摆）。
+func _furnish_floor(_floor_node: Node2D) -> void:
+	pass
+
+
+## 子类可选覆盖：家具 props 布局（props 容器，Building 局部坐标，地面线 y=0）。
+## 家具件工厂见 InteriorProps（锚点=脚底中心）。
+func _furnish_interior(_props: Node2D) -> void:
+	pass
+
+
+## InteractionZone 补齐（Area2D + CollisionShape2D，覆盖建筑 footprint）。
+## 场景缺失时程序化补建（宽度自适应，比场景手写固定值更耐拉伸建造）；
+## body_entered/exited 信号由 Building._lookup_children 统一连接（本方法在 super() 之前调用）。
+func _ensure_interaction_zone() -> void:
+	if get_node_or_null("InteractionZone") != null:
+		return
+	var zone := Area2D.new()
+	zone.name = "InteractionZone"
+	zone.collision_layer = 0
+	zone.collision_mask = ENTITY_LAYER
+	var cs := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = Vector2(float(width) * 32.0, ZONE_HEIGHT)
+	cs.shape = shape
+	cs.position = Vector2(float(width) * 16.0, ZONE_CY)
+	cs.name = "ZoneShape"
+	zone.add_child(cs)
+	add_child(zone)
+
+
+## 实际建造宽度与场景默认不同时，InteractionZone 随 PassageBarrier 同步缩放。
+func _resize_interaction_zone() -> void:
+	var zone := get_node_or_null("InteractionZone") as Area2D
+	if zone == null:
+		return
+	var cs := zone.get_node_or_null("ZoneShape") as CollisionShape2D
+	if cs == null or cs.shape == null:
+		return
+	var rect := cs.shape as RectangleShape2D
+	if rect != null:
+		rect.size = Vector2(float(width) * 32.0, ZONE_HEIGHT)
+	cs.position = Vector2(float(width) * 16.0, ZONE_CY)
+
+
+## 透明化进屋态：前景遮挡层（L3 前景挂件/L4 前景柱/L5 屋顶）整体淡出 + Interior 可见。
+## 基类 super 处理 _wall_front（若场景提供）与 Interior.visible 切换；
+## 程序化外壳无 WallFront 单节点，此处对分层前景做等价渐变。
+func _set_transparent(on: bool) -> void:
+	if on == _interior_is_transparent:
+		return  # 与基类守卫一致，避免重复 kill/tween
+	super(on)
+	if _wall_front != null:
+		return  # 场景自带 WallFront 时基类已处理
+	var ext := get_node_or_null("Exterior") as Node2D
+	if ext == null:
+		return
+	if _fade_tween != null and _fade_tween.is_valid():
+		_fade_tween.kill()
+	_fade_tween = create_tween()
+	_fade_tween.set_parallel(true)
+	var target: float = _transparent_alpha if on else 1.0
+	for layer_name in FRONT_LAYERS:
+		var layer := ext.get_node_or_null(layer_name) as CanvasItem
+		if layer != null:
+			_fade_tween.tween_property(layer, "modulate:a", target, _fade_duration)
 
 
 # ── helpers ──

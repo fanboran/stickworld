@@ -2,8 +2,8 @@ class_name MainMenu
 extends Control
 ## 主菜单（正式版）—— 启动流程第一屏，进入游戏的中枢。
 ##
-## 设计见 docs/设计/UI/03-主菜单与流程.md；视觉走 StickTheme 主题层
-## （黑玻璃窗 + 琥珀强调，与游戏内 UI 同一套 token）。
+## 设计见 docs/设计/UI/03-主菜单与流程.md；视觉走 StickTheme 手绘皮肤 +
+## 黄金时刻天空场景（手绘云/暮色山/闲逛火柴人），主行动点实底琥珀。
 ##
 ## 流程：
 ##   ├ 继续游戏 → 读最近存档（槽位 0，无档禁用）
@@ -23,9 +23,10 @@ const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scri
 const SketchCloudScript: GDScript = preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
 
 ## 菜单项数据：id / 文案 / 视觉档位
+## 新游戏 = PRIMARY（实底琥珀主行动点，§1.2）；继续游戏 = ACCENT（琥珀描边档）
 const MENU_ITEMS: Array[Dictionary] = [
 	{"id": "continue", "label": "继续游戏", "kind": StickKit.ButtonKind.ACCENT},
-	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.ACCENT},
+	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.PRIMARY},
 	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.NORMAL},
 	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.NORMAL},
 	# 测试场景入口：仅开发构建显示（正式发布隐藏），字段 debug_only 过滤于 _build_menu
@@ -50,17 +51,19 @@ func _ready() -> void:
 	_build_menu()
 	_version_label.text = "v0.2 Demo · stick-world"
 	_version_label.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
-	_version_label.modulate = StickTokens.TEXT_FAINT
+	# 亮天空上 TEXT_FAINT 不可见：改暖墨半透明（与描边同族）
+	_version_label.modulate = Color(0.08, 0.06, 0.05, 0.55)
 
 
 func _build_title() -> void:
 	var title := StickKit.label(_menu_column, "火柴人帝国模拟", StickKit.LabelKind.TITLE)
-	# 标题加大一档（用户指示；48 = FONT_DISPLAY 34 的展示级放大）
-	title.add_theme_font_size_override("font_size", 48)
+	# 展示级大字（hero 感：审计指出旧 48px 灰白小字主体弱）
+	title.add_theme_font_size_override("font_size", 56)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# 亮天空上的白字配黑描边（贴纸感），墨色与血条 COLOR_OUTLINE 同源
+	# 暖白字 + 深墨描边（贴纸感），墨色与血条 COLOR_OUTLINE 同源
+	title.add_theme_color_override("font_color", Color(0.99, 0.97, 0.92))
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.03, 0.92))
-	title.add_theme_constant_override("outline_size", 8)
+	title.add_theme_constant_override("outline_size", 10)
 	# 呼吸缩放以中心为锚
 	title.resized.connect(func() -> void: title.pivot_offset = title.size * 0.5)
 	_title = title
@@ -76,11 +79,12 @@ func _build_menu() -> void:
 			continue
 		var btn := StickKit.sketch_button(_menu_column, item["label"],
 				_on_menu_pressed.bind(item), item["kind"], StickTokens.BTN_H_LG)
-		# 浮在暖金天空上的按钮用深墨描边（白描边在亮背景上不可见）
-		btn.ink = Color(0.05, 0.04, 0.03, 1.0)
-		# 按钮文字改黑（用户指示）：暖黑与 ink 描边同族，亮天空上黑字比白字稳
-		# 字号加大一圈（16→18，用户指示「弄大一小圈」——上次读反成缩小已纠正：
-		# 等粗手绘体字号越大笔画间距越开，黑字反而更清晰）
+		# 亮天空上的按钮：次级用纸面+墨描边形态（白描边贴图在亮底不可见）；
+		# PRIMARY 实底琥珀自带墨描边，不走纸面
+		if item["kind"] != StickKit.ButtonKind.PRIMARY:
+			btn.ink_skin = true
+		# 按钮文字统一暖黑（墨与描边同族，亮底上黑字比白字稳）：
+		# 等粗手绘体字号越大笔画间距越开，黑字更清晰
 		for col_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 			btn.add_theme_color_override(col_name, Color(0.1, 0.08, 0.06))
 		btn.add_theme_font_size_override("font_size", 18)
@@ -209,9 +213,11 @@ func _open_settings_panel() -> void:
 
 # ─────────────────────────────── 背景装饰（Demo 第一印象）────────────────────────────────
 
-## 主菜单背景：天空暖色渐变 + 远山剪影 + 漂移云（复用 sky 装饰贴图，与游戏内一致）
+## 主菜单背景：黄金时刻天空 + 远近山剪影 + 手绘漂移云 + 闲逛火柴人
+## （审计整改：旧渐变中段橙→灰过渡发闷像雾霾，色相断链；山是中饱和扁平蓝与暖天撞色；
+##  云用 ANIME 光滑体积风读作 clipart——三件一起按手绘语言调谐）
 func _build_background() -> void:
-	# 天空垂直渐变（上暖金 → 下深蓝灰，黄金时刻）
+	# 天空垂直渐变：暖金 → 琥珀玫瑰 → 暮尘 → 深暮蓝，色相连续不断链
 	var sky := TextureRect.new()
 	sky.name = "SkyGradient"
 	sky.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -219,9 +225,10 @@ func _build_background() -> void:
 	sky.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	sky.stretch_mode = TextureRect.STRETCH_SCALE
 	var grad := Gradient.new()
-	grad.set_color(0, Color(0.96, 0.78, 0.55))
-	grad.set_color(1, Color(0.16, 0.19, 0.27))
-	grad.add_point(0.45, Color(0.66, 0.55, 0.52))
+	grad.set_color(0, Color(0.99, 0.82, 0.55))
+	grad.set_color(1, Color(0.23, 0.20, 0.29))
+	grad.add_point(0.42, Color(0.94, 0.67, 0.46))
+	grad.add_point(0.72, Color(0.62, 0.44, 0.44))
 	var gt := GradientTexture2D.new()
 	gt.fill_from = Vector2(0, 0)
 	gt.fill_to = Vector2(0, 1)
@@ -232,7 +239,8 @@ func _build_background() -> void:
 	add_child(sky)
 	move_child(sky, 1)  # 垫在 Background 之上、菜单列之下
 	_sky_rect = sky
-	# 远山（贴屏幕底）
+	# 远山（贴屏幕底）：暮色染调（蓝贴图×暖玫瑰 = 黄金时刻大气透视的暮紫，
+	# 消中饱和扁平蓝与暖天的撞色）
 	if ResourceLoader.exists(SkyDecorMountains):
 		var m := TextureRect.new()
 		m.name = "Mountains"
@@ -247,15 +255,33 @@ func _build_background() -> void:
 		m.anchor_bottom = 1.0
 		m.offset_top = -300.0
 		m.offset_bottom = 0.0
-		m.modulate = Color(0.9, 0.86, 0.84)
+		m.modulate = Color(0.82, 0.60, 0.56)
 		add_child(m)
 		move_child(m, 2)
-	# 漂移云（手绘云三朵，四风格随机混排同世界选型期；_process 缓移）——
-	# 山之上、菜单之下（index 4）
+	# 近山一层（更暗更近，叠出纵深；无此贴图时静默跳过）
+	if ResourceLoader.exists(SkyDecorMountainsNear):
+		var mn := TextureRect.new()
+		mn.name = "MountainsNear"
+		_mountains_near_rect = mn
+		mn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mn.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		mn.stretch_mode = TextureRect.STRETCH_TILE
+		mn.texture = load(SkyDecorMountainsNear)
+		mn.anchor_left = 0.0
+		mn.anchor_right = 1.0
+		mn.anchor_top = 1.0
+		mn.anchor_bottom = 1.0
+		mn.offset_top = -170.0
+		mn.offset_bottom = 0.0
+		mn.modulate = Color(0.45, 0.36, 0.40)
+		add_child(mn)
+		move_child(mn, 3)
+	# 漂移云（手绘简笔画系三风格混排：毛线团/笔触/鼓包，与沸腾语言同源；
+	# 原 ANIME 光滑体积风读作 clipart 已弃）——山之上、菜单之下（index 4）
 	_cloud_rects = []
 	for i in 3:
 		var c: Node2D = SketchCloudScript.new()
-		c.set("style", [5, 5, 5, 4][i % 4])
+		c.set("style", [1, 2, 0][i % 3])
 		c.set("cloud_size", Vector2(200.0, 83.0) * randf_range(0.85, 1.2))
 		c.position = Vector2(randf_range(0.1, 0.7) * 1920.0, randf_range(40.0, 300.0))
 		c.modulate = Color(1, 1, 1, 0.85)
@@ -270,6 +296,7 @@ func _build_background() -> void:
 	move_child(birds, 2)
 
 const SkyDecorMountains := "res://assets/sky/bg_mountain_far.png"
+const SkyDecorMountainsNear := "res://assets/sky/bg_mountain_near.png"
 const SkyDecorCloudA := "res://assets/sky/cloud_a.png"
 const SkyDecorCloudB := "res://assets/sky/cloud_b.png"
 const MenuBirdsScript := preload("res://modules/ui_global/scripts/menus/menu_birds.gd")
@@ -281,14 +308,18 @@ var _cloud_rects: Array = []
 ## 背景视差引用
 var _sky_rect: TextureRect = null
 var _mountains_rect: TextureRect = null
+var _mountains_near_rect: TextureRect = null
 ## 鼠标归一化位置（-0.5~0.5），用于背景层反向微移
 var _mouse_norm: Vector2 = Vector2.ZERO
 ## 闲逛火柴人彩蛋
 var _walker: TextureRect = null
 var _walker_frame: float = 0.0
 var _walker_dir: float = 1.0
-var _walker_cooldown: float = 3.0
+var _walker_cooldown: float = 0.8
 var _walker_last_frame: int = -1
+
+## 远山暮色基调（蓝贴图×暖玫瑰=黄金时刻大气透视；视差呼吸围绕此色）
+const MOUNTAIN_TINT := Color(0.82, 0.60, 0.56)
 
 const WalkerF0 := "res://assets/sky/walker_f0.png"
 const WalkerF1 := "res://assets/sky/walker_f1.png"
@@ -305,9 +336,13 @@ func _process(delta: float) -> void:
 	var mp := get_viewport().get_mouse_position()
 	var target := Vector2(mp.x / 1920.0 - 0.5, mp.y / 1080.0 - 0.5)
 	_mouse_norm = _mouse_norm.lerp(target, minf(1.0, 3.0 * delta))
-	# 山层贴底 anchor 不被视差破坏：仅以轻微透明度呼吸暗示深度
+	# 山层贴底 anchor 不被视差破坏：远山以暮色基调做轻微明暗呼吸暗示深度，
+	# 近山只做 x 向微视差（直接改 position 会破坏贴底锚点，只动 x 分量）
 	if _mountains_rect != null:
-		_mountains_rect.modulate = Color(1, 1, 1).lerp(Color(0.94, 0.94, 0.97), (_mouse_norm.x + 0.5))
+		_mountains_rect.modulate = MOUNTAIN_TINT.lerp(
+				MOUNTAIN_TINT.lightened(0.06), (_mouse_norm.x + 0.5))
+	if _mountains_near_rect != null:
+		_mountains_near_rect.position.x = -_mouse_norm.x * 12.0
 	if _sky_rect != null:
 		_sky_rect.position = -_mouse_norm * 6.0
 	for i in _cloud_rects.size():
@@ -316,7 +351,8 @@ func _process(delta: float) -> void:
 
 
 var _cloud_base_ys: Array = []
-## 火柴人闲逛彩蛋：随机间隔从屏幕一侧走到另一侧（呼应"每个火柴人都在真实生活"）
+## 火柴人闲逛彩蛋 → 视觉主体（审计：主菜单缺火柴人视觉主体）。
+## 加大加实、走完短休整即返场——山脊线上永远有火柴人在生活。
 func _update_walker(delta: float) -> void:
 	if _walker == null and not ResourceLoader.exists(WalkerF0):
 		return
@@ -325,16 +361,16 @@ func _update_walker(delta: float) -> void:
 		if _walker_cooldown <= 0.0:
 			_walker = TextureRect.new()
 			_walker.texture = load(WalkerF0)
-			_walker.modulate = Color(1, 1, 1, 0.55)
+			_walker.modulate = Color(1, 1, 1, 0.85)
 			_walker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(_walker)
 			move_child(_walker, 1)
 			_walker_dir = 1.0 if randf() < 0.5 else -1.0
 			var start_x: float = -80.0 if _walker_dir > 0 else 1920.0 + 80.0
-			_walker.position = Vector2(start_x, 620.0 + randf() * 120.0)
-			_walker.scale = Vector2(1.4, 1.4)
+			_walker.position = Vector2(start_x, 640.0 + randf() * 100.0)
+			_walker.scale = Vector2(2.1, 2.1)
 			if _walker_dir < 0:
-				_walker.scale.x = -1.4  # 面向行走方向
+				_walker.scale.x = -2.1  # 面向行走方向
 		return
 	# 行走动画：2 帧交替 + 平移（帧号变化才 load/赋值 texture——每帧赋值
 	# 触发 TextureRect 重绘 + 路径字符串构造，主菜单常驻 _process 白烧）
@@ -347,7 +383,7 @@ func _update_walker(delta: float) -> void:
 	if _walker.position.x < -120.0 or _walker.position.x > 1960.0:
 		_walker.queue_free()
 		_walker = null
-		_walker_cooldown = randf_range(4.0, 9.0)
+		_walker_cooldown = randf_range(0.8, 2.2)
 
 
 ## 标题进场：淡入 + 上浮（首印之一）

@@ -4,13 +4,12 @@ extends RefCounted
 ##
 ## 用法：
 ##   func _ready() -> void:
-##       theme = StickTheme.create()                      # 游戏内：手绘涂鸦皮肤（默认）
-##       theme = StickTheme.create(StickTheme.Mode.GLASS) # 主菜单/载入屏：玻璃窗原样
+##       theme = StickTheme.create()  # 全部界面（含主菜单/载入屏）统一手绘皮肤
 ##
-## 两种皮肤共用同一套 Flat 玻璃 StyleBox（GlassStyle，兜底未自绘控件）：
-## - SKETCH：游戏内 —— StickHand 程序化手写字体；主视觉由自绘控件（SketchPanel/
-##   SketchButton 等，血条同源沸腾）承担
-## - GLASS：主菜单/载入屏 —— 引擎默认字体，完全原样
+## 手绘是全局唯一皮肤（01-设计语言 §1.0，主菜单 2026-09 已实装同皮肤）：
+## StickHand 程序化手写字体 + 烘焙沸腾贴图控件（SketchPanel/SketchButton 等），
+## Theme 层 Flat 玻璃 StyleBox（GlassStyle）只兜底未自绘的原生控件
+## （TabContainer/HSlider 等）与开发模板。
 ##
 ## 原生控件兜底的手绘感：CheckBox/CheckButton/OptionButton 的勾选框/拨动开关/
 ## 下拉箭头由 SketchIcons 生成定型扰动图标（boiling 版走 SketchCheckBox/

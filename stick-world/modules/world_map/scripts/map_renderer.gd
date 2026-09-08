@@ -120,13 +120,18 @@ const LABEL_SIZE := 30.0
 ## F3 城市编号屏幕上限（像素）：仅高缩放时封顶防"雷霆大字"，默认缩放不受影响
 const LABEL_SCREEN_CAP := 40.0
 
-# 玩家图钉（F2/C1，总体设计 §5.6：琥珀色图钉，唯一允许的图标类美术——此处程序化绘制）
-const PIN_COLOR := Color(1.0, 0.72, 0.11)
-const PIN_OUTLINE := Color(0.25, 0.15, 0.02)
-const PIN_HEAD_RADIUS := 11.0
-const PIN_TAIL_LEN := 20.0
-const PIN_LABEL := "你在这里"
-const PIN_LABEL_SIZE := 22.0
+## 玩家位置标记（R2，GPS 范式，§7.3-6 规范表）：中心 4px 玩家国色点（白描边）+
+## 12px 静态细环 + 1.5s 周期向外扩散淡出脉冲环（12→36px，alpha 0.5→0）。
+## 玩家位置是内容语义——色取玩家所在地块政权色（政权色体系内），非琥珀操作色；
+## 全部尺寸屏幕像素固定（÷zoom 换算）
+const PLAYER_DOT_RADIUS := 4.0
+const PLAYER_DOT_OUTLINE_W := 1.5
+const PLAYER_RING_RADIUS := 12.0
+const PLAYER_RING_WIDTH := 1.0
+const PLAYER_PULSE_FROM := 12.0
+const PLAYER_PULSE_TO := 36.0
+const PLAYER_PULSE_PERIOD := 1.5
+const PLAYER_PULSE_ALPHA := 0.5
 
 ## 快速旅行路由高亮（P6/E3「途经路径高亮」）：途经道路亮琥珀加粗 + 途经聚落
 ## 节点白描边空心圆，画在水系之上（湖不再遮高亮，路径反馈连续可见）
@@ -137,24 +142,30 @@ const ROUTE_NODE_RADIUS := 6.0
 var _route_road_pts: Array[PackedVector2Array] = []
 var _route_nodes: PackedVector2Array = PackedVector2Array()
 
-## 玩家图钉（L1 地图坐标；默认 = 出生聚落，api.set_player_map 动态更新）
-var _pin_pos := Vector2.ZERO
-var _pin_visible := false
+## 玩家位置（L1 地图坐标；默认 = 出生聚落，api.set_player_map 动态更新）
+var _player_pos := Vector2.ZERO
+var _player_visible := false
+## 玩家所在地块政权色（标记中心点/脉冲环用；内容语义）
+var _player_state_color := Color.WHITE
 
 var _debug_was_visible: bool = false
 
-## 当前所在城市地块蓝光流动描边（"你在这里"，细粒度层级）：
-## 含玩家当前聚落的地块（出生 = spawn 聚落所在块）。Phase C 玩家跨城移动后经
-## set_current_tile 动态更新（现阶段恒出生块）。双色不透明，与 M 大世界同视觉语言
+## 当前所在城市的流动描边（"你在这里"，细粒度层级）：
+## 几何 = 该城建成区 blob 轮廓（R2——与城市本体图形共用同一几何，描边与建成区
+## 轮廓逐像素重合；原整地块多边形描边与城市轮廓不重合，已废）。
+## 含玩家当前聚落的地块（出生 = spawn 聚落所在块），跨城移动后经 set_current_tile 更新。
+## 双色不透明，与 M 大世界同视觉语言
 var _current_tile_id: String = ""
 const GLOW_A := Color(0.35, 0.85, 1.0)
 const GLOW_B := Color(0.15, 0.45, 0.95)
 ## 描边宽（屏幕像素固定，与其他描边一致策略）
 const GLOW_WIDTH := 4.0
-## 当前地块轮廓分段缓存（几何不变，重采样一次复用）
+## 当前城 blob 轮廓分段缓存（几何不变，重采样一次复用）
 var _glow_outline: PackedVector2Array = PackedVector2Array()
 ## 流动动画相位（秒）
 var _glow_time := 0.0
+## 玩家位置脉冲环相位（秒，PLAYER_PULSE_PERIOD 周期循环）
+var _pulse_time := 0.0
 
 
 func set_data(data: L1WorldData) -> void:
@@ -172,9 +183,11 @@ func set_data(data: L1WorldData) -> void:
 			if tile.settlement != null \
 					and tile.settlement.settlement_id == _data.spawn_settlement_id:
 				_current_tile_id = tile.tile_id
-				# 图钉默认锚出生聚落（F2/C1；api.set_player_map 动态更新）
-				_pin_pos = tile.settlement.position
-				_pin_visible = true
+				# 玩家位置标记默认锚出生聚落（api.set_player_map 动态更新）；
+				# 色取所在地块政权色（内容语义，R2 裁决：非琥珀）
+				_player_pos = tile.settlement.position
+				_player_visible = true
+				_player_state_color = _data.get_state_color(tile.owner_state_id)
 				break
 	_build_glow_outline()
 	queue_redraw()
@@ -212,6 +225,12 @@ func invalidate_blob(settlement_id: String) -> void:
 	if sref == null:
 		return
 	_blob_outlines[settlement_id] = _outline_for(sref)
+	# 当前城的轮廓变了 → 流动描边同步重采样（R2：描边与 blob 共用几何）
+	for tile in _data.tiles:
+		if tile.tile_id == _current_tile_id and tile.settlement != null \
+				and tile.settlement.settlement_id == settlement_id:
+			_glow_outline = FlowOutline.resample_closed(_blob_outlines[settlement_id])
+			break
 	queue_redraw()
 
 
@@ -226,14 +245,19 @@ func _outline_for(sref: SettlementRef) -> PackedVector2Array:
 	return pts
 
 
-## 构建当前地块流动描边分段缓存
+## 构建当前城流动描边缓存（R2）：几何 = 当前地块聚落的 blob 轮廓
+## （与建成区图形同源，逐像素重合；原整地块多边形描边已废）
 func _build_glow_outline() -> void:
 	_glow_outline = PackedVector2Array()
 	if _data == null or _current_tile_id.is_empty():
 		return
 	for tile in _data.tiles:
-		if tile.tile_id == _current_tile_id and tile.polygon.size() >= 3:
-			_glow_outline = FlowOutline.resample_closed(tile.polygon)
+		if tile.tile_id == _current_tile_id:
+			if tile.settlement != null:
+				var outline: PackedVector2Array = _blob_outlines.get(
+					tile.settlement.settlement_id, PackedVector2Array())
+				if outline.size() >= 3:
+					_glow_outline = FlowOutline.resample_closed(outline)
 			return
 
 
@@ -279,9 +303,16 @@ func refresh() -> void:
 func _process(delta: float) -> void:
 	if not is_visible_in_tree() or _data == null:
 		return
-	# 当前地块流动光动画：相位推进 + 每帧重绘（静态层均缓存，成本低）
+	# 动画相位推进：当前城流动光 + 玩家位置脉冲环（有任一动画即逐帧重绘；
+	# 静态层均缓存，成本低）
+	var animating := false
 	if not _glow_outline.is_empty():
 		_glow_time += delta
+		animating = true
+	if _player_visible:
+		_pulse_time += delta
+		animating = true
+	if animating:
 		queue_redraw()
 	# 屏幕坐标 -> 地图坐标（一次换算，与 api.query_at_screen 同路径；
 	# 不能用 get_global_mouse_position——它已按节点 transform 逆变换过，再换算会双重扭曲）
@@ -431,9 +462,9 @@ func _draw() -> void:
 	# 8. F3 调试：城市编号（标在聚落位置）
 	if DebugApi != null and DebugApi.is_visible():
 		_draw_city_labels()
-	# 9. 玩家图钉（F2/C1：琥珀色图钉 + 「你在这里」标注，画在最上层）
-	if _pin_visible:
-		_draw_player_pin(zz)
+	# 9. 玩家位置标记（R2 GPS 范式：中心点 + 静态环 + 脉冲扩散环，画在最上层）
+	if _player_visible:
+		_draw_player_marker(zz)
 
 
 ## 闭合多边形点列（首尾相连）
@@ -445,18 +476,25 @@ func _closed(pts: PackedVector2Array) -> PackedVector2Array:
 	return out
 
 
-## 设置玩家图钉位置（L1 地图坐标 = 所在聚落 position_px；api.set_player_map 接线）
+## 设置玩家位置（L1 地图坐标 = 所在聚落 position_px；api.set_player_map 接线。
+## 方法名保留 P6 时代接口；R2 起图形为位置标记而非图钉）
 func set_player_pin(map_pos: Vector2) -> void:
-	_pin_pos = map_pos
-	_pin_visible = true
+	_player_pos = map_pos
+	_player_visible = true
+	# 色随所在地块政权色走（查询失败保留旧色——跨 L1 查不到时标记仍可见）
+	if _data != null:
+		var query: Dictionary = _data.query_at_map_pos(map_pos)
+		var tile: L1TileDef = query.get("tile", null)
+		if tile != null:
+			_player_state_color = _data.get_state_color(tile.owner_state_id)
 	queue_redraw()
 
 
-## 隐藏玩家图钉（玩家当前不在本 L1 的任何聚落时）
+## 隐藏玩家位置标记（玩家当前不在本 L1 的任何聚落时）
 func clear_player_pin() -> void:
-	if not _pin_visible:
+	if not _player_visible:
 		return
-	_pin_visible = false
+	_player_visible = false
 	queue_redraw()
 
 
@@ -483,35 +521,34 @@ func clear_route_highlight() -> void:
 	queue_redraw()
 
 
-## 琥珀色图钉：圆头 + 尾针 + 白点 + 「你在这里」标注（总体设计 §5.6；
-## 程序化绘制，属"仅 UI 标记"豁免，不引素材）
-func _draw_player_pin(zz: float) -> void:
-	var head_r: float = PIN_HEAD_RADIUS
-	var tail_len: float = PIN_TAIL_LEN
+## 玩家位置标记（R2，替代拟物图钉）：中心 4px 玩家国色点（白描边）+ 12px 静态细环
+## + 1.5s 周期脉冲扩散环（12→36px，alpha 0.5→0，玩家国色）。全部屏幕像素固定。
+func _draw_player_marker(zz: float) -> void:
+	var dot_r := PLAYER_DOT_RADIUS
+	var dot_ow := PLAYER_DOT_OUTLINE_W
+	var ring_r := PLAYER_RING_RADIUS
+	var ring_w := PLAYER_RING_WIDTH
+	var p_from := PLAYER_PULSE_FROM
+	var p_to := PLAYER_PULSE_TO
 	if zz > 0.0001:
-		head_r = PIN_HEAD_RADIUS / zz
-		tail_len = PIN_TAIL_LEN / zz
-	var tail_tip := _pin_pos + Vector2(0.0, tail_len)
-	# 尾针（三角）
-	draw_colored_polygon(PackedVector2Array([
-		_pin_pos + Vector2(-head_r * 0.45, 0.0),
-		_pin_pos + Vector2(head_r * 0.45, 0.0),
-		tail_tip,
-	]), PIN_COLOR)
-	# 圆头 + 深色描边 + 白点
-	draw_circle(_pin_pos, head_r, PIN_COLOR)
-	draw_arc(_pin_pos, head_r, 0.0, TAU, 48, PIN_OUTLINE, maxf(1.0, head_r * 0.22), true)
-	draw_circle(_pin_pos, head_r * 0.38, Color.WHITE)
-	# 「你在这里」标注（尾针下方，屏幕字号封顶同城市标签口径）
-	var font := ThemeDB.fallback_font
-	var fs: float = PIN_LABEL_SIZE
-	if zz > 0.0001:
-		fs = minf(PIN_LABEL_SIZE, LABEL_SCREEN_CAP / zz)
-	var txt_pos := tail_tip + Vector2(0.0, fs * 0.9)
-	var halo: float = maxf(1.5, fs * 0.12)
-	for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
-		draw_string(font, txt_pos + off * halo, PIN_LABEL, HORIZONTAL_ALIGNMENT_CENTER, -1, fs, LABEL_BG)
-	draw_string(font, txt_pos, PIN_LABEL, HORIZONTAL_ALIGNMENT_CENTER, -1, fs, PIN_COLOR)
+		dot_r /= zz
+		dot_ow /= zz
+		ring_r /= zz
+		ring_w /= zz
+		p_from /= zz
+		p_to /= zz
+	# 静态细环（白，半透明度略降避免喧宾夺主）
+	var ring_col := Color(1.0, 1.0, 1.0, 0.75)
+	draw_arc(_player_pos, ring_r, 0.0, TAU, 48, ring_col, ring_w, true)
+	# 脉冲扩散环：0→1 相位，半径 12→36px、alpha 0.5→0，玩家国色
+	var t := fmod(_pulse_time, PLAYER_PULSE_PERIOD) / PLAYER_PULSE_PERIOD
+	var pa := lerpf(PLAYER_PULSE_ALPHA, 0.0, t)
+	if pa > 0.01:
+		draw_arc(_player_pos, lerpf(p_from, p_to, t), 0.0, TAU, 48,
+				Color(_player_state_color, pa), ring_w, true)
+	# 中心点：玩家国色填充 + 白描边
+	draw_circle(_player_pos, dot_r, _player_state_color)
+	draw_arc(_player_pos, dot_r, 0.0, TAU, 48, Color.WHITE, dot_ow, true)
 
 
 ## 邻湖判定容差（地图单元）：边中点距湖多边形 ≤ 该值视为"地块-湖泊"边界不描边。

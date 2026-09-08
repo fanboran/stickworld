@@ -364,44 +364,44 @@ func _update_title_bar(l1_label: int) -> void:
 	_title_bar.set_content("L1", "地块 #%d" % l1_label, subtitle)
 
 
-## 图例内容随地图模式切换（B4，走 MapLegend.set_title/set_entries）：
-## TERRAIN = 地物水系（海洋/湖泊；B2 群系底图落地后在此追加群系色条目）
-## POLITICAL = 政权色条目（与地图填充同色源 get_state_color）
-## 两模式末尾恒附「城镇建成区」（C2 blob 与行政区划分层的图例说明，风险表点名项）
+## 图例内容随地图模式切换（B4 机制；R4 三模式语义，走 MapLegend.set_title/set_entries）：
+## TERRAIN 地形 = 地物水系 + 群系色 + 建成区（建成区仅本模式显示，§R4 创始人拍板）
+## POLITICAL 政治 = 政权色条目（与地图填充同色源 get_state_color；不显示建成区/道路）
+## TRAFFIC 交通 = 土路/官道条目（道路已烘焙进 l1_travel.png 贴图；无虚线/实线字样——R6 废虚线）
 func _fill_legend() -> void:
 	if _legend == null:
 		return
-	var blob_entry := {"color": MapRenderer.BLOB_FILL, "text": "城镇建成区"}
-	if MapModeManager.current_mode == MapModeManager.Mode.TERRAIN:
-		_legend.set_title("地形")
-		var entries := [
-			{"color": MapRenderer.OCEAN_COLOR, "text": "海洋"},
-			{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
-		]
-		entries.append_array(MapRenderer.BIOME_LEGEND)
-		entries.append(blob_entry)
-		entries.append_array(MapRenderer.ROAD_LEGEND)
-		_legend.set_entries(entries)
+	var mode := MapModeManager.current_mode
+	if mode == MapModeManager.Mode.TRAFFIC:
+		_legend.set_title("交通")
+		_legend.set_entries(MapRenderer.ROAD_LEGEND)
 		return
-	if api == null or not api.has_method("get_states"):
+	if mode == MapModeManager.Mode.POLITICAL:
+		var data: L1WorldData = api.get_data() if api != null and api.has_method("get_data") else null
+		var states: Dictionary = api.get_states() if api != null and api.has_method("get_states") else {}
+		if data == null:
+			return
+		var pol_entries: Array = []
+		for state_id in states:
+			var info: Dictionary = states[state_id]
+			pol_entries.append({
+				"color": data.get_state_color(state_id),
+				"text": str(info.get("name", state_id)),
+			})
+		if pol_entries.is_empty():
+			_legend.set_entries([])  # 空态：set_shown 自动保持隐藏
+			return
+		_legend.set_title("政权")
+		_legend.set_entries(pol_entries)
 		return
-	var data: L1WorldData = api.get_data() if api.has_method("get_data") else null
-	if data == null:
-		return
-	var states: Dictionary = api.get_states()
-	var entries: Array = []
-	for state_id in states:
-		var info: Dictionary = states[state_id]
-		entries.append({
-			"color": data.get_state_color(state_id),
-			"text": str(info.get("name", state_id)),
-		})
-	entries.append(blob_entry)
-	if states.is_empty():
-		_legend.set_entries([])  # 空态：set_shown 自动保持隐藏
-		return
-	entries.append_array(MapRenderer.ROAD_LEGEND)
-	_legend.set_title("政权")
+	# TERRAIN 地形（默认）
+	_legend.set_title("地形")
+	var entries := [
+		{"color": MapRenderer.OCEAN_COLOR, "text": "海洋"},
+		{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
+	]
+	entries.append_array(MapRenderer.BIOME_LEGEND)
+	entries.append({"color": MapRenderer.BLOB_FILL, "text": "城镇建成区"})
 	_legend.set_entries(entries)
 
 

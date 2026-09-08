@@ -39,6 +39,10 @@ const _BUILDING_SCENE_PATHS := {
 	"stone_warehouse": "buildings/stone_warehouse.tscn",
 	# 宅邸：二层半木悬挑建筑（外梯+阳台+穿坡烟囱），批次 3 多层建筑验收载体
 	"manor": "buildings/manor.tscn",
+	# 木骨石基民居：石基+半木+金茅草（v12 笔触），批次 5 多材质家族 T2 民居
+	"timber_cottage": "buildings/timber_cottage.tscn",
+	# 议事厅：地标级混合精修（石砌角石+半木悬挑+茅草坡+脊上钟楼+外梯阳台），批次 5 验收载体
+	"grand_hall": "buildings/grand_hall.tscn",
 }
 
 

@@ -70,9 +70,21 @@ static func make_straw_thatch(w: int, h: int, base_color: Color = Color(0.72, 0.
 
 # ═══════════════════════ 层叠茅草 ═══════════════════════
 
-## 简化版层叠茅草屋顶贴图（横向 tileable）
+## 层叠茅草屋顶贴图（横向 tileable）
 ## 斜向茅草束 + 底边垂挂 + 外框描边
-static func make_thatch_layered(w: int, h: int, seed_value: int = 0) -> ImageTexture:
+##
+## v12 笔触参数（opts，全部可选；不传或传空 Dictionary 时与 v11 逐像素一致，
+## 既有调用方零影响）。针对前批遗留「茅草偏鳞瓦感」：束形更修长+斜铺+束梢收尖。
+##   "slant":     float，束身每往下 1px 的水平偏移（0.0=直立矩形束；推荐 0.4 左右=斜铺长束）
+##   "stretch":   float，束纵向拉伸倍率（1.0=原束高；推荐 1.8~2.2，束形修长、叠瓦更深）
+##   "slender":   float，束宽收窄分母（仅 >1.0 生效；推荐 1.5 左右，细束密排减鳞瓦感）
+##   "taper_min": float，束顶宽度比例（0.7=原圆头；推荐 0.45，束梢更尖自然）
+## 推荐组合：{"slant": 0.42, "stretch": 1.9, "slender": 1.55, "taper_min": 0.45}
+static func make_thatch_layered(w: int, h: int, seed_value: int = 0, opts: Dictionary = {}) -> ImageTexture:
+	var slant: float = float(opts.get("slant", 0.0))
+	var stretch: float = float(opts.get("stretch", 1.0))
+	var slender: float = float(opts.get("slender", 1.0))
+	var taper_min: float = float(opts.get("taper_min", 0.7))
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("thatch_layered_%dx%d_s%d" % [w, h, seed_value])
@@ -107,14 +119,19 @@ static func make_thatch_layered(w: int, h: int, seed_value: int = 0) -> ImageTex
 		var base_c: Color = palette[clampi(color_idx, 0, 4)]
 		var x_offset := rng.randf_range(-row_h * 0.5, row_h * 0.5)
 		var bundle_w := maxi(8, int(w / 24.0))
+		if slender > 1.0:
+			bundle_w = maxi(5, int(float(bundle_w) / slender))
 		var num_bundles := int(w / float(bundle_w)) + 2
 		for b in range(num_bundles):
 			var bx := int(b * bundle_w + x_offset) % w
 			if bx < 0:
 				bx += w
+			# rng 调用顺序保持原样（先 bh 后 bw），保证 opts 缺省时随机序列逐位一致
 			var bh := row_h + rng.randf_range(-3, 5)
+			if stretch != 1.0:
+				bh = int(float(bh) * stretch)
 			var bw := bundle_w + rng.randf_range(-2, 2)
-			_draw_thatch_bundle(img, bx, row_y, int(bw), int(bh), base_c, edge_color, rng, w)
+			_draw_thatch_bundle(img, bx, row_y, int(bw), int(bh), base_c, edge_color, rng, w, slant, taper_min)
 		if row >= rows - 4:
 			var overhang := (row - rows + 4) * 6
 			for x in range(0, w, 3):
@@ -155,16 +172,18 @@ void fragment() {
 	return mat
 
 
-static func _draw_thatch_bundle(img: Image, x: int, y: int, w: int, h: int, color: Color, edge: Color, rng: RandomNumberGenerator, wrap_w: int) -> void:
+static func _draw_thatch_bundle(img: Image, x: int, y: int, w: int, h: int, color: Color, edge: Color, rng: RandomNumberGenerator, wrap_w: int, slant: float = 0.0, taper_min: float = 0.7) -> void:
 	var half_w := int(w / 2.0)
 	for dy in range(h):
 		var py := y + dy
 		if py < 0 or py >= img.get_height():
 			continue
-		var taper := 0.7 + 0.3 * float(dy) / float(h)
+		# 束身剖面：顶 taper_min（束梢）→ 底 1.0（束根）；slant=每行水平偏移（斜铺束）
+		var taper := taper_min + (1.0 - taper_min) * float(dy) / float(h)
 		var cw := int(half_w * taper)
+		var sweep := int(float(dy) * slant)
 		for dx in range(-cw, cw):
-			var px := x + dx
+			var px := x + dx + sweep
 			px = ((px % wrap_w) + wrap_w) % wrap_w
 			var c: Color = color
 			var dist := absi(dx) / float(cw + 1)

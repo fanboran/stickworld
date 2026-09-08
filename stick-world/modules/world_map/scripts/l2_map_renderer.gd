@@ -5,6 +5,10 @@ class_name L2MapRenderer
 ## L2 本身即"具体到城市"的视图：恒以该地区城市蒙版贴图（l2_city_preview.png）为底，
 ## 无显示模式切换（不提供 toggle_display_mode，MapHUD 因此不显示细分按钮）。
 ## hover/编号仍按老 L1（索引图不变）；交互不变。
+## 线条语言（R8 层2）：非政治模式界线维持现状语义（token 化，MapTokens 零字面量）；
+## 政治模式界线走三级——地区界 2px 长虚线 / 地块界 1px 短虚线（国界 3px 由底图
+## ID mask 像素色差表达，矢量国界在 L3 落地）；手绘笔触与 SketchDraw 同源
+## （MapSketch：固定 seed 不沸腾），hover = boiling 动态笔触（血条同拍）。
 ## 分层（context 坐标系，含相邻地区扩展区域）：
 ##   海洋背景 -> 湖泊(浅蓝) -> 相邻地区(灰色) -> 当前地区城市贴图
 ##   -> 相邻地区分界线(深色) -> hover 描边
@@ -26,33 +30,35 @@ var display_mode: int = DisplayMode.MODE_CITY
 ## hover 命中的地块（Dictionary，未命中为空）
 var hovered_tile: Dictionary = {}
 
-## hover 描边色（灰色）
-const EDGE_COLOR := Color(0.55, 0.55, 0.55)
-const EDGE_WIDTH := 6.5          # 地图单位线宽（描边=地图绝对粗细；放大超屏幕上限时 clamp）——原×1.3
-const HOVER_SCREEN_CAP := 11.7   # hover 描边屏幕像素上限（原 9 ×1.3）
-const HOVER_MARGIN := 2.0        # hover 描边至少比地块常驻描边粗的裕量（地图单位）
+## ===== 线条/色彩 token（R8 层2）：真相源在 MapTokens，本文件零色值/线宽字面量 =====
+## 非政治模式沿用现状线宽语义（原值迁移）；政治模式界线走三级规范（国/地区/地块）。
 
-## L1 地块编号（F3 调试模式显示，画在 L1 地块质心）
-const LABEL_COLOR := Color(1.0, 0.9, 0.3, 0.95)
-const LABEL_BG := Color(0.0, 0.0, 0.0, 0.75)
+## hover 描边色（交互线槽 = StickTokens.BORDER_STRONG，R8 语义归位）
+const EDGE_COLOR := MapTokens.L2_HOVER_COLOR
+const EDGE_WIDTH := MapTokens.L2_HOVER_WIDTH     # hover 地图单位线宽（描边=地图绝对粗细）
+const HOVER_SCREEN_CAP := MapTokens.L2_HOVER_SCREEN_CAP
+const HOVER_MARGIN := MapTokens.L2_HOVER_MARGIN
+
+## L1 地块编号（F3 调试模式显示，画在 L1 地块质心；调试域专色）
+const LABEL_COLOR := MapTokens.DEBUG_INK
+const LABEL_BG := MapTokens.DEBUG_BG
 const LABEL_SIZE := 28.0          # 地图单位字号（放大跟随，缩小保持可见）
 var _debug_was_visible: bool = false
 
-## 相邻地区分界线（深色）
-const BORDER_COLOR := Color(0.25, 0.25, 0.25)
-## 地块常驻描边（内部省份边界；与邻居分界线风格协调：深灰、中等粗细）
-const TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
-const TILE_BORDER_WIDTH := 5.2   # 原 4 ×1.3
+## 相邻地区分界线（非政治模式；深灰墨）
+const BORDER_COLOR := MapTokens.L2_BORDER_COLOR
+## 地块常驻描边（非政治模式；灰墨、地图单位宽）
+const TILE_BORDER_COLOR := MapTokens.L2_TILE_BORDER_COLOR
+const TILE_BORDER_WIDTH := MapTokens.L2_TILE_BORDER_WIDTH
 
-## 海洋背景色
-const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
-## 湖泊（对齐 B2 底图湖色 terrain_params.json colors.lake；mesh 顶点色由 l2_bake 烘入）
-const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
-## 河流（B3）：与 L3/L2 底图预渲染河流同色；POLITICAL 模式矢量叠加（TERRAIN 底图已含，不重复画）
-const RIVER_COLOR := Color(46.0 / 255.0, 102.0 / 255.0, 140.0 / 255.0)
-const RIVER_MIN_WIDTH := 2.5
+## 海洋背景色（B2 同源）/ 湖泊（B2 湖色同源，mesh 顶点色由 l2_bake 烘入）/
+## 河流（B3：与底图预渲染河流同色；POLITICAL 模式矢量叠加）
+const OCEAN_COLOR := MapTokens.L2_OCEAN
+const LAKE_COLOR := MapTokens.L2_LAKE
+const RIVER_COLOR := MapTokens.L2_RIVER
+const RIVER_MIN_WIDTH := MapTokens.L2_RIVER_MIN_WIDTH
 ## 相邻地区（灰色，不上色）
-const NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
+const NEIGHBOR_COLOR := MapTokens.L2_NEIGHBOR
 
 var _static_mesh: ArrayMesh = null       # 当前地区地块（彩色）
 var _neighbors_mesh: ArrayMesh = null    # 相邻地区（灰色）
@@ -67,11 +73,24 @@ var _neighbor_border_segs: Array = []    # 相邻地区分界线段（烘焙，�
 ## 海洋/湖泊/邻区底色保留码，垫底后本节点跳过 1/2/3 层，界线/河流/hover 照常画）
 var _political_layer: Sprite2D = null
 
+## 政治模式界线三级缓存（R8 层2）：地块界（1px 短虚线）/地区界（2px 长虚线）——
+## 手绘扰动 + 虚线在构建时做一次（固定 seed 不沸腾，笔触烙在地图上）。
+## 国界（3px 实线）由底图 ID mask 像素色差表达（L2 pack 无城块矢量几何，
+## 三级中的国界矢量层在 L3 落地，数据源 = l3_city 城块邻接）
+var _political_plot_segs := PackedVector2Array()
+var _political_region_segs := PackedVector2Array()
+var _political_borders_built := false
+
+## boiling 时钟/帧号（R8 层2 动态线节拍，hover 笔触用；0.12s 重掷，血条同拍）
+var _boiling_time := 0.0
+var _boiling_frame := 0
+
 
 func set_data(data: L2WorldData) -> void:
 	_data = data
 	_build_static_mesh()
 	_ensure_political_layer()
+	_political_borders_built = false
 	queue_redraw()
 
 
@@ -158,7 +177,7 @@ func _make_mesh_from_baked(baked: Dictionary) -> ArrayMesh:
 	return mesh
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not visible or _data == null:
 		return
 	var viewport := get_viewport()
@@ -176,6 +195,16 @@ func _process(_delta: float) -> void:
 	if label != int(hovered_tile.get("label", -1)):
 		hovered_tile = tile
 		queue_redraw()
+	# 动态线 boiling（hover 笔触）：0.12s 重掷帧号（血条同拍），变化才重绘
+	if hovered_tile.is_empty():
+		_boiling_time = 0.0
+		_boiling_frame = 0
+	else:
+		_boiling_time += delta
+		var frame := MapSketch.boiling_seed(_boiling_time)
+		if frame != _boiling_frame:
+			_boiling_frame = frame
+			queue_redraw()
 	# F3 调试模式变化时刷新（L1 编号显隐）
 	var debug_now: bool = DebugApi != null and DebugApi.is_visible()
 	if debug_now != _debug_was_visible:
@@ -218,19 +247,37 @@ func _draw() -> void:
 			# 5. 当前地块洞（海洋色）
 			if _holes_mesh != null:
 				draw_mesh(_holes_mesh, null)
-	# 5.5 地块常驻描边（地图绝对粗细，放大超屏幕上限时 clamp）
-	var twidth := TILE_BORDER_WIDTH
-	if _camera != null and _camera.has_method("get_zoom"):
-		var zz: float = _camera.get_zoom()
-		if zz > 0.0001:
-			twidth = minf(TILE_BORDER_WIDTH, 7.8 / zz)
-	for seg in _tile_border_segs:
-		draw_line(seg[0], seg[1], TILE_BORDER_COLOR, twidth, true)
-	# 6. 相邻地区分界线（深色，抗锯齿矢量线；已烘焙合并共线段）
-	if not _neighbor_border_segs.is_empty():
-		var bw := BORDER_WIDTH()
-		for seg in _neighbor_border_segs:
-			draw_line(seg[0], seg[1], BORDER_COLOR, bw, true)
+	# 5.5 界线（R8 层2 分级）：
+	#     政治模式 = 界线三级——地区界 2px 长虚线 / 地块界 1px 短虚线（§7.3-6 规范表，
+	#     屏幕像素口径恒定粗细；手绘固定 seed 不沸腾；国界由底图 ID mask 像素色差表达）
+	#     非政治模式 = 现状语义（地块常驻描边，地图绝对粗细，放大超屏幕上限时 clamp）
+	if political:
+		if not _political_borders_built:
+			_build_political_borders()
+		var regw := MapTokens.LINE_REGION
+		var plw := MapTokens.LINE_PLOT
+		if _camera != null and _camera.has_method("get_zoom"):
+			var pz: float = _camera.get_zoom()
+			if pz > 0.0001:
+				regw = MapTokens.LINE_REGION / pz
+				plw = MapTokens.LINE_PLOT / pz
+		if _political_plot_segs.size() >= 2:
+			draw_multiline(_political_plot_segs, MapTokens.LINE_PLOT_COLOR, plw, true)
+		if _political_region_segs.size() >= 2:
+			draw_multiline(_political_region_segs, MapTokens.LINE_REGION_COLOR, regw, true)
+	else:
+		var twidth := TILE_BORDER_WIDTH
+		if _camera != null and _camera.has_method("get_zoom"):
+			var zz: float = _camera.get_zoom()
+			if zz > 0.0001:
+				twidth = minf(TILE_BORDER_WIDTH, 7.8 / zz)
+		for seg in _tile_border_segs:
+			draw_line(seg[0], seg[1], TILE_BORDER_COLOR, twidth, true)
+		# 6. 相邻地区分界线（深色，抗锯齿矢量线；已烘焙合并共线段）
+		if not _neighbor_border_segs.is_empty():
+			var bw := BORDER_WIDTH()
+			for seg in _neighbor_border_segs:
+				draw_line(seg[0], seg[1], BORDER_COLOR, bw, true)
 	# 6.5 湖泊绘制到最上层：覆盖灰色相邻地区/非地块区（湖是水域，不应被灰影盖住）。
 	# 地块内湖泊已作洞（5 步洞网格同色），此处再绘一次湖泊多边形，确保非地块区的湖也显现。
 	# 地形模式下纹理已含湖色，跳过（避免纯色湖 mesh 盖掉纹理湖渐变）。
@@ -243,7 +290,8 @@ func _draw() -> void:
 			var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
 			if rpts.size() >= 2:
 				draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
-	# 7. hover 地块轮廓描边（灰，最上层；固定屏幕像素粗细，不随缩放）
+	# 7. hover 地块轮廓描边（交互线槽，最上层；固定屏幕像素粗细，不随缩放；
+	#    boiling 手绘笔触——"活"的笔触只给交互层，R8 层2）
 	var hpolys: Array = hovered_tile.get("polygons", [hovered_tile.get("polygon", [])])
 	for hp in hpolys:
 		if hp.size() < 3:
@@ -251,14 +299,16 @@ func _draw() -> void:
 		var hpts := PackedVector2Array()
 		for pp in hp:
 			hpts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
-		hpts.append(hpts[0])
 		var hw := TILE_BORDER_WIDTH + HOVER_MARGIN
 		if _camera != null and _camera.has_method("get_zoom"):
 			var z: float = _camera.get_zoom()
 			if z > 0.0001:
 				# hover 比地块常驻描边粗一个裕量（地图绝对），放大超屏幕上限 clamp
 				hw = minf(TILE_BORDER_WIDTH + HOVER_MARGIN, HOVER_SCREEN_CAP / z)
-		draw_polyline(hpts, EDGE_COLOR, hw, true)
+		var hseed := MapSketch.id_seed("l2_hover") + _boiling_frame
+		var hwobble := MapSketch.wobble_polyline(hpts, hseed, hw, true)
+		hwobble.append(hwobble[0])
+		draw_polyline(hwobble, EDGE_COLOR, hw, true)
 	# 8. L1 地块编号（F3 调试模式）：标在各地块质心，指认地块用
 	if DebugApi != null and DebugApi.is_visible() and _data != null:
 		_draw_l1_labels()
@@ -281,10 +331,39 @@ func _draw_l1_labels() -> void:
 		draw_string(font, pos + Vector2(2.0, -LABEL_SIZE * 0.4), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, LABEL_COLOR)
 
 
+## 构建政治模式界线三级缓存（首次政治绘制时一次）：地块界/地区界逐段手绘扰动
+## （固定 seed——顶点拖拽由坐标 hash 决定，段间共享端点连续无缝）+ 虚线切段。
+## 笔触/虚线按构建时 zoom 固化成地图单位（烙在地图上，缩放观感一致）；线宽绘制时
+## 实时 ÷zoom 保持屏幕恒定。
+func _build_political_borders() -> void:
+	_political_plot_segs = PackedVector2Array()
+	_political_region_segs = PackedVector2Array()
+	_political_borders_built = true
+	var zz := 1.0
+	if _camera != null and _camera.has_method("get_zoom"):
+		zz = _camera.get_zoom()
+	if zz <= 0.0001:
+		zz = 1.0
+	var plot_w := MapTokens.LINE_PLOT / zz
+	var region_w := MapTokens.LINE_REGION / zz
+	var plot_seed := MapSketch.id_seed("l2_plot")
+	var region_seed := MapSketch.id_seed("l2_region")
+	for seg in _tile_border_segs:
+		var wpts := MapSketch.wobble_polyline(
+			PackedVector2Array([seg[0], seg[1]]), plot_seed, plot_w, false)
+		MapSketch.dash_segments(_political_plot_segs, wpts,
+			MapTokens.DASH_SHORT / zz, MapTokens.DASH_SHORT_GAP / zz)
+	for seg in _neighbor_border_segs:
+		var wpts := MapSketch.wobble_polyline(
+			PackedVector2Array([seg[0], seg[1]]), region_seed, region_w, false)
+		MapSketch.dash_segments(_political_region_segs, wpts,
+			MapTokens.DASH_LONG / zz, MapTokens.DASH_LONG_GAP / zz)
+
+
 func BORDER_WIDTH() -> float:
-	# 相邻地区分界：地图绝对宽 6.5，放大超 10 屏像素 clamp
+	# 相邻地区分界：地图绝对宽，放大超屏幕像素 clamp
 	if _camera != null and _camera.has_method("get_zoom"):
 		var z: float = _camera.get_zoom()
 		if z > 0.0001:
-			return minf(EDGE_WIDTH * 1.3, 13.0 / z)
-	return EDGE_WIDTH * 1.3
+			return minf(MapTokens.L2_BORDER_WIDTH, MapTokens.L2_BORDER_SCREEN_CAP / z)
+	return MapTokens.L2_BORDER_WIDTH

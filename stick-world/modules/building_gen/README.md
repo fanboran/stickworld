@@ -3,7 +3,6 @@
 > 本模块负责程序化生成建筑实体：
 > - `buildings/`：程序化建筑定义（草棚外壳 + 城墙等，核心）
 > - 纹理/材质生成已迁移至 [`modules/texture_gen/`](../texture_gen/README.md)，本模块单向依赖之。
-> - 编辑器预览/参考场景已归档至 `archive/`（开发参考，运行时无引用）。
 >
 > 系统级设计规范见 [docs/技术/教程/程序化材质系统.md](file:///f:/VSCode/game-2/stick-world/docs/技术/教程/程序化材质系统.md)。
 
@@ -19,16 +18,12 @@ modules/building_gen/
 │   ├── placeholder.tscn            #   草棚外壳（房屋类建筑共用，16格宽，可拉伸）
 │   ├── thatch_hut.gd               #   草棚调色板子类（extends BuildingExterior）
 │   ├── building_exterior.gd        #   外观装配基类（外壳几何 + 纹理生成）
+│   ├── barracks.tscn / warehouse.tscn / smithy_lv1.tscn  #  差异化外观建筑（子类 + 调色板）
 │   ├── wall_tier1.tscn             #   低矮土墙（耦合：场景手绘，非材质/模块分离）
 │   ├── wall_tier2.tscn             #   标准城墙
 │   ├── wall_tier3.tscn             #   大型城墙
 │   ├── wall_gate.tscn              #   城门
 │   └── reference/                  #   建筑级参考图（设计稿）
-├── archive/                        # 归档（开发参考，无运行时引用）
-│   ├── smithy_reference.tscn       #   铁匠铺零件参考装配场景（历史）
-│   ├── smithy_preview.tscn         #   铁匠铺编辑器预览场景（历史）
-│   ├── smithy_reference_textures/  #   零件纹理（配套）
-│   ├── smithy_preview.gd / smithy_reference.gd
 ├── scripts/
 │   ├── building.gd                 # Building 基类（class_name）
 │   └── building_snap.gd            # 编辑器吸附工具（@tool，配合预览场景做场景搭建/测试）

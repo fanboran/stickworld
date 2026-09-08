@@ -7,16 +7,20 @@ extends Button
 ## 脚本 _draw() 后执行——只画边缘描边线（1.6px）就不会盖文字。
 ## hover 微缩放/音效/信号行为全部继承（与 StickKit.button 交互一致）。
 
-enum Kind { NORMAL, ACCENT, DANGER }
+enum Kind { NORMAL, ACCENT, PRIMARY, DANGER }
 
 @export var kind: Kind = Kind.NORMAL:
 	set(v):
 		kind = v
 		_apply_flats()
 		queue_redraw()
-## 深墨描边（亮背景用，血条黑墨同思路）：非透明时覆盖常规白描边。
-## 主菜单浮在暖金天空上的按钮用它，描边才醒目。
-@export var ink := Color.TRANSPARENT
+## 亮背景纸面形态：奶油纸底 + 深墨描边贴图（主菜单浮在暖金天空上的次级按钮）。
+## 白 16% 描边贴图在亮底不可见，深墨描边与血条黑墨同思路（§1.0 墨色规则）。
+@export var ink_skin := false:
+	set(v):
+		ink_skin = v
+		_apply_flats()
+		queue_redraw()
 
 var _seed: int = 0
 var _timer: float = 0.0
@@ -29,21 +33,17 @@ func _ready() -> void:
 	resized.connect(queue_redraw)
 
 
-## 字色固定不变色（hover 反黑实验已撤——闪烁与状态错乱代价 > 收益）：
-## - ink（亮背景如主菜单天空）= 黑字
-## - 其余（黑底常态/hover/ACCENT/DANGER）= 白字，状态切换只换底图不换字色
-func _apply_text_colors() -> void:
-	var c := Color(0.05, 0.04, 0.03) if ink.a > 0.0 else StickTokens.TEXT
-	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
-		add_theme_color_override(state, c)
-
-
-## 四态贴图（kind 映射槽位；沸腾由 SketchTextures 帧驱动）
+## 四态贴图（kind/ink_skin 映射槽位；沸腾由 SketchTextures 帧驱动）
 func _apply_flats() -> void:
 	var base := "btn"
-	match kind:
-		Kind.ACCENT: base = "accent"
-		Kind.DANGER: base = "danger"
+	if kind == Kind.PRIMARY:
+		base = "btn_primary"  # 实底琥珀已含墨描边，优先于纸面形态
+	elif ink_skin:
+		base = "btn_ink"
+	else:
+		match kind:
+			Kind.ACCENT: base = "accent"
+			Kind.DANGER: base = "danger"
 	for state in ["normal", "hover", "pressed", "disabled"]:
 		var slot := StringName("%s_%s" % [base, state])
 		if SketchTextures._frame_sets.is_empty():

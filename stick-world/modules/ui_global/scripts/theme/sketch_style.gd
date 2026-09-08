@@ -78,6 +78,24 @@ static func accent_pressed() -> StyleBoxTexture:
 	return _box(&"accent_pressed", StickTokens.PAD_X + 2, 2)
 
 
+## 主行动点（实底琥珀 + 深墨描边）：黑玻璃上是琥珀实体，亮天空上也读得清
+## 「琥珀只上底不上字」（§1.5）的实体形态——14% 琥珀底只在暗底可读
+static func primary_normal() -> StyleBoxTexture:
+	return _box(&"btn_primary_normal", StickTokens.PAD_X + 2, 2)
+
+
+static func primary_hover() -> StyleBoxTexture:
+	return _box(&"btn_primary_hover", StickTokens.PAD_X + 2, 2)
+
+
+static func primary_pressed() -> StyleBoxTexture:
+	return _box(&"btn_primary_pressed", StickTokens.PAD_X + 2, 2)
+
+
+static func primary_disabled() -> StyleBoxTexture:
+	return _box(&"btn_primary_disabled", StickTokens.PAD_X + 2, 2)
+
+
 static func danger_normal() -> StyleBoxTexture:
 	return _box(&"danger_normal", StickTokens.PAD_X + 2, 2)
 

@@ -15,7 +15,7 @@ extends RefCounted
 enum LabelKind { TITLE, SECTION, BODY, HINT, TINY }
 
 ## 按钮档位（视觉变体）
-enum ButtonKind { NORMAL, ACCENT, DANGER }
+enum ButtonKind { NORMAL, ACCENT, PRIMARY, DANGER }
 
 
 # ─────────────────────────────── 标签 ────────────────────────────────
@@ -63,6 +63,9 @@ static func sketch_button(parent: Control, text: String, callback: Callable = Ca
 	var b := SketchButton.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, height)
+	# 枚举同名同序直转——不设 kind 的话 _ready 的 _apply_flats 会把 _setup_button
+	# 挂的 ACCENT 贴图覆盖回普通槽位（陈列区靠手动补设 kind 掩盖了这条暗路）
+	b.kind = kind as SketchButton.Kind
 	_setup_button(b, callback, kind)
 	parent.add_child(b)
 	return b
@@ -85,6 +88,17 @@ static func _setup_button(b: Button, callback: Callable, kind: ButtonKind) -> vo
 			var bold := SketchFonts.bold()
 			if bold != null:
 				b.add_theme_font_override("font", bold)
+		ButtonKind.PRIMARY:
+			# 主行动点：实底琥珀 + 深墨描边（贴图烘焙），黑字 + 伪粗
+			# ——14% 琥珀底只在黑玻璃上可读，亮背景（主菜单天空）必须实体形态
+			b.add_theme_stylebox_override("normal", StickStyle.primary_normal())
+			b.add_theme_stylebox_override("hover", StickStyle.primary_hover())
+			b.add_theme_stylebox_override("pressed", StickStyle.primary_pressed())
+			b.add_theme_stylebox_override("disabled", StickStyle.primary_disabled())
+			b.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
+			var bold2 := SketchFonts.bold()
+			if bold2 != null:
+				b.add_theme_font_override("font", bold2)
 		ButtonKind.DANGER:
 			b.add_theme_stylebox_override("normal", StickStyle.danger_normal())
 			b.add_theme_stylebox_override("hover", StickStyle.danger_hover())

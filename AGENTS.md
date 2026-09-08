@@ -24,7 +24,12 @@
 - **拉独立分支 = `.temp/` 下建 worktree**（2026-09-07 创始人约定）：凡被要求拉独立分支，一律 `git worktree add .temp/<分支名后缀> -b agent/<后缀>`，任务会话在对应 worktree 内干活；`.temp/` 已 gitignore。收线后 `git worktree remove` + 合并/删分支。
 - **交接档统一放 `docs/项目/交接/`**（索引见其 [README.md](docs/项目/交接/README.md)）；任务收官无待验收项的移入 `docs/项目/交接/归档/`；**代码审计/快照类文档用完直接删除**，不进归档。
 - 当前活跃交接文档：
-  - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，6 会话批次 Pro/Flash 分级派发，分支 `agent/conquest-loop`，worktree `.temp/conquest-loop`）
+  - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，**批次 1~6 全部完成、循环已测试锁死，待创始人观感验收后收线**，分支 `agent/conquest-loop`，worktree `.temp/conquest-loop`）
+  - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：描边融合+缩放抗锯齿；**批次 1=修 project.godot rendering 段事故（msaa 静默失效=全游戏零抗锯齿）最优先**，计划 worktree `.temp/stickman-visual`）
+  - `docs/项目/交接/建筑与美术升级-进度与交接.md`（任务：铁匠铺落地/石头结构件化/多层建筑/室内内饰/多材质/village_a 美化，计划 worktree `.temp/building-art`）
+  - `docs/项目/交接/城镇生成管线-进度与交接.md`（任务：L1 城镇种子随机生成+风格参数化（死亡细胞式布局随机+王国两位君主观感），计划 worktree `.temp/town-gen`）
+  - `docs/项目/交接/小镇生活与NPC职业-进度与交接.md`（任务：NPC 各司其职（铁匠/伐木/矿工）+经济自动产出端，计划 worktree `.temp/town-life`）
+  - `docs/项目/交接/游戏循环深化-进度与交接.md`（任务：兵源闭环/军饷 sink/战斗规模/敌方反扑——修核心循环 8 断点（诊断见 `docs/设计/核心循环.md` §七），计划 worktree `.temp/loop-deepen`）
   - `docs/项目/交接/世界地图系统完善-进度与交接.md`（任务：世界地图系统完善，开发完成仅剩观感验收，分支 `agent/world-map-revamp`）
   - `docs/项目/交接/图标管线与美术升级-进度与交接.md`（任务：图标三渲二管线+程序化美术升级，剩接入 Godot UI，分支 `main`）
 

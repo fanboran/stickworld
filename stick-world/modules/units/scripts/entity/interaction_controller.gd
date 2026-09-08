@@ -2,8 +2,8 @@ extends Node
 ## 火柴人交互控制器 —— 玩家按 F 交互 + 交互提示弹窗。
 ##
 ## 职责：
-## - 查找当前可交互目标（工地 / 仓库 / 资源点）并返回提示文字
-## - 玩家按 F 执行交互（交付材料 / 敲击建造 / 取放材料 / 采集）
+## - 查找当前可交互目标（工地 / 仓库 / 兵营 / 资源点）并返回提示文字
+## - 玩家按 F 执行交互（交付材料 / 敲击建造 / 取放材料 / 招兵 / 采集）
 ## - 交互提示弹窗（挂到地图前景层，跟随目标建筑显示）
 ##
 ## 由 StickmanEntity._ready 挂载为 InteractionController 子节点并调用 setup(entity)，
@@ -63,6 +63,11 @@ func try_interact() -> void:
 				_entity.set_carrying(false)
 			else:
 				_entity.set_carrying(true)
+		"barracks":
+			# 招兵（成败与原因通知由 RecruitManager 内发，交互层零通知职责）
+			if _entity.get_organization_api() != null \
+					and _entity.get_organization_api().has_method("recruit"):
+				_entity.get_organization_api().recruit()
 		"resource":
 			_try_harvest_resource_node(target as Node2D)
 
@@ -214,6 +219,14 @@ func _find_interact_target() -> Dictionary:
 			else:
 				hint = "按F拿起建材"
 			return {"target": warehouse, "kind": "warehouse", "hint": hint, "center_x": float(bounds.center), "hint_y": -1.0}
+	# 兵营（招兵，游戏循环深化批次 1）：经 OrganizationApi 转发 RecruitManager
+	var org_api: Node = _entity.get_organization_api()
+	if org_api != null and org_api.has_method("find_nearest_barracks"):
+		var barracks: Node2D = org_api.find_nearest_barracks(_entity.global_position)
+		if barracks != null and _is_near_building(barracks):
+			var bar_bounds: Dictionary = _get_building_barrier_bounds(barracks)
+			return {"target": barracks, "kind": "barracks", "hint": String(org_api.get_recruit_hint()),
+					"center_x": float(bar_bounds.center), "hint_y": -1.0}
 	# 资源点（采集）
 	var rn: Node2D = _find_nearest_resource_node()
 	if rn != null:

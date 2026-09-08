@@ -93,6 +93,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_garrison_spawner.tscn"
 	"tests/integration/test_conquest_flow.tscn"
 	"tests/integration/test_conquest_e2e.tscn"
+	"tests/integration/test_recruit_flow.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -107,6 +108,7 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_garrison_spawner.tscn"]=120
 	["tests/integration/test_conquest_flow.tscn"]=180
 	["tests/integration/test_conquest_e2e.tscn"]=180
+	["tests/integration/test_recruit_flow.tscn"]=120
 	["tests/integration/test_selection_formation.tscn"]=90
 	["tests/integration/test_possession.tscn"]=90
 	["tests/integration/test_village_map.tscn"]=90
@@ -149,7 +151,8 @@ affected_suites() {
 				picked["tests/integration/test_combat_feedback.tscn"]=1
 				picked["tests/integration/test_combat_control.tscn"]=1
 				picked["tests/integration/test_placement_grid_units.tscn"]=1
-				picked["tests/integration/test_battle_retreat.tscn"]=1 ;;
+				picked["tests/integration/test_battle_retreat.tscn"]=1
+				picked["tests/integration/test_recruit_flow.tscn"]=1 ;;
 			stick-world/modules/combat/*)
 				picked["tests/integration/test_battle_lifecycle.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1
@@ -164,7 +167,8 @@ affected_suites() {
 				picked["tests/integration/test_battle_retreat.tscn"]=1 ;;
 			stick-world/modules/construction/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1
-				picked["tests/integration/test_placement_grid_units.tscn"]=1 ;;
+				picked["tests/integration/test_placement_grid_units.tscn"]=1
+				picked["tests/integration/test_recruit_flow.tscn"]=1 ;;
 			stick-world/modules/world_map/*)
 				picked["tests/integration/test_strategic_map_p0.tscn"]=1
 				picked["tests/integration/test_l2_strategic_map.tscn"]=1
@@ -177,6 +181,7 @@ affected_suites() {
 				picked["tests/integration/test_modal_stack.tscn"]=1
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_conquest_e2e.tscn"]=1
+				picked["tests/integration/test_recruit_flow.tscn"]=1
 				picked["tests/smoke/test_new_game_smoke.tscn"]=1
 				picked["tests/smoke/test_cross_map_travel.tscn"]=1 ;;
 			stick-world/modules/debug_gui/*|stick-world/modules/debug_GUI/*)
@@ -198,7 +203,8 @@ affected_suites() {
 			stick-world/modules/resources/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1 ;;
 			stick-world/modules/organization/*)
-				picked["tests/integration/test_formation_presets.tscn"]=1 ;;
+				picked["tests/integration/test_formation_presets.tscn"]=1
+				picked["tests/integration/test_recruit_flow.tscn"]=1 ;;
 			stick-world/modules/player_control/*)
 				picked["tests/integration/test_possession.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1

@@ -135,6 +135,10 @@ var _expansion_api: Node = null
 ## ConquestManager 实例引用（运行时由 SystemSetup 装配）
 var _conquest_manager: Node = null
 
+# ─────────────────────────────── 招兵与人口（游戏循环深化批次 1）───────────────────────────────
+## RecruitManager 实例引用（运行时由 SystemSetup 装配；招兵经 OrganizationApi 转发）
+var _recruit_manager: Node = null
+
 # ─────────────────────────────── 传送系统（§5.6；TravelHandler 跨脚本读写，故加忽略）────────────────────────────────
 ## 传送返回地图 ID（进入 MegaInteriorMap 前记录，退出时返回）
 @warning_ignore("unused_private_class_variable")
@@ -279,6 +283,11 @@ func get_resources_api() -> Node:
 ## 征服流程管理器（出征/占领/收益；测试与跨模块消费走 expansion/api.gd）
 func get_conquest_manager() -> Node:
 	return _conquest_manager
+
+
+## 招兵与人口管理器（测试/调试用；玩家交互走 organization/api.gd 转发）
+func get_recruit_manager() -> Node:
+	return _recruit_manager
 
 
 ## 获取 SelectionSystem 引用（供测试用）
@@ -610,6 +619,9 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 玩家注入 FormationSystem（编队职责查询）
 		if player.has_method("set_formation_system") and _formation_system != null:
 			player.set_formation_system(_formation_system)
+		# 玩家注入 OrganizationApi（招兵交互经 org api 转发 RecruitManager）
+		if player.has_method("set_organization_api") and _organization_api != null:
+			player.set_organization_api(_organization_api)
 		# 让 CameraRig 跟随玩家
 		if camera_rig != null and camera_rig.has_method("set_follow_target"):
 			camera_rig.set_follow_target(player)

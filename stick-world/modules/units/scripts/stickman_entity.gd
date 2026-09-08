@@ -1172,6 +1172,19 @@ func get_formation_system() -> Node:
 	return _formation_system
 
 
+## 由 GameRoot spawn 时注入 OrganizationApi 引用（玩家招兵交互经它转发，
+## organization/api.gd 招兵段；NPC 不注入）
+var _organization_api: Node = null
+
+
+func set_organization_api(api: Node) -> void:
+	_organization_api = api
+
+
+func get_organization_api() -> Node:
+	return _organization_api
+
+
 ## 设置角色类型（由 FormationSystem 编队时写入）。
 func set_role(r: String) -> void:
 	role = r

@@ -73,6 +73,8 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 
 	var best: Node = null
 	var best_score: float = INF
+	# 防集火过滤开关提到循环外（battle 方法表固定，逐候选 has_method 是纯重复开销）
+	var check_attackers: bool = ignore_attackers and battle.has_method("get_attacker_count")
 	for e in enemies:
 		if e == null or not is_instance_valid(e) or _is_dead(e):
 			continue
@@ -82,8 +84,7 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 		if prefer_statue and not _is_statue(e):
 			continue
 		# 防集火重叠：正被 ≥max_attackers 个单位围攻的目标跳过（除非无其他选择时兜底放宽）
-		if ignore_attackers and battle.has_method("get_attacker_count") \
-				and battle.get_attacker_count(e) >= max_attackers:
+		if check_attackers and battle.get_attacker_count(e) >= max_attackers:
 			continue
 		# 距离为主，残血优先时按低血加权（残血分值更低 → 更可能被选中）
 		var score: float = d

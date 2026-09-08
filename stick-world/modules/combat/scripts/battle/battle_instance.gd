@@ -199,25 +199,32 @@ func unregister_attacker(target: Node, attacker: Node) -> void:
 ## 查询某目标当前被几个单位攻击（TargetFinder 防集火过滤用）。
 ## 只统计新鲜窗口内（ATTACKER_FRESH_WINDOW_MS）仍登记的攻击者，
 ## 过期项顺带惰性清理——修复原"只增不减"导致的集火分配失真（审计 P1-3）。
+## 战斗性能优化：直接迭代字典 + 复用过期键暂存数组——原 `.keys()` + 临时
+## expired 数组在混战中每秒数万次调用下是稳定的分配热点（语义不变）。
+var _expired_keys_buf: Array = []
+
 func get_attacker_count(target: Node) -> int:
 	if target == null or not is_instance_valid(target):
 		return 0
-	var iid: int = target.get_instance_id()
-	var entry: Variant = _target_attackers.get(iid, null)
+	var entry: Variant = _target_attackers.get(target.get_instance_id(), null)
 	if entry == null:
 		return 0
+	var attackers: Dictionary = entry["attackers"]
 	var now_ms: int = Time.get_ticks_msec()
 	var fresh: int = 0
-	var expired: Array = []
-	for attacker_iid in entry["attackers"].keys():
-		if now_ms - int(entry["attackers"][attacker_iid]) <= ATTACKER_FRESH_WINDOW_MS:
+	var has_expired: bool = false
+	for attacker_iid in attackers:
+		if now_ms - int(attackers[attacker_iid]) <= ATTACKER_FRESH_WINDOW_MS:
 			fresh += 1
 		else:
-			expired.append(attacker_iid)
-	for k in expired:
-		entry["attackers"].erase(k)
-	if entry["attackers"].is_empty():
-		_target_attackers.erase(iid)
+			has_expired = true
+			_expired_keys_buf.append(attacker_iid)
+	if has_expired:
+		for k in _expired_keys_buf:
+			attackers.erase(k)
+		_expired_keys_buf.clear()
+		if attackers.is_empty():
+			_target_attackers.erase(target.get_instance_id())
 	return fresh
 
 
@@ -256,12 +263,17 @@ func _rebuild_alive_cache() -> void:
 	if _alive_cache_frame == Engine.get_physics_frames():
 		return
 	_alive_cache_frame = Engine.get_physics_frames()
-	_alive_attacker = _units_attacker.filter(_is_alive_unit)
-	_alive_defender = _units_defender.filter(_is_alive_unit)
-
-
-static func _is_alive_unit(u) -> bool:
-	return u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead())
+	# 战斗性能优化：复用数组 + 内联存活判定（语义同 _is_alive_unit）——
+	# filter 每物理帧两次新数组分配 + 逐元素 Callable 派发是纯开销；
+	# 唯一消费方 target_finder 即时迭代、不跨帧持有，原地清空重建等价
+	_alive_attacker.clear()
+	for u in _units_attacker:
+		if u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+			_alive_attacker.append(u)
+	_alive_defender.clear()
+	for u in _units_defender:
+		if u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+			_alive_defender.append(u)
 
 
 ## 获取所有参战单位

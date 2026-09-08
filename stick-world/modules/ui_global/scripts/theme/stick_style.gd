@@ -56,6 +56,24 @@ static func accent_pressed() -> StyleBox:
 	return GlassStyle.accent_pressed()
 
 
+## 主行动点（实底琥珀+深墨描边）：走 SketchStyle 贴图版——原生按钮与
+## SketchButton 同一质感（玻璃 Flat 的 14% 琥珀在亮背景上不可读，见 §1.5）
+static func primary_normal() -> StyleBox:
+	return SketchStyle.primary_normal()
+
+
+static func primary_hover() -> StyleBox:
+	return SketchStyle.primary_hover()
+
+
+static func primary_pressed() -> StyleBox:
+	return SketchStyle.primary_pressed()
+
+
+static func primary_disabled() -> StyleBox:
+	return SketchStyle.primary_disabled()
+
+
 static func danger_normal() -> StyleBox:
 	return GlassStyle.danger_normal()
 

@@ -52,6 +52,8 @@ static func _load_all() -> void:
 	for slot in ["panel", "panel_light", "groove", "groove_focus",
 			"btn_normal", "btn_hover", "btn_pressed", "btn_disabled",
 			"accent_normal", "accent_hover", "accent_pressed",
+			"btn_primary_normal", "btn_primary_hover", "btn_primary_pressed", "btn_primary_disabled",
+			"btn_ink_normal", "btn_ink_hover", "btn_ink_pressed", "btn_ink_disabled",
 			"danger_normal", "danger_hover",
 			"tab_selected", "tab_hover",
 			"progress_bg", "progress_fill", "sep_h", "sep_v"]:

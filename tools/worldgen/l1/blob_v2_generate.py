@@ -799,15 +799,20 @@ def main():
     print("[v2] 管线完成 %.1fs" % (time.time() - t0))
 
     # ---- 几何落盘（npz：环拼接 + 元数据索引；世界坐标 float32）----
+    # start/count 是 rings 的「点索引」区间（不是环序号！曾误用环计数当 start，
+    # 读端按点切片导致全部环内容错位——预览图直读 results 不受影响，npz 独错）
     rings_all, meta_all, ids, cinfos = [], [], [], []
+    n_pts = 0
     for ci, c in enumerate(order):
         ids.append(c["sid"])
         cinfos.append([c["wx"], c["wy"], c["level"], c["ps"]])
         for ti, tier in enumerate(TIER_ORDER):
             for oi, (outer, holes) in enumerate(results[c["sid"]]["polys"][tier]):
                 for kind, ring in ((0, outer),) + tuple((1, h) for h in holes):
-                    meta_all.append([ci, ti, kind, oi, len(rings_all), len(ring)])
-                    rings_all.append(np.asarray(ring, np.float32))
+                    ring_arr = np.asarray(ring, np.float32)
+                    meta_all.append([ci, ti, kind, oi, n_pts, len(ring_arr)])
+                    rings_all.append(ring_arr)
+                    n_pts += len(ring_arr)
     np.savez_compressed(
         os.path.join(BLOB_V2_DIR, "blob_v2_geoms.npz"),
         rings=np.concatenate(rings_all) if rings_all else np.zeros((0, 2), np.float32),

@@ -4,7 +4,7 @@ class_name MapRenderer
 ##
 ## 数据来自 l1_world.json（含 context_size/neighbors/lakes，坐标 = context 局部）。
 ## 三模式语义（创始人 2026-09-08 拍板，观感返工 §R4）：
-##   地形   = l1_terrain.png 贴图 + 建成区 blob（blob 仅本模式）+ 交互层；不画道路
+##   地形   = l1_terrain.png 贴图 + 建成区三档贴图（blob 仅本模式）+ 交互层；不画道路
 ##   政治   = 运行时矢量政权色填充（R9 裁决：政权色随游戏进程变化，不烘焙）
 ##            + 地块界线描边 + 交互层；不画建成区、不画道路；底图无贴图（政权色全填充）
 ##   交通   = l1_travel.png 贴图（地形底图 + R6 道路 casing 双层实线已烘焙）
@@ -12,6 +12,13 @@ class_name MapRenderer
 ## 交互层（三模式全保留）：城市描边/中心点、hover/选中、当前城流动描边、玩家位置
 ## 标记、快速旅行路由高亮（琥珀虚线——虚线的正确语用位置，§7.2-4）、纸边框。
 ## 静态层贴图缺失时回退矢量管线（政权色填充 + 实线道路分级——R6 废虚线）。
+##
+## 建成区 blob V2（§R5，创始人拍板随人口增长动态化）：每包三档严格嵌套贴图
+## （blob_low/mid/high.png，high ⊆ mid ⊆ low）逐层叠加 = 每城烘焙档形状；
+## 运行时按扰动后 population_score 判档（0.35/0.65，SettlementBlob.tier_of），
+## 与烘焙档不同的城经「单城小贴图」修正（升档直接叠加覆盖；降档先以
+## l1_terrain.png 原样回贴擦除旧档像素再重画影响域各城）——补丁分帧生成防卡顿。
+## 贴图未就绪时回退包几何矢量画法（blob_v2_geo.bin 环顶点）。
 ##
 ## 分层（context 坐标系，含邻居老 L1 块扩展区域）：
 ##   静态底图(贴图或矢量) -> [交通回退:道路] -> 河流 -> 湖泊 -> 路由高亮(琥珀虚线)
@@ -53,9 +60,25 @@ var _segs_valid: bool = false
 var _tiles_mesh: ArrayMesh = null
 var _lakes_mesh: ArrayMesh = null
 
-## 城市建成区 blob 轮廓缓存（settlement_id → 以聚落锚点为中心的 context 坐标折线；
-## 形状只随 population_score 变化——settlement_updated 事件单城重算，不随 zoom/hover 变）
-var _blob_outlines: Dictionary = {}
+## ===== 建成区 blob V2 状态（§R5；仅 TERRAIN 模式消费）=====
+## 包几何（blob_v2_geo.bin：每城三档环顶点 + 烘焙档；SettlementBlob.load_pack_geometry）
+var _geo: Dictionary = {}
+## 每城生效显示档（sid → 0/1/2）。初值 = 烘焙档（贴图画的就是它）；
+## 档位判定/reconcile 后 = 运行时扰动分数判档
+var _city_tier: Dictionary = {}
+## 三档贴图（index = 档；叠加序 low→mid→high，嵌套无 z 冲突）
+var _blob_tex: Array[Texture2D] = []
+## 三档贴图全部就绪（叠加层 + 单城补丁生效开关）
+var _blob_ready: bool = false
+## 单城补丁（档位修正）：sid → {"tex": ImageTexture, "rect": Rect2}。
+## overlay = 生效档形状小贴图（补丁栅格化）；erase = l1_terrain.png 原样回贴
+## （降档擦旧档像素，随后重画影响域各城）
+var _city_overlays: Dictionary = {}
+var _city_erases: Dictionary = {}
+## 待生成补丁的城队列（分帧消费防卡顿；settlement_updated 插队优先）
+var _overlay_queue: Array[String] = []
+## 每帧补丁生成预算（栅格化单城 ~几十 ms，一帧两城把补齐窗口压在 ~0.5s 内）
+const OVERLAY_BUDGET_PER_FRAME := 2
 
 ## 模式静态底图（R9 静态层烘焙化 + R4 三模式）：TERRAIN = 本包 l1_terrain.png
 ## （B2 同管线，地形/群系/河湖/海洋）；TRAFFIC = l1_travel.png（地形底图 + R6 道路
@@ -70,10 +93,15 @@ const MODE_TEXTURES := {
 }
 ## 按模式缓存的本包底图（set_data 换包清空；POLITICAL 恒缺席）
 var _mode_textures: Dictionary = {}
+## TERRAIN 底图 Image（降档擦除贴图的取样源；随贴图线程解码后保留）
+var _terrain_img: Image = null
+## 贴图加载线程（单线程串行消费 _load_queue；R9 样板：目标归档 + join 防段错误）
 var _tex_thread: Thread = null
 var _tex_result: Image = null
-## 在途加载的目标模式（线程完成时结果归档到 _mode_textures 用）
-var _tex_target_mode: int = -1
+## 在途任务（{"kind": "mode"/"blob", "slot": int, "path": String}；完成时按它归档）
+var _tex_slot: Dictionary = {}
+## 待加载队列（模式切换/set_data 时按需补充）
+var _load_queue: Array[Dictionary] = []
 
 ## 配色（与 L2MapRenderer 完全一致；水体色与 B2 底图 terrain_params.json colors 同源，改色两端同步）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
@@ -128,10 +156,11 @@ const CITY_DOT_RADIUS := 3.0
 const CITY_DOT_RING_WIDTH := 1.0
 const CITY_DOT_COLOR := Color(0.95, 0.95, 0.9)
 const CITY_DOT_RING := Color(0.12, 0.12, 0.12)
-## 城市建成区 blob（C2，总体设计 §5.7）：卫星图式暖灰团块叠在地块填充之上、
-## 描边层之下（城界线保持清晰——与行政区划显式分层，风险表点名项）。
-## T4+ 白描边 / T5 金描边（当前数据只到 T3，代码支持全级）
-const BLOB_FILL := Color(0.62, 0.57, 0.50, 0.92)
+## 城市建成区（C2/§R5）：烘焙贴图填充底色近似值（生成端概览同款暖灰 198,188,170——
+## 实际填充从周边群系色派生，此处为图例/矢量回退的近似常量，改色两端同步）。
+## 画在城界描边之下（行政区划显式分层，风险表点名项）。
+## T4+ 白描边 / T5 金描边（当前数据只到 T3，代码支持全级；矢量回退层用）
+const BLOB_FILL := Color(198.0 / 255.0, 188.0 / 255.0, 170.0 / 255.0)
 const BLOB_EDGE := Color(0.24, 0.20, 0.15)
 const BLOB_EDGE_T4 := Color(0.95, 0.95, 0.92)
 const BLOB_EDGE_T5 := Color(1.0, 0.83, 0.25)
@@ -204,11 +233,28 @@ func set_data(data: L1WorldData) -> void:
 	_lakes_mesh = null
 	_route_road_pts.clear()
 	_route_nodes = PackedVector2Array()
-	# 换包：旧贴图/旧线程作废（join 防未完成 Thread 销毁段错误，见 _join_texture_thread）
+	# 换包：旧贴图/旧线程/旧 blob 状态作废（join 防未完成 Thread 销毁段错误）
 	_join_texture_thread()
 	_mode_textures = {}
-	_bake_blob_outlines()
+	_terrain_img = null
+	_blob_tex.clear()
+	for i in SettlementBlob.TIER_COUNT:
+		_blob_tex.append(null)
+	_blob_ready = false
+	_city_overlays = {}
+	_city_erases = {}
+	_overlay_queue.clear()
 	_current_tile_id = ""
+	# 包几何（三档环顶点 + 烘焙档）同步装载——单包几十 KB 解压 + parse，毫秒级；
+	# 生效档初值 = 烘焙档（贴图画的就是它，reconcile 后修正为运行时判档）
+	_city_tier = {}
+	if _data != null:
+		_geo = SettlementBlob.load_pack_geometry(_data.base_dir)
+		for tile in _data.tiles:
+			if tile.settlement == null:
+				continue
+			_city_tier[tile.settlement.settlement_id] = \
+				SettlementBlob.bake_tier_of(_geo, tile.settlement.settlement_id)
 	# 当前所在地块默认 = 出生聚落所在块（玩家跨城移动后由 set_current_tile 切换）
 	if _data != null and not _data.spawn_settlement_id.is_empty():
 		for tile in _data.tiles:
@@ -223,7 +269,7 @@ func set_data(data: L1WorldData) -> void:
 				break
 	_build_glow_outline()
 	# 当前模式需要静态底图（TERRAIN/TRAFFIC）时按需触发异步加载（POLITICAL 无贴图）
-	_ensure_mode_texture()
+	_ensure_static_textures()
 	queue_redraw()
 
 
@@ -239,48 +285,43 @@ func set_current_tile(tile_id: String) -> void:
 			return
 
 
-## 烘焙全部聚落 blob 轮廓（set_data 一次；s = 装配侧 population_score，含每局扰动）
-func _bake_blob_outlines() -> void:
-	_blob_outlines = {}
-	if _data == null:
+## 档位对账（三档贴图就绪后一次）：运行时扰动分 vs 烘焙档不同的城 → 补丁队列
+## （分帧生成，生成前保持烘焙档画面——±15% jitter 边界城的短暂小偏差，可接受）
+func _reconcile_tiers() -> void:
+	if not _blob_ready or _data == null:
 		return
 	for tile in _data.tiles:
 		if tile.settlement == null:
 			continue
-		_blob_outlines[tile.settlement.settlement_id] = _outline_for(tile.settlement)
+		var sid := tile.settlement.settlement_id
+		var t := SettlementBlob.tier_of(tile.settlement.population_score)
+		if t != int(_city_tier.get(sid, -1)):
+			_city_tier[sid] = t
+			if not _overlay_queue.has(sid):
+				_overlay_queue.append(sid)
+	queue_redraw()
 
 
-## 单城 blob 重算（EventBus.settlement_updated → api 调用；SettlementRef.population_score
-## 已由 api 更新，这里只重生成轮廓。不在当前数据中的 id 忽略）
+## 单城档位刷新（EventBus.settlement_updated → api 调用；SettlementRef.population_score
+## 已由 api 更新，这里重判档位并把该城排进补丁队列优先生成。不在当前数据中的 id 忽略）
 func invalidate_blob(settlement_id: String) -> void:
-	if _data == null or not _blob_outlines.has(settlement_id):
+	if _data == null:
 		return
 	var sref := _data.get_settlement(settlement_id)
 	if sref == null:
 		return
-	_blob_outlines[settlement_id] = _outline_for(sref)
-	# 当前城的轮廓变了 → 流动描边同步重采样（R2：描边与 blob 共用几何）
-	for tile in _data.tiles:
-		if tile.tile_id == _current_tile_id and tile.settlement != null \
-				and tile.settlement.settlement_id == settlement_id:
-			_glow_outline = FlowOutline.resample_closed(_blob_outlines[settlement_id])
-			break
+	var new_tier := SettlementBlob.tier_of(sref.population_score)
+	if new_tier != int(_city_tier.get(settlement_id, new_tier)):
+		_city_tier[settlement_id] = new_tier
+		_overlay_queue.erase(settlement_id)     # 去重：同一城只保留一个待补丁条目
+		_overlay_queue.insert(0, settlement_id)
+		_process_overlay_queue()
 	queue_redraw()
 
 
-## 单聚落轮廓（锚点平移到聚落位置；catmull-rom 72 点由 SettlementBlob 保证）
-func _outline_for(sref: SettlementRef) -> PackedVector2Array:
-	var local := SettlementBlob.generate_outline(
-		sref.settlement_id, sref.level, sref.blob_capacity, sref.population_score)
-	var pts := PackedVector2Array()
-	pts.resize(local.size())
-	for i in local.size():
-		pts[i] = local[i] + sref.position
-	return pts
-
-
-## 构建当前城流动描边缓存（R2）：几何 = 当前地块聚落的 blob 轮廓
-## （与建成区图形同源，逐像素重合；原整地块多边形描边已废）
+## 构建当前城流动描边缓存（R2）：几何 = 当前城 mid 档建成区轮廓（包几何最大外环，
+## 与建成区图形重合的 R2 语义；旧径向 blob 轮廓已随 §R5 退役）。
+## 固定 mid 档——分数变化不再引起描边几何跳变。
 func _build_glow_outline() -> void:
 	_glow_outline = PackedVector2Array()
 	if _data == null or _current_tile_id.is_empty():
@@ -288,10 +329,13 @@ func _build_glow_outline() -> void:
 	for tile in _data.tiles:
 		if tile.tile_id == _current_tile_id:
 			if tile.settlement != null:
-				var outline: PackedVector2Array = _blob_outlines.get(
-					tile.settlement.settlement_id, PackedVector2Array())
-				if outline.size() >= 3:
-					_glow_outline = FlowOutline.resample_closed(outline)
+				var ring := SettlementBlob.glow_outline(_geo, tile.settlement.settlement_id)
+				if ring.size() >= 3:
+					var pts := PackedVector2Array()
+					pts.resize(ring.size())
+					for i in ring.size():
+						pts[i] = ring[i] + tile.settlement.position
+					_glow_outline = FlowOutline.resample_closed(pts)
 			return
 
 
@@ -305,7 +349,7 @@ func set_map_mode(mode: int) -> void:
 		return
 	map_mode = mode
 	# 切到需静态底图的模式（TERRAIN/TRAFFIC）时按需触发加载（首帧/其他模式期间未加载过）
-	_ensure_mode_texture()
+	_ensure_static_textures()
 	queue_redraw()
 
 
@@ -336,22 +380,43 @@ func refresh() -> void:
 	queue_redraw()
 
 
-## ===== 模式静态底图异步加载（R9/R4；l3_map_renderer 三线程同款样板）=====
+## ===== 静态贴图异步加载（R9/R4 底图 + §R5 建成区三档；l3_map_renderer 三线程同款样板）=====
 ## 后台线程 FileAccess 直读 + PNG 解码（纯 CPU、线程安全，主线程零阻塞）；
-## 路径经 bind 传入（线程内不读 _data——set_data 换包期间无竞态）。
+## 单线程串行消费 _load_queue（任务含 kind/slot，完成时按它归档）。
 ## 完成前当前模式回退矢量管线，解码完成后 queue_redraw 自动切上。
-## TERRAIN/TRAFFIC 各一张；加载在途切模式 → 完成后按当前模式补启动。
-func _ensure_mode_texture() -> void:
-	if _data == null or _tex_thread != null:
+func _ensure_static_textures() -> void:
+	if _data == null:
 		return
-	if not MODE_TEXTURES.has(map_mode) or _mode_textures.has(map_mode):
-		return
-	var path := "%s/%s" % [_data.base_dir, MODE_TEXTURES[map_mode]]
-	if not FileAccess.file_exists(path):
-		return
-	_tex_target_mode = map_mode
-	_tex_thread = Thread.new()
-	_tex_thread.start(_load_texture_async.bind(path))
+	_queue_static_textures()
+	_pump_load_queue()
+
+
+## 按当前模式把「需要而未装载/未排队/未在途」的贴图任务入队
+func _queue_static_textures() -> void:
+	if MODE_TEXTURES.has(map_mode) and not _mode_textures.has(map_mode):
+		_load_queue.append({
+			"kind": "mode", "slot": map_mode,
+			"path": "%s/%s" % [_data.base_dir, MODE_TEXTURES[map_mode]],
+		})
+	# 建成区三档只在 TERRAIN 模式消费（POLITICAL/TRAFFIC 不显示建成区，§R4）
+	if map_mode == MapModeManager.Mode.TERRAIN and not _blob_ready:
+		for ti in SettlementBlob.TIER_COUNT:
+			if _blob_tex[ti] == null:
+				_load_queue.append({
+					"kind": "blob", "slot": ti,
+					"path": "%s/%s" % [_data.base_dir, SettlementBlob.TIER_FILES[ti]],
+				})
+
+
+## 线程空闲时从队列取一个任务启动（缺失文件直接跳过继续取下一个）
+func _pump_load_queue() -> void:
+	while _tex_thread == null and not _load_queue.is_empty():
+		var job: Dictionary = _load_queue.pop_front()
+		if not FileAccess.file_exists(job.path):
+			continue
+		_tex_slot = job
+		_tex_thread = Thread.new()
+		_tex_thread.start(_load_texture_async.bind(job.path))
 
 
 func _load_texture_async(path: String) -> void:
@@ -366,25 +431,162 @@ func _load_texture_async(path: String) -> void:
 ## join 后台线程并丢弃未消费结果（set_data 换包 / _exit_tree 销毁前必须调用——
 ## 未完成的 Thread 直接销毁在 Windows 上会段错误）
 func _join_texture_thread() -> void:
+	_load_queue.clear()
+	_tex_slot = {}
 	if _tex_thread != null:
 		_tex_thread.wait_to_finish()
 		_tex_thread = null
 	_tex_result = null
-	_tex_target_mode = -1
 
 
-## 每帧检查后台线程：解码完成 → wait_to_finish + 主线程建 ImageTexture 归档到
-## 对应模式；加载在途期间用户切过模式的话按当前模式补启动
+## 每帧检查后台线程：解码完成 → wait_to_finish + 主线程建 ImageTexture 按 slot 归档；
+## blob 三档齐 → 档位对账；随后按当前模式补启动下一个任务
 func _poll_texture_load() -> void:
 	if _tex_thread != null and not _tex_thread.is_alive():
 		_tex_thread.wait_to_finish()
 		_tex_thread = null
-		if _tex_result != null and _tex_target_mode >= 0:
-			_mode_textures[_tex_target_mode] = ImageTexture.create_from_image(_tex_result)
+		if _tex_result != null and not _tex_slot.is_empty():
+			var tex := ImageTexture.create_from_image(_tex_result)
+			if str(_tex_slot.get("kind")) == "mode":
+				_mode_textures[_tex_slot.slot] = tex
+				if int(_tex_slot.get("slot", -1)) == MapModeManager.Mode.TERRAIN:
+					_terrain_img = _tex_result   # 降档擦除贴图的取样源
+			elif str(_tex_slot.get("kind")) == "blob":
+				var slot := int(_tex_slot.get("slot", -1))
+				if slot >= 0 and slot < _blob_tex.size():
+					_blob_tex[slot] = tex
+					_check_blob_ready()
 			_tex_result = null
-			_tex_target_mode = -1
+			_tex_slot = {}
 			queue_redraw()
-		_ensure_mode_texture()
+		_queue_static_textures()
+		_pump_load_queue()
+
+
+func _check_blob_ready() -> void:
+	if _blob_ready:
+		return
+	for tex in _blob_tex:
+		if tex == null:
+			return
+	_blob_ready = true
+	_reconcile_tiers()
+
+
+## ===== 单城档位补丁（§R5 单城刷新；分帧生成防栅格化卡顿）=====
+
+## 每帧消费补丁队列（_process 调用；settlement_updated 走同步直通不走此队列等待）
+func _process_overlay_queue() -> void:
+	var n := 0
+	while not _overlay_queue.is_empty() and n < OVERLAY_BUDGET_PER_FRAME:
+		_build_city_patch(_overlay_queue.pop_front())
+		n += 1
+	if n > 0:
+		queue_redraw()
+
+
+## 单城补丁：按「生效档 vs 烘焙档」的差异方向生成 overlay/erase。
+## 升档：嵌套覆盖（新形状 ⊇ 旧形状）→ 只需该城新档小贴图；
+## 降档：旧档像素超出新形状 → 先以 l1_terrain.png 原样回贴擦除旧档区域，
+##       再重画影响域内各城（含被波及的邻城）的生效档形状。
+func _build_city_patch(sid: String) -> void:
+	if not _blob_ready or _data == null:
+		return
+	var sref := _data.get_settlement(sid)
+	if sref == null or not _geo.has(sid):
+		return
+	var tier := int(_city_tier.get(sid, -1))
+	if tier < 0:
+		return
+	var bake := SettlementBlob.bake_tier_of(_geo, sid)
+	if tier > bake:
+		_city_erases.erase(sid)
+		var ov := _make_city_overlay(sid, tier)
+		if ov.is_empty():
+			_city_overlays.erase(sid)
+		else:
+			_city_overlays[sid] = ov
+	elif tier < bake:
+		var bb := _city_context_bbox(sid, bake, sref)
+		if bb.size.x <= 0.0:
+			return
+		var ep := _make_erase_patch(bb)
+		if not ep.is_empty():
+			_city_erases[sid] = ep
+		for other_sid in _cities_touching(bb):
+			var ot := int(_city_tier.get(other_sid, SettlementBlob.bake_tier_of(_geo, other_sid)))
+			var ov2 := _make_city_overlay(other_sid, ot)
+			if ov2.is_empty():
+				_city_overlays.erase(other_sid)
+			else:
+				_city_overlays[other_sid] = ov2
+
+
+## 单城生效档形状 → 小贴图（相对锚点局部栅格化 + 锚点平移定位）。该档无建成区返回 {}。
+func _make_city_overlay(sid: String, tier: int) -> Dictionary:
+	var sref := _data.get_settlement(sid)
+	if sref == null:
+		return {}
+	var res := SettlementBlob.rasterize_evenodd(
+		SettlementBlob.city_rings(_geo, sid, tier), BLOB_FILL)
+	if res.is_empty():
+		return {}
+	var origin: Vector2 = res["origin"]
+	var img: Image = res["img"]
+	return {
+		"tex": ImageTexture.create_from_image(img),
+		"rect": Rect2(origin + sref.position, Vector2(img.get_width(), img.get_height())),
+	}
+
+
+## 擦除补丁：l1_terrain.png 原样回贴（区域 = 旧档形状 bbox 外扩 2px，裁进 context）。
+## 底图 Image 未就绪（贴图加载失败等）返回 {}——降档城保持烘焙画面（报告遗留项）。
+func _make_erase_patch(bb: Rect2) -> Dictionary:
+	if _terrain_img == null:
+		return {}
+	var ctx := _data.context_size
+	var bounds := Rect2(Vector2.ZERO, Vector2(ctx.x, ctx.y))
+	var rect := bb.grow(2.0).intersection(bounds)
+	if rect.size.x <= 1.0 or rect.size.y <= 1.0:
+		return {}
+	var img := _terrain_img.get_region(Rect2i(int(rect.position.x), int(rect.position.y),
+		int(rect.size.x), int(rect.size.y)))
+	return {"tex": ImageTexture.create_from_image(img), "rect": rect}
+
+
+## 城 tier 档形状的 context 坐标包围盒（锚点 = settlement.position）
+func _city_context_bbox(sid: String, tier: int, sref: SettlementRef) -> Rect2:
+	var bb := Rect2()
+	var polys := SettlementBlob.city_rings(_geo, sid, tier)
+	var first := true
+	for poly: Variant in polys:
+		var outer: PackedVector2Array = (poly as Dictionary).get("outer", PackedVector2Array())
+		for p in outer:
+			var pt := p + sref.position
+			if first:
+				bb = Rect2(pt, Vector2.ZERO)
+				first = false
+			else:
+				bb = bb.expand(pt)
+	return bb
+
+
+## 包围盒触及的城 sid 集合（各城烘焙档形状 bbox 相交判定——擦除区内所有
+## 可能被波及的城都要重画）
+func _cities_touching(bb: Rect2) -> Array[String]:
+	var out: Array[String] = []
+	if bb.size.x <= 0.0:
+		return out
+	for tile in _data.tiles:
+		if tile.settlement == null:
+			continue
+		var sid := tile.settlement.settlement_id
+		var ot := int(_city_tier.get(sid, SettlementBlob.bake_tier_of(_geo, sid)))
+		var obb := _city_context_bbox(sid, maxi(ot, SettlementBlob.bake_tier_of(_geo, sid)),
+			tile.settlement)
+		if obb.size.x > 0.0 and obb.intersects(bb):
+			out.append(sid)
+	return out
 
 
 func _exit_tree() -> void:
@@ -393,6 +595,8 @@ func _exit_tree() -> void:
 
 func _process(delta: float) -> void:
 	_poll_texture_load()
+	# 单城档位补丁分帧生成（栅格化较重，一帧限两城）
+	_process_overlay_queue()
 	if not is_visible_in_tree() or _data == null:
 		return
 	# 动画相位推进：当前城流动光 + 玩家位置脉冲环（有任一动画即逐帧重绘；
@@ -492,27 +696,49 @@ func _draw() -> void:
 			if tile.polygon.size() < 3:
 				continue
 			draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
-	# 2.5 城市建成区 blob（C2）：暖灰填充 + 分级描边，画在城界描边之下（行政区划保持清晰）；
-	#     半径为地图单位（随缩放，与地块多边形一致），描边宽屏幕像素固定。
-	#     §R4 创始人拍板：建成区仅地形模式显示（政治/交通不画）
+	# 2.5 城市建成区（C2/§R5）：仅地形模式显示（政治/交通不画，§R4 创始人拍板）。
+	#     贴图就绪 = 三档嵌套贴图逐层叠加（每城显示烘焙档形状）+ 单城档位补丁
+	#     （先 erase 回贴底图，再 overlay 生效档形状）；未就绪 = 包几何矢量回退。
 	if map_mode == MapModeManager.Mode.TERRAIN:
-		var bew: float = BLOB_EDGE_WIDTH
-		if zz > 0.0001:
-			bew = BLOB_EDGE_WIDTH / zz
-		for tile in _data.tiles:
-			var sref := tile.settlement
-			if sref == null:
-				continue
-			var outline: PackedVector2Array = _blob_outlines.get(sref.settlement_id, PackedVector2Array())
-			if outline.size() < 3:
-				continue
-			draw_colored_polygon(outline, BLOB_FILL)
-			var edge := BLOB_EDGE
-			if sref.level >= 5:
-				edge = BLOB_EDGE_T5
-			elif sref.level >= 4:
-				edge = BLOB_EDGE_T4
-			draw_polyline(_closed(outline), edge, bew, true)
+		if _blob_ready:
+			for tex in _blob_tex:
+				if tex != null:
+					draw_texture_rect(tex, Rect2(Vector2.ZERO, ctx_size), false)
+			# 降档擦除（底图原样回贴）→ 单城生效档 overlay（顺序不可换：
+			# 全部 erase 完成后再统一 overlay，多城 patch 相互覆盖才正确）
+			for patch: Dictionary in _city_erases.values():
+				draw_texture_rect(patch.tex, patch.rect, false)
+			for patch: Dictionary in _city_overlays.values():
+				draw_texture_rect(patch.tex, patch.rect, false)
+		else:
+			# 矢量回退：包几何按生效档平涂（洞不挖——过渡画面数帧）；描边沿用级别色
+			var bew: float = BLOB_EDGE_WIDTH
+			if zz > 0.0001:
+				bew = BLOB_EDGE_WIDTH / zz
+			for tile in _data.tiles:
+				var sref := tile.settlement
+				if sref == null:
+					continue
+				var tier := int(_city_tier.get(sref.settlement_id, SettlementBlob.TIER_LOW))
+				var polys := SettlementBlob.city_rings(_geo, sref.settlement_id, tier)
+				if polys.is_empty():
+					continue
+				var edge := BLOB_EDGE
+				if sref.level >= 5:
+					edge = BLOB_EDGE_T5
+				elif sref.level >= 4:
+					edge = BLOB_EDGE_T4
+				for poly: Variant in polys:
+					var outer: PackedVector2Array = (poly as Dictionary).get("outer",
+						PackedVector2Array())
+					if outer.size() < 3:
+						continue
+					var pts := PackedVector2Array()
+					pts.resize(outer.size())
+					for i in outer.size():
+						pts[i] = outer[i] + sref.position
+					draw_colored_polygon(pts, BLOB_FILL)
+					draw_polyline(_closed(pts), edge, bew, true)
 	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
 	var nbw: float = NEIGHBOR_BORDER_WIDTH
 	if zz > 0.0001:

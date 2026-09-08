@@ -354,6 +354,26 @@ variables = {
 			"wall_tier": null,
 			"can_stand_on": null,
 			"is_gate": null
+		},
+		{
+			"id": "manor",
+			"name_zh": "宅邸",
+			"type": "house",
+			"tier": 3,
+			"width": 14,
+			"build_time": 150,
+			"build_cost_wood": 120,
+			"build_cost_stone": 160,
+			"build_cost_metal": 80,
+			"max_hp": 700,
+			"workers_required": 3,
+			"interior_mode": 0,
+			"mega_interior_map_id": null,
+			"description": "两层半木悬挑宅邸，外梯上二层，镇上有头脸人家的住处",
+			"unlocked_by_tech": null,
+			"wall_tier": null,
+			"can_stand_on": null,
+			"is_gate": null
 		}
 	]
 }

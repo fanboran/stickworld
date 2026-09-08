@@ -170,19 +170,9 @@ func _make_glow_tex(size: int, color: Color) -> ImageTexture:
 
 ## 坡面茅草纹理：layered 茅草按梯形/平行四边形坡面逐行裁剪、坡面外透明。
 ## 用于 Sprite2D 显示（绕开 Polygon2D uv 采样坍缩问题）。
-## 四个占比参数分别为顶行/底行的左右边界（0..1，相对包围盒宽），行间线性过渡。
+## 批次 3 提升为基类通用件（BuildingExterior._slope_thatch_tex），此处保留委托。
 func _make_slope_thatch_tex(w: int, h: int, top_l: float, top_r: float, bot_l: float, bot_r: float, seed_value: int) -> ImageTexture:
-	var src := TextureGenAPI.make_thatch_layered(w, h, seed_value).get_image()
-	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
-	for y in h:
-		var t := float(y) / float(h - 1)  # 0=顶 1=底
-		var left := int(round(w * lerpf(top_l, bot_l, t)))
-		var right := int(round(w * lerpf(top_r, bot_r, t)))
-		for x in range(left, right):
-			var c := src.get_pixel(x, y)
-			c.a = 1.0
-			img.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(img)
+	return _slope_thatch_tex(w, h, top_l, top_r, bot_l, bot_r, seed_value)
 
 
 # ── 铁砧 + 木桶（L3 前景，x≈-150；参考图左侧）──

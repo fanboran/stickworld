@@ -37,6 +37,8 @@ const _BUILDING_SCENE_PATHS := {
 	"smithy_lv1": "buildings/smithy_lv1.tscn",
 	# 石造仓库：纯石头建筑（垛口石墙/拱窗/石带/角石），批次 2 石头结构件化验收载体
 	"stone_warehouse": "buildings/stone_warehouse.tscn",
+	# 宅邸：二层半木悬挑建筑（外梯+阳台+穿坡烟囱），批次 3 多层建筑验收载体
+	"manor": "buildings/manor.tscn",
 }
 
 

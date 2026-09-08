@@ -226,7 +226,7 @@ def build_heart(scene):
     except AttributeError:
         pass
     print("cast type:", puff.type)
-    puff.factor = 0.52
+    puff.factor = 0.22
     return {ob.name: ['heart']}
 
 
@@ -440,13 +440,13 @@ for t in (64, 128, 256):
     # 0.76/0.95（_toon_mat 按参数签名自动重建材质）
     os.environ['TOON_LO'] = '0.60'
     os.environ['TOON_HI'] = '0.88'
-    scene = setup(38, 22, t * 2, 3.3)
+    scene = setup(38, 22, t * 2, 4.2)
     emap = build_heart(scene)
     # 头灯位主光：灯放相机正后方略偏上，穹顶正面获得径向明度场
     cam = scene.camera
     R = cam.matrix_world.to_3x3()
     sun = scene.objects['Key']
-    pos = cam.matrix_world.translation + R @ _V((0.0, 1.0, 0.6))
+    pos = cam.matrix_world.translation + R @ _V((0.0, 1.2, 0.5))
     sun.location = pos
     d = _V((0, 0, 0)) - pos
     sun.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()

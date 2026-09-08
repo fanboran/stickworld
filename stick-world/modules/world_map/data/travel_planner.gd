@@ -62,39 +62,113 @@ func neighbors(sid: String) -> Dictionary:
 	return _adj.get(sid, {})
 
 
-## 单源 Dijkstra：返回 {sid: {"dist": float, "prev": sid_or_""}}（源自身 dist=0）。
-## blocked 内的聚落不扩展也不出现在结果中（起点被阻断 → 仅含起点）。
+## 单源 Dijkstra（二叉最小堆 + 惰性删除）：返回 {sid: {"dist": float, "prev": sid_or_""}}
+## （源自身 dist=0）。blocked 内的聚落不扩展也不出现在结果中（起点被阻断 → 仅含起点）。
+## 处理序与旧 O(V²) 线性扫描版逐字段一致：同距离平局按节点首次入表序先到先出
+## （即旧 frontier 最先出现的最小者），松弛同为"严格更短才更新"——结果完全一致，
+## 仅复杂度从 O(V²) 降为 O(E log V)（千级节点路网，线性选最小成主要瓶颈）。
 func compute(from_id: String, blocked: Dictionary = {}) -> Dictionary:
+	return _compute_to(from_id, "", blocked)
+
+
+## 带早停目标的单源 Dijkstra：to_id 非空时该节点出堆（距离定稿）即停。
+## 返回的表可能不含未松弛到的节点——消费方（find_path）只用 to 的 dist/prev，语义不变。
+func _compute_to(from_id: String, to_id: String, blocked: Dictionary) -> Dictionary:
 	var result: Dictionary = {}
 	if not _adj.has(from_id):
 		return result
 	result[from_id] = {"dist": 0.0, "prev": ""}
-	# 手写小顶堆嫌重——出生 L1 规模（8 节点）线性选最小即可；全大陆跨 L1 路网
-	# 接入时再换二叉堆（届时节点数 ~10³，线性 O(V²) 也在毫秒级）
-	var frontier: Array[String] = [from_id]
-	while not frontier.is_empty():
-		var best_i := 0
-		var best_d := INF
-		for i in frontier.size():
-			var d: float = result[frontier[i]]["dist"]
-			if d < best_d:
-				best_d = d
-				best_i = i
-		var cur: String = frontier[best_i]
-		frontier.remove_at(best_i)
-		var cd: float = result[cur]["dist"]
-		for nb in _adj[cur]:
+	# 堆元素 [dist, seq, node_id]；seq = 节点首次入表序（平局 tie-break，见上）。
+	# decrease-key 走惰性删除：旧 dist 的堆条目弹出时与 result 现值不符即跳过。
+	var heap: Array = [[0.0, 0, from_id]]
+	var seq_of := {from_id: 0}
+	var next_seq := 1
+	while not heap.is_empty():
+		var top: Array = heap[0]
+		var cur: String = top[2]
+		# 弹堆头：尾条目换头 + 下沉
+		var last: Array = heap.pop_back()
+		if not heap.is_empty():
+			heap[0] = last
+			_heap_sift_down(heap, 0)
+		# 惰性删除：过期条目（该节点已有更短 dist）跳过
+		var cur_d: float = result[cur]["dist"]
+		if cur_d < float(top[0]):
+			continue
+		if cur == to_id:
+			break  # 目标距离定稿（Dijkstra 出堆序性质），后续节点不影响 to 的最短路
+		var adj_cur: Dictionary = _adj[cur]
+		for nb in adj_cur:
 			if blocked.has(nb):
 				continue
-			var nd: float = cd + float(_adj[cur][nb])
+			var nd: float = cur_d + float(adj_cur[nb])
 			var old: Variant = result.get(nb)
 			if old == null:
 				result[nb] = {"dist": nd, "prev": cur}
-				frontier.append(nb)
+				seq_of[nb] = next_seq
+				heap.push_back([nd, next_seq, nb])
+				next_seq += 1
+				_heap_sift_up(heap, heap.size() - 1)
 			elif nd < float(old["dist"]):
 				old["dist"] = nd
 				old["prev"] = cur
+				heap.push_back([nd, seq_of[nb], nb])
+				_heap_sift_up(heap, heap.size() - 1)
 	return result
+
+
+## 堆条目比较键 = (dist, seq) 字典序（比较逻辑内联在 sift_up/sift_down，省调用开销）。
+
+
+## 最小堆上浮（新条目入堆尾后调用）——"洞法"：每层只写一次，末端落位
+static func _heap_sift_up(heap: Array, i: int) -> void:
+	var e: Array = heap[i]
+	var ed: float = e[0]
+	var es: int = e[1]
+	while i > 0:
+		var p := (i - 1) >> 1
+		var pe: Array = heap[p]
+		var pd: float = pe[0]
+		if ed < pd or (ed == pd and es < int(pe[1])):
+			heap[i] = pe
+			i = p
+		else:
+			break
+	heap[i] = e
+
+
+## 最小堆下沉（堆头被替换后调用）——洞法：每层只写一次，末端落位
+static func _heap_sift_down(heap: Array, i: int) -> void:
+	var n := heap.size()
+	var e: Array = heap[i]
+	var ed: float = e[0]
+	var es: int = e[1]
+	while true:
+		var l := i * 2 + 1
+		if l >= n:
+			break
+		# 选两个子中 (dist, seq) 更小者
+		var le: Array = heap[l]
+		var ld: float = le[0]
+		var ls: int = le[1]
+		var m := l
+		var md := ld
+		var ms := ls
+		var r := l + 1
+		if r < n:
+			var re: Array = heap[r]
+			var rd: float = re[0]
+			var rs: int = re[1]
+			if rd < ld or (rd == ld and rs < ls):
+				m = r
+				md = rd
+				ms = rs
+		if md < ed or (md == ed and ms < es):
+			heap[i] = heap[m]
+			i = m
+		else:
+			break
+	heap[i] = e
 
 
 ## 最短路查询：{"path": [from, ..., to]（空 = 不可达）, "length_px": float,
@@ -103,7 +177,7 @@ func find_path(from_id: String, to_id: String, blocked: Dictionary = {}) -> Dict
 	var empty := {"path": [], "length_px": 0.0, "roads": []}
 	if not _adj.has(from_id) or not _adj.has(to_id):
 		return empty
-	var computed: Dictionary = compute(from_id, blocked)
+	var computed: Dictionary = _compute_to(from_id, to_id, blocked)  # 目标出堆即早停，路径语义不变
 	if not computed.has(to_id):
 		return empty
 	# 回溯 prev 链

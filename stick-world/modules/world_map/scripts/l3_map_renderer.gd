@@ -250,13 +250,31 @@ func _mesh_from_arrays(verts: PackedVector2Array, cols: PackedColorArray,
 	return mesh
 
 
+## 顶点总量 = Σ 多边形点数（每多边形独立顶点），先 resize 后索引填充 + 末尾收缩，
+## 替代逐点 append；多边形换算走 _tile_poly_pts（bin 紧凑数据零复制直返）。
+## 剖分（Geometry2D.triangulate_polygon，C++ earcut）本身占大头，GDScript 侧不可省。
 func _build_layer_mesh(tiles: Array) -> Array:
+	var total_v := 0
+	var total_hv := 0
+	for t in tiles:
+		for poly in t.get("polygons", []):
+			if poly.size() >= 3:
+				total_v += poly.size()
+		for hole in t.get("holes", []):
+			if hole.size() >= 3:
+				total_hv += hole.size()
 	var verts := PackedVector3Array()
 	var colors := PackedColorArray()
 	var indices := PackedInt32Array()
 	var hverts := PackedVector3Array()
 	var hcols := PackedColorArray()
 	var hindices := PackedInt32Array()
+	verts.resize(total_v)
+	colors.resize(total_v)
+	hverts.resize(total_hv)
+	hcols.resize(total_hv)
+	var vi := 0
+	var hi := 0
 	for t in tiles:
 		var col: Array = t.get("color", [])
 		var fill := Color(0.6, 0.7, 0.8)
@@ -265,34 +283,36 @@ func _build_layer_mesh(tiles: Array) -> Array:
 		for poly in t.get("polygons", []):
 			if poly.size() < 3:
 				continue
-			var pts2 := PackedVector2Array()
-			for p in poly:
-				pts2.append(p if p is Vector2 else Vector2(p[1], p[0]))
+			var pts2 := _tile_poly_pts(poly)
 			var tri := Geometry2D.triangulate_polygon(pts2)
 			if tri.is_empty():
 				continue
-			var base := verts.size()
+			var base := vi
 			for v in pts2:
-				verts.append(Vector3(v.x, v.y, 0.0))
-				colors.append(fill)
+				verts[vi] = Vector3(v.x, v.y, 0.0)
+				colors[vi] = fill
+				vi += 1
 			for idx in tri:
 				indices.append(base + idx)
 		# 洞
 		for hole in t.get("holes", []):
 			if hole.size() < 3:
 				continue
-			var hpts := PackedVector2Array()
-			for p in hole:
-				hpts.append(p if p is Vector2 else Vector2(p[1], p[0]))
+			var hpts := _tile_poly_pts(hole)
 			var htri := Geometry2D.triangulate_polygon(hpts)
 			if htri.is_empty():
 				continue
-			var hb := hverts.size()
+			var hb := hi
 			for v in hpts:
-				hverts.append(Vector3(v.x, v.y, 0.0))
-				hcols.append(OCEAN_COLOR)
+				hverts[hi] = Vector3(v.x, v.y, 0.0)
+				hcols[hi] = OCEAN_COLOR
+				hi += 1
 			for idx in htri:
 				hindices.append(hb + idx)
+	verts.resize(vi)
+	colors.resize(vi)
+	hverts.resize(hi)
+	hcols.resize(hi)
 	var fill_mesh: ArrayMesh = null
 	var holes_mesh: ArrayMesh = null
 	if not verts.is_empty():
@@ -312,6 +332,20 @@ func _build_layer_mesh(tiles: Array) -> Array:
 		holes_mesh = ArrayMesh.new()
 		holes_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, harr)
 	return [fill_mesh, holes_mesh]
+
+
+## 多边形顶点统一为 PackedVector2Array(x,y)。bin 紧凑数据已是该形态，直接原样
+## 返回（Packed 数组按值语义 + COW，只读安全，零复制）；JSON 回退的 Array 顶点
+## 才逐点换算 [y,x]→(x,y)，与原实现结果一致。
+static func _tile_poly_pts(poly: Variant) -> PackedVector2Array:
+	if poly is PackedVector2Array:
+		return poly
+	var pts := PackedVector2Array()
+	pts.resize(poly.size())
+	for i in poly.size():
+		var p = poly[i]
+		pts[i] = p if p is Vector2 else Vector2(p[1], p[0])
+	return pts
 
 
 func _process(delta: float) -> void:
@@ -531,6 +565,8 @@ func _draw() -> void:
 
 ## 转换 L2 边界多边形为闭合折线缓存（顶点 [y,x] 数组 / Vector2 双口径，
 ## 与 _build_glow_outlines 同法）。几何只随 set_data 变化，转换一次终局复用。
+## bin 紧凑数据（PackedVector2Array）走 duplicate 批量复制（21 万顶点逐点循环 → C++ memcpy），
+## 与逐点构造结果位级一致；仅 JSON 回退（Array 顶点）走逐点换算分支。
 func _build_l2_border_cache() -> void:
 	_l2_border_polylines = []
 	if _data == null:
@@ -539,12 +575,16 @@ func _build_l2_border_cache() -> void:
 		for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
 			if poly.size() < 3:
 				continue
-			var bpts := PackedVector2Array()
-			bpts.resize(poly.size() + 1)
-			for i in poly.size():
-				var pp = poly[i]
-				bpts[i] = pp if pp is Vector2 else Vector2(pp[1], pp[0])
-			bpts[poly.size()] = bpts[0]
+			var bpts: PackedVector2Array
+			if poly is PackedVector2Array:
+				bpts = poly.duplicate()
+			else:
+				bpts = PackedVector2Array()
+				bpts.resize(poly.size())
+				for i in poly.size():
+					var pp = poly[i]
+					bpts[i] = pp if pp is Vector2 else Vector2(pp[1], pp[0])
+			bpts.append(bpts[0])
 			_l2_border_polylines.append(bpts)
 
 

@@ -53,6 +53,8 @@ const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_roo
 const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/debug_overlay.tscn")
 const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
 const _DemoQuestScript: GDScript = preload("res://modules/world/scripts/setup/demo_quest.gd")
+const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
+const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
 
 var _root: GameRoot
 
@@ -81,6 +83,7 @@ func setup(root: GameRoot) -> void:
 	_setup_organization_system()
 	_setup_formation_system()
 	_setup_tactical_system()
+	_setup_conquest_system()
 	_setup_battle_panel()
 	_setup_formation_panel()
 	_setup_settings_menu_panel()
@@ -353,6 +356,32 @@ func _setup_tactical_system() -> void:
 	_root._tactical_orders = to
 	if to.has_method("setup"):
 		to.setup(_root._formation_system, _root._command_chain)
+
+
+# ─────────────────────────────── 征服系统装配（出征与领地架构 §一）───────────────────────────────
+
+## 实例化 ExpansionApi + ConquestManager：单一 TerritoryRegistry 共享给
+## api 查询面/GarrisonSpawner/ConquestManager；ConquestManager 常驻 GameRoot
+## （监听全局 map_loaded/battle_ended，领地状态跨图存活）。
+func _setup_conquest_system() -> void:
+	var registry := TerritoryRegistry.new()
+	registry.load_config()
+	var api := Node.new()
+	api.set_script(_ExpansionApiScript)
+	api.name = "ExpansionApi"
+	_root.add_child(api)
+	_root._expansion_api = api
+	api.setup(registry)
+	var spawner := GarrisonSpawner.new()
+	spawner.setup(registry)
+	var manager := Node.new()
+	manager.set_script(_ConquestManagerScript)
+	manager.name = "ConquestManager"
+	_root.add_child(manager)
+	_root._conquest_manager = manager
+	manager.setup(registry, spawner, api,
+			_root._combat_api, _root._resources_api, _root.scene_loader)
+	api.set_flow_manager(manager)
 
 
 # ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────

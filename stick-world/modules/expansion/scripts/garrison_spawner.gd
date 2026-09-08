@@ -15,6 +15,8 @@ extends RefCounted
 
 ## 守军单位来源标记（调试/测试识别；战斗侧不读）
 const META_GARRISON_UNIT := "garrison_unit"
+## 敌将来源标记（ConquestManager 败仗统计排除敌将用——敌将不受 garrison_losses 扣减，架构 §2.3）
+const META_GARRISON_COMMANDER := "garrison_commander"
 ## 守军战术档位透传（tactics.tres 的战术 id；行为消费端待战术系统实装）
 const META_GARRISON_TIER := "garrison_tier"
 ## 无锚点 fallback：布阵 x 起点 / 间距（相对地图右侧半区）
@@ -85,6 +87,7 @@ func spawn_garrison(map: Node2D, territory_id: String) -> Array:
 		var c := _spawn_unit(map, cmd_pos, cmd_profile)
 		if c != null:
 			c.set_meta(META_GARRISON_UNIT, true)
+			c.set_meta(META_GARRISON_COMMANDER, true)
 			spawned.append(c)
 	return spawned
 

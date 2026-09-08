@@ -129,6 +129,12 @@ var _possess_panel: Control = null
 ## ResourcesApi 实例引用（运行时由 SystemSetup 装配）
 var _resources_api: Node = null
 
+# ─────────────────────────────── 征服系统（出征与领地循环）───────────────────────────────
+## ExpansionApi 实例引用（运行时由 SystemSetup 装配）
+var _expansion_api: Node = null
+## ConquestManager 实例引用（运行时由 SystemSetup 装配）
+var _conquest_manager: Node = null
+
 # ─────────────────────────────── 传送系统（§5.6；TravelHandler 跨脚本读写，故加忽略）────────────────────────────────
 ## 传送返回地图 ID（进入 MegaInteriorMap 前记录，退出时返回）
 @warning_ignore("unused_private_class_variable")
@@ -268,6 +274,11 @@ func get_combat_api() -> Node:
 ## 获取 ResourcesApi 引用（供测试用）
 func get_resources_api() -> Node:
 	return _resources_api
+
+
+## 征服流程管理器（出征/占领/收益；测试与跨模块消费走 expansion/api.gd）
+func get_conquest_manager() -> Node:
+	return _conquest_manager
 
 
 ## 获取 SelectionSystem 引用（供测试用）

@@ -44,7 +44,7 @@
 | 批次 | 状态 | 提交 | 备注 |
 |---|---|---|---|
 | 1 | ✅ 完成 | 294b9f5d | 三职业着装可见（视觉 Subagent PASS，截图 `stick-world/tests/dev/professions_out.png`）；run_all 绿（3 失败项单跑全绿=并行 flaky，与本批无关） |
-| 2 | ⬜ 未开工 | — | |
+| 2 | ✅ 完成 | 本批多个提交 | 采集经济闭环通：三职业村民无人干预劳作，res_wood/ore/ingot 三库存增长（集成测试 `test_town_life_harvest` 60.5s PASS）；视觉判定 PASS（截图 `tests/dev/harvest_out_0..5.png`）；run_all 全量 39/0 一次过；check_godot_errors 干净 |
 | 3 | ⬜ 未开工 | — | |
 | 4 | ⬜ 未开工 | — | |
 
@@ -59,12 +59,25 @@
 - **dev 截图场景**：`tests/dev/snapshot_professions.tscn`（真渲染：`godot --path stick-world res://tests/dev/snapshot_professions.tscn`；补 spawn 矿工凑三职业同框 + stdout 打印职业/颜色证据）。
 - **已知未验证**：着装色与地图背景在不同时段（夜晚）的对比度未测；NPC_COUNT 扩充在批次 4。
 
+## 批次 2 落地物（批次 3 新会话必读）
+
+- **行为本体**：`modules/units/scripts/ai/behavior_harvest.gd`（BehaviorHarvest，BehaviorBase 子类，行为名 `harvest`）——泛化工作循环：寻位→移动→劳作（`play_attack()` 按武器路由挥镐/挥剑，cycle 节拍一拍一挥+头顶进度条）→产出入账→循环。双模式按职业档案 `work_site_def` 分流：空=资源点模式（resource_node 组内找**最近未枯竭且 `get_resource_id()==product`** 的点，每拍 `harvest()` 实采实入账，采空自动换点/换树）；非空=工位模式（占位定点，`consume→produce` 两步转化，原料不足空拍等待）。行为不引用 world/town_life 内部类，跨模块只走鸭子协议与 TownLifeAPI 契约。
+- **决策接线**：`ai_controller.gd` 的 `_try_harvest()`——次序=命令覆盖>战斗>跟随>建造派工(work/haul)>**采集(harvest)>idle**；职责过滤走 `_can_work(WORK_FORAGE)`（FORAGE 从预留转实装）；待业（职业空串）不采集。采集结束（无资源/无工位）回 idle，决策循环稍后自动重试。
+- **职业配置新增字段**（`config/town_life/professions.tres`）：`produce_amount`（每拍产出量：采集 20=与玩家手采同速、打铁 6）、`consume_res`/`consume_amount`（铁匠 consume 10 矿/拍）。数值口径全部 [提案/待定]：矿工净增 4/s > 铁匠消耗 2.5/s，三资源可同时增长（集成测试已验证）。
+- **资源转换语义**：ResourcesApi 无原子"转换"，铁匠链在行为内两步实现（`consume(res_metal_ore)` 成功才 `produce(res_iron_ingot)`）；region 与玩家手采同账 `test_region`。
+- **占位工位**（[提案/待定]）：`ProfessionRegistry.PLACEHOLDER_WORK_SITES = {"smithy_lv1": 1120.0}`（仓库右侧、村民区之间的村道口；Y 运行时取实体地面线+40）。经 `TownLifeAPI.get_placeholder_work_site_x(def)` 查询，未配置返回 NAN=寻位失败。**批次 3 WorkSlots 消费到位后本表与工位模式占位逻辑退役**（换 WorkSlots 定位+建筑存活校验）。
+- **资源点重生**（[提案/待定] 数值）：`resource_node.gd` 采空**不再自毁**，转枯竭态（`visible=false`+不可采+挂 REGEN_TIME=90s 单次 Timer）→ `_regrow()` 原地长满（变体/位置不变，modulate 复位）。玩家交互与 NPC 寻位都跳过枯竭点。**已知限制**：枯竭点不进存档（`save_resource_nodes_to_db` 过滤 is_depleted 维持原状），跨存档读回后该点消失、不处于重生倒计时。
+- **测试**：单测 `tests/unit/test_behavior_harvest.gd`（7 用例：无职业/资源点循环/采空转寻/工位转化/原料空拍/未知工位/重生翻转，已进 batch_runner 清单）；集成 `tests/integration/test_town_life_harvest.tscn`（摆树/矿在村民旁+补 spawn 矿工 index2+预置 300 矿，轮询 90s 断言三库存增长+harvest 行为；已注册 run_all 清单/150s 超时/affected 映射含 town_life 与 world 分支）。视觉快照 `tests/dev/snapshot_harvest.tscn`（真渲染连拍 6 帧+stdout 职业/行为/目标证据，截图 `harvest_out_0..5.png`）。
+- **遗留移交（非本批引入，未修）**：`tests/unit/test_road_walk.gd` 在 Godot 4.7.2 下 parse error（`PackedVector2Array.is_equal_approx` 不存在，bed73553 引入）+ 4 处断言失败（宽度公式 2500 vs 2400/1600 等），被 batch_runner 的类型化赋值吞错掩盖成伪通过——属世界地图线领域，建议该线修复；另 batch_runner `_await_done` 对加载失败套件的 code 收割有同样吞错隐患。`tests/unit/test_profession_registry.gd` 本批已补 `signal test_done` 声明（原缺声明致 emit ERROR）。
+- **批次 3 接手提示**：工位模式换 WorkSlots 的替换点=BehaviorHarvest._locate() 工位分支与 PLACEHOLDER_WORK_SITES；观感下一步=工作/休息节律+wander 打开（WANDER_PROBABILITY=0 在 ai_controller）；NPC 采集与玩家手采并存已验证，F3 调试标签可见资源点类型。
+
 ## 关键决策速查
 
 | 决策 | 结论 |
 |---|---|
 | 职业绑定 | ProfessionDef 绑工作建筑与产物；职业分化靠配置不靠硬编码 |
 | 产出通道 | NPC 劳作直接 produce 入 ResourcesApi（与手采/征服奖励同池） |
-| 打铁语义 | 矿→锭转化链（GDD"生产到工序"第一个可见缩影） |
+| 打铁语义 | 矿→锭转化链（GDD"生产到工序"第一个可见缩影）；ResourcesApi 无原子转换，行为内 consume→produce 两步 |
 | 节律 | P0 工作/休息两态，完整日夜系统不做 |
 | 采集归属 | NPC 采集与玩家手采并存（FORAGE 工种从预留转实装） |
+| 资源点枯竭 | 采空不自毁：枯竭态（隐藏+不可采）+90s 重生（[提案/待定]）；枯竭点不进存档为已知限制 |

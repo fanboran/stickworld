@@ -1,5 +1,7 @@
 extends Node
-## 临时审计截图脚本（用完即删）：逐个实例化 UI 模板，等待渲染后截屏存 PNG。
+## UI 全家福截图工具：逐个实例化 UI 模板，等待渲染后截屏存 PNG。
+## 产物喂 README「UI 备选图」（docs/演示/备选图/，入库时改中文名）——
+## UI 观感改动后重跑一张即可对比回归。
 ## 用法：godot --path . res://tests/dev/ui_audit_capture.tscn（需真实渲染，不能 headless）
 
 const SHOTS := [

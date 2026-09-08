@@ -7,12 +7,13 @@ extends RefCounted
 ## 同步装载进 BalanceConfig 类型路径 town_life.professions；读取照 formation_system
 ## 先例直读 .tres，不依赖 autoload 顺序，单测/直跑场景可用）。
 ##
-## 字段契约（批次 1 消费 id/name_zh/tool/uniform；批次 2 采集行为族消费
-## work_site_def/product/produce_amount/consume_res/consume_amount/cycle）：
+## 字段契约（批次 1 消费 id/name_zh/tool/uniform；批次 2 消费 product/
+## produce_amount/consume_res/consume_amount/cycle；批次 3 消费 work_site_def）：
 ##   id             职业唯一 id（写入实体 set_profession；空串 = 待业）
 ##   name_zh        中文名（调试与将来 UI 用）
 ##   work_site_def  绑定工作建筑 def_id（空 = 野外资源点采集模式；
-##                  非空 = 工位模式，建筑未到位前走占位定点）[提案/待定]
+##                  非空 = 工位模式：建筑 WorkSlots 真槽位优先，占位定点降级）
+##                  [提案/待定]
 ##   product        产出资源 id（resources.tres 的 id）[提案/待定]
 ##   produce_amount 每拍产出量（资源点模式实际量以资源点 harvest 返回为准）
 ##                  [提案/待定]
@@ -40,17 +41,83 @@ extends RefCounted
 const CONFIG_PATH := "res://config/town_life/professions.tres"
 
 ## 占位工位定点（X 坐标，Y 由行为运行时取实体地面线）[提案/待定]
-## A 线铁匠铺建筑未到位前的过渡方案：铁匠在村道旁固定点打铁；
-## 批次 3 WorkSlots 消费（building.gd Interior 契约）到位后本表退役。
+## 批次 3 起 WorkSlots 真槽位优先（get_work_site 扫 building 组），本表降级为
+## "无匹配建筑槽位时"的兜底（A 线铁匠铺场景未到位 / 建筑被毁 / 测试桩环境的
+## 降级路径）——A 线铁匠铺落地注册后无需改本表即自动切到真建筑。
 ## 1120 = 仓库（cell 15~31，X 480~992）右侧、村民聚居区（X 1050/1250）之间的村道口。
 const PLACEHOLDER_WORK_SITES: Dictionary = {
 	"smithy_lv1": 1120.0,
 }
 
+## 工作时段（游戏小时，0~24）[提案/待定]
+## 对齐 EnvironmentAPI.LIGHT_KEYFRAMES 的日照感（早晨 7 点亮 / 黄昏 19 点暗）：
+## 7~19 在岗劳作，其余休息（P0 两态节律，完整日夜系统不做）。
+const WORK_HOUR_START: float = 7.0
+const WORK_HOUR_END: float = 19.0
+
 
 ## 查占位工位 X 坐标（未配置返回 NAN，调用方视为无工位可用）。
 static func get_placeholder_work_site_x(work_site_def: String) -> float:
 	return float(PLACEHOLDER_WORK_SITES.get(work_site_def, NAN))
+
+
+## 为村民寻找工位点（批次 3 WorkSlots 消费入口）：
+##   1) 扫 "building" 组：def_id 匹配 work_site_def 且 is_operational()（被毁/
+##      建造中跳过）且有 WorkSlot 槽位 → 取最近建筑的最近槽位；
+##   2) 无匹配建筑（A 线场景未到位 / 建筑被毁 / 桩环境）→ 降级占位工位表。
+## 返回 {"pos": Vector2, "building": Node2D}；building = null 表示占位工位；
+## 无任何可用工位返回 {}（调用方视为寻位失败）。
+## pos.y 恒为 NAN：槽位 marker 只消费 X（横向工位），Y 由调用方按实体地面线
+## 补齐（同 BehaviorHaul 取货点口径——卷轴地图工作站位全在地面带内，可达）。
+## 建筑侧走鸭子协议（get("def_id") / is_operational / get_work_slot_positions），
+## 不依赖 building_gen 类型，测试桩可注入。
+static func get_work_site(entity: Node2D, work_site_def: String) -> Dictionary:
+	if work_site_def.is_empty() or entity == null or not is_instance_valid(entity):
+		return {}
+	var tree := entity.get_tree() if entity.is_inside_tree() else null
+	if tree != null:
+		var best_building: Node2D = null
+		var best_slot_x: float = 0.0
+		var best_dist: float = INF
+		for node in tree.get_nodes_in_group("building"):
+			var b := node as Node2D
+			if b == null or not is_instance_valid(b) or not b.is_inside_tree():
+				continue
+			if String(b.get("def_id")) != work_site_def:
+				continue
+			if b.has_method("is_operational") and not b.is_operational():
+				continue
+			if not b.has_method("get_work_slot_positions"):
+				continue
+			for slot_v in b.get_work_slot_positions():
+				var slot: Vector2 = slot_v if slot_v is Vector2 else Vector2.ZERO
+				var d: float = slot.distance_to(entity.global_position)
+				if d < best_dist:
+					best_dist = d
+					best_building = b
+					best_slot_x = slot.x
+		if best_building != null:
+			return {"pos": Vector2(best_slot_x, NAN), "building": best_building}
+	var px := get_placeholder_work_site_x(work_site_def)
+	if not is_nan(px):
+		return {"pos": Vector2(px, NAN), "building": null}
+	return {}
+
+
+## 是否工作时段（村民劳作节律判定，读 WorldState.game_time——EnvironmentSystem
+## 每帧推进/恢复的全局小时数，autoload 直读无场景树依赖，单测可直接赋值注入）。
+## game_time <= 0 = 时间未初始化（无 EnvironmentSystem 的测试/桩环境）→
+## 视为全天工作（无节律数据就没有节律，对既有路径零扰动）。
+## 单测/特殊场景经 hour 参数显式注入可绕过全局时间。
+static func is_work_time(hour: float = NAN) -> bool:
+	if not is_nan(hour):
+		var h := fposmod(hour, 24.0)
+		return h >= WORK_HOUR_START and h < WORK_HOUR_END
+	if WorldState == null or WorldState.game_time <= 0.0:
+		return true
+	var t := fposmod(WorldState.game_time, 24.0)
+	# 7~19 在岗；跨零点休息段（19→7）自然落在取值域外，端点含头不含尾防浮点抖动
+	return t >= WORK_HOUR_START and t < WORK_HOUR_END
 
 ## tool 字段 → WeaponMount.WeaponType 映射（"none" = 徒手不挂武器场景）；
 ## 矿工 PICKAXE 正装，铁匠/伐木工暂用现有变体（pickaxe 代锤 / sword 代斧，

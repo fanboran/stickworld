@@ -21,26 +21,28 @@ const SPEEDS: Array[Dictionary] = [
 	{"id": "x4", "label": "4x", "tip": "四倍（3）"},
 ]
 
-## 资源槽（落地接 resources_api；icon 暂用单字占位，资产到位后换 TextureRect）
+## 资源槽（落地接 resources_api；icon = 图标管线母题名，缺图回退单字）
+## 与正式 ResourceBar 的五资源同单（res_gold/res_diamond 为 2026-09-06 新增档）
 const RESOURCES: Array[Dictionary] = [
-	{"id": "res_wood", "icon": "木", "name": "木材", "amount": 150},
-	{"id": "res_stone", "icon": "石", "name": "石料", "amount": 90},
-	{"id": "res_metal", "icon": "铁", "name": "金属矿", "amount": 34},
-	{"id": "res_asphalt", "icon": "沥", "name": "黑色沥青", "amount": 12},
+	{"id": "res_wood", "icon": "木", "motif": "板条箱", "name": "木材", "amount": 150},
+	{"id": "res_stone", "icon": "石", "motif": "矿石", "name": "石料", "amount": 90},
+	{"id": "res_metal", "icon": "铁", "motif": "铁砧", "name": "金属矿", "amount": 34},
+	{"id": "res_gold", "icon": "金", "motif": "金币", "name": "黄金", "amount": 58},
+	{"id": "res_diamond", "icon": "钻", "motif": "", "name": "钻石", "amount": 2},
 ]
 
-## 快捷栏格子（堆叠满足感：icon 占位 + 角标热键 + 数量徽标）
+## 快捷栏格子（堆叠满足感：图标 + 角标热键 + 数量徽标；motif = 管线母题名）
 const QUICK_SLOTS: Array[Dictionary] = [
-	{"icon": "剑", "key": "1", "count": 0, "tip": "攻击指令"},
-	{"icon": "盾", "key": "2", "count": 0, "tip": "防御指令"},
-	{"icon": "旗", "key": "3", "count": 2, "tip": "集结点"},
-	{"icon": "镐", "key": "4", "count": 0, "tip": "建造"},
-	{"icon": "包", "key": "5", "count": 8, "tip": "搬运"},
-	{"icon": "研", "key": "6", "count": 0, "tip": "科研"},
-	{"icon": "仓", "key": "7", "count": 1, "tip": "仓库"},
-	{"icon": "医", "key": "8", "count": 3, "tip": "医疗"},
-	{"icon": "马", "key": "9", "count": 0, "tip": "行军"},
-	{"icon": "书", "key": "0", "count": 0, "tip": "法令"},
+	{"icon": "剑", "motif": "短剑", "key": "1", "count": 0, "tip": "攻击指令"},
+	{"icon": "盾", "motif": "圆盾", "key": "2", "count": 0, "tip": "防御指令"},
+	{"icon": "旗", "motif": "旗帜", "key": "3", "count": 2, "tip": "集结点"},
+	{"icon": "镐", "motif": "十字镐", "key": "4", "count": 0, "tip": "建造"},
+	{"icon": "包", "motif": "货运板车", "key": "5", "count": 8, "tip": "搬运"},
+	{"icon": "研", "motif": "试管架", "key": "6", "count": 0, "tip": "科研"},
+	{"icon": "仓", "motif": "木桶", "key": "7", "count": 1, "tip": "仓库"},
+	{"icon": "医", "motif": "医疗箱", "key": "8", "count": 3, "tip": "医疗"},
+	{"icon": "马", "motif": "马蹄铁", "key": "9", "count": 0, "tip": "行军"},
+	{"icon": "书", "motif": "卷轴", "key": "0", "count": 0, "tip": "法令"},
 ]
 
 ## 通知演示流
@@ -118,9 +120,20 @@ func _build_resource_slot(res: Dictionary) -> void:
 	var box := HBoxContainer.new()
 	box.add_theme_constant_override("separation", 4)
 	_top_row.add_child(box)
-	var icon := StickKit.label(box, res["icon"], StickKit.LabelKind.BODY)
-	icon.modulate = StickTokens.ACCENT
-	icon.tooltip_text = res["name"]
+	# 图标：管线母题优先（彩色 64px），缺图回退单字占位
+	var motif_tex := StickIcons.tex(res.get("motif", ""))
+	if motif_tex != null:
+		var icon := TextureRect.new()
+		icon.texture = motif_tex
+		icon.custom_minimum_size = Vector2(18, 18)
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.tooltip_text = res["name"]
+		box.add_child(icon)
+	else:
+		var icon := StickKit.label(box, res["icon"], StickKit.LabelKind.BODY)
+		icon.modulate = StickTokens.ACCENT
+		icon.tooltip_text = res["name"]
 	var amount := StickKit.label(box, str(_amounts[res["id"]]), StickKit.LabelKind.BODY)
 	amount.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_resource_labels[res["id"]] = amount
@@ -152,6 +165,17 @@ func _make_slot(slot: Dictionary) -> PanelContainer:
 	var icon := StickKit.label(stack, slot["icon"], StickKit.LabelKind.BODY)
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon.add_theme_font_size_override("font_size", StickTokens.FONT_SECTION + 3)
+	# 管线母题图标盖在单字上（同位替换；缺图自然露出单字占位）
+	var motif_tex := StickIcons.tex(slot.get("motif", ""))
+	if motif_tex != null:
+		var img := TextureRect.new()
+		img.texture = motif_tex
+		img.custom_minimum_size = Vector2(28, 28)
+		img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		img.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		stack.add_child(img)
+		icon.visible = false
 	# 点击演示：按下态闪烁 + 通知
 	cell.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:

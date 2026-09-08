@@ -1,5 +1,7 @@
 {
   "seed": 20260906,
+  "n_states_total": 80,
+  "n_states_total_comment": "政权总数定档 80（创始人 2026-09-08）：含出生 8 城邦，新国种子数 = 80 - 8 = 72，按文化圈城数占比分配配额",
   "culture_flood": {
     "comment": "文化圈栅格 flood-fill 的 cost 系数（2048 级；进入像素代价 = 1 + k_slope*|grad| + k_river*河 + 群系加成）",
     "k_slope": 350.0,
@@ -9,7 +11,7 @@
     "k_cross_region": 30.0
   },
   "expansion": {
-    "comment": "城图扩张：边权 = dist * (1 + k_culture*跨文化 + k_terrain*连线高度std + k_barren*贫瘠 + k_sea*跨海)",
+    "comment": "城图扩张：边权 = dist * (1 + k_culture*跨文化 + k_terrain*连线高度std + k_barren*贫瘠 + k_sea*跨海 + k_ridge*山脊带占比 + k_river_cross*过河占比) / expansionism，再乘 w_i 面积反馈系数；边界自动停驻在河线/山脊上（§7.4-1）",
     "knear": 8,
     "max_edge_px": 520,
     "k_culture": 2.2,
@@ -17,144 +19,96 @@
     "k_barren": 0.8,
     "k_sea": 3.0,
     "sea_edge_ratio": 0.3,
-    "cap_per_state": 48
+    "k_ridge": 3.0,
+    "ridge_quantile": 0.88,
+    "k_river_cross": 2.5,
+    "balance_eps": 0.006,
+    "zipf": {
+      "comment": "目标面积幂律（Zipf 型大小悬殊，§7.4-1）：圈内第 r 大国目标城数 ∝ r^-s；w_i ← w_i * (实际/目标)^eta 迭代收敛（Balzer 式面积反馈）",
+      "s": 0.85,
+      "eta": 0.55,
+      "rounds": 4,
+      "cap_factor": 2.2
+    },
+    "expansionism": {
+      "comment": "每国随机扩张系数（FMG states-generator 同款），边权除以它——制造有机的不均匀，配合 Zipf 反馈",
+      "min": 0.75,
+      "max": 1.45
+    }
   },
-  "capital_min_sep_px": 280,
+  "normalize": {
+    "comment": "多数邻域翻转消飞地（FMG normalize 同款）：非都城城若最大异国邻居数 >=2 且大于本国邻居数，翻给该邻国（只翻文化圈合法目标）",
+    "min_foreign": 2,
+    "max_rounds": 6
+  },
+  "capital_min_sep_px": 260,
+  "capital_min_sep_comment": "都城最小间距（8192 级像素）；实际间距按圈尺寸自适应放大（bbox 对角线/sqrt(配额)），种子按 population_score 降序 + 四叉树间距筛选（FMG 同族，§7.4-1）",
+  "colors": {
+    "comment": "政权色 = CONTENT_PALETTE 派生（R8 层3，废除 HSL 黄金角）：7 族 × 族内明度/饱和档承载 80 国；相邻国不同族优先、同族不同档（贪心图着色校验）",
+    "n_per_family": [12, 12, 12, 12, 12, 10, 10],
+    "min_lightness_gap": 0.09
+  },
+  "name_source": "state_names_placeholder.json",
+  "name_source_comment": "命名接口（创始人 2026-09-08 定）：指向占位词表 JSON（键=state_id）；词表不存在/缺项时生成「文化圈前缀+编号」占位名并回写词表；重跑时已有键的名字原样保留——世界观会话定稿后换表重跑即可，不改代码。占位名全部标注「提案/待定」",
   "birth": {
     "region": 13,
-    "comment": "出生老 L1 的 8 城邦沿用 l1_world.json 既有 states（色/名/id 不变），不参与扩张；region_013 其余城碎成小政权（便于初期扩张）"
+    "comment": "出生老 L1 的 8 城邦沿用 l1_world.json 既有 states（色/名/id 不变，LUT 序号排 73..80），不参与扩张"
   },
   "cultures": [
     {
       "id": "plain",
       "label": "平原",
-      "regions": [
-        13
-      ],
-      "n_states": 4,
-      "names": [
-        "河湾同盟",
-        "东原邦联",
-        "西麦丘联盟",
-        "南渡自由市",
-        "北塬公国"
-      ]
+      "regions": [13],
+      "names": ["河湾同盟", "东原邦联", "西麦丘联盟", "南渡自由市", "北塬公国"]
     },
     {
       "id": "polar",
       "label": "极北",
-      "regions": [
-        1,
-        2,
-        3,
-        9
-      ],
-      "per_region_states": true,
-      "name_prefix": "极北霜原·",
-      "names": [
-        "冰牙部",
-        "白原部",
-        "冻星部",
-        "雪松部",
-        "长夜部"
-      ]
+      "regions": [1, 2, 3, 9],
+      "names": ["冰牙部", "白原部", "冻星部", "雪松部", "长夜部"]
     },
     {
       "id": "giant",
       "label": "霜峰",
-      "regions": [
-        7
-      ],
-      "n_states": 1,
-      "names": [
-        "霜峰氏族",
-        "霜峰·北峰盟",
-        "雪线盟"
-      ]
+      "regions": [7],
+      "names": ["霜峰氏族", "霜峰·北峰盟", "雪线盟"]
     },
     {
       "id": "fire",
       "label": "炽焰",
-      "regions": [
-        8
-      ],
-      "n_states": 1,
-      "names": [
-        "炽焰王庭",
-        "炽焰·南炉盟",
-        "炉边盟"
-      ]
+      "regions": [8],
+      "names": ["炽焰王庭", "炽焰·南炉盟", "炉边盟"]
     },
     {
       "id": "golden",
       "label": "金穗",
-      "regions": [
-        5,
-        12
-      ],
-      "n_states": 1,
-      "names": [
-        "金穗王国",
-        "金穗·南境伯国",
-        "麦浪邦"
-      ]
+      "regions": [5, 12],
+      "names": ["金穗王国", "金穗·南境伯国", "麦浪邦"]
     },
     {
       "id": "forest",
       "label": "翠荫",
-      "regions": [
-        4
-      ],
-      "n_states": 1,
-      "names": [
-        "翠荫林邦",
-        "翠荫·雨林盟"
-      ]
+      "regions": [4],
+      "names": ["翠荫林邦", "翠荫·雨林盟"]
     },
     {
       "id": "nomad",
       "label": "风驰",
-      "regions": [
-        6
-      ],
-      "n_states": 2,
-      "names": [
-        "风驰游帐",
-        "黑云帐",
-        "灰马部"
-      ]
+      "regions": [6],
+      "names": ["风驰游帐", "黑云帐", "灰马部"]
     },
     {
       "id": "desert",
       "label": "黄沙",
-      "regions": [
-        10
-      ],
-      "south_seed_regions": [
-        6,
-        11
-      ],
-      "n_states": 2,
-      "names": [
-        "黄沙商邦",
-        "西绿洲商邦",
-        "南砾邦",
-        "赤盐邦",
-        "砂王领"
-      ]
+      "regions": [10],
+      "south_seed_regions": [6, 11],
+      "names": ["黄沙商邦", "西绿洲商邦", "南砾邦", "赤盐邦", "砂王领"]
     },
     {
       "id": "water",
       "label": "沧澜",
-      "regions": [
-        11
-      ],
-      "n_states": 1,
-      "names": [
-        "沧澜千屿",
-        "沧澜·外岛社",
-        "环礁社"
-      ]
+      "regions": [11],
+      "names": ["沧澜千屿", "沧澜·外岛社", "环礁社"]
     }
   ],
   "special_cultures": {

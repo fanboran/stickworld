@@ -94,6 +94,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_conquest_flow.tscn"
 	"tests/integration/test_conquest_e2e.tscn"
 	"tests/integration/test_town_life_harvest.tscn"
+	"tests/integration/test_town_life_worksite.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -108,7 +109,8 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_garrison_spawner.tscn"]=120
 	["tests/integration/test_conquest_flow.tscn"]=180
 	["tests/integration/test_conquest_e2e.tscn"]=180
-	["tests/integration/test_town_life_harvest.tscn"]=150
+	["tests/integration/test_town_life_harvest.tscn"]=240
+	["tests/integration/test_town_life_worksite.tscn"]=240
 	["tests/integration/test_selection_formation.tscn"]=90
 	["tests/integration/test_possession.tscn"]=90
 	["tests/integration/test_village_map.tscn"]=90
@@ -151,7 +153,8 @@ affected_suites() {
 				picked["tests/integration/test_combat_feedback.tscn"]=1
 				picked["tests/integration/test_combat_control.tscn"]=1
 				picked["tests/integration/test_placement_grid_units.tscn"]=1
-				picked["tests/integration/test_battle_retreat.tscn"]=1 ;;
+				picked["tests/integration/test_battle_retreat.tscn"]=1
+				picked["tests/integration/test_town_life_worksite.tscn"]=1 ;;
 			stick-world/modules/combat/*)
 				picked["tests/integration/test_battle_lifecycle.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1
@@ -172,7 +175,8 @@ affected_suites() {
 				picked["tests/integration/test_l2_strategic_map.tscn"]=1
 				picked["tests/integration/test_l3_strategic_map.tscn"]=1 ;;
 			stick-world/modules/town_life/*|stick-world/config/town_life/*)
-				picked["tests/integration/test_town_life_harvest.tscn"]=1 ;;
+				picked["tests/integration/test_town_life_harvest.tscn"]=1
+				picked["tests/integration/test_town_life_worksite.tscn"]=1 ;;
 			stick-world/modules/world/*|stick-world/tools/check_godot_errors.sh)
 				picked["tests/integration/test_town_life_harvest.tscn"]=1
 				picked["tests/integration/test_game_root_assembly.tscn"]=1
@@ -210,7 +214,8 @@ affected_suites() {
 				picked["tests/integration/test_menu_navigation.tscn"]=1 ;;
 			stick-world/modules/building_gen/*|stick-world/modules/texture_gen/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1
-				picked["tests/integration/test_village_map.tscn"]=1 ;;
+				picked["tests/integration/test_village_map.tscn"]=1
+				picked["tests/integration/test_town_life_worksite.tscn"]=1 ;;
 			stick-world/tests/integration/test_*.tscn)
 				picked["tests/integration/${f##*/}"]=1 ;;
 			stick-world/tests/smoke/test_*.tscn)

@@ -205,9 +205,14 @@ def _toon_mat():
     steps = max(2, int(os.environ.get('TOON_STEPS', '3')))
     lo = float(os.environ.get('TOON_LO', '0.76'))
     hi = float(os.environ.get('TOON_HI', '0.95'))
+    # 材质按参数签名缓存（TOON_LO/HI 可中途改，场景切换自动重建）。
+    # （与 gen_motifs.py 逐字一致）
+    sig = f"{steps}|{lo}|{hi}"
     m = bpy.data.materials.get('_toon')
     if m:
-        return m
+        if m.get('_sig') == sig:
+            return m
+        bpy.data.materials.remove(m)
     m = bpy.data.materials.new('_toon')
     m.use_nodes = True
     nt = m.node_tree
@@ -219,15 +224,26 @@ def _toon_mat():
         s2r = nt.nodes.new('ShaderNodeShaderToRGB')
         bw = nt.nodes.new('ShaderNodeRGBToBW')
         ramp = nt.nodes.new('ShaderNodeValToRGB')
-        ramp.color_ramp.interpolation = 'CONSTANT'
+        ramp.color_ramp.interpolation = 'LINEAR'
         elems = ramp.color_ramp.elements
         while len(elems) > 1:
             elems.remove(elems[-1])
-        poss = [0.0] + [_srgb_inv(lo + (hi - lo) * (i + 1) / (steps - 1)) for i in range(steps - 1)]
+        # 窄过渡带替代 CONSTANT 硬台阶（EEVEE Next 逐像素光照平滑不了档位边界：
+        # 锯齿+细窄件抖档虚线的根因）。（与 gen_motifs.py 逐字一致）
         _, grays = _toon_band_grays(steps)
-        for i, p in enumerate(poss):
-            e = elems[0] if i == 0 else elems.new(min(p, 0.999))
-            e.color = (grays[i], grays[i], grays[i], 1.0)
+        poss = [_srgb_inv(lo + (hi - lo) * (i + 1) / (steps - 1)) for i in range(steps - 1)]
+        trans = 0.03
+        e0 = elems[0]
+        e0.position = 0.0
+        e0.color = (grays[0], grays[0], grays[0], 1.0)
+        for i in range(steps - 1):
+            ea = elems.new(min(max(poss[i] - trans, 0.001), 0.998))
+            ea.color = (grays[i], grays[i], grays[i], 1.0)
+            eb = elems.new(min(poss[i] + trans, 0.999))
+            eb.color = (grays[i + 1], grays[i + 1], grays[i + 1], 1.0)
+        last = elems[-1]
+        last.position = 1.0
+        last.color = (grays[-1], grays[-1], grays[-1], 1.0)
         nt.links.new(diff.outputs[0], s2r.inputs[0])
         nt.links.new(s2r.outputs[0], bw.inputs[0])
         nt.links.new(bw.outputs[0], ramp.inputs[0])
@@ -240,6 +256,7 @@ def _toon_mat():
         diff = nt.nodes.new('ShaderNodeBsdfDiffuse')
         diff.inputs[0].default_value = (0.85, 0.85, 0.85, 1.0)
         nt.links.new(diff.outputs[0], out.inputs[0])
+    m['_sig'] = sig
     return m
 
 

@@ -3,7 +3,9 @@
     "八城 landmarks/character 为 AI 提案（提案/待定），批次 4 全量精调；性格命名只作开发期辨识，未经创始人确认为世界观设定。",
     "性格依据 l1_world.json 的城名/位置/人口/水系距离：近河城配 dock，人口大城配 market+smith，conquest 城守 reserve+barracks。",
     "landmark 类型→建筑 def 的映射在 city_layout.py LANDMARK_DEFS（[占位] 标注 = 待 A 线真 def 替换）。",
-    "T2 镇（00/06）不得配 barracks（test_settlement_entry 布局断言：T2 无兵营）。"
+    "T2 镇（00/06）不得配 barracks（test_settlement_entry 布局断言：T2 无兵营）。",
+    "decor（装饰密度/农田开关等）为批次 3 新增配置口子（AI 提案·待定）：defaults 定 L1 文化圈统一基准，每城可覆盖单项（见 06 farmland）；批次 4 性格化时在此调密度/配色。",
+    "渲染层级契约：地面分带(TerrainLayer) < DecorationLayer(装饰物件) < BuildingHost(建筑) < EntityHost(单位)，详见 tools/worldgen/l1/README.md。"
   ],
   "defaults": {
     "ground_y": 810,
@@ -11,7 +13,17 @@
     "edge_cells": 8,
     "wall_band_len": 24,
     "house_width": 4,
-    "density": 0.7
+    "density": 0.7,
+    "decor": {
+      "road_h": 110,
+      "lamp_count": 10,
+      "lamp_spacing": 210,
+      "trees": 10,
+      "bushes": 16,
+      "clutter_market": 7,
+      "clutter_warehouse": 4,
+      "farmland": false
+    }
   },
   "sizes": {
     "hamlet": {"grid_width": 80, "width_px": 2560},
@@ -52,12 +64,17 @@
     "l1_settlement_06": {
       "character": "南路粮集（AI提案·待定）：西南农业镇，粮仓与集市的集散地",
       "size": "town", "wall_tier": 1, "seed": 611039, "density": 0.6,
-      "landmarks": ["gate", "market", "warehouse"], "conquest_anchor": false
+      "landmarks": ["gate", "market", "warehouse"], "conquest_anchor": false,
+      "decor": {"farmland": true, "clutter_market": 9}
     },
     "l1_settlement_07": {
       "character": "南渡口城（AI提案·待定）：南境渡口城，铁匠区+码头扼守南路",
       "size": "city", "wall_tier": 2, "seed": 611040, "density": 0.65,
-      "landmarks": ["gate", "smith", "warehouse", "barracks", "dock"], "conquest_anchor": false
+      "landmarks": ["gate", "smith", "warehouse", "barracks", "dock"], "conquest_anchor": false,
+      "style_notes": [
+        "全城粉调天空=昼夜循环黄昏档的表现（截图进图时序落在 19:00 粉峰，见 sky_stars.gd），主会话已确认为有意效果，非本城专属参数——精调时保留。",
+        "批次 4 若引入 per-city 风格化天空参数（AI 提案·待定规格），在此字段扩展登记。"
+      ]
     }
   }
 }

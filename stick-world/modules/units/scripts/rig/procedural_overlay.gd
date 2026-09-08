@@ -67,6 +67,20 @@ var _smooth_vx: float = 0.0
 # 低频微抖噪声（替代每帧 randf 白噪声：白噪声 = 高频抖动，违背"低频小幅"注释本意）
 var _noise := FastNoiseLite.new()
 
+# ── LOD 节流（战斗级，StickmanRig.set_anim_update_hz 同步转发；未接入时零变化）──
+## 更新频率（Hz）：>=60 每帧叠加（默认 = 现行全速行为）；<=0 完全不叠加；
+## 否则按频率节流（累积真实 delta，达到 1/hz 执行一次）
+var _update_hz: float = 60.0
+## 节流累积器
+var _hz_accum: float = 0.0
+
+
+## 设置叠加更新频率（LOD 分档；见 StickmanRig.set_anim_update_hz）。
+## 叠加所用 delta 用真实累计值，保证呼吸相位/spring 衰减幅度与真实时间一致。
+func set_update_hz(hz: float) -> void:
+	_update_hz = hz
+	_hz_accum = 0.0
+
 
 func setup(skeleton: Skeleton2D, rig: Node2D) -> void:
 	_skeleton = skeleton
@@ -143,6 +157,15 @@ func _on_frame() -> void:
 	if _skeleton == null or not is_instance_valid(_skeleton):
 		return
 	var delta: float = get_process_delta_time()
+	# LOD 频率闸门：<=0 不叠加；节流档累积到 1/hz 才执行一次（delta 换成累计值）
+	if _update_hz <= 0.0:
+		return
+	if _update_hz < 60.0:
+		_hz_accum += delta
+		if _hz_accum < 1.0 / _update_hz:
+			return
+		delta = _hz_accum
+		_hz_accum = 0.0
 	_time += delta
 
 	# 当前动画（从 rig 读取）

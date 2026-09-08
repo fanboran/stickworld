@@ -168,6 +168,43 @@ func _make_glow_tex(size: int, color: Color) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
+# ── 内饰（批次 4）：补储物类——淬火桶/煤堆/工具箱/柴堆/墙挂工具。
+# 布局避让 Exterior 挂件（Building 局部）：铁砧 x≈125、石炉 x≈305、工作台 x≈430。
+
+func _furnish_floor(floor_node: Node2D) -> void:
+	var w := float(width) * 32.0 - 24.0
+	var slab := InteriorProps.make_floor(int(w), 24, Color(0.33, 0.29, 0.25))
+	slab.position = Vector2(float(width) * 16.0, -12)
+	floor_node.add_child(slab)
+
+
+func _furnish_interior(props: Node2D) -> void:
+	# 左角：淬火桶（木桶+水面反光）
+	var quench := InteriorProps.make_quench_barrel("QuenchBarrel")
+	quench.position = Vector2(40, 0)
+	props.add_child(quench)
+	# 砧炉之间：煤堆（锻炉燃料）
+	var coal := InteriorProps.make_coal_pile("CoalPile", 66.0)
+	coal.position = Vector2(205, 0)
+	props.add_child(coal)
+	# 炉右：工具矮箱（半塞炉脚生活感）
+	var chest := InteriorProps.make_chest("ToolChest", 52.0)
+	chest.position = Vector2(392, 0)
+	props.add_child(chest)
+	# 右角：柴堆（锻造木柴储备）
+	var logs := InteriorProps.make_log_pile("LogPile")
+	logs.position = Vector2(468, 0)
+	props.add_child(logs)
+	# 后墙：挂工具（锤/火钳，挂横梁下，砧上方作业区）
+	var tools := InteriorProps.make_hang_tools("HangTools")
+	tools.position = Vector2(198, -228)
+	props.add_child(tools)
+	# 后墙：煤斗挂串（深色，铁匠铺储煤）
+	var hang := InteriorProps.make_hang_string("HangCoalBag", Color(0.28, 0.28, 0.30))
+	hang.position = Vector2(430, -230)
+	props.add_child(hang)
+
+
 ## 坡面茅草纹理：layered 茅草按梯形/平行四边形坡面逐行裁剪、坡面外透明。
 ## 用于 Sprite2D 显示（绕开 Polygon2D uv 采样坍缩问题）。
 ## 四个占比参数分别为顶行/底行的左右边界（0..1，相对包围盒宽），行间线性过渡。

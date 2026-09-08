@@ -50,6 +50,54 @@ func make_solid_poly(node_name: String, size: Vector2, color: Color) -> Polygon2
 	return p
 
 
+# ── 内饰（批次 4）：军营生活布局——通铺+武器架+长凳+火盆+箱堆+墙挂盾剑 ──
+
+func _backwall_tint() -> Color:
+	return Color(0.88, 0.80, 0.68)  # 军营冷暗调后墙
+
+func _furnish_floor(floor_node: Node2D) -> void:
+	var w := float(width) * 32.0 - 24.0
+	var slab := InteriorProps.make_floor(int(w), 24, Color(0.33, 0.29, 0.23))
+	slab.position = Vector2(float(width) * 16.0, -12)
+	floor_node.add_child(slab)
+
+
+func _furnish_interior(props: Node2D) -> void:
+	var w := float(width) * 32.0
+	# 左区：双层通铺（灰蓝毯，军纪感）+ 爬凳
+	var bunk := InteriorProps.make_bunk("Bunk", Color(0.34, 0.38, 0.46))
+	bunk.position = Vector2(105, 0)
+	props.add_child(bunk)
+	# 中区：武器架（矛/剑）+ 长凳
+	var weapon_rack := InteriorProps.make_weapon_rack("WeaponRack", 120.0)
+	weapon_rack.position = Vector2(252, 0)
+	props.add_child(weapon_rack)
+	var bench := InteriorProps.make_bench("Bench", 92.0)
+	bench.position = Vector2(332, 0)
+	props.add_child(bench)
+	# 右中区：火盆（暖光+火苗）
+	var basket := InteriorProps.make_fire_basket("FireBasket")
+	basket.position = Vector2(396, 0)
+	props.add_child(basket)
+	# 右区：装备箱堆（2 底 1 顶）
+	var c1 := InteriorProps.crate_prop("Crate0", 46.0)
+	c1.position = Vector2(452, 0)
+	props.add_child(c1)
+	var c2 := InteriorProps.crate_prop("Crate1", 46.0)
+	c2.position = Vector2(494, 0)
+	props.add_child(c2)
+	var c3 := InteriorProps.crate_prop("CrateTop", 42.0)
+	c3.position = Vector2(473, -46)
+	props.add_child(c3)
+	# 横梁：圆盾 + 交叉剑（挂梁下，顶部与梁重叠=挂靠关系）
+	var shield := InteriorProps.make_wall_shield("WallShield", 22.0, Color(0.48, 0.36, 0.22))
+	shield.position = Vector2(214, -240)
+	props.add_child(shield)
+	var swords := InteriorProps.make_wall_swords("WallSwords")
+	swords.position = Vector2(408, -218)
+	props.add_child(swords)
+
+
 ## 八边形近似盾面：外圈木缘 + 内盘浅色
 func make_shield(node_name: String, radius: float, face: Color, rim: Color) -> Node2D:
 	var root := Node2D.new()

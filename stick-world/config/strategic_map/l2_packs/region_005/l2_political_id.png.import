@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bfky0dxkocwww"
-path="res://.godot/imported/l2_political_preview.png-4c665f81c10a8467e9a5da32f9a79a67.ctex"
+uid="uid://b1xn6ribrxi7j"
+path="res://.godot/imported/l2_political_id.png-531cc3410584f23aeaf68a7d0aa67d99.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://config/strategic_map/l2_packs/region_005/l2_political_preview.png"
-dest_files=["res://.godot/imported/l2_political_preview.png-4c665f81c10a8467e9a5da32f9a79a67.ctex"]
+source_file="res://config/strategic_map/l2_packs/region_005/l2_political_id.png"
+dest_files=["res://.godot/imported/l2_political_id.png-531cc3410584f23aeaf68a7d0aa67d99.ctex"]
 
 [params]
 

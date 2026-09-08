@@ -12,9 +12,12 @@
 ##       全部职业档案行（config/town_life/professions.tres）。
 ##   - TownLifeAPI.get_profession(id) -> Dictionary
 ##       按 id 查职业行（未命中 {}）。
+##   - TownLifeAPI.get_placeholder_work_site_x(work_site_def) -> float
+##       占位工位 X 坐标（A 线铁匠铺到位前的过渡；未配置返回 NAN）。
+##       批次 3 WorkSlots 消费到位后退役。
 ##
 ## 职业档案字段：见 profession_registry.gd 类头（id/name_zh/work_site_def/
-## product/cycle/tool/uniform）。
+## product/produce_amount/consume_res/consume_amount/cycle/tool/uniform）。
 ##
 ## 职业状态协议（弱类型，实体侧零依赖本模块）：
 ##   - 实体 set_profession(id) / get_profession()：空串 = 待业，非空 = 在职。
@@ -42,3 +45,8 @@ static func get_professions() -> Array:
 ## 按 id 查职业行（未命中 {}）。
 static func get_profession(id: String) -> Dictionary:
 	return ProfessionRegistry.get_profession(id)
+
+
+## 占位工位 X 坐标（未配置返回 NAN）。
+static func get_placeholder_work_site_x(work_site_def: String) -> float:
+	return ProfessionRegistry.get_placeholder_work_site_x(work_site_def)

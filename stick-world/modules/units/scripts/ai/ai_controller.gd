@@ -24,6 +24,7 @@ const ScriptBehaviorHaul := preload("res://modules/units/scripts/ai/behavior_hau
 const ScriptBehaviorFollow := preload("res://modules/units/scripts/ai/behavior_follow.gd")
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 const ScriptBehaviorHeal := preload("res://modules/units/scripts/ai/behavior_heal.gd")
+const ScriptBehaviorHarvest := preload("res://modules/units/scripts/ai/behavior_harvest.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）
@@ -124,6 +125,14 @@ func _setup_state_machine() -> void:
 	haul.entity = _entity
 	_state_machine.add_child(haul)
 	_state_machine.register_behavior(haul)
+
+	# 采集行为族（小镇生活批次 2：伐木/挖矿/打铁，有职业村民的自主劳作）
+	var harvest := ScriptBehaviorHarvest.new()
+	harvest.name = "BehaviorHarvest"
+	harvest.behavior_name = "harvest"
+	harvest.entity = _entity
+	_state_machine.add_child(harvest)
+	_state_machine.register_behavior(harvest)
 
 	# 跟随行为（小队"跟随玩家"模式，§8.3）
 	var follow := ScriptBehaviorFollow.new()
@@ -242,6 +251,8 @@ func _make_decision() -> void:
 		# 无激活行为，检查派工
 		if _try_work():
 			return
+		if _try_harvest():
+			return
 		_state_machine.travel("idle")
 		return
 
@@ -253,17 +264,27 @@ func _make_decision() -> void:
 		# 闲置完成：优先看是否有派工
 		if _try_work():
 			return
+		# 无派工但有职业：进采集劳作（小镇生活批次 2）
+		if _try_harvest():
+			return
 		# 没有派工，原地待机（P0 关闭随机漫游，工人无事做原地待命）
 		_state_machine.travel("idle")
 	elif current == "wander":
 		# 漫游完成：先检查派工
 		if _try_work():
 			return
+		if _try_harvest():
+			return
 		_state_machine.travel("idle")
 	elif current == "work":
 		# work 完成（项目完工或取消）：检查是否还有派工
 		if _try_work():
 			return
+		if _try_harvest():
+			return
+		_state_machine.travel("idle")
+	elif current == "harvest":
+		# 采集结束（资源耗尽/无工位/无法寻位）：回 idle，决策循环稍后重试
 		_state_machine.travel("idle")
 	else:
 		# 未知行为，回 idle
@@ -554,6 +575,29 @@ func _has_warehouse() -> bool:
 	if manager == null or not manager.has_method("get_nearest_warehouse"):
 		return false
 	return manager.get_nearest_warehouse(_entity.global_position) != null
+
+
+## 尝试采集决策（小镇生活批次 2）：有职业的村民在无建造派工/战斗/跟随/号令时
+## 进 harvest 行为自主劳作（寻位→移动→劳作→产出入账，循环见 BehaviorHarvest）。
+## 职责过滤：队伍职责不含 WORK_FORAGE 的编队单位不采集（如战斗班被征用后离岗）。
+## 职业档案由行为 enter 时经 TownLifeAPI 自查（本层只判"有职业"）。
+## 返回 true 表示已切换到 harvest。
+func _try_harvest() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	# 编队职责过滤（未编队/测试直生实体视为允许，同 _can_work 口径）
+	if not _can_work(WorkTypeForage):
+		return false
+	if not _entity.has_method("get_profession"):
+		return false
+	if String(_entity.get_profession()).is_empty():
+		return false  # 待业（无职业不劳作）
+	# 已在采集且未完成 → 保持（决策节拍内不重入）
+	var cur: String = _state_machine.get_current_behavior_name()
+	if cur == "harvest" and not _state_machine.is_current_finished():
+		return true
+	_state_machine.travel("harvest")
+	return true
 
 
 ## 检查单位是否被队伍职责允许执行某工作类型（编队行为过滤）。

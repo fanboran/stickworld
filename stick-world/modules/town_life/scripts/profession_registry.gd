@@ -7,15 +7,25 @@ extends RefCounted
 ## 同步装载进 BalanceConfig 类型路径 town_life.professions；读取照 formation_system
 ## 先例直读 .tres，不依赖 autoload 顺序，单测/直跑场景可用）。
 ##
-## 字段契约（批次 1 消费 id/name_zh/tool/uniform；work_site_def/product/cycle
-## 由批次 2 采集行为族、批次 3 工作场所消费，本批只落配置不强校验）：
-##   id            职业唯一 id（写入实体 set_profession；空串 = 待业）
-##   name_zh       中文名（调试与将来 UI 用）
-##   work_site_def 绑定工作建筑 def_id（空 = 野外资源点，批次 2 细化）[提案/待定]
-##   product       产出资源 id（resources.tres 的 id）[提案/待定]
-##   cycle         工作节拍（秒）[提案/待定]
-##   tool          工具/武器变体（TOOL_WEAPONS 的 key；缺省 = 不换武器）
-##   uniform       职业着装色（身体色，html 颜色串如 "#7a4a21"）
+## 字段契约（批次 1 消费 id/name_zh/tool/uniform；批次 2 采集行为族消费
+## work_site_def/product/produce_amount/consume_res/consume_amount/cycle）：
+##   id             职业唯一 id（写入实体 set_profession；空串 = 待业）
+##   name_zh        中文名（调试与将来 UI 用）
+##   work_site_def  绑定工作建筑 def_id（空 = 野外资源点采集模式；
+##                  非空 = 工位模式，建筑未到位前走占位定点）[提案/待定]
+##   product        产出资源 id（resources.tres 的 id）[提案/待定]
+##   produce_amount 每拍产出量（资源点模式实际量以资源点 harvest 返回为准）
+##                  [提案/待定]
+##   consume_res    每拍消耗资源 id（空 = 无消耗；铁匠 = res_metal_ore，
+##                  "矿→锭"转化链语义）[提案/待定]
+##   consume_amount 每拍消耗量（0 = 无消耗）[提案/待定]
+##   cycle          工作节拍（秒/拍）[提案/待定]
+##   tool           工具/武器变体（TOOL_WEAPONS 的 key；缺省 = 不换武器）
+##   uniform        职业着装色（身体色，html 颜色串如 "#7a4a21"）
+##
+## 数值口径（[提案/待定]，待实测定稿）：采集 20/拍与玩家手采同速（HARVEST_PER_ACTION）；
+## 打铁 consume 10 矿 → produce 6 锭/拍（熔炼损耗），节拍 4s 略快于采集 5s，
+## 全链矿净增速为正（矿工 4/s vs 铁匠 2.5/s），三资源库存可同时增长。
 ##
 ## 着装通道（批次 1 验收核心"职业可见"）：
 ##   - 身体色 entity.rig.body_color（阵营识别走血条圆点/横条，body_color
@@ -28,6 +38,19 @@ extends RefCounted
 
 ## 职业档案配置路径（BalanceResource 行数组，字段契约见类头）
 const CONFIG_PATH := "res://config/town_life/professions.tres"
+
+## 占位工位定点（X 坐标，Y 由行为运行时取实体地面线）[提案/待定]
+## A 线铁匠铺建筑未到位前的过渡方案：铁匠在村道旁固定点打铁；
+## 批次 3 WorkSlots 消费（building.gd Interior 契约）到位后本表退役。
+## 1120 = 仓库（cell 15~31，X 480~992）右侧、村民聚居区（X 1050/1250）之间的村道口。
+const PLACEHOLDER_WORK_SITES: Dictionary = {
+	"smithy_lv1": 1120.0,
+}
+
+
+## 查占位工位 X 坐标（未配置返回 NAN，调用方视为无工位可用）。
+static func get_placeholder_work_site_x(work_site_def: String) -> float:
+	return float(PLACEHOLDER_WORK_SITES.get(work_site_def, NAN))
 
 ## tool 字段 → WeaponMount.WeaponType 映射（"none" = 徒手不挂武器场景）；
 ## 矿工 PICKAXE 正装，铁匠/伐木工暂用现有变体（pickaxe 代锤 / sword 代斧，

@@ -19,12 +19,20 @@ const MAP_IDS := [
 const GATE_ZOOM := 0.6
 ## 地面特写缩放：约 1160px 世界宽，可辨分带边界/石板/路灯绿植杂物
 const GROUND_ZOOM := 1.1
+## tone → 截图时刻（时）。天空/昼夜是全局时间系统（EnvironmentSystem 驱动、不逐城锁），
+## 验收画面按每城 tone 对齐时刻=该城氛围的真实表达；截图窗口内暂停时钟防漂移。
+const TONE_HOUR := {"dawn": 6.0, "noon": 12.0, "gold": 16.5, "dusk": 19.0, "overcast": 12.0}
+## tone 配置来源（生成器配置层，仓库级文件不在 res:// 内）
+const PROFILES_PATH := "res://../tools/worldgen/l1/city_profiles.json"
 
 var _game_root: Node = null
+var _env: Node = null
+var _tones: Dictionary = {}
 
 
 func _ready() -> void:
 	get_window().size = Vector2i(1280, 720)  # 降渲染负担（核显弹窗模式帧率低）
+	_load_tones()
 	_game_root = (load("res://modules/world/scenes/game_root.tscn") as PackedScene).instantiate()
 	add_child(_game_root)
 	for i in 5:
@@ -39,6 +47,7 @@ func _ready() -> void:
 
 
 func _shot_map(mid: String, out_dir: String) -> int:
+	TimeManager.resume()  # 解除上一城截图窗口的时钟暂停（含中途失败的兜底）
 	_preset_captured()  # game_root 启动链（start_new_run）会清 WorldState.territories，逐城重预置
 	var sl: Node = _game_root.get("scene_loader")
 	sl.travel_to_map(mid, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
@@ -52,6 +61,7 @@ func _shot_map(mid: String, out_dir: String) -> int:
 		push_error("[town_snapshot] 进图失败: " + mid)
 		return 1
 	await get_tree().create_timer(2.0).timeout  # 建筑实例化/deferred 收尾
+	_align_clock(mid)  # 按城 tone 对齐游戏时刻并暂停时钟（截图窗口防漂移）
 	var width: float = map.map_right - map.map_left
 	var vp := get_viewport().get_visible_rect().size
 	var cam := Camera2D.new()
@@ -82,6 +92,42 @@ func _shot_map(mid: String, out_dir: String) -> int:
 	cam.queue_free()
 	await get_tree().process_frame
 	return 0
+
+
+## 读生成器配置层拿每城 tone（缺失城按 noon）
+func _load_tones() -> void:
+	var f := FileAccess.open(PROFILES_PATH, FileAccess.READ)
+	if f == null:
+		push_warning("[town_snapshot] 读不到 profiles，全部按 noon 拍")
+		return
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if data is Dictionary and data.get("cities") is Dictionary:
+		for mid in MAP_IDS:
+			var c: Dictionary = data["cities"].get(mid, {})
+			_tones[mid] = String(c.get("tone", "noon"))
+
+
+## 对齐游戏时刻并暂停时钟：天空色/光照/极光都由 EnvironmentSystem 按 time_of_day 驱动
+func _align_clock(mid: String) -> void:
+	if _env == null or not is_instance_valid(_env):
+		_env = _find_env(get_tree().root)
+	if _env == null:
+		push_warning("[town_snapshot] 找不到 EnvironmentSystem，按当前时刻拍")
+		return
+	_env.call("set_time_of_day", float(TONE_HOUR.get(_tones.get(mid, "noon"), 12.0)))
+	TimeManager.pause()
+	for i in 3:
+		await get_tree().process_frame  # CanvasModulate/天空色刷新一拍
+
+
+func _find_env(node: Node) -> Node:
+	if node.has_method("set_time_of_day") and node.has_method("get_time_of_day"):
+		return node
+	for c in node.get_children():
+		var found := _find_env(c)
+		if found != null:
+			return found
+	return null
 
 
 ## 全领地预置已臣服：进据点城时 ConquestManager 短路不刷守军不开战，画面干净

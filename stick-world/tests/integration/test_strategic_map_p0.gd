@@ -431,3 +431,23 @@ func _test_fast_travel_exec() -> void:
 		_runner.assert_true(dialog.is_open(), "open_for 后打开")
 		dialog.close()
 		_runner.assert_true(not dialog.is_open(), "close 后关闭")
+		# 几何回归（2026-09-08 验收实测 bug）：根/遮罩必须铺满视口、窗口居中且不出屏——
+		# 曾因 CanvasLayer 直下只设锚点不设偏移 → 根恒 0 尺寸 → 居中算出负坐标半屏外
+		dialog.open_for(target, "几何回归测试城", {"code": "UNVISITED", "reason": "尚未到访",
+				"path": [], "roads": [], "hops": 0, "length_px": 0.0})
+		for i in 2:
+			await get_tree().process_frame
+		var vp_size: Vector2 = dialog.get_viewport().get_visible_rect().size
+		var dim: Control = dialog.get_node_or_null("Dim")
+		_runner.assert_true(dim != null, "遮罩存在")
+		if dim != null:
+			_runner.assert_true(dim.size.distance_to(vp_size) < 1.0,
+					"遮罩铺满视口（实测 %s，期望 %s）" % [dim.size, vp_size])
+			if dim.get_child_count() > 0:
+				var win: Control = dim.get_child(0)
+				_runner.assert_true(win.global_position.x >= 0.0 and win.global_position.y >= 0.0,
+						"窗口不出屏（实测 %s）" % win.global_position)
+				var center_delta: Vector2 = win.global_position + win.size * 0.5 - vp_size * 0.5
+				_runner.assert_true(center_delta.length() < 1.0,
+						"窗口居中（偏差 %s）" % center_delta)
+		dialog.close()

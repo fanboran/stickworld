@@ -42,26 +42,26 @@ func _ready() -> void:
 
 
 func _build_widgets() -> void:
-	# 根铺满视口（anchor FULL_RECT + 双向 grow，否则内部遮罩塌缩 0 尺寸）
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 根铺满视口：必须 anchors+offsets 一起设——父是 CanvasLayer（顶层 Control）时
+	# 只设锚点不重算矩形，根恒为 0 尺寸，遮罩塌缩、居中算出负坐标（验收实测 bug）
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	grow_horizontal = Control.GROW_DIRECTION_BOTH
 	grow_vertical = Control.GROW_DIRECTION_BOTH
 	_dim = ColorRect.new()
 	_dim.name = "Dim"
 	_dim.color = Color(0, 0, 0, 0.45)
 	_dim.mouse_filter = Control.MOUSE_FILTER_STOP  # 消费点击，防穿透点到地图
-	_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_dim)
 	_window = PanelContainer.new()
 	_window.add_theme_stylebox_override("panel", StickStyle.window_panel())
 	_window.custom_minimum_size = Vector2(400, 0)
 	_dim.add_child(_window)
-	# 居中（anchor 归零 + resized 重算，Godot 的 position setter 配 anchor 会失效）
-	_window.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_window.resized.connect(func():
-		if is_instance_valid(_window) and is_instance_valid(_dim):
-			_window.position = (_dim.size - _window.size) * 0.5
-	)
+	# 居中：锚点方案（全部锚 0.5 + 偏移 0 + 双向 grow = 内容尺寸窗口恒居中），
+	# 不依赖 resized 时序、不用 position setter（配 anchor 会失效）
+	_window.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	_window.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_window.grow_vertical = Control.GROW_DIRECTION_BOTH
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	_window.add_child(box)

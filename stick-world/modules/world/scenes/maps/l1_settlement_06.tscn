@@ -9,9 +9,9 @@
 [sub_resource type="ShaderMaterial" id="BandMat_0"]
 shader = ExtResource("6_band")
 shader_parameter/style = 0
-shader_parameter/base_color = Color(0.33, 0.44, 0.21, 1)
-shader_parameter/alt_color = Color(0.29, 0.4, 0.19, 1)
-shader_parameter/seam_color = Color(0.43, 0.39, 0.32, 1)
+shader_parameter/base_color = Color(0.35, 0.44, 0.18, 1)
+shader_parameter/alt_color = Color(0.31, 0.4, 0.16, 1)
+shader_parameter/seam_color = Color(0.46, 0.39, 0.28, 1)
 shader_parameter/seed_off = 97.13
 shader_parameter/rect_l = 1024
 shader_parameter/rect_t = 810
@@ -22,25 +22,25 @@ shader_parameter/edge_soft = 30
 [sub_resource type="ShaderMaterial" id="BandMat_1"]
 shader = ExtResource("6_band")
 shader_parameter/style = 1
-shader_parameter/base_color = Color(0.58, 0.46, 0.3, 1)
-shader_parameter/alt_color = Color(0.58, 0.46, 0.3, 1)
-shader_parameter/seam_color = Color(0.43, 0.39, 0.32, 1)
+shader_parameter/base_color = Color(0.62, 0.46, 0.26, 1)
+shader_parameter/alt_color = Color(0.62, 0.46, 0.26, 1)
+shader_parameter/seam_color = Color(0.46, 0.39, 0.28, 1)
 shader_parameter/seed_off = 194.26
 shader_parameter/rect_l = 1024
 shader_parameter/rect_t = 810
 shader_parameter/rect_r = 3072
-shader_parameter/rect_b = 920
+shader_parameter/rect_b = 950
 shader_parameter/edge_soft = 26
 
 [sub_resource type="ShaderMaterial" id="BandMat_2"]
 shader = ExtResource("6_band")
 shader_parameter/style = 2
-shader_parameter/base_color = Color(0.56, 0.5, 0.4, 1)
-shader_parameter/alt_color = Color(0.51, 0.46, 0.38, 1)
-shader_parameter/seam_color = Color(0.43, 0.39, 0.32, 1)
+shader_parameter/base_color = Color(0.6, 0.5, 0.34, 1)
+shader_parameter/alt_color = Color(0.55, 0.46, 0.33, 1)
+shader_parameter/seam_color = Color(0.46, 0.39, 0.28, 1)
 shader_parameter/seed_off = 291.39
 shader_parameter/rect_l = 1952
-shader_parameter/rect_t = 920
+shader_parameter/rect_t = 950
 shader_parameter/rect_r = 2400
 shader_parameter/rect_b = 1080
 shader_parameter/edge_soft = 20
@@ -48,12 +48,12 @@ shader_parameter/edge_soft = 20
 [sub_resource type="ShaderMaterial" id="BandMat_3"]
 shader = ExtResource("6_band")
 shader_parameter/style = 3
-shader_parameter/base_color = Color(0.4, 0.32, 0.21, 1)
-shader_parameter/alt_color = Color(0.34, 0.51, 0.21, 1)
-shader_parameter/seam_color = Color(0.43, 0.39, 0.32, 1)
+shader_parameter/base_color = Color(0.43, 0.32, 0.18, 1)
+shader_parameter/alt_color = Color(0.36, 0.51, 0.18, 1)
+shader_parameter/seam_color = Color(0.46, 0.39, 0.28, 1)
 shader_parameter/seed_off = 388.52
 shader_parameter/rect_l = 1048
-shader_parameter/rect_t = 930
+shader_parameter/rect_t = 960
 shader_parameter/rect_r = 1640
 shader_parameter/rect_b = 1058
 shader_parameter/edge_soft = 18
@@ -69,7 +69,7 @@ grid_width = 128
 
 [node name="GroundPolygon" type="Polygon2D" parent="TerrainLayer"]
 position = Vector2(-131, -1)
-color = Color(0.45, 0.55, 0.32, 1)
+color = Color(0.48, 0.55, 0.28, 1)
 polygon = PackedVector2Array(0, 810, 4096, 810, 4096, 1080, 0, 1080)
 [node name="GroundTurf" type="Polygon2D" parent="TerrainLayer"]
 material = SubResource("BandMat_0")
@@ -77,15 +77,15 @@ polygon = PackedVector2Array(1024, 810, 3072, 810, 3072, 1080, 1024, 1080)
 
 [node name="GroundRoad" type="Polygon2D" parent="TerrainLayer"]
 material = SubResource("BandMat_1")
-polygon = PackedVector2Array(1024, 810, 3072, 810, 3072, 920, 1024, 920)
+polygon = PackedVector2Array(1024, 810, 3072, 810, 3072, 950, 1024, 950)
 
 [node name="GroundPlaza1" type="Polygon2D" parent="TerrainLayer"]
 material = SubResource("BandMat_2")
-polygon = PackedVector2Array(1952, 920, 2400, 920, 2400, 1080, 1952, 1080)
+polygon = PackedVector2Array(1952, 950, 2400, 950, 2400, 1080, 1952, 1080)
 
-[node name="GroundFarmland" type="Polygon2D" parent="TerrainLayer"]
+[node name="GroundFarmland0" type="Polygon2D" parent="TerrainLayer"]
 material = SubResource("BandMat_3")
-polygon = PackedVector2Array(1048, 930, 1640, 930, 1640, 1058, 1048, 1058)
+polygon = PackedVector2Array(1048, 960, 1640, 960, 1640, 1058, 1048, 1058)
 
 [node name="GroundLine" type="Marker2D" parent="."]
 position = Vector2(0, 810)
@@ -96,393 +96,339 @@ script = ExtResource("4_grid_drawer")
 [node name="DecorationLayer" type="Node2D" parent="."]
 z_index = 1
 [node name="Lamp0" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2385.6, 868.6)
+position = Vector2(2385.6, 884.6)
 
 [node name="Glow" type="Polygon2D" parent="DecorationLayer/Lamp0"]
-color = Color(1, 0.81, 0.43, 0.1)
+color = Color(1, 0.81, 0.37, 0.1)
 polygon = PackedVector2Array(14, -46, 12.12, -39, 7, -33.88, 0, -32, -7, -33.88, -12.12, -39, -14, -46, -12.12, -53, -7, -58.12, -0, -60, 7, -58.12, 12.12, -53)
 
 [node name="Pole" type="Polygon2D" parent="DecorationLayer/Lamp0"]
-color = Color(0.16, 0.15, 0.18, 1)
+color = Color(0.17, 0.15, 0.15, 1)
 polygon = PackedVector2Array(-1.6, 0, 1.6, 0, 1.6, -44, -1.6, -44)
 
 [node name="Glass" type="Polygon2D" parent="DecorationLayer/Lamp0"]
-color = Color(1, 0.85, 0.54, 1)
+color = Color(1, 0.85, 0.46, 1)
 polygon = PackedVector2Array(5.5, -47, 4.45, -43.77, 1.7, -41.77, -1.7, -41.77, -4.45, -43.77, -5.5, -47, -4.45, -50.23, -1.7, -52.23, 1.7, -52.23, 4.45, -50.23)
 
 [node name="Lamp1" type="Node2D" parent="DecorationLayer"]
-position = Vector2(3034.4, 859.3)
+position = Vector2(2993.6, 872.8)
 
 [node name="Glow" type="Polygon2D" parent="DecorationLayer/Lamp1"]
-color = Color(1, 0.81, 0.43, 0.1)
+color = Color(1, 0.81, 0.37, 0.1)
 polygon = PackedVector2Array(14, -46, 12.12, -39, 7, -33.88, 0, -32, -7, -33.88, -12.12, -39, -14, -46, -12.12, -53, -7, -58.12, -0, -60, 7, -58.12, 12.12, -53)
 
 [node name="Pole" type="Polygon2D" parent="DecorationLayer/Lamp1"]
-color = Color(0.16, 0.15, 0.18, 1)
+color = Color(0.17, 0.15, 0.15, 1)
 polygon = PackedVector2Array(-1.6, 0, 1.6, 0, 1.6, -44, -1.6, -44)
 
 [node name="Glass" type="Polygon2D" parent="DecorationLayer/Lamp1"]
-color = Color(1, 0.85, 0.54, 1)
+color = Color(1, 0.85, 0.46, 1)
+polygon = PackedVector2Array(5.5, -47, 4.45, -43.77, 1.7, -41.77, -1.7, -41.77, -4.45, -43.77, -5.5, -47, -4.45, -50.23, -1.7, -52.23, 1.7, -52.23, 4.45, -50.23)
+
+[node name="Lamp2" type="Node2D" parent="DecorationLayer"]
+position = Vector2(1968.5, 896)
+
+[node name="Glow" type="Polygon2D" parent="DecorationLayer/Lamp2"]
+color = Color(1, 0.81, 0.37, 0.1)
+polygon = PackedVector2Array(14, -46, 12.12, -39, 7, -33.88, 0, -32, -7, -33.88, -12.12, -39, -14, -46, -12.12, -53, -7, -58.12, -0, -60, 7, -58.12, 12.12, -53)
+
+[node name="Pole" type="Polygon2D" parent="DecorationLayer/Lamp2"]
+color = Color(0.17, 0.15, 0.15, 1)
+polygon = PackedVector2Array(-1.6, 0, 1.6, 0, 1.6, -44, -1.6, -44)
+
+[node name="Glass" type="Polygon2D" parent="DecorationLayer/Lamp2"]
+color = Color(1, 0.85, 0.46, 1)
 polygon = PackedVector2Array(5.5, -47, 4.45, -43.77, 1.7, -41.77, -1.7, -41.77, -4.45, -43.77, -5.5, -47, -4.45, -50.23, -1.7, -52.23, 1.7, -52.23, 4.45, -50.23)
 
 [node name="Tree0" type="Node2D" parent="DecorationLayer"]
-position = Vector2(3009, 1026.7)
+position = Vector2(2386.9, 1012.6)
 
 [node name="Trunk" type="Polygon2D" parent="DecorationLayer/Tree0"]
-color = Color(0.42, 0.29, 0.18, 1)
-polygon = PackedVector2Array(-2, 0, 2, 0, 1.6, -19.04, -1.6, -19.04)
+color = Color(0.45, 0.29, 0.15, 1)
+polygon = PackedVector2Array(-2, 0, 2, 0, 1.6, -14.64, -1.6, -14.64)
 
 [node name="LeafBack" type="Polygon2D" parent="DecorationLayer/Tree0"]
-color = Color(0.25, 0.43, 0.23, 1)
-polygon = PackedVector2Array(6.43, -24.99, 4.13, -16.42, -2.14, -10.15, -10.71, -7.85, -19.28, -10.15, -25.55, -16.42, -27.85, -24.99, -25.55, -33.56, -19.28, -39.83, -10.71, -42.13, -2.14, -39.83, 4.13, -33.56)
+color = Color(0.27, 0.43, 0.2, 1)
+polygon = PackedVector2Array(4.94, -19.21, 3.18, -12.63, -1.65, -7.8, -8.24, -6.04, -14.82, -7.8, -19.65, -12.63, -21.41, -19.21, -19.65, -25.8, -14.82, -30.63, -8.24, -32.39, -1.65, -30.63, 3.18, -25.8)
 
 [node name="LeafFront" type="Polygon2D" parent="DecorationLayer/Tree0"]
-color = Color(0.3, 0.5, 0.26, 1)
-polygon = PackedVector2Array(24.75, -22.61, 22.65, -14.76, 16.9, -9.01, 9.04, -6.9, 1.19, -9.01, -4.56, -14.76, -6.66, -22.61, -4.56, -30.46, 1.19, -36.21, 9.04, -38.32, 16.9, -36.21, 22.65, -30.46)
+color = Color(0.32, 0.5, 0.22, 1)
+polygon = PackedVector2Array(19.03, -17.39, 17.41, -11.35, 12.99, -6.93, 6.95, -5.31, 0.92, -6.93, -3.51, -11.35, -5.12, -17.39, -3.51, -23.42, 0.91, -27.84, 6.95, -29.46, 12.99, -27.84, 17.41, -23.42)
 
 [node name="LeafTop" type="Polygon2D" parent="DecorationLayer/Tree0"]
-color = Color(0.36, 0.57, 0.29, 1)
-polygon = PackedVector2Array(18.56, -32.13, 16.08, -22.85, 9.28, -16.05, 0, -13.57, -9.28, -16.05, -16.08, -22.85, -18.56, -32.13, -16.08, -41.41, -9.28, -48.21, -0, -50.69, 9.28, -48.21, 16.08, -41.41)
+color = Color(0.39, 0.57, 0.25, 1)
+polygon = PackedVector2Array(14.27, -24.71, 12.36, -17.57, 7.14, -12.34, 0, -10.43, -7.14, -12.34, -12.36, -17.57, -14.27, -24.71, -12.36, -31.84, -7.14, -37.07, -0, -38.98, 7.14, -37.07, 12.36, -31.84)
 
 [node name="Tree1" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2020.9, 1037.8)
+position = Vector2(1951.9, 1023.9)
 
 [node name="Trunk" type="Polygon2D" parent="DecorationLayer/Tree1"]
-color = Color(0.42, 0.29, 0.18, 1)
-polygon = PackedVector2Array(-2, 0, 2, 0, 1.6, -17.12, -1.6, -17.12)
+color = Color(0.45, 0.29, 0.15, 1)
+polygon = PackedVector2Array(-2, 0, 2, 0, 1.6, -13.28, -1.6, -13.28)
 
 [node name="LeafBack" type="Polygon2D" parent="DecorationLayer/Tree1"]
-color = Color(0.25, 0.43, 0.23, 1)
-polygon = PackedVector2Array(5.78, -22.47, 3.71, -14.77, -1.93, -9.13, -9.63, -7.06, -17.33, -9.13, -22.97, -14.77, -25.04, -22.47, -22.97, -30.17, -17.33, -35.81, -9.63, -37.88, -1.93, -35.81, 3.71, -30.17)
+color = Color(0.27, 0.43, 0.2, 1)
+polygon = PackedVector2Array(4.48, -17.43, 2.88, -11.45, -1.49, -7.08, -7.47, -5.48, -13.45, -7.08, -17.82, -11.45, -19.42, -17.43, -17.82, -23.41, -13.45, -27.78, -7.47, -29.38, -1.49, -27.78, 2.88, -23.41)
 
 [node name="LeafFront" type="Polygon2D" parent="DecorationLayer/Tree1"]
-color = Color(0.3, 0.5, 0.26, 1)
-polygon = PackedVector2Array(22.26, -20.33, 20.36, -13.27, 15.19, -8.1, 8.13, -6.21, 1.07, -8.1, -4.1, -13.27, -5.99, -20.33, -4.1, -27.39, 1.07, -32.56, 8.13, -34.45, 15.19, -32.56, 20.36, -27.39)
+color = Color(0.32, 0.5, 0.22, 1)
+polygon = PackedVector2Array(17.26, -15.77, 15.8, -10.29, 11.79, -6.28, 6.31, -4.81, 0.83, -6.28, -3.18, -10.29, -4.65, -15.77, -3.18, -21.25, 0.83, -25.26, 6.31, -26.73, 11.79, -25.26, 15.8, -21.25)
 
 [node name="LeafTop" type="Polygon2D" parent="DecorationLayer/Tree1"]
-color = Color(0.36, 0.57, 0.29, 1)
-polygon = PackedVector2Array(16.69, -28.89, 14.46, -20.54, 8.35, -14.43, 0, -12.2, -8.35, -14.43, -14.46, -20.54, -16.69, -28.89, -14.46, -37.24, -8.35, -43.35, -0, -45.58, 8.35, -43.35, 14.46, -37.24)
+color = Color(0.39, 0.57, 0.25, 1)
+polygon = PackedVector2Array(12.95, -22.41, 11.21, -15.94, 6.47, -11.2, 0, -9.46, -6.47, -11.2, -11.21, -15.94, -12.95, -22.41, -11.21, -28.88, -6.47, -33.62, -0, -35.36, 6.47, -33.62, 11.21, -28.88)
 
 [node name="Tree2" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2348.9, 971.3)
+position = Vector2(2969.9, 1008.8)
 
 [node name="Trunk" type="Polygon2D" parent="DecorationLayer/Tree2"]
-color = Color(0.42, 0.29, 0.18, 1)
-polygon = PackedVector2Array(-2, 0, 2, 0, 1.6, -14.8, -1.6, -14.8)
+color = Color(0.45, 0.29, 0.15, 1)
+polygon = PackedVector2Array(-2, 0, 2, 0, 1.6, -16.72, -1.6, -16.72)
 
 [node name="LeafBack" type="Polygon2D" parent="DecorationLayer/Tree2"]
-color = Color(0.25, 0.43, 0.23, 1)
-polygon = PackedVector2Array(4.99, -19.43, 3.21, -12.77, -1.66, -7.89, -8.33, -6.11, -14.98, -7.89, -19.86, -12.77, -21.65, -19.43, -19.86, -26.08, -14.99, -30.96, -8.33, -32.75, -1.66, -30.96, 3.21, -26.09)
+color = Color(0.27, 0.43, 0.2, 1)
+polygon = PackedVector2Array(5.64, -21.95, 3.63, -14.42, -1.88, -8.91, -9.4, -6.9, -16.93, -8.91, -22.44, -14.42, -24.45, -21.94, -22.44, -29.47, -16.93, -34.98, -9.41, -36.99, -1.88, -34.98, 3.63, -29.47)
 
 [node name="LeafFront" type="Polygon2D" parent="DecorationLayer/Tree2"]
-color = Color(0.3, 0.5, 0.26, 1)
-polygon = PackedVector2Array(19.24, -17.57, 17.6, -11.47, 13.14, -7, 7.03, -5.36, 0.93, -7, -3.54, -11.47, -5.18, -17.57, -3.54, -23.68, 0.92, -28.15, 7.03, -29.79, 13.14, -28.15, 17.6, -23.68)
+color = Color(0.32, 0.5, 0.22, 1)
+polygon = PackedVector2Array(21.74, -19.85, 19.89, -12.96, 14.84, -7.91, 7.94, -6.06, 1.05, -7.91, -4, -12.96, -5.85, -19.85, -4, -26.75, 1.04, -31.8, 7.94, -33.65, 14.84, -31.8, 19.89, -26.75)
 
 [node name="LeafTop" type="Polygon2D" parent="DecorationLayer/Tree2"]
-color = Color(0.36, 0.57, 0.29, 1)
-polygon = PackedVector2Array(14.43, -24.98, 12.5, -17.76, 7.22, -12.48, 0, -10.55, -7.21, -12.48, -12.5, -17.76, -14.43, -24.98, -12.5, -32.19, -7.22, -37.47, -0, -39.41, 7.22, -37.47, 12.5, -32.19)
-
-[node name="Tree3" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2751.3, 1015.6)
-
-[node name="Trunk" type="Polygon2D" parent="DecorationLayer/Tree3"]
-color = Color(0.42, 0.29, 0.18, 1)
-polygon = PackedVector2Array(-2, 0, 2, 0, 1.6, -17.36, -1.6, -17.36)
-
-[node name="LeafBack" type="Polygon2D" parent="DecorationLayer/Tree3"]
-color = Color(0.25, 0.43, 0.23, 1)
-polygon = PackedVector2Array(5.86, -22.79, 3.77, -14.97, -1.95, -9.25, -9.76, -7.16, -17.58, -9.25, -23.3, -14.97, -25.39, -22.78, -23.3, -30.6, -17.58, -36.32, -9.77, -38.41, -1.95, -36.32, 3.77, -30.6)
-
-[node name="LeafFront" type="Polygon2D" parent="DecorationLayer/Tree3"]
-color = Color(0.3, 0.5, 0.26, 1)
-polygon = PackedVector2Array(22.57, -20.61, 20.65, -13.45, 15.41, -8.21, 8.25, -6.29, 1.09, -8.21, -4.16, -13.45, -6.08, -20.61, -4.16, -27.78, 1.08, -33.02, 8.25, -34.94, 15.41, -33.02, 20.65, -27.78)
-
-[node name="LeafTop" type="Polygon2D" parent="DecorationLayer/Tree3"]
-color = Color(0.36, 0.57, 0.29, 1)
-polygon = PackedVector2Array(16.93, -29.3, 14.66, -20.83, 8.46, -14.64, 0, -12.37, -8.46, -14.64, -14.66, -20.83, -16.93, -29.29, -14.66, -37.76, -8.46, -43.95, -0, -46.22, 8.46, -43.95, 14.66, -37.76)
+color = Color(0.39, 0.57, 0.25, 1)
+polygon = PackedVector2Array(16.3, -28.21, 14.12, -20.06, 8.15, -14.1, 0, -11.91, -8.15, -14.1, -14.12, -20.06, -16.3, -28.21, -14.12, -36.37, -8.15, -42.33, -0, -44.52, 8.15, -42.33, 14.12, -36.37)
 
 [node name="Bush0" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2621.8, 1023.9)
+position = Vector2(2792.2, 1022.4)
 
 [node name="Body" type="Polygon2D" parent="DecorationLayer/Bush0"]
-color = Color(0.28, 0.46, 0.24, 1)
+color = Color(0.3, 0.46, 0.21, 1)
 polygon = PackedVector2Array(11.3, -5.65, 9.14, 0.99, 3.49, 5.1, -3.49, 5.1, -9.14, 0.99, -11.3, -5.65, -9.14, -12.29, -3.49, -16.4, 3.49, -16.4, 9.14, -12.29)
 
 [node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush0"]
-color = Color(0.34, 0.53, 0.28, 1)
+color = Color(0.36, 0.53, 0.24, 1)
 polygon = PackedVector2Array(3.39, -8.48, 2.2, -4.82, -0.9, -2.56, -4.75, -2.56, -7.85, -4.82, -9.04, -8.48, -7.85, -12.13, -4.75, -14.39, -0.9, -14.39, 2.2, -12.13)
 
 [node name="Bush1" type="Node2D" parent="DecorationLayer"]
-position = Vector2(1745.6, 1050.6)
+position = Vector2(1831.9, 1041.1)
 
 [node name="Body" type="Polygon2D" parent="DecorationLayer/Bush1"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(8.4, -4.2, 6.8, 0.74, 2.6, 3.79, -2.6, 3.79, -6.8, 0.74, -8.4, -4.2, -6.8, -9.14, -2.6, -12.19, 2.6, -12.19, 6.8, -9.14)
-
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush1"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(2.52, -6.3, 1.64, -3.58, -0.67, -1.91, -3.53, -1.91, -5.84, -3.58, -6.72, -6.3, -5.84, -9.02, -3.53, -10.69, -0.67, -10.69, 1.64, -9.02)
-
-[node name="Bush2" type="Node2D" parent="DecorationLayer"]
-position = Vector2(1846.3, 967.9)
-
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush2"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(12.9, -6.45, 10.44, 1.13, 3.99, 5.82, -3.99, 5.82, -10.44, 1.13, -12.9, -6.45, -10.44, -14.03, -3.99, -18.72, 3.99, -18.72, 10.44, -14.03)
-
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush2"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.87, -9.68, 2.51, -5.5, -1.03, -2.93, -5.42, -2.93, -8.96, -5.5, -10.32, -9.68, -8.96, -13.85, -5.42, -16.42, -1.03, -16.42, 2.51, -13.85)
-
-[node name="Bush3" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2481, 976.4)
-
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush3"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(9.5, -4.75, 7.69, 0.83, 2.94, 4.29, -2.94, 4.29, -7.69, 0.83, -9.5, -4.75, -7.69, -10.33, -2.94, -13.79, 2.94, -13.79, 7.69, -10.33)
-
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush3"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(2.85, -7.12, 1.85, -4.05, -0.76, -2.16, -3.99, -2.16, -6.6, -4.05, -7.6, -7.12, -6.6, -10.2, -3.99, -12.09, -0.76, -12.09, 1.85, -10.2)
-
-[node name="Bush4" type="Node2D" parent="DecorationLayer"]
-position = Vector2(1835.8, 1013.2)
-
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush4"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(12.3, -6.15, 9.95, 1.08, 3.8, 5.55, -3.8, 5.55, -9.95, 1.08, -12.3, -6.15, -9.95, -13.38, -3.8, -17.85, 3.8, -17.85, 9.95, -13.38)
-
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush4"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.69, -9.23, 2.4, -5.25, -0.98, -2.79, -5.17, -2.79, -8.55, -5.25, -9.84, -9.23, -8.55, -13.2, -5.17, -15.66, -0.98, -15.66, 2.4, -13.2)
-
-[node name="Bush5" type="Node2D" parent="DecorationLayer"]
-position = Vector2(1732.2, 982.8)
-
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush5"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(12.9, -6.45, 10.44, 1.13, 3.99, 5.82, -3.99, 5.82, -10.44, 1.13, -12.9, -6.45, -10.44, -14.03, -3.99, -18.72, 3.99, -18.72, 10.44, -14.03)
-
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush5"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.87, -9.68, 2.51, -5.5, -1.03, -2.93, -5.42, -2.93, -8.96, -5.5, -10.32, -9.68, -8.96, -13.85, -5.42, -16.42, -1.03, -16.42, 2.51, -13.85)
-
-[node name="Bush6" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2573.1, 1017.2)
-
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush6"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(12.2, -6.1, 9.87, 1.07, 3.77, 5.5, -3.77, 5.5, -9.87, 1.07, -12.2, -6.1, -9.87, -13.27, -3.77, -17.7, 3.77, -17.7, 9.87, -13.27)
-
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush6"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.66, -9.15, 2.38, -5.21, -0.98, -2.77, -5.12, -2.77, -8.48, -5.21, -9.76, -9.15, -8.48, -13.09, -5.12, -15.53, -0.98, -15.53, 2.38, -13.09)
-
-[node name="Bush7" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2122, 988.1)
-
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush7"]
-color = Color(0.28, 0.46, 0.24, 1)
+color = Color(0.3, 0.46, 0.21, 1)
 polygon = PackedVector2Array(10.7, -5.35, 8.66, 0.94, 3.31, 4.83, -3.31, 4.83, -8.66, 0.94, -10.7, -5.35, -8.66, -11.64, -3.31, -15.53, 3.31, -15.53, 8.66, -11.64)
 
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush7"]
-color = Color(0.34, 0.53, 0.28, 1)
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush1"]
+color = Color(0.36, 0.53, 0.24, 1)
 polygon = PackedVector2Array(3.21, -8.02, 2.09, -4.57, -0.86, -2.43, -4.49, -2.43, -7.44, -4.57, -8.56, -8.02, -7.44, -11.48, -4.49, -13.62, -0.86, -13.62, 2.09, -11.48)
 
-[node name="Bush8" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2203, 1007.9)
+[node name="Bush2" type="Node2D" parent="DecorationLayer"]
+position = Vector2(2161, 1019.9)
 
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush8"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(9.7, -4.85, 7.85, 0.85, 3, 4.38, -3, 4.38, -7.85, 0.85, -9.7, -4.85, -7.85, -10.55, -3, -14.08, 3, -14.08, 7.85, -10.55)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush2"]
+color = Color(0.3, 0.46, 0.21, 1)
+polygon = PackedVector2Array(10.5, -5.25, 8.49, 0.92, 3.24, 4.74, -3.24, 4.74, -8.49, 0.92, -10.5, -5.25, -8.49, -11.42, -3.24, -15.24, 3.24, -15.24, 8.49, -11.42)
 
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush8"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(2.91, -7.27, 1.89, -4.14, -0.78, -2.2, -4.07, -2.2, -6.74, -4.14, -7.76, -7.27, -6.74, -10.41, -4.07, -12.35, -0.78, -12.35, 1.89, -10.41)
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush2"]
+color = Color(0.36, 0.53, 0.24, 1)
+polygon = PackedVector2Array(3.15, -7.88, 2.05, -4.48, -0.84, -2.38, -4.41, -2.38, -7.3, -4.48, -8.4, -7.87, -7.3, -11.27, -4.41, -13.37, -0.84, -13.37, 2.05, -11.27)
 
-[node name="Bush9" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2066.4, 964.1)
+[node name="Bush3" type="Node2D" parent="DecorationLayer"]
+position = Vector2(2213.8, 1043.1)
 
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush9"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(10.6, -5.3, 8.58, 0.93, 3.28, 4.78, -3.28, 4.78, -8.58, 0.93, -10.6, -5.3, -8.58, -11.53, -3.28, -15.38, 3.28, -15.38, 8.58, -11.53)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush3"]
+color = Color(0.3, 0.46, 0.21, 1)
+polygon = PackedVector2Array(8.8, -4.4, 7.12, 0.77, 2.72, 3.97, -2.72, 3.97, -7.12, 0.77, -8.8, -4.4, -7.12, -9.57, -2.72, -12.77, 2.72, -12.77, 7.12, -9.57)
 
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush9"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.18, -7.95, 2.07, -4.52, -0.85, -2.41, -4.45, -2.41, -7.37, -4.52, -8.48, -7.95, -7.37, -11.38, -4.45, -13.49, -0.85, -13.49, 2.07, -11.38)
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush3"]
+color = Color(0.36, 0.53, 0.24, 1)
+polygon = PackedVector2Array(2.64, -6.6, 1.72, -3.76, -0.7, -2, -3.7, -2, -6.12, -3.76, -7.04, -6.6, -6.12, -9.44, -3.7, -11.2, -0.7, -11.2, 1.72, -9.44)
 
-[node name="Bush10" type="Node2D" parent="DecorationLayer"]
-position = Vector2(1990.3, 965.8)
+[node name="Bush4" type="Node2D" parent="DecorationLayer"]
+position = Vector2(2647.9, 999.6)
 
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush10"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(11, -5.5, 8.9, 0.97, 3.4, 4.96, -3.4, 4.96, -8.9, 0.97, -11, -5.5, -8.9, -11.97, -3.4, -15.96, 3.4, -15.96, 8.9, -11.97)
-
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush10"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.3, -8.25, 2.14, -4.69, -0.88, -2.5, -4.62, -2.5, -7.64, -4.69, -8.8, -8.25, -7.64, -11.81, -4.62, -14, -0.88, -14, 2.14, -11.81)
-
-[node name="Bush11" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2539.3, 982.6)
-
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush11"]
-color = Color(0.28, 0.46, 0.24, 1)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush4"]
+color = Color(0.3, 0.46, 0.21, 1)
 polygon = PackedVector2Array(10.8, -5.4, 8.74, 0.95, 3.34, 4.87, -3.34, 4.87, -8.74, 0.95, -10.8, -5.4, -8.74, -11.75, -3.34, -15.67, 3.34, -15.67, 8.74, -11.75)
 
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush11"]
-color = Color(0.34, 0.53, 0.28, 1)
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush4"]
+color = Color(0.36, 0.53, 0.24, 1)
 polygon = PackedVector2Array(3.24, -8.1, 2.11, -4.61, -0.86, -2.45, -4.54, -2.45, -7.51, -4.61, -8.64, -8.1, -7.51, -11.59, -4.54, -13.75, -0.86, -13.75, 2.11, -11.59)
 
-[node name="Bush12" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2576.7, 1056.2)
+[node name="Bush5" type="Node2D" parent="DecorationLayer"]
+position = Vector2(2233.4, 990.1)
 
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush12"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(12.8, -6.4, 10.36, 1.12, 3.96, 5.77, -3.96, 5.77, -10.36, 1.12, -12.8, -6.4, -10.36, -13.92, -3.96, -18.57, 3.96, -18.57, 10.36, -13.92)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush5"]
+color = Color(0.3, 0.46, 0.21, 1)
+polygon = PackedVector2Array(8.7, -4.35, 7.04, 0.76, 2.69, 3.92, -2.69, 3.92, -7.04, 0.76, -8.7, -4.35, -7.04, -9.46, -2.69, -12.62, 2.69, -12.62, 7.04, -9.46)
 
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush12"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.84, -9.6, 2.5, -5.46, -1.02, -2.9, -5.38, -2.9, -8.9, -5.46, -10.24, -9.6, -8.9, -13.74, -5.38, -16.3, -1.02, -16.3, 2.5, -13.74)
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush5"]
+color = Color(0.36, 0.53, 0.24, 1)
+polygon = PackedVector2Array(2.61, -6.52, 1.7, -3.71, -0.7, -1.97, -3.65, -1.97, -6.05, -3.71, -6.96, -6.52, -6.05, -9.34, -3.65, -11.08, -0.7, -11.08, 1.7, -9.34)
 
-[node name="Bush13" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2725.7, 945.9)
+[node name="Bush6" type="Node2D" parent="DecorationLayer"]
+position = Vector2(1883.9, 992.9)
 
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush13"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(12.5, -6.25, 10.11, 1.1, 3.86, 5.64, -3.86, 5.64, -10.11, 1.1, -12.5, -6.25, -10.11, -13.6, -3.86, -18.14, 3.86, -18.14, 10.11, -13.6)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush6"]
+color = Color(0.3, 0.46, 0.21, 1)
+polygon = PackedVector2Array(8.9, -4.45, 7.2, 0.78, 2.75, 4.01, -2.75, 4.01, -7.2, 0.78, -8.9, -4.45, -7.2, -9.68, -2.75, -12.91, 2.75, -12.91, 7.2, -9.68)
 
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush13"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.75, -9.38, 2.44, -5.33, -1, -2.84, -5.25, -2.84, -8.69, -5.33, -10, -9.38, -8.69, -13.42, -5.25, -15.91, -1, -15.91, 2.44, -13.42)
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush6"]
+color = Color(0.36, 0.53, 0.24, 1)
+polygon = PackedVector2Array(2.67, -6.68, 1.74, -3.8, -0.71, -2.02, -3.74, -2.02, -6.19, -3.8, -7.12, -6.67, -6.19, -9.55, -3.74, -11.33, -0.71, -11.33, 1.74, -9.55)
 
-[node name="Bush14" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2999.8, 962.7)
+[node name="Bush7" type="Node2D" parent="DecorationLayer"]
+position = Vector2(2384.5, 1052.6)
 
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush14"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(10, -5, 8.09, 0.88, 3.09, 4.51, -3.09, 4.51, -8.09, 0.88, -10, -5, -8.09, -10.88, -3.09, -14.51, 3.09, -14.51, 8.09, -10.88)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush7"]
+color = Color(0.3, 0.46, 0.21, 1)
+polygon = PackedVector2Array(9.8, -4.9, 7.93, 0.86, 3.03, 4.42, -3.03, 4.42, -7.93, 0.86, -9.8, -4.9, -7.93, -10.66, -3.03, -14.22, 3.03, -14.22, 7.93, -10.66)
 
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush14"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3, -7.5, 1.95, -4.27, -0.8, -2.27, -4.2, -2.27, -6.95, -4.27, -8, -7.5, -6.95, -10.73, -4.2, -12.73, -0.8, -12.73, 1.95, -10.73)
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush7"]
+color = Color(0.36, 0.53, 0.24, 1)
+polygon = PackedVector2Array(2.94, -7.35, 1.91, -4.18, -0.78, -2.22, -4.12, -2.22, -6.81, -4.18, -7.84, -7.35, -6.81, -10.52, -4.12, -12.48, -0.78, -12.48, 1.91, -10.52)
 
-[node name="Bush15" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2936.9, 1053.7)
+[node name="Bush8" type="Node2D" parent="DecorationLayer"]
+position = Vector2(2682.6, 1031.9)
 
-[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush15"]
-color = Color(0.28, 0.46, 0.24, 1)
-polygon = PackedVector2Array(12, -6, 9.71, 1.05, 3.71, 5.41, -3.71, 5.41, -9.71, 1.05, -12, -6, -9.71, -13.05, -3.71, -17.41, 3.71, -17.41, 9.71, -13.05)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush8"]
+color = Color(0.3, 0.46, 0.21, 1)
+polygon = PackedVector2Array(10.2, -5.1, 8.25, 0.9, 3.15, 4.6, -3.15, 4.6, -8.25, 0.9, -10.2, -5.1, -8.25, -11.1, -3.15, -14.8, 3.15, -14.8, 8.25, -11.1)
 
-[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush15"]
-color = Color(0.34, 0.53, 0.28, 1)
-polygon = PackedVector2Array(3.6, -9, 2.34, -5.12, -0.96, -2.72, -5.04, -2.72, -8.34, -5.12, -9.6, -9, -8.34, -12.88, -5.04, -15.28, -0.96, -15.28, 2.34, -12.88)
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush8"]
+color = Color(0.36, 0.53, 0.24, 1)
+polygon = PackedVector2Array(3.06, -7.65, 1.99, -4.35, -0.82, -2.31, -4.28, -2.31, -7.09, -4.35, -8.16, -7.65, -7.09, -10.95, -4.28, -12.99, -0.82, -12.99, 1.99, -10.95)
+
+[node name="Bush9" type="Node2D" parent="DecorationLayer"]
+position = Vector2(2316.8, 991.5)
+
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Bush9"]
+color = Color(0.3, 0.46, 0.21, 1)
+polygon = PackedVector2Array(11.1, -5.55, 8.98, 0.97, 3.43, 5.01, -3.43, 5.01, -8.98, 0.97, -11.1, -5.55, -8.98, -12.07, -3.43, -16.11, 3.43, -16.11, 8.98, -12.07)
+
+[node name="Highlight" type="Polygon2D" parent="DecorationLayer/Bush9"]
+color = Color(0.36, 0.53, 0.24, 1)
+polygon = PackedVector2Array(3.33, -8.32, 2.16, -4.74, -0.89, -2.52, -4.66, -2.52, -7.71, -4.74, -8.88, -8.32, -7.71, -11.91, -4.66, -14.13, -0.89, -14.13, 2.16, -11.91)
 
 [node name="Clutter0" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2358.4, 953.7)
+position = Vector2(1998, 1045.4)
 
 [node name="Mound" type="Polygon2D" parent="DecorationLayer/Clutter0"]
-color = Color(0.78, 0.65, 0.31, 1)
+color = Color(0.83, 0.65, 0.27, 1)
 polygon = PackedVector2Array(9, -5, 7.28, 0.29, 2.78, 3.56, -2.78, 3.56, -7.28, 0.29, -9, -5, -7.28, -10.29, -2.78, -13.56, 2.78, -13.56, 7.28, -10.29)
 
 [node name="Top" type="Polygon2D" parent="DecorationLayer/Clutter0"]
-color = Color(0.86, 0.74, 0.38, 1)
+color = Color(0.92, 0.74, 0.33, 1)
 polygon = PackedVector2Array(9, -6, 7.95, -2.77, 5.2, -0.77, 1.8, -0.77, -0.95, -2.77, -2, -6, -0.95, -9.23, 1.8, -11.23, 5.2, -11.23, 7.95, -9.23)
 
 [node name="Clutter1" type="Node2D" parent="DecorationLayer"]
-position = Vector2(1969.1, 967.2)
+position = Vector2(2344.5, 995.5)
 
-[node name="Mound" type="Polygon2D" parent="DecorationLayer/Clutter1"]
-color = Color(0.78, 0.65, 0.31, 1)
-polygon = PackedVector2Array(9, -5, 7.28, 0.29, 2.78, 3.56, -2.78, 3.56, -7.28, 0.29, -9, -5, -7.28, -10.29, -2.78, -13.56, 2.78, -13.56, 7.28, -10.29)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Clutter1"]
+color = Color(0.51, 0.32, 0.16, 1)
+polygon = PackedVector2Array(-7, 0, 7, 0, 7, -16, -7, -16)
 
-[node name="Top" type="Polygon2D" parent="DecorationLayer/Clutter1"]
-color = Color(0.86, 0.74, 0.38, 1)
-polygon = PackedVector2Array(9, -6, 7.95, -2.77, 5.2, -0.77, 1.8, -0.77, -0.95, -2.77, -2, -6, -0.95, -9.23, 1.8, -11.23, 5.2, -11.23, 7.95, -9.23)
+[node name="HoopTop" type="Polygon2D" parent="DecorationLayer/Clutter1"]
+color = Color(0.27, 0.17, 0.09, 1)
+polygon = PackedVector2Array(-7, -6, 7, -6, 7, -4.4, -7, -4.4)
+
+[node name="HoopBot" type="Polygon2D" parent="DecorationLayer/Clutter1"]
+color = Color(0.27, 0.17, 0.09, 1)
+polygon = PackedVector2Array(-7, -12, 7, -12, 7, -10.4, -7, -10.4)
 
 [node name="Clutter2" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2343.8, 1013.8)
+position = Vector2(2029.4, 1014)
 
-[node name="Face" type="Polygon2D" parent="DecorationLayer/Clutter2"]
-color = Color(0.64, 0.5, 0.28, 1)
-polygon = PackedVector2Array(-8, 0, 8, 0, 8, -14, -8, -14)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Clutter2"]
+color = Color(0.51, 0.32, 0.16, 1)
+polygon = PackedVector2Array(-7, 0, 7, 0, 7, -16, -7, -16)
 
-[node name="Inner" type="Polygon2D" parent="DecorationLayer/Clutter2"]
-color = Color(0.5, 0.38, 0.2, 1)
-polygon = PackedVector2Array(-5, -2.5, 5, -2.5, 5, -11, -5, -11)
+[node name="HoopTop" type="Polygon2D" parent="DecorationLayer/Clutter2"]
+color = Color(0.27, 0.17, 0.09, 1)
+polygon = PackedVector2Array(-7, -6, 7, -6, 7, -4.4, -7, -4.4)
+
+[node name="HoopBot" type="Polygon2D" parent="DecorationLayer/Clutter2"]
+color = Color(0.27, 0.17, 0.09, 1)
+polygon = PackedVector2Array(-7, -12, 7, -12, 7, -10.4, -7, -10.4)
 
 [node name="Clutter3" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2014.6, 1015.3)
+position = Vector2(2384.7, 1042.9)
 
-[node name="Mound" type="Polygon2D" parent="DecorationLayer/Clutter3"]
-color = Color(0.78, 0.65, 0.31, 1)
-polygon = PackedVector2Array(9, -5, 7.28, 0.29, 2.78, 3.56, -2.78, 3.56, -7.28, 0.29, -9, -5, -7.28, -10.29, -2.78, -13.56, 2.78, -13.56, 7.28, -10.29)
+[node name="Face" type="Polygon2D" parent="DecorationLayer/Clutter3"]
+color = Color(0.68, 0.5, 0.24, 1)
+polygon = PackedVector2Array(-8, 0, 8, 0, 8, -14, -8, -14)
 
-[node name="Top" type="Polygon2D" parent="DecorationLayer/Clutter3"]
-color = Color(0.86, 0.74, 0.38, 1)
-polygon = PackedVector2Array(9, -6, 7.95, -2.77, 5.2, -0.77, 1.8, -0.77, -0.95, -2.77, -2, -6, -0.95, -9.23, 1.8, -11.23, 5.2, -11.23, 7.95, -9.23)
+[node name="Inner" type="Polygon2D" parent="DecorationLayer/Clutter3"]
+color = Color(0.54, 0.38, 0.17, 1)
+polygon = PackedVector2Array(-5, -2.5, 5, -2.5, 5, -11, -5, -11)
 
 [node name="Clutter4" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2028.7, 961.6)
+position = Vector2(1963.8, 1007.5)
 
-[node name="Face" type="Polygon2D" parent="DecorationLayer/Clutter4"]
-color = Color(0.64, 0.5, 0.28, 1)
-polygon = PackedVector2Array(-8, 0, 8, 0, 8, -14, -8, -14)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Clutter4"]
+color = Color(0.51, 0.32, 0.16, 1)
+polygon = PackedVector2Array(-7, 0, 7, 0, 7, -16, -7, -16)
 
-[node name="Inner" type="Polygon2D" parent="DecorationLayer/Clutter4"]
-color = Color(0.5, 0.38, 0.2, 1)
-polygon = PackedVector2Array(-5, -2.5, 5, -2.5, 5, -11, -5, -11)
+[node name="HoopTop" type="Polygon2D" parent="DecorationLayer/Clutter4"]
+color = Color(0.27, 0.17, 0.09, 1)
+polygon = PackedVector2Array(-7, -6, 7, -6, 7, -4.4, -7, -4.4)
+
+[node name="HoopBot" type="Polygon2D" parent="DecorationLayer/Clutter4"]
+color = Color(0.27, 0.17, 0.09, 1)
+polygon = PackedVector2Array(-7, -12, 7, -12, 7, -10.4, -7, -10.4)
 
 [node name="Clutter5" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2335.7, 1043.1)
+position = Vector2(2331.1, 1049.6)
 
-[node name="Face" type="Polygon2D" parent="DecorationLayer/Clutter5"]
-color = Color(0.64, 0.5, 0.28, 1)
-polygon = PackedVector2Array(-8, 0, 8, 0, 8, -14, -8, -14)
+[node name="Mound" type="Polygon2D" parent="DecorationLayer/Clutter5"]
+color = Color(0.83, 0.65, 0.27, 1)
+polygon = PackedVector2Array(9, -5, 7.28, 0.29, 2.78, 3.56, -2.78, 3.56, -7.28, 0.29, -9, -5, -7.28, -10.29, -2.78, -13.56, 2.78, -13.56, 7.28, -10.29)
 
-[node name="Inner" type="Polygon2D" parent="DecorationLayer/Clutter5"]
-color = Color(0.5, 0.38, 0.2, 1)
-polygon = PackedVector2Array(-5, -2.5, 5, -2.5, 5, -11, -5, -11)
+[node name="Top" type="Polygon2D" parent="DecorationLayer/Clutter5"]
+color = Color(0.92, 0.74, 0.33, 1)
+polygon = PackedVector2Array(9, -6, 7.95, -2.77, 5.2, -0.77, 1.8, -0.77, -0.95, -2.77, -2, -6, -0.95, -9.23, 1.8, -11.23, 5.2, -11.23, 7.95, -9.23)
 
 [node name="Clutter6" type="Node2D" parent="DecorationLayer"]
-position = Vector2(1969, 1056.1)
+position = Vector2(1968.3, 978.1)
 
 [node name="Body" type="Polygon2D" parent="DecorationLayer/Clutter6"]
-color = Color(0.48, 0.32, 0.19, 1)
+color = Color(0.51, 0.32, 0.16, 1)
 polygon = PackedVector2Array(-7, 0, 7, 0, 7, -16, -7, -16)
 
 [node name="HoopTop" type="Polygon2D" parent="DecorationLayer/Clutter6"]
-color = Color(0.25, 0.17, 0.11, 1)
+color = Color(0.27, 0.17, 0.09, 1)
 polygon = PackedVector2Array(-7, -6, 7, -6, 7, -4.4, -7, -4.4)
 
 [node name="HoopBot" type="Polygon2D" parent="DecorationLayer/Clutter6"]
-color = Color(0.25, 0.17, 0.11, 1)
+color = Color(0.27, 0.17, 0.09, 1)
 polygon = PackedVector2Array(-7, -12, 7, -12, 7, -10.4, -7, -10.4)
 
 [node name="Clutter7" type="Node2D" parent="DecorationLayer"]
-position = Vector2(2386.6, 1048.7)
+position = Vector2(2369.9, 967.4)
 
 [node name="Body" type="Polygon2D" parent="DecorationLayer/Clutter7"]
-color = Color(0.48, 0.32, 0.19, 1)
+color = Color(0.51, 0.32, 0.16, 1)
 polygon = PackedVector2Array(-7, 0, 7, 0, 7, -16, -7, -16)
 
 [node name="HoopTop" type="Polygon2D" parent="DecorationLayer/Clutter7"]
-color = Color(0.25, 0.17, 0.11, 1)
+color = Color(0.27, 0.17, 0.09, 1)
 polygon = PackedVector2Array(-7, -6, 7, -6, 7, -4.4, -7, -4.4)
 
 [node name="HoopBot" type="Polygon2D" parent="DecorationLayer/Clutter7"]
-color = Color(0.25, 0.17, 0.11, 1)
+color = Color(0.27, 0.17, 0.09, 1)
 polygon = PackedVector2Array(-7, -12, 7, -12, 7, -10.4, -7, -10.4)
 
 [node name="Clutter8" type="Node2D" parent="DecorationLayer"]
-position = Vector2(1969.3, 1014)
+position = Vector2(2020.6, 965.7)
 
-[node name="Mound" type="Polygon2D" parent="DecorationLayer/Clutter8"]
-color = Color(0.78, 0.65, 0.31, 1)
-polygon = PackedVector2Array(9, -5, 7.28, 0.29, 2.78, 3.56, -2.78, 3.56, -7.28, 0.29, -9, -5, -7.28, -10.29, -2.78, -13.56, 2.78, -13.56, 7.28, -10.29)
+[node name="Body" type="Polygon2D" parent="DecorationLayer/Clutter8"]
+color = Color(0.51, 0.32, 0.16, 1)
+polygon = PackedVector2Array(-7, 0, 7, 0, 7, -16, -7, -16)
 
-[node name="Top" type="Polygon2D" parent="DecorationLayer/Clutter8"]
-color = Color(0.86, 0.74, 0.38, 1)
-polygon = PackedVector2Array(9, -6, 7.95, -2.77, 5.2, -0.77, 1.8, -0.77, -0.95, -2.77, -2, -6, -0.95, -9.23, 1.8, -11.23, 5.2, -11.23, 7.95, -9.23)
+[node name="HoopTop" type="Polygon2D" parent="DecorationLayer/Clutter8"]
+color = Color(0.27, 0.17, 0.09, 1)
+polygon = PackedVector2Array(-7, -6, 7, -6, 7, -4.4, -7, -4.4)
+
+[node name="HoopBot" type="Polygon2D" parent="DecorationLayer/Clutter8"]
+color = Color(0.27, 0.17, 0.09, 1)
+polygon = PackedVector2Array(-7, -12, 7, -12, 7, -10.4, -7, -10.4)
 
 [node name="BuildingHost" type="Node2D" parent="."]
 z_index = 2

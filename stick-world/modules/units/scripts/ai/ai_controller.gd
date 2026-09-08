@@ -33,6 +33,12 @@ const DECISION_INTERVAL: float = 0.3
 ## BehaviorWander 行为本体保留，敌人 AI / 闲逛功能启用时调大此值即可）
 const WANDER_PROBABILITY: float = 0.0
 
+## 村民（有职业）idle 完成后切 wander 的概率（小镇生活批次 3 [提案/待定]：
+## 空闲走动让村子"活"起来）。作用域过滤见 _is_villager：战斗/编队/敌方单位
+## （无职业）仍走 WANDER_PROBABILITY=0——待机乱走会破坏战斗测试语义。
+## 用 var 便于测试注入 0/1 做确定性断言。
+var villager_wander_probability: float = 0.5
+
 ## TeamAi 姿态枚举（对齐 TeamAi.STANCE_* / dump Team.Stance 序；本地常量避免跨模块依赖。
 ## 3=ROUT 敌将撤仗终态，本作扩展——出征与领地架构 §4.2）
 const TEAM_AI_STANCE_GARRISON: int = 0
@@ -267,7 +273,12 @@ func _make_decision() -> void:
 		# 无派工但有职业：进采集劳作（小镇生活批次 2）
 		if _try_harvest():
 			return
-		# 没有派工，原地待机（P0 关闭随机漫游，工人无事做原地待命）
+		# 村民空闲走动（小镇生活批次 3 [提案/待定]）：有职业村民 idle 完成
+		# 后概率 wander；其他单位（战斗/编队/敌方）保持原地待命（P0 语义不变）
+		if _is_villager() and randf() < villager_wander_probability:
+			_state_machine.travel("wander")
+			return
+		# 没有派工，原地待机（工人无事做原地待命）
 		_state_machine.travel("idle")
 	elif current == "wander":
 		# 漫游完成：先检查派工
@@ -581,6 +592,8 @@ func _has_warehouse() -> bool:
 ## 进 harvest 行为自主劳作（寻位→移动→劳作→产出入账，循环见 BehaviorHarvest）。
 ## 职责过滤：队伍职责不含 WORK_FORAGE 的编队单位不采集（如战斗班被征用后离岗）。
 ## 职业档案由行为 enter 时经 TownLifeAPI 自查（本层只判"有职业"）。
+## 劳作节律（批次 3 [提案/待定] 7~19 时）：休息时段不进采集——在岗村民由
+## 行为层 update 收工，本层防"enter 即收工"的 travel 抖动。
 ## 返回 true 表示已切换到 harvest。
 func _try_harvest() -> bool:
 	if _entity == null or not is_instance_valid(_entity):
@@ -592,12 +605,25 @@ func _try_harvest() -> bool:
 		return false
 	if String(_entity.get_profession()).is_empty():
 		return false  # 待业（无职业不劳作）
+	# 节律过滤：休息时段（劳作由行为层收尾，这里不再新进）
+	if not TownLifeAPI.is_work_time():
+		return false
 	# 已在采集且未完成 → 保持（决策节拍内不重入）
 	var cur: String = _state_machine.get_current_behavior_name()
 	if cur == "harvest" and not _state_machine.is_current_finished():
 		return true
 	_state_machine.travel("harvest")
 	return true
+
+
+## 是否村民（小镇生活批次 3 wander 作用域过滤）：有职业档案的实体才视为村民；
+## 战斗/编队/敌方单位无职业（initial_content 是唯一分配点），wander 概率不生效。
+func _is_villager() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if not _entity.has_method("get_profession"):
+		return false
+	return not String(_entity.get_profession()).is_empty()
 
 
 ## 检查单位是否被队伍职责允许执行某工作类型（编队行为过滤）。

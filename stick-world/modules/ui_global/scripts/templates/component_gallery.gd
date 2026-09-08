@@ -36,6 +36,7 @@ func _build_buttons() -> void:
 	var row1 := StickKit.row(sec)
 	StickKit.button(row1, "普通按钮", _demo_toast("普通按钮"))
 	StickKit.button(row1, "强调按钮", _demo_toast("强调按钮"), StickKit.ButtonKind.ACCENT)
+	StickKit.button(row1, "主行动按钮", _demo_toast("主行动按钮"), StickKit.ButtonKind.PRIMARY)
 	StickKit.button(row1, "危险按钮", _demo_toast("危险按钮"), StickKit.ButtonKind.DANGER)
 	var disabled := StickKit.button(row1, "禁用按钮")
 	disabled.disabled = true
@@ -44,17 +45,26 @@ func _build_buttons() -> void:
 	StickKit.button(row2, "小型 26", Callable(), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 	StickKit.button(row2, "标准 32", Callable(), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 	StickKit.button(row2, "大型 44", Callable(), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+	# 亮背景形态（主菜单在用）：纸面墨描边，黑玻璃上看反而发白——专供暖金天空
+	var row3 := StickKit.row(sec)
+	StickKit.label(row3, "亮背景：", StickKit.LabelKind.HINT)
+	var paper := StickKit.sketch_button(row3, "纸面按钮", _demo_toast("纸面按钮"))
+	paper.ink_skin = true
+	paper.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
+	var paper_primary := StickKit.sketch_button(row3, "纸面·主行动", _demo_toast("纸面·主行动"),
+			StickKit.ButtonKind.PRIMARY)
+	paper_primary.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
 
 
 # ─────────────────────────────── 标签族 ────────────────────────────────
 
 func _build_labels() -> void:
 	var sec := StickKit.section(_content, "标签 / LABEL")
-	StickKit.label(sec, "大标题 TITLE 22 —— 面板标题", StickKit.LabelKind.TITLE)
-	StickKit.label(sec, "区块 SECTION 13 —— 分节小标题", StickKit.LabelKind.SECTION)
-	StickKit.label(sec, "正文 BODY 14 —— 按钮与正文文字", StickKit.LabelKind.BODY)
-	StickKit.label(sec, "提示 HINT 11 —— 辅助说明文字", StickKit.LabelKind.HINT)
-	StickKit.label(sec, "角标 TINY 10 —— 徽标与极密列表", StickKit.LabelKind.TINY)
+	StickKit.label(sec, "大标题 TITLE 24 —— 面板标题", StickKit.LabelKind.TITLE)
+	StickKit.label(sec, "区块 SECTION 14 —— 分节小标题", StickKit.LabelKind.SECTION)
+	StickKit.label(sec, "正文 BODY 15 —— 按钮与正文文字", StickKit.LabelKind.BODY)
+	StickKit.label(sec, "提示 HINT 12 —— 辅助说明文字", StickKit.LabelKind.HINT)
+	StickKit.label(sec, "角标 TINY 11 —— 徽标与极密列表", StickKit.LabelKind.TINY)
 	var row := StickKit.row(sec)
 	StickKit.label(row, "语义色：", StickKit.LabelKind.HINT)
 	StickKit.label(row, "强调琥珀", StickKit.LabelKind.BODY, StickTokens.ACCENT)

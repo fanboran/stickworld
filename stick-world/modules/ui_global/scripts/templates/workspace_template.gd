@@ -50,6 +50,16 @@ const FULL_OPS: Array[String] = [
 	"采购", "销售", "定价", "物流",
 ]
 
+## 操作 → 图标管线母题（缺映射的操作保持纯文字按钮，不硬凑）
+const OP_MOTIFS: Dictionary = {
+	"进攻": "短剑", "防御": "圆盾", "行军": "马蹄铁", "呼叫支援": "哨子",
+	"部署": "旗帜", "操练": "战鼓",
+	"分配课题": "账本", "审核论文": "羽毛笔", "调拨经费": "钱袋", "实验": "锥形瓶",
+	"开工": "十字镐", "验收": "星章", "材料调度": "货运板车", "质量检查": "放大镜",
+	"征税": "金币", "户籍": "卷轴", "司法": "天平", "治安": "提灯",
+	"采购": "板条箱", "销售": "金币", "定价": "天平", "物流": "货运板车",
+}
+
 @onready var _tab_bar: HBoxContainer = $Window/MainVBox/TabBar
 @onready var _tree_vbox: VBoxContainer = $Window/MainVBox/Body/TreePanel/TreeVBox
 @onready var _right_panel: VBoxContainer = $Window/MainVBox/Body/RightPanel
@@ -134,6 +144,7 @@ func _rebuild_right() -> void:
 			StickKit.toast(self, "执行：%s（演示）" % op, "info")
 		, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
 		btn.custom_minimum_size = Vector2(160, StickTokens.BTN_H_LG)
+		_wire_op_icon(btn, op)
 	# 完整功能（折叠；所有标签同一底层能力）
 	var fold_btn := StickKit.button(_right_panel, "完整功能 ▾（所有标签共享同一底层能力）",
 			Callable(), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
@@ -153,6 +164,7 @@ func _rebuild_right() -> void:
 			StickKit.toast(self, "执行：%s（演示）" % op, "info")
 		, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 		btn.custom_minimum_size = Vector2(110, StickTokens.BTN_H_SM)
+		_wire_op_icon(btn, op)
 		if is_quick:
 			btn.modulate = StickTokens.TEXT_FAINT
 	fold_btn.pressed.connect(func():
@@ -179,3 +191,12 @@ func _find_workspace(ws_id: String) -> Dictionary:
 		if ws["id"] == ws_id:
 			return ws
 	return {}
+
+
+## 操作按钮挂管线图标（有映射且有图才挂，其余保持纯文字）
+func _wire_op_icon(btn: Button, op: String) -> void:
+	if not OP_MOTIFS.has(op):
+		return
+	var tex := StickIcons.tex(OP_MOTIFS[op])
+	if tex != null:
+		btn.icon = tex

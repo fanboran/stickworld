@@ -140,8 +140,12 @@ func _flash_red(resource_id: String) -> void:
 	tween.tween_property(lbl, "theme_override_colors/font_color", Color.WHITE, 0.3)
 
 
-## 资源 id → 笔触贴图路径（与资源点同源美术）
+## 资源 id → 图标贴图。优先图标管线母题（StickIcons 语义映射），回退
+## 资源点同源笔触贴图，再回退色块——三档渐退，调用方零分支。
 func _icon_texture_path(resource_id: String) -> String:
+	var semantic_tex := StickIcons.semantic(resource_id)
+	if semantic_tex != null:
+		return semantic_tex.resource_path
 	match resource_id:
 		"res_wood": return "res://assets/resources/tree_paint.png"
 		"res_stone": return "res://assets/resources/stone_paint.png"

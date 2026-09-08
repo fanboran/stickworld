@@ -47,7 +47,7 @@
 | 1 | ✅ 完成 | 294b9f5d | 三职业着装可见（视觉 Subagent PASS，截图 `stick-world/tests/dev/professions_out.png`）；run_all 绿（3 失败项单跑全绿=并行 flaky，与本批无关） |
 | 2 | ✅ 完成 | 78e0738e / 6fdb9178 / 865a71bf / c5ebdc9c | 采集经济闭环通：三职业村民无人干预劳作，res_wood/ore/ingot 三库存增长（集成测试 `test_town_life_harvest` PASS，编排方复现 run_all 39/0）；视觉判定 PASS（截图 `tests/dev/harvest_out_0..5.png`）；check_godot_errors 干净 |
 | 3 | ✅ 完成 | 518388a5 / 0ca1ae24 | WorkSlots 消费+节律+wander 全落地：真建筑槽位上班/拆毁降级占位（集成 `test_town_life_worksite` 3 用例 PASS）、7~19 时工作节律（夜间收工白天回岗）、村民 wander 职业过滤（战斗单位语义不变）；视觉判定 PASS（`tests/dev/rhythm_day_0..2.png` 白天在岗 / `rhythm_night_0..2.png` 夜间散逛）；run_all 40/0 绿；check_godot_errors 干净 |
-| 4 | ✅ 完成 | 5db707bb / 8952781d / 065d40a6 | 人口 2→10 配比落地：`assign_village_jobs` 配比分配（铁匠1/伐木3/矿3/待业3，quota+工位容量双约束）、spawn 两簇分布适配 village_a 边界、编队征用离岗互斥（formation duck 清职业+BehaviorHarvest 即时收工）、wander 改身份标志判定+村锚回归（修待业漂出地图）；视觉判定 PASS（`tests/dev/town_overview_0..2.png` / `town_left_0..2.png`）；unit 45/45 绿，run_all 34 通过+6 失败项全部单跑复绿=并行 flaky；check_godot_errors 干净。**四批全部完成、待创始人观感验收后收线** |
+| 4 | ✅ 完成 | 5db707bb / 8952781d / 065d40a6 / e518010b | 人口 2→10 配比落地：`assign_village_jobs` 配比分配（铁匠1/伐木3/矿3/待业3，quota+工位容量双约束）、spawn 两簇分布适配 village_a 边界、编队征用离岗互斥（formation duck 清职业+BehaviorHarvest 即时收工）、wander 改身份标志判定+村锚回归（修待业漂出地图）；视觉判定 PASS（`tests/dev/town_overview_0..2.png` / `town_left_0..2.png`）；unit 45/45 绿；check_godot_errors 干净。**四批全部完成、待创始人观感验收后收线**。编排方验收注：批次 4 曾使 selection_formation/battle_ui 稳定挂——NPC 右簇进框致"恰好 3 人"断言失效（测试场地纯净性假设被打破，非生产行为缺陷），已修 e518010b，最终 run_all 40/0 |
 
 ## 批次 1 落地物（批次 2 新会话必读）
 

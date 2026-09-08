@@ -44,7 +44,7 @@
 | 批次 | 状态 | 提交 | 备注 |
 |---|---|---|---|
 | 1 | ✅ 完成 | 294b9f5d | 三职业着装可见（视觉 Subagent PASS，截图 `stick-world/tests/dev/professions_out.png`）；run_all 绿（3 失败项单跑全绿=并行 flaky，与本批无关） |
-| 2 | ✅ 完成 | 本批多个提交 | 采集经济闭环通：三职业村民无人干预劳作，res_wood/ore/ingot 三库存增长（集成测试 `test_town_life_harvest` 60.5s PASS）；视觉判定 PASS（截图 `tests/dev/harvest_out_0..5.png`）；run_all 全量 39/0 一次过；check_godot_errors 干净 |
+| 2 | ✅ 完成 | 78e0738e / 6fdb9178 / 865a71bf / c5ebdc9c | 采集经济闭环通：三职业村民无人干预劳作，res_wood/ore/ingot 三库存增长（集成测试 `test_town_life_harvest` PASS，编排方复现 run_all 39/0）；视觉判定 PASS（截图 `tests/dev/harvest_out_0..5.png`）；check_godot_errors 干净 |
 | 3 | ⬜ 未开工 | — | |
 | 4 | ⬜ 未开工 | — | |
 

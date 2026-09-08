@@ -37,9 +37,16 @@ SIZES = (64, 128, 256)
 # 旧 tag 的 ID 候选锁定为前 5 色：10 色全开会让红/黄材质的 AA 混合中间色
 # （恰好=新橙 (1,.5,0)）在接缝处改判家族，破坏逐字节回归
 NIDS = {t[0]: 5 for t in TAGS[:7]}
-# 明度自适应拉伸豁免：创始人点名的已验收图标，一字节不许动
-NO_STRETCH = {"icon_hammer_v9", "mot_bone", "mot_keys",
-              "mot_ledger", "mot_signpost", "mot_sword"}
+
+# D 着色器分档（v2）：shade pass 在渲染端已量化为 cel 灰阶（曲面 toon 材质/
+# 平面面烘色，三档 0.32/0.62/0.92），compose 只按灰阶查表映射色带。
+# 断点与渲染端共享 TOON_LO/TOON_HI/TOON_STEPS 环境变量（默认 0.35/0.70/3，
+# 基线实测与 v1 k-means 切点对齐）；RAMPS 固定三带，档数>3 时钳到亮带。
+_TOON_STEPS = max(2, int(os.environ.get("TOON_STEPS", "3")))
+_TOON_LO = float(os.environ.get("TOON_LO", "0.35"))
+_TOON_HI = float(os.environ.get("TOON_HI", "0.70"))
+_TH = tuple(_TOON_LO + (_TOON_HI - _TOON_LO) * (i + 1) / (_TOON_STEPS - 1)
+            for i in range(_TOON_STEPS - 1))
 
 
 def cel(tag, fake, target, out_ink=None, nids=10):
@@ -58,9 +65,9 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     part[~solid] = -1
 
     gray = (sa[..., 0] * 0.299 + sa[..., 1] * 0.587 + sa[..., 2] * 0.114)
-    # 模糊半径：非豁免收紧（0.03→0.012）——大半径下亮面沿棱渗入暗面，
-    # 过渡带自成一档（Cube「棱变独立色」）；豁免图标沿用旧半径保逐字节
-    br = max(1.5, target * 0.03) if tag in NO_STRETCH else max(1.2, target * 0.012)
+    # 轻模糊压渲染噪点，档位边界随平滑明度场走（半径与 v1 非豁免一致；
+    # 豁免大半径 0.03 分支随 NO_STRETCH 退役）
+    br = max(1.2, target * 0.012)
     L = np.asarray(Image.fromarray(np.clip(gray, 0, 255).astype(np.uint8))
                    .filter(ImageFilter.GaussianBlur(br))).astype(np.float32) / 255.0
     if fake:
@@ -69,49 +76,9 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         d = np.sqrt(((xx - W * lx) / W) ** 2 + ((yy - H * ly) / H) ** 2)
         L = np.clip(L * (1 - k * d), 0.05, 1.2)
 
-    # 采样域：腐蚀掉轮廓 AA 环——环像素偏暗，会压低 p5 拉低拉伸下限，
-    # 把内部渐变压进单一档（椅子整体同色的真凶）。细长形体腐蚀殆尽时回退全实体。
-    inner = solid
-    for _ in range(2):
-        nxt = np.asarray(Image.fromarray((inner * 255).astype(np.uint8))
-                         .filter(ImageFilter.MinFilter(3))) > 120
-        if nxt.sum() < 0.15 * solid.sum():
-            break
-        inner = nxt
-    samp = inner if inner.sum() >= 50 else solid
-
-    # 自适应明度拉伸：多面同亮度的图标（整体偏亮/偏平）cel 后糊成剪影
-    # （Cube=六边形、椅背座面连体）——根因是分档阈值固定，而明度场
-    # 档位与拉伸：豁免图标走旧路径（固定阈值+不拉伸，逐字节承诺）。
-    # 其余：采样域明度展宽足够（多面/曲面形体）→ 按采样域 p5/p98 拉伸到
-    # 0..1（光源角度差还原成色差，无需内部线条）+ 一维 k-means 三簇——
-    # 档位切在直方图结构上，均匀面整面同档不从中间劈开；展宽过窄（单面
-    # 物体如罗盘盘面）说明整个图标基本一个面，拉伸+k-means 只会在量化
-    # 噪声上劈簇出噪点 → 固定阈值，一面一个色。
-    if tag in NO_STRETCH:
-        th = (0.5,) if target <= 64 else (0.36, 0.68)
-        band = np.digitize(L, th)
-    else:
-        lv = L[samp]
-        lo, hi = np.percentile(lv, 5), np.percentile(lv, 98)
-        if hi - lo >= 0.15:
-            L = np.clip((L - lo) / max(1e-6, hi - lo), 0.0, 1.0)
-            lv = L[samp]
-            c = np.percentile(lv, [16.7, 50.0, 83.3]).astype(np.float32)
-            for _ in range(12):
-                mids = ((c[0] + c[1]) / 2, (c[1] + c[2]) / 2)
-                b_ = np.digitize(lv, mids)
-                for k_ in range(3):
-                    sel = lv[b_ == k_]
-                    if sel.size:
-                        c[k_] = sel.mean()
-            c = np.sort(c)
-            mids = ((c[0] + c[1]) / 2, (c[1] + c[2]) / 2)
-            th = (0.36, 0.68)   # 仅供 ramp_at 判断档位数（k-means 恒三档）
-            band = np.digitize(L, mids)
-        else:
-            th = (0.36, 0.68)
-            band = np.digitize(L, th)
+    # D 分档查表：渲染端已定档（toon 材质/面烘色），此处仅按灰阶映射色带。
+    # v1 的采样域腐蚀/p5-p98 拉伸/k-means/单面退化保护随图像域分档一并退役。
+    band = np.digitize(L, _TH)
     RAMPS = {
         0: [(0.38, 0.40, 0.45), (0.55, 0.57, 0.62), (0.74, 0.76, 0.80)],
         1: [(0.30, 0.32, 0.36), (0.47, 0.49, 0.54), (0.62, 0.64, 0.68)],
@@ -124,38 +91,33 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         8: [(0.52, 0.36, 0.10), (0.76, 0.56, 0.16), (0.92, 0.76, 0.32)],
         9: [(0.14, 0.22, 0.40), (0.24, 0.38, 0.60), (0.40, 0.58, 0.80)],
     }
-    ramp_at = lambda ramp, b: (ramp[0] if b == 0 else ramp[-1]) if len(th) == 1 else ramp[b]
     out = np.zeros((H, W, 3), dtype=np.float32)
     for pid, ramp in RAMPS.items():
         m = part == pid
         if not m.any():
             continue
-        out[m] = np.array([ramp_at(ramp, b) for b in band[m]]) * 255
-    # 注：v9 交接文档曾记载「锤头三面锁档」，实测其条件 len(th)==3 对二元组
-    # 档位表永远为假——从未生效，已验收样张本来就是纯光场分档。分支已删除。
+        out[m] = np.array([ramp[min(b, len(ramp) - 1)] for b in band[m]]) * 255
 
-    # 超分抗锯齿：渲染是 2x SSAA+64x MSAA，边缘 alpha 本来平滑——保留软 alpha，
-    # BOX 面积平均缩放（纯平均无负瓣零振铃），边缘半透明带细腻；描边仍在最终
-    # 尺寸上画不受影响。豁免图标走旧硬边+LANCZOS 路径（逐字节承诺）。
-    soft = tag not in NO_STRETCH
-    if soft:
-        # 软 alpha 边缘环填部件色：环上 part=-1，取最近实心像素的部件色，
-        # 防 BOX 平均把黑底 RGB 混进边缘出黑边
-        fill = part.copy()
-        for _ in range(4):
-            holes = (sa[..., 3] > 0) & (fill < 0)
-            if not holes.any():
-                break
-            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                sh = np.roll(fill, (dy, dx), axis=(0, 1))
-                m = (fill < 0) & (sh >= 0)
-                fill[m] = sh[m]
-        for pid, ramp in RAMPS.items():
-            m = (fill == pid) & (part < 0) & (sa[..., 3] > 0)
-            if m.any():
-                out[m] = np.array([ramp_at(ramp, b) for b in band[m]]) * 255
+    # 超分抗锯齿（全量统一，NO_STRETCH 豁免退役）：渲染是 2x SSAA+64x MSAA，
+    # 边缘 alpha 本来平滑——保留软 alpha + BOX 面积平均缩放（纯平均无负瓣
+    # 零振铃），边缘半透明带细腻；描边仍在最终尺寸上画不受影响。
+    # 软 alpha 边缘环填部件色：环上 part=-1，取最近实心像素的部件色，
+    # 防 BOX 平均把黑底 RGB 混进边缘出黑边
+    fill = part.copy()
+    for _ in range(4):
+        holes = (sa[..., 3] > 0) & (fill < 0)
+        if not holes.any():
+            break
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            sh = np.roll(fill, (dy, dx), axis=(0, 1))
+            m = (fill < 0) & (sh >= 0)
+            fill[m] = sh[m]
+    for pid, ramp in RAMPS.items():
+        m = (fill == pid) & (part < 0) & (sa[..., 3] > 0)
+        if m.any():
+            out[m] = np.array([ramp[min(b, len(ramp) - 1)] for b in band[m]]) * 255
 
-    rgba = np.dstack([out, sa[..., 3] if soft else solid * 255.0])
+    rgba = np.dstack([out, sa[..., 3]])
     img = Image.fromarray(np.clip(rgba, 0, 255).astype(np.uint8), "RGBA")
 
     ys, xs = np.where(np.asarray(img)[..., 3] > 40)
@@ -165,7 +127,7 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     sq = Image.new("RGBA", (side, side), (0, 0, 0, 0))
     sq.paste(crop, ((side - crop.width) // 2, (side - crop.height) // 2))
     inner = target - max(1, round(target * 0.008) * 2)
-    small = sq.resize((inner, inner), Image.BOX if soft else Image.LANCZOS)
+    small = sq.resize((inner, inner), Image.BOX)
     cv = Image.new("RGBA", (target, target), (0, 0, 0, 0))
     cv.paste(small, ((target - inner) // 2, (target - inner) // 2))
 
@@ -173,18 +135,13 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     op = a[..., 3] > 128
     op_img = Image.fromarray((op * 255).astype(np.uint8))
     ero3 = np.asarray(op_img.filter(ImageFilter.MinFilter(3))) > 120
-    # 描边环基线（2026-09-08 描边内缩排查）：软路径从视觉轮廓（alpha>16，软边
+    # 描边环基线（全量统一，NO_STRETCH 豁免退役）：从视觉轮廓（alpha>16，软边
     # 最外沿）向内画环——墨骑在轮廓上。旧版从 alpha>128（软边中点）起画，
     # 外侧半条软边只剩填充色=高分图「描边内缩+色晕」。
-    # 豁免路径保留旧环定义：其 LANCZOS 缩放会把二值 alpha 重新糊出软边，
-    # vis≠op，换基线会破坏逐字节承诺。
-    if tag not in NO_STRETCH:
-        vis = a[..., 3] > 16
-        vis_img = Image.fromarray((vis * 255).astype(np.uint8))
-        ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
-        ring = (vis & ~ero_vis).astype(np.float32)
-    else:
-        ring = (op & ~ero3).astype(np.float32)
+    vis = a[..., 3] > 16
+    vis_img = Image.fromarray((vis * 255).astype(np.uint8))
+    ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
+    ring = (vis & ~ero_vis).astype(np.float32)
     # 描边宽度档（ICON_STROKE，默认 1.0）：>1 时向内加第二圈——
     # 1.5=半权重内圈，2.0=满权重内圈（共 2px）。仅外轮廓圈，ID 结合缝线不动
     stroke = float(os.environ.get("ICON_STROKE", "1.0"))

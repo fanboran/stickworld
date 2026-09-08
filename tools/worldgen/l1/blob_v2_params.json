@@ -1,0 +1,102 @@
+{
+ "tiers": {
+  "low": 0.18,
+  "mid": 0.5,
+  "high": 0.82
+ },
+ "window": {
+  "w_r": 5.6,
+  "w_min": 192,
+  "w_max": 576
+ },
+ "area": {
+  "k": 0.9,
+  "gamma": 0.7,
+  "min_total_area": 30,
+  "fallback_q": 0.9
+ },
+ "core": {
+  "a": 1.0,
+  "sigma_r": 0.38
+ },
+ "road": {
+  "b": 1.8,
+  "half_width_r": 0.085,
+  "half_width_min": 3.0,
+  "half_width_max": 10.0,
+  "finger_r": 0.8,
+  "finger_s_gain": 0.6,
+  "bead_gap_hw": 3.4,
+  "bead_amp_var": 0.35,
+  "bead_size_var": 0.3,
+  "sample_step": 2.0
+ },
+ "seeds": {
+  "n_max": 7,
+  "amp": 0.5,
+  "sigma_r": 0.22,
+  "dist_r": [
+   0.45,
+   1.45
+  ]
+ },
+ "fbm": {
+  "amp": 0.5,
+  "wavelengths": [
+   30.0,
+   12.0,
+   5.0,
+   2.5
+  ],
+  "amp_decay": 0.5
+ },
+ "roughen": {
+  "amp": 6.5,
+  "wavelengths": [
+   20.0,
+   9.0,
+   4.0
+  ],
+  "amp_decay": 0.72,
+  "min_ring_pts": 24,
+  "smooth_win": 1
+ },
+ "detail_scale": {
+  "ref": 60.0,
+  "min": 0.45
+ },
+ "exclusion": {
+  "slope_hard": 0.005
+ },
+ "morph": {
+  "opening_r": 0,
+  "closing_r": 1
+ },
+ "contour": {
+  "simplify_tol": 0.5,
+  "hole_min_frac": 0.02,
+  "hole_min_abs": 40.0,
+  "enclave_min_area": 45.0
+ },
+ "preview": {
+  "closeup_win": 512,
+  "barren_win": 256,
+  "barren_n": 10,
+  "fractal_eps": [
+   1,
+   2,
+   4,
+   8,
+   16
+  ]
+ },
+ "parks": {
+  "n_max": 4,
+  "amp": 0.8,
+  "sigma_r": 0.18,
+  "dist_r": [
+   0.3,
+   0.8
+  ]
+ }
+}

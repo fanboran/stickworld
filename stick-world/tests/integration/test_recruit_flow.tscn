@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/integration/test_recruit_flow.gd" id="1_rcf"]
+
+[node name="TestRecruitFlow" type="Node"]
+script = ExtResource("1_rcf")

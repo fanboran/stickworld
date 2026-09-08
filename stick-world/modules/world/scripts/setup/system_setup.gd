@@ -55,6 +55,7 @@ const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud
 const _DemoQuestScript: GDScript = preload("res://modules/world/scripts/setup/demo_quest.gd")
 const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
 const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
+const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
 
 var _root: GameRoot
 
@@ -84,6 +85,7 @@ func setup(root: GameRoot) -> void:
 	_setup_formation_system()
 	_setup_tactical_system()
 	_setup_conquest_system()
+	_setup_recruit_system()
 	_setup_battle_panel()
 	_setup_formation_panel()
 	_setup_settings_menu_panel()
@@ -382,6 +384,22 @@ func _setup_conquest_system() -> void:
 	manager.setup(registry, spawner, api,
 			_root._combat_api, _root._resources_api, _root.scene_loader)
 	api.set_flow_manager(manager)
+
+
+# ─────────────────────────────── 招兵与人口装配（游戏循环深化批次 1）───────────────────────────────
+
+## RecruitManager 常驻 GameRoot（人口再生 tick 跨图存活但只在村A 计时）；
+## 招兵逻辑经 OrganizationApi 转发（api.gd 招兵段），玩家交互注入见 game_root._on_map_loaded。
+func _setup_recruit_system() -> void:
+	var mgr := Node.new()
+	mgr.set_script(_RecruitManagerScript)
+	mgr.name = "RecruitManager"
+	_root.add_child(mgr)
+	_root._recruit_manager = mgr
+	mgr.setup(_root._construction_api, _root._resources_api,
+			_root.scene_loader, _root._formation_system)
+	if _root._organization_api != null and _root._organization_api.has_method("set_recruit_manager"):
+		_root._organization_api.set_recruit_manager(mgr)
 
 
 # ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────

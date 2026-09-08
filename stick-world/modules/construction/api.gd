@@ -154,6 +154,13 @@ func unregister_worker(worker: Node) -> void:
 	_manager.unregister_worker(worker)
 
 
+## 空闲工人名单（拷贝；招兵/人口统计消费，organization 域经本 api 查询）
+func get_available_workers() -> Array:
+	if not _is_initialized:
+		return []
+	return _manager.get_available_workers()
+
+
 # ===== 查询 =====
 
 ## 查询地块内的所有建筑 ID

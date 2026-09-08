@@ -667,6 +667,13 @@ func try_assign_worker(worker: Node) -> bool:
 	return _assigner.try_assign(worker)
 
 
+## 空闲工人名单（拷贝；招兵/人口统计消费）
+func get_available_workers() -> Array:
+	if _assigner == null:
+		return []
+	return _assigner.get_available_workers()
+
+
 ## 获取工人当前派工的项目（无返回 null）
 func get_worker_project(worker: Node) -> ScriptConstructionProject:
 	if _assigner == null:

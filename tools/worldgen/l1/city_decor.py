@@ -5,7 +5,11 @@
 
 地面分带（一维条带内的水平分层，与布局数据同源、随 seed 确定性）：
   [草皮带=城内其余地面] [土路带=沿主街的水平踩踏带] [石板广场=市场地标净空区]
-  另有农田带（profile.decor.farmland 开关，落在最宽无建筑间隙，AI 提案·待定）。
+  另有农田带（profile.decor.farmland，true=1 块 / int n=最多 n 块，AI 提案·待定）。
+
+时段/色调（profile.tone，批次 4）：TONES 档位表给分带与装饰统一乘 tint——
+  分城氛围调色（清晨/正午/午后/黄昏/阴雾），轻量乘法偏移不换皮、
+  不逐城换 shader，天空与昼夜循环不在此列（全局系统管）。
 
 装饰物件（纯视觉 Polygon2D 组，无碰撞无脚本）：
   路灯（城门沿主街两侧） / 绿植（树丛+灌木，草带前缘） /
@@ -25,6 +29,21 @@
   地面分带与装饰恒在建筑/单位之下，不遮挡交互。
 """
 import random
+
+# ── 时段/色调档（批次 4，AI 提案·待定）────────────────────────────────────
+# 分城氛围调色：profile.tone 引用档位标签，渲染端（settlement_mapgen）把
+# PALETTE 取色统一乘 tint 后烘进 tscn（分带 shader uniform + 装饰 Polygon2D
+# 颜色），零运行时开销、不逐城换 shader。tint 是 ±10% 内的轻量乘法偏移——
+# 色彩语言仍属同一文化圈（差异在氛围不在画风）；天空/昼夜循环不逐城调
+# （全局 TimeManager 管，07 粉调天空=黄昏档全局表现）。
+TONES = {
+    "noon":     (1.00, 1.00, 1.00),  # 正午中性（基准档）
+    "dawn":     (0.90, 0.97, 1.07),  # 清晨冷青（晨雾未散）
+    "gold":     (1.07, 1.00, 0.86),  # 午后暖金（斜阳）
+    "dusk":     (1.05, 0.90, 0.96),  # 黄昏粉橙
+    "overcast": (0.91, 0.94, 0.98),  # 阴雾铁灰（低饱和）
+}
+TONE_DEFAULT = "noon"
 
 # 装饰 rng 派生盐：与布局 rng（profile.seed 直接播种）隔离
 _DECOR_SEED_SALT = 0x5EC0
@@ -65,9 +84,10 @@ PALETTE = {
 def plan_decor(layout: dict, profile: dict, config: dict) -> dict:
     """由布局骨架 + profile 装饰配置规划装饰数据。
 
-    profile: city_profiles.json -> cities.<map_id>（复用其 seed；decor 字段可覆盖 defaults.decor）
+    profile: city_profiles.json -> cities.<map_id>（复用其 seed；decor/tone 字段可覆盖默认）
     config:  city_profiles.json（含 defaults）
     返回 decor dict：
+      tone     时段/色调 tint 三元组（渲染端统一乘到 PALETTE 取色）
       bands    地面分带 [{name, style, rect}] （style 对应 ground_band.gdshader）
       lamps    路灯 [{x, y}]（基点在地面上，灯体向上）
       trees    树丛 [{x, y, r, tone}]
@@ -84,7 +104,17 @@ def plan_decor(layout: dict, profile: dict, config: dict) -> dict:
     n_bushes = int(cfg.get("bushes", 16))
     n_clutter_mkt = int(cfg.get("clutter_market", 7))
     n_clutter_wh = int(cfg.get("clutter_warehouse", 4))
-    farmland_on = bool(cfg.get("farmland", False))
+    clutter_mix = list(cfg.get("clutter_mix") or [0.4, 0.4, 0.2])  # barrel/crate/hay 权重
+    tone_key = profile.get("tone",
+                           config.get("defaults", {}).get("tone", TONE_DEFAULT))
+    tone = TONES.get(tone_key)
+    if tone is None:
+        raise ValueError("未知 tone 档: %r（可选: %s）" % (tone_key, sorted(TONES)))
+    farmland_cfg = cfg.get("farmland", False)
+    farm_plots = 0
+    if farmland_cfg:
+        # true=1 块（批次 3 兼容）；int n=期望最多 n 块（田块数口子，批次 4）
+        farm_plots = 1 if farmland_cfg is True else max(int(farmland_cfg), 1)
 
     cell_w = int(defaults["cell_w"])
     ground_y = float(layout["ground_y"])
@@ -125,37 +155,40 @@ def plan_decor(layout: dict, profile: dict, config: dict) -> dict:
         plaza_rects.append(pr)
         bands.append({"name": "GroundPlaza%d" % len(plaza_rects), "style": 2, "rect": pr})
 
-    # ── 农田带（AI 提案·待定）：最宽无建筑/校场/广场间隙，前缘草带内的垄沟田 ──
-    farmland_rect = None
-    if farmland_on:
+    # ── 农田带（AI 提案·待定）：最宽的若干无建筑/校场/广场间隙，前缘草带内的垄沟田 ──
+    # 田块按间隙宽度降序取前 farm_plots 块（不足则少落），每块最窄 560px
+    farmland_rects = []
+    if farm_plots > 0:
         occ = sorted((r[0], r[2]) for r in brects)
         if reserve_rect:
             occ.append((reserve_rect[0], reserve_rect[2]))
         occ += [(p[0], p[2]) for p in plaza_rects]
         lo_m, hi_m = inner_l + 64, inner_r - 64  # 两端退离墙线
         need = 560                                # 最窄田宽（px）
-        best = None
+        gaps = []
         cur = inner_l
         for lo, hi in occ:
             lo2 = max(lo, lo_m)
-            if lo2 - cur >= (best[1] - best[0] if best else need):
-                best = (cur, lo2)
+            if lo2 - cur >= need:
+                gaps.append((cur, lo2))
             cur = max(cur, hi)
-        if hi_m - cur >= (best[1] - best[0] if best else need):
-            best = (cur, hi_m)
-        if best and best[1] - best[0] >= need:
+        if hi_m - cur >= need:
+            gaps.append((cur, hi_m))
+        gaps.sort(key=lambda g: g[0] - g[1])  # 宽度降序
+        for i, (gl, gr) in enumerate(gaps[:farm_plots]):
             ft = road_bot + 10
             fb = min(ft + 130, front_bot)
-            farmland_rect = (best[0] + 24, ft, best[1] - 24, fb)
-            bands.append({"name": "GroundFarmland", "style": 3, "rect": farmland_rect})
+            farmland_rects.append((gl + 24, ft, gr - 24, fb))
+            bands.append({"name": "GroundFarmland%d" % i, "style": 3, "rect": farmland_rects[-1]})
 
     def in_forbidden_zone(x: float, margin: float) -> bool:
         """校场带/农田带内禁入装饰物件（地面分带不受限）。"""
         if reserve_rect and reserve_rect[0] - margin <= x <= reserve_rect[2] + margin:
             return True
-        if farmland_rect and farmland_rect[0] - margin <= x <= farmland_rect[2] + margin:
-            # 前缘物件只挡农田矩形 y 范围内的落点（农田只占前缘一部分深度）
-            return True
+        for fr in farmland_rects:
+            if fr[0] - margin <= x <= fr[2] + margin:
+                # 前缘物件只挡农田矩形 y 范围内的落点（农田只占前缘一部分深度）
+                return True
         return False
 
     def in_building(x: float, margin: float) -> bool:
@@ -225,7 +258,7 @@ def plan_decor(layout: dict, profile: dict, config: dict) -> dict:
                 continue
             if any(abs(x - c["x"]) < 44 and abs(y - c["y"]) < 26 for c in clutter):
                 continue
-            kind = rng.choices(["barrel", "crate", "hay"], weights=[0.4, 0.4, 0.2])[0]
+            kind = rng.choices(["barrel", "crate", "hay"], weights=clutter_mix)[0]
             clutter.append({"x": round(x, 1), "y": round(y, 1), "kind": kind})
             placed += 1
 
@@ -246,6 +279,7 @@ def plan_decor(layout: dict, profile: dict, config: dict) -> dict:
                      max(wr[0] - 70, inner_l + 16), min(wr[2] + 70, inner_r - 16), anchor_rect=wr)
 
     decor = {
+        "tone": tone,
         "bands": bands,
         "lamps": lamps,
         "trees": trees,

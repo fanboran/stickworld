@@ -33,9 +33,10 @@ const DECISION_INTERVAL: float = 0.3
 ## BehaviorWander 行为本体保留，敌人 AI / 闲逛功能启用时调大此值即可）
 const WANDER_PROBABILITY: float = 0.0
 
-## 村民（有职业）idle 完成后切 wander 的概率（小镇生活批次 3 [提案/待定]：
-## 空闲走动让村子"活"起来）。作用域过滤见 _is_villager：战斗/编队/敌方单位
-## （无职业）仍走 WANDER_PROBABILITY=0——待机乱走会破坏战斗测试语义。
+## 村民 idle 完成后切 wander 的概率（小镇生活批次 3 [提案/待定]：
+## 空闲走动让村子"活"起来）。作用域过滤见 _is_villager（批次 4 改造）：
+## 村民身份标志（is_villager）+ 不在编队——待业村民闲逛，战斗/编队/敌方
+## 单位仍走 WANDER_PROBABILITY=0——待机乱走会破坏战斗测试语义。
 ## 用 var 便于测试注入 0/1 做确定性断言。
 var villager_wander_probability: float = 0.5
 
@@ -273,10 +274,13 @@ func _make_decision() -> void:
 		# 无派工但有职业：进采集劳作（小镇生活批次 2）
 		if _try_harvest():
 			return
-		# 村民空闲走动（小镇生活批次 3 [提案/待定]）：有职业村民 idle 完成
-		# 后概率 wander；其他单位（战斗/编队/敌方）保持原地待命（P0 语义不变）
+		# 村民空闲走动（小镇生活批次 3 [提案/待定]）：村民 idle 完成后概率
+		# wander（批次 4 起含待业村民，_is_villager 判身份标志+不在编队）；
+		# 其他单位（战斗/编队/敌方）保持原地待命（P0 语义不变）。
+		# 村民 wander 锚定村庄中心（批次 4）：待业村民全天闲逛，无锚会累积
+		# 漂出村子/地图——锚 = 地图 town_center_world_x（村中心，village_a=0）
 		if _is_villager() and randf() < villager_wander_probability:
-			_state_machine.travel("wander")
+			_state_machine.travel("wander", _villager_wander_params())
 			return
 		# 没有派工，原地待机（工人无事做原地待命）
 		_state_machine.travel("idle")
@@ -616,14 +620,40 @@ func _try_harvest() -> bool:
 	return true
 
 
-## 是否村民（小镇生活批次 3 wander 作用域过滤）：有职业档案的实体才视为村民；
-## 战斗/编队/敌方单位无职业（initial_content 是唯一分配点），wander 概率不生效。
+## 村民 wander 参数（批次 4）：锚定村中心（地图 town_center_world_x），
+## 防长时间闲逛累积漂离；地图引用未注入/无该属性的桩环境返回空参数
+##（wander 原语义，零扰动）。
+func _villager_wander_params() -> Dictionary:
+	if _entity == null or not is_instance_valid(_entity):
+		return {}
+	if not _entity.has_method("get_map_reference"):
+		return {}
+	var mref: Node2D = _entity.get_map_reference()
+	if mref == null or not is_instance_valid(mref) or not ("town_center_world_x" in mref):
+		return {}
+	return {"anchor_x": float(mref.town_center_world_x)}
+
+
+## 是否村民（wander 作用域过滤，批次 4 语义改造）：实体带村民身份标志
+##（is_villager，spawn 时写入）且**不在编队**。与职业解耦——待业村民与
+## 被征用离岗的村民（职业都是空串）仍算村民可闲逛；编队中的单位（含被
+## 征用的前村民）保持战斗待命语义不 wander；无标志实体（战斗/敌方/测试
+## 裸桩）不判村民。批次 3 的"职业非空"判据在引入待业人口后失效（待业
+## 与征用两类空职业实体的行为语义相反），故改身份标志判定。
+## "有无职业"由 _try_harvest 单独判定（待业不劳作）。
 func _is_villager() -> bool:
 	if _entity == null or not is_instance_valid(_entity):
 		return false
 	if not _entity.has_method("get_profession"):
 		return false
-	return not String(_entity.get_profession()).is_empty()
+	if not bool(_entity.get("is_villager")):
+		return false
+	# 编队中不闲逛（战斗待命语义；FormationSystem 未注入 = 未编队）
+	if _entity.has_method("get_formation_system"):
+		var fs: Node = _entity.get_formation_system()
+		if fs != null and fs.has_method("is_in_squad") and fs.is_in_squad(_entity):
+			return false
+	return true
 
 
 ## 检查单位是否被队伍职责允许执行某工作类型（编队行为过滤）。

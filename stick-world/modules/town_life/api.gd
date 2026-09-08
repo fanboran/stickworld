@@ -6,7 +6,12 @@
 ##
 ## 外部模块通过本契约与模块交互：
 ##   - TownLifeAPI.assign_village_job(entity, index) -> String
-##       村民 spawn 职业分配（轮转）+ 着装应用，返回职业 id（"" = 无职业/待业）。
+##       村民职业**强制**分配（轮转 index % 职业数，不看配额）+ 着装应用，
+##       返回职业 id（"" = 无职业/待业）。测试摆拍/调试用。
+##   - TownLifeAPI.assign_village_jobs(entities) -> Dictionary
+##       村庄批量**配比**分配（批次 4，spawn 正片入口）：各职业不超过
+##       min(配置 quota, 工位容量)，配额满的村民待业。返回
+##       {"jobs": {职业id: 人数}, "idle": 待业数}。
 ##       initial_content.spawn_npcs 是唯一调用点。
 ##   - TownLifeAPI.get_professions() -> Array
 ##       全部职业档案行（config/town_life/professions.tres）。
@@ -25,11 +30,13 @@
 ##       WorldState.game_time，hour 参数显式注入（单测/特殊场景）。
 ##
 ## 职业档案字段：见 profession_registry.gd 类头（id/name_zh/work_site_def/
-## product/produce_amount/consume_res/consume_amount/cycle/tool/uniform）。
+## product/produce_amount/consume_res/consume_amount/cycle/tool/uniform/quota）。
 ##
 ## 职业状态协议（弱类型，实体侧零依赖本模块）：
 ##   - 实体 set_profession(id) / get_profession()：空串 = 待业，非空 = 在职。
-##   - 批次 4 征兵离岗：set_profession("") 回待业池。
+##   - 批次 4 征用离岗：set_profession("")（编队征用互斥，回待业池）。
+##   - 实体 is_villager 标志（批次 4）：村民身份与职业解耦——待业村民与
+##     征用离岗村民仍是村民（AI wander 作用域），战斗/敌方单位无此标志。
 ##
 ## ⚠️ 契约说明：实现全部在 ProfessionRegistry（静态、无状态）；本文件是
 ## 契约声明层 + 转发，外部模块禁止直接 preload 模块内部脚本路径。
@@ -40,9 +47,16 @@ extends RefCounted
 const PROFESSIONS_CONFIG := "res://config/town_life/professions.tres"
 
 
-## 村民 spawn 职业分配（轮转 index % 职业数）+ 着装应用，返回职业 id。
+## 村民职业强制分配（轮转 index % 职业数，不看配额）+ 着装应用，返回职业 id。
+## 测试摆拍/调试用——正片 spawn 走 assign_village_jobs 配比分配。
 static func assign_village_job(entity: Node, index: int) -> String:
 	return ProfessionRegistry.assign_village_job(entity, index)
+
+
+## 村庄批量配比分配（批次 4）：各职业不超过 min(quota, 工位容量)，
+## 配额满待业。返回 {"jobs": {职业id: 人数}, "idle": 待业数}。
+static func assign_village_jobs(entities: Array) -> Dictionary:
+	return ProfessionRegistry.assign_village_jobs(entities)
 
 
 ## 全部职业档案行。

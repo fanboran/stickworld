@@ -12,6 +12,9 @@ extends BehaviorBase
 ##
 ## params 可选字段：
 ##   - duration: float  漫游时长（秒），不传则随机 3~6 秒
+##   - anchor_x: float  漫游锚点 X（可选，小镇生活批次 4）：超出
+##     anchor_radius 时施加回归转向力，防长时间闲逛累积漂离村庄
+##     （待业村民全天 wander，无锚会漂出地图）。不传 = 原语义零影响。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 漫游最短/最长时长（秒）
@@ -28,6 +31,10 @@ const STUCK_COOLDOWN: float = 0.5
 const BOUNDARY_MARGIN: float = 80.0
 ## 边界规避力强度（相对于漫游方向的权重）
 const BOUNDARY_FORCE: float = 3.0
+## 锚点默认回归半径（px，[提案/待定]）＝半屏量级：闲逛不出村又不显得拴死
+const ANCHOR_DEFAULT_RADIUS: float = 640.0
+## 锚点回归力强度（相对权重，与边界规避同模式）
+const ANCHOR_FORCE: float = 2.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 当前漫游方向（归一化）
@@ -42,6 +49,10 @@ var _last_pos: Vector2 = Vector2.ZERO
 var _stuck_timer: float = 0.0
 ## 卡住恢复冷却（冷却期间不检测卡住，防止左右抽搐）
 var _stuck_cooldown: float = 0.0
+## 漫游锚点 X（NAN = 无锚，原语义）；超出 _anchor_radius 施加回归力
+var _anchor_x: float = NAN
+## 锚点回归半径（px）
+var _anchor_radius: float = ANCHOR_DEFAULT_RADIUS
 
 
 func _ready() -> void:
@@ -55,6 +66,8 @@ func enter(previous: String, params: Dictionary) -> void:
 	_last_pos = entity.global_position if entity != null else Vector2.ZERO
 	_stuck_timer = 0.0
 	_stuck_cooldown = 0.0
+	_anchor_x = float(params.get("anchor_x", NAN))
+	_anchor_radius = float(params.get("anchor_radius", ANCHOR_DEFAULT_RADIUS))
 	_pick_new_direction()
 
 
@@ -105,6 +118,14 @@ func update(delta: float) -> void:
 		steer.y = 0.5
 	elif foot_y > entity.ground_bottom - 30.0:
 		steer.y = -0.5
+
+	# 锚点回归（批次 4，可选）：超出锚点半径时反向拉回——力道随超出深度
+	# 线性升到 ANCHOR_FORCE，与边界规避同模式（并进 steer 统一消费）
+	if not is_nan(_anchor_x):
+		var dx: float = pos.x - _anchor_x
+		var over: float = absf(dx) - _anchor_radius
+		if over > 0.0:
+			steer.x += -signf(dx) * minf(over / 200.0, 1.0) * ANCHOR_FORCE
 
 	# 边界力足够强时覆盖漫游方向
 	if steer.length() > 0.1:

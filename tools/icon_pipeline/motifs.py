@@ -302,6 +302,62 @@ def drop_mesh(scale=1.0, loc=(0, 0, 0), pid=4, extrude=0.22, bevel=0.065):
     return ob
 
 
+# ── 元老迁移（原 gen_icon_v9 首批图标；锤子仍留 gen_icon_v9 回归套件）───────
+def _heart_outline():
+    """心形轮廓：16 点基形 + 三轮 2D Chaikin（与 gen_icon_v9 heart_outline 逐字一致）"""
+    base = [
+        (0.00, 0.42), (-0.20, 0.70), (-0.52, 0.86), (-0.84, 0.72),
+        (-1.00, 0.36), (-0.94, 0.00), (-0.70, -0.42), (-0.36, -0.72),
+        (0.00, -0.98),
+        (0.36, -0.72), (0.70, -0.42), (0.94, 0.00), (1.00, 0.36),
+        (0.84, 0.72), (0.52, 0.86), (0.20, 0.70),
+    ]
+    for _ in range(3):
+        out = []
+        n = len(base)
+        for i in range(n):
+            a, b = base[i], base[(i + 1) % n]
+            out.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
+            out.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
+        base = out
+    return base
+
+
+@motif("heart", "爱心", az=38, el=22, key_e=5.0)
+def _m_heart():
+    # 曲线挤出枕形 + REMESH/SUBSURF/CAST 0.22 浅穹顶（气球感，剪影不动；
+    # 强球化会把双叶/底尖磨圆成歪嘴桃子——见 v2 交接档 §九）
+    import bpy
+    pts = _heart_outline()
+    cu = bpy.data.curves.new('heart', 'CURVE')
+    spl = cu.splines.new('POLY')
+    spl.points.add(len(pts) - 1)
+    for i, (x, y) in enumerate(pts):
+        spl.points[i].co = (x, y + 0.15, 0.0, 1.0)
+    spl.use_cyclic_u = True
+    cu.extrude = 0.34
+    cu.bevel_depth = 0.10
+    cu.fill_mode = 'BOTH'
+    ob = bpy.data.objects.new('Heart', cu)
+    bpy.context.scene.collection.objects.link(ob)
+    ob = _finish(ob, 4)
+    ob.rotation_euler = (math.radians(90), 0, 0)
+    rm = ob.modifiers.new('remesh', 'REMESH')
+    rm.mode = 'VOXEL'
+    rm.voxel_size = 0.05
+    ss = ob.modifiers.new('subdiv', 'SUBSURF')
+    ss.levels = 1
+    ss.render_levels = 2
+    puff = ob.modifiers.new('puff', 'CAST')
+    try:
+        if puff.type != 'SPHERE':
+            puff.type = 'SPHERE'   # 5.2 只读（默认即 SPHERE），旧版本可写
+    except AttributeError:
+        pass
+    puff.factor = 0.22
+    return ob
+
+
 # ── 生产工具 ────────────────────────────────────────────────────────────────
 @motif("pick", "十字镐")
 def _m_pick():

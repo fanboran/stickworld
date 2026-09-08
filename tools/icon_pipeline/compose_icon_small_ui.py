@@ -25,7 +25,6 @@ INK = np.array([18, 14, 9])
 # (tag, 中文名, 假光参数 or None)
 TAGS = [
     ("icon_hammer_v9", "锻造锤", (0.10, 0.02, 0.20)),
-    ("icon_heart_v9", "爱心", None),
     ("test_cube_v9", "立方体", None),
     ("test_sphere_v9", "正球", None),
     ("test_cylinder_v9", "圆柱", None),
@@ -36,7 +35,9 @@ SIZES = (64, 128, 256)
 
 # 旧 tag 的 ID 候选锁定为前 5 色：10 色全开会让红/黄材质的 AA 混合中间色
 # （恰好=新橙 (1,.5,0)）在接缝处改判家族，破坏逐字节回归
-NIDS = {t[0]: 5 for t in TAGS[:7]}
+_OLD_TAGS = ("icon_hammer_v9", "test_cube_v9", "test_sphere_v9",
+             "test_cylinder_v9", "test_cone_v9", "test_torus_v9")
+NIDS = {t[0]: 5 for t in TAGS if t[0] in _OLD_TAGS}
 
 # D 着色器分档（v2）：shade pass 在渲染端已量化为 cel 灰阶（曲面 toon 材质/
 # 平面面烘色，三档 0.32/0.62/0.92），compose 只按灰阶查表映射色带。

@@ -45,7 +45,7 @@
 |---|---|---|---|
 | 1 | ✅ 完成 | 294b9f5d | 三职业着装可见（视觉 Subagent PASS，截图 `stick-world/tests/dev/professions_out.png`）；run_all 绿（3 失败项单跑全绿=并行 flaky，与本批无关） |
 | 2 | ✅ 完成 | 78e0738e / 6fdb9178 / 865a71bf / c5ebdc9c | 采集经济闭环通：三职业村民无人干预劳作，res_wood/ore/ingot 三库存增长（集成测试 `test_town_life_harvest` PASS，编排方复现 run_all 39/0）；视觉判定 PASS（截图 `tests/dev/harvest_out_0..5.png`）；check_godot_errors 干净 |
-| 3 | ⬜ 未开工 | — | |
+| 3 | ✅ 完成 | 518388a5 / 0ca1ae24 | WorkSlots 消费+节律+wander 全落地：真建筑槽位上班/拆毁降级占位（集成 `test_town_life_worksite` 3 用例 PASS）、7~19 时工作节律（夜间收工白天回岗）、村民 wander 职业过滤（战斗单位语义不变）；视觉判定 PASS（`tests/dev/rhythm_day_0..2.png` 白天在岗 / `rhythm_night_0..2.png` 夜间散逛）；run_all 40/0 绿；check_godot_errors 干净 |
 | 4 | ⬜ 未开工 | — | |
 
 ## 批次 1 落地物（批次 2 新会话必读）
@@ -65,11 +65,23 @@
 - **决策接线**：`ai_controller.gd` 的 `_try_harvest()`——次序=命令覆盖>战斗>跟随>建造派工(work/haul)>**采集(harvest)>idle**；职责过滤走 `_can_work(WORK_FORAGE)`（FORAGE 从预留转实装）；待业（职业空串）不采集。采集结束（无资源/无工位）回 idle，决策循环稍后自动重试。
 - **职业配置新增字段**（`config/town_life/professions.tres`）：`produce_amount`（每拍产出量：采集 20=与玩家手采同速、打铁 6）、`consume_res`/`consume_amount`（铁匠 consume 10 矿/拍）。数值口径全部 [提案/待定]：矿工净增 4/s > 铁匠消耗 2.5/s，三资源可同时增长（集成测试已验证）。
 - **资源转换语义**：ResourcesApi 无原子"转换"，铁匠链在行为内两步实现（`consume(res_metal_ore)` 成功才 `produce(res_iron_ingot)`）；region 与玩家手采同账 `test_region`。
-- **占位工位**（[提案/待定]）：`ProfessionRegistry.PLACEHOLDER_WORK_SITES = {"smithy_lv1": 1120.0}`（仓库右侧、村民区之间的村道口；Y 运行时取实体地面线+40）。经 `TownLifeAPI.get_placeholder_work_site_x(def)` 查询，未配置返回 NAN=寻位失败。**批次 3 WorkSlots 消费到位后本表与工位模式占位逻辑退役**（换 WorkSlots 定位+建筑存活校验）。
+- **占位工位**（[提案/待定]）：`ProfessionRegistry.PLACEHOLDER_WORK_SITES = {"smithy_lv1": 1120.0}`（仓库右侧、村民区之间的村道口；Y 运行时取实体地面线+40）。经 `TownLifeAPI.get_placeholder_work_site_x(def)` 查询，未配置返回 NAN=寻位失败。**批次 3 起转为降级路径**（WorkSlots 真槽位优先，无匹配建筑时兜底；详见批次 3 落地物）。
 - **资源点重生**（[提案/待定] 数值）：`resource_node.gd` 采空**不再自毁**，转枯竭态（`visible=false`+不可采+挂 REGEN_TIME=90s 单次 Timer）→ `_regrow()` 原地长满（变体/位置不变，modulate 复位）。玩家交互与 NPC 寻位都跳过枯竭点。**已知限制**：枯竭点不进存档（`save_resource_nodes_to_db` 过滤 is_depleted 维持原状），跨存档读回后该点消失、不处于重生倒计时。
 - **测试**：单测 `tests/unit/test_behavior_harvest.gd`（7 用例：无职业/资源点循环/采空转寻/工位转化/原料空拍/未知工位/重生翻转，已进 batch_runner 清单）；集成 `tests/integration/test_town_life_harvest.tscn`（摆树/矿在村民旁+补 spawn 矿工 index2+预置 300 矿，轮询 90s 断言三库存增长+harvest 行为；已注册 run_all 清单/150s 超时/affected 映射含 town_life 与 world 分支）。视觉快照 `tests/dev/snapshot_harvest.tscn`（真渲染连拍 6 帧+stdout 职业/行为/目标证据，截图 `harvest_out_0..5.png`）。
 - **遗留移交（非本批引入，未修）**：`tests/unit/test_road_walk.gd` 在 Godot 4.7.2 下 parse error（`PackedVector2Array.is_equal_approx` 不存在，bed73553 引入）+ 4 处断言失败（宽度公式 2500 vs 2400/1600 等），被 batch_runner 的类型化赋值吞错掩盖成伪通过——属世界地图线领域，建议该线修复；另 batch_runner `_await_done` 对加载失败套件的 code 收割有同样吞错隐患。`tests/unit/test_profession_registry.gd` 本批已补 `signal test_done` 声明（原缺声明致 emit ERROR）。
 - **批次 3 接手提示**：工位模式换 WorkSlots 的替换点=BehaviorHarvest._locate() 工位分支与 PLACEHOLDER_WORK_SITES；观感下一步=工作/休息节律+wander 打开（WANDER_PROBABILITY=0 在 ai_controller）；NPC 采集与玩家手采并存已验证，F3 调试标签可见资源点类型。
+
+## 批次 3 落地物（批次 4 新会话必读）
+
+- **WorkSlots 消费**：`ProfessionRegistry.get_work_site(entity, work_site_def)`（静态，经 `TownLifeAPI` 转发）——扫 **"building" 组**（`building.gd::_ready` 新增加组，resource_node 组先例）取 `def_id` 匹配 + `is_operational()` + 有槽位的**最近建筑最近槽位**；无匹配建筑降级 `PLACEHOLDER_WORK_SITES` 占位表（**表未删除，转为降级路径**）。返回 `{"pos": Vector2, "building": Node2D 或 null}`，无工位返回 `{}`。**pos.y 恒 NAN 约定**：槽位只消费 X（横向工位），Y 由 BehaviorHarvest 按实体地面线 +40 补齐（同 BehaviorHaul 取货点口径——卷轴地图工作站位全在地面带内保证可达）。A 线铁匠铺落地后**无需改任何代码自动切真槽位**（真建筑优先级高于占位表）。
+- **建筑存活校验**：BehaviorHarvest 劳作中每帧 `_target_valid()` 校验工位建筑（freed/离树/非 OPERATIONAL 即重寻位）；`_update_working` 的中途失效检查从"仅资源点模式"扩为两模式通用。行为侧新增观测口 `get_worksite_building()`（测试/截图证据）。
+- **工作/休息节律**（[提案/待定]）：`ProfessionRegistry.is_work_time(hour=NAN)`——7~19 时在岗（对齐 EnvironmentAPI 光照关键帧早晨 7/黄昏 19），缺省读 `WorldState.game_time`（EnvironmentSystem 每帧推进），hour 参数显式注入（单测）。**game_time<=0（未初始化/无环境系统场景）视为全天工作**——对批次 2 前的测试桩环境零扰动。双层拦截：ai_controller._try_harvest 挡新进（防 enter 即收工抖动）+ BehaviorHarvest.update 收工（在岗村民整点收尾）。
+- **wander 打开**（[提案/待定]）：`ai_controller.villager_wander_probability = 0.5`（var 可测试注入）——idle 完成后村民概率 wander；作用域过滤 `_is_villager()`（有 `get_profession` 且非空串；战斗/编队/敌方单位无职业 → 保持 WANDER_PROBABILITY=0 原地待命语义，AI 测试全绿）。决策次序：work > harvest > **wander（仅村民）** > idle。
+- **测试**：单测 `tests/unit/test_work_slots_rhythm.gd`（10 用例：节律端点/全局时间注入恢复/建筑进组+marker 收集/双建筑最近槽位/被毁与 def 不匹配降级/真槽位寻位结算/劳作中拆毁降级/_is_villager/节律挡采集/wander 三态，进 batch_runner 清单 44/44 绿）；集成 `tests/integration/test_town_life_worksite.tscn`（真槽位上班+产出/拆毁降级占位续营业/夜间收工白天回岗，单跑与并行均 PASS，已注册 run_all 清单/超时 240s/affected 映射 town_life+units+building_gen 分支）。视觉快照 `tests/dev/snapshot_rhythm.tscn`（真渲染：白天 12 点三职业在岗 `rhythm_day_0..2.png` / 夜间 23 点收工散逛 `rhythm_night_0..2.png`，stdout 逐帧行为证据）。
+- **时间敏感套件加固（重要，新增集成套件必读）**：默认 `seconds_per_day=60`（60 现实秒=1 游戏日）下**一个工作日仅 27.5 真实秒**，长窗口套件中途必撞 19 点收工线（批次 2 的 harvest 套件因此在本批 run_all 首跑 TIMEOUT——真实回归非 flaky）。对策：两个 town_life 套件 `_setup_world` 里 `env.set_seconds_per_day(600.0)`（90s 窗口仅推进 3.6 游戏小时）+ 到岗预算放宽（并行争用 ~2.5x）+ 套件超时 240s；节律断言用 `set_time_of_day` 显式拨针不受流速影响。
+- **关键决策速查补充**：节律/wander 数值（7~19 时、概率 0.5）全部 [提案/待定] 待创始人观感定稿（其余见主速查表）。
+- **已知限制**：夜间画面为 Terraria 级压暗（既有光照设定），村民剪影辨识度低属光照线领域；`PLACEHOLDER_WORK_SITES` 只有 smithy_lv1 一行，新工位职业（如木匠）落地前需补行或等真建筑；worksuite 套件的占位工位断言依赖 X=1120 常量，若占位表迁移需同步。
+- **批次 4 接手提示**：NPC_COUNT 扩充在 `game_root.gd`（const NPC_COUNT=2）；职业配比随建筑走可复用 `get_work_site`（无建筑=无该职业工位→分配时降级）；征兵离岗走 `set_profession("")`（批次 1 契约），离岗后 wander 概率自动失效（_is_villager 判空）；wander 概率若需观感调优改 `ai_controller.villager_wander_probability` 单点。
 
 ## 关键决策速查
 
@@ -81,3 +93,5 @@
 | 节律 | P0 工作/休息两态，完整日夜系统不做 |
 | 采集归属 | NPC 采集与玩家手采并存（FORAGE 工种从预留转实装） |
 | 资源点枯竭 | 采空不自毁：枯竭态（隐藏+不可采）+90s 重生（[提案/待定]）；枯竭点不进存档为已知限制 |
+| WorkSlots 接线 | 建筑进 "building" 组 + 鸭子协议查询（不引 construction 内部注册表）；真槽位优先、占位表永久降级；A 线铁匠铺落地零改动自动切换 |
+| 节律与 wander | 7~19 时在岗（对齐光照关键帧）+ 村民 idle 后 0.5 概率 wander（[提案/待定]）；wander 仅限有职业村民，战斗/敌方单位语义不变 |

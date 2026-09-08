@@ -88,6 +88,19 @@ var _event_last_pos: float = -1.0
 ## 动画事件派发状态：本轮已发射的事件键集合（"事件名@时间"）
 var _fired_events: Dictionary = {}
 
+## ── LOD 动画节流（战斗级，UnitLodDirector 驱动；未接入时零变化）──
+## 程序化叠加层引用（_init_procedural_overlay 时缓存，hz 变化时同步转发）
+var _overlay: Node2D = null
+## 驱动模式：true = AnimationTree 自动处理已停用（active=false），由本节点
+## 按节流频率手动 advance 推进。一旦进入就不再回退自动处理（见 set_anim_update_hz）。
+var _anim_driven: bool = false
+## 当前动画更新频率（Hz；<=0 完全暂停，>=60 全速每帧推进）
+var _adv_hz: float = 0.0
+## 节流档累积器（真实渲染帧 delta 累积，达到 1/hz 批量 advance）
+var _adv_accum: float = 0.0
+## 显式暂停闸门（set_anim_paused 置位）：暂停优先于 LOD 档，冻结累积推进
+var _pause_gate: bool = false
+
 ## 动画播放结束信号（反编译参考实装 C）：LOOP_NONE 动画播完时发射（对应传奇 UpdateFinishAnimation）。
 ## 供攻击播完回切、受击播完回切、未来动作节奏（如 build 敲击）等使用。
 signal animation_finished(anim_name: String)
@@ -117,15 +130,26 @@ func _ready() -> void:
 var _tick_frame_counter: int = 0
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _state_machine == null and _anim_tree != null:
 		_state_machine = _anim_tree.get("parameters/playback")
 	if _rebuild_pending:
 		_rebuild_pending = false
 		_do_rebuild()
+	# LOD 驱动模式推进：自动处理已停用，按节流频率手动 advance（先于事件轮询，
+	# 保证 _check_animation_finished/_check_animation_events 读到最新播放位置）
+	if _anim_driven and _anim_tree != null and not _pause_gate:
+		if _adv_hz >= 60.0:
+			_anim_tree.advance(delta)
+		else:
+			_adv_accum += delta
+			if _adv_accum >= 1.0 / _adv_hz:
+				var adv := _adv_accum
+				_adv_accum = 0.0
+				_anim_tree.advance(adv)
 	# 受击插播倒计时：动画播完回切到受击前状态（反编译参考实装 B）
 	if _hit_timer > 0.0:
-		_hit_timer -= _delta
+		_hit_timer -= delta
 		if _hit_timer <= 0.0 and _state_machine != null and not _dead:
 			_state_machine.travel(_hit_return_to)
 			_current_anim = _hit_return_to
@@ -208,6 +232,7 @@ func _init_procedural_overlay() -> void:
 	# 未接线的 overlay 有 _skeleton 空值守卫，_physics_process 会静默返回。
 	if not Engine.is_editor_hint():
 		overlay.call("setup", self, self)
+	_overlay = overlay
 
 
 func _init_bones() -> void:
@@ -428,10 +453,50 @@ func set_state_anim(state_name: String, anim_name: String) -> bool:
 
 ## 暂停冻结动画（TimeManager 暂停门禁配套，修复"暂停只停位移肢体还动"）：
 ## AnimationPlayer 速率归零；恢复时回 1.0（walk 速率由移动代码下一帧重设）。
+## LOD 驱动模式下同步置闸门：显式暂停优先于 LOD 档（冻结手动推进，
+## 否则暂停期间被节流的单位动画仍会走——AnimationTree 不理会 AnimationPlayer 的
+## speed_scale，闸门是驱动模式下暂停真正生效的通道）。
 func set_anim_paused(paused: bool) -> void:
+	_pause_gate = paused
+	_adv_accum = 0.0
 	if _anim_player == null:
 		return
 	_anim_player.speed_scale = 0.0 if paused else 1.0
+
+
+## 设置动画更新频率（Hz，战斗级 LOD 节流，UnitLodDirector 经实体转发调用）：
+##   hz <= 0 ：完全暂停（停用自动处理，保留当前 pose，状态推进冻结）
+##   0 < hz < 60 ：按该频率节流推进（累积真实 delta，达到 1/hz 批量 advance）
+##   hz >= 60 ：全速（每帧 advance 真实 delta，与 IDLE 自动处理等价）
+##
+## 实现说明（为什么不用 MANUAL 回调、也不把 active 置回 true）：实测 Godot 4.7，
+## 运行时切换 process_callback 或重新 set_active(true) 后，AnimationTree 激活首帧
+## 会向状态机发送 seek(0)，AnimationNodeStateMachinePlayback 被整体重置回 Start
+## （源码 animation_node_state_machine.cpp "seek to 0 (means reset)" 分支）——
+## 攻击/受击动画位置丢失、命中帧事件重发（重复伤害）。因此一旦进入驱动模式
+## （active=false + 手动 advance）就不再回退自动处理；deactivate 不重置状态机，
+## advance 是同步推进（状态机过渡/播放位置/事件检测照常），全速档与自动处理行为等价。
+func set_anim_update_hz(hz: float) -> void:
+	if _anim_tree == null:
+		return
+	_adv_hz = hz
+	_adv_accum = 0.0
+	if hz <= 0.0:
+		_anim_driven = false
+		if _anim_tree.active:
+			_anim_tree.active = false
+		_forward_overlay_hz(0.0)
+		return
+	_anim_driven = true
+	if _anim_tree.active:
+		_anim_tree.active = false
+	_forward_overlay_hz(hz)
+
+
+## 叠加层频率同步：overlay 与动画同档节流（hz<=0 关闭叠加）。
+func _forward_overlay_hz(hz: float) -> void:
+	if _overlay != null and is_instance_valid(_overlay) and _overlay.has_method("set_update_hz"):
+		_overlay.set_update_hz(hz)
 
 
 ## 设置动画播放速率（用于 walk 速度匹配，p_speed=1.0 为原始速率）。

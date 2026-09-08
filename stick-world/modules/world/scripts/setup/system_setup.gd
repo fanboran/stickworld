@@ -53,6 +53,7 @@ const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_roo
 const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/debug_overlay.tscn")
 const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
 const _DemoQuestScript: GDScript = preload("res://modules/world/scripts/setup/demo_quest.gd")
+const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/entity/unit_lod_director.gd")
 
 var _root: GameRoot
 
@@ -96,6 +97,9 @@ func setup(root: GameRoot) -> void:
 	_setup_build_menu()
 	_setup_post_process()
 	_setup_map_transition()
+	# 单位 LOD 调度（性能优化）：核心系统装配完成后挂载，自动发现模式——
+	# 覆盖演练场（battle_arena）/世界村庄/真实战斗全部场景（headless 无相机时空转）
+	_setup_unit_lod()
 	# Demo 目标链最后装（deferred：需在资源初始发放之后做基线快照）
 	call_deferred("_setup_demo_quest_deferred")
 
@@ -914,3 +918,22 @@ func _setup_map_transition() -> void:
 	var overlay := MapTransitionOverlay.new()
 	overlay.name = "MapTransition"
 	_root.add_child(overlay)
+
+
+# ─────────────────────────────── 单位 LOD 调度装配 ────────────────────────────────
+
+## 创建单位 LOD 调度器（性能优化：混战表现层按相机距离分档节流——48v48 场景下
+## 每单位动画采样/程序化叠加/血条重绘是大头）。自动发现模式：注入 GameRoot 后
+## 每 10Hz 经 get_current_map() 解析 EntityHost 单位集 + 视口激活相机分档，
+## 地图实例变更自动换绑。挂 GameRoot 下持久存在，不随战斗实例生灭；
+## headless 无相机时空转（单位保持默认全速，零行为变化）。
+func _setup_unit_lod() -> void:
+	if _root.get_node_or_null("UnitLodDirector") != null:
+		return  # 已存在，避免重复添加
+	var lod := Node.new()
+	lod.set_script(_UnitLodDirectorScript)
+	lod.name = "UnitLodDirector"
+	_root.add_child(lod)
+	# 自动发现模式：无需外部喂数据，注入宿主后自取地图/单位集/相机
+	if lod.has_method("setup"):
+		lod.setup(_root)

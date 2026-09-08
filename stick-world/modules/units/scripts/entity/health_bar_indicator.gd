@@ -99,6 +99,34 @@ var _head_find_tried: bool = false
 ## 头骨骼路径（颈根——头球中心与颈根 x 基本一致，水平对齐够用）
 const HEAD_NODE_PATH := "hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head"
 
+# ── LOD 节流（战斗级，UnitLodDirector 经实体转发；未接入时零变化）──
+## 更新频率（Hz）：>=60 每帧 _process（默认 = 现行全速行为）；<=0 不再刷新；
+## 否则按频率节流（累积 delta，达到 1/hz 跑一次）
+var _update_hz: float = 60.0
+## 节流累积器
+var _hz_accum: float = 0.0
+## LOD 显示开关（与死亡隐藏/渐隐状态机正交；false = 强制隐藏并停更）
+var _lod_display_visible: bool = true
+
+
+## 设置刷新频率（LOD 分档：近景全速/中景 10Hz/远景隐藏）。
+func set_update_hz(hz: float) -> void:
+	_update_hz = hz
+	_hz_accum = 0.0
+
+
+## LOD 显示开关：false 强制隐藏并停更（远景/离屏单位血条不参与每帧重绘）；
+## true 恢复显示（死亡单位的隐藏语义优先：_ratio<=0 保持不可见）。
+func set_display_visible(v: bool) -> void:
+	_lod_display_visible = v
+	if v:
+		if _ratio > 0.0:
+			visible = true
+		set_process(true)
+	else:
+		visible = false
+		set_process(false)
+
 
 func _ready() -> void:
 	# 绝对顶层：单位按 y 排序 z_index（0~140+）后，血条作为子节点若用相对 z
@@ -137,6 +165,15 @@ func set_faction(fid: int) -> void:
 
 
 func _process(delta: float) -> void:
+	# LOD 频率闸门：节流档累积到 1/hz 才跑一次（delta 换成累计值，速率语义不变）
+	if _update_hz <= 0.0:
+		return
+	if _update_hz < 60.0:
+		_hz_accum += delta
+		if _hz_accum < 1.0 / _update_hz:
+			return
+		delta = _hz_accum
+		_hz_accum = 0.0
 	_anim_time += delta
 	# 跟头 x 对齐：头球中心水平跟随（动画摆头时标记贴着头走）
 	_follow_head()

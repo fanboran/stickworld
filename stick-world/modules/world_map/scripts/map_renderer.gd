@@ -1,24 +1,29 @@
 extends Node2D
 class_name MapRenderer
-## 战略图渲染器（L1 单层，Tab 键）—— 与 L2 同款分层矢量绘制
+## 战略图渲染器（L1 单层，Tab 键）—— R4 三模式语义分离（地形 / 政治 / 交通）
 ##
 ## 数据来自 l1_world.json（含 context_size/neighbors/lakes，坐标 = context 局部）。
-## 全部矢量绘制（地块少），任意缩放清晰，不依赖底图纹理。
-## 分层（context 坐标系，含邻居老 L1 块扩展区域，与 L2MapRenderer 一致）：
-##   海洋背景 -> 湖泊(浅蓝) -> 当前 L1 城市块(政权色) -> 道路(F5 土路虚线/官道实线)
-##   -> 河流 -> 湖泊(mesh) -> 城市建成区 blob(C2) -> 邻居老 L1 块(灰色空心描边)
-##   -> 城市描边 + 出生 L1 权威轮廓(深色) -> hover 描边(灰) -> 内容区纸边黑框
-##   -> F3 地块编号
-## 邻居块空心化（A3）：只描边不填充，聚焦本 L1；context 外缘画黑线"纸张边界"。
+## 三模式语义（创始人 2026-09-08 拍板，观感返工 §R4）：
+##   地形   = l1_terrain.png 贴图 + 建成区 blob（blob 仅本模式）+ 交互层；不画道路
+##   政治   = 运行时矢量政权色填充（R9 裁决：政权色随游戏进程变化，不烘焙）
+##            + 地块界线描边 + 交互层；不画建成区、不画道路；底图无贴图（政权色全填充）
+##   交通   = l1_travel.png 贴图（地形底图 + R6 道路 casing 双层实线已烘焙）
+##            + 交互层；不画建成区、不画矢量道路
+## 交互层（三模式全保留）：城市描边/中心点、hover/选中、当前城流动描边、玩家位置
+## 标记、快速旅行路由高亮（琥珀虚线——虚线的正确语用位置，§7.2-4）、纸边框。
+## 静态层贴图缺失时回退矢量管线（政权色填充 + 实线道路分级——R6 废虚线）。
+##
+## 分层（context 坐标系，含邻居老 L1 块扩展区域）：
+##   静态底图(贴图或矢量) -> [交通回退:道路] -> 河流 -> 湖泊 -> 路由高亮(琥珀虚线)
+##   -> 建成区 blob(仅地形) -> 邻居老 L1 块(灰色空心描边) -> 城市描边 + 出生 L1 轮廓
+##   -> 城市中心点 -> hover 描边 -> 当前城流动描边 -> 内容区纸边黑框 -> F3 编号 -> 玩家标记
 ##
 ## 交互：hover 命中城市块（经相机换算 + 索引图查询），点击选中由控制器经 api 处理。
 
 ## 关联的 L1 世界数据
 var _data: L1WorldData = null
 
-## 当前地图模式（B4 TERRAIN/POLITICAL，MapModeManager 广播 → 控制器转发）。
-## 地形底图层（B2 产 PNG）与政权叠加层（Phase F）落地前两模式渲染一致（回退现状着色），
-## 本字段为届时分层绘制的接入口
+## 当前地图模式（MapModeManager 广播 → 控制器转发；R4 三态真分支）
 var map_mode: int = MapModeManager.Mode.TERRAIN
 
 ## 相机引用（悬停检测做 screen->map 坐标换算）
@@ -35,8 +40,10 @@ var _cached_segs: PackedVector2Array = PackedVector2Array()
 var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
 ## 邻居老 L1 块空心轮廓（每块一条闭合折线，A3 空心化）
 var _cached_neighbor_outlines: Array[PackedVector2Array] = []
-## 道路分级缓存（F5，set_data 后构建一次）：土路虚线段对（draw_multiline）+ 官道折线组
-var _road_dirt_segs: PackedVector2Array = PackedVector2Array()
+## 道路分级缓存（R6 实线分级，set_data 后构建一次）：土路/官道折线组。
+## 运行时矢量仅交通模式贴图缺失回退时绘制——正常观感走 l1_travel.png 贴图
+## （道路 casing 已烘焙，§R4：地形/政治模式不显示道路）
+var _road_dirt_lines: Array[PackedVector2Array] = []
 var _road_paved_lines: Array[PackedVector2Array] = []
 var _segs_valid: bool = false
 
@@ -50,15 +57,23 @@ var _lakes_mesh: ArrayMesh = null
 ## 形状只随 population_score 变化——settlement_updated 事件单城重算，不随 zoom/hover 变）
 var _blob_outlines: Dictionary = {}
 
-## 地形模式静态底图（R9 静态层烘焙化）：本包 l1_terrain.png（B2 同管线 per-L1 烘焙，
-## 已含地形/群系/河湖/海洋），TERRAIN 模式画在最底层，贴图坐标 ↔ context 坐标 1:1
-## （与 l1_base.png 同系无 offset）。异步后台线程解码（l3_map_renderer 三线程同款样板：
-## FileAcess 直读不需 .import；Thread 未 join 直接销毁在 Windows 会段错误——
-## _exit_tree / set_data 换包前统一 wait_to_finish）。解码完成前回退现状矢量管线。
-## 政权色不烘焙（R9 裁决）——POLITICAL 模式保持运行时矢量政权色填充不变。
-var _terrain_texture: Texture2D = null
-var _terrain_thread: Thread = null
-var _terrain_result: Image = null
+## 模式静态底图（R9 静态层烘焙化 + R4 三模式）：TERRAIN = 本包 l1_terrain.png
+## （B2 同管线，地形/群系/河湖/海洋）；TRAFFIC = l1_travel.png（地形底图 + R6 道路
+## casing 双层实线烘焙）。POLITICAL 无贴图（R9 裁决：政权色随游戏进程变化，运行时矢量）。
+## 贴图坐标 ↔ context 坐标 1:1（与 l1_base.png 同系无 offset）。异步后台线程解码
+## （l3_map_renderer 三线程同款样板：FileAccess 直读不需 .import；Thread 未 join 直接
+## 销毁在 Windows 会段错误——_exit_tree / set_data 换包前统一 wait_to_finish）。
+## 解码完成前回退现状矢量管线。
+const MODE_TEXTURES := {
+	MapModeManager.Mode.TERRAIN: "l1_terrain.png",
+	MapModeManager.Mode.TRAFFIC: "l1_travel.png",
+}
+## 按模式缓存的本包底图（set_data 换包清空；POLITICAL 恒缺席）
+var _mode_textures: Dictionary = {}
+var _tex_thread: Thread = null
+var _tex_result: Image = null
+## 在途加载的目标模式（线程完成时结果归档到 _mode_textures 用）
+var _tex_target_mode: int = -1
 
 ## 配色（与 L2MapRenderer 完全一致；水体色与 B2 底图 terrain_params.json colors 同源，改色两端同步）
 const OCEAN_COLOR := Color(30.0 / 255.0, 55.0 / 255.0, 95.0 / 255.0)
@@ -68,19 +83,19 @@ const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
 const RIVER_COLOR := Color(46.0 / 255.0, 102.0 / 255.0, 140.0 / 255.0)
 const RIVER_MIN_WIDTH := 2.0
 
-## 道路（F5/E2 渲染分级，总体设计 §5.9）：色与生成端特写 road_closeup.py STYLE 同源
-## （改色两端同步）；宽度 = context 比例（地图单位，随缩放变粗细，与河流同策略）
-const ROAD_COLOR_DIRT := Color(196.0 / 255.0, 160.0 / 255.0, 96.0 / 255.0)
-const ROAD_COLOR_PAVED := Color(255.0 / 255.0, 186.0 / 255.0, 72.0 / 255.0)
-const ROAD_WIDTH_DIRT := 0.0045
-const ROAD_WIDTH_PAVED := 0.0065
-## 土路虚线的实段/空段长（context 比例）
-const ROAD_DASH := 0.012
-const ROAD_GAP := 0.009
-## 图例条目（控制器 _fill_legend 两种模式共用追加；虚线/实线以文字标注）
+## 道路（R6 渲染端：实线分级，废 F5 虚线；色与生成端 casing 面色同源——
+## l1_terrain_params.json travel.face_color，改色两端同步）。
+## 宽度 = 地图单位（贴图坐标 ↔ context 1:1，与烘焙面宽同值；河流同策略）；
+## 正常观感走 l1_travel.png 贴图（casing 双层），矢量仅交通模式回退时绘制
+const ROAD_COLOR_DIRT := Color(166.0 / 255.0, 122.0 / 255.0, 60.0 / 255.0)
+const ROAD_COLOR_PAVED := Color(198.0 / 255.0, 132.0 / 255.0, 82.0 / 255.0)
+const ROAD_WIDTH_DIRT := 1.2
+const ROAD_WIDTH_PAVED := 3.0
+## 图例条目（控制器 _fill_legend 按模式取用；R6 废虚线——不再标注线型，
+## 文字定「土路/官道」，§R4 交通模式图例）
 const ROAD_LEGEND: Array[Dictionary] = [
-	{"color": ROAD_COLOR_DIRT, "text": "土路（虚线）"},
-	{"color": ROAD_COLOR_PAVED, "text": "官道（实线）"},
+	{"color": ROAD_COLOR_DIRT, "text": "土路"},
+	{"color": ROAD_COLOR_PAVED, "text": "官道"},
 ]
 
 ## 群系图例色（B2 地形底图色板的 L1 图例入口；基色与生成端
@@ -143,10 +158,14 @@ const PLAYER_PULSE_TO := 36.0
 const PLAYER_PULSE_PERIOD := 1.5
 const PLAYER_PULSE_ALPHA := 0.5
 
-## 快速旅行路由高亮（P6/E3「途经路径高亮」）：途经道路亮琥珀加粗 + 途经聚落
-## 节点白描边空心圆，画在水系之上（湖不再遮高亮，路径反馈连续可见）
+## 快速旅行路由高亮（P6/E3「途经路径高亮」）：途经道路亮琥珀虚线加粗 + 途经聚落
+## 节点白描边空心圆，画在水系之上（湖不再遮高亮，路径反馈连续可见）。
+## 虚线 = UI 操作语义的正确位置（§7.2-4：正式道路实线，虚线只给行军/路线预览类 UI；
+## R6 已废道路虚线，虚线只剩这里）
 const ROUTE_HIGHLIGHT_COLOR := Color(1.0, 0.72, 0.11, 0.95)
 const ROUTE_HIGHLIGHT_WIDTH := 0.008
+const ROUTE_DASH := 0.014
+const ROUTE_GAP := 0.010
 const ROUTE_NODE_RADIUS := 6.0
 ## 路由高亮数据（api.get_travel_status 的 roads/path → context 折线 + 节点位置）
 var _route_road_pts: Array[PackedVector2Array] = []
@@ -185,10 +204,9 @@ func set_data(data: L1WorldData) -> void:
 	_lakes_mesh = null
 	_route_road_pts.clear()
 	_route_nodes = PackedVector2Array()
-	# 换包：旧贴图/旧线程作废（join 防未完成 Thread 销毁段错误，见 _join_terrain_thread）
-	_join_terrain_thread()
-	_terrain_texture = null
-	_terrain_result = null
+	# 换包：旧贴图/旧线程作废（join 防未完成 Thread 销毁段错误，见 _join_texture_thread）
+	_join_texture_thread()
+	_mode_textures = {}
 	_bake_blob_outlines()
 	_current_tile_id = ""
 	# 当前所在地块默认 = 出生聚落所在块（玩家跨城移动后由 set_current_tile 切换）
@@ -204,9 +222,8 @@ func set_data(data: L1WorldData) -> void:
 				_player_state_color = _data.get_state_color(tile.owner_state_id)
 				break
 	_build_glow_outline()
-	# TERRAIN 为默认模式：切包即触发本包地形贴图异步加载（POLITICAL 下按需，见 set_map_mode）
-	if map_mode == MapModeManager.Mode.TERRAIN:
-		_ensure_terrain()
+	# 当前模式需要静态底图（TERRAIN/TRAFFIC）时按需触发异步加载（POLITICAL 无贴图）
+	_ensure_mode_texture()
 	queue_redraw()
 
 
@@ -287,9 +304,8 @@ func set_map_mode(mode: int) -> void:
 	if mode == map_mode:
 		return
 	map_mode = mode
-	# 切回地形模式时按需触发贴图加载（首帧/政治模式期间未加载过）
-	if mode == MapModeManager.Mode.TERRAIN:
-		_ensure_terrain()
+	# 切到需静态底图的模式（TERRAIN/TRAFFIC）时按需触发加载（首帧/其他模式期间未加载过）
+	_ensure_mode_texture()
 	queue_redraw()
 
 
@@ -320,55 +336,63 @@ func refresh() -> void:
 	queue_redraw()
 
 
-## ===== 地形模式底图异步加载（R9；l3_map_renderer 三线程同款样板）=====
+## ===== 模式静态底图异步加载（R9/R4；l3_map_renderer 三线程同款样板）=====
 ## 后台线程 FileAccess 直读 + PNG 解码（纯 CPU、线程安全，主线程零阻塞）；
 ## 路径经 bind 传入（线程内不读 _data——set_data 换包期间无竞态）。
-## 完成前 TERRAIN 模式回退现状矢量管线，解码完成后 queue_redraw 自动切上。
-func _ensure_terrain() -> void:
-	if _data == null or _terrain_texture != null or _terrain_thread != null:
+## 完成前当前模式回退矢量管线，解码完成后 queue_redraw 自动切上。
+## TERRAIN/TRAFFIC 各一张；加载在途切模式 → 完成后按当前模式补启动。
+func _ensure_mode_texture() -> void:
+	if _data == null or _tex_thread != null:
 		return
-	var path := "%s/l1_terrain.png" % _data.base_dir
+	if not MODE_TEXTURES.has(map_mode) or _mode_textures.has(map_mode):
+		return
+	var path := "%s/%s" % [_data.base_dir, MODE_TEXTURES[map_mode]]
 	if not FileAccess.file_exists(path):
 		return
-	_terrain_thread = Thread.new()
-	_terrain_thread.start(_load_terrain_async.bind(path))
+	_tex_target_mode = map_mode
+	_tex_thread = Thread.new()
+	_tex_thread.start(_load_texture_async.bind(path))
 
 
-func _load_terrain_async(path: String) -> void:
+func _load_texture_async(path: String) -> void:
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		return
 	var img := Image.new()
 	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
-		_terrain_result = img
+		_tex_result = img
 
 
 ## join 后台线程并丢弃未消费结果（set_data 换包 / _exit_tree 销毁前必须调用——
 ## 未完成的 Thread 直接销毁在 Windows 上会段错误）
-func _join_terrain_thread() -> void:
-	if _terrain_thread != null:
-		_terrain_thread.wait_to_finish()
-		_terrain_thread = null
-	_terrain_result = null
+func _join_texture_thread() -> void:
+	if _tex_thread != null:
+		_tex_thread.wait_to_finish()
+		_tex_thread = null
+	_tex_result = null
+	_tex_target_mode = -1
 
 
-## 每帧检查后台线程：解码完成 → wait_to_finish + 主线程建 ImageTexture
-func _poll_terrain_load() -> void:
-	if _terrain_thread != null and not _terrain_thread.is_alive():
-		_terrain_thread.wait_to_finish()
-		_terrain_thread = null
-		if _terrain_result != null:
-			_terrain_texture = ImageTexture.create_from_image(_terrain_result)
-			_terrain_result = null
+## 每帧检查后台线程：解码完成 → wait_to_finish + 主线程建 ImageTexture 归档到
+## 对应模式；加载在途期间用户切过模式的话按当前模式补启动
+func _poll_texture_load() -> void:
+	if _tex_thread != null and not _tex_thread.is_alive():
+		_tex_thread.wait_to_finish()
+		_tex_thread = null
+		if _tex_result != null and _tex_target_mode >= 0:
+			_mode_textures[_tex_target_mode] = ImageTexture.create_from_image(_tex_result)
+			_tex_result = null
+			_tex_target_mode = -1
 			queue_redraw()
+		_ensure_mode_texture()
 
 
 func _exit_tree() -> void:
-	_join_terrain_thread()
+	_join_texture_thread()
 
 
 func _process(delta: float) -> void:
-	_poll_terrain_load()
+	_poll_texture_load()
 	if not is_visible_in_tree() or _data == null:
 		return
 	# 动画相位推进：当前城流动光 + 玩家位置脉冲环（有任一动画即逐帧重绘；
@@ -413,32 +437,30 @@ func _draw() -> void:
 	var zz: float = 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
-	# 0. 地形模式静态底图（R9 静态层烘焙化）：本包烘焙贴图画在最底层，
-	#    贴图坐标 ↔ context 坐标 1:1（与 l1_base.png 同系无 offset）。
-	#    贴图已含地形/群系/河湖/海洋——政权色填充与矢量道路/河湖跳过（避免双画）；
-	#    解码完成前回退现状矢量管线（下方），完成后 _poll_terrain_load 自动重绘切换。
-	#    POLITICAL 不烘焙（R9 裁决：政权色会随游戏进程变化，保持运行时矢量填充）
-	var terrain_base: bool = map_mode == MapModeManager.Mode.TERRAIN and _terrain_texture != null
+	# 0. 模式静态底图（R9/R4）：TERRAIN = l1_terrain.png；TRAFFIC = l1_travel.png
+	#    （地形底图 + R6 道路 casing 已烘焙）。贴图坐标 ↔ context 坐标 1:1。
+	#    贴图就绪时政权色填充与矢量河湖跳过（防双画）；解码完成前回退矢量管线（下方）。
+	#    POLITICAL 无贴图（R9 裁决：政权色运行时矢量填充，归属/人口变化即时反映）
+	var base_tex: Texture2D = _mode_textures.get(map_mode, null)
+	var terrain_base: bool = base_tex != null
 	if terrain_base:
-		draw_texture_rect(_terrain_texture, Rect2(Vector2.ZERO, ctx_size), false)
-	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓/道路分级）——描边/轮廓层两模式都消费
+		draw_texture_rect(base_tex, Rect2(Vector2.ZERO, ctx_size), false)
+	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓/道路分级）——描边/轮廓层全模式消费
 	if not _segs_valid:
 		_build_cached_geometry()
-	# 1. 静态色块层（城市色块 → 道路 → 河流 → 湖泊）；TERRAIN 贴图已承担本层（防双画）
+	# 1. 矢量回退层（贴图缺失/未解码完成时）；POLITICAL 恒走本层（政权色全填充）
 	if not terrain_base:
 		if _tiles_mesh == null:
 			_bake_base_meshes()
 		if _tiles_mesh != null:
 			draw_mesh(_tiles_mesh, null)
-		# 1.4 道路（F5/E2 渲染分级）：官道实线 / 土路虚线，画在城市块之上、河流之下
-		#（人工特征压地块色，自然水系压道路——河路交叉处河在上；路避水由生成端保证）
-		if _road_dirt_segs.size() >= 2 or not _road_paved_lines.is_empty():
-			if _road_dirt_segs.size() >= 2:
-				draw_multiline(_road_dirt_segs, ROAD_COLOR_DIRT,
-						maxf(ctx_size.x * ROAD_WIDTH_DIRT, 1.0), true)
+		# 1.4 道路（R6 实线分级，废 F5 虚线）：仅交通模式回退时画——
+		#     §R4 创始人拍板：道路只归交通模式（贴图已含），地形/政治不显示
+		if map_mode == MapModeManager.Mode.TRAFFIC:
+			for line in _road_dirt_lines:
+				draw_polyline(line, ROAD_COLOR_DIRT, maxf(ROAD_WIDTH_DIRT, 1.0), true)
 			for line in _road_paved_lines:
-				draw_polyline(line, ROAD_COLOR_PAVED,
-						maxf(ctx_size.x * ROAD_WIDTH_PAVED, 1.2), true)
+				draw_polyline(line, ROAD_COLOR_PAVED, maxf(ROAD_WIDTH_PAVED, 1.2), true)
 		# 1.5 河流（B3）：矢量折线叠加，画在湖泊之下（河入湖由湖面覆盖）、城市块之上
 		for rv in _data.rivers:
 			var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
@@ -446,11 +468,15 @@ func _draw() -> void:
 				draw_polyline(rpts, RIVER_COLOR, maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH), true)
 		if _lakes_mesh != null:
 			draw_mesh(_lakes_mesh, null)
-	# 1.6 快速旅行路由高亮（P6）：途经道路亮色加粗 + 节点空心圆（水系之上）
+	# 1.6 快速旅行路由高亮（P6）：途经道路琥珀虚线加粗 + 节点空心圆（全模式——
+	#     UI 操作语义的虚线，§7.2-4；水系之上连续可见）
 	if not _route_road_pts.is_empty():
 		var rw: float = maxf(ctx_size.x * ROUTE_HIGHLIGHT_WIDTH, 2.0)
+		var dash_segs := PackedVector2Array()
 		for pts in _route_road_pts:
-			draw_polyline(pts, ROUTE_HIGHLIGHT_COLOR, rw, true)
+			_append_dashed(dash_segs, pts, ctx_size.x * ROUTE_DASH, ctx_size.x * ROUTE_GAP)
+		if dash_segs.size() >= 2:
+			draw_multiline(dash_segs, ROUTE_HIGHLIGHT_COLOR, rw, true)
 		var nr: float = ROUTE_NODE_RADIUS
 		if zz > 0.0001:
 			nr = ROUTE_NODE_RADIUS / zz
@@ -467,24 +493,26 @@ func _draw() -> void:
 				continue
 			draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
 	# 2.5 城市建成区 blob（C2）：暖灰填充 + 分级描边，画在城界描边之下（行政区划保持清晰）；
-	#    半径为地图单位（随缩放，与地块多边形一致），描边宽屏幕像素固定
-	var bew: float = BLOB_EDGE_WIDTH
-	if zz > 0.0001:
-		bew = BLOB_EDGE_WIDTH / zz
-	for tile in _data.tiles:
-		var sref := tile.settlement
-		if sref == null:
-			continue
-		var outline: PackedVector2Array = _blob_outlines.get(sref.settlement_id, PackedVector2Array())
-		if outline.size() < 3:
-			continue
-		draw_colored_polygon(outline, BLOB_FILL)
-		var edge := BLOB_EDGE
-		if sref.level >= 5:
-			edge = BLOB_EDGE_T5
-		elif sref.level >= 4:
-			edge = BLOB_EDGE_T4
-		draw_polyline(_closed(outline), edge, bew, true)
+	#     半径为地图单位（随缩放，与地块多边形一致），描边宽屏幕像素固定。
+	#     §R4 创始人拍板：建成区仅地形模式显示（政治/交通不画）
+	if map_mode == MapModeManager.Mode.TERRAIN:
+		var bew: float = BLOB_EDGE_WIDTH
+		if zz > 0.0001:
+			bew = BLOB_EDGE_WIDTH / zz
+		for tile in _data.tiles:
+			var sref := tile.settlement
+			if sref == null:
+				continue
+			var outline: PackedVector2Array = _blob_outlines.get(sref.settlement_id, PackedVector2Array())
+			if outline.size() < 3:
+				continue
+			draw_colored_polygon(outline, BLOB_FILL)
+			var edge := BLOB_EDGE
+			if sref.level >= 5:
+				edge = BLOB_EDGE_T5
+			elif sref.level >= 4:
+				edge = BLOB_EDGE_T4
+			draw_polyline(_closed(outline), edge, bew, true)
 	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
 	var nbw: float = NEIGHBOR_BORDER_WIDTH
 	if zz > 0.0001:
@@ -715,12 +743,10 @@ func _build_cached_geometry() -> void:
 			_cached_segs.append(b)
 	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环，多环串接已在数据侧消除）
 	_cached_l1_closed = _closed(_data.l1_polygon)
-	# 道路分级（F5）：官道整折线走实线；土路按 dash/gap 弧长切段走虚线
-	_road_dirt_segs = PackedVector2Array()
+	# 道路分级（R6 实线分级，废 F5 虚线切分）：土路细 / 官道粗；
+	# 仅交通模式矢量回退时绘制（正常观感走 l1_travel.png 贴图）
+	_road_dirt_lines = []
 	_road_paved_lines = []
-	var ctx_x := maxf(float(_data.context_size.x), 1.0)
-	var dash := ctx_x * ROAD_DASH
-	var gap := ctx_x * ROAD_GAP
 	for rd in _data.roads:
 		var pts: PackedVector2Array = rd.get("pts", PackedVector2Array())
 		if pts.size() < 2:
@@ -728,12 +754,13 @@ func _build_cached_geometry() -> void:
 		if str(rd.get("tier", "DIRT")) == "PAVED":
 			_road_paved_lines.append(pts)
 		else:
-			_append_dashed(_road_dirt_segs, pts, dash, gap)
+			_road_dirt_lines.append(pts)
 	_segs_valid = true
 
 
-## 折线按 dash/gap 交替弧长切段（土路虚线）：实段点对 append 到 segs（draw_multiline 消费）。
+## 折线按 dash/gap 交替弧长切段（琥珀虚线）：实段点对 append 到 segs（draw_multiline 消费）。
 ## 相位沿折线连续（跨顶点不断火），末尾残段按剩余长度截断。
+## 消费方 = 快速旅行路由高亮（R6 废道路虚线后，虚线只剩 UI 操作语义这一处）。
 func _append_dashed(segs: PackedVector2Array, pts: PackedVector2Array,
 		dash: float, gap: float) -> void:
 	var drawing := true

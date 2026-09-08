@@ -69,6 +69,8 @@ tools/worldgen/output/**
 !tools/worldgen/output/road_v2_*.png
 # R4 三模式并排验收预览（地形/政治/交通，见交接档 R 系列 R4 批3）
 !tools/worldgen/output/r4_modes_*.png
+# R5 建成区场叠加管线验收图（特写/贫瘠抽查/分形自检，见交接档 R 系列 R5）
+!tools/worldgen/output/blob_v2_*.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

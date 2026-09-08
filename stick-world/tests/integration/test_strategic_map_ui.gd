@@ -164,22 +164,57 @@ func _test_l1_title_legend() -> void:
 		"地形模式图例标题（实测 %s）" % _l1_legend._title_label.text)
 	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 9,
 		"地形模式 9 条目（实测 %d）" % _l1_legend._entries_box.get_child_count())
-	# 切政治模式（R4：政治 = 政权色，不显示建成区/道路）：8 城邦政权色条目，
-	# 政权色块与地图填充同色源（get_state_color）
+	# 切政治模式（R4：政治 = 政权色，不显示建成区/道路）。R7 80 国：图例 =
+	# 文化圈聚合代表性子集（9 圈各一条 + 城邦聚合一条 = 10 条），不塞 80 条；
+	# 色源 = PoliticalLut（与 L2/L3 政治模式同一份运行时 LUT）
 	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 政权",
 		"政治模式图例标题（实测 %s）" % _l1_legend._title_label.text)
-	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 8,
-		"8 城邦政权条目（R4：政治无建成区/道路，实测 %d）" % _l1_legend._entries_box.get_child_count())
-	var states: Dictionary = _l1_api.get_states()
-	var first_id: String = states.keys()[0]
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 10,
+		"10 条目 = 9 文化圈聚合 + 城邦聚合（R7，实测 %d）" % _l1_legend._entries_box.get_child_count())
+	var last_entry: HBoxContainer = _l1_legend._entries_box.get_child(9)
+	var last_text: Label = last_entry.get_child(1)
+	_runner.assert_true(last_text.text == "自由城邦 ×8",
+		"末条目 = 城邦聚合（实测 %s）" % last_text.text)
+	# 首条目 = 规模最大文化圈（「族标签 ×N 国」），色块 = 该圈最大国的 LUT 政权色
 	var first_entry: HBoxContainer = _l1_legend._entries_box.get_child(0)
 	var swatch: ColorRect = first_entry.get_child(0)
-	_runner.assert_true(swatch.color == _l1_api.get_data().get_state_color(first_id),
-		"首条目色块 = 地图政权填充色")
 	var text_label: Label = first_entry.get_child(1)
-	_runner.assert_true(text_label.text == str(states[first_id].get("name", first_id)),
-		"首条目文字 = 政权名（实测 %s）" % text_label.text)
+	_runner.assert_true("×" in text_label.text and text_label.text.ends_with("国"),
+		"首条目 = 文化圈聚合（实测 %s）" % text_label.text)
+	var lut := PoliticalLut.load_shared()
+	_runner.assert_true(lut != null, "PoliticalLut 可用")
+	if lut != null:
+		# 首条目 = 新国数最多的文化圈；色块 = 该圈最大国的 LUT 政权色
+		var cnt := {}
+		for sid in lut.states:
+			var info: Dictionary = lut.states[sid]
+			if bool(info.get("is_city_state", false)):
+				continue
+			var cu := str(info.get("culture", ""))
+			cnt[cu] = int(cnt.get(cu, 0)) + 1
+		var top_cu := ""
+		var top_cn := -1
+		for cu in cnt:
+			if int(cnt[cu]) > top_cn:
+				top_cn = int(cnt[cu])
+				top_cu = cu
+		var top_n := -1
+		var top_id := ""
+		for sid in lut.states:
+			var info: Dictionary = lut.states[sid]
+			if bool(info.get("is_city_state", false)):
+				continue
+			if str(info.get("culture", "")) != top_cu:
+				continue
+			if int(info.get("n_cities", 0)) > top_n:
+				top_n = int(info.get("n_cities", 0))
+				top_id = sid
+		_runner.assert_true(text_label.text == "%s ×%d 国"
+				% [str(lut.states[top_id].get("culture_label", top_cu)), top_cn],
+				"首条目 = 最大文化圈聚合（实测 %s）" % text_label.text)
+		_runner.assert_true(swatch.color.is_equal_approx(lut.color_of(top_id)),
+			"首条目色块 = 该圈最大国 LUT 政权色（%s，%d 城）" % [top_id, top_n])
 	# 切交通模式（R4：交通 = 土路/官道条目；R6 废虚线——文字不得再带线型标注）
 	MapModeManager.set_mode(MapModeManager.Mode.TRAFFIC)
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 交通",

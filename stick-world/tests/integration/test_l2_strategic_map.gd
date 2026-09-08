@@ -29,6 +29,7 @@ func _ready() -> void:
 	_runner.add_test("地块索引图命中", _test_query, true)
 	_runner.add_test("F3 调试模式：L1 地块标号刷新", _test_debug_labels, true)
 	_runner.add_test("L2 恒城市模式（默认城市贴图 + 无细分开关）", _test_city_mode, true)
+	_runner.add_test("政治模式：ID mask + LUT 查表着色层（R7/R9）", _test_political_layer, true)
 	_runner.add_test("L3 单击下钻 -> L2 打开（L3 HUD 隐藏不重叠），ESC 返回 L3", _test_drilldown, true)
 	_runner.add_test("L2 单击 L1 地块 -> 打开对应老 L1 地图，ESC 返回 L2", _test_l1_drilldown, true)
 	await _runner.run_async()
@@ -168,6 +169,48 @@ func _test_city_mode() -> void:
 		"L2 默认恒城市模式（具体到城市）")
 	_runner.assert_true(not _l2_renderer.has_method("toggle_display_mode"),
 		"L2 不应有显示模式开关（无细分按钮）")
+
+
+func _test_political_layer() -> void:
+	# R7/R9 政治模式：L2 政权 ID mask（含海洋/湖泊/邻区保留码）随包同步加载，
+	# POLITICAL 下建查表着色层（z=-1 垫底 + 共享 PoliticalLut）。渲染器路径自证。
+	if _l2_renderer == null:
+		if _l2_scene == null:
+			_l2_scene = L2_SCENE.instantiate()
+			add_child(_l2_scene)
+		var content: Node = _l2_scene.get_node_or_null("Content")
+		_l2_renderer = content.get_node_or_null("L2MapRenderer") if content != null else null
+	if _l2_renderer == null:
+		_runner.assert_true(false, "前置：L2 渲染器未装载")
+		return
+	var data: RefCounted = L2WorldData.load_from(
+		"%s/region_001/l2_world.json" % L2_BASE_DIR,
+		"%s/region_001" % L2_BASE_DIR)
+	_runner.assert_true(data != null and data.political_id_texture != null,
+		"l2_political_id.png 随包加载")
+	if data == null or data.political_id_texture == null:
+		return
+	_l2_renderer.set_data(data)
+	var was_mode: int = MapModeManager.current_mode
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	await get_tree().process_frame
+	var layer: Sprite2D = _l2_renderer._political_layer
+	_runner.assert_true(layer != null, "政治着色层已构建")
+	if layer == null:
+		MapModeManager.set_mode(was_mode)
+		return
+	_runner.assert_true(layer.visible, "POLITICAL 下着色层可见")
+	var mat: ShaderMaterial = layer.material
+	_runner.assert_true(mat != null and mat.shader == PoliticalLut.COLORIZE_SHADER,
+		"着色层挂 PoliticalLut.COLORIZE_SHADER")
+	var lut_tex: Texture2D = mat.get_shader_parameter("lut")
+	var lut := PoliticalLut.load_shared()
+	_runner.assert_true(lut != null and lut_tex == lut.texture,
+		"shader LUT 参数 = 共享 PoliticalLut 纹理（与 L3/图例同源，改 LUT 全图生效）")
+	_runner.assert_true(layer.z_index == -1, "着色层垫底（z=-1，上层界线/河流照画）")
+	MapModeManager.set_mode(was_mode)
+	await get_tree().process_frame
+	_runner.assert_true(not layer.visible, "复位模式后着色层隐藏")
 
 
 func _test_drilldown() -> void:

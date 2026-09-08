@@ -1,0 +1,49 @@
+{
+  "defaults": {
+    "ground_y": 810,
+    "cell_w": 32,
+    "edge_cells": 8,
+    "wall_band_len": 24,
+    "house_width": 4,
+    "density": 0.7
+  },
+  "sizes": {
+    "hamlet": {"grid_width": 80, "width_px": 2560},
+    "town": {"grid_width": 128, "width_px": 4096},
+    "city": {"grid_width": 192, "width_px": 6144}
+  },
+  "cities": {
+    "l1_settlement_00": {
+      "size": "town", "wall_tier": 1, "seed": 611033, "density": 0.6,
+      "landmarks": ["gate", "warehouse"], "conquest_anchor": false
+    },
+    "l1_settlement_01": {
+      "size": "city", "wall_tier": 2, "seed": 611034, "density": 0.7,
+      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": false
+    },
+    "l1_settlement_02": {
+      "size": "city", "wall_tier": 2, "seed": 611035, "density": 0.7,
+      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": true
+    },
+    "l1_settlement_03": {
+      "size": "city", "wall_tier": 2, "seed": 611036, "density": 0.7,
+      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": true
+    },
+    "l1_settlement_04": {
+      "size": "city", "wall_tier": 2, "seed": 611037, "density": 0.7,
+      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": true
+    },
+    "l1_settlement_05": {
+      "size": "city", "wall_tier": 2, "seed": 611038, "density": 0.75,
+      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": false
+    },
+    "l1_settlement_06": {
+      "size": "town", "wall_tier": 1, "seed": 611039, "density": 0.6,
+      "landmarks": ["gate", "warehouse"], "conquest_anchor": false
+    },
+    "l1_settlement_07": {
+      "size": "city", "wall_tier": 2, "seed": 611040, "density": 0.65,
+      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": false
+    }
+  }
+}

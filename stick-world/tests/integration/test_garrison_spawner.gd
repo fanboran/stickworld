@@ -16,8 +16,6 @@ const ScriptTerritoryRegistry := preload("res://modules/expansion/scripts/territ
 const TID_1 := "ter_bandit_camp_01"
 ## TID_1 满配守军数（garrison 条目 count 之和，不含敌将）
 const TID_1_GARRISON := 3
-## 据点图守军布阵带左界（锚点槽位 x，避开民居带 3456~3936）
-const GARRISON_ZONE_X := 3900.0
 ## 据点图 map_id
 const MAP_ID := "l1_settlement_02"
 
@@ -68,6 +66,18 @@ func _set_territory(state: int, losses: int) -> void:
 	}
 
 
+## 城门像素 x（守军带基准）。城镇生成管线批次 1 起布局由 seed 驱动、锚点带位置随城门走，
+## 不再硬编码坐标——从初始建筑 def 派生，对任意布局稳健。
+func _gate_x(map: Node2D) -> float:
+	var ibl: Node = map.get_node_or_null("InitialBuildingsList")
+	if ibl == null:
+		return -1.0
+	for d in ibl.building_defs:
+		if String(d.get("def_id", "")) == "wall_gate":
+			return float(d.get("cell_x", -1)) * 32.0
+	return -1.0
+
+
 ## 锚点契约：GarrisonSlots 8 槽 + CommanderSlot + RallyX，布阵在守军带内
 func _test_anchor_contract() -> void:
 	var map: Node2D = await _travel_to(MAP_ID)
@@ -78,11 +88,13 @@ func _test_anchor_contract() -> void:
 		return
 	var slots := anchor.get_garrison_slots()
 	_runner.assert_equal(slots.size(), 8, "守军位应 8 槽（覆盖最大守军配置）")
+	var gate_x := _gate_x(map)
+	_runner.assert_true(gate_x > 0.0, "图内应有城门 def（守军带基准）")
 	var in_zone := true
 	for p in slots:
-		if p.x < GARRISON_ZONE_X or p.x > map.map_right:
+		if p.x <= gate_x or p.x > map.map_right:
 			in_zone = false
-	_runner.assert_true(in_zone, "守军槽应落在城门右侧空旷带（x > %.0f）" % GARRISON_ZONE_X)
+	_runner.assert_true(in_zone, "守军槽应落在城门右侧空旷带（x > %.0f）" % gate_x)
 	_runner.assert_true(anchor.get_commander_position().is_finite(), "敌将位应存在")
 	_runner.assert_true(is_finite(anchor.get_rally_x()), "集结线应存在")
 
@@ -95,6 +107,7 @@ func _test_spawn_by_config() -> void:
 	_runner.assert_equal(garrison.size(), TID_1_GARRISON + 1, "满配应刷守军 %d + 敌将 1" % TID_1_GARRISON)
 	var def_ids: Dictionary = {}
 	var bow_units: Array = []
+	var gate_x := _gate_x(map)
 	var in_zone := true
 	for u in garrison:
 		if not is_instance_valid(u):
@@ -104,7 +117,7 @@ func _test_spawn_by_config() -> void:
 			_runner.assert_true(true, "守军带来源标记")
 		if u.stickman_def_id == "stm_bow_001":
 			bow_units.append(u)
-		if u.global_position.x < GARRISON_ZONE_X:
+		if u.global_position.x <= gate_x:
 			in_zone = false
 	_runner.assert_equal(int(def_ids.get("stm_sword_001", 0)), 3, "剑士守军 2 + 敌将（剑士）1")
 	_runner.assert_equal(int(def_ids.get("stm_bow_001", 0)), 1, "弓手守军 1")

@@ -54,40 +54,37 @@ z_index = 3
 [node name="ChunkTriggers" type="Node2D" parent="."]
 
 [node name="BattleAnchor" type="Node2D" parent="."]
-
-; 征服锚点（据点图）：守军位 8 槽 + 敌将位 + 集结线，坐标避开放民亭带（3456~3936）
-; 与兵营（cell 154=4928），布城门右侧空旷带；契约见 docs/技术/架构/出征与领地架构.md §2.3
 [node name="ConquestAnchor" type="Node2D" parent="."]
 script = ExtResource("5_anchor")
 
 [node name="GarrisonSlots" type="Node2D" parent="ConquestAnchor"]
 
 [node name="Slot1" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(3980, 945)
+position = Vector2(2836, 945)
 
 [node name="Slot2" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(4085, 945)
+position = Vector2(2941, 945)
 
 [node name="Slot3" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(4190, 945)
+position = Vector2(3046, 945)
 
 [node name="Slot4" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(4295, 945)
+position = Vector2(3151, 945)
 
 [node name="Slot5" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(4400, 945)
+position = Vector2(3256, 945)
 
 [node name="Slot6" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(4505, 945)
+position = Vector2(3361, 945)
 
 [node name="Slot7" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(4610, 945)
+position = Vector2(3466, 945)
 
 [node name="Slot8" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(4715, 945)
+position = Vector2(3571, 945)
 
 [node name="CommanderSlot" type="Marker2D" parent="ConquestAnchor"]
-position = Vector2(4830, 945)
+position = Vector2(3686, 945)
 
 [node name="RallyX" type="Marker2D" parent="ConquestAnchor"]
-position = Vector2(3940, 945)
+position = Vector2(2796, 945)

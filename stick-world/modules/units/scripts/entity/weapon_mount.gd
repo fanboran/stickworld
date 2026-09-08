@@ -458,7 +458,10 @@ func _apply_balance_calibration() -> void:
 			var health: Node = owner_entity.get_health()
 			if health != null and "max_hp" in health:
 				health.max_hp = hp
-				health.hp = hp
+				# 满血基线只写活体：deferred 校准可能落在出生帧之后，若单位已死
+				#（同帧接敌/陷阱/溅射），回写 hp 会把尸体复活成满血——只校准上限
+				if not (health.has_method("is_dead") and health.is_dead()):
+					health.hp = hp
 			_hp_calibrated = true
 	_check_cooldown_vs_anim()
 	_apply_global_tuning()

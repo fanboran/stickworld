@@ -271,7 +271,7 @@ def bake_flat_faces(scene):
     _, grays = _toon_band_grays(3)   # [lin(0.32), lin(0.62), lin(0.92)] 暗/中/亮
     g_dark, g_mid, g_bright = grays
     for o in scene.objects:
-        if o.type != 'MESH':
+        if o.type != 'MESH' or o.get('is_ink_shell'):
             continue
         polys = o.data.polygons
         if polys and all(p.use_smooth for p in polys):
@@ -287,7 +287,60 @@ def bake_flat_faces(scene):
         o.data.materials[0] = bake
 
 
-def render_passes(scene, tag, id_mat):
+def _ink_mat():
+    """描边壳材质：纯墨色 emission+背面剔除（反向壳原理）。
+    （与 gen_motifs.py 逐字一致）"""
+    m = bpy.data.materials.get('_ink_shell')
+    if m:
+        return m
+    m = bpy.data.materials.new('_ink_shell')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    emi = nt.nodes.new('ShaderNodeEmission')
+    emi.inputs[0].default_value = (18 / 255, 14 / 255, 9 / 255, 1.0)
+    nt.links.new(emi.outputs[0], out.inputs[0])
+    m.use_backface_culling = True
+    return m
+
+
+def build_ink_shells(scene, target):
+    """反向壳描边（C 阶段）：复制+SOLIDIFY 外扩成壳，纯墨只渲背面。
+    （与 gen_motifs.py 逐字一致）"""
+    import bmesh
+    cam = scene.camera
+    px = {64: 2.2, 128: 2.6, 256: 3.0}.get(target, 2.2)
+    thickness = cam.data.ortho_scale * px / target
+    ink = _ink_mat()
+    for o in list(scene.objects):
+        if o.type != 'MESH' or o.get('is_ink_shell'):
+            continue
+        sh = o.copy()
+        sh.data = o.data.copy()
+        sh['is_ink_shell'] = 1
+        sol = sh.modifiers.new('ink_shell', 'SOLIDIFY')
+        sol.thickness = thickness
+        sol.offset = -1
+        flipped = False
+        try:
+            sol.use_flip = True
+            flipped = True
+        except AttributeError:
+            pass
+        if not flipped:
+            bm = bmesh.new()
+            bm.from_mesh(sh.data)
+            bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+            bm.to_mesh(sh.data)
+            bm.free()
+        sh.data.materials.clear()
+        sh.data.materials.append(ink)
+        scene.collection.objects.link(sh)
+
+
+def render_passes(scene, tag, id_mat, target=64, margin=1.06):
+    """C 阶段三分 pass：ID（无壳）→ shade（原体+壳）→ ink（只有壳）"""
     for o in scene.objects:
         if o.type != 'MESH':
             continue
@@ -296,10 +349,21 @@ def render_passes(scene, tag, id_mat):
     scene.render.filepath = os.path.join(OUT, f"{tag}_id.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "id")
-    bake_flat_faces(scene)   # D 分档：平面面烘色/曲面 toon，取代白模受光
+    build_ink_shells(scene, target)
+    fit_ortho(scene, margin)   # 二次取景：描边壳外扩纳入画框
+    for o in scene.objects:
+        if o.get('is_ink_shell'):
+            o.hide_render = True   # shade 保持纯 cel
+    bake_flat_faces(scene)     # D 分档：平面面烘色/曲面 toon，取代白模受光
     scene.render.filepath = os.path.join(OUT, f"{tag}_shade.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "shade")
+    for o in scene.objects:
+        if o.type == 'MESH':
+            o.hide_render = not bool(o.get('is_ink_shell'))
+    scene.render.filepath = os.path.join(OUT, f"{tag}_ink.png")
+    bpy.ops.render.render(write_still=True)
+    print("rendered", tag, "ink")
 
 
 KINDS = ["cube", "sphere", "cylinder", "cone", "torus"]
@@ -311,5 +375,5 @@ for kind in KINDS:
         scene = setup(32, 22, t * 2)
         ob, col = build_primitive(scene, kind)
         fit_ortho(scene)
-        render_passes(scene, f"test_{kind}_v9_{t}", flat_mat(f'id_{kind}', ID_COLS[kind]))
+        render_passes(scene, f"test_{kind}_v9_{t}", flat_mat(f'id_{kind}', ID_COLS[kind]), target=t)
 sys.stdout.flush()

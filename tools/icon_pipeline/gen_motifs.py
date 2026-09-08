@@ -236,7 +236,7 @@ def bake_flat_faces(scene):
     _, grays = _toon_band_grays(3)   # [lin(0.32), lin(0.62), lin(0.92)] 暗/中/亮
     g_dark, g_mid, g_bright = grays
     for o in scene.objects:
-        if o.type != 'MESH':
+        if o.type != 'MESH' or o.get('is_ink_shell'):
             continue
         polys = o.data.polygons
         if polys and all(p.use_smooth for p in polys):
@@ -252,23 +252,104 @@ def bake_flat_faces(scene):
         o.data.materials[0] = bake
 
 
-def render_two(scene, tag, t, classic=False):
-    """shade pass：平面物体面烘色、曲面物体 toon 着色器分档（输出即 cel 灰阶）；
-    再 ID pass。母题对象全部单槽，原位替换材质，无钳零问题。classic=True
-    全白模受光连续明度（豁免母题 v1 渲染语义——其 compose 侧假光依赖连续
-    明度场，保留；对应 v9 套件旧管线）"""
+def _ink_mat():
+    """描边壳材质：纯墨色 emission（不受光、无分档），开启背面剔除——
+    反向壳原理：壳沿法线外扩+法线反转后，叠在形体正面的壳面是背面被剔除，
+    只有轮廓外露出的壳面朝向相机，形成描边。"""
+    m = bpy.data.materials.get('_ink_shell')
+    if m:
+        return m
+    m = bpy.data.materials.new('_ink_shell')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    emi = nt.nodes.new('ShaderNodeEmission')
+    emi.inputs[0].default_value = (18 / 255, 14 / 255, 9 / 255, 1.0)
+    nt.links.new(emi.outputs[0], out.inputs[0])
+    m.use_backface_culling = True
+    return m
+
+
+def build_ink_shells(scene, target):
+    """反向壳描边（C 阶段，取代图像域外轮廓环）：
+    - 对场景每个 mesh 复制一份（修改器栈随对象复制，bevel 等形状保留），
+      追加 SOLIDIFY 沿法线外扩成壳，材质=纯墨+背面剔除；
+    - 5.2 的 Solidify 无独立法线翻转开关，用 use_flip 探测，失败则 bmesh
+      反转壳网格法线（基面反转后 offset=-1 语义即向外）；
+    - 壳边缘=几何边缘，MSAA 真抗锯齿（ShaderToRGB 会关 MSAA，图像域描边
+      拿不到的 AA 几何线白送）；墨线与形体轮廓零对位误差（双层线根除）；
+    - 壳不带 pid：ID pass 前 hide_render，ID 渲完在 shade 里可见；
+    - 线宽按目标尺寸参数化（世界单位 thickness=ortho_scale×px/target）"""
+    import bmesh
+    cam = scene.camera
+    px = {64: 2.2, 128: 2.6, 256: 3.0}.get(target, 2.2)
+    thickness = cam.data.ortho_scale * px / target
+    ink = _ink_mat()
+    for o in list(scene.objects):
+        if o.type != 'MESH' or o.get('is_ink_shell'):
+            continue
+        sh = o.copy()                  # 修改器栈随对象复制
+        sh.data = o.data.copy()        # 网格数据独立（材质可安全替换）
+        sh['is_ink_shell'] = 1
+        sol = sh.modifiers.new('ink_shell', 'SOLIDIFY')
+        sol.thickness = thickness
+        sol.offset = -1
+        flipped = False
+        try:
+            sol.use_flip = True        # 5.2 探测：直接反转壳法线
+            flipped = True
+        except AttributeError:
+            pass
+        if not flipped:
+            bm = bmesh.new()
+            bm.from_mesh(sh.data)
+            bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+            bm.to_mesh(sh.data)
+            bm.free()
+        sh.data.materials.clear()
+        sh.data.materials.append(ink)
+        scene.collection.objects.link(sh)
+    return thickness
+
+
+def render_two(scene, tag, t, classic=False, margin=1.06):
+    """shade pass：平面物体面烘色、曲面物体 toon 着色器分档（输出即 cel 灰阶
+    +几何描边壳）；再 ID pass（壳先隐藏，壳不带 pid）。
+    母题对象全部单槽，原位替换材质，无钳零问题。classic=True 全白模受光
+    连续明度（豁免母题 v1 渲染语义——其 compose 侧假光依赖连续明度场）"""
+    build_ink_shells(scene, t)
+    fit_ortho(scene, margin)   # 二次取景：把描边壳的外扩纳入画框
     if not classic:
         bake_flat_faces(scene)
     else:
         white = shade_mat('_w')
         for o in scene.objects:
+            if o.get('is_ink_shell'):
+                continue
             if o.type == 'MESH':
                 o.data.materials[0] = white
+    # shade pass：壳隐藏——shade 保持纯 cel（墨线由 ink pass 单独承担）
+    for o in scene.objects:
+        if o.get('is_ink_shell'):
+            o.hide_render = True
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_shade.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, t, "shade")
     sys.stdout.flush()
+    # 墨线 pass：只渲描边壳（透明底）；compose「cel 在上、墨壳在下」合成，
+    # 墨壳被 cel 覆盖的部分不显形，只在轮廓外露出一圈描边
     for o in scene.objects:
+        if o.type == 'MESH':
+            o.hide_render = not bool(o.get('is_ink_shell'))
+    scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_ink.png")
+    bpy.ops.render.render(write_still=True)
+    print("rendered", tag, t, "ink")
+    sys.stdout.flush()
+    for o in scene.objects:
+        if o.get('is_ink_shell'):
+            o.hide_render = True
+            continue
         if o.type == 'MESH':
             o.data.materials[0] = flat_mat(f"_id{o['pid']}", M.ID_COLORS[o['pid']])
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_id.png")
@@ -287,7 +368,7 @@ for m in M.MOTIFS:
             scene = setup(m["az"], m["el"], t * 2, m["key_e"])
             m["build"]()
             fit_ortho(scene, m["margin"])
-            render_two(scene, m["tag"], t, m.get("classic", False))
+            render_two(scene, m["tag"], t, m.get("classic", False), m["margin"])
         except Exception:
             fails.append((m["tag"], t, traceback.format_exc()))
 

@@ -114,7 +114,24 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         if m.any():
             out[m] = np.array([ramp[min(b, len(ramp) - 1)] for b in band[m]]) * 255
 
-    rgba = np.dstack([out, sa[..., 3]])
+    # 反向壳墨线层（C 阶段）：渲染端单独渲 ink pass（只有描边壳完整剪影，
+    # 透明底），合成次序=「cel 在上、墨壳在下」的标准 over——墨壳被 cel 覆盖
+    # 的部分不显形，只在轮廓外露出一圈描边。壳轮廓=几何边缘，MSAA 真抗锯齿
+    # （ShaderToRGB 会关 MSAA，图像域描边拿不到），墨线与形体零对位误差
+    # （双层线根除）。无 ink 层的旧产物回退图像域外轮廓环。
+    ink_fp = os.path.join(BASE, f"{tag}_{target}_ink.png")
+    has_ink = os.path.exists(ink_fp)
+    if has_ink:
+        inkim = np.asarray(Image.open(ink_fp).convert("RGBA")).astype(np.float32)
+        a_cel = sa[..., 3:4]                      # 0..255
+        a_ink = inkim[..., 3:4]                   # 0..255
+        alpha = a_cel + a_ink * (1 - a_cel / 255.0)
+        w = a_cel / np.maximum(alpha, 1e-3)       # cel 在最终透明度中的权重
+        out = out * w + inkim[..., :3] * (1 - w)
+    else:
+        alpha = sa[..., 3]
+
+    rgba = np.dstack([out, alpha])
     img = Image.fromarray(np.clip(rgba, 0, 255).astype(np.uint8), "RGBA")
 
     ys, xs = np.where(np.asarray(img)[..., 3] > 40)
@@ -132,23 +149,15 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     op = a[..., 3] > 128
     op_img = Image.fromarray((op * 255).astype(np.uint8))
     ero3 = np.asarray(op_img.filter(ImageFilter.MinFilter(3))) > 120
-    # 描边环基线（全量统一，NO_STRETCH 豁免退役）：从视觉轮廓（alpha>16，软边
-    # 最外沿）向内画环——墨骑在轮廓上。旧版从 alpha>128（软边中点）起画，
-    # 外侧半条软边只剩填充色=高分图「描边内缩+色晕」。
-    vis = a[..., 3] > 16
-    vis_img = Image.fromarray((vis * 255).astype(np.uint8))
-    ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
-    ring = (vis & ~ero_vis).astype(np.float32)
-    # 描边宽度档（ICON_STROKE，默认 2.0=1px 核心+满权重内圈共 2px——2026-09-08
-    # 创始人审计定档「1.0 偏细」；1.5=半权重内圈）：>1 时向内加第二圈——
-    # 仅外轮廓圈，ID 结合缝线不动；阶段 2 反向壳落地后外轮廓宽度改由壳厚承载
-    stroke = float(os.environ.get("ICON_STROKE", "2.0"))
-    if stroke > 1.0:
-        ero5 = np.asarray(op_img.filter(ImageFilter.MinFilter(5))) > 120
-        ring = ring + min(1.0, stroke - 1.0) * (ero3 & ~ero5)
-    if target >= 128:
-        ero5 = np.asarray(op_img.filter(ImageFilter.MinFilter(5))) > 120
-        ring = ring + np.where(ero3 & ~ero5, 0.3 if target == 128 else 0.4, 0.0)
+    # 外轮廓墨线已由渲染端反向壳承担（ink pass 合成）。此节只剩：无 ink 层的
+    # 回退环（视觉轮廓 alpha>16 向内一圈）+ ID 结合缝线（拼版概念，保留图像域）。
+    if has_ink:
+        ring = np.zeros_like(op, dtype=np.float32)
+    else:
+        vis = a[..., 3] > 16
+        vis_img = Image.fromarray((vis * 255).astype(np.uint8))
+        ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
+        ring = (vis & ~ero_vis).astype(np.float32)
     if target >= 128:
         id_t = Image.fromarray((part + 1).astype(np.uint8)).resize((target, target), Image.NEAREST)
         idedge = (np.asarray(id_t.filter(ImageFilter.MaxFilter(3))) !=

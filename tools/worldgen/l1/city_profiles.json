@@ -1,4 +1,10 @@
 {
+  "_notes": [
+    "八城 landmarks/character 为 AI 提案（提案/待定），批次 4 全量精调；性格命名只作开发期辨识，未经创始人确认为世界观设定。",
+    "性格依据 l1_world.json 的城名/位置/人口/水系距离：近河城配 dock，人口大城配 market+smith，conquest 城守 reserve+barracks。",
+    "landmark 类型→建筑 def 的映射在 city_layout.py LANDMARK_DEFS（[占位] 标注 = 待 A 线真 def 替换）。",
+    "T2 镇（00/06）不得配 barracks（test_settlement_entry 布局断言：T2 无兵营）。"
+  ],
   "defaults": {
     "ground_y": 810,
     "cell_w": 32,
@@ -14,36 +20,44 @@
   },
   "cities": {
     "l1_settlement_00": {
+      "character": "河口渔村（AI提案·待定）：西北小镇临河，渔获仓储为生",
       "size": "town", "wall_tier": 1, "seed": 611033, "density": 0.6,
-      "landmarks": ["gate", "warehouse"], "conquest_anchor": false
+      "landmarks": ["gate", "warehouse", "dock"], "conquest_anchor": false
     },
     "l1_settlement_01": {
+      "character": "河港商城（AI提案·待定）：北境大河港，市场+铁匠区+码头齐备的富庶大城",
       "size": "city", "wall_tier": 2, "seed": 611034, "density": 0.7,
-      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": false
+      "landmarks": ["gate", "market", "smith", "warehouse", "barracks", "dock"], "conquest_anchor": false
     },
     "l1_settlement_02": {
+      "character": "湖畔军镇（AI提案·待定）：东境湖泊畔的驻防城，集市供养驻军",
       "size": "city", "wall_tier": 2, "seed": 611035, "density": 0.7,
-      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": true
+      "landmarks": ["gate", "market", "warehouse", "barracks"], "conquest_anchor": true
     },
     "l1_settlement_03": {
+      "character": "家园主城（AI提案·待定）：玩家出生城，功能最全的门户型大城",
       "size": "city", "wall_tier": 2, "seed": 611036, "density": 0.7,
-      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": true
+      "landmarks": ["gate", "market", "smith", "warehouse", "barracks"], "conquest_anchor": true
     },
     "l1_settlement_04": {
+      "character": "矿冶工堡（AI提案·待定）：中部湖东工坊堡，铁匠区供养军械",
       "size": "city", "wall_tier": 2, "seed": 611037, "density": 0.7,
-      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": true
+      "landmarks": ["gate", "smith", "warehouse", "barracks"], "conquest_anchor": true
     },
     "l1_settlement_05": {
+      "character": "河东商埠（AI提案·待定）：远东河畔商埠，集市+码头的贸易城",
       "size": "city", "wall_tier": 2, "seed": 611038, "density": 0.75,
-      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": false
+      "landmarks": ["gate", "market", "warehouse", "barracks", "dock"], "conquest_anchor": false
     },
     "l1_settlement_06": {
+      "character": "南路粮集（AI提案·待定）：西南农业镇，粮仓与集市的集散地",
       "size": "town", "wall_tier": 1, "seed": 611039, "density": 0.6,
-      "landmarks": ["gate", "warehouse"], "conquest_anchor": false
+      "landmarks": ["gate", "market", "warehouse"], "conquest_anchor": false
     },
     "l1_settlement_07": {
+      "character": "南渡口城（AI提案·待定）：南境渡口城，铁匠区+码头扼守南路",
       "size": "city", "wall_tier": 2, "seed": 611040, "density": 0.65,
-      "landmarks": ["gate", "warehouse", "barracks"], "conquest_anchor": false
+      "landmarks": ["gate", "smith", "warehouse", "barracks", "dock"], "conquest_anchor": false
     }
   }
 }

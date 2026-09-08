@@ -1,16 +1,29 @@
 """城镇布局骨架规划器 —— seed 驱动的一维街区生成（纯函数，无 IO）。
 
-死亡细胞式随机边界：seed 决定结构与布局（城门位/街区分块/建筑落位），
-美术风格不归这里管（材质/层高/装饰是批次 2/3 的消费端）。
+死亡细胞式随机边界：seed 决定结构与布局（城门位/地标落位/街区分块/民居填充），
+美术风格不归这里管（材质/层高/装饰是批次 3 的消费端）。
 
 一维骨架（横向卷轴退化为条带布局，从左到右）：
 
-  [左城墙带] [左街区：仓库+民居群] [城门(主街锚)] [右街区：校场+兵营+民居群] [右城墙带]
+  [左城墙带] [左街区：市场·铁匠铺·仓库 + 民居群] [城门(主街锚)] [右街区：校场·兵营·码头 + 民居群] [右城墙带]
 
-- 城门位置在可用区中部随机（主街走向的一维表达）；
-- 校场（conquest reserve）紧邻城门右侧——守军布阵开阔带，语义同
-  ConquestAnchor 现状（城门右侧空旷带）；
-- 民居按街区（block 10~18 cell）填充，block 间留巷道，密度由 profile 控制。
+功能区锚定布局（先占位再填民居）：地标按 LANDMARK_SPECS 的 side/order 在
+城门两侧顺序落位，占满自己的 footprint + plaza 净空后，剩余空间才给民居：
+
+- 市场（market）：紧贴城门左侧，footprint 大 + 双侧广场净空（集市人流语义）；
+- 铁匠铺区（smith）：市场之后仍靠主街（工匠区近门、远离仓储的烟火语义）；
+- 仓库（warehouse）：左街区深端（仓储远离主街喧嚣）；
+- 校场（conquest reserve）：紧邻城门右侧——守军布阵开阔带（30 cell 净空，
+  ConquestAnchor 位置由它派生，见 RESERVE_CELLS）；
+- 兵营（barracks）：校场之后（无校场则城门右侧第一地标）；
+- 码头（dock）：贴右街区边缘（水岸语义，profile 配了才有）；
+- 民居按街区（block 10~18 cell）填充剩余空间，block 间巷道，密度由 profile 控制。
+
+一维表达约定（横向卷轴的空间语义退化）：
+- 「面向主街」= 同侧落位次序靠前（order 小，紧邻城门）；
+- 「广场净空」= plaza cell 的禁区段，净空内除该地标本身不出任何建筑
+  （verify_layout 校验）；
+- 「贴边/水岸」= 压着可用区内缘（edge=True 的地标从右端倒着落位）。
 
 确定性契约：同 profile（同 seed）→ 同 layout，跨平台跨时间可重放。
 profile/schema 见同目录 city_profiles.json。
@@ -22,8 +35,65 @@ RESERVE_CELLS = 30
 WALL_SEGMENT_COUNT = 6  # 每侧城墙段数（现状节奏：6 段 × 4 cell）
 
 _LM_GATE = "gate"
-_LM_WAREHOUSE = "warehouse"
-_LM_BARRACKS = "barracks"
+
+# ── 地标类型 → 建筑 def 映射 ──────────────────────────────────────────────
+# [占位] = A 线（建筑与美术升级）专用 def 未就绪，先用现有 def 占位；
+# A 线相应批次落地后在此换真 def，并复核 LANDMARK_SPECS 的宽度/净空
+# （占位 landmark 的辨识度目前靠宽度与净空，视觉辨识批次 3/4 增强）。
+LANDMARK_DEFS = {
+    "market": "placeholder",   # [占位] 市场：placeholder 宽幅拉伸渲染，待 A 线市场/商铺 def
+    "smith": "placeholder",    # [占位] 铁匠铺：待 A 线批次1 smithy_lv1 场景+注册
+    "dock": "placeholder",     # [占位] 码头：无对应 def，栈桥类建筑未立项
+    "warehouse": "warehouse",
+    "barracks": "barracks",
+}
+
+# ── 地标落位规格 ─────────────────────────────────────────────────────────
+# width  = 建筑 footprint（cell）
+# plaza  = 单侧净空（cell）——广场/防火带语义，净空内禁其他建筑
+# side   = 落位区段（left=城门左侧街区 / right=城门右侧街区）
+# order  = 同侧落位次序（1=最靠城门，即「面向主街」）
+# edge   = True 时贴可用区边缘落位（水岸语义，从区段尾端倒着放）
+LANDMARK_SPECS = {
+    "market":    {"width": 8, "plaza": 3, "side": "left",  "order": 1},
+    "smith":     {"width": 6, "plaza": 1, "side": "left",  "order": 2},
+    "warehouse": {"width": 8, "plaza": 0, "side": "left",  "order": 3},
+    "barracks":  {"width": 8, "plaza": 0, "side": "right", "order": 1},
+    "dock":      {"width": 6, "plaza": 2, "side": "right", "order": 2, "edge": True},
+}
+
+# profile.landmarks 里 gate 的校验位（gate 由算法独占落位，不进 SPEC 表）
+_GATE_KEY = _LM_GATE
+
+
+def _normalize_landmarks(landmarks) -> list:
+    """profile.landmarks 条目归一化：支持 "market" 串或 {"type": "market", ...覆盖}。
+
+    dict 形式可覆盖 width/plaza（批次 4 精调口子），未指定字段取 LANDMARK_SPECS 默认。
+    返回按落位次序（side 内 order 升序）排序的规格列表，gate 不在其中。
+    """
+    out = []
+    for lm in landmarks:
+        if isinstance(lm, str):
+            lm = {"type": lm}
+        t = lm.get("type")
+        if t == _LM_GATE:
+            continue
+        spec = LANDMARK_SPECS.get(t)
+        if spec is None:
+            raise ValueError("未知地标类型: %r（可选: %s）" % (t, sorted(LANDMARK_SPECS)))
+        merged = dict(spec)
+        for k in ("width", "plaza"):
+            if k in lm:
+                merged[k] = int(lm[k])
+        merged["type"] = t
+        out.append(merged)
+    out.sort(key=lambda m: (m["side"], m["order"]))
+    return out
+
+
+def _align_up(x: int, step: int) -> int:
+    return -(-x // step) * step
 
 
 def plan_layout(profile: dict, config: dict) -> dict:
@@ -31,7 +101,11 @@ def plan_layout(profile: dict, config: dict) -> dict:
 
     profile: city_profiles.json -> cities.<map_id>（size/wall_tier/seed/density/landmarks/conquest_anchor）
     config:  city_profiles.json（含 defaults + sizes）
-    返回 layout dict（buildings 按 cell_x 升序；anchor 仅 conquest 城有值）。
+    返回 layout dict：
+      buildings        按 cell_x 升序的建筑落位（def_id/cell_x/width）
+      anchor           ConquestAnchor 数据（仅 conquest 城非 None）
+      landmarks        {类型: cell_x} 地标落位索引（gate 除外）
+      landmark_zones   [(lo, hi, 类型)] 含净空的禁区段（verify_layout 校验用）
     """
     defaults = config["defaults"]
     size = config["sizes"][profile["size"]]
@@ -43,33 +117,39 @@ def plan_layout(profile: dict, config: dict) -> dict:
     wall_tier = int(profile.get("wall_tier", 0))
     wall_len = defaults["wall_band_len"] if wall_tier > 0 else 0
     density = float(profile.get("density", defaults["density"]))
-    landmarks = list(profile.get("landmarks", []))
+    raw_landmarks = list(profile.get("landmarks", []))
+    if _GATE_KEY not in raw_landmarks:
+        raise ValueError("landmarks 必须含 gate（主街锚点），got %r" % raw_landmarks)
+    lms = _normalize_landmarks(raw_landmarks)
     conquest = bool(profile.get("conquest_anchor", False))
-    if _LM_GATE not in landmarks:
-        raise ValueError("landmarks 必须含 gate（主街锚点），got %r" % landmarks)
 
     rng = random.Random(int(profile["seed"]))
 
     # 可用区（城墙带内侧）
     s = edge + wall_len
     e = grid - edge - wall_len
-
-    # 城门（主街锚点）：两侧须容下必配地标 + 至少一个民居街区
     gate_w = house_w
-    left_min = 26 if _LM_WAREHOUSE in landmarks else 12
+
+    left_lms = [m for m in lms if m["side"] == "left"]
+    right_lms = [m for m in lms if m["side"] == "right"]
+
+    # 城门（主街锚点）可放区间：两侧须容下全部地标（footprint+双侧净空+最小巷道1）
+    # + 至少一个民居街区（12 cell）；conquest 右侧另加校场带+城门巷道
+    left_need = 12 + sum(m["width"] + 2 * m["plaza"] + 1 for m in left_lms)
+    right_need = 12
     if conquest:
-        right_min = RESERVE_CELLS + 26
-    elif _LM_BARRACKS in landmarks:
-        right_min = 26
-    else:
-        right_min = 12
-    lo_align = -(-max(s + left_min, s) // house_w)  # ceil 对齐 house_w
-    hi_align = (e - gate_w - right_min) // house_w
+        right_need += RESERVE_CELLS + 2  # 校场 + 城门与校场间巷道（2~4 取下限）
+    right_need += sum(m["width"] + 2 * m["plaza"] + 1 for m in right_lms)
+    lo_align = _align_up(s + left_need, house_w) // house_w  # ceil 对齐 house_w 后取 cell 索引
+    hi_align = (e - gate_w - right_need) // house_w
     if lo_align > hi_align:
-        raise ValueError("可用区容不下必配地标：grid=%d s=%d e=%d" % (grid, s, e))
+        raise ValueError("可用区容不下必配地标：grid=%d s=%d e=%d left_need=%d right_need=%d"
+                         % (grid, s, e, left_need, right_need))
     gate_x = rng.randint(lo_align, hi_align) * house_w
 
     buildings = []
+    marks = {}      # 类型 -> 建筑左缘 cell_x
+    zones = []      # (lo, hi, 类型) 含净空禁区
 
     # 城墙带（贴边缘，位置固定不随机——城墙就该贴边）
     if wall_tier > 0:
@@ -82,17 +162,24 @@ def plan_layout(profile: dict, config: dict) -> dict:
     # 城门
     buildings.append({"def_id": "wall_gate", "cell_x": gate_x, "width": gate_w})
 
-    # 左街区：仓库（靠入口侧，随机落位）+ 民居
-    anchor = None
-    warehouse_x = None
-    if _LM_WAREHOUSE in landmarks:
-        warehouse_x = rng.randint(s + 2, gate_x - 9)
-        buildings.append({"def_id": _LM_WAREHOUSE, "cell_x": warehouse_x, "width": 8})
-    for seg in _segments_around(s, gate_x, warehouse_x, 8):
-        buildings.extend(_houses_in(rng, seg, density, house_w))
+    # ── 左街区：从城门向左按 order 落位地标，剩余空间填民居 ──
+    cur = gate_x  # 左侧游标（下一地标的右缘基准）
+    for m in left_lms:
+        cur -= rng.randint(1, 3)   # 与主街/前一地标的巷道
+        cur -= m["plaza"]
+        x2 = cur
+        x1 = x2 - m["width"]
+        if x1 < s:
+            raise ValueError("左街区容不下地标 %s：x1=%d < s=%d" % (m["type"], x1, s))
+        buildings.append({"def_id": LANDMARK_DEFS[m["type"]], "cell_x": x1, "width": m["width"]})
+        marks[m["type"]] = x1
+        zones.append((max(x1 - m["plaza"], s), min(x2 + m["plaza"], e), m["type"]))
+        cur = x1 - m["plaza"]
+    buildings.extend(_houses_in(rng, (s, cur), density, house_w))
 
-    # 右街区：校场（紧邻城门右侧）→ 兵营（远端）→ 民居
+    # ── 右街区：校场（紧邻城门右侧，conquest 专属）→ 地标按 order → 民居 ──
     cur = gate_x + gate_w
+    anchor = None
     if conquest:
         cur += rng.randint(2, 4)  # 城门与校场间巷道
         reserve_start = cur
@@ -105,12 +192,28 @@ def plan_layout(profile: dict, config: dict) -> dict:
             "slot_xs": slot_xs,
             "commander_x": slot_xs[-1] + 115,
         }
-    if _LM_BARRACKS in landmarks:
-        cur += rng.randint(1, 3)
-        barracks_x = -(-cur // house_w) * house_w  # ceil 对齐
-        buildings.append({"def_id": _LM_BARRACKS, "cell_x": barracks_x, "width": 8})
-        cur = barracks_x + 8
-    buildings.extend(_houses_in(rng, (cur, e), density, house_w))
+    tail_end = e  # 民居填充的右边界（贴边地标会把它往里收）
+    for m in right_lms:
+        if m.get("edge"):
+            # 水岸语义：贴可用区右缘落位
+            x1 = tail_end - m["width"] - rng.randint(0, 2)
+            if x1 - m["plaza"] < cur:
+                raise ValueError("右街区容不下地标 %s：x1=%d 与游标 %d 冲突" % (m["type"], x1, cur))
+            tail_end = x1 - m["plaza"]
+        else:
+            cur += rng.randint(1, 3)  # 与校场/前一地标的巷道
+            x1 = cur
+            if x1 + m["width"] + m["plaza"] > tail_end:
+                raise ValueError("右街区容不下地标 %s：右缘 %d 越界 %d" % (m["type"], x1 + m["width"], tail_end))
+            cur = x1 + m["width"] + m["plaza"]
+        buildings.append({"def_id": LANDMARK_DEFS[m["type"]], "cell_x": x1, "width": m["width"]})
+        marks[m["type"]] = x1
+        zones.append((max(x1 - m["plaza"], s), min(x1 + m["width"] + m["plaza"], e), m["type"]))
+    buildings.extend(_houses_in(rng, (cur, tail_end), density, house_w))
+
+    # 地标可辨识守护：每个配置地标必须真实落位（程序性验收门）
+    for m in lms:
+        assert m["type"] in marks, "地标缺失: %s" % m["type"]
 
     buildings.sort(key=lambda b: (b["cell_x"], b["def_id"]))
     layout = {
@@ -120,16 +223,11 @@ def plan_layout(profile: dict, config: dict) -> dict:
         "wall_tier": wall_tier,
         "buildings": buildings,
         "anchor": anchor,
+        "landmarks": marks,
+        "landmark_zones": zones,
     }
     verify_layout(layout, cell_w)
     return layout
-
-
-def _segments_around(zone_start: int, zone_end: int, occupied_x, occupied_w: int):
-    """一块区域被单个地标占用后，剩余的民居可用段。"""
-    if occupied_x is None:
-        return [(zone_start, zone_end)]
-    return [(zone_start, occupied_x - 1), (occupied_x + occupied_w + 1, zone_end)]
 
 
 def _houses_in(rng, seg, density: float, house_w: int) -> list:
@@ -149,7 +247,7 @@ def _houses_in(rng, seg, density: float, house_w: int) -> list:
 
 
 def verify_layout(layout: dict, cell_w: int) -> None:
-    """布局不变式：越界/重叠/校场净空/城门存在。规划期 assert，防算法回归。"""
+    """布局不变式：越界/重叠/校场净空/城门存在/地标净空。规划期 assert，防算法回归。"""
     grid = layout["grid_width"]
     bl = layout["buildings"]
     assert any(b["def_id"] == "wall_gate" for b in bl), "缺城门"
@@ -169,3 +267,13 @@ def verify_layout(layout: dict, cell_w: int) -> None:
             bx2 = (b["cell_x"] + b["width"]) * cell_w
             assert bx2 <= clear_lo or bx >= clear_hi, \
                 "校场被占: %s@%d 侵入 [%d,%d]" % (b["def_id"], b["cell_x"], clear_lo, clear_hi)
+    # 地标净空：禁区段内只允许该地标本身（同类型多地标以落位坐标区分）
+    marks = layout.get("landmarks", {})
+    for lo, hi, t in layout.get("landmark_zones", []):
+        lx = marks.get(t)
+        for b in bl:
+            if b["cell_x"] == lx and b["def_id"] == LANDMARK_DEFS[t]:
+                continue
+            bx2 = b["cell_x"] + b["width"]
+            assert b["cell_x"] >= hi or bx2 <= lo, \
+                "净空被占: %s@%d 侵入 %s 区 [%d,%d]" % (b["def_id"], b["cell_x"], t, lo, hi)

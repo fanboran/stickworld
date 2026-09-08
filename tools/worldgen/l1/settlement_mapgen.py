@@ -3,8 +3,8 @@
 开发期一次性工具（Python），产出：
   modules/world/scenes/maps/l1_settlement_00.tscn ... 07.tscn
   8 张 VillageMap 结构场景图。布局由 city_profiles.json 的每城 profile 驱动
-  （seed 随机骨架：城门位/街区分块/民居填充随机，骨架算法见 city_layout.py；
-   材质/层高/装饰等风格字段批次 2/3 接入）。
+  （seed 随机骨架：城门位/地标落位/街区分块/民居填充随机，骨架算法见 city_layout.py；
+   材质/层高/装饰等风格字段批次 3 接入）。
 
 城邦据点（conquest_anchor=true 的城）模板内置 ConquestAnchor
 （GarrisonSlots×8 + CommanderSlot + RallyX，位置由布局算法划出的校场带决定），
@@ -179,7 +179,8 @@ def main():
             json.dump({"buildings": layout["buildings"]}, f, ensure_ascii=False, indent=1)
         n = len(layout["buildings"])
         tag = " +锚点" if layout["anchor"] else ""
-        print(f"  {map_id} ({name}, seed={profile['seed']}, 建筑{n}{tag}) -> {path}")
+        lm_desc = ",".join(sorted(layout["landmarks"]))
+        print(f"  {map_id} ({name}, seed={profile['seed']}, 建筑{n}, 地标[{lm_desc}]{tag}) -> {path}")
 
     # 回填 map_id（就地读-改-写，只动 settlement.map_id 字段，indent=1 对齐原格式）
     if not backfill:

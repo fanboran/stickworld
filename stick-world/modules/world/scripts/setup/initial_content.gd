@@ -4,7 +4,7 @@ extends Node
 ## 职责：
 ## - 初始建筑（读 InitialBuildingsList，直接创建 OPERATIONAL 状态建筑）
 ## - 村庄仓库预置
-## - NPC 村民生成
+## - NPC 村民生成（含职业分配与着装，经 TownLifeAPI，town_life 模块实现）
 ## - 遭遇战战场敌方生成（红色阵营 + 启动战斗）
 ## - 火柴人身体颜色设置
 ##
@@ -76,6 +76,9 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 			# 注入 FormationSystem 引用（编队职责查询，AIController 决策过滤）
 			if npc.has_method("set_formation_system") and _root._formation_system != null:
 				npc.set_formation_system(_root._formation_system)
+			# 分配村庄职业（town_life 模块：职业档案 + 着装，轮转 index % 职业数；
+			# 无职业配置时安全降级待业，契约见 modules/town_life/api.gd）
+			TownLifeAPI.assign_village_job(npc, i)
 
 
 # ─────────────────────────────── 战场敌人 ────────────────────────────────

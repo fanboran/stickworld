@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+variables = {
+"data": [
+    {"id": "blacksmith", "name_zh": "铁匠", "work_site_def": "smithy_lv1", "product": "res_iron_ingot", "cycle": 4.0, "tool": "pickaxe", "uniform": "#7a4a21"},
+    {"id": "lumberjack", "name_zh": "伐木工", "work_site_def": "", "product": "res_wood", "cycle": 5.0, "tool": "sword", "uniform": "#3d6b35"},
+    {"id": "miner", "name_zh": "矿工", "work_site_def": "", "product": "res_metal_ore", "cycle": 5.0, "tool": "pickaxe", "uniform": "#555a66"}
+]
+}

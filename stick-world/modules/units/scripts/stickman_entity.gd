@@ -130,6 +130,12 @@ var role: String = ""
 ## FormationSystem 引用（由 GameRoot spawn 时注入，供 AIController 查询队伍职责；可能为 null）
 var _formation_system: Node = null
 
+# ─────────────────────────────── 职业（小镇生活，town_life 模块写入）────────────────────────────────
+## 职业 id（initial_content spawn 时经 TownLifeAPI 分配写入；
+## 空串 = 待业/无职业，非空 = 在职。契约见 modules/town_life/api.gd——
+## 实体侧只存弱类型 id，职业语义（档案/着装/工位）全部归 town_life 模块）
+var _profession_id: String = ""
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
 var rig: Node2D = null
@@ -1170,6 +1176,17 @@ func set_formation_system(fs: Node) -> void:
 ## 获取 FormationSystem 引用（可能为 null）
 func get_formation_system() -> Node:
 	return _formation_system
+
+
+## 写入职业 id（initial_content spawn 时经 TownLifeAPI 分配；弱类型协议，
+## 契约见 modules/town_life/api.gd）。空串 = 待业——批次 4 征兵离岗走此通道。
+func set_profession(id: String) -> void:
+	_profession_id = id
+
+
+## 获取职业 id（空串 = 待业/无职业）。
+func get_profession() -> String:
+	return _profession_id
 
 
 ## 设置角色类型（由 FormationSystem 编队时写入）。

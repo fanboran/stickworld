@@ -116,6 +116,7 @@ def plan_layout(profile: dict, config: dict) -> dict:
     wall_tier = int(profile.get("wall_tier", 0))
     wall_len = defaults["wall_band_len"] if wall_tier > 0 else 0
     density = float(profile.get("density", defaults["density"]))
+    house_w = int(profile.get("house_width", defaults["house_width"]))  # profile 可覆盖（紧凑档）
     raw_landmarks = list(profile.get("landmarks", []))
     if _GATE_KEY not in raw_landmarks:
         raise ValueError("landmarks 必须含 gate（主街锚点），got %r" % raw_landmarks)
@@ -177,7 +178,9 @@ def plan_layout(profile: dict, config: dict) -> dict:
         marks[m["type"]] = x1
         zones.append((max(x1 - m["plaza"], s), min(x2 + m["plaza"], e), m["type"]))
         cur = x1 - m["plaza"]
-    buildings.extend(_houses_in(rng, (s, cur), density, house_w))
+    gd = profile.get("house_gap", 4)
+    lg = profile.get("lane_gap", 4)
+    buildings.extend(_houses_in(rng, (s, cur), density, house_w, gd, lg))
 
     # ── 右街区：校场（紧邻城门右侧，conquest 专属）→ 地标按 order → 民居 ──
     cur = gate_x + gate_w
@@ -212,7 +215,7 @@ def plan_layout(profile: dict, config: dict) -> dict:
         buildings.append({"def_id": LANDMARK_DEFS[m["type"]], "cell_x": x1, "width": m["width"]})
         marks[m["type"]] = x1
         zones.append((max(x1 - m["plaza"], s), min(x1 + m["width"] + m["plaza"], e), m["type"]))
-    buildings.extend(_houses_in(rng, (cur, tail_end), density, house_w))
+    buildings.extend(_houses_in(rng, (cur, tail_end), density, house_w, gd, lg))
 
     # 地标可辨识守护：每个配置地标必须真实落位（程序性验收门）
     for m in lms:
@@ -238,8 +241,10 @@ def plan_layout(profile: dict, config: dict) -> dict:
     return layout
 
 
-def _houses_in(rng, seg, density: float, house_w: int) -> list:
-    """街区内民居填充：block 10~18 cell、block 间巷道 2~4、房距 1~4、density 概率落房。"""
+def _houses_in(rng, seg, density: float, house_w: int, gap_max: int = 4, lane_max: int = 4) -> list:
+    """街区内民居填充：block 10~18 cell、block 间巷道 2~lane_max、房距 1~gap_max、density 概率落房。
+    gap/lane 上限可由 profile 收紧（house_gap/lane_gap 口子，家园主城稠密档用）；
+    rng 消耗次数与取值上限解耦于骨架——地标先落位，此处只影响民居分布。"""
     seg_start, seg_end = seg
     houses = []
     cur = max(seg_start, 0)
@@ -249,8 +254,8 @@ def _houses_in(rng, seg, density: float, house_w: int) -> list:
         while pos + house_w <= cur + block_w:
             if rng.random() < density:
                 houses.append({"def_id": "placeholder", "cell_x": pos, "width": house_w})
-            pos += house_w + rng.randint(1, 4)
-        cur += block_w + rng.randint(2, 4)
+            pos += house_w + rng.randint(1, max(int(gap_max), 1))
+        cur += block_w + rng.randint(2, max(int(lane_max), 2))
     return houses
 
 

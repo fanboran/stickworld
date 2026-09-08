@@ -11,7 +11,7 @@ shader = ExtResource("6_band")
 shader_parameter/style = 0
 shader_parameter/base_color = Color(0.33, 0.44, 0.21, 1)
 shader_parameter/alt_color = Color(0.29, 0.4, 0.19, 1)
-shader_parameter/seam_color = Color(0.36, 0.34, 0.31, 1)
+shader_parameter/seam_color = Color(0.43, 0.39, 0.32, 1)
 shader_parameter/seed_off = 97.13
 shader_parameter/rect_l = 1024
 shader_parameter/rect_t = 810
@@ -24,7 +24,7 @@ shader = ExtResource("6_band")
 shader_parameter/style = 1
 shader_parameter/base_color = Color(0.58, 0.46, 0.3, 1)
 shader_parameter/alt_color = Color(0.58, 0.46, 0.3, 1)
-shader_parameter/seam_color = Color(0.36, 0.34, 0.31, 1)
+shader_parameter/seam_color = Color(0.43, 0.39, 0.32, 1)
 shader_parameter/seed_off = 194.26
 shader_parameter/rect_l = 1024
 shader_parameter/rect_t = 810
@@ -35,12 +35,12 @@ shader_parameter/edge_soft = 26
 [sub_resource type="ShaderMaterial" id="BandMat_2"]
 shader = ExtResource("6_band")
 shader_parameter/style = 2
-shader_parameter/base_color = Color(0.58, 0.55, 0.48, 1)
-shader_parameter/alt_color = Color(0.49, 0.46, 0.4, 1)
-shader_parameter/seam_color = Color(0.36, 0.34, 0.31, 1)
+shader_parameter/base_color = Color(0.56, 0.5, 0.4, 1)
+shader_parameter/alt_color = Color(0.51, 0.46, 0.38, 1)
+shader_parameter/seam_color = Color(0.43, 0.39, 0.32, 1)
 shader_parameter/seed_off = 291.39
 shader_parameter/rect_l = 2784
-shader_parameter/rect_t = 810
+shader_parameter/rect_t = 920
 shader_parameter/rect_r = 3232
 shader_parameter/rect_b = 1080
 shader_parameter/edge_soft = 20
@@ -68,7 +68,7 @@ polygon = PackedVector2Array(1024, 810, 5120, 810, 5120, 920, 1024, 920)
 
 [node name="GroundPlaza1" type="Polygon2D" parent="TerrainLayer"]
 material = SubResource("BandMat_2")
-polygon = PackedVector2Array(2784, 810, 3232, 810, 3232, 1080, 2784, 1080)
+polygon = PackedVector2Array(2784, 920, 3232, 920, 3232, 1080, 2784, 1080)
 
 [node name="GroundLine" type="Marker2D" parent="."]
 position = Vector2(0, 810)

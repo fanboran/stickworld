@@ -14,7 +14,7 @@ shader_type canvas_item;
 uniform int style = 0; // 0=草皮 1=土路 2=石板 3=农田
 uniform vec4 base_color : source_color = vec4(0.33, 0.44, 0.21, 1.0);
 uniform vec4 alt_color : source_color = vec4(0.27, 0.38, 0.18, 1.0);
-uniform vec4 seam_color : source_color = vec4(0.36, 0.34, 0.31, 1.0);
+uniform vec4 seam_color : source_color = vec4(0.43, 0.39, 0.32, 1.0);  // 浅缝（明度差小=铺装非砌块）
 uniform float seed_off = 0.0;
 uniform float rect_l = -99999.0; // 分带矩形（世界坐标，边缘羽化窗）
 uniform float rect_t = -99999.0;
@@ -83,8 +83,8 @@ vec3 road_col(vec2 p) {
 }
 
 vec3 stone_col(vec2 p) {
-	float slab_w = 46.0;
-	float slab_h = 24.0;
+	float slab_w = 34.0;  // 细板（大块砖读感偏"砌块墙"）
+	float slab_h = 17.0;
 	float row = floor(p.y / slab_h);
 	float sx = (p.x + mod(row, 2.0) * slab_w * 0.5) / slab_w;
 	vec2 cell = vec2(floor(sx), row);
@@ -92,8 +92,8 @@ vec3 stone_col(vec2 p) {
 	vec3 c = mix(base_color.rgb, alt_color.rgb, hash21(cell + seed_off));
 	c *= 0.94 + hash21(cell * 1.7 + seed_off + 3.0) * 0.10;
 	float bd = min(min(f.x, 1.0 - f.x) * slab_w, min(f.y, 1.0 - f.y) * slab_h);
-	c = mix(c, seam_color.rgb, (1.0 - smoothstep(1.0, 2.4, bd)) * 0.55);
-	c *= 0.88 + fbm(p * 0.008 + seed_off) * 0.24;
+	c = mix(c, seam_color.rgb, (1.0 - smoothstep(1.0, 2.4, bd)) * 0.38);
+	c *= 0.92 + fbm(p * 0.008 + seed_off) * 0.16;
 	float dirt_slab = step(0.94, hash21(cell + seed_off + 7.0));
 	c = mix(c, vec3(0.45, 0.38, 0.28), dirt_slab * 0.45);
 	return c;

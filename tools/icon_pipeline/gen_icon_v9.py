@@ -62,7 +62,7 @@ def setup(az_deg, el_deg, res, key_e=4.5):
             break
         except TypeError:
             continue
-    scene.eevee.taa_render_samples = 64
+    scene.eevee.taa_render_samples = 256   # 审计反馈「抗锯齿开满」：64→256（配合 2x SSAA 出图）
     scene.render.resolution_x = res
     scene.render.resolution_y = res
     scene.render.film_transparent = True
@@ -209,6 +209,11 @@ def build_heart(scene):
     ob.data.materials.append(red)
     for p_ in ob.data.polygons:
         p_.use_smooth = True
+    # 气球式鼓包（2026-09-08 审计反馈：挤出枕形读成「有厚度的心」不是「鼓起来的心」）：
+    # CAST 球化把平板正/背面向外顶成充气感，factor 压低保住心形轮廓读法
+    puff = ob.modifiers.new('puff', 'CAST')
+    puff.type = 'SPHERE'
+    puff.factor = 0.38
     return {ob.name: ['heart']}
 
 

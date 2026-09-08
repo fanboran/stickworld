@@ -32,7 +32,12 @@
   },
   {
    "def_id": "placeholder",
-   "cell_x": 32,
+   "cell_x": 33,
+   "width": 4
+  },
+  {
+   "def_id": "placeholder",
+   "cell_x": 40,
    "width": 4
   },
   {
@@ -43,47 +48,47 @@
   {
    "def_id": "placeholder",
    "cell_x": 63,
-   "width": 4
+   "width": 6
   },
   {
    "def_id": "placeholder",
-   "cell_x": 68,
-   "width": 4
+   "cell_x": 75,
+   "width": 8
   },
   {
    "def_id": "wall_gate",
-   "cell_x": 76,
+   "cell_x": 88,
    "width": 4
   },
   {
    "def_id": "barracks",
-   "cell_x": 84,
+   "cell_x": 93,
    "width": 8
   },
   {
    "def_id": "placeholder",
-   "cell_x": 93,
+   "cell_x": 103,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 113,
+   "cell_x": 117,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 128,
+   "cell_x": 123,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 133,
+   "cell_x": 131,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 141,
-   "width": 4
+   "cell_x": 152,
+   "width": 6
   },
   {
    "def_id": "wall_tier2",

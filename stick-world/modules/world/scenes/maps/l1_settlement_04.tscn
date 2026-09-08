@@ -60,31 +60,31 @@ script = ExtResource("5_anchor")
 [node name="GarrisonSlots" type="Node2D" parent="ConquestAnchor"]
 
 [node name="Slot1" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(2836, 945)
+position = Vector2(2964, 945)
 
 [node name="Slot2" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(2941, 945)
+position = Vector2(3069, 945)
 
 [node name="Slot3" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(3046, 945)
+position = Vector2(3174, 945)
 
 [node name="Slot4" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(3151, 945)
+position = Vector2(3279, 945)
 
 [node name="Slot5" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(3256, 945)
+position = Vector2(3384, 945)
 
 [node name="Slot6" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(3361, 945)
+position = Vector2(3489, 945)
 
 [node name="Slot7" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(3466, 945)
+position = Vector2(3594, 945)
 
 [node name="Slot8" type="Marker2D" parent="ConquestAnchor/GarrisonSlots"]
-position = Vector2(3571, 945)
+position = Vector2(3699, 945)
 
 [node name="CommanderSlot" type="Marker2D" parent="ConquestAnchor"]
-position = Vector2(3686, 945)
+position = Vector2(3814, 945)
 
 [node name="RallyX" type="Marker2D" parent="ConquestAnchor"]
-position = Vector2(2796, 945)
+position = Vector2(2924, 945)

@@ -37,16 +37,21 @@
   },
   {
    "def_id": "placeholder",
-   "cell_x": 42,
-   "width": 4
-  },
-  {
-   "def_id": "placeholder",
-   "cell_x": 81,
+   "cell_x": 46,
    "width": 4
   },
   {
    "def_id": "warehouse",
+   "cell_x": 62,
+   "width": 8
+  },
+  {
+   "def_id": "placeholder",
+   "cell_x": 74,
+   "width": 6
+  },
+  {
+   "def_id": "placeholder",
    "cell_x": 87,
    "width": 8
   },
@@ -57,17 +62,17 @@
   },
   {
    "def_id": "barracks",
-   "cell_x": 140,
+   "cell_x": 139,
    "width": 8
   },
   {
    "def_id": "placeholder",
-   "cell_x": 148,
+   "cell_x": 147,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 156,
+   "cell_x": 152,
    "width": 4
   },
   {

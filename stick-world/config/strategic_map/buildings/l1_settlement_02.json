@@ -42,32 +42,32 @@
   },
   {
    "def_id": "warehouse",
-   "cell_x": 63,
+   "cell_x": 73,
    "width": 8
   },
   {
    "def_id": "placeholder",
-   "cell_x": 80,
-   "width": 4
+   "cell_x": 87,
+   "width": 8
   },
   {
    "def_id": "wall_gate",
-   "cell_x": 92,
+   "cell_x": 100,
    "width": 4
   },
   {
    "def_id": "barracks",
-   "cell_x": 132,
+   "cell_x": 139,
    "width": 8
   },
   {
    "def_id": "placeholder",
-   "cell_x": 141,
+   "cell_x": 148,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 147,
+   "cell_x": 155,
    "width": 4
   },
   {

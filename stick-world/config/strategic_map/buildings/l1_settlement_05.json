@@ -32,68 +32,63 @@
   },
   {
    "def_id": "placeholder",
-   "cell_x": 33,
+   "cell_x": 32,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 47,
+   "cell_x": 39,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 57,
+   "cell_x": 53,
+   "width": 4
+  },
+  {
+   "def_id": "placeholder",
+   "cell_x": 58,
    "width": 4
   },
   {
    "def_id": "warehouse",
-   "cell_x": 63,
+   "cell_x": 77,
    "width": 8
   },
   {
    "def_id": "placeholder",
-   "cell_x": 74,
-   "width": 4
-  },
-  {
-   "def_id": "placeholder",
-   "cell_x": 86,
-   "width": 4
+   "cell_x": 90,
+   "width": 8
   },
   {
    "def_id": "wall_gate",
-   "cell_x": 92,
+   "cell_x": 104,
    "width": 4
   },
   {
    "def_id": "barracks",
-   "cell_x": 100,
+   "cell_x": 111,
    "width": 8
   },
   {
    "def_id": "placeholder",
-   "cell_x": 108,
+   "cell_x": 121,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 113,
+   "cell_x": 131,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 118,
+   "cell_x": 138,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 128,
-   "width": 4
-  },
-  {
-   "def_id": "placeholder",
-   "cell_x": 142,
-   "width": 4
+   "cell_x": 152,
+   "width": 6
   },
   {
    "def_id": "wall_tier2",

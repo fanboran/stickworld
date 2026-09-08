@@ -31,29 +31,29 @@
    "width": 4
   },
   {
-   "def_id": "warehouse",
-   "cell_x": 36,
-   "width": 8
-  },
-  {
    "def_id": "placeholder",
-   "cell_x": 47,
+   "cell_x": 34,
    "width": 4
   },
   {
+   "def_id": "warehouse",
+   "cell_x": 51,
+   "width": 8
+  },
+  {
    "def_id": "wall_gate",
+   "cell_x": 60,
+   "width": 4
+  },
+  {
+   "def_id": "placeholder",
    "cell_x": 64,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 68,
-   "width": 4
-  },
-  {
-   "def_id": "placeholder",
-   "cell_x": 89,
-   "width": 4
+   "cell_x": 88,
+   "width": 6
   },
   {
    "def_id": "wall_tier1",

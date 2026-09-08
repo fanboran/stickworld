@@ -32,37 +32,42 @@
   },
   {
    "def_id": "placeholder",
-   "cell_x": 32,
+   "cell_x": 34,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 45,
-   "width": 4
-  },
-  {
-   "def_id": "placeholder",
-   "cell_x": 66,
+   "cell_x": 46,
    "width": 4
   },
   {
    "def_id": "warehouse",
-   "cell_x": 71,
-   "width": 8
-  },
-  {
-   "def_id": "wall_gate",
-   "cell_x": 80,
-   "width": 4
-  },
-  {
-   "def_id": "barracks",
-   "cell_x": 120,
+   "cell_x": 64,
    "width": 8
   },
   {
    "def_id": "placeholder",
-   "cell_x": 133,
+   "cell_x": 74,
+   "width": 6
+  },
+  {
+   "def_id": "wall_gate",
+   "cell_x": 84,
+   "width": 4
+  },
+  {
+   "def_id": "barracks",
+   "cell_x": 124,
+   "width": 8
+  },
+  {
+   "def_id": "placeholder",
+   "cell_x": 134,
+   "width": 4
+  },
+  {
+   "def_id": "placeholder",
+   "cell_x": 141,
    "width": 4
   },
   {

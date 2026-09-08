@@ -37,38 +37,33 @@
   },
   {
    "def_id": "warehouse",
-   "cell_x": 44,
+   "cell_x": 43,
    "width": 8
   },
   {
+   "def_id": "placeholder",
+   "cell_x": 55,
+   "width": 6
+  },
+  {
    "def_id": "wall_gate",
-   "cell_x": 60,
+   "cell_x": 64,
    "width": 4
   },
   {
    "def_id": "barracks",
-   "cell_x": 68,
+   "cell_x": 69,
    "width": 8
   },
   {
    "def_id": "placeholder",
-   "cell_x": 92,
+   "cell_x": 103,
    "width": 4
   },
   {
    "def_id": "placeholder",
-   "cell_x": 104,
-   "width": 4
-  },
-  {
-   "def_id": "placeholder",
-   "cell_x": 112,
-   "width": 4
-  },
-  {
-   "def_id": "placeholder",
-   "cell_x": 117,
-   "width": 4
+   "cell_x": 154,
+   "width": 6
   },
   {
    "def_id": "wall_tier2",

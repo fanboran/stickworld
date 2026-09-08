@@ -32,8 +32,9 @@ enum Level {
 ## 规模分数（0-1，运行时可被 ±15% 扰动；玩家建设改变此值 → L1 地图聚落大小实时变化）
 @export var population_score: float = 0.0
 
-## 16 方向地形容量（blob 生长模型，总体设计 §5.7）：生成端 blob_bake.py 沿射线
-## 预烘焙（坡度×水体×jitter 终值）进视图包，运行时纯查表。空数组 = 旧数据回退均匀容量
+## 16 方向地形容量（旧 blob 生长模型产物，总体设计 §5.7）：生成端沿射线预烘焙
+## 进视图包。R5 起渲染改三档贴图（SettlementBlob V2），本字段仅作数据保留与
+## 装配校验（长度 16），不再驱动轮廓
 @export var blob_capacity: PackedFloat32Array = PackedFloat32Array()
 
 ## 对应场景图的 map_id（双击聚落时 SceneLoader.load_map 用）
@@ -56,18 +57,6 @@ static func jitter_population_score(base: float, settlement_id: String, run_seed
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(settlement_id) + run_seed
 	return clampf(base * (1.0 + rng.randf_range(-POPULATION_JITTER, POPULATION_JITTER)), 0.0, 1.0)
-
-
-## 获取建成区占地半径（像素，L1 地图坐标系）——blob 16 方向半径均值
-## （SettlementBlob 生长模型，docs/技术/架构/战略图架构.md §4.6）
-func get_footprint_radius() -> float:
-	var radii := SettlementBlob.direction_radii(settlement_id, level, blob_capacity, population_score)
-	if radii.is_empty():
-		return 0.0
-	var total := 0.0
-	for r in radii:
-		total += r
-	return total / float(radii.size())
 
 
 ## 获取建筑数量

@@ -7,11 +7,15 @@ extends RefCounted
 ## 大腿骨骼（thigh_outer/thigh_inner）位于髋部位置(0,0)，作为大腿肢体的容器。
 ## 旋转大腿骨骼 = 整条腿围绕髋部转；旋转小腿骨骼 = 小腿以下围绕膝盖转。
 ##
-## 渲染架构（方案 B · 矢量化描边，两遍渲染）：
+## 渲染架构（方案 B · 矢量化描边，链式两遍渲染 + 根部开口描边）：
 ## - 每段肢体 = 容器 Node2D（命名 sprite_<id> 保持扫描兼容），内含两层：
-##   描边层（加宽深色圆头 Line2D / 外圈 Polygon2D，z_index=-1）+ 填充层（z=0）。
-## - 两遍渲染：全部描边压底、全部填充置顶 → 肢体重叠处填充无缝融合
-##   （关节自动连接），描边只在整体剪影外缘露出一圈。
+##   描边层（加宽深色圆头 Line2D / 外圈 Polygon2D）+ 填充层（同几何窄一层）。
+## - 链式两遍渲染：肢体分五条链（外腿/内腿/躯干头/内臂/外臂），链内
+##   描边压底、填充置顶 → 链内关节融合连贯；链间 z 递增 → 高链描边
+##   可见于低链填充之上 → 臂与躯干、两臂之间出现分隔线。
+## - 根部开口描边（U 形）：前臂描边多边形根部平口无端帽——臂根方向
+##   不产生环绕弧线，填充根帽直接融合进躯干填充 → 肩/肘无接缝，
+##   无需任何关节补丁（补丁方案三次失败的教训：盖缝必连坐外缘描边）。
 ## - 不再使用位图贴图 / CanvasGroup / ID 缓冲着色器 / 邻接表。
 
 # ===== 节点类型 =====
@@ -23,6 +27,24 @@ const TYPE_ELLIPSE: int = 5
 # ===== 描边参数 =====
 ## 描边宽度（逻辑像素，单侧）
 const OUTLINE_WIDTH: float = 2.0
+
+## 链式分层 z 表（描边层；填充层 = 描边层 + 1）。
+## 五条链：外腿 → 内腿 → 躯干+头 → 内臂 → 外臂，链间 z 递增，
+## 高链描边可见于低链填充之上 → 链间出现分隔线（臂与躯干分开）。
+## z 取值压缩在 [-3, +6]：单位所在带 EntityHost z=3，有效全局 z=0~9，
+## 严格低于地图前景层 z=10（室内支柱/天花板遮挡单位不被破坏）。
+const CHAIN_STROKE_Z: Dictionary = {
+	3: -3, 4: -3, 5: -3,          # 外腿
+	11: -1, 12: -1, 13: -1,       # 内腿
+	6: 1, 7: 1, 20: 1, 10: 1,     # 躯干+头
+	14: 3, 15: 3,                 # 内臂
+	1: 5, 2: 5,                   # 外臂
+}
+
+## 根部开口描边的肢体（前臂外/内）：描边多边形根部平口无端帽，
+## 臂根方向不产生环绕弧线，填充根帽直接融合进躯干填充（肩/肘无接缝）。
+## 上臂段无渲染（type=-1），前臂根即视觉臂根。
+const OPEN_ROOT_LIMBS: Array = [1, 14]
 
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 23
@@ -223,11 +245,12 @@ static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 
 ## 在 parent_bone 上创建矢量肢体段，表示从 parent 到子骨骼的肢体段。
 ## px, py = 子骨骼相对 parent 的偏移；容器放段的中点、旋转对齐方向，
-## 内含描边 + 填充两层圆头 Line2D（几何跨度 = length + thickness，与旧位图一致）。
-## 全局两遍渲染：所有描边层 z=-1 压底、所有填充层 z=0 置顶 →
-## 全身填充无缝融合（肢体/躯干/头部一体，无任何接缝，与"刚重构完"
-## 参考状态一致），描边只在整体剪影外缘露出一圈。
-## z_index 用相对值（祖先全部 z=0，等效于全局顺序）。
+## 内含描边 + 填充两层（几何跨度 = length + thickness，与旧位图一致）。
+## 链式两遍渲染：描边层 z=CHAIN_STROKE_Z[id]、填充层 z=描边+1 →
+## 链内填充互相融合（关节连贯），链间高链描边压在低链填充上（分隔线）。
+## 前臂（OPEN_ROOT_LIMBS）描边为根部开口 U 形多边形：根端无端帽弧，
+## 填充根帽裸露融合进躯干填充——肩/肘无接缝且臂轮廓分隔完整。
+## z_index 用相对值（祖先全部 z=0；单位带 EntityHost z=3，全局 0~9 < 前景层 10）。
 static func _build_limb(
 	parent_bone: Node2D, id: int, length: int, thickness: int, node_type: int,
 	px: float, py: float, thickness_scale: float, colors: Dictionary
@@ -237,27 +260,55 @@ static func _build_limb(
 	parent_bone.add_child(container)
 
 	var w: float = max(thickness * thickness_scale, 1.0)
+	var sz: int = CHAIN_STROKE_Z.get(id, 1)
+	var outline: Color = colors.get("outline", DEFAULT_OUTLINE)
 	if node_type == TYPE_CIRCLE:
 		container.position = Vector2(px, py)
 		container.rotation = 0.0
 		var r: float = max(float(length), w * 2.0) / 2.0
-		var st := _make_circle("stroke", r + OUTLINE_WIDTH, colors.get("outline", DEFAULT_OUTLINE))
+		var st := _make_circle("stroke", r + OUTLINE_WIDTH, outline)
 		var fi := _make_circle("fill", r, _color_for_type(node_type, colors))
-		st.z_index = -1
-		fi.z_index = 0
+		st.z_index = sz
+		fi.z_index = sz + 1
 		container.add_child(st)
 		container.add_child(fi)
 	else:
 		container.rotation = Vector2(px, py).angle()
 		container.position = Vector2(px / 2.0, py / 2.0)
 		var pts := PackedVector2Array([Vector2(-length / 2.0, 0), Vector2(length / 2.0, 0)])
-		var stl := _make_line("stroke", pts, w + OUTLINE_WIDTH * 2.0, colors.get("outline", DEFAULT_OUTLINE))
 		var fil := _make_line("fill", pts, w, _color_for_type(node_type, colors))
-		stl.z_index = -1
-		fil.z_index = 0
+		fil.z_index = sz + 1
+		var stl: CanvasItem
+		if id in OPEN_ROOT_LIMBS:
+			# 根部开口 U 形描边：两侧边 + 末端半圆，根部平口（无端帽）
+			stl = _make_open_root_stroke("stroke", length / 2.0, w / 2.0 + OUTLINE_WIDTH, outline)
+		else:
+			stl = _make_line("stroke", pts, w + OUTLINE_WIDTH * 2.0, outline)
+		stl.z_index = sz
 		container.add_child(stl)
 		container.add_child(fil)
 	return container
+
+
+## 根部开口的 U 形描边多边形（Polygon2D）：
+## 上边 (-H,-R)→(H,-R)、末端半圆弧（圆心 (H,0) 半径 R，-90°→+90°）、
+## 下边 (H,R)→(-H,R)，根部以直线段闭合（平口，无端帽弧）。
+## 局部坐标与 Line2D 版描边一致：-x 朝肢根、+x 朝肢端。
+static func _make_open_root_stroke(lname: String, half_len: float, radius: float, color: Color) -> Polygon2D:
+	var p := Polygon2D.new()
+	p.name = lname
+	p.color = color
+	var pts := PackedVector2Array()
+	pts.append(Vector2(-half_len, -radius))
+	pts.append(Vector2(half_len, -radius))
+	var n := 12
+	for i in range(1, n):
+		var a := -PI / 2.0 + PI * float(i) / float(n)
+		pts.append(Vector2(half_len, 0) + Vector2(cos(a), sin(a)) * radius)
+	pts.append(Vector2(half_len, radius))
+	pts.append(Vector2(-half_len, radius))
+	p.polygon = pts
+	return p
 
 
 static func _make_line(lname: String, pts: PackedVector2Array, width: float, color: Color) -> Line2D:

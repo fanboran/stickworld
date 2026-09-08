@@ -25,8 +25,9 @@ var _subtitle_label: Label = null
 
 
 func _ready() -> void:
+	# 面板底 = 主题自带 SketchStyle 手绘贴图（R8 层1 换肤：删玻璃 override，与
+	# granularity_indicator/settlement_tooltip 同一皮肤语言）
 	theme = StickTheme.create()
-	add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	StickKit.dock(self, StickKit.Corner.TOP_LEFT, PANEL_SIZE)
 	_build_widgets()

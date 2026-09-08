@@ -100,6 +100,23 @@ var _adv_hz: float = 0.0
 var _adv_accum: float = 0.0
 ## 显式暂停闸门（set_anim_paused 置位）：暂停优先于 LOD 档，冻结累积推进
 var _pause_gate: bool = false
+##
+## 骨架解算频率（Hz）：修改栈（4×TwoBoneIK）解算的 LOD 限频档，由
+## set_anim_update_hz 联动设定 = min(动画 hz, 30)（T0 密度档 20Hz 动画 → 解算
+## 也 20Hz：解算只在推进帧后有输入变化，高于推进频率纯浪费；60Hz 动画 → 30Hz）。
+##
+## 机制（Godot 4.7 实测，worktree 实验：temp/mech/ 顺序探针 + 姿态/成本对照）：
+## 解算跑在 Skeleton2D 的内部处理里，且没有等价的"手动解一次"API——
+## Skeleton2D.execute_modifications 脱离内部处理调用会直接把 IK 结果写进骨骼
+## 节点变换，肢体向 IK 目标塌折（与原生渲染姿态完全不符），不可用。故用
+## set_process_internal 逐帧开关：推进帧置 true → 下一帧帧首内部处理恰好解算
+## 一次 → 下一个推进节拍再按需开关（内部处理阶段先于脚本 _process、父节点先于
+## 子节点，均实测；解算先于动画推进、读上一推进帧的骨骼姿态，与原生每帧时序
+## 同构，仅频率降档）。未接 LOD（本变量保持 0 且 _anim_driven=false）时内部
+## 处理保持原生开启，行为零变化。
+var _solve_hz: float = 0.0
+## 解算节拍累积器（累加动画推进 delta；仅在推进帧后解算才有输入变化）
+var _solve_accum: float = 0.0
 
 ## 动画播放结束信号（反编译参考实装 C）：LOOP_NONE 动画播完时发射（对应传奇 UpdateFinishAnimation）。
 ## 供攻击播完回切、受击播完回切、未来动作节奏（如 build 敲击）等使用。
@@ -139,14 +156,25 @@ func _process(delta: float) -> void:
 	# LOD 驱动模式推进：自动处理已停用，按节流频率手动 advance（先于事件轮询，
 	# 保证 _check_animation_finished/_check_animation_events 读到最新播放位置）
 	if _anim_driven and _anim_tree != null and not _pause_gate:
+		var adv := 0.0
 		if _adv_hz >= 60.0:
-			_anim_tree.advance(delta)
+			adv = delta
 		else:
 			_adv_accum += delta
 			if _adv_accum >= 1.0 / _adv_hz:
-				var adv := _adv_accum
+				adv = _adv_accum
 				_adv_accum = 0.0
-				_anim_tree.advance(adv)
+		if adv > 0.0:
+			_anim_tree.advance(adv)
+			# 骨架解算随推进帧联动（机制见 _solve_hz 注）：本帧 _process 置 true，
+			# 下一帧帧首内部处理解算一次；非解算节拍关闭内部处理停掉解算
+			if _solve_hz > 0.0:
+				_solve_accum += adv
+				if _solve_accum >= 1.0 / _solve_hz:
+					_solve_accum = 0.0
+					set_process_internal(true)
+				else:
+					set_process_internal(false)
 	# 受击插播倒计时：动画播完回切到受击前状态（反编译参考实装 B）
 	if _hit_timer > 0.0:
 		_hit_timer -= delta
@@ -455,19 +483,26 @@ func set_state_anim(state_name: String, anim_name: String) -> bool:
 ## AnimationPlayer 速率归零；恢复时回 1.0（walk 速率由移动代码下一帧重设）。
 ## LOD 驱动模式下同步置闸门：显式暂停优先于 LOD 档（冻结手动推进，
 ## 否则暂停期间被节流的单位动画仍会走——AnimationTree 不理会 AnimationPlayer 的
-## speed_scale，闸门是驱动模式下暂停真正生效的通道）。
+## speed_scale，闸门是驱动模式下暂停真正生效的通道），并停掉骨架解算
+## （闸门跳过推进分支后不会再有开关指令，悬挂的 internal=true 会让解算每帧空跑）。
 func set_anim_paused(paused: bool) -> void:
 	_pause_gate = paused
 	_adv_accum = 0.0
+	if paused and _anim_driven:
+		set_process_internal(false)
+		_solve_accum = 0.0
 	if _anim_player == null:
 		return
 	_anim_player.speed_scale = 0.0 if paused else 1.0
 
 
 ## 设置动画更新频率（Hz，战斗级 LOD 节流，UnitLodDirector 经实体转发调用）：
-##   hz <= 0 ：完全暂停（停用自动处理，保留当前 pose，状态推进冻结）
+##   hz <= 0 ：完全暂停（停用自动处理，保留当前 pose，状态推进与骨架解算冻结）
 ##   0 < hz < 60 ：按该频率节流推进（累积真实 delta，达到 1/hz 批量 advance）
 ##   hz >= 60 ：全速（每帧 advance 真实 delta，与 IDLE 自动处理等价）
+##
+## 骨架解算联动：接入 LOD 即按 min(hz, 30) 限频修改栈解算（T0 封顶 30Hz /
+## T1 15Hz / T2 5Hz；机制与时序详见 _solve_hz 注）。
 ##
 ## 实现说明（为什么不用 MANUAL 回调、也不把 active 置回 true）：实测 Godot 4.7，
 ## 运行时切换 process_callback 或重新 set_active(true) 后，AnimationTree 激活首帧
@@ -481,13 +516,18 @@ func set_anim_update_hz(hz: float) -> void:
 		return
 	_adv_hz = hz
 	_adv_accum = 0.0
+	_solve_accum = 0.0
 	if hz <= 0.0:
 		_anim_driven = false
+		_solve_hz = 0.0
 		if _anim_tree.active:
 			_anim_tree.active = false
+		# 完全暂停档：骨架解算一并冻结（接入过 LOD 才动内部处理，未接入保持原生）
+		set_process_internal(false)
 		_forward_overlay_hz(0.0)
 		return
 	_anim_driven = true
+	_solve_hz = minf(hz, 30.0)
 	if _anim_tree.active:
 		_anim_tree.active = false
 	_forward_overlay_hz(hz)

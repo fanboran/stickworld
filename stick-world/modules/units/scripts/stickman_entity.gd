@@ -135,6 +135,11 @@ var _formation_system: Node = null
 ## 空串 = 待业/无职业，非空 = 在职。契约见 modules/town_life/api.gd——
 ## 实体侧只存弱类型 id，职业语义（档案/着装/工位）全部归 town_life 模块）
 var _profession_id: String = ""
+## 村民身份标志（小镇生活批次 4）：initial_content.spawn_npcs 对村民置 true。
+## 与职业解耦——待业村民（职业空串）与征用离岗村民都仍是"村民"；
+## 战斗/敌方单位不置此标志，AI 侧行为过滤（wander 作用域等）靠它区分
+## "待业村民"与"无职业战斗单位"（二者职业都是空串，行为语义相反）。
+var is_villager: bool = false
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
@@ -1176,6 +1181,12 @@ func set_formation_system(fs: Node) -> void:
 ## 获取 FormationSystem 引用（可能为 null）
 func get_formation_system() -> Node:
 	return _formation_system
+
+
+## 获取地图引用（spawn 时由 MapBase 注入；可能为 null——AI 模块读
+## town_center_world_x 等村庄锚点用，见 ai_controller wander 决策）
+func get_map_reference() -> Node2D:
+	return _map_ref
 
 
 ## 写入职业 id（initial_content spawn 时经 TownLifeAPI 分配；弱类型协议，

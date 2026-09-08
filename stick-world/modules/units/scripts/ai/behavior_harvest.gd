@@ -89,6 +89,12 @@ func update(delta: float) -> void:
 	if entity == null or not is_instance_valid(entity):
 		finish()
 		return
+	# 征用离岗（批次 4 编队征用互斥）：职业被清空（编队时 FormationSystem
+	# 置空）即时收工——劳作中的村民被征入伍不再继续干活；决策层
+	# _try_harvest 同判职业空，不会重进劳作
+	if entity.has_method("get_profession") and String(entity.get_profession()).is_empty():
+		finish()
+		return
 	# 劳作节律（批次 3 [提案/待定]）：休息时段收工（决策层不再重进 harvest，
 	# 村民回 idle/wander 休息态；时间未初始化的环境 is_work_time 恒真不受影响）
 	if not TownLifeAPI.is_work_time():

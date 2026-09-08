@@ -23,6 +23,8 @@ extends RefCounted
 ##   cycle          工作节拍（秒/拍）[提案/待定]
 ##   tool           工具/武器变体（TOOL_WEAPONS 的 key；缺省 = 不换武器）
 ##   uniform        职业着装色（身体色，html 颜色串如 "#7a4a21"）
+##   quota          村庄该职业最大在职数（批次 4 配比；缺省 1）[提案/待定]
+##                  工位职业实际配额 = min(quota, 工位容量)，见 count_work_capacity
 ##
 ## 数值口径（[提案/待定]，待实测定稿）：采集 20/拍与玩家手采同速（HARVEST_PER_ACTION）；
 ## 打铁 consume 10 矿 → produce 6 锭/拍（熔炼损耗），节拍 4s 略快于采集 5s，
@@ -165,6 +167,10 @@ static func get_profession(id: String) -> Dictionary:
 ## index % 职业数 分配职业并应用着装，返回分配的职业 id。
 ## 实体经 duck 协议注入（set_profession/rig/weapon_mount，缺什么跳什么，
 ## 测试桩与直生实体安全降级）。无职业配置时返回 ""（实体保持待业）。
+##
+## ⚠️ 本函数是**强制分配**入口（不看配额，index 定职业）——测试摆拍/
+## 调试用（如集成套件补 spawn 指定职业）；正片 spawn 走 assign_village_jobs
+## 配比分配（批次 4）。
 static func assign_village_job(entity: Node, index: int) -> String:
 	var profs := get_professions()
 	if profs.is_empty() or entity == null or not is_instance_valid(entity):
@@ -180,6 +186,103 @@ static func assign_village_job(entity: Node, index: int) -> String:
 	entity.set_profession(id)
 	apply_appearance(entity, prof)
 	return id
+
+
+# ─────────────────────────── 批次 4：村庄职业配比 ────────────────────────────
+
+## quota 字段缺省值（professions.tres 行未写 quota 时的村庄该职业最大在职数）
+const DEFAULT_QUOTA: int = 1
+
+
+## 数村庄某职业的工位容量：
+##   - 扫 "building" 组累计匹配 def_id + is_operational 建筑的 WorkSlot 槽位数
+##     （复用 get_work_site 的真建筑语义）；
+##   - 无匹配真建筑但占位表覆盖该 def → 容量 1（占位工位语义 = "村子有该
+##     需求"的最低配比兜底，[提案/待定]：A 线铁匠铺落地前保持铁匠可见）；
+##   - 都无 → 0（该职业不参与本次配比分配）。
+## ref_entity 仅用于取场景树（容量计数与位置无关）；不可用返回 0。
+static func count_work_capacity(ref_entity: Node, work_site_def: String) -> int:
+	if work_site_def.is_empty() or ref_entity == null or not is_instance_valid(ref_entity):
+		return 0
+	var tree := ref_entity.get_tree() if ref_entity.is_inside_tree() else null
+	var total: int = 0
+	if tree != null:
+		for node in tree.get_nodes_in_group("building"):
+			var b := node as Node2D
+			if b == null or not is_instance_valid(b) or not b.is_inside_tree():
+				continue
+			if String(b.get("def_id")) != work_site_def:
+				continue
+			if b.has_method("is_operational") and not b.is_operational():
+				continue
+			if b.has_method("get_work_slot_positions"):
+				total += (b.get_work_slot_positions() as Array).size()
+	if total > 0:
+		return total
+	return 0 if is_nan(get_placeholder_work_site_x(work_site_def)) else 1
+
+
+## 村庄批量配比分配（批次 4，initial_content.spawn_npcs 正片入口）：
+##   - 各职业配额 = min(配置 quota, 工位容量)；工位容量仅约束工位职业
+##     （work_site_def 非空），资源点职业（空 def）不受工位约束——资源点
+##     存在性由城镇生成线保证（village_a 净空带吃掉资源点是布局阶段问题，
+##     不据此砍职业配比）；
+##   - 村民按职业档案序轮转分配，配额满跳下一职业，全部配额满 → 待业
+##     （set_profession("")，走 wander 闲逛）；
+##   - 配额满即止的轮转序 = 档案配置序（blacksmith → lumberjack → miner）。
+## 返回 {"jobs": {职业id: 人数}, "idle": 待业数}（stdout 证据/测试断言用）。
+## 单实体（缺协议/无效）按待业计，不抛错。
+static func assign_village_jobs(entities: Array) -> Dictionary:
+	var profs := get_professions()
+	var stats: Dictionary = {"jobs": {}, "idle": 0}
+	var quotas: Dictionary = {}
+	var prof_order: Array = []
+	if not profs.is_empty():
+		# 先算各职业配额（容量参照取第一个有效实体，仅借它的场景树）
+		var ref: Node = null
+		for e in entities:
+			if e != null and is_instance_valid(e):
+				ref = e
+				break
+		for row in profs:
+			var prof: Dictionary = row if row is Dictionary else {}
+			var id := String(prof.get("id", ""))
+			if id.is_empty():
+				continue
+			prof_order.append(prof)
+			var q := int(prof.get("quota", DEFAULT_QUOTA))
+			var site_def := String(prof.get("work_site_def", ""))
+			if not site_def.is_empty():
+				q = mini(q, count_work_capacity(ref, site_def))
+			quotas[id] = q
+	# 轮转分配：指针沿档案序循环，配额满跳过；一整圈无位即全待业
+	var assigned: Dictionary = {}
+	var cursor: int = 0
+	var quota_left: bool = not prof_order.is_empty()
+	for e in entities:
+		if e == null or not is_instance_valid(e) or not e.has_method("set_profession"):
+			stats["idle"] = int(stats["idle"]) + 1
+			continue
+		if not quota_left:
+			stats["idle"] = int(stats["idle"]) + 1
+			continue
+		var placed: bool = false
+		for _scan in prof_order.size():
+			var prof: Dictionary = prof_order[cursor % prof_order.size()]
+			cursor += 1
+			var id := String(prof.get("id", ""))
+			if int(assigned.get(id, 0)) >= int(quotas.get(id, 0)):
+				continue
+			e.set_profession(id)
+			apply_appearance(e, prof)
+			assigned[id] = int(assigned.get(id, 0)) + 1
+			placed = true
+			break
+		if not placed:
+			quota_left = false  # 一整圈无位：剩余村民全部待业
+			stats["idle"] = int(stats["idle"]) + 1
+	stats["jobs"] = assigned
+	return stats
 
 
 ## 应用职业着装：uniform 身体色 + tool 武器变体（缺字段跳对应项）。

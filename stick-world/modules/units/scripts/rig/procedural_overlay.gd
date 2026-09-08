@@ -58,6 +58,10 @@ var _hit_spring: float = 0.0
 var _last_anim: String = ""
 var _last_pos := Vector2.INF
 
+## rig.get_current_anim 的 Callable 缓存（setup 后不变）：_on_frame 每渲染帧都要读
+## 当前动画名，原先每帧 has_method 字符串反射 + duck 查找，大群单位下是稳定浪费
+var _get_anim: Callable = Callable()
+
 # 速度平滑：实体位置只在物理帧更新，渲染帧率(如 144Hz) > 物理帧率(60Hz) 时，
 # 按渲染帧差分会得到 0/全速交替的振荡值（实测 head lean 每帧跳 4~8° → 抖动/重影）。
 # 改为物理帧差分 + 指数平滑，渲染帧直接读平滑值。
@@ -71,6 +75,9 @@ var _noise := FastNoiseLite.new()
 func setup(skeleton: Skeleton2D, rig: Node2D) -> void:
 	_skeleton = skeleton
 	_rig = rig
+	# 读当前动画的入口缓存成 Callable（方法存在性 setup 后不变，免每帧反射）
+	if rig != null and rig.has_method("get_current_anim"):
+		_get_anim = Callable(rig, "get_current_anim")
 	# IK 目标父（OutlineGroup/Node2D）
 	var outline := skeleton.get_parent()
 	_markers = outline.get_node_or_null("Node2D") if outline != null else null
@@ -145,10 +152,10 @@ func _on_frame() -> void:
 	var delta: float = get_process_delta_time()
 	_time += delta
 
-	# 当前动画（从 rig 读取；走公共 getter，每渲染帧反射 get() 属性查找太贵）
+	# 当前动画（从 rig 读取；走缓存的 Callable，免每帧 has_method 反射查找）
 	var anim: String = ""
-	if _rig != null and _rig.has_method("get_current_anim"):
-		anim = _rig.get_current_anim()
+	if _get_anim.is_valid():
+		anim = _get_anim.call()
 	if anim != _last_anim:
 		# 动画切换事件
 		if anim == "attack":

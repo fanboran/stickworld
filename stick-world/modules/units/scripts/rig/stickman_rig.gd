@@ -161,17 +161,25 @@ func _check_animation_finished() -> void:
 
 ## 动画内嵌事件派发：当前动画播放位置越过 anim_events 中任一事件时间点 → 发射一次。
 ## 事件表来自动画资源元数据（spine_import 从 Spine JSON 导出；无元数据则静默跳过）。
+## 事件表按动画名缓存（元数据运行期不变），免每隔帧 get_meta 反射。
 ## 重播判定：切换动画、或播放位置回退（LOOP 动画回绕 / 重新 travel）→ 清空已发集合。
+var _events_cache: Dictionary = {}
+
 func _check_animation_events() -> void:
 	if _state_machine == null or _anim_player == null:
 		return
 	var cur: String = _state_machine.get_current_node()
 	if cur.is_empty() or cur == "Start" or not _anim_player.has_animation(cur):
 		return
-	var anim: Animation = _anim_player.get_animation(cur)
-	if anim == null or not anim.has_meta("anim_events"):
-		return
-	var events: Array = anim.get_meta("anim_events")
+	var events: Array
+	if _events_cache.has(cur):
+		events = _events_cache[cur]
+	else:
+		var anim: Animation = _anim_player.get_animation(cur)
+		events = []
+		if anim != null and anim.has_meta("anim_events"):
+			events = anim.get_meta("anim_events")
+		_events_cache[cur] = events
 	if events.is_empty():
 		return
 	var pos: float = _state_machine.get_current_play_position()
@@ -402,11 +410,23 @@ func play(anim_name: String) -> void:
 
 
 ## 动画是否为一次性（LOOP_NONE，播完停在片尾）；找不到的动画按一次性处理。
+## 按动画名缓存判定结果：动画资源 loop_mode 运行期不变，而 _is_oneshot 的消费点
+## set_anim_speed 每物理帧都会走（walk 速率匹配），has_animation/get_animation
+## 每帧反射是大群单位的稳定浪费。
+var _oneshot_cache: Dictionary = {}
+
+
 func _is_oneshot(anim_name: String) -> bool:
+	var cached: Variant = _oneshot_cache.get(anim_name)
+	if cached != null:
+		return cached
 	if _anim_player == null or not _anim_player.has_animation(anim_name):
+		_oneshot_cache[anim_name] = true
 		return true
 	var anim: Animation = _anim_player.get_animation(anim_name)
-	return anim != null and anim.loop_mode == Animation.LOOP_NONE
+	var result: bool = anim != null and anim.loop_mode == Animation.LOOP_NONE
+	_oneshot_cache[anim_name] = result
+	return result
 
 
 ## 动态换主状态节点的动画资源（盾姿态分层，计划 5）：
@@ -442,10 +462,13 @@ func set_anim_paused(paused: bool) -> void:
 func set_anim_speed(p_speed: float) -> void:
 	if _anim_player == null:
 		return
-	if _is_oneshot(_current_anim):
-		_anim_player.speed_scale = 1.0
-		return
-	_anim_player.speed_scale = clampf(p_speed, 0.0, 3.0)
+	# 一次性动画一律按原始速率播放（否则站姿速率被压到 MIN_ANIM_SCALE 拖慢挥剑，
+	# 命中帧对齐失准）；循环动画按移动速率缩放
+	var target: float = 1.0 if _is_oneshot(_current_anim) else clampf(p_speed, 0.0, 3.0)
+	# 同值跳过写：walk 稳态下移动代码每帧调本函数，重复写同值 speed_scale
+	# 会打穿 AnimationMixer 的缓存失效链，是纯浪费（终值语义不变）
+	if _anim_player.speed_scale != target:
+		_anim_player.speed_scale = target
 
 
 ## 查询指定动画的播放进度（0~1）。仅当当前状态正在播放该动画时返回真实进度，

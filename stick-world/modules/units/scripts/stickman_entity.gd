@@ -92,9 +92,13 @@ var foot_offset: float = 45.0
 ## foot_offset 基准值（body_scale=1.0 时的脚距，_ready 计算一次）
 var _foot_offset_base: float = 45.0
 
-# ─────────────────────────────── 通行障碍（§7.1.2）────────────────────────────────
+# ─────────────────────────────── 地图引用（§7.1.2）────────────────────────────────
 ## 地图引用（供地形倍率/交互/脱困查询，由 VillageMap.spawn_entity 注入）
 var _map_ref: Node2D = null
+## 地图方法存在性缓存（注入时确定，生命周期内不变）：分离查询/地形倍率每物理帧
+## 都要走 has_method 字符串反射，大群单位下是纯浪费——注入时查一次记布尔
+var _map_has_query: bool = false
+var _map_has_terrain_mult: bool = false
 
 # ─────────────────────────────── AI 移动（§7.1 / §7.2）────────────────────────────────
 ## AI 控制器引用（_ready 时自动获取子节点）
@@ -394,16 +398,25 @@ func _apply_balance_data() -> void:
 
 ## 移动/缩放数值校准：balance.variables（Excel 平衡变量表）覆盖代码默认。
 ## 在 _ready 内先于首次 _apply_scale() 执行，缩放/碰撞体按校准后值构建。
+## id->value 映射按数据引用做 static 缓存：表内容运行期不变，
+## 大批量刷兵时免每单位重建一遍字典（开局/战斗刷新尖峰的纯浪费）。
+static var _tuning_by_id: Dictionary = {}
+static var _tuning_source: Variant = null
+
+
 func _apply_movement_tuning() -> void:
 	if BalanceConfig == null or BalanceConfig.data.is_empty():
 		return
 	var rows_v: Variant = BalanceConfig.get_value("balance.variables")
 	if not (rows_v is Array):
 		return
-	var by_id := {}
-	for row: Dictionary in rows_v:
-		if row.has("id"):
-			by_id[row["id"]] = row.get("value")
+	if _tuning_source != rows_v:
+		_tuning_source = rows_v
+		_tuning_by_id = {}
+		for row: Dictionary in rows_v:
+			if row.has("id"):
+				_tuning_by_id[row["id"]] = row.get("value")
+	var by_id: Dictionary = _tuning_by_id
 	var walk: Variant = by_id.get("var_walk_speed")
 	if walk is float or walk is int:
 		WALK_SPEED = float(walk)
@@ -609,7 +622,8 @@ func _handle_player_input(delta: float) -> void:
 
 ## 获取当前脚下地形的移动速度倍率（土路=1.0，非土路=0.8）。
 func _terrain_speed_mult() -> float:
-	if _map_ref != null and _map_ref.has_method("get_move_speed_mult_at_x"):
+	# _map_has_terrain_mult：set_map_reference 时缓存的方法存在性（免每帧字符串反射）
+	if _map_ref != null and is_instance_valid(_map_ref) and _map_has_terrain_mult:
 		return _map_ref.get_move_speed_mult_at_x(global_position.x)
 	return 1.0
 
@@ -619,9 +633,14 @@ func _terrain_speed_mult() -> float:
 func _blocking_speed_mult() -> float:
 	if weapon_mount == null or not is_instance_valid(weapon_mount):
 		return 1.0
-	if not weapon_mount.has_method("is_blocking") or not weapon_mount.is_blocking():
+	# is_blocking 方法/block_move_mult 字段存在性不变 → 首次查一次记布尔（每帧反射免了）
+	if not _wm_checked:
+		_wm_checked = true
+		_wm_has_blocking = weapon_mount.has_method("is_blocking")
+		_wm_has_block_move_mult = "block_move_mult" in weapon_mount
+	if not _wm_has_blocking or not weapon_mount.is_blocking():
 		return 1.0
-	if "block_move_mult" in weapon_mount:
+	if _wm_has_block_move_mult:
 		return float(weapon_mount.block_move_mult)
 	return 1.0
 
@@ -652,7 +671,14 @@ func get_armor_factor() -> float:
 
 func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 	var se: Node = get_status_effects()
-	var slow_mult: float = se.get_speed_mult() if se != null and se.has_method("get_speed_mult") else 1.0
+	if not _se_checked:
+		_se_checked = true
+		_se_has_stun = se != null and se.has_method("has_stun")
+		_se_has_speed_mult = se != null and se.has_method("get_speed_mult")
+	# slow_mult：SLOW 状态减速倍率（无组件/无方法 = 1.0；存在性走缓存布尔）
+	var slow_mult: float = 1.0
+	if se != null and _se_has_speed_mult:
+		slow_mult = se.get_speed_mult()
 	# 持盾移速惩罚（盾姿态分层，计划 5）：举盾行军更沉稳（档案 block_move_mult）
 	var block_mult: float = _blocking_speed_mult()
 	var mult: float = _terrain_speed_mult() * move_speed_mult * slow_mult * block_mult * armor_speed_factor
@@ -715,12 +741,10 @@ func _handle_ai_input(delta: float) -> void:
 ## 距离越近推力越强，叠加到移动方向（RTS 单位移动标准做法，参考
 ## StickmanEntity 的 soft-body separation：位置推开 + 速度修正）。
 func _apply_separation(dir: Vector2) -> Vector2:
-	if _map_ref == null or not is_instance_valid(_map_ref):
+	if _map_ref == null or not is_instance_valid(_map_ref) or not _map_has_query:
 		return dir
 	# 帧率优化：分离扫描隔物理帧跑（与静态分离共用帧计数）
 	if _sep_frame_counter % _sep_rate_div != 0:
-		return dir
-	if not _map_ref.has_method("query_neighbors"):
 		return dir
 	var push := Vector2.ZERO
 	for e in _map_ref.query_neighbors(global_position, SEPARATION_RADIUS):
@@ -748,9 +772,7 @@ func _apply_separation(dir: Vector2) -> Vector2:
 ## 直接写坐标线性叠加（被 N 人围住 = N 路叠加无上限，一帧几十上百 px = 肉眼瞬移），
 ## 现在单帧总修正 ≤ MAX_SEPARATION_CORRECTION。
 func _apply_static_separation() -> void:
-	if _map_ref == null or not is_instance_valid(_map_ref):
-		return
-	if not _map_ref.has_method("query_neighbors"):
+	if _map_ref == null or not is_instance_valid(_map_ref) or not _map_has_query:
 		return
 	var total_push := Vector2.ZERO
 	# +8px 余量：网格位置是本帧重建时刻的快照，覆盖帧内已发生的位移
@@ -851,6 +873,9 @@ func _apply_scale() -> void:
 		return
 	var s: float = BASE_SCALE * body_scale
 	rig.scale = Vector2(s * _facing, s)
+	# rig 局部缩放变了 → markers 同步置脏（_sync_markers_transform 只在脏时写，
+	# 免每物理帧 200 单位 × 全局矩阵读写的纯浪费，见该函数注释）
+	_markers_dirty = true
 	# 9q：foot_offset 随体型重算（缩放单位脚随体型上移；消费点全部读本字段）
 	foot_offset = _foot_offset_base * body_scale
 	# 同步缩放 Collider shape（Collider 不在 rig 层级下，不受 rig.scale 影响）
@@ -889,9 +914,19 @@ func set_body_scale(v: float) -> void:
 	_apply_scale()
 
 
+## markers 同步脏标记（性能）：markers_parent 与 rig 同父（RigHost/OutlineGroup），
+## 二者局部 transform 一致时，全局变换随父节点自动保持一致——父（实体）移动
+## 不需要重写。rig 的局部 transform 只在 _apply_scale（翻转/体型缩放）变化，
+## 故只在置脏后写一次，替代此前每物理帧的全局矩阵读写（大群单位的稳定开销）。
+var _markers_dirty: bool = true
+
+
 func _sync_markers_transform() -> void:
 	if _markers_parent == null or rig == null:
 		return
+	if not _markers_dirty:
+		return
+	_markers_dirty = false
 	# IK markers 父节点必须与 StickmanRig 同 transform，否则 IK 不可达
 	_markers_parent.global_transform = rig.global_transform
 
@@ -1036,6 +1071,9 @@ func set_ground_constraints(p_ground_y: float, p_ground_bottom: float, p_map_lef
 ## 由 MapInstance.spawn_entity 调用，注入地图引用（供通行障碍查询，§7.1.2）
 func set_map_reference(p_map: Node2D) -> void:
 	_map_ref = p_map
+	# 方法存在性随注入的地图而定 → 注入时查一次记布尔，免每物理帧 has_method 反射
+	_map_has_query = p_map != null and p_map.has_method("query_neighbors")
+	_map_has_terrain_mult = p_map != null and p_map.has_method("get_move_speed_mult_at_x")
 
 
 ## 物理查询：实体的 Collider 形状位于 pos 时是否与任何物理体（建筑/工地障碍/其他实体）碰撞。
@@ -1260,6 +1298,19 @@ func is_in_hit_stun() -> bool:
 ## 状态效果组件缓存（_ready 装配后生命周期内不变；is_stunned 每物理帧
 ## 查询走缓存，免每帧 get_node 路径解析）
 var _status_effects: Node = null
+## 组件方法存在性缓存（首次查询记布尔）：is_stunned/_handle_acceleration 每物理帧
+## 都要查 has_stun/get_speed_mult，大群单位下 has_method 字符串反射是纯浪费
+var _se_has_stun: bool = false
+var _se_has_speed_mult: bool = false
+var _se_checked: bool = false
+## health/战斗实例方法存在性缓存（同上，_apply_rest_morale_recovery 每物理帧消费）
+var _health_morale_checked: bool = false
+var _health_has_morale: bool = false
+var _battle_has_is_active: bool = false
+## weapon_mount 方法/字段存在性缓存（@onready 装配后不变；举盾移速/受击每帧消费）
+var _wm_has_blocking: bool = false
+var _wm_has_block_move_mult: bool = false
+var _wm_checked: bool = false
 
 ## 获取状态效果组件（_ready 装配；测试桩可能无）
 func get_status_effects() -> Node:
@@ -1278,17 +1329,34 @@ func apply_status(type: int, duration: float, power: float = 0.0, source: Node =
 ## 是否被眩晕（AI 据此停滞：StunSystem 语义——被打晕时既不追也不打）
 func is_stunned() -> bool:
 	var se: Node = get_status_effects()
-	return se != null and se.has_method("has_stun") and se.has_stun()
+	if se == null:
+		return false
+	# has_stun 方法存在性不变 → 首次查一次记布尔（免每帧 has_method 字符串反射）
+	if not _se_checked:
+		_se_checked = true
+		_se_has_stun = se.has_method("has_stun")
+	return _se_has_stun and se.has_stun()
 
 
 ## 士气自然恢复（AI 完善批次 3）：不在战斗中时全速回；**战斗中但 ≥3s 未受击
 ## （脱离火线）半速回**（2026-09-01 观察场反馈：怯战者退到后排后士气永不恢复 =
 ## 原地再也不动——战斗不结束就该有机会重整再战）。
 func _apply_rest_morale_recovery(delta: float) -> void:
-	if health_component == null or not health_component.has_method("restore_morale"):
+	if health_component == null:
 		return
-	var in_battle: bool = _battle_instance != null and is_instance_valid(_battle_instance) \
-			and _battle_instance.has_method("is_active") and _battle_instance.is_active()
+	# restore_morale 方法存在性不变 → 首次查一次记布尔（每物理帧 has_method 反射是大群开销）
+	if not _health_morale_checked:
+		_health_morale_checked = true
+		_health_has_morale = health_component.has_method("restore_morale")
+	if not _health_has_morale:
+		return
+	var in_battle: bool = false
+	var bi: Node = _battle_instance
+	if bi != null and is_instance_valid(bi):
+		# is_active 方法存在性随战斗实例注入而定 → 首次查一次记布尔（状态查询本身保留每帧调）
+		if not _battle_has_is_active:
+			_battle_has_is_active = bi.has_method("is_active")
+		in_battle = _battle_has_is_active and bi.is_active()
 	if not in_battle:
 		health_component.restore_morale(REST_MORALE_REGEN * delta)
 		return

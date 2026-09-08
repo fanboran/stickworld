@@ -209,11 +209,24 @@ def build_heart(scene):
     ob.data.materials.append(red)
     for p_ in ob.data.polygons:
         p_.use_smooth = True
-    # 气球式鼓包（2026-09-08 审计反馈：挤出枕形读成「有厚度的心」不是「鼓起来的心」）：
-    # CAST 球化把平板正/背面向外顶成充气感，factor 压低保住心形轮廓读法
+    # 气球式鼓包（2026-09-08 审计：挤出枕形读成「有厚度」；二轮反馈正面仍是一
+    # 整块明面——CAST 对无内部顶点的整面填充无效，鼓不起来；三轮发现扇形三角
+    # 化填充直接 CAST 会出水平波纹）。REMESH 体素重建均匀拓扑 → SUBSURF 平滑
+    # → CAST 球化，正面成真正的弧面穹顶；factor 压低保住轮廓读法
+    rm = ob.modifiers.new('remesh', 'REMESH')
+    rm.mode = 'VOXEL'
+    rm.voxel_size = 0.05
+    ss = ob.modifiers.new('subdiv', 'SUBSURF')
+    ss.levels = 1
+    ss.render_levels = 2
     puff = ob.modifiers.new('puff', 'CAST')
-    puff.type = 'SPHERE'
-    puff.factor = 0.38
+    try:
+        if puff.type != 'SPHERE':
+            puff.type = 'SPHERE'   # 5.2 只读（默认即 SPHERE），旧版本可写
+    except AttributeError:
+        pass
+    print("cast type:", puff.type)
+    puff.factor = 0.52
     return {ob.name: ['heart']}
 
 
@@ -226,8 +239,84 @@ def fix_head_faces(scene):
                 poly.material_index = 0 if n.z > 0.7 else (1 if n.y < -0.7 else (2 if n.x > 0.7 else 1))
 
 
-def render_passes(scene, tag, id_slots):
-    """ID 先渲（此时 material_index 新鲜），再清空渲 shade"""
+def _srgb_inv(f):
+    """文件域灰度 → 线性域（Standard 视图变换仍做 sRGB 显示编码）。
+    （与 gen_motifs.py 逐字一致）"""
+    return f / 12.92 if f <= 0.04045 else ((f + 0.055) / 1.055) ** 2.4
+
+
+def _toon_band_grays(steps):
+    """N 档 cel 灰（文件域均布 0.32..0.92）与其线性域值"""
+    fs = [0.32 + (0.92 - 0.32) * i / (steps - 1) for i in range(steps)]
+    return fs, [_srgb_inv(f) for f in fs]
+
+
+def _toon_mat():
+    """曲面 toon 材质（D 着色器分档）：漫反射 → ShaderToRGB → 明度 →
+    ColorRamp 窄过渡带量化 → Emission。TOON_LO/HI/STEPS 环境变量默认
+    0.76/0.95/3，可场景中途改（爱心头灯径向场用 0.60/0.88），材质按签名缓存。
+    ShaderToRGB 仅 EEVEE 支持；不可用时回退白模受光。（与 gen_motifs.py 逐字一致）"""
+    import os
+    steps = max(2, int(os.environ.get('TOON_STEPS', '3')))
+    lo = float(os.environ.get('TOON_LO', '0.76'))
+    hi = float(os.environ.get('TOON_HI', '0.95'))
+    sig = f"{steps}|{lo}|{hi}"
+    m = bpy.data.materials.get('_toon')
+    if m:
+        if m.get('_sig') == sig:
+            return m
+        bpy.data.materials.remove(m)
+    m = bpy.data.materials.new('_toon')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    try:
+        diff = nt.nodes.new('ShaderNodeBsdfDiffuse')
+        diff.inputs[0].default_value = (0.85, 0.85, 0.85, 1.0)
+        s2r = nt.nodes.new('ShaderNodeShaderToRGB')
+        bw = nt.nodes.new('ShaderNodeRGBToBW')
+        ramp = nt.nodes.new('ShaderNodeValToRGB')
+        ramp.color_ramp.interpolation = 'LINEAR'
+        elems = ramp.color_ramp.elements
+        while len(elems) > 1:
+            elems.remove(elems[-1])
+        # 窄过渡带替代 CONSTANT 硬台阶（EEVEE Next 逐像素光照平滑不了档位边界：
+        # 锯齿+细窄件抖档虚线的根因）。（与 gen_motifs.py 逐字一致）
+        _, grays = _toon_band_grays(steps)
+        poss = [_srgb_inv(lo + (hi - lo) * (i + 1) / (steps - 1)) for i in range(steps - 1)]
+        trans = 0.03
+        e0 = elems[0]
+        e0.position = 0.0
+        e0.color = (grays[0], grays[0], grays[0], 1.0)
+        for i in range(steps - 1):
+            ea = elems.new(min(max(poss[i] - trans, 0.001), 0.998))
+            ea.color = (grays[i], grays[i], grays[i], 1.0)
+            eb = elems.new(min(poss[i] + trans, 0.999))
+            eb.color = (grays[i + 1], grays[i + 1], grays[i + 1], 1.0)
+        last = elems[-1]
+        last.position = 1.0
+        last.color = (grays[-1], grays[-1], grays[-1], 1.0)
+        nt.links.new(diff.outputs[0], s2r.inputs[0])
+        nt.links.new(s2r.outputs[0], bw.inputs[0])
+        nt.links.new(bw.outputs[0], ramp.inputs[0])
+        emi = nt.nodes.new('ShaderNodeEmission')
+        nt.links.new(ramp.outputs[0], emi.inputs[0])
+        nt.links.new(emi.outputs[0], out.inputs[0])
+    except Exception:
+        print("toon shader unavailable, fallback to white diffuse")
+        sys.stdout.flush()
+        diff = nt.nodes.new('ShaderNodeBsdfDiffuse')
+        diff.inputs[0].default_value = (0.85, 0.85, 0.85, 1.0)
+        nt.links.new(diff.outputs[0], out.inputs[0])
+    m['_sig'] = sig
+    return m
+
+
+def render_passes(scene, tag, id_slots, toon=False):
+    """ID 先渲（此时 material_index 新鲜），再清空渲 shade。toon=True 时 shade
+    挂 toon 材质（渲染端分档，爱心用）；False 保持白模受光连续明度（锤的
+    classic 语义——compose 假光依赖连续明度场）"""
     for o in scene.objects:
         if o.type != 'MESH':
             continue
@@ -240,12 +329,18 @@ def render_passes(scene, tag, id_slots):
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "id")
 
-    white = shade_mat('shade_all')
-    for o in scene.objects:
-        if o.type != 'MESH':
-            continue
-        o.data.materials.clear()
-        o.data.materials.append(white)
+    if toon:
+        for o in scene.objects:
+            if o.type == 'MESH':
+                o.data.materials.clear()
+                o.data.materials.append(_toon_mat())
+    else:
+        white = shade_mat('shade_all')
+        for o in scene.objects:
+            if o.type != 'MESH':
+                continue
+            o.data.materials.clear()
+            o.data.materials.append(white)
     scene.render.filepath = os.path.join(OUT, f"{tag}_shade.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "shade")
@@ -268,13 +363,31 @@ for t in (64, 128, 256):
     sys.stdout.flush()
 
 # ── 爱心（3/4 视角，与母题库统一；2026-09-08 创始人要求立体感+斜角度，
-#    二轮反馈仍不够鼓 → 厚度加倍 + 方位角加大侧面占比）──
+#    二轮反馈仍不够鼓 → 厚度加倍+方位角加大；三轮 SUBSURF+CAST 穹顶。
+#    四轮：3/4 侧光下穹顶正面仍一大块明面——气球读法要「中心亮四周暗」的
+#    径向渐变，改头灯位主光（相机轴略偏上；「头灯无内部差」教训只针对平面
+#    件，穹顶恰好要头灯）+ 光强 3.3 + 径向场专属断点 ──
+from mathutils import Euler, Vector as _V
 for t in (64, 128, 256):
-    scene = setup(38, 22, t * 2, 5.0)
+    # 头灯径向场专属断点：实测爱心 shade 文件域明度分位（缘 0.4/面 0.73-0.92），
+    # 0.60/0.88 切出 暗缘-中面-亮心 三档=气球读法；其余图标走全局默认
+    # 0.76/0.95（_toon_mat 按参数签名自动重建材质）
+    os.environ['TOON_LO'] = '0.60'
+    os.environ['TOON_HI'] = '0.88'
+    scene = setup(38, 22, t * 2, 3.3)
     emap = build_heart(scene)
+    # 头灯位主光：灯放相机正后方略偏上，穹顶正面获得径向明度场
+    cam = scene.camera
+    R = cam.matrix_world.to_3x3()
+    sun = scene.objects['Key']
+    pos = cam.matrix_world.translation + R @ _V((0.0, 1.0, 0.6))
+    sun.location = pos
+    d = _V((0, 0, 0)) - pos
+    sun.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
     fit_ortho(scene)
 
     id_e = {n: flat_mat('id_' + n, ID_COLS[n]) for n in ID_COLS}
     render_passes(scene, f"icon_heart_v9_{t}",
-                  {oname: [id_e[n] for n in names] for oname, names in emap.items()})
+                  {oname: [id_e[n] for n in names] for oname, names in emap.items()},
+                  toon=True)
     sys.stdout.flush()

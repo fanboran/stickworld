@@ -468,9 +468,11 @@ func _stone_band(parent: Node2D, node_name: String, pos: Vector2,
 
 ## 坡面纹理：layered 茅草按梯形/平行四边形坡面逐行裁剪、坡面外透明，Sprite2D 显示。
 ## 四个占比参数为顶行/底行左右边界（0..1 相对包围盒宽），行间线性过渡。
+## opts 透传 make_thatch_layered v12 笔触参数（slant/stretch/slender/taper_min；
+## 缺省与旧坡面观感一致）。
 ## （原 smithy_lv1._make_slope_thatch_tex，批次 3 提升为基类通用件）
-func _slope_thatch_tex(w: int, h: int, top_l: float, top_r: float, bot_l: float, bot_r: float, seed_value: int) -> ImageTexture:
-	var src := TextureGenAPI.make_thatch_layered(w, h, seed_value).get_image()
+func _slope_thatch_tex(w: int, h: int, top_l: float, top_r: float, bot_l: float, bot_r: float, seed_value: int, opts: Dictionary = {}) -> ImageTexture:
+	var src := TextureGenAPI.make_thatch_layered(w, h, seed_value, opts).get_image()
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	for y in h:
 		var t := float(y) / float(h - 1)  # 0=顶 1=底
@@ -699,3 +701,49 @@ func _mullion_window(parent: Node2D, node_name: String, cx: float, cy_bottom: fl
 		mull.default_color = Color(0.62, 0.58, 0.50)
 		root.add_child(mull)
 	return root
+
+
+## 茅草双坡屋顶通用件（批次 5）：后坡露头条（暗）→ 前坡大梯形 → 脊梁 → 檐口 → 阴影线。
+## 结构同 manor._build_roof，参数化后供多建筑复用（timber_cottage/grand_hall、批次 6 村庄配比）。
+## roof_l/roof_r 檐口左右缘；wall_top_y 屋墙顶（檐口高度）；ridge_y 脊高；
+## tint 茅草乘色（红棕/金自定）；opts 透传 make_thatch_layered v12 笔触参数
+## （缺省 = 旧坡面观感）。脊宽随屋宽自适应（0.38 倍，钳 150..260）。
+func _thatch_roof(parent: Node2D, roof_l: float, roof_r: float, wall_top_y: float,
+		ridge_y: float, cx_mid: float, seed_value: int, tint: Color,
+		opts: Dictionary = {}) -> void:
+	var roof_w := int(roof_r - roof_l)
+	var ridge_w := clampf(roof_w * 0.38, 150.0, 260.0)
+	# 前坡脊边对称居中（脊边 x 范围 cx ± ridge_w/2）
+	var ridge_l := cx_mid - ridge_w * 0.5
+	# 后坡露头条：暗茅草带贴脊线上方露出（第二层屋面感），下段被前坡盖住。
+	# 比前坡脊边略窄且同心——左右端完全藏进脊边内，不产生悬空端。
+	var back := _sprite2d("RoofBackStrip",
+		Vector2(cx_mid, ridge_y - 10.0),
+		_slope_thatch_tex(int(ridge_w) - 20, 58, 0.05, 0.95, 0.0, 0.90, seed_value, opts))
+	back.self_modulate = tint.darkened(0.42)
+	back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_a(parent, back)
+	# 前坡大梯形：脊边（ridge_w）→ 檐边（roof_w）
+	var tex := _slope_thatch_tex(roof_w, 132,
+		(ridge_l - roof_l) / float(roof_w), (ridge_l - roof_l + ridge_w) / float(roof_w),
+		0.0, 1.0, seed_value + 2, opts)
+	var slope := _sprite2d("RoofFrontSlope",
+		Vector2(cx_mid, (wall_top_y + ridge_y) * 0.5 + 1.0), tex)
+	slope.self_modulate = tint
+	slope.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_a(parent, slope)
+	# 脊梁（盖两坡接缝）
+	_a(parent, _sprite2d("RidgeBeam", Vector2(cx_mid, ridge_y - 2.0),
+		TextureGenAPI.make_wood_plank(int(ridge_w + 40), 13,
+			Color(0.33, 0.22, 0.12))))
+	# 檐口板（盖前坡底缘与墙接缝）
+	_a(parent, _sprite2d("Eave", Vector2(cx_mid, wall_top_y - 7.0),
+		TextureGenAPI.make_wood_plank(roof_w, 14, Color(0.36, 0.25, 0.13))))
+	# 檐口下阴影线（强化出挑进深）
+	var shadow := Line2D.new()
+	shadow.name = "EaveShadow"
+	shadow.points = PackedVector2Array([
+		Vector2(roof_l + 8.0, wall_top_y + 10.0), Vector2(roof_r - 8.0, wall_top_y + 10.0)])
+	shadow.width = 5.0
+	shadow.default_color = Color(0.16, 0.13, 0.10, 0.45)
+	_a(parent, shadow)

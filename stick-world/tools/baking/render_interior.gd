@@ -11,6 +11,9 @@ const TARGETS := [
 	["barracks", "res://modules/building_gen/buildings/barracks.tscn"],
 	["warehouse", "res://modules/building_gen/buildings/warehouse.tscn"],
 	["smithy_lv1", "res://modules/building_gen/buildings/smithy_lv1.tscn"],
+	# 批次 5 新变体：内饰进屋态验收
+	["timber_cottage", "res://modules/building_gen/buildings/timber_cottage.tscn"],
+	["grand_hall", "res://modules/building_gen/buildings/grand_hall.tscn"],
 ]
 const VW := 900
 const VH := 600

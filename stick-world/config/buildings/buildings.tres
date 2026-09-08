@@ -374,6 +374,46 @@ variables = {
 			"wall_tier": null,
 			"can_stand_on": null,
 			"is_gate": null
+		},
+		{
+			"id": "timber_cottage",
+			"name_zh": "木骨民居",
+			"type": "house",
+			"tier": 2,
+			"width": 10,
+			"build_time": 100,
+			"build_cost_wood": 90,
+			"build_cost_stone": 70,
+			"build_cost_metal": 20,
+			"max_hp": 450,
+			"workers_required": 2,
+			"interior_mode": 1,
+			"mega_interior_map_id": null,
+			"description": "石基木骨的小民居，金茅草双坡顶，可进屋",
+			"unlocked_by_tech": null,
+			"wall_tier": null,
+			"can_stand_on": null,
+			"is_gate": null
+		},
+		{
+			"id": "grand_hall",
+			"name_zh": "议事厅",
+			"type": "hall",
+			"tier": 3,
+			"width": 16,
+			"build_time": 200,
+			"build_cost_wood": 150,
+			"build_cost_stone": 260,
+			"build_cost_metal": 90,
+			"max_hp": 900,
+			"workers_required": 3,
+			"interior_mode": 1,
+			"mega_interior_map_id": null,
+			"description": "村镇议事大厅，石砌基层半木二层脊上钟楼（地标）",
+			"unlocked_by_tech": null,
+			"wall_tier": null,
+			"can_stand_on": null,
+			"is_gate": null
 		}
 	]
 }

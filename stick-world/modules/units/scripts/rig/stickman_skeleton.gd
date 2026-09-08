@@ -25,8 +25,11 @@ const TYPE_TRIANGLE: int = 3
 const TYPE_ELLIPSE: int = 5
 
 # ===== 描边参数 =====
-## 描边宽度（逻辑像素，单侧）
+## 描边宽度（逻辑像素，单侧）——zoom≥1 时的设计世界宽度（肢体比例基准）
 const OUTLINE_WIDTH: float = 2.0
+## 描边屏幕像素下限（单侧）：相机拉远（画布缩放 <1）时描边按 1/缩放补偿，
+## 屏幕上恒定 ~2px 不再变细发糊；由 StickmanRig 在画布缩放变化时批量刷新
+const OUTLINE_SCREEN_PX: float = 2.0
 
 ## 链式分层 z 表（描边层；填充层 = 描边层 + 1）。
 ## 五条链：外腿 → 内腿 → 躯干+头 → 内臂 → 外臂，链间 z 递增，
@@ -362,6 +365,55 @@ static func apply_colors(sprites: Dictionary, colors: Dictionary) -> void:
 			(fill as Line2D).default_color = _color_for_type(node_type, colors)
 		elif fill is Polygon2D:
 			(fill as Polygon2D).color = _color_for_type(node_type, colors)
+
+
+# ============================================================
+#  描边缩放补偿（屏幕像素恒定）
+# ============================================================
+
+## 描边单侧世界宽度（屏幕像素恒定补偿，思路同 world_map b443c26a"描边改固定屏幕像素"）：
+## 画布缩放 s（Camera2D.zoom，含分辨率适配）下拉远时按 1/s 放大，保持屏幕
+## ~OUTLINE_SCREEN_PX 像素；放大（s>1）时不低于设计世界宽度 OUTLINE_WIDTH，
+## 肢体比例不变（特写描边不过细，屏幕像素随之 ≥ 下限）。
+static func outline_world_width(canvas_scale: float) -> float:
+	var s: float = maxf(canvas_scale, 0.0001)
+	return maxf(OUTLINE_WIDTH, OUTLINE_SCREEN_PX / s)
+
+
+## 描边宽度缩放补偿刷新（画布缩放变化时由 StickmanRig 批量调用，低频）：
+## 线段肢体 stroke 宽 = 填充宽 + 2×eff；头部圆 stroke 重建 40 边形（半径 = r + eff）。
+## 只改描边层几何，不动填充层与颜色；缩放未变时无需调用。
+static func apply_outline_zoom(sprites: Dictionary, eff: float) -> void:
+	var all_data := SKELETON_DATA.merged(EXTRA_LIMBS, true)
+	for id in sprites.keys():
+		var limb: Node2D = sprites[id]
+		if not is_instance_valid(limb):
+			continue
+		if int(all_data.get(id, {}).get("type", -1)) < 0:
+			continue
+		var stroke := limb.get_node_or_null("stroke")
+		var fill := limb.get_node_or_null("fill")
+		if stroke is Line2D and fill is Line2D:
+			(stroke as Line2D).width = (fill as Line2D).width + eff * 2.0
+		elif stroke is Polygon2D and fill is Polygon2D:
+			var r: float = _circle_radius(fill as Polygon2D)
+			if r > 0.0:
+				_set_circle_radius(stroke as Polygon2D, r + eff)
+
+
+## 读取圆描边多边形的半径（顶点绕中心生成，取首顶点到原点距离；中心在 Vector2.ZERO）
+static func _circle_radius(p: Polygon2D) -> float:
+	var pts := p.polygon
+	return pts[0].length() if pts.size() > 0 else 0.0
+
+
+## 重建圆多边形顶点（40 边，中心 Vector2.ZERO，同 _make_circle 生成方式）
+static func _set_circle_radius(p: Polygon2D, radius: float) -> void:
+	var pts := PackedVector2Array()
+	for i in range(40):
+		var a := TAU * float(i) / 40.0
+		pts.append(Vector2(cos(a), sin(a)) * radius)
+	p.polygon = pts
 
 
 # ============================================================

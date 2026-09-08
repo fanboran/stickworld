@@ -316,3 +316,244 @@ func _stone_band(parent: Node2D, node_name: String, pos: Vector2,
 	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_a(parent, s)
 	return s
+
+
+# ═══════════════ 多层装配结构件（批次 3：Layers[0..N] 二层框架） ═══════════════
+# 设计图纸：docs/技术/架构/建筑模块化设计.md §三 Layers[0..N] / §十五 B3 楼梯模块。
+# 全部结构件沿用批次 2 定案：贴纹理面一律 Sprite2D + CPU 纹理（Polygon2D uv 采样
+# 在本环境坍缩），纯色块几何（Polygon2D 无 texture / Line2D）安全。
+# 消费范例：manor.gd（二层半木悬挑宅邸）。
+
+## 坡面纹理：layered 茅草按梯形/平行四边形坡面逐行裁剪、坡面外透明，Sprite2D 显示。
+## 四个占比参数为顶行/底行左右边界（0..1 相对包围盒宽），行间线性过渡。
+## （原 smithy_lv1._make_slope_thatch_tex，批次 3 提升为基类通用件）
+func _slope_thatch_tex(w: int, h: int, top_l: float, top_r: float, bot_l: float, bot_r: float, seed_value: int) -> ImageTexture:
+	var src := TextureGenAPI.make_thatch_layered(w, h, seed_value).get_image()
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in h:
+		var t := float(y) / float(h - 1)  # 0=顶 1=底
+		var left := int(round(w * lerpf(top_l, bot_l, t)))
+		var right := int(round(w * lerpf(top_r, bot_r, t)))
+		for x in range(left, right):
+			var c := src.get_pixel(x, y)
+			c.a = 1.0
+			img.set_pixel(x, y, c)
+	return ImageTexture.create_from_image(img)
+
+
+## 灰泥/泥灰墙面纹理（半木结构底色；细噪点+轻水平污渍带，避免大面积平涂死板）
+func _plaster_tex(w: int, h: int, seed_value: int, base: Color) -> ImageTexture:
+	var key := "plaster_%d_%d_%d_%d_%d_%d" % [w, h, seed_value, int(base.r8), int(base.g8), int(base.b8)]
+	if _stone_tex_cache.has(key):
+		return _stone_tex_cache[key]
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	for y in h:
+		var band := 1.0 + 0.03 * sin(float(y) * 0.05 + float(seed_value % 7))
+		for x in w:
+			var c := base * (band + rng.randf_range(-0.045, 0.045))
+			c.a = 1.0
+			img.set_pixel(x, y, c)
+	var tex := ImageTexture.create_from_image(img)
+	_stone_tex_cache[key] = tex
+	return tex
+
+
+## 灰泥墙面 Sprite2D（centered 于 pos）
+func _plaster_wall(parent: Node2D, node_name: String, pos: Vector2,
+		w: int, h: int, seed_value: int, base: Color) -> Sprite2D:
+	var s := _sprite2d(node_name, pos, _plaster_tex(w, h, seed_value, base))
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_a(parent, s)
+	return s
+
+
+## 半木结构框架（叠加在灰泥墙前景）：竖柱按间距均布 + 顶/底横梁 + 跨间交替斜撑。
+## x_l/x_r/y_top/y_bot 为墙面四缘（局部坐标，y 向上为负）。
+func _timber_frame(parent: Node2D, node_name: String, x_l: float, x_r: float,
+		y_top: float, y_bot: float, stud_pitch: float, pal: Dictionary) -> Node2D:
+	var root := _nc(node_name, parent)
+	var beam: Color = pal.get("C_WOOD_BEAM", Color(0.34, 0.24, 0.14))
+	var w := int(x_r - x_l)
+	var h := int(y_bot - y_top)
+	var cy := (y_top + y_bot) * 0.5
+	# 顶/底横梁（板纹）
+	_a(root, _sprite2d("BeamTop", Vector2((x_l + x_r) * 0.5, y_top + 9.0),
+		TextureGenAPI.make_wood_plank(w, 18, beam)))
+	_a(root, _sprite2d("BeamBottom", Vector2((x_l + x_r) * 0.5, y_bot - 9.0),
+		TextureGenAPI.make_wood_plank(w, 18, beam)))
+	# 竖柱（柱纹，两端嵌进横梁）
+	var stud_tex := TextureGenAPI.make_wood_pillar(16, h + 8, beam)
+	var xs: Array = _fill_pillars([x_l + 8.0], x_r - 8.0, stud_pitch)
+	for i in xs.size():
+		_a(root, _sprite2d("Stud%d" % i, Vector2(xs[i], cy), stud_tex))
+	# 跨间斜撑（交替方向，柱纹斜放；纯剪影构件）
+	if xs.size() >= 2:
+		var diag_len := sqrt(stud_pitch * stud_pitch * 0.64 + (h * 0.55) * (h * 0.55))
+		var diag_tex := TextureGenAPI.make_wood_pillar(12, ceili(diag_len), beam.darkened(0.15))
+		for i in range(xs.size() - 1):
+			var cx: float = (float(xs[i]) + float(xs[i + 1])) * 0.5
+			var dy := h * 0.55
+			var dx := stud_pitch * 0.8
+			var s := _sprite2d("Brace%d" % i, Vector2(cx, cy),
+				diag_tex, atan2(-dy, dx) if i % 2 == 0 else atan2(dy, dx))
+			s.flip_h = i % 2 == 1
+			_a(root, s)
+	return root
+
+
+## 悬挑楼板（上层比下层出挑的 jettying）：出挑底板 + 底部交替托架斜撑。
+## y_face = 上层地面（板顶面）；板厚向下 16。
+func _jetty_slab(parent: Node2D, node_name: String, x_l: float, x_r: float,
+		y_face: float, pal: Dictionary) -> Node2D:
+	var root := _nc(node_name, parent)
+	var front: Color = pal.get("C_WOOD_FRONT", Color(0.52, 0.36, 0.19))
+	var beam: Color = pal.get("C_WOOD_BEAM", Color(0.34, 0.24, 0.14))
+	var w := int(x_r - x_l)
+	var cx := (x_l + x_r) * 0.5
+	# 托架斜撑（先画，藏在板后；直角贴下层墙面、斜边托板底）
+	var span := x_r - x_l
+	var n_brace := clampi(int(span / 130.0), 2, 4)
+	for i in n_brace:
+		var bx := lerpf(x_l + 46.0, x_r - 46.0, float(i) / float(n_brace - 1))
+		var brace := Polygon2D.new()
+		brace.name = "Brace%d" % i
+		var lean := 34.0 if i % 2 == 0 else -34.0
+		brace.polygon = PackedVector2Array([
+			Vector2(bx, y_face + 16.0),
+			Vector2(bx + lean, y_face + 16.0),
+			Vector2(bx, y_face + 50.0),
+		])
+		brace.color = beam
+		root.add_child(brace)
+	# 出挑底板（板纹，厚 16）
+	_a(root, _sprite2d("Slab", Vector2(cx, y_face + 8.0),
+		TextureGenAPI.make_wood_plank(w, 16, front)))
+	return root
+
+
+## 阳台：平台板 + 栏杆（扶手+竖栏柱）+ 底部托架斜撑。y_face = 阳台地面。
+func _balcony(parent: Node2D, node_name: String, x_l: float, x_r: float,
+		y_face: float, pal: Dictionary) -> Node2D:
+	var root := _nc(node_name, parent)
+	var front: Color = pal.get("C_WOOD_FRONT", Color(0.52, 0.36, 0.19))
+	var beam: Color = pal.get("C_WOOD_BEAM", Color(0.34, 0.24, 0.14))
+	var w := int(x_r - x_l)
+	var cx := (x_l + x_r) * 0.5
+	# 托架斜撑 ×2（板底向前下撑）
+	for i in 2:
+		var bx := lerpf(x_l + 30.0, x_r - 30.0, float(i))
+		var brace := Polygon2D.new()
+		brace.name = "Brace%d" % i
+		brace.polygon = PackedVector2Array([
+			Vector2(bx, y_face + 12.0), Vector2(bx + 26.0, y_face + 12.0),
+			Vector2(bx, y_face + 46.0)])
+		brace.color = beam
+		root.add_child(brace)
+	# 平台板（板纹，厚 12）
+	_a(root, _sprite2d("Slab", Vector2(cx, y_face + 6.0),
+		TextureGenAPI.make_wood_plank(w, 12, front)))
+	# 栏杆：竖栏柱（柱纹细杆）+ 扶手（板纹细条）
+	var post_tex := TextureGenAPI.make_wood_pillar(6, 38, beam)
+	var post_n := clampi(int(w / 24.0), 3, 10)
+	for i in post_n:
+		var px := lerpf(x_l + 4.0, x_r - 4.0, float(i) / float(post_n - 1))
+		_a(root, _sprite2d("Post%d" % i, Vector2(px, y_face - 19.0), post_tex))
+	_a(root, _sprite2d("Handrail", Vector2(cx, y_face - 38.0),
+		TextureGenAPI.make_wood_plank(w, 7, front)))
+	return root
+
+
+## 外部木楼梯（B3 楼梯模块 P0：层间通行可见件）——实心阶梯剖面（纯色块）+
+## 斜侧梁 + 扶手。从 (x_start, 0) 地面向 x 正方向爬升 rise_total，
+## 顶面落在 y = -rise_total（对接上层楼面）。
+func _exterior_stairs(parent: Node2D, node_name: String, x_start: float,
+		steps: int, step_w: float, rise_total: float, pal: Dictionary) -> Node2D:
+	var root := _nc(node_name, parent)
+	var front: Color = pal.get("C_WOOD_FRONT", Color(0.52, 0.36, 0.19))
+	var beam: Color = pal.get("C_WOOD_BEAM", Color(0.34, 0.24, 0.14))
+	var step_h := rise_total / float(steps)
+	# 阶梯剖面：第 i 级矩形从第 i 级顶面直落地面（实心，避免透出下层墙）
+	for i in steps:
+		var stair := Polygon2D.new()
+		stair.name = "Step%d" % i
+		var x0 := x_start + float(i) * step_w
+		var y_top := -step_h * float(i + 1)
+		stair.polygon = PackedVector2Array([
+			Vector2(x0, 0.0), Vector2(x0 + step_w, 0.0),
+			Vector2(x0 + step_w, y_top), Vector2(x0, y_top)])
+		stair.color = front.darkened(0.08 + 0.012 * float(i % 3))
+		root.add_child(stair)
+		# 踏面亮线（板色提亮，强化台阶可读性）
+		var tread := Line2D.new()
+		tread.name = "Tread%d" % i
+		tread.points = PackedVector2Array([
+			Vector2(x0, y_top - 1.5), Vector2(x0 + step_w, y_top - 1.5)])
+		tread.width = 3.0
+		tread.default_color = front.lightened(0.22)
+		root.add_child(tread)
+	# 斜侧梁（沿阶梯斜边，柱纹旋转）
+	var span := step_w * float(steps)
+	var mid := Vector2(x_start + span * 0.5, -rise_total * 0.5)
+	var length := sqrt(span * span + rise_total * rise_total)
+	_a(root, _sprite2d("Stringer", mid,
+		TextureGenAPI.make_wood_pillar(11, ceili(length) + 6, beam.darkened(0.1)),
+		-atan2(rise_total, span)))
+	# 扶手：平行于阶梯斜边的扶手条（上方 44）+ 竖扶手段 ×2
+	var rail := Line2D.new()
+	rail.name = "Rail"
+	rail.points = PackedVector2Array([
+		Vector2(x_start + 4.0, -44.0),
+		Vector2(x_start + span - 4.0, -rise_total - 44.0)])
+	rail.width = 5.0
+	rail.default_color = beam
+	root.add_child(rail)
+	for i in 2:
+		var t := 0.2 + 0.6 * float(i)
+		var face_y := -rise_total * t          # 该处阶梯面 y
+		var post := Polygon2D.new()
+		post.name = "RailPost%d" % i
+		var px := x_start + span * t
+		post.polygon = PackedVector2Array([
+			Vector2(px - 2.5, face_y), Vector2(px + 2.5, face_y),
+			Vector2(px + 2.5, face_y - 44.0), Vector2(px - 2.5, face_y - 44.0)])
+		post.color = beam
+		root.add_child(post)
+	return root
+
+
+## 直棂窗（叠在墙面上的前景件）：木框 + 暗洞 + 竖棂 ×2。
+## cx/cy_b 为窗洞中心 x 与窗洞底 y（向上开窗高 opening_h）。
+func _mullion_window(parent: Node2D, node_name: String, cx: float, cy_bottom: float,
+		half_w: float, opening_h: float, pal: Dictionary) -> Node2D:
+	var root := _nc(node_name, parent)
+	var beam: Color = pal.get("C_WOOD_BEAM", Color(0.34, 0.24, 0.14))
+	var cy := cy_bottom - opening_h * 0.5
+	# 木框（外矩形）+ 暗洞（内矩形缩 5）
+	var frame := Polygon2D.new()
+	frame.name = "Frame"
+	frame.polygon = PackedVector2Array([
+		Vector2(cx - half_w, cy_bottom + 5.0), Vector2(cx + half_w, cy_bottom + 5.0),
+		Vector2(cx + half_w, cy_bottom - opening_h - 5.0), Vector2(cx - half_w, cy_bottom - opening_h - 5.0)])
+	frame.color = beam
+	root.add_child(frame)
+	var hole := Polygon2D.new()
+	hole.name = "Hole"
+	var hw := half_w - 5.0
+	var hh := opening_h * 0.5
+	hole.polygon = PackedVector2Array([
+		Vector2(cx - hw, cy + hh), Vector2(cx + hw, cy + hh),
+		Vector2(cx + hw, cy - hh), Vector2(cx - hw, cy - hh)])
+	hole.color = Color(0.09, 0.09, 0.12)
+	root.add_child(hole)
+	# 竖棂 ×2（暖灰白，逆光剪影可读）
+	for i in 2:
+		var mull := Line2D.new()
+		mull.name = "Mullion%d" % i
+		var mx := cx - hw * 0.34 + float(i) * hw * 0.68
+		mull.points = PackedVector2Array([Vector2(mx, cy - hh + 2.0), Vector2(mx, cy + hh - 2.0)])
+		mull.width = 2.5
+		mull.default_color = Color(0.62, 0.58, 0.50)
+		root.add_child(mull)
+	return root

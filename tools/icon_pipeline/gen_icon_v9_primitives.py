@@ -56,7 +56,7 @@ def setup(az_deg, el_deg, res):
             break
         except TypeError:
             continue
-    scene.eevee.taa_render_samples = 64
+    scene.eevee.taa_render_samples = 256   # 审计反馈「抗锯齿开满」：64→256（配合 2x SSAA 出图）
     scene.render.resolution_x = res
     scene.render.resolution_y = res
     scene.render.film_transparent = True
@@ -198,13 +198,13 @@ def _toon_band_grays(steps):
 def _toon_mat():
     """曲面 toon 材质（D 着色器分档）：漫反射光照 → ShaderToRGB → 明度 →
     ColorRamp 常量量化 N 档灰（出图=文件域 0.32/0.62/0.92）→ Emission。
-    断点 TOON_LO/TOON_HI（文件域默认 0.35/0.70）、档数 TOON_STEPS 环境变量
-    （与 gen_motifs/compose 共享）。ShaderToRGB 仅 EEVEE 支持；不可用时回退
-    白模受光。（与 gen_motifs.py 逐字一致）"""
+    断点 TOON_LO/TOON_HI（文件域默认 0.76/0.95，v1 三分位校准）、档数
+    TOON_STEPS 环境变量（与 gen_motifs 共享）。ShaderToRGB 仅 EEVEE 支持；
+    不可用时回退白模受光。（与 gen_motifs.py 逐字一致）"""
     import os
     steps = max(2, int(os.environ.get('TOON_STEPS', '3')))
-    lo = float(os.environ.get('TOON_LO', '0.35'))
-    hi = float(os.environ.get('TOON_HI', '0.70'))
+    lo = float(os.environ.get('TOON_LO', '0.76'))
+    hi = float(os.environ.get('TOON_HI', '0.95'))
     m = bpy.data.materials.get('_toon')
     if m:
         return m

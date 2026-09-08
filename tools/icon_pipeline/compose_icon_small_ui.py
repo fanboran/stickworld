@@ -40,13 +40,10 @@ NIDS = {t[0]: 5 for t in TAGS[:7]}
 
 # D 着色器分档（v2）：shade pass 在渲染端已量化为 cel 灰阶（曲面 toon 材质/
 # 平面面烘色，三档 0.32/0.62/0.92），compose 只按灰阶查表映射色带。
-# 断点与渲染端共享 TOON_LO/TOON_HI/TOON_STEPS 环境变量（默认 0.35/0.70/3，
-# 基线实测与 v1 k-means 切点对齐）；RAMPS 固定三带，档数>3 时钳到亮带。
-_TOON_STEPS = max(2, int(os.environ.get("TOON_STEPS", "3")))
-_TOON_LO = float(os.environ.get("TOON_LO", "0.35"))
-_TOON_HI = float(os.environ.get("TOON_HI", "0.70"))
-_TH = tuple(_TOON_LO + (_TOON_HI - _TOON_LO) * (i + 1) / (_TOON_STEPS - 1)
-            for i in range(_TOON_STEPS - 1))
+# 本表阈值只承担「分类三档灰」（含 classic 连续明度 ≈v1 0.36/0.68 语义），
+# 与渲染端档位轮廓调优（TOON_LO/HI，默认 0.76/0.95）解耦——轮廓怎么移，
+# 出图灰阶恒为三档，此表不必跟调。RAMPS 固定三带，档数>3 时钳到亮带。
+_TH = (0.35, 0.70)
 
 
 def cel(tag, fake, target, out_ink=None, nids=10):
@@ -142,9 +139,10 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     vis_img = Image.fromarray((vis * 255).astype(np.uint8))
     ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
     ring = (vis & ~ero_vis).astype(np.float32)
-    # 描边宽度档（ICON_STROKE，默认 1.0）：>1 时向内加第二圈——
-    # 1.5=半权重内圈，2.0=满权重内圈（共 2px）。仅外轮廓圈，ID 结合缝线不动
-    stroke = float(os.environ.get("ICON_STROKE", "1.0"))
+    # 描边宽度档（ICON_STROKE，默认 2.0=1px 核心+满权重内圈共 2px——2026-09-08
+    # 创始人审计定档「1.0 偏细」；1.5=半权重内圈）：>1 时向内加第二圈——
+    # 仅外轮廓圈，ID 结合缝线不动；阶段 2 反向壳落地后外轮廓宽度改由壳厚承载
+    stroke = float(os.environ.get("ICON_STROKE", "2.0"))
     if stroke > 1.0:
         ero5 = np.asarray(op_img.filter(ImageFilter.MinFilter(5))) > 120
         ring = ring + min(1.0, stroke - 1.0) * (ero3 & ~ero5)

@@ -30,9 +30,11 @@ _ALL = [{"name": n, "tag": t} for n, t in OLD7] + \
        [{"name": m["label"], "tag": m["tag"]} for m in M.MOTIFS]
 
 # 既往轮次已标「满意」的不再进待标区（结果档案 temp/review_result_round*.json 全量合并）；
-# RECHECK = 已满意但后续轮次重做过、需复验的名字
+# RECHECK = 已满意但后续轮次重做过、需复验的名字；--all = 关闭过滤全量复
+# 审（架构换代轮用：v2 重渲了全部图标，已过枚也须复验）
 import glob as _glob
 RECHECK = set()
+SHOW_ALL = "--all" in sys.argv[1:]
 
 def _prev_ok_names():
     ok = set()
@@ -45,7 +47,7 @@ def _prev_ok_names():
             pass
     return ok
 
-_PREV_OK = _prev_ok_names()
+_PREV_OK = set() if SHOW_ALL else _prev_ok_names()
 ICONS = [ic for ic in _ALL if ic["name"] not in _PREV_OK or ic["name"] in RECHECK]
 HIDDEN_OK = len(_ALL) - len(ICONS)
 
@@ -106,9 +108,9 @@ PAGE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>图标建模验收 <span class="hint">__TOTAL__ 枚待标（另有 __HIDDEN__ 枚上轮已满意已隐藏）· 点击图标可放大看 128/256 渲染</span></h1>
-  <div class="hint">只评 <b>建模</b>（形体 / 比例 / 部件连接 / 一眼认得出是什么）。配色、描边、光影不用反馈。
-       标「不满意」可以写备注，也可以 <b>不写</b>——留空的由 AI 直读 64px 原图自查问题。</div>
+  <h1>图标验收 · v2 分档换代审计 <span class="hint">__TOTAL__ 枚全量待标（__HIDDEN__ 枚已过枚本轮一并复验）· 点击图标可放大看 128/256 渲染</span></h1>
+  <div class="hint">本轮是 <b>v2 渲染架构换代</b>（着色器分档替换 k-means）——<b>建模和观感都可以反馈</b>：形体/比例/部件连接，以及档位漂移、颜色观感、描边异常。
+       点「不满意」可以写备注，也可以 <b>不写</b>——留空的由 AI 直读 64px 原图自查。v1/v2 并排对照页在 temp/compare_v1v2_64_p*.png。</div>
   <div id="bar">
     <span id="prog"></span>
     <button id="next">↓ 下一个未标记</button>
@@ -122,7 +124,7 @@ PAGE = """<!DOCTYPE html>
 <div id="toast"></div>
 <script>
 const ICONS = __ICONS__;
-const KEY = "icon_review_v3";
+const KEY = "icon_review_v4";
 const state = {};
 ICONS.forEach(ic => state[ic.name] = { model_ok: null, note: "" });
 

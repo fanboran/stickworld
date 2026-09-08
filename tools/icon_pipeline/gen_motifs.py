@@ -51,7 +51,7 @@ def setup(az_deg, el_deg, res, key_e=4.5):
             break
         except TypeError:
             continue
-    scene.eevee.taa_render_samples = 64
+    scene.eevee.taa_render_samples = 256   # 审计反馈「抗锯齿开满」：64→256（配合 2x SSAA 出图）
     scene.render.resolution_x = res
     scene.render.resolution_y = res
     scene.render.film_transparent = True
@@ -153,14 +153,16 @@ def _toon_mat():
     """曲面 toon 材质（D 着色器分档）：白模漫反射受光 → ShaderToRGB → 明度 →
     ColorRamp 常量插值量化 N 档 → Emission。shade pass 出图即文件域 cel 灰阶
     （三档 0.32/0.62/0.92），compose 只按灰阶查表映射色带，不再拉伸/聚类。
-    断点 TOON_LO/TOON_HI 默认 0.35/0.70（文件域，与 v1 k-means 三簇切点对齐；
-    进材质前经 _srgb_inv 换算线性域）、档数 TOON_STEPS（默认 3）环境变量化，
-    供创始人验收调优。ShaderToRGB 仅 EEVEE 支持；节点不可用时回退白模受光
-    （compose 用同一断点查表，语义等价兜底）。"""
+    断点 TOON_LO/TOON_HI 默认 0.76/0.95（文件域，按 main v1 基线 shade 的线性
+    明度三分位校准——v1 k-means 簇边界实测 lin≈0.59/0.94；首版 0.35/0.70 偏低，
+    亮档吞掉中段致圆环近纯色，2026-09-08 审计返工调正；进材质前经 _srgb_inv
+    换算线性域）、档数 TOON_STEPS（默认 3）环境变量化，供创始人验收调优。
+    ShaderToRGB 仅 EEVEE 支持；节点不可用时回退白模受光（compose 按灰阶分类
+    三档，语义等价兜底）。"""
     import os
     steps = max(2, int(os.environ.get('TOON_STEPS', '3')))
-    lo = float(os.environ.get('TOON_LO', '0.35'))
-    hi = float(os.environ.get('TOON_HI', '0.70'))
+    lo = float(os.environ.get('TOON_LO', '0.76'))
+    hi = float(os.environ.get('TOON_HI', '0.95'))
     m = bpy.data.materials.get('_toon')
     if m:
         return m

@@ -29,18 +29,21 @@ OLD7 = [("锻造锤", "icon_hammer_v9"), ("爱心", "icon_heart_v9"),
 _ALL = [{"name": n, "tag": t} for n, t in OLD7] + \
        [{"name": m["label"], "tag": m["tag"]} for m in M.MOTIFS]
 
-# 上一轮已标「满意」的不再进待标区（结果档案 temp/review_result_round3.json）；
-# RECHECK = 上轮满意但本轮按创始人指令重做过，仍需复验
-PREV_RESULT = os.path.join(ROOT, "temp", "review_result_round3.json")
-RECHECK = {"药瓶"}
+# 既往轮次已标「满意」的不再进待标区（结果档案 temp/review_result_round*.json 全量合并）；
+# RECHECK = 已满意但后续轮次重做过、需复验的名字
+import glob as _glob
+RECHECK = set()
 
 def _prev_ok_names():
-    try:
-        with open(PREV_RESULT, encoding="utf-8") as f:
-            data = json.load(f)
-        return {it["name"] for it in data.get("items", []) if it.get("model_ok") is True}
-    except Exception:
-        return set()
+    ok = set()
+    for fp in sorted(_glob.glob(os.path.join(ROOT, "temp", "review_result_round*.json"))):
+        try:
+            with open(fp, encoding="utf-8") as f:
+                data = json.load(f)
+            ok |= {it["name"] for it in data.get("items", []) if it.get("model_ok") is True}
+        except Exception:
+            pass
+    return ok
 
 _PREV_OK = _prev_ok_names()
 ICONS = [ic for ic in _ALL if ic["name"] not in _PREV_OK or ic["name"] in RECHECK]

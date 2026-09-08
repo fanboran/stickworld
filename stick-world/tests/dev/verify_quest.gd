@@ -3,13 +3,14 @@ extends Node
 ##
 ## 用法：godot --headless --path stick-world res://tests/dev/verify_quest.tscn
 ##
-## 模拟玩家走完四个阶段目标（采集→建造→编队→战斗），断言：
+## 模拟玩家走完四个阶段目标（采集→建造→编队→征伐），断言：
 ## 1. DemoQuest 装配存在且初始指向第 1 个目标
 ## 2. 采集 60 木后目标推进
-## 3. 建造/编队/战斗事件逐个推进
+## 3. 建造/编队/据点占领事件逐个推进
 ## 4. 全部完成后 VictoryOverlay 出现且可见
 
 const GameRootScene := preload("res://modules/world/scenes/game_root.tscn")
+const ExpansionApiScript := preload("res://modules/expansion/api.gd")
 
 var _game_root: Node = null
 var _fails: int = 0
@@ -70,13 +71,15 @@ func _run() -> void:
 	else:
 		_pass("编队目标完成 → 推进到战斗")
 
-	# 阶段 4：战斗胜利事件
-	EventBus.battle_ended.emit("bt_verify", true)
+	# 阶段 4：据点占领事件（架构 §七：第四目标完成 = 任意据点 CAPTURED，
+	# battle_ended 不再驱动目标）
+	EventBus.territory_state_changed.emit("ter_verify",
+			ExpansionApiScript.STATE_CAPTURED)
 	await get_tree().process_frame
 	if not bool(quest.get("_victory_shown")):
-		_fail("战斗胜利后未触发胜利结算")
+		_fail("据点占领后未触发胜利结算")
 	else:
-		_pass("战斗目标完成 → 胜利结算触发")
+		_pass("据点占领目标完成 → 胜利结算触发")
 
 	# ── 乱序容错回归：重开一局，先触发后续目标事件再完成首个目标 ──
 	_game_root.queue_free()
@@ -92,7 +95,7 @@ func _run() -> void:
 		return
 	c_api.building_completed.emit("b_o1", "test_region")
 	EventBus.squad_created.emit("sq_o1", [])
-	EventBus.battle_ended.emit("bt_o1", true)
+	EventBus.territory_state_changed.emit("ter_o1", ExpansionApiScript.STATE_CAPTURED)
 	await get_tree().process_frame
 	if int(quest.get("_index")) != 0:
 		_fail("乱序事件不应推进当前目标（_index=%d）" % int(quest.get("_index")))

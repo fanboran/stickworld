@@ -1,13 +1,15 @@
 extends Node
-## 开发期验收工具：L1 八城截图（全景 + 城门近景），供视觉验收（城镇生成管线批次 2/3/4 复用）。
+## 开发期验收工具：L1 八城截图（全景 + 城门近景 + 地面特写），供视觉验收（城镇生成管线批次 2/3/4 复用）。
 ##
-## 用法（会弹一个游戏窗口约 2 分钟，跑完自动退出）：
+## 用法（会弹一个游戏窗口约 3 分钟，跑完自动退出）：
 ##   godot --path stick-world res://tools/worldgen/l1/town_snapshot.tscn
-## 输出：<仓库>/.../.tmp_shots/<map_id>_pan.png（全景布局）、<map_id>_gate.png（城门近景）
+## 输出：<仓库>/.../.tmp_shots/<map_id>_pan.png（全景布局）、<map_id>_gate.png（城门近景）、
+##       <map_id>_ground.png（地面分带/装饰特写）
 ##
 ## 走真实加载链路（game_root + SceneLoader + 初始建筑 spawn），所见即玩家进城所见。
 ## 去干扰：全领地预置已臣服（据点城不刷守军不开战）+ 截图帧隐藏全部 CanvasLayer
-## （去 HUD/新手引导弹窗）。相机自管（make_current 覆盖游戏相机）。
+## （去 HUD/新手引导弹窗）。相机自管（make_current 覆盖游戏相机），并让 SkyDecor
+## 视差层跟随截图相机（否则背景带只盖游戏相机附近，全景里出现山体硬切边假象）。
 
 const MAP_IDS := [
 	"l1_settlement_00", "l1_settlement_01", "l1_settlement_02", "l1_settlement_03",
@@ -15,6 +17,8 @@ const MAP_IDS := [
 ]
 ## 近景缩放：1280 宽视野下约 2100px 世界宽，能看清城门两侧地标形态
 const GATE_ZOOM := 0.6
+## 地面特写缩放：约 1160px 世界宽，可辨分带边界/石板/路灯绿植杂物
+const GROUND_ZOOM := 1.1
 
 var _game_root: Node = null
 
@@ -53,6 +57,10 @@ func _shot_map(mid: String, out_dir: String) -> int:
 	var cam := Camera2D.new()
 	add_child(cam)
 	cam.make_current()
+	# SkyDecor 默认追 GameRoot.CameraRig；改跟截图相机，背景带才铺满全景画幅
+	var sky: Node = map.get_node_or_null("SkyDecor")
+	if sky != null and sky.has_method("set_camera_override"):
+		sky.set_camera_override(cam)
 	# 全景：横向塞满视口（空天偏多属预期，看的是布局骨架）
 	var z: float = vp.x / maxf(width, 1.0)
 	cam.zoom = Vector2(z, z)
@@ -66,6 +74,11 @@ func _shot_map(mid: String, out_dir: String) -> int:
 		cam.position = Vector2(gate_x, 760)
 		await RenderingServer.frame_post_draw
 		await _snap(out_dir.path_join(mid + "_gate.png"))
+	# 地面特写：看分带边界/石板广场/路灯绿植杂物落位
+	cam.zoom = Vector2(GROUND_ZOOM, GROUND_ZOOM)
+	cam.position = Vector2(_ground_focus_x(map, gate_x), 940)
+	await RenderingServer.frame_post_draw
+	await _snap(out_dir.path_join(mid + "_ground.png"))
 	cam.queue_free()
 	await get_tree().process_frame
 	return 0
@@ -111,3 +124,21 @@ func _gate_x(map: Node2D) -> float:
 		if String(d.get("def_id", "")) == "wall_gate":
 			return float(d.get("cell_x", -1)) * 32.0
 	return -1.0
+
+
+## 地面特写落点：优先市场广场（placeholder 宽幅地标），退而求其次仓库，最后城门
+func _ground_focus_x(map: Node2D, gate_x: float) -> float:
+	var ibl: Node = map.get_node_or_null("InitialBuildingsList")
+	if ibl == null:
+		return gate_x
+	var warehouse_x := -1.0
+	for d in ibl.building_defs:
+		var def := String(d.get("def_id", ""))
+		var w := int(d.get("width", 0))
+		if def == "placeholder" and w >= 8:  # 市场地标（民居宽 4、铁匠铺区宽 6）
+			return float(d.get("cell_x", -1)) * 32.0
+		if def == "warehouse":
+			warehouse_x = float(d.get("cell_x", -1)) * 32.0
+	if warehouse_x > 0.0:
+		return warehouse_x
+	return gate_x

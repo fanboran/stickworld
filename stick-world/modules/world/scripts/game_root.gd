@@ -204,6 +204,9 @@ var dev_enemy_count: int = 3
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	# 冻结手绘 UI 沸腾换帧（玩法场景素描控件群庞大，换帧级联拖帧率；
+	# 主菜单 _ready 显式恢复 true）
+	SketchTextures.animation_enabled = false
 	# 加入 game_root group（供 SelectionSystem 等查找相机等服务）
 	add_to_group("game_root")
 	# 注册 InputDispatcher 到 PlayerControlAPI（units 经 api 获取，不反向依赖 world）

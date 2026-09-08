@@ -1,6 +1,7 @@
 # 小镇生活与 NPC 职业：进度与交接
 
 > **用途**：跨会话交接单一入口。新会话恢复本任务从本文件开始读，不重新摸底。
+> **状态**：**批次 1~4 全部完成**（2026-09-09），待创始人观感验收后收线（分支 `agent/town-life`，worktree `.temp/town-life`）。
 > **任务**：让火柴人各司其职——铁匠在铁匠铺打铁、伐木工伐木、矿工挖矿，"这就是一个很普通的小镇"；NPC 职业化 + 经济自动产出端。愿景锚点：[`docs/设计/系统/12-小镇生活与美术.md`](../../设计/系统/12-小镇生活与美术.md) §三；也是核心循环断点 6（职业断）的修复线（[`核心循环.md`](../../设计/核心循环.md) §7.1）。
 > **工作区约定**：worktree `.temp/town-life`（分支 `agent/town-life`，已建好）。**首跑测试前先 `godot --headless --path stick-world --import` 连跑两遍**（否则 fx 类单测假红）。
 > **依赖**：铁匠铺工位需要 A 线批次 1 的铁匠铺场景（未到位时可 placeholder 建筑+工位槽先行）。
@@ -46,7 +47,7 @@
 | 1 | ✅ 完成 | 294b9f5d | 三职业着装可见（视觉 Subagent PASS，截图 `stick-world/tests/dev/professions_out.png`）；run_all 绿（3 失败项单跑全绿=并行 flaky，与本批无关） |
 | 2 | ✅ 完成 | 78e0738e / 6fdb9178 / 865a71bf / c5ebdc9c | 采集经济闭环通：三职业村民无人干预劳作，res_wood/ore/ingot 三库存增长（集成测试 `test_town_life_harvest` PASS，编排方复现 run_all 39/0）；视觉判定 PASS（截图 `tests/dev/harvest_out_0..5.png`）；check_godot_errors 干净 |
 | 3 | ✅ 完成 | 518388a5 / 0ca1ae24 | WorkSlots 消费+节律+wander 全落地：真建筑槽位上班/拆毁降级占位（集成 `test_town_life_worksite` 3 用例 PASS）、7~19 时工作节律（夜间收工白天回岗）、村民 wander 职业过滤（战斗单位语义不变）；视觉判定 PASS（`tests/dev/rhythm_day_0..2.png` 白天在岗 / `rhythm_night_0..2.png` 夜间散逛）；run_all 40/0 绿；check_godot_errors 干净 |
-| 4 | ⬜ 未开工 | — | |
+| 4 | ✅ 完成 | 5db707bb / 8952781d / 065d40a6 | 人口 2→10 配比落地：`assign_village_jobs` 配比分配（铁匠1/伐木3/矿3/待业3，quota+工位容量双约束）、spawn 两簇分布适配 village_a 边界、编队征用离岗互斥（formation duck 清职业+BehaviorHarvest 即时收工）、wander 改身份标志判定+村锚回归（修待业漂出地图）；视觉判定 PASS（`tests/dev/town_overview_0..2.png` / `town_left_0..2.png`）；unit 45/45 绿，run_all 34 通过+6 失败项全部单跑复绿=并行 flaky；check_godot_errors 干净。**四批全部完成、待创始人观感验收后收线** |
 
 ## 批次 1 落地物（批次 2 新会话必读）
 
@@ -83,6 +84,19 @@
 - **已知限制**：夜间画面为 Terraria 级压暗（既有光照设定），村民剪影辨识度低属光照线领域；`PLACEHOLDER_WORK_SITES` 只有 smithy_lv1 一行，新工位职业（如木匠）落地前需补行或等真建筑；worksuite 套件的占位工位断言依赖 X=1120 常量，若占位表迁移需同步。
 - **批次 4 接手提示**：NPC_COUNT 扩充在 `game_root.gd`（const NPC_COUNT=2）；职业配比随建筑走可复用 `get_work_site`（无建筑=无该职业工位→分配时降级）；征兵离岗走 `set_profession("")`（批次 1 契约），离岗后 wander 概率自动失效（_is_villager 判空）；wander 概率若需观感调优改 `ai_controller.villager_wander_probability` 单点。
 
+## 批次 4 落地物（收尾批——本线四批全部完成）
+
+- **人口与配比**：`game_root.NPC_COUNT = 10`（[提案/待定]）。`ProfessionRegistry.assign_village_jobs(entities)`（批量配比分配，spawn 正片入口，经 `TownLifeAPI` 转发）：各职业配额 = **min(配置 quota, 工位容量)**——工位容量 `count_work_capacity()` = 真建筑 WorkSlot 槽位累计，无匹配建筑降级占位表按 1 槽兜底（"村子有打铁需求"语义，保持三职业可见），都无 = 0（该职业不上岗）；资源点职业（work_site_def 空）不受工位约束——**资源点存在性不做现场检查**（village_a 硬化区+城墙净空带吃掉全部资源点属 B 线布局阶段问题，不据此砍配比）。配额满的村民待业（`set_profession("")`）。当前配比：铁匠 1 / 伐木 3 / 矿工 3 / 待业 3（`professions.tres` 新增 `quota` 字段 [提案/待定]）。`assign_village_job(entity, index)` 保留原轮转语义为**强制分配**入口（集成套件 `assign_village_job(npc, 2)` 补矿工的用法无需改动）。
+- **spawn 分布**（[提案/待定]，适配 village_a/town_siege 布局）：旧公式 `1050+200*i` 在 i≥6 时超 map_right（2160）。新两簇：右簇 i=0~4 `1050+180i`（1050~1770，贴铁匠占位工位/仓库右缘，沿用既有村民区）；左簇 i=5~9 `-250-180(i-5)`（-250~-970，靠左侧资源带方向，伐木/挖矿通勤短）。超界 fallback 保留（含左侧 `map_left+100` 新增防御）。spawn 时打 `is_villager` 标志 + 批量配比分配 + stdout 逐人证据（`[TownLife] 村庄配比: 在职={...} 待业=N` + 每人职业/工位 X/资源点）。
+- **村民身份标志（核心语义改造）**：实体新增 `is_villager`（spawn_npcs 写入，duck `set("is_villager", true)`）——批次 3 的 `_is_villager()` 判"职业非空"在引入待业人口后失效（待业村民与被征用士兵职业都是空串，行为语义相反），改为判**"标志 + 不在编队"**（编队查询走 `get_formation_system()` → `is_in_squad`）。效果矩阵：在职村民=wander+harvest；待业村民=wander 不 harvest；被征用前村民（在队）=均无（战斗待命）；无标志实体（士兵/敌方/裸桩）=均无（批次 3 战斗语义保持）。
+- **编队征用互斥**：`FormationSystem._requisition_unit()`（duck 检查 `get_profession` 非空则置空）在 `create_squad`/`add_unit` 成员循环调用——最小接线点，不改 E 线领域结构、零 town_life 依赖。劳作中断：`BehaviorHarvest.update` 新增职业清空自查（即时 finish，与节律收工同点位），决策层 `_try_harvest` 同判不会重进。**释放/解散不回岗**（P0 决策：进待业池闲逛，重新分配留给存档/后续招募系统）。
+- **wander 村锚回归**（[提案/待定] 数值）：`BehaviorWander` params 新增可选 `anchor_x`/`anchor_radius`（缺省半径 640，回归力 ANCHOR_FORCE=2 与边界规避同模式）——待业村民全天闲逛无锚会累积漂移，实测漂到 X=-2900（超 village_a 地图边界 -2160）。`ai_controller._villager_wander_params()` 传地图 `town_center_world_x`（village_a=0）；不传锚 = 原语义（敌人/其他 wander 调用零影响）。实体新增 `get_map_reference()` 供读取。修复后待业村民活动范围收敛在村内（实测 393~714）。
+- **测试**：单测扩至 **45 套件全绿**——`test_profession_registry` 补 3 用例（容量计数三态/批量配比/容量 0 全待业，配比断言与 tres quota 联动）；`test_work_slots_rhythm` 补 3 用例（劳作中清职业即时收工/真建筑容量累计与被毁降级/wander 超锚回归）+ 批次 3 wander 用例适配身份标志（DecisionFixture 加 `is_villager`/`FakeSquadFS` 编队桩）；新套件 `test_requisition_exclusion`（4 用例：create_squad/add_unit 征用清职业、待业与无协议单位安全、解散不回岗，已注册 batch_runner）。
+- **视觉验收材料**：`tests/dev/snapshot_town.tscn`（真渲染：village_a 正片 spawn 10 人 + 村内补摆树×3/矿×3——village_a 净空带内无自然资源点，摆点供伐木/挖矿可见；右簇镜头 `town_overview_0..2.png` 工位/伐木/挖矿/闲逛混合 + 左簇镜头 `town_left_0..2.png` 矿工/待业闲逛；stdout 逐帧行为证据）。**判定 PASS**：三职业着装可辨（棕铁匠@工位 1120 / 绿伐木@树 / 灰矿工@矿，挥镐特效+头顶进度条），在岗与闲逛混合，待业村民锚点内活动。
+- **run_all 记录**：本批全量 34 通过 / 6 失败（selection_formation / fx_damage_text / esc_key_input / battle_ui / notification_feed / new_game_smoke-TIMEOUT），**6 项逐一单跑全部复绿（exit=0）=并行 flaky**；其中 new_game_smoke 单跑 2/2（60s 持续运行）验证 10 人村庄无性能/崩溃问题，selection_formation 单跑全绿验证征用互斥接线未破坏编队链路。harvest/worksite 集成套件单跑与并行均 PASS（`assign_village_job(npc,2)` 强制分配入口保持兼容，套件零改动）。
+- **已知限制 / 移交**：village_a 正片无自然资源点（净空带覆盖全域）→ 正片里伐木/挖矿劳作不可见（村民寻位失败回 idle+wander），观感补全依赖 B 线城镇生成（资源布局）与 A 线铁匠铺（真工位）——配比逻辑已按"资源点存在性由城镇生成线保证"设计，B 线资源到位后零改动生效；待业村民 wander 半径 640 内可能走到城墙/仓库附近穿帮（建筑无碰撞排除，观感可接受）；wander 锚点只锚 X（村庄横向带），Y 仍由地面带约束。
+- **收线状态**：**四批全部完成**，本线无待办批次；待创始人观感验收（热闹小镇整体观感 + 配比数值定稿）后按流程收线（worktree remove + 合并 `agent/town-life`）。
+
 ## 关键决策速查
 
 | 决策 | 结论 |
@@ -95,3 +109,8 @@
 | 资源点枯竭 | 采空不自毁：枯竭态（隐藏+不可采）+90s 重生（[提案/待定]）；枯竭点不进存档为已知限制 |
 | WorkSlots 接线 | 建筑进 "building" 组 + 鸭子协议查询（不引 construction 内部注册表）；真槽位优先、占位表永久降级；A 线铁匠铺落地零改动自动切换 |
 | 节律与 wander | 7~19 时在岗（对齐光照关键帧）+ 村民 idle 后 0.5 概率 wander（[提案/待定]）；wander 仅限有职业村民，战斗/敌方单位语义不变 |
+| 村民身份 | 实体 `is_villager` 标志（spawn 写入）与职业解耦：`_is_villager()` = 标志 + 不在编队——待业村民闲逛、被征用前村民战斗待命、士兵/敌方语义不变（批次 4） |
+| 职业配比 | 各职业配额 = min(配置 quota, 工位容量)；工位容量 = 真建筑槽位数、占位表兜底按 1 槽（占位计入配比，A 线铁匠铺未到位也保持铁匠可见 [提案/待定]）；资源点职业不做现场资源检查（存在性由城镇生成线保证）；配额外村民进待业池（wander 闲逛） |
+| 人口规模 | NPC_COUNT = 10（起步 8~12 中段 [提案/待定]，在岗 7 + 待业 3；性能基准 196 单位远未触顶） |
+| 征用互斥 | 编队注册处（create_squad/add_unit）duck 清职业——最小接线点不改 E 线结构；BehaviorHarvest 职业清空自查即时收工；释放/解散不回岗（P0：进待业池，重分配留给后续招募/存档） |
+| wander 漂移 | 待业村民全天闲逛会累积漂出地图（实测 -2900 vs 边界 -2160）：BehaviorWander 加可选 anchor_x 锚点回归（半径 640 [提案/待定]），村民锚定 town_center_world_x，不传锚原语义零影响 |

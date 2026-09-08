@@ -187,20 +187,43 @@ func get_nearest_warehouse(pos: Vector2) -> Node2D:
 	return best
 
 
-## 查找距离 pos 最近的活跃建造项目（UNDER_CONSTRUCTION）。无项目返回 null。
-func get_nearest_project(pos: Vector2) -> RefCounted:
-	var best: RefCounted = null
-	var best_dist: float = INF
+## 项目查询快照缓存（get_nearest_project 被搬运工 AI 每物理帧调用，100 项目下
+## 每次全扫 values() 数组分配 + 逐项类型断言占成本大头，基准 bench_infra_construction）。
+## 缓存元素 = [center_x: float, project]（项目选址字段创建后不可变，中心坐标预计算）。
+## _projects 增删点（开工/完工移表/读档清空重建）置脏；state 过滤在查询时实时判——
+## PLANNED→UNDER_CONSTRUCTION 转换不经 manager，但缓存持引用不过滤状态，无失效窗口。
+var _project_cache: Array = []
+var _project_cache_dirty: bool = true
+
+
+## _projects 增删后调用（开工注册/完工移表/读档清空重建共用）
+func _on_projects_changed() -> void:
+	_project_cache_dirty = true
+
+
+func _rebuild_project_cache() -> void:
+	_project_cache = []
 	for p in _projects.values():
 		if p is ScriptConstructionProject:
 			var proj: ScriptConstructionProject = p as ScriptConstructionProject
-			if proj.state != proj.State.UNDER_CONSTRUCTION:
-				continue
-			var center_x: float = float(proj.cell_x) * 32.0 + float(proj.width) * 16.0
-			var d: float = absf(center_x - pos.x)
-			if d < best_dist:
-				best_dist = d
-				best = proj
+			_project_cache.append([float(proj.cell_x) * 32.0 + float(proj.width) * 16.0, proj])
+	_project_cache_dirty = false
+
+
+## 查找距离 pos 最近的活跃建造项目（UNDER_CONSTRUCTION）。无项目返回 null。
+func get_nearest_project(pos: Vector2) -> RefCounted:
+	if _project_cache_dirty:
+		_rebuild_project_cache()
+	var best: RefCounted = null
+	var best_dist: float = INF
+	for entry: Array in _project_cache:
+		var proj: ScriptConstructionProject = entry[1]
+		if proj.state != proj.State.UNDER_CONSTRUCTION:
+			continue
+		var d: float = absf(entry[0] - pos.x)
+		if d < best_dist:
+			best_dist = d
+			best = proj
 	return best
 
 
@@ -230,10 +253,12 @@ func _physics_process(delta: float) -> void:
 	# 暂停门禁（对齐 resources/api.gd 的统一"暂停"语义）：暂停时工地进度不推进
 	if TimeManager != null and TimeManager.is_paused():
 		return
-	# 推进所有活跃项目（完工项目移入 _finished_projects，本循环不再随历史建造数增长）
-	for p in _projects.values():
-		if p is ScriptConstructionProject:
-			(p as ScriptConstructionProject).tick(delta)
+	# 推进所有活跃项目（完工项目移入 _finished_projects，本循环不再随历史建造数增长）；
+	# 复用项目快照缓存（_projects 增删点置脏），免每帧 values() 数组分配
+	if _project_cache_dirty:
+		_rebuild_project_cache()
+	for entry: Array in _project_cache:
+		(entry[1] as ScriptConstructionProject).tick(delta)
 
 
 # ─────────────────────────────── 开工建造 ────────────────────────────────
@@ -283,6 +308,7 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	_next_project_id += 1
 	var project := ScriptConstructionProject.new(project_id, building_type, cell_x, width, _map, scene, total_work, region_id)
 	_projects[project_id] = project
+	_on_projects_changed()
 	_assigner.add_project(project)
 	# 项目创建即立工地障碍（不等派工——否则无空闲工人时工地无碰撞箱，玩家可走进工地）
 	project._create_barrier()
@@ -309,6 +335,7 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 	# 完工项目移出活跃表（此前只增不删，_physics_process 30Hz 遍历量随历史建造数
 	# 单调增长）；转入 _finished_projects 保留查询（get_project_state 测试契约）
 	_projects.erase(project.project_id)
+	_on_projects_changed()
 	_finished_projects[project.project_id] = project
 	if building == null:
 		return

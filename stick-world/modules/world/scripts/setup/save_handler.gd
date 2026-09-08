@@ -79,11 +79,14 @@ func _on_game_saving(_slot_index: int) -> void:
 
 
 ## 保存实体到 DB
+## 实体行收集后走 insert_rows 事务批包（逐行 insert_row 每行一次磁盘提交，
+## 中期存档数百实体时为存档卡顿主源之一，同 building_persistence 的批包改造）
 func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 	if map == null:
 		return
 	if not db.query_with_bindings(_SQL_ENT_DELETE, [slot_id, map_id]):
 		push_error("[SaveHandler] entities 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
+	var rows: Array = []
 	var idx: int = 0
 	for entity in map.get_entities():
 		if not is_instance_valid(entity):
@@ -93,7 +96,7 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 		var extra: Dictionary = {}
 		if "faction_id" in entity:
 			extra["faction_id"] = entity.faction_id
-		if not db.insert_row("entities", {
+		rows.append({
 			"slot_id": slot_id, "map_id": map_id,
 			"entity_id": "ent_%04d" % idx,
 			"entity_type": "stickman",
@@ -103,9 +106,10 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 			"facing": facing,
 			"is_player": is_player,
 			"extra_data": JSON.stringify(extra),
-		}):
-			push_error("[SaveHandler] 实体写入失败 slot=%d map=%s id=ent_%04d: %s" % [slot_id, map_id, idx, str(db.error_message)])
+		})
 		idx += 1
+	if not rows.is_empty() and not db.insert_rows("entities", rows):
+		push_error("[SaveHandler] 实体批量写入失败 slot=%d map=%s（%d 行）: %s" % [slot_id, map_id, rows.size(), str(db.error_message)])
 
 
 # ─────────────────────────────── 加载流程 ────────────────────────────────

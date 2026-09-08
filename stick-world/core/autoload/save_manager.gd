@@ -12,10 +12,10 @@ const SAVE_DIR := "user://saves"
 
 # SQL 白名单：表名无法经 ? 参数化，统一定义为常量；运行时值一律走 ? 绑定
 # （query_with_bindings），禁止字符串拼接进 SQL。
-const _T_SAVE_META := "save_meta"
 const _SQL_META_SELECT_ALL := "SELECT * FROM save_meta WHERE slot_id = ?"
 const _SQL_META_SELECT_CREATED := "SELECT created_at FROM save_meta WHERE slot_id = ?"
-const _SQL_META_DELETE := "DELETE FROM save_meta WHERE slot_id = ?"
+# 列顺序对齐 _SCHEMA_SQLS 的 save_meta 建表定义（_upsert_save_meta 单语句写入）
+const _SQL_META_UPSERT := "INSERT OR REPLACE INTO save_meta (slot_id, save_name, created_at, updated_at, playtime_seconds, version, current_map_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
 
 # ── schema 版本化（PRAGMA user_version）──
 ## 当前支持的存档 schema 版本。v2 = 现行建表 SQL 的表结构（save_meta.version 所写数值）；
@@ -405,15 +405,24 @@ func _slot_path(slot_index: int) -> String:
 
 
 ## 确保所有表存在（幂等）
+## DDL 段包显式事务：godot-sqlite 每条 query 独立 autocommit 提交（Windows 每次提交
+## 一次 fsync，12 条建表语句在存档路径上白付 ~11 次磁盘提交，基准 bench_infra_save
+## 实测占全链存档大头）。DDL 均为 IF NOT EXISTS/幂等 PRAGMA，事务内执行行为等价。
+## 注意：此事务只包本方法的 DDL——game_saving 回调中的 insert_rows 自带事务，
+## 混在外层事务里会嵌套冲突（其内部 BEGIN/COMMIT 会提前结束外层事务）。
 func _ensure_schema() -> void:
 	if _db == null:
 		return
+	if not _db.query("BEGIN IMMEDIATE"):
+		push_error("[SaveManager] schema 事务开启失败: %s" % str(_db.error_message))
 	for stmt in _SCHEMA_SQLS:
 		if not _db.query(stmt):
 			push_error("[SaveManager] 建表语句执行失败: %s…（%s）" % [stmt.left(48), str(_db.error_message)])
 	_migrate_schema()
 	# 表结构就绪后盖章 schema 版本：旧档（user_version=0）在下次存档时自动升级标记
 	_stamp_schema_version()
+	if not _db.query("COMMIT"):
+		push_error("[SaveManager] schema 事务提交失败: %s" % str(_db.error_message))
 
 
 ## 旧库迁移：construction_projects 补 material_progress 列。
@@ -475,6 +484,9 @@ func _migrate_loaded_schema(from_version: int) -> bool:
 
 
 ## 写入或更新 save_meta（保留首次创建时间，只更新 updated_at）
+## INSERT OR REPLACE 单语句：语义与原 DELETE+INSERT 完全一致（REPLACE 冲突即
+## 删旧行插新行，save_meta 主键 slot_id；FK 级联行为同原 DELETE——子表行清除后
+## 由各模块 game_saving 回调重写，全链行为不变），少一次 autocommit 磁盘提交。
 func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version: int) -> void:
 	var rows: Array = []
 	if _db.query_with_bindings(_SQL_META_SELECT_CREATED, [slot_id]):
@@ -482,18 +494,8 @@ func _upsert_save_meta(slot_id: int, datetime: String, playtime: float, version:
 	var created_at: String = datetime
 	if not rows.is_empty():
 		created_at = str(rows[0].get("created_at", datetime))
-	# 先尝试删除旧记录（save_meta 主键是 slot_id）
-	if not _db.query_with_bindings(_SQL_META_DELETE, [slot_id]):
-		push_error("[SaveManager] save_meta 旧记录删除失败 slot=%d: %s" % [slot_id, str(_db.error_message)])
-	if not _db.insert_row(_T_SAVE_META, {
-		"slot_id": slot_id,
-		"save_name": "",
-		"created_at": created_at,
-		"updated_at": datetime,
-		"playtime_seconds": playtime,
-		"version": version,
-		"current_map_id": "",
-	}):
+	if not _db.query_with_bindings(_SQL_META_UPSERT,
+			[slot_id, "", created_at, datetime, playtime, version, ""]):
 		push_error("[SaveManager] save_meta 元数据写入失败 slot=%d: %s" % [slot_id, str(_db.error_message)])
 
 

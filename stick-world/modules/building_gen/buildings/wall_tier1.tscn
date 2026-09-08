@@ -15,7 +15,15 @@ position = Vector2(16, 0)
 
 [node name="WallBody" type="Polygon2D" parent="Exterior"]
 polygon = PackedVector2Array(-16, -64, 16, -64, 16, 0, -16, 0)
-color = Color(0.55, 0.42, 0.28, 1)
+color = Color(0.4, 0.31, 0.21, 1)
+
+[node name="RailTop" type="Polygon2D" parent="Exterior"]
+polygon = PackedVector2Array(-16, -52, 16, -52, 16, -46, -16, -46)
+color = Color(0.52, 0.4, 0.27, 1)
+
+[node name="RailMid" type="Polygon2D" parent="Exterior"]
+polygon = PackedVector2Array(-16, -30, 16, -30, 16, -24, -16, -24)
+color = Color(0.52, 0.4, 0.27, 1)
 
 [node name="PassageBarrier" type="StaticBody2D" parent="."]
 

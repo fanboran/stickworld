@@ -55,15 +55,22 @@ func _settle() -> void:
 	await get_tree().create_timer(0.9).timeout
 
 
-## 生成一个飘字并返回其 Label（等 3 帧确保 deferred 挂载 + tween 启动）
-func _spawn_one(amount: float, crit: bool) -> Label:
+## 生成一个飘字并返回其 Label（等 3 帧确保 deferred 挂载 + tween 启动）。
+## frozen=true：暂停树冻结 tween（deferred 挂载照常刷），单帧后读取——
+## 起手 scale 等 tween 进度类断言必须用此模式：加载停顿下 3 帧可吃掉
+## 100ms+ delta，固定帧数读取窗口被拉穿成随机 flake（实测 0.98 谷值）。
+func _spawn_one(amount: float, crit: bool, frozen: bool = false) -> Label:
+	if frozen:
+		get_tree().paused = true
 	FxLibrary.spawn_damage_text(get_tree(), Vector2(960.0, 540.0), amount, crit)
-	for i in 3:
+	for i in (1 if frozen else 3):
 		await get_tree().process_frame
 	var found: Array = []
 	for c in get_tree().current_scene.get_children():
 		if c is Label and c.visible:
 			found.append(c)
+	if frozen:
+		get_tree().paused = false
 	if found.size() != 1:
 		push_error("可见飘字数量异常: %d（期望 1）" % found.size())
 		return null
@@ -73,7 +80,8 @@ func _spawn_one(amount: float, crit: bool) -> Label:
 func _test_base() -> void:
 	await _settle()
 	_cam.zoom = Vector2.ONE
-	var lb := await _spawn_one(42.0, false)
+	# 起手放大态断言走冻结读取（返回时 tween 仍未首步，scale 恒 = 1.3 起手值）
+	var lb := await _spawn_one(42.0, false, true)
 	if lb == null:
 		_runner.assert_true(false, "应恰好出现一个可见飘字 Label")
 		return

@@ -91,6 +91,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_expansion_territories.tscn"
 	"tests/integration/test_battle_retreat.tscn"
 	"tests/integration/test_garrison_spawner.tscn"
+	"tests/integration/test_conquest_flow.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -103,6 +104,7 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_battle_lifecycle.tscn"]=120
 	["tests/integration/test_battle_retreat.tscn"]=180
 	["tests/integration/test_garrison_spawner.tscn"]=120
+	["tests/integration/test_conquest_flow.tscn"]=180
 	["tests/integration/test_selection_formation.tscn"]=90
 	["tests/integration/test_possession.tscn"]=90
 	["tests/integration/test_village_map.tscn"]=90
@@ -178,7 +180,8 @@ affected_suites() {
 				picked["tests/integration/test_debug_api.tscn"]=1 ;;
 			stick-world/modules/expansion/*)
 				picked["tests/integration/test_expansion_territories.tscn"]=1
-				picked["tests/integration/test_garrison_spawner.tscn"]=1 ;;
+				picked["tests/integration/test_garrison_spawner.tscn"]=1
+				picked["tests/integration/test_conquest_flow.tscn"]=1 ;;
 			stick-world/modules/ui_global/*)
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1

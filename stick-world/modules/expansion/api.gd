@@ -5,8 +5,9 @@ extends Node
 ## 禁止跨模块直接引用 expansion 内部脚本（契约详见
 ## docs/技术/架构/出征与领地架构.md §五；广播类信号走 EventBus §六）。
 ##
-## 装配：SystemSetup 动态挂载（批次 C5，与 SaveHandler 同模式）——
-## _ready 自载 territories 配置，ConquestManager 装配时可经 setup 注入共享实例。
+## 装配：SystemSetup 动态挂载（ExpansionApi + ConquestManager + 共享 TerritoryRegistry，
+## 与 ConstructionApi 同模式）——_ready 自载 territories 配置，
+## ConquestManager 装配时可经 setup 注入共享实例。
 ## 广播给全局的信号在 EventBus（territory_state_changed / region_owner_changed /
 ## unlock_granted）；本文件两条信号是模块间点对点契约。
 
@@ -26,6 +27,9 @@ signal conquest_completed(stats: Dictionary)
 ## _ready 自载配置；SystemSetup 装配 ConquestManager 时可注入共享实例（批次 C5）
 var _registry := TerritoryRegistry.new()
 
+## 流程编排器（ConquestManager，SystemSetup 装配后注入；流程方法转发目标）
+var _flow: Node = null
+
 
 func _ready() -> void:
 	if _registry.get_count() == 0:
@@ -34,6 +38,11 @@ func _ready() -> void:
 
 func setup(registry: TerritoryRegistry) -> void:
 	_registry = registry
+
+
+## 注入流程编排器（SystemSetup 装配尾部调用；查询面不依赖它，流程面转发给它）
+func set_flow_manager(manager: Node) -> void:
+	_flow = manager
 
 
 # ===== 查询（C1 实装）=====
@@ -71,15 +80,20 @@ func is_all_captured() -> bool:
 	return true
 
 
-# ===== 流程（批次 C5 由 ConquestManager 实装，C1 仅占位契约）=====
+# ===== 流程（ConquestManager 编排，本 api 转发）=====
 
 ## 出征：校验状态 → SceneLoader.travel_to_map(map_id)。可出征返回 true
 func launch_campaign(territory_id: String) -> bool:
-	push_warning("[expansion] launch_campaign 属批次 C5（ConquestManager）实装，当前恒拒")
+	if _flow != null and _flow.has_method("launch_campaign"):
+		return _flow.launch_campaign(territory_id)
+	push_warning("[expansion] ConquestManager 未装配，出征不可用")
 	return false
 
 
 ## 占领：battle_ended 后由 ConquestManager 调（也供测试直达）——
 ## 写状态/发奖励/广播 territory_state_changed + region_owner_changed
 func capture_territory(territory_id: String) -> void:
-	push_warning("[expansion] capture_territory 属批次 C5（ConquestManager）实装，当前无操作")
+	if _flow != null and _flow.has_method("capture_territory"):
+		_flow.capture_territory(territory_id)
+		return
+	push_warning("[expansion] ConquestManager 未装配，占领不可用")

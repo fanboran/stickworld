@@ -32,7 +32,6 @@ import random
 
 # 校场（守军布阵带）宽度：8 守军槽(间距105px) + 敌将位 + 集结线 ≈ 910px，取 30 cell=960px
 RESERVE_CELLS = 30
-WALL_SEGMENT_COUNT = 6  # 每侧城墙段数（现状节奏：6 段 × 4 cell）
 
 _LM_GATE = "gate"
 
@@ -151,13 +150,16 @@ def plan_layout(profile: dict, config: dict) -> dict:
     marks = {}      # 类型 -> 建筑左缘 cell_x
     zones = []      # (lo, hi, 类型) 含净空禁区
 
-    # 城墙带（贴边缘，位置固定不随机——城墙就该贴边）
+    # 城墙带（贴边缘，位置固定不随机——城墙就该贴边）。
+    # 逐 cell 连续落位：城墙 def 的外观是单 cell 宽（32px）定宽体，按多 cell 段
+    # 落位会出现「每段只有最左 1 cell 有外观」的等距幽灵矩形碎片（批次 4 judge
+    # 观察项），逐 cell 砌墙后观感=连续栅栏/石墙带，且与玩家手动建墙（width=1）
+    # 同构。落位不消耗 rng——布局骨架与其余产物不受影响。
     if wall_tier > 0:
         wall_def = "wall_tier%d" % wall_tier
-        for i in range(WALL_SEGMENT_COUNT):
-            buildings.append({"def_id": wall_def, "cell_x": edge + i * house_w, "width": house_w})
-            buildings.append({"def_id": wall_def, "cell_x": grid - edge - wall_len + i * house_w,
-                              "width": house_w})
+        for i in range(wall_len):
+            buildings.append({"def_id": wall_def, "cell_x": edge + i, "width": 1})
+            buildings.append({"def_id": wall_def, "cell_x": grid - edge - wall_len + i, "width": 1})
 
     # 城门
     buildings.append({"def_id": "wall_gate", "cell_x": gate_x, "width": gate_w})

@@ -90,17 +90,19 @@ func _run() -> void:
 	else:
 		_fail("空格恢复后 %.0fs 未分胜负（AI 自主接战断链）" % BATTLE_TIMEOUT)
 
-	# 3) DemoQuest 记账验证（胜局记账 / 败局不触发）
+	# 3) DemoQuest 胜局统计验证（battle_ended 只计数不驱动目标；第四目标
+	# 完成改由据点占领信号 territory_state_changed 驱动，出征与领地架构 §七）
+	var wins: int = int(quest.get("_battle_win_count"))
 	if result["victory"]:
-		var pending: Variant = quest.get("_pending_done")
-		if pending is Dictionary and pending.get("battle", false):
-			_pass("胜利已入乱序记账")
-		elif int(quest.get("_index")) == 3:
-			_pass("胜利作为当前目标完成")
+		if wins == 1:
+			_pass("胜利已入战斗胜局统计")
 		else:
-			_fail("胜利既未推进也未记账")
+			_fail("胜局未统计（_battle_win_count=%d）" % wins)
 	else:
-		_pass("败局不触发目标完成（符合设计）——真实游玩玩家操作可获胜")
+		if wins == 0:
+			_pass("败局不增胜局统计（符合设计）——真实游玩玩家操作可获胜")
+		else:
+			_fail("败局误增胜局统计（_battle_win_count=%d）" % wins)
 
 
 func _fail(msg: String) -> void:

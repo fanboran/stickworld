@@ -11,6 +11,14 @@ extends Node
 ## 广播给全局的信号在 EventBus（territory_state_changed / region_owner_changed /
 ## unlock_granted）；本文件两条信号是模块间点对点契约。
 
+# ===== 公共常量 =====
+
+## 领地状态枚举转发：跨模块消费 EventBus.territory_state_changed(new_state) 时
+## 经本 api 取值（模块对外契约面），不引 expansion 内部脚本 territory_registry.gd
+const STATE_HOSTILE := TerritoryRegistry.State.HOSTILE
+const STATE_CAPTURED := TerritoryRegistry.State.CAPTURED
+
+
 # ===== 公共信号 =====
 
 ## 领地被占领：ConquestManager（批次 C5）发射 → 装饰/UI 等点对点订阅方
@@ -48,16 +56,20 @@ func set_flow_manager(manager: Node) -> void:
 # ===== 查询（C1 实装）=====
 
 ## 可征伐据点列表（出城选项动态项数据源）：{id, name_zh, garrison_count, captured, rewards_preview}
+## garrison_count = 当前剩余守军（配置 − garrison_losses 车轮战扣减，clamp 0；
+## 不含敌将——敌将每次进图均在位，架构 §2.3）
 func list_targets() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for row in _registry.get_all():
 		if not (row is Dictionary):
 			continue
 		var id := String(row.get("id", ""))
+		var record: Dictionary = WorldState.territories.get(id, {})
+		var losses: int = int(record.get("garrison_losses", 0)) if record is Dictionary else 0
 		out.append({
 			"id": id,
 			"name_zh": String(row.get("name_zh", "")),
-			"garrison_count": _registry.get_garrison_count(id),
+			"garrison_count": maxi(0, _registry.get_garrison_count(id) - losses),
 			"captured": get_territory_state(id) == TerritoryRegistry.State.CAPTURED,
 			"rewards_preview": row.get("rewards", {}).get("resources", {}),
 		})

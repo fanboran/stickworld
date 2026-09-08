@@ -76,6 +76,14 @@ func _test_api_queries() -> void:
 		_runner.assert_false(bool(t["captured"]), "%s 初始未臣服" % t.get("id", "?"))
 	# 状态查询：缺失条目 → HOSTILE；写入后翻 CAPTURED
 	_runner.assert_equal(api.get_territory_state(TID_1), 0, "缺失条目按 HOSTILE 查询")
+	# 车轮战扣减感知：list_targets 守军数 = 配置 − garrison_losses（C6 出城选项口径）
+	var base_count: int = int(targets[0]["garrison_count"])  # targets[0] = 配置首条 TID_1
+	WorldState.territories[TID_1] = {"state": 0, "garrison_losses": 1, "control_progress": 100.0}
+	var got_count := -1
+	for t in api.list_targets():
+		if String(t["id"]) == TID_1:
+			got_count = int(t["garrison_count"])
+	_runner.assert_equal(got_count, base_count - 1, "list_targets 守军数随车轮战扣减")
 	WorldState.territories[TID_1] = {"state": 1, "garrison_losses": 0, "control_progress": 100.0}
 	_runner.assert_equal(api.get_territory_state(TID_1), 1, "写入后 CAPTURED")
 	var first: Dictionary = api.list_targets()[0]

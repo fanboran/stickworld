@@ -44,6 +44,11 @@ var _title: Label = null
 
 
 func _ready() -> void:
+	# 主菜单显式恢复沸腾（玩法场景置 false 后返回菜单不依赖对方清理）；
+	# 并确保驱动节点存在——ensure_driver 原本只由世界场景的 ui_root 装配调用，
+	# 全新启动直接进主菜单时驱动不存在，沸腾从未生效
+	SketchTextures.animation_enabled = true
+	SketchTextures.ensure_driver(get_tree())
 	theme = StickTheme.create()
 	_build_background()
 	_build_title()

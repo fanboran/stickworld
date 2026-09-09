@@ -33,6 +33,16 @@ const _BUILDING_SCENE_PATHS := {
 	# 2026-08-22：兵营/仓库脱离共用草棚外壳，各自程序化差异化外观（PLACEHOLDER 几何挂件）
 	"barracks": "buildings/barracks.tscn",
 	"warehouse": "buildings/warehouse.tscn",
+	# 铁匠铺 Lv1：开放锻造棚（石炉/烟囱/铁砧/工作台挂件），参考图 buildings/reference/smithy_lv1.png
+	"smithy_lv1": "buildings/smithy_lv1.tscn",
+	# 石造仓库：纯石头建筑（垛口石墙/拱窗/石带/角石），批次 2 石头结构件化验收载体
+	"stone_warehouse": "buildings/stone_warehouse.tscn",
+	# 宅邸：二层半木悬挑建筑（外梯+阳台+穿坡烟囱），批次 3 多层建筑验收载体
+	"manor": "buildings/manor.tscn",
+	# 木骨石基民居：石基+半木+金茅草（v12 笔触），批次 5 多材质家族 T2 民居
+	"timber_cottage": "buildings/timber_cottage.tscn",
+	# 议事厅：地标级混合精修（石砌角石+半木悬挑+茅草坡+脊上钟楼+外梯阳台），批次 5 验收载体
+	"grand_hall": "buildings/grand_hall.tscn",
 }
 
 

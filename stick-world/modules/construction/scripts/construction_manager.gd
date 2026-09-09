@@ -253,6 +253,8 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	var project_id := "proj_%04d" % _next_project_id
 	_next_project_id += 1
 	var project := ScriptConstructionProject.new(project_id, building_type, cell_x, width, _map, scene, total_work, region_id)
+	# D2 数据驱动：def 随项目携带，完工时 apply_building_def 应用到建筑（interior_mode 等）
+	project.building_def = def
 	_projects[project_id] = project
 	_assigner.add_project(project)
 	# 项目创建即立工地障碍（不等派工——否则无空闲工人时工地无碰撞箱，玩家可走进工地）

@@ -45,6 +45,9 @@ var region_id: String = ""
 var map: Node2D = null
 ## 建筑场景模板（P0 由 ConstructionManager 根据 def_id 查表注入）
 var building_scene: PackedScene = null
+## 建筑定义数据（D2 数据驱动：interior_mode/max_hp 等，ConstructionManager 立项时注入，
+## 完工时经 apply_building_def 应用——与 spawn_operational_building 预置路径对齐）
+var building_def: Dictionary = {}
 ## 完工所需总工作量（人·秒）。P0 默认 10.0（单人 10 秒建完，双人 5 秒）
 var total_work: float = 10.0
 ## 已累计工作量（建造进度 = current_work / total_work）
@@ -361,6 +364,10 @@ func _complete() -> void:
 		typed.cell_x = cell_x
 		typed.width = width
 		typed.is_terrain = false
+		# D2: 应用数据驱动字段（interior_mode 等；与 spawn_operational_building 对齐，
+		# 须在 add_child 触发 _ready/_lookup_children 之前完成）
+		if not building_def.is_empty() and typed.has_method("apply_building_def"):
+			typed.apply_building_def(building_def)
 		# 场景默认宽度与实际建造宽度不同时，重建程序化外观（草棚等可拉伸宽度建筑）
 		if new_building is BuildingExterior:
 			(new_building as BuildingExterior).rebuild_exterior()

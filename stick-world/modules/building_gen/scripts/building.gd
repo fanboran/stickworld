@@ -386,6 +386,8 @@ func _set_transparent(on: bool) -> void:
 
 ## InteractionZone body_entered 回调
 func _on_interaction_zone_body_entered(body: Node2D) -> void:
+	if _interior_mode == 0:
+		return  # interior_mode=NONE：无室内交互（数据驱动门控，Excel interior_mode 列）
 	if not _is_player_entity(body):
 		return  # 非玩家实体不触发
 	if state != State.OPERATIONAL:
@@ -398,6 +400,8 @@ func _on_interaction_zone_body_entered(body: Node2D) -> void:
 
 ## InteractionZone body_exited 回调
 func _on_interaction_zone_body_exited(body: Node2D) -> void:
+	if _interior_mode == 0:
+		return  # interior_mode=NONE：无室内交互（与 entered 门控对称）
 	if not _is_player_entity(body):
 		return
 	_set_transparent(false)

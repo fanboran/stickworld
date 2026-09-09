@@ -329,9 +329,14 @@ func _ready() -> void:
 	# 获取 AIController 子节点（§7.1）
 	_ai_controller = get_node_or_null("AIController")
 	_ai_phase = int(get_instance_id() % 2)
+	# 30Hz 物理刻下同样保持隔刻节流（perf/battle-30fps：反转原"降级放弃节流"分支）。
+	# 60Hz 时代设计的分频在 30Hz 下若退化为 div=1，AI 行为 update（逐刻 duck-typing
+	# + 目标全敌打分）与分离网格查询会全部逐刻全量跑满。div=2 时：AI 行为按 _ai_phase
+	# （实例 id 奇偶）对半交错降为 15Hz，physics_update 传 delta*rate_div 倍增保持
+	# 游戏时间语义不变（行为计时器均为 delta 累积）；分离扫描同步减半查询总量。
 	if Engine.get_physics_ticks_per_second() < 60:
-		_ai_rate_div = 1
-		_sep_rate_div = 1
+		_ai_rate_div = 2
+		_sep_rate_div = 2
 	# 从模型 marker 动态计算 foot_offset 基准（适配不同参考系）；
 	# 实际 foot_offset = 基准 × body_scale（_apply_scale 内重算，9q）
 	_foot_offset_base = _calculate_foot_offset()
@@ -522,14 +527,21 @@ func _physics_process(delta: float) -> void:
 		_handle_ai_input(delta)
 		# 静态分离：停住的单位也互相推开（移动方向修正只在移动时生效，
 		# 双方都停在射程边缘时会黏住——soft-body 位置修正解决）。
-		# 帧率优化：邻域扫描隔物理帧跑（60Hz 物理=30Hz 分离；30Hz 物理下逐帧）
+		# 帧率优化：邻域扫描隔物理帧跑（60Hz 物理=30Hz 分离；30Hz 物理=15Hz 分离）
 		_sep_frame_counter += 1
 		if _sep_frame_counter % _sep_rate_div == 0:
 			_apply_static_separation()
 
 	# 火柴人可在地面范围内上下左右移动（详见 §7.1.1）
 	velocity += _knockback_velocity
-	move_and_slide()
+	# 零位移早退（perf/battle-30fps）：移动速度与击退速度都≈0（上行为二者合成，
+	# 合成后≈0 即两者都≈0）时跳过 move_and_slide——CharacterBody2D 即便零位移
+	# 也要付一次 body_test_motion 碰撞查询，而全工程无 is_on_floor/is_on_wall
+	# 消费（查询结果无人读），满编 96 单位逐刻白付纯属浪费；站位由下方 Y/X clamp
+	# 与静态分离位置修正维持，减速停止由 _apply_movement 显式写 velocity 完成。
+	# 击退中合成速度非零，照常执行。
+	if not velocity.is_zero_approx():
+		move_and_slide()
 	# 士气自然恢复（AI 完善批次 3，行业最佳实践）：脱离战斗后逐渐回士气，防永久溃逃
 	_apply_rest_morale_recovery(delta)
 	# 击退冲量衰减

@@ -327,22 +327,30 @@ def build_ink_shells(scene, target):
         bm.from_mesh(me)
         oe.to_mesh_clear()
         bm.normal_update()
-        # 屏幕空间恒宽：沿「法线去掉视线分量」的相机平面方向外推——正交相机
-        # 下位移在屏幕平面内恒为 thickness 像素，不随面与视线的夹角变化。
-        # （3D 法线外推在掠射面变粗/陡直面变细：铁砧左右不匀、圆锥上细下粗的根因）
+        # 屏幕空间恒宽 + 逐面独立位移：每个面沿「自身面法线去掉视线分量」的
+        # 相机平面方向独立外拓（面间不共享顶点）。正交相机下位移在屏幕平面
+        # 内恒为 thickness 像素，不随面与视线的夹角变化；顶点平均法线在尖峭
+        # 处（锥尖/棱尖）会退化为沿边滑动——描边向尖端渐细消失，逐面位移
+        # 保证每个面的轮廓环都不缺席。正对相机的面投影近零、完全被 cel
+        # 覆盖，直接跳过。
         R = o.matrix_world.to_3x3()
         Rinv = R.inverted()
         RinvN = Rinv.transposed()   # 法线矩阵：防非均匀尺度扭曲法线方向
         view = (R @ Vector((0.0, 0.0, -1.0))).normalized()
-        for v in bm.verts:
-            wn = (RinvN @ v.normal).normalized()
+        verts_out = []
+        faces_out = []
+        for face in bm.faces:
+            wn = (RinvN @ face.normal).normalized()
             n_plane = wn - view * wn.dot(view)
-            if n_plane.length > 1e-4:
-                n_plane.normalize()
-                v.co = v.co + Rinv @ (n_plane * thickness)   # 只回转方向，不平移（防壳飞离原体）
-        bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+            if n_plane.length <= 1e-4:
+                continue   # 正对相机：完全在 cel 覆盖之下，无需壳
+            n_plane.normalize()
+            off = Rinv @ (n_plane * thickness)   # 只回转方向，不平移（防壳飞离原体）
+            faces_out.append(tuple(len(verts_out) + i for i in range(len(face.verts))))
+            for v in face.verts:
+                verts_out.append(tuple(v.co + off))
         sh_mesh = bpy.data.meshes.new(f"{o.name}_ink_shell")
-        bm.to_mesh(sh_mesh)
+        sh_mesh.from_pydata(verts_out, [], faces_out)
         bm.free()
         sh = bpy.data.objects.new(f"{o.name}_ink_shell", sh_mesh)
         sh['is_ink_shell'] = 1

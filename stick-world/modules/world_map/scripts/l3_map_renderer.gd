@@ -96,6 +96,10 @@ var _political_borders_built := false
 var _boiling_time := 0.0
 var _boiling_frame := 0
 
+## 地图标注层（R8 层3）：国名 + 都城星标（§7.3-6 规范表 L3=只画首都星标+国名），
+## 子节点随本渲染器被相机缩放；仅 POLITICAL 模式绘制（政治语义，层内自判门控）
+var _label_layer: MapLabelLayer = null
+
 
 func set_data(data: L3WorldData) -> void:
 	_data = data
@@ -103,7 +107,17 @@ func set_data(data: L3WorldData) -> void:
 	_build_glow_outlines()
 	_ensure_l1_index()
 	_ensure_terrain()
+	_ensure_label_layer()
 	queue_redraw()
+
+
+## 标注层挂载（R8 层3）：懒建子节点 + 喂 L3 国名/都城数据（换数据重复调用即重建）
+func _ensure_label_layer() -> void:
+	if _label_layer == null:
+		_label_layer = MapLabelLayer.new()
+		_label_layer.set_camera(_camera)
+		add_child(_label_layer)
+	_label_layer.setup_l3(_data)
 
 
 ## 设置玩家当前所在 L2 地区（Phase C 动态跟踪入口；变化时重建描边缓存）
@@ -632,9 +646,12 @@ func _draw_hover_l1() -> void:
 		draw_polyline(hwobble, HOVER_COLOR, hw, true)
 
 
-## F3 调试：给每个 L2 地区打编号（地区质心；centroid 2048 级 × size/mask 比例）
+## F3 调试：给每个 L2 地区打编号（地区质心；centroid 2048 级 × size/mask 比例）。
+## 字体归正（R8 层3）：StickHand 与全游戏 UI 同源，不用 fallback 字体
 func _draw_l2_labels() -> void:
-	var font := ThemeDB.fallback_font
+	var font := SketchFonts.hand()
+	if font == null:
+		return
 	var scale := 1.0
 	if _data.size > 0 and _data.mask_image != null:
 		scale = float(_data.size) / float(_data.mask_image.get_width())

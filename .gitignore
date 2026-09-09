@@ -71,6 +71,8 @@ tools/worldgen/output/**
 !tools/worldgen/output/r4_modes_*.png
 # R5 建成区场叠加管线验收图（特写/贫瘠抽查/分形自检，见交接档 R 系列 R5）
 !tools/worldgen/output/blob_v2_*.png
+# R8 标注体系验收预览（三级视图标注效果，见交接档 R 系列 R8 层3）
+!tools/worldgen/output/r8_label_*.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

@@ -85,13 +85,27 @@ var _political_borders_built := false
 var _boiling_time := 0.0
 var _boiling_frame := 0
 
+## 地图标注层（R8 层3）：地区名 + 都城星标/名 + 重镇名（§7.3-6 规范表 L2 档），
+## 子节点随本渲染器被相机缩放；仅 POLITICAL 模式绘制（政治语义，层内自判门控）
+var _label_layer: MapLabelLayer = null
+
 
 func set_data(data: L2WorldData) -> void:
 	_data = data
 	_build_static_mesh()
 	_ensure_political_layer()
 	_political_borders_built = false
+	_ensure_label_layer()
 	queue_redraw()
+
+
+## 标注层挂载（R8 层3）：懒建子节点 + 喂 L2 地区/重镇数据（换地区重复调用即重建）
+func _ensure_label_layer() -> void:
+	if _label_layer == null:
+		_label_layer = MapLabelLayer.new()
+		_label_layer.set_camera(_camera)
+		add_child(_label_layer)
+	_label_layer.setup_l2(_data)
 
 
 func set_camera(camera: MapCamera) -> void:
@@ -314,9 +328,12 @@ func _draw() -> void:
 		_draw_l1_labels()
 
 
-## F3 调试：给当前地区内的每个 L1 地块打编号
+## F3 调试：给当前地区内的每个 L1 地块打编号。
+## 字体归正（R8 层3）：StickHand 与全游戏 UI 同源，不用 fallback 字体
 func _draw_l1_labels() -> void:
-	var font := ThemeDB.fallback_font
+	var font := SketchFonts.hand()
+	if font == null:
+		return
 	for tile in _data.tiles:
 		var label: int = int(tile.get("label", 0))
 		if label <= 0:

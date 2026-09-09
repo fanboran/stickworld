@@ -274,7 +274,22 @@ func set_data(data: L1WorldData) -> void:
 	_build_glow_outline()
 	# 当前模式需要静态底图（TERRAIN/TRAFFIC）时按需触发异步加载（POLITICAL 无贴图）
 	_ensure_static_textures()
+	_ensure_label_layer()
 	queue_redraw()
+
+
+## 地图标注层（R8 层3）：城市名（包内 settlement name）+ 都城星标
+## （capital_settlement_id，§7.3-1 首都星形惯例）。聚落语义全模式显示
+var _label_layer: MapLabelLayer = null
+
+
+## 标注层挂载（R8 层3）：懒建子节点 + 喂 L1 聚落数据（换包重复调用即重建）
+func _ensure_label_layer() -> void:
+	if _label_layer == null:
+		_label_layer = MapLabelLayer.new()
+		_label_layer.set_camera(_camera)
+		add_child(_label_layer)
+	_label_layer.setup_l1(_data)
 
 
 ## 设置玩家当前所在地块（Phase C 动态跟踪入口；未知 id 忽略）
@@ -1115,9 +1130,12 @@ func _pts(arr: Array) -> PackedVector2Array:
 	return pts
 
 
-## F3 调试：给城市打编号（屏幕恒定字号，不随缩放放大成大字）
+## F3 调试：给城市打编号（屏幕恒定字号，不随缩放放大成大字）。
+## 字体归正（R8 层3）：StickHand 与全游戏 UI 同源，不用 fallback 字体
 func _draw_city_labels() -> void:
-	var font := ThemeDB.fallback_font
+	var font := SketchFonts.hand()
+	if font == null:
+		return
 	var zz: float = 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()

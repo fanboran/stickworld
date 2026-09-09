@@ -754,7 +754,7 @@ def _m_flask():
     prof = [(-0.10, 1.30), (-0.13, 1.10), (-0.17, 0.94), (-0.36, 0.80), (-0.45, 0.58),
             (-0.40, 0.30), (-0.22, 0.13), (0, 0.10), (0.22, 0.13), (0.40, 0.30),
             (0.45, 0.58), (0.36, 0.80), (0.17, 0.94), (0.13, 1.10), (0.10, 1.30)]
-    _lathe([(x * 0.90, z) for x, z in prof if x <= 0], pid=5)                   # 药水内芯直出（绿）
+    _lathe([(x * 0.90, z) for x, z in prof if x <= 0 and z <= 0.88], pid=5)     # 药水内芯（液面 0.88 露颈）
     tube([(x, 0, z) for x, z in prof], 0.042, pid=6, chaikin=2)                 # 瓶壁描边
     cyl(0.075, 0.12, (0, 0, 1.33), pid=3)                                       # 软木塞
     sph(0.040, (-0.17, -0.26, 0.78), scale=(0.55, 0.45, 1.7), pid=6)            # 玻璃高光斜纹
@@ -768,7 +768,7 @@ def _m_erlenmeyer():
     prof = [(-0.09, 1.22), (-0.11, 1.02), (-0.18, 0.78), (-0.30, 0.50), (-0.40, 0.24),
             (-0.42, 0.14), (0, 0.11), (0.42, 0.14), (0.40, 0.24), (0.30, 0.50),
             (0.18, 0.78), (0.11, 1.02), (0.09, 1.22)]
-    _lathe([(x * 0.90, z) for x, z in prof if x <= 0], pid=9)                   # 蓝试剂内芯直出
+    _lathe([(x * 0.90, z) for x, z in prof if x <= 0 and z <= 0.62], pid=9)     # 蓝试剂内芯（液面 0.62）
     tube([(x, 0, z) for x, z in prof], 0.040, pid=6, chaikin=2)                 # 瓶壁描边
     cyl(0.085, 0.10, (0, 0, 1.26), pid=6)                                       # 瓶口沿
     sph(0.038, (-0.13, -0.24, 0.62), scale=(0.55, 0.45, 1.5), pid=6)            # 玻璃高光斜纹
@@ -838,7 +838,8 @@ def _m_gear():
         a = math.radians(i * 45)
         box((0.20, 0.18, 0.16), (math.cos(a) * 0.60, 0, 0.45 + math.sin(a) * 0.60),
             rot=(0, -a, 0), pid=2)
-    cyl(0.16, 0.26, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=8)
+    cyl(0.17, 0.30, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=8)          # 轴毂
+    cyl(0.085, 0.34, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=9)         # 轴孔（掏空，深色贯通）
 
 
 @motif("books", "两本书", az=20, el=12, key_e=6.0)
@@ -875,12 +876,24 @@ def _m_telescope():
 # ── 战斗 ────────────────────────────────────────────────────────────────────
 @motif("sword", "短剑", fake=(0.10, 0.02, 0.18), classic=True)
 def _m_sword():
-    box((0.30, 0.09, 1.15), (0, 0, 0.76), bev=0.04, pid=2)
-    box((0.20, 0.06, 0.26), (0, 0, 1.42), rot=(0, math.radians(45), 0), pid=2)
-    box((0.58, 0.15, 0.12), (0, 0, 0.12), bev=0.03, pid=8)
-    cyl(0.075, 0.34, (0, 0, -0.14), pid=4)
-    sph(0.10, (0, 0, -0.37), pid=8)
+    # 双剑交叉（纹章图式）：两剑绕画面中心 ±34°，剑尖朝上、柄尾朝下
+    for s in (1, -1):
+        az = math.radians(42 * s)          # 剑轴从竖直向两侧倾（交叉角 84°）
+        c, sn = math.cos(az), math.sin(az)
 
+        def P(x, z):                       # 剑局部 (x,z) → 世界（绕原点转 az）
+            return (x * c - z * sn, 0.0, x * sn + z * c)
+
+        def seg(p0, p1, w, depth=0.09, pid=2):
+            d = (p1[0] - p0[0], p1[2] - p0[2])
+            L = max(1e-5, (d[0] ** 2 + d[1] ** 2) ** 0.5)
+            tilt = math.atan2(d[0], d[1])   # 竖直 box 的画面内倾斜=绕 Y 轴（Z 轴转不动竖长条）
+            box((w, depth, L), ((p0[0] + p1[0]) / 2, 0, (p0[2] + p1[2]) / 2),
+                rot=(0, -tilt, 0), bev=0.02, pid=pid)
+        seg(P(0, 1.34), P(0, -0.20), 0.17)                       # 剑身（细长，穿过中线）
+        seg(P(0.13, 0.30), P(-0.13, 0.30), 0.10)                 # 护手（短横杆）
+        seg(P(0, 0.28), P(0, 0.02), 0.09)                        # 柄（短）
+        sph(0.07, P(0, -0.05), pid=8)                            # 柄尾球
 
 @motif("spear", "长矛")
 def _m_spear():
@@ -921,111 +934,40 @@ def _m_shield():
 
 @motif("bow", "弓箭")
 def _m_bow():
-    # 弓臂开角 150°，弦接两端，箭头左/羽尾右归位（旧羽装在箭头端）
+    import bpy
+    # 交叉图式：弓竖立（开口朝右），箭从左下向右上斜穿弦前——全部世界坐标直摆
     pts = []
     for i in range(13):
-        a = math.radians(-75 + i * (150 / 12))
-        pts.append((math.cos(a) * 0.70, 0, 0.55 + math.sin(a) * 0.70))
-    tube(pts, 0.09, pid=3, chaikin=2)
-    cyl(0.018, 1.36, (0.181, 0, 0.55), pid=6)                                   # 弦
-    cyl(0.04, 0.90, (-0.30, 0, 0.55), rot=(0, math.radians(90), 0), pid=2)      # 箭杆（尾扣弦）
-    cyl(0.07, 0.16, (-0.82, 0, 0.55), rot=(0, math.radians(-90), 0), verts=4, pid=2)  # 箭头
-    box((0.17, 0.03, 0.13), (0.00, 0, 0.63), rot=(0, 0, math.radians(18)), pid=4)     # 羽尾×2
-    box((0.17, 0.03, 0.13), (0.00, 0, 0.47), rot=(0, 0, math.radians(-18)), pid=4)
-
-
-@motif("drum", "战鼓")
-def _m_drum():
-    # 战鼓标志=侧面交叉拉绳（旧金环绕鼓读成蛋糕箍）
-    cyl(0.50, 0.55, (0, 0, 0.42), pid=4)
-    cyl(0.44, 0.06, (0, 0, 0.72), pid=6)
-    cyl(0.44, 0.06, (0, 0, 0.12), pid=6)
-    for i in range(4):
-        a0 = math.radians(i * 90 + 25)
-        a1 = math.radians(i * 90 + 85)
-        tube([(math.cos(a0) * 0.505, math.sin(a0) * 0.505, 0.68),
-              (math.cos((a0 + a1) / 2) * 0.52, math.sin((a0 + a1) / 2) * 0.52, 0.42),
-              (math.cos(a1) * 0.505, math.sin(a1) * 0.505, 0.16)], 0.028, pid=3, chaikin=1)
-    cap(0.035, 0.52, (0.18, 0.12, 0.80), rot=(0, math.radians(58), math.radians(30)), pid=3)
-    cap(0.035, 0.52, (-0.14, -0.16, 0.80), rot=(0, math.radians(58), math.radians(-35)), pid=3)
-
-
-@motif("helmet", "头盔")
-def _m_helmet():
-    # 扁盔顶+宽檐+护鼻+盔缨拱（旧正球+细环读成气球）
-    sph(0.48, (0, 0, 0.44), scale=(1.0, 0.95, 0.75), pid=2)
-    cyl(0.50, 0.09, (0, 0, 0.26), rot=(math.radians(90), 0, 0), pid=2)          # 檐
-    box((0.09, 0.10, 0.26), (0, -0.44, 0.40), pid=2)                            # 护鼻
-    tube([(0, -0.08, 0.84), (0.05, 0, 1.02), (0, 0.08, 0.84)], 0.055, pid=4, chaikin=2)  # 盔缨
-
-
-@motif("sling", "弹弓")
-def _m_sling():
-    # 粗壮丫杈弹弓：柄+双臂管径加倍+皮筋 V 兜宽皮兜包石弹（发力图式直给）
-    cyl(0.12, 0.62, (0, 0, 0.30), pid=3)
-    tube([(0, 0, 0.55), (-0.16, 0, 0.95), (-0.22, 0, 1.22)], 0.105, pid=3, chaikin=2)
-    tube([(0, 0, 0.55), (0.16, 0, 0.95), (0.22, 0, 1.22)], 0.105, pid=3, chaikin=2)
-    tube([(-0.22, 0, 1.16), (0, 0, 0.82), (0.22, 0, 1.16)], 0.055, pid=4, chaikin=2)
-    sph(0.15, (0, 0, 0.86), pid=7)                                              # 石弹（兜中）
-
-
-@motif("cannon", "小炮")
-def _m_cannon():
-    # 三件分层：短粗炮管 35° 仰角+大轮居中（辐条清晰）+尾撑
-    ax = math.radians(35)
-    cyl(0.19, 0.72, (-0.16, 0, 0.60), rot=(0, ax, 0), pid=2)
-    cyl(0.235, 0.12, (-0.16 + math.sin(ax) * 0.36, 0, 0.60 + math.cos(ax) * 0.36),
-        rot=(0, ax, 0), pid=7)                                                  # 炮口箍
-    sph(0.16, (-0.16 - math.sin(ax) * 0.36, 0, 0.60 - math.cos(ax) * 0.36), pid=2)  # 尾球
-    cyl(0.30, 0.14, (0.02, 0, 0.30), rot=(math.radians(90), 0, 0), pid=3)       # 大轮
-    for k in range(4):                                                          # 轮辐
-        aa = math.radians(k * 45)
-        box((0.05, 0.16, 0.50), (0.02, 0, 0.30), rot=(aa, 0, 0), pid=3)
-    box((0.10, 0.22, 0.62), (0.02, 0, 0.31), pid=3)                             # 轮轴芯
-    box((0.62, 0.20, 0.08), (0.05, 0, 0.10), rot=(0, math.radians(-14), 0), pid=3)  # 尾撑
-    for y in (-0.26, 0.26):
-        cyl(0.19, 0.06, (-0.10, y, 0.19), rot=(math.radians(90), 0, 0), pid=7)  # 轮（居中）
-        tor(0.19, 0.04, (-0.10, y, 0.19), rot=(math.radians(90), 0, 0), pid=3)  # 轮辋
-
-
-# ── 扩张探索 ────────────────────────────────────────────────────────────────
-@motif("maproll", "卷地图", az=20, el=10, key_e=6.0)
-def _m_maproll():
-    # 双卷杆+图面路线标记（旧单杆白纸读成挂纸巾）
-    cyl(0.13, 1.00, (0, 0, 1.00), rot=(0, math.radians(90), 0), pid=6)
-    cyl(0.10, 0.90, (0, 0, 0.18), rot=(0, math.radians(90), 0), pid=6)          # 底卷
-    box((0.84, 0.05, 0.68), (0.02, 0, 0.56), pid=6)
-    for i in range(4):                                                          # 红色虚线路线
-        sph(0.032, (-0.26 + i * 0.17, -0.045, 0.70 - i * 0.13), pid=4)
-    pyramid(0.075, 0.13, (0.28, -0.045, 0.68), pid=2)                           # 小山
-    sph(0.055, (0.28, -0.045, 0.34), pid=9)                                     # 湖
-
-
-@motif("compass_nav", "罗盘", az=14, el=10, key_e=7.0)
-def _m_compass_nav():
-    import bpy
-    tor(0.50, 0.055, (0, 0, 0.10), rot=(math.radians(90), 0, 0), pid=8)   # 金环
-    cyl(0.46, 0.11, (0, 0, 0.10), rot=(math.radians(90), 0, 0), pid=6)    # 米白表盘
-    # ⚠️ 相机在 -y 侧（v9 教训），指针/刻点必须放盘面之前（-y）。
-    # 指针斜指东北-西南；4 灰刻点会读成时钟 → 换顶部单个红色北标
-    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.16, depth=0.32,
-                                    location=(0.085, -0.05, 0.19),
-                                    rotation=(0, math.radians(35), 0))
-    north = bpy.context.object                  # 欧拉只绕 Y：+z 轴向 (sin35,0,cos35)=东北
-    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.16, depth=0.36,
-                                    location=(-0.097, -0.05, -0.06),
-                                    rotation=(0, math.radians(215), 0))
-    south = bpy.context.object                  # 215° → 轴向西南下
-    for ob in (north, south):
-        ob.scale = (1, 0.4, 1)
-        for p in ob.data.polygons:
-            p.use_smooth = False
-        _base_mat(ob)
-    north["pid"] = 4
-    south["pid"] = 6
-    box((0.09, 0.08, 0.09), (0, -0.04, 0.385), rot=(0, 0, math.radians(45)), pid=4)  # 北标
-    sph(0.055, (0, -0.07, 0.05), pid=2)  # 中心轴帽
-
+        a = math.radians(-84 + i * (168 / 12))
+        pts.append((0.20 - math.cos(a) * 0.62, 0, 0.62 + math.sin(a) * 0.60))
+    tube(pts, 0.085, pid=3, chaikin=2)                                          # 弓臂（C 形开口朝右）
+    cyl(0.018, 1.16, (0.135, 0, 0.62), pid=6)                                   # 弦（竖直线）
+    # 箭：左下 (-0.55,0.16) → 右上 (0.50,1.02)，y=0.14 在弦前
+    x0, z0, x1, z1, yA = -0.55, 0.16, 0.50, 1.02, 0.14
+    dx, dz = x1 - x0, z1 - z0
+    L = (dx * dx + dz * dz) ** 0.5
+    ux, uz = dx / L, dz / L
+    ang = math.atan2(dz, dx)
+    def at(t):
+        return (x0 + ux * t, yA, z0 + uz * t)
+    p0, p1 = at(0.14), at(0.80)
+    box((0.075, 0.075, 0.80), ((p0[0] + p1[0]) / 2, yA, (p0[2] + p1[2]) / 2),
+        rot=(0, 0, ang), pid=2)                                                 # 箭杆
+    tp = at(0.98)
+    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.085, depth=0.24,
+                                    location=tp,
+                                    rotation=(math.radians(90), 0, ang + math.radians(90)))
+    tip = bpy.context.object                                                    # 箭头（锥尖朝右上）
+    tip.scale = (1.0, 1.0, 0.6)
+    for p in tip.data.polygons:
+        p.use_smooth = False
+    _base_mat(tip)
+    tip["pid"] = 2
+    b0 = at(0.02)
+    sph(0.085, (b0[0] - uz * 0.07, yA, b0[2] + ux * 0.07),
+        scale=(1.0, 0.45, 1.9), rot=(0, 0, ang), pid=4)                         # 羽片 A
+    sph(0.085, (b0[0] + uz * 0.07, yA, b0[2] - ux * 0.07),
+        scale=(1.0, 0.45, 1.9), rot=(0, 0, ang), pid=4)                         # 羽片 B
 
 @motif("horseshoe", "马蹄铁")
 def _m_horseshoe():

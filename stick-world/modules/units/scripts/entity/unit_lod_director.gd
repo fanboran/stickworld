@@ -50,12 +50,22 @@ const RETIER_INTERVAL: float = 0.1
 ## T0 密度自适应分档（存活跟踪单位数 N → T0 动画频率，hz 策略唯一真相源）
 const HZ_T0_SPARSE: float = 60.0  ## N ≤ 24：全速（与未接入 LOD 等价）
 const HZ_T0_MID: float = 30.0     ## 25 ≤ N ≤ 48
-const HZ_T0_DENSE: float = 20.0   ## N > 48
+const HZ_T0_DENSE: float = 20.0   ## 49 ≤ N ≤ 96
+const HZ_T0_MASS: float = 15.0    ## N > 96（96v96 大战场）：步进配合逐单位相位错开（rig 侧）
 const DENSITY_SPARSE: int = 24
 const DENSITY_DENSE: int = 48
+const DENSITY_MASS: int = 96
 ## T1/T2 固定频率（Hz）
 const HZ_T1: float = 15.0
 const HZ_T2: float = 5.0
+
+## 物理刻恐慌降级（fps 持续走低时收敛每帧物理刻数，切断「低帧→每帧多刻→更低帧」
+## 螺旋）。这不是慢动作：低帧下游戏时间本就按 min(fps, ticks)/ticks 膨胀（30Hz
+## 刻在 9fps 下游戏时间只有墙钟 0.3 倍），降刻反而让游戏时间更接近墙钟。
+const PANIC_CHECK_EVERY: int = 10      ## 每 N 个重拍节拍评估一次（≈1s，防抖）
+const PANIC_TICKS_HI: int = 15         ## fps < 15 → 15Hz 刻
+const PANIC_TICKS_LO: int = 10         ## fps < 8 → 10Hz 刻
+const PANIC_RECOVER_FPS: float = 25.0  ## fps ≥ 25 才回升 30Hz（滞回）
 
 ## 性能档位（与 StickmanEntity.set_perf_tier 对齐）
 enum Tier {
@@ -74,6 +84,12 @@ var _host: Node = null
 var _units: Array = []
 ## 分档计时器
 var _timer: float = 0.0
+## 恐慌降级评估节拍计数（每 PANIC_CHECK_EVERY 个重拍 ≈1s 评估一次）
+var _panic_beat: int = 0
+## 工程原始物理刻率（setup 时快照；panic 降级在此基础上只降不升超）
+var _ticks_default: int = 30
+## 当前生效的物理刻率（避免重复 set 触发引擎重排）
+var _ticks_applied: int = 30
 ## 每单位当前档位（instance_id -> Tier）
 var _tiers: Dictionary = {}
 ## 每单位当前下发频率（instance_id -> hz；T0 频率随密度 N 变化需重新下发）
@@ -89,6 +105,10 @@ func setup(game_root: Node) -> void:
 	_tiers.clear()
 	_hzs.clear()
 	_timer = 0.0
+	_panic_beat = 0
+	## 记录工程原始物理刻率，panic 降级/退出时以此为准还原
+	_ticks_default = int(ProjectSettings.get_setting(
+			"physics/common/physics_ticks_per_second", 30))
 
 
 func _physics_process(delta: float) -> void:
@@ -97,11 +117,40 @@ func _physics_process(delta: float) -> void:
 		return
 	_timer = RETIER_INTERVAL
 	_retier()
+	_panic_beat += 1
+	if _panic_beat >= PANIC_CHECK_EVERY:
+		_panic_beat = 0
+		_apply_panic_ticks()
+
+
+## 物理刻恐慌降级：每 ~1s 按实测帧率收敛刻率（15Hz/10Hz），fps 回升到
+## PANIC_RECOVER_FPS 以上才还原工程刻率（滞回防 15 附近来回振荡）。
+## 只在帧率撑不住刻率时生效——健康场景（fps ≥ 25）恒为工程刻率，零行为变化。
+func _apply_panic_ticks() -> void:
+	var fps := Engine.get_frames_per_second()
+	var current := Engine.get_physics_ticks_per_second()
+	if current == _ticks_default:
+		# 健康态：只在撑不住时降档
+		var target := _ticks_default
+		if fps < 8.0:
+			target = mini(PANIC_TICKS_LO, _ticks_default)
+		elif fps < 15.0:
+			target = mini(PANIC_TICKS_HI, _ticks_default)
+		if target != current:
+			Engine.physics_ticks_per_second = target
+			_ticks_applied = target
+	elif fps >= PANIC_RECOVER_FPS:
+		# 降级态：帧率充分回升才还原（滞回）
+		Engine.physics_ticks_per_second = _ticks_default
+		_ticks_applied = _ticks_default
 
 
 ## 退出时把存活单位全部置回近景全速档（rig 可见性/血条显示还原，hz 缺省=全速）。
 ## 死者跳过：尸体血条已由 _on_died 隐藏，恢复显示会"尸体复活血条"。
+## 物理刻率还原工程默认，避免降级状态泄漏到其他场景。
 func _exit_tree() -> void:
+	Engine.physics_ticks_per_second = _ticks_default
+	_ticks_applied = _ticks_default
 	for u in _units:
 		if not _is_trackable(u):
 			continue
@@ -194,13 +243,15 @@ func _is_trackable(u: Node) -> bool:
 
 # ─────────────────────────────── 频率策略（唯一真相源） ────────────────────────────────
 
-## T0 密度分档：N ≤ 24 → 60Hz；25 ≤ N ≤ 48 → 30Hz；N > 48 → 20Hz。
+## T0 密度分档：N ≤ 24 → 60Hz；25 ≤ N ≤ 48 → 30Hz；49 ≤ N ≤ 96 → 20Hz；N > 96 → 15Hz。
 func _t0_hz(n: int) -> float:
 	if n <= DENSITY_SPARSE:
 		return HZ_T0_SPARSE
 	if n <= DENSITY_DENSE:
 		return HZ_T0_MID
-	return HZ_T0_DENSE
+	if n <= DENSITY_MASS:
+		return HZ_T0_DENSE
+	return HZ_T0_MASS
 
 
 ## 档位 → 动画频率（T0 密度自适应，T1/T2 固定）。

@@ -125,7 +125,7 @@ PAGE = """<!DOCTYPE html>
 <div id="toast"></div>
 <script>
 const ICONS = __ICONS__;
-const KEY = "icon_review_v4";
+const KEY = "icon_review_v5";
 const state = {};
 ICONS.forEach(ic => state[ic.name] = { model_ok: null, note: "" });
 

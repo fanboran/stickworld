@@ -25,7 +25,7 @@
 - **交接档统一放 `docs/项目/交接/`**（索引见其 [README.md](docs/项目/交接/README.md)）；任务收官无待验收项的移入 `docs/项目/交接/归档/`；**代码审计/快照类文档用完直接删除**，不进归档。
 - 当前活跃交接文档：
   - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，**批次 1~6 全部完成、循环已测试锁死，待创始人观感验收后收线**，分支 `agent/conquest-loop`，worktree `.temp/conquest-loop`）
-  - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：描边融合+缩放抗锯齿；**批次 1=修 project.godot rendering 段事故（msaa 静默失效=全游戏零抗锯齿）最优先**，计划 worktree `.temp/stickman-visual`）
+  - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：描边融合+缩放抗锯齿；**四批全部完成并合入分支（终态 run_all 38/38），待合并回 main——main 已有独立同因修复 c029c705，注意项见交接档**，worktree `.temp/stickman-visual`）
   - `docs/项目/交接/建筑与美术升级-进度与交接.md`（任务：铁匠铺落地/石头结构件化/多层建筑/室内内饰/多材质/village_a 美化，计划 worktree `.temp/building-art`）
   - `docs/项目/交接/城镇生成管线-进度与交接.md`（任务：L1 城镇种子随机生成+风格参数化（死亡细胞式布局随机+王国两位君主观感），计划 worktree `.temp/town-gen`）
   - `docs/项目/交接/小镇生活与NPC职业-进度与交接.md`（任务：NPC 各司其职（铁匠/伐木/矿工）+经济自动产出端，计划 worktree `.temp/town-life`）

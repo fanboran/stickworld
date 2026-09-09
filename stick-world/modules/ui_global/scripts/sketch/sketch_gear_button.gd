@@ -39,7 +39,7 @@ func _draw() -> void:
 	elif mode == BaseButton.DRAW_DISABLED:
 		bg = Color(1, 1, 1, 0.03)
 		border = Color.TRANSPARENT
-	if ink.a > 0.0:
+	if ink_skin:
 		# 亮背景：深墨描边
 		border = Color(0.05, 0.04, 0.03, 1.0) if border.a > 0.0 else border
 	# 方形底 + 沸腾方框描边（空白正方形，无图标）

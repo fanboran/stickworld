@@ -131,6 +131,10 @@ func _process(_delta: float) -> void:
 	# 平时每帧只有一次取矩阵+浮点比较的开销。编辑器内不补偿，保持设计空间观感）
 	if not Engine.is_editor_hint():
 		_update_outline_zoom()
+		# 开口侧线头圆动态裁剪（近臂双线；手臂摆动时起点始终钳在头圆外，
+		# 静息留隙只是标定基准——创始人反馈"线条不要进脑袋"的运行时兜底）
+		if _sprites.has(1) and _sprites.has(10):
+			Skeleton.clip_open_root_sides_to_head(_sprites, 10)
 	# 受击插播倒计时：动画播完回切到受击前状态（反编译参考实装 B）
 	if _hit_timer > 0.0:
 		_hit_timer -= _delta

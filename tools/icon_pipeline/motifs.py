@@ -302,6 +302,27 @@ def drop_mesh(scale=1.0, loc=(0, 0, 0), pid=4, extrude=0.22, bevel=0.065):
     return ob
 
 
+def _lathe_glass(prof, pid=6):
+    """轮廓半边绕 Z 旋转成型=玻璃瓶体（真透明材质，bake 按 glass 标记挂载）"""
+    import bpy
+    me = bpy.data.meshes.new('glass_body')
+    me.from_pydata([(x, 0, z) for x, z in prof],
+                   [(i, i + 1) for i in range(len(prof) - 1)], [])
+    ob = bpy.data.objects.new('glass_body', me)
+    bpy.context.scene.collection.objects.link(ob)
+    spin = ob.modifiers.new('spin', 'SCREW')
+    spin.angle = math.radians(360)
+    spin.steps = 48
+    try:
+        spin.use_smooth_shading = True
+    except AttributeError:
+        pass
+    ob['glass'] = 1
+    ob['pid'] = pid
+    _base_mat(ob)
+    return ob
+
+
 # ── 元老迁移（原 gen_icon_v9 首批图标；锤子仍留 gen_icon_v9 回归套件）───────
 def _heart_outline():
     """心形轮廓：16 点基形 + 三轮 2D Chaikin（与 gen_icon_v9 heart_outline 逐字一致）"""
@@ -441,11 +462,31 @@ def _m_wagon():
 
 @motif("sack", "麻袋")
 def _m_sack():
-    # 旧版顶部双圆结读成骨头：改单结+麻绳扎口
-    sph(0.46, (0, 0, 0.40), scale=(1.0, 0.88, 1.0), pid=6)
-    cyl(0.14, 0.22, (0, 0, 0.92), pid=6)
-    tor(0.145, 0.05, (0, 0, 1.00), rot=(math.radians(90), 0, 0), pid=5)         # 麻绳
-    sph(0.11, (0, 0, 1.10), scale=(1, 0.85, 0.8), pid=6)                        # 顶结
+    # 布袋=球囊+程序化布褶（云噪声沿法线位移）。布料模拟在 64px 图标尺度
+    # 三轮参数均不稳（压力/重力/碰撞平衡脆弱，曾塌饼/气球化），弃 sim 取
+    # 等效观感；真布料留待专门美术 pass
+    import bpy
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.46, segments=48, ring_count=32,
+                                         location=(0, 0, 0.44))
+    ob = bpy.context.object
+    ob.scale = (1.0, 0.85, 1.0)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    ss = ob.modifiers.new('subdiv', 'SUBSURF')
+    ss.levels = 2
+    ss.render_levels = 3
+    tex = bpy.data.textures.new('sack_wrinkle', type='CLOUDS')
+    tex.noise_scale = 0.55
+    wr = ob.modifiers.new('wrinkle', 'DISPLACE')
+    wr.texture = tex
+    wr.texture_coords = 'LOCAL'
+    wr.strength = 0.055
+    wr.mid_level = 0.5
+    for p in ob.data.polygons:
+        p.use_smooth = True
+    _finish(ob, 6)
+    cyl(0.14, 0.20, (0, 0, 0.93), pid=6)                                        # 扎口颈
+    tor(0.145, 0.05, (0, 0, 1.01), rot=(math.radians(90), 0, 0), pid=5)         # 麻绳
+    sph(0.11, (0, 0, 1.11), scale=(1, 0.85, 0.8), pid=6)                        # 顶结
 
 
 @motif("barrel", "木桶")
@@ -703,7 +744,8 @@ def _m_flask():
             (-0.40, 0.30), (-0.22, 0.13), (0, 0.10), (0.22, 0.13), (0.40, 0.30),
             (0.45, 0.58), (0.36, 0.80), (0.17, 0.94), (0.13, 1.10), (0.10, 1.30)]
     tube([(x, 0, z) for x, z in prof], 0.042, pid=6, chaikin=2)
-    sph(0.30, (0, 0, 0.42), scale=(1.12, 0.85, 0.9), pid=5)                     # 药水
+    _lathe_glass([p for p in prof if p[0] <= 0])                                # 玻璃瓶体（真透明）
+    sph(0.30, (0, 0, 0.42), scale=(1.12, 0.85, 0.9), pid=5)                     # 药水（真装在瓶里）
     cyl(0.075, 0.12, (0, 0, 1.33), pid=3)                                       # 软木塞
     sph(0.045, (0.10, 0.05, 0.52), pid=6)                                       # 气泡
     sph(0.032, (-0.08, 0.05, 0.36), pid=6)
@@ -716,6 +758,7 @@ def _m_erlenmeyer():
             (-0.42, 0.14), (0, 0.11), (0.42, 0.14), (0.40, 0.24), (0.30, 0.50),
             (0.18, 0.78), (0.11, 1.02), (0.09, 1.22)]
     tube([(x, 0, z) for x, z in prof], 0.040, pid=6, chaikin=2)
+    _lathe_glass([p for p in prof if p[0] <= 0])                                # 玻璃瓶体（真透明）
     cyl(0.23, 0.15, (0, 0, 0.21), pid=9)                                        # 蓝试剂
     cyl(0.085, 0.10, (0, 0, 1.26), pid=6)                                       # 瓶口沿
 
@@ -731,6 +774,8 @@ def _m_testrack():
         prof = [(x - 0.075, 0, 0.92), (x - 0.075, 0, 0.26), (x, 0, 0.16),
                 (x + 0.075, 0, 0.26), (x + 0.075, 0, 0.92)]
         tube(prof, 0.026, pid=6, chaikin=2)
+        tube_body = cyl(0.070, 0.74, (x, 0, 0.55), pid=6)                       # 玻璃管体（真透明）
+        tube_body['glass'] = 1
         cyl(0.052, 0.20, (x, 0, 0.30), pid=c)                                   # 液体柱
 
 
@@ -992,7 +1037,9 @@ def _m_campfire():
         cyl(0.09, 0.92, (0, 0, 0.06), rot=(math.radians(90), 0, math.radians(a)), pid=3)
     flame = drop_mesh(0.78, (0, 0, 0.10), pid=4, extrude=0.20, bevel=0.06)
     flame.scale = (1.0, 1.15, 1.0)   # 局部 Y=世界 Z（rotX90 后），拉高火舌
-    drop_mesh(0.45, (0, -0.06, 0.28), pid=8, extrude=0.16, bevel=0.05)          # 内焰金（前置）
+    flame['fire'] = 1                # 按世界高度三分灰：核心亮-中焰-焰尖暗（分层 toon 火）
+    inner = drop_mesh(0.45, (0, -0.06, 0.28), pid=8, extrude=0.16, bevel=0.05)  # 内焰金（前置）
+    inner['fire'] = 1
 
 
 @motif("watchtower", "瞭望塔")
@@ -1085,15 +1132,6 @@ def _m_dango():
     cyl(0.045, 1.15, (0, 0, 0.52), rot=(0, math.radians(22), 0), pid=3)
     for i, (pid, z) in enumerate(((6, 0.30), (5, 0.62), (4, 0.94))):
         sph(0.21, (math.sin(math.radians(22)) * (z - 0.52), 0, z), segs=(48, 32), pid=pid)
-
-
-@motif("riceball", "饭团", az=24, el=12, key_e=6.0)
-def _m_riceball():
-    # 圆角三角柱（旧白椭球读成鸡蛋）+ 底部海苔
-    cyl(0.52, 0.34, (0, 0, 0.50), rot=(math.radians(90), 0, math.radians(90)),
-        verts=3, bev=0.13, pid=6)
-    box((0.36, 0.06, 0.26), (0, -0.155, 0.30), pid=7)                           # 海苔
-    sph(0.03, (0.10, -0.16, 0.52), pid=6)                                       # 饭粒高光
 
 
 @motif("medal", "奖章", az=14, el=8, key_e=7.0)

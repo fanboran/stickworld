@@ -15,6 +15,8 @@ var _shots: Array = [
 	{"name": "zoom_100", "zoom": 1.0, "pos": Vector2(960, 640)},
 	{"name": "zoom_050", "zoom": 0.5, "pos": Vector2(960, 640)},
 	{"name": "zoom_200", "zoom": 2.0, "pos": Vector2(960, 700)},
+	# 肩关节特写（第一单位肩点 ≈(190,686)，4× 看描边断续）
+	{"name": "zoom_400_shoulder", "zoom": 4.0, "pos": Vector2(190, 686)},
 ]
 
 

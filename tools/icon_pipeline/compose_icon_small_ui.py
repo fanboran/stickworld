@@ -115,35 +115,34 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         if m.any():
             out[m] = np.array([ramp[min(b, len(ramp) - 1)] for b in band[m]]) * 255
 
-    # 反向壳墨线层（C 阶段）：渲染端单独渲 ink pass（只有描边壳完整剪影，
-    # 透明底），合成次序=「cel 在上、墨壳在下」的标准 over——墨壳被 cel 覆盖
-    # 的部分不显形，只在轮廓外露出一圈描边。壳轮廓=几何边缘，MSAA 真抗锯齿
-    # （ShaderToRGB 会关 MSAA，图像域描边拿不到），墨线与形体零对位误差
-    # （双层线根除）。无 ink 层的旧产物回退图像域外轮廓环。
+    # 反向壳墨线层（C 阶段）：渲染端单独渲 ink pass（只有描边壳完整剪影）。
+    # 合成必须在渲染域（同分辨率空间）先做「cel 在上、墨壳在下」的 over——
+    # 曾把 ink 图留到裁切缩放后合成：两图 bbox 不同（ink 比 cel 大一圈线宽），
+    # 各自居中缩放=相对错位一圈线宽（256px 描边悬空可见，创始人审计）。
+    # 渲染域同坐标系合成后，后续裁缩对两层完全一致，零对位误差。
     ink_fp = os.path.join(BASE, f"{tag}_{target}_ink.png")
     has_ink = os.path.exists(ink_fp)
     if has_ink:
         inkim = np.asarray(Image.open(ink_fp).convert("RGBA")).astype(np.float32)
-        a_cel = sa[..., 3:4]                      # 0..255
-        a_ink = inkim[..., 3:4]                   # 0..255
-        alpha = a_cel + a_ink * (1 - a_cel / 255.0)
-        w = a_cel / np.maximum(alpha, 1e-3)       # cel 在最终透明度中的权重
+        a_cel = sa[..., 3:4] / 255.0
+        a_ink = inkim[..., 3:4] / 255.0
+        A = a_cel + a_ink * (1 - a_cel)
+        w = a_cel / np.maximum(A, 1e-6)
         out = out * w + inkim[..., :3] * (1 - w)
+        alpha512 = A * 255.0
     else:
-        alpha = sa[..., 3]
+        alpha512 = sa[..., 3]
 
-    # 火焰层（真实火焰质感）：渲染端单独渲 fire pass（平滑渐变发光材质），
-    # 原样合成不过色带——量化三档会把火做成糖果条
     fire_fp = os.path.join(BASE, f"{tag}_{target}_fire.png")
     if os.path.exists(fire_fp):
         fireim = np.asarray(Image.open(fire_fp).convert("RGBA")).astype(np.float32)
         a_f = fireim[..., 3:4] / 255.0
-        a_bot = alpha / 255.0
+        a_bot = alpha512 / 255.0
         A = a_f + a_bot * (1 - a_f)
-        out = (fireim[..., :3] * a_f + out * a_bot * (1 - a_f)) / np.maximum(A, 1e-4)
-        alpha = A * 255.0
+        out = (fireim[..., :3] * a_f + out * a_bot * (1 - a_f)) / np.maximum(A, 1e-6)
+        alpha512 = A * 255.0
 
-    rgba = np.dstack([out, alpha])
+    rgba = np.dstack([out, alpha512])
     img = Image.fromarray(np.clip(rgba, 0, 255).astype(np.uint8), "RGBA")
 
     ys, xs = np.where(np.asarray(img)[..., 3] > 40)

@@ -269,9 +269,11 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 		return
 	var label: Label = null
 	if not _damage_text_pool.is_empty():
-		label = _damage_text_pool.pop_back()
-		if not is_instance_valid(label):
-			label = null
+		# 弹出到无类型临时再判活：池里可能有场景切换时被释放的悬垂引用，
+		# 直接赋给类型化变量会在赋值处报错（场景切换后的首波伤害必现）
+		var popped = _damage_text_pool.pop_back()
+		if is_instance_valid(popped):
+			label = popped
 	if label == null:
 		label = Label.new()
 		label.z_index = 90

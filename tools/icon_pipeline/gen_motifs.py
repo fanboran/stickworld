@@ -293,8 +293,19 @@ def build_ink_shells(scene, target):
         bm.from_mesh(me)
         oe.to_mesh_clear()
         bm.normal_update()
+        # 屏幕空间恒宽：沿「法线去掉视线分量」的相机平面方向外推——正交相机
+        # 下位移在屏幕平面内恒为 thickness 像素，不随面与视线的夹角变化。
+        # （3D 法线外推在掠射面变粗/陡直面变细：铁砧左右不匀、圆锥上细下粗的根因）
+        R = o.matrix_world.to_3x3()
+        Rinv = R.inverted()
+        RinvN = Rinv.transposed()   # 法线矩阵：防非均匀尺度扭曲法线方向
+        view = (R @ Vector((0.0, 0.0, -1.0))).normalized()
         for v in bm.verts:
-            v.co += v.normal * thickness
+            wn = (RinvN @ v.normal).normalized()
+            n_plane = wn - view * wn.dot(view)
+            if n_plane.length > 1e-4:
+                n_plane.normalize()
+                v.co = v.co + Rinv @ (n_plane * thickness)   # 只回转方向，不平移（防壳飞离原体）
         bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
         sh_mesh = bpy.data.meshes.new(f"{o.name}_ink_shell")
         bm.to_mesh(sh_mesh)

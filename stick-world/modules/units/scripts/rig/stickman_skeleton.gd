@@ -69,7 +69,14 @@ const OPEN_ROOT_LIMBS: Array = [1]
 
 ## 根部留隙（本地 px，自根部平面沿臂向肢端量）：肩关节圆圈直径 ≈ 肢厚+描边
 ## ≈26~29，取 30 保证圆圈内无笔迹（探针实测：前臂根端平面距肩点 15.9+帽 13）。
-const OPEN_ROOT_GAP := {1: 30.0}
+## 根部留隙（Vector2，本地 px，自根部平面沿臂向肢端量）——非对称开口
+## （创始人 2026-09-09 定稿"长条一侧有描边另一侧没有"）：
+##   x = 内侧线（side_top，局部 -y，贴身体侧）留隙——肩关节圆圈内无笔迹，
+##       裸露填充根帽融合进躯干；
+##   y = 外侧线（side_bottom，局部 +y，背离身体侧）留隙 0——肩部外轮廓
+##       （背侧肩线）从根部全程保留，不参与融合。
+## 探针实测：前臂根端平面距肩点 15.9+帽 13 ≈ 肩圈直径，故内侧取 30。
+const OPEN_ROOT_GAP := {1: Vector2(30.0, 0.0)}
 
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 23
@@ -308,7 +315,7 @@ static func _build_limb(
 		if id in OPEN_ROOT_LIMBS:
 			# 根部真开口描边：两侧线自根部留隙起笔 + 末端半圆弧，无闭合边
 			stl = _make_open_root_stroke("stroke", length / 2.0, w, OUTLINE_WIDTH,
-					outline, float(OPEN_ROOT_GAP.get(id, 0.0)))
+					outline, OPEN_ROOT_GAP.get(id, Vector2.ZERO))
 		else:
 			stl = _make_line("stroke", pts, w + OUTLINE_WIDTH * 2.0, outline)
 		stl.z_index = sz
@@ -323,16 +330,17 @@ static func _build_limb(
 ## 反馈"肩膀圆圈没融合"的元凶），容器式三件套无任何越过留隙区的笔迹。
 ## meta 供 apply_outline_zoom 识别重建：open_root_half_len / open_root_fill_w。
 ## 局部坐标与 Line2D 版描边一致：-x 朝肢根、+x 朝肢端。
+## gap: Vector2(x=内侧 side_top 留隙, y=外侧 side_bottom 留隙)——两侧独立起笔。
 static func _make_open_root_stroke(lname: String, half_len: float, fill_w: float,
-		eff: float, color: Color, gap: float) -> Node2D:
+		eff: float, color: Color, gap: Vector2) -> Node2D:
 	var box := Node2D.new()
 	box.name = lname
 	box.set_meta("open_root_half_len", half_len)
 	box.set_meta("open_root_fill_w", fill_w)
 	box.set_meta("open_root_gap", gap)
 	var y: float = fill_w / 2.0 + eff / 2.0
-	var x0: float = -half_len + gap
 	for side in [-1.0, 1.0]:
+		var x0: float = -half_len + (gap.x if side < 0 else gap.y)
 		var ln := _make_line("side_%s" % ("top" if side < 0 else "bottom"),
 				PackedVector2Array([Vector2(x0, side * y), Vector2(half_len, side * y)]),
 				eff, color)
@@ -445,14 +453,15 @@ static func apply_outline_zoom(sprites: Dictionary, eff: float) -> void:
 			# 容器式真开口描边：两侧线宽/离轴 + 端弧外径随 eff 重建
 			var fw: float = float(stroke.get_meta("open_root_fill_w"))
 			var hl: float = float(stroke.get_meta("open_root_half_len"))
-			var gap: float = float(stroke.get_meta("open_root_gap", 0.0))
+			var gap: Vector2 = stroke.get_meta("open_root_gap", Vector2.ZERO)
 			var y_u: float = fw / 2.0 + eff / 2.0
 			for side in [-1.0, 1.0]:
+				var x0_u: float = -hl + (gap.x if side < 0 else gap.y)
 				var sl := stroke.get_node_or_null("side_top" if side < 0 else "side_bottom") as Line2D
 				if sl != null:
 					sl.width = eff
 					sl.points = PackedVector2Array([
-						Vector2(-hl + gap, side * y_u), Vector2(hl, side * y_u)])
+						Vector2(x0_u, side * y_u), Vector2(hl, side * y_u)])
 			var arc := stroke.get_node_or_null("tip_arc") as Polygon2D
 			if arc != null:
 				arc.polygon = _tip_arc_pts(hl, fw / 2.0, eff)

@@ -11,7 +11,7 @@
     "渲染层级契约：地面分带(TerrainLayer) < DecorationLayer(装饰物件) < BuildingHost(建筑) < EntityHost(单位)，详见 tools/worldgen/l1/README.md。"
   ],
   "defaults": {
-    "ground_y": 810,
+    "ground_y": 720,
     "cell_w": 32,
     "edge_cells": 8,
     "wall_band_len": 24,

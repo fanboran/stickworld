@@ -13,10 +13,11 @@ extends Node2D
 # WorldAPI 是全局 class_name，无需 preload
 
 # ─────────────────────────────── 地图元数据（§3.4.1）────────────────────────────────
-## 地面线 Y（世界坐标），火柴人可走区域顶部
-@export var ground_y: float = 810.0
-## 地面占屏幕高度比例（Inspector 可改，默认 0.25 = 1/4）
-@export var ground_ratio: float = 0.25
+## 地面线 Y（世界坐标），火柴人可走区域顶部（1080 - 1080/3：地面带占屏 1/3）
+@export var ground_y: float = 720.0
+## 地面占屏幕高度比例（Inspector 可改，默认 1/3——2026-09-09 创始人定稿：
+## 默认地面占比 1/4 提到 1/3，建筑随基线 ground_y + building_baseline_offset 上移）
+@export var ground_ratio: float = 0.334
 ## 地图左边界 X（相机/火柴人 X 下限）
 @export var map_left: float = 0.0
 ## 地图右边界 X（相机/火柴人 X 上限）

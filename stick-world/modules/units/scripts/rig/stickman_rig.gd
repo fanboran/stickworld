@@ -72,6 +72,8 @@ var _weapon_l: Node2D
 var _rebuild_pending: bool = false
 ## 描边补偿当前已应用的画布缩放（-1 = 未初始化，首帧强制应用一次）
 var _outline_canvas_scale: float = -1.0
+## 上次描边补偿的 rig 自身缩放（body_scale 变化时触发重补偿，与画布缩放同口径）
+var _outline_rig_scale: float = -1.0
 ## 受击插播计时（>0 表示正在受击动画，倒计时结束后回切到 _hit_return_to）
 var _hit_timer: float = -1.0
 ## 死亡终态（2026-08-31 观察场审计）：dead/dead_headshot 播出后置位，
@@ -371,6 +373,10 @@ func _do_rebuild() -> void:
 ## 描边屏幕像素恒定：画布缩放（Camera2D.zoom，含分辨率适配）变化时批量刷新
 ## 描边宽。检测用"每帧取一次画布变换缩放 + 浮点比较"，写入只在变化帧发生
 ## （百人同屏一帧 ~千次属性写，滚轮缩放低频，成本可忽略）。
+## 补偿公式须除掉 rig 自身 scale（BASE_SCALE × body_scale）：描边宽写在本地
+## 坐标、渲染时再乘节点 scale——0.65× 体型单位若只按画布缩放补偿，本地描边
+## 被灌到超粗（渲染后屏幕占比过大），深灰填充被白描边盖成"白色小人"
+## （视觉验收抓过，1× 机位小护卫）。
 func _update_outline_zoom() -> void:
 	if _sprites.is_empty() or not is_inside_tree():
 		return
@@ -378,10 +384,12 @@ func _update_outline_zoom() -> void:
 	if vp == null:
 		return
 	var s: float = vp.get_canvas_transform().get_scale().x
-	if absf(s - _outline_canvas_scale) < 0.001:
+	var rig_scale: float = absf(scale.x)
+	if absf(s - _outline_canvas_scale) < 0.001 and absf(rig_scale - _outline_rig_scale) < 0.001:
 		return
 	_outline_canvas_scale = s
-	Skeleton.apply_outline_zoom(_sprites, Skeleton.outline_world_width(s))
+	_outline_rig_scale = rig_scale
+	Skeleton.apply_outline_zoom(_sprites, Skeleton.outline_world_width(s * rig_scale))
 
 
 # ============================================================

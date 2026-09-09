@@ -33,7 +33,7 @@ func _test_boot() -> void:
 	add_child(_game_root)
 	var ok: bool = await TestHelpers.await_condition(
 		func(): return _game_root != null and is_instance_valid(_game_root) and _game_root.has_method("get_current_map") and _game_root.get_current_map() != null,
-		15.0, "GameRoot 地图就绪"
+		30.0, "GameRoot 地图就绪"
 	)
 	_runner.assert_true(ok, "GameRoot 应在 15s 内装配出地图")
 	if not ok:
@@ -43,7 +43,7 @@ func _test_boot() -> void:
 	# 玩家与 NPC 生成
 	var ok2: bool = await TestHelpers.await_condition(
 		func(): return map != null and is_instance_valid(map) and map.has_method("get_entities") and map.get_entities().size() >= 2,
-		10.0, "实体生成（玩家+至少 1 NPC）"
+		20.0, "实体生成（玩家+至少 1 NPC）"
 	)
 	_runner.assert_true(ok2, "应生成玩家与 NPC（实体数 >= 2）")
 

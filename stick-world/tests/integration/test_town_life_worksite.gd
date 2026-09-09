@@ -67,6 +67,16 @@ func _setup_world() -> void:
 	var env := _env()
 	if env != null and env.has_method("set_seconds_per_day"):
 		env.set_seconds_per_day(600.0)
+	# 移除 village_a 的真铁匠铺（建筑与美术升级线批次 1 配置，cell -17）：
+	# 本套件专测「建筑被毁 → 降级占位工位」路径，真铺在场时铁匠拆铺后会
+	# 投奔真铺 WorkSlots 而非占位工位，降级路径被绕开
+	var host: Node2D = _map().get("building_host") if "building_host" in _map() else null
+	if host != null:
+		for b in host.get_children():
+			if b != null and is_instance_valid(b) and String(b.get("def_id")) == "smithy_lv1":
+				b.queue_free()
+	await get_tree().process_frame
+	await get_tree().process_frame
 
 
 # ─────────────────────────────── 环境辅助 ────────────────────────────────

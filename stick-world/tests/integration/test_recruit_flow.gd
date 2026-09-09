@@ -68,8 +68,9 @@ func _run_tests() -> void:
 
 # ─────────────────────────────── 测试用例 ────────────────────────────────
 
-## 用例 1「兵营招兵」：手动落一座 OPERATIONAL 兵营 → 连招 2 名（开局村民 2）
-## → 村民 0、士兵 2、资源扣减正确、hint 文案非空
+## 用例 1「兵营招兵」：手动落一座 OPERATIONAL 兵营 → 循环招募到耗尽
+## （村民数为动态口径：生活线批次 4 起 NPC_COUNT=10）→ 村民 0、士兵=招募数、
+## 资源扣减正确、hint 文案非空
 func _test_recruit_success() -> void:
 	var built: Dictionary = _construction.spawn_operational_building("barracks", 40, 16)
 	_runner.assert_true(bool(built.get("ok", false)), "兵营应可直建（spawn_operational_building）")
@@ -79,17 +80,27 @@ func _test_recruit_success() -> void:
 	var wood0: float = _resources.get_stock("res_wood")
 	var stone0: float = _resources.get_stock("res_stone")
 	var v0: int = _villager_count()
-	var r1: Dictionary = _org_api.recruit()
-	_runner.assert_true(bool(r1.get("ok", false)), "第一次招兵应成功（%s）" % str(r1))
-	var r2: Dictionary = _org_api.recruit()
-	_runner.assert_true(bool(r2.get("ok", false)), "第二次招兵应成功（%s）" % str(r2))
-	_runner.assert_equal(_villager_count(), v0 - 2, "空闲村民应 -2（%d → %d）" % [v0, v0 - 2])
-	_runner.assert_equal(_soldier_count(), 2, "士兵应 +2")
-	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, -COST_WOOD * 2.0, 0.001, "木 -60")
-	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, -COST_STONE * 2.0, 0.001, "石 -20")
+	_runner.assert_true(v0 >= 1, "开局应有空闲村民可招（实得 %d）" % v0)
+	# 循环招募到耗尽（人数不写死——NPC_COUNT 由生活线配比批次管控）
+	var recruited := 0
+	for i in v0 + 1:
+		var r: Dictionary = _org_api.recruit()
+		if bool(r.get("ok", false)):
+			recruited += 1
+		else:
+			_runner.assert_equal(String(r.get("reason", "")), "no_villager",
+					"耗尽后原因 = no_villager（实得 %s）" % str(r))
+			break
+	_runner.assert_equal(recruited, v0, "应恰好招空全部村民（%d/%d）" % [recruited, v0])
+	_runner.assert_equal(_villager_count(), 0, "招募后空闲村民归零")
+	_runner.assert_equal(_soldier_count(), recruited, "士兵数 = 招募数")
+	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, -COST_WOOD * float(recruited), 0.001,
+			"木 -30×%d" % recruited)
+	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, -COST_STONE * float(recruited), 0.001,
+			"石 -10×%d" % recruited)
 
 
-## 用例 2「无空闲村民拒招」
+## 用例 2「无空闲村民拒招」（接用例 1 耗尽态）
 func _test_no_villager() -> void:
 	var r: Dictionary = _org_api.recruit()
 	_runner.assert_false(bool(r.get("ok", true)), "无村民应拒招")
@@ -143,7 +154,7 @@ func _test_insufficient_and_soldier() -> void:
 		_runner.assert_false(bool(u.get_meta("garrison_unit", false)), "士兵不应带守军 meta")
 		_runner.assert_true(not u.is_dead(), "士兵应存活")
 		_runner.assert_false(u.is_possessed(), "士兵不应是附身态")
-	_runner.assert_true(soldiers >= 2, "应有 >= 2 名可出征士兵（实得 %d）" % soldiers)
+	_runner.assert_true(soldiers >= 1, "应有可出征士兵（实得 %d）" % soldiers)
 
 
 # ─────────────────────────────── 工具 ────────────────────────────────

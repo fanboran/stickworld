@@ -139,7 +139,9 @@ const DEFAULT_OUTLINE := Color.WHITE
 # ============================================================
 
 ## 从零构建骨骼 + 矢量肢体层级
-static func build_from_scratch(skeleton: Skeleton2D, thickness_scale: float = 1.0, colors: Dictionary = {}) -> Dictionary:
+## p_build_limbs=false 只建骨骼不建部件（批渲染路径：部件改由 StickmanBatchRig
+## 的 MultiMesh 桶承担；默认 true 保持旧矢量路径与工具脚本行为不变）
+static func build_from_scratch(skeleton: Skeleton2D, thickness_scale: float = 1.0, colors: Dictionary = {}, p_build_limbs: bool = true) -> Dictionary:
 	var bones: Dictionary = {}
 	var ordered := _topo_sort(SKELETON_DATA)
 
@@ -164,7 +166,9 @@ static func build_from_scratch(skeleton: Skeleton2D, thickness_scale: float = 1.
 		bones[id] = node
 
 	reorder_render_order(skeleton)
-	var sprites := build_limbs(skeleton, bones, thickness_scale, colors)
+	var sprites := {}
+	if p_build_limbs:
+		sprites = build_limbs(skeleton, bones, thickness_scale, colors)
 	return {"bones": bones, "sprites": sprites}
 
 

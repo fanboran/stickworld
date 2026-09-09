@@ -238,3 +238,7 @@ func _on_frame() -> void:
 		_outhand.position = _outhand_base + outhand_off
 	if _innerhand != null:
 		_innerhand.position = _innerhand_base + innerhand_off
+	# 批渲染层通知：叠加已改写骨骼/IK 标记，pose 实例缓冲需重写
+	# （旧矢量路径无操作——部件节点直接从骨骼树取变换）
+	if _rig != null and is_instance_valid(_rig) and _rig.has_method("notify_pose_dirty"):
+		_rig.notify_pose_dirty()

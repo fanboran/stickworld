@@ -11,6 +11,7 @@ const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd"
 const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
 const Weapon := preload("res://modules/units/scripts/weapons/stickman_weapon.gd")
 const OverlayScript := preload("res://modules/units/scripts/rig/procedural_overlay.gd")
+const BatchRig := preload("res://modules/units/scripts/rig/stickman_batch_rig.gd")
 
 # ===== 动画状态名（公共 API 用） =====
 const ANIM_IDLE := "idle"
@@ -63,6 +64,8 @@ enum WeaponType { SWORD, SPEAR, BOW, SHIELD, UNARMED }
 # ===== 运行时引用 =====
 var _bones: Dictionary = {}
 var _sprites: Dictionary = {}
+## 批渲染层（MultiMesh 桶；null = 旧矢量部件路径——编辑器/A-B 对照/回滚）
+var _batch: RefCounted = null
 var _anim_player: AnimationPlayer
 var _anim_tree: AnimationTree
 var _state_machine: AnimationNodeStateMachinePlayback
@@ -142,6 +145,30 @@ func _ready() -> void:
 	# 程序化叠加层（Stick Fight 关节物理/惯性风格；纯算法，动画之上叠加）
 	_init_procedural_overlay()
 
+
+## 通知路由：
+## - VISIBILITY_CHANGED：重新可见时补一次批渲染 pose 写入（不可见期 flush 跳过并
+##   保留脏标记，此通知兜底"LOD FAR 档隐藏 → 回到近档"的首帧；旧矢量路径无此需求）。
+## - INTERNAL_PROCESS：骨架解算落地帧恰是内部处理开启帧（set_process_internal
+##   逐帧开关，机制见 _solve_hz 注），解算刚改写骨骼 → 批渲染标脏，本帧尾部
+##   flush 捕获解算后姿态。未接 LOD 时内部处理原生常开、通知逐帧触发 = 与旧路径
+##   "渲染即最新姿态"同频；接 LOD 后仅解算节拍帧触发，随档位降频。
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		if _batch != null and is_visible_in_tree():
+			_batch.mark_dirty()
+	elif what == NOTIFICATION_INTERNAL_PROCESS:
+		if _batch != null:
+			_batch.mark_dirty()
+
+
+## 程序化叠加层改写骨骼/IK 标记后的通知（叠加层 _on_frame 每次实际叠加后调用；
+## 批渲染 pose 缓冲随之标脏，旧矢量路径无操作——节点树直接渲染无需快照）
+func notify_pose_dirty() -> void:
+	if _batch != null:
+		_batch.mark_dirty()
+
+
 ## 隔帧计数（战斗性能优化）：动画结束/事件检测为"越过时间点"语义，
 ## 30Hz 采样不漏事件（最多晚 1 帧触发），196 单位混战省一半逐帧检测开销
 var _tick_frame_counter: int = 0
@@ -153,6 +180,10 @@ func _process(delta: float) -> void:
 	if _rebuild_pending:
 		_rebuild_pending = false
 		_do_rebuild()
+	# 批渲染 pose 脏标记（自动驱动模式）：AnimationTree 自主推进，无法感知姿态
+	# 变化帧，保守每帧标脏（无动画树则姿态恒定，跳过）
+	if _batch != null and not _anim_driven and _anim_tree != null:
+		_batch.mark_dirty()
 	# LOD 驱动模式推进：自动处理已停用，按节流频率手动 advance（先于事件轮询，
 	# 保证 _check_animation_finished/_check_animation_events 读到最新播放位置）
 	if _anim_driven and _anim_tree != null and not _pause_gate:
@@ -166,8 +197,13 @@ func _process(delta: float) -> void:
 				_adv_accum = 0.0
 		if adv > 0.0:
 			_anim_tree.advance(adv)
+			# 批渲染：本帧推进改写姿态 → 标脏（flush 在 _process 尾部消费）
+			if _batch != null:
+				_batch.mark_dirty()
 			# 骨架解算随推进帧联动（机制见 _solve_hz 注）：本帧 _process 置 true，
-			# 下一帧帧首内部处理解算一次；非解算节拍关闭内部处理停掉解算
+			# 下一帧帧首内部处理解算一次；非解算节拍关闭内部处理停掉解算。
+			# 批渲染的解算后标脏走 _notification 的 INTERNAL_PROCESS 分支
+			#（解算落地帧 = 内部处理开启帧，精确挂钩），此处无需再记脏
 			if _solve_hz > 0.0:
 				_solve_accum += adv
 				if _solve_accum >= 1.0 / _solve_hz:
@@ -181,6 +217,9 @@ func _process(delta: float) -> void:
 		if _hit_timer <= 0.0 and _state_machine != null and not _dead:
 			_state_machine.travel(_hit_return_to)
 			_current_anim = _hit_return_to
+	# 批渲染 pose 快照：此处骨骼 = 本帧最终合成姿态（推进 + 解算 + 程序化叠加）
+	if _batch != null:
+		_batch.flush()
 	_tick_frame_counter += 1
 	if _tick_frame_counter % 2 != 0:
 		return
@@ -265,17 +304,26 @@ func _init_procedural_overlay() -> void:
 
 func _init_bones() -> void:
 	var colors := _make_colors()
-	# 检查是否已有骨骼（通过 hip 节点判断）
+	# 批渲染开关（默认开；旧矢量部件路径原样保留做 A/B 对照与回滚，编辑器恒走旧路径）
+	var batch_on: bool = not Engine.is_editor_hint() and BatchRig.is_enabled()
+	var batch: RefCounted = BatchRig.new() if batch_on else null
 	if get_node_or_null("hip") != null:
 		Skeleton.reorder_render_order(self)
 		_bones = Skeleton.collect_nodes(self)["bones"]
 		# .tscn 骨骼 + 运行时矢量肢体（场景不再预置贴图精灵）
-		_sprites = Skeleton.build_limbs(self, _bones, thickness_scale, colors)
+		if not batch_on:
+			_sprites = Skeleton.build_limbs(self, _bones, thickness_scale, colors)
 	else:
-		# 首次打开：从零构建骨骼 + 矢量肢体
-		var result := Skeleton.build_from_scratch(self, thickness_scale, colors)
+		# 首次打开：从零构建骨骼 + 矢量肢体（批渲染路径只建骨骼，部件归 MultiMesh 桶）
+		var result := Skeleton.build_from_scratch(self, thickness_scale, colors, not batch_on)
 		_bones = result["bones"]
 		_sprites = result["sprites"]
+	if batch != null:
+		if batch.setup(self, _bones, thickness_scale, colors):
+			_batch = batch
+		else:
+			# 批渲染构建失败（骨骼缺失等）：回退旧矢量路径，行为与旧版完全一致
+			_sprites = Skeleton.build_limbs(self, _bones, thickness_scale, colors)
 
 
 ## 组装颜色表（矢量肢体直接消费）
@@ -409,6 +457,10 @@ func _refresh_weapon(bone_id: int) -> void:
 # ============================================================
 
 func _do_rebuild() -> void:
+	if _batch != null:
+		# 批渲染路径：重烘桶实例的局部变换与颜色（不重建节点）
+		_batch.reconfigure(thickness_scale, _make_colors())
+		return
 	Skeleton.apply_colors(_sprites, _make_colors())
 
 
@@ -530,6 +582,9 @@ func set_anim_update_hz(hz: float) -> void:
 	_solve_hz = minf(hz, 30.0)
 	if _anim_tree.active:
 		_anim_tree.active = false
+	# 批渲染：节拍节奏变化，补一次 pose 快照（防档位切换期漏帧）
+	if _batch != null:
+		_batch.mark_dirty()
 	_forward_overlay_hz(hz)
 
 

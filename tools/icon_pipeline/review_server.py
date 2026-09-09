@@ -83,10 +83,12 @@ PAGE = """<!DOCTYPE html>
           padding:10px 10px 8px; display:flex; flex-direction:column; gap:6px; }
   .card.ok   { border-color:var(--ok); }
   .card.bad  { border-color:var(--bad); }
-  .imgwrap { width:64px; height:64px; margin:0 auto; cursor:zoom-in;
+  .imgwrap { display:flex; gap:6px; justify-content:center; align-items:flex-end;
+             margin:0 auto; cursor:zoom-in;
              background:conic-gradient(#9aa 25%,#778 0 50%,#9aa 0 75%,#778 0) 0 0/16px 16px;
              border-radius:4px; }
   .imgwrap img { width:64px; height:64px; display:block; }
+  .imgwrap img.big { width:128px; height:128px; }   /* 256 原生缩显：双分辨率同览 */
   .nm { text-align:center; font-size:13.5px; }
   .btns { display:flex; gap:6px; }
   .btns button { flex:1; padding:4px 0; font-size:12.5px; }
@@ -121,7 +123,7 @@ PAGE = """<!DOCTYPE html>
   </div>
 </header>
 <main id="grid"></main>
-<div id="modal"><div class="cap" id="mcap"></div><img id="m256" width="256" height="256"><img id="m128" width="128" height="128"></div>
+<div id="modal"><div class="cap" id="mcap"></div><img id="m256" width="256" height="256"><img id="m128" width="64" height="64"></div>
 <div id="toast"></div>
 <script>
 const ICONS = __ICONS__;
@@ -142,7 +144,7 @@ ICONS.forEach(ic => {
   const card = document.createElement("div");
   card.className = "card"; card.dataset.name = ic.name;
   card.innerHTML = `
-    <div class="imgwrap" title="点击放大"><img loading="lazy" src="icons/${encodeURIComponent(ic.name)}_64.png"></div>
+    <div class="imgwrap" title="点击放大（左 64 / 右 256 原生渲染）"><img loading="lazy" src="icons/${encodeURIComponent(ic.name)}_64.png"><img loading="lazy" class="big" src="icons/${encodeURIComponent(ic.name)}_256.png"></div>
     <div class="nm">${ic.name}</div>
     <div class="btns">
       <button class="ok">✓ 满意</button><button class="bad">✗ 不满意</button>
@@ -158,10 +160,10 @@ ICONS.forEach(ic => {
 });
 
 function openModal(name) {
-  document.getElementById("mcap").textContent = name + "（右 64 源 128 / 左 256，均为原生渲染）";
+  document.getElementById("mcap").textContent = name + "（左 256 / 右 64，均为原生渲染）";
   const m = document.getElementById("modal");
   document.getElementById("m256").src = `icons/${encodeURIComponent(name)}_256.png`;
-  document.getElementById("m128").src = `icons/${encodeURIComponent(name)}_128.png`;
+  document.getElementById("m128").src = `icons/${encodeURIComponent(name)}_64.png`;
   m.style.display = "flex";
   m.onclick = () => m.style.display = "none";
 }

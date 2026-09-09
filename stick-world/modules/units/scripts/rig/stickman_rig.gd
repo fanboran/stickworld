@@ -188,6 +188,10 @@ func _process(delta: float) -> void:
 	# 平时每帧只有一次取矩阵+浮点比较的开销。编辑器内不补偿，保持设计空间观感）
 	if not Engine.is_editor_hint():
 		_update_outline_zoom()
+		# 开口侧线头圆动态裁剪（近臂双线；手臂摆动时起点始终钳在头圆外，
+		# 静息留隙只是标定基准——创始人反馈"线条不要进脑袋"的运行时兜底）
+		if _sprites.has(1) and _sprites.has(10):
+			Skeleton.clip_open_root_sides_to_head(_sprites, 10)
 	# 批渲染 pose 脏标记（自动驱动模式）：AnimationTree 自主推进，无法感知姿态
 	# 变化帧，保守每帧标脏（无动画树则姿态恒定，跳过）
 	if _batch != null and not _anim_driven and _anim_tree != null:

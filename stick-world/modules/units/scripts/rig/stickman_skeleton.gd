@@ -65,18 +65,26 @@ const CHAIN_FILL_Z: Dictionary = {
 ## 躯干）。远侧臂（前臂内 14）整体藏于躯干之后、不与身体观感相交，肩部
 ## 轮廓必须完整（背侧露出的远肩全靠它读形）——曾误同开口致后肩描边丢失
 ## （创始人 2026-09-09 三次反馈）。上臂段无渲染（type=-1），前臂根即视觉臂根。
-const OPEN_ROOT_LIMBS: Array = [1]
+const OPEN_ROOT_LIMBS: Array = [1, 3, 11, 14]
 
-## 根部留隙（本地 px，自根部平面沿臂向肢端量）：肩关节圆圈直径 ≈ 肢厚+描边
-## ≈26~29，取 30 保证圆圈内无笔迹（探针实测：前臂根端平面距肩点 15.9+帽 13）。
-## 根部留隙（Vector2，本地 px，自根部平面沿臂向肢端量）——非对称开口
+## 根部留隙（Vector2，本地 px，自根部平面沿肢向末端量）——非对称开口
 ## （创始人 2026-09-09 定稿"长条一侧有描边另一侧没有"）：
-##   x = 内侧线（side_top，局部 -y，贴身体侧）留隙——肩关节圆圈内无笔迹，
-##       裸露填充根帽融合进躯干；
-##   y = 外侧线（side_bottom，局部 +y，背离身体侧）留隙 0——肩部外轮廓
-##       （背侧肩线）从根部全程保留，不参与融合。
-## 探针实测：前臂根端平面距肩点 15.9+帽 13 ≈ 肩圈直径，故内侧取 30。
-const OPEN_ROOT_GAP := {1: Vector2(30.0, 0.0)}
+##   x = 内侧线（side_top，局部 -y，贴身体侧）留隙；
+##   y = 外侧线（side_bottom，局部 +y，背离身体侧）留隙。
+## 各肢体口径：
+##   近臂 1：双线 30——内侧=肩圈融合（圈径≈26~29）；外侧=头圆出口
+##     （探针实测静息姿态沿臂 29.4 出头圆；摆动误差由运行时头圆动态
+##     裁剪兜底，见 StickmanRig.clip_open_root_to_head）。
+##   外腿 3 / 内腿 11：双线 40——胯部融合区（躯干填充下缘 ≈754，腿根
+##     ≈707，沿腿 39~40 本地 px）内无笔迹，两腿分界线自胯下起笔。
+##   内臂 14：双线 30——远臂与头/躯干交界处开口（远臂描边整体在填充
+##     之下，此留隙去掉其上端出露碎片，交界读作融合）。
+const OPEN_ROOT_GAP := {
+	1: Vector2(30.0, 30.0),
+	3: Vector2(40.0, 40.0),
+	11: Vector2(40.0, 40.0),
+	14: Vector2(30.0, 30.0),
+}
 
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 23
@@ -475,6 +483,48 @@ static func apply_outline_zoom(sprites: Dictionary, eff: float) -> void:
 			var r: float = _circle_radius(fill as Polygon2D)
 			if r > 0.0:
 				_set_circle_radius(stroke as Polygon2D, r + eff)
+
+
+## 开口描边侧线对头圆的动态裁剪（StickmanRig._process 每帧调；仅近臂双线）：
+## 手臂摆动时静息标定的留隙会失准（摆向头侧=线进脑袋，摆离头侧=线缺口），
+## 每帧把侧线起点钳到头圆轮廓上——起点在圆内则沿段方向求出口交点外移，
+## 起点在圆外则不动。头圆=头部填充多边形的全球半径（中心=容器原点）。
+static func clip_open_root_sides_to_head(sprites: Dictionary, head_id: int) -> void:
+	var head_limb: Node2D = sprites.get(head_id)
+	if head_limb == null or not is_instance_valid(head_limb):
+		return
+	var head_fill := head_limb.get_node_or_null("fill") as Polygon2D
+	if head_fill == null:
+		return
+	var head_xform := head_fill.get_global_transform()
+	var head_center: Vector2 = head_xform.origin
+	var head_r: float = _circle_radius(head_fill) * head_xform.get_scale().x
+	for id in OPEN_ROOT_LIMBS:
+		var limb: Node2D = sprites.get(id)
+		if limb == null or not is_instance_valid(limb):
+			continue
+		var lx := limb.get_global_transform()
+		var inv: Transform2D = lx.affine_inverse()
+		for side_name in ["side_top", "side_bottom"]:
+			var ln := limb.get_node_or_null(side_name) as Line2D
+			if ln == null or ln.points.size() < 2:
+				continue
+			var pts := ln.points
+			var p0w: Vector2 = lx * pts[0]
+			var d: Vector2 = p0w - head_center
+			if d.length() <= head_r:
+				var p1w: Vector2 = lx * pts[1]
+				var seg: Vector2 = p1w - p0w
+				# |p0w + t*seg - C| = R 的较小根（段内出口）
+				var b: float = 2.0 * d.dot(seg) / seg.length_squared()
+				var c: float = (d.length_squared() - head_r * head_r) / seg.length_squared()
+				var disc: float = b * b - 4.0 * c
+				if disc < 0.0:
+					continue
+				var t: float = (-b + sqrt(disc)) / 2.0
+				t = clampf(t, 0.0, 1.0)
+				pts[0] = inv * (p0w + seg * t)
+				ln.points = pts
 
 
 ## 读取圆描边多边形的半径（顶点绕中心生成，取首顶点到原点距离；中心在 Vector2.ZERO）

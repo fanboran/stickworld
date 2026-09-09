@@ -221,22 +221,88 @@ def _toon_mat():
     return m
 
 
+def _glass_mat():
+    """透明玻璃（cel 量化三档）：掠射暗缘半透、中段近全透、高光带近实白泽。
+    ShaderToRGB→明度→ColorRamp 三档驱动 Mix(Transparent, Emission)。
+    BLENDED 前向渲染（真透明必需，DITHERED 哈希透明会噪）；高光来自
+    Glossy 对主光的镜面反射。瓶内液体/瓶后背景真实透出。"""
+    m = bpy.data.materials.get('_glass_cel')
+    if m:
+        return m
+    m = bpy.data.materials.new('_glass_cel')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    trans = nt.nodes.new('ShaderNodeBsdfTransparent')
+    gloss = nt.nodes.new('ShaderNodeBsdfGlossy')
+    gloss.inputs['Roughness'].default_value = 0.12
+    base = nt.nodes.new('ShaderNodeMixShader')
+    base.inputs['Fac'].default_value = 0.20
+    nt.links.new(trans.outputs[0], base.inputs[1])
+    nt.links.new(gloss.outputs[0], base.inputs[2])
+    s2r = nt.nodes.new('ShaderNodeShaderToRGB')
+    bw = nt.nodes.new('ShaderNodeRGBToBW')
+    ramp = nt.nodes.new('ShaderNodeValToRGB')
+    ramp.color_ramp.interpolation = 'CONSTANT'
+    elems = ramp.color_ramp.elements
+    elems[0].position = 0.0
+    elems[0].color = (0.18, 0.18, 0.18, 1.0)   # 无高光区：近全透（真透明）
+    e1 = elems.new(0.45)
+    e1.color = (0.06, 0.06, 0.06, 1.0)         # 中段：全透
+    e2 = elems.new(0.80)
+    e2.color = (0.80, 0.80, 0.80, 1.0)         # 高光带：白泽
+    mix = nt.nodes.new('ShaderNodeMixShader')
+    emi = nt.nodes.new('ShaderNodeEmission')
+    emi.inputs[0].default_value = (0.80, 0.90, 0.96, 1.0)
+    nt.links.new(base.outputs[0], s2r.inputs[0])
+    nt.links.new(s2r.outputs[0], bw.inputs[0])
+    nt.links.new(bw.outputs[0], ramp.inputs[0])
+    nt.links.new(ramp.outputs[0], mix.inputs[0])
+    nt.links.new(trans.outputs[0], mix.inputs[1])
+    nt.links.new(emi.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], out.inputs[0])
+    m.surface_render_method = 'BLENDED'
+    return m
+
+
 def bake_flat_faces(scene):
     """平面着色网格：按「面法线·主光方向」量化三档灰烘进顶点色——
     每个平面恰好一色，朝向不同色不同（cel 一面一色惯例；来源方向=相机基
     向量，与 setup 主光一致：左上主光）。平滑网格（球/胶囊/环/曲线管）
     走 toon 材质：着色器内把漫反射光照量化成同三档灰（D 分档，取代
     v1 的白模受光→图像域 k-means）。烘色灰存线性域（出图=文件域三档灰）。
-    倒角等修改器生成的新面从相邻基面插值属性=柔和棱过渡。"""
+    倒角等修改器生成的新面从相邻基面插值属性=柔和棱过渡。
+    玻璃标记（glass）挂真透明材质；火焰标记（fire）按世界高度三分灰。"""
     cam = scene.camera
     R = cam.matrix_world.to_3x3()
     ldir = (R @ Vector((-3.0, 2.6, 0.6))).normalized()
     bake = _cel_bake_mat()
     toon = _toon_mat()
+    glass = _glass_mat()
     _, grays = _toon_band_grays(3)   # [lin(0.32), lin(0.62), lin(0.92)] 暗/中/亮
     g_dark, g_mid, g_bright = grays
     for o in scene.objects:
         if o.type != 'MESH' or o.get('is_ink_shell'):
+            continue
+        if o.get('glass'):
+            o.data.materials[0] = glass
+            continue
+        if o.get('fire'):
+            # 火舌按世界高度三分灰（核心亮-中焰-焰尖暗）：走标准色带=分层
+            # 三渲二火（成熟 toon fire 的静态图标形态，零 compose 特判）
+            polys = o.data.polygons
+            zs = [(o.matrix_world @ p.center).z for p in polys]
+            zlo, zhi = min(zs), max(zs)
+            span = max(1e-6, zhi - zlo)
+            attr = o.data.color_attributes.get('cel_tone')
+            if attr is None:
+                attr = o.data.color_attributes.new('cel_tone', 'FLOAT_COLOR', 'FACE')
+            for p, zc in zip(polys, zs):
+                t = (zc - zlo) / span
+                g = g_dark if t > 0.62 else (g_mid if t > 0.30 else g_bright)
+                attr.data[p.index].color = (g, g, g, 1.0)
+            o.data.materials[0] = bake
             continue
         polys = o.data.polygons
         if polys and all(p.use_smooth for p in polys):

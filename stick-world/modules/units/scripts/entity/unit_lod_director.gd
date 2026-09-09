@@ -15,10 +15,12 @@ extends Node
 ##   T2 远景：更远 → rig 隐藏、血条隐藏、动画/叠加 5Hz（不暂停，状态照常推进）
 ##   T1/T2 频率固定；hz 换算策略只在 director（唯一策略源），实体侧仅透传。
 ##
-## 帧率钳制：hz 下发前经实测帧率钳制（Engine.get_frames_per_second() 10Hz 采样、
-##   lerp 0.2 平滑防抖）——档位频率可达成（fps ≥ hz）时原样下发（健康状态零变化）；
-##   不可达成（fps < hz）时压到实测帧率一半（隔帧节拍），形成
-##   「降载→帧率回升→hz 回升」正反馈，低 fps 危机场景动画管线不再每帧全跑。
+## 帧率与推进频率的关系（实测教训，勿回退）：推进器 delta 累积的含义是
+## 「hz ≥ fps 时每帧都推进」——低 fps 下动画本就随帧率自然降频（每帧推进
+## 一次、平滑到帧率上限）；若再把 hz 钳到 fps 以下（hz < fps），推进变成
+## 隔帧节拍，行走循环呈「定格-跳帧」交替（站立相/劈叉相来回跳），视觉
+## 等于没有行走动画。而实测动画采样本身成本很低（throttle 前后 proc 几乎
+## 不变），压它没有收益——因此 hz 永不向下钳制。
 ##
 ## 滞回：升/降档需越过阈值 15% 边际（"深入区"收紧 15%，"守住区"放宽 15%），
 ## 防止单位在阈值附近来回抖档。
@@ -44,8 +46,6 @@ const MID_DIST: float = 2600.0
 const HYSTERESIS: float = 0.15
 ## 重新分档节拍（s）：单位数 ≤128 时遍历成本可忽略
 const RETIER_INTERVAL: float = 0.1
-## 实测帧率平滑系数：每次 10Hz 重拍向 Engine.get_frames_per_second() lerp 一份（防抖）
-const FPS_SMOOTHING: float = 0.2
 
 ## T0 密度自适应分档（存活跟踪单位数 N → T0 动画频率，hz 策略唯一真相源）
 const HZ_T0_SPARSE: float = 60.0  ## N ≤ 24：全速（与未接入 LOD 等价）
@@ -78,9 +78,6 @@ var _timer: float = 0.0
 var _tiers: Dictionary = {}
 ## 每单位当前下发频率（instance_id -> hz；T0 频率随密度 N 变化需重新下发）
 var _hzs: Dictionary = {}
-## 实测帧率平滑值（每拍向 Engine.get_frames_per_second() lerp FPS_SMOOTHING；
-## 初值取 60，首拍未收敛时按健康态下发不误压频率）
-var _fps_smooth: float = 60.0
 
 
 ## 注入宿主 GameRoot（自动发现模式：地图/单位集/相机均由本节点每拍自取）。
@@ -91,7 +88,6 @@ func setup(game_root: Node) -> void:
 	_units.clear()
 	_tiers.clear()
 	_hzs.clear()
-	_fps_smooth = 60.0
 	_timer = 0.0
 
 
@@ -140,9 +136,7 @@ func _retier() -> void:
 	for u in _units:
 		if _is_trackable(u):
 			n += 1
-	# 实测帧率平滑（10Hz 采样防抖），供下发频率钳制用
-	_fps_smooth = lerpf(_fps_smooth, Engine.get_frames_per_second(), FPS_SMOOTHING)
-	var t0_hz: float = _clamp_hz(_t0_hz(n))
+	var t0_hz: float = _t0_hz(n)
 	var vp_size: Vector2 = cam.get_viewport().get_visible_rect().size
 	var center: Vector2 = cam.get_screen_center_position()
 	var zoom: Vector2 = cam.get_zoom()
@@ -209,25 +203,18 @@ func _t0_hz(n: int) -> float:
 	return HZ_T0_DENSE
 
 
-## 档位 → 动画频率（T0 密度自适应，T1/T2 固定）。返回前统一经实测帧率钳制。
+## 档位 → 动画频率（T0 密度自适应，T1/T2 固定）。
+## 注意：hz 永不向下钳到实测帧率以下——推进器 delta 累积在 hz ≥ fps 时每帧
+## 都推进（动画平滑到帧率上限）；hz < fps 会变成隔帧节拍，行走循环呈
+## 「定格-跳帧」交替（类头「帧率与推进频率的关系」注）。
 func _tier_hz(tier: int, t0_hz: float) -> float:
 	match tier:
 		Tier.MID:
-			return _clamp_hz(HZ_T1)
+			return HZ_T1
 		Tier.FAR:
-			return _clamp_hz(HZ_T2)
+			return HZ_T2
 		_:
-			return _clamp_hz(t0_hz)
-
-
-## 实测帧率钳制：档位频率可达成（fps ≥ hz）时原样下发（健康状态零变化）；
-## 不可达成（fps < hz）时压到实测帧率一半（隔帧节拍），形成
-## 「降载→帧率回升→hz 回升」正反馈。帧率未收敛（<1）时跳过钳制防误压到 0。
-func _clamp_hz(hz: float) -> float:
-	var fps := _fps_smooth
-	if fps < 1.0:
-		return hz
-	return hz if fps >= hz else fps * 0.5
+			return t0_hz
 
 
 # ─────────────────────────────── 分档 ────────────────────────────────

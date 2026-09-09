@@ -567,8 +567,11 @@ func set_anim_update_hz(hz: float) -> void:
 	if _anim_tree == null:
 		return
 	_adv_hz = hz
-	_adv_accum = 0.0
-	_solve_accum = 0.0
+	# 逐单位相位错开：推进/解算累积器随机初相，群体在低频档各自的"跳步帧"
+	# 互相错开——远观是纷杂的步态差异，而不是全体同步的定格-跳步（人群动画
+	# 惯用手法；hz ≥ fps 时每帧都推进，相位无可见影响）
+	_adv_accum = randf() * (1.0 / hz) if hz > 0.0 else 0.0
+	_solve_accum = randf() * (1.0 / maxf(hz, 1.0)) if hz > 0.0 else 0.0
 	if hz <= 0.0:
 		_anim_driven = false
 		_solve_hz = 0.0

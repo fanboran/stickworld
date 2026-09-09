@@ -72,12 +72,47 @@ Terraria/王者真正可借鉴的是**刻内数据化**：单位不是场景树�
 - 2026-09-09：立项。基线测量完毕（§一），路线定稿（§三），未开工。
 - 2026-09-09 02:25：阶段 0 完成——结构侦察结论（§七）+ worktree 测量基建；
   阶段 1（LOD 分层节流）派工实现中。
-- 2026-09-09 03:1x：阶段 1 首测**零效果**（proc 74ms/fps 9 与基线无异）。
-  诊断：①battle_arena 不走 BattleInstance（自己刷两队互殴），挂载点从未生效；
-  ②竞技场相机贴脸，48 单位全员 T0=全速。修正单已派工：director 改挂
-  SystemSetup + 自动发现当前地图 EntityHost 单位；T0 密度自适应（N≤24→60Hz、
-  ≤48→30Hz、>48→20Hz）。注意：实现 agent 报告完成后可能残留 headless 测试
-  进程（batch_run 挂起），测量前必须清场。
+- 2026-09-09 03:5x：**成本模型修正（重要）**。LOD 修正版 director 状态完美
+  （96 单位全跟踪/档位下发/AnimationTree active=false+advance 20Hz 已生效），
+  但 proc 仍 ~75ms——证明可见单位大头不是动画采样，而是 **Skeleton2D 修改栈
+  （4×TwoBoneIK）解算：可见+内部处理开启即每帧跑，与动画频率无关**。
+  对照组：手动 26 单位 rig.visible=false → proc 80→25ms、fps 8→42、
+  draws 4100→1264（该成本可见性门控实锤）。这也解释了历史 battle_perf
+  --anim-off 无效的观测。
+  结论：阶段 1（commit cd0e05e8）定位为控制面基建（LOD 档位/advance 驱动/
+  自动发现——离屏场景有真实收益），arena 达标靠：阶段 1.5 骨架解算 stagger
+  （set_process_internal 逐帧开关，按 LOD 档限频 30/15/5Hz，派工中）+
+  阶段 2 MultiMesh 批渲染（§八，draws 主攻）。§八 补充：阶段 2 验收时须
+  复测 stagger 后的骨架残余成本，若 30fps 仍差临门一脚，下一刀是
+  「代码解算 IK 替代修改栈」（骨架解算彻底脱离每帧 internal 处理）。
+- 2026-09-09 04:4x：阶段 1.5 骨架解算 stagger 交付并提交（a3a810b5）。
+  实验实证：execute_modifications 手动解算会写死骨骼致塌折（否决）；
+  关闭解算与原生姿态 bit-exact（动画轨道覆写兜底）；解算切片仅
+  ~0.06-0.12ms/单位/帧；fps≤30 时 stagger 退化为逐帧（30fps 后兑现利润）。
+- 2026-09-09 07:0x-08:3x：**阶段 2 交付并提交**。续作 agent 审计补全遗作：
+  逐实例 API 写入是 ~20µs/次的性能黑洞 → 实验反解整缓冲 12-float 行主布局
+  （bit-exact）改每桶一次 buffer 赋值；实例色需网格自带 COLOR 属性（QuadMesh
+  渲染全黑 → 自建带色 ArrayMesh）；解算落地帧（INTERNAL_PROCESS）精确标脏。
+  末刀「有效 hz 随实测帧率钳制」（fps<hz 压到 fps/2 隔帧节拍）补上低帧率
+  正反馈回路。提交：0ecea381（批渲染）+ dfce1bab（hz 钳制）。
+  **终态数字（48v48=96 单位，基线 fps 7-9 / proc ~75ms / draws ~4100）**：
+  draws **1616**、proc **47-57ms**；满编混战最重峰 fps **9-12**（此时头号成本
+  已让位物理：phys ~45ms，30Hz 大规模碰撞推挤/AI）；战损减员阶段爬到
+  **25-30+fps** 并保持到终局（胜利结算正常）。96v96 仍 2-3fps（非本轮目标）。
+  **30fps 硬线判定：减员阶段达标、满编峰未达**——剩余刀按性价比排序：
+  ①物理/AI 分帧（phys 45ms 是满编峰头号成本：push_apart 网格查询、
+  move_and_slide 大规模碰撞；决策已是 0.3s 节流，行为 update 每刻全量）；
+  ②非 rig 绘制合批/剔除（血条 1+阴影 1+武器 2 /单位 + 箭矢，约 700-900
+  draws 在 rig 层之外）；③代码解算 IK 替代修改栈（解算彻底脱离每帧
+  internal）；④数据化批模拟（最大工程）。
+  视觉抛光项：批渲染肢体宽度偏胖（胶囊宽度映射比 Line2D 语义略宽），
+  收圆即更贴近旧观感。
+  环境遗留：project.godot 探针接线已撤销（temp/perf_probe.gd 文件保留）；
+  日志自检干净；分支 perf/battle-30fps 共 5 个性能提交待评审合并 main。
+  附带发现待办：①d1023908 提交的 sketch_gear_button.gd:42 运行时
+  Parse Error（"ink" 未声明，编辑器模拟扫不出，需修）；②battle_arena R 键
+  探针 key 注入不生效（keycode vs physical_keycode）+ 重开后 HUD 上一局
+  标签不刷新（dev 场景小瑕疵）。
 
 ## 七、结构侦察结论（阶段 2 的设计依据，已实证勿重查）
 

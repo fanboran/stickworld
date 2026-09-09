@@ -299,7 +299,9 @@ def _ink_mat():
     nt.nodes.clear()
     out = nt.nodes.new('ShaderNodeOutputMaterial')
     emi = nt.nodes.new('ShaderNodeEmission')
-    emi.inputs[0].default_value = (18 / 255, 14 / 255, 9 / 255, 1.0)
+    # 墨色存线性域（Standard 出图做 sRGB 编码会拉亮线性值——与三档 cel 灰
+    # 同坑；曾漏修致描边呈暗棕「浅灰线」）
+    emi.inputs[0].default_value = (0.00605, 0.00439, 0.00273, 1.0)
     nt.links.new(emi.outputs[0], out.inputs[0])
     return m
 

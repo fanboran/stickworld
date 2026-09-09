@@ -112,6 +112,10 @@ signal completed(building: Building)
 
 
 func _ready() -> void:
+	# 进 "building" 组：跨模块建筑查询面（小镇生活批次 3 WorkSlots 就近寻位
+	# 等场景经组扫描 + 鸭子协议读 def_id/is_operational/get_work_slot_positions，
+	# 同 resource_node 组先例；不引 construction_manager 内部注册表）
+	add_to_group("building")
 	_lookup_children()
 	_apply_state_visual()
 

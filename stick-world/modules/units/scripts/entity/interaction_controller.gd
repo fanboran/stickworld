@@ -108,12 +108,15 @@ func _get_resources_api() -> Node:
 
 
 ## 找采集范围内的最近资源点（resource_node 组全局扫描，地图内节点数 ~几十，开销可忽略）
+## 枯竭点跳过（采空后隐藏待重生，按 F 无反馈观感差）
 func _find_nearest_resource_node() -> Node2D:
 	var best: Node2D = null
 	var best_dist: float = INF
 	for node in _entity.get_tree().get_nodes_in_group("resource_node"):
 		var rn := node as Node2D
 		if rn == null or not is_instance_valid(rn) or not rn.is_inside_tree():
+			continue
+		if rn.has_method("is_depleted") and rn.is_depleted():
 			continue
 		var dx: float = absf(rn.global_position.x - _entity.global_position.x)
 		var dy: float = absf(rn.global_position.y - _entity.global_position.y)

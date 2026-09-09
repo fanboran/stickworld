@@ -73,8 +73,10 @@ const SIEGE_MAP_ID := "siege_battlefield"
 const FOREST_ZONE_MAP_ID := "forest_zone"
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
 const PLAYER_SPAWN_X: float = 0.0
-## NPC 村民数量（P0 测试用，展示 AI 行为；阶段 E 创始人确认改为 2）
-const NPC_COUNT: int = 2
+## NPC 村民数量（小镇生活批次 4 [提案/待定]：起步小镇人口 10——配比在岗
+## 铁匠 1 + 伐木 3 + 矿工 3 = 7，余 3 待业闲逛；配额见 professions.tres quota）。
+## 性能基准 196 单位远未触顶，10 无性能顾虑。
+const NPC_COUNT: int = 10
 
 # ─────────────────────────────── 建造系统（§15 阶段 0.4）────────────────────────────────
 

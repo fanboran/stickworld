@@ -132,6 +132,17 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     else:
         alpha = sa[..., 3]
 
+    # 火焰层（真实火焰质感）：渲染端单独渲 fire pass（平滑渐变发光材质），
+    # 原样合成不过色带——量化三档会把火做成糖果条
+    fire_fp = os.path.join(BASE, f"{tag}_{target}_fire.png")
+    if os.path.exists(fire_fp):
+        fireim = np.asarray(Image.open(fire_fp).convert("RGBA")).astype(np.float32)
+        a_f = fireim[..., 3:4] / 255.0
+        a_bot = alpha / 255.0
+        A = a_f + a_bot * (1 - a_f)
+        out = (fireim[..., :3] * a_f + out * a_bot * (1 - a_f)) / np.maximum(A, 1e-4)
+        alpha = A * 255.0
+
     rgba = np.dstack([out, alpha])
     img = Image.fromarray(np.clip(rgba, 0, 255).astype(np.uint8), "RGBA")
 

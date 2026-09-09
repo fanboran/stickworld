@@ -221,51 +221,6 @@ def _toon_mat():
     return m
 
 
-def _glass_mat():
-    """透明玻璃（cel 量化三档）：掠射暗缘半透、中段近全透、高光带近实白泽。
-    ShaderToRGB→明度→ColorRamp 三档驱动 Mix(Transparent, Emission)。
-    BLENDED 前向渲染（真透明必需，DITHERED 哈希透明会噪）；高光来自
-    Glossy 对主光的镜面反射。瓶内液体/瓶后背景真实透出。"""
-    m = bpy.data.materials.get('_glass_cel')
-    if m:
-        return m
-    m = bpy.data.materials.new('_glass_cel')
-    m.use_nodes = True
-    nt = m.node_tree
-    nt.nodes.clear()
-    out = nt.nodes.new('ShaderNodeOutputMaterial')
-    trans = nt.nodes.new('ShaderNodeBsdfTransparent')
-    gloss = nt.nodes.new('ShaderNodeBsdfGlossy')
-    gloss.inputs['Roughness'].default_value = 0.12
-    base = nt.nodes.new('ShaderNodeMixShader')
-    base.inputs['Fac'].default_value = 0.20
-    nt.links.new(trans.outputs[0], base.inputs[1])
-    nt.links.new(gloss.outputs[0], base.inputs[2])
-    s2r = nt.nodes.new('ShaderNodeShaderToRGB')
-    bw = nt.nodes.new('ShaderNodeRGBToBW')
-    ramp = nt.nodes.new('ShaderNodeValToRGB')
-    ramp.color_ramp.interpolation = 'CONSTANT'
-    elems = ramp.color_ramp.elements
-    elems[0].position = 0.0
-    elems[0].color = (0.18, 0.18, 0.18, 1.0)   # 无高光区：近全透（真透明）
-    e1 = elems.new(0.45)
-    e1.color = (0.06, 0.06, 0.06, 1.0)         # 中段：全透
-    e2 = elems.new(0.80)
-    e2.color = (0.80, 0.80, 0.80, 1.0)         # 高光带：白泽
-    mix = nt.nodes.new('ShaderNodeMixShader')
-    emi = nt.nodes.new('ShaderNodeEmission')
-    emi.inputs[0].default_value = (0.80, 0.90, 0.96, 1.0)
-    nt.links.new(base.outputs[0], s2r.inputs[0])
-    nt.links.new(s2r.outputs[0], bw.inputs[0])
-    nt.links.new(bw.outputs[0], ramp.inputs[0])
-    nt.links.new(ramp.outputs[0], mix.inputs[0])
-    nt.links.new(trans.outputs[0], mix.inputs[1])
-    nt.links.new(emi.outputs[0], mix.inputs[2])
-    nt.links.new(mix.outputs[0], out.inputs[0])
-    m.surface_render_method = 'BLENDED'
-    return m
-
-
 def bake_flat_faces(scene):
     """平面着色网格：按「面法线·主光方向」量化三档灰烘进顶点色——
     每个平面恰好一色，朝向不同色不同（cel 一面一色惯例；来源方向=相机基
@@ -279,31 +234,13 @@ def bake_flat_faces(scene):
     ldir = (R @ Vector((-3.0, 2.6, 0.6))).normalized()
     bake = _cel_bake_mat()
     toon = _toon_mat()
-    glass = _glass_mat()
     _, grays = _toon_band_grays(3)   # [lin(0.32), lin(0.62), lin(0.92)] 暗/中/亮
     g_dark, g_mid, g_bright = grays
     for o in scene.objects:
         if o.type != 'MESH' or o.get('is_ink_shell'):
             continue
-        if o.get('glass'):
-            o.data.materials[0] = glass
-            continue
         if o.get('fire'):
-            # 火舌按世界高度三分灰（核心亮-中焰-焰尖暗）：走标准色带=分层
-            # 三渲二火（成熟 toon fire 的静态图标形态，零 compose 特判）
-            polys = o.data.polygons
-            zs = [(o.matrix_world @ p.center).z for p in polys]
-            zlo, zhi = min(zs), max(zs)
-            span = max(1e-6, zhi - zlo)
-            attr = o.data.color_attributes.get('cel_tone')
-            if attr is None:
-                attr = o.data.color_attributes.new('cel_tone', 'FLOAT_COLOR', 'FACE')
-            for p, zc in zip(polys, zs):
-                t = (zc - zlo) / span
-                g = g_dark if t > 0.62 else (g_mid if t > 0.30 else g_bright)
-                attr.data[p.index].color = (g, g, g, 1.0)
-            o.data.materials[0] = bake
-            continue
+            continue   # 火焰走 fire pass 的平滑渐变发光材质，不进 shade
         polys = o.data.polygons
         if polys and all(p.use_smooth for p in polys):
             o.data.materials[0] = toon
@@ -332,6 +269,51 @@ def _ink_mat():
     out = nt.nodes.new('ShaderNodeOutputMaterial')
     emi = nt.nodes.new('ShaderNodeEmission')
     emi.inputs[0].default_value = (18 / 255, 14 / 255, 9 / 255, 1.0)
+    nt.links.new(emi.outputs[0], out.inputs[0])
+    return m
+
+
+def _fire_mat():
+    """火焰材质（真实火焰质感）：生成坐标高度 + 噪声扰动 → 线性渐变
+    （核心亮黄→橙→焰尖暗红）→ 高强度 Emission。火是发光体，走平滑渐变
+    而非三档量化（量化=糖果条）；compose 以独立 fire pass 原样合成，
+    不过色带。"""
+    m = bpy.data.materials.get('_fire_grad')
+    if m:
+        return m
+    m = bpy.data.materials.new('_fire_grad')
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    emi = nt.nodes.new('ShaderNodeEmission')
+    emi.inputs['Strength'].default_value = 2.2
+    tc = nt.nodes.new('ShaderNodeTexCoord')
+    sep = nt.nodes.new('ShaderNodeSeparateXYZ')
+    nt.links.new(tc.outputs['Generated'], sep.inputs[0])
+    noise = nt.nodes.new('ShaderNodeTexNoise')
+    noise.inputs['Scale'].default_value = 6.0
+    nt.links.new(tc.outputs['Generated'], noise.inputs['Vector'])
+    n2 = nt.nodes.new('ShaderNodeMath')
+    n2.operation = 'MULTIPLY'
+    n2.inputs[1].default_value = 0.22
+    nt.links.new(noise.outputs['Fac'], n2.inputs[0])
+    add = nt.nodes.new('ShaderNodeMath')
+    add.operation = 'ADD'
+    add.inputs[0].default_value = -0.11
+    nt.links.new(n2.outputs[0], add.inputs[0])
+    nt.links.new(sep.outputs['Y'], add.inputs[1])
+    ramp = nt.nodes.new('ShaderNodeValToRGB')
+    ramp.color_ramp.interpolation = 'LINEAR'
+    e = ramp.color_ramp.elements
+    e[0].position = 0.0
+    e[0].color = (1.00, 0.86, 0.30, 1.0)   # 核心亮黄
+    e1 = e.new(0.45)
+    e1.color = (1.00, 0.50, 0.08, 1.0)     # 橙
+    e2 = e.new(0.78)
+    e2.color = (0.55, 0.10, 0.02, 1.0)     # 焰尖暗红
+    nt.links.new(add.outputs[0], ramp.inputs[0])
+    nt.links.new(ramp.outputs['Color'], emi.inputs['Color'])
     nt.links.new(emi.outputs[0], out.inputs[0])
     return m
 
@@ -406,9 +388,11 @@ def render_two(scene, tag, t, classic=False, margin=1.06):
                 continue
             if o.type == 'MESH':
                 o.data.materials[0] = white
-    # shade pass：壳隐藏——shade 保持纯 cel（墨线由 ink pass 单独承担）
+    # shade pass：壳与火焰隐藏——shade 保持纯 cel（墨线/火焰各自单独承担）
     for o in scene.objects:
         if o.get('is_ink_shell'):
+            o.hide_render = True
+        if o.get('fire'):
             o.hide_render = True
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_shade.png")
     bpy.ops.render.render(write_still=True)
@@ -423,12 +407,24 @@ def render_two(scene, tag, t, classic=False, margin=1.06):
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, t, "ink")
     sys.stdout.flush()
+    # 火焰 pass：只渲火焰标记件（平滑渐变发光，compose 原样合成不过色带）
+    has_fire = any(o.get('fire') for o in scene.objects if o.type == 'MESH')
+    if has_fire:
+        for o in scene.objects:
+            if o.type == 'MESH':
+                o.hide_render = not bool(o.get('fire'))
+                if o.get('fire'):
+                    o.data.materials[0] = _fire_mat()
+        scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_fire.png")
+        bpy.ops.render.render(write_still=True)
+        print("rendered", tag, t, "fire")
+        sys.stdout.flush()
     for o in scene.objects:
         if o.get('is_ink_shell'):
             o.hide_render = True
             continue
         if o.type == 'MESH':
-            o.hide_render = False   # 墨线 pass 曾隐藏原体——ID 前必须解封（曾致 ID 全黑、全库误涂墨炭）
+            o.hide_render = False   # 墨线/火焰 pass 曾隐藏原体——ID 前必须解封（曾致 ID 全黑、全库误涂墨炭）
             o.data.materials[0] = flat_mat(f"_id{o['pid']}", M.ID_COLORS[o['pid']])
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_id.png")
     bpy.ops.render.render(write_still=True)

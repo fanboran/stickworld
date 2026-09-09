@@ -302,13 +302,13 @@ def drop_mesh(scale=1.0, loc=(0, 0, 0), pid=4, extrude=0.22, bevel=0.065):
     return ob
 
 
-def _lathe_glass(prof, pid=6):
-    """轮廓半边绕 Z 旋转成型=玻璃瓶体（真透明材质，bake 按 glass 标记挂载）"""
+def _lathe(prof, pid=6):
+    """轮廓半边绕 Z 旋转成型=瓶身内芯（直出 pid 色带）"""
     import bpy
-    me = bpy.data.meshes.new('glass_body')
+    me = bpy.data.meshes.new('lathe_body')
     me.from_pydata([(x, 0, z) for x, z in prof],
                    [(i, i + 1) for i in range(len(prof) - 1)], [])
-    ob = bpy.data.objects.new('glass_body', me)
+    ob = bpy.data.objects.new('lathe_body', me)
     bpy.context.scene.collection.objects.link(ob)
     spin = ob.modifiers.new('spin', 'SCREW')
     spin.angle = math.radians(360)
@@ -317,7 +317,6 @@ def _lathe_glass(prof, pid=6):
         spin.use_smooth_shading = True
     except AttributeError:
         pass
-    ob['glass'] = 1
     ob['pid'] = pid
     _base_mat(ob)
     return ob
@@ -474,13 +473,18 @@ def _m_sack():
     ss = ob.modifiers.new('subdiv', 'SUBSURF')
     ss.levels = 2
     ss.render_levels = 3
-    tex = bpy.data.textures.new('sack_wrinkle', type='CLOUDS')
-    tex.noise_scale = 0.55
-    wr = ob.modifiers.new('wrinkle', 'DISPLACE')
-    wr.texture = tex
-    wr.texture_coords = 'LOCAL'
-    wr.strength = 0.055
-    wr.mid_level = 0.5
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bm.normal_update()
+    for v in bm.verts:
+        ang = math.atan2(v.co.y, v.co.x)
+        fold = abs(math.sin(ang * 3)) ** 0.6                    # 6 道竖褶
+        decay = max(0.0, min(1.0, (v.co.z + 0.02) / 0.88))      # 自底向颈增强
+        n = v.normal.copy()
+        v.co += n * (fold * 0.05 * decay + 0.010 * math.sin(v.co.z * 38.0))
+    bm.to_mesh(ob.data)
+    bm.free()
     for p in ob.data.polygons:
         p.use_smooth = True
     _finish(ob, 6)
@@ -743,12 +747,12 @@ def _m_flask():
     prof = [(-0.10, 1.30), (-0.13, 1.10), (-0.17, 0.94), (-0.36, 0.80), (-0.45, 0.58),
             (-0.40, 0.30), (-0.22, 0.13), (0, 0.10), (0.22, 0.13), (0.40, 0.30),
             (0.45, 0.58), (0.36, 0.80), (0.17, 0.94), (0.13, 1.10), (0.10, 1.30)]
-    tube([(x, 0, z) for x, z in prof], 0.042, pid=6, chaikin=2)
-    _lathe_glass([p for p in prof if p[0] <= 0])                                # 玻璃瓶体（真透明）
-    sph(0.30, (0, 0, 0.42), scale=(1.12, 0.85, 0.9), pid=5)                     # 药水（真装在瓶里）
+    _lathe([(x * 0.90, z) for x, z in prof if x <= 0], pid=5)                   # 药水内芯直出（绿）
+    tube([(x, 0, z) for x, z in prof], 0.042, pid=6, chaikin=2)                 # 瓶壁描边
     cyl(0.075, 0.12, (0, 0, 1.33), pid=3)                                       # 软木塞
-    sph(0.045, (0.10, 0.05, 0.52), pid=6)                                       # 气泡
-    sph(0.032, (-0.08, 0.05, 0.36), pid=6)
+    sph(0.040, (-0.17, -0.26, 0.78), scale=(0.55, 0.45, 1.7), pid=6)            # 玻璃高光斜纹
+    sph(0.030, (0.24, -0.26, 0.60), scale=(0.5, 0.4, 1.3), pid=6)               # 短纹
+    sph(0.030, (0.10, 0.02, 0.50), pid=6)                                       # 气泡
 
 
 @motif("erlenmeyer", "锥形瓶")
@@ -757,10 +761,11 @@ def _m_erlenmeyer():
     prof = [(-0.09, 1.22), (-0.11, 1.02), (-0.18, 0.78), (-0.30, 0.50), (-0.40, 0.24),
             (-0.42, 0.14), (0, 0.11), (0.42, 0.14), (0.40, 0.24), (0.30, 0.50),
             (0.18, 0.78), (0.11, 1.02), (0.09, 1.22)]
-    tube([(x, 0, z) for x, z in prof], 0.040, pid=6, chaikin=2)
-    _lathe_glass([p for p in prof if p[0] <= 0])                                # 玻璃瓶体（真透明）
-    cyl(0.23, 0.15, (0, 0, 0.21), pid=9)                                        # 蓝试剂
+    _lathe([(x * 0.90, z) for x, z in prof if x <= 0], pid=9)                   # 蓝试剂内芯直出
+    tube([(x, 0, z) for x, z in prof], 0.040, pid=6, chaikin=2)                 # 瓶壁描边
     cyl(0.085, 0.10, (0, 0, 1.26), pid=6)                                       # 瓶口沿
+    sph(0.038, (-0.13, -0.24, 0.62), scale=(0.55, 0.45, 1.5), pid=6)            # 玻璃高光斜纹
+    sph(0.028, (0.20, -0.24, 0.48), scale=(0.5, 0.4, 1.2), pid=6)               # 短纹
 
 
 @motif("testrack", "试管架")
@@ -771,12 +776,10 @@ def _m_testrack():
     for x in (-0.46, 0.46):
         box((0.08, 0.24, 0.70), (x, 0, 0.40), pid=3)                            # 立柱
     for x, c in ((-0.30, 4), (0.0, 5), (0.30, 8)):
-        prof = [(x - 0.075, 0, 0.92), (x - 0.075, 0, 0.26), (x, 0, 0.16),
-                (x + 0.075, 0, 0.26), (x + 0.075, 0, 0.92)]
+        prof = [(x - 0.075, 0, 0.74), (x - 0.075, 0, 0.26), (x, 0, 0.16),
+                (x + 0.075, 0, 0.26), (x + 0.075, 0, 0.74)]   # 顶端收进横梁（盖帽不外露）
         tube(prof, 0.026, pid=6, chaikin=2)
-        tube_body = cyl(0.070, 0.74, (x, 0, 0.55), pid=6)                       # 玻璃管体（真透明）
-        tube_body['glass'] = 1
-        cyl(0.052, 0.20, (x, 0, 0.30), pid=c)                                   # 液体柱
+        cyl(0.058, 0.26, (x, 0, 0.32), pid=c)                                   # 液体柱
 
 
 @motif("hourglass", "沙漏")
@@ -1160,12 +1163,11 @@ def _m_star_badge():
     sph(0.10, (0, 0, 0.50), pid=4)
 
 
-
-
-
-
-
-
-
-
-
+@motif("canteen", "水壶", key_e=5.0)
+def _m_canteen():
+    # 军绿水壶（替换饭团）：扁圆壶体+背带拱+壶嘴盖，生存物资位
+    sph(0.42, (0, 0, 0.52), scale=(0.95, 0.52, 1.0), pid=5)                     # 扁圆壶体（军绿）
+    tube([(0.30, 0.10, 0.98), (0.17, 0.10, 1.22), (0.0, 0.10, 1.28),
+          (-0.17, 0.10, 1.22), (-0.30, 0.10, 0.98)], 0.040, pid=5, chaikin=2)   # 背带拱
+    cyl(0.09, 0.14, (0, 0, 0.99), pid=3)                                        # 壶嘴
+    cyl(0.11, 0.06, (0, 0, 1.09), pid=3)                                        # 盖

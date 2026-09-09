@@ -263,12 +263,15 @@ static func _roads_from(arr: Array, tiles: Array[L1TileDef]) -> Array:
 		var biomes := PackedInt32Array()
 		for v in d.get("biomes", []):
 			biomes.append(int(v))
+		# length_px 兜底：个别包存在 null（如 l1_002 城20-城23 路），float(null) 报错
+		var lp: Variant = d.get("length_px", 0.0)
+		var length_px := float(lp) if (lp is float or lp is int) else 0.0
 		out.append({
 			"pts": pts,
 			"from": from_id,
 			"to": to_id,
 			"tier": str(d.get("tier", "DIRT")),
-			"length_px": float(d.get("length_px", 0.0)),
+			"length_px": length_px,
 			"biomes": biomes,
 		})
 	return out

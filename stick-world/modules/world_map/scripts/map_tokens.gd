@@ -142,6 +142,57 @@ const L1_ROUTE_DASH_RATIO := 0.014
 const L1_ROUTE_GAP_RATIO := 0.010
 const L1_ROUTE_NODE_RADIUS := 6.0
 
+# ────────────────────── 地图标注体系（R8 层3，§7.3-3/§7.3-6 规范表）──────────────────────
+## 标注 = 三级视觉分级（国名/地区名/城市，两步法相邻档差 ≥2pt）+ 都城星标。
+## 尺寸全部屏幕像素口径（绘制时 ÷zoom 换算成地图单位）；字体 = StickHand
+## （SketchFonts.hand/bold，与游戏 UI 同源，禁止 fallback 字体）。
+
+## 国名 18px Bold（中文无大写——以字距/字重表达层级，§7.3-3）
+const LABEL_SIZE_COUNTRY := 18.0
+## 地区名 14px
+const LABEL_SIZE_REGION := 14.0
+## 首都名 13px Bold
+const LABEL_SIZE_CAPITAL := 13.0
+## 城市名 12px
+const LABEL_SIZE_CITY := 12.0
+
+## 国名字距 = 字号的 15%（§7.3-6 规范表「全大写字距 15%」的中文等价表达）
+const LABEL_COUNTRY_TRACKING := 0.15
+
+## halo 宽（§7.3-3：白 halo ≈ 字号 1/6~1/5，clamp 到 1.5~2.5px；描边式四向偏移）
+const LABEL_HALO_MIN := 1.5
+const LABEL_HALO_MAX := 2.5
+
+## 政治模式标注用色（L3/L2，彩色政权底图上）：墨白字 + 深墨 halo——
+## 高对比可读优先（任务详单「国名用高对比墨白」）；深墨 = 墨色系（LINE_REGION_COLOR 同族）
+const LABEL_INK_MAP := StickTokens.TEXT
+const LABEL_HALO_DARK := Color(0.06, 0.06, 0.06, 0.72)
+## L1 城市标注用色（浅色地形底图上）：暖墨字 + 白 halo（§7.3-3「白 halo」正例）
+const LABEL_INK_CITY := Color(0.16, 0.14, 0.11)
+const LABEL_HALO_WHITE := Color(1.0, 1.0, 1.0, 0.85)
+
+## 都城星标：外接圆直径 8px（§7.3-6 规范表「首都 8px 星标」；首都惯例 = 星形符号，
+## OSM carto place-capital）。金 = CONTENT_PALETTE[9] 琥珀棕——顶级聚落语义
+## （与 L1_BLOB_EDGE_T5 同值同源，改色两端同步）；描边 = 墨色（LINE_REGION_COLOR 复用）
+const LABEL_STAR_SIZE := 8.0
+const LABEL_STAR_FILL := Color(0.95, 0.68, 0.25)
+const LABEL_STAR_OUTLINE := LINE_REGION_COLOR
+
+## 缩放显隐阈值（r = zoom / 视图适配 zoom；OSM carto 国家 z3/城市 z6 的分级思路
+## 按我们三级视图定标）。适配 zoom 由层自算 = 视口高 × fit_hint / 地图跨度。
+## L3：国名 r≤6 显（全景~中景；再放大即将下钻 L2，国名退场只留都城星标）
+const LABEL_ZOOM_COUNTRY_MAX := 6.0
+## L2：地区名 r≤6 显；重镇名 r≥1.2 显（默认视角 = 1.75r 打开即显）
+const LABEL_ZOOM_REGION_MAX := 6.0
+const LABEL_ZOOM_TOWN_MIN := 1.2
+## L1：城市名 r≥0.55 显（过度缩小只留首都，防 13+ 城标注互相压盖）
+const LABEL_ZOOM_CITY_MIN := 0.55
+
+## 标注锚点间隙（屏幕像素，文字盒相对符号点/锚点的留隙）
+const LABEL_ANCHOR_GAP := 3.0
+## 碰撞盒外边距（屏幕像素，防文字贴字）
+const LABEL_COLLIDE_PAD := 2.0
+
 # ────────────────────── L2 视图（l2_map_renderer，原值迁移）──────────────────────
 ## 坐标系 = L2 region context（千级），线宽 = 地图单位绝对粗细 + 屏幕上限 clamp
 

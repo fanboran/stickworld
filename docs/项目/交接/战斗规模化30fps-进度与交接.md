@@ -202,6 +202,53 @@ draw calls 从 ~1440（48 只×30）降到 96（48×2），96v96 从 ~2900 降�
 - 验收硬线：48v48 ≥30fps；截图逐帧对比新旧 rig 观感（描边粗细/层次/颜色）；
   命中帧/受击红闪/死亡淡出功能回归。
 
+## 十、D 刀设计：数据化批模拟（2026-09-09 立项，已批准）
+
+**目标**：96v96（192 单位）满编混战 ≥20-30fps。当前 4.5fps 的两堵墙：
+Wall A 实体物理链 ~25-30ms/刻（move_and_slide/分离/武器mount/marker同步）+
+Wall B 骨架渲染管线 ~60-70ms/帧（advance/overlay/flush，D3 处理）。
+
+**核心思想**：单位模拟状态离开场景树，进 SoA 扁平数组；系统以紧凑循环批量
+推进；场景树只留渲染代理。关键洞察：**模拟不需要骨骼**——它只需要状态名、
+动画相位（命中帧事件）、冷却、目标、位置、血量；骨骼姿态是纯渲染关注点。
+
+**架构**：
+- 新 `modules/combat/scripts/battle/battle_sim.gd`（BattleSim，RefCounted，
+  BattleInstance 持有）。SoA：`pos_x/pos_y/vel_x/vel_y/hp`（PackedFloat32Array）、
+  `faction/state/state_anim/target/cooldown_main`（PackedInt32Array）；
+  entity 持 `sim_id`（int 索引 + free-list 复用）。
+- 移动：`position += velocity*dt` + 边界 clamp + WalkBarrier 矩形推挤
+  （替代 move_and_slide——单位层互不碰撞、地形只有边缘 barrier，语义等价）。
+- 分离：按 pos 数组每刻重建空间网格（192 单位插入 Dictionary[PackedInt32Array]
+  成本可忽略），批查询 + 推挤（替代逐单位 query_neighbors 分配风暴）。
+- 渲染代理同步：entity（CharacterBody2D）每帧从 sim 写回 global_position，
+  保留碰撞体供箭矢 Area2D/hitbox 检测；其自身物理停用。
+- 动画时序归 sim：sim 推进 `state_anim + anim_time`，命中帧事件在 sim 侧
+  按各攻击动画的事件时间表 crossing 检测（数据来自 rig 现有
+  get_anim_event_time 查询，缓存 Dictionary）→ 调 DamagePipeline；
+  渲染侧 rig 跟随 sim（状态切换时 play，T2 隐藏单位回显时 seek 对齐）。
+  这同时根治 T2 隐藏单位命中帧事件丢失问题。
+- AI：决策（0.3s 节流）与行为意图（已 15Hz 交错）保持现有 GDScript，
+  但读写改走 sim 数组 + sim 网格查询（消灭逐单位 Node 查找）。
+- 击退/死亡/伤害：全走 sim 数组；DamagePipeline 单入口语义不变；
+  死亡标记 → 渲染侧播死亡动画/淡出/collider 关闭。
+
+**开关与回滚**：ProjectSettings `sim/battle_sim`（默认开，环境变量
+STICK_BATTLE_SIM 兜底），关闭时走旧实体链（A/B 与回滚）。
+
+**批次**（每批独立验收可提交，battle_arena 48+96 实测）：
+- 批 1：BattleSim 骨架 + 移动/分离/边界迁移 + 代理同步。验收：48 峰值
+  phys ≤10ms、96 phys ≤30ms，fps 显著上升，移动观感无漂移，套件绿。
+- 批 2：武器冷却/命中/击退/死亡迁移（sim 驱动命中帧事件）。验收：战斗
+  全流程（伤害数字/击退/爆头/插箭/胜负）与旧路径行为一致，phys 进一步下降。
+- 批 3：AI 决策/行为意图读写改 sim + 目标选择批化 + 附身/工作/搬运等
+  非战斗行为兼容。验收：全行为回归 + 96 满编 ≥20fps。
+- 批 4：打磨（尸体/淡出/多战场实例/存档兼容）+ 全套件 + 总验收。
+
+**风险**：行为语义漂移（用 A/B 截图+战斗结果对照压）；击退/击退衰减时序；
+多战场 BattleInstance 并存（sim 每 battle 一份，天然隔离）；存档兼容
+（sim 状态不进存档，重开局重建）。
+
 ## 九、下一步任务分解（新会话从这接）
 
 1. ~~读火柴人骨架结构~~（已完成，见 §七）。

@@ -261,7 +261,10 @@ func _walk_and_emit(node: Node, parent_idx: int, limb_by_parent: Dictionary) -> 
 ## 局部变换预烘（容器变换 × 尺寸缩放），运行时只需再乘父骨骼 acc。
 ## 尺寸语义与旧 _build_limb 逐位对齐：
 ##   矩段 fill：Line2D 点距 length、宽 thickness*scale、圆头 → 总长 length+width；
-##   stroke：同点位宽 +2*OUTLINE。头部：r = max(length, width*2)/2，stroke 外扩 OUTLINE。
+##   stroke：同点位宽 +2*OUTLINE。
+##   注意：quad 网格边长 1（scale=边长），圆网格半径 1（**scale=半径**，直径要 ÷2）——
+##   Line2D 圆头直径=线宽、旧头部 Polygon2D 半径 r，故圆实例 scale 取 w/2、(w+4)/2、
+##   r、r+ow（半径语义）。头部：r = max(length, width*2)/2，stroke 外扩 OUTLINE。
 ## 桶下标：0=描边矩形 1=描边圆头 2=填充矩形 3=填充圆头。
 func _emit_limb(data: Dictionary, bone_pre_idx: int) -> void:
 	var node_type: int = int(data.get("type", -1))
@@ -273,22 +276,22 @@ func _emit_limb(data: Dictionary, bone_pre_idx: int) -> void:
 	if node_type == Skel.TYPE_CIRCLE:
 		var r := maxf(length, w * 2.0) / 2.0
 		var base := Transform2D(0.0, Vector2(data["x"], data["y"]))
-		_push(1, bone_pre_idx, base * _scale2(2.0 * (r + ow), 2.0 * (r + ow)), stroke_color)
-		_push(3, bone_pre_idx, base * _scale2(2.0 * r, 2.0 * r), fill_color)
+		_push(1, bone_pre_idx, base * _scale2(r + ow, r + ow), stroke_color)
+		_push(3, bone_pre_idx, base * _scale2(r, r), fill_color)
 		return
 	# 矩段：容器 = 段中点、旋向对齐父子骨骼连线（与旧 _build_limb 同式）
 	var dir := Vector2(data["x"], data["y"])
 	var base := Transform2D(dir.angle(), dir / 2.0)
 	var half := length / 2.0
-	# stroke：加宽加长的三件（中段 + 两端圆头）
+	# stroke：加宽的三件（中段 + 两端圆头）；圆头直径 = 线宽 → 圆实例 scale = 半径
 	var sw := w + ow * 2.0
 	_push(0, bone_pre_idx, base * _scale2(length, sw), stroke_color)
-	_push(1, bone_pre_idx, base * _shift_scale(Vector2(-half, 0.0), sw, sw), stroke_color)
-	_push(1, bone_pre_idx, base * _shift_scale(Vector2(half, 0.0), sw, sw), stroke_color)
+	_push(1, bone_pre_idx, base * _shift_scale(Vector2(-half, 0.0), sw / 2.0, sw / 2.0), stroke_color)
+	_push(1, bone_pre_idx, base * _shift_scale(Vector2(half, 0.0), sw / 2.0, sw / 2.0), stroke_color)
 	# fill：中段 + 两端圆头
 	_push(2, bone_pre_idx, base * _scale2(length, w), fill_color)
-	_push(3, bone_pre_idx, base * _shift_scale(Vector2(-half, 0.0), w, w), fill_color)
-	_push(3, bone_pre_idx, base * _shift_scale(Vector2(half, 0.0), w, w), fill_color)
+	_push(3, bone_pre_idx, base * _shift_scale(Vector2(-half, 0.0), w / 2.0, w / 2.0), fill_color)
+	_push(3, bone_pre_idx, base * _shift_scale(Vector2(half, 0.0), w / 2.0, w / 2.0), fill_color)
 
 
 func _push(bucket: int, bone_pre_idx: int, xform: Transform2D, color: Color) -> void:

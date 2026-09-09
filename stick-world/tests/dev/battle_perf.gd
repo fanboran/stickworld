@@ -3,11 +3,14 @@ extends Node
 ##
 ## 复用 battle_arena 的完整装配（GameRoot + battlefield + 编队推进互殴），
 ## 只是把观察场换成采样器：热身 8s（含刷兵级联），采样 20s，输出 JSON 后退出。
-## 用法（不要 --headless，需要真渲染）：
-##   godot --path . res://tests/dev/battle_perf.tscn --resolution 1920x1080
+## 用法（不要 --headless，需要真渲染；建议加 --audio-driver Dummy 关声音降噪）：
+##   godot --path . --resolution 1920x1080 res://tests/dev/battle_perf.tscn
+##   godot --path . --resolution 1920x1080 res://tests/dev/battle_perf.tscn -- --preset=1
+## 预设：--preset=0 遭遇战16 / =1 标准战役48（可玩基线）/ =2 大军压境96（默认）
 ## headless 模拟速率（无渲染噪声）：
 ##   godot --headless --path . res://tests/dev/battle_perf.tscn -- --headless-measure
-## 对比基线：git worktree 检出改动前提交跑同命令。
+## 对比基线：git worktree 检出改动前提交跑同命令；量测规范见
+## docs/技术/教程/性能量测规范.md（通道隔离/关声音/固定分辨率）。
 
 const ArenaScene := preload("res://tests/dev/battle_arena.tscn")
 const ArenaScript := preload("res://tests/dev/battle_arena.gd")
@@ -34,6 +37,8 @@ var _bodies_ghost: bool = false
 var _no_ai: bool = false
 var _freeze_entities: bool = false
 var _headless_measure: bool = false
+## --preset=N：0 遭遇战16 / 1 标准战役48 / 2 大军压境96（默认 2）
+var _preset_arg: int = 2
 var _applied: bool = false
 var _measure_start_ticks: int = 0
 var _measure_start_msec: int = 0
@@ -54,8 +59,11 @@ func _ready() -> void:
 				_freeze_entities = true
 			"--headless-measure":
 				_headless_measure = true
-	# 大军压境·96 预设（static 跨实例生效，重开保持同档）
-	ArenaScript._preset_idx = 2
+			_ when str(a).begins_with("--preset="):
+				var pv := int(a.get_slice("=", 1))
+				_preset_arg = clampi(pv, 0, 2)
+	# 预设（static 跨实例生效，重开保持同档）
+	ArenaScript._preset_idx = _preset_arg
 	var arena: Node = ArenaScene.instantiate()
 	add_child(arena)
 
@@ -191,7 +199,7 @@ func _report() -> void:
 	var median: float = sorted[sorted.size() / 2]
 	var p05: float = sorted[maxi(0, int(sorted.size() * 0.05))]
 	print("[PERF] %s" % str({
-		"preset": "大军压境·96(96v96)",
+		"preset": ["遭遇战16(16v16)", "标准战役48(48v48)", "大军压境96(96v96)"][_preset_arg],
 		"samples": _samples.size(),
 		"fps_avg": snappedf(avg, 0.1),
 		"fps_median": median,

@@ -4,7 +4,7 @@ extends Node
 ## 职责：
 ## - 初始建筑（读 InitialBuildingsList，直接创建 OPERATIONAL 状态建筑）
 ## - 村庄仓库预置
-## - NPC 村民生成
+## - NPC 村民生成（含职业分配与着装，经 TownLifeAPI，town_life 模块实现）
 ## - 遭遇战战场敌方生成（红色阵营 + 启动战斗）
 ## - 火柴人身体颜色设置
 ##
@@ -57,15 +57,27 @@ func spawn_initial_warehouse() -> void:
 
 # ─────────────────────────────── NPC 生成 ────────────────────────────────
 
-## 生成 NPC 村民，分布在玩家右侧不同 X 位置，不附身（AI 接管）。
+## 生成 NPC 村民，按职业分布两簇落脚（批次 4 配比分配），不附身（AI 接管）。
+##
+## 分布设计（[提案/待定]，依据 village_a 布局：硬化区 -1280~1280、仓库
+## X 480~992、铁匠占位工位 X=1120、右城墙 1900、左侧森林带 -2160~-1280）：
+##   - 右簇（i=0~4）：1100 + 180*i → 1100~1820，贴铁匠占位工位与仓库右缘
+##     （沿用批次 1~3 的村民区，避开仓库 PassageBarrier）；
+##   - 左簇（i=5~9）：-250 - 180*(i-5) → -250~-970，靠左侧资源带方向——
+##     伐木/挖矿的劳作点在村外森林，就近落脚少跑通勤。
+## 超界 fallback 保留（其他地图复用时防越界）。
 func spawn_npcs(map: Node2D, spawn_y: float) -> void:
-	# NPC 生成在东侧民居右缘之外，避开民居 PassageBarrier（cell 17~33, X 544~1088）
+	# NPC 生成在东侧民居右缘之外，避开民居 PassageBarrier（cell 17~33, X 544~1088，
+	# 建筑与美术升级线批次 6 布局）；右簇起点 1100 与两簇设计对齐（铁匠工位 X=1120）
 	var npc_start_x: float = 1100.0
+	var npcs: Array = []
 	for i in _root.NPC_COUNT:
-		var x: float = npc_start_x + 200.0 * i
-		# 确保在地图边界内
+		var x: float = npc_start_x + 180.0 * float(i) if i < 5 else -250.0 - 180.0 * float(i - 5)
+		# 确保在地图边界内（village_a 右簇最远 1770 < map_right-100=2060，不触发）
 		if x > map.map_right - 100.0:
 			x = npc_start_x + randf_range(0.0, 400.0)
+		elif x < map.map_left + 100.0:
+			x = randf_range(-400.0, -100.0)
 		var npc: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
 		if npc != null:
 			# 修正 Y：让脚部对齐 spawn_y
@@ -79,6 +91,29 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 			# 注入 FormationSystem 引用（编队职责查询，AIController 决策过滤）
 			if npc.has_method("set_formation_system") and _root._formation_system != null:
 				npc.set_formation_system(_root._formation_system)
+			# 村民身份标志（批次 4）：与职业解耦——待业/被征用离岗后仍是村民
+			#（wander 闲逛作用域），战斗/敌方单位无此标志（duck 写入，无类型依赖）
+			npc.set("is_villager", true)
+			npcs.append(npc)
+	# 批量配比分配（town_life 模块：各职业不超过 min(quota, 工位容量)，
+	# 配额满待业 wander；契约见 modules/town_life/api.gd）
+	var stats: Dictionary = TownLifeAPI.assign_village_jobs(npcs)
+	# stdout 证据：配比总览 + 逐村民职业/工位（视觉/日志验收材料）
+	print("[TownLife] 村庄配比: 在职=%s 待业=%d（共 %d 人）" % [stats.get("jobs", {}), stats.get("idle", 0), npcs.size()])
+	for npc in npcs:
+		if npc == null or not is_instance_valid(npc):
+			continue
+		var pid := String(npc.get_profession()) if npc.has_method("get_profession") else ""
+		if pid.is_empty():
+			print("[TownLife]   %s 待业（村庄闲逛）" % npc.name)
+			continue
+		var prof: Dictionary = TownLifeAPI.get_profession(pid)
+		var site_desc: String = "资源点(%s)" % prof.get("product", "?")
+		var site_def := String(prof.get("work_site_def", ""))
+		if not site_def.is_empty():
+			var site: Dictionary = TownLifeAPI.get_work_site(npc, site_def)
+			site_desc = "工位 X=%d" % int((site.get("pos", Vector2()) as Vector2).x) if not site.is_empty() else "无可用工位"
+		print("[TownLife]   %s 职业=%s(%s) %s" % [npc.name, prof.get("name_zh", pid), pid, site_desc])
 
 
 # ─────────────────────────────── 战场敌人 ────────────────────────────────

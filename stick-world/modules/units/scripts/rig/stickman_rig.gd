@@ -70,6 +70,8 @@ var _current_anim: String = ANIM_IDLE
 var _weapon_r: Node2D
 var _weapon_l: Node2D
 var _rebuild_pending: bool = false
+## 描边补偿当前已应用的画布缩放（-1 = 未初始化，首帧强制应用一次）
+var _outline_canvas_scale: float = -1.0
 ## 受击插播计时（>0 表示正在受击动画，倒计时结束后回切到 _hit_return_to）
 var _hit_timer: float = -1.0
 ## 死亡终态（2026-08-31 观察场审计）：dead/dead_headshot 播出后置位，
@@ -123,6 +125,10 @@ func _process(_delta: float) -> void:
 	if _rebuild_pending:
 		_rebuild_pending = false
 		_do_rebuild()
+	# 描边屏幕像素恒定：画布缩放变化时批量刷描边宽（缩放变化=滚轮/改窗，低频事件；
+	# 平时每帧只有一次取矩阵+浮点比较的开销。编辑器内不补偿，保持设计空间观感）
+	if not Engine.is_editor_hint():
+		_update_outline_zoom()
 	# 受击插播倒计时：动画播完回切到受击前状态（反编译参考实装 B）
 	if _hit_timer > 0.0:
 		_hit_timer -= _delta
@@ -357,6 +363,25 @@ func _refresh_weapon(bone_id: int) -> void:
 
 func _do_rebuild() -> void:
 	Skeleton.apply_colors(_sprites, _make_colors())
+	# 重建不涉及描边宽度，但 thickness_scale 变更会重建填充宽——
+	# 强制下帧重应用当前画布缩放的描边补偿（否则按旧缓存跳过，描边回退设计宽）
+	_outline_canvas_scale = -1.0
+
+
+## 描边屏幕像素恒定：画布缩放（Camera2D.zoom，含分辨率适配）变化时批量刷新
+## 描边宽。检测用"每帧取一次画布变换缩放 + 浮点比较"，写入只在变化帧发生
+## （百人同屏一帧 ~千次属性写，滚轮缩放低频，成本可忽略）。
+func _update_outline_zoom() -> void:
+	if _sprites.is_empty() or not is_inside_tree():
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var s: float = vp.get_canvas_transform().get_scale().x
+	if absf(s - _outline_canvas_scale) < 0.001:
+		return
+	_outline_canvas_scale = s
+	Skeleton.apply_outline_zoom(_sprites, Skeleton.outline_world_width(s))
 
 
 # ============================================================

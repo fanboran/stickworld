@@ -1,0 +1,107 @@
+{
+  "_notes": [
+    "八城 landmarks/character/tone/decor 配比为 AI 提案（提案/待定），批次 4 全量精调；性格命名只作开发期辨识，未经创始人确认为世界观设定。",
+    "性格依据 l1_world.json 的城名/位置/水系距离：近河城配 dock，人口大城配 market+smith，conquest 城守 reserve+barracks。",
+    "批次 4 三轴性格化（沿 judge 建议拉开，差异在氛围不在画风、同属 L1 文化圈）：",
+    "  轴一 分带构成：road_h 土路宽窄 / density 民居密度 / market 条目 dict 形式 plaza 覆盖（石板广场大小）/ decor.farmland 农田（true=1 块、int n=最多 n 块）。",
+    "  轴二 装饰密度：decor.lamp_count·lamp_spacing（路灯）/ trees·bushes（绿植）/ clutter_market·clutter_warehouse（杂物量）/ clutter_mix（barrel·crate·hay 三类权重）。",
+    "  轴三 时段/色调：tone 引用 city_decor.TONES 档位（noon 正午 / dawn 清晨冷青 / gold 午后暖金 / dusk 黄昏粉橙 / overcast 阴雾铁灰），渲染端统一乘 PALETTE 取色（±10% 内轻量偏移，不换皮不换 shader）；天空/昼夜循环是全局系统不逐城调。",
+    "landmark 类型→建筑 def 的映射在 city_layout.py LANDMARK_DEFS（[占位] 标注 = 待 A 线真 def 替换）。",
+    "T2 镇（00/06）不得配 barracks（test_settlement_entry 布局断言：T2 无兵营）。",
+    "渲染层级契约：地面分带(TerrainLayer) < DecorationLayer(装饰物件) < BuildingHost(建筑) < EntityHost(单位)，详见 tools/worldgen/l1/README.md。"
+  ],
+  "defaults": {
+    "ground_y": 810,
+    "cell_w": 32,
+    "edge_cells": 8,
+    "wall_band_len": 24,
+    "house_width": 4,
+    "density": 0.7,
+    "tone": "noon",
+    "decor": {
+      "road_h": 110,
+      "lamp_count": 10,
+      "lamp_spacing": 210,
+      "trees": 10,
+      "bushes": 16,
+      "clutter_market": 7,
+      "clutter_warehouse": 4,
+      "clutter_mix": [0.4, 0.4, 0.2],
+      "farmland": false
+    }
+  },
+  "sizes": {
+    "hamlet": {"grid_width": 80, "width_px": 2560},
+    "town": {"grid_width": 128, "width_px": 4096},
+    "city": {"grid_width": 192, "width_px": 6144}
+  },
+  "cities": {
+    "l1_settlement_00": {
+      "character": "河口渔村（AI提案·待定）：西北小镇临河，渔获仓储为生。晨雾疏朗——窄径疏灯、河岸树丛芦苇密、木桶渔具散置",
+      "size": "town", "wall_tier": 1, "seed": 611033, "density": 0.55, "tone": "dawn",
+      "landmarks": ["gate", "warehouse", "dock"], "conquest_anchor": false,
+      "decor": {"road_h": 80, "lamp_count": 4, "lamp_spacing": 260, "trees": 12, "bushes": 22,
+                 "clutter_market": 0, "clutter_warehouse": 5, "clutter_mix": [0.55, 0.2, 0.25]},
+      "_tuning": "渔村疏朗：密度 0.55 民居稀；窄径 80 疏灯 4 盏=村道尺度；绿植偏密（河岸）；无 market 无石板；木桶权重高=渔获桶"
+    },
+    "l1_settlement_01": {
+      "character": "河港商城（AI提案·待定）：北境大河港，市场+铁匠区+码头齐备的富庶大城。正午明快——灯市密集、大石板广场、货物流通",
+      "size": "city", "wall_tier": 2, "seed": 611034, "density": 0.75, "tone": "noon",
+      "landmarks": ["gate", {"type": "market", "plaza": 4}, "smith", "warehouse", "barracks", "dock"],
+      "conquest_anchor": false,
+      "decor": {"road_h": 130, "lamp_count": 14, "lamp_spacing": 170, "trees": 8, "bushes": 12,
+                 "clutter_market": 10, "clutter_warehouse": 5},
+      "_tuning": "富庶商城：密度 0.75 民居稠；主街 130 宽（商道）；灯 14 盏密布=夜市繁华；market plaza 4=全区最大石板广场；杂物双高（集市 10/仓储 5）"
+    },
+    "l1_settlement_02": {
+      "character": "湖畔军镇（AI提案·待定）：东境湖泊畔的驻防城，集市供养驻军。阴雾铁灰——军纪规整、绿植收束、军资箱堆仓",
+      "size": "city", "wall_tier": 2, "seed": 611035, "density": 0.65, "tone": "overcast",
+      "landmarks": ["gate", {"type": "market", "plaza": 2}, "warehouse", "barracks"], "conquest_anchor": true,
+      "decor": {"road_h": 90, "lamp_count": 8, "lamp_spacing": 200, "trees": 6, "bushes": 8,
+                 "clutter_market": 5, "clutter_warehouse": 6, "clutter_mix": [0.3, 0.6, 0.1]},
+      "_tuning": "军镇肃穆：overcast 铁灰档；窄路 90=行军纪律；绿植最少（开阔射界）；market plaza 2=小集市（供养驻军即可）；货箱权重 0.6=军资"
+    },
+    "l1_settlement_03": {
+      "character": "家园主城（AI提案·待定）：玩家出生城，功能最全的门户型大城。正午明快、人烟稠密——大石板广场迎宾客",
+      "size": "city", "wall_tier": 2, "seed": 611036, "density": 0.9, "house_width": 3, "house_gap": 2, "lane_gap": 3, "tone": "noon",
+      "landmarks": ["gate", {"type": "market", "plaza": 4}, "smith", "warehouse", "barracks"], "conquest_anchor": true,
+      "decor": {"road_h": 130, "lamp_count": 12, "lamp_spacing": 190, "trees": 10, "bushes": 16,
+                 "clutter_market": 9, "clutter_warehouse": 5},
+      "_tuning": "门户型：密度 0.78 全区最高（修批次 2 民居 4~6 座偏稀）；路灯集市杂物次密；market plaza 4 与 01 并列最大；杂物配比走默认（均衡）"
+    },
+    "l1_settlement_04": {
+      "character": "矿冶工堡（AI提案·待定）：中部湖东工坊堡，铁匠区供养军械。烟尘铁灰——矿车大道、童山濯濯、货箱成山",
+      "size": "city", "wall_tier": 2, "seed": 611037, "density": 0.6, "tone": "overcast",
+      "landmarks": ["gate", "smith", "warehouse", "barracks"], "conquest_anchor": true,
+      "decor": {"road_h": 150, "lamp_count": 6, "lamp_spacing": 240, "trees": 4, "bushes": 6,
+                 "clutter_market": 0, "clutter_warehouse": 9, "clutter_mix": [0.25, 0.75, 0.0]},
+      "_tuning": "矿业性格：overcast 烟尘档（与 02 同档不同配比）；主街 150 全区最宽=矿车大道；树 4 灌木 6 全区最少（冶炼城童山）；货箱权重 0.75+仓储杂物 9=矿料箱山；无 market 无石板"
+    },
+    "l1_settlement_05": {
+      "character": "河东商埠（AI提案·待定）：远东河畔商埠，集市+码头的贸易城。午后暖金——斜阳商道、灯密货足",
+      "size": "city", "wall_tier": 2, "seed": 611038, "density": 0.75, "tone": "gold",
+      "landmarks": ["gate", {"type": "market", "plaza": 3}, "warehouse", "barracks", "dock"],
+      "conquest_anchor": false,
+      "decor": {"road_h": 120, "lamp_count": 13, "lamp_spacing": 180, "trees": 9, "bushes": 14,
+                 "clutter_market": 10, "clutter_warehouse": 5, "clutter_mix": [0.45, 0.35, 0.2]},
+      "_tuning": "贸易商埠：gold 斜阳档；灯 13 盏次密；market plaza 3 集市+杂物 10 全区并列最高；密度 0.75 商住稠密"
+    },
+    "l1_settlement_06": {
+      "character": "南路粮集（AI提案·待定）：西南农业镇，粮仓与集市的集散地。秋收暖金——粮车宽道、田垄两块、干草成堆",
+      "size": "town", "wall_tier": 1, "seed": 611039, "density": 0.6, "tone": "gold",
+      "landmarks": ["gate", {"type": "market", "plaza": 3}, "warehouse"], "conquest_anchor": false,
+      "decor": {"road_h": 140, "lamp_count": 6, "lamp_spacing": 190, "trees": 5, "bushes": 10,
+                 "clutter_market": 9, "clutter_warehouse": 6, "clutter_mix": [0.2, 0.25, 0.55],
+                 "farmland": 2},
+      "_tuning": "粮集性格：gold 秋收档（与 05 同档不同配比）；粮车道 140 次宽；farmland 2=全区唯一多田块城（田块数口子）；干草权重 0.55=粮垛；绿植少（开垦地）"
+    },
+    "l1_settlement_07": {
+      "character": "南渡口城（AI提案·待定）：南境渡口城，铁匠区+码头扼守南路。黄昏粉橙——渡口灯火、酒桶堆岸",
+      "size": "city", "wall_tier": 2, "seed": 611040, "density": 0.65, "tone": "dusk",
+      "landmarks": ["gate", "smith", "warehouse", "barracks", "dock"], "conquest_anchor": false,
+      "decor": {"road_h": 120, "lamp_count": 12, "lamp_spacing": 180, "trees": 8, "bushes": 12,
+                 "clutter_market": 0, "clutter_warehouse": 6, "clutter_mix": [0.5, 0.3, 0.2]},
+      "_tuning": "渡口黄昏：dusk 档正式登记（粉调天空=全局昼夜黄昏档表现，本城地面氛围随之定调，主会话已确认保留）；灯 12 盏=渡口夜航灯；木桶权重 0.5=酒桶岸；无 market 无石板"
+    }
+  }
+}

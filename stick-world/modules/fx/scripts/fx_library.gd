@@ -280,8 +280,8 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 	# 恒定屏上尺寸：基准字号除以相机 zoom 再钳制；inv_zoom 同比例缩放偏移量
 	var cam := tree.root.get_viewport().get_camera_2d()
 	var zoom: float = clampf(cam.zoom.x if cam != null else 1.0, 0.35, 3.0)
-	var base_px: float = 34.0 if crit else 24.0
-	var font_px: int = int(round(clampf(base_px / zoom, 22.0, 56.0)))
+	var base_px: float = 17.0 if crit else 12.0
+	var font_px: int = int(round(clampf(base_px / zoom, 11.0, 28.0)))
 	var inv_zoom: float = float(font_px) / base_px
 	label.visible = true
 	label.text = str(int(round(amount)))

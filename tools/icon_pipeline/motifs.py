@@ -347,7 +347,7 @@ def _m_heart():
     rm.voxel_size = 0.05
     ss = ob.modifiers.new('subdiv', 'SUBSURF')
     ss.levels = 1
-    ss.render_levels = 2
+    ss.render_levels = 3
     puff = ob.modifiers.new('puff', 'CAST')
     try:
         if puff.type != 'SPHERE':

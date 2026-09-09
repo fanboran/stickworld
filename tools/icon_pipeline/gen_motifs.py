@@ -267,51 +267,43 @@ def _ink_mat():
     emi = nt.nodes.new('ShaderNodeEmission')
     emi.inputs[0].default_value = (18 / 255, 14 / 255, 9 / 255, 1.0)
     nt.links.new(emi.outputs[0], out.inputs[0])
-    m.use_backface_culling = True
     return m
 
 
 def build_ink_shells(scene, target):
-    """反向壳描边（C 阶段，取代图像域外轮廓环）：
-    - 对场景每个 mesh 复制一份（修改器栈随对象复制，bevel 等形状保留），
-      追加 SOLIDIFY 沿法线外扩成壳，材质=纯墨+背面剔除；
-    - 5.2 的 Solidify 无独立法线翻转开关，用 use_flip 探测，失败则 bmesh
-      反转壳网格法线（基面反转后 offset=-1 语义即向外）；
-    - 壳边缘=几何边缘，MSAA 真抗锯齿（ShaderToRGB 会关 MSAA，图像域描边
-      拿不到的 AA 几何线白送）；墨线与形体轮廓零对位误差（双层线根除）；
-    - 壳不带 pid：ID pass 前 hide_render，ID 渲完在 shade 里可见；
-    - 线宽按目标尺寸参数化（世界单位 thickness=ortho_scale×px/target）"""
+    """反向壳描边（C 阶段）：取每个 mesh「修改器求值后」的几何，顶点沿法线
+    外推 thickness、面序反转，得到比原体大一圈的墨壳；单独渲 ink pass，
+    compose「cel 在上、墨壳在下」只露外圈。壳边=几何边，MSAA 真抗锯齿。
+    不用 SOLIDIFY/背面剔除：EEVEE Next DITHERED 延迟管线不理会剔除，
+    5.2 的 solidify offset/use_flip 组合实测外扩为零（壳剪影与原体逐像素
+    重合），故直接对求值几何做法线位移，确定性成立。
+    线宽按目标尺寸参数化：thickness=ortho_scale×px/target（世界单位）。"""
     import bmesh
     cam = scene.camera
     px = {64: 2.2, 128: 2.6, 256: 3.0}.get(target, 2.2)
     thickness = cam.data.ortho_scale * px / target
     ink = _ink_mat()
+    deps = bpy.context.evaluated_depsgraph_get()
     for o in list(scene.objects):
         if o.type != 'MESH' or o.get('is_ink_shell'):
             continue
-        sh = o.copy()                  # 修改器栈随对象复制
-        sh.data = o.data.copy()        # 网格数据独立（材质可安全替换）
+        oe = o.evaluated_get(deps)
+        me = oe.to_mesh()
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        oe.to_mesh_clear()
+        bm.normal_update()
+        for v in bm.verts:
+            v.co += v.normal * thickness
+        bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+        sh_mesh = bpy.data.meshes.new(f"{o.name}_ink_shell")
+        bm.to_mesh(sh_mesh)
+        bm.free()
+        sh = bpy.data.objects.new(f"{o.name}_ink_shell", sh_mesh)
         sh['is_ink_shell'] = 1
-        sol = sh.modifiers.new('ink_shell', 'SOLIDIFY')
-        sol.thickness = thickness
-        sol.offset = -1
-        flipped = False
-        try:
-            sol.use_flip = True        # 5.2 探测：直接反转壳法线
-            flipped = True
-        except AttributeError:
-            pass
-        if not flipped:
-            bm = bmesh.new()
-            bm.from_mesh(sh.data)
-            bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
-            bm.to_mesh(sh.data)
-            bm.free()
-        sh.data.materials.clear()
+        sh.matrix_world = o.matrix_world.copy()
         sh.data.materials.append(ink)
         scene.collection.objects.link(sh)
-    return thickness
-
 
 def render_two(scene, tag, t, classic=False, margin=1.06):
     """shade pass：平面物体面烘色、曲面物体 toon 着色器分档（输出即 cel 灰阶

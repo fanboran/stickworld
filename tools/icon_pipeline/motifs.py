@@ -537,27 +537,29 @@ def _m_signpost():
 # ── 经济资源 ────────────────────────────────────────────────────────────────
 @motif("bread", "面包")
 def _m_bread():
-    # 斜置长棍+侧面割痕（枕形割痕在俯视角只露点读不出）
-    cap(0.23, 1.05, (0, 0, 0.42), rot=(0, math.radians(90), math.radians(-24)), pid=8)
-    for t in (-0.34, 0.0, 0.34):
-        px = t * math.cos(math.radians(66))
-        py = -t * math.sin(math.radians(66))
-        box((0.055, 0.055, 0.26), (px, py, 0.55), rot=(0, 0, math.radians(66)), pid=3)
+    # 圆枕吐司（金皮）+顶弧三道斜割痕（深色）——面包图式直给
+    cap(0.30, 0.78, (0, 0, 0.36), rot=(0, math.radians(90), math.radians(-12)), pid=8)
+    sph(0.30, (-0.02, 0, 0.34), scale=(0.72, 1.35, 0.62), pid=8)                # 中段隆起
+    for t in (-0.16, 0.0, 0.16):
+        px = t * math.cos(math.radians(78))
+        py = -t * math.sin(math.radians(78))
+        box((0.06, 0.06, 0.20), (px, py, 0.63), rot=(0, math.radians(12), math.radians(78)), pid=3)
 
 
 @motif("gold_coin", "金币")
 def _m_gold_coin():
-    # 西式金币堆（三枚小角度错叠，旧 44° 大转差+星歪斜塌成薯片）
-    for i, (z, ry) in enumerate(((0.10, 0.0), (0.26, math.radians(14)), (0.42, math.radians(28)))):
-        cyl(0.42 - i * 0.02, 0.13, (0, 0, z), rot=(math.radians(90), 0, ry), pid=8)
-        tor(0.40 - i * 0.02, 0.034, (0, 0, z), rot=(math.radians(90), 0, ry), pid=8)
-    pts = []   # 顶枚五角星浮雕：随顶枚同角度转，chaikin=0 保星角尖锐
+    # 单枚大金币微倾（读法最清晰）+内缘环+五角星浮雕；背后两枚薄边暗示钱堆
+    cyl(0.44, 0.12, (0, 0, 0.44), rot=(math.radians(90), 0, math.radians(-10)), pid=8)
+    tor(0.355, 0.028, (0, 0, 0.44), rot=(math.radians(90), 0, math.radians(-10)), pid=7)
+    for z, ry, dx in ((0.30, math.radians(18), 0.10), (0.60, math.radians(6), -0.08)):
+        cyl(0.42, 0.09, (dx, 0, z), rot=(math.radians(90), 0, ry), pid=8)
+    pts = []
     for k in range(10):
         a = math.radians(90 + k * 36)
-        r = 0.20 if k % 2 == 0 else 0.088
-        pts.append((math.cos(a) * r, math.sin(a) * r, 0.075))
-    tube(pts, 0.028, pid=6, chaikin=0, closed=True,
-         loc=(0, 0, 0.42), rot=(math.radians(90), 0, math.radians(28)))
+        r = 0.21 if k % 2 == 0 else 0.092
+        pts.append((math.cos(a) * r, math.sin(a) * r, 0.065))
+    tube(pts, 0.030, pid=6, chaikin=0, closed=True,
+         loc=(0, 0, 0.44), rot=(math.radians(90), 0, math.radians(-10)))
 
 
 @motif("ore", "矿石")
@@ -593,14 +595,17 @@ def _m_apple():
 
 @motif("wheat", "麦穗")
 def _m_wheat():
-    # 收成/农业 UI：麦秆+交错麦粒+叶
-    tube([(0, 0, 0), (0.02, 0, 0.55), (0.0, 0, 1.05)], 0.035, pid=5, chaikin=2)
-    for i in range(6):
-        z = 0.72 + i * 0.115
-        s = 1 - i * 0.075
-        cap(0.055 * s, 0.17, (0.055 * s, 0, z), rot=(0, math.radians(-34), 0), pid=8)
-        cap(0.055 * s, 0.17, (-0.055 * s, 0, z + 0.055), rot=(0, math.radians(34), 0), pid=8)
-    sph(0.16, (0.15, 0, 0.28), scale=(0.8, 0.10, 0.30), rot=(0, 0, math.radians(38)), pid=5)
+    # 收成/农业 UI：穗粒占满画幅（旧整穗细窄主体过小）——麦秆粗+双层交错
+    # 长麦粒（capsule 斜插=经典麦穗图式）+对生叶
+    tube([(0, 0, 0), (0.01, 0, 0.45), (0.0, 0, 0.62)], 0.055, pid=5, chaikin=2)
+    for i in range(5):
+        z = 0.66 + i * 0.155
+        s = 1 - i * 0.10
+        cap(0.085 * s, 0.30, (0.090 * s, 0, z), rot=(0, math.radians(-38), 0), pid=8)
+        cap(0.085 * s, 0.30, (-0.090 * s, 0, z + 0.070), rot=(0, math.radians(38), 0), pid=8)
+    cap(0.060, 0.22, (0, 0, 1.48), rot=(0, math.radians(90), 0), pid=8)         # 顶粒
+    sph(0.30, (0.34, 0, 0.24), scale=(0.75, 0.10, 0.32), rot=(0, 0, math.radians(52)), pid=5)
+    sph(0.30, (-0.34, 0, 0.30), scale=(0.75, 0.10, 0.32), rot=(0, 0, math.radians(-52)), pid=5)
 
 
 # ── 组织权力 ────────────────────────────────────────────────────────────────
@@ -655,10 +660,12 @@ def _m_chair():
 
 @motif("whistle", "哨子")
 def _m_whistle():
-    # 豌豆哨：横筒+同轴侧吹嘴+尾环（旧吹嘴竖在背上读不出哨）
-    cyl(0.19, 0.42, (0.14, 0, 0.40), rot=(0, math.radians(90), 0), pid=8)
-    box((0.32, 0.15, 0.10), (-0.22, 0, 0.44), rot=(0, math.radians(-8), 0), bev=0.03, pid=8)
-    tor(0.11, 0.035, (0.44, 0, 0.40), rot=(0, math.radians(90), 0), pid=8)
+    # 裁判哨 45° 斜持：大圆腔（球缺口）+斜上吹嘴+珠芯+尾部指环，标志剪影
+    sph(0.26, (0.02, 0, 0.40), pid=8)                                           # 圆腔主体
+    box((0.30, 0.30, 0.15), (0.24, 0, 0.56), rot=(0, math.radians(-32), 0), bev=0.03, pid=8)  # 吹嘴（短）
+    cyl(0.17, 0.06, (0.02, -0.26, 0.40), rot=(math.radians(90), 0, 0), pid=6)   # 前口面（白）
+    sph(0.105, (0.02, -0.22, 0.40), pid=6)                                      # 珠芯（白）
+    tor(0.10, 0.045, (-0.28, 0, 0.32), rot=(0, math.radians(90), 0), pid=3)     # 尾指环（棕）
     sph(0.05, (0.10, 0, 0.60), pid=7)                                           # 哨孔
 
 
@@ -954,23 +961,28 @@ def _m_helmet():
 
 @motif("sling", "弹弓")
 def _m_sling():
-    # Y 收紧+皮筋 V 兜石下拉（旧平弧兜+悬球读不出弹弓发力）
-    cyl(0.09, 0.60, (0, 0, 0.30), pid=3)
-    tube([(0, 0, 0.56), (-0.13, 0, 0.92), (-0.18, 0, 1.18)], 0.075, pid=3, chaikin=2)
-    tube([(0, 0, 0.56), (0.13, 0, 0.92), (0.18, 0, 1.18)], 0.075, pid=3, chaikin=2)
-    tube([(-0.18, 0, 1.14), (0, 0, 0.80), (0.18, 0, 1.14)], 0.045, pid=4, chaikin=2)
-    sph(0.11, (0, 0, 0.84), pid=7)
+    # 粗壮丫杈弹弓：柄+双臂管径加倍+皮筋 V 兜宽皮兜包石弹（发力图式直给）
+    cyl(0.12, 0.62, (0, 0, 0.30), pid=3)
+    tube([(0, 0, 0.55), (-0.16, 0, 0.95), (-0.22, 0, 1.22)], 0.105, pid=3, chaikin=2)
+    tube([(0, 0, 0.55), (0.16, 0, 0.95), (0.22, 0, 1.22)], 0.105, pid=3, chaikin=2)
+    tube([(-0.22, 0, 1.16), (0, 0, 0.82), (0.22, 0, 1.16)], 0.055, pid=4, chaikin=2)
+    sph(0.15, (0, 0, 0.86), pid=7)                                              # 石弹（兜中）
 
 
 @motif("cannon", "小炮")
 def _m_cannon():
-    # 炮管 30° 仰角；轮子必须在炮管正下方（旧轮炮水平错位读成两件套）
-    ax = math.radians(30)
-    cyl(0.155, 0.88, (-0.10, 0, 0.58), rot=(0, ax, 0), pid=2)
-    cyl(0.19, 0.10, (-0.10 + math.sin(ax) * 0.44, 0, 0.58 + math.cos(ax) * 0.44),
+    # 三件分层：短粗炮管 35° 仰角+大轮居中（辐条清晰）+尾撑
+    ax = math.radians(35)
+    cyl(0.19, 0.72, (-0.16, 0, 0.60), rot=(0, ax, 0), pid=2)
+    cyl(0.235, 0.12, (-0.16 + math.sin(ax) * 0.36, 0, 0.60 + math.cos(ax) * 0.36),
         rot=(0, ax, 0), pid=7)                                                  # 炮口箍
-    sph(0.13, (-0.10 - math.sin(ax) * 0.44, 0, 0.58 - math.cos(ax) * 0.44), pid=2)  # 尾球
-    box((0.88, 0.24, 0.09), (-0.06, 0, 0.36), rot=(0, math.radians(-30), 0), pid=3) # 炮架
+    sph(0.16, (-0.16 - math.sin(ax) * 0.36, 0, 0.60 - math.cos(ax) * 0.36), pid=2)  # 尾球
+    cyl(0.30, 0.14, (0.02, 0, 0.30), rot=(math.radians(90), 0, 0), pid=3)       # 大轮
+    for k in range(4):                                                          # 轮辐
+        aa = math.radians(k * 45)
+        box((0.05, 0.16, 0.50), (0.02, 0, 0.30), rot=(aa, 0, 0), pid=3)
+    box((0.10, 0.22, 0.62), (0.02, 0, 0.31), pid=3)                             # 轮轴芯
+    box((0.62, 0.20, 0.08), (0.05, 0, 0.10), rot=(0, math.radians(-14), 0), pid=3)  # 尾撑
     for y in (-0.26, 0.26):
         cyl(0.19, 0.06, (-0.10, y, 0.19), rot=(math.radians(90), 0, 0), pid=7)  # 轮（居中）
         tor(0.19, 0.04, (-0.10, y, 0.19), rot=(math.radians(90), 0, 0), pid=3)  # 轮辋
@@ -1035,13 +1047,13 @@ def _m_tent():
 
 @motif("campfire", "篝火")
 def _m_campfire():
-    # 火舌收窄拉高+柴火加大外露（旧火焰太圆+柴埋没）
+    # 火舌缩小让位（0.78→0.60，宽 34px→26px：火是配角柴是主角）+柴火加大外露
     for a in (0, 60, 120):
-        cyl(0.09, 0.92, (0, 0, 0.06), rot=(math.radians(90), 0, math.radians(a)), pid=3)
-    flame = drop_mesh(0.78, (0, 0, 0.10), pid=4, extrude=0.20, bevel=0.06)
-    flame.scale = (1.0, 1.15, 1.0)   # 局部 Y=世界 Z（rotX90 后），拉高火舌
-    flame['fire'] = 1                # 按世界高度三分灰：核心亮-中焰-焰尖暗（分层 toon 火）
-    inner = drop_mesh(0.45, (0, -0.06, 0.28), pid=8, extrude=0.16, bevel=0.05)  # 内焰金（前置）
+        cyl(0.10, 1.00, (0, 0, 0.06), rot=(math.radians(90), 0, math.radians(a)), pid=3)
+    flame = drop_mesh(0.60, (0, 0, 0.08), pid=4, extrude=0.16, bevel=0.05)
+    flame.scale = (1.0, 1.25, 1.0)   # 局部 Y=世界 Z（rotX90 后），收窄拉高
+    flame['fire'] = 1                # 独立 fire pass：平滑渐变发光（核心亮黄→橙→焰尖暗红）
+    inner = drop_mesh(0.34, (0, -0.05, 0.22), pid=8, extrude=0.13, bevel=0.04)  # 内焰金（前置）
     inner['fire'] = 1
 
 
@@ -1102,11 +1114,13 @@ def _m_button_hand():
 
 @motif("foxtail", "狗尾巴草")
 def _m_foxtail():
-    # 单穗两段渐细沿秆向（旧两段错位读成两根肠）+叶角抬高
-    tube([(0, 0, 0), (0.02, 0, 0.45), (0.06, 0, 0.85), (0.12, 0, 1.08)], 0.035, pid=5, chaikin=2)
-    cap(0.075, 0.34, (0.20, 0, 1.22), rot=(0, math.radians(-24), 0), pid=3)
-    cap(0.048, 0.20, (0.31, 0, 1.44), rot=(0, math.radians(-24), 0), pid=3)
-    sph(0.20, (0.04, 0, 0.36), scale=(0.85, 0.08, 0.36), rot=(0, 0, math.radians(58)), pid=5)
+    # 弯秆垂穗（狗尾草图式：秆弯+穗大垂头）+两片对生叶；穗=胶囊+短芒圈
+    tube([(0, 0, 0), (0.05, 0, 0.50), (0.14, 0, 0.95), (0.16, 0, 1.16)], 0.055, pid=5, chaikin=2)
+    cap(0.115, 0.58, (0.24, 0, 1.32), rot=(0, math.radians(-42), 0), pid=3)     # 大穗（微垂）
+    for dx, dz in ((0.09, 0.28), (-0.02, 0.32), (0.06, 0.38)):
+        cap(0.035, 0.22, (0.40 - dx, 0, 1.28 + dz), rot=(0, math.radians(-48), 0), pid=3)
+    sph(0.34, (-0.20, 0, 0.42), scale=(0.85, 0.08, 0.40), rot=(0, 0, math.radians(-46)), pid=5)
+    sph(0.30, (0.30, 0, 0.60), scale=(0.80, 0.08, 0.36), rot=(0, 0, math.radians(38)), pid=5)
     sph(0.17, (0.16, 0, 0.62), scale=(0.85, 0.08, 0.32), rot=(0, 0, math.radians(70)), pid=5)
 
 

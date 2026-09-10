@@ -158,8 +158,6 @@ def cel(tag, fake, target, out_ink=None, nids=10):
 
     a = np.asarray(cv).copy()
     op = a[..., 3] > 128
-    op_img = Image.fromarray((op * 255).astype(np.uint8))
-    ero3 = np.asarray(op_img.filter(ImageFilter.MinFilter(3))) > 120
     # 外轮廓墨线已由渲染端反向壳承担（ink pass 合成）。此节只剩：无 ink 层的
     # 回退环（视觉轮廓 alpha>16 向内一圈）+ ID 结合缝线（拼版概念，保留图像域）。
     if has_ink:

@@ -6,8 +6,9 @@
 产物:
   <仓库根>/temp/review_result.json —— 逐枚 {name, model_ok, note}，供返工轮读取
 
-只评「建模」（形体/比例/部件连接/辨识度），配色/描边/光影不在反馈范围。
-图标清单挂 motifs.py 注册表（旧 7 枚在前），与 accept_sheet 排序一致。"""
+只评范围与验收页同口径：形体/比例/部件连接/辨识度 + 观感（档位漂移、
+颜色、描边异常）。图标清单挂 motifs.py 注册表（旧 7 枚在前），与
+accept_sheet 排序一致。"""
 import json
 import os
 import sys
@@ -111,9 +112,9 @@ PAGE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>图标验收 · v2 分档换代审计 <span class="hint">__TOTAL__ 枚全量待标（__HIDDEN__ 枚已过枚本轮一并复验）· 点击图标可放大看 128/256 渲染</span></h1>
-  <div class="hint">本轮是 <b>v2 渲染架构换代</b>（着色器分档替换 k-means）——<b>建模和观感都可以反馈</b>：形体/比例/部件连接，以及档位漂移、颜色观感、描边异常。
-       点「不满意」可以写备注，也可以 <b>不写</b>——留空的由 AI 直读 64px 原图自查。v1/v2 并排对照页在 temp/compare_v1v2_64_p*.png。</div>
+  <h1>图标验收 · v2 终审 <span class="hint">__TOTAL__ 枚全量待标（__HIDDEN__ 枚已过枚本轮一并复验）· 点击图标可放大看 128/256 渲染</span></h1>
+  <div class="hint">本轮是 <b>v2 终审</b>（七轮返工后全库定稿：着色器分档+反向壳描边，描边已全库纯黑单线恒宽紧贴）——<b>建模和观感都可以反馈</b>：形体/比例/部件连接，以及档位漂移、颜色观感、描边异常。
+       点「不满意」可以写备注，也可以 <b>不写</b>——留空的由 AI 直读 64px 原图自查。</div>
   <div id="bar">
     <span id="prog"></span>
     <button id="next">↓ 下一个未标记</button>
@@ -127,7 +128,7 @@ PAGE = """<!DOCTYPE html>
 <div id="toast"></div>
 <script>
 const ICONS = __ICONS__;
-const KEY = "icon_review_v5";
+const KEY = "icon_review_v6";
 const state = {};
 ICONS.forEach(ic => state[ic.name] = { model_ok: null, note: "" });
 

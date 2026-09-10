@@ -23,9 +23,9 @@ const EXPECT_ANIM_COUNT := 93
 const EXPECT_EVENT_COUNT := 52
 
 ## spot check 期望值（Spine 原始键 → 导入器 Godot 域换算 -(setup+delta) → 独立求值，单位：度）
-## 键 = "<动画>/<骨>:rotation"，值 = {t: 期望度}
+## 键 = "<动画>/<全相对轨道路径>"（Bone2D 嵌套，路径必须含祖先链；扁平骨名解析不到）
 const SPOT_EXPECT := {
-	"Swordwrath-Attack1/pickaxe1:rotation": {
+	"Swordwrath-Attack1/root/bone/minertorso1/bone2/bone3/minerarm3/minerarm4/pickaxe1:rotation": {
 		0.1: -103.82,          # 首键 t=0.5，之前 hold 首键值（setup 103.82 + delta 0）
 		0.3: -89.89043015,
 		0.5: -65.92,
@@ -33,13 +33,13 @@ const SPOT_EXPECT := {
 		0.9: -60.861139674,
 		1.2: -63.875709387,
 	},
-	"Swordwrath-Attack1/minertorso1:rotation": {
+	"Swordwrath-Attack1/root/bone/minertorso1:rotation": {
 		0.2: -82.949986049,
 		0.5: -84.4,
 		0.8: -88.06099562,
 		1.1: -86.894509002,
 	},
-	"Swordwrath-Walk/minerleg2:rotation": {
+	"Swordwrath-Walk/root/bone/minerleg2:rotation": {
 		0.0: 63.18,
 		0.3: 78.415,
 		0.6: 97.400011539,

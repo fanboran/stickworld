@@ -20,6 +20,9 @@
   - events   5 类 52 处全量写 metadata/anim_events（消费端 stickman_rig._check_animation_events）
   - ik       核心动画 0 使用——不实现，约束表留档矩阵
 
+轨道路径口径：骨骼轨道写**全相对路径**（root/bone/minertorso1/...:rotation），
+不是扁平骨名——Skeleton2D 的 Bone2D 是嵌套节点，扁平名引擎解析不到（批次 B 实测）。
+
 曲线精确性（实验实证，tests/dev/bezier_*_probe.gd）：
   Godot 4.3+ bezier 轨道 handle x 为段长比例（in∈[-1,0]、out∈[0,1]）、y 为带符号绝对值偏移。
   Spine 归一化曲线 {curve: x1, c2: y1, c3: x2, c4: y2}（缺省 y1=0,x2=1,y2=1）与 Godot key 完全同构：
@@ -55,6 +58,30 @@ def node_safe_name(name):
     """骨名 → Godot 节点名（非法字符替换 _；返回 (安全名, 是否改过)）。"""
     safe = ''.join('_' if c in GODOT_NODE_INVALID else c for c in name)
     return safe, safe != name
+
+
+def bone_track_paths(bones):
+    """骨名 → 动画轨道路径前缀（相对 Skeleton2D 的全相对路径，如 root/bone/minertorso1）。
+
+    必需原因（批次 B 实测，tests/dev/bone_path_probe.gd）：AnimationPlayer 的
+    root_node 指向 Skeleton2D，Bone2D 是**嵌套** Node2D 子节点——轨道路径必须
+    是完整相对路径；只写扁平骨名（"bone3:rotation"）会让引擎解析失败并刷
+    "couldn't resolve track" 警告，骨骼完全不动（Skeleton2D 没有 Skeleton3D 那种
+    "骨名即属性"的伪属性通道）。
+    """
+    by_name = {b['name']: b for b in bones}
+    out = {}
+    for b in bones:
+        parts = []
+        cur = b
+        while True:
+            parts.append(node_safe_name(cur['name'])[0])
+            parent = cur.get('parent')
+            if not parent or parent not in by_name:
+                break
+            cur = by_name[parent]
+        out[b['name']] = '/'.join(reversed(parts))
+    return out
 
 
 def unwrap_rotate(keys):
@@ -212,10 +239,10 @@ def anim_duration(anim_data):
     return _max_time(sections, 0.0)
 
 
-def import_animation(anim_name, anim_data, bones_by_name, node_names, root_tx_policy, stats):
+def import_animation(anim_name, anim_data, bones_by_name, bone_paths, root_tx_policy, stats):
     """单动画 → (tres 文本行, 统计 dict)。stats 由调用方注入（含 _curve_stats 闭包）。
 
-    bones_by_name: 骨名→setup dict；node_names: 骨名→节点名。"""
+    bones_by_name: 骨名→setup dict；bone_paths: 骨名→全相对轨道路径（见 bone_track_paths）。"""
     lines = ['[gd_resource type="Animation" format=3]', '', '[resource]']
     length = anim_duration(anim_data)
     lines.append('length = %s' % fnum(length))
@@ -228,7 +255,7 @@ def import_animation(anim_name, anim_data, bones_by_name, node_names, root_tx_po
         setup = bones_by_name.get(bone_name)
         if setup is None:
             raise ValueError('动画 %s 引用未知骨骼 %s' % (anim_name, bone_name))
-        node = node_names[bone_name]
+        node = bone_paths[bone_name]
         setup_rot = float(setup.get('rotation', 0.0))
         setup_x = float(setup.get('x', 0.0))
         setup_y = float(setup.get('y', 0.0))
@@ -384,6 +411,9 @@ def main():
         node_names[b['name']] = safe
         if changed:
             name_changes[b['name']] = safe
+    # 轨道路径 = 全相对路径（含祖先链）——Skeleton2D 的 Bone2D 是嵌套节点，
+    # 扁平骨名解析不到（见 bone_track_paths 注释与 tests/dev/bone_path_probe.gd）
+    bone_paths = bone_track_paths(bones)
 
     def curve_stats_fn(stats):
         def _apply(rows):
@@ -402,7 +432,7 @@ def main():
                  'draw_order_timelines': 0, 'events': len(anim_data.get('events', [])),
                  'tracks': 0}
         stats['_curve_stats'] = curve_stats_fn(stats)
-        text, stats = import_animation(name, anim_data, bones_by_name, node_names,
+        text, stats = import_animation(name, anim_data, bones_by_name, bone_paths,
                                        args.root_tx, stats)
         out_path = os.path.join(repo, OUT_ANIM_DIR, name + '.tres')
         with open(out_path, 'w', encoding='utf-8', newline='\n') as f:

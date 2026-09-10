@@ -18,7 +18,7 @@ extends Node2D
 ##   **读动画内嵌事件的真值**，不写死比例。解包 Spine 数据里每个攻击动画都带
 ##   Hit 事件（Swordwrath-Attack1 Hit@1.0s / 全长 1.3333s = 75%；
 ##   Spearton-Attack1 Hit@0.8667s；Archidon-Draw Hit@0.5333s；Miner-Attack1 Hit@0.6667s；
-##   Magikill-Spell1 Hit@1.0s），由 tools/baking/spine_import.gd 导出为动画元数据，
+##   Magikill-Spell1 Hit@1.0s），由逆向重建导入器导出为动画元数据（见 docs/设计/系统/火柴人逆向重建与覆盖率方案.md），
 ##   运行期经 StickmanRig.get_anim_event_time() 读取。
 ##   仅当动画确实没有事件数据（如程序化动画/测试桩）时才回退到 STRIKE_FRAME_RATIO_FALLBACK。
 

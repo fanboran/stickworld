@@ -98,7 +98,7 @@ signal animation_finished(anim_name: String)
 
 ## 动画内嵌事件信号（复刻 Spine animations[].events[] / 传奇 AnimationSpec.Events[]）。
 ## 播放位置越过事件时间点时发射一次；切状态或播放位置回退（重播/循环）后重新计数。
-## 事件由 tools/baking/spine_import.gd 从解包 Spine JSON 导出为动画元数据：
+## 事件由逆向重建导入器从解包 Spine JSON 写入动画元数据（见 docs/设计/系统/火柴人逆向重建与覆盖率方案.md）：
 ##   Hit（命中帧）/ Sound（音效，value=音效名）/ Drawn（弓拉满）/ Mine（矿工敲击）。
 ## 消费方（WeaponMount）一律读真值，禁止再写"命中帧 = 动画进度 × 拍脑袋比例"。
 signal animation_event(anim_name: String, event_name: String, value: String)
@@ -110,7 +110,6 @@ signal animation_event(anim_name: String, event_name: String, value: String)
 
 func _ready() -> void:
 	_init_bones()
-	_init_ik()
 	_init_animations()
 	_init_weapons()
 	# 程序化叠加层（Stick Fight 关节物理/惯性风格；纯算法，动画之上叠加）
@@ -172,7 +171,7 @@ func _check_animation_finished() -> void:
 
 
 ## 动画内嵌事件派发：当前动画播放位置越过 anim_events 中任一事件时间点 → 发射一次。
-## 事件表来自动画资源元数据（spine_import 从 Spine JSON 导出；无元数据则静默跳过）。
+## 事件表来自动画资源元数据（逆向重建导入器写入；无元数据则静默跳过）。
 ## 重播判定：切换动画、或播放位置回退（LOOP 动画回绕 / 重新 travel）→ 清空已发集合。
 func _check_animation_events() -> void:
 	if _state_machine == null or _anim_player == null:
@@ -207,7 +206,7 @@ func _check_animation_events() -> void:
 #  初始化
 # ============================================================
 
-## 程序化叠加层：创建为骨架子节点，动画之上叠加惯性/呼吸/弹性（非 IK 骨骼 + IK 手目标）
+## 程序化叠加层：创建为骨架子节点，动画之上叠加惯性/呼吸/弹性（只碰 hip/torso/neck）
 func _init_procedural_overlay() -> void:
 	if get_node_or_null("ProceduralOverlay") != null:
 		return
@@ -245,70 +244,6 @@ func _make_colors() -> Dictionary:
 		"guard": guard_color,
 		"outline": outline_color,
 	}
-
-
-
-func _init_ik() -> void:
-	# 运行时通过遍历骨骼修正 bone_idx，避免 .tscn 中写死的索引和实际不匹配
-	var stack := get_modification_stack()
-	if stack == null:
-		push_warning("[IK] modification_stack 为 null，IK 不会执行")
-		return
-	# 强制每个实例拥有独立的 modification stack 副本，避免多实例共享同一资源导致 IK 冲突
-	if not Engine.is_editor_hint():
-		var unique_stack := stack.duplicate(true) as SkeletonModificationStack2D
-		if unique_stack != null:
-			set_modification_stack(unique_stack)
-			stack = unique_stack
-	# 构建骨骼名->索引映射
-	var bone_name_to_idx: Dictionary = {}
-	for idx in range(get_bone_count()):
-		var b := get_bone(idx)
-		if b:
-			bone_name_to_idx[b.name] = idx
-	# NodePath 解析失败的修改器必须整条移除（收集后倒序删，避免中途移位）。
-	# 约束：TwoBoneIK 的 joint idx 在 tscn 里是"写死的历史值"，只有 NodePath 解析
-	# 成功时才会被 _init_ik 按骨名校正。解析失败却保留修改器 = 残留 idx 继续生效，
-	# 会误驱动别的骨骼——08-30"独立场景全身横躺 ~90°"事故根因：骨链重排后
-	# 腿 IK NodePath 失配，残留 idx (0,1)=新链的 (hip,spine_root)，腿 IK 把
-	# 根骨 hip 拽向脚部目标 → 全身横躺（详见 tools/baking/render_weapon_check.gd 头注释）。
-	var _dead_mods: PackedInt64Array = []
-	for i in range(stack.modification_count):
-		var mod := stack.get_modification(i) as SkeletonModification2DTwoBoneIK
-		if mod == null:
-			push_warning("[IK] modification ", i, " 不是 TwoBoneIK")
-			continue
-		# 通过 NodePath 找到 Bone2D 节点，再用名称查实际索引
-		var bone1 := get_node_or_null(mod.joint_one_bone2d_node) as Bone2D
-		var bone2 := get_node_or_null(mod.joint_two_bone2d_node) as Bone2D
-		if bone1 == null or bone2 == null:
-			push_warning("[IK] mod ", i, " 关节骨 NodePath 解析失败（bone1=",
-					mod.joint_one_bone2d_node, " bone2=", mod.joint_two_bone2d_node,
-					"），已移除该修改器，防止残留 joint idx 误驱动其他骨骼")
-			_dead_mods.append(i)
-			continue
-		var idx1: int = bone_name_to_idx.get(bone1.name, -1)
-		if idx1 >= 0:
-			mod.joint_one_bone_idx = idx1
-		var idx2: int = bone_name_to_idx.get(bone2.name, -1)
-		if idx2 >= 0:
-			mod.joint_two_bone_idx = idx2
-		# 检查目标节点
-		var target := get_node_or_null(mod.target_nodepath) as Node2D
-		if target == null:
-			push_warning("[IK] mod ", i, ": target NodePath 解析失败: ", mod.target_nodepath)
-	for j in range(_dead_mods.size() - 1, -1, -1):
-		stack.delete_modification(_dead_mods[j])
-	# 延迟一帧启用 IK：Skeleton2D + IK 在 _ready 后首帧不保证解算，
-	# 先禁用栈、等一个帧周期再启用，让解算自然完成（替代"前 0.25s 模拟移动"的 workaround）
-	if not Engine.is_editor_hint():
-		stack.enabled = false
-		call_deferred("_enable_ik_stack", stack)
-
-
-func _enable_ik_stack(stack: SkeletonModificationStack2D) -> void:
-	if stack != null and is_instance_valid(stack):
-		stack.enabled = true
 
 
 func _init_animations() -> void:

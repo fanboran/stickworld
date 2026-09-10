@@ -11,9 +11,9 @@ extends Node
 ##   1. 骨链重排（fd95bf6，新增 spine_root/chest_mid/weapon_hand/shield_hand，共 23 骨）
 ##      后，stickman_test.tscn 的**腿 IK NodePath 仍指向旧链**（"spine_root/thigh_outer"，
 ##      缺 hip/ 前缀）→ 运行时解析失败；
-##   2. StickmanRig._init_ik 对解析失败的修改器只告警、不处理 → tscn 里写死的
+##   2. （历史）StickmanRig._init_ik 曾对解析失败的修改器只告警 → tscn 里写死的
 ##      残留 joint_bone_idx (0,1)/(3,4) 继续生效——在新骨链里 0=hip、1=spine_root，
-##      即**腿 IK 把根骨 hip 拽向脚部 IK 目标** → 全身绕 hip 旋转 ~90° 横躺；
+##      残留 idx 会让**腿 IK 把根骨 hip 拽向脚部 IK 目标** → 全身绕 hip 旋转 ~90° 横躺；
 ##   3. "打印直立、渲染横躺"的表象是引擎机制：Skeleton2D 修改器在骨架内部
 ##      process 阶段以 local_pose_override 写入 Bone2D 渲染变换，常规 process
 ##      阶段又从 cache_transform 还原（Godot skeleton_2d.cpp
@@ -24,10 +24,10 @@ extends Node
 ##      calculate_length_and_rotation），与横躺无因果，已由 build_from_scratch
 ##      显式 auto_calculate=false 消除；
 ##   5. 当时"播 idle/不播动画/关 IK 三配置均横躺"的原因：动画 .tres 轨道路径
-##      同批失效（idle 实际没播）；外部关 IK 会被 rig._init_ik 的 call_deferred
+##      同批失效（idle 实际没播）；旧 rig 的 call_deferred 启用会顶掉外部关 IK
 ##      重新启用（配置没真正关上）。
 ## 修复：d63fc57（腿 IK 路径补 hip/ 前缀 + auto_calculate=false）已在主路径消除
-## 症状；_init_ik 加固为"NodePath 解析失败的修改器整条移除"（防同类静默劫持复发）。
+## 症状。（IK 装置已于 2026-09 逆向重建批次整体移除，见覆盖率方案 §三/§六）
 ## 实体管线独立场景渲染已验证直立（diag_entity_pose_root 三探针对照）。
 ## 本工具保留裸骨架直出（可复现性最好），不再是对 bug 的绕开。
 ##

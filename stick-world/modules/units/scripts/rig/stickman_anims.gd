@@ -20,7 +20,7 @@ const ANIM_IDLE_STAFF := "idle_staff"
 const ANIM_WALK := "walk"
 const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
-## 各武器专属攻击动画（转译自解包 Spine 数据，见 tools/baking/spine_import.gd）
+## 各武器专属攻击动画（转译自解包 Spine 数据，管线见 docs/设计/系统/火柴人逆向重建与覆盖率方案.md）
 const ANIM_ATTACK_SPEAR := "attack_spear"
 ## 9f 矛士攻击池候选（Spearton-Attack2/3 戳刺变体，经档案 attack_pool 随机抽取）
 const ANIM_ATTACK_SPEAR_2 := "attack_spear_2"

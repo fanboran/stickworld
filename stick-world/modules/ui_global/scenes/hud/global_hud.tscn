@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" uid="uid://bhvemj6s8akro" path="res://modules/ui_global/scripts/hud/global_hud.gd" id="2_hud"]
 [ext_resource type="Script" uid="uid://cn4f70s21pher" path="res://modules/ui_global/scripts/hud/clock_widget.gd" id="5_clock"]
 [ext_resource type="Script" path="res://modules/ui_global/scripts/sketch/sketch_panel.gd" id="4_sketchpanel"]
 [ext_resource type="Script" path="res://modules/ui_global/scripts/sketch/sketch_gear_button.gd" id="6_gear"]
+[ext_resource type="Texture2D" uid="uid://dm32cnaqqnthj" path="res://assets/icons/齿轮_64.png" id="7_gearicon"]
 
 [node name="GlobalHUD" type="Control" unique_id=381952387]
 layout_mode = 3
@@ -34,6 +35,9 @@ theme_override_constants/separation = 24
 layout_mode = 2
 custom_minimum_size = Vector2(31, 31)
 size_flags_vertical = 4
+icon = ExtResource("7_gearicon")
+expand_icon = true
+icon_alignment = 1
 script = ExtResource("6_gear")
 
 [node name="PlaceholderPreviewButton" type="Button" parent="MarginContainer/HBoxContainer"]

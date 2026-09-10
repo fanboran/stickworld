@@ -51,9 +51,10 @@ OCEAN = (30, 55, 95)
 # 群系标签（biome_generate.py 同源）
 BI_SOURCE, BI_VOLCANIC, BI_DESERT, BI_ICE = 5, 6, 3, 4
 
-# L2 ID mask 保留码（非政权）：与运行时 PoliticalLut / l2_map_renderer 常量同源
+# L2/L3 ID mask 保留码（非政权）：与运行时 PoliticalLut / l2_map_renderer 常量同源
 CODE_LAKE = 254      # 湖泊（l2_map_renderer.LAKE_COLOR）
 CODE_NEIGHBOR = 255  # 邻区灰底（l2_map_renderer.NEIGHBOR_COLOR）
+CODE_FREE = 253      # 自由城邦灰（无归属陆地：政治图 feedback2 D，0 仍=海洋）
 
 # ---------- CONTENT_PALETTE（20 色内容色板，7 族） ----------
 # 来源：stick-world/modules/ui_global/scripts/theme/stick_tokens.gd 的 CONTENT_PALETTE
@@ -77,6 +78,16 @@ CONTENT_PALETTE_FAMILIES = [
     ("purple", [(0.48, 0.38, 0.52)]),
 ]
 
+# 出生 8 城邦族色（feedback2 E）：CONTENT_PALETTE 7 族各取一枚代表原型 + 草绿族
+# 麦色变体补第 8 邦。城邦之间不接壤，不受「相邻不同族」图着色约束，只需互相
+# 可分（旧 P7 HSL 色是绿色渐变梯，观感如同一国的渐变带——废除）。
+# (族下标, 原型下标)；0..1 float × 255 取整落 states[].color。lut_index 73..80 不变。
+_BIRTH_COLOR_PICKS = [(0, 1), (1, 0), (2, 0), (3, 0), (5, 0), (6, 0), (4, 0), (0, 0)]
+BIRTH_CITY_STATE_COLORS = [
+    tuple(int(round(v * 255)) for v in CONTENT_PALETTE_FAMILIES[f][1][i])
+    for f, i in _BIRTH_COLOR_PICKS
+]
+
 
 def sid_of(label):
     """城 label（int）→ settlement id（P4 惯例：三位补零）"""
@@ -98,11 +109,13 @@ def load_inputs():
         Image.fromarray(river).resize((SIZE, SIZE), Image.NEAREST)) > 127
     biome = np.load(os.path.join(OUTPUT_DIR, "biome_labels_2048.npy"))
     region = np.load(os.path.join(OUTPUT_DIR, "regions", "region_labels.npy"))
+    lake = np.asarray(Image.open(
+        os.path.join(OUTPUT_DIR, "fractal_lake_mask_8192.png")).convert("L")) > 0
     with open(os.path.join(GAME_CFG, "l3_city.json"), encoding="utf-8") as f:
         city_json = json.load(f)
     with open(os.path.join(GAME_CFG, "l1_world.json"), encoding="utf-8") as f:
         birth_json = json.load(f)
-    return elev, river, biome, region, city_json, birth_json
+    return elev, river, biome, region, lake, city_json, birth_json
 
 
 # ---------- Step 1：文化圈（§5.11.1 锚点，region 越界罚沿用） ----------
@@ -532,18 +545,27 @@ def load_or_init_name_table(path, params_path):
 
 # ---------- 蒙版与贴图（ID mask，R9 过渡态：不再烘焙颜色贴图） ----------
 
-def rasterize_id_mask(city_json, idx_by_label):
-    """城市 polygon × 政权 lut_index → 8192 单通道 ID 蒙版（非城=0，城 holes 挖空）。
+def rasterize_id_mask(city_json, idx_by_label, biome, lake8):
+    """城市 polygon × 政权 lut_index → 8192 单通道 ID 蒙版（feedback2 D：陆地无深色洞）。
 
     l3_city.json 顶点为 8192 级 [y,x]（city_split_v2 产物），直接同级光栅化；
-    fill+outline 同值封 1px 接缝。像素值 = state lut_index（1..80），0 = 海/无。
+    fill+outline 同值封 1px 接缝。编码：
+      城块 = state lut_index（1..80；无归属城块 = CODE_FREE）；
+      城块洞 = 湖泊（质心命中全局湖掩膜）→ CODE_LAKE，海洋飞地 → 0；
+      城块没铺到的陆地（biome>0）与荒野湖泊同理分别回填 CODE_FREE / CODE_LAKE；
+      0 = 海洋（真海域）。运行时 PoliticalLut 查表（253 灰 / 254 湖色）。
+    （feedback2 D 根因：旧版城块洞与荒野全落 0 = 深海军蓝，政治图深探时湖被
+    画成海色——彩色陆地上的近黑水斑即用户报告的「陆地洞」。）
     """
+    k = SIZE_FULL // SIZE
+    land8 = (biome > 0).repeat(k, axis=0).repeat(k, axis=1)
     img = Image.new("L", (SIZE_FULL, SIZE_FULL), 0)
-    dr = ImageDraw.Draw(img)
+    holes = Image.new("L", (SIZE_FULL, SIZE_FULL), 0)
+    dr, drh = ImageDraw.Draw(img), ImageDraw.Draw(holes)
     for t in city_json["tiles"]:
         idx = idx_by_label.get(int(t["label"]), 0)
         if idx <= 0:
-            continue
+            idx = CODE_FREE  # 无归属陆地城块：自由城邦保留码（不留 0 = 陆地洞）
         for poly in t.get("polygons", []):
             if len(poly) < 3:
                 continue
@@ -551,8 +573,21 @@ def rasterize_id_mask(city_json, idx_by_label):
         for hole in t.get("holes", []):
             if len(hole) < 3:
                 continue
-            dr.polygon([(p[1], p[0]) for p in hole], fill=0, outline=0)
-    return img
+            # 洞 = 块内水体：湖泊（质心命中全局湖掩膜）→ 湖泊保留码；海洋飞地 → 0
+            cy = sum(p[0] for p in hole) / len(hole)
+            cx = sum(p[1] for p in hole) / len(hole)
+            code = CODE_LAKE if (lake8[int(cy), int(cx)] if
+                                 (0 <= int(cy) < SIZE_FULL and 0 <= int(cx) < SIZE_FULL)
+                                 else False) else 0
+            dr.polygon([(p[1], p[0]) for p in hole], fill=code, outline=code)
+            drh.polygon([(p[1], p[0]) for p in hole], fill=255)
+    arr = np.asarray(img)
+    hole8 = np.asarray(holes) > 0
+    # 陆地回填：城块没铺到的荒野写 CODE_FREE；湖泊写 CODE_LAKE（湖色，不再是海色）
+    fill_land = land8 & (~hole8) & (~lake8) & (arr == 0)
+    arr = np.where(fill_land, np.uint8(CODE_FREE), arr).astype(np.uint8)
+    arr[(lake8) & (arr == 0)] = CODE_LAKE
+    return Image.fromarray(arr, "L")
 
 
 def export_l2_id_masks(mask8, l2_packs_dir):
@@ -617,7 +652,7 @@ def main():
     args = ap.parse_args()
 
     P = load_params()
-    elev, river, biome, region, city_json, birth_json = load_inputs()
+    elev, river, biome, region, lake, city_json, birth_json = load_inputs()
     cultures = P["cultures"]
     cu_by_id = {c["id"]: c for c in cultures}
 
@@ -873,8 +908,8 @@ def main():
                 states[sid]["name"] = "%s·%02d" % (label, i + 1)
                 name_table["names"][sid] = states[sid]["name"]
 
-    # Step 6 色：CONTENT_PALETTE 派生 + 贪心图着色；出生 8 邦原色不动
-    birth_colors = {sid: tuple(sd["color"]) for sid, sd in birth_states.items()}
+    # Step 6 色：CONTENT_PALETTE 派生 + 贪心图着色；出生 8 邦取族代表色
+    # （feedback2 E：旧 P7 HSL 绿渐变梯观感如同一国的渐变带，废除）
     sizes_new = Counter(city_owners.values())
     new_states_by_size = sorted(
         [sid for (_, sid, _) in capitals], key=lambda s: (-sizes_new.get(s, 0), s))
@@ -896,13 +931,15 @@ def main():
     print("相邻国色冲突（同族且 ΔL<%.2f）：%d 对" % (
         P["colors"]["min_lightness_gap"], len(conflicts)))
 
-    # lut_index：新国按规模降序 1..72，出生城邦 73..80
+    # lut_index：新国按规模降序 1..72，出生城邦 73..80（序号排尾不变；feedback2 E
+    # 只换色：城邦色 = BIRTH_CITY_STATE_COLORS 族代表色，按 sid 字典序确定性分配）
     for i, sid in enumerate(new_states_by_size):
         states[sid]["lut_index"] = i + 1
         states[sid]["color"] = list(assigned[sid]["rgb"])
     birth_sids = sorted(birth_states)
     for j, sid in enumerate(birth_sids):
         states[sid]["lut_index"] = len(new_states_by_size) + 1 + j
+        states[sid]["color"] = list(BIRTH_CITY_STATE_COLORS[j % len(BIRTH_CITY_STATE_COLORS)])
     for sid in states:
         states[sid]["n_cities"] = 0
     for sid in city_owners.values():
@@ -950,14 +987,16 @@ def main():
             "n_states": len(states), "n_cities": len(city_owners),
             "n_states_total": P["n_states_total"],
             "color_source": "CONTENT_PALETTE 派生（stick_tokens.gd 20 色内容色板，"
-                            "7 族 × 族内明度/饱和档；出生 8 城邦保留原色）",
+                            "7 族 × 族内明度/饱和档；出生 8 城邦 = CONTENT_PALETTE "
+                            "族代表色 BIRTH_CITY_STATE_COLORS，旧 P7 HSL 渐变梯废除）",
             "names_status": "提案/待定（出生 8 城邦除外）；正式国名由世界观会话定稿后换 "
                             + P["name_source"] + " 重跑",
             "id_mask": {
-                "l3": "l3_political_id_8192.png（单通道，像素值=lut_index 1..%d，0=海/无）"
-                      % len(states),
+                "l3": "l3_political_id_8192.png（单通道，像素值=lut_index 1..%d，"
+                      "保留码 253=自由城邦（无归属陆地）254=湖泊，0=海洋）" % len(states),
                 "l2": "l2_packs/*/l2_political_id.png（context 窗口裁切，同编码；"
-                      "保留码 %d=湖泊 %d=邻区灰底）" % (CODE_LAKE, CODE_NEIGHBOR),
+                      "保留码 %d=湖泊 %d=邻区灰底，253=自由城邦）"
+                      % (CODE_LAKE, CODE_NEIGHBOR),
                 "runtime": "PoliticalLut 查表上色（改 LUT 即全图换色，零重烘）",
             },
         },
@@ -993,8 +1032,8 @@ def main():
         with open(p, "w", encoding="utf-8") as f:
             json.dump(w, f, ensure_ascii=False, indent=1)
 
-    # ID mask（R9 过渡态：颜色贴图退役，只产政权 ID）
-    mask8 = rasterize_id_mask(city_json, idx_by_label)
+    # ID mask（R9 过渡态：颜色贴图退役，只产政权 ID；feedback2 D：陆地回填 253）
+    mask8 = rasterize_id_mask(city_json, idx_by_label, biome, lake)
     mask8.save(os.path.join(GAME_CFG, "l3_political_id_8192.png"))
     made = export_l2_id_masks(mask8, l2_dir)
     for rid, _, npx in made:
@@ -1024,11 +1063,14 @@ def make_previews(P, city_json, states, owners_by_label, mask8, idx_by_label,
     new_states = [s for s, sd in states.items() if not sd["is_city_state"]]
     birth_states = [s for s, sd in states.items() if sd["is_city_state"]]
 
-    # LUT：lut_index → RGB（0 = 海洋色）
+    # LUT：lut_index → RGB（0 = 海洋色；253 = 自由城邦灰 / 254 = 湖泊色，
+    # 与运行时 PoliticalLut 同值）
     lut = [OCEAN] + [states[s]["color"] for s in sorted(
         new_states + birth_states, key=lambda s: states[s]["lut_index"])]
     while len(lut) < 256:
         lut.append((0, 0, 0))
+    lut[CODE_FREE] = (110, 110, 110)
+    lut[CODE_LAKE] = (72, 116, 158)
     full = colorize_id(mask8, lut)
     l3_img = full.resize((SIZE, SIZE), Image.NEAREST)
 

@@ -2,13 +2,14 @@ extends Node
 ## 单元测试：政权数据一致性（R7 扩容 80 国 + ID mask/LUT 运行时链路，总体设计 §5.11）。
 ##
 ## 覆盖：political_data.json 全量覆盖（1040 城无缺漏/无孤儿）/ 归属合法性 +
-## 字段完整 / 政权总数 == 80（创始人 2026-09-08 定档）/ 出生 8 城邦沿用
-## l1_world.json 原样（state_id+色不变，LUT 序号排尾）/ lut_index 1..80 连续唯一
-## / l3_city 注入一致（state_id+城文化）/ L2 packs 注入一致 / 文化圈锚定
-## （首都城文化 == 国文化 100%，城文化归属一致率 ≥95%，9 圈都有政权）
-## / L3 ID mask 与 json 一致（首都 anchor 像素 == lut_index，值域合法）
-## / L2 ID mask 保留码（254 湖泊 / 255 邻区）/ L3WorldData.states bin 装载
-## / PoliticalLut 构建与「改 LUT 即换色」运行时链路（R9 验收硬指标的自证）。
+## 字段完整 / 政权总数 == 80（创始人 2026-09-08 定档）/ 出生 8 城邦 id/归属沿用、
+## 色 = CONTENT_PALETTE 族代表色（feedback2 E：旧 P7 HSL 绿渐变梯废除，LUT 序号
+## 排尾不变）/ lut_index 1..80 连续唯一 / l3_city 注入一致（state_id+城文化）/
+## L2 packs 注入一致 / 文化圈锚定（首都城文化 == 国文化 100%，城文化归属一致率
+## ≥95%，9 圈都有政权）/ L3 ID mask 与 json 一致（首都 anchor 像素 == lut_index，
+## 值域合法含 253 自由城邦）/ L2 ID mask 保留码（253 自由城邦/254 湖泊/255 邻区）
+## / L3WorldData.states bin 装载 / PoliticalLut 构建与「改 LUT 即换色」运行时链路
+## （R9 验收硬指标的自证）。
 
 signal test_done(code: int)
 
@@ -37,13 +38,13 @@ func _ready() -> void:
 	_runner.add_test("political_data: 城主表全量覆盖", _test_full_coverage)
 	_runner.add_test("political_data: 归属全部合法 + 字段完整", _test_owners_legal)
 	_runner.add_test("政权总数 == 80（8 城邦 + 72 新国，Zipf 型碎度窗口）", _test_total_states)
-	_runner.add_test("出生 8 城邦原样沿用（id+色不变，LUT 序号排尾）", _test_birth_states_preserved)
+	_runner.add_test("出生 8 城邦沿用（id/归属不变，色=族代表色，LUT 序号排尾）", _test_birth_states_preserved)
 	_runner.add_test("lut_index 1..80 连续唯一", _test_lut_index_coverage)
 	_runner.add_test("l3_city 注入与真相源一致", _test_l3_city_injection)
 	_runner.add_test("L2 packs 注入一致（13 地区）", _test_l2_injection)
 	_runner.add_test("文化圈锚定（首都 100% / 全城一致率 ≥95% / 9 圈有政权）", _test_culture_anchoring)
 	_runner.add_test("L3 ID mask 与 json 一致（首都 anchor 像素 == lut_index）", _test_l3_id_mask)
-	_runner.add_test("L2 ID mask 值域与保留码（湖泊/邻区）", _test_l2_id_mask)
+	_runner.add_test("L2 ID mask 值域与保留码（自由城邦/湖泊/邻区）", _test_l2_id_mask)
 	_runner.add_test("L3WorldData.states 装载（bin 路径）", _test_l3_states_loaded)
 	_runner.add_test("PoliticalLut：构建 + 改 LUT 即换色（R9 硬指标自证）", _test_political_lut)
 	_runner.run()
@@ -140,21 +141,44 @@ func _test_total_states() -> void:
 	_runner.assert_true(smax <= 120, "单国城数 ≤ 120（实测 %d）" % smax)
 
 
+## 出生 8 城邦族色（feedback2 E，与生成端 state_expand_lite.py
+## BIRTH_CITY_STATE_COLORS 同源——CONTENT_PALETTE 7 族代表原型 + 草绿族麦色变体，
+## 按 sorted(birth_state_id) 字典序分配；改色两端同步）
+const BIRTH_CITY_STATE_COLORS := [
+	[168, 194, 87], [76, 148, 133], [107, 158, 204], [242, 173, 64],
+	[168, 92, 76], [122, 97, 133], [133, 107, 76], [199, 184, 122],
+]
+
+
 func _test_birth_states_preserved() -> void:
 	var birth := _read_json("res://config/strategic_map/l1_world.json")
 	var pd := _read_json("res://config/strategic_map/political_data.json")
 	var states: Dictionary = pd.get("states", {})
 	var owners: Dictionary = pd.get("city_owners", {})
-	var ok := true
+	var birth_sids: Array = []
 	for s in (birth.get("states", []) as Array):
-		var sid: String = s["state_id"]
+		birth_sids.append(str(s["state_id"]))
+	birth_sids.sort()
+	var ok := true
+	for i in birth_sids.size():
+		var sid := str(birth_sids[i])
 		if not states.has(sid):
 			ok = false
 			break
-		if states[sid].get("color", []) != s.get("color", []):
+		# feedback2 E：色 = CONTENT_PALETTE 族代表色（不再是 l1_world 的 HSL 绿渐变梯）；
+		# JSON 数值解析为 float，逐元素 int 化比较
+		var col: Array = states[sid].get("color", [])
+		var want: Array = BIRTH_CITY_STATE_COLORS[i]
+		if col.size() != 3 or int(col[0]) != int(want[0]) \
+				or int(col[1]) != int(want[1]) or int(col[2]) != int(want[2]):
 			ok = false
 			break
-	_runner.assert_true(ok, "出生 states 的 id/色在 political_data 中原样")
+	_runner.assert_true(ok, "出生 states id 沿用 + 色 = 族代表色（与生成端同源）")
+	# 族色互相可分（无重复）
+	var distinct := {}
+	for col in BIRTH_CITY_STATE_COLORS:
+		distinct[str(col)] = true
+	_runner.assert_equal(distinct.size(), BIRTH_CITY_STATE_COLORS.size(), "8 族色互不重复")
 	# 出生城邦 LUT 序号排尾（73..80），新国占 1..72
 	var birth_idx: Array = []
 	for sid in states:
@@ -297,15 +321,34 @@ func _test_l3_id_mask() -> void:
 			"ID mask 8192（实测 %d）" % (img.get_width() if img != null else 0))
 	if img == null:
 		return
-	# 值域：只允许 0..80（0 = 海/无）——稀疏采样 ~20 万点
+	# 值域：政权码 0..80 + 保留码 253（自由城邦）/ 254（湖泊，feedback2 D）——稀疏采样
 	var bad_val := 0
+	var has_free := false
+	var has_lake := false
 	var n := 8192 * 8192
 	var step := 8192 * 33 + 17
 	for i in range(0, n, step):
 		var v := int(img.get_pixel(i % 8192, int(i / 8192.0)).r * 255.0 + 0.5)
-		if v > states.size():
+		if v == PoliticalLut.CODE_FREE_CITY:
+			has_free = true
+		elif v == PoliticalLut.CODE_LAKE:
+			has_lake = true
+		elif v > states.size():
 			bad_val += 1
-	_runner.assert_equal(bad_val, 0, "ID mask 值域 ⊆ 0..80（稀疏采样越界 %d）" % bad_val)
+	_runner.assert_equal(bad_val, 0, "ID mask 值域 ⊆ 0..80 + 253/254（稀疏采样越界 %d）" % bad_val)
+	# 保留码存在性：253 荒野回填 / 254 块内湖都是细碎斑块，稀疏对角线采不到 →
+	# 16px 子格稠密扫描（26 万采样，headless <1s）
+	has_free = false
+	has_lake = false
+	for y in range(0, 8192, 16):
+		for x in range(0, 8192, 16):
+			var v := int(img.get_pixel(x, y).r * 255.0 + 0.5)
+			if v == PoliticalLut.CODE_FREE_CITY:
+				has_free = true
+			elif v == PoliticalLut.CODE_LAKE:
+				has_lake = true
+	_runner.assert_true(has_free, "ID mask 含 253 自由城邦保留码（陆地无 0 洞）")
+	_runner.assert_true(has_lake, "ID mask 含 254 湖泊保留码（块内湖不再是海色洞）")
 	# 首都 anchor 像素 == lut_index（anchor 是 8192 级 [x,y]）
 	var tiles := _tiles_by_label(l3)
 	var mismatch := 0
@@ -334,14 +377,15 @@ func _test_l2_id_mask() -> void:
 	_runner.assert_true(img != null and img.get_width() > 0, "L2 ID mask 可读")
 	if img == null:
 		return
-	# 值域：政权码 1..80 + 保留码 254/255 + 0
+	# 值域：政权码 1..80 + 保留码 253/254/255 + 0
 	var bad := 0
 	var has_state := false
 	var has_reserved := false
 	for y in range(0, img.get_height(), 7):
 		for x in range(0, img.get_width(), 7):
 			var v := int(img.get_pixel(x, y).r * 255.0 + 0.5)
-			if v == PoliticalLut.CODE_LAKE or v == PoliticalLut.CODE_NEIGHBOR:
+			if v == PoliticalLut.CODE_LAKE or v == PoliticalLut.CODE_NEIGHBOR \
+					or v == PoliticalLut.CODE_FREE_CITY:
 				has_reserved = true
 			elif v > 0:
 				if v > N_STATES:
@@ -350,7 +394,7 @@ func _test_l2_id_mask() -> void:
 					has_state = true
 	_runner.assert_equal(bad, 0, "L2 mask 值域合法（越界 %d）" % bad)
 	_runner.assert_true(has_state, "L2 mask 含政权码")
-	_runner.assert_true(has_reserved, "L2 mask 含保留码（湖泊/邻区灰底）")
+	_runner.assert_true(has_reserved, "L2 mask 含保留码（自由城邦/湖泊/邻区灰底）")
 
 
 func _test_l3_states_loaded() -> void:
@@ -397,7 +441,9 @@ func _test_political_lut() -> void:
 	var want := Color(float(col[0]) / 255.0, float(col[1]) / 255.0, float(col[2]) / 255.0)
 	_runner.assert_true(lut.color_of(sample).is_equal_approx(want),
 			"LUT 色 == political_data 色（%s）" % sample)
-	# 保留码（湖泊/邻区灰底，与 L2 mask 同源）
+	# 保留码（自由城邦/湖泊/邻区灰底，与 L3/L2 mask 同码表）
+	_runner.assert_true(lut.image.get_pixel(PoliticalLut.CODE_FREE_CITY, 0)
+			.is_equal_approx(PoliticalLut.FREE_CITY_COLOR), "保留码 253 = 自由城邦灰")
 	_runner.assert_true(lut.image.get_pixel(PoliticalLut.CODE_LAKE, 0)
 			.is_equal_approx(PoliticalLut.LAKE_COLOR), "保留码 254 = 湖泊色")
 	_runner.assert_true(lut.image.get_pixel(PoliticalLut.CODE_NEIGHBOR, 0)

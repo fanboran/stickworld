@@ -8,9 +8,9 @@ extends RefCounted
 ##   = StickTokens.BORDER_STRONG；操作线（快速旅行路由高亮）= StickTokens.ACCENT——
 ##   琥珀在地图上的唯一合法位置；玩家位置 = 玩家国色（运行时按所在地块政权色取，无常量）；
 ## - 线宽档：界线三级（§7.3-6 规范表）国 3px 实线 / 地区 2px 长虚线 / 地块 1px 短虚线，
-##   屏幕像素口径（政治模式恒定粗细）；非政治模式沿用各视图现状线宽（原值迁移）；
-## - 手绘笔触参数与 SketchDraw（ui_global）同源：wobble 公式/采样密度/boiling 节拍
-##   直接引用 SketchDraw 常量，地图侧只定「笔触幅度/采样段长 相对线宽的比例」。
+##   屏幕像素口径（政治模式恒定粗细）；非政治模式沿用各视图现状线宽（原值迁移）。
+## feedback1 去抖动：手绘笔触参数（SEG_LEN_RATIO/AMP_RATIO）随 wobble 退役删除，
+## 线条平滑直绘——token 只管线宽/语义色/虚线分级。
 
 # ────────────────────── 界线三级（§7.3-6 规范表，政治模式，屏幕像素口径）──────────────────────
 
@@ -30,14 +30,6 @@ const LINE_NATIONAL_COLOR := StickTokens.TEXT
 const LINE_REGION_COLOR := Color(0.14, 0.14, 0.14, 0.85)
 ## 地块界墨色（原 L2MapRenderer.TILE_BORDER_COLOR 灰墨）
 const LINE_PLOT_COLOR := Color(0.35, 0.35, 0.35)
-
-# ────────────────────── 手绘笔触（地图空间，与 SketchDraw 同源）──────────────────────
-
-## 采样段长 / 线宽：SketchDraw SEG_LEN 18 / OUTLINE_WIDTH 1.6 ≈ 11，取同量级 12——
-## 段长随线宽缩放（地图空间固定，笔触烙在地图上，缩放观感一致，缓存不随 zoom 重建）
-const SEG_LEN_RATIO := 12.0
-## 扰动幅度 / 线宽：SketchDraw WOBBLE_AMP 0.95 / OUTLINE_WIDTH 1.6 ≈ 0.6，取 0.55
-const AMP_RATIO := 0.55
 
 # ────────────────────── 虚线（屏幕像素口径）──────────────────────
 
@@ -146,22 +138,26 @@ const L1_ROUTE_NODE_RADIUS := 6.0
 ## 标注 = 三级视觉分级（国名/地区名/城市，两步法相邻档差 ≥2pt）+ 都城星标。
 ## 尺寸全部屏幕像素口径（绘制时 ÷zoom 换算成地图单位）；字体 = StickHand
 ## （SketchFonts.hand/bold，与游戏 UI 同源，禁止 fallback 字体）。
+## feedback1 定标：创始人反馈「文字太大」→ 全档下调一档
+## （国名 18→14 / 地区 14→11 / 首都 13→11 / 城市 12→10；相邻档差仍 ≥2pt 除首都/城市同档
+## ——首都用 Bold 字重区分）。halo 换引擎级描边（TextServer 字形轮廓扩张，非四向偏移）。
 
-## 国名 18px Bold（中文无大写——以字距/字重表达层级，§7.3-3）
-const LABEL_SIZE_COUNTRY := 18.0
-## 地区名 14px
-const LABEL_SIZE_REGION := 14.0
-## 首都名 13px Bold
-const LABEL_SIZE_CAPITAL := 13.0
-## 城市名 12px
-const LABEL_SIZE_CITY := 12.0
+## 国名 14px Bold（中文无大写——以字距/字重表达层级，§7.3-3）
+const LABEL_SIZE_COUNTRY := 14.0
+## 地区名 11px
+const LABEL_SIZE_REGION := 11.0
+## 首都名 11px Bold（与城市同字号，字重区分）
+const LABEL_SIZE_CAPITAL := 11.0
+## 城市名 10px
+const LABEL_SIZE_CITY := 10.0
 
 ## 国名字距 = 字号的 15%（§7.3-6 规范表「全大写字距 15%」的中文等价表达）
 const LABEL_COUNTRY_TRACKING := 0.15
 
-## halo 宽（§7.3-3：白 halo ≈ 字号 1/6~1/5，clamp 到 1.5~2.5px；描边式四向偏移）
-const LABEL_HALO_MIN := 1.5
-const LABEL_HALO_MAX := 2.5
+## halo 宽（字号 1/6~1/5 ≈ ×0.18，clamp 1.0~2.0px 屏幕口径；随字号下调同步收窄，
+## 防小字 halo 过宽显脏；描边 = 引擎级字形轮廓扩张，宽为像素 int）
+const LABEL_HALO_MIN := 1.0
+const LABEL_HALO_MAX := 2.0
 
 ## 政治模式标注用色（L3/L2，彩色政权底图上）：墨白字 + 深墨 halo——
 ## 高对比可读优先（任务详单「国名用高对比墨白」）；深墨 = 墨色系（LINE_REGION_COLOR 同族）
@@ -171,10 +167,11 @@ const LABEL_HALO_DARK := Color(0.06, 0.06, 0.06, 0.72)
 const LABEL_INK_CITY := Color(0.16, 0.14, 0.11)
 const LABEL_HALO_WHITE := Color(1.0, 1.0, 1.0, 0.85)
 
-## 都城星标：外接圆直径 8px（§7.3-6 规范表「首都 8px 星标」；首都惯例 = 星形符号，
-## OSM carto place-capital）。金 = CONTENT_PALETTE[9] 琥珀棕——顶级聚落语义
-## （与 L1_BLOB_EDGE_T5 同值同源，改色两端同步）；描边 = 墨色（LINE_REGION_COLOR 复用）
-const LABEL_STAR_SIZE := 8.0
+## 都城星标：外接圆直径 7px 简洁矢量五星（规范表「首都星标」惯例；feedback1 随字号
+## 下调 8→7 同步缩一档；首都惯例 = 星形符号，OSM carto place-capital）。
+## 金 = CONTENT_PALETTE[9] 琥珀棕——顶级聚落语义（与 L1_BLOB_EDGE_T5 同值同源，
+## 改色两端同步）；描边 = 墨色（LINE_REGION_COLOR 复用）
+const LABEL_STAR_SIZE := 7.0
 const LABEL_STAR_FILL := Color(0.95, 0.68, 0.25)
 const LABEL_STAR_OUTLINE := LINE_REGION_COLOR
 

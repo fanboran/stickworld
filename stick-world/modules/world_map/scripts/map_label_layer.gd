@@ -6,8 +6,9 @@ extends Node2D
 ## 规范来源（§7.3-3 标注两步法 / §7.3-6 规范表）：
 ##   - 字号分级：国名 18px Bold（中文无大写，以字距 15%/字重表达）> 地区名 14px
 ##     > 首都 13px Bold > 城市 12px（相邻档差 ≥2pt）；尺寸屏幕像素口径（÷zoom 换算）
-##   - halo：字号 1/6~1/5 clamp 1.5~2.5px，描边式四向偏移；政治模式彩色底 = 墨白字 +
-##     深墨 halo，L1 浅色地形底 = 暖墨字 + 白 halo
+##   - halo：字号 1/6~1/5 clamp 1.0~2.0px，引擎级字形描边（draw_string_outline，
+##     feedback1 由四向偏移改入——偏移字形放大显阶梯锯齿毛刺）；政治模式彩色底 =
+##     墨白字 + 深墨 halo，L1 浅色地形底 = 暖墨字 + 白 halo
 ##   - 字体 = StickHand（SketchFonts，与游戏 UI 同源；禁止 fallback 字体）
 ##   - 缩放显隐阈值（r = zoom / 视图适配 zoom，OSM carto z3/z5/z6 思路按三级视图定标）：
 ##       L3 国名 r≤6 / 都城星标恒显；L2 地区名 r≤6 / 重镇名 r≥1.2 / 首都恒显；
@@ -336,8 +337,11 @@ func _draw_label(item: Dictionary, z: float, occupied: Array[Rect2]) -> void:
 	var ink: Color = MapTokens.LABEL_INK_MAP if item["style"] == "map" else MapTokens.LABEL_INK_CITY
 	var halo: Color = MapTokens.LABEL_HALO_DARK if item["style"] == "map" else MapTokens.LABEL_HALO_WHITE
 	var gap := MapTokens.LABEL_ANCHOR_GAP / z
-	# halo 宽：屏幕像素口径 clamp（字号 1/6~1/5，1.5~2.5px）再 ÷zoom 成地图单位——
-	# clamp 必须发生在屏幕尺度，否则远 zoom 时 halo 被放大/吃掉
+	# halo 宽：屏幕像素口径 clamp（字号 1/6~1/5，1.0~2.0px）再 ÷zoom 成地图单位——
+	# clamp 必须发生在屏幕尺度，否则远 zoom 时 halo 被放大/吃掉。
+	# feedback1 毛刺修复：描边换引擎级字形轮廓扩张（draw_string_outline，
+	# TextServer 对字形位图做平滑外扩进 glyph 缓存），替代四向偏移叠字
+	# （放大后四份偏移字形的阶梯锯齿显形 = 毛刺根因）
 	var halo_w := clampf(fs_px * 0.18, MapTokens.LABEL_HALO_MIN, MapTokens.LABEL_HALO_MAX) / z
 	# 锚点候选（文字盒左上角相对锚点）；面标注（国名/地区名）按制图惯例居中单候选。
 	# 点标注首候选「右」：都城须让出星标半径（星最后画，但文字盒先让位不与之重叠）
@@ -380,21 +384,24 @@ func _draw_label(item: Dictionary, z: float, occupied: Array[Rect2]) -> void:
 		_draw_halo_string(font, text, origin, fs, halo_w, halo, ink)
 
 
-## 四向偏移 halo + 主文（描边式白/深 halo，§7.3-3）；halo_w 已是地图单位
+## 引擎级描边 halo + 主文（§7.3-3 白/深 halo 语义不变）。
+## feedback1 毛刺修复：四向偏移叠字（放大后偏移字形阶梯锯齿显形）→
+## draw_string_outline（TextServer 字形轮廓平滑外扩，与 LabelSettings.outline 同一
+## 渲染路径且进 glyph 缓存）；halo_w 已是地图单位，outline size 随字号同尺度取整
 func _draw_halo_string(font: Font, text: String, pos: Vector2, fs: float, halo_w: float,
 		halo: Color, ink: Color) -> void:
-	for off in [Vector2(-halo_w, 0), Vector2(halo_w, 0), Vector2(0, -halo_w), Vector2(0, halo_w)]:
-		draw_string(font, pos + off, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, halo)
+	var ow := maxi(1, roundi(halo_w))
+	draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ow, halo)
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)
 
 
-## 国名逐字绘制（字距 15%——中文无大写，以字距/字重表达层级）
+## 国名逐字绘制（字距 15%——中文无大写，以字距/字重表达层级）；halo 同引擎级描边
 func _draw_spaced(font: Font, text: String, pos: Vector2, fs: float, tracking: float,
 		halo_w: float, halo: Color, ink: Color) -> void:
 	var cursor := pos
+	var ow := maxi(1, roundi(halo_w))
 	for ch in text:
-		for off in [Vector2(-halo_w, 0), Vector2(halo_w, 0), Vector2(0, -halo_w), Vector2(0, halo_w)]:
-			draw_string(font, cursor + off, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, halo)
+		draw_string_outline(font, cursor, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ow, halo)
 		draw_string(font, cursor, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)
 		cursor.x += font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + tracking
 

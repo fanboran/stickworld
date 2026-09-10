@@ -55,6 +55,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_road_walk.gd",
 	"res://tests/unit/test_territory_registry.gd",
 	"res://tests/unit/test_project_render_settings.gd",
+	"res://tests/unit/test_spine_import_assets.gd",
 	"res://tests/unit/test_profession_registry.gd",
 	"res://tests/unit/test_behavior_harvest.gd",
 	"res://tests/unit/test_work_slots_rhythm.gd",

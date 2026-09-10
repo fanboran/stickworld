@@ -1,0 +1,2878 @@
+[gd_resource type="Animation" format=3]
+
+[resource]
+metadata/anim_events = [{ "time": 0.1, "name": "Sound", "string": "Giant-Rider-Stomp" }, { "time": 1.6, "name": "Sound", "string": "Giant-Rider-Stomp" }]
+length = 2.8333
+loop_mode = 1
+
+tracks/0/type = "bezier"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("bone:rotation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.1699950691442477, 0, 0, 0, 0, 0.1699950691442477, 0, 0, 0, 0, 0.16999506914424786, 0, 0, 0, 0, 0.16999506914424786, 0, 0, 0, 0, 0.16999506914424786, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/1/type = "bezier"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("bone:position:x")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(32.8, 0, 0, 0.6120000000000001, 0, 31.71, -0.225, 0, 0.15, 0, 32.8, -0.15, 0, 0.4186160999999999, -0.2070999999999993, 31.71, -0.21667499999999995, 0, 0.11665000000000003, 0, 32.8, -0.11665000000000003, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.9, 1.5, 2.3667, 2.8333)
+}
+tracks/2/type = "bezier"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("bone:position:y")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-168.85000000000002, 0, 0, 0.6120000000000001, 0, -183.94, -0.225, 0, 0.15, 0, -169.85000000000002, -0.15, 0, 0.4186160999999999, -2.8670999999999953, -184.94, -0.21667499999999995, 0, 0.11665000000000003, 0, -168.85000000000002, -0.11665000000000003, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.9, 1.5, 2.3667, 2.8333)
+}
+tracks/3/type = "bezier"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("bone:scale:x")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/4/type = "bezier"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("bone:scale:y")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/5/type = "bezier"
+tracks/5/imported = false
+tracks/5/enabled = true
+tracks/5/path = NodePath("minerleg2:rotation")
+tracks/5/interp = 1
+tracks/5/loop_wrap = true
+tracks/5/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.676838683923401, 0, 0, 0, 0, 0.730071226109228, 0, 0, 0, 0, 0.9302604913129776, 0, 0, 0, 0, 1.5873769546888428, 0, 0, 0, 0, 1.7451547190691301, 0, 0, 0, 0, 1.6927948415093002, 0, 0, 0, 0, 0.6768386839234013, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.1333, 0.4667, 1.4, 1.6, 2.0333, 2.8333)
+}
+tracks/6/type = "bezier"
+tracks/6/imported = false
+tracks/6/enabled = true
+tracks/6/path = NodePath("minerleg2:position:x")
+tracks/6/interp = 1
+tracks/6/loop_wrap = true
+tracks/6/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(2.95, 0, 0, 0, 0, -3.8699999999999997, 0, 0, 0, 0, 2.95, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4, 2.8333)
+}
+tracks/7/type = "bezier"
+tracks/7/imported = false
+tracks/7/enabled = true
+tracks/7/path = NodePath("minerleg2:position:y")
+tracks/7/interp = 1
+tracks/7/loop_wrap = true
+tracks/7/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(18.43, 0, 0, 0, 0, 21.71, 0, 0, 0, 0, 18.43, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4, 2.8333)
+}
+tracks/8/type = "bezier"
+tracks/8/imported = false
+tracks/8/enabled = true
+tracks/8/path = NodePath("minerleg2:scale:x")
+tracks/8/interp = 1
+tracks/8/loop_wrap = true
+tracks/8/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/9/type = "bezier"
+tracks/9/imported = false
+tracks/9/enabled = true
+tracks/9/path = NodePath("minerleg2:scale:y")
+tracks/9/interp = 1
+tracks/9/loop_wrap = true
+tracks/9/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/10/type = "bezier"
+tracks/10/imported = false
+tracks/10/enabled = true
+tracks/10/path = NodePath("minerleg4:rotation")
+tracks/10/interp = 1
+tracks/10/loop_wrap = true
+tracks/10/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1.6851153928005251, 0, 0, 0, 0, 1.7748253163530334, 0, 0, 0, 0, 1.5999433253032018, 0, 0, 0, 0, 1.498016096986733, 0, 0, 0, 0, 0.583289036016505, 0, 0, 0, 0, 0.6335545184739416, 0, 0, 0, 0, 0.8656833089891875, 0, 0, 0, 0, 1.6851153928005251, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.1333, 0.4667, 0.6333, 1.4667, 1.6667, 2.1, 2.8333)
+}
+tracks/11/type = "bezier"
+tracks/11/imported = false
+tracks/11/enabled = true
+tracks/11/path = NodePath("minerleg4:position:x")
+tracks/11/interp = 1
+tracks/11/loop_wrap = true
+tracks/11/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-2.84, 0, 0, 0, 0, 2.91, 0, 0, 0, 0, -2.84, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4667, 2.8333)
+}
+tracks/12/type = "bezier"
+tracks/12/imported = false
+tracks/12/enabled = true
+tracks/12/path = NodePath("minerleg4:position:y")
+tracks/12/interp = 1
+tracks/12/loop_wrap = true
+tracks/12/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(19.73, 0, 0, 0, 0, 20.95, 0, 0, 0, 0, 19.73, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4667, 2.8333)
+}
+tracks/13/type = "bezier"
+tracks/13/imported = false
+tracks/13/enabled = true
+tracks/13/path = NodePath("minerleg4:scale:x")
+tracks/13/interp = 1
+tracks/13/loop_wrap = true
+tracks/13/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4657, 1.4667, 2.8323, 2.8333)
+}
+tracks/14/type = "bezier"
+tracks/14/imported = false
+tracks/14/enabled = true
+tracks/14/path = NodePath("minerleg4:scale:y")
+tracks/14/interp = 1
+tracks/14/loop_wrap = true
+tracks/14/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4657, 1.4667, 2.8323, 2.8333)
+}
+tracks/15/type = "bezier"
+tracks/15/imported = false
+tracks/15/enabled = true
+tracks/15/path = NodePath("minertorso1:rotation")
+tracks/15/interp = 1
+tracks/15/loop_wrap = true
+tracks/15/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-1.3624040141067737, 0, 0, 0.116675, 0, -1.5482815794441698, -0.116675, 0, 0.0636909, 0, -1.5315264186250241, -0.08865399999999998, -0.009885544883295924, 0.17972210000000005, 0.024129176908821503, -1.4625859131712484, -0.12905860000000002, 0, 0.25835, 0, -1.509709802975095, -0.25835, 0, 0.07499999999999996, 0, -1.583886296184854, -0.07499999999999996, 0, 0.06664999999999999, 0, -1.3624040141067737, -0.06664999999999999, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.4667, 0.7, 1.2333, 2.2667, 2.5667, 2.8333)
+}
+tracks/16/type = "bezier"
+tracks/16/imported = false
+tracks/16/enabled = true
+tracks/16/path = NodePath("minertorso1:position:x")
+tracks/16/interp = 1
+tracks/16/loop_wrap = true
+tracks/16/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.67, 0, 0, 0, 0, -1.67, 0, 0, 0, 0, -1.67, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/17/type = "bezier"
+tracks/17/imported = false
+tracks/17/enabled = true
+tracks/17/path = NodePath("minertorso1:position:y")
+tracks/17/interp = 1
+tracks/17/loop_wrap = true
+tracks/17/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-8.510000000000002, 0, 0, 0, 0, -8.510000000000002, 0, 0, 0, 0, -8.510000000000002, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/18/type = "bezier"
+tracks/18/imported = false
+tracks/18/enabled = true
+tracks/18/path = NodePath("minertorso1:scale:x")
+tracks/18/interp = 1
+tracks/18/loop_wrap = true
+tracks/18/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/19/type = "bezier"
+tracks/19/imported = false
+tracks/19/enabled = true
+tracks/19/path = NodePath("minertorso1:scale:y")
+tracks/19/interp = 1
+tracks/19/loop_wrap = true
+tracks/19/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/20/type = "bezier"
+tracks/20/imported = false
+tracks/20/enabled = true
+tracks/20/path = NodePath("bone2:rotation")
+tracks/20/interp = 1
+tracks/20/loop_wrap = true
+tracks/20/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.08970992355250854, 0, 0, 0.116675, 0, 0.18622663118779476, -0.116675, 0, 0.0636909, 0, 0.2057743188101313, -0.08865399999999998, -0.011533135697178567, 0.17972210000000005, 0.02687807048071271, 0.2825688058978819, -0.12905860000000002, 0, 0.25835, 0, 0.2349213173184369, -0.25835, 0, 0.07499999999999996, 0, 0.24190263432641382, -0.07499999999999996, 0, 0.06664999999999999, 0, 0.0897099235525088, -0.06664999999999999, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.4667, 0.7, 1.2333, 2.2667, 2.5667, 2.8333)
+}
+tracks/21/type = "bezier"
+tracks/21/imported = false
+tracks/21/enabled = true
+tracks/21/path = NodePath("bone2:position:x")
+tracks/21/interp = 1
+tracks/21/loop_wrap = true
+tracks/21/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(32.05, 0, 0, 0, 0, 32.05, 0, 0, 0, 0, 32.05, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/22/type = "bezier"
+tracks/22/imported = false
+tracks/22/enabled = true
+tracks/22/path = NodePath("bone2:position:y")
+tracks/22/interp = 1
+tracks/22/loop_wrap = true
+tracks/22/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.12, 0, 0, 0, 0, 0.12, 0, 0, 0, 0, 0.12, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/23/type = "bezier"
+tracks/23/imported = false
+tracks/23/enabled = true
+tracks/23/path = NodePath("bone2:scale:x")
+tracks/23/interp = 1
+tracks/23/loop_wrap = true
+tracks/23/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/24/type = "bezier"
+tracks/24/imported = false
+tracks/24/enabled = true
+tracks/24/path = NodePath("bone2:scale:y")
+tracks/24/interp = 1
+tracks/24/loop_wrap = true
+tracks/24/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/25/type = "bezier"
+tracks/25/imported = false
+tracks/25/enabled = true
+tracks/25/path = NodePath("minerleg1:rotation")
+tracks/25/interp = 1
+tracks/25/loop_wrap = true
+tracks/25/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.8108799704765656, 0, 0, 0, 0, 0.6305874587455511, 0, 0, 0.13332499999999997, 0, 0.590270353024482, -0.13332499999999997, 0, 0, 0, 0.6881833240613642, 0, 0, 0, 0, 0.5066690818539538, 0, 0, 0, 0, 0.8183848862601413, 0, 0, 0, 0, 1.1121237993707866, 0, 0, 0, 0, 0.8108799704765656, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.2, 0.7333, 1.4, 1.6, 2.0667, 2.5, 2.8333)
+}
+tracks/26/type = "bezier"
+tracks/26/imported = false
+tracks/26/enabled = true
+tracks/26/path = NodePath("minerleg1:position:x")
+tracks/26/interp = 1
+tracks/26/loop_wrap = true
+tracks/26/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(82.67, 0, 0, 0, 0, 82.67, 0, 0, 0, 0, 82.67, 0, 0, 0, 0, 82.67, 0, 0, 0, 0, 82.67, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/27/type = "bezier"
+tracks/27/imported = false
+tracks/27/enabled = true
+tracks/27/path = NodePath("minerleg1:position:y")
+tracks/27/interp = 1
+tracks/27/loop_wrap = true
+tracks/27/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1.95, 0, 0, 0, 0, 1.95, 0, 0, 0, 0, 1.95, 0, 0, 0, 0, 1.95, 0, 0, 0, 0, 1.95, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/28/type = "bezier"
+tracks/28/imported = false
+tracks/28/enabled = true
+tracks/28/path = NodePath("minerleg1:scale:x")
+tracks/28/interp = 1
+tracks/28/loop_wrap = true
+tracks/28/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/29/type = "bezier"
+tracks/29/imported = false
+tracks/29/enabled = true
+tracks/29/path = NodePath("minerleg1:scale:y")
+tracks/29/interp = 1
+tracks/29/loop_wrap = true
+tracks/29/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/30/type = "bezier"
+tracks/30/imported = false
+tracks/30/enabled = true
+tracks/30/path = NodePath("minerleg3:rotation")
+tracks/30/interp = 1
+tracks/30/loop_wrap = true
+tracks/30/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.3251548396465436, 0, 0, 0, 0, 0.441917366604964, 0, 0, 0, 0, 0.8866272600131195, 0, 0, 0, 0, 0.8429940287132612, 0, 0, 0, 0, 0.8080874436733747, 0, 0, 0, 0, 0.5551892350593961, 0, 0, 0, 0, 0.4516912104161323, 0, 0, 0, 0, 0.3251548396465434, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.1333, 0.4667, 1.4667, 1.6667, 2.1, 2.3333, 2.8333)
+}
+tracks/31/type = "bezier"
+tracks/31/imported = false
+tracks/31/enabled = true
+tracks/31/path = NodePath("minerleg3:position:x")
+tracks/31/interp = 1
+tracks/31/loop_wrap = true
+tracks/31/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(77.84, 0, 0, 0, 0, 77.84, 0, 0, 0, 0, 77.84, 0, 0, 0, 0, 77.84, 0, 0, 0, 0, 77.84, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4657, 1.4667, 2.8323, 2.8333)
+}
+tracks/32/type = "bezier"
+tracks/32/imported = false
+tracks/32/enabled = true
+tracks/32/path = NodePath("minerleg3:position:y")
+tracks/32/interp = 1
+tracks/32/loop_wrap = true
+tracks/32/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.4, 0, 0, 0, 0, 0.4, 0, 0, 0, 0, 0.4, 0, 0, 0, 0, 0.4, 0, 0, 0, 0, 0.4, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4657, 1.4667, 2.8323, 2.8333)
+}
+tracks/33/type = "bezier"
+tracks/33/imported = false
+tracks/33/enabled = true
+tracks/33/path = NodePath("minerleg3:scale:x")
+tracks/33/interp = 1
+tracks/33/loop_wrap = true
+tracks/33/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4657, 1.4667, 2.8323, 2.8333)
+}
+tracks/34/type = "bezier"
+tracks/34/imported = false
+tracks/34/enabled = true
+tracks/34/path = NodePath("minerleg3:scale:y")
+tracks/34/interp = 1
+tracks/34/loop_wrap = true
+tracks/34/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4657, 1.4667, 2.8323, 2.8333)
+}
+tracks/35/type = "bezier"
+tracks/35/imported = false
+tracks/35/enabled = true
+tracks/35/path = NodePath("bone3:rotation")
+tracks/35/interp = 1
+tracks/35/loop_wrap = true
+tracks/35/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.32934362985133, 0, 0, 0.116675, 0, 0.42568580456141714, -0.116675, 0, 0.0636909, 0, 0.4452334921837537, -0.08865399999999998, -0.011533135697178567, 0.17972210000000005, 0.026878070480712536, 0.5220279792715038, -0.12905860000000002, 0, 0.25835, 0, 0.494975375865592, -0.25835, 0, 0.07499999999999996, 0, 0.48136180770003617, -0.07499999999999996, 0, 0.06664999999999999, 0, 0.3293436298513299, -0.06664999999999999, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.4667, 0.7, 1.2333, 2.2667, 2.5667, 2.8333)
+}
+tracks/36/type = "bezier"
+tracks/36/imported = false
+tracks/36/enabled = true
+tracks/36/path = NodePath("bone3:position:x")
+tracks/36/interp = 1
+tracks/36/loop_wrap = true
+tracks/36/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(36.83, 0, 0, 0, 0, 36.83, 0, 0, 0, 0, 36.83, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/37/type = "bezier"
+tracks/37/imported = false
+tracks/37/enabled = true
+tracks/37/path = NodePath("bone3:position:y")
+tracks/37/interp = 1
+tracks/37/loop_wrap = true
+tracks/37/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.76, 0, 0, 0, 0, 0.76, 0, 0, 0, 0, 0.76, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/38/type = "bezier"
+tracks/38/imported = false
+tracks/38/enabled = true
+tracks/38/path = NodePath("bone3:scale:x")
+tracks/38/interp = 1
+tracks/38/loop_wrap = true
+tracks/38/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/39/type = "bezier"
+tracks/39/imported = false
+tracks/39/enabled = true
+tracks/39/path = NodePath("bone3:scale:y")
+tracks/39/interp = 1
+tracks/39/loop_wrap = true
+tracks/39/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/40/type = "bezier"
+tracks/40/imported = false
+tracks/40/enabled = true
+tracks/40/path = NodePath("minerfoot1:rotation")
+tracks/40/interp = 1
+tracks/40/loop_wrap = true
+tracks/40/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-1.5060446115459072, 0, 0, 0, 0, -1.5760323145508794, 0, 0, 0, 0, -2.0771163427984516, 0, 0, 0, 0, -1.7662732030182615, 0, 0, 0, 0, -1.6411330956502683, 0, 0, 0, 0, -1.936966403863307, 0, 0, 0, 0, -1.5060446115459072, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.1333, 1.4, 1.7667, 2.1333, 2.5667, 2.8333)
+}
+tracks/41/type = "bezier"
+tracks/41/imported = false
+tracks/41/enabled = true
+tracks/41/path = NodePath("minerfoot1:position:x")
+tracks/41/interp = 1
+tracks/41/loop_wrap = true
+tracks/41/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(81.41, 0, 0, 0, 0, 81.41, 0, 0, 0, 0, 81.41, 0, 0, 0, 0, 81.41, 0, 0, 0, 0, 81.41, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/42/type = "bezier"
+tracks/42/imported = false
+tracks/42/enabled = true
+tracks/42/path = NodePath("minerfoot1:position:y")
+tracks/42/interp = 1
+tracks/42/loop_wrap = true
+tracks/42/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-1.62, 0, 0, 0, 0, -1.62, 0, 0, 0, 0, -1.62, 0, 0, 0, 0, -1.62, 0, 0, 0, 0, -1.62, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/43/type = "bezier"
+tracks/43/imported = false
+tracks/43/enabled = true
+tracks/43/path = NodePath("minerfoot1:scale:x")
+tracks/43/interp = 1
+tracks/43/loop_wrap = true
+tracks/43/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/44/type = "bezier"
+tracks/44/imported = false
+tracks/44/enabled = true
+tracks/44/path = NodePath("minerfoot1:scale:y")
+tracks/44/interp = 1
+tracks/44/loop_wrap = true
+tracks/44/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/45/type = "bezier"
+tracks/45/imported = false
+tracks/45/enabled = true
+tracks/45/path = NodePath("minerfoot2:rotation")
+tracks/45/interp = 1
+tracks/45/loop_wrap = true
+tracks/45/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-1.6488125443590431, 0, 0, 0, 0, -1.531526418625024, 0, 0, 0, 0, -1.3643238762839673, 0, 0, 0, 0, -1.8310249182672513, 0, 0, 0, 0, -1.5563100940033436, 0, 0, 0, 0, -1.6784831416429467, 0, 0, 0, 0, -1.556833692778942, 0, 0, 0, 0, -1.576904979176877, 0, 0, 0, 0, -1.8228218707828774, 0, 0, 0, 0, -1.8448130193580063, 0, 0, 0, 0, -1.648812544359043, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.1333, 0.6333, 0.9333, 1.4, 1.6, 1.8333, 2.0667, 2.3667, 2.7333, 2.8333)
+}
+tracks/46/type = "bezier"
+tracks/46/imported = false
+tracks/46/enabled = true
+tracks/46/path = NodePath("minerfoot2:position:x")
+tracks/46/interp = 1
+tracks/46/loop_wrap = true
+tracks/46/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(85.28, 0, 0, 0, 0, 85.28, 0, 0, 0, 0, 85.28, 0, 0, 0, 0, 85.28, 0, 0, 0, 0, 85.28, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/47/type = "bezier"
+tracks/47/imported = false
+tracks/47/enabled = true
+tracks/47/path = NodePath("minerfoot2:position:y")
+tracks/47/interp = 1
+tracks/47/loop_wrap = true
+tracks/47/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-2.83, 0, 0, 0, 0, -2.83, 0, 0, 0, 0, -2.83, 0, 0, 0, 0, -2.83, 0, 0, 0, 0, -2.83, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/48/type = "bezier"
+tracks/48/imported = false
+tracks/48/enabled = true
+tracks/48/path = NodePath("minerfoot2:scale:x")
+tracks/48/interp = 1
+tracks/48/loop_wrap = true
+tracks/48/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/49/type = "bezier"
+tracks/49/imported = false
+tracks/49/enabled = true
+tracks/49/path = NodePath("minerfoot2:scale:y")
+tracks/49/interp = 1
+tracks/49/loop_wrap = true
+tracks/49/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.399, 1.4, 2.8323, 2.8333)
+}
+tracks/50/type = "bezier"
+tracks/50/imported = false
+tracks/50/enabled = true
+tracks/50/path = NodePath("minerarm3:rotation")
+tracks/50/interp = 1
+tracks/50/loop_wrap = true
+tracks/50/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(2.0924752402160016, 0, 0, 0, 0, 2.0924752402160016, 0, 0, 0, 0, 2.0924752402160016, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/51/type = "bezier"
+tracks/51/imported = false
+tracks/51/enabled = true
+tracks/51/path = NodePath("minerarm3:position:x")
+tracks/51/interp = 1
+tracks/51/loop_wrap = true
+tracks/51/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(34.9, 0, 0, 0, 0, 34.9, 0, 0, 0, 0, 34.9, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/52/type = "bezier"
+tracks/52/imported = false
+tracks/52/enabled = true
+tracks/52/path = NodePath("minerarm3:position:y")
+tracks/52/interp = 1
+tracks/52/loop_wrap = true
+tracks/52/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1.47, 0, 0, 0, 0, 1.47, 0, 0, 0, 0, 1.47, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/53/type = "bezier"
+tracks/53/imported = false
+tracks/53/enabled = true
+tracks/53/path = NodePath("minerarm3:scale:x")
+tracks/53/interp = 1
+tracks/53/loop_wrap = true
+tracks/53/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/54/type = "bezier"
+tracks/54/imported = false
+tracks/54/enabled = true
+tracks/54/path = NodePath("minerarm3:scale:y")
+tracks/54/interp = 1
+tracks/54/loop_wrap = true
+tracks/54/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/55/type = "bezier"
+tracks/55/imported = false
+tracks/55/enabled = true
+tracks/55/path = NodePath("minerhead1:rotation")
+tracks/55/interp = 1
+tracks/55/loop_wrap = true
+tracks/55/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.183434104384604, 0, 0, 0.1129414, 0, 0.14765485471872017, -0.1572779, 0.01252273738305934, 0.08865399999999998, -0.011121237993707699, 0.1288052987971817, -0.0636909, 0, 0.13332500000000003, 0, 0.0881391272257136, -0.13332500000000003, 0, 0.09999999999999998, 0, 0.12828170002158337, -0.09999999999999998, 0, 0.19318700000000005, -0.0036931166972200653, 0.11222467090323526, -0.15454960000000004, 0, 0.14164999999999994, 0, 0.1834341043846041, -0.14164999999999994, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.4667, 0.7, 1.2333, 1.6333, 2.2667, 2.8333)
+}
+tracks/56/type = "bezier"
+tracks/56/imported = false
+tracks/56/enabled = true
+tracks/56/path = NodePath("minerhead1:position:x")
+tracks/56/interp = 1
+tracks/56/loop_wrap = true
+tracks/56/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(52.64, 0, 0, 0, 0, 52.64, 0, 0, 0, 0, 52.64, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/57/type = "bezier"
+tracks/57/imported = false
+tracks/57/enabled = true
+tracks/57/path = NodePath("minerhead1:position:y")
+tracks/57/interp = 1
+tracks/57/loop_wrap = true
+tracks/57/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.35, 0, 0, 0, 0, -0.35, 0, 0, 0, 0, -0.35, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/58/type = "bezier"
+tracks/58/imported = false
+tracks/58/enabled = true
+tracks/58/path = NodePath("minerhead1:scale:x")
+tracks/58/interp = 1
+tracks/58/loop_wrap = true
+tracks/58/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/59/type = "bezier"
+tracks/59/imported = false
+tracks/59/enabled = true
+tracks/59/path = NodePath("minerhead1:scale:y")
+tracks/59/interp = 1
+tracks/59/loop_wrap = true
+tracks/59/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/60/type = "bezier"
+tracks/60/imported = false
+tracks/60/enabled = true
+tracks/60/path = NodePath("minerarm4:rotation")
+tracks/60/interp = 1
+tracks/60/loop_wrap = true
+tracks/60/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-2.195798731934066, 0, 0, 0.789, 0, -2.20365271356804, -0.32699999999999996, 0.003769911184307517, 0.39599009999999996, 0.004005530633326737, -2.195798731934066, -0.6039848999999999, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.5, 2.8333)
+}
+tracks/61/type = "bezier"
+tracks/61/imported = false
+tracks/61/enabled = true
+tracks/61/path = NodePath("minerarm4:position:x")
+tracks/61/interp = 1
+tracks/61/loop_wrap = true
+tracks/61/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(76.26, 0, 0, 0, 0, 76.26, 0, 0, 0, 0, 76.26, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/62/type = "bezier"
+tracks/62/imported = false
+tracks/62/enabled = true
+tracks/62/path = NodePath("minerarm4:position:y")
+tracks/62/interp = 1
+tracks/62/loop_wrap = true
+tracks/62/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.6, 0, 0, 0, 0, -1.6, 0, 0, 0, 0, -1.6, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/63/type = "bezier"
+tracks/63/imported = false
+tracks/63/enabled = true
+tracks/63/path = NodePath("minerarm4:scale:x")
+tracks/63/interp = 1
+tracks/63/loop_wrap = true
+tracks/63/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/64/type = "bezier"
+tracks/64/imported = false
+tracks/64/enabled = true
+tracks/64/path = NodePath("minerarm4:scale:y")
+tracks/64/interp = 1
+tracks/64/loop_wrap = true
+tracks/64/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/65/type = "bezier"
+tracks/65/imported = false
+tracks/65/enabled = true
+tracks/65/path = NodePath("Arrow1:rotation")
+tracks/65/interp = 1
+tracks/65/loop_wrap = true
+tracks/65/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.1302752235915279, 0, 0, 0, 0, -1.1302752235915279, 0, 0, 0, 0, -1.1302752235915279, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/66/type = "bezier"
+tracks/66/imported = false
+tracks/66/enabled = true
+tracks/66/path = NodePath("Arrow1:position:x")
+tracks/66/interp = 1
+tracks/66/loop_wrap = true
+tracks/66/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(70.94, 0, 0, 0, 0, 70.94, 0, 0, 0, 0, 70.94, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/67/type = "bezier"
+tracks/67/imported = false
+tracks/67/enabled = true
+tracks/67/path = NodePath("Arrow1:position:y")
+tracks/67/interp = 1
+tracks/67/loop_wrap = true
+tracks/67/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(19.12, 0, 0, 0, 0, 19.12, 0, 0, 0, 0, 19.12, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/68/type = "bezier"
+tracks/68/imported = false
+tracks/68/enabled = true
+tracks/68/path = NodePath("Arrow1:scale:x")
+tracks/68/interp = 1
+tracks/68/loop_wrap = true
+tracks/68/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/69/type = "bezier"
+tracks/69/imported = false
+tracks/69/enabled = true
+tracks/69/path = NodePath("Arrow1:scale:y")
+tracks/69/interp = 1
+tracks/69/loop_wrap = true
+tracks/69/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/70/type = "bezier"
+tracks/70/imported = false
+tracks/70/enabled = true
+tracks/70/path = NodePath("pickaxe1:rotation")
+tracks/70/interp = 1
+tracks/70/loop_wrap = true
+tracks/70/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.8120008294205128, 0, 0, 0.789, 0, -1.8198548110544872, -0.32699999999999996, 0.0037699111843077305, 0.39599009999999996, 0.004005530633326964, -1.8120008294205128, -0.6039848999999999, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.5, 2.8333)
+}
+tracks/71/type = "bezier"
+tracks/71/imported = false
+tracks/71/enabled = true
+tracks/71/path = NodePath("pickaxe1:position:x")
+tracks/71/interp = 1
+tracks/71/loop_wrap = true
+tracks/71/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(58.85, 0, 0, 0, 0, 58.85, 0, 0, 0, 0, 58.85, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/72/type = "bezier"
+tracks/72/imported = false
+tracks/72/enabled = true
+tracks/72/path = NodePath("pickaxe1:position:y")
+tracks/72/interp = 1
+tracks/72/loop_wrap = true
+tracks/72/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-8.9, 0, 0, 0, 0, -8.9, 0, 0, 0, 0, -8.9, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/73/type = "bezier"
+tracks/73/imported = false
+tracks/73/enabled = true
+tracks/73/path = NodePath("pickaxe1:scale:x")
+tracks/73/interp = 1
+tracks/73/loop_wrap = true
+tracks/73/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/74/type = "bezier"
+tracks/74/imported = false
+tracks/74/enabled = true
+tracks/74/path = NodePath("pickaxe1:scale:y")
+tracks/74/interp = 1
+tracks/74/loop_wrap = true
+tracks/74/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/75/type = "bezier"
+tracks/75/imported = false
+tracks/75/enabled = true
+tracks/75/path = NodePath("root:rotation")
+tracks/75/interp = 1
+tracks/75/loop_wrap = true
+tracks/75/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/76/type = "bezier"
+tracks/76/imported = false
+tracks/76/enabled = true
+tracks/76/path = NodePath("root:position:y")
+tracks/76/interp = 1
+tracks/76/loop_wrap = true
+tracks/76/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/77/type = "bezier"
+tracks/77/imported = false
+tracks/77/enabled = true
+tracks/77/path = NodePath("root:scale:x")
+tracks/77/interp = 1
+tracks/77/loop_wrap = true
+tracks/77/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/78/type = "bezier"
+tracks/78/imported = false
+tracks/78/enabled = true
+tracks/78/path = NodePath("root:scale:y")
+tracks/78/interp = 1
+tracks/78/loop_wrap = true
+tracks/78/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/79/type = "bezier"
+tracks/79/imported = false
+tracks/79/enabled = true
+tracks/79/path = NodePath("minerbag:rotation")
+tracks/79/interp = 1
+tracks/79/loop_wrap = true
+tracks/79/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(2.5265386251869915, 0, 0, 0, 0, 2.5265386251869915, 0, 0, 0, 0, 2.5265386251869915, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/80/type = "bezier"
+tracks/80/imported = false
+tracks/80/enabled = true
+tracks/80/path = NodePath("minerbag:position:x")
+tracks/80/interp = 1
+tracks/80/loop_wrap = true
+tracks/80/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-104.25, 0, 0, 0, 0, -104.25, 0, 0, 0, 0, -104.25, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/81/type = "bezier"
+tracks/81/imported = false
+tracks/81/enabled = true
+tracks/81/path = NodePath("minerbag:position:y")
+tracks/81/interp = 1
+tracks/81/loop_wrap = true
+tracks/81/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-134.06, 0, 0, 0, 0, -134.06, 0, 0, 0, 0, -134.06, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/82/type = "bezier"
+tracks/82/imported = false
+tracks/82/enabled = true
+tracks/82/path = NodePath("minerbag:scale:x")
+tracks/82/interp = 1
+tracks/82/loop_wrap = true
+tracks/82/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/83/type = "bezier"
+tracks/83/imported = false
+tracks/83/enabled = true
+tracks/83/path = NodePath("minerbag:scale:y")
+tracks/83/interp = 1
+tracks/83/loop_wrap = true
+tracks/83/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/84/type = "bezier"
+tracks/84/imported = false
+tracks/84/enabled = true
+tracks/84/path = NodePath("helm:rotation")
+tracks/84/interp = 1
+tracks/84/loop_wrap = true
+tracks/84/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.09651670763528643, 0, 0, 0, 0, 0.09651670763528643, 0, 0, 0, 0, 0.09651670763528643, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/85/type = "bezier"
+tracks/85/imported = false
+tracks/85/enabled = true
+tracks/85/path = NodePath("helm:position:x")
+tracks/85/interp = 1
+tracks/85/loop_wrap = true
+tracks/85/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(22.85, 0, 0, 0, 0, 22.85, 0, 0, 0, 0, 22.85, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/86/type = "bezier"
+tracks/86/imported = false
+tracks/86/enabled = true
+tracks/86/path = NodePath("helm:position:y")
+tracks/86/interp = 1
+tracks/86/loop_wrap = true
+tracks/86/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-25.98, 0, 0, 0, 0, -25.98, 0, 0, 0, 0, -25.98, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/87/type = "bezier"
+tracks/87/imported = false
+tracks/87/enabled = true
+tracks/87/path = NodePath("helm:scale:x")
+tracks/87/interp = 1
+tracks/87/loop_wrap = true
+tracks/87/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/88/type = "bezier"
+tracks/88/imported = false
+tracks/88/enabled = true
+tracks/88/path = NodePath("helm:scale:y")
+tracks/88/interp = 1
+tracks/88/loop_wrap = true
+tracks/88/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/89/type = "bezier"
+tracks/89/imported = false
+tracks/89/enabled = true
+tracks/89/path = NodePath("bone4:rotation")
+tracks/89/interp = 1
+tracks/89/loop_wrap = true
+tracks/89/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.24591689160600103, 0, 0, 0.35, 0, 0.122173047639603, -0.35, 0, 0.358325, 0, 0.24591689160600103, -0.358325, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4, 2.8333)
+}
+tracks/90/type = "bezier"
+tracks/90/imported = false
+tracks/90/enabled = true
+tracks/90/path = NodePath("bone4:position:x")
+tracks/90/interp = 1
+tracks/90/loop_wrap = true
+tracks/90/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(20.84, 0, 0, 0.35, 0, -2.6000000000000014, -0.35, 0, 0.358325, 0, 20.84, -0.358325, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4, 2.8333)
+}
+tracks/91/type = "bezier"
+tracks/91/imported = false
+tracks/91/enabled = true
+tracks/91/path = NodePath("bone4:position:y")
+tracks/91/interp = 1
+tracks/91/loop_wrap = true
+tracks/91/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-19.54, 0, 0, 0.35, 0, -33.739999999999995, -0.35, 0, 0.358325, 0, -19.54, -0.358325, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.4, 2.8333)
+}
+tracks/92/type = "bezier"
+tracks/92/imported = false
+tracks/92/enabled = true
+tracks/92/path = NodePath("bone4:scale:x")
+tracks/92/interp = 1
+tracks/92/loop_wrap = true
+tracks/92/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/93/type = "bezier"
+tracks/93/imported = false
+tracks/93/enabled = true
+tracks/93/path = NodePath("bone4:scale:y")
+tracks/93/interp = 1
+tracks/93/loop_wrap = true
+tracks/93/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/94/type = "bezier"
+tracks/94/imported = false
+tracks/94/enabled = true
+tracks/94/path = NodePath("bone20:rotation")
+tracks/94/interp = 1
+tracks/94/loop_wrap = true
+tracks/94/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.1117010721276371, 0, 0, 0, 0, 0.07365289443416059, 0, 0, 0.16665, 0, 0.1373574121319537, -0.16665, 0, 0.18335, 0, 0.07365289443416059, -0.036670000000000036, 0.013377948716536553, 0, 0, 0.1117010721276371, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.6667, 1.3333, 2.0667, 2.8333)
+}
+tracks/95/type = "bezier"
+tracks/95/imported = false
+tracks/95/enabled = true
+tracks/95/path = NodePath("bone20:position:x")
+tracks/95/interp = 1
+tracks/95/loop_wrap = true
+tracks/95/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(9.88, 0, 0, 0, 0, 9.88, 0, 0, 0, 0, 9.88, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/96/type = "bezier"
+tracks/96/imported = false
+tracks/96/enabled = true
+tracks/96/path = NodePath("bone20:position:y")
+tracks/96/interp = 1
+tracks/96/loop_wrap = true
+tracks/96/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(9.07, 0, 0, 0, 0, 9.07, 0, 0, 0, 0, 9.07, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/97/type = "bezier"
+tracks/97/imported = false
+tracks/97/enabled = true
+tracks/97/path = NodePath("bone20:scale:x")
+tracks/97/interp = 1
+tracks/97/loop_wrap = true
+tracks/97/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/98/type = "bezier"
+tracks/98/imported = false
+tracks/98/enabled = true
+tracks/98/path = NodePath("bone20:scale:y")
+tracks/98/interp = 1
+tracks/98/loop_wrap = true
+tracks/98/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/99/type = "bezier"
+tracks/99/imported = false
+tracks/99/enabled = true
+tracks/99/path = NodePath("bone22:rotation")
+tracks/99/interp = 1
+tracks/99/loop_wrap = true
+tracks/99/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.052883476335428184, 0, 0, 0, 0, -0.052883476335428184, 0, 0, 0, 0, -0.052883476335428184, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/100/type = "bezier"
+tracks/100/imported = false
+tracks/100/enabled = true
+tracks/100/path = NodePath("bone22:position:x")
+tracks/100/interp = 1
+tracks/100/loop_wrap = true
+tracks/100/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(24.65, 0, 0, 0, 0, 24.65, 0, 0, 0, 0, 24.65, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/101/type = "bezier"
+tracks/101/imported = false
+tracks/101/enabled = true
+tracks/101/path = NodePath("bone22:position:y")
+tracks/101/interp = 1
+tracks/101/loop_wrap = true
+tracks/101/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1.01, 0, 0, 0, 0, 1.01, 0, 0, 0, 0, 1.01, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/102/type = "bezier"
+tracks/102/imported = false
+tracks/102/enabled = true
+tracks/102/path = NodePath("bone22:scale:x")
+tracks/102/interp = 1
+tracks/102/loop_wrap = true
+tracks/102/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/103/type = "bezier"
+tracks/103/imported = false
+tracks/103/enabled = true
+tracks/103/path = NodePath("bone22:scale:y")
+tracks/103/interp = 1
+tracks/103/loop_wrap = true
+tracks/103/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/104/type = "bezier"
+tracks/104/imported = false
+tracks/104/enabled = true
+tracks/104/path = NodePath("bone23:rotation")
+tracks/104/interp = 1
+tracks/104/loop_wrap = true
+tracks/104/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.026703537555513242, 0, 0, 0.166675, 0, -0.06248278722139723, -0.166675, 0, 0.19165000000000001, 0, 0.05166174585903228, -0.19165000000000001, 0, 0.20835000000000004, 0, -0.07312929565856238, -0.20835000000000004, 0, 0, 0, 0.026703537555513242, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.6667, 1.4333, 2.2667, 2.8333)
+}
+tracks/105/type = "bezier"
+tracks/105/imported = false
+tracks/105/enabled = true
+tracks/105/path = NodePath("bone23:position:x")
+tracks/105/interp = 1
+tracks/105/loop_wrap = true
+tracks/105/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(30.97, 0, 0, 0, 0, 30.97, 0, 0, 0, 0, 30.97, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/106/type = "bezier"
+tracks/106/imported = false
+tracks/106/enabled = true
+tracks/106/path = NodePath("bone23:position:y")
+tracks/106/interp = 1
+tracks/106/loop_wrap = true
+tracks/106/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(2.3, 0, 0, 0, 0, 2.3, 0, 0, 0, 0, 2.3, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/107/type = "bezier"
+tracks/107/imported = false
+tracks/107/enabled = true
+tracks/107/path = NodePath("bone23:scale:x")
+tracks/107/interp = 1
+tracks/107/loop_wrap = true
+tracks/107/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/108/type = "bezier"
+tracks/108/imported = false
+tracks/108/enabled = true
+tracks/108/path = NodePath("bone23:scale:y")
+tracks/108/interp = 1
+tracks/108/loop_wrap = true
+tracks/108/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/109/type = "bezier"
+tracks/109/imported = false
+tracks/109/enabled = true
+tracks/109/path = NodePath("bone21:rotation")
+tracks/109/interp = 1
+tracks/109/loop_wrap = true
+tracks/109/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.07714355293814937, 0, 0, 0, 0, -0.07714355293814937, 0, 0, 0, 0, -0.07714355293814937, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/110/type = "bezier"
+tracks/110/imported = false
+tracks/110/enabled = true
+tracks/110/path = NodePath("bone21:position:x")
+tracks/110/interp = 1
+tracks/110/loop_wrap = true
+tracks/110/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(34.68, 0, 0, 0, 0, 34.68, 0, 0, 0, 0, 34.68, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/111/type = "bezier"
+tracks/111/imported = false
+tracks/111/enabled = true
+tracks/111/path = NodePath("bone21:position:y")
+tracks/111/interp = 1
+tracks/111/loop_wrap = true
+tracks/111/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.57, 0, 0, 0, 0, -0.57, 0, 0, 0, 0, -0.57, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/112/type = "bezier"
+tracks/112/imported = false
+tracks/112/enabled = true
+tracks/112/path = NodePath("bone21:scale:x")
+tracks/112/interp = 1
+tracks/112/loop_wrap = true
+tracks/112/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/113/type = "bezier"
+tracks/113/imported = false
+tracks/113/enabled = true
+tracks/113/path = NodePath("bone21:scale:y")
+tracks/113/interp = 1
+tracks/113/loop_wrap = true
+tracks/113/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/114/type = "bezier"
+tracks/114/imported = false
+tracks/114/enabled = true
+tracks/114/path = NodePath("bone24:rotation")
+tracks/114/interp = 1
+tracks/114/loop_wrap = true
+tracks/114/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.022863813201125717, 0, 0, 0, 0, -0.10105456369047157, 0, 0, 0.19165000000000001, 0, 0.04782202150464475, -0.19165000000000001, 0, 0.20835000000000004, 0, -0.0769690200129499, -0.20835000000000004, 0, 0.14164999999999994, 0, 0.022863813201125717, -0.14164999999999994, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.6667, 1.4333, 2.2667, 2.8333)
+}
+tracks/115/type = "bezier"
+tracks/115/imported = false
+tracks/115/enabled = true
+tracks/115/path = NodePath("bone24:position:x")
+tracks/115/interp = 1
+tracks/115/loop_wrap = true
+tracks/115/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(32.14, 0, 0, 0, 0, 32.14, 0, 0, 0, 0, 32.14, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/116/type = "bezier"
+tracks/116/imported = false
+tracks/116/enabled = true
+tracks/116/path = NodePath("bone24:position:y")
+tracks/116/interp = 1
+tracks/116/loop_wrap = true
+tracks/116/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1.55, 0, 0, 0, 0, 1.55, 0, 0, 0, 0, 1.55, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/117/type = "bezier"
+tracks/117/imported = false
+tracks/117/enabled = true
+tracks/117/path = NodePath("bone24:scale:x")
+tracks/117/interp = 1
+tracks/117/loop_wrap = true
+tracks/117/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/118/type = "bezier"
+tracks/118/imported = false
+tracks/118/enabled = true
+tracks/118/path = NodePath("bone24:scale:y")
+tracks/118/interp = 1
+tracks/118/loop_wrap = true
+tracks/118/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/119/type = "bezier"
+tracks/119/imported = false
+tracks/119/enabled = true
+tracks/119/path = NodePath("bone25:rotation")
+tracks/119/interp = 1
+tracks/119/loop_wrap = true
+tracks/119/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-0.08691739674931762, 0, 0, 0.0320016, -0.03299894016745688, -0.1761037215262281, -0.166675, 0, 0.19165000000000001, 0, -0.061959188445798584, -0.19165000000000001, 0, 0.20835000000000004, 0, -0.18675022996339324, -0.20835000000000004, 0, 0.14164999999999994, 0, -0.08691739674931762, -0.14164999999999994, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.6667, 1.4333, 2.2667, 2.8333)
+}
+tracks/120/type = "bezier"
+tracks/120/imported = false
+tracks/120/enabled = true
+tracks/120/path = NodePath("bone25:position:x")
+tracks/120/interp = 1
+tracks/120/loop_wrap = true
+tracks/120/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(32.72, 0, 0, 0, 0, 32.72, 0, 0, 0, 0, 32.72, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/121/type = "bezier"
+tracks/121/imported = false
+tracks/121/enabled = true
+tracks/121/path = NodePath("bone25:position:y")
+tracks/121/interp = 1
+tracks/121/loop_wrap = true
+tracks/121/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.06, 0, 0, 0, 0, 0.06, 0, 0, 0, 0, 0.06, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/122/type = "bezier"
+tracks/122/imported = false
+tracks/122/enabled = true
+tracks/122/path = NodePath("bone25:scale:x")
+tracks/122/interp = 1
+tracks/122/loop_wrap = true
+tracks/122/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/123/type = "bezier"
+tracks/123/imported = false
+tracks/123/enabled = true
+tracks/123/path = NodePath("bone25:scale:y")
+tracks/123/interp = 1
+tracks/123/loop_wrap = true
+tracks/123/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/124/type = "bezier"
+tracks/124/imported = false
+tracks/124/enabled = true
+tracks/124/path = NodePath("bone26:rotation")
+tracks/124/interp = 1
+tracks/124/loop_wrap = true
+tracks/124/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.05061454830783556, 0, 0, 0.166675, 0, -0.03857177646907492, -0.166675, 0, 0.19165000000000001, 0, 0.0755727566113546, -0.19165000000000001, 0, 0.20835000000000004, 0, -0.04921828490624008, -0.20835000000000004, 0, 0.14164999999999994, 0, 0.05061454830783556, -0.14164999999999994, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.6667, 1.4333, 2.2667, 2.8333)
+}
+tracks/125/type = "bezier"
+tracks/125/imported = false
+tracks/125/enabled = true
+tracks/125/path = NodePath("bone26:position:x")
+tracks/125/interp = 1
+tracks/125/loop_wrap = true
+tracks/125/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(32.33, 0, 0, 0, 0, 32.33, 0, 0, 0, 0, 32.33, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/126/type = "bezier"
+tracks/126/imported = false
+tracks/126/enabled = true
+tracks/126/path = NodePath("bone26:position:y")
+tracks/126/interp = 1
+tracks/126/loop_wrap = true
+tracks/126/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(2.25, 0, 0, 0, 0, 2.25, 0, 0, 0, 0, 2.25, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/127/type = "bezier"
+tracks/127/imported = false
+tracks/127/enabled = true
+tracks/127/path = NodePath("bone26:scale:x")
+tracks/127/interp = 1
+tracks/127/loop_wrap = true
+tracks/127/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/128/type = "bezier"
+tracks/128/imported = false
+tracks/128/enabled = true
+tracks/128/path = NodePath("bone26:scale:y")
+tracks/128/interp = 1
+tracks/128/loop_wrap = true
+tracks/128/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/129/type = "bezier"
+tracks/129/imported = false
+tracks/129/enabled = true
+tracks/129/path = NodePath("bone27:rotation")
+tracks/129/interp = 1
+tracks/129/loop_wrap = true
+tracks/129/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-0.10419615634406147, 0, 0, 0, 0, -0.08203047484373331, 0, 0, 0, 0, -0.19338248112097192, 0, 0, 0.09201660000000003, 0, -0.32812189937493413, -0.13820820000000006, 0.06871710330952073, 0.14919999999999997, 0.12195313615385193, -0.07923794804054243, -0.09959999999999998, 0, 0.09959999999999998, 0, -0.0698131700797732, -0.14919999999999997, -0.004618141200776926, 0.1633918000000001, -0.06845006793396559, -0.20402898955813709, -0.10878340000000006, 0, 0.14164999999999994, 0, -0.10419615634406147, -0.14164999999999994, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.2667, 0.6667, 1.0333, 1.4333, 1.8333, 2.2667, 2.8333)
+}
+tracks/130/type = "bezier"
+tracks/130/imported = false
+tracks/130/enabled = true
+tracks/130/path = NodePath("bone27:position:x")
+tracks/130/interp = 1
+tracks/130/loop_wrap = true
+tracks/130/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(28.62, 0, 0, 0, 0, 28.62, 0, 0, 0, 0, 28.62, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/131/type = "bezier"
+tracks/131/imported = false
+tracks/131/enabled = true
+tracks/131/path = NodePath("bone27:position:y")
+tracks/131/interp = 1
+tracks/131/loop_wrap = true
+tracks/131/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(2.39, 0, 0, 0, 0, 2.39, 0, 0, 0, 0, 2.39, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/132/type = "bezier"
+tracks/132/imported = false
+tracks/132/enabled = true
+tracks/132/path = NodePath("bone27:scale:x")
+tracks/132/interp = 1
+tracks/132/loop_wrap = true
+tracks/132/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/133/type = "bezier"
+tracks/133/imported = false
+tracks/133/enabled = true
+tracks/133/path = NodePath("bone27:scale:y")
+tracks/133/interp = 1
+tracks/133/loop_wrap = true
+tracks/133/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/134/type = "bezier"
+tracks/134/imported = false
+tracks/134/enabled = true
+tracks/134/path = NodePath("bone28:rotation")
+tracks/134/interp = 1
+tracks/134/loop_wrap = true
+tracks/134/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-0.0486946861306418, 0, 0, 0, 0, 0.07644542123735142, 0, 0, 0, 0, -0.13788101090755178, 0, 0, 0.09201660000000003, 0, -0.27262042916151447, -0.13820820000000006, 0.06871710330952097, 0.14919999999999997, 0.12195313615385193, -0.023736477827122765, -0.09959999999999998, 0, 0.09959999999999998, 0, 0.17802358370342178, -0.14919999999999997, -0.09886243014996682, 0.2387918, -0.16654106255455098, -0.14852751934471742, -0.1589834, 0, 0.09165000000000001, 0, -0.0486946861306418, -0.09165000000000001, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.2667, 0.6667, 1.0333, 1.4333, 1.8333, 2.4667, 2.8333)
+}
+tracks/135/type = "bezier"
+tracks/135/imported = false
+tracks/135/enabled = true
+tracks/135/path = NodePath("bone28:position:x")
+tracks/135/interp = 1
+tracks/135/loop_wrap = true
+tracks/135/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(23.55, 0, 0, 0, 0, 23.55, 0, 0, 0, 0, 23.55, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/136/type = "bezier"
+tracks/136/imported = false
+tracks/136/enabled = true
+tracks/136/path = NodePath("bone28:position:y")
+tracks/136/interp = 1
+tracks/136/loop_wrap = true
+tracks/136/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1.23, 0, 0, 0, 0, 1.23, 0, 0, 0, 0, 1.23, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/137/type = "bezier"
+tracks/137/imported = false
+tracks/137/enabled = true
+tracks/137/path = NodePath("bone28:scale:x")
+tracks/137/interp = 1
+tracks/137/loop_wrap = true
+tracks/137/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/138/type = "bezier"
+tracks/138/imported = false
+tracks/138/enabled = true
+tracks/138/path = NodePath("bone28:scale:y")
+tracks/138/interp = 1
+tracks/138/loop_wrap = true
+tracks/138/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/139/type = "bezier"
+tracks/139/imported = false
+tracks/139/enabled = true
+tracks/139/path = NodePath("Dead-Leader_staff2:rotation")
+tracks/139/interp = 1
+tracks/139/loop_wrap = true
+tracks/139/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(0, 0, 0, 0.208325, 0, -0.14922565104551538, -0.208325, 0, 0.24999999999999997, 0, 0.04852015320544238, -0.24999999999999997, 0, 0.375, -0.02426007660272119, 0, -0.25, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.8333, 1.8333, 2.8333)
+}
+tracks/140/type = "bezier"
+tracks/140/imported = false
+tracks/140/enabled = true
+tracks/140/path = NodePath("Dead-Leader_staff2:position:x")
+tracks/140/interp = 1
+tracks/140/loop_wrap = true
+tracks/140/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(32.1, 0, 0, 0, 0, 32.42, 0, 0, 0.17926740000000002, 0.8214999999999996, 35.07, -0.09165000000000001, 0, 0.2616, -0.8135999999999999, 30.55, -0.05399999999999998, 1.2204, 0, 0, 31.48, 0, 0, 0, 0, 30.87, 0, 0, 0, 0, 32.1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.4667, 0.8333, 1.4333, 1.5667, 1.6667, 2.8333)
+}
+tracks/141/type = "bezier"
+tracks/141/imported = false
+tracks/141/enabled = true
+tracks/141/path = NodePath("Dead-Leader_staff2:position:y")
+tracks/141/interp = 1
+tracks/141/loop_wrap = true
+tracks/141/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-27.92, 0, 0, 0, 0, -28.8, 0, 0, 0.17926740000000002, 0.15809999999999938, -28.290000000000003, -0.09165000000000001, 0, 0.2616, -0.08640000000000007, -28.770000000000003, -0.05399999999999998, 0.12960000000000013, 0, 0, -28.96, 0, 0, 0, 0, -28.220000000000002, 0, 0, 0, 0, -27.92, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.4667, 0.8333, 1.4333, 1.5667, 1.6667, 2.8333)
+}
+tracks/142/type = "bezier"
+tracks/142/imported = false
+tracks/142/enabled = true
+tracks/142/path = NodePath("bone5:rotation")
+tracks/142/interp = 1
+tracks/142/loop_wrap = true
+tracks/142/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.3218387140677544, 0, 0, 0, 0, -0.3218387140677544, 0, 0, 0, 0, -0.3218387140677544, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/143/type = "bezier"
+tracks/143/imported = false
+tracks/143/enabled = true
+tracks/143/path = NodePath("bone5:position:x")
+tracks/143/interp = 1
+tracks/143/loop_wrap = true
+tracks/143/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(63.24, 0, 0, 0, 0, 63.24, 0, 0, 0, 0, 63.24, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/144/type = "bezier"
+tracks/144/imported = false
+tracks/144/enabled = true
+tracks/144/path = NodePath("bone5:position:y")
+tracks/144/interp = 1
+tracks/144/loop_wrap = true
+tracks/144/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-16.26, 0, 0, 0, 0, -16.26, 0, 0, 0, 0, -16.26, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/145/type = "bezier"
+tracks/145/imported = false
+tracks/145/enabled = true
+tracks/145/path = NodePath("bone5:scale:x")
+tracks/145/interp = 1
+tracks/145/loop_wrap = true
+tracks/145/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/146/type = "bezier"
+tracks/146/imported = false
+tracks/146/enabled = true
+tracks/146/path = NodePath("bone5:scale:y")
+tracks/146/interp = 1
+tracks/146/loop_wrap = true
+tracks/146/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/147/type = "bezier"
+tracks/147/imported = false
+tracks/147/enabled = true
+tracks/147/path = NodePath("Dead-Leader_leadertorso2:rotation")
+tracks/147/interp = 1
+tracks/147/loop_wrap = true
+tracks/147/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(0.14835298641951802, 0, 0, 0, 0, 0.014835298641951624, 0, 0, 0, 0, 0.17558012275062954, 0, 0, 0.21665, 0, 0.14835298641951794, -0.21665, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.1667, 1.9667, 2.8333)
+}
+tracks/148/type = "bezier"
+tracks/148/imported = false
+tracks/148/enabled = true
+tracks/148/path = NodePath("Dead-Leader_leadertorso2:position:x")
+tracks/148/interp = 1
+tracks/148/loop_wrap = true
+tracks/148/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(8.62, 0, 0, 0, 0, 7.6, 0, 0, 0, 0, 6.299999999999999, 0, 0, 0.21665, 0, 8.62, -0.21665, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.1667, 1.9667, 2.8333)
+}
+tracks/149/type = "bezier"
+tracks/149/imported = false
+tracks/149/enabled = true
+tracks/149/path = NodePath("Dead-Leader_leadertorso2:position:y")
+tracks/149/interp = 1
+tracks/149/loop_wrap = true
+tracks/149/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(0.18, 0, 0, 0, 0, -0.2, 0, 0, 0, 0, 1.01, 0, 0, 0.21665, 0, 0.18, -0.21665, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.1667, 1.9667, 2.8333)
+}
+tracks/150/type = "bezier"
+tracks/150/imported = false
+tracks/150/enabled = true
+tracks/150/path = NodePath("Dead-Leader_leadertorso2:scale:x")
+tracks/150/interp = 1
+tracks/150/loop_wrap = true
+tracks/150/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/151/type = "bezier"
+tracks/151/imported = false
+tracks/151/enabled = true
+tracks/151/path = NodePath("Dead-Leader_leadertorso2:scale:y")
+tracks/151/interp = 1
+tracks/151/loop_wrap = true
+tracks/151/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/152/type = "bezier"
+tracks/152/imported = false
+tracks/152/enabled = true
+tracks/152/path = NodePath("bone6:rotation")
+tracks/152/interp = 1
+tracks/152/loop_wrap = true
+tracks/152/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(0.204378055408536, 0, 0, 0, 0, 0.14782938764391948, 0, 0, 0, 0, 0.27768188399229804, 0, 0, 0.21665, 0, 0.2043780554085359, -0.21665, 0, 0, 0),
+"times": PackedFloat32Array(0, 1, 1.9667, 2.8333)
+}
+tracks/153/type = "bezier"
+tracks/153/imported = false
+tracks/153/enabled = true
+tracks/153/path = NodePath("bone6:position:x")
+tracks/153/interp = 1
+tracks/153/loop_wrap = true
+tracks/153/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(15.29, 0, 0, 0, 0, 14.629999999999999, 0, 0, 0, 0, 14.909999999999998, 0, 0, 0, 0, 15.29, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1, 1.1667, 2.8333)
+}
+tracks/154/type = "bezier"
+tracks/154/imported = false
+tracks/154/enabled = true
+tracks/154/path = NodePath("bone6:position:y")
+tracks/154/interp = 1
+tracks/154/loop_wrap = true
+tracks/154/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(0.55, 0, 0, 0, 0, -0.74, 0, 0, 0, 0, -1.3299999999999998, 0, 0, 0, 0, 0.55, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1, 1.1667, 2.8333)
+}
+tracks/155/type = "bezier"
+tracks/155/imported = false
+tracks/155/enabled = true
+tracks/155/path = NodePath("bone6:scale:x")
+tracks/155/interp = 1
+tracks/155/loop_wrap = true
+tracks/155/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/156/type = "bezier"
+tracks/156/imported = false
+tracks/156/enabled = true
+tracks/156/path = NodePath("bone6:scale:y")
+tracks/156/interp = 1
+tracks/156/loop_wrap = true
+tracks/156/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/157/type = "bezier"
+tracks/157/imported = false
+tracks/157/enabled = true
+tracks/157/path = NodePath("bone7:rotation")
+tracks/157/interp = 1
+tracks/157/loop_wrap = true
+tracks/157/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(0.15550883635269477, 0, 0, 0, 0, 0.08203047484373327, 0, 0, 0.19999999999999996, 0, 0.17959438003021638, -0.19999999999999996, 0, 0.21665, 0, 0.1555088363526947, -0.21665, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.1667, 1.9667, 2.8333)
+}
+tracks/158/type = "bezier"
+tracks/158/imported = false
+tracks/158/enabled = true
+tracks/158/path = NodePath("bone7:position:x")
+tracks/158/interp = 1
+tracks/158/loop_wrap = true
+tracks/158/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(14.94, 0, 0, 0, 0, 14.99, 0, 0, 0, 0, 14.94, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.1667, 2.8333)
+}
+tracks/159/type = "bezier"
+tracks/159/imported = false
+tracks/159/enabled = true
+tracks/159/path = NodePath("bone7:position:y")
+tracks/159/interp = 1
+tracks/159/loop_wrap = true
+tracks/159/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.65, 0, 0, 0, 0, -2.02, 0, 0, 0, 0, -0.65, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.1667, 2.8333)
+}
+tracks/160/type = "bezier"
+tracks/160/imported = false
+tracks/160/enabled = true
+tracks/160/path = NodePath("bone7:scale:x")
+tracks/160/interp = 1
+tracks/160/loop_wrap = true
+tracks/160/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/161/type = "bezier"
+tracks/161/imported = false
+tracks/161/enabled = true
+tracks/161/path = NodePath("bone7:scale:y")
+tracks/161/interp = 1
+tracks/161/loop_wrap = true
+tracks/161/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/162/type = "bezier"
+tracks/162/imported = false
+tracks/162/enabled = true
+tracks/162/path = NodePath("Dead-Leader_leaderarm5:rotation")
+tracks/162/interp = 1
+tracks/162/loop_wrap = true
+tracks/162/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-2.4841271243635297, 0, 0, 0, 0, -2.6714009531025207, 0, 0, 0, 0, -2.4841271243635297, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3333, 2.8333)
+}
+tracks/163/type = "bezier"
+tracks/163/imported = false
+tracks/163/enabled = true
+tracks/163/path = NodePath("Dead-Leader_leaderarm5:position:x")
+tracks/163/interp = 1
+tracks/163/loop_wrap = true
+tracks/163/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(8.37, 0, 0, 0, 0, 8.37, 0, 0, 0, 0, 8.37, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/164/type = "bezier"
+tracks/164/imported = false
+tracks/164/enabled = true
+tracks/164/path = NodePath("Dead-Leader_leaderarm5:position:y")
+tracks/164/interp = 1
+tracks/164/loop_wrap = true
+tracks/164/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-3.77, 0, 0, 0, 0, -3.77, 0, 0, 0, 0, -3.77, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/165/type = "bezier"
+tracks/165/imported = false
+tracks/165/enabled = true
+tracks/165/path = NodePath("Dead-Leader_leaderarm5:scale:x")
+tracks/165/interp = 1
+tracks/165/loop_wrap = true
+tracks/165/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/166/type = "bezier"
+tracks/166/imported = false
+tracks/166/enabled = true
+tracks/166/path = NodePath("Dead-Leader_leaderarm5:scale:y")
+tracks/166/interp = 1
+tracks/166/loop_wrap = true
+tracks/166/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/167/type = "bezier"
+tracks/167/imported = false
+tracks/167/enabled = true
+tracks/167/path = NodePath("Dead-Leader_leaderarm8:rotation")
+tracks/167/interp = 1
+tracks/167/loop_wrap = true
+tracks/167/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-2.0523326674201323, 0, 0, 0, 0, -1.8149678891489034, 0, 0, 0, 0, -2.0523326674201323, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3333, 2.8333)
+}
+tracks/168/type = "bezier"
+tracks/168/imported = false
+tracks/168/enabled = true
+tracks/168/path = NodePath("Dead-Leader_leaderarm8:position:x")
+tracks/168/interp = 1
+tracks/168/loop_wrap = true
+tracks/168/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(25.16, 0, 0, 0, 0, 25.16, 0, 0, 0, 0, 25.16, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/169/type = "bezier"
+tracks/169/imported = false
+tracks/169/enabled = true
+tracks/169/path = NodePath("Dead-Leader_leaderarm8:position:y")
+tracks/169/interp = 1
+tracks/169/loop_wrap = true
+tracks/169/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-3.43, 0, 0, 0, 0, -3.43, 0, 0, 0, 0, -3.43, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/170/type = "bezier"
+tracks/170/imported = false
+tracks/170/enabled = true
+tracks/170/path = NodePath("Dead-Leader_leaderarm8:scale:x")
+tracks/170/interp = 1
+tracks/170/loop_wrap = true
+tracks/170/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/171/type = "bezier"
+tracks/171/imported = false
+tracks/171/enabled = true
+tracks/171/path = NodePath("Dead-Leader_leaderarm8:scale:y")
+tracks/171/interp = 1
+tracks/171/loop_wrap = true
+tracks/171/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/172/type = "bezier"
+tracks/172/imported = false
+tracks/172/enabled = true
+tracks/172/path = NodePath("Dead-Leader_leaderarm7:rotation")
+tracks/172/interp = 1
+tracks/172/loop_wrap = true
+tracks/172/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-0.9934414102351724, 0, 0, 0.166675, 0, -0.813497964354557, -0.166675, 0, 0.16665, 0, -0.9934414102351724, -0.16665, 0, 0, 0, -0.6866125277345696, 0, 0, 0.17499999999999993, 0, -0.9934414102351724, -0.17499999999999993, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.6667, 1.3333, 2.1333, 2.8333)
+}
+tracks/173/type = "bezier"
+tracks/173/imported = false
+tracks/173/enabled = true
+tracks/173/path = NodePath("Dead-Leader_leaderarm7:position:x")
+tracks/173/interp = 1
+tracks/173/loop_wrap = true
+tracks/173/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(26.34, 0, 0, 0, 0, 26.34, 0, 0, 0, 0, 26.34, 0, 0, 0, 0, 26.34, 0, 0, 0, 0, 26.34, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3323, 1.3333, 2.8323, 2.8333)
+}
+tracks/174/type = "bezier"
+tracks/174/imported = false
+tracks/174/enabled = true
+tracks/174/path = NodePath("Dead-Leader_leaderarm7:position:y")
+tracks/174/interp = 1
+tracks/174/loop_wrap = true
+tracks/174/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-0.83, 0, 0, 0, 0, -0.83, 0, 0, 0, 0, -0.83, 0, 0, 0, 0, -0.83, 0, 0, 0, 0, -0.83, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3323, 1.3333, 2.8323, 2.8333)
+}
+tracks/175/type = "bezier"
+tracks/175/imported = false
+tracks/175/enabled = true
+tracks/175/path = NodePath("Dead-Leader_leaderarm7:scale:x")
+tracks/175/interp = 1
+tracks/175/loop_wrap = true
+tracks/175/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3323, 1.3333, 2.8323, 2.8333)
+}
+tracks/176/type = "bezier"
+tracks/176/imported = false
+tracks/176/enabled = true
+tracks/176/path = NodePath("Dead-Leader_leaderarm7:scale:y")
+tracks/176/interp = 1
+tracks/176/loop_wrap = true
+tracks/176/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3323, 1.3333, 2.8323, 2.8333)
+}
+tracks/177/type = "bezier"
+tracks/177/imported = false
+tracks/177/enabled = true
+tracks/177/path = NodePath("Dead-Leader_leaderarm6:rotation")
+tracks/177/interp = 1
+tracks/177/loop_wrap = true
+tracks/177/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1.7125170620568362, 0, 0, 0.166675, 0, 1.8924605079374517, -0.166675, 0, 0, 0, 1.7125170620568362, 0, 0, 0.20000000000000007, 0, 1.5570082257041415, -0.20000000000000007, 0, 0.17499999999999993, 0, 1.7125170620568362, -0.17499999999999993, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.6667, 1.3333, 2.1333, 2.8333)
+}
+tracks/178/type = "bezier"
+tracks/178/imported = false
+tracks/178/enabled = true
+tracks/178/path = NodePath("Dead-Leader_leaderarm6:position:x")
+tracks/178/interp = 1
+tracks/178/loop_wrap = true
+tracks/178/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(7.79, 0, 0, 0, 0, 7.79, 0, 0, 0, 0, 7.79, 0, 0, 0, 0, 7.79, 0, 0, 0, 0, 7.79, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3323, 1.3333, 2.8323, 2.8333)
+}
+tracks/179/type = "bezier"
+tracks/179/imported = false
+tracks/179/enabled = true
+tracks/179/path = NodePath("Dead-Leader_leaderarm6:position:y")
+tracks/179/interp = 1
+tracks/179/loop_wrap = true
+tracks/179/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(4.48, 0, 0, 0, 0, 4.48, 0, 0, 0, 0, 4.48, 0, 0, 0, 0, 4.48, 0, 0, 0, 0, 4.48, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3323, 1.3333, 2.8323, 2.8333)
+}
+tracks/180/type = "bezier"
+tracks/180/imported = false
+tracks/180/enabled = true
+tracks/180/path = NodePath("Dead-Leader_leaderarm6:scale:x")
+tracks/180/interp = 1
+tracks/180/loop_wrap = true
+tracks/180/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3323, 1.3333, 2.8323, 2.8333)
+}
+tracks/181/type = "bezier"
+tracks/181/imported = false
+tracks/181/enabled = true
+tracks/181/path = NodePath("Dead-Leader_leaderarm6:scale:y")
+tracks/181/interp = 1
+tracks/181/loop_wrap = true
+tracks/181/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 1.3323, 1.3333, 2.8323, 2.8333)
+}
+tracks/182/type = "bezier"
+tracks/182/imported = false
+tracks/182/enabled = true
+tracks/182/path = NodePath("Dead-Leader_head2:rotation")
+tracks/182/interp = 1
+tracks/182/loop_wrap = true
+tracks/182/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.6318091892219474, 0, 0, 0.2, 0, 0.5216789134211051, -0.30000000000000004, 0.05506513790042117, 0.19998749999999996, 0.041800635585264145, 0.6052801845916334, -0.13332499999999997, 0, 0.0865412, 0.0593621385188313, 0.7401941357707954, -0.18335, 0, 0.19165, 0, 0.6318091892219474, -0.19165, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.8, 1.3333, 2.0667, 2.8333)
+}
+tracks/183/type = "bezier"
+tracks/183/imported = false
+tracks/183/enabled = true
+tracks/183/path = NodePath("Dead-Leader_head2:position:x")
+tracks/183/interp = 1
+tracks/183/loop_wrap = true
+tracks/183/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(22.9, 0, 0, 0.0198018, -0.7826000000000001, 21.08, -0.091675, 0, 0.108325, 0, 23.88, -0.108325, 0, 0.13332499999999997, 0, 23.889999999999997, -0.13332499999999997, 0, 0.028468700000000007, -1.2419999999999998, 20.439999999999998, -0.11667500000000003, 0, 0.2510919, 0, 22.9, -0.36062169999999993, -0.9594000000000004, 0, 0),
+"times": PackedFloat32Array(0, 0.3667, 0.8, 1.3333, 1.8, 2.8333)
+}
+tracks/184/type = "bezier"
+tracks/184/imported = false
+tracks/184/enabled = true
+tracks/184/path = NodePath("Dead-Leader_head2:position:y")
+tracks/184/interp = 1
+tracks/184/loop_wrap = true
+tracks/184/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.1, 0, 0, 0.0198018, -0.6149, -1.3299999999999998, -0.091675, 0, 0.108325, 0, -0.47, -0.108325, 0, 0.13332499999999997, 0, -0.87, -0.13332499999999997, 0, 0.028468700000000007, 0.44999999999999996, 0.38, -0.11667500000000003, 0, 0.2510919, 0, 0.1, -0.36062169999999993, 0.10920000000000002, 0, 0),
+"times": PackedFloat32Array(0, 0.3667, 0.8, 1.3333, 1.8, 2.8333)
+}
+tracks/185/type = "bezier"
+tracks/185/imported = false
+tracks/185/enabled = true
+tracks/185/path = NodePath("Dead-Leader_head2:scale:x")
+tracks/185/interp = 1
+tracks/185/loop_wrap = true
+tracks/185/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/186/type = "bezier"
+tracks/186/imported = false
+tracks/186/enabled = true
+tracks/186/path = NodePath("Dead-Leader_head2:scale:y")
+tracks/186/interp = 1
+tracks/186/loop_wrap = true
+tracks/186/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/187/type = "bezier"
+tracks/187/imported = false
+tracks/187/enabled = true
+tracks/187/path = NodePath("Dead-Leader_back3:rotation")
+tracks/187/interp = 1
+tracks/187/loop_wrap = true
+tracks/187/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.09634217471008698, 0, 0, 0, 0, -0.09634217471008698, 0, 0, 0, 0, -0.09634217471008698, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/188/type = "bezier"
+tracks/188/imported = false
+tracks/188/enabled = true
+tracks/188/path = NodePath("Dead-Leader_back3:position:x")
+tracks/188/interp = 1
+tracks/188/loop_wrap = true
+tracks/188/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(11.35, 0, 0, 0, 0, 11.35, 0, 0, 0, 0, 11.35, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/189/type = "bezier"
+tracks/189/imported = false
+tracks/189/enabled = true
+tracks/189/path = NodePath("Dead-Leader_back3:position:y")
+tracks/189/interp = 1
+tracks/189/loop_wrap = true
+tracks/189/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-10.89, 0, 0, 0, 0, -10.89, 0, 0, 0, 0, -10.89, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/190/type = "bezier"
+tracks/190/imported = false
+tracks/190/enabled = true
+tracks/190/path = NodePath("Dead-Leader_back3:scale:x")
+tracks/190/interp = 1
+tracks/190/loop_wrap = true
+tracks/190/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/191/type = "bezier"
+tracks/191/imported = false
+tracks/191/enabled = true
+tracks/191/path = NodePath("Dead-Leader_back3:scale:y")
+tracks/191/interp = 1
+tracks/191/loop_wrap = true
+tracks/191/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/192/type = "bezier"
+tracks/192/imported = false
+tracks/192/enabled = true
+tracks/192/path = NodePath("Dead-Leader_leaderleg7:rotation")
+tracks/192/interp = 1
+tracks/192/loop_wrap = true
+tracks/192/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-2.9476865736932227, 0, 0, 0, 0, -2.9476865736932227, 0, 0, 0, 0, -2.9476865736932227, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/193/type = "bezier"
+tracks/193/imported = false
+tracks/193/enabled = true
+tracks/193/path = NodePath("Dead-Leader_leaderleg7:position:x")
+tracks/193/interp = 1
+tracks/193/loop_wrap = true
+tracks/193/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-3.61, 0, 0, 0, 0, -3.61, 0, 0, 0, 0, -3.61, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/194/type = "bezier"
+tracks/194/imported = false
+tracks/194/enabled = true
+tracks/194/path = NodePath("Dead-Leader_leaderleg7:position:y")
+tracks/194/interp = 1
+tracks/194/loop_wrap = true
+tracks/194/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.28, 0, 0, 0, 0, -1.28, 0, 0, 0, 0, -1.28, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/195/type = "bezier"
+tracks/195/imported = false
+tracks/195/enabled = true
+tracks/195/path = NodePath("Dead-Leader_leaderleg7:scale:x")
+tracks/195/interp = 1
+tracks/195/loop_wrap = true
+tracks/195/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/196/type = "bezier"
+tracks/196/imported = false
+tracks/196/enabled = true
+tracks/196/path = NodePath("Dead-Leader_leaderleg7:scale:y")
+tracks/196/interp = 1
+tracks/196/loop_wrap = true
+tracks/196/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/197/type = "bezier"
+tracks/197/imported = false
+tracks/197/enabled = true
+tracks/197/path = NodePath("Dead-Leader_leaderleg6:rotation")
+tracks/197/interp = 1
+tracks/197/loop_wrap = true
+tracks/197/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(3.064100034801245, 0, 0, 0, 0, 3.064100034801245, 0, 0, 0, 0, 3.064100034801245, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/198/type = "bezier"
+tracks/198/imported = false
+tracks/198/enabled = true
+tracks/198/path = NodePath("Dead-Leader_leaderleg6:position:x")
+tracks/198/interp = 1
+tracks/198/loop_wrap = true
+tracks/198/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-6.11, 0, 0, 0, 0, -6.11, 0, 0, 0, 0, -6.11, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/199/type = "bezier"
+tracks/199/imported = false
+tracks/199/enabled = true
+tracks/199/path = NodePath("Dead-Leader_leaderleg6:position:y")
+tracks/199/interp = 1
+tracks/199/loop_wrap = true
+tracks/199/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.21, 0, 0, 0, 0, -1.21, 0, 0, 0, 0, -1.21, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/200/type = "bezier"
+tracks/200/imported = false
+tracks/200/enabled = true
+tracks/200/path = NodePath("Dead-Leader_leaderleg6:scale:x")
+tracks/200/interp = 1
+tracks/200/loop_wrap = true
+tracks/200/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/201/type = "bezier"
+tracks/201/imported = false
+tracks/201/enabled = true
+tracks/201/path = NodePath("Dead-Leader_leaderleg6:scale:y")
+tracks/201/interp = 1
+tracks/201/loop_wrap = true
+tracks/201/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/202/type = "bezier"
+tracks/202/imported = false
+tracks/202/enabled = true
+tracks/202/path = NodePath("Dead-Leader_leaderleg8:rotation")
+tracks/202/interp = 1
+tracks/202/loop_wrap = true
+tracks/202/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.004014257279586958, 0, 0, 0, 0, 0.004014257279586958, 0, 0, 0, 0, 0.004014257279586958, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/203/type = "bezier"
+tracks/203/imported = false
+tracks/203/enabled = true
+tracks/203/path = NodePath("Dead-Leader_leaderleg8:position:x")
+tracks/203/interp = 1
+tracks/203/loop_wrap = true
+tracks/203/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(34.88, 0, 0, 0, 0, 34.88, 0, 0, 0, 0, 34.88, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/204/type = "bezier"
+tracks/204/imported = false
+tracks/204/enabled = true
+tracks/204/path = NodePath("Dead-Leader_leaderleg8:position:y")
+tracks/204/interp = 1
+tracks/204/loop_wrap = true
+tracks/204/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.14, 0, 0, 0, 0, 0.14, 0, 0, 0, 0, 0.14, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/205/type = "bezier"
+tracks/205/imported = false
+tracks/205/enabled = true
+tracks/205/path = NodePath("Dead-Leader_leaderleg8:scale:x")
+tracks/205/interp = 1
+tracks/205/loop_wrap = true
+tracks/205/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/206/type = "bezier"
+tracks/206/imported = false
+tracks/206/enabled = true
+tracks/206/path = NodePath("Dead-Leader_leaderleg8:scale:y")
+tracks/206/interp = 1
+tracks/206/loop_wrap = true
+tracks/206/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/207/type = "bezier"
+tracks/207/imported = false
+tracks/207/enabled = true
+tracks/207/path = NodePath("Dead-Leader_leaderleg5:rotation")
+tracks/207/interp = 1
+tracks/207/loop_wrap = true
+tracks/207/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.45675266524691605, 0, 0, 0, 0, 0.45675266524691605, 0, 0, 0, 0, 0.45675266524691605, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/208/type = "bezier"
+tracks/208/imported = false
+tracks/208/enabled = true
+tracks/208/path = NodePath("Dead-Leader_leaderleg5:position:x")
+tracks/208/interp = 1
+tracks/208/loop_wrap = true
+tracks/208/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(35.55, 0, 0, 0, 0, 35.55, 0, 0, 0, 0, 35.55, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/209/type = "bezier"
+tracks/209/imported = false
+tracks/209/enabled = true
+tracks/209/path = NodePath("Dead-Leader_leaderleg5:position:y")
+tracks/209/interp = 1
+tracks/209/loop_wrap = true
+tracks/209/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.77, 0, 0, 0, 0, 0.77, 0, 0, 0, 0, 0.77, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/210/type = "bezier"
+tracks/210/imported = false
+tracks/210/enabled = true
+tracks/210/path = NodePath("Dead-Leader_leaderleg5:scale:x")
+tracks/210/interp = 1
+tracks/210/loop_wrap = true
+tracks/210/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/211/type = "bezier"
+tracks/211/imported = false
+tracks/211/enabled = true
+tracks/211/path = NodePath("Dead-Leader_leaderleg5:scale:y")
+tracks/211/interp = 1
+tracks/211/loop_wrap = true
+tracks/211/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/212/type = "bezier"
+tracks/212/imported = false
+tracks/212/enabled = true
+tracks/212/path = NodePath("Dead-Leader_leaderfoot3:rotation")
+tracks/212/interp = 1
+tracks/212/loop_wrap = true
+tracks/212/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.6449728200046556, 0, 0, 0, 0, -1.6449728200046556, 0, 0, 0, 0, -1.6449728200046556, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/213/type = "bezier"
+tracks/213/imported = false
+tracks/213/enabled = true
+tracks/213/path = NodePath("Dead-Leader_leaderfoot3:position:x")
+tracks/213/interp = 1
+tracks/213/loop_wrap = true
+tracks/213/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(34.11, 0, 0, 0, 0, 34.11, 0, 0, 0, 0, 34.11, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/214/type = "bezier"
+tracks/214/imported = false
+tracks/214/enabled = true
+tracks/214/path = NodePath("Dead-Leader_leaderfoot3:position:y")
+tracks/214/interp = 1
+tracks/214/loop_wrap = true
+tracks/214/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.08, 0, 0, 0, 0, -1.08, 0, 0, 0, 0, -1.08, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/215/type = "bezier"
+tracks/215/imported = false
+tracks/215/enabled = true
+tracks/215/path = NodePath("Dead-Leader_leaderfoot3:scale:x")
+tracks/215/interp = 1
+tracks/215/loop_wrap = true
+tracks/215/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/216/type = "bezier"
+tracks/216/imported = false
+tracks/216/enabled = true
+tracks/216/path = NodePath("Dead-Leader_leaderfoot3:scale:y")
+tracks/216/interp = 1
+tracks/216/loop_wrap = true
+tracks/216/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/217/type = "bezier"
+tracks/217/imported = false
+tracks/217/enabled = true
+tracks/217/path = NodePath("Dead-Leader_leaderfoot4:rotation")
+tracks/217/interp = 1
+tracks/217/loop_wrap = true
+tracks/217/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.6175711507483448, 0, 0, 0, 0, -1.6175711507483448, 0, 0, 0, 0, -1.6175711507483448, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/218/type = "bezier"
+tracks/218/imported = false
+tracks/218/enabled = true
+tracks/218/path = NodePath("Dead-Leader_leaderfoot4:position:x")
+tracks/218/interp = 1
+tracks/218/loop_wrap = true
+tracks/218/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(35.96, 0, 0, 0, 0, 35.96, 0, 0, 0, 0, 35.96, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/219/type = "bezier"
+tracks/219/imported = false
+tracks/219/enabled = true
+tracks/219/path = NodePath("Dead-Leader_leaderfoot4:position:y")
+tracks/219/interp = 1
+tracks/219/loop_wrap = true
+tracks/219/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.47, 0, 0, 0, 0, -0.47, 0, 0, 0, 0, -0.47, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/220/type = "bezier"
+tracks/220/imported = false
+tracks/220/enabled = true
+tracks/220/path = NodePath("Dead-Leader_leaderfoot4:scale:x")
+tracks/220/interp = 1
+tracks/220/loop_wrap = true
+tracks/220/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/221/type = "bezier"
+tracks/221/imported = false
+tracks/221/enabled = true
+tracks/221/path = NodePath("Dead-Leader_leaderfoot4:scale:y")
+tracks/221/interp = 1
+tracks/221/loop_wrap = true
+tracks/221/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/222/type = "bezier"
+tracks/222/imported = false
+tracks/222/enabled = true
+tracks/222/path = NodePath("minerarm1:rotation")
+tracks/222/interp = 1
+tracks/222/loop_wrap = true
+tracks/222/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(2.4909339084463067, 0, 0, 0.183325, 0, 2.3228587014792526, -0.183325, 0, 0.23030000000000003, 0.01297477765932597, 2.3846433569998524, -0.17500000000000002, 0, 0.2684244, -0.004194026192542366, 2.244842483915107, -0.18335, 0, 0.16664999999999996, 0, 2.4909339084463067, -0.16664999999999996, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.7333, 1.4333, 2.1667, 2.8333)
+}
+tracks/223/type = "bezier"
+tracks/223/imported = false
+tracks/223/enabled = true
+tracks/223/path = NodePath("minerarm1:position:x")
+tracks/223/interp = 1
+tracks/223/loop_wrap = true
+tracks/223/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(34.67, 0, 0, 0, 0, 34.67, 0, 0, 0, 0, 34.67, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/224/type = "bezier"
+tracks/224/imported = false
+tracks/224/enabled = true
+tracks/224/path = NodePath("minerarm1:position:y")
+tracks/224/interp = 1
+tracks/224/loop_wrap = true
+tracks/224/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-2.76, 0, 0, 0, 0, -2.76, 0, 0, 0, 0, -2.76, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/225/type = "bezier"
+tracks/225/imported = false
+tracks/225/enabled = true
+tracks/225/path = NodePath("minerarm2:rotation")
+tracks/225/interp = 1
+tracks/225/loop_wrap = true
+tracks/225/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-0.12671090369478835, 0, 0, 0.2566564, 0, -0.21973695282608566, -0.2974881, 0.06046693193534325, 0.2826, -0.008309512568745092, -0.25586526834236867, -0.3159, 0.015535175672001696, 0.19439999999999996, -0.007487462491055707, -0.2808234766458877, -0.20519999999999994, 0.009234537072302039, 0.1635, 0.047774897614840856, -0.12671090369478816, -0.16949999999999998, -0.05393940053288483, 0, 0),
+"times": PackedFloat32Array(0, 0.8333, 1.7333, 2.3333, 2.8333)
+}
+tracks/226/type = "bezier"
+tracks/226/imported = false
+tracks/226/enabled = true
+tracks/226/path = NodePath("minerarm2:position:x")
+tracks/226/interp = 1
+tracks/226/loop_wrap = true
+tracks/226/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(74.32, 0, 0, 0, 0, 74.32, 0, 0, 0, 0, 74.32, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/227/type = "bezier"
+tracks/227/imported = false
+tracks/227/enabled = true
+tracks/227/path = NodePath("minerarm2:position:y")
+tracks/227/interp = 1
+tracks/227/loop_wrap = true
+tracks/227/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.48, 0, 0, 0, 0, -1.48, 0, 0, 0, 0, -1.48, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/228/type = "bezier"
+tracks/228/imported = false
+tracks/228/enabled = true
+tracks/228/path = NodePath("bone8:rotation")
+tracks/228/interp = 1
+tracks/228/loop_wrap = true
+tracks/228/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.6213372137099813, 0, 0, 0, 0, 0.759392757542733, 0, 0, 0, 0, 0.8559094651780195, 0, 0, 0, 0, 0.7752752537358814, 0, 0, 0, 0, 0.5745623897565334, 0, 0, 0, 0, 0.4886921905584122, 0, 0, 0, 0, 0.6213372137099816, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.5333, 0.9333, 1.3333, 1.7333, 2, 2.8333)
+}
+tracks/229/type = "bezier"
+tracks/229/imported = false
+tracks/229/enabled = true
+tracks/229/path = NodePath("bone8:position:x")
+tracks/229/interp = 1
+tracks/229/loop_wrap = true
+tracks/229/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(27.94, 0, 0, 0, 0, 27.94, 0, 0, 0, 0, 27.94, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/230/type = "bezier"
+tracks/230/imported = false
+tracks/230/enabled = true
+tracks/230/path = NodePath("bone8:position:y")
+tracks/230/interp = 1
+tracks/230/loop_wrap = true
+tracks/230/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(2.97, 0, 0, 0, 0, 2.97, 0, 0, 0, 0, 2.97, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/231/type = "bezier"
+tracks/231/imported = false
+tracks/231/enabled = true
+tracks/231/path = NodePath("bone8:scale:x")
+tracks/231/interp = 1
+tracks/231/loop_wrap = true
+tracks/231/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/232/type = "bezier"
+tracks/232/imported = false
+tracks/232/enabled = true
+tracks/232/path = NodePath("bone8:scale:y")
+tracks/232/interp = 1
+tracks/232/loop_wrap = true
+tracks/232/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/233/type = "bezier"
+tracks/233/imported = false
+tracks/233/enabled = true
+tracks/233/path = NodePath("bone9:rotation")
+tracks/233/interp = 1
+tracks/233/loop_wrap = true
+tracks/233/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.0921533845053006, 0, 0, 0, 0, -0.0921533845053006, 0, 0, 0, 0, -0.0921533845053006, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/234/type = "bezier"
+tracks/234/imported = false
+tracks/234/enabled = true
+tracks/234/path = NodePath("bone9:position:x")
+tracks/234/interp = 1
+tracks/234/loop_wrap = true
+tracks/234/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(13.78, 0, 0, 0, 0, 13.78, 0, 0, 0, 0, 13.78, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/235/type = "bezier"
+tracks/235/imported = false
+tracks/235/enabled = true
+tracks/235/path = NodePath("bone9:position:y")
+tracks/235/interp = 1
+tracks/235/loop_wrap = true
+tracks/235/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.39, 0, 0, 0, 0, 0.39, 0, 0, 0, 0, 0.39, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/236/type = "bezier"
+tracks/236/imported = false
+tracks/236/enabled = true
+tracks/236/path = NodePath("bone9:scale:x")
+tracks/236/interp = 1
+tracks/236/loop_wrap = true
+tracks/236/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/237/type = "bezier"
+tracks/237/imported = false
+tracks/237/enabled = true
+tracks/237/path = NodePath("bone9:scale:y")
+tracks/237/interp = 1
+tracks/237/loop_wrap = true
+tracks/237/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/238/type = "bezier"
+tracks/238/imported = false
+tracks/238/enabled = true
+tracks/238/path = NodePath("bone10:rotation")
+tracks/238/interp = 1
+tracks/238/loop_wrap = true
+tracks/238/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.17505652397503124, 0, 0, 0, 0, -0.17505652397503124, 0, 0, 0, 0, -0.17505652397503124, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/239/type = "bezier"
+tracks/239/imported = false
+tracks/239/enabled = true
+tracks/239/path = NodePath("bone10:position:x")
+tracks/239/interp = 1
+tracks/239/loop_wrap = true
+tracks/239/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(16.57, 0, 0, 0, 0, 16.57, 0, 0, 0, 0, 16.57, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/240/type = "bezier"
+tracks/240/imported = false
+tracks/240/enabled = true
+tracks/240/path = NodePath("bone10:position:y")
+tracks/240/interp = 1
+tracks/240/loop_wrap = true
+tracks/240/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.26, 0, 0, 0, 0, -0.26, 0, 0, 0, 0, -0.26, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/241/type = "bezier"
+tracks/241/imported = false
+tracks/241/enabled = true
+tracks/241/path = NodePath("bone10:scale:x")
+tracks/241/interp = 1
+tracks/241/loop_wrap = true
+tracks/241/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/242/type = "bezier"
+tracks/242/imported = false
+tracks/242/enabled = true
+tracks/242/path = NodePath("bone10:scale:y")
+tracks/242/interp = 1
+tracks/242/loop_wrap = true
+tracks/242/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/243/type = "bezier"
+tracks/243/imported = false
+tracks/243/enabled = true
+tracks/243/path = NodePath("bone11:rotation")
+tracks/243/interp = 1
+tracks/243/loop_wrap = true
+tracks/243/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.13997540600994524, 0, 0, 0, 0, -0.13997540600994524, 0, 0, 0, 0, -0.13997540600994524, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/244/type = "bezier"
+tracks/244/imported = false
+tracks/244/enabled = true
+tracks/244/path = NodePath("bone11:position:x")
+tracks/244/interp = 1
+tracks/244/loop_wrap = true
+tracks/244/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(18.25, 0, 0, 0, 0, 18.25, 0, 0, 0, 0, 18.25, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/245/type = "bezier"
+tracks/245/imported = false
+tracks/245/enabled = true
+tracks/245/path = NodePath("bone11:position:y")
+tracks/245/interp = 1
+tracks/245/loop_wrap = true
+tracks/245/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.85, 0, 0, 0, 0, -0.85, 0, 0, 0, 0, -0.85, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/246/type = "bezier"
+tracks/246/imported = false
+tracks/246/enabled = true
+tracks/246/path = NodePath("bone11:scale:x")
+tracks/246/interp = 1
+tracks/246/loop_wrap = true
+tracks/246/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/247/type = "bezier"
+tracks/247/imported = false
+tracks/247/enabled = true
+tracks/247/path = NodePath("bone11:scale:y")
+tracks/247/interp = 1
+tracks/247/loop_wrap = true
+tracks/247/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/248/type = "bezier"
+tracks/248/imported = false
+tracks/248/enabled = true
+tracks/248/path = NodePath("bone12:rotation")
+tracks/248/interp = 1
+tracks/248/loop_wrap = true
+tracks/248/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.17488199104983182, 0, 0, 0, 0, -0.17488199104983182, 0, 0, 0, 0, -0.17488199104983182, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/249/type = "bezier"
+tracks/249/imported = false
+tracks/249/enabled = true
+tracks/249/path = NodePath("bone12:position:x")
+tracks/249/interp = 1
+tracks/249/loop_wrap = true
+tracks/249/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(15.49, 0, 0, 0, 0, 15.49, 0, 0, 0, 0, 15.49, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/250/type = "bezier"
+tracks/250/imported = false
+tracks/250/enabled = true
+tracks/250/path = NodePath("bone12:position:y")
+tracks/250/interp = 1
+tracks/250/loop_wrap = true
+tracks/250/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.75, 0, 0, 0, 0, -0.75, 0, 0, 0, 0, -0.75, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/251/type = "bezier"
+tracks/251/imported = false
+tracks/251/enabled = true
+tracks/251/path = NodePath("bone12:scale:x")
+tracks/251/interp = 1
+tracks/251/loop_wrap = true
+tracks/251/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/252/type = "bezier"
+tracks/252/imported = false
+tracks/252/enabled = true
+tracks/252/path = NodePath("bone12:scale:y")
+tracks/252/interp = 1
+tracks/252/loop_wrap = true
+tracks/252/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/253/type = "bezier"
+tracks/253/imported = false
+tracks/253/enabled = true
+tracks/253/path = NodePath("bone13:rotation")
+tracks/253/interp = 1
+tracks/253/loop_wrap = true
+tracks/253/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-0.2790781473938933, 0, 0, 0, 0, -0.2790781473938933, 0, 0, 0, 0, -0.2790781473938933, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/254/type = "bezier"
+tracks/254/imported = false
+tracks/254/enabled = true
+tracks/254/path = NodePath("bone13:position:x")
+tracks/254/interp = 1
+tracks/254/loop_wrap = true
+tracks/254/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(14.2, 0, 0, 0, 0, 14.2, 0, 0, 0, 0, 14.2, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/255/type = "bezier"
+tracks/255/imported = false
+tracks/255/enabled = true
+tracks/255/path = NodePath("bone13:position:y")
+tracks/255/interp = 1
+tracks/255/loop_wrap = true
+tracks/255/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.13, 0, 0, 0, 0, 0.13, 0, 0, 0, 0, 0.13, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/256/type = "bezier"
+tracks/256/imported = false
+tracks/256/enabled = true
+tracks/256/path = NodePath("bone13:scale:x")
+tracks/256/interp = 1
+tracks/256/loop_wrap = true
+tracks/256/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/257/type = "bezier"
+tracks/257/imported = false
+tracks/257/enabled = true
+tracks/257/path = NodePath("bone13:scale:y")
+tracks/257/interp = 1
+tracks/257/loop_wrap = true
+tracks/257/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/258/type = "bezier"
+tracks/258/imported = false
+tracks/258/enabled = true
+tracks/258/path = NodePath("bone14:rotation")
+tracks/258/interp = 1
+tracks/258/loop_wrap = true
+tracks/258/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/259/type = "bezier"
+tracks/259/imported = false
+tracks/259/enabled = true
+tracks/259/path = NodePath("bone14:position:x")
+tracks/259/interp = 1
+tracks/259/loop_wrap = true
+tracks/259/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(12.04, 0, 0, 0, 0, 12.04, 0, 0, 0, 0, 12.04, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}
+tracks/260/type = "bezier"
+tracks/260/imported = false
+tracks/260/enabled = true
+tracks/260/path = NodePath("bone14:position:y")
+tracks/260/interp = 1
+tracks/260/loop_wrap = true
+tracks/260/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(8.01, 0, 0, 0, 0, 8.01, 0, 0, 0, 0, 8.01, 0, 0, 0, 0),
+"times": PackedFloat32Array(0, 2.8323, 2.8333)
+}

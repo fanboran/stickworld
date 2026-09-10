@@ -6,11 +6,13 @@
 产物:
   <仓库根>/temp/review_result.json —— 逐枚 {name, model_ok, note}，供返工轮读取
 
-只评「建模」（形体/比例/部件连接/辨识度），配色/描边/光影不在反馈范围。
-图标清单挂 motifs.py 注册表（旧 7 枚在前），与 accept_sheet 排序一致。"""
+只评范围与验收页同口径：形体/比例/部件连接/辨识度 + 观感（档位漂移、
+颜色、描边异常）。图标清单挂 motifs.py 注册表（旧 7 枚在前），与
+accept_sheet 排序一致。"""
 import json
 import os
 import sys
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -18,21 +20,25 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 ICON_DIR = os.path.join(ROOT, "temp", "icons")
 RESULT = os.path.join(ROOT, "temp", "review_result.json")
+BUILD = str(int(time.time()))   # cache-busting：每次重启换图片 URL 版本
 
 sys.path.insert(0, HERE)
 import motifs as M
 
-OLD7 = [("锻造锤", "icon_hammer_v9"), ("爱心", "icon_heart_v9"),
+OLD7 = [("锻造锤", "icon_hammer_v9"),
         ("立方体", "test_cube_v9"), ("正球", "test_sphere_v9"),
         ("圆柱", "test_cylinder_v9"), ("圆锥", "test_cone_v9"),
         ("圆环", "test_torus_v9")]
+# 爱心已并入 motifs 注册表（mot_heart），随注册表段列出
 _ALL = [{"name": n, "tag": t} for n, t in OLD7] + \
        [{"name": m["label"], "tag": m["tag"]} for m in M.MOTIFS]
 
 # 既往轮次已标「满意」的不再进待标区（结果档案 temp/review_result_round*.json 全量合并）；
-# RECHECK = 已满意但后续轮次重做过、需复验的名字
+# RECHECK = 已满意但后续轮次重做过、需复验的名字；--all = 关闭过滤全量复
+# 审（架构换代轮用：v2 重渲了全部图标，已过枚也须复验）
 import glob as _glob
 RECHECK = {"药瓶"}   # round3 已满意但按创始人指令重做透明瓶，仍需复验
+SHOW_ALL = "--all" in sys.argv[1:]
 
 def _prev_ok_names():
     ok = set()
@@ -45,7 +51,7 @@ def _prev_ok_names():
             pass
     return ok
 
-_PREV_OK = _prev_ok_names()
+_PREV_OK = set() if SHOW_ALL else _prev_ok_names()
 ICONS = [ic for ic in _ALL if ic["name"] not in _PREV_OK or ic["name"] in RECHECK]
 HIDDEN_OK = len(_ALL) - len(ICONS)
 
@@ -80,10 +86,12 @@ PAGE = """<!DOCTYPE html>
           padding:10px 10px 8px; display:flex; flex-direction:column; gap:6px; }
   .card.ok   { border-color:var(--ok); }
   .card.bad  { border-color:var(--bad); }
-  .imgwrap { width:64px; height:64px; margin:0 auto; cursor:zoom-in;
+  .imgwrap { display:flex; gap:6px; justify-content:center; align-items:flex-end;
+             margin:0 auto; cursor:zoom-in;
              background:conic-gradient(#9aa 25%,#778 0 50%,#9aa 0 75%,#778 0) 0 0/16px 16px;
              border-radius:4px; }
   .imgwrap img { width:64px; height:64px; display:block; }
+  .imgwrap img.big { width:128px; height:128px; }   /* 256 原生缩显：双分辨率同览 */
   .nm { text-align:center; font-size:13.5px; }
   .btns { display:flex; gap:6px; }
   .btns button { flex:1; padding:4px 0; font-size:12.5px; }
@@ -106,9 +114,9 @@ PAGE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>图标建模验收 <span class="hint">__TOTAL__ 枚待标（另有 __HIDDEN__ 枚上轮已满意已隐藏）· 点击图标可放大看 128/256 渲染</span></h1>
-  <div class="hint">只评 <b>建模</b>（形体 / 比例 / 部件连接 / 一眼认得出是什么）。配色、描边、光影不用反馈。
-       标「不满意」可以写备注，也可以 <b>不写</b>——留空的由 AI 直读 64px 原图自查问题。</div>
+  <h1>图标验收 · v2 终审 <span class="hint">__TOTAL__ 枚全量待标（__HIDDEN__ 枚已过枚本轮一并复验）· 点击图标可放大看 128/256 渲染</span></h1>
+  <div class="hint">本轮是 <b>v2 终审</b>（七轮返工后全库定稿：着色器分档+反向壳描边，描边已全库纯黑单线恒宽紧贴）——<b>建模和观感都可以反馈</b>：形体/比例/部件连接，以及档位漂移、颜色观感、描边异常。
+       点「不满意」可以写备注，也可以 <b>不写</b>——留空的由 AI 直读 64px 原图自查。</div>
   <div id="bar">
     <span id="prog"></span>
     <button id="next">↓ 下一个未标记</button>
@@ -118,11 +126,11 @@ PAGE = """<!DOCTYPE html>
   </div>
 </header>
 <main id="grid"></main>
-<div id="modal"><div class="cap" id="mcap"></div><img id="m256" width="256" height="256"><img id="m128" width="128" height="128"></div>
+<div id="modal"><div class="cap" id="mcap"></div><img id="m256" width="256" height="256"><img id="m128" width="64" height="64"></div>
 <div id="toast"></div>
 <script>
 const ICONS = __ICONS__;
-const KEY = "icon_review_v3";
+const KEY = "icon_review_v6";
 const state = {};
 ICONS.forEach(ic => state[ic.name] = { model_ok: null, note: "" });
 
@@ -139,7 +147,7 @@ ICONS.forEach(ic => {
   const card = document.createElement("div");
   card.className = "card"; card.dataset.name = ic.name;
   card.innerHTML = `
-    <div class="imgwrap" title="点击放大"><img loading="lazy" src="icons/${encodeURIComponent(ic.name)}_64.png"></div>
+    <div class="imgwrap" title="点击放大（左 64 / 右 256 原生渲染）"><img loading="lazy" src="icons/${encodeURIComponent(ic.name)}_64.png?v=__BUILD__"><img loading="lazy" class="big" src="icons/${encodeURIComponent(ic.name)}_256.png?v=__BUILD__"></div>
     <div class="nm">${ic.name}</div>
     <div class="btns">
       <button class="ok">✓ 满意</button><button class="bad">✗ 不满意</button>
@@ -155,10 +163,10 @@ ICONS.forEach(ic => {
 });
 
 function openModal(name) {
-  document.getElementById("mcap").textContent = name + "（右 64 源 128 / 左 256，均为原生渲染）";
+  document.getElementById("mcap").textContent = name + "（左 256 / 右 64，均为原生渲染）";
   const m = document.getElementById("modal");
-  document.getElementById("m256").src = `icons/${encodeURIComponent(name)}_256.png`;
-  document.getElementById("m128").src = `icons/${encodeURIComponent(name)}_128.png`;
+  document.getElementById("m256").src = `icons/${encodeURIComponent(name)}_256.png?v=__BUILD__`;
+  document.getElementById("m128").src = `icons/${encodeURIComponent(name)}_64.png?v=__BUILD__`;
   m.style.display = "flex";
   m.onclick = () => m.style.display = "none";
 }
@@ -229,6 +237,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        # 图标产物频繁重渲但 URL 不变，禁止浏览器缓存过期图
+        self.send_header("Cache-Control", "no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
 
@@ -243,7 +253,8 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             html = PAGE.replace("__ICONS__", json.dumps(ICONS, ensure_ascii=False)) \
                        .replace("__TOTAL__", str(len(ICONS))) \
-                       .replace("__HIDDEN__", str(HIDDEN_OK))
+                       .replace("__HIDDEN__", str(HIDDEN_OK)) \
+                       .replace("__BUILD__", BUILD)
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
         elif path == "/api/state":
             if os.path.exists(RESULT):

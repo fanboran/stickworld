@@ -1,0 +1,38 @@
+[gd_resource type="Animation" format=3]
+
+[resource]
+length = 0.7
+
+tracks/0/type = "bezier"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("bone3:rotation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.29914943379182807, 0, 0, 0, -0.41741817989471985, -0.1806415775814131, -0.07984929999999998, 0, 0.20958690000000002, 0, 0.29914943379182823, -0.133325, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.1667, 0.7)
+}
+tracks/1/type = "bezier"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("minerhead1:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.5195845183187119, 0, 0, 0, -0.49905246499825046, -0.15481070465189686, -0.06078479999999999, 0, 0.141675, 0, 0.5195845183187119, -0.141675, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.1333, 0.7)
+}
+tracks/2/type = "bezier"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("bone2:rotation")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0.3860668305411457, 0, 0, 0.0005334, -0.17482963117227202, 0.10855947947404727, -0.1328166, 0.027750735106709837, 0.10832499999999999, 0, 0.38606683054114577, -0.10832499999999999, 0, 0, 0),
+"times": PackedFloat32Array(0, 0.2667, 0.7)
+}

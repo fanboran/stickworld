@@ -10,13 +10,18 @@ extends RefCounted
 ## （R9 验收硬指标；shader 每帧采样该纹理，无缓存失效问题）。
 ##
 ## ID mask 保留码（与生成端 state_expand_lite.py 同源）：
-##   0 = 无归属（shader 侧输出海洋色）；254 = 湖泊；255 = 邻区灰底（仅 L2 mask）。
+##   0 = 海洋（mask 外真水域，shader 侧输出 empty_color）；253 = 自由城邦
+##   （无归属陆地，feedback2 D 陆地洞修复）；254 = 湖泊；255 = 邻区灰底（仅 L2 mask）。
 
+## mask 保留码：自由城邦（无归属陆地，L3/L2 mask 通用）
+const CODE_FREE_CITY := 253
 ## L2 mask 保留码：湖泊（色值同 L2MapRenderer.LAKE_COLOR）
 const CODE_LAKE := 254
 ## L2 mask 保留码：邻区灰底（色值同 L2MapRenderer.NEIGHBOR_COLOR 0.45 灰）
 const CODE_NEIGHBOR := 255
 
+## 自由城邦中性灰（feedback2 D 定值 [110,110,110]；与生成端预览 LUT 同值）
+const FREE_CITY_COLOR := Color(110.0 / 255.0, 110.0 / 255.0, 110.0 / 255.0)
 const LAKE_COLOR := Color(72.0 / 255.0, 116.0 / 255.0, 158.0 / 255.0)
 ## 0.45 灰的 8bit 精确表示（LUT 图像是 RGBA8，取 115/255 才能精确回读）
 const NEIGHBOR_COLOR := Color(115.0 / 255.0, 115.0 / 255.0, 115.0 / 255.0)
@@ -34,7 +39,7 @@ static var _shared: PoliticalLut = null
 var states: Dictionary = {}
 ## state_id -> lut_index（1..80）
 var index_of: Dictionary = {}
-## 256x1 RGBA8 色表图像（x = lut_index；0 透明；254/255 保留码）
+## 256x1 RGBA8 色表图像（x = lut_index；0 透明；253/254/255 保留码）
 var image: Image = null
 ## LUT 纹理（shader 采样；set_state_color 就地 update → 全图即时换色）
 var texture: ImageTexture = null
@@ -78,7 +83,8 @@ func _build(st: Dictionary) -> void:
 		var col: Array = info.get("color", [255, 0, 255])
 		image.set_pixel(idx, 0, Color(
 			float(col[0]) / 255.0, float(col[1]) / 255.0, float(col[2]) / 255.0, 1.0))
-	# L2 mask 保留码（湖泊/邻区灰底）
+	# mask 保留码（自由城邦灰/湖泊/邻区灰底）
+	image.set_pixel(CODE_FREE_CITY, 0, FREE_CITY_COLOR)
 	image.set_pixel(CODE_LAKE, 0, LAKE_COLOR)
 	image.set_pixel(CODE_NEIGHBOR, 0, NEIGHBOR_COLOR)
 	texture = ImageTexture.create_from_image(image)

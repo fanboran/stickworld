@@ -20,6 +20,8 @@ const LINE_NATIONAL := 3.0
 const LINE_REGION := 2.0
 ## 地块界 1px 短虚线（值 = StickTokens.BORDER_W = 1）
 const LINE_PLOT := 1.0
+## 自由城邦界 1px（feedback2 A：国 vs 无归属 253 边的降级样式，与地块界同宽档）
+const LINE_FREE := 1.0
 
 # ────────────────────── 界线三级配色（内容线槽）──────────────────────
 
@@ -30,6 +32,9 @@ const LINE_NATIONAL_COLOR := StickTokens.TEXT
 const LINE_REGION_COLOR := Color(0.14, 0.14, 0.14, 0.85)
 ## 地块界墨色（原 L2MapRenderer.TILE_BORDER_COLOR 灰墨）
 const LINE_PLOT_COLOR := Color(0.35, 0.35, 0.35)
+## 自由城邦界灰（feedback2 A：0.45 中性灰 = L1_NEIGHBOR_COLOR/PoliticalLut
+## NEIGHBOR_COLOR 同值灰族；弱于地块界，防与国界抢语义）
+const LINE_FREE_COLOR := Color(0.45, 0.45, 0.45)
 
 # ────────────────────── 虚线（屏幕像素口径）──────────────────────
 

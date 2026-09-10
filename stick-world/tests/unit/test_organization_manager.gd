@@ -31,6 +31,11 @@ func _ready() -> void:
 	_runner.add_test("Org: disband 移除组织并子组织上挂", _test_disband)
 	_runner.add_test("Org: 序列化 round-trip 含 next_id 防冲突", _test_save_load)
 	_runner.add_test("Org: WorldState 容器同步（创建注册/删除注销）", _test_world_sync)
+	_runner.add_test("Org: load_preset 查表整树创建（军事编制）", _test_load_preset_from_config)
+	_runner.add_test("Org: load_preset 错误路径（未知预设/坏参数/层级不衔接）", _test_load_preset_errors)
+	_runner.add_test("Org: load_preset Dictionary 直灌挂接到 parent", _test_load_preset_attach)
+	_runner.add_test("Org: load_preset 中途失败整体回滚", _test_load_preset_rollback)
+	_runner.add_test("Org: export_as_preset 子树导出 + 往返同构", _test_export_roundtrip)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -250,3 +255,117 @@ func _test_world_sync() -> void:
 	m.remove_tier(tree.mid)
 	_runner.assert_equal(ws.organizations.size(), 2, "删除后 WorldState 容器应同步注销")
 	_runner.assert_null(ws.organizations.get(tree.mid, null), "被删组织应已注销")
+
+
+# ─────────────── 预设（load_preset / export_as_preset） ───────────────
+
+func _test_load_preset_from_config() -> void:
+	var m := ScriptOrgManager.new()
+	var r: Dictionary = m.load_preset("军事编制", "")
+	_runner.assert_true(r.get("ok", false), "军事编制预设应加载成功: " + str(r))
+	var created: Array = r.data.created
+	_runner.assert_equal(created.size(), 5, "军事编制应创建 5 层组织")
+	var root: Dictionary = m.get_organization(r.data.org_id).data
+	_runner.assert_equal(root.name, "师", "根组织应为师")
+	_runner.assert_equal(root.tier, 5, "根组织应为 L5")
+	_runner.assert_equal(root.tag, ScriptOrgState.Tag.MILITARY, "预设组织应带 MILITARY 标签")
+	# 链式结构：师→团→营→连→排
+	var expected := ["团", "营", "连", "排"]
+	var parent_id: String = r.data.org_id
+	for i in expected.size():
+		var children: Array[String] = m.get_child_orgs(parent_id)
+		_runner.assert_equal(children.size(), 1, "每层应只有一个子组织")
+		var child: Dictionary = m.get_organization(children[0]).data
+		_runner.assert_equal(child.name, expected[i], "第 %d 层应为%s" % [i, expected[i]])
+		_runner.assert_equal(child.tier, 4 - i, "层级应逐层递减")
+		parent_id = child.id
+	_runner.assert_equal(m.organizations.size(), 5, "总组织数应为 5")
+
+
+func _test_load_preset_errors() -> void:
+	var m := ScriptOrgManager.new()
+	var r1: Dictionary = m.load_preset("不存在的预设", "")
+	_runner.assert_false(r1.get("ok", true), "未知预设名应失败")
+	_runner.assert_true(str(r1.get("error", "")).contains("可用"), "错误信息应列出可用预设")
+	var r2: Dictionary = m.load_preset(42, "")
+	_runner.assert_false(r2.get("ok", true), "非 String/Dictionary 参数应失败")
+	# 层级不衔接：预设顶层 L5 无法挂到 L5 父组织下（须 parent.tier-1 = L4）
+	var root: Dictionary = m.create_organization("司令部", "MILITARY", 5, "")
+	var r3: Dictionary = m.load_preset("军事编制", root.data.org_id)
+	_runner.assert_false(r3.get("ok", true), "预设顶层与父组织层级不衔接应失败")
+	_runner.assert_equal(m.organizations.size(), 1, "失败后不应留下预设组织")
+
+
+func _test_load_preset_attach() -> void:
+	var m := ScriptOrgManager.new()
+	var root: Dictionary = m.create_organization("野战军", "MILITARY", 5, "")
+	# Dictionary 直灌（export_as_preset 同格式）：顶层 L4 恰好衔接 L5 父组织
+	var preset := {
+		"name": "附属师", "tag": "MILITARY",
+		"entries": [
+			{"id": "a", "name": "师", "level": 4, "tag": "MILITARY", "parent_id": ""},
+			{"id": "b", "name": "团", "level": 3, "tag": "MILITARY", "parent_id": "a"},
+			{"id": "c", "name": "连", "level": 2, "tag": "MILITARY", "parent_id": "b"},
+		],
+	}
+	var r: Dictionary = m.load_preset(preset, root.data.org_id)
+	_runner.assert_true(r.get("ok", false), "衔接层级的预设应挂接成功: " + str(r))
+	_runner.assert_equal(m.organizations.size(), 4, "挂接后共 4 个组织")
+	var children: Array[String] = m.get_child_orgs(root.data.org_id)
+	_runner.assert_equal(children, [r.data.org_id], "预设根应挂到指定父组织")
+	_runner.assert_equal(m.get_organization(r.data.org_id).data.name, "师", "预设根名称保真")
+
+
+func _test_load_preset_rollback() -> void:
+	var m := ScriptOrgManager.new()
+	# 条目层级断链（连的子级标 L5 越界）→ 中途失败，已创建组织须回滚
+	var preset := {
+		"name": "坏预设", "tag": "MILITARY",
+		"entries": [
+			{"id": "a", "name": "师", "level": 5, "tag": "MILITARY", "parent_id": ""},
+			{"id": "b", "name": "团", "level": 4, "tag": "MILITARY", "parent_id": "a"},
+			{"id": "c", "name": "幽灵层", "level": 5, "tag": "MILITARY", "parent_id": "b"},
+		],
+	}
+	var r: Dictionary = m.load_preset(preset, "")
+	_runner.assert_false(r.get("ok", true), "断链预设应失败")
+	_runner.assert_true(str(r.get("error", "")).contains("回滚"), "错误信息应说明已回滚")
+	_runner.assert_equal(m.organizations.size(), 0, "回滚后不应残留任何组织")
+
+
+func _test_export_roundtrip() -> void:
+	var m := ScriptOrgManager.new()
+	var r: Dictionary = m.load_preset("军事编制", "")
+	var root_id: String = r.data.org_id
+	# 只导出子树（从团开始）：导出根 = 团，parent_id 恒为 ""
+	var regiment_id: String = m.get_child_orgs(root_id)[0]
+	var exported: Dictionary = m.export_as_preset(regiment_id)
+	_runner.assert_true(exported.get("ok", false), "子树导出应成功")
+	_runner.assert_equal(exported.data.name, "团", "导出根名称应为团")
+	_runner.assert_equal(exported.data.tag, "MILITARY", "导出根标签应为 MILITARY")
+	_runner.assert_equal(exported.data.entries.size(), 4, "团子树应含 4 个条目")
+	_runner.assert_equal(String(exported.data.entries[0].parent_id), "", "导出根条目 parent_id 应为空")
+	# 往返：回灌到全新 manager，结构应同构
+	var m2 := ScriptOrgManager.new()
+	var r2: Dictionary = m2.load_preset(exported.data, "")
+	_runner.assert_true(r2.get("ok", false), "导出数据应可直接回灌: " + str(r2))
+	var exported2: Dictionary = m2.export_as_preset(r2.data.org_id)
+	_runner.assert_equal(_preset_shape(exported.data), _preset_shape(exported2.data), "往返后结构应同构")
+	# 整树导出对照：5 条目
+	var full: Dictionary = m.export_as_preset(root_id)
+	_runner.assert_equal(full.data.entries.size(), 5, "整树导出应含 5 个条目")
+	# 导出不存在的组织
+	_runner.assert_false(m.export_as_preset("org_999").get("ok", true), "导出不存在的组织应失败")
+
+
+## 预设数据规范化形状：[(name, level, tag, 父名)] 排序后比较（org_id 差异无关结构）
+func _preset_shape(data: Dictionary) -> Array:
+	var name_by_id := {}
+	for e in data.entries:
+		name_by_id[String(e.id)] = String(e.name)
+	var rows: Array = []
+	for e in data.entries:
+		var pid := String(e.parent_id)
+		rows.append([String(e.name), int(e.level), String(e.tag), name_by_id.get(pid, "") if pid != "" else ""])
+	rows.sort()
+	return rows

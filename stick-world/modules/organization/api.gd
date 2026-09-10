@@ -196,13 +196,22 @@ func disband_organization(org_id: String) -> Dictionary:
 # ===== 预设 =====
 
 ## 加载预设模板，创建组织树
-func load_preset(preset_name: String, parent_id: String) -> Dictionary:
+## preset 双形态：String（查 presets.tres 官方母本）或 Dictionary（export_as_preset 产物直灌）
+## parent_id = "" 创建独立根树；指定 parent 时须预设顶层 level == parent.tier - 1
+## [Q] 每创建一个组织发射一次 org_created（data.created 列出全部新组织 id）
+func load_preset(preset: Variant, parent_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	return _manager.load_preset(preset_name, parent_id)
+	var result := _manager.load_preset(preset, parent_id)
+	if result.get("ok", false):
+		for org_id in result.data.created:
+			org_created.emit(org_id)
+	return result
 
 
-## 将组织及其子树导出为预设
+## 将组织及其子树导出为预设数据
+## 返回 data: {name, tag, entries: [{id, name, level, tag, parent_id}]}，
+## 可直接回灌 load_preset（Dictionary 形态）；UGC 文件化导出挂后续任务
 func export_as_preset(org_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}

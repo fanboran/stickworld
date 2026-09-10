@@ -28,6 +28,7 @@
   - `docs/项目/交接/世界地图系统完善-进度与交接.md`（任务：观感返工 R 系列，分支 `agent/world-map-rework`，worktree `.temp/world-map-rework`）
   - `docs/项目/交接/图标管线与美术升级-进度与交接.md`（任务：图标三渲二管线+程序化美术升级，剩接入 Godot UI，分支 `main`）
   - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
+  - `docs/项目/交接/组织系统深化-进度与交接.md`（任务：组织系统深化，分支 `agent/organization-deepening`，worktree `.temp/organization-deepening`）
 
 ### 项目文档导航
 

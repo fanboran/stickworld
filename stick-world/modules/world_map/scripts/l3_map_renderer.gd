@@ -9,9 +9,11 @@ class_name L3MapRenderer
 ##   MODE_L1   : 底 = 69 块老 L1 地块（鲜艳配色）
 ##   MODE_CITY : 底 = 1038 块城市（像 city_preview 花花绿绿）
 ## hover 恒命中老 L1 索引图（label 直编）；点击下钻仍按 L2（L3MapController 用 L2 索引图）。
-## 线条语言（R8 层2 token 化 + feedback1 去抖动）：政治模式界线三级——国界 3px
-## 实线（亮，states 邻接提取）+ 地区界 2px 长虚线（§7.3-6 规范表）；线条平滑直绘
-## （antialiased），共享边端点共点严丝合缝；线宽/色全部走 MapTokens。
+## 线条语言（R8 层2 token 化 + feedback1 去抖动 + feedback2 统一几何源）：政治模式
+## 界线三级——国界 3px 实线（亮）+ 地区界 2px 长虚线（§7.3-6 规范表），**都从
+## l3_city 城块共享边邻接提取**（同一几何源，同一条物理边界只有一条线；旧 region
+## polygon 虚线双源错位退役）；线条平滑直绘（antialiased），共享边端点共点严丝合缝；
+## 线宽/色全部走 MapTokens。
 ## 性能：两级 mesh 加载时一次性烘焙，每帧按模式 draw_mesh。
 
 enum DisplayMode { MODE_L1, MODE_CITY }
@@ -84,13 +86,15 @@ var _political_result: Image = null
 ## （POLITICAL 模式回退现状着色）
 var _political_layer: Sprite2D = null
 
-## 政治模式界线三级缓存（R8 层2，首次政治绘制时一次构建）：
-##   国界 3px 实线（亮）——数据源 = l3_city 城块共享边两侧政权不同（states 邻接，
-##   MapSketch.edge_key 无向边提取）；地区界 2px 长虚线——现行 region 几何沿用。
-##   feedback1 去抖动：平滑直绘，虚线按构建时 zoom 固化成地图单位（烙在地图上），
-##   线宽绘制时实时 ÷zoom 保持屏幕恒定
+## 政治模式界线缓存（R8 层2 建，feedback2 A/C 重构）：全部从城块共享边邻接提取
+## （单一几何源）。国界 3px 实线（亮）= 两侧均政权且不同；地区界 2px 长虚线 =
+## 两侧地区不同且非国界（与国界互斥 = 同一条物理边界只有一条线）；自由城邦界
+## 1px 细灰短虚线 = 恰一侧政权（国 vs 无归属 253，feedback2 A 降级样式，防御类）。
+## feedback1 去抖动：平滑直绘，虚线按构建时 zoom 固化成地图单位（烙在地图上），
+## 线宽绘制时实时 ÷zoom 保持屏幕恒定
 var _national_border_segs := PackedVector2Array()
 var _political_region_segs := PackedVector2Array()
+var _free_city_border_segs := PackedVector2Array()
 var _political_borders_built := false
 
 ## 地图标注层（R8 层3）：国名 + 都城星标（§7.3-6 规范表 L3=只画首都星标+国名），
@@ -485,8 +489,9 @@ func _draw() -> void:
 			draw_mesh(_l1_mesh, null)
 		if _l1_holes_mesh != null:
 			draw_mesh(_l1_holes_mesh, null)
-	# 3. 界线（R8 层2 分级）：政治模式 = 国界 3px 实线（亮）+ 地区界 2px 长虚线
-	#    （§7.3-6 规范表）；其他模式 = L2 地区常驻描边（现状语义）
+	# 3. 界线（R8 层2 分级 + feedback2 统一几何源）：政治模式 = 国界 3px 实线（亮）
+	#    + 地区界 2px 长虚线 + 自由城邦界 1px 细灰短虚线（§7.3-6 规范表，城块邻接
+	#    同源提取）；其他模式 = L2 地区常驻描边（现状语义）
 	if political_ready:
 		_draw_political_borders()
 	else:
@@ -521,8 +526,9 @@ func _draw_l2_borders() -> void:
 			draw_polyline(bpts, L2_BORDER_COLOR, bw, true)
 
 
-## 政治模式界线三级绘制（R8 层2）：国界 3px 实线（亮，TEXT 白）+ 地区界 2px 长虚线。
-## 国界由 states 邻接（城块共享边）提取（见构建函数）；feedback1 去抖动：平滑直绘
+## 政治模式界线三级绘制（R8 层2）：国界 3px 实线（亮，TEXT 白）+ 地区界 2px 长虚线
+## + 自由城邦界 1px 细灰短虚线。三类都由城块邻接提取（见构建函数，feedback2 A/C：
+## 单一几何源）；feedback1 去抖动：平滑直绘
 func _draw_political_borders() -> void:
 	if not _political_borders_built:
 		_build_political_borders()
@@ -537,11 +543,25 @@ func _draw_political_borders() -> void:
 	if _political_region_segs.size() >= 2:
 		draw_multiline(_political_region_segs, MapTokens.LINE_REGION_COLOR,
 			MapTokens.LINE_REGION / zz, true)
+	if _free_city_border_segs.size() >= 2:
+		draw_multiline(_free_city_border_segs, MapTokens.LINE_FREE_COLOR,
+			MapTokens.LINE_FREE / zz, true)
 
 
-## 构建政治模式界线缓存（首次政治绘制一次）：
-## 国界 = l3_city 1040 城块多边形共享边的无向 key 分组，两侧政权不同即国界段
-## （一次字典构建 ~4 万边，毫秒级×几十）；地区界 = 现行 region 几何，平滑直绘+长虚线
+## 构建政治模式界线缓存（首次政治绘制一次）——单一几何源（feedback2 A/C）：
+## 国界与地区界都从 l3_city 城块共享边的无向 key 分组提取（一次字典构建 ~4 万边，
+## 毫秒级×几十），同一物理边界按「国界 > 地区界 > 自由城邦界」优先级只画一条线；
+## 旧「国界用城块邻接 + 地区界用 region polygon」双源错位（feedback2 C）与
+## 「国 vs 无归属也画国界」的白线乱走（feedback2 A）就此根除。
+## 边分类（feedback2 A）：
+##   国界 = 两侧均政权（lut_index 1..80/城邦 73..80）且不同国；
+##   地区界 = 两侧地区 label 不同且非国界（同源城块边聚合）；
+##   自由城邦界 = 双侧都是城块且恰一侧政权（国 vs 无归属 253）→ 降级 1px 细灰短虚线
+##   （选择理由：保住国体领土范围在灰底自由城邦旁的可读性，又不与国界抢语义）。
+##   必须用 tiles 集合限定「双侧城块」：states/regions 集合无法区分「另一侧是无归属
+##   城块」与「另一侧是海/荒野」（单侧贡献）——后者含 3.2 万条海岸边 + 1,450 条同国
+##   内部边，不限会把全图撒满灰虚线（feedback2 A 审计实测）；限后现数据（城块全有
+##   归属）此类边为 0，纯防御。
 func _build_political_borders() -> void:
 	_political_borders_built = true
 	var zz := 1.0
@@ -549,12 +569,11 @@ func _build_political_borders() -> void:
 		zz = _camera.get_zoom()
 	if zz <= 0.0001:
 		zz = 1.0
-	# 1) 国界提取：边 key → {两侧政权集合, 端点}
+	# 1) 边提取：无向 key -> {端点, 两侧政权集合, 两侧地区集合, 贡献块集合}
 	var edges := {}
 	for t in _data.city_tiles:
 		var st: String = t.get("state_id", "")
-		if st.is_empty():
-			continue
+		var rg := int(t.get("region", 0))
 		for poly in (t.get("polygons", []) as Array):
 			var n: int = poly.size()
 			if n < 3:
@@ -570,31 +589,32 @@ func _build_political_borders() -> void:
 				var key := MapSketch.edge_key(a, b)
 				var e: Dictionary = edges.get(key, {})
 				if e.is_empty():
-					e = {"a": a, "b": b, "states": {}}
+					e = {"a": a, "b": b, "states": {}, "regions": {}, "tiles": {}}
 					edges[key] = e
-				e["states"][st] = true
-	# 2) 国界段（feedback1 去抖动：原始共享边直绘——端点即两侧城块共点，
-	#    三岔交界严丝合缝）
+				if not st.is_empty():
+					e["states"][st] = true
+				if rg > 0:
+					e["regions"][rg] = true
+				e["tiles"][int(t.get("label", 0))] = true
+	# 2) 分类（feedback1 去抖动：原始共享边直绘——端点即两侧城块共点，三岔交界
+	#    严丝合缝；虚线按构建时 zoom 固化成地图单位）
 	_national_border_segs = PackedVector2Array()
+	_political_region_segs = PackedVector2Array()
+	_free_city_border_segs = PackedVector2Array()
 	for key in edges:
 		var e: Dictionary = edges[key]
-		var sts: Dictionary = e["states"]
-		if sts.size() < 2:
-			continue
-		_national_border_segs.append(e["a"])
-		_national_border_segs.append(e["b"])
-	# 3) 地区界（region 几何沿用）：闭合环平滑直绘 + 长虚线
-	_political_region_segs = PackedVector2Array()
-	for r in _data.regions:
-		for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
-			if poly.size() < 3:
-				continue
-			var pts := PackedVector2Array()
-			for pp in poly:
-				pts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
-			pts.append(pts[0])
-			MapSketch.dash_segments(_political_region_segs, pts,
+		var ab := PackedVector2Array([e["a"], e["b"]])
+		if (e["states"] as Dictionary).size() >= 2:
+			_national_border_segs.append(e["a"])
+			_national_border_segs.append(e["b"])
+		elif (e["regions"] as Dictionary).size() >= 2:
+			MapSketch.dash_segments(_political_region_segs, ab,
 				MapTokens.DASH_LONG / zz, MapTokens.DASH_LONG_GAP / zz)
+		elif (e["states"] as Dictionary).size() == 1 \
+				and (e["tiles"] as Dictionary).size() >= 2:
+			# 双侧城块且恰一侧政权 = 国 vs 无归属城块；单侧贡献（海岸/荒野）不画
+			MapSketch.dash_segments(_free_city_border_segs, ab,
+				MapTokens.DASH_SHORT / zz, MapTokens.DASH_SHORT_GAP / zz)
 
 
 func BORDER_WIDTH() -> float:

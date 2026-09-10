@@ -1,6 +1,7 @@
 class_name SketchGearButton
 extends SketchButton
-## 空白正方形手绘按钮（设置入口）：方底 + 沸腾方框描边，无任何图标。
+## 手绘正方形按钮（设置入口）：方底 + 沸腾方框描边，图标走场景 icon 属性
+## （管线三渲二齿轮，居中 expand；content margin 留内衬防贴沸腾描边）。
 ## 方形走 SketchDraw.draw_panel 同款 wobbly 矩形——与其他 Sketch 按钮同语言。
 
 
@@ -10,7 +11,11 @@ func _ready() -> void:
 	# 底与描边全自绘（禁用父类贴图四态）
 	var states := ["normal", "hover", "pressed", "disabled", "focus"]
 	for state in states:
-		add_theme_stylebox_override(state, StyleBoxEmpty.new())
+		var sb := StyleBoxEmpty.new()
+		for m in ["content_margin_left", "content_margin_right",
+				"content_margin_top", "content_margin_bottom"]:
+			sb.set(m, 2.0)
+		add_theme_stylebox_override(state, sb)
 	resized.connect(queue_redraw)
 
 

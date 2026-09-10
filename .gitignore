@@ -73,6 +73,8 @@ tools/worldgen/output/**
 !tools/worldgen/output/blob_v2_*.png
 # R8 标注体系验收预览（三级视图标注效果，见交接档 R 系列 R8 层3）
 !tools/worldgen/output/r8_label_*.png
+# feedback1 创始人验收第一批修复预览（去抖动/掉色修复/新字号，见交接档 feedback1）
+!tools/worldgen/output/feedback1_*.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

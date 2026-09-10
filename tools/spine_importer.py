@@ -45,6 +45,18 @@ OUT_SKELETON_GD = 'stick-world/modules/units/scripts/rig/spine_skeleton_data.gd'
 OUT_ANIM_DIR = 'stick-world/modules/units/animations/spine'
 OUT_SKINS_JSON = 'stick-world/modules/units/data/spine_skins.json'
 OUT_COVERAGE_JSON = 'docs/设计/系统/覆盖矩阵.json'
+OUT_RENDER_GD = 'stick-world/modules/units/scripts/rig/spine_render_data.gd'
+
+# 合成锚点骨（无轨道）：承载"髋骨对齐 rig 原点"的平移（见 bone_track_paths）
+RIG_ROOT_NAME = 'RigRoot'
+# 有游戏内对应兵种的皮肤（v1：6 正规兵种；Zombie/Leader/Giant-Rider 系登记远期）
+UNIT_SKINS = ['Swordwrath', 'Spearton', 'Archidon', 'Magikill', 'Miner', 'Giant']
+# 核心矢量肢体槽位（批次 B 渲染重标：矢量肢体的几何全部从附件表直读）
+CORE_SLOTS = ['arm1upper', 'arm1lower', 'arm2upper', 'arm2lower',
+              'leg1upper', 'leg1lower', 'leg2upper', 'leg2lower',
+              'foot1', 'foot2', 'head']
+# 装备槽位（贴图附件直读：武器/盾/头盔/背包/箭袋）
+EQUIP_SLOTS = ['weapon', 'Arrow1', 'helm', 'bag', 'Quiver1']
 
 EPS = 0.001          # stepped 折叠陡坡宽度（秒）
 GODOT_NODE_INVALID = '.:/@"%'   # Godot 节点名非法字符
@@ -61,13 +73,17 @@ def node_safe_name(name):
 
 
 def bone_track_paths(bones):
-    """骨名 → 动画轨道路径前缀（相对 Skeleton2D 的全相对路径，如 root/bone/minertorso1）。
+    """骨名 → 动画轨道路径（相对 Skeleton2D 的全相对路径，含合成锚点 RigRoot）。
 
     必需原因（批次 B 实测，tests/dev/bone_path_probe.gd）：AnimationPlayer 的
     root_node 指向 Skeleton2D，Bone2D 是**嵌套** Node2D 子节点——轨道路径必须
     是完整相对路径；只写扁平骨名（"bone3:rotation"）会让引擎解析失败并刷
     "couldn't resolve track" 警告，骨骼完全不动（Skeleton2D 没有 Skeleton3D 那种
     "骨名即属性"的伪属性通道）。
+
+    RigRoot = 合成静态父骨（无任何轨道），承载"把髋骨对到 rig 原点"的锚点平移。
+    锚点不能直接烘到 root 骨的 setup 位置：root 有 position:y 轨道（躯干起伏），
+    每帧会把锚点覆写回 0。
     """
     by_name = {b['name']: b for b in bones}
     out = {}
@@ -80,7 +96,8 @@ def bone_track_paths(bones):
             if not parent or parent not in by_name:
                 break
             cur = by_name[parent]
-        out[b['name']] = '/'.join(reversed(parts))
+        chain = '/'.join(reversed(parts))
+        out[b['name']] = '%s/%s' % (RIG_ROOT_NAME, chain)
     return out
 
 
@@ -239,10 +256,12 @@ def anim_duration(anim_data):
     return _max_time(sections, 0.0)
 
 
-def import_animation(anim_name, anim_data, bones_by_name, bone_paths, root_tx_policy, stats):
+def import_animation(anim_name, anim_data, bones_by_name, bone_paths, slot_bone,
+                     root_tx_policy, stats):
     """单动画 → (tres 文本行, 统计 dict)。stats 由调用方注入（含 _curve_stats 闭包）。
 
-    bones_by_name: 骨名→setup dict；bone_paths: 骨名→全相对轨道路径（见 bone_track_paths）。"""
+    bones_by_name: 骨名→setup dict；bone_paths: 骨名→全相对轨道路径（见 bone_track_paths）；
+    slot_bone: 槽位→骨名（visible 轨道要挂到**该槽所属骨**下，否则静态节点跟不上骨骼）。"""
     lines = ['[gd_resource type="Animation" format=3]', '', '[resource]']
     length = anim_duration(anim_data)
     lines.append('length = %s' % fnum(length))
@@ -334,7 +353,11 @@ def import_animation(anim_name, anim_data, bones_by_name, bone_paths, root_tx_po
                 vis_rows = sorted([(float(k.get('time', 0.0)), k.get('name') is None) for k in raw_keys],
                                   key=lambda r: r[0])
                 stats['visible_keys'] += len(vis_rows)
-                write_visible_track(lines, track_idx, 'attach_%s:visible' % safe, vis_rows)
+                # 挂到该槽所属骨下：静态节点跟不上骨骼（渲染端在该骨下建 attach_<槽> 件）
+                owner = slot_bone.get(slot_name)
+                prefix = bone_paths[owner] if owner in bone_paths else ''
+                path = ('%s/attach_%s' % (prefix, safe)) if prefix else ('attach_%s' % safe)
+                write_visible_track(lines, track_idx, '%s:visible' % path, vis_rows)
                 track_idx += 1
             else:
                 stats['attach_tracks_ignored'] += 1  # 纯同名重设（无视觉语义）
@@ -385,6 +408,214 @@ def resolve_source(repo, path_arg):
     raise FileNotFoundError('真相源不存在（worktree 与主 checkout 都试过）: %s' % path_arg)
 
 
+def _bone_world(bones_by_name, name, cache):
+    """setup 世界变换 (x, y, rot_deg)（y-up、逆时针、度）。"""
+    if name in cache:
+        return cache[name]
+    b = bones_by_name[name]
+    parent = b.get('parent')
+    lx, ly = float(b.get('x', 0.0)), float(b.get('y', 0.0))
+    lr = float(b.get('rotation', 0.0))
+    if not parent or parent not in bones_by_name:
+        res = (lx, ly, lr)
+    else:
+        px, py, pr = _bone_world(bones_by_name, parent, cache)
+        c, s = math.cos(math.radians(pr)), math.sin(math.radians(pr))
+        res = (px + lx * c - ly * s, py + lx * s + ly * c, pr + lr)
+    cache[name] = res
+    return res
+
+
+def _mesh_vertex_worlds(t, bones, bones_by_name, cache):
+    """Spine 加权 mesh → setup 世界坐标顶点列表。
+
+    vertices 布局（Spine 3.8 加权 mesh，本数据实测）：每顶点
+    [影响数 n, (骨索引, x, y, 权重) × n]，x/y 在该骨的局部系。加权平均得顶点。
+    """
+    v = t['vertices']
+    i = 0
+    out = []
+    while i < len(v):
+        n = int(v[i]); i += 1
+        acc_x = acc_y = 0.0
+        for _ in range(n):
+            bi, lx, ly, w = int(v[i]), float(v[i+1]), float(v[i+2]), float(v[i+3])
+            i += 4
+            bx, by, br = _bone_world(bones_by_name, bones[bi]['name'], cache)
+            c, s = math.cos(math.radians(br)), math.sin(math.radians(br))
+            acc_x += w * (bx + lx * c - ly * s)
+            acc_y += w * (by + lx * s + ly * c)
+        out.append((acc_x, acc_y))
+    return out
+
+
+def _mesh_boundary(t, worlds):
+    """三角形集合 → 有序边界环（只出现一次的边串联）。"""
+    tris = t['triangles']
+    cnt = {}
+    for i in range(0, len(tris), 3):
+        a, b, c = tris[i], tris[i+1], tris[i+2]
+        for e in ((a, b), (b, c), (c, a)):
+            key = (min(e), max(e))
+            cnt[key] = cnt.get(key, 0) + 1
+    adj = {}
+    for (a, b), n in cnt.items():
+        if n != 1:
+            continue
+        adj.setdefault(a, []).append(b)
+        adj.setdefault(b, []).append(a)
+    if not adj:
+        return []
+    start = next(iter(adj))
+    loop, prev, cur = [], None, start
+    while True:
+        loop.append(cur)
+        nxt = [x for x in adj.get(cur, []) if x != prev]
+        if not nxt:
+            break
+        prev, cur = cur, nxt[0]
+        if cur == start:
+            break
+    return loop
+
+
+def build_render_data(bones, bones_by_name, skins, node_names, slots):
+    """批次 B 渲染重标数据：核心矢量肢体几何 + 装备贴图件几何 + 躯干轮廓 + 髋部锚点。
+
+    - CORE_ATTACH：bone 节点名 → 附件几何（w×h 圆头胶囊/圆；矢量渲染直读）
+    - EQUIP：兵种皮肤 → 槽位 → {bone, 贴图区域几何}（武器/盾/盔/包/箭袋）
+    - TORSO_POLY：躯干 mesh 的边界环（minertorso1 局部、Spine y-up）——mesh 无 deform
+      动画，按静态多边形渲染（方案 §2.3「可按线段降级零损失」的更强保留）
+    - RIG_ANCHOR：髋骨对齐 rig 原点的平移（Godot 局部系，y-down）——给 RigRoot 用
+    """
+    skin_by_name = {s['name']: s for s in skins}
+    slot_bone = {s.get('name'): s.get('bone') for s in slots}
+
+    core = {}
+    equip = {}
+    for skin_name in UNIT_SKINS:
+        atts = skin_by_name.get(skin_name, {}).get('attachments', {}) or {}
+        sk_equip = {}
+        for slot in CORE_SLOTS:
+            m = atts.get(slot)
+            if not m:
+                continue
+            an, a = next(iter(m.items()))
+            if a is None or a.get('type') == 'mesh':
+                continue
+            bone = slot_bone.get(slot)
+            if not bone:
+                continue
+            geo = {'x': a.get('x', 0.0), 'y': a.get('y', 0.0),
+                   'rot': a.get('rotation', 0.0),
+                   'sx': a.get('scaleX', 1.0), 'sy': a.get('scaleY', 1.0),
+                   'w': a.get('width', 0), 'h': a.get('height', 0), 'slot': slot}
+            core.setdefault(node_names.get(bone, bone), geo)
+        for slot in EQUIP_SLOTS:
+            m = atts.get(slot)
+            if not m:
+                continue
+            an, a = next(iter(m.items()))
+            if a is None:
+                continue
+            bone = slot_bone.get(slot)
+            if not bone:
+                continue
+            sk_equip[slot] = {'bone': node_names.get(bone, bone),
+                              'att': an, 'path': a.get('path', an),
+                              'type': a.get('type', 'region'),
+                              'x': a.get('x', 0.0), 'y': a.get('y', 0.0),
+                              'rot': a.get('rotation', 0.0),
+                              'sx': a.get('scaleX', 1.0), 'sy': a.get('scaleY', 1.0),
+                              'w': a.get('width', 0), 'h': a.get('height', 0)}
+        equip[skin_name] = sk_equip
+
+    # 躯干 mesh 边界环（minertorso1 局部，Spine y-up）
+    cache = {}
+    torso_poly = []
+    tw = skin_by_name['Swordwrath']['attachments'].get('torso', {})
+    if tw:
+        t = next(iter(tw.values()))
+        worlds = _mesh_vertex_worlds(t, bones, bones_by_name, cache)
+        loop = _mesh_boundary(t, worlds)
+        tx, ty, tr = _bone_world(bones_by_name, 'minertorso1', cache)
+        c, s = math.cos(math.radians(-tr)), math.sin(math.radians(-tr))
+        for idx in loop:
+            dx, dy = worlds[idx][0] - tx, worlds[idx][1] - ty
+            torso_poly.append((round(dx * c - dy * s, 3), round(dx * s + dy * c, 3)))
+
+    hip_x, hip_y, _ = _bone_world(bones_by_name, 'bone', cache)
+    anchor = (-hip_x, hip_y)   # Godot 局部：hip_godot=(-x, +y)，取反即对齐原点
+    return core, equip, torso_poly, anchor
+
+
+def write_render_data(out_path, core, equip, torso_poly, anchor, slot_bone, visible_slots):
+    lines = ['class_name SpineRenderData',
+             'extends RefCounted',
+             '## 批次 B 渲染重标数据（tools/spine_importer.py 从 APK Spine 数据导入，勿手改）。',
+             '##',
+             '## CORE_ATTACH：核心矢量肢体/头的附件几何（挂 bone 节点，w×h 圆头胶囊，',
+             '##   头=圆）。渲染端按 (w,h,rot) 反算胶囊两端点，不做任何手调比例。',
+             '## EQUIP：兵种皮肤 → 装备槽（weapon/Arrow1/helm/bag/Quiver1）→ 挂骨 + 贴图',
+             '##   区域几何（位置/旋转/缩放直读，贴图本体走既有武器/装备贴图管线）。',
+             '## TORSO_POLY：躯干 mesh 边界环（minertorso1 局部，Spine y-up）——静态多边形。',
+             '## RIG_ANCHOR：RigRoot 平移（Godot 局部系 y-down），把髋骨对到 rig 原点。',
+             '']
+    lines.append('## 合成锚点骨名（动画轨道路径前缀）')
+    lines.append('const RIG_ROOT := "%s"' % RIG_ROOT_NAME)
+    lines.append('')
+    lines.append('## 髋骨对齐原点平移（Godot 局部系，y-down）')
+    lines.append('const RIG_ANCHOR := Vector2(%s, %s)' % (fnum(anchor[0]), fnum(anchor[1])))
+    lines.append('')
+    lines.append('## 兵种皮肤顺序（与游戏兵种档案对账）')
+    lines.append('const UNIT_SKINS: Array[String] = [%s]' % ', '.join('"%s"' % s for s in UNIT_SKINS))
+    lines.append('')
+    lines.append('## 核心矢量肢体/头附件几何：bone 节点名 → {x, y, rot(度), sx, sy, w, h, slot}')
+    lines.append('const CORE_ATTACH := {')
+    for bone, g in core.items():
+        lines.append('\t"%s": {"x": %s, "y": %s, "rot": %s, "sx": %s, "sy": %s, "w": %s, "h": %s, "slot": "%s"},' % (
+            bone, fnum(g['x']), fnum(g['y']), fnum(g['rot']),
+            fnum(g['sx']), fnum(g['sy']), fnum(g['w']), fnum(g['h']), g['slot']))
+    lines.append('}')
+    lines.append('')
+    lines.append('## 装备贴图件：皮肤 → 槽位 → {bone, att, path, type, x, y, rot, sx, sy, w, h}')
+    lines.append('const EQUIP := {')
+    for skin, m in equip.items():
+        lines.append('\t"%s": {' % skin)
+        for slot, g in m.items():
+            lines.append('\t\t"%s": {"bone": "%s", "att": "%s", "path": "%s", "type": "%s", "x": %s, "y": %s, "rot": %s, "sx": %s, "sy": %s, "w": %s, "h": %s},' % (
+                slot, g['bone'], g['att'], g['path'], g['type'], fnum(g['x']), fnum(g['y']),
+                fnum(g['rot']), fnum(g['sx']), fnum(g['sy']), fnum(g['w']), fnum(g['h'])))
+        lines.append('\t},')
+    lines.append('}')
+    lines.append('')
+    lines.append('## 躯干多边形（minertorso1 局部，Spine y-up；渲染时 y 取反）')
+    lines.append('const TORSO_POLY: Array = [')
+    for (x, y) in torso_poly:
+        lines.append('\tVector2(%s, %s),' % (fnum(x), fnum(y)))
+    lines.append(']')
+    lines.append('')
+    lines.append('## 槽位 → 骨（渲染端在骨下建 attach_<槽> 件，visible 轨道即打在它上面）')
+    lines.append('const SLOT_BONE := {')
+    for slot in sorted(slot_bone.keys()):
+        bone = slot_bone[slot]
+        if not bone:
+            continue
+        safe = ''.join('_' if c in GODOT_NODE_INVALID else c for c in slot)
+        lines.append('\t"%s": "%s",' % (safe, node_safe_name(bone)[0]))
+    lines.append('}')
+    lines.append('')
+    lines.append('## 带 visible（attachment NULL）语义的槽位——必须有 attach_<槽> 节点承接轨道')
+    lines.append('const VISIBLE_SLOTS: Array[String] = [%s]' % ', '.join(
+        '"%s"' % ''.join('_' if c in GODOT_NODE_INVALID else c for c in s)
+        for s in sorted(visible_slots)))
+    text = '\n'.join(lines) + '\n'
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+    return len(torso_poly)
+
+
 def main():
     ap = argparse.ArgumentParser(description='SWL 火柴人 Spine 导入器（批次 A）')
     ap.add_argument('--skeleton', default=DEFAULT_SKELETON)
@@ -414,6 +645,14 @@ def main():
     # 轨道路径 = 全相对路径（含祖先链）——Skeleton2D 的 Bone2D 是嵌套节点，
     # 扁平骨名解析不到（见 bone_track_paths 注释与 tests/dev/bone_path_probe.gd）
     bone_paths = bone_track_paths(bones)
+    slot_bone = {s.get('name'): s.get('bone') for s in slots}
+    # 带 visible（attachment NULL）语义的槽位——渲染端需在这些槽所属骨下建 attach_<槽> 件
+    visible_slots = set()
+    for _an, _ad in anims.items():
+        for sl, chans in (_ad.get('slots', {}) or {}).items():
+            keys = chans.get('attachment')
+            if isinstance(keys, list) and any(k.get('name') is None for k in keys):
+                visible_slots.add(sl)
 
     def curve_stats_fn(stats):
         def _apply(rows):
@@ -433,7 +672,7 @@ def main():
                  'tracks': 0}
         stats['_curve_stats'] = curve_stats_fn(stats)
         text, stats = import_animation(name, anim_data, bones_by_name, bone_paths,
-                                       args.root_tx, stats)
+                                       slot_bone, args.root_tx, stats)
         out_path = os.path.join(repo, OUT_ANIM_DIR, name + '.tres')
         with open(out_path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(text)
@@ -501,6 +740,12 @@ def main():
     with open(os.path.join(repo, OUT_SKINS_JSON), 'w', encoding='utf-8', newline='\n') as f:
         json.dump(skins_out, f, ensure_ascii=False, indent=1)
 
+    # ---- 渲染重标数据（批次 B：肢体几何 + 装备几何 + 躯干轮廓 + 髋部锚点）----
+    core, equip, torso_poly, anchor = build_render_data(
+        bones, bones_by_name, skins, node_names, slots)
+    n_poly = write_render_data(os.path.join(repo, OUT_RENDER_GD),
+                               core, equip, torso_poly, anchor, slot_bone, visible_slots)
+
     # ---- 覆盖矩阵 ----
     src_stats = source_stats(d)
     coverage = {
@@ -525,6 +770,14 @@ def main():
         'animations': per_anim,
         'anim_count': len(per_anim),
         'loop_anims': sorted(n for n, s in per_anim.items() if s['loop']),
+        'render': {
+            'output': OUT_RENDER_GD,
+            'core_attach': sorted(core.keys()),
+            'equip_skins': sorted(equip.keys()),
+            'torso_poly_vertices': n_poly,
+            'rig_anchor_godot': [anchor[0], anchor[1]],
+            'note': '轨道路径含合成锚点骨 %s（髋骨对齐 rig 原点）' % RIG_ROOT_NAME,
+        },
     }
     # 自动断言：93/93、通道全量对账、事件全量
     ok = len(per_anim) == len(anims)
@@ -549,6 +802,8 @@ def main():
     print('动画 %d/%d → %s' % (len(per_anim), len(anims), OUT_ANIM_DIR))
     print('骨架 %d 骨 → %s' % (len(bones), OUT_SKELETON_GD))
     print('皮肤 %d → %s' % (len(skins), OUT_SKINS_JSON))
+    print('渲染重标数据 → %s（核心件 %d、皮肤 %d、躯干多边形 %d 顶点、锚点 %s）' % (
+        OUT_RENDER_GD, len(core), len(equip), n_poly, anchor))
     print('覆盖矩阵 → %s  coverage_ok=%s' % (OUT_COVERAGE_JSON, coverage['coverage_ok']))
     print('通道对账 rotate/translate/scale: %s（源 %s）' % (
         {k: per_ch[k] for k in ('rotate', 'translate', 'scale')},

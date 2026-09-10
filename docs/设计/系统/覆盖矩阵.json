@@ -2001,6 +2001,36 @@
   "Zombie-Walk2",
   "Zombie-Walk3"
  ],
+ "render": {
+  "output": "stick-world/modules/units/scripts/rig/spine_render_data.gd",
+  "core_attach": [
+   "minerarm1",
+   "minerarm2",
+   "minerarm3",
+   "minerarm4",
+   "minerfoot1",
+   "minerfoot2",
+   "minerhead1",
+   "minerleg1",
+   "minerleg2",
+   "minerleg3",
+   "minerleg4"
+  ],
+  "equip_skins": [
+   "Archidon",
+   "Giant",
+   "Magikill",
+   "Miner",
+   "Spearton",
+   "Swordwrath"
+  ],
+  "torso_poly_vertices": 10,
+  "rig_anchor_godot": [
+   4.0,
+   183.02
+  ],
+  "note": "轨道路径含合成锚点骨 RigRoot（髋骨对齐 rig 原点）"
+ },
  "channel_imported": {
   "rotate": 1837,
   "translate": 1803,

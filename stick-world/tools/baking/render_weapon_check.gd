@@ -96,9 +96,9 @@ func _shoot(scene_name: String, tag: String, c_override: float = NAN) -> void:
 	inst.position = -(grip.position * spr.scale).rotated(spr.rotation)
 	inst.z_index = -2
 	inst.z_as_relative = false
-	var bone_path := "hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner/hand_inner/weapon_hand"
+	var bone_path := "RigRoot/root/bone/minertorso1/bone2/bone3/minerarm3/minerarm4/pickaxe1"
 	if scene_name == "weapon_shield.tscn":
-		bone_path = "hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer/hand_outer/shield_hand"
+		bone_path = "RigRoot/root/bone/minertorso1/bone2/bone3/minerarm1/minerarm2/Arrow1"
 	var bone: Node2D = skel.get_node_or_null(bone_path)
 	if bone == null:
 		printerr("挂载骨不存在: " + bone_path)

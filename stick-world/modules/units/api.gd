@@ -14,8 +14,8 @@
 ## 外部模块应通过 StickmanRig 的公共 API 与本模块交互：
 ##   - play(anim_name: String)          播放动画
 ##   - get_current_anim() -> String      获取当前动画名
-##   - get_bone_by_id(id: int) -> Node2D 获取骨骼节点
-##   - get_bone_ids() -> Array           获取所有骨骼 ID
+##   - get_bone_by_name(name: String) -> Node2D 按 Spine 骨名获取骨骼节点
+##   - get_bone_names() -> Array         获取全部骨名（Spine 原名）
 ##
 ## StickmanEntity 公共 API：
 ##   - set_possessed(bool)               切换玩家附身

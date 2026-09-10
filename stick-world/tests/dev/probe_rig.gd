@@ -27,16 +27,13 @@ func _ready() -> void:
 	print("[probe] entity=", u.name, " body_scale=", u.get("body_scale"), " rig.scale=", rig.scale)
 	var bones: Dictionary = rig.get("_bones") if "_bones" in rig else {}
 	var sprites: Dictionary = rig.get("_sprites") if "_sprites" in rig else {}
-	var names: Dictionary = rig.get("ScriptSkeleton").BONE_NAMES if false else {}
-	# 骨骼世界位置
-	var sk: GDScript = load("res://modules/units/scripts/rig/stickman_skeleton.gd")
-	var bone_names: Dictionary = sk.BONE_NAMES
-	for id in bones:
-		var b: Node2D = bones[id]
-		print("[bone] %d %-18s global=%v" % [id, str(bone_names.get(id, "?")), b.global_position])
+	# 骨骼世界位置（批次 B：骨骼字典键 = Spine 骨名）
+	for name in bones:
+		var b: Node2D = bones[name]
+		print("[bone] %-18s global=%v" % [str(name), b.global_position])
 	# 肢体容器与 fill 端点
-	for id in sprites:
-		var c: Node2D = sprites[id]
+	for name in sprites:
+		var c: Node2D = sprites[name]
 		var fill: Node = c.get_node_or_null("fill")
 		var stroke: Node = c.get_node_or_null("stroke")
 		var info := "container global=%v rot=%.2f" % [c.global_position, c.rotation]
@@ -47,7 +44,7 @@ func _ready() -> void:
 			info += " fill_poly bounds=%s" % str(_poly_bounds(fill as Polygon2D))
 		if stroke != null and stroke.has_meta("open_root_half_len"):
 			info += " [OPEN_ROOT half_len=%.1f]" % float(stroke.get_meta("open_root_half_len"))
-		print("[limb] %d %s" % [id, info])
+		print("[limb] %s %s" % [str(name), info])
 	get_tree().quit(0)
 
 

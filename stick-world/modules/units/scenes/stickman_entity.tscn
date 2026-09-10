@@ -8,25 +8,27 @@
 [ext_resource type="Script" uid="uid://0d05hxudimxm" path="res://modules/units/scripts/entity/weapon_mount.gd" id="6_weapon"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hs7ru"]
-size = Vector2(83, 24)
+size = Vector2(119.67, 34.6)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hitbox"]
-size = Vector2(38, 262.5)
+size = Vector2(54.79, 378.49)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ogq8d"]
-size = Vector2(90, 277)
+size = Vector2(129.76, 399.38)
 
 [node name="StickmanEntity" type="CharacterBody2D" unique_id=655489722]
-position = Vector2(-8.5, -130)
+position = Vector2(-12.26, -187.43)
 collision_layer = 2
 # 单位间不物理互撞（防叠人由空间网格软分离负责，人群战斗性能核心）；仅撞地形/障碍层1
+# 判定盒数值在"骨架本地单位"域，运行时乘 BASE_SCALE；批次 B 换真 Spine 骨架后
+# BASE_SCALE 0.5→0.3468（髋→脚底屏幕距离不变），授权值统一 ×1.4418 补偿，世界像素不变。
 collision_mask = 1
 script = ExtResource("1_entity")
 
 [node name="RigHost" parent="." unique_id=1566456611 instance=ExtResource("2_rig_scene")]
 
 [node name="Collider" type="CollisionShape2D" parent="." unique_id=983411722]
-position = Vector2(8.5, 130)
+position = Vector2(12.26, 187.43)
 shape = SubResource("RectangleShape2D_hs7ru")
 
 [node name="AIController" type="Node" parent="." unique_id=279625248]
@@ -40,7 +42,7 @@ collision_layer = 4
 script = ExtResource("5_hitbox")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox" unique_id=62523622]
-position = Vector2(10, 5.75)
+position = Vector2(14.42, 8.29)
 shape = SubResource("RectangleShape2D_hitbox")
 
 [node name="WeaponMount" type="Node2D" parent="." unique_id=284373627]
@@ -48,5 +50,5 @@ script = ExtResource("6_weapon")
 
 [node name="Range" type="CollisionShape2D" parent="." unique_id=1337042102]
 disabled = true
-position = Vector2(8.5, 9.5)
+position = Vector2(12.26, 13.7)
 shape = SubResource("RectangleShape2D_ogq8d")

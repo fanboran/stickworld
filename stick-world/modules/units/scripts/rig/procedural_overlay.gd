@@ -7,10 +7,11 @@ extends Node2D
 ##   - 随机微抖：head/torso 低幅噪声（火柴人真动感）
 ##
 ## 设计：
-##   - 只叠加不参与动画通道的骨骼（hip/lower_torso/neck），不碰肢体链，
+##   - 只叠加躯干轴上的三根骨（hip / minertorso1 / bone3），不碰肢体链，
 ##     避免与动画/骨架姿态互相踩踏。
-##   - 绝对设置（base + overlay）而非累积：这些骨骼不被动画每帧重置，
-##     `+=` 会累积漂移（实测 head 单调漂 70°）。
+##   - **先撤上帧叠加、再叠本帧**（`rot = rot - last + new`）：批次 B 换真骨架后
+##     每根骨都被动画逐帧写绝对值，绝对设置（base + overlay）会把动画整段抹掉；
+##     纯 `+=` 又会在"该动画没有这根骨的轨道"时累积漂移。先撤后加两种情形都对。
 ##   - 挂载：由 StickmanRig._ready 动态创建为骨架子节点，连接 process_frame
 ##     （动画应用后叠加，下一帧动画覆盖后再叠加 → 等效"动画 + 叠加"持续生效）。
 ##   - 历史上的"IK 手目标抖动"随 IK 装置一并移除：IK 修改器栈实测从不解算
@@ -29,6 +30,11 @@ const LEAN_GAIN := 0.025
 const JITTER_HEAD_DEG := 0.15
 const JITTER_TORSO_DEG := 0.1
 
+## 叠加目标骨（Spine 骨名）+ 路径（批次 B：骨骼字典键 = Spine 骨名）
+const HIP_PATH := "RigRoot/root/bone"
+const TORSO_PATH := "RigRoot/root/bone/minertorso1"
+const HEAD_PATH := "RigRoot/root/bone/minertorso1/bone2/bone3"
+
 var _skeleton: Skeleton2D
 var _rig: Node2D
 var _hip: Bone2D
@@ -36,10 +42,10 @@ var _torso: Bone2D
 var _head: Bone2D
 var _entity: Node2D
 
-# 基准（动画不驱动这些骨骼，叠加以基准 + 偏移绝对设置，防累积漂移）
-var _hip_base: float = 0.0
-var _torso_base: float = 0.0
-var _head_base: float = 0.0
+# 上一帧已叠加的偏移（本帧先撤销再加新值：兼容"动画写了绝对值"与"无该轨道"）
+var _hip_applied: float = 0.0
+var _torso_applied: float = 0.0
+var _head_applied: float = 0.0
 
 var _time: float = 0.0
 var _last_anim: String = ""
@@ -58,17 +64,10 @@ var _noise := FastNoiseLite.new()
 func setup(skeleton: Skeleton2D, rig: Node2D) -> void:
 	_skeleton = skeleton
 	_rig = rig
-	# 叠加目标骨骼（不参与动画通道重置的躯干根/颈）
-	_hip = skeleton.get_node_or_null("hip")
-	_torso = skeleton.get_node_or_null("hip/spine_root/lower_torso")
-	_head = skeleton.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/neck")
-	# 记录基准
-	if _hip != null:
-		_hip_base = _hip.rotation
-	if _torso != null:
-		_torso_base = _torso.rotation
-	if _head != null:
-		_head_base = _head.rotation
+	# 叠加目标骨骼（躯干轴三根：髋 / 下躯干 / 颈等价骨）
+	_hip = skeleton.get_node_or_null(HIP_PATH)
+	_torso = skeleton.get_node_or_null(TORSO_PATH)
+	_head = skeleton.get_node_or_null(HEAD_PATH)
 	# 每帧帧末叠加（动画应用之后）
 	get_tree().process_frame.connect(_on_frame)
 	# 速度在物理帧计算（位置只在物理帧更新，渲染帧差分会振荡）
@@ -138,10 +137,15 @@ func _on_frame() -> void:
 	head_off += _noise.get_noise_1d(_time * 2.0) * JITTER_HEAD_DEG
 	torso_off += _noise.get_noise_1d(_time * 2.0 + 100.0) * JITTER_TORSO_DEG
 
-	# ---- 应用（绝对设置 = 基准 + 叠加） ----
-	if _head != null:
-		_head.rotation = _head_base + deg_to_rad(head_off)
-	if _torso != null:
-		_torso.rotation = _torso_base + deg_to_rad(torso_off)
-	if _hip != null:
-		_hip.rotation = _hip_base + deg_to_rad(hip_off)
+	# ---- 应用（先撤上帧叠加、再叠本帧：动画逐帧写绝对值也不会被抹掉） ----
+	_hip_applied = _apply_offset(_hip, deg_to_rad(hip_off), _hip_applied)
+	_torso_applied = _apply_offset(_torso, deg_to_rad(torso_off), _torso_applied)
+	_head_applied = _apply_offset(_head, deg_to_rad(head_off), _head_applied)
+
+
+## 撤上帧偏移 + 叠本帧偏移，返回本帧偏移（供下帧撤销）
+func _apply_offset(bone: Bone2D, offset: float, applied: float) -> float:
+	if bone == null:
+		return 0.0
+	bone.rotation = bone.rotation - applied + offset
+	return offset

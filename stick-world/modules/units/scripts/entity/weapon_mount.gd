@@ -255,9 +255,9 @@ func _ready() -> void:
 	call_deferred("_reload_weapons")
 
 
-## 挂载主手武器 + 副手盾牌到手骨骼（跟随手臂摆动）。
-## 手骨骼挂在 forearm 末端（见 stickman_test.tscn），攻击/行走动画驱动
-## forearm 时武器自动跟随；不再挂 IK marker（marker 静态，物体会飘在固定位置）。
+## 挂载主手武器 + 副手盾牌到武器/盾骨（跟随手臂摆动）。
+## 挂点骨来自 Spine 数据（pickaxe1 挂远侧前臂末梢、Arrow1 挂近侧前臂末梢），
+## 攻击/行走动画驱动前臂时武器自动跟随；不再挂 IK marker（marker 静态，物体会飘）。
 func _mount_weapons() -> void:
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity == null:
@@ -350,11 +350,11 @@ func _on_rig_anim_event(anim_name: String, event_name: String, value: String) ->
 	if anim_name != _attack_anim_name():
 		return
 	weapon_anim_event.emit(anim_name, event_name, value)
-	match event_name:
-		"Hit":
-			_try_strike_frame()
-		"Sound":
-			_play_event_sfx(value)
+	# 命中事件名按武器类型取（镐=Mine，其余=Hit；见 StickmanAnims.WEAPON_HIT_EVENT）
+	if event_name == Anims.hit_event_for_weapon(weapon_type):
+		_try_strike_frame()
+	elif event_name == "Sound":
+		_play_event_sfx(value)
 
 
 ## 动画播完回调（P7 批次 7b）：治疗系动画结束 → 清施法标志位。
@@ -536,22 +536,29 @@ func _check_cooldown_vs_anim() -> void:
 			push_warning("[WeaponMount] 冷却 %.2fs < 攻击动画时长 %.2fs（%s）：依赖命中帧后打断语义（原版剑士同款）" % [cooldown, anim_len, anim_name])
 
 
-## 查找武器骨 weapon_hand（SWL pickaxe1 补译；挂 hand_inner 手骨原点，
-## 挥剑时武器随腕甩动——动画经 pickaxe1 通道驱动该骨旋转）。
+## 查找武器骨 pickaxe1（原版 weapon 槽挂骨；远侧臂末梢，挥砍时武器随腕甩动
+## ——动画经 pickaxe1 的 rotate 通道驱动该骨）。
 func _find_hand_bone(owner_entity: Node2D) -> Node2D:
-	var rig: Node = owner_entity.get("rig") if "rig" in owner_entity else null
-	if rig == null:
-		return null
-	return rig.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner/hand_inner/weapon_hand")
+	return _find_rig_bone(owner_entity, "pickaxe1",
+			"RigRoot/root/bone/minertorso1/bone2/bone3/minerarm3/minerarm4/pickaxe1")
 
 
-## 查找盾骨 shield_hand（SWL Arrow1 补译；挂 hand_outer 手骨原点，
-## 拉弓/举盾的动画经 Arrow1 通道驱动该骨）。
+## 查找盾骨 Arrow1（原版 Arrow1 槽挂骨；近侧臂末梢，拉弓/举盾动画驱动该骨）。
 func _find_shield_bone(owner_entity: Node2D) -> Node2D:
+	return _find_rig_bone(owner_entity, "Arrow1",
+			"RigRoot/root/bone/minertorso1/bone2/bone3/minerarm1/minerarm2/Arrow1")
+
+
+## 按 Spine 骨名取骨（优先走 rig 公共 API，取不到再按全路径兜底）
+func _find_rig_bone(owner_entity: Node2D, bone_name: String, path: String) -> Node2D:
 	var rig: Node = owner_entity.get("rig") if "rig" in owner_entity else null
 	if rig == null:
 		return null
-	return rig.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer/hand_outer/shield_hand")
+	if rig.has_method("get_bone_by_name"):
+		var b: Node2D = rig.get_bone_by_name(bone_name)
+		if b != null:
+			return b
+	return rig.get_node_or_null(path) as Node2D
 
 
 func _physics_process(delta: float) -> void:
@@ -857,7 +864,8 @@ func _resolve_hit_event_time() -> void:
 	var rig: Node = owner_entity.get("rig")
 	if rig == null or not rig.has_method("get_anim_event_time"):
 		return
-	_hit_event_time = rig.get_anim_event_time(_attack_anim_name(), "Hit")
+	_hit_event_time = rig.get_anim_event_time(_attack_anim_name(),
+			Anims.hit_event_for_weapon(weapon_type))
 
 
 ## 每帧递减冷却（也可由外部调用）

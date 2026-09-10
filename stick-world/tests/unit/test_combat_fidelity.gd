@@ -21,16 +21,34 @@ const DamagePipeline := preload("res://modules/combat/scripts/battle/damage_pipe
 const WeaponMountScript := preload("res://modules/units/scripts/entity/weapon_mount.gd")
 const HealthComponentScript := preload("res://modules/units/scripts/entity/health_component.gd")
 
-const ANIM_DIR := "res://modules/units/animations/"
+## 批次 B：动画资源在 spine/ 子目录，库键仍是游戏动作名（经 SPINE_MAP 解析）
+const ANIM_DIR := "res://modules/units/animations/spine/"
 
-## 解包 Spine 数据里各攻击动画的 Hit 事件真值（秒），用于断言"读的是真值"
-const EXPECTED_HIT_TIME: Dictionary = {
-	"attack": 1.0,           # Swordwrath-Attack1（全长 1.3333s = 75%）
-	"attack_spear": 0.8667,  # Spearton-Attack1（全长 1.6667s = 52%）
-	"attack_bow": 0.5333,    # Archidon-Draw（全长 2.0s = 27%）
-	"attack_pickaxe": 0.6667,# Miner-Attack1（全长 1.0s = 67%）
-	"attack_staff": 1.0,     # Magikill-Spell1（全长 1.6667s = 60%）
+## 解包 Spine 数据里各攻击动画的原生命中事件真值：{事件名, 秒}
+## （Miner-Mine 的原生事件是 Mine 而非 Hit，对应 WeaponMount 的 Pickaxe 口径）
+const EXPECTED_HIT: Dictionary = {
+	"attack": {"ev": "Hit", "t": 1.0},            # Swordwrath-Attack1（全长 1.3333s = 75%）
+	"attack_spear": {"ev": "Hit", "t": 0.8667},   # Spearton-Attack1（全长 1.6667s = 52%）
+	"attack_bow": {"ev": "Hit", "t": 0.5333},     # Archidon-Draw（全长 2.0s = 27%）
+	"attack_pickaxe": {"ev": "Mine", "t": 1.2},   # Miner-Mine（全长 2.3333s = 51%）
+	"attack_staff": {"ev": "Hit", "t": 1.0},      # Magikill-Spell1（全长 1.6667s = 60%）
 }
+
+
+## 载入游戏动作名对应的 Spine 动画资源
+func _load_anim(game_name: String) -> Animation:
+	var spine_name: String = str(Anims.SPINE_MAP.get(game_name, game_name))
+	return load(ANIM_DIR + spine_name + ".tres") as Animation
+
+
+## 读动画内嵌事件时间（秒）；无该事件返回 -1（真值来源，非拍脑袋比例）
+func _event_time(anim: Animation, event_name: String) -> float:
+	if anim == null or not anim.has_meta("anim_events"):
+		return -1.0
+	for e in anim.get_meta("anim_events"):
+		if str(e.get("name")) == event_name:
+			return float(e.get("time"))
+	return -1.0
 
 var _runner: TestRunner
 
@@ -57,27 +75,30 @@ func _ready() -> void:
 # ─────────────────────────────── 命中帧（走样 #1）───────────────────────────────
 
 func _test_hit_event_meta() -> void:
-	for anim_name in EXPECTED_HIT_TIME.keys():
-		var anim: Animation = load(ANIM_DIR + anim_name + ".tres")
+	for anim_name in EXPECTED_HIT.keys():
+		var anim: Animation = _load_anim(anim_name)
 		_runner.assert_not_null(anim, "动画资源应存在: %s" % anim_name)
 		if anim == null:
 			continue
-		_runner.assert_true(anim.has_meta("hit_time"), "%s 应带 hit_time 元数据" % anim_name)
-		var t: float = float(anim.get_meta("hit_time"))
-		_runner.assert_approx(t, EXPECTED_HIT_TIME[anim_name], 0.001,
-			"%s 的 Hit 事件时间应为解包真值 %.4f，实际 %.4f" % [anim_name, EXPECTED_HIT_TIME[anim_name], t])
+		_runner.assert_true(anim.has_meta("anim_events"), "%s 应带 anim_events 事件元数据" % anim_name)
+		var ev: String = str(EXPECTED_HIT[anim_name]["ev"])
+		var t: float = _event_time(anim, ev)
+		_runner.assert_true(t >= 0.0, "%s 应含 %s 事件" % [anim_name, ev])
+		_runner.assert_approx(t, float(EXPECTED_HIT[anim_name]["t"]), 0.001,
+			"%s 的 %s 事件时间应为解包真值 %.4f，实际 %.4f" % [
+				anim_name, ev, float(EXPECTED_HIT[anim_name]["t"]), t])
 		# 命中帧必须落在动画时长内，否则永远等不到结算
 		_runner.assert_true(t >= 0.0 and t <= anim.length,
-			"%s 的 Hit 时间应落在 [0, %.4f] 内" % [anim_name, anim.length])
+			"%s 的命中时间应落在 [0, %.4f] 内" % [anim_name, anim.length])
 
 
 func _test_hit_points_differ() -> void:
 	var ratios: Array = []
-	for anim_name in EXPECTED_HIT_TIME.keys():
-		var anim: Animation = load(ANIM_DIR + anim_name + ".tres")
+	for anim_name in EXPECTED_HIT.keys():
+		var anim: Animation = _load_anim(anim_name)
 		if anim == null or anim.length <= 0.0:
 			continue
-		ratios.append(float(anim.get_meta("hit_time")) / anim.length)
+		ratios.append(_event_time(anim, str(EXPECTED_HIT[anim_name]["ev"])) / anim.length)
 	_runner.assert_true(ratios.size() >= 4, "应收集到至少 4 个武器的命中帧比例")
 	# 写死 STRIKE_FRAME_RATIO 时所有比例相同；真值各不相同（0.27~0.75）
 	var min_r: float = ratios[0]
@@ -368,12 +389,12 @@ func _test_reflect_chain() -> void:
 # ──────────────────────── 爆头死亡动画分家（漏译 #4）────────────────────────
 
 func _test_headshot_death() -> void:
-	# 资源：dead_headshot.tres 存在、一次性、与普通 dead 是两条动画
-	var anim: Animation = load(ANIM_DIR + "dead_headshot.tres")
-	_runner.assert_not_null(anim, "dead_headshot.tres 应存在（tools/baking 产线生成）")
+	# 资源：dead_headshot 存在、一次性、与普通 dead 是两条动画
+	var anim: Animation = _load_anim("dead_headshot")
+	_runner.assert_not_null(anim, "dead_headshot 动画应存在（spine 导入产物）")
 	if anim != null:
 		_runner.assert_true(anim.loop_mode == Animation.LOOP_NONE, "死亡动画应为一次性")
-		var dead: Animation = load(ANIM_DIR + "dead.tres")
+		var dead: Animation = _load_anim("dead")
 		_runner.assert_true(anim != dead and not is_equal_approx(anim.length, dead.length),
 			"爆头死亡与普通死亡应是不同动画（%.3f vs %.3f）" % [anim.length, dead.length])
 	# 标记：爆头致死 → died_from_headshot=true；普通致死 → false

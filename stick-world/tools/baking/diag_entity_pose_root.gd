@@ -58,7 +58,7 @@ func _run() -> void:
 	for i in 30:
 		await get_tree().process_frame
 		if i < 12:
-			var head := _entity_rig.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head") as Node2D
+			var head := _entity_rig.get_node_or_null("RigRoot/root/bone/minertorso1/bone2/bone3/minerhead1") as Node2D
 			var hip := _entity_rig.get_node_or_null("hip") as Node2D
 			if head != null and hip != null:
 				print("f%02d hip g_rot=%8.3f head g_rot=%8.3f rig g_rot=%8.3f" % [

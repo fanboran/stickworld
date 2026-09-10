@@ -48,7 +48,8 @@ func _test_weapon_idle_anim() -> void:
 	for wtype in expected:
 		var got: String = Anims.idle_for_weapon(wtype)
 		_runner.assert_equal(got, expected[wtype], "武器 %d 站姿" % wtype)
-		var path := Anims.ANIM_DIR + got + ".tres"
+		# 批次 B：库键 = 游戏动作名，资源 = SPINE_MAP 里的 Spine 原名
+		var path := Anims.ANIM_DIR + str(Anims.SPINE_MAP.get(got, got)) + ".tres"
 		_runner.assert_true(ResourceLoader.exists(path), "站姿资源应存在: %s" % path)
 		var picked: String = Anims.pick_stand_variant_for(wtype)
 		_runner.assert_true(picked == expected[wtype] or (wtype == 0 and picked in Anims.STAND_VARIANTS),

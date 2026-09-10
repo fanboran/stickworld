@@ -43,8 +43,9 @@ const LINE_NATIONAL_CASING_EXTRA := 1.6
 const LINE_NATIONAL_COLOR := Color(0.11, 0.10, 0.09, 0.95)
 ## 地区界墨色（次级：更浅更透，无底衬）
 const LINE_REGION_COLOR := Color(0.18, 0.17, 0.16, 0.60)
-## 地块界墨色（三级之最弱）
-const LINE_PLOT_COLOR := Color(0.24, 0.23, 0.22, 0.42)
+## 地块界墨色（三级之最弱）。第四批反馈「有的城市界黑线会消失」：0.42 太淡，
+## 在中明度政权色上接近隐形 → 提到 0.6（线宽仍 1px，不与地区界抢语义）
+const LINE_PLOT_COLOR := Color(0.22, 0.21, 0.20, 0.60)
 ## 自由城邦界灰（内容语义：无归属陆地；灰族与 PoliticalLut.FREE_CITY_COLOR 同语义）
 const LINE_FREE_COLOR := Color(0.42, 0.42, 0.42, 0.75)
 
@@ -260,10 +261,11 @@ const L3_REGION_BORDER_SCREEN_CAP := 20.8
 const L3_HOVER_COLOR := StickTokens.BORDER_STRONG
 const L3_HOVER_WIDTH := 6.5
 const L3_HOVER_SCREEN_CAP := 10.4
-## 玩家所在 L2 地区流动描边（A3 定标双色不透明蓝青，与 L1_GLOW 同语言）
+## 玩家所在 L2 地区流动描边（A3 定标双色不透明蓝青，与 L1_GLOW 同语言）。
+## 第四批反馈「太粗/画风不对」：10→4（地区轮廓只是位置提示，不该压过政权界线）
 const L3_PLAYER_GLOW_A := L1_GLOW_A
 const L3_PLAYER_GLOW_B := L1_GLOW_B
-const L3_PLAYER_GLOW_WIDTH := 10.0
-const L3_PLAYER_GLOW_SCREEN_CAP := 20.0
+const L3_PLAYER_GLOW_WIDTH := 4.0
+const L3_PLAYER_GLOW_SCREEN_CAP := 8.0
 ## F3 调试编号
 const L3_LABEL_SIZE := 40.0

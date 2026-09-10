@@ -35,18 +35,6 @@ def flat_mat(name, color):
     return m
 
 
-def shade_mat(name):
-    m = bpy.data.materials.new(name)
-    m.use_nodes = True
-    nt = m.node_tree
-    nt.nodes.clear()
-    out = nt.nodes.new('ShaderNodeOutputMaterial')
-    diff = nt.nodes.new('ShaderNodeBsdfDiffuse')
-    diff.inputs[0].default_value = (0.85, 0.85, 0.85, 1.0)
-    nt.links.new(diff.outputs[0], out.inputs[0])
-    return m
-
-
 def setup(az_deg, el_deg, res):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene

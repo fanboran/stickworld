@@ -14,10 +14,6 @@ OUT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "temp"))
 import motifs as M
 
 
-def lin(c):
-    return tuple(min(1.0, v) ** 2.2 for v in c)
-
-
 def flat_mat(name, color):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
@@ -408,18 +404,6 @@ def render_two(scene, tag, t, classic=False, margin=1.06):
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_ink.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, t, "ink")
-    # 诊断：ink pass 前壳材质槽0的颜色（验证 (75,66,53) 的来源）
-    for o in scene.objects:
-        if o.get('is_ink_shell') and o.type == 'MESH':
-            mt = o.data.materials[0] if o.data.materials else None
-            if mt and mt.use_nodes:
-                for nd in mt.node_tree.nodes:
-                    if nd.type == 'EMISSION':
-                        print('DIAG ink mat emission =', tuple(round(v, 4) for v in nd.inputs[0].default_value))
-                        break
-            else:
-                print('DIAG ink mat MISSING/NON-NODES:', mt.name if mt else None)
-            break
     sys.stdout.flush()
     # 火焰 pass：只渲火焰标记件（平滑渐变发光，compose 原样合成不过色带）
     has_fire = any(o.get('fire') for o in scene.objects if o.type == 'MESH')

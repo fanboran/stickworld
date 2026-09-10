@@ -115,38 +115,12 @@ def cel(tag, fake, target, out_ink=None, nids=10):
             out[m] = np.array([ramp[min(b, len(ramp) - 1)] for b in band[m]]) * 255
 
     # 反向壳墨线层（C 阶段）：渲染端单独渲 ink pass（只有描边壳完整剪影）。
-    # 合成必须在渲染域（同分辨率空间）先做「cel 在上、墨壳在下」的 over——
-    # 曾把 ink 图留到裁切缩放后合成：两图 bbox 不同（ink 比 cel 大一圈线宽），
-    # 各自居中缩放=相对错位一圈线宽（256px 描边悬空可见，创始人审计）。
-    # 渲染域同坐标系合成后，后续裁缩对两层完全一致，零对位误差。
-    ink_fp = os.path.join(BASE, f"{tag}_{target}_ink.png")
-    has_ink = os.path.exists(ink_fp)
-    if has_ink:
-        inkim = np.asarray(Image.open(ink_fp).convert("RGBA")).astype(np.float32)
-        # 合并外轮廓环带白名单（v1 语义）：v1 描边=合并剪影的外轮廓环，部件
-        # 重叠区内部无描边；壳架构是每部件各自描边，交叉区双方描边叠加出
-        # 黑块。ink 只保留「合并剪影外扩 R 内」的环带（外轮廓描边+洞缘描边，
-        # 洞缘在 dilate 带内自然保留），重叠区内部墨由 cel 在上自动覆盖。
-        # 曾同时做「窄缝墨压制」（闭运算清窄缝 ink，想恢复缝透明）——但缝
-        # 两侧部件边缘的贴边描边落在缝带内被一并清掉，同 pid 部件间又无
-        # idedge 缝线补位→线条转弯处断口（虚焊）。窄缝处的壳墨融合成连贯
-        # 线（描边 join 观感）才是连续性优先的正确取舍，故只留环带白名单。
-        sol = sa[..., 3] > 128
-        R = {64: 8, 128: 9, 256: 10}[target]
-        r = sol
-        for _ in range(R):
-            x = r.copy()
-            x[1:, :] |= r[:-1, :]; x[:-1, :] |= r[1:, :]; x[:, 1:] |= r[:, :-1]; x[:, :-1] |= r[:, 1:]
-            r = x
-        inkim[..., 3] *= r
-        a_cel = sa[..., 3:4] / 255.0
-        a_ink = inkim[..., 3:4] / 255.0
-        A = a_cel + a_ink * (1 - a_cel)
-        w = a_cel / np.maximum(A, 1e-6)
-        out = out * w + inkim[..., :3] * (1 - w)
-        alpha512 = A * 255.0
-    else:
-        alpha512 = sa[..., 3]
+    # 描边已在渲染端与 cel 同场渲染（inverted hull 正统用法，显隐由 Z-buffer
+    # 遮挡决定），shade 图自带全部描边。曾用的 ink pass +「cel 在上」over 合成
+    # +合并环带白名单随同场渲染一并退役：遮挡语义交给合成层后，贴合部件间的
+    # 分界线被背景 cel 盖掉（有/无不齐、粗细不匹配、端点错位三症，见 idege
+    # 退役与同场渲染记录）。
+    alpha512 = sa[..., 3:4]
 
     fire_fp = os.path.join(BASE, f"{tag}_{target}_fire.png")
     if os.path.exists(fire_fp):

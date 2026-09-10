@@ -301,6 +301,11 @@ def build_ink_shells(scene, target):
         # 近水平面（顶/底面）壳被跳过、斜面壳位移方向跑偏，屏幕上/下轮廓的
         # 描边覆盖不均=单侧偏薄（64/256 同源同向，64px 上肉眼可见）
         view = (cam.matrix_world.to_3x3() @ Vector((0.0, 0.0, -1.0))).normalized()
+        # 壳沿视线后移 lift（正交相机下不改变屏幕投影）：壳面与本体外侧面
+        # 在视线方向近乎共面，同场渲染会 Z-fighting；后移让本体稳赢深度，
+        # 壳只露轮廓外的环带=描边。lift 须远小于部件间距（世界 0.02 级），
+        # 否则前景部件的描边会被背景部件盖掉
+        lift = cam.data.ortho_scale * 0.012
         verts_out = []
         faces_out = []
         face_shells = []   # (bm_face, 该面壳顶点在 verts_out 的索引序列)
@@ -310,7 +315,7 @@ def build_ink_shells(scene, target):
             if n_plane.length <= 1e-4:
                 continue   # 正对相机：完全在 cel 覆盖之下，无需壳
             n_plane.normalize()
-            off = Rinv @ (n_plane * thickness)   # 只回转方向，不平移（防壳飞离原体）
+            off = Rinv @ (n_plane * thickness + view * lift)   # 相机平面外拓 + 沿视线后移防共面闪烁
             i0 = len(verts_out)
             faces_out.append(tuple(range(i0, i0 + len(face.verts))))
             for v in face.verts:
@@ -346,6 +351,8 @@ def build_ink_shells(scene, target):
         bm.free()
         sh = bpy.data.objects.new(f"{o.name}_ink_shell", sh_mesh)
         sh['is_ink_shell'] = 1
+        if o.get('fire'):
+            sh['fire_shell'] = 1   # 火焰壳跟随火焰本体隐藏（发光体不描边）
         sh.matrix_world = o.matrix_world.copy()
         sh.data.materials.append(ink)
         scene.collection.objects.link(sh)
@@ -369,9 +376,7 @@ def render_passes(scene, tag, id_slots, toon=False, target=64, margin=1.06):
 
     build_ink_shells(scene, target)
     fit_ortho(scene, margin)   # 二次取景：描边壳外扩纳入画框
-    for o in scene.objects:
-        if o.get('is_ink_shell'):
-            o.hide_render = True   # shade 保持纯 cel
+    # 壳与 cel 同场渲染（inverted hull 正统用法，遮挡语义由 Z-buffer 决定）
     if toon:
         for o in scene.objects:
             if o.type == 'MESH' and not o.get('is_ink_shell'):
@@ -386,13 +391,6 @@ def render_passes(scene, tag, id_slots, toon=False, target=64, margin=1.06):
     scene.render.filepath = os.path.join(OUT, f"{tag}_shade.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, "shade")
-
-    for o in scene.objects:
-        if o.type == 'MESH':
-            o.hide_render = not bool(o.get('is_ink_shell'))
-    scene.render.filepath = os.path.join(OUT, f"{tag}_ink.png")
-    bpy.ops.render.render(write_still=True)
-    print("rendered", tag, "ink")
 
 
 ID_COLS = {

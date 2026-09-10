@@ -348,9 +348,14 @@ def build_ink_shells(scene, target):
         R = o.matrix_world.to_3x3()
         Rinv = R.inverted()
         RinvN = Rinv.transposed()   # 法线矩阵：防非均匀尺度扭曲法线方向
-        view = (R @ Vector((0.0, 0.0, -1.0))).normalized()
+        # 视线方向必须取相机的世界 -Z（正交相机斜视角下非竖直）。曾误用物体
+        # 自身 -Z 轴（无旋转物体=竖直向下）：「去视线分量」变成「去竖直分量」，
+        # 近水平面（顶/底面）壳被跳过、斜面壳位移方向跑偏，屏幕上/下轮廓的
+        # 描边覆盖不均=单侧偏薄（64/256 同源同向，64px 上肉眼可见）
+        view = (cam.matrix_world.to_3x3() @ Vector((0.0, 0.0, -1.0))).normalized()
         verts_out = []
         faces_out = []
+        face_shells = []   # (bm_face, 该面壳顶点在 verts_out 的索引序列)
         for face in bm.faces:
             wn = (RinvN @ face.normal).normalized()
             n_plane = wn - view * wn.dot(view)
@@ -358,9 +363,36 @@ def build_ink_shells(scene, target):
                 continue   # 正对相机：完全在 cel 覆盖之下，无需壳
             n_plane.normalize()
             off = Rinv @ (n_plane * thickness)   # 只回转方向，不平移（防壳飞离原体）
-            faces_out.append(tuple(len(verts_out) + i for i in range(len(face.verts))))
+            i0 = len(verts_out)
+            faces_out.append(tuple(range(i0, i0 + len(face.verts))))
             for v in face.verts:
                 verts_out.append(tuple(v.co + off))
+            face_shells.append((face, list(range(i0, i0 + len(face.verts)))))
+        # 补外拓棱之间的裙边（rim）：相邻面的壳位移方向不同（锥面/斜面/端帽
+        # 与侧壁差异最大），两面壳的外拓棱之间会裂开楔形透明缝（描边断裂/
+        # 破碎感——view 修正后近水平面壳大量激活，缝从隐形变可见）。对被两个
+        # 壳面共享的边，加一个连接两面壳外拓棱的 quad 填死楔缝；边界边/跳过
+        # 面不补（端部开放，屏幕投影已连续）。
+        from collections import defaultdict
+        def _ek(e):
+            return tuple(sorted((e.verts[0].index, e.verts[1].index)))
+        edge_faces = defaultdict(list)
+        for face, sidx in face_shells:
+            for e in face.edges:
+                edge_faces[_ek(e)].append((face, sidx))
+        for (v0i, v1i), lst in edge_faces.items():
+            if len(lst) != 2:
+                continue
+            (fa, sa), (fb, sb) = lst
+            ma = {v.index: s for v, s in zip(fa.verts, sa)}
+            mb = {v.index: s for v, s in zip(fb.verts, sb)}
+            if v0i not in ma or v0i not in mb or v1i not in ma or v1i not in mb:
+                continue
+            a0, a1 = ma[v0i], ma[v1i]
+            b0, b1 = mb[v0i], mb[v1i]
+            if len({a0, a1, b0, b1}) < 4:
+                continue   # 两面壳在该棱位移后重合（平滑段），无需裙边
+            faces_out.append((a0, a1, b1, b0))
         sh_mesh = bpy.data.meshes.new(f"{o.name}_ink_shell")
         sh_mesh.from_pydata(verts_out, [], faces_out)
         bm.free()

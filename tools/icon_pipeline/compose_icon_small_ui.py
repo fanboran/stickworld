@@ -124,6 +124,36 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     has_ink = os.path.exists(ink_fp)
     if has_ink:
         inkim = np.asarray(Image.open(ink_fp).convert("RGBA")).astype(np.float32)
+        # 窄缝墨压制：部件间距小于线宽时，3D 壳描边必然横跨缝隙把缝填黑
+        # （跨缝墨=游离黑线，观感如描边偏移）。用闭运算（先膨胀后腐蚀）找出
+        # 合并 cel alpha 中「宽度 < 8px(成品) 的窄缝」，ink 层在该区清零——
+        # 部件间恢复透缝，由 idedge 细缝线承担（v1 语义）；宽缝/洞区（齿轮
+        # 轴孔等）描边保留。k=12：十字核闭运算填 ≤24px(渲染域)=≤12px(成品)
+        # 宽的缝——锥形瓶瓶身×管脚的缝在 512 域 10-20px，k=8 检不出。
+        sol = sa[..., 3] > 128
+        k = 12
+        r = sol
+        for _ in range(k):
+            x = r.copy()
+            x[1:, :] |= r[:-1, :]; x[:-1, :] |= r[1:, :]; x[:, 1:] |= r[:, :-1]; x[:, :-1] |= r[:, 1:]
+            r = x
+        for _ in range(k):
+            x = r.copy()
+            x[1:, :] &= r[:-1, :]; x[:-1, :] &= r[1:, :]; x[:, 1:] &= r[:, :-1]; x[:, :-1] &= r[:, 1:]
+            r = x
+        narrow_gap = r & ~sol
+        inkim[..., 3] *= ~narrow_gap
+        # 合并外轮廓环带白名单（v1 语义）：v1 描边=合并剪影的外轮廓环，部件
+        # 重叠区内部无描边；壳架构是每部件各自描边，交叉区双方描边叠加出
+        # 黑块。ink 只保留「合并剪影外扩 R 内」的环带（外轮廓描边+洞缘描边，
+        # 洞缘在 dilate 带内自然保留），重叠区内部墨由 cel 在上自动覆盖。
+        R = {64: 8, 128: 9, 256: 10}[target]
+        r = sol
+        for _ in range(R):
+            x = r.copy()
+            x[1:, :] |= r[:-1, :]; x[:-1, :] |= r[1:, :]; x[:, 1:] |= r[:, :-1]; x[:, :-1] |= r[:, 1:]
+            r = x
+        inkim[..., 3] *= r
         a_cel = sa[..., 3:4] / 255.0
         a_ink = inkim[..., 3:4] / 255.0
         A = a_cel + a_ink * (1 - a_cel)

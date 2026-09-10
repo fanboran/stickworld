@@ -177,6 +177,24 @@ Terraria/王者真正可借鉴的是**刻内数据化**：单位不是场景树�
   Parse Error（"ink" 未声明，编辑器模拟扫不出，需修）；②battle_arena R 键
   探针 key 注入不生效（keycode vs physical_keycode）+ 重开后 HUD 上一局
   标签不刷新（dev 场景小瑕疵）。
+- 2026-09-10：**D 刀重开（整体迁移第一版）交付**。按 §十 重开必读执行整链
+  切换：移动/分离/边界/击退/冷却/命中帧时序/远程放箭计时一次进 sim，实体
+  变渲染代理。落点：`modules/combat/scripts/battle/battle_sim.gd`（SoA 批
+  内核）+ stickman_entity/weapon_mount/battle_instance 三处 sim 分支 +
+  ProjectSettings `[sim] battle_sim` 开关（默认开；环境变量
+  `STICK_BATTLE_SIM=0` 兜底回退旧链）。设计要点与实测数据见 §十一。
+  **验收（同机同条件 A/B）**：48 满编 6.3→8.1fps（+29%）；96 满编 1.4→1.4
+  （持平）；headless 96 每刻 9.3→9.5 ticks（模拟侧不是 96 的墙）；日志
+  零脚本报错；96 混战终态截图行为正常（两军接战有伤亡/弓兵后排阵列/分离
+  无叠人）。**96 差分定位（headless freeze-entities 满速 vs base 9.5）**：
+  实体链在 headless 模拟侧占比很小，**96 满编的墙是渲染帧骨架管线
+  （proc ~200ms，Wall B）**——下一刀在渲染侧（D3 渲染纯投影/非 rig 剔除/
+  代码 IK），不再在模拟侧挖。
+  **回归与行为验收**：test_combat_fidelity 全绿（命中帧/AOE/格挡/反伤/
+  爆头死亡——旧链未破坏）；test_entity_states 全绿；48 终态截图：满编
+  混战 11 伤亡（伤害/死亡链在跑）、分离无叠人、弓兵侧翼、箭矢弹道正常。
+  48 fps 第二跑 7.0（本机负载波动，sim 后区间 7.0-8.1，基线 6.3）。
+  交接档 §十一 已落档完整设计与下一刀排序（渲染侧）。
 
 ## 七、结构侦察结论（阶段 2 的设计依据，已实证勿重查）
 
@@ -280,3 +298,72 @@ STICK_BATTLE_SIM 兜底），关闭时走旧实体链（A/B 与回滚）。
    硬线）→提交分支。
 4. 若 §八 达标后仍想榨：D 数据化（PackedArray 批模拟）再评估，否则收尾
    （撤销 worktree 的 PerfProbe 接线、归档交接档）。
+
+## 十一、D 刀整体迁移第一版：BattleSim 落地设计（2026-09-10 交付）
+
+**架构（已实现，开关 `[sim] battle_sim`，env `STICK_BATTLE_SIM=0` 回退）**：
+
+- `modules/combat/scripts/battle/battle_sim.gd`（BattleSim，RefCounted，每
+  BattleInstance 一份）。SoA：`pos_x/y`（权威位置）、`intent_x/y`（AI 意图
+  速度，实体侧加速曲线算好后写入）、`kb_x/y`（击退冲量，线性衰减 700/s²）、
+  `faction/cooldown/foot_off/strike_slot/strike_elapsed/ranged_timer`；
+  引用表用普通 Array（实体表/_strikes 槽池/网格 cell——PackedArray 存容器
+  是值拷贝，批 1 教训③）。
+- `tick(delta)` 单 pass：分离（隔刻 15Hz，网格重建 cell=64 + 内联修正，
+  语义=旧 _apply_static_separation：重叠半推/先累加再限幅 3px/死者除外）
+  → 运动（意图+击退积分 + 边界 clamp，Y 以 foot_offset 脚部参考系）
+  → 武器（冷却推进 + 近战 strike 命中帧 crossing + 远程放箭到点）
+  → 写回（entity.global_position / velocity（箭矢预判消费）/ z_index）。
+- **命中帧时序归 sim**：perform_attack 时 WeaponMount 把 hit_time 解析成
+  绝对秒（Hit 事件真值；无事件数据 = 动画时长×0.45；无 rig 测试桩 = 0 立即
+  结算）登记 sim；crossing 时回调 `weapon.sim_strike_now()`——结算链复用
+  旧 `_do_strike()`（AOE 弧/情绪掷骰/暴击/DamagePipeline/hitstop 零重复）。
+  sim 是时序权威，渲染侧攻击动画只是观感（与 rig 播放位置可能漂移，已接受）。
+- **实体 sim 分支**（`_sim_active()` = 已注册且未死）：`_physics_process`
+  跳过 move_and_slide/静态分离/击退衰减/边界 clamp/z_index（sim 批管）；
+  保留 AI 决策节流 + `_apply_movement` 加速曲线与动画切换（velocity 照算，
+  末尾写 sim intent——动画观感与旧链同源）+ 士气/硬直/markers。死亡分支
+  照旧（尸体碰撞禁用/淡出在实体侧）。`apply_hit_reaction` 写 sim kb。
+- **WeaponMount sim 分支**：`_physics_process` 早退（冷却/命中帧/放箭计时
+  全在 sim）；`can_attack` 读 sim 冷却（cancel window 判定照旧读 rig——
+  动画仍在播）；perform_attack/perform_swing/_attack_ranged 三入口登记
+  sim 并写 sim 冷却（`_cooldown_timer` 字段 sim 模式下不再推进，
+  get_cooldown_remaining 消费方注意）。
+- **范围裁剪**：附身单位不注册（`_on_possession_changed` 附身即注销交还
+  旧链）；非参战单位（工人/村民）不注册；AI 决策/行为状态机/DamagePipeline/
+  箭矢弹道/状态效果/士气保持 Node 侧（低频事件链，HealthComponent 仍血量
+  权威）。`AIController._count_enemies_near` 等仍走 map 网格（未迁移）。
+- **on_unit_died 不清 sim**：死者留 sim 墓位（`_sid_alive` 过滤，零成本），
+  尸体淡出 queue_free → `_exit_tree` → `unregister_unit`（清 strike 槽）。
+
+**实测（同机同条件，1920×1080 Dummy 音频）**：
+
+| 场景 | 基线 | sim 后 | 备注 |
+|---|---|---|---|
+| 48 渲染态 fps_avg | 6.3 | **8.1** | +29%；满编混战峰 |
+| 96 渲染态 fps_avg | 1.4 | 1.4 | 持平——墙在 Wall B |
+| 96 headless ticks/s | 9.3 | 9.5 | 模拟侧不是 96 的墙 |
+| 48 headless ticks/s | 15.1 | 15.1 | 满速（15Hz 恐慌档） |
+
+**96 差分定位（headless）**：base 9.5 / freeze-entities 10.1（满速）——
+实体链在模拟侧占比 ~6%，**96 满编 1.4fps 的帧时大头是渲染帧骨架管线
+（proc ~200ms：Skeleton2D 解算 stagger 在 fps≤30 退化逐帧 + AnimationTree
+advance + 批渲染整缓冲写 + 非 rig draws）**。下一刀排序（均在渲染侧）：
+①骨架解算 stagger 的低帧率补偿（fps<<30 时按刻数解算而非逐帧）；
+②非 rig 绘制剔除/合批（血条/阴影/武器 ~700-900 draws）；③代码解算 IK；
+④批渲染更新频率与 LOD 档位联动（T1/T2 单位缓冲写降频）。
+
+**批 1 净回归 vs 本版正收益的原因复盘**（对照 §十 教训）：批 1 只迁移
+移动学时，sim 写回与实体链剩余部分（AI 逐刻 move_and_slide 零位移早退前的
+velocity 合成、分离查询）存在双轨成本；本版整链切换后实体 `_physics_process`
+只剩低频决策与标量计算，物理查询（move_and_slide 的 body_test_motion、
+query_neighbors 的 Dictionary 分配风暴）全部消失，48 净赚 29%。
+
+**遗留与注意**：
+- `--no-ai` 实验开关长期无效（AIController 无 _physics_process，AI 更新是
+  实体显式调 physics_update）——battle_perf 差分数据解读时注意。
+- WeaponMount.get_cooldown_remaining 在 sim 模式返回 0（真相源在 sim）——
+  若有 UI/测试消费该接口需改读 entity.get_battle_sim().get_cooldown(sid)。
+- strike 结算的二次距离确认（1.25×射程）与命中率掷骰在 sim crossing 时跑，
+  与旧链同一代码路径（_do_strike），行为语义不变。
+- 测试套件与 48 截图验收见进度日志 2026-09-10 条（跑完补记）。

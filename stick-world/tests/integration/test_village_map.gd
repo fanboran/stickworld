@@ -135,10 +135,10 @@ func _test_village_ground_fields() -> void:
 		_runner.assert_true(false, "地图非 VillageMap")
 		return
 	# 设计基准值（与 village_map.gd 默认 @export 一致）
-	_runner.assert_equal(map.ground_y, 810.0, "ground_y 应为 810")
-	_runner.assert_equal(map.ground_ratio, 0.25, "ground_ratio 应为 0.25")
+	_runner.assert_equal(map.ground_y, 720.0, "ground_y 应为 720（地面占比 1/3）")
+	_runner.assert_equal(map.ground_ratio, 0.334, "ground_ratio 应为 0.334（地面占比 1/3）")
 	_runner.assert_equal(map.ground_bottom, 1080.0, "ground_bottom 应为 1080")
-	_runner.assert_equal(map.get_ground_y(), 810.0, "get_ground_y 应为 810")
+	_runner.assert_equal(map.get_ground_y(), 720.0, "get_ground_y 应为 720（地面占比 1/3）")
 	# 初始加载后土路/初始建筑会向负坐标扩展 map_left（expand_map 64 格粒度），故 map_left <= 0
 	_runner.assert_true(map.map_left <= 0.0, "map_left 应 <= 0（初始加载被土路扩展）")
 	_runner.assert_true(map.map_right >= 8192.0, "map_right 应 >= 8192")

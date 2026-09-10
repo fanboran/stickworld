@@ -263,6 +263,21 @@ func _find_camera() -> void:
 		_update_tile_layers()
 
 
+## 相机覆盖（dev 工具口子）：视差/平铺/雾带改跟指定相机。
+## 用途：截图验收等场景会 make_current 一台自管相机，SkyDecor 默认仍追
+## GameRoot.CameraRig，全景截图里背景带只盖住游戏相机附近、其余天空裸露
+## （批次 2 视觉验收观察到的「山体背景带垂直硬切边」根因）。调用方在
+## make_current 之后传入自管相机即可；不影响正常游戏路径。
+func set_camera_override(cam: Camera2D) -> void:
+	_cam = cam
+	_cam_ready = true
+	if _cam != null:
+		_last_cam_x = _cam.global_position.x
+		_apply_parallax()
+		_update_tile_layers()
+		_update_haze()
+
+
 func _process(delta: float) -> void:
 	if _cam_ready and _cam != null and is_instance_valid(_cam):
 		_apply_parallax()

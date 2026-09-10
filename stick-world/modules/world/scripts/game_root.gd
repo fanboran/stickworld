@@ -35,7 +35,7 @@ const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/ma
 const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/road_a_b.tscn")
 ## 测试大建筑内部地图场景（阶段 0.9.5 传送切换）
 const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/mega_interior.tscn")
-## 遭遇战战场地图场景（阶段 F）
+## 遭遇战战场地图场景（已退役为 dev 验证图，出征与领地架构 §4.3：进图不自动开战）
 const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
 ## 守城战战场地图场景（右端城墙+波次敌军，接在遭遇战之后）
 const _SIEGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/siege_battlefield.tscn")
@@ -65,7 +65,7 @@ const ROAD_MAP_ID := "road_a_b"
 const VILLAGE_B_MAP_ID := "village_b"
 ## 测试大建筑内部地图 ID
 const MEGA_INTERIOR_MAP_ID := "mega_interior"
-## 遭遇战战场地图 ID（阶段 F）
+## 遭遇战战场地图 ID（dev 验证图；注册与步行出口保留供 dev 直达）
 const BATTLEFIELD_MAP_ID := "battlefield"
 ## 守城战战场地图 ID（右端城墙+波次敌军）
 const SIEGE_MAP_ID := "siege_battlefield"
@@ -73,8 +73,10 @@ const SIEGE_MAP_ID := "siege_battlefield"
 const FOREST_ZONE_MAP_ID := "forest_zone"
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
 const PLAYER_SPAWN_X: float = 0.0
-## NPC 村民数量（P0 测试用，展示 AI 行为；阶段 E 创始人确认改为 2）
-const NPC_COUNT: int = 2
+## NPC 村民数量（小镇生活批次 4 [提案/待定]：起步小镇人口 10——配比在岗
+## 铁匠 1 + 伐木 3 + 矿工 3 = 7，余 3 待业闲逛；配额见 professions.tres quota）。
+## 性能基准 196 单位远未触顶，10 无性能顾虑。
+const NPC_COUNT: int = 10
 
 # ─────────────────────────────── 建造系统（§15 阶段 0.4）────────────────────────────────
 
@@ -88,9 +90,6 @@ var _construction_api: Node = null
 # ─────────────────────────────── 战斗系统（§15 阶段 0.5）────────────────────────────────
 ## CombatApi 实例引用（运行时由 SystemSetup 装配）
 var _combat_api: Node = null
-## 战场预置敌军抑制开关（大乱斗观察场审计 P0-7）：工具场景置 true 后，
-## 进入战场图不再 spawn 遭遇战敌军/启动幽灵战斗，由场景自己组织战斗。
-var suppress_battlefield_enemies: bool = false
 
 # ─────────────────────────────── 框选系统（§15 阶段 0.6）────────────────────────────────
 ## SelectionSystem 实例引用（运行时由 SystemSetup 装配，挂到 UIRoot）
@@ -131,6 +130,16 @@ var _possess_panel: Control = null
 # ─────────────────────────────── 资源系统（P0-9）────────────────────────────────
 ## ResourcesApi 实例引用（运行时由 SystemSetup 装配）
 var _resources_api: Node = null
+
+# ─────────────────────────────── 征服系统（出征与领地循环）───────────────────────────────
+## ExpansionApi 实例引用（运行时由 SystemSetup 装配）
+var _expansion_api: Node = null
+## ConquestManager 实例引用（运行时由 SystemSetup 装配）
+var _conquest_manager: Node = null
+
+# ─────────────────────────────── 招兵与人口（游戏循环深化批次 1）───────────────────────────────
+## RecruitManager 实例引用（运行时由 SystemSetup 装配；招兵经 OrganizationApi 转发）
+var _recruit_manager: Node = null
 
 # ─────────────────────────────── 传送系统（§5.6；TravelHandler 跨脚本读写，故加忽略）────────────────────────────────
 ## 传送返回地图 ID（进入 MegaInteriorMap 前记录，退出时返回）
@@ -197,8 +206,6 @@ var _save_panel: Control = null
 # ─────────────────────────────── 跨图携带（带队出征）────────────────────────────────
 ## travel_started 时收集的编队快照（跨图携带），map_loaded 后恢复
 var _pending_squad_snapshots: Array = []
-## 遭遇战敌方数量（dev 场景可调，默认 4）
-var dev_enemy_count: int = 3
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -276,6 +283,16 @@ func get_combat_api() -> Node:
 ## 获取 ResourcesApi 引用（供测试用）
 func get_resources_api() -> Node:
 	return _resources_api
+
+
+## 征服流程管理器（出征/占领/收益；测试与跨模块消费走 expansion/api.gd）
+func get_conquest_manager() -> Node:
+	return _conquest_manager
+
+
+## 招兵与人口管理器（测试/调试用；玩家交互走 organization/api.gd 转发）
+func get_recruit_manager() -> Node:
+	return _recruit_manager
 
 
 ## 获取 SelectionSystem 引用（供测试用）
@@ -386,9 +403,11 @@ func get_pause_menu_panel() -> Control:
 
 ## 启动一场测试战斗（供遭遇战/测试调用）。
 ## attacker_units / defender_units: StickmanEntity 数组
+## player_faction: 玩家阵营（victory 语义基准；默认攻方。守城战等玩家为守方的战斗传 2）
 ## 返回 BattleInstance（失败返回 null）
 ## 统一走 CombatApi（不再直调 battle_director，2026-08 审计收敛）
-func start_test_battle(attacker_units: Array, defender_units: Array) -> Node:
+func start_test_battle(attacker_units: Array, defender_units: Array,
+		player_faction: int = 1) -> Node:
 	if _combat_api == null or not _combat_api.has_method("start_battle"):
 		push_warning("[GameRoot] CombatApi 未就绪")
 		return null
@@ -396,7 +415,7 @@ func start_test_battle(attacker_units: Array, defender_units: Array) -> Node:
 	if map == null:
 		push_warning("[GameRoot] 当前无地图，无法启动战斗")
 		return null
-	return _combat_api.start_battle(map, attacker_units, defender_units)
+	return _combat_api.start_battle(map, attacker_units, defender_units, player_faction)
 
 
 # ─────────────────────────────── 地图注册与加载 ────────────────────────────────
@@ -573,6 +592,19 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 	# 配置小地图地图信息（详见 §10.4.6）
 	if _minimap != null and _minimap.has_method("set_map_info"):
 		_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
+	# 初始建筑每图都 spawn：InitialBuildingsList 是每图一份的 defs（L1 城邦/据点全靠它），
+	# 限首图会让其余城永远是空城。场景每次切图重新实例化、BuildingHost 从零开始，
+	# 天然无重复；meta 兜底同实例重入。
+	# 须在玩家 spawn 之前：建筑落位会触发 expand_map 扩图（如村A右城墙把窄边界
+	# 撑回网格宽），先定型边界再落人，入口落点才不随加载时序漂移。
+	if not map.has_meta("initial_buildings_spawned"):
+		map.set_meta("initial_buildings_spawned", true)
+		_worldgen.spawn_initial_buildings(map)
+		# 扩图后刷新相机/小地图边界
+		if camera_rig != null and camera_rig.has_method("set_map_bounds"):
+			camera_rig.set_map_bounds(map.map_left, map.map_right)
+		if _minimap != null and _minimap.has_method("set_map_info"):
+			_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 	# 读档恢复：跳过默认 spawn，由 SaveHandler 接管
 	if _pending_save_load:
 		_pending_save_load = false
@@ -605,16 +637,18 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 玩家注入 FormationSystem（编队职责查询）
 		if player.has_method("set_formation_system") and _formation_system != null:
 			player.set_formation_system(_formation_system)
+		# 玩家注入 OrganizationApi（招兵交互经 org api 转发 RecruitManager）
+		if player.has_method("set_organization_api") and _organization_api != null:
+			player.set_organization_api(_organization_api)
 		# 让 CameraRig 跟随玩家
 		if camera_rig != null and camera_rig.has_method("set_follow_target"):
 			camera_rig.set_follow_target(player)
 		# 进入即对准玩家（水平居中；1/4 跟随机制下不 snap 会在触发线偏移）
 		if camera_rig != null and camera_rig.has_method("snap_to_follow_target"):
 			camera_rig.snap_to_follow_target()
-		# 仅初始加载时 spawn 初始建筑、NPC 和演示建造
+		# 仅初始加载时 spawn 村庄仓库、土路资源与 NPC（出生村专属）
 		if not _initial_map_loaded:
 			_initial_map_loaded = true
-			_worldgen.spawn_initial_buildings(map)
 			# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
 			_worldgen.spawn_initial_warehouse()
 			# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
@@ -634,14 +668,11 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 			_worldgen.spawn_npcs(map, spawn_y)
 		# 跨图携带：spawn 随行编队成员并重建编队（带队出征）
-		var followers: Array = _spawn_travel_followers(map, player, spawn_y)
-		# 阶段 E：遭遇战战场 spawn 敌方火柴人 + 启动战斗（地图切换进入战场时触发；
-		# 观察场等工具场景可置 suppress_battlefield_enemies 跳过，防幽灵战斗事件）
-		if map_id == BATTLEFIELD_MAP_ID and _initial_map_loaded and not suppress_battlefield_enemies:
-			var allies: Array = [player]
-			allies.append_array(followers)
-			_worldgen.spawn_battlefield_enemies(map, allies, dev_enemy_count)
-	# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
+		_spawn_travel_followers(map, player, spawn_y)
+		# 战场图（battlefield）已退役为 dev 验证图（出征与领地架构 §4.3）：进图不再
+		# 自动刷敌开战；dev 验证走 tests/dev/verify_battle.gd 直达调
+		# InitialContent.spawn_battlefield_enemies 组织遭遇战。
+		# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):
 		input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# F6 步行旅行（总体设计 §5.10 E5）：道路场景出口按队列状态刷新；进出聚落 = 队列终点/回退

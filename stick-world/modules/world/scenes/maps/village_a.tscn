@@ -42,7 +42,23 @@ script = ExtResource("4_grid_drawer")
 
 [node name="InitialBuildingsList" type="Node" parent="." unique_id=818831420]
 script = ExtResource("3_ibl")
-building_defs = Array[Dictionary]([])
+building_defs = Array[Dictionary]([{
+"def_id": "placeholder",
+"cell_x": -51,
+"width": 16
+}, {
+"def_id": "stone_warehouse",
+"cell_x": -34,
+"width": 16
+}, {
+"def_id": "smithy_lv1",
+"cell_x": -17,
+"width": 16
+}, {
+"def_id": "manor",
+"cell_x": 1,
+"width": 14
+}])
 
 [node name="WalkBarrier" type="Node2D" parent="." unique_id=1540466640]
 

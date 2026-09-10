@@ -18,9 +18,12 @@ extends Node
 ## 契约要点（历史教训，勿改）：
 ##   - 纯骨架：StickmanSkeleton.build_from_scratch 原始骨变换，不套任何 scale/朝向镜像；
 ##   - 角度 = Bone2D.global_transform 的原始旋转角（度），**绝不翻转符号**；
-##   - 骨名用 Godot 骨名，19 根 Bone2D 全输出（hip 也输出位置）；
+##   - 骨名用 Spine 原名（build_from_scratch 建 56 骨真值树 + 合成锚点骨 RigRoot，
+##     锚点只作平移父级、不进输出），56 骨全输出；
 ##   - 动画未列出的骨骼 = setup 姿势（对齐 Spine 语义：未列骨骼保持默认姿势）；
-##   - 数值保留 3 位小数（duration 4 位，对齐契约示例 0.6667）。
+##   - 数值保留 3 位小数（duration 4 位，对齐契约示例 0.6667）；
+##   - 采样时刻 t = min(i/fps, length)、n = round(length*fps)——必须与
+##     tools/dump_spine_pose.py v2 同款，两侧帧键才能对齐（批次 C 对账前提）。
 
 const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
 
@@ -44,7 +47,7 @@ func _ready() -> void:
 	skel.name = "Skeleton2D"
 	root.add_child(skel)
 	var built := Skeleton.build_from_scratch(skel)
-	var bones: Dictionary = built["bones"]  # id -> Bone2D（19 根）
+	var bones: Dictionary = built["bones"]  # Spine 骨名 -> Bone2D（56 根；RigRoot 锚点不进表）
 
 	# 2. skeleton_height：setup 姿势（动画未应用）下全部骨关节的全局 y 范围。
 	#    算法：max_y - min_y（骨"端点"以子骨关节坐标为准——Bone2D 节点不携带
@@ -96,14 +99,9 @@ func _ready() -> void:
 		setup_rot[id] = b.rotation
 		setup_pos[id] = b.position
 
-	# 5. seek(t, true) 即时性验证（一次性，探针用摆动最大的动画）：
-	#    seek 后立即快照 vs await 一帧后快照，一致 = update=true 即时生效。
-	#    验证结论见运行日志；即时生效则后续逐帧不再 await（节省 headless 帧循环）。
-	var probe := loaded[0]
-	for candidate in ["walk", "run", "attack"]:
-		if candidate in loaded:
-			probe = candidate
-			break
+	# 5. seek(t, true) 即时性验证（一次性）：seek 后立即快照 vs await 一帧后快照，
+	#    一致 = update=true 即时生效。即时生效则后续逐帧不再 await（节省 headless 帧循环）。
+	var probe: String = loaded[0]
 	var probe_t: float = player.get_animation(probe).length * 0.37
 	player.play(probe)
 	_reset_pose(bones, setup_rot, setup_pos)
@@ -117,7 +115,9 @@ func _ready() -> void:
 	if not seek_immediate:
 		print("  （speed_scale=0 冻结推进下，await 一帧后位姿 = seek 目标位姿，采样不受影响）")
 
-	# 6. 逐动画采样：n = round(duration*fps) 段，t = duration*i/n（含 0 与 duration 两端）
+	# 6. 逐动画采样：n = round(length*fps)（半升，同 Python int(x+0.5)），
+	#    t = min(i/fps, length)——与 tools/dump_spine_pose.py v2 采样算法逐字一致，
+	#    两侧帧键（3 位小数）才能对齐。
 	var fps: float = args["fps"]
 	var anims_out := {}
 	for anim_name in loaded:
@@ -126,7 +126,7 @@ func _ready() -> void:
 		var frames := {}
 		player.play(anim_name)
 		for i in range(n + 1):
-			var t: float = anim.length * float(i) / float(n)
+			var t: float = minf(float(i) / fps, anim.length)
 			_reset_pose(bones, setup_rot, setup_pos)
 			player.seek(t, true)
 			if not seek_immediate:

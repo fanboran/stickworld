@@ -88,6 +88,10 @@ func _build_menu() -> void:
 		# PRIMARY 实底琥珀自带墨描边，不走纸面
 		if item["kind"] != StickKit.ButtonKind.PRIMARY:
 			btn.ink_skin = true
+		# 次级入口半透明纸面（除顶部两个主行动外）：天空透出来，视觉层级
+		# 落到「继续/新游戏」上；NORMAL 档=读取存档/设置/测试场景/退出
+		if item["kind"] == StickKit.ButtonKind.NORMAL:
+			btn.bg_alpha = 0.62
 		# 按钮文字统一暖黑（墨与描边同族，亮底上黑字比白字稳）：
 		# 等粗手绘体字号越大笔画间距越开，黑字更清晰
 		for col_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:

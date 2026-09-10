@@ -21,6 +21,14 @@ enum Kind { NORMAL, ACCENT, PRIMARY, DANGER }
 		ink_skin = v
 		_apply_flats()
 		queue_redraw()
+## 半透明底（1.0=不透明）。<1 时四态走独立盒（绕开静态缓存，避免污染同槽位
+## 其他按钮）并降低盒 modulate alpha——新盒经 SketchStyle._box 注册进帧轮换
+## 仍保持沸腾；文字/描边语义不变，只有纸底透出背后场景。
+@export_range(0.0, 1.0) var bg_alpha := 1.0:
+	set(v):
+		bg_alpha = v
+		_apply_flats()
+		queue_redraw()
 
 var _seed: int = 0
 var _timer: float = 0.0
@@ -50,7 +58,12 @@ func _apply_flats() -> void:
 			SketchTextures._load_all()
 		if not SketchTextures._frame_sets.has(slot):
 			slot = &"btn_normal"
-		add_theme_stylebox_override(state, _box(slot))
+		# 不透明走共享缓存；半透明每按钮独立盒（modulate 是盒级属性，
+		# 共享缓存会把透明度串到所有同槽位按钮上）
+		var sb := _box(slot) if bg_alpha >= 1.0 else SketchStyle._box(slot, StickTokens.PAD_X + 2, 2)
+		if bg_alpha < 1.0:
+			sb.modulate_color = Color(1, 1, 1, bg_alpha)
+		add_theme_stylebox_override(state, sb)
 	add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 

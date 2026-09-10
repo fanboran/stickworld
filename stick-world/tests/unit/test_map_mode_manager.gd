@@ -1,8 +1,8 @@
 extends Node
-## 单元测试：MapModeManager（B4 地图模式系统，总体设计 §5.5）。
+## 单元测试：MapModeManager（B4 地图模式系统，总体设计 §5.5；R4 三模式）。
 ##
 ## 覆盖：默认 TERRAIN / set_mode 切换与信号 / static 广播多实例 / 数字键切换
-## （含视图关闭门控）/ api.gd 委托读写。
+## （含视图关闭门控）/ api.gd 委托读写 / TRAFFIC 第三态（R4）。
 ## 模式是静态全局状态：每个用例前后重置为 TERRAIN，防污染同批后续套件。
 
 signal test_done(code: int)
@@ -19,7 +19,8 @@ func _ready() -> void:
 	_runner.add_test("模式: 默认 TERRAIN + 中文名", _test_default)
 	_runner.add_test("模式: set_mode 切换发信号 + 重复设置静默", _test_set_mode_signal)
 	_runner.add_test("模式: static 广播——多实例同收", _test_broadcast)
-	_runner.add_test("模式: 数字键 1/2 切换 + 视图关闭门控", _test_key_input)
+	_runner.add_test("模式: 数字键 1/2/3 切换 + 视图关闭门控", _test_key_input)
+	_runner.add_test("模式: TRAFFIC 三态切换（R4）", _test_traffic_mode)
 	_runner.add_test("模式: api.gd 委托读写", _test_api)
 	MapModeManager.current_mode = MapModeManager.Mode.TERRAIN
 	_runner.run()
@@ -38,6 +39,8 @@ func _test_default() -> void:
 	_runner.assert_equal(MapModeManager.get_mode_name(), "地形", "当前模式中文名")
 	_runner.assert_equal(MapModeManager.get_mode_name(MapModeManager.Mode.POLITICAL),
 			"政治", "指定模式中文名")
+	_runner.assert_equal(MapModeManager.get_mode_name(MapModeManager.Mode.TRAFFIC),
+			"交通", "交通模式中文名（R4 三模式）")
 	_runner.assert_equal(MapModeManager.get_mode_name(999), "", "未知模式名返回空串")
 
 
@@ -90,6 +93,13 @@ func _test_key_input() -> void:
 	mgr._unhandled_input(ev2)
 	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.POLITICAL,
 			"视图打开时 KEY_2 应切政治")
+	# KEY_3 → TRAFFIC（R4 第三态；数字小键盘同义）
+	var ev3 := InputEventKey.new()
+	ev3.keycode = KEY_3
+	ev3.pressed = true
+	mgr._unhandled_input(ev3)
+	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TRAFFIC,
+			"视图打开时 KEY_3 应切交通")
 	# KEY_1 → TERRAIN（数字小键盘同义）
 	var ev1 := InputEventKey.new()
 	ev1.keycode = KEY_KP_1
@@ -97,16 +107,29 @@ func _test_key_input() -> void:
 	mgr._unhandled_input(ev1)
 	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TERRAIN,
 			"视图打开时 KP_1 应切地形")
-	# 视图关闭（Content visible=false）：按键不响应（1/2 归场景图玩法）
+	# 视图关闭（Content visible=false）：按键不响应（1/2/3 归场景图玩法）
 	view.visible = false
-	var ev3 := InputEventKey.new()
-	ev3.keycode = KEY_2
-	ev3.pressed = true
-	mgr._unhandled_input(ev3)
+	var ev4 := InputEventKey.new()
+	ev4.keycode = KEY_2
+	ev4.pressed = true
+	mgr._unhandled_input(ev4)
 	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TERRAIN,
 			"视图关闭时按键不应响应")
 	mgr.queue_free()
 	view.queue_free()
+	_reset()
+
+
+func _test_traffic_mode() -> void:
+	_reset()
+	# R4 三模式语义：TERRAIN → TRAFFIC → POLITICAL 全链切换，静态全局状态即时更新
+	MapModeManager.set_mode(MapModeManager.Mode.TRAFFIC)
+	_runner.assert_equal(MapModeManager.get_mode(), MapModeManager.Mode.TRAFFIC,
+			"TRAFFIC 应为可切换的第三态（R4）")
+	_runner.assert_equal(MapModeManager.get_mode_name(), "交通", "当前模式名 = 交通")
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	_runner.assert_equal(MapModeManager.get_mode(), MapModeManager.Mode.POLITICAL,
+			"交通 → 政治切换")
 	_reset()
 
 
@@ -116,5 +139,8 @@ func _test_api() -> void:
 	api.set_map_mode(MapModeManager.Mode.POLITICAL)
 	_runner.assert_equal(api.get_map_mode(), MapModeManager.Mode.POLITICAL,
 			"api.set_map_mode 应写全局模式")
+	api.set_map_mode(MapModeManager.Mode.TRAFFIC)
+	_runner.assert_equal(api.get_map_mode(), MapModeManager.Mode.TRAFFIC,
+			"api.set_map_mode 应支持 TRAFFIC（R4）")
 	api.queue_free()
 	_reset()

@@ -1,0 +1,53 @@
+{
+ "_注释": "R6 道路自然化后处理参数（road_naturalize.py）。对 1107 条现役折线就地加工：等弧长重采样 → 世界坐标 value-noise 法向位移（低频大摆动 + 高频细碎，幅度按 tier/坡度/端点衰减）→ 仅一次窗口3滑动平均（禁样条平滑）；陡坡直穿点（行进方向与等高线夹角>60°）为锐折角锚点，0 位移不圆滑。噪声 seed = DJB2(道路id)（blob 同款哈希），同一路重跑逐位一致。方案依据：世界地图观感返工 §R6 + §7.2-1「路径自然化后处理（直接答案）」。",
+
+ "width_px": {"DIRT": 2.0, "PAVED": 3.5},
+ "width_注释": "现行路宽口径（road_closeup.py STYLE，context px = 世界 px），重采样步长由此派生",
+
+ "step_mult": 0.75,
+ "step_注释": "重采样步长 = 路宽 × step_mult（§7.2-1：步长≈路宽 0.5-1 倍）",
+
+ "amp_px": {"DIRT": 4.5, "PAVED": 2.5},
+ "amp_注释": "低频位移幅度（土路 4-6 取 4.5 / 官道 2-3 取 2.5，§7.2-1 幅度按等级衰减）",
+
+ "low_wavelengths_px": [160, 80],
+ "low_weights": [1.0, 0.5],
+ "low_注释": "低频大摆动（§7.2-1 波长 80-200px）：双八度覆盖，主波长 160",
+
+ "high_wavelength_px": 32,
+ "high_ratio": 0.3,
+ "high_注释": "高频细碎弯（§7.2-1 波长 20-40px）幅度 = 低频合成幅度 × high_ratio（P3.5 踩坑：高频只给细碎，别喧宾夺主）",
+
+ "short_road_scale": {"ref_mult": 4.0, "floor": 0.3},
+ "short_road_scale_注释": "路长 < ref_mult×高频波长 时幅度按比例衰减（超短路摆不开波长，位移只推高弧长不出弯）",
+
+ "noise_gain": 1.3,
+ "noise_gain_注释": "value-noise 值域 [-1,1] 后的增益（平滑插值使典型值偏 0，用增益把幅度顶满参数名义值；预览观感定标）",
+
+ "slope_soften": {"start": 0.015, "full": 0.045, "mult": 0.35},
+ "slope_soften_注释": "坡度衰减：|∇h|（每 px 高度）≤start 不衰减，≥full 衰减到 ×mult（§7.2-1 坡度大段 ×0.3-0.5）；山地梯度 0.026-0.04（P3.5 口径），平原 ~0.001",
+
+ "sharp": {"angle_deg": 60, "slope_min": 0.02},
+ "sharp_注释": "锐折角锚点：坡度>slope_min 且行进方向与等高线夹角>angle_deg（=与梯度方向夹角<30°）的点标记「不可圆滑」，0 位移且不参与滑动平均",
+
+ "endpoint_fade_px": 10,
+ "endpoint_fade_px_注释": "端点聚落锚 0 位移，向内 fade_px 弧长内 smoothstep 渐起——聚落锚精确不撕口，路口两侧位移趋同",
+
+ "smooth_window": 3,
+ "smooth_window_注释": "位移后仅一次滑动平均去毛刺（§7.2-1：窗口=3，禁样条平滑）",
+
+ "max_len_growth": 0.05,
+ "max_len_growth_注释": "自检阈值：自然化前后长度变化率告警线（§R6 任务详单 <5%）",
+
+ "render": {
+  "_注释": "预览渲染专用（不入游戏包）：casing 双层 + 路面乘 hillshade，参照 §7.2-3 制图渲染 / §7.2-4 Rome 2 观感",
+  "ss": 4,
+  "face_color": {"DIRT": [166, 122, 60], "PAVED": [198, 132, 82]},
+  "case_color": {"DIRT": [64, 44, 26], "PAVED": [52, 34, 22]},
+  "face_注释": "面=赭土/亮赭（比地形亮一档），casing=深棕（比地形暗一档）；OSM 土路实线 #996600 语用",
+  "case_extra_px": 1.2,
+  "overview_px": 2048,
+  "closeup_pad_px": 150,
+  "closeup_out_px": 760
+ }
+}

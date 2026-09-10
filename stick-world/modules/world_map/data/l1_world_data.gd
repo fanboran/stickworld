@@ -61,6 +61,10 @@ var rivers: Array = []
 ## context 左上角在 8192 世界坐标中的原点（生成端注入；跨 L1 定位/河流裁切用）
 var world_origin := Vector2i.ZERO
 
+## 数据目录（res://，末尾无斜杠；渲染器按硬编码文件名约定取同目录产物如
+## l1_terrain.png——R9 不占 json 字段，避免与并行数据写入冲突）
+var base_dir: String = ""
+
 ## 状态（tile_id -> L1TileDef 快速索引）
 var _tile_by_id: Dictionary = {}
 
@@ -70,6 +74,7 @@ var _tile_by_id: Dictionary = {}
 ## base_dir: 含 l1_base.png / l1_mask.png 的目录（res:// 路径，末尾无斜杠）
 static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	var world := L1WorldData.new()
+	world.base_dir = base_dir
 	var data := _read_data_dict(json_path)
 	if data.is_empty():
 		push_error("[L1WorldData] 无法读取/解析 %s" % json_path)
@@ -258,12 +263,15 @@ static func _roads_from(arr: Array, tiles: Array[L1TileDef]) -> Array:
 		var biomes := PackedInt32Array()
 		for v in d.get("biomes", []):
 			biomes.append(int(v))
+		# length_px 兜底：个别包存在 null（如 l1_002 城20-城23 路），float(null) 报错
+		var lp: Variant = d.get("length_px", 0.0)
+		var length_px := float(lp) if (lp is float or lp is int) else 0.0
 		out.append({
 			"pts": pts,
 			"from": from_id,
 			"to": to_id,
 			"tier": str(d.get("tier", "DIRT")),
-			"length_px": float(d.get("length_px", 0.0)),
+			"length_px": length_px,
 			"biomes": biomes,
 		})
 	return out

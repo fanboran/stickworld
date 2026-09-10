@@ -75,7 +75,14 @@ def downsample_mode(seg, th, tw):
 
 
 def main():
-    rids = sys.argv[1:] or sorted(d for d in os.listdir(L2_DIR) if d.startswith("region_"))
+    import sys as _sys
+    rids = [a for a in _sys.argv[1:] if not a.startswith("-")] or \
+        sorted(d for d in os.listdir(L2_DIR) if d.startswith("region_"))
+    polys_only = "--polys-only" in _sys.argv
+    if polys_only:
+        print("R3 --polys-only：重提取平滑几何，就地 patch l2_world.json 几何字段"
+              "（tiles polygon/polygons/holes、neighbors、lakes），"
+              "cities/states 等后注入字段保留；bake 几何重烘，索引/底图跳过重写")
 
     # 8192 合成标签图（region_labels 2048 放大 + 8K 大陆蒙版裁切海岸线）——
     # 用于渲染相邻 L2 地区（灰色）与湖泊（浅蓝）
@@ -91,7 +98,7 @@ def main():
     l3w = json.load(open(os.path.join(HERE, "output", "l3_view", "l3_world.json"), encoding="utf-8"))
     adj_by_label = {int(r["label"]): r.get("adjacent", []) for r in l3w["regions"]}
 
-    from mesh_extract import extract_mesh, simplify_mesh
+    from mesh_extract import extract_smooth_mesh
 
     for rid in rids:
         rdir = os.path.join(L2_DIR, rid)
@@ -138,11 +145,10 @@ def main():
         land_in_tile = tile_zone & ~ctx_lake[ty:ty + H, tx:tx + W]
         ctx[ty:ty + H, tx:tx + W][land_in_tile] = TILE_LABEL + tiles_small[0:H, 0:W][land_in_tile]
 
-        # Chaikin 3 次 + corner_min_len=3（mesh_extract 中 chaikin_smooth 默认值）：
-        # · 相邻两边 ≥3px 的「真实地形尖角」原顶点保留不切角 → 海角/河湾锐度不丢
-        # · 仅 1~2px 短边的「像素台阶」经 3 次 Chaikin 抹平 → 马赛克感彻底消除
-        # 提取后多边形是填充 mesh 和描边的唯一真源，保证两者渲染严丝合缝
-        ctx_mesh = simplify_mesh(extract_mesh(ctx.astype(np.int32)), smooth_passes=3)
+        # R3：extract_smooth_mesh 替代「extract_mesh + Chaikin×3」——find_contours
+        # 亚像素等值线 + 共享弧统一平滑（Visvalingam + Chaikin），整数台阶根除；
+        # 提取后多边形仍是填充 mesh 和描边的唯一真源，保证两者渲染严丝合缝
+        ctx_mesh = extract_smooth_mesh(ctx.astype(np.int32))
         # 灰影 = context 内出现的其他地区（8192 精度）
         neighbors_data = []
         for n, mv in ctx_mesh.items():
@@ -208,7 +214,27 @@ def main():
 
         outd = os.path.join(OUT_DIR, rid)
         os.makedirs(outd, exist_ok=True)
-        Image.fromarray(idx).save(os.path.join(outd, "l2_tiles_index.png"))
+        if not polys_only:
+            Image.fromarray(idx).save(os.path.join(outd, "l2_tiles_index.png"))
+        if polys_only:
+            # R3 就地 patch：读游戏侧现有 json（含 cities/states 等后注入字段），
+            # 按 label 对齐替换 tiles 几何 + neighbors/lakes，其余字段原样保留；
+            # bake 从 merged world 重烘（bin 是几何烘焙，必须与新几何一致）
+            gamed0 = os.path.join(GAME_DIR, rid)
+            with open(os.path.join(gamed0, "l2_world.json"), encoding="utf-8") as f:
+                old = json.load(f)
+            old_tiles = {int(t["label"]): t for t in old.get("tiles", [])}
+            for nt in world["tiles"]:
+                ot = old_tiles.get(int(nt["label"]))
+                if ot is None:
+                    print("  !! patch 跳过未知 tile: label %s" % nt["label"])
+                    continue
+                ot["polygon"] = nt["polygon"]
+                ot["polygons"] = nt["polygons"]
+                ot["holes"] = nt["holes"]
+            old["neighbors"] = world["neighbors"]
+            old["lakes"] = world["lakes"]
+            world = old
         with open(os.path.join(outd, "l2_world.json"), "w", encoding="utf-8") as f:
             json.dump(world, f, ensure_ascii=False, separators=(",", ":"))
 
@@ -219,7 +245,7 @@ def main():
         # 复制到游戏 config
         gamed = os.path.join(GAME_DIR, rid)
         os.makedirs(gamed, exist_ok=True)
-        for fn in ("l2_world.json", "l2_tiles_index.png", "l2_geom.bin"):
+        for fn in ("l2_world.json", "l2_geom.bin"):
             shutil.copy(os.path.join(outd, fn), os.path.join(gamed, fn))
         print("  %s: %dx%d -> 正方形 %d, %d 地块, 邻居 %d, 湖泊 %d | tris T%d H%d L%d N%d | border %d/%d"
               % (rid, W, H, side, len(tiles), len(neighbors_data), len(lakes),

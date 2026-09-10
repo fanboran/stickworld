@@ -38,6 +38,7 @@ var _mode_manager: Node = null
 var _mode_group: ButtonGroup = null
 var _terrain_btn: Button = null
 var _political_btn: Button = null
+var _traffic_btn: Button = null
 
 ## 默认缩放（该视图首次打开时的初始缩放 = 100%）
 var default_zoom: float = 1.0
@@ -72,11 +73,10 @@ func _ready() -> void:
 	# 根 STOP：底部横条整条 = 不可穿透区（F1 验收反馈），点击不落到地图地块上；
 	# 地图拖拽/滚轮走 MapCamera._input（先于 GUI），不受本条影响
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	# 可见 UI 外壳（次窗体底"玻璃横条"，与图例同款样式）
+	# 可见 UI 外壳（Panel 回退主题自带 SketchStyle 手绘贴图横条，R8 层1 换肤）
 	var shell := Panel.new()
 	shell.name = "Shell"
 	shell.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shell.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
 	shell.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shell)
 	_build_widgets()
@@ -106,7 +106,8 @@ func set_default_zoom(z: float) -> void:
 
 func _build_widgets() -> void:
 	var x: float = StickTokens.SCREEN_MARGIN
-	# 地图模式条（B4）：地形/政治 双选按钮（ButtonGroup 单选；状态随静态模式广播同步）
+	# 地图模式条（B4；R4 三模式）：地形/政治/交通 单选按钮（ButtonGroup；
+	# 状态随静态模式广播同步）
 	if _mode_manager != null:
 		_mode_group = ButtonGroup.new()
 		_terrain_btn = _make_mode_button("地形", MapModeManager.Mode.TERRAIN)
@@ -114,6 +115,9 @@ func _build_widgets() -> void:
 		x += MODE_BTN_W + GAP
 		_political_btn = _make_mode_button("政治", MapModeManager.Mode.POLITICAL)
 		_dock_bottom_left(_political_btn, x, MODE_BTN_W, BTN_H_SM)
+		x += MODE_BTN_W + GAP
+		_traffic_btn = _make_mode_button("交通", MapModeManager.Mode.TRAFFIC)
+		_dock_bottom_left(_traffic_btn, x, MODE_BTN_W, BTN_H_SM)
 		x += MODE_BTN_W + GAP
 		_sync_mode_buttons()
 		# 资源/物流覆盖层入口预留（创始人要求）：枚举已留、数据未接，置灰占位
@@ -182,7 +186,7 @@ func _make_mode_button(text: String, mode: int) -> Button:
 	return b
 
 
-## 模式变更（含他视图切模式广播回流）：同步两颗按钮按压态
+## 模式变更（含他视图切模式广播回流）：同步三颗按钮按压态
 func _on_map_mode_changed(_mode: int) -> void:
 	_sync_mode_buttons()
 
@@ -193,6 +197,8 @@ func _sync_mode_buttons() -> void:
 	var m: int = MapModeManager.current_mode
 	_terrain_btn.set_pressed_no_signal(m == MapModeManager.Mode.TERRAIN)
 	_political_btn.set_pressed_no_signal(m == MapModeManager.Mode.POLITICAL)
+	if _traffic_btn != null:
+		_traffic_btn.set_pressed_no_signal(m == MapModeManager.Mode.TRAFFIC)
 
 
 func _update_ruler() -> void:

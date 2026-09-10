@@ -1,21 +1,26 @@
 extends Node
 class_name MapModeManager
-## 地图模式管理器（B4，总体设计 §5.5）—— TERRAIN 地形（默认）/ POLITICAL 政治
+## 地图模式管理器（B4，总体设计 §5.5；R4 三模式语义分离）——
+## TERRAIN 地形（默认）/ POLITICAL 政治 / TRAFFIC 交通
+##
+## 三模式语义（创始人 2026-09-08 拍板，观感返工 §R4）：
+##   - 地形 = 底图 + 建成区（建成区仅本模式显示）
+##   - 政治 = 政权 + 界线（不显示建成区、不显示道路）
+##   - 交通 = 底图 + 道路（不显示建成区；道路已烘焙进 l1_travel.png）
 ##
 ## 模式是跨视图全局状态（L3 切到政治，之后 Tab 开 L1 也是政治）：当前模式存静态变量，
 ## 每个战略图场景（L1/L2/L3）在 Content 下挂一个实例，实例负责两件事：
-##   - 数字键切换（1=地形 / 2=政治）：Content 隐藏时（视图关闭）不响应，
-##     地图关闭时 1/2 归场景图玩法占用，互不干扰
+##   - 数字键切换（1=地形 / 2=政治 / 3=交通）：Content 隐藏时（视图关闭）不响应，
+##     地图关闭时 1/2/3 归场景图玩法占用，互不干扰
 ##   - mode_changed 信号：HUD 模式条 / L1 图例 / 渲染器订阅；
 ##     static set_mode 广播给全部存活实例，跨视图即时同步
 ## 资源/人口/战线模式本轮不实装（战略图架构 §八枚举预留，届时在 Mode 追加）。
-## 渲染表现：地形底图层（B2 产 l3_terrain.png）/ 政权叠加层（Phase F）数据到位前，
-## 两模式回退现状着色（渲染器持有 map_mode，数据到位即按模式分层）。
 
 ## 模式变更信号（本实例所在视图的 HUD/图例/渲染器订阅）
 signal mode_changed(mode: int)
 
-enum Mode { TERRAIN, POLITICAL, RESOURCE, LOGISTICS }
+enum Mode { TERRAIN, POLITICAL, TRAFFIC, RESOURCE, LOGISTICS }
+## TRAFFIC（交通）：R4 三模式第三态（L1 交通 = l1_travel.png 贴图 + 交互层）。
 ## RESOURCE（资源）/ LOGISTICS（物流）本轮不实装：HUD 模式条置灰占位（创始人要求
 ## 提前预留覆盖层入口），数据接入后启用；STICKMAN/BATTLEFRONT（战略图架构 §八）届时再补枚举
 
@@ -29,6 +34,7 @@ static var _instances: Array[MapModeManager] = []
 const MODE_NAMES := {
 	Mode.TERRAIN: "地形",
 	Mode.POLITICAL: "政治",
+	Mode.TRAFFIC: "交通",
 	Mode.RESOURCE: "资源",
 	Mode.LOGISTICS: "物流",
 }
@@ -72,7 +78,7 @@ func _is_view_open() -> bool:
 	return false
 
 
-## 数字键 1/2 切换（仅本视图打开时响应；消费事件防场景图玩法键穿透）
+## 数字键 1/2/3 切换（仅本视图打开时响应；消费事件防场景图玩法键穿透）
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_view_open():
 		return
@@ -83,4 +89,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		elif key.keycode == KEY_2 or key.keycode == KEY_KP_2:
 			set_mode(Mode.POLITICAL)
+			get_viewport().set_input_as_handled()
+		elif key.keycode == KEY_3 or key.keycode == KEY_KP_3:
+			set_mode(Mode.TRAFFIC)
 			get_viewport().set_input_as_handled()

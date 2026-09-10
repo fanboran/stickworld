@@ -25,8 +25,10 @@ var city_tiles: Array = []
 var city_preview_texture: Texture2D = null
 ## 地形模式底图（l3_terrain.png，B2 程序着色：群系基色×高度明度+hillshade+水体+海岸线）
 var terrain_texture: Texture2D = null
-## 政治模式底图（l3_political.png，P7 政权简化版：城市地块 × 政权色，出生 8 邦原色）
-var political_texture: Texture2D = null
+## 政权 ID mask（l3_political_id_8192.png，R7/R9：单通道，像素值 = 政权 lut_index
+## 1..80，0 = 海/无）。颜色不再烘焙——由 PoliticalLut 运行时查表上色（改 LUT 即
+## 全图换色），本字段由 L3MapRenderer 后台线程解码填充
+var political_id_image: Image = null
 ## 政权表（P7，l3_city.json 顶层 "states"）：state_id -> {name,capital,culture,alliance,color,...}
 var states: Dictionary = {}
 ## 老 L1 索引图（label 直编 2048）：hover 查询返回老 L1 地块

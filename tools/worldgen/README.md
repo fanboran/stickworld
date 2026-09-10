@@ -80,6 +80,7 @@ biome_generate.py ──▶ output/biome_labels_2048.npy + biome_hot_zone_2048.p
 | `l3_terrain.png` | 全大陆程序着色地形图（2048²）：七群系 + hillshade 山体阴影 + 河湖海渐变 + 炎热大陆暖调 |
 | `l2_preview_region_008.png` | 炎热大陆（region_008）特写预览（1600² 缩版） |
 | `l2_preview_region_013.png` | 出生地区（region_013）特写预览（1600² 缩版） |
+| `smooth_closeup_*.png` | R3 地块边缘平滑特写对比（同窗四联：旧整数台阶 4x/12x vs 新亚像素等值线 4x/12x；出生包 + 批量包样例） |
 
 > 重生成：`python l3/terrain_render.py --install` 出全量底图后，用 PIL 对地区裁切 `thumbnail((1600,1600))` 重出缩版（命名保持 `l2_preview_region_XXX.png` 以命中 gitignore 白名单）。
 

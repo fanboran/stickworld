@@ -421,19 +421,174 @@ func disband_organization(org_id: String) -> Dictionary:
 
 # ===== 预设 =====
 
-## 加载预设模板，创建组织树
-func load_preset(preset_name: String, _parent_id: String) -> Dictionary:
-	# 骨架阶段：返回预设未实现
-	return {"ok": false, "error": "预设系统尚未实现: %s" % preset_name}
+## 预设层级树配置（官方母本蓝图：军事编制/科研架构/工程架构/行政架构/运输架构）
+const PRESET_CONFIG_PATH := "res://config/formations/presets.tres"
+
+## Tag 枚举 → 字符串（export_as_preset 序列化用，与 TAG_TO_ENUM 互逆）
+const ENUM_TO_TAG := {
+	ScriptOrgState.Tag.MILITARY: "MILITARY",
+	ScriptOrgState.Tag.RESEARCH: "RESEARCH",
+	ScriptOrgState.Tag.ENGINEERING: "ENGINEERING",
+	ScriptOrgState.Tag.ADMINISTRATION: "ADMINISTRATION",
+	ScriptOrgState.Tag.COMMERCE: "COMMERCE",
+	ScriptOrgState.Tag.LABOR: "LABOR",
+	ScriptOrgState.Tag.LOGISTICS: "LOGISTICS",
+}
 
 
-## 将组织及其子树导出为预设
+## 加载预设模板，创建组织树。
+## preset 双形态：
+##   - String：查 presets.tres 官方母本（按条目的 preset 字段过滤）
+##   - Dictionary：export_as_preset 产物直灌 {name, tag, entries: [{id, name, level, tag, parent_id}]}
+## parent_id = "" 时创建独立根树（按预设标称层级）；指定 parent 时须预设顶层
+## level == parent.tier - 1（不做层级平移——平移会让"师"落到连级，语义错乱）。
+## 中途失败回滚已创建组织（整体成功或整体失败）。
+## 返回 data: {org_id=根组织, created=全部新组织 id（根在首位）}
+func load_preset(preset: Variant, parent_id: String) -> Dictionary:
+	var preset_data := {}
+	if preset is String:
+		var loaded := _load_preset_rows(preset)
+		if not loaded.get("ok", false):
+			return loaded
+		preset_data = loaded.data
+	elif preset is Dictionary:
+		var err := _validate_preset_data(preset)
+		if err != "":
+			return {"ok": false, "error": err}
+		preset_data = preset
+	else:
+		return {"ok": false, "error": "预设参数须为 String（预设名）或 Dictionary（export_as_preset 格式）"}
+
+	var entries: Array = preset_data.get("entries", [])
+	var root_tag := String(preset_data.get("tag", ""))
+
+	# 单根校验 + 条目 id 集（顶层 = parent_id 为空或不在条目集内）
+	var ids := {}
+	for e in entries:
+		ids[String(e.get("id", ""))] = true
+	var roots: Array = []
+	for e in entries:
+		var pid := String(e.get("parent_id", ""))
+		if pid == "" or not ids.has(pid):
+			roots.append(e)
+	if roots.size() != 1:
+		return {"ok": false, "error": "预设必须是单根树，实际顶层条目 %d 个" % roots.size()}
+	if root_tag == "":
+		root_tag = String(roots[0].get("tag", ""))
+	if root_tag == "":
+		return {"ok": false, "error": "预设缺少标签（data.tag 与顶层条目 tag 均为空）"}
+
+	# 挂接校验
+	if parent_id != "":
+		var parent := _get_org(parent_id)
+		if parent == null:
+			return {"ok": false, "error": "父组织不存在: %s" % parent_id}
+		var root_level := int(roots[0].get("level", 0))
+		if root_level != parent.tier - 1:
+			return {"ok": false, "error": "预设顶层层级 %d 与父组织层级 %d 不衔接（须为 parent.tier-1=%d）" % [root_level, parent.tier, parent.tier - 1]}
+
+	# 按 level 降序创建（层级严格递减的树中父必先于子；同层按原顺序稳定）
+	var order_index := {}
+	for i in entries.size():
+		order_index[entries[i]] = i
+	var ordered: Array = entries.duplicate()
+	ordered.sort_custom(func(a, b):
+		var la := int(a.get("level", 0))
+		var lb := int(b.get("level", 0))
+		if la != lb:
+			return la > lb
+		return order_index[a] < order_index[b])
+
+	var id_map := {}   # 预设条目 id -> 新 org_id
+	var created: Array[String] = []
+	var failure := ""   # 非空 = 创建中断原因，统一走回滚出口
+	for e in ordered:
+		if failure != "":
+			break
+		var pid := String(e.get("parent_id", ""))
+		var new_parent: String
+		if pid == "" or not ids.has(pid):
+			new_parent = parent_id
+		elif id_map.has(pid):
+			new_parent = String(id_map[pid])
+		else:
+			# 父条目尚未创建（数据断链，如子级 level >= 父级）——不可建，整体失败
+			failure = "条目 %s 的父条目 %s 未创建（层级断链）" % [String(e.get("id")), pid]
+			break
+		var r := create_organization(String(e.get("name", "未命名")), String(e.get("tag", root_tag)), int(e.get("level", 1)), new_parent)
+		if r.get("ok", false):
+			id_map[String(e.get("id", ""))] = r.data.org_id
+			created.append(r.data.org_id)
+		else:
+			failure = str(r.get("error", ""))
+
+	if failure != "":
+		for i in range(created.size() - 1, -1, -1):
+			disband_organization(created[i])
+		return {"ok": false, "error": "预设创建中断（已回滚）: %s" % failure}
+
+	return {"ok": true, "data": {"org_id": created[0], "created": created}}
+
+
+## 将组织及其子树导出为预设数据（load_preset Dictionary 形态可直接回灌）。
+## 格式：{name=根组织名, tag=根组织标签, entries=[{id, name, level, tag, parent_id}]}
+## 根条目 parent_id 恒为 ""——导出子树重灌时成为独立根树（内部相对链接保留）。
 func export_as_preset(org_id: String) -> Dictionary:
 	var org := _get_org(org_id)
 	if org == null:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
-	# 骨架阶段：返回组织数据的序列化副本作为预设数据
-	return {"ok": true, "data": ScriptSerializer.organization_to_dict(org)}
+	var entries: Array = []
+	_collect_subtree(org, "", entries)
+	return {"ok": true, "data": {"name": org.name, "tag": ENUM_TO_TAG.get(org.tag, ""), "entries": entries}}
+
+
+## DFS 收集子树条目（先根序，兄弟顺序 = child_orgs 顺序）
+func _collect_subtree(org: ScriptOrgState, parent_key: String, entries: Array) -> void:
+	entries.append({
+		"id": org.id,
+		"name": org.name,
+		"level": org.tier,
+		"tag": ENUM_TO_TAG.get(org.tag, ""),
+		"parent_id": parent_key,
+	})
+	for child_id in org.child_orgs:
+		var child := _get_org(child_id)
+		if child != null:
+			_collect_subtree(child, org.id, entries)
+
+
+## 从 presets.tres 按预设名取条目集
+func _load_preset_rows(preset_name: String) -> Dictionary:
+	var res: Resource = load(PRESET_CONFIG_PATH)
+	if res == null or not (res is BalanceResource):
+		return {"ok": false, "error": "预设配置加载失败: %s" % PRESET_CONFIG_PATH}
+	var rows := BalanceResource.sanitized_rows(res)
+	var entries: Array = []
+	var available: PackedStringArray = []
+	for row in rows:
+		var pname := String(row.get("preset", ""))
+		if pname != "" and pname not in available:
+			available.append(pname)
+		if pname == preset_name:
+			entries.append(row)
+	if entries.is_empty():
+		return {"ok": false, "error": "未知预设: %s（可用: %s）" % [preset_name, ", ".join(available)]}
+	return {"ok": true, "data": {"entries": entries}}
+
+
+## 校验 Dictionary 形态预设的结构（单根/条目字段完备）
+func _validate_preset_data(data: Dictionary) -> String:
+	var entries: Variant = data.get("entries", null)
+	if entries == null or not (entries is Array) or (entries as Array).is_empty():
+		return "预设数据缺少非空 entries 数组"
+	for e in entries:
+		if not (e is Dictionary):
+			return "预设条目须为 Dictionary"
+		if String(e.get("id", "")) == "":
+			return "预设条目缺少 id"
+		if int(e.get("level", 0)) < TIER_MIN or int(e.get("level", 0)) > TIER_MAX:
+			return "预设条目 %s 层级 %s 超出 %d-%d 范围" % [String(e.get("id")), String(e.get("level")), TIER_MIN, TIER_MAX]
+	return ""
 
 
 # ===== 存档对接（2026-08 集中制：序列化格式与 WorldState 统一） =====

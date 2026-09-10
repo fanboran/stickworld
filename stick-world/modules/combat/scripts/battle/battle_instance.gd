@@ -15,6 +15,8 @@ const ScriptCoverSystem := preload("res://modules/combat/scripts/battle/cover_sy
 const ScriptBattleAIDirector := preload("res://modules/combat/scripts/battle/battle_ai_director.gd")
 const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
+## D 刀：数据化批模拟内核（ProjectSettings sim/battle_sim 开关，见 BattleSim.is_enabled）
+const ScriptBattleSim := preload("res://modules/combat/scripts/battle/battle_sim.gd")
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 战斗结束（胜负/平局判定完成，实例即将 queue_free）。
@@ -76,6 +78,8 @@ var _team_ai: Dictionary = {}
 ## 号令/编队系统引用（装配注入，enable_team_ai 时透传 TeamAi）
 var _order_refs_orders: Node = null
 var _order_refs_formation: Node = null
+## 数据化批模拟内核（null = 开关关闭——全部单位走旧实体链，A/B 与回滚口径）
+var _sim: ScriptBattleSim = null
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -87,6 +91,15 @@ func setup(map: Node2D) -> void:
 	_cover.setup(map)
 	_director = ScriptBattleAIDirector.new()
 	_director.setup(self)
+	# D 刀 A/B 开关：启用时参战 AI 单位模拟状态进 BattleSim（移动/分离/冷却/
+	# 命中时序批处理）；附身单位不注册（玩家交互链不动）
+	if ScriptBattleSim.is_enabled() and map != null and is_instance_valid(map):
+		_sim = ScriptBattleSim.new()
+		_sim.set_bounds(
+				float(map.map_left) if "map_left" in map else 0.0,
+				float(map.map_right) if "map_right" in map else 8192.0,
+				float(map.ground_y) if "ground_y" in map else 450.0,
+				float(map.ground_bottom) if "ground_bottom" in map else 882.0)
 
 
 ## 添加参战单位。
@@ -99,6 +112,12 @@ func add_unit(unit: Node, faction: int) -> void:
 		unit.set_faction(faction)
 	if unit.has_method("set_battle_instance"):
 		unit.set_battle_instance(self)
+	if _sim != null:
+		var sid: int = _sim.register_unit(unit, faction)
+		if sid >= 0 and unit.has_method("set_battle_sim"):
+			unit.set_battle_sim(_sim, sid)
+		elif sid >= 0:
+			_sim.unregister_unit(unit)  # 非 StickmanEntity 测试桩：不入 sim
 	if faction == FACTION_ATTACKER:
 		_units_attacker.append(unit)
 	else:
@@ -119,6 +138,10 @@ func _physics_process(delta: float) -> void:
 	if TimeManager != null and TimeManager.is_paused():
 		return
 	_duration += delta
+	# D 刀：sim 批循环先行（分离/积分/冷却/命中帧/写回代理）——
+	# AI 决策（director/behavior）读到本刻最新位置
+	if _sim != null:
+		_sim.tick(delta)
 	_director.tick(delta)
 	# 阵营 AI tick（P6 TeamAi：注册判空，未注册零开销；内部低频节流 + 门禁双保险）
 	for faction in _team_ai.keys():
@@ -417,13 +440,17 @@ func _end(result: State) -> void:
 	if _state != State.ENGAGED:
 		return
 	_state = result
-	# 清理单位身上的战斗引用（AI 依据 battle_instance 判参战，结束后应立即解除）
+	# 清理单位身上的战斗引用（AI 依据 battle_instance 判参战，结束后应立即解除）；
+	# sim 注册同步解除（单位交还旧实体链自驱）
 	for unit in _units_attacker + _units_defender:
 		if is_instance_valid(unit) and unit.has_method("set_battle_instance"):
 			unit.set_battle_instance(null)
+			if unit.has_method("set_battle_sim"):
+				unit.set_battle_sim(null, -1)
 	_units_attacker.clear()
 	_units_defender.clear()
 	_target_attackers.clear()
+	_sim = null
 	# 阵营 AI 消亡：断开 EventBus 订阅（防 freed 悬空连接），随宿主 queue_free 整体释放
 	for faction in _team_ai.keys():
 		var tai: ScriptTeamAi = _team_ai[faction]

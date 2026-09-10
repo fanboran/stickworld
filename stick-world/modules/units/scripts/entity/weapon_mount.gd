@@ -553,6 +553,10 @@ func _physics_process(delta: float) -> void:
 	# TimeManager 暂停门禁：与实体同一"暂停"语义（暂停时冷却/放箭计时/命中帧全停）
 	if TimeManager != null and TimeManager.is_paused():
 		return
+	# sim 模式（D 刀）：冷却/strike 命中帧/远程放箭计时由 BattleSim 批推进，
+	# 到点回调 sim_strike_now()/sim_fire_now()——本节点 _physics_process 停跑
+	if _sim() != null:
+		return
 	update_cooldown(delta)
 	# 格挡重置冷却（原版 blockResetInterval）
 	if _block_reset_timer > 0.0:
@@ -587,6 +591,15 @@ func can_attack() -> bool:
 	# 徒手（背包装备系统主手卸空）不可攻击——玩家空手即无威胁
 	if weapon_type == WeaponType.NONE:
 		return false
+	# sim 模式：冷却真相源在 BattleSim（本节点 _physics_process 停跑，
+	# _cooldown_timer 不再推进）；pending strike 门禁语义与旧链一致
+	var s := _sim()
+	if s != null:
+		if s.get_cooldown(_sim_sid()) > 0.0:
+			return _cancel_window_latched or _can_cancel_attack_anim()
+		if _pending_strike_target != null and not _strike_fired:
+			return false
+		return true
 	if _cooldown_timer > 0.0:
 		return _cancel_window_latched or _can_cancel_attack_anim()
 	# 上一击已登记目标但还没到命中帧：等它结算（空挥/已结算不拦）
@@ -681,10 +694,15 @@ func perform_attack(target: Node) -> Dictionary:
 	_pending_strike_target = target
 	_pending_strike_owner = owner_entity
 	_strike_fired = false
-	_pending_strike_elapsed = 0.0
 	_cancel_window_latched = false
-	# 进入冷却（含情绪修正）
-	_cooldown_timer = _get_effective_cooldown()
+	# 进入冷却（含情绪修正）；sim 模式计时归 BattleSim（冷却 + strike 命中帧）
+	var s := _sim()
+	if s != null:
+		s.set_cooldown(_sim_sid(), _get_effective_cooldown())
+		s.register_strike(_sim_sid(), self, _resolve_hit_seconds())
+	else:
+		_pending_strike_elapsed = 0.0
+		_cooldown_timer = _get_effective_cooldown()
 	result["reason"] = "striking"
 	return result
 
@@ -699,9 +717,14 @@ func perform_swing() -> bool:
 	_pending_strike_target = null
 	_pending_strike_owner = get_owner_entity()
 	_strike_fired = false
-	_pending_strike_elapsed = 0.0
 	_cancel_window_latched = false
-	_cooldown_timer = _get_effective_cooldown()
+	var s := _sim()
+	if s != null:
+		s.set_cooldown(_sim_sid(), _get_effective_cooldown())
+		s.register_strike(_sim_sid(), self, _resolve_hit_seconds())
+	else:
+		_pending_strike_elapsed = 0.0
+		_cooldown_timer = _get_effective_cooldown()
 	return true
 
 
@@ -739,6 +762,35 @@ func _try_strike_frame() -> void:
 	if not _has_reached_hit_frame():
 		return
 	_strike_fired = true
+	_do_strike()
+
+
+## sim 模式命中帧到点回调（BattleSim._tick_weapon crossing 触发；sim 为时序权威）。
+## 结算链与旧路径共用 _do_strike()（AOE/情绪/hitstop/伤害管线零重复）。
+func sim_strike_now() -> void:
+	if _strike_fired or _pending_strike_target == null:
+		return
+	_strike_fired = true
+	_do_strike()
+
+
+## sim 模式远程到点回调（弓放箭 / 杖施法；延迟计时归 BattleSim）。
+func sim_fire_now() -> void:
+	if _pending_ranged_target == null:
+		return
+	var target: Node = _pending_ranged_target
+	_pending_ranged_target = null
+	if not is_instance_valid(target):
+		return
+	if weapon_type == WeaponType.BOW:
+		_fire_arrow(target)
+	else:
+		_cast_magic(target)
+
+
+## 命中帧结算本体（旧 _try_strike_frame 的结算段；触发源：旧链动画到点 /
+## sim crossing）。Saga MeleeAttackSystem.Strike。
+func _do_strike() -> void:
 	var target: Node = _pending_strike_target
 	var owner_entity: Node = _pending_strike_owner
 	_pending_strike_target = null
@@ -855,6 +907,44 @@ func _resolve_hit_event_time() -> void:
 	_hit_event_time = rig.get_anim_event_time(_attack_anim_name(), "Hit")
 
 
+# ─────────────────────────────── BattleSim 接线（D 刀）────────────────────────────────
+
+## 宿主实体的 BattleSim（null = 未注册/未启用/已死——所有 sim 分支的统一入口判定）。
+func _sim() -> BattleSim:
+	var e := get_owner_entity()
+	if e == null or not is_instance_valid(e):
+		return null
+	if not e.has_method("get_battle_sim"):
+		return null
+	var s: BattleSim = e.get_battle_sim()
+	if s == null or e.get_battle_sim_sid() < 0 or e.is_dead():
+		return null
+	return s
+
+
+## 宿主实体的 sim 下标（调用前须确认 _sim() 非 null）
+func _sim_sid() -> int:
+	var e := get_owner_entity()
+	return e.get_battle_sim_sid() if e != null else -1
+
+
+## sim 模式命中帧绝对秒（秒）：Hit 事件真值优先；无事件数据时按动画时长 ×
+## fallback 比例换算；连动画时长都拿不到（测试桩无 rig）返回 0——
+## 对齐旧链「无动画数据立即结算」语义。
+func _resolve_hit_seconds() -> float:
+	_resolve_hit_event_time()
+	if _hit_event_time >= 0.0:
+		return _hit_event_time
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity != null and "rig" in owner_entity:
+		var rig: Node = owner_entity.get("rig")
+		if rig != null and rig.has_method("get_anim_length"):
+			var anim_len: float = rig.get_anim_length(_attack_anim_name())
+			if anim_len > 0.0:
+				return anim_len * STRIKE_FRAME_RATIO_FALLBACK
+	return 0.0
+
+
 ## 每帧递减冷却（也可由外部调用）
 func update_cooldown(delta: float) -> void:
 	if _cooldown_timer > 0.0:
@@ -865,9 +955,10 @@ func update_cooldown(delta: float) -> void:
 
 # ─────────────────────────────── 远程攻击（弓）────────────────────────────────
 
-## 弓：发射箭矢朝向目标（命中由箭矢实际飞行碰撞决定，非概率）。
+## 远程攻击（弓）：发射箭矢朝向目标（命中由箭矢实际飞行碰撞决定，非概率）。
 ## 延迟发射：记录目标 + 倒计时，拉弓拉满（attack_bow 的 Hit 事件 @0.5333s）时放箭。
 ## 返回 {hit:false, damage:0, reason:"fired"/...}——命中结果由箭头落地后报告。
+## sim 模式：倒计时与冷却归 BattleSim，到点回调 sim_fire_now()。
 func _attack_ranged(target: Node) -> Dictionary:
 	var result: Dictionary = {"hit": false, "damage": 0.0, "reason": ""}
 	var owner_entity: CharacterBody2D = get_owner_entity()
@@ -879,9 +970,14 @@ func _attack_ranged(target: Node) -> Dictionary:
 		result["reason"] = "out_of_range"
 		return result
 	_pending_ranged_target = target
-	_bow_fire_timer = _get_bow_fire_delay()
+	var s := _sim()
+	if s != null:
+		s.register_ranged(_sim_sid(), self, target, _get_bow_fire_delay())
+		s.set_cooldown(_sim_sid(), _get_effective_cooldown())
+	else:
+		_bow_fire_timer = _get_bow_fire_delay()
+		_cooldown_timer = _get_effective_cooldown()
 	result["reason"] = "fired"
-	_cooldown_timer = _get_effective_cooldown()
 	return result
 
 

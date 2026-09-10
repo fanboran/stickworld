@@ -207,3 +207,35 @@ func export_as_preset(org_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
 	return _manager.export_as_preset(org_id)
+
+
+# ===== 招兵（游戏循环深化批次 1；RecruitManager 由 SystemSetup 注入）=====
+
+## 招兵编排器（同模块内部节点，recruit_manager.gd）
+var _recruit_manager: Node = null
+
+
+## SystemSetup 装配尾部注入（招兵逻辑不在组织树管理器内，独立常驻节点）
+func set_recruit_manager(manager: Node) -> void:
+	_recruit_manager = manager
+
+
+## 招募一名民兵：扣资源 + 空闲村民变身士兵。返回 {ok, soldier/reason}
+func recruit() -> Dictionary:
+	if _recruit_manager == null:
+		return {"ok": false, "reason": "recruit_manager_missing"}
+	return _recruit_manager.recruit()
+
+
+## 距 pos 最近的可用兵营（OPERATIONAL；无则 null）——交互探测用
+func find_nearest_barracks(pos: Vector2) -> Node2D:
+	if _recruit_manager == null:
+		return null
+	return _recruit_manager.find_nearest_barracks(pos)
+
+
+## 招兵交互提示文案（资源/人口状态感知）
+func get_recruit_hint() -> String:
+	if _recruit_manager == null:
+		return ""
+	return _recruit_manager.get_recruit_hint()

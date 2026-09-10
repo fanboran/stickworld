@@ -7,11 +7,18 @@ extends RefCounted
 ## 大腿骨骼（thigh_outer/thigh_inner）位于髋部位置(0,0)，作为大腿肢体的容器。
 ## 旋转大腿骨骼 = 整条腿围绕髋部转；旋转小腿骨骼 = 小腿以下围绕膝盖转。
 ##
-## 渲染架构（方案 B · 矢量化描边，两遍渲染）：
+## 渲染架构（方案 B · 矢量化描边，链式两遍渲染 + 根部开口描边）：
 ## - 每段肢体 = 容器 Node2D（命名 sprite_<id> 保持扫描兼容），内含两层：
-##   描边层（加宽深色圆头 Line2D / 外圈 Polygon2D，z_index=-1）+ 填充层（z=0）。
-## - 两遍渲染：全部描边压底、全部填充置顶 → 肢体重叠处填充无缝融合
-##   （关节自动连接），描边只在整体剪影外缘露出一圈。
+##   描边层（加宽深色圆头 Line2D / 外圈 Polygon2D）+ 填充层（同几何窄一层）。
+## - 五链 z 栈（2026-09-09 创始人二次定稿，显式描边/填充双表）：远侧臂
+##   （藏最底）→ 躯干描边 → 外腿 → 内腿 → 躯干填充 → 近侧臂。效果：
+##   躯干描边压在两腿填充之下（髋部/胯部无线）；躯干填充盖住两腿描边
+##   （胯部融合）；内腿描边压外腿填充（两腿分界，仅胯部以下）；近侧臂
+##   描边压躯干填充（臂-躯分隔，唯一保留的分隔线）；肩膀圆圈由臂描边
+##   根部留隙（OPEN_ROOT_GAP）裸出融合。
+## - 根部开口描边（U 形）：前臂描边多边形根部平口无端帽——臂根方向
+##   不产生环绕弧线，填充根帽直接融合进躯干填充 → 肩/肘无接缝，
+##   无需任何关节补丁（补丁方案三次失败的教训：盖缝必连坐外缘描边）。
 ## - 不再使用位图贴图 / CanvasGroup / ID 缓冲着色器 / 邻接表。
 
 # ===== 节点类型 =====
@@ -21,8 +28,55 @@ const TYPE_TRIANGLE: int = 3
 const TYPE_ELLIPSE: int = 5
 
 # ===== 描边参数 =====
-## 描边宽度（逻辑像素，单侧）
+## 描边宽度（逻辑像素，单侧）——zoom≥1 时的设计世界宽度（肢体比例基准）
 const OUTLINE_WIDTH: float = 2.0
+## 描边屏幕像素下限（单侧）：相机拉远（画布缩放 <1）时描边按 1/缩放补偿，
+## 屏幕上恒定 ~2px 不再变细发糊；由 StickmanRig 在画布缩放变化时批量刷新
+## 屏幕像素描边宽目标。校准口径：批次 2/3 视觉验收时的实际屏宽为 1px
+## （当时补偿公式漏乘 rig 自身缩放等效减半，验收观感基于此）——565c347f
+## 修缩放口径后保持 2.0 会让描边整体翻倍、分隔线被放大（创始人反馈
+## "线太显眼"），故回校准值 1.0：与历史验收观感一致且体型间等宽。
+const OUTLINE_SCREEN_PX: float = 1.0
+
+## 链式分层 z 表——描边/填充显式双表（填充不再恒等于描边+1：躯干填充
+## 必须越过两腿描边、同时躯干描边必须沉到两腿填充之下，两者夹住腿链）。
+## 线性栈（底→顶）：远臂描边-3/填充-2 → 躯干描边-1 → 外腿描边0/填充1
+## → 内腿描边2/填充3 → 躯干填充4 → 近臂描边5/填充6。
+## z 取值范围 [-3, +6]：单位带 EntityHost z=3，全局 0~9，严格低于前景层 10。
+const CHAIN_STROKE_Z: Dictionary = {
+	14: -3, 15: -3,               # 内臂（远侧）——最底
+	6: -1, 7: -1, 20: -1, 10: -1, # 躯干+头 描边（沉到两腿填充下→髋部无线）
+	3: 0, 4: 0, 5: 0,             # 外腿描边
+	11: 2, 12: 2, 13: 2,          # 内腿描边（压外腿填充=两腿分界线）
+	1: 5, 2: 5,                   # 外臂（近侧）描边——臂-躯分隔保留
+}
+
+## 填充层 z（缺省回退 描边+1；躯干链显式越顶见上）
+const CHAIN_FILL_Z: Dictionary = {
+	14: -2, 15: -2,
+	6: 4, 7: 4, 20: 4, 10: 4,     # 躯干+头 填充（盖两腿描边→胯部融合）
+	3: 1, 4: 1, 5: 1,
+	11: 3, 12: 3, 13: 3,
+	1: 6, 2: 6,
+}
+
+## 根部开口描边的肢体——仅近侧臂（前臂外 1）：其根与躯干填充相交，肩关节
+## 圈内不能有笔迹（两侧线自根部留隙 OPEN_ROOT_GAP 起笔，裸露填充根帽融进
+## 躯干）。远侧臂（前臂内 14）整体藏于躯干之后、不与身体观感相交，肩部
+## 轮廓必须完整（背侧露出的远肩全靠它读形）——曾误同开口致后肩描边丢失
+## （创始人 2026-09-09 三次反馈）。上臂段无渲染（type=-1），前臂根即视觉臂根。
+const OPEN_ROOT_LIMBS: Array = [1]
+
+## 根部留隙（本地 px，自根部平面沿臂向肢端量）：肩关节圆圈直径 ≈ 肢厚+描边
+## ≈26~29，取 30 保证圆圈内无笔迹（探针实测：前臂根端平面距肩点 15.9+帽 13）。
+## 根部留隙（Vector2，本地 px，自根部平面沿臂向肢端量）——非对称开口
+## （创始人 2026-09-09 定稿"长条一侧有描边另一侧没有"）：
+##   x = 内侧线（side_top，局部 -y，贴身体侧）留隙——肩关节圆圈内无笔迹，
+##       裸露填充根帽融合进躯干；
+##   y = 外侧线（side_bottom，局部 +y，背离身体侧）留隙 0——肩部外轮廓
+##       （背侧肩线）从根部全程保留，不参与融合。
+## 探针实测：前臂根端平面距肩点 15.9+帽 13 ≈ 肩圈直径，故内侧取 30。
+const OPEN_ROOT_GAP := {1: Vector2(30.0, 0.0)}
 
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 23
@@ -227,11 +281,12 @@ static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 
 ## 在 parent_bone 上创建矢量肢体段，表示从 parent 到子骨骼的肢体段。
 ## px, py = 子骨骼相对 parent 的偏移；容器放段的中点、旋转对齐方向，
-## 内含描边 + 填充两层圆头 Line2D（几何跨度 = length + thickness，与旧位图一致）。
-## 全局两遍渲染：所有描边层 z=-1 压底、所有填充层 z=0 置顶 →
-## 全身填充无缝融合（肢体/躯干/头部一体，无任何接缝，与"刚重构完"
-## 参考状态一致），描边只在整体剪影外缘露出一圈。
-## z_index 用相对值（祖先全部 z=0，等效于全局顺序）。
+## 内含描边 + 填充两层（几何跨度 = length + thickness，与旧位图一致）。
+## 链式两遍渲染：描边层 z=CHAIN_STROKE_Z[id]、填充层 z=描边+1 →
+## 描边/填充 z 按 CHAIN_STROKE_Z/CHAIN_FILL_Z 双表（见表头注释）。
+## 前臂（OPEN_ROOT_LIMBS）描边为根部真开口三件套（两侧线+端弧，根部留隙
+## OPEN_ROOT_GAP）：肩关节圆圈内无笔迹，填充根帽裸露融合进躯干填充。
+## z_index 用相对值（祖先全部 z=0；单位带 EntityHost z=3，全局 0~9 < 前景层 10）。
 static func _build_limb(
 	parent_bone: Node2D, id: int, length: int, thickness: int, node_type: int,
 	px: float, py: float, thickness_scale: float, colors: Dictionary
@@ -241,27 +296,81 @@ static func _build_limb(
 	parent_bone.add_child(container)
 
 	var w: float = max(thickness * thickness_scale, 1.0)
+	var sz: int = CHAIN_STROKE_Z.get(id, 1)
+	var fz: int = CHAIN_FILL_Z.get(id, sz + 1)
+	var outline: Color = colors.get("outline", DEFAULT_OUTLINE)
 	if node_type == TYPE_CIRCLE:
 		container.position = Vector2(px, py)
 		container.rotation = 0.0
 		var r: float = max(float(length), w * 2.0) / 2.0
-		var st := _make_circle("stroke", r + OUTLINE_WIDTH, colors.get("outline", DEFAULT_OUTLINE))
+		var st := _make_circle("stroke", r + OUTLINE_WIDTH, outline)
 		var fi := _make_circle("fill", r, _color_for_type(node_type, colors))
-		st.z_index = -1
-		fi.z_index = 0
+		st.z_index = sz
+		fi.z_index = fz
 		container.add_child(st)
 		container.add_child(fi)
 	else:
 		container.rotation = Vector2(px, py).angle()
 		container.position = Vector2(px / 2.0, py / 2.0)
 		var pts := PackedVector2Array([Vector2(-length / 2.0, 0), Vector2(length / 2.0, 0)])
-		var stl := _make_line("stroke", pts, w + OUTLINE_WIDTH * 2.0, colors.get("outline", DEFAULT_OUTLINE))
 		var fil := _make_line("fill", pts, w, _color_for_type(node_type, colors))
-		stl.z_index = -1
-		fil.z_index = 0
+		fil.z_index = fz
+		var stl: CanvasItem
+		if id in OPEN_ROOT_LIMBS:
+			# 根部真开口描边：两侧线自根部留隙起笔 + 末端半圆弧，无闭合边
+			stl = _make_open_root_stroke("stroke", length / 2.0, w, OUTLINE_WIDTH,
+					outline, OPEN_ROOT_GAP.get(id, Vector2.ZERO))
+		else:
+			stl = _make_line("stroke", pts, w + OUTLINE_WIDTH * 2.0, outline)
+		stl.z_index = sz
 		container.add_child(stl)
 		container.add_child(fil)
 	return container
+
+
+## 根部真开口描边（Node2D 容器）：两侧 Line2D（平头帽，自 root_gap 起笔）
+## + 末端半环 Polygon2D（外径 fill_w/2+eff、内径 fill_w/2 的半圆环，无径向
+## 闭合线外露）。旧单多边形 U 形的根部闭合边会横在肩/胯关节上（创始人
+## 反馈"肩膀圆圈没融合"的元凶），容器式三件套无任何越过留隙区的笔迹。
+## meta 供 apply_outline_zoom 识别重建：open_root_half_len / open_root_fill_w。
+## 局部坐标与 Line2D 版描边一致：-x 朝肢根、+x 朝肢端。
+## gap: Vector2(x=内侧 side_top 留隙, y=外侧 side_bottom 留隙)——两侧独立起笔。
+static func _make_open_root_stroke(lname: String, half_len: float, fill_w: float,
+		eff: float, color: Color, gap: Vector2) -> Node2D:
+	var box := Node2D.new()
+	box.name = lname
+	box.set_meta("open_root_half_len", half_len)
+	box.set_meta("open_root_fill_w", fill_w)
+	box.set_meta("open_root_gap", gap)
+	var y: float = fill_w / 2.0 + eff / 2.0
+	for side in [-1.0, 1.0]:
+		var x0: float = -half_len + (gap.x if side < 0 else gap.y)
+		var ln := _make_line("side_%s" % ("top" if side < 0 else "bottom"),
+				PackedVector2Array([Vector2(x0, side * y), Vector2(half_len, side * y)]),
+				eff, color)
+		ln.begin_cap_mode = Line2D.LINE_CAP_NONE
+		ln.end_cap_mode = Line2D.LINE_CAP_NONE
+		box.add_child(ln)
+	var arc := Polygon2D.new()
+	arc.name = "tip_arc"
+	arc.color = color
+	arc.polygon = _tip_arc_pts(half_len, fill_w / 2.0, eff)
+	box.add_child(arc)
+	return box
+
+
+## 末端半环顶点：外弧（圆心 (H,0) 半径 R，-90°→+90°）+ 内弧（半径 r，+90°→-90°）。
+static func _tip_arc_pts(half_len: float, inner_r: float, eff: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var n := 12
+	var ro: float = inner_r + eff
+	for i in range(n + 1):
+		var a := -PI / 2.0 + PI * float(i) / float(n)
+		pts.append(Vector2(half_len, 0) + Vector2(cos(a), sin(a)) * ro)
+	for i in range(n, -1, -1):
+		var a := -PI / 2.0 + PI * float(i) / float(n)
+		pts.append(Vector2(half_len, 0) + Vector2(cos(a), sin(a)) * inner_r)
+	return pts
 
 
 static func _make_line(lname: String, pts: PackedVector2Array, width: float, color: Color) -> Line2D:
@@ -315,6 +424,72 @@ static func apply_colors(sprites: Dictionary, colors: Dictionary) -> void:
 			(fill as Line2D).default_color = _color_for_type(node_type, colors)
 		elif fill is Polygon2D:
 			(fill as Polygon2D).color = _color_for_type(node_type, colors)
+
+
+# ============================================================
+#  描边缩放补偿（屏幕像素恒定）
+# ============================================================
+
+## 描边单侧世界宽度（屏幕像素恒定补偿，思路同 world_map b443c26a"描边改固定屏幕像素"）：
+## 画布缩放 s（Camera2D.zoom，含分辨率适配）下拉远时按 1/s 放大，保持屏幕
+## ~OUTLINE_SCREEN_PX 像素；放大（s>1）时不低于设计世界宽度 OUTLINE_WIDTH，
+## 肢体比例不变（特写描边不过细，屏幕像素随之 ≥ 下限）。
+static func outline_world_width(canvas_scale: float) -> float:
+	var s: float = maxf(canvas_scale, 0.0001)
+	return maxf(OUTLINE_WIDTH, OUTLINE_SCREEN_PX / s)
+
+
+## 描边宽度缩放补偿刷新（画布缩放变化时由 StickmanRig 批量调用，低频）：
+## 线段肢体 stroke 宽 = 填充宽 + 2×eff；头部圆 stroke 重建 40 边形（半径 = r + eff）；
+## 前臂 U 形描边（open_root_half_len meta 标记）按 radius = 填充宽/2 + eff 重建顶点。
+## 只改描边层几何，不动填充层与颜色；缩放未变时无需调用。
+static func apply_outline_zoom(sprites: Dictionary, eff: float) -> void:
+	var all_data := SKELETON_DATA.merged(EXTRA_LIMBS, true)
+	for id in sprites.keys():
+		var limb: Node2D = sprites[id]
+		if not is_instance_valid(limb):
+			continue
+		if int(all_data.get(id, {}).get("type", -1)) < 0:
+			continue
+		var stroke := limb.get_node_or_null("stroke")
+		var fill := limb.get_node_or_null("fill")
+		if stroke is Node2D and stroke.has_meta("open_root_half_len") 				and stroke.has_meta("open_root_fill_w"):
+			# 容器式真开口描边：两侧线宽/离轴 + 端弧外径随 eff 重建
+			var fw: float = float(stroke.get_meta("open_root_fill_w"))
+			var hl: float = float(stroke.get_meta("open_root_half_len"))
+			var gap: Vector2 = stroke.get_meta("open_root_gap", Vector2.ZERO)
+			var y_u: float = fw / 2.0 + eff / 2.0
+			for side in [-1.0, 1.0]:
+				var x0_u: float = -hl + (gap.x if side < 0 else gap.y)
+				var sl := stroke.get_node_or_null("side_top" if side < 0 else "side_bottom") as Line2D
+				if sl != null:
+					sl.width = eff
+					sl.points = PackedVector2Array([
+						Vector2(x0_u, side * y_u), Vector2(hl, side * y_u)])
+			var arc := stroke.get_node_or_null("tip_arc") as Polygon2D
+			if arc != null:
+				arc.polygon = _tip_arc_pts(hl, fw / 2.0, eff)
+		elif stroke is Line2D and fill is Line2D:
+			(stroke as Line2D).width = (fill as Line2D).width + eff * 2.0
+		elif stroke is Polygon2D and fill is Polygon2D:
+			var r: float = _circle_radius(fill as Polygon2D)
+			if r > 0.0:
+				_set_circle_radius(stroke as Polygon2D, r + eff)
+
+
+## 读取圆描边多边形的半径（顶点绕中心生成，取首顶点到原点距离；中心在 Vector2.ZERO）
+static func _circle_radius(p: Polygon2D) -> float:
+	var pts := p.polygon
+	return pts[0].length() if pts.size() > 0 else 0.0
+
+
+## 重建圆多边形顶点（40 边，中心 Vector2.ZERO，同 _make_circle 生成方式）
+static func _set_circle_radius(p: Polygon2D, radius: float) -> void:
+	var pts := PackedVector2Array()
+	for i in range(40):
+		var a := TAU * float(i) / 40.0
+		pts.append(Vector2(cos(a), sin(a)) * radius)
+	p.polygon = pts
 
 
 # ============================================================

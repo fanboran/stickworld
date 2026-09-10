@@ -1,7 +1,8 @@
 extends Node
 ## 出城选项框 —— 玩家越过右墙前触发线时弹在玩家头顶的按钮组：
-##   开守城战(Demo) / 出城逛战场 / 去隔壁地区 / 收起
-## 选项经 SceneLoader 传送（加载覆盖掩盖城内 1/3 屏地面 ↔ 战场高地面带的比例跳变）。
+##   ⚔ 征伐 <据点>（动态，expansion api） / 开守城战(Demo) / 出城逛战场 / 去隔壁地区 / 收起
+## 选项经 SceneLoader 传送（加载覆盖掩盖城内 1/3 屏地面 ↔ 战场高地面带的比例跳变）；
+## 征伐项走 expansion.launch_campaign（状态校验+直达 travel，架构 §三 出征入口）。
 ## UI 挂 UIRoot HudOverlay 槽（AGENTS 核心指令 5），每帧跟随玩家屏幕坐标。
 
 const SiegeFieldScript := preload("res://modules/world/scripts/map/siege_field.gd")
@@ -28,6 +29,9 @@ func setup(map: Node2D) -> void:
 			_root = n
 			break
 		n = n.get_parent()
+	# 守军折损/臣服状态变化（车轮战、占领）→ 面板重建（选项数据 list_targets 现取）
+	if EventBus != null and EventBus.has_signal("territory_state_changed"):
+		EventBus.territory_state_changed.connect(_on_territory_state_changed)
 
 
 func _process(_delta: float) -> void:
@@ -86,10 +90,23 @@ func _hide() -> void:
 
 ## 随所属地图释放时清掉跨图存活的 HUD 面板（切图后不残留选项框）
 func _exit_tree() -> void:
+	if EventBus != null and EventBus.has_signal("territory_state_changed"):
+		EventBus.territory_state_changed.disconnect(_on_territory_state_changed)
 	_shown = false
 	if _panel != null and is_instance_valid(_panel):
 		_panel.queue_free()
 	_panel = null
+
+
+## 守军折损/臣服状态变化 → 弃置面板（可见时立即重建，否则下次触发线 _show 重建）
+func _on_territory_state_changed(_territory_id: String, _new_state: int) -> void:
+	if _panel != null and is_instance_valid(_panel):
+		_panel.queue_free()
+	_panel = null
+	if _shown:
+		var player := _find_player()
+		if player != null:
+			_show(player)
 
 
 ## 选项框跟随玩家头顶（世界 → 屏幕坐标）
@@ -138,6 +155,21 @@ func _build_panel() -> Control:
 			btn2.text = _dest_label(sl, String(exit_info["target"]))
 			btn2.pressed.connect(_on_choice.bind("travel:" + String(exit_info["target"])))
 			col.add_child(btn2)
+	# 动态项：可征伐据点（expansion api.list_targets，架构 §三 出征入口）——
+	# 「⚔ 征伐 黑石营地（守军 3）」；已臣服项禁用占位（据点已友化，不可再战）
+	var expansion: Node = _root.get("_expansion_api") if _root != null else null
+	if expansion != null and expansion.has_method("list_targets"):
+		for target: Dictionary in expansion.list_targets():
+			var tid := String(target.get("id", ""))
+			var btn4 := Button.new()
+			if bool(target.get("captured", false)):
+				btn4.text = "⚔ 征伐 %s（已臣服）" % String(target.get("name_zh", tid))
+				btn4.disabled = true
+			else:
+				btn4.text = "⚔ 征伐 %s（守军 %d）" % [String(target.get("name_zh", tid)),
+						int(target.get("garrison_count", 0))]
+				btn4.pressed.connect(_on_choice.bind("campaign:" + tid))
+			col.add_child(btn4)
 	var btn3 := Button.new()
 	btn3.text = "收起"
 	btn3.pressed.connect(_on_choice.bind("close"))
@@ -192,6 +224,9 @@ func _on_choice(act: String) -> void:
 	if act.begins_with("travel:"):
 		_travel(act.trim_prefix("travel:"))
 		return
+	if act.begins_with("campaign:"):
+		_launch_campaign(act.trim_prefix("campaign:"))
+		return
 	match act:
 		"siege":
 			SiegeFieldScript.pending_siege_mode = true
@@ -201,6 +236,15 @@ func _on_choice(act: String) -> void:
 			_travel("siege_battlefield")
 		"close":
 			_hide()
+
+
+## 征伐：交 expansion 流程编排（状态校验 + 直达 travel，架构 §三；
+## 已臣服/装配缺失由 launch_campaign 侧拒绝并告警）
+func _launch_campaign(territory_id: String) -> void:
+	_hide()
+	var expansion: Node = _root.get("_expansion_api") if _root != null else null
+	if expansion != null and expansion.has_method("launch_campaign"):
+		expansion.launch_campaign(territory_id)
 
 
 func _travel(map_id: String) -> void:

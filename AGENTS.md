@@ -35,6 +35,8 @@
   - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
   - `docs/项目/交接/组织系统深化-进度与交接.md`（任务：组织系统深化，分支 `agent/organization-deepening`，worktree `.temp/organization-deepening`）
   - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
+- 在役审计快照（用完即删，删除时同步移除登记）：
+  - `docs/审计/架构审计_2026-09-11.md`（架构实测基线与重测命令，供 `docs/项目/待办事项.md`「架构收敛 AR 系列」引用；AR 全部执行完毕后删除）
 
 ### 项目文档导航
 

@@ -102,7 +102,17 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	# 政权 ID mask（可选，R7/R9 政权 ID 烘焙 + 运行时 LUT 上色）
 	var political_path := "%s/l2_political_id.png" % base_dir
 	if ResourceLoader.exists(political_path):
-		world.political_id_texture = load(political_path) as Texture2D
+		var ptex := load(political_path) as Texture2D
+		if ptex != null:
+			# 格式归一 RGBA8（feedback1 掉色修复）：源 PNG 为单通道 L8，d3d12 渲染
+			# 后端 canvas shader 采样 L8 纹理异常（.r 恒 0 → 全图只剩保留码/海洋色）。
+			# L8→RGBA8 灰度值原样复制进 RGB，R 值逐位不变（254/255 保留码不受影响）。
+			var pimg := ptex.get_image()
+			if pimg != null and pimg.get_format() != Image.FORMAT_RGBA8:
+				pimg.convert(Image.FORMAT_RGBA8)
+				world.political_id_texture = ImageTexture.create_from_image(pimg)
+			else:
+				world.political_id_texture = ptex
 	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l2_base_2048.png")]
 	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l2_tiles_index_2048.png")]
 	var border_path := "%s/%s" % [base_dir, data.get("border_texture", "l2_tiles_border_2048.png")]

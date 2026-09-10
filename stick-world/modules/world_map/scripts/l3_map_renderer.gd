@@ -357,6 +357,11 @@ func _load_political_async() -> void:
 		return
 	var img := Image.new()
 	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
+		# 格式归一 RGBA8（feedback1 掉色修复）：PNG 是单通道 L8，d3d12 渲染后端
+		# canvas shader 采样 L8 纹理异常（.r 恒 0 → idx 全 0 → 全图只剩海洋色）。
+		# L8→RGBA8 灰度值原样复制进 RGB 通道，R 值逐位不变（保留码 254/255 不受影响）。
+		if img.get_format() != Image.FORMAT_RGBA8:
+			img.convert(Image.FORMAT_RGBA8)
 		_political_result = img
 
 

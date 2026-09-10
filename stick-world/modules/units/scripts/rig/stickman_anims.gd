@@ -119,7 +119,77 @@ static func pick_dead_anim(headshot: bool) -> String:
 static func pick_heal_anim() -> String:
 	return HEAL_ANIMS[randi() % HEAL_ANIMS.size()]
 
-const ANIM_DIR := "res://modules/units/animations/"
+const ANIM_DIR := "res://modules/units/animations/spine/"
+
+## 游戏动作名 → Spine 原始动画名（批次 B 单一真相源；.tres 仍按**游戏动作名**入
+## AnimationPlayer 库，故状态机/事件订阅/变体池机制全部零改动）。
+## 默认列 = 通用人形（剑士骨架）动作；持械兵种差异由既有的"按武器选站姿/攻击"
+## 表（WEAPON_IDLE_ANIM / WEAPON_ATTACK_ANIM）承担，不在此处再分兵种。
+## 原版无对应动画的游戏动作（伐木/耕作等）沿用映射表加行扩容，不改编动画数据。
+const SPINE_MAP: Dictionary = {
+	# ── 站姿 ──
+	"idle": "Swordwrath-Stand1",
+	"idle_v2": "Swordwrath-Stand1",
+	"idle_spear": "Spearton-Stand1",
+	"idle_spear_v2": "Spearton-Stand1",
+	"idle_spear_v3": "Spearton-Stand1",
+	"idle_bow": "Archidon-Stand1",
+	"idle_pickaxe": "Miner-Stand1",
+	"idle_staff": "Magikill-Stand",
+	# ── 移动（原版各兵种一个步态；矛士只有 Run、无 Walk）──
+	"walk": "Swordwrath-Walk",
+	"run": "Swordwrath-Run",
+	"walk_carry": "Miner-Walk",
+	"walk_heavy": "Swordwrath-Walk",
+	"walk_light": "Swordwrath-Walk",
+	"walk_standard": "Swordwrath-Walk",
+	"walk_bvh": "Swordwrath-Walk",
+	"run_bvh": "Swordwrath-Run",
+	# ── 攻击 ──
+	"attack": "Swordwrath-Attack1",
+	"attack_spear": "Spearton-Attack1",
+	"attack_spear_2": "Spearton-Attack1",
+	"attack_spear_3": "Spearton-Attack1",
+	"attack_pickaxe": "Miner-Mine",
+	"attack_staff": "Magikill-Spell1",
+	"attack_bow": "Archidon-Draw",
+	"heal_meric_1": "Magikill-Spell1",
+	"heal_meric_2": "Magikill-Spell2",
+	# ── 盾形态（原版 Spearton 专属）──
+	"block": "Spearton-Block",
+	"block_attack_1": "Spearton-Block-Attack1",
+	"block_attack_2": "Spearton-Block-Attack2",
+	"block_attack_3": "Spearton-Block-Attack3",
+	"block_walk": "Spearton-Block-Walk",
+	"block_crouch": "Spearton-Block-Crouch",
+	# ── 任务动作 ──
+	"build": "Miner-Mine",
+	"arrive": "Swordwrath-Jump",
+	# ── 死亡（原版 Death1/2 + 爆头系）──
+	"dead": "Death1",
+	"dead_v2": "Death2",
+	"dead_headshot": "Death-Headshot",
+	"dead_headshot_v2": "Death-Headshot",
+	"dead_headshot_fwd": "Zombie-Headshot-Forward",
+	"dead_headshot_fwd_spear": "Zombie-Headshot-Forward-Spear",
+	"dead_headshot_spear": "Death-Headshot-Spear",
+	"dead_headshot_spearton": "Death-Headshot",
+	"dead_headshot_spearton_spear": "Death-Headshot-Spear",
+	"dead_headshot2_spear": "Death-Headshot-Spear",
+	# ── 受击（原版 Hit 池：部位×方向×强度，原数据为 Zombie 系受击组）──
+	"hit_front": "Zombie-Hit-Belly-1",
+	"hit_back": "Zombie-Small-Hit-2",
+	"hit_mid_front_big": "Zombie-Big-Hit-1",
+	"hit_mid_back_big": "Zombie-Small-Hit-1",
+	"hit_head_front_small": "Zombie-Small-Hit-1",
+	"hit_head_front_small2": "Zombie-Small-Hit-2",
+	"hit_head_back_big": "Zombie-Big-Hit-1",
+	"hit_head_back_small": "Zombie-Small-Hit-2",
+	"hit_head_butt": "Zombie-Small-Hit-1",
+	"hit_head_butt2": "Zombie-Small-Hit-2",
+	"hit_block_1": "Zombie-Small-Hit-1",
+	"hit_block_2": "Zombie-Small-Hit-2",
+}
 
 ## 全部攻击动画（通用剑攻 + 各武器专属：矛刺/镐挥/法杖/拉弓）
 const ATTACK_ANIMS: Array[String] = [
@@ -146,6 +216,14 @@ const WEAPON_ATTACK_ANIM: Dictionary = {
 ## 取武器类型对应的攻击动画名（未知类型回落通用剑攻）
 static func anim_for_weapon(weapon_type: int) -> String:
 	return WEAPON_ATTACK_ANIM.get(weapon_type, ANIM_ATTACK)
+
+## 武器类型 -> 命中帧**原生事件名**。原版只有镐/挖掘系用 Mine 事件（Miner-Mine
+## Mine@1.2 即敲击结算帧），其余武器一律 Hit。键序对齐 WeaponMount.WeaponType。
+const WEAPON_HIT_EVENT: Dictionary = {3: "Mine"}
+
+## 取武器类型对应的命中事件名（未知类型回落 Hit）
+static func hit_event_for_weapon(weapon_type: int) -> String:
+	return str(WEAPON_HIT_EVENT.get(weapon_type, "Hit"))
 
 ## 武器类型 -> 持械站姿动画名（键序对齐 WeaponMount.WeaponType）。
 ## 原版各兵种 Stand 动画：剑士 Swordwrath-Stand1/2、矛兵 Spearton-Stand1、
@@ -366,14 +444,19 @@ static func set_state_animation(sm: AnimationNodeStateMachine, state_name: Strin
 #  内部辅助
 # ============================================================
 
+## 按游戏动作名入库：资源取 SPINE_MAP 里的 Spine 原名，库键仍是游戏动作名。
 static func _load_anim(lib: AnimationLibrary, name: String) -> void:
-	var path := ANIM_DIR + name + ".tres"
+	var spine_name: String = str(SPINE_MAP.get(name, ""))
+	if spine_name.is_empty():
+		push_warning("StickmanAnims: 动作「%s」无 Spine 映射（SPINE_MAP 缺行）" % name)
+		return
+	var path := ANIM_DIR + spine_name + ".tres"
 	if ResourceLoader.exists(path):
 		var anim := load(path) as Animation
 		if anim != null:
 			lib.add_animation(name, anim)
 			return
-	push_warning("StickmanAnims: 动画资源不存在 %s，请运行 tools/baking/bake_anims.tscn 生成" % path)
+	push_warning("StickmanAnims: 动画资源不存在 %s（动作 %s）" % [path, name])
 
 
 static func _add_state(sm: AnimationNodeStateMachine, anim_name: String) -> void:

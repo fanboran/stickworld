@@ -13,7 +13,7 @@ const WALK_DECEL := 200.0       # 减速度 px/s²
 const RUN_SPEED := 130.0        # 奔跑速度（达到阈值后跳变）
 const MIN_ANIM_SCALE := 0.2     # walk 动画最低播放速率
 const IDLE_THRESHOLD := 5.0     # 低于此速度切到 idle
-const BASE_SCALE := 0.267       # 火柴人缩放（原 0.8 的 1/3）
+const BASE_SCALE := 0.1852      # 火柴人缩放（批次 B：真 Spine 骨架单位换算，与实体同口径 0.3468/0.5 折算）
 
 var _rig: Node2D
 var _markers_parent: Node2D

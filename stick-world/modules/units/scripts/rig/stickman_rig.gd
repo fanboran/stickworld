@@ -131,9 +131,9 @@ func _process(_delta: float) -> void:
 	if not Engine.is_editor_hint():
 		_update_outline_zoom()
 		# 开口侧线头圆动态裁剪（近臂双线；手臂摆动时起点始终钳在头圆外，
-		# 静息留隙只是标定基准——创始人反馈"线条不要进脑袋"的运行时兜底）
-		if _sprites.has(1) and _sprites.has(10):
-			Skeleton.clip_open_root_sides_to_head(_sprites, 10)
+		# 静息留隙只是标定基准——"线条不要进脑袋"的运行时兜底）
+		if _sprites.has("minerarm1") and _sprites.has(Skeleton.HEAD_BONE):
+			Skeleton.clip_open_root_sides_to_head(_sprites, Skeleton.HEAD_BONE)
 	# 受击插播倒计时：动画播完回切到受击前状态（反编译参考实装 B）
 	if _hit_timer > 0.0:
 		_hit_timer -= _delta
@@ -223,14 +223,11 @@ func _init_procedural_overlay() -> void:
 
 func _init_bones() -> void:
 	var colors := _make_colors()
-	# 检查是否已有骨骼（通过 hip 节点判断）
-	if get_node_or_null("hip") != null:
-		Skeleton.reorder_render_order(self)
+	# 场景不再预置骨骼（数据源 = SpineSkeletonData，批次 B）：无锚点骨即从零构建
+	if get_node_or_null(Skeleton.RIG_ROOT_NAME) != null:
 		_bones = Skeleton.collect_nodes(self)["bones"]
-		# .tscn 骨骼 + 运行时矢量肢体（场景不再预置贴图精灵）
 		_sprites = Skeleton.build_limbs(self, _bones, thickness_scale, colors)
 	else:
-		# 首次打开：从零构建骨骼 + 矢量肢体
 		var result := Skeleton.build_from_scratch(self, thickness_scale, colors)
 		_bones = result["bones"]
 		_sprites = result["sprites"]
@@ -277,7 +274,7 @@ func _init_weapons() -> void:
 #  武器刷新
 # ============================================================
 
-func _refresh_weapon(bone_id: int) -> void:
+func _refresh_weapon(bone_id: String) -> void:
 	# 清除旧武器
 	var old := _weapon_r if bone_id == Skeleton.WEAPON_ATTACH_R else _weapon_l
 	if is_instance_valid(old):
@@ -516,9 +513,11 @@ func get_current_anim() -> String:
 	return _current_anim
 
 
-func get_bone_by_id(id: int) -> Node2D:
-	return _bones.get(id, null)
+## 按 Spine 骨名取骨骼节点（批次 B：骨骼字典键 = 骨名，不再是数字 id）
+func get_bone_by_name(name: String) -> Node2D:
+	return _bones.get(name, null)
 
 
-func get_bone_ids() -> Array:
+## 全部骨名（Spine 原名）
+func get_bone_names() -> Array:
 	return _bones.keys()

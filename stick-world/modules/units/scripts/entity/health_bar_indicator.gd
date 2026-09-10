@@ -96,8 +96,8 @@ const FADE_SPEED := 3.0
 ## 头部骨骼节点（跟头 x 对齐；找到前回退实体原点）
 var _head_node: Node2D = null
 var _head_find_tried: bool = false
-## 头骨骼路径（颈根——头球中心与颈根 x 基本一致，水平对齐够用）
-const HEAD_NODE_PATH := "hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head"
+## 头骨骼路径（Spine 骨名链，批次 B 渲染重标后；头球中心与颈根 x 基本一致）
+const HEAD_NODE_PATH := "RigRoot/root/bone/minertorso1/bone2/bone3/minerhead1"
 
 
 func _ready() -> void:

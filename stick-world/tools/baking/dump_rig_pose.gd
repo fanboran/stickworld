@@ -26,7 +26,7 @@ const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd"
 
 const DEFAULT_ANIMS := "idle,walk,run,attack"
 const DEFAULT_FPS := 15.0
-const DEFAULT_DIR := "res://modules/units/animations/"
+const DEFAULT_DIR := "res://modules/units/animations/spine/"
 const DEFAULT_OUT := "res://tools/baking/rig_pose.json"
 
 
@@ -213,15 +213,15 @@ func _reset_pose(bones: Dictionary, setup_rot: Dictionary, setup_pos: Dictionary
 		b.position = setup_pos[id]
 
 
-## 契约帧快照：按 BONE_NAMES 顺序输出全部骨骼 {x, y, angle}（全局变换，3 位小数）
+## 契约帧快照：按骨表顺序输出全部骨骼 {x, y, angle}（全局变换，3 位小数）
 func _snapshot_pose(bones: Dictionary) -> Dictionary:
 	var out := {}
-	for id in Skeleton.BONE_NAMES.keys():
-		var b: Bone2D = bones.get(id)
+	for name in bones:
+		var b: Bone2D = bones[name]
 		if b == null:
 			continue
 		var xf: Transform2D = b.global_transform
-		out[Skeleton.BONE_NAMES[id]] = {
+		out[str(name)] = {
 			"x": xf.origin.x,
 			"y": xf.origin.y,
 			"angle": rad_to_deg(xf.get_rotation()),
@@ -232,8 +232,8 @@ func _snapshot_pose(bones: Dictionary) -> Dictionary:
 ## 原始精度快照（即时性验证用，不四舍五入）：逐骨 [x, y, angle_deg]
 func _snapshot_raw(bones: Dictionary) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
-	for id in Skeleton.BONE_NAMES.keys():
-		var b: Bone2D = bones.get(id)
+	for name in bones:
+		var b: Bone2D = bones[name]
 		if b == null:
 			continue
 		var xf: Transform2D = b.global_transform

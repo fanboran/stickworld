@@ -12,12 +12,12 @@ const DEFAULT_WEAPON_PATH := "res://modules/units/scenes/components/weapon_sword
 #  武器挂载
 # ============================================================
 
-## 挂载武器到手部骨骼
+## 挂载武器到武器/盾骨
 ## scene: 武器 PackedScene（null 时右手自动加载占位剑）
-## bone_id: 挂载骨骼 ID（WEAPON_ATTACH_R 或 WEAPON_ATTACH_L）
-## bones: 骨骼字典
+## bone_id: 挂载骨名（WEAPON_ATTACH_R="pickaxe1" 或 WEAPON_ATTACH_L="Arrow1"）
+## bones: 骨骼字典（键 = Spine 骨名）
 ## 返回: 武器实例（Node2D），或 null
-static func attach(scene: PackedScene, bone_id: int, bones: Dictionary) -> Node2D:
+static func attach(scene: PackedScene, bone_id: String, bones: Dictionary) -> Node2D:
 	if bone_id == Skeleton.WEAPON_ATTACH_R and scene == null:
 		if ResourceLoader.exists(DEFAULT_WEAPON_PATH):
 			scene = load(DEFAULT_WEAPON_PATH)

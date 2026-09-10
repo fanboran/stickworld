@@ -30,8 +30,11 @@ const WALK_ANIM_BASE: float = 100.0
 const ANIM_SPEED_MULT: float = 1.4
 ## 切到 idle 的速度阈值
 const IDLE_THRESHOLD: float = 5.0
-## 火柴人渲染缩放（对齐 stickman_test.BASE_SCALE * 1.5，适配 DESIGN_HEIGHT=1080）
-var BASE_SCALE: float = 0.5
+## 火柴人渲染缩放（适配 DESIGN_HEIGHT=1080）。
+## 批次 B 用真 Spine 骨架（髋→脚底 188.86 骨单位）替换旧手搓骨架（131）：此处
+## 按「髋→脚底屏幕距离不变（131×0.5=65.5px）」重锚定，脚部对齐/碰撞体屏幕尺寸
+## 与改前完全一致；其余比例随真数据修正（头更小、腿更长，整体高 ~9%）。
+var BASE_SCALE: float = 0.3468
 ## 主手武器类型 -> 攻击动画名：单一真相源在 StickmanAnims.WEAPON_ATTACK_ANIM。
 ## 表现侧（本文件 play_attack）与战斗侧（weapon_mount 订阅命中帧事件）共用同一张表，
 ## 避免"播矛刺动画、却按剑的命中帧结算"的错配。

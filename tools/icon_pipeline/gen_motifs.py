@@ -353,11 +353,6 @@ def build_ink_shells(scene, target):
         # 近水平面（顶/底面）壳被跳过、斜面壳位移方向跑偏，屏幕上/下轮廓的
         # 描边覆盖不均=单侧偏薄（64/256 同源同向，64px 上肉眼可见）
         view = (cam.matrix_world.to_3x3() @ Vector((0.0, 0.0, -1.0))).normalized()
-        # 壳沿视线后移 lift（正交相机下不改变屏幕投影）：壳面与本体外侧面
-        # 在视线方向近乎共面，同场渲染会 Z-fighting；后移让本体稳赢深度，
-        # 壳只露轮廓外的环带=描边。lift 须远小于部件间距（世界 0.02 级），
-        # 否则前景部件的描边会被背景部件盖掉
-        lift = cam.data.ortho_scale * 0.012
         verts_out = []
         faces_out = []
         face_shells = []   # (bm_face, 该面壳顶点在 verts_out 的索引序列)
@@ -367,7 +362,7 @@ def build_ink_shells(scene, target):
             if n_plane.length <= 1e-4:
                 continue   # 正对相机：完全在 cel 覆盖之下，无需壳
             n_plane.normalize()
-            off = Rinv @ (n_plane * thickness + view * lift)   # 相机平面外拓 + 沿视线后移防共面闪烁
+            off = Rinv @ (n_plane * thickness)   # 只回转方向，不平移（防壳飞离原体）
             i0 = len(verts_out)
             faces_out.append(tuple(range(i0, i0 + len(face.verts))))
             for v in face.verts:
@@ -403,22 +398,15 @@ def build_ink_shells(scene, target):
         bm.free()
         sh = bpy.data.objects.new(f"{o.name}_ink_shell", sh_mesh)
         sh['is_ink_shell'] = 1
-        if o.get('fire'):
-            sh['fire_shell'] = 1   # 火焰壳跟随火焰本体隐藏（发光体不描边）
         sh.matrix_world = o.matrix_world.copy()
         sh.data.materials.append(ink)
         scene.collection.objects.link(sh)
 
 def render_two(scene, tag, t, classic=False, margin=1.06):
-    """shade pass：平面物体面烘色、曲面物体 toon 着色器分档，壳与 cel **同场
-    渲染**（inverted hull 正统用法）——描边的显隐由 Z-buffer 遮挡自动决定：
-    前景部件的壳描边画在背景部件上=部件分界线，外轮廓/内部线/粗细/有-无
-    全部同源；壳已沿视线后移 lift 防共面闪烁。再 ID pass（壳隐藏，壳不带
-    pid）。母题对象全部单槽，原位替换材质，无钳零问题。classic=True 全白模
-    受光连续明度（豁免母题 v1 渲染语义——其 compose 侧假光依赖连续明度场）。
-    曾把壳单独渲 ink pass 由 compose「cel 在上」合成——遮挡语义交给合成层后，
-    贴合部件间的分界线被背景 cel 盖掉（有/无不齐、粗细不匹配、端点错位三症，
-    见 idege 退役记录），同场渲染才是正解。"""
+    """shade pass：平面物体面烘色、曲面物体 toon 着色器分档（输出即 cel 灰阶
+    +几何描边壳）；再 ID pass（壳先隐藏，壳不带 pid）。
+    母题对象全部单槽，原位替换材质，无钳零问题。classic=True 全白模受光
+    连续明度（豁免母题 v1 渲染语义——其 compose 侧假光依赖连续明度场）"""
     build_ink_shells(scene, t)
     fit_ortho(scene, margin)   # 二次取景：把描边壳的外扩纳入画框
     if not classic:
@@ -430,14 +418,24 @@ def render_two(scene, tag, t, classic=False, margin=1.06):
                 continue
             if o.type == 'MESH':
                 o.data.materials[0] = white
-    # shade pass：壳与 cel 同场；火焰本体与其壳隐藏（发光体不描边，火焰由
-    # fire pass 承担）
+    # shade pass：壳与火焰隐藏——shade 保持纯 cel（墨线/火焰各自单独承担）
     for o in scene.objects:
-        if o.get('fire') or o.get('fire_shell'):
+        if o.get('is_ink_shell'):
+            o.hide_render = True
+        if o.get('fire'):
             o.hide_render = True
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_shade.png")
     bpy.ops.render.render(write_still=True)
     print("rendered", tag, t, "shade")
+    sys.stdout.flush()
+    # 墨线 pass：只渲描边壳（透明底）；compose「cel 在上、墨壳在下」合成，
+    # 墨壳被 cel 覆盖的部分不显形，只在轮廓外露出一圈描边
+    for o in scene.objects:
+        if o.type == 'MESH':
+            o.hide_render = not bool(o.get('is_ink_shell'))
+    scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_ink.png")
+    bpy.ops.render.render(write_still=True)
+    print("rendered", tag, t, "ink")
     sys.stdout.flush()
     # 火焰 pass：只渲火焰标记件（平滑渐变发光，compose 原样合成不过色带）
     has_fire = any(o.get('fire') for o in scene.objects if o.type == 'MESH')
@@ -456,7 +454,7 @@ def render_two(scene, tag, t, classic=False, margin=1.06):
             o.hide_render = True
             continue
         if o.type == 'MESH':
-            o.hide_render = False   # 火焰 pass 曾隐藏原体——ID 前必须解封（曾致 ID 全黑、全库误涂墨炭）
+            o.hide_render = False   # 墨线/火焰 pass 曾隐藏原体——ID 前必须解封（曾致 ID 全黑、全库误涂墨炭）
             o.data.materials[0] = flat_mat(f"_id{o['pid']}", M.ID_COLORS[o['pid']])
     scene.render.filepath = os.path.join(OUT, f"{tag}_{t}_id.png")
     bpy.ops.render.render(write_still=True)

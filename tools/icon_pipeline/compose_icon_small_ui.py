@@ -20,6 +20,7 @@ except Exception as _e:
     _MOTIFS, _NAME = [], {}
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+INK = np.array([18, 14, 9])
 
 # (tag, 中文名, 假光参数 or None)
 TAGS = [
@@ -115,12 +116,38 @@ def cel(tag, fake, target, out_ink=None, nids=10):
             out[m] = np.array([ramp[min(b, len(ramp) - 1)] for b in band[m]]) * 255
 
     # 反向壳墨线层（C 阶段）：渲染端单独渲 ink pass（只有描边壳完整剪影）。
-    # 描边已在渲染端与 cel 同场渲染（inverted hull 正统用法，显隐由 Z-buffer
-    # 遮挡决定），shade 图自带全部描边。曾用的 ink pass +「cel 在上」over 合成
-    # +合并环带白名单随同场渲染一并退役：遮挡语义交给合成层后，贴合部件间的
-    # 分界线被背景 cel 盖掉（有/无不齐、粗细不匹配、端点错位三症，见 idege
-    # 退役与同场渲染记录）。
-    alpha512 = sa[..., 3:4]
+    # 合成必须在渲染域（同分辨率空间）先做「cel 在上、墨壳在下」的 over——
+    # 曾把 ink 图留到裁切缩放后合成：两图 bbox 不同（ink 比 cel 大一圈线宽），
+    # 各自居中缩放=相对错位一圈线宽（256px 描边悬空可见，创始人审计）。
+    # 渲染域同坐标系合成后，后续裁缩对两层完全一致，零对位误差。
+    ink_fp = os.path.join(BASE, f"{tag}_{target}_ink.png")
+    has_ink = os.path.exists(ink_fp)
+    if has_ink:
+        inkim = np.asarray(Image.open(ink_fp).convert("RGBA")).astype(np.float32)
+        # 合并外轮廓环带白名单（v1 语义）：v1 描边=合并剪影的外轮廓环，部件
+        # 重叠区内部无描边；壳架构是每部件各自描边，交叉区双方描边叠加出
+        # 黑块。ink 只保留「合并剪影外扩 R 内」的环带（外轮廓描边+洞缘描边，
+        # 洞缘在 dilate 带内自然保留），重叠区内部墨由 cel 在上自动覆盖。
+        # 曾同时做「窄缝墨压制」（闭运算清窄缝 ink，想恢复缝透明）——但缝
+        # 两侧部件边缘的贴边描边落在缝带内被一并清掉，同 pid 部件间又无
+        # idedge 缝线补位→线条转弯处断口（虚焊）。窄缝处的壳墨融合成连贯
+        # 线（描边 join 观感）才是连续性优先的正确取舍，故只留环带白名单。
+        sol = sa[..., 3] > 128
+        R = {64: 8, 128: 9, 256: 10}[target]
+        r = sol
+        for _ in range(R):
+            x = r.copy()
+            x[1:, :] |= r[:-1, :]; x[:-1, :] |= r[1:, :]; x[:, 1:] |= r[:, :-1]; x[:, :-1] |= r[:, 1:]
+            r = x
+        inkim[..., 3] *= r
+        a_cel = sa[..., 3:4] / 255.0
+        a_ink = inkim[..., 3:4] / 255.0
+        A = a_cel + a_ink * (1 - a_cel)
+        w = a_cel / np.maximum(A, 1e-6)
+        out = out * w + inkim[..., :3] * (1 - w)
+        alpha512 = A * 255.0
+    else:
+        alpha512 = sa[..., 3]
 
     fire_fp = os.path.join(BASE, f"{tag}_{target}_fire.png")
     if os.path.exists(fire_fp):
@@ -146,12 +173,32 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     cv.paste(small, ((target - inner) // 2, (target - inner) // 2))
 
     a = np.asarray(cv).copy()
-    # 内部线条全部由渲染端反向壳天然承担：每个部件自己的壳描边贴着部件轮廓，
-    # 前景部件的描边显示在背景部件上=部件分界线（粗细=外描边、位置精确、
-    # 凡部件边缘必有）。v1 遗留的图像域部件缝线（idege）已整体退役——它按
-    # 「部件颜色不同才画」工作（同色部件间无内部线=有/无不齐）、靠模糊膨胀
-    # 画（比壳描边粗且发虚）、画在低分辨率部件图边界上且端点提前断（与外
-    # 描边接不上），三重不一致在壳架构下无存在价值。
+    op = a[..., 3] > 128
+    # 外轮廓墨线已由渲染端反向壳承担（ink pass 合成）。此节只剩：无 ink 层的
+    # 回退环（视觉轮廓 alpha>16 向内一圈）+ ID 结合缝线（拼版概念，保留图像域）。
+    if has_ink:
+        ring = np.zeros_like(op, dtype=np.float32)
+    else:
+        vis = a[..., 3] > 16
+        vis_img = Image.fromarray((vis * 255).astype(np.uint8))
+        ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
+        ring = (vis & ~ero_vis).astype(np.float32)
+    if target >= 128:
+        pid8 = Image.fromarray((part + 1).astype(np.uint8)).resize((target, target), Image.NEAREST)
+        pmax = np.asarray(pid8.filter(ImageFilter.MaxFilter(3)))
+        pmin = np.asarray(pid8.filter(ImageFilter.MinFilter(3)))
+        # 只画「部件-部件」交界缝线：窗内必须全是真实部件（pmin>=1 即不含
+        # part=-1 的壳墨/背景区）。壳描边架构下成品 op 实心区扩到壳剪影，
+        # 「部件 vs 壳墨区」的边界若不排除，会在形体外缘再画一圈墨——与
+        # 壳描边之间夹 cel 边缘 AA 带 = 双层线/悬空描边（256px 审计病灶）
+        idedge = (pmax != pmin) & (pmin >= 1) & op
+        ring = ring + np.asarray(Image.fromarray((idedge * 255).astype(np.uint8))
+                                 .filter(ImageFilter.MaxFilter(3))).astype(np.float32) / 255.0 * (0.6 if target == 128 else 0.8)
+    w = np.clip(ring, 0, 1)
+    w = np.asarray(Image.fromarray((w * 255).astype(np.uint8))
+                   .filter(ImageFilter.GaussianBlur(0.6))).astype(np.float32) / 255.0
+    w = w[..., None]
+    a[..., :3] = a[..., :3] * (1 - w) + INK * w
     cv = Image.fromarray(a, "RGBA")
 
     aa = np.asarray(cv)

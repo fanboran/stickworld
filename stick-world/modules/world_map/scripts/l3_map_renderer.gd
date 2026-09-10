@@ -9,9 +9,11 @@ class_name L3MapRenderer
 ##   MODE_L1   : 底 = 69 块老 L1 地块（鲜艳配色）
 ##   MODE_CITY : 底 = 1038 块城市（像 city_preview 花花绿绿）
 ## hover 恒命中老 L1 索引图（label 直编）；点击下钻仍按 L2（L3MapController 用 L2 索引图）。
-## 线条语言（R8 层2）：政治模式界线三级——国界 3px 实线（亮，states 邻接提取）+
-## 地区界 2px 长虚线（§7.3-6 规范表，手绘固定 seed 不沸腾）；hover = boiling 手绘
-## 笔触（血条同拍）；线宽/色全部走 MapTokens。
+## 线条语言（R8 层2 token 化 + feedback1 去抖动 + feedback2 统一几何源）：政治模式
+## 界线三级——国界 3px 实线（亮）+ 地区界 2px 长虚线（§7.3-6 规范表），**都从
+## l3_city 城块共享边邻接提取**（同一几何源，同一条物理边界只有一条线；旧 region
+## polygon 虚线双源错位退役）；线条平滑直绘（antialiased），共享边端点共点严丝合缝；
+## 线宽/色全部走 MapTokens。
 ## 性能：两级 mesh 加载时一次性烘焙，每帧按模式 draw_mesh。
 
 enum DisplayMode { MODE_L1, MODE_CITY }
@@ -84,17 +86,16 @@ var _political_result: Image = null
 ## （POLITICAL 模式回退现状着色）
 var _political_layer: Sprite2D = null
 
-## 政治模式界线三级缓存（R8 层2，首次政治绘制时一次构建）：
-##   国界 3px 实线（亮）——数据源 = l3_city 城块共享边两侧政权不同（states 邻接，
-##   MapSketch.edge_key 无向边提取）；地区界 2px 长虚线——现行 region 几何沿用。
-##   手绘固定 seed 不沸腾（顶点拖拽式，共享端点连续无缝）；笔触按构建时 zoom
-##   固化成地图单位（烙在地图上），线宽绘制时实时 ÷zoom 保持屏幕恒定
+## 政治模式界线缓存（R8 层2 建，feedback2 A/C 重构）：全部从城块共享边邻接提取
+## （单一几何源）。国界 3px 实线（亮）= 两侧均政权且不同；地区界 2px 长虚线 =
+## 两侧地区不同且非国界（与国界互斥 = 同一条物理边界只有一条线）；自由城邦界
+## 1px 细灰短虚线 = 恰一侧政权（国 vs 无归属 253，feedback2 A 降级样式，防御类）。
+## feedback1 去抖动：平滑直绘，虚线按构建时 zoom 固化成地图单位（烙在地图上），
+## 线宽绘制时实时 ÷zoom 保持屏幕恒定
 var _national_border_segs := PackedVector2Array()
 var _political_region_segs := PackedVector2Array()
+var _free_city_border_segs := PackedVector2Array()
 var _political_borders_built := false
-## boiling 时钟/帧号（R8 层2 动态线节拍：hover/玩家区笔触；0.12s 重掷，血条同拍）
-var _boiling_time := 0.0
-var _boiling_frame := 0
 
 ## 地图标注层（R8 层3）：国名 + 都城星标（§7.3-6 规范表 L3=只画首都星标+国名），
 ## 子节点随本渲染器被相机缩放；仅 POLITICAL 模式绘制（政治语义，层内自判门控）
@@ -273,16 +274,7 @@ func _process(delta: float) -> void:
 	if visible and not _glow_outlines.is_empty():
 		_glow_time += delta
 		queue_redraw()
-	# 动态线 boiling（hover/玩家区笔触）：0.12s 重掷帧号（血条同拍），变化才重绘
-	if visible and not hovered_l1.is_empty():
-		_boiling_time += delta
-		var frame := MapSketch.boiling_seed(_boiling_time)
-		if frame != _boiling_frame:
-			_boiling_frame = frame
-			queue_redraw()
-	else:
-		_boiling_time = 0.0
-		_boiling_frame = 0
+	# feedback1 去抖动：hover/玩家区笔触已回平滑直绘，无 boiling 重掷重绘需求
 	if not visible or _data == null:
 		return
 	var viewport := get_viewport()
@@ -357,6 +349,11 @@ func _load_political_async() -> void:
 		return
 	var img := Image.new()
 	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
+		# 格式归一 RGBA8（feedback1 掉色修复）：PNG 是单通道 L8，d3d12 渲染后端
+		# canvas shader 采样 L8 纹理异常（.r 恒 0 → idx 全 0 → 全图只剩海洋色）。
+		# L8→RGBA8 灰度值原样复制进 RGB 通道，R 值逐位不变（保留码 254/255 不受影响）。
+		if img.get_format() != Image.FORMAT_RGBA8:
+			img.convert(Image.FORMAT_RGBA8)
 		_political_result = img
 
 
@@ -492,24 +489,23 @@ func _draw() -> void:
 			draw_mesh(_l1_mesh, null)
 		if _l1_holes_mesh != null:
 			draw_mesh(_l1_holes_mesh, null)
-	# 3. 界线（R8 层2 分级）：政治模式 = 国界 3px 实线（亮）+ 地区界 2px 长虚线
-	#    （手绘固定 seed，§7.3-6 规范表）；其他模式 = L2 地区常驻描边（现状语义）
+	# 3. 界线（R8 层2 分级 + feedback2 统一几何源）：政治模式 = 国界 3px 实线（亮）
+	#    + 地区界 2px 长虚线 + 自由城邦界 1px 细灰短虚线（§7.3-6 规范表，城块邻接
+	#    同源提取）；其他模式 = L2 地区常驻描边（现状语义）
 	if political_ready:
 		_draw_political_borders()
 	else:
 		_draw_l2_borders()
 	# 3.5 玩家当前所在 L2 地区：整区蓝光流动描边（"你在这里"）。
-	#     R8 层2：FlowOutline 流动语义保留，叠加 boiling 手绘笔触（血条同拍）
+	#     FlowOutline 流动语义保留（feedback1 去抖动：平滑轮廓直绘）
 	if not _glow_outlines.is_empty():
 		var gw := PLAYER_GLOW_MAP_WIDTH
 		if _camera != null and _camera.has_method("get_zoom"):
 			var gz: float = _camera.get_zoom()
 			if gz > 0.0001:
 				gw = minf(PLAYER_GLOW_MAP_WIDTH, PLAYER_GLOW_SCREEN_CAP / gz)
-		var gseed := MapSketch.id_seed("l3_player_glow") + _boiling_frame
 		for outline in _glow_outlines:
-			var gwobble := MapSketch.wobble_polyline(outline, gseed, gw, true)
-			FlowOutline.draw_flow(self, gwobble, PLAYER_GLOW_A, PLAYER_GLOW_B, _glow_time, gw)
+			FlowOutline.draw_flow(self, outline, PLAYER_GLOW_A, PLAYER_GLOW_B, _glow_time, gw)
 	# 4. hover 老 L1 高亮（黄线轮廓）
 	_draw_hover_l1()
 	# 5. L2 地区编号（F3 调试模式）
@@ -530,8 +526,9 @@ func _draw_l2_borders() -> void:
 			draw_polyline(bpts, L2_BORDER_COLOR, bw, true)
 
 
-## 政治模式界线三级绘制（R8 层2）：国界 3px 实线（亮，TEXT 白）+ 地区界 2px 长虚线。
-## 手绘笔触固定 seed 不沸腾；国界由 states 邻接（城块共享边）提取（见构建函数）
+## 政治模式界线三级绘制（R8 层2）：国界 3px 实线（亮，TEXT 白）+ 地区界 2px 长虚线
+## + 自由城邦界 1px 细灰短虚线。三类都由城块邻接提取（见构建函数，feedback2 A/C：
+## 单一几何源）；feedback1 去抖动：平滑直绘
 func _draw_political_borders() -> void:
 	if not _political_borders_built:
 		_build_political_borders()
@@ -546,11 +543,25 @@ func _draw_political_borders() -> void:
 	if _political_region_segs.size() >= 2:
 		draw_multiline(_political_region_segs, MapTokens.LINE_REGION_COLOR,
 			MapTokens.LINE_REGION / zz, true)
+	if _free_city_border_segs.size() >= 2:
+		draw_multiline(_free_city_border_segs, MapTokens.LINE_FREE_COLOR,
+			MapTokens.LINE_FREE / zz, true)
 
 
-## 构建政治模式界线缓存（首次政治绘制一次）：
-## 国界 = l3_city 1040 城块多边形共享边的无向 key 分组，两侧政权不同即国界段
-## （一次字典构建 ~4 万边，毫秒级×几十）；地区界 = 现行 region 几何，手绘+长虚线
+## 构建政治模式界线缓存（首次政治绘制一次）——单一几何源（feedback2 A/C）：
+## 国界与地区界都从 l3_city 城块共享边的无向 key 分组提取（一次字典构建 ~4 万边，
+## 毫秒级×几十），同一物理边界按「国界 > 地区界 > 自由城邦界」优先级只画一条线；
+## 旧「国界用城块邻接 + 地区界用 region polygon」双源错位（feedback2 C）与
+## 「国 vs 无归属也画国界」的白线乱走（feedback2 A）就此根除。
+## 边分类（feedback2 A）：
+##   国界 = 两侧均政权（lut_index 1..80/城邦 73..80）且不同国；
+##   地区界 = 两侧地区 label 不同且非国界（同源城块边聚合）；
+##   自由城邦界 = 双侧都是城块且恰一侧政权（国 vs 无归属 253）→ 降级 1px 细灰短虚线
+##   （选择理由：保住国体领土范围在灰底自由城邦旁的可读性，又不与国界抢语义）。
+##   必须用 tiles 集合限定「双侧城块」：states/regions 集合无法区分「另一侧是无归属
+##   城块」与「另一侧是海/荒野」（单侧贡献）——后者含 3.2 万条海岸边 + 1,450 条同国
+##   内部边，不限会把全图撒满灰虚线（feedback2 A 审计实测）；限后现数据（城块全有
+##   归属）此类边为 0，纯防御。
 func _build_political_borders() -> void:
 	_political_borders_built = true
 	var zz := 1.0
@@ -558,12 +569,11 @@ func _build_political_borders() -> void:
 		zz = _camera.get_zoom()
 	if zz <= 0.0001:
 		zz = 1.0
-	# 1) 国界提取：边 key → {两侧政权集合, 端点}
+	# 1) 边提取：无向 key -> {端点, 两侧政权集合, 两侧地区集合, 贡献块集合}
 	var edges := {}
 	for t in _data.city_tiles:
 		var st: String = t.get("state_id", "")
-		if st.is_empty():
-			continue
+		var rg := int(t.get("region", 0))
 		for poly in (t.get("polygons", []) as Array):
 			var n: int = poly.size()
 			if n < 3:
@@ -579,40 +589,32 @@ func _build_political_borders() -> void:
 				var key := MapSketch.edge_key(a, b)
 				var e: Dictionary = edges.get(key, {})
 				if e.is_empty():
-					e = {"a": a, "b": b, "states": {}}
+					e = {"a": a, "b": b, "states": {}, "regions": {}, "tiles": {}}
 					edges[key] = e
-				e["states"][st] = true
-	# 2) 国界段手绘扰动（固定 seed；宽按构建时 zoom 固化成地图单位）
+				if not st.is_empty():
+					e["states"][st] = true
+				if rg > 0:
+					e["regions"][rg] = true
+				e["tiles"][int(t.get("label", 0))] = true
+	# 2) 分类（feedback1 去抖动：原始共享边直绘——端点即两侧城块共点，三岔交界
+	#    严丝合缝；虚线按构建时 zoom 固化成地图单位）
 	_national_border_segs = PackedVector2Array()
-	var nw := MapTokens.LINE_NATIONAL / zz
-	var nseed := MapSketch.id_seed("l3_national")
+	_political_region_segs = PackedVector2Array()
+	_free_city_border_segs = PackedVector2Array()
 	for key in edges:
 		var e: Dictionary = edges[key]
-		var sts: Dictionary = e["states"]
-		if sts.size() < 2:
-			continue
-		var wpts := MapSketch.wobble_polyline(
-			PackedVector2Array([e["a"], e["b"]]), nseed, nw, false)
-		for i in range(wpts.size() - 1):
-			_national_border_segs.append(wpts[i])
-			_national_border_segs.append(wpts[i + 1])
-	# 3) 地区界（region 几何沿用）：闭合环手绘 + 长虚线
-	_political_region_segs = PackedVector2Array()
-	var rw := MapTokens.LINE_REGION / zz
-	var rseed := MapSketch.id_seed("l3_region")
-	for r in _data.regions:
-		for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
-			if poly.size() < 3:
-				continue
-			var pts := PackedVector2Array()
-			for pp in poly:
-				pts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
-			var wpts := MapSketch.wobble_polyline(pts, rseed, rw, true)
-			if wpts.size() < 2:
-				continue
-			wpts.append(wpts[0])
-			MapSketch.dash_segments(_political_region_segs, wpts,
+		var ab := PackedVector2Array([e["a"], e["b"]])
+		if (e["states"] as Dictionary).size() >= 2:
+			_national_border_segs.append(e["a"])
+			_national_border_segs.append(e["b"])
+		elif (e["regions"] as Dictionary).size() >= 2:
+			MapSketch.dash_segments(_political_region_segs, ab,
 				MapTokens.DASH_LONG / zz, MapTokens.DASH_LONG_GAP / zz)
+		elif (e["states"] as Dictionary).size() == 1 \
+				and (e["tiles"] as Dictionary).size() >= 2:
+			# 双侧城块且恰一侧政权 = 国 vs 无归属城块；单侧贡献（海岸/荒野）不画
+			MapSketch.dash_segments(_free_city_border_segs, ab,
+				MapTokens.DASH_SHORT / zz, MapTokens.DASH_SHORT_GAP / zz)
 
 
 func BORDER_WIDTH() -> float:
@@ -633,17 +635,15 @@ func _draw_hover_l1() -> void:
 		var z: float = _camera.get_zoom()
 		if z > 0.0001:
 			hw = minf(HOVER_MAP_WIDTH, HOVER_SCREEN_CAP / z)
-	# R8 层2：hover = 交互线槽色 + boiling 手绘笔触（"活"的笔触只给交互层）
-	var hseed := MapSketch.id_seed("l3_hover") + _boiling_frame
+	# feedback1 去抖动：hover 平滑闭合直绘
 	for hp in hpolys:
 		if hp.size() < 3:
 			continue
 		var hpts := PackedVector2Array()
 		for pp in hp:
 			hpts.append(pp if pp is Vector2 else Vector2(pp[1], pp[0]))
-		var hwobble := MapSketch.wobble_polyline(hpts, hseed, hw, true)
-		hwobble.append(hwobble[0])
-		draw_polyline(hwobble, HOVER_COLOR, hw, true)
+		hpts.append(hpts[0])
+		draw_polyline(hpts, HOVER_COLOR, hw, true)
 
 
 ## F3 调试：给每个 L2 地区打编号（地区质心；centroid 2048 级 × size/mask 比例）。
@@ -664,6 +664,5 @@ func _draw_l2_labels() -> void:
 			continue
 		var pos := Vector2(float(c[0]), float(c[1])) * scale
 		var txt := "L2#%d" % label
-		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
-			draw_string(font, pos + off * 2.0, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, L2_LABEL_SIZE, L2_LABEL_BG)
+		draw_string_outline(font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, L2_LABEL_SIZE, 2, L2_LABEL_BG)
 		draw_string(font, pos + Vector2(4.0, -L2_LABEL_SIZE * 0.3), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, L2_LABEL_SIZE, L2_LABEL_COLOR)

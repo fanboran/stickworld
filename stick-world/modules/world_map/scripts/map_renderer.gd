@@ -13,12 +13,10 @@ class_name MapRenderer
 ## 标记、快速旅行路由高亮（琥珀虚线——虚线的正确语用位置，§7.2-4）、纸边框。
 ## 静态层贴图缺失时回退矢量管线（政权色填充 + 实线道路分级——R6 废虚线）。
 ##
-## 线条语言（R8 层2）：地图线条 = 手绘马克笔，与 UI 控件边框同源（MapSketch，
-## wobble 公式/采样密度/boiling 节拍直接复用 SketchDraw）。
-##   静态线（城界/出生轮廓/邻居轮廓/河流）：固定 seed（几何 id/坐标 hash 派生，
-##   MapSketch DJB2）**不沸腾**；wobble 在缓存构建时做一次
-##   动态线（hover/路由高亮/玩家脉冲环/当前城笔触）：boiling 0.12s 重掷（血条同拍）
-## 线宽/色全部走 MapTokens（本文件零字面量）；琥珀只出现在路由高亮（操作语义）。
+## 线条语言（R8 层2 token 化 + feedback1 去抖动）：线条平滑直绘
+## （draw_polyline/draw_multiline/draw_arc，antialiased），严丝合缝——共享边
+## 无向去重只描一次、端点共点。线宽/色全部走 MapTokens（本文件零字面量）；
+## 琥珀只出现在路由高亮（操作语义）。
 ##
 ## 建成区 blob V2（§R5，创始人拍板随人口增长动态化）：每包三档严格嵌套贴图
 ## （blob_low/mid/high.png，high ⊆ mid ⊆ low）逐层叠加 = 每城烘焙档形状；
@@ -46,8 +44,7 @@ var _camera: MapCamera = null
 ## 当前悬停的地块 ID（""=无）
 var hovered_tile_id: String = ""
 
-## 性能缓存：城市描边段 + 出生 L1 轮廓 + 邻居空心轮廓 + 河流折线（R8 层2 起存的是
-## **手绘扰动后**的点列——wobble 在缓存构建时做一次，几何不变则扰动不变，不沸腾；
+## 性能缓存：城市描边段 + 出生 L1 轮廓 + 邻居空心轮廓 + 河流折线（原始平滑点列；
 ## 不随 zoom/hover 变化，set_data 后首帧构建一次复用）。
 ## 原实现每帧重建描边段并对每段遍历湖全部边做距离计算（4668 段 × 湖边数 ≈ 百万级），
 ## hover 每帧触发 → 卡顿源；缓存后 hover 重绘 = 1 次 draw_multiline。
@@ -56,7 +53,7 @@ var _cached_segs: PackedVector2Array = PackedVector2Array()
 var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
 ## 邻居老 L1 块空心轮廓（每块一条闭合折线，A3 空心化）
 var _cached_neighbor_outlines: Array[PackedVector2Array] = []
-## 河流折线（矢量回退层消费；手绘扰动后，seed = 河流序固定）+ 平行宽度表
+## 河流折线（矢量回退层消费）+ 平行宽度表
 var _river_lines: Array[PackedVector2Array] = []
 var _river_widths: PackedFloat32Array = PackedFloat32Array()
 ## 道路分级缓存（R6 实线分级，set_data 后构建一次）：土路/官道折线组。
@@ -177,7 +174,7 @@ const LABEL_SCREEN_CAP := MapTokens.L1_LABEL_SCREEN_CAP
 
 ## 玩家位置标记（R2，GPS 范式，§7.3-6 规范表）：中心 4px 玩家国色点（白描边）+
 ## 12px 静态细环 + 1.5s 周期向外扩散淡出脉冲环。色取所在地块政权色（内容语义）。
-## 全部尺寸屏幕像素固定（÷zoom 换算）；环手绘化（R8 层2）
+## 全部尺寸屏幕像素固定（÷zoom 换算）
 const PLAYER_DOT_RADIUS := MapTokens.L1_PLAYER_DOT_RADIUS
 const PLAYER_DOT_OUTLINE_W := MapTokens.L1_PLAYER_DOT_OUTLINE_W
 const PLAYER_RING_RADIUS := MapTokens.L1_PLAYER_RING_RADIUS
@@ -211,8 +208,7 @@ var _debug_was_visible: bool = false
 ## 几何 = 该城建成区 blob 轮廓（R2——与城市本体图形共用同一几何，描边与建成区
 ## 轮廓逐像素重合；原整地块多边形描边与城市轮廓不重合，已废）。
 ## 含玩家当前聚落的地块（出生 = spawn 聚落所在块），跨城移动后经 set_current_tile 更新。
-## 双色不透明，与 M 大世界同视觉语言；R8 层2：流动语义保留（FlowOutline 色带），
-## 叠加 boiling 手绘笔触（0.12s 重掷扰动点列，血条同拍）
+## 双色不透明，与 M 大世界同视觉语言；FlowOutline 流动语义保留（色带沿轮廓移动）
 var _current_tile_id: String = ""
 const GLOW_A := MapTokens.L1_GLOW_A
 const GLOW_B := MapTokens.L1_GLOW_B
@@ -224,10 +220,6 @@ var _glow_outline: PackedVector2Array = PackedVector2Array()
 var _glow_time := 0.0
 ## 玩家位置脉冲环相位（秒，PLAYER_PULSE_PERIOD 周期循环）
 var _pulse_time := 0.0
-## boiling 时钟/帧号（R8 层2 动态线节拍）：动态线（hover/路由/脉冲环/当前城笔触）
-## seed = _boiling_frame，每 SketchDraw.WOBBLE_INTERVAL 0.12s 重掷——血条同拍
-var _boiling_time := 0.0
-var _boiling_frame := 0
 
 
 func set_data(data: L1WorldData) -> void:
@@ -618,8 +610,8 @@ func _process(delta: float) -> void:
 	_process_overlay_queue()
 	if not is_visible_in_tree() or _data == null:
 		return
-	# 动画相位推进：当前城流动光 + 玩家位置脉冲环 + 动态线 boiling（有任一动画即逐帧
-	# 重绘；静态层均缓存，成本低）。boiling = 0.12s 重掷一次（血条同拍），seed 变化才重绘
+	# 动画相位推进：当前城流动光 + 玩家位置脉冲环（有任一动画即逐帧重绘；
+	# 静态层均缓存，成本低）。线条已回平滑直绘，无 boiling 重掷重绘需求
 	var animating := false
 	if not _glow_outline.is_empty():
 		_glow_time += delta
@@ -627,19 +619,6 @@ func _process(delta: float) -> void:
 	if _player_visible:
 		_pulse_time += delta
 		animating = true
-	# 动态线 boiling 时钟（hover/路由高亮/玩家脉冲环/当前城笔触共用）：
-	# 每 0.12s 重掷一次帧号（血条同拍），帧号变化才触发重绘
-	var has_dynamic := not hovered_tile_id.is_empty() or not _route_road_pts.is_empty() \
-			or _player_visible or not _glow_outline.is_empty()
-	if has_dynamic:
-		_boiling_time += delta
-		var frame := MapSketch.boiling_seed(_boiling_time)
-		if frame != _boiling_frame:
-			_boiling_frame = frame
-			animating = true
-	else:
-		_boiling_time = 0.0
-		_boiling_frame = 0
 	if animating:
 		queue_redraw()
 	# 屏幕坐标 -> 地图坐标（一次换算，与 api.query_at_screen 同路径；
@@ -697,7 +676,7 @@ func _draw() -> void:
 				draw_polyline(line, ROAD_COLOR_DIRT, maxf(ROAD_WIDTH_DIRT, 1.0), true)
 			for line in _road_paved_lines:
 				draw_polyline(line, ROAD_COLOR_PAVED, maxf(ROAD_WIDTH_PAVED, 1.2), true)
-		# 1.5 河流（B3）：手绘扰动折线（缓存，seed=河流序固定），画在湖泊之下
+		# 1.5 河流（B3）：平滑折线（缓存），画在湖泊之下
 		#     （河入湖由湖面覆盖）、城市块之上
 		for ri in _river_lines.size():
 			draw_polyline(_river_lines[ri], RIVER_COLOR, _river_widths[ri], true)
@@ -705,14 +684,12 @@ func _draw() -> void:
 			draw_mesh(_lakes_mesh, null)
 	# 1.6 快速旅行路由高亮（P6）：途经道路琥珀虚线加粗 + 节点空心圆（全模式——
 	#     UI 操作语义的虚线，§7.2-4；水系之上连续可见）。
-	#     R8 层2：操作线 = ACCENT；boiling 手绘笔触（0.12s 重掷，扰动点列再切虚线）
+	#     R8 层2：操作线 = ACCENT。feedback1 去抖动：平滑直绘（虚线切段保留）
 	if not _route_road_pts.is_empty():
 		var rw: float = maxf(ctx_size.x * ROUTE_HIGHLIGHT_WIDTH, 2.0)
 		var dash_segs := PackedVector2Array()
 		for ri in _route_road_pts.size():
-			var wpts := MapSketch.wobble_polyline(_route_road_pts[ri],
-				MapSketch.id_seed("route", ri) + _boiling_frame, rw, false)
-			MapSketch.dash_segments(dash_segs, wpts,
+			MapSketch.dash_segments(dash_segs, _route_road_pts[ri],
 				ctx_size.x * ROUTE_DASH, ctx_size.x * ROUTE_GAP)
 		if dash_segs.size() >= 2:
 			draw_multiline(dash_segs, ROUTE_HIGHLIGHT_COLOR, rw, true)
@@ -720,10 +697,7 @@ func _draw() -> void:
 		if zz > 0.0001:
 			nr = ROUTE_NODE_RADIUS / zz
 		for pos in _route_nodes:
-			var nring := MapSketch.wobble_ring(pos, nr,
-				MapSketch.vertex_seed(pos) + _boiling_frame, maxf(rw * 0.35, 1.0))
-			nring.append(nring[0])
-			draw_polyline(nring, Color.WHITE, maxf(rw * 0.35, 1.0), true)
+			draw_arc(pos, nr, 0.0, TAU, 48, Color.WHITE, maxf(rw * 0.35, 1.0), true)
 	if _tiles_mesh == null and not terrain_base:
 		# 回退：数据异常时逐层绘制（邻居空心：只描边，见第 4.5 层）
 		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
@@ -808,29 +782,23 @@ func _draw() -> void:
 			continue
 		draw_circle(tile.settlement.position, dot_r, CITY_DOT_COLOR)
 		draw_arc(tile.settlement.position, dot_r, 0.0, TAU, 48, CITY_DOT_RING, ring_w, true)
-	# 7. hover 城市块描边（交互线槽；屏幕像素固定；boiling 手绘笔触——"活"的笔触
-	#    只给交互层，R8 层2）
+	# 7. hover 城市块描边（交互线槽；屏幕像素固定；feedback1 去抖动：平滑闭合直绘）
 	if not hovered_tile_id.is_empty():
 		var hw: float = HOVER_WIDTH
 		if zz > 0.0001:
 			hw = HOVER_WIDTH / zz
 		for tile in _data.tiles:
 			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
-				var wpts := MapSketch.wobble_polyline(tile.polygon,
-					MapSketch.id_seed(hovered_tile_id, 7) + _boiling_frame, hw, true)
-				wpts.append(wpts[0])
-				draw_polyline(wpts, HOVER_COLOR, hw, true)
+				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)
 				break
 	# 7.5 当前所在城市地块：蓝光流动描边（"你在这里"；屏幕像素固定，画在纸边框内）。
-	#     R8 层2：FlowOutline 流动语义保留（色调波沿线移动），叠加 boiling 手绘
-	#     笔触（扰动点列重采样后再走色带）——一套动画语言，不打架
+	#     FlowOutline 流动语义保留（色调波沿线移动）；feedback1 去抖动：
+	#     撤 boiling 笔触叠加，流动色带直接走平滑轮廓点列
 	if _glow_outline.size() >= 3:
 		var gwid: float = GLOW_WIDTH
 		if zz > 0.0001:
 			gwid = GLOW_WIDTH / zz
-		var gwobble := MapSketch.wobble_polyline(_glow_outline,
-			MapSketch.id_seed(_current_tile_id) + _boiling_frame, gwid, true)
-		FlowOutline.draw_flow(self, gwobble, GLOW_A, GLOW_B, _glow_time, gwid)
+		FlowOutline.draw_flow(self, _glow_outline, GLOW_A, GLOW_B, _glow_time, gwid)
 	# 7.8 内容区"纸张边界"黑框（context 外缘，A3；压住贴边内容 = 装裱观感，屏幕像素固定）
 	var pw: float = PAPER_BORDER_WIDTH
 	if zz > 0.0001:
@@ -898,10 +866,9 @@ func clear_route_highlight() -> void:
 	queue_redraw()
 
 
-## 玩家位置标记（R2，替代拟物图钉；R8 层2 环手绘化）：中心 4px 玩家国色点（白描边）
-## + 12px 手绘静态细环（固定 seed=位置 hash，位置不变笔触不变）
-## + 1.5s 周期脉冲扩散环（boiling 重掷的手绘闭合环，12→36px alpha 0.5→0，玩家国色）。
-## 全部屏幕像素固定。
+## 玩家位置标记（R2，替代拟物图钉；feedback1 去抖动：环回平滑 draw_arc）：
+## 中心 4px 玩家国色点（白描边）+ 12px 静态细环（白，半透明）
+## + 1.5s 周期脉冲扩散环（12→36px alpha 0.5→0，玩家国色）。全部屏幕像素固定。
 func _draw_player_marker(zz: float) -> void:
 	var dot_r := PLAYER_DOT_RADIUS
 	var dot_ow := PLAYER_DOT_OUTLINE_W
@@ -916,19 +883,14 @@ func _draw_player_marker(zz: float) -> void:
 		ring_w /= zz
 		p_from /= zz
 		p_to /= zz
-	# 静态细环（手绘化：固定 seed——不沸腾；白，半透明度略降避免喧宾夺主）
-	var ring_seed := MapSketch.vertex_seed(_player_pos)
-	var ring := MapSketch.wobble_ring(_player_pos, ring_r, ring_seed, ring_w)
-	ring.append(ring[0])
-	draw_polyline(ring, MapTokens.L1_PLAYER_RING_COLOR, ring_w, true)
-	# 脉冲扩散环（手绘化 boiling 闭合环）：0→1 相位，半径 12→36px、alpha 0.5→0，玩家国色
+	# 静态细环（白，半透明度略降避免喧宾夺主）
+	draw_arc(_player_pos, ring_r, 0.0, TAU, 64, MapTokens.L1_PLAYER_RING_COLOR, ring_w, true)
+	# 脉冲扩散环：0→1 相位，半径 12→36px、alpha 0.5→0，玩家国色
 	var t := fmod(_pulse_time, PLAYER_PULSE_PERIOD) / PLAYER_PULSE_PERIOD
 	var pa := lerpf(PLAYER_PULSE_ALPHA, 0.0, t)
 	if pa > 0.01:
-		var pulse := MapSketch.wobble_ring(_player_pos, lerpf(p_from, p_to, t),
-			ring_seed + _boiling_frame, ring_w)
-		pulse.append(pulse[0])
-		draw_polyline(pulse, Color(_player_state_color, pa), ring_w, true)
+		draw_arc(_player_pos, lerpf(p_from, p_to, t), 0.0, TAU, 64,
+			Color(_player_state_color, pa), ring_w, true)
 	# 中心点：玩家国色填充 + 白描边
 	draw_circle(_player_pos, dot_r, _player_state_color)
 	draw_arc(_player_pos, dot_r, 0.0, TAU, 48, Color.WHITE, dot_ow, true)
@@ -993,36 +955,31 @@ func _mesh_from_pairs(pairs: Array) -> ArrayMesh:
 
 ## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓
 ## + 邻居空心轮廓（A3）+ 河流折线。仅 set_data / 首帧调用一次。
-## R8 层2：缓存存**手绘扰动后**点列——静态线固定 seed（几何 id/坐标 hash 派生，
-## MapSketch DJB2 混合）不沸腾；wobble 在构建时做一次，几何不变则扰动不变。
+## feedback1 去抖动：缓存存原始平滑点列（直绘，Godot antialiased）；
+## 无向边去重保留——共享边只描一次，线条严丝合缝不叠双线。
 func _build_cached_geometry() -> void:
 	_cached_segs = PackedVector2Array()
 	_cached_l1_closed = PackedVector2Array()
 	_cached_neighbor_outlines = []
 	_river_lines = []
 	_river_widths = PackedFloat32Array()
-	# 邻居空心轮廓（手绘化：seed = 邻居序，固定）
+	# 邻居空心轮廓（闭合折线缓存）
 	for ni in _data.neighbors.size():
 		for poly in _data.neighbors[ni].get("polygons", []):
 			var pts := _pts(poly)
 			if pts.size() >= 3:
-				var wpts := MapSketch.wobble_polyline(pts,
-					MapSketch.id_seed("neighbor", ni), NEIGHBOR_BORDER_WIDTH, true)
-				wpts.append(wpts[0])
-				_cached_neighbor_outlines.append(wpts)
+				_cached_neighbor_outlines.append(_closed(pts))
 	var lake_tol := _lake_edge_tol()
 	# 湖 bbox（外扩 tol）预筛：段中点不在任何湖 bbox 内 → 直接非邻湖，省精确距离计算
 	var lake_boxes: Array[Rect2] = []
 	for lake in _data.lakes:
 		lake_boxes.append(_lake_bbox(lake, lake_tol))
-	# 城界描边段：无向边去重（相邻 tile 共享边只描一次——扰动后两份笔触才不会叠成
-	# 模糊双线）→ 每边按 tile_id hash seed 手绘扰动（顶点拖拽式：共享端点扰动一致，
-	# 折线连续无缝）
+	# 城界描边段：无向边去重（相邻 tile 共享边只描一次——同一物理边一份描边，
+	# 端点与邻边共点，三岔交界严丝合缝）
 	var seen_edges := {}
 	for tile in _data.tiles:
 		if tile.polygon.size() < 3:
 			continue
-		var tseed := MapSketch.id_seed(tile.tile_id)
 		var pts := tile.polygon
 		var n := pts.size()
 		for i in range(n):
@@ -1034,25 +991,18 @@ func _build_cached_geometry() -> void:
 			if seen_edges.has(key):
 				continue
 			seen_edges[key] = true
-			var wpts := MapSketch.wobble_polyline(PackedVector2Array([a, b]),
-				tseed, TILE_BORDER_WIDTH, false)
-			_append_polyline_segs(_cached_segs, wpts)
-	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环）——手绘化固定 seed
+			_cached_segs.append(a)
+			_cached_segs.append(b)
+	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环）——闭合缓存
 	if _data.l1_polygon.size() >= 3:
-		var l1w := MapSketch.wobble_polyline(_data.l1_polygon,
-			MapSketch.id_seed("l1_polygon"), BORDER_WIDTH, true)
-		if l1w.size() >= 3:
-			l1w.append(l1w[0])
-			_cached_l1_closed = l1w
-	# 河流折线（矢量回退层；seed = 河流序固定，宽随河流数据）
+		_cached_l1_closed = _closed(_data.l1_polygon)
+	# 河流折线（矢量回退层；宽随河流数据）
 	for ri in _data.rivers.size():
 		var rv: Dictionary = _data.rivers[ri]
 		var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
 		if rpts.size() >= 2:
-			var rw := maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH)
-			_river_lines.append(MapSketch.wobble_polyline(rpts,
-				MapSketch.id_seed("river", ri), rw, false))
-			_river_widths.append(rw)
+			_river_lines.append(rpts)
+			_river_widths.append(maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH))
 	# 道路分级（R6 实线分级，废 F5 虚线切分）：土路细 / 官道粗；
 	# 仅交通模式矢量回退时绘制（正常观感走 l1_travel.png 贴图）
 	_road_dirt_lines = []
@@ -1066,13 +1016,6 @@ func _build_cached_geometry() -> void:
 		else:
 			_road_dirt_lines.append(pts)
 	_segs_valid = true
-
-
-## 折线展开为点对 append（draw_multiline 消费：[p0,p1, p1,p2, ...]）
-func _append_polyline_segs(segs: PackedVector2Array, pts: PackedVector2Array) -> void:
-	for i in range(pts.size() - 1):
-		segs.append(pts[i])
-		segs.append(pts[i + 1])
 
 
 ## 无向边去重 key：已迁 `MapSketch.edge_key`（L1 城界共享边去重 / L3 国界邻接共用）。
@@ -1154,8 +1097,8 @@ func _draw_city_labels() -> void:
 			continue
 		var pos := tile.settlement.position
 		var txt := "L1城#" + num
-		for off in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
-			draw_string(font, pos + off * halo, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, LABEL_BG)
+		draw_string_outline(font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+			maxi(1, roundi(halo)), LABEL_BG)
 		draw_string(font, pos + Vector2(2.0, -fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, LABEL_COLOR)
 
 

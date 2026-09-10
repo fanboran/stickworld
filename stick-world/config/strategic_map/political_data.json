@@ -5,11 +5,11 @@
   "n_states": 80,
   "n_cities": 1040,
   "n_states_total": 80,
-  "color_source": "CONTENT_PALETTE 派生（stick_tokens.gd 20 色内容色板，7 族 × 族内明度/饱和档；出生 8 城邦保留原色）",
+  "color_source": "CONTENT_PALETTE 派生（stick_tokens.gd 20 色内容色板，7 族 × 族内明度/饱和档；出生 8 城邦 = CONTENT_PALETTE 族代表色 BIRTH_CITY_STATE_COLORS，旧 P7 HSL 渐变梯废除）",
   "names_status": "提案/待定（出生 8 城邦除外）；正式国名由世界观会话定稿后换 state_names_placeholder.json 重跑",
   "id_mask": {
-   "l3": "l3_political_id_8192.png（单通道，像素值=lut_index 1..80，0=海/无）",
-   "l2": "l2_packs/*/l2_political_id.png（context 窗口裁切，同编码；保留码 254=湖泊 255=邻区灰底）",
+   "l3": "l3_political_id_8192.png（单通道，像素值=lut_index 1..80，保留码 253=自由城邦（无归属陆地）254=湖泊，0=海洋）",
+   "l2": "l2_packs/*/l2_political_id.png（context 窗口裁切，同编码；保留码 254=湖泊 255=邻区灰底，253=自由城邦）",
    "runtime": "PoliticalLut 查表上色（改 LUT 即全图换色，零重烘）"
   }
  },
@@ -1172,9 +1172,9 @@
    "culture": "plain",
    "alliance": null,
    "color": [
-    67,
-    91,
-    34
+    242,
+    173,
+    64
    ],
    "is_city_state": true,
    "n_cities": 1,
@@ -1188,9 +1188,9 @@
    "culture": "plain",
    "alliance": null,
    "color": [
-    82,
-    110,
-    41
+    76,
+    148,
+    133
    ],
    "is_city_state": true,
    "n_cities": 1,
@@ -1204,9 +1204,9 @@
    "culture": "plain",
    "alliance": null,
    "color": [
-    96,
-    129,
-    49
+    107,
+    158,
+    204
    ],
    "is_city_state": true,
    "n_cities": 1,
@@ -1220,9 +1220,9 @@
    "culture": "plain",
    "alliance": null,
    "color": [
-    110,
-    148,
-    56
+    122,
+    97,
+    133
    ],
    "is_city_state": true,
    "n_cities": 1,
@@ -1236,9 +1236,9 @@
    "culture": "plain",
    "alliance": null,
    "color": [
-    124,
-    167,
-    63
+    168,
+    92,
+    76
    ],
    "is_city_state": true,
    "n_cities": 1,
@@ -1252,9 +1252,9 @@
    "culture": "plain",
    "alliance": null,
    "color": [
-    138,
-    186,
-    70
+    199,
+    184,
+    122
    ],
    "is_city_state": true,
    "n_cities": 1,
@@ -1268,9 +1268,9 @@
    "culture": "plain",
    "alliance": null,
    "color": [
-    153,
-    205,
-    78
+    133,
+    107,
+    76
    ],
    "is_city_state": true,
    "n_cities": 1,
@@ -1284,9 +1284,9 @@
    "culture": "plain",
    "alliance": null,
    "color": [
-    167,
-    225,
-    85
+    168,
+    194,
+    87
    ],
    "is_city_state": true,
    "n_cities": 1,

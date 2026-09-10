@@ -167,17 +167,26 @@ func remove_stickman(org_id: String, stickman_id: String) -> Dictionary:
 
 ## 在 org 和其 parent 之间插入一个新组织
 ## position: "above"（插入到 org 之上）/ "below"（插入到 org 之下）
+## [Q] 成功时发射 org_created（新节点）+ org_restructured（父结构变化）
 func insert_tier(org_id: String, new_org_name: String, position: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	return _manager.insert_tier(org_id, new_org_name, position)
+	var result := _manager.insert_tier(org_id, new_org_name, position)
+	if result.get("ok", false):
+		org_created.emit(result.data.org_id)
+		org_restructured.emit(org_id)
+	return result
 
 
 ## 删除该组织，其子组织自动上挂到 parent
+## [Q] 成功时发射 org_restructured（子组织上挂 = 结构变化）
 func remove_tier(org_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	return _manager.remove_tier(org_id)
+	var result := _manager.remove_tier(org_id)
+	if result.get("ok", false):
+		org_restructured.emit(org_id)
+	return result
 
 
 # ===== 解散 =====
@@ -195,23 +204,35 @@ func disband_organization(org_id: String) -> Dictionary:
 
 # ===== 预设 =====
 
-## 加载预设模板，创建组织树
-## preset 双形态：String（查 presets.tres 官方母本）或 Dictionary（export_as_preset 产物直灌）
+## 加载官方预设母本，创建组织树（presets.tres：军事编制/科研架构/工程架构/行政架构/运输架构）
 ## parent_id = "" 创建独立根树；指定 parent 时须预设顶层 level == parent.tier - 1
 ## [Q] 每创建一个组织发射一次 org_created（data.created 列出全部新组织 id）
-func load_preset(preset: Variant, parent_id: String) -> Dictionary:
+func load_preset(preset_name: String, parent_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	var result := _manager.load_preset(preset, parent_id)
+	var result := _manager.load_preset(preset_name, parent_id)
 	if result.get("ok", false):
 		for org_id in result.data.created:
 			org_created.emit(org_id)
 	return result
 
 
-## 将组织及其子树导出为预设数据
-## 返回 data: {name, tag, entries: [{id, name, level, tag, parent_id}]}，
-## 可直接回灌 load_preset（Dictionary 形态）；UGC 文件化导出挂后续任务
+## 应用 v2 蓝图数据（export_as_preset 产物格式）创建组织树。
+## 条目模板字段（编制/装备/权限/默认行为）透传；实例字段（成员/指挥官）不导入。
+## 挂接/回滚/信号语义同 load_preset
+func apply_preset(data: Dictionary, parent_id: String) -> Dictionary:
+	if not _is_initialized:
+		return {"ok": false, "error": "模块未初始化"}
+	var result := _manager.apply_preset(data, parent_id)
+	if result.get("ok", false):
+		for org_id in result.data.created:
+			org_created.emit(org_id)
+	return result
+
+
+## 将组织及其子树导出为 v2 蓝图数据
+## 返回 data: {name, tag, entries=[{key, name, level, tag, parent_key, 模板字段}]}，
+## 条目 key 为语义键（无运行时 org_id），可直接回灌 apply_preset；UGC 文件化挂后续任务
 func export_as_preset(org_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}

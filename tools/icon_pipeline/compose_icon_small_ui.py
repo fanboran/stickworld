@@ -20,12 +20,10 @@ except Exception as _e:
     _MOTIFS, _NAME = [], {}
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-INK = np.array([18, 14, 9])
 
 # (tag, 中文名, 假光参数 or None)
 TAGS = [
     ("icon_hammer_v9", "锻造锤", (0.10, 0.02, 0.20)),
-    ("icon_heart_v9", "爱心", None),
     ("test_cube_v9", "立方体", None),
     ("test_sphere_v9", "正球", None),
     ("test_cylinder_v9", "圆柱", None),
@@ -36,10 +34,16 @@ SIZES = (64, 128, 256)
 
 # 旧 tag 的 ID 候选锁定为前 5 色：10 色全开会让红/黄材质的 AA 混合中间色
 # （恰好=新橙 (1,.5,0)）在接缝处改判家族，破坏逐字节回归
-NIDS = {t[0]: 5 for t in TAGS[:7]}
-# 明度自适应拉伸豁免：创始人点名的已验收图标，一字节不许动
-NO_STRETCH = {"icon_hammer_v9", "mot_bone", "mot_keys",
-              "mot_ledger", "mot_signpost", "mot_sword"}
+_OLD_TAGS = ("icon_hammer_v9", "test_cube_v9", "test_sphere_v9",
+             "test_cylinder_v9", "test_cone_v9", "test_torus_v9")
+NIDS = {t[0]: 5 for t in TAGS if t[0] in _OLD_TAGS}
+
+# D 着色器分档（v2）：shade pass 在渲染端已量化为 cel 灰阶（曲面 toon 材质/
+# 平面面烘色，三档 0.32/0.62/0.92），compose 只按灰阶查表映射色带。
+# 本表阈值只承担「分类三档灰」（含 classic 连续明度 ≈v1 0.36/0.68 语义），
+# 与渲染端档位轮廓调优（TOON_LO/HI，默认 0.76/0.95）解耦——轮廓怎么移，
+# 出图灰阶恒为三档，此表不必跟调。RAMPS 固定三带，档数>3 时钳到亮带。
+_TH = (0.35, 0.70)
 
 
 def cel(tag, fake, target, out_ink=None, nids=10):
@@ -58,9 +62,9 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     part[~solid] = -1
 
     gray = (sa[..., 0] * 0.299 + sa[..., 1] * 0.587 + sa[..., 2] * 0.114)
-    # 模糊半径：非豁免收紧（0.03→0.012）——大半径下亮面沿棱渗入暗面，
-    # 过渡带自成一档（Cube「棱变独立色」）；豁免图标沿用旧半径保逐字节
-    br = max(1.5, target * 0.03) if tag in NO_STRETCH else max(1.2, target * 0.012)
+    # 轻模糊压渲染噪点，档位边界随平滑明度场走（半径与 v1 非豁免一致；
+    # 豁免大半径 0.03 分支随 NO_STRETCH 退役）
+    br = max(1.2, target * 0.012)
     L = np.asarray(Image.fromarray(np.clip(gray, 0, 255).astype(np.uint8))
                    .filter(ImageFilter.GaussianBlur(br))).astype(np.float32) / 255.0
     if fake:
@@ -69,49 +73,9 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         d = np.sqrt(((xx - W * lx) / W) ** 2 + ((yy - H * ly) / H) ** 2)
         L = np.clip(L * (1 - k * d), 0.05, 1.2)
 
-    # 采样域：腐蚀掉轮廓 AA 环——环像素偏暗，会压低 p5 拉低拉伸下限，
-    # 把内部渐变压进单一档（椅子整体同色的真凶）。细长形体腐蚀殆尽时回退全实体。
-    inner = solid
-    for _ in range(2):
-        nxt = np.asarray(Image.fromarray((inner * 255).astype(np.uint8))
-                         .filter(ImageFilter.MinFilter(3))) > 120
-        if nxt.sum() < 0.15 * solid.sum():
-            break
-        inner = nxt
-    samp = inner if inner.sum() >= 50 else solid
-
-    # 自适应明度拉伸：多面同亮度的图标（整体偏亮/偏平）cel 后糊成剪影
-    # （Cube=六边形、椅背座面连体）——根因是分档阈值固定，而明度场
-    # 档位与拉伸：豁免图标走旧路径（固定阈值+不拉伸，逐字节承诺）。
-    # 其余：采样域明度展宽足够（多面/曲面形体）→ 按采样域 p5/p98 拉伸到
-    # 0..1（光源角度差还原成色差，无需内部线条）+ 一维 k-means 三簇——
-    # 档位切在直方图结构上，均匀面整面同档不从中间劈开；展宽过窄（单面
-    # 物体如罗盘盘面）说明整个图标基本一个面，拉伸+k-means 只会在量化
-    # 噪声上劈簇出噪点 → 固定阈值，一面一个色。
-    if tag in NO_STRETCH:
-        th = (0.5,) if target <= 64 else (0.36, 0.68)
-        band = np.digitize(L, th)
-    else:
-        lv = L[samp]
-        lo, hi = np.percentile(lv, 5), np.percentile(lv, 98)
-        if hi - lo >= 0.15:
-            L = np.clip((L - lo) / max(1e-6, hi - lo), 0.0, 1.0)
-            lv = L[samp]
-            c = np.percentile(lv, [16.7, 50.0, 83.3]).astype(np.float32)
-            for _ in range(12):
-                mids = ((c[0] + c[1]) / 2, (c[1] + c[2]) / 2)
-                b_ = np.digitize(lv, mids)
-                for k_ in range(3):
-                    sel = lv[b_ == k_]
-                    if sel.size:
-                        c[k_] = sel.mean()
-            c = np.sort(c)
-            mids = ((c[0] + c[1]) / 2, (c[1] + c[2]) / 2)
-            th = (0.36, 0.68)   # 仅供 ramp_at 判断档位数（k-means 恒三档）
-            band = np.digitize(L, mids)
-        else:
-            th = (0.36, 0.68)
-            band = np.digitize(L, th)
+    # D 分档查表：渲染端已定档（toon 材质/面烘色），此处仅按灰阶映射色带。
+    # v1 的采样域腐蚀/p5-p98 拉伸/k-means/单面退化保护随图像域分档一并退役。
+    band = np.digitize(L, _TH)
     RAMPS = {
         0: [(0.38, 0.40, 0.45), (0.55, 0.57, 0.62), (0.74, 0.76, 0.80)],
         1: [(0.30, 0.32, 0.36), (0.47, 0.49, 0.54), (0.62, 0.64, 0.68)],
@@ -124,38 +88,76 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         8: [(0.52, 0.36, 0.10), (0.76, 0.56, 0.16), (0.92, 0.76, 0.32)],
         9: [(0.14, 0.22, 0.40), (0.24, 0.38, 0.60), (0.40, 0.58, 0.80)],
     }
-    ramp_at = lambda ramp, b: (ramp[0] if b == 0 else ramp[-1]) if len(th) == 1 else ramp[b]
     out = np.zeros((H, W, 3), dtype=np.float32)
     for pid, ramp in RAMPS.items():
         m = part == pid
         if not m.any():
             continue
-        out[m] = np.array([ramp_at(ramp, b) for b in band[m]]) * 255
-    # 注：v9 交接文档曾记载「锤头三面锁档」，实测其条件 len(th)==3 对二元组
-    # 档位表永远为假——从未生效，已验收样张本来就是纯光场分档。分支已删除。
+        out[m] = np.array([ramp[min(b, len(ramp) - 1)] for b in band[m]]) * 255
 
-    # 超分抗锯齿：渲染是 2x SSAA+64x MSAA，边缘 alpha 本来平滑——保留软 alpha，
-    # BOX 面积平均缩放（纯平均无负瓣零振铃），边缘半透明带细腻；描边仍在最终
-    # 尺寸上画不受影响。豁免图标走旧硬边+LANCZOS 路径（逐字节承诺）。
-    soft = tag not in NO_STRETCH
-    if soft:
-        # 软 alpha 边缘环填部件色：环上 part=-1，取最近实心像素的部件色，
-        # 防 BOX 平均把黑底 RGB 混进边缘出黑边
-        fill = part.copy()
-        for _ in range(4):
-            holes = (sa[..., 3] > 0) & (fill < 0)
-            if not holes.any():
-                break
-            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                sh = np.roll(fill, (dy, dx), axis=(0, 1))
-                m = (fill < 0) & (sh >= 0)
-                fill[m] = sh[m]
-        for pid, ramp in RAMPS.items():
-            m = (fill == pid) & (part < 0) & (sa[..., 3] > 0)
-            if m.any():
-                out[m] = np.array([ramp_at(ramp, b) for b in band[m]]) * 255
+    # 超分抗锯齿（全量统一，NO_STRETCH 豁免退役）：渲染是 2x SSAA+64x MSAA，
+    # 边缘 alpha 本来平滑——保留软 alpha + BOX 面积平均缩放（纯平均无负瓣
+    # 零振铃），边缘半透明带细腻；描边仍在最终尺寸上画不受影响。
+    # 软 alpha 边缘环填部件色：环上 part=-1，取最近实心像素的部件色，
+    # 防 BOX 平均把黑底 RGB 混进边缘出黑边
+    fill = part.copy()
+    for _ in range(4):
+        holes = (sa[..., 3] > 0) & (fill < 0)
+        if not holes.any():
+            break
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            sh = np.roll(fill, (dy, dx), axis=(0, 1))
+            m = (fill < 0) & (sh >= 0)
+            fill[m] = sh[m]
+    for pid, ramp in RAMPS.items():
+        m = (fill == pid) & (part < 0) & (sa[..., 3] > 0)
+        if m.any():
+            out[m] = np.array([ramp[min(b, len(ramp) - 1)] for b in band[m]]) * 255
 
-    rgba = np.dstack([out, sa[..., 3] if soft else solid * 255.0])
+    # 反向壳墨线层（C 阶段）：渲染端单独渲 ink pass（只有描边壳完整剪影）。
+    # 合成必须在渲染域（同分辨率空间）先做「cel 在上、墨壳在下」的 over——
+    # 曾把 ink 图留到裁切缩放后合成：两图 bbox 不同（ink 比 cel 大一圈线宽），
+    # 各自居中缩放=相对错位一圈线宽（256px 描边悬空可见，创始人审计）。
+    # 渲染域同坐标系合成后，后续裁缩对两层完全一致，零对位误差。
+    ink_fp = os.path.join(BASE, f"{tag}_{target}_ink.png")
+    has_ink = os.path.exists(ink_fp)
+    if has_ink:
+        inkim = np.asarray(Image.open(ink_fp).convert("RGBA")).astype(np.float32)
+        # 合并外轮廓环带白名单（v1 语义）：v1 描边=合并剪影的外轮廓环，部件
+        # 重叠区内部无描边；壳架构是每部件各自描边，交叉区双方描边叠加出
+        # 黑块。ink 只保留「合并剪影外扩 R 内」的环带（外轮廓描边+洞缘描边，
+        # 洞缘在 dilate 带内自然保留），重叠区内部墨由 cel 在上自动覆盖。
+        # 曾同时做「窄缝墨压制」（闭运算清窄缝 ink，想恢复缝透明）——但缝
+        # 两侧部件边缘的贴边描边落在缝带内被一并清掉，同 pid 部件间又无
+        # idedge 缝线补位→线条转弯处断口（虚焊）。窄缝处的壳墨融合成连贯
+        # 线（描边 join 观感）才是连续性优先的正确取舍，故只留环带白名单。
+        sol = sa[..., 3] > 128
+        R = {64: 8, 128: 9, 256: 10}[target]
+        r = sol
+        for _ in range(R):
+            x = r.copy()
+            x[1:, :] |= r[:-1, :]; x[:-1, :] |= r[1:, :]; x[:, 1:] |= r[:, :-1]; x[:, :-1] |= r[:, 1:]
+            r = x
+        inkim[..., 3] *= r
+        a_cel = sa[..., 3:4] / 255.0
+        a_ink = inkim[..., 3:4] / 255.0
+        A = a_cel + a_ink * (1 - a_cel)
+        w = a_cel / np.maximum(A, 1e-6)
+        out = out * w + inkim[..., :3] * (1 - w)
+        alpha512 = A * 255.0
+    else:
+        alpha512 = sa[..., 3]
+
+    fire_fp = os.path.join(BASE, f"{tag}_{target}_fire.png")
+    if os.path.exists(fire_fp):
+        fireim = np.asarray(Image.open(fire_fp).convert("RGBA")).astype(np.float32)
+        a_f = fireim[..., 3:4] / 255.0
+        a_bot = alpha512 / 255.0
+        A = a_f + a_bot * (1 - a_f)
+        out = (fireim[..., :3] * a_f + out * a_bot * (1 - a_f)) / np.maximum(A, 1e-6)
+        alpha512 = A * 255.0
+
+    rgba = np.dstack([out, alpha512])
     img = Image.fromarray(np.clip(rgba, 0, 255).astype(np.uint8), "RGBA")
 
     ys, xs = np.where(np.asarray(img)[..., 3] > 40)
@@ -165,46 +167,17 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     sq = Image.new("RGBA", (side, side), (0, 0, 0, 0))
     sq.paste(crop, ((side - crop.width) // 2, (side - crop.height) // 2))
     inner = target - max(1, round(target * 0.008) * 2)
-    small = sq.resize((inner, inner), Image.BOX if soft else Image.LANCZOS)
+    small = sq.resize((inner, inner), Image.BOX)
     cv = Image.new("RGBA", (target, target), (0, 0, 0, 0))
     cv.paste(small, ((target - inner) // 2, (target - inner) // 2))
 
     a = np.asarray(cv).copy()
-    op = a[..., 3] > 128
-    op_img = Image.fromarray((op * 255).astype(np.uint8))
-    ero3 = np.asarray(op_img.filter(ImageFilter.MinFilter(3))) > 120
-    # 描边环基线（2026-09-08 描边内缩排查）：软路径从视觉轮廓（alpha>16，软边
-    # 最外沿）向内画环——墨骑在轮廓上。旧版从 alpha>128（软边中点）起画，
-    # 外侧半条软边只剩填充色=高分图「描边内缩+色晕」。
-    # 豁免路径保留旧环定义：其 LANCZOS 缩放会把二值 alpha 重新糊出软边，
-    # vis≠op，换基线会破坏逐字节承诺。
-    if tag not in NO_STRETCH:
-        vis = a[..., 3] > 16
-        vis_img = Image.fromarray((vis * 255).astype(np.uint8))
-        ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
-        ring = (vis & ~ero_vis).astype(np.float32)
-    else:
-        ring = (op & ~ero3).astype(np.float32)
-    # 描边宽度档（ICON_STROKE，默认 1.0）：>1 时向内加第二圈——
-    # 1.5=半权重内圈，2.0=满权重内圈（共 2px）。仅外轮廓圈，ID 结合缝线不动
-    stroke = float(os.environ.get("ICON_STROKE", "1.0"))
-    if stroke > 1.0:
-        ero5 = np.asarray(op_img.filter(ImageFilter.MinFilter(5))) > 120
-        ring = ring + min(1.0, stroke - 1.0) * (ero3 & ~ero5)
-    if target >= 128:
-        ero5 = np.asarray(op_img.filter(ImageFilter.MinFilter(5))) > 120
-        ring = ring + np.where(ero3 & ~ero5, 0.3 if target == 128 else 0.4, 0.0)
-    if target >= 128:
-        id_t = Image.fromarray((part + 1).astype(np.uint8)).resize((target, target), Image.NEAREST)
-        idedge = (np.asarray(id_t.filter(ImageFilter.MaxFilter(3))) !=
-                  np.asarray(id_t.filter(ImageFilter.MinFilter(3)))) & op
-        ring = ring + np.asarray(Image.fromarray((idedge * 255).astype(np.uint8))
-                                 .filter(ImageFilter.MaxFilter(3))).astype(np.float32) / 255.0 * (0.6 if target == 128 else 0.8)
-    w = np.clip(ring, 0, 1)
-    w = np.asarray(Image.fromarray((w * 255).astype(np.uint8))
-                   .filter(ImageFilter.GaussianBlur(0.6))).astype(np.float32) / 255.0
-    w = w[..., None]
-    a[..., :3] = a[..., :3] * (1 - w) + INK * w
+    # 内部线条全部由渲染端反向壳天然承担：每个部件自己的壳描边贴着部件轮廓，
+    # 前景部件的描边显示在背景部件上=部件分界线（粗细=外描边、位置精确、
+    # 凡部件边缘必有）。v1 遗留的图像域部件缝线（idege）已整体退役——它按
+    # 「部件颜色不同才画」工作（同色部件间无内部线=有/无不齐）、靠模糊膨胀
+    # 画（比壳描边粗且发虚）、画在低分辨率部件图边界上且端点提前断（与外
+    # 描边接不上），三重不一致在壳架构下无存在价值。
     cv = Image.fromarray(a, "RGBA")
 
     aa = np.asarray(cv)

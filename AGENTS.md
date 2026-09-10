@@ -21,7 +21,7 @@
 - 长任务（多阶段实施类）跨多个对话会话推进。当上下文过长、判断质量可能下降时，**主动建议用户开新对话**，不要硬撑。
 - **交接前必须**：更新该任务的交接文档（进度 / 下一步任务分解 / 关键决策 / 新会话恢复指引）并 git 提交。
 - **新会话恢复**：用户说「继续 <任务名>」时，先读下方"当前活跃交接文档"恢复上下文，再开始干活，不重新摸底。
-- **任务分支一律用独立 worktree**（2026-09-07 创始人约定）：`git worktree add .temp/<任务名> -b agent/<后缀>`，任务会话在对应 worktree 内干活；**主工作区（仓库根）留给 `main`**，禁止在主工作区长期 checkout 任务分支（多会话并行共用仓库，占主工作区会把别的会话的提交混进自己的分支——2026-09-08 图标会话踩坑，world-map 提交被混入 feature 分支，后 cherry-pick 归位 main）。注意各 worktree 的 `temp/`（gitignored）互相独立，渲染产物/验收档案不共享。收线后 `git worktree remove` + 合并/删分支。
+- **任务分支一律用独立 worktree**：`git worktree add .temp/<任务名> -b agent/<后缀>`，任务会话在对应 worktree 内干活；**主工作区（仓库根）留给 `main`**，禁止在主工作区长期 checkout 任务分支（多会话并行共用仓库，占主工作区会把其他会话的提交混进自己的分支）。注意各 worktree 的 `temp/`（gitignored）互相独立，渲染产物/验收档案不共享。收线后 `git worktree remove` + 合并/删分支。
 - **交接档统一放 `docs/项目/交接/`**（索引见其 [README.md](docs/项目/交接/README.md)）；任务收官无待验收项的移入 `docs/项目/交接/归档/`；**代码审计/快照类文档用完直接删除**，不进归档（审计快照放 `docs/审计/`）。
 - 当前活跃交接文档：
   - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，**批次 1~6 全部完成、循环已测试锁死，待创始人观感验收后收线**，分支 `agent/conquest-loop`，worktree `.temp/conquest-loop`）
@@ -60,7 +60,7 @@
 | 查程序化世界生成       | `docs/设计/系统/08-程序化世界生成.md` |
 | 游戏数据表           | `config/excel/` 目录 + `docs/技术/教程/Excel数据管线.md` |
 | 查编辑器工具/插件    | `docs/技术/编辑器工具索引.md`（addons/ + tools/ 全部脚本） |
-| 查 Godot 引擎 API（类参考，项目外） | `F:\VSCode\godot-docs\doc\classes\<类名>.xml`（`--doctool` 生成，版本精准；查属性/方法/信号用；**升级引擎后重跑 `godot --headless --doctool F:\VSCode\godot-docs` 保持对齐**） |
+| 查 Godot 引擎 API（类参考，项目外） | `F:\VSCode\godot-docs\doc\classes\<类名>.xml`（`--doctool` 生成，版本精准；查属性/方法/信号用） |
 | 查编辑器/运行时报错    | `stick-world/tools/check_godot_errors.sh`（扫描 `user://logs/`，日志机制见 `docs/技术/教程/Godot日志与报错检测.md`） |
 | 开发规范            | `docs/CONTRIBUTING.md`                                  |
 | 有可以参考的开源项目就放到这里 | external/                                               |
@@ -72,9 +72,8 @@
 ## 核心行为指令
 
 1. **主动沟通**：当任务描述不清晰或与架构原则冲突时，积极主动提问，不做危险假设。但可从系统一致性推导的实现细节（如某系统接入另一系统的方式、宏观涌现类机制的节奏）**不问创始人**——自行推导并落档；只把真正需要创始人定方向、定了会改做法的分歧拿出来问。
-2. **core/ 稳定优先**：`core/` 是全局基础设施，修改前须向用户说明理由并确认（autoload 新增/删减同样适用）。
-3. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/设计/系统/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
-4. **报错自检**：任何代码修改后，运行 `bash stick-world/tools/check_godot_errors.sh`（退出码 1 = 日志有报错，须修复）；用户报告编辑器报错时先查日志再处置，详见 `docs/技术/教程/Godot日志与报错检测.md`。测试：`bash stick-world/tests/run_all.sh`（全量 / `-Changed` 增量 / `-Match` 过滤，详见 `docs/技术/教程/测试矩阵.md`）。
+2. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/设计/系统/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
+3. **报错自检**：任何代码修改后，运行 `bash stick-world/tools/check_godot_errors.sh`（退出码 1 = 日志有报错，须修复）；用户报告编辑器报错时先查日志再处置，详见 `docs/技术/教程/Godot日志与报错检测.md`。测试：`bash stick-world/tests/run_all.sh`（全量 / `-Changed` 增量 / `-Match` 过滤，详见 `docs/技术/教程/测试矩阵.md`）。
 4. **GitHub 查询走 MCP**：查 GitHub（代码/issue/仓库/README）一律用 `github-search` MCP 工具（已配置 GITHUB_TOKEN 认证）；**禁止手动 curl 匿名调用 api.github.com**（匿名限额 60 次/时，会触发限流并污染诊断）。
 5. **UI 布局单一真相源**：场景是布局唯一真相源，**禁止 `Control.new()` 当 UI 根**（会丢 anchor 致控件静默不可见）；代码建控件的合规出口（全屏 `full_rect()` / 角落部件 `widget()` + 槽位）见 `docs/技术/架构/场景与战斗/UI.md`。
 
@@ -102,7 +101,7 @@
 
 ```
 / (res://)
-├── core/                  # 核心系统与基础设施（稳定，修改需批准）
+├── core/                  # 核心系统与基础设施
 ├── modules/               # 游戏功能模块（开发最频繁的区域）
 ├── assets/                # 全局共享资源
 ├── addons/                # 编辑器插件（项目自带 + 第三方），详见 docs/技术/编辑器工具索引.md

@@ -25,7 +25,7 @@
 - **交接档统一放 `docs/项目/交接/`**（索引见其 [README.md](docs/项目/交接/README.md)）；任务收官无待验收项的移入 `docs/项目/交接/归档/`；**代码审计/快照类文档用完直接删除**，不进归档。
 - 当前活跃交接文档：
   - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，**批次 1~6 全部完成、循环已测试锁死，待创始人观感验收后收线**，分支 `agent/conquest-loop`，worktree `.temp/conquest-loop`）
-  - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：火柴人逆向重建——从 Stick War 解包真值数据重建骨架/动画/渲染；**批次 1-4h、4i-A（导入器）、4i-B（渲染重标：56 骨真值骨架+附件几何矢量肢体+动画切真 Spine 数据）、4i-C（逐动画 RMS 数值验收：93/93 全 PASS）全部完成，视觉 judge PASS、D1~D11 实质清零；仅剩批次 D（画廊目检终验）**；注意 4i 工作实际在分支 `agent/conquest-loop`、worktree `.temp/conquest-loop` 内推进，`.temp/stickman-visual` 仅存批次 1-4）
+  - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：火柴人逆向重建——从 Stick War 解包真值数据重建骨架/动画/渲染；**批次 1-4h、4i-A~D（导入器/渲染重标/RMS 数值验收 93:93 全 PASS/画廊目检 judge 终验全 PASS）全部完成，D1~D11 清零——4i 收官，待创始人观感验收后收线**；注意 4i 工作实际在分支 `agent/conquest-loop`、worktree `.temp/conquest-loop` 内推进，`.temp/stickman-visual` 仅存批次 1-4）
   - `docs/项目/交接/建筑与美术升级-进度与交接.md`（任务：铁匠铺/石头结构件/多层建筑/室内内饰/多材质/village_a 美化；**批次 1-6 全部完成已合并入本分支**，待观感验收；worktree `.temp/building-art` 保留）
   - `docs/项目/交接/城镇生成管线-进度与交接.md`（任务：L1 城镇种子随机生成+风格参数化；**批次 1-4 全部完成已合并入本分支**；待办：八城按地面占比 1/3 重生成；worktree `.temp/town-gen` 保留）
   - `docs/项目/交接/小镇生活与NPC职业-进度与交接.md`（任务：NPC 各司其职（铁匠/伐木/矿工）+经济自动产出端；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/town-life` 保留）

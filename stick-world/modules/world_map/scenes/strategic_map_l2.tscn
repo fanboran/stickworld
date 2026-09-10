@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://modules/world_map/scripts/l2_map_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/l2_map_renderer.gd" id="2_renderer"]
@@ -7,8 +7,20 @@
 [ext_resource type="Script" path="res://modules/world_map/ui/granularity_indicator.gd" id="5_gind"]
 [ext_resource type="Script" path="res://modules/world_map/ui/map_title_bar.gd" id="7_title"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_mode_manager.gd" id="8_mode"]
+[ext_resource type="Script" path="res://modules/world_map/ui/map_ocean_backdrop.gd" id="9_ocean"]
 
 [node name="StrategicMapL2" type="CanvasLayer"]
+
+[node name="OceanBackground" type="ColorRect" parent="."]
+script = ExtResource("9_ocean")
+visible = false
+z_index = -2
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
 [node name="Content" type="Node2D" parent="."]
 script = ExtResource("1_ctrl")

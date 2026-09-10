@@ -9,11 +9,11 @@ class_name L3MapRenderer
 ##   MODE_L1   : 底 = 69 块老 L1 地块（鲜艳配色）
 ##   MODE_CITY : 底 = 1038 块城市（像 city_preview 花花绿绿）
 ## hover 恒命中老 L1 索引图（label 直编）；点击下钻仍按 L2（L3MapController 用 L2 索引图）。
-## 线条语言（R8 层2 token 化 + feedback1 去抖动 + feedback2 统一几何源）：政治模式
-## 界线三级——国界 3px 实线（亮）+ 地区界 2px 长虚线（§7.3-6 规范表），**都从
-## l3_city 城块共享边邻接提取**（同一几何源，同一条物理边界只有一条线；旧 region
-## polygon 虚线双源错位退役）；线条平滑直绘（antialiased），共享边端点共点严丝合缝；
-## 线宽/色全部走 MapTokens。
+## 线条语言（R8 层2 token 化 + feedback1 去抖动 + feedback2 统一几何源 +
+## 第三批 C19 界线重设计）：政治模式界线三级——国界（浅色 casing + 深墨主线）+
+## 地区界（墨色长虚线）+ 自由城邦界（灰短虚线），**都从 l3_city 城块共享边邻接提取**
+## （同一几何源，同一条物理边界只有一条线；旧 region polygon 虚线双源错位退役）；
+## 线条平滑直绘（antialiased），共享边端点共点严丝合缝；线宽/色全部走 MapTokens。
 ## 性能：两级 mesh 加载时一次性烘焙，每帧按模式 draw_mesh。
 
 enum DisplayMode { MODE_L1, MODE_CITY }
@@ -526,9 +526,11 @@ func _draw_l2_borders() -> void:
 			draw_polyline(bpts, L2_BORDER_COLOR, bw, true)
 
 
-## 政治模式界线三级绘制（R8 层2）：国界 3px 实线（亮，TEXT 白）+ 地区界 2px 长虚线
-## + 自由城邦界 1px 细灰短虚线。三类都由城块邻接提取（见构建函数，feedback2 A/C：
-## 单一几何源）；feedback1 去抖动：平滑直绘
+## 政治模式界线三级绘制（第三批 C19 重设计）：**国界 = 浅色底衬 casing + 深墨主线**，
+## 地区界 = 墨色长虚线，自由城邦界 = 灰色短虚线（全部屏幕像素口径恒定粗细）。
+## 三类都由城块邻接提取（单一几何源，feedback2 A/C）；平滑直绘（feedback1 去抖动）。
+## 绘制次序 = 语义层级倒序（低级先画、国界最后压顶）：地区界 → 自由城邦界 →
+## 国界底衬 → 国界主线（底衬必须紧贴主线之下，中间不能被别的线插队）。
 func _draw_political_borders() -> void:
 	if not _political_borders_built:
 		_build_political_borders()
@@ -537,84 +539,134 @@ func _draw_political_borders() -> void:
 		zz = _camera.get_zoom()
 	if zz <= 0.0001:
 		zz = 1.0
-	if _national_border_segs.size() >= 2:
-		draw_multiline(_national_border_segs, MapTokens.LINE_NATIONAL_COLOR,
-			MapTokens.LINE_NATIONAL / zz, true)
 	if _political_region_segs.size() >= 2:
 		draw_multiline(_political_region_segs, MapTokens.LINE_REGION_COLOR,
 			MapTokens.LINE_REGION / zz, true)
 	if _free_city_border_segs.size() >= 2:
 		draw_multiline(_free_city_border_segs, MapTokens.LINE_FREE_COLOR,
 			MapTokens.LINE_FREE / zz, true)
+	if _national_border_segs.size() >= 2:
+		# 底衬（暖白半透明）→ 主线（墨）；底衬宽 = 主线宽 + CASING_EXTRA
+		draw_multiline(_national_border_segs, MapTokens.LINE_NATIONAL_CASING_COLOR,
+			(MapTokens.LINE_NATIONAL + MapTokens.LINE_NATIONAL_CASING_EXTRA) / zz, true)
+		draw_multiline(_national_border_segs, MapTokens.LINE_NATIONAL_COLOR,
+			MapTokens.LINE_NATIONAL / zz, true)
 
 
-## 构建政治模式界线缓存（首次政治绘制一次）——单一几何源（feedback2 A/C）：
-## 国界与地区界都从 l3_city 城块共享边的无向 key 分组提取（一次字典构建 ~4 万边，
-## 毫秒级×几十），同一物理边界按「国界 > 地区界 > 自由城邦界」优先级只画一条线；
-## 旧「国界用城块邻接 + 地区界用 region polygon」双源错位（feedback2 C）与
-## 「国 vs 无归属也画国界」的白线乱走（feedback2 A）就此根除。
-## 边分类（feedback2 A）：
-##   国界 = 两侧均政权（lut_index 1..80/城邦 73..80）且不同国；
-##   地区界 = 两侧地区 label 不同且非国界（同源城块边聚合）；
-##   自由城邦界 = 双侧都是城块且恰一侧政权（国 vs 无归属 253）→ 降级 1px 细灰短虚线
-##   （选择理由：保住国体领土范围在灰底自由城邦旁的可读性，又不与国界抢语义）。
-##   必须用 tiles 集合限定「双侧城块」：states/regions 集合无法区分「另一侧是无归属
-##   城块」与「另一侧是海/荒野」（单侧贡献）——后者含 3.2 万条海岸边 + 1,450 条同国
-##   内部边，不限会把全图撒满灰虚线（feedback2 A 审计实测）；限后现数据（城块全有
-##   归属）此类边为 0，纯防御。
+## 构建政治模式界线缓存（首次政治绘制一次）——几何取城块多边形边，
+## **「是不是界」由政权 ID mask 判定**（C19 修正）：
+## 旧口径用「城块共享边无向 key 精确配对」，但 l3_city 的城块多边形是**各自独立
+## 平滑**出来的——实测 34433 条边里只有 2192 条（6%）能在两侧找到同一 key，
+## 于是国界只画出一小撮短线段、地区界虚线断成散落的短划（观感缺陷根源）。
+## 新口径（mask 是颜色的唯一真相源：颜色在哪变，界就在哪）：
+##   从每条边中点沿**外法向**探针 4px 采样 mask 像素值（= lut_index）：
+##     外侧是另一政权 → 国界（实线 + 底衬）
+##     恰一侧是 253 自由城邦 → 自由城邦界（细灰短虚线，防御类）
+##     外侧同政权 → 查 2048 地区划分图：地区不同 → 地区界（墨色长虚线）
+##     外侧 0 海洋 / 254 湖泊 → 海岸线/湖岸，本层不画
+## 同一条物理界两侧各出一条近乎重合的边（两侧多边形互有 ~1-3px 平滑差）→
+## 中点空间哈希**仅跨城块**去重（同城块内相邻短边绝不去重，否则界线断口）。
 func _build_political_borders() -> void:
 	_political_borders_built = true
+	_national_border_segs = PackedVector2Array()
+	_political_region_segs = PackedVector2Array()
+	_free_city_border_segs = PackedVector2Array()
+	if _data == null or _data.political_id_image == null:
+		return
 	var zz := 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
 	if zz <= 0.0001:
 		zz = 1.0
-	# 1) 边提取：无向 key -> {端点, 两侧政权集合, 两侧地区集合, 贡献块集合}
-	var edges := {}
+	var mask: Image = _data.political_id_image
+	var part: Image = _data.mask_image          # 2048 地区划分（像素 = 地区 label）
+	var part_scale := 1.0
+	if part != null and _data.size > 0:
+		part_scale = float(part.get_width()) / float(_data.size)
+	var lut_of := {}
+	for sid in _data.states:
+		lut_of[sid] = int((_data.states[sid] as Dictionary).get("lut_index", 0))
+	# 中点空间哈希（跨城块去重）：bucket key -> 已登记城块 label
+	var weld := {}
 	for t in _data.city_tiles:
-		var st: String = t.get("state_id", "")
-		var rg := int(t.get("region", 0))
+		var sid := str(t.get("state_id", ""))
+		var self_idx := int(lut_of.get(sid, 0))
+		var self_rg := int(t.get("region", 0))
+		var label := int(t.get("label", 0))
 		for poly in (t.get("polygons", []) as Array):
 			var n: int = poly.size()
 			if n < 3:
 				continue
 			var pts := PackedVector2Array()
 			pts.resize(n)
+			var cx := 0.0
+			var cy := 0.0
 			for i in n:
 				var pp = poly[i]
 				pts[i] = pp if pp is Vector2 else Vector2(pp[1], pp[0])
+				cx += pts[i].x
+				cy += pts[i].y
+			var centroid := Vector2(cx / float(n), cy / float(n))
 			for i in n:
 				var a := pts[i]
 				var b := pts[(i + 1) % n]
-				var key := MapSketch.edge_key(a, b)
-				var e: Dictionary = edges.get(key, {})
-				if e.is_empty():
-					e = {"a": a, "b": b, "states": {}, "regions": {}, "tiles": {}}
-					edges[key] = e
-				if not st.is_empty():
-					e["states"][st] = true
-				if rg > 0:
-					e["regions"][rg] = true
-				e["tiles"][int(t.get("label", 0))] = true
-	# 2) 分类（feedback1 去抖动：原始共享边直绘——端点即两侧城块共点，三岔交界
-	#    严丝合缝；虚线按构建时 zoom 固化成地图单位）
-	_national_border_segs = PackedVector2Array()
-	_political_region_segs = PackedVector2Array()
-	_free_city_border_segs = PackedVector2Array()
-	for key in edges:
-		var e: Dictionary = edges[key]
-		var ab := PackedVector2Array([e["a"], e["b"]])
-		if (e["states"] as Dictionary).size() >= 2:
-			_national_border_segs.append(e["a"])
-			_national_border_segs.append(e["b"])
-		elif (e["regions"] as Dictionary).size() >= 2:
-			MapSketch.dash_segments(_political_region_segs, ab,
-				MapTokens.DASH_LONG / zz, MapTokens.DASH_LONG_GAP / zz)
-		elif (e["states"] as Dictionary).size() == 1 \
-				and (e["tiles"] as Dictionary).size() >= 2:
-			# 双侧城块且恰一侧政权 = 国 vs 无归属城块；单侧贡献（海岸/荒野）不画
-			MapSketch.dash_segments(_free_city_border_segs, ab,
-				MapTokens.DASH_SHORT / zz, MapTokens.DASH_SHORT_GAP / zz)
+				var mid := (a + b) * 0.5
+				var outward := mid - centroid
+				if outward.length_squared() < 0.0001:
+					continue
+				var probe := mid + outward.normalized() * MapTokens.BORDER_PROBE_DIST
+				if _weld_seen(weld, mid, label):
+					continue
+				var idx_out := _mask_code(mask, probe)
+				if idx_out == self_idx:
+					# 同国：看是不是地区界（2048 划分图）
+					if part != null and self_rg > 0:
+						var rg_out := _mask_code(part, probe * part_scale)
+						if rg_out > 0 and rg_out != self_rg:
+							_weld_mark(weld, mid, label)
+							MapSketch.dash_segments(_political_region_segs,
+								PackedVector2Array([a, b]),
+								MapTokens.DASH_LONG / zz, MapTokens.DASH_LONG_GAP / zz)
+					continue
+				if idx_out <= 0 or idx_out == PoliticalLut.CODE_LAKE \
+						or idx_out == PoliticalLut.CODE_NEIGHBOR:
+					continue  # 海岸/湖岸：非政权界
+				_weld_mark(weld, mid, label)
+				if idx_out == PoliticalLut.CODE_FREE_CITY \
+						or self_idx == PoliticalLut.CODE_FREE_CITY:
+					MapSketch.dash_segments(_free_city_border_segs,
+						PackedVector2Array([a, b]),
+						MapTokens.DASH_SHORT / zz, MapTokens.DASH_SHORT_GAP / zz)
+				else:
+					_national_border_segs.append(a)
+					_national_border_segs.append(b)
+
+
+## mask/划分图像素值（R 通道 × 255；clamp 到图内）
+func _mask_code(img: Image, p: Vector2) -> int:
+	if img == null:
+		return 0
+	var x := clampi(roundi(p.x), 0, img.get_width() - 1)
+	var y := clampi(roundi(p.y), 0, img.get_height() - 1)
+	return roundi(img.get_pixel(x, y).r * 255.0)
+
+
+## 中点是否已被**别的城块**登记过（同城块返回 false——同块内相邻短边不能去重）
+func _weld_seen(weld: Dictionary, mid: Vector2, label: int) -> bool:
+	var gx := roundi(mid.x / MapTokens.BORDER_WELD_GRID)
+	var gy := roundi(mid.y / MapTokens.BORDER_WELD_GRID)
+	for dy in [-1, 0, 1]:
+		for dx in [-1, 0, 1]:
+			var got: Variant = weld.get("%d,%d" % [gx + dx, gy + dy], null)
+			if got != null and int(got) != label:
+				return true
+	return false
+
+
+func _weld_mark(weld: Dictionary, mid: Vector2, label: int) -> void:
+	var gx := roundi(mid.x / MapTokens.BORDER_WELD_GRID)
+	var gy := roundi(mid.y / MapTokens.BORDER_WELD_GRID)
+	weld["%d,%d" % [gx, gy]] = label
 
 
 func BORDER_WIDTH() -> float:

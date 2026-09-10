@@ -55,6 +55,11 @@ const FAST_TRAVEL_HIGHLIGHT_SEC: float = 0.8
 var _title_bar: MapTitleBar = null
 var _legend: MapLegend = null
 
+## 全屏海洋底（CanvasLayer 首子节点，z 最低）。C21：地图一打开就整屏铺海洋，
+## 不再让场景图从地图四周（上下尤其明显）露出来。显隐随本视图（下钻 L2 时收起，
+## 由 L2 自己的海洋底接管）。
+var _ocean_backdrop: Control = null
+
 ## 地图模式管理器（Content 子节点，B4：TERRAIN 默认/POLITICAL；图例/渲染器随模式切换）
 var _mode_manager: MapModeManager = null
 
@@ -118,6 +123,8 @@ func _auto_find_components() -> void:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _legend == null:
 		_legend = MapControllerUtil.find_sibling(self, "MapLegend") as MapLegend
+	if _ocean_backdrop == null:
+		_ocean_backdrop = MapControllerUtil.find_sibling(self, "OceanBackground")
 	if _mode_manager == null:
 		_mode_manager = MapControllerUtil.find_child(self, func(c: Node) -> bool: return c is MapModeManager) as MapModeManager
 
@@ -163,6 +170,9 @@ func handle_escape() -> bool:
 
 ## 指示器/名牌/图例/tooltip 显隐同步（CanvasLayer 直下子节点，不随 Content 自动隐藏）
 func _set_overlay_visible(v: bool) -> void:
+	# 全屏海洋底同批显隐（open / close / 下钻 L2 三条路径都经过本函数）
+	if _ocean_backdrop != null:
+		_ocean_backdrop.visible = v
 	if _indicator != null:
 		_indicator.visible = v
 	if _title_bar != null:

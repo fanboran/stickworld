@@ -34,6 +34,9 @@ var _indicator: GranularityIndicator = null
 ## 视图名牌（CanvasLayer 直接子节点，同批显隐；open 时喂"地区 N · N 地块"）
 var _title_bar: MapTitleBar = null
 
+## 全屏海洋底（CanvasLayer 首子节点，z 最低；C21：下钻视图同样整屏铺海洋）
+var _ocean_backdrop: Control = null
+
 ## 地图模式管理器（Content 子节点，B4：切模式转发渲染器）
 var _mode_manager: MapModeManager = null
 
@@ -68,6 +71,8 @@ func _auto_find_components() -> void:
 		_indicator = MapControllerUtil.find_sibling(self, "GranularityIndicator") as GranularityIndicator
 	if _title_bar == null:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
+	if _ocean_backdrop == null:
+		_ocean_backdrop = MapControllerUtil.find_sibling(self, "OceanBackground")
 	if _hud == null:
 		_hud = MapControllerUtil.find_sibling(self, "ZoomIndicator")
 	if _mode_manager == null:
@@ -158,6 +163,8 @@ func open(region_id: String) -> void:
 					map_camera.set_offset(vp_size * 0.5 - Vector2(
 						float(msize.x) * default_zoom * 0.5, float(msize.y) * default_zoom * 0.5))
 	visible = true
+	if _ocean_backdrop != null:
+		_ocean_backdrop.visible = true
 	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
 	if map_renderer != null and map_renderer.has_method("set_map_mode"):
 		map_renderer.set_map_mode(MapModeManager.current_mode)
@@ -193,6 +200,9 @@ func _update_title_bar() -> void:
 ## 与 open() 内的显隐逻辑保持一致（M 关闭重开、下钻切换都同步粒度指示器）
 func set_view_visible(v: bool) -> void:
 	visible = v
+	# 全屏海洋底同批显隐（C21；L3 会话内的下钻也自带一层，同色重叠无副作用）
+	if _ocean_backdrop != null:
+		_ocean_backdrop.visible = v
 	if _hud != null:
 		_hud.visible = v
 	if _indicator != null:

@@ -49,13 +49,14 @@
 
 | 要做什么            | 读哪个                                                     |
 | --------------- | ------------------------------------------------------- |
+| **查架构文档地图（架构目录入口）** | `docs/技术/架构/README.md` |
 | 了解游戏整体          | `docs/设计/游戏设计文档.md`                                 |
 | 查 UI 体系规划/模板    | `docs/设计/UI/README.md`（索引各篇；模板在 `modules/ui_global/scenes/templates/`） |
 | 实现某个系统          | `docs/设计/系统/<系统名>.md`                        |
 | 查核心实体/状态机       | `docs/技术/架构/核心实体与状态机.md`               |
 | 查 EventBus 信号   | `docs/技术/架构/系统交互与EventBus.md`           |
 | 查模块 API 规范      | `docs/技术/架构/模块API契约.md`                   |
-| 查架构总纲/分层规则/收敛工作项（AR 系列） | `docs/技术/架构/架构总纲.md` |
+| 查模块实现状态/断链点（GDD↔代码对照） | `docs/技术/架构/模块依赖关系.md` |
 | 查 Autoload 依赖   | `docs/技术/架构/自动加载依赖.md`              |
 | 查战略图（world_map）架构 | `docs/技术/架构/战略图架构.md`（模块重新设计基线） |
 | 查程序化产物如何喂给战略图 | `docs/技术/架构/世界地图数据流.md`（生成端 ↔ 消费端契约） |
@@ -88,6 +89,7 @@
 1. **文件夹结构**：模块一级目录按功能划分（`/modules/`、`/core/`），新功能 = 新模块，互不干扰，保证高可扩展性；模块内二级目录按类型划分（scenes/、scripts/、assets/ 等），找场景去 scenes/、找脚本去 scripts/，保证高速定位。功能定边界、类型定导航，两级结合。
 2. **耦合原则**：模块间通信优先使用 `core/autoload/event_bus.gd` 的全局事件总线，或通过模块的 `api.gd` 定义信号。不要跨模块 `get_node` 或引用非 API 内部方法。
 3. **接口契约**：模块对外交互须通过其根目录下的 `api.gd` 文件。
+4. **依赖分层**：只允许高层依赖低层——L0 `core/` → L1 基础设施（ui_global/fx/texture_gen/building_gen/environment）→ L2 玩法（combat/units/construction/organization/resources/inventory/player_control/world_map/debug_gui）→ L3 组装（world 唯一 composition root）。改动跨模块结构后跑 `python tools/audit_deps.py` 自检（零依赖环；跨模块 preload 仅限 api.gd 或行内 `audit-exempt` 标记+理由）。架构收敛工作项（AR 系列）见 `docs/项目/待办事项.md`。
 
 **解耦核心策略**：
 

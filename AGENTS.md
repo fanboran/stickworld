@@ -60,7 +60,7 @@
 | 查程序化世界生成       | `docs/设计/系统/08-程序化世界生成.md` |
 | 游戏数据表           | `config/excel/` 目录 + `docs/技术/教程/Excel数据管线.md` |
 | 查编辑器工具/插件    | `docs/技术/编辑器工具索引.md`（addons/ + tools/ 全部脚本） |
-| 查 Godot 引擎 API（类参考，项目外） | `F:\VSCode\godot-docs\doc\classes\<类名>.xml`（`--doctool` 生成，版本精准；查属性/方法/信号用） |
+| 查 Godot 引擎 API（类参考，项目外） | `F:\VSCode\godot-docs\doc\classes\<类名>.xml`（`--doctool` 生成，版本精准；查属性/方法/信号用；**升级引擎后重跑 `godot --headless --doctool F:\VSCode\godot-docs` 保持对齐**） |
 | 查编辑器/运行时报错    | `stick-world/tools/check_godot_errors.sh`（扫描 `user://logs/`，日志机制见 `docs/技术/教程/Godot日志与报错检测.md`） |
 | 开发规范            | `docs/CONTRIBUTING.md`                                  |
 | 有可以参考的开源项目就放到这里 | external/                                               |
@@ -72,8 +72,9 @@
 ## 核心行为指令
 
 1. **主动沟通**：当任务描述不清晰或与架构原则冲突时，积极主动提问，不做危险假设。但可从系统一致性推导的实现细节（如某系统接入另一系统的方式、宏观涌现类机制的节奏）**不问创始人**——自行推导并落档；只把真正需要创始人定方向、定了会改做法的分歧拿出来问。
-2. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/设计/系统/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
-3. **报错自检**：任何代码修改后，运行 `bash stick-world/tools/check_godot_errors.sh`（退出码 1 = 日志有报错，须修复）；用户报告编辑器报错时先查日志再处置，详见 `docs/技术/教程/Godot日志与报错检测.md`。测试：`bash stick-world/tests/run_all.sh`（全量 / `-Changed` 增量 / `-Match` 过滤，详见 `docs/技术/教程/测试矩阵.md`）。
+2. **core/ 稳定优先**：`core/` 是全局基础设施，修改前须向用户说明理由并确认（autoload 新增/删减同样适用）。
+3. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/设计/系统/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
+4. **报错自检**：任何代码修改后，运行 `bash stick-world/tools/check_godot_errors.sh`（退出码 1 = 日志有报错，须修复）；用户报告编辑器报错时先查日志再处置，详见 `docs/技术/教程/Godot日志与报错检测.md`。测试：`bash stick-world/tests/run_all.sh`（全量 / `-Changed` 增量 / `-Match` 过滤，详见 `docs/技术/教程/测试矩阵.md`）。
 4. **GitHub 查询走 MCP**：查 GitHub（代码/issue/仓库/README）一律用 `github-search` MCP 工具（已配置 GITHUB_TOKEN 认证）；**禁止手动 curl 匿名调用 api.github.com**（匿名限额 60 次/时，会触发限流并污染诊断）。
 5. **UI 布局单一真相源**：场景是布局唯一真相源，**禁止 `Control.new()` 当 UI 根**（会丢 anchor 致控件静默不可见）；代码建控件的合规出口（全屏 `full_rect()` / 角落部件 `widget()` + 槽位）见 `docs/技术/架构/场景与战斗/UI.md`。
 
@@ -101,7 +102,7 @@
 
 ```
 / (res://)
-├── core/                  # 核心系统与基础设施
+├── core/                  # 核心系统与基础设施（稳定，修改需批准）
 ├── modules/               # 游戏功能模块（开发最频繁的区域）
 ├── assets/                # 全局共享资源
 ├── addons/                # 编辑器插件（项目自带 + 第三方），详见 docs/技术/编辑器工具索引.md

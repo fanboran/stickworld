@@ -168,9 +168,14 @@ def cel(tag, fake, target, out_ink=None, nids=10):
         ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
         ring = (vis & ~ero_vis).astype(np.float32)
     if target >= 128:
-        id_t = Image.fromarray((part + 1).astype(np.uint8)).resize((target, target), Image.NEAREST)
-        idedge = (np.asarray(id_t.filter(ImageFilter.MaxFilter(3))) !=
-                  np.asarray(id_t.filter(ImageFilter.MinFilter(3)))) & op
+        pid8 = Image.fromarray((part + 1).astype(np.uint8)).resize((target, target), Image.NEAREST)
+        pmax = np.asarray(pid8.filter(ImageFilter.MaxFilter(3)))
+        pmin = np.asarray(pid8.filter(ImageFilter.MinFilter(3)))
+        # 只画「部件-部件」交界缝线：窗内必须全是真实部件（pmin>=1 即不含
+        # part=-1 的壳墨/背景区）。壳描边架构下成品 op 实心区扩到壳剪影，
+        # 「部件 vs 壳墨区」的边界若不排除，会在形体外缘再画一圈墨——与
+        # 壳描边之间夹 cel 边缘 AA 带 = 双层线/悬空描边（256px 审计病灶）
+        idedge = (pmax != pmin) & (pmin >= 1) & op
         ring = ring + np.asarray(Image.fromarray((idedge * 255).astype(np.uint8))
                                  .filter(ImageFilter.MaxFilter(3))).astype(np.float32) / 255.0 * (0.6 if target == 128 else 0.8)
     w = np.clip(ring, 0, 1)

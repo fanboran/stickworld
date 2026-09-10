@@ -121,6 +121,53 @@ def cyl(r, depth, loc=(0, 0, 0), rot=None, verts=48, bev=None, pid=3):
     return ob
 
 
+def ring(R, r, depth, loc=(0, 0, 0), rot=None, verts=48, pid=2):
+    """环形平板（中心物理镂空）：外半径 R、内半径 r、厚 depth。孔是真几何
+    孔洞——穿透，非深色贴片伪装。recalc_face_normals 保证法线朝外（烘色
+    依赖面法线点乘光向）。"""
+    import bpy, bmesh
+    from mathutils import Euler
+    me = bpy.data.meshes.new('ring')
+    vs, fs = [], []
+    for i in range(verts):        # 底圈：外/内
+        a = 2 * math.pi * i / verts
+        vs.append((R * math.cos(a), R * math.sin(a), -depth / 2))
+    for i in range(verts):        # 底圈：内
+        a = 2 * math.pi * i / verts
+        vs.append((r * math.cos(a), r * math.sin(a), -depth / 2))
+    for i in range(verts):        # 顶圈：外/内
+        a = 2 * math.pi * i / verts
+        vs.append((R * math.cos(a), R * math.sin(a), depth / 2))
+    for i in range(verts):        # 顶圈：内
+        a = 2 * math.pi * i / verts
+        vs.append((r * math.cos(a), r * math.sin(a), depth / 2))
+    v2 = verts * 2
+    for i in range(verts):
+        j = (i + 1) % verts
+        fs.append((i, j, verts + j, verts + i))                          # 底环带
+        fs.append((2 * verts + i, 2 * verts + j, 3 * verts + j, 3 * verts + i))  # 顶环带
+        fs.append((i, 2 * verts + i, 2 * verts + j, j))                  # 外壁
+        fs.append((verts + i, 3 * verts + i, 3 * verts + j, verts + j))  # 内壁
+    me.from_pydata(vs, [], fs)
+    me.validate()
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    ob = bpy.data.objects.new('ring', me)
+    # data.objects.new 产生的是游离对象，必须手动 link 进场景（bpy.ops 系列
+    # 原语会自动 link，此处没有 op，漏 link 则 mesh 存在但永不进渲染/ID pass）
+    bpy.context.scene.collection.objects.link(ob)
+    ob.location = loc
+    if rot:
+        ob.rotation_euler = Euler(rot, 'XYZ')
+    _base_mat(ob)
+    ob["pid"] = pid
+    return ob
+
+
 def sph(r, loc=(0, 0, 0), segs=(64, 40), pid=3, scale=None, rot=None):
     import bpy
     bpy.ops.mesh.primitive_uv_sphere_add(radius=r, segments=segs[0], ring_count=segs[1],
@@ -833,13 +880,13 @@ def _m_medkit():
 
 @motif("gear", "齿轮")
 def _m_gear():
-    cyl(0.52, 0.22, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=2)
+    # 盘面=环形平板（中心物理镂空，孔径=原轴毂区域）：轴毂/轴孔圆柱整体退役，
+    # 只剩灰色轮盘+齿，中心真孔穿透（见背景，非深色贴片伪装）
+    ring(0.52, 0.17, 0.22, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=2)
     for i in range(8):
         a = math.radians(i * 45)
         box((0.20, 0.18, 0.16), (math.cos(a) * 0.60, 0, 0.45 + math.sin(a) * 0.60),
             rot=(0, -a, 0), pid=2)
-    cyl(0.17, 0.30, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=8)          # 轴毂
-    cyl(0.085, 0.34, (0, 0, 0.45), rot=(math.radians(90), 0, 0), pid=9)         # 轴孔（掏空，深色贯通）
 
 
 @motif("books", "两本书", az=20, el=12, key_e=6.0)

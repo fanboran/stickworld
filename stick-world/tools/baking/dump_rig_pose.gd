@@ -4,7 +4,7 @@ extends Node
 ## 全局位姿（position + rotation 度数）为 JSON。与 Python 侧 Spine 基准导出器
 ## 共用同一 JSON 契约（source/skeleton_height/anims.frames），供动画翻译验收对照。
 ##
-## 运行方式（与 spine_import.tscn 同款）：
+## 运行方式：
 ##   godot --headless --path <工程根> res://tools/baking/dump_rig_pose.tscn -- \
 ##     --anims=walk,run,attack --fps=15 \
 ##     --dir=res://tools/baking/_faithful --out=res://tools/baking/_faithful/rig_pose.json

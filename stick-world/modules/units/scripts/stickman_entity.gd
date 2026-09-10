@@ -14,7 +14,7 @@ extends CharacterBody2D
 ##   StickmanEntity (CharacterBody2D)
 ##   ├── RigHost (Node2D, 实例化 stickman_test.tscn，禁用其脚本)
 ##   │   ├── StickmanRig (Skeleton2D)
-##   │   └── Node2D (IK markers parent)
+##   │   └── Node2D (脚位 markers 父节点，foot_offset 基准)
 ##   ├── VisualController (Node, visual_controller.gd —— 动画播放/头顶进度条)
 ##   ├── InteractionController (Node, interaction_controller.gd —— 按F交互/提示弹窗)
 ##   └── CollisionShape2D
@@ -144,9 +144,9 @@ var is_villager: bool = false
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
 var rig: Node2D = null
-## IK markers 父节点引用
+## 脚位 markers 父节点引用（foot_offset 基准）
 var _markers_parent: Node2D = null
-## IK markers 父节点引用
+## 脚位 markers 父节点引用（foot_offset 基准）
 ## 当前速度（标量，px/s）
 var _current_speed: float = 0.0
 ## 是否在奔跑
@@ -323,7 +323,7 @@ func _ready() -> void:
 			"cft": 7 + randi() % 7,
 			"cmd": 7 + randi() % 7,
 		}
-	# 先拿到 StickmanRig 和 IK markers 引用——必须在 _mount_components 之前：
+	# 先拿到 StickmanRig 和脚位 markers 引用——必须在 _mount_components 之前：
 	# VisualController.setup 连接 rig.animation_finished（攻击播完回切），
 	# 顺序颠倒时 rig 为 null，连接静默丢失（曾致攻击动画播完永不回切）
 	var rig_host := get_node_or_null("RigHost")
@@ -905,7 +905,7 @@ func set_body_scale(v: float) -> void:
 func _sync_markers_transform() -> void:
 	if _markers_parent == null or rig == null:
 		return
-	# IK markers 父节点必须与 StickmanRig 同 transform，否则 IK 不可达
+	# 脚位 markers 父节点必须与 StickmanRig 同 transform（foot_offset 基准随动）
 	_markers_parent.global_transform = rig.global_transform
 
 

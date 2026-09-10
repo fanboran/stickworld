@@ -436,40 +436,49 @@ const ENUM_TO_TAG := {
 }
 
 
-## 加载预设模板，创建组织树。
-## preset 双形态：
-##   - String：查 presets.tres 官方母本（按条目的 preset 字段过滤）
-##   - Dictionary：export_as_preset 产物直灌 {name, tag, entries: [{id, name, level, tag, parent_id}]}
-## parent_id = "" 时创建独立根树（按预设标称层级）；指定 parent 时须预设顶层
-## level == parent.tier - 1（不做层级平移——平移会让"师"落到连级，语义错乱）。
-## 中途失败回滚已创建组织（整体成功或整体失败）。
-## 返回 data: {org_id=根组织, created=全部新组织 id（根在首位）}
-func load_preset(preset: Variant, parent_id: String) -> Dictionary:
-	var preset_data := {}
-	if preset is String:
-		var loaded := _load_preset_rows(preset)
-		if not loaded.get("ok", false):
-			return loaded
-		preset_data = loaded.data
-	elif preset is Dictionary:
-		var err := _validate_preset_data(preset)
-		if err != "":
-			return {"ok": false, "error": err}
-		preset_data = preset
-	else:
-		return {"ok": false, "error": "预设参数须为 String（预设名）或 Dictionary（export_as_preset 格式）"}
+## AutonomyLevel 枚举 → 字符串（export_as_preset 序列化用，与 AUTONOMY_TO_ENUM 互逆）
+const AUTONOMY_TO_STR := {
+	ScriptOrgState.AutonomyLevel.HIGH: "HIGH",
+	ScriptOrgState.AutonomyLevel.MEDIUM: "MEDIUM",
+	ScriptOrgState.AutonomyLevel.LOW: "LOW",
+}
 
+
+## 加载官方预设母本，创建组织树（presets.tres 按条目 preset 字段过滤，装载时归一为 v2 条目）。
+## 挂接/回滚/返回值语义同 apply_preset。返回 data: {org_id=根组织, created=全部新组织 id（根在首位）}
+func load_preset(preset_name: String, parent_id: String) -> Dictionary:
+	var loaded := _load_preset_rows(preset_name)
+	if not loaded.get("ok", false):
+		return loaded
+	return _instantiate_preset({"name": preset_name, "tag": "", "entries": loaded.data.entries}, parent_id)
+
+
+## 应用 v2 蓝图数据（export_as_preset 产物格式），创建组织树。
+## parent_id = "" 时创建独立根树（按蓝图标称层级）；指定 parent 时须蓝图顶层
+## level == parent.tier - 1（不做层级平移——平移会让"师"落到连级，语义错乱）。
+## 条目模板字段（personnel_template/equipment_template/autonomy/default_behavior）透传到新组织；
+## 实例字段（personnel/commander_id/location 等）不属于蓝图，永不导入。
+## 中途失败回滚已创建组织（整体成功或整体失败）。
+func apply_preset(data: Dictionary, parent_id: String) -> Dictionary:
+	var err := _validate_preset_data(data)
+	if err != "":
+		return {"ok": false, "error": err}
+	return _instantiate_preset(data, parent_id)
+
+
+## 预设实例化主体（load_preset / apply_preset 共用，输入已归一为 v2 条目）
+func _instantiate_preset(preset_data: Dictionary, parent_id: String) -> Dictionary:
 	var entries: Array = preset_data.get("entries", [])
 	var root_tag := String(preset_data.get("tag", ""))
 
-	# 单根校验 + 条目 id 集（顶层 = parent_id 为空或不在条目集内）
-	var ids := {}
+	# 单根校验 + 条目 key 集（顶层 = parent_key 为空或不在条目集内）
+	var keys := {}
 	for e in entries:
-		ids[String(e.get("id", ""))] = true
+		keys[String(e.get("key", ""))] = true
 	var roots: Array = []
 	for e in entries:
-		var pid := String(e.get("parent_id", ""))
-		if pid == "" or not ids.has(pid):
+		var pk := String(e.get("parent_key", ""))
+		if pk == "" or not keys.has(pk):
 			roots.append(e)
 	if roots.size() != 1:
 		return {"ok": false, "error": "预设必须是单根树，实际顶层条目 %d 个" % roots.size()}
@@ -499,26 +508,35 @@ func load_preset(preset: Variant, parent_id: String) -> Dictionary:
 			return la > lb
 		return order_index[a] < order_index[b])
 
-	var id_map := {}   # 预设条目 id -> 新 org_id
+	var key_map := {}   # 预设条目 key -> 新 org_id
 	var created: Array[String] = []
 	var failure := ""   # 非空 = 创建中断原因，统一走回滚出口
 	for e in ordered:
 		if failure != "":
 			break
-		var pid := String(e.get("parent_id", ""))
+		var pk := String(e.get("parent_key", ""))
 		var new_parent: String
-		if pid == "" or not ids.has(pid):
+		if pk == "" or not keys.has(pk):
 			new_parent = parent_id
-		elif id_map.has(pid):
-			new_parent = String(id_map[pid])
+		elif key_map.has(pk):
+			new_parent = String(key_map[pk])
 		else:
 			# 父条目尚未创建（数据断链，如子级 level >= 父级）——不可建，整体失败
-			failure = "条目 %s 的父条目 %s 未创建（层级断链）" % [String(e.get("id")), pid]
+			failure = "条目 %s 的父条目 %s 未创建（层级断链）" % [String(e.get("key")), pk]
 			break
 		var r := create_organization(String(e.get("name", "未命名")), String(e.get("tag", root_tag)), int(e.get("level", 1)), new_parent)
 		if r.get("ok", false):
-			id_map[String(e.get("id", ""))] = r.data.org_id
+			key_map[String(e.get("key", ""))] = r.data.org_id
 			created.append(r.data.org_id)
+			# 模板字段透传（实例字段不属于蓝图，不导入）
+			var st := _get_org(r.data.org_id)
+			var tmpl: Variant = e.get("personnel_template", {})
+			st.personnel_template = tmpl.duplicate() if tmpl is Dictionary else {}
+			var equip: Variant = e.get("equipment_template", {})
+			st.equipment_template = equip.duplicate() if equip is Dictionary else {}
+			var behav: Variant = e.get("default_behavior", {})
+			st.default_behavior = behav.duplicate() if behav is Dictionary else {}
+			st.autonomy_level = AUTONOMY_TO_ENUM.get(String(e.get("autonomy", "MEDIUM")).to_upper(), ScriptOrgState.AutonomyLevel.MEDIUM)
 		else:
 			failure = str(r.get("error", ""))
 
@@ -530,34 +548,48 @@ func load_preset(preset: Variant, parent_id: String) -> Dictionary:
 	return {"ok": true, "data": {"org_id": created[0], "created": created}}
 
 
-## 将组织及其子树导出为预设数据（load_preset Dictionary 形态可直接回灌）。
-## 格式：{name=根组织名, tag=根组织标签, entries=[{id, name, level, tag, parent_id}]}
-## 根条目 parent_id 恒为 ""——导出子树重灌时成为独立根树（内部相对链接保留）。
+## 将组织及其子树导出为 v2 蓝图数据（apply_preset 可直接回灌）。
+## 格式：{name, tag, entries=[{key, name, level, tag, parent_key, 模板字段...}]}
+## 条目 key 为导出时重编的语义键（"n1","n2"... 先根序）——蓝图不携带运行时 org_id，
+## 可 diff/可合并（构筑谱系/UGC 前提）；实例字段（成员/指挥官/驻地）不导。
 func export_as_preset(org_id: String) -> Dictionary:
 	var org := _get_org(org_id)
 	if org == null:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
+	# 第一遍：先根序收集 (org, parent_org_id)，分配语义键
+	var flat: Array = []
+	_collect_flat(org, "", flat)
+	var key_of := {}   # org_id -> 语义键
+	for i in flat.size():
+		key_of[flat[i]["org"].id] = "n%d" % (i + 1)
+	# 第二遍：产 v2 条目（parent_key 经映射；根为空）
 	var entries: Array = []
-	_collect_subtree(org, "", entries)
+	for item in flat:
+		var o: ScriptOrgState = item["org"]
+		entries.append({
+			"key": key_of[o.id],
+			"name": o.name,
+			"level": o.tier,
+			"tag": ENUM_TO_TAG.get(o.tag, ""),
+			"parent_key": "" if item["parent"] == "" else String(key_of[item["parent"]]),
+			"personnel_template": o.personnel_template.duplicate(),
+			"equipment_template": o.equipment_template.duplicate(),
+			"autonomy": AUTONOMY_TO_STR.get(o.autonomy_level, "MEDIUM"),
+			"default_behavior": o.default_behavior.duplicate(),
+		})
 	return {"ok": true, "data": {"name": org.name, "tag": ENUM_TO_TAG.get(org.tag, ""), "entries": entries}}
 
 
-## DFS 收集子树条目（先根序，兄弟顺序 = child_orgs 顺序）
-func _collect_subtree(org: ScriptOrgState, parent_key: String, entries: Array) -> void:
-	entries.append({
-		"id": org.id,
-		"name": org.name,
-		"level": org.tier,
-		"tag": ENUM_TO_TAG.get(org.tag, ""),
-		"parent_id": parent_key,
-	})
+## 先根序收集子树 (org, parent_org_id) 扁平表（兄弟顺序 = child_orgs 顺序）
+func _collect_flat(org: ScriptOrgState, parent_id: String, flat: Array) -> void:
+	flat.append({"org": org, "parent": parent_id})
 	for child_id in org.child_orgs:
 		var child := _get_org(child_id)
 		if child != null:
-			_collect_subtree(child, org.id, entries)
+			_collect_flat(child, org.id, flat)
 
 
-## 从 presets.tres 按预设名取条目集
+## 从 presets.tres 按预设名取条目，归一为 v2 形态（母本行字段 id/parent_id 映射为 key/parent_key）
 func _load_preset_rows(preset_name: String) -> Dictionary:
 	var res: Resource = load(PRESET_CONFIG_PATH)
 	if res == null or not (res is BalanceResource):
@@ -570,13 +602,19 @@ func _load_preset_rows(preset_name: String) -> Dictionary:
 		if pname != "" and pname not in available:
 			available.append(pname)
 		if pname == preset_name:
-			entries.append(row)
+			entries.append({
+				"key": String(row.get("id", "")),
+				"name": String(row.get("name", "")),
+				"level": int(row.get("level", 0)),
+				"tag": String(row.get("tag", "")),
+				"parent_key": String(row.get("parent_id", "")),
+			})
 	if entries.is_empty():
 		return {"ok": false, "error": "未知预设: %s（可用: %s）" % [preset_name, ", ".join(available)]}
 	return {"ok": true, "data": {"entries": entries}}
 
 
-## 校验 Dictionary 形态预设的结构（单根/条目字段完备）
+## 校验 v2 蓝图数据的结构（单根在 _instantiate_preset 校验；此处验条目字段完备）
 func _validate_preset_data(data: Dictionary) -> String:
 	var entries: Variant = data.get("entries", null)
 	if entries == null or not (entries is Array) or (entries as Array).is_empty():
@@ -584,10 +622,10 @@ func _validate_preset_data(data: Dictionary) -> String:
 	for e in entries:
 		if not (e is Dictionary):
 			return "预设条目须为 Dictionary"
-		if String(e.get("id", "")) == "":
-			return "预设条目缺少 id"
+		if String(e.get("key", "")) == "":
+			return "预设条目缺少 key"
 		if int(e.get("level", 0)) < TIER_MIN or int(e.get("level", 0)) > TIER_MAX:
-			return "预设条目 %s 层级 %s 超出 %d-%d 范围" % [String(e.get("id")), String(e.get("level")), TIER_MIN, TIER_MAX]
+			return "预设条目 %s 层级 %s 超出 %d-%d 范围" % [String(e.get("key")), String(e.get("level")), TIER_MIN, TIER_MAX]
 	return ""
 
 

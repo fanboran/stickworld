@@ -36,6 +36,8 @@ func _ready() -> void:
 	_runner.add_test("Org: load_preset Dictionary 直灌挂接到 parent", _test_load_preset_attach)
 	_runner.add_test("Org: load_preset 中途失败整体回滚", _test_load_preset_rollback)
 	_runner.add_test("Org: export_as_preset 子树导出 + 往返同构", _test_export_roundtrip)
+	_runner.add_test("Org: 蓝图模板字段往返保真（编制/装备/权限/行为）", _test_preset_template_roundtrip)
+	_runner.add_test("Org: api 层信号契约（insert_tier 补发 org_created+restructured）", _test_api_signals)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -287,8 +289,10 @@ func _test_load_preset_errors() -> void:
 	var r1: Dictionary = m.load_preset("不存在的预设", "")
 	_runner.assert_false(r1.get("ok", true), "未知预设名应失败")
 	_runner.assert_true(str(r1.get("error", "")).contains("可用"), "错误信息应列出可用预设")
-	var r2: Dictionary = m.load_preset(42, "")
-	_runner.assert_false(r2.get("ok", true), "非 String/Dictionary 参数应失败")
+	var r2: Dictionary = m.apply_preset({"entries": []}, "")
+	_runner.assert_false(r2.get("ok", true), "空 entries 蓝图应失败")
+	var r_bad: Dictionary = m.apply_preset({"entries": [{"key": "a", "name": "x", "level": 9}]}, "")
+	_runner.assert_false(r_bad.get("ok", true), "层级越界条目应失败")
 	# 层级不衔接：预设顶层 L5 无法挂到 L5 父组织下（须 parent.tier-1 = L4）
 	var root: Dictionary = m.create_organization("司令部", "MILITARY", 5, "")
 	var r3: Dictionary = m.load_preset("军事编制", root.data.org_id)
@@ -299,16 +303,16 @@ func _test_load_preset_errors() -> void:
 func _test_load_preset_attach() -> void:
 	var m := ScriptOrgManager.new()
 	var root: Dictionary = m.create_organization("野战军", "MILITARY", 5, "")
-	# Dictionary 直灌（export_as_preset 同格式）：顶层 L4 恰好衔接 L5 父组织
+	# v2 蓝图直灌（export_as_preset 同格式）：顶层 L4 恰好衔接 L5 父组织
 	var preset := {
 		"name": "附属师", "tag": "MILITARY",
 		"entries": [
-			{"id": "a", "name": "师", "level": 4, "tag": "MILITARY", "parent_id": ""},
-			{"id": "b", "name": "团", "level": 3, "tag": "MILITARY", "parent_id": "a"},
-			{"id": "c", "name": "连", "level": 2, "tag": "MILITARY", "parent_id": "b"},
+			{"key": "a", "name": "师", "level": 4, "tag": "MILITARY", "parent_key": ""},
+			{"key": "b", "name": "团", "level": 3, "tag": "MILITARY", "parent_key": "a"},
+			{"key": "c", "name": "连", "level": 2, "tag": "MILITARY", "parent_key": "b"},
 		],
 	}
-	var r: Dictionary = m.load_preset(preset, root.data.org_id)
+	var r: Dictionary = m.apply_preset(preset, root.data.org_id)
 	_runner.assert_true(r.get("ok", false), "衔接层级的预设应挂接成功: " + str(r))
 	_runner.assert_equal(m.organizations.size(), 4, "挂接后共 4 个组织")
 	var children: Array[String] = m.get_child_orgs(root.data.org_id)
@@ -322,12 +326,12 @@ func _test_load_preset_rollback() -> void:
 	var preset := {
 		"name": "坏预设", "tag": "MILITARY",
 		"entries": [
-			{"id": "a", "name": "师", "level": 5, "tag": "MILITARY", "parent_id": ""},
-			{"id": "b", "name": "团", "level": 4, "tag": "MILITARY", "parent_id": "a"},
-			{"id": "c", "name": "幽灵层", "level": 5, "tag": "MILITARY", "parent_id": "b"},
+			{"key": "a", "name": "师", "level": 5, "tag": "MILITARY", "parent_key": ""},
+			{"key": "b", "name": "团", "level": 4, "tag": "MILITARY", "parent_key": "a"},
+			{"key": "c", "name": "幽灵层", "level": 5, "tag": "MILITARY", "parent_key": "b"},
 		],
 	}
-	var r: Dictionary = m.load_preset(preset, "")
+	var r: Dictionary = m.apply_preset(preset, "")
 	_runner.assert_false(r.get("ok", true), "断链预设应失败")
 	_runner.assert_true(str(r.get("error", "")).contains("回滚"), "错误信息应说明已回滚")
 	_runner.assert_equal(m.organizations.size(), 0, "回滚后不应残留任何组织")
@@ -344,10 +348,12 @@ func _test_export_roundtrip() -> void:
 	_runner.assert_equal(exported.data.name, "团", "导出根名称应为团")
 	_runner.assert_equal(exported.data.tag, "MILITARY", "导出根标签应为 MILITARY")
 	_runner.assert_equal(exported.data.entries.size(), 4, "团子树应含 4 个条目")
-	_runner.assert_equal(String(exported.data.entries[0].parent_id), "", "导出根条目 parent_id 应为空")
+	_runner.assert_equal(String(exported.data.entries[0].parent_key), "", "导出根条目 parent_key 应为空")
+	_runner.assert_equal(String(exported.data.entries[0].key), "n1", "条目 key 应为语义键（先根序重编，无运行时 org_id）")
+	_runner.assert_true(str(exported.data.entries[0].key).begins_with("n"), "key 不应携带 org_ 前缀")
 	# 往返：回灌到全新 manager，结构应同构
 	var m2 := ScriptOrgManager.new()
-	var r2: Dictionary = m2.load_preset(exported.data, "")
+	var r2: Dictionary = m2.apply_preset(exported.data, "")
 	_runner.assert_true(r2.get("ok", false), "导出数据应可直接回灌: " + str(r2))
 	var exported2: Dictionary = m2.export_as_preset(r2.data.org_id)
 	_runner.assert_equal(_preset_shape(exported.data), _preset_shape(exported2.data), "往返后结构应同构")
@@ -369,3 +375,59 @@ func _preset_shape(data: Dictionary) -> Array:
 		rows.append([String(e.name), int(e.level), String(e.tag), name_by_id.get(pid, "") if pid != "" else ""])
 	rows.sort()
 	return rows
+
+
+# ─────────────── 蓝图模板字段往返（v2：模板导、实例不导） ───────────────
+
+func _test_preset_template_roundtrip() -> void:
+	var m := ScriptOrgManager.new()
+	var r: Dictionary = m.load_preset("军事编制", "")
+	var root_id: String = r.data.org_id
+	var regiment_id: String = m.get_child_orgs(root_id)[0]
+	# 给团级配模板 + 权限
+	m.set_personnel_template(regiment_id, {"rifleman": 4, "mage": 1})
+	m.set_equipment_template(regiment_id, {"armor": "leather"})
+	m.set_autonomy(regiment_id, "LOW")
+	m.set_default_behavior(regiment_id, {"stance": "hold"})
+	var exported: Dictionary = m.export_as_preset(root_id)
+	var reg_entry: Dictionary = {}
+	for e in exported.data.entries:
+		if String(e.name) == "团":
+			reg_entry = e
+	_runner.assert_equal(reg_entry.personnel_template, {"rifleman": 4, "mage": 1}, "导出条目应含人员编制模板")
+	_runner.assert_equal(reg_entry.equipment_template, {"armor": "leather"}, "导出条目应含装备模板")
+	_runner.assert_equal(String(reg_entry.autonomy), "LOW", "导出条目应含自主权限")
+	_runner.assert_equal(reg_entry.default_behavior, {"stance": "hold"}, "导出条目应含默认行为")
+	# 实例字段不应出现
+	_runner.assert_false(reg_entry.has("personnel") or reg_entry.has("commander_id"), "实例字段（成员/指挥官）不应进蓝图")
+	# 回灌：模板字段逐项落到新组织
+	var m2 := ScriptOrgManager.new()
+	var r2: Dictionary = m2.apply_preset(exported.data, "")
+	var reg2: String = m2.get_child_orgs(r2.data.org_id)[0]
+	_runner.assert_equal(m2.get_organization(reg2).data.personnel_template, {"rifleman": 4, "mage": 1}, "回灌后编制模板保真")
+	_runner.assert_equal(m2.get_organization(reg2).data.autonomy_level, ScriptOrgState.AutonomyLevel.LOW, "回灌后自主权限保真")
+	_runner.assert_equal(m2.get_organization(reg2).data.default_behavior, {"stance": "hold"}, "回灌后默认行为保真")
+
+
+# ─────────────── api 层信号契约（层级调整补发信号） ───────────────
+
+func _test_api_signals() -> void:
+	var api := preload("res://modules/organization/api.gd").new()
+	var m := ScriptOrgManager.new()
+	api.setup(m)
+	var tree := _build_tree(m)
+	var created_ids: Array = []
+	var restructured_ids: Array = []
+	api.org_created.connect(func(org_id: String): created_ids.append(org_id))
+	api.org_restructured.connect(func(org_id: String): restructured_ids.append(org_id))
+	# insert_tier：above 在 root 与 mid 之间无空层（连续层级）会失败——用 below 在 leaf 下插 L2
+	var r: Dictionary = api.insert_tier(tree.leaf, "新连", "below")
+	_runner.assert_true(r.get("ok", false), "below 插层应成功: " + str(r))
+	_runner.assert_equal(created_ids.size(), 1, "insert_tier 应补发 1 次 org_created")
+	_runner.assert_true(restructured_ids.has(tree.leaf), "insert_tier 应对原节点发 org_restructured")
+	# remove_tier：应发 org_restructured
+	restructured_ids.clear()
+	var r2: Dictionary = api.remove_tier(created_ids[0])
+	_runner.assert_true(r2.get("ok", false), "删层应成功")
+	_runner.assert_equal(restructured_ids.size(), 1, "remove_tier 应补发 org_restructured")
+	api.free()

@@ -20,7 +20,6 @@ except Exception as _e:
     _MOTIFS, _NAME = [], {}
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-INK = np.array([18, 14, 9])
 
 # (tag, 中文名, 假光参数 or None)
 TAGS = [
@@ -173,32 +172,12 @@ def cel(tag, fake, target, out_ink=None, nids=10):
     cv.paste(small, ((target - inner) // 2, (target - inner) // 2))
 
     a = np.asarray(cv).copy()
-    op = a[..., 3] > 128
-    # 外轮廓墨线已由渲染端反向壳承担（ink pass 合成）。此节只剩：无 ink 层的
-    # 回退环（视觉轮廓 alpha>16 向内一圈）+ ID 结合缝线（拼版概念，保留图像域）。
-    if has_ink:
-        ring = np.zeros_like(op, dtype=np.float32)
-    else:
-        vis = a[..., 3] > 16
-        vis_img = Image.fromarray((vis * 255).astype(np.uint8))
-        ero_vis = np.asarray(vis_img.filter(ImageFilter.MinFilter(3))) > 120
-        ring = (vis & ~ero_vis).astype(np.float32)
-    if target >= 128:
-        pid8 = Image.fromarray((part + 1).astype(np.uint8)).resize((target, target), Image.NEAREST)
-        pmax = np.asarray(pid8.filter(ImageFilter.MaxFilter(3)))
-        pmin = np.asarray(pid8.filter(ImageFilter.MinFilter(3)))
-        # 只画「部件-部件」交界缝线：窗内必须全是真实部件（pmin>=1 即不含
-        # part=-1 的壳墨/背景区）。壳描边架构下成品 op 实心区扩到壳剪影，
-        # 「部件 vs 壳墨区」的边界若不排除，会在形体外缘再画一圈墨——与
-        # 壳描边之间夹 cel 边缘 AA 带 = 双层线/悬空描边（256px 审计病灶）
-        idedge = (pmax != pmin) & (pmin >= 1) & op
-        ring = ring + np.asarray(Image.fromarray((idedge * 255).astype(np.uint8))
-                                 .filter(ImageFilter.MaxFilter(3))).astype(np.float32) / 255.0 * (0.6 if target == 128 else 0.8)
-    w = np.clip(ring, 0, 1)
-    w = np.asarray(Image.fromarray((w * 255).astype(np.uint8))
-                   .filter(ImageFilter.GaussianBlur(0.6))).astype(np.float32) / 255.0
-    w = w[..., None]
-    a[..., :3] = a[..., :3] * (1 - w) + INK * w
+    # 内部线条全部由渲染端反向壳天然承担：每个部件自己的壳描边贴着部件轮廓，
+    # 前景部件的描边显示在背景部件上=部件分界线（粗细=外描边、位置精确、
+    # 凡部件边缘必有）。v1 遗留的图像域部件缝线（idege）已整体退役——它按
+    # 「部件颜色不同才画」工作（同色部件间无内部线=有/无不齐）、靠模糊膨胀
+    # 画（比壳描边粗且发虚）、画在低分辨率部件图边界上且端点提前断（与外
+    # 描边接不上），三重不一致在壳架构下无存在价值。
     cv = Image.fromarray(a, "RGBA")
 
     aa = np.asarray(cv)

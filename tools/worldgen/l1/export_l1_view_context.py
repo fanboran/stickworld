@@ -326,6 +326,11 @@ def main():
                     help="F8：只渲染 L1 世界全景 preview（不写 config），见 render_panorama")
     ap.add_argument("--panorama-size", type=int, default=2048,
                     help="全景 preview 输出边长（默认 2048）")
+    ap.add_argument("--polys-only", action="store_true",
+                    help="R3：重提取平滑几何并就地 patch 现有 l1_world.json 的几何字段"
+                         "（tiles polygon/polygons、neighbors、lakes、l1_polygon），"
+                         "roads/rivers/states/settlement 等后注入字段原样保留；窗口读包内 "
+                         "world_origin+context_size（不重算 margin），跳过底图/索引图重写")
     args = ap.parse_args()
     if args.panorama:
         render_panorama(args.panorama_size)
@@ -351,22 +356,36 @@ def main():
     lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
 
     # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距（按 res 缩放）
-    l1_mask = legacy == lab_l1
-    ys0, xs0 = np.where(l1_mask)
-    bx0, by0 = xs0.min(), ys0.min()
-    bx1, by1 = xs0.max(), ys0.max()
-    # 以地块 bbox 中心居中（质心对不规则形状会偏，导致四周边距不均）
-    cx = int(round((bx0 + bx1) / 2.0))
-    cy = int(round((by0 + by1) / 2.0))
-    margin = args.margin * res // 2048
-    # 正方形边长 = 地块长边 + 2×边距；以地块 bbox 中心为中心，钳在 res 内
-    side = max(bx1 - bx0 + 1, by1 - by0 + 1) + 2 * margin
-    x0 = cx - side // 2
-    y0 = cy - side // 2
-    x0 = max(0, min(x0, res - side))
-    y0 = max(0, min(y0, res - side))
-    print("  context: %d x %d @ (%d,%d)，出生 L1 bbox %d x %d（边距 %d，地块特写居中）"
-          % (side, side, x0, y0, bx1 - bx0 + 1, by1 - by0 + 1, margin))
+    # R3 --polys-only：窗口直接读包内 world_origin+context_size（river_export 注入时
+    # 与本工具同公式重算过——规避 margin 不统一坑），保证 patch 几何与旧坐标同窗
+    if args.polys_only:
+        with open(os.path.join(out_dir, "l1_world.json"), encoding="utf-8") as f:
+            _old = json.load(f)
+        wo = _old.get("world_origin")
+        if wo is None:
+            print("错误：--polys-only 需要 %s 内有 world_origin（先跑 river_export 注入）"
+                  % out_dir)
+            return
+        x0, y0 = int(wo[0]), int(wo[1])
+        side = int(_old["context_size"][0])
+        print("  patch 窗口: %d x %d @ (%d,%d)（读包内 world_origin）" % (side, side, x0, y0))
+    else:
+        l1_mask = legacy == lab_l1
+        ys0, xs0 = np.where(l1_mask)
+        bx0, by0 = xs0.min(), ys0.min()
+        bx1, by1 = xs0.max(), ys0.max()
+        # 以地块 bbox 中心居中（质心对不规则形状会偏，导致四周边距不均）
+        cx = int(round((bx0 + bx1) / 2.0))
+        cy = int(round((by0 + by1) / 2.0))
+        margin = args.margin * res // 2048
+        # 正方形边长 = 地块长边 + 2×边距；以地块 bbox 中心为中心，钳在 res 内
+        side = max(bx1 - bx0 + 1, by1 - by0 + 1) + 2 * margin
+        x0 = cx - side // 2
+        y0 = cy - side // 2
+        x0 = max(0, min(x0, res - side))
+        y0 = max(0, min(y0, res - side))
+        print("  context: %d x %d @ (%d,%d)，出生 L1 bbox %d x %d（边距 %d，地块特写居中）"
+              % (side, side, x0, y0, bx1 - bx0 + 1, by1 - by0 + 1, margin))
 
     print("[2/5] 统一网格提取（城市/邻居/出生轮廓/湖泊，共享角点无缝）...")
     ctx_legacy = legacy[y0:y0 + side, x0:x0 + side].copy()
@@ -377,11 +396,17 @@ def main():
     # 共享同一像素边界），消除"湖泊丝滑弧线 vs 陆地直线大块"交界处的缝隙
     ctx_city[ctx_lake] = 0
     # 8192 原生几何已足够细（屏幕 zoom≈0.77 时像素楼梯不可见）：轻平滑去尖角即可
-    smooth_city, smooth_legacy, smooth_lake = 1, 1, 1
-
-    city_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_city), smooth_passes=smooth_city)
-    legacy_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_legacy), smooth_passes=smooth_legacy)
-    lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)), smooth_passes=smooth_lake)
+    # R3 起换 extract_smooth_mesh：find_contours 亚像素等值线 + 共享弧统一平滑，
+    # 整数台阶根除（--polys-only 的 patch 与全新生成同管线）。
+    # 城市/legacy 合成一张标签图一次提取（legacy +10000 命名空间）——城市块与
+    # 邻居块的交界才共享弧缓存/点焊（分两次提取则交界各自平滑出楔形缝）
+    ctx_combined = ctx_city.copy()
+    _fill = ctx_legacy > 0   # 只填 legacy 陆地（海洋保持 0；city 块优先覆盖）
+    ctx_combined[_fill] = ctx_legacy[_fill] + 10000
+    combined_mesh = mesh_extract.extract_smooth_mesh(ctx_combined)
+    city_mesh = {k: v for k, v in combined_mesh.items() if k < 10000}
+    legacy_mesh = {k - 10000: v for k, v in combined_mesh.items() if k > 10000}
+    lake_mesh = mesh_extract.extract_smooth_mesh(ctx_lake.astype(np.int32))
 
     # 出生 L1 权威轮廓 + 邻居块（灰色）：context 内除出生块外的所有老 L1 块
     # 多连通（大陆 + 岛屿）时 extract 输出多个外环——只取最大环（主大陆）画 L1 轮廓粗线，
@@ -464,23 +489,29 @@ def main():
     city_pts = np.array([t["settlement"]["position_px"] for t in tiles], dtype=np.float64)
     sid = [t["settlement"]["settlement_id"] for t in tiles]
     roads = [{"from": sid[a], "to": sid[b]} for a, b in mst(city_pts)]
-    # 出生 L1 质心在 context 局部坐标（居中聚焦点）
-    focus = [float(cx - x0), float(cy - y0)]
+    # 出生 L1 质心在 context 局部坐标（居中聚焦点）；patch 模式保留旧值
+    if args.polys_only:
+        focus = _old.get("focus_center", [side / 2.0, side / 2.0])
+    else:
+        focus = [float(cx - x0), float(cy - y0)]
 
     print("[4/5] 写索引图 + 底图 ...")
-    idx = np.zeros((side, side, 3), dtype=np.uint8)
-    for i, c in enumerate(cities, start=1):
-        msk = ctx_city == c["label"]
-        idx[msk] = ((i >> 16) & 0xFF, (i >> 8) & 0xFF, i & 0xFF)
-    Image.fromarray(idx).save(os.path.join(out_dir, "l1_mask.png"))
+    if args.polys_only:
+        print("  --polys-only：跳过索引图/底图重写（蒙版未变）")
+    else:
+        idx = np.zeros((side, side, 3), dtype=np.uint8)
+        for i, c in enumerate(cities, start=1):
+            msk = ctx_city == c["label"]
+            idx[msk] = ((i >> 16) & 0xFF, (i >> 8) & 0xFF, i & 0xFF)
+        Image.fromarray(idx).save(os.path.join(out_dir, "l1_mask.png"))
 
-    base = np.full((side, side, 3), OCEAN_COLOR, dtype=np.uint8)
-    for c in cities:
-        base[ctx_city == c["label"]] = c["rgb"]
-    for nlb in nbr_labels:
-        base[ctx_legacy == nlb] = NEIGHBOR_COLOR
-    base[ctx_lake] = LAKE_COLOR
-    Image.fromarray(base).save(os.path.join(out_dir, "l1_base.png"))
+        base = np.full((side, side, 3), OCEAN_COLOR, dtype=np.uint8)
+        for c in cities:
+            base[ctx_city == c["label"]] = c["rgb"]
+        for nlb in nbr_labels:
+            base[ctx_legacy == nlb] = NEIGHBOR_COLOR
+        base[ctx_lake] = LAKE_COLOR
+        Image.fromarray(base).save(os.path.join(out_dir, "l1_base.png"))
 
     print("[5/5] 写 l1_world.json（context 含邻居/湖泊）...")
     world = {
@@ -500,6 +531,22 @@ def main():
         "neighbors": neighbors_data,
         "lakes": lakes,
     }
+    if args.polys_only:
+        # 就地 patch：只替换几何字段（tiles 按 tile_id 对齐 polygon/polygons），
+        # roads/rivers/states/settlement/world_origin 等后注入字段原样保留
+        old = _old
+        old["l1_polygon"] = world["l1_polygon"]
+        old["neighbors"] = world["neighbors"]
+        old["lakes"] = world["lakes"]
+        old_tiles = {t["tile_id"]: t for t in old.get("tiles", [])}
+        for nt in world["tiles"]:
+            ot = old_tiles.get(nt["tile_id"])
+            if ot is None:
+                print("  !! patch 跳过未知 tile: %s" % nt["tile_id"])
+                continue
+            ot["polygon"] = nt["polygon"]
+            ot["polygons"] = nt["polygons"]
+        world = old
     with open(os.path.join(out_dir, "l1_world.json"), "w", encoding="utf-8") as f:
         json.dump(jsonable(world), f, ensure_ascii=False, indent=1)
 

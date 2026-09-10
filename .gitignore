@@ -61,6 +61,18 @@ tools/worldgen/output/**
 # F8 缩略窗全景 preview（候选底图素材 + 坐标映射 sidecar，见交接档 Flash 队列 F8）
 !tools/worldgen/output/l1_panorama_preview.png
 !tools/worldgen/output/l1_panorama_preview.json
+# R3 地块边缘平滑特写对比图（观感验收素材，见交接档 R 系列 R3）
+!tools/worldgen/output/smooth_closeup_*.png
+# R9 L1 地形烘焙对比预览图（观感验收素材，见交接档 R 系列 R9 批2）
+!tools/worldgen/output/l1_terrain_preview_*.png
+# R6 道路自然化新旧对比图（观感验收素材，见交接档 R 系列 R6 批3）
+!tools/worldgen/output/road_v2_*.png
+# R4 三模式并排验收预览（地形/政治/交通，见交接档 R 系列 R4 批3）
+!tools/worldgen/output/r4_modes_*.png
+# R5 建成区场叠加管线验收图（特写/贫瘠抽查/分形自检，见交接档 R 系列 R5）
+!tools/worldgen/output/blob_v2_*.png
+# R8 标注体系验收预览（三级视图标注效果，见交接档 R 系列 R8 层3）
+!tools/worldgen/output/r8_label_*.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

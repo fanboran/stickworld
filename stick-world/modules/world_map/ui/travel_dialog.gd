@@ -53,8 +53,8 @@ func _build_widgets() -> void:
 	_dim.mouse_filter = Control.MOUSE_FILTER_STOP  # 消费点击，防穿透点到地图
 	_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_dim)
+	# 面板底 = 主题自带 SketchStyle 手绘贴图（R8 层1 换肤：删玻璃 override）
 	_window = PanelContainer.new()
-	_window.add_theme_stylebox_override("panel", StickStyle.window_panel())
 	_window.custom_minimum_size = Vector2(400, 0)
 	_dim.add_child(_window)
 	# 居中：锚点方案（全部锚 0.5 + 偏移 0 + 双向 grow = 内容尺寸窗口恒居中），

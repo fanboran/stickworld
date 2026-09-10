@@ -24,6 +24,7 @@ func _ready() -> void:
 	_runner.add_test("M 键视图打开/关闭（HUD 同步显隐）", _test_toggle, true)
 	_runner.add_test("F3 调试模式：L2 地区编号刷新", _test_debug_labels, true)
 	_runner.add_test("显示模式切换（L1 <-> 城市）", _test_display_mode, true)
+	_runner.add_test("政治模式：ID mask + LUT 查表着色层（R7/R9）", _test_political_layer, true)
 	_runner.add_test("hover 命中老 L1（索引图查询）", _test_hover_l1, true)
 	_runner.add_test("HUD：默认缩放=100% + 按钮/缩放条/百分比互不重叠", _test_hud, true)
 	await _runner.run_async()
@@ -147,6 +148,39 @@ func _test_display_mode() -> void:
 	_runner.assert_true(mname == "城市" or mname == "L1", "模式名应可读（%s）" % mname)
 	_renderer.toggle_display_mode()
 	_runner.assert_true(_renderer.display_mode == before, "再次切换应还原")
+
+
+func _test_political_layer() -> void:
+	# R7/R9 政治模式：POLITICAL 下异步解码政权 ID mask → 建查表着色层
+	# （z=-1 垫底 + PoliticalLut 共享 LUT 纹理）。改 LUT 即全图换色的
+	# CPU 侧自证在 test_political_data（unit），此处验证真实接线：
+	# MapModeManager 广播 → L3 控制器 → 渲染器 set_map_mode。
+	if _scene == null or _renderer == null or _data == null:
+		_runner.assert_true(false, "前置：L3 场景未装载")
+		return
+	var was_mode: int = MapModeManager.current_mode
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	var deadline := Time.get_ticks_msec() + 15000
+	while _renderer._political_layer == null and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+	_runner.assert_true(_renderer._political_layer != null,
+		"政治着色层已构建（mask 异步解码完成）")
+	if _renderer._political_layer == null:
+		MapModeManager.set_mode(was_mode)
+		return
+	_runner.assert_true(_renderer._political_layer.visible, "POLITICAL 下着色层可见")
+	var mat: ShaderMaterial = _renderer._political_layer.material
+	_runner.assert_true(mat != null and mat.shader == PoliticalLut.COLORIZE_SHADER,
+		"着色层挂 PoliticalLut.COLORIZE_SHADER")
+	var lut_tex: Texture2D = mat.get_shader_parameter("lut")
+	var lut := PoliticalLut.load_shared()
+	_runner.assert_true(lut != null and lut_tex == lut.texture,
+		"shader LUT 参数 = 共享 PoliticalLut 纹理（改 LUT 全图生效）")
+	_runner.assert_true(_renderer._political_layer.z_index == -1,
+		"着色层垫底（z=-1，上层界线/hover 照画）")
+	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)  # 广播复位，防污染后续用例
+	_runner.assert_true(not _renderer._political_layer.visible,
+		"复位 TERRAIN 后着色层隐藏")
 
 
 func _test_debug_labels() -> void:

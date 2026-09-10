@@ -1,0 +1,37 @@
+{
+  "inherits": "../l3/terrain_params.json",
+  "l1": {
+    "biome_blend_sigma": 1.2,
+    "texture_name": "l1_terrain.png",
+
+    "travel": {
+      "_注释": "R4 交通模式贴图（l1_travel.png）= 地形底图（同 terrain）+ R6 道路 casing 双层实线烘焙。数据源 = road_naturalize.py 产物 roads_v2_global.json（世界 8192 [x,y]，含 sharp_anchors 锐折角锚点——锚点处拆段绘制保留折角不圆滑）。面宽按 §7.2-3 宽度分级（官道 3px / 土路 1.2px @8192 尺度）；casing = 深棕底（比地形暗一档）+ 赭土面（比地形亮一档，OSM 土路 #996600 语用）；路面乘 hillshade 明暗贴地形（§7.2-3 Imhof 原理）；端部在聚落处收尖（锥形端）；全实线废除虚线（虚线只保留给快速旅行路由高亮 UI）。道路层 2x 超采样出 AA（矢量线条层需要 AA，纯场底图不需要——R9 决策），只对道路层超采样控制体积。",
+
+      "texture_name": "l1_travel.png",
+      "v2_roads": "../output/road_v2/roads_v2_global.json",
+      "v2_roads_注释": "road_naturalize.py 产物，相对本参数文件；写回由 road_writeback.py 负责（运行时折线与其同源）",
+
+      "ss": 2,
+      "ss_注释": "道路层超采样倍数（2x 出 AA；底图 1x 不动，控体积）",
+
+      "width_px": {"DIRT": 1.2, "PAVED": 3.0},
+      "width_注释": "路面宽 @8192 世界尺度（§7.2-3：官道 3 / 干道 2 / 土路 1.2；现行两级取 1.2/3.0）",
+
+      "case_extra_px": 1.2,
+      "case_extra_注释": "casing 总宽差（面宽 + 此值 = 底宽，§7.2-3 casing 每侧 0.3-1px）",
+
+      "face_color": {"DIRT": [166, 122, 60], "PAVED": [198, 132, 82]},
+      "case_color": {"DIRT": [64, 44, 26], "PAVED": [52, 34, 22]},
+      "color_注释": "面=赭土（比地形亮一档）/ casing=深棕（比地形暗一档）；与 road_naturalize_params.json render 块同源（预览即游戏内观感）",
+
+      "tip_px": 6.0,
+      "tip_注释": "端部收尖长度 @8192（聚落处锥形收尾，§7.2 落地清单「端部收尖」）",
+
+      "shade_strength": 0.6,
+      "shade_strength_注释": "路面乘 hillshade 强度（shade 场向 1 收缩的比例，1=全量明暗贴地形）",
+
+      "cull_margin_px": 16,
+      "cull_margin_注释": "折线 bbox 与窗口相交测试的外扩余量（> 最大线宽半宽 + 收尖长度即可）"
+    }
+  }
+}

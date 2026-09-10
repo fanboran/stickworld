@@ -12,6 +12,7 @@ accept_sheet 排序一致。"""
 import json
 import os
 import sys
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -19,6 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 ICON_DIR = os.path.join(ROOT, "temp", "icons")
 RESULT = os.path.join(ROOT, "temp", "review_result.json")
+BUILD = str(int(time.time()))   # cache-busting：每次重启换图片 URL 版本
 
 sys.path.insert(0, HERE)
 import motifs as M
@@ -145,7 +147,7 @@ ICONS.forEach(ic => {
   const card = document.createElement("div");
   card.className = "card"; card.dataset.name = ic.name;
   card.innerHTML = `
-    <div class="imgwrap" title="点击放大（左 64 / 右 256 原生渲染）"><img loading="lazy" src="icons/${encodeURIComponent(ic.name)}_64.png"><img loading="lazy" class="big" src="icons/${encodeURIComponent(ic.name)}_256.png"></div>
+    <div class="imgwrap" title="点击放大（左 64 / 右 256 原生渲染）"><img loading="lazy" src="icons/${encodeURIComponent(ic.name)}_64.png?v=__BUILD__"><img loading="lazy" class="big" src="icons/${encodeURIComponent(ic.name)}_256.png?v=__BUILD__"></div>
     <div class="nm">${ic.name}</div>
     <div class="btns">
       <button class="ok">✓ 满意</button><button class="bad">✗ 不满意</button>
@@ -163,8 +165,8 @@ ICONS.forEach(ic => {
 function openModal(name) {
   document.getElementById("mcap").textContent = name + "（左 256 / 右 64，均为原生渲染）";
   const m = document.getElementById("modal");
-  document.getElementById("m256").src = `icons/${encodeURIComponent(name)}_256.png`;
-  document.getElementById("m128").src = `icons/${encodeURIComponent(name)}_64.png`;
+  document.getElementById("m256").src = `icons/${encodeURIComponent(name)}_256.png?v=__BUILD__`;
+  document.getElementById("m128").src = `icons/${encodeURIComponent(name)}_64.png?v=__BUILD__`;
   m.style.display = "flex";
   m.onclick = () => m.style.display = "none";
 }
@@ -235,6 +237,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        # 图标产物频繁重渲但 URL 不变，禁止浏览器缓存过期图
+        self.send_header("Cache-Control", "no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
 
@@ -243,7 +247,8 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             html = PAGE.replace("__ICONS__", json.dumps(ICONS, ensure_ascii=False)) \
                        .replace("__TOTAL__", str(len(ICONS))) \
-                       .replace("__HIDDEN__", str(HIDDEN_OK))
+                       .replace("__HIDDEN__", str(HIDDEN_OK)) \
+                       .replace("__BUILD__", BUILD)
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
         elif path == "/api/state":
             if os.path.exists(RESULT):

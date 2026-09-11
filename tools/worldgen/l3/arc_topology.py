@@ -32,6 +32,7 @@ import sys
 import time
 
 import numpy as np
+from PIL import Image
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # tools/worldgen
 sys.path.insert(0, os.path.join(HERE, "l2_export"))
@@ -404,24 +405,27 @@ def main():
     print("    fill 顶点 %d（含湖 %d+%d）三角 %d"
           % (len(fill_verts), len(lake_verts), len(old_verts), len(fill_idx) // 3))
 
-    # 旧湖（城块间湖，非同源几何）湖岸弧标记：弧中点落旧湖面内 → glow 排除
-    #（漂移参照消除；洞湖与城块弧同源无需排除）
+    # 贴湖弧标记（arc_lakeshore）：弧中点采样**原生湖 mask**（fractal_lake_mask，
+    # 湖的真相源）——覆盖洞湖/旧湖/城块间湖岸的一切贴湖弧。湖是水域，政治界线
+    #（国界/地区界/自由城邦界）与 glow 均不沿湖岸画（湖面由湖色与政权色的对比
+    # 表达；界线沿湖岸走会产生断续黑线与 glow 不一致的观感杂乱）。
     arc_lakeshore = [0] * len(arcs_xy)
-    if lake_polys:
-        from shapely.geometry import Polygon as ShPolygon, Point
-        from shapely.strtree import STRtree
-        geoms = [ShPolygon(lk) for lk in lake_polys
-                 if len(lk) >= 3 and ring_area(lk) > 64.0]
-        if geoms:
-            tree = STRtree(geoms)
-            for aid, a in enumerate(arcs_xy):
-                mid = a[len(a) // 2]
-                pt = Point(mid)
-                for gi in tree.query(pt):
-                    if geoms[gi].contains(pt):
-                        arc_lakeshore[aid] = 1
-                        break
-    print("    旧湖湖岸弧 %d 条（glow 排除）" % sum(arc_lakeshore))
+    lake_mask = np.array(Image.open(os.path.join(
+        OUT_DIR, "fractal_lake_mask_8192.png")).convert("L"))
+    H8, W8 = lake_mask.shape
+
+    def _in_lake(pt):
+        mx = int(np.clip(round(pt[0]), 0, W8 - 1))
+        my = int(np.clip(round(pt[1]), 0, H8 - 1))
+        return lake_mask[my, mx] > 0
+
+    for aid, a in enumerate(arcs_xy):
+        n = len(a)
+        # 三点采样（1/4、1/2、3/4）——单中点对短弧/斜弧会偏出湖 mask 1~2px 漏判
+        #（实测表现为部分湖岸弧残留黑虚线与蓝线 = 采样漏）
+        if _in_lake(a[n // 4]) or _in_lake(a[n // 2]) or _in_lake(a[(3 * n) // 4]):
+            arc_lakeshore[aid] = 1
+    print("    贴湖弧 %d 条（界线与 glow 均排除）" % sum(arc_lakeshore))
 
     mesh = {
         "name": "L3 政治矢量 mesh（共享弧拓扑，arc_topology.py 产；改色零重烘走 PoliticalLut）",

@@ -33,7 +33,8 @@ var political_id_image: Image = null
 ## lut code + 共享弧三级界线。fill_verts 非空 = POLITICAL 模式优先矢量路线
 ## （解析边界任意缩放零马赛克）；缺失/空 = mask 路线（political_id_image）回退。
 ## 字段：arcs(PackedFloat32Array 平铺 x,y)/arc_ptr/arc_code_a/arc_code_b/arc_border
-##       /fill_verts(PackedVector2Array)/fill_code/fill_idx/tiles(弧引用，运行时暂不消费)
+##       /fill_verts(PackedVector2Array)/fill_code/fill_idx/arc_lakeshore(贴湖弧，
+##       界线与 glow 均排除)/tiles(弧引用，运行时暂不消费)
 var political_mesh: Dictionary = {}
 ## 政权表（P7，l3_city.json 顶层 "states"）：state_id -> {name,capital,culture,alliance,color,...}
 var states: Dictionary = {}

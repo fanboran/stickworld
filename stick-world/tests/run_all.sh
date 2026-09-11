@@ -40,7 +40,7 @@ TMP_DIR="$TMP_BASE/sw_tests_$$"
 FILTER=""
 MATCH=""
 CHANGED=""
-PARALLEL=4
+PARALLEL=3
 REPORT=""
 
 while [ $# -gt 0 ]; do
@@ -82,6 +82,8 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_battle_ui.tscn"
 	"tests/integration/test_formation_system_assembly.tscn"
 	"tests/integration/test_org_panel.tscn"
+	"tests/integration/test_org_command_chain.tscn"
+	"tests/integration/test_org_e2e.tscn"
 	"tests/integration/test_placement_grid_units.tscn"
 	"tests/integration/test_tactical_orders.tscn"
 	"tests/integration/test_save_roundtrip.tscn"
@@ -89,6 +91,14 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_settings_apply.tscn"
 	"tests/integration/test_notification_feed.tscn"
 	"tests/integration/test_debug_api.tscn"
+	"tests/integration/test_expansion_territories.tscn"
+	"tests/integration/test_battle_retreat.tscn"
+	"tests/integration/test_garrison_spawner.tscn"
+	"tests/integration/test_conquest_flow.tscn"
+	"tests/integration/test_conquest_e2e.tscn"
+	"tests/integration/test_recruit_flow.tscn"
+	"tests/integration/test_town_life_harvest.tscn"
+	"tests/integration/test_town_life_worksite.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -99,11 +109,18 @@ declare -A SUITE_TIMEOUT=(
 	# 每套件超时：长套件按串行实测 ×2 取整，短套件统一 ≥90s
 	# （2026-08 审计校准：并行 6 下 CPU 争用系数实测最高 ~2.5x，短套件 60s 边界会碰运气误杀）
 	["tests/integration/test_battle_lifecycle.tscn"]=120
+	["tests/integration/test_battle_retreat.tscn"]=180
+	["tests/integration/test_garrison_spawner.tscn"]=120
+	["tests/integration/test_conquest_flow.tscn"]=180
+	["tests/integration/test_conquest_e2e.tscn"]=180
+	["tests/integration/test_recruit_flow.tscn"]=120
+	["tests/integration/test_town_life_harvest.tscn"]=240
+	["tests/integration/test_town_life_worksite.tscn"]=300
 	["tests/integration/test_selection_formation.tscn"]=90
 	["tests/integration/test_possession.tscn"]=90
 	["tests/integration/test_village_map.tscn"]=90
-	["tests/smoke/test_cross_map_travel.tscn"]=120
-	["tests/smoke/test_new_game_smoke.tscn"]=120
+	["tests/smoke/test_cross_map_travel.tscn"]=180
+	["tests/smoke/test_new_game_smoke.tscn"]=240
 	["tests/integration/test_ai_behaviors.tscn"]=90
 	["tests/integration/test_game_root_assembly.tscn"]=90
 	["tests/integration/test_formation_presets.tscn"]=110
@@ -114,7 +131,7 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_combat_control.tscn"]=90
 	["tests/integration/test_menu_navigation.tscn"]=95
 	["tests/integration/test_modal_stack.tscn"]=95
-	["tests/integration/test_esc_key_input.tscn"]=90
+	["tests/integration/test_esc_key_input.tscn"]=150
 	["tests/integration/test_ui_layout.tscn"]=90
 	["tests/integration/test_battle_ui.tscn"]=90
 	["tests/integration/test_formation_system_assembly.tscn"]=90
@@ -140,7 +157,10 @@ affected_suites() {
 				picked["tests/integration/test_melee_combat.tscn"]=1
 				picked["tests/integration/test_combat_feedback.tscn"]=1
 				picked["tests/integration/test_combat_control.tscn"]=1
-				picked["tests/integration/test_placement_grid_units.tscn"]=1 ;;
+				picked["tests/integration/test_placement_grid_units.tscn"]=1
+				picked["tests/integration/test_battle_retreat.tscn"]=1
+				picked["tests/integration/test_recruit_flow.tscn"]=1
+				picked["tests/integration/test_town_life_worksite.tscn"]=1 ;;
 			stick-world/modules/combat/*)
 				picked["tests/integration/test_battle_lifecycle.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1
@@ -151,24 +171,38 @@ affected_suites() {
 				picked["tests/integration/test_squad_travel.tscn"]=1
 				picked["tests/integration/test_melee_combat.tscn"]=1
 				picked["tests/integration/test_combat_feedback.tscn"]=1
-				picked["tests/integration/test_combat_control.tscn"]=1 ;;
+				picked["tests/integration/test_combat_control.tscn"]=1
+				picked["tests/integration/test_battle_retreat.tscn"]=1 ;;
 			stick-world/modules/construction/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1
-				picked["tests/integration/test_placement_grid_units.tscn"]=1 ;;
+				picked["tests/integration/test_placement_grid_units.tscn"]=1
+				picked["tests/integration/test_recruit_flow.tscn"]=1 ;;
 			stick-world/modules/world_map/*)
 				picked["tests/integration/test_strategic_map_p0.tscn"]=1
 				picked["tests/integration/test_l2_strategic_map.tscn"]=1
 				picked["tests/integration/test_l3_strategic_map.tscn"]=1 ;;
+			stick-world/modules/town_life/*|stick-world/config/town_life/*)
+				picked["tests/integration/test_town_life_harvest.tscn"]=1
+				picked["tests/integration/test_town_life_worksite.tscn"]=1 ;;
 			stick-world/modules/world/*|stick-world/tools/check_godot_errors.sh)
+				picked["tests/integration/test_town_life_harvest.tscn"]=1
 				picked["tests/integration/test_game_root_assembly.tscn"]=1
 				picked["tests/integration/test_village_map.tscn"]=1
+				picked["tests/integration/test_garrison_spawner.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1
 				picked["tests/integration/test_modal_stack.tscn"]=1
 				picked["tests/integration/test_battle_ui.tscn"]=1
+				picked["tests/integration/test_conquest_e2e.tscn"]=1
+				picked["tests/integration/test_recruit_flow.tscn"]=1
 				picked["tests/smoke/test_new_game_smoke.tscn"]=1
 				picked["tests/smoke/test_cross_map_travel.tscn"]=1 ;;
 			stick-world/modules/debug_gui/*|stick-world/modules/debug_GUI/*)
 				picked["tests/integration/test_debug_api.tscn"]=1 ;;
+			stick-world/modules/expansion/*)
+				picked["tests/integration/test_expansion_territories.tscn"]=1
+				picked["tests/integration/test_garrison_spawner.tscn"]=1
+				picked["tests/integration/test_conquest_flow.tscn"]=1
+				picked["tests/integration/test_conquest_e2e.tscn"]=1 ;;
 			stick-world/modules/ui_global/*)
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1
@@ -176,19 +210,24 @@ affected_suites() {
 				picked["tests/integration/test_esc_key_input.tscn"]=1
 				picked["tests/integration/test_ui_layout.tscn"]=1
 				picked["tests/integration/test_settings_apply.tscn"]=1
-				picked["tests/integration/test_notification_feed.tscn"]=1 ;;
+				picked["tests/integration/test_notification_feed.tscn"]=1
+				picked["tests/integration/test_conquest_e2e.tscn"]=1 ;;
 			stick-world/modules/resources/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1 ;;
 			stick-world/modules/organization/*)
 				picked["tests/integration/test_formation_presets.tscn"]=1
-				picked["tests/integration/test_org_panel.tscn"]=1 ;;
+				picked["tests/integration/test_org_panel.tscn"]=1
+				picked["tests/integration/test_org_command_chain.tscn"]=1
+				picked["tests/integration/test_org_e2e.tscn"]=1
+				picked["tests/integration/test_recruit_flow.tscn"]=1 ;;
 			stick-world/modules/player_control/*)
 				picked["tests/integration/test_possession.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1 ;;
 			stick-world/modules/building_gen/*|stick-world/modules/texture_gen/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1
-				picked["tests/integration/test_village_map.tscn"]=1 ;;
+				picked["tests/integration/test_village_map.tscn"]=1
+				picked["tests/integration/test_town_life_worksite.tscn"]=1 ;;
 			stick-world/tests/integration/test_*.tscn)
 				picked["tests/integration/${f##*/}"]=1 ;;
 			stick-world/tests/smoke/test_*.tscn)

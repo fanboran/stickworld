@@ -65,8 +65,7 @@ func _run_tests_async() -> void:
 
 	# ── Phase 3: 旅行到村落 B ──
 	sl.travel_to_map(ScriptGameRoot.VILLAGE_B_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
-	await get_tree().process_frame
-	await get_tree().process_frame
+	await _await_current_map(ScriptGameRoot.VILLAGE_B_MAP_ID)
 	_run_phase_3_tests()
 
 	# ── Phase 4: 反向旅行（村落B -> 道路 -> 村落A）──
@@ -74,8 +73,7 @@ func _run_tests_async() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	sl.travel_to_map(ScriptGameRoot.VILLAGE_A_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
-	await get_tree().process_frame
-	await get_tree().process_frame
+	await _await_current_map(ScriptGameRoot.VILLAGE_A_MAP_ID)
 	_run_phase_4_tests()
 
 	# 汇总
@@ -202,7 +200,7 @@ func _run_phase_2_tests() -> void:
 	_runner.begin_test("道路地图: 地面字段正确")
 	if map:
 		var rm: ScriptRoadMap = map as ScriptRoadMap
-		_runner.assert_equal(rm.get_ground_y(), 810.0, "ground_y 应为 810")
+		_runner.assert_equal(rm.get_ground_y(), 720.0, "ground_y 应为 720（地面占比 1/3）")
 		_runner.assert_equal(rm.get_ground_bottom(), 1080.0, "ground_bottom 应为 1080")
 		var bounds: Vector2 = rm.get_camera_bounds()
 		_runner.assert_equal(bounds, Vector2(0, 4096), "camera_bounds 应为 (0, 4096)")
@@ -227,7 +225,11 @@ func _run_phase_2_tests() -> void:
 		_runner.assert_true(player != null, "应有玩家附身实体")
 		if player:
 			# ENTRY_LEFT: spawn_x = map_left + 150 = 150
-			_runner.assert_true(absf(player.global_position.x - 150.0) < 10.0, "玩家应在左侧入口附近 (x≈150)")
+			var expect_left: float = float(map.map_left) + 150.0
+			# 期望与 game_root 入口公式一致（map_left + 150）：初始建筑落位可能
+			# 触发 expand_map 左扩，入口落点跟随扩图后边界而非写死的 150
+			_runner.assert_true(absf(player.global_position.x - expect_left) < 10.0,
+					"玩家应在左侧入口附近 (x≈%d)" % int(expect_left))
 	_runner.end_test()
 
 	_runner.begin_test("道路地图: 公共 API 可用")
@@ -278,7 +280,9 @@ func _run_phase_3_tests() -> void:
 		var player: Node2D = map.get_possessed_entity()
 		_runner.assert_true(player != null, "应有玩家附身实体")
 		if player:
-			_runner.assert_true(absf(player.global_position.x - 150.0) < 10.0, "玩家应在左侧入口附近 (x≈150)")
+			var expect_left_b: float = float(map.map_left) + 150.0
+			_runner.assert_true(absf(player.global_position.x - expect_left_b) < 10.0,
+					"玩家应在左侧入口附近 (x≈%d)" % int(expect_left_b))
 	_runner.end_test()
 
 	_runner.begin_test("完整链路: EventBus 旅行信号累计")
@@ -289,6 +293,18 @@ func _run_phase_3_tests() -> void:
 
 
 # ─────────────────────────────── Phase 4: 反向旅行 ────────────────────────────────
+
+## 轮询等待 SceneLoader 当前地图实例与 id 一致（旧图 queue_free 延迟释放，
+## get_current_map 短暂返回旧图；建筑与美术升级线收窄村A 后图宽差异即暴露——
+## 位置断言必须等新图实体就位再读）
+func _await_current_map(map_id: String) -> void:
+	var sl := _get_scene_loader()
+	for i in 120:
+		var map := _get_current_map()
+		if map != null and String(map.get("map_id")) == map_id:
+			return
+		await get_tree().process_frame
+
 
 func _run_phase_4_tests() -> void:
 	_runner.begin_test("反向旅行: 回到村落A")

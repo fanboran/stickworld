@@ -1,7 +1,9 @@
 extends Node
 ## 遭遇战全流程实测（dev 层）——验证 Demo 目标 4 的真实可达成性：
-## 直达 battlefield → 遭遇战自动开打并自动暂停（auto_pause_battle 设计）→
-## 模拟玩家空格恢复 → AI 自主接战互搏 → battle_ended 分出胜负。
+## 直达 battlefield → 直达调用 InitialContent.spawn_battlefield_enemies 组织遭遇战
+## （battlefield 退役后 game_root 进图不再自动刷敌，出征与领地架构 §4.3）→
+## 自动暂停（auto_pause_battle 设计）→ 模拟玩家空格恢复 → AI 自主接战互搏 →
+## battle_ended 分出胜负。
 ## 根因记录：暂停期间一切单位冻结（含 AI 决策循环），解除后接战链自动工作。
 
 const GameRootScene := preload("res://modules/world/scenes/game_root.tscn")
@@ -42,6 +44,17 @@ func _run() -> void:
 	for i in 30:
 		await get_tree().process_frame
 
+	# 直达组织遭遇战：玩家方（攻方）vs 刷出的敌方
+	var gen: Node = _game_root.get("_worldgen")
+	var player: Node2D = _game_root.get_player_entity()
+	if gen == null or not gen.has_method("spawn_battlefield_enemies") or player == null:
+		_fail("直达刷敌入口不可用（InitialContent.spawn_battlefield_enemies）")
+		return
+	var field_map: Node2D = _game_root.get_current_map()
+	gen.spawn_battlefield_enemies(field_map, [player], 3)
+	for i in 5:
+		await get_tree().process_frame
+
 	# 1) 建战断言（恢复前，单位还在）：阵容正确 + 参战引用回填 + 自动暂停生效
 	var m: Node2D = _game_root.get_current_map()
 	var ents: Array = m.get_entities() if m != null and m.has_method("get_entities") else []
@@ -77,17 +90,19 @@ func _run() -> void:
 	else:
 		_fail("空格恢复后 %.0fs 未分胜负（AI 自主接战断链）" % BATTLE_TIMEOUT)
 
-	# 3) DemoQuest 记账验证（胜局记账 / 败局不触发）
+	# 3) DemoQuest 胜局统计验证（battle_ended 只计数不驱动目标；第四目标
+	# 完成改由据点占领信号 territory_state_changed 驱动，出征与领地架构 §七）
+	var wins: int = int(quest.get("_battle_win_count"))
 	if result["victory"]:
-		var pending: Variant = quest.get("_pending_done")
-		if pending is Dictionary and pending.get("battle", false):
-			_pass("胜利已入乱序记账")
-		elif int(quest.get("_index")) == 3:
-			_pass("胜利作为当前目标完成")
+		if wins == 1:
+			_pass("胜利已入战斗胜局统计")
 		else:
-			_fail("胜利既未推进也未记账")
+			_fail("胜局未统计（_battle_win_count=%d）" % wins)
 	else:
-		_pass("败局不触发目标完成（符合设计）——真实游玩玩家操作可获胜")
+		if wins == 0:
+			_pass("败局不增胜局统计（符合设计）——真实游玩玩家操作可获胜")
+		else:
+			_fail("败局误增胜局统计（_battle_win_count=%d）" % wins)
 
 
 func _fail(msg: String) -> void:

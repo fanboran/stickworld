@@ -71,6 +71,31 @@ static func sketch_button(parent: Control, text: String, callback: Callable = Ca
 	return b
 
 
+## 母题角标：管线图标叠挂按钮左缘，不占排版位（btn.icon 属性参与排版会把
+## 居中文字挤进图标右侧剩余空间，同组无图标条目的文字随之错位——居中文字
+## 的菜单条一律用角标；文字左对齐的列表可用 icon 属性）。返回角标便于调用处
+## 调 modulate（如禁用态调暗）。
+static func motif_badge(btn: Button, motif: StringName, size := 20.0, pad := 10.0) -> TextureRect:
+	var tex := StickIcons.tex(motif)
+	if tex == null:
+		return null
+	var tr := TextureRect.new()
+	tr.texture = tex
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.anchor_left = 0.0
+	tr.anchor_right = 0.0
+	tr.anchor_top = 0.5
+	tr.anchor_bottom = 0.5
+	tr.offset_left = pad
+	tr.offset_right = pad + size
+	tr.offset_top = -size * 0.5
+	tr.offset_bottom = size * 0.5
+	btn.add_child(tr)
+	return tr
+
+
 ## 按钮公共装配：点击音 + kind 文字色 + hover 微缩放
 static func _setup_button(b: Button, callback: Callable, kind: ButtonKind) -> void:
 	# 统一 UI 点击音（AudioManager 框架先行，资产未就位时静默跳过）
@@ -105,8 +130,9 @@ static func _setup_button(b: Button, callback: Callable, kind: ButtonKind) -> vo
 			b.add_theme_color_override("font_color", StickTokens.DANGER)
 	if callback.is_valid():
 		b.pressed.connect(callback)
-	# hover 微缩放（精致细节：按钮"浮起"感；pivot 居中避免缩放偏移）
-	b.pivot_offset = Vector2(0, b.custom_minimum_size.y * 0.5)
+	# hover 微缩放（精致细节：按钮"浮起"感）。pivot 必须双向居中——装配时宽度
+	# 还没被容器定下来，挂 resized 跟踪；锚在左缘会向右下放大（创始人否了）
+	b.resized.connect(func() -> void: b.pivot_offset = b.size * 0.5)
 	b.mouse_entered.connect(func() -> void:
 		if AudioManager and AudioManager.has_method("play_event"):
 			AudioManager.play_event("ui_hover")

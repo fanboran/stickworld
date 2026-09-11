@@ -3,7 +3,7 @@ extends Node
 ##
 ## 为什么存在：自动化测试（tests/）验证逻辑，但手动体验战斗要走完整流程
 ## （启动→村庄→编队→跨图→遭遇战）。本场景用启动参数直接组装目标状态，
-## GameRoot 零改动（除 dev_enemy_count 字段）。
+## GameRoot 零改动（战场图已退役自动刷敌，遭遇战经 InitialContent 直达组织）。
 ##
 ## 用法（命令行）：
 ##   godot --path stick-world res://tests/dev/dev_playtest.tscn -- --map battlefield --party 3 --enemies 4 --follow
@@ -66,7 +66,6 @@ func _parse_args() -> Dictionary:
 func _run(args: Dictionary) -> void:
 	# 实例化 GameRoot（正式主场景，含全部系统装配）
 	_game_root = GameRootScene.instantiate()
-	_game_root.set("dev_enemy_count", int(args["enemies"]))
 	add_child(_game_root)
 	# 等待初始村庄加载与实体生成
 	for i in 10:
@@ -83,6 +82,13 @@ func _run(args: Dictionary) -> void:
 			sl.travel_to_map(str(args["map"]), WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
 			for i in 6:
 				await get_tree().process_frame
+		# battlefield 已退役自动刷敌：按 --enemies 直达组织遭遇战（手动体验用）
+		if str(args["map"]) == ScriptGameRoot.BATTLEFIELD_MAP_ID and int(args["enemies"]) > 0:
+			var gen: Node = _game_root.get("_worldgen")
+			var player: Node2D = _game_root.get_player_entity()
+			var field_map: Node2D = _game_root.get_current_map()
+			if gen != null and player != null and field_map != null:
+				gen.spawn_battlefield_enemies(field_map, [player], int(args["enemies"]))
 
 	print("[DevPlaytest] 就绪：map=%s party=%d enemies=%d follow=%s（按 Q 切换战斗模式，编制面板编队）" % [
 		str(args["map"]), int(args["party"]), int(args["enemies"]), bool(args["follow"])

@@ -24,6 +24,7 @@ const ScriptBehaviorHaul := preload("res://modules/units/scripts/ai/behavior_hau
 const ScriptBehaviorFollow := preload("res://modules/units/scripts/ai/behavior_follow.gd")
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 const ScriptBehaviorHeal := preload("res://modules/units/scripts/ai/behavior_heal.gd")
+const ScriptBehaviorHarvest := preload("res://modules/units/scripts/ai/behavior_harvest.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 决策检查间隔（秒）（R1 代码默认：档案 decision_interval 可覆盖，见 _roll_decision_interval）
@@ -34,10 +35,19 @@ const MIN_DECISION_INTERVAL: float = 0.05
 ## BehaviorWander 行为本体保留，敌人 AI / 闲逛功能启用时调大此值即可）
 const WANDER_PROBABILITY: float = 0.0
 
-## TeamAi 姿态枚举（对齐 TeamAi.STANCE_* / dump Team.Stance 序；本地常量避免跨模块依赖）
+## 村民 idle 完成后切 wander 的概率（小镇生活批次 3 [提案/待定]：
+## 空闲走动让村子"活"起来）。作用域过滤见 _is_villager（批次 4 改造）：
+## 村民身份标志（is_villager）+ 不在编队——待业村民闲逛，战斗/编队/敌方
+## 单位仍走 WANDER_PROBABILITY=0——待机乱走会破坏战斗测试语义。
+## 用 var 便于测试注入 0/1 做确定性断言。
+var villager_wander_probability: float = 0.5
+
+## TeamAi 姿态枚举（对齐 TeamAi.STANCE_* / dump Team.Stance 序；本地常量避免跨模块依赖。
+## 3=ROUT 敌将撤仗终态，本作扩展——出征与领地架构 §4.2）
 const TEAM_AI_STANCE_GARRISON: int = 0
 const TEAM_AI_STANCE_DEFEND: int = 1
 const TEAM_AI_STANCE_ATTACK: int = 2
+const TEAM_AI_STANCE_ROUT: int = 3
 
 ## 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙 背水一战。
 ## 被围判定：SURROUND_RANGE 内敌对单位 >= SURROUND_MIN 视为被围
@@ -126,6 +136,14 @@ func _setup_state_machine() -> void:
 	haul.entity = _entity
 	_state_machine.add_child(haul)
 	_state_machine.register_behavior(haul)
+
+	# 采集行为族（小镇生活批次 2：伐木/挖矿/打铁，有职业村民的自主劳作）
+	var harvest := ScriptBehaviorHarvest.new()
+	harvest.name = "BehaviorHarvest"
+	harvest.behavior_name = "harvest"
+	harvest.entity = _entity
+	_state_machine.add_child(harvest)
+	_state_machine.register_behavior(harvest)
 
 	# 跟随行为（小队"跟随玩家"模式，§8.3）
 	var follow := ScriptBehaviorFollow.new()
@@ -245,6 +263,8 @@ func _make_decision() -> void:
 		# 无激活行为，检查派工
 		if _try_work():
 			return
+		if _try_harvest():
+			return
 		_state_machine.travel("idle")
 		return
 
@@ -256,17 +276,35 @@ func _make_decision() -> void:
 		# 闲置完成：优先看是否有派工
 		if _try_work():
 			return
-		# 没有派工，原地待机（P0 关闭随机漫游，工人无事做原地待命）
+		# 无派工但有职业：进采集劳作（小镇生活批次 2）
+		if _try_harvest():
+			return
+		# 村民空闲走动（小镇生活批次 3 [提案/待定]）：村民 idle 完成后概率
+		# wander（批次 4 起含待业村民，_is_villager 判身份标志+不在编队）；
+		# 其他单位（战斗/编队/敌方）保持原地待命（P0 语义不变）。
+		# 村民 wander 锚定村庄中心（批次 4）：待业村民全天闲逛，无锚会累积
+		# 漂出村子/地图——锚 = 地图 town_center_world_x（村中心，village_a=0）
+		if _is_villager() and randf() < villager_wander_probability:
+			_state_machine.travel("wander", _villager_wander_params())
+			return
+		# 没有派工，原地待机（工人无事做原地待命）
 		_state_machine.travel("idle")
 	elif current == "wander":
 		# 漫游完成：先检查派工
 		if _try_work():
+			return
+		if _try_harvest():
 			return
 		_state_machine.travel("idle")
 	elif current == "work":
 		# work 完成（项目完工或取消）：检查是否还有派工
 		if _try_work():
 			return
+		if _try_harvest():
+			return
+		_state_machine.travel("idle")
+	elif current == "harvest":
+		# 采集结束（资源耗尽/无工位/无法寻位）：回 idle，决策循环稍后重试
 		_state_machine.travel("idle")
 	else:
 		# 未知行为，回 idle
@@ -406,9 +444,10 @@ func _try_rout_reengage(bi: Node, bi_param: Dictionary, health: Node) -> bool:
 	var test_on: bool = bool(profile.get("test_engage_enabled", false))
 	if not reengage_on and not test_on:
 		return false
-	# GARRISON 维持待命（归队由锚点号令覆盖）；查询不可用降级为 DEFEND（保守不压上）
+	# GARRISON 维持待命（归队由锚点号令覆盖）；ROUT 战役撤离不再接敌（C3：全军撤；
+	# 个别溃兵被 ROUT 撤离号令周期重发拉回，此处再战通道同样关闭）；查询不可用降级为 DEFEND（保守不压上）
 	var stance: int = _query_team_stance(bi)
-	if stance == TEAM_AI_STANCE_GARRISON:
+	if stance == TEAM_AI_STANCE_GARRISON or stance == TEAM_AI_STANCE_ROUT:
 		return false
 	# 仅 ATTACK/DEFEND 姿态下执行再战/试探（stance 查询失败降级 DEFEND 也允许）
 	var morale_ratio: float = 1.0
@@ -566,6 +605,70 @@ func _has_warehouse() -> bool:
 	if manager == null or not manager.has_method("get_nearest_warehouse"):
 		return false
 	return manager.get_nearest_warehouse(_entity.global_position) != null
+
+
+## 尝试采集决策（小镇生活批次 2）：有职业的村民在无建造派工/战斗/跟随/号令时
+## 进 harvest 行为自主劳作（寻位→移动→劳作→产出入账，循环见 BehaviorHarvest）。
+## 职责过滤：队伍职责不含 WORK_FORAGE 的编队单位不采集（如战斗班被征用后离岗）。
+## 职业档案由行为 enter 时经 TownLifeAPI 自查（本层只判"有职业"）。
+## 劳作节律（批次 3 [提案/待定] 7~19 时）：休息时段不进采集——在岗村民由
+## 行为层 update 收工，本层防"enter 即收工"的 travel 抖动。
+## 返回 true 表示已切换到 harvest。
+func _try_harvest() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	# 编队职责过滤（未编队/测试直生实体视为允许，同 _can_work 口径）
+	if not _can_work(WorkTypeForage):
+		return false
+	if not _entity.has_method("get_profession"):
+		return false
+	if String(_entity.get_profession()).is_empty():
+		return false  # 待业（无职业不劳作）
+	# 节律过滤：休息时段（劳作由行为层收尾，这里不再新进）
+	if not TownLifeAPI.is_work_time():
+		return false
+	# 已在采集且未完成 → 保持（决策节拍内不重入）
+	var cur: String = _state_machine.get_current_behavior_name()
+	if cur == "harvest" and not _state_machine.is_current_finished():
+		return true
+	_state_machine.travel("harvest")
+	return true
+
+
+## 村民 wander 参数（批次 4）：锚定村中心（地图 town_center_world_x），
+## 防长时间闲逛累积漂离；地图引用未注入/无该属性的桩环境返回空参数
+##（wander 原语义，零扰动）。
+func _villager_wander_params() -> Dictionary:
+	if _entity == null or not is_instance_valid(_entity):
+		return {}
+	if not _entity.has_method("get_map_reference"):
+		return {}
+	var mref: Node2D = _entity.get_map_reference()
+	if mref == null or not is_instance_valid(mref) or not ("town_center_world_x" in mref):
+		return {}
+	return {"anchor_x": float(mref.town_center_world_x)}
+
+
+## 是否村民（wander 作用域过滤，批次 4 语义改造）：实体带村民身份标志
+##（is_villager，spawn 时写入）且**不在编队**。与职业解耦——待业村民与
+## 被征用离岗的村民（职业都是空串）仍算村民可闲逛；编队中的单位（含被
+## 征用的前村民）保持战斗待命语义不 wander；无标志实体（战斗/敌方/测试
+## 裸桩）不判村民。批次 3 的"职业非空"判据在引入待业人口后失效（待业
+## 与征用两类空职业实体的行为语义相反），故改身份标志判定。
+## "有无职业"由 _try_harvest 单独判定（待业不劳作）。
+func _is_villager() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if not _entity.has_method("get_profession"):
+		return false
+	if not bool(_entity.get("is_villager")):
+		return false
+	# 编队中不闲逛（战斗待命语义；FormationSystem 未注入 = 未编队）
+	if _entity.has_method("get_formation_system"):
+		var fs: Node = _entity.get_formation_system()
+		if fs != null and fs.has_method("is_in_squad") and fs.is_in_squad(_entity):
+			return false
+	return true
 
 
 ## 检查单位是否被队伍职责允许执行某工作类型（编队行为过滤）。

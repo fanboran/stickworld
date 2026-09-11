@@ -1,8 +1,12 @@
 class_name ResourceNode
 extends Node2D
-## 城内有限资源点 -- 阶段 F §5.7.4.5
+## 城内资源点 -- 阶段 F §5.7.4.5
 ##
-## 城内树木/石头/铁矿，储量有限，砍完彻底不再生。
+## 城内树木/石头/铁矿，储量有限；采空后进入枯竭态（隐藏+不可采），
+## 按重生节拍自动恢复（NPC 采集经济配套，小镇生活批次 2；重生节拍为
+## AI 提案数值，待实测定稿——原"砍完彻底不再生"语义不满足长期经济循环）。
+## 已知限制：枯竭态节点不写入存档（save_resource_nodes_to_db 过滤
+## is_depleted），跨存档读回后该点消失、不处于重生倒计时。
 ## 建造时自动清场（砍树给木材）。
 
 ## 资源类型枚举
@@ -225,8 +229,49 @@ func harvest(qty: int) -> int:
 	_play_harvest_feedback(actual)
 	if amount <= 0:
 		_is_depleted = true
-		queue_free()
+		_enter_depleted()
 	return actual
+
+
+## 枯竭态表现与重生（小镇生活批次 2，重生节拍 [提案/待定] 90s 游戏秒）：
+## 采空不再自毁，改为隐藏（视觉枯萎占位）+ 单次 Timer 到点重生长满。
+## 存档过滤不写枯竭节点（见类头已知限制）；建造清场 queue_free 不受影响。
+const REGEN_TIME: float = 90.0
+
+## 重生倒计时 Timer（枯竭时创建）
+var _regen_timer: Timer = null
+
+
+func _enter_depleted() -> void:
+	visible = false
+	if _regen_timer != null:
+		return  # 已在重生倒计时（防御：同一枯竭周期不重复挂表）
+	_regen_timer = Timer.new()
+	_regen_timer.one_shot = true
+	_regen_timer.wait_time = REGEN_TIME
+	_regen_timer.timeout.connect(_regrow)
+	add_child(_regen_timer)
+	_regen_timer.start()
+
+
+## 重生长满：储量回满、解除枯竭、恢复可见（变体/位置不变 = "原地长回来"）。
+## 采集渐隐（_play_harvest_feedback 压 modulate.a）同步复位不透明。
+func _regrow() -> void:
+	amount = maxi(_initial_amount, 1)
+	_crit_gain = false
+	_is_depleted = false
+	visible = true
+	if _body_rect != null:
+		_body_rect.modulate.a = 1.0
+	elif _body_sprite != null:
+		_body_sprite.modulate.a = 1.0
+	elif _body_painting != null:
+		_body_painting.modulate.a = 1.0
+	elif _body_rock != null:
+		_body_rock.modulate.a = 1.0
+	if _regen_timer != null and is_instance_valid(_regen_timer):
+		_regen_timer.queue_free()
+	_regen_timer = null
 
 
 ## 采集即时反馈：挤压弹跳 + 飘字 + 剩余量渐隐（GDD 核心循环"采集成功的微奖励"）

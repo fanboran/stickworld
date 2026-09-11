@@ -5,12 +5,17 @@ extends BehaviorBase
 ## 详见 docs/技术/架构/场景与战斗架构.md §7.2。
 ## 撤退中士气缓慢恢复；士气恢复到安全水平或拉开足够距离后 finish（回 attack）。
 ##
+## 战役撤离模式（C3 敌将撤仗，出征与领地架构 §4.2）：params 带 evacuate=true 时
+## 方向固定为己方出生侧地图边缘，不因士气恢复/安全距离/超时收束（战役级撤退不回头）；
+## 抵达边缘带登记 entity.departed（BattleInstance._count_alive 计非存活）后收束。
+##
 ## 9i+ 增强（P6 批次 7c，design §2.1.3.6 #2/#3，档案开关默认关 = 零回归）：
 ##   - 保持招架（retreat_keep_block）：持盾兵种撤退全程举盾，finish/死亡/战斗结束还原
 ##   - 垂直位游走（rout_strafe_enabled）：撤退叠加垂直于敌我连线的横向分量，消除贴边零位移
 ##
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
+##   - evacuate: true 战役撤离（见上；TeamAi ROUT 姿态经 RETREAT 号令传入）
 
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
@@ -23,6 +28,8 @@ const SAFE_DISTANCE: float = 320.0
 const MORALE_RECOVER_PER_SEC: float = 8.0
 ## 士气恢复到此比例后停止撤退
 const SAFE_MORALE_RATIO: float = 0.6
+## 战役撤离：判定抵达边缘带的内收余量（px；阵营锚点 margin 260，正常布阵不误触）
+const DEPART_EDGE_EPSILON: float = 50.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属战斗实例
@@ -35,6 +42,8 @@ var _retreat_dir: Vector2 = Vector2.LEFT
 var _profile: Dictionary = {}
 ## 9i+ 保持招架：enter 时举盾标记，finish/exit 时还原（先例 behavior_seek_cover._set_blocking）
 var _keep_block_active: bool = false
+## 战役撤离模式（C3）：固定方向撤至己方侧边缘，不提前收束
+var _evacuate: bool = false
 
 
 func _ready() -> void:
@@ -47,6 +56,7 @@ func enter(previous: String, params: Dictionary) -> void:
 	if _battle == null and entity != null and entity.has_method("get_battle_instance"):
 		_battle = entity.get_battle_instance()
 	_timer = RETREAT_DURATION
+	_evacuate = bool(params.get("evacuate", false))
 	# 兵种档案解析（按主手武器类型；取不到回落空档案 = 全基线）
 	_profile = {}
 	if entity != null and is_instance_valid(entity) and entity.has_method("get_weapon"):
@@ -54,6 +64,8 @@ func enter(previous: String, params: Dictionary) -> void:
 		if w != null and is_instance_valid(w) and "weapon_type" in w:
 			_profile = ScriptBehaviorProfiles.get_profile(int(w.get("weapon_type")))
 	_compute_retreat_dir()
+	if _evacuate:
+		_retreat_dir = _evac_dir()
 	# 9i+ 保持招架：持盾兵种（profile 有 block_walk_anim）且开关开 → 撤退全程举盾
 	_keep_block_active = false
 	if bool(_profile.get("retreat_keep_block", false)) and not String(_profile.get("block_walk_anim", "")).is_empty():
@@ -72,6 +84,11 @@ func update(delta: float) -> void:
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
 		_finish_with_block_restore()
+		return
+
+	# 战役撤离：独立通道（不查敌、不因士气/距离/超时收束）
+	if _evacuate:
+		_update_evacuate()
 		return
 
 	_timer -= delta
@@ -100,6 +117,12 @@ func update(delta: float) -> void:
 		var away: Vector2 = entity.global_position - enemy.global_position
 		if away.length() > 0.1:
 			_retreat_dir = away.normalized()
+
+	# 撤退贴边 = 战役离场（C3 撤离判定覆盖溃逃：RETREAT 状态行至地图边缘即记 departed，
+	# BattleInstance 计非存活；登记后停步收束，实体保留溃兵视觉）
+	if _at_retreat_edge():
+		_register_departed()
+		return
 
 	# 撤退移动（奔跑）：方向夹紧可走带——被逼到地图边缘时不再朝带外逃
 	# （贴墙站死观感根因，2026-09-01 观察场反馈），x/y 双向都被夹死 → finish 回决策
@@ -141,6 +164,56 @@ func exit(next: String) -> void:
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
+
+## 战役撤离主循环（C3）：固定朝己方侧边缘行军，抵达边缘带登记 departed 后收束。
+## 登记后实体保留（溃兵视觉），由 BattleInstance 侧计非存活触发战斗收束。
+func _update_evacuate() -> void:
+	if _at_retreat_edge():
+		_register_departed()
+		return
+	var move_dir := _retreat_dir
+	# y 夹紧可走带（与常规撤退同规）：撤离是水平行军，y 只防走出地带
+	var gy: float = float(entity.get("ground_y")) if "ground_y" in entity else 0.0
+	var gb: float = float(entity.get("ground_bottom")) if "ground_bottom" in entity else 0.0
+	if gb > gy:
+		var pos: Vector2 = entity.global_position
+		if move_dir.y < 0.0 and pos.y <= gy + 20.0:
+			move_dir.y = 0.0
+		elif move_dir.y > 0.0 and pos.y >= gb - 20.0:
+			move_dir.y = 0.0
+		move_dir = move_dir.normalized() if move_dir.length_squared() > 0.0001 else Vector2.ZERO
+	if move_dir != Vector2.ZERO and entity.has_method("ai_move"):
+		entity.ai_move(move_dir, true)
+
+
+## 撤离方向：己方出生侧（faction 1 左攻方 → 左缘；faction 2 右守方 → 右缘）
+func _evac_dir() -> Vector2:
+	var f: int = int(entity.get("faction_id")) if entity != null and "faction_id" in entity else 0
+	return Vector2.LEFT if f == 1 else Vector2.RIGHT
+
+
+## 是否抵达撤退方向上的边缘带（entity.map_left/map_right 内收 DEPART_EDGE_EPSILON；
+## evacuate 与常规溃逃共用——撤离判定按"RETREAT 状态行至边缘"，出征与领地架构 §4.2）
+func _at_retreat_edge() -> bool:
+	var x: float = entity.global_position.x
+	if _retreat_dir.x < -0.5:
+		var ml: float = float(entity.get("map_left")) if "map_left" in entity else 0.0
+		return x <= ml + DEPART_EDGE_EPSILON
+	if _retreat_dir.x > 0.5:
+		var mr: float = float(entity.get("map_right")) if "map_right" in entity else 0.0
+		return x >= mr - DEPART_EDGE_EPSILON
+	return false
+
+
+## 登记战役离场：departed 置位（BattleInstance._count_alive 计非存活），
+## 停步收束（实体保留，溃兵视觉；战斗收束由 BattleInstance 侧清点触发）
+func _register_departed() -> void:
+	if "departed" in entity:
+		entity.set("departed", true)
+	if entity.has_method("ai_stop"):
+		entity.ai_stop()
+	_finish_with_block_restore()
+
 
 ## 计算初始撤退方向（远离最近敌人）
 func _compute_retreat_dir() -> void:

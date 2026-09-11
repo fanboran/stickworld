@@ -233,7 +233,8 @@ func _join_battle(new_attackers: Array) -> void:
 		_breach()
 		return
 	if api != null and api.has_method("start_battle"):
-		api.start_battle(_map, new_attackers, defenders)
+		# 守城战玩家为守方（faction 2）：victory 语义按玩家阵营胜发报
+		api.start_battle(_map, new_attackers, defenders, 2)
 
 
 ## 守城陷落：全场进攻方 set_order(move) 直插城内（town 大门 → 硬地皮中心）

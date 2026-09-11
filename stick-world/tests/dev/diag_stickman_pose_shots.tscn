@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/dev/diag_stickman_pose_shots.gd" id="1_pose"]
+
+[node name="DiagStickmanPoseShots" type="Node"]
+script = ExtResource("1_pose")

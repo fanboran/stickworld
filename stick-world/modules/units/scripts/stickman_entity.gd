@@ -109,6 +109,10 @@ var _construction_manager: Node = null
 # ─────────────────────────────── 战斗（§7.1 / §8）────────────────────────────────
 ## 阵营 ID（0=未参战，1/2=敌对双方，由 BattleInstance 分配）
 var faction_id: int = 0
+## 战役撤离离场标记（C3 敌将撤仗）：RETREAT 号令撤至地图边缘时置位，
+## BattleInstance._count_alive 计非存活（守军全部离场 = 据点攻陷）。
+## 实体保留不销毁（溃兵视觉）；BattleInstance add_unit/_end 复位。
+var departed: bool = false
 ## 所属战斗实例引用（null=未参战）
 var _battle_instance: Node = null
 ## 最后一次被敌方箭矢瞄准的时刻（s，Time.get_ticks_msec 换算；-999=无威胁）。
@@ -131,6 +135,17 @@ var being_healed_until: float = -1.0e9
 var role: String = ""
 ## FormationSystem 引用（由 GameRoot spawn 时注入，供 AIController 查询队伍职责；可能为 null）
 var _formation_system: Node = null
+
+# ─────────────────────────────── 职业（小镇生活，town_life 模块写入）────────────────────────────────
+## 职业 id（initial_content spawn 时经 TownLifeAPI 分配写入；
+## 空串 = 待业/无职业，非空 = 在职。契约见 modules/town_life/api.gd——
+## 实体侧只存弱类型 id，职业语义（档案/着装/工位）全部归 town_life 模块）
+var _profession_id: String = ""
+## 村民身份标志（小镇生活批次 4）：initial_content.spawn_npcs 对村民置 true。
+## 与职业解耦——待业村民（职业空串）与征用离岗村民都仍是"村民"；
+## 战斗/敌方单位不置此标志，AI 侧行为过滤（wander 作用域等）靠它区分
+## "待业村民"与"无职业战斗单位"（二者职业都是空串，行为语义相反）。
+var is_villager: bool = false
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## StickmanRig 引用（渲染骨架）
@@ -1184,6 +1199,36 @@ func set_formation_system(fs: Node) -> void:
 ## 获取 FormationSystem 引用（可能为 null）
 func get_formation_system() -> Node:
 	return _formation_system
+
+
+## 由 GameRoot spawn 时注入 OrganizationApi 引用（玩家招兵交互经它转发，
+## organization/api.gd 招兵段；NPC 不注入）
+var _organization_api: Node = null
+
+
+func set_organization_api(api: Node) -> void:
+	_organization_api = api
+
+
+func get_organization_api() -> Node:
+	return _organization_api
+
+
+## 获取地图引用（spawn 时由 MapBase 注入；可能为 null——AI 模块读
+## town_center_world_x 等村庄锚点用，见 ai_controller wander 决策）
+func get_map_reference() -> Node2D:
+	return _map_ref
+
+
+## 写入职业 id（initial_content spawn 时经 TownLifeAPI 分配；弱类型协议，
+## 契约见 modules/town_life/api.gd）。空串 = 待业——批次 4 征兵离岗走此通道。
+func set_profession(id: String) -> void:
+	_profession_id = id
+
+
+## 获取职业 id（空串 = 待业/无职业）。
+func get_profession() -> String:
+	return _profession_id
 
 
 ## 设置角色类型（由 FormationSystem 编队时写入）。

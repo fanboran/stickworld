@@ -19,6 +19,8 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_resources_api.gd",
 	"res://tests/unit/test_crystal_sparkles.gd",
 	"res://tests/unit/test_organization_manager.gd",
+	"res://tests/unit/test_org_command_dispatcher.gd",
+	"res://tests/unit/test_transport_layer.gd",
 	"res://tests/unit/test_entity_states.gd",
 	"res://tests/unit/test_command_chain.gd",
 	"res://tests/unit/test_formation_system.gd",
@@ -55,6 +57,12 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_travel_planner.gd",
 	"res://tests/unit/test_political_data.gd",
 	"res://tests/unit/test_road_walk.gd",
+	"res://tests/unit/test_territory_registry.gd",
+	"res://tests/unit/test_project_render_settings.gd",
+	"res://tests/unit/test_profession_registry.gd",
+	"res://tests/unit/test_behavior_harvest.gd",
+	"res://tests/unit/test_work_slots_rhythm.gd",
+	"res://tests/unit/test_requisition_exclusion.gd",
 ]
 
 const PER_TEST_TIMEOUT_SEC: float = 30.0

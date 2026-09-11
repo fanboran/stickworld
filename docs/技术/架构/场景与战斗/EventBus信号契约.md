@@ -48,5 +48,5 @@
 | `battle_ended` | battle_id, victory | BattleDirector | UI | 战斗结束 |
 | `selection_changed` | unit_ids: Array | SelectionSystem | UI | 框选/选择变化 |
 | `squad_created` | squad_id, unit_ids | FormationSystem | UI、Organization | 编队创建 |
-| `order_issued` | order_type, target_squad_id, source_tier | TacticalOrders | UI、Units | 下达号令（source_tier=发令层级，0=玩家直接指挥） |
-| `commander_assigned` | squad_id, unit_id | FormationSystem | UI | 任命指挥官 |
+| `order_issued` | order_type, target_squad_id, source_tier | TacticalOrders | UI、Units | 下达号令。两条路径共用：`issue`（target=L1 小队 id，现场指挥零延迟）与 `issue_to_org`（target=组织根 id，逐层传播接力）——target 字段按下达路径分别为 squad_id / org_id（3-F2） |
+| `commander_assigned` | squad_id, unit_id | FormationSystem、organization 补位引擎 | UI、FormationSystem | 任命指挥官（ FormationSystem.assign_leader）与组织侧伤亡补位成功（manager 内聚触发）都会发射；FormationSystem 订阅回写 squad.leader（排长 UI/光环自动恢复，3-F2） |

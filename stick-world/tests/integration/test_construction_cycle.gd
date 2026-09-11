@@ -251,8 +251,12 @@ func _test_apply_def_null_fields() -> void:
 func _test_entity_blocking() -> void:
 	await _ensure_setup()
 	var cell_x := 50
-	# 实体站在选址中心、建筑体 Y 范围内（根 y=800 → 脚部在建筑体区域）→ 应拒绝
-	var e: Node2D = _map.spawn_entity(STICKMAN_SCENE, Vector2(float(cell_x) * 32.0 + 16.0 * 16.0, 800.0))
+	# 实体站在选址中心、建筑体 Y 范围内 → 应拒绝。
+	# 判定用实体脚部 Collider（中心约在实体 y+65，半高 6）对建筑体
+	# [ground_y+96-390, ground_y+96]：y 取地面线下方一点，使碰撞盒落在建筑体内
+	# （地面占比 1/3 调整后基线随 ground_y 上移，写死 y 会对不上）
+	var inside_y: float = float(_map.get("ground_y") if "ground_y" in _map else 720.0) + 15.0
+	var e: Node2D = _map.spawn_entity(STICKMAN_SCENE, Vector2(float(cell_x) * 32.0 + 16.0 * 16.0, inside_y))
 	_runner.assert_not_null(e, "实体应生成")
 	if e == null:
 		return

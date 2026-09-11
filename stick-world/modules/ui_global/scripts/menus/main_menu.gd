@@ -97,12 +97,14 @@ func _build_menu() -> void:
 		for col_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 			btn.add_theme_color_override(col_name, Color(0.1, 0.08, 0.06))
 		btn.add_theme_font_size_override("font_size", 18)
-		# 母题图标（StickIcons 取 assets/icons 管线成品；icon_max_width 压到按钮字高量级）
+		# 母题角标（左缘叠加，不占排版位）：居中文字不偏，同组有/无图标条目对齐
+		var badge: TextureRect = null
 		if item.has("icon"):
-			btn.icon = StickIcons.tex(item["icon"])
-			btn.add_theme_constant_override("icon_max_width", 22)
+			badge = StickKit.motif_badge(btn, item["icon"])
 		if item["id"] == "continue":
 			btn.disabled = not _has_continue_save()
+			if badge != null and btn.disabled:
+				badge.modulate.a = 0.45
 
 
 func _has_continue_save() -> bool:

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/dev/verify_button_variants.gd" id="1_vbv"]
+
+[node name="VerifyButtonVariants" type="Node"]
+script = ExtResource("1_vbv")

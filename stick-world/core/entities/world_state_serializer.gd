@@ -105,6 +105,7 @@ static func organization_to_dict(o: OrganizationState) -> Dictionary:
 		"personnel_template": o.personnel_template.duplicate(),
 		"equipment_template": o.equipment_template.duplicate(),
 		"autonomy_level": o.autonomy_level,
+		"succession_rule": o.succession_rule,
 		"default_behavior": o.default_behavior.duplicate(),
 		"supply_priority": o.supply_priority,
 		"morale_threshold": o.morale_threshold,
@@ -127,6 +128,7 @@ static func organization_from_dict(d: Dictionary) -> OrganizationState:
 	o.personnel_template = d.get("personnel_template", {}).duplicate()
 	o.equipment_template = d.get("equipment_template", {}).duplicate()
 	o.autonomy_level = int(d.get("autonomy_level", 1))
+	o.succession_rule = int(d.get("succession_rule", 0))
 	o.default_behavior = d.get("default_behavior", {}).duplicate()
 	o.supply_priority = int(d.get("supply_priority", 1))
 	o.morale_threshold = d.get("morale_threshold", 0.0)

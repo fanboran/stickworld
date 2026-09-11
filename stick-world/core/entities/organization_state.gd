@@ -25,6 +25,12 @@ enum AutonomyLevel {
 	LOW,        ## 低自主权
 }
 
+enum SuccessionRule {
+	RANK_HIGHEST,  ## 军衔最高者顶上（P0 军衔未建，以成员指挥属性代理排序）——默认
+	PLAYER_CHOSEN, ## 玩家指定（不自动补位，持续空缺等任命）
+	NONE,          ## 不补位（持续空缺，下级按 default_behavior/自主权行动）
+}
+
 enum SupplyPriority {
 	HIGH,       ## 高优先级
 	MEDIUM,     ## 中优先级
@@ -42,6 +48,7 @@ var personnel: Array[String] = []
 var personnel_template: Dictionary = {}
 var equipment_template: Dictionary = {}
 var autonomy_level: AutonomyLevel = AutonomyLevel.MEDIUM
+var succession_rule: SuccessionRule = SuccessionRule.RANK_HIGHEST
 var default_behavior: Dictionary = {}
 var supply_priority: SupplyPriority = SupplyPriority.MEDIUM
 var morale_threshold: float = 0.0

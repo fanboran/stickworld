@@ -26,6 +26,8 @@ const STRATEGIC_L2 := 102
 
 ## HUD 槽（GlobalHUD / ModePanel / ContextPanel / HudOverlay / ResourceBar）
 const Z_HUD := 0
+## zone 保留区 debug 画框（hud_zone_layout.gd：压过 HUD 部件、低于模态）
+const Z_HUD_ZONE_DEBUG := 10
 ## 模态层（ModalOverlay：排他模态盖住 HUD 槽）
 const Z_MODAL := 50
 ## 系统层（SystemOverlay：toast / 确认框，在模态之上）

@@ -34,6 +34,7 @@ var _notification_feed: NotificationFeed = null
 func _ready() -> void:
 	add_to_group("ui_root")
 	_apply_slot_z_orders()
+	_setup_zone_layout()
 	_setup_modal_stack()
 	_setup_notification_feed()
 	_bind_event_bus()
@@ -63,6 +64,27 @@ func _setup_modal_stack() -> void:
 ## 取模态栈（供 GameRoot / StickKit 等调用）
 func get_modal_stack() -> UIModalStack:
 	return modal_stack
+
+
+# ─────────────────────────────── zone 定位（HUD 布局收权，方案 B）────────────────────────────────
+
+## zone 引擎（hud_zone_layout.gd）：slot 管「画在哪层」，zone 管「钉在哪个角」。
+## 坐标一律由 zone 表计算，部件只声明内容（custom_minimum_size）。
+var _zone_layout: HudZoneLayout = null
+
+
+func _setup_zone_layout() -> void:
+	_zone_layout = HudZoneLayout.new()
+	_zone_layout.attach(self)
+	# 场景常驻部件落位（ui_root.tscn 是层级真相源；定位真相源 = zone 表）
+	place_in_zone(&"top_bar", global_hud)
+
+
+## 统一入口：把部件钉进 zone（供装配层 SystemSetup / 本类内部调用）。
+func place_in_zone(zone: StringName, control: Control) -> void:
+	if _zone_layout == null:
+		return
+	_zone_layout.place(zone, control)
 
 
 ## 装配通知流（左下堆叠 feed，挂 HudOverlay 槽；无该槽的裸环境直接挂 UIRoot）

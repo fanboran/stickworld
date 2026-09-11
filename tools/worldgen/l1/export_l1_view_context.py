@@ -352,7 +352,14 @@ def main():
         return
     # 城市层 8192 生成 + 老 L1 拼 8192 原图 + 湖泊 8192 原样（全链无重采样）
     legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_8192.npy")).astype(np.int32)
-    city_labels = np.load(os.path.join(V2_DIR, "city_labels_8192.npy")).astype(np.int32)
+    # 城块蒙版：S1 细化场优先（label 编号与 city_labels 完全一致，边界已 fBm 自然化；
+    # 审计#1——L1 视图城块边界旧代几何欠账的根治入口）
+    refined_path = os.path.join(V2_DIR, "refined_city_labels_8192.npy")
+    if os.path.exists(refined_path):
+        city_labels = np.load(refined_path).astype(np.int32)
+        print("  城块蒙版 = refined_city_labels_8192.npy（S1 细化场）")
+    else:
+        city_labels = np.load(os.path.join(V2_DIR, "city_labels_8192.npy")).astype(np.int32)
     lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
 
     # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距（按 res 缩放）
@@ -388,33 +395,39 @@ def main():
               % (side, side, x0, y0, bx1 - bx0 + 1, by1 - by0 + 1, margin))
 
     print("[2/5] 统一网格提取（城市/邻居/出生轮廓/湖泊，共享角点无缝）...")
-    ctx_legacy = legacy[y0:y0 + side, x0:x0 + side].copy()
     ctx_lake = lake[y0:y0 + side, x0:x0 + side].copy()
     # 8192：直接裁剪 8192 级城市标签（城市层已在 8192 生成，真实精细边界）
     ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
     # 城市块裁剪湖泊：湖区域不属于任何城市块——城市块在湖边的边界沿湖弧线（与湖泊 mesh
     # 共享同一像素边界），消除"湖泊丝滑弧线 vs 陆地直线大块"交界处的缝隙
     ctx_city[ctx_lake] = 0
-    # 8192 原生几何已足够细（屏幕 zoom≈0.77 时像素楼梯不可见）：轻平滑去尖角即可
     # R3 起换 extract_smooth_mesh：find_contours 亚像素等值线 + 共享弧统一平滑，
     # 整数台阶根除（--polys-only 的 patch 与全新生成同管线）。
-    # 城市/legacy 合成一张标签图一次提取（legacy +10000 命名空间）——城市块与
-    # 邻居块的交界才共享弧缓存/点焊（分两次提取则交界各自平滑出楔形缝）
-    ctx_combined = ctx_city.copy()
-    _fill = ctx_legacy > 0   # 只填 legacy 陆地（海洋保持 0；city 块优先覆盖）
-    ctx_combined[_fill] = ctx_legacy[_fill] + 10000
+    # 城市/邻居合成一张标签图一次提取（邻居 +10000 命名空间）——城块与
+    # 邻居块的交界才共享弧缓存/点焊（分两次提取则交界各自平滑出楔形缝）。
+    # 组合规则（city 优先覆盖，R3 定标；审计#1 修正——旧实现写反成 legacy 覆写
+    # 全部城块，city_mesh 恒空、tiles 一直走 city_data 兜底旧几何）：
+    #   本 L1 城块（parent==lab_l1）留 city 命名空间；其余陆地按城块 parent_l1
+    #   归入 legacy+10000 命名空间（邻居块 = 细化场 parent 聚合，随之换新代几何；
+    #   legacy 的 EDT 缺口修复像素本就归属邻块城块，以城块真相源为准）。
+    parent_lut = np.zeros(int(city_labels.max()) + 1, dtype=np.int32)
+    for c in citydata["cities"]:
+        parent_lut[int(c["label"])] = int(c["parent_l1"])
+    is_birth = np.zeros(parent_lut.shape, dtype=bool)
+    for c in cities:
+        is_birth[int(c["label"])] = True
+    par = parent_lut[ctx_city]
+    birth = is_birth[ctx_city] & (ctx_city > 0)
+    ctx_combined = np.where(birth, ctx_city, par + 10000).astype(np.int32)
+    ctx_combined[par == 0] = 0
     combined_mesh = mesh_extract.extract_smooth_mesh(ctx_combined)
     city_mesh = {k: v for k, v in combined_mesh.items() if k < 10000}
     legacy_mesh = {k - 10000: v for k, v in combined_mesh.items() if k > 10000}
     lake_mesh = mesh_extract.extract_smooth_mesh(ctx_lake.astype(np.int32))
 
-    # 出生 L1 权威轮廓 + 邻居块（灰色）：context 内除出生块外的所有老 L1 块
-    # 多连通（大陆 + 岛屿）时 extract 输出多个外环——只取最大环（主大陆）画 L1 轮廓粗线，
-    # 岛屿不画 L1 轮廓（防多环串接成跨海乱飞线；岛屿由城市色块/描边呈现）
-    l1_polygon = []
-    outs = legacy_mesh.get(lab_l1, {}).get("outer", [])
-    if outs:
-        l1_polygon = to_xy(max(outs, key=len))
+    # 邻居块（灰色）：context 内除出生块外的所有老 L1 块（细化场 parent 聚合）
+    # 多连通（大陆 + 岛屿）时 extract 输出多个外环——渲染端按 polygons 全画
+    #（出生块自身陆地全部归入城块命名空间，legacy_mesh 中无 lab_l1 条目）
     neighbors_data = []
     nbr_labels = []
     for k, mv in legacy_mesh.items():
@@ -424,8 +437,11 @@ def main():
         if not outs:
             continue
         nbr_labels.append(int(k))
-        neighbors_data.append({"label": int(k), "polygons": outs,
-                               "holes": [to_xy(p) for p in mv.get("holes", [])]})
+        neighbors_data.append({"label": int(k),
+                               "polygons": [r for p in mv.get("outer", [])
+                                            for r in mesh_extract.f32_clean_ring(p)],
+                               "holes": [r for p in mv.get("holes", [])
+                                         for r in mesh_extract.f32_clean_ring(p)]})
     nbr_labels.sort()
     print("  邻居老 L1 块 (%d):" % len(nbr_labels), nbr_labels)
     # 湖泊：context 内全部湖像素（覆盖邻居/非地块区；地块内湖极少，直接作湖泊色覆盖城市块）
@@ -434,7 +450,7 @@ def main():
         if k <= 0:
             continue
         for p in mv.get("outer", []):
-            lakes.append(to_xy(p))
+            lakes.extend(mesh_extract.f32_clean_ring(to_xy(p)))
 
     print("[3/5] 城市块 + 政权 + 道路 ...")
     rgb_by_label = {int(c["label"]): c["rgb"] for c in cities}
@@ -466,6 +482,11 @@ def main():
             if changed:
                 outs[0] = filled
                 main_outer = filled
+        # float32 运行时清洗（bin 顶点是 float32，float64 下合法的环量化后可能
+        # 自交/重合 → 运行时三角剖分报错丢面；自交环拆分后重选主轮廓）
+        outs = [r for ring in outs for r in mesh_extract.f32_clean_ring(ring)]
+        if outs:
+            main_outer = max(outs, key=_area_xy)
         tiles.append({
             "tile_id": "city_%03d" % c["label"],
             "polygon": main_outer,
@@ -480,6 +501,25 @@ def main():
                 "map_id": "",
             },
         })
+    # 出生 L1 权威轮廓 = 本 L1 城块多边形并集的最大外环（与 tile 填充逐点一致；
+    # 旧实现取 legacy 块轮廓——旧代几何且与细化城块差 ±11-14px）。
+    # 只取最大环：岛屿不画 L1 轮廓（防多环串接成跨海乱飞线；岛屿由城市色块/描边呈现）
+    from shapely.geometry import Polygon as ShPolygon
+    from shapely.ops import unary_union
+    l1_polygon = []
+    _geoms = []
+    for t in tiles:
+        for r in t["polygons"]:
+            if len(r) >= 3:
+                _geoms.append(ShPolygon(r).buffer(0))
+    if _geoms:
+        _u = unary_union(_geoms)
+        _polys = list(_u.geoms) if _u.geom_type == "MultiPolygon" else [_u]
+        _big = max(_polys, key=lambda g: g.area)
+        _lp = [[float(x), float(y)] for x, y in _big.exterior.coords[:-1]]
+        _lc = mesh_extract.f32_clean_ring(_lp)
+        l1_polygon = max(_lc, key=_area_xy) if _lc else []
+
     states = [{
         "state_id": t["owner_state_id"],
         "name": "城邦%d" % i,
@@ -497,7 +537,13 @@ def main():
 
     print("[4/5] 写索引图 + 底图 ...")
     if args.polys_only:
-        print("  --polys-only：跳过索引图/底图重写（蒙版未变）")
+        # 索引图随细化蒙版重写（hover 查询与新几何一致）；底图/静态贴图跳过
+        idx = np.zeros((side, side, 3), dtype=np.uint8)
+        for i, c in enumerate(cities, start=1):
+            msk = ctx_city == c["label"]
+            idx[msk] = ((i >> 16) & 0xFF, (i >> 8) & 0xFF, i & 0xFF)
+        Image.fromarray(idx).save(os.path.join(out_dir, "l1_mask.png"))
+        print("  --polys-only：重写 l1_mask.png（细化蒙版），跳过底图重写")
     else:
         idx = np.zeros((side, side, 3), dtype=np.uint8)
         for i, c in enumerate(cities, start=1):
@@ -508,8 +554,7 @@ def main():
         base = np.full((side, side, 3), OCEAN_COLOR, dtype=np.uint8)
         for c in cities:
             base[ctx_city == c["label"]] = c["rgb"]
-        for nlb in nbr_labels:
-            base[ctx_legacy == nlb] = NEIGHBOR_COLOR
+        base[ctx_combined > 10000] = NEIGHBOR_COLOR
         base[ctx_lake] = LAKE_COLOR
         Image.fromarray(base).save(os.path.join(out_dir, "l1_base.png"))
 

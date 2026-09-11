@@ -748,3 +748,44 @@ def extract_smooth_mesh_with_arcs(labels, min_area_px=2.0, visvalingam_area=1.5,
         ring_refs.setdefault(r["lab"], {"outer": [], "holes": []})
         ring_refs[r["lab"]][slot].append(refs)
     return result, arcs, ring_refs
+
+
+# ── float32 运行时清洗（审计#1 踩坑）──────────────────────────────────────
+# bin 的 polygon 字段按 PackedVector2Array(Vector2) 序列化 = float32。json float64
+# 下合法（shapely is_valid）的环，量化到 float32 后可能出现重合点/自交——Godot
+# 运行时 Geometry2D.triangulate_polygon 直接报「Invalid polygon data」并整面丢弃。
+# 顶点密度越高（S1 细化场）越易触发。导出端统一先量化再清洗，保证运行时环合法。
+
+
+def f32_clean_ring(ring):
+    """float32 量化 + 相邻重合点去重；量化后自交的环用 shapely buffer(0) 拆分。
+
+    返回环列表（通常 1 个；自交拆分为多个；退化返回空）。坐标序不限（逐元量化）。"""
+    import numpy as _np
+    from shapely.geometry import Polygon as _SP
+
+    def _q(r):
+        q = []
+        for p in r:
+            v = (float(_np.float32(p[0])), float(_np.float32(p[1])))
+            if not q or v != q[-1]:
+                q.append(v)
+        if len(q) > 1 and q[0] == q[-1]:
+            q.pop()
+        return q
+
+    q = _q(ring)
+    if len(q) < 3:
+        return []
+    p = _SP(q)
+    if p.is_valid:
+        return [q]
+    cleaned = p.buffer(0)
+    geoms = list(cleaned.geoms) if cleaned.geom_type == "MultiPolygon" else (
+        [cleaned] if not cleaned.is_empty else [])
+    out = []
+    for g in geoms:
+        r = _q(list(g.exterior.coords)[:-1])
+        if len(r) >= 3:
+            out.append(r)
+    return out

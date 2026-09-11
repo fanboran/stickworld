@@ -11,6 +11,17 @@ extends RefCounted
 ## 真值声明（§七.9）：dump TeamAi 21 个行为函数均为 IL2CPP 签名级导出、**无方法体**，
 ## 所有数值阈值为语义推断初值（legend TeamAiParameters 字段结构参考），**均待实测校准**；
 ## 方法名保留 dump 原名蛇形化，便于执行计划 §三 审计逐函数对账。
+##
+## A1（设计文档12号 C1/C2，AI集大成）：
+##   - C1 节拍分帧：宿主 tick 改固定节拍调度（beat_interval=0.5s，CoH
+##     TimeRule_AddInterval 0.5 真值），双相位轮转一跳一类事——DECIDE（快照+姿态
+##     决策）/ BUILD（造兵桩），有效决策周期 = 2×beat = 1.0s（与旧
+##     stance_decision_interval 默认等价，零回归）。
+##   - C2 难度参数化：难度档（easy/standard/hard/hardest）经
+##     TeamAiProfiles.load_personality_overlay 从 BalanceConfig 装载；
+##     开局攻击门禁 = seconds_before_attack ± start_attack_variance 掷骰
+##     （CoH standard 9min±4min 同构，难度=参数不=作弊）；默认种子固定
+##     （确定性可测/可复现），显式 overrides.random_seed 可逐局随机。
 
 ## 同模块档案（显式 preload，headless 防御惯例 §七.3）
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
@@ -25,6 +36,9 @@ const STANCE_ATTACK: int = 2
 const SOURCE_TIER_AI: int = 1
 ## 玩家手动号令层级（EventBus.order_issued 的 source_tier 语义）
 const SOURCE_TIER_PLAYER: int = 0
+## 分帧相位（C1：0.5s 基础节拍上一跳一类事，CoH AI_Think/Analyze 分帧同构）
+const PHASE_DECIDE: int = 0
+const PHASE_BUILD: int = 1
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 ## 宿主战斗实例（duck 引用，RefCounted 持 Node 用 Variant 语义注解）
@@ -42,8 +56,16 @@ var _stance: int = STANCE_DEFEND
 ## 最近一次姿态切换原因（调试 HUD / battle_sim 采样）
 var _stance_reason: String = "init"
 
-## 决策周期计时器
-var _decision_timer: float = 0.0
+## 节拍累积器（C1：beat_interval 粒度调度，while 兼容 delta 尖峰不丢拍）
+var _beat_acc: float = 0.0
+## 当前分帧相位（DECIDE/BUILD 轮转，起始 DECIDE 保证首拍即决策）
+var _phase: int = PHASE_DECIDE
+## 难度档名（A1 · C2，setup 显式 overrides["difficulty"]，默认 standard）
+var _difficulty: String = ""
+## 开局攻击门禁截止时刻（战斗秒；setup 期按难度档案掷骰一次定局）
+var _attack_deadline: float = 0.0
+## 难度档案掷骰随机源（默认固定种子：确定性可测/可复现；overrides.random_seed 覆盖）
+var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 ## 快照：本方军事单位数（权重>0 的存活单位）
 var _num_military: int = 0
 ## 快照：敌方军事单位数
@@ -73,13 +95,25 @@ var _manual_order_until: Dictionary = {}
 
 ## 装配（BattleInstance.enable_team_ai 内调用）。
 ## battle 已 setup 且 faction ∈ {1,2}；orders/formation 允许 null（仅测试环境）；
-## overrides 仅 setup 期消费一次（TeamAiProfiles.get_profile 浅合并，battle_sim 扫参用）。
+## overrides 仅 setup 期消费一次——merge 序 = 代码默认 < 难度档案 < 显式 overrides
+## （难度选择键 overrides["difficulty"]，随机种子键 overrides["random_seed"]，A1）。
 func setup(battle: Node, faction: int, orders: Node, formation: Node, overrides: Dictionary = {}) -> void:
 	_battle = battle
 	_faction = faction
 	_orders = orders
 	_formation = formation
-	_p = ScriptTeamAiProfiles.get_profile(overrides)
+	# C2 难度档案：BalanceConfig 装载（缺载安全回退代码默认），显式 overrides 最高优先
+	_difficulty = str(overrides.get("difficulty", ScriptTeamAiProfiles.DEFAULT_DIFFICULTY))
+	var effective: Dictionary = {}
+	effective.merge(ScriptTeamAiProfiles.load_personality_overlay(_difficulty))
+	effective.merge(overrides)
+	_p = ScriptTeamAiProfiles.get_profile(effective)
+	# 开局攻击门禁掷骰：基准 ± 方差半宽一次定局（CoH standard 9min±4min 同构；
+	# 默认固定种子 → 门禁确定性，单测可锁、battle_sim 可复现）
+	_rng.seed = int(overrides.get("random_seed", ScriptTeamAiProfiles.DEFAULT_RANDOM_SEED))
+	var base_time: float = float(_p["seconds_before_attack"])
+	var variance: float = maxf(float(_p["start_attack_variance"]), 0.0)
+	_attack_deadline = base_time + _rng.randf_range(-variance, variance)
 	# 手动号令保护期守卫：订阅全局号令事件（tier=0 玩家直令刷新保护时间戳）
 	if EventBus != null and EventBus.has_signal("order_issued") \
 			and not EventBus.order_issued.is_connected(_on_order_issued):
@@ -99,8 +133,10 @@ func set_order_refs(orders: Node, formation: Node) -> void:
 	_formation = formation
 
 
-## 宿主 tick（BattleInstance._physics_process 内调用，每物理帧进入、内部低频节流）。
-## 后置：至多完成一次决策周期；姿态变更时号令已受理或已跳过（不排队）。
+## 宿主 tick（BattleInstance._physics_process 内调用，每物理帧进入）。
+## C1 固定节拍分帧：按 beat_interval 累积，每拍只跑一个相位（DECIDE=快照+姿态决策 /
+## BUILD=造兵桩），轮转推进——决策不逐帧思考，单拍峰值成本减半。
+## 后置：相位推进完整（while 兼容 delta 尖峰）；姿态变更时号令已受理或已跳过（不排队）。
 func tick(delta: float) -> void:
 	if _battle == null or not is_instance_valid(_battle):
 		return
@@ -109,11 +145,23 @@ func tick(delta: float) -> void:
 		return
 	if TimeManager != null and TimeManager.is_paused():
 		return
-	_decision_timer += delta
-	if _decision_timer < float(_p["stance_decision_interval"]):
-		return
-	_decision_timer = 0.0
-	update()
+	_beat_acc += delta
+	var beat: float = float(_p["beat_interval"])
+	while _beat_acc >= beat:
+		_beat_acc -= beat
+		_run_beat()
+
+
+## 执行一个节拍相位并轮转（DECIDE 起拍：首拍即决策，与旧调度首周期一致）
+func _run_beat() -> void:
+	match _phase:
+		PHASE_DECIDE:
+			stance_update()
+		PHASE_BUILD:
+			build_units_update()
+		_:
+			pass
+	_phase = PHASE_BUILD if _phase == PHASE_DECIDE else PHASE_DECIDE
 
 
 # ─────────────────────────────── 只读查询（稳定接口）────────────────────────────────
@@ -135,9 +183,20 @@ func get_stance_reason() -> String:
 	return _stance_reason
 
 
+## 难度档名（A1 · C2；调试 HUD / battle_sim 采样）
+func get_difficulty() -> String:
+	return _difficulty
+
+
+## 开局攻击门禁截止时刻（A1 · C2 掷骰产物；调试 HUD / 观测采样）
+func get_attack_deadline() -> float:
+	return _attack_deadline
+
+
 # ─────────────────────────────── 直译函数族（21 函数，按 dump 原名蛇形）────────────────────────────────
 
-## [dump #1 Update] 编排入口：姿态决策 → 造兵桩（由宿主 tick 驱动）。
+## [dump #1 Update] 编排入口：姿态决策 → 造兵桩（直译锚点保留；生产调度走
+## tick 固定节拍分帧（A1 C1：DECIDE/BUILD 双相位各占一拍），本函数供测试/审计直调）。
 func update() -> void:
 	stance_update()
 	build_units_update()
@@ -200,9 +259,11 @@ func should_attack() -> bool:
 	return _attack_gate_open() and balance_of_powers_ratio() >= float(_p["attack_enter"])
 
 
-## 开局攻击门禁（SecondsBeforeCanLeaveBase 语义近似）：时长未满即便力量占优不切 ATTACK
+## 开局攻击门禁（SecondsBeforeCanLeaveBase 语义近似）：时长未满即便力量占优不切 ATTACK。
+## 门禁时刻 = seconds_before_attack ± start_attack_variance 掷骰（A1 · C2：难度=参数，
+## setup 期一次定局；CoH standard 9min±4min 同构——开局节奏不可预测但难度差异全在参数）
 func _attack_gate_open() -> bool:
-	return _now() >= float(_p["seconds_before_attack"])
+	return _now() >= _attack_deadline
 
 
 ## [dump #7 ShouldDefend] 进攻中回落（ratio ≤ attack_exit）或防守恶化（≤ defend_enter）。

@@ -9,6 +9,9 @@
 ~5% label 面积偏差超 ±5%、5 个 label 无环）。
 
 做法（**label 编号不变**——下游道路/blob/政权/聚落锚点零重灌，只重提取弧拓扑）：
+  0. 分区细化（创始人设定 2026-09-11）：**同老 L1 内的城-城边界保持 watershed
+     原始直线**（城市边界=人工直线分割的设计感），仅海岸/湖岸/L1 地块间边界
+     做 fBm 自然化——城-城边界像素位移按距离衰减为 0（damp 场）
   1. fBm 域扭曲反向采样：refined(p) = labels(p + warp(p))，warp = 两 octave
      value noise（低频 260px/amp 11px 大弯 + 高频 64px/amp 3.5px 细碎，两通道
      独立 seed）——大致边界保持、边缘分形细化
@@ -46,6 +49,10 @@ DEFAULT_PARAMS = {
     "seed_dx": 20260911,
     "seed_dy": 91120260,
     "diag_max_iter": 24,
+    "damp_falloff": 28,
+    "comment_damp": "城-城边界（同老 L1 内）保持直线分割（设计设定：城市边界=人工直线，"
+                    "L1 地块间/海岸/湖岸=自然地形）——城-城边界像素位移衰减为 0，"
+                    "falloff=衰减带宽 px",
 }
 
 
@@ -102,8 +109,43 @@ def build_warp_chunk(x0, y0, h, w, prm):
     return dx, dy
 
 
-def warp_sample(labels, coast_land, prm, block=1024):
-    """fBm 域扭曲反向采样 + 海岸贴合 + 陆地空洞回填。"""
+def build_parent_map(labels):
+    """像素 → 老 L1 归属（city_data.json 的 parent_l1 映射；海=0）。"""
+    city_data = json.load(open(os.path.join(OUT_DIR, "l1_v2", "city_data.json"),
+                               encoding="utf-8"))
+    parent_of = {}
+    for c in city_data["cities"]:
+        parent_of[int(c["label"])] = int(c["parent_l1"])
+    flat = labels.ravel()
+    pm = np.zeros(flat.shape[0], dtype=np.int32)
+    for lab, par in parent_of.items():
+        pm[flat == lab] = par
+    return pm.reshape(labels.shape)
+
+
+def build_damp(labels, parent_map, falloff):
+    """城-城边界位移衰减场：到「同老 L1 内城-城边界」的距离 → [0,1] 系数
+    （0 = 边界处位移为 0，保持 watershed 原始直线；falloff 带宽外=1 正常细化）。"""
+    H, W = labels.shape
+    # 城-城边界像素：与正交邻域像素同 parent 但 label 不同
+    same_p = (parent_map[1:, :] == parent_map[:-1, :])
+    diff_l = (labels[1:, :] != labels[:-1, :])
+    both = (labels[1:, :] > 0) & (labels[:-1, :] > 0)
+    vert = same_p & diff_l & both
+    horiz = (parent_map[:, 1:] == parent_map[:, :-1]) &             (labels[:, 1:] != labels[:, :-1]) &             (labels[:, 1:] > 0) & (labels[:, :-1] > 0)
+    cc_bound = np.zeros((H, W), dtype=bool)
+    cc_bound[1:, :][vert] = True
+    cc_bound[:-1, :][vert] = True
+    cc_bound[:, 1:][horiz] = True
+    cc_bound[:, :-1][horiz] = True
+    if not cc_bound.any():
+        return np.ones((H, W), dtype=np.float32)
+    dist = ndi.distance_transform_edt(~cc_bound)
+    return np.clip(dist / float(falloff), 0.0, 1.0).astype(np.float32)
+
+
+def warp_sample(labels, coast_land, prm, block=1024, damp=None):
+    """fBm 域扭曲反向采样 + 海岸贴合 + 陆地空洞回填。damp=城-城边界位移衰减场。"""
     H, W = labels.shape
     out = np.zeros_like(labels)
     for y0 in range(0, H, block):
@@ -111,6 +153,9 @@ def warp_sample(labels, coast_land, prm, block=1024):
         for x0 in range(0, W, block):
             ww = min(block, W - x0)
             dx, dy = build_warp_chunk(x0, y0, hh, ww, prm)
+            if damp is not None:
+                dx = dx * damp[y0:y0 + hh, x0:x0 + ww]
+                dy = dy * damp[y0:y0 + hh, x0:x0 + ww]
             # 反向采样：输出 (x,y) 取输入 (x+dx, y+dy)——NEAREST
             sx = np.clip(np.rint(np.arange(x0, x0 + ww, dtype=np.float64)[None, :] + dx),
                          0, W - 1).astype(np.int64)
@@ -169,9 +214,11 @@ def main():
     print("[1] 标签场 %s 城块 %d；tiles 陆地 %.1f%%"
           % (labels.shape, n_lab, coast_land.mean() * 100))
 
-    print("[2] fBm 域扭曲反向采样（低频 %dpx/amp %s + 高频 %dpx/amp %s）..."
-          % (prm["low_wavelength"], prm["low_amp"], prm["high_wavelength"], prm["high_amp"]))
-    refined = warp_sample(labels, coast_land, prm)
+    print("[2] 分区细化：海岸/湖岸/L1 地块间边界 fBm 自然化，"
+          "同 L1 内城-城边界保持直线（衰减带宽 %spx）..." % prm.get("damp_falloff", 28))
+    parent_map = build_parent_map(labels)
+    damp = build_damp(labels, parent_map, prm.get("damp_falloff", 28))
+    refined = warp_sample(labels, coast_land, prm, damp=damp)
 
     print("[3] 对角接触 4 连通化 ...")
     refined = decouple_diagonal(refined, int(prm["diag_max_iter"]))

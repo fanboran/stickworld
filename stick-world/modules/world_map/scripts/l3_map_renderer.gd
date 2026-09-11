@@ -189,11 +189,11 @@ func _build_glow_outlines() -> void:
 			var regs: Dictionary = arc_regs[aid]
 			if not regs.has(player_region_label):
 				continue
+			var is_lakeshore := aid < lakeshore.size() and lakeshore[aid] == 1
 			var n_refs := int(arc_refs[aid])
-			if n_refs >= 2 and regs.size() == 1:
+			# 湖岸弧：地区内湖岸也描轮廓（豁免内部弧排除）；界线由生成端排除
+			if not is_lakeshore and n_refs >= 2 and regs.size() == 1:
 				continue   # 内部弧（两侧同地区）不画
-			if aid < lakeshore.size() and lakeshore[aid] == 1:
-				continue   # 旧湖（非同源几何）湖岸弧不画——防漂移参照
 			# 海岸弧（单侧引用）+ 相邻地区界弧（两侧不同地区）——**逐弧独立流动**
 			#（三岔交界处串链会产生方向歧义斜穿，放弃闭合串链）
 			if ptr[aid + 1] - ptr[aid] < 4:

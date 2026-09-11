@@ -413,19 +413,23 @@ def main():
     lake_mask = np.array(Image.open(os.path.join(
         OUT_DIR, "fractal_lake_mask_8192.png")).convert("L"))
     H8, W8 = lake_mask.shape
-
-    def _in_lake(pt):
-        mx = int(np.clip(round(pt[0]), 0, W8 - 1))
-        my = int(np.clip(round(pt[1]), 0, H8 - 1))
-        return lake_mask[my, mx] > 0
-
+    # 邻域采样：城块弧在**岸上**（陆地一侧），弧顶点本身不落湖面——单点/三点
+    # 采样全漏。改为每顶点向 4 正交方向偏 2px 采样，任一落湖面即贴湖弧
+    #（向量化：全部采样点堆成一次 mask 查询）
+    all_pts = []
+    pt_arc = []
     for aid, a in enumerate(arcs_xy):
-        n = len(a)
-        # 三点采样（1/4、1/2、3/4）——单中点对短弧/斜弧会偏出湖 mask 1~2px 漏判
-        #（实测表现为部分湖岸弧残留黑虚线与蓝线 = 采样漏）
-        if _in_lake(a[n // 4]) or _in_lake(a[n // 2]) or _in_lake(a[(3 * n) // 4]):
-            arc_lakeshore[aid] = 1
-    print("    贴湖弧 %d 条（界线与 glow 均排除）" % sum(arc_lakeshore))
+        for (x, y) in a[::max(1, len(a) // 12)]:   # 每弧最多 13 顶点采样
+            for dx, dy in ((2, 0), (-2, 0), (0, 2), (0, -2)):
+                all_pts.append((x + dx, y + dy))
+                pt_arc.append(aid)
+    pts_arr = np.array(all_pts)
+    mx = np.clip(np.rint(pts_arr[:, 0]).astype(np.int64), 0, W8 - 1)
+    my = np.clip(np.rint(pts_arr[:, 1]).astype(np.int64), 0, H8 - 1)
+    hit = lake_mask[my, mx] > 0
+    for aid in np.array(pt_arc)[hit]:
+        arc_lakeshore[int(aid)] = 1
+    print("    贴湖弧 %d 条（界线与 glow 均特殊处理）" % sum(arc_lakeshore))
 
     mesh = {
         "name": "L3 政治矢量 mesh（共享弧拓扑，arc_topology.py 产；改色零重烘走 PoliticalLut）",

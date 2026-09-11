@@ -212,6 +212,9 @@ var _pending_squad_snapshots: Array = []
 
 ## 启动装配总段数（Minecraft 式模块计数进度：7 段装配 + 读档/世界生成 + 地图就绪）
 const BOOT_STAGES: int = 9
+## 启动期世界生成阶段（8/9 细分文字 + 分帧让步的开关；游戏内切图关闭——
+## 不把全屏加载盖回到正在玩的画面上，让帧本身照做只不刷文字）
+var _boot_world_phase: bool = false
 
 
 func _ready() -> void:
@@ -246,6 +249,7 @@ func _ready() -> void:
 		EventBus.game_started.emit()
 	# 加载初始村落（延迟一帧确保 SceneLoader 就绪；读档/世界生成显示 8/9，
 	# 地图加载完成后 _on_map_loaded 视世界就绪淡出覆盖层）
+	_boot_world_phase = true
 	call_deferred("_load_start_village")
 
 
@@ -255,6 +259,15 @@ func _stage(idx: int, label: String, work: Callable) -> void:
 	_show_loading("%s…（%d/%d）" % [label, idx, BOOT_STAGES], float(idx) / float(BOOT_STAGES))
 	await RenderingServer.frame_post_draw
 	work.call()
+
+
+## 世界生成子阶段：细化 8/9 的阶段文字并让一帧（分帧生成，转圈持续转动）。
+## 仅启动期刷文字；游戏内切图静默让帧（两态都让，动画在两种场景下都不断流）。
+func _world_sub_phase(label: String) -> void:
+	if _boot_world_phase:
+		_show_loading("正在生成世界…（%d/%d）· %s" % [BOOT_STAGES - 1, BOOT_STAGES, label],
+				float(BOOT_STAGES - 1) / float(BOOT_STAGES))
+	await RenderingServer.frame_post_draw
 
 
 ## 实例化四个子模块节点并挂到 GameRoot 下。
@@ -619,7 +632,8 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 	# 撑回网格宽），先定型边界再落人，入口落点才不随加载时序漂移。
 	if not map.has_meta("initial_buildings_spawned"):
 		map.set_meta("initial_buildings_spawned", true)
-		_worldgen.spawn_initial_buildings(map)
+		await _world_sub_phase("初始建筑")
+		await _worldgen.spawn_initial_buildings(map)
 		# 扩图后刷新相机/小地图边界
 		if camera_rig != null and camera_rig.has_method("set_map_bounds"):
 			camera_rig.set_map_bounds(map.map_left, map.map_right)
@@ -628,6 +642,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 	# 读档恢复：跳过默认 spawn，由 SaveHandler 接管
 	if _pending_save_load:
 		_pending_save_load = false
+		await _world_sub_phase("存档恢复")
 		_save_system._restore_from_save(map, map_id)
 	# 正常流程：spawn 玩家 + 初始内容
 	else:
@@ -669,6 +684,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 仅初始加载时 spawn 村庄仓库、土路资源与 NPC（出生村专属）
 		if not _initial_map_loaded:
 			_initial_map_loaded = true
+			await _world_sub_phase("村庄设施")
 			# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
 			_worldgen.spawn_initial_warehouse()
 			# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
@@ -686,7 +702,8 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 				camera_rig.set_map_bounds(map.map_left, map.map_right)
 			if _minimap != null and _minimap.has_method("set_map_info"):
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-			_worldgen.spawn_npcs(map, spawn_y)
+			await _world_sub_phase("村民")
+			await _worldgen.spawn_npcs(map, spawn_y)
 		# 跨图携带：spawn 随行编队成员并重建编队（带队出征）
 		_spawn_travel_followers(map, player, spawn_y)
 		# 战场图（battlefield）已退役为 dev 验证图（出征与领地架构 §4.3）：进图不再
@@ -700,6 +717,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 	# 注册调试绘制器
 	_bootstrap.register_debug_drawers()
 	# 世界就绪：淡出加载覆盖（玩家已生成、相机已跟随）
+	_boot_world_phase = false
 	if _world_loading_overlay != null and _world_loading_overlay.has_method("hide_loading"):
 		_world_loading_overlay.hide_loading()
 

@@ -18,6 +18,14 @@ extends Control
 const GAME_ROOT_SCENE := "res://modules/world/scenes/game_root.tscn"
 ## 载入屏（主菜单 → 游戏 的过渡画面）
 const LOADING_SCENE := "res://modules/ui_global/scenes/menus/loading_screen.tscn"
+
+## 闲时预热清单：主菜单是加载富余窗口——后台线程把下一屏本体与出生图拉进
+## 资源缓存，点「继续/新游戏」后的场景切换直接命中缓存（脚本编译与依赖解析
+## 免去冷加载）。行业 splash/menu 预载惯例；未点游戏也不浪费——线程加载不占主线程。
+const PREWARM_PATHS: Array[String] = [
+	GAME_ROOT_SCENE,
+	"res://modules/world/scenes/maps/village_a.tscn",
+]
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
 ## 手绘云（背景漂移云；与世界天空同选型期四风格混排）
 const SketchCloudScript: GDScript = preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
@@ -50,6 +58,7 @@ func _ready() -> void:
 	SketchTextures.animation_enabled = true
 	SketchTextures.ensure_driver(get_tree())
 	theme = StickTheme.create()
+	_prewarm_next_screen()
 	_build_background()
 	_build_title()
 	_start_title_entrance()
@@ -58,6 +67,13 @@ func _ready() -> void:
 	_version_label.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	# 亮天空上 TEXT_FAINT 不可见：改暖墨半透明（与描边同族）
 	_version_label.modulate = Color(0.08, 0.06, 0.05, 0.55)
+
+
+## 闲时预热：线程拉起下一屏资源（已缓存的跳过；不消费——load 时命中缓存即回）
+func _prewarm_next_screen() -> void:
+	for p in PREWARM_PATHS:
+		if ResourceLoader.exists(p) and not ResourceLoader.has_cached(p):
+			ResourceLoader.load_threaded_request(p)
 
 
 func _build_title() -> void:

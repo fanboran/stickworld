@@ -33,6 +33,7 @@ func spawn_initial_buildings(map: Node2D) -> void:
 	if construction_api == null or not construction_api.has_method("spawn_operational_building"):
 		push_warning("[GameRoot] ConstructionApi 未就绪，跳过初始建筑生成")
 		return
+	var i: int = 0
 	for d in defs:
 		var def_id: String = d.get("def_id") if d is Dictionary else d.def_id
 		var cell_x: int = int(d.get("cell_x") if d is Dictionary else d.cell_x)
@@ -43,6 +44,10 @@ func spawn_initial_buildings(map: Node2D) -> void:
 		var result: Dictionary = construction_api.spawn_operational_building(def_id, cell_x, width)
 		if not result.get("ok", false):
 			push_warning("[GameRoot] 初始建筑生成失败: %s cell_x=%d: %s" % [def_id, cell_x, result.get("error", "未知错误")])
+		# 逐栋让帧：建筑实例化+落位是生成链大头，分帧保加载动画不断流
+		i += 1
+		if i % 2 == 0:
+			await RenderingServer.frame_post_draw
 
 
 ## 预置主街东端民居（搬运系统送货/取货点）：placeholder 兼任仓库，
@@ -95,6 +100,9 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 			#（wander 闲逛作用域），战斗/敌方单位无此标志（duck 写入，无类型依赖）
 			npc.set("is_villager", true)
 			npcs.append(npc)
+		# 逐个让帧：实体实例化+依赖注入分帧，加载动画不断流
+		if i % 2 == 1:
+			await RenderingServer.frame_post_draw
 	# 批量配比分配（town_life 模块：各职业不超过 min(quota, 工位容量)，
 	# 配额满待业 wander；契约见 modules/town_life/api.gd）
 	var stats: Dictionary = TownLifeAPI.assign_village_jobs(npcs)

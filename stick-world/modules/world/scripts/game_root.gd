@@ -232,7 +232,7 @@ func _ready() -> void:
 	# 无帧渲染，不等首帧覆盖层永远画不出来（旧版"两屏加载夹 10 秒灰屏"根因）
 	_setup_world_loading_overlay()
 	_show_loading("正在启动…", 0.0)
-	await RenderingServer.frame_post_draw
+	await _yield_frame()
 	# 分段装配：每段先更新文字/进度条 → 等一帧画出来 → 干重活；进度真实推进
 	await _stage(1, "挂载子模块", func(): _mount_child_modules())
 	await _stage(2, "装配界面与子系统", func(): _bootstrap.setup(self))
@@ -255,11 +255,21 @@ func _ready() -> void:
 	call_deferred("_load_start_village")
 
 
+## 让一帧（「先画再干」的等帧原语，五处启动/切图等帧统一出口）。
+## headless 下渲染服务器不绘制帧、frame_post_draw 永不发射——不短路则启动协程
+## 在首个等帧点永久挂起、子系统全部不装配（2026-09-11 回归：启动分帧合入后
+## 全部集成/冒烟测试崩，game_root 装配未执行即退场）。
+func _yield_frame() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	await RenderingServer.frame_post_draw
+
+
 ## 单段装配：更新进度文字/进度条 → 等渲染出这一帧 → 执行重活。
 ## 先画后干是关键——顺序反了进度条会在整段装配期一动不动（假进度观感）。
 func _stage(idx: int, label: String, work: Callable) -> void:
 	_show_loading("%s…（%d/%d）" % [label, idx, BOOT_STAGES], float(idx) / float(BOOT_STAGES))
-	await RenderingServer.frame_post_draw
+	await _yield_frame()
 	work.call()
 
 
@@ -269,7 +279,7 @@ func _world_sub_phase(label: String) -> void:
 	if _boot_world_phase:
 		_show_loading("正在生成世界…（%d/%d）· %s" % [BOOT_STAGES - 1, BOOT_STAGES, label],
 				float(BOOT_STAGES - 1) / float(BOOT_STAGES))
-	await RenderingServer.frame_post_draw
+	await _yield_frame()
 
 
 ## 实例化四个子模块节点并挂到 GameRoot 下。
@@ -505,7 +515,7 @@ func _load_start_village() -> void:
 				float(BOOT_STAGES - 1) / float(BOOT_STAGES))
 		# 先让"读取存档"这一帧画出来再进同步读档——顺序反了文字永远不上屏，
 		# 玩家盯着上一段文字以为卡死（7/9 假死教训）
-		await RenderingServer.frame_post_draw
+		await _yield_frame()
 		var boot_accepted: bool = false
 		if _save_system != null and _save_system.has_method("load_game_from_slot"):
 			boot_accepted = _save_system.load_game_from_slot(boot_slot)
@@ -527,7 +537,7 @@ func _load_start_village() -> void:
 	_show_loading("正在生成世界…（%d/%d）" % [BOOT_STAGES - 1, BOOT_STAGES],
 			float(BOOT_STAGES - 1) / float(BOOT_STAGES))
 	# 同上：先渲染"生成世界"帧，再进地图实例化的最长同步块
-	await RenderingServer.frame_post_draw
+	await _yield_frame()
 	scene_loader.load_map(VILLAGE_A_MAP_ID)
 
 

@@ -55,6 +55,9 @@ const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/
 const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
 const _DemoQuestScript: GDScript = preload("res://modules/world/scripts/setup/demo_quest.gd")
 const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/entity/unit_lod_director.gd")
+const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
+const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
+const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
 
 var _root: GameRoot
 
@@ -83,6 +86,9 @@ func setup(root: GameRoot) -> void:
 	_setup_organization_system()
 	_setup_formation_system()
 	_setup_tactical_system()
+	_setup_command_transport()
+	_setup_conquest_system()
+	_setup_recruit_system()
 	_setup_battle_panel()
 	_setup_formation_panel()
 	_setup_org_panel()
@@ -351,6 +357,10 @@ func _setup_tactical_system() -> void:
 	cc.name = "CommandChain"
 	_root.add_child(cc)
 	_root._command_chain = cc
+	# 注入 FormationSystem（队内目标点散开依赖；3-F2 接力复用 _execute_delivery 时补挂——
+	# 此前装配缺口使 spread 散点静默失效，全队退化为同一点）
+	if _root._formation_system != null and cc.has_method("setup_formation"):
+		cc.setup_formation(_root._formation_system)
 	# TacticalOrders
 	var to := Node.new()
 	to.set_script(_TacticalOrdersScript)
@@ -358,7 +368,117 @@ func _setup_tactical_system() -> void:
 	_root.add_child(to)
 	_root._tactical_orders = to
 	if to.has_method("setup"):
-		to.setup(_root._formation_system, _root._command_chain)
+		to.setup(_root._formation_system, _root._command_chain, _root._organization_api)
+
+
+# ─────────────────────────────── 指挥链传输层装配（3-F2）────────────────────────────────
+
+## 传输层三 provider + cmd 属性 provider 注入（架构文档 §4.2.1/§4.3.1）：
+## organization 保持零出向依赖——实体坐标/玩家位置/属性查询在此装配（world 侧高视角取值）。
+func _setup_command_transport() -> void:
+	var api: Node = _root._organization_api
+	if api == null or not api.has_method("set_transport_providers"):
+		return
+	api.set_transport_providers(
+		_org_commander_position,
+		_player_command_position,
+		_region_distance_stub,
+	)
+	if api.has_method("set_attribute_provider"):
+		api.set_attribute_provider(_stickman_cmd_attribute)
+
+
+## 组织指挥官实体坐标（同图）；无指挥官/实体不在场 → Vector2.INF（走跨图分支，不掺假距离）。
+## 中间层指挥官也是真实实体（指挥官不变量：某人实际指挥着下级指挥官），坐标同样可取。
+func _org_commander_position(org_id: String) -> Variant:
+	var api: Node = _root._organization_api
+	if api == null or not api.has_method("get_organization"):
+		return Vector2.INF
+	var info: Dictionary = api.get_organization(org_id)
+	if not info.get("ok", false):
+		return Vector2.INF
+	var cid := String(info.get("data", {}).get("commander_id", ""))
+	if cid.is_empty():
+		return Vector2.INF
+	var unit: Node = instance_from_id(int(cid))
+	if unit == null or not is_instance_valid(unit) or not (unit is Node2D):
+		return Vector2.INF
+	return (unit as Node2D).global_position
+
+
+## 玩家位置：附身实体坐标；未附身 = 相机视野中心；全不可得 → Vector2.INF
+func _player_command_position() -> Vector2:
+	var map: Node = _root.get_current_map() if _root.has_method("get_current_map") else null
+	if map != null and map.has_method("get_possessed_entity"):
+		var p: Node2D = map.get_possessed_entity()
+		if p != null and is_instance_valid(p):
+			return p.global_position
+	if _root.camera_rig != null:
+		return _root.camera_rig.get_screen_center_position()
+	return Vector2.INF
+
+
+## 跨图驻地距离 v1 收口（§4.2.2）：world_map 侧取数接口未立——恒 -1 走 fallback 常数
+##（balance var_command_cross_map_distance）；接口落地后换真值（待办已登记）
+func _region_distance_stub(_from_loc: String, _to_loc: String) -> float:
+	return -1.0
+
+
+## cmd 属性查询（补位排序，§4.3.1）：instance_id 字符串 → attributes.cmd；失败 -1 沉底
+func _stickman_cmd_attribute(stickman_id: String) -> float:
+	var iid := int(stickman_id)
+	if iid <= 0:
+		return -1.0
+	var unit: Node = instance_from_id(iid)
+	if unit == null or not is_instance_valid(unit):
+		return -1.0
+	var attrs: Variant = unit.get("attributes")
+	if not (attrs is Dictionary):
+		return -1.0
+	var value: Variant = (attrs as Dictionary).get("cmd", -1.0)
+	return float(value) if value is float or value is int else -1.0
+
+
+# ─────────────────────────────── 征服系统装配（出征与领地架构 §一）───────────────────────────────
+
+## 实例化 ExpansionApi + ConquestManager：单一 TerritoryRegistry 共享给
+## api 查询面/GarrisonSpawner/ConquestManager；ConquestManager 常驻 GameRoot
+## （监听全局 map_loaded/battle_ended，领地状态跨图存活）。
+func _setup_conquest_system() -> void:
+	var registry := TerritoryRegistry.new()
+	registry.load_config()
+	var api := Node.new()
+	api.set_script(_ExpansionApiScript)
+	api.name = "ExpansionApi"
+	_root.add_child(api)
+	_root._expansion_api = api
+	api.setup(registry)
+	var spawner := GarrisonSpawner.new()
+	spawner.setup(registry)
+	var manager := Node.new()
+	manager.set_script(_ConquestManagerScript)
+	manager.name = "ConquestManager"
+	_root.add_child(manager)
+	_root._conquest_manager = manager
+	manager.setup(registry, spawner, api,
+			_root._combat_api, _root._resources_api, _root.scene_loader)
+	api.set_flow_manager(manager)
+
+
+# ─────────────────────────────── 招兵与人口装配（游戏循环深化批次 1）───────────────────────────────
+
+## RecruitManager 常驻 GameRoot（人口再生 tick 跨图存活但只在村A 计时）；
+## 招兵逻辑经 OrganizationApi 转发（api.gd 招兵段），玩家交互注入见 game_root._on_map_loaded。
+func _setup_recruit_system() -> void:
+	var mgr := Node.new()
+	mgr.set_script(_RecruitManagerScript)
+	mgr.name = "RecruitManager"
+	_root.add_child(mgr)
+	_root._recruit_manager = mgr
+	mgr.setup(_root._construction_api, _root._resources_api,
+			_root.scene_loader, _root._formation_system)
+	if _root._organization_api != null and _root._organization_api.has_method("set_recruit_manager"):
+		_root._organization_api.set_recruit_manager(mgr)
 
 
 # ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────

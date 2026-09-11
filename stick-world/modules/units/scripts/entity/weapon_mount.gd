@@ -320,10 +320,12 @@ func _mount_one(scene: PackedScene, bone: Node2D, node_name: String) -> Node2D:
 	# 层级跟随单位所在带（EntityHost z=3）：相对层级 + 树序近似 SWL 槽序。
 	# 旧写法 z_as_relative=false 是"绝对 z"——武器 -2 掉到所有地图瓦片层
 	# （地面 0/装饰 1/建筑 2）之下、盾 20 压过前景层 10，武器被地面盖住。
-	# 现在：武器 0 = 与身体填充同带，树序在手 subtree（盖腿/躯干/头，见
-	# reorder_render_order 把 neck 提到臂前）；盾 1 = 全局 4，盖武器与全身，
-	# 仍低于前景层 10。躯干盖武器需拆分填充层，待渲染重构（审计已知项）。
-	instance.z_index = 1 if node_name == "Shield" else 0
+	# 链式分层渲染（stickman_skeleton.gd CHAIN_STROKE_Z）下肢体填充层
+	# 相对 z 最高 +6（外臂），武器/盾取 +7 盖全身肢体；树序盾挂外臂
+	# subtree（后画）盖武器——保持"盾 > 武器"的原语义。全局 z=10 与
+	# 地图前景层同值：树序单位在后，仅武器尖角过前景支柱时轻微盖柱
+	# （身体仍正确被前景遮挡）。
+	instance.z_index = 7
 	instance.z_as_relative = true
 	return instance
 
@@ -458,7 +460,10 @@ func _apply_balance_calibration() -> void:
 			var health: Node = owner_entity.get_health()
 			if health != null and "max_hp" in health:
 				health.max_hp = hp
-				health.hp = hp
+				# 满血基线只写活体：deferred 校准可能落在出生帧之后，若单位已死
+				#（同帧接敌/陷阱/溅射），回写 hp 会把尸体复活成满血——只校准上限
+				if not (health.has_method("is_dead") and health.is_dead()):
+					health.hp = hp
 			_hp_calibrated = true
 	_check_cooldown_vs_anim()
 	_apply_global_tuning()

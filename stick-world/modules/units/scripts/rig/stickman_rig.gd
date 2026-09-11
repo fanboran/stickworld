@@ -73,6 +73,10 @@ var _current_anim: String = ANIM_IDLE
 var _weapon_r: Node2D
 var _weapon_l: Node2D
 var _rebuild_pending: bool = false
+## 描边补偿当前已应用的画布缩放（-1 = 未初始化，首帧强制应用一次）
+var _outline_canvas_scale: float = -1.0
+## 上次描边补偿的 rig 自身缩放（body_scale 变化时触发重补偿，与画布缩放同口径）
+var _outline_rig_scale: float = -1.0
 ## 受击插播计时（>0 表示正在受击动画，倒计时结束后回切到 _hit_return_to）
 var _hit_timer: float = -1.0
 ## 死亡终态（2026-08-31 观察场审计）：dead/dead_headshot 播出后置位，
@@ -180,6 +184,14 @@ func _process(delta: float) -> void:
 	if _rebuild_pending:
 		_rebuild_pending = false
 		_do_rebuild()
+	# 描边屏幕像素恒定：画布缩放变化时批量刷描边宽（缩放变化=滚轮/改窗，低频事件；
+	# 平时每帧只有一次取矩阵+浮点比较的开销。编辑器内不补偿，保持设计空间观感）
+	if not Engine.is_editor_hint():
+		_update_outline_zoom()
+		# 开口侧线头圆动态裁剪（近臂双线；手臂摆动时起点始终钳在头圆外，
+		# 静息留隙只是标定基准——创始人反馈"线条不要进脑袋"的运行时兜底）
+		if _sprites.has(1) and _sprites.has(10):
+			Skeleton.clip_open_root_sides_to_head(_sprites, 10)
 	# 批渲染 pose 脏标记（自动驱动模式）：AnimationTree 自主推进，无法感知姿态
 	# 变化帧，保守每帧标脏（无动画树则姿态恒定，跳过）
 	if _batch != null and not _anim_driven and _anim_tree != null:
@@ -462,6 +474,31 @@ func _do_rebuild() -> void:
 		_batch.reconfigure(thickness_scale, _make_colors())
 		return
 	Skeleton.apply_colors(_sprites, _make_colors())
+	# 重建不涉及描边宽度，但 thickness_scale 变更会重建填充宽——
+	# 强制下帧重应用当前画布缩放的描边补偿（否则按旧缓存跳过，描边回退设计宽）
+	_outline_canvas_scale = -1.0
+
+
+## 描边屏幕像素恒定：画布缩放（Camera2D.zoom，含分辨率适配）变化时批量刷新
+## 描边宽。检测用"每帧取一次画布变换缩放 + 浮点比较"，写入只在变化帧发生
+## （百人同屏一帧 ~千次属性写，滚轮缩放低频，成本可忽略）。
+## 补偿公式须除掉 rig 自身 scale（BASE_SCALE × body_scale）：描边宽写在本地
+## 坐标、渲染时再乘节点 scale——0.65× 体型单位若只按画布缩放补偿，本地描边
+## 被灌到超粗（渲染后屏幕占比过大），深灰填充被白描边盖成"白色小人"
+## （视觉验收抓过，1× 机位小护卫）。
+func _update_outline_zoom() -> void:
+	if _sprites.is_empty() or not is_inside_tree():
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var s: float = vp.get_canvas_transform().get_scale().x
+	var rig_scale: float = absf(scale.x)
+	if absf(s - _outline_canvas_scale) < 0.001 and absf(rig_scale - _outline_rig_scale) < 0.001:
+		return
+	_outline_canvas_scale = s
+	_outline_rig_scale = rig_scale
+	Skeleton.apply_outline_zoom(_sprites, Skeleton.outline_world_width(s * rig_scale))
 
 
 # ============================================================

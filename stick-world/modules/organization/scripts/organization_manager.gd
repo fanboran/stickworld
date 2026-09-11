@@ -33,6 +33,8 @@ const VALID_POSITIONS: Array[String] = [
 const ScriptOrgState := preload("res://core/entities/organization_state.gd")
 const ScriptWorldState := preload("res://core/autoload/world_state.gd")
 const ScriptSerializer := preload("res://core/entities/world_state_serializer.gd")
+const ScriptDispatcher := preload("res://modules/organization/scripts/command/org_command_dispatcher.gd")
+const ScriptTransport := preload("res://modules/organization/scripts/command/transport_layer.gd")
 
 const TAG_TO_ENUM := {
 	"MILITARY": ScriptOrgState.Tag.MILITARY,
@@ -61,6 +63,32 @@ var _next_id: int = 1
 
 ## WorldState 容器引用（2026-08 集中制：由 api.setup 注入，null 时跳过容器同步，仅测试/独立使用）
 var _world: Node = null
+
+# ===== 批次 3：指挥链组件（架构文档 §四）=====
+
+## 补位引擎上报（对内信号；api.setup 时转发到公共信号 report_filed——manager 内部
+## 发射的上报如 commander_lost 必报，无法经 api 方法回程包装）
+signal report_filed(org_id: String, report: Dictionary)
+
+## 逐层命令分解器（§4.1，无状态纯逻辑）
+var command_dispatcher: ScriptDispatcher
+
+## 传输层 v1 抽象传播（§4.2）：三 provider 经 api.set_transport_providers 装配注入；
+## location 是组织自有数据，manager 内部接线
+var transport_layer: ScriptTransport
+
+## cmd 属性查询（补位排序用，§4.3.1）：装配层实现 instance_from_id → attributes.cmd，
+## 失败返回 -1 沉底；未注入时全员 -1 → 平局按池序
+var _attribute_provider: Callable = Callable()
+
+## MEDIUM 自主档伤亡上报阈值（存活比跌破即报，§4.4）；常规走 balance.variables 行覆盖
+var _casualty_report_threshold: float = 0.30
+
+
+func _init() -> void:
+	command_dispatcher = ScriptDispatcher.new()
+	transport_layer = ScriptTransport.new()
+	transport_layer.set_location_provider(_org_location)
 
 
 # ===== 工具方法 =====
@@ -271,11 +299,16 @@ func assign_commander(org_id: String, stickman_id: String) -> Dictionary:
 
 
 ## 撤除指挥官
+## 补位引擎（§4.3.1）：手工撤职与死亡同一入口——撤除后按 succession_rule 自动补位
 func remove_commander(org_id: String) -> Dictionary:
 	var org := _get_org(org_id)
 	if org == null:
 		return {"ok": false, "error": "组织不存在: %s" % org_id}
+	if org.commander_id == "":
+		return {"ok": true, "data": {}}
+	var prev := org.commander_id
 	org.commander_id = ""
+	_run_succession(org, prev)
 	return {"ok": true, "data": {}}
 
 
@@ -291,6 +324,8 @@ func assign_stickman(org_id: String, stickman_id: String, _role: String) -> Dict
 
 
 ## 从组织移除火柴人
+## 补位引擎（§4.3.1）：被移除者是指挥官时自动补位（死亡/调离同一入口，无独立 notify API；
+## FormationSystem 死亡清理处既有调用天然触发，零新增挂点）
 func remove_stickman(org_id: String, stickman_id: String) -> Dictionary:
 	var org := _get_org(org_id)
 	if org == null:
@@ -298,6 +333,9 @@ func remove_stickman(org_id: String, stickman_id: String) -> Dictionary:
 	if stickman_id not in org.personnel:
 		return {"ok": false, "error": "该火柴人不在组织中: %s" % stickman_id}
 	org.personnel.erase(stickman_id)
+	if org.commander_id == stickman_id:
+		org.commander_id = ""
+		_run_succession(org, stickman_id)
 	return {"ok": true, "data": {}}
 
 
@@ -661,6 +699,165 @@ func _validate_preset_data(data: Dictionary) -> String:
 		if int(e.get("level", 0)) < TIER_MIN or int(e.get("level", 0)) > TIER_MAX:
 			return "预设条目 %s 层级 %s 超出 %d-%d 范围" % [String(e.get("key")), String(e.get("level")), TIER_MIN, TIER_MAX]
 	return ""
+
+
+# ===== 批次 3：逐层指挥链（架构文档 §四，3-F1）=====
+
+## 装配注入三 provider（实体坐标/玩家位置/跨图驻地距离）——经 api.set_transport_providers 转发
+func set_transport_providers(position_provider: Callable, player_position_provider: Callable,
+		region_distance_provider: Callable) -> void:
+	transport_layer.setup(position_provider, player_position_provider, region_distance_provider)
+
+
+## 装配注入 cmd 属性查询（补位排序用，§4.3.1）——经 api.set_attribute_provider 转发
+func set_attribute_provider(provider: Callable) -> void:
+	_attribute_provider = provider
+
+
+## MEDIUM 自主档伤亡上报阈值注入（balance.variables 行覆盖入口）
+func set_casualty_report_threshold(threshold: float) -> void:
+	_casualty_report_threshold = threshold
+
+
+## 组织驻地查询（transport 内部 location provider 接线；不存在按 "" = 同驻地口径）
+func _org_location(org_id: String) -> String:
+	var org := _get_org(org_id)
+	return org.location if org != null else ""
+
+
+## 逐层投递计划（§4.1 schema：玩家跳 + BFS 层序 hops；同令透传；分解器只出结构不算时间）
+func build_dispatch_plan(org_id: String, order: Dictionary) -> Dictionary:
+	return command_dispatcher.build_plan(organizations, org_id, order)
+
+
+# ── 补位引擎（§4.3.1，3-P 定稿）──────────────────────────────
+# 触发点内聚在 remove_stickman/remove_commander（被移除者 == commander 时自动补位）；
+# 死亡/调离/手工撤职同一入口。伤亡是唯一的"位置事实空缺"来源（过渡态），补上的人就是真指挥官。
+
+## 补位候选序（[{id, cmd}, ...] 按 cmd 降序，平局按池序稳定）——OrgPanel 展示/测试断言
+func get_succession_candidates(org_id: String) -> Array[Dictionary]:
+	var org := _get_org(org_id)
+	if org == null:
+		return []
+	return _succession_pool(org, org.commander_id)
+
+
+## 候选池 = personnel ∪ 直接子组织 commander（去重、剔空串、剔除被移除者），
+## L1 自然退化为班内成员，中间层自然退化为下级指挥官（§4.3.1 第 3 条）
+func _succession_pool(org: ScriptOrgState, exclude_id: String) -> Array[Dictionary]:
+	var pool: Array = []
+	var seen := {}
+	var order := 0
+	for sid in org.personnel:
+		var member := str(sid)
+		if member == "" or member == exclude_id or seen.has(member):
+			continue
+		seen[member] = true
+		pool.append({"id": member, "cmd": _cmd_attribute(member), "order": order})
+		order += 1
+	for child_id in org.child_orgs:
+		var child := _get_org(child_id)
+		if child == null:
+			continue
+		var cid := child.commander_id
+		if cid == "" or cid == exclude_id or seen.has(cid):
+			continue
+		seen[cid] = true
+		pool.append({"id": cid, "cmd": _cmd_attribute(cid), "order": order})
+		order += 1
+	# cmd 降序；平局按池序稳定（personnel 先于子指挥官）——sort_custom 不保证稳定，用 order 做次级键
+	pool.sort_custom(func(a, b):
+		if a.cmd != b.cmd:
+			return a.cmd > b.cmd
+		return a.order < b.order)
+	var result: Array[Dictionary] = []
+	for p in pool:
+		result.append({"id": p.id, "cmd": p.cmd})
+	return result
+
+
+## cmd 属性查询：provider 缺失/异常 → -1 沉底（平局按池序）
+func _cmd_attribute(stickman_id: String) -> float:
+	if not _attribute_provider.is_valid():
+		return -1.0
+	var value: Variant = _attribute_provider.call(stickman_id)
+	if value is float or value is int:
+		return float(value)
+	return -1.0
+
+
+## 补位主流程（§4.3.1）：RANK_HIGHEST 自动补位；PLAYER_CHOSEN/NONE 保持空缺等任命；
+## 成功补位发 EventBus.commander_assigned（battle_panel 已消费，3-F2 FormationSystem 订阅回写）；
+## commander_lost 上报必报型——无视 autonomy 门控（§4.4）。
+## 返回 {filled, successor_id}（供测试断言）。
+func _run_succession(org: ScriptOrgState, prev_commander_id: String) -> Dictionary:
+	var filled := false
+	var successor := ""
+	if org.succession_rule == ScriptOrgState.SuccessionRule.RANK_HIGHEST:
+		var pool := _succession_pool(org, prev_commander_id)
+		if not pool.is_empty():
+			successor = pool[0]["id"]
+			org.commander_id = successor
+			filled = true
+			var unit_id := successor.to_int()
+			if unit_id > 0:
+				EventBus.commander_assigned.emit(org.id, unit_id)
+	report_filed.emit(org.id, {
+		"type": "commander_lost",
+		"filed_at": Time.get_ticks_msec(),
+		"payload": {"prev_commander_id": prev_commander_id, "filled": filled, "successor_id": successor},
+	})
+	return {"filled": filled, "successor_id": successor}
+
+
+# ── 信息上报骨架（§4.4，P0 三 type × autonomy 三档门控）──────────────────
+# 门控规则是组织学规则，归组织侧判定——combat 只发原始事件；
+# P0 只发一层（信号载荷为发起方 org_id），逐级衰减是 P1。
+
+## 上报门控判定（combat 挂点用法：gate 通过才 file_report）
+## type: "commander_lost"（必报）/ "casualty_threshold" / "contact"；未知 type / 组织不存在 → false
+func evaluate_report_gate(org_id: String, type: String, payload: Dictionary) -> bool:
+	var org := _get_org(org_id)
+	if org == null:
+		return false
+	match type:
+		"commander_lost":
+			return true  # 组织结构事件，上级必须知道（补位/重组依据）
+		"casualty_threshold":
+			match org.autonomy_level:
+				ScriptOrgState.AutonomyLevel.HIGH:
+					return false  # 全自主：不报
+				ScriptOrgState.AutonomyLevel.LOW:
+					return true   # 全量：每次死亡报（阈值形同虚设）
+				_:
+					# MEDIUM：存活比跌破阈值才报（沿只报首次由 combat 挂点状态把关）
+					var total := int(payload.get("total", 0))
+					if total <= 0:
+						return false
+					var alive := int(payload.get("alive", 0))
+					return float(alive) / float(total) < _casualty_report_threshold
+		"contact":
+			match org.autonomy_level:
+				ScriptOrgState.AutonomyLevel.HIGH:
+					return false  # 全自主：不报
+				_:
+					return true   # MEDIUM 首次报 / LOW 每次报（首次性由 combat 挂点把关）
+	return false
+
+
+## 提交上报（combat 挂点入口；内部校验 schema 后发 report_filed 信号——组织侧只透传不解释）
+func file_report(org_id: String, report: Dictionary) -> void:
+	if not organizations.has(org_id):
+		return
+	var r_type := String(report.get("type", ""))
+	if r_type.is_empty():
+		return  # schema：type 必填
+	var payload: Variant = report.get("payload", {})
+	report_filed.emit(org_id, {
+		"type": r_type,
+		"filed_at": int(report.get("filed_at", Time.get_ticks_msec())),
+		"payload": payload if payload is Dictionary else {},
+	})
 
 
 # ===== 存档对接（2026-08 集中制：序列化格式与 WorldState 统一） =====

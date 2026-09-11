@@ -1,34 +1,47 @@
-class_name LoadingScreen
 extends Control
-## 载入屏 —— 主菜单 → 游戏 的短过渡（标题 + 加载环，无假进度条）。
+## 载入屏 —— 主菜单 → 游戏 的跳板（本屏不再自带视觉）。
 ##
-## 真实的世界加载在 game_root 内由 WorldLoadingOverlay 承载（game_root 启动第一帧即显示
-## "正在加载…"，覆盖装配+加载全期，世界就绪淡出），因此本屏只做"主菜单→游戏"的
-## 极短过渡（约 0.5s），不做假进度——假进度条会在切 game_root 装配期"卡死"，观感差。
+## 职责：把常驻加载层（WorldLoadingOverlay）挂到**场景树根**——它不随本场景
+## 释放，切到 game_root 期间持续在屏；game_root 启动后经 group 认领同一块层，
+## 继续驱动分段进度到世界就绪。点「继续游戏」到进世界是**同一块加载屏**，
+## 交接零缝隙（旧两屏方案：各自挂场景内，切换时旧的销毁、新的没首帧，必卡缝）。
+## 直启 game_root（编辑器 F5/测试）没有跳板，game_root 自建兜底。
+##
+## ⚠ 主动放弃的优化（2026-09-11，防重踩）：menu 闲时 `load_threaded_request`
+## 预热 game_root.tscn/村庄图。收益被全屏加载层盖住，风险实测三次事故——
+## 线程加载会后台编译 game_root.gd，编译期十几条地图 `preload` 与主线程资源
+## 操作竞态（同步加载相撞=主线程死锁；编译竞态=preload 资源风暴、场景切空壳）。
+## 资源线程化预热只对「无脚本 preload 闭包的纯数据资源」安全。
 
 const GAME_ROOT_SCENE := "res://modules/world/scenes/game_root.tscn"
+const _OverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/world_loading_overlay.gd")
+## 跳板停留时间（给常驻层首帧渲染 + 提示可读的最低保障）
 const LOAD_SECONDS := 0.5
-
-## 过渡期提示（固定显示第一条；加条目 = 加一行）
-const LOADING_TIPS: Array[String] = [
-	"提示：空格暂停 · 1/2/3 调速 · Tab 战略图",
-	"提示：F5 快速保存 · F9 快速读档 · Ctrl+S 存档面板",
-	"提示：按 F3 调试（悬停 UI 显示控件名）",
-]
-
-@onready var _title_label: Label = $CenterBox/TitleLabel
-@onready var _subtitle_label: Label = $CenterBox/SubtitleLabel
-@onready var _tip_label: Label = $CenterBox/TipLabel
 
 
 func _ready() -> void:
-	theme = StickTheme.create()
-	_title_label.add_theme_font_size_override("font_size", StickTokens.FONT_TITLE)
-	_subtitle_label.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
-	_subtitle_label.modulate = StickTokens.TEXT_DIM
-	_tip_label.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
-	_tip_label.modulate = StickTokens.TEXT_FAINT
-	_tip_label.text = LOADING_TIPS[0]
-	# 到点切游戏根（game_root 启动即显示加载覆盖，world 就绪淡出）
+	_install_root_overlay()
 	await get_tree().create_timer(LOAD_SECONDS).timeout
 	get_tree().change_scene_to_file(GAME_ROOT_SCENE)
+
+
+## 挂常驻加载层到场景树根（已存在则复用——回主菜单再进游戏的第二轮）。
+## root.add_child 需 deferred：菜单 _ready 处于场景装配期，同步挂会撞
+## "Parent is busy setting up children"（SketchTextures.ensure_driver 同坑）。
+func _install_root_overlay() -> void:
+	var root := get_tree().root
+	if root.get_node_or_null("BootLoadingLayer") != null:
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "BootLoadingLayer"
+	layer.layer = 100  # 压过一切场景内 UI（含 game_root 的 WorldLoadingLayer）
+	root.add_child.call_deferred(layer)
+	await get_tree().process_frame
+	if not is_instance_valid(layer):
+		return
+	var ov: Control = _OverlayScript.new()
+	ov.name = "WorldLoadingOverlay"
+	ov.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(ov)
+	if ov.has_method("show_loading"):
+		ov.show_loading("正在进入世界…", 0.0)

@@ -248,6 +248,25 @@ func load_preset(preset_name: String, parent_id: String) -> Dictionary
 func apply_preset(data: Dictionary, parent_id: String) -> Dictionary
 # v2 蓝图直灌（export_as_preset 产物格式），信号语义同 load_preset
 func export_as_preset(org_id: String) -> Dictionary
+
+# 逐层指挥链（批次 3-F1，架构文档 组织系统架构.md §四）
+func build_dispatch_plan(org_id: String, order: Dictionary) -> Dictionary
+# 逐层投递计划：hop 0 玩家跳（from_org=""，from_tier=0）+ BFS 层序展开到 L1，同令透传
+# data: {root_org, leaf_orgs, hops}；错误："org_not_found" / "no_subordinate"
+func get_delivery_time(from_org: String, to_org: String) -> float
+# 一跳传播秒数（传输层 v1：距离÷媒介速度；层级数不直接生延迟）——3-F2 combat 接力执行消费
+func set_transport_providers(position_provider: Callable, player_position_provider: Callable, region_distance_provider: Callable) -> void
+# 装配注入传输层三 provider（system_setup 接线；location 由 manager 内部接线，不占装配面）
+func set_attribute_provider(provider: Callable) -> void
+# 装配注入 cmd 属性查询（补位排序）：stickman_id -> float，失败返回 -1 沉底
+func get_succession_candidates(org_id: String) -> Array[Dictionary]
+# 补位候选序 [{id, cmd}, ...] 按 cmd 降序（平局按池序；现任指挥官不在池）
+func evaluate_report_gate(org_id: String, type: String, payload: Dictionary) -> bool
+# 上报门控（§4.4 三档表）：commander_lost 必报恒 true；HIGH 不报 casualty/contact；
+# MEDIUM casualty 按存活比阈值（var_report_casualty_threshold）；LOW 全量
+func file_report(org_id: String, report: Dictionary) -> void
+# 提交上报（combat 挂点入口；schema 校验后发 report_filed）
+# 信号 report_filed(org_id, report)：report={type, filed_at, payload}，组织侧只透传不解释
 ```
 
 ---

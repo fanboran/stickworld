@@ -118,9 +118,20 @@ static func build(leg: Dictionary) -> PackedScene:
 	_build_exit_trigger(triggers, "ExitLeft", WorldAPI.EntrySide.LEFT, width)
 	_build_exit_trigger(triggers, "ExitRight", WorldAPI.EntrySide.RIGHT, width)
 
+	# pack() 只序列化 owner==root 的子树——运行时 add_child 的节点 owner 为空，
+	# 不补设则产物仅剩根节点（地形/装饰/出口触发器全丢，road 场景进图即空壳）
+	_propagate_owner(root, root)
+
 	var packed := PackedScene.new()
 	packed.pack(root)
 	return packed
+
+
+## 递归补设 owner（静态生成节点统一归属根，PackedScene.pack 的序列化前提）
+static func _propagate_owner(node: Node, owner: Node) -> void:
+	for c in node.get_children():
+		c.owner = owner
+		_propagate_owner(c, owner)
 
 
 ## 沿线群系色带：biomes 均分横向分段（逐段 Polygon2D）；无数据按 tier 单色兜底

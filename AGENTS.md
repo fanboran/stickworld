@@ -30,6 +30,7 @@
   - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
   - `docs/项目/交接/组织系统深化-进度与交接.md`（任务：组织系统深化，分支 `agent/organization-deepening`，worktree `.temp/organization-deepening`）
   - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
+  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界AI机制复刻与分层集成（CoH已逆向，RimWorld/全战等候选），设计文档 `docs/设计/系统/12-游戏AI系统.md`，批次 A1~A8，暂随 `agent/organization-deepening` 分支）（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
 
 ### 项目文档导航
 

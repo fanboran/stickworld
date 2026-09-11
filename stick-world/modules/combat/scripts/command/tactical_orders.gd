@@ -81,6 +81,10 @@ func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO
 	var spread_mode: String = _order_to_spread(order_type)
 	# 通过指挥链下达（P0 source_tier=0 时无延迟）
 	_command_chain.deliver(order_type, squad_id, units, behavior_name, params, source_tier, 1, spread_mode)
+	# A5 相位计划触发点（C8）：号令下发成功后回查编队系统——推进类号令激活
+	# 小队相位计划，其余号令撤销（开关关闭时编队侧静默忽略，零回归）
+	if _formation_system != null and _formation_system.has_method("notify_squad_order"):
+		_formation_system.notify_squad_order(order_type, squad_id, target_pos)
 	# 发射信号
 	order_issued.emit(order_type, squad_id, source_tier)
 	if EventBus != null and EventBus.has_signal("order_issued"):
@@ -128,6 +132,10 @@ func issue_to_org(org_id: String, order_type: int, target_pos: Vector2 = Vector2
 	var spread_mode: String = _order_to_spread(order_type)
 	# 接力执行（协程，fire-and-forget——受理即返回，送达异步推进）
 	_command_chain.deliver_via_orgs(plan_result["data"], _org_api, order_type, behavior_name, params, spread_mode)
+	# A5 相位计划触发点（C8）：组织号令受理后回查编队系统，整编制 L1 小队入计划
+	# （开关关闭时编队侧静默忽略，零回归）
+	if _formation_system != null and _formation_system.has_method("notify_org_order"):
+		_formation_system.notify_org_order(order_type, org_id, target_pos)
 	# 发射信号（既有口径：org 根 id 作 target；source_tier=0 玩家跳）
 	order_issued.emit(order_type, org_id, 0)
 	if EventBus != null and EventBus.has_signal("order_issued"):

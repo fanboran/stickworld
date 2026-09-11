@@ -942,6 +942,8 @@ func _setup_demo_quest_deferred() -> void:
 	if not _root.ui_root.add_to_slot("HudOverlay", panel):
 		panel.queue_free()
 		return
+	# 定位归 zone：top_left_stack 堆叠区（排在资源条之下，见 hud_zone_layout.gd）
+	_root.ui_root.place_in_zone(&"top_left_stack", panel)
 	var quest := Node.new()
 	quest.set_script(_DemoQuestScript)
 	quest.name = "DemoQuest"

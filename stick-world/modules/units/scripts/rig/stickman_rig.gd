@@ -84,6 +84,33 @@ var _dead: bool = false
 var _hit_return_to: String = ANIM_IDLE
 ## 已发送 animation_finished 的 state（防重复触发；离开该 state 后重置）
 var _finished_sent_state: String = ""
+## ── 小兵渲染代理（§十四 crowd_renderer）──
+## hook 有效 = 本 rig 退居代理模式：AnimationTree 停用、rig 隐藏（武器由
+## 代理 reparent 出去自驱）、play/play_hit 播报给代理；animation_finished
+## 由代理检测 t ≥ 动画时长后经本信号补发（消费方无感知）。解除 hook
+## （附身/退出代理）即恢复富管线。
+var _crowd_hook: Callable = Callable()
+
+
+## 进入/退出小兵代理模式。进入时停动画、藏 rig；退出时恢复（可见 + LOD
+## 下一拍自动重设动画频率；附身单位勿进入代理）。
+func set_crowd_hook(hook: Callable) -> void:
+	_crowd_hook = hook
+	var on: bool = hook.is_valid()
+	visible = not on
+	if on:
+		# 完全暂停档：动画停（hz=0 短路见 set_anim_update_hz）+ 解算/推进冻结
+		set_anim_update_hz(0.0)
+		if _anim_tree != null and _anim_tree.active:
+			_anim_tree.active = false
+	else:
+		# 恢复：交给 LOD 下一拍重设（或立即全速，附身场景由实体侧再调）
+		visible = true
+
+
+## 是否处于小兵渲染代理模式（LOD 的 rig 可见性/动画频率管辖据此让位）
+func is_crowd_proxied() -> bool:
+	return _crowd_hook.is_valid()
 ## 动画事件派发状态：当前跟踪的动画名
 var _event_anim: String = ""
 ## 动画事件派发状态：上一帧播放位置（用于检测重播/循环回绕）
@@ -496,6 +523,11 @@ func _do_rebuild() -> void:
 # ============================================================
 
 func play(anim_name: String) -> void:
+	# 小兵代理模式：播报即完成（状态机已停，由 CrowdRenderer 插值驱动；
+	# 死亡变体的 base 归一化不需要——预编译表按变体名索引）
+	if _crowd_hook.is_valid():
+		_crowd_hook.call(anim_name)
+		return
 	if _state_machine == null:
 		if _anim_tree != null:
 			_state_machine = _anim_tree.get("parameters/playback")
@@ -584,6 +616,8 @@ func set_anim_paused(paused: bool) -> void:
 ## （active=false + 手动 advance）就不再回退自动处理；deactivate 不重置状态机，
 ## advance 是同步推进（状态机过渡/播放位置/事件检测照常），全速档与自动处理行为等价。
 func set_anim_update_hz(hz: float) -> void:
+	if _crowd_hook.is_valid():
+		return  # 代理模式恒停（LOD 每拍重设在此短路，动画由 CrowdRenderer 驱动）
 	if _anim_tree == null:
 		return
 	_adv_hz = hz
@@ -719,6 +753,10 @@ func get_anim_length(anim_name: String) -> float:
 ## blocking=true 举盾中被击（Hit-Spearton-Block 池，招架配套反馈）。
 func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking: bool = false) -> void:
 	if _dead:
+		return
+	# 小兵代理模式：播报选中变体（pick_hit_anim 与富管线同一选择逻辑）
+	if _crowd_hook.is_valid():
+		_crowd_hook.call(Anims.pick_hit_anim(from_front, big, head, blocking))
 		return
 	if _state_machine == null:
 		if _anim_tree != null:

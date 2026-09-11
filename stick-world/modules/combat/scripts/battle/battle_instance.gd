@@ -17,6 +17,7 @@ const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 ## D 刀：数据化批模拟内核（ProjectSettings sim/battle_sim 开关，见 BattleSim.is_enabled）
 const ScriptBattleSim := preload("res://modules/combat/scripts/battle/battle_sim.gd")
+const ScriptCrowdRenderer := preload("res://modules/units/scripts/rig/crowd_renderer.gd")
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 战斗结束（胜负/平局判定完成，实例即将 queue_free）。
@@ -80,6 +81,8 @@ var _order_refs_orders: Node = null
 var _order_refs_formation: Node = null
 ## 数据化批模拟内核（null = 开关关闭——全部单位走旧实体链，A/B 与回滚口径）
 var _sim: ScriptBattleSim = null
+## 小兵渲染代理（§十四；null = 未启用/回退富管线）
+var _crowd: ScriptCrowdRenderer = null
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -100,6 +103,18 @@ func setup(map: Node2D) -> void:
 				float(map.map_right) if "map_right" in map else 8192.0,
 				float(map.ground_y) if "ground_y" in map else 450.0,
 				float(map.ground_bottom) if "ground_bottom" in map else 882.0)
+	# §十四 小兵渲染代理：启用时小兵 rig 退居代理（全局 4 桶 MultiMesh 批渲染，
+	# 动画代码插值）；附身单位在 add_unit 排除。y 分带边界 = 地面纵深；
+	# MMI 容器挂 EntityHost（与实体同父、同 canvas 同 y-sort 上下文）。
+	if ScriptCrowdRenderer.is_enabled() and map != null:
+		_crowd = ScriptCrowdRenderer.new()
+		var host_parent: Node2D = map
+		var eh: Node2D = map.find_child("EntityHost", true, false) as Node2D
+		if eh != null:
+			host_parent = eh
+		_crowd.setup(host_parent,
+				float(map.ground_y) if "ground_y" in map else 0.0,
+				float(map.ground_bottom) if "ground_bottom" in map else 1024.0)
 
 
 ## 添加参战单位。
@@ -118,6 +133,11 @@ func add_unit(unit: Node, faction: int) -> void:
 			unit.set_battle_sim(_sim, sid)
 		elif sid >= 0:
 			_sim.unregister_unit(unit)  # 非 StickmanEntity 测试桩：不入 sim
+	# §十四 小兵渲染代理：非附身实体注册代理（附身/玩家交互链保持富管线）
+	if _crowd != null and not (unit.has_method("is_possessed") and unit.is_possessed()):
+		var slot: Dictionary = _crowd.register_unit(unit)
+		if not slot.is_empty():
+			unit.set_meta("crowd_slot", slot)
 	if faction == FACTION_ATTACKER:
 		_units_attacker.append(unit)
 	else:
@@ -142,6 +162,9 @@ func _physics_process(delta: float) -> void:
 	# AI 决策（director/behavior）读到本刻最新位置
 	if _sim != null:
 		_sim.tick(delta)
+	# §十四 小兵渲染代理（sim 之后：读最新位置/朝向；物理刻驱动即暂停门禁同 sim）
+	if _crowd != null:
+		_crowd.tick(delta)
 	_director.tick(delta)
 	# 阵营 AI tick（P6 TeamAi：注册判空，未注册零开销；内部低频节流 + 门禁双保险）
 	for faction in _team_ai.keys():
@@ -447,10 +470,16 @@ func _end(result: State) -> void:
 			unit.set_battle_instance(null)
 			if unit.has_method("set_battle_sim"):
 				unit.set_battle_sim(null, -1)
+		if is_instance_valid(unit) and unit.has_meta("crowd_slot"):
+			_crowd.unregister_unit(unit.get_meta("crowd_slot"))
+			unit.remove_meta("crowd_slot")
 	_units_attacker.clear()
 	_units_defender.clear()
 	_target_attackers.clear()
 	_sim = null
+	if _crowd != null:
+		_crowd.teardown()
+		_crowd = null
 	# 阵营 AI 消亡：断开 EventBus 订阅（防 freed 悬空连接），随宿主 queue_free 整体释放
 	for faction in _team_ai.keys():
 		var tai: ScriptTeamAi = _team_ai[faction]

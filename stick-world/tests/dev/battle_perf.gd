@@ -22,6 +22,9 @@ const WARMUP_SECONDS: float = 8.0
 var _elapsed: float = 0.0
 var _samples: Array[float] = []
 var _max_frame_ms: float = 0.0
+## draw calls 采样（渲染管线精确统计，不受 CPU 负载噪声影响——量测纪律见
+## 交接档 §十二：本机分钟级负载波动 ±30%，fps/tps 只能同分钟 A/B，draw 数恒可信）
+var _draw_samples: Array[float] = []
 var _done: bool = false
 ## 实验开关（诊断瓶颈用；正常跑不带参数）：
 ##   --anim-off   开战 5s 后冻结全部 AnimationTree（动画处理成本归零，渲染仍在）
@@ -84,6 +87,8 @@ func _process(delta: float) -> void:
 	_max_frame_ms = maxf(_max_frame_ms, delta * 1000.0)
 	if _elapsed > WARMUP_SECONDS:
 		_samples.append(float(Engine.get_frames_per_second()))
+		_draw_samples.append(float(Performance.get_monitor(
+				Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
 	if _elapsed < WARMUP_SECONDS + MEASURE_SECONDS:
 		return
 	_done = true
@@ -198,6 +203,9 @@ func _report() -> void:
 	avg /= maxf(1.0, float(_samples.size()))
 	var median: float = sorted[sorted.size() / 2]
 	var p05: float = sorted[maxi(0, int(sorted.size() * 0.05))]
+	var draws_sorted: Array[float] = _draw_samples.duplicate()
+	draws_sorted.sort()
+	var draws_med: float = draws_sorted[draws_sorted.size() / 2] if not draws_sorted.is_empty() else 0.0
 	print("[PERF] %s" % str({
 		"preset": ["遭遇战16(16v16)", "标准战役48(48v48)", "大军压境96(96v96)"][_preset_arg],
 		"samples": _samples.size(),
@@ -205,4 +213,5 @@ func _report() -> void:
 		"fps_median": median,
 		"fps_p05": p05,
 		"worst_frame_ms": snappedf(_max_frame_ms, 0.1),
+		"draw_calls_median": int(draws_med),
 	}))

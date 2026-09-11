@@ -28,10 +28,32 @@ extends RefCounted
 ##     开局攻击门禁 = seconds_before_attack ± start_attack_variance 掷骰
 ##     （CoH standard 9min±4min 同构，难度=参数不=作弊）；默认种子固定
 ##     （确定性可测/可复现），显式 overrides.random_seed 可逐局随机。
+##
+## A2（设计文档12号 C3/C4/C5，AI集大成）：
+##   - C3 任务槽：TaskBoard（攻/防槽）——本类只创建/杀槽（sync_slots，期望进攻
+##     槽数 = ceil(attack% × 原子单元数)，CoH strategy_military 同构），小队匹配
+##     归执行侧（match_groups：组织化编制作一组/散兵各一组）；槽带集结点/集结
+##     超时（到点杀槽由 sync 重建）/目标超时（到点重评分重定向+重发号令）。
+##   - C4 目标评分四因子：threat / avoid_clumps / distance / inertia（防振荡），
+##     权重 CoH 真值（5/10/5/5/1.4）进 personality 档案；攻击槽目标 = 候选敌位
+##     （敌方军事单位 + 敌质心）argmax，重评分以槽现目标为惯性参照。
+##   - C5 攻击百分比四规则（优先级高→低）：胜利目标危急（开放问题#1 无 VP
+##     等价物，vp_rule_enabled 缺省关闭【提案/待定】）→ 基地威胁封顶 → 难度基调
+##     （门禁未开 0；开门禁后 baseline + 每分钟递增，封顶 max）→ 军力优势递增；
+##     "领先转防守"挂 VP 分支（随规则一同 dormant）。
+##   - 咬合③：CoH 槽内核为主决策内核（姿态由槽驱动：有攻击槽→ATTACK，槽清空
+##     →DEFEND；SWL 比例条件转写为槽创建/维持门禁——enter=attack_enter，
+##     维持=ATTACK 态 ratio>attack_exit 滞回带）；SWL 决策函数（should_attack/
+##     should_defend 签名与节流接口）保留为退化路径（slot_kernel_enabled=false
+##     或任务板缺失时走原逻辑）。
+##   - 下令路径收敛（§四）：组织化编制经 issue_to_org 逐跳传播（编制=原子，
+##     整组一号令），散兵经 issue 现场直令；玩家手动号令保护期仍高于自动号令
+##     （散兵逐队避让 / 编制任一成员保护期内整组避让，下轮槽重发/姿态切换恢复）。
 
 ## 同模块档案（显式 preload，headless 防御惯例 §七.3）
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const ScriptTaskBoard := preload("res://modules/combat/scripts/battle/task_board.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 姿态枚举（0=GARRISON/1=DEFEND/2=ATTACK，对齐 dump Team.Stance 枚举序；
@@ -88,6 +110,14 @@ var _enemy_strength: float = 0.0
 var _own_threatened: bool = false
 ## 首次快照的本方力量基线（no_defender_floor 比例分母；每战斗恒定）
 var _initial_own_strength: float = -1.0
+## A2 快照：敌方存活军事单位 [{pos, weight}]（C4 攻击目标候选/评分取数；
+## 不持单位引用只留值拷贝，防 freed 悬挂，与快照口径一致）
+var _enemy_units_snapshot: Array = []
+## A2 快照：敌军在本方锚点 enemy_close_dist 半径内的力量值（C5 基地威胁取数）
+var _enemy_strength_near_base: float = 0.0
+## A2 · C3 任务槽板实例（setup 装配；权重/超时与 _p 同源档案；
+## slot_kernel_enabled=false 时决策不走槽，板仍同步保持观测面一致）
+var _task_board: ScriptTaskBoard = null
 
 ## 节流计时器三件套（dump 字段直译：_lastStanceChangeTime/_lastGarrisonTime/_lastBuildUpdate；
 ## 时钟源 = battle.get_duration() 战斗秒：暂停冻结、随宿主）
@@ -122,6 +152,9 @@ func setup(battle: Node, faction: int, orders: Node, formation: Node, overrides:
 	var base_time: float = float(_p["seconds_before_attack"])
 	var variance: float = maxf(float(_p["start_attack_variance"]), 0.0)
 	_attack_deadline = base_time + _rng.randf_range(-variance, variance)
+	# A2 · C3 任务槽板（与 _p 同源档案引用：C4 权重/槽超时全档案化）
+	_task_board = ScriptTaskBoard.new()
+	_task_board.setup(_p)
 	# 手动号令保护期守卫：订阅全局号令事件（tier=0 玩家直令刷新保护时间戳）
 	if EventBus != null and EventBus.has_signal("order_issued") \
 			and not EventBus.order_issued.is_connected(_on_order_issued):
@@ -130,6 +163,7 @@ func setup(battle: Node, faction: int, orders: Node, formation: Node, overrides:
 
 ## 消亡钩子（宿主 _end 调用）：断开 EventBus 订阅，防 freed 悬空连接。
 func dispose() -> void:
+	_task_board = null
 	if EventBus != null and EventBus.has_signal("order_issued") \
 			and EventBus.order_issued.is_connected(_on_order_issued):
 		EventBus.order_issued.disconnect(_on_order_issued)
@@ -231,7 +265,10 @@ func stance_update() -> void:
 	if should_rout():
 		_set_stance(STANCE_ROUT, _rout_reason())
 		return
-	# 驻守触发集优先于力量条件（非 GARRISON 态；受全姿态切换冷却节流）
+	# A2 · C3/C4/C5 CoH 内核先行：攻击百分比重算 + 任务槽同步/超时（决策数据）
+	_update_task_board()
+	# 驻守触发集优先于力量条件（非 GARRISON 态；受全姿态切换冷却节流；
+	# 生存开关，槽内核亦不得压过——两内核共享同一优先序）
 	if _stance != STANCE_GARRISON:
 		if _can_change_stance() and should_garrison():
 			_set_stance(STANCE_GARRISON, "garrison_triggers")
@@ -240,9 +277,9 @@ func stance_update() -> void:
 	# GARRISON 维持与重评（WeRecentlyDecidedToGarrison 语义：驻守冷却内不重评）
 	if _stance == STANCE_GARRISON:
 		if not should_garrison() and not we_recently_decided_to_garrison():
-			# 触发集全假 ∧ 驻守冷却满 → 按力量条件重评（此处不受"非 GARRISON"门禁，
+			# 触发集全假 ∧ 驻守冷却满 → 按内核重评（此处不受"非 GARRISON"门禁，
 			# 重评本身就是解除驻守的决策；开局门禁仍然生效）
-			if _attack_gate_open() and balance_of_powers_ratio() >= float(_p["attack_enter"]):
+			if _garrison_reeval_attack_open():
 				_set_stance(STANCE_ATTACK, "garrison_reeval_attack")
 			else:
 				_set_stance(STANCE_DEFEND, "garrison_reeval_defend")
@@ -250,7 +287,15 @@ func stance_update() -> void:
 	# 力量条件（受切换冷却节流；迟滞带内维持现态）
 	if not _can_change_stance():
 		return
-	if should_attack():
+	# 决策内核分派（咬合③）：CoH 槽内核为主（姿态由攻击槽驱动），
+	# SWL 比例条件保留为退化路径（签名不变，slot_kernel_enabled=false 时消费）
+	if _task_board_enabled():
+		if _task_board.has_attack_slots():
+			if _stance != STANCE_ATTACK:
+				_set_stance(STANCE_ATTACK, "slots_attack")
+		elif _stance == STANCE_ATTACK:
+			_set_stance(STANCE_DEFEND, "slots_defend")
+	elif should_attack():
 		_set_stance(STANCE_ATTACK, "ratio_attack")
 	elif should_defend():
 		_set_stance(STANCE_DEFEND, "ratio_defend")
@@ -440,6 +485,194 @@ func _own_initial_count() -> int:
 	return _num_military + int(_battle.get_casualties(_faction))
 
 
+# ─────────────────────────────── 任务槽内核（A2 · C3/C4/C5，非 dump 直译）────────────────────────────────
+
+## 任务槽板只读访问（调试 HUD / 测试断言；setup 前为 null）
+func get_task_board() -> ScriptTaskBoard:
+	return _task_board
+
+
+## 槽内核是否在决策位（咬合③：开关 + 板实例双检；false 走 SWL 退化路径）
+func _task_board_enabled() -> bool:
+	return _task_board != null and bool(_p.get("slot_kernel_enabled", true))
+
+
+## C5 攻击百分比（CoH state_analysis.recalculate_attackpercentage 同构，四规则
+## 优先级高→低；返回 0~1 = 应处进攻位的战斗小队比例）：
+##   规则一 胜利目标危急（vp_rule_enabled，缺省关闭【提案/待定】——开放问题#1
+##          战役域无 VP 等价物；旗/区域控制接入后实现"票数危急抬升、我方占优
+##          翻转防守"语义，本批仅留参数开关位）
+##   规则二 基地威胁封顶（硬帽，最后施加）：threat_at_base 超阈 →
+##          pct ≤ max(100 - threat, floor)/100
+##   规则三 难度基调：门禁未开 = 0；开门禁后 baseline + 每分钟递增，封顶 max
+##   规则四 军力优势递增（hard/hardest 消费）：归一化优势超起点 → 按增益抬升，
+##          同受 max 封顶
+func recalculate_attack_percentage() -> float:
+	# 规则三（基调）：开局攻击门禁未过 → 0（CoH start_attack_time 前攻击% = 0）
+	if not _attack_gate_open():
+		return 0.0
+	var pct: float = float(_p["attack_pct_baseline"])
+	var minutes: float = maxf(_now() - _attack_deadline, 0.0) / 60.0
+	pct += float(_p["attack_pct_growth_per_min"]) * minutes
+	pct = minf(pct, float(_p["max_attack_percentage"]))
+	# 规则四（军力优势递增）：归一化优势 = (我-敌)/(我+敌)，超起点按增益抬升
+	var total: float = _own_strength + _enemy_strength
+	if total > 0.0:
+		var adv: float = (_own_strength - _enemy_strength) / total
+		if adv > float(_p["superiority_ratio_floor"]):
+			pct += (adv - float(_p["superiority_ratio_floor"])) * float(_p["superiority_gain"])
+			pct = minf(pct, float(_p["max_attack_percentage"]))
+	# 规则二（基地威胁封顶）：硬帽最后施加，危巢之下不出兵
+	var threat: float = threat_at_base()
+	if threat > float(_p["base_threat_threshold"]):
+		pct = minf(pct, maxf(100.0 - threat, float(_p["base_threat_floor"])) / 100.0)
+	# 规则一（胜利目标危急）：开放问题#1 缺省关闭；开关位与实现钩子留待 VP 等价物
+	if bool(_p.get("vp_rule_enabled", false)):
+		pct = _apply_victory_objective_rule(pct)
+	return clampf(pct, 0.0, 1.0)
+
+
+## C5 规则一实现钩子（vp_rule_enabled=true 时消费）：本作战役域尚无 VP 等价物
+## （开放问题#1【提案/待定】），接入旗/区域控制后在此映射"危急度抬升 / 我方占优
+## 翻转防守"。当前恒返输入值（关闭语义）。
+func _apply_victory_objective_rule(pct: float) -> float:
+	return pct
+
+
+## 基地威胁值（0-100 口径，CoH threat_at_base 语义映射）：锚点半径内（enemy_close_dist）
+## 敌军力量 / 本方初始力量基线 × 100；基线缺失/为零 → 0（无基准不判威胁）。
+func threat_at_base() -> float:
+	if _initial_own_strength <= 0.0:
+		return 0.0
+	return _enemy_strength_near_base / _initial_own_strength * 100.0
+
+
+## 攻击槽创建/维持门禁（SWL 比例条件的槽语义转写，咬合③）：
+## 创建 = 开局门禁过 ∧ ratio ≥ attack_enter（SWL enter 条件，驻守期同判）；
+## 维持 = ATTACK 态 ∧ ratio > attack_exit（SWL 滞回带——带内不塌槽，姿态不抖）。
+func _slot_attack_intent_open() -> bool:
+	if not _attack_gate_open():
+		return false
+	var ratio: float = balance_of_powers_ratio()
+	if ratio >= float(_p["attack_enter"]):
+		return true
+	return _stance == STANCE_ATTACK and ratio > float(_p["attack_exit"])
+
+
+## GARRISON 重评进攻条件（两内核同判入口）：槽内核 = 存在攻击槽（驻守期建槽
+## 门禁 = SWL enter 条件，与旧 garrison_reeval 口径逐位一致）；退化路径 = 原逻辑。
+func _garrison_reeval_attack_open() -> bool:
+	if _task_board_enabled():
+		return _task_board.has_attack_slots()
+	return _attack_gate_open() and balance_of_powers_ratio() >= float(_p["attack_enter"])
+
+
+## 槽同步 + 生命周期（每决策周期一次，CoH strategy_military.execute 同构）：
+##   1) 目标超时杀槽/重评分（tick 先行——集结超时杀掉的槽当拍由 sync 重建，
+##      无"攻击槽真空拍"窗口，防姿态振荡）；
+##   2) 攻/防槽同步：期望进攻槽数 = ceil(attack% × 原子单元数)，防守 = 余量
+##      （只增删空槽，从不指定小队——匹配归 match_groups 执行侧）；
+##   3) 重定向脏槽重发号令（进攻小队向新目标推进）。
+func _update_task_board() -> void:
+	if _task_board == null:
+		return
+	var dirty: Array = _task_board.tick(_now(), _on_slot_retarget)
+	var atomic: int = _count_atomic_units()
+	var desired: int = 0
+	if atomic > 0:
+		var pct: float = recalculate_attack_percentage()
+		if pct > 0.0 and _slot_attack_intent_open():
+			desired = mini(int(ceil(pct * float(atomic))), atomic)
+	# 攻击槽目标 = 评分最优敌位（新建槽定位用；现存槽不重定位，防逐拍振荡）
+	var attack_target: Vector2 = _attack_slot_target(null)
+	_task_board.sync_slots(ScriptTaskBoard.KIND_ATTACK, desired, attack_target, _own_centroid, _now())
+	_task_board.sync_slots(ScriptTaskBoard.KIND_DEFEND, maxi(atomic - desired, 0), _own_centroid, get_garrison_anchor(), _now())
+	if not dirty.is_empty() and _task_board_enabled():
+		_issue_retarget_orders(dirty)
+
+
+## 槽目标重定位回调（TaskBoard.tick 目标超时消费；slot 为 TaskBoard.TaskSlot）
+func _on_slot_retarget(slot: Variant) -> Vector2:
+	if slot != null and int(slot.kind) == ScriptTaskBoard.KIND_ATTACK:
+		return _attack_slot_target(slot)
+	return _own_centroid
+
+
+## 攻击槽目标定位（C4 四因子 argmax）：候选 = 敌方存活军事单位位置 + 敌方质心
+## （去重）；评分参照 = 本方质心（squad 口径）/ 本方锚点（base 口径）/ 敌方力量
+## 快照；惯性参照 = 槽现目标（重评分防振荡）。无候选 → 敌方质心（旧 ATTACK 语义）。
+func _attack_slot_target(slot: Variant) -> Vector2:
+	var candidates: Array = []
+	for e in _enemy_units_snapshot:
+		var pos: Vector2 = e.get("pos", Vector2.INF)
+		if pos.is_finite() and not candidates.has(pos):
+			candidates.append(pos)
+	if not _enemy_units_snapshot.is_empty() and not candidates.has(_enemy_centroid):
+		candidates.append(_enemy_centroid)
+	if candidates.is_empty():
+		return _enemy_centroid
+	var ctx := {
+		"squad_pos": _own_centroid,
+		"base_pos": get_garrison_anchor(),
+		"enemies": _enemy_units_snapshot,
+		"own_strength": _own_strength,
+		"last_target": slot.target if slot != null else Vector2.INF,
+	}
+	return _task_board.pick_target(candidates, ctx)
+
+
+## 原子单元数（槽期望数基数）：组织化编制作一处（编制行军原子）、散兵各一处；
+## 编队系统缺失（测试环境）或本方暂无注册小队 → 退化 1（槽逻辑照跑，与 SWL
+## 内核"无小队仍切姿态"行为一致；号令侧无小队可发，自然空转）。
+func _count_atomic_units() -> int:
+	if _formation == null or not is_instance_valid(_formation) \
+			or not _formation.has_method("get_all_squads"):
+		return 1
+	var n := _atomic_groups().size()
+	return n if n > 0 else 1
+
+
+## 原子单元分组（下令路径与槽匹配共用）：组织化编制 = 同组织根的小队一组，
+## 散兵各成一组。返回 [{key, squads}]（key = 组织根 id，散兵 = squad_id 自身）。
+func _atomic_groups() -> Array:
+	var groups: Array = []
+	var by_root: Dictionary = {}
+	for squad_id_v in _own_combat_squads():
+		var squad_id := str(squad_id_v)
+		var root := _org_root_of(squad_id)
+		if root.is_empty():
+			groups.append({"key": squad_id, "squads": [squad_id]})
+			continue
+		if not by_root.has(root):
+			var g := {"key": root, "squads": []}
+			by_root[root] = g
+			groups.append(g)
+		(by_root[root]["squads"] as Array).append(squad_id)
+	return groups
+
+
+## 小队所在组织根（号令系统代理查询；orders 缺失/无代理方法 → "" 散兵口径，
+## combat 不直引 organization——模块契约，见 TacticalOrders.get_org_root_for_squad）
+func _org_root_of(squad_id: String) -> String:
+	if _orders == null or not is_instance_valid(_orders) \
+			or not _orders.has_method("get_org_root_for_squad"):
+		return ""
+	return String(_orders.get_org_root_for_squad(squad_id))
+
+
+## 本阵营战斗小队列表（执行侧匹配与号令的统一取数口；序 = 编队注册序，稳定可断言）
+func _own_combat_squads() -> Array:
+	if _formation == null or not is_instance_valid(_formation) \
+			or not _formation.has_method("get_all_squads"):
+		return []
+	var result: Array = []
+	for squad_id_v in _formation.get_all_squads():
+		var squad_id := str(squad_id_v)
+		if _is_own_combat_squad(squad_id):
+			result.append(squad_id)
+	return result
+
+
 # ─────────────────────────────── 快照刷新（每决策周期重建，O(n)）────────────────────────────────
 
 ## 遍历双方存活单位各至多一次：军事单位数/力量值/质心/投射物威胁布尔。
@@ -456,6 +689,11 @@ func _refresh_snapshot() -> void:
 	var threatened: bool = false
 	var now_real: float = Time.get_ticks_msec() / 1000.0
 	var window: float = float(_p["projectile_window"])
+	# A2 取数：敌方军事单位快照（C4 评分候选）+ 基地半径内敌军力量（C5 基地威胁）
+	var enemy_snapshot: Array = []
+	var near_base_strength: float = 0.0
+	var base_dist: float = float(_p["enemy_close_dist"])
+	var anchor: Vector2 = get_garrison_anchor()
 
 	# 本方/敌方分别取数（faction 用 1/2 编码，非对称负数；get_enemies_of 取敌方）
 	var own_units: Array = []
@@ -493,6 +731,10 @@ func _refresh_snapshot() -> void:
 		if weight > 0.0:
 			enemy_military += 1
 			enemy_wsum += weight
+			# C4 评分候选（值拷贝，不持引用）；C5 基地威胁（锚点半径内敌军力量）
+			enemy_snapshot.append({"pos": pos, "weight": weight})
+			if pos.distance_to(anchor) < base_dist:
+				near_base_strength += weight
 
 	_num_military = own_military
 	_num_enemy_military = enemy_military
@@ -501,6 +743,8 @@ func _refresh_snapshot() -> void:
 	_own_strength = own_wsum
 	_enemy_strength = enemy_wsum
 	_own_threatened = threatened
+	_enemy_units_snapshot = enemy_snapshot
+	_enemy_strength_near_base = near_base_strength
 
 
 ## duck 读取单位武器类型（无武器挂载 → 返回 PICKAXE（权重 0，非军事），不影响力量统计）
@@ -548,45 +792,120 @@ func _set_stance(to: int, reason: String) -> void:
 	_issue_stance_orders()
 
 
-## 姿态→号令映射器（TeamAi 的唯一执行通道：只消费 TacticalOrders.issue，不改号令系统行为）。
-## ATTACK → ADVANCE_ALL 敌军质心（formation 散开）；DEFEND → ADVANCE_ALL 本方质心（回聚合
-## 防线坚守）；GARRISON → RALLY 己方锚点（围圈驻点，途中 engage_in_range 近身自卫）；
-## ROUT → RETREAT(evacuate) 全军战役撤离（撤至己方侧边缘登记 departed，C3 敌将撤仗）。
-## 目标点取切换时刻快照；常规姿态仅切换时下发一次（维持期不重发，防号令风暴），
-## ROUT 例外——维持期由 stance_update 每决策周期重发（溃逃抢占兜底，见 §4.2）。
+## 姿态→号令映射器（TeamAi 的唯一执行通道：只消费 TacticalOrders，不改号令系统行为）。
+## A2 槽内核（ATTACK 态）：小队经 match_groups 匹配任务槽——攻击槽绑定小队 →
+## ADVANCE_ALL 槽目标（评分最优敌位）；未绑定/防守槽 → ADVANCE_ALL 本方质心
+## （防守位兜底）。DEFEND → ADVANCE_ALL 本方质心（回聚合防线坚守，不消费槽）；
+## GARRISON → RALLY 己方锚点（围圈驻点，生存模式不走槽）；ROUT → RETREAT(evacuate)
+## 全军战役撤离（撤至己方侧边缘登记 departed，C3 敌将撤仗）。
+## 下令路径收敛（设计文档 §四）：组织化编制经 issue_to_org 逐跳传播（编制=原子，
+## 同根一号令一轮内去重）；散兵经 issue 直令（现场电台零延迟）。玩家手动号令
+## 保护期 > 姿态自动号令：散兵逐队避让；编制任一成员保护期内整组避让（玩家意图
+## 压过编制号令，下轮姿态切换/槽重发恢复）。
+## 常规姿态仅切换时下发一次（维持期不重发，防号令风暴）；ROUT 例外——维持期由
+## stance_update 每决策周期重发（溃逃抢占兜底，见 §4.2）；攻击槽目标超时重定向
+## 由 _issue_retarget_orders 重发绑定小队。
 func _issue_stance_orders() -> void:
+	if _stance == STANCE_ROUT:
+		_issue_orders(_own_combat_squads(), {}, ScriptTacticalOrders.OrderType.RETREAT,
+				Vector2.ZERO, {"evacuate": true})
+		return
+	var squads: Array = _own_combat_squads()
+	if squads.is_empty():
+		return
+	# 执行侧小队匹配（A2 C3）：序位在前攻击槽数的原子单元组绑攻击槽，其余绑防守
+	var mapping: Dictionary = {}
+	if _task_board_enabled():
+		mapping = _task_board.match_groups(_atomic_groups())
+	var plan_of: Dictionary = {}
+	for squad_id_v in squads:
+		var squad_id := str(squad_id_v)
+		match _stance:
+			STANCE_ATTACK:
+				var target: Vector2 = _enemy_centroid  # 退化语义（槽内核关闭时旧目标）
+				if _task_board_enabled():
+					# 槽驱动：攻击槽绑定 → 槽目标；未绑定/防守槽 → 本方质心防守位
+					target = _own_centroid
+					var slot: Variant = _task_board.get_slot(str(mapping.get(squad_id, "")))
+					if slot != null and int(slot.kind) == ScriptTaskBoard.KIND_ATTACK:
+						target = slot.target
+				plan_of[squad_id] = {"order_type": ScriptTacticalOrders.OrderType.ADVANCE_ALL, "target": target}
+			STANCE_DEFEND:
+				plan_of[squad_id] = {"order_type": ScriptTacticalOrders.OrderType.ADVANCE_ALL, "target": _own_centroid}
+			STANCE_GARRISON:
+				plan_of[squad_id] = {"order_type": ScriptTacticalOrders.OrderType.RALLY, "target": get_garrison_anchor()}
+			_:
+				pass
+	_issue_orders(squads, plan_of)
+
+
+## 攻击槽目标重定向重发（TaskBoard.tick 目标超时 → 脏槽的绑定小队向新目标推进）
+func _issue_retarget_orders(dirty_slot_ids: Array) -> void:
+	var squads: Array = _own_combat_squads()
+	if squads.is_empty() or dirty_slot_ids.is_empty():
+		return
+	var plan_of: Dictionary = {}
+	for squad_id_v in squads:
+		var squad_id := str(squad_id_v)
+		var slot_id := _task_board.slot_of_squad(squad_id)
+		if slot_id.is_empty() or not dirty_slot_ids.has(slot_id):
+			continue
+		var slot: Variant = _task_board.get_slot(slot_id)
+		if slot == null:
+			continue
+		plan_of[squad_id] = {"order_type": ScriptTacticalOrders.OrderType.ADVANCE_ALL, "target": slot.target}
+	if not plan_of.is_empty():
+		_issue_orders(squads, plan_of)
+
+
+## 号令下发执行（唯一出口）：逐小队查计划 → 手动号令保护期避让 → 路径分流。
+## plan_of 为空且给定 order_type 时全员同令（ROUT 撤离路径）。
+## 保护期语义：散兵逐队避让；编制组（同组织根）任一成员在保护期内 → 整组避让。
+## 路径分流：有组织根 ∧ 号令系统支持 issue_to_org → 编制根一号令（同根去重）；
+## 否则散兵 issue 直令。issue 拒绝（职责校验/空队）→ 跳过不重试，下一决策周期
+## 随姿态重评自然恢复（既有口径）。
+func _issue_orders(squads: Array, plan_of: Dictionary, order_type: int = -1,
+		target: Vector2 = Vector2.ZERO, extra_params: Dictionary = {}) -> void:
 	if _orders == null or not is_instance_valid(_orders) or not _orders.has_method("issue"):
 		return
-	var order_type: int = -1
-	var target := Vector2.ZERO
-	var extra_params: Dictionary = {}
-	match _stance:
-		STANCE_ATTACK:
-			order_type = ScriptTacticalOrders.OrderType.ADVANCE_ALL
-			target = _enemy_centroid
-		STANCE_DEFEND:
-			order_type = ScriptTacticalOrders.OrderType.ADVANCE_ALL
-			target = _own_centroid
-		STANCE_GARRISON:
-			order_type = ScriptTacticalOrders.OrderType.RALLY
-			target = get_garrison_anchor()
-		STANCE_ROUT:
-			order_type = ScriptTacticalOrders.OrderType.RETREAT
-			extra_params = {"evacuate": true}
-		_:
-			return
-	if _formation == null or not is_instance_valid(_formation) or not _formation.has_method("get_all_squads"):
-		return
-	for squad_id_v in _formation.get_all_squads():
-		var squad_id: String = str(squad_id_v)
-		# 预过滤：本阵营多数派 ∧ 战斗职责 ∧ 存活战斗成员（空队不调 issue，避免 push_warning 噪音）
-		if not _is_own_combat_squad(squad_id):
-			continue
-		# 手动号令保护期：玩家手动号令 > 姿态自动号令（硬约束，spec §5.2.1.2a）
+	var issued_roots: Dictionary = {}
+	for squad_id_v in squads:
+		var squad_id := str(squad_id_v)
+		# 玩家手动号令保护期：玩家手动号令 > 姿态自动号令（硬约束，spec §5.2.1.2a）
 		if _is_manual_order_active(squad_id):
 			continue
-		# issue 拒绝（职责校验/空队）→ 跳过不重试，下一决策周期随姿态重评自然恢复
-		_orders.issue(order_type, squad_id, target, SOURCE_TIER_AI, extra_params)
+		var root := _org_root_of(squad_id)
+		if not root.is_empty():
+			# 编制原子性守卫：组内任一成员保护期内 → 整组本轮避让
+			var group_guarded: bool = false
+			for other_v in squads:
+				var other := str(other_v)
+				if other != squad_id and _is_manual_order_active(other) and _org_root_of(other) == root:
+					group_guarded = true
+					break
+			if group_guarded:
+				continue
+			# 同根一号令（编制行军原子；issue_to_org 计划天然覆盖组内全部 L1）
+			if issued_roots.has(root):
+				continue
+			issued_roots[root] = true
+		var p_order: int = order_type
+		var p_target: Vector2 = target
+		var p_extra: Dictionary = extra_params
+		if not plan_of.is_empty():
+			var plan: Dictionary = plan_of.get(squad_id, {})
+			if plan.is_empty():
+				continue
+			p_order = int(plan.get("order_type", order_type))
+			p_target = plan.get("target", target)
+			p_extra = plan.get("extra", {})
+		if p_order < 0:
+			continue
+		if not root.is_empty() and _orders.has_method("issue_to_org"):
+			# 组织化编制：走 org 入口逐跳传播（号令语义参数增量随计划透传）
+			_orders.issue_to_org(root, p_order, p_target, p_extra)
+		else:
+			_orders.issue(p_order, squad_id, p_target, SOURCE_TIER_AI, p_extra)
 
 
 ## 本阵营战斗小队判定：成员 get_faction 多数派 == 本阵营 ∧ is_combat_squad。

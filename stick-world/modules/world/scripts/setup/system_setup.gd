@@ -500,6 +500,9 @@ func _setup_minimap() -> void:
 		return
 	var mm := UIKit.widget(_MinimapScript, "Minimap")
 	_root.ui_root.add_to_slot("HudOverlay", mm)
+	# 定位归 zone（顶部中央保留区，见 hud_zone_layout.gd）；先落位再 setup，
+	# 让 L1 缩略窗读到最终 rect
+	_root.ui_root.place_in_zone(&"top_center", mm)
 	_root._minimap = mm
 	if mm.has_method("setup"):
 		mm.setup(_root)

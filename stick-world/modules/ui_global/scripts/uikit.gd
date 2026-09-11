@@ -22,8 +22,9 @@ static func full_rect(script: GDScript, node_name: String) -> Control:
 	return c
 
 
-## 创建带脚本的角落 HUD 部件（不自设 anchor——由部件脚本自身 _ready 决定锚定，
-## 并挂到 UIRoot.add_to_slot 的有尺寸槽）。与 full_rect 的分工见头注释。
+## 创建带脚本的角落 HUD 部件（不自设 anchor——定位归 zone，由装配层经
+## UIRoot.place_in_zone 按 hud_zone_layout.gd 的 zone 表落位；部件只声明
+## custom_minimum_size 体量）。与 full_rect 的分工见头注释。
 static func widget(script: GDScript, node_name: String) -> Control:
 	var c := Control.new()
 	c.set_script(script)

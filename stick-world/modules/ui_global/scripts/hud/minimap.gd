@@ -55,15 +55,19 @@ var _dragging: bool = false
 
 # ─────────────────────────────── 装配 ────────────────────────────────
 
+func _ready() -> void:
+	# 体量声明：定位归 zone（SystemSetup 经 UIRoot.place_in_zone 钉进 top_center，
+	# 见 hud_zone_layout.gd），本部件不自算屏幕坐标
+	custom_minimum_size = Vector2(MAP_WIDTH, MAP_HEIGHT)
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
+
 ## 由 GameRoot 调用，注入引用。
 func setup(game_root: Node) -> void:
 	_game_root = game_root
 	_camera_rig = game_root.camera_rig if game_root.has_method("get") else null
 	if _camera_rig == null and game_root.get("camera_rig") != null:
 		_camera_rig = game_root.camera_rig
-	# 设置位置：屏幕正上方中央
-	_anchor_top_center()
-	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
 ## 设置地图信息（地图加载时由 GameRoot 调用，详见 §10.4.6）
@@ -200,16 +204,6 @@ func _jump_to_mouse(local_pos: Vector2) -> void:
 
 
 # ─────────────────────────────── 内部辅助 ────────────────────────────────
-
-func _anchor_top_center() -> void:
-	# 全部锚点设为 0，直接用绝对坐标定位，避免 size 被父节点拉伸
-	set_anchors_preset(Control.PRESET_TOP_LEFT)
-	# 计算居中位置
-	var vp_w: float = get_viewport_rect().size.x
-	var pos_x: float = (vp_w - MAP_WIDTH) * 0.5
-	position = Vector2(pos_x, UIAPI.HUD_MINIMAP_Y)
-	size = Vector2(MAP_WIDTH, MAP_HEIGHT)
-
 
 func _get_current_map() -> Node2D:
 	if _game_root == null:

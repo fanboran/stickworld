@@ -11,6 +11,16 @@ enum Mode { BACKPACK, EQUIP, HOTBAR_ITEM, ACTION }
 const CELL: float = 52.0
 const CAPTION_H: float = 15.0
 
+## 动作格图标（图标管线成品，母题中文名）；缺图回退 null 走程序简笔
+const ACTION_ICONS := {
+	"interact": "res://assets/icons/按按钮小手_64.png",
+	"unstuck": "res://assets/icons/传送门_64.png",
+	"inventory": "res://assets/icons/背包_64.png",
+	"stats": "res://assets/icons/火柴人_64.png",
+}
+
+static var _action_tex_cache: Dictionary = {}
+
 signal slot_left(widget: ItemSlotWidget)
 signal slot_right(widget: ItemSlotWidget)
 signal action_pressed(widget: ItemSlotWidget)
@@ -190,34 +200,18 @@ func _draw_category_glyph(category: int, r: Rect2) -> void:
 			draw_polyline(pts2 + PackedVector2Array([pts2[0]]), ink, w, true)
 
 
-## 动作格图标（F 交互锤 / H 脱困闪电 / E 背包）
+## 动作格图标：图标管线成品贴图（按 action_id 查表，静态缓存）；缺图画空框
 func _draw_action_icon() -> void:
+	if not _action_tex_cache.has(action_id):
+		var path: String = ACTION_ICONS.get(action_id, "")
+		_action_tex_cache[action_id] = load(path) if ResourceLoader.exists(path) else null
+	var tex: Texture2D = _action_tex_cache[action_id]
+	if tex != null:
+		var tex_size: Vector2 = tex.get_size()
+		var s: float = minf(42.0 / tex_size.x, 42.0 / tex_size.y)
+		var dst := Vector2(CELL, CELL) * 0.5 - tex_size * s * 0.5
+		draw_texture_rect(tex, Rect2(dst, tex_size * s), false)
+		return
 	var c := Vector2(CELL * 0.5, CELL * 0.5)
 	var ink: Color = Color(0.85, 0.82, 0.75, 0.9)
-	var w := 2.0
-	match action_id:
-		"interact":
-			# 敲击锤：柄 + 头
-			draw_line(c + Vector2(-8, 8), c + Vector2(6, -6), ink, w)
-			draw_rect(Rect2(c + Vector2(0, -14), Vector2(14, 9)), ink)
-		"unstuck":
-			# 闪电（脱困）
-			var pts := PackedVector2Array([
-				c + Vector2(2, -13), c + Vector2(-6, 2),
-				c + Vector2(0, 2), c + Vector2(-2, 13),
-				c + Vector2(7, -3), c + Vector2(1, -3),
-			])
-			draw_polyline(pts, ink, w, true)
-		"inventory":
-			# 背包：圆角方箱 + 盖 + 扣
-			draw_rect(Rect2(c + Vector2(-12, -6), Vector2(24, 18)), ink, false, w)
-			draw_rect(Rect2(c + Vector2(-7, -12), Vector2(14, 7)), ink, false, w)
-			draw_line(c + Vector2(-3, -6), c + Vector2(-3, 0), ink, w)
-		"stats":
-			# 属性：人形剪影（头圆 + 肩身三角）
-			draw_arc(c + Vector2(0, -9), 5.0, 0, TAU, 10, ink, w)
-			draw_line(c + Vector2(-9, 8), c + Vector2(0, -1), ink, w)
-			draw_line(c + Vector2(9, 8), c + Vector2(0, -1), ink, w)
-			draw_line(c + Vector2(0, -1), c + Vector2(0, 8), ink, w)
-		_:
-			draw_rect(Rect2(c + Vector2(-8, -8), Vector2(16, 16)), ink, false, w)
+	draw_rect(Rect2(c + Vector2(-10, -10), Vector2(20, 20)), ink, false, 2.0)

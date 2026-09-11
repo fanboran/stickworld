@@ -7,8 +7,8 @@ script = ExtResource("1")
 resource_name = "personality"
 _meta = {
 	"resource_name": "personality",
-	"version": "0.1.0",
-	"description": "AI personality 难度档案（A1 · 设计文档12号 C2）：难度=参数不=作弊。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.personality）与热重载。global 行 = L4 层基础节拍（C1 收敛红线：每层一个基础节拍）；easy/hard/hardest 行 = 难度档覆盖参数（standard 行 = 代码默认档案的配置化镜像）。全部数值语义推断初值，待实测校准。",
+	"version": "0.2.0",
+	"description": "AI personality 难度档案（A1 · C2 + A2 · C3/C4/C5，设计文档12号）。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.personality）与热重载。global 行 = L4 层基础节拍 + 任务槽内核参数（C3 槽超时 / C4 四因子评分权重，CoH 真值）；easy/standard/hard/hardest 行 = 难度档覆盖参数（standard 行 = 代码默认档案的配置化镜像）。全部数值语义推断初值，待实测校准。",
 	"category": "ai"
 }
 variables = {
@@ -16,35 +16,72 @@ variables = {
 		{
 			"id": "global",
 			"beat_interval": 0.5,
-			"description": "L4 阵营 AI 基础节拍（s）——CoH 真值 TimeRule_AddInterval(fn, 0.5)，决策不逐帧思考；行为级偏移由 team_ai 相位轮转表达（0.5s 一跳一类事）"
+			"slot_kernel_enabled": true,
+			"score_threat": 5.0,
+			"score_avoid_clumps_at_no_threat": 10.0,
+			"score_distance_to_squad": 5.0,
+			"score_distance_to_base": 5.0,
+			"score_inertia": 1.4,
+			"score_threat_radius": 260.0,
+			"score_clump_radius": 300.0,
+			"score_distance_norm": 1200.0,
+			"score_inertia_tolerance": 120.0,
+			"attack_rally_timeout": 180.0,
+			"attack_target_timeout": 30.0,
+			"defend_target_timeout": 120.0,
+			"defend_rally_timeout": 240.0,
+			"base_threat_threshold": 5.0,
+			"base_threat_floor": 5.0,
+			"vp_rule_enabled": false,
+			"description": "L4 阵营 AI 全局行：beat_interval=C1 基础节拍（CoH 0.5s 真值）；slot_kernel_enabled=决策内核开关（false 退化 SWL 比例条件，咬合③）；score_* = C4 目标评分四因子权重（CoH 真值 5/10/5/5/1.4）与取数半径/归一尺度；attack/defend_*_timeout = C3 槽集结/目标超时（CoH 3min/30s/2min）；base_threat_*=C5 基地威胁封顶（0-100 口径，CoH 5/5）；vp_rule_enabled=C5 规则一胜利目标危急（开放问题#1 无 VP 等价物，缺省关闭【提案/待定】）"
 		},
 		{
 			"id": "easy",
 			"seconds_before_attack": 20.0,
 			"start_attack_variance": 8.0,
 			"demand_variance": 0.8,
-			"description": "简单档：开局攻击时间晚且随机窗宽（CoH start_attack_time 9min±4min 同构）；demand_variance=方差扰动单旋钮（收敛红线，A4 效用打分消费）"
+			"attack_pct_baseline": 0.5,
+			"attack_pct_growth_per_min": 0.01,
+			"max_attack_percentage": 0.6,
+			"superiority_ratio_floor": 0.4,
+			"superiority_gain": 0.0,
+			"description": "简单档：开局攻击晚且随机窗宽；攻击百分比基调低且封顶低、不吃军力优势递增（CoH 递增仅 hard/hardest 消费同构）；demand_variance=方差扰动单旋钮"
 		},
 		{
 			"id": "standard",
 			"seconds_before_attack": 10.0,
 			"start_attack_variance": 2.0,
 			"demand_variance": 0.8,
-			"description": "标准档：与 team_ai_profiles.DEFAULTS 代码默认一致（P6 语义推断初值），保证零回归基线"
+			"attack_pct_baseline": 0.6,
+			"attack_pct_growth_per_min": 0.01,
+			"max_attack_percentage": 0.70,
+			"superiority_ratio_floor": 0.4,
+			"superiority_gain": 1.0,
+			"description": "标准档：与 team_ai_profiles.DEFAULTS 代码默认一致（P6 语义推断初值 + A2 CoH 真值），保证零回归基线"
 		},
 		{
 			"id": "hard",
 			"seconds_before_attack": 5.0,
 			"start_attack_variance": 1.0,
 			"demand_variance": 0.8,
-			"description": "困难档：开局攻击更早更果断"
+			"attack_pct_baseline": 0.6,
+			"attack_pct_growth_per_min": 0.01,
+			"max_attack_percentage": 0.85,
+			"superiority_ratio_floor": 0.4,
+			"superiority_gain": 1.25,
+			"description": "困难档：开局攻击更早更果断；攻击百分比封顶抬高+军力优势递增增益（CoH hard/hardest 递增同构）"
 		},
 		{
 			"id": "hardest",
 			"seconds_before_attack": 3.0,
 			"start_attack_variance": 0.5,
 			"demand_variance": 0.8,
-			"description": "极难档：开局攻击时间最短；难度差异全在时机/方差参数，不送资源不改数值（C2 铁律）"
+			"attack_pct_baseline": 0.7,
+			"attack_pct_growth_per_min": 0.01,
+			"max_attack_percentage": 0.95,
+			"superiority_ratio_floor": 0.4,
+			"superiority_gain": 1.5,
+			"description": "极难档：开局攻击最短+攻击百分比封顶最高+递增增益最大；难度差异全在时机/方差/比例参数，不送资源不改数值（C2 铁律）"
 		}
 	]
 }

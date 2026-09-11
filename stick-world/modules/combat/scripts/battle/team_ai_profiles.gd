@@ -67,6 +67,31 @@ const STANCE_ROUT: int = 3
 ##   retreat_loss_ratio         撤仗阈值：本方伤亡/敌方伤亡 超此值（打不动对面）
 ##   retreat_timeout            撤仗阈值：战斗持续秒数超此值（相持不下）
 ##   三阈值任一 >0 即武装撤仗评估，满足其一即切 ROUT（据点战由 territories.commander 注入）
+## ── A2 · C3/C4/C5 任务槽与攻击百分比（CoH 真值见逆向笔记 §3.2/§3.3；语义映射初值待校准）──
+##   slot_kernel_enabled        决策内核开关：true=CoH 槽内核（咬合③主路径），
+##                              false=SWL 比例条件退化路径（should_attack/should_defend）
+##   score_threat               C4 目标评分·威胁权重（CoH 5.0）
+##   score_avoid_clumps_at_no_threat  C4 目标评分·无威胁时敌群聚集惩罚权重（CoH 10.0）
+##   score_distance_to_squad    C4 目标评分·距小队（本方质心）惩罚权重（CoH 5.0）
+##   score_distance_to_base     C4 目标评分·距基地（本方锚点）惩罚权重（CoH 5.0）
+##   score_inertia              C4 目标评分·惯性防振荡奖励权重（CoH 1.4）
+##   score_threat_radius        威胁因子取数半径（px；语义映射初值）
+##   score_clump_radius         聚集因子取数半径（px；语义映射初值）
+##   score_distance_norm        距离因子归一化尺度（px）
+##   score_inertia_tolerance    惯性判定容差（px，候选距上次目标小于此值视为同一目标）
+##   attack_rally_timeout       攻击槽集结超时（s，CoH 3min；到点杀槽由 sync 重建）
+##   attack_target_timeout      攻击槽目标超时→重评分重定向（s，CoH 30s）
+##   defend_target_timeout      防守槽目标超时→重定位刷数据（s，CoH 2min；不重发号令）
+##   defend_rally_timeout       防守槽集结超时（s；CoH 未给真值，取防守目标超时 2 倍）
+##   attack_pct_baseline        C5 难度基调：攻击百分比基准（CoH 默认 0.6）
+##   attack_pct_growth_per_min  C5 难度基调：开门禁后每分钟递增（CoH +0.01/min）
+##   max_attack_percentage      C5 攻击百分比上限（CoH standard 0.70）
+##   superiority_ratio_floor    C5 军力优势递增起点（归一化优势，CoH hard/hardest 0.4）
+##   superiority_gain           C5 超出起点部分→pct 增益系数（语义映射初值）
+##   base_threat_threshold      C5 基地威胁封顶触发值（0-100 口径，CoH 5）
+##   base_threat_floor          C5 基地威胁封顶下限（%，CoH max(100-threat,5)）
+##   vp_rule_enabled            C5 规则一胜利目标危急（开放问题#1：无 VP 等价物，
+##                              缺省关闭【提案/待定】；旗/区域控制接入后启用）
 const DEFAULTS: Dictionary = {
 	"beat_interval": 0.5,
 	"attack_enter": 1.30,
@@ -99,6 +124,29 @@ const DEFAULTS: Dictionary = {
 	"retreat_casualty_rate": -1.0,
 	"retreat_loss_ratio": -1.0,
 	"retreat_timeout": -1.0,
+	# ── A2 · C3/C4/C5（standard 行镜像值 = 零回归基线；CoH 真值见逆向笔记 §3.2/§3.3）──
+	"slot_kernel_enabled": true,
+	"score_threat": 5.0,
+	"score_avoid_clumps_at_no_threat": 10.0,
+	"score_distance_to_squad": 5.0,
+	"score_distance_to_base": 5.0,
+	"score_inertia": 1.4,
+	"score_threat_radius": 260.0,
+	"score_clump_radius": 300.0,
+	"score_distance_norm": 1200.0,
+	"score_inertia_tolerance": 120.0,
+	"attack_rally_timeout": 180.0,
+	"attack_target_timeout": 30.0,
+	"defend_target_timeout": 120.0,
+	"defend_rally_timeout": 240.0,
+	"attack_pct_baseline": 0.6,
+	"attack_pct_growth_per_min": 0.01,
+	"max_attack_percentage": 0.70,
+	"superiority_ratio_floor": 0.4,
+	"superiority_gain": 1.0,
+	"base_threat_threshold": 5.0,
+	"base_threat_floor": 5.0,
+	"vp_rule_enabled": false,
 }
 
 ## 难度档（A1 · C2：personality 难度=参数，配置真值在 config/ai/personality.tres）

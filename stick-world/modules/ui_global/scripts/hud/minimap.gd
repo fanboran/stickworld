@@ -17,9 +17,10 @@ extends Control
 ## 由 GameRoot 在 _ready 中创建并 add_child 到 UIRoot，随后调用 setup(game_root)。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-## 小地图尺寸（屏幕像素，与 ZoomBar 对齐见 UIAPI.HUD_*）
-const MAP_WIDTH: float = UIAPI.HUD_MINIMAP_WIDTH
-const MAP_HEIGHT: float = UIAPI.HUD_MINIMAP_HEIGHT
+## 小地图体量（屏幕像素）。定位归 zone（top_center 保留区须容纳此体量，
+## 见 hud_zone_layout.gd）；1.5 倍放大（基准 240x80 → 360x120）
+const MAP_WIDTH: float = 360.0
+const MAP_HEIGHT: float = 120.0
 ## 边框宽度
 const BORDER_WIDTH: float = 2.0
 ## 建筑图标最小宽度（像素）

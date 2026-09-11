@@ -241,6 +241,16 @@ var _shadow_mmi: MultiMeshInstance2D = null
 var _shadow_mm: MultiMesh = null
 var _shadow_buf: PackedFloat32Array = PackedFloat32Array()
 var _shadow_cap: int = 0
+## 血条桶：全局双 MMI（圆点=圆 mesh 1 行/单位、横条=矩形 mesh 3 行/单位——
+## 一个 MMI 只能绑一种 mesh）。z=1000 顶层与原 indicator 同绝对层；颜色全
+## 走实例色（阵营/低血闪/渐隐 alpha），状态机留在 HealthBarIndicator（数据
+## 模式 get_bar_state 快照），wobble shader 增强后续批次
+var _dot_mm: MultiMesh = null
+var _dot_buf: PackedFloat32Array = PackedFloat32Array()
+var _dot_cap: int = 0
+var _bar_mm: MultiMesh = null
+var _bar_buf: PackedFloat32Array = PackedFloat32Array()
+var _bar_cap: int = 0
 
 
 ## 装配：创建 4 带 × 4 桶 MMI（容器 Node2D，z=ENTITY=3 同层；带间靠树序
@@ -308,6 +318,27 @@ func setup(parent: Node2D, y_top: float = 0.0, y_bottom: float = 1024.0) -> void
 	container.add_child(smmi)
 	_shadow_mmi = smmi
 	_shadow_mm = smm
+	# 血条桶双 MMI（z=1000 顶层）
+	_dot_mm = _make_overlay_mm(container, "CrowdDots", BatchRig._get_circle_mesh())
+	_bar_mm = _make_overlay_mm(container, "CrowdBars", BatchRig._get_quad_mesh())
+
+
+## 顶层覆盖层 MMI 构造（血条桶共用；z=1000 绝对层与原 indicator 一致）
+func _make_overlay_mm(container: Node2D, mm_name: String, mesh: Mesh) -> MultiMesh:
+	var mmi := MultiMeshInstance2D.new()
+	mmi.name = mm_name
+	mmi.texture = BatchRig._get_white_tex()
+	mmi.z_index = 1000
+	mmi.z_as_relative = false
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_2D
+	mm.use_colors = true
+	mm.mesh = mesh
+	mm.instance_count = 0
+	mm.custom_aabb = AABB(Vector3(-4096.0, -4096.0, 0.0), Vector3(16384.0, 16384.0, 0.0))
+	mmi.multimesh = mm
+	container.add_child(mmi)
+	return mm
 
 
 ## 阴影桶容量按需翻倍扩（零变换行=隐形，instance_count 恒为容量）
@@ -319,6 +350,27 @@ func _ensure_shadow_cap(n: int) -> void:
 	_shadow_mm.instance_count = _shadow_cap
 	_shadow_buf.resize(_shadow_cap * 12)
 	_shadow_mm.buffer = _shadow_buf
+
+
+## 血条桶容量（圆点/横条同款翻倍扩）
+func _ensure_dot_cap(n: int) -> void:
+	if n <= _dot_cap:
+		return
+	while _dot_cap < n:
+		_dot_cap = maxi(_dot_cap * 2, 16)
+	_dot_mm.instance_count = _dot_cap
+	_dot_buf.resize(_dot_cap * 12)
+	_dot_mm.buffer = _dot_buf
+
+
+func _ensure_bar_cap(n: int) -> void:
+	if n <= _bar_cap:
+		return
+	while _bar_cap < n:
+		_bar_cap = maxi(_bar_cap * 2, 16)
+	_bar_mm.instance_count = _bar_cap
+	_bar_buf.resize(_bar_cap * 12)
+	_bar_mm.buffer = _bar_buf
 
 
 ## y → 带号（clamp 到尾带兜底）
@@ -368,6 +420,11 @@ func register_unit(entity: Node) -> Dictionary:
 	var shadow: Node = entity.get_node_or_null("ContactShadow")
 	if shadow != null:
 		shadow.visible = false
+	# 血条进 crowd 桶：indicator 切数据模式（状态机照跑，绘制让位实例行）
+	var bar: Node = entity.get_node_or_null("HealthBar")
+	if bar != null and bar.has_method("set_crowd_data_mode"):
+		bar.set_crowd_data_mode(true)
+		slot["_bar"] = bar
 	if rig.has_method("set_crowd_hook"):
 		rig.set_crowd_hook(Callable(self, "_on_rig_play").bind(slot))
 	return slot
@@ -435,6 +492,9 @@ func unregister_unit(slot: Dictionary) -> void:
 		var shadow: Node = ent.get_node_or_null("ContactShadow")
 		if shadow != null:
 			shadow.visible = true  # 阴影交还原 Sprite
+		var bar: Node = ent.get_node_or_null("HealthBar")
+		if bar != null and bar.has_method("set_crowd_data_mode"):
+			bar.set_crowd_data_mode(false)  # 血条交还原 _draw
 	for w in slot.get("weapons", []):
 		var node: Node2D = w.get("node")
 		var hand: Node2D = w.get("hand")
@@ -555,6 +615,97 @@ func tick(delta: float) -> void:
 				_shadow_buf[o + 11] = a
 			n += 3
 		_shadow_mm.buffer = _shadow_buf
+	# 血条桶：圆点 1 行 + 横条 3 行/单位（状态机在 indicator 数据模式，此处纯绘制换算；
+	# 活跃单位恒占行，宽 0/alpha 0 即隐形，避免压实写行数抖动残留旧数据）
+	var nd: int = 0
+	var nb: int = 0
+	for idx in _slots.size():
+		var slot2 = _slots[idx]
+		if slot2 == null or slot2.is_empty() or bool(slot2["hidden"]):
+			continue
+		var ind = slot2.get("_bar")
+		if ind == null or not is_instance_valid(ind) or not ind._data_mode:
+			continue
+		var st: Dictionary = ind.get_bar_state()
+		if not bool(st["active"]):
+			continue
+		var bs: float = float(st["scale"])
+		var cx: float = ind.global_position.x
+		var cy: float = ind.global_position.y
+		var shown: float = float(st["shown"])
+		# 圆点（掉血展开后随 expand 渐隐，与原 _draw_dot alpha 语义一致）
+		_ensure_dot_cap(nd + 1)
+		var dr: float = HealthBarIndicator.DOT_RADIUS * bs
+		var o := nd * 12
+		_dot_buf[o] = dr
+		_dot_buf[o + 1] = 0.0
+		_dot_buf[o + 2] = 0.0
+		_dot_buf[o + 3] = cx
+		_dot_buf[o + 4] = 0.0
+		_dot_buf[o + 5] = dr
+		_dot_buf[o + 6] = 0.0
+		_dot_buf[o + 7] = cy
+		var dc: Color = st["color"]
+		_dot_buf[o + 8] = dc.r
+		_dot_buf[o + 9] = dc.g
+		_dot_buf[o + 10] = dc.b
+		_dot_buf[o + 11] = dc.a * shown * (1.0 - float(st["expand"]))
+		nd += 1
+		# 横条 3 行：底 → 白残影（宽×trail，左对齐）→ 阵营填充（宽×ratio，左对齐）
+		_ensure_bar_cap(nb + 3)
+		var half: float = float(st["width"]) * 0.5 * float(st["expand"]) * bs
+		var t: float = float(st["anim_time"])
+		var se: float = float(st["shake"])
+		var shk: float = sin(t * HealthBarIndicator.SHAKE_FREQ) * se * HealthBarIndicator.SHAKE_MAX_OFFSET \
+				+ sin(t * HealthBarIndicator.SHAKE_FREQ * 2.3) * se * HealthBarIndicator.SHAKE_MAX_OFFSET * 0.3
+		var cx2: float = cx + shk
+		var hh: float = HealthBarIndicator.BAR_HEIGHT * bs * 0.5
+		var left: float = cx2 - half
+		var bo := nb * 12
+		_bar_buf[bo] = half
+		_bar_buf[bo + 1] = 0.0
+		_bar_buf[bo + 2] = 0.0
+		_bar_buf[bo + 3] = cx2
+		_bar_buf[bo + 4] = 0.0
+		_bar_buf[bo + 5] = hh
+		_bar_buf[bo + 6] = 0.0
+		_bar_buf[bo + 7] = cy
+		_bar_buf[bo + 8] = 0.08
+		_bar_buf[bo + 9] = 0.07
+		_bar_buf[bo + 10] = 0.06
+		_bar_buf[bo + 11] = 0.72 * shown
+		var tw: float = half * 2.0 * clampf(float(st["trail"]), 0.0, 1.0)
+		_bar_buf[bo + 12] = tw * 0.5
+		_bar_buf[bo + 13] = 0.0
+		_bar_buf[bo + 14] = 0.0
+		_bar_buf[bo + 15] = left + tw * 0.5
+		_bar_buf[bo + 16] = 0.0
+		_bar_buf[bo + 17] = hh
+		_bar_buf[bo + 18] = 0.0
+		_bar_buf[bo + 19] = cy
+		_bar_buf[bo + 20] = 1.0
+		_bar_buf[bo + 21] = 0.97
+		_bar_buf[bo + 22] = 0.9
+		_bar_buf[bo + 23] = 0.95 * shown
+		var fw: float = half * 2.0 * float(st["ratio"])
+		var fc: Color = st["color"]
+		_bar_buf[bo + 24] = fw * 0.5
+		_bar_buf[bo + 25] = 0.0
+		_bar_buf[bo + 26] = 0.0
+		_bar_buf[bo + 27] = left + fw * 0.5
+		_bar_buf[bo + 28] = 0.0
+		_bar_buf[bo + 29] = hh
+		_bar_buf[bo + 30] = 0.0
+		_bar_buf[bo + 31] = cy
+		_bar_buf[bo + 32] = fc.r
+		_bar_buf[bo + 33] = fc.g
+		_bar_buf[bo + 34] = fc.b
+		_bar_buf[bo + 35] = fc.a * shown
+		nb += 3
+	if _dot_mm != null and _dot_cap > 0:
+		_dot_mm.buffer = _dot_buf
+	if _bar_mm != null and _bar_cap > 0:
+		_bar_mm.buffer = _bar_buf
 
 
 ## 战斗结束/销毁：释放容器（含全部带桶 MMI；实体侧 meta 由调用方清）
@@ -573,6 +724,12 @@ func teardown() -> void:
 	_shadow_mm = null
 	_shadow_buf = PackedFloat32Array()
 	_shadow_cap = 0
+	_dot_mm = null
+	_dot_buf = PackedFloat32Array()
+	_dot_cap = 0
+	_bar_mm = null
+	_bar_buf = PackedFloat32Array()
+	_bar_cap = 0
 	_host = null
 
 

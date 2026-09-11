@@ -107,6 +107,11 @@ var _update_hz: float = 60.0
 var _hz_accum: float = 0.0
 ## LOD 显示开关（与死亡隐藏/渐隐状态机正交；false = 强制隐藏并停更）
 var _lod_display_visible: bool = true
+## CrowdRenderer 数据模式：true 时本节点不绘制（visible 恒 false 停 _draw），
+## _process 状态机照跑，CrowdRenderer 每刻经 get_bar_state() 拉快照写实例行
+var _data_mode: bool = false
+## 数据模式下的 LOD 显示落地（visible 被数据模式占用，改记此标志）
+var _lod_visible: bool = true
 
 
 ## 设置刷新频率（LOD 分档：近景全速/中景 10Hz/远景隐藏）。
@@ -119,6 +124,10 @@ func set_update_hz(hz: float) -> void:
 ## true 恢复显示（死亡单位的隐藏语义优先：_ratio<=0 保持不可见）。
 func set_display_visible(v: bool) -> void:
 	_lod_display_visible = v
+	if _data_mode:
+		_lod_visible = v
+		set_process(v)
+		return
 	if v:
 		if _ratio > 0.0:
 			visible = true
@@ -126,6 +135,40 @@ func set_display_visible(v: bool) -> void:
 	else:
 		visible = false
 		set_process(false)
+
+
+## 进入/退出 CrowdRenderer 数据模式。退出时按 LOD/存活状态恢复原绘制。
+func set_crowd_data_mode(on: bool) -> void:
+	if _data_mode == on:
+		return
+	_data_mode = on
+	if on:
+		visible = false
+	else:
+		visible = _lod_visible and _ratio > 0.0
+		set_process(true)
+
+
+## 数据模式状态快照：绘制终点在 CrowdRenderer 血条桶，本类只产数据。
+## color 已含低血明度闪烁；渐隐/展开/残影/抖动系数原样给出。
+func get_bar_state() -> Dictionary:
+	var color: Color = FACTION_COLORS.get(_faction, COLOR_NEUTRAL)
+	if _ratio <= LOW_THRESHOLD:
+		var flicker: float = 0.72 + 0.28 * sin(_anim_time * 10.0)
+		color = color.darkened(1.0 - flicker)
+	return {
+		"active": _lod_visible and _ratio > 0.0 and _shown > 0.01,
+		"shown": _shown,
+		"expand": _expand,
+		"ratio": _ratio,
+		"trail": _trail_ratio,
+		"shake": _shake_energy,
+		"anim_time": _anim_time,
+		"color": color,
+		"max_hp": _max_hp,
+		"width": clampf(WIDTH_BASE + _max_hp * WIDTH_PER_HP, WIDTH_MIN, WIDTH_MAX),
+		"scale": scale.x,
+	}
 
 
 func _ready() -> void:
@@ -257,7 +300,8 @@ func _refresh() -> void:
 		_ever_damaged = false
 		_trail_ratio = 1.0
 	_ratio = new_ratio
-	visible = hp > 0.0
+	if not _data_mode:
+		visible = hp > 0.0
 	queue_redraw()
 
 

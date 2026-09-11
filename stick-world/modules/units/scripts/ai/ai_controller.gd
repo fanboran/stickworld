@@ -63,6 +63,13 @@ const WALL_LOOKBACK: float = 80.0
 const RAGE_LOW_HP: float = 0.3
 ## 狂暴所需最低士气（低血但士气高于此值 → 狂暴反击；低于此值走溃逃）
 const RAGE_MORALE_THRESHOLD: float = 0.4
+## 撤退掷骰 RNG 默认种子（A3 · C6：固定默认种子锁确定性，单测可锁/battle_sim
+## 可复现；与 A1 team_ai DEFAULT_RANDOM_SEED 同值惯例。测试经
+## _retreat_mod_rng.seed 重掷，生产恒定）
+const RETREAT_MOD_DEFAULT_SEED: int = 20260911
+## 难度档查询降级默认（TeamAi 未注册/查询不可用时按 standard 档读掷骰概率；
+## 本地字符串避免跨模块引用）
+const RETREAT_MOD_FALLBACK_DIFFICULTY: String = "standard"
 
 ## 工作类型（与 FormationSystem.WorkType 保持一致，本地常量避免跨模块依赖）
 const WorkTypeCombat := "WORK_COMBAT"
@@ -84,6 +91,12 @@ var _was_possessed: bool = false
 ## 9i+ 试探接敌脉冲状态（test_engage_enabled 开时在脱战低士气分支消费）
 var _test_pulse_active: bool = false
 var _test_pulse_until: float = -1.0e9
+## A3 · C6 撤退掷骰专用 RNG（与全局 randf 隔离：固定默认种子锁确定性，
+## 单测/battle_sim 可复现；先例 team_ai._rng）
+var _retreat_mod_rng := RandomNumberGenerator.new()
+## A3 · C6 下次允许掷骰的战斗时刻（战斗时长时间戳法，同 _test_pulse_until；
+## 掷骰节流 = 档案 retreat_mod_reevaluate 评估周期内只掷一次）
+var _retreat_mod_next_roll_at: float = -1.0e9
 
 # ─────────────────────────────── 命令覆盖（§8.3 战术号令）────────────────────────────────
 ## 当前下达的命令行为名（空=无命令，由 AI 自主决策）
@@ -99,6 +112,7 @@ func _ready() -> void:
 	if _entity == null:
 		push_error("[AIController] 父节点非 CharacterBody2D，AI 无法工作")
 		return
+	_retreat_mod_rng.seed = RETREAT_MOD_DEFAULT_SEED
 	_setup_state_machine()
 
 
@@ -350,6 +364,10 @@ func _try_combat() -> bool:
 				return true
 			# 既有行为：不进战斗决策（避免 travel→finish 抖动），原地待命回士气
 			return false
+	# A3 · C6 概率调制撤退：补"未到强制阈值但战况恶化"的中间带（档案开关默认关 =
+	# 零回归；强制链优先，见 _try_retreat_modulation 注释）
+	if _try_retreat_modulation(bi, bi_param, health):
+		return true
 	# 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙背水一战
 	var mods: Dictionary = _compute_state_modifiers(bi, health)
 	if _should_rage(mods, health):
@@ -369,6 +387,98 @@ func _try_combat() -> bool:
 	else:
 		_state_machine.travel("attack", bi_param)
 	return true
+
+
+## A3 · C6 概率调制撤退（设计文档12号 §三C6 / 设计原则3）：补"未到强制阈值但
+## 战况恶化"的中间带——血量/士气逼近阈值或周边友军崩坏时，按难度档案概率掷骰
+## 触发 RETREAT（非确定性开关，消除阈值边界的机械感；掷骰是执行机制不是因果，
+## 候选判定仍是真实战况）。与既有强制溃逃链并存：上游 is_routed / 低士气+近身
+## 威胁已 return（强制链优先），本函数只处理中间带。
+## 双档语义（CoH fallback_*/retreat_* 同构）：战线崩坏 → withdraw 撤退回己方
+## 锚点；个人战况恶化 → fallback 战术后退（脱离接触原地后撤重整）。
+## 返回 true 表示已切入撤退行为。
+func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bool:
+	var profile: Dictionary = _get_behavior_profile()
+	if not bool(profile.get("retreat_mod_enabled", false)):
+		return false
+	# 近身无威胁不评估（脱战不逃；脱战低士气分支语义不变）
+	if not _is_under_threat(bi):
+		return false
+	# 掷骰节流：评估周期内只掷一次（CoH retreat_chance_reevaluate_ticks 20 tick≈2.5s）
+	var now: float = bi.get_duration() \
+			if bi != null and is_instance_valid(bi) and bi.has_method("get_duration") else 0.0
+	if now < _retreat_mod_next_roll_at:
+		return false
+	_retreat_mod_next_roll_at = now + maxf(float(profile.get("retreat_mod_reevaluate", 2.5)), 0.05)
+	# 候选判定（因果=真实战况，三因子任一成立即候选）
+	var hp_ok := true
+	var morale_ok := true
+	if health != null:
+		if health.has_method("get_hp_ratio"):
+			hp_ok = health.get_hp_ratio() >= float(profile.get("retreat_mod_hp_ratio", 0.49))
+		if health.has_method("get_morale_ratio"):
+			morale_ok = health.get_morale_ratio() >= float(profile.get("retreat_mod_morale_ratio", 0.35))
+	var line_collapsed := _nearby_ally_break_ratio(bi, profile) \
+			>= float(profile.get("retreat_mod_ally_break_ratio", 0.51))
+	if hp_ok and morale_ok and not line_collapsed:
+		return false
+	# 按难度档案概率掷骰（难度行 personality.<难度>.retreat_chance 覆盖，档案基线兜底）
+	var chance: float = float(profile.get("retreat_mod_chance", 0.30))
+	var from_cfg: float = ScriptBehaviorProfiles.get_difficulty_retreat_chance(
+			_query_team_difficulty(bi))
+	if not is_nan(from_cfg):
+		chance = from_cfg
+	if _retreat_mod_rng.randf() >= chance:
+		return false
+	# 双档语义：战线崩坏 → 撤退（回锚点）；个人战况恶化 → 后撤（战术后退重整）
+	var params: Dictionary = bi_param.duplicate()
+	params["retreat_mode"] = "withdraw" if line_collapsed else "fallback"
+	_state_machine.travel("retreat", params)
+	return true
+
+
+## 附近友军崩坏比例（A3 · C6 候选因子三）：判定半径内同阵营单位中"已阵亡或
+## 已溃逃"的占比（CoH retreat_suppressed_percentage「周边小队被压制比例」同构
+## ——本作压制映射到士气/存活状态）。无友军（孤军）返回 0：孤军安危由个人
+## 血量/士气因子承担，不构成战线崩坏信号。
+func _nearby_ally_break_ratio(bi: Node, profile: Dictionary) -> float:
+	if _entity == null or not is_instance_valid(_entity) or not _entity.has_method("get_faction"):
+		return 0.0
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_allies_of"):
+		return 0.0
+	var radius: float = float(profile.get("retreat_mod_ally_radius", 300.0))
+	var total: int = 0
+	var broken: int = 0
+	for ally_v in bi.get_allies_of(_entity.get_faction()):
+		var ally := ally_v as Node2D
+		if ally == null or not is_instance_valid(ally) or ally == _entity:
+			continue
+		if _entity.global_position.distance_to(ally.global_position) > radius:
+			continue
+		total += 1
+		var dead: bool = ally.has_method("is_dead") and ally.is_dead()
+		var routed: bool = false
+		var ah: Node = ally.get_health() if ally.has_method("get_health") else null
+		if ah != null and is_instance_valid(ah) and ah.has_method("is_routed"):
+			routed = ah.is_routed()
+		if dead or routed:
+			broken += 1
+	if total <= 0:
+		return 0.0
+	return float(broken) / float(total)
+
+
+## 查询所属阵营 TeamAi 的难度档名（A1 · C2 消费：duck 调用 + has_method 防御；
+## 未注册/查询不可用降级 standard——与 _query_team_stance 同款守卫）。
+func _query_team_difficulty(bi: Node) -> String:
+	if _entity == null or not is_instance_valid(_entity) or not _entity.has_method("get_faction"):
+		return RETREAT_MOD_FALLBACK_DIFFICULTY
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_team_ai"):
+		return RETREAT_MOD_FALLBACK_DIFFICULTY
+	var tai: Variant = bi.get_team_ai(_entity.get_faction())
+	if tai == null or not is_instance_valid(tai) or not tai.has_method("get_difficulty"):
+		return RETREAT_MOD_FALLBACK_DIFFICULTY
+	return str(tai.get_difficulty())
 
 
 ## 是否祭司兵种（MERIC 路由判定，P7 批次 7b）

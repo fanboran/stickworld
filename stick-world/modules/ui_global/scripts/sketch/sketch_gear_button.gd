@@ -9,7 +9,9 @@ extends SketchButton
 func _ready() -> void:
 	kind = Kind.ICON_SQUARE  # 变体查表：self_draw 档 + center 图标
 	_seed = randi()
-	custom_minimum_size = Vector2(31, 31)
+	# 30 = 顶栏按钮行统一行高（单行等高不变式，见 test_ui_layout；原 31 与
+	# 文字钮差 1px，无主题环境下恰被默认主题高度掩住）
+	custom_minimum_size = Vector2(30, 30)
 	resized.connect(queue_redraw)
 
 

@@ -34,7 +34,7 @@ theme_override_constants/separation = 8
 
 [node name="SettingsButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=137787555]
 layout_mode = 2
-custom_minimum_size = Vector2(31, 31)
+custom_minimum_size = Vector2(30, 30)
 size_flags_vertical = 4
 icon = ExtResource("7_gearicon")
 expand_icon = true

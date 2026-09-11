@@ -47,7 +47,11 @@ func spawn_initial_buildings(map: Node2D) -> void:
 		# 逐栋让帧：建筑实例化+落位是生成链大头，分帧保加载动画不断流
 		i += 1
 		if i % 2 == 0:
-			await RenderingServer.frame_post_draw
+			# headless 下 frame_post_draw 永不发射——直接 await 会永久挂起，
+			# _on_map_loaded 协程停在首个让帧点、玩家/村民/模式设置全部不执行
+			# （与 game_root._yield_frame 同一根因的 headless 分叉，2026-09 测试基线修复）
+			if DisplayServer.get_name() != "headless":
+				await RenderingServer.frame_post_draw
 
 
 ## 预置主街东端民居（搬运系统送货/取货点）：placeholder 兼任仓库，
@@ -101,7 +105,8 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 			npc.set("is_villager", true)
 			npcs.append(npc)
 		# 逐个让帧：实体实例化+依赖注入分帧，加载动画不断流
-		if i % 2 == 1:
+		# （headless 分叉理由同上：frame_post_draw 永不发射，见 spawn_initial_buildings）
+		if i % 2 == 1 and DisplayServer.get_name() != "headless":
 			await RenderingServer.frame_post_draw
 	# 批量配比分配（town_life 模块：各职业不超过 min(quota, 工位容量)，
 	# 配额满待业 wander；契约见 modules/town_life/api.gd）

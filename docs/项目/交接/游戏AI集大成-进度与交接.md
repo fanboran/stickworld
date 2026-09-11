@@ -7,7 +7,7 @@
 
 ## 快速恢复（新会话从这里开始）
 
-- **分支**：暂随 `agent/organization-deepening`；**推进序定稿（2026-09-11 耦合分析）**：串行段 3-F1→3-F2→批次 4→合并 main 后，本任务切独立分支（基点 main）再做 A1→A2→{A3,A4,A5,A9}→A6——A4/A5 会回手 organization/formation 域，必须在组织任务归档后的新分支上做；批次 4 e2e 按 AI 回归基线标准写（组织档同步登记）
+- **分支**：随组织分支执行至批次 4 收线；跨任务总 DAG 与推进序唯一真相源 = 设计文档 12 号 §五「跨任务总 DAG」（本档不复制）；收线后本任务切独立分支（基点 main）续任
 - **工作区**：`.temp/organization-deepening`（CoH 逆向原件在 `temp/coh/`，gitignored）
 - **自检**：`bash stick-world/tools/check_godot_errors.sh`；测试 `bash stick-world/tests/run_all.sh`
 - **当前阶段**：**立项完成，A1 未开工**。设计先行已定稿（分层范式 + 复刻登记表 + 批次表 A1~A8）。

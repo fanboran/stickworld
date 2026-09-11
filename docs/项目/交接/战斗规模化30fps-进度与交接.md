@@ -321,6 +321,76 @@ They Are Billions 类 2D 大人集体、RTS 的 GPU 蒙皮人群）。
 桶 + y 分带（12~16 draws）。观感代价 = 带内单位不再互相遮挡（平铺），
 武器 Sprite2D 将浮在所有身体上（武器挂实体子树 z 高于全局桶）。96 满编
 混战本就高度重叠，损失预期可控，但属观感决策不单方面动工。
+（**创始人裁决后转向：不做全局桶改造，直接做 §十四 小兵帧图集代理化
+——旧富管线整体退役，全局桶失去意义。**）
+
+## 十四、小兵帧图集代理化（2026-09-11 立项，创始人裁决发起）
+
+**背景与反思**：96 满编在刀①③②后仍 ~1500 draws、个位数 fps，根因不在
+优化手段而在架构——每个小兵复制了一整套「主角级」富渲染管线（23 骨
+Skeleton2D + AnimationTree 逐单位采样 + 叠加层 + 武器挂点 + 物理体 +
+血条阴影），192 单位 = 上万物件节点、每单位每帧几十次 GDScript 调用。
+一百多个纯 2D 单位的打斗本应是「sprite + 模拟循环 + 一次批量绘制」的
+廉价问题；此前各刀都在优化富管线的开销分布，没有质疑小兵凭什么用富
+管线。创始人裁决：按行业默认做法整体重构。
+
+**目标架构（2026-09-11 修订：代码插值矢量代理，帧图集留作 500+ 规模后手）**：
+
+侦察发现动画并非外部 Spine 数据——`tools/baking/bake_anims.gd` 程序化
+烘焙的 .tres，**每动画仅 4~8 条骨骼 rotation 轨道、每轨道 3~5 个关键帧**
+（walk 8 轨道 / attack 4 轨道）。因此不需要离线烘焙帧图集：
+
+- **小兵 = 纯数据 + 代码插值矢量代理**。CrowdRenderer 全局 4 桶
+  MultiMesh（描边 rect/caps + 填充 rect/caps，同 stickman_batch_rig
+  构成）；每单位状态 = {动画名, 播放位置 t}，每帧按关键帧插值出 4~8
+  个骨骼角度 → 复用批渲染的先序累乘 + 预烘部件变换数学 → 写实例段。
+  观感与骨骼管线同源（同几何同色），无帧图集的 tint 单色化/分辨率
+  匹配/分页问题；CPU 每单位 ≈ 200 次浮点运算 + 360 floats 写。
+- **动画状态播报制**：小兵 rig 停用（AnimationTree 不跑），实体调
+  `rig.play()/play_hit()` 时播报 CrowdRenderer 切动画；`animation_
+  finished`（攻击播完回切/移动锁）由 CrowdRenderer 检测 t ≥ 动画时长
+  回调实体，语义与 rig 的 LOOP_NONE 完成检测一致。命中帧时序已归 sim
+  （D 刀），渲染零依赖。
+- **骨骼富管线只留玩家附身单位与英雄**（个位数）。小兵 rig visible=
+  false + 动画停用 + 批渲染层 discard；血条/阴影照旧（阴影已合批）。
+- **模拟侧零变化**：sim 已是位置/朝向/动画状态权威，AI/DamagePipeline/
+  行为链全部不动。
+- 渲染侧 draw：96 满编 1516 → **20 以内**（身体 4 + 阴影 1~3 + 血条
+  顶层批）；帧率瓶颈移回模拟侧，验收线 60fps 可玩起步；「上百帧」需
+  模拟侧后续深挖另立刀。回退开关：env `STICK_CROWD=0` 回退骨骼富管线
+  （默认开）。
+
+**批次（修订）**：
+
+1. **CrowdRenderer 核心**：动画表预编译（.tres → 每骨骼关键帧数组）、
+   骨骼先序 + 部件预烘表（复用 Skel.SKELETON_DATA 与 batch_rig 数学）、
+   y 分带 12×4 桶 MMI、tick 推进插值写 buffer、animation_finished 回调。
+2. **接线**：rig.play/play_hit 播报（set_crowd_hook 代理模式）、
+   battle_instance 装配代理 + 小兵 rig 停用、附身豁免、env 开关。
+   ✅ 已完成（2026-09-11 深夜）：核心+接线全通，16v16 渲染态
+   **fps_avg 94.6 / median 99（历史新高，基线富管线同刻 96.9）**、
+   draw_calls 616（富管线同刻 815）；probe（crowd_probe.tscn）单/双
+   真实战斗实体渲染完美（深色身体+白描边+walk 姿态）。
+3. **🔴 未解 bug（新会话第一件事）**：battle 场景里小兵身体**渲染白色**
+   （应为深色 body(0.156)+白描边；截图≈WHITE×CanvasModulate(0.96,0.94,
+   0.88)）。**已排除**（勿重查）：①buffer 数据——写后读回深色正确、
+   fill 桶替换逻辑正确（dump col=(0.156...)）；②use_colors=true、
+   modulate 白；③PointLight2D——禁光后照白；④剔除——custom_aabb 已设
+   全域（顺带修复：空 aabb 导致视野不含原点时整个 MMI 被剔除，即
+   "身体消失仅剩矛/盾/血条" 的根因，矛/盾是独立 Sprite2D 不受影响）；
+   ⑤挂载位置——battle_instance(Node)/map/EntityHost 都试过；
+   ⑥注册时序——延迟注册 probe 复现失败。白≈WHITE 占位未替换的渲染
+   表现，疑 _buf 本体与 pose 局部拷贝（PackedFloat32Array 值语义/COW）
+   之间的上传路径污染——probe 与 battle 代码路径相同结果不同，剩
+   EntityHost.y_sort_enabled 对容器的影响未测。**调试资产**：
+   crowd_renderer.gd 内 _dbg_dumped/2/3 三处 dump（验收后删）；
+   battle_perf --shot-at=N（开战 N 秒附加截图）。
+4. **🔴 用户报「入战圆点没了」**：血条设计逻辑在（_check_in_combat →
+   AIController.is_under_threat → 显示；_ever_damaged 展开成条）。
+   shot-at=6 截图全条（交战掉血正常）；开战前阶段（推进中）未截到，
+   需 --shot-at=4~5 放大验证圆点是否显示；富管线同刻也无圆点（疑与本
+   刀无关，可能 threat 判定窄或本来如此），待核。
+5. **变体与 LOD**（批次 3）：idle 变体池、hit/dead 变体映射、远档跳帧。
 
 ## 七、结构侦察结论（阶段 2 的设计依据，已实证勿重查）
 

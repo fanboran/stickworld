@@ -42,6 +42,10 @@ var _freeze_entities: bool = false
 var _headless_measure: bool = false
 ## --preset=N：0 遭遇战16 / 1 标准战役48 / 2 大军压境96（默认 2）
 var _preset_arg: int = 2
+## --shot-at=N：开战后 N 秒截一张附加截图（battle_perf_shot.png，默认关闭）。
+## 验证战斗早期观感用（全员满血圆点/接阵队形等后期截图看不到的状态）
+var _shot_at: float = -1.0
+var _shot_done: bool = false
 var _applied: bool = false
 var _measure_start_ticks: int = 0
 var _measure_start_msec: int = 0
@@ -65,6 +69,8 @@ func _ready() -> void:
 			_ when str(a).begins_with("--preset="):
 				var pv := int(a.get_slice("=", 1))
 				_preset_arg = clampi(pv, 0, 2)
+			_ when str(a).begins_with("--shot-at="):
+				_shot_at = float(a.get_slice("=", 1))
 	# 预设（static 跨实例生效，重开保持同档）
 	ArenaScript._preset_idx = _preset_arg
 	var arena: Node = ArenaScene.instantiate()
@@ -80,6 +86,12 @@ func _process(delta: float) -> void:
 		_applied = true
 		if _anim_off or _rig_hidden or _bodies_ghost or _no_ai or _freeze_entities:
 			_apply_experiment()
+	# 附加截图：开战后 _shot_at 秒（战斗早期观感验证）
+	if not _shot_done and _shot_at > 0.0 and _elapsed > _shot_at:
+		_shot_done = true
+		var img2 := get_viewport().get_texture().get_image()
+		img2.save_png("res://tests/dev/battle_perf_shot.png")
+		print("[PERF] shot saved at ", _elapsed)
 	# headless 模式：测物理 tick 速率（模拟侧独占开销，满速=tps 设置值）
 	if _headless_measure:
 		_headless_tick()

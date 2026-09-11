@@ -1186,6 +1186,16 @@ func _on_possession_changed(p: bool) -> void:
 		_sim.unregister_unit(self)
 		_sim = null
 		_sim_sid = -1
+	# 附身接管时退出小兵渲染代理（玩家身体必须富管线：unregister 内部
+	# 解 hook 恢复 rig 可见 + 武器 reparent 回手骨）
+	if p and has_meta("crowd_slot"):
+		var slot: Dictionary = get_meta("crowd_slot")
+		var crowd = slot.get("renderer")
+		if crowd != null:
+			var crowd_obj = crowd.get_ref() if crowd is WeakRef else crowd
+			if crowd_obj != null:
+				crowd_obj.call("unregister_unit", slot)
+		remove_meta("crowd_slot")
 	# 附身切换时重置速度，避免残留
 	if not p:
 		_current_speed = 0.0
@@ -1239,6 +1249,15 @@ func _exit_tree() -> void:
 		_sim.unregister_unit(self)
 	_sim = null
 	_sim_sid = -1
+	# 小兵渲染代理槽位注销（清实例段 + 解 rig hook；实体随 queue_free 释放）
+	if has_meta("crowd_slot"):
+		var slot: Dictionary = get_meta("crowd_slot")
+		var crowd = slot.get("renderer")
+		if crowd != null:
+			var crowd_obj = crowd.get_ref() if crowd is WeakRef else crowd
+			if crowd_obj != null:
+				crowd_obj.call("unregister_unit", slot)
+		remove_meta("crowd_slot")
 
 
 ## 由 GameRoot spawn 时注入 FormationSystem 引用（供 AIController 查询队伍职责）。
@@ -1485,9 +1504,10 @@ func set_perf_tier(tier: int, anim_hz: float = -1.0) -> void:
 
 
 ## 档位落点：rig 可见性/动画频率（rig 内部同步转发 ProceduralOverlay 同档节流）
-## + 血条频率/显示。rig.visible 由 LOD 独占管辖（受击闪红走 modulate，不依赖 visible）。
+## + 血条频率/显示。rig.visible 由 LOD 独占管辖（受击闪红走 modulate，不依赖 visible）；
+## 小兵渲染代理模式下 rig 让位（CrowdRenderer 全权渲染，LOD 只管血条）。
 func _apply_perf_tier(rig_visible: bool, anim_hz: float, bar_hz: float, bar_visible: bool) -> void:
-	if rig != null and is_instance_valid(rig):
+	if rig != null and is_instance_valid(rig) and not rig.is_crowd_proxied():
 		rig.visible = rig_visible
 		if rig.has_method("set_anim_update_hz"):
 			rig.set_anim_update_hz(anim_hz)

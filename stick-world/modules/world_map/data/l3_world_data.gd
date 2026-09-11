@@ -252,7 +252,8 @@ static func _compact_political_mesh(pm: Dictionary) -> void:
 		for i in fa.size():
 			fa[i] = float(pm["arcs"][i])
 		pm["arcs"] = fa
-	for f in ["arc_ptr", "arc_code_a", "arc_code_b", "arc_border", "fill_code", "fill_idx"]:
+	for f in ["arc_ptr", "arc_code_a", "arc_code_b", "arc_border", "arc_lakeshore",
+			"fill_code", "fill_idx"]:
 		if pm.get(f) is Array:
 			var ia := PackedInt32Array()
 			ia.resize((pm[f] as Array).size())

@@ -131,7 +131,7 @@ func _compact_political_mesh(pm: Dictionary, full: bool) -> Dictionary:
 	if full:
 		if pm.has("arcs"):
 			pm["arcs"] = _to_float_arr(pm["arcs"])
-		for f in ["arc_ptr", "arc_code_a", "arc_code_b", "arc_border"]:
+		for f in ["arc_ptr", "arc_code_a", "arc_code_b", "arc_border", "arc_lakeshore"]:
 			if pm.has(f):
 				pm[f] = _to_int_arr(pm[f])
 	return pm

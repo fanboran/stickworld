@@ -50,6 +50,12 @@ func _shot_l1() -> void:
 	await _settle(14)
 	_diag("L1", content.get("map_renderer"))
 	await _capture("feedback3_l1_terrain", cam, rect)
+	# 交通模式（R6 道路渲染 + l1_travel 底图）——道路图验收
+	MapModeManager.set_mode(MapModeManager.Mode.TRAFFIC)
+	await _settle(14)
+	await _capture("feedback3_l1_traffic", cam, rect)
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	await _settle(6)
 	await _teardown([scene])
 
 

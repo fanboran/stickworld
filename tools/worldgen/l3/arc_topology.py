@@ -199,7 +199,13 @@ def build_fill(tiles_geom, code_of, dy=0, dx=0, scale=1.0, sea_rect=None):
 
 
 def collect_lakes_global():
-    """13 份 L2 pack 的 lakes（context [y,x]）拼回全局 8192 (x,y) 顶点列表。"""
+    """13 份 L2 pack 的 lakes（context [y,x]）拼回全局 8192 (x,y) 顶点列表。
+
+    ⚠️ 这是**城块间湖**的旧几何（与细化城块弧不同代）——fill 用它画湖面时，
+    glow 的城块湖岸弧与湖缘存在细微漂移（实测 1033% 放大可见）。城块内湖已改
+    由洞弧展开（build_hole_lakes，与城块弧严格同源）；本函数保留供城块间湖，
+    且对应弧会标 arc_lakeshore 供 glow 排除。
+    """
     lakes = []
     for i in range(1, 14):
         rid = "region_%03d" % i
@@ -213,6 +219,21 @@ def collect_lakes_global():
         oy = int(bb["y0"]) - int(ty)
         for lk in world.get("lakes", []):
             lakes.append([(float(p[1]) + ox, float(p[0]) + oy) for p in lk])
+    return lakes
+
+
+def build_hole_lakes(arcs_xy, ring_refs, city_data):
+    """城块内湖：tiles 洞弧引用展开成闭合环（与城块弧同源，零漂移）。
+
+    ring_refs 的 holes 元素 = [(arc_id, forward)]；返回 [(outer, label=0)] 形态
+    （供 build_fill 消费，顶点 (x,y)@8192）。
+    """
+    lakes = []
+    for lab, info in ring_refs.items():
+        for refs in info["holes"]:
+            ring = expand_ring(refs, arcs_xy)   # (x,y) 顶点（arcs_xy 已 xy 序）
+            if len(ring) >= 3:
+                lakes.append(ring)
     return lakes
 
 
@@ -363,17 +384,44 @@ def main():
                                [[(p[1], p[0]) for p in h] for h in holes], lab))
     fill_verts, fill_codes, fill_idx, n_washed = build_fill(
         tiles_geom, code_of, sea_rect=(8192, 8192))
-    lake_polys = collect_lakes_global()
-    lake_verts, _, lake_idx, _ = build_fill([(lk, [], 0) for lk in lake_polys],
+    # 湖面两层：① 城块内湖 = 洞弧展开（与城块弧同源零漂移）② 城块间湖 = 旧
+    # lakes 几何（对应弧标 arc_lakeshore，glow 排除 → 无漂移参照）
+    hole_lakes = build_hole_lakes(arcs_xy, ring_refs, city_data)
+    lake_verts, _, lake_idx, _ = build_fill([(lk, [], 0) for lk in hole_lakes],
                                             {0: CODE_LAKE})
-    if n_washed:
-        print("    ⚠️ %d 个 tile 走 shapely 清洗/退化跳过（清洗比例应 <10%%）" % n_washed)
-    # 湖并入 fill：顶点 code=254（LUT 查湖色）
+    lake_polys = collect_lakes_global()
+    old_verts, _, old_idx, _ = build_fill([(lk, [], 0) for lk in lake_polys],
+                                          {0: CODE_LAKE})
     base = len(fill_verts)
     fill_verts.extend(lake_verts)
     fill_codes.extend([CODE_LAKE] * len(lake_verts))
     fill_idx.extend(int(base + t) for t in lake_idx)
-    print("    fill 顶点 %d（含湖 %d）三角 %d" % (len(fill_verts), len(lake_verts), len(fill_idx) // 3))
+    fill_verts.extend(old_verts)
+    fill_codes.extend([CODE_LAKE] * len(old_verts))
+    fill_idx.extend(int(base + len(lake_verts) + t) for t in old_idx)
+    if n_washed:
+        print("    ⚠️ %d 个 tile 走 shapely 清洗/退化跳过（清洗比例应 <10%%）" % n_washed)
+    print("    fill 顶点 %d（含湖 %d+%d）三角 %d"
+          % (len(fill_verts), len(lake_verts), len(old_verts), len(fill_idx) // 3))
+
+    # 旧湖（城块间湖，非同源几何）湖岸弧标记：弧中点落旧湖面内 → glow 排除
+    #（漂移参照消除；洞湖与城块弧同源无需排除）
+    arc_lakeshore = [0] * len(arcs_xy)
+    if lake_polys:
+        from shapely.geometry import Polygon as ShPolygon, Point
+        from shapely.strtree import STRtree
+        geoms = [ShPolygon(lk) for lk in lake_polys
+                 if len(lk) >= 3 and ring_area(lk) > 64.0]
+        if geoms:
+            tree = STRtree(geoms)
+            for aid, a in enumerate(arcs_xy):
+                mid = a[len(a) // 2]
+                pt = Point(mid)
+                for gi in tree.query(pt):
+                    if geoms[gi].contains(pt):
+                        arc_lakeshore[aid] = 1
+                        break
+    print("    旧湖湖岸弧 %d 条（glow 排除）" % sum(arc_lakeshore))
 
     mesh = {
         "name": "L3 政治矢量 mesh（共享弧拓扑，arc_topology.py 产；改色零重烘走 PoliticalLut）",
@@ -384,6 +432,7 @@ def main():
         "arc_code_a": [sc[0] for sc in side_code],
         "arc_code_b": [sc[1] for sc in side_code],
         "arc_border": border_type,
+        "arc_lakeshore": arc_lakeshore,
         "tiles": _tiles_refs(city_data, ring_refs),
         "fill_verts": [[round(x, 2), round(y, 2)] for (x, y) in fill_verts],
         "fill_code": fill_codes,

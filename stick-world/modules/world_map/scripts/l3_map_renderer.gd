@@ -184,6 +184,7 @@ func _build_glow_outlines() -> void:
 						arc_refs.append(0)
 					arc_refs[aid1] += 1
 		var ptr: PackedInt32Array = pm.get("arc_ptr", PackedInt32Array())
+		var lakeshore: PackedInt32Array = pm.get("arc_lakeshore", PackedInt32Array())
 		for aid in arc_regs.size():
 			var regs: Dictionary = arc_regs[aid]
 			if not regs.has(player_region_label):
@@ -191,6 +192,8 @@ func _build_glow_outlines() -> void:
 			var n_refs := int(arc_refs[aid])
 			if n_refs >= 2 and regs.size() == 1:
 				continue   # 内部弧（两侧同地区）不画
+			if aid < lakeshore.size() and lakeshore[aid] == 1:
+				continue   # 旧湖（非同源几何）湖岸弧不画——防漂移参照
 			# 海岸弧（单侧引用）+ 相邻地区界弧（两侧不同地区）——**逐弧独立流动**
 			#（三岔交界处串链会产生方向歧义斜穿，放弃闭合串链）
 			if ptr[aid + 1] - ptr[aid] < 4:

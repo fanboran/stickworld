@@ -96,6 +96,8 @@ var _presets_loaded: bool = false
 var _squad_targets: Dictionary = {}
 ## 队伍级目标决策计时器（累计到 SQUAD_DECISION_INTERVAL 触发一轮决策）
 var _squad_decision_timer: float = 0.0
+## MEDIUM 自主档伤亡上报阈值（存活比跌破沿判定，§4.4）；常规走 balance.variables 行覆盖
+var _casualty_report_threshold: float = 0.30
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -105,6 +107,26 @@ func setup(org_api: Node) -> void:
 	_apply_balance_tuning()
 	_org_api = org_api
 	_load_presets()
+	# 组织侧补位成功回写本地排长（架构文档 §4.3.1 第 5 条）：补位由 manager 的
+	# remove_stickman/remove_commander 内聚触发（死亡清理处既有调用天然联动，零新增死亡挂点）；
+	# 补位成功发 EventBus.commander_assigned → 在此回写 squad.leader，排长 UI/光环随之自动恢复
+	if EventBus != null and EventBus.has_signal("commander_assigned") \
+			and not EventBus.commander_assigned.is_connected(_on_commander_assigned):
+		EventBus.commander_assigned.connect(_on_commander_assigned)
+
+
+## 组织侧补位成功 → 回写本地 squad.leader（§4.3.1）：org_id ∈ 本地 _squads 时
+## 按 instance_id 找回实体（有效性校验 + 成员校验）。
+## assign_leader 自身也发 commander_assigned，此时回写为幂等（同一实体）。
+func _on_commander_assigned(org_id: String, unit_id: int) -> void:
+	if not _squads.has(org_id):
+		return
+	var unit: Node = instance_from_id(unit_id)
+	if unit == null or not is_instance_valid(unit):
+		return
+	if unit not in _squads[org_id]["units"]:
+		return
+	_squads[org_id]["leader"] = unit
 
 
 ## 从 config/formations/formation_presets.tres 加载编制预设。
@@ -159,7 +181,12 @@ func _process(_delta: float) -> void:
 				_unit_to_squad.erase(u.get_instance_id())
 				units.remove_at(i)
 				changed = true
+				# 伤亡上报挂点（§4.4）：每次死亡评估一次存活比（跌破沿只报首次，档位门控归组织侧）
+				squad["casualty_dead"] = int(squad.get("casualty_dead", 0)) + 1
+				_evaluate_casualty_report(squad_id)
 				# 同步组织模块：移除死亡单位（2026-08 修复：原实现仅本地移除，org.personnel 失步）
+				# 补位引擎内聚在 manager.remove_stickman——死者是指挥官时自动补位并经
+				# commander_assigned 信号回写 squad.leader（本文件 setup 订阅），零新增死亡挂点
 				if _org_api != null and _org_api.has_method("remove_stickman"):
 					_org_api.remove_stickman(squad_id, str(u.get_instance_id()))
 				if squad["leader"] == u:
@@ -213,8 +240,10 @@ func _apply_leader_morale_aura(delta: float) -> void:
 ## 创建小队。units 为 StickmanEntity 节点数组。返回 squad_id（失败返回 ""）。
 ## preset_id 指定编制预设（如 fp_combat_squad / fp_builder_crew / fp_worker_crew），
 ## 决定组织标签、成员职责范围（work_types）与成员角色（role）。
+## parent_id 指定挂载的上级组织（须 tier==2，如把排挂到某个连下；默认 "" = 独立根），
+## 层级校验由组织模块把关，不衔接时创建失败返回 ""。
 ## 已在其他小队中的单位会先被移出。
-func create_squad(units: Array, squad_name: String = "", preset_id: String = DEFAULT_PRESET_ID) -> String:
+func create_squad(units: Array, squad_name: String = "", preset_id: String = DEFAULT_PRESET_ID, parent_id: String = "") -> String:
 	if _org_api == null:
 		push_warning("[FormationSystem] organization_api 未注入")
 		return ""
@@ -234,10 +263,10 @@ func create_squad(units: Array, squad_name: String = "", preset_id: String = DEF
 	# 已在其他小队的单位先移出
 	for u in valid_units:
 		_remove_unit_from_squad(u)
-	# 创建 L1 组织（标签来自预设）
+	# 创建 L1 组织（标签来自预设；parent_id 非空时挂到指定上级组织）
 	_squad_counter += 1
 	var name_str: String = squad_name if not squad_name.is_empty() else "squad_%d" % _squad_counter
-	var result: Dictionary = _org_api.create_organization(name_str, preset["tag"], SQUAD_TIER, "")
+	var result: Dictionary = _org_api.create_organization(name_str, preset["tag"], SQUAD_TIER, parent_id)
 	if not result.get("ok", false):
 		push_warning("[FormationSystem] 创建组织失败: %s" % result.get("error", ""))
 		return ""
@@ -262,6 +291,9 @@ func create_squad(units: Array, squad_name: String = "", preset_id: String = DEF
 		"follow_squad_id": "",
 		"follow_gap": 0.0,
 		"slots": {},
+		# 伤亡上报挂点状态（§4.4）：累计死亡数 + 跌破沿首次已报标记
+		"casualty_dead": 0,
+		"casualty_reported": false,
 	}
 	# 编队槽位初始分配（11b）
 	_assign_formation_slots(squad_id)
@@ -449,8 +481,15 @@ func _decide_squad_targets(delta: float) -> void:
 			continue
 		var target: Node = ScriptTargetFinder.find_target(rep, { "battle": battle })
 		if target == null:
+			# 脱离接触：清共享目标，contact 上报的"首次"状态随之重置（再接敌再报）
 			_squad_targets.erase(squad_id)
 		else:
+			# contact 上报挂点（§4.4）：小队首次获得敌方共享目标（每场接敌一次）
+			if not _squad_targets.has(squad_id):
+				_file_squad_report(squad_id, "contact", {
+					"enemy_count": _squad_contact_enemy_count(squad_id),
+					"position": target.global_position if is_instance_valid(target) else Vector2.ZERO,
+				})
 			_squad_targets[squad_id] = target
 	# 编队动态跟队（SWL MoveInFormationBehindAnotherFormation 直译）：锚定小队落点维持
 	_update_squad_follows()
@@ -518,6 +557,80 @@ func _remove_unit_from_squad(unit: Node) -> void:
 		_org_api.remove_stickman(squad_id, str(iid))
 	# 离队补位（11b）：原小队槽位随成员数重算
 	_assign_formation_slots(squad_id)
+
+
+# ──────────────────────── 信息上报挂点（§4.4，3-F2）────────────────────────────────
+# combat 只发原始事件，档位门控（autonomy 三档）归组织侧 evaluate_report_gate 判定；
+# P0 三类事件全产自战斗域，经此出口落 report_filed 信号（一层直报）。
+
+## 上报出口：组织侧门控通过才落报告（combat 挂点统一用法，架构文档 §4.4）
+func _file_squad_report(squad_id: String, type: String, payload: Dictionary) -> void:
+	if _org_api == null or not _org_api.has_method("evaluate_report_gate"):
+		return
+	if not _org_api.evaluate_report_gate(squad_id, type, payload):
+		return
+	_org_api.file_report(squad_id, {
+		"type": type,
+		"filed_at": Time.get_ticks_msec(),
+		"payload": payload,
+	})
+
+
+## 伤亡上报评估（死亡清理处每次死亡调用一次）：存活比跌破阈值沿只报首次，
+## 回升（增员/救治）后重置沿标记再报；档位差异由门控承担（HIGH 恒不报/LOW 全量口径下
+## 仍按沿触发——架构文档 §4.4 挂点规格统一状态机）。
+func _evaluate_casualty_report(squad_id: String) -> void:
+	var squad: Dictionary = _squads.get(squad_id, {})
+	if squad.is_empty():
+		return
+	var alive: int = 0
+	for u in squad["units"]:
+		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+			alive += 1
+	var dead: int = int(squad.get("casualty_dead", 0))
+	var total: int = alive + dead
+	if total <= 0:
+		return
+	var ratio: float = float(alive) / float(total)
+	if ratio >= _casualty_report_threshold:
+		squad["casualty_reported"] = false
+		return
+	if bool(squad.get("casualty_reported", false)):
+		return
+	squad["casualty_reported"] = true
+	_file_squad_report(squad_id, "casualty_threshold", {
+		"alive": alive,
+		"dead": dead,
+		"total": total,
+		"loss_rate": 1.0 - ratio,
+	})
+
+
+## 小队接敌规模（contact payload.enemy_count）：小队成员射程内去重存活敌人数
+##（口径同 _member_enemy_in_range 的接敌判定，P0 首次接敌时一次性统计）
+func _squad_contact_enemy_count(squad_id: String) -> int:
+	var seen: Dictionary = {}
+	if not _squads.has(squad_id):
+		return 0
+	for u in _squads[squad_id]["units"]:
+		if not is_instance_valid(u) or (u.has_method("is_dead") and u.is_dead()):
+			continue
+		if not u.has_method("get_battle_instance"):
+			continue
+		var bi: Node = u.get_battle_instance()
+		if bi == null or not is_instance_valid(bi) or not bi.has_method("get_enemies_of"):
+			continue
+		var faction: int = u.get_faction() if u.has_method("get_faction") else 0
+		if faction == 0:
+			continue
+		var weapon: Node = u.get_weapon() if u.has_method("get_weapon") else null
+		var attack_range: float = float(weapon.attack_range) if weapon != null and "attack_range" in weapon else 100.0
+		for e in bi.get_enemies_of(faction):
+			if e == null or not is_instance_valid(e) or (e.has_method("is_dead") and e.is_dead()):
+				continue
+			if u.global_position.distance_to(e.global_position) <= attack_range:
+				seen[e.get_instance_id()] = true
+	return seen.size()
 
 
 # ──────────────────── 编队结构列阵（SWL Formation 直译，11b）────────────────────────────
@@ -1014,7 +1127,8 @@ func _apply_balance_tuning() -> void:
 		if row.has("id"):
 			by_id[row["id"]] = row.get("value")
 	for entry: Array in [["var_spread_spacing", SPREAD_SPACING], ["var_follow_default_gap", FOLLOW_DEFAULT_GAP],
-			["var_row_gap", ROW_GAP], ["var_catchup_run_dist", CATCHUP_RUN_DIST]]:
+			["var_row_gap", ROW_GAP], ["var_catchup_run_dist", CATCHUP_RUN_DIST],
+			["var_report_casualty_threshold", _casualty_report_threshold]]:
 		var v: Variant = by_id.get(entry[0])
 		if not (v is float or v is int):
 			continue
@@ -1027,3 +1141,5 @@ func _apply_balance_tuning() -> void:
 				ROW_GAP = float(v)
 			"var_catchup_run_dist":
 				CATCHUP_RUN_DIST = float(v)
+			"var_report_casualty_threshold":
+				_casualty_report_threshold = float(v)

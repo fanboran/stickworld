@@ -83,6 +83,7 @@ func setup(root: GameRoot) -> void:
 	_setup_organization_system()
 	_setup_formation_system()
 	_setup_tactical_system()
+	_setup_command_transport()
 	_setup_battle_panel()
 	_setup_formation_panel()
 	_setup_org_panel()
@@ -351,6 +352,10 @@ func _setup_tactical_system() -> void:
 	cc.name = "CommandChain"
 	_root.add_child(cc)
 	_root._command_chain = cc
+	# 注入 FormationSystem（队内目标点散开依赖；3-F2 接力复用 _execute_delivery 时补挂——
+	# 此前装配缺口使 spread 散点静默失效，全队退化为同一点）
+	if _root._formation_system != null and cc.has_method("setup_formation"):
+		cc.setup_formation(_root._formation_system)
 	# TacticalOrders
 	var to := Node.new()
 	to.set_script(_TacticalOrdersScript)
@@ -358,7 +363,75 @@ func _setup_tactical_system() -> void:
 	_root.add_child(to)
 	_root._tactical_orders = to
 	if to.has_method("setup"):
-		to.setup(_root._formation_system, _root._command_chain)
+		to.setup(_root._formation_system, _root._command_chain, _root._organization_api)
+
+
+# ─────────────────────────────── 指挥链传输层装配（3-F2）────────────────────────────────
+
+## 传输层三 provider + cmd 属性 provider 注入（架构文档 §4.2.1/§4.3.1）：
+## organization 保持零出向依赖——实体坐标/玩家位置/属性查询在此装配（world 侧高视角取值）。
+func _setup_command_transport() -> void:
+	var api: Node = _root._organization_api
+	if api == null or not api.has_method("set_transport_providers"):
+		return
+	api.set_transport_providers(
+		_org_commander_position,
+		_player_command_position,
+		_region_distance_stub,
+	)
+	if api.has_method("set_attribute_provider"):
+		api.set_attribute_provider(_stickman_cmd_attribute)
+
+
+## 组织指挥官实体坐标（同图）；无指挥官/实体不在场 → Vector2.INF（走跨图分支，不掺假距离）。
+## 中间层指挥官也是真实实体（指挥官不变量：某人实际指挥着下级指挥官），坐标同样可取。
+func _org_commander_position(org_id: String) -> Variant:
+	var api: Node = _root._organization_api
+	if api == null or not api.has_method("get_organization"):
+		return Vector2.INF
+	var info: Dictionary = api.get_organization(org_id)
+	if not info.get("ok", false):
+		return Vector2.INF
+	var cid := String(info.get("data", {}).get("commander_id", ""))
+	if cid.is_empty():
+		return Vector2.INF
+	var unit: Node = instance_from_id(int(cid))
+	if unit == null or not is_instance_valid(unit) or not (unit is Node2D):
+		return Vector2.INF
+	return (unit as Node2D).global_position
+
+
+## 玩家位置：附身实体坐标；未附身 = 相机视野中心；全不可得 → Vector2.INF
+func _player_command_position() -> Vector2:
+	var map: Node = _root.get_current_map() if _root.has_method("get_current_map") else null
+	if map != null and map.has_method("get_possessed_entity"):
+		var p: Node2D = map.get_possessed_entity()
+		if p != null and is_instance_valid(p):
+			return p.global_position
+	if _root.camera_rig != null:
+		return _root.camera_rig.get_screen_center_position()
+	return Vector2.INF
+
+
+## 跨图驻地距离 v1 收口（§4.2.2）：world_map 侧取数接口未立——恒 -1 走 fallback 常数
+##（balance var_command_cross_map_distance）；接口落地后换真值（待办已登记）
+func _region_distance_stub(_from_loc: String, _to_loc: String) -> float:
+	return -1.0
+
+
+## cmd 属性查询（补位排序，§4.3.1）：instance_id 字符串 → attributes.cmd；失败 -1 沉底
+func _stickman_cmd_attribute(stickman_id: String) -> float:
+	var iid := int(stickman_id)
+	if iid <= 0:
+		return -1.0
+	var unit: Node = instance_from_id(iid)
+	if unit == null or not is_instance_valid(unit):
+		return -1.0
+	var attrs: Variant = unit.get("attributes")
+	if not (attrs is Dictionary):
+		return -1.0
+	var value: Variant = (attrs as Dictionary).get("cmd", -1.0)
+	return float(value) if value is float or value is int else -1.0
 
 
 # ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────

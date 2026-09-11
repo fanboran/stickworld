@@ -89,6 +89,14 @@ const BASELINE: Dictionary = {
 	"heal_duration": 0.0,                   ## HOT 持续时长（s，总量均分 per_tick）
 	"heal_scan_interval": 0.5,              ## 治疗目标扫视周期（s，MericAi.UpdateTarget 节流推断）
 	"rear_line": false,                     ## 后排站位（FormationSystem 尾列取向；duck 查询不跨模块 preload）
+	# ── A9 · R1/R3/R5 个体 AI 参数面板（RWR interval/burst 族直译，AI集大成；
+	#    全部语义推断初值待实测校准；消费点见 ai_controller/behavior_attack/behavior_heal）──
+	"decision_interval": 0.3,               ## R1 主决策间隔（s，RWR choose_enemy_time 族；镜像旧 DECISION_INTERVAL 常量 = 零回归）
+	"decision_variance": 0.0,               ## R1 间隔 ± 方差半宽（s，RWR wait_time_variance 同构——逐拍重掷去同步；0 = 旧固定节拍）
+	"burst_shots": 0,                       ## R3 连射点数（发：连发此数后插 wait 停顿再射，RWR burst_time 族；0=关零回归；远程与近战均按档案开关）
+	"burst_wait": Vector2(1.2, 1.8),        ## R3 点射间停顿时长区间（s，RWR wait 1.2±0.6 直译）
+	"night_hesitate_mult": 1.0,             ## R3 夜间犹豫时长倍率（RWR 昼 0.3~0.6/夜 0.8~1.1 ≈ ×1.8~2.7；1.0 = 零回归；夜间判定见 behavior_attack._is_night）
+	"heal_buzz_distance": 60.0,             ## R5 防扎堆治疗（px：候选伤员被登记"治疗中"未过期时跳过，RWR consider_someone_already_healing_wounded_distance 10m 同构；0=关）
 }
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────
@@ -182,18 +190,68 @@ const CLASS_PROFILES: Dictionary = {
 	},
 }
 
-## 档案缓存（weapon_type -> 合并后 Dictionary）
+## 档案缓存（weapon_type -> [覆盖行数组引用, 合并后 Dictionary]；行数组引用
+## 比对实现 BalanceConfig 热重载失效——reload 重建 data 后引用变化即重合并）
 static var _cache: Dictionary = {}
 
+## BalanceConfig 类型路径（R2 兵种人格覆盖档：config/ai/behavior_profiles.tres，
+## 手写平衡资源非 Excel 导出背书——A1 personality.tres 同例）
+const CONFIG_TYPE_PATH: String = "ai.behavior_profiles"
+## weapon_type -> .tres 行 id 映射（行 id 用字符串；未知类型只有 baseline 行生效）
+const CLASS_ID_BY_TYPE: Dictionary = {
+	SWORD: "sword",
+	SPEAR: "spear",
+	BOW: "bow",
+	PICKAXE: "pickaxe",
+	STAFF: "staff",
+	MERIC: "meric",
+}
 
-## 获取兵种行为档案：基线 + 兵种覆盖合并（覆盖项浅合并，未覆盖项回落基线）。
-## 未知类型返回基线副本。
+
+## 获取兵种行为档案：合并序 = 代码基线 ← 代码兵种覆盖（SWL 直译真值宿主）
+## ← BalanceConfig 行覆盖（R2：baseline 行 + 本兵种行，同 id 后行覆盖前行；
+## 行只写差异项 = RWR 职业文件语义）。未知类型返回基线合并副本。
 static func get_profile(weapon_type: int) -> Dictionary:
-	if _cache.has(weapon_type):
-		return _cache[weapon_type]
+	var rows: Array = _load_config_rows()
+	var cached: Array = _cache.get(weapon_type, [])
+	if cached.size() == 2 and cached[0] == rows:
+		return cached[1]
 	var merged: Dictionary = BASELINE.duplicate()
 	var override: Dictionary = CLASS_PROFILES.get(weapon_type, {})
 	for k in override.keys():
 		merged[k] = override[k]
-	_cache[weapon_type] = merged
+	var class_id: String = CLASS_ID_BY_TYPE.get(weapon_type, "")
+	for row_v in rows:
+		if not (row_v is Dictionary):
+			continue
+		var rid := str(row_v.get("id", ""))
+		if rid != "baseline" and rid != class_id:
+			continue
+		for k in row_v.keys():
+			if k == "id" or k == "description":
+				continue
+			merged[k] = row_v[k]
+	_cache[weapon_type] = [rows, merged]
 	return merged
+
+
+## 读 BalanceConfig 覆盖行数组（缺载/路径缺失返回空数组，代码默认兜底；
+## 直查 data 字典绕过 get_value 的未命中警告——软依赖语义，非异常）。
+static func _load_config_rows() -> Array:
+	var cfg: Node = _balance_config()
+	if cfg == null or "data" not in cfg:
+		return []
+	var data: Dictionary = cfg.get("data")
+	if not data.has(CONFIG_TYPE_PATH):
+		return []
+	var rows: Variant = data[CONFIG_TYPE_PATH]
+	return rows if rows is Array else []
+
+
+## BalanceConfig autoload 稳健解析（static 上下文不直引 autoload 标识符，
+## 先例 team_ai_profiles._balance_config；主循环未就绪返回 null）
+static func _balance_config() -> Node:
+	var loop := Engine.get_main_loop()
+	if loop == null or not (loop is SceneTree):
+		return null
+	return (loop as SceneTree).root.get_node_or_null("BalanceConfig")

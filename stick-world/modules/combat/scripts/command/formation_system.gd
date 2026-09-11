@@ -373,6 +373,47 @@ func get_squad_leader(squad_id: String) -> Node:
 	return _squads[squad_id]["leader"]
 
 
+# ─────────────────────────────── 权威值择班（A9 · R4，RWR authority 经济）────────────────────────────────
+## RWR 权威值参数（设计文档12号 §2.2 R4；消费点挂 A2 任务槽的"谁在班里由
+## 权威值经济定"——本批次交付评分内核与滞回判定，不引入单位自主跳槽行为）。
+## 有班长基础权威（RWR 班长存在才有归属感）
+const AUTHORITY_LEADER_BASE: float = 1.0
+## 组织指挥官已任命加成（编制在册 = 班有"官"）
+const AUTHORITY_COMMANDER_BONUS: float = 0.5
+## 玩家光环加成（班长被玩家附身；RWR favor_joining_player_squad_value_increase 0.2 直译）
+const AUTHORITY_PLAYER_BONUS: float = 0.2
+## 换班权威差容限（RWR authority_margin 0.07 直译：新班须高出当前班此值才值得换，
+## 滞回防两边来回跳）
+const AUTHORITY_MARGIN: float = 0.07
+
+
+## 小队权威值评分（R4 择班内核）：班长在场 1.0 + 组织指挥官在册 0.5
+## + 班长被玩家附身 0.2。组织查询不可用（_org_api 缺载/无该方法）时跳过指挥官项。
+## 小队不存在返回 -INF（调用方以"可入"语义处理无班情况）。
+func get_squad_authority(squad_id: String) -> float:
+	if not _squads.has(squad_id):
+		return -INF
+	var squad: Dictionary = _squads[squad_id]
+	var score: float = 0.0
+	var leader: Node = squad.get("leader", null)
+	if leader != null and is_instance_valid(leader):
+		score += AUTHORITY_LEADER_BASE
+		if leader.has_method("is_possessed") and leader.is_possessed():
+			score += AUTHORITY_PLAYER_BONUS
+	if _org_api != null and _org_api.has_method("get_organization"):
+		var org: Dictionary = _org_api.get_organization(squad_id)
+		if not org.is_empty() and str(org.get("commander_id", "")) != "":
+			score += AUTHORITY_COMMANDER_BONUS
+	return score
+
+
+## 换班判定（R4 滞回）：候选班权威须高出当前班 authority_margin 以上才值得换。
+## 单位当前无班（current_authority = -INF）时任何候选班都值得进（-INF + margin
+## 仍为 -INF，浮点语义天然成立，无需特判）。
+func should_switch_squad(current_authority: float, candidate_authority: float) -> bool:
+	return candidate_authority > current_authority + AUTHORITY_MARGIN
+
+
 ## 队伍级目标点分配（反编译参考实装 D）：按单位在队内序号计算个性化目标点，
 ## 取代"全体同一点"——推进横排展开、集合围圈，配合实体 separation 防叠人。
 ## mode: "line" 横排散开（推进/冲刺）/ "rally" 围圈（集合）

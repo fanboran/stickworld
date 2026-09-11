@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BuildingPalette" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modules/building_gen/buildings/building_palette.gd" id="1_pal"]
+
+[resource]
+script = ExtResource("1_pal")
+C_STONE_MAIN = Color(0.58, 0.55, 0.49, 1)
+C_STONE_DARK = Color(0.42, 0.395, 0.35, 1)
+C_STONE_JOINT = Color(0.30, 0.275, 0.24, 1)
+C_WOOD_BEAM = Color(0.33, 0.23, 0.13, 1)

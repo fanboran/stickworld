@@ -157,7 +157,7 @@ func _test_world_map_dynamic() -> void:
 	_runner.assert_true(not content.visible, "关闭后战略图应不可见")
 
 
-## 战场默认步兵：不带队伍进战场，友军（进攻方）应 ≥3（含玩家）
+## 战场默认步兵：不带队伍直达开战，友军（进攻方）应 ≥3（含玩家）
 func _test_default_infantry() -> void:
 	var sl: Node = _helper.game_root.scene_loader
 	if sl == null or not sl.has_method("travel_to_map"):
@@ -169,6 +169,17 @@ func _test_default_infantry() -> void:
 		if sp != null and sp.visible:
 			_helper.game_root.toggle_settings_menu()
 	sl.travel_to_map(ScriptGameRoot.BATTLEFIELD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
+	for i in 4:
+		await get_tree().process_frame
+	# 战场图已退役自动刷敌（出征与领地架构 §4.3）：直达组织遭遇战，
+	# 验证默认步兵补位（allies 少于 3 补至 3）链路仍在
+	var gen: Node = _helper.game_root.get("_worldgen")
+	var player: Node2D = _helper.game_root.get_player_entity()
+	if gen == null or not gen.has_method("spawn_battlefield_enemies") or player == null:
+		_runner.assert_true(false, "直达刷敌入口或玩家实体缺失")
+		return
+	var field_map: Node2D = _helper.game_root.get_current_map()
+	gen.spawn_battlefield_enemies(field_map, [player], 2)
 	for i in 4:
 		await get_tree().process_frame
 	var bd: Node = _helper.game_root.get_battle_director_node() if _helper.game_root.has_method("get_battle_director_node") else null

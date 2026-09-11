@@ -13,10 +13,11 @@ extends Node2D
 # WorldAPI 是全局 class_name，无需 preload
 
 # ─────────────────────────────── 地图元数据（§3.4.1）────────────────────────────────
-## 地面线 Y（世界坐标），火柴人可走区域顶部
-@export var ground_y: float = 810.0
-## 地面占屏幕高度比例（Inspector 可改，默认 0.25 = 1/4）
-@export var ground_ratio: float = 0.25
+## 地面线 Y（世界坐标），火柴人可走区域顶部（1080 - 1080/3：地面带占屏 1/3）
+@export var ground_y: float = 720.0
+## 地面占屏幕高度比例（Inspector 可改，默认 1/3——2026-09-09 创始人定稿：
+## 默认地面占比 1/4 提到 1/3，建筑随基线 ground_y + building_baseline_offset 上移）
+@export var ground_ratio: float = 0.334
 ## 地图左边界 X（相机/火柴人 X 下限）
 @export var map_left: float = 0.0
 ## 地图右边界 X（相机/火柴人 X 上限）
@@ -87,7 +88,9 @@ func get_map_width() -> float:
 
 ## 生成实体到 EntityHost，注入地面约束参数与地图引用。
 ## 兼容注入（has_method 防御）：set_ground_constraints / set_map_reference / set_last_valid_position
-func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
+## def_id: 兵种档案 id（config/units/stickmen.tres 行 id，映射 StickmanEntity.stickman_def_id）。
+## 必须在 add_child 前设置——实体 _ready 经 _apply_balance_data 拉取兵种数值。
+func spawn_entity(entity_scene: PackedScene, p_position: Vector2, def_id: String = "") -> Node2D:
 	if entity_host == null or entity_scene == null:
 		push_error("[MapBase] 无法生成实体: entity_host 或 scene 为空")
 		return null
@@ -95,6 +98,8 @@ func spawn_entity(entity_scene: PackedScene, p_position: Vector2) -> Node2D:
 	if instance == null:
 		push_error("[MapBase] 实体场景实例化失败")
 		return null
+	if not def_id.is_empty() and "stickman_def_id" in instance:
+		instance.stickman_def_id = def_id
 	entity_host.add_child(instance)
 	instance.global_position = p_position
 	# 刷新初始有效位置（实体 _ready 中默认 (0,0)，此处修正）

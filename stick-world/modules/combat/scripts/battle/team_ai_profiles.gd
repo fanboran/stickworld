@@ -24,10 +24,12 @@ const STAFF: int = 4
 const MERIC: int = 5  ## P7 批次 7b 祭司（本地常量，不跨模块引用 BehaviorProfiles）
 const GIANT: int = 9  ## 占位类别（P8 前不出现）
 
-## 姿态枚举（对齐 dump Team.Stance 枚举序：0=GARRISON/1=DEFEND/2=ATTACK）
+## 姿态枚举（对齐 dump Team.Stance 枚举序：0=GARRISON/1=DEFEND/2=ATTACK；
+## 3=ROUT 为本作扩展——敌将撤仗终态，据点战专用，见出征与领地架构 §4.2）
 const STANCE_GARRISON: int = 0
 const STANCE_DEFEND: int = 1
 const STANCE_ATTACK: int = 2
+const STANCE_ROUT: int = 3
 
 
 ## 默认参数档案（待实测校准）：
@@ -45,6 +47,11 @@ const STANCE_ATTACK: int = 2
 ##   manual_order_guard         玩家手动号令保护期（s，姿态号令避让）
 ##   ratio_empty_enemy_sentinel 敌方力量为 0 时的力量比值哨兵（全歼敌军=绝对优势）
 ##   type_priority              兵种优先序（CompareUnitTypes 比较器，排序真值来自签名语义）
+##   retreat_casualty_rate      撤仗阈值：本方伤亡率超此值判定"这仗不能打了"
+##                              （≤0 不启用 = 普通战斗维持全灭判定的注册制闸门）
+##   retreat_loss_ratio         撤仗阈值：本方伤亡/敌方伤亡 超此值（打不动对面）
+##   retreat_timeout            撤仗阈值：战斗持续秒数超此值（相持不下）
+##   三阈值任一 >0 即武装撤仗评估，满足其一即切 ROUT（据点战由 territories.commander 注入）
 const DEFAULTS: Dictionary = {
 	"stance_decision_interval": 1.0,
 	"attack_enter": 1.30,
@@ -70,6 +77,11 @@ const DEFAULTS: Dictionary = {
 	"manual_order_guard": 8.0,
 	"ratio_empty_enemy_sentinel": 10.0,
 	"type_priority": [GIANT, STAFF, SPEAR, BOW, MERIC, SWORD],  ## P7 祭司插 BOW 与 SWORD 之间（待实测校准）
+	# 撤仗阈值（C3 敌将撤仗）：默认全负 = 不启用（普通战斗/双开扫参零回归；
+	# 据点战 enable_team_ai 时经 overrides 注入 territories.commander.retreat_thresholds）
+	"retreat_casualty_rate": -1.0,
+	"retreat_loss_ratio": -1.0,
+	"retreat_timeout": -1.0,
 }
 
 ## 决策周期硬下限（spec §4.1.1：覆盖注入不得低于此值，防号令风暴）

@@ -53,12 +53,14 @@ func set_tactical_orders(tactical: Node) -> void:
 
 ## 在指定地图上启动一场战斗。
 ## attacker_units / defender_units: StickmanEntity 数组
+## player_faction: 玩家阵营（battle_ended 的 victory 语义基准；默认攻方 = 旧语义兼容）
 ## 返回 BattleInstance（失败返回 null）
-func start_battle(map: Node2D, attacker_units: Array, defender_units: Array) -> Node:
+func start_battle(map: Node2D, attacker_units: Array, defender_units: Array,
+		player_faction: int = 1) -> Node:
 	if _director == null:
 		push_warning("[CombatApi] BattleDirector 未注入")
 		return null
-	return _director.start_battle_at(map, attacker_units, defender_units)
+	return _director.start_battle_at(map, attacker_units, defender_units, player_faction)
 
 
 # ─────────────────────────────── 号令下达 ────────────────────────────────

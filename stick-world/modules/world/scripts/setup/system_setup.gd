@@ -55,6 +55,9 @@ const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/
 const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
 const _DemoQuestScript: GDScript = preload("res://modules/world/scripts/setup/demo_quest.gd")
 const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/entity/unit_lod_director.gd")
+const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
+const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
+const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
 
 var _root: GameRoot
 
@@ -84,6 +87,8 @@ func setup(root: GameRoot) -> void:
 	_setup_formation_system()
 	_setup_tactical_system()
 	_setup_command_transport()
+	_setup_conquest_system()
+	_setup_recruit_system()
 	_setup_battle_panel()
 	_setup_formation_panel()
 	_setup_org_panel()
@@ -432,6 +437,48 @@ func _stickman_cmd_attribute(stickman_id: String) -> float:
 		return -1.0
 	var value: Variant = (attrs as Dictionary).get("cmd", -1.0)
 	return float(value) if value is float or value is int else -1.0
+
+
+# ─────────────────────────────── 征服系统装配（出征与领地架构 §一）───────────────────────────────
+
+## 实例化 ExpansionApi + ConquestManager：单一 TerritoryRegistry 共享给
+## api 查询面/GarrisonSpawner/ConquestManager；ConquestManager 常驻 GameRoot
+## （监听全局 map_loaded/battle_ended，领地状态跨图存活）。
+func _setup_conquest_system() -> void:
+	var registry := TerritoryRegistry.new()
+	registry.load_config()
+	var api := Node.new()
+	api.set_script(_ExpansionApiScript)
+	api.name = "ExpansionApi"
+	_root.add_child(api)
+	_root._expansion_api = api
+	api.setup(registry)
+	var spawner := GarrisonSpawner.new()
+	spawner.setup(registry)
+	var manager := Node.new()
+	manager.set_script(_ConquestManagerScript)
+	manager.name = "ConquestManager"
+	_root.add_child(manager)
+	_root._conquest_manager = manager
+	manager.setup(registry, spawner, api,
+			_root._combat_api, _root._resources_api, _root.scene_loader)
+	api.set_flow_manager(manager)
+
+
+# ─────────────────────────────── 招兵与人口装配（游戏循环深化批次 1）───────────────────────────────
+
+## RecruitManager 常驻 GameRoot（人口再生 tick 跨图存活但只在村A 计时）；
+## 招兵逻辑经 OrganizationApi 转发（api.gd 招兵段），玩家交互注入见 game_root._on_map_loaded。
+func _setup_recruit_system() -> void:
+	var mgr := Node.new()
+	mgr.set_script(_RecruitManagerScript)
+	mgr.name = "RecruitManager"
+	_root.add_child(mgr)
+	_root._recruit_manager = mgr
+	mgr.setup(_root._construction_api, _root._resources_api,
+			_root.scene_loader, _root._formation_system)
+	if _root._organization_api != null and _root._organization_api.has_method("set_recruit_manager"):
+		_root._organization_api.set_recruit_manager(mgr)
 
 
 # ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────

@@ -46,8 +46,10 @@ func _process(_delta: float) -> void:
 
 ## 在指定地图上启动一场战斗。
 ## attacker_units / defender_units: StickmanEntity 数组
+## player_faction: 玩家阵营（battle_ended 的 victory 语义基准；默认攻方 = 旧语义兼容）
 ## 返回创建的 BattleInstance（失败返回 null）
-func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array) -> Node:
+func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array,
+		player_faction: int = ScriptBattleInstance.FACTION_ATTACKER) -> Node:
 	if map == null:
 		push_error("[BattleDirector] map 为空，无法启动战斗")
 		return null
@@ -58,6 +60,8 @@ func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array) 
 	var bi: Node = ScriptBattleInstance.new()
 	bi.name = "BattleInstance"
 	bi.setup(map)
+	if player_faction != ScriptBattleInstance.FACTION_ATTACKER:
+		bi.set_player_faction(player_faction)
 	# 装配注入透传（P6 阵营 AI：enable_team_ai 时 TeamAi 消费号令/编队引用）
 	if bi.has_method("set_order_refs"):
 		bi.set_order_refs(_tactical_orders, _formation_system)

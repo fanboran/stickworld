@@ -10,6 +10,7 @@ extends RefCounted
 ##     推进（成员尺寸变化经 resized 信号触发重排，deferred 合并同帧多次）。
 ##   - debug 构建下常驻画 zone 保留区半透明框（设环境变量 HUD_ZONES_DEBUG=0 关闭），
 ##     部件越界保留区 push_warning（每部件一次）。
+##   - 可见性判定 OS.is_debug_build()：编辑器/调试运行可见，发行导出自动消失。
 ##
 ## 设计基线：docs/技术/架构/UI运行时架构优化方案.md §三。
 ## 约束：堆叠成员须挂在「顶部通栏全宽、原点即屏左上」的父级下（GlobalHUD /
@@ -89,7 +90,7 @@ var _debug_overlay: Control = null
 
 ## 挂到 UIRoot：创建 zone debug 画框层（release 构建为空操作）。
 func attach(ui_root: CanvasLayer) -> void:
-	if not Engine.is_debug_build():
+	if not OS.is_debug_build():
 		return
 	if OS.get_environment("HUD_ZONES_DEBUG") == "0":
 		return

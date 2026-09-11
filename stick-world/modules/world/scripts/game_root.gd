@@ -210,6 +210,10 @@ var _pending_squad_snapshots: Array = []
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
+## 启动装配总段数（Minecraft 式模块计数进度：7 段装配 + 读档/世界生成 + 地图就绪）
+const BOOT_STAGES: int = 9
+
+
 func _ready() -> void:
 	# 冻结手绘 UI 沸腾换帧（玩法场景素描控件群庞大，换帧级联拖帧率；
 	# 主菜单 _ready 显式恢复 true）
@@ -219,34 +223,38 @@ func _ready() -> void:
 	# 注册 InputDispatcher 到 PlayerControlAPI（units 经 api 获取，不反向依赖 world）
 	if input_dispatcher != null:
 		PlayerControlAPI.register_input_dispatcher(input_dispatcher)
-	# 挂载子模块（SystemSetup / SaveHandler / TravelHandler / InitialContent）
-	_mount_child_modules()
-	# 世界加载覆盖层：game_root 一启动立即显示，覆盖装配+加载全期（防裸灰屏）。
-	# 挂自身高层 CanvasLayer（不依赖尚未装配的 UIRoot），世界就绪后淡出。
+	# 世界加载覆盖层：先挂上并等到**真正绘制出首帧**再开始重活——同步装配期
+	# 无帧渲染，不等首帧覆盖层永远画不出来（旧版"两屏加载夹 10 秒灰屏"根因）
 	_setup_world_loading_overlay()
-	_show_loading("正在加载…")
-	# 装配 UI 覆盖层 + 所有子系统（由 SystemSetup 执行）
-	_bootstrap.setup(self)
-	# 存档系统：信号连接 + 注册 + SavePanel 实例化
-	_save_system.setup(self)
-	# 传送系统：EventBus 信号连接
-	_travel_system.setup(self)
-	# 初始内容生成器
-	_worldgen.setup(self)
-	_validate_children()
-	_bind_event_bus()
-	# 注册默认地图与地图出口
-	_register_default_maps()
-	# 默认 X1 速度
-	if TimeManager:
-		TimeManager.set_speed(TimeManager.Speed.X1)
-	# 世界加载覆盖层（启动即显示，_on_map_loaded 世界就绪后淡出）
+	_show_loading("正在启动…", 0.0)
+	await RenderingServer.frame_post_draw
+	# 分段装配：每段先更新文字/进度条 → 等一帧画出来 → 干重活；进度真实推进
+	await _stage(1, "挂载子模块", func(): _mount_child_modules())
+	await _stage(2, "装配界面与子系统", func(): _bootstrap.setup(self))
+	await _stage(3, "接入存档系统", func(): _save_system.setup(self))
+	await _stage(4, "接入传送系统", func(): _travel_system.setup(self))
+	await _stage(5, "初始化世界生成器", func(): _worldgen.setup(self))
+	await _stage(6, "校验场景与事件绑定", func():
+		_validate_children()
+		_bind_event_bus())
+	await _stage(7, "注册默认地图", func():
+		_register_default_maps()
+		if TimeManager:
+			TimeManager.set_speed(TimeManager.Speed.X1))
 	# 通知游戏开始
 	if EventBus:
 		EventBus.game_started.emit()
-	# 加载测试村落地图（延迟一帧确保 SceneLoader 就绪）
-	# 地图加载完成后会 set_mode(EXPLORE) 激活 handler，此时实体已就绪
+	# 加载初始村落（延迟一帧确保 SceneLoader 就绪；读档/世界生成显示 8/9，
+	# 地图加载完成后 _on_map_loaded 视世界就绪淡出覆盖层）
 	call_deferred("_load_start_village")
+
+
+## 单段装配：更新进度文字/进度条 → 等渲染出这一帧 → 执行重活。
+## 先画后干是关键——顺序反了进度条会在整段装配期一动不动（假进度观感）。
+func _stage(idx: int, label: String, work: Callable) -> void:
+	_show_loading("%s…（%d/%d）" % [label, idx, BOOT_STAGES], float(idx) / float(BOOT_STAGES))
+	await RenderingServer.frame_post_draw
+	work.call()
 
 
 ## 实例化四个子模块节点并挂到 GameRoot 下。
@@ -467,7 +475,8 @@ func _load_start_village() -> void:
 		var boot_slot: int = SaveManager.boot_load_slot
 		SaveManager.boot_load_slot = -1
 		print_verbose("[GameRoot] 启动读档: 槽位 %d" % boot_slot)
-		_show_loading("正在读取存档…")
+		_show_loading("正在读取存档…（%d/%d）" % [BOOT_STAGES - 1, BOOT_STAGES],
+				float(BOOT_STAGES - 1) / float(BOOT_STAGES))
 		var boot_accepted: bool = false
 		if _save_system != null and _save_system.has_method("load_game_from_slot"):
 			boot_accepted = _save_system.load_game_from_slot(boot_slot)
@@ -486,14 +495,15 @@ func _load_start_village() -> void:
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
 	# 不兼容会带来异常状态（灰屏/位置错乱）；手动存档/读档（SavePanel/quick_*）保留
 	print_verbose("[GameRoot] 开始新游戏")
-	_show_loading("正在生成世界…")
+	_show_loading("正在生成世界…（%d/%d）" % [BOOT_STAGES - 1, BOOT_STAGES],
+			float(BOOT_STAGES - 1) / float(BOOT_STAGES))
 	scene_loader.load_map(VILLAGE_A_MAP_ID)
 
 
 ## 显示世界加载覆盖（启动加载期）
-func _show_loading(message: String) -> void:
+func _show_loading(message: String, ratio: float = -1.0) -> void:
 	if _world_loading_overlay != null and _world_loading_overlay.has_method("show_loading"):
-		_world_loading_overlay.show_loading(message)
+		_world_loading_overlay.show_loading(message, ratio)
 
 
 ## 装配世界加载覆盖层：挂 game_root 自身高层 CanvasLayer（layer=10，盖住 UIRoot），

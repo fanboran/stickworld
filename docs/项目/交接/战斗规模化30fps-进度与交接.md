@@ -3,9 +3,10 @@
 > 目标：战斗场景达到可游玩帧率——**标准战役 48（48v48）≥30fps**；大军压境 96 尽力优化不设硬线。
 > 分支 `perf/battle-30fps`（已合并 main）。
 >
-> **状态：阶段性收官（2026-09-09，选项 B）**——48 可玩目标达成后合入 main；
-> 96 满编 4.5fps 与 D 刀（数据化批模拟，§十）留待后续立项，重开时重建
-> worktree 并读本档进度日志即可恢复全部上下文。
+> **状态：§十四 CrowdRenderer 重写进行中（2026-09-11 重开）**——批次 1/2
+> （核心+接线）完成：16v16 渲染态 fps 94.6 / draw 616（历史新高）；白填充
+> 与入战圆点两 bug 已修复（下方六、3/4 条）；剩批次 3（idle 变体池/远档
+> 跳帧）与 96 全链验收。前一阶段（2026-09-09，选项 B）48 可玩已合入 main。
 
 ## 一、背景与测量基线（2026-09-09，PerfProbe 探针实测）
 
@@ -371,25 +372,23 @@ Skeleton2D + AnimationTree 逐单位采样 + 叠加层 + 武器挂点 + 物理�
    **fps_avg 94.6 / median 99（历史新高，基线富管线同刻 96.9）**、
    draw_calls 616（富管线同刻 815）；probe（crowd_probe.tscn）单/双
    真实战斗实体渲染完美（深色身体+白描边+walk 姿态）。
-3. **🔴 未解 bug（新会话第一件事）**：battle 场景里小兵身体**渲染白色**
-   （应为深色 body(0.156)+白描边；截图≈WHITE×CanvasModulate(0.96,0.94,
-   0.88)）。**已排除**（勿重查）：①buffer 数据——写后读回深色正确、
-   fill 桶替换逻辑正确（dump col=(0.156...)）；②use_colors=true、
-   modulate 白；③PointLight2D——禁光后照白；④剔除——custom_aabb 已设
-   全域（顺带修复：空 aabb 导致视野不含原点时整个 MMI 被剔除，即
-   "身体消失仅剩矛/盾/血条" 的根因，矛/盾是独立 Sprite2D 不受影响）；
-   ⑤挂载位置——battle_instance(Node)/map/EntityHost 都试过；
-   ⑥注册时序——延迟注册 probe 复现失败。白≈WHITE 占位未替换的渲染
-   表现，疑 _buf 本体与 pose 局部拷贝（PackedFloat32Array 值语义/COW）
-   之间的上传路径污染——probe 与 battle 代码路径相同结果不同，剩
-   EntityHost.y_sort_enabled 对容器的影响未测。**调试资产**：
-   crowd_renderer.gd 内 _dbg_dumped/2/3 三处 dump（验收后删）；
-   battle_perf --shot-at=N（开战 N 秒附加截图）。
-4. **🔴 用户报「入战圆点没了」**：血条设计逻辑在（_check_in_combat →
-   AIController.is_under_threat → 显示；_ever_damaged 展开成条）。
-   shot-at=6 截图全条（交战掉血正常）；开战前阶段（推进中）未截到，
-   需 --shot-at=4~5 放大验证圆点是否显示；富管线同刻也无圆点（疑与本
-   刀无关，可能 threat 判定窄或本来如此），待核。
+3. **白填充 bug**：✅ 已修复（b69c2055）。根因：setup() 的
+   `container.move_child(mmi, band)` 打乱同 z 的带内桶序（同 z 绘制顺序
+   靠树序）——白描边桶后画，把深色填充桶整个盖住（描边矩形更宽且同长，
+   完全遮蔽填充）。probe 同样中招，此前"probe 正常"系像素误判。修复：
+   删 move_child（创建循环本身即带主序×桶次序，注释禁止再 move）；
+   实例颜色通路经 set_instance_color 涂色对照实验实证无罪。三处 dump
+   与禁光实验代码已清，check_godot_errors 通过。
+4. **入战圆点**：✅ 已修复（a71e0b8c），双根因叠加：
+   ①「血条三改」（e2f6163f）加的 `_shown<=0.01` 早退门 × 性能优化
+   （b5c3b4ec）给 wobble/残影/抖动/展开重绘加的 `_ever_damaged` 门——
+   满血圆点从此再无任何重绘来源，而 modulate.a 渐显不触发重绘，首次
+   _draw 被空门拦下后画布永空（掉血单位靠 _on_damaged 重绘所以条正常）。
+   修复：_shown 跨 0.01 阈值时补一次 queue_redraw（渐显画出/渐隐清空）。
+   ②创始人指示：**入战=整场战斗**——在战判定从近身威胁 140px（AI 溃逃
+   语义，不共用）改为 `battle_instance.is_active()`：battle 打响全员
+   头顶圆点、受伤展开成条、战斗结束渐隐。t=5 截图实证前后排全员红/蓝
+   圆点显示正常。
 5. **变体与 LOD**（批次 3）：idle 变体池、hit/dead 变体映射、远档跳帧。
 
 ## 七、结构侦察结论（阶段 2 的设计依据，已实证勿重查）

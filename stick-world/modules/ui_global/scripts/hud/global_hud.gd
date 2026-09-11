@@ -22,6 +22,12 @@ const EMPIRE_PRESETS: Dictionary = {
 	"OverviewButton": "empire_overview", "TechButton": "tech_tree",
 	"LogisticsButton": "logistics", "CollectionButton": "collection",
 }
+## 顶栏按钮群管线图标（设置齿轮已挂 tscn；icon_max_width 防挤压短文本）
+const TOPBAR_MOTIFS: Dictionary = {
+	"FormationButton": &"战鼓", "OrgButton": &"旗帜", "OverviewButton": &"账本",
+	"TechButton": &"科技树", "LogisticsButton": &"手推车", "CollectionButton": &"奖章",
+	"CenteredButton": &"罗盘", "PlaceholderPreviewButton": &"放大镜",
+}
 ## 材料面板（顶栏下方左侧横条，ResourceBar 挂这里）
 @onready var _resource_host: PanelContainer = get_node_or_null("ResourceBarHost")
 
@@ -51,6 +57,7 @@ func attach_resources(resources_api: Node) -> Control:
 
 func _ready() -> void:
 	_bind_event_bus()
+	_wire_topbar_icons()
 	if centered_button != null:
 		centered_button.pressed.connect(_on_centered_button_pressed)
 		_update_centered_button_text()
@@ -66,6 +73,17 @@ func _ready() -> void:
 		var btn: Button = get_node_or_null("MarginContainer/HBoxContainer/" + node_name)
 		if btn != null:
 			btn.pressed.connect(_on_empire_panel_pressed.bind(EMPIRE_PRESETS[node_name]))
+
+
+## 顶栏按钮群挂管线图标（缺图静默跳过）。⚠ 勿开 expand_icon：与文字并存时
+## 图标被布局压到不可见（_diag_btn_icon 对照实验实锤），纯图标按钮才用它
+func _wire_topbar_icons() -> void:
+	for node_name: String in TOPBAR_MOTIFS:
+		var btn: Button = get_node_or_null("MarginContainer/HBoxContainer/" + node_name)
+		var tex := StickIcons.tex(TOPBAR_MOTIFS[node_name])
+		if btn != null and tex != null:
+			btn.icon = tex
+			btn.add_theme_constant_override("icon_max_width", 18)
 
 
 func _process(_delta: float) -> void:

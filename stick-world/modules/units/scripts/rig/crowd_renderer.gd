@@ -245,12 +245,29 @@ var _shadow_cap: int = 0
 ## 一个 MMI 只能绑一种 mesh）。z=1000 顶层与原 indicator 同绝对层；颜色全
 ## 走实例色（阵营/低血闪/渐隐 alpha），状态机留在 HealthBarIndicator（数据
 ## 模式 get_bar_state 快照），wobble shader 增强后续批次
+var _dot_mmi: MultiMeshInstance2D = null
 var _dot_mm: MultiMesh = null
 var _dot_buf: PackedFloat32Array = PackedFloat32Array()
 var _dot_cap: int = 0
+var _bar_mmi: MultiMeshInstance2D = null
 var _bar_mm: MultiMesh = null
 var _bar_buf: PackedFloat32Array = PackedFloat32Array()
 var _bar_cap: int = 0
+## 武器图集桶：全局单 MMI（武器 z=18 绝对层本就无单位间遮挡语义）。
+## 带透明底自建图集渲染正常（二值 alpha 实测 OK，坑仅在半透明软渐变纹理——
+## weapon_probe 四行对照实验定性）；INSTANCE_CUSTOM=(UV 偏移,子区域尺寸)
+## 经 crowd_weapon_atlas.gdshader 顶点期映射采样。行 stride 16 floats
+## （变换 8 + 色 4 + custom 4），纹理明暗不动、实例色恒白
+var _weapon_mmi: MultiMeshInstance2D = null
+var _weapon_mm: MultiMesh = null
+var _weapon_buf: PackedFloat32Array = PackedFloat32Array()
+var _weapon_cap: int = 0
+var _weapon_count: int = 0  # 本刻压实行计数（tick 开头清零）
+var _atlas_tex: ImageTexture = null
+var _atlas_img: Image = null
+var _atlas_entries: Dictionary = {}  # texture_path -> Rect2i（图集像素区）
+var _atlas_pending: Dictionary = {}  # texture_path -> true（待 blit）
+var _atlas_dirty: bool = false
 
 
 ## 装配：创建 4 带 × 4 桶 MMI（容器 Node2D，z=ENTITY=3 同层；带间靠树序
@@ -319,26 +336,111 @@ func setup(parent: Node2D, y_top: float = 0.0, y_bottom: float = 1024.0) -> void
 	_shadow_mmi = smmi
 	_shadow_mm = smm
 	# 血条桶双 MMI（z=1000 顶层）
-	_dot_mm = _make_overlay_mm(container, "CrowdDots", BatchRig._get_circle_mesh())
-	_bar_mm = _make_overlay_mm(container, "CrowdBars", BatchRig._get_quad_mesh())
+	var wobble_shader: Shader = load("res://modules/units/scripts/rig/crowd_bar_wobble.gdshader")
+	_dot_mmi = _make_overlay_mm(container, "CrowdDots", BatchRig._get_circle_mesh(), wobble_shader, 1.0)
+	_bar_mmi = _make_overlay_mm(container, "CrowdBars", BatchRig._get_wobble_bar_mesh(), wobble_shader, 0.0)
+	# 武器图集桶（z=18 浮于单位身体之上，原武器 Sprite 同层）
+	_weapon_mm = _make_weapon_mm(container)
 
 
-## 顶层覆盖层 MMI 构造（血条桶共用；z=1000 绝对层与原 indicator 一致）
-func _make_overlay_mm(container: Node2D, mm_name: String, mesh: Mesh) -> MultiMesh:
+## 顶层覆盖层 MMI 构造（血条桶共用；z=1000 绝对层与原 indicator 一致；
+## wobble shader 顶点期 boiling 扰动，INSTANCE_CUSTOM=(seed, 幅度, 0,0)）
+func _make_overlay_mm(container: Node2D, mm_name: String, mesh: Mesh, wobble_shader: Shader, mode: float) -> MultiMeshInstance2D:
 	var mmi := MultiMeshInstance2D.new()
 	mmi.name = mm_name
 	mmi.texture = BatchRig._get_white_tex()
 	mmi.z_index = 1000
 	mmi.z_as_relative = false
+	var mat := ShaderMaterial.new()
+	mat.shader = wobble_shader
+	mat.set_shader_parameter("mode", mode)
+	mmi.material = mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_2D
 	mm.use_colors = true
+	mm.use_custom_data = true
 	mm.mesh = mesh
 	mm.instance_count = 0
 	mm.custom_aabb = AABB(Vector3(-4096.0, -4096.0, 0.0), Vector3(16384.0, 16384.0, 0.0))
 	mmi.multimesh = mm
 	container.add_child(mmi)
+	if mm_name == "CrowdDots":
+		_dot_mm = mm
+		_dot_mmi = mmi
+	else:
+		_bar_mm = mm
+		_bar_mmi = mmi
+	return mmi
+
+
+## 武器图集桶 MMI（use_custom_data 传 UV 子区域，shader 顶点期映射）
+func _make_weapon_mm(container: Node2D) -> MultiMesh:
+	var mmi := MultiMeshInstance2D.new()
+	mmi.name = "CrowdWeapons"
+	mmi.texture = null  # 图集就绪后由 _rebuild_atlas 赋
+	mmi.z_index = 18
+	mmi.z_as_relative = false
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://modules/units/scripts/rig/crowd_weapon_atlas.gdshader")
+	mmi.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_2D
+	mm.use_colors = true
+	mm.use_custom_data = true
+	mm.mesh = BatchRig._get_quad_mesh()
+	mm.instance_count = 0
+	mm.custom_aabb = AABB(Vector3(-4096.0, -4096.0, 0.0), Vector3(16384.0, 16384.0, 0.0))
+	mmi.multimesh = mm
+	container.add_child(mmi)
+	_weapon_mmi = mmi
 	return mm
+
+
+## 图集构建（注册期收集，首 tick 前一次）：扫描线摆放，宽 256 高 1024
+func _rebuild_atlas() -> void:
+	if not _atlas_dirty:
+		return
+	_atlas_dirty = false
+	const AW := 256
+	const AH := 1024
+	if _atlas_img == null:
+		_atlas_img = Image.create(AW, AH, false, Image.FORMAT_RGBA8)
+	var x := 0
+	var y := 0
+	var row_h := 0
+	for path in _atlas_pending.keys():
+		var tex: Texture2D = load(path)
+		if tex == null:
+			continue
+		var img: Image = tex.get_image()
+		img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+		var sz := img.get_size()
+		if x + sz.x > AW:
+			x = 0
+			y += row_h
+			row_h = 0
+		if y + sz.y > AH:
+			push_error("[CrowdRenderer] 武器图集溢出，跳过 " + path)
+			continue
+		_atlas_img.blit_rect(img, Rect2i(Vector2i.ZERO, sz), Vector2i(x, y))
+		_atlas_entries[path] = Rect2i(x, y, sz.x, sz.y)
+		x += sz.x
+		row_h = maxi(row_h, sz.y)
+	_atlas_pending.clear()
+	_atlas_tex = ImageTexture.create_from_image(_atlas_img)
+	_weapon_mmi.texture = _atlas_tex
+
+
+## 武器桶容量按需翻倍扩（stride 16：变换 8 + 色 4 + custom 4）
+func _ensure_weapon_cap(n: int) -> void:
+	if n <= _weapon_cap:
+		return
+	while _weapon_cap < n:
+		_weapon_cap = maxi(_weapon_cap * 2, 16)
+	_weapon_mm.instance_count = _weapon_cap
+	_weapon_buf.resize(_weapon_cap * 16)
+	_weapon_mm.buffer = _weapon_buf
 
 
 ## 阴影桶容量按需翻倍扩（零变换行=隐形，instance_count 恒为容量）
@@ -359,7 +461,7 @@ func _ensure_dot_cap(n: int) -> void:
 	while _dot_cap < n:
 		_dot_cap = maxi(_dot_cap * 2, 16)
 	_dot_mm.instance_count = _dot_cap
-	_dot_buf.resize(_dot_cap * 12)
+	_dot_buf.resize(_dot_cap * 16)
 	_dot_mm.buffer = _dot_buf
 
 
@@ -369,7 +471,7 @@ func _ensure_bar_cap(n: int) -> void:
 	while _bar_cap < n:
 		_bar_cap = maxi(_bar_cap * 2, 16)
 	_bar_mm.instance_count = _bar_cap
-	_bar_buf.resize(_bar_cap * 12)
+	_bar_buf.resize(_bar_cap * 16)
 	_bar_mm.buffer = _bar_buf
 
 
@@ -446,8 +548,9 @@ func _alloc_band_idx(band: int) -> int:
 
 
 ## 武器接管：武器/盾挂 rig 手骨下，rig 隐藏会连带隐藏——reparent 到实体
-## 直挂（保全局变换），记录「相对手骨局部变换 + 手骨先序下标」，tick 由
-## 代理插值的手骨姿态驱动（与富管线同款挂载语义）。
+## 直挂（保全局变换），记录「相对手骨局部变换 + 手骨先序下标」。代理模式
+## 下节点停用（visible=false），绘制走图集桶实例行；纹理与 Sprite 局部
+## 变换在此记录（attach_local=场景根相对手骨，sprite_local=Sprite 相对根）
 func _adopt_weapons(entity: Node, rig: Node2D) -> Array:
 	var out: Array = []
 	var wm: Node = entity.get_node_or_null("WeaponMount")
@@ -464,15 +567,33 @@ func _adopt_weapons(entity: Node, rig: Node2D) -> Array:
 		var hand_idx: int = _bone_ids.find(hand_id)
 		if hand_idx < 0:
 			continue
+		var sprite: Sprite2D = _find_sprite(w)
+		if sprite == null or sprite.texture == null or sprite.texture.resource_path.is_empty():
+			continue
 		var attach_local: Transform2D = hand.global_transform.affine_inverse() * w.global_transform
 		w.reparent(entity)
-		# 代理模式武器浮于 crowd 身体之上（绝对 z=18 > 实体 y-sort 上限 17）；
-		# 他单位身体不再遮挡我矛的语义损失与 crowd 带内平铺同级妥协
+		# 代理模式武器进图集桶（全局单 MMI z=18 浮于身体之上，原绝对层语义）
+		w.visible = false
 		w.z_as_relative = false
 		w.z_index = 18
+		var tex: Texture2D = sprite.texture
+		_atlas_pending[tex.resource_path] = true
+		_atlas_dirty = true
 		out.append({"node": w, "hand_idx": hand_idx, "attach_local": attach_local, "hand": hand,
-				"z_was_relative": w.z_as_relative})
+				"sprite_local": sprite.transform, "tex_path": tex.resource_path,
+				"tex_size": tex.get_size()})
 	return out
+
+
+## 深找第一个 Sprite2D（武器场景根下）
+static func _find_sprite(root: Node) -> Sprite2D:
+	if root is Sprite2D:
+		return root
+	for c in root.get_children():
+		var s := _find_sprite(c)
+		if s != null:
+			return s
+	return null
 
 
 ## 注销：解 rig hook（恢复富管线可见）、武器 reparent 回手骨（保全局变换）、
@@ -499,6 +620,7 @@ func unregister_unit(slot: Dictionary) -> void:
 		var node: Node2D = w.get("node")
 		var hand: Node2D = w.get("hand")
 		if node != null and is_instance_valid(node) and hand != null and is_instance_valid(hand):
+			node.visible = true  # 图集桶让位，恢复武器 Sprite 自绘
 			node.z_as_relative = true
 			node.z_index = 0
 			node.reparent(hand)
@@ -537,6 +659,8 @@ func set_slot_hidden(slot: Dictionary, hidden: bool) -> void:
 func tick(delta: float) -> void:
 	if _host == null or _slots.is_empty():
 		return
+	_rebuild_atlas()  # 注册期收集的武器纹理在此一次 blit+上传
+	_weapon_count = 0
 	for idx in _slots.size():
 		var slot = _slots[idx]  # 空槽为 null（无类型赋值 + 判空）
 		if slot == null or slot.is_empty() or bool(slot["hidden"]):
@@ -615,8 +739,10 @@ func tick(delta: float) -> void:
 				_shadow_buf[o + 11] = a
 			n += 3
 		_shadow_mm.buffer = _shadow_buf
-	# 血条桶：圆点 1 行 + 横条 3 行/单位（状态机在 indicator 数据模式，此处纯绘制换算；
-	# 活跃单位恒占行，宽 0/alpha 0 即隐形，避免压实写行数抖动残留旧数据）
+	# 血条桶：圆点 2 行（黑描边圆+阵营色圆）+ 横条 4 行（黑描边条+底/残影/填充）
+# /单位。手绘感三件套在 wobble shader 顶点期复刻：boiling 相位 floor(TIME/0.12)
+# 离散跳变（每单位 seed 错相），描边=本体轮廓外扩 OUTLINE_WIDTH 的黑色同行
+# （同 seed 同世界扰动幅度 → 轮廓同步、描边等宽）。行 stride 16（+custom）
 	var nd: int = 0
 	var nb: int = 0
 	for idx in _slots.size():
@@ -633,79 +759,95 @@ func tick(delta: float) -> void:
 		var cx: float = ind.global_position.x
 		var cy: float = ind.global_position.y
 		var shown: float = float(st["shown"])
-		# 圆点（掉血展开后随 expand 渐隐，与原 _draw_dot alpha 语义一致）
-		_ensure_dot_cap(nd + 1)
-		var dr: float = HealthBarIndicator.DOT_RADIUS * bs
-		var o := nd * 12
-		_dot_buf[o] = dr
-		_dot_buf[o + 1] = 0.0
-		_dot_buf[o + 2] = 0.0
-		_dot_buf[o + 3] = cx
-		_dot_buf[o + 4] = 0.0
-		_dot_buf[o + 5] = dr
-		_dot_buf[o + 6] = 0.0
-		_dot_buf[o + 7] = cy
-		var dc: Color = st["color"]
-		_dot_buf[o + 8] = dc.r
-		_dot_buf[o + 9] = dc.g
-		_dot_buf[o + 10] = dc.b
-		_dot_buf[o + 11] = dc.a * shown * (1.0 - float(st["expand"]))
-		nd += 1
-		# 横条 3 行：底 → 白残影（宽×trail，左对齐）→ 阵营填充（宽×ratio，左对齐）
-		_ensure_bar_cap(nb + 3)
+		var seed: float = fposmod(float(slot2["slot"]) * 2.37, 10.0)
+		# 圆点（原版 _draw_dot 语义：_expand<0.999 才画，展开完成即硬切——
+		# 不用 alpha 渐隐，避免条中残留圆心观感）
+		var dot_a: float = shown * (1.0 - float(st["expand"]))
+		if float(st["expand"]) < 0.999:
+			_ensure_dot_cap(nd + 2)
+			var dc: Color = st["color"]
+			for layer in 2:
+				var rr: float = (HealthBarIndicator.DOT_RADIUS + (HealthBarIndicator.OUTLINE_WIDTH * 0.5 if layer == 0 else 0.0)) * bs
+				var o := (nd + layer) * 16
+				_dot_buf[o] = rr
+				_dot_buf[o + 1] = 0.0
+				_dot_buf[o + 2] = 0.0
+				_dot_buf[o + 3] = cx
+				_dot_buf[o + 4] = 0.0
+				_dot_buf[o + 5] = rr
+				_dot_buf[o + 6] = 0.0
+				_dot_buf[o + 7] = cy
+				var lc: Color = HealthBarIndicator.COLOR_OUTLINE if layer == 0 else dc
+				_dot_buf[o + 8] = lc.r
+				_dot_buf[o + 9] = lc.g
+				_dot_buf[o + 10] = lc.b
+				# 原版 _draw_dot：描边/本体 alpha 同乘 (1-expand) 渐隐
+				_dot_buf[o + 11] = lc.a * shown * dot_a
+				_dot_buf[o + 12] = seed
+				_dot_buf[o + 13] = HealthBarIndicator.WOBBLE_AMP / maxf(rr, 0.001)
+				_dot_buf[o + 14] = 0.0
+				_dot_buf[o + 15] = 0.0
+			nd += 2
+		# 横条 4 行：黑描边 → 暗底 → 白残影（宽×trail，左对齐）→ 阵营填充（宽×ratio）
+		_ensure_bar_cap(nb + 4)
 		var half: float = float(st["width"]) * 0.5 * float(st["expand"]) * bs
 		var t: float = float(st["anim_time"])
 		var se: float = float(st["shake"])
-		var shk: float = sin(t * HealthBarIndicator.SHAKE_FREQ) * se * HealthBarIndicator.SHAKE_MAX_OFFSET \
-				+ sin(t * HealthBarIndicator.SHAKE_FREQ * 2.3) * se * HealthBarIndicator.SHAKE_MAX_OFFSET * 0.3
+		var shk: float = sin(t * HealthBarIndicator.SHAKE_FREQ) * se * HealthBarIndicator.SHAKE_MAX_OFFSET + sin(t * HealthBarIndicator.SHAKE_FREQ * 2.3) * se * HealthBarIndicator.SHAKE_MAX_OFFSET * 0.3
 		var cx2: float = cx + shk
 		var hh: float = HealthBarIndicator.BAR_HEIGHT * bs * 0.5
+		var ow: float = HealthBarIndicator.OUTLINE_WIDTH * bs
 		var left: float = cx2 - half
-		var bo := nb * 12
-		_bar_buf[bo] = half
-		_bar_buf[bo + 1] = 0.0
-		_bar_buf[bo + 2] = 0.0
-		_bar_buf[bo + 3] = cx2
-		_bar_buf[bo + 4] = 0.0
-		_bar_buf[bo + 5] = hh
-		_bar_buf[bo + 6] = 0.0
-		_bar_buf[bo + 7] = cy
-		_bar_buf[bo + 8] = 0.08
-		_bar_buf[bo + 9] = 0.07
-		_bar_buf[bo + 10] = 0.06
-		_bar_buf[bo + 11] = 0.72 * shown
-		var tw: float = half * 2.0 * clampf(float(st["trail"]), 0.0, 1.0)
-		_bar_buf[bo + 12] = tw * 0.5
-		_bar_buf[bo + 13] = 0.0
-		_bar_buf[bo + 14] = 0.0
-		_bar_buf[bo + 15] = left + tw * 0.5
-		_bar_buf[bo + 16] = 0.0
-		_bar_buf[bo + 17] = hh
-		_bar_buf[bo + 18] = 0.0
-		_bar_buf[bo + 19] = cy
-		_bar_buf[bo + 20] = 1.0
-		_bar_buf[bo + 21] = 0.97
-		_bar_buf[bo + 22] = 0.9
-		_bar_buf[bo + 23] = 0.95 * shown
-		var fw: float = half * 2.0 * float(st["ratio"])
-		var fc: Color = st["color"]
-		_bar_buf[bo + 24] = fw * 0.5
-		_bar_buf[bo + 25] = 0.0
-		_bar_buf[bo + 26] = 0.0
-		_bar_buf[bo + 27] = left + fw * 0.5
-		_bar_buf[bo + 28] = 0.0
-		_bar_buf[bo + 29] = hh
-		_bar_buf[bo + 30] = 0.0
-		_bar_buf[bo + 31] = cy
-		_bar_buf[bo + 32] = fc.r
-		_bar_buf[bo + 33] = fc.g
-		_bar_buf[bo + 34] = fc.b
-		_bar_buf[bo + 35] = fc.a * shown
-		nb += 3
+		var bar_amp: float = HealthBarIndicator.WOBBLE_AMP / maxf(HealthBarIndicator.BAR_HEIGHT * bs, 0.001)
+		for layer in 4:
+			var bo := (nb + layer) * 16
+			var w_row: float = half * 2.0
+			var h_row: float = HealthBarIndicator.BAR_HEIGHT * bs
+			var outline_pad: float = HealthBarIndicator.OUTLINE_WIDTH * 0.5 * bs
+			var rcol: Color
+			var rx: float = cx2
+			match layer:
+				0:
+					w_row += outline_pad * 2.0
+					h_row += outline_pad * 2.0
+					rcol = Color(HealthBarIndicator.COLOR_OUTLINE.r, HealthBarIndicator.COLOR_OUTLINE.g, HealthBarIndicator.COLOR_OUTLINE.b, HealthBarIndicator.COLOR_OUTLINE.a * shown)
+				1:
+					rcol = Color(HealthBarIndicator.COLOR_BG.r, HealthBarIndicator.COLOR_BG.g, HealthBarIndicator.COLOR_BG.b, HealthBarIndicator.COLOR_BG.a * shown)
+				2:
+					var tw: float = half * 2.0 * clampf(float(st["trail"]), 0.0, 1.0)
+					w_row = tw
+					rx = left + tw * 0.5
+					rcol = Color(HealthBarIndicator.COLOR_TRAIL.r, HealthBarIndicator.COLOR_TRAIL.g, HealthBarIndicator.COLOR_TRAIL.b, HealthBarIndicator.COLOR_TRAIL.a * shown)
+				3:
+					var fw: float = half * 2.0 * float(st["ratio"])
+					w_row = fw
+					rx = left + fw * 0.5
+					var fc: Color = st["color"]
+					rcol = Color(fc.r, fc.g, fc.b, fc.a * shown)
+			_bar_buf[bo] = w_row * 0.5
+			_bar_buf[bo + 1] = 0.0
+			_bar_buf[bo + 2] = 0.0
+			_bar_buf[bo + 3] = rx
+			_bar_buf[bo + 4] = 0.0
+			_bar_buf[bo + 5] = h_row * 0.5
+			_bar_buf[bo + 6] = 0.0
+			_bar_buf[bo + 7] = cy
+			_bar_buf[bo + 8] = rcol.r
+			_bar_buf[bo + 9] = rcol.g
+			_bar_buf[bo + 10] = rcol.b
+			_bar_buf[bo + 11] = rcol.a
+			_bar_buf[bo + 12] = seed
+			_bar_buf[bo + 13] = bar_amp
+			_bar_buf[bo + 14] = 0.0
+			_bar_buf[bo + 15] = 0.0
+		nb += 4
 	if _dot_mm != null and _dot_cap > 0:
 		_dot_mm.buffer = _dot_buf
 	if _bar_mm != null and _bar_cap > 0:
 		_bar_mm.buffer = _bar_buf
+	# 武器图集桶上传（_wcount 压实行数；未用行=零变换隐形）
+	if _weapon_mm != null and _weapon_cap > 0 and _atlas_tex != null:
+		_weapon_mm.buffer = _weapon_buf
 
 
 ## 战斗结束/销毁：释放容器（含全部带桶 MMI；实体侧 meta 由调用方清）
@@ -724,12 +866,24 @@ func teardown() -> void:
 	_shadow_mm = null
 	_shadow_buf = PackedFloat32Array()
 	_shadow_cap = 0
+	_dot_mmi = null
 	_dot_mm = null
 	_dot_buf = PackedFloat32Array()
 	_dot_cap = 0
+	_bar_mmi = null
 	_bar_mm = null
 	_bar_buf = PackedFloat32Array()
 	_bar_cap = 0
+	_weapon_mmi = null
+	_weapon_mm = null
+	_weapon_buf = PackedFloat32Array()
+	_weapon_cap = 0
+	_weapon_count = 0
+	_atlas_tex = null
+	_atlas_img = null
+	_atlas_entries = {}
+	_atlas_pending = {}
+	_atlas_dirty = false
 	_host = null
 
 
@@ -756,12 +910,37 @@ func _pose_slot(slot: Dictionary, info: Dictionary, t: float) -> void:
 	var outline: Color = slot.get("outline_color", Color.BLACK)
 	var band: int = slot.get("band", 0)
 	var band_idx: int = slot.get("band_idx", 0)
-	# 武器/盾：手骨全局变换驱动（与富管线挂手骨同语义）
+	# 武器/盾：手骨姿态 × attach × Sprite 局部 → 图集桶实例行（节点已停用，
+	# 绘制终点在 CrowdWeapons MMI；行 stride 16 = 变换 8 + 色 4 + custom UV 4）
 	var weapons: Array = slot.get("weapons", [])
 	for w in weapons:
-		var node: Node2D = w["node"]
-		if node != null and is_instance_valid(node):
-			node.global_transform = unit_xf * _acc[w["hand_idx"]] * w["attach_local"]
+		var path: String = w.get("tex_path", "")
+		if path.is_empty() or not _atlas_entries.has(path):
+			continue
+		var rect: Rect2i = _atlas_entries[path]
+		_ensure_weapon_cap(_weapon_count + 1)
+		var xf: Transform2D = unit_xf * _acc[w["hand_idx"]] * w["attach_local"] * w["sprite_local"]
+		var tsz: Vector2 = w["tex_size"]
+		var aw: float = float(_atlas_img.get_width())
+		var ah: float = float(_atlas_img.get_height())
+		var wo := _weapon_count * 16
+		_weapon_buf[wo] = xf.x.x * tsz.x
+		_weapon_buf[wo + 1] = xf.y.x * tsz.y
+		_weapon_buf[wo + 2] = 0.0
+		_weapon_buf[wo + 3] = xf.origin.x
+		_weapon_buf[wo + 4] = xf.x.y * tsz.x
+		_weapon_buf[wo + 5] = xf.y.y * tsz.y
+		_weapon_buf[wo + 6] = 0.0
+		_weapon_buf[wo + 7] = xf.origin.y
+		_weapon_buf[wo + 8] = 1.0
+		_weapon_buf[wo + 9] = 1.0
+		_weapon_buf[wo + 10] = 1.0
+		_weapon_buf[wo + 11] = 1.0
+		_weapon_buf[wo + 12] = float(rect.position.x) / aw
+		_weapon_buf[wo + 13] = float(rect.position.y) / ah
+		_weapon_buf[wo + 14] = float(rect.size.x) / aw
+		_weapon_buf[wo + 15] = float(rect.size.y) / ah
+		_weapon_count += 1
 	for j in 4:
 		var bidx: PackedInt32Array = _bucket_bidx[j]
 		var xforms: Array = _bucket_xform[j]

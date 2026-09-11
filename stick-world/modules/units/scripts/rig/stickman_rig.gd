@@ -103,23 +103,12 @@ var _adv_hz: float = 0.0
 var _adv_accum: float = 0.0
 ## 显式暂停闸门（set_anim_paused 置位）：暂停优先于 LOD 档，冻结累积推进
 var _pause_gate: bool = false
-##
-## 骨架解算频率（Hz）：修改栈（4×TwoBoneIK）解算的 LOD 限频档，由
-## set_anim_update_hz 联动设定 = min(动画 hz, 30)（T0 密度档 20Hz 动画 → 解算
-## 也 20Hz：解算只在推进帧后有输入变化，高于推进频率纯浪费；60Hz 动画 → 30Hz）。
-##
-## 机制（Godot 4.7 实测，worktree 实验：temp/mech/ 顺序探针 + 姿态/成本对照）：
-## 解算跑在 Skeleton2D 的内部处理里，且没有等价的"手动解一次"API——
-## Skeleton2D.execute_modifications 脱离内部处理调用会直接把 IK 结果写进骨骼
-## 节点变换，肢体向 IK 目标塌折（与原生渲染姿态完全不符），不可用。故用
-## set_process_internal 逐帧开关：推进帧置 true → 下一帧帧首内部处理恰好解算
-## 一次 → 下一个推进节拍再按需开关（内部处理阶段先于脚本 _process、父节点先于
-## 子节点，均实测；解算先于动画推进、读上一推进帧的骨骼姿态，与原生每帧时序
-## 同构，仅频率降档）。未接 LOD（本变量保持 0 且 _anim_driven=false）时内部
-## 处理保持原生开启，行为零变化。
-var _solve_hz: float = 0.0
-## 解算节拍累积器（累加动画推进 delta；仅在推进帧后解算才有输入变化）
-var _solve_accum: float = 0.0
+## （骨架解算限频机制 _solve_hz/_solve_accum 已随刀③删除：修改器栈默认禁用、
+##   骨架内部处理永久关闭，见 _init_ik 注——无解算可限频。历史机制存档：
+##   曾用 set_process_internal 逐帧开关按 min(动画hz,30) 限频修改栈解算；
+##   execute_modifications 脱离内部处理调用会把 IK 结果直写骨骼致肢体塌折，
+##   不可用作手动解算出口——刀③若重做代码解算，需解析解自管姿态、绕开
+##   非持久 override，参考 docs/技术/架构/场景与战斗/战斗与AI.md §TwoBoneIK。）
 
 ## ── 低帧率分桶（stagger 补偿，96 满编渲染侧墙专项）──
 ## 分桶阈值：fps < STAGGER_K2_FPS → 2 桶、fps < STAGGER_K4_FPS → 4 桶，
@@ -171,19 +160,13 @@ func _ready() -> void:
 	_init_procedural_overlay()
 
 
-## 通知路由：
-## - VISIBILITY_CHANGED：重新可见时补一次批渲染 pose 写入（不可见期 flush 跳过并
-##   保留脏标记，此通知兜底"LOD FAR 档隐藏 → 回到近档"的首帧；旧矢量路径无此需求）。
-## - INTERNAL_PROCESS：骨架解算落地帧恰是内部处理开启帧（set_process_internal
-##   逐帧开关，机制见 _solve_hz 注），解算刚改写骨骼 → 批渲染标脏，本帧尾部
-##   flush 捕获解算后姿态。未接 LOD 时内部处理原生常开、通知逐帧触发 = 与旧路径
-##   "渲染即最新姿态"同频；接 LOD 后仅解算节拍帧触发，随档位降频。
+## 通知路由：VISIBILITY_CHANGED——重新可见时补一次批渲染 pose 写入（不可见期
+## flush 跳过并保留脏标记，此通知兜底"LOD FAR 档隐藏 → 回到近档"的首帧；
+## 旧矢量路径无此需求）。（INTERNAL_PROCESS 标脏分支已随刀③删除：骨架内部
+## 处理永久关闭、不再有解算落地帧，姿态脏标记源只剩动画推进与叠加层。）
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED:
 		if _batch != null and is_visible_in_tree():
-			_batch.mark_dirty()
-	elif what == NOTIFICATION_INTERNAL_PROCESS:
-		if _batch != null:
 			_batch.mark_dirty()
 
 
@@ -222,15 +205,11 @@ func _process(delta: float) -> void:
 		# 推进整个累积量，动画时间与墙钟同步。
 		if _adv_hz < 60.0:
 			_adv_accum += delta
-		# 分桶推进门：跳过帧只跳「动画推进」与「批渲染 flush」（尾部按桶门控），
-		# **解算开关必须不动**——Skeleton2D 修改器的解算输出是非持久
-		# local_pose_override（引擎机制：仅内部处理写入的当帧生效，其余阶段
-		# 从 cache_transform 还原未解算值，见 docs/技术/架构/场景与战斗/
-		# 战斗与AI.md §TwoBoneIK 强约束——当初"全身横躺 90°"事故同源）。
-		# 若跳过帧 set_process_internal(false)，该帧渲染回退未解算姿态，与
-		# 解算帧交替 = 肢体闪烁（"肢体飞"）。解算保持每帧跑：成本与分桶前
-		# 持平（fps < 推进档时节流累积恒满足，internal 本就恒 true），分桶
-		# 省的是 advance 采样 + overlay 叠加 + 批缓冲写三块。
+		# 分桶推进门：跳过帧跳「动画推进」，批渲染 flush 尾部按桶门控——
+		# 姿态源只剩动画 track（持久 bone pose）与叠加层（绝对设置=基准+偏移，
+		# 跳过帧保持上次值），跳过帧显示连续无闪烁。（刀③前的历史坑存档：
+		# 当时解算跑修改器栈的非持久 override，跳解算帧渲染回退未解算姿态
+		# = "肢体飞"；栈已禁用，该约束不复存在。）
 		if _stagger_k <= 1 \
 				or Engine.get_process_frames() % _stagger_k == _stagger_seed % _stagger_k:
 			var adv := 0.0
@@ -244,17 +223,6 @@ func _process(delta: float) -> void:
 				# 批渲染：本帧推进改写姿态 → 标脏（flush 在 _process 尾部消费）
 				if _batch != null:
 					_batch.mark_dirty()
-				# 骨架解算随推进帧联动（机制见 _solve_hz 注）：本帧 _process 置 true，
-				# 下一帧帧首内部处理解算一次；非解算节拍关闭内部处理停掉解算。
-				# 批渲染的解算后标脏走 _notification 的 INTERNAL_PROCESS 分支
-				#（解算落地帧 = 内部处理开启帧，精确挂钩），此处无需再记脏
-				if _solve_hz > 0.0:
-					_solve_accum += adv
-					if _solve_accum >= 1.0 / _solve_hz:
-						_solve_accum = 0.0
-						set_process_internal(true)
-					else:
-						set_process_internal(false)
 	# 受击插播倒计时：动画播完回切到受击前状态（反编译参考实装 B）
 	if _hit_timer > 0.0:
 		_hit_timer -= delta
@@ -438,6 +406,18 @@ func _init_ik() -> void:
 	# 延迟一帧启用 IK：Skeleton2D + IK 在 _ready 后首帧不保证解算，
 	# 先禁用栈、等一个帧周期再启用，让解算自然完成（替代"前 0.25s 模拟移动"的 workaround）
 	if not Engine.is_editor_hint():
+		# 刀③（2026-09-11）：修改器栈默认**不启用**，并停掉骨架内部处理。
+		# 实测（headless 96，方差 ±0.15 ticks）：开栈 9.6~10.1 / 关栈 9.9 /
+		# 关栈+停 internal **14.7** ticks/s——栈的解算数学只占 ~0.3，
+		# **Skeleton2D internal 全套（pose 缓存/传播/修改管线骨架）占 ~4.4
+		# ticks**，栈不生效时是纯空载。姿态实测无差：骨骼姿态由动画 track
+		# 持久驱动（写 bone pose），栈的解算 override 每帧被动画覆盖——与
+		# 征服线（agent/conquest-loop 批次 4h「IK 栈不解算实锤」）交叉印证。
+		# STICK_RIG_IK=1 开回旧行为（A/B 兜底；编辑器模式不受影响，栈保持
+		# tscn 原样供实时调试）。
+		if OS.get_environment("STICK_RIG_IK") != "1":
+			set_process_internal(false)
+			return
 		stack.enabled = false
 		call_deferred("_enable_ik_stack", stack)
 
@@ -582,26 +562,19 @@ func set_state_anim(state_name: String, anim_name: String) -> bool:
 ## AnimationPlayer 速率归零；恢复时回 1.0（walk 速率由移动代码下一帧重设）。
 ## LOD 驱动模式下同步置闸门：显式暂停优先于 LOD 档（冻结手动推进，
 ## 否则暂停期间被节流的单位动画仍会走——AnimationTree 不理会 AnimationPlayer 的
-## speed_scale，闸门是驱动模式下暂停真正生效的通道），并停掉骨架解算
-## （闸门跳过推进分支后不会再有开关指令，悬挂的 internal=true 会让解算每帧空跑）。
+## speed_scale，闸门是驱动模式下暂停真正生效的通道）。
 func set_anim_paused(paused: bool) -> void:
 	_pause_gate = paused
 	_adv_accum = 0.0
-	if paused and _anim_driven:
-		set_process_internal(false)
-		_solve_accum = 0.0
 	if _anim_player == null:
 		return
 	_anim_player.speed_scale = 0.0 if paused else 1.0
 
 
 ## 设置动画更新频率（Hz，战斗级 LOD 节流，UnitLodDirector 经实体转发调用）：
-##   hz <= 0 ：完全暂停（停用自动处理，保留当前 pose，状态推进与骨架解算冻结）
+##   hz <= 0 ：完全暂停（停用自动处理，保留当前 pose，状态推进冻结）
 ##   0 < hz < 60 ：按该频率节流推进（累积真实 delta，达到 1/hz 批量 advance）
 ##   hz >= 60 ：全速（每帧 advance 真实 delta，与 IDLE 自动处理等价）
-##
-## 骨架解算联动：接入 LOD 即按 min(hz, 30) 限频修改栈解算（T0 封顶 30Hz /
-## T1 15Hz / T2 5Hz；机制与时序详见 _solve_hz 注）。
 ##
 ## 实现说明（为什么不用 MANUAL 回调、也不把 active 置回 true）：实测 Godot 4.7，
 ## 运行时切换 process_callback 或重新 set_active(true) 后，AnimationTree 激活首帧
@@ -614,23 +587,18 @@ func set_anim_update_hz(hz: float) -> void:
 	if _anim_tree == null:
 		return
 	_adv_hz = hz
-	# 逐单位相位错开：推进/解算累积器随机初相，群体在低频档各自的"跳步帧"
+	# 逐单位相位错开：推进累积器随机初相，群体在低频档各自的"跳步帧"
 	# 互相错开——远观是纷杂的步态差异，而不是全体同步的定格-跳步（人群动画
 	# 惯用手法；hz ≥ fps 时每帧都推进，相位无可见影响）
 	_adv_accum = randf() * (1.0 / hz) if hz > 0.0 else 0.0
-	_solve_accum = randf() * (1.0 / maxf(hz, 1.0)) if hz > 0.0 else 0.0
 	if hz <= 0.0:
 		_anim_driven = false
-		_solve_hz = 0.0
 		_stagger_k = 1
 		if _anim_tree.active:
 			_anim_tree.active = false
-		# 完全暂停档：骨架解算一并冻结（接入过 LOD 才动内部处理，未接入保持原生）
-		set_process_internal(false)
 		_forward_overlay_hz(0.0)
 		return
 	_anim_driven = true
-	_solve_hz = minf(hz, 30.0)
 	if _anim_tree.active:
 		_anim_tree.active = false
 	# 低帧率分桶：桶相位随机化（与推进累积器的随机初相同款人群错峰思路），
@@ -654,11 +622,10 @@ func _forward_overlay_hz(hz: float) -> void:
 ## 重估低帧率分桶数（每 STAGGER_REEVAL 秒）：全速档（hz≥60，节流未失效、
 ## 每帧推进本就是原生行为）不参与；节流档按引擎实测 fps 定桶（阈值见
 ## STAGGER_K2_FPS 注）。桶数变化时同步 overlay 并转发相位。
-## 环境变量 STICK_RIG_STAGGER=0 强制关闭（A/B 实测用）：实测净收益 ≈0——
-## 非持久 override 机制下解算不可跳帧（跳了肢体飞），advance/overlay/flush
-## 的节省被解算墙吞掉（headless 96 实证：分桶 9.6 vs 基线 9.5 ticks/s，
-## 跳解算的 buggy 版 13.5）；本机制保留作代码解算 IK（交接档 §十一 刀③）
-## 落地后的跳帧框架。
+## 环境变量 STICK_RIG_STAGGER=0 强制关闭（A/B 实测用）。
+## 收益史（headless 96）：刀③前解算每帧跑（非持久 override 约束），分桶
+## 只省 advance/叠加/批写三块，净收益 ≈0（9.6 vs 基线 9.5）；刀③禁栈+停
+## internal 后跳过帧四块全省，14.7 ticks/s（+48%，vs 开栈基线 9.6~10.1）。
 func _reeval_stagger() -> void:
 	if OS.get_environment("STICK_RIG_STAGGER") == "0":
 		_stagger_k = 1

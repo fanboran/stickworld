@@ -1,23 +1,16 @@
 class_name GlobalHUD
 extends Control
-## 全局 HUD —— 顶层常驻 UI（顶栏三段式：左=时间心智，中=资源，右=系统/功能）。
+## 全局 HUD —— 顶层常驻 UI。
 ##
-## 左块：速度按钮组（‖/1x/2x/4x，显示即控制）+「第X天 HH:MM」；中块：资源条
-## （ResourceBar 内嵌手绘横条，弹簧居中，attach_resources 注入）；右块：编制+
-## 帝国功能常驻入口（总览/科技/物流/成就——占位面板先行）+居中/脱困/预览+设置。
-## 时钟表盘在顶栏下方右上角。
+## 顶栏左段=按钮群（编制+帝国功能常驻入口+居中/脱困/预览+设置）；速度控制
+## 收进右上角时钟的 P 社式速度弧（ClockWidget 下半圆四段，点击调速），天数/
+## 时间显示在时钟正下方；资源条为顶栏下方左侧横条（ResourceBarHost，
+## attach_resources 注入，避开顶部中央小地图）。
 
 const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/resource_bar.gd")
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
-## 速度按钮组（‖/1x/2x/4x）：显示即控制，当前档字色琥珀；Index 与 TimeManager.Speed 对齐
-@onready var speed_buttons: Array = [
-	get_node_or_null("MarginContainer/HBoxContainer/SpeedPauseButton"),
-	get_node_or_null("MarginContainer/HBoxContainer/Speed1Button"),
-	get_node_or_null("MarginContainer/HBoxContainer/Speed2Button"),
-	get_node_or_null("MarginContainer/HBoxContainer/Speed4Button"),
-]
-@onready var day_time_label: Label = get_node_or_null("MarginContainer/HBoxContainer/DayTimeLabel")
+@onready var day_time_label: Label = get_node_or_null("DayTimeLabel")
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
@@ -29,8 +22,8 @@ const EMPIRE_PRESETS: Dictionary = {
 	"OverviewButton": "empire_overview", "TechButton": "tech_tree",
 	"LogisticsButton": "logistics", "CollectionButton": "collection",
 }
-## 材料面板（顶栏中段，ResourceBar 挂这里）
-@onready var _resource_host: PanelContainer = get_node_or_null("MarginContainer/HBoxContainer/ResourceBarHost")
+## 材料面板（顶栏下方左侧横条，ResourceBar 挂这里）
+@onready var _resource_host: PanelContainer = get_node_or_null("ResourceBarHost")
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -58,12 +51,6 @@ func attach_resources(resources_api: Node) -> Control:
 
 func _ready() -> void:
 	_bind_event_bus()
-	_update_speed_display()
-	for i in speed_buttons.size():
-		var btn: Button = speed_buttons[i]
-		if btn != null:
-			# TimeManager.Speed 枚举序：0=暂停 1/2/4=倍速，与按钮顺序一致
-			btn.pressed.connect(_on_speed_pressed.bind(i))
 	if centered_button != null:
 		centered_button.pressed.connect(_on_centered_button_pressed)
 		_update_centered_button_text()
@@ -82,7 +69,6 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	_update_speed_display()
 	_update_time_display()
 
 
@@ -111,32 +97,6 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 
 # ─────────────────────────────── 更新显示 ────────────────────────────────
 
-## 速度组显示即控制：当前档琥珀高亮；暂停时 ‖ 档醒目橙红（战斗自动暂停的
-## 可发现性——玩家第一眼看到"怎么继续"）
-func _update_speed_display() -> void:
-	if TimeManager == null or speed_buttons.is_empty():
-		return
-	var paused: bool = TimeManager.is_paused()
-	var key := "%d|%d" % [TimeManager.current_speed, int(paused)]
-	if key == _last_speed_key:
-		return
-	_last_speed_key = key
-	for i in speed_buttons.size():
-		var btn: Button = speed_buttons[i]
-		if btn == null:
-			continue
-		if i == TimeManager.current_speed:
-			btn.add_theme_color_override("font_color",
-					Color(1.0, 0.55, 0.35) if paused else StickTokens.ACCENT)
-		else:
-			btn.remove_theme_color_override("font_color")
-
-
-func _on_speed_pressed(idx: int) -> void:
-	if TimeManager != null:
-		TimeManager.set_speed(idx)
-
-
 func _update_time_display() -> void:
 	if day_time_label == null:
 		return
@@ -153,7 +113,7 @@ func _update_time_display() -> void:
 
 
 func _on_pause_changed(_paused: bool) -> void:
-	_update_speed_display()
+	pass  # 速度弧高亮由 ClockWidget 自行监听 TimeManager 状态驱动
 
 
 # ─────────────────────────────── 通知 ────────────────────────────────
@@ -170,8 +130,7 @@ var _camera_rig: Node = null
 var _game_root: Node = null
 ## 顶栏内嵌资源条（attach_resources 注入）
 var _resource_bar: Control = null
-## 速度/时间显示脏检查缓存（-1 = 从未写过，首帧必写）
-var _last_speed_key: String = ""
+## 时间显示脏检查缓存（-1 = 从未写过，首帧必写）
 var _last_minute_of_day: int = -1
 var _last_day: int = -1
 

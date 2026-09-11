@@ -31,6 +31,7 @@ var _tip_idx: int = 0
 
 
 func _ready() -> void:
+	add_to_group("world_loading_overlay")
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()

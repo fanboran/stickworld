@@ -511,11 +511,16 @@ func _show_loading(message: String, ratio: float = -1.0) -> void:
 		_world_loading_overlay.show_loading(message, ratio)
 
 
-## 装配世界加载覆盖层：挂 game_root 自身高层 CanvasLayer（layer=10，盖住 UIRoot），
-## 在 game_root._ready 最开头调用，覆盖装配+加载全期，不依赖尚未装配的 UIRoot。
+## 装配世界加载覆盖层：优先认领启动跳板（loading_screen）挂在**场景树根**的
+## 常驻加载层（跨场景切换存活——交接零缝隙）；直启（编辑器 F5/测试）无跳板时
+## 自建兜底（game_root 自身高层 CanvasLayer，layer=10，盖住 UIRoot）。
 func _setup_world_loading_overlay() -> void:
 	if _world_loading_overlay != null:
 		return
+	for n in get_tree().get_nodes_in_group("world_loading_overlay"):
+		if is_instance_valid(n):
+			_world_loading_overlay = n
+			return
 	var layer := CanvasLayer.new()
 	layer.name = "WorldLoadingLayer"
 	layer.layer = LayerOrder.WORLD_LOADING

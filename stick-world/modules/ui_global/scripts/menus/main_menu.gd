@@ -54,7 +54,7 @@ func _ready() -> void:
 	_build_title()
 	_start_title_entrance()
 	_build_menu()
-	_version_label.text = "v0.2 Demo · stick-world"
+	_version_label.text = "v0.6.0 Demo · stick-world"
 	_version_label.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	# 亮天空上 TEXT_FAINT 不可见：改暖墨半透明（与描边同族）
 	_version_label.modulate = Color(0.08, 0.06, 0.05, 0.55)

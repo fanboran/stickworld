@@ -29,7 +29,6 @@ BalanceConfig="*res://core/autoload/balance_config.gd"
 AudioManager="*res://core/services/audio_manager.gd"
 SaveManager="*res://core/autoload/save_manager.gd"
 DebugApi="*res://modules/debug_gui/api.gd"
-PerfProbe="*res://tests/dev/perf_probe.gd"
 
 [display]
 

@@ -134,16 +134,99 @@ func _on_menu_pressed(item: Dictionary) -> void:
 			_open_arena_panel()
 
 
-## 测试场景选择面板（开发构建专用；非正式玩法入口）。
-## 场景清单在此登记：名称 + 场景路径；新测试场景加一行即可。
-const TEST_SCENES: Array[Dictionary] = [
-	{"name": "大乱斗观察场（12v12 混编自动互殴）", "path": "res://tests/dev/battle_arena.tscn"},
-	{"name": "单位动作画廊（全员单位×全部动作对比）", "path": "res://tests/dev/unit_action_gallery.tscn"},
-	{"name": "手绘皮肤全族陈列（自绘沸腾 + StickHand 字体）", "path": "res://tests/dev/sketch_compare.tscn"},
-	{"name": "手绘云候选陈列（动漫体积/油画厚涂）", "path": "res://tests/dev/sketch_cloud_gallery.tscn"},
+## 测试场景选择窗（开发构建专用；非正式玩法入口）。
+## 左分类右列表结构：SCENE_GROUPS 定义分组，DirAccess 全量扫描 res://tests/dev
+## 分桶收录——游戏内不可达的独立场景一枚不漏；DEV_SCENE_NAMES 给常用场景中
+## 文名，未登记场景以文件名入列（下划线前缀 = 内部辅助件，不入列）。
+const DEV_SCENE_NAMES: Dictionary = {
+	"res://tests/dev/battle_arena.tscn": "大乱斗观察场（12v12 混编自动互殴）",
+	"res://tests/dev/unit_action_gallery.tscn": "单位动作画廊（全员单位×全部动作对比）",
+	"res://tests/dev/sketch_compare.tscn": "手绘皮肤全族陈列（自绘沸腾 + StickHand 字体）",
+	"res://tests/dev/sketch_cloud_gallery.tscn": "手绘云候选陈列（动漫体积/油画厚涂）",
+	"res://tests/dev/dev_playtest.tscn": "开发者试玩场",
+	"res://tests/dev/battle_sim.tscn": "战斗模拟观测",
+	"res://tests/dev/battle_perf.tscn": "战斗性能观测",
+	"res://tests/dev/world_perf.tscn": "世界性能观测",
+	"res://tests/dev/siege_wall_showcase.tscn": "攻城城墙陈列",
+	"res://tests/dev/preview_glass_demo.tscn": "玻璃拟态预览",
+	"res://tests/dev/verify_battle.tscn": "功能验证：战斗",
+	"res://tests/dev/verify_build.tscn": "功能验证：建造",
+	"res://tests/dev/verify_harvest.tscn": "功能验证：采集",
+	"res://tests/dev/verify_quest.tscn": "功能验证：任务",
+	"res://tests/dev/verify_parallax.tscn": "功能验证：视差",
+}
+
+## 界面模板陈列（modules/ui_global 场景，游戏内不可达）
+const TEMPLATE_SCENES: Array[Dictionary] = [
+	{"name": "模板总索引", "path": "res://modules/ui_global/scenes/templates/template_index.tscn"},
+	{"name": "组件全族陈列", "path": "res://modules/ui_global/scenes/templates/component_gallery.tscn"},
+	{"name": "HUD 模板", "path": "res://modules/ui_global/scenes/templates/hud_template.tscn"},
+	{"name": "主菜单模板", "path": "res://modules/ui_global/scenes/templates/main_menu_template.tscn"},
+	{"name": "设置模板", "path": "res://modules/ui_global/scenes/templates/settings_template.tscn"},
+	{"name": "工作区模板", "path": "res://modules/ui_global/scenes/templates/workspace_template.tscn"},
 ]
 
+## 场景分组（左分类栏）：names=按文件基名收编，prefix=按前缀收编，
+## templates=界面模板固定组；未匹配场景进「其他」组兜底
+const SCENE_GROUPS: Array[Dictionary] = [
+	{"id": "play", "title": "试玩与观测", "names": ["battle_arena", "unit_action_gallery",
+		"dev_playtest", "battle_sim", "battle_perf", "world_perf", "siege_wall_showcase",
+		"record_demo", "record_night"]},
+	{"id": "gallery", "title": "画廊陈列", "names": ["sketch_compare", "sketch_cloud_gallery",
+		"preview_glass_demo"]},
+	{"id": "verify", "title": "功能验证", "prefix": "verify_"},
+	{"id": "diag", "title": "诊断脚本", "prefix": "diag_"},
+	{"id": "templates", "title": "界面模板", "templates": true},
+]
+
+## 扫描 res://tests/dev 的全部场景，按 SCENE_GROUPS 分桶（下划线前缀 = 内部
+## 辅助件跳过）；未匹配进「其他」。返回 [{title, items:[{display, path}]}]
+static func _arena_buckets() -> Array[Dictionary]:
+	var buckets: Array[Dictionary] = []
+	var consumed: Dictionary = {}
+	for g: Dictionary in SCENE_GROUPS:
+		var items: Array[Dictionary] = []
+		if g.get("templates", false):
+			for t: Dictionary in TEMPLATE_SCENES:
+				items.append({"display": t["name"], "path": t["path"]})
+		else:
+			var dir := DirAccess.open("res://tests/dev")
+			if dir != null:
+				dir.list_dir_begin()
+				var f := dir.get_next()
+				while f != "":
+					var base := f.get_basename()
+					if f.ends_with(".tscn") and not f.begins_with("_"):
+						var hit: bool = (g.get("prefix", "") != "" and base.begins_with(g["prefix"])) \
+								or base in g.get("names", [])
+						if hit:
+							var path := "res://tests/dev/" + f
+							items.append({"display": DEV_SCENE_NAMES.get(path, base), "path": path})
+							consumed[f] = true
+					f = dir.get_next()
+				dir.list_dir_end()
+		if not items.is_empty():
+			buckets.append({"title": g["title"], "items": items})
+	# 兜底：未归组的场景收进「其他」
+	var rest: Array[Dictionary] = []
+	var dir2 := DirAccess.open("res://tests/dev")
+	if dir2 != null:
+		dir2.list_dir_begin()
+		var f2 := dir2.get_next()
+		while f2 != "":
+			if f2.ends_with(".tscn") and not f2.begins_with("_") and not consumed.has(f2):
+				rest.append({"display": f2.get_basename(), "path": "res://tests/dev/" + f2})
+			f2 = dir2.get_next()
+		dir2.list_dir_end()
+	if not rest.is_empty():
+		rest.sort_custom(func(a, b): return a["display"] < b["display"])
+		buckets.append({"title": "其他", "items": rest})
+	return buckets
+
 var _arena_panel: Control = null
+var _arena_group_buttons: Dictionary = {}
+var _arena_list_box: VBoxContainer = null
+var _arena_bucket_data: Array[Dictionary] = []
 
 func _open_arena_panel() -> void:
 	if _arena_panel != null and is_instance_valid(_arena_panel):
@@ -151,27 +234,67 @@ func _open_arena_panel() -> void:
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.55)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 点暗幕空白处关闭
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed:
+			_close_arena_panel())
 	add_child(dim)
 	_arena_panel = dim
 	var panel := SketchPanel.new()
+	panel.custom_minimum_size = Vector2(920, 620)
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	dim.add_child(panel)
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
+	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
 	var title := Label.new()
 	title.text = "测试场景"
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 24)
 	vbox.add_child(title)
-	for scene_info in TEST_SCENES:
-		# StickKit.button 内部已挂到 vbox，不再手动 add_child（重复挂父会报错）
-		StickKit.sketch_button(vbox, scene_info["name"],
-				func(): get_tree().change_scene_to_file(scene_info["path"]),
-				StickKit.ButtonKind.ACCENT, StickTokens.BTN_H)
-	StickKit.sketch_button(vbox, "返回", _close_arena_panel,
+	# 左分类 + 右列表（设置面板同款骨架；单列滚到底放不下 40+ 场景）
+	var body := HBoxContainer.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 12)
+	vbox.add_child(body)
+	var cats := VBoxContainer.new()
+	cats.custom_minimum_size = Vector2(150, 0)
+	cats.add_theme_constant_override("separation", 4)
+	body.add_child(cats)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(scroll)
+	_arena_list_box = VBoxContainer.new()
+	_arena_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_arena_list_box.add_theme_constant_override("separation", 5)
+	scroll.add_child(_arena_list_box)
+	_arena_bucket_data = _arena_buckets()
+	for i in _arena_bucket_data.size():
+		var btn := StickKit.sketch_button(cats, _arena_bucket_data[i]["title"],
+				_select_arena_group.bind(i), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_arena_group_buttons[i] = btn
+	_select_arena_group(0)
+	StickKit.sketch_button(vbox, "关闭", _close_arena_panel,
 			StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+
+
+## 切换右侧场景列表（分类按钮琥珀高亮=选中）
+func _select_arena_group(idx: int) -> void:
+	for i in _arena_group_buttons:
+		var b: Button = _arena_group_buttons[i]
+		b.kind = SketchButton.Kind.ACCENT if i == idx else SketchButton.Kind.NORMAL
+	for child in _arena_list_box.get_children():
+		child.queue_free()
+	for item: Dictionary in _arena_bucket_data[idx]["items"]:
+		var btn := StickKit.sketch_button(_arena_list_box, item["display"],
+				func(): get_tree().change_scene_to_file(item["path"]),
+				StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.add_theme_font_size_override("font_size", 15)
 
 
 func _close_arena_panel() -> void:

@@ -8,7 +8,7 @@ resource_name = "personality"
 _meta = {
 	"resource_name": "personality",
 	"version": "0.2.0",
-	"description": "AI personality 难度档案（A1 · C2 + A2 · C3/C4/C5 + A3 · C6，设计文档12号）。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.personality）与热重载。global 行 = L4 层基础节拍 + 任务槽内核参数（C3 槽超时 / C4 四因子评分权重，CoH 真值）；easy/standard/hard/hardest 行 = 难度档覆盖参数（standard 行 = 代码默认档案的配置化镜像）；retreat_chance = A3 概率调制撤退掷骰（L1 个体层消费，ai.behavior_profiles 基线值兜底）。全部数值语义推断初值，待实测校准。",
+	"description": "AI personality 难度档案（A1 · C2 + A2 · C3/C4/C5 + A3 · C6 + A4 · C7，设计文档12号）。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.personality）与热重载。global 行 = L4 层基础节拍 + 任务槽内核参数（C3 槽超时 / C4 四因子评分权重，CoH 真值）+ default_behavior v2 效用打分参数（C7：default_behavior_v2_enabled 开关默认关 = 零回归门，demand_increment=±分基准 CoH 50，方差扰动单旋钮 demand_variance 走难度行）；easy/standard/hard/hardest 行 = 难度档覆盖参数（standard 行 = 代码默认档案的配置化镜像）；retreat_chance = A3 概率调制撤退掷骰（L1 个体层消费，ai.behavior_profiles 基线值兜底）。全部数值语义推断初值，待实测校准。",
 	"category": "ai"
 }
 variables = {
@@ -33,7 +33,9 @@ variables = {
 			"base_threat_threshold": 5.0,
 			"base_threat_floor": 5.0,
 			"vp_rule_enabled": false,
-			"description": "L4 阵营 AI 全局行：beat_interval=C1 基础节拍（CoH 0.5s 真值）；slot_kernel_enabled=决策内核开关（false 退化 SWL 比例条件，咬合③）；score_* = C4 目标评分四因子权重（CoH 真值 5/10/5/5/1.4）与取数半径/归一尺度；attack/defend_*_timeout = C3 槽集结/目标超时（CoH 3min/30s/2min）；base_threat_*=C5 基地威胁封顶（0-100 口径，CoH 5/5）；vp_rule_enabled=C5 规则一胜利目标危急（开放问题#1 无 VP 等价物，缺省关闭【提案/待定】）"
+			"default_behavior_v2_enabled": false,
+			"demand_increment": 50.0,
+			"description": "L4 阵营 AI 全局行：beat_interval=C1 基础节拍（CoH 0.5s 真值）；slot_kernel_enabled=决策内核开关（false 退化 SWL 比例条件，咬合③）；score_* = C4 目标评分四因子权重（CoH 真值 5/10/5/5/1.4）与取数半径/归一尺度；attack/defend_*_timeout = C3 槽集结/目标超时（CoH 3min/30s/2min）；base_threat_*=C5 基地威胁封顶（0-100 口径，CoH 5/5）；vp_rule_enabled=C5 规则一胜利目标危急（开放问题#1 无 VP 等价物，缺省关闭【提案/待定】）；default_behavior_v2_enabled=C7 效用打分选择器开关（消费组织 default_behavior 字段，缺省关闭=零回归门）；demand_increment=C7 ±分基准（命中 +N 未命中 -N，CoH s_demand_increment=50 真值）；方差扰动单旋钮 demand_variance 在难度行（收敛红线·咬合④）"
 		},
 		{
 			"id": "easy",

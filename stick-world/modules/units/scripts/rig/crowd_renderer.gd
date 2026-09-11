@@ -234,6 +234,13 @@ var _used_count: Dictionary = {}  # band -> int
 ## 累乘缓存（tick 复用避免分配）
 var _acc: Array = []
 var _local: Array = []
+## 阴影桶：全局单 MMI（接触阴影无单位间遮挡语义，不分带不随 y 排序）。
+## 实例行 = 平移(0, foot_offset+2) × 压扁(0.9,0.26)，观感与原 ContactShadow
+## Sprite 一致（同参数径向渐变纹理）。注册时隐藏原 Sprite，注销恢复。
+var _shadow_mmi: MultiMeshInstance2D = null
+var _shadow_mm: MultiMesh = null
+var _shadow_buf: PackedFloat32Array = PackedFloat32Array()
+var _shadow_cap: int = 0
 
 
 ## 装配：创建 4 带 × 4 桶 MMI（容器 Node2D，z=ENTITY=3 同层；带间靠树序
@@ -285,6 +292,33 @@ func setup(parent: Node2D, y_top: float = 0.0, y_bottom: float = 1024.0) -> void
 	if _acc.size() != _bone_ids.size():
 		_acc.resize(_bone_ids.size())
 		_local.resize(_bone_ids.size())
+	# 阴影桶 MMI（z=1 DECORATION 层，与原 ContactShadow Sprite 同层同观感）
+	var smmi := MultiMeshInstance2D.new()
+	smmi.name = "CrowdShadows"
+	smmi.texture = BatchRig._get_white_tex()  # 纯白兜底纹理：软边全靠多层实例色阶梯
+	smmi.z_index = 1
+	smmi.z_as_relative = false
+	var smm := MultiMesh.new()
+	smm.transform_format = MultiMesh.TRANSFORM_2D
+	smm.use_colors = true
+	smm.mesh = BatchRig._get_quad_mesh()
+	smm.instance_count = 0
+	smm.custom_aabb = AABB(Vector3(-4096.0, -4096.0, 0.0), Vector3(16384.0, 16384.0, 0.0))
+	smmi.multimesh = smm
+	container.add_child(smmi)
+	_shadow_mmi = smmi
+	_shadow_mm = smm
+
+
+## 阴影桶容量按需翻倍扩（零变换行=隐形，instance_count 恒为容量）
+func _ensure_shadow_cap(n: int) -> void:
+	if n <= _shadow_cap:
+		return
+	while _shadow_cap < n:
+		_shadow_cap = maxi(_shadow_cap * 2, 16)
+	_shadow_mm.instance_count = _shadow_cap
+	_shadow_buf.resize(_shadow_cap * 12)
+	_shadow_mm.buffer = _shadow_buf
 
 
 ## y → 带号（clamp 到尾带兜底）
@@ -330,6 +364,10 @@ func register_unit(entity: Node) -> Dictionary:
 		"renderer": weakref(self),  # 实体 _exit_tree/_on_possession_changed 经此注销
 	}
 	_slots[slot["slot"]] = slot
+	# 阴影进 crowd 桶：原 ContactShadow Sprite 停用（注销/回退时恢复）
+	var shadow: Node = entity.get_node_or_null("ContactShadow")
+	if shadow != null:
+		shadow.visible = false
 	if rig.has_method("set_crowd_hook"):
 		rig.set_crowd_hook(Callable(self, "_on_rig_play").bind(slot))
 	return slot
@@ -392,6 +430,11 @@ func unregister_unit(slot: Dictionary) -> void:
 	var rig: Node = slot.get("rig")
 	if rig != null and is_instance_valid(rig) and rig.has_method("set_crowd_hook"):
 		rig.set_crowd_hook(Callable())  # 解除代理：rig 恢复可见，动画交还 LOD/富管线
+	var ent = slot.get("entity")
+	if ent != null and is_instance_valid(ent):
+		var shadow: Node = ent.get_node_or_null("ContactShadow")
+		if shadow != null:
+			shadow.visible = true  # 阴影交还原 Sprite
 	for w in slot.get("weapons", []):
 		var node: Node2D = w.get("node")
 		var hand: Node2D = w.get("hand")
@@ -475,6 +518,43 @@ func tick(delta: float) -> void:
 		var mm: MultiMesh = (_mm[idx].multimesh if _mm[idx] is MultiMeshInstance2D else null)
 		if mm != null and mm.instance_count > 0:
 			mm.buffer = _buf[idx]
+	# 阴影桶：全部活单位写入（变换布局与身体桶一致：[xx,yx,0,ox, xy,yy,0,oy, rgba]）。
+	# quad 基准 1×1、白纹理 4px——软边观感用 3 层同心椭圆阶梯叠加（alpha 合成
+	# 中心 ≈0.34 边缘 0.08，逼近原渐变 Sprite）；带 alpha 的自绘纹理在 MMI
+	# 管线实测不渲染（白纹对照实验定位），故纹理只用纯白、明暗全走实例色
+	if _shadow_mm != null:
+		var ts: float = 64.0
+		var n: int = 0
+		for idx in _slots.size():
+			var slot = _slots[idx]
+			if slot == null or slot.is_empty() or bool(slot["hidden"]):
+				continue
+			var entity: Node = slot["entity"]
+			if entity == null or not is_instance_valid(entity):
+				continue
+			_ensure_shadow_cap(n + 3)
+			var fo = entity.get("foot_offset")
+			var oy: float = (float(fo) if fo != null else 45.0) + 2.0
+			var px: float = entity.global_position.x
+			var py: float = entity.global_position.y + oy
+			for layer in 3:
+				var r: float = [1.0, 0.72, 0.46][layer]
+				var a: float = [0.08, 0.13, 0.16][layer]
+				var o := (n + layer) * 12
+				_shadow_buf[o] = 0.9 * ts * r
+				_shadow_buf[o + 1] = 0.0
+				_shadow_buf[o + 2] = 0.0
+				_shadow_buf[o + 3] = px
+				_shadow_buf[o + 4] = 0.0
+				_shadow_buf[o + 5] = 0.26 * ts * r
+				_shadow_buf[o + 6] = 0.0
+				_shadow_buf[o + 7] = py
+				_shadow_buf[o + 8] = 0.0
+				_shadow_buf[o + 9] = 0.0
+				_shadow_buf[o + 10] = 0.0
+				_shadow_buf[o + 11] = a
+			n += 3
+		_shadow_mm.buffer = _shadow_buf
 
 
 ## 战斗结束/销毁：释放容器（含全部带桶 MMI；实体侧 meta 由调用方清）
@@ -489,6 +569,10 @@ func teardown() -> void:
 	_free_slots.clear()
 	_free_band.clear()
 	_used_count.clear()
+	_shadow_mmi = null
+	_shadow_mm = null
+	_shadow_buf = PackedFloat32Array()
+	_shadow_cap = 0
 	_host = null
 
 

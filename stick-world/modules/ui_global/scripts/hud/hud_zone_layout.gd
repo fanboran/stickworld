@@ -119,7 +119,8 @@ func place(zone_id: StringName, control: Control) -> void:
 		var members: Array = _stack_members.get(zone_id, [])
 		members.append(control)
 		_stack_members[zone_id] = members
-		control.resized.connect(_on_member_resized.bind(control))
+		control.resized.connect(_on_member_geometry_changed.bind(control))
+		control.minimum_size_changed.connect(_on_member_geometry_changed.bind(control))
 		_request_restack(zone_id)
 	else:
 		if mode == "dock" and _dock_occupant.has(zone_id) and is_instance_valid(_dock_occupant[zone_id]):
@@ -151,7 +152,7 @@ func _apply_static(zone_id: StringName, c: Control) -> void:
 		c.offset_right = region[2]
 		c.offset_bottom = region[3]
 		return
-	var sz := _member_size(c)
+	var sz: Vector2 = c.get_combined_minimum_size()
 	var l: float = region[0]
 	var t: float = region[1]
 	match String(zone.get("dock_h", "begin")):
@@ -171,7 +172,12 @@ func _apply_static(zone_id: StringName, c: Control) -> void:
 	_warn_if_outside(zone_id, c, Rect2(l, t, sz.x, sz.y), region)
 
 
-## 堆叠重排：游标自保留区顶起，逐成员按实际 rect 下移（水平按 stack_h 停靠）
+## 堆叠重排：游标自保留区顶起，逐成员按声明体量（get_combined_minimum_size）
+## 下移，水平按 stack_h 停靠。
+##
+## 体量只信声明值不信当前 size：autowrap 文本部件的 min 高度依赖宽度，放置
+## 帧可能量到虚高值并被 offsets 固化成死点；取声明值 + 监听
+## minimum_size_changed，宽度就位后 min 回落即自动重排收缩（自愈）。
 func _restack(zone_id: StringName) -> void:
 	var zone: Dictionary = ZONES.get(zone_id, {})
 	if zone.is_empty():
@@ -182,17 +188,19 @@ func _restack(zone_id: StringName) -> void:
 		return is_instance_valid(m) and not m.is_queued_for_deletion())
 	_stack_members[zone_id] = members
 	var region: Array = zone["region"]
+	var anchors: Array = zone["anchors"]
+	var dock: String = zone.get("stack_h", "begin")
 	var gap: float = zone.get("gap", 0.0)
 	var y: float = region[1]
 	for m: Control in members:
-		var sz := _member_size(m)
+		var sz: Vector2 = m.get_combined_minimum_size()
 		var l: float = region[0]
-		match String(zone.get("stack_h", "begin")):
+		match dock:
 			"end":
 				l = region[2] - sz.x
 			"center":
 				l = (region[0] + region[2] - sz.x) * 0.5
-		_set_anchors(m, zone["anchors"])
+		_set_anchors(m, anchors)
 		m.offset_left = l
 		m.offset_top = y
 		m.offset_right = l + sz.x
@@ -213,7 +221,7 @@ func _restack_deferred(zone_id: StringName) -> void:
 	_restack(zone_id)
 
 
-func _on_member_resized(control: Control) -> void:
+func _on_member_geometry_changed(control: Control) -> void:
 	var zone_id: Variant = _member_zone.get(control)
 	if zone_id != null:
 		_request_restack(zone_id)
@@ -234,10 +242,10 @@ func _detach(control: Control) -> void:
 	if members.has(control):
 		members.erase(control)
 		_request_restack(old)
-	var sig := control.resized
-	var bound := _on_member_resized.bind(control)
-	if sig.is_connected(bound):
-		sig.disconnect(bound)
+	for sig: Signal in [control.resized, control.minimum_size_changed]:
+		var bound := _on_member_geometry_changed.bind(control)
+		if sig.is_connected(bound):
+			sig.disconnect(bound)
 
 
 ## 清理已销毁部件的登记（place 时顺手，避免长局泄漏）
@@ -251,14 +259,6 @@ func _prune() -> void:
 
 
 # ─────────────────────────────── 内部：几何辅助 ────────────────────────────────
-
-## 成员体量 = max(声明的最小尺寸, 当前 rect)——未布局完时取声明值，容器长高后
-## 经 resized 重排推进游标
-static func _member_size(c: Control) -> Vector2:
-	return Vector2(
-			maxf(c.get_combined_minimum_size().x, c.size.x),
-			maxf(c.get_combined_minimum_size().y, c.size.y))
-
 
 static func _set_anchors(c: Control, a: Array) -> void:
 	c.anchor_left = a[0]

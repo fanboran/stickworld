@@ -25,10 +25,10 @@ const SPEEDS: Array[Dictionary] = [
 ## 与正式 ResourceBar 的五资源同单（res_gold/res_diamond 为 2026-09-06 新增档）
 const RESOURCES: Array[Dictionary] = [
 	{"id": "res_wood", "icon": "木", "motif": "板条箱", "name": "木材", "amount": 150},
-	{"id": "res_stone", "icon": "石", "motif": "矿石", "name": "石料", "amount": 90},
+	{"id": "res_stone", "icon": "石", "motif": "石料", "name": "石料", "amount": 90},
 	{"id": "res_metal", "icon": "铁", "motif": "铁砧", "name": "金属矿", "amount": 34},
 	{"id": "res_gold", "icon": "金", "motif": "金币", "name": "黄金", "amount": 58},
-	{"id": "res_diamond", "icon": "钻", "motif": "", "name": "钻石", "amount": 2},
+	{"id": "res_diamond", "icon": "钻", "motif": "钻石", "name": "钻石", "amount": 2},
 ]
 
 ## 快捷栏格子（堆叠满足感：图标 + 角标热键 + 数量徽标；motif = 管线母题名）

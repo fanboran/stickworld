@@ -13,12 +13,13 @@ var _title_label: Label
 
 func _ready() -> void:
 	name = "QuestPanel"
-	# 角落部件自设 anchor：右上角（顶栏 + 资源条约占顶部 128px，从 132 起）
-	set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	offset_left = -298.0
-	offset_right = -16.0
-	offset_top = 132.0
-	grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	# 角落部件自设 anchor：左上角（顶栏按钮群下方、资源条之下——右上角已让位
+	# 给时钟+速度弧；后续多任务线扩展时改为左侧可滚动任务列表）
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	offset_left = 16.0
+	offset_right = 298.0
+	offset_top = 116.0
+	grow_horizontal = Control.GROW_DIRECTION_END
 	super._ready()  # SketchPanel：手绘底 + 沸腾
 	tone = Tone.LIGHT
 	mouse_filter = Control.MOUSE_FILTER_IGNORE

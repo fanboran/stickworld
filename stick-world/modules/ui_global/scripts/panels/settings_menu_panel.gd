@@ -83,7 +83,9 @@ func _build_content() -> void:
 	StickKit.auto_button(_footer, "恢复默认", _on_reset_defaults)
 	StickKit.auto_button(_footer, "应用", _on_apply, StickKit.ButtonKind.ACCENT)
 	if _game_root != null:
-		StickKit.auto_button(_footer, "保存并回到主菜单", _on_return_to_menu_pressed)
+		var btn_menu := StickKit.auto_button(_footer, "保存并回到主菜单", _on_return_to_menu_pressed)
+		btn_menu.icon = StickIcons.tex(&"房屋")
+		btn_menu.add_theme_constant_override("icon_max_width", 18)
 	StickKit.auto_button(_footer, "关闭（ESC）", close)
 
 
@@ -196,6 +198,8 @@ func _add_stuck_button() -> void:
 	var btn := StickKit.auto_button(_content_vbox, "脱离卡死（传送至附近空旷处）",
 			_on_stuck_pressed, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.icon = StickIcons.tex(&"传送门")
+	btn.add_theme_constant_override("icon_max_width", 18)
 
 
 func _on_stuck_pressed() -> void:
@@ -382,6 +386,8 @@ func _add_map_button(map_id: String) -> void:
 	var btn := StickKit.auto_button(_content_vbox, "前往 %s" % MAP_DISPLAY_NAMES.get(map_id, map_id),
 			_on_map_selected.bind(map_id), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.icon = StickIcons.tex(&"卷地图")
+	btn.add_theme_constant_override("icon_max_width", 16)
 
 
 func _on_map_selected(map_id: String) -> void:

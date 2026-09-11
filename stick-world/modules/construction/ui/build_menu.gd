@@ -173,12 +173,29 @@ func _refresh_list() -> void:
 		_list_container.add_child(empty)
 
 
+## 建筑条目 → 图标管线母题（未登记 id 不挂图，走纯文字）
+const BUILDING_MOTIFS: Dictionary = {
+	&"house": &"房屋", &"farm": &"麦穗", &"placeholder": &"帐篷", &"barracks": &"战鼓",
+	&"market": &"钱袋", &"academy": &"两本书",
+	&"smithy_lv1": &"铁砧", &"smithy_lv2": &"铁砧", &"smithy_lv3": &"铁砧", &"smithy_lv4": &"铁砧",
+	&"wall_tier1": &"石料", &"wall_tier2": &"石料", &"wall_tier3": &"石料", &"wall_gate": &"木门",
+	&"moat": &"小木船", &"warehouse": &"木桶", &"stone_warehouse": &"板条箱",
+	&"manor": &"王冠", &"timber_cottage": &"木锯", &"grand_hall": &"印章",
+}
+
+
 ## 创建单个建筑条目（按钮 + 资源消耗摘要）
 func _create_build_entry(def_id: String, def: Dictionary) -> Control:
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 2)
 	var btn := Button.new()
 	btn.text = str(def.get("name_zh", def_id))
+	var motif: StringName = BUILDING_MOTIFS.get(def_id, &"")
+	var tex := StickIcons.tex(motif) if motif != &"" else null
+	if tex != null:
+		btn.icon = tex
+		btn.expand_icon = true
+		btn.add_theme_constant_override("icon_max_width", 18)
 	# 与右下角「建造」按钮等高（30px），保证建造菜单内按钮尺寸统一
 	btn.custom_minimum_size = Vector2(0, 30)
 	btn.pressed.connect(_on_building_selected.bind(def_id))

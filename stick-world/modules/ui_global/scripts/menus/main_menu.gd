@@ -31,7 +31,7 @@ const MENU_ITEMS: Array[Dictionary] = [
 	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.NORMAL, "icon": &"齿轮"},
 	# 测试场景入口：仅开发构建显示（正式发布隐藏），字段 debug_only 过滤于 _build_menu
 	{"id": "arena", "label": "测试场景", "kind": StickKit.ButtonKind.NORMAL, "debug_only": true, "icon": &"立方体"},
-	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.NORMAL},
+	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.NORMAL, "icon": &"木门"},
 ]
 
 @onready var _menu_column: VBoxContainer = $MenuColumn

@@ -130,8 +130,9 @@ static func _setup_button(b: Button, callback: Callable, kind: ButtonKind) -> vo
 			b.add_theme_color_override("font_color", StickTokens.DANGER)
 	if callback.is_valid():
 		b.pressed.connect(callback)
-	# hover 微缩放（精致细节：按钮"浮起"感；pivot 居中避免缩放偏移）
-	b.pivot_offset = Vector2(0, b.custom_minimum_size.y * 0.5)
+	# hover 微缩放（精致细节：按钮"浮起"感）。pivot 必须双向居中——装配时宽度
+	# 还没被容器定下来，挂 resized 跟踪；锚在左缘会向右下放大（创始人否了）
+	b.resized.connect(func() -> void: b.pivot_offset = b.size * 0.5)
 	b.mouse_entered.connect(func() -> void:
 		if AudioManager and AudioManager.has_method("play_event"):
 			AudioManager.play_event("ui_hover")

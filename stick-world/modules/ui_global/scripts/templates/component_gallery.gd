@@ -48,12 +48,15 @@ func _build_buttons() -> void:
 	# 亮背景形态（主菜单在用）：纸面墨描边，黑玻璃上看反而发白——专供暖金天空
 	var row3 := StickKit.row(sec)
 	StickKit.label(row3, "亮背景：", StickKit.LabelKind.HINT)
-	var paper := StickKit.sketch_button(row3, "纸面按钮", _demo_toast("纸面按钮"))
-	paper.ink_skin = true
-	paper.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
-	var paper_primary := StickKit.sketch_button(row3, "纸面·主行动", _demo_toast("纸面·主行动"),
+	# PAPER 变体（主菜单在用）：纸面暖墨字，黑玻璃上看反而发白——专供暖金天空
+	StickKit.sketch_button(row3, "纸面按钮", _demo_toast("纸面按钮"), StickKit.ButtonKind.PAPER)
+	StickKit.sketch_button(row3, "纸面·主行动", _demo_toast("纸面·主行动"),
 			StickKit.ButtonKind.PRIMARY)
-	paper_primary.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
+	# ICON_SQUARE 变体（纯图标钮）：自绘沸腾方底 + center 图标（HUD 设置齿轮同款）
+	var square := SketchGearButton.new()
+	square.icon = load("res://assets/icons/齿轮_64.png")
+	square.tooltip_text = "ICON_SQUARE 变体（纯图标钮）"
+	row3.add_child(square)
 
 
 # ─────────────────────────────── 标签族 ────────────────────────────────

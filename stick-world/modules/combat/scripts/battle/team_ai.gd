@@ -112,10 +112,8 @@ func set_order_refs(orders: Node, formation: Node) -> void:
 func tick(delta: float) -> void:
 	if _battle == null or not is_instance_valid(_battle):
 		return
-	# 决策门禁双保险（宿主已保证 ENGAGED + 未暂停，TeamAi 再自检一层）
+	# 决策门禁（宿主已保证 ENGAGED；暂停/倍速由引擎总闸与 sim_delta 全局负责）
 	if not _battle.has_method("is_active") or not _battle.is_active():
-		return
-	if TimeManager != null and TimeManager.is_paused():
 		return
 	_decision_timer += delta
 	if _decision_timer < float(_p["stance_decision_interval"]):

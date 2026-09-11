@@ -51,10 +51,11 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if TimeManager and not TimeManager.is_paused():
-		# 推进时间
+	# 昼夜推进：本节点 PAUSABLE，暂停冻结由引擎总闸负责（原 is_paused 自查已删）；
+	# 步长经 sim_delta 携带速度档——修复「倍速不作用于昼夜」的节律脱钩
+	if TimeManager:
 		var hours_per_second: float = 24.0 / seconds_per_day
-		time_of_day += hours_per_second * delta
+		time_of_day += hours_per_second * TimeManager.sim_delta(delta)
 		if WorldState:
 			WorldState.game_time = time_of_day
 	# 更新光照

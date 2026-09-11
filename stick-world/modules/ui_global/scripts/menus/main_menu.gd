@@ -22,16 +22,18 @@ const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scri
 ## 手绘云（背景漂移云；与世界天空同选型期四风格混排）
 const SketchCloudScript: GDScript = preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
 
-## 菜单项数据：id / 文案 / 视觉档位 / 母题图标（icon = 管线母题中文名，无则不挂）
-## 新游戏 = PRIMARY（实底琥珀主行动点，§1.2）；继续游戏 = ACCENT（琥珀描边档）
+## 菜单项数据：id / 文案 / 变体档位 / 母题图标（icon = 管线母题中文名，无则不挂）
+## 亮天空上的次级入口一律 PAPER 纸面档（白描边贴图在亮底不可见）；
+## 新游戏 = PRIMARY（实底琥珀主行动点，§1.2）；
+## alpha = 半透明纸面（除顶部两个主行动外天空透出来，视觉层级落到主行动上）
 const MENU_ITEMS: Array[Dictionary] = [
-	{"id": "continue", "label": "继续游戏", "kind": StickKit.ButtonKind.ACCENT, "icon": &"卷轴"},
+	{"id": "continue", "label": "继续游戏", "kind": StickKit.ButtonKind.PAPER, "icon": &"卷轴"},
 	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.PRIMARY, "icon": &"旗帜"},
-	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.NORMAL, "icon": &"两本书"},
-	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.NORMAL, "icon": &"齿轮"},
+	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.PAPER, "icon": &"两本书", "alpha": 0.62},
+	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.PAPER, "icon": &"齿轮", "alpha": 0.62},
 	# 测试场景入口：仅开发构建显示（正式发布隐藏），字段 debug_only 过滤于 _build_menu
-	{"id": "arena", "label": "测试场景", "kind": StickKit.ButtonKind.NORMAL, "debug_only": true, "icon": &"立方体"},
-	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.NORMAL, "icon": &"木门"},
+	{"id": "arena", "label": "测试场景", "kind": StickKit.ButtonKind.PAPER, "debug_only": true, "icon": &"立方体", "alpha": 0.62},
+	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.PAPER, "icon": &"木门", "alpha": 0.62},
 ]
 
 @onready var _menu_column: VBoxContainer = $MenuColumn
@@ -44,6 +46,10 @@ var _title: Label = null
 
 
 func _ready() -> void:
+	# 暂停原语化：游戏内「退出到主菜单」可能带着引擎总闸（SceneTree.paused=true）
+	# 换场景，总闸不随场景切换复位——菜单按钮（PAUSABLE）会全部失灵，这里统一复位
+	if TimeManager != null and TimeManager.is_paused():
+		TimeManager.resume()
 	# 主菜单显式恢复沸腾（玩法场景置 false 后返回菜单不依赖对方清理）；
 	# 并确保驱动节点存在——ensure_driver 原本只由世界场景的 ui_root 装配调用，
 	# 全新启动直接进主菜单时驱动不存在，沸腾从未生效
@@ -84,19 +90,10 @@ func _build_menu() -> void:
 			continue
 		var btn := StickKit.sketch_button(_menu_column, item["label"],
 				_on_menu_pressed.bind(item), item["kind"], StickTokens.BTN_H_LG)
-		# 亮天空上的按钮：次级用纸面+墨描边形态（白描边贴图在亮底不可见）；
-		# PRIMARY 实底琥珀自带墨描边，不走纸面
-		if item["kind"] != StickKit.ButtonKind.PRIMARY:
-			btn.ink_skin = true
-		# 次级入口半透明纸面（除顶部两个主行动外）：天空透出来，视觉层级
-		# 落到「继续/新游戏」上；NORMAL 档=读取存档/设置/测试场景/退出
-		if item["kind"] == StickKit.ButtonKind.NORMAL:
-			btn.bg_alpha = 0.62
-		# 按钮文字统一暖黑（墨与描边同族，亮底上黑字比白字稳）：
-		# 等粗手绘体字号越大笔画间距越开，黑字更清晰
-		for col_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-			btn.add_theme_color_override(col_name, Color(0.1, 0.08, 0.06))
-		btn.add_theme_font_size_override("font_size", 18)
+		# 视觉全归变体（PAPER 纸面 / PRIMARY 实底琥珀）；字号是排版参数走实例属性
+		btn.font_size = 18
+		if item.has("alpha"):
+			btn.bg_alpha = item["alpha"]
 		# 母题角标（左缘叠加，不占排版位）：居中文字不偏，同组有/无图标条目对齐
 		var badge: TextureRect = null
 		if item.has("icon"):
@@ -286,7 +283,7 @@ func _open_arena_panel() -> void:
 func _select_arena_group(idx: int) -> void:
 	for i in _arena_group_buttons:
 		var b: Button = _arena_group_buttons[i]
-		b.kind = SketchButton.Kind.ACCENT if i == idx else SketchButton.Kind.NORMAL
+		b.kind = SketchButton.Kind.ACCENT if i == idx else SketchButton.Kind.DARK
 	for child in _arena_list_box.get_children():
 		child.queue_free()
 	for item: Dictionary in _arena_bucket_data[idx]["items"]:
@@ -294,7 +291,7 @@ func _select_arena_group(idx: int) -> void:
 				func(): get_tree().change_scene_to_file(item["path"]),
 				StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.add_theme_font_size_override("font_size", 15)
+		btn.font_size = 15
 
 
 func _close_arena_panel() -> void:

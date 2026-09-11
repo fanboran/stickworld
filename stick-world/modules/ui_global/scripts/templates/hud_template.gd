@@ -85,9 +85,9 @@ func _ready() -> void:
 # ─────────────────────────────── 顶栏 ────────────────────────────────
 
 func _build_top_bar() -> void:
-	# 左：速度控制组
+	# 左：速度控制组（选中态经变体切换，调用点零 override）
 	for s in SPEEDS:
-		var btn := StickKit.button(_top_row, s["label"],
+		var btn := StickKit.sketch_button(_top_row, s["label"],
 				_on_speed_pressed.bind(s["id"]), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 		btn.custom_minimum_size = Vector2(44, StickTokens.BTN_H_SM)
 		btn.tooltip_text = s["tip"]
@@ -227,13 +227,9 @@ func _on_speed_pressed(speed_id: String) -> void:
 
 func _refresh_speed_highlight() -> void:
 	for id in _speed_buttons:
-		var btn: Button = _speed_buttons[id]
-		if id == _active_speed:
-			btn.add_theme_stylebox_override("normal", StickStyle.accent_normal())
-			btn.add_theme_color_override("font_color", StickTokens.ACCENT)
-		else:
-			btn.remove_theme_stylebox_override("normal")
-			btn.remove_theme_color_override("font_color")
+		var btn := _speed_buttons[id] as SketchButton
+		# 选中态 = ACCENT 变体（琥珀描边档），取消 = DARK
+		btn.kind = SketchButton.Kind.ACCENT if id == _active_speed else SketchButton.Kind.DARK
 
 
 ## 通知流：堆叠式 feed，最多 5 条，旧条自动淡出

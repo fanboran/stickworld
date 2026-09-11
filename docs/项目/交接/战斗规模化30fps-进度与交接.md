@@ -418,16 +418,27 @@ Skeleton2D + AnimationTree 逐单位采样 + 叠加层 + 武器挂点 + 物理�
      均隐形，白纹理+黑色实例色对照立现）——明暗必须走实例色，纹理只用
      纯白兜底；武器图集桶实施前须先做「图集 MMI 最小渲染对照」验证
      （图集透明背景区域可能触发同坑）。
-   - **血条桶 ✅**（8eaab732）：全局双 MMI（圆点=圆 mesh、横条=quad×3 层
-     底/残影/填充，一个 MMI 只能绑一种 mesh 故拆二），纯实例色；indicator
-     转「数据模式」（set_crowd_data_mode/get_bar_state 快照——渐隐/展开/
-     残影/抖动/低血闪/hover/LOD/死亡隐藏状态机全保留，仅绘制终点换桶）。
-     **48v48 draw_calls_median 930→655**；t=8/t=12 截图条与点形态正确、
-     STICK_CROWD=0 回退 1368 draw 富管线完整。wobble shader 增强后续批次。
-   - **武器图集桶**：设计已定（见上表），涉及自定义 shader
-     （INSTANCE_CUSTOM 采图集 UV），⚠ 先做「图集 MMI 最小渲染对照」（见上
-     alpha 坑警示）再全量；待子代理配额真正恢复派工实施。
-7. **表现批次**（原批次 3 顺延）：idle 变体池、hit/dead 变体映射、
+   - **血条桶 ✅**（8eaab732 + 6cef1ffe）：全局双 MMI（圆点=圆 mesh、
+     横条=手绘条模板 mesh），纯实例色；indicator 转「数据模式」
+     （set_crowd_data_mode/get_bar_state 快照——渐隐/展开/残影/抖动/低血
+     闪/hover/LOD/死亡隐藏状态机全保留，仅绘制终点换桶）。
+     **48v48 draw_calls_median 930→655**。
+   - **血条手绘感复刻 ✅**（6cef1ffe，用户反馈驱动）：初版光板矩形/圆丢失
+     手绘感，补 wobble shader——顶点 boiling 扰动（相位 floor(TIME/0.12)
+     离散跳变复刻逐帧重掷 seed、每单位 INSTANCE_CUSTOM 错相）+ 手绘条
+     模板 mesh（水平 12 段上下边顶点，quad 仅 4 角扰动=刚体晃动不够）+
+     描边行（黑垫层外扩 0.5×线宽，对齐原版中心线描边视觉外露量）+
+     圆点 _expand<0.999 硬切对齐原版（alpha 渐隐会残留「条中圆心」）。
+   - **武器图集桶 ✅**（6cef1ffe）：武器/盾纹理注册期去重收集，运行时
+     blit 图集（256×1024）→ 全局单 MMI（z=18 绝对层，武器本无单位间遮挡
+     语义），crowd_weapon_atlas.gdshader 顶点期按 INSTANCE_CUSTOM 把 UV
+     映射到图集子区域；原 Sprite 停用（回退/注销恢复）。**最终 draw
+    _calls_median ≈ 550**（基线富管线 1516 / CrowdRenderer 初版 930）。
+   - **⚠ 技术事实（weapon_probe 四行对照实验修正）**：MMI 管线对「全图
+     半透明的软渐变自建纹理」实测不渲染（阴影 0.34 渐变两版构造均隐形）；
+     **二值 alpha（1/0）的自建图集渲染完全正常**（透明区正确丢弃）——
+     武器图集走透明底原样路线，无需 discard。
+7. 7. **表现批次**（原批次 3 顺延）：idle 变体池、hit/dead 变体映射、
    远档跳帧——表现完整性，与性能无关。
 8. **量测驱动收尾**：96 全链验收（同分钟交替 A/B 取中位纪律见 §十二）、
    AI 分帧与尖峰消除（worst_frame_ms 800+ 巨刺先 profiler 抓因）仅在

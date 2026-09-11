@@ -137,9 +137,10 @@ func _rebuild_content() -> void:
 	if cat.is_empty():
 		return
 	_add_section_title(cat["title"])
-	# 游戏分类：速度控制是特例（操作类，非持久化设置项）
+	# 游戏分类：速度控制 + 脱离卡死（操作类工具，非持久化设置项）
 	if _active_category == "game":
 		_add_speed_buttons()
+		_add_stuck_button()
 	for field in cat["fields"]:
 		_add_field_row(field)
 	# 调试分类：调试构建 + 游戏内时追加测试地图入口
@@ -186,6 +187,28 @@ func _add_speed_buttons() -> void:
 				TimeManager.set_speed(speed_map[label_text])
 		, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+
+## 脱离卡死（自救工具，行业惯例收进设置/帮助页；仅游戏内显示，主菜单无玩家实体）
+func _add_stuck_button() -> void:
+	if _game_root == null:
+		return
+	var btn := StickKit.auto_button(_content_vbox, "脱离卡死（传送至附近空旷处）",
+			_on_stuck_pressed, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+
+func _on_stuck_pressed() -> void:
+	var gr := _game_root
+	if gr == null:
+		return
+	var e: Node2D = gr.get_player_entity() if gr.has_method("get_player_entity") else null
+	if e == null or not is_instance_valid(e) or not e.has_method("escape_stuck"):
+		StickKit.toast(self, "脱离卡死失败：未找到玩家实体", "error")
+		return
+	e.escape_stuck()
+	StickKit.toast(self, "已传送至附近空旷地带", "info")
+	close()
 
 
 ## 设置项字段行（slider / option / toggle），值变化写入 _values。

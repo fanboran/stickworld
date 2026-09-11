@@ -279,10 +279,15 @@ func set_camera_override(cam: Camera2D) -> void:
 
 
 func _process(delta: float) -> void:
+	# 暂停冻结世界视觉（云漂移/风一并停）；视差跟随相机不受暂停影响（UI 操作
+	# 面板时仍可平移镜头）
+	var world_paused: bool = TimeManager != null and TimeManager.is_paused()
 	if _cam_ready and _cam != null and is_instance_valid(_cam):
 		_apply_parallax()
 		_update_tile_layers()
 		_update_haze()
+	if world_paused:
+		return
 	# 风：缓慢正弦起伏（周期 ~2 分钟，双向漂；Terraria windSpeedCurrent 简化版）。
 	# 幅度 0.6：原版常态风速偏小（峰值档最近云 ~86px/s，可察觉的舒缓漂移）；
 	# 曾 1.1（最近云 158px/s、横穿一屏 12s——用户质疑「变化这么快」的来源）

@@ -12,7 +12,6 @@ const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hu
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var day_time_label: Label = get_node_or_null("DayTimeLabel")
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
-@onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
 @onready var settings_button: Button = get_node_or_null("MarginContainer/HBoxContainer/SettingsButton")
 ## 占位界面预览入口（开发用）：打开占位预览面板（大界面空面板陈列）
@@ -54,8 +53,6 @@ func _ready() -> void:
 	if centered_button != null:
 		centered_button.pressed.connect(_on_centered_button_pressed)
 		_update_centered_button_text()
-	if stuck_button != null:
-		stuck_button.pressed.connect(_on_stuck_button_pressed)
 	if formation_button != null:
 		formation_button.pressed.connect(_on_formation_button_pressed)
 	if settings_button != null:
@@ -152,20 +149,8 @@ func _update_centered_button_text() -> void:
 	centered_button.text = "居中: 开" if cam.is_centered_mode() else "居中: 关"
 
 
-# ─────────────────────────────── 脱离卡死（H 键 / 按钮）────────────────────────────────
-
-
-func _on_stuck_button_pressed() -> void:
-	var gr := _game_root
-	if gr == null:
-		_notify("脱困", "未找到游戏根节点", "error")
-		return
-	var e: Node2D = gr.get_player_entity() if gr.has_method("get_player_entity") else null
-	if e == null or not is_instance_valid(e) or not e.has_method("escape_stuck"):
-		_notify("脱困", "未找到玩家实体", "error")
-		return
-	e.escape_stuck()
-	_notify("脱困", "已随机传送到附近空旷地带", "info")
+# 脱离卡死已迁设置面板（游戏分类）——自救类功能按行业惯例收进设置/帮助页，
+# 不占主界面按钮位；HUD 侧 H 键快捷通道仍在（game_root 按键处理）
 
 
 # ─────────────────────────────── 编制管理窗口 ────────────────────────────────

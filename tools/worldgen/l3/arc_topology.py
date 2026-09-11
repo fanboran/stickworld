@@ -44,6 +44,7 @@ GAME_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "stick-world",
 OUT_DIR = os.path.join(HERE, "output")
 GEN_PACKS_DIR = os.path.join(OUT_DIR, "l2_packs")   # 生成端 pack 元数据（info.json）
 LABELS_PATH = os.path.join(OUT_DIR, "l1_v2", "city_labels_8192.npy")
+REFINED_LABELS_PATH = os.path.join(OUT_DIR, "l1_v2", "refined_city_labels_8192.npy")
 
 CODE_FREE_CITY = 253   # 与 PoliticalLut 同码表
 CODE_LAKE = 254
@@ -200,28 +201,263 @@ def build_fill(tiles_geom, code_of, dy=0, dx=0, scale=1.0, sea_rect=None):
     return verts, codes, idx, n_washed
 
 
-def collect_lakes_global():
-    """13 份 L2 pack 的 lakes（context [y,x]）拼回全局 8192 (x,y) 顶点列表。
+def build_interblock_lakes(arcs, arcs_xy, labels, lake_mask):
+    """城块间湖面同源化：湖岸弧按 0 侧组件串链成环（与城块弧严格同源零漂移）。
 
-    ⚠️ 这是**城块间湖**的旧几何（与细化城块弧不同代）——fill 用它画湖面时，
-    glow 的城块湖岸弧与湖缘存在细微漂移（实测 1033% 放大可见）。城块内湖已改
-    由洞弧展开（build_hole_lakes，与城块弧严格同源）；本函数保留供城块间湖，
-    且对应弧会标 arc_lakeshore 供 glow 排除。
+    旧方案湖面用 L2 pack 的 lakes 旧几何（与细化城块弧不同代），湖面与城块洞
+    边界错位 → sea_rect 海洋底从缝隙漏出（湖缘一圈黑斑）。本函数以湖 mask
+    组件（湖的真相源）为种子，在细化场上重建湖面：
+      候选弧 = 一侧为 0 且 0 侧的场 0 组件 = 该湖的场 0 组件（弧上多点沿法向
+      偏移采样判定；场 0 组件即城块洞——湖岸弧与城块 fill 共用同一批弧）
+    串链闭环中包含种子的为湖面外环；不含种子的闭环为湖中岛（作洞，岛面由
+    城块 fill 自带）。串链不闭合（病态）或湖连海（场 0 组件面积远超湖 mask
+    组件，串链会卷进整条海岸线）→ 跳过/回退光栅描迹——同场 0.5 等值线 +
+    同参平滑管线，与弧仅有平滑方向独立的亚像素差异。
+    返回 [(outer, holes, 0)]（build_fill 消费形态，(x,y)@8192）。
     """
-    lakes = []
-    for i in range(1, 14):
-        rid = "region_%03d" % i
-        info = json.load(open(os.path.join(GEN_PACKS_DIR, rid, "info.json"),
-                              encoding="utf-8"))
-        world = json.load(open(os.path.join(GAME_DIR, "l2_packs", rid, "l2_world.json"),
-                               encoding="utf-8"))
-        bb = info["bbox_8192"]
-        tx, ty = world["tiles_offset"]
-        ox = int(bb["x0"]) - int(tx)
-        oy = int(bb["y0"]) - int(ty)
-        for lk in world.get("lakes", []):
-            lakes.append([(float(p[1]) + ox, float(p[0]) + oy) for p in lk])
-    return lakes
+    zero = labels == 0
+    cl, _ = ndi.label(zero)
+    comp_sizes = np.bincount(cl.ravel())
+    H, W = labels.shape
+
+    def _zero_comp(aid):
+        """弧的 0 侧场组件 id：弧上取样点的 3×3 邻域找最近水像素（弧即 0.5
+        等值线，水侧必在 1px 邻域内——法向偏移采样在湖尖/窄水两侧都会落陆）。"""
+        a = arcs_xy[aid]
+        n = len(a)
+        if n < 2:
+            return 0
+        for f in (0.5, 0.25, 0.75, 0.125, 0.875):
+            if n >= 3:
+                i = max(1, min(n - 2, int(n * f)))
+                mx = (a[i - 1][0] + a[i + 1][0]) * 0.5
+                my = (a[i - 1][1] + a[i + 1][1]) * 0.5
+            else:
+                mx = (a[0][0] + a[-1][0]) * 0.5
+                my = (a[0][1] + a[-1][1]) * 0.5
+            px = int(np.clip(round(mx), 1, W - 2))
+            py = int(np.clip(round(my), 1, H - 2))
+            best = 0
+            bestd = 1e18
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if zero[py + dy, px + dx]:
+                        d2 = (px + dx - mx) ** 2 + (py + dy - my) ** 2
+                        if d2 < bestd:
+                            bestd = d2
+                            best = int(cl[py + dy, px + dx])
+            if best > 0:
+                return best
+        return 0
+
+    comp_arcs = {}
+    for aid in range(len(arcs_xy)):
+        la, lb = arcs[aid]["sides"]
+        if la > 0 and lb > 0:
+            continue
+        c = _zero_comp(aid)
+        if c > 0:
+            comp_arcs.setdefault(c, []).append(aid)
+
+    def _chain(aids):
+        """端点焊合串链（0.01px 格）→ (闭环列表, 开链列表)。"""
+        end_map = {}
+        for aid in aids:
+            a = arcs_xy[aid]
+            end_map.setdefault((round(a[0][0] * 100), round(a[0][1] * 100)),
+                               []).append((aid, 0))
+            end_map.setdefault((round(a[-1][0] * 100), round(a[-1][1] * 100)),
+                               []).append((aid, 1))
+        used = set()
+        loops, opens = [], []
+        for aid0 in aids:
+            if aid0 in used:
+                continue
+            used.add(aid0)
+            pts = list(arcs_xy[aid0])
+            for at_head in (False, True):
+                while True:
+                    p = pts[0] if at_head else pts[-1]
+                    key = (round(p[0] * 100), round(p[1] * 100))
+                    nxt = None
+                    for cand in end_map.get(key, []):
+                        if cand[0] not in used:
+                            nxt = cand
+                            break
+                    if nxt is None:
+                        break
+                    aid2, e2 = nxt
+                    used.add(aid2)
+                    ap = arcs_xy[aid2]
+                    seg = (ap if e2 == 0 else ap[::-1])[1:]   # e2=0 弧首在接点
+                    if at_head:
+                        pts[:0] = seg
+                    else:
+                        pts.extend(seg)
+            k0 = (round(pts[0][0] * 100), round(pts[0][1] * 100))
+            k1 = (round(pts[-1][0] * 100), round(pts[-1][1] * 100))
+            if k0 == k1 and len(pts) >= 3:
+                loops.append(pts)
+            elif len(pts) >= 2:
+                opens.append(pts)
+        return loops, opens
+
+    def _trace_comp(cid):
+        """回退：场 0 组件光栅描迹（同场 0.5 等值线 + 同参平滑管线）。"""
+        ys, xs = np.where(cl == cid)
+        gy0, gy1 = int(ys.min()), int(ys.max()) + 1
+        gx0, gx1 = int(xs.min()), int(xs.max()) + 1
+        sub = (cl[gy0:gy1, gx0:gx1] == cid).astype(np.int32)
+        res = mesh_extract.extract_smooth_mesh(sub)
+        info = res.get(1)
+        if not info:
+            return []
+        out = []
+        for oi, outer in enumerate(info["outer"]):
+            holes = info["holes"] if oi == 0 else []
+            out.append(([(p[1] + gx0, p[0] + gy0) for p in outer],
+                        [[(p[1] + gx0, p[0] + gy0) for p in h] for h in holes],
+                        0))
+        return out
+
+    from shapely.geometry import Polygon as ShPolygon, Point
+    geom = []
+    n_open = 0
+    n_skip = 0
+    n_seaconn = 0
+    lc, n_lk = ndi.label(lake_mask > 0)
+    # 湖 mask 组件 → 场 0 组件分组（连体湖共享同一场 0 组件，只串链一次）
+    comp_seeds = {}   # cid -> [(seed, mask_area), ...]
+    for lid in range(1, n_lk + 1):
+        ys, xs = np.where(lc == lid)
+        gy0, gy1 = int(ys.min()), int(ys.max()) + 1
+        gx0, gx1 = int(xs.min()), int(xs.max()) + 1
+        sub = lc[gy0:gy1, gx0:gx1] == lid
+        d = ndi.distance_transform_edt(sub)
+        k = int(d.argmax())
+        seed = (float(gx0 + k % sub.shape[1]), float(gy0 + k // sub.shape[1]))
+        cid = int(cl[int(seed[1]), int(seed[0])])
+        if cid <= 0:
+            n_skip += 1   # 湖被细化场 warp 吃成陆地 → 无湖面可画
+            continue
+        if comp_sizes[cid] > 3 * int(sub.sum()):
+            n_seaconn += 1   # 湖连海（场 0 组件远大于湖）→ 政治场按海表达
+            continue
+        comp_seeds.setdefault(cid, []).append((seed, int(sub.sum())))
+    # 残余内陆块状水域补种子：湖 mask 阈值下的中小湖泊（refine 开运算保留下来的
+    # 厚水、不沾图边、无 mask 种子）——旧版旧几何把它们画成湖色，政治图保持
+    # 一致观感；下限 40px（≈10px 直径，深放大下的最小可见水斑），上限 10 万 px
+    #（再大是内陆海，按海色表达）
+    RESID_MIN, RESID_MAX = 40, 100000
+    border_ids = set(int(i) for i in np.unique(np.concatenate(
+        [cl[0, :], cl[-1, :], cl[:, 0], cl[:, -1]])) if i > 0)
+    n_resid = 0
+    for cid in range(1, len(comp_sizes)):
+        ca = int(comp_sizes[cid])
+        if cid in comp_seeds or cid in border_ids or ca < RESID_MIN or ca > RESID_MAX:
+            continue
+        ys, xs = np.where(cl == cid)
+        gy0, gy1 = int(ys.min()), int(ys.max()) + 1
+        gx0, gx1 = int(xs.min()), int(xs.max()) + 1
+        sub = cl[gy0:gy1, gx0:gx1] == cid
+        d = ndi.distance_transform_edt(sub)
+        k = int(d.argmax())
+        seed = (float(gx0 + k % sub.shape[1]), float(gy0 + k // sub.shape[1]))
+        comp_seeds[cid] = [(seed, ca)]
+        n_resid += 1
+    if n_resid:
+        print("    残余内陆水域补种 %d 个（湖 mask 阈值下的中湖泊，%d..%d px）"
+              % (n_resid, RESID_MIN, RESID_MAX))
+    for cid, seeds in comp_seeds.items():
+        loops, opens = _chain(comp_arcs.get(cid, []))
+        n_open += len(opens)
+        polys = []
+        for lp in loops:
+            try:
+                poly = ShPolygon(_clean_ring(lp))
+                if not poly.is_valid:
+                    poly = poly.buffer(0)
+            except Exception:
+                poly = None
+            if poly is not None and not poly.is_empty:
+                polys.append((lp, poly))
+        mains = []   # (loop, poly)：包含至少一个种子的环为湖面外环
+        used_ids = set()
+        for seed, _ma in seeds:
+            for it in polys:
+                if id(it[0]) in used_ids:
+                    continue
+                if it[1].contains(Point(seed)):
+                    mains.append(it)
+                    used_ids.add(id(it[0]))
+                    break
+        if not mains:
+            geom.extend(_trace_comp(cid))
+            continue
+        for loop, _poly in mains:
+            holes = [other for other, op in polys
+                     if id(other) not in used_ids and _poly.contains(Point(other[0]))]
+            geom.append((loop, holes, 0))   # 湖中岛作洞，岛面由城块 fill 自带
+
+    # ── 盲端水 pocket（河口盲湾）补画 ──
+    # 特征：opening(8) 后独立的厚水块（≤17px 的细水道把它与海隔开），但场 0
+    # 组件=海（细水道仍连通，逃过 refine 的内陆水回填、也进不了上面的串链）。
+    # 视觉上是从海伸进大陆的水道末端开阔部，旧版被旧湖几何盖成湖色。处理：
+    # 以 pocket 为中心截取局部窗口（dilate 25px），窗口内的场 0 连通块=盲湾
+    # 全域（海在窗口外），同参描迹成湖面。
+    struct8 = np.ones((3, 3), dtype=bool)
+    thick8 = ndi.binary_opening(zero, structure=struct8, iterations=8)
+    tc8, tn8 = ndi.label(thick8)
+    ts8 = np.bincount(tc8.ravel())
+    n_pocket = 0
+    for pid in range(1, tn8 + 1):
+        pa = int(ts8[pid])
+        if pa < 250 or pa > 100000:
+            continue
+        pys, pxs = np.where(tc8 == pid)
+        if int(cl[pys[0], pxs[0]]) in comp_seeds:
+            continue   # 内陆水域已按场 0 组件正常串链
+        if pys.min() == 0 or pys.max() == H - 1 or pxs.min() == 0 or pxs.max() == W - 1:
+            continue   # 沾图边 = 海体本身
+        # EDT 最深点（bbox 窗口内）
+        sub8 = tc8[pys.min():pys.max() + 1, pxs.min():pxs.max() + 1] == pid
+        k8 = int(ndi.distance_transform_edt(sub8).argmax())
+        seed = (float(pxs.min() + k8 % sub8.shape[1]),
+                float(pys.min() + k8 // sub8.shape[1]))
+        # 局部窗口内的场 0 连通块（窗口截断海侧连接）
+        R = 25
+        gx0, gx1 = int(max(0, seed[0] - R)), int(min(W, seed[0] + R + 1))
+        gy0, gy1 = int(max(0, seed[1] - R)), int(min(H, seed[1] + R + 1))
+        local = zero[gy0:gy1, gx0:gx1]
+        lc2, _ = ndi.label(local)
+        sid2 = int(lc2[int(seed[1]) - gy0, int(seed[0]) - gx0])
+        if sid2 <= 0:
+            continue
+        pm = lc2 == sid2
+        if int(pm.sum()) > 20000:
+            continue   # 窗口内仍连着大水域 = 不是盲端
+        subm = pm.astype(np.int32)
+        res2 = mesh_extract.extract_smooth_mesh(subm)
+        info2 = res2.get(1)
+        if not info2:
+            continue
+        appended = False
+        for oi, outer in enumerate(info2["outer"]):
+            holes2 = info2["holes"] if oi == 0 else []
+            geom.append(([(p[1] + gx0, p[0] + gy0) for p in outer],
+                         [[(p[1] + gx0, p[0] + gy0) for p in h] for h in holes2],
+                         0))
+            appended = True
+        if appended:
+            n_pocket += 1
+    if n_pocket:
+        print("    盲端水 pocket 补画 %d 个（opening(8) 独立 + 局部窗口描迹）" % n_pocket)
+    if n_open:
+        print("    ⚠️ %d 条湖岸弧串链未闭合（该湖回退光栅描迹）" % n_open)
+    if n_skip or n_seaconn:
+        print("    湖组件跳过：%d 被细化场吃掉 / %d 连海按海表达"
+              % (n_skip, n_seaconn))
+    return geom
 
 
 def build_hole_lakes(arcs_xy, ring_refs, city_data):
@@ -261,16 +497,22 @@ def main():
     ap = argparse.ArgumentParser(description="共享弧拓扑 + 政治矢量 mesh 导出（S2/S3）")
     ap.add_argument("--write", action="store_true",
                     help="写回 l3_city.json 换源 + 产 l3_political_mesh.json + 注入 13 份 L2")
-    ap.add_argument("--labels", default=LABELS_PATH,
-                    help="城块标签场路径（缺省原始 watershed；细化场用 refined_city_labels_8192.npy）")
+    ap.add_argument("--labels", default=None,
+                    help="城块标签场路径（缺省=细化场 refined_city_labels_8192.npy，"
+                         "无则回退原始 watershed 场；S1 细化场是正典数据源）")
     ap.add_argument("--smoke", type=int, default=0, metavar="REGION",
                     help="只跑 region_NNN 的标签切片（快速自检，不写数据）")
     ap.add_argument("--no-preview", action="store_true", help="跳过预览图")
     args = ap.parse_args()
 
     t0 = time.time()
-    labels = np.load(args.labels)
-    print("[1] 标签场 %s 城块 %d 个" % (labels.shape, int(labels.max())))
+    labels_path = args.labels
+    if labels_path is None:
+        labels_path = REFINED_LABELS_PATH if os.path.exists(REFINED_LABELS_PATH) \
+            else LABELS_PATH
+    labels = np.load(labels_path)
+    print("[1] 标签场 %s（%s）城块 %d 个"
+          % (labels.shape, labels_path, int(labels.max())))
 
     if args.smoke:
         # 烟测：取 region 窗口的标签切片（对拍 with_arcs vs 原 extract_smooth_mesh）
@@ -386,33 +628,29 @@ def main():
                                [[(p[1], p[0]) for p in h] for h in holes], lab))
     fill_verts, fill_codes, fill_idx, n_washed = build_fill(
         tiles_geom, code_of, sea_rect=(8192, 8192))
-    # 湖面两层：① 城块内湖 = 洞弧展开（与城块弧同源零漂移）② 城块间湖 = 旧
-    # lakes 几何（对应弧标 arc_lakeshore，glow 排除 → 无漂移参照）
+    # 湖面两层，均与城块弧同源零漂移：① 城块内湖 = 洞弧展开 ② 城块间湖 =
+    # 湖岸弧按场 0 组件串链（旧 L2 pack lakes 几何退役——与细化场不同代，
+    # 湖面与城块洞错位漏 navy 底色）
+    lake_mask = np.array(Image.open(os.path.join(
+        OUT_DIR, "fractal_lake_mask_8192.png")).convert("L"))
     hole_lakes = build_hole_lakes(arcs_xy, ring_refs, city_data)
-    lake_verts, _, lake_idx, _ = build_fill([(lk, [], 0) for lk in hole_lakes],
-                                            {0: CODE_LAKE})
-    lake_polys = collect_lakes_global()
-    old_verts, _, old_idx, _ = build_fill([(lk, [], 0) for lk in lake_polys],
-                                          {0: CODE_LAKE})
+    lakes_geom = build_interblock_lakes(arcs, arcs_xy, labels, lake_mask)
+    lake_verts, _, lake_idx, _ = build_fill(
+        [(lk, [], 0) for lk in hole_lakes] + lakes_geom, {0: CODE_LAKE})
     base = len(fill_verts)
     fill_verts.extend(lake_verts)
     fill_codes.extend([CODE_LAKE] * len(lake_verts))
     fill_idx.extend(int(base + t) for t in lake_idx)
-    fill_verts.extend(old_verts)
-    fill_codes.extend([CODE_LAKE] * len(old_verts))
-    fill_idx.extend(int(base + len(lake_verts) + t) for t in old_idx)
     if n_washed:
         print("    ⚠️ %d 个 tile 走 shapely 清洗/退化跳过（清洗比例应 <10%%）" % n_washed)
-    print("    fill 顶点 %d（含湖 %d+%d）三角 %d"
-          % (len(fill_verts), len(lake_verts), len(old_verts), len(fill_idx) // 3))
+    print("    fill 顶点 %d（含湖 %d）三角 %d"
+          % (len(fill_verts), len(lake_verts), len(fill_idx) // 3))
 
     # 贴湖弧标记（arc_lakeshore）：弧中点采样**原生湖 mask**（fractal_lake_mask，
     # 湖的真相源）——覆盖洞湖/旧湖/城块间湖岸的一切贴湖弧。湖是水域，政治界线
     #（国界/地区界/自由城邦界）与 glow 均不沿湖岸画（湖面由湖色与政权色的对比
     # 表达；界线沿湖岸走会产生断续黑线与 glow 不一致的观感杂乱）。
     arc_lakeshore = [0] * len(arcs_xy)
-    lake_mask = np.array(Image.open(os.path.join(
-        OUT_DIR, "fractal_lake_mask_8192.png")).convert("L"))
     # 膨胀湖 mask：城块弧在**岸上**（陆地一侧），弧顶点/近邻采样都可能偏出
     # 湖面（单点/三点/4 向偏 2px 均实测漏判 → 湖岸残留拉丝）。湖 mask 膨胀
     # LAKE_DILATE px 后「弧任一顶点落膨胀湖」= 贴湖弧，判定保守且完备
@@ -475,7 +713,8 @@ def main():
     print("    %s（%.1f MB）" % (mesh_path, os.path.getsize(mesh_path) / 1e6))
 
     print("[6] 13 份 L2 pack 注入 political_mesh ...")
-    _inject_l2(arcs_xy, side_code, border_type, ring_refs, result, code_of, region_of)
+    _inject_l2(arcs_xy, side_code, border_type, ring_refs, result, code_of, region_of,
+               lakes_geom=lakes_geom)
 
     print("完成。总耗时 %.1fs。记得跑 l_world_bake.gd 刷 bin + headless --import"
           % (time.time() - t0))
@@ -511,8 +750,11 @@ def _tiles_refs(city_data, ring_refs):
     return out
 
 
-def _inject_l2(arcs_xy, side_code, border_type, ring_refs, result, code_of, region_of):
+def _inject_l2(arcs_xy, side_code, border_type, ring_refs, result, code_of, region_of,
+               lakes_geom=None):
     """把窗口相交的城块 fill + 界线（context 坐标）注入 13 份 l2_world.json。"""
+    code_of_lk = dict(code_of)
+    code_of_lk[0] = CODE_LAKE
     for i in range(1, 14):
         rid = "region_%03d" % i
         info = json.load(open(os.path.join(GEN_PACKS_DIR, rid, "info.json"),
@@ -545,6 +787,16 @@ def _inject_l2(arcs_xy, side_code, border_type, ring_refs, result, code_of, regi
                 h = holes if oi == 0 else []
                 tiles_geom.append(([to_ctx_yx(p) for p in outer],
                                    [[to_ctx_yx(p) for p in hh] for hh in h], t))
+        # 窗口相交湖面（与城块弧同源串链）→ context 坐标，code 0 湖色
+        lk_ctx = []
+        for outer, holes, _lab in (lakes_geom or []):
+            xs = [p[0] for p in outer]
+            ys = [p[1] for p in outer]
+            if max(xs) < ox or min(xs) > ox + cw or max(ys) < oy or min(ys) > oy + ch:
+                continue
+            lk_ctx.append(([(p[0] - ox, p[1] - oy) for p in outer],
+                           [[(p[0] - ox, p[1] - oy) for p in h] for h in holes],
+                           0))
         # 窗口相交弧 → 界线折线（context 坐标），按界分类分组
         borders = {BORDER_NATIONAL: [], BORDER_REGION: [], BORDER_FREE_CITY: []}
         for aid, a in enumerate(arcs_xy):
@@ -557,7 +809,7 @@ def _inject_l2(arcs_xy, side_code, border_type, ring_refs, result, code_of, regi
                 continue
             borders[bt].append([to_ctx(p) for p in a])
         world["political_mesh"] = export_l2(
-            world, tiles_geom, borders, code_of, ctx_size=(cw, ch))
+            world, tiles_geom + lk_ctx, borders, code_of_lk, ctx_size=(cw, ch))
         with open(os.path.join(GAME_DIR, "l2_packs", rid, "l2_world.json"), "w",
                   encoding="utf-8") as f:
             json.dump(world, f, ensure_ascii=False, indent=1)

@@ -17,7 +17,9 @@
      独立 seed）——大致边界保持、边缘分形细化
   2. 海岸贴合：refined[原生海岸蒙版==0] = 0（贴 locked_continent_8192 的自然
      分形海岸，与 update_tiles_coastline 同一真相源）
-  3. 陆地空洞回填：warp 在海岸带把海采进陆地的像素，EDT 填最近城块
+  3. 陆地空洞回填：warp 在海岸带把海采进陆地的像素，EDT 填最近城块；
+     内陆零碎水域（河流/小池塘——容器 exclude 在 tiles 外的场 0）同回填，
+     political 场只保留海与湖 mask 两种水域
   4. 对角接触 4 连通化：2×2 块迭代解耦（a==d&&b==c&&a!=b → d 让给 b），消除
      等值线提取的对角歧义（病态重复点环的根因）
   5. 校验：label 集合不变性 + 面积守恒统计
@@ -144,7 +146,7 @@ def build_damp(labels, parent_map, falloff):
     return np.clip(dist / float(falloff), 0.0, 1.0).astype(np.float32)
 
 
-def warp_sample(labels, coast_land, prm, block=1024, damp=None):
+def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None):
     """fBm 域扭曲反向采样 + 海岸贴合 + 陆地空洞回填。damp=城-城边界位移衰减场。"""
     H, W = labels.shape
     out = np.zeros_like(labels)
@@ -172,6 +174,24 @@ def warp_sample(labels, coast_land, prm, block=1024, damp=None):
         _, inds = ndi.distance_transform_edt(out == 0, return_indices=True)
         out[hole] = out[inds[0][hole], inds[1][hole]]
         print("    陆地空洞回填 %d px（EDT 最近城块）" % n_hole, flush=True)
+    # 内陆零碎水域回填（河流/小池塘）：watershed 容器把它们 exclude 在 tiles 外
+    #（场 0），political 渲染下成为 navy 细缝，岸线轮廓弧被当界线画成细丝。
+    # 政治场只保留两种水域：块状海/湖 与 湖 mask——其余场 0 一律 EDT 填最近
+    # 城块（政治图盖掉河塘，EU4 惯例）。海组件按**局部厚度**判定（开运算剪细
+    # 枝）：河口水道再细也与海连通，按组件整判会把整条河留成 navy 细缝
+    if lake_mask is not None:
+        zero = out == 0
+        # 厚度 ≥ 2×5+1 px 的水域才算「块状水」；细水道/发丝海峡剪除回填
+        struct = np.ones((3, 3), dtype=bool)
+        thick = ndi.binary_opening(zero, structure=struct, iterations=5)
+        keep = thick | lake_mask
+        hole2 = zero & ~keep
+        n2 = int(hole2.sum())
+        if n2:
+            _, inds = ndi.distance_transform_edt(zero, return_indices=True)
+            out[hole2] = out[inds[0][hole2], inds[1][hole2]]
+            print("    内陆零碎水域回填 %d px（河流/池塘/河口细道 → 最近城块）" % n2,
+                  flush=True)
     return out
 
 
@@ -218,7 +238,9 @@ def main():
           "同 L1 内城-城边界保持直线（衰减带宽 %spx）..." % prm.get("damp_falloff", 28))
     parent_map = build_parent_map(labels)
     damp = build_damp(labels, parent_map, prm.get("damp_falloff", 28))
-    refined = warp_sample(labels, coast_land, prm, damp=damp)
+    lake_mask = np.array(Image.open(os.path.join(
+        OUT_DIR, "fractal_lake_mask_8192.png")).convert("L")) > 0
+    refined = warp_sample(labels, coast_land, prm, damp=damp, lake_mask=lake_mask)
 
     print("[3] 对角接触 4 连通化 ...")
     refined = decouple_diagonal(refined, int(prm["diag_max_iter"]))

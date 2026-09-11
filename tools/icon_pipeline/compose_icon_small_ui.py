@@ -218,11 +218,17 @@ def checkerboard(size, cell=16):
 
 
 # ── 批处理：全部图标出三档尺寸 ──
+# `-- <tag或中文名>` 只合成指定母题（全库原始渲染被清理后，单批增量合成用；
+# 无参仍全量合成，行为不变）
+_only = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 results = {}
 os.makedirs(os.path.join(BASE, "icons"), exist_ok=True)
 FT = font(32, True)
 FN = font(15)
 for tag, label, fake in TAGS:
+    _name = tag[4:] if tag.startswith("mot_") else tag
+    if _only and tag not in _only and _name not in _only and label not in _only:
+        continue
     icons = {}
     for t in SIZES:
         icons[t] = cel(tag, fake, t, nids=NIDS.get(tag, 10))

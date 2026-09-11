@@ -15,9 +15,9 @@ const DIR := "res://assets/icons/"
 ## 只登记跨模块复用的固定语义；场景级映射写在各场景数据表。
 const SEMANTIC: Dictionary = {
 	&"res_gold": &"金币",
-	&"res_diamond": &"立方体",  # 提案/待定：暂以立方体充当钻石母题，待管线补钻石
+	&"res_diamond": &"钻石",
 	&"res_wood": &"板条箱",
-	&"res_stone": &"矿石",
+	&"res_stone": &"石料",
 	&"res_metal": &"铁砧",
 	&"res_metal_ore": &"铁砧",
 }

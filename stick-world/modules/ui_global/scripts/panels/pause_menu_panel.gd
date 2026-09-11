@@ -18,7 +18,7 @@ var _game_root: Node = null
 ## icon = 管线母题名（StickIcons 取图）；无匹配母题的入口不挂（见图标清单与缺口文档）
 const EMPIRE_ENTRIES: Array[Dictionary] = [
 	{"id": "empire_overview", "label": "总览报表", "icon": &"账本"},
-	{"id": "tech_tree", "label": "科技树"},
+	{"id": "tech_tree", "label": "科技树", "icon": &"科技树"},
 	{"id": "logistics", "label": "物流网络", "icon": &"手推车"},
 	{"id": "collection", "label": "成就", "icon": &"奖章"},
 ]

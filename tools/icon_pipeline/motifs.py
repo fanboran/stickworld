@@ -1261,3 +1261,206 @@ def _m_canteen():
           (-0.17, 0.10, 1.22), (-0.30, 0.10, 0.98)], 0.040, pid=5, chaikin=2)   # 背带拱
     cyl(0.09, 0.14, (0, 0, 0.99), pid=3)                                        # 壶嘴
     cyl(0.11, 0.06, (0, 0, 1.09), pid=3)                                        # 盖
+
+
+# ── 热栏装备（hotbar 十格接线批：武器/护甲/材料/动作，语义=ItemDef 与动作名）──
+@motif("staff", "法杖")
+def _m_staff():
+    # 学徒法杖：木杆+金箍+顶珠蓝宝（施法媒介）
+    cyl(0.055, 1.46, (0, 0, 0.32), pid=3)
+    tor(0.085, 0.032, (0, 0, 0.92), pid=8)
+    sph(0.16, (0, 0, 1.08), pid=9)
+
+
+@motif("backpack", "背包")
+def _m_backpack():
+    # 冒险背包：棕皮主袋+顶卷+前袋+双肩带（开背包动作格）
+    box((0.62, 0.40, 0.74), (0, 0, 0.44), bev=0.10, pid=3)
+    cyl(0.17, 0.64, (0, 0, 0.88), rot=(0, math.radians(90), 0), pid=3)          # 顶卷
+    box((0.44, 0.12, 0.34), (0, -0.22, 0.30), bev=0.05, pid=6)                  # 前袋
+    box((0.10, 0.46, 0.14), (-0.26, 0, 0.46), pid=7)                            # 肩带
+    box((0.10, 0.46, 0.14), (0.26, 0, 0.46), pid=7)
+
+
+@motif("stickman", "火柴人")
+def _m_stickman():
+    # 火柴人本尊（角色/属性面板）：墨炭头+躯干+四肢
+    sph(0.19, (0, 0, 1.04), pid=7)
+    cyl(0.055, 0.50, (0, 0, 0.62), pid=7)
+    cyl(0.045, 0.46, (-0.20, 0, 0.60), rot=(0, math.radians(30), 0), pid=7)     # 左臂
+    cyl(0.045, 0.46, (0.20, 0, 0.60), rot=(0, math.radians(-30), 0), pid=7)     # 右臂
+    cyl(0.05, 0.48, (-0.11, 0, 0.16), rot=(0, math.radians(14), 0), pid=7)      # 左腿
+    cyl(0.05, 0.48, (0.11, 0, 0.16), rot=(0, math.radians(-14), 0), pid=7)      # 右腿
+
+
+@motif("portal", "传送门")
+def _m_portal():
+    # 脱离卡死：站立传送门（墨环+门内蓝涡星点）
+    tor(0.50, 0.15, (0, 0, 0.62), rot=(math.radians(90), 0, 0), pid=7)
+    cyl(0.36, 0.09, (0, 0, 0.62), rot=(math.radians(90), 0, 0), pid=9)
+    sph(0.07, (-0.14, -0.07, 0.76), pid=6)
+    sph(0.05, (0.16, -0.07, 0.50), pid=6)
+    sph(0.04, (0.05, -0.07, 0.66), pid=6)
+    sph(0.035, (-0.10, -0.07, 0.48), pid=6)
+
+
+@motif("bandage", "绷带")
+def _m_bandage():
+    # 绷带卷：白卷横躺+垂尾+绿十字贴卷身正面（与医疗箱同治疗语言）
+    cyl(0.30, 0.34, (0, 0, 0.32), rot=(0, math.radians(90), 0), pid=6)
+    box((0.26, 0.06, 0.34), (0.0, -0.25, 0.10), rot=(math.radians(-18), 0, 0), bev=0.03, pid=6)
+    box((0.26, 0.06, 0.10), (0, -0.31, 0.34), pid=5)
+    box((0.10, 0.06, 0.26), (0, -0.31, 0.34), pid=5)
+
+
+@motif("stone_block", "石料")
+def _m_stone_block():
+    # 切方石材：大方块+顶上小方错叠
+    box((0.80, 0.55, 0.42), (-0.04, 0, 0.23), bev=0.07, pid=1)
+    box((0.42, 0.38, 0.28), (0.20, 0.06, 0.60), rot=(0, 0, math.radians(16)), bev=0.06, pid=1)
+
+
+@motif("gold_nugget", "金砂")
+def _m_gold_nugget():
+    # 砂金堆：三块天然金（与锻制金币区分）
+    sph(0.30, (-0.12, 0, 0.22), scale=(1.25, 0.9, 0.62), pid=8)
+    sph(0.20, (0.26, 0.06, 0.28), scale=(1.1, 0.85, 0.7), rot=(0, 0, math.radians(22)), pid=8)
+    sph(0.16, (0.02, 0.12, 0.54), scale=(1.0, 0.9, 0.75), pid=8)
+
+
+@motif("diamond", "钻石")
+def _m_diamond():
+    # 宝石：4 棱刻面（下尖+上冠台），锥体纪律许可的 4 棱刻意棱面用法
+    import bpy
+    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.0, radius2=0.40, depth=0.46,
+                                    location=(0, 0, 0.26), rotation=(0, 0, math.radians(45)))
+    lo = bpy.context.object
+    for p in lo.data.polygons:
+        p.use_smooth = False
+    _base_mat(lo)
+    lo["pid"] = 9
+    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.40, radius2=0.10, depth=0.30,
+                                    location=(0, 0, 0.64), rotation=(0, 0, math.radians(45)))
+    hi = bpy.context.object
+    for p in hi.data.polygons:
+        p.use_smooth = False
+    _base_mat(hi)
+    hi["pid"] = 9
+
+
+# 护甲三阶三槽：布（米白 6）/皮（木棕 3）/锁子（中灰金属 1），形随阶变
+def _armor_head(tier):
+    if tier == 0:      # 布头巾：缠头布圈+顶结
+        tor(0.40, 0.16, (0, 0, 0.34), pid=6)
+        sph(0.34, (0, 0, 0.52), scale=(1.0, 0.95, 0.58), pid=6)
+        sph(0.11, (0.20, -0.08, 0.72), pid=6)
+    elif tier == 1:    # 皮盔：圆顶皮帽+檐
+        sph(0.38, (0, 0, 0.50), scale=(1.0, 0.95, 0.72), pid=3)
+        cyl(0.42, 0.08, (0, 0, 0.28), rot=(math.radians(90), 0, 0), pid=3)
+    else:              # 锁子头罩：金属圆盔+护颈
+        sph(0.36, (0, 0, 0.54), scale=(1.0, 0.95, 0.78), pid=1)
+        cyl(0.30, 0.26, (0, 0, 0.18), pid=1)
+
+
+def _armor_chest(tier):
+    if tier == 0:      # 布衣：长袍+腰带
+        box((0.60, 0.30, 0.60), (0, 0, 0.50), bev=0.06, pid=6)
+        box((0.70, 0.36, 0.24), (0, 0, 0.14), bev=0.05, pid=6)
+        tor(0.31, 0.045, (0, 0, 0.42), pid=3)
+    elif tier == 1:    # 皮甲：胸甲+双肩甲+斜挎带
+        box((0.58, 0.32, 0.66), (0, 0, 0.44), bev=0.07, pid=3)
+        sph(0.15, (-0.33, 0, 0.68), scale=(0.8, 0.9, 0.6), pid=3)
+        sph(0.15, (0.33, 0, 0.68), scale=(0.8, 0.9, 0.6), pid=3)
+        box((0.12, 0.34, 0.70), (0, 0, 0.44), rot=(0, math.radians(26), 0), pid=7)
+    else:              # 锁子甲：甲身+锁子裙摆
+        box((0.56, 0.30, 0.58), (0, 0, 0.54), bev=0.06, pid=1)
+        cyl(0.40, 0.26, (0, 0, 0.18), pid=1)
+
+
+def _armor_legs(tier):
+    if tier == 0:      # 布腿带：双腿+绑带环
+        cyl(0.13, 0.70, (-0.16, 0, 0.36), pid=6)
+        cyl(0.13, 0.70, (0.16, 0, 0.36), pid=6)
+        tor(0.14, 0.032, (-0.16, 0, 0.30), pid=3)
+        tor(0.14, 0.032, (-0.16, 0, 0.46), pid=3)
+        tor(0.14, 0.032, (0.16, 0, 0.38), pid=3)
+        tor(0.14, 0.032, (0.16, 0, 0.54), pid=3)
+    elif tier == 1:    # 皮护胫：胫甲板+靴头
+        box((0.22, 0.18, 0.56), (-0.16, 0.02, 0.40), bev=0.05, pid=3)
+        box((0.22, 0.18, 0.56), (0.16, 0.02, 0.40), bev=0.05, pid=3)
+        box((0.22, 0.30, 0.14), (-0.16, -0.04, 0.08), bev=0.04, pid=7)
+        box((0.22, 0.30, 0.14), (0.16, -0.04, 0.08), bev=0.04, pid=7)
+    else:              # 锁子护腿：甲腿+护膝
+        cyl(0.14, 0.66, (-0.16, 0, 0.34), pid=1)
+        cyl(0.14, 0.66, (0.16, 0, 0.34), pid=1)
+        sph(0.13, (-0.16, 0, 0.60), pid=1)
+        sph(0.13, (0.16, 0, 0.60), pid=1)
+
+
+@motif("headwrap", "布头巾")
+def _m_headwrap():
+    _armor_head(0)
+
+
+@motif("leather_helm", "皮盔")
+def _m_leather_helm():
+    _armor_head(1)
+
+
+@motif("mail_coif", "锁子头罩")
+def _m_mail_coif():
+    _armor_head(2)
+
+
+@motif("cloth_tunic", "布衣")
+def _m_cloth_tunic():
+    _armor_chest(0)
+
+
+@motif("leather_armor", "皮甲")
+def _m_leather_armor():
+    _armor_chest(1)
+
+
+@motif("mail_shirt", "锁子甲")
+def _m_mail_shirt():
+    _armor_chest(2)
+
+
+@motif("legwraps", "布腿带")
+def _m_legwraps():
+    _armor_legs(0)
+
+
+@motif("greaves", "皮护胫")
+def _m_greaves():
+    _armor_legs(1)
+
+
+@motif("mail_leggings", "锁子护腿")
+def _m_mail_leggings():
+    _armor_legs(2)
+
+
+# ── 导航与科技（缺口清单收尾批：退出/关闭类 + 科技树）──
+@motif("door", "木门")
+def _m_door():
+    # 木门：墨框+棕门板（带拼缝）+金门把（退出/关闭类；兼建造菜单城门）
+    box((0.14, 0.16, 1.34), (-0.44, 0, 0.64), pid=7)
+    box((0.14, 0.16, 1.34), (0.44, 0, 0.64), pid=7)
+    box((1.02, 0.16, 0.14), (0, 0, 1.30), pid=7)
+    box((0.74, 0.10, 1.20), (0, 0, 0.60), bev=0.05, pid=3)
+    box((0.06, 0.12, 1.10), (-0.18, 0, 0.58), pid=7)
+    box((0.06, 0.12, 1.10), (0.18, 0, 0.58), pid=7)
+    sph(0.055, (0.30, -0.09, 0.60), pid=8)
+
+
+@motif("tech_tree", "科技树")
+def _m_tech_tree():
+    # 分叉树苗：主干+双分枝+三团叶（科技/成长）
+    tube([(0, 0, 0), (0, 0, 0.40), (0.03, 0, 0.76)], 0.07, pid=3, chaikin=2)
+    tube([(0.01, 0, 0.48), (0.24, 0, 0.72), (0.40, 0, 0.90)], 0.045, pid=3, chaikin=2)
+    tube([(0.01, 0, 0.64), (-0.20, 0, 0.90), (-0.32, 0, 1.06)], 0.045, pid=3, chaikin=2)
+    sph(0.21, (0.03, 0, 0.94), scale=(1.15, 1.0, 0.85), pid=5)
+    sph(0.16, (0.44, 0, 1.00), scale=(1.0, 0.95, 0.8), pid=5)
+    sph(0.14, (-0.36, 0, 1.14), scale=(1.0, 0.95, 0.8), pid=5)

@@ -54,6 +54,7 @@ extends RefCounted
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
 const ScriptTaskBoard := preload("res://modules/combat/scripts/battle/task_board.gd")
+const ScriptUtilityScorer := preload("res://modules/combat/scripts/battle/utility_scorer.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 姿态枚举（0=GARRISON/1=DEFEND/2=ATTACK，对齐 dump Team.Stance 枚举序；
@@ -128,6 +129,13 @@ var _last_build_update: float = -1.0e9
 ## 手动号令保护期：squad_id -> 保护截止时刻（战斗秒）
 var _manual_order_until: Dictionary = {}
 
+## A4 效用打分器（default_behavior v2 消费端；setup 装配，开关默认关 = 不参与决策零开销）
+var _utility_scorer: ScriptUtilityScorer = null
+## A4 组织 API duck 引用（default_behavior 只读消费；经 _orders 同模块探测，见 _resolve_org_api）
+var _org_api: Node = null
+## A4 观测面：squad_id -> 最近一次 default_behavior 选择名（调试 HUD / 测试断言）
+var _default_behavior_choices: Dictionary = {}
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
@@ -146,6 +154,15 @@ func setup(battle: Node, faction: int, orders: Node, formation: Node, overrides:
 	effective.merge(ScriptTeamAiProfiles.load_personality_overlay(_difficulty))
 	effective.merge(overrides)
 	_p = ScriptTeamAiProfiles.get_profile(effective)
+	# A4（追加）：default_behavior v2 参数经 personality.tres global 行装载——get_profile
+	# 仅透传 DEFAULTS 既有键（档案文件键集不动），此处把 A4 新键补挂进 _p。
+	# 优先序 = 显式 overrides > 难度档案（既有 effective.merge 为不改写语义，A4 键
+	# 在此显式兑现 setup 文档承诺的覆盖序；overlay 缺载时键缺席 = 代码默认关）。
+	for _a4_key in ["default_behavior_v2_enabled", "demand_increment"]:
+		if overrides.has(_a4_key):
+			_p[_a4_key] = overrides[_a4_key]
+		elif effective.has(_a4_key):
+			_p[_a4_key] = effective[_a4_key]
 	# 开局攻击门禁掷骰：基准 ± 方差半宽一次定局（CoH standard 9min±4min 同构；
 	# 默认固定种子 → 门禁确定性，单测可锁、battle_sim 可复现）
 	_rng.seed = int(overrides.get("random_seed", ScriptTeamAiProfiles.DEFAULT_RANDOM_SEED))
@@ -159,11 +176,17 @@ func setup(battle: Node, faction: int, orders: Node, formation: Node, overrides:
 	if EventBus != null and EventBus.has_signal("order_issued") \
 			and not EventBus.order_issued.is_connected(_on_order_issued):
 		EventBus.order_issued.connect(_on_order_issued)
+	# A4 效用打分器装配（default_behavior v2；开关关时纯闲置，号令路径不消费）
+	_utility_scorer = ScriptUtilityScorer.new()
+	_utility_scorer.setup(_p)
+	_org_api = _resolve_org_api()
 
 
 ## 消亡钩子（宿主 _end 调用）：断开 EventBus 订阅，防 freed 悬空连接。
 func dispose() -> void:
 	_task_board = null
+	_utility_scorer = null
+	_org_api = null
 	if EventBus != null and EventBus.has_signal("order_issued") \
 			and EventBus.order_issued.is_connected(_on_order_issued):
 		EventBus.order_issued.disconnect(_on_order_issued)
@@ -173,6 +196,8 @@ func dispose() -> void:
 func set_order_refs(orders: Node, formation: Node) -> void:
 	_orders = orders
 	_formation = formation
+	# A4（追加）：orders 补注入后重探组织 API（"先注册 TeamAi 后补引用"兼容路径）
+	_org_api = _resolve_org_api()
 
 
 ## 宿主 tick（BattleInstance._physics_process 内调用，每物理帧进入）。
@@ -836,6 +861,9 @@ func _issue_stance_orders() -> void:
 				plan_of[squad_id] = {"order_type": ScriptTacticalOrders.OrderType.RALLY, "target": get_garrison_anchor()}
 			_:
 				pass
+		# A4 default_behavior v2：无显式号令（防守兜底/未绑定）小队按效用打分选行为
+		# （追加钩子，开关默认关 = 原样返回零回归；见 _apply_default_behavior_plans）
+		plan_of = _apply_default_behavior_plans(plan_of, mapping)
 	_issue_orders(squads, plan_of)
 
 
@@ -962,6 +990,125 @@ func _is_manual_order_active(squad_id: String) -> bool:
 	if not _manual_order_until.has(squad_id):
 		return false
 	return _now() < float(_manual_order_until[squad_id])
+
+
+# ─────────────────────────────── default_behavior v2 效用打分（A4 · C7，非 dump 直译）────────────────────────────────
+## CoH tactics.ai demand 系统同构（docs/审计/英雄连AI逆向_2026-09-11.md §3.5，评分实现
+## 归 UtilityScorer，本段只做组织配置取数 / 小队上下文快照 / 接入点门禁）。
+
+## 组织 API 引用显式注入（测试/宿主装配出口；不调用时走 _resolve_org_api 同模块探测）
+func set_org_api(api: Node) -> void:
+	_org_api = api
+
+
+## 组织 API 同模块 duck 探测：号令系统（TacticalOrders）装配时已持 _org_api 引用，
+## 本文件不动禁碰面，经 Object.get 同模块反射读取（combat 域内私有桥；TacticalOrders
+## 未来开放组织代理方法时迁移）。探测失败保持现状（散兵/测试环境 = 无组织消费）。
+func _resolve_org_api() -> Node:
+	if _org_api != null and is_instance_valid(_org_api):
+		return _org_api
+	if _orders != null and is_instance_valid(_orders):
+		var api: Variant = _orders.get("_org_api")
+		if api is Node and is_instance_valid(api):
+			return api
+	return null
+
+
+## 组织 default_behavior 只读查询（org API get_organization 快照；失败/缺字段 = {}）
+## 禁改组织存储格式——本方法纯消费（模块契约：combat 不直引 organization，经 duck api）
+func _org_default_behavior(org_id: String) -> Dictionary:
+	if _org_api == null or not is_instance_valid(_org_api) \
+			or not _org_api.has_method("get_organization"):
+		return {}
+	var info: Dictionary = _org_api.get_organization(org_id)
+	if not info.get("ok", false):
+		return {}
+	var data: Dictionary = info.get("data", {})
+	var behavior: Variant = data.get("default_behavior", {})
+	return behavior if behavior is Dictionary else {}
+
+
+## 小队行为上下文（UtilityScorer 消费口径；敌人取决策周期值拷贝快照，防 freed 悬挂）
+func _squad_behavior_ctx(squad_id: String) -> Dictionary:
+	return {
+		"squad_pos": _squad_centroid(squad_id),
+		"enemies": _enemy_units_snapshot,
+		"own_centroid": _own_centroid,
+		"enemy_centroid": _enemy_centroid,
+		"anchor": get_garrison_anchor(),
+		"threatened": _own_threatened,
+		"own_strength": _own_strength,
+		"initial_own_strength": _initial_own_strength,
+		"now": _now(),
+	}
+
+
+## 小队存活成员质心（编队缺失/空队退化本方质心——与防守兜底目标语义一致）
+func _squad_centroid(squad_id: String) -> Vector2:
+	if _formation == null or not is_instance_valid(_formation) \
+			or not _formation.has_method("get_squad_units"):
+		return _own_centroid
+	var sum := Vector2.ZERO
+	var n: int = 0
+	for u in _formation.get_squad_units(squad_id):
+		if u == null or not is_instance_valid(u):
+			continue
+		if u.has_method("is_dead") and u.is_dead():
+			continue
+		sum += u.global_position if u is Node2D else Vector2.ZERO
+		n += 1
+	return sum / float(n) if n > 0 else _own_centroid
+
+
+## default_behavior 扰动种子（按小队错峰的 base；同 setup 显式 random_seed，确定性可锁）
+func _behavior_seed() -> int:
+	return int(_rng.seed)
+
+
+## default_behavior v2 接入点（追加钩子，不改既有号令语义）：
+## 只接管「无显式号令」的小队——攻/防姿态下未绑攻击槽、落防守兜底（ADVANCE_ALL
+## 本方质心）的原子单元小队；攻击槽绑定小队有任务槽号令不接管；GARRISON（生存模式
+## RALLY）与 ROUT（战役撤离）不经本钩子（ROUT 路径在 stance_update 提前返回）。
+## 开关关（default_behavior_v2_enabled 默认关）/ 组织无配置 / 打分无候选 → 原样返回
+## （零回归）。组织根经 _org_root_of 查询（同既有号令分流口径），root 缺失 = 散兵不消费。
+func _apply_default_behavior_plans(plan_of: Dictionary, mapping: Dictionary) -> Dictionary:
+	if _utility_scorer == null or not bool(_p.get("default_behavior_v2_enabled", false)):
+		return plan_of
+	if _stance != STANCE_ATTACK and _stance != STANCE_DEFEND:
+		return plan_of
+	for squad_id_v in plan_of.keys():
+		var squad_id := str(squad_id_v)
+		var plan: Dictionary = plan_of[squad_id]
+		# 只接管防守兜底小队（ADVANCE_ALL 语义）；RALLY 等其他号令一律不碰
+		if int(plan.get("order_type", -1)) != ScriptTacticalOrders.OrderType.ADVANCE_ALL:
+			continue
+		# 攻击槽绑定 = 显式任务号令，不接管
+		var slot_id := str(mapping.get(squad_id, ""))
+		if not slot_id.is_empty() and _task_board != null:
+			var slot: Variant = _task_board.get_slot(slot_id)
+			if slot != null and int(slot.kind) == ScriptTaskBoard.KIND_ATTACK:
+				continue
+		var root := _org_root_of(squad_id)
+		if root.is_empty():
+			continue
+		var behavior := _org_default_behavior(root)
+		if behavior.is_empty():
+			continue
+		var choice := _utility_scorer.pick_behavior(behavior, _squad_behavior_ctx(squad_id),
+				squad_id, _behavior_seed())
+		if choice.is_empty():
+			continue
+		plan_of[squad_id] = {
+			"order_type": int(choice["order_type"]),
+			"target": choice["target"],
+		}
+		_default_behavior_choices[squad_id] = str(choice.get("name", ""))
+	return plan_of
+
+
+## 最近一轮 default_behavior 选择快照（只读副本；调试 HUD / 测试断言）
+func get_default_behavior_choices() -> Dictionary:
+	return _default_behavior_choices.duplicate()
 
 
 # ─────────────────────────────── 内部工具 ────────────────────────────────

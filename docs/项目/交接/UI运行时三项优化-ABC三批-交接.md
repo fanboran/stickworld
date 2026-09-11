@@ -1,6 +1,6 @@
 # UI 运行时三项优化（A 暂停原语化 · B HUD 布局收权 · C 按钮变体）—— 交接
 
-> **状态**：**A/B/C 三批全部实施完毕、验收通过，分支链待合并入 main**。
+> **状态**：**A/B/C 三批已合并入 main**（合并提交 `116d42bf`，2026-09-12；合并解冲突记录见 §二末），待创始人观感验收。
 > **是什么**：UI 运行时架构三项优化的实施交接档（方案与 as-built 细节见 [`../../技术/架构/UI运行时架构优化方案.md`](../../技术/架构/UI运行时架构优化方案.md)，本档只记分支拓扑、验收结论与合并操作）。
 > **分支链**（基点 8d12a8e9，链尾 = `agent/ui-button-variants`）：
 >
@@ -27,6 +27,8 @@
 3. 预期冲突：`main_menu.gd`（本链 A 在 `_ready` 顶部加了总闸复位 guard，对方在改预热/跳板——两者语义都要保留）；`docs/项目/交接/` 本档（main 上有一份仅 A 的旧版 `UI运行时优化批次A-暂停原语化-交接.md`，合并后删除旧版、保留本档）；`docs/项目/待办事项.md`（取本链版本）。
 4. 合并后验证：`check_godot_errors.sh` + `godot --headless --path stick-world res://tests/dev/verify_pause_gate.tscn` + `res://tests/dev/verify_hud_zones.tscn` + 全量 run_all 对照合并前失败清单（零新增即过）。
 5. 收尾：本档移入 `归档/`、AGENTS.md 与交接 README 清单同步更新；三 worktree（已删）与三分支合并后删除。
+
+> **合并实施记录（2026-09-12）**：`git merge agent/ui-button-variants` → 合并提交 `116d42bf`。冲突 2 处：`command_chain.gd`（取 main 传令重构 + 批次 A 暂停语义移植到 `deliver_via_orgs`/`_relay_child` 两个逐跳计时点，`create_timer(delay, false)`）；`main_menu.gd`（MENU_ITEMS 行合并：对方木门图标 + 我方 PAPER 变体/半透明）。另补：main 新增的顶栏 OrgButton 挂 sketch_button 脚本对齐其余七钮。合并前 main 基线 44/44 全绿（test-stability 会话已修复旧基线破损），合并后全量复验见 §一补充。
 
 ## 三、遗留（均不阻塞合并）
 

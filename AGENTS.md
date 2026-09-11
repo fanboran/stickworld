@@ -35,7 +35,7 @@
   - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
   - `docs/项目/交接/组织系统深化-进度与交接.md`（任务：组织系统深化，分支 `agent/organization-deepening`，worktree `.temp/organization-deepening`）
   - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
-  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界AI机制复刻与分层集成——CoH/RWR/SWL 三家已登记，批次 A1~A9，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1、A9 已完成**，A2 待组织 3-F2，分支 `agent/game-ai`，worktree `.temp/game-ai`）
+  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界AI机制复刻与分层集成——CoH/RWR/SWL 三家已登记，批次 A1~A9，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1、A9、A2 已完成**，下一批 A3/A4/A5，分支 `agent/game-ai`，worktree `.temp/game-ai`）
   - `docs/项目/交接/UI运行时优化批次A-暂停原语化-交接.md`（任务：UI 运行时三项优化·批次 A 暂停原语化，**实施完毕待合并**，分支 `agent/ui-pause-primitive`，合并注意事项见档内 §三）
 - 在役审计快照（用完即删，删除时同步移除登记）：
   - `docs/审计/架构审计_2026-09-11.md`（架构实测基线与重测命令，供 `docs/项目/待办事项.md`「架构收敛 AR 系列」引用；AR 全部执行完毕后删除）

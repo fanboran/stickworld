@@ -517,12 +517,13 @@ func _setup_minimap() -> void:
 	_l1_thumbnail.visible = false
 
 
-## 创建 ZoomBar 并挂到 UIRoot，位于小地图下方。
+## 创建 ZoomBar 并挂到 UIRoot，钉进 right_bottom zone（右下贴缘，见 hud_zone_layout.gd）。
 func _setup_zoom_bar() -> void:
 	if _root.ui_root == null:
 		return
 	var zb := UIKit.widget(_ZoomBarScript, "ZoomBar")
 	_root.ui_root.add_to_slot("HudOverlay", zb)
+	_root.ui_root.place_in_zone(&"right_bottom", zb)
 	_root._zoom_bar = zb
 	if zb.has_method("setup"):
 		zb.setup(_root.camera_rig)

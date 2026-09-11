@@ -24,9 +24,14 @@ static func full_rect(script: GDScript, node_name: String) -> Control:
 
 ## 创建带脚本的角落 HUD 部件（不自设 anchor——定位归 zone，由装配层经
 ## UIRoot.place_in_zone 按 hud_zone_layout.gd 的 zone 表落位；部件只声明
-## custom_minimum_size 体量）。与 full_rect 的分工见头注释。
+## custom_minimum_size 体量）。节点按脚本基类型实例化（脚本 extends
+## HBoxContainer 等容器类时同样适用）。与 full_rect 的分工见头注释。
 static func widget(script: GDScript, node_name: String) -> Control:
-	var c := Control.new()
+	var base_type := script.get_instance_base_type()
+	var c := ClassDB.instantiate(base_type) as Control
+	if c == null:
+		push_warning("[UIKit] 脚本基类型不可实例化: %s，回退 Control" % base_type)
+		c = Control.new()
 	c.set_script(script)
 	c.name = node_name
 	return c

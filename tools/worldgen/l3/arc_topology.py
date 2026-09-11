@@ -33,6 +33,7 @@ import time
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage as ndi
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # tools/worldgen
 sys.path.insert(0, os.path.join(HERE, "l2_export"))
@@ -412,24 +413,24 @@ def main():
     arc_lakeshore = [0] * len(arcs_xy)
     lake_mask = np.array(Image.open(os.path.join(
         OUT_DIR, "fractal_lake_mask_8192.png")).convert("L"))
+    # 膨胀湖 mask：城块弧在**岸上**（陆地一侧），弧顶点/近邻采样都可能偏出
+    # 湖面（单点/三点/4 向偏 2px 均实测漏判 → 湖岸残留拉丝）。湖 mask 膨胀
+    # LAKE_DILATE px 后「弧任一顶点落膨胀湖」= 贴湖弧，判定保守且完备
+    lake_dilate = 8   # 膨胀带宽 px（覆盖岸宽；城界弧远端不受影响）
+    lake_mask = ndi.binary_dilation(lake_mask > 0, iterations=lake_dilate)
     H8, W8 = lake_mask.shape
-    # 邻域采样：城块弧在**岸上**（陆地一侧），弧顶点本身不落湖面——单点/三点
-    # 采样全漏。改为每顶点向 4 正交方向偏 2px 采样，任一落湖面即贴湖弧
-    #（向量化：全部采样点堆成一次 mask 查询）
-    all_pts = []
-    pt_arc = []
+
+    def _in_lake(pt):
+        mx = int(np.clip(round(pt[0]), 0, W8 - 1))
+        my = int(np.clip(round(pt[1]), 0, H8 - 1))
+        return lake_mask[my, mx]
+
     for aid, a in enumerate(arcs_xy):
-        for (x, y) in a[::max(1, len(a) // 12)]:   # 每弧最多 13 顶点采样
-            for dx, dy in ((2, 0), (-2, 0), (0, 2), (0, -2)):
-                all_pts.append((x + dx, y + dy))
-                pt_arc.append(aid)
-    pts_arr = np.array(all_pts)
-    mx = np.clip(np.rint(pts_arr[:, 0]).astype(np.int64), 0, W8 - 1)
-    my = np.clip(np.rint(pts_arr[:, 1]).astype(np.int64), 0, H8 - 1)
-    hit = lake_mask[my, mx] > 0
-    for aid in np.array(pt_arc)[hit]:
-        arc_lakeshore[int(aid)] = 1
-    print("    贴湖弧 %d 条（界线与 glow 均特殊处理）" % sum(arc_lakeshore))
+        n = len(a)
+        if _in_lake(a[0]) or _in_lake(a[n // 4]) or _in_lake(a[n // 2])                 or _in_lake(a[(3 * n) // 4]) or _in_lake(a[-1]):
+            arc_lakeshore[aid] = 1
+    print("    贴湖弧 %d 条（膨胀 %dpx；界线与 glow 均排除）"
+          % (sum(arc_lakeshore), lake_dilate))
 
     mesh = {
         "name": "L3 政治矢量 mesh（共享弧拓扑，arc_topology.py 产；改色零重烘走 PoliticalLut）",

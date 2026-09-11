@@ -189,10 +189,12 @@ func _build_glow_outlines() -> void:
 			var regs: Dictionary = arc_regs[aid]
 			if not regs.has(player_region_label):
 				continue
-			var is_lakeshore := aid < lakeshore.size() and lakeshore[aid] == 1
 			var n_refs := int(arc_refs[aid])
-			# 湖岸弧：地区内湖岸也描轮廓（豁免内部弧排除）；界线由生成端排除
-			if not is_lakeshore and n_refs >= 2 and regs.size() == 1:
+			# 贴湖弧一律不画 glow（湖轮廓由湖色块表达；arc_lakeshore 膨胀采样
+			# 已全覆盖——残留拉丝弧=漏判，见生成端 arc_topology）
+			if aid < lakeshore.size() and lakeshore[aid] == 1:
+				continue
+			if n_refs >= 2 and regs.size() == 1:
 				continue   # 内部弧（两侧同地区）不画
 			# 海岸弧（单侧引用）+ 相邻地区界弧（两侧不同地区）——**逐弧独立流动**
 			#（三岔交界处串链会产生方向歧义斜穿，放弃闭合串链）

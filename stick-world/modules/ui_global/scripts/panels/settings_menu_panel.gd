@@ -119,7 +119,7 @@ func _select_category(cat_id: String) -> void:
 		var btn: Button = _category_buttons[id]
 		var selected: bool = id == cat_id
 		if btn is SketchButton:
-			btn.kind = SketchButton.Kind.ACCENT if selected else SketchButton.Kind.NORMAL
+			btn.kind = SketchButton.Kind.ACCENT if selected else SketchButton.Kind.DARK
 		elif selected:
 			btn.add_theme_stylebox_override("normal", GlassStyle.accent_normal())
 			btn.add_theme_color_override("font_color", StickTokens.ACCENT)

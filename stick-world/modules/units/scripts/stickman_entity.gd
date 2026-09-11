@@ -191,8 +191,6 @@ var attributes: Dictionary = {}
 ## 体型缩放倍率（SWL minidon 召唤护卫比常规兵种小一圈；1.0 = 正常体型）。
 ## 影响 rig 渲染 + Collider/Range/Hitbox 判定 + 血条高度，经 set_body_scale 设置。
 var body_scale: float = 1.0
-## 上一帧是否暂停冻结动画（恢复时还原速率，见 _physics_process 暂停分支）
-var _anim_frozen: bool = false
 ## 尸体停留时长（s；碰撞禁用后计时，之后淡出）——SWL 尸体 fadeOutOver 前的停留
 const CORPSE_LIFETIME: float = 4.0
 ## 尸体淡出时长（s，透明度线性降到 0 后移除节点）
@@ -508,21 +506,11 @@ func _physics_process(delta: float) -> void:
 		_ai_move_dir = Vector2.ZERO
 		_sync_markers_transform()
 		return
-	# TimeManager 暂停门禁（统一"暂停"语义）：空格暂停/战斗自动暂停时全停，
-	# 修复"假暂停"（此前单位物理/AI 不理会 TimeManager，暂停停不住战斗）。
-	# 动画同样冻结（2026-09-01 修复：暂停时 AnimationPlayer 在 idle 帧继续跑，
-	# 肢体还在动——第一次进暂停置速率 0，恢复时还原）
-	if TimeManager != null and TimeManager.is_paused():
-		if not _anim_frozen:
-			_anim_frozen = true
-			if _visual != null and _visual.has_method("set_anim_paused"):
-				_visual.set_anim_paused(true)
-		_sync_markers_transform()
-		return
-	if _anim_frozen:
-		_anim_frozen = false
-		if _visual != null and _visual.has_method("set_anim_paused"):
-			_visual.set_anim_paused(false)
+	# 暂停冻结由引擎总闸负责（本实体 PAUSABLE：暂停期物理/AI/AnimationPlayer
+	# 一并冻结——原 is_paused 自查与"暂停冻结动画"补丁随换闸删除）；
+	# 步长经 sim_delta 携带速度档（AI/计时/动画节奏随档位缩放）
+	if TimeManager != null:
+		delta = TimeManager.sim_delta(delta)
 	# y 排序（2.5D 遮挡正确性）：y 越大（屏幕越靠下=离镜头越近）z 越高——
 	# 修复"远处单位身体盖住近处单位的手/武器"（此前绘制顺序=生成顺序）
 	var zi := int(global_position.y * 0.1)
@@ -556,7 +544,14 @@ func _physics_process(delta: float) -> void:
 	# 与静态分离位置修正维持，减速停止由 _apply_movement 显式写 velocity 完成。
 	# 击退中合成速度非零，照常执行。
 	if not velocity.is_zero_approx():
+		# 倍速作用于位移积分（暂停原语化）：放大合成速度=放大本帧步长
+		# （move_and_slide 为扫掠检测，步长放大不隧穿）；积分后还原语义速度，
+		# 下帧由 AI/输入路径重新赋值
+		var prev_velocity := velocity
+		if TimeManager != null:
+			velocity = prev_velocity * TimeManager.speed_factor()
 		move_and_slide()
+		velocity = prev_velocity
 	# 士气自然恢复（AI 完善批次 3，行业最佳实践）：脱离战斗后逐渐回士气，防永久溃逃
 	_apply_rest_morale_recovery(delta)
 	# 击退冲量衰减

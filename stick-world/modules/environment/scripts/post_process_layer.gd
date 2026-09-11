@@ -25,6 +25,9 @@ func set_grain_override(v: float) -> void:
 
 
 func _ready() -> void:
+	# 例外节点（process_mode 分层表）：本节点 ALWAYS——炫光"暂停淡出/恢复淡入"
+	# 是暂停状态的视觉反应（is_paused 查询保留），冻结期间不 tick 就永远淡不出去
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 0.5
 	_rect = ColorRect.new()
 	_rect.name = "PostProcessRect"

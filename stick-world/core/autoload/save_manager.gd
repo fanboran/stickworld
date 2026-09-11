@@ -140,6 +140,10 @@ const _SCHEMA_SQLS: Array[String] = [
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	# 服务方 autoload：暂停期照常服务——存读档可从暂停菜单发起（F5/F9/面板），
+	# LoadGuard 看门狗须在引擎总闸（SceneTree.paused）下继续计时。
+	# 自动加载不在 game_root/ui_root 两棵子树内，在各自 _ready 声明（分层声明表例外项）。
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not DirAccess.dir_exists_absolute(SAVE_DIR):
 		var err: int = DirAccess.make_dir_absolute(SAVE_DIR)
 		if err != OK:

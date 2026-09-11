@@ -58,6 +58,42 @@ static func is_enabled() -> bool:
 static var _white_tex: ImageTexture = null
 static var _quad_mesh: ArrayMesh = null
 static var _circle_mesh: ArrayMesh = null
+static var _wobble_bar_mesh: ArrayMesh = null
+
+
+## 手绘条模板：1×1 单位条，水平 12 段上下边顶点——血条桶 wobble shader
+## 在顶点期扰动边缘顶点复刻 boiling line（quad 仅 4 角扰动=刚体晃动，不够）
+static func _get_wobble_bar_mesh() -> ArrayMesh:
+	if _wobble_bar_mesh != null:
+		return _wobble_bar_mesh
+	var n := 12
+	var pts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	var cols := PackedColorArray()
+	for i in n + 1:
+		var x := -0.5 + float(i) / float(n)
+		pts.append(Vector2(x, -0.5))
+		pts.append(Vector2(x, 0.5))
+		uvs.append(Vector2(x + 0.5, 0.0))
+		uvs.append(Vector2(x + 0.5, 1.0))
+		cols.append(Color.WHITE)
+		cols.append(Color.WHITE)
+	var idx := PackedInt32Array()
+	for i in n:
+		var a := i * 2
+		var b := a + 1
+		var c := a + 2
+		var d := a + 3
+		idx.append_array([a, c, b, b, c, d])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = pts
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	arr[Mesh.ARRAY_COLOR] = cols
+	arr[Mesh.ARRAY_INDEX] = idx
+	_wobble_bar_mesh = ArrayMesh.new()
+	_wobble_bar_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return _wobble_bar_mesh
 
 
 ## 1x1 纯白不透明纹理：兜底绑定（无纹理 canvas item 理论上按纯色渲染，

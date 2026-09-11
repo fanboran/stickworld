@@ -477,6 +477,9 @@ func _load_start_village() -> void:
 		print_verbose("[GameRoot] 启动读档: 槽位 %d" % boot_slot)
 		_show_loading("正在读取存档…（%d/%d）" % [BOOT_STAGES - 1, BOOT_STAGES],
 				float(BOOT_STAGES - 1) / float(BOOT_STAGES))
+		# 先让"读取存档"这一帧画出来再进同步读档——顺序反了文字永远不上屏，
+		# 玩家盯着上一段文字以为卡死（7/9 假死教训）
+		await RenderingServer.frame_post_draw
 		var boot_accepted: bool = false
 		if _save_system != null and _save_system.has_method("load_game_from_slot"):
 			boot_accepted = _save_system.load_game_from_slot(boot_slot)
@@ -497,6 +500,8 @@ func _load_start_village() -> void:
 	print_verbose("[GameRoot] 开始新游戏")
 	_show_loading("正在生成世界…（%d/%d）" % [BOOT_STAGES - 1, BOOT_STAGES],
 			float(BOOT_STAGES - 1) / float(BOOT_STAGES))
+	# 同上：先渲染"生成世界"帧，再进地图实例化的最长同步块
+	await RenderingServer.frame_post_draw
 	scene_loader.load_map(VILLAGE_A_MAP_ID)
 
 

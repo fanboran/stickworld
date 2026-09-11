@@ -34,6 +34,7 @@ var _notification_feed: NotificationFeed = null
 func _ready() -> void:
 	add_to_group("ui_root")
 	_apply_slot_z_orders()
+	_setup_zone_layout()
 	_setup_modal_stack()
 	_setup_notification_feed()
 	_bind_event_bus()
@@ -65,12 +66,40 @@ func get_modal_stack() -> UIModalStack:
 	return modal_stack
 
 
-## 装配通知流（左下堆叠 feed，挂 HudOverlay 槽；无该槽的裸环境直接挂 UIRoot）
+# ─────────────────────────────── zone 定位（HUD 布局收权，方案 B）────────────────────────────────
+
+## zone 引擎（hud_zone_layout.gd）：slot 管「画在哪层」，zone 管「钉在哪个角」。
+## 坐标一律由 zone 表计算，部件只声明内容（custom_minimum_size）。
+var _zone_layout: HudZoneLayout = null
+
+
+func _setup_zone_layout() -> void:
+	_zone_layout = HudZoneLayout.new()
+	_zone_layout.attach(self)
+	# 场景常驻部件落位（ui_root.tscn 是层级真相源；定位真相源 = zone 表）
+	place_in_zone(&"top_bar", global_hud)
+	if global_hud != null:
+		# 资源条 host：top_left_stack 首位住户（任务卡等后续成员顺延下移）
+		place_in_zone(&"top_left_stack", global_hud.get_node_or_null("ResourceBarHost"))
+		# 右上成组：时钟在上、天数时间其下（top_right 堆叠，右缘对齐）
+		place_in_zone(&"top_right", global_hud.get_node_or_null("ClockWidget"))
+		place_in_zone(&"top_right", global_hud.get_node_or_null("DayTimeLabel"))
+
+
+## 统一入口：把部件钉进 zone（供装配层 SystemSetup / 本类内部调用）。
+func place_in_zone(zone: StringName, control: Control) -> void:
+	if _zone_layout == null:
+		return
+	_zone_layout.place(zone, control)
+
+
+## 装配通知流（左下堆叠 feed，挂 HudOverlay 槽 + bottom_left zone；无该槽的裸环境直接挂 UIRoot）
 func _setup_notification_feed() -> void:
 	var feed: NotificationFeed = _NotificationFeedScript.new()
 	feed.name = "NotificationFeed"
 	if not add_to_slot("HudOverlay", feed):
 		add_child(feed)
+	place_in_zone(&"bottom_left", feed)
 	_notification_feed = feed
 
 

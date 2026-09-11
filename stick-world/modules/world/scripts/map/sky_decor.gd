@@ -88,6 +88,11 @@ var _cloud_texs: Array = []
 
 
 func _ready() -> void:
+	# 例外节点（process_mode 分层表）：本节点 ALWAYS——云/山/星野视差跟随相机，
+	# 暂停布置战术平移镜头时天空必须跟手；风/云漂移的暂停冻结由下方 world_paused
+	# 分支负责（保留 TimeManager.is_paused 查询，属"暂停期仍要跑"的视觉跟随例外，
+	# 非模拟自查）。星野/飞鸟子节点显式回落 PAUSABLE 随闸冻结。
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	z_index = -6
 	var set: Array = BIOME_SETS.get(biome, BIOME_SETS["mountains"])
 	# 云三档穿插：远云在首层山后；中云在两山之间；近云在树线远层之后
@@ -118,6 +123,8 @@ func _build_stars() -> void:
 	var stars: Node2D = SkyStarsScript.new()
 	stars.name = "Stars"
 	stars.z_index = 1
+	# 父节点 ALWAYS（视差例外）下显式回落 PAUSABLE：星/月/极光随引擎总闸冻结
+	stars.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(stars)
 	_layers.append({"node": stars, "factor": SkyStarsScript.FACTOR})
 
@@ -167,6 +174,8 @@ func _update_haze() -> void:
 func _build_birds() -> void:
 	var birds: Node2D = SkyBirdsScript.new()
 	birds.name = "Birds"
+	# 父节点 ALWAYS（视差例外）下显式回落 PAUSABLE：飞鸟随引擎总闸冻结
+	birds.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(birds)
 	_layers.append({"node": birds, "factor": SkyBirdsScript.FACTOR})
 

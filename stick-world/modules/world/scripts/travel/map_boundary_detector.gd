@@ -39,6 +39,10 @@ func set_map(map: Node2D) -> void:
 func _physics_process(delta: float) -> void:
 	if _map == null or _game_root == null:
 		return
+	# 顶边界计时随速度档缩放（4x 下贴边 3 秒=0.75 秒真实时长，与游戏时间一致；
+	# 暂停冻结由引擎总闸负责）
+	if TimeManager != null:
+		delta = TimeManager.sim_delta(delta)
 	# 获取当前附身实体
 	var pi: Node = _game_root.get_possession_interface() if _game_root.has_method("get_possession_interface") else null
 	if pi == null or not pi.has_method("get_possessed_entity"):

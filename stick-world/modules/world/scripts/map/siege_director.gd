@@ -162,6 +162,9 @@ func _deploy_squad() -> void:
 func _process(delta: float) -> void:
 	if _map == null or _wall == null:
 		return
+	# 步长经 sim_delta 携带速度档（波次推进随档位缩放；暂停冻结由引擎总闸负责）
+	if TimeManager != null:
+		delta = TimeManager.sim_delta(delta)
 	_clamp_garrison(delta)
 	if not waves_enabled:
 		return

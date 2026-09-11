@@ -67,14 +67,13 @@ func _build_content() -> void:
 	_content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content_vbox.add_theme_constant_override("separation", 8)
 	scroll.add_child(_content_vbox)
-	# 分类列按钮
+	# 分类列按钮（左对齐列表形态：图标走 set_list_icon 行内呈现，宽度组件自管）
 	for cat in SETTINGS_SCHEMA:
 		var btn := StickKit.auto_button(_category_column, cat["title"],
 				_select_category.bind(cat["id"]), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		if cat.has("icon"):
-			btn.icon = StickIcons.tex(cat["icon"])
-			btn.add_theme_constant_override("icon_max_width", 18)
+			(btn as SketchButton).set_list_icon(StickIcons.tex(cat["icon"]))
 		_category_buttons[cat["id"]] = btn
 	# 初始值 + 内容
 	_init_values()
@@ -115,19 +114,12 @@ func _normalize_stored_value(key: String, raw: Variant) -> Variant:
 
 func _select_category(cat_id: String) -> void:
 	_active_category = cat_id
-	# 分类按钮高亮：游戏内 SketchButton 切 kind（手绘琥珀描边）；
-	# 主菜单原生 Button 走 override（玻璃琥珀底）
+	# 分类按钮高亮：选中态 = ACCENT 变体（琥珀描边档），取消 = DARK。
+	# _category_buttons 全部经 auto_button 创建（恒为 SketchButton）——旧
+	# 「原生 Button 玻璃底 override」分支为死代码，随变体化删除
 	for id in _category_buttons:
-		var btn: Button = _category_buttons[id]
-		var selected: bool = id == cat_id
-		if btn is SketchButton:
-			btn.kind = SketchButton.Kind.ACCENT if selected else SketchButton.Kind.NORMAL
-		elif selected:
-			btn.add_theme_stylebox_override("normal", GlassStyle.accent_normal())
-			btn.add_theme_color_override("font_color", StickTokens.ACCENT)
-		else:
-			btn.remove_theme_stylebox_override("normal")
-			btn.remove_theme_color_override("font_color")
+		var btn: SketchButton = _category_buttons[id]
+		btn.kind = SketchButton.Kind.ACCENT if id == cat_id else SketchButton.Kind.DARK
 	_rebuild_content()
 
 

@@ -40,10 +40,8 @@ func setup(resource_manager: Object) -> void:
 func _process(delta: float) -> void:
 	if _resource_manager == null:
 		return
-	# 暂停时冻结市场（与全局时间流速一致）
-	if TimeManager and TimeManager.is_paused():
-		return
-	_price_tick_accumulator += delta
+	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE）；步长经 sim_delta 携带速度档
+	_price_tick_accumulator += TimeManager.sim_delta(delta) if TimeManager != null else delta
 	if _price_tick_accumulator < PRICE_TICK_INTERVAL:
 		return
 	_price_tick_accumulator = 0.0

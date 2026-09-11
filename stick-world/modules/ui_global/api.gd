@@ -35,13 +35,3 @@ const PATH_MODAL_OVERLAY := "ModalOverlay"
 static func create_save_panel() -> Control:
 	const SavePanelScript := preload("res://modules/ui_global/scripts/menus/save_panel.gd")
 	return UIKit.full_rect(SavePanelScript, "SavePanel")
-
-# ─────────────────────────────── HUD 布局常量 ────────────────────────────────
-## 小地图/缩放条共享布局参数（跨文件对齐，避免各处硬编码散落）
-## 小地图 1.5 倍放大（基准 240x80 → 360x120）
-const HUD_MINIMAP_WIDTH: float = 360.0
-const HUD_MINIMAP_HEIGHT: float = 120.0
-## 小地图左上角 Y（= SCREEN_MARGIN，与屏幕顶边界留距）
-const HUD_MINIMAP_Y: float = 12.0
-## 缩放条 Y（= 小地图 Y + 高度 + 4px 间距）
-const HUD_ZOOMBAR_Y: float = HUD_MINIMAP_Y + HUD_MINIMAP_HEIGHT + 4.0

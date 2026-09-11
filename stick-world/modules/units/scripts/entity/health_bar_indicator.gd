@@ -184,8 +184,14 @@ func _process(delta: float) -> void:
 		_in_combat = _check_in_combat()
 	var hover: bool = _is_hovered()
 	var show: bool = _in_combat or _ever_damaged or hover
+	var prev_shown: float = _shown
 	_shown = move_toward(_shown, 1.0 if show else 0.0, FADE_SPEED * delta)
 	modulate.a = _shown
+	# 满血圆点无其他重绘来源（wobble/残影/展开都要求 _ever_damaged），而
+	# modulate.a 变化不触发重绘：跨过 _draw 的 _shown<=0.01 早退门时补一次
+	# 重绘（渐显=画出圆点；渐隐=清空画布），否则入战圆点永不出现
+	if (prev_shown <= 0.01) != (_shown <= 0.01):
+		queue_redraw()
 	# boiling line：定期重掷扰动相位（手绘逐帧抖动感）。
 	# 战斗性能优化：仅掉过血（横条形态）才抖——满血圆点无抖动细节，
 	# 混战时 ~200 根满血条每 0.12s 的无条件重画（多边形重建+三角化）是纯浪费
@@ -377,15 +383,19 @@ func _follow_head() -> void:
 					/ maxf(absf(entity.scale.x), 0.01)
 
 
-## 在战判定：近身有活敌（AI IsUnderThreat 真值，公开包装）
+## 在战判定：所属战斗实例进行中（入战=整场战斗——battle 打响全员头顶
+## 圆点、受伤展开成条；战斗结束 is_active=false 渐隐。AI 的近身威胁
+## 判定（溃逃用）与本 UI 判定语义不同，不共用 THREAT_RANGE）
 func _check_in_combat() -> bool:
 	var entity := get_parent()
 	if entity == null or not is_instance_valid(entity):
 		return false
-	var ai: Node = entity.get_node_or_null("AIController")
-	if ai != null and ai.has_method("is_under_threat"):
-		return ai.is_under_threat()
-	return false
+	if not entity.has_method("get_battle_instance"):
+		return false
+	var bi: Node = entity.get_battle_instance()
+	if bi == null or not is_instance_valid(bi):
+		return false
+	return bi.has_method("is_active") and bi.is_active()
 
 
 ## 鼠标悬浮：指针距实体原点 HOVER_RADIUS 内且血量不满 → 强制显示横条

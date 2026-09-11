@@ -48,3 +48,57 @@ static func dash_segments(segs: PackedVector2Array, pts: PackedVector2Array,
 			if remain <= 0.0001:
 				drawing = not drawing
 				remain = dash if drawing else gap
+
+
+## 折线串链：把同组折线按端点匹配（±tol）接成长链，减少虚线相位断裂与视觉碎段。
+## 输入 lines 元素为 PackedVector2Array；返回长链列表（无法拼接的孤线原样保留）。
+## 典型用途：共享弧拓扑的界线（每弧一条折线）→ 同类界先串链再 dash_segments，
+## 虚线长短即统一由 dash/gap 决定。
+static func chain_polylines(lines: Array, tol: float = 0.05) -> Array:
+	var chains: Array = []
+	var end_map := {}   # 端点 key -> [链下标, 是否接尾部]
+	for ln in lines:
+		var pts: PackedVector2Array = ln
+		if pts.size() < 2:
+			continue
+		var k0 := _pt_key(pts[0], tol)
+		var k1 := _pt_key(pts[pts.size() - 1], tol)
+		var head: Variant = end_map.get(k0, null)
+		var tail: Variant = end_map.get(k1, null)
+		if head != null and (head as Array)[1]:
+			# 接到某链尾部
+			var ci: int = (head as Array)[0]
+			var ch: PackedVector2Array = chains[ci]
+			ch.append_array(pts)
+			chains[ci] = ch
+			_end_remap(end_map, k0, ci, false)
+			end_map[k1] = [ci, true]
+		elif tail != null and not (tail as Array)[1]:
+			# 接到某链头部（反转并入保持方向）
+			var ci2: int = (tail as Array)[0]
+			var rev := PackedVector2Array()
+			rev.resize(pts.size())
+			for i in pts.size():
+				rev[i] = pts[pts.size() - 1 - i]
+			var ch2: PackedVector2Array = chains[ci2]
+			var merged := PackedVector2Array()
+			merged.append_array(rev)
+			merged.append_array(ch2)
+			chains[ci2] = merged
+			_end_remap(end_map, k1, ci2, false)
+			end_map[k0] = [ci2, false]
+		else:
+			chains.append(pts)
+			end_map[k0] = [chains.size() - 1, false]
+			end_map[k1] = [chains.size() - 1, true]
+	return chains
+
+
+static func _pt_key(p: Vector2, tol: float) -> String:
+	return "%d,%d" % [roundi(p.x / tol), roundi(p.y / tol)]
+
+
+static func _end_remap(end_map: Dictionary, key: String, ci: int, is_tail: bool) -> void:
+	var cur: Variant = end_map.get(key, null)
+	if cur != null and int((cur as Array)[0]) == ci:
+		end_map[key] = [ci, is_tail]

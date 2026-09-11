@@ -10,7 +10,7 @@ extends ColorRect
 ##     不设偏移，CanvasLayer 直下的顶层 Control 可能保持 0 尺寸），并显式对齐视口；
 ##   - 视口尺寸变化（窗口缩放）时重新对齐；
 ##   - `mouse_filter = IGNORE`（设计本意不挡地图输入；L3 曾误写 STOP）；
-##   - `z_index = -2`：垫在所有地图内容（含政治 ID mask 层的相对 z = −1）之下。
+##   - `z_index = -3`：垫在所有地图内容（含政治 ID mask 层的相对 z = −1）之下。
 ##
 ## 色值 = MapTokens 海洋色（与 B2 底图 terrain_params.json 的 ocean 同源，改色两端同步）。
 
@@ -18,7 +18,7 @@ extends ColorRect
 func _ready() -> void:
 	color = MapTokens.L1_OCEAN
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	z_index = -2
+	z_index = -3
 	_fit_viewport()
 	var vp := get_viewport()
 	if vp != null and not vp.size_changed.is_connected(_fit_viewport):

@@ -61,18 +61,28 @@ def build_candidates(spec: dict):
     """按参数表 colors 段生成候选色列表。
 
     spec = {"hue_count": 16, "hue_offset_deg": 11.25,
-            "tiers": [{"l": 0.815, "c": 0.038}, ...]}
+            "tiers": [{"l": 0.815, "c": 0.038}, ...],
+            "hue_center_deg": 80.0, "hue_span_deg": 240.0}   # 可选：色相重心/跨度
     返回项：{hue, tier, L, C, lab, rgb}
+
+    hue_center/span：把均匀色环压缩到 [center-span/2, center+span/2]——
+    全环 360° 会出「彩虹地图」（纯绿/品红扎眼）；收窄到暖调大地系
+    （如 center=80° 黄棕重心、span=240° 避开品红段）观感即统一为做旧地图色。
     """
     n_hue = int(spec.get("hue_count", 16))
     offset = float(spec.get("hue_offset_deg", 0.0))
     tiers = spec.get("tiers", [])
+    center = spec.get("hue_center_deg", None)
+    span = float(spec.get("hue_span_deg", 360.0))
     out = []
     for ti, tier in enumerate(tiers):
         lightness = float(tier["l"])
         chroma = float(tier["c"])
         for hi in range(n_hue):
             hue = (offset + 360.0 * hi / n_hue) % 360.0
+            if center is not None and span < 360.0:
+                # 色相压缩：0..360 环映射到 center±span/2（保持环序与均匀步进）
+                hue = (float(center) - span * 0.5 + span * hi / n_hue) % 360.0
             lab = oklch_to_oklab(lightness, chroma, hue)
             out.append({
                 "hue": hi, "tier": ti, "L": lightness, "C": chroma,

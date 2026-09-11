@@ -32,6 +32,7 @@ func _init() -> void:
 	n += 1 if _bake_l3("res://config/strategic_map/l3_world.json") else 0
 	n += 1 if _bake_l3("res://config/strategic_map/l3_l1.json") else 0
 	n += 1 if _bake_l3("res://config/strategic_map/l3_city.json") else 0
+	n += 1 if _bake_political_mesh("res://config/strategic_map/l3_political_mesh.json") else 0
 	print("全盘紧凑化完成: %d 个 bin，%d ms" % [n, Time.get_ticks_msec() - t0])
 	quit()
 
@@ -107,6 +108,44 @@ func _bake_l2(json_path: String) -> bool:
 		data["neighbors"] = _compact_poly_list(data["neighbors"])
 	if data.has("lakes"):
 		data["lakes"] = _compact_poly_list(data["lakes"])
+	if data.has("political_mesh"):
+		data["political_mesh"] = _compact_political_mesh(data["political_mesh"], false)
+	return _write_bin(json_path, data)
+
+
+## 政治矢量 mesh（边界超分 S3）紧凑化。
+## 顶点 json 是 [x,y] 序（与 l2/l3 老字段的 [y,x] 不同——mesh 是新格式新约定）。
+## full=true 为 L3 顶层 mesh（arcs 平铺 + tiles 弧引用），false 为 L2 注入版。
+func _compact_political_mesh(pm: Dictionary, full: bool) -> Dictionary:
+	if pm.has("verts"):
+		pm["verts"] = _to_vec2_arr_xy(pm["verts"])
+	for f in ["code", "idx"]:
+		if pm.has(f):
+			pm[f] = _to_int_arr(pm[f])
+	for f in ["borders_national", "borders_region", "borders_free"]:
+		if pm.has(f):
+			var lines := []
+			for ln in (pm[f] as Array):
+				lines.append(_to_vec2_arr_xy(ln))
+			pm[f] = lines
+	if full:
+		if pm.has("arcs"):
+			pm["arcs"] = _to_float_arr(pm["arcs"])
+		for f in ["arc_ptr", "arc_code_a", "arc_code_b", "arc_border"]:
+			if pm.has(f):
+				pm[f] = _to_int_arr(pm[f])
+	return pm
+
+
+## L3 顶层政治矢量 mesh：arcs/弧侧码/界分类/fill 三角网/tiles 弧引用
+func _bake_political_mesh(json_path: String) -> bool:
+	if not FileAccess.file_exists(json_path):
+		print("  .. %s 不存在，跳过（mask 路线回退可用）" % json_path)
+		return false
+	var data: Dictionary = _read_json(json_path)
+	if data.is_empty():
+		return false
+	data = _compact_political_mesh(data, true)
 	return _write_bin(json_path, data)
 
 
@@ -176,6 +215,32 @@ func _to_vec2_arr(poly: Array) -> PackedVector2Array:
 		var p: Array = poly[i]
 		arr[i] = Vector2(float(p[1]), float(p[0]))  # json [y,x] → Vector2(x,y)
 	return arr
+
+
+## political_mesh 顶点：json [x,y] → Vector2(x,y)（新格式直转，无序交换）
+func _to_vec2_arr_xy(poly: Array) -> PackedVector2Array:
+	var arr := PackedVector2Array()
+	arr.resize(poly.size())
+	for i in poly.size():
+		var p: Array = poly[i]
+		arr[i] = Vector2(float(p[0]), float(p[1]))
+	return arr
+
+
+func _to_int_arr(arr: Array) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	out.resize(arr.size())
+	for i in arr.size():
+		out[i] = int(arr[i])
+	return out
+
+
+func _to_float_arr(arr: Array) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(arr.size())
+	for i in arr.size():
+		out[i] = float(arr[i])
+	return out
 
 
 func _read_json(json_path: String) -> Dictionary:

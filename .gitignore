@@ -78,6 +78,9 @@ tools/worldgen/output/**
 # feedback3 创始人第三批观感返工验收预览（C19 界线 / C20 都城标记 / C21 全屏海洋 /
 # C22 裁剪 / C23 政权配色 / C24 标注文字，见交接档「创始人第三批观感反馈」）
 !tools/worldgen/output/feedback3_*.png
+# 边界超分 S2/S3 验收预览（共享弧拓扑全景+出生特写+新色板，见交接档「边界超分 S2/S3」）
+!tools/worldgen/output/arcs_preview_*.png
+!tools/worldgen/output/palette_v3_preview_2048.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

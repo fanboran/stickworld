@@ -29,6 +29,12 @@ var terrain_texture: Texture2D = null
 ## 1..80，0 = 海/无）。颜色不再烘焙——由 PoliticalLut 运行时查表上色（改 LUT 即
 ## 全图换色），本字段由 L3MapRenderer 后台线程解码填充
 var political_id_image: Image = null
+## 政治矢量 mesh（边界超分 S3，l3_political_mesh.json/bin）：fill 三角网顶点色 =
+## lut code + 共享弧三级界线。fill_verts 非空 = POLITICAL 模式优先矢量路线
+## （解析边界任意缩放零马赛克）；缺失/空 = mask 路线（political_id_image）回退。
+## 字段：arcs(PackedFloat32Array 平铺 x,y)/arc_ptr/arc_code_a/arc_code_b/arc_border
+##       /fill_verts(PackedVector2Array)/fill_code/fill_idx/tiles(弧引用，运行时暂不消费)
+var political_mesh: Dictionary = {}
 ## 政权表（P7，l3_city.json 顶层 "states"）：state_id -> {name,capital,culture,alliance,color,...}
 var states: Dictionary = {}
 ## 老 L1 索引图（label 直编 2048）：hover 查询返回老 L1 地块
@@ -82,6 +88,13 @@ static func load_from(json_path: String, base_dir: String) -> L3WorldData:
 			# 政权表（P7 state_expand_lite 注入顶层；缺字段时为空表，渲染回退现状）
 			for sd in (city_data.get("states", {}) as Dictionary):
 				world.states[sd] = city_data["states"][sd]
+	# 政治矢量 mesh（可选，S3；缺失时 POLITICAL 回退 mask 路线）
+	var pm_path := "%s/l3_political_mesh.json" % base_dir
+	if FileAccess.file_exists(pm_path) or FileAccess.file_exists(_bin_of(pm_path)):
+		var pm := _read_data_dict(pm_path)
+		if not pm.is_empty():
+			_compact_political_mesh(pm)
+			world.political_mesh = pm
 	# C2 blob：population_score 就地做每局扰动（出生免疫，与 L1/L2 装配同口径；
 	# label→settlement_city_%03d 与生成端 id 规则一致）
 	for t in world.city_tiles:
@@ -228,3 +241,28 @@ static func _to_vec2(poly: Array) -> PackedVector2Array:
 		var p: Array = poly[i]
 		arr[i] = Vector2(float(p[1]), float(p[0]))  # json [y,x] → Vector2(x,y)
 	return arr
+
+
+## 政治矢量 mesh 的 JSON 回退紧凑化（bin 产物已紧凑，幂等）：顶点 [x,y] 直转
+## Vector2(x,y)（mesh 是新格式新约定，与老字段 [y,x] 不同）、数值数组转 Packed
+static func _compact_political_mesh(pm: Dictionary) -> void:
+	if pm.get("arcs") is Array:
+		var fa := PackedFloat32Array()
+		fa.resize((pm["arcs"] as Array).size())
+		for i in fa.size():
+			fa[i] = float(pm["arcs"][i])
+		pm["arcs"] = fa
+	for f in ["arc_ptr", "arc_code_a", "arc_code_b", "arc_border", "fill_code", "fill_idx"]:
+		if pm.get(f) is Array:
+			var ia := PackedInt32Array()
+			ia.resize((pm[f] as Array).size())
+			for i in ia.size():
+				ia[i] = int(pm[f][i])
+			pm[f] = ia
+	if pm.get("fill_verts") is Array:
+		var va := PackedVector2Array()
+		va.resize((pm["fill_verts"] as Array).size())
+		for i in va.size():
+			var p: Array = pm["fill_verts"][i]
+			va[i] = Vector2(float(p[0]), float(p[1]))
+		pm["fill_verts"] = va

@@ -69,16 +69,27 @@ var _context_size := Vector2.ONE
 var _tile_border_segs: Array = []        # 地块描边段（烘焙，已合并共线段并滤除湖泊/边缘段）
 var _neighbor_border_segs: Array = []    # 相邻地区分界线段（烘焙，同上）
 
-## 政治模式着色层（R7/R9：政权 ID mask + PoliticalLut 查表 shader；mask 含
-## 海洋/湖泊/邻区底色保留码，垫底后本节点跳过 1/2/3 层，界线/河流/hover 照常画）
+## 政治模式着色层（R7/R9 mask 路线：政权 ID mask + PoliticalLut 查表 shader；
+## 边界超分 S3 起为**回退路线**。mask 含海洋/湖泊/邻区底色保留码，垫底后本节点
+## 跳过 1/2/3 层，界线/河流/hover 照常画）
 var _political_layer: Sprite2D = null
 
-## 政治模式界线三级缓存（R8 层2）：地块界（1px 短虚线）/地区界（2px 长虚线）——
-## 虚线在构建时做一次（feedback1 去抖动：平滑直绘）。
-## 国界（3px 实线）由底图 ID mask 像素色差表达（L2 pack 无城块矢量几何，
-## 三级中的国界矢量层在 L3 落地，数据源 = l3_city 城块邻接）
-var _political_plot_segs := PackedVector2Array()
+## 政治矢量 fill（边界超分 S3 主路线：共享弧拓扑 earcut 三角网，顶点色直烘
+## PoliticalLut 最终 RGB——解析边界任意缩放零马赛克）。画进本渲染器 _draw
+## （draw_mesh，先画=垫底；渲染怪癖记录见 L3 渲染器与 MapMeshBuilder 注）。
+## LUT 改色走信号重烘顶点色。空数组 = mask 回退
+var _political_fill_meshes: Array = []
+var _political_fill_codes := PackedInt32Array()
+
+## 政治模式界线三级缓存：矢量路线（S3，弧源同源）= 国界 casing/主线 + 地区界长虚线
+## + 自由城邦界短虚线，与 L3 同一语言同一几何源；mask 回退路线维持旧两级
+## （地块界 1px 短虚线 / 地区界 2px 长虚线）。虚线在构建时做一次
+## （feedback1 去抖动：平滑直绘），虚线按构建时 zoom 固化成地图单位（烙在地图上），
+## 线宽绘制时实时 ÷zoom 保持屏幕恒定
+var _political_national := PackedVector2Array()
 var _political_region_segs := PackedVector2Array()
+var _political_free_segs := PackedVector2Array()
+var _political_plot_segs := PackedVector2Array()
 var _political_borders_built := false
 
 ## 地图标注层（R8 层3）：地区名 + 都城星标/名 + 重镇名（§7.3-6 规范表 L2 档），
@@ -108,13 +119,27 @@ func set_camera(camera: MapCamera) -> void:
 	_camera = camera
 
 
-## 政权 ID mask 着色层（R7/R9）：贴图随包同步加载，LUT 全游戏共享一份
-## （PoliticalLut.shared_from_states 首调构建）——改 LUT 即 L2/L3/图例全换色
+## 政治模式着色层（R7/R9）：贴图随包同步加载，LUT 全游戏共享一份
+## （PoliticalLut.shared_from_states 首调构建）——改 LUT 即 L2/L3/图例全换色。
+## 边界超分 S3：political_mesh 存在时优先矢量 fill（_draw 内 draw_mesh 直绘），
+## mask 降级为回退（数据缺失/低端机）。
+## ⚠️ fill 不用子节点（MeshInstance2D z=-1/show_behind_parent 在真实场景树实测
+## 均不渲染——canvas 排序怪癖）；draw_mesh 走本节点 _draw 管线，先画即垫底。
 func _ensure_political_layer() -> void:
-	if _political_layer != null or _data == null or _data.political_id_texture == null:
+	if not _political_fill_meshes.is_empty() or _political_layer != null or _data == null:
 		return
 	var lut := PoliticalLut.shared_from_states(_data.states)
 	if lut == null:
+		return
+	var parts := _build_political_fill_parts(lut)
+	if not parts.is_empty():
+		_political_fill_meshes = parts
+		if not lut.state_color_changed.is_connected(_on_lut_color_changed):
+			lut.state_color_changed.connect(_on_lut_color_changed)
+		queue_redraw()
+		return
+	# mask 回退路线（S3 前的主路线，数据兼容保留）
+	if _data.political_id_texture == null:
 		return
 	var mat := ShaderMaterial.new()
 	mat.shader = PoliticalLut.COLORIZE_SHADER
@@ -129,6 +154,32 @@ func _ensure_political_layer() -> void:
 	_political_layer.z_index = -1
 	_political_layer.visible = map_mode == MapModeManager.Mode.POLITICAL
 	add_child(_political_layer)
+
+
+## 矢量 fill 三角网 → ArrayMesh（顶点色 R = lut code/255，运行时零几何计算：
+## 三角剖分已在生成端 earcut 完成；MapMeshBuilder 分块规避 canvas 65535 顶点限制）
+func _build_political_fill_parts(lut: PoliticalLut) -> Array:
+	var pm: Dictionary = _data.political_mesh
+	var verts: PackedVector2Array = pm.get("verts", PackedVector2Array())
+	var codes: PackedInt32Array = pm.get("code", PackedInt32Array())
+	var idx: PackedInt32Array = pm.get("idx", PackedInt32Array())
+	if verts.is_empty() or idx.is_empty() or codes.size() < verts.size():
+		return []
+	_political_fill_codes = codes
+	var parts: Array = MapMeshBuilder.build_political_fill_parts(verts, codes, idx, lut)
+	MapMeshBuilder.setup_rebake_offsets(parts)
+	return parts
+
+
+## LUT 改色（PoliticalLut.set_state_color）→ 重烘 fill 顶点色（调试低频操作）
+func _on_lut_color_changed(_sid: String, _col: Color) -> void:
+	if _political_fill_meshes.is_empty() or _data == null:
+		return
+	var lut := PoliticalLut.shared_from_states(_data.states)
+	if lut == null:
+		return
+	MapMeshBuilder.rebake_colors(_political_fill_meshes, _political_fill_codes, lut)
+	queue_redraw()
 
 
 ## 地图模式切换（控制器在 open() 时也推一次当前模式——跨视图全局状态）
@@ -217,17 +268,25 @@ func _draw() -> void:
 		return
 	# 地形模式（B2）：程序着色底图替代填充层（湖泊/海洋/邻居地形已在纹理内）
 	var terrain := map_mode == MapModeManager.Mode.TERRAIN and _data.terrain_texture != null
-	# 政治模式（R7/R9）：政权 ID mask shader 层已垫底（mask 含海洋/湖泊/邻区底色
-	# 保留码），本节点跳过 1/2/3 层直出；层未就绪（贴图缺失）时回退城市贴图
-	var political := map_mode == MapModeManager.Mode.POLITICAL 				and _political_layer != null
-	# 1. 海洋背景（context 尺寸；地形纹理的虚空透明区透出此色）
+	# 政治模式两条路线（边界超分 S3）：
+	#   矢量 = _draw 内 draw_mesh fill（自带 code 0 海洋底矩形垫底）；
+	#   mask 回退 = _political_layer（ID mask 含海洋/湖泊/邻区保留码）垫底，跳过 1/2/3 层
+	var political_vector := map_mode == MapModeManager.Mode.POLITICAL 			and not _political_fill_meshes.is_empty()
+	var political_mask := map_mode == MapModeManager.Mode.POLITICAL 			and _political_layer != null
+	var political := political_vector or political_mask
+	# 1. 海洋背景（context 尺寸；地形纹理的虚空透明区透出此色）。
+	#    政治模式两条路线的垫底层都自带海洋色（mask 含海洋保留码空区 / 矢量 fill
+	#    首排 code 0 海洋底矩形），父绘海洋 rect 在 z=0 会盖住 z=-1 的 fill，跳过
 	if not political:
 		draw_rect(Rect2(Vector2.ZERO, _context_size), OCEAN_COLOR)
 	if terrain:
 		draw_texture_rect(_data.terrain_texture,
 			Rect2(Vector2.ZERO, _context_size), false)
 	elif political:
-		pass  # 政权 ID + LUT 查表层已垫底
+		# 矢量路线 draw_mesh fill（自带海洋底矩形，先画=垫底），界线/河流/hover 自然压上
+		if political_vector:
+			for fm in _political_fill_meshes:
+				draw_mesh(fm, null)
 	else:
 		# 2. 湖泊（浅蓝）
 		if _lakes_mesh != null:
@@ -247,24 +306,45 @@ func _draw() -> void:
 			# 5. 当前地块洞（海洋色）
 			if _holes_mesh != null:
 				draw_mesh(_holes_mesh, null)
-	# 5.5 界线（R8 层2 分级）：
-	#     政治模式 = 界线三级——地区界 2px 长虚线 / 地块界 1px 短虚线（§7.3-6 规范表，
-	#     屏幕像素口径恒定粗细；国界由底图 ID mask 像素色差表达）
+	# 5.5 界线（R8 层2 分级 + 边界超分 S3 同源化）：
+	#     矢量路线 = 界线三级与 L3 同语言同几何源——国界（casing+墨线实线）/
+	#     地区界（2px 长虚线）/ 自由城邦界（灰短虚线），全部从共享弧两侧政权判定；
+	#     mask 回退路线 = 旧两级（地区界 2px 长虚线 / 地块界 1px 短虚线，
+	#     国界由 mask 像素色差表达）
 	#     非政治模式 = 现状语义（地块常驻描边，地图绝对粗细，放大超屏幕上限时 clamp）
 	if political:
 		if not _political_borders_built:
 			_build_political_borders()
-		var regw := MapTokens.LINE_REGION
-		var plw := MapTokens.LINE_PLOT
+		var zz := 1.0
 		if _camera != null and _camera.has_method("get_zoom"):
-			var pz: float = _camera.get_zoom()
-			if pz > 0.0001:
-				regw = MapTokens.LINE_REGION / pz
-				plw = MapTokens.LINE_PLOT / pz
-		if _political_plot_segs.size() >= 2:
-			draw_multiline(_political_plot_segs, MapTokens.LINE_PLOT_COLOR, plw, true)
-		if _political_region_segs.size() >= 2:
-			draw_multiline(_political_region_segs, MapTokens.LINE_REGION_COLOR, regw, true)
+			zz = _camera.get_zoom()
+		if zz <= 0.0001:
+			zz = 1.0
+		if political_vector:
+			# 矢量路线：绘制次序 = 语义层级倒序（低级先画、国界压顶）
+			if _political_region_segs.size() >= 2:
+				draw_multiline(_political_region_segs, MapTokens.LINE_REGION_COLOR,
+					MapTokens.LINE_REGION / zz, true)
+			if _political_free_segs.size() >= 2:
+				draw_multiline(_political_free_segs, MapTokens.LINE_FREE_COLOR,
+					MapTokens.LINE_FREE / zz, true)
+			if _political_national.size() >= 2:
+				draw_multiline(_political_national, MapTokens.LINE_NATIONAL_CASING_COLOR,
+					(MapTokens.LINE_NATIONAL + MapTokens.LINE_NATIONAL_CASING_EXTRA) / zz, true)
+				draw_multiline(_political_national, MapTokens.LINE_NATIONAL_COLOR,
+					MapTokens.LINE_NATIONAL / zz, true)
+		else:
+			var regw := MapTokens.LINE_REGION
+			var plw := MapTokens.LINE_PLOT
+			if _camera != null and _camera.has_method("get_zoom"):
+				var pz: float = _camera.get_zoom()
+				if pz > 0.0001:
+					regw = MapTokens.LINE_REGION / pz
+					plw = MapTokens.LINE_PLOT / pz
+			if _political_plot_segs.size() >= 2:
+				draw_multiline(_political_plot_segs, MapTokens.LINE_PLOT_COLOR, plw, true)
+			if _political_region_segs.size() >= 2:
+				draw_multiline(_political_region_segs, MapTokens.LINE_REGION_COLOR, regw, true)
 	else:
 		var twidth := TILE_BORDER_WIDTH
 		if _camera != null and _camera.has_method("get_zoom"):
@@ -280,8 +360,8 @@ func _draw() -> void:
 				draw_line(seg[0], seg[1], BORDER_COLOR, bw, true)
 	# 6.5 湖泊绘制到最上层：覆盖灰色相邻地区/非地块区（湖是水域，不应被灰影盖住）。
 	# 地块内湖泊已作洞（5 步洞网格同色），此处再绘一次湖泊多边形，确保非地块区的湖也显现。
-	# 地形模式下纹理已含湖色，跳过（避免纯色湖 mesh 盖掉纹理湖渐变）。
-	if _lakes_mesh != null and not terrain:
+	# 地形模式纹理已含湖色跳过；矢量政治层 fill 已含湖（code 254 同 LUT 色）也跳过。
+	if _lakes_mesh != null and not terrain and not political_vector:
 		draw_mesh(_lakes_mesh, null)
 	# 6.6 河流矢量（B3）：POLITICAL 模式叠加（TERRAIN 底图已含河流，不重复画）。
 	# 画在湖泊上层之外的水系表达——河折线止于湖岸/海岸（生成端 mask 同源），画湖后即可。
@@ -331,19 +411,40 @@ func _draw_l1_labels() -> void:
 		draw_string(font, pos + Vector2(2.0, -LABEL_SIZE * 0.4), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, LABEL_COLOR)
 
 
-## 构建政治模式界线三级缓存（首次政治绘制时一次）：地块界/地区界逐段虚线切段
-## （feedback1 去抖动：平滑直绘，共享端点共点 = 交界处严丝合缝）。
-## 虚线按构建时 zoom 固化成地图单位（烙在地图上，缩放观感一致）；线宽绘制时
-## 实时 ÷zoom 保持屏幕恒定。
+## 构建政治模式界线三级缓存（首次政治绘制时一次）。
+## 矢量路线（边界超分 S3）：生成端已从共享弧按两侧政权判定界类型并裁好窗口折线
+## （political_mesh.borders_*，与 fill 色块逐像素同源）——这里只做国界段对展开
+## 与虚线切段（feedback1 去抖动：平滑直绘，虚线按构建时 zoom 固化成地图单位）。
+## mask 回退路线：旧两级——地块界/地区界逐段虚线切段。
 func _build_political_borders() -> void:
-	_political_plot_segs = PackedVector2Array()
+	_political_national = PackedVector2Array()
 	_political_region_segs = PackedVector2Array()
+	_political_free_segs = PackedVector2Array()
+	_political_plot_segs = PackedVector2Array()
 	_political_borders_built = true
 	var zz := 1.0
 	if _camera != null and _camera.has_method("get_zoom"):
 		zz = _camera.get_zoom()
 	if zz <= 0.0001:
 		zz = 1.0
+	var pm: Dictionary = _data.political_mesh
+	if pm.get("verts", PackedVector2Array()).size() > 0:
+		# 国界实线：折线 → 线段对展开（⚠️ draw_multiline 消费段对，直接 append
+		# 折线点列会把相邻顶点错误连线出「飞线」）
+		for ln in (pm.get("borders_national", []) as Array):
+			var pts: PackedVector2Array = ln
+			for k in pts.size() - 1:
+				_political_national.append(pts[k])
+				_political_national.append(pts[k + 1])
+		# 地区界/自由城邦界虚线：同组弧先串成长链再切虚线——相位连续、长短统一
+		for ln in MapSketch.chain_polylines(pm.get("borders_region", [])):
+			MapSketch.dash_segments(_political_region_segs, ln,
+				MapTokens.DASH_LONG / zz, MapTokens.DASH_LONG_GAP / zz)
+		for ln in MapSketch.chain_polylines(pm.get("borders_free", [])):
+			MapSketch.dash_segments(_political_free_segs, ln,
+				MapTokens.DASH_SHORT / zz, MapTokens.DASH_SHORT_GAP / zz)
+		return
+	# mask 回退：旧两级（地块界 1px 短虚线 / 地区界 2px 长虚线）
 	for seg in _tile_border_segs:
 		MapSketch.dash_segments(_political_plot_segs,
 			PackedVector2Array([seg[0], seg[1]]),

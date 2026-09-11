@@ -59,6 +59,13 @@ const BORDER_PROBE_DIST := 4.0
 ## 同城块内相邻边永不去重——否则短边会被吃掉，界线断口）。
 const BORDER_WELD_GRID := 8.0
 
+## ── 弧界类型（边界超分 S3：political_mesh.arc_border 值，与生成端
+## arc_topology.classify_border 同码表；探针路线退役后为界线唯一来源）──
+const ARC_BORDER_NONE := 0            ## 非界（海岸/同国同地区）
+const ARC_BORDER_NATIONAL := 1        ## 国界（两侧政权不同）
+const ARC_BORDER_REGION := 2          ## 地区界（同国不同地区）
+const ARC_BORDER_FREE_CITY := 3       ## 自由城邦界（恰一侧 253 无归属）
+
 # ────────────────────── 虚线（屏幕像素口径）──────────────────────
 
 ## 长虚线（地区界）：实段/空段

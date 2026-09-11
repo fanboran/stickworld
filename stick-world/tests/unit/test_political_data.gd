@@ -447,7 +447,9 @@ func _test_political_lut() -> void:
 	# LUT 图像并就地 texture.update()——shader 每帧采样该纹理，L2/L3 政治模式
 	# 即刻换色、零重烘（headless 可证：图像像素即时变化 + update 路径无错）
 	var before := lut.color_of(sample)
-	var alt := Color(1.0, 0.0, 0.0) if before.r < 0.5 else Color(0.0, 0.5, 1.0)
+	# alt 必须 8bit 精确（image.set_pixel 按 RGBA8 量化，is_equal_approx 容差
+	# 1e-5 判不出 0.5→127/255 的差——2026-09-11 色板改暖调后踩坑）
+	var alt := Color8(0, 128, 255)
 	lut.set_state_color(sample, alt)
 	_runner.assert_true(lut.color_of(sample).is_equal_approx(alt),
 			"set_state_color 后 LUT 像素即时更新（%s: %s → %s）" % [sample, before, alt])

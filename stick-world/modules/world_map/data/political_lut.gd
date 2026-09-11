@@ -13,6 +13,9 @@ extends RefCounted
 ##   0 = 海洋（mask 外真水域，shader 侧输出 empty_color）；253 = 自由城邦
 ##   （无归属陆地，feedback2 D 陆地洞修复）；254 = 湖泊；255 = 邻区灰底（仅 L2 mask）。
 
+## 政权色变更信号（矢量 fill 直烘 RGB 路线的重烘通知；set_state_color 发射）
+signal state_color_changed(sid: String, col: Color)
+
 ## mask 保留码：自由城邦（无归属陆地，L3/L2 mask 通用）
 const CODE_FREE_CITY := 253
 ## L2 mask 保留码：湖泊（色值同 L2MapRenderer.LAKE_COLOR）
@@ -28,6 +31,14 @@ const NEIGHBOR_COLOR := Color(115.0 / 255.0, 115.0 / 255.0, 115.0 / 255.0)
 
 ## 查表上色 shader（L2/L3 政治模式共用）
 const COLORIZE_SHADER := preload("res://modules/world_map/shaders/political_mask_colorize.gdshader")
+
+## 顶点色编码/解码（fill 弧引用/格式的 lut code ↔ 归一化值，生成端与运行时同式）
+static func code_to_vertex_r(code: int) -> float:
+	return float(code) / 255.0
+
+
+static func vertex_r_to_code(r: float) -> int:
+	return roundi(r * 255.0)
 
 ## 数据源：l3_city.json（bin 优先）顶层 states（state_expand_lite 注入，与
 ## political_data.json 同表）
@@ -104,6 +115,7 @@ func state_info(sid: String) -> Dictionary:
 
 ## 运行时改色：更新 LUT 图像 + 就地刷纹理 → 所有政治图层（L2/L3/L1 图例色源）
 ## 即时换色，不重烘任何贴图（R9 验收硬指标的运行时链路）。
+## 矢量 fill 直烘 RGB 路线（MapMeshBuilder）订阅 state_color_changed 重烘顶点色。
 func set_state_color(sid: String, col: Color) -> void:
 	var idx := int(index_of.get(sid, 0))
 	if idx <= 0:
@@ -115,6 +127,15 @@ func set_state_color(sid: String, col: Color) -> void:
 				int(round(col.b * 255.0))]
 	if texture != null:
 		texture.update(image)
+	state_color_changed.emit(sid, col)
+
+
+## lut code → 最终显示色（含保留码/海洋色兜底；矢量 fill 直烘 RGB 用）。
+## code 0 = 海洋（empty_color 同源 MapTokens.L1_OCEAN）。
+func color_of_code(code: int) -> Color:
+	if code <= 0:
+		return Color(0.117647, 0.215686, 0.372549)
+	return image.get_pixel(code, 0)
 
 
 ## 读取 l*_city 数据：优先同名紧凑 bin（LWDB + var_to_bytes，与 L3WorldData 同机制），

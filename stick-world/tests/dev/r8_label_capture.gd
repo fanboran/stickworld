@@ -63,9 +63,13 @@ func _shot_l3() -> void:
 	renderer.set_data(L3WorldData.load_from(SM + "/l3_world.json", SM))
 	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
 	content.call("open")
-	# 等政权 ID mask 后台解码完成（67MB PNG）
-	await _wait_until(func(): return renderer._political_layer != null)
+	# 等政权着色层就绪（S3 矢量 fill 优先，mask 异步回退）
+	await _wait_until(func(): return renderer._political_layer != null 		or not renderer._political_fill_meshes.is_empty())
 	await _settle(10)
+	print("DIAG L3 fill_meshes=", renderer._political_fill_meshes.size(),
+		" mask_layer=", renderer._political_layer)
+
+
 	_diag_ocean("L3", scene)
 	_diag("L3fit", renderer)
 	var rect := _l3_land_rect(renderer)
@@ -193,3 +197,20 @@ func _teardown(nodes: Array) -> void:
 	for n in nodes:
 		n.queue_free()
 	await _settle(3)
+
+
+func _dump_tree(n: Node, depth: int) -> void:
+	if depth > 4:
+		return
+	var info := ""
+	if n is CanvasItem:
+		var ci := n as CanvasItem
+		info = " z=%d vis=%s modulate=%s" % [ci.z_index, ci.visible, ci.modulate]
+		if n is ColorRect:
+			info += " color=%s size=%s" % [(n as ColorRect).color, (n as ColorRect).size]
+		if n is MeshInstance2D:
+			var mi := n as MeshInstance2D
+			info += " surf=%d" % (mi.mesh.get_surface_count() if mi.mesh != null else -1)
+	print("%s%s [%s]%s" % ["  ".repeat(depth), n.name, n.get_class(), info])
+	for c in n.get_children():
+		_dump_tree(c, depth + 1)

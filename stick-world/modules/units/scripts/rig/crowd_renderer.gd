@@ -56,10 +56,6 @@ static var _bucket_bidx: Array = []  # PackedInt32Array ×4
 static var _bucket_xform: Array = [] # Array[Transform2D] ×4
 static var _bucket_color: Array = [] # PackedColorArray ×4（身体色占位白，注册时按单位实际色替换）
 static var _statics_ready: bool = false
-## 临时诊断开关（首次 pose dump 后置位；验收后移除）
-var _dbg_dumped: bool = false
-var _dbg_dumped2: bool = false
-var _dbg_dumped3: bool = false
 
 
 ## 进程级静态表构建：骨骼拓扑 + 部件预烘 + 动画关键帧预编译。
@@ -280,7 +276,12 @@ func setup(parent: Node2D, y_top: float = 0.0, y_bottom: float = 1024.0) -> void
 			mm.custom_aabb = AABB(Vector3(-4096.0, -4096.0, 0.0), Vector3(16384.0, 16384.0, 0.0))
 			mmi.multimesh = mm
 			container.add_child(mmi)
-			container.move_child(mmi, band)  # band 树序 = 遮挡序（低带先画）
+			# 树序 = 绘制序：创建循环本身就是「带主序 × 桶次序」（低带先画保留
+			# y 遮挡；带内 0/1 描边先画、2/3 填充后画盖在描边之上）。此前在此
+			# 调 move_child(mmi, band) 把每 MMI 重插到 index=band，将已就位的
+			# 桶整体后推——最终桶序错成"填充先画、描边后画"，而描边矩形与填充
+			# 同长同中心更宽，白描边完全盖住深色填充 = 实心白身体（涂色定位
+			# 实证：描边涂蓝可见、填充涂红被盖）。同 z 下靠树序，严禁再 move_child。
 			_mm[idx] = mmi
 	if _acc.size() != _bone_ids.size():
 		_acc.resize(_bone_ids.size())
@@ -516,28 +517,6 @@ func _pose_slot(slot: Dictionary, info: Dictionary, t: float) -> void:
 		var buf: PackedFloat32Array = _buf[band * 4 + j]
 		var per_unit: int = bidx.size()
 		var base_i: int = band_idx * per_unit * 12  # 带桶内段基址（buffer 按带独立）
-		if not _dbg_dumped and j == 0:
-			_dbg_dumped = true
-			var container: Node = _host.get_node_or_null("CrowdLayer") if _host != null else null
-			var mmi0 = _mm[band * 4]
-			if container != null:
-				var lights: Array = container.get_tree().root.find_children("*", "Light2D", true, false)
-				for l in lights:  # 临时实验：禁光验证身体发白根因（验收后删）
-					l.visible = false
-				var cm: Node = container.get_tree().root.find_child("CanvasModulate", true, false)
-				print("[crowd-dbg] lights=", lights.size(), " light_mask0=", (lights[0].range_item_cull_mask if lights.size() > 0 else "NA"),
-						" cm=", (cm.color if cm != null else "NA"),
-						" mmi_light_mask=", (mmi0.light_mask if mmi0 is CanvasItem else "NA"),
-						" mmi_mat=", (mmi0.material if mmi0 is CanvasItem else "NA"))
-			print("[crowd-dbg] pos=", entity.global_position, " band=", band, " bidx=", band_idx,
-					" per_unit=", per_unit, " buf.size=", buf.size(), " base=", base_i,
-					" mm.ic=", (_mm[band * 4].multimesh.instance_count if _mm[band * 4] is MultiMeshInstance2D else -1),
-					" scale=", unit_xf.get_scale(), " t=", t, " anim=", slot["anim"],
-					" cvis=", container.is_visible_in_tree() if container != null else "NA",
-					" mmi_vis=", mmi0.is_visible_in_tree() if mmi0 is CanvasItem else "NA",
-					" xf0=", (unit_xf * _acc[bidx[0]] * xforms[0]),
-					" col0=", colors[0], " body=", body,
-					" bufread=", buf.slice(base_i, base_i + 12))
 		for i in per_unit:
 			var xf: Transform2D = unit_xf * _acc[bidx[i]] * xforms[i]
 			var col: Color = colors[i]
@@ -546,15 +525,6 @@ func _pose_slot(slot: Dictionary, info: Dictionary, t: float) -> void:
 			elif col == Color.BLACK:
 				col = outline
 			var o := base_i + i * 12
-			if not _dbg_dumped2 and j == 2 and i == 0:
-				_dbg_dumped2 = true
-				print("[crowd-dbg2] write col=", col, " o=", o, " use_colors=",
-					(_mm[band * 4].multimesh.use_colors if _mm[band * 4] is MultiMeshInstance2D else "NA"),
-					" vis_mod=", (_mm[band * 4 + 2].modulate if _mm[band * 4 + 2] is CanvasItem else "NA"))
-			if not _dbg_dumped2 and j == 2 and i == 0:
-				_dbg_dumped2 = true
-				print("[crowd-dbg2] fill col_template=", colors[0], " replaced=", col,
-						" body=", body, " eq_white=", (colors[0] == Color.WHITE))
 			buf[o] = xf.x.x
 			buf[o + 1] = xf.y.x
 			buf[o + 2] = 0.0
@@ -567,9 +537,6 @@ func _pose_slot(slot: Dictionary, info: Dictionary, t: float) -> void:
 			buf[o + 9] = col.g
 			buf[o + 10] = col.b
 			buf[o + 11] = col.a
-			if _dbg_dumped2 and not _dbg_dumped3 and j == 2 and i == 0:
-				_dbg_dumped3 = true
-				print("[crowd-dbg3] readback=", buf.slice(base_i + 8, base_i + 12), " xf=", buf.slice(base_i, base_i + 8))
 
 
 ## 关键帧线性插值（keys = [t0,a0,t1,a1...]；角度弧度，与 bake 同单位）

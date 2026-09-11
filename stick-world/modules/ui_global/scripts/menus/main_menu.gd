@@ -22,15 +22,15 @@ const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scri
 ## 手绘云（背景漂移云；与世界天空同选型期四风格混排）
 const SketchCloudScript: GDScript = preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
 
-## 菜单项数据：id / 文案 / 视觉档位
+## 菜单项数据：id / 文案 / 视觉档位 / 母题图标（icon = 管线母题中文名，无则不挂）
 ## 新游戏 = PRIMARY（实底琥珀主行动点，§1.2）；继续游戏 = ACCENT（琥珀描边档）
 const MENU_ITEMS: Array[Dictionary] = [
-	{"id": "continue", "label": "继续游戏", "kind": StickKit.ButtonKind.ACCENT},
-	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.PRIMARY},
-	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.NORMAL},
-	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.NORMAL},
+	{"id": "continue", "label": "继续游戏", "kind": StickKit.ButtonKind.ACCENT, "icon": &"卷轴"},
+	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.PRIMARY, "icon": &"旗帜"},
+	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.NORMAL, "icon": &"两本书"},
+	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.NORMAL, "icon": &"齿轮"},
 	# 测试场景入口：仅开发构建显示（正式发布隐藏），字段 debug_only 过滤于 _build_menu
-	{"id": "arena", "label": "测试场景", "kind": StickKit.ButtonKind.NORMAL},
+	{"id": "arena", "label": "测试场景", "kind": StickKit.ButtonKind.NORMAL, "debug_only": true, "icon": &"立方体"},
 	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.NORMAL},
 ]
 
@@ -97,6 +97,10 @@ func _build_menu() -> void:
 		for col_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 			btn.add_theme_color_override(col_name, Color(0.1, 0.08, 0.06))
 		btn.add_theme_font_size_override("font_size", 18)
+		# 母题图标（StickIcons 取 assets/icons 管线成品；icon_max_width 压到按钮字高量级）
+		if item.has("icon"):
+			btn.icon = StickIcons.tex(item["icon"])
+			btn.add_theme_constant_override("icon_max_width", 22)
 		if item["id"] == "continue":
 			btn.disabled = not _has_continue_save()
 

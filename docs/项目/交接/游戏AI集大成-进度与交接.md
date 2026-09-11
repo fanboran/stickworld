@@ -10,7 +10,7 @@
 - **分支**：`agent/game-ai`（本任务独立 worktree/分支；A1 无依赖故自组织分支尖端切出提前执行，A2 起依赖组织批次 3-F2，待组织收线合 main 后按设计文档 12 号 §五 继任段推进）；跨任务总 DAG 与推进序唯一真相源 = 设计文档 12 号 §五「跨任务总 DAG」（本档不复制）
 - **工作区**：`.temp/game-ai`（CoH/RWR 逆向原件在组织 worktree `.temp/organization-deepening/temp/coh/` 等，gitignored）
 - **自检**：`bash stick-world/tools/check_godot_errors.sh`；测试 `bash stick-world/tests/run_all.sh`
-- **当前阶段**：**A1 完成**（节拍+难度参数化），下一开工批 **A9**（仅依赖 A1，可立即做）或 **A2**（待组织 3-F2 合并）。
+- **当前阶段**：**A1、A9 完成**（节拍+难度参数化；个体 AI 参数面板 R1~R5），下一开工批 **A2**（待组织 3-F2 合并）或 A8+（待创始人裁决）。
 - **开场白**：「继续 AI集大成 批次 N」——先读本档 + 设计文档 12-游戏AI系统.md，再动手。
 - **任务分级**：Pro = 需设计判断/跨模块契约；Flash = 规格明确单模块实现。
 - **通用验收**：check 干净 + run_all 与基线零回归 + 回填本档 + 中文提交。
@@ -43,7 +43,8 @@
 | 立项+设计 | ✅ 完成 | （见 git log） | CoH 逆向笔记 + 设计文档 12 号 + 本档；批次表定稿 |
 | L1 逆向补全 | ✅ 完成 | （见 git log） | 小兵步枪(RWR) AI 逆向笔记（个体 AI 全参数 schema/兵种人格继承档/commander_ai/支援军衔经济/权威值择班）；设计文档补 R1~R7 登记 + A9 批次 |
 | A1 | ✅ 完成 | （本批提交见 git log） | **节拍+难度参数化**：①C1——`team_ai.tick` 改固定节拍分帧（`beat_interval`=0.5s CoH 真值，DECIDE/BUILD 双相位轮转一跳一类事，有效决策周期 2×beat=1.0s 与旧默认等价零回归；旧 `stance_decision_interval` 退役）；②C2——难度档 `config/ai/personality.tres`（BalanceResource，类型路径 `ai.personality`，global 行=L4 基础节拍 + easy/standard/hard/hardest 四档行：开局攻击时间/方差/demand_variance 单旋钮），merge 序=代码默认<难度档案<setup overrides；开局攻击门禁=基准±`start_attack_variance` 掷骰（CoH 9min±4min 同构），默认固定种子（`DEFAULT_RANDOM_SEED`）确定性可测可复现；③新套件 `test_team_ai_personality` 7 用例锁装载/难度覆盖/掷骰界内/门禁消费/节拍分帧/下限钳制/未知难度回退；④验收：check 干净；unit 批量 40/41；battle_sim 10 场景与基线同包络（姿态机切换数/三态可达一致）；run_all 31/34 失败集合与基线一致（road_walk / fx_damage_text / melee_combat——后者经基线 worktree 复验同为既有，疑似动画时序敏感） |
-| A2~A8+ | ⬜ 未开工 | — | A9 可立即开工（依赖 A1）；A2 待组织 3-F2 |
+| A9 | ✅ 完成 | （本批提交见 git log） | **个体 AI 参数面板 R1~R5**：①R1 决策间隔族——`ai_controller` 统一 `DECISION_INTERVAL` 常量档案化（BASELINE `decision_interval`=0.3 镜像零回归 + `decision_variance` 逐拍重掷去同步，RWR choose_enemy_time±wait_time_variance 同构；硬下限 MIN_DECISION_INTERVAL=0.05 防决策风暴；域级间隔已有档案键 acquire_interval/heal_scan_interval，间隔族全景=基线注释）；②R2 兵种人格覆盖档进 BalanceConfig——新档 `config/ai/behavior_profiles.tres`（类型路径 `ai.behavior_profiles`，baseline 行镜像 A9 新键组；行只写差异项=RWR 职业文件语义，兵种行按需补），`BehaviorProfiles.get_profile` 合并序=代码基线←SWL 直译 CLASS_PROFILES←.tres 行（同 id 后行覆盖前行），缓存以行数组**引用比对**失效（reload 重建 data 即热失效，免 EventBus static 连接）；③R3 点射节奏+昼夜反应——档案 `burst_shots`（连发点数，0=关零回归）/`burst_wait`（停顿区间 1.2~1.8s，RWR wait 1.2±0.6 直译），behavior_attack 两出手点（风筝还击/射程内放箭）过 `_burst_gate`+`_register_burst_shot`（停顿期间走位/持瞄照常只禁出手）；夜间犹豫倍率 `night_hesitate_mult`（RWR 昼 0.3~0.6/夜 0.8~1.1 同构），`_is_night()` 防御式查询 EnvironmentSystem 光照亮度<0.55（与 fx 视觉层 fireflies/SkyStars 同源同分界，查询不可用=白天保守零回归）；④R5 防扎堆治疗——实体新增 `being_healed_until` 登记字段（behavior_heal 施放 HOT 时写入目标，时长+0.5s 缓冲），`TargetFinder.find_weakest_ally` 新 opts `skip_being_healed`（heal_buzz_distance>0 启用；单祭司零差异、多祭司不再扎堆同一伤员）；⑤R4 权威值择班——formation_system 新增 `get_squad_authority`（班长在场 1.0+指挥官在册 0.5+玩家光环 0.2，RWR favor_joining_player_squad 直译）与 `should_switch_squad`（margin 0.07 滞回防来回跳），**消费点挂 A2 任务槽匹配**（"谁在班里由权威值经济定"，咬合②），本批次不引入自主跳槽行为；⑥新套件 `test_ai_param_panel` 14 用例锁全部五项（覆盖链装载/合并序/引用热失效/缺载回退/SWL 直译保留/间隔恒定/方差界内/下限钳制/门禁关-计数-停顿循环/昼夜分界/防扎堆过滤-过期恢复/登记窗/权威值组合/margin 滞回）；⑦验收：check 干净；unit 批量 41/42（唯一失败=基线既有 road_walk）；run_all 31/34 失败集合与 A1 基线一致（unit(batch)/melee_combat/fx_damage_text 均既有） |
+| A2~A8+ | ⬜ 未开工 | — | A2 待组织 3-F2；A8+ 待创始人裁决 |
 
 ## 关键决策速查
 
@@ -58,3 +59,7 @@
 | A1 personality 落点 | 独立手写资源 `config/ai/personality.tres`（BalanceResource，BalanceConfig 统一装载+热重载）而非 variables.tres 加行——后者系 Excel 导出管线背书（手改会被再导出覆盖），且难度档是多字段行非标量 |
 | A1 确定性 | 默认随机种子固定（`DEFAULT_RANDOM_SEED`）：单测可锁掷骰、battle_sim 可复现；需要逐局差异时显式传 `overrides.random_seed` |
 | A1 难度选择 | setup overrides["difficulty"]（默认 standard）；全局难度选择 UI 挂开放问题#3（调试菜单先行），A1 不做 |
+| A9 R4 边界 | 权威值评分内核+margin 滞回先行，自主跳槽行为不做（玩家预期风险）——A2 任务槽匹配小队时消费 `get_squad_authority`/`should_switch_squad` |
+| A9 R5 简化 | 防扎堆=登记时间戳（being_healed_until 过期即失效），RWR 的 10m 距离维度省略（治疗本有 heal_range 约束）；求援/增援族（force_comparison_multiplier 等）挂 A5/A8 |
+| A9 R3 昼夜 | 夜间判定=EnvironmentSystem 光照亮度<0.55（与 fx 视觉层同源同分界）；查询不可用（测试桩/未装配）=白天，保守零回归 |
+| A9 覆盖链 | BehaviorProfiles 缓存以 .tres 行数组引用比对失效（reload 重建 data 触发重合并）——static 上下文免连 EventBus，测试同式注入 |

@@ -243,7 +243,11 @@ static func _is_statue(e: Node) -> bool:
 
 ## 选取血量最低的未满血友军（P7 MericAi.UpdateTarget 直译宿主）。
 ## 候选 = 同阵营存活 ∧ hp_ratio < 1.0；按 hp_ratio 升序，同比例取距离最近。
-## 含自身（祭司可自我治疗，决策点 3）。opts: battle(必填) / range(-1=无限)。
+## 含自身（祭司可自我治疗，决策点 3）。
+## opts: battle(必填) / range(-1=无限) / skip_being_healed(false)——
+## A9 · R5 防扎堆治疗：跳过 being_healed_until 未过期的候选（有治疗者 HOT 在身），
+## 多治疗者不扎堆同一伤员（RWR consider_someone_already_healing_wounded_distance
+## 语义；登记字段见 stickman_entity.being_healed_until）。
 static func find_weakest_ally(unit: Node, opts: Dictionary = {}) -> Node:
 	if unit == null or not is_instance_valid(unit):
 		return null
@@ -257,6 +261,8 @@ static func find_weakest_ally(unit: Node, opts: Dictionary = {}) -> Node:
 	if faction == 0:
 		return null
 	var range_limit: float = float(opts.get("range", -1.0))
+	var skip_healing: bool = bool(opts.get("skip_being_healed", false))
+	var now: float = Time.get_ticks_msec() / 1000.0
 	var pos: Vector2 = unit.global_position
 	var best: Node = null
 	var best_ratio: float = 2.0
@@ -273,6 +279,10 @@ static func find_weakest_ally(unit: Node, opts: Dictionary = {}) -> Node:
 		if ratio >= 1.0:
 			continue
 		if range_limit > 0.0 and pos.distance_to(ally.global_position) > range_limit:
+			continue
+		# R5 防扎堆：已有治疗者在治（登记未过期）的伤员让给队友
+		if skip_healing and "being_healed_until" in ally \
+				and float(ally.get("being_healed_until")) > now:
 			continue
 		var dist: float = pos.distance_to(ally.global_position)
 		if ratio < best_ratio or (ratio == best_ratio and dist < best_dist):

@@ -26,8 +26,10 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 const ScriptBehaviorHeal := preload("res://modules/units/scripts/ai/behavior_heal.gd")
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-## 决策检查间隔（秒）
+## 决策检查间隔（秒）（R1 代码默认：档案 decision_interval 可覆盖，见 _roll_decision_interval）
 const DECISION_INTERVAL: float = 0.3
+## 决策间隔硬下限（s）：方差掷骰/配置注入不得低于此值，防决策风暴（对齐 A1 MIN_BEAT_INTERVAL 语义）
+const MIN_DECISION_INTERVAL: float = 0.05
 ## idle 后切换到 wander 的概率（当前 0：工人无事做原地待机，不随机漫游。
 ## BehaviorWander 行为本体保留，敌人 AI / 闲逛功能启用时调大此值即可）
 const WANDER_PROBABILITY: float = 0.0
@@ -65,6 +67,8 @@ var _entity: CharacterBody2D = null
 var _state_machine: BehaviorStateMachine = null
 ## 决策计时器
 var _decision_timer: float = 0.0
+## 当前决策间隔（R1 间隔族：基值 ± 方差逐拍重掷，见 _roll_decision_interval）
+var _decision_interval: float = DECISION_INTERVAL
 ## 上一帧是否被附身（用于检测附身状态变化）
 var _was_possessed: bool = false
 ## 9i+ 试探接敌脉冲状态（test_engage_enabled 开时在脱战低士气分支消费）
@@ -199,11 +203,12 @@ func physics_update(delta: float) -> void:
 	# 状态机调度
 	_state_machine.physics_update(delta)
 
-	# 决策
+	# 决策（R1 间隔族：触发后重掷下一次间隔，方差去同步）
 	_decision_timer += delta
-	if _decision_timer >= DECISION_INTERVAL:
+	if _decision_timer >= _decision_interval:
 		_decision_timer = 0.0
 		_make_decision()
+		_decision_interval = _roll_decision_interval()
 
 
 # ─────────────────────────────── 决策逻辑 ────────────────────────────────
@@ -445,6 +450,16 @@ func _get_behavior_profile() -> Dictionary:
 		if w != null and is_instance_valid(w) and "weapon_type" in w:
 			return ScriptBehaviorProfiles.get_profile(int(w.get("weapon_type")))
 	return ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
+
+
+## 掷下一次决策间隔（R1 · RWR interval 族直译：choose_enemy_time ± wait_time_variance
+## 同构——主决策间隔读档案 decision_interval，± decision_variance 逐拍重掷去同步；
+## 钳 MIN_DECISION_INTERVAL 下限防决策风暴）。
+func _roll_decision_interval() -> float:
+	var p: Dictionary = _get_behavior_profile()
+	var base: float = float(p.get("decision_interval", DECISION_INTERVAL))
+	var variance: float = maxf(float(p.get("decision_variance", 0.0)), 0.0)
+	return maxf(base + randf_range(-variance, variance), MIN_DECISION_INTERVAL)
 
 
 ## 查询所属阵营的 TeamAi 姿态（duck 调用 + has_method 防御；未注册/查询不可用降级 DEFEND）

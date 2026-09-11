@@ -119,6 +119,12 @@ var arrow_threat_time: float:
 	get: return _threat_ledger.arrow_threat_time
 	set(value): _threat_ledger.arrow_threat_time = value
 
+## 正在被治疗截止时刻（s，Time.get_ticks_msec 换算；-1e9=无）。
+## A9 · R5 防扎堆治疗（RWR consider_someone_already_healing_wounded_distance
+## 同构）：治疗方施放 HOT 时写入**目标**实体，TargetFinder.find_weakest_ally
+## 据此跳过"已有祭司在治"的伤员——多个治疗者不扎堆同一目标。
+var being_healed_until: float = -1.0e9
+
 # ─────────────────────────────── 编队角色（编制预设派生）────────────────────────────────
 ## 角色类型（fighter/builder/worker，由编队预设写入，仅展示/标记；
 ## 行为限制由所属编队的职责范围决定，见 FormationSystem.is_work_allowed）

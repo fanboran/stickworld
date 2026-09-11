@@ -93,12 +93,13 @@ func place_in_zone(zone: StringName, control: Control) -> void:
 	_zone_layout.place(zone, control)
 
 
-## 装配通知流（左下堆叠 feed，挂 HudOverlay 槽；无该槽的裸环境直接挂 UIRoot）
+## 装配通知流（左下堆叠 feed，挂 HudOverlay 槽 + bottom_left zone；无该槽的裸环境直接挂 UIRoot）
 func _setup_notification_feed() -> void:
 	var feed: NotificationFeed = _NotificationFeedScript.new()
 	feed.name = "NotificationFeed"
 	if not add_to_slot("HudOverlay", feed):
 		add_child(feed)
+	place_in_zone(&"bottom_left", feed)
 	_notification_feed = feed
 
 

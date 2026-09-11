@@ -290,7 +290,7 @@ func _open_arena_panel() -> void:
 func _select_arena_group(idx: int) -> void:
 	for i in _arena_group_buttons:
 		var b: Button = _arena_group_buttons[i]
-		b.kind = SketchButton.Kind.ACCENT if i == idx else SketchButton.Kind.NORMAL
+		b.kind = SketchButton.Kind.ACCENT if i == idx else SketchButton.Kind.DARK
 	for child in _arena_list_box.get_children():
 		child.queue_free()
 	for item: Dictionary in _arena_bucket_data[idx]["items"]:

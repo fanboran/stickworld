@@ -81,6 +81,9 @@ func _setup_zone_layout() -> void:
 	if global_hud != null:
 		# 资源条 host：top_left_stack 首位住户（任务卡等后续成员顺延下移）
 		place_in_zone(&"top_left_stack", global_hud.get_node_or_null("ResourceBarHost"))
+		# 右上成组：时钟在上、天数时间其下（top_right 堆叠，右缘对齐）
+		place_in_zone(&"top_right", global_hud.get_node_or_null("ClockWidget"))
+		place_in_zone(&"top_right", global_hud.get_node_or_null("DayTimeLabel"))
 
 
 ## 统一入口：把部件钉进 zone（供装配层 SystemSetup / 本类内部调用）。

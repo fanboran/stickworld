@@ -215,7 +215,6 @@ static func _compile_anims() -> void:
 ## 48 draws 相比富管线 1516 仍 30 倍。单位跨带时段搬运（拷贝 30×12 floats×4
 ## 桶，平滑移动下频率很低）。
 const BAND_COUNT := 12
-const BAND_CAP := 48
 
 ## 挂载节点（BattleInstance 子节点，z=ENTITY 层；MMI 树序在实体前——
 ## 小兵 rig 已隐藏，仅武器 Sprite（若保留）会盖在其上）
@@ -306,8 +305,14 @@ func register_unit(entity: Node) -> Dictionary:
 		return {}
 	var band: int = _band_of(entity.global_position.y)
 	var band_idx: int = _alloc_band_idx(band)
-	var slot_idx: int = band * BAND_CAP + band_idx
-	while _slots.size() <= slot_idx:
+	# 全局槽位：独立自增池（与带无关）——此前 slot_idx=band*CAP+band_idx，
+	# 带内超员复用尾位时两单位撞出同一下标，后者覆盖前者致身体永久消失
+	# （武器/血条/阴影挂 entity 侧照常渲染 = "浮空武器血条"观感）
+	var slot_idx: int
+	if not _free_slots.is_empty():
+		slot_idx = _free_slots.pop_back()
+	else:
+		slot_idx = _slots.size()
 		_slots.append(null)
 	var slot := {
 		"entity": entity,
@@ -318,7 +323,7 @@ func register_unit(entity: Node) -> Dictionary:
 		"hidden": false,
 		"body_color": _read_color(rig, "body_color", Color.WHITE),
 		"outline_color": _read_color(rig, "outline_color", Color.BLACK),
-		"slot": slot_idx,  # 全局唯一下标 = band*CAP + band_idx（_slots 寻址）
+		"slot": slot_idx,  # 全局槽位表下标（与带无关，注册/注销互斥分配）
 		"band": band,
 		"band_idx": band_idx,
 		"weapons": _adopt_weapons(entity, rig),
@@ -330,8 +335,9 @@ func register_unit(entity: Node) -> Dictionary:
 	return slot
 
 
-## 带内槽位池分配（BAND_CAP 上限兜底复用尾位——极端拥挤时同段覆盖，
-## 远优于拒绝渲染）
+## 带内槽位池分配（free 复用 O(1)；无上限——挤团一带超百单位也各占其段，
+## buffer/instance_count 由 _grow_band 按需扩。此前 BAND_CAP=48 截断复用
+## 尾位，48v48 挤团即触发同段覆盖丢身体）
 func _alloc_band_idx(band: int) -> int:
 	while band >= _free_band.size():
 		_free_band.append([])
@@ -340,8 +346,8 @@ func _alloc_band_idx(band: int) -> int:
 		return pool.pop_back()
 	_used_count[band] = _used_count.get(band, 0) + 1
 	var idx: int = _used_count[band] - 1
-	_grow_band(band, mini(idx, BAND_CAP - 1) + 1)
-	return mini(idx, BAND_CAP - 1)
+	_grow_band(band, idx + 1)
+	return idx
 
 
 ## 武器接管：武器/盾挂 rig 手骨下，rig 隐藏会连带隐藏——reparent 到实体
@@ -436,11 +442,16 @@ func tick(delta: float) -> void:
 		var rig: Node = slot["rig"]
 		if entity == null or not is_instance_valid(entity):
 			continue
-		# 跨带检测（单位移动到别的 y 带）：旧段清零、新带分配段（本刻 pose
-		# 直接写新带；搬运动画语义无感，平滑移动下频率很低）
+		# 跨带检测（单位移动到别的 y 带）：旧段清零、旧带内槽位还池、
+		# 新带分配段（本刻 pose 直接写新带；搬运动画语义无感，平滑移动下
+		# 频率很低）
 		var new_band: int = _band_of(entity.global_position.y)
 		if new_band != int(slot["band"]):
 			_clear_slot_instances(slot)
+			var old_band: int = slot.get("band", 0)
+			while old_band >= _free_band.size():
+				_free_band.append([])
+			_free_band[old_band].append(slot.get("band_idx", 0))
 			slot["band"] = new_band
 			slot["band_idx"] = _alloc_band_idx(new_band)
 		# 死者淡出后实体释放：槽位由 unregister 清理；死后保持尾帧姿态
@@ -570,9 +581,9 @@ func _read_color(rig: Node, prop: String, fallback: Color) -> Color:
 	return c if c is Color else fallback
 
 
-## 带容量一次到位（BAND_CAP 满容量——带基址 = band*CAP 恒定，段按需写入；
-## resize 新位默认 0 = 零缩放阵，防 identity 簇拥原点）
-func _grow_band(band: int, _count: int) -> void:
+## 带容量按需扩容（带内已分配段数 count 只增不减；buffer 一次扩到位、
+## 新位默认 0 = 零缩放阵，防 identity 簇拥原点）
+func _grow_band(band: int, count: int) -> void:
 	for j in 4:
 		var holder = _mm[band * 4 + j]
 		var mm: MultiMesh = (holder.multimesh if holder is MultiMeshInstance2D else null)
@@ -581,7 +592,7 @@ func _grow_band(band: int, _count: int) -> void:
 		var per_unit: int = _bucket_bidx[j].size()
 		if per_unit <= 0:
 			continue
-		var need: int = BAND_CAP * per_unit
+		var need: int = maxi(mm.instance_count / per_unit, count) * per_unit
 		if mm.instance_count >= need:
 			continue
 		mm.instance_count = need

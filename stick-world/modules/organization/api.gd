@@ -18,6 +18,10 @@ signal org_restructured(org_id: String)
 ## 组织已解散
 signal org_disbanded(org_id: String)
 
+## 上报已提交（§4.4 信息上报骨架：combat 挂点经 evaluate_report_gate 门控后 file_report；
+## 补位引擎 commander_lost 必报也走此信号。P0 一层直报，消费方自取 parent_org 归档）
+signal report_filed(org_id: String, report: Dictionary)
+
 
 # ===== 内部引用（在 _setup 中绑定） =====
 
@@ -35,6 +39,27 @@ func setup(manager: Object) -> void:
 	# 存档由 WorldState 统一序列化（本模块不再自行注册 SaveManager）
 	if WorldState != null and manager.has_method("set_world"):
 		manager.set_world(WorldState)
+	# manager 内部发射的上报（补位引擎 commander_lost 必报）转发到公共信号
+	if _manager != null:
+		_manager.report_filed.connect(report_filed.emit)
+	_apply_balance_variables()
+
+
+## balance.variables 指挥链三行覆盖（缺行零回归——transport/manager 代码默认值已就位）
+const BALANCE_VARIABLES_PATH := "res://config/balance/variables.tres"
+
+func _apply_balance_variables() -> void:
+	var res: Resource = load(BALANCE_VARIABLES_PATH)
+	if res == null or not "variables" in res:
+		return
+	for row in res.get("variables").get("data", []):
+		match String(row.get("id", "")):
+			"var_courier_speed":
+				_manager.transport_layer.set_courier_speed(float(row.get("value", 208.0)))
+			"var_command_cross_map_distance":
+				_manager.transport_layer.set_fallback_distance(float(row.get("value", 2000.0)))
+			"var_report_casualty_threshold":
+				_manager.set_casualty_report_threshold(float(row.get("value", 0.30)))
 
 
 # ===== 存档对接（保留转发，当前由 WorldState 统一落盘，此处仅防御性可用） =====
@@ -262,3 +287,57 @@ func export_as_preset(org_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
 	return _manager.export_as_preset(org_id)
+
+
+# ===== 批次 3：逐层指挥链（架构文档 §四）=====
+
+## 生成逐层投递计划（§4.1 schema：hop 0 玩家跳 + BFS 层序展开到 L1；同令透传）
+## data: {root_org, leaf_orgs, hops}；错误："org_not_found" / "no_subordinate"
+func build_dispatch_plan(org_id: String, order: Dictionary) -> Dictionary:
+	if not _is_initialized:
+		return {"ok": false, "error": "模块未初始化"}
+	return _manager.build_dispatch_plan(org_id, order)
+
+
+## 一跳传播秒数（传输层 v1 §4.2：距离÷媒介速度；层级数不直接生延迟）
+## combat 接力执行消费（3-F2 issue_to_org 逐跳计时）；未装配 provider 时退化跨图/同驻地口径
+func get_delivery_time(from_org: String, to_org: String) -> float:
+	if not _is_initialized:
+		return 0.0
+	return _manager.transport_layer.delivery_time(from_org, to_org)
+
+
+## 装配注入传输层三 provider（3-F2 system_setup 接线）：
+## position_provider(org_id)->Vector2|INF、player_position_provider()->Vector2、
+## region_distance_provider(from_loc, to_loc)->float|-1
+func set_transport_providers(position_provider: Callable, player_position_provider: Callable,
+		region_distance_provider: Callable) -> void:
+	if _is_initialized:
+		_manager.set_transport_providers(position_provider, player_position_provider, region_distance_provider)
+
+
+## 装配注入 cmd 属性查询（补位排序用，§4.3.1）：stickman_id -> float，失败返回 -1 沉底
+func set_attribute_provider(provider: Callable) -> void:
+	if _is_initialized:
+		_manager.set_attribute_provider(provider)
+
+
+## 补位候选序（§4.3.1）：[{id, cmd}, ...] 按 cmd 降序（平局按池序）——面板展示/测试断言
+func get_succession_candidates(org_id: String) -> Array[Dictionary]:
+	if not _is_initialized:
+		return []
+	return _manager.get_succession_candidates(org_id)
+
+
+## 上报门控判定（§4.4 三档表）：commander_lost 必报恒 true；HIGH 不报 casualty/contact；
+## MEDIUM casualty 按存活比阈值；LOW 全量。combat 挂点用法：gate 通过才 file_report
+func evaluate_report_gate(org_id: String, type: String, payload: Dictionary) -> bool:
+	if not _is_initialized:
+		return false
+	return _manager.evaluate_report_gate(org_id, type, payload)
+
+
+## 提交上报（combat 挂点入口；内部校验 schema 后发 report_filed，组织侧只透传不解释）
+func file_report(org_id: String, report: Dictionary) -> void:
+	if _is_initialized:
+		_manager.file_report(org_id, report)

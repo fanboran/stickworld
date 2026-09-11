@@ -38,6 +38,13 @@ func _ready() -> void:
 	_runner.add_test("Org: export_as_preset 子树导出 + 往返同构", _test_export_roundtrip)
 	_runner.add_test("Org: 蓝图模板字段往返保真（编制/装备/权限/行为）", _test_preset_template_roundtrip)
 	_runner.add_test("Org: api 层信号契约（insert_tier 补发 org_created+restructured）", _test_api_signals)
+	_runner.add_test("Org: 补位 RANK_HIGHEST cmd 最高顶上（EventBus+上报必发）", _test_succession_rank_highest)
+	_runner.add_test("Org: 补位平局按池序（personnel 先于子指挥官）", _test_succession_tie_pool_order)
+	_runner.add_test("Org: 补位池口径（L1 班内/中间层下级指挥官/并池去重/剔除被移除者）", _test_succession_pools)
+	_runner.add_test("Org: 补位候选空持续空缺 / PLAYER_CHOSEN 不自动", _test_succession_vacancy)
+	_runner.add_test("Org: get_succession_candidates 排序（cmd 降序）", _test_succession_candidates_api)
+	_runner.add_test("Org: 上报门控三档×三 type 全矩阵（含阈值边界/覆盖）", _test_report_gate_matrix)
+	_runner.add_test("Org: file_report schema 校验与 api 层转发", _test_file_report_schema)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -430,4 +437,196 @@ func _test_api_signals() -> void:
 	var r2: Dictionary = api.remove_tier(created_ids[0])
 	_runner.assert_true(r2.get("ok", false), "删层应成功")
 	_runner.assert_equal(restructured_ids.size(), 1, "remove_tier 应补发 org_restructured")
+	api.free()
+
+# ─────────────── 批次 3-F1：补位引擎（架构文档 §4.3.1） ───────────────
+
+## 构造 L1 班：personnel 依次入列，首位任命指挥官。返回 org_id
+func _build_l1_squad(m: ScriptOrgManager, members: Array) -> String:
+	var org: String = m.create_organization("排", "MILITARY", 1, "").data.org_id
+	for sid in members:
+		m.assign_stickman(org, str(sid), "fighter")
+	m.assign_commander(org, str(members[0]))
+	return org
+
+
+func _test_succession_rank_highest() -> void:
+	var m := ScriptOrgManager.new()
+	var cmd_table := {"101": 1.0, "102": 3.0, "103": 2.0}
+	m.set_attribute_provider(func(id: String) -> float: return float(cmd_table.get(id, -1.0)))
+	var org := _build_l1_squad(m, ["101", "102", "103"])
+	# 断言 EventBus.commander_assigned 与 manager.report_filed 双信号
+	var assigned: Array = []
+	var cb := func(squad_id: String, unit_id: int): assigned.append([squad_id, unit_id])
+	EventBus.commander_assigned.connect(cb)
+	var reports: Array = []
+	m.report_filed.connect(func(oid: String, report: Dictionary): reports.append([oid, report]))
+	var r: Dictionary = m.remove_stickman(org, "101")  # 指挥官阵亡（成员表移除 + 补位）
+	_runner.assert_true(r.get("ok", false), "移除指挥官应成功")
+	_runner.assert_equal(String(m.get_organization(org).data.commander_id), "102", "cmd 最高者(102=3.0)应顶上")
+	_runner.assert_equal(assigned, [[org, 102]], "EventBus.commander_assigned 应发射(org, 102)")
+	_runner.assert_equal(reports.size(), 1, "commander_lost 上报必发一次")
+	var rep: Dictionary = reports[0][1]
+	_runner.assert_equal(String(rep.type), "commander_lost", "上报 type=commander_lost")
+	_runner.assert_true(int(rep.filed_at) > 0, "filed_at 应为时间戳")
+	_runner.assert_equal(String(rep.payload.prev_commander_id), "101", "payload 记录前任")
+	_runner.assert_true(bool(rep.payload.filled), "payload filled=true")
+	_runner.assert_equal(String(rep.payload.successor_id), "102", "payload 记录继任者")
+	EventBus.commander_assigned.disconnect(cb)
+
+
+func _test_succession_tie_pool_order() -> void:
+	var m := ScriptOrgManager.new()  # 不注入 attribute_provider → 全员 -1 平局 → 池序定胜负
+	var root: String = m.create_organization("连", "MILITARY", 2, "").data.org_id
+	m.assign_stickman(root, "201", "fighter")  # 连部直属副官
+	m.assign_stickman(root, "202", "fighter")
+	var l1a: String = m.create_organization("一排", "MILITARY", 1, root).data.org_id
+	var l1b: String = m.create_organization("二排", "MILITARY", 1, root).data.org_id
+	m.assign_stickman(l1a, "301", "fighter")
+	m.assign_commander(l1a, "301")
+	m.assign_stickman(l1b, "302", "fighter")
+	m.assign_commander(l1b, "302")
+	m.assign_commander(root, "202")
+	var r: Dictionary = m.remove_commander(root)  # 撤职 → 同一入口触发补位
+	_runner.assert_true(r.get("ok", false), "撤职应成功")
+	# 平局时池序：personnel（201）先于子指挥官（301/302）
+	_runner.assert_equal(String(m.get_organization(root).data.commander_id), "201", "平局按池序，personnel 先于子指挥官")
+	# 中间层无 personnel → 完全退化为下级指挥官（child_orgs 注册序）
+	var m2 := ScriptOrgManager.new()
+	var root2: String = m2.create_organization("连", "MILITARY", 2, "").data.org_id
+	var p1: String = m2.create_organization("一排", "MILITARY", 1, root2).data.org_id
+	var p2: String = m2.create_organization("二排", "MILITARY", 1, root2).data.org_id
+	m2.assign_stickman(p1, "401", "fighter")
+	m2.assign_commander(p1, "401")
+	m2.assign_stickman(p2, "402", "fighter")
+	m2.assign_commander(p2, "402")
+	m2.assign_commander(root2, "501")
+	var r2: Dictionary = m2.remove_commander(root2)
+	_runner.assert_true(r2.get("ok", false), "撤职应成功")
+	_runner.assert_equal(String(m2.get_organization(root2).data.commander_id), "401", "中间层补位取下级指挥官（一排长顶上）")
+
+
+func _test_succession_pools() -> void:
+	# 并池去重：同一人既是父 personnel 又是子组织指挥官 → 候选只出现一次
+	var m := ScriptOrgManager.new()
+	var root: String = m.create_organization("连", "MILITARY", 2, "").data.org_id
+	m.assign_stickman(root, "601", "fighter")
+	var l1: String = m.create_organization("排", "MILITARY", 1, root).data.org_id
+	m.assign_stickman(l1, "601", "fighter")  # 双重身份
+	m.assign_commander(l1, "601")
+	var candidates: Array = m.get_succession_candidates(root)
+	_runner.assert_equal(candidates.size(), 1, "并池去重：双重身份只出现一次")
+	# L1 退化为班内（无子组织）；现任指挥官不能继承自己，不在候选池
+	var squad := _build_l1_squad(m, ["701", "702"])
+	var ids: Array = []
+	for c in m.get_succession_candidates(squad):
+		ids.append(String(c.id))
+	_runner.assert_false(ids.has("701"), "现任指挥官不在候选池")
+	_runner.assert_true(ids.has("702"), "班内其余成员在候选池")
+	# remove_stickman 触发补位：死者本人被剔除（指挥官阵亡后由 702 顶上）
+	var r: Dictionary = m.remove_stickman(squad, "701")
+	_runner.assert_true(r.get("ok", false), "移除应成功")
+	_runner.assert_equal(String(m.get_organization(squad).data.commander_id), "702", "死者被剔除，班内次序顶上")
+
+
+func _test_succession_vacancy() -> void:
+	# 候选池空 → 持续空缺（filled=false，report 仍必发）
+	var m := ScriptOrgManager.new()
+	var root: String = m.create_organization("连", "MILITARY", 2, "").data.org_id
+	m.assign_commander(root, "801")
+	var reports: Array = []
+	m.report_filed.connect(func(oid: String, report: Dictionary): reports.append(report))
+	var r: Dictionary = m.remove_commander(root)
+	_runner.assert_true(r.get("ok", false), "撤职应成功")
+	_runner.assert_equal(String(m.get_organization(root).data.commander_id), "", "无人可用应持续空缺")
+	_runner.assert_equal(reports.size(), 1, "空缺也必发 commander_lost")
+	_runner.assert_false(bool(reports[0].payload.filled), "filled=false")
+	_runner.assert_equal(String(reports[0].payload.successor_id), "", "successor_id 为空")
+	# PLAYER_CHOSEN：不自动补（等玩家任命），EventBus 不发射
+	var m2 := ScriptOrgManager.new()
+	var squad2 := _build_l1_squad(m2, ["811", "812"])
+	m2.organizations[squad2].succession_rule = ScriptOrgState.SuccessionRule.PLAYER_CHOSEN
+	var assigned: Array = []
+	var cb := func(squad_id: String, unit_id: int): assigned.append([squad_id, unit_id])
+	EventBus.commander_assigned.connect(cb)
+	var r2: Dictionary = m2.remove_stickman(squad2, "811")
+	_runner.assert_true(r2.get("ok", false), "移除应成功")
+	_runner.assert_equal(String(m2.get_organization(squad2).data.commander_id), "", "PLAYER_CHOSEN 不自动补位")
+	_runner.assert_equal(assigned, [], "PLAYER_CHOSEN 不发 commander_assigned")
+	EventBus.commander_assigned.disconnect(cb)
+
+
+func _test_succession_candidates_api() -> void:
+	var m := ScriptOrgManager.new()
+	var cmd_table := {"901": 2.0, "902": 5.0, "903": 3.5}
+	m.set_attribute_provider(func(id: String) -> float: return float(cmd_table.get(id, -1.0)))
+	var squad := _build_l1_squad(m, ["901", "902", "903"])
+	var cands: Array = m.get_succession_candidates(squad)
+	_runner.assert_equal(cands.size(), 2, "候选 = 班内其余成员（现任 901 剔除）")
+	# cmd 降序：902(5.0) > 903(3.5)
+	_runner.assert_equal(String(cands[0].id), "902", "cmd 最高者排首位")
+	_runner.assert_equal(String(cands[1].id), "903", "次高第二")
+	_runner.assert_equal(float(cands[0].cmd), 5.0, "候选携带 cmd 值")
+	# 不存在的组织 → 空表
+	_runner.assert_equal(m.get_succession_candidates("org_nope").size(), 0, "未知组织候选为空")
+
+
+# ─────────────── 批次 3-F1：信息上报门控（架构文档 §4.4） ───────────────
+
+func _test_report_gate_matrix() -> void:
+	var m := ScriptOrgManager.new()
+	var org: String = m.create_organization("排", "MILITARY", 1, "").data.org_id
+	# HIGH：全自主——仅 commander_lost 必报
+	m.set_autonomy(org, "HIGH")
+	_runner.assert_true(m.evaluate_report_gate(org, "commander_lost", {}), "commander_lost 三档必报（HIGH）")
+	_runner.assert_false(m.evaluate_report_gate(org, "casualty_threshold", {"alive": 1, "total": 10}), "HIGH casualty 不报")
+	_runner.assert_false(m.evaluate_report_gate(org, "contact", {}), "HIGH contact 不报")
+	# MEDIUM：阈值门控（默认 0.30）
+	m.set_autonomy(org, "MEDIUM")
+	_runner.assert_true(m.evaluate_report_gate(org, "commander_lost", {}), "commander_lost 必报（MEDIUM）")
+	_runner.assert_true(m.evaluate_report_gate(org, "casualty_threshold", {"alive": 29, "total": 100}), "存活比 0.29 < 0.30 应报")
+	_runner.assert_false(m.evaluate_report_gate(org, "casualty_threshold", {"alive": 30, "total": 100}), "存活比恰 0.30 不报（跌破才报）")
+	_runner.assert_false(m.evaluate_report_gate(org, "casualty_threshold", {"alive": 70, "total": 100}), "存活比 0.70 不报")
+	_runner.assert_false(m.evaluate_report_gate(org, "casualty_threshold", {"total": 0, "alive": 0}), "total=0 防御不报")
+	_runner.assert_true(m.evaluate_report_gate(org, "contact", {}), "MEDIUM contact 报（首次性由 combat 挂点把关）")
+	# 阈值覆盖入口（balance 行覆盖语义）
+	m.set_casualty_report_threshold(0.5)
+	_runner.assert_false(m.evaluate_report_gate(org, "casualty_threshold", {"alive": 50, "total": 100}), "覆盖阈值 0.50 后 0.50 不报")
+	_runner.assert_true(m.evaluate_report_gate(org, "casualty_threshold", {"alive": 49, "total": 100}), "覆盖阈值 0.50 后 0.49 应报")
+	# LOW：全量
+	m.set_autonomy(org, "LOW")
+	_runner.assert_true(m.evaluate_report_gate(org, "commander_lost", {}), "commander_lost 必报（LOW）")
+	_runner.assert_true(m.evaluate_report_gate(org, "casualty_threshold", {"alive": 9, "total": 10}), "LOW casualty 恒报（阈值形同虚设）")
+	_runner.assert_true(m.evaluate_report_gate(org, "contact", {}), "LOW contact 恒报")
+	# 边界外
+	_runner.assert_false(m.evaluate_report_gate("org_nope", "commander_lost", {}), "未知组织不报")
+	_runner.assert_false(m.evaluate_report_gate(org, "unknown_type", {}), "未知 type 防御不报")
+
+
+func _test_file_report_schema() -> void:
+	var m := ScriptOrgManager.new()
+	var org: String = m.create_organization("排", "MILITARY", 1, "").data.org_id
+	var reports: Array = []
+	m.report_filed.connect(func(oid: String, report: Dictionary): reports.append([oid, report]))
+	# 合法上报透传（filed_at 缺省补当前时间）
+	m.file_report(org, {"type": "contact", "payload": {"enemy_count": 3, "position": Vector2(1, 2)}})
+	_runner.assert_equal(reports.size(), 1, "合法上报应发一次信号")
+	_runner.assert_equal(String(reports[0][0]), org, "信号载荷 = 发起方 org_id")
+	var rep: Dictionary = reports[0][1]
+	_runner.assert_equal(String(rep.type), "contact", "type 透传")
+	_runner.assert_true(int(rep.filed_at) > 0, "filed_at 缺省自动补")
+	_runner.assert_equal(rep.payload, {"enemy_count": 3, "position": Vector2(1, 2)}, "payload 透传不解释")
+	# schema 校验：type 必填 / 未知组织静默丢弃
+	m.file_report(org, {"payload": {}})
+	_runner.assert_equal(reports.size(), 1, "缺 type 不发")
+	m.file_report("org_nope", {"type": "contact"})
+	_runner.assert_equal(reports.size(), 1, "未知组织不发")
+	# api 层转发：combat 挂点 → api.file_report → api.report_filed
+	var api := preload("res://modules/organization/api.gd").new()
+	api.setup(m)
+	var api_reports: Array = []
+	api.report_filed.connect(func(oid: String, report: Dictionary): api_reports.append(report))
+	api.file_report(org, {"type": "casualty_threshold", "filed_at": 42, "payload": {"alive": 2, "dead": 1, "total": 3, "loss_rate": 0.333}})
+	_runner.assert_equal(api_reports.size(), 1, "api 层应转发 manager 上报")
+	_runner.assert_equal(int(api_reports[0].filed_at), 42, "filed_at 透传")
 	api.free()

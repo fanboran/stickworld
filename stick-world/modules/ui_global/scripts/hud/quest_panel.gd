@@ -28,11 +28,23 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 5)
 	add_child(box)
 
+	# 标题行：卷轴母题图标 + 文字（原图标位是 ◈ 字符菱形，管线图标就位后换真图）
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 6)
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(title_row)
+	var title_icon := TextureRect.new()
+	title_icon.texture = StickIcons.tex(&"卷轴")
+	title_icon.custom_minimum_size = Vector2(18, 18)
+	title_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	title_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_row.add_child(title_icon)
 	_title_label = Label.new()
-	_title_label.text = "◈ 阶段目标"
+	_title_label.text = "阶段目标"
 	_title_label.add_theme_font_size_override("font_size", StickTokens.FONT_HUD)
 	_title_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.45))
-	box.add_child(_title_label)
+	title_row.add_child(_title_label)
 
 	_current_title = Label.new()
 	_current_title.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
@@ -57,7 +69,7 @@ func _ready() -> void:
 
 ## 显示当前目标（进度文本为空则隐藏进度行）
 func show_quest(title: String, desc: String, progress_text: String = "") -> void:
-	_title_label.text = "◈ 阶段目标"
+	_title_label.text = "阶段目标"
 	_current_title.text = "▶ %s" % title
 	_current_desc.text = desc
 	_progress_label.text = progress_text

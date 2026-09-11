@@ -35,6 +35,8 @@ const TEXT := Color(0.93, 0.94, 0.96)
 const TEXT_DIM := Color(0.93, 0.94, 0.96, 0.55)
 const TEXT_FAINT := Color(0.93, 0.94, 0.96, 0.32)
 const TEXT_DISABLED := Color(0.93, 0.94, 0.96, 0.25)
+## 深墨：文字描边/亮底字色（主菜单标题描边、血条 COLOR_OUTLINE 同族）
+const INK := Color(0.05, 0.04, 0.03)
 
 # ─────────────────────────────── 色彩 · 语义 ────────────────────────────────
 

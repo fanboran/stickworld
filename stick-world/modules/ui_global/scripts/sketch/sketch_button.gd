@@ -79,6 +79,13 @@ func _apply_font_colors(base: String) -> void:
 			add_theme_color_override(col_name, StickTokens.ACCENT_TEXT)
 		else:
 			remove_theme_color_override(col_name)
+	# 描边只服务「暗底白字」的时间戳高对比（主题层 3px 墨边）；亮底深墨字
+	# 再加墨描边=笔画膨胀糊死（主菜单纸面按钮教训）——亮底档一律归零
+	if base == "btn":
+		remove_theme_constant_override("outline_size")
+		remove_theme_color_override("font_outline_color")
+	else:
+		add_theme_constant_override("outline_size", 0)
 
 
 static var _box_cache: Dictionary = {}

@@ -70,6 +70,12 @@ custom_minimum_size = Vector2(0, 30)
 size_flags_vertical = 4
 text = "编制"
 
+[node name="OrgButton" type="Button" parent="MarginContainer/HBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
+text = "组织"
+
 [node name="ResourceBarHost" type="PanelContainer" parent="." unique_id=926316734]
 layout_mode = 1
 anchors_preset = 0

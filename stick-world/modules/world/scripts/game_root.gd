@@ -177,6 +177,8 @@ var _resource_bar: Control = null
 var _build_menu: Control = null
 ## 编制管理窗口（运行时由 SystemSetup 装配到 UIRoot.ModalOverlay）
 var _formation_panel: Control = null
+## 组织管理窗口（运行时由 SystemSetup 装配到 UIRoot.ModalOverlay）
+var _org_panel: Control = null
 ## 设置菜单（运行时由 SystemSetup 装配到 UIRoot，齿轮/ESC 打开）
 var _settings_menu_panel: Control = null
 ## 暂停菜单（运行时由 SystemSetup 装配到 UIRoot，ESC 打开；ESC 语义统一在 GameRoot 处理）
@@ -357,6 +359,17 @@ func get_formation_panel() -> Control:
 func toggle_formation_panel() -> void:
 	if _formation_panel != null and _formation_panel.has_method("toggle"):
 		_formation_panel.toggle()
+
+
+## 获取组织管理窗口引用（供测试用）
+func get_org_panel() -> Control:
+	return _org_panel
+
+
+## 打开/关闭组织管理窗口（GlobalHUD 组织按钮调用）
+func toggle_org_panel() -> void:
+	if _org_panel != null and _org_panel.has_method("toggle"):
+		_org_panel.toggle()
 
 
 ## 获取设置菜单引用（供测试用）

@@ -891,7 +891,12 @@ func _spawn_contact_shadow() -> void:
 	spr.texture = _get_contact_shadow_tex()
 	spr.scale = Vector2(0.9, 0.26)  # 压成椭圆
 	spr.position = Vector2(0.0, foot_offset + 2.0)
-	spr.z_index = -2  # 垫在身体与地图装饰之下
+	# 刀②合批：绝对 z=1（DECORATION 层——地面之上可见、建筑/单位正常遮盖，
+	# 与装饰同层但树序在后成连续段）。此前 z=-2 为相对实体 z（y 序 0~14 →
+	# 阴影实际 z 各异、交错在各单位之间）——同纹理却因渲染序列不连续无法
+	# 合批，96v96 192 个阴影 = 192 draws。
+	spr.z_as_relative = false
+	spr.z_index = 1
 	add_child(spr)
 
 

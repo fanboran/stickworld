@@ -32,12 +32,11 @@ func setup(game_root: Node) -> void:
 	_build_screen()
 
 
-## 给按钮挂母题图标（统一尺寸约束；motif 为空则跳过）
+## 给按钮挂母题角标（左缘叠加不占排版位，居中文字不偏；motif 为空则跳过）
 static func _motif_icon(btn: Button, motif: Variant) -> void:
 	if motif == null or motif == &"":
 		return
-	btn.icon = StickIcons.tex(motif)
-	btn.add_theme_constant_override("icon_max_width", 20)
+	StickKit.motif_badge(btn, motif)
 
 
 ## 构建内容：动作按钮列表（继续/设置/存档/回主菜单）

@@ -78,6 +78,9 @@ func _setup_zone_layout() -> void:
 	_zone_layout.attach(self)
 	# 场景常驻部件落位（ui_root.tscn 是层级真相源；定位真相源 = zone 表）
 	place_in_zone(&"top_bar", global_hud)
+	if global_hud != null:
+		# 资源条 host：top_left_stack 首位住户（任务卡等后续成员顺延下移）
+		place_in_zone(&"top_left_stack", global_hud.get_node_or_null("ResourceBarHost"))
 
 
 ## 统一入口：把部件钉进 zone（供装配层 SystemSetup / 本类内部调用）。

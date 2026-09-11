@@ -1,24 +1,36 @@
 class_name GlobalHUD
 extends Control
-## 全局 HUD —— 顶层常驻 UI（统一顶栏通栏）。
+## 全局 HUD —— 顶层常驻 UI（顶栏三段式：左=时间心智，中=资源，右=系统/功能）。
 ##
-## 顶栏一段式通栏（黑玻璃背景）：左=速度/时间，中=系统按钮；材料条（ResourceBar）
-## 作为**顶栏下方独立横条**（ResourceBarHost，y=64 起，不重叠按钮行，见 global_hud.tscn）。
-## 资源条由 attach_resources 注入（SystemSetup 在资源系统装配后调用）。
+## 左块：速度按钮组（‖/1x/2x/4x，显示即控制）+「第X天 HH:MM」；中块：资源条
+## （ResourceBar 内嵌手绘横条，弹簧居中，attach_resources 注入）；右块：编制+
+## 帝国功能常驻入口（总览/科技/物流/成就——占位面板先行）+居中/脱困/预览+设置。
+## 时钟表盘在顶栏下方右上角。
 
 const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/resource_bar.gd")
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
-@onready var speed_label: Label = get_node_or_null("MarginContainer/HBoxContainer/SpeedLabel")
-@onready var time_label: Label = get_node_or_null("TimeLabel")  # 钟表盘正下方（宽度变化不再挤顶栏按钮）
+## 速度按钮组（‖/1x/2x/4x）：显示即控制，当前档字色琥珀；Index 与 TimeManager.Speed 对齐
+@onready var speed_buttons: Array = [
+	get_node_or_null("MarginContainer/HBoxContainer/SpeedPauseButton"),
+	get_node_or_null("MarginContainer/HBoxContainer/Speed1Button"),
+	get_node_or_null("MarginContainer/HBoxContainer/Speed2Button"),
+	get_node_or_null("MarginContainer/HBoxContainer/Speed4Button"),
+]
+@onready var day_time_label: Label = get_node_or_null("MarginContainer/HBoxContainer/DayTimeLabel")
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
 @onready var settings_button: Button = get_node_or_null("MarginContainer/HBoxContainer/SettingsButton")
 ## 占位界面预览入口（开发用）：打开占位预览面板（大界面空面板陈列）
 @onready var placeholder_preview_button: Button = get_node_or_null("MarginContainer/HBoxContainer/PlaceholderPreviewButton")
-## 材料面板（顶栏下方横条，ResourceBar 挂这里）
-@onready var _resource_host: PanelContainer = get_node_or_null("ResourceBarHost")
+## 帝国功能入口（顶栏常驻，占位面板先行——系统落地后换真实面板）
+const EMPIRE_PRESETS: Dictionary = {
+	"OverviewButton": "empire_overview", "TechButton": "tech_tree",
+	"LogisticsButton": "logistics", "CollectionButton": "collection",
+}
+## 材料面板（顶栏中段，ResourceBar 挂这里）
+@onready var _resource_host: PanelContainer = get_node_or_null("MarginContainer/HBoxContainer/ResourceBarHost")
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -47,6 +59,11 @@ func attach_resources(resources_api: Node) -> Control:
 func _ready() -> void:
 	_bind_event_bus()
 	_update_speed_display()
+	for i in speed_buttons.size():
+		var btn: Button = speed_buttons[i]
+		if btn != null:
+			# TimeManager.Speed 枚举序：0=暂停 1/2/4=倍速，与按钮顺序一致
+			btn.pressed.connect(_on_speed_pressed.bind(i))
 	if centered_button != null:
 		centered_button.pressed.connect(_on_centered_button_pressed)
 		_update_centered_button_text()
@@ -58,6 +75,10 @@ func _ready() -> void:
 		settings_button.pressed.connect(_on_settings_button_pressed)
 	if placeholder_preview_button != null:
 		placeholder_preview_button.pressed.connect(_on_placeholder_preview_pressed)
+	for node_name: String in EMPIRE_PRESETS:
+		var btn: Button = get_node_or_null("MarginContainer/HBoxContainer/" + node_name)
+		if btn != null:
+			btn.pressed.connect(_on_empire_panel_pressed.bind(EMPIRE_PRESETS[node_name]))
 
 
 func _process(_delta: float) -> void:
@@ -90,42 +111,45 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 
 # ─────────────────────────────── 更新显示 ────────────────────────────────
 
+## 速度组显示即控制：当前档琥珀高亮；暂停时 ‖ 档醒目橙红（战斗自动暂停的
+## 可发现性——玩家第一眼看到"怎么继续"）
 func _update_speed_display() -> void:
-	if speed_label == null or TimeManager == null:
+	if TimeManager == null or speed_buttons.is_empty():
 		return
 	var paused: bool = TimeManager.is_paused()
-	var text: String = "速度: "
-	match TimeManager.current_speed:
-		TimeManager.Speed.PAUSED:
-			text += "暂停（空格继续）"
-		TimeManager.Speed.X1:
-			text += "1x"
-		TimeManager.Speed.X2:
-			text += "2x"
-		TimeManager.Speed.X4:
-			text += "4x"
-	# 脏检查：内容/配色没变就不碰 Label（每帧 text/color 赋值触发重排，全程白烧）
-	if text != _last_speed_text:
-		_last_speed_text = text
-		speed_label.text = text
-	if int(paused) != _last_speed_paused:
-		_last_speed_paused = int(paused)
-		# 暂停态醒目化（战斗自动暂停的可发现性——玩家第一眼看到"怎么继续"）
-		speed_label.add_theme_color_override("font_color",
-				Color(1.0, 0.55, 0.35) if paused else Color(0.9, 0.9, 0.9))
+	var key := "%d|%d" % [TimeManager.current_speed, int(paused)]
+	if key == _last_speed_key:
+		return
+	_last_speed_key = key
+	for i in speed_buttons.size():
+		var btn: Button = speed_buttons[i]
+		if btn == null:
+			continue
+		if i == TimeManager.current_speed:
+			btn.add_theme_color_override("font_color",
+					Color(1.0, 0.55, 0.35) if paused else StickTokens.ACCENT)
+		else:
+			btn.remove_theme_color_override("font_color")
+
+
+func _on_speed_pressed(idx: int) -> void:
+	if TimeManager != null:
+		TimeManager.set_speed(idx)
 
 
 func _update_time_display() -> void:
-	if time_label == null:
+	if day_time_label == null:
 		return
 	# 优先从 WorldState 读取；按"当日分钟数"脏检查，分钟没跳过不重写
 	if WorldState:
 		var t: float = WorldState.game_time
 		var minute_of_day: int = int(t * 60.0) % 1440
-		if minute_of_day == _last_minute_of_day:
+		var day: int = int(t / 24.0) + 1
+		if minute_of_day == _last_minute_of_day and day == _last_day:
 			return
 		_last_minute_of_day = minute_of_day
-		time_label.text = "时间: %02d:%02d" % [minute_of_day / 60, minute_of_day % 60]
+		_last_day = day
+		day_time_label.text = "第%d天 %02d:%02d" % [day, minute_of_day / 60, minute_of_day % 60]
 
 
 func _on_pause_changed(_paused: bool) -> void:
@@ -147,9 +171,9 @@ var _game_root: Node = null
 ## 顶栏内嵌资源条（attach_resources 注入）
 var _resource_bar: Control = null
 ## 速度/时间显示脏检查缓存（-1 = 从未写过，首帧必写）
-var _last_speed_text: String = ""
-var _last_speed_paused: int = -1
+var _last_speed_key: String = ""
 var _last_minute_of_day: int = -1
+var _last_day: int = -1
 
 
 func _on_centered_button_pressed() -> void:
@@ -186,6 +210,18 @@ func _on_stuck_button_pressed() -> void:
 
 
 # ─────────────────────────────── 编制管理窗口 ────────────────────────────────
+
+## 帝国功能占位面板（总览/科技/物流/成就——顶栏常驻入口，系统落地前开空面板）
+func _on_empire_panel_pressed(preset_id: String) -> void:
+	var gr := _game_root
+	if gr == null or not ("ui_root" in gr):
+		return
+	var overlay: Node = gr.ui_root
+	var modal: Control = overlay.get_slot("ModalOverlay")
+	if modal == null:
+		return
+	UIPlaceholderPanel.open_panel(modal, preset_id)
+
 
 ## 打开/关闭编制管理窗口（队伍类型编制：创建/配置编队）
 func _on_formation_button_pressed() -> void:

@@ -278,6 +278,7 @@ func create_squad(units: Array, squad_name: String = "", preset_id: String = DEF
 		_org_api.assign_stickman(squad_id, sid, preset["default_role"])
 		if u.has_method("set_role"):
 			u.set_role(preset["default_role"])
+		_requisition_unit(u)  # 编队征用互斥（批次 4）：在岗村民入伍即离岗
 		_unit_to_squad[u.get_instance_id()] = squad_id
 	# 本地追踪
 	_squads[squad_id] = {
@@ -379,6 +380,7 @@ func add_unit(squad_id: String, unit: Node) -> bool:
 		_org_api.assign_stickman(squad_id, str(unit.get_instance_id()), _squads[squad_id]["role"])
 	if unit.has_method("set_role"):
 		unit.set_role(_squads[squad_id]["role"])
+	_requisition_unit(unit)  # 编队征用互斥（批次 4）：在岗村民入伍即离岗
 	_squads[squad_id]["units"].append(unit)
 	_unit_to_squad[unit.get_instance_id()] = squad_id
 	# 入队补位（11b）：槽位随成员数重算
@@ -631,6 +633,18 @@ func _squad_contact_enemy_count(squad_id: String) -> int:
 			if u.global_position.distance_to(e.global_position) <= attack_range:
 				seen[e.get_instance_id()] = true
 	return seen.size()
+## 编队征用互斥（小镇生活批次 4）：在岗村民被征入伍自动离岗——清职业回
+## 待业池。duck 协议（get_profession/set_profession），零 town_life 模块依赖，
+## 无职业协议/已待业的单位跳过。离岗后劳作由 BehaviorHarvest 自查职业清空
+## 即时收工（AI 决策层 _try_harvest 同判职业空，不会重进劳作）。
+## 释放/解散不自动回岗（P0 决策：进待业池闲逛，重新分配走存档/后续系统）。
+func _requisition_unit(unit: Node) -> void:
+	if unit == null or not is_instance_valid(unit):
+		return
+	if not unit.has_method("get_profession") or not unit.has_method("set_profession"):
+		return
+	if not String(unit.get_profession()).is_empty():
+		unit.set_profession("")
 
 
 # ──────────────────── 编队结构列阵（SWL Formation 直译，11b）────────────────────────────

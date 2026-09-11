@@ -21,16 +21,24 @@
 - 长任务（多阶段实施类）跨多个对话会话推进。当上下文过长、判断质量可能下降时，**主动建议用户开新对话**，不要硬撑。
 - **交接前必须**：更新该任务的交接文档（进度 / 下一步任务分解 / 关键决策 / 新会话恢复指引）并 git 提交。
 - **新会话恢复**：用户说「继续 <任务名>」时，先读下方"当前活跃交接文档"恢复上下文，再开始干活，不重新摸底。
-- **任务分支一律用独立 worktree**：`git worktree add .temp/<任务名> <分支>`，在 worktree 目录里干活；**主工作区（仓库根）留给 `main`**，禁止在主工作区长期 checkout 任务分支（多会话并行共用仓库，占主工作区会把别的会话的提交混进自己的分支——2026-09-08 图标会话踩坑，world-map 提交被混入 feature 分支，后 cherry-pick 归位 main）。注意各 worktree 的 `temp/`（gitignored）互相独立，渲染产物/验收档案不共享。
-- **交接档统一放 `docs/项目/交接/`**（索引见其 [README.md](docs/项目/交接/README.md)）；任务收官无待验收项的移入 `docs/项目/交接/归档/`；**代码审计/快照类文档用完直接删除**，不进归档。
+- **任务分支一律用独立 worktree**：`git worktree add .temp/<任务名> -b agent/<后缀>`，任务会话在对应 worktree 内干活；**主工作区（仓库根）留给 `main`**，禁止在主工作区长期 checkout 任务分支（多会话并行共用仓库，占主工作区会把其他会话的提交混进自己的分支）。注意各 worktree 的 `temp/`（gitignored）互相独立，渲染产物/验收档案不共享。收线后 `git worktree remove` + 合并/删分支。
+- **交接档统一放 `docs/项目/交接/`**（索引见其 [README.md](docs/项目/交接/README.md)）；任务收官无待验收项的移入 `docs/项目/交接/归档/`；**代码审计/快照类文档用完直接删除**，不进归档（审计快照放 `docs/审计/`）。
 - 当前活跃交接文档：
-  - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，6 会话批次 Pro/Flash 分级派发，分支 `main`）
+  - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，**批次 1~6 全部完成、循环已测试锁死，待创始人观感验收后收线**，分支 `agent/conquest-loop`，worktree `.temp/conquest-loop`）
+  - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：描边融合+缩放抗锯齿；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/stickman-visual` 保留）
   - `docs/项目/交接/世界地图系统完善-进度与交接.md`（任务：观感返工 R 系列，分支 `agent/world-map-rework`，worktree `.temp/world-map-rework`）
+  - `docs/项目/交接/建筑与美术升级-进度与交接.md`（任务：铁匠铺/石头结构件/多层建筑/室内内饰/多材质/village_a 美化；**批次 1-6 全部完成已合并入本分支**，待观感验收；worktree `.temp/building-art` 保留）
+  - `docs/项目/交接/城镇生成管线-进度与交接.md`（任务：L1 城镇种子随机生成+风格参数化；**批次 1-4 全部完成已合并入本分支**；待办：八城按地面占比 1/3 重生成；worktree `.temp/town-gen` 保留）
+  - `docs/项目/交接/小镇生活与NPC职业-进度与交接.md`（任务：NPC 各司其职（铁匠/伐木/矿工）+经济自动产出端；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/town-life` 保留）
+  - `docs/项目/交接/游戏循环深化-进度与交接.md`（任务：兵源闭环/军饷 sink/战斗规模/敌方反扑——修核心循环 8 断点（诊断见 `docs/设计/核心循环.md` §七）；**并入本分支实施**，批次 1 兵营招兵完成，批次 2-5 待做）
   - `docs/项目/交接/图标管线与美术升级-进度与交接.md`（任务：图标三渲二管线+程序化美术升级，剩接入 Godot UI，分支 `main`）
   - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
   - `docs/项目/交接/组织系统深化-进度与交接.md`（任务：组织系统深化，分支 `agent/organization-deepening`，worktree `.temp/organization-deepening`）
   - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
   - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界AI机制复刻与分层集成（CoH已逆向，RimWorld/全战等候选），设计文档 `docs/设计/系统/12-游戏AI系统.md`，批次 A1~A8，暂随 `agent/organization-deepening` 分支）（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
+  - `docs/项目/交接/UI运行时优化批次A-暂停原语化-交接.md`（任务：UI 运行时三项优化·批次 A 暂停原语化，**实施完毕待合并**，分支 `agent/ui-pause-primitive`，合并注意事项见档内 §三）
+- 在役审计快照（用完即删，删除时同步移除登记）：
+  - `docs/审计/架构审计_2026-09-11.md`（架构实测基线与重测命令，供 `docs/项目/待办事项.md`「架构收敛 AR 系列」引用；AR 全部执行完毕后删除）
 
 ### 项目文档导航
 
@@ -40,18 +48,20 @@
 
 | 要做什么            | 读哪个                                                     |
 | --------------- | ------------------------------------------------------- |
+| **查技术架构（模块依赖/实体/EventBus/API 契约/存储/战略图/场景图…）** | `docs/技术/架构/README.md`（架构文档地图，按场景索引全部架构文档） |
 | 了解游戏整体          | `docs/设计/游戏设计文档.md`                                 |
 | 查 UI 体系规划/模板    | `docs/设计/UI/README.md`（索引各篇；模板在 `modules/ui_global/scenes/templates/`） |
 | 实现某个系统          | `docs/设计/系统/<系统名>.md`                        |
 | 查核心实体/状态机       | `docs/技术/架构/核心实体与状态机.md`               |
 | 查 EventBus 信号   | `docs/技术/架构/系统交互与EventBus.md`           |
 | 查模块 API 规范      | `docs/技术/架构/模块API契约.md`                   |
-| 查架构总纲/分层规则/收敛工作项（AR 系列） | `docs/技术/架构/架构总纲.md` |
+| 查模块实现状态/断链点（GDD↔代码对照） | `docs/技术/架构/模块依赖关系.md` |
 | 查 Autoload 依赖   | `docs/技术/架构/自动加载依赖.md`              |
 | 查战略图（world_map）架构 | `docs/技术/架构/战略图架构.md`（模块重新设计基线） |
 | 查程序化产物如何喂给战略图 | `docs/技术/架构/世界地图数据流.md`（生成端 ↔ 消费端契约） |
 | 查场景图（卷轴地图）架构 | `docs/技术/架构/场景与战斗架构.md`（导读，索引各子系统）<br>↳ 宿主: [`场景宿主架构.md`](docs/技术/架构/场景与战斗/场景宿主架构.md)<br>↳ 地图/室内/旅行: [`地图与场景图.md`](docs/技术/架构/场景与战斗/地图与场景图.md)<br>↳ 建筑/定居点: [`建筑与定居点.md`](docs/技术/架构/场景与战斗/建筑与定居点.md)<br>↳ 火柴人AI/战斗: [`战斗与AI.md`](docs/技术/架构/场景与战斗/战斗与AI.md)<br>↳ UI/环境: [`UI.md`](docs/技术/架构/场景与战斗/UI.md)<br>↳ 事件信号: [`EventBus信号契约.md`](docs/技术/架构/场景与战斗/EventBus信号契约.md) |
 | 查数据流与存储方案      | `docs/技术/架构/数据流全景.md` |
+| 查 UI 运行时三项优化（暂停原语化/HUD 槽位/按钮变体） | `docs/技术/架构/UI运行时架构优化方案.md`（设计基线，工作项在待办事项） |
 | 查程序化世界生成       | `docs/设计/系统/08-程序化世界生成.md` |
 | 游戏数据表           | `config/excel/` 目录 + `docs/技术/教程/Excel数据管线.md` |
 | 查编辑器工具/插件    | `docs/技术/编辑器工具索引.md`（addons/ + tools/ 全部脚本） |
@@ -68,9 +78,9 @@
 
 1. **主动沟通**：当任务描述不清晰或与架构原则冲突时，积极主动提问，不做危险假设。但可从系统一致性推导的实现细节（如某系统接入另一系统的方式、宏观涌现类机制的节奏）**不问创始人**——自行推导并落档；只把真正需要创始人定方向、定了会改做法的分歧拿出来问。
 2. **设计先行**：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/设计/系统/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
-3. **报错自检**：任何代码修改后，运行 `bash stick-world/tools/check_godot_errors.sh`（退出码 1 = 编辑器/运行日志有 ERROR/SCRIPT ERROR/Parse Error，须修复）；修改场景/资源文件后若用户报告编辑器报错，先查 `%APPDATA%\Godot\app_userdata\stick_world\logs\` 下最新日志（含轮转文件 `godot<时间戳>.log`），详见 `docs/技术/教程/Godot日志与报错检测.md`。测试命令见 `docs/技术/教程/测试矩阵.md`（`bash stick-world/tests/run_all.sh` 全量 / `-Changed` 增量 / `-Match` 过滤）。
+3. **报错自检**：任何代码修改后，运行 `bash stick-world/tools/check_godot_errors.sh`（退出码 1 = 日志有报错，须修复）；用户报告编辑器报错时先查日志再处置，详见 `docs/技术/教程/Godot日志与报错检测.md`。测试：`bash stick-world/tests/run_all.sh`（全量 / `-Changed` 增量 / `-Match` 过滤，详见 `docs/技术/教程/测试矩阵.md`）。
 4. **GitHub 查询走 MCP**：查 GitHub（代码/issue/仓库/README）一律用 `github-search` MCP 工具（已配置 GITHUB_TOKEN 认证）；**禁止手动 curl 匿名调用 api.github.com**（匿名限额 60 次/时，会触发限流并污染诊断）。
-5. **UI 布局单一真相源（P1/P2）**：场景是布局唯一真相源。**禁止 `Control.new()` 当 UI 根**（会丢 anchor 致控件静默不可见）；代码建全屏控件用 `UIKit.full_rect()`，角落 HUD 部件自设 anchor 并挂 `UIRoot.add_to_slot("HudOverlay", ...)` 等槽。详见 `docs/技术/架构/场景与战斗/UI.md`。
+5. **UI 布局单一真相源**：场景是布局唯一真相源，**禁止 `Control.new()` 当 UI 根**（会丢 anchor 致控件静默不可见）；代码建控件的合规出口（全屏 `full_rect()` / 角落部件 `widget()` + 槽位）见 `docs/技术/架构/场景与战斗/UI.md`。
 
 ***
 
@@ -79,6 +89,7 @@
 1. **文件夹结构**：模块一级目录按功能划分（`/modules/`、`/core/`），新功能 = 新模块，互不干扰，保证高可扩展性；模块内二级目录按类型划分（scenes/、scripts/、assets/ 等），找场景去 scenes/、找脚本去 scripts/，保证高速定位。功能定边界、类型定导航，两级结合。
 2. **耦合原则**：模块间通信优先使用 `core/autoload/event_bus.gd` 的全局事件总线，或通过模块的 `api.gd` 定义信号。不要跨模块 `get_node` 或引用非 API 内部方法。
 3. **接口契约**：模块对外交互须通过其根目录下的 `api.gd` 文件。
+4. **依赖分层**：只允许高层依赖低层——L0 `core/` → L1 基础设施（ui_global/fx/texture_gen/building_gen/environment）→ L2 玩法（combat/units/construction/organization/resources/inventory/player_control/world_map/debug_gui）→ L3 组装（world 唯一 composition root）。改动跨模块结构后跑 `python tools/audit_deps.py` 自检（零依赖环；跨模块 preload 仅限 api.gd 或行内 `audit-exempt` 标记+理由）。架构收敛工作项（AR 系列）见 `docs/项目/待办事项.md`。
 
 **解耦核心策略**：
 

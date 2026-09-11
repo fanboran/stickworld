@@ -67,6 +67,11 @@ static func _apply_button(t: Theme, s: Object, skin_mode: int = Mode.SKETCH) -> 
 	t.set_color("font_pressed_color", "Button", StickTokens.ACCENT)
 	t.set_color("font_disabled_color", "Button", StickTokens.TEXT_DISABLED)
 	t.set_font_size("font_size", "Button", StickTokens.FONT_HUD)
+	# 时间戳式恒定高对比（监控录像时间戳=白字黑边而非变色）：半透明按钮晒在
+	# 任意亮度的场景上都可读。背景采样变色需逐帧 GPU→CPU 屏幕回读（性能大忌）；
+	# 描边只随字体图集烘焙一次，零回读开销
+	t.set_constant("outline_size", "Button", 3)
+	t.set_color("font_outline_color", "Button", StickTokens.INK)
 
 
 static func _apply_label(t: Theme) -> void:

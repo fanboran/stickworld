@@ -72,6 +72,9 @@ func _build_content() -> void:
 		var btn := StickKit.auto_button(_category_column, cat["title"],
 				_select_category.bind(cat["id"]), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		if cat.has("icon"):
+			btn.icon = StickIcons.tex(cat["icon"])
+			btn.add_theme_constant_override("icon_max_width", 18)
 		_category_buttons[cat["id"]] = btn
 	# 初始值 + 内容
 	_init_values()
@@ -134,9 +137,10 @@ func _rebuild_content() -> void:
 	if cat.is_empty():
 		return
 	_add_section_title(cat["title"])
-	# 游戏分类：速度控制是特例（操作类，非持久化设置项）
+	# 游戏分类：速度控制 + 脱离卡死（操作类工具，非持久化设置项）
 	if _active_category == "game":
 		_add_speed_buttons()
+		_add_stuck_button()
 	for field in cat["fields"]:
 		_add_field_row(field)
 	# 调试分类：调试构建 + 游戏内时追加测试地图入口
@@ -183,6 +187,28 @@ func _add_speed_buttons() -> void:
 				TimeManager.set_speed(speed_map[label_text])
 		, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+
+## 脱离卡死（自救工具，行业惯例收进设置/帮助页；仅游戏内显示，主菜单无玩家实体）
+func _add_stuck_button() -> void:
+	if _game_root == null:
+		return
+	var btn := StickKit.auto_button(_content_vbox, "脱离卡死（传送至附近空旷处）",
+			_on_stuck_pressed, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+
+func _on_stuck_pressed() -> void:
+	var gr := _game_root
+	if gr == null:
+		return
+	var e: Node2D = gr.get_player_entity() if gr.has_method("get_player_entity") else null
+	if e == null or not is_instance_valid(e) or not e.has_method("escape_stuck"):
+		StickKit.toast(self, "脱离卡死失败：未找到玩家实体", "error")
+		return
+	e.escape_stuck()
+	StickKit.toast(self, "已传送至附近空旷地带", "info")
+	close()
 
 
 ## 设置项字段行（slider / option / toggle），值变化写入 _values。
@@ -391,7 +417,7 @@ const _VOLUME_KEYS: Array[String] = ["audio/master_volume", "audio/bgm_volume", 
 
 const SETTINGS_SCHEMA: Array[Dictionary] = [
 	{
-		"id": "game", "title": "游戏",
+		"id": "game", "title": "游戏", "icon": &"罗盘",
 		"fields": [
 			{"key": "game/auto_save_interval_sec", "label": "自动存档间隔（秒）", "type": "slider", "min": 30, "max": 600, "step": 30, "default": 60},
 			{"key": "game/auto_pause_battle", "label": "战斗开始时自动暂停", "type": "toggle", "default": true},
@@ -400,7 +426,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		],
 	},
 	{
-		"id": "video", "title": "画面",
+		"id": "video", "title": "画面", "icon": &"望远镜",
 		"fields": [
 			{"key": "video/window_mode", "label": "窗口模式", "type": "option", "options": ["窗口化", "无边框全屏", "独占全屏"], "default": 0},
 			{"key": "video/ui_scale", "label": "界面缩放", "type": "slider", "min": 75, "max": 150, "step": 5, "default": 100},
@@ -408,7 +434,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		],
 	},
 	{
-		"id": "audio", "title": "音频",
+		"id": "audio", "title": "音频", "icon": &"哨子",
 		"fields": [
 			{"key": "audio/master_volume", "label": "主音量", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80},
 			{"key": "audio/bgm_volume", "label": "音乐", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 70},
@@ -417,7 +443,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		],
 	},
 	{
-		"id": "control", "title": "控制",
+		"id": "control", "title": "控制", "icon": &"按按钮小手",
 		"fields": [
 			{"key": "control/edge_scroll", "label": "屏幕边缘滚动镜头", "type": "toggle", "default": true},
 			{"key": "control/edge_scroll_speed", "label": "边缘滚动速度", "type": "slider", "min": 1, "max": 10, "step": 1, "default": 5},
@@ -426,7 +452,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		],
 	},
 	{
-		"id": "debug", "title": "调试",
+		"id": "debug", "title": "调试", "icon": &"放大镜",
 		"fields": [
 			{"key": "debug/overlay", "label": "调试覆盖层（F3）", "type": "toggle", "default": false},
 			{"key": "debug/legend", "label": "常驻调试图例", "type": "toggle", "default": true},

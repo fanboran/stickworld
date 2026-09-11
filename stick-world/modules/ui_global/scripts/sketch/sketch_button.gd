@@ -65,6 +65,27 @@ func _apply_flats() -> void:
 			sb.modulate_color = Color(1, 1, 1, bg_alpha)
 		add_theme_stylebox_override(state, sb)
 	add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_apply_font_colors(base)
+
+
+## 字色随贴图亮度走：琥珀系亮底（primary 实底 / accent 的 hover/pressed 亮面）
+## 配深墨，深底配白。kind 可运行时切换（设置分类选中态），所以每次 _apply_flats
+## 重设：亮底槽位 override，其余清除还原主题——创建路径与切换路径都覆盖。
+func _apply_font_colors(base: String) -> void:
+	for col_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		var on_bright: bool = base == "btn_primary" \
+				or (base == "accent" and col_name != "font_color")
+		if on_bright:
+			add_theme_color_override(col_name, StickTokens.ACCENT_TEXT)
+		else:
+			remove_theme_color_override(col_name)
+	# 描边只服务「暗底白字」的时间戳高对比（主题层 3px 墨边）；亮底深墨字
+	# 再加墨描边=笔画膨胀糊死（主菜单纸面按钮教训）——亮底档一律归零
+	if base == "btn":
+		remove_theme_constant_override("outline_size")
+		remove_theme_color_override("font_outline_color")
+	else:
+		add_theme_constant_override("outline_size", 0)
 
 
 static var _box_cache: Dictionary = {}

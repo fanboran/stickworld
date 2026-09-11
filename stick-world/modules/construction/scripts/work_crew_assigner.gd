@@ -63,6 +63,11 @@ func get_available_count() -> int:
 	return _available_workers.size()
 
 
+## 空闲工人名单（拷贝；招兵/人口统计消费——过滤已变身单位由调用方按 meta 做）
+func get_available_workers() -> Array:
+	return _available_workers.duplicate()
+
+
 ## 工人是否在派工中
 func is_assigned(worker: Node) -> bool:
 	return _worker_to_project.has(worker)

@@ -14,12 +14,13 @@ const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 
 var _game_root: Node = null
 
-## 功能面板入口（依赖系统未建 → 打开空面板占位；系统落地后替换为真实面板）
+## 功能面板入口（依赖系统未建 → 打开空面板占位；系统落地后替换为真实面板）。
+## icon = 管线母题名（StickIcons 取图）；无匹配母题的入口不挂（见图标清单与缺口文档）
 const EMPIRE_ENTRIES: Array[Dictionary] = [
-	{"id": "empire_overview", "label": "总览报表"},
+	{"id": "empire_overview", "label": "总览报表", "icon": &"账本"},
 	{"id": "tech_tree", "label": "科技树"},
-	{"id": "logistics", "label": "物流网络"},
-	{"id": "collection", "label": "成就"},
+	{"id": "logistics", "label": "物流网络", "icon": &"手推车"},
+	{"id": "collection", "label": "成就", "icon": &"奖章"},
 ]
 
 
@@ -31,18 +32,30 @@ func setup(game_root: Node) -> void:
 	_build_screen()
 
 
+## 给按钮挂母题角标（左缘叠加不占排版位，居中文字不偏；motif 为空则跳过）
+static func _motif_icon(btn: Button, motif: Variant) -> void:
+	if motif == null or motif == &"":
+		return
+	StickKit.motif_badge(btn, motif)
+
+
 ## 构建内容：动作按钮列表（继续/设置/存档/回主菜单）
 func _build_content() -> void:
-	StickKit.sketch_button(_body, "继续游戏", close, StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_LG)
-	StickKit.sketch_button(_body, "设置", _on_settings, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
-	StickKit.sketch_button(_body, "存档管理", _on_save_panel, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+	var btn_continue := StickKit.sketch_button(_body, "继续游戏", close, StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_LG)
+	_motif_icon(btn_continue, &"卷轴")
+	var btn_settings := StickKit.sketch_button(_body, "设置", _on_settings, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+	_motif_icon(btn_settings, &"齿轮")
+	var btn_save := StickKit.sketch_button(_body, "存档管理", _on_save_panel, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+	_motif_icon(btn_save, &"两本书")
 	# 功能面板（空面板占位，内容留白但入口可达；系统接入后替换真实面板）。
 	# 分区不用「帝国」等头衔预设——开局玩家尚非帝国，头衔跃升需游戏内其他组织承认。
 	var sec := StickKit.section(_body, "功能")
 	for entry in EMPIRE_ENTRIES:
-		StickKit.sketch_button(sec, entry["label"], _open_placeholder.bind(entry["id"]),
+		var btn := StickKit.sketch_button(sec, entry["label"], _open_placeholder.bind(entry["id"]),
 				StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
-	StickKit.sketch_button(_body, "保存并回到主菜单", _on_return_menu, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+		_motif_icon(btn, entry.get("icon"))
+	var btn_return := StickKit.sketch_button(_body, "保存并回到主菜单", _on_return_menu, StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_LG)
+	_motif_icon(btn_return, &"房屋")
 
 
 ## 打开功能空面板（叠放在暂停菜单上：ModalOverlay 层序在暂停菜单之后，遮罩盖住它；

@@ -75,17 +75,22 @@ func _run() -> void:
 	else:
 		_pass("采集入库正常：%s +%d（%f → %f）" % [rid, int(after - before), before, after])
 
-	# 3) 连续采到耗尽 → 节点应自毁
+	# 3) 连续采到耗尽 → 节点进入枯竭态（隐藏+不可采，等待重生；
+	#    小镇生活批次 2 起采空不再自毁，改为按节拍重生）
 	var amount_left: int = int(rn.amount) if is_instance_valid(rn) else 0
 	var guard: int = 0
 	while is_instance_valid(rn) and guard < 50:
 		interaction._try_harvest_resource_node(rn)
 		guard += 1
 		await get_tree().process_frame
-	if is_instance_valid(rn):
-		_fail("采空后节点未自毁（剩余 %d，guard=%d）" % [int(rn.amount), guard], failures)
+	if not is_instance_valid(rn):
+		_fail("采空后节点不应自毁（批次 2 语义 = 枯竭+重生），剩余 %d，guard=%d" % [amount_left, guard], failures)
+	elif not rn.is_depleted():
+		_fail("采空后节点未进入枯竭态（剩余 %d，guard=%d）" % [int(rn.amount), guard], failures)
+	elif rn.visible:
+		_fail("枯竭节点应隐藏（等待重生）", failures)
 	else:
-		_pass("资源点采空自毁正常（共 %d 次采集）" % guard)
+		_pass("资源点采空转枯竭态正常（共 %d 次采集，%ss 后重生）" % [guard, rn.REGEN_TIME])
 
 	_quit(failures)
 

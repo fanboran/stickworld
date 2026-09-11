@@ -241,6 +241,13 @@ func _test_find_enemy() -> void:
 		unit.set_faction(1)
 	if _test_units[1].has_method("set_faction"):
 		_test_units[1].set_faction(2)
+	# 重摆两单位到村东空旷带（间距 70 < 剑射程 80）：单位无附身会被 AI wander
+	# 溜走（小镇生活线打开 wander 后漂移超射程曾致红），且游荡村民可能比
+	# unit 1 更近——摆到 NPC 活动区（±2100）之外，保证最近敌人恰为 unit 1
+	var spawn_y: float = _map.ground_y + (_map.ground_bottom - _map.ground_y) * 0.5
+	unit.global_position = Vector2(2600.0, spawn_y)
+	if _test_units[1] != null and is_instance_valid(_test_units[1]):
+		_test_units[1].global_position = Vector2(2670.0, spawn_y)
 	# 白盒标注（2026-08 审计）：私有方法直接驱动，重构时同步
 	# 调用 _find_nearest_enemy_in_range（通过 call 或直接调用）
 	var enemy: Node = null

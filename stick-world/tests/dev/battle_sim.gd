@@ -132,7 +132,6 @@ func _ready() -> void:
 func _run() -> void:
 	_game_root = _GameRootScene.instantiate()
 	add_child(_game_root)
-	_game_root.set("suppress_battlefield_enemies", true)
 	for i in 10:
 		await get_tree().process_frame
 	var loader: Node = _game_root.get("scene_loader")

@@ -58,8 +58,11 @@ func setup(formation_system: Node, command_chain: Node, org_api: Node = null) ->
 ## squad_id: 目标小队 ID
 ## target_pos: 目标位置（世界坐标，ADVANCE/RALLY 用）
 ## source_tier: 发令者层级（0=玩家直接指挥，延迟为 0）
+## extra_params: 行为参数增量（合并进 _order_to_params；如 RETREAT 的 evacuate=true
+## 战役撤离标记，TeamAi ROUT 姿态消费——出征与领地架构 §4.2）
 ## 返回是否成功下达（小队存在且有有效单位）。
-func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO, source_tier: int = 0) -> bool:
+func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO,
+		source_tier: int = 0, extra_params: Dictionary = {}) -> bool:
 	if _formation_system == null or _command_chain == null:
 		push_warning("[TacticalOrders] 未注入 formation_system 或 command_chain")
 		return false
@@ -73,6 +76,7 @@ func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO
 		return false
 	var behavior_name: String = _order_to_behavior(order_type)
 	var params: Dictionary = _order_to_params(order_type, target_pos)
+	params.merge(extra_params, true)
 	# 队伍级目标点分配模式（反编译参考实装 D）：推进/冲刺横排散开，RALLY 围圈集合
 	var spread_mode: String = _order_to_spread(order_type)
 	# 通过指挥链下达（P0 source_tier=0 时无延迟）
@@ -172,7 +176,9 @@ func _order_to_params(order_type: int, target_pos: Vector2) -> Dictionary:
 		OrderType.HOLD_POSITION:
 			return {}
 		OrderType.RETREAT:
-			return {}  # battle_instance 由 behavior 自动从 entity 获取
+			# battle_instance 由 behavior 自动从 entity 获取；
+			# 战役撤离 evacuate=true 经 issue 的 extra_params 增量并入（TeamAi ROUT 姿态）
+			return {}
 		OrderType.TAKE_COVER:
 			return {}
 		_:

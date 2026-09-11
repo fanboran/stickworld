@@ -34,6 +34,13 @@ var run_seed: int = 0
 ## 出生聚落不落此表——api 判定时恒视为已到访（不依赖开局加载时序）
 var visited_settlements: Dictionary = {}
 
+## 领地运行时状态（出征与领地循环，架构 §2.2）：{territory_id: 状态字典}。
+## 字段规范 = TerritoryRegistry.initial_state()（core 不反向依赖模块，此处内联同形）：
+##   state: int（0=HOSTILE/1=CAPTURED，TerritoryRegistry.State）；garrison_losses: int
+##   （车轮战累计守军战损，玩家败仗不判负只扣敌军）；control_progress: float
+##   （§9.1 P 社化预留，P0 恒 100）。只存已发生变化的领地，缺失条目按初始态查询
+var territories: Dictionary = {}
+
 ## ── 步行旅行队列（F6/E5，瞬态不进存档——读档恒回出发聚落）──
 ## 途经道路段序列（按行进序）：[{road_id, road(道路数据条目), from_map_id, to_map_id}]。
 ## road_id 即道路场景 id（road_map_generator 生成/缓存键）；from/to_map_id 为两端
@@ -51,6 +58,7 @@ var walk_origin_map_id: String = ""
 func start_new_run() -> void:
 	run_seed = randi()
 	visited_settlements = {}
+	territories = {}
 	reset_walk()
 
 
@@ -274,6 +282,7 @@ func get_save_data() -> Dictionary:
 		"game_time": game_time,
 		"run_seed": run_seed,
 		"visited_settlements": visited_settlements.keys(),
+		"territories": territories,
 		"stickmen": WorldStateSerializer.serialize_dict(stickmen, WorldStateSerializer.stickman_to_dict),
 		"organizations": WorldStateSerializer.serialize_dict(organizations, WorldStateSerializer.organization_to_dict),
 		"regions": WorldStateSerializer.serialize_dict(regions, WorldStateSerializer.region_to_dict),
@@ -290,6 +299,19 @@ func load_save_data(data: Dictionary) -> void:
 	visited_settlements = {}
 	for sid in data.get("visited_settlements", []):
 		visited_settlements[str(sid)] = true
+	territories = {}
+	# JSON 往返把 int 变 float，载入侧整型还原（字段规范见 TerritoryRegistry.initial_state，
+	# core 不反向依赖模块故此处内联同形——两处字段须同步改）
+	var ter_save: Dictionary = data.get("territories", {})
+	for tid in ter_save:
+		var v: Variant = ter_save[tid]
+		if not (v is Dictionary):
+			continue
+		territories[str(tid)] = {
+			"state": int(v.get("state", 0)),
+			"garrison_losses": int(v.get("garrison_losses", 0)),
+			"control_progress": float(v.get("control_progress", 100.0)),
+		}
 	reset_walk()  # 步行队列瞬态不进存档——读档恒从聚落出发
 	stickmen = WorldStateSerializer.deserialize_dict(data.get("stickmen", {}), WorldStateSerializer.stickman_from_dict)
 	organizations = WorldStateSerializer.deserialize_dict(data.get("organizations", {}), WorldStateSerializer.organization_from_dict)

@@ -144,8 +144,7 @@ func _ready() -> void:
 
 
 func _spawn_and_start() -> void:
-	# 幽灵战斗抑制（审计 P0-7）：worldgen 不再为战场图预置敌军/启动遭遇战
-	_game_root.set("suppress_battlefield_enemies", true)
+	# 战场图已退役自动刷敌（出征与领地架构 §4.3），本工具自行组织战斗，无幽灵战斗问题
 	# 等默认村图装配完成
 	for i in 10:
 		await get_tree().process_frame

@@ -16,6 +16,11 @@ extends BehaviorBase
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
 ##   - evacuate: true 战役撤离（见上；TeamAi ROUT 姿态经 RETREAT 号令传入）
+##   - retreat_mode: "withdraw" 撤退（回己方锚点/集结点，A3 · C6）；缺省/其余值 =
+##     "fallback" 后撤（战术后退：远离最近敌拉开距离重整，既有语义原样）。
+##     双档为 CoH fallback_*/retreat_* 同构：后撤=个人战况恶化的低烈度脱离
+##     （保留再战），撤退=战线崩坏的整体回撤（回集结点重整）。evacuate 优先于
+##     withdraw；锚点查询不可用时 withdraw 降级 fallback。
 
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
@@ -44,6 +49,12 @@ var _profile: Dictionary = {}
 var _keep_block_active: bool = false
 ## 战役撤离模式（C3）：固定方向撤至己方侧边缘，不提前收束
 var _evacuate: bool = false
+## A3 撤退档（withdraw）：回己方锚点/集结点（方向固定锚点，抵达带或超时收束）
+var _withdraw: bool = false
+## withdraw 撤退目标锚点（enter 时经 BattleInstance.get_faction_side_anchor 解析）
+var _withdraw_anchor: Vector2 = Vector2.ZERO
+## withdraw 撤退计时（上限 = 档案 retreat_mod_withdraw_max_time）
+var _withdraw_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -57,6 +68,13 @@ func enter(previous: String, params: Dictionary) -> void:
 		_battle = entity.get_battle_instance()
 	_timer = RETREAT_DURATION
 	_evacuate = bool(params.get("evacuate", false))
+	# A3 双档语义：withdraw = 撤退回锚点（方向固定锚点）；缺省 = fallback 后撤
+	# （既有语义）。evacuate 优先；锚点解析失败降级 fallback。
+	_withdraw = false
+	_withdraw_timer = 0.0
+	if not _evacuate and str(params.get("retreat_mode", "fallback")) == "withdraw":
+		if _resolve_withdraw_anchor():
+			_withdraw = true
 	# 兵种档案解析（按主手武器类型；取不到回落空档案 = 全基线）
 	_profile = {}
 	if entity != null and is_instance_valid(entity) and entity.has_method("get_weapon"):
@@ -66,6 +84,9 @@ func enter(previous: String, params: Dictionary) -> void:
 	_compute_retreat_dir()
 	if _evacuate:
 		_retreat_dir = _evac_dir()
+	elif _withdraw:
+		var to_anchor: Vector2 = _withdraw_anchor - entity.global_position
+		_retreat_dir = to_anchor.normalized() if to_anchor.length() > 0.1 else Vector2.LEFT
 	# 9i+ 保持招架：持盾兵种（profile 有 block_walk_anim）且开关开 → 撤退全程举盾
 	_keep_block_active = false
 	if bool(_profile.get("retreat_keep_block", false)) and not String(_profile.get("block_walk_anim", "")).is_empty():
@@ -89,6 +110,12 @@ func update(delta: float) -> void:
 	# 战役撤离：独立通道（不查敌、不因士气/距离/超时收束）
 	if _evacuate:
 		_update_evacuate()
+		return
+
+	# A3 撤退（withdraw）：回锚点独立通道（方向固定锚点，不因士气/安全距离提前
+	# 收束；抵达锚点带或超时收束；不登记 departed——自主撤退是战术行为，非战役离场）
+	if _withdraw:
+		_update_withdraw(delta)
 		return
 
 	_timer -= delta
@@ -184,6 +211,56 @@ func _update_evacuate() -> void:
 		move_dir = move_dir.normalized() if move_dir.length_squared() > 0.0001 else Vector2.ZERO
 	if move_dir != Vector2.ZERO and entity.has_method("ai_move"):
 		entity.ai_move(move_dir, true)
+
+
+## 撤退档主循环（A3 · C6 withdraw）：固定朝己方锚点/集结点行军，途中士气恢复
+## （"重整"分量，不因士气收束）；抵达锚点带或超时（档案 retreat_mod_withdraw_*
+## 参数）收束。方向不因敌人重算（脱离接触语义），不叠加游走，不登记 departed。
+func _update_withdraw(delta: float) -> void:
+	var health: Node = entity.get_health() if entity.has_method("get_health") else null
+	if health != null and health.has_method("restore_morale"):
+		health.restore_morale(MORALE_RECOVER_PER_SEC * delta)
+	_withdraw_timer += delta
+	var arrive: float = float(_profile.get("retreat_mod_withdraw_arrive", 80.0))
+	var max_time: float = float(_profile.get("retreat_mod_withdraw_max_time", 12.0))
+	var to_anchor: Vector2 = _withdraw_anchor - entity.global_position
+	if to_anchor.length() <= arrive or _withdraw_timer >= max_time:
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
+		_finish_with_block_restore()
+		return
+	var move_dir := to_anchor.normalized()
+	# y 夹紧可走带（与常规撤退同规）
+	var gy: float = float(entity.get("ground_y")) if "ground_y" in entity else 0.0
+	var gb: float = float(entity.get("ground_bottom")) if "ground_bottom" in entity else 0.0
+	if gb > gy:
+		var pos: Vector2 = entity.global_position
+		if move_dir.y < 0.0 and pos.y <= gy + 20.0:
+			move_dir.y = 0.0
+		elif move_dir.y > 0.0 and pos.y >= gb - 20.0:
+			move_dir.y = 0.0
+		move_dir = move_dir.normalized() if move_dir.length_squared() > 0.0001 else Vector2.ZERO
+	if move_dir == Vector2.ZERO:
+		# 无路可走（贴边）：收束交还决策
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
+		_finish_with_block_restore()
+		return
+	if entity.has_method("ai_move"):
+		entity.ai_move(move_dir, true)
+
+
+## 解析撤退目标锚点（A3 withdraw 档）：己方阵营侧锚点（BattleInstance.
+## get_faction_side_anchor duck 调用，不跨模块 preload）。查询不可用返回
+## false → 撤退降级后撤（fallback 原语义）。
+func _resolve_withdraw_anchor() -> bool:
+	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_faction"):
+		return false
+	if _battle == null or not is_instance_valid(_battle) \
+			or not _battle.has_method("get_faction_side_anchor"):
+		return false
+	_withdraw_anchor = _battle.get_faction_side_anchor(int(entity.get_faction()))
+	return true
 
 
 ## 撤离方向：己方出生侧（faction 1 左攻方 → 左缘；faction 2 右守方 → 右缘）

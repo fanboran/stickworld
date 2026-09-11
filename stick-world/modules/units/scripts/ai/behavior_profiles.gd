@@ -97,6 +97,18 @@ const BASELINE: Dictionary = {
 	"burst_wait": Vector2(1.2, 1.8),        ## R3 点射间停顿时长区间（s，RWR wait 1.2±0.6 直译）
 	"night_hesitate_mult": 1.0,             ## R3 夜间犹豫时长倍率（RWR 昼 0.3~0.6/夜 0.8~1.1 ≈ ×1.8~2.7；1.0 = 零回归；夜间判定见 behavior_attack._is_night）
 	"heal_buzz_distance": 60.0,             ## R5 防扎堆治疗（px：候选伤员被登记"治疗中"未过期时跳过，RWR consider_someone_already_healing_wounded_distance 10m 同构；0=关）
+	# ── A3 · C6 概率调制撤退（AI集大成；CoH personality retreat_* 真值见逆向笔记 §3.4；
+	#    数值为语义映射初值待实测校准；总开关默认关 = 既有强制溃逃链原样 = 零回归。
+	#    消费点：ai_controller._try_combat 中间带掷骰 + behavior_retreat 双档语义）──
+	"retreat_mod_enabled": false,           ## 自主撤退/后撤概率调制总开关（false=只走既有强制溃逃链）
+	"retreat_mod_hp_ratio": 0.49,           ## 血量低于此比例 → 撤退候选因子一（CoH retreat_capacity_percentage 0.49）
+	"retreat_mod_morale_ratio": 0.35,       ## 士气低于此比例 → 撤退候选因子二（本作士气维度映射，CoH 无直接对应；须 ≥ 强制链低士气阈值 0.25，只补中间带）
+	"retreat_mod_ally_break_ratio": 0.51,   ## 附近友军溃逃/阵亡比例 ≥ 此值 → 撤退候选因子三（CoH retreat_suppressed_percentage 0.51 同构）
+	"retreat_mod_ally_radius": 300.0,       ## "附近友军"判定半径（px）
+	"retreat_mod_reevaluate": 2.5,          ## 掷骰评估周期（s，CoH retreat_chance_reevaluate_ticks 20 tick≈2.5s）
+	"retreat_mod_chance": 0.30,             ## 基线掷骰概率（难度行 personality.<难度>.retreat_chance 覆盖；CoH easy/standard 0.30）
+	"retreat_mod_withdraw_arrive": 80.0,    ## 撤退（回锚点）判定抵达半径（px，behavior_retreat withdraw 档）
+	"retreat_mod_withdraw_max_time": 12.0,  ## 撤退（回锚点）最长持续时间（s；后撤档沿用既有 RETREAT_DURATION 不动）
 }
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────
@@ -255,3 +267,26 @@ static func _balance_config() -> Node:
 	if loop == null or not (loop is SceneTree):
 		return null
 	return (loop as SceneTree).root.get_node_or_null("BalanceConfig")
+
+
+## 读难度档 personality 行的撤退掷骰概率（A3 · C6：难度调制消费 A1 personality
+## 难度行 ai.personality.<difficulty>.retreat_chance，CoH personality retreat_chance
+## 按难度分档同构）。缺载/路径缺失/未知难度/行无该键返回 NAN，调用方以
+## 档案基线 retreat_mod_chance 兜底（软依赖语义，非异常）。
+static func get_difficulty_retreat_chance(difficulty: String) -> float:
+	var cfg: Node = _balance_config()
+	if cfg == null or "data" not in cfg:
+		return NAN
+	var data: Dictionary = cfg.get("data")
+	var rows: Variant = data.get("ai.personality", [])
+	if not (rows is Array):
+		return NAN
+	for row_v in rows:
+		if not (row_v is Dictionary):
+			continue
+		if str(row_v.get("id", "")) != difficulty:
+			continue
+		if "retreat_chance" not in row_v:
+			return NAN
+		return float(row_v["retreat_chance"])
+	return NAN

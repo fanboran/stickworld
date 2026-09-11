@@ -94,6 +94,31 @@ func get_orgs_in_region(region_id: String) -> Array[String]:
 	return _manager.get_orgs_in_region(region_id)
 
 
+## 列出全部根组织（森林多根；OrgPanel 树构建入口）
+func list_root_orgs() -> Array[String]:
+	if not _is_initialized:
+		return []
+	return _manager.list_root_orgs()
+
+
+## 改名（GDD §3.3 命名可改）
+## [Q] 成功发射 org_restructured（树节点文案含名称，属可见结构信息）
+func set_org_name(org_id: String, new_name: String) -> Dictionary:
+	if not _is_initialized:
+		return {"ok": false, "error": "模块未初始化"}
+	var result := _manager.set_org_name(org_id, new_name)
+	if result.get("ok", false):
+		org_restructured.emit(org_id)
+	return result
+
+
+## 列出全部预设名（"从预设创建"入口数据源）
+func list_preset_names() -> Array[String]:
+	if not _is_initialized:
+		return []
+	return _manager.list_preset_names()
+
+
 # ===== 编制管理 =====
 
 ## 设置人员编制模板

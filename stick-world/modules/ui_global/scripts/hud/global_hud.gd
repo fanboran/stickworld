@@ -14,6 +14,7 @@ const _ResourceBarScript: GDScript = preload("res://modules/ui_global/scripts/hu
 @onready var centered_button: Button = get_node_or_null("MarginContainer/HBoxContainer/CenteredButton")
 @onready var stuck_button: Button = get_node_or_null("MarginContainer/HBoxContainer/StuckButton")
 @onready var formation_button: Button = get_node_or_null("MarginContainer/HBoxContainer/FormationButton")
+@onready var org_button: Button = get_node_or_null("MarginContainer/HBoxContainer/OrgButton")
 @onready var settings_button: Button = get_node_or_null("MarginContainer/HBoxContainer/SettingsButton")
 ## 占位界面预览入口（开发用）：打开占位预览面板（大界面空面板陈列）
 @onready var placeholder_preview_button: Button = get_node_or_null("MarginContainer/HBoxContainer/PlaceholderPreviewButton")
@@ -54,6 +55,8 @@ func _ready() -> void:
 		stuck_button.pressed.connect(_on_stuck_button_pressed)
 	if formation_button != null:
 		formation_button.pressed.connect(_on_formation_button_pressed)
+	if org_button != null:
+		org_button.pressed.connect(_on_org_button_pressed)
 	if settings_button != null:
 		settings_button.pressed.connect(_on_settings_button_pressed)
 	if placeholder_preview_button != null:
@@ -194,6 +197,18 @@ func _on_formation_button_pressed() -> void:
 		return
 	if gr.has_method("toggle_formation_panel"):
 		gr.toggle_formation_panel()
+
+
+# ─────────────────────────────── 组织管理窗口 ────────────────────────────────
+
+## 打开/关闭组织管理窗口（通用组织树：任命统辖/层级/人事/预设）
+func _on_org_button_pressed() -> void:
+	var gr := _game_root
+	if gr == null:
+		_notify("组织", "未找到游戏根节点", "error")
+		return
+	if gr.has_method("toggle_org_panel"):
+		gr.toggle_org_panel()
 
 
 # ─────────────────────────────── 设置菜单（齿轮按钮）────────────────────────────────

@@ -197,6 +197,27 @@ func get_orgs_in_region(region_id: String) -> Array[String]:
 	return result
 
 
+## 列出全部根组织（森林多根；OrgPanel 树构建入口，无全列表遍历口故单设）
+func list_root_orgs() -> Array[String]:
+	var result: Array[String] = []
+	for org_id in organizations:
+		if organizations[org_id].parent_org == "":
+			result.append(org_id)
+	return result
+
+
+## 改名（GDD §3.3 命名可改；行政区划锁定规则挂行政/扩张系统后续任务）
+func set_org_name(org_id: String, new_name: String) -> Dictionary:
+	var org := _get_org(org_id)
+	if org == null:
+		return {"ok": false, "error": "组织不存在: %s" % org_id}
+	var trimmed := new_name.strip_edges()
+	if trimmed.is_empty():
+		return {"ok": false, "error": "名称不能为空"}
+	org.name = trimmed
+	return {"ok": true, "data": {}}
+
+
 # ===== 编制管理 =====
 
 ## 设置人员编制模板
@@ -612,6 +633,19 @@ func _load_preset_rows(preset_name: String) -> Dictionary:
 	if entries.is_empty():
 		return {"ok": false, "error": "未知预设: %s（可用: %s）" % [preset_name, ", ".join(available)]}
 	return {"ok": true, "data": {"entries": entries}}
+
+
+## 列出全部预设名（presets.tres preset 字段去重，面板"从预设创建"入口数据源）
+func list_preset_names() -> Array[String]:
+	var names: Array[String] = []
+	var res: Resource = load(PRESET_CONFIG_PATH)
+	if res == null or not (res is BalanceResource):
+		return names
+	for row in BalanceResource.sanitized_rows(res):
+		var pname := String(row.get("preset", ""))
+		if pname != "" and pname not in names:
+			names.append(pname)
+	return names
 
 
 ## 校验 v2 蓝图数据的结构（单根在 _instantiate_preset 校验；此处验条目字段完备）

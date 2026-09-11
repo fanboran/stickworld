@@ -202,6 +202,14 @@ func get_organization(org_id: String) -> Dictionary
 func get_child_orgs(org_id: String) -> Array[String]
 func get_orgs_by_tag(tag: String) -> Array[String]
 func get_orgs_in_region(region_id: String) -> Array[String]
+func list_root_orgs() -> Array[String]
+# 森林多根列举（OrgPanel 树构建入口）
+
+func set_org_name(org_id: String, new_name: String) -> Dictionary
+# [Q] 成功发射 org_restructured
+
+func list_preset_names() -> Array[String]
+# presets.tres 预设名去重列表（"从预设创建"入口数据源）
 
 # 编制管理
 func set_personnel_template(org_id: String, template: Dictionary) -> Dictionary
@@ -236,6 +244,9 @@ func disband_organization(org_id: String) -> Dictionary
 
 # 预设
 func load_preset(preset_name: String, parent_id: String) -> Dictionary
+# [Q] 每创建一个组织发射一次 org_created
+func apply_preset(data: Dictionary, parent_id: String) -> Dictionary
+# v2 蓝图直灌（export_as_preset 产物格式），信号语义同 load_preset
 func export_as_preset(org_id: String) -> Dictionary
 ```
 

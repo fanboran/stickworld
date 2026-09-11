@@ -27,6 +27,7 @@ const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/co
 const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command/command_chain.gd")
 const _BattlePanelScript: GDScript = preload("res://modules/combat/ui/battle_panel.gd")
 const _FormationPanelScript: GDScript = preload("res://modules/combat/ui/formation_panel.gd")
+const _OrgPanelScript: GDScript = preload("res://modules/organization/ui/org_panel.gd")
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
 const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
@@ -84,6 +85,7 @@ func setup(root: GameRoot) -> void:
 	_setup_tactical_system()
 	_setup_battle_panel()
 	_setup_formation_panel()
+	_setup_org_panel()
 	_setup_settings_menu_panel()
 	_setup_pause_menu_panel()
 	_setup_minimap()
@@ -401,6 +403,26 @@ func _setup_formation_panel_deferred() -> void:
 		return
 	if _root._formation_panel.has_method("setup"):
 		_root._formation_panel.setup(_root)
+
+
+# ─────────────────────────────── 组织管理窗口装配 ────────────────────────────────
+
+## 实例化 OrgPanel 并挂到 UIRoot.ModalOverlay 槽（FLOATING 浮动窗口，open/close 控制可见性）。
+func _setup_org_panel() -> void:
+	if _root.ui_root == null:
+		return
+	var op := UIKit.full_rect(_OrgPanelScript, "OrgPanel")
+	if not _root.ui_root.add_to_slot("ModalOverlay", op):
+		return
+	_root._org_panel = op
+	call_deferred("_setup_org_panel_deferred")
+
+
+func _setup_org_panel_deferred() -> void:
+	if _root._org_panel == null:
+		return
+	if _root._org_panel.has_method("setup"):
+		_root._org_panel.setup(_root)
 
 
 # ─────────────────────────────── 设置菜单装配（齿轮/ESC 打开）────────────────────────────────

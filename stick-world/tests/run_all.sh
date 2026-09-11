@@ -81,6 +81,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_ui_layout.tscn"
 	"tests/integration/test_battle_ui.tscn"
 	"tests/integration/test_formation_system_assembly.tscn"
+	"tests/integration/test_org_panel.tscn"
 	"tests/integration/test_placement_grid_units.tscn"
 	"tests/integration/test_tactical_orders.tscn"
 	"tests/integration/test_save_roundtrip.tscn"
@@ -179,7 +180,8 @@ affected_suites() {
 			stick-world/modules/resources/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1 ;;
 			stick-world/modules/organization/*)
-				picked["tests/integration/test_formation_presets.tscn"]=1 ;;
+				picked["tests/integration/test_formation_presets.tscn"]=1
+				picked["tests/integration/test_org_panel.tscn"]=1 ;;
 			stick-world/modules/player_control/*)
 				picked["tests/integration/test_possession.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1

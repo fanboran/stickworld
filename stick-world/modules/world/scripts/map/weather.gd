@@ -41,9 +41,7 @@ func _find_refs() -> void:
 
 
 func _process(delta: float) -> void:
-	# 暂停冻结世界视觉（雨滴/天气机一并停——UI 沸腾不受影响）
-	if TimeManager != null and TimeManager.is_paused():
-		return
+	# 暂停冻结由引擎总闸负责（本节点随地图 PAUSABLE，雨滴/天气机一并停）
 	_time += delta
 	# 状态机
 	_next_change -= delta

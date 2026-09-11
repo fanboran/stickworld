@@ -45,7 +45,8 @@ func deliver(order_type: int, squad_id: String, units: Array, behavior_name: Str
 	if delay <= 0.0:
 		_execute_delivery(order_type, squad_id, units, behavior_name, params, spread_mode)
 	else:
-		await get_tree().create_timer(delay).timeout
+		# process_always=false：暂停期（引擎总闸）延时一并暂停，指令不在暗中送达
+		await get_tree().create_timer(delay, false).timeout
 		_execute_delivery(order_type, squad_id, units, behavior_name, params, spread_mode)
 
 

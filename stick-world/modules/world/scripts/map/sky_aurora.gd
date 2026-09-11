@@ -62,8 +62,10 @@ func bind_frame(night: float, hour: float, center_x: float, phase: int, seconds_
 
 
 func _process(delta: float) -> void:
-	if TimeManager == null or not TimeManager.is_paused():
-		_wrapped_hour += delta * 24.0 / maxf(_seconds_per_day, 1.0)
+	# 昼夜联动计时：暂停冻结由引擎总闸负责（本节点 PAUSABLE）；步长经
+	# sim_delta 携带速度档——与 environment_system 昼夜同步倍速
+	var sim: float = TimeManager.sim_delta(delta) if TimeManager != null else delta
+	_wrapped_hour += sim * 24.0 / maxf(_seconds_per_day, 1.0)
 	# AuroraSky.Update（:33-56）直译：激活淡入 0.3/s、离开淡出 0.5/s
 	var active: bool = _night > 0.3
 	if active:

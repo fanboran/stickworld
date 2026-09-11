@@ -10,10 +10,21 @@ extends Node2D
 ## 详见 docs/技术/架构/场景与战斗架构.md §二。
 ##
 ## 子节点：
+##   ShortcutGate    —— 暂停期快捷键通道（ALWAYS，转发输入到 handle_shortcuts）
 ##   SystemSetup     —— 系统装配（system_setup.gd）
 ##   SaveHandler     —— 存档/读档（save_handler.gd）
 ##   TravelHandler   —— 传送/过场（travel_handler.gd）
 ##   InitialContent  —— 初始内容生成（initial_content.gd）
+##
+## ── process_mode 分层表（暂停原语化，声明集中在 game_root.tscn / ui_root.tscn）──
+## 本节点保持默认 PAUSABLE：引擎总闸（SceneTree.paused，由 TimeManager 翻转）
+## 一刀冻结世界全家（含 SystemSetup 运行时挂载的全部管理器）。显式例外：
+##   ShortcutGate = ALWAYS  ESC/空格/存读档快捷键在暂停期必须存活（本文件 handle_shortcuts）
+##   CameraRig    = ALWAYS  暂停布置战术时仍可平移/缩放（输入自门禁防穿透模态）
+##   UIRoot       = ALWAYS  ui_root.tscn 内声明；菜单可开可点、沸腾动画继续
+##   TimeManager / SaveManager = ALWAYS（自动加载不在两棵子树内，在各自 _ready 声明）
+## 其余子节点一律不设 process_mode（INHERIT → PAUSABLE）；新系统挂本节点下
+## 默认随闸冻结，需要暂停期存活的必须进上表并注释理由。
 
 # WorldAPI / PlayerControlAPI 是全局 class_name，无需 preload
 
@@ -836,7 +847,9 @@ func is_in_battle() -> bool:
 
 # ─────────────────────────────── 快捷键 ────────────────────────────────
 
-func _unhandled_input(event: InputEvent) -> void:
+## 快捷键总入口（由子节点 ShortcutGate 转发，暂停期照常触发；本节点自身
+## PAUSABLE，引擎暂停期 _unhandled_input 不再触发，故不经标准回调接入口）。
+func handle_shortcuts(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed:
 		return
 	var ek: InputEventKey = event as InputEventKey

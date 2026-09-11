@@ -25,8 +25,7 @@ var _accum: float = 0.0
 
 
 func _process(delta: float) -> void:
-	if TimeManager and TimeManager.is_paused():
-		return
+	# 暂停冻结由引擎总闸负责（本节点随地图 PAUSABLE）
 	_accum += delta
 	if _accum < SCAN_INTERVAL:
 		return

@@ -126,7 +126,14 @@ func _ensure_label_layer() -> void:
 	if _label_layer == null:
 		_label_layer = MapLabelLayer.new()
 		_label_layer.set_camera(_camera)
-		add_child(_label_layer)
+		# ⚠️ 挂渲染器父级（Content，无相机变换）：标注层按屏幕像素口径自绘
+		# （字形与 UI 同路径清晰；挂渲染器下会被 scale 把字形光栅化-缩回弄糊）
+		var host := get_parent()
+		if host != null:
+			host.add_child(_label_layer)
+		else:
+			add_child(_label_layer)
+		_label_layer.set_host(self)
 	_label_layer.setup_l3(_data)
 
 
@@ -139,12 +146,65 @@ func set_player_region(label: int) -> void:
 	queue_redraw()
 
 
-## 构建所在 L2 地区的流动描边分段缓存：该地区全部陆地多边形（land_polygons，
-## 顶点 [y,x] 或 Vector2，与 _draw_l2_borders 同口径换算）
+## 构建所在 L2 地区的流动描边分段缓存。
+## **弧源优先**（边界超分 S3）：从 political_mesh 的 tiles 弧引用收集玩家地区
+## 的边界弧（海岸单侧弧 + 相邻地区界弧），MapSketch.chain_polylines 串成闭合
+## 环——与 fill 色块同一几何源，逐像素贴合；旧 land_polygons（2048 域）降级回退。
 func _build_glow_outlines() -> void:
 	_glow_outlines = []
 	if _data == null or player_region_label <= 0:
 		return
+	var pm: Dictionary = _data.political_mesh
+	var arcs: PackedFloat32Array = pm.get("arcs", PackedFloat32Array())
+	var tiles_refs: Array = pm.get("tiles", [])
+	if not arcs.is_empty() and not tiles_refs.is_empty():
+		var region_of := {}
+		for t in _data.city_tiles:
+			region_of[int(t.get("label", 0))] = int(t.get("region", 0))
+		# 弧 → 外环引用的地区集合与引用数（弧 id 从 1 起，引用编码 ±(aid+1)）。
+		# ⚠️ holes（城块内湖）只计数不加 region——内湖不是地区边界
+		var arc_regs: Array = []
+		var arc_refs: Array = []
+		for tr in tiles_refs:
+			var td: Dictionary = tr
+			var rg := int(region_of.get(int(td.get("label", 0)), 0))
+			for v in (td.get("rings", []) as Array):
+				for w in (v as Array):
+					var aid0 := absi(int(w)) - 1
+					while arc_regs.size() <= aid0:
+						arc_regs.append({})
+						arc_refs.append(0)
+					arc_regs[aid0][rg] = true
+					arc_refs[aid0] += 1
+			for v in (td.get("holes", []) as Array):
+				for w in (v as Array):
+					var aid1 := absi(int(w)) - 1
+					while arc_refs.size() <= aid1:
+						arc_regs.append({})
+						arc_refs.append(0)
+					arc_refs[aid1] += 1
+		var ptr: PackedInt32Array = pm.get("arc_ptr", PackedInt32Array())
+		for aid in arc_regs.size():
+			var regs: Dictionary = arc_regs[aid]
+			if not regs.has(player_region_label):
+				continue
+			var n_refs := int(arc_refs[aid])
+			if n_refs >= 2 and regs.size() == 1:
+				continue   # 内部弧（两侧同地区）不画
+			# 海岸弧（单侧引用）+ 相邻地区界弧（两侧不同地区）——**逐弧独立流动**
+			#（三岔交界处串链会产生方向歧义斜穿，放弃闭合串链）
+			if ptr[aid + 1] - ptr[aid] < 4:
+				continue
+			var pts := PackedVector2Array()
+			pts.resize((ptr[aid + 1] - ptr[aid]) / 2)
+			for k in pts.size():
+				pts[k] = Vector2(arcs[ptr[aid] + k * 2], arcs[ptr[aid] + k * 2 + 1])
+			var resampled := FlowOutline.resample_open(pts)
+			if resampled.size() >= 2:
+				_glow_outlines.append(resampled)
+		if not _glow_outlines.is_empty():
+			return
+	# 回退：老 land_polygons（2048 域，与弧拓扑不同源——弧缺失时兜底）
 	for r in _data.regions:
 		if int(r.get("label", 0)) != player_region_label:
 			continue
@@ -559,7 +619,7 @@ func _draw() -> void:
 			if gz > 0.0001:
 				gw = minf(PLAYER_GLOW_MAP_WIDTH, PLAYER_GLOW_SCREEN_CAP / gz)
 		for outline in _glow_outlines:
-			FlowOutline.draw_flow(self, outline, PLAYER_GLOW_A, PLAYER_GLOW_B, _glow_time, gw)
+			FlowOutline.draw_flow_open(self, outline, PLAYER_GLOW_A, PLAYER_GLOW_B, _glow_time, gw)
 	# 4. hover 老 L1 高亮（黄线轮廓）
 	_draw_hover_l1()
 	# 5. L2 地区编号（F3 调试模式）

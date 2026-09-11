@@ -111,7 +111,14 @@ func _ensure_label_layer() -> void:
 	if _label_layer == null:
 		_label_layer = MapLabelLayer.new()
 		_label_layer.set_camera(_camera)
-		add_child(_label_layer)
+		# ⚠️ 挂渲染器父级（Content，无相机变换）：标注层按屏幕像素口径自绘
+		# （字形与 UI 同路径清晰；挂渲染器下会被 scale 把字形光栅化-缩回弄糊）
+		var host := get_parent()
+		if host != null:
+			host.add_child(_label_layer)
+		else:
+			add_child(_label_layer)
+		_label_layer.set_host(self)
 	_label_layer.setup_l2(_data)
 
 

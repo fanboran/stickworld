@@ -285,7 +285,13 @@ func _ensure_label_layer() -> void:
 	if _label_layer == null:
 		_label_layer = MapLabelLayer.new()
 		_label_layer.set_camera(_camera)
-		add_child(_label_layer)
+		# 挂渲染器父级（Content，无相机变换）：屏幕像素口径（同 L3/L2 注）
+		var host := get_parent()
+		if host != null:
+			host.add_child(_label_layer)
+		else:
+			add_child(_label_layer)
+		_label_layer.set_host(self)
 	_label_layer.setup_l1(_data)
 
 

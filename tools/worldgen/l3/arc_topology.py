@@ -238,13 +238,15 @@ def main():
     ap = argparse.ArgumentParser(description="共享弧拓扑 + 政治矢量 mesh 导出（S2/S3）")
     ap.add_argument("--write", action="store_true",
                     help="写回 l3_city.json 换源 + 产 l3_political_mesh.json + 注入 13 份 L2")
+    ap.add_argument("--labels", default=LABELS_PATH,
+                    help="城块标签场路径（缺省原始 watershed；细化场用 refined_city_labels_8192.npy）")
     ap.add_argument("--smoke", type=int, default=0, metavar="REGION",
                     help="只跑 region_NNN 的标签切片（快速自检，不写数据）")
     ap.add_argument("--no-preview", action="store_true", help="跳过预览图")
     args = ap.parse_args()
 
     t0 = time.time()
-    labels = np.load(LABELS_PATH)
+    labels = np.load(args.labels)
     print("[1] 标签场 %s 城块 %d 个" % (labels.shape, int(labels.max())))
 
     if args.smoke:

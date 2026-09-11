@@ -121,6 +121,31 @@ var _solve_hz: float = 0.0
 ## 解算节拍累积器（累加动画推进 delta；仅在推进帧后解算才有输入变化）
 var _solve_accum: float = 0.0
 
+## ── 低帧率分桶（stagger 补偿，96 满编渲染侧墙专项）──
+## 分桶阈值：fps < STAGGER_K2_FPS → 2 桶、fps < STAGGER_K4_FPS → 4 桶，
+## 否则关闭。阈值取「幻灯片区」下沿：48v48 可玩基线（fps 7~8）不受影响，
+## 96 满编（1.4fps）全档生效；每 STAGGER_REEVAL 秒重估一次（fps 由引擎
+## 每秒更新一次，重估间隔对齐后档位切换天然平滑）。
+const STAGGER_K2_FPS: float = 6.0
+const STAGGER_K4_FPS: float = 3.0
+const STAGGER_REEVAL: float = 1.0
+## LOD 节流的累积器在 fps << hz 时每帧都满足（帧 delta 0.7s >> 1/hz），
+## 节流失效：全单位每帧推进 + 解算 + 叠加 + 批渲染写，proc 线性堆叠
+## （96 满编 1.4fps 实测渲染骨架管线 ~200ms/帧，见交接档 §十一差分）。
+## 补偿：按全局渲染帧号把单位分桶错峰，每帧只让 1/k 桶位的单位走推进
+## 分支；跳过帧姿态冻结（批渲染 _dirty 门禁自然跳过写入，解算停在推进
+## 帧节拍上）。推进量取累积真实 delta——动画时间与墙钟同步（非慢动作），
+## 姿态更新率降为 fps/k：fps<6 已是幻灯片量级，姿态率减半/减 3/4 无观感
+## 差异，换渲染侧成本 ÷k 与帧率回升。与 LOD 导演「hz 永不向下钳制」教训
+## 不冲突：不钳 hz，只在 fps<6 幻灯片区错峰；fps≥6 时 k=1 行为与旧一致。
+## 桶相位 _stagger_seed 每单位随机（set_anim_update_hz 时），群体跳步帧
+## 互相错开，不出现全体同步定格。
+var _stagger_seed: int = 0
+## 当前桶数（1 = 关闭；重估见 _reeval_stagger）
+var _stagger_k: int = 1
+## 桶数重估计时器（fps 引擎侧每秒更新，1s 重估防档位抖动）
+var _stagger_timer: float = 0.0
+
 ## 动画播放结束信号（反编译参考实装 C）：LOOP_NONE 动画播完时发射（对应传奇 UpdateFinishAnimation）。
 ## 供攻击播完回切、受击播完回切、未来动作节奏（如 build 敲击）等使用。
 signal animation_finished(anim_name: String)
@@ -187,38 +212,60 @@ func _process(delta: float) -> void:
 	# LOD 驱动模式推进：自动处理已停用，按节流频率手动 advance（先于事件轮询，
 	# 保证 _check_animation_finished/_check_animation_events 读到最新播放位置）
 	if _anim_driven and _anim_tree != null and not _pause_gate:
-		var adv := 0.0
-		if _adv_hz >= 60.0:
-			adv = delta
-		else:
+		# 低帧率分桶重估（低频；见 _stagger_k 注）
+		_stagger_timer -= delta
+		if _stagger_timer <= 0.0:
+			_stagger_timer = STAGGER_REEVAL
+			_reeval_stagger()
+		# 节流累积每帧照加（含分桶跳过帧）：跳过帧不累积会让推进帧只推单帧
+		# delta，动画时间流速 = 墙钟/k（k=2 半速慢动作）；累积后推进帧一次
+		# 推进整个累积量，动画时间与墙钟同步。
+		if _adv_hz < 60.0:
 			_adv_accum += delta
-			if _adv_accum >= 1.0 / _adv_hz:
+		# 分桶推进门：跳过帧只跳「动画推进」与「批渲染 flush」（尾部按桶门控），
+		# **解算开关必须不动**——Skeleton2D 修改器的解算输出是非持久
+		# local_pose_override（引擎机制：仅内部处理写入的当帧生效，其余阶段
+		# 从 cache_transform 还原未解算值，见 docs/技术/架构/场景与战斗/
+		# 战斗与AI.md §TwoBoneIK 强约束——当初"全身横躺 90°"事故同源）。
+		# 若跳过帧 set_process_internal(false)，该帧渲染回退未解算姿态，与
+		# 解算帧交替 = 肢体闪烁（"肢体飞"）。解算保持每帧跑：成本与分桶前
+		# 持平（fps < 推进档时节流累积恒满足，internal 本就恒 true），分桶
+		# 省的是 advance 采样 + overlay 叠加 + 批缓冲写三块。
+		if _stagger_k <= 1 \
+				or Engine.get_process_frames() % _stagger_k == _stagger_seed % _stagger_k:
+			var adv := 0.0
+			if _adv_hz >= 60.0:
+				adv = delta
+			elif _adv_accum >= 1.0 / _adv_hz:
 				adv = _adv_accum
 				_adv_accum = 0.0
-		if adv > 0.0:
-			_anim_tree.advance(adv)
-			# 批渲染：本帧推进改写姿态 → 标脏（flush 在 _process 尾部消费）
-			if _batch != null:
-				_batch.mark_dirty()
-			# 骨架解算随推进帧联动（机制见 _solve_hz 注）：本帧 _process 置 true，
-			# 下一帧帧首内部处理解算一次；非解算节拍关闭内部处理停掉解算。
-			# 批渲染的解算后标脏走 _notification 的 INTERNAL_PROCESS 分支
-			#（解算落地帧 = 内部处理开启帧，精确挂钩），此处无需再记脏
-			if _solve_hz > 0.0:
-				_solve_accum += adv
-				if _solve_accum >= 1.0 / _solve_hz:
-					_solve_accum = 0.0
-					set_process_internal(true)
-				else:
-					set_process_internal(false)
+			if adv > 0.0:
+				_anim_tree.advance(adv)
+				# 批渲染：本帧推进改写姿态 → 标脏（flush 在 _process 尾部消费）
+				if _batch != null:
+					_batch.mark_dirty()
+				# 骨架解算随推进帧联动（机制见 _solve_hz 注）：本帧 _process 置 true，
+				# 下一帧帧首内部处理解算一次；非解算节拍关闭内部处理停掉解算。
+				# 批渲染的解算后标脏走 _notification 的 INTERNAL_PROCESS 分支
+				#（解算落地帧 = 内部处理开启帧，精确挂钩），此处无需再记脏
+				if _solve_hz > 0.0:
+					_solve_accum += adv
+					if _solve_accum >= 1.0 / _solve_hz:
+						_solve_accum = 0.0
+						set_process_internal(true)
+					else:
+						set_process_internal(false)
 	# 受击插播倒计时：动画播完回切到受击前状态（反编译参考实装 B）
 	if _hit_timer > 0.0:
 		_hit_timer -= delta
 		if _hit_timer <= 0.0 and _state_machine != null and not _dead:
 			_state_machine.travel(_hit_return_to)
 			_current_anim = _hit_return_to
-	# 批渲染 pose 快照：此处骨骼 = 本帧最终合成姿态（推进 + 解算 + 程序化叠加）
-	if _batch != null:
+	# 批渲染 pose 快照：此处骨骼 = 本帧最终合成姿态（推进 + 解算 + 程序化叠加）。
+	# 分桶跳过帧不写缓冲（缓冲保持推进帧的解算后姿态，显示连续无闪烁）；
+	# 跳过帧解算的 mark_dirty 保留，推进帧 flush 一次补写到最新。
+	if _batch != null and (_stagger_k <= 1 \
+			or Engine.get_process_frames() % _stagger_k == _stagger_seed % _stagger_k):
 		_batch.flush()
 	_tick_frame_counter += 1
 	if _tick_frame_counter % 2 != 0:
@@ -575,6 +622,7 @@ func set_anim_update_hz(hz: float) -> void:
 	if hz <= 0.0:
 		_anim_driven = false
 		_solve_hz = 0.0
+		_stagger_k = 1
 		if _anim_tree.active:
 			_anim_tree.active = false
 		# 完全暂停档：骨架解算一并冻结（接入过 LOD 才动内部处理，未接入保持原生）
@@ -585,6 +633,12 @@ func set_anim_update_hz(hz: float) -> void:
 	_solve_hz = minf(hz, 30.0)
 	if _anim_tree.active:
 		_anim_tree.active = false
+	# 低帧率分桶：桶相位随机化（与推进累积器的随机初相同款人群错峰思路），
+	# 桶数待 _process 重估（timer 归零下帧即估）
+	_stagger_seed = randi()
+	_stagger_k = 1
+	_stagger_timer = 0.0
+	_forward_stagger()
 	# 批渲染：节拍节奏变化，补一次 pose 快照（防档位切换期漏帧）
 	if _batch != null:
 		_batch.mark_dirty()
@@ -595,6 +649,37 @@ func set_anim_update_hz(hz: float) -> void:
 func _forward_overlay_hz(hz: float) -> void:
 	if _overlay != null and is_instance_valid(_overlay) and _overlay.has_method("set_update_hz"):
 		_overlay.set_update_hz(hz)
+
+
+## 重估低帧率分桶数（每 STAGGER_REEVAL 秒）：全速档（hz≥60，节流未失效、
+## 每帧推进本就是原生行为）不参与；节流档按引擎实测 fps 定桶（阈值见
+## STAGGER_K2_FPS 注）。桶数变化时同步 overlay 并转发相位。
+## 环境变量 STICK_RIG_STAGGER=0 强制关闭（A/B 实测用）：实测净收益 ≈0——
+## 非持久 override 机制下解算不可跳帧（跳了肢体飞），advance/overlay/flush
+## 的节省被解算墙吞掉（headless 96 实证：分桶 9.6 vs 基线 9.5 ticks/s，
+## 跳解算的 buggy 版 13.5）；本机制保留作代码解算 IK（交接档 §十一 刀③）
+## 落地后的跳帧框架。
+func _reeval_stagger() -> void:
+	if OS.get_environment("STICK_RIG_STAGGER") == "0":
+		_stagger_k = 1
+		_forward_stagger()
+		return
+	var k := 1
+	if _anim_driven and _adv_hz < 60.0:
+		var fps := Engine.get_frames_per_second()
+		if fps < STAGGER_K4_FPS:
+			k = 4
+		elif fps < STAGGER_K2_FPS:
+			k = 2
+	if k != _stagger_k:
+		_stagger_k = k
+		_forward_stagger()
+
+
+## 叠加层分桶参数同步：overlay 的 _on_frame 与推进同桶错峰（跳过帧不叠加）。
+func _forward_stagger() -> void:
+	if _overlay != null and is_instance_valid(_overlay) and _overlay.has_method("set_stagger"):
+		_overlay.set_stagger(_stagger_seed, _stagger_k)
 
 
 ## 设置动画播放速率（用于 walk 速度匹配，p_speed=1.0 为原始速率）。

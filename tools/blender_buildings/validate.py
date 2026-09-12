@@ -91,6 +91,11 @@ ASM_TIER_ATTR = {
     "windmill": "WINDMILL_TIERS", "cathedral": "CATHEDRAL_TIERS",
     "tower": "TOWER_TIERS", "gatehouse": "GATEHOUSE_TIERS",
     "lighthouse": "LIGHTHOUSE_TIERS",
+    # 批次 D3a（9 个民用装配器）
+    "cottage": "COTTAGE_TIERS", "tavern": "TAVERN_TIERS", "bakery": "BAKERY_TIERS",
+    "shop": "SHOP_TIERS", "guildhall": "GUILDHALL_TIERS",
+    "hayloft": "HAYLOFT_TIERS", "smithy2": "SMITHY2_TIERS",
+    "smithy3": "SMITHY3_TIERS", "smithy4": "SMITHY4_TIERS",
 }
 
 #: 窗规格标准（交接档 §0.3 / 任务书）

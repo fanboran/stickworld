@@ -57,22 +57,22 @@ CELL = 32.0
 #: 布局器 def → (装配器, 该装配器支持且**尽量不小于平面格宽**的宽度档)
 #: 宽度档取自 buildings.py 的各 *_TIERS 表；挑最小的"够宽"档，不够就取最大档。
 DEF_MAP = {
-    "cottage":       ("house", [8, 12, 16]),
+    "cottage":       ("cottage", [6, 8]),
     "house":         ("house", [8, 12, 16]),
     "plaster_house": ("house", [8, 12, 16]),
-    "bakery":        ("house", [8, 12, 16]),
-    "shop":          ("house", [8, 12, 16]),
-    "tavern":        ("townhouse", [12, 16]),
+    "bakery":        ("bakery", [8, 12]),
+    "shop":          ("shop", [8, 12]),
+    "tavern":        ("tavern", [12, 16]),
     "townhouse":     ("townhouse", [12, 16]),
-    "guildhall":     ("rowhouse", [12, 16]),
-    "hayloft":       ("barn", [8, 12, 16]),
+    "guildhall":     ("guildhall", [12, 16]),
+    "hayloft":       ("hayloft", [8, 12]),
     "barn":          ("barn", [8, 12, 16]),
     "stable":        ("barn", [8, 12, 16]),
     "shelter":       ("barn", [8, 12, 16]),
     "smithy1":       ("smithy1", [6, 8]),
-    "smithy2":       ("smithy1", [6, 8]),
-    "smithy3":       ("smithy1", [6, 8]),
-    "smithy4":       ("smithy1", [6, 8]),
+    "smithy2":       ("smithy2", [8]),
+    "smithy3":       ("smithy3", [8, 12]),
+    "smithy4":       ("smithy4", [12]),
     "church":        ("cathedral", [12, 16]),
     "chapel":        ("cathedral", [12, 16]),
     "tower":         ("tower", [4, 6]),
@@ -82,13 +82,20 @@ DEF_MAP = {
 }
 
 #: 装配器 → 道具配方键
-DRESS_OF = {"smithy1": "smithy", "rowhouse": "townhouse"}
+DRESS_OF = {"smithy1": "smithy", "smithy2": "smithy", "smithy3": "smithy",
+            "smithy4": "smithy", "rowhouse": "townhouse", "cottage": "house",
+            "tavern": "townhouse", "bakery": "market", "shop": "shop",
+            "guildhall": "cathedral", "hayloft": "barn"}
 
 #: 布局器 def → 道具配方键（功能区决定前场道具）
+#: 配方一律取自 `props.DRESS` 的既有键（**不新增、不改 props.py**）：
+#: tavern→townhouse（含 hanging_sign）、shop→shop（布篷 + 铁艺招牌 + 面包架）、
+#: bakery→market（市集摊 + 桶架 + 菜筐，面包房门口摆摊的老传统）、
+#: guildhall→cathedral（门口灯柱 + 长凳 + 摊桌的市政/行会前场）。
 DRESS_BY_DEF = {
     "smithy1": "smithy", "smithy2": "smithy", "smithy3": "smithy", "smithy4": "smithy",
-    "tavern": "townhouse", "townhouse": "townhouse", "guildhall": "townhouse",
-    "shop": "townhouse", "bakery": "townhouse", "plaster_house": "townhouse",
+    "tavern": "townhouse", "townhouse": "townhouse", "guildhall": "cathedral",
+    "shop": "shop", "bakery": "market", "plaster_house": "townhouse",
     "barn": "barn", "stable": "barn", "hayloft": "barn", "shelter": "barn",
     "cottage": "house", "house": "house",
     "church": "cathedral", "chapel": "cathedral",

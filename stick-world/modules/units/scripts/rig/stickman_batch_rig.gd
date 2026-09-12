@@ -78,8 +78,8 @@ static func _get_wobble_circle_mesh() -> ArrayMesh:
 		uvs.append(Vector2(float(i) / float(n), 0.0))
 		cols.append(Color.WHITE)
 	var idx := PackedInt32Array()
-	for i in range(1, n - 1):
-		idx.append_array([0, i, i + 1])
+	for i in n:
+		idx.append_array([0, i, (i + 1) % n])
 	var arr := []
 	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = pts
@@ -100,6 +100,10 @@ static func _get_wobble_bar_mesh() -> ArrayMesh:
 	var pts := PackedVector2Array()
 	var uvs := PackedVector2Array()
 	var cols := PackedColorArray()
+	# 端头微凸点（x=±0.54，对齐原版端头外凸 0.6×半高≈0.04 单位）
+	pts.append(Vector2(-0.54, 0.0))
+	uvs.append(Vector2(0.0, 0.5))
+	cols.append(Color.WHITE)
 	for i in n + 1:
 		var x := -0.5 + float(i) / float(n)
 		pts.append(Vector2(x, -0.5))
@@ -108,13 +112,24 @@ static func _get_wobble_bar_mesh() -> ArrayMesh:
 		uvs.append(Vector2(x + 0.5, 1.0))
 		cols.append(Color.WHITE)
 		cols.append(Color.WHITE)
+	pts.append(Vector2(0.54, 0.0))
+	uvs.append(Vector2(1.0, 0.5))
+	cols.append(Color.WHITE)
 	var idx := PackedInt32Array()
+	# 左端头扇（cap0 → 上边首 2 点）+ 条身网格 + 右端头扇
+	var cap0 := 0
+	var top0 := 1
+	var bot0 := 2
+	idx.append_array([cap0, bot0, top0])
 	for i in n:
-		var a := i * 2
+		var a := 1 + i * 2
 		var b := a + 1
 		var c := a + 2
 		var d := a + 3
 		idx.append_array([a, c, b, b, c, d])
+	var last_top := 1 + n * 2
+	var cap1 := 1 + n * 2 + 1
+	idx.append_array([cap1, last_top, last_top + 1])
 	var arr := []
 	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = pts

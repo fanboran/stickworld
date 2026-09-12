@@ -92,6 +92,7 @@ func update(delta: float) -> void:
 						if entity.has_method("ai_stop"):
 							entity.ai_stop()
 						weapon.cast_heal(_heal_target)
+						_mark_being_healed(_heal_target)
 				return
 
 	# 目标扫视周期节流（MericAi.UpdateTarget 直译）
@@ -117,6 +118,7 @@ func update(delta: float) -> void:
 			if entity.has_method("ai_stop"):
 				entity.ai_stop()
 			weapon.cast_heal(_heal_target)
+			_mark_being_healed(_heal_target)
 		else:
 			# 冷却/施法中 → 停移等待（Stand 观感）
 			if entity.has_method("ai_stop"):
@@ -167,15 +169,27 @@ func update_target() -> void:
 			and not (_heal_target.has_method("is_dead") and _heal_target.is_dead()) \
 			and not _is_target_full_hp(_heal_target):
 		return
-	# 重扫：find_weakest_ally（本阵营存活 ∧ 未满血，含祭司自身——决策点 3）
+	# 重扫：find_weakest_ally（本阵营存活 ∧ 未满血，含祭司自身——决策点 3）。
+	# A9 · R5 防扎堆治疗：档案 heal_buzz_distance > 0 时跳过"已有治疗者 HOT 在身"
+	# 的伤员（登记字段 being_healed_until，TargetFinder 过滤），多祭司不扎堆同一目标。
 	var heal_range: float = _p("heal_range", 0.0)
 	var opts: Dictionary = { "battle": _battle }
 	if heal_range > 0.0:
 		opts["range"] = heal_range
+	if _p("heal_buzz_distance", 0.0) > 0.0:
+		opts["skip_being_healed"] = true
 	_heal_target = ScriptTargetFinder.find_weakest_ally(entity, opts)
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
+
+## 登记"正在被治疗"（A9 · R5 防扎堆）：施放 HOT 后向目标写 being_healed_until
+## （截止 = now + HOT 时长 + 0.5s 缓冲），TargetFinder.find_weakest_ally 据此
+## 让其他祭司跳过该伤员。目标非 StickmanEntity（测试桩）时 set 静默失败，无害。
+func _mark_being_healed(target: Node) -> void:
+	var duration: float = _p("heal_duration", 0.0)
+	target.set("being_healed_until", Time.get_ticks_msec() / 1000.0 + duration + 0.5)
+
 
 ## 读取兵种档案参数（缺省回落 fallback——对齐 behavior_attack.gd:587 惯例）
 func _p(key: String, fallback: float) -> float:

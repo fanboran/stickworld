@@ -1,0 +1,36 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "squad_phase_plan"
+_meta = {
+	"resource_name": "squad_phase_plan",
+	"version": "0.1.0",
+	"description": "小队相位计划参数（A5 · 设计文档12号 C8，CoH squadai infantry-plan 简化直译）。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.squad_phase_plan）与热重载。global 行 = L2 小队层计划参数：角色分派比例（位置×素质双维）+ 跃进节奏（步长/等待去同步）+ 接敌反应（被压制代理/背敌判定）。phase_plan_enabled 缺省关闭 = 零回归基线。全部数值语义映射初值【提案/待定】待实测校准，CoH 真值项见键注释。",
+	"category": "ai"
+}
+variables = {
+	"data": [
+		{
+			"id": "global",
+			"phase_plan_enabled": false,
+			"phase_tick_interval": 0.5,
+			"role_core_ratio": 0.4,
+			"leap_step_ratio": 0.35,
+			"leap_min_dist": 120.0,
+			"leap_max_dist": 420.0,
+			"leap_timeout": 6.0,
+			"arrive_tolerance": 48.0,
+			"wait_core_min": 2.0,
+			"wait_core_max": 4.0,
+			"wait_flank_min": 2.0,
+			"wait_flank_max": 3.5,
+			"threat_window": 3.0,
+			"back_enemy_radius": 260.0,
+			"back_enemy_dot": -0.25,
+			"description": "L2 小队相位计划全局行：phase_plan_enabled=缺省关闭（零回归基线，A5 验收门）；phase_tick_interval=L2 计划节拍（收敛红线，与 L4 beat_interval 0.5 同量级）；role_core_ratio=核心组比例（前列优先，位置×素质双维分派【提案/待定】）；leap_step_ratio/min/max=跃进步长（剩余路程比例，CoH 70% 间距语义的进度映射）；leap_timeout=单相位移动超时防卡死；arrive_tolerance=到位死区；wait_core_*=核心跃进后全队还击等待（CoH infantry-plan 2~4s 真值）；wait_flank_*=双翼跟进等待（CoH 2~3.5s 真值）；threat_window=被压制代理窗口（arrow_threat_time 新鲜度【提案/待定】，A6 压制系统落地后替换）；back_enemy_*=背敌判定（半径+推进方向反半平面点积阈值）"
+		}
+	]
+}

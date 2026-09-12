@@ -89,6 +89,37 @@ const BASELINE: Dictionary = {
 	"heal_duration": 0.0,                   ## HOT 持续时长（s，总量均分 per_tick）
 	"heal_scan_interval": 0.5,              ## 治疗目标扫视周期（s，MericAi.UpdateTarget 节流推断）
 	"rear_line": false,                     ## 后排站位（FormationSystem 尾列取向；duck 查询不跨模块 preload）
+	# ── A9 · R1/R3/R5 个体 AI 参数面板（RWR interval/burst 族直译，AI集大成；
+	#    全部语义推断初值待实测校准；消费点见 ai_controller/behavior_attack/behavior_heal）──
+	"decision_interval": 0.3,               ## R1 主决策间隔（s，RWR choose_enemy_time 族；镜像旧 DECISION_INTERVAL 常量 = 零回归）
+	"decision_variance": 0.0,               ## R1 间隔 ± 方差半宽（s，RWR wait_time_variance 同构——逐拍重掷去同步；0 = 旧固定节拍）
+	"burst_shots": 0,                       ## R3 连射点数（发：连发此数后插 wait 停顿再射，RWR burst_time 族；0=关零回归；远程与近战均按档案开关）
+	"burst_wait": Vector2(1.2, 1.8),        ## R3 点射间停顿时长区间（s，RWR wait 1.2±0.6 直译）
+	"night_hesitate_mult": 1.0,             ## R3 夜间犹豫时长倍率（RWR 昼 0.3~0.6/夜 0.8~1.1 ≈ ×1.8~2.7；1.0 = 零回归；夜间判定见 behavior_attack._is_night）
+	"heal_buzz_distance": 60.0,             ## R5 防扎堆治疗（px：候选伤员被登记"治疗中"未过期时跳过，RWR consider_someone_already_healing_wounded_distance 10m 同构；0=关）
+	# ── A3 · C6 概率调制撤退（AI集大成；CoH personality retreat_* 真值见逆向笔记 §3.4；
+	#    数值为语义映射初值待实测校准；总开关默认关 = 既有强制溃逃链原样 = 零回归。
+	#    消费点：ai_controller._try_combat 中间带掷骰 + behavior_retreat 双档语义）──
+	"retreat_mod_enabled": false,           ## 自主撤退/后撤概率调制总开关（false=只走既有强制溃逃链）
+	"retreat_mod_hp_ratio": 0.49,           ## 血量低于此比例 → 撤退候选因子一（CoH retreat_capacity_percentage 0.49）
+	"retreat_mod_morale_ratio": 0.35,       ## 士气低于此比例 → 撤退候选因子二（本作士气维度映射，CoH 无直接对应；须 ≥ 强制链低士气阈值 0.25，只补中间带）
+	"retreat_mod_ally_break_ratio": 0.51,   ## 附近友军溃逃/阵亡比例 ≥ 此值 → 撤退候选因子三（CoH retreat_suppressed_percentage 0.51 同构）
+	"retreat_mod_ally_radius": 300.0,       ## "附近友军"判定半径（px）
+	"retreat_mod_reevaluate": 2.5,          ## 掷骰评估周期（s，CoH retreat_chance_reevaluate_ticks 20 tick≈2.5s）
+	"retreat_mod_chance": NAN,              ## 掷骰概率（NAN=未覆写 → personality global 行 retreat_chance → 代码默认 0.30；显式写入 = 覆写，测试/扫参出口）
+	"retreat_mod_withdraw_arrive": 80.0,    ## 撤退（回锚点）判定抵达半径（px，behavior_retreat withdraw 档）
+	"retreat_mod_withdraw_max_time": 12.0,  ## 撤退（回锚点）最长持续时间（s；后撤档沿用既有 RETREAT_DURATION 不动）
+	# ── A6 · C9 压制=定时锁死（AI集大成；CoH pinned-reaction-plan isInterruptablePlan=false
+	#    + 等 7.5s 真值见逆向笔记 §4.2；总开关默认关 = 零回归基线。
+	#    消费点：status_effects（触发+士气流失 tick）/ ai_controller（决策链禁令+
+	#    强制停滞）/ behavior_attack（在途行为兜底停滞）/ squad_phase_plan（真实压制
+	#    查询替换 A5 被压制代理）。惩罚来自模拟因果（行为禁令，非数值折扣）──
+	"suppression_enabled": false,           ## 压制系统总开关（false=无触发/无禁令/无士气流失，零回归）
+	"suppression_duration": 4.5,            ## 压制时长（s；CoH 7.5s 真值 × 本项目节拍比 0.3/0.5=0.6 校准——L1 决策拍 0.3s 快于 CoH 0.5s，锁死体感等比缩短；语义推断待实测校准）
+	"suppression_ranged_min_damage": 4.0,   ## 远程（射手主手弓）命中触发下限（HP；满箭 5~10、飞行衰减/格挡残余 0.45~3——挡住的箭不压制；语义推断待实测校准）
+	"suppression_melee_min_damage": 12.0,   ## 近战重击触发下限（HP；量级对齐 Anims.HIT_BIG_DAMAGE_THRESHOLD=12 重击分级——轻击不压制，防近战互殴全员钉死）
+	"suppression_morale_per_tick": 2.0,     ## 压制期士气流失（点/0.5s tick，语义推断待实测校准；经 lose_morale 只损士气不伤血，与伤害士气损失叠加可推向溃逃）
+	"suppression_immune": false,            ## 豁免规则（兵种级：英雄/巨人类置 true；已溃逃/已死亡/玩家附身恒豁免，不占此键）
 }
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────
@@ -182,18 +213,91 @@ const CLASS_PROFILES: Dictionary = {
 	},
 }
 
-## 档案缓存（weapon_type -> 合并后 Dictionary）
+## 档案缓存（weapon_type -> [覆盖行数组引用, 合并后 Dictionary]；行数组引用
+## 比对实现 BalanceConfig 热重载失效——reload 重建 data 后引用变化即重合并）
 static var _cache: Dictionary = {}
 
+## BalanceConfig 类型路径（R2 兵种人格覆盖档：config/ai/behavior_profiles.tres，
+## 手写平衡资源非 Excel 导出背书——A1 personality.tres 同例）
+const CONFIG_TYPE_PATH: String = "ai.behavior_profiles"
+## weapon_type -> .tres 行 id 映射（行 id 用字符串；未知类型只有 baseline 行生效）
+const CLASS_ID_BY_TYPE: Dictionary = {
+	SWORD: "sword",
+	SPEAR: "spear",
+	BOW: "bow",
+	PICKAXE: "pickaxe",
+	STAFF: "staff",
+	MERIC: "meric",
+}
 
-## 获取兵种行为档案：基线 + 兵种覆盖合并（覆盖项浅合并，未覆盖项回落基线）。
-## 未知类型返回基线副本。
+
+## 获取兵种行为档案：合并序 = 代码基线 ← 代码兵种覆盖（SWL 直译真值宿主）
+## ← BalanceConfig 行覆盖（R2：baseline 行 + 本兵种行，同 id 后行覆盖前行；
+## 行只写差异项 = RWR 职业文件语义）。未知类型返回基线合并副本。
 static func get_profile(weapon_type: int) -> Dictionary:
-	if _cache.has(weapon_type):
-		return _cache[weapon_type]
+	var rows: Array = _load_config_rows()
+	var cached: Array = _cache.get(weapon_type, [])
+	if cached.size() == 2 and cached[0] == rows:
+		return cached[1]
 	var merged: Dictionary = BASELINE.duplicate()
 	var override: Dictionary = CLASS_PROFILES.get(weapon_type, {})
 	for k in override.keys():
 		merged[k] = override[k]
-	_cache[weapon_type] = merged
+	var class_id: String = CLASS_ID_BY_TYPE.get(weapon_type, "")
+	for row_v in rows:
+		if not (row_v is Dictionary):
+			continue
+		var rid := str(row_v.get("id", ""))
+		if rid != "baseline" and rid != class_id:
+			continue
+		for k in row_v.keys():
+			if k == "id" or k == "description":
+				continue
+			merged[k] = row_v[k]
+	_cache[weapon_type] = [rows, merged]
 	return merged
+
+
+## 读 BalanceConfig 覆盖行数组（缺载/路径缺失返回空数组，代码默认兜底；
+## 直查 data 字典绕过 get_value 的未命中警告——软依赖语义，非异常）。
+static func _load_config_rows() -> Array:
+	var cfg: Node = _balance_config()
+	if cfg == null or "data" not in cfg:
+		return []
+	var data: Dictionary = cfg.get("data")
+	if not data.has(CONFIG_TYPE_PATH):
+		return []
+	var rows: Variant = data[CONFIG_TYPE_PATH]
+	return rows if rows is Array else []
+
+
+## BalanceConfig autoload 稳健解析（static 上下文不直引 autoload 标识符，
+## 先例 team_ai_profiles._balance_config；主循环未就绪返回 null）
+static func _balance_config() -> Node:
+	var loop := Engine.get_main_loop()
+	if loop == null or not (loop is SceneTree):
+		return null
+	return (loop as SceneTree).root.get_node_or_null("BalanceConfig")
+
+
+## 读 personality 单一档案 global 行的撤退掷骰概率（A3 · C6：ai.personality.global
+## retreat_chance，难度分档维度已裁决移除·开放问题#3——CoH personality
+## retreat_chance 语义保留为单一参数）。缺载/路径缺失/global 行无该键返回 NAN，
+## 调用方以代码默认兜底（软依赖语义，非异常）。
+static func get_personality_retreat_chance() -> float:
+	var cfg: Node = _balance_config()
+	if cfg == null or "data" not in cfg:
+		return NAN
+	var data: Dictionary = cfg.get("data")
+	var rows: Variant = data.get("ai.personality", [])
+	if not (rows is Array):
+		return NAN
+	for row_v in rows:
+		if not (row_v is Dictionary):
+			continue
+		if str(row_v.get("id", "")) != "global":
+			continue
+		if "retreat_chance" not in row_v:
+			return NAN
+		return float(row_v["retreat_chance"])
+	return NAN

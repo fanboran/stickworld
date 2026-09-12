@@ -35,6 +35,7 @@
   - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
   - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL 三家登记，批次 A1~A9，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1、A9 完成，A2 实施中，A3~A6 排队；组织批次 3 基建已随 `agent/organization-deepening` 收线合并**，分支 `agent/game-ai`，worktree `.temp/game-ai`；main 上此交接档为登记快照，最新版以分支为准）
   - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
+  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL/WorldBox 四家登记，批次 A1~A9，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1~A6/A9 七批全部收官并合入 main（难度维度按裁决移除）；待创始人裁决 W1~W10 批次化/组织界面方案/TeamAi 生产开关 + 机制观感验收**，分支 `agent/game-ai`，worktree `.temp/game-ai`）
   - `docs/项目/交接/UI运行时三项优化-ABC三批-交接.md`（任务：UI 运行时三项优化 A 暂停原语化/B HUD 布局收权/C 按钮变体，**三批已合并入 main（116d42bf），待创始人观感验收**，分支链 `agent/ui-pause-primitive`→`agent/ui-hud-zones`→`agent/ui-button-variants`）
 - 在役审计快照（用完即删，删除时同步移除登记）：
   - `docs/审计/架构审计_2026-09-11.md`（架构实测基线与重测命令，供 `docs/项目/待办事项.md`「架构收敛 AR 系列」引用；AR 全部执行完毕后删除）

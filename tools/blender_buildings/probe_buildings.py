@@ -211,7 +211,18 @@ def main():
                   pad=40.0, pad_top=34.0)
 
     # 3) 门口净空校验：火柴人站在门口（贴前墙面）
-    for (name, wc) in (("house", 6), ("house", 8), ("townhouse", 12), ("barn", 8)):
+    #    宽度档**一律从实际支持的档位表里取**（旧实现写死 ("house", 6)，而 HOUSE_TIERS
+    #    只有 8/12/16 → KeyError: 6；新 def 增删档位后这里也不会再挂）
+    door_cases = []
+    for (name, table) in (("house", B.HOUSE_TIERS), ("townhouse", B.TOWNHOUSE_TIERS),
+                          ("barn", B.BARN_TIERS)):
+        ws = sorted(w for w in table if table[w].get("door_w"))
+        if not ws:
+            continue
+        door_cases.append((name, ws[0]))
+        if len(ws) > 1:
+            door_cases.append((name, ws[-1]))
+    for (name, wc) in door_cases:
         ob, spec = B.ASSEMBLERS[name](wc)
         mx = B.measure(ob)
         if not spec.get("door"):

@@ -28,6 +28,7 @@ const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/comm
 const _BattlePanelScript: GDScript = preload("res://modules/combat/ui/battle_panel.gd")
 const _FormationPanelScript: GDScript = preload("res://modules/combat/ui/formation_panel.gd")
 const _OrgPanelScript: GDScript = preload("res://modules/organization/ui/org_panel.gd")
+const _CommandChainViewScene: PackedScene = preload("res://modules/organization/ui/command_chain_view.tscn")
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
 const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
@@ -117,6 +118,7 @@ func _step_table() -> Array:
 		["战斗面板", _setup_battle_panel],
 		["编队面板", _setup_formation_panel],
 		["组织面板", _setup_org_panel],
+		["指挥链视图", _setup_command_chain_view],
 		["上报叙事", _setup_org_report_narrator],
 		["设置菜单", _setup_settings_menu_panel],
 		["暂停菜单", _setup_pause_menu_panel],
@@ -587,6 +589,23 @@ func _setup_org_panel_deferred() -> void:
 		return
 	if _root._org_panel.has_method("setup"):
 		_root._org_panel.setup(_root)
+
+
+# ─────────────────────────── 指挥链视图装配（UI-W3）───────────────────────────
+
+## 实例化 CommandChainView 场景（command_chain_view.tscn，场景=布局唯一真相源）挂
+## UIRoot.ModalOverlay 槽（独立 FLOATING 窗口，与 OrgPanel 并存不互嵌——方案 §五.2）。
+## 视图自带 group("command_chain_view")，OrgPanel 顶部「指挥链」按钮按 group 打开，
+## 装配层不导引用（不新增 GameRoot getter）。
+func _setup_command_chain_view() -> void:
+	if _root.ui_root == null:
+		return
+	var cv: Control = _CommandChainViewScene.instantiate()
+	if not _root.ui_root.add_to_slot("ModalOverlay", cv):
+		cv.queue_free()
+		return
+	if cv.has_method("setup"):
+		cv.setup(_root)
 
 
 # ─────────────────────────────── 设置菜单装配（齿轮/ESC 打开）────────────────────────────────

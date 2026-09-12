@@ -12,6 +12,7 @@ signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptCommandChain := preload("res://modules/combat/scripts/command/command_chain.gd")
 const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const ScriptBoard := preload("res://modules/organization/ui/command_chain_board.gd")
 const TestHelpers := preload("res://tests/core/test_helpers.gd")
 
 var _runner: TestRunner
@@ -75,6 +76,24 @@ class RelayFormation extends Node:
 		return squads.get(org_id, [])
 
 
+## 沙盘夹具：organization api 桩（CommandChainBoard.build_tree 的三个只读查询）
+class BoardOrgApi extends Node:
+	var roots: Array = []
+	var orgs: Dictionary = {}
+	var candidates: Dictionary = {}
+
+	func list_root_orgs() -> Array:
+		return roots
+
+	func get_organization(id: String) -> Dictionary:
+		if not orgs.has(id):
+			return {"ok": false}
+		return {"ok": true, "data": orgs[id]}
+
+	func get_succession_candidates(id: String) -> Array:
+		return candidates.get(id, [])
+
+
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("CommandChain: deliver 恒即时送达（撤抽象公式，签名兼容）", _test_deliver_instant)
@@ -86,6 +105,9 @@ func _ready() -> void:
 	_runner.add_test("接力在途: 带延迟跳 eta 语义与在途清单生命周期", _test_relay_eta_inflight, true)
 	_runner.add_test("接力在途: 中间层群龙无首=停驻丢弃且不达 L1", _test_relay_leaderless, true)
 	_runner.add_test("接力在途: L1 非战斗拒收= rejected_noncombat", _test_relay_reject, true)
+	_runner.add_test("事件镜像: 逐跳接力镜像转发到 EventBus（UI-W3 跨模块观测）", _test_relay_eventbus_mirror, true)
+	_runner.add_test("指挥链沙盘: 树构建/布局/群龙无首/补位候选/统辖规模", _test_board_tree_and_layout)
+	_runner.add_test("指挥链沙盘: 在途跳 eta 倒计时与停驻态生命周期", _test_board_hop_ledger)
 	await _runner.run_async()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -297,3 +319,123 @@ func _test_relay_reject() -> void:
 	_runner.assert_equal(String(outcome_by_org.get("root", "")), "relayed", "中间层结局=relayed")
 	_runner.assert_true(delivered.is_empty(), "拒收不应发出 order_delivered")
 	_teardown_relay(chain, formation, api)
+
+
+# ─────────────────── EventBus 镜像（UI-W3 指挥链视图跨模块观测）───────────────────
+
+## 镜像口径：链信号原样转发到 EventBus（同 relay_id/from/to/hop/eta/outcome），
+## 视图侧只订阅 EventBus——本用例守住「转发确实发生且字段一致」。
+func _test_relay_eventbus_mirror() -> void:
+	if EventBus == null or not EventBus.has_signal("relay_started") or not EventBus.has_signal("relay_arrived"):
+		_runner.assert_true(false, "EventBus 应登记 relay_started/relay_arrived 镜像信号")
+		return
+	var started: Array = []
+	var arrived: Array = []
+	var cb_started := func(rid: String, _ot: int, from: String, to: String, hop: int, eta: float) -> void:
+		started.append({"rid": rid, "from": from, "to": to, "hop": hop, "eta": eta})
+	var cb_arrived := func(rid: String, _ot: int, from: String, to: String, hop: int, outcome: String) -> void:
+		arrived.append({"rid": rid, "from": from, "to": to, "hop": hop, "outcome": outcome})
+	EventBus.relay_started.connect(cb_started)
+	EventBus.relay_arrived.connect(cb_arrived)
+	var formation := RelayFormation.new()
+	formation.combat = {"l1": true}
+	formation.squads = {"l1": [StubUnit.new()]}
+	var chain := _mk_relay_chain(formation)
+	var api := RelayOrgApi.new()
+	api.orgs = {"root": {"tier": 2, "commander_id": "c1"}, "l1": {"tier": 1, "commander_id": ""}}
+	api.delays = {">root": 0.3, "root>l1": 0.1}
+	chain.deliver_via_orgs(_relay_plan("root", ["l1"]), api,
+			ScriptTacticalOrders.OrderType.ADVANCE_ALL, "move", {"target": Vector2.ZERO}, "")
+	var settled: bool = await _await_relays_settled(chain)
+	# 先断开再断言：断言失败也不把事件残留到其他用例
+	EventBus.relay_started.disconnect(cb_started)
+	EventBus.relay_arrived.disconnect(cb_arrived)
+	_runner.assert_true(settled, "接力应在超时内落账")
+	_runner.assert_equal(started.size(), (chain.get_relay_history(8) as Array).size(), "镜像 started 数与留痕一致")
+	_runner.assert_equal(started.size(), 2, "两跳各镜像一次 relay_started")
+	_runner.assert_equal(arrived.size(), 2, "两跳各镜像一次 relay_arrived")
+	var started_by_to: Dictionary = {}
+	for e in started:
+		started_by_to[String(e["to"])] = e
+	_runner.assert_approx(float((started_by_to["root"] as Dictionary)["eta"]), 0.3, 0.0001,
+			"镜像 eta 应透传传输层真值（玩家跳 0.3）")
+	_runner.assert_equal(String((started_by_to["root"] as Dictionary)["from"]), "", "镜像 from 空串=玩家跳")
+	_runner.assert_equal(int((started_by_to["l1"] as Dictionary)["hop"]), 1, "镜像跳序位透传")
+	var arrived_by_to: Dictionary = {}
+	for e in arrived:
+		arrived_by_to[String(e["to"])] = String(e["outcome"])
+	_runner.assert_equal(String(arrived_by_to.get("root", "")), "relayed", "镜像结局=relayed")
+	_runner.assert_equal(String(arrived_by_to.get("l1", "")), "delivered", "镜像结局=delivered")
+	for e in started:
+		_runner.assert_true(String(e["rid"]).begins_with("relay_"), "镜像 relay_id 与在途登记同源")
+	_teardown_relay(chain, formation, api)
+
+
+# ─────────────────────── 指挥链沙盘（UI-W3 视图纯逻辑）───────────────────────
+
+## 树构建：玩家源 + 组织节点、群龙无首口径、补位候选前、统辖规模、层级布局坐标
+func _test_board_tree_and_layout() -> void:
+	var api := BoardOrgApi.new()
+	api.roots = ["root"]
+	api.orgs = {
+		"root": {"id": "root", "name": "第三团", "tier": 3, "tag": 0,
+				"commander_id": "c0", "personnel": [], "child_orgs": ["co"]},
+		"co": {"id": "co", "name": "第一连", "tier": 2, "tag": 0,
+				"commander_id": "", "personnel": ["p1"], "child_orgs": ["l1"]},
+		"l1": {"id": "l1", "name": "一排", "tier": 1, "tag": 0,
+				"commander_id": "p1", "personnel": ["p1", "p2"], "child_orgs": []},
+	}
+	api.candidates = {"co": [{"id": "p1", "cmd": 3.0}, {"id": "p2", "cmd": 2.0}]}
+	var board: CommandChainBoard = ScriptBoard.new()
+	board.build_tree(api)
+	_runner.assert_equal(board.get_node_count(), 4, "玩家源 + 三组织 = 4 节点")
+	var co: Dictionary = board.get_node_snapshot("co")
+	_runner.assert_true(bool(co.get("leaderless", false)), "L2 指挥官空缺 = 群龙无首")
+	_runner.assert_equal((co.get("candidates") as Array).size(), 2, "补位候选序透传（上限前三）")
+	_runner.assert_equal(String((co.get("candidates") as Array)[0]), "p1", "候选第一序原文透出")
+	_runner.assert_equal(int(co.get("people", 0)), 2, "统辖规模 = 子树去重人数（p1/p2）")
+	var l1: Dictionary = board.get_node_snapshot("l1")
+	_runner.assert_true(not bool(l1.get("leaderless", false)), "L1 空缺不算群龙无首（可空架招兵）")
+	var unit: Dictionary = board.get_unit_positions()
+	_runner.assert_approx(float((unit[""] as Vector2).y), 0.0, 0.0001, "玩家源在第 0 层")
+	_runner.assert_approx(float((unit["root"] as Vector2).y), 1.0, 0.0001, "根组织第 1 层")
+	_runner.assert_approx(float((unit["co"] as Vector2).y), 2.0, 0.0001, "连第 2 层")
+	_runner.assert_approx(float((unit["l1"] as Vector2).y), 3.0, 0.0001, "排第 3 层")
+	_runner.assert_approx(float((unit["co"] as Vector2).x), float((unit["l1"] as Vector2).x), 0.0001,
+			"单子节点的父节点居中于子")
+	board.free()
+	api.free()
+
+
+## 在途跳账本：起跑登记 eta → 动画时钟递减 → 抵达销账/留档；停驻态随送达清除
+func _test_board_hop_ledger() -> void:
+	var api := BoardOrgApi.new()
+	api.roots = ["root"]
+	api.orgs = {
+		"root": {"id": "root", "name": "第三团", "tier": 3, "tag": 0,
+				"commander_id": "c0", "personnel": [], "child_orgs": ["co"]},
+		"co": {"id": "co", "name": "第一连", "tier": 2, "tag": 0,
+				"commander_id": "", "personnel": [], "child_orgs": ["l1"]},
+		"l1": {"id": "l1", "name": "一排", "tier": 1, "tag": 0,
+				"commander_id": "p1", "personnel": ["p1"], "child_orgs": []},
+	}
+	var board: CommandChainBoard = ScriptBoard.new()
+	board.build_tree(api)
+	board.notify_relay_started("r1", 0, "", "root", 0, 2.0)
+	_runner.assert_equal(board.get_active_hop_ids().size(), 1, "起跑即在途（连线点亮）")
+	_runner.assert_approx(board.get_hop_remaining("r1"), 2.0, 0.0001, "剩余秒数起点 = eta")
+	board.tick(0.5)
+	_runner.assert_approx(board.get_hop_remaining("r1"), 1.5, 0.0001, "动画时钟推进 → 剩余递减")
+	board.notify_relay_arrived("r1", 0, "", "root", 0, "relayed")
+	_runner.assert_equal(board.get_active_hop_ids().size(), 0, "抵达销账（流光收束）")
+	_runner.assert_equal(board.get_hop_remaining("r1"), -1.0, "不在途剩余查询返回 -1")
+	_runner.assert_equal(board.get_last_outcome("r1"), "relayed", "结局留档")
+	# 停驻：中间层群龙无首被停驻丢弃 → 该节点亮「命令停驻」
+	board.notify_relay_arrived("r2", 0, "root", "co", 1, "dropped_leaderless")
+	_runner.assert_true(board.has_hold("co"), "dropped_leaderless → 该组织节点停驻态")
+	board.notify_relay_started("r3", 0, "root", "co", 1, 0.0)
+	_runner.assert_true(not board.has_hold("co"), "新一跳起跑清除停驻")
+	board.notify_relay_arrived("r3", 0, "root", "co", 1, "delivered")
+	_runner.assert_equal(board.get_last_outcome("r3"), "delivered", "L1/L2 送达结局留档")
+	board.free()
+	api.free()

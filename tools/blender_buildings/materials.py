@@ -29,6 +29,25 @@
     box_project_uv(obj)
 
 NodeGroup 参数：`Scale`（尺度倍率，>1 = 纹理更大）、`Tint`、`Wear`（0 新 ~ 1 破）。
+
+做旧层与逐体色变（v3.2，见 `AGE` / `OBJ_VAR` 两张表）
+-----------------------------------------------------
+三道抱怨对应三层，全部走**低频**以守 25% 门禁（<35 cm 的"脏"在 19px/m 下只是噪点）：
+
+1. **做旧层**（`_age_wall`，材质内部，参数在 `AGE`）：近地溅泥/苔 —— 竖面上 V（= 世界 Z
+   ／32）0~35cm 渐入、随高度衰减、横向断续（**走 UV 的 V 而不是 Geometry 的世界 Z**：
+   世界单位在交付渲染与样片探针里差 32 倍，只有 V 在两处都等于"世界 Z/32"，见 `_v_ground`）；
+   垂直雨渍 —— 纵向拉伸噪声，亮度/色相扰动 ≤6%；木质另有**大尺度日照褪色**（朝向不可知
+   → 用 1.2~2m 的噪声代替）。水平面（基座顶/墙板顶）用 Normal 门控排除，避免误溅。
+2. **逐体色变**（`_obj_var`，Object Info > Random）：每 Object 一个恒定微随机色偏
+   （抹灰色相 ±3%、木色明度 ±8%、陶瓦色相 ±6%）——治"全城一个色"（材质实例按名字
+   复用，全局只有一个 Tint）。**只给建筑结构材质**（OBJ_VAR 登记在册）；道具系 10 个
+   追加 key 不做：道具与墙体各自独立 Object，给了随机就成"一堆不同材质的桶"。
+3. **屋面增强**：陶瓦/石板瓦加**第二维逐片随机**（色相摆动 + 破损率）——只用单随机
+   时全屋面只在"亮红↔暗红"一条线上抖，读作均匀色带；茅草加大尺度深浅斑驳。
+
+> `Object.random` 由对象名/创建序确定性派生（实测跨进程逐位一致），故逐体色变
+> **不破坏**"同种子渲染逐位可复现"。
 """
 import bpy
 import math
@@ -273,6 +292,35 @@ class B:
         self._in(n.inputs[0], vec)
         return n.outputs[0]
 
+    # ---------- 世界坐标 / 逐体随机 ----------
+    def pos_z(self):
+        """Geometry > Position 的世界 Z（**注意口径**：世界单位 = 场景尺度，
+
+        `buildings.py` 里 1 单位 = 1px@1:1，样片探针里 1 单位 = 1 格，两者差 32 倍；
+        任何"现实尺寸"判定都要先想清楚在哪种尺度下——做旧层因此改走 UV 的 V（见 _v_ground）。
+        """
+        n = self.nd('ShaderNodeNewGeometry')
+        _x, _y, z = self.sep(n.outputs['Position'])
+        return z
+
+    def nz(self):
+        """Geometry > Normal 的 Z 分量（竖面判定用）。"""
+        n = self.nd('ShaderNodeNewGeometry')
+        _x, _y, z = self.sep(n.outputs['Normal'])
+        return z
+
+    def comb(self, r, g, bl):
+        """三通道合成颜色（ShaderNodeCombineColor/RGB）——通道级色偏乘子用。"""
+        n = self.nd('ShaderNodeCombineColor', mode='RGB')
+        for i, s in enumerate((r, g, bl)):
+            self._in(n.inputs[i], s)
+        return n.outputs[0]
+
+    def obj_rand(self):
+        """Object Info > Random：**每对象恒定**的 0~1 随机（跨进程可复现，见 _obj_var）。"""
+        n = self.nd('ShaderNodeObjectInfo')
+        return n.outputs['Random']
+
     def wave(self, vec, scale, bands='X', dist=0.0, detail=0.0, phase=0.0):
         n = self.nd('ShaderNodeTexWave', wave_type='BANDS', bands_direction=bands,
                     wave_profile='SIN')
@@ -353,6 +401,177 @@ def _cells(b, u, v, cw, ch, stagger=0.5, seed=0.0, jitter=0.0):
                 rand=b.h2(col, row, 1.0 + seed),
                 rand2=b.h2(col, row, 2.0 + seed),
                 rand3=b.h2(col, row, 3.0 + seed))
+
+
+# ------------------------------------------------------------ 做旧层 / 逐体色变
+#
+# 这一层治的是创始人三条抱怨：**墙面灰白平淡**（缺"住过人"的时间感）、
+# **所有建筑一个色**（材质实例按名字复用 → 全局共享一个 Tint）、
+# **屋面像贴纹理平板**（缺斑驳）。三条都必须在 25% 门禁尺寸下仍然成立：
+# 所以做旧全部走**低频**（≥35 cm 的带/斑），不做高频脏点。
+#
+# 分工纪律：
+#   * 做旧层 = 材质内部（本表 AGE），同一材质在任何建筑上都成立；
+#   * 逐体色变 = Object Info > Random（OBJ_VAR），**只给建筑结构材质**——
+#     道具系那 10 个追加 key 不做：道具与墙体是各自独立的 Object，若也给随机，
+#     一排木桶会各自偏色（读作"摆了一堆不同材质的桶"）。
+
+#: 做旧层参数（每 key）：
+#:   splash 溅泥强度 / mud 暖褐泥色 / moss 苔色 / h 近地渐入高度(m)
+#:   rain 垂直雨渍强度 / sun 日照褪色强度 / sun_gray 褪色目标色
+AGE = {
+    'plaster':     dict(splash=0.58, mud=(0.302, 0.252, 0.184), moss=(0.168, 0.190, 0.092),
+                        rain=0.055, h=0.45),
+    'stone':       dict(splash=0.56, mud=(0.238, 0.202, 0.152), moss=(0.138, 0.172, 0.076),
+                        rain=0.050, h=0.35),
+    'white_stone': dict(splash=0.24, mud=(0.372, 0.330, 0.268), moss=(0.204, 0.226, 0.138),
+                        rain=0.040, h=0.30),
+    'brick':       dict(splash=0.42, mud=(0.246, 0.192, 0.140), moss=(0.140, 0.164, 0.078),
+                        rain=0.050, h=0.35),
+    'wattle':      dict(splash=0.58, mud=(0.312, 0.280, 0.208), moss=(0.202, 0.262, 0.102),
+                        rain=0.050, h=0.45),
+    'plank_wall':  dict(splash=0.44, mud=(0.188, 0.148, 0.100), moss=(0.128, 0.148, 0.068),
+                        rain=0.060, sun=0.13, sun_gray=(0.660, 0.612, 0.520), h=0.40),
+    'timber':      dict(splash=0.34, mud=(0.148, 0.116, 0.080), moss=(0.108, 0.128, 0.060),
+                        rain=0.050, sun=0.11, h=0.35),
+    'log_wall':    dict(splash=0.46, mud=(0.182, 0.146, 0.100), moss=(0.122, 0.148, 0.068),
+                        rain=0.058, sun=0.10, sun_gray=(0.628, 0.570, 0.462), h=0.40),
+    'shingle':     dict(rain=0.050, sun=0.16, sun_gray=(0.600, 0.552, 0.470)),
+    'slate_roof':  dict(rain=0.040, sun=0.10, sun_gray=(0.500, 0.520, 0.545)),
+    'thatch':      dict(sun=0.14, sun_gray=(0.720, 0.620, 0.400)),
+    'thatch_old':  dict(sun=0.09, sun_gray=(0.560, 0.520, 0.400)),
+    'straw':       dict(sun=0.12, sun_gray=(0.700, 0.600, 0.380)),
+}
+
+#: 逐体色变幅度 (hue, val)：hue = 通道增益偏差（近似小色相旋转），val = 明度 ±。
+#: **只登记建筑结构材质**（墙体/屋面/石砌）；道具系 10 key 一律不做。
+OBJ_VAR = {
+    'plaster':     (0.032, 0.045),      # 抹灰：色相 ±3%（近中性面上色偏会被放大，宁小勿大）
+    'stone':       (0.036, 0.060),
+    'white_stone': (0.030, 0.050),
+    'brick':       (0.032, 0.062),
+    'wattle':      (0.028, 0.060),
+    'plank_wall':  (0.026, 0.080),      # 木色：明度 ±8%
+    'timber':      (0.022, 0.080),
+    'log_wall':    (0.026, 0.080),
+    'shingle':     (0.024, 0.080),
+    'thatch':      (0.040, 0.080),
+    'thatch_old':  (0.040, 0.080),
+    'straw':       (0.034, 0.070),
+    'tile_roof':   (0.060, 0.050),      # 陶瓦：色相 ±6%
+    'slate_roof':  (0.034, 0.060),
+}
+
+
+def _obj_var(b, key):
+    """逐体微随机色偏乘子（Object Info > Random，每对象恒定）。
+
+    实现：三通道用 120° 相位的正弦调制（R/G/B 各自 1 + hue·sin(θ + 相位)）
+    —— 一次近似的小色相旋转，同时带一点明度抖动；再乘一个独立的 ±val 明度因子
+    （由同一个 Random 的分数拍哈希出第二个随机数，省一个节点）。
+    `Object.random` 由对象名/创建序确定性派生，**跨进程逐位一致**（已实测）。
+    """
+    hue, val = OBJ_VAR[key]
+    r = b.obj_rand()
+    ang = b.mul(b.sub(r, 0.5), 6.2831853)
+    sr = b.add(1.0, b.mul(b.sine(ang, 1.0, 0.0), hue))
+    sg = b.add(1.0, b.mul(b.sine(ang, 1.0, 2.0943951), hue))
+    sb = b.add(1.0, b.mul(b.sine(ang, 1.0, 4.1887902), hue))
+    q = b.frc(b.add(b.mul(r, 7.317), 0.371))
+    f = b.add(1.0, b.mul(b.sub(q, 0.5), 2.0 * val))
+    return b.mul_c(b.comb(sr, sg, sb), f)
+
+
+def _v_ground(b, v, h_m=0.35):
+    """近地权重：V（= 世界 Z/32，竖面上 = 离地高度）0 → 1，h_m 以上 → 0。
+
+    为什么不用 `Geometry > Position` 的**世界 Z**：世界单位在两处口径差 32 倍 ——
+    `buildings.py`/交付渲染里 **1 单位 = 1px@1:1**（一层檐高 200 单位 ≈ 2.1m），
+    而样片探针（`probe_materials_v2`/`probe_mat3`，`box_project_uv` 直投 UV）
+    里 **1 单位 = 1 格 = 32px**（同一面墙只有 5 单位）。同一句"世界 Z 0~0.35m"
+    在两个场景里相差 32 倍，材质会在一处几乎看不见、在另一处糊满整面墙（实测踩过）。
+    V 在两处都等于"世界 Z / 32"，正是本库唯一的口径基准（1 UV = 1 格 = 0.42m），
+    所以做旧层一律走 V → 与场景尺度无关。
+    """
+    return b.sub(1.0, b.ss(v, 0.0, uv_m(h_m)))
+
+
+def _vertical(b):
+    """竖面权重（0~1）：|N.z| 小 → 1；水平面（地面/基座顶/屋面）→ 0。
+
+    防什么：V 在水平面上是"进深"而不是"高度"（`Builder.poly` 的水平面取 (x,y)），
+    所以墙材贴到**水平面**（基座顶檐、墙板顶面）时会被误判成"贴地"而溅满泥。
+    """
+    return b.sub(1.0, b.ss(b.absv(b.nz()), 0.35, 0.80))
+
+
+def _mud_palette(b, u, v, mud, moss, seed=271.0):
+    """溅泥色：低频斑里"泥色 ↔ 苔色"互串（同一层里既有泥点也有苔痕）。"""
+    n = b.noise(b.vec(b.mul(u, 1.7), b.mul(v, 2.8), seed), 1.0, 5.0, 0.5)
+    return b.mixc(b.lin(n, 0.30, 0.78, 0.0, 1.0), mud, moss)
+
+
+def _splash_mask(b, u, v, g):
+    """溅泥掩码（0~1）：近地梯度 × 低频断斑 + 底部更密的溅点。
+
+    刻意"断续"：连续的贴地色带会读成"墙脚刷了一道漆"，断续才读作泥水飞溅。
+    """
+    lo = b.noise(b.vec(b.mul(u, 1.9), b.mul(v, 3.2), 211.0), 1.0, 5.0, 0.55)
+    band = b.mul(g, b.lin(lo, 0.28, 0.80, 0.30, 1.0))
+    sp = b.noise(b.vec(b.mul(u, 7.5), b.mul(v, 5.5), 223.0), 1.0, 4.0, 0.5)
+    speck = b.mul(b.ss(sp, 0.62, 0.80), b.mul(g, 0.85))
+    return b.mx(band, speck)
+
+
+def _rain_mask(b, u, v):
+    """垂直雨渍掩码：噪声沿 U 高频、沿 V 低频 → 纵向拉伸的水痕（断续）。"""
+    n = b.noise(b.vec(b.mul(u, 8.0), b.mul(v, 0.60), 233.0), 1.0, 5.0, 0.35)
+    return b.ss(n, 0.44, 0.82)
+
+
+def _sun_bleach(b, u, v, col, amt, gray):
+    """大尺度日照褪色（1.2~2 m 斑）：朝向不可知 → 只能用大尺度噪声代替。
+
+    只给木质（木墙/木骨/木瓦/茅草）：受光面被晒白、背光面留原色，这层"不匀"
+    正是"整片一个色"的解药。
+    """
+    n = b.noise(b.vec(b.mul(u, 0.30), b.mul(v, 0.23), 241.0), 1.0, 4.0)
+    m = b.ss(n, 0.40, 0.74)
+    col = b.mixc(b.mul(m, amt), col, gray)
+    return b.mul_c(col, b.lin(m, 0.0, 1.0, 1.0, 1.06))
+
+
+def _age_wall(b, u, v, col, key):
+    """墙面/屋面做旧层（plaster/stone/wood 系共用；参数见 AGE 表）。
+
+    顺序：日照褪色（大尺度底色不匀）→ 近地溅泥/苔 → 垂直雨渍（≤6% 扰动）。
+    三层都低频克制，保证 25% 门禁下是"读得出材质+有年头"，不是"脏斑"。
+    """
+    cfg = AGE.get(key)
+    if not cfg:
+        return col
+    if cfg.get('sun'):
+        col = _sun_bleach(b, u, v, col, cfg['sun'],
+                          cfg.get('sun_gray', (0.620, 0.590, 0.540)))
+    if cfg.get('splash'):
+        g = b.mul(_v_ground(b, v, cfg.get('h', 0.35)), _vertical(b))
+        m = b.mul(_splash_mask(b, u, v, g), cfg['splash'])
+        col = b.mixc(m, col, _mud_palette(b, u, v, cfg['mud'], cfg['moss']))
+    if cfg.get('rain'):
+        m = b.mul(_rain_mask(b, u, v), cfg['rain'])
+        # 通道压暗不相等 → 水痕微偏冷（R 压得比 B 多），总扰动 ≤ rain
+        col = b.mul_c(col, b.comb(b.sub(1.0, m),
+                                  b.sub(1.0, b.mul(m, 0.80)),
+                                  b.sub(1.0, b.mul(m, 0.52))))
+    return col
+
+
+def _aged(b, u, v, col, key):
+    """做旧层 + 逐体色变（结构材质统一收尾；道具材质只调 `_age_wall` 不调本函数）。"""
+    col = _age_wall(b, u, v, col, key)
+    if key in OBJ_VAR:
+        col = b.mul_c(col, _obj_var(b, key))
+    return col
 
 
 # ============================================================ 茅草
@@ -450,6 +669,14 @@ def _b_thatch(b, gi, bsdf, variant='new'):
     col = b.mixc(b.mul(gap, 0.14), col, b.mul_c(col, 1.22))         # 层界下缘一线受光
     col = b.mixc(b.mul(knot, 0.20), b.mul_c(col, 0.80), col)        # 草节
 
+    # ---- 大尺度斑驳（0.4~0.6 m 的干/湿、新/旧斑块）：屋面"像一块平板"的直接解药。
+    #      只走同色系明度 ±20% + 一点湿草的暗黄，绝不引入异物色。
+    pat = b.lin(b.noise(b.vec(b.mul(u, 0.85), b.mul(v, 0.50), 251.0), 1.0, 4.0),
+                0.28, 0.74, 0.0, 1.0)
+    col = b.mul_c(col, b.lin(pat, 0.0, 1.0, 0.80, 1.18))
+    wet = b.ss(b.noise(b.vec(b.mul(u, 0.62), b.mul(v, 0.42), 257.0), 1.0, 4.0), 0.54, 0.82)
+    col = b.mixc(b.mul(wet, 0.34 if variant == 'old' else 0.16), col, (0.235, 0.192, 0.098))
+
     # ---- 霉斑（旧草明显；新草只留一点灰，注意别做成"发霉抹布"）
     m1 = b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 47.0), 1.0, 5.0, 0.6)
     m2 = b.noise(b.vec(b.mul(u, 9.0), b.mul(v, 9.0), 53.0), 1.0, 4.0)
@@ -463,6 +690,8 @@ def _b_thatch(b, gi, bsdf, variant='new'):
     h = b.sub(h, b.mul(gap, 0.60))
     h = b.add(h, b.mul(fine, 0.22))
     rough = b.add(b.lin(bundle, 0.0, 1.0, 0.88, 0.97), b.mul(seam, 0.02))
+    # 日照褪色（大尺度斑，取代"朝向"信息）+ 逐体色偏 ±8% 明度
+    col = _aged(b, u, v, col, 'thatch' if variant != 'old' else 'thatch_old')
 
     return dict(color=col, rough=rough,
                 normal=b.bump(h, 0.65, uv_cm(1.6)),
@@ -521,6 +750,7 @@ def _b_straw(b, gi, bsdf):
     h = b.sub(h, b.mul(sr, 0.18))
     h = b.add(h, b.mul(overlay, 0.55))
     h = b.add(h, b.mul(b.sub(clump, 0.5), 0.60))
+    col = _aged(b, u, v, col, 'straw')
     return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(1.2)),
                 spec=0.10, sheen=0.35, sheen_rough=0.6)
 
@@ -548,16 +778,23 @@ def _b_tile_roof(b, gi, bsdf):
     u, v = _uv(b, gi)
     cw, ch = uv_cm(15.0), uv_cm(16.0)       # 瓦 15cm 宽、每排露 16cm
     c = _cells(b, u, v, cw, ch, stagger=0.5, seed=3.0)
-    fu, fv, r1, r2 = c['fu'], c['fv'], c['rand'], c['rand2']
+    fu, fv, r1, r2, r3 = c['fu'], c['fv'], c['rand'], c['rand2'], c['rand3']
 
     crown = b.pisin(fu)                     # 瓦垄剖面（片中央起拱）
     shade, lip = _row_light(b, fv, top=0.90, grad_to=0.60, lip=0.07)
     du = b.mul(b.mn(fu, b.sub(1.0, fu)), cw)
     seam_col = b.sub(1.0, b.ss(du, uv_cm(0.5), uv_cm(1.7)))     # 同排细缝（弱）
 
-    base = b.mixc(r1, (0.180, 0.045, 0.022), (0.520, 0.140, 0.046))
+    base = b.mixc(r1, (0.180, 0.045, 0.022), (0.540, 0.140, 0.044))
+    # ---- 逐瓦色差**第二维**：同窑批次也有色相摆动（偏黄 / 偏紫灰），r3 单独驱动
+    #      （只用 r1 一个随机 → 全屋面只在"亮红↔暗红"一条线上抖，读作均匀色带）
+    base = b.mixc(b.lin(r3, 0.0, 1.0, 0.0, 0.42), base,
+                  b.mixc(r1, (0.315, 0.088, 0.028), (0.222, 0.148, 0.132)))
     base = b.mixc(b.lin(r2, 0.82, 0.97, 0.0, 0.72), base, (0.085, 0.030, 0.024))   # 焦瓦
-    base = b.mixc(b.lin(r2, 0.0, 0.10, 0.0, 0.40), base, (0.560, 0.265, 0.100))    # 泛白瓦
+    base = b.mixc(b.lin(r2, 0.0, 0.10, 0.0, 0.40), base, (0.575, 0.272, 0.100))    # 泛白瓦
+    # ---- 破损率：极少数瓦片缺角/被替换（暗斑），随 Wear 上升（2~3px@25%，读作颗粒）
+    dmg = b.mul(b.ss(r3, 0.90, 0.985), b.lin(wear, 0.0, 1.0, 0.35, 1.0))
+    base = b.mixc(dmg, base, (0.128, 0.062, 0.044))
     base = b.shade(base, crown, 0.72, 1.20)                     # 垄脊受光
     base = b.shade(base, lip, 0.94, 1.18)                       # 瓦口亮棱
     col = b.mixc(b.mul(shade, 0.9), b.mul_c(base, 0.26), base)  # 行交叠（主角）
@@ -574,6 +811,7 @@ def _b_tile_roof(b, gi, bsdf):
     h = b.add(h, b.mul(shade, 1.05))            # 上一排压在上面 → 行界处一层台阶
     h = b.sub(h, b.mul(seam_col, 0.40))
     h = b.add(h, b.mul(b.sub(grn, 0.5), 0.10))
+    col = _aged(b, u, v, col, 'tile_roof')
     return dict(color=col,
                 rough=b.add(b.lin(r1, 0.0, 1.0, 0.60, 0.80), b.mul(grn, 0.03)),
                 normal=b.bump(h, 0.75, uv_cm(2.4)), spec=0.34)
@@ -587,7 +825,7 @@ def _b_slate_roof(b, gi, bsdf):
     u, v = _uv(b, gi)
     cw, ch = uv_cm(26.0), uv_cm(13.0)       # 石板 26cm 宽、每排露 13cm
     c = _cells(b, u, v, cw, ch, stagger=0.5, seed=17.0, jitter=0.10)
-    fu, fv, r1, r2 = c['fu'], c['fv'], c['rand'], c['rand2']
+    fu, fv, r1, r2, r3 = c['fu'], c['fv'], c['rand'], c['rand2'], c['rand3']
 
     shade, lip = _row_light(b, fv, top=0.92, grad_to=0.50, lip=0.05)
     du = b.mul(b.mn(fu, b.sub(1.0, fu)), cw)
@@ -597,6 +835,9 @@ def _b_slate_roof(b, gi, bsdf):
                  b.mul(b.ss(fv, 0.02, 0.14), b.ss(fu, 0.28, 0.44)))
 
     base = b.mixc(r1, (0.085, 0.098, 0.120), (0.205, 0.225, 0.258))
+    # 逐片色调摆动（第二维随机：一部分石板偏暖褐、一部分偏冷蓝 → 鱼鳞感更碎）
+    base = b.mixc(b.lin(r3, 0.0, 1.0, 0.0, 0.40), base,
+                  b.mixc(r1, (0.235, 0.222, 0.196), (0.148, 0.170, 0.200)))
     base = b.mixc(b.lin(r2, 0.82, 0.98, 0.0, 0.5), base, (0.058, 0.066, 0.082))
     base = b.mixc(b.lin(r2, 0.0, 0.14, 0.0, 0.35), base, (0.190, 0.172, 0.146))
     base = b.shade(base, lip, 1.0, 1.16)
@@ -615,6 +856,7 @@ def _b_slate_roof(b, gi, bsdf):
     h = b.sub(h, b.mul(seam_col, 0.30))
     h = b.sub(h, b.mul(chip, 0.6))
     h = b.add(h, b.mul(b.sub(grn, 0.5), 0.08))
+    col = _aged(b, u, v, col, 'slate_roof')
     return dict(color=col,
                 rough=b.add(b.lin(r1, 0.0, 1.0, 0.56, 0.76), b.mul(grn, 0.04)),
                 normal=b.bump(h, 0.70, uv_cm(2.2)), spec=0.44)
@@ -654,9 +896,14 @@ def _b_shingle(b, gi, bsdf):
     col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 71.0), 1.0, 5.0),
                             0.55, 0.82), b.mul(wear, 0.35)), col, (0.150, 0.115, 0.075))
 
+    # 逐片批次色差（第三维随机：阴阳面/不同批的木瓦冷暖不同，0.45 以内）
+    col = b.mixc(b.lin(c['rand3'], 0.0, 1.0, 0.0, 0.45),
+                 col, b.mixc(r1, b.mul_c(col, 1.10), b.mul_c(col, 0.84)))
+
     h = b.add(b.mul(lip, 0.95), b.mul(shade, 1.10))
     h = b.sub(h, b.mul(seam_col, 0.30))
     h = b.add(h, b.mul(b.sub(g, 0.5), 0.30))
+    col = _aged(b, u, v, col, 'shingle')
     return dict(color=col,
                 rough=b.add(b.lin(r1, 0.0, 1.0, 0.74, 0.90), b.mul(g, 0.03)),
                 normal=b.bump(h, 0.80, uv_cm(2.2)), spec=0.28)
@@ -735,6 +982,7 @@ def _b_plank_wall(b, gi, bsdf):
                           knot_amt=1.0, cracks=0.35, grain_len=1.0)
     dirt = b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 1.1), 71.0), 1.0, 5.0, 0.5)
     col = b.mixc(b.mul(b.ss(dirt, 0.52, 0.82), b.mul(wear, 0.40)), col, (0.105, 0.052, 0.024))
+    col = _aged(b, u, v, col, 'plank_wall')
     return dict(color=col, rough=rough, normal=b.bump(h, 0.80, uv_cm(2.0)), spec=0.33)
 
 
@@ -764,6 +1012,7 @@ def _b_timber(b, gi, bsdf):
     col = b.mul_c(col, b.lin(b.mixf(0.5, ax, ax2), 0.30, 0.72, 0.84, 1.16))
     h = b.add(h, b.mul(b.sub(r1, 0.5), 0.90))
     _ = hd
+    col = _aged(b, u, v, col, 'timber')
     return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(2.4)), spec=0.30)
 
 
@@ -779,22 +1028,22 @@ def _b_plaster(b, gi, bsdf):
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
 
-    base = (0.680, 0.632, 0.520)          # 暖米白（略偏黄，别偏灰）
+    base = (0.700, 0.645, 0.498)          # 暖米白（略偏黄，别偏灰；G/B 拉开防冷光下发灰）
     # 抹刀痕：低频 + 沿 U 拉长的刀弧（只做明度）
     trowel = b.noise(b.vec(b.mul(u, 0.9), b.mul(v, 2.6), 3.0), 1.0, 4.0, 0.6)
     arc = b.noise(b.vec(b.mul(u, 0.55), b.mul(v, 4.5), 17.0), 1.0, 3.0, 0.75)
     paddle = b.mixf(0.45, trowel, arc)
-    col = b.mul_c(base, b.lin(paddle, 0.22, 0.82, 0.855, 1.125))
+    col = b.mul_c(base, b.lin(paddle, 0.22, 0.82, 0.842, 1.150))
 
     # 砂粒（2~3 px，太细在 76 px/m 下看不见）
     grain = b.noise(b.vec(b.mul(u, 13.0), b.mul(v, 13.0), 5.0), 1.0, 3.0, 0.6)
     col = b.mul_c(col, b.lin(grain, 0.22, 0.78, 0.905, 1.095))
     # 抹刀压光的斜向拉丝（灰浆活儿的"光带"）
     trow = b.noise(b.vec(b.mul(u, 1.6), b.mul(v, 7.0), 19.0), 1.0, 4.0, 0.6)
-    col = b.mul_c(col, b.lin(trow, 0.30, 0.78, 0.93, 1.08))
-    # 灰浆的厚薄斑（5~15cm 的明度起伏：真实石灰墙靠这个"活"起来）
+    col = b.mul_c(col, b.lin(trow, 0.30, 0.78, 0.912, 1.105))
+    # 灰浆的厚薄斑（5~15cm 的明度起伏：真实石灰墙靠这个"活"起来；也是治"灰白平淡"的主力）
     blob = b.noise(b.vec(b.mul(u, 3.4), b.mul(v, 3.4), 23.0), 1.0, 5.0, 0.55)
-    col = b.mul_c(col, b.lin(blob, 0.25, 0.75, 0.905, 1.10))
+    col = b.mul_c(col, b.lin(blob, 0.25, 0.75, 0.888, 1.132))
 
     # 剥落：片状（低频大斑 + 中频边界参差），露中性灰浆底
     sp1 = b.noise(b.vec(b.mul(u, 0.65), b.mul(v, 0.65), 23.0), 1.0, 5.0, 0.6)
@@ -828,6 +1077,8 @@ def _b_plaster(b, gi, bsdf):
     h = b.sub(h, b.mul(crack, 0.35))
     rough = b.lin(paddle, 0.0, 1.0, 0.86, 0.95)
     rough = b.add(rough, b.mul(grain, 0.03))
+    # 做旧层：墙脚溅泥/苔（世界 Z 0~35cm，随高度衰减）+ 垂直雨渍 + 逐体色偏 ±4%
+    col = _aged(b, u, v, col, 'plaster')
     return dict(color=col, rough=rough, normal=b.bump(h, 0.50, uv_cm(3.0)), spec=0.26)
 
 
@@ -855,7 +1106,7 @@ def _b_masonry(b, gi, cfg):
     mott = b.noise(b.vec(b.mul(u, 5.0), b.mul(v, 5.0), 7.0), 1.0, 6.0, 0.6)
     col = b.mixc(r1, cfg['lo'], cfg['hi'])
     col = b.mixc(b.lin(r2, 0.78, 0.98, 0.0, 0.58), col, b.mul_c(col, 0.66))   # 深石
-    col = b.mixc(b.lin(r3, 0.0, 0.38, 0.0, 0.60), col, cfg['warm'])           # 暖石（约 2/5 的块偏暖）
+    col = b.mixc(b.lin(r3, 0.0, 0.38, 0.0, cfg.get('warm_hi', 0.60)), col, cfg['warm'])  # 暖石
     col = b.mixc(b.lin(mott, 0.28, 0.78, 0.0, 0.45), col, b.mul_c(col, 0.78))  # 石面斑驳
     col = b.shade(col, top_hi, 1.0, cfg['top_light'])
     col = b.shade(col, bot_dk, cfg['bot_dark'], 1.0)
@@ -883,6 +1134,8 @@ def _b_masonry(b, gi, cfg):
     h = b.sub(h, b.mul(seam, 1.30))
     h = b.add(h, b.mul(b.sub(grn, 0.5), 0.10))
     rough = b.add(b.lin(mott, 0.0, 1.0, 0.78, 0.93), b.mul(seam, 0.04))
+    # 做旧层：墙脚溅泥/苔 + 垂直雨渍 + 逐体色偏（石砌类的"死灰"靠这一层活起来）
+    col = _aged(b, u, v, col, cfg.get('age', 'stone'))
     return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(3.2)), spec=0.24)
 
 
@@ -890,17 +1143,17 @@ def _b_stone(b, gi, bsdf):
     """粗料石：块长 45~70 cm、层高 28 cm、缝 2.6 cm（大块 + 深缝 + 上缘受光倒角）。"""
     return _b_masonry(b, gi, dict(
         cw=uv_cm(56.0), ch=uv_cm(28.0), jw=uv_cm(2.6), jitter=0.52, seed=1.0,
-        lo=(0.170, 0.164, 0.152), hi=(0.480, 0.462, 0.428),
-        warm=(0.400, 0.318, 0.225), mortar=(0.072, 0.069, 0.064),
-        top_light=1.16, bot_dark=0.78, ao=0.50, moss=0.55))
+        lo=(0.175, 0.167, 0.150), hi=(0.492, 0.470, 0.428),
+        warm=(0.432, 0.338, 0.228), mortar=(0.078, 0.073, 0.066),
+        top_light=1.16, bot_dark=0.78, ao=0.50, moss=0.55, age='stone', warm_hi=0.68))
 
 def _b_white_stone(b, gi, bsdf):
     """白石细料（线脚/雕饰/首府立面）：块长 30~45 cm、层高 16 cm、缝 1.6 cm，暖奶油色。"""
     return _b_masonry(b, gi, dict(
         cw=uv_cm(38.0), ch=uv_cm(16.0), jw=uv_cm(1.6), jitter=0.30, seed=11.0,
-        lo=(0.400, 0.378, 0.330), hi=(0.790, 0.752, 0.668),
-        warm=(0.700, 0.605, 0.460), mortar=(0.250, 0.240, 0.218),
-        top_light=1.12, bot_dark=0.82, ao=0.66, moss=0.10))
+        lo=(0.408, 0.383, 0.330), hi=(0.800, 0.762, 0.668),
+        warm=(0.712, 0.612, 0.458), mortar=(0.256, 0.245, 0.220),
+        top_light=1.12, bot_dark=0.82, ao=0.66, moss=0.10, age='white_stone'))
 
 
 # ============================================================ 红砖
@@ -924,9 +1177,9 @@ def _b_brick(b, gi, bsdf):
     face = b.mul(bricky, b.sub(1.0, b.mx(b.mul(erode, 0.75), b.mul(chip, 0.9))))
 
     grain = b.noise(b.vec(b.mul(u, 12.0), b.mul(v, 24.0), 13.0), 1.0, 5.0, 0.6)
-    col = b.mixc(r1, (0.260, 0.072, 0.036), (0.600, 0.180, 0.062))
-    col = b.mixc(b.lin(r2, 0.66, 0.88, 0.0, 0.55), col, (0.420, 0.205, 0.070))
-    col = b.mixc(b.lin(r2, 0.90, 0.97, 0.0, 0.65), col, (0.090, 0.048, 0.036))
+    col = b.mixc(r1, (0.272, 0.070, 0.030), (0.622, 0.186, 0.058))
+    col = b.mixc(b.lin(r2, 0.66, 0.88, 0.0, 0.55), col, (0.438, 0.208, 0.068))
+    col = b.mixc(b.lin(r2, 0.90, 0.97, 0.0, 0.65), col, (0.088, 0.046, 0.034))
     col = b.mul_c(col, b.lin(r1, 0.0, 1.0, 0.74, 1.16))
     col = b.mixc(b.lin(grain, 0.28, 0.75, 0.0, 0.50), col, b.mul_c(col, 0.74))
     # 灰浆缝：浅灰（衬红砖）
@@ -946,6 +1199,7 @@ def _b_brick(b, gi, bsdf):
     h = b.sub(h, b.mul(b.mul(erode, 0.6), 0.5))
     h = b.sub(h, b.mul(chip, 0.4))
     rough = b.add(b.lin(r1, 0.0, 1.0, 0.74, 0.90), b.mul(b.sub(grain, 0.5), 0.08))
+    col = _aged(b, u, v, col, 'brick')
     return dict(color=col, rough=rough, normal=b.bump(h, 0.80, uv_cm(2.4)), spec=0.30)
 
 
@@ -1004,16 +1258,17 @@ def _b_log_wall(b, gi, bsdf):
     gate = b.mr(b.h2(b.flr(b.mul(u, 1.4)), b.flr(b.mul(v, 1.4)), 31.0), 0.80, 0.90, 0.0, 1.0)
     knot = b.mul(b.sub(1.0, b.ss(kd, 0.05, 0.20)), gate)
 
-    col = b.ramp(g, [(0.24, (0.078, 0.034, 0.012)), (0.52, (0.240, 0.118, 0.042)),
-                     (0.82, (0.430, 0.238, 0.096))])
+    col = b.ramp(g, [(0.24, (0.088, 0.036, 0.011)), (0.52, (0.272, 0.120, 0.034)),
+                     (0.82, (0.478, 0.240, 0.078))])
     col = b.mixc(rr1, b.mul_c(col, 0.84), b.mul_c(col, 1.12))       # 逐根色差
     col = b.mixc(rr2, col, b.mul_c(col, 0.90))
     col = b.shade(col, prof, 0.55, 1.12)                            # 圆木弧面明暗
     col = b.mixc(knot, col, (0.048, 0.022, 0.009))
     col = b.mixc(b.mul(seam, 0.80), b.mul_c(col, 0.30), col)        # 缝间深阴影
-    # 缝内填泥/苔（原木墙的"chinking"）
+    # 缝内填泥/苔（原木墙的"chinking"）—— 泥色偏暖、覆盖收窄（旧版又宽又偏橄榄绿，
+    # 整面墙会被读成"发绿的木板"，而不是"暖棕原木 + 浅色填泥"）
     mud = b.noise(b.vec(b.mul(u, 7.0), b.mul(v, 7.0), 47.0), 1.0, 4.0)
-    col = b.mixc(b.mul(seam, 0.75), b.mixc(mud, (0.215, 0.178, 0.128), (0.170, 0.160, 0.072)), col)
+    col = b.mixc(b.mul(seam, 0.62), b.mixc(mud, (0.218, 0.176, 0.118), (0.180, 0.162, 0.090)), col)
     col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 2.2), b.mul(v, 2.2), 59.0), 1.0, 5.0),
                             0.58, 0.84), b.mul(wear, 0.35)), col, b.mul_c(col, 0.72))
 
@@ -1021,6 +1276,7 @@ def _b_log_wall(b, gi, bsdf):
     h = b.sub(h, b.mul(seam, 1.10))
     h = b.sub(h, b.mul(knot, 0.5))
     rough = b.lin(g, 0.0, 1.0, 0.78, 0.92)
+    col = _aged(b, u, v, col, 'log_wall')
     return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(4.0)), spec=0.28)
 
 
@@ -1062,6 +1318,7 @@ def _b_wattle(b, gi, bsdf):
     h = b.add(h, b.mul(b.mul(withy, over), 0.75))
     h = b.add(h, b.mul(b.sub(g, 0.5), 0.30))
     rough = b.lin(g, 0.0, 1.0, 0.86, 0.95)
+    col = _aged(b, u, v, col, 'wattle')
     return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(2.4)), spec=0.18)
 
 
@@ -1619,30 +1876,46 @@ ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
 #: 需要 alpha 混合的 key（裁切用贴片）
 ALPHA_KEYS = {'grass_tuft'}
 
-#: 每族的"现实特征尺寸"（cm），供 audit() 打印 texel density 对照
+#: 每族的"现实特征尺寸"（cm），供 audit() 打印 texel density 对照。
+#: 含做旧层的特征（近地溅泥带/雨渍/日照褪色斑）——**必须 ≥35 cm**：25% 下 <7px
+#: 的脏点只会把材质糊成"脏"，不增加信息量。
 FEATURES = {
-    'thatch':      [("草茎宽", 2.8), ("细茎宽", 1.5), ("草层高", 27.0), ("一撮（9 茎）", 25.0)],
-    'thatch_old':  [("草茎宽", 2.8), ("草层高", 27.0), ("霉斑", 25.0)],
-    'tile_roof':   [("瓦宽", 15.0), ("每排露高", 16.0), ("瓦垄拱高", 2.5), ("同排缝", 1.5)],
-    'slate_roof':  [("石板宽", 26.0), ("每排露高", 13.0), ("上排投影渐变", 6.5), ("竖缝", 1.4)],
-    'plank_wall':  [("板高", 20.0), ("板缝", 1.4), ("木节", 6.0), ("木纹周期", 11.0)],
-    'timber':      [("斧劈棱面", 11.0), ("干裂", 2.0), ("木纹周期", 26.0)],
-    'plaster':     [("砂粒", 2.5), ("灰浆厚薄斑", 12.0), ("抹刀弧", 30.0), ("剥落片", 25.0), ("细裂", 2.0)],
-    'stone':       [("块长", 56.0), ("层高", 28.0), ("砂浆缝", 2.6), ("倒角带", 4.0)],
-    'white_stone': [("块长", 38.0), ("层高", 16.0), ("砂浆缝", 1.6), ("倒角带", 2.6)],
-    'brick':       [("砖长", 23.0), ("砖高", 8.0), ("灰浆缝", 1.6), ("砖面颗粒", 2.6)],
+    'thatch':      [("草茎宽", 2.8), ("细茎宽", 1.5), ("草层高", 27.0), ("一撮（9 茎）", 25.0),
+                    ("大尺度斑驳", 50.0), ("日照褪色斑", 180.0)],
+    'thatch_old':  [("草茎宽", 2.8), ("草层高", 27.0), ("霉斑", 25.0),
+                    ("大尺度斑驳", 50.0), ("日照褪色斑", 180.0)],
+    'tile_roof':   [("瓦宽", 15.0), ("每排露高", 16.0), ("瓦垄拱高", 2.5), ("同排缝", 1.5),
+                    ("逐瓦批次色差", 15.0), ("破损瓦", 15.0)],
+    'slate_roof':  [("石板宽", 26.0), ("每排露高", 13.0), ("上排投影渐变", 6.5), ("竖缝", 1.4),
+                    ("逐片色调", 26.0), ("雨渍", 40.0)],
+    'plank_wall':  [("板高", 20.0), ("板缝", 1.4), ("木节", 6.0), ("木纹周期", 11.0),
+                    ("近地溅泥带", 40.0), ("雨渍", 55.0), ("日照褪色斑", 140.0)],
+    'timber':      [("斧劈棱面", 11.0), ("干裂", 2.0), ("木纹周期", 26.0),
+                    ("近地溅泥带", 35.0), ("日照褪色斑", 140.0)],
+    'plaster':     [("砂粒", 2.5), ("灰浆厚薄斑", 12.0), ("抹刀弧", 30.0), ("剥落片", 25.0),
+                    ("细裂", 2.0), ("近地溅泥带", 45.0), ("雨渍", 55.0)],
+    'stone':       [("块长", 56.0), ("层高", 28.0), ("砂浆缝", 2.6), ("倒角带", 4.0),
+                    ("近地溅泥带", 35.0), ("雨渍", 55.0)],
+    'white_stone': [("块长", 38.0), ("层高", 16.0), ("砂浆缝", 1.6), ("倒角带", 2.6),
+                    ("近地溅泥带", 30.0)],
+    'brick':       [("砖长", 23.0), ("砖高", 8.0), ("灰浆缝", 1.6), ("砖面颗粒", 2.6),
+                    ("近地溅泥带", 35.0), ("雨渍", 55.0)],
     'iron':        [("锤打棱面", 9.0), ("锤痕", 2.6), ("氧化斑", 30.0)],
     'canvas':      [("织格", 2.4), ("粗节", 3.5), ("污渍", 40.0)],
     'cavity':      [("（无特征：近全黑）", 0.0)],
     'water':       [("涟漪", 4.0)],
     'lamp':        [("（自发光，强度 2.5）", 0.0)],
     'glass_win':   [("流痕", 30.0), ("灰斑", 12.0)],
-    'shingle':     [("木瓦宽", 16.0), ("每排露高", 18.0), ("上排投影渐变", 8.9), ("竖缝", 1.0)],
-    'log_wall':    [("原木径", 26.0), ("圆木弧面", 26.0), ("缝间填泥", 4.0)],
-    'straw':       [("草秆宽", 2.0), ("横躺散秆", 2.6), ("斜躺散秆", 3.4), ("成堆起伏", 35.0)],
+    'shingle':     [("木瓦宽", 16.0), ("每排露高", 18.0), ("上排投影渐变", 8.9), ("竖缝", 1.0),
+                    ("逐片色调", 16.0), ("日照褪色斑", 140.0)],
+    'log_wall':    [("原木径", 26.0), ("圆木弧面", 26.0), ("缝间填泥", 4.0),
+                    ("近地溅泥带", 40.0), ("日照褪色斑", 140.0)],
+    'straw':       [("草秆宽", 2.0), ("横躺散秆", 2.6), ("斜躺散秆", 3.4), ("成堆起伏", 35.0),
+                    ("日照褪色斑", 180.0)],
     'rope':        [("捻距", 3.6), ("股径", 1.2), ("纤维", 0.5)],
     'sack':        [("织格", 3.4), ("粗细跳变", 6.0)],
-    'wattle':      [("立桩宽", 2.8), ("横编条距", 9.0), ("泥底斑", 25.0)],
+    'wattle':      [("立桩宽", 2.8), ("横编条距", 9.0), ("泥底斑", 25.0),
+                    ("近地溅泥带", 45.0)],
     'ground':      [("草簇", 15.0), ("碎石粒", 5.0), ("低频色斑", 100.0), ("土粒", 4.0)],
     'grass_tuft':  [("草叶位宽", 2.2), ("草叶净宽", 1.1), ("草叶高(中值)", 30.0)],
     'foliage':     [("叶片", 7.0), ("叶脉", 1.0)],
@@ -1926,6 +2199,9 @@ def audit(verbose=False):
                 continue
             feats.append("%s %.1fcm/%.1fpx@1x/%.1fpx@25%%" % (
                 nm, cm_, cm_ * 0.01 / M_PER_UV * 32.0, cm_ * 0.01 / M_PER_UV * 8.0))
+        ov = OBJ_VAR.get(k)
+        if ov:
+            feats.append("逐体色变 hue±%.0f%% val±%.0f%%" % (ov[0] * 100.0, ov[1] * 100.0))
         rows.append((k, _BUILDERS[k][1], len(ng.nodes), "；".join(feats)))
     if verbose:
         print("\n=== 材质清单（特征尺寸 = 现实尺寸 / 游戏 1:1 像素 / 25% 像素）===")

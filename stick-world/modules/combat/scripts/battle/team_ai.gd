@@ -1010,6 +1010,13 @@ func _is_manual_order_active(squad_id: String) -> bool:
 	return _now() < float(_manual_order_until[squad_id])
 
 
+## 手动号令保护期查询出口（编队侧权威值跳槽守卫复用，语义同 _is_manual_order_active）：
+## 保护期状态唯一真相源在本类（订阅 EventBus.order_issued tier=0 刷新），
+## 消费方经 battle_instance.get_team_ai(faction) 取用，不各自维护时间戳副本。
+func is_manual_order_guarded(squad_id: String) -> bool:
+	return _is_manual_order_active(squad_id)
+
+
 # ─────────────────────────────── default_behavior v2 效用打分（A4 · C7，非 dump 直译）────────────────────────────────
 ## CoH tactics.ai demand 系统同构（docs/审计/英雄连AI逆向_2026-09-11.md §3.5，评分实现
 ## 归 UtilityScorer，本段只做组织配置取数 / 小队上下文快照 / 接入点门禁）。

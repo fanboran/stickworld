@@ -767,7 +767,7 @@ func tick(delta: float) -> void:
 			_ensure_dot_cap(nd + 2)
 			var dc: Color = st["color"]
 			for layer in 2:
-				var rr: float = (HealthBarIndicator.DOT_RADIUS + (HealthBarIndicator.OUTLINE_WIDTH * 0.5 if layer == 0 else 0.0)) * bs
+				var rr: float = (HealthBarIndicator.DOT_RADIUS + (HealthBarIndicator.OUTLINE_WIDTH if layer == 0 else 0.0)) * bs
 				var o := (nd + layer) * 16
 				_dot_buf[o] = rr
 				_dot_buf[o + 1] = 0.0
@@ -799,37 +799,39 @@ func tick(delta: float) -> void:
 		var ow: float = HealthBarIndicator.OUTLINE_WIDTH * bs
 		var left: float = cx2 - half
 		var bar_amp: float = HealthBarIndicator.WOBBLE_AMP / maxf(HealthBarIndicator.BAR_HEIGHT * bs, 0.001)
+		# 无条态（满血圆点）整行透明——退化条（描边行宽=outline_pad）会画成圆点中心黑竖条
+		var bar_vis: float = 1.0 if half >= 1.0 else 0.0
 		for layer in 4:
 			var bo := (nb + layer) * 16
 			var w_row: float = half * 2.0
 			var h_row: float = HealthBarIndicator.BAR_HEIGHT * bs
-			var outline_pad: float = HealthBarIndicator.OUTLINE_WIDTH * 0.5 * bs
+			var outline_pad: float = HealthBarIndicator.OUTLINE_WIDTH * bs
 			var rcol: Color
 			var rx: float = cx2
 			match layer:
 				0:
 					w_row += outline_pad * 2.0
 					h_row += outline_pad * 2.0
-					rcol = Color(HealthBarIndicator.COLOR_OUTLINE.r, HealthBarIndicator.COLOR_OUTLINE.g, HealthBarIndicator.COLOR_OUTLINE.b, HealthBarIndicator.COLOR_OUTLINE.a * shown)
+					rcol = Color(HealthBarIndicator.COLOR_OUTLINE.r, HealthBarIndicator.COLOR_OUTLINE.g, HealthBarIndicator.COLOR_OUTLINE.b, HealthBarIndicator.COLOR_OUTLINE.a * shown * bar_vis)
 				1:
-					rcol = Color(HealthBarIndicator.COLOR_BG.r, HealthBarIndicator.COLOR_BG.g, HealthBarIndicator.COLOR_BG.b, HealthBarIndicator.COLOR_BG.a * shown)
+					rcol = Color(HealthBarIndicator.COLOR_BG.r, HealthBarIndicator.COLOR_BG.g, HealthBarIndicator.COLOR_BG.b, HealthBarIndicator.COLOR_BG.a * shown * bar_vis)
 				2:
 					var tw: float = half * 2.0 * clampf(float(st["trail"]), 0.0, 1.0)
 					w_row = tw
 					rx = left + tw * 0.5
-					rcol = Color(HealthBarIndicator.COLOR_TRAIL.r, HealthBarIndicator.COLOR_TRAIL.g, HealthBarIndicator.COLOR_TRAIL.b, HealthBarIndicator.COLOR_TRAIL.a * shown)
+					rcol = Color(HealthBarIndicator.COLOR_TRAIL.r, HealthBarIndicator.COLOR_TRAIL.g, HealthBarIndicator.COLOR_TRAIL.b, HealthBarIndicator.COLOR_TRAIL.a * shown * bar_vis)
 				3:
 					var fw: float = half * 2.0 * float(st["ratio"])
 					w_row = fw
 					rx = left + fw * 0.5
 					var fc: Color = st["color"]
-					rcol = Color(fc.r, fc.g, fc.b, fc.a * shown)
-			_bar_buf[bo] = w_row * 0.5
+					rcol = Color(fc.r, fc.g, fc.b, fc.a * shown * bar_vis)
+			_bar_buf[bo] = w_row
 			_bar_buf[bo + 1] = 0.0
 			_bar_buf[bo + 2] = 0.0
 			_bar_buf[bo + 3] = rx
 			_bar_buf[bo + 4] = 0.0
-			_bar_buf[bo + 5] = h_row * 0.5
+			_bar_buf[bo + 5] = h_row
 			_bar_buf[bo + 6] = 0.0
 			_bar_buf[bo + 7] = cy
 			_bar_buf[bo + 8] = rcol.r

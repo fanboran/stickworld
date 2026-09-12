@@ -16,8 +16,10 @@ var _runner: TestRunner
 
 # ─────────────────────────────── 桩 ────────────────────────────────
 
-## 假组织 API。commander_id 不随 assign_commander 自动登记——测试显式设置
-## `commanders[org_id]`，以精确构造权威值组合（班长 / 班长+指挥官 / +玩家光环）。
+## 假组织 API（严格按生产形态返回 {ok, data} 包装——organization_api.get_organization
+## 经 manager 即此形态；commander_id 在 data 内）。commander_id 不随 assign_commander
+## 自动登记——测试显式设置 `commanders[org_id]`，以精确构造权威值组合
+## （班长 / 班长+指挥官 / +玩家光环）。裸数据形态的兼容性见 _test_org_query_normalization。
 class FakeOrgApi:
 	extends Node
 	var commanders: Dictionary = {}
@@ -43,9 +45,20 @@ class FakeOrgApi:
 	func get_organization(org_id: String) -> Dictionary:
 		return {
 			"ok": true,
-			"data": {"id": org_id, "parent_org": ""},
-			"commander_id": String(commanders.get(org_id, "")),
+			"data": {"id": org_id, "parent_org": "", "commander_id": String(commanders.get(org_id, ""))},
 		}
+
+
+## 裸数据形态假组织 API（单测历史口径：直接返回组织数据字典，无 ok/data 包装）。
+## 用于验证归一化取数口对两种形态都接受（权威值加成不因形态差异丢失）。
+class BareOrgApi:
+	extends Node
+	var commander_id: String = ""
+
+	func get_organization(org_id: String) -> Dictionary:
+		if commander_id.is_empty():
+			return {}
+		return {"id": org_id, "commander_id": commander_id}
 
 
 ## 单位桩：faction / battle / ai / 附身 / 压制 / 武器射程。
@@ -170,6 +183,8 @@ func _ready() -> void:
 	_runner.add_test("约束5 限流: 单拍单来源班只放行名额内人数", _test_per_squad_flow_cap)
 	_runner.add_test("约束6 错峰/确定性: 非同拍评估 + 同种子同局面可复现", _test_determinism_and_desync)
 	_runner.add_test("档案: config/ai/formation_authority.tres 装载与生效默认开闸", _test_resource)
+	_runner.add_test("归一化: 包装/裸数据两种组织查询形态均取到指挥官加成", _test_org_query_normalization)
+	_runner.add_test("参数出口: get_authority_switch_state 暴露候选半径/冷却等档案实值", _test_state_exit)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -550,3 +565,81 @@ func _test_resource() -> void:
 	# margin 仍是评分内核常量（行为侧不重写比较逻辑）
 	_runner.assert_approx(ScriptFormationSystem.AUTHORITY_MARGIN, 0.07, 0.001,
 			"authority_margin 保持 RWR 真值 0.07")
+
+
+# ─────────────── 组织查询归一化（{ok,data} 包装 vs 裸数据）───────────────
+
+## 权威值三计价项在生产路径（api 包装形态）与单测裸数据形态下都必须取到：
+## 生产 bug 曾因直接 org.get("commander_id") 读包装字典顶层而恒空，
+## 指挥官在册 0.5 静默丢失（班长在场 1.0 / 玩家光环 0.2 不受影响）。
+## 归一化取数口同时接受两种形态：本用例对同一权威值组合分别走包装与裸数据断言。
+func _test_org_query_normalization() -> void:
+	# 基线：班长在场（1.0）+ 班长被附身（+0.2 玩家光环），无组织加成
+	var org := FakeOrgApi.new()
+	var fs: FormationSystem = ScriptFormationSystem.new()
+	fs.setup(org)
+	fs._squads["s1"] = {"units": [], "leader": null, "preset_id": "squad_combat",
+			"work_types": [], "role": "fighter", "name": "s1",
+			"follow_squad_id": "", "follow_gap": 0.0, "slots": {}}
+	var leader := _unit("leader")
+	fs._squads["s1"]["leader"] = leader
+	leader.possessed = true
+	_runner.assert_approx(fs.get_squad_authority("s1"), 1.2, 0.001,
+			"班长在场 1.0 + 玩家光环 0.2")
+	# 包装形态：指挥官在册 → +0.5（生产形态回归点）
+	org.commanders["s1"] = "7"
+	_runner.assert_approx(fs.get_squad_authority("s1"), 1.7, 0.001,
+			"包装形态（生产）：班长 1.0 + 指挥官 0.5 + 玩家光环 0.2")
+	# 包装形态 ok=false / 组织不存在 → 指挥官项跳过（回落到 1.2，不误加）
+	org.commanders.erase("s1")
+	_runner.assert_approx(fs.get_squad_authority("s1"), 1.2, 0.001,
+			"组织无指挥官：加成应缺席")
+	fs.free()
+	org.free()
+	# 裸数据形态（单测历史口径）：同一组合仍取到 1.5（班长 1.0 + 指挥官 0.5）
+	var bare := BareOrgApi.new()
+	var fs2: FormationSystem = ScriptFormationSystem.new()
+	fs2.setup(bare)
+	fs2._squads["s1"] = {"units": [], "leader": null, "preset_id": "squad_combat",
+			"work_types": [], "role": "fighter", "name": "s1",
+			"follow_squad_id": "", "follow_gap": 0.0, "slots": {}}
+	var leader2 := _unit("leader2")
+	fs2._squads["s1"]["leader"] = leader2
+	_runner.assert_approx(fs2.get_squad_authority("s1"), 1.0, 0.001, "裸数据：班长 1.0")
+	bare.commander_id = "7"
+	_runner.assert_approx(fs2.get_squad_authority("s1"), 1.5, 0.001,
+			"裸数据：班长 1.0 + 指挥官在册 0.5")
+
+
+# ─────────────── 只读参数出口（UI 数值与档案脱钩修复）───────────────
+
+## get_authority_switch_state 除运行态计数外，须镜像档案实值（候选半径/冷却等），
+## 供 UI duck 消费；默认值 = AUTHORITY_DEFAULTS，注入后随参数变化（单一真相源）。
+func _test_state_exit() -> void:
+	var fresh: FormationSystem = ScriptFormationSystem.new()
+	# 未 setup（_authority_params 空）也要恒有值：回落 AUTHORITY_DEFAULTS 同值
+	var d: Dictionary = fresh.get_authority_switch_state()
+	_runner.assert_approx(float(d.get("candidate_radius", -1.0)),
+			float(ScriptFormationSystem.AUTHORITY_DEFAULTS["authority_candidate_radius"]), 0.001,
+			"未 setup：候选半径应回落代码默认 800")
+	_runner.assert_approx(float(d.get("cooldown", -1.0)),
+			float(ScriptFormationSystem.AUTHORITY_DEFAULTS["authority_switch_cooldown"]), 0.001,
+			"未 setup：冷却应回落代码默认")
+	_runner.assert_false(bool(d.get("enabled", true)), "未 setup：开关默认关")
+	fresh.free()
+	# setup 装载档案实值 → 注入后出口随动（UI 端不再镜像常量）
+	var w := _new_world()
+	var fs: Node = w["fs"]
+	fs.set_authority_params({
+		"authority_switch_enabled": true,
+		"authority_candidate_radius": 1234.0,
+		"authority_switch_cooldown": 42.0,
+	})
+	var d2: Dictionary = fs.get_authority_switch_state()
+	_runner.assert_true(bool(d2.get("enabled", false)), "注入后开关应为开")
+	_runner.assert_approx(float(d2.get("candidate_radius", -1.0)), 1234.0, 0.001,
+			"候选半径应随档案实值（不再与 UI 常量脱钩）")
+	_runner.assert_approx(float(d2.get("cooldown", -1.0)), 42.0, 0.001, "冷却应随档案实值")
+	# 运行态计数键保持不变（向后兼容既有消费方）
+	_runner.assert_true(d2.has("clock") and d2.has("registered") and d2.has("cooling"),
+			"运行态计数键应保持")

@@ -64,6 +64,7 @@ func _register_tests() -> void:
 		["操作: 移出班组后成员行减少", "_test_remove_member", true],
 		["收起: 清空选择即隐藏", "_test_hide_on_clear", true],
 		["权威对比: 邻近班权威对比行 +「N 人有意转投 X 班」提示条", "_test_authority_compare", true],
+		["参数出口: 卡片候选半径 duck 消费 formation 档案实值（非镜像常量）", "_test_candidate_radius_param", false],
 		["触发源: OrgPanel 选中 L1 → 唤起班组卡；关面板 → 收起", "_test_orgpanel_selection_binding", true],
 	]
 	for t in _tests:
@@ -229,13 +230,15 @@ func _test_authority_compare() -> void:
 	_runner.assert_true(not two.is_empty() and not three.is_empty(), "两班应创建成功")
 	_runner.assert_true(bool(_helper.formation.assign_leader(three, _helper.units[-1])),
 			"三班应能任命班长（权威 1.0）")
-	# 权威内核口径自检：无班长 0.0 / 有班长 1.0，且够格转投
+	# 权威内核口径自检：无班长 0.0 / 有班长 1.5（班长在场 1.0 + 组织指挥官在册 0.5），
+	# 且够格转投。注：指派班长同时经 assign_commander 登记组织指挥官——修复组织查询
+	# 归一化前指挥官项在生产路径恒丢失（曾误断言 1.0），现值为生产真值 1.5。
 	_runner.assert_approx(_helper.formation.get_squad_authority(two), 0.0, 0.001,
-			"二班无班长权威 = 0.0")
-	_runner.assert_approx(_helper.formation.get_squad_authority(three), 1.0, 0.001,
-			"三班有班长权威 = 1.0")
-	_runner.assert_true(_helper.formation.should_switch_squad(0.0, 1.0),
-			"权威差 1.0 > margin 应够格转投")
+			"二班无班长无指挥官权威 = 0.0")
+	_runner.assert_approx(_helper.formation.get_squad_authority(three), 1.5, 0.001,
+			"三班有班长+在册指挥官权威 = 1.5")
+	_runner.assert_true(_helper.formation.should_switch_squad(0.0, 1.5),
+			"权威差 1.5 > margin 应够格转投")
 	# 绑到二班：对比块应显示（本班 + 三班行），提示条应报「N 人有意转投 三班」
 	_card.show_squad(two)
 	for i in 4:
@@ -253,6 +256,25 @@ func _test_authority_compare() -> void:
 	_runner.assert_true(hint_text.contains("有意转投") and hint_text.contains("三班"),
 			"提示条应报 「N 人有意转投 三班」（实测 %s）" % hint_text)
 	_runner.assert_true(hint_text.contains("2 人"), "二班两名非班长成员均在半径内（实测 %s）" % hint_text)
+
+
+## 参数出口消费（UI 数值与档案脱钩修复）：卡片候选半径须 duck 消费
+## formation.get_authority_switch_state().candidate_radius（档案实值），
+## 不再镜像常量 800——档案改值后 UI 表达随动；出口缺失才回落缺省。
+func _test_candidate_radius_param() -> void:
+	if _card == null or _helper.formation == null:
+		return
+	if not _helper.formation.has_method("get_authority_switch_state"):
+		_runner.assert_true(false, "formation 应暴露 get_authority_switch_state 参数出口")
+		return
+	var orig := float(_helper.formation.get_authority_switch_state().get("candidate_radius", 800.0))
+	_runner.assert_true(_card.has_method("_candidate_radius"), "卡片应提供 _candidate_radius 消费口")
+	_helper.formation.set_authority_params({"authority_candidate_radius": 1234.0})
+	_runner.assert_approx(float(_card.call("_candidate_radius")), 1234.0, 0.001,
+			"卡片候选半径应取档案实值（非镜像常量 800）")
+	_helper.formation.set_authority_params({"authority_candidate_radius": orig})
+	_runner.assert_approx(float(_card.call("_candidate_radius")), orig, 0.001,
+			"恢复档案值后卡片半径应随动（无状态残留）")
 
 
 ## 触发源补全（UI-W4b 遗留）：OrgPanel 选中 L1 → 装配层接线唤起班组卡；关闭面板 → 收起。

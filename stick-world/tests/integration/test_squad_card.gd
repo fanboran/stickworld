@@ -63,6 +63,7 @@ func _register_tests() -> void:
 		["操作: 点行选中 → 任命班长落到编制侧", "_test_assign_leader", true],
 		["操作: 移出班组后成员行减少", "_test_remove_member", true],
 		["收起: 清空选择即隐藏", "_test_hide_on_clear", true],
+		["权威对比: 邻近班权威对比行 +「N 人有意转投 X 班」提示条", "_test_authority_compare", true],
 	]
 	for t in _tests:
 		_runner.add_test(t[0], Callable(self, String(t[1])), bool(t[2]))
@@ -124,6 +125,9 @@ func _test_content_wired() -> void:
 	_runner.assert_true(
 			_card.get_node("Body/Actions/ActionsB").get_child(0).disabled,
 			"指挥链入口本批应为禁用占位")
+	# 权威对比块：此刻全世界只有本班一支小队 = 无邻近可投奔班 → 整块降级隐藏
+	_runner.assert_false(_card.get_node("Body/AuthCompare").visible,
+			"无邻近班时权威对比块应整块隐藏（不显示占位噪声）")
 
 
 func _test_order_line() -> void:
@@ -204,3 +208,47 @@ func _test_hide_on_clear() -> void:
 		await get_tree().process_frame
 	_runner.assert_false(_card.visible, "清空选择后卡片应收起")
 	_runner.assert_equal(_card.get_bound_squad(), "", "收起后不应残留绑定")
+
+
+## 权威值择班表达（UI-W4a §3.3①）：同父两班——本班无班长（威望 0）、兄弟班有班长（1.0），
+## 真实 get_squad_authority + should_switch_squad 查询应给出对比行与转投提示条。
+func _test_authority_compare() -> void:
+	var org_api: Node = _helper.game_root.get_organization_api()
+	# 父级 L2 连队（L1 班的 parent；tier 校验要求父 tier = 子 tier + 1）
+	var mk: Dictionary = org_api.create_organization("第三连", "MILITARY", 2, "")
+	_runner.assert_true(mk.get("ok", false), "应能建出 L2 连队作为父组织")
+	var company := String((mk.get("data", {}) as Dictionary).get("org_id", ""))
+	# 再来两班（无班长）与三班（有班长），同为连队下属 —— 满足 L1 兄弟班口径
+	_helper.spawn_test_units(4)
+	await get_tree().process_frame
+	var two := String(_helper.formation.create_squad([_helper.units[-4], _helper.units[-3]],
+			"二班", "fp_combat_squad", company))
+	var three := String(_helper.formation.create_squad([_helper.units[-2], _helper.units[-1]],
+			"三班", "fp_combat_squad", company))
+	_runner.assert_true(not two.is_empty() and not three.is_empty(), "两班应创建成功")
+	_runner.assert_true(bool(_helper.formation.assign_leader(three, _helper.units[-1])),
+			"三班应能任命班长（权威 1.0）")
+	# 权威内核口径自检：无班长 0.0 / 有班长 1.0，且够格转投
+	_runner.assert_approx(_helper.formation.get_squad_authority(two), 0.0, 0.001,
+			"二班无班长权威 = 0.0")
+	_runner.assert_approx(_helper.formation.get_squad_authority(three), 1.0, 0.001,
+			"三班有班长权威 = 1.0")
+	_runner.assert_true(_helper.formation.should_switch_squad(0.0, 1.0),
+			"权威差 1.0 > margin 应够格转投")
+	# 绑到二班：对比块应显示（本班 + 三班行），提示条应报「N 人有意转投 三班」
+	_card.show_squad(two)
+	for i in 4:
+		await get_tree().process_frame
+	var block: VBoxContainer = _card.get_node("Body/AuthCompare")
+	_runner.assert_true(block.visible, "有邻近班时权威对比块应显示")
+	var rows: VBoxContainer = _card.get_node("Body/AuthCompare/AuthRows")
+	_runner.assert_true(rows.get_child_count() >= 2, "对比行应含本班 + 至少一个邻近班（实测 %d）"
+			% rows.get_child_count())
+	_runner.assert_true(String(rows.get_child(0).text).contains("本班"),
+			"对比首行应是本班（实测 %s）" % String(rows.get_child(0).text))
+	var hint: PanelContainer = _card.get_node("Body/AuthCompare/DefectHint")
+	var hint_text := String(_card.get_node("Body/AuthCompare/DefectHint/DefectLabel").text)
+	_runner.assert_true(hint.visible, "够格转投时应显示提示条")
+	_runner.assert_true(hint_text.contains("有意转投") and hint_text.contains("三班"),
+			"提示条应报 「N 人有意转投 三班」（实测 %s）" % hint_text)
+	_runner.assert_true(hint_text.contains("2 人"), "二班两名非班长成员均在半径内（实测 %s）" % hint_text)

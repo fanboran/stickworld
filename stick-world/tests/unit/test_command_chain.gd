@@ -13,6 +13,9 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptCommandChain := preload("res://modules/combat/scripts/command/command_chain.gd")
 const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
 const ScriptBoard := preload("res://modules/organization/ui/command_chain_board.gd")
+const ViewScene: PackedScene = preload("res://modules/organization/ui/command_chain_view.tscn")
+## 显式 preload 取视图常量（tests/README 禁区：不依赖 class_name 全局注册）
+const ViewScript := preload("res://modules/organization/ui/command_chain_view.gd")
 const TestHelpers := preload("res://tests/core/test_helpers.gd")
 
 var _runner: TestRunner
@@ -94,6 +97,46 @@ class BoardOrgApi extends Node:
 		return candidates.get(id, [])
 
 
+## 下令桩（视图 issue_to_org 目标；捕获 org/号令/目标点）
+class OrderTactical extends Node:
+	var calls: Array = []
+
+	func issue_to_org(org_id: String, order_type: int, target_pos: Vector2 = Vector2.ZERO,
+			_extra: Dictionary = {}) -> bool:
+		calls.append({"org": org_id, "type": order_type, "target": target_pos})
+		return true
+
+
+## 编队桩（子树质心取数：L1 小队 → 成员）
+class CentroidFormation extends Node:
+	var squads: Dictionary = {}
+
+	func get_squad_units(squad_id: String) -> Array:
+		return squads.get(squad_id, [])
+
+
+## 视图宿主桩（GameRoot duck getter 最小面）
+class ViewRoot extends Node:
+	var org_api: Node = null
+	var tactical: Node = null
+	var formation: Node = null
+
+	func get_organization_api() -> Node:
+		return org_api
+
+	func get_command_chain() -> Node:
+		return null
+
+	func get_tactical_orders() -> Node:
+		return tactical
+
+	func get_formation_system() -> Node:
+		return formation
+
+	func get_selection_system() -> Node:
+		return null
+
+
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("CommandChain: deliver 恒即时送达（撤抽象公式，签名兼容）", _test_deliver_instant)
@@ -108,6 +151,10 @@ func _ready() -> void:
 	_runner.add_test("事件镜像: 逐跳接力镜像转发到 EventBus（UI-W3 跨模块观测）", _test_relay_eventbus_mirror, true)
 	_runner.add_test("指挥链沙盘: 树构建/布局/群龙无首/补位候选/统辖规模", _test_board_tree_and_layout)
 	_runner.add_test("指挥链沙盘: 在途跳 eta 倒计时与停驻态生命周期", _test_board_hop_ledger)
+	_runner.add_test("指挥链沙盘: 选中/取消/玩家源节点（下令目标口径）", _test_board_selection)
+	_runner.add_test("指挥链沙盘: 缩放不重叠（步距 ≥ 兵牌宽）与内容尺寸随缩放变", _test_board_zoom_no_overlap)
+	_runner.add_test("指挥链视图: 选中层下令经 issue_to_org（选层=对该层子树，目标点=子树质心）",
+			_test_view_order_issuance)
 	await _runner.run_async()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -386,7 +433,7 @@ func _test_board_tree_and_layout() -> void:
 				"commander_id": "p1", "personnel": ["p1", "p2"], "child_orgs": []},
 	}
 	api.candidates = {"co": [{"id": "p1", "cmd": 3.0}, {"id": "p2", "cmd": 2.0}]}
-	var board: CommandChainBoard = ScriptBoard.new()
+	var board = ScriptBoard.new()
 	board.build_tree(api)
 	_runner.assert_equal(board.get_node_count(), 4, "玩家源 + 三组织 = 4 节点")
 	var co: Dictionary = board.get_node_snapshot("co")
@@ -419,7 +466,7 @@ func _test_board_hop_ledger() -> void:
 		"l1": {"id": "l1", "name": "一排", "tier": 1, "tag": 0,
 				"commander_id": "p1", "personnel": ["p1"], "child_orgs": []},
 	}
-	var board: CommandChainBoard = ScriptBoard.new()
+	var board = ScriptBoard.new()
 	board.build_tree(api)
 	board.notify_relay_started("r1", 0, "", "root", 0, 2.0)
 	_runner.assert_equal(board.get_active_hop_ids().size(), 1, "起跑即在途（连线点亮）")
@@ -439,3 +486,153 @@ func _test_board_hop_ledger() -> void:
 	_runner.assert_equal(board.get_last_outcome("r3"), "delivered", "L1/L2 送达结局留档")
 	board.free()
 	api.free()
+
+
+# ─────────────────────── 指挥链沙盘 UI-W4a（选中 / 缩放 / 下令）───────────────────────
+
+## 选中口径：普通组织节点 / 玩家源节点（id 空串）/ 未选中三分，非法 id 忽略
+func _test_board_selection() -> void:
+	var api := _small_tree_api()
+	var board = ScriptBoard.new()
+	board.build_tree(api)
+	_runner.assert_false(board.has_selection(), "初始未选中")
+	var captured: Array = []
+	board.node_selected.connect(func(oid: String) -> void: captured.append(oid))
+	board.select_node("co")
+	_runner.assert_true(board.has_selection(), "选中组织节点后应有选中态")
+	_runner.assert_equal(board.get_selected_id(), "co", "选中 id 应回读")
+	_runner.assert_equal(captured.size(), 1, "选中应发一次 node_selected")
+	_runner.assert_equal(String(captured[0]), "co", "信号携带 org_id")
+	board.clear_selection()
+	_runner.assert_false(board.has_selection(), "取消选中后不应残留选中态")
+	board.select_node("不存在的组织")
+	_runner.assert_false(board.has_selection(), "非法 id 应忽略（不产生选中）")
+	# 玩家源节点 id = ""，合法可选中（与「未选中」区分开）
+	board.select_node("")
+	_runner.assert_true(board.has_selection(), "玩家源节点应可选中")
+	_runner.assert_equal(board.get_selected_id(), "", "玩家源节点 id 为空串")
+	board.clear_selection()
+	_runner.assert_false(board.has_selection(), "清空后 has_selection=false（空串不再误判为选中）")
+	board.free()
+	api.free()
+
+
+## 拥挤治理：任意缩放下同层兵牌不重叠（步距 = 兵牌宽 + 间隙），内容尺寸随缩放变
+func _test_board_zoom_no_overlap() -> void:
+	var api := BoardOrgApi.new()
+	var kids: Array = []
+	var orgs: Dictionary = {
+		"root": {"id": "root", "name": "第三营", "tier": 3, "tag": 0,
+				"commander_id": "c0", "personnel": [], "child_orgs": []},
+	}
+	for i in 12:
+		var cid := "l%d" % i
+		kids.append(cid)
+		orgs[cid] = {"id": cid, "name": "第 %d 班" % (i + 1), "tier": 1, "tag": 0,
+				"commander_id": "p%d" % i, "personnel": ["p%d" % i], "child_orgs": []}
+	orgs["root"]["child_orgs"] = kids
+	api.roots = ["root"]
+	api.orgs = orgs
+	var board = ScriptBoard.new()
+	board.build_tree(api)
+	var unit := board.get_unit_positions()
+	_runner.assert_equal(unit.size(), 14, "12 叶 + 营 + 玩家源 = 14 节点")
+	for zoom in [ScriptBoard.ZOOM_MIN, 1.0, ScriptBoard.ZOOM_MAX]:
+		board.set_zoom(float(zoom))
+		_runner.assert_approx(board.get_zoom(), float(zoom), 0.001, "缩放回读应与设置一致")
+		var by_depth: Dictionary = {}
+		for id in unit:
+			var u: Vector2 = unit[id]
+			var r: Rect2 = board.get_plaque_rect(String(id))
+			_runner.assert_true(r.size.x > 0.0, "布局后兵牌矩形应有尺寸（%s）" % String(id))
+			var key := int(u.y)
+			if not by_depth.has(key):
+				by_depth[key] = []
+			(by_depth[key] as Array).append(r)
+		for depth in by_depth:
+			var rects: Array = by_depth[depth]
+			rects.sort_custom(func(a: Rect2, b: Rect2) -> bool: return a.position.x < b.position.x)
+			for i in range(1, rects.size()):
+				var gap: float = (rects[i] as Rect2).position.x \
+						- (rects[i - 1] as Rect2).end.x
+				_runner.assert_true(gap >= -0.01,
+						"zoom %.2f 层 %d 同层兵牌不重叠（gap=%.2f）" % [float(zoom), int(depth), gap])
+	# 内容尺寸随缩放单调变化（放大更宽，缩小更窄）
+	board.set_zoom(1.0)
+	var base_size: Vector2 = board.get_content_size()
+	board.set_zoom(ScriptBoard.ZOOM_MAX)
+	_runner.assert_true(board.get_content_size().x > base_size.x, "放大后内容宽度应变大")
+	board.set_zoom(ScriptBoard.ZOOM_MIN)
+	_runner.assert_true(board.get_content_size().x < base_size.x, "缩小后内容宽度应变小")
+	board.free()
+	api.free()
+
+
+## 视图下令口径：选中层 → issue_to_org（org = 选中层，推进类目标点 = 子树质心 + 前推偏移）；
+## 无目标点号令（坚守）恒可用；玩家源节点/未选中不可下令（按钮全禁用）
+func _test_view_order_issuance() -> void:
+	var api := _small_tree_api()
+	var tac := OrderTactical.new()
+	var fs := CentroidFormation.new()
+	var u := Node2D.new()
+	u.position = Vector2(100.0, 50.0)
+	fs.squads = {"l1": [u]}
+	var root := ViewRoot.new()
+	root.org_api = api
+	root.tactical = tac
+	root.formation = fs
+	add_child(root)
+	var view: Control = ViewScene.instantiate()
+	add_child(view)
+	view.setup(root)
+	# 初始未选中：号令条全禁用
+	_runner.assert_true((view.get_available_orders() as Array).is_empty(), "未选中时号令按钮应全禁用")
+	# 选中 L3 营：坚守恒可用；前进（子树质心可解）可用
+	view.select_node("root")
+	_runner.assert_equal(view.get_selected_org(), "root", "选中层应回读")
+	_runner.assert_true(String(view.get_order_target_label()).contains("第三营"),
+			"目标文案应显示选中层名（实测 %s）" % String(view.get_order_target_label()))
+	var avail: Array = view.get_available_orders()
+	_runner.assert_true(avail.has(2), "坚守（无目标点）应可用")
+	_runner.assert_true(avail.has(0), "前进（子树质心可解）应可用")
+	# 坚守：org = 选中层，无目标点语义（传 Vector2.ZERO）
+	_runner.assert_true(view.issue_order_to_selected(2), "坚守应受理")
+	_runner.assert_equal(tac.calls.size(), 1, "应下发一次号令")
+	_runner.assert_equal(String((tac.calls[0] as Dictionary)["org"]), "root", "号令应落到选中层 org")
+	_runner.assert_equal(int((tac.calls[0] as Dictionary)["type"]), 2, "号令类型应透传（坚守）")
+	# 前进：目标点 = 子树质心 (100,50) + 前推偏移
+	_runner.assert_true(view.issue_order_to_selected(0), "前进应受理")
+	_runner.assert_equal(tac.calls.size(), 2, "应下发第二次号令")
+	var target: Vector2 = (tac.calls[1] as Dictionary)["target"]
+	_runner.assert_approx(target.x, 100.0 + ViewScript.FORWARD_OFFSET_X, 0.01,
+			"前进目标点 x = 子树质心 + 前推偏移")
+	_runner.assert_approx(target.y, 50.0, 0.01, "前进目标点 y = 子树质心")
+	# 选中玩家源节点（链路起点非组织层）→ 不可下令
+	view.select_node("")
+	_runner.assert_true((view.get_available_orders() as Array).is_empty(), "玩家源节点不可下令")
+	_runner.assert_false(view.issue_order_to_selected(2), "玩家源节点下令应被拒（返回 false）")
+	# 组织树重建（org_created 等）后选中被清 → 退回禁用
+	view.get("_board").clear_selection()
+	_runner.assert_true((view.get_available_orders() as Array).is_empty(), "未选中不得残留可用按钮")
+	u.free()
+	view.free()
+	root.free()
+	tac.free()
+	fs.free()
+	api.free()
+
+
+## 小树夹具：玩家源 → 第三营(L3) → 第一连(L2) → 一排(L1)
+func _small_tree_api() -> BoardOrgApi:
+	var api := BoardOrgApi.new()
+	api.roots = ["root"]
+	api.orgs = {
+		"root": {"id": "root", "name": "第三营", "tier": 3, "tag": 0,
+				"commander_id": "c0", "personnel": [], "child_orgs": ["co"]},
+		"co": {"id": "co", "name": "第一连", "tier": 2, "tag": 0,
+				"commander_id": "", "personnel": [], "child_orgs": ["l1"]},
+		"l1": {"id": "l1", "name": "一排", "tier": 1, "tag": 0,
+				"commander_id": "p1", "personnel": ["p1"], "child_orgs": []},
+	}
+	api.candidates = {}
+	return api

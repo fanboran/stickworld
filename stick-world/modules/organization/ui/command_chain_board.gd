@@ -12,8 +12,17 @@ extends Control
 ##
 ## 数据来源（organization api 只读 duck 查询，查询缺口即降级不显示）：
 ## list_root_orgs / get_organization / get_succession_candidates。
-## 布局：compute_layout 纯函数（叶子序 x、深度 y）→ _apply_layout 映射到控件矩形，
-## 尺寸变化（resized）自动重算，可单测。
+## 布局：compute_layout 纯函数（叶子序 x、深度 y）→ _apply_layout 映射到像素矩形。
+## **拥挤治理（UI-W4a）**：固定步距（兵牌宽 + 间隙）× 缩放系数，内容尺寸超出窗口
+## 视口时由宿主 ScrollContainer 出滚动条（平移即滚条）；不再把整棵树压缩进一屏
+## 导致兵牌互叠。缩放滑杆/滚轮入口在视图侧，本类只认 set_zoom。
+##
+## 节点下令取数：选中兵牌 → 视图侧经 game_root duck 取 TacticalOrders.issue_to_org
+## （本类不做跨模块调用，只发 node_selected 信号）。
+
+# ─────────────────────────────── 信号 ────────────────────────────────
+## 选中任意层兵牌（org_id = 组织 id；空串 = 玩家源节点）
+signal node_selected(org_id: String)
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 玩家源节点 id（hop 0 的 from_org，空串 = 玩家跳，与 dispatcher §4.1.2 同口径）
@@ -27,8 +36,15 @@ const PLAQUE_TEXT_W := NODE_W - 58.0
 ## 沙盘内边距（留出层级标签与流光弧顶）
 const PAD_X := 46.0
 const PAD_Y := 34.0
-## 一层到下一层的行距（像素，映射前的布局基准）
-const ROW_GAP := 116.0
+## 同层兵牌最小水平间隙 / 相邻层最小垂直间隙（像素基准，实际 × 缩放系数）——
+## 「不重叠」的布局硬保证：叶子步距恒 = NODE_W + H_GAP
+const H_GAP := 46.0
+const V_GAP := 40.0
+
+## 缩放档位（视图侧滑杆同区间；1.0 = 基准步距）
+const ZOOM_MIN := 0.55
+const ZOOM_MAX := 1.8
+const ZOOM_STEP := 0.05
 
 ## 在途流光最短可见时长（s）：eta=0 的即时跳也让人看得见（真值仍在 eta 标注里显示）
 const MIN_HOP_DUR := 0.28
@@ -68,6 +84,12 @@ var _flashes: Array = []
 var _holds: Dictionary = {}
 ## 最近结局（relay_id -> outcome，测试/宿主查询）
 var _last_outcomes: Dictionary = {}
+## 缩放系数（0.55~1.8；步距与兵牌同倍缩放，「不重叠」在任意档位成立）
+var _zoom: float = 1.0
+## 当前选中兵牌（空串 = 未选中；下令目标）
+var _selected_id: String = ""
+## 是否有选中（区分「选中玩家源节点（id 为空串）」与「未选中」）
+var _has_selection: bool = false
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -168,6 +190,8 @@ func _clear_scene() -> void:
 	_flashes.clear()
 	_holds.clear()
 	_last_outcomes.clear()
+	_selected_id = ""
+	_has_selection = false
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -206,33 +230,119 @@ static func _walk_layout(id: String, nodes: Dictionary, roots: Array, depth: int
 	return cx
 
 
-## 单位坐标 → 控件像素坐标（尺寸变化自动重算；尺寸未知时保持原位等 resized）
+## 单位坐标 → 控件像素坐标（固定步距 × 缩放；尺寸变化自动重算）。
+## 不重叠硬保证：同层步距 = (NODE_W + H_GAP) × zoom > 兵牌宽 × zoom；层距同理。
+## 内容尺寸随节点数/缩放变化（custom_minimum_size），由宿主 ScrollContainer 出滚动条，
+## 窗口装不下时平移滚动而不是压缩兵牌。
 func _apply_layout() -> void:
 	if _nodes.is_empty():
 		return
-	var w := size.x
-	var h := size.y
-	if w < 80.0 or h < 80.0:
-		return
-	var span_x: float = maxf(1.0, _unit_x_max)
-	var span_y: float = maxf(1.0, float(_max_depth))
-	var avail_x: float = maxf(0.0, w - PAD_X * 2.0 - NODE_W)
-	var avail_y: float = maxf(0.0, h - PAD_Y * 2.0 - NODE_H)
+	var step_x: float = (NODE_W + H_GAP) * _zoom
+	var step_y: float = (NODE_H + V_GAP) * _zoom
+	var scaled_w: float = NODE_W * _zoom
+	var scaled_h: float = NODE_H * _zoom
+	var used_w: float = _unit_x_max * step_x + scaled_w
+	var used_h: float = float(_max_depth) * step_y + scaled_h
+	var content := Vector2(used_w + PAD_X * 2.0, used_h + PAD_Y * 2.0)
+	if absf(custom_minimum_size.x - content.x) > 0.5 or absf(custom_minimum_size.y - content.y) > 0.5:
+		custom_minimum_size = content
+	# 内容比视口小时居中（大时左上对齐，滚动条负责平移）
+	var ox: float = PAD_X
+	var oy: float = PAD_Y
+	if size.x > content.x:
+		ox = (size.x - used_w) * 0.5
+	if size.y > content.y:
+		oy = (size.y - used_h) * 0.5
 	_rows.clear()
 	for id in _nodes:
 		var u: Vector2 = _unit.get(id, Vector2.ZERO)
-		var px: float = PAD_X + (u.x / span_x) * avail_x
-		var py: float = PAD_Y + (u.y / span_y) * avail_y
+		var px: float = ox + u.x * step_x
+		var py: float = oy + u.y * step_y
 		var n: Dictionary = _nodes[id]
 		n["pos"] = Vector2(px, py)
-		_rows[int(u.y)] = py + NODE_H * 0.5
+		_rows[int(u.y)] = py + scaled_h * 0.5
 		var part: Variant = _parts.get(id)
 		if part != null:
 			var panel: Control = part["panel"]
 			if is_instance_valid(panel):
 				panel.position = n["pos"]
 				panel.size = Vector2(NODE_W, NODE_H)
+				panel.scale = Vector2(_zoom, _zoom)
 	queue_redraw()
+
+
+# ─────────────────────────────── 缩放 / 选中（UI-W4a）────────────────────────────────
+
+## 设置缩放（钳 + 吸附步进；重排兵牌与连线，内容尺寸同步变化）
+func set_zoom(z: float) -> void:
+	var snapped: float = roundf(z / ZOOM_STEP) * ZOOM_STEP
+	_zoom = clampf(snapped, ZOOM_MIN, ZOOM_MAX)
+	_apply_layout()
+
+
+func get_zoom() -> float:
+	return _zoom
+
+
+## 选中兵牌（非法 id 忽略；发 node_selected 供视图侧下令入口消费）
+func select_node(org_id: String) -> void:
+	if not _nodes.has(org_id):
+		return
+	_selected_id = org_id
+	_has_selection = true
+	_apply_selection_visuals()
+	node_selected.emit(org_id)
+
+
+func clear_selection() -> void:
+	if not _has_selection:
+		return
+	_selected_id = ""
+	_has_selection = false
+	_apply_selection_visuals()
+
+
+func has_selection() -> bool:
+	return _has_selection
+
+
+func get_selected_id() -> String:
+	return _selected_id
+
+
+## 兵牌像素矩形（含缩放；未布局/未知 id 返回空 Rect2）——测试断言不重叠口径
+func get_plaque_rect(org_id: String) -> Rect2:
+	var n: Dictionary = _nodes.get(org_id, {})
+	if n.is_empty() or not n.has("pos"):
+		return Rect2()
+	return Rect2(n["pos"], Vector2(NODE_W, NODE_H) * _zoom)
+
+
+## 沙盘内容尺寸（滚动区内容体量；= custom_minimum_size）
+func get_content_size() -> Vector2:
+	return custom_minimum_size
+
+
+## 选中态描边（选中 = 琥珀描边；其余恢复底色描边——玩家源节点靠色条/文案区分）
+func _apply_selection_visuals() -> void:
+	for id in _parts:
+		var part: Variant = _parts.get(id)
+		if part == null:
+			continue
+		var panel: Control = part["panel"]
+		if not is_instance_valid(panel):
+			continue
+		panel.outline_override = StickTokens.ACCENT if id == _selected_id else Color.TRANSPARENT
+
+
+## 兵牌左键点击 → 选中（消费事件，防穿透到世界/视图层）
+func _on_plaque_input(event: InputEvent, org_id: String) -> void:
+	if event is InputEventMouseButton and event.pressed \
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		select_node(org_id)
+		var part: Variant = _parts.get(org_id)
+		if part != null and is_instance_valid(part["panel"]):
+			(part["panel"] as Control).accept_event()
 
 
 func get_node_count() -> int:
@@ -271,8 +381,9 @@ func _make_plaque(n: Dictionary) -> Dictionary:
 	panel.custom_minimum_size = Vector2(NODE_W, NODE_H)
 	panel.size = Vector2(NODE_W, NODE_H)
 	panel.tooltip_text = _tooltip(n)
-	if is_player:
-		panel.outline_override = StickTokens.ACCENT
+	# 点击选中（下令目标；描边由 _apply_selection_visuals 统一刷）
+	var org_id := String(n.get("id", ""))
+	panel.gui_input.connect(_on_plaque_input.bind(org_id))
 	add_child(panel)
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 6)
@@ -556,16 +667,16 @@ func _tier_of_depth(depth: int) -> int:
 	return best if found else depth
 
 
-func _pos_of(id: String) -> Vector2:
-	var n: Dictionary = _nodes.get(id, {})
-	return n.get("pos", Vector2(NODE_W * 0.5, NODE_H * 0.5))
-
-
+## 连线端点 = 兵牌底心 / 顶心（含缩放；_draw 与在途流光共用同一口径）
 func _edge_start(from_id: String) -> Vector2:
-	var p := _pos_of(from_id)
-	return p + Vector2(NODE_W * 0.5, NODE_H)
+	var r := get_plaque_rect(from_id)
+	if r.size == Vector2.ZERO:
+		return Vector2(NODE_W * _zoom * 0.5, NODE_H * _zoom)
+	return r.position + Vector2(r.size.x * 0.5, r.size.y)
 
 
 func _edge_end(to_id: String) -> Vector2:
-	var p := _pos_of(to_id)
-	return p + Vector2(NODE_W * 0.5, 0.0)
+	var r := get_plaque_rect(to_id)
+	if r.size == Vector2.ZERO:
+		return Vector2(NODE_W * _zoom * 0.5, 0.0)
+	return r.position + Vector2(r.size.x * 0.5, 0.0)

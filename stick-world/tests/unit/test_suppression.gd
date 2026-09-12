@@ -7,7 +7,8 @@ signal test_done(code: int)
 ## （远程命中/近战重击/格挡残余不触发）/ 豁免规则（溃逃/死亡/附身/兵种免疫）/
 ## 同 type 刷新不叠加 / 压制期士气流失（不伤血）/ ai_controller 禁令（强制停滞+
 ## 号令挂起续行）/ 强制溃逃链优先 / 无组件零回归 / behavior_attack 在途兜底 /
-## squad_phase_plan 真实压制替换点。
+## squad_phase_plan 真实压制替换点 / **箭矢近失压制**（开关关零回归、总门约束、
+## 半径内外边界、豁免集复用、只压制不伤害）。
 ## 确定性：压制链无掷骰（触发/禁令/解除续行全确定；BehaviorIdle 时长随机不影响
 ## 断言语义）。不进场景树（fixture 用 new() + 直注入，StatusEffects 经
 ## _owner 注入 + _connect_suppression_trigger 直调，test_meric_heal 先例）。
@@ -19,6 +20,7 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 const ScriptAIController := preload("res://modules/units/scripts/ai/ai_controller.gd")
 const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
 const ScriptSquadPhasePlan := preload("res://modules/combat/scripts/command/squad_phase_plan.gd")
+const ScriptArrowProjectile := preload("res://modules/units/scripts/weapons/arrow_projectile.gd")
 
 var _runner: TestRunner
 
@@ -38,13 +40,138 @@ func _ready() -> void:
 	_runner.add_test("零回归：无状态效果组件实体决策原样", _test_no_component_regression)
 	_runner.add_test("behavior_attack 兜底：压制期在途行为立即停", _test_attack_segment)
 	_runner.add_test("squad_phase_plan 替换点：压制成员跳过/未压制走代理", _test_phase_plan)
+	_runner.add_test("A6 近失压制：档案默认关 + 半径键约束", _test_near_miss_defaults)
+	_runner.add_test("A6 近失压制：总门关/近失门关不压制（零回归）", _test_near_miss_gate_off)
+	_runner.add_test("A6 近失压制：半径内触发 / 半径外与友军不触发", _test_near_miss_radius)
+	_runner.add_test("A6 近失压制：豁免集复用（溃逃/死亡/附身/兵种免疫）", _test_near_miss_exemptions)
+	_runner.add_test("A6 近失压制：只压制不伤害（命中路径语义不受影响）", _test_near_miss_no_damage)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 # ─────────────────────────────── 测试用例 ────────────────────────────────
+# A6 近失压制（箭矢投射物侧；压制主体用例见下）
 
+func _test_near_miss_defaults() -> void:
+	_runner.assert_false(bool(ScriptBehaviorProfiles.BASELINE.get("suppression_near_miss_enabled", true)),
+			"suppression_near_miss_enabled 基线默认关（零回归）")
+	_reset_profile_cache()
+	var p: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.BOW)
+	_runner.assert_false(bool(p.get("suppression_near_miss_enabled", true)),
+			"弓手近失门默认关（.tres baseline 行覆盖后仍关）")
+	var radius: float = float(p.get("suppression_near_miss_radius", 0.0))
+	_runner.assert_true(radius > ScriptArrowProjectile.HIT_RADIUS,
+			"近失半径须大于命中半径 34（实测 %.1f）" % radius)
+	_runner.assert_approx(radius, 80.0, 0.001, "近失半径档案初值 80px")
+	_reset_profile_cache()
+
+
+func _test_near_miss_gate_off() -> void:
+	# 总门关：近失门即使开也不压制（近失受既有 suppression_enabled 约束）
+	_arm_near_miss_profiles(true, 80.0, false)
+	var v1 := _make_near_miss_victim(Vector2(20.0, 0.0))
+	var s1 := _make_shooter(ScriptBehaviorProfiles.BOW)
+	var a1: ArrowProjectile = _nfire(Vector2.ZERO, [v1], s1)
+	_runner.assert_equal(a1.try_near_miss_suppression(), 0, "总门关：近失施加数为 0")
+	_runner.assert_false(v1.effects.has_suppressed(), "总门关：落点近失不压制")
+	a1.free()
+	s1.free()
+	_free_victim(v1)
+
+	# 近失门关（默认）：总门开也不压制——受击命中才是既有触发源
+	_arm_near_miss_profiles(false, 80.0, true)
+	var v2 := _make_near_miss_victim(Vector2(20.0, 0.0))
+	var s2 := _make_shooter(ScriptBehaviorProfiles.BOW)
+	var a2: ArrowProjectile = _nfire(Vector2.ZERO, [v2], s2)
+	_runner.assert_equal(a2.try_near_miss_suppression(), 0, "近失门关：施加数为 0")
+	_runner.assert_false(v2.effects.has_suppressed(), "近失门关：落点近失不压制（零回归）")
+	a2.free()
+	s2.free()
+	_free_victim(v2)
+	_reset_profile_cache()
+
+
+func _test_near_miss_radius() -> void:
+	_arm_near_miss_profiles(true, 80.0, true)
+	var inside := _make_near_miss_victim(Vector2(60.0, 0.0))     # 60 ≤ 80
+	var edge := _make_near_miss_victim(Vector2(80.0, 0.0))       # 恰在半径上（含）
+	var outside := _make_near_miss_victim(Vector2(80.5, 0.0))    # > 80
+	var ally := _make_near_miss_victim(Vector2(10.0, 0.0))
+	ally.faction = 1  # 同阵营（射手 faction=1）
+	var shooter := _make_shooter(ScriptBehaviorProfiles.BOW)
+	var arrow: ArrowProjectile = _nfire(Vector2.ZERO, [inside, edge, outside, ally], shooter)
+	var applied: int = arrow.try_near_miss_suppression()
+	_runner.assert_equal(applied, 2, "近失只压制半径内敌人（半径上计入；半径外/友军不计）")
+	_runner.assert_true(inside.effects.has_suppressed(), "半径内（60 ≤ 80）触发压制")
+	_runner.assert_true(edge.effects.has_suppressed(), "半径边界（恰 80）触发压制")
+	_runner.assert_false(outside.effects.has_suppressed(), "半径外（80.5 > 80）不触发")
+	_runner.assert_false(ally.effects.has_suppressed(), "友军不压制（不误伤）")
+	arrow.free()
+	shooter.free()
+	for v in [inside, edge, outside, ally]:
+		_free_victim(v)
+	_reset_profile_cache()
+
+
+func _test_near_miss_exemptions() -> void:
+	# 新触发源复用受击路径同一豁免集（不因走通用入口而绕过）
+	_arm_near_miss_profiles(true, 80.0, true)
+	var routed := _make_near_miss_victim(Vector2(20.0, 0.0))
+	routed.hp.routed = true
+	var dead := _make_near_miss_victim(Vector2(20.0, 0.0))
+	dead.dead = true
+	var possessed := _make_near_miss_victim(Vector2(20.0, 0.0))
+	possessed.possessed = true
+	# 兵种级免疫：单开 STAFF 档置 immune（SWORD 档保持不免疫，隔离其余三类豁免判定）
+	var staff: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.STAFF)
+	staff["suppression_enabled"] = true
+	staff["suppression_immune"] = true
+	var immune := _make_near_miss_victim(Vector2(20.0, 0.0), ScriptBehaviorProfiles.STAFF)
+	# 对照组：同装具但走 SWORD 档（不免疫）→ 近失压制正常施加
+	var control := _make_near_miss_victim(Vector2(20.0, 0.0))
+	var s3 := _make_shooter(ScriptBehaviorProfiles.BOW)
+	var arrow: ArrowProjectile = _nfire(Vector2.ZERO, [routed, dead, possessed, immune], s3)
+	var applied: int = arrow.try_near_miss_suppression()
+	_runner.assert_equal(applied, 0, "四类豁免全部拒绝近失压制")
+	_runner.assert_false(routed.effects.has_suppressed(), "已溃逃豁免（同受击路径）")
+	_runner.assert_false(dead.effects.has_suppressed(), "已死亡豁免")
+	_runner.assert_false(possessed.effects.has_suppressed(), "玩家附身豁免")
+	_runner.assert_false(immune.effects.has_suppressed(), "兵种级 suppression_immune 豁免")
+	var s4 := _make_shooter(ScriptBehaviorProfiles.BOW)
+	var arrow2: ArrowProjectile = _nfire(Vector2.ZERO, [control], s4)
+	_runner.assert_equal(arrow2.try_near_miss_suppression(), 1,
+			"对照（不免疫档）：同一发近失正常压制——豁免来自档案而非入口失效")
+	_runner.assert_true(control.effects.has_suppressed(), "对照单位被压制")
+	arrow.free()
+	arrow2.free()
+	s3.free()
+	s4.free()
+	for v in [routed, dead, possessed, immune, control]:
+		_free_victim(v)
+	_reset_profile_cache()
+
+
+func _test_near_miss_no_damage() -> void:
+	# 近失压制只走行为禁令 + 士气流失通道：不产生伤害、不即时扣士气（tick 制），
+	# 也不触碰命中路径参数（伤害量/锁定目标）——两条触发源互不污染
+	_arm_near_miss_profiles(true, 80.0, true)
+	var v := _make_near_miss_victim(Vector2(40.0, 0.0))
+	var shooter := _make_shooter(ScriptBehaviorProfiles.BOW)
+	var arrow: ArrowProjectile = _nfire(Vector2.ZERO, [v], shooter)
+	arrow._stick_ground()
+	_runner.assert_true(v.effects.has_suppressed(), "插地近失终态施加压制")
+	_runner.assert_approx(v.hp.hp, 100.0, 0.0, "近失不产生伤害（hp 不变，未走 DamagePipeline）")
+	_runner.assert_approx(v.hp.morale_lost, 0.0, 0.0, "近失不即时流失士气（0.5s tick 制）")
+	_runner.assert_approx(arrow._damage, 10.0, 0.0, "近失不篡改箭矢伤害量")
+	_runner.assert_true(arrow._target == null, "近失不改动锁定目标（命中路径前提不变）")
+	arrow.free()
+	shooter.free()
+	_free_victim(v)
+	_reset_profile_cache()
+
+
+## A6 压制主体用例（受击门槛 / 禁令 / 替换点）
 func _test_profile_defaults() -> void:
 	_runner.assert_false(bool(ScriptBehaviorProfiles.BASELINE.get("suppression_enabled", true)),
 			"suppression_enabled 基线默认关（零回归）")
@@ -308,6 +435,80 @@ func _make_plan_member() -> _PlanUnit:
 	return u
 
 
+## 近失用例档案装配：射手（BOW）侧配总门/近失门/半径，受害者（SWORD）侧配总门。
+## 直改合并档案缓存（_SupCtx 同款先例）；用后 _reset_profile_cache 清缓存重合并。
+func _arm_near_miss_profiles(near_miss_enabled: bool, radius: float,
+		shooter_total_gate: bool = true) -> void:
+	_reset_profile_cache()
+	var bow: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.BOW)
+	bow["suppression_enabled"] = shooter_total_gate
+	bow["suppression_near_miss_enabled"] = near_miss_enabled
+	bow["suppression_near_miss_radius"] = radius
+	var sw: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
+	sw["suppression_enabled"] = true
+	sw["suppression_immune"] = false
+	sw["suppression_duration"] = 4.5
+	sw["suppression_morale_per_tick"] = 2.0
+
+
+## 近失箭矢夹具：真实 ArrowProjectile（非树，候选经 near_miss_candidates_override
+## 注入 = _stick_ground 调用点同款路径），setup 走生产入口解析射手档案快照
+func _nfire(arrow_pos: Vector2, candidates: Array,
+		shooter: _Shooter = null) -> ArrowProjectile:
+	var s: _Shooter = shooter if shooter != null else _make_shooter(ScriptBehaviorProfiles.BOW)
+	var arrow: ArrowProjectile = ScriptArrowProjectile.new()
+	arrow.global_position = arrow_pos
+	arrow.near_miss_candidates_override = candidates
+	arrow.setup(Vector2.RIGHT * 640.0, 10.0, s, null)
+	return arrow
+
+
+## 近失受害者桩：真实 StatusEffects（_owner 注入）+ 显式 Collider 子节点 = 身体中心
+func _make_near_miss_victim(body_center: Vector2,
+		wtype: int = ScriptBehaviorProfiles.SWORD) -> _NearMissVictim:
+	var v := _NearMissVictim.new()
+	v.setup_victim(body_center, wtype)
+	return v
+
+
+func _free_victim(v: _NearMissVictim) -> void:
+	v.effects.free()
+	v.hp.free()
+	v.free()
+
+
+class _NearMissVictim extends _SupEntity:
+	## 身体中心节点（Collider 语义）：_target_body_pos 优先读取，半径断言按身体中心直算
+	var collider: Node2D = null
+	## 类型化别名（基类 se/health 声明为 Node，鸭子面不便直接断言）
+	var effects: StatusEffects = null
+	var hp: _SupHealth = null
+
+	func _init() -> void:
+		var c := Node2D.new()
+		c.name = "Collider"
+		add_child(c)
+		collider = c
+
+	## 装配：faction=2（与射手 faction=1 敌对）+ 真状态效果部门 + 假生命组件
+	func setup_victim(body_center: Vector2, wtype: int) -> void:
+		faction = 2
+		var w := _SupWeapon.new()
+		w.weapon_type = wtype
+		add_child(w)
+		weapon = w
+		hp = _SupHealth.new()
+		health = hp
+		effects = StatusEffects.new()
+		effects._owner = self
+		se = effects
+		set_body_center(body_center)
+
+	## 设置身体中心世界坐标（实体自身在原点 = collider.position 即世界位）
+	func set_body_center(p: Vector2) -> void:
+		collider.position = p
+
+
 class _SupCtx:
 	var entity: _SupEntity
 	var health: _SupHealth
@@ -394,6 +595,11 @@ class _Shooter extends Node2D:
 
 	func get_weapon() -> Node:
 		return self
+
+	## 阵营查询面（近失压制敌方过滤消费；缺失时投射物侧按"可命中"处理，
+	## 会误把友军算作近失目标——夹具补上以锁定"不误伤友军"断言）
+	func get_faction() -> int:
+		return faction
 
 
 ## 压制/决策夹具实体：duck 面齐（get_weapon/get_health/get_status_effects/

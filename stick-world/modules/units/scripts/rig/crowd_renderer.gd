@@ -337,7 +337,7 @@ func setup(parent: Node2D, y_top: float = 0.0, y_bottom: float = 1024.0) -> void
 	_shadow_mm = smm
 	# 血条桶双 MMI（z=1000 顶层）
 	var wobble_shader: Shader = load("res://modules/units/scripts/rig/crowd_bar_wobble.gdshader")
-	_dot_mmi = _make_overlay_mm(container, "CrowdDots", BatchRig._get_circle_mesh(), wobble_shader, 1.0)
+	_dot_mmi = _make_overlay_mm(container, "CrowdDots", BatchRig._get_wobble_circle_mesh(), wobble_shader, 1.0)
 	_bar_mmi = _make_overlay_mm(container, "CrowdBars", BatchRig._get_wobble_bar_mesh(), wobble_shader, 0.0)
 	# 武器图集桶（z=18 浮于单位身体之上，原武器 Sprite 同层）
 	_weapon_mm = _make_weapon_mm(container)

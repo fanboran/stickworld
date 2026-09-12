@@ -963,9 +963,10 @@ def bay_openings(W, bays, door_w=None, door_bay=0, win_w=52.0, win_h=60.0,
 #: 剪影总高 = 檐口 + rise + 屋面厚度余弦增量 + 接地细节；6 格档受"门 150 + 楣梁"
 #: 与"剪影 ≤1.5×宽"双向挤压，屋面只能给到 ~76，见报告里的算术说明。
 HOUSE_TIERS = {
-    6:  dict(D=112.0, plinth=12.0, wall=170.0, rise=76.0, door_w=50.0, wt=16.0),
-    8:  dict(D=176.0, plinth=16.0, wall=176.0, rise=142.0, door_w=54.0, wt=18.0),
-    12: dict(D=224.0, plinth=18.0, wall=206.0, rise=176.0, door_w=56.0, wt=20.0),
+    6:  dict(D=112.0, plinth=12.0, wall=170.0, rise=80.0, door_w=50.0, wt=16.0),
+    8:  dict(D=160.0, plinth=16.0, wall=176.0, rise=90.0, door_w=54.0, wt=18.0),
+    12: dict(D=200.0, plinth=18.0, wall=206.0, rise=105.0, door_w=56.0, wt=20.0),
+    16: dict(D=232.0, plinth=20.0, wall=220.0, rise=112.0, door_w=58.0, wt=22.0),
 }
 TOWNHOUSE_TIERS = {
     12: dict(D=208.0, plinth=18.0, storey=178.0, rise=150.0, door_w=56.0,
@@ -974,13 +975,13 @@ TOWNHOUSE_TIERS = {
              wt=20.0, jetty=10.0),
 }
 BARN_TIERS = {
-    8:  dict(D=192.0, plinth=12.0, wall=190.0, rise=126.0, wt=20.0, leaf=58.0),
-    12: dict(D=224.0, plinth=14.0, wall=200.0, rise=150.0, wt=22.0, leaf=62.0),
-    16: dict(D=256.0, plinth=16.0, wall=210.0, rise=200.0, wt=22.0, leaf=62.0),
+    8:  dict(D=176.0, plinth=12.0, wall=190.0, rise=95.0, wt=20.0, leaf=58.0),
+    12: dict(D=200.0, plinth=14.0, wall=200.0, rise=102.0, wt=22.0, leaf=62.0),
+    16: dict(D=224.0, plinth=16.0, wall=210.0, rise=108.0, wt=22.0, leaf=62.0),
 }
 SMITHY1_TIERS = {
     6: dict(D=144.0, post_h=168.0, rise=80.0, post=16.0, roof_t=18.0),
-    8: dict(D=176.0, post_h=190.0, rise=126.0, post=16.0, roof_t=20.0),
+    8: dict(D=176.0, post_h=190.0, rise=96.0, post=16.0, roof_t=20.0),
 }
 
 
@@ -1256,8 +1257,9 @@ ASSEMBLERS = {
 }
 
 #: 本轮对比图要出的 def × 宽度档（4 格档已按 §8.2 取消带门建筑）
-PROBE_LIST = [("house", 6), ("house", 8), ("house", 12),
-              ("townhouse", 12), ("barn", 8), ("smithy1", 6)]
+PROBE_LIST = [("house", 8), ("house", 12), ("house", 16),
+              ("townhouse", 12), ("townhouse", 16),
+              ("barn", 12), ("smithy1", 8)]
 
 
 # ---------------------------------------------------------------- §5 自检

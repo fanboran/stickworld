@@ -35,12 +35,12 @@ import buildings as B  # noqa: E402
 OUT_DIR = "F:/VSCode/game-2/.temp/building-pipeline-v2/stick-world/temp"
 SHEET = os.path.join(OUT_DIR, "pbr_buildings_v2.png")
 
-YAW = 12.0             # §8.1 水平偏航（建筑统一朝右前）
-TILT = 17.0            # §8.1 俯角（微俯视：显露大面积屋面，创始人要求更明显的俯视）
+YAW = 0.0              # 2D 侧视+微俯视游戏：水平不偏航（建筑正面朝观众）
+TILT = 20.0            # 微俯视俯角（露屋面；横版卷轴里建筑正面朝观众，仅从上往下看）
 ZOOM_SHEET = 2.0       # 总图每世界单位像素数（§5.3：2x，1 格 = 64px）
 ZOOM_CLOSE = 2.6
 GAP = 46.0             # 火柴人离建筑外檐的水平净距
-BAY_GAP = 120.0        # 相邻建筑净距
+BAY_GAP = 28.0         # 相邻建筑净距（街道感：近排）
 
 
 # ------------------------------------------------------------------ 场景
@@ -169,13 +169,13 @@ def layout():
         ob.location.x = bx - (x0 + x1) / 2.0
         bpy.context.view_layer.update()
         mx = B.measure(ob)
-        stick_x = mx["x"][1] + GAP
+        stick_x = mx["x"][1] - 26.0
         sb = B.Builder("stick_%s_w%d" % (name, wc))
-        B.stickman(sb, x=stick_x, y=mx["y"][0] + 10.0)   # 立面前沿同一地面基准
+        B.stickman(sb, x=stick_x, y=mx["y"][0] - 26.0)   # 站在建筑前缘（不占横向净距）
         sob = sb.to_object()
         built.append({"name": name, "wc": wc, "obj": ob, "stick": sob, "spec": spec,
                       "bbox": mx, "x_center": bx})
-        cursor = mx["x"][1] + GAP + 40.0 + BAY_GAP
+        cursor = mx["x"][1] + BAY_GAP
     return built
 
 
@@ -228,7 +228,7 @@ def main():
         bpy.data.objects.remove(ob, do_unlink=True)
 
     # 4) 规格表（实测：3/4 视角下的屏幕剪影）
-    print("\n=== 实测规格（单位 px；剪影为 yaw=12°/tilt=17° 投影）===")
+    print("\n=== 实测规格（单位 px；剪影为 yaw=0°/tilt=20° 投影）===")
     print("%-9s %2s %6s %6s %7s %6s %-9s %-11s %5s %6s %8s %s"
           % ("def", "格", "网格宽", "剪影宽", "剪影总高", "檐口", "层高", "门(净)",
              "出檐", "檐%", "长宽比", "判定"))

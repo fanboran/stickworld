@@ -11,7 +11,7 @@
 - **工作区**：`.temp/game-ai`（CoH/RWR 逆向原件在组织 worktree `.temp/organization-deepening/temp/coh/` 等，gitignored）
 - **自检**：`bash stick-world/tools/check_godot_errors.sh`；测试 `bash stick-world/tests/run_all.sh`
 - **开闸/校准入口**：设计文档 §七「机制开关总表」——全部机制开关（层/默认/开闸后可观测差异/观察入口）+ 开闸纪律，校准轮按表逐项开、逐项看
-- **当前阶段**：**A 系列 + 观测接线批 + WorldBox WB1/WB2/WB6 + AI-GAPS + AUTHORITY-SWITCH + UI-W2 两子批 + UI-W3 前置（在途命令注册表）全部收官**（分支尖端 60497140，待落地 main——曾因并行会话未提交的图标文档被 git 拦下，落地命令 `git merge --ff-only agent/game-ai`）。机制开闸按设计文档 §七 清单逐层推进：**GK-1 已开**（弓手点射 3 发/夜间犹豫 1.8/溃逃横向游走），GK-2~GK-5 待开；**GK-5 前置=组织侧 `default_behavior` 配置写入方（当前无写入方，效用打分宿主开了也没有候选——A4/WB1/WB6 生产链仍未激活）**。界面线下一批 **UI-W3 指挥链可视化：前置已就绪可直接开工**（在途命令注册表已实现，动画数据源齐了）。
+- **当前阶段**：**A 系列 + 观测接线批 + WorldBox WB1/WB2/WB6 + AI-GAPS + AUTHORITY-SWITCH + UI-W2 两子批 + UI-W3 前置（在途命令注册表）全部收官**（已全部落地 main，main 与 `agent/game-ai` 同步）。机制开闸按设计文档 §七 清单逐层推进：**GK-1 已开**（弓手点射 3 发/夜间犹豫 1.8/溃逃横向游走），GK-2~GK-5 待开；**GK-5 前置=组织侧 `default_behavior` 配置写入方（当前无写入方，效用打分宿主开了也没有候选——A4/WB1/WB6 生产链仍未激活）**。界面线下一批 **UI-W3 指挥链可视化：前置已就绪可直接开工**（在途命令注册表已实现，动画数据源齐了）。
 - **开场白**：「继续 AI集大成 批次 N」——先读本档 + 设计文档 12-游戏AI系统.md，再动手。
 - **任务分级**：Pro = 需设计判断/跨模块契约；Flash = 规格明确单模块实现。
 - **通用验收**：check 干净 + run_all 与基线零回归 + 回填本档 + 中文提交。

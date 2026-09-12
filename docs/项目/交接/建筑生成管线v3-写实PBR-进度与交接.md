@@ -74,43 +74,45 @@
 
 ---
 
-## 二、当前状态（v3：材质库 / 几何库 / 布局器 / **道具层** / **成图探针**）
+## 二、当前状态（v3：材质库 / 几何库 / 布局器 / **道具层** / **成图探针** —— **四块都已落地，待创始人观感验收**）
 
 ### 已建成
 
 | 模块 | 文件 | 状态 |
 |---|---|---|
 | 规范文档 | `docs/技术/架构/建筑生成管线v3-写实PBR.md` | 九章 + §8 修订决议（含 §8.7 米制）+ §9 品控结论 |
-| 材质库 | `tools/blender_buildings/materials.py` | 12 种 PBR 材质 + UV 工具；**正在被 agent 按 texel density 标准重建**（thatch/iron/plaster/stone 重做 + cavity/water/lamp/straw/rope/ground/foliage 新注册） |
-| 建筑几何库 | `tools/blender_buildings/buildings.py` | 10 种装配器 × 宽度档：house/townhouse/barn/smithy1 + **rowhouse(3 层)/windmill/cathedral/tower/gatehouse/lighthouse**；模块库另有拱券/玫瑰窗/尖拱窗/垛口/隅石/扶壁/锥顶/风车叶/灯室 |
+| 材质库 **v3.1（已重建）** | `tools/blender_buildings/materials.py` | **26 个 key**，全库改为「现实尺寸 → UV」标定（`M_PER_UV = 0.42`，1 UV = 1 格 = 42cm；入口 `uv_m/uv_cm/uv_mm`，`audit(verbose=True)` 打印每材质换算后的现实特征尺寸）。茅草改**逐根草茎索引**建模（2.8cm 茎宽 + 27cm 层高 + 分撮明暗），铁改低粗糙度大锤打棱面，抹灰暖米白禁锈褐斑，石块大块 + 深砂浆缝。**修掉 `cavity` 硬 bug**（以前 `get()` 返回 None → 回退浅色 → 所有窗洞发亮）。新增 `water/lamp(自发光)/straw/rope/sack/glass_win/wattle/shingle/log_wall/ground/grass_tuft/foliage/vine`。`get()` 为任意已注册 key 的通用入口；`reset_cache()` + `_alive()` 失效探测（救 `read_factory_settings` 坑）。集成校验：buildings 31 个装配名**零纯色回退**；跨进程逐位一致 |
+| 建筑几何库 | `tools/blender_buildings/buildings.py` | **10 种装配器 × 宽度档**：house/townhouse/barn/smithy1 + **rowhouse(3 层)/windmill/cathedral/tower/gatehouse/lighthouse**；模块库另有拱券/玫瑰窗/尖拱窗/垛口/隅石/扶壁/锥顶/风车叶/灯室。**屋顶已加结构**：正脊压顶条 `ridge_cap`、檐口封檐板 `eave_board`、山墙端出挑椽头 `rafter_ends`。`SPEC_COLOR` 补 `cavity/lamp/water/straw/rope` 回退（`lamp` 进 `EMISSIVE` 强度 2.6），接触阴影三级已压深（shadow_near 0.20） |
 | **道具层** | `tools/blender_buildings/props.py` | **33 件道具**（容器/铁匠工坊/家具/运输围挡/立面挂载）+ `dress()` 门口避让式挂载调度；`GAME_SCALE=1.45` 解决"现实尺寸道具缩到游戏尺寸不可辨" |
 | 城市布局器 | `tools/blender_buildings/city_layout.py` | 4 档确定性布局 + 平面图 + 天际线 + 断言；**DEFS 表已列 24 种建筑** |
-| 探针 | `probe_materials.py` / `probe_buildings.py`（规范自检）<br>`probe_props.py`（道具）<br>`probe_delivery.py`（交付图：总图/街景/1:1 游戏尺寸）<br>`probe_city_scene.py`（**城市成图**：布局器数据 → 渲染） | 均可复跑 |
+| 探针 | `probe_materials.py` / `probe_buildings.py`（规范自检）<br>`probe_materials_v2.py`（**新材质样片**：26 材质 × 平面/球/立方体，每格并列 100% 与**物理 25%** 双缩略）<br>`probe_props.py`（道具）<br>`probe_delivery.py`（交付图：总图/街景/1:1 游戏尺寸）<br>`probe_city_scene.py`（**城市成图**：布局器数据 → 渲染） | 均可复跑 |
 
-### 关键产物（`stick-world/temp/`）
-- `pbr_sheet_2x.png`（全部 def×宽度档总图）、`pbr_c_<def>_w<N>.png`（单体特写）
-- `pbr_game_1x.png`（**1 px/单位 = 游戏内真实大小**的街排；判断"材质/道具会不会糊"只看这张）
-- `pbr_city_town.png`（城镇临街全景，俯角 20°）、`pbr_city_town_top.png`（**总览，俯角 34°**，读出行深）+ `.json` 摆放清单
+### 关键产物（`stick-world/temp/`，2026-09-13 最新一轮，已用新材质全量重渲）
+- `pbr_mat2_probe.png`（26 材质样片，100% + 物理 25% 双缩略）、`pbr_mat2_true25.png`（整表 25% 出厂门禁真值）
+- `pbr_sheet_2x.png`（全部 def×宽度档总图）、`pbr_c_<def>_w<N>.png`（15 个单体特写）
+- `pbr_game_1x.png`（**1 px/单位 = 游戏内真实大小**的街排；判断"材质/道具会不会糊"只看这张）、`pbr_street_2x.png`
+- `pbr_city_town_top.png`（**城镇总览，俯角 34° + 行距拉伸**，21 栋 + 城墙，最好的一张）、`pbr_city_town.png`（临街 20° 游戏内视角）、`pbr_city_village.png` + 各自 `.json` 摆放清单
 - `pbr_props.png`（道具总览条）、`pbr_props_{smithy,house,barn}.png`（前场实景）
 - `city_plan_{hamlet,village,town,city}.png|.json`（城市平面数据）
 
-### 未完成（按优先级见 §三）
-- 材质重建（进行中）与**屋顶结构**（屋面厚度/正脊/封檐板/檐下 AO/山墙檩条）
-- 布局器 24 种 def ↔ 装配器 10 种的落差（`probe_city_scene.py` 现用 `DEF_MAP` 兜底）
-- 道具层尚未接进建筑本体（目前由探针并置）
-- 运行时接入与入库（批次 5）
+### 已知落差（诚实清单）
+- 布局器 **24 种 def ↔ 装配器 10 种**：`probe_city_scene.py` 现用 `DEF_MAP` 把缺的种类兜底映射到最接近的装配器（tavern→townhouse、church→cathedral…），`well`/`market_stall` 直接跳过。
+- 道具层尚未接进建筑本体（目前由探针在渲染时并置，`props.dress()` 独立对象）。
+- 材质 25% 门禁仍有 **FAIL**：canvas/sack/rope/wattle 在 25% 退化成同一种淡棕纤维面（2.4~3.4cm 织格在 19px/m 下只剩 0.5px，物理极限）；thatch 与 shingle 在 25% 都读作"横向分带暖色面"，只能靠颜色区分。
+- 材质层做不了"檐口草梢悬垂"（世界空间纹理无位置语义），要靠屋面下缘的几何草束。
+- 屋面仍偏"平板 + 檐口/椽头点缀"：正脊与封檐板有了，但**屋面厚度、檐下 AO 暗带、山墙檩条层次**还不够，普通民居的茅草屋面在 2x 下仍读作"大块草席矩形"。
 
 ---
 
 ## 三、下一步（按品控优先级，详见文档 §9.2）
 
-1. **屋顶结构改造**（当前第一观感杀手）：正脊压顶条、檐口封檐板（带厚度）+ 檐下暗带 AO、山墙端可见檩条/椽头出挑 2~3 根。参考图屋顶占剪影高 45~55% 且结构可读。
-2. **材质标准重建收口**（agent 进行中）：thatch 必须"一根根草茎顺坡披下 + 分层草把暗影"，iron 去砾石感，plaster 暖白禁锈褐斑，stone 大块砌块 + 深砂浆缝；`cavity` 近全黑（窗洞发亮的元凶）；`ground` 暖沙。
-3. **立面修正**：屋面可见厚度、窗型表化（窗台 69 / 窗高 92~100 / 同立面同窗型 ≤2 / 上下层差异化）、二层补墙（现在镂空可见天空）、烟囱落地泛水。
-4. **道具层接入装配器**：`dress()` 目前在探针里并置，应下沉到建筑装配器或入库烘焙流程；补 20~30 件道具（市集摊/水槽/招牌样式）。
-5. **补齐布局器 def**：24 种 def 里还缺 14 种装配器（cottage/tavern/bakery/shop/guildhall/hayloft/smithy2~4/church/chapel/shelter/stable/well/market_stall）。
-6. **校验工具**：真火柴人剪影 + 人高刻度；道路占用/纹素密度/材质 25% 可辨三条自动校验。
-7. **运行时接入**（批次 5）：def_id 映射、`modules/building_gen/api.gd` 重定向、内饰图、入库。
+1. **屋顶结构改造二轮**（当前第一观感杀手）：屋面**可见厚度**（檐口断面）+ **檐下 AO 暗带** + 山墙檩条层次；茅草屋面加"檐口草梢悬垂"（几何草束，不是贴图）。参考图屋顶占剪影高 45~55% 且结构可读。
+2. **立面修正**：窗型表化（窗台 69 / 窗高 92~100 / 同立面同窗型 ≤2 / 上下层差异化）、二层补墙（现在镂空可见天空）、烟囱落地泛水、墙面做旧 decal（油渍/水痕/烟熏）。
+3. **道具层接入装配器/入库烘焙流程**：`dress()` 目前在探针里并置；补市集摊/水槽/招牌样式等 20~30 件。
+4. **补齐布局器 def**：24 种 def 里还缺 14 种装配器（cottage/tavern/bakery/shop/guildhall/hayloft/smithy2~4/church/chapel/shelter/stable/well/market_stall）。
+5. **校验工具**：真火柴人剪影 + 人高刻度；道路占用/纹素密度/材质 25% 可辨三条自动校验（材质 25% 判定现在靠人眼 + agent 自评）。
+6. **运行时接入**（批次 5）：def_id 映射、`modules/building_gen/api.gd` 重定向、内饰图、产物入库 `assets/buildings/gen/`。
+7. 待创始人观感验收项：特殊单体 6 种、道具层、新材质库、城市成图（§二 关键产物）。
 
 ---
 
@@ -134,8 +136,11 @@ python probe_city_plan.py                                  # 城市平面图（�
 
 1. 读本文档（**§0 台账必读**）+ 设计文档 §8/§9。
 2. `git worktree list` 确认 `.temp/building-pipeline-v2`；缺则 `git worktree add .temp/building-pipeline-v2 agent/building-pipeline-v2`。
-3. 跑几个 probe 确认环境；按 §三 优先级推进。
+3. 跑几个 probe 确认环境（§四）；按 §三 优先级推进。
 4. 规矩：改任何东西前先对齐 §0.3；每环节产出必须派审查员打回；每轮把图直接贴给创始人。
+5. **worktree 里的 v2 脏文件（不是本任务的工作）**：`git status` 会看到 11 个 `stick-world/tools/building_pipeline/`（v2）的未提交改动 + 未跟踪的 `comps_opt.gd`/`dev/`——那是 v2 时代一个子 agent 的半成品，v2 已废弃，**可以直接丢**：
+   `git checkout -- stick-world/tools/building_pipeline && rm -rf stick-world/tools/building_pipeline/comps_opt.gd stick-world/tools/building_pipeline/dev`（收线清理时做即可）。
+6. 参考图 `stick-world/assets/_raw/建筑/smithy.png` 在主工作区（raw 资源未入库，worktree 里是拷贝）；若 worktree 重建后缺图，从主工作区拷一份。
 
 ---
 

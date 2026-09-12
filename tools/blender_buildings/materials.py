@@ -1,44 +1,66 @@
 # -*- coding: utf-8 -*-
-"""写实西幻建筑 PBR 材质库（Blender 5.2 / EEVEE）。
+"""写实西幻建筑程序化 PBR 材质库 v3.1（Blender 5.2 / EEVEE）。
 
-坐标约定（与 `建筑生成管线v3-写实PBR.md` §3.1 §5.1 对齐）
+尺度契约（本轮重定标，一切 feature 尺寸都必须走这里的换算）
 --------------------------------------------------------
-* 图案基于 **UV**；1 UV 单位 = 1 Blender 单位 = 1 格 = 32px（`PX_PER_UNIT`）。
-* UV 必须用 `box_project_uv()` 做盒式投影：**U = 水平轴，V = 竖直/顺坡轴**
-  （水平面取另一水平轴）。这样同一材质贴到任意朝向的墙/屋顶上，砖缝永远水平、
-  茅草茎永远顺坡、瓦垄永远横贯。投影基于世界坐标 → 相邻构件的纹理自然对齐。
-* 每个材质是一个 NodeGroup，对外暴露 3 个可调参数：
-    `Scale` 尺度倍率（>1 = 纹理更大，按"格"标定，默认 1.0 = 规范尺寸）
-    `Tint`  色调（与基色相乘，用于同族材质的冷暖/深浅变体）
-    `Wear`  做旧 0(全新) ~ 1(残破)，控制污渍/苔藓/缺角/霉斑的强度
-* 用法：
-    import materials as M
-    m = M.mat_thatch(scale=1.0, tint=(1.0,0.95,0.85), wear=0.35)
-    M.box_project_uv(obj)          # 几何 UV 投影
-    M.tune(m, wear=0.8)            # 事后调参
+* **1 UV 单位 = 1 格 = 32 世界单位 = 32 px(游戏 1:1) = 0.42 m**。
+  （`Builder.__init__(tile=CELL=32)` 与 `box_project_uv` 都是这个口径；
+   `box_project_uv` 的"世界单位"在样片里 1 单位 = 1 px，所以 1 UV = 32 px。）
+* 换算入口：`uv_m(米)` / `uv_cm(厘米)` / `uv_mm(毫米)`，以及 `to_px(uv)` 回算像素。
+* 由此得到的 texel density：游戏 1:1 = **76 px/m**；建筑渲染 2x = 152 px/m。
+  出厂门禁：**缩到 25%（19 px/m）仍能说出这是什么材质** —— 所以每族材质除了
+  "细读层"（草茎/砖缝/木纹）还必须有"粗读层"（层带、砌块、板缝、垄行）在
+  5 cm 以上的尺度成立。
 
-材质规格（1 格 = 32px）
-----------------------
-    brick       砖 20x10px, 缝 1.5px
-    stone       石块 ~30x18px, 灰浆缝 1.5px
-    white_stone 白石饰块 ~16x10px, 细缝 1px
-    plank_wall  横板高 20px, 板间色差 + 木纹 29x3px + 木节 3px
-    timber      深色木骨: 同族木纹, 手斧棱面, 纵向干裂
-    thatch      草层高 16px, 草茎 ~1.8px 宽 / 9px 长, 束宽 4~8px
-    tile_roof   瓦 11x10px, 垄高 ~2px, 逐片色差
-    slate_roof  石板瓦 13x11px, 错缝, 冷灰 + 风化
-    plaster     抹灰: 抹刀痕 + 颗粒 + 剥落斑(露底灰) + 细裂
-    iron        铸铁: 麻点(1.6px) + 锤痕 + 锈斑
-    canvas      麻布: 经纬织纹 1.2px + 粗节
+坐标约定
+--------
+* 图案基于 **UV**；`box_project_uv()` / `Builder.poly()` 做盒式投影：
+  **U = 水平轴，V = 竖直/顺坡轴**（水平面取另一水平轴）。
+* 投影基于世界坐标 → 相邻构件的纹理自然对齐；材质不是"贴图"，是**世界空间
+  程序纹理**（`get_coord` 用 UV，那就是世界坐标 / 32），所以大平面上不会看到
+  平铺接缝，但 feature 尺寸必须按米标定。
+
+对外接口（契约，勿破坏）
+------------------------
+    make(key, **kw) / get(name) / tune(mat, scale=, tint=, wear=)
+    mat_<key>(...)            # 12 个原 key 的便捷函数
+    audit()                   # 打印 节点数 + 换算后的现实特征尺寸
+    reset_cache()             # 场景重建后清内部缓存（避免 StructRNA 失效）
+    box_project_uv(obj)
+
+NodeGroup 参数：`Scale`（尺度倍率，>1 = 纹理更大）、`Tint`、`Wear`（0 新 ~ 1 破）。
 """
 import bpy
+import math
 
 PX_PER_UNIT = 32.0
+#: 1 UV 单位（= 1 格 = 32 世界单位 = 32 px）对应的现实长度
+M_PER_UV = 0.42
 
 
 def px(v):
-    """像素 → Blender 单位（1 单位 = 1 格 = 32px）。"""
+    """像素 → UV（1 UV = 32 px @游戏 1:1）。"""
     return float(v) / PX_PER_UNIT
+
+
+def uv_m(metres):
+    """现实米 → UV。"""
+    return float(metres) / M_PER_UV
+
+
+def uv_cm(centimetres):
+    """现实厘米 → UV。"""
+    return (float(centimetres) / 100.0) / M_PER_UV
+
+
+def uv_mm(millimetres):
+    """现实毫米 → UV。"""
+    return (float(millimetres) / 1000.0) / M_PER_UV
+
+
+def to_px(uv_units):
+    """UV → 游戏 1:1 像素。"""
+    return float(uv_units) * PX_PER_UNIT
 
 
 # ============================================================ 节点构建器
@@ -89,11 +111,13 @@ class B:
         return node
 
     # ---------- 数学 ----------
-    def op(self, op, a, b=None, clamp=False):
+    def op(self, op, a, b=None, c=None, clamp=False):
         x = self.nd('ShaderNodeMath', operation=op, use_clamp=clamp)
         self._in(x.inputs[0], a)
         if b is not None:
             self._in(x.inputs[1], b)
+        if c is not None:
+            self._in(x.inputs[2], c)
         return x.outputs[0]
 
     def add(self, a, b):
@@ -107,6 +131,28 @@ class B:
 
     def div(self, a, b):
         return self.op('DIVIDE', a, b)
+
+    def mn(self, a, b):
+        return self.op('MINIMUM', a, b)
+
+    def mx(self, a, b):
+        return self.op('MAXIMUM', a, b)
+
+    def absv(self, a):
+        return self.op('ABSOLUTE', a)
+
+    def flr(self, a):
+        return self.op('FLOOR', a)
+
+    def frc(self, a):
+        return self.sub(a, self.flr(a))
+
+    def sine(self, a, mult=1.0, phase=0.0):
+        return self.op('SINE', self.add(self.mul(a, mult), phase))
+
+    def pisin(self, a):
+        """sin(pi * a)：0→0, 0.5→1, 1→0（块体/草茎截面主力）。"""
+        return self.op('SINE', self.mul(a, math.pi))
 
     def vop(self, op, a, b, c=None):
         x = self.nd('ShaderNodeVectorMath', operation=op)
@@ -152,8 +198,22 @@ class B:
         """v > e → 1"""
         return self.op('GREATER_THAN', v, e)
 
+    def lt(self, v, e):
+        """v < e → 1"""
+        return self.op('LESS_THAN', v, e)
+
+    def gt01(self, v, e):
+        return self.op('GREATER_THAN', v, e)
+
     def pow(self, v, e):
         return self.op('POWER', v, e)
+
+    # ---------- 哈希 / 随机（确定性：全靠 WhiteNoise 对整数格点哈希） ----------
+    def h1(self, x, seed=0.0, salt=0.0):
+        return self.white(self.vec(x, salt, seed))
+
+    def h2(self, x, y, seed=0.0):
+        return self.white(self.vec(x, y, seed))
 
     # ---------- 混合 ----------
     def mixc(self, fac, a, b, blend='MIX'):
@@ -172,7 +232,7 @@ class B:
         return n.outputs[0]
 
     def mul_c(self, c, k):
-        """颜色 × 灰度系数（k 可为常数或 socket→用 shade）。"""
+        """颜色 × 灰度系数（k 可为常数或 socket）。"""
         if not isinstance(k, (int, float)):
             return self.mixc(1.0, c, k, blend='MULTIPLY')
         return self.mixc(1.0, c, (k, k, k), blend='MULTIPLY')
@@ -248,9 +308,9 @@ class B:
         return n.outputs[0]
 
 
-# ------------------------------------------------------------ 通用小工具
+# ------------------------------------------------------------ 通用字段
 def _uv(b, gi):
-    """取 Scale 归一化后的 UV（返回值 u=水平, v=竖直/顺坡）。"""
+    """取 Scale 归一化后的 UV（u=水平, v=竖直/顺坡）。"""
     tc = b.nd('ShaderNodeTexCoord')
     inv = b.op('DIVIDE', 1.0, gi.outputs['Scale'])
     uv = b.vop('SCALE', tc.outputs['UV'], inv)
@@ -259,555 +319,1126 @@ def _uv(b, gi):
 
 
 def _rows(b, v, h):
-    """横向分层（木板/草层）：返回 (sv, row, fv, row_rand, row_rand2)。"""
+    """横向分层（木板/草层/原木）。返回 (sv, row, fv, row_rand, row_rand2)。"""
     sv = b.div(v, h)
-    row = b.op('FLOOR', sv)
-    fv = b.op('SUBTRACT', sv, row)
-    return sv, row, fv, b.white(b.vec(row, 5.0, 2.0)), b.white(b.vec(row, 91.0, 7.0))
-
-
-def _cells(b, u, v, cw, ch, stagger=0.5, seed=0.0):
-    """矩形砌块网格（砖/瓦）：返回 dict(单元格内相对坐标/序号/随机值/到缝距离)。"""
-    sv = b.div(v, ch)
-    row = b.op('FLOOR', sv)
-    rrand = b.white(b.vec(row, 5.0 + seed, 2.0))
-    su = b.div(u, cw)
-    if stagger:
-        su = b.add(su, b.mul(rrand, stagger))
-    col = b.op('FLOOR', su)
-    fu = b.sub(su, col)
+    row = b.flr(sv)
     fv = b.sub(sv, row)
-    du = b.mul(b.op('MINIMUM', fu, b.sub(1.0, fu)), cw)
-    dv = b.mul(b.op('MINIMUM', fv, b.sub(1.0, fv)), ch)
-    d = b.op('MINIMUM', du, dv)
-    return dict(sv=sv, row=row, fv=fv, su=su, col=col, fu=fu, d=d,
-                rand=b.white(b.vec(col, row, seed)),
-                rand2=b.white(b.vec(col, row, seed + 37.0)),
-                cell=b.vec(col, row, seed))
+    return sv, row, fv, b.h1(row, 5.0), b.h1(row, 91.0)
 
 
-# ============================================================ 材质实现
+def _cells(b, u, v, cw, ch, stagger=0.5, seed=0.0, jitter=0.0):
+    """矩形砌块场（砖/瓦/木瓦）：错缝 + 可选的**缝位抖动**。
+
+    抖动**只做水平方向** —— 砌筑的横缝本来就是水平的（竖缝错落），而且纵向抖动会把
+    fv 推出 [0,1]，`min(fv,1-fv)` 变负 → 整条带被误判成灰浆缝，砌块读法直接崩掉
+    （第一轮就是踩了这个坑：石墙读成一圈圈横向色带）。
+    抖动值取自整数格哈希 → 格内恒定、块间不同，得到"边是直但不规则"的料石感
+    （Voronoi 会读成鹅卵石，不能用）。
+    """
+    sv = b.div(v, ch)
+    row = b.flr(sv)
+    fv = b.sub(sv, row)
+    rrand = b.h1(row, 5.0 + seed)
+    su = b.add(b.div(u, cw), b.mul(rrand, stagger))
+    col = b.flr(su)
+    if jitter:
+        jx = b.noise(b.vec(b.mul(col, 3.0), b.mul(row, 3.0), 7.0 + seed), 1.0, 2.0)
+        su = b.add(su, b.mul(b.sub(jx, 0.5), jitter))
+        col = b.flr(su)
+    fu = b.frc(su)
+    du = b.mul(b.mn(fu, b.sub(1.0, fu)), cw)
+    dv = b.mul(b.mn(fv, b.sub(1.0, fv)), ch)
+    d = b.mn(du, dv)
+    return dict(sv=sv, row=row, fv=fv, su=su, col=col, fu=fu, d=d, du=du, dv=dv,
+                rand=b.h2(col, row, 1.0 + seed),
+                rand2=b.h2(col, row, 2.0 + seed),
+                rand3=b.h2(col, row, 3.0 + seed))
+
+
+# ============================================================ 茅草
 def _b_thatch(b, gi, bsdf, variant='new'):
-    """茅草：顺坡草茎 + 层叠起檐 + 束状起伏 + 霉斑。
+    """茅草：**沿 V（顺坡）的单根草茎** + 分层的草把 + 层界暗影带。
 
-    草茎做法（关键）：取**各向异性噪声的等值线**做草茎分界 ——
-        line = 1 - smoothstep(|noise - 0.5|, 0, w)
-    噪声沿 U 密集(1.6px)、沿 V 极长(约 24px)，其 0.5 等值线就是一条条细、硬、
-    天然弯曲的竖线，正是草茎之间的暗缝；两层（细/中）+ 长条随机叠加即可。
-    直接用平滑噪声当亮度只会得到"刷痕/抹布"，不是茅草。
+    这是本轮返工的核心。旧版用"各向异性噪声等值线"做草茎，噪声频率过高
+    （茎宽 ≈ 1 cm = 0.75 px）→ 直接糊成"草席/瓦楞板"。
+
+    新版逐字面建模：
+      1. 草茎索引：`si = floor((u + 层相位 + 顺坡弯曲) / 茎宽)`，茎宽 2.6 cm；
+         逐茎哈希给明度/色温差 → 一根是一根。
+      2. 茎截面：`core = sin(pi*fu)^0.5` → 茎心亮、茎缝暗（草秆是圆的）。
+      3. 草层：层高 27 cm，**逐层草茎相位错位**（层与层不对齐 → 层界可读）；
+         每层草茎下梢参差（±），梢下 = 深层暗影带 → "一撮一撮披下来"。
+      4. 梢部发白（枯梢）+ 层间色差 + 旧草的霉斑。
     """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
 
-    # ---- 层界：轻微起伏（扰动过大会失去"层"的读法）
-    w1 = b.noise(b.vec(b.mul(u, 0.9), b.mul(v, 0.30), 5.0), 1.0, 3.0)
-    w2 = b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 0.9), 9.0), 1.0, 3.0)
-    vv = b.add(v, b.mul(b.sub(b.mixf(0.5, w1, w2), 0.5), 0.38))
-    sv = b.div(vv, 0.50)                                    # 层高 0.50u = 16px
-    course = b.op('FLOOR', sv)
-    fv = b.sub(sv, course)
-    crow = b.white(b.vec(course, 5.0, 2.0))                 # 每层色差
-    cthk = b.white(b.vec(course, 61.0, 9.0))
+    sw = uv_cm(2.8)            # 草茎宽 2.8 cm
+    lh = uv_cm(27.0)           # 草层高 27 cm
 
-    # ---- 草茎等值线：细茎(1.5px) + 中茎(3px)
-    n1 = b.noise(b.vec(b.mul(u, 21.0), b.mul(v, 1.35), 1.0), 1.0, 5.0, 0.5)
-    n2 = b.noise(b.vec(b.mul(u, 9.5), b.mul(v, 0.9), 7.0), 1.0, 5.0, 0.5)
-    wk = b.lin(cthk, 0.0, 1.0, 0.040, 0.070)                # 层间缝宽随机
-    line1 = b.sub(1.0, b.ss(b.op('ABSOLUTE', b.sub(n1, 0.5)), 0.0, wk))
-    line2 = b.sub(1.0, b.ss(b.op('ABSOLUTE', b.sub(n2, 0.5)), 0.0, b.mul(wk, 1.5)))
-    stem = b.op('MAXIMUM', line1, b.mul(line2, 0.85))       # 茎缝（1=缝）
-    # 茎内明暗（沿茎方向的起伏 + 逐茎随机）
-    strand = b.white(b.vec(b.op('FLOOR', b.mul(u, 21.0)),
-                           b.op('FLOOR', b.mul(v, 0.8)), 17.0))
-    inner = b.mixf(0.45, b.lin(n2, 0.2, 0.8, 0.0, 1.0), strand)
+    # ---- 坡面起伏（很轻，过大就失去"层"的读法）
+    wob = b.noise(b.vec(b.mul(u, 1.1), b.mul(v, 0.22), 11.0), 1.0, 3.0)
+    vv = b.add(v, b.mul(b.sub(wob, 0.5), b.mul(lh, 0.28)))
+    sv = b.div(vv, lh)
+    band = b.flr(sv)
+    fv = b.sub(sv, band)
+    br = b.h1(band, 5.0)
+    br2 = b.h1(band, 61.0)
 
-    # ---- 层顶：上一层压住（窄而硬的下缘阴影）+ 层檐参差
-    lap = b.sub(1.0, b.ss(fv, 0.0, b.lin(cthk, 0.0, 1.0, 0.055, 0.15)))
-    tip = b.noise(b.vec(b.mul(u, 15.0), b.mul(vv, 3.0), 23.0), 1.0, 4.0)
-    stem = b.mixf(b.mul(b.sub(1.0, lap), b.lin(tip, 0.35, 0.72, 0.35, 1.0)), stem,
-                  b.sub(stem, 0.25))
-    bundle = b.lin(b.noise(b.vec(b.mul(u, 2.4), b.mul(v, 1.5), 31.0), 1.0, 5.0),
-                   0.25, 0.75, 0.0, 1.0)
+    # ---- 草茎（层相位错位 + 顺坡弯曲 + **茎宽不均** → 不要做成"均匀编织帘"）
+    phase = b.mul(br, b.mul(sw, 2.0))
+    curv = b.noise(b.vec(b.mul(v, 0.5), b.mul(u, 0.12), 23.0), 1.0, 3.0)
+    widen = b.noise(b.vec(b.div(u, b.mul(sw, 3.0)), b.mul(v, 0.25), 61.0), 1.0, 3.0)
+    u2 = b.add(b.add(u, phase), b.mul(b.sub(curv, 0.5), b.mul(sw, 1.6)))
+    u2 = b.add(u2, b.mul(b.sub(widen, 0.5), b.mul(sw, 1.3)))
+    su = b.div(u2, sw)
+    si = b.flr(su)
+    fu = b.sub(su, si)
+    sr = b.h1(si, 7.0)          # 逐茎明度
+    sr2 = b.h1(si, 91.0)        # 逐茎色温/干湿
+    sr3 = b.h1(si, 131.0)       # 逐茎"干枯/新鲜"
+    sr4 = b.noise(b.vec(b.mul(si, 1.7), b.mul(v, 2.2), 157.0), 1.0, 3.0)   # 沿茎渐变
+    # 一撮一撮：每 ~9 根草茎共用一个"撮"的明度/色调偏置（同撮的草是一起铺的）
+    clump_i = b.flr(b.div(su, 9.0))
+    cl = b.h1(clump_i, 311.0)
+    cl2 = b.h1(clump_i, 337.0)
+    core = b.pow(b.pisin(fu), 0.5)
+    seam = b.sub(1.0, core)     # 1 = 茎缝
+    # 第二层细茎（1.5cm）叠在上面 → 两个尺度并存，破碎均匀感
+    sw2 = uv_cm(1.5)
+    su2 = b.div(b.add(u, b.mul(curv, b.mul(sw2, 2.0))), sw2)
+    si2 = b.flr(su2)
+    fu2 = b.sub(su2, si2)
+    core2 = b.pow(b.pisin(fu2), 0.6)
+    fine = b.mul(core2, b.mul(b.h1(si2, 173.0), 0.55))
+
+    # ---- 顺茎细部：**必须沿茎（V）缓慢** —— 频率一高就和跨茎方向混成"针织/草席"
+    fib = b.noise(b.vec(b.mul(u, 1.4), b.mul(v, 7.0), 5.0), 1.0, 5.0)
+    knot = b.noise(b.vec(b.mul(u, 1.2), b.mul(v, 3.2), 13.0), 1.0, 4.0)
+
+    # ---- 本层草梢参差 → 梢下暗影（层界）：窄、软、**沿 U 断断续续**（不断就成竹席横档）
+    tipn = b.noise(b.vec(b.mul(u, 11.0), b.mul(band, 7.3), 31.0), 1.0, 3.0)
+    tip = b.mr(tipn, 0.34, 0.66, 0.12, 0.40)
+    gap = b.sub(1.0, b.ss(fv, b.sub(tip, 0.05), b.add(tip, 0.04)))
+    gapbreak = b.lin(b.noise(b.vec(b.mul(u, 1.3), b.mul(band, 2.7), 199.0), 1.0, 4.0),
+                     0.30, 0.72, 0.35, 1.0)
+    gap = b.mul(gap, gapbreak)
+    # ---- 一撮一撮的草把：沿 V 拉长、**低对比**（对比一高就成"编织格"）
+    bundle = b.lin(b.noise(b.vec(b.mul(u, 1.3), b.mul(v, 0.35), 43.0), 1.0, 5.0),
+                   0.30, 0.70, 0.0, 1.0)
+
+    bright = b.add(b.mul(core, 0.42), b.mul(sr, 0.26))
+    bright = b.add(bright, b.mul(sr4, 0.12))
+    bright = b.add(bright, b.mul(fib, 0.06))
+    bright = b.add(bright, b.mul(bundle, 0.08))
+    bright = b.add(bright, b.mul(cl, 0.12))         # 撮内同明度
 
     if variant == 'old':
-        c_dark, c_mid, c_hi = (0.145, 0.115, 0.062), (0.400, 0.320, 0.170), (0.640, 0.545, 0.330)
-        c_moss = (0.195, 0.205, 0.130)
+        c_dark, c_mid, c_hi = (0.068, 0.044, 0.020), (0.300, 0.205, 0.092), (0.600, 0.490, 0.285)
+        c_moss = (0.135, 0.140, 0.062)
     else:
-        c_dark, c_mid, c_hi = (0.300, 0.165, 0.045), (0.890, 0.605, 0.205), (1.000, 0.870, 0.450)
-        c_moss = (0.285, 0.255, 0.125)
+        c_dark, c_mid, c_hi = (0.105, 0.042, 0.008), (0.700, 0.360, 0.085), (1.000, 0.800, 0.400)
+        c_moss = (0.165, 0.150, 0.062)
 
-    col = b.ramp(b.mixf(0.35, inner, bundle),
-                 [(0.10, c_dark), (0.45, c_mid), (0.85, c_hi)])
-    col = b.mixc(stem, b.mul_c(col, 0.62), col)             # 茎缝压暗
-    col = b.mixc(lap, b.shade(col, 0.0, 0.74, 1.0), col)    # 层檐阴影
-    col = b.mixc(crow, b.mul_c(col, 0.90), col)             # 层色差
+    col = b.ramp(bright, [(0.10, c_dark), (0.44, c_mid), (0.80, c_hi)])
+    col = b.mixc(b.mul(sr2, 0.9), b.mul_c(col, 0.80), col)          # 逐茎深浅
+    col = b.mixc(b.mul(sr3, 0.5), b.mul_c(col, 0.86), col)          # 少数枯茎
+    col = b.mixc(b.mul(cl2, 0.45), b.mul_c(col, 0.88), col)         # 撮间色调差
+    col = b.mixc(b.mul(core2, 0.85), b.mul_c(col, 0.78), col)       # 细茎层（暗缝）
+    col = b.mul_c(col, b.lin(seam, 0.0, 1.0, 1.02, 0.46))           # 茎缝压暗（硬边界）
+    col = b.mixc(gap, b.mul_c(col, 0.50), col)                      # 层界暗影带（软、断续）
+    col = b.mixc(b.mul(gap, 0.14), col, b.mul_c(col, 1.22))         # 层界下缘一线受光
+    col = b.mixc(b.mul(knot, 0.20), b.mul_c(col, 0.80), col)        # 草节
 
-    # ---- 霉斑 / 发灰（边界不规则）
-    m1 = b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 43.0), 1.0, 5.0, 0.6)
-    m2 = b.noise(b.vec(b.mul(u, 8.0), b.mul(v, 8.0), 47.0), 1.0, 4.0)
-    mold_mask = b.ss(b.mixf(0.5, m1, m2), 0.52, 0.66)
-    amt = wear if variant == 'old' else b.mul(wear, 0.22)
-    col = b.mixc(b.mul(mold_mask, amt), col, c_moss)
+    # ---- 霉斑（旧草明显；新草只留一点灰，注意别做成"发霉抹布"）
+    m1 = b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 47.0), 1.0, 5.0, 0.6)
+    m2 = b.noise(b.vec(b.mul(u, 9.0), b.mul(v, 9.0), 53.0), 1.0, 4.0)
+    mold = b.ss(b.mixf(0.5, m1, m2), 0.54, 0.68)
+    amt = wear if variant == 'old' else b.mul(wear, 0.15)
+    col = b.mixc(b.mul(mold, amt), col, c_moss)
 
-    h = b.add(b.mul(b.sub(1.0, lap), 0.55), b.mul(lap, 0.30))
-    h = b.sub(h, b.mul(stem, 0.55))
-    h = b.add(h, b.mul(bundle, 0.40))
-    h = b.add(h, b.mul(b.sub(tip, 0.5), 0.20))
-    rough = b.lin(bundle, 0.0, 1.0, 0.90, 0.97)
+    h = b.add(b.mul(core, 0.55), b.mul(bundle, 0.30))
+    h = b.add(h, b.mul(b.sub(fib, 0.5), 0.12))
+    h = b.sub(h, b.mul(seam, 0.50))
+    h = b.sub(h, b.mul(gap, 0.60))
+    h = b.add(h, b.mul(fine, 0.22))
+    rough = b.add(b.lin(bundle, 0.0, 1.0, 0.88, 0.97), b.mul(seam, 0.02))
 
-    return dict(color=col,
-                rough=rough,
-                normal=b.bump(h, 0.55, 0.035),
-                spec=0.12, sheen=0.25, sheen_rough=0.6)
+    return dict(color=col, rough=rough,
+                normal=b.bump(h, 0.65, uv_cm(1.6)),
+                spec=0.10, sheen=0.30, sheen_rough=0.55)
+
+
+# ============================================================ 散稻草
+def _b_straw(b, gi, bsdf):
+    """散稻草（草垛/屋顶散落/地面铺草）：**以顺坡（V）为主的草堆** + 零星横躺的散秆。
+
+    上一轮做成"两向等权交叉"→ 直接读成竹席/编织垫。稻草堆是**有主方向**的：
+    绝大多数秆顺着堆的坡向躺，少数被踩/被风吹成横的，再加上成堆的低频明暗起伏。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    sw = uv_cm(2.0)             # 散草秆 2 cm
+
+    # 主方向：沿 V 躺的草（横截面在 U）
+    sk = b.div(u, sw)
+    si = b.flr(sk)
+    fu = b.sub(sk, si)
+    core = b.pow(b.pisin(fu), 0.5)
+    sr = b.h1(si, 23.0)
+    sr2 = b.h1(si, 71.0)
+    sr3 = b.noise(b.vec(b.mul(si, 1.3), b.mul(v, 1.6), 137.0), 1.0, 3.0)
+    # 少数横躺的散秆（约 18% 的秆位）：压在堆面上
+    sk2 = b.div(v, b.mul(sw, 1.3))
+    si2 = b.flr(sk2)
+    fu2 = b.sub(sk2, si2)
+    core2 = b.pow(b.pisin(fu2), 0.5)
+    gate2 = b.ss(b.h1(si2, 211.0), 0.82, 0.88)
+    # 斜躺的散秆（45°）
+    d45 = b.div(b.add(u, v), b.mul(sw, 1.7))
+    si3 = b.flr(d45)
+    fu3 = b.sub(d45, si3)
+    core3 = b.pow(b.pisin(fu3), 0.5)
+    gate3 = b.ss(b.h1(si3, 233.0), 0.86, 0.92)
+
+    fib = b.noise(b.vec(b.mul(u, 3.0), b.mul(v, 9.0), 29.0), 1.0, 5.0)
+    clump = b.noise(b.vec(b.mul(u, 1.2), b.mul(v, 1.2), 13.0), 1.0, 5.0)   # 成堆起伏
+
+    bright = b.add(b.mul(core, 0.42), b.mul(sr, 0.30))
+    bright = b.add(bright, b.mul(sr3, 0.16))
+    bright = b.add(bright, b.mul(clump, 0.12))
+    col = b.ramp(bright, [(0.06, (0.115, 0.052, 0.012)),
+                          (0.46, (0.520, 0.300, 0.082)),
+                          (0.86, (0.870, 0.680, 0.330))])
+    col = b.mixc(sr2, b.mul_c(col, 0.80), col)
+    # 横躺/斜躺散秆（亮一点、压在面上）
+    overlay = b.mx(b.mul(gate2, core2), b.mul(gate3, b.mul(core3, 0.9)))
+    col = b.mixc(overlay, b.mul_c(col, 0.72), b.mul_c(col, 1.10))
+    col = b.mixc(b.mul(b.ss(fib, 0.62, 0.86), b.mul(wear, 0.30)), col,
+                 (0.235, 0.180, 0.075))
+    rough = b.lin(fib, 0.0, 1.0, 0.88, 0.97)
+    h = b.add(b.mul(core, 0.80), b.mul(b.sub(fib, 0.5), 0.30))
+    h = b.sub(h, b.mul(sr, 0.18))
+    h = b.add(h, b.mul(overlay, 0.55))
+    h = b.add(h, b.mul(b.sub(clump, 0.5), 0.60))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(1.2)),
+                spec=0.10, sheen=0.35, sheen_rough=0.6)
+
+
+# ============================================================ 陶瓦
+def _row_light(b, fv, top=0.90, grad_to=0.55, lip=0.06):
+    """交叠屋面的**行内受光律**：fv=1 是本排顶端（被上一排压住）→ 硬接触影 + 上排投影渐变；
+    fv=0 是本排下缘（露出的板边/瓦口）→ 受光的薄棱。
+
+    这一条是"石板瓦/木瓦/陶瓦读不对"的总病根：旧版只在 fv≈0 做了一道对称的暗缝，
+    横纵缝强度一样 → 立刻读成"砌墙"。正确的读法是"上暗下亮、行是主角"。
+    """
+    contact = b.ss(fv, top - 0.07, top + 0.02)          # 硬接触线
+    grad = b.lin(fv, top - grad_to, top, 0.0, 1.0)      # 上排投影（渐变）
+    shade = b.mx(contact, grad)
+    lip = b.sub(1.0, b.ss(fv, 0.0, lip))                # 下缘薄棱
+    return shade, lip
 
 
 def _b_tile_roof(b, gi, bsdf):
-    """陶瓦（筒板瓦）：横垄 + 逐片色差 + 瓦口出檐阴影 + 瓦缝苔痕。
-
-    关键：**缝必须各向异性** —— 横向（每排瓦口）一道硬而深的阴影，纵向（同排瓦片之间）
-    只有极细的暗线。四边等强会读成"编织垫/马赛克"。
+    """陶瓦（筒板瓦）：**横向垄行是主角**（每排瓦口一道硬阴影 + 上一排的投影 +
+    本排瓦口的圆棱），同排瓦片之间只有细缝 + 瓦垄剖面。逐片色差 + 苔痕。
     """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
-    cw, chh = px(11), px(10)
-    c = _cells(b, u, v, cw, chh, stagger=0.5)
+    cw, ch = uv_cm(15.0), uv_cm(16.0)       # 瓦 15cm 宽、每排露 16cm
+    c = _cells(b, u, v, cw, ch, stagger=0.5, seed=3.0)
     fu, fv, r1, r2 = c['fu'], c['fv'], c['rand'], c['rand2']
 
-    crown = b.op('SINE', b.mul(fu, 3.14159265))              # 垄脊（片中央最高）
-    # 横向：瓦口（本排下缘）—— 硬深阴影 + 上一排的投影
-    seam_row = b.sub(1.0, b.ss(fv, 0.0, 0.085))
-    lap = b.ss(fv, 0.02, 0.40)                               # 0=瓦口, 1=瓦面
-    # 纵向：同排瓦片间的细缝（弱）
-    du = b.mul(b.op('MINIMUM', fu, b.sub(1.0, fu)), cw)
-    seam_col = b.sub(1.0, b.ss(du, 0.004, 0.016))
+    crown = b.pisin(fu)                     # 瓦垄剖面（片中央起拱）
+    shade, lip = _row_light(b, fv, top=0.90, grad_to=0.60, lip=0.07)
+    du = b.mul(b.mn(fu, b.sub(1.0, fu)), cw)
+    seam_col = b.sub(1.0, b.ss(du, uv_cm(0.5), uv_cm(1.7)))     # 同排细缝（弱）
 
-    # 逐片色差：深陶红族 + 少量焦黑/泛白（烧成差异）
-    base = b.mixc(r1, (0.245, 0.062, 0.036), (0.495, 0.160, 0.066))
-    base = b.mixc(b.lin(r2, 0.78, 0.95, 0.0, 0.75), base, (0.16, 0.055, 0.035))   # 焦瓦
-    base = b.mixc(b.lin(r2, 0.0, 0.13, 0.0, 0.5), base, (0.60, 0.34, 0.16))       # 泛白瓦
-    base = b.shade(base, crown, 0.80, 1.12)                  # 垄脊受光
-    base = b.shade(base, lap, 0.62, 1.04)                    # 瓦口一段压暗（层叠）
-    col = b.mixc(b.op('MAXIMUM', seam_col, b.mul(seam_row, 0.85)), base,
-                 b.mul_c(base, 0.22))                        # 缝（横重纵轻）
-    # 苔痕 / 水渍（积在瓦口与同排缝里）
+    base = b.mixc(r1, (0.180, 0.045, 0.022), (0.520, 0.140, 0.046))
+    base = b.mixc(b.lin(r2, 0.82, 0.97, 0.0, 0.72), base, (0.085, 0.030, 0.024))   # 焦瓦
+    base = b.mixc(b.lin(r2, 0.0, 0.10, 0.0, 0.40), base, (0.560, 0.265, 0.100))    # 泛白瓦
+    base = b.shade(base, crown, 0.72, 1.20)                     # 垄脊受光
+    base = b.shade(base, lip, 0.94, 1.18)                       # 瓦口亮棱
+    col = b.mixc(b.mul(shade, 0.9), b.mul_c(base, 0.26), base)  # 行交叠（主角）
+    col = b.mixc(b.mul(seam_col, 0.55), col, b.mul_c(base, 0.50))   # 同排缝（弱）
+    # 苔痕/水渍（积在瓦口与缝里）
     moss = b.noise(b.vec(b.mul(u, 4.5), b.mul(v, 4.5), 13.0), 1.0, 5.0, 0.6)
-    moss_m = b.mul(b.mul(b.ss(moss, 0.48, 0.68), b.lin(wear, 0.0, 1.0, 0.25, 0.95)),
-                   b.op('MAXIMUM', b.mul(seam_row, 0.9), b.mul(b.sub(1.0, lap), 0.5)))
-    col = b.mixc(moss_m, col, (0.24, 0.26, 0.13))
-    streak = b.noise(b.vec(b.mul(u, 6.5), b.mul(v, 1.0), 31.0), 1.0, 4.0)
-    col = b.mixc(b.mul(b.ss(streak, 0.58, 0.82), b.mul(wear, 0.5)), col, (0.14, 0.10, 0.085))
-    # 瓦面颗粒（2~3px，不做过细则不可见）
-    grn = b.noise(b.vec(b.mul(u, 14.0), b.mul(v, 14.0), 5.0), 1.0, 4.0)
-    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.93, 1.06))
+    moss_m = b.mul(b.mul(b.ss(moss, 0.50, 0.70), b.lin(wear, 0.0, 1.0, 0.20, 0.90)),
+                   b.mx(shade, b.mul(lip, 0.9)))
+    col = b.mixc(moss_m, col, (0.200, 0.225, 0.100))
+    grn = b.noise(b.vec(b.mul(u, 16.0), b.mul(v, 16.0), 5.0), 1.0, 4.0)   # 2px 瓦面颗粒
+    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.92, 1.07))
 
-    h = b.add(b.mul(crown, 0.60), b.mul(lap, 0.70))
-    h = b.sub(h, b.mul(seam_row, 0.9))
-    h = b.sub(h, b.mul(seam_col, 0.5))
+    h = b.add(b.mul(crown, 0.85), b.mul(lip, 0.55))
+    h = b.add(h, b.mul(shade, 1.05))            # 上一排压在上面 → 行界处一层台阶
+    h = b.sub(h, b.mul(seam_col, 0.40))
     h = b.add(h, b.mul(b.sub(grn, 0.5), 0.10))
-
     return dict(color=col,
-                rough=b.add(b.lin(r1, 0.0, 1.0, 0.66, 0.84), b.mul(grn, 0.03)),
-                normal=b.bump(h, 0.60, 0.055),
-                spec=0.32)
+                rough=b.add(b.lin(r1, 0.0, 1.0, 0.60, 0.80), b.mul(grn, 0.03)),
+                normal=b.bump(h, 0.75, uv_cm(2.4)), spec=0.34)
 
 
 def _b_slate_roof(b, gi, bsdf):
-    """石板瓦：错缝平铺、片状硬边、冷灰、风化水渍（横重纵轻，同 tile 纪律）。"""
+    """石板瓦：鱼鳞状交叠 —— 每排**上缘压暗 + 上排投影渐变 + 下缘受光薄棱**，
+    同排竖缝细、随机、时有时无（一旦等强就成砌墙）。冷灰偏蓝 + 风化水渍。
+    """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
-    cw, chh = px(15), px(11)
-    c = _cells(b, u, v, cw, chh, stagger=0.5, seed=17.0)
+    cw, ch = uv_cm(26.0), uv_cm(13.0)       # 石板 26cm 宽、每排露 13cm
+    c = _cells(b, u, v, cw, ch, stagger=0.5, seed=17.0, jitter=0.10)
     fu, fv, r1, r2 = c['fu'], c['fv'], c['rand'], c['rand2']
 
-    seam_row = b.sub(1.0, b.ss(fv, 0.0, 0.075))              # 本排石板下缘（硬边 + 投影）
-    lap = b.ss(fv, 0.03, 0.45)
-    du = b.mul(b.op('MINIMUM', fu, b.sub(1.0, fu)), cw)
-    seam_col = b.sub(1.0, b.ss(du, 0.004, 0.020))
-    # 部分石板下缘被磕掉
-    chip_amt = b.mr(r2, 0.88, 0.99, 0.0, 1.0)
-    chip = b.mul(chip_amt, b.mul(b.ss(b.sub(1.0, fv), 0.72, 0.94), b.ss(fu, 0.30, 0.46)))
+    shade, lip = _row_light(b, fv, top=0.92, grad_to=0.50, lip=0.05)
+    du = b.mul(b.mn(fu, b.sub(1.0, fu)), cw)
+    seam_col = b.sub(1.0, b.ss(du, uv_cm(0.4), uv_cm(2.0)))
+    seam_col = b.mul(seam_col, b.lin(r2, 0.45, 0.72, 0.0, 1.0))    # 竖缝时有时无
+    chip = b.mul(b.mr(r2, 0.86, 0.98, 0.0, 1.0),
+                 b.mul(b.ss(fv, 0.02, 0.14), b.ss(fu, 0.28, 0.44)))
 
-    # 冷灰石板：逐片明暗差（同矿区石板本就有色差）
-    base = b.mixc(r1, (0.140, 0.158, 0.190), (0.245, 0.265, 0.302))
-    base = b.mixc(b.lin(r2, 0.86, 0.99, 0.0, 0.45), base, (0.105, 0.115, 0.135))  # 深青
-    base = b.mixc(b.lin(r2, 0.0, 0.10, 0.0, 0.30), base, (0.240, 0.243, 0.230))   # 略泛褐
-    base = b.shade(base, lap, 0.68, 1.05)
-    col = b.mixc(b.op('MAXIMUM', b.mul(seam_col, 0.42), seam_row), base,
-                 b.mul_c(base, 0.20))
-    col = b.mixc(chip, col, (0.300, 0.310, 0.330))           # 磕口露新茬
-    # 风化水渍（竖向拉长）+ 缝内苔藓
-    st = b.noise(b.vec(b.mul(u, 5.5), b.mul(v, 1.2), 41.0), 1.0, 5.0, 0.5)
-    col = b.mixc(b.mul(b.ss(st, 0.52, 0.78), b.mul(wear, 0.5)), col, (0.115, 0.125, 0.135))
+    base = b.mixc(r1, (0.085, 0.098, 0.120), (0.205, 0.225, 0.258))
+    base = b.mixc(b.lin(r2, 0.82, 0.98, 0.0, 0.5), base, (0.058, 0.066, 0.082))
+    base = b.mixc(b.lin(r2, 0.0, 0.14, 0.0, 0.35), base, (0.190, 0.172, 0.146))
+    base = b.shade(base, lip, 1.0, 1.16)
+    col = b.mixc(shade, b.mul_c(base, 0.30), base)
+    col = b.mixc(b.mul(seam_col, 0.45), col, b.mul_c(base, 0.34))
+    col = b.mixc(chip, col, (0.280, 0.292, 0.310))
+    st = b.noise(b.vec(b.mul(u, 4.5), b.mul(v, 1.1), 41.0), 1.0, 5.0, 0.5)
+    col = b.mixc(b.mul(b.ss(st, 0.54, 0.80), b.mul(wear, 0.5)), col, (0.085, 0.095, 0.108))
     moss = b.noise(b.vec(b.mul(u, 3.6), b.mul(v, 3.6), 61.0), 1.0, 5.0, 0.6)
-    col = b.mixc(b.mul(b.mul(b.ss(moss, 0.52, 0.72), b.mul(seam_row, 0.8)),
-                       b.mul(wear, 0.65)), col, (0.21, 0.235, 0.12))
-    grn = b.noise(b.vec(b.mul(u, 13.0), b.mul(v, 13.0), 9.0), 1.0, 4.0)
-    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.94, 1.05))
+    col = b.mixc(b.mul(b.mul(b.ss(moss, 0.54, 0.74), b.mul(shade, 0.8)),
+                       b.mul(wear, 0.6)), col, (0.170, 0.195, 0.100))
+    grn = b.noise(b.vec(b.mul(u, 15.0), b.mul(v, 15.0), 9.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.93, 1.06))
 
-    h = b.add(b.mul(lap, 0.85), b.mul(b.sub(1.0, seam_row), -0.9))
-    h = b.sub(h, b.mul(seam_col, 0.3))
+    h = b.add(b.mul(lip, 0.95), b.mul(b.sub(1.0, shade), -1.05))
+    h = b.sub(h, b.mul(seam_col, 0.30))
     h = b.sub(h, b.mul(chip, 0.6))
     h = b.add(h, b.mul(b.sub(grn, 0.5), 0.08))
-
     return dict(color=col,
-                rough=b.add(b.lin(r1, 0.0, 1.0, 0.60, 0.78), b.mul(grn, 0.04)),
-                normal=b.bump(h, 0.55, 0.055),
-                spec=0.42)
+                rough=b.add(b.lin(r1, 0.0, 1.0, 0.56, 0.76), b.mul(grn, 0.04)),
+                normal=b.bump(h, 0.70, uv_cm(2.2)), spec=0.44)
 
 
-def _wood(b, gi, u, v, board_h, pal, joint_w=0.035, knot_amt=1.0, camber=0.0,
-          cracks=0.0, ring=1.0):
-    """共用木料层：横向板 + 板间色差 + 木纹 + 木节 + 板缝阴影。返回 (color, height, rough)。"""
+# ============================================================ 木瓦
+def _b_shingle(b, gi, bsdf):
+    """木瓦（鱼鳞板）：13 cm 宽、每排露 17 cm，逐片色差 + 顺纹木理 + 行交叠受光。"""
     wear = gi.outputs['Wear']
-    _sv, row, fv, rr1, rr2 = _rows(b, v, board_h)
-    dv = b.mul(b.op('MINIMUM', fv, b.sub(1.0, fv)), board_h)
-    joint = b.sub(1.0, b.ss(dv, 0.004, joint_w))            # 1 = 板缝里
+    u, v = _uv(b, gi)
+    cw, ch = uv_cm(16.0), uv_cm(18.0)       # 木瓦 16cm 宽、每排露 18cm
+    c = _cells(b, u, v, cw, ch, stagger=0.5, seed=29.0, jitter=0.18)
+    fu, fv, r1, r2 = c['fu'], c['fv'], c['rand'], c['rand2']
 
-    # 木纹：沿 U 拉长的噪声 + 低频扭曲（年轮感）
+    shade, lip = _row_light(b, fv, top=0.90, grad_to=0.62, lip=0.05)
+    # 竖缝：木瓦是拼铺的，缝很细、且**大部分看不见**（等强就成小方格/编织垫）
+    du = b.mul(b.mn(fu, b.sub(1.0, fu)), cw)
+    seam_col = b.sub(1.0, b.ss(du, uv_cm(0.25), uv_cm(1.0)))
+    seam_col = b.mul(seam_col, b.lin(r2, 0.55, 0.78, 0.0, 1.0))
+
+    # 顺纹木理（木瓦是径向劈的 → 纹路沿着长度方向 = V）
+    grain = b.noise(b.vec(b.mul(u, 12.0), b.mul(v, 1.6), 7.0), 1.0, 6.0, 0.55)
+    grain2 = b.noise(b.vec(b.mul(u, 26.0), b.mul(v, 0.8), 13.0), 1.0, 4.0)
+    g = b.mixf(0.5, grain, grain2)
+
+    base = b.mixc(r1, (0.105, 0.056, 0.028), (0.300, 0.178, 0.086))
+    base = b.mixc(b.lin(r2, 0.80, 0.98, 0.0, 0.55), base, (0.082, 0.060, 0.040))
+    base = b.mixc(b.lin(r2, 0.0, 0.16, 0.0, 0.40), base, (0.395, 0.245, 0.115))
+    base = b.mul_c(base, b.lin(g, 0.25, 0.78, 0.76, 1.16))
+    base = b.shade(base, lip, 1.0, 1.22)
+    col = b.mixc(shade, b.mul_c(base, 0.24), base)
+    col = b.mixc(b.mul(seam_col, 0.30), col, b.mul_c(base, 0.42))
+    # 缝里积的苔/腐
+    moss = b.noise(b.vec(b.mul(u, 4.5), b.mul(v, 4.5), 63.0), 1.0, 5.0, 0.6)
+    col = b.mixc(b.mul(b.mul(b.ss(moss, 0.52, 0.72), b.mul(shade, 0.8)),
+                       b.mul(wear, 0.55)), col, (0.145, 0.155, 0.072))
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 71.0), 1.0, 5.0),
+                            0.55, 0.82), b.mul(wear, 0.35)), col, (0.150, 0.115, 0.075))
+
+    h = b.add(b.mul(lip, 0.95), b.mul(shade, 1.10))
+    h = b.sub(h, b.mul(seam_col, 0.30))
+    h = b.add(h, b.mul(b.sub(g, 0.5), 0.30))
+    return dict(color=col,
+                rough=b.add(b.lin(r1, 0.0, 1.0, 0.74, 0.90), b.mul(g, 0.03)),
+                normal=b.bump(h, 0.80, uv_cm(2.2)), spec=0.28)
+
+
+# ============================================================ 木料（横板 / 木骨）
+def _wood(b, gi, u, v, board_h, pal, joint_w=None, knot_amt=1.0, camber=0.0,
+          cracks=0.0, grain_len=1.0):
+    """共用木料层：横板 + 板缝 + 顺板木纹 + 木节 + 板下沿投影。返回 (color, h, rough)。
+
+    * `board_h` 板高按现实换算（木板墙 20 cm → uv_cm(20)）。
+    * `grain_len` 木纹沿 U 的拉长倍率（大构件用大值）。
+    """
+    wear = gi.outputs['Wear']
+    jw = joint_w if joint_w is not None else uv_cm(1.2)
+    _sv, row, fv, rr1, rr2 = _rows(b, v, board_h)
+    dv = b.mul(b.mn(fv, b.sub(1.0, fv)), board_h)
+    joint = b.sub(1.0, b.ss(dv, uv_cm(0.15), jw))            # 1 = 板缝里
+
+    # 木纹：沿 U 拉长 + 低频扭曲（年轮感）
     yw = b.noise(b.vec(b.mul(u, 2.0), b.mul(v, 3.0), 7.0), 1.0, 4.0)
-    grain = b.noise(b.vec(b.mul(u, 1.2), b.add(b.mul(v, 11.0), b.mul(yw, 6.0)), 3.0), 1.0, 7.0, 0.62)
-    grain2 = b.noise(b.vec(b.mul(u, 0.5), b.mul(v, 26.0), 13.0), 1.0, 5.0)
+    grain = b.noise(b.vec(b.mul(u, 1.2 / max(grain_len, 0.05)),
+                          b.add(b.mul(v, 11.0), b.mul(yw, 6.0)), 3.0), 1.0, 7.0, 0.62)
+    grain2 = b.noise(b.vec(b.mul(u, 0.5), b.mul(v, 30.0), 13.0), 1.0, 5.0)
     g = b.mixf(0.55, grain, grain2)
-    if ring:
-        g = b.pow(g, b.lin(ring, 0.5, 1.5, 1.35, 0.75))
 
     col = b.ramp(g, [(0.22, pal['dark']), (0.52, pal['mid']), (0.80, pal['light'])])
-    col = b.mixc(rr1, b.mul_c(col, pal['board_lo']), b.mul_c(col, pal['board_hi']))  # 板间色差
+    col = b.mixc(rr1, b.mul_c(col, pal['board_lo']), b.mul_c(col, pal['board_hi']))
     if 'board_hi2' in pal:
         col = b.mixc(b.sub(1.0, b.lin(rr2, 0.42, 0.58, 0.0, 1.0)), col,
-                     b.mul_c(col, pal['board_hi2']))                                  # 少数板更红/更亮
+                     b.mul_c(col, pal['board_hi2']))
 
-    # 木节：稀疏的深色小圆点（Voronoi 距离门控 + 单元随机门）
-    kd, _kc, kp = b.voro(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 23.0), scale=1.0, randomness=1.0)
-    gate = b.mr(b.white(b.vec(b.op('FLOOR', b.mul(u, 2.6)), b.op('FLOOR', b.mul(v, 2.6)), 23.0)),
-                0.78, 0.88, 0.0, 1.0)
+    # 木节：稀疏深色小圆点（Voronoi 距离门控 + 单元门）
+    kd, _kc, _kp = b.voro(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 23.0), scale=1.0, randomness=1.0)
+    gate = b.mr(b.h2(b.flr(b.mul(u, 2.6)), b.flr(b.mul(v, 2.6)), 23.0), 0.78, 0.88, 0.0, 1.0)
     knot = b.mul(b.sub(1.0, b.ss(kd, 0.06, 0.22)), b.mul(gate, knot_amt))
     col = b.mixc(knot, col, pal['knot'])
 
     # 干裂（木骨/老木明显）：顺 U 的细黑线
+    crk = None
     if cracks:
         cr = b.noise(b.vec(b.mul(u, 0.5), b.mul(v, 40.0), 51.0), 1.0, 3.0)
-        crk = b.mul(b.sub(1.0, b.ss(b.op('ABSOLUTE', b.sub(cr, 0.5)), 0.0, 0.02)),
-                    b.mul(b.sub(1.0, joint), b.mul(cracks, b.lin(wear, 0.2, 0.9, 0.4, 1.0))))
-        col = b.mixc(crk, col, (0.06, 0.03, 0.02))
+        crk = b.mul(b.sub(1.0, b.ss(b.absv(b.sub(cr, 0.5)), 0.0, 0.02)),
+                    b.mul(b.sub(1.0, joint), b.mul(cracks, b.lin(wear, 0.15, 0.9, 0.35, 1.0))))
+        col = b.mixc(crk, col, (0.055, 0.028, 0.015))
 
-    # 板缝阴影 + 板下沿出檐阴影（板顶棱受光）
-    edge_shadow = b.lin(fv, 0.0, 0.46, 0.60, 1.02)
-    top_hi = b.ss(fv, 0.86, 1.0)
-    col = b.mixc(joint, col, (0.075, 0.038, 0.018))
-    col = b.shade(col, edge_shadow, 0.62, 1.0)
-    col = b.shade(col, top_hi, 1.0, 1.14)
+    # 板缝阴影 + 板下沿投影（板顶棱受光）
+    edge_shadow = b.lin(fv, 0.0, 0.42, 0.58, 1.02)
+    top_hi = b.ss(fv, 0.84, 1.0)
+    col = b.mixc(joint, col, (0.055, 0.028, 0.014))
+    col = b.shade(col, edge_shadow, 0.60, 1.0)
+    col = b.shade(col, top_hi, 1.0, 1.16)
 
     h = b.sub(1.0, joint)
-    h = b.add(h, b.mul(b.sub(0.5, b.op('ABSOLUTE', b.sub(fv, 0.35))), 0.25))
+    h = b.add(h, b.mul(b.sub(0.5, b.absv(b.sub(fv, 0.32))), 0.25))
     h = b.sub(h, b.mul(knot, 0.5))
     if camber:
-        h = b.add(h, b.mul(b.op('SINE', b.mul(fv, 3.14159)), camber))
+        h = b.add(h, b.mul(b.pisin(fv), camber))
     h = b.add(h, b.mul(b.sub(g, 0.5), 0.30))
-    if cracks:
+    if crk is not None:
         h = b.sub(h, b.mul(crk, 0.6))
     rough = b.lin(g, 0.0, 1.0, pal['rough'][0], pal['rough'][1])
     return col, h, rough
 
 
 def _b_plank_wall(b, gi, bsdf):
-    """横向木板墙：板高 20px，板缝 1px，板间色差 + 木纹 + 木节。"""
+    """横向木板墙：板高 20 cm，板缝清晰，木纹顺板长，饱和暖棕（绝不发灰白）。"""
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
-    pal = dict(dark=(0.205, 0.112, 0.052), mid=(0.390, 0.225, 0.105),
-               light=(0.585, 0.375, 0.185),
-               board_lo=(0.84, 0.84, 0.84), board_hi=(1.09, 1.06, 1.03),
-               board_hi2=(1.22, 1.12, 1.02),
-               knot=(0.105, 0.048, 0.022), rough=(0.72, 0.86))
-    col, h, rough = _wood(b, gi, u, v, px(20), pal, joint_w=px(1.1), knot_amt=1.0,
-                          camber=0.0, cracks=0.35, ring=1.0)
-    # 雨水污渍（下沿更深）
-    dirt = b.noise(b.vec(b.mul(u, 3.5), b.mul(v, 1.2), 71.0), 1.0, 5.0, 0.5)
-    col = b.mixc(b.mul(b.ss(dirt, 0.5, 0.8), b.mul(wear, 0.45)), col, (0.155, 0.095, 0.05))
-    return dict(color=col, rough=rough, normal=b.bump(h, 0.70, 0.045), spec=0.35)
+    pal = dict(dark=(0.048, 0.020, 0.008), mid=(0.190, 0.078, 0.030),
+               light=(0.360, 0.158, 0.062),
+               board_lo=(0.80, 0.80, 0.80), board_hi=(1.12, 1.08, 1.03),
+               board_hi2=(1.34, 1.16, 0.98),
+               knot=(0.095, 0.042, 0.018), rough=(0.70, 0.86))
+    col, h, rough = _wood(b, gi, u, v, uv_cm(20.0), pal, joint_w=uv_cm(1.4),
+                          knot_amt=1.0, cracks=0.35, grain_len=1.0)
+    dirt = b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 1.1), 71.0), 1.0, 5.0, 0.5)
+    col = b.mixc(b.mul(b.ss(dirt, 0.52, 0.82), b.mul(wear, 0.40)), col, (0.105, 0.052, 0.024))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.80, uv_cm(2.0)), spec=0.33)
 
 
 def _b_timber(b, gi, bsdf):
-    """深色木骨梁：手斧棱面 + 深色 + 纵向干裂（配抹灰）。"""
+    """深色木骨/手斧梁：大尺度斧劈棱面 + 顺梁长纤维 + 纵向干裂。
+
+    木骨构件在游戏尺寸下只有 8~20 px 宽，木纹本身看不清 —— 靠**斧劈棱面**
+    （几个大平面各自的明暗差）才能读出"一根方木"。
+    """
+    wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
-    pal = dict(dark=(0.165, 0.082, 0.034), mid=(0.300, 0.168, 0.075),
-               light=(0.430, 0.258, 0.122),
-               board_lo=(0.88, 0.88, 0.88), board_hi=(1.12, 1.08, 1.04),
-               knot=(0.045, 0.022, 0.010), rough=(0.78, 0.90))
-    col, h, rough = _wood(b, gi, u, v, px(60), pal, joint_w=px(2.0), knot_amt=0.6,
-                          camber=0.45, cracks=1.0, ring=0.5)
-    # 斧痕：横向的浅棱面
-    ax = b.noise(b.vec(b.mul(u, 0.7), b.mul(v, 1.1), 101.0), 1.0, 2.0)
-    col = b.shade(col, b.lin(ax, 0.3, 0.7, 0.0, 1.0), 0.86, 1.14)
-    h = b.add(h, b.mul(b.sub(ax, 0.5), 0.55))
-    return dict(color=col, rough=rough, normal=b.bump(h, 0.60, 0.045), spec=0.3)
+    pal = dict(dark=(0.034, 0.016, 0.007), mid=(0.130, 0.062, 0.026),
+               light=(0.250, 0.132, 0.056),
+               board_lo=(0.86, 0.86, 0.86), board_hi=(1.14, 1.10, 1.05),
+               board_hi2=(1.22, 1.05, 0.94),
+               knot=(0.030, 0.014, 0.007), rough=(0.76, 0.90))
+    col, h, rough = _wood(b, gi, u, v, uv_cm(80.0), pal, joint_w=uv_cm(2.0),
+                          knot_amt=0.5, camber=0.40, cracks=1.0, grain_len=3.0)
+    # 斧劈棱面（11 cm 面，逐面明暗差 → 读得出方木的棱）
+    hd, hc, _hp = b.voro(b.vec(b.mul(u, 1.0 / uv_cm(11.0)), b.mul(v, 1.0 / uv_cm(11.0)), 3.0),
+                         scale=1.0, randomness=0.85)
+    r1, _r2, _r3 = b.sep_c(hc)
+    col = b.shade(col, r1, 0.62, 1.44)
+    # 斧痕（顺梁的长向浅棱，沿 U 或 V 各一半 → 竖梁横梁都成立）
+    ax = b.noise(b.vec(b.mul(u, 1.4), b.mul(v, 0.5), 101.0), 1.0, 3.0)
+    ax2 = b.noise(b.vec(b.mul(u, 0.5), b.mul(v, 1.4), 103.0), 1.0, 3.0)
+    col = b.mul_c(col, b.lin(b.mixf(0.5, ax, ax2), 0.30, 0.72, 0.84, 1.16))
+    h = b.add(h, b.mul(b.sub(r1, 0.5), 0.90))
+    _ = hd
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(2.4)), spec=0.30)
 
 
+# ============================================================ 抹灰
 def _b_plaster(b, gi, bsdf):
-    """抹灰墙：抹刀痕（拉长弧纹）+ 2px 砂粒 + 剥落斑（露砖红底）+ 细裂。
+    """暖白石灰浆抹灰：**只做明度微差，禁止锈褐色斑**；剥落成"片状露底灰"。
 
-    颗粒尺度必须 ≥2px 才在 32px/格下可见（此前用 scale 170 → 0.19px，等于没做）。
+    旧版两宗罪：① 底色偏灰白（0.80,0.75,0.62 在冷环境光下读成脏灰）；
+    ② 剥落斑用锈褐 substrate + 随机阈值 → 低 wear 也满墙随机褐点。
+    新版：底色暖米白；mottling 走明度不走色相；剥落 = 低频 2 尺度阈值合成的
+    连片区域（片状、有边缘棱、有深度），底层是**中性灰浆**（不发褐）。
     """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
 
-    base = (0.80, 0.75, 0.62)                                  # 米白抹灰
-    # 抹刀痕：低频 + 沿 U 拉长的刀弧
+    base = (0.680, 0.632, 0.520)          # 暖米白（略偏黄，别偏灰）
+    # 抹刀痕：低频 + 沿 U 拉长的刀弧（只做明度）
     trowel = b.noise(b.vec(b.mul(u, 0.9), b.mul(v, 2.6), 3.0), 1.0, 4.0, 0.6)
     arc = b.noise(b.vec(b.mul(u, 0.55), b.mul(v, 4.5), 17.0), 1.0, 3.0, 0.75)
     paddle = b.mixf(0.45, trowel, arc)
-    col = b.mul_c(base, b.lin(paddle, 0.22, 0.82, 0.845, 1.115))
+    col = b.mul_c(base, b.lin(paddle, 0.22, 0.82, 0.855, 1.125))
 
-    # 砂粒（2.3px）
-    grain = b.noise(b.vec(b.mul(u, 14.0), b.mul(v, 14.0), 5.0), 1.0, 3.0, 0.6)
-    col = b.mul_c(col, b.lin(grain, 0.22, 0.78, 0.92, 1.07))
+    # 砂粒（2~3 px，太细在 76 px/m 下看不见）
+    grain = b.noise(b.vec(b.mul(u, 13.0), b.mul(v, 13.0), 5.0), 1.0, 3.0, 0.6)
+    col = b.mul_c(col, b.lin(grain, 0.22, 0.78, 0.905, 1.095))
+    # 抹刀压光的斜向拉丝（灰浆活儿的"光带"）
+    trow = b.noise(b.vec(b.mul(u, 1.6), b.mul(v, 7.0), 19.0), 1.0, 4.0, 0.6)
+    col = b.mul_c(col, b.lin(trow, 0.30, 0.78, 0.93, 1.08))
+    # 灰浆的厚薄斑（5~15cm 的明度起伏：真实石灰墙靠这个"活"起来）
+    blob = b.noise(b.vec(b.mul(u, 3.4), b.mul(v, 3.4), 23.0), 1.0, 5.0, 0.55)
+    col = b.mul_c(col, b.lin(blob, 0.25, 0.75, 0.905, 1.10))
 
-    # 剥落斑：大块、边界参差、露砖红底灰；斑内自身有色差
-    spall = b.noise(b.vec(b.mul(u, 0.75), b.mul(v, 0.75), 23.0), 1.0, 5.0, 0.65)
-    spall2 = b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 3.2), 29.0), 1.0, 4.0)
-    sp = b.mixf(0.22, spall, spall2)
-    thr = b.lin(wear, 0.0, 1.0, 0.665, 0.590)
-    mask = b.ss(sp, thr, b.add(thr, 0.035))
-    rim = b.mul(b.ss(sp, b.sub(thr, 0.025), thr),
-                b.sub(1.0, b.ss(sp, thr, b.add(thr, 0.02))))
-    sub_tex = b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 3.2), 41.0), 1.0, 4.0)        # 底层灰浆斑
-    substrate = b.mul_c((0.300, 0.170, 0.110), b.lin(sub_tex, 0.25, 0.75, 0.80, 1.18))
+    # 剥落：片状（低频大斑 + 中频边界参差），露中性灰浆底
+    sp1 = b.noise(b.vec(b.mul(u, 0.65), b.mul(v, 0.65), 23.0), 1.0, 5.0, 0.6)
+    sp2 = b.noise(b.vec(b.mul(u, 3.0), b.mul(v, 3.0), 29.0), 1.0, 4.0)
+    sp = b.mixf(0.25, sp1, sp2)
+    thr = b.lin(wear, 0.0, 1.0, 0.735, 0.600)
+    mask = b.ss(sp, thr, b.add(thr, 0.045))
+    rim = b.mul(b.ss(sp, b.sub(thr, 0.030), thr),
+                b.sub(1.0, b.ss(sp, thr, b.add(thr, 0.022))))
+    sub_tex = b.noise(b.vec(b.mul(u, 3.4), b.mul(v, 3.4), 41.0), 1.0, 4.0)
+    substrate = b.mul_c((0.400, 0.378, 0.345), b.lin(sub_tex, 0.25, 0.75, 0.78, 1.20))
     col = b.mixc(mask, col, substrate)
-    col = b.mixc(b.mul(rim, 0.85), col, (0.94, 0.91, 0.82))    # 剥落边缘露白
-    col = b.mul_c(col, b.lin(mask, 0.0, 1.0, 1.0, 0.92))
+    col = b.mixc(b.mul(rim, 0.9), col, (0.760, 0.735, 0.665))   # 剥落边缘露白（石灰茬）
+    col = b.mul_c(col, b.lin(mask, 0.0, 1.0, 1.0, 0.90))
 
-    # 细裂（竖向拉长，2px 宽）
+    # 细裂（竖向拉长，2 px 宽）
     cr = b.noise(b.vec(b.mul(u, 1.8), b.mul(v, 9.0), 37.0), 1.0, 4.0, 0.4)
-    crack = b.mul(b.sub(1.0, b.ss(b.op('ABSOLUTE', b.sub(cr, 0.5)), 0.0, 0.010)),
-                  b.mul(b.sub(1.0, mask), b.lin(wear, 0.0, 1.0, 0.25, 0.85)))
-    col = b.mixc(crack, col, (0.30, 0.25, 0.19))
+    crack = b.mul(b.sub(1.0, b.ss(b.absv(b.sub(cr, 0.5)), 0.0, 0.010)),
+                  b.mul(b.sub(1.0, mask), b.lin(wear, 0.0, 1.0, 0.20, 0.85)))
+    col = b.mixc(crack, col, (0.330, 0.310, 0.280))
 
-    # 泛潮 / 脏（低频斑，不依赖绝对坐标）
-    damp = b.noise(b.vec(b.mul(u, 1.8), b.mul(v, 1.8), 53.0), 1.0, 4.0, 0.5)
-    col = b.mixc(b.mul(b.ss(damp, 0.55, 0.85), b.mul(wear, 0.35)), col, (0.52, 0.47, 0.37))
+    # 泛潮：**只压明度，不换色相**（这是"禁褐斑"的纪律）
+    damp = b.noise(b.vec(b.mul(u, 1.6), b.mul(v, 1.6), 53.0), 1.0, 4.0, 0.5)
+    col = b.mul_c(col, b.lin(b.mul(b.ss(damp, 0.55, 0.85), b.mul(wear, 0.45)),
+                             0.0, 1.0, 1.0, 0.86))
 
     h = b.add(0.75, b.mul(b.sub(paddle, 0.5), 0.42))
     h = b.add(h, b.mul(b.sub(grain, 0.5), 0.30))
-    h = b.sub(h, b.mul(mask, 0.65))
+    h = b.sub(h, b.mul(mask, 0.70))
     h = b.add(h, b.mul(rim, 0.30))
     h = b.sub(h, b.mul(crack, 0.35))
+    rough = b.lin(paddle, 0.0, 1.0, 0.86, 0.95)
+    rough = b.add(rough, b.mul(grain, 0.03))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.50, uv_cm(3.0)), spec=0.26)
 
-    rough = b.lin(paddle, 0.0, 1.0, 0.85, 0.94)
-    rough = b.add(rough, b.mul(grain, 0.04))
-    return dict(color=col, rough=rough, normal=b.bump(h, 0.45, 0.030), spec=0.28)
 
-
-def _b_stone(b, gi, bsdf, light=False):
-    """石砌：**错缝矩形石块 + 缝位抖动**（不用 Voronoi 细胞 —— 那会读成"龟裂/鹅卵石"）。
+# ============================================================ 石砌
+def _b_masonry(b, gi, cfg):
+    """石砌通用：**大块料石 + 深砂浆缝 + 上缘受光/下缘暗的倒角读法**。
 
     石砌的读法靠三件事：
-      1) 矩形料石 + 错缝(半块) + 缝位被逐格噪声抖动 → 不规则但边是直的；
-      2) 逐块明暗/冷暖差（整数格索引哈希，可靠）；
-      3) 灰浆缝窄而深 + 石块棱边一圈受光倒角 + 缝内苔藓。
+      1) 矩形料石 + 错缝 + 缝位逐块抖动 → 不规则但边是直的；
+      2) 逐块明暗/冷暖差（整数格哈希，可靠、确定性）；
+      3) 缝要**深**：缝内 AO + 缝底比石面暗得多 + 上缘一圈受光倒角。
     """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
+    cw, ch, jw = cfg['cw'], cfg['ch'], cfg['jw']
+    c = _cells(b, u, v, cw, ch, stagger=0.5, seed=cfg['seed'], jitter=cfg['jitter'])
+    fu, fv, r1, r2, r3, d = c['fu'], c['fv'], c['rand'], c['rand2'], c['rand3'], c['d']
 
-    if light:      # 白石饰（线脚/雕饰用，细料石）
-        cw, chh, jw, jitter = px(16), px(10), px(0.9), 0.20
-        c_lo, c_hi, c_warm = (0.475, 0.462, 0.432), (0.795, 0.772, 0.705), (0.735, 0.698, 0.618)
-        c_mortar = (0.360, 0.348, 0.325)
-        moss_amt = 0.10
-    else:          # 石砌（深）：粗料石
-        cw, chh, jw, jitter = px(30), px(18), px(1.4), 0.32
-        c_lo, c_hi, c_warm = (0.175, 0.170, 0.163), (0.545, 0.525, 0.478), (0.487, 0.428, 0.352)
-        c_mortar = (0.165, 0.160, 0.150)
-        moss_amt = 0.85
-
-    sv = b.div(v, chh)
-    row = b.op('FLOOR', sv)
-    fv0 = b.sub(sv, row)
-    rrand = b.white(b.vec(row, 5.0, 2.0))
-    su = b.add(b.div(u, cw), b.mul(rrand, 0.5))               # 错缝
-    col = b.op('FLOOR', su)
-    fu0 = b.sub(su, col)
-    # 缝位抖动（每格一个值：整数格索引 → 噪声格点，格内恒定）
-    jx = b.noise(b.vec(b.mul(col, 6.0), b.mul(row, 6.0), 3.0), 1.0, 2.0)
-    jy = b.noise(b.vec(b.mul(col, 6.0), b.mul(row, 6.0), 11.0), 1.0, 2.0)
-    fu = b.add(fu0, b.mul(b.sub(jx, 0.5), jitter))
-    fv = b.add(fv0, b.mul(b.sub(jy, 0.5), b.mul(jitter, 0.5)))
-    du = b.mul(b.op('MINIMUM', fu, b.sub(1.0, fu)), cw)
-    dv = b.mul(b.op('MINIMUM', fv, b.sub(1.0, fv)), chh)
-    d = b.op('MINIMUM', du, dv)                                # 到缝的距离（单位）
-
-    r1 = b.white(b.vec(col, row, 1.0))
-    r2 = b.white(b.vec(col, row, 2.0))
-    r3 = b.white(b.vec(col, row, 3.0))
-    face = b.ss(d, b.mul(jw, 0.35), jw)
+    face = b.ss(d, b.mul(jw, 0.30), jw)                  # 1 = 石面
     seam = b.sub(1.0, face)
-    chamfer = b.mul(b.ss(d, jw, b.mul(jw, 1.7)),
-                    b.sub(1.0, b.ss(d, b.mul(jw, 1.7), b.mul(jw, 3.4))))
+    # 倒角：**上缘微弱受光 / 下缘暗**（4 边等强会读成"瓷砖"，过强会读成"条纹纸"）
+    top_hi = b.ss(fv, 0.86, 0.99)
+    bot_dk = b.sub(1.0, b.ss(fv, 0.05, 0.22))
 
-    # 石面色：逐块明暗/冷暖 + 块内斑驳
-    mott = b.noise(b.vec(b.mul(u, 8.0), b.mul(v, 8.0), 7.0), 1.0, 6.0, 0.6)
-    col_c = b.mixc(r1, c_lo, c_hi)
-    col_c = b.mixc(b.lin(r2, 0.78, 0.98, 0.0, 0.62), col_c, b.mul_c(col_c, 0.60))
-    col_c = b.mixc(b.lin(r3, 0.0, 0.24, 0.0, 0.55), col_c, c_warm)
-    col_c = b.mixc(b.lin(mott, 0.28, 0.78, 0.0, 0.5), col_c, b.mul_c(col_c, 0.74))
-    col_c = b.shade(col_c, chamfer, 1.0, 1.26)
-    # 灰浆缝
-    mort = b.mixc(b.noise(b.vec(b.mul(u, 13.0), b.mul(v, 13.0), 11.0), 1.0, 4.0),
-                  b.mul_c(c_mortar, 0.70), c_mortar)
-    col_c = b.mixc(face, mort, col_c)
-    # 风化脏斑
+    mott = b.noise(b.vec(b.mul(u, 5.0), b.mul(v, 5.0), 7.0), 1.0, 6.0, 0.6)
+    col = b.mixc(r1, cfg['lo'], cfg['hi'])
+    col = b.mixc(b.lin(r2, 0.78, 0.98, 0.0, 0.58), col, b.mul_c(col, 0.66))   # 深石
+    col = b.mixc(b.lin(r3, 0.0, 0.38, 0.0, 0.60), col, cfg['warm'])           # 暖石（约 2/5 的块偏暖）
+    col = b.mixc(b.lin(mott, 0.28, 0.78, 0.0, 0.45), col, b.mul_c(col, 0.78))  # 石面斑驳
+    col = b.shade(col, top_hi, 1.0, cfg['top_light'])
+    col = b.shade(col, bot_dk, cfg['bot_dark'], 1.0)
+    # 砂浆缝（缝底深、缝内 AO）
+    mort = b.mixc(b.noise(b.vec(b.mul(u, 12.0), b.mul(v, 12.0), 11.0), 1.0, 4.0),
+                  b.mul_c(cfg['mortar'], 0.72), cfg['mortar'])
+    col = b.mixc(face, mort, col)
+    col = b.mixc(b.mul(seam, 0.85), b.mul_c(col, cfg['ao']), col)
+    # 风化脏斑（压明度）
     wea = b.noise(b.vec(b.mul(u, 1.8), b.mul(v, 2.2), 29.0), 1.0, 5.0, 0.5)
-    col_c = b.mixc(b.mul(b.ss(wea, 0.50, 0.80), b.lin(wear, 0.0, 1.0, 0.15, 0.62)), col_c,
-                   b.mul_c(col_c, 0.58))
+    col = b.mixc(b.mul(b.ss(wea, 0.50, 0.80), b.lin(wear, 0.0, 1.0, 0.12, 0.55)),
+                 col, b.mul_c(col, 0.66))
     # 缝内苔藓
-    moss = b.noise(b.vec(b.mul(u, 4.0), b.mul(v, 4.0), 43.0), 1.0, 5.0, 0.6)
-    col_c = b.mixc(b.mul(b.mul(b.ss(moss, 0.46, 0.68), b.pow(seam, 0.6)),
-                         b.mul(wear, moss_amt)), col_c, (0.205, 0.245, 0.120))
-    grn = b.noise(b.vec(b.mul(u, 15.0), b.mul(v, 15.0), 3.0), 1.0, 4.0)
-    col_c = b.mul_c(col_c, b.lin(grn, 0.25, 0.75, 0.94, 1.06))
+    if cfg['moss'] > 0.0:
+        moss = b.noise(b.vec(b.mul(u, 4.0), b.mul(v, 4.0), 43.0), 1.0, 5.0, 0.6)
+        col = b.mixc(b.mul(b.mul(b.ss(moss, 0.46, 0.68), b.pow(seam, 0.6)),
+                           b.mul(wear, cfg['moss'])), col, (0.180, 0.215, 0.100))
+    grn = b.noise(b.vec(b.mul(u, 16.0), b.mul(v, 16.0), 3.0), 1.0, 4.0)    # 2px 石面颗粒
+    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.95, 1.05))
 
-    # 高度：逐块高低 + 石面平台 + 深缝 + 棱边倒角
-    h = b.add(b.mul(face, b.lin(b.mixf(0.5, r1, r3), 0.0, 1.0, 0.72, 1.0)),
+    h = b.add(b.mul(face, b.lin(r1, 0.0, 1.0, 0.72, 1.0)),
               b.mul(b.sub(mott, 0.5), 0.16))
-    h = b.add(h, b.mul(chamfer, 0.28))
-    h = b.sub(h, b.mul(seam, 1.15))
+    h = b.add(h, b.mul(top_hi, 0.22))
+    h = b.sub(h, b.mul(bot_dk, 0.16))
+    h = b.sub(h, b.mul(seam, 1.30))
     h = b.add(h, b.mul(b.sub(grn, 0.5), 0.10))
+    rough = b.add(b.lin(mott, 0.0, 1.0, 0.78, 0.93), b.mul(seam, 0.04))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(3.2)), spec=0.24)
 
-    rough = b.add(b.lin(mott, 0.0, 1.0, 0.76, 0.92), b.mul(seam, 0.05))
-    return dict(color=col_c, rough=rough, normal=b.bump(h, 0.70, 0.04), spec=0.25)
+
+def _b_stone(b, gi, bsdf):
+    """粗料石：块长 45~70 cm、层高 28 cm、缝 2.6 cm（大块 + 深缝 + 上缘受光倒角）。"""
+    return _b_masonry(b, gi, dict(
+        cw=uv_cm(56.0), ch=uv_cm(28.0), jw=uv_cm(2.6), jitter=0.52, seed=1.0,
+        lo=(0.170, 0.164, 0.152), hi=(0.480, 0.462, 0.428),
+        warm=(0.400, 0.318, 0.225), mortar=(0.072, 0.069, 0.064),
+        top_light=1.16, bot_dark=0.78, ao=0.50, moss=0.55))
+
+def _b_white_stone(b, gi, bsdf):
+    """白石细料（线脚/雕饰/首府立面）：块长 30~45 cm、层高 16 cm、缝 1.6 cm，暖奶油色。"""
+    return _b_masonry(b, gi, dict(
+        cw=uv_cm(38.0), ch=uv_cm(16.0), jw=uv_cm(1.6), jitter=0.30, seed=11.0,
+        lo=(0.400, 0.378, 0.330), hi=(0.790, 0.752, 0.668),
+        warm=(0.700, 0.605, 0.460), mortar=(0.250, 0.240, 0.218),
+        top_light=1.12, bot_dark=0.82, ao=0.66, moss=0.10))
 
 
+# ============================================================ 红砖
 def _b_brick(b, gi, bsdf):
-    """做旧红砖：20x10px 砖 + ~1.3px 深缝 + 逐块色差 + 边缘磕蚀 + 烟熏。
-
-    要点：缝要窄而深（比砖暗很多，靠 AO 拉出凹凸），砖面要有 2~3px 的可见颗粒，
-    砖块轮廓被噪点啃出缺口 —— 否则读成"矢量色块贴图"。
+    """暖橙红砖：砖 23x8 cm、缝 1.6 cm 错缝，逐块色差（橙红/砖红/土黄/焦黑），
+    边缘磕蚀 + 砖面 2~3 px 颗粒，灰浆缝**浅灰**（浅缝才能把红砖衬出来）。
     """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
-    cw, chh = px(20), px(10)
-    c = _cells(b, u, v, cw, chh, stagger=0.5, seed=3.0)
+    cw, ch = uv_cm(23.0), uv_cm(8.0)
+    c = _cells(b, u, v, cw, ch, stagger=0.5, seed=3.0)
     fu, fv, r1, r2, d = c['fu'], c['fv'], c['rand'], c['rand2'], c['d']
 
-    # ---- 砖面轮廓：缝内 1.2px 起步 + 噪点啃边 + 缺角
-    bricky = b.ss(d, px(0.3), px(1.2))
-    erode_n = b.noise(b.vec(b.mul(u, 11.0), b.mul(v, 22.0), 1.0), 1.0, 4.0, 0.5)
-    edge_prox = b.sub(1.0, b.ss(d, px(0.4), px(3.2)))
+    bricky = b.ss(d, uv_cm(0.25), uv_cm(1.1))
+    erode_n = b.noise(b.vec(b.mul(u, 11.0), b.mul(v, 24.0), 1.0), 1.0, 4.0, 0.5)
+    edge_prox = b.sub(1.0, b.ss(d, uv_cm(0.3), uv_cm(2.6)))
     erode = b.mul(edge_prox, b.lin(erode_n, 0.38, 0.62, 0.0, 1.0))
-    corner = b.op('MAXIMUM', b.op('ABSOLUTE', b.sub(fu, 0.5)), b.op('ABSOLUTE', b.sub(fv, 0.5)))
-    chip_amt = b.mr(r2, b.sub(0.78, b.mul(wear, 0.26)), 0.97, 0.0, 1.0)
-    chip = b.mul(chip_amt, b.ss(corner, 0.36, 0.49))
-    face = b.mul(bricky, b.sub(1.0, b.op('MAXIMUM', b.mul(erode, 0.75), b.mul(chip, 0.95))))
+    corner = b.mx(b.absv(b.sub(fu, 0.5)), b.absv(b.sub(fv, 0.5)))
+    chip_amt = b.mr(r2, b.sub(0.80, b.mul(wear, 0.24)), 0.97, 0.0, 1.0)
+    chip = b.mul(chip_amt, b.ss(corner, 0.37, 0.49))
+    face = b.mul(bricky, b.sub(1.0, b.mx(b.mul(erode, 0.75), b.mul(chip, 0.9))))
 
-    # ---- 砖面色：4 路（深红/亮红/土黄/焦黑）+ 宽明暗跨度 + 2.5px 颗粒
-    grain = b.noise(b.vec(b.mul(u, 13.0), b.mul(v, 26.0), 13.0), 1.0, 5.0, 0.6)
-    col = b.mixc(r1, (0.30, 0.085, 0.045), (0.58, 0.18, 0.070))
-    col = b.mixc(b.lin(r2, 0.70, 0.90, 0.0, 0.55), col, (0.42, 0.20, 0.075))
-    col = b.mixc(b.lin(r2, 0.90, 0.97, 0.0, 0.7), col, (0.115, 0.06, 0.048))
-    col = b.mul_c(col, b.lin(r1, 0.0, 1.0, 0.70, 1.18))
-    col = b.mixc(b.lin(grain, 0.28, 0.75, 0.0, 0.55), col, b.mul_c(col, 0.70))
-    # ---- 灰浆缝（窄、深、灰）
-    mort = b.mixc(grain, (0.145, 0.135, 0.125), (0.30, 0.285, 0.265))
+    grain = b.noise(b.vec(b.mul(u, 12.0), b.mul(v, 24.0), 13.0), 1.0, 5.0, 0.6)
+    col = b.mixc(r1, (0.260, 0.072, 0.036), (0.600, 0.180, 0.062))
+    col = b.mixc(b.lin(r2, 0.66, 0.88, 0.0, 0.55), col, (0.420, 0.205, 0.070))
+    col = b.mixc(b.lin(r2, 0.90, 0.97, 0.0, 0.65), col, (0.090, 0.048, 0.036))
+    col = b.mul_c(col, b.lin(r1, 0.0, 1.0, 0.74, 1.16))
+    col = b.mixc(b.lin(grain, 0.28, 0.75, 0.0, 0.50), col, b.mul_c(col, 0.74))
+    # 灰浆缝：浅灰（衬红砖）
+    mort = b.mixc(grain, (0.230, 0.216, 0.196), (0.360, 0.342, 0.312))
     col = b.mixc(face, mort, col)
-    col = b.shade(col, bricky, 0.50, 1.0)                     # 缝内 AO（拉凹凸）
-    # ---- 烟熏 / 泛白盐霜
+    col = b.shade(col, bricky, 0.55, 1.0)                 # 缝内 AO
     soot = b.noise(b.vec(b.mul(u, 2.4), b.mul(v, 2.4), 19.0), 1.0, 5.0, 0.5)
-    col = b.mixc(b.mul(b.ss(soot, 0.42, 0.78), b.lin(wear, 0.0, 1.0, 0.2, 0.8)), col,
-                 (0.135, 0.10, 0.085))
+    col = b.mixc(b.mul(b.ss(soot, 0.44, 0.78), b.lin(wear, 0.0, 1.0, 0.18, 0.70)),
+                 col, (0.110, 0.082, 0.070))
     salt = b.noise(b.vec(b.mul(u, 5.0), b.mul(v, 5.0), 67.0), 1.0, 5.0)
     col = b.mixc(b.mul(b.mul(b.ss(salt, 0.62, 0.82),
                              b.add(b.mul(face, 0.30), b.mul(bricky, 0.20))),
-                       b.mul(wear, 0.65)),
-                 col, (0.60, 0.58, 0.54))
+                       b.mul(wear, 0.60)), col, (0.480, 0.455, 0.420))
 
     h = b.add(b.mul(face, 1.0), b.mul(r1, 0.20))
     h = b.add(h, b.mul(b.sub(grain, 0.5), 0.30))
     h = b.sub(h, b.mul(b.mul(erode, 0.6), 0.5))
     h = b.sub(h, b.mul(chip, 0.4))
-    rough = b.add(b.lin(r1, 0.0, 1.0, 0.72, 0.88), b.mul(b.sub(grain, 0.5), 0.08))
-    return dict(color=col, rough=rough, normal=b.bump(h, 0.70, 0.035), spec=0.30)
+    rough = b.add(b.lin(r1, 0.0, 1.0, 0.74, 0.90), b.mul(b.sub(grain, 0.5), 0.08))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.80, uv_cm(2.4)), spec=0.30)
 
 
+# ============================================================ 锻铁
 def _b_iron(b, gi, bsdf):
-    """铸铁：锤打棱面（逐面高低）+ 麻点气孔 + 锈斑（金属 0.9）。"""
-    wear = gi.outputs['Wear']
-    u, v = _uv(b, gi)
+    """深色锻铁：**近均匀的暗基底 + 低粗糙度 + 锤打棱面（大而柔和）+ 少量氧化斑**。
 
-    base = (0.090, 0.090, 0.100)
-    # 铸造麻点（~3px 凹坑）
-    pd, _pc, _pp = b.voro(b.vec(b.mul(u, 6.0), b.mul(v, 6.0), 7.0), scale=1.0, randomness=1.0)
-    pit = b.sub(1.0, b.ss(pd, 0.22, 0.60))
-    # 锤打棱面（~10px 平面，逐面不同朝向/高度 → 形体才读得出来）
-    hd, hc, _hp = b.voro(b.vec(b.mul(u, 2.1), b.mul(v, 2.1), 3.0), scale=1.0, randomness=0.9)
-    r1, r2, _r3 = b.sep_c(hc)
-    hammer = b.lin(hd, 0.10, 0.80, 0.0, 1.0)
-    # 表面微观粗糙
-    mic = b.noise(b.vec(b.mul(u, 12.0), b.mul(v, 12.0), 11.0), 1.0, 5.0, 0.65)
-
-    col = b.mixc(pit, b.mul_c(base, 1.15), b.mul_c(base, 2.0))
-    col = b.shade(col, b.mul(r1, 1.0), 0.72, 1.35)             # 逐面亮度（棱面反光差）
-    col = b.mul_c(col, b.lin(mic, 0.25, 0.75, 0.88, 1.14))
-    # 锈斑
-    rust = b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 3.0), 23.0), 1.0, 5.0, 0.55)
-    rust_m = b.mul(b.ss(rust, 0.48, 0.70), b.lin(wear, 0.0, 1.0, 0.25, 1.0))
-    col = b.mixc(rust_m, col, (0.265, 0.115, 0.050))
-    met = b.mixf(rust_m, 0.97, 0.20)
-    rough = b.mixf(rust_m, b.add(b.lin(mic, 0.0, 1.0, 0.26, 0.46), b.mul(b.sub(1.0, pit), 0.12)), 0.88)
-    h = b.add(b.mul(b.sub(1.0, pit), -0.55), b.mul(r2, 0.35))
-    h = b.add(h, b.mul(b.sub(mic, 0.5), 0.35))
-    h = b.sub(h, b.mul(b.mul(b.sub(1.0, hammer), 0.4), 0.6))
-    return dict(color=col, rough=rough, metal=met, normal=b.bump(h, 0.65, 0.045), spec=0.5)
-
-
-def _b_canvas(b, gi, bsdf):
-    """麻布（棚布/麻袋）：经纬织纹（2.4px）+ 粗节 + 污渍。
-
-    注意 Wave 的 Scale 是"每单位几个波段"，不是周期长度：周期 2.4px → Scale = 32/2.4 ≈ 13.3。
+    旧版读成"水泥砾石"的原因：基底色差过大（逐面 0.72~1.35）+ 高频坑点 +
+    粗糙度偏高 → 金属的高光被噪点打散。金属感来自"低粗糙度 + 平滑的大棱面反光"，
+    不是来自细节噪点。
     """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
-    wscale = PX_PER_UNIT / 3.2                                # 3.2px 一个织纹周期（规范 2~4px）
-    warp = b.wave(b.vec(u, v, 0.0), scale=wscale, bands='Y')
-    weft = b.wave(b.vec(u, v, 0.0), scale=wscale, bands='X')
-    weave = b.mul(warp, weft)
-    weave = b.lin(weave, 0.06, 0.46, 0.0, 1.0)
-    slub = b.noise(b.vec(b.mul(u, 12.0), b.mul(v, 12.0), 5.0), 1.0, 5.0, 0.6)
-    thread = b.white(b.vec(b.op('FLOOR', b.mul(u, 16.0)), b.op('FLOOR', b.mul(v, 16.0)), 3.0))
+    base = (0.078, 0.080, 0.090)          # 深灰蓝锻铁（不是纯黑：纯黑在 2D 立绘里读成"洞"）
 
-    col = b.ramp(b.mixf(0.35, weave, thread),
-                 [(0.10, (0.375, 0.320, 0.225)), (0.50, (0.640, 0.580, 0.440)),
-                  (0.90, (0.850, 0.795, 0.650))])
-    col = b.mixc(slub, col, b.mul_c(col, 0.72))
+    # 锤打棱面：9 cm 一块，逐块一个小角度的面（明度差小、边界柔和）
+    fd, fc, _fp = b.voro(b.vec(b.div(u, uv_cm(9.0)), b.div(v, uv_cm(9.0)), 3.0),
+                         scale=1.0, randomness=0.85)
+    fr, fg, fb = b.sep_c(fc)
+    facet = b.lin(fd, 0.05, 0.75, 0.0, 1.0)
+    col = b.mixc(b.mul(fr, 0.65), b.mul_c(base, 0.82), b.mul_c(base, 1.34))
+    col = b.mixc(b.mul(fg, 0.35), col, b.mul_c(col, 1.14))
+    # 锤痕（棱面上的浅凹，2~3 cm）
+    mic = b.noise(b.vec(b.mul(u, 26.0), b.mul(v, 26.0), 11.0), 1.0, 4.0, 0.55)
+    col = b.mul_c(col, b.lin(mic, 0.25, 0.75, 0.92, 1.12))
+
+    # 氧化：只在缝/边角少量（保持金属主体干净）
+    ox = b.noise(b.vec(b.mul(u, 2.2), b.mul(v, 2.6), 23.0), 1.0, 5.0, 0.55)
+    ox_m = b.mul(b.ss(ox, 0.58, 0.76), b.lin(wear, 0.0, 1.0, 0.10, 0.75))
+    col = b.mixc(ox_m, col, (0.185, 0.082, 0.038))
+    met = b.mixf(ox_m, 0.95, 0.35)
+    rough = b.mixf(ox_m, b.add(b.lin(facet, 0.0, 1.0, 0.26, 0.40),
+                               b.mul(b.sub(mic, 0.5), 0.06)), 0.82)
+
+    h = b.add(b.mul(facet, 0.35), b.mul(fb, 0.05))
+    h = b.add(h, b.mul(b.sub(mic, 0.5), 0.22))
+    return dict(color=col, rough=rough, metal=met,
+                normal=b.bump(h, 0.45, uv_cm(2.0)), spec=0.55)
+
+
+# ============================================================ 原木墙
+def _b_log_wall(b, gi, bsdf):
+    """原木横叠墙：圆木径 26 cm —— 长向弧面（缝间压暗 + 中央受光）+ 顺纹 + 节子 + 缝内填泥。"""
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    d = uv_cm(26.0)
+    sv, row, fv, rr1, rr2 = _rows(b, v, d)
+    prof = b.pow(b.pisin(fv), 0.65)                # 0 缝 / 1 木心（圆木剖面）
+    seam = b.sub(1.0, prof)
+
+    # 顺纹（沿 U 的长木纹）+ 节子
+    grain = b.noise(b.vec(b.mul(u, 0.9), b.mul(v, 26.0), 7.0), 1.0, 6.0, 0.6)
+    grain2 = b.noise(b.vec(b.mul(u, 0.4), b.mul(v, 52.0), 19.0), 1.0, 4.0)
+    g = b.mixf(0.5, grain, grain2)
+    kd, _kc, _kp = b.voro(b.vec(b.mul(u, 1.4), b.mul(v, 1.4), 31.0), scale=1.0, randomness=1.0)
+    gate = b.mr(b.h2(b.flr(b.mul(u, 1.4)), b.flr(b.mul(v, 1.4)), 31.0), 0.80, 0.90, 0.0, 1.0)
+    knot = b.mul(b.sub(1.0, b.ss(kd, 0.05, 0.20)), gate)
+
+    col = b.ramp(g, [(0.24, (0.078, 0.034, 0.012)), (0.52, (0.240, 0.118, 0.042)),
+                     (0.82, (0.430, 0.238, 0.096))])
+    col = b.mixc(rr1, b.mul_c(col, 0.84), b.mul_c(col, 1.12))       # 逐根色差
+    col = b.mixc(rr2, col, b.mul_c(col, 0.90))
+    col = b.shade(col, prof, 0.55, 1.12)                            # 圆木弧面明暗
+    col = b.mixc(knot, col, (0.048, 0.022, 0.009))
+    col = b.mixc(b.mul(seam, 0.80), b.mul_c(col, 0.30), col)        # 缝间深阴影
+    # 缝内填泥/苔（原木墙的"chinking"）
+    mud = b.noise(b.vec(b.mul(u, 7.0), b.mul(v, 7.0), 47.0), 1.0, 4.0)
+    col = b.mixc(b.mul(seam, 0.75), b.mixc(mud, (0.215, 0.178, 0.128), (0.170, 0.160, 0.072)), col)
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 2.2), b.mul(v, 2.2), 59.0), 1.0, 5.0),
+                            0.58, 0.84), b.mul(wear, 0.35)), col, b.mul_c(col, 0.72))
+
+    h = b.add(b.mul(prof, 0.95), b.mul(b.sub(g, 0.5), 0.30))
+    h = b.sub(h, b.mul(seam, 1.10))
+    h = b.sub(h, b.mul(knot, 0.5))
+    rough = b.lin(g, 0.0, 1.0, 0.78, 0.92)
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(4.0)), spec=0.28)
+
+
+# ============================================================ 编条篱 / 泥笆
+def _b_wattle(b, gi, bsdf):
+    """编条篱（wattle & daub）：细木条立桩 + 横编条压一挑一 + 泥填缝。"""
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    sw, wh = uv_cm(2.8), uv_cm(9.0)
+
+    ss_ = b.div(u, sw)
+    si = b.flr(ss_)
+    fu = b.sub(ss_, si)
+    stake = b.pow(b.pisin(fu), 0.45)                  # 立桩（竖直细木条）
+    ws = b.div(v, wh)
+    wi = b.flr(ws)
+    fv = b.sub(ws, wi)
+    withy = b.pow(b.pisin(fv), 0.5)                   # 横编条
+    over = b.step(b.frc(b.mul(b.add(si, wi), 0.5)), 0.5)   # 压一挑一
+
+    srand = b.h1(si, 13.0)
+    wrand = b.h1(wi, 29.0)
+    g = b.noise(b.vec(b.mul(u, 15.0), b.mul(v, 15.0), 5.0), 1.0, 5.0, 0.5)
+
+    # 泥底（暗、微暖、斑驳）
+    daub = b.mixc(b.noise(b.vec(b.mul(u, 2.4), b.mul(v, 2.4), 41.0), 1.0, 5.0, 0.6),
+                  (0.128, 0.092, 0.055), (0.225, 0.170, 0.108))
+    col = daub
+    stake_c = b.mixc(srand, (0.160, 0.105, 0.048), (0.310, 0.205, 0.098))
+    withy_c = b.mixc(wrand, (0.225, 0.155, 0.066), (0.390, 0.272, 0.130))
+    stake_c = b.mul_c(stake_c, b.lin(g, 0.25, 0.75, 0.80, 1.15))
+    withy_c = b.mul_c(withy_c, b.lin(g, 0.25, 0.75, 0.82, 1.18))
+    col = b.mixc(stake, col, stake_c)
+    col = b.mixc(b.mul(withy, over), col, withy_c)                    # 编条在前
+    col = b.mixc(b.mul(withy, b.mul(b.sub(1.0, over), 0.55)), col,
+                 b.mul_c(withy_c, 0.55))                              # 编条在后（压暗）
+
+    h = b.add(b.mul(stake, 0.55), b.mul(b.sub(withy, 0.0), 0.0))
+    h = b.add(h, b.mul(b.mul(withy, over), 0.75))
+    h = b.add(h, b.mul(b.sub(g, 0.5), 0.30))
+    rough = b.lin(g, 0.0, 1.0, 0.86, 0.95)
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(2.4)), spec=0.18)
+
+
+# ============================================================ 麻布 / 麻袋
+def _weave(b, u, v, cell, pal, over_scale=1.0):
+    """平纹织物的"压一挑一"：返回 (col, h)。cell = 织格边长（UV）。"""
+    su = b.div(u, cell)
+    sv = b.div(v, cell)
+    iu = b.flr(su)
+    iv = b.flr(sv)
+    fu = b.sub(su, iu)
+    fv = b.sub(sv, iv)
+    warp = b.pow(b.pisin(fu), 0.5)          # 竖线（沿 V 走）
+    weft = b.pow(b.pisin(fv), 0.5)          # 横线（沿 U 走）
+    over = b.step(b.frc(b.mul(b.add(iu, iv), 0.5)), 0.5)     # 谁在上
+    tr = b.h2(iu, iv, 3.0)
+    tr2 = b.h2(iu, iv, 19.0)
+    slub = b.noise(b.vec(b.mul(u, 9.0), b.mul(v, 9.0), 5.0), 1.0, 5.0, 0.6)
+    col = b.mixc(b.mixf(0.5, tr, slub), pal['dark'], pal['mid'])
+    col = b.mixc(b.mul(tr2, 0.7), col, pal['hi'])
+    top = b.mixf(over, warp, weft)
+    col = b.shade(col, top, 0.52, 1.16)
+    h = b.mul(top, 1.0)
+    h = b.add(h, b.mul(b.sub(slub, 0.5), 0.35))
+    return col, h, slub, tr
+
+
+def _b_canvas(b, gi, bsdf):
+    """麻布（棚布/旗帜）：天然亚麻色，织纹 2.4 cm 织格（游戏尺寸下 1.8 px，
+    只留"粗布感"；靠**粗节 + 明暗跳变**读出布）。"""
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    pal = dict(dark=(0.255, 0.212, 0.140), mid=(0.545, 0.482, 0.352),
+               hi=(0.760, 0.700, 0.545))
+    col, h, slub, tr = _weave(b, u, v, uv_cm(2.4), pal)
     dirt = b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 3.2), 31.0), 1.0, 5.0, 0.5)
-    col = b.mixc(b.mul(b.ss(dirt, 0.5, 0.8), b.mul(wear, 0.45)), col, (0.38, 0.325, 0.235))
-    h = b.add(b.mul(weave, 0.65), b.mul(b.sub(slub, 0.5), 0.30))
-    return dict(color=col, rough=0.95, normal=b.bump(h, 0.80, 0.060), spec=0.12, sheen=0.2)
+    col = b.mixc(b.mul(b.ss(dirt, 0.5, 0.8), b.mul(wear, 0.45)), col, (0.330, 0.278, 0.190))
+    col = b.mixc(b.mul(b.sub(1.0, b.pisin(b.frc(b.mul(v, 0.5)))), 0.10), col, b.mul_c(col, 0.86))
+    _ = tr
+    return dict(color=col, rough=0.94, normal=b.bump(h, 0.95, uv_cm(1.2)),
+                spec=0.12, sheen=0.22, sheen_rough=0.55)
+
+
+def _b_sack(b, gi, bsdf):
+    """粗麻布（麻袋）：织格 3.4 cm 的粗黄麻，比 canvas 更粗更黄、脱线起毛。"""
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    pal = dict(dark=(0.175, 0.128, 0.058), mid=(0.430, 0.352, 0.170),
+               hi=(0.690, 0.585, 0.320))
+    col, h, slub, tr = _weave(b, u, v, uv_cm(3.4), pal)
+    fuzzy = b.noise(b.vec(b.mul(u, 30.0), b.mul(v, 30.0), 11.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(fuzzy, 0.25, 0.75, 0.86, 1.12))          # 起毛
+    col = b.mixc(b.mul(b.lin(tr, 0.0, 1.0, 0.62, 1.0), 0.25), col, b.mul_c(col, 0.70))
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 2.2), b.mul(v, 2.2), 71.0), 1.0, 5.0),
+                            0.52, 0.82), b.mul(wear, 0.45)), col, (0.185, 0.140, 0.075))
+    return dict(color=col, rough=0.96, normal=b.bump(h, 1.0, uv_cm(1.6)),
+                spec=0.10, sheen=0.30, sheen_rough=0.6)
+
+
+# ============================================================ 麻绳
+def _b_rope(b, gi, bsdf):
+    """麻绳：三股螺旋捻 —— 斜向捻纹 + 股沟 + 纤维毛刺（斜 45° 放，竖绳横绳都成立）。"""
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    pitch = uv_cm(3.6)
+    t = b.div(b.add(u, v), pitch)                     # 沿 45° 的螺旋参数
+    grp = b.frc(b.div(t, 3.0))                        # 三股分组
+    strand = b.pow(b.pisin(grp), 0.5)                 # 股的截面
+    fine = b.pisin(b.mul(t, 6.0))                     # 纤维捻线
+    fib = b.noise(b.vec(b.mul(u, 40.0), b.mul(v, 40.0), 7.0), 1.0, 4.0)
+
+    col = b.mixc(strand, (0.115, 0.078, 0.036), (0.400, 0.300, 0.150))
+    col = b.mixc(b.mul(fine, 0.35), col, b.mul_c(col, 1.20))
+    col = b.mul_c(col, b.lin(fib, 0.25, 0.75, 0.84, 1.14))
+    col = b.mixc(b.sub(1.0, b.pisin(grp)), b.mul_c(col, 0.42), col)     # 股沟
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 2.0), b.mul(v, 2.0), 23.0), 1.0, 5.0),
+                            0.58, 0.84), b.mul(wear, 0.35)), col, (0.245, 0.190, 0.100))
+    h = b.add(b.mul(strand, 0.85), b.mul(b.mul(fine, 0.5), 0.30))
+    h = b.add(h, b.mul(b.sub(fib, 0.5), 0.40))
+    return dict(color=col, rough=0.92, normal=b.bump(h, 0.95, uv_cm(1.4)),
+                spec=0.14, sheen=0.25, sheen_rough=0.6)
+
+
+# ============================================================ 玻璃 / 水 / 暗腔 / 灯
+def _b_glass_win(b, gi, bsdf):
+    """窗玻璃：深色但有微弱反射（不是纯黑板）。
+
+    深色 + roughness 0.06 → EEVEE 的射线追踪会把天空/环境反射上去，
+    于是窗格里有一层冷色微光，"玻璃"才成立；纯黑平板读起来像贴片。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    base = (0.030, 0.038, 0.046)
+    mott = b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 3.2), 13.0), 1.0, 5.0, 0.6)
+    col = b.mixc(b.lin(mott, 0.30, 0.80, 0.0, 0.55), base, b.mul_c(base, 1.9))
+    streak = b.noise(b.vec(b.mul(u, 2.0), b.mul(v, 0.8), 29.0), 1.0, 4.0)   # 斜流痕（脏玻璃）
+    col = b.mul_c(col, b.lin(streak, 0.35, 0.75, 0.82, 1.25))
+    rough = b.lin(mott, 0.0, 1.0, 0.05, 0.14)
+    rough = b.add(rough, b.mul(b.ss(streak, 0.62, 0.88), b.mul(wear, 0.35)))
+    return dict(color=col, rough=rough, metal=0.0, spec=0.85)
+
+
+def _b_water(b, gi, bsdf):
+    """水面：深色（墨绿蓝）+ 极低粗糙度 + 微涟漪法线 → 反出天光才像水。"""
+    u, v = _uv(b, gi)
+    base = (0.012, 0.030, 0.034)
+    rip = b.noise(b.vec(b.mul(u, 11.0), b.mul(v, 11.0), 17.0), 1.0, 4.0, 0.4)
+    rip2 = b.noise(b.vec(b.mul(u, 5.0), b.mul(v, 21.0), 37.0), 1.0, 4.0, 0.4)
+    col = b.mixc(b.lin(b.mixf(0.5, rip, rip2), 0.30, 0.70, 0.0, 0.5), base, (0.030, 0.070, 0.075))
+    h = b.add(b.mul(b.sub(rip, 0.5), 0.5), b.mul(b.sub(rip2, 0.5), 0.5))
+    return dict(color=col, rough=0.04, metal=0.0,
+                normal=b.bump(h, 0.25, uv_cm(2.0)), spec=0.9)
+
+
+def _b_cavity(b, gi, bsdf):
+    """室内暗腔（窗洞/门洞/炉膛内壁）：近全黑，roughness 1.0。**硬需求。**
+
+    代码里 `mat="cavity"` 大量使用；未注册时回退成浅抹灰 → 窗洞/炉膛整体发亮，
+    是"窗户像贴片、炉膛没深度"的主因。这里给一层极微弱的低频色差
+    （0.02~0.05），让它读作"有纵深的黑"而不是平面黑板。
+    """
+    u, v = _uv(b, gi)
+    n = b.noise(b.vec(b.mul(u, 1.6), b.mul(v, 1.6), 5.0), 1.0, 4.0)
+    col = b.mul_c((0.030, 0.030, 0.035), b.lin(n, 0.25, 0.75, 0.75, 1.35))
+    return dict(color=col, rough=1.0, metal=0.0, spec=0.0)
+
+
+def _b_lamp(b, gi, bsdf):
+    """灯室/灯笼玻璃：暖色自发光 + 轻微玻璃质感。
+
+    自发光色不能给"接近白"的值：Standard 视图变换下 2.5 强度会直接把 RGB 全推过 1
+    → 渲成一块白纸。给**深橙**基色（R 过曝、G 只到 0.9），保证读成"暖黄灯火"。
+    """
+    u, v = _uv(b, gi)
+    n = b.noise(b.vec(b.mul(u, 6.0), b.mul(v, 6.0), 9.0), 1.0, 4.0)
+    mott = b.lin(n, 0.25, 0.75, 0.62, 1.06)
+    col = b.mul_c((0.560, 0.240, 0.075), mott)
+    # 自发光色跟着斑纹走（而不是恒定色值）→ 灯罩上仍有"玻璃/火苗"的层次。
+    # 色值必须够深：Standard 视图变换下 emit*strength 一旦 RGB 全部过 1 就是一块白纸。
+    emit = b.mul_c((1.00, 0.30, 0.055), b.lin(n, 0.25, 0.75, 0.80, 1.12))
+    return dict(color=col, rough=0.16, metal=0.0, spec=0.7,
+                emit=emit, emit_str=2.5)
+
+
+# ============================================================ 地面 / 植被
+def _b_ground(b, gi, bsdf):
+    """地面：暖米沙色 + 低频色斑 + 稀疏草簇（15 cm）+ 细碎石粒（5 cm）。
+
+    ground 是**巨大平面**且 UV 是世界坐标 / 32，所以材质是"世界空间程序纹理"：
+    尺度必须按米标定，否则草簇会密到糊成噪点（这就是回退纯色死白之外最常见的坑）。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    base = (0.680, 0.560, 0.395)                     # 暖沙（略偏黄）
+    # 大尺度低频色斑（1~3 m）
+    patch = b.noise(b.vec(b.mul(u, 0.45), b.mul(v, 0.45), 3.0), 1.0, 4.0)
+    col = b.mul_c(base, b.lin(patch, 0.25, 0.78, 0.82, 1.12))
+    patch2 = b.noise(b.vec(b.mul(u, 1.3), b.mul(v, 1.3), 7.0), 1.0, 5.0)
+    col = b.mul_c(col, b.lin(patch2, 0.25, 0.78, 0.90, 1.08))
+    # 土粒（3~8 cm）
+    grain = b.noise(b.vec(b.mul(u, 9.0), b.mul(v, 9.0), 11.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(grain, 0.2, 0.8, 0.90, 1.09))
+    # 细碎石粒：5 cm 格，少数格里有石子
+    pd, _pc, _pp = b.voro(b.vec(b.mul(u, 8.4), b.mul(v, 8.4), 9.0), scale=1.0, randomness=0.95)
+    pcell = b.h2(b.flr(b.mul(u, 8.4)), b.flr(b.mul(v, 8.4)), 23.0)
+    peb = b.mul(b.ss(pcell, 0.74, 0.82), b.sub(1.0, b.ss(pd, 0.30, 0.72)))
+    peb_c = b.mixc(b.h1(b.flr(b.mul(u, 8.4)), 31.0), (0.300, 0.285, 0.255), (0.520, 0.500, 0.460))
+    col = b.mixc(b.mul(peb, 0.85), col, peb_c)
+    # 稀疏草簇：15 cm 簇斑 + 2 cm 草叶
+    tuft = b.ss(b.noise(b.vec(b.mul(u, 2.8), b.mul(v, 2.8), 71.0), 1.0, 4.0), 0.50, 0.68)
+    tuft2 = b.ss(b.noise(b.vec(b.mul(u, 5.6), b.mul(v, 5.6), 77.0), 1.0, 4.0), 0.48, 0.72)
+    tm = b.mul(tuft, b.mixf(0.4, 1.0, tuft2))
+    blade = b.noise(b.vec(b.mul(u, 18.0), b.mul(v, 18.0), 83.0), 1.0, 4.0)
+    bm = b.mul(b.ss(blade, 0.50, 0.74), b.lin(tm, 0.2, 0.9, 0.0, 1.0))
+    grass_c = b.mixc(b.lin(blade, 0.3, 0.8, 0.0, 1.0),
+                     (0.052, 0.115, 0.024), (0.165, 0.290, 0.055))
+    col = b.mixc(b.mul(bm, 0.95), col, grass_c)
+    # 草簇/石粒的接地暗影（让贴地物读得出来）
+    col = b.mul_c(col, b.lin(b.mul(tuft, 0.35), 0.0, 1.0, 1.0, 0.90))
+
+    h = b.mul(b.sub(grain, 0.5), 0.28)
+    h = b.add(h, b.mul(b.sub(blade, 0.5), b.mul(bm, 0.9)))
+    h = b.add(h, b.mul(peb, 0.35))
+    rough = b.lin(grain, 0.0, 1.0, 0.92, 0.99)
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 1.1), b.mul(v, 1.1), 91.0), 1.0, 4.0),
+                            0.55, 0.85), b.mul(wear, 0.30)), col, b.mul_c(col, 0.80))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.45, uv_cm(2.5)), spec=0.16)
+
+
+def _b_grass_tuft(b, gi, bsdf):
+    """独立草簇（供程序化散布）：整格密生草叶 + 叶梢参差 + 叶缝暗底；带 alpha 裁切。
+
+    坐标按**格内相对高度** `frc(v)` 取，所以贴到 1 格小方片上就是完整一丛，
+    贴到大平面上就是逐格重复的草丛（不会因为平面尺寸变了就整片消失）。
+    """
+    u, v = _uv(b, gi)
+    vh = b.frc(v)                         # 格内相对高度 0(根)~1(梢)
+    bw = uv_cm(2.2)                       # 草叶位宽 2.2 cm（叶占中间约一半）
+    curv = b.mul(b.sub(b.noise(b.vec(b.mul(v, 0.8), b.mul(u, 0.2), 13.0), 1.0, 3.0), 0.5),
+                 b.mul(bw, 2.4))
+    su = b.div(b.add(u, curv), bw)
+    si = b.flr(su)
+    fu = b.sub(su, si)
+    tall = b.h1(si, 7.0)                  # 逐叶高度
+    lean = b.h1(si, 31.0)                 # 逐叶倒伏
+    fu2 = b.frc(b.add(fu, b.mul(b.sub(lean, 0.5), b.mul(vh, 0.9))))
+    # 叶截面：要真的"窄"（pow 指数太高会整格都算实心 → alpha 裁不出叶缝）
+    prof = b.pisin(fu2)
+    blade = b.ss(prof, 0.42, 0.95)                  # 0/1 边缘（裁切用）
+    blade_c = b.pow(prof, 0.6)                      # 连续明暗（着色用）
+    top = b.mr(tall, 0.0, 1.0, 0.42, 0.96)          # 叶梢所在高度
+    alive = b.ss(b.sub(top, vh), 0.0, 0.05)         # 超过叶高 → 裁掉
+    lvl = b.h1(si, 53.0)
+    col = b.mixc(lvl, (0.060, 0.140, 0.028), (0.200, 0.330, 0.078))
+    col = b.mul_c(col, b.lin(blade_c, 0.0, 1.0, 0.48, 1.24))
+    col = b.mul_c(col, b.lin(vh, 0.0, 0.9, 0.60, 1.18))         # 根暗梢亮
+    # 叶缝暗底（alpha 被忽略时也读得出"一丛草"而不是一块绿板）
+    col = b.mixc(b.sub(1.0, b.mul(alive, blade)), col, (0.024, 0.042, 0.014))
+    alpha = b.mul(alive, blade)
+    h = b.mul(blade_c, 0.7)
+    return dict(color=col, rough=0.88, alpha=alpha,
+                normal=b.bump(h, 0.5, uv_cm(1.0)), spec=0.2)
+
+
+def _leaves(b, u, v, leaf_sz, pal, vein=True):
+    """阔叶簇：Voronoi 叶单元 + 逐叶色差 + 叶脉 + 叶间暗影。返回 (col, h)。"""
+    k = 1.0 / leaf_sz
+    kd, kc, kp = b.voro(b.vec(b.mul(u, k), b.mul(v, k), 5.0), scale=1.0, randomness=0.9)
+    idx = b.h2(b.flr(b.mul(u, k)), b.flr(b.mul(v, k)), 17.0)
+    col = b.mixc(idx, pal['lo'], pal['hi'])
+    col = b.mixc(b.lin(b.h1(b.flr(b.mul(u, k)), 41.0), 0.72, 0.95, 0.0, 0.6),
+                 col, b.mul_c(col, 0.62))
+    face = b.sub(1.0, b.ss(kd, 0.30, 0.95))              # 叶面/叶隙
+    if vein:
+        px_, py_, _pz = b.sep(kp)
+        vd = b.absv(b.mul(px_, 2.2))
+        vein_m = b.sub(1.0, b.ss(vd, 0.06, 0.22))
+        col = b.mixc(b.mul(vein_m, face), col, b.mul_c(col, 0.66))
+    col = b.mul_c(col, b.lin(face, 0.0, 1.0, 0.42, 1.10))
+    col = b.mul_c(col, b.lin(b.noise(b.vec(b.mul(u, 12.0), b.mul(v, 12.0), 23.0), 1.0, 4.0),
+                             0.25, 0.75, 0.86, 1.12))
+    h = b.add(b.mul(face, 0.85), b.mul(b.sub(kd, 0.5), 0.3))
+    return col, h
+
+
+def _b_foliage(b, gi, bsdf):
+    """阔叶绿植（花槽/陶罐里的丛叶）：叶 7 cm，饱和偏黄的叶绿，粗糙。"""
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    pal = dict(lo=(0.028, 0.075, 0.014), hi=(0.150, 0.320, 0.062))
+    col, h = _leaves(b, u, v, uv_cm(7.0), pal)
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 3.2), 61.0), 1.0, 5.0),
+                            0.58, 0.84), b.mul(wear, 0.30)), col, (0.180, 0.185, 0.070))  # 枯斑
+    return dict(color=col, rough=0.86, normal=b.bump(h, 0.75, uv_cm(3.0)), spec=0.22,
+                sheen=0.12, sheen_rough=0.7)
+
+
+def _b_vine(b, gi, bsdf):
+    """攀爬藤（墙根/墙面绿化）：深绿叶片 + 竖向藤蔓茎（比 foliage 更深更冷）。"""
+    u, v = _uv(b, gi)
+    pal = dict(lo=(0.018, 0.052, 0.014), hi=(0.095, 0.205, 0.048))
+    col, h = _leaves(b, u, v, uv_cm(6.0), pal)
+    # 竖向藤茎（14 cm 一根，细、暗、连续；沿 V 缓慢蛇行）
+    meander = b.noise(b.vec(b.mul(v, 0.6), 3.0, 9.0), 1.0, 3.0)
+    stem = b.pisin(b.frc(b.div(b.add(u, b.mul(b.sub(meander, 0.5), 0.14)), uv_cm(14.0))))
+    stem = b.pow(stem, 0.4)
+    col = b.mixc(stem, col, (0.085, 0.062, 0.030))
+    h = b.add(h, b.mul(stem, 0.25))
+    col = b.mul_c(col, b.lin(b.noise(b.vec(b.mul(u, 8.0), b.mul(v, 8.0), 33.0), 1.0, 4.0),
+                             0.25, 0.75, 0.86, 1.10))
+    return dict(color=col, rough=0.88, normal=b.bump(h, 0.8, uv_cm(2.6)), spec=0.20,
+                sheen=0.12, sheen_rough=0.7)
 
 
 # ============================================================ 注册表
 _BUILDERS = {
+    # ---- 原有 12 个（名字与语义不变）----
     'thatch':       (lambda b, gi, bsdf: _b_thatch(b, gi, bsdf, 'new'), '茅草（新）'),
     'thatch_old':   (lambda b, gi, bsdf: _b_thatch(b, gi, bsdf, 'old'), '茅草（旧/发霉）'),
     'tile_roof':    (_b_tile_roof, '陶瓦（筒板瓦）'),
     'slate_roof':   (_b_slate_roof, '石板瓦'),
     'plank_wall':   (_b_plank_wall, '横向木板墙'),
     'timber':       (_b_timber, '深色木骨梁'),
-    'plaster':      (_b_plaster, '抹灰墙'),
-    'stone':        (_b_stone, '石砌（深）'),
-    'white_stone':  (lambda b, gi, bsdf: _b_stone(b, gi, bsdf, True), '白石饰（细块）'),
-    'brick':        (_b_brick, '做旧红砖'),
-    'iron':         (_b_iron, '铸铁'),
+    'plaster':      (_b_plaster, '暖白抹灰'),
+    'stone':        (_b_stone, '粗料石砌'),
+    'white_stone':  (_b_white_stone, '白石细料'),
+    'brick':        (_b_brick, '暖橙红砖'),
+    'iron':         (_b_iron, '深色锻铁'),
     'canvas':       (_b_canvas, '麻布'),
+    # ---- 本轮新增（补齐缺口）----
+    'cavity':       (_b_cavity, '室内暗腔'),
+    'water':        (_b_water, '深色水面'),
+    'lamp':         (_b_lamp, '自发光灯玻璃'),
+    'straw':        (_b_straw, '散稻草'),
+    'rope':         (_b_rope, '麻绳'),
+    'sack':         (_b_sack, '粗麻袋布'),
+    'glass_win':    (_b_glass_win, '窗玻璃'),
+    'wattle':       (_b_wattle, '编条篱/泥笆'),
+    'shingle':      (_b_shingle, '木瓦'),
+    'log_wall':     (_b_log_wall, '原木横叠墙'),
+    'ground':       (_b_ground, '地面（沙土+草簇）'),
+    'grass_tuft':   (_b_grass_tuft, '独立草簇（alpha）'),
+    'foliage':      (_b_foliage, '阔叶绿植'),
+    'vine':         (_b_vine, '攀爬藤'),
 }
+
 ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
          'plank_wall', 'timber', 'plaster', 'stone',
-         'brick', 'iron', 'white_stone', 'canvas']
+         'brick', 'iron', 'white_stone', 'canvas',
+         'cavity', 'water', 'lamp', 'glass_win',
+         'shingle', 'log_wall', 'straw', 'rope',
+         'sack', 'wattle', 'ground', 'grass_tuft',
+         'foliage', 'vine']
+
+#: 需要 alpha 混合的 key（裁切用贴片）
+ALPHA_KEYS = {'grass_tuft'}
+
+#: 每族的"现实特征尺寸"（cm），供 audit() 打印 texel density 对照
+FEATURES = {
+    'thatch':      [("草茎宽", 2.8), ("细茎宽", 1.5), ("草层高", 27.0), ("一撮（9 茎）", 25.0)],
+    'thatch_old':  [("草茎宽", 2.8), ("草层高", 27.0), ("霉斑", 25.0)],
+    'tile_roof':   [("瓦宽", 15.0), ("每排露高", 16.0), ("瓦垄拱高", 2.5), ("同排缝", 1.5)],
+    'slate_roof':  [("石板宽", 26.0), ("每排露高", 13.0), ("上排投影渐变", 6.5), ("竖缝", 1.4)],
+    'plank_wall':  [("板高", 20.0), ("板缝", 1.4), ("木节", 6.0), ("木纹周期", 11.0)],
+    'timber':      [("斧劈棱面", 11.0), ("干裂", 2.0), ("木纹周期", 26.0)],
+    'plaster':     [("砂粒", 2.5), ("灰浆厚薄斑", 12.0), ("抹刀弧", 30.0), ("剥落片", 25.0), ("细裂", 2.0)],
+    'stone':       [("块长", 56.0), ("层高", 28.0), ("砂浆缝", 2.6), ("倒角带", 4.0)],
+    'white_stone': [("块长", 38.0), ("层高", 16.0), ("砂浆缝", 1.6), ("倒角带", 2.6)],
+    'brick':       [("砖长", 23.0), ("砖高", 8.0), ("灰浆缝", 1.6), ("砖面颗粒", 2.6)],
+    'iron':        [("锤打棱面", 9.0), ("锤痕", 2.6), ("氧化斑", 30.0)],
+    'canvas':      [("织格", 2.4), ("粗节", 3.5), ("污渍", 40.0)],
+    'cavity':      [("（无特征：近全黑）", 0.0)],
+    'water':       [("涟漪", 4.0)],
+    'lamp':        [("（自发光，强度 2.5）", 0.0)],
+    'glass_win':   [("流痕", 30.0), ("灰斑", 12.0)],
+    'shingle':     [("木瓦宽", 16.0), ("每排露高", 18.0), ("上排投影渐变", 8.9), ("竖缝", 1.0)],
+    'log_wall':    [("原木径", 26.0), ("圆木弧面", 26.0), ("缝间填泥", 4.0)],
+    'straw':       [("草秆宽", 2.0), ("横躺散秆", 2.6), ("斜躺散秆", 3.4), ("成堆起伏", 35.0)],
+    'rope':        [("捻距", 3.6), ("股径", 1.2), ("纤维", 0.5)],
+    'sack':        [("织格", 3.4), ("粗细跳变", 6.0)],
+    'wattle':      [("立桩宽", 2.8), ("横编条距", 9.0), ("泥底斑", 25.0)],
+    'ground':      [("草簇", 15.0), ("碎石粒", 5.0), ("低频色斑", 100.0), ("土粒", 4.0)],
+    'grass_tuft':  [("草叶位宽", 2.2), ("草叶净宽", 1.1), ("草叶高(中值)", 30.0)],
+    'foliage':     [("叶片", 7.0), ("叶脉", 1.0)],
+    'vine':        [("叶片", 6.0), ("藤茎间距", 14.0)],
+}
 
 _GROUP_CACHE = {}
+_INST_CACHE = {}
+
+
+def _alive(x):
+    """Blender 场景重建（read_factory_settings）后旧 ID 会变成失效 StructRNA。"""
+    try:
+        x.name
+        return True
+    except Exception:
+        return False
+
+
+def reset_cache():
+    """清空内部缓存。**探针/脚本在 `read_factory_settings` 之后必须调用**：
+    模块级缓存会留下已被删除的 Material/NodeGroup 引用，取用时抛
+    `StructRNA of type Material has been removed`，随后静默回退纯色、纹理整片消失。
+    """
+    _GROUP_CACHE.clear()
+    _INST_CACHE.clear()
 
 
 def _get_group(key, force=False):
-    if key in _GROUP_CACHE and not force:
-        return _GROUP_CACHE[key]
+    if not force and key in _GROUP_CACHE:
+        ng = _GROUP_CACHE[key]
+        if _alive(ng):
+            return ng
+        _GROUP_CACHE.pop(key, None)
+    if key not in _BUILDERS:
+        raise KeyError("未知材质: {}（可用: {}）".format(key, ", ".join(ORDER)))
     ng = bpy.data.node_groups.new("nn_" + key, 'ShaderNodeTree')
     for nm, st, dv in (("Scale", 'NodeSocketFloat', 1.0),
                        ("Tint", 'NodeSocketColor', (1.0, 1.0, 1.0, 1.0)),
@@ -834,17 +1465,26 @@ def _get_group(key, force=False):
     b.l.new(col, bsdf.inputs['Base Color'])
     for k, name in (('rough', 'Roughness'), ('metal', 'Metallic'), ('normal', 'Normal'),
                     ('spec', 'Specular IOR Level'), ('sheen', 'Sheen Weight'),
-                    ('sheen_rough', 'Sheen Roughness')):
+                    ('sheen_rough', 'Sheen Roughness'), ('alpha', 'Alpha'),
+                    ('emit', 'Emission Color'), ('ior', 'IOR'),
+                    ('coat', 'Coat Weight'), ('trans', 'Transmission Weight')):
         if k not in res:
             continue
         v = res[k]
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             bsdf.inputs[name].default_value = v      # 常数直接设默认值
+        elif isinstance(v, (tuple, list)):
+            sock = bsdf.inputs[name]
+            sock.default_value = tuple(v) + (1.0,) if len(v) == 3 else tuple(v)
         else:
             b.l.new(v, bsdf.inputs[name])
+    if 'emit_str' in res:
+        bsdf.inputs['Emission Strength'].default_value = float(res['emit_str'])
     for k, v in (('IOR', 1.45), ('Coat Weight', 0.0), ('Diffuse Roughness', 0.0),
                  ('Thin Wall', False)):
         try:
+            if 'ior' in res and k == 'IOR':
+                continue
             bsdf.inputs[k].default_value = v
         except Exception:
             pass
@@ -864,8 +1504,22 @@ def _instance(key, name=None, scale=1.0, tint=(1.0, 1.0, 1.0), wear=0.5):
     o.location = (320, 0)
     nt.links.new(g.outputs['Shader'], o.inputs['Surface'])
     m["pbr_family"] = key
+    if key in ALPHA_KEYS:
+        _set_blend(m)
     tune(m, scale=scale, tint=tint, wear=wear)
     return m
+
+
+def _set_blend(mat):
+    """裁切材质：让 Alpha 真的生效（4.2+ 用 surface_render_method，老版用 blend_method）。"""
+    for attr, val in (('surface_render_method', 'BLENDED'),
+                      ('blend_method', 'BLEND'),
+                      ('shadow_method', 'HASHED'),
+                      ('show_transparent_back', False)):
+        try:
+            setattr(mat, attr, val)
+        except Exception:
+            pass
 
 
 def tune(mat, scale=None, tint=None, wear=None):
@@ -904,6 +1558,20 @@ mat_white_stone = _mk('white_stone')
 mat_brick = _mk('brick')
 mat_iron = _mk('iron')
 mat_canvas = _mk('canvas')
+mat_cavity = _mk('cavity')
+mat_water = _mk('water')
+mat_lamp = _mk('lamp')
+mat_straw = _mk('straw')
+mat_rope = _mk('rope')
+mat_sack = _mk('sack')
+mat_glass_win = _mk('glass_win')
+mat_wattle = _mk('wattle')
+mat_shingle = _mk('shingle')
+mat_log_wall = _mk('log_wall')
+mat_ground = _mk('ground')
+mat_grass_tuft = _mk('grass_tuft')
+mat_foliage = _mk('foliage')
+mat_vine = _mk('vine')
 
 
 def make(key, **kw):
@@ -913,28 +1581,41 @@ def make(key, **kw):
     return _instance(key, **kw)
 
 
-#: 建筑装配层（buildings.py）的材质名 → 本库注册名
+#: 建筑/道具装配层的材质名 → 本库注册名
 _ALIAS = {
     "plaster_old": "plaster",
     "wood": "plank_wall", "wood_light": "plank_wall", "wood_dark": "timber",
+    "wood_door": "plank_wall", "wood_roof": "plank_wall",
     "tile": "tile_roof", "slate": "slate_roof", "stone_dark": "stone",
+    "glass": "glass_win",
+    "log": "log_wall", "wood_shingle": "shingle",
+    "plant": "foliage", "leaf": "foliage",
 }
 
 
 def get(name):
-    """按建筑装配层的材质名取材质；未知名返回 None（便于装配层回退纯色 PBR）。"""
+    """按装配层的材质名取材质。
+
+    **任意已注册 key 都能直接取到**（buildings.py 的 `_external_material` 在名称
+    不在 alias 表时会直接调 `mod.get(name)`），未知名才返回 None（回退纯色）。
+    同名材质会被复用（避免 bpy.data 里堆同名副本）。
+    """
     key = _ALIAS.get(name, name)
     if key not in _BUILDERS:
         return None
-    return _instance(key, name=name)
+    hit = _INST_CACHE.get(name)
+    if hit is not None and _alive(hit):
+        return hit
+    m = _instance(key, name=name)
+    _INST_CACHE[name] = m
+    return m
 
 
 # ============================================================ 几何工具
 def box_project_uv(obj, uv_scale=1.0):
     """按世界坐标做盒式投影 UV：主导轴决定平面，U=水平轴，V=竖直轴（水平面取另一水平轴）。
 
-    1 UV 单位 = 1 Blender 单位 = 1 格 = 32px，与材质库尺度规范一致。
-    必须在设置完物体变换（位置/旋转）之后调用。
+    1 UV 单位 = 1 格 = 32 px；必须**在设置完物体变换（位置/旋转）之后**调用。
     """
     import bmesh
     me = obj.data
@@ -964,15 +1645,33 @@ def box_project_uv(obj, uv_scale=1.0):
     return obj
 
 
-def audit():
-    """打印材质清单与各自节点数（自检/报告用）。"""
+def features(key):
+    """该材质的现实特征尺寸清单 [(名称, 厘米), ...]（audit / 报告用）。"""
+    return list(FEATURES.get(key, []))
+
+
+def audit(verbose=False):
+    """每族的节点数 + 换算后的现实特征尺寸（texel density 自检）。
+
+    返回 [(key, 说明, nodes, features_str), ...]；verbose 时同时打印。
+    """
     rows = []
     for k in ORDER:
         ng = _get_group(k)
-        rows.append((k, _BUILDERS[k][1], len(ng.nodes), len(ng.interface.items_tree) - 1))
+        feats = []
+        for nm, cm_ in FEATURES.get(k, []):
+            if cm_ <= 0.0:
+                feats.append(nm)
+                continue
+            feats.append("%s %.1fcm/%.1fpx@1x/%.1fpx@25%%" % (
+                nm, cm_, cm_ * 0.01 / M_PER_UV * 32.0, cm_ * 0.01 / M_PER_UV * 8.0))
+        rows.append((k, _BUILDERS[k][1], len(ng.nodes), "；".join(feats)))
+    if verbose:
+        print("\n=== 材质清单（特征尺寸 = 现实尺寸 / 游戏 1:1 像素 / 25% 像素）===")
+        for r in rows:
+            print("%-12s %-14s nodes=%-4d %s" % r)
     return rows
 
 
 if __name__ == "__main__":
-    for r in audit():
-        print("{:12s} {:14s} nodes={:3d} inputs={}".format(*r))
+    audit(verbose=True)

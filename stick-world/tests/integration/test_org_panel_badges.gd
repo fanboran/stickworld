@@ -16,6 +16,7 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptOrgManager := preload("res://modules/organization/scripts/organization_manager.gd")
 const ScriptFakeRoot := preload("res://tests/helpers/org_panel_test_game_root.gd")
 const ScriptOrgPanel := preload("res://modules/organization/ui/org_panel.gd")
+const ScriptOverview := preload("res://modules/organization/ui/strategic_overview_panel.gd")
 const HealthScript := preload("res://modules/units/scripts/entity/health_component.gd")
 
 
@@ -41,6 +42,7 @@ class StubMap extends Node:
 var _runner: TestRunner
 var _api: Node = null
 var _panel: Control = null
+var _overview: Control = null
 var _stub_map: StubMap = null
 
 
@@ -51,6 +53,12 @@ func _ready() -> void:
 	_runner.add_test("树: 群龙无首标记（L2+ 空缺，红字）", _test_leaderless_mark)
 	_runner.add_test("树: 补位候选序进悬停提示（只读）", _test_tooltip_candidates)
 	_runner.add_test("详情: 概览卡含空缺警示 + 补位候选序", _test_detail_vitals)
+	_runner.add_test("OrgPanel: 选中变更发 org_selection_changed（关闭清空）", _test_selection_signal)
+	_runner.add_test("总览: 报表行含人数/状态/士气（森林缩进）", _test_overview_rows)
+	_runner.add_test("总览: report_filed → 时间线条目 + 行尾最近上报", _test_overview_timeline)
+	_runner.add_test("总览: commander_assigned → 时间线条目", _test_overview_assign)
+	_runner.add_test("总览: 标签过滤（非匹配组织不生成行）", _test_overview_tag_filter)
+	_runner.add_test("总览: 选中行仅本面板高亮", _test_overview_select_row)
 	_setup_env()
 	_runner.run()
 	print(_runner.summary())
@@ -80,6 +88,10 @@ func _setup_env() -> void:
 	add_child(panel)
 	panel.setup(fake)
 	_panel = panel
+	var overview: Control = ScriptOverview.new()
+	add_child(overview)
+	overview.setup(fake)
+	_overview = overview
 
 
 ## 造一个可解析士气的桩单位（health.morale / max_morale → ratio）
@@ -214,3 +226,138 @@ func _test_detail_vitals() -> void:
 	var text := _detail_text()
 	_runner.assert_true(text.contains("群龙无首：指挥官空缺"), "详情卡应警示空缺，实际：%s" % text)
 	_api.disband_organization(org_id)
+
+
+# ─────────────────────── UI-W4b：OrgPanel 选中信号 ───────────────────────
+
+## 选中变更导出（装配层据此联动班组卡）；关闭面板导出「无选中」。
+func _test_selection_signal() -> void:
+	var seen: Array = []
+	var cb := func(oid: String) -> void:
+		seen.append(oid)
+	_panel.org_selection_changed.connect(cb)
+	_panel.open()
+	var r: Dictionary = _api.create_organization("信令连", "MILITARY", 2, "")
+	var org_id := String(r.data.org_id)
+	_panel._refresh_tree()
+	var item := _find_item(org_id)
+	_runner.assert_not_null(item, "树应含信令连节点")
+	if item != null:
+		item.select(0)
+		_panel._on_tree_item_selected()
+		_runner.assert_true(seen.has(org_id), "选中组织应发 org_selection_changed(%s)，实际：%s" % [org_id, seen])
+	_panel.close()
+	_runner.assert_false(seen.is_empty(), "关闭应至少发一次选中变更")
+	if not seen.is_empty():
+		_runner.assert_equal(String(seen[-1]), "", "关闭面板应导出空选中（收起班组卡）")
+	_panel.org_selection_changed.disconnect(cb)
+	_api.disband_organization(org_id)
+
+
+# ─────────────────────── UI-W4b：战略总览面板 ───────────────────────
+
+## 报表行：人数（直辖/统辖）+ 状态 + 士气均值条（经在场实体表聚合）+ 森林缩进。
+func _test_overview_rows() -> void:
+	var r: Dictionary = _api.create_organization("总览连", "MILITARY", 2, "")
+	var company := String(r.data.org_id)
+	var c: Dictionary = _api.create_organization("总览排", "MILITARY", 1, company)
+	var platoon := String(c.data.org_id)
+	var u1 := _make_unit(0.4)
+	var u2 := _make_unit(0.6)
+	_api.assign_stickman(platoon, str(u1.get_instance_id()), "fighter")
+	_api.assign_stickman(platoon, str(u2.get_instance_id()), "fighter")
+	_overview.open()
+	_runner.assert_true(_overview.visible, "总览 open 后应可见")
+	var row: Control = _overview._rows.get(company, null)
+	_runner.assert_not_null(row, "L2 连报表行应生成")
+	if row == null:
+		return
+	var text := _row_text(row)
+	_runner.assert_true(text.contains("直辖 0") and text.contains("统辖 2"),
+			"报表行应含人数（直辖/统辖），实际：%s" % text)
+	_runner.assert_true(text.contains("军事"), "报表行应含标签列，实际：%s" % text)
+	_runner.assert_true(text.contains("组建中"), "报表行应含状态徽标，实际：%s" % text)
+	_runner.assert_true(text.contains("50%"),
+			"子树两成员士气 0.5 应聚合为 50%%，实际：%s" % text)
+	_runner.assert_true(_overview._rows.has(platoon), "森林子行（L1）应生成")
+	# 选中信号路径以外的选中态：面板自身高亮态字段
+	_overview._selected_org = company
+	_overview._apply_selection_visuals()
+	_runner.assert_equal(row.outline_override, StickTokens.ACCENT, "选中行应着琥珀描边")
+	_api.disband_organization(company)
+
+
+## 上报流：report_filed → 时间线条目 + 报表行尾「最近上报」原地更新（不二次门控）。
+func _test_overview_timeline() -> void:
+	var n0: int = _overview._report_cache.size()
+	var r: Dictionary = _api.create_organization("总览排乙", "MILITARY", 1, "")
+	var org_id := String(r.data.org_id)
+	_overview.open()
+	_api.file_report(org_id, {"type": "casualty_threshold",
+			"payload": {"alive": 2, "dead": 6, "total": 8, "loss_rate": 0.75}})
+	_runner.assert_equal(_overview._report_cache.size(), n0 + 1, "应新增一条时间线条目")
+	if _overview._report_cache.is_empty():
+		return
+	var top: Dictionary = _overview._report_cache[0]
+	_runner.assert_equal(String(top.get("kind", "")), "伤亡", "分组名应为伤亡")
+	_runner.assert_true(String(top.get("text", "")).contains("剩 2/8"),
+			"文案应含存活/总数，实际：%s" % String(top.get("text", "")))
+	var row: Control = _overview._rows.get(org_id, null)
+	_runner.assert_not_null(row, "该组织报表行应存在")
+	if row != null:
+		_runner.assert_true(_row_text(row).contains("最近 伤亡"),
+				"行尾最近上报应原地更新，实际：%s" % _row_text(row))
+	_api.disband_organization(org_id)
+
+
+## commander_assigned → 时间线「任命」分组（指挥变更留痕）。
+func _test_overview_assign() -> void:
+	var n0: int = _overview._report_cache.size()
+	EventBus.commander_assigned.emit("assign_probe_org", 9001)
+	_runner.assert_equal(_overview._report_cache.size(), n0 + 1, "任命事件应新增一条时间线条目")
+	if _overview._report_cache.is_empty():
+		return
+	var top: Dictionary = _overview._report_cache[0]
+	_runner.assert_equal(String(top.get("kind", "")), "任命", "分组名应为任命")
+	_runner.assert_true(String(top.get("text", "")).contains("▲#9001"),
+			"文案应含受任者 id，实际：%s" % String(top.get("text", "")))
+
+
+## 标签过滤复用 OrgPanel 语义：非匹配组织不生成行。
+func _test_overview_tag_filter() -> void:
+	var r: Dictionary = _api.create_organization("过滤连", "MILITARY", 2, "")
+	var org_id := String(r.data.org_id)
+	_overview.open()
+	_overview._on_tab_selected(1)  # 军事
+	_runner.assert_true(_overview._rows.has(org_id), "军事标签下军事组织应显示")
+	_overview._on_tab_selected(2)  # 科研
+	_runner.assert_false(_overview._rows.has(org_id), "科研标签下军事组织不应生成行")
+	_runner.assert_true(_overview._rows.is_empty(), "科研过滤下不应有匹配行（实际 %d）" % _overview._rows.size())
+	_overview._on_tab_selected(0)  # 全部
+	_runner.assert_true(_overview._rows.has(org_id), "切回全部后军事组织应重新显示")
+	_api.disband_organization(org_id)
+
+
+## 选中行：仅本面板高亮（不新造跨面板状态同步）。
+func _test_overview_select_row() -> void:
+	var r: Dictionary = _api.create_organization("选中连", "MILITARY", 2, "")
+	var org_id := String(r.data.org_id)
+	_overview.open()
+	var row: Control = _overview._rows.get(org_id, null)
+	_runner.assert_not_null(row, "选中连报表行应生成")
+	if row == null:
+		return
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	row.gui_input.emit(ev)
+	_runner.assert_equal(_overview._selected_org, org_id, "点行应记为选中组织")
+	_runner.assert_equal(row.outline_override, StickTokens.ACCENT, "选中行应着琥珀描边")
+	_api.disband_organization(org_id)
+
+
+## 行控件内全部 Label 文案拼接（报表列断言口径）
+func _row_text(row: Control) -> String:
+	var texts: Array = []
+	_collect_labels(row, texts)
+	return " ".join(texts)

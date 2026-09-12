@@ -14,6 +14,11 @@ extends StickWindow
 ## FormationPanel 保持战斗侧快捷位不并（各开各的面板，不做跨面板状态同步）。
 ## 由 SystemSetup 装配到 UIRoot.ModalOverlay 槽，open()/close() 控制可见性。
 
+# ─────────────────────────────── 信号 ────────────────────────────────
+## 选中组织变更（"" = 无选中/面板关闭）。装配层据此联动班组卡（system_setup 接线，
+## 组织模块内部导出选中态，不跨模块 get_node——UI-W2-A 遗留补全）。
+signal org_selection_changed(org_id: String)
+
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 标签栏（"" = 全部；顺序照架构 §3.2：军事/科研/工程/行政/商业/劳工/运输）
 const TABS: Array = [
@@ -72,6 +77,9 @@ var _org_api: Node = null
 var _active_tag: String = ""
 ## 选中组织 id（"" = 未选中）
 var _selected_org: String = ""
+## 选中变更信号去重（避免 open/_refresh_tree 多路径重复发同一选中）
+var _last_emitted_selection: String = ""
+var _selection_emitted: bool = false
 ## 导出的蓝图内存持有（name -> v2 data；构筑谱系/UGC 文件化挂后续任务）
 var _blueprints: Dictionary = {}
 ## 非 "" = 详情区处于「插入层级（任命统辖）」流程，值为插入位置 above/below
@@ -137,8 +145,12 @@ func _build_content() -> void:
 	# ── 顶部入口：指挥链视图（独立 StickWindow，不嵌本面板——方案 §五.2） ──
 	var top := StickKit.row(_body, 8)
 	StickKit.label(top, "组织管理", StickKit.LabelKind.SECTION)
-	var top_hint := StickKit.label(top, "树 = 编制结构；指挥链 = 命令逐跳物理旅程", StickKit.LabelKind.HINT)
+	var top_hint := StickKit.label(top, "树 = 编制结构；总览 = 全组织报表；指挥链 = 命令逐跳物理旅程", StickKit.LabelKind.HINT)
 	top_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# ── 战略总览入口（独立大面板，与指挥链并排——方案 §3.2.C） ──
+	var overview_btn := StickKit.sketch_button(top, "总览", _on_open_overview_pressed,
+			StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+	overview_btn.tooltip_text = "打开战略总览（全组织报表 + 上报流时间线）"
 	var chain_btn := StickKit.sketch_button(top, "指挥链", _on_open_chain_pressed,
 			StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_SM)
 	chain_btn.tooltip_text = "打开指挥链视图（命令沿层级逐跳跑秒 + 在途命令清单）"
@@ -206,7 +218,25 @@ func _build_content() -> void:
 
 func open() -> void:
 	_refresh_all()
+	_emit_selection_changed()
 	super.open()
+
+
+## 关闭即导出「无选中」——装配层据此收起班组卡，别让卡残留（消费既有 hide 语义）
+func close() -> void:
+	_selected_org = ""
+	_selection_emitted = false
+	_emit_selection_changed()
+	super.close()
+
+
+## 选中变更导出（去重；"" 表示无选中/关闭）。装配层 system_setup 消费。
+func _emit_selection_changed() -> void:
+	if _selection_emitted and _last_emitted_selection == _selected_org:
+		return
+	_selection_emitted = true
+	_last_emitted_selection = _selected_org
+	org_selection_changed.emit(_selected_org)
 
 
 # ─────────────────────────────── 刷新 ────────────────────────────────
@@ -266,10 +296,11 @@ func _refresh_tree() -> void:
 	_morale_cache.clear()
 	_unit_index_built = false
 	_tree.clear()
-	# 选中组织可能已被解散/重组：失效则清空选中
+	# 选中组织可能已被解散/重组：失效则清空选中（并导出——装配层据此收起班组卡）
 	if not _selected_org.is_empty() \
 			and not (_org_api.get_organization(_selected_org).get("ok", false)):
 		_selected_org = ""
+		_emit_selection_changed()
 	var fake_root := _tree.create_item()
 	if _org_api == null or not _org_api.has_method("list_root_orgs"):
 		return
@@ -800,6 +831,7 @@ func _on_tree_item_selected() -> void:
 		return
 	_selected_org = String(item.get_metadata(0))
 	_choosing_commander = false
+	_emit_selection_changed()
 	_refresh_detail()
 
 
@@ -967,3 +999,17 @@ func _on_open_chain_pressed() -> void:
 		view.call("open")
 	else:
 		_notify("指挥链视图未装配", "warn")
+
+
+# ─────────────────────────── 战略总览入口（UI-W4b）───────────────────────────
+
+## 打开战略总览面板（独立大面板，system_setup 装配；group 查找，不硬编码节点路径——
+## 与指挥链入口同纪律，组织面板与总览各归各的窗口，不做跨面板状态同步）。
+func _on_open_overview_pressed() -> void:
+	var view: Node = null
+	if get_tree() != null:
+		view = get_tree().get_first_node_in_group("strategic_overview_panel")
+	if view != null and view.has_method("open"):
+		view.call("open")
+	else:
+		_notify("战略总览未装配", "warn")

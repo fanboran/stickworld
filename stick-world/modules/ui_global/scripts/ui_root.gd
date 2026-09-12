@@ -190,17 +190,29 @@ func set_context_content(content: Control) -> void:
 		return
 	# 清空旧内容
 	for child in context_panel.get_children():
+		if not _is_context_dynamic(child):
+			continue
 		child.queue_free()
 	if content:
 		context_panel.add_child(content)
 
 
-## 清空上下文面板
+## 清空上下文面板（只清运行时动态内容）
 func clear_context() -> void:
 	if context_panel == null:
 		return
 	for child in context_panel.get_children():
+		if not _is_context_dynamic(child):
+			continue
 		child.queue_free()
+
+
+## 动态内容判定：场景（.tscn）声明的结构性槽不属动态内容，清理时跳过。
+## 槽（如 ContextPanel/SquadInspector，见 context_panel.tscn）由装配层经
+## add_to_slot 填内容，模式切换（apply_mode_panel → clear_context）不得把槽本身
+## 一起释放——否则切一次 BATTLE 模式槽就消失（owner 非空 = 场景声明节点）。
+func _is_context_dynamic(child: Node) -> bool:
+	return child.owner == null
 
 
 ## 打开模态弹窗

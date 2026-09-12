@@ -59,6 +59,7 @@ const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
 const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
 const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
 const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
+const _SquadCardScene: PackedScene = preload("res://modules/combat/ui/squad_card.tscn")
 
 var _root: GameRoot
 
@@ -97,6 +98,7 @@ func setup(root: GameRoot) -> void:
 	_setup_pause_menu_panel()
 	_setup_minimap()
 	_setup_team_ai_hud()
+	_setup_squad_card()
 	_setup_zoom_bar()
 	_setup_inventory()
 	_setup_possession_interface()
@@ -629,6 +631,25 @@ func _setup_team_ai_hud() -> void:
 		return
 	if hud.has_method("setup"):
 		hud.setup(_root.battle_director)
+
+
+# ─────────────────────────────── L1 班组卡装配（W2 · 组织界面）────────────────────────────────
+
+## 挂 L1 班组卡（combat/ui/squad_card.tscn，场景=布局唯一真相源）到 ContextPanel 的
+## SquadInspector 具名槽（槽在 context_panel.tscn 声明，UI.md §10.1 层级图），
+## 并注入 GameRoot（卡片数据自取：框选解析小队 → 编制/相位/士气 duck 取数）。
+## 显隐由卡片自管（框选到小队即有、清空即收），装配层不参与业务判断。
+## 走 add_to_slot 的路径形式——槽在 ContextPanel 之下（UI.md §10.1 组织层级），
+## 槽名即 UIRoot 下的相对 NodePath。
+func _setup_squad_card() -> void:
+	if _root.ui_root == null:
+		return
+	var card := _SquadCardScene.instantiate()
+	if not _root.ui_root.add_to_slot("ContextPanel/SquadInspector", card):
+		card.queue_free()
+		return
+	if card.has_method("setup"):
+		card.setup(_root)
 
 
 ## 创建 ZoomBar 并挂到 UIRoot，钉进 right_bottom zone（右下贴缘，见 hud_zone_layout.gd）。

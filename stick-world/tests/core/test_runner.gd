@@ -25,6 +25,12 @@ var _current_failed: bool = false
 var _current_messages: Array = []
 var _current_assertions: int = 0
 
+## 批量模式观测出口（batch_runner 消费）：最近一次 run()/run_async() 的用例数与断言数。
+## 经 Engine meta 发布的原因：TestRunner 实例活在套件脚本内部，批量运行器拿不到它，
+## 而"用例一条没跑"正是历史盲区（空 _results 曾判通过，见 all_passed 零用例守卫）。
+const META_LAST_CASES: String = "test_last_cases"
+const META_LAST_ASSERTS: String = "test_last_asserts"
+
 
 func add_test(name: String, fn: Callable, is_async: bool = false) -> void:
 	_tests.append({"name": name, "fn": fn, "async": is_async})
@@ -39,6 +45,7 @@ func run() -> void:
 		if fn.is_valid():
 			fn.call()
 		_finish()
+	_publish_counts()
 
 
 ## 异步运行（推荐）：async 用例 await 等待完成；同步用例照常。
@@ -53,6 +60,7 @@ func run_async() -> void:
 			else:
 				fn.call()
 		_finish()
+	_publish_counts()
 
 
 # ─────────────────────────────── 断言（均计入断言计数）────────────────────────────────
@@ -148,6 +156,10 @@ func summary() -> String:
 
 
 func all_passed() -> bool:
+	# 零用例守卫：一个用例都没跑（_results 空）说明套件根本没执行（add_test 未被调用/
+	# 中途抛错早退）——空跑不算通过，否则批量运行器会把"什么都没测"记成绿灯。
+	if _results.is_empty():
+		return false
 	for r in _results:
 		if not r["passed"]:
 			return false
@@ -156,6 +168,15 @@ func all_passed() -> bool:
 
 func get_results() -> Array:
 	return _results
+
+
+## 发布本套件执行计数（run/run_async 收尾调用；batch_runner 读 meta 判零用例）
+func _publish_counts() -> void:
+	var asserts: int = 0
+	for r in _results:
+		asserts += int(r["asserts"])
+	Engine.set_meta(META_LAST_CASES, _results.size())
+	Engine.set_meta(META_LAST_ASSERTS, asserts)
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────

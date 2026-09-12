@@ -12,6 +12,9 @@ extends Node
 ##
 ## 运行：godot --headless --path <project> res://tests/batch_runner.tscn
 
+## 观测位常量来源（tests/README 禁区：不依赖 class_name 全局注册，显式 preload）
+const TestRunner := preload("res://tests/core/test_runner.gd")
+
 const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_placement_grid.gd",
 	"res://tests/unit/test_health_component.gd",
@@ -79,6 +82,7 @@ var _failed: Array[String] = []
 func _ready() -> void:
 	Engine.set_meta("test_batch", true)
 	var t0: int = Time.get_ticks_msec()
+	_check_manifest()
 	for path in UNIT_SCRIPTS:
 		await _run_one(path)
 	var secs: float = (Time.get_ticks_msec() - t0) / 1000.0
@@ -95,6 +99,39 @@ func _ready() -> void:
 		get_tree().quit(1)
 
 
+## 清单自检：tests/unit/ 下每个 .gd 都必须在 UNIT_SCRIPTS 里——套件文件躺在盘上
+## 却没登记进清单 = 它永远不会跑，且不会有任何红灯（静默漏测盲区）。
+## 目录枚举不可用（打包/异常）时只提示不判失败，避免误报。
+func _check_manifest() -> void:
+	var dir := DirAccess.open("res://tests/unit")
+	if dir == null:
+		print("[BATCH-NOTE] 无法枚举 res://tests/unit，跳过清单自检")
+		return
+	var registered: Dictionary = {}
+	for p in UNIT_SCRIPTS:
+		registered[p] = true
+	var found: int = 0
+	var unregistered: Array[String] = []
+	dir.list_dir_begin()
+	var fn := dir.get_next()
+	while fn != "":
+		if not dir.current_is_dir() and fn.ends_with(".gd"):
+			found += 1
+			var full := "res://tests/unit/" + fn
+			if not registered.has(full):
+				unregistered.append(full)
+		fn = dir.get_next()
+	dir.list_dir_end()
+	if found == 0:
+		print("[BATCH-NOTE] 目录枚举结果为空，跳过清单自检")
+		return
+	for p in unregistered:
+		_failed.append(p + "（未登记进 UNIT_SCRIPTS——本套件不会被运行）")
+	print("[BATCH-CHECK] 清单自检：盘上 %d 个套件 / 清单 %d 条，未登记 %d 个" % [
+		found, UNIT_SCRIPTS.size(), unregistered.size()
+	])
+
+
 func _run_one(path: String) -> void:
 	var script: GDScript = load(path) as GDScript
 	if script == null:
@@ -106,11 +143,21 @@ func _run_one(path: String) -> void:
 	var tm: Node = get_node_or_null("/root/TimeManager")
 	if tm != null and "current_speed" in tm and int(tm.current_speed) != int(tm.Speed.X1):
 		tm.set_speed(tm.Speed.X1)
+	# 零用例守卫的观测位：套件在自己的 TestRunner 收尾时写回真实计数
+	Engine.set_meta(TestRunner.META_LAST_CASES, -1)
+	Engine.set_meta(TestRunner.META_LAST_ASSERTS, -1)
 	var inst: Node = script.new()
 	inst.name = path.get_file().get_basename()
 	add_child(inst)
 	var code: int = await _await_done(inst)
-	if code != 0:
+	var cases: int = int(Engine.get_meta(TestRunner.META_LAST_CASES, -1))
+	var asserts: int = int(Engine.get_meta(TestRunner.META_LAST_ASSERTS, 0))
+	print("  [%s] %-46s 用例 %d / 断言 %d" % [
+		"OK  " if code == 0 else "FAIL", inst.name, cases, asserts
+	])
+	if code == 0 and cases <= 0:
+		_failed.append(path + "（零用例：套件未真正执行任何断言）")
+	elif code != 0:
 		_failed.append(path)
 	inst.queue_free()
 

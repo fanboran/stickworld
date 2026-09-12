@@ -37,6 +37,7 @@
   - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL/WorldBox 四家登记，批次 A1~A9 + WorldBox WB1~WB10 系列，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1~A6/A9 七批 + WB1(W1 softmax 选优)/WB2(W2 冷却错峰)/WB6(W6 评分留痕) 三批收官合入 main**；WB3~WB5/WB7~WB10 分流至 30fps·组织·出征·town-life 各任务线待立项；机制观感验收与数值校准轮进行中，分支 `agent/game-ai`，worktree `.temp/game-ai`）
   - `docs/项目/交接/UI运行时三项优化-ABC三批-交接.md`（任务：UI 运行时三项优化 A 暂停原语化/B HUD 布局收权/C 按钮变体，**三批已合并入 main（116d42bf），待创始人观感验收**，分支链 `agent/ui-pause-primitive`→`agent/ui-hud-zones`→`agent/ui-button-variants`）
   - `docs/项目/交接/建筑生成管线v2-笔触手绘-进度与交接.md`（任务：推翻旧 building_gen，新建离线"代码建模→笔触手绘渲染→PNG+元数据"建筑管线，唯一沿用约束=宽度 3~16 格；**批次 1 完成**（骨架+house/smithy/warehouse 三样板 16 张+确定性校验过），批次 2~4 待做，分支 `agent/building-pipeline-v2`，worktree `.temp/building-pipeline-v2`）
+  - `docs/项目/交接/加载屏双进度条与分帧装配-进度与交接.md`（任务：治加载卡顿 + 两级进度条（上=总阶段/下=阶段内细分）+ dev 探针静音后置底；**批次 1 完成已提交**（`cae2af48`），待创始人观感验收；批次 2 候选与实测数据见文档 §二/§三，分支 `agent/loading-ux`，worktree `.temp/loading-ux`）
 - 在役审计快照（用完即删，删除时同步移除登记）：
   - `docs/审计/架构审计_2026-09-11.md`（架构实测基线与重测命令，供 `docs/项目/待办事项.md`「架构收敛 AR 系列」引用；AR 全部执行完毕后删除）
 

@@ -23,14 +23,41 @@ const _SQL_ENT_SELECT := "SELECT * FROM entities WHERE slot_id = ? AND map_id = 
 
 func setup(root: GameRoot) -> void:
 	_root = root
+	for step in _step_table():
+		(step[1] as Callable).call()
+
+
+## 分帧装配入口（启动加载屏用）：绑定 root 并返回步骤表——调用方逐步执行、
+## 每步之间让一帧并推进副进度条（与 SystemSetup 同模式，语义与 setup() 一致）。
+func setup_steps(root: GameRoot) -> Array:
+	_root = root
+	return _step_table()
+
+
+## 装配步骤表：每项 = [细分标签, 可调用]，顺序即依赖顺序。
+func _step_table() -> Array:
+	return [
+		["订阅存档事件", _subscribe_save_events],
+		["构造存档面板", _create_save_panel],
+		["挂载面板槽位", _attach_save_panel],
+	]
+
+
+func _subscribe_save_events() -> void:
 	if EventBus:
 		if EventBus.has_signal("game_saving"):
 			EventBus.game_saving.connect(_on_game_saving)
 		if EventBus.has_signal("game_loaded"):
 			EventBus.game_loaded.connect(_on_game_loaded)
-	# 实例化存档面板（经 UIAPI 构造，全屏 UI 根挂 ModalOverlay 槽）
+
+
+## 实例化存档面板（经 UIAPI 构造，全屏 UI 根挂 ModalOverlay 槽）
+func _create_save_panel() -> void:
 	_root._save_panel = UIAPI.create_save_panel()
 	_root._save_panel.visible = false
+
+
+func _attach_save_panel() -> void:
 	if _root.ui_root != null:
 		_root.ui_root.add_to_slot("ModalOverlay", _root._save_panel)
 	else:

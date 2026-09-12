@@ -75,7 +75,7 @@ const DEFAULTS: Dictionary = {
 	"wait_core_max": 4.0,         ## 核心跃进后全队还击等待上限（s，CoH 真值）
 	"wait_flank_min": 2.0,        ## 双翼跟进后等待下限（s，CoH infantry-plan 2~3.5s 真值）
 	"wait_flank_max": 3.5,        ## 双翼跟进后等待上限（s，CoH 真值）
-	"threat_window": 3.0,         ## 被压制代理窗口（s；arrow_threat_time 登记新鲜度）【提案/待定，A6 压制系统接入后替换】
+	"threat_window": 3.0,         ## 箭矢瞄准反应窗口（s；arrow_threat_time 登记新鲜度。A6 后分工：达真实压制门槛的成员由 _unit_suppressed 守卫跳过（禁令本体已锁死），本窗口保留为未压制成员的轻量找掩体反应）
 	"back_enemy_radius": 260.0,   ## 背敌判定半径（px）
 	"back_enemy_dot": -0.25,      ## 背敌半平面阈值（敌方向与推进方向点积小于此值 = 背后）
 	"rng_seed": -1,               ## 随机源种子；-1 = randomize（生产去同步），测试传固定种子保确定
@@ -305,8 +305,11 @@ func _tick_leap(units: Array, core_wave: bool) -> void:
 # ─────────────────────────────── 接敌反应（reaction-plan 等价面）────────────────────────────────
 
 ## 被压制/背敌成员 → 找掩体（既有 seek_cover 行为，不新造掩体机制）：
-##   - 被压制代理【提案/待定】：arrow_threat_time 窗口内被瞄准登记（真实战况信号，
-##     A6 压制系统落地后替换为压制状态查询）；
+##   - 真实压制态（A6 · C9 落地替换 A5 代理）：达压制门槛的成员已在 L1 被
+##     StatusEffects.SUPPRESSED 禁令锁死（压制蹲伏/停滞 = pinned-reaction 本体），
+##     本反应跳过、不叠加 seek_cover 号令——禁令期号令会被 ai_controller 挂起；
+##   - 轻量反应（既有代理保留）：arrow_threat_time 窗口内被瞄准登记（真实战况
+##     信号，消费未达压制门槛的瞄射/擦伤成员）；
 ##   - 背敌：推进方向反半平面 back_enemy_radius 内有存活敌人（reaction-plan
 ##     DT_AWAY_FROM_TARGET 语义映射）。
 ## 守卫成员（士气行为/接战中/他人号令）不介入——接战成员交还战斗行为。
@@ -319,6 +322,8 @@ func _contact_reaction(units: Array) -> void:
 	for u in units:
 		if _member_guarded(u):
 			continue
+		if _unit_suppressed(u):
+			continue  # 真实压制态：禁令已在 L1 锁死（A6 替换 A5 被压制代理）
 		var ai: Node = _ai_of(u)
 		if ai == null or not ai.has_method("set_order"):
 			continue
@@ -407,6 +412,17 @@ func _roll_wait(core_wait: bool) -> void:
 	var lo: float = float(_p.get("wait_core_min", 2.0)) if core_wait else float(_p.get("wait_flank_min", 2.0))
 	var hi: float = float(_p.get("wait_core_max", 4.0)) if core_wait else float(_p.get("wait_flank_max", 3.5))
 	_wait_duration = _rng.randf_range(minf(lo, hi), maxf(lo, hi))
+
+
+## 成员是否处于真实压制态（A6 · C9 替换点落地：duck 查询 StatusEffects.SUPPRESSED；
+## 组件缺失/压制未启用返回 false = 既有轻量代理语义原样，零回归）。
+func _unit_suppressed(u: Node) -> bool:
+	if u == null or not is_instance_valid(u) or not u.has_method("get_status_effects"):
+		return false
+	var se: Node = u.get_status_effects()
+	if se == null or not is_instance_valid(se) or not se.has_method("has_suppressed"):
+		return false
+	return bool(se.has_suppressed())
 
 
 ## 成员 AI 控制器（duck；缺失返回 null）。

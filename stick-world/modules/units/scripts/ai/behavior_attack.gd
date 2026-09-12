@@ -124,6 +124,15 @@ func update(delta: float) -> void:
 	if entity.has_method("is_dead") and entity.is_dead():
 		finish()
 		return
+	# 压制禁令消费段（A6 · C9）：压制期停滞——不追不打不调整，同受击硬直口径。
+	# 决策链已在 ai_controller 拦截新行为，此处兜底"压制发生在两拍之间的在途
+	# 攻击行为"（禁令立即生效，不等下一决策拍）。受击反馈/被推挤在物理层不受
+	# 禁令影响——惩罚来自模拟因果。duck 查询：组件缺失（测试桩）跳过 = 零回归。
+	var se: Node = entity.get_status_effects() if entity.has_method("get_status_effects") else null
+	if se != null and is_instance_valid(se) and se.has_method("has_suppressed") and se.has_suppressed():
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
+		return
 	# 受击硬直（行业最佳实践 hit stun）：被打瞬间短暂停滞，不追不打；
 	# 醒后小概率规避小跳（RWR 士兵被打了会挪窝，不站桩吃第二下）
 	var stunned: bool = entity.has_method("is_in_hit_stun") and entity.is_in_hit_stun()
@@ -404,6 +413,10 @@ func _arrows_wasted(target: Node, weapon: Node) -> bool:
 
 ## 姿态举盾聚合（SWL 直译）：
 ## ① 箭矢威胁（SpeartonAi.IsAnyArrowThreat）——有敌方箭矢瞄向自己即举盾；
+##    （A6 标注：arrow_threat_time 是**轻量感知代理**——真实压制状态已落地
+##    （StatusEffects.SUPPRESSED，消费点 ai_controller 决策链 + 本行为压制
+##    消费段），本代理保留消费未达压制门槛的瞄射窗口（arrow_threat_block
+##    语义不变），与真实禁令分工不混判）
 ## ② 攻击后格挡（Ai.cooldownAfterAttackForBlock）——刚攻击完举盾一拍防反打。
 ## 两来源任一命中即举盾，窗口全过收盾。
 func _update_arrow_threat_block(weapon: Node) -> void:

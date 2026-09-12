@@ -47,7 +47,8 @@ func _ready() -> void:
 	_runner.add_test("确定性：同 (base_seed, squad_id) 两次调用逐位一致", _test_determinism)
 	_runner.add_test("target 解析：五种模式 + 未知模式兜底", _test_target_modes)
 	_runner.add_test("行为名映射：六号令全对齐 + 未知名 -1", _test_order_mapping)
-	_runner.add_test("TeamAi 零回归门：默认关，无显式号令小队走防守兜底", _test_team_ai_zero_regression)
+	_runner.add_test("TeamAi 生效默认：shipped 档 v2 已开闸，无显式号令小队按打分选行为", _test_team_ai_shipped_default_on)
+	_runner.add_test("TeamAi 零回归门：显式注入 v2 关，无显式号令小队走防守兜底", _test_team_ai_zero_regression)
 	_runner.add_test("TeamAi v2 接管：开关开按打分选行为 / 攻击槽绑定不受接管", _test_team_ai_v2_override)
 	_runner.add_test("GARRISON 豁免：生存模式号令不被 default_behavior 接管", _test_team_ai_garrison_exempt)
 	_runner.run()
@@ -59,8 +60,10 @@ func _ready() -> void:
 
 func _test_config_keys() -> void:
 	# personality.tres global 行（配置真值）：A4 既有键
-	_runner.assert_false(bool(BalanceConfig.get_value("ai.personality.global.default_behavior_v2_enabled")),
-			"default_behavior_v2_enabled 默认关（零回归门）")
+	# GK-5 第一层已开闸：档案生效默认为 true（旧「锁默认关」断言改锁新默认；
+	# 零回归由 _test_team_ai_zero_regression 的显式注入关档两态覆盖）
+	_runner.assert_true(bool(BalanceConfig.get_value("ai.personality.global.default_behavior_v2_enabled")),
+			"default_behavior_v2_enabled 已开闸（GK-5 第一层生效默认 true）")
 	_runner.assert_approx(float(BalanceConfig.get_value("ai.personality.global.demand_increment")), 50.0, 0.001,
 			"demand_increment = 50（CoH s_demand_increment 真值）")
 	# W1 五键档案真值（WorldBox M2/M6/M7）
@@ -76,7 +79,14 @@ func _test_config_keys() -> void:
 			"cooldown_enabled 默认开（M6 launch 冷却）")
 	# 装载器携带新键（TeamAi.setup 合并链可消费）
 	var overlay: Dictionary = ScriptTeamAiProfiles.load_personality_overlay()
-	_runner.assert_false(bool(overlay.get("default_behavior_v2_enabled", true)), "overlay 携带 A4 开关（默认关）")
+	_runner.assert_true(bool(overlay.get("default_behavior_v2_enabled", false)), "overlay 携带 A4 开关（已开闸）")
+	# 显式注入关档仍可退回零回归（overrides > 档案；两态证据见 TeamAi 套内用例）
+	var overlay_off: Dictionary = overlay.duplicate()
+	overlay_off["default_behavior_v2_enabled"] = false
+	var off_profile: Dictionary = ScriptTeamAiProfiles.get_profile(overlay_off)
+	off_profile.merge(overlay_off, true)  # 与 TeamAi.setup 补挂同构
+	_runner.assert_false(bool(off_profile.get("default_behavior_v2_enabled", true)),
+			"显式注入 false 覆盖档案 true（零回归可退回）")
 	_runner.assert_approx(float(overlay.get("demand_increment", -1.0)), 50.0, 0.001, "overlay 携带 ±分增量")
 	_runner.assert_true(bool(overlay.get("softmax_enabled", false)), "overlay 携带 W1 轮盘开关")
 	_runner.assert_approx(float(overlay.get("softmax_weight_scale", -1.0)), 0.02, 1e-9, "overlay 携带量纲归一尺度")
@@ -683,11 +693,10 @@ func _test_order_mapping() -> void:
 	_runner.assert_equal(ScriptUtilityScorer.order_type_of("flank"), -1, "未知行为名 -1（解析期丢弃）")
 
 
-func _test_team_ai_zero_regression() -> void:
-	# 开关默认关（零回归门）：root_c 配置了 default_behavior 也不消费——
-	# 无显式号令小队维持防守兜底（ADVANCE_ALL 本方质心），选择观测面为空
-	# （4v3：adv=(8-6)/14=0.143 < 优势递增起点 0.4 → attack%=0.6 → 2 攻 1 防）
-	var ctx := _make_org_ctx({})
+## 防守兜底场景骨架（4v3：attack%=0.6 → 2 攻 1 防；root_c 配 hold-on-enemy 行为）。
+## 同骨架跑两种闸态，差异只来自 v2 开关。
+func _defend_fallback_ctx(overrides: Dictionary) -> _Ctx:
+	var ctx := _make_org_ctx(overrides)
 	ctx.org_api.set_behavior("root_c", _hold_on_enemy_behavior())
 	for i in 4:
 		ctx.add_own_unit(Vector2(500 + 20.0 * i, 300), ScriptTeamAiProfiles.SPEAR)
@@ -698,9 +707,36 @@ func _test_team_ai_zero_regression() -> void:
 	ctx.add_squad("s_c", "root_c")
 	ctx.battle.duration = 15.0
 	ctx.ai.update()
+	return ctx
+
+
+## 生效默认（GK-5 第一层已开闸）：shipped 档不注入任何 override，_p 应带 v2=true，
+## 无显式号令的防守兜底小队被接管（hold），选择观测面留痕。
+func _test_team_ai_shipped_default_on() -> void:
+	var ctx := _defend_fallback_ctx({})
+	_runner.assert_equal(ctx.ai.get_stance(), ScriptTeamAi.STANCE_ATTACK, "先切 ATTACK")
+	_runner.assert_true(bool(ctx.ai._p.get("default_behavior_v2_enabled", false)),
+			"shipped 档 v2 开关应入 _p（档案生效默认 true）")
+	var call_of := {}
+	for c in ctx.orders.org_calls:
+		call_of[c["org_id"]] = c
+	_runner.assert_equal(call_of.size(), 3, "三编制组各一号令")
+	if call_of.has("root_c"):
+		_runner.assert_equal(int(call_of["root_c"]["order_type"]), ScriptTacticalOrders.OrderType.HOLD_POSITION,
+				"生效默认：root_c 防守兜底被 v2 接管选 hold")
+	var choices: Dictionary = ctx.ai.get_default_behavior_choices()
+	_runner.assert_equal(str(choices.get("s_c", "")), "hold", "选择观测面记录 hold（生效默认消费）")
+	ctx.teardown()
+
+
+## 零回归门（显式注入关）：同骨架显式覆盖 v2=false，root_c 维持防守兜底
+## （ADVANCE_ALL 本方质心），选择观测面为空——差异只来自开关。
+func _test_team_ai_zero_regression() -> void:
+	var ctx := _defend_fallback_ctx({"default_behavior_v2_enabled": false})
 	_runner.assert_equal(ctx.ai.get_stance(), ScriptTeamAi.STANCE_ATTACK, "先切 ATTACK")
 	_runner.assert_equal(ctx.ai.get_task_board().slot_count(ScriptTaskBoard.KIND_ATTACK), 2,
 			"期望进攻槽数 = ceil(0.6×3) = 2")
+	_runner.assert_false(bool(ctx.ai._p.get("default_behavior_v2_enabled", true)), "显式关档已入 _p")
 	var call_of := {}
 	for c in ctx.orders.org_calls:
 		call_of[c["org_id"]] = c

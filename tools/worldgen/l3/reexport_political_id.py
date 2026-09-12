@@ -5,7 +5,8 @@
 旧代边界旧代湖。本脚本从 S1 细化场直接映射重导：
 
   城块像素 = 所属政权 lut_index（l3_city.json tiles.state_id → states.lut_index）
-  细化场 0 且湖 mask = CODE_LAKE(254)；其余 0 = 海洋
+  细化场 0 且湖 mask = CODE_LAKE(254)；老大陆上其余 0 = 荒野 CODE_FREE(253)
+  回填（与 R7 state_expand_lite 同语义，防陆上海色洞）；海上 0 = 海洋
   L2 = 8192 蒙版按 context 窗口 order=0 采样 + neighbors=CODE_NEIGHBOR(255)
        / lakes=CODE_LAKE 补底（沿用 R7 export_l2_id_masks 语义，邻区/lake
        几何已是细化场同代）
@@ -31,6 +32,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(HERE, "output")
 REFINED = os.path.join(OUT_DIR, "l1_v2", "refined_city_labels_8192.npy")
 LAKE8 = os.path.join(OUT_DIR, "fractal_lake_mask_8192.png")
+LOCKED = os.path.join(OUT_DIR, "locked", "locked_continent_8192.png")
 GAME_CFG = os.path.join(HERE, "..", "..", "stick-world", "config", "strategic_map")
 L2_PACKS = os.path.join(GAME_CFG, "l2_packs")
 
@@ -94,8 +96,12 @@ def build_mask8():
     land = refined > 0
     arr[land] = code_lut[refined[land]]
     arr[(~land) & lake_r] = CODE_LAKE
-    print("[1] mask8 %s 城块码 %d 种，无归属=FREE %d 块，湖 %d px"
-          % (arr.shape, len(np.unique(arr[land])), n_free, int(((~land) & lake_r).sum())))
+    land8 = np.asarray(Image.open(LOCKED).convert("L")) > 127
+    hole = (refined == 0) & land8 & (~lake_r)
+    arr[hole] = CODE_FREE
+    print("[1] mask8 %s 城块码 %d 种，无归属=FREE %d 块，湖 %d px，荒野回填 %d px"
+          % (arr.shape, len(np.unique(arr[land])), n_free,
+             int(((~land) & lake_r).sum()), int(hole.sum())))
     return arr
 
 

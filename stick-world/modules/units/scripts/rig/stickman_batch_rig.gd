@@ -59,6 +59,36 @@ static var _white_tex: ImageTexture = null
 static var _quad_mesh: ArrayMesh = null
 static var _circle_mesh: ArrayMesh = null
 static var _wobble_bar_mesh: ArrayMesh = null
+static var _wobble_circle_mesh: ArrayMesh = null
+
+
+## 粗粝 10 段圆（对齐原版 _wobbled_circle 拓扑）：血条圆点用，wobble shader
+## 顶点期按段索引 hash 扰动半径复刻手绘感（40 边光滑圆观感不对）
+static func _get_wobble_circle_mesh() -> ArrayMesh:
+	if _wobble_circle_mesh != null:
+		return _wobble_circle_mesh
+	var n := 10
+	var pts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	var cols := PackedColorArray()
+	for i in n:
+		var a := TAU * float(i) / float(n)
+		var c := Vector2(cos(a), sin(a))
+		pts.append(c)
+		uvs.append(Vector2(float(i) / float(n), 0.0))
+		cols.append(Color.WHITE)
+	var idx := PackedInt32Array()
+	for i in range(1, n - 1):
+		idx.append_array([0, i, i + 1])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = pts
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	arr[Mesh.ARRAY_COLOR] = cols
+	arr[Mesh.ARRAY_INDEX] = idx
+	_wobble_circle_mesh = ArrayMesh.new()
+	_wobble_circle_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return _wobble_circle_mesh
 
 
 ## 手绘条模板：1×1 单位条，水平 12 段上下边顶点——血条桶 wobble shader

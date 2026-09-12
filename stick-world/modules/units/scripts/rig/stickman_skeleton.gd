@@ -190,7 +190,9 @@ const EXTRA_LIMBS: Dictionary = {
 }
 
 # ===== 默认颜色 =====
-const DEFAULT_BODY := Color(0.82, 0.82, 0.85, 1.0)
+## 身体色（深灰紫）：火柴人身体唯一颜色，不做身份染色（阵营走血条、职业走武器变体）。
+## 改这里等于改所有火柴人的身体色——这是刻意为之的单一色源，不要按身份分支取值。
+const DEFAULT_BODY := Color(0.1560398, 0.15568888, 0.18235794, 1.0)
 const DEFAULT_WEAPON := Color(0.72, 0.74, 0.78, 1.0)
 const DEFAULT_GUARD := Color(0.65, 0.45, 0.18, 1.0)
 const DEFAULT_OUTLINE := Color.WHITE

@@ -38,6 +38,21 @@
 
 **依赖图**：A1→A2→{A3,A4,A5}→A6；A9 依赖 A1（与 A3~A5 并行可行）；A7/A8 独立线；A2 起依赖组织批次 3-F2。
 
+### 开闸批次计划（GK 系列 —— 创始人 2026-09-13 授权按 §七 清单逐层开闸并留档）
+
+开关清单与语义见设计文档 §七。开闸按「同层 + 同风险面」分组，一组一批、开一批留一档：
+
+| 批 | 内容 | 前置 | 证据口径 |
+|---|---|---|---|
+| GK-1 | L1 个体动作细节：`heal_enabled`、`arrow_threat_block`、`missing_arrows_tolerance`、`burst_shots`、`night_hesitate_mult`、`flank_enabled`、`rout_strafe_enabled`、`rout_reengage_enabled`、`test_engage_enabled` | AI-GAPS 落地 | 行为差异可辨（点射停顿/夜战变慢/绕侧接近/溃兵不走直线）；unit 全绿 + run_all 失败集不扩大 |
+| GK-2 | L1 状态类：`suppression_enabled`（含近失触发）、`retreat_mod_enabled` | AI-GAPS 落地 | 触发次数与分布（既有查询面：压制状态/`get_retreat_mod_state`）；溃逃节奏与战损不失控 |
+| GK-3 | L1 调度类：`spawn_jitter_enabled`、`probe_fail_cooldown_enabled` | — | 首拍决策离散度上升（`get_decision_timing_state`）、齐套尖峰下降 |
+| GK-4 | L2：`phase_plan_enabled` | — | 相位序列符合计划（`phase_changed` 信号留痕：核心先行→两翼跟进→接敌转掩体） |
+| GK-5 | L4：`default_behavior_v2_enabled`（效用打分宿主）+ 权威值择班开关 | 组织侧 `default_behavior` 配置**写入方**（当前无写入方，开了也没有候选）+ AUTHORITY-SWITCH 落地 | 行为选择分布、换班次数与滞回表现 |
+| 不开 | `vp_rule_enabled`（本游戏无 VP 等价物，留位）；`slot_kernel_enabled`/`team_ai_enabled`/softmax 三键已在默认开，不需开闸 |
+
+**证据诚实口径**：能给量化指标的就给（触发次数/分布/离散度/信号序列）；当前确实没有测量手段的（如帧率在 headless 与实机不可比）就明确写"本批仅机制触发 + 零回归，无量化指标"，**不假装有数据**。若某批需要新增测量口，那本身作为该批的一项交付登记在报告里。
+
 ## 进度记录
 
 | 批次 | 状态 | 提交 | 备注 |

@@ -107,6 +107,11 @@ var _update_hz: float = 60.0
 var _hz_accum: float = 0.0
 ## LOD 显示开关（与死亡隐藏/渐隐状态机正交；false = 强制隐藏并停更）
 var _lod_display_visible: bool = true
+## CrowdRenderer 数据模式：true 时本节点不绘制（visible 恒 false 停 _draw），
+## _process 状态机照跑，CrowdRenderer 每刻经 get_bar_state() 拉快照写实例行
+var _data_mode: bool = false
+## 数据模式下的 LOD 显示落地（visible 被数据模式占用，改记此标志）
+var _lod_visible: bool = true
 
 
 ## 设置刷新频率（LOD 分档：近景全速/中景 10Hz/远景隐藏）。
@@ -119,6 +124,10 @@ func set_update_hz(hz: float) -> void:
 ## true 恢复显示（死亡单位的隐藏语义优先：_ratio<=0 保持不可见）。
 func set_display_visible(v: bool) -> void:
 	_lod_display_visible = v
+	if _data_mode:
+		_lod_visible = v
+		set_process(v)
+		return
 	if v:
 		if _ratio > 0.0:
 			visible = true
@@ -126,6 +135,43 @@ func set_display_visible(v: bool) -> void:
 	else:
 		visible = false
 		set_process(false)
+
+
+## 进入/退出 CrowdRenderer 数据模式。退出时按 LOD/存活状态恢复原绘制。
+func set_crowd_data_mode(on: bool) -> void:
+	if _data_mode == on:
+		return
+	_data_mode = on
+	if on:
+		visible = false
+	else:
+		visible = _lod_visible and _ratio > 0.0
+		set_process(true)
+
+
+## 数据模式状态快照：绘制终点在 CrowdRenderer 血条桶，本类只产数据。
+## color 已含低血明度闪烁；渐隐/展开/残影/抖动系数原样给出。
+func get_bar_state() -> Dictionary:
+	var color: Color = FACTION_COLORS.get(_faction, COLOR_NEUTRAL)
+	if _ratio <= LOW_THRESHOLD:
+		var flicker: float = 0.72 + 0.28 * sin(_anim_time * 10.0)
+		color = color.darkened(1.0 - flicker)
+	return {
+		"active": _lod_visible and _ratio > 0.0 and _shown > 0.01,
+		"shown": _shown,
+		"expand": _expand,
+		"ratio": _ratio,
+		"trail": _trail_ratio,
+		"shake": _shake_energy,
+		"anim_time": _anim_time,
+		"color": color,
+		"max_hp": _max_hp,
+		"width": clampf(WIDTH_BASE + _max_hp * WIDTH_PER_HP, WIDTH_MIN, WIDTH_MAX),
+		"scale": scale.x,
+		# boiling 相位（CrowdRenderer 据此选预烘相位组：seed % WOBBLE_VARIANTS；
+		# 满血未掉血恒 0 = 静止，与原版 _ever_damaged 门一致）
+		"wobble": _wobble_seed,
+	}
 
 
 func _ready() -> void:
@@ -184,8 +230,14 @@ func _process(delta: float) -> void:
 		_in_combat = _check_in_combat()
 	var hover: bool = _is_hovered()
 	var show: bool = _in_combat or _ever_damaged or hover
+	var prev_shown: float = _shown
 	_shown = move_toward(_shown, 1.0 if show else 0.0, FADE_SPEED * delta)
 	modulate.a = _shown
+	# 满血圆点无其他重绘来源（wobble/残影/展开都要求 _ever_damaged），而
+	# modulate.a 变化不触发重绘：跨过 _draw 的 _shown<=0.01 早退门时补一次
+	# 重绘（渐显=画出圆点；渐隐=清空画布），否则入战圆点永不出现
+	if (prev_shown <= 0.01) != (_shown <= 0.01):
+		queue_redraw()
 	# boiling line：定期重掷扰动相位（手绘逐帧抖动感）。
 	# 战斗性能优化：仅掉过血（横条形态）才抖——满血圆点无抖动细节，
 	# 混战时 ~200 根满血条每 0.12s 的无条件重画（多边形重建+三角化）是纯浪费
@@ -251,7 +303,8 @@ func _refresh() -> void:
 		_ever_damaged = false
 		_trail_ratio = 1.0
 	_ratio = new_ratio
-	visible = hp > 0.0
+	if not _data_mode:
+		visible = hp > 0.0
 	queue_redraw()
 
 
@@ -377,15 +430,19 @@ func _follow_head() -> void:
 					/ maxf(absf(entity.scale.x), 0.01)
 
 
-## 在战判定：近身有活敌（AI IsUnderThreat 真值，公开包装）
+## 在战判定：所属战斗实例进行中（入战=整场战斗——battle 打响全员头顶
+## 圆点、受伤展开成条；战斗结束 is_active=false 渐隐。AI 的近身威胁
+## 判定（溃逃用）与本 UI 判定语义不同，不共用 THREAT_RANGE）
 func _check_in_combat() -> bool:
 	var entity := get_parent()
 	if entity == null or not is_instance_valid(entity):
 		return false
-	var ai: Node = entity.get_node_or_null("AIController")
-	if ai != null and ai.has_method("is_under_threat"):
-		return ai.is_under_threat()
-	return false
+	if not entity.has_method("get_battle_instance"):
+		return false
+	var bi: Node = entity.get_battle_instance()
+	if bi == null or not is_instance_valid(bi):
+		return false
+	return bi.has_method("is_active") and bi.is_active()
 
 
 ## 鼠标悬浮：指针距实体原点 HOVER_RADIUS 内且血量不满 → 强制显示横条

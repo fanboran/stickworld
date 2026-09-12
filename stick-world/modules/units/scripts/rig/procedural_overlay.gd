@@ -73,6 +73,13 @@ var _noise := FastNoiseLite.new()
 var _update_hz: float = 60.0
 ## 节流累积器
 var _hz_accum: float = 0.0
+## ── 低帧率分桶（与 StickmanRig._process 推进分支同桶错峰）──
+## fps << hz 时叠加层节流同样失效（每帧叠加 + notify_pose_dirty → 批渲染
+## 每帧重写）。rig 按全局帧号分桶后把相位转发过来，跳过帧不叠加——但
+## _hz_accum 照常累积真实 delta，下次叠加执行时 delta 取累计值，呼吸相位/
+## spring 衰减幅度与真实时间一致（不慢动作）。
+var _stagger_phase: int = 0
+var _stagger_k: int = 1
 
 
 ## 设置叠加更新频率（LOD 分档；见 StickmanRig.set_anim_update_hz）。
@@ -80,6 +87,12 @@ var _hz_accum: float = 0.0
 func set_update_hz(hz: float) -> void:
 	_update_hz = hz
 	_hz_accum = 0.0
+
+
+## rig 低帧率分桶参数同步（桶相位/桶数；见 StickmanRig 低帧率分桶注）。
+func set_stagger(seed: int, k: int) -> void:
+	_stagger_phase = seed
+	_stagger_k = k
 
 
 func setup(skeleton: Skeleton2D, rig: Node2D) -> void:
@@ -159,6 +172,12 @@ func _on_frame() -> void:
 	var delta: float = get_process_delta_time()
 	# LOD 频率闸门：<=0 不叠加；节流档累积到 1/hz 才执行一次（delta 换成累计值）
 	if _update_hz <= 0.0:
+		return
+	# 低帧率分桶：跳过帧累积真实 delta 后直接返回（与 rig 推进同桶错峰，
+	# 时间不丢失——下次叠加 delta 取累计值）
+	if _stagger_k > 1 \
+			and Engine.get_process_frames() % _stagger_k != _stagger_phase % _stagger_k:
+		_hz_accum += delta
 		return
 	if _update_hz < 60.0:
 		_hz_accum += delta

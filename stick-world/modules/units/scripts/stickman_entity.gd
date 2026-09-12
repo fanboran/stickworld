@@ -103,6 +103,12 @@ var _ai_controller: Node = null
 var _ai_move_dir: Vector2 = Vector2.ZERO
 ## AI 是否要求奔跑
 var _ai_running: bool = false
+## BattleSim 批模拟注册（D 刀：参战 AI 单位模拟状态出节点树）。
+## 非 null 时本实体的移动/分离/边界/冷却/命中时序由 sim 批处理，
+## 实体降级为渲染/受击代理（_physics_process 跳过 move_and_slide 等）。
+var _sim: BattleSim = null
+## 本实体在 sim SoA 里的下标（<0 = 未注册）
+var _sim_sid: int = -1
 ## Construction 模块 API 引用（由 GameRoot spawn 时注入的是 ConstructionApi 实例，供 AIController 查询派工；可能为 null）
 var _construction_manager: Node = null
 
@@ -518,10 +524,12 @@ func _physics_process(delta: float) -> void:
 	if TimeManager != null:
 		delta = TimeManager.sim_delta(delta)
 	# y 排序（2.5D 遮挡正确性）：y 越大（屏幕越靠下=离镜头越近）z 越高——
-	# 修复"远处单位身体盖住近处单位的手/武器"（此前绘制顺序=生成顺序）
-	var zi := int(global_position.y * 0.1)
-	if zi != z_index:
-		z_index = zi
+	# 修复"远处单位身体盖住近处单位的手/武器"（此前绘制顺序=生成顺序）。
+	# sim 模式由 BattleSim._write_back 批量写（与位置同一写回点），此处跳过
+	if not _sim_active():
+		var zi := int(global_position.y * 0.1)
+		if zi != z_index:
+			z_index = zi
 	# 仅在被附身时处理玩家输入
 	if possessed:
 		_handle_player_input(delta)
@@ -537,9 +545,30 @@ func _physics_process(delta: float) -> void:
 		# 静态分离：停住的单位也互相推开（移动方向修正只在移动时生效，
 		# 双方都停在射程边缘时会黏住——soft-body 位置修正解决）。
 		# 帧率优化：邻域扫描隔物理帧跑（60Hz 物理=30Hz 分离；30Hz 物理=15Hz 分离）
-		_sep_frame_counter += 1
-		if _sep_frame_counter % _sep_rate_div == 0:
-			_apply_static_separation()
+		# sim 模式由 BattleSim._tick_separation 批处理（网格重建+内联修正），此处跳过
+		if not _sim_active():
+			_sep_frame_counter += 1
+			if _sep_frame_counter % _sep_rate_div == 0:
+				_apply_static_separation()
+
+	if _sim_active():
+		# sim 模式：移动/分离/边界/击退衰减/z_index 全由 BattleSim 批处理；
+		# 实体只保留 AI 决策节流（上方）+ 意图速度标量/动画（_handle_ai_input→
+		# _apply_movement 末尾写 sim）+ 士气/硬直/markers。
+		_apply_rest_morale_recovery(delta)
+		if _hit_stun_timer > 0.0:
+			_hit_stun_timer = maxf(0.0, _hit_stun_timer - delta)
+		_sync_markers_transform()
+		# 玩家建造动画计时（按F敲击后 1.8 秒解除动作锁定）——附身单位不入 sim，
+		# 此分支实际不可达；保留判定防未来注册口径变化时漏计时
+		if _player_build_timer > 0.0:
+			_player_build_timer -= delta
+			set_action_progress(1.0 - _player_build_timer / 1.8)
+			if _player_build_timer <= 0.0:
+				_player_build_timer = 0.0
+				hide_action_progress()
+				clear_action()
+		return
 
 	# 火柴人可在地面范围内上下左右移动（详见 §7.1.1）
 	velocity += _knockback_velocity
@@ -741,6 +770,12 @@ func _handle_ai_input(delta: float) -> void:
 ## 距离越近推力越强，叠加到移动方向（RTS 单位移动标准做法，参考
 ## StickmanEntity 的 soft-body separation：位置推开 + 速度修正）。
 func _apply_separation(dir: Vector2) -> Vector2:
+	# sim 模式：走 sim 网格快照的内联推力查询（无逐邻居 Node 遍历）
+	if _sim_active():
+		var push_sim: Vector2 = _sim.separation_push(_sim_sid, SEPARATION_RADIUS)
+		if push_sim == Vector2.ZERO:
+			return dir
+		return (dir + push_sim * SEPARATION_FORCE).normalized()
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		return dir
 	# 帧率优化：分离扫描隔物理帧跑（与静态分离共用帧计数）
@@ -811,6 +846,8 @@ func get_health_bar() -> Node:
 
 ## 统一移动处理（玩家与 AI 共用）：方向 → 朝向/加速/奔跑 → velocity。
 ## run=true 强制奔跑；allow_run=false 时不会自动加速到奔跑（NPC 散步）。
+## sim 模式：velocity 照算（动画曲线/速度标量与旧链完全同源），
+## 但不落 move_and_slide——末尾写入 sim 意图，由批循环积分。
 func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> void:
 	if dir != Vector2.ZERO:
 		if dir.length() > 1.0:
@@ -836,6 +873,8 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 			velocity = v_dir * _current_speed
 		else:
 			velocity = Vector2.ZERO
+	if _sim_active():
+		_sim.set_intent(_sim_sid, velocity)
 
 
 # ─────────────────────────────── 渲染同步 ────────────────────────────────
@@ -868,7 +907,12 @@ func _spawn_contact_shadow() -> void:
 	spr.texture = _get_contact_shadow_tex()
 	spr.scale = Vector2(0.9, 0.26)  # 压成椭圆
 	spr.position = Vector2(0.0, foot_offset + 2.0)
-	spr.z_index = -2  # 垫在身体与地图装饰之下
+	# 刀②合批：绝对 z=1（DECORATION 层——地面之上可见、建筑/单位正常遮盖，
+	# 与装饰同层但树序在后成连续段）。此前 z=-2 为相对实体 z（y 序 0~14 →
+	# 阴影实际 z 各异、交错在各单位之间）——同纹理却因渲染序列不连续无法
+	# 合批，96v96 192 个阴影 = 192 draws。
+	spr.z_as_relative = false
+	spr.z_index = 1
 	add_child(spr)
 
 
@@ -1128,12 +1172,46 @@ func is_possessed() -> bool:
 	return possessed
 
 
+## BattleSim 注册注入（BattleInstance.add_unit 调用；sid<0 = 注册失败/未启用）。
+func set_battle_sim(sim: BattleSim, sid: int) -> void:
+	_sim = sim
+	_sim_sid = sid if sim != null else -1
+
+
+func get_battle_sim() -> BattleSim:
+	return _sim
+
+
+func get_battle_sim_sid() -> int:
+	return _sim_sid
+
+
+## sim 是否接管本实体（注册有效且实体未死亡——死亡刻起交还实体死亡分支）
+func _sim_active() -> bool:
+	return _sim != null and _sim_sid >= 0 and not is_dead()
+
+
 ## 获取朝向
 func get_facing() -> int:
 	return _facing
 
 
 func _on_possession_changed(p: bool) -> void:
+	# 附身接管时交还 sim（玩家输入直驱旧实体链——sim 只服务 AI 单位）
+	if p and _sim != null and _sim_sid >= 0:
+		_sim.unregister_unit(self)
+		_sim = null
+		_sim_sid = -1
+	# 附身接管时退出小兵渲染代理（玩家身体必须富管线：unregister 内部
+	# 解 hook 恢复 rig 可见 + 武器 reparent 回手骨）
+	if p and has_meta("crowd_slot"):
+		var slot: Dictionary = get_meta("crowd_slot")
+		var crowd = slot.get("renderer")
+		if crowd != null:
+			var crowd_obj = crowd.get_ref() if crowd is WeakRef else crowd
+			if crowd_obj != null:
+				crowd_obj.call("unregister_unit", slot)
+		remove_meta("crowd_slot")
 	# 附身切换时重置速度，避免残留
 	if not p:
 		_current_speed = 0.0
@@ -1182,6 +1260,20 @@ func _exit_tree() -> void:
 			and _construction_manager.has_method("unregister_worker"):
 		_construction_manager.unregister_worker(self)
 	_construction_manager = null
+	# sim 注销（尸体淡出 queue_free / 清场释放的统一出口；sim 侧清 strike 槽与引用）
+	if _sim != null and _sim_sid >= 0:
+		_sim.unregister_unit(self)
+	_sim = null
+	_sim_sid = -1
+	# 小兵渲染代理槽位注销（清实例段 + 解 rig hook；实体随 queue_free 释放）
+	if has_meta("crowd_slot"):
+		var slot: Dictionary = get_meta("crowd_slot")
+		var crowd = slot.get("renderer")
+		if crowd != null:
+			var crowd_obj = crowd.get_ref() if crowd is WeakRef else crowd
+			if crowd_obj != null:
+				crowd_obj.call("unregister_unit", slot)
+		remove_meta("crowd_slot")
 
 
 ## 由 GameRoot spawn 时注入 FormationSystem 引用（供 AIController 查询队伍职责）。
@@ -1250,6 +1342,10 @@ func _on_died() -> void:
 	_knockback_velocity = Vector2.ZERO
 	_current_speed = 0.0
 	_is_running = false
+	# sim 侧意图/击退清零（死亡刻起 sim 不再积分本实体，防御残留）
+	if _sim != null and _sim_sid >= 0:
+		_sim.set_intent(_sim_sid, Vector2.ZERO)
+		_sim.add_knockback(_sim_sid, Vector2.ZERO)
 	# 建造动作锁会拦截 play("dead")——死亡优先级最高，强制解锁
 	_action_locked = false
 	# 死亡变体池（SWL 死亡变体随机）：普通死 Death1/2，爆头死 Headshot 系 8 变体
@@ -1454,9 +1550,10 @@ func set_perf_tier(tier: int, anim_hz: float = -1.0) -> void:
 
 
 ## 档位落点：rig 可见性/动画频率（rig 内部同步转发 ProceduralOverlay 同档节流）
-## + 血条频率/显示。rig.visible 由 LOD 独占管辖（受击闪红走 modulate，不依赖 visible）。
+## + 血条频率/显示。rig.visible 由 LOD 独占管辖（受击闪红走 modulate，不依赖 visible）；
+## 小兵渲染代理模式下 rig 让位（CrowdRenderer 全权渲染，LOD 只管血条）。
 func _apply_perf_tier(rig_visible: bool, anim_hz: float, bar_hz: float, bar_visible: bool) -> void:
-	if rig != null and is_instance_valid(rig):
+	if rig != null and is_instance_valid(rig) and not rig.is_crowd_proxied():
 		rig.visible = rig_visible
 		if rig.has_method("set_anim_update_hz"):
 			rig.set_anim_update_hz(anim_hz)
@@ -1501,9 +1598,13 @@ func is_routed() -> bool:
 
 ## 受击反馈：物理击退冲量 + 受击红闪。
 ## 由 WeaponMount.perform_attack 命中时调用（dir 为指向目标的方向）。
+## sim 模式冲量写入 sim 击退数组（批循环积分+衰减），不再写本地冲量字段。
 func apply_hit_reaction(dir: Vector2, force: float) -> void:
 	if dir != Vector2.ZERO:
-		_knockback_velocity = dir.normalized() * force
+		if _sim_active():
+			_sim.add_knockback(_sim_sid, dir.normalized() * force)
+		else:
+			_knockback_velocity = dir.normalized() * force
 	_flash_hurt()
 
 

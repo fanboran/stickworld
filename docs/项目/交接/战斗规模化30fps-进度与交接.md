@@ -3,9 +3,10 @@
 > 目标：战斗场景达到可游玩帧率——**标准战役 48（48v48）≥30fps**；大军压境 96 尽力优化不设硬线。
 > 分支 `perf/battle-30fps`（已合并 main）。
 >
-> **状态：阶段性收官（2026-09-09，选项 B）**——48 可玩目标达成后合入 main；
-> 96 满编 4.5fps 与 D 刀（数据化批模拟，§十）留待后续立项，重开时重建
-> worktree 并读本档进度日志即可恢复全部上下文。
+> **状态：§十四 CrowdRenderer 重写进行中（2026-09-11 重开）**——批次 1/2
+> （核心+接线）完成：16v16 渲染态 fps 94.6 / draw 616（历史新高）；白填充
+> 与入战圆点两 bug 已修复（下方六、3/4 条）；剩批次 3（idle 变体池/远档
+> 跳帧）与 96 全链验收。前一阶段（2026-09-09，选项 B）48 可玩已合入 main。
 
 ## 一、背景与测量基线（2026-09-09，PerfProbe 探针实测）
 
@@ -177,6 +178,321 @@ Terraria/王者真正可借鉴的是**刻内数据化**：单位不是场景树�
   Parse Error（"ink" 未声明，编辑器模拟扫不出，需修）；②battle_arena R 键
   探针 key 注入不生效（keycode vs physical_keycode）+ 重开后 HUD 上一局
   标签不刷新（dev 场景小瑕疵）。
+- 2026-09-10：**D 刀重开（整体迁移第一版）交付**。按 §十 重开必读执行整链
+  切换：移动/分离/边界/击退/冷却/命中帧时序/远程放箭计时一次进 sim，实体
+  变渲染代理。落点：`modules/combat/scripts/battle/battle_sim.gd`（SoA 批
+  内核）+ stickman_entity/weapon_mount/battle_instance 三处 sim 分支 +
+  ProjectSettings `[sim] battle_sim` 开关（默认开；环境变量
+  `STICK_BATTLE_SIM=0` 兜底回退旧链）。设计要点与实测数据见 §十一。
+  **验收（同机同条件 A/B）**：48 满编 6.3→8.1fps（+29%）；96 满编 1.4→1.4
+  （持平）；headless 96 每刻 9.3→9.5 ticks（模拟侧不是 96 的墙）；日志
+  零脚本报错；96 混战终态截图行为正常（两军接战有伤亡/弓兵后排阵列/分离
+  无叠人）。**96 差分定位（headless freeze-entities 满速 vs base 9.5）**：
+  实体链在 headless 模拟侧占比很小，**96 满编的墙是渲染帧骨架管线
+  （proc ~200ms，Wall B）**——下一刀在渲染侧（D3 渲染纯投影/非 rig 剔除/
+  代码 IK），不再在模拟侧挖。
+  **回归与行为验收**：test_combat_fidelity 全绿（命中帧/AOE/格挡/反伤/
+  爆头死亡——旧链未破坏）；test_entity_states 全绿；48 终态截图：满编
+  混战 11 伤亡（伤害/死亡链在跑）、分离无叠人、弓兵侧翼、箭矢弹道正常。
+  48 fps 第二跑 7.0（本机负载波动，sim 后区间 7.0-8.1，基线 6.3）。
+  交接档 §十一 已落档完整设计与下一刀排序（渲染侧）。
+- 2026-09-11：**刀①低帧率分桶（stagger 补偿）交付，实测净收益 ≈0，保留作
+  刀③框架**。按 §十一 排序做①（fps<<hz 时 LOD 节流失效，全单位每帧
+  advance+解算+叠加+批写，proc 线性堆叠）：按全局渲染帧号把单位分桶错峰
+  （fps<6→2 桶、<3→4 桶，env `STICK_RIG_STAGGER=0` 关），跳过帧跳
+  advance/overlay 叠加/批缓冲写三块。开发中踩中两个坑（用户实机报
+  「肢体飞」后定位，机制与规避见 §十二——**下一个做渲染侧的人必读**）。
+  **实测（诚实定论）**：headless 96 分桶 9.6 vs 基线 9.5 ticks/s——净收益
+  ≈0，非持久 override 机制下解算不可跳帧，advance/overlay/flush 的节省
+  被解算墙吞掉；而跳解算的 buggy 中间版 headless 13.5（+42%）——**解算
+  每帧就是渲染侧 _process 最大单项，刀③（代码解算 IK，绕开非持久
+  override）优先级据此提升**，buggy 版数据即刀③收益下界。渲染态同环境
+  A/B（96 基线 2.6 vs 分桶 2.3-2.7、48 基线 8.6 vs 分桶 8.4-9.4）持平
+  无回归；本机负载波动极大（同代码 96 渲染态 1.4~9.0 跨时段复现），
+  跨时段 fps 对比不可作归因依据，同分钟 A/B 才算数。
+  **回归验收**：单测 40 套全绿（含 stickman_anims/anim_finished/
+  combat_fidelity）；check_godot_errors 干净；96 终态截图姿态正常。
+- 2026-09-11（续 2）：**刀②第一片——接触阴影合批落地（1628→1516 draws，
+  -112）**。battle_perf 加 `draw_calls_median` 采样（渲染管线精确统计，
+  **不受 CPU 负载噪声影响，是当前可信量测通道**）。96 基线 1628 draws
+  构成 ≈192 单位 × 8（身体 4 MMI + 阴影 + 血条 + 武器 1-2）。阴影此前
+  `z_index=-2` 为**相对实体 z**（y 序 0~14 → 各阴影实际 z 1~15 交错断批）；
+  改 `z_as_relative=false + z=1`（DECORATION 层绝对 z：地面之上、树序在
+  装饰后成连续段、建筑/单位正常遮盖）→ 同纹理自动合批。-112 而非 -191
+  的残差 = 受击 modulate 传染等临时态断批点，不深挖。截图可见性与基线
+  无差（远 zoom 下阴影本就极淡）。单测 40 套全绿、报错干净。
+  **剩余大头与观感 trade-off（需创始人拍板再动）**：①身体 4 MMI/单位
+  ~768 draws——跨单位合批（全局 4 桶或 y 分带 12-16 桶）会丢单位间 y-sort
+  遮挡（全部平铺/带内平铺），混战观感变化需眼睛验收；②武器 Sprite2D
+  ~192-384 draws——必须画在本单位身体之上（y-sort 语义），降 z 会消失
+  在身体后，纯色 MMI 桶装不下纹理武器，暂无低风险合批路径；③血条已
+  z=50 全局顶层（当年为防 y-sort 遮挡而设），同 z 连续已自动合批，无余量。
+
+## 十二、刀①低帧率分桶：机制、两个坑与解算墙证据（2026-09-11 交付）
+
+**机制（stickman_rig.gd + procedural_overlay.gd，env `STICK_RIG_STAGGER=0` 关）**：
+fps<<推进档时 LOD 节流累积器每帧满足（帧 delta 0.7s >> 1/hz），节流失效
+= 全单位每帧走完整渲染管线。补偿：`Engine.get_process_frames() % k ==
+_stagger_seed % k`（seed 每单位随机，人群跳步帧错开）判推进帧，跳过帧跳
+advance/overlay 叠加/批缓冲写；`_adv_accum` 跳过帧照常累积（推进帧一次
+推进整个累积量，动画时间与墙钟同步）；overlay 侧 `_hz_accum` 同理。重估
+每 1s 按引擎 fps 定 k（<3→4 桶、<6→2 桶），全速档（hz≥60）不参与。
+
+**坑一（用户实机报「肢体飞」）：跳过帧绝不可停骨架解算**。Skeleton2D
+修改器的解算输出是**非持久 local_pose_override**——仅内部处理写入的当帧
+生效，其余阶段从 cache_transform 还原未解算值（引擎机制，见
+`docs/技术/架构/场景与战斗/战斗与AI.md` §TwoBoneIK 两层强约束，当初
+「全身横躺 90°」事故同源；待办事项 T23 结案记录）。跳过帧
+`set_process_internal(false)` → 该帧渲染回退未解算姿态，与解算帧交替 =
+肢体大幅闪烁。修法：解算保持每帧跑（internal 开关不被分桶扰动——推进帧
+solve 节拍在 k>1 时恒满足，internal 恒 true，与分桶前成本持平）；跳过帧
+连批渲染 flush 一起跳（缓冲保持推进帧的解算后姿态，显示滞后 k 帧但连续
+无闪烁）。
+
+**坑二：跳过帧必须照常累积推进累积器**。`_adv_accum` 若只在推进帧累积，
+推进帧只推单帧 delta → 动画时间流速 = 墙钟/k（k=2 半速慢动作、k=4 四分
+之一速）。修法：累积移到分桶门外，推进帧一次推进整个累积量。
+
+**解算墙证据（headless 96 同机同刻）**：基线 9.5 / 分桶（解算照跑）
+9.6 / buggy 中间版（解算随桶跳）**13.5 ticks/s**。即 advance 采样 +
+overlay 叠加 + 批缓冲写三块合计占比 ≈0，**4×TwoBoneIK 每帧解算才是
+_process 最大单项**——而非持久 override 机制使它一帧都不能停。这把
+§十一 刀③（代码解算 IK：解算从 SkeletonModificationStack 换成代码自管
+姿态，彻底绕开非持久 override）的收益钉死：跳过帧可真跳解算，分桶框架
+立即兑现，buggy 版 13.5 即收益下界。刀③落地前本机制零收益也无回归。
+
+**刀③落地（同日，比原设想简单——不是代码解算，是直接禁栈）**：验证
+发现骨骼姿态完全由动画 track 持久驱动（写 bone pose），栈的解算 override
+每帧被动画覆盖、实际是死重（与征服线 agent/conquest-loop 批次 4h「IK
+栈不解算实锤」交叉印证）。落地 = `_init_ik` 默认不启用修改器栈 +
+`set_process_internal(false)` 永久停骨架内部处理（pose 缓存/传播全套），
+`STICK_RIG_IK=1` 开回旧行为（A/B 兜底；编辑器模式不受影响）；原「代码
+解算 IK」方案不再需要——姿态无 IK 需求时禁栈即终局。_solve_hz/_solve_accum
+限频机制与 _notification 的 INTERNAL_PROCESS 标脏分支随之删除（无解算
+可限频、无解算落地帧）。**姿态验收**：96 渲染态终态截图行进/列阵/混战
+姿态与开栈无差；单测 40 套全绿；check_godot_errors 干净。
+
+**⚠️ 量测污染警示（本日核心教训）**：上表 headless 数字**全部作废**——
+验证发现 default 与 STICK_RIG_IK=0 同代码路径的两次交替跑分别落在
+9.6~10.0 与 9.6~12.8：本机负载**分钟级波动 ±30%**（背景进程/编辑器/其他
+会话），跨时段绝对数字不可比；此前「headless 方差 ±0.15」是三连跑恰好
+撞上平静段的误判。**未来量测纪律**：①同分钟内交替 A/B 多组（≥3 组）
+取中位；②绝对数字只在安静环境（无编辑器编译/无并行会话）复测；③渲染态
+fps 波动更大（同代码 96 跨时段 1.4~9.0），一律同分钟 A/B。刀③收益定性：
+纯删空载工作必然不慢，幅度待安静环境复测。
+
+**附带发现**：battle_perf `--headless-measure` 的「模拟侧独占开销」注释
+语义不准——headless 下节点树照常实例化，rig `_process`（advance/解算/
+overlay）与批渲染 flush 混入 ticks 速率（本次解算墙正是用它测出的），
+解读数据时注意。
+
+## 十三、渲染规模化行业实践调研（2026-09-11，用户发起）
+
+**来源**：Godot 官方文档《Optimization using MultiMesh》
+（godotengine/godot-docs，标注 article_outdated 但技术点仍有效）、
+《Optimization using Servers》；综合领域共识（Factorio 渲染器分层批量、
+They Are Billions 类 2D 大人集体、RTS 的 GPU 蒙皮人群）。
+
+**与本项目 96 满编（1628 draws，身体 4 MMI/单位 ≈768）的对照结论**：
+
+1. **MultiMesh 的正确粒度是「全局桶」而非「每单位一组」**——官方定义
+   MultiMesh 为「单次 draw 画数万~百万实例」的基元；每单位 4 个 MMI
+   （768 draws）只用了 MultiMesh 的部件合批、没用上跨单位合批。全局
+   4 桶（描边 rect/caps + 填充 rect/caps）× y 分带 3~4 带 = 12~16
+   draws，768 → 1/50。
+2. **逐实例剔除缺失的官方解法 = 按世界区域分多个 MultiMesh**——正好为
+   「y 分带」提供官方背书：带间遮挡保留（高带后画盖低带）、带内平铺
+   （无逐实例排序）、离屏带整体跳过（带 = 剔除粒度）。
+3. **数量级路线图（官方）**：数千实例 GDScript 足够（96×30≈2880 实例
+   落在舒适区）；数十万~百万级才需要 C++/GDExtension + `RenderingServer.
+   multimesh_set_buffer()`（线性内存整缓冲一次提交、可多线程构建）。
+   我们现有整缓冲写方案方向正确。
+4. **RenderingServer 直接 API 是逃生通道不是常态**：绕过节点树省管理
+   开销、可异步/多线程，但 RID 手动生命周期、draw 指令不可变（改=
+   clear 重加）、API 不返回数据（取值调用强制同步阻塞）。当前规模不
+   需要。
+5. **实时骨骼 2D 人群的规模化终点是烘焙帧图集 / GPU 蒙皮**（行业共识：
+   帧图集精灵或顶点着色器内解算，CPU 不逐单位采样骨骼）。96 规模下
+   刀①③后骨骼管线可扛，**上千单位时再立项烘焙图集**（近档实时骨骼 +
+   远档图集的 LOD 混合是标准折中）。
+6. 可用的小 API：`visible_instance_count`（先分配最大实例数、按需收缩
+   可见数）——比重建实例表便宜。
+
+**刀②下一片立项依据（需创始人拍板观感 trade-off 后动工）**：身体全局
+桶 + y 分带（12~16 draws）。观感代价 = 带内单位不再互相遮挡（平铺），
+武器 Sprite2D 将浮在所有身体上（武器挂实体子树 z 高于全局桶）。96 满编
+混战本就高度重叠，损失预期可控，但属观感决策不单方面动工。
+（**创始人裁决后转向：不做全局桶改造，直接做 §十四 小兵帧图集代理化
+——旧富管线整体退役，全局桶失去意义。**）
+
+## 十四、小兵帧图集代理化（2026-09-11 立项，创始人裁决发起）
+
+**背景与反思**：96 满编在刀①③②后仍 ~1500 draws、个位数 fps，根因不在
+优化手段而在架构——每个小兵复制了一整套「主角级」富渲染管线（23 骨
+Skeleton2D + AnimationTree 逐单位采样 + 叠加层 + 武器挂点 + 物理体 +
+血条阴影），192 单位 = 上万物件节点、每单位每帧几十次 GDScript 调用。
+一百多个纯 2D 单位的打斗本应是「sprite + 模拟循环 + 一次批量绘制」的
+廉价问题；此前各刀都在优化富管线的开销分布，没有质疑小兵凭什么用富
+管线。创始人裁决：按行业默认做法整体重构。
+
+**目标架构（2026-09-11 修订：代码插值矢量代理，帧图集留作 500+ 规模后手）**：
+
+侦察发现动画并非外部 Spine 数据——`tools/baking/bake_anims.gd` 程序化
+烘焙的 .tres，**每动画仅 4~8 条骨骼 rotation 轨道、每轨道 3~5 个关键帧**
+（walk 8 轨道 / attack 4 轨道）。因此不需要离线烘焙帧图集：
+
+- **小兵 = 纯数据 + 代码插值矢量代理**。CrowdRenderer 全局 4 桶
+  MultiMesh（描边 rect/caps + 填充 rect/caps，同 stickman_batch_rig
+  构成）；每单位状态 = {动画名, 播放位置 t}，每帧按关键帧插值出 4~8
+  个骨骼角度 → 复用批渲染的先序累乘 + 预烘部件变换数学 → 写实例段。
+  观感与骨骼管线同源（同几何同色），无帧图集的 tint 单色化/分辨率
+  匹配/分页问题；CPU 每单位 ≈ 200 次浮点运算 + 360 floats 写。
+- **动画状态播报制**：小兵 rig 停用（AnimationTree 不跑），实体调
+  `rig.play()/play_hit()` 时播报 CrowdRenderer 切动画；`animation_
+  finished`（攻击播完回切/移动锁）由 CrowdRenderer 检测 t ≥ 动画时长
+  回调实体，语义与 rig 的 LOOP_NONE 完成检测一致。命中帧时序已归 sim
+  （D 刀），渲染零依赖。
+- **骨骼富管线只留玩家附身单位与英雄**（个位数）。小兵 rig visible=
+  false + 动画停用 + 批渲染层 discard；血条/阴影照旧（阴影已合批）。
+- **模拟侧零变化**：sim 已是位置/朝向/动画状态权威，AI/DamagePipeline/
+  行为链全部不动。
+- 渲染侧 draw：96 满编 1516 → **20 以内**（身体 4 + 阴影 1~3 + 血条
+  顶层批）；帧率瓶颈移回模拟侧，验收线 60fps 可玩起步；「上百帧」需
+  模拟侧后续深挖另立刀。回退开关：env `STICK_CROWD=0` 回退骨骼富管线
+  （默认开）。
+
+**终态架构（2026-09-11 定稿，「一战场一张实例表」）**：基线实测渲染是
+主犯（proc 71ms/帧），AI/逻辑按量测驱动排后。单位退化为纯数据行，全部
+可见物进 MultiMesh，每单位 CPU 成本=字典行+数值更新：
+
+| 可见物 | 现状 | 终态 | draw |
+|---|---|---|---|
+| 身体描边/填充 | 12带×4桶 MMI ✅ | 不动 | 48 |
+| 武器/盾 | 独立 Sprite2D ~150 draw | 运行时烘图集，每带 1 武器 MMI，shader 按 INSTANCE_CUSTOM 采 UV | 12 |
+| 阴影 | 每单位节点 96 draw | 全局 1 MMI（半透明椭圆 quad，无遮挡语义不分带） | 1 |
+| 血条/圆点 | 每单位 indicator 96 draw | 全局 1 MMI（点=圆 quad，条=底/填充/残影 quad），wobble 用顶点 shader sin 扰动复刻；渐隐/展开/残影/低血闪状态机留 CPU 数据行 | 1 |
+
+目标 draw 929→~100（含地形/UI/投射物）。GPU 姿势纹理不进终态：96~200
+单位规模下 CPU 插值 3-7ms 非瓶颈，规模上 300+ 单位再立项。
+
+**批次**：
+
+1. **CrowdRenderer 核心**：动画表预编译（.tres → 每骨骼关键帧数组）、
+   骨骼先序 + 部件预烘表（复用 Skel.SKELETON_DATA 与 batch_rig 数学）、
+   y 分带 12×4 桶 MMI、tick 推进插值写 buffer、animation_finished 回调。
+2. **接线**：rig.play/play_hit 播报（set_crowd_hook 代理模式）、
+   battle_instance 装配代理 + 小兵 rig 停用、附身豁免、env 开关。
+   ✅ 已完成（2026-09-11 深夜）：核心+接线全通，16v16 渲染态
+   **fps_avg 94.6 / median 99（历史新高，基线富管线同刻 96.9）**、
+   draw_calls 616（富管线同刻 815）。
+3. **白填充 bug**：✅ 已修复（b69c2055）。根因：setup() 的
+   `container.move_child(mmi, band)` 打乱同 z 的带内桶序（同 z 绘制顺序
+   靠树序）——白描边桶后画，把深色填充桶整个盖住（描边矩形更宽且同长，
+   完全遮蔽填充）。probe 同样中招，此前"probe 正常"系像素误判。修复：
+   删 move_child（创建循环本身即带主序×桶次序，注释禁止再 move）；
+   实例颜色通路经 set_instance_color 涂色对照实验实证无罪。三处 dump
+   与禁光实验代码已清，check_godot_errors 通过。
+4. **入战圆点**：✅ 已修复（a71e0b8c），双根因叠加：
+   ①「血条三改」（e2f6163f）加的 `_shown<=0.01` 早退门 × 性能优化
+   （b5c3b4ec）给 wobble/残影/抖动/展开重绘加的 `_ever_damaged` 门——
+   满血圆点从此再无任何重绘来源，而 modulate.a 渐显不触发重绘，首次
+   _draw 被空门拦下后画布永空（掉血单位靠 _on_damaged 重绘所以条正常）。
+   修复：_shown 跨 0.01 阈值时补一次 queue_redraw（渐显画出/渐隐清空）。
+   ②创始人指示：**入战=整场战斗**——在战判定从近身威胁 140px（AI 溃逃
+   语义，不共用）改为 `battle_instance.is_active()`：battle 打响全员
+   头顶圆点、受伤展开成条、战斗结束渐隐。t=5 截图实证前后排全员红/蓝
+   圆点显示正常。
+5. **身体消失（浮空武器血条观感）**：✅ 已修复（0c738043）。根因：
+   BAND_CAP=48 带内截断复用尾位，挤团带超员（48v48 主战线一带 50+ 人）
+   时两单位撞同渲染段+同 slot 全局下标，后者覆盖前者——被顶掉单位不再
+   tick（身体消失），武器/血条/阴影挂 entity 侧照常渲染=「浮空」观感。
+   修复：带内无上限按需扩容 + 全局 slot 池寻址（与带解耦）+ 跨带搬段
+   旧槽位还池。t=8 弓兵队/中区截图实证身体全回。
+6. **渲染终态三桶**（部分完成）：
+   - **阴影桶 ✅**（df4b17ad）：全局单 MMI，白纹理×3 层同心椭圆实例色阶梯
+     （0.08/0.13/0.16，alpha 合成中心 ≈0.33）复刻软边；96 个 ContactShadow
+     节点退役（注册隐藏/注销恢复）。draw 收益≈0——刀②把阴影调成同 z 连续
+     段后引擎已自动合批，真实收益=−96 节点的每帧变换/树开销，96v96（192
+     阴影节点）时收益更大。**⚠ 关键技术事实：MMI 管线对带 alpha 的自建
+     ImageTexture 实测不渲染**（GradientTexture2D 转制与手写逐像素两版
+     均隐形，白纹理+黑色实例色对照立现）——明暗必须走实例色，纹理只用
+     纯白兜底；武器图集桶实施前须先做「图集 MMI 最小渲染对照」验证
+     （图集透明背景区域可能触发同坑）。
+   - **血条桶 ✅**（8eaab732 + 6cef1ffe）：全局双 MMI（圆点=圆 mesh、
+     横条=手绘条模板 mesh），纯实例色；indicator 转「数据模式」
+     （set_crowd_data_mode/get_bar_state 快照——渐隐/展开/残影/抖动/低血
+     闪/hover/LOD/死亡隐藏状态机全保留，仅绘制终点换桶）。
+     **48v48 draw_calls_median 930→655**。
+   - **血条手绘感复刻 ✅**（6cef1ffe，用户反馈驱动）：初版光板矩形/圆丢失
+     手绘感，补 wobble shader——顶点 boiling 扰动（相位 floor(TIME/0.12)
+     离散跳变复刻逐帧重掷 seed、每单位 INSTANCE_CUSTOM 错相）+ 手绘条
+     模板 mesh（水平 12 段上下边顶点，quad 仅 4 角扰动=刚体晃动不够）+
+     描边行（黑垫层外扩 0.5×线宽，对齐原版中心线描边视觉外露量）+
+     圆点 _expand<0.999 硬切对齐原版（alpha 渐隐会残留「条中圆心」）。
+   - **武器图集桶 ✅**（6cef1ffe）：武器/盾纹理注册期去重收集，运行时
+     blit 图集（256×1024）→ 全局单 MMI（z=18 绝对层，武器本无单位间遮挡
+     语义），crowd_weapon_atlas.gdshader 顶点期按 INSTANCE_CUSTOM 把 UV
+     映射到图集子区域；原 Sprite 停用（回退/注销恢复）。**最终 draw
+    _calls_median ≈ 550**（基线富管线 1516 / CrowdRenderer 初版 930）。
+   - **血条观感对齐 ✅**（2da41f1b，创始人验收打回后修）：新增
+     **bar_probe 血条特写对比场景**（tests/dev/bar_probe.tscn——无角色，
+     上排原版自绘/下排 crowd 桶，蓝红两阵营×满血圆点+5 档血量条同屏，
+     1.2s 自动截图）——此工具留作血条观感回归的标准验收手段。修四处：
+     ①条尺寸 *0.5 笔误（长高全瘦一半，观感差异的主因）；②无条态退化条
+     （描边行宽=outline_pad）画成圆点中心黑竖条→无条态整行透明；③10 段
+     圆 fan 漏闭合三角形→中心左侧楔形镂空透黑；④描边外扩恢复全线宽+
+     条模板加端头微凸点。wobble 扰动改 hash 公式复刻原版 _wobble
+     （655bbd67）。
+   - **血条像素级对齐 ✅（2026-09-12，创始人要求「像素级一模一样」）**：
+     bar_probe 升级为**双跑像素 diff 验收闭环**——`--row=rich|--row=crowd`
+     两跑同布局同坐标（确定性钉死：`_update_hz=0` 冻结状态机、wobble seed
+     按列钉预烘相位、无 shader TIME 依赖），产物 bar_ab_rich/crowd.png 经
+     `tools/diff_png.py` 逐像素比对出差异统计+热点簇+热图。
+     **最终 diff = 0（1920×1080 全帧逐像素一致，双跑稳定复现）**；
+     draw_calls_median 588（覆盖层 6 组×(8 相位+plain) 槽，+38 在预算内）。
+     **验证**：diff=0 复现（`python stick-world/tools/diff_png.py`，任意 cwd）；
+     unit 批量 + 6 个受影响集成套件（ai_behaviors / possession /
+     melee_combat / combat_feedback / combat_control / placement_grid_units）
+     全绿；`check_godot_errors.sh` 干净。⚠ `test_ai_enhance.gd` 偶发 FAIL
+     （"硬直结束后应恢复目标获取"）经 stash A/B 对照证实为**既有 flake**
+     （同批基线同样偶发，与本次改动无关），待 main 处置。
+     五个根因与解法：
+     ① **扰动同源化**：wobble 数值由 CPU（原版 `_wobble` 逐字同式 float64）
+       预烘 8 相位表烘进网格 UV——GPU float32 复算 sin 大参数精度不可控且
+       无法与 CPU 路径对齐，shader 只做线性位移。相位组 = indicator
+       wobble seed % 8：原版每 0.12s 重掷 seed → 桶侧换组跳相位（boiling
+       逐帧抖动语义一致）；满血圆点 seed 恒 0 → 静止（与原版一致）。
+       ⚠ **保真边界**：桶侧相位只有 8 组（原版 seed 是任意整数）——验收
+       闭环 pin 同相位时逐像素一致；实机为同族噪声（同 0.12s 重掷节奏、
+       离散 8 相位）而非同一 hash，视觉无差但机制上非逐位复刻。
+     ② **描边层序**：原版 `_draw_bar` 描边画两遍（0.95 半透明双绘合成
+       ≈0.9975，单绘差 3/255 系统色偏 + AA 有效外沿偏移）——覆盖层拆
+       6 组按树序绘制：底色→描边①→残影/填充→描边②→点填充→点描边。
+     ③ **描边几何 = miter 环带**：polyline_probe 实验实证 draw_polyline
+       join 为 miter（外缘 = 顶点 + 相邻两边世界法线角平分线 ×
+       0.8/cos(半外角)，ext 37°~74° 无角度限制）。环带网格 = miter 偏移
+       多边形内外双拷贝环形缝合；条实例非均匀缩放（w×7）下法线随宽高比
+       变化，由 DELTAS[16]（单位烘表，按变体挂材质）×(bw,hh) +
+       COEFF[16]（端头位移修正：抵达边 +c / 离开边 -c，同号会算歪斜边
+       法线）在 shader 逐实例重建。
+     ④ **端头复刻**：凸出 0.3×行高 + 端头 wobble x 位移经 UV 打包通道
+       （UV.x=前后边索引×32+后边索引，UV.y=code×131072+(t+1)×65536——
+       canvas_item 无 UV2 内置）传入 shader。
+     ⑤ **窄条退化**：plain 直角网格另烘（对齐原版 `_draw_wobbly_rect`
+       的 draw_rect 回退），描边偏移 = (n1+n2)×0.8 直角方角。
+     圆点：均匀缩放可全烘焙（径向 wobble 0.9/6 单位常量烘进半径、miter
+     构建期烘焙），shader 零位移。覆盖层桶 = OverlayBucket 内部类
+     （N+plain 槽；begin/row/end——end 清高水位尾段，防死亡/换相位组后
+     残留行渲染成幽灵血条）。
+   - **⚠ 技术事实（weapon_probe 四行对照实验修正）**：MMI 管线对「全图
+     半透明的软渐变自建纹理」实测不渲染（阴影 0.34 渐变两版构造均隐形）；
+     **二值 alpha（1/0）的自建图集渲染完全正常**（透明区正确丢弃）——
+     武器图集走透明底原样路线，无需 discard。
+7. 7. **表现批次**（原批次 3 顺延）：idle 变体池、hit/dead 变体映射、
+   远档跳帧——表现完整性，与性能无关。
+8. **量测驱动收尾**：96 全链验收（同分钟交替 A/B 取中位纪律见 §十二）、
+   AI 分帧与尖峰消除（worst_frame_ms 800+ 巨刺先 profiler 抓因）仅在
+   渲染终态落地后按实测决定是否立项。
 
 ## 七、结构侦察结论（阶段 2 的设计依据，已实证勿重查）
 
@@ -280,3 +596,72 @@ STICK_BATTLE_SIM 兜底），关闭时走旧实体链（A/B 与回滚）。
    硬线）→提交分支。
 4. 若 §八 达标后仍想榨：D 数据化（PackedArray 批模拟）再评估，否则收尾
    （撤销 worktree 的 PerfProbe 接线、归档交接档）。
+
+## 十一、D 刀整体迁移第一版：BattleSim 落地设计（2026-09-10 交付）
+
+**架构（已实现，开关 `[sim] battle_sim`，env `STICK_BATTLE_SIM=0` 回退）**：
+
+- `modules/combat/scripts/battle/battle_sim.gd`（BattleSim，RefCounted，每
+  BattleInstance 一份）。SoA：`pos_x/y`（权威位置）、`intent_x/y`（AI 意图
+  速度，实体侧加速曲线算好后写入）、`kb_x/y`（击退冲量，线性衰减 700/s²）、
+  `faction/cooldown/foot_off/strike_slot/strike_elapsed/ranged_timer`；
+  引用表用普通 Array（实体表/_strikes 槽池/网格 cell——PackedArray 存容器
+  是值拷贝，批 1 教训③）。
+- `tick(delta)` 单 pass：分离（隔刻 15Hz，网格重建 cell=64 + 内联修正，
+  语义=旧 _apply_static_separation：重叠半推/先累加再限幅 3px/死者除外）
+  → 运动（意图+击退积分 + 边界 clamp，Y 以 foot_offset 脚部参考系）
+  → 武器（冷却推进 + 近战 strike 命中帧 crossing + 远程放箭到点）
+  → 写回（entity.global_position / velocity（箭矢预判消费）/ z_index）。
+- **命中帧时序归 sim**：perform_attack 时 WeaponMount 把 hit_time 解析成
+  绝对秒（Hit 事件真值；无事件数据 = 动画时长×0.45；无 rig 测试桩 = 0 立即
+  结算）登记 sim；crossing 时回调 `weapon.sim_strike_now()`——结算链复用
+  旧 `_do_strike()`（AOE 弧/情绪掷骰/暴击/DamagePipeline/hitstop 零重复）。
+  sim 是时序权威，渲染侧攻击动画只是观感（与 rig 播放位置可能漂移，已接受）。
+- **实体 sim 分支**（`_sim_active()` = 已注册且未死）：`_physics_process`
+  跳过 move_and_slide/静态分离/击退衰减/边界 clamp/z_index（sim 批管）；
+  保留 AI 决策节流 + `_apply_movement` 加速曲线与动画切换（velocity 照算，
+  末尾写 sim intent——动画观感与旧链同源）+ 士气/硬直/markers。死亡分支
+  照旧（尸体碰撞禁用/淡出在实体侧）。`apply_hit_reaction` 写 sim kb。
+- **WeaponMount sim 分支**：`_physics_process` 早退（冷却/命中帧/放箭计时
+  全在 sim）；`can_attack` 读 sim 冷却（cancel window 判定照旧读 rig——
+  动画仍在播）；perform_attack/perform_swing/_attack_ranged 三入口登记
+  sim 并写 sim 冷却（`_cooldown_timer` 字段 sim 模式下不再推进，
+  get_cooldown_remaining 消费方注意）。
+- **范围裁剪**：附身单位不注册（`_on_possession_changed` 附身即注销交还
+  旧链）；非参战单位（工人/村民）不注册；AI 决策/行为状态机/DamagePipeline/
+  箭矢弹道/状态效果/士气保持 Node 侧（低频事件链，HealthComponent 仍血量
+  权威）。`AIController._count_enemies_near` 等仍走 map 网格（未迁移）。
+- **on_unit_died 不清 sim**：死者留 sim 墓位（`_sid_alive` 过滤，零成本），
+  尸体淡出 queue_free → `_exit_tree` → `unregister_unit`（清 strike 槽）。
+
+**实测（同机同条件，1920×1080 Dummy 音频）**：
+
+| 场景 | 基线 | sim 后 | 备注 |
+|---|---|---|---|
+| 48 渲染态 fps_avg | 6.3 | **8.1** | +29%；满编混战峰 |
+| 96 渲染态 fps_avg | 1.4 | 1.4 | 持平——墙在 Wall B |
+| 96 headless ticks/s | 9.3 | 9.5 | 模拟侧不是 96 的墙 |
+| 48 headless ticks/s | 15.1 | 15.1 | 满速（15Hz 恐慌档） |
+
+**96 差分定位（headless）**：base 9.5 / freeze-entities 10.1（满速）——
+实体链在模拟侧占比 ~6%，**96 满编 1.4fps 的帧时大头是渲染帧骨架管线
+（proc ~200ms：Skeleton2D 解算 stagger 在 fps≤30 退化逐帧 + AnimationTree
+advance + 批渲染整缓冲写 + 非 rig draws）**。下一刀排序（均在渲染侧）：
+①骨架解算 stagger 的低帧率补偿（fps<<30 时按刻数解算而非逐帧）；
+②非 rig 绘制剔除/合批（血条/阴影/武器 ~700-900 draws）；③代码解算 IK；
+④批渲染更新频率与 LOD 档位联动（T1/T2 单位缓冲写降频）。
+
+**批 1 净回归 vs 本版正收益的原因复盘**（对照 §十 教训）：批 1 只迁移
+移动学时，sim 写回与实体链剩余部分（AI 逐刻 move_and_slide 零位移早退前的
+velocity 合成、分离查询）存在双轨成本；本版整链切换后实体 `_physics_process`
+只剩低频决策与标量计算，物理查询（move_and_slide 的 body_test_motion、
+query_neighbors 的 Dictionary 分配风暴）全部消失，48 净赚 29%。
+
+**遗留与注意**：
+- `--no-ai` 实验开关长期无效（AIController 无 _physics_process，AI 更新是
+  实体显式调 physics_update）——battle_perf 差分数据解读时注意。
+- WeaponMount.get_cooldown_remaining 在 sim 模式返回 0（真相源在 sim）——
+  若有 UI/测试消费该接口需改读 entity.get_battle_sim().get_cooldown(sid)。
+- strike 结算的二次距离确认（1.25×射程）与命中率掷骰在 sim crossing 时跑，
+  与旧链同一代码路径（_do_strike），行为语义不变。
+- 测试套件与 48 截图验收见进度日志 2026-09-10 条（跑完补记）。

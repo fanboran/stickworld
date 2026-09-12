@@ -56,6 +56,10 @@ GRID_H_BAND = {4: (109, 192), 6: (163, 288), 8: (218, 384),
 STOREY_H_BAND = (175.0, 195.0)
 #: §8.2 出檐占建筑宽的比例区间（每侧）
 EAVE_RATIO_BAND = (0.18, 0.23)
+#: 相机固定俯角 20°（§0.3 视角硬约束：纯正面 + 俯角 20°）。檐口出檐会遮住墙顶
+#: `出檐 × tan20°` 高的一条墙面 —— 檐下 AO 条带必须压在**这条遮挡线之下**才看得见，
+#: 否则整条带都被自家屋檐挡掉（旧实现在墙顶贴 shadow_near，实测完全不可见）。
+AO_TILT_TAN = math.tan(math.radians(20.0))
 #: §8.2 带门建筑最小宽度（4 格档只做小物件）
 MIN_DOOR_CELLS = 6
 U_WIDTHS = (4, 8, 12, 16)   # 小物件以外，房屋类宽度取 4 的整数倍（4 格仅限小物件）
@@ -102,6 +106,13 @@ SPEC_COLOR = {
     "shadow_far":  ((0.44, 0.415, 0.370), 1.0, 0.0),
     "shadow_mid":  ((0.30, 0.280, 0.250), 1.0, 0.0),
     "shadow_near": ((0.20, 0.185, 0.165), 1.0, 0.0),
+    # 檐下 AO 暗带（屋顶结构二轮新增）：**低对比**——对抹灰墙的压暗量 0.23
+    # ≈ 既有 shadow_near 压暗量 (0.78-0.20=0.58) 的一半；比早先那版 shadow_near
+    # 明显轻，不会读成"檐下贴了条黑胶带"。实测：值 ≥0.60 时在抹灰墙上反而**比墙亮**、
+    # 不成暗带，故取 0.545（仍在"低对比/半暗度"口径内）。
+    # 名字含 "shadow_" → shape_points() 会把它排除出剪影测量（与接地阴影同规）。
+    # 深色墙（木板/砖）上的檐下暗带改用既有 shadow_mid（与墙对比更小，见 roof_gable ao_mat）。
+    "shadow_ao":   ((0.545, 0.530, 0.505), 1.0, 0.0),
 }
 EMISSIVE = {"fire": ((1.0, 0.42, 0.10), 4.0),
             "ember": ((1.0, 0.28, 0.05), 1.4)}   # name -> (color, strength)
@@ -451,11 +462,27 @@ def wall_panel(b, w, h, d, mat, x=0.0, y=0.0, z=0.0, openings=(), eps=0.0, axis=
     return {"w": w, "h": h, "openings": list(openings), "axis": axis}
 
 
+def _jit(i, salt=0):
+    """确定性抖动 ∈ [-1,1)。**不用 random**：跨进程/跨图逐位一致（管线纪律）。"""
+    v = (int(i) * 1103515245 + int(salt) * 2654435761 + 0x9E3779B9) & 0x7FFFFFFF
+    return ((v >> 8) & 0xFFFF) / 32767.5 - 1.0
+
+
+def _roof_family(mat):
+    """屋面材质 → 结构族：檐口断面/草束做法的分档依据（材质名不变，只换几何手法）。"""
+    if mat in ("thatch", "thatch_old", "reed", "straw"):
+        return "thatch"
+    if mat in ("tile", "slate", "shingle"):
+        return "tile"
+    return "wood"
+
+
 def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
                thickness=9.0, mat_under=None, gable_overhang=None, ridge_cap=True,
                cap_mat=None, cap_size=(0, 0), eave_board=True, board_mat=None,
                board_h=0.0, slope_uv=True, uv_swap=False, eave_ao=True,
-               rafter_ends=3):
+               rafter_ends=3, eave_section=True, straw_eave=True, straw_ridge=True,
+               ao_faces=None, ao_mat=None, ao_h=0.0, purlin_ext=(6.0, 14.0)):
     """双坡屋顶（屋脊沿 X，正面朝 -Y，相机侧看到整片前坡）。
 
     w        = 屋脊方向覆盖的建筑宽度（X，不含出檐）
@@ -464,6 +491,17 @@ def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
     overhang = 出檐（§8.2：每侧 = 建筑宽 × 18~23%）
     z        = 檐口高度（= 墙顶）
     返回 dict：檐口/屋脊高、坡长、坡度角。
+
+    屋顶结构二轮（全部为**纯几何**，默认开启、参数可关；不引贴图、不碰材质库既有条目）：
+    ① `eave_section` 檐口可见厚度断面——草顶做圆断面"草檐卷"（厚 16~24 可读）；
+       瓦/木顶做 6~10 高**封檐板** + 一排**瓦口/瓦条断面**（凸出板 4~6，长短抖动）。
+    ② `eave_ao` 檐下 AO 暗带——贴墙窄几何条带（高 10~16、凸出墙 4.5），低对比；
+       `ao_faces` 给出两面墙的实际外皮 y（有悬挑楼层的房子必须显式传，否则条带浮空）；
+       `ao_mat` 可换材质（深色木墙用 shadow_mid，浅灰墙用 shadow_ao）。
+    ③ `rafter_ends` 山墙檩条端头——每端左右坡各一排（2~4 根），出挑 6~14 + 长度抖动，
+       压在屋面板之下（不再是伸到屋面外的孤立方块）；草顶出挑收敛到 60%（被草檐半掩）。
+    ④ `straw_eave`/`straw_ridge` 茅草檐口草束（沿两道檐缘悬垂、微下垂梳齿感，straw 材质）
+       + 屋脊草穗（仅在 ridge_cap 时）；瓦/木顶不做此项。
     """
     ov_x = overhang if gable_overhang is None else gable_overhang
     ridge_len = w + 2.0 * ov_x
@@ -503,34 +541,126 @@ def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
             c2 = Vector((x, cy, cz)) - nrm * (thickness / 2.0 + 1.0)
             b.box_oriented(c2, axes, (ridge_len / 2.0 - 2.0, slope / 2.0, 1.0),
                            mat_under, uv_axes=uvx)
-    if eave_board:                              # 檐口封檐板：勾出檐线
+    fam = _roof_family(mat)
+    fmat = board_mat or mat_under or "wood_dark"
+    roll_r = min(9.0, max(6.0, thickness * 0.35))    # 草檐卷半径（板厚的圆角唇，不喧宾夺主）
+    cap_h = (cap_size[1] if cap_size and cap_size[1] else max(8.0, thickness * 0.55))
+    if ridge_cap:
+        cw = (cap_size[0] if cap_size and cap_size[0] else 26.0)
+        # 正脊压顶条：默认取深色（瓦/石顶用石脊、草/木顶用木脊）→ 正脊可读，不抬剪影
+        b.box_bottom((ridge_len + 2.0, cw, cap_h), (x, y), z + rise - cap_h * 0.35,
+                     cap_mat or ("stone_dark" if fam == "tile" else "wood_dark"))
+    # ---- ① 檐口可见厚度断面 ------------------------------------------------
+    if eave_section:
+        if fam == "thatch":
+            # 草檐卷：圆断面（半径随板厚），勾出"厚草檐"的真实厚度；不抬高剪影。
+            # 长度收到封山板之内（ridge_len-4）→ 端头被封山条盖住，不露出"圆棒切口"
+            for sign in (-1.0, 1.0):
+                b.cylinder((x, y + sign * (half + 1.0), z - roll_r * 0.30),
+                           roll_r, ridge_len - 4.0, mat, segments=12, axis="X")
+        else:
+            bh = min(10.0, max(6.0, board_h if board_h else 8.5))
+            for sign in (-1.0, 1.0):
+                ey = y + sign * half
+                # 封檐板：竖直板条（6~10 高），坡度角下读到"檐口有厚度"
+                b.box_bottom((ridge_len - 1.0, 9.0, bh), (x, ey + sign * 1.0),
+                             z - bh * 0.62, fmat)
+                # 瓦口/瓦条断面：一排瓦端（凸出封檐板 4~6、长短与高度抖动）
+                n = max(6, min(44, int(round(ridge_len / 15.0))))
+                for i in range(n):
+                    u = -ridge_len / 2.0 + ridge_len * (i + 0.5) / n
+                    sa_ = int(sign)
+                    bw_ = 12.5 + 2.5 * _jit(i, 41 + sa_)
+                    dp_ = 15.0 + 3.5 * _jit(i, 73 + sa_)
+                    hh_ = 7.0 + 1.6 * _jit(i, 97 + sa_)
+                    b.box_bottom((bw_, dp_, hh_), (x + u, ey + sign * 2.5),
+                                 z - 1.0 + 1.3 * _jit(i, 131 + sa_),
+                                 mat if fam == "tile" else fmat)
+    elif eave_board:                                # 旧行为退路（eave_section=False）
         bh = board_h if board_h else max(7.0, thickness * 0.42)
         for sign in (-1.0, 1.0):
             b.box_bottom((ridge_len + 1.0, 9.0, bh), (x, y + sign * (half - 2.0)),
-                         z - bh * 0.55, board_mat or mat_under or "wood_dark")
-    if ridge_cap:
-        cw = (cap_size[0] if cap_size[0] else 26.0)
-        ch = (cap_size[1] if cap_size[1] else max(8.0, thickness * 0.55))
-        # 正脊压顶条：默认取深色（瓦/石顶用石脊、草/木顶用木脊）→ 正脊可读，不抬剪影
-        b.box_bottom((ridge_len + 2.0, cw, ch), (x, y), z + rise - ch * 0.35,
-                     cap_mat or ("stone_dark" if mat in ("tile", "slate") else
-                                 "wood_dark"))
-    if eave_ao:                                  # 檐下暗带（AO）：贴墙顶的深色窄条
-        ah = max(8.0, min(14.0, rise * 0.09))
-        for sign in (-1.0, 1.0):
-            b.box_bottom((ridge_len, 7.0, ah), (x, y + sign * (span / 2.0 - 1.0)),
-                         z - ah, "shadow_near")
-    if rafter_ends:                              # 山墙端出挑椽头/檩头（每坡 2~3 根，只在下半坡）
-        n_r = max(1, int(rafter_ends))
+                         z - bh * 0.55, fmat)
+    # ---- ② 檐下 AO 暗带（贴墙窄条带；几何实现，非贴图） ---------------------
+    # 位置：顶面压到"出檐遮挡线"之下（z - 出檐×tan20° - 2），高度 10~14；
+    # 凸出墙面仅 3（小于木骨 4）→ 木骨会遮住它，暗带读作"木骨后的阴影"而不是贴条。
+    if eave_ao:
+        ah = ao_h if ao_h > 0.0 else max(10.0, min(14.0, 7.0 + rise * 0.06))
+        fys = ao_faces or (y - span / 2.0, y + span / 2.0)
+        top = z - overhang * AO_TILT_TAN - 2.0
+        for k, fy in enumerate(fys):
+            if fy is None:
+                continue
+            sign = -1.0 if k == 0 else 1.0            # 0 = 正面（-Y 外皮），1 = 背面
+            # 宽度收到建筑宽（不越墙角），暗带只在墙面正下方
+            b.box_bottom((min(ridge_len, w + 2.0), 9.0, ah), (x, fy - sign * 1.5),
+                         top - ah, ao_mat or "shadow_ao")
+    # ---- ①b 山墙封山板（盖住屋面板在山墙端的"切面"，同时加一道顺坡厚度线） ----
+    if eave_section:
         for sx in (-1.0, 1.0):
             for sign in (-1.0, 1.0):
+                rotx = -sign * ang
+                u_ax = Vector((0.0, math.cos(rotx), math.sin(rotx)))
+                n_ax = Vector((0.0, -math.sin(rotx), math.cos(rotx)))
+                b.box_oriented(Vector((x + sx * (ridge_len / 2.0 - 7.0),
+                                       y + sign * half / 2.0,
+                                       z + rise / 2.0)),
+                               (Vector((1.0, 0.0, 0.0)), u_ax, n_ax),
+                               (6.5, slope / 2.0 - 2.0, thickness / 2.0 + 1.5),
+                               mat if fam == "thatch" else fmat)
+    # ---- ③ 山墙檩条端头（每端左右坡各一排；出挑 6~14 + 长度抖动） -----------
+    if rafter_ends:
+        n_r = max(1, min(4, int(rafter_ends)))
+        lo, hi = purlin_ext
+        for sx in (-1.0, 1.0):
+            for sign in (-1.0, 1.0):
+                sal = int(sx * 3 + sign * 7)
                 for i in range(n_r):
-                    f = 0.18 + 0.46 * (i + 1) / float(n_r + 1)
-                    b.box_bottom((22.0, 11.0, 9.0),
-                                 (x + sx * (ridge_len / 2.0 - 2.0),
-                                  y + sign * (half * (1.0 - f))),
-                                 z + rise * f - 10.0,
-                                 board_mat or "wood_dark")
+                    f = 0.22 + 0.50 * (i / float(max(1, n_r - 1)))
+                    ext = lo + (hi - lo) * (0.5 + 0.5 * _jit(i, 11 + sal))
+                    if fam == "thatch":             # 草檐半掩：出挑收敛
+                        ext *= 0.6
+                    ln = 12.0 + ext
+                    yc = y + sign * (half * (1.0 - f))
+                    zb = z + rise * f - ca * thickness * 0.5 - 8.5
+                    xc = x + sx * (w / 2.0 + ext - ln / 2.0)
+                    b.box_bottom((ln, 10.0, 10.0), (xc, yc), zb, fmat)
+    # ---- ④ 茅草檐口草束 + 脊部草穗（仅草顶；瓦/木顶不做） --------------------
+    if straw_eave and fam == "thatch":
+        n_b = max(8, min(40, int(round(ridge_len / 12.0))))
+        ax0 = Vector((1.0, 0.0, 0.0))
+        for sign in (-1.0, 1.0):
+            ey = y + sign * half
+            for i in range(n_b):
+                u = -ridge_len / 2.0 + ridge_len * (i + 0.5) / n_b
+                j0, j1, j2 = _jit(i, 5), _jit(i, 17), _jit(i, 29)
+                bw_ = 5.5 + 1.5 * j0                 # 草束宽 4~7
+                ln_ = 14.0 + 6.0 * j1                # 长度抖动
+                bt_ = 4.5 + 1.2 * j2
+                tilt = 0.20 + 0.16 * (0.5 + 0.5 * j0)   # 微下垂外倾（梳齿感）
+                d = Vector((0.0, sign * math.sin(tilt), -math.cos(tilt)))
+                # 束根挂在草檐卷的外侧（inside 会被卷体吞掉 → 草束读不出来）
+                c = (Vector((x + u, ey + sign * (roll_r * 0.55), z + 1.0))
+                     + d * (ln_ * 0.5))
+                b.box_oriented(c, (ax0, d, ax0.cross(d).normalized()),
+                               (bw_ / 2.0, ln_ / 2.0, bt_ / 2.0), "straw")
+    if straw_ridge and ridge_cap and fam == "thatch":
+        n_s = max(6, min(26, int(round(ridge_len / 18.0))))
+        top_z = z + rise - cap_h * 0.35 + cap_h
+        cap_half = (cap_size[0] if cap_size and cap_size[0] else 26.0) * 0.5
+        ax0 = Vector((1.0, 0.0, 0.0))
+        for sgn in (-1.0, 1.0):
+            for i in range(n_s):
+                u = -ridge_len / 2.0 + ridge_len * (i + 0.5) / n_s
+                j0, j1 = _jit(i, 61), _jit(i, 83)
+                ln_ = 13.0 + 6.0 * j0
+                tilt = 0.55 + 0.20 * (0.5 + 0.5 * j1)
+                d = Vector((0.0, sgn * math.sin(tilt), -math.cos(tilt)))
+                # 束根落在压顶条**外肩**上（±0.62·半宽）→ 草穗披在脊两侧、正面可见
+                c = (Vector((x + u, y + sgn * cap_half * 0.62, top_z - 1.0))
+                     + d * (ln_ * 0.5))
+                b.box_oriented(c, (ax0, d, ax0.cross(d).normalized()),
+                               (4.2, ln_ / 2.0, 3.4), "straw")
     return {"ridge_len": ridge_len, "half_span": half, "slope_len": slope,
             "angle_deg": math.degrees(ang), "eave_z": z, "ridge_z": z + rise}
 
@@ -1043,7 +1173,7 @@ def assemble_house(width_cells=8):
         window(b, ow=ww, oh=z1 - z0, x=W / 2.0, y=wy, z=z0, frame_mat="timber",
                shutters=True, shutter_mat="wood_dark", muntins=1,
                axis="Y", face_dir=1.0)
-    roof_gable(b, W, D, rise, over, "thatch", z=eave, thickness=16.0,
+    roof_gable(b, W, D, rise, over, "thatch", z=eave, thickness=18.0,
                mat_under="wood_dark", cap_size=(34.0, 14.0), board_h=10.0)
     gable_infill(b, W, D, rise, "plaster", z=eave, thickness=14.0)
     for sx in (-1.0, 1.0):                       # 山墙木骨（两端，落在三角面内）
@@ -1055,7 +1185,7 @@ def assemble_house(width_cells=8):
     ob = b.to_object()
     spec = _mk("house", width_cells, {
         "depth": D, "plinth_h": plinth_h, "wall_h": wall_h, "eave_h": eave,
-        "rise": rise, "total_h": eave + rise, "overhang": over, "roof_t": 16.0,
+        "rise": rise, "total_h": eave + rise, "overhang": over, "roof_t": 18.0,
         "storey_h": [wall_h], "door": (door_w, DOOR_H), "door_x": dx,
         "bays": bays, "side_windows": len(side_win),
         "material": "抹灰+木骨 / 茅草顶"})
@@ -1118,9 +1248,11 @@ def assemble_townhouse(width_cells=12):
     for (wx, ww, z0, z1) in wins2:                   # 二层按开间数排窗
         window(b, ow=ww, oh=z1 - z0, x=wx, y=yf2, z=z0, shutters=True,
                shutter_mat="wood_dark", muntins=1)
-    # ---- 屋顶
+    # ---- 屋顶（檐下 AO 条带必须贴到"二层前墙外皮 yf2 / 后墙外皮 yb"，
+    #      屋面以 y=0 为中心、墙体因悬挑偏前，不显式给面就会浮空）
     roof_gable(b, W, D + jetty, rise, over, "tile", z=eave, thickness=14.0,
-               mat_under="wood_dark", cap_size=(28.0, 16.0), board_h=9.0)
+               mat_under="wood_dark", cap_size=(28.0, 16.0), board_h=9.0,
+               ao_faces=(yf2, yb))
     gable_infill(b, W, D + jetty, rise, "plaster", z=eave, thickness=14.0)
     for sx in (-1.0, 1.0):
         gable_timber(b, D + jetty, rise, "timber", (sx * (W / 2.0), yc2),
@@ -1183,7 +1315,7 @@ def assemble_barn(width_cells=8):
               (sx * (W / 2.0 - 64.0), yf, eave - 10.0), 11.0, "wood_dark")
     roof_gable(b, W, D, rise, over, "wood_roof", z=eave, thickness=16.0,
                mat_under="wood_dark", cap_size=(32.0, 14.0), cap_mat="wood_dark",
-               board_h=12.0, uv_swap=True)
+               board_h=12.0, uv_swap=True, ao_mat="shadow_mid")   # 深色木板墙：AO 取更深档
     gable_infill(b, W, D, rise, "wood", z=eave, thickness=14.0)
     for sx in (-1.0, 1.0):
         plank_siding(b, D, rise, "wood_light", (sx * (W / 2.0), 0.0), eave,
@@ -1457,8 +1589,13 @@ _Y_AXIS = Vector((0.0, 1.0, 0.0))
 
 # ---------------------------------------------------------------- 6.1 通用新模块
 
-def cone_roof(b, x, y, z, r, h, mat, segments=16, r_top=0.0, uv_slope=True):
-    """攒尖/锥形顶：底半径 r、顶半径 r_top、高 h（底在 z）。UV 顺坡（瓦垄不被压平）。"""
+def cone_roof(b, x, y, z, r, h, mat, segments=16, r_top=0.0, uv_slope=True,
+              eave_ring=True):
+    """攒尖/锥形顶：底半径 r、顶半径 r_top、高 h（底在 z）。UV 顺坡（瓦垄不被压平）。
+
+    eave_ring：锥顶檐口也做"可见厚度断面"——底缘一圈挑出的瓦檐唇 + 一道深色檐线
+    （塔类锥顶没有山墙/檐板，只能靠这一圈读厚度；塔/风车/灯塔均已显式豁免剪影比）。
+    """
     base, top = [], []
     for i in range(segments):
         th = 2.0 * math.pi * i / segments
@@ -1488,6 +1625,9 @@ def cone_roof(b, x, y, z, r, h, mat, segments=16, r_top=0.0, uv_slope=True):
                        y + r_top * math.sin(2.0 * math.pi * i / segments), z + h))
                for i in range(segments)]
         b.poly(cap, mat, outward=(0.0, 0.0, 1.0))
+    if eave_ring and h > 12.0:
+        b.cylinder((x, y, z + 2.0), r * 1.055, 9.0, mat, segments=segments)
+        b.cylinder((x, y, z - 2.5), r * 1.045, 5.0, "wood_dark", segments=segments)
 
 
 def ring_stone(b, cx, y, cz, r, mat, blocks=8, depth=10.0, thick=16.0,

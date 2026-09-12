@@ -58,6 +58,7 @@ const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/en
 const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
 const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
 const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
+const _OrgReportNarratorScript: GDScript = preload("res://modules/organization/ui/org_report_narrator.gd")
 const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
 
 var _root: GameRoot
@@ -90,6 +91,7 @@ func setup(root: GameRoot) -> void:
 	_setup_command_transport()
 	_setup_conquest_system()
 	_setup_recruit_system()
+	_setup_org_report_narrator()
 	_setup_battle_panel()
 	_setup_formation_panel()
 	_setup_org_panel()
@@ -481,6 +483,23 @@ func _setup_recruit_system() -> void:
 			_root.scene_loader, _root._formation_system)
 	if _root._organization_api != null and _root._organization_api.has_method("set_recruit_manager"):
 		_root._organization_api.set_recruit_manager(mgr)
+
+
+# ─────────────────────────────── 上报叙事装配（UI-W2-B ②③）───────────────────────────────
+
+## OrgReportNarrator 常驻 GameRoot：消费 organization api 的 report_filed（组织侧
+## 门控后的可见集）与 EventBus.commander_assigned，经 EventBus.ui_notification 落既有通知 feed。
+## 归 organization/ui（消费组织域数据、组织域 UI），不建跨模块面板。
+func _setup_org_report_narrator() -> void:
+	if _root._organization_api == null:
+		return
+	var n := Node.new()
+	n.set_script(_OrgReportNarratorScript)
+	n.name = "OrgReportNarrator"
+	_root.add_child(n)
+	_root._org_report_narrator = n
+	if n.has_method("setup"):
+		n.setup(_root._organization_api)
 
 
 # ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────

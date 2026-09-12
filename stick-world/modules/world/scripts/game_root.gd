@@ -199,6 +199,8 @@ var _build_menu: Control = null
 var _formation_panel: Control = null
 ## 组织管理窗口（运行时由 SystemSetup 装配到 UIRoot.ModalOverlay）
 var _org_panel: Control = null
+## 上报叙事器（运行时由 SystemSetup 装配为常驻子节点；三型上报 + 补位事件 → 通知 feed）
+var _org_report_narrator: Node = null
 ## 设置菜单（运行时由 SystemSetup 装配到 UIRoot，齿轮/ESC 打开）
 var _settings_menu_panel: Control = null
 ## 暂停菜单（运行时由 SystemSetup 装配到 UIRoot，ESC 打开；ESC 语义统一在 GameRoot 处理）
@@ -423,6 +425,11 @@ func toggle_formation_panel() -> void:
 ## 获取组织管理窗口引用（供测试用）
 func get_org_panel() -> Control:
 	return _org_panel
+
+
+## 获取上报叙事器引用（供测试用）
+func get_org_report_narrator() -> Node:
+	return _org_report_narrator
 
 
 ## 打开/关闭组织管理窗口（GlobalHUD 组织按钮调用）

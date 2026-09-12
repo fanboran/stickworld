@@ -2,7 +2,7 @@
 ## 只提供"线"的质感，不含建筑知识。在渲染域 Node2D 的 _draw() 回调内使用（draw_* 只能在该回调里调）。
 extends RefCounted
 
-const INK := Color(0.169, 0.125, 0.094)  # 暖墨黑 #2b2018
+const INK := Color(0.141, 0.098, 0.059)  # 深褐墨 #241a12（对齐参考图线条色）
 
 
 ## 主入口：把 pts 折线画成抖动变宽墨线。
@@ -54,9 +54,9 @@ static func _prepare_path(pts: PackedVector2Array, rng: RandomNumberGenerator, o
 	var closed: bool = opts.get("closed", false)
 	var step := 5.0
 	var path := _resample(pts, step)
-	path = _wobble(path, opts.get("amp", 1.1), opts.get("wave", 32.0), rng, closed)
+	path = _wobble(path, opts.get("amp", 0.75), opts.get("wave", 40.0), rng, closed)
 	if not closed:
-		var ov: float = opts.get("overshoot", 3.0)
+		var ov: float = opts.get("overshoot", 2.4)
 		if ov > 0.0 and path.size() >= 2:
 			var head_dir := (path[0] - path[1]).normalized()
 			var tail_dir := (path[path.size() - 1] - path[path.size() - 2]).normalized()

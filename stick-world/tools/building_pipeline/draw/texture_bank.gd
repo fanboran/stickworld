@@ -56,6 +56,16 @@ static func _bake(kind: String, seed_val: int) -> Image:
 			_thatch(img, rng)
 		"plaster_noise":
 			_plaster_noise(img, rng)
+		"wood_grain":
+			_wood_grain(img, rng)
+		"brick":
+			_brick(img, rng)
+		"stone_block":
+			_stone_block(img, rng)
+		"slate":
+			_slate(img, rng)
+		"tile":
+			_tile(img, rng)
 		_:
 			push_error("texture_bank: 未知纹理 kind=%s" % kind)
 	return img
@@ -178,3 +188,122 @@ static func _plaster_noise(img: Image, rng: RandomNumberGenerator) -> void:
 		_px(img, x, y, Color(c.r, c.g, c.b, a))
 		if rng.randf() < 0.25:
 			_px(img, x + 1, y, Color(c.r, c.g, c.b, a * 0.6))
+
+
+## 纵向木纹 + 板缝（参考图木材表现：竖向纹路清晰）。
+static func _wood_grain(img: Image, rng: RandomNumberGenerator) -> void:
+	var seam := Color(0.18, 0.1, 0.04, 0.5)
+	# 板缝：竖向，间距不均
+	var x := 0
+	while x < SIZE:
+		for y in SIZE:
+			_px(img, x, y, Color(seam.r, seam.g, seam.b, seam.a * rng.randf_range(0.7, 1.0)))
+		x += rng.randi_range(14, 26)
+	# 木纹：竖向长线
+	for i in 46:
+		var gx := rng.randi_range(0, SIZE - 1)
+		var gy0 := rng.randi_range(-10, SIZE)
+		var ln := rng.randi_range(20, 50)
+		var a := rng.randf_range(0.1, 0.3)
+		for t in ln:
+			var bend := 1 if rng.randf() < 0.06 else 0
+			_px(img, gx + bend, gy0 + t, Color(0.2, 0.11, 0.04, a))
+	# 少量横向结疤
+	for i in 7:
+		var bx := rng.randi_range(0, SIZE - 1)
+		var by := rng.randi_range(0, SIZE - 1)
+		_px(img, bx, by, Color(0.16, 0.09, 0.03, 0.4))
+		_px(img, bx, by + 1, Color(0.16, 0.09, 0.03, 0.25))
+
+
+## 砖缝：水平缝每 8px + 竖缝错位（参考图 Lv4 红砖）。
+static func _brick(img: Image, rng: RandomNumberGenerator) -> void:
+	var mortar := Color(0.42, 0.34, 0.28, 0.5)
+	var row_h := 8
+	for y in SIZE:
+		if y % row_h < 1:
+			for x in SIZE:
+				_px(img, x, y, Color(mortar.r, mortar.g, mortar.b, mortar.a * rng.randf_range(0.8, 1.0)))
+	for row in SIZE / row_h:
+		var x := (row * 9) % 18
+		while x < SIZE:
+			for yy in row_h - 1:
+				_px(img, x, row * row_h + 1 + yy, Color(mortar.r, mortar.g, mortar.b, 0.4))
+			x += rng.randi_range(14, 20)
+	# 砖面轻微明暗（每砖一档）
+	for row in SIZE / row_h:
+		var x := (row * 9) % 18
+		while x < SIZE:
+			if rng.randf() < 0.4:
+				var bx := rng.randi_range(0, 10)
+				var by := rng.randi_range(1, row_h - 1)
+				_px(img, x + bx, row * row_h + by, Color(0.3, 0.15, 0.1, 0.12) if rng.randf() < 0.5 else Color(0.95, 0.8, 0.7, 0.1))
+			x += rng.randi_range(14, 20)
+
+
+## 大块石砌：水平层缝每 14px + 竖缝错位 + 石面斑驳（参考图 Lv3 石工）。
+static func _stone_block(img: Image, rng: RandomNumberGenerator) -> void:
+	var gap := Color(0.2, 0.19, 0.17, 0.55)
+	var ch := 14
+	for y in SIZE:
+		if y % ch < 1:
+			for x in SIZE:
+				_px(img, x, y, Color(gap.r, gap.g, gap.b, gap.a * rng.randf_range(0.7, 1.0)))
+	for row in SIZE / ch:
+		var x := (row * 11) % 24 + rng.randi_range(0, 3)
+		while x < SIZE:
+			for yy in ch - 1:
+				_px(img, x, row * ch + 1 + yy, Color(gap.r, gap.g, gap.b, 0.45))
+			x += rng.randi_range(18, 28)
+	# 石面明暗块（大块面感）
+	for i in 34:
+		var bx := rng.randi_range(0, SIZE - 6)
+		var by := rng.randi_range(1, SIZE - 4)
+		if by % ch == 0:
+			continue
+		var dark := rng.randf() < 0.55
+		var c := Color(0.28, 0.27, 0.25, 0.14) if dark else Color(1.0, 0.99, 0.95, 0.12)
+		for dx in rng.randi_range(3, 7):
+			for dy in rng.randi_range(2, 4):
+				_px(img, bx + dx, by + dy, c)
+
+
+## 石板瓦：横向瓦排 + 每排错位短缝（冷灰）。
+static func _slate(img: Image, rng: RandomNumberGenerator) -> void:
+	var line := Color(0.16, 0.17, 0.2, 0.45)
+	var row_h := 7
+	for y in SIZE:
+		if y % row_h < 1:
+			for x in SIZE:
+				_px(img, x, y, Color(line.r, line.g, line.b, line.a * rng.randf_range(0.75, 1.0)))
+	for row in SIZE / row_h:
+		var x := (row * 7) % 14
+		while x < SIZE:
+			for yy in row_h - 1:
+				_px(img, x, row * row_h + 1 + yy, Color(line.r, line.g, line.b, 0.35))
+			x += rng.randi_range(11, 16)
+
+
+## 红瓦：横向瓦垄弧线 + 错位（参考图 Lv4 遮棚瓦）。
+static func _tile(img: Image, rng: RandomNumberGenerator) -> void:
+	var line := Color(0.26, 0.11, 0.07, 0.5)
+	var row_h := 8
+	for y in SIZE:
+		var phase := (y / row_h) % 2
+		if y % row_h < 1:
+			for x in SIZE:
+				var sag := int(1.5 * sin(float(x + phase * 8) * 0.5))
+				_px(img, x, y + sag, Color(line.r, line.g, line.b, line.a * rng.randf_range(0.75, 1.0)))
+	for row in SIZE / row_h:
+		var x := (row * 8) % 16
+		while x < SIZE:
+			for yy in row_h - 1:
+				_px(img, x, row * row_h + 1 + yy, Color(line.r, line.g, line.b, 0.3))
+			x += rng.randi_range(10, 15)
+	# 瓦面高光条（每垄一亮线）
+	for row in SIZE / row_h:
+		var x := (row * 8) % 16 + 4
+		while x < SIZE:
+			for yy in row_h - 2:
+				_px(img, x, row * row_h + 2 + yy, Color(1.0, 0.85, 0.72, 0.1))
+			x += rng.randi_range(10, 15)

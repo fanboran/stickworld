@@ -1,51 +1,149 @@
-## 建筑类型预设（规格域）：参数化建模的类型差异全部在此声明。
-## 尺寸均为 1x 像素（1 格 = 32px）；宽度合法域统一 3~16 格，另受各预设 min_w 约束。
+## 建筑类型预设（规格域）：中世纪欧洲城市建筑谱系，声明式参数。
+## 尺寸单位 1x 像素（1 格 = 32px）。宽度合法域默认 3~16 格（各预设可加 min_w 收紧；城墙段为特例允许 1 格）。
+## shell 类通用字段：
+##   stories: 自下而上各层 [{h, mat, trim?, windows?, arch?, shutters?}]
+##   jetty:   二层及以上每侧出挑 px（悬挑街屋）
+##   roof:    {kind: gable|slope|hip|spire|flat, rise/spire_h/parapet, overhang, mat, ...}
+##   extras:  ["plinth","chimney","sign","lantern","flag","bell","fence","awning"]
 extends RefCounted
 
 const PRESETS := {
+	# ===== 街屋 / 民居 =====
+	"cottage": {
+		"label": "茅草农舍", "builder": "shell",
+		"min_w": 3, "max_w": 12, "layout": "bays", "bay_w_cells": 2,
+		"stories": [{"h": 46, "mat": "plaster", "trim": "timber", "windows": true}],
+		"roof": {"kind": "gable", "rise": 40, "overhang": 9.0, "mat": "thatch", "gable_window": true},
+		"extras": ["plinth", "chimney"],
+	},
 	"house": {
-		"label": "民居",
-		"builder": "house",
-		"min_w": 3, "max_w": 16,
-		"img_h": 132,
-		"layout": "bays",
-		"edge": 10.0,          # 端件（角柱）宽 px
-		"bay_w_cells": 2,      # 名义开间宽（格），实际按中段宽均分
-		"wall_h": 60,
-		"mat_wall": "plaster", "mat_trim": "timber", "mat_door": "dark_wood",
-		"roof": {"kind": "gable", "rise": 44, "overhang": 8.0, "mat": "thatch", "eave_mat": "thatch"},
-		"bay_pool": ["window", "blind", "window", "timber"],
-		"door": true,
-		"chimney": false,
+		"label": "民居", "builder": "shell",
+		"min_w": 3, "max_w": 16, "layout": "bays", "bay_w_cells": 2,
+		"stories": [{"h": 58, "mat": "plaster", "trim": "timber", "windows": true}],
+		"roof": {"kind": "gable", "rise": 42, "overhang": 9.0, "mat": "thatch", "gable_window": false},
+		"extras": ["plinth"],
 	},
-	"smithy": {
-		"label": "铁匠铺",
-		"builder": "smithy",
-		"min_w": 6, "max_w": 16,
-		"img_h": 196,
-		"layout": "pillars",
-		"edge": 14.0,
-		"pillar_gap": 96.0,    # 中段补柱基准间距
-		"wall_h": 78,
-		"mat_wall": "wood", "mat_trim": "dark_wood",
-		"awn": {"h": 36, "out": 26.0, "mat": "thatch"},   # 宽棚：棚面抬高 h、前伸 out
-		"open_h": 44,          # 正面敞口高（工坊大开口）
-		"chimney": {"x_ratio": 0.22, "w": 16.0, "top_above_awn": 30.0},
-		"forge_ratio": 0.18,   # 炉口中心 x（占宽比例）
+	"townhouse": {
+		"label": "木骨街屋", "builder": "shell",
+		"min_w": 4, "max_w": 16, "layout": "bays", "bay_w_cells": 2.4,
+		"stories": [
+			{"h": 46, "mat": "plaster", "windows": false},
+			{"h": 40, "mat": "plaster", "windows": true},
+		],
+		"jetty": 5.0,
+		"roof": {"kind": "gable", "rise": 34, "overhang": 10.0, "mat": "tile", "gable_window": true},
+		"extras": ["plinth", "chimney", "lantern"],
 	},
-	"warehouse": {
-		"label": "仓库",
-		"builder": "warehouse",
-		"min_w": 4, "max_w": 16,
-		"img_h": 150,
-		"layout": "bays",
-		"edge": 12.0,
-		"bay_w_cells": 3,
+	"plaster_house": {
+		"label": "抹灰街屋", "builder": "shell",
+		"min_w": 4, "max_w": 16, "layout": "bays", "bay_w_cells": 2.4,
+		"stories": [
+			{"h": 44, "mat": "plaster", "windows": false},
+			{"h": 38, "mat": "trim_white", "windows": true, "shutters": true},
+		],
+		"jetty": 0.0,
+		"roof": {"kind": "gable", "rise": 32, "overhang": 8.0, "mat": "slate", "gable_window": true},
+		"extras": ["plinth", "chimney"],
+	},
+	"tavern": {
+		"label": "酒馆", "builder": "shell",
+		"min_w": 4, "max_w": 14, "layout": "bays", "bay_w_cells": 2.4,
+		"stories": [
+			{"h": 48, "mat": "wood", "windows": true},
+			{"h": 38, "mat": "plaster", "trim": "timber", "windows": true},
+		],
+		"jetty": 4.0,
+		"roof": {"kind": "gable", "rise": 34, "overhang": 10.0, "mat": "tile", "gable_window": true},
+		"extras": ["plinth", "sign", "lantern", "barrel"],
+	},
+	"bakery": {
+		"label": "面包房", "builder": "shell",
+		"min_w": 4, "max_w": 14, "layout": "bays", "bay_w_cells": 2.6,
+		"stories": [
+			{"h": 44, "mat": "brick", "windows": false},
+			{"h": 34, "mat": "plaster", "windows": true},
+		],
+		"jetty": 0.0,
+		"roof": {"kind": "gable", "rise": 30, "overhang": 8.0, "mat": "tile", "gable_window": false},
+		"extras": ["plinth", "chimney_big", "sign", "lantern"],
+	},
+	"shop": {
+		"label": "商铺", "builder": "shell",
+		"min_w": 3, "max_w": 12, "layout": "bays", "bay_w_cells": 2.2,
+		"stories": [{"h": 48, "mat": "wood", "windows": true}],
+		"roof": {"kind": "gable", "rise": 32, "overhang": 9.0, "mat": "thatch_dry"},
+		"extras": ["plinth", "sign", "awning", "barrel"],
+	},
+	"guildhall": {
+		"label": "行会馆", "builder": "shell",
+		"min_w": 8, "max_w": 16, "layout": "bays", "bay_w_cells": 3,
+		"stories": [
+			{"h": 52, "mat": "stone_light", "windows": false, "arch": true},
+			{"h": 46, "mat": "brick", "windows": true, "arch": true},
+		],
+		"jetty": 0.0,
+		"roof": {"kind": "gable", "rise": 40, "overhang": 10.0, "mat": "tile", "gable_window": true},
+		"extras": ["plinth", "chimney", "bell", "flag"],
+		"grand": true,
+	},
+
+	# ===== 铁匠铺四级（参考图 smithy.png）=====
+	"smithy1": {"label": "茅草棚工坊", "builder": "smithy1", "min_w": 4, "max_w": 12, "img_h": 152, "layout": "none", "wall_h": 74},
+	"smithy2": {"label": "木屋工坊", "builder": "smithy2", "min_w": 5, "max_w": 14, "img_h": 168, "layout": "none", "wall_h": 82},
+	"smithy3": {"label": "石砌工坊", "builder": "smithy3", "min_w": 5, "max_w": 14, "img_h": 162, "layout": "none", "wall_h": 88},
+	"smithy4": {"label": "砖石行会工坊", "builder": "smithy4", "min_w": 6, "max_w": 16, "img_h": 196, "layout": "none", "wall_h": 96},
+
+	# ===== 公共 / 信仰 / 防御 =====
+	"church": {
+		"label": "教堂", "builder": "church",
+		"min_w": 8, "max_w": 16, "img_h": 210, "layout": "none",
+		"wall_h": 96,
+	},
+	"chapel": {
+		"label": "小礼拜堂", "builder": "chapel",
+		"min_w": 5, "max_w": 10, "img_h": 156, "layout": "none",
+		"wall_h": 74,
+	},
+	"tower": {
+		"label": "瞭望塔", "builder": "tower",
+		"min_w": 3, "max_w": 7, "img_h": 168, "layout": "none",
+		"wall_h": 130,
+	},
+	"gatehouse": {
+		"label": "城门楼", "builder": "gatehouse",
+		"min_w": 4, "max_w": 10, "img_h": 140, "layout": "none",
+		"wall_h": 104,
+	},
+	"wall_seg": {
+		"label": "城墙段", "builder": "wall_seg",
+		"min_w": 1, "max_w": 3, "img_h": 90, "layout": "none",
+		"wall_h": 62,
+	},
+
+	# ===== 田园 / 生产 =====
+	"barn": {
+		"label": "谷仓", "builder": "barn",
+		"min_w": 5, "max_w": 16, "img_h": 144, "layout": "none",
 		"wall_h": 72,
-		"mat_wall": "wood", "mat_trim": "dark_wood", "mat_door": "dark_wood",
-		"roof": {"kind": "slope", "rise": 42, "eave_drop": 10.0, "skew": 7.0, "overhang": 9.0, "mat": "roof_wood"},
-		"door_w_cells": 2,
-		"door": true,
-		"chimney": false,
+	},
+	"stable": {
+		"label": "马厩", "builder": "stable",
+		"min_w": 4, "max_w": 12, "img_h": 122, "layout": "none",
+		"wall_h": 64,
+	},
+	"windmill": {
+		"label": "风车", "builder": "windmill",
+		"min_w": 3, "max_w": 6, "img_h": 158, "layout": "none",
+		"wall_h": 92,
+	},
+	"well": {
+		"label": "水井", "builder": "well",
+		"min_w": 3, "max_w": 6, "img_h": 70, "layout": "none",
+		"wall_h": 30,
+	},
+	"market_stall": {
+		"label": "市集摊", "builder": "market_stall",
+		"min_w": 3, "max_w": 8, "img_h": 74, "layout": "none",
+		"wall_h": 30,
 	},
 }

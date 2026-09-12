@@ -16,11 +16,16 @@ func _run() -> void:
 	await process_frame
 	var dir := "res://temp/buildings"
 	var out_path := "res://temp/buildings_sheet.png"
+	var only: Array = []
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--dir="):
 			dir = a.substr(6)
 		elif a.begins_with("--out="):
 			out_path = a.substr(6)
+		elif a.begins_with("--defs="):
+			for dd in a.substr(7).split(","):
+				if dd.strip_edges() != "":
+					only.append(dd.strip_edges())
 
 	var abs_dir := ProjectSettings.globalize_path(dir)
 	var files: Array = []
@@ -31,6 +36,8 @@ func _run() -> void:
 		return
 	for f in d.get_files():
 		if f.ends_with(".png") and not f.ends_with("_sheet.png"):
+			if not only.is_empty() and not _match_only(String(f), only):
+				continue
 			files.append(f)
 	files.sort()
 
@@ -76,3 +83,10 @@ func _run() -> void:
 	for i in imgs.size():
 		print("  [%d] %s" % [i, String(imgs[i]["name"])])
 	quit(0)
+
+
+static func _match_only(fname: String, only: Array) -> bool:
+	for o in only:
+		if fname.begins_with(String(o) + "_w"):
+			return true
+	return false

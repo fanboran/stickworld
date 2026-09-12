@@ -6,16 +6,27 @@ const Ink := preload("res://tools/building_pipeline/draw/ink.gd")
 const TextureBank := preload("res://tools/building_pipeline/draw/texture_bank.gd")
 
 ## 材质四档色（shadow/base/lit/hi）+ 默认质感纹理与叠加透明度。
+## 取色基线：assets/_raw/建筑/smithy.png 参考图（茅草金黄 / 红棕木 / 亮灰石 / 红砖白饰）。
 const MATS := {
-	"thatch": {"shadow": Color("7a5c34"), "base": Color("a07c46"), "lit": Color("c2a05e"), "hi": Color("e0c88a"), "tex": "thatch", "tex_a": 0.75},
-	"wood": {"shadow": Color("5a4026"), "base": Color("7d5c36"), "lit": Color("a37d4e"), "hi": Color("c8a468"), "tex": "plank", "tex_a": 0.45},
-	"roof_wood": {"shadow": Color("43301b"), "base": Color("63492b"), "lit": Color("836339"), "hi": Color("a5824f"), "tex": "plank", "tex_a": 0.5},
-	"dark_wood": {"shadow": Color("3d2c18"), "base": Color("56401f"), "lit": Color("74572e"), "hi": Color("937445"), "tex": "plank", "tex_a": 0.4},
-	"timber": {"shadow": Color("3a2b1b"), "base": Color("54402a"), "lit": Color("71572f"), "hi": Color("8f7040"), "tex": "dry_brush", "tex_a": 0.3},
-	"stone": {"shadow": Color("6a655d"), "base": Color("8c867b"), "lit": Color("aca698"), "hi": Color("cdc7b8"), "tex": "stone_courses", "tex_a": 0.55},
-	"plaster": {"shadow": Color("b8ac93"), "base": Color("d3c8ae"), "lit": Color("e8dfc8"), "hi": Color("f6efdd"), "tex": "plaster_noise", "tex_a": 0.5},
+	"thatch": {"shadow": Color("a8762f"), "base": Color("cf9a45"), "lit": Color("e6b95e"), "hi": Color("f5d98f"), "tex": "thatch", "tex_a": 0.8},
+	"thatch_dry": {"shadow": Color("7d5c2c"), "base": Color("a07a3c"), "lit": Color("bd9552"), "hi": Color("d4b06a"), "tex": "thatch", "tex_a": 0.7},
+	"wood": {"shadow": Color("5e3519"), "base": Color("87522a"), "lit": Color("a86c37"), "hi": Color("c4884b"), "tex": "wood_grain", "tex_a": 0.6},
+	"wood_dark": {"shadow": Color("3f2410"), "base": Color("5c381c"), "lit": Color("7a4c26"), "hi": Color("96633a"), "tex": "wood_grain", "tex_a": 0.55},
+	"dark_wood": {"shadow": Color("3f2410"), "base": Color("5c381c"), "lit": Color("7a4c26"), "hi": Color("96633a"), "tex": "wood_grain", "tex_a": 0.55},
+	"roof_wood": {"shadow": Color("4b2c14"), "base": Color("6b4423"), "lit": Color("8a5a2f"), "hi": Color("a87540"), "tex": "wood_grain", "tex_a": 0.55},
+	"timber": {"shadow": Color("33200f"), "base": Color("4a3116"), "lit": Color("63431f"), "hi": Color("7d5729"), "tex": "wood_grain", "tex_a": 0.4},
+	"plaster": {"shadow": Color("b9a886"), "base": Color("d8c9a8"), "lit": Color("ecdfc0"), "hi": Color("f7efd9"), "tex": "plaster_noise", "tex_a": 0.5},
 	"daub": {"shadow": Color("9a8a6a"), "base": Color("b5a582"), "lit": Color("cfc09a"), "hi": Color("e2d6b2"), "tex": "plaster_noise", "tex_a": 0.4},
-	"iron": {"shadow": Color("3a3a3e"), "base": Color("54545a"), "lit": Color("727279"), "hi": Color("95959c"), "tex": "dry_brush", "tex_a": 0.35},
+	"stone": {"shadow": Color("6a6861"), "base": Color("918f87"), "lit": Color("b2b0a6"), "hi": Color("cdcbc0"), "tex": "stone_block", "tex_a": 0.65},
+	"stone_light": {"shadow": Color("8d8b83"), "base": Color("b6b3a8"), "lit": Color("d5d2c6"), "hi": Color("eae7db"), "tex": "stone_block", "tex_a": 0.6},
+	"stone_dark": {"shadow": Color("4e4c47"), "base": Color("6e6c65"), "lit": Color("8b8981"), "hi": Color("a5a39b"), "tex": "stone_block", "tex_a": 0.6},
+	"brick": {"shadow": Color("8f3f2c"), "base": Color("bd5a3c"), "lit": Color("d4785a"), "hi": Color("e59a80"), "tex": "brick", "tex_a": 0.65},
+	"trim_white": {"shadow": Color("bfb8a6"), "base": Color("ddd6c4"), "lit": Color("efe9da"), "hi": Color("faf6ec"), "tex": "plaster_noise", "tex_a": 0.35},
+	"slate": {"shadow": Color("454852"), "base": Color("5f626c"), "lit": Color("7b7e88"), "hi": Color("969aa4"), "tex": "slate", "tex_a": 0.65},
+	"tile": {"shadow": Color("6f3325"), "base": Color("934634"), "lit": Color("ae5c45"), "hi": Color("c6785e"), "tex": "tile", "tex_a": 0.65},
+	"iron": {"shadow": Color("1e1e22"), "base": Color("32323a"), "lit": Color("4a4a54"), "hi": Color("62626c"), "tex": "dry_brush", "tex_a": 0.4},
+	"cloth_red": {"shadow": Color("7a2f28"), "base": Color("a03f34"), "lit": Color("bd5a45"), "hi": Color("d07862"), "tex": "dry_brush", "tex_a": 0.3},
+	"gold": {"shadow": Color("8a6a24"), "base": Color("b8903a"), "lit": Color("d8b054"), "hi": Color("eacd7e"), "tex": "dry_brush", "tex_a": 0.25},
 }
 
 var ci: CanvasItem

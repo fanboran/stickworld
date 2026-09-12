@@ -25,7 +25,9 @@ variables = {
 			"spawn_jitter_ratio": 0.5,
 			"probe_fail_cooldown_enabled": false,
 			"job_scan_interval": 0.5,
-			"description": "R1 主决策间隔 0.3s ± 0 方差（镜像旧 DECISION_INTERVAL 常量）；R3 点射 0 发=关、停顿区间 1.2~1.8s（RWR wait 1.2±0.6）、夜间犹豫倍率 1.0（RWR 昼 0.3~0.6/夜 0.8~1.1 同构）；R5 防扎堆治疗 60px（RWR consider_someone_already_healing_wounded_distance 10m 同构换算）"
+			"suppression_near_miss_enabled": false,
+			"suppression_near_miss_radius": 80.0,
+			"description": "R1 主决策间隔 0.3s ± 0 方差（镜像旧 DECISION_INTERVAL 常量）；R3 点射 0 发=关、停顿区间 1.2~1.8s（RWR wait 1.2±0.6）、夜间犹豫倍率 1.0（RWR 昼 0.3~0.6/夜 0.8~1.1 同构）；R5 防扎堆治疗 60px（RWR consider_someone_already_healing_wounded_distance 10m 同构换算）；A6 近失压制默认关 + 近失半径 80px（须 > 命中半径 34，语义推断待实测校准）"
 		}
 	]
 }

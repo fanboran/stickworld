@@ -38,6 +38,8 @@ const DUE_EPSILON: float = 1.0e-9
 ## W2 出生错峰 RNG 默认种子（专用 RNG、对齐 A3 RETREAT_MOD_DEFAULT_SEED 惯例：
 ## 生产按实体实例 id 派生 = 每单位不同；实体不可用/单测未注入时兜底，保证可复现）
 const SPAWN_JITTER_DEFAULT_SEED: int = 20260912
+## 决策时钟族序列化格式版本（存档字段演进留位；导入侧只认当前版本语义）
+const TIMING_STATE_VERSION: int = 1
 ## W2 域级间隔通道表（channel -> 档案间隔键）：探测型行为失败冷却的粒度单位。
 ## WorldBox M4 冷却挂"行为 index"不挂单位（Actor.cs `_decision_cooldowns[]`）；本项目
 ## L1 无行为 index 数组，粒度落到"域级探测"，间隔复用 A9 既有键或新增键：
@@ -758,6 +760,76 @@ func _init_decision_timing(now: float) -> void:
 ## 注入 clock_override/jitter_seed_override 做确定性断言。
 func apply_spawn_jitter() -> void:
 	_init_decision_timing(_now())
+
+
+# ── WB2 读档序列化（AI 时钟族）──────────────────────────────────────────────
+# 语义：导出量一律记"相对当前世界时钟的剩余时长"——实体读档重建后本地时钟从 0
+# 重新起算，剩余量回填即恢复原相位（错峰离散度不丢，也不随存档时间基准漂移）。
+# 导入只回填、不重掷：错峰 RNG 不再抽一次（重掷 = 错峰双重随机，反而打乱相位）。
+
+## 决策时钟族导出（读档序列化出口）：主节拍与域级通道的剩余时长 + 当前间隔 +
+## 错峰种子（字符串保精度：实体实例 id 可能超出 JSON 数值的精确整数范围）。
+## 未装配/无到期时刻给 -1.0 哨兵，导入侧跳过。
+func export_timing_state() -> Dictionary:
+	var now: float = _now()
+	var dom: Dictionary = {}
+	for ch in DOMAIN_CHANNELS:
+		dom[ch] = float(_domain_next_at.get(ch, now - 1.0e9)) - now
+	return {
+		"version": TIMING_STATE_VERSION,
+		"armed": _timing_armed,
+		"decision_remaining": (_next_decision_at - now) if is_finite(_next_decision_at) else -1.0,
+		"decision_interval": _decision_interval,
+		"jitter_seed": str(_resolve_jitter_seed()),
+		"domain_remaining": dom,
+	}
+
+
+## 决策时钟族导入（读档序列化入口）：按剩余时长回填到期时刻，**不重掷错峰**；
+## 错峰种子回填注入位（后续重新装配可复现同一偏移）。
+## 老存档（无该字段）/字段缺失/类型不符 → 保持调用方装配语义（_ready 的
+## apply_spawn_jitter 结果），不报错。
+func import_timing_state(d: Dictionary) -> void:
+	if d.is_empty():
+		return
+	var now: float = _now()
+	if bool(d.get("armed", false)) and d.has("decision_remaining"):
+		var rem: float = _safe_float(d["decision_remaining"])
+		if is_finite(rem):
+			_timing_armed = true
+			_next_decision_at = now + rem
+	var iv: float = _safe_float(d.get("decision_interval"))
+	if is_finite(iv) and iv > 0.0:
+		_decision_interval = iv
+	var seed: int = _safe_seed(d.get("jitter_seed"))
+	if seed >= 0:
+		jitter_seed_override = seed
+	var dom: Variant = d.get("domain_remaining")
+	if dom is Dictionary:
+		var dom_d: Dictionary = dom
+		for ch in DOMAIN_CHANNELS:
+			if not dom_d.has(ch):
+				continue
+			var r: float = _safe_float(dom_d[ch])
+			if is_finite(r):
+				_domain_next_at[ch] = now + r
+
+
+## 存档数值安全读取（JSON 往返：int/float 均可；类型不符/缺失 → NAN，调用方跳过）
+static func _safe_float(v: Variant) -> float:
+	if v is float or v is int:
+		return float(v)
+	return NAN
+
+
+## 存档错峰种子安全读取（字符串优先保精度；非法值 → -1 表示不注入）
+static func _safe_seed(v: Variant) -> int:
+	if v is String:
+		var s: String = v
+		return int(s) if s.is_valid_int() else -1
+	if v is float or v is int:
+		return int(v)
+	return -1
 
 
 ## 决策时钟推进（纯时钟，不决策）：时钟未装配则先装配（懒装配 = 与旧"首次

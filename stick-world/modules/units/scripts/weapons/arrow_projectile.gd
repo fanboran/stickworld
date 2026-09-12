@@ -26,6 +26,12 @@ const BODY_HEIGHT := 130.0
 const GROUND_DROP: float = 500.0
 ## 兜底寿命（s）：超时强制插地（防极端弹道永生）
 const MAX_FLIGHT_TIME: float = 6.0
+## 近失半径查询的碰撞掩码（= 单位根节点层，镜像 arrow.tscn 的 collision_mask：
+## 物理空间直查落点附近单位，仅终态调用一次，无逐帧成本）
+const NEAR_MISS_QUERY_MASK: int = 2
+
+## 兵种行为档案（压制键族；同模块 preload，与 status_effects/ai_controller 同款消费口径）
+const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 ## RWR 击杀概率飞行时间衰减（ak47.weapon kill_decay_start_time=0.33/end=0.68 直译、
 ## 按 HP 制与箭速 850px/s 换算）：命中≠全额伤害——贴脸（飞行 ≤0.35s ≈ 300px）满伤，
 ## 0.35~0.75s 线性衰减到远距 0.5 倍下限（≈640px 外）。远程压制不等于远程狙杀，
@@ -66,6 +72,13 @@ var _stuck_timer: float = 0.0
 ## 在飞伤害登记目标（11d MissingArrowsTolerance 估计口径）：发射时锁定，
 ## 箭矢终态（命中任意敌人/插地）扣减其 incoming_arrow_damage
 var _registered_target: Node = null
+## 近失压制开关/半径/射手阵营快照（setup 时从射手兵种档案解析一次，射手阵亡后
+## 仍生效；开关默认关 = 零回归；判定与施加见 try_near_miss_suppression）
+var _near_miss_enabled: bool = false
+var _near_miss_radius: float = 0.0
+var _near_miss_shooter_faction: int = 0
+## 近失候选注入出口（单测确定性断言用；空数组 = 按落点做物理半径查询）
+var near_miss_candidates_override: Array = []
 
 
 ## 发射参数：初速度矢量、伤害、射手、目标、拉弓力度（0~1）、重力（缺省 0=直线，兼容旧调用）、
@@ -82,6 +95,8 @@ func setup(vel: Vector2, dmg: float, shooter: Node, target: Node = null, draw_po
 	_solve_time = maxf(0.0, solve_time)
 	_solve_ground_y = solve_ground_y
 	rotation = _vel.angle()
+	# 近失压制参数快照（发射瞬间的射手兵种档案；射手之后阵亡不影响本箭）
+	_capture_near_miss_profile()
 	# 11d 在飞伤害登记目标（终态扣减，见 _clear_incoming）
 	if target != null and is_instance_valid(target) and "incoming_arrow_damage" in target:
 		_registered_target = target
@@ -269,6 +284,94 @@ func _stick_ground() -> void:
 		_target = null
 	# 视觉：插地角度微微下倾
 	rotation = _vel.angle() + 0.15
+	# A6 近失压制：插地 = 本箭的"打偏"终态，落点附近敌人被压制（命中路径走
+	# _hit，不经此处——命中已另有受击门槛触发源，两条路径不重复）
+	try_near_miss_suppression()
+
+
+## 近失压制参数快照（A6 · C9 近失触发源，射手兵种档案解析一次）：
+## 开关 = suppression_enabled（总门）∧ suppression_near_miss_enabled（近失门）；
+## 射手缺失/无武器类型 → 保持关（零回归）。
+func _capture_near_miss_profile() -> void:
+	_near_miss_enabled = false
+	_near_miss_radius = 0.0
+	_near_miss_shooter_faction = 0
+	if _shooter == null or not is_instance_valid(_shooter) or not _shooter.has_method("get_weapon"):
+		return
+	if _shooter.has_method("get_faction"):
+		_near_miss_shooter_faction = int(_shooter.get_faction())
+	var w: Node = _shooter.get_weapon()
+	if w == null or not is_instance_valid(w) or not ("weapon_type" in w):
+		return
+	var p: Dictionary = ScriptBehaviorProfiles.get_profile(int(w.weapon_type))
+	_near_miss_enabled = bool(p.get("suppression_enabled", false)) \
+			and bool(p.get("suppression_near_miss_enabled", false))
+	_near_miss_radius = maxf(0.0, float(p.get("suppression_near_miss_radius", 0.0)))
+
+
+## 近失压制：落点半径内的敌方单位经 StatusEffects 通用入口施加 SUPPRESSED。
+## "擦身而过/落在脚边"同样构成压制因果——不要求命中（命中走受击门槛路径）。
+## candidates 缺省 = 按落点做物理半径查询（单位层）；显式传入 = 单测注入。
+## 只施加压制，不产生伤害（不触碰 DamagePipeline）。
+## 返回本次被近失压制的单位数。
+func try_near_miss_suppression(candidates: Array = []) -> int:
+	if not _near_miss_enabled or _near_miss_radius <= 0.0:
+		return 0
+	var pool: Array = near_miss_candidates_override if not near_miss_candidates_override.is_empty() \
+			else candidates
+	if pool.is_empty():
+		pool = _query_bodies_in_radius(_near_miss_radius)
+	var applied: int = 0
+	for body in pool:
+		if body == null or not is_instance_valid(body) or body == _shooter:
+			continue
+		if not (body is Node2D):
+			continue
+		if not _is_near_miss_enemy(body):
+			continue  # 只压制敌方（不误伤友军）
+		if global_position.distance_to(_target_body_pos(body)) > _near_miss_radius:
+			continue  # 半径外不算近失
+		if not body.has_method("get_status_effects"):
+			continue
+		var se: Node = body.get_status_effects()
+		if se == null or not is_instance_valid(se) or not se.has_method("apply_suppression"):
+			continue
+		if se.apply_suppression(_shooter):
+			applied += 1
+	return applied
+
+
+## 近失敌方过滤：按发射瞬间锁定的射手阵营判定——射手随后阵亡不影响本箭，
+## 也不退化成"射手没了就六亲不认"误压友军；任一方阵营未知（0）= 不判为敌。
+func _is_near_miss_enemy(body: Node) -> bool:
+	if _near_miss_shooter_faction == 0:
+		return false
+	if not body.has_method("get_faction"):
+		return false
+	return int(body.get_faction()) != _near_miss_shooter_faction
+
+
+## 落点半径内的单位列表（物理空间直查，单位层；仅箭矢终态调用一次）
+func _query_bodies_in_radius(radius: float) -> Array:
+	if not is_inside_tree():
+		return []
+	var world: World2D = get_world_2d()
+	if world == null:
+		return []
+	var shape := CircleShape2D.new()
+	shape.radius = radius
+	var params := PhysicsShapeQueryParameters2D.new()
+	params.shape = shape
+	params.transform = Transform2D(0.0, global_position)
+	params.collision_mask = NEAR_MISS_QUERY_MASK
+	params.collide_with_bodies = true
+	params.collide_with_areas = false
+	var out: Array = []
+	for hit in world.direct_space_state.intersect_shape(params):
+		var collider: Variant = hit.get("collider")
+		if collider != null and collider is Node:
+			out.append(collider)
+	return out
 
 
 ## 扣减登记目标头上的在飞伤害估计（11d MissingArrowsTolerance 估计口径；

@@ -19,14 +19,18 @@ extends Node
 ## HEAL 正向结算不经 DamagePipeline（伤害单入口语义不破坏，spec §6.2.2.2a）。
 ##
 ## 压制（A6 · C9，CoH pinned-reaction-plan 直译——被压制的实质是定时禁令）：
-##   - 触发源（最小可判定取舍）：受击达门槛——①射手主手弓（远程投射物代理）
-##     命中 ≥ suppression_ranged_min_damage（箭矢压制）；②任意近战重击
-##     ≥ suppression_melee_min_damage（量级对齐 HIT_BIG_DAMAGE_THRESHOLD）。
-##     插地箭近失需投射物侧近失几何（arrow_projectile 不在 A6 文件面内），
-##     预留 apply(SUPPRESSED, ...) 通用入口后续接入。状态 DOT tick 同信号不可辨
-##     （take_damage 无 is_status 上下文），当前无 BURN/POISON 施加方（直译登记
-##     未启用），若未来启用须在管线侧过滤或提高门槛（挂总账）。
-##   - 总开关 suppression_enabled 默认关（零回归基线）；豁免：已溃逃/已死亡/
+##   - 触发源（两类，共用同一豁免集与总开关）：
+##     ① **箭矢近失**——箭矢非命中终态（插地）时，落点半径内的敌方单位经
+##        apply_suppression 通用入口被压制，"擦身而过/落在脚边"同样构成压制因果
+##        （near-miss 判定在投射物侧，见 arrow_projectile）；
+##     ② **受击达门槛**——射手主手弓命中 ≥ suppression_ranged_min_damage
+##        （箭矢压制），或任意近战重击 ≥ suppression_melee_min_damage
+##        （量级对齐 HIT_BIG_DAMAGE_THRESHOLD）。
+##     状态 DOT tick 同信号不可辨（take_damage 无 is_status 上下文），当前无
+##     BURN/POISON 施加方（直译登记未启用），若未来启用须在管线侧过滤或提高门槛
+##     （挂总账）。
+##   - 总开关 suppression_enabled 默认关（零回归基线），近失另有
+##     suppression_near_miss_enabled 默认关（受总门约束）；豁免：已溃逃/已死亡/
 ##     玩家附身/suppression_immune 兵种级豁免。同 type 刷新不叠加（既有 apply 语义
 ##     = 持续火力延长锁死）。
 ##   - 士气联动：SUPPRESSED 期间按 tick 经 lose_morale 流失（power=每 tick 点数，
@@ -193,25 +197,46 @@ func _apply_hot(e: Dictionary) -> void:
 ## 受击触发（HealthComponent.damaged 消费）：达门槛 → apply SUPPRESSED。
 ## 开关/豁免/门槛全档案化（behavior_profiles，总开关默认关 = 零回归基线）。
 func _on_owner_damaged(amount: float, source: Node) -> void:
-	if _owner == null or not is_instance_valid(_owner):
+	if not _can_suppress():
 		return
 	var profile: Dictionary = _suppression_profile()
-	if not bool(profile.get("suppression_enabled", false)):
-		return
-	if bool(profile.get("suppression_immune", false)):
-		return  # 兵种级豁免（英雄/巨人类预留）
-	if _owner.has_method("is_possessed") and _owner.is_possessed():
-		return  # 玩家附身：行为禁令语义不作用于玩家操控
-	if _owner.has_method("is_dead") and _owner.is_dead():
-		return  # 已死者不压制（致死一击的受击反馈链不受影响）
-	var health: Node = _health_of()
-	if health != null and health.has_method("is_routed") and health.is_routed():
-		return  # 豁免：已溃逃者禁令无意义（强制溃逃链优先于压制禁令）
 	if not _qualifies_suppression_hit(amount, source, profile):
 		return
 	# power = 压制期每 tick 士气流失点数（suppression_drain 消费）；同 type 刷新不叠加
 	apply(Type.SUPPRESSED, float(profile.get("suppression_duration", 4.5)),
 			float(profile.get("suppression_morale_per_tick", 2.0)), source)
+
+
+## 外部触发源通用入口（箭矢近失等非伤害触发消费）：与受击触发共用总开关/豁免集，
+## 但不经受击门槛——调用方已完成"这一发够格压制"的判定（如箭矢落点在近失半径内）。
+## 返回是否实际施加。此路径不产生任何伤害（压制惩罚来自行为禁令与士气流失）。
+func apply_suppression(source: Node = null) -> bool:
+	if not _can_suppress():
+		return false
+	var profile: Dictionary = _suppression_profile()
+	apply(Type.SUPPRESSED, float(profile.get("suppression_duration", 4.5)),
+			float(profile.get("suppression_morale_per_tick", 2.0)), source)
+	return true
+
+
+## 压制允许判定（两类触发源共用，避免豁免规则在两条路径上分叉）：
+## 总开关 / 兵种级免疫 / 玩家附身 / 已死亡 / 已溃逃。
+func _can_suppress() -> bool:
+	if _owner == null or not is_instance_valid(_owner):
+		return false
+	var profile: Dictionary = _suppression_profile()
+	if not bool(profile.get("suppression_enabled", false)):
+		return false
+	if bool(profile.get("suppression_immune", false)):
+		return false  # 兵种级豁免（英雄/巨人类预留）
+	if _owner.has_method("is_possessed") and _owner.is_possessed():
+		return false  # 玩家附身：行为禁令语义不作用于玩家操控
+	if _owner.has_method("is_dead") and _owner.is_dead():
+		return false  # 已死者不压制（致死一击的受击反馈链不受影响）
+	var health: Node = _health_of()
+	if health != null and health.has_method("is_routed") and health.is_routed():
+		return false  # 豁免：已溃逃者禁令无意义（强制溃逃链优先于压制禁令）
+	return true
 
 
 ## 触发门槛判定（最小可判定取舍见类头注释）：远程命中达下限 / 近战重击达下限。

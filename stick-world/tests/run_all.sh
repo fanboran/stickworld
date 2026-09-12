@@ -80,6 +80,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_esc_key_input.tscn"
 	"tests/integration/test_ui_layout.tscn"
 	"tests/integration/test_battle_ui.tscn"
+	"tests/integration/test_squad_card.tscn"
 	"tests/integration/test_formation_system_assembly.tscn"
 	"tests/integration/test_org_panel.tscn"
 	"tests/integration/test_org_command_chain.tscn"
@@ -136,6 +137,7 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_esc_key_input.tscn"]=150
 	["tests/integration/test_ui_layout.tscn"]=90
 	["tests/integration/test_battle_ui.tscn"]=90
+	["tests/integration/test_squad_card.tscn"]=120
 	["tests/integration/test_formation_system_assembly.tscn"]=90
 	["tests/integration/test_tactical_orders.tscn"]=90
 	["tests/integration/test_debug_api.tscn"]=90

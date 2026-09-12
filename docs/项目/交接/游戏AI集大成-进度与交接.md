@@ -58,6 +58,7 @@
 | 测试基建加固（开闸前置） | ✅ 完成 | （本批提交见 git log） | **批量运行器两处静默漏测盲区修复 + 机制开关总表**：①零用例盲区——`TestRunner.all_passed()` 对空 `_results` 恒返 true，"一个用例都没跑"的套件会被记成绿灯；改为零用例判失败，并让 TestRunner 在 run/run_async 收尾经 Engine meta 发布用例数/断言数（`META_LAST_CASES`/`META_LAST_ASSERTS`），批量运行器逐套件打印并据此判零用例；②清单漏登记盲区——套件文件躺在 `tests/unit/` 却没登记进 `UNIT_SCRIPTS` 则永不运行且无红灯，新增盘上清单自检（目录枚举不可用时只提示不误判）；③守卫经一次性探针实测：零用例=false / 单用例=true 且计数 1/1 / 零断言=false（既有守卫）；④加固后 unit 批量 56/56，清单自检「盘上 56 / 清单 56 / 未登记 0」；⑤设计文档新增 §七「机制开关总表」——18 个机制开关的层/默认/开闸后可观测差异/观察入口 + 四条开闸纪律，校准轮按表推进 |
 | A7 | ⬜ 挂起 | — | 待经济域立项 |
 | A8+ | ⬜ 挂起 | — | 待创始人裁决 |
+| AUTHORITY-SWITCH（R4 行为落地） | 🔄 待验收 | （本批提交见 git log） | **士兵自主跳槽（权威值择班行为化）**：①A9 的评分内核（`get_squad_authority`/`should_switch_squad`）接上行为——`formation_system` 新增周期性评估：战斗班成员比较「当前班权威值 + 已在玩家班黏性 0.5」与「邻近（半径内）可投奔班权威值 + 玩家班吸引力 0.2」，权威差须超 `authority_margin` 0.07（复用既有判定，不重写比较逻辑）才转投，迁移走既有 `add_unit`（组织同步/角色/槽位/征用互斥全复用）。②新档 `config/ai/formation_authority.tres`（类型路径 `ai.formation_authority`，category=ai，10 键）——`authority_switch_enabled` **缺省关闭**（零回归门）/ 扫描节拍 0.5s（L2 基础节拍，与 `_decide_squad_targets`/`_tick_phase_plans` 同源）/ 单单位评估间隔 2.0s + 确定性错峰相位（种子+登记序，不用 instance_id 以免跨运行不可复现）/ 跳槽冷却 20s / 邻近半径 800px / 玩家班吸引力与黏性（RWR 0.2 / 0.5 直译）/ 班长放人阈值 0.3（RWR `max_leader_authority_willing_to_join_another_squad` 直译）/ 单拍单来源班限流 1 人。③守卫「不该动的别动」——玩家附身单位、班长、组织在册指挥官本人、溃逃·找掩体（士气行为）、真实压制态（StatusEffects duck）、接战中（射程内有敌）、玩家手动号令保护期；保护期**复用** TeamAi 既有状态（team_ai 新增公开查询 `is_manual_order_guarded`，编队侧经 `battle_instance.get_team_ai(faction)` 取用，不各自维护时间戳副本）。④新套件 `test_authority_switch` 14 用例 75 断言全绿，逐条锁六约束（默认关零行为零时钟 / 滞回带内外 / 冷却窗与到期 / 排序 A1.0→B1.7 与并列时玩家班优先 / 七类守卫 + 限流 / 错峰槽位≥2 且同种子同局面可复现）。⑤观感风险限制——单拍单来源班限流防整班雪崩、冷却防每拍横跳、候选班须有在场班长、邻近半径防全图跳槽。⑥验收：check 干净；unit 批量 56/57（唯一失败 = 清单自检提示本新套件未登记进 `UNIT_SCRIPTS`，待主会话登记；既有套件全绿含 `test_formation_system`/`test_formation_slots`/`test_squad_phase_plan`/`test_ai_param_panel`）。 |
 
 ## 关键决策速查
 
@@ -72,7 +73,7 @@
 | A1 personality 落点 | 独立手写资源 `config/ai/personality.tres`（BalanceResource，BalanceConfig 统一装载+热重载）而非 variables.tres 加行——后者系 Excel 导出管线背书（手改会被再导出覆盖），且难度档是多字段行非标量 |
 | A1 确定性 | 默认随机种子固定（`DEFAULT_RANDOM_SEED`）：单测可锁掷骰、battle_sim 可复现；需要逐局差异时显式传 `overrides.random_seed` |
 | A1 难度选择 | setup overrides["difficulty"]（默认 standard）；全局难度选择 UI 挂开放问题#3（调试菜单先行），A1 不做 |
-| A9 R4 边界 | 权威值评分内核+margin 滞回先行，自主跳槽行为不做（玩家预期风险）——A2 任务槽匹配小队时消费 `get_squad_authority`/`should_switch_squad` |
+| A9 R4 边界 | 权威值评分内核 + margin 滞回先行（A9）；**自主跳槽行为已于 AUTHORITY-SWITCH 批次实装**（档案 `ai.formation_authority`，缺省关）——玩家预期风险由守卫 + 限流 + 冷却控制：班长·指挥官·玩家本体不动，溃逃/被压制/接战中/玩家号令保护期内不换，单拍单来源班至多放走 1 人 |
 | A9 R5 简化 | 防扎堆=登记时间戳（being_healed_until 过期即失效），RWR 的 10m 距离维度省略（治疗本有 heal_range 约束）；求援/增援族（force_comparison_multiplier 等）挂 A5/A8 |
 | A9 R3 昼夜 | 夜间判定=EnvironmentSystem 光照亮度<0.55（与 fx 视觉层同源同分界）；查询不可用（测试桩/未装配）=白天，保守零回归 |
 | A9 覆盖链 | BehaviorProfiles 缓存以 .tres 行数组引用比对失效（reload 重建 data 触发重合并）——static 上下文免连 EventBus，测试同式注入 |

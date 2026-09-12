@@ -118,7 +118,16 @@ func _road_cell_bounds(a: int, b: int) -> Vector2i:
 	return Vector2i(lo, hi)
 
 
-## 在指定 cell 范围内按生态群落程序化生成自然资源点。
+## 每积满这么多毫秒的放置工作就让一帧（与 boot_warmup.TIME_BUDGET_MS 同口径：
+## 单次停顿肉眼近无感，同时把让帧开销摊到 ~10%）。
+const TIME_BUDGET_MS := 150
+## 每块放置节点数上限。放置本身比首绘便宜得多（实测 ~2ms/个 vs 树的 ~20ms/个
+## 渲染），只按时间预算会让首块积累到 ~84 个才让帧（那一帧仍 1.6s）；按个数
+## 封顶才真正把每帧要首绘的资源点数压下来。两条件取先到者。
+const MAX_NODES_PER_CHUNK := 40
+
+
+## 在指定 cell 范围内按生态群落程序化生成自然资源点（同步版）。
 ## start_cell / end_cell: cell_x 范围
 ## density: 期望密度（0.0~1.0，语义=每格期望资源数，与旧逐格概率版总量一致）
 ## 返回生成的 ResourceNode 数组
@@ -130,50 +139,106 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 	var a: int = mini(start_cell, end_cell)
 	var b: int = maxi(start_cell, end_cell)
 	var road := _road_cell_bounds(a, b)
-	# target 扩容：树权重 0.88 × 2 倍密度 → 总量 ≈1.88×基线（attempts 上限同步放宽，
-	# 间距 56 后成员放置成功率升，远端能真正填到 2 倍密度）
-	var target: int = int((b - a) * clampf(density, 0.0, 1.0)
-		* (1.0 + (FOREST_DENSITY_MULT - 1.0) * 0.88))
+	var target: int = _target_count(a, b, density)
 	var max_attempts: int = target * 12 + 16
 	var attempts: int = 0
 	var rows: int = get_terrain_row_count()
 	while nodes.size() < target and attempts < max_attempts:
 		attempts += 1
-		var kind := _pick_community()
-		# 群落中心：x 全范围随机，y 随机行起步（纵深聚拢成片）
-		var center_px: float = (a + randf() * (b - a)) * PlacementGrid.CELL_SIZE
-		var center_row: int = randi_range(0, maxi(0, rows - 1))
-		var count: int = randi_range(kind["size"].x, kind["size"].y)
-		for i in count:
-			if nodes.size() >= target:
-				break
-			# 群落内高斯散布：中心密、边缘疏，树影交叠自然成林
-			var px: float = center_px + _gauss() * float(kind["radius"]) * PlacementGrid.CELL_SIZE
-			var row: int = clampi(center_row + int(round(_gauss() * 1.4)), 0, maxi(0, rows - 1))
-			var py: float = _root.ground_y + row * TERRAIN_CELL_SIZE_Y + TERRAIN_CELL_SIZE_Y * 0.5
-			var cx: int = floori(px / PlacementGrid.CELL_SIZE)
-			if cx < a or cx >= b:
-				continue
-			# 硬化路面/土路上不可能长资源
-			if _root.get_terrain_type_at_cell(cx) == _root.TERRAIN_DIRT_ROAD:
-				continue
-			var rtype0 := _pick_type(kind)
-			# 林区梯度：全部资源走同一规则（石/矿在森林里，净空带干净无资源）
-			var rate := _forest_rate(cx, road.x, road.y)
-			if randf() * FOREST_DENSITY_MULT >= rate:
-				continue
-			if _too_close(px, py, nodes):
-				continue
-			var node: Node2D = ScriptResourceNode.new()
-			node.resource_type = rtype0
-			# 储量按类型：大树给更多木；稀有矿储少而值高
-			match rtype0:
-				0: node.amount = 150 + randi_range(0, 170)  # WOOD
-				1: node.amount = 100 + randi_range(0, 80)   # STONE
-				2: node.amount = 80 + randi_range(0, 60)    # METAL
-				3: node.amount = 40 + randi_range(0, 30)    # DIAMOND
-				_: node.amount = 60 + randi_range(0, 40)    # GOLD
-			node.position = Vector2(px, py)
-			_root.decoration_layer.add_child(node)
-			nodes.append(node)
+		_attempt_community(a, b, rows, road, target, nodes)
 	return nodes
+
+
+## 分块协程版：同一套放置算法，但按「时间预算满」或「本块满 `MAX_NODES_PER_CHUNK`
+## 个」让一帧（先到者）——资源点的实例化与首绘（程序化树 `_draw` 的折线网格生成）
+## 因此摊到多个较小帧，加载屏在本子阶段不再有一段数秒的整屏定格（vulkan 实测
+## 改造前最长单帧 ~9s → 改造后 ~0.9s）。
+## on_progress(placed, target)：已放置数/目标数（可空）——供加载屏副进度条。
+## 返回生成的 ResourceNode 数组（与同步版同一批节点、同一随机序列）。
+func generate_resource_nodes_chunked(start_cell: int, end_cell: int, density: float,
+		on_progress: Callable = Callable()) -> Array:
+	if _root.decoration_layer == null:
+		if on_progress.is_valid():
+			on_progress.call(0, 0)
+		return []
+	var nodes: Array = []
+	var a: int = mini(start_cell, end_cell)
+	var b: int = maxi(start_cell, end_cell)
+	var road := _road_cell_bounds(a, b)
+	var target: int = _target_count(a, b, density)
+	var max_attempts: int = target * 12 + 16
+	var attempts: int = 0
+	var rows: int = get_terrain_row_count()
+	var last: int = Time.get_ticks_msec()
+	var chunk_start: int = 0
+	while nodes.size() < target and attempts < max_attempts:
+		attempts += 1
+		_attempt_community(a, b, rows, road, target, nodes)
+		if (nodes.size() - chunk_start >= MAX_NODES_PER_CHUNK
+				or Time.get_ticks_msec() - last >= TIME_BUDGET_MS):
+			if on_progress.is_valid():
+				on_progress.call(nodes.size(), target)
+			await _yield_frame()
+			last = Time.get_ticks_msec()
+			chunk_start = nodes.size()
+	if on_progress.is_valid():
+		on_progress.call(nodes.size(), target)
+	return nodes
+
+
+## 单次群落尝试：掷群落类型/中心/成员数，成员逐个按规则落位到 `nodes`。
+## 同步版与分块版共用同一套放置规则（不维护第二份，行为与随机序列逐位一致）。
+func _attempt_community(a: int, b: int, rows: int, road: Vector2i,
+		target: int, nodes: Array) -> void:
+	var kind := _pick_community()
+	# 群落中心：x 全范围随机，y 随机行起步（纵深聚拢成片）
+	var center_px: float = (a + randf() * (b - a)) * PlacementGrid.CELL_SIZE
+	var center_row: int = randi_range(0, maxi(0, rows - 1))
+	var count: int = randi_range(kind["size"].x, kind["size"].y)
+	for i in count:
+		if nodes.size() >= target:
+			break
+		# 群落内高斯散布：中心密、边缘疏，树影交叠自然成林
+		var px: float = center_px + _gauss() * float(kind["radius"]) * PlacementGrid.CELL_SIZE
+		var row: int = clampi(center_row + int(round(_gauss() * 1.4)), 0, maxi(0, rows - 1))
+		var py: float = _root.ground_y + row * TERRAIN_CELL_SIZE_Y + TERRAIN_CELL_SIZE_Y * 0.5
+		var cx: int = floori(px / PlacementGrid.CELL_SIZE)
+		if cx < a or cx >= b:
+			continue
+		# 硬化路面/土路上不可能长资源
+		if _root.get_terrain_type_at_cell(cx) == _root.TERRAIN_DIRT_ROAD:
+			continue
+		var rtype0 := _pick_type(kind)
+		# 林区梯度：全部资源走同一规则（石/矿在森林里，净空带干净无资源）
+		var rate := _forest_rate(cx, road.x, road.y)
+		if randf() * FOREST_DENSITY_MULT >= rate:
+			continue
+		if _too_close(px, py, nodes):
+			continue
+		var node: Node2D = ScriptResourceNode.new()
+		node.resource_type = rtype0
+		# 储量按类型：大树给更多木；稀有矿储少而值高
+		match rtype0:
+			0: node.amount = 150 + randi_range(0, 170)  # WOOD
+			1: node.amount = 100 + randi_range(0, 80)   # STONE
+			2: node.amount = 80 + randi_range(0, 60)    # METAL
+			3: node.amount = 40 + randi_range(0, 30)    # DIAMOND
+			_: node.amount = 60 + randi_range(0, 40)    # GOLD
+		node.position = Vector2(px, py)
+		_root.decoration_layer.add_child(node)
+		nodes.append(node)
+
+
+## 目标资源点数：树权重 0.88 × 2 倍密度 → 总量 ≈1.88×基线（attempts 上限同步
+## 放宽，间距 56 后成员放置成功率升，远端能真正填到 2 倍密度）。
+func _target_count(a: int, b: int, density: float) -> int:
+	return int((b - a) * clampf(density, 0.0, 1.0)
+		* (1.0 + (FOREST_DENSITY_MULT - 1.0) * 0.88))
+
+
+## 等一帧（与 game_root._yield_frame 同口径）：headless 下渲染服务器不绘制帧、
+## frame_post_draw 永不发射——不短路则协程在首个让帧点永久挂起（装备/测试卡死）。
+func _yield_frame() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	await RenderingServer.frame_post_draw

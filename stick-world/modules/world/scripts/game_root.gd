@@ -326,13 +326,22 @@ func _world_sub_phase(label: String) -> void:
 	await _yield_frame()
 
 
-## 世界生成子阶段内部细分进度（逐个建筑/逐个村民等）：副条在当前子阶段切片内推进。
-func _world_sub_progress(done: int, total: int) -> void:
+## 世界生成子阶段内部细分进度（逐个建筑/逐个村民/逐个资源点等）：副条在当前子阶段
+## 切片内推进。`detail` 非空时在阶段文字后补「· detail」（同一套下条，不新造 UI）。
+func _world_sub_progress(done: int, total: int, detail: String = "") -> void:
 	if not _boot_world_phase or total <= 0:
 		return
 	var sub: float = (float(_world_sub_idx - 1) + float(done) / float(total)) / float(WORLD_SUB_PHASES)
-	_show_loading("正在生成世界…（%d/%d）· %s" % [BOOT_STAGES - 1, BOOT_STAGES, _world_sub_label],
-			float(BOOT_STAGES - 1) / float(BOOT_STAGES), sub)
+	var msg: String = "正在生成世界…（%d/%d）· %s" % [
+			BOOT_STAGES - 1, BOOT_STAGES, _world_sub_label]
+	if not detail.is_empty():
+		msg += " · " + detail
+	_show_loading(msg, float(BOOT_STAGES - 1) / float(BOOT_STAGES), sub)
+
+
+## 「村庄设施」子阶段：资源点放置逐项进度（下条文字「布置资源点 n/m」）。
+func _world_sub_phase_resources(placed: int, target: int) -> void:
+	_world_sub_progress(placed, target, "布置资源点 %d/%d" % [placed, target])
 
 
 ## 实例化四个子模块节点并挂到 GameRoot 下。
@@ -769,11 +778,19 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 			var safe_radius: int = 40  # 出生点±40格内为村庄土路区
 			if map.has_method("set_dirt_road_range"):
 				map.set_dirt_road_range(spawn_cell - safe_radius, spawn_cell + safe_radius)
-			if map.has_method("generate_resource_nodes"):
+			if map.has_method("generate_resource_nodes_chunked"):
 				var map_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
 				var map_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
-				# 全地图生成，generate_resource_nodes 内部会跳过土路 cell，保证硬化路面不长资源
-				map.generate_resource_nodes(map_left_cell, map_right_cell, 0.65)
+				# 全地图生成，生成器内部会跳过土路 cell，保证硬化路面不长资源。
+				# 分块版：每积满时间预算让一帧——~154 个资源点的实例化与首绘因此
+				# 摊到多帧，加载屏不再在该子阶段有一段数秒的整屏定格；副条随
+				# 放置进度推进（「布置资源点 n/m」）。
+				await map.generate_resource_nodes_chunked(
+						map_left_cell, map_right_cell, 0.65, _world_sub_phase_resources)
+			elif map.has_method("generate_resource_nodes"):
+				var fb_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
+				var fb_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
+				map.generate_resource_nodes(fb_left_cell, fb_right_cell, 0.65)
 			# 重新设置相机/小地图边界（土路可能向负坐标扩展了 map_left）
 			if camera_rig != null and camera_rig.has_method("set_map_bounds"):
 				camera_rig.set_map_bounds(map.map_left, map.map_right)

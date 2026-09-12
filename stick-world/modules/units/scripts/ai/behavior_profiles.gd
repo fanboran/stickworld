@@ -106,7 +106,7 @@ const BASELINE: Dictionary = {
 	"retreat_mod_ally_break_ratio": 0.51,   ## 附近友军溃逃/阵亡比例 ≥ 此值 → 撤退候选因子三（CoH retreat_suppressed_percentage 0.51 同构）
 	"retreat_mod_ally_radius": 300.0,       ## "附近友军"判定半径（px）
 	"retreat_mod_reevaluate": 2.5,          ## 掷骰评估周期（s，CoH retreat_chance_reevaluate_ticks 20 tick≈2.5s）
-	"retreat_mod_chance": 0.30,             ## 基线掷骰概率（难度行 personality.<难度>.retreat_chance 覆盖；CoH easy/standard 0.30）
+	"retreat_mod_chance": NAN,              ## 掷骰概率（NAN=未覆写 → personality global 行 retreat_chance → 代码默认 0.30；显式写入 = 覆写，测试/扫参出口）
 	"retreat_mod_withdraw_arrive": 80.0,    ## 撤退（回锚点）判定抵达半径（px，behavior_retreat withdraw 档）
 	"retreat_mod_withdraw_max_time": 12.0,  ## 撤退（回锚点）最长持续时间（s；后撤档沿用既有 RETREAT_DURATION 不动）
 }
@@ -269,11 +269,11 @@ static func _balance_config() -> Node:
 	return (loop as SceneTree).root.get_node_or_null("BalanceConfig")
 
 
-## 读难度档 personality 行的撤退掷骰概率（A3 · C6：难度调制消费 A1 personality
-## 难度行 ai.personality.<difficulty>.retreat_chance，CoH personality retreat_chance
-## 按难度分档同构）。缺载/路径缺失/未知难度/行无该键返回 NAN，调用方以
-## 档案基线 retreat_mod_chance 兜底（软依赖语义，非异常）。
-static func get_difficulty_retreat_chance(difficulty: String) -> float:
+## 读 personality 单一档案 global 行的撤退掷骰概率（A3 · C6：ai.personality.global
+## retreat_chance，难度分档维度已裁决移除·开放问题#3——CoH personality
+## retreat_chance 语义保留为单一参数）。缺载/路径缺失/global 行无该键返回 NAN，
+## 调用方以代码默认兜底（软依赖语义，非异常）。
+static func get_personality_retreat_chance() -> float:
 	var cfg: Node = _balance_config()
 	if cfg == null or "data" not in cfg:
 		return NAN
@@ -284,7 +284,7 @@ static func get_difficulty_retreat_chance(difficulty: String) -> float:
 	for row_v in rows:
 		if not (row_v is Dictionary):
 			continue
-		if str(row_v.get("id", "")) != difficulty:
+		if str(row_v.get("id", "")) != "global":
 			continue
 		if "retreat_chance" not in row_v:
 			return NAN

@@ -50,7 +50,7 @@ func _test_config_keys() -> void:
 	_runner.assert_approx(float(BalanceConfig.get_value("ai.personality.global.demand_increment")), 50.0, 0.001,
 			"demand_increment = 50（CoH s_demand_increment 真值）")
 	# 装载器携带新键（TeamAi.setup 合并链可消费）
-	var overlay: Dictionary = ScriptTeamAiProfiles.load_personality_overlay("standard")
+	var overlay: Dictionary = ScriptTeamAiProfiles.load_personality_overlay()
 	_runner.assert_false(bool(overlay.get("default_behavior_v2_enabled", true)), "overlay 携带开关（默认关）")
 	_runner.assert_approx(float(overlay.get("demand_increment", -1.0)), 50.0, 0.001, "overlay 携带 ±分增量")
 	# 代码默认兜底（空档案）：scorer 语义不依赖配置存在性

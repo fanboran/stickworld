@@ -20,7 +20,7 @@ func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("渲染配置: msaa_2d = 2（4x，抗锯齿生命线）", _test_msaa_2d)
 	_runner.add_test("渲染配置: msaa_3d = 2（同段锚点）", _test_msaa_3d)
-	_runner.add_test("渲染配置: rendering_device/driver.windows = d3d12", _test_rendering_driver)
+	_runner.add_test("渲染配置: rendering_device/driver.windows = vulkan", _test_rendering_driver)
 	_runner.add_test("物理配置: physics_ticks_per_second = 30", _test_physics_ticks)
 	_runner.run()
 	print(_runner.summary())
@@ -45,7 +45,9 @@ func _test_msaa_3d() -> void:
 func _test_rendering_driver() -> void:
 	var driver: String = str(ProjectSettings.get_setting(
 			"rendering/rendering_device/driver.windows", ""))
-	_runner.assert_equal(driver, "d3d12", "Windows 渲染驱动应为 d3d12")
+	# vulkan 而非 d3d12：D3D12 下世界首次绘制的管线编译把主线程冻 32~127s（Vulkan 3.8s，
+	# 且 Vulkan 管线缓存落盘可复用）；量测与依据见加载屏交接档 §二
+	_runner.assert_equal(driver, "vulkan", "Windows 渲染驱动应为 vulkan（D3D12 管线编译冻结实测见交接档）")
 
 
 func _test_physics_ticks() -> void:

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://boottimelineprobe"]
+
+[ext_resource type="Script" path="res://tests/dev/boot_timeline_probe.gd" id="1"]
+
+[node name="BootTimelineProbe" type="Node"]
+script = ExtResource("1")

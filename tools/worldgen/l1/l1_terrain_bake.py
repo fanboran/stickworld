@@ -305,6 +305,9 @@ def main():
     ap = argparse.ArgumentParser(description="L1 地形底图烘焙（R9，B2 同管线 per-L1 裁切）")
     ap.add_argument("--pack", nargs="*", help="只处理指定包（目录名如 l1_001；spawn = 出生包）")
     ap.add_argument("--spawn-only", action="store_true", help="只跑出生包（调参快速预览）")
+    ap.add_argument("--lake-refined", action="store_true",
+                    help="审计#4 湖岸案：湖输入换 refined 湖光栅（mesh 同口径，含海湾案"
+                         "修正），terrain 与政治模式水面一致")
     args = ap.parse_args()
 
     t0 = time.time()
@@ -322,6 +325,14 @@ def main():
 
     print("[1/2] 加载 B2 全局场（terrain_render 同源）...", flush=True)
     elev, land, lake, river, labels8, hot8 = tr.load_inputs()
+    if args.lake_refined:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        "..", "l3"))
+        from reexport_political_id import build_lake_raster
+        refined = np.load(os.path.join(OUTPUT_DIR, "l1_v2",
+                                       "refined_city_labels_8192.npy")).astype(np.int32)
+        lake = build_lake_raster(refined, lake)
+        print("  湖输入 = refined 湖光栅（%d px）" % int(lake.sum()), flush=True)
     shade, ocean_edt, lake_in, coast_dark, river_a = tr.build_fields(
         elev, land, lake, river, p)
     # EDT 返回 float64，压成 float32 减半内存（8192² 场 ×2）

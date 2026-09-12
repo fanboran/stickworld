@@ -33,9 +33,8 @@
   - `docs/项目/交接/游戏循环深化-进度与交接.md`（任务：兵源闭环/军饷 sink/战斗规模/敌方反扑——修核心循环 8 断点（诊断见 `docs/设计/核心循环.md` §七）；**并入本分支实施**，批次 1 兵营招兵完成，批次 2-5 待做）
   - `docs/项目/交接/图标管线与美术升级-进度与交接.md`（任务：图标三渲二管线+程序化美术升级，剩接入 Godot UI，分支 `main`）
   - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
-  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL 三家登记，批次 A1~A9，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1、A9 完成，A2 实施中，A3~A6 排队；组织批次 3 基建已随 `agent/organization-deepening` 收线合并**，分支 `agent/game-ai`，worktree `.temp/game-ai`；main 上此交接档为登记快照，最新版以分支为准）
   - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
-  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL/WorldBox 四家登记，批次 A1~A9，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1~A6/A9 七批全部收官并合入 main（难度维度按裁决移除）；待创始人裁决 W1~W10 批次化/组织界面方案/TeamAi 生产开关 + 机制观感验收**，分支 `agent/game-ai`，worktree `.temp/game-ai`）
+  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL/WorldBox 四家登记，批次 A1~A9 + WorldBox WB1~WB10 系列，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1~A6/A9 七批 + WB1(W1 softmax 选优)/WB2(W2 冷却错峰)/WB6(W6 评分留痕) 三批收官合入 main**；WB3~WB5/WB7~WB10 分流至 30fps·组织·出征·town-life 各任务线待立项；机制观感验收与数值校准轮进行中，分支 `agent/game-ai`，worktree `.temp/game-ai`）
   - `docs/项目/交接/UI运行时三项优化-ABC三批-交接.md`（任务：UI 运行时三项优化 A 暂停原语化/B HUD 布局收权/C 按钮变体，**三批已合并入 main（116d42bf），待创始人观感验收**，分支链 `agent/ui-pause-primitive`→`agent/ui-hud-zones`→`agent/ui-button-variants`）
   - `docs/项目/交接/建筑生成管线v2-笔触手绘-进度与交接.md`（任务：推翻旧 building_gen，新建离线"代码建模→笔触手绘渲染→PNG+元数据"建筑管线，唯一沿用约束=宽度 3~16 格；**批次 1 完成**（骨架+house/smithy/warehouse 三样板 16 张+确定性校验过），批次 2~4 待做，分支 `agent/building-pipeline-v2`，worktree `.temp/building-pipeline-v2`）
 - 在役审计快照（用完即删，删除时同步移除登记）：

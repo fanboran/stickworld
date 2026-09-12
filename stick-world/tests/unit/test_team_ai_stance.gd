@@ -28,6 +28,7 @@ func _ready() -> void:
 	_runner.add_test("balance_of_powers / ratio 计算", _test_balance_calc)
 	_runner.add_test("enemy_has_no_military_units", _test_enemy_no_military)
 	_runner.add_test("we_recently_decided_to_garrison 防抖", _test_garrison_recent)
+	_runner.add_test("W1 get_attack_percentage：缓存查询（setup 首算/决策节拍刷新/查询零重算）", _test_attack_pct_cache)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -220,6 +221,35 @@ func _test_garrison_recent() -> void:
 	ctx.battle.duration = 100.0  # 距驻守 85s > 8s
 	ctx.ai.update()
 	_runner.assert_false(ctx.ai.we_recently_decided_to_garrison(), "85s > 8s cool 非近期")
+	ctx.teardown()
+
+
+## W1（组织界面与AI状态接线 §2.6）：attack% 只读缓存查询。
+## 语义：缓存随决策周期（update/_update_task_board）刷新，查询侧零重算零副作用
+## ——HUD 可高频轮询而不重跑四规则。
+func _test_attack_pct_cache() -> void:
+	var ctx := _Ctx.new()
+	ctx.setup()
+	# setup 期首算：门禁未开（duration=0 < deadline≥8）→ 缓存 0
+	_runner.assert_approx(ctx.ai.get_attack_percentage(), 0.0, 0.001, "setup 首算：门禁未开缓存 = 0")
+	# 等军力（无优势递增）、敌远锚点（无基地威胁封顶）：决策周期后缓存 = 重算值
+	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
+	ctx.add_enemy_unit(Vector2(1500, 300), ScriptTeamAiProfiles.SPEAR)
+	var deadline: float = ctx.ai.get_attack_deadline()
+	ctx.battle.duration = deadline + 120.0  # 门禁过 +2 分钟
+	ctx.ai.update()
+	var expect: float = ctx.ai.recalculate_attack_percentage()
+	_runner.assert_true(expect > 0.0, "门禁过 + 基调曲线应给出正攻击百分比")
+	_runner.assert_approx(ctx.ai.get_attack_percentage(), expect, 0.001,
+			"决策周期后缓存 = recalculate 重算值")
+	# 查询零重算：时长前推但未进决策周期 → 缓存不随时间漂移
+	ctx.battle.duration = deadline + 600.0
+	_runner.assert_approx(ctx.ai.get_attack_percentage(), expect, 0.001,
+			"查询侧零重算：未进决策周期缓存不随时间漂移")
+	# 下一次决策周期到来 → 缓存随重算刷新（+8 分钟基调递增）
+	ctx.ai.update()
+	_runner.assert_true(ctx.ai.get_attack_percentage() > expect + 0.001,
+			"再次决策周期应刷新缓存（基调随时间递增）")
 	ctx.teardown()
 
 

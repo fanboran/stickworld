@@ -141,6 +141,7 @@ func _ready() -> void:
 	_runner.add_test("角色分派: 素质维——高血量夺侦察但夺不了核心（位置维优先）", _test_roles_quality)
 	_runner.add_test("角色分派: 侧翼按锚朝向横向分左右", _test_roles_flank_sides)
 	_runner.add_test("相位切换: 核心组先行→随机等待→两翼跟进→循环推进跃进线", _test_phase_cycle)
+	_runner.add_test("W1 观测信号: phase_changed / roles_reassigned（§2.6 接口缺口）", _test_w1_signals)
 	_runner.add_test("相位切换: 末跳（跃进线=终点）全员到位后计划完成", _test_final_leg_done)
 	_runner.add_test("接敌反应: 背敌成员 → seek_cover（既有行为接入）", _test_back_enemy_cover)
 	_runner.add_test("接敌反应: 被瞄准（被压制代理）成员 → seek_cover", _test_suppressed_cover)
@@ -291,6 +292,60 @@ func _test_phase_cycle() -> void:
 	# 新循环核心组应收到推进后的新跃进号令（剩余路程 > arrive_tolerance）
 	_beat(fs)
 	_runner.assert_gt(units[0].ai.orders_for("move"), before, "新循环核心组应收到推进后的新跃进号令")
+
+
+## W1（组织界面与AI状态接线 §2.6）：相位/角色变更信号。
+## 激活首跳（IDLE→CORE_LEAP）与循环相位边界都发射 phase_changed；角色重排
+## （新循环核心跃进入口）发射 roles_reassigned，均携带小队 id。
+func _test_w1_signals() -> void:
+	var w: Dictionary = _make_world(6)
+	var fs: Node = w["fs"]
+	var units: Array = w["units"]
+	var sid: String = w["sid"]
+	_enable(fs)
+	# 激活首跳（直构计划在激活前连接，验证 IDLE→CORE_LEAP 边界）
+	var plan2: Variant = ScriptSquadPhasePlan.new()
+	plan2.setup(fs, ScriptSquadPhasePlan.DEFAULTS.duplicate())
+	var first_events: Array = []
+	plan2.phase_changed.connect(func(s: String, f: int, t: int) -> void:
+		first_events.append([s, f, t]))
+	plan2.activate(sid, Vector2(1000, 500))
+	_runner.assert_equal(first_events.size(), 1, "激活首跳应发射一次 phase_changed")
+	_runner.assert_equal(str(first_events[0][0]), sid, "信号应携带小队 id")
+	_runner.assert_equal(int(first_events[0][1]), ScriptSquadPhasePlan.PH_IDLE, "首跳 from = IDLE")
+	_runner.assert_equal(int(first_events[0][2]), ScriptSquadPhasePlan.PH_CORE_LEAP, "首跳 to = 核心跃进")
+	plan2.deactivate()
+	# 循环相位边界（宿主激活路径；连接晚于激活，观测后续边界）
+	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1000, 500))
+	var plan: Variant = fs._squad_phase_plans[sid]
+	var phase_events: Array = []
+	var role_events: Array = []
+	plan.phase_changed.connect(func(s: String, f: int, t: int) -> void:
+		phase_events.append({"squad": s, "from": f, "to": t}))
+	plan.roles_reassigned.connect(func(s: String) -> void:
+		role_events.append(s))
+	# 首拍：核心组获跃进号令 → 到位 → CORE_WAIT（phase_changed，无角色信号）
+	fs._tick_phase_plans(0.5)
+	for i in range(3):
+		if units[i].ai.has_order():
+			units[i].global_position = units[i].ai.get_ordered_params().get("target", units[i].global_position)
+	fs._tick_phase_plans(0.5)
+	_runner.assert_equal(phase_events.size(), 1, "进入等待应发射一次 phase_changed")
+	_runner.assert_equal(int(phase_events[0]["from"]), ScriptSquadPhasePlan.PH_CORE_LEAP, "from = 核心跃进")
+	_runner.assert_equal(int(phase_events[0]["to"]), ScriptSquadPhasePlan.PH_CORE_WAIT, "to = 还击等待")
+	_runner.assert_equal(role_events.size(), 0, "等待相位不重排角色")
+	# 推进至新循环核心跃进入口（等待→两翼→跟进等待→重排角色；循环节拍逐拍推进）
+	for i in range(120):
+		fs._tick_phase_plans(0.5)
+		if not role_events.is_empty():
+			break
+	_runner.assert_true(not role_events.is_empty(), "新循环应发射 roles_reassigned（掉员自愈重排）")
+	_runner.assert_equal(str(role_events[0]), sid, "角色信号应携带小队 id")
+	var last: Dictionary = phase_events[phase_events.size() - 1]
+	_runner.assert_equal(int(last["from"]), ScriptSquadPhasePlan.PH_FLANK_WAIT, "角色重排应发生在两翼等待→新循环边界")
+	_runner.assert_equal(int(last["to"]), ScriptSquadPhasePlan.PH_CORE_LEAP, "新循环入口 = 核心跃进")
+	_runner.assert_true(phase_events.size() >= 3,
+			"多相位边界应发射多次 phase_changed（实测 %d）" % phase_events.size())
 
 
 func _test_final_leg_done() -> void:

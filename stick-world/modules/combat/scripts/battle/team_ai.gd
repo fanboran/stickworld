@@ -117,6 +117,9 @@ var _enemy_strength_near_base: float = 0.0
 ## A2 · C3 任务槽板实例（setup 装配；权重/超时与 _p 同源档案；
 ## slot_kernel_enabled=false 时决策不走槽，板仍同步保持观测面一致）
 var _task_board: ScriptTaskBoard = null
+## W1 观测缓存：最近一次决策周期重算的攻击百分比（get_attack_percentage 消费；
+## 决策节拍刷新而非查询时重算——HUD 轮询不重跑四规则，方案 §2.6）
+var _cached_attack_pct: float = 0.0
 
 ## 节流计时器三件套（dump 字段直译：_lastStanceChangeTime/_lastGarrisonTime/_lastBuildUpdate；
 ## 时钟源 = battle.get_duration() 战斗秒：暂停冻结、随宿主）
@@ -173,6 +176,8 @@ func setup(battle: Node, faction: int, orders: Node, formation: Node, overrides:
 	# A2 · C3 任务槽板（与 _p 同源档案引用：C4 权重/槽超时全档案化）
 	_task_board = ScriptTaskBoard.new()
 	_task_board.setup(_p)
+	# W1 观测缓存首算（门禁未开 = 0.0；定义初始值，查询侧不依赖首次决策到达）
+	_cached_attack_pct = recalculate_attack_percentage()
 	# 手动号令保护期守卫：订阅全局号令事件（tier=0 玩家直令刷新保护时间戳）
 	if EventBus != null and EventBus.has_signal("order_issued") \
 			and not EventBus.order_issued.is_connected(_on_order_issued):
@@ -237,6 +242,14 @@ func _run_beat() -> void:
 ## 当前姿态（9i+ 消费端 / 调试 HUD）
 func get_stance() -> int:
 	return _stance
+
+
+## 攻击百分比缓存查询（W1 · 方案 §2.6 接口缺口补齐）：返回最近一次决策周期
+## 重算的 recalculate_attack_percentage() 结果（0~1）。缓存随 _update_task_board
+## 按决策节拍刷新（含 setup 期首算），查询侧零重算零副作用——调试 HUD/观测
+## 采样可高频轮询。门禁未开/尚无快照 = 0.0。
+func get_attack_percentage() -> float:
+	return _cached_attack_pct
 
 
 ## 驻守锚点（GARRISON 号令目标 / 归队参照）
@@ -602,6 +615,7 @@ func _update_task_board() -> void:
 	var desired: int = 0
 	if atomic > 0:
 		var pct: float = recalculate_attack_percentage()
+		_cached_attack_pct = pct  # W1：决策节拍刷新观测缓存（get_attack_percentage 消费）
 		if pct > 0.0 and _slot_attack_intent_open():
 			desired = mini(int(ceil(pct * float(atomic))), atomic)
 	# 攻击槽目标 = 评分最优敌位（新建槽定位用；现存槽不重定位，防逐拍振荡）

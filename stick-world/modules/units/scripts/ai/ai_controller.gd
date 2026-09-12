@@ -94,6 +94,13 @@ var _retreat_mod_rng := RandomNumberGenerator.new()
 ## A3 · C6 下次允许掷骰的战斗时刻（战斗时长时间戳法，同 _test_pulse_until；
 ## 掷骰节流 = 档案 retreat_mod_reevaluate 评估周期内只掷一次）
 var _retreat_mod_next_roll_at: float = -1.0e9
+## W1 观测面（get_retreat_mod_state 消费）：最近一次调制评估快照——候选因子
+## 命中集/掷骰值/概率/是否触发。评估未到达（开关关/无威胁/节流内）时保持
+## 上次评估值；last_chance 为 NAN = 尚未评估过。
+var _retreat_mod_last_factors: Dictionary = {}
+var _retreat_mod_last_roll: float = NAN
+var _retreat_mod_last_chance: float = NAN
+var _retreat_mod_last_result: bool = false
 
 # ─────────────────────────────── 命令覆盖（§8.3 战术号令）────────────────────────────────
 ## 当前下达的命令行为名（空=无命令，由 AI 自主决策）
@@ -431,6 +438,12 @@ func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bo
 			morale_ok = health.get_morale_ratio() >= float(profile.get("retreat_mod_morale_ratio", 0.35))
 	var line_collapsed := _nearby_ally_break_ratio(bi, profile) \
 			>= float(profile.get("retreat_mod_ally_break_ratio", 0.51))
+	# W1 观测面：候选因子命中项登记（任一 true = 撤退候选；查询 get_retreat_mod_state）
+	_retreat_mod_last_factors = {
+		"hp_low": not hp_ok,
+		"morale_low": not morale_ok,
+		"line_collapsed": line_collapsed,
+	}
 	if hp_ok and morale_ok and not line_collapsed:
 		return false
 	# 掷骰概率三级链（难度分档已裁决移除·开放问题#3）：档案显式值（NAN=未覆写）
@@ -440,7 +453,12 @@ func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bo
 		chance = ScriptBehaviorProfiles.get_personality_retreat_chance()
 	if is_nan(chance):
 		chance = 0.30
-	if _retreat_mod_rng.randf() >= chance:
+	# W1 观测面：掷骰值/概率/结果登记（概率是执行机制不是因果，调试可见）
+	var roll: float = _retreat_mod_rng.randf()
+	_retreat_mod_last_roll = roll
+	_retreat_mod_last_chance = chance
+	_retreat_mod_last_result = roll < chance
+	if roll >= chance:
 		return false
 	# 双档语义：战线崩坏 → 撤退（回锚点）；个人战况恶化 → 后撤（战术后退重整）
 	var params: Dictionary = bi_param.duplicate()
@@ -478,6 +496,31 @@ func _nearby_ally_break_ratio(bi: Node, profile: Dictionary) -> float:
 	if total <= 0:
 		return 0.0
 	return float(broken) / float(total)
+
+
+## 撤退调制状态只读快照（W1 · 方案 §2.6 接口缺口补齐；调试悬停/观察场消费）：
+##   enabled            档案开关实测值（retreat_mod_enabled）
+##   next_roll_at       下次允许掷骰的战斗时刻（节流窗口起点）
+##   throttle_remaining 节流窗口余量（s，≥0；战斗时长不可用 = 0）
+##   last_factors       最近评估候选因子命中项 {hp_low, morale_low, line_collapsed}
+##   last_roll/last_chance/last_result  最近掷骰值/概率/是否触发（NAN = 从未评估）
+## 纯查询零副作用；实体/战斗实例不可用降级安全默认（调试面板不倒逼战斗侧改结构）。
+func get_retreat_mod_state() -> Dictionary:
+	var profile: Dictionary = _get_behavior_profile()
+	var now: float = 0.0
+	if _entity != null and is_instance_valid(_entity) and _entity.has_method("get_battle_instance"):
+		var bi: Node = _entity.get_battle_instance()
+		if bi != null and is_instance_valid(bi) and bi.has_method("get_duration"):
+			now = float(bi.get_duration())
+	return {
+		"enabled": bool(profile.get("retreat_mod_enabled", false)),
+		"next_roll_at": _retreat_mod_next_roll_at,
+		"throttle_remaining": maxf(_retreat_mod_next_roll_at - now, 0.0),
+		"last_factors": _retreat_mod_last_factors.duplicate(),
+		"last_roll": _retreat_mod_last_roll,
+		"last_chance": _retreat_mod_last_chance,
+		"last_result": _retreat_mod_last_result,
+	}
 
 
 ## 是否祭司兵种（MERIC 路由判定，P7 批次 7b）

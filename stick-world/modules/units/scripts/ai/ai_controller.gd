@@ -245,7 +245,21 @@ func physics_update(delta: float) -> void:
 ## P0 决策：命令覆盖 > 战斗（参战时）> work（有派工）> idle/wander 循环。
 ## 命令覆盖：tactical_orders 下达的号令优先于自主决策，但溃逃例外。
 ## 职责过滤：编队中的单位只能做队伍职责范围内的行为（见 _can_work / _can_combat）。
+## 优先级（A6 · C9 落定）：强制溃逃链 > 压制禁令 > 命令覆盖 > 自主决策。
+##   - 溃逃 > 压制：禁令是"不敢动"不是"不能逃"，士气崩溃照样跑；
+##   - 压制 > 命令覆盖：CoH pinned isInterruptablePlan=false——禁令期号令
+##     **挂起不清除**（压制是暂态锁死，号令是玩家意图），压制结束自动续行。
 func _make_decision() -> void:
+	# 强制溃逃链（士气崩溃）：最高优先——清号令走溃逃强制链（is_routed →
+	# retreat 在 _try_combat），压制期亦溃逃
+	if _is_routing():
+		_ordered_behavior = ""
+		_ordered_params = {}
+	# 压制禁令（A6 · C9 定时锁死）：非溃逃被压制 → 强制短行为（原地停滞），
+	# 不可被常规决策与号令执行打断（惩罚来自模拟因果，非数值折扣）
+	elif _is_suppressed():
+		_suppressed_stall()
+		return
 	# 0. 命令覆盖（最高优先级，溃逃例外）
 	if not _ordered_behavior.is_empty():
 		if _is_routing():
@@ -864,3 +878,36 @@ func _is_routing() -> bool:
 	if health == null or not health.has_method("is_routed"):
 		return false
 	return health.is_routed()
+
+
+# ─────────────────────────────── 压制禁令（A6 · C9 定时锁死）────────────────────────────────
+
+## 是否被压制：查询状态效果组件 SUPPRESSED 态（duck；组件缺失/压制未启用
+## 返回 false = 零回归）。压制=短时行为禁令（惩罚来自模拟因果，非数值折扣；
+## CoH pinned-reaction-plan isInterruptablePlan=false 直译）。
+func _is_suppressed() -> bool:
+	var se: Node = _status_effects_of()
+	return se != null and se.has_method("has_suppressed") and bool(se.has_suppressed())
+
+
+## 压制期强制短行为（压制蹲伏/停滞）：原地停步 + 落 idle，每决策拍重申
+## （禁令期任何 travel 下一拍都被拉回——"不可被常规决策打断"）。
+## 受击反馈动画/被推挤走物理与表现层，不受禁令影响。号令挂起不清除：
+## 压制结束后命令覆盖段检测 cur != ordered 自动续行。
+func _suppressed_stall() -> void:
+	if _entity != null and is_instance_valid(_entity) and _entity.has_method("ai_stop"):
+		_entity.ai_stop()
+	if _state_machine != null and _state_machine.get_current_behavior_name() != "idle":
+		_state_machine.travel("idle")
+
+
+## 所属实体状态效果组件（duck；缺失返回 null——测试桩/未装配环境零回归）。
+func _status_effects_of() -> Node:
+	if _entity == null or not is_instance_valid(_entity):
+		return null
+	if not _entity.has_method("get_status_effects"):
+		return null
+	var se: Node = _entity.get_status_effects()
+	if se == null or not is_instance_valid(se):
+		return null
+	return se

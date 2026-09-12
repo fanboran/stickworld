@@ -109,6 +109,17 @@ const BASELINE: Dictionary = {
 	"retreat_mod_chance": NAN,              ## 掷骰概率（NAN=未覆写 → personality global 行 retreat_chance → 代码默认 0.30；显式写入 = 覆写，测试/扫参出口）
 	"retreat_mod_withdraw_arrive": 80.0,    ## 撤退（回锚点）判定抵达半径（px，behavior_retreat withdraw 档）
 	"retreat_mod_withdraw_max_time": 12.0,  ## 撤退（回锚点）最长持续时间（s；后撤档沿用既有 RETREAT_DURATION 不动）
+	# ── A6 · C9 压制=定时锁死（AI集大成；CoH pinned-reaction-plan isInterruptablePlan=false
+	#    + 等 7.5s 真值见逆向笔记 §4.2；总开关默认关 = 零回归基线。
+	#    消费点：status_effects（触发+士气流失 tick）/ ai_controller（决策链禁令+
+	#    强制停滞）/ behavior_attack（在途行为兜底停滞）/ squad_phase_plan（真实压制
+	#    查询替换 A5 被压制代理）。惩罚来自模拟因果（行为禁令，非数值折扣）──
+	"suppression_enabled": false,           ## 压制系统总开关（false=无触发/无禁令/无士气流失，零回归）
+	"suppression_duration": 4.5,            ## 压制时长（s；CoH 7.5s 真值 × 本项目节拍比 0.3/0.5=0.6 校准——L1 决策拍 0.3s 快于 CoH 0.5s，锁死体感等比缩短；语义推断待实测校准）
+	"suppression_ranged_min_damage": 4.0,   ## 远程（射手主手弓）命中触发下限（HP；满箭 5~10、飞行衰减/格挡残余 0.45~3——挡住的箭不压制；语义推断待实测校准）
+	"suppression_melee_min_damage": 12.0,   ## 近战重击触发下限（HP；量级对齐 Anims.HIT_BIG_DAMAGE_THRESHOLD=12 重击分级——轻击不压制，防近战互殴全员钉死）
+	"suppression_morale_per_tick": 2.0,     ## 压制期士气流失（点/0.5s tick，语义推断待实测校准；经 lose_morale 只损士气不伤血，与伤害士气损失叠加可推向溃逃）
+	"suppression_immune": false,            ## 豁免规则（兵种级：英雄/巨人类置 true；已溃逃/已死亡/玩家附身恒豁免，不占此键）
 }
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────

@@ -134,6 +134,14 @@ func _on_orgs_changed(_org_id: String = "") -> void:
 
 ## 内容装配（StickWindow 已建无遮罩骨架；内容挂 _body：标签栏 + 快捷条 + 左树右详情）
 func _build_content() -> void:
+	# ── 顶部入口：指挥链视图（独立 StickWindow，不嵌本面板——方案 §五.2） ──
+	var top := StickKit.row(_body, 8)
+	StickKit.label(top, "组织管理", StickKit.LabelKind.SECTION)
+	var top_hint := StickKit.label(top, "树 = 编制结构；指挥链 = 命令逐跳物理旅程", StickKit.LabelKind.HINT)
+	top_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var chain_btn := StickKit.sketch_button(top, "指挥链", _on_open_chain_pressed,
+			StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_SM)
+	chain_btn.tooltip_text = "打开指挥链视图（命令沿层级逐跳跑秒 + 在途命令清单）"
 	# ── 标签栏 = 树过滤器 ──
 	_tab_bar = TabBar.new()
 	for t in TABS:
@@ -945,3 +953,17 @@ func _on_preset_create_pressed(option: OptionButton = null) -> void:
 func _notify(msg: String, kind: String = "info") -> void:
 	if EventBus != null and EventBus.has_signal("ui_notification"):
 		EventBus.ui_notification.emit("组织", msg, kind)
+
+
+# ─────────────────────────── 指挥链视图入口（UI-W3）───────────────────────────
+
+## 打开指挥链视图（独立窗口，system_setup 装配）。用 group 查找而非节点路径——
+## 组织面板与视图各归各的窗口，不做跨面板状态同步（方案 §五.2 提案）。
+func _on_open_chain_pressed() -> void:
+	var view: Node = null
+	if get_tree() != null:
+		view = get_tree().get_first_node_in_group("command_chain_view")
+	if view != null and view.has_method("open"):
+		view.call("open")
+	else:
+		_notify("指挥链视图未装配", "warn")

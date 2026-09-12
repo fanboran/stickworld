@@ -68,6 +68,16 @@ extends Node
 # 任命指挥官：Organization -> UI
 @warning_ignore("unused_signal") signal commander_assigned(squad_id: String, unit_id: int)
 
+# ─────────────────────────── 指挥链接力（跨模块观测，UI-W3）───────────────────────────
+# combat 域 CommandChain 的逐跳接力信号镜像（command_chain.gd 发射处原样转发，链逻辑不变）。
+# 落 EventBus 的原因（UI 方案 §五.5 提案口径）：指挥链视图归 organization/ui，消费的是
+# 战斗域信号——走 EventBus 全局广播免去跨模块取节点，形态对齐 team_ai_stance_changed 先例。
+# relay_started：单跳起跑，eta = 本跳传输层传播秒数（hop 0 = 玩家跳）
+@warning_ignore("unused_signal") signal relay_started(relay_id: String, order_type: int, from_org: String, to_org: String, hop_index: int, eta: float)
+# relay_arrived：单跳抵达/停驻结局，outcome 七态（delivered/relayed/rejected_noncombat/
+# dropped_leaderless/dropped_invalid/dropped_no_squad/dropped_no_formation）
+@warning_ignore("unused_signal") signal relay_arrived(relay_id: String, order_type: int, from_org: String, to_org: String, hop_index: int, outcome: String)
+
 # ─────────────────────────────── 场景 / 地图 / 旅行（§14.1 / §14.2）────────────────────────────────
 # 旅行请求：战略图 -> SceneLoader（玩家点击聚落进入场景图）。
 # travel_mode 取 WorldAPI.TravelMode（WALK/FAST_TRAVEL；此处用 int 避免 core 依赖模块类），

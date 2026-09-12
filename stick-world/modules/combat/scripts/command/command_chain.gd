@@ -192,6 +192,7 @@ func _relay_begin(order_type: int, from_org: String, to_org: String, hop_index: 
 		"state": "in_flight",
 	}
 	relay_started.emit(id, order_type, from_org, to_org, hop_index, eta)
+	_mirror_relay_started(id, order_type, from_org, to_org, hop_index, eta)
 	return id
 
 
@@ -208,6 +209,22 @@ func _relay_end(relay_id: String, outcome: String) -> void:
 		_relay_history.pop_front()
 	relay_arrived.emit(String(entry["relay_id"]), int(entry["order_type"]), String(entry["from_org"]),
 			String(entry["to_org"]), int(entry["hop_index"]), outcome)
+	_mirror_relay_arrived(String(entry["relay_id"]), int(entry["order_type"]),
+			String(entry["from_org"]), String(entry["to_org"]), int(entry["hop_index"]), outcome)
+
+
+# ─────────────────────── EventBus 镜像转发（UI-W3 跨模块观测）───────────────────────
+# 指挥链视图归 organization/ui，消费战斗域接力信号；镜像到 EventBus 免去跨模块取节点
+# （方案 §五.5）。链逻辑本身不变，只原样转发；EventBus 缺失/未登记时静默跳过（测试/主菜单安全）。
+
+func _mirror_relay_started(relay_id: String, order_type: int, from_org: String, to_org: String, hop_index: int, eta: float) -> void:
+	if EventBus != null and EventBus.has_signal("relay_started"):
+		EventBus.relay_started.emit(relay_id, order_type, from_org, to_org, hop_index, eta)
+
+
+func _mirror_relay_arrived(relay_id: String, order_type: int, from_org: String, to_org: String, hop_index: int, outcome: String) -> void:
+	if EventBus != null and EventBus.has_signal("relay_arrived"):
+		EventBus.relay_arrived.emit(relay_id, order_type, from_org, to_org, hop_index, outcome)
 
 
 ## 实际执行号令送达：设置每个单位的 AIController 命令。

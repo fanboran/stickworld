@@ -23,8 +23,8 @@
   - config/strategic_map/l1_world.json + l1_packs/*/l1_world.json：
     roads 扩展为完整结构，polyline 为该包 context 本地坐标 [x,y]
     （向后兼容：运行时 l1_world_data 只读 from/to 画直线，polyline 渲染接线属 E2）
-  - config/strategic_map/roads_global.json：全大陆路网（8192 全局坐标，
-    含 L1 内边 + 跨 L1 边，Phase E3 旅行连通性 / E4 道路场景数据源）
+  - output/roads_global.json：全大陆路网（8192 全局坐标，含 L1 内边 + 跨 L1 边）
+    ——生成端参考产物，运行时零消费（E3 旅行 / E4 道路场景读各包 roads 字段）
   - output/roads_preview_2048.png：全大陆路网预览（密度参数交创始人验收）
 
 用法：
@@ -578,9 +578,9 @@ def main():
             r.pop("detour", None)
             r.pop("dev_mean", None)
             r.pop("dev_max", None)
-        with open(os.path.join(GAME_DIR, "roads_global.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(OUT_DIR, "roads_global.json"), "w", encoding="utf-8") as f:
             json.dump(jsonable({
-                "name": "全大陆 L1 路网（§5.9 E1；旅行连通性/道路场景数据源）",
+                "name": "全大陆 L1 路网（§5.9 E1；生成端参考产物，运行时不读）",
                 "size": RES,
                 "coordinate": "[x,y] 8192 全局",
                 "tier_meaning": {"DIRT": "土路", "PAVED": "官道", "HIGHWAY": "预留"},

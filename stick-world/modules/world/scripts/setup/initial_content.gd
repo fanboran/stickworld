@@ -20,7 +20,8 @@ func setup(root: GameRoot) -> void:
 
 ## 读取地图的 InitialBuildingsList，直接创建 OPERATIONAL 状态建筑（跳过建造过程）。
 ## P0-2 修复：绕过存档系统，在 VillageMap 首次加载时预置建筑。
-func spawn_initial_buildings(map: Node2D) -> void:
+## on_progress(done, total)：逐栋细分进度回调（可空）——供加载屏副进度条。
+func spawn_initial_buildings(map: Node2D, on_progress: Callable = Callable()) -> void:
 	var ibl: Node = map.get("initial_buildings_list") if "initial_buildings_list" in map else null
 	if ibl == null or not ibl.has_method("get_defs"):
 		return
@@ -34,6 +35,9 @@ func spawn_initial_buildings(map: Node2D) -> void:
 		return
 	var i: int = 0
 	for d in defs:
+		# 先上报再干活：副进度条这一格代表「本栋即将开始」，与本栋耗时对齐
+		if on_progress.is_valid():
+			on_progress.call(i, defs.size())
 		var def_id: String = d.get("def_id") if d is Dictionary else d.def_id
 		var cell_x: int = int(d.get("cell_x") if d is Dictionary else d.cell_x)
 		var width: int = int(d.get("width") if d is Dictionary else d.width)
@@ -51,6 +55,8 @@ func spawn_initial_buildings(map: Node2D) -> void:
 			# （与 game_root._yield_frame 同一根因的 headless 分叉，2026-09 测试基线修复）
 			if DisplayServer.get_name() != "headless":
 				await RenderingServer.frame_post_draw
+	if on_progress.is_valid():
+		on_progress.call(defs.size(), defs.size())
 
 
 ## 预置主街东端民居（搬运系统送货/取货点）：placeholder 兼任仓库，
@@ -74,12 +80,16 @@ func spawn_initial_warehouse() -> void:
 ##   - 左簇（i=5~9）：-250 - 180*(i-5) → -250~-970，靠左侧资源带方向——
 ##     伐木/挖矿的劳作点在村外森林，就近落脚少跑通勤。
 ## 超界 fallback 保留（其他地图复用时防越界）。
-func spawn_npcs(map: Node2D, spawn_y: float) -> void:
+## on_progress(done, total)：逐村民细分进度回调（可空）——供加载屏副进度条。
+func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable()) -> void:
 	# NPC 生成在东侧民居右缘之外，避开民居 PassageBarrier（cell 17~33, X 544~1088，
 	# 建筑与美术升级线批次 6 布局）；右簇起点 1100 与两簇设计对齐（铁匠工位 X=1120）
 	var npc_start_x: float = 1100.0
 	var npcs: Array = []
 	for i in _root.NPC_COUNT:
+		# 先上报再干活：副进度条这一格代表「本村民即将开始」（与建筑同一口径）
+		if on_progress.is_valid():
+			on_progress.call(i, _root.NPC_COUNT)
 		var x: float = npc_start_x + 180.0 * float(i) if i < 5 else -250.0 - 180.0 * float(i - 5)
 		# 确保在地图边界内（village_a 右簇最远 1770 < map_right-100=2060，不触发）
 		if x > map.map_right - 100.0:
@@ -126,6 +136,9 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 			var site: Dictionary = TownLifeAPI.get_work_site(npc, site_def)
 			site_desc = "工位 X=%d" % int((site.get("pos", Vector2()) as Vector2).x) if not site.is_empty() else "无可用工位"
 		print("[TownLife]   %s 职业=%s(%s) %s" % [npc.name, prof.get("name_zh", pid), pid, site_desc])
+	# 本子阶段收尾上报（此时村民实体+职业分配全部落定）
+	if on_progress.is_valid():
+		on_progress.call(_root.NPC_COUNT, _root.NPC_COUNT)
 
 
 # ─────────────────────────────── 战场敌人 ────────────────────────────────

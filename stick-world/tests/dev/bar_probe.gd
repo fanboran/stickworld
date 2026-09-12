@@ -50,7 +50,11 @@ class FakeUnit extends Node2D:
 		return _fake_battle
 
 
+const DevQuiet := preload("res://tests/dev/dev_quiet.gd")
+
+
 func _ready() -> void:
+	DevQuiet.apply_if_requested()
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--row="):
 			_use_crowd = a.get_slice("=", 1) == "crowd"

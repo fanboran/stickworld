@@ -6,10 +6,14 @@ extends Control
 ## 元素不全会让加载期比过渡屏还素。
 ## 进度条由 game_root 分段装配驱动（Minecraft 式模块计数），每段先更新再让出
 ## 一帧渲染后干活——进度是真实推进，不是假动画。
+## **两级进度条（Minecraft 式）**：上条 = 总阶段（装配 9 段），下条更窄 = 当前
+## 阶段内部的细分步（下条走满即上条进一格）。阶段没细分进度可报时下条隐藏。
 ## 挂 UIRoot 高 z（模态 z=50 之上、F3 调试 z=100 之下）。
 
 const _SpinnerScript: GDScript = preload("res://modules/ui_global/scripts/menus/loading_spinner.gd")
 const BAR_WIDTH: float = 260.0
+const SUB_BAR_WIDTH: float = 186.0
+const SUB_BAR_HEIGHT: float = 4.0
 const TIP_INTERVAL: float = 2.5
 
 ## 过渡期提示（与 loading_screen 同池；轮换显示，加载期有活东西看）
@@ -25,6 +29,8 @@ var _label: Label = null
 var _tip_label: Label = null
 var _bar_track: Control = null
 var _bar_fill: ColorRect = null
+var _sub_track: Control = null
+var _sub_fill: ColorRect = null
 var _shown: bool = false
 var _tip_timer: float = 0.0
 var _tip_idx: int = 0
@@ -62,13 +68,18 @@ func _ready() -> void:
 	spinner.custom_minimum_size = Vector2(56, 56)
 	spinner.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	center.add_child(spinner)
-	# 进度条（分段装配驱动；ratio < 0 时隐藏——纯文案阶段不假装有进度）
+	# 两级进度条容器（条间距 5px——紧贴成一组，与组外元素仍隔 18px）
+	var bars := VBoxContainer.new()
+	bars.add_theme_constant_override("separation", 5)
+	bars.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	center.add_child(bars)
+	# 主进度条（总阶段；与副条同亮同灭——纯文案阶段不假装有进度）
 	_bar_track = Control.new()
 	_bar_track.custom_minimum_size = Vector2(BAR_WIDTH, 6)
 	_bar_track.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_bar_track.clip_contents = true
 	_bar_track.visible = false
-	center.add_child(_bar_track)
+	bars.add_child(_bar_track)
 	var track_bg := ColorRect.new()
 	track_bg.color = Color(1, 1, 1, 0.12)
 	track_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -78,6 +89,23 @@ func _ready() -> void:
 	_bar_fill.position = Vector2.ZERO
 	_bar_fill.size = Vector2(0, 6)
 	_bar_track.add_child(_bar_fill)
+	# 副进度条（当前阶段内部细分；更窄更矮更暗，视觉上从属于上条）
+	_sub_track = Control.new()
+	_sub_track.custom_minimum_size = Vector2(SUB_BAR_WIDTH, SUB_BAR_HEIGHT)
+	_sub_track.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_sub_track.clip_contents = true
+	_sub_track.visible = false
+	bars.add_child(_sub_track)
+	var sub_bg := ColorRect.new()
+	sub_bg.color = Color(1, 1, 1, 0.10)
+	sub_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sub_track.add_child(sub_bg)
+	_sub_fill = ColorRect.new()
+	_sub_fill.color = StickTokens.ACCENT
+	_sub_fill.modulate = Color(1, 1, 1, 0.62)
+	_sub_fill.position = Vector2.ZERO
+	_sub_fill.size = Vector2(0, SUB_BAR_HEIGHT)
+	_sub_track.add_child(_sub_fill)
 	# 底部提示（与过渡屏同池轮换）
 	_tip_label = Label.new()
 	_tip_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -102,22 +130,34 @@ func _process(delta: float) -> void:
 		_tip_label.text = LOADING_TIPS[_tip_idx]
 
 
-## 显示加载覆盖（阶段文字；ratio 0~1 同时亮进度条，<0 隐藏）
-func show_loading(message: String, ratio: float = -1.0) -> void:
+## 显示加载覆盖（阶段文字；ratio 0~1 同时亮主进度条，<0 隐藏只留文字；
+## sub_ratio 为当前阶段内部细分进度，<0 = 该阶段无细分进度）
+func show_loading(message: String, ratio: float = -1.0, sub_ratio: float = -1.0) -> void:
 	_label.text = message
 	set_progress(ratio)
+	set_sub_progress(sub_ratio)
 	visible = true
 	modulate.a = 1.0
 	_shown = true
 
 
-## 更新进度条（钳 0~1；<0 隐藏进度条只留文字）
+## 更新主进度条（钳 0~1；<0 隐藏整组进度条只留文字）
 func set_progress(ratio: float) -> void:
 	if ratio < 0.0:
 		_bar_track.visible = false
+		_sub_track.visible = false
 		return
 	_bar_track.visible = true
 	_bar_fill.size.x = BAR_WIDTH * clampf(ratio, 0.0, 1.0)
+
+
+## 更新副进度条（当前阶段内部细分；主条未亮时一并隐藏——避免孤零零一条副条）
+func set_sub_progress(ratio: float) -> void:
+	if ratio < 0.0 or not _bar_track.visible:
+		_sub_track.visible = false
+		return
+	_sub_track.visible = true
+	_sub_fill.size.x = SUB_BAR_WIDTH * clampf(ratio, 0.0, 1.0)
 
 
 ## 世界就绪后淡出（幂等）

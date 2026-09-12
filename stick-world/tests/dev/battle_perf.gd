@@ -51,7 +51,11 @@ var _measure_start_ticks: int = 0
 var _measure_start_msec: int = 0
 
 
+const DevQuiet := preload("res://tests/dev/dev_quiet.gd")
+
+
 func _ready() -> void:
+	DevQuiet.apply_if_requested()
 	for a in OS.get_cmdline_user_args():
 		match str(a):
 			"--anim-off":

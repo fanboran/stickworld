@@ -58,6 +58,7 @@ const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/en
 const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
 const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
 const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
+const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
 
 var _root: GameRoot
 
@@ -95,6 +96,7 @@ func setup(root: GameRoot) -> void:
 	_setup_settings_menu_panel()
 	_setup_pause_menu_panel()
 	_setup_minimap()
+	_setup_team_ai_hud()
 	_setup_zoom_bar()
 	_setup_inventory()
 	_setup_possession_interface()
@@ -612,6 +614,23 @@ func _setup_minimap() -> void:
 	_l1_thumbnail.visible = false
 
 
+# ─────────────────────────────── TeamAi 状态 HUD 装配（W1 观测接线批）────────────────────────────────
+
+## 挂 TeamAi 姿态 HUD（combat/ui/team_ai_hud.tscn，场景=布局唯一真相源）到
+## HudOverlay 槽并注入 BattleDirector 引用（数据自取，本层只装配）。显隐走
+## DebugApi drawer "team_ai_hud"（F3 开关族，注册见 register_debug_drawers）；
+## 槽位路由见 UI.md §10.7，模块专属 UI 归 combat/ui（组织界面与AI状态接线 §2.2）。
+func _setup_team_ai_hud() -> void:
+	if _root.ui_root == null or _root.battle_director == null:
+		return
+	var hud := _TeamAiHudScene.instantiate()
+	if not _root.ui_root.add_to_slot("HudOverlay", hud):
+		hud.queue_free()
+		return
+	if hud.has_method("setup"):
+		hud.setup(_root.battle_director)
+
+
 ## 创建 ZoomBar 并挂到 UIRoot，钉进 right_bottom zone（右下贴缘，见 hud_zone_layout.gd）。
 func _setup_zoom_bar() -> void:
 	if _root.ui_root == null:
@@ -1023,6 +1042,8 @@ func register_debug_drawers() -> void:
 	DebugApi.register_drawer("building_names", Callable(_DebugDrawers, "draw_building_names"))
 	DebugApi.register_drawer("world_ruler", Callable(_DebugDrawers, "draw_world_ruler"))
 	DebugApi.register_drawer("entity_info", Callable(_DebugDrawers, "draw_entity_info"))
+	# W1 观测接线批：TeamAi 姿态 HUD 开关（HUD 本体独立 Control，此注册仅进 F3 复选框族）
+	DebugApi.register_drawer("team_ai_hud", Callable(_DebugDrawers, "draw_team_ai_hud"))
 
 
 # ─────────────────────────────── Demo 目标链装配 ────────────────────────────────

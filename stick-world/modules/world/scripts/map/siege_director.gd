@@ -7,8 +7,8 @@ extends Node
 ## - 波次刷敌：每 wave_interval 秒从地图右端刷新一波进攻方（人数逐波递增、封顶），
 ##   经 BattleInstance.add_unit 并入当前战斗（首波经 CombatApi.start_battle 开战）
 ##
-## 单位生成与兵种着色沿用 initial_content 的约定（StickmanEntity 场景 + 身体染色），
-## 不重复造 spawn 管线。由守城地图（siege_map.gd）挂载并调用 setup()。
+## 单位生成沿用 initial_content 的约定（StickmanEntity 场景），不重复造 spawn 管线。
+## 由守城地图（siege_map.gd）挂载并调用 setup()。
 
 const StICKMAN_FALLBACK := preload("res://modules/units/scenes/stickman_entity.tscn")
 

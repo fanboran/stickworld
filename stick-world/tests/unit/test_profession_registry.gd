@@ -1,10 +1,10 @@
 extends Node
-## 单元测试：职业注册表（ProfessionRegistry）——档案读取/轮转分配/着装应用/duck 降级。
+## 单元测试：职业注册表（ProfessionRegistry）——档案读取/轮转分配/装具应用/duck 降级。
 ##
 ## 覆盖批次 1（小镇生活与NPC职业）验收面：
-##   - config/town_life/professions.tres 装载（id/name_zh/uniform/tool 字段完整）
+##   - config/town_life/professions.tres 装载（id/name_zh/tool 字段完整）
 ##   - assign_village_job 轮转分配（index % 职业数）+ set_profession 写入
-##   - 着装应用（rig.body_color = uniform 色；weapon_mount.weapon_type = tool 映射）
+##   - 装具应用（weapon_mount.weapon_type = tool 映射；身体色不做身份染色）
 ##   - duck 协议降级（无 set_profession/rig/weapon_mount 的实体安全跳过）
 ## 覆盖批次 4（人口扩充与配比）验收面：
 ##   - count_work_capacity：真建筑槽位累计 / 占位表兜底容量 1 / 无处可干 0
@@ -21,7 +21,8 @@ var _runner: TestRunner
 
 # ─────────────────────────────── 测试桩 ────────────────────────────────
 
-## rig 桩：只带 body_color 属性（registry duck 检查 "body_color" in rig）
+## rig 桩：带 body_color 属性——用于验证装具应用不会去改它
+##（火柴人身体不做身份染色，见 stickman_rig.gd 类头）
 class FakeRig extends Node2D:
 	var body_color: Color = Color.WHITE
 
@@ -49,7 +50,7 @@ func _ready() -> void:
 	_runner.add_test("配置装载: 职业行字段完整", _test_config_rows)
 	_runner.add_test("按 id 查职业: 命中与未命中", _test_get_profession)
 	_runner.add_test("轮转分配: 三实体得三职业 + 越界取模", _test_assign_rotation)
-	_runner.add_test("着装应用: body_color 与 weapon_type", _test_appearance)
+	_runner.add_test("装具应用: weapon_type 映射 + 不染身体", _test_appearance)
 	_runner.add_test("duck 降级: 裸实体安全返回空", _test_duck_degrade)
 	_runner.add_test("配比: 工位容量计数（真建筑/占位兜底/无处可干）", _test_count_work_capacity)
 	_runner.add_test("配比: 批量分配（quota+工位容量约束、配额满待业）", _test_assign_village_jobs)
@@ -66,7 +67,7 @@ func _test_config_rows() -> void:
 		_runner.assert_true(row is Dictionary, "职业行应为字典")
 		_runner.assert_false(String(row.get("id", "")).is_empty(), "职业行 id 不应为空")
 		_runner.assert_false(String(row.get("name_zh", "")).is_empty(), "职业行 name_zh 不应为空")
-		_runner.assert_false(String(row.get("uniform", "")).is_empty(), "职业行 uniform 不应为空")
+		_runner.assert_false(row.has("uniform"), "职业行不应再有 uniform 染色字段（身体不做身份染色）")
 	# 三个起步职业（铁匠/伐木工/矿工）id 唯一
 	var ids: Dictionary = {}
 	for row in profs:
@@ -111,17 +112,17 @@ func _test_appearance() -> void:
 	e.rig = FakeRig.new()
 	e.weapon_mount = FakeMount.new()
 	ProfessionRegistry.apply_appearance(e, smith)
-	_runner.assert_equal(e.rig.body_color, Color(String(smith["uniform"])), "铁匠身体色 = uniform 配置色")
 	_runner.assert_equal(e.weapon_mount.weapon_type, WeaponMount.WeaponType.PICKAXE, "铁匠工具映射 PICKAXE")
+	_runner.assert_equal(e.rig.body_color, Color.WHITE, "装具应用不改身体色（火柴人身体不做身份染色）")
 	# 未知 tool 值不换装（保持默认剑）
-	var bogus: Dictionary = {"id": "x", "uniform": "#123456", "tool": "chainsaw"}
+	var bogus: Dictionary = {"id": "x", "tool": "chainsaw"}
 	var e2 := FakeEntity.new()
 	e2.rig = FakeRig.new()
 	e2.weapon_mount = FakeMount.new()
 	ProfessionRegistry.apply_appearance(e2, bogus)
-	_runner.assert_equal(e2.rig.body_color, Color("#123456"), "未知 tool 不影响着装色")
+	_runner.assert_equal(e2.rig.body_color, Color.WHITE, "未知 tool 同样不染身体色")
 	_runner.assert_equal(e2.weapon_mount.weapon_type, WeaponMount.WeaponType.SWORD, "未知 tool 保持默认武器")
-	# 缺 rig/weapon_mount 的实体只跳着装不炸
+	# 缺 rig/weapon_mount 的实体只跳装具不炸
 	var e3 := FakeEntity.new()
 	ProfessionRegistry.apply_appearance(e3, smith)
 
@@ -168,13 +169,13 @@ func _test_assign_village_jobs() -> void:
 	_runner.assert_equal(int(jobs.get("lumberjack", 0)), 3, "伐木工配额 3（quota=3，资源点职业不受工位约束）")
 	_runner.assert_equal(int(jobs.get("miner", 0)), 3, "矿工配额 3（quota=3，资源点职业不受工位约束）")
 	_runner.assert_equal(int(stats.get("idle", 0)), 3, "配额外村民进待业池 3 人")
-	# 职业确实写入实体、着装同步应用（铁匠 uniform #7a4a21）
+	# 职业确实写入实体、装具同步应用（身体色不被染色）
 	var smith_count: int = 0
 	for e in entities:
 		var pid := String(e.get_profession())
 		if pid == "blacksmith":
 			smith_count += 1
-			_runner.assert_equal(e.rig.body_color, Color("#7a4a21"), "铁匠着装已应用")
+			_runner.assert_equal(e.rig.body_color, Color.WHITE, "铁匠装具已应用且不动身体色")
 	_runner.assert_equal(smith_count, int(jobs.get("blacksmith", 0)), "实体侧职业计数与统计一致")
 	for e in entities:
 		e.queue_free()
@@ -185,8 +186,8 @@ func _test_jobs_capacity_zero_idle() -> void:
 	# 资源点职业按 quota 上限分配；配额外全待业。
 	var saved: Array = ProfessionRegistry._cached
 	ProfessionRegistry._cached = [
-		{"id": "mason", "name_zh": "石匠", "work_site_def": "no_such_shop", "quota": 2, "uniform": "#888888"},
-		{"id": "farmer", "name_zh": "农夫", "work_site_def": "", "quota": 1, "uniform": "#aabb88"},
+		{"id": "mason", "name_zh": "石匠", "work_site_def": "no_such_shop", "quota": 2},
+		{"id": "farmer", "name_zh": "农夫", "work_site_def": "", "quota": 1},
 	]
 	var entities: Array = []
 	for i in 4:

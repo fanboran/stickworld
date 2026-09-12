@@ -7,7 +7,7 @@ extends RefCounted
 ## 同步装载进 BalanceConfig 类型路径 town_life.professions；读取照 formation_system
 ## 先例直读 .tres，不依赖 autoload 顺序，单测/直跑场景可用）。
 ##
-## 字段契约（批次 1 消费 id/name_zh/tool/uniform；批次 2 消费 product/
+## 字段契约（批次 1 消费 id/name_zh/tool；批次 2 消费 product/
 ## produce_amount/consume_res/consume_amount/cycle；批次 3 消费 work_site_def）：
 ##   id             职业唯一 id（写入实体 set_profession；空串 = 待业）
 ##   name_zh        中文名（调试与将来 UI 用）
@@ -22,7 +22,6 @@ extends RefCounted
 ##   consume_amount 每拍消耗量（0 = 无消耗）[提案/待定]
 ##   cycle          工作节拍（秒/拍）[提案/待定]
 ##   tool           工具/武器变体（TOOL_WEAPONS 的 key；缺省 = 不换武器）
-##   uniform        职业着装色（身体色，html 颜色串如 "#7a4a21"）
 ##   quota          村庄该职业最大在职数（批次 4 配比；缺省 1）[提案/待定]
 ##                  工位职业实际配额 = min(quota, 工位容量)，见 count_work_capacity
 ##
@@ -30,11 +29,11 @@ extends RefCounted
 ## 打铁 consume 10 矿 → produce 6 锭/拍（熔炼损耗），节拍 4s 略快于采集 5s，
 ## 全链矿净增速为正（矿工 4/s vs 铁匠 2.5/s），三资源库存可同时增长。
 ##
-## 着装通道（批次 1 验收核心"职业可见"）：
-##   - 身体色 entity.rig.body_color（阵营识别走血条圆点/横条，body_color
-##     不承担阵营语义，改色安全；setter 置 rebuild 标记由 rig 下一帧重建）
+## 装具通道（批次 1 验收核心"职业可见"）：
 ##   - 工具 entity.weapon_mount.weapon_type（garrison_spawner 先例：
 ##     spawn 后设置安全，setter call_deferred 重挂）
+## 职业识别只走武器，不染身体色：身体色是火柴人的全局常量（Skeleton.DEFAULT_BODY），
+## 与阵营一样不做身份染色（阵营走血条圆点/横条）。
 ##
 ## 待业/在职状态：实体 _profession_id 空串 = 待业，非空 = 在职（职业 id）。
 ## 批次 4 征兵离岗走 set_profession("") 回待业池。
@@ -285,15 +284,10 @@ static func assign_village_jobs(entities: Array) -> Dictionary:
 	return stats
 
 
-## 应用职业着装：uniform 身体色 + tool 武器变体（缺字段跳对应项）。
+## 应用职业装具：tool 武器变体（缺字段跳过）。职业识别只走武器——不染身体色。
 static func apply_appearance(entity: Node, prof: Dictionary) -> void:
 	if entity == null or not is_instance_valid(entity) or prof.is_empty():
 		return
-	# 着装色（rig.body_color；rig 未就绪/无此属性则跳过）
-	var rig: Variant = entity.get("rig")
-	if rig != null and is_instance_valid(rig) and "body_color" in rig \
-			and not String(prof.get("uniform", "")).is_empty():
-		rig.set("body_color", Color(String(prof["uniform"])))
 	# 工具（weapon_mount.weapon_type；未知 tool 值不换装，保持默认剑）
 	var tool_id := String(prof.get("tool", ""))
 	if not tool_id.is_empty() and TOOL_WEAPONS.has(tool_id):

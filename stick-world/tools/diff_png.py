@@ -8,9 +8,16 @@
 """
 import sys
 from collections import Counter
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
+
+# 默认产物路径按脚本位置解析（本脚本在 <repo>/stick-world/tools/）——否则
+# 从 stick-world/ 内调用会把默认路径拼成 stick-world/stick-world/... 而报找不到
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_A = _REPO_ROOT / "stick-world" / "tests" / "dev" / "bar_ab_rich.png"
+_DEFAULT_B = _REPO_ROOT / "stick-world" / "tests" / "dev" / "bar_ab_crowd.png"
 
 
 def main() -> int:
@@ -22,10 +29,10 @@ def main() -> int:
             tol = int(a.split("=", 1)[1])
         elif a.startswith("--out="):
             out = a.split("=", 1)[1]
-    a_path = args[0] if args else "stick-world/tests/dev/bar_ab_rich.png"
-    b_path = args[1] if len(args) > 1 else "stick-world/tests/dev/bar_ab_crowd.png"
+    a_path = Path(args[0]) if args else _DEFAULT_A
+    b_path = Path(args[1]) if len(args) > 1 else _DEFAULT_B
     if out is None:
-        out = b_path.rsplit(".", 1)[0] + "_diff.png"
+        out = str(b_path).rsplit(".", 1)[0] + "_diff.png"
 
     A = np.asarray(Image.open(a_path).convert("RGB"), dtype=np.int16)
     B = np.asarray(Image.open(b_path).convert("RGB"), dtype=np.int16)

@@ -31,6 +31,7 @@ func _ready() -> void:
 	_runner.add_test("种子确定性：同种子同决策序列", _test_seed_determinism)
 	_runner.add_test("withdraw 档行为：朝锚点行军、抵达收束、士气恢复", _test_withdraw_behavior)
 	_runner.add_test("withdraw 降级：锚点不可用回退 fallback / evacuate 优先", _test_withdraw_degrade)
+	_runner.add_test("W1 get_retreat_mod_state：观测快照（enabled/因子/掷骰/节流余量）", _test_w1_state_getter)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -154,6 +155,37 @@ func _test_dual_tier() -> void:
 	var rf: BehaviorRetreat = ctxf.ai.get_state_machine()._current_behavior
 	_runner.assert_false(rf._withdraw, "孤军 → fallback 档")
 	ctxf.teardown()
+
+
+## W1（组织界面与AI状态接线 §2.6）：撤退调制状态只读快照。
+## 覆盖：初始未评估（last_chance=NAN）/ 评估后因子命中集与掷骰登记 /
+## 节流窗口余量 / 开关关语义——调试悬停与观察场的数据面契约。
+func _test_w1_state_getter() -> void:
+	# 初始态：开关开但尚未评估
+	var ctx := _make_ctx({"retreat_mod_chance": 1.0, "retreat_mod_reevaluate": 2.5})
+	var st: Dictionary = ctx.ai.get_retreat_mod_state()
+	_runner.assert_true(bool(st.get("enabled", false)), "快照 enabled = 档案开")
+	_runner.assert_true(is_nan(float(st.get("last_chance", 0.0))), "未评估时 last_chance = NAN")
+	_runner.assert_equal(int(st.get("last_factors", {}).size()), 0, "未评估时无因子命中集")
+	# 评估发生：血量因子命中 → 掷骰（chance=1 必撤）→ 快照登记
+	ctx.health.hp_ratio = 0.4
+	ctx.battle.duration = 0.0
+	ctx.ai._try_combat()
+	st = ctx.ai.get_retreat_mod_state()
+	_runner.assert_approx(float(st.get("last_chance", 0.0)), 1.0, 0.001, "last_chance = 档案显式值")
+	_runner.assert_true(not is_nan(float(st.get("last_roll", NAN))), "评估后 last_roll 有值")
+	_runner.assert_true(bool(st.get("last_result", false)), "chance=1 应触发")
+	var f: Dictionary = st.get("last_factors", {})
+	_runner.assert_true(bool(f.get("hp_low", false)), "血量因子命中登记")
+	_runner.assert_false(bool(f.get("line_collapsed", true)), "战线未崩坏不登记")
+	_runner.assert_approx(float(st.get("throttle_remaining", -1.0)), 2.5, 0.01, "节流余量 = 周期全量")
+	ctx.teardown()
+	# 开关关：enabled 假，评估不发生（last_chance 保持 NAN）
+	var ctx2 := _make_ctx({}, false)
+	var st2: Dictionary = ctx2.ai.get_retreat_mod_state()
+	_runner.assert_false(bool(st2.get("enabled", true)), "开关关 enabled = 假")
+	_runner.assert_true(is_nan(float(st2.get("last_chance", 0.0))), "开关关从未评估")
+	ctx2.teardown()
 
 
 func _test_throttle() -> void:

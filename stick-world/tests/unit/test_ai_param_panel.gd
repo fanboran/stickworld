@@ -63,9 +63,13 @@ func _inject_rows(rows: Array) -> void:
 
 
 func _restore_rows() -> void:
-	# 走装载器同款清理（类型键 + 前缀行键 + _type_paths 同步），净效应归零；
-	# 直接 data.erase 会残留 "ai.behavior_profiles.<id>" 行键污染后续套件
+	# 走装载器同款清理（类型键 + 前缀行键 + _type_paths 同步）后按 .tres 原样回装。
+	# W1 修复：原实现只清不装（假定该类型不在 autoload 数据中），而
+	# config/ai/behavior_profiles.tres 是 BalanceConfig 常驻数据——套件跑完净减
+	# 2 键，污染后续 test_balance_config 的 reload 幂等断言（此前被本文件的
+	# entity 类型解析错误掩盖：套件整体加载失败没跑，修复后暴露）。
 	BalanceConfig._remove_type_data("ai.behavior_profiles")
+	BalanceConfig._load_tres("res://config/ai/behavior_profiles.tres", "ai.behavior_profiles")
 	ScriptBehaviorProfiles._cache.clear()
 
 
@@ -184,7 +188,12 @@ func _test_r3_gate_cycle() -> void:
 func _test_r3_is_night() -> void:
 	var atk: BehaviorAttack = ScriptBehaviorAttack.new()
 	add_child(atk)
-	atk.entity = self  # _is_night 从 entity 取树；未接树恒判白天
+	# entity 形类型桩（CharacterBody2D）：_is_night 只经它取树；无
+	# GameRoot/EnvironmentSystem 恒判白天。W1 修复：原 `atk.entity = self`
+	# （Node→CharacterBody2D 字段）在类缓存重建后暴露为解析错误。
+	var body := CharacterBody2D.new()
+	add_child(body)
+	atk.entity = body
 	# 查询不可用（无 GameRoot/EnvironmentSystem）→ 白天（保守零回归）
 	_runner.assert_true(not atk._is_night(), "无环境节点 = 白天")
 	# 假环境：黑色（夜）→ true；白色（昼）→ false
@@ -202,6 +211,8 @@ func _test_r3_is_night() -> void:
 	game_root.free()
 	remove_child(atk)
 	atk.free()
+	remove_child(body)
+	body.free()
 
 
 class _FakeEnv extends Node:

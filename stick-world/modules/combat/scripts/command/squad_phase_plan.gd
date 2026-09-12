@@ -81,6 +81,15 @@ const DEFAULTS: Dictionary = {
 	"rng_seed": -1,               ## 随机源种子；-1 = randomize（生产去同步），测试传固定种子保确定
 }
 
+## W1 观测接线（组织界面与AI状态接线 §2.6）：相位/角色变更信号——UI 只能
+## 逐帧轮询的接口缺口补齐；本类无自转，信号随宿主节拍内的状态变更同步发射
+## （跨模块调试观测消费，EventBus 与 api 自建的落点裁决见方案 §五.5）。
+
+## 相位变更（_enter 统一出口发射；IDLE→CORE_LEAP 的激活首跳同样发射）
+signal phase_changed(squad_id: String, from_phase: int, to_phase: int)
+## 角色重排完成（_reassign_roles 每推进循环发射；负载随相位信号同拍）
+signal roles_reassigned(squad_id: String)
+
 # ─────────────────────────────── 状态 ────────────────────────────────
 ## 宿主 FormationSystem（duck 引用：槽位/锚点/落点/接战判定/素质代理/号令通道）
 var _host: Node = null
@@ -257,8 +266,12 @@ func tick(delta: float) -> void:
 
 ## 相位进入（统一出口：计时复位 + 相位级一次性工作）。
 func _enter(phase: int) -> void:
+	var from: int = _phase
 	_phase = phase
 	_phase_timer = 0.0
+	# W1 观测信号：跨相位边界即发射（含 IDLE→CORE_LEAP 激活首跳）
+	if phase != from:
+		phase_changed.emit(_squad_id, from, phase)
 	match phase:
 		PH_CORE_LEAP:
 			_reassign_roles()   # 掉员自愈：每个推进循环按存活成员重排角色
@@ -372,6 +385,8 @@ func _reassign_roles() -> void:
 		if _host.has_method("get_squad_anchor"):
 			anchor = _host.get_squad_anchor(_squad_id)
 	_roles = assign_roles(_alive_members(), slots, anchor, Callable(self, "_quality_of"))
+	# W1 观测信号：角色表整体重建后发射（消费端按需重查 get_roles/get_role_of）
+	roles_reassigned.emit(_squad_id)
 
 
 ## 素质回调桥（assign_roles → 宿主素质代理；宿主缺失回退 1.0 平权）。

@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="BalanceResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "formation_authority"
+_meta = {
+	"resource_name": "formation_authority",
+	"version": "0.1.0",
+	"description": "权威值自主跳槽参数（R4 · 设计文档12号 §2.2 R4，RWR 编制加入的权威值经济行为落地）。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.formation_authority）与热重载。global 行 = 士兵自主择班的开关/节拍/冷却/吸引力/守卫阈值。authority_switch_enabled 缺省关闭 = 零回归基线（开闸后战场才出现士兵自主换班）。评分内核（班长/指挥官/玩家光环 + authority_margin 滞回）在 formation_system.gd §权威值择班，参数真值见 反向审计 小兵步枪AI逆向_2026-09-11.md §2.6。",
+	"category": "ai"
+}
+variables = {
+	"data": [
+		{
+			"id": "global",
+			"authority_switch_enabled": false,
+			"authority_scan_interval": 0.5,
+			"authority_eval_interval": 2.0,
+			"authority_switch_cooldown": 20.0,
+			"authority_candidate_radius": 800.0,
+			"authority_player_squad_bonus": 0.2,
+			"authority_stay_in_player_squad_bonus": 0.5,
+			"authority_leader_release_threshold": 0.3,
+			"authority_max_switches_per_squad_tick": 1,
+			"authority_rng_seed": 20260913,
+			"description": "权威值自主跳槽全局行：authority_switch_enabled=缺省关闭（零回归基线）；authority_scan_interval=宿主扫描节拍（L2 基础节拍 0.5s，与 _decide_squad_targets/_tick_phase_plans 同源）；authority_eval_interval=单单位两次评估最小间隔（个体错峰相位在 [0, 本值) 内取，避免全部单位同拍评估）；authority_switch_cooldown=单次跳槽后的冷却窗（s，窗内不再评估转投，防每拍横跳）；authority_candidate_radius=邻近可投奔班半径（px，距候选班长的距离上限，禁全图跳槽）；authority_player_squad_bonus=玩家所在班吸引力加成（RWR favor_joining_player_squad_value_increase 0.2 直译；班长被附身的 0.2 已由 get_squad_authority 计价，此处不重复）；authority_stay_in_player_squad_bonus=已在玩家班的黏性加成（RWR favor_staying_in_current_player_squad_value_increase 0.5 直译）；authority_leader_release_threshold=班长放人阈值（RWR max_leader_authority_willing_to_join_another_squad 0.3 直译：本班权威值高于此值者视为骨干，不被抽走）；authority_max_switches_per_squad_tick=单拍单来源班最多被带走人数（防整班雪崩式投奔的观感突变）；authority_rng_seed=错峰相位种子（确定性，同种子同局面结果可复现）"
+		}
+	]
+}

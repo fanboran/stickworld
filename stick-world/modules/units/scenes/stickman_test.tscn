@@ -49,7 +49,6 @@ script = ExtResource("2_test")
 [node name="StickmanRig" type="Skeleton2D" parent="OutlineGroup" unique_id=1221827476]
 modification_stack = SubResource("SkeletonModificationStack2D_ik")
 script = ExtResource("1_rig")
-body_color = Color(0.1560398, 0.15568888, 0.18235794, 1)
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="OutlineGroup/StickmanRig" unique_id=726246529]
 

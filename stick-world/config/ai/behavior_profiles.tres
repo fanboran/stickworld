@@ -1,0 +1,27 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "behavior_profiles"
+_meta = {
+	"resource_name": "behavior_profiles",
+	"version": "0.1.0",
+	"description": "R2 兵种人格覆盖档（A9 · 设计文档12号 §2.2 RWR 登记表）：个体 AI 参数的运行时可调层。合并序 = 代码基线（behavior_profiles.BASELINE）← 代码兵种覆盖（CLASS_PROFILES，SWL 直译真值宿主）← 本表行（baseline 行 + 兵种行，同 id 后行覆盖前行，行只写差异项 = RWR 职业文件语义）。本表 baseline 行镜像 A9 新键组代码默认（零回归基线）；调参先改这里（F9 热重载），兵种行按需补。全部数值语义推断初值，待实测校准。",
+	"category": "ai"
+}
+variables = {
+	"data": [
+		{
+			"id": "baseline",
+			"decision_interval": 0.3,
+			"decision_variance": 0.0,
+			"burst_shots": 0,
+			"burst_wait": Vector2(1.2, 1.8),
+			"night_hesitate_mult": 1.0,
+			"heal_buzz_distance": 60.0,
+			"description": "R1 主决策间隔 0.3s ± 0 方差（镜像旧 DECISION_INTERVAL 常量）；R3 点射 0 发=关、停顿区间 1.2~1.8s（RWR wait 1.2±0.6）、夜间犹豫倍率 1.0（RWR 昼 0.3~0.6/夜 0.8~1.1 同构）；R5 防扎堆治疗 60px（RWR consider_someone_already_healing_wounded_distance 10m 同构换算）"
+		}
+	]
+}

@@ -84,6 +84,10 @@ var _strafe_hold: float = 0.0
 var _in_stun_prev: bool = false
 var _evade_hold: float = 0.0
 var _evade_dir: float = 0.0
+## 点射节奏状态（A9 · R3，RWR burst 族直译）：连射计数与停顿截止时刻
+## （达 burst_shots 后插 burst_wait 停顿再射——"点射-停顿-点射"节奏）
+var _burst_count: int = 0
+var _burst_wait_until: float = -1.0e9
 
 
 func _ready() -> void:
@@ -119,6 +123,15 @@ func update(delta: float) -> void:
 		return
 	if entity.has_method("is_dead") and entity.is_dead():
 		finish()
+		return
+	# 压制禁令消费段（A6 · C9）：压制期停滞——不追不打不调整，同受击硬直口径。
+	# 决策链已在 ai_controller 拦截新行为，此处兜底"压制发生在两拍之间的在途
+	# 攻击行为"（禁令立即生效，不等下一决策拍）。受击反馈/被推挤在物理层不受
+	# 禁令影响——惩罚来自模拟因果。duck 查询：组件缺失（测试桩）跳过 = 零回归。
+	var se: Node = entity.get_status_effects() if entity.has_method("get_status_effects") else null
+	if se != null and is_instance_valid(se) and se.has_method("has_suppressed") and se.has_suppressed():
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
 		return
 	# 受击硬直（行业最佳实践 hit stun）：被打瞬间短暂停滞，不追不打；
 	# 醒后小概率规避小跳（RWR 士兵被打了会挪窝，不站桩吃第二下）
@@ -189,7 +202,8 @@ func update(delta: float) -> void:
 			finish()
 			return
 
-	# 犹豫概率钩子（§7.4 第一层）
+	# 犹豫概率钩子（§7.4 第一层；A9 · R3：夜间反应更慢——犹豫时长 × 档案
+	# night_hesitate_mult，RWR day/night reaction_time 分段同构）
 	if _hesitate_timer > 0.0:
 		_hesitate_timer -= delta
 		if entity.has_method("ai_stop"):
@@ -199,7 +213,10 @@ func update(delta: float) -> void:
 	if _hesitate_check_timer <= 0.0:
 		_hesitate_check_timer = HESITATE_CHECK_INTERVAL
 		if randf() < _p("hesitate_prob", prob_hesitate):
-			var ht: Vector2 = _profile.get("hesitate_time", Vector2(0.3, 0.8))
+			var ht: Vector2 = _p_v2("hesitate_time", Vector2(0.3, 0.8))
+			var night_mult: float = _p("night_hesitate_mult", 1.0)
+			if night_mult != 1.0 and _is_night():
+				ht *= night_mult
 			_hesitate_timer = randf_range(ht.x, ht.y)
 			if entity.has_method("ai_stop"):
 				entity.ai_stop()
@@ -223,10 +240,11 @@ func update(delta: float) -> void:
 			entity.ai_move(away, _p("kite_run", 0.0) > 0.5)
 		# 风筝还击（SWL 弓手边撤边射）：前摇/弹道与移动解耦（延迟结算计时独立），
 		# 冷却好就边跑边放——不再被追着跑还不还手
-		if dist <= attack_range and weapon != null and weapon.has_method("can_attack") \
+		if dist <= attack_range and _burst_gate() and weapon != null and weapon.has_method("can_attack") \
 				and weapon.can_attack() and not _arrows_wasted(_target, weapon):
 			_face_target()  # 回头面向目标开火（否则背身拉弓）
 			weapon.perform_attack(_target)
+			_register_burst_shot()
 			_aiming = false
 	elif dist <= attack_range:
 		# 在射程内：停止移动并攻击。弓手先进瞄准节奏（SWL ShouldAim）：持瞄随机
@@ -243,9 +261,10 @@ func update(delta: float) -> void:
 				entity.ai_move(Vector2(0.0, signf(dy_align)), false)
 			_update_aim_rhythm(delta)  # 持瞄节奏照常走，y 对齐即放箭
 			return
-		if _update_aim_rhythm(delta) and weapon != null and weapon.has_method("can_attack") \
+		if _burst_gate() and _update_aim_rhythm(delta) and weapon != null and weapon.has_method("can_attack") \
 				and weapon.can_attack() and not _arrows_wasted(_target, weapon):
 			weapon.perform_attack(_target)
+			_register_burst_shot()
 			_aiming = false
 			# 攻击后举盾（cooldownAfterAttackForBlock）：矛兵攻击完一拍盾防反打
 			if _p("block_after_attack", 0.0) > 0.0:
@@ -313,6 +332,43 @@ const BURST_HEAT_THRESHOLD := 0.8
 const BURST_WAIT_MULT := Vector2(1.8, 3.2)
 
 
+## 点射门禁（A9 · R3，RWR burst 族直译）：档案 burst_shots = 连射点数，
+## 达数后强制插 burst_wait 区间随机停顿再射——"点射-停顿-点射"的节奏模拟。
+## 0 = 关（零回归；停顿期间走位/持瞄照常，只禁出手）。
+func _burst_gate() -> bool:
+	var shots: int = int(_p("burst_shots", 0.0))
+	if shots <= 0:
+		return true
+	return Time.get_ticks_msec() / 1000.0 >= _burst_wait_until
+
+
+## 出手成功登记（R3）：连射计数 +1，达 burst_shots 重掷停顿窗口。
+func _register_burst_shot() -> void:
+	var shots: int = int(_p("burst_shots", 0.0))
+	if shots <= 0:
+		return
+	_burst_count += 1
+	if _burst_count >= shots:
+		_burst_count = 0
+		var wait: Vector2 = _p_v2("burst_wait", Vector2(1.2, 1.8))
+		_burst_wait_until = Time.get_ticks_msec() / 1000.0 + randf_range(wait.x, wait.y)
+
+
+## 夜间判定（R3 昼/夜反应分段消费）：环境光照亮度 < 0.55——与 fx 视觉层
+## （fireflies/SkyStars 的 day_factor）同源同分界（EnvironmentSystem
+## get_current_light_color）。查询不可用（测试桩/未装配）→ 白天（保守零回归）。
+func _is_night() -> bool:
+	if entity == null or not is_instance_valid(entity):
+		return false
+	var tree: SceneTree = entity.get_tree()
+	if tree == null:
+		return false
+	var env: Node = tree.root.get_node_or_null("GameRoot/EnvironmentSystem")
+	if env == null or not env.has_method("get_current_light_color"):
+		return false
+	return env.get_current_light_color().get_luminance() < 0.55
+
+
 ## 拉弓瞄准节奏（SWL ArcherAi.ShouldAim/isAiming/GenerateNextShotRandomness 直译）。
 ## 档案 aim_hold 有值时：进入射程先"持瞄"高斯随机时长再放箭；换目标重掷。
 ## 返回 true = 持瞄结束可放箭（无瞄准档案的兵种直接放行）。
@@ -357,6 +413,10 @@ func _arrows_wasted(target: Node, weapon: Node) -> bool:
 
 ## 姿态举盾聚合（SWL 直译）：
 ## ① 箭矢威胁（SpeartonAi.IsAnyArrowThreat）——有敌方箭矢瞄向自己即举盾；
+##    （A6 标注：arrow_threat_time 是**轻量感知代理**——真实压制状态已落地
+##    （StatusEffects.SUPPRESSED，消费点 ai_controller 决策链 + 本行为压制
+##    消费段），本代理保留消费未达压制门槛的瞄射窗口（arrow_threat_block
+##    语义不变），与真实禁令分工不混判）
 ## ② 攻击后格挡（Ai.cooldownAfterAttackForBlock）——刚攻击完举盾一拍防反打。
 ## 两来源任一命中即举盾，窗口全过收盾。
 func _update_arrow_threat_block(weapon: Node) -> void:
@@ -649,6 +709,12 @@ func _spawn_minidons(count: int) -> Array:
 ## 读取兵种档案参数（缺省回落 fallback——对应原硬编码常量）。
 func _p(key: String, fallback: float) -> float:
 	return float(_profile.get(key, fallback))
+
+
+## 读取兵种档案 Vector2 参数（区间键：hesitate_time/burst_wait 等）。
+func _p_v2(key: String, fallback: Vector2) -> Vector2:
+	var v: Variant = _profile.get(key, fallback)
+	return v if v is Vector2 else fallback
 
 
 ## 开火前面向目标（横向翻转）——统一 Face 入口（SWL Ai.Face 直译，

@@ -113,6 +113,8 @@ func setup(org_api: Node) -> void:
 	if EventBus != null and EventBus.has_signal("commander_assigned") \
 			and not EventBus.commander_assigned.is_connected(_on_commander_assigned):
 		EventBus.commander_assigned.connect(_on_commander_assigned)
+	# A5 小队相位计划参数装载（缺省关闭，见文件尾 §A5 段）
+	_load_phase_plan_params()
 
 
 ## 组织侧补位成功 → 回写本地 squad.leader（§4.3.1）：org_id ∈ 本地 _squads 时
@@ -210,6 +212,8 @@ func _process(_delta: float) -> void:
 	_decide_squad_targets(_delta)
 	# 指挥官光环（AI 完善批次 3）：排长存活 → 队员士气恢复
 	_apply_leader_morale_aura(_delta)
+	# A5 小队相位计划（C8）：按 L2 节拍驱动活跃计划（缺省关闭时零开销空转）
+	_tick_phase_plans(_delta)
 
 
 ## 指挥官光环（行业最佳实践）：战斗小队排长存活时，队员持续恢复士气（指挥提振）。
@@ -405,6 +409,47 @@ func get_squad_leader(squad_id: String) -> Node:
 	if not _squads.has(squad_id):
 		return null
 	return _squads[squad_id]["leader"]
+
+
+# ─────────────────────────────── 权威值择班（A9 · R4，RWR authority 经济）────────────────────────────────
+## RWR 权威值参数（设计文档12号 §2.2 R4；消费点挂 A2 任务槽的"谁在班里由
+## 权威值经济定"——本批次交付评分内核与滞回判定，不引入单位自主跳槽行为）。
+## 有班长基础权威（RWR 班长存在才有归属感）
+const AUTHORITY_LEADER_BASE: float = 1.0
+## 组织指挥官已任命加成（编制在册 = 班有"官"）
+const AUTHORITY_COMMANDER_BONUS: float = 0.5
+## 玩家光环加成（班长被玩家附身；RWR favor_joining_player_squad_value_increase 0.2 直译）
+const AUTHORITY_PLAYER_BONUS: float = 0.2
+## 换班权威差容限（RWR authority_margin 0.07 直译：新班须高出当前班此值才值得换，
+## 滞回防两边来回跳）
+const AUTHORITY_MARGIN: float = 0.07
+
+
+## 小队权威值评分（R4 择班内核）：班长在场 1.0 + 组织指挥官在册 0.5
+## + 班长被玩家附身 0.2。组织查询不可用（_org_api 缺载/无该方法）时跳过指挥官项。
+## 小队不存在返回 -INF（调用方以"可入"语义处理无班情况）。
+func get_squad_authority(squad_id: String) -> float:
+	if not _squads.has(squad_id):
+		return -INF
+	var squad: Dictionary = _squads[squad_id]
+	var score: float = 0.0
+	var leader: Node = squad.get("leader", null)
+	if leader != null and is_instance_valid(leader):
+		score += AUTHORITY_LEADER_BASE
+		if leader.has_method("is_possessed") and leader.is_possessed():
+			score += AUTHORITY_PLAYER_BONUS
+	if _org_api != null and _org_api.has_method("get_organization"):
+		var org: Dictionary = _org_api.get_organization(squad_id)
+		if not org.is_empty() and str(org.get("commander_id", "")) != "":
+			score += AUTHORITY_COMMANDER_BONUS
+	return score
+
+
+## 换班判定（R4 滞回）：候选班权威须高出当前班 authority_margin 以上才值得换。
+## 单位当前无班（current_authority = -INF）时任何候选班都值得进（-INF + margin
+## 仍为 -INF，浮点语义天然成立，无需特判）。
+func should_switch_squad(current_authority: float, candidate_authority: float) -> bool:
+	return candidate_authority > current_authority + AUTHORITY_MARGIN
 
 
 ## 队伍级目标点分配（反编译参考实装 D）：按单位在队内序号计算个性化目标点，
@@ -1157,3 +1202,186 @@ func _apply_balance_tuning() -> void:
 				CATCHUP_RUN_DIST = float(v)
 			"var_report_casualty_threshold":
 				_casualty_report_threshold = float(v)
+
+
+# ──────────────────── A5 小队相位计划（设计文档12号 C8）────────────────────────────────
+# CoH squadai 相位计划的宿主落点：角色分派（位置×素质双维）+ 交替掩护跃进 +
+# 接敌反应（被压制/背敌 → 既有 seek_cover）。计划逻辑全在 squad_phase_plan.gd
+# （RefCounted 纯逻辑，无自转），本系统只做：参数装载 / 号令触发 / 节拍驱动 / 查询出口。
+# 触发点取舍（最小侵入）：TacticalOrders 下发号令后回查通知（号令侧显式挂点，
+# 不经 EventBus 全局监听）——ADVANCE_ALL/SPRINT 激活计划，其余号令撤销计划；
+# 缺省 phase_plan_enabled=false 零回归，config/ai/squad_phase_plan.tres 配置化。
+
+## 小队相位计划脚本（同模块 command/，显式 preload 惯例）
+const ScriptSquadPhasePlan := preload("res://modules/combat/scripts/command/squad_phase_plan.gd")
+## 号令类型枚举（通知判定 ADVANCE/SPRINT 用；同模块显式 preload，无跨模块依赖）
+const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+
+## 活跃相位计划：squad_id -> SquadPhasePlan（计划随小队消亡由节拍侧惰性清理）
+var _squad_phase_plans: Dictionary = {}
+## 相位计划参数（SquadPhasePlan.DEFAULTS ← config/ai/squad_phase_plan.tres global 行覆盖）
+var _phase_plan_params: Dictionary = {}
+## 计划节拍累积器（L2 节拍 phase_tick_interval，与队伍目标决策节拍同量级）
+var _phase_plan_timer: float = 0.0
+
+
+## 装载相位计划参数（setup 调用）：代码默认 ← BalanceConfig 类型路径
+## ai.squad_phase_plan.global 行覆盖（只认默认键，未知键忽略防错字）。
+## BalanceConfig 缺载/路径缺失安全回退代码默认（unit 测试不依赖 autoload）。
+func _load_phase_plan_params() -> void:
+	_phase_plan_params = ScriptSquadPhasePlan.DEFAULTS.duplicate(true)
+	if BalanceConfig == null or BalanceConfig.data.is_empty():
+		return
+	var row_v: Variant = BalanceConfig.get_value("ai.squad_phase_plan.global")
+	if not (row_v is Dictionary):
+		return
+	var row: Dictionary = row_v
+	for k in row.keys():
+		if _phase_plan_params.has(k):
+			_phase_plan_params[k] = row[k]
+
+
+## 测试/调参出口：合并覆盖相位计划参数（不改 BalanceConfig）。
+func set_phase_plan_params(params: Dictionary) -> void:
+	for k in params.keys():
+		if _phase_plan_params.has(k):
+			_phase_plan_params[k] = params[k]
+
+
+## 号令通知（TacticalOrders.issue 下发成功后回查调用，A5 触发点）：
+## 推进类号令（ADVANCE_ALL/SPRINT）激活/重定该小队相位计划；
+## 其余号令（HOLD/RETREAT/TAKE_COVER/RALLY）撤销计划——计划不得与号令打架。
+## 开关关闭 / 非战斗小队 / 小队不存在：静默忽略（零回归闸门）。
+func notify_squad_order(order_type: int, squad_id: String, target_pos: Vector2) -> void:
+	if not bool(_phase_plan_params.get("phase_plan_enabled", false)):
+		return
+	if not _squads.has(squad_id) or not is_combat_squad(squad_id):
+		return
+	if order_type == ScriptTacticalOrders.OrderType.ADVANCE_ALL \
+			or order_type == ScriptTacticalOrders.OrderType.SPRINT:
+		_activate_phase_plan(squad_id, target_pos)
+	else:
+		_deactivate_phase_plan(squad_id)
+
+
+## 组织号令通知（TacticalOrders.issue_to_org 受理后回查调用）：解析挂在该组织
+## 树下的全部战斗 L1 小队，逐队转发 notify_squad_order（编制=原子，整编制入计划）。
+func notify_org_order(order_type: int, org_root_id: String, target_pos: Vector2) -> void:
+	if not bool(_phase_plan_params.get("phase_plan_enabled", false)):
+		return
+	if org_root_id.is_empty():
+		return
+	for squad_id_v in _squads.keys():
+		var squad_id := str(squad_id_v)
+		if not is_combat_squad(squad_id):
+			continue
+		if _org_root_of_squad(squad_id) == org_root_id:
+			notify_squad_order(order_type, squad_id, target_pos)
+
+
+## 激活（或重定）小队相位计划。跟随玩家/锚定跟队的小队不激活——成员号令
+## 已分别归 BehaviorFollow / 跟队 tick 决策，相位计划不得抢决策权。
+func _activate_phase_plan(squad_id: String, target: Vector2) -> void:
+	var squad: Dictionary = _squads.get(squad_id, {})
+	if squad.is_empty():
+		return
+	if squad.get("follow_player", false):
+		return
+	if String(squad.get("follow_squad_id", "")) != "":
+		return
+	var plan: Variant = _squad_phase_plans.get(squad_id)
+	if plan == null:
+		plan = ScriptSquadPhasePlan.new()
+		plan.setup(self, _phase_plan_params)
+		_squad_phase_plans[squad_id] = plan
+	plan.activate(squad_id, target)
+
+
+## 撤销小队相位计划（号令改向/小队消亡；成员在途号令不回收，与 deactivate 语义一致）。
+func _deactivate_phase_plan(squad_id: String) -> void:
+	var plan: Variant = _squad_phase_plans.get(squad_id)
+	if plan != null:
+		plan.deactivate()
+	_squad_phase_plans.erase(squad_id)
+
+
+## 相位计划节拍驱动（_process 调用）：按 phase_tick_interval 累积，每拍推进全部
+## 活跃计划；小队已消亡的计划惰性清理（解散路径零新增挂点）。
+func _tick_phase_plans(delta: float) -> void:
+	if _squad_phase_plans.is_empty():
+		return
+	if not bool(_phase_plan_params.get("phase_plan_enabled", false)):
+		return
+	_phase_plan_timer += delta
+	var beat: float = maxf(float(_phase_plan_params.get("phase_tick_interval", 0.5)), 0.05)
+	if _phase_plan_timer < beat:
+		return
+	_phase_plan_timer = 0.0
+	for squad_id_v in _squad_phase_plans.keys().duplicate():
+		var squad_id := str(squad_id_v)
+		var plan: Variant = _squad_phase_plans[squad_id]
+		if plan == null or not _squads.has(squad_id):
+			_squad_phase_plans.erase(squad_id)
+			continue
+		plan.tick(beat)
+		# 计划自身完成（末跳到位 deactivate）→ 从宿主注销
+		if not plan.is_active():
+			_squad_phase_plans.erase(squad_id)
+
+
+## 小队编队槽位快照（相位计划角色分派取数口，11b 槽位基建复用）。
+func get_squad_slots(squad_id: String) -> Dictionary:
+	if not _squads.has(squad_id):
+		return {}
+	return (_squads[squad_id].get("slots", {}) as Dictionary).duplicate()
+
+
+## 小队锚信息（相位计划角色分派取数口）：{"centroid", "facing"}，见 _squad_anchor。
+func get_squad_anchor(squad_id: String) -> Dictionary:
+	return _squad_anchor(squad_id)
+
+
+## 单位素质代理（角色分派·素质维【提案/待定】）：max_hp 简单代理优先（耐久=素质），
+## 无健康组件回退武器档位权重，再回退 1.0 平权。仅作分派排序，不参与任何数值结算。
+func get_unit_quality(u: Node) -> float:
+	if u == null or not is_instance_valid(u):
+		return 1.0
+	if u.has_method("get_health"):
+		var h: Node = u.get_health()
+		if h != null and is_instance_valid(h) and "max_hp" in h:
+			return float(h.get("max_hp"))
+	if u.has_method("get_weapon"):
+		var w: Node = u.get_weapon()
+		if w != null and is_instance_valid(w) and "weapon_type" in w:
+			return float(QUALITY_WEAPON_TIER.get(int(w.get("weapon_type")), 1.0))
+	return 1.0
+
+
+## 武器档位素质权重（max_hp 代理缺失时的回退序；对齐 unit_weights 语义的简化镜像，
+## 【提案/待定】待素质档案定稿后替换）
+const QUALITY_WEAPON_TIER: Dictionary = {
+	0: 1.0,   ## SWORD
+	1: 2.0,   ## SPEAR
+	2: 1.5,   ## BOW
+	3: 0.5,   ## PICKAXE
+	4: 2.5,   ## STAFF
+	5: 1.0,   ## MERIC
+}
+
+
+## 小队所在组织树根 id（组织号令通知的编制解析用；沿 parent_org 上溯，上限防环；
+## org_api 缺失/查询失败返回 ""，按散兵口径不入编制组）。
+func _org_root_of_squad(squad_id: String) -> String:
+	if _org_api == null or not _org_api.has_method("get_organization"):
+		return ""
+	var cur := squad_id
+	for _i in 8:
+		var info: Dictionary = _org_api.get_organization(cur)
+		if not info.get("ok", false):
+			return ""
+		var data: Dictionary = info.get("data", {})
+		var parent := String(data.get("parent_org", ""))
+		if parent.is_empty():
+			return String(data.get("id", cur))
+		cur = parent
+	return cur

@@ -81,6 +81,10 @@ func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO
 	var spread_mode: String = _order_to_spread(order_type)
 	# 通过指挥链下达（P0 source_tier=0 时无延迟）
 	_command_chain.deliver(order_type, squad_id, units, behavior_name, params, source_tier, 1, spread_mode)
+	# A5 相位计划触发点（C8）：号令下发成功后回查编队系统——推进类号令激活
+	# 小队相位计划，其余号令撤销（开关关闭时编队侧静默忽略，零回归）
+	if _formation_system != null and _formation_system.has_method("notify_squad_order"):
+		_formation_system.notify_squad_order(order_type, squad_id, target_pos)
 	# 发射信号
 	order_issued.emit(order_type, squad_id, source_tier)
 	if EventBus != null and EventBus.has_signal("order_issued"):
@@ -102,8 +106,11 @@ func issue_to_all(order_type: int, target_pos: Vector2 = Vector2.ZERO) -> int:
 ## 对组织下达号令（§4.2.4，任意层级根）：生成逐层投递计划后经 CommandChain
 ## 物理传播接力——L1 收令时刻 = 沿途各跳延迟之和；中间层只透传不做决策。
 ## org_id: 目标组织 id（L1 小队或中间层均可）
+## extra_params: 行为参数增量（A2 TeamAi 消费：RETREAT 的 evacuate=true 经组织链
+## 透传至 L1，与 issue 直令路径同语义）
 ## 返回是否受理（计划生成成功即受理；送达结果异步，非战斗叶在送达时拒收）
-func issue_to_org(org_id: String, order_type: int, target_pos: Vector2 = Vector2.ZERO) -> bool:
+func issue_to_org(org_id: String, order_type: int, target_pos: Vector2 = Vector2.ZERO,
+		extra_params: Dictionary = {}) -> bool:
 	if _formation_system == null or _command_chain == null:
 		push_warning("[TacticalOrders] 未注入 formation_system 或 command_chain")
 		return false
@@ -121,9 +128,14 @@ func issue_to_org(org_id: String, order_type: int, target_pos: Vector2 = Vector2
 	# 同令透传：全部跳共用同一份号令语义，映射一次全程适用
 	var behavior_name: String = _order_to_behavior(order_type)
 	var params: Dictionary = _order_to_params(order_type, target_pos)
+	params.merge(extra_params, true)
 	var spread_mode: String = _order_to_spread(order_type)
 	# 接力执行（协程，fire-and-forget——受理即返回，送达异步推进）
 	_command_chain.deliver_via_orgs(plan_result["data"], _org_api, order_type, behavior_name, params, spread_mode)
+	# A5 相位计划触发点（C8）：组织号令受理后回查编队系统，整编制 L1 小队入计划
+	# （开关关闭时编队侧静默忽略，零回归）
+	if _formation_system != null and _formation_system.has_method("notify_org_order"):
+		_formation_system.notify_org_order(order_type, org_id, target_pos)
 	# 发射信号（既有口径：org 根 id 作 target；source_tier=0 玩家跳）
 	order_issued.emit(order_type, org_id, 0)
 	if EventBus != null and EventBus.has_signal("order_issued"):
@@ -132,6 +144,34 @@ func issue_to_org(org_id: String, order_type: int, target_pos: Vector2 = Vector2
 
 
 # ─────────────────────────────── 查询 ────────────────────────────────
+
+## 查询小队所在组织树的根 id（A2 下令路径分流消费，设计文档 §四）：
+## 组织化编制（小队挂于多层组织树下）→ 树根 org_id，号令走 issue_to_org 逐跳传播；
+## 散兵（无组织挂载 / 无父级的独立 L1）/ org_api 未装配 / 查询失败 → ""（issue 直令）。
+## 独立 L1（无父级）按散兵处理：其 issue_to_org 计划只有玩家跳一跳，走 org 入口
+## 无传播语义且 Event 信号口径会误标玩家跳——不路由。
+## combat 不直引 organization——组织查询由本类代理（已持 _org_api 引用），守模块契约。
+func get_org_root_for_squad(squad_id: String) -> String:
+	if _org_api == null or not _org_api.has_method("get_organization"):
+		return ""
+	var info: Dictionary = _org_api.get_organization(squad_id)
+	if not info.get("ok", false):
+		return ""
+	var data: Dictionary = info.get("data", {})
+	var current_id: String = String(data.get("id", squad_id))
+	# 沿 parent_org 上溯至树根（上限防环；父链断裂按已到层级取根）
+	for _i in 8:
+		var parent: String = String(data.get("parent_org", ""))
+		if parent.is_empty():
+			# 根即自身 = 独立 L1，无指挥链可走 → 散兵口径
+			return "" if current_id == squad_id else current_id
+		var pinfo: Dictionary = _org_api.get_organization(parent)
+		if not pinfo.get("ok", false):
+			return current_id
+		data = pinfo.get("data", {})
+		current_id = String(data.get("id", current_id))
+	return current_id
+
 
 ## 获取号令名称（供 UI/调试用）
 func get_order_name(order_type: int) -> String:

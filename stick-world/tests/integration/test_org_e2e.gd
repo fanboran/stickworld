@@ -19,6 +19,7 @@ extends Node
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 
 ## 测试单位总数：4 排 × 3 人 = 12 + 军长/连长甲/连长乙 3 名独立指挥官
 const UNIT_COUNT: int = 15
@@ -231,7 +232,11 @@ func _test_army_wide_advance() -> void:
 	_runner.assert_true(ok, "对军根下令应受理")
 	_runner.assert_equal(_issued_org, _army, "order_issued 应以军根 id 为 target")
 	_runner.assert_equal(_issued_type, _tactical.OrderType.ADVANCE_ALL, "order_issued 类型应为 ADVANCE_ALL")
-	await _wait_frames(6)
+	# 等就绪不数帧（tests/README §二.1）：军→连→排 BFS 全展开以「四排各送达一次且成员收到号令」
+	# 为条件——固定 6 帧在并行池争用下可能不够，会造成假失败
+	var arrived: bool = await TestHelpers.await_condition(
+			func() -> bool: return _all_platoons_delivered(["甲1", "甲2", "乙1", "乙2"]), 5.0, "军令送达四排")
+	_runner.assert_true(arrived, "军令应在超时内送达四排")
 	# 全部 4 排各送达一次（军→连→排 BFS 层序全展开）
 	for key in ["甲1", "甲2", "乙1", "乙2"]:
 		var sid: String = String(_platoons[key])
@@ -243,6 +248,23 @@ func _test_army_wide_advance() -> void:
 			if ai != null:
 				_runner.assert_true(ai.has_order(), "排%s成员应收到号令" % key)
 				_runner.assert_equal(ai.get_ordered_behavior(), "move", "号令行为应为 move")
+
+
+## 四排是否均已「送达恰一次且成员收到号令」（等就绪条件；成员无效则跳过，与断言语义一致）
+func _all_platoons_delivered(keys: Array) -> bool:
+	if _formation == null:
+		return false
+	for key in keys:
+		var sid: String = String(_platoons[key])
+		if _delivered_squads.count(sid) != 1:
+			return false
+		for u in _formation.get_squad_units(sid):
+			if not is_instance_valid(u):
+				continue
+			var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
+			if ai != null and not ai.has_order():
+				return false
+	return true
 
 
 func _test_panel_tree_full() -> void:

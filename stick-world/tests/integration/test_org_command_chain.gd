@@ -20,6 +20,7 @@ extends Node
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 
 ## 测试单位总数（按用例分配：甲 0-5 / 乙 6-11 / 丙 0-3 / 丁 4-6 / 戊 9-11 / 建造队 2）
 const UNIT_COUNT: int = 12
@@ -239,8 +240,11 @@ func _test_relay_delivery() -> void:
 	_runner.assert_true(ok, "对连下令应受理")
 	_runner.assert_equal(_issued_org, company, "order_issued 应以组织根 id 为 target")
 	_runner.assert_equal(_issued_type, _tactical.OrderType.ADVANCE_ALL, "order_issued 类型应为 ADVANCE_ALL")
-	for i in 3:
-		await get_tree().process_frame
+	# 等就绪不数帧（tests/README §二.1）：接力投递以「两排成员都已收到号令」为条件，
+	# 不假定固定帧数——并行池争用下 3 帧可能不够落定，会造成假失败
+	var arrived: bool = await TestHelpers.await_condition(
+			func() -> bool: return _squads_all_ordered([sq_a, sq_b]), 5.0, "两排成员收到号令")
+	_runner.assert_true(arrived, "两排成员应在超时内收到号令")
 	for sid: String in [sq_a, sq_b]:
 		for u in _formation.get_squad_units(sid):
 			if not is_instance_valid(u):
@@ -251,6 +255,21 @@ func _test_relay_delivery() -> void:
 				_runner.assert_equal(ai.get_ordered_behavior(), "move", "号令行为应为 move")
 	_runner.assert_true(_delivered_squads.count(sq_a) == 1, "order_delivered 排A 应恰一次")
 	_runner.assert_true(_delivered_squads.count(sq_b) == 1, "order_delivered 排B 应恰一次")
+
+
+## 指定排是否「成员均已收到号令」（等就绪条件；成员无效则跳过，与断言语义一致）
+func _squads_all_ordered(sids: Array) -> bool:
+	if _formation == null:
+		return false
+	for sid_v in sids:
+		var sid := String(sid_v)
+		for u in _formation.get_squad_units(sid):
+			if not is_instance_valid(u):
+				continue
+			var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
+			if ai != null and not ai.has_order():
+				return false
+	return true
 
 
 # ─────────────────────────────── 幕二：伤亡补位 ────────────────────────────────

@@ -550,6 +550,779 @@ def mooring_post(b, x=0.0, y=0.0, z=0.0):
     _ring(b, (x, y, z + 33.0), 10.0, 4.0, "iron", 12, "X")
 
 
+# ================================================================ 二轮：市集/民生道具
+#
+# 尺寸纪律（与既有 34 件一致）
+# ------------------------------
+# * 一律按**现实尺寸**建模（1 世界单位 ≈ 1.31cm，1 格 = 32 单位 = 0.42m），
+#   挂载时由 `GAME_SCALE` 统一放大到"游戏尺寸可辨"。
+# * 只有 r/h/w/d/s 能当主尺寸参数 —— `dress()` 的缩放**只认这五个键**；其余内部
+#   尺寸必须从主尺寸派生（`fx = w * 0.42` 之类），否则放大后比例会走形。
+# * 复合道具内部调用的子道具（筐、桶、箱）也要按同一比例派生尺寸，否则会出现
+#   "放大的摊子上摆着没放大的菜筐"。
+
+def _euler_to(dx, dy, dz):
+    """把"局部 +Z 指向 d"的欧拉角解出来（XYZ 序，rz=0）—— 斜腿/斜撑/辕杆用。"""
+    ln = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
+    dx, dy, dz = dx / ln, dy / ln, dz / ln
+    rx = math.asin(max(-1.0, min(1.0, -dy)))
+    cx = math.cos(rx)
+    if abs(cx) < 1e-6:
+        return (rx, 0.0, 0.0)
+    return (rx, math.atan2(dx / cx, dz / cx), 0.0)
+
+
+def _strut(b, p0, p1, size, mat, thick=None):
+    """两点之间的一根方料（斜腿/斜撑/吊臂/辕杆）—— 免得手算欧拉角。
+
+    `buildings.Builder.box` 只吃轴对齐或欧拉旋转的盒子，斜构件一律靠这个包一层。
+    """
+    dx, dy, dz = (p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
+    ln = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if ln < 1e-6:
+        return
+    b.box((size, size if thick is None else thick, ln),
+          ((p0[0] + p1[0]) / 2.0, (p0[1] + p1[1]) / 2.0, (p0[2] + p1[2]) / 2.0),
+          mat, rot=_euler_to(dx, dy, dz))
+
+
+def _open_vat(b, x=0.0, y=0.0, z=0.0, r=26.0, h=26.0, mat="wood", seg=16, t=None,
+              water=None, band=None, inner="cavity"):
+    """**开口**圆盆/圆缸：一圈切向壁板 + 内腔底 + 可选液面 + 可选铁箍。
+
+    为什么不能用 `cylinder`：Builder 的柱体**两头都封盖**，顶盖会把内腔与液面全盖住，
+    "敞口容器"就死了。所以壁板必须由 seg 块切向薄板拼（微俯视下能看见的恰好是
+    "壁顶一圈 + 内腔暗面 + 液面"这三层）。`trough()` 用四块方板是因为它是方的。
+    """
+    t = t if t is not None else max(3.0, r * 0.16)
+    chord = 2.0 * math.pi * (r - t * 0.5) / seg + 1.6
+    for i in range(seg):
+        a = 2.0 * math.pi * (i + 0.5) / seg
+        cx = x + math.cos(a) * (r - t * 0.5)
+        cy = y + math.sin(a) * (r - t * 0.5)
+        b.box((t, chord, h), (cx, cy, z + h * 0.5), mat, rot=(0.0, 0.0, a))
+    b.cylinder((x, y, z + t * 0.6), r - t, t, inner, seg, "Z")          # 内腔底（暗）
+    if water is not None:
+        b.cylinder((x, y, z + h - 1.0), r - t * 1.25, 2.0, water, seg)  # 液面
+    else:
+        b.cylinder((x, y, z + h - 1.6), r - t * 1.15, 1.6, inner, seg)
+    if band is not None:
+        _ring(b, (x, y, z + h * band), r + 0.6, 3.4, "iron", seg)
+    return {"r": r, "h": h}
+
+
+def _cloth_over_rim(b, x, y, z, r, h, cloth, rng, width=None):
+    """一块布搭在缸/盆沿上（缸口一段 + 外垂到地 + 内搭一段）——"有人在干活"的信号。"""
+    w = width if width else r * 1.5
+    y0 = y - r * 0.55
+    b.box((w, r * 0.95, 4.0), (x, y0, z + h + 1.5), cloth)                     # 搭在缸口
+    b.box((w, 4.5, h * 1.28), (x, y0 - r * 0.52, z + h * 0.64), cloth,
+          rot=(math.radians(-8.0), 0.0, 0.0))                                  # 外垂到地
+    b.box((w * 0.78, 4.0, h * 0.46), (x, y0 + r * 0.38, z + h * 0.80), cloth,
+          rot=(math.radians(14.0), 0.0, 0.0))                                  # 内搭一段
+    b.box((w * 1.02, 3.0, 5.0), (x, y0, z + h - 1.0), cloth if rng.random() < 0.5
+          else "cloth_ochre")                                                  # 缸口垂下的褶
+
+
+def _hen(b, x=0.0, y=0.0, z=0.0, s=1.0, mat="canvas"):
+    """母鸡（卵形身 + 竖颈 + 头 + 红冠 + 上翘尾）：3~4 只在笼边走动，"有人养"的信号。
+
+    游戏尺寸下只有 ~30px，所以**不做腿**（细腿会读成"小桌子"）；比例必须是
+    "**长 > 高**的卵形身"（第一轮做成半径≈半长的球体，缩下去读成一朵白花）。
+    体色用暖白/暖褐的织物材质（`canvas` / `cloth_ochre`）——在这个尺度它们就是
+    "一块暖色羽毛"；不要用 `plaster_old`（冷灰会读成石头）。
+    """
+    _ring(b, (x, y, z + 8.5 * s), 7.6 * s, 26.0 * s, mat, 10, "X", taper=0.62)   # 身
+    b.box_bottom((16.0 * s, 13.0 * s, 4.0 * s), (x - 1.0 * s, y), z, mat)        # 腹底（落地）
+    b.box((6.0 * s, 6.0 * s, 11.0 * s), (x + 10.0 * s, y, z + 15.0 * s), mat,
+          rot=(0.0, math.radians(-16.0), 0.0))                                   # 颈
+    b.cylinder((x + 13.0 * s, y, z + 21.0 * s), 5.0 * s, 9.0 * s, mat, 8, "X")   # 头
+    b.box_bottom((3.6 * s, 3.6 * s, 4.0 * s), (x + 13.0 * s, y), z + 24.0 * s,
+                 "cloth_red")                                                    # 冠
+    b.box((3.0 * s, 2.8 * s, 3.0 * s), (x + 18.0 * s, y, z + 19.5 * s), "produce_root",
+          rot=(0.0, math.radians(12.0), 0.0))                                    # 喙
+    b.box((11.0 * s, 2.6 * s, 6.0 * s), (x - 14.0 * s, y, z + 15.0 * s), mat,
+          rot=(0.0, math.radians(-38.0), 0.0))                                   # 翘尾
+
+
+def _fish(b, x=0.0, y=0.0, z=0.0, ln=34.0, r=7.0, mat="fish", seed=0):
+    """一条鱼（头朝 -X）：两节纺锤身 + 浅色腹线 + 背/胸/尾鳍 + 两眼（湿光靠材质）。
+
+    鱼在游戏尺寸下是一条 ~50px 的横条，读法全靠三件事：**纺锤轮廓 + 浅腹（与深色
+    背一撞）+ 鳍的碎边**；三者缺一就会被读成"一坨灰纸"。
+    """
+    cz = z + r * 0.98
+    _ring(b, (x + ln * 0.26, y, cz), r, ln * 0.48, mat, 10, "X", taper=0.34)     # 后段（收尾）
+    _ring(b, (x - ln * 0.25, y, cz), r * 0.86, ln * 0.50, mat, 10, "X", taper=0.78)  # 前段（头）
+    b.box((ln * 0.66, r * 1.15, r * 0.26), (x - ln * 0.05, y, cz - r * 0.80), "canvas")
+    b.box((ln * 0.30, 2.0, r * 0.72), (x - ln * 0.02, y, cz + r * 0.94), mat,
+          rot=(0.0, math.radians(-16.0), 0.0))                                   # 背鳍
+    for sz in (1.0, -1.0):
+        b.box((ln * 0.20, 2.0, r * 0.92), (x + ln * 0.55, y, cz + sz * r * 0.60), mat,
+              rot=(0.0, math.radians(38.0 * sz), 0.0))                           # 尾鳍
+    b.box((ln * 0.16, 2.5, r * 0.55), (x - ln * 0.14, y, cz - r * 0.40), mat,
+          rot=(0.0, math.radians(22.0), 0.0))                                    # 胸鳍
+    for sy in (-1.0, 1.0):
+        b.cylinder((x - ln * 0.40, y + sy * r * 0.78, cz + r * 0.26), r * 0.20, 2.0,
+                   "iron", 8, "Y")                                               # 眼
+    _ = seed
+
+
+def _jug(b, x=0.0, y=0.0, z=0.0, r=17.0, h=30.0, mat="clay"):
+    """双耳细颈瓶（酒/油/水）：鼓腹 + 收肩 + 细颈 + 外翻口 + 双耳。"""
+    _ring(b, (x, y, z + h * 0.30), r * 0.90, h * 0.60, mat, 14, "Z", taper=1.08)
+    _ring(b, (x, y, z + h * 0.68), r * 0.98, h * 0.24, mat, 14, "Z", taper=0.64)
+    b.cylinder((x, y, z + h * 0.86), r * 0.46, h * 0.22, mat, 12)
+    _ring(b, (x, y, z + h * 0.98), r * 0.60, h * 0.07, mat, 12)
+    for sx in (-1.0, 1.0):
+        b.box_bottom((5.0, 4.0, h * 0.34), (x + sx * r * 0.84, y), z + h * 0.50, mat)
+
+
+def _basket_load(b, x, y, z_top, r, mat, seed, n=7, k=None):
+    """筐面堆货（叶菜/根菜/鱼）：在筐口之上堆一坨，破掉"空筐"的读法。"""
+    rng = random.Random(seed)
+    k = k if k else r * 0.52
+    for i in range(n):
+        th = rng.uniform(0.0, math.pi * 2.0)
+        rad = rng.uniform(0.0, r * 0.46)
+        b.box((k, k, k * 0.72),
+              (x + math.cos(th) * rad, y + math.sin(th) * rad,
+               z_top + k * 0.32 + rng.uniform(0.0, k * 0.26)),
+              mat, rot=(rng.uniform(-0.35, 0.35), rng.uniform(-0.35, 0.35), th))
+
+
+def basket(b, x=0.0, y=0.0, z=0.0, r=19.0, h=19.0, mat="wicker", rim="wood_light",
+           handle=False, bottom=True):
+    """柳条筐：敞口微外翻 + 口沿加固圈 + 可选提梁。"""
+    _ring(b, (x, y, z + h * 0.47), r * 0.80, h * 0.94, mat, 14, "Z", taper=1.22)
+    _ring(b, (x, y, z + h * 0.93), r * 1.04, h * 0.16, rim, 14)
+    if bottom:
+        b.cylinder((x, y, z + 2.0), r * 0.76, 3.0, rim, 12)
+    if handle:
+        for sx in (-1.0, 1.0):
+            b.box((4.5, 5.0, h * 0.70), (x + sx * r * 0.88, y, z + h * 0.80), mat)
+        b.box((r * 1.76, 5.0, 5.0), (x, y, z + h * 1.14), mat)
+
+
+def produce_baskets(b, x=0.0, y=0.0, z=0.0, r=19.0, h=19.0, seed=0):
+    """菜筐堆：两只落地筐 + 一只叠在上面，筐面堆叶菜/根菜。"""
+    basket(b, x - r * 1.05, y, z, r=r, h=h)
+    _basket_load(b, x - r * 1.05, y, z + h * 0.88, r, "produce", seed + 1)
+    basket(b, x + r * 1.05, y - 2.0, z, r=r * 0.95, h=h * 0.95)
+    _basket_load(b, x + r * 1.05, y - 2.0, z + h * 0.90, r * 0.95, "produce_root", seed + 2)
+    basket(b, x - r * 1.05, y + 1.0, z + h, r=r * 0.86, h=h * 0.84, handle=True)
+    _basket_load(b, x - r * 1.05, y + 1.0, z + h + h * 0.80, r * 0.86, "produce",
+                 seed + 3, n=5)
+
+
+def market_stall(b, x=0.0, y=0.0, z=0.0, w=170.0, d=88.0, h=165.0, mat="timber",
+                 cloth="cloth_ochre", goods=True, seed=0):
+    """市集摊：四柱 + 前柜台（布围裙 + 台面货）+ 前低后高的斜布篷 + 前缘布幔 + 摊下堆货。
+
+    正面 = -Y。三条经验值（都是"从正面看会不会穿帮"倒推的，不要随手改）：
+      ① **篷前缘必须高过台面货在屏幕上的顶**：相机俯角 20°，篷前缘（在 y 更靠前处）
+         下垂的布幔会遮住它身后的台面货 —— 所以前柱取 `h*0.88`、布幔只挂 14 左右，
+         台面货高度压到 `h*0.20` 以内，屏幕上前者才始终在后者上方。
+      ② **布篷要压得住柜台**：后柱 h、前柱 h*0.88，前后落差 20~25 单位，
+         在 20° 俯角下算下来正好能看见布面（再平就压成一条线）。
+      ③ **台前不做整片木板墙**：一块落地木墙会把摊子读成"棚屋"；改成布围裙
+         （垂到台面下 ~55%）+ 露出的台腿与摊下堆货，"摊"的读法才成立。
+    """
+    rng = random.Random(seed)
+    fx = w / 170.0                      # dress() 只缩放主尺寸，内部小件按此比例跟随
+    pw = 9.0 * fx
+    x0, x1 = x - w / 2.0 + pw * 0.6, x + w / 2.0 - pw * 0.6
+    yb, yf = y + d / 2.0 - pw * 0.6, y - d / 2.0 + pw * 0.6
+    pf = h * 0.88                                                               # 前柱高
+    for px in (x0, x1):
+        for (py, ph) in ((yb, h), (yf, pf)):
+            b.box_bottom((pw, pw, ph), (px, py), z, mat)
+    b.box((w + 6.0 * fx, 7.0 * fx, 7.0 * fx), (x, yb, z + h - 12.0 * fx), mat)     # 后梁
+    b.box((w + 6.0 * fx, 6.0 * fx, 6.0 * fx), (x, yf, z + pf - 9.0 * fx), mat)     # 前梁
+    for px in (x0, x1):                                                            # 侧向斜撑
+        _strut(b, (px, yb, z + h - 12.0 * fx), (px, yf, z + pf - 9.0 * fx),
+               6.0 * fx, mat)
+    # 布篷（前低后高）+ 前后压条 + 前缘布幔
+    cz_top = z + h - 6.0 * fx
+    cz_bot = z + pf - 4.0 * fx
+    y_a, y_b = yb, yf - 18.0 * fx
+    rx = math.atan2(cz_top - cz_bot, y_a - y_b)
+    ln = math.hypot(y_a - y_b, cz_top - cz_bot)
+    b.box((w + 16.0 * fx, ln, 3.0 * fx), (x, (y_a + y_b) / 2.0, (cz_top + cz_bot) / 2.0),
+          cloth, rot=(rx, 0.0, 0.0))
+    b.box((w + 17.0 * fx, 5.0 * fx, 5.0 * fx), (x, y_a, cz_top + 2.0 * fx), mat)
+    b.box((w + 17.0 * fx, 4.0 * fx, 4.0 * fx), (x, y_b, cz_bot - 1.0 * fx), mat)
+    nf = max(3, int(w / 42.0))
+    for i in range(nf):
+        fw = (w + 14.0 * fx) / nf - 5.0 * fx
+        fxp = x - (w + 14.0 * fx) / 2.0 + (i + 0.5) * ((w + 14.0 * fx) / nf)
+        fh = (14.0 + rng.uniform(-3.0, 4.0)) * fx
+        b.box((fw, 3.0 * fx, fh), (fxp, y_b - 0.5 * fx, cz_bot - fh * 0.5 - 2.0 * fx), cloth)
+    # 柜台（台面 + 布围裙 + 台腿）
+    ct_h = h * 0.42
+    ct_w = w - 12.0 * fx
+    ct_d = d * 0.62
+    cy = y - d * 0.10
+    b.box_bottom((ct_w, ct_d, 8.0 * fx), (x, cy), z + ct_h, mat)
+    b.box_bottom((ct_w + 4.0 * fx, 5.0 * fx, 5.0 * fx), (x, cy - ct_d / 2.0 + 2.0 * fx),
+                 z + ct_h + 8.0 * fx, mat)                                      # 台沿
+    b.box((ct_w, 3.5 * fx, ct_h * 0.55), (x, cy - ct_d / 2.0 - 2.0 * fx,
+                                          z + ct_h - ct_h * 0.28), cloth)       # 布围裙
+    b.box_bottom((ct_w - 10.0 * fx, ct_d * 0.78, 4.0 * fx), (x, cy), z + ct_h * 0.42, "wood")
+    for sx in (-1.0, 1.0):
+        b.box_bottom((7.0 * fx, ct_d, ct_h), (x + sx * (ct_w / 2.0 - 6.0 * fx), cy),
+                     z + 2.0 * fx, mat)
+    # 台面货（高度压在 h*0.20 以内，否则会在屏幕上顶到前缘布幔）
+    if goods:
+        top = z + ct_h + 8.0 * fx
+        if w >= 140.0:
+            basket(b, x - ct_w * 0.30, cy, top, r=16.0 * fx, h=14.0 * fx)
+            _basket_load(b, x - ct_w * 0.30, cy, top + 12.0 * fx, 15.0 * fx, "produce",
+                         seed + 5, n=6, k=8.0 * fx)
+            crate(b, x + ct_w * 0.06, cy + 2.0 * fx, top, s=28.0 * fx, h=22.0 * fx)
+            _basket_load(b, x + ct_w * 0.06, cy + 2.0 * fx, top + 20.0 * fx, 17.0 * fx,
+                         "produce_root", seed + 6, n=6, k=8.0 * fx)
+            basket(b, x + ct_w * 0.36, cy, top, r=14.0 * fx, h=13.0 * fx)
+            _basket_load(b, x + ct_w * 0.36, cy, top + 11.0 * fx, 13.0 * fx, "bread",
+                         seed + 7, n=5, k=9.0 * fx)
+        else:
+            basket(b, x - ct_w * 0.24, cy, top, r=16.0 * fx, h=14.0 * fx)
+            _basket_load(b, x - ct_w * 0.24, cy, top + 12.0 * fx, 15.0 * fx, "produce",
+                         seed + 5, n=6, k=8.0 * fx)
+            crate(b, x + ct_w * 0.26, cy + 2.0 * fx, top, s=26.0 * fx, h=20.0 * fx)
+    sack(b, x - ct_w * 0.34, cy + 6.0 * fx, z, r=11.0 * fx, h=26.0 * fx)
+    barrel(b, x + ct_w * 0.36, cy + 4.0 * fx, z, r=12.0 * fx, h=34.0 * fx, bands=2)
+
+
+def market_table(b, x=0.0, y=0.0, z=0.0, w=120.0, d=60.0, h=62.0, mat="wood",
+                 cloth="cloth_blue", goods="produce", seed=0):
+    """市集案桌（搁凳 + 台板 + 桌裙 + 台面货）：可单摆，也可摆在摊篷下。
+
+    `goods`：`produce` 菜果 / `cheese` 奶酪（圆形酪轮 + 案板 + 刀）。
+    """
+    rng = random.Random(seed)
+    fw = w / 120.0
+    b.box_bottom((w, d, 7.0 * fw), (x, y), z + h, mat)
+    b.box_bottom((w - 6.0 * fw, d - 6.0 * fw, 4.0 * fw), (x, y), z + h - 9.0 * fw, mat)
+    for sx in (-1.0, 1.0):
+        b.box_bottom((9.0 * fw, d - 8.0 * fw, h - 4.0 * fw),
+                     (x + sx * (w / 2.0 - 10.0 * fw), y), z + 2.0 * fw, "timber")
+        b.box_bottom((7.0 * fw, 6.0 * fw, 30.0 * fw),
+                     (x + sx * (w / 2.0 - 10.0 * fw), y - d / 2.0 + 4.0 * fw), z, "timber")
+    b.box_bottom((w - 26.0 * fw, 5.0 * fw, 5.0 * fw), (x, y), z + h * 0.40, "timber")
+    b.box((w + 5.0 * fw, 4.0 * fw, 30.0 * fw), (x, y - d / 2.0 - 1.0 * fw, z + h - 22.0 * fw),
+          cloth)                                                            # 桌裙
+    top = z + h + 7.0 * fw
+    if goods == "cheese":
+        for (dx, rr, hh) in ((-w * 0.30, 17.0, 9.0), (-w * 0.10, 15.0, 8.0), (w * 0.14, 13.0, 8.0)):
+            _ring(b, (x + dx * fw, y, top + rr * 0.9 * fw), rr * 0.9 * fw, hh * fw,
+                  "bread", 14, "Y")
+        b.box_bottom((w * 0.30, 12.0 * fw, 5.0 * fw), (x + w * 0.33, y - 2.0 * fw), top,
+                     "wood_light")
+        b.box((24.0 * fw, 3.0 * fw, 13.0 * fw), (x + w * 0.33, y - 10.0 * fw,
+                                                top + 11.0 * fw), "iron")     # 酪刀
+    else:
+        basket(b, x - w * 0.30, y, top, r=16.0 * fw, h=15.0 * fw)
+        _basket_load(b, x - w * 0.30, y, top + 13.0 * fw, 16.0 * fw, "produce", seed + 1, n=6)
+        basket(b, x + w * 0.30, y, top, r=15.0 * fw, h=14.0 * fw)
+        _basket_load(b, x + w * 0.30, y, top + 12.0 * fw, 15.0 * fw, "produce_root",
+                     seed + 2, n=6)
+        _jug(b, x + w * 0.06, y + 6.0 * fw, top, r=12.0 * fw, h=22.0 * fw)
+        for i in range(2):
+            b.box((10.0 * fw, 10.0 * fw, 9.0 * fw),
+                  (x - w * 0.08 + i * 12.0 * fw, y - 10.0 * fw, top + 4.0 * fw),
+                  "bread", rot=(rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), 0.0))
+
+
+def awning(b, x=0.0, y=0.0, z=0.0, w=140.0, cloth="cloth_red",
+           arms="iron", valance=4):
+    """纯布篷（挂立面）：墙面横梁 + 两根斜撑杆 + 斜布面 + 前缘不等长布幔。
+
+    y = 墙面（贴面件由 `dress()` 给 `front_y - 4`）。布面向 -Y 伸出 `w*0.42`，
+    靠墙侧高、外缘低 —— 微俯视下能看见布面，不会被压成一条线（§8.1）。
+
+    布幔**必须同色**：两色交替会被读成"一块块方盒"而不是垂布（一轮踩过）。
+    布幔之间留缝、长度不一、上缘压一道深色条，"垂布"的读法才立得住。
+    """
+    proj = w * 0.42
+    drop = w * 0.20
+    z_top = z + drop
+    y0, y1 = y, y - proj
+    b.box((w, 7.0, 7.0), (x, y - 3.0, z_top), "timber")                        # 墙面横梁
+    for sx in (-1.0, 1.0):                                                     # 斜撑杆
+        _strut(b, (x + sx * (w / 2.0 - 6.0), y0 - 2.0, z_top),
+               (x + sx * (w / 2.0 - 6.0), y1 + 4.0, z + 2.0), 5.5, arms)
+    rx = math.atan2(drop, y0 - y1)
+    ln = math.hypot(y0 - y1, drop)
+    b.box((w + 12.0, ln, 3.0), (x, (y0 + y1) / 2.0, (z_top + z) / 2.0), cloth,
+          rot=(rx, 0.0, 0.0))
+    b.box((w + 13.0, 5.0, 5.0), (x, y0 - 2.0, z_top + 2.0), "timber")          # 靠墙压条
+    b.box((w + 13.0, 4.0, 4.0), (x, y1 + 2.0, z), "timber")                    # 外缘压条
+    n = max(2, int(valance))
+    for i in range(n):
+        fw = (w + 10.0) / n - w * 0.035
+        fxp = x - (w + 10.0) / 2.0 + (i + 0.5) * ((w + 10.0) / n)
+        fh = w * 0.14 * (1.0 + 0.26 * ((i % 2) * 2 - 1))
+        b.box((fw, 3.0, fh), (fxp, y1 + 1.5, z - fh * 0.5 - 1.0), cloth)
+        b.box((fw + 1.5, 4.0, 4.0), (fxp, y1 + 2.5, z - 2.0), "timber")         # 幔上压条
+
+
+def hanging_sign(b, x=0.0, y=0.0, z=0.0, w=48.0, h=38.0, arm=None, mat="wood_dark",
+                 iron="iron", board_mat="cloth_red", emblem=True, swing=0.0):
+    """铁艺挂招牌（贴面）：墙面铁座 + 挑臂 + 卷草 + 吊环 + 木牌（可带彩绘牌面）。
+
+    与 `signboard`（旧）的分工：那个是"铁支架 + 木牌"的通用款；这个专做**铁艺挑臂
+    挂招牌**（锻铁卷草 + 双吊环 + 彩绘牌面），市集/店铺立面用它才有中世纪街味。
+    """
+    arm = arm if arm else w * 1.25
+    b.box_bottom((10.0, 6.0, h * 1.30), (x, y - 2.0), z - 4.0, iron)           # 墙面竖座
+    for k in range(3):
+        b.box_bottom((14.0, 9.0, 5.0), (x, y - 3.0), z - 2.0 + k * (h * 0.55), iron)
+    _strut(b, (x, y - 3.0, z + h * 1.05), (x, y - arm, z + h * 0.86), 6.0, iron)  # 挑臂（略上翘）
+    b.box((6.0, 6.0, 15.0), (x, y - arm * 0.93, z + h * 0.86), iron)
+    _ring(b, (x, y - arm * 0.60, z + h * 0.76), 7.5, 4.5, iron, 10, "Y")        # 卷草
+    _strut(b, (x, y - arm * 0.66, z + h * 0.80), (x, y - arm * 0.30, z + h * 0.28),
+           4.5, iron)                                                           # 斜拉杆
+    for sx in (-1.0, 1.0):                                                      # 吊环
+        b.box_bottom((3.4, 3.4, 10.0), (x + sx * (w * 0.30), y - arm * 0.86),
+                     z + h * 0.60, iron)
+    b.box((w, 4.0, h), (x, y - arm * 0.96, z + h * 0.06), mat,
+          rot=(0.0, math.radians(swing), 0.0))
+    b.box((w + 5.0, 6.0, 4.5), (x, y - arm * 0.96, z + h * 0.52), iron)
+    b.box((w + 5.0, 6.0, 4.5), (x, y - arm * 0.96, z - h * 0.44), iron)
+    if emblem:
+        b.box((w * 0.56, 3.0, h * 0.56), (x, y - arm * 0.96 - 3.6, z + h * 0.04), board_mat)
+
+
+def standing_board(b, x=0.0, y=0.0, z=0.0, w=44.0, h=66.0, mat="wood",
+                   panel="white_stone"):
+    """A 字招牌：两块斜立板 + 顶部铁铰 + 白色板面（摊前/店门口的招揽牌）。"""
+    for sy in (-1.0, 1.0):
+        for sx in (-1.0, 1.0):
+            _strut(b, (x + sx * w * 0.44, y + sy * 3.0, z + 2.0),
+                   (x + sx * w * 0.10, y + sy * 12.0, z + h), 4.5, mat)
+        b.box((w * 0.94, 5.0, h * 0.86), (x, y + sy * 9.0, z + h * 0.48), mat,
+              rot=(math.radians(9.0 * sy), 0.0, 0.0))
+    b.box((w * 0.74, 3.0, h * 0.56), (x, y - 11.5, z + h * 0.55), panel,
+          rot=(math.radians(-9.0), 0.0, 0.0))
+    b.box((w * 0.9, 6.0, 6.0), (x, y, z + h - 2.0), "iron")
+
+
+def fish_table(b, x=0.0, y=0.0, z=0.0, w=110.0, d=52.0, h=60.0, mat="wood", seed=0):
+    """鱼摊案板：厚案板 + 三条约 0.45m 的鱼 + 鱼刀 + 台下鱼篓与提桶。"""
+    fw = w / 110.0
+    b.box_bottom((w, d, 9.0 * fw), (x, y), z + h, "wood_light")               # 厚案板
+    b.box_bottom((w + 8.0 * fw, 6.0 * fw, 6.0 * fw), (x, y - d / 2.0 + 3.0 * fw),
+                 z + h + 9.0 * fw, "wood")
+    for sx in (-1.0, 1.0):
+        b.box_bottom((10.0 * fw, d - 10.0 * fw, h - 6.0 * fw),
+                     (x + sx * (w / 2.0 - 12.0 * fw), y), z, "timber")
+    b.box_bottom((w - 20.0 * fw, d - 16.0 * fw, 5.0 * fw), (x, y), z + h * 0.52, "timber")
+    basket(b, x - w * 0.30, y, z + h * 0.52 + 5.0 * fw, r=15.0 * fw, h=14.0 * fw)
+    _basket_load(b, x - w * 0.30, y, z + h * 0.52 + 19.0 * fw, 15.0 * fw, "fish", seed + 1, n=5)
+    bucket(b, x + w * 0.33, y + 2.0 * fw, z + h * 0.52 + 5.0 * fw,
+           r=9.0 * fw, h=18.0 * fw)
+    top = z + h + 9.0 * fw
+    for i in range(3):
+        _fish(b, x - w * 0.30 + i * (w * 0.30), y - 9.0 * fw + i * 7.0 * fw, top,
+              ln=w * 0.40, r=w * 0.082, seed=seed + i)
+    b.box((30.0 * fw, 3.0 * fw, 15.0 * fw), (x + w * 0.44, y + 12.0 * fw, top + 14.0 * fw),
+          "iron")                                                              # 鱼刀
+    b.box_bottom((26.0 * fw, 16.0 * fw, 8.0 * fw), (x - w * 0.46, y + 9.0 * fw),
+                 top, "white_stone")                                           # 盐箱
+
+
+def pottery_row(b, x=0.0, y=0.0, z=0.0, n=5, r=17.0, h=30.0, mat="clay", seed=0):
+    """陶器摊：一列大小不一的陶罐/双耳瓶 + 一只侧倒（破掉"一排站桩"的读法）。"""
+    rng = random.Random(seed)
+    span = r * 2.4 * n
+    for i in range(n):
+        px = x - span / 2.0 + (i + 0.5) * (span / n)
+        rr = r * rng.uniform(0.72, 1.10)
+        hh = h * rng.uniform(0.70, 1.15)
+        py = y + rng.uniform(-2.0, 2.0)
+        if i % 3 == 1:
+            _jug(b, px, py, z, r=rr, h=hh, mat=mat)
+        else:
+            pot(b, px, py, z, r=rr, h=hh, mat=mat, plant=False)
+    _ring(b, (x + span * 0.5 + r * 0.95, y, z + r * 0.92), r * 0.90, h * 0.72,
+          mat, 12, "Y", taper=0.92)                                             # 侧倒的一只
+
+
+def wash_tub(b, x=0.0, y=0.0, z=0.0, r=30.0, h=26.0, mat="wood", cloth="cloth_blue",
+             cloth2="cloth_red", board=True, bucket_side=True, seed=0):
+    """洗衣盆：木箍大盆 + 盆内水面 + 搭在盆沿的湿布 + 斜靠的搓衣板 + 提桶。"""
+    rng = random.Random(seed)
+    _open_vat(b, x, y, z, r, h, mat, seg=18, t=r * 0.16, water="water", band=0.55)
+    _cloth_over_rim(b, x + r * 0.55, y - r * 0.30, z, r * 0.92, h, cloth, rng,
+                    width=r * 0.85)
+    if board:
+        # 搓衣板**靠在盆外侧**（底在身前地面、上端搭在盆沿）：塞进盆里会被盆壁整个
+        # 挡住（微俯视下"看不见"就等于没做）。
+        bw, bh = r * 1.15, h * 2.1
+        bx = x - r * 0.40
+        p0 = (bx, y - r * 1.32, z + 2.0)
+        p1 = (bx, y - r * 0.46, z + h * 1.95)
+        _strut(b, p0, p1, bw, "wood_light", thick=3.6)
+        for i in range(4):
+            t = 0.18 + i * 0.21
+            px = bx
+            py = p0[1] + (p1[1] - p0[1]) * t - 2.6
+            pz = p0[2] + (p1[2] - p0[2]) * t
+            b.box((bw * 0.86, 2.4, 2.6), (px, py, pz), "wood_light",
+                  rot=_euler_to(0.0, p1[1] - p0[1], p1[2] - p0[2]))
+    if bucket_side:
+        bucket(b, x + r * 1.32, y + r * 0.30, z, r=r * 0.32, h=h * 0.76)
+        b.box((6.0, 5.0, 10.0), (x + r * 1.05, y + r * 0.20, z + h * 0.9), cloth2,
+              rot=(math.radians(-12.0), 0.0, math.radians(20.0)))
+    _ = rng
+
+
+def dye_pots(b, x=0.0, y=0.0, z=0.0, n=3, r=21.0, h=32.0, mat="clay", seed=0):
+    """染缸组：数口陶缸（深靛液面）+ 缸沿搭着的染色布 + 靠着的搅棍。"""
+    rng = random.Random(seed)
+    gap = r * 2.5
+    for i in range(n):
+        px = x - (n - 1) * gap / 2.0 + i * gap
+        py = y + rng.uniform(-3.0, 3.0)
+        rv = r * rng.uniform(0.88, 1.08)
+        hv = h * rng.uniform(0.86, 1.06)
+        _open_vat(b, px, py, z, rv, hv, mat, seg=16, t=rv * 0.20, water="dye_bath",
+                  band=0.60)
+        if i % 2 == 0:
+            _cloth_over_rim(b, px + rv * 0.30, py - rv * 0.35, z, rv * 0.9, hv,
+                            "cloth_blue" if i == 0 else "cloth_red", rng,
+                            width=rv * 0.9)
+        else:
+            b.box((5.0, 5.0, hv * 1.95), (px - rv * 0.80, py - rv * 0.25, z + hv * 0.95),
+                  "wood", rot=(0.0, math.radians(-20.0), 0.0))                   # 搅棍
+            b.box((rv * 0.55, 4.0, hv * 0.80), (px - rv * 1.40, py - rv * 0.30, z + hv * 0.72),
+                  "cloth_blue", rot=(0.0, math.radians(-9.0), 0.0))             # 绞布挂杆
+
+
+def sack_stack(b, x=0.0, y=0.0, z=0.0, r=13.0, h=30.0, seed=0, patch=True):
+    """麻袋堆：底层三袋 + 中层两袋 + 顶一袋（逐层错位、层间下沉 20% 才像压着堆）。"""
+    rng = random.Random(seed)
+    rows = ((0, (-1.0, 0.0, 1.0)), (1, (-0.5, 0.5)), (2, (0.0,)))
+    for (lv, offs) in rows:
+        lz = z + lv * h * 0.80
+        for k in offs:
+            px = x + k * r * 1.85 + rng.uniform(-1.5, 1.5)
+            py = y + rng.uniform(-3.0, 3.0)
+            sack(b, px, py, lz, r=r, h=h * (1.0 - 0.06 * lv), mat="sack", ear=(lv > 1))
+            if patch and rng.random() < 0.55:
+                b.box((r * 0.9, 3.0, r * 0.7), (px, py - r * 0.95, lz + h * 0.40),
+                      "cloth_ochre" if rng.random() < 0.5 else "cloth_red")
+
+
+def barrel_stand(b, x=0.0, y=0.0, z=0.0, w=104.0, r=13.0, bl=34.0, h=44.0,
+                 mat="timber", tap=True):
+    """双层酒桶架：四腿木架，下层两只横躺落地、上层两只落在横档上（带龙头）。"""
+    lg = max(6.0, w * 0.085)
+    for sx in (-1.0, 1.0):
+        for sy in (-1.0, 1.0):
+            b.box_bottom((lg, lg, h + 6.0), (x + sx * (w / 2.0 - lg * 0.6),
+                                            y + sy * (bl * 0.62)), z, mat)
+    for sy in (-1.0, 1.0):
+        b.box((w, 7.0, 7.0), (x, y + sy * (bl * 0.62), z + h), mat)             # 上层横档
+        _strut(b, (x + w / 2.0 - lg * 0.6, y + sy * (bl * 0.62), z + h),
+               (x + w / 2.0 - lg * 0.6, y + sy * (bl * 0.62), z), lg * 0.7, mat)
+    for sx in (-1.0, 1.0):                                                      # 侧向斜撑
+        _strut(b, (x - sx * (w / 2.0 - lg * 0.6), y - bl * 0.62, z + h),
+               (x - sx * (w / 2.0 - lg * 0.6), y + bl * 0.62, z + h), lg * 0.7, mat)
+    for sx in (-1.0, 1.0):
+        barrel(b, x + sx * (w * 0.25), y, z, r=r, h=bl, lying=True)             # 下层
+        barrel(b, x + sx * (w * 0.25), y, z + h + 3.5, r=r * 0.94, h=bl * 0.94,
+               lying=True)                                                      # 上层
+    if tap:
+        b.cylinder((x - w * 0.25, y - bl * 0.5 - 3.0, z + h + r * 0.9), 3.0, 10.0,
+                   "iron", 8, "Y")
+        b.box_bottom((9.0, 6.0, 7.0), (x - w * 0.25, y - bl * 0.5 - 9.0),
+                     z + h + r * 0.6, "iron")
+
+
+def bread_tray(b, x=0.0, y=0.0, z=0.0, w=60.0, h=76.0, d=34.0, mat="wood",
+               loaves=5, seed=0):
+    """面包架：三层（微前倾）托盘 + 圆面包/长棍 + 盖布角 + 立柱与顶梁。"""
+    rng = random.Random(seed)
+    fw = w / 60.0
+    for sx in (-1.0, 1.0):
+        b.box_bottom((7.0 * fw, 7.0 * fw, h), (x + sx * (w / 2.0 - 5.0 * fw), y),
+                     z, "timber")
+    b.box((w + 6.0 * fw, 5.0 * fw, 5.0 * fw), (x, y, z + h), "timber")
+    tilt = math.radians(-7.0)
+    for i in range(3):
+        sz = z + 12.0 * fw + i * (h * 0.30)
+        b.box((w, d, 5.0 * fw), (x, y, sz), mat, rot=(tilt, 0.0, 0.0))
+        b.box((w + 3.0 * fw, 4.0 * fw, 5.0 * fw), (x, y - d / 2.0, sz + 3.0 * fw), "timber")
+        nn = max(2, loaves // 2)
+        for k in range(nn):
+            px = x - w * 0.34 + (k + 0.5) * (w * 0.68 / nn)
+            rr = w * 0.10 * rng.uniform(0.80, 1.15)
+            if i == 1:
+                b.box((w * 0.30, rr * 1.5, rr * 0.95), (px, y, sz + 3.0 * fw + rr * 0.5),
+                      "bread", rot=(0.0, 0.0, rng.uniform(-0.25, 0.25)))
+            else:
+                _ring(b, (px, y, sz + 3.0 * fw + rr * 0.52), rr * 0.92, rr * 0.92,
+                      "bread", 12, "Y")
+    b.box((w * 0.5, d * 0.9, 4.0 * fw), (x + w * 0.22, y, z + 12.0 * fw + h * 0.60 + 6.0 * fw),
+          "canvas")                                                             # 盖布
+
+
+def herb_rack(b, x=0.0, y=0.0, z=0.0, w=64.0, n=6, seed=0, mat="timber"):
+    """墙面草药晾架（贴面）：横杆 + 两只托架 + 一束束倒挂的香草/蒜辫。"""
+    rng = random.Random(seed)
+    b.box((w, 7.0, 7.0), (x, y, z), mat)                                        # 横杆
+    for sx in (-1.0, 1.0):                                                      # 托架
+        b.box_bottom((6.0, 6.0, 16.0), (x + sx * (w / 2.0 - 8.0), y + 3.0), z - 13.0, mat)
+        b.box((22.0, 6.0, 6.0), (x + sx * (w / 2.0 - 14.0), y + 6.0, z - 4.0), mat)
+    for i in range(n):
+        px = x - w * 0.42 + (i + 0.5) * (w * 0.84 / n)
+        ln = w * rng.uniform(0.36, 0.56)
+        mm = "foliage" if i % 2 == 0 else "straw"
+        _ring(b, (px, y - 2.0, z - 5.0 - ln * 0.5), ln * 0.09, ln, mm, 10, "Z", taper=1.32)
+        b.box((7.0, 5.0, 5.0), (px, y - 2.0, z - 6.0), "rope")
+        if i % 3 == 2:
+            b.box((5.0, 5.0, 9.0), (px + 4.0, y - 2.0, z - 12.0 - ln), "produce_root")
+
+
+def lantern_post(b, x=0.0, y=0.0, z=0.0, h=196.0, arm=None, mat="timber", lit=True,
+                 s=None):
+    """立柱灯笼：石座 + 木柱 + 铁箍/挂环 + 挑臂 + 灯笼（自发光）+ 斜撑。
+
+    灯笼复用既有 `lantern()`（`belt/materials` 的 `lamp` 自发光玻璃），所以夜里
+    亮的是同一套材质，不会出现"柱子上的灯和门口灯不是一个色"。
+    """
+    arm = arm if arm else h * 0.16
+    s = s if s else h * 0.098
+    k = s / 19.0                                    # 内部小件的等比系数（s=19 为标称值）
+    b.box_bottom((26.0 * k, 26.0 * k, 12.0 * k), (x, y), z, "stone_dark")
+    b.box_bottom((12.0 * k, 12.0 * k, h), (x, y), z + 10.0 * k, mat)
+    b.box_bottom((16.0 * k, 16.0 * k, 8.0 * k), (x, y), z + h * 0.35, "iron")
+    _ring(b, (x, y, z + h * 0.62), 8.0 * k, 5.0 * k, "iron", 12, "X")
+    b.box((arm, 7.0 * k, 7.0 * k), (x, y - arm * 0.5, z + h - 5.0 * k), "iron")   # 挑臂
+    _strut(b, (x, y - 3.0 * k, z + h - 26.0 * k),
+           (x, y - arm + 5.0 * k, z + h - 8.0 * k), 5.0 * k, "iron")              # 斜撑
+    b.box_bottom((5.0 * k, 5.0 * k, 12.0 * k), (x, y - arm + 4.0 * k), z + h - 20.0 * k,
+                 "iron")
+    lantern(b, x, y - arm + 4.0 * k, z + h - 32.0 * k, s=s, h=s * 1.5,
+            bracket=False, lit=lit)
+
+
+def chicken_coop(b, x=0.0, y=0.0, z=0.0, w=92.0, d=60.0, h=56.0, mat="wood",
+                 roof_mat="wood_shingle", hens=3, seed=0):
+    """鸡笼：木板笼身 + 单坡顶 + 出入洞（朝前）+ 带横档的踏板坡道 + 散养母鸡。"""
+    rng = random.Random(seed)
+    fw = w / 92.0
+    b.box_bottom((w, d, h), (x, y), z, mat)                                     # 笼身
+    b.box_bottom((w * 0.30, 4.0 * fw, h * 0.40), (x - w * 0.16, y - d / 2.0 - 1.0 * fw),
+                 z + 2.0 * fw, "cavity")                                        # 出入洞
+    b.box((w * 0.34, 5.0 * fw, h * 0.40), (x - w * 0.16, y - d / 2.0 - 3.0 * fw, z + h * 0.22),
+          "timber")                                                             # 洞框
+    b.box((w + 12.0 * fw, d + 16.0 * fw, 6.0 * fw), (x, y, z + h + 5.0 * fw), roof_mat,
+          rot=(math.radians(-7.0), 0.0, 0.0))                                   # 单坡顶
+    rl = h * 0.95                                                               # 坡道
+    ry = y - d / 2.0 - rl * 0.44
+    rz = z + h * 0.21
+    ang = math.radians(-58.0)          # 绕 X 转 → 盒子**长边必须是局部 Z**（局部 Y 是坡长会埋进地里）
+    b.box((w * 0.30, 4.0 * fw, rl), (x - w * 0.16, ry, rz), "wood_light", rot=(ang, 0.0, 0.0))
+    for i in range(4):                                                          # 坡道横档
+        s = -rl * 0.34 + i * rl * 0.24
+        b.box((w * 0.30 + 3.0 * fw, 3.0 * fw, 3.0 * fw),
+              (x - w * 0.16, ry + s * 0.848, rz + s * 0.530), "wood_light", rot=(ang, 0.0, 0.0))
+    hs = fw * 1.5
+    # 站位全部落在笼身**前方**（oy ≤ -0.6 → y - d*0.6，笼身前沿在 -0.5）：站进笼子
+    # 里就是穿模；同时避开 x -0.31w..-0.01w 那段坡道。
+    spots = ((-0.62, -0.66), (0.16, -0.92), (0.46, -1.10), (-0.30, -1.18))
+    for i in range(max(0, min(hens, len(spots)))):
+        (ox, oy) = spots[i]
+        _hen(b, x + w * ox, y + d * oy, z, s=hs,
+             mat="canvas" if i % 2 == 0 else "cloth_ochre")
+    _ = rng
+
+
+def cart_loaded(b, x=0.0, y=0.0, z=0.0, w=110.0, d=52.0, seed=0, sacks=2, barrels=1,
+                hay=True):
+    """载货板车：复用 `cart` 的辐条轮组/车厢/辕杆，再压上箱 + 袋 + 卧桶 + 草捆。"""
+    cart(b, x=x, y=y, z=z, w=w, d=d, loaded=0)
+    fw = w / 110.0
+    top = z + 30.0 + 5.0
+    crate(b, x - w * 0.22, y + 2.0 * fw, top, s=w * 0.24, h=w * 0.20)
+    crate(b, x - w * 0.22, y + 2.0 * fw, top + w * 0.20, s=w * 0.20, h=w * 0.17)
+    for i in range(sacks):
+        sack(b, x + w * 0.14 + i * w * 0.15, y - 6.0 * fw + i * 5.0 * fw, top,
+             r=w * 0.10, h=w * 0.24)
+    if barrels:
+        barrel(b, x + w * 0.30, y + 3.0 * fw, top, r=w * 0.10, h=w * 0.27, lying=True)
+    if hay:
+        hay_bale(b, x + w * 0.03, y + 4.0 * fw, top + w * 0.20, w=w * 0.42,
+                 d=26.0 * fw, h=22.0 * fw, mat="thatch", seed=seed)
+    basket(b, x - w * 0.52, y + d * 0.48, top - 12.0 * fw, r=12.0 * fw, h=12.0 * fw,
+           handle=True)
+
+
+def stone_pile(b, x=0.0, y=0.0, z=0.0, w=88.0, h=40.0, seed=0, cut=True):
+    """石料堆：底层一坨深色碎石 + 上面两块**浅色**方整料石 + 撬棍。
+
+    对比是刻意的：碎石用 `stone_dark`、料石用 `stone`。全用浅石在沙土地上会糊成
+    一坨"沙堆"，深浅一撞才读得出"石料 + 待砌的料石"。
+    """
+    rng = random.Random(seed)
+    # 底床做成**低平的碎石床**而不是圆锥：圆锥在 20° 俯视下侧面全在暗部，会读成
+    # "一顶深色小帐篷"（草垛也踩过同一个坑）。
+    _ring(b, (x, y, z + h * 0.09), w * 0.44, h * 0.20, "stone_dark", 12, "Z", taper=0.90)
+    for i in range(11):
+        a = rng.uniform(0.0, math.pi * 2.0)
+        rad = rng.uniform(0.0, w * 0.40)
+        s = w * rng.uniform(0.09, 0.17)
+        b.box((s, s * 0.82, s * 0.62),
+              (x + math.cos(a) * rad, y + math.sin(a) * rad * 0.62,
+               z + h * 0.16 + rng.uniform(0.0, h * 0.16)),
+              "stone_dark" if i % 3 else "stone",
+              rot=(rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), rng.uniform(0.0, 3.0)))
+    if cut:
+        b.box_bottom((w * 0.42, w * 0.24, h * 0.30), (x - w * 0.10, y), z + h * 0.20, "stone")
+        b.box_bottom((w * 0.30, w * 0.20, h * 0.24), (x + w * 0.06, y + w * 0.05),
+                     z + h * 0.50, "stone")
+        b.box((6.0, 6.0, h * 0.48), (x + w * 0.34, y - w * 0.12, z + h * 0.42), "timber",
+              rot=(0.0, math.radians(16.0), 0.0))
+
+
+def firewood_basket(b, x=0.0, y=0.0, z=0.0, r=20.0, h=22.0, seed=0, lean=2):
+    """柴篓：柳条筐 + 竖插的劈柴（端面朝上）+ 斜靠的两根长柴。"""
+    rng = random.Random(seed)
+    basket(b, x, y, z, r=r, h=h)
+    for i in range(7):
+        th = rng.uniform(0.0, math.pi * 2.0)
+        rad = rng.uniform(0.0, r * 0.62)
+        ln = h * rng.uniform(1.5, 2.1)
+        lx, ly = x + math.cos(th) * rad, y + math.sin(th) * rad
+        b.cylinder((lx, ly, z + ln / 2.0), r * 0.17, ln, "wood_light", 8, "Z",
+                   taper=rng.uniform(0.86, 1.0))
+        b.cylinder((lx, ly, z + ln - 0.8), r * 0.16, 1.8, "wood_dark", 8, "Z")
+    for i in range(lean):
+        b.box((6.0, 6.0, h * 1.6), (x + (i * 2 - 1) * r * 0.85, y + r * 0.45, z + h * 0.72),
+              "wood", rot=(math.radians(-14.0), 0.0, math.radians((i * 2 - 1) * 10.0)))
+
+
+def milk_churn(b, x=0.0, y=0.0, z=0.0, r=12.0, h=54.0, mat="iron", lid=True, handle=True):
+    """奶桶（束颈高桶）：下宽上收 + 束颈 + 盖 + 双耳 + 底圈。"""
+    _ring(b, (x, y, z + h * 0.40), r * 0.92, h * 0.80, mat, 14, "Z", taper=0.74)
+    _ring(b, (x, y, z + h * 0.84), r * 0.70, h * 0.10, mat, 14)
+    b.cylinder((x, y, z + h * 0.94), r * 0.76, h * 0.08, mat, 14)
+    _ring(b, (x, y, z + 2.0), r * 1.02, 4.0, mat, 14)
+    if lid:
+        b.cylinder((x, y, z + h * 0.99), r * 0.80, 3.0, mat, 14)
+        b.box_bottom((5.0, 5.0, 5.0), (x, y), z + h * 1.02, mat)
+    if handle:
+        for sx in (-1.0, 1.0):
+            b.box_bottom((3.0, 4.0, 12.0), (x + sx * r * 0.82, y), z + h * 0.66, mat)
+
+
+def crate_stack(b, x=0.0, y=0.0, z=0.0, s=30.0, h=26.0, n=3, seed=0, plank=True):
+    """货箱堆：三层箱（逐层错位微转）+ 顶上一块散板 + 脚边一捆绳。"""
+    rng = random.Random(seed)
+    for i in range(n):
+        crate(b, x + rng.uniform(-3.0, 3.0), y + rng.uniform(-3.0, 3.0),
+              z + i * (h + 1.0), s=s * (1.0 - 0.05 * i), h=h * (1.0 - 0.05 * i))
+    if plank:
+        b.box((s * 1.5, s * 0.7, 3.0), (x - s * 0.05, y + s * 0.1, z + n * (h + 1.0) + 1.5),
+              "wood_light", rot=(0.0, 0.0, math.radians(rng.uniform(-8.0, 8.0))))
+        rope_coil(b, x + s * 0.95, y - s * 0.9, z, r=s * 0.42)
+
+
+def water_butt(b, x=0.0, y=0.0, z=0.0, r=16.0, h=54.0, lid=True, tap=True, bucket2=True):
+    """接雨水的立桶：高桶（开口 + 水面）+ 半边板盖 + 铁龙头 + 接水桶。"""
+    barrel(b, x, y, z, r=r, h=h, bands=3, mat="wood", open_top=True, water=True)
+    if lid:
+        for sx in (-1.0, 1.0):
+            b.box_bottom((r * 1.3, 5.0, 5.0), (x + sx * r * 0.66, y), z + h - 1.0,
+                         "wood_dark")
+    if tap:
+        b.cylinder((x, y - r * 1.06, z + h * 0.36), 3.2, 12.0, "iron", 8, "Y")
+        _ring(b, (x, y - r * 1.06 - 6.0, z + h * 0.30), 4.0, 9.0, "iron", 8, "X")
+    if bucket2:
+        bucket(b, x + r * 0.55, y - r * 1.55, z, r=r * 0.52, h=h * 0.30)
+
+
+def hay_bale(b, x=0.0, y=0.0, z=0.0, w=76.0, d=42.0, h=34.0, mat="thatch", seed=0,
+             fork=False):
+    """草捆（方捆）：两道绳 + 参差的草梢端面（破掉"方盒"的读法）。"""
+    rng = random.Random(seed)
+    fw = w / 76.0
+    b.box_bottom((w, d, h), (x, y), z, mat)
+    for i in range(2):
+        _ring(b, (x + (i * 2 - 1) * w * 0.26, y, z + h * 0.5), h * 0.56, 3.0 * fw,
+              "rope", 12, "X")
+    for i in range(8):
+        b.box((7.0 * fw, 5.0 * fw, 5.0 * fw),
+              (x + w * 0.5 + rng.uniform(-1.0, 1.0),
+               y + rng.uniform(-d * 0.4, d * 0.4), z + rng.uniform(3.0, h - 3.0)),
+              "straw", rot=(rng.uniform(-0.6, 0.6), rng.uniform(-0.6, 0.6), 0.0))
+    if fork:
+        hay_fork(b, x + w * 0.42, y + d * 0.30, z)
+
+
+def stew_pot(b, x=0.0, y=0.0, z=0.0, r=22.0, h=26.0, mat="iron", fire=True, ladle=True):
+    """吊锅灶：三脚铁架 + 挂链 + 吊锅（能看见汤面）+ 灶膛余烬（自发光）+ 长柄勺。"""
+    top = z + h * 3.0
+    for i in range(3):
+        a = 2.0 * math.pi * i / 3.0 + math.pi / 2.0
+        _strut(b, (x + math.cos(a) * r * 1.05, y + math.sin(a) * r * 1.05, z),
+               (x, y, top), r * 0.30, "iron")
+    _ring(b, (x, y, top + 4.0), r * 0.22, 8.0, "iron", 10)
+    b.box_bottom((r * 0.16, r * 0.16, 14.0), (x, y), top - 8.0, "iron")        # 挂链
+    _open_vat(b, x, y, top - 34.0, r, h, mat, seg=16, t=r * 0.15, water="water")
+    for sx in (-1.0, 1.0):
+        b.box_bottom((r * 0.30, 4.0, 5.0), (x + sx * r * 0.66, y), top - 30.0, "iron")
+    _ring(b, (x, y, z + 5.0), r * 0.85, 11.0, "stone_dark", 12)                # 灶圈
+    if fire:
+        for i in range(5):
+            a = math.pi * 2.0 * i / 5.0
+            b.box((9.0, 9.0, 7.0),
+                  (x + math.cos(a) * r * 0.36, y + math.sin(a) * r * 0.36, z + 9.0),
+                  "ember", rot=(0.0, 0.0, a))
+        b.box_bottom((r * 0.68, r * 0.68, 8.0), (x, y), z + 8.0, "fire")
+    if ladle:
+        _strut(b, (x + r * 1.45, y - r * 0.45, z), (x + r * 0.45, y - r * 0.22, top - 26.0),
+               4.5, "wood")
+        b.cylinder((x + r * 0.50, y - r * 0.22, top - 30.0), r * 0.26, 8.0, "iron", 10)
+
+
+def broom_bundle(b, x=0.0, y=0.0, z=0.0, h=118.0, n=2, seed=0):
+    """靠墙的扫帚/柴捆（贴面）：柄上端抵墙，草梢在下端散开成帚。"""
+    rng = random.Random(seed)
+    for i in range(n):
+        px = x + (i - (n - 1) / 2.0) * h * 0.14
+        _strut(b, (px, y - h * 0.22, z), (px, y - 4.0, z + h), h * 0.042, "wood_light")
+        for k in range(5):
+            th = -0.5 + k * 0.25
+            _strut(b, (px + math.sin(th) * h * 0.04, y - h * 0.20, z + h * 0.22),
+                   (px + math.sin(th) * h * 0.10,
+                    y - h * 0.26 - rng.uniform(0.0, h * 0.04), z + 2.0),
+                   h * 0.034, "straw")
+        _ring(b, (px, y - h * 0.21, z + h * 0.19), h * 0.058, h * 0.05, "rope", 10, "X")
+
+
+def flower_bucket(b, x=0.0, y=0.0, z=0.0, r=10.0, h=21.0, n=9, seed=0, bucket2=True):
+    """花桶：木提桶里插一把剪下的花（红/蓝花头 + 绿叶茎），旁边再来一只空桶。"""
+    rng = random.Random(seed)
+    bucket(b, x, y, z, r=r, h=h)
+    for i in range(n):
+        th = rng.uniform(0.0, math.pi * 2.0)
+        rad = rng.uniform(0.0, r * 0.60)
+        ln = h * rng.uniform(1.05, 1.65)
+        sx, sy = x + math.cos(th) * rad, y + math.sin(th) * rad
+        b.box((2.6, 2.6, ln), (sx, sy, z + h + ln * 0.5 - 3.0), "foliage",
+              rot=(rng.uniform(-0.22, 0.22), rng.uniform(-0.22, 0.22), 0.0))
+        b.box((6.5, 6.5, 6.0),
+              (sx + rng.uniform(-2.0, 2.0), sy + rng.uniform(-2.0, 2.0), z + h + ln - 2.0),
+              "cloth_red" if i % 2 == 0 else "cloth_blue",
+              rot=(rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), rng.uniform(0.0, 3.0)))
+    if bucket2:
+        bucket(b, x + r * 2.6, y + 3.0, z, r=r * 0.86, h=h * 0.86)
+
+
 # ================================================================ 挂载调度
 
 #: 游戏内 1:1 可辨的默认放大系数。道具按"现实尺寸"建模（桶高 0.55m、铁砧全高 1.2m），
@@ -570,6 +1343,10 @@ DRESS = {
         ("haystack", 1, dict(r=20.0, h=38.0)),
         ("ladder", -1, dict(h=96.0)),
         ("pot", 1, dict(r=10.0, h=16.0)),
+        # ---- 二轮追加（一律挂在尾部：宽不够时从尾部丢，既有排布不动）----
+        ("firewood_basket", 1, dict(r=20.0, h=22.0)),
+        ("basket", -1, dict(r=17.0, h=17.0)),
+        ("milk_churn", -1, dict(r=11.0, h=50.0)),
     ],
     "townhouse": [
         ("signboard", -1, dict(w=48.0, h=36.0, swing=2.5)),
@@ -578,6 +1355,10 @@ DRESS = {
         ("sack", -1, dict(r=12.0, h=28.0)),
         ("pot", -1, dict(r=9.0, h=15.0)),
         ("clothesline", 1, dict(x0=-30.0, x1=30.0, z=120.0, items=2)),
+        # ---- 二轮追加（尾部低优先级）----
+        ("flower_bucket", 1, dict(r=10.0, h=20.0)),
+        ("basket", -1, dict(r=17.0, h=17.0)),
+        ("hanging_sign", -1, dict(w=42.0, h=32.0, z=178.0)),
     ],
     "barn": [
         ("cart", 1, dict(w=92.0, loaded=3)),
@@ -586,6 +1367,10 @@ DRESS = {
         ("hay_fork", -1, {}),
         ("log_pile", -1, dict(rows=2, per_row=5)),
         ("fence", 1, dict(x0=-30.0, x1=30.0, wattle=True)),
+        # ---- 二轮追加 ----
+        ("hay_bale", 1, dict(w=76.0, h=34.0)),
+        ("chicken_coop", -1, dict(w=88.0, h=52.0)),
+        ("basket", 1, dict(r=17.0, h=17.0)),
     ],
     "smithy": [
         ("anvil", -1, {}),
@@ -596,6 +1381,10 @@ DRESS = {
         ("grindstone", 1, dict(r=22.0)),
         ("stool", -1, {}),
         ("coal_pile", 1, dict(w=40.0, h=16.0)),
+        # ---- 二轮追加 ----
+        ("stone_pile", -1, dict(w=84.0, h=38.0)),
+        ("barrel_stand", 1, dict(w=100.0)),
+        ("broom_bundle", -1, dict(h=104.0)),
     ],
     "windmill": [
         ("cart", 1, dict(w=96.0, loaded=4)),
@@ -603,6 +1392,9 @@ DRESS = {
         ("grindstone", 1, dict(r=24.0)),
         ("sack", -1, dict(r=11.0, h=26.0)),
         ("fence", -1, dict(x0=-30.0, x1=30.0)),
+        # ---- 二轮追加 ----
+        ("sack_stack", 1, dict(r=12.0, h=28.0)),
+        ("basket", -1, dict(r=16.0, h=16.0)),
     ],
     "cathedral": [
         ("lantern", -1, dict(s=19.0, h=30.0)),
@@ -610,6 +1402,9 @@ DRESS = {
         ("flower_box", -1, dict(w=44.0)),
         ("flower_box", 1, dict(w=44.0)),
         ("bench", 1, dict(w=56.0, h=32.0, back=True)),
+        # ---- 二轮追加（教堂门前是市集的老传统）----
+        ("lantern_post", -1, dict(h=190.0)),
+        ("market_table", 1, dict(w=110.0, goods="produce")),
     ],
     "tower": [
         ("barrel", -1, dict(r=14.0, h=40.0)),
@@ -621,12 +1416,40 @@ DRESS = {
         ("lantern", -1, dict(s=17.0, h=26.0)),
         ("barrel", 1, dict(r=14.0, h=40.0)),
         ("crate", 1, dict(s=24.0, h=20.0)),
+        ("market_table", 1, dict(w=104.0, goods="cheese")),
+        ("sack_stack", -1, dict(r=12.0, h=28.0)),
     ],
     "lighthouse": [
         ("rope_coil", -1, dict(r=13.0)),
         ("mooring_post", -1, {}),
         ("crate", 1, dict(s=28.0, h=24.0)),
         ("barrel", 1, dict(r=14.0, h=40.0)),
+        ("water_butt", -1, dict(r=15.0, h=52.0)),
+        ("firewood_basket", 1, dict(r=18.0, h=20.0)),
+    ],
+    # ---- 二轮新增配方：店铺 / 市集 -------------------------------------------
+    #: 店铺立面：布篷 + 挂招牌 + 台案 + 筐货 + 面包架。
+    #: 顺序说明：townhouse 的门偏在**左起第一开间**（door_x ≈ -218，左侧只剩极窄一条
+    #: 墙面），所以大件先占**右侧**的连续墙面，小件再走左。篷布 w=120 是"外缘恰好压在
+    #: 窗楣之上、靠墙缘又不超过一层檐口（207）、左右也不压门框"的尺寸，别随手放大。
+    "shop": [
+        ("awning", 1, dict(w=120.0, z=168.0)),
+        ("hanging_sign", 1, dict(w=46.0, h=36.0, z=182.0)),
+        ("market_table", 1, dict(w=118.0, goods="cheese")),
+        ("flower_bucket", -1, dict(r=10.0, h=20.0)),
+        ("bread_tray", -1, dict(w=56.0, h=72.0)),
+        ("produce_baskets", -1, dict(r=18.0, h=18.0)),
+        ("sack_stack", 1, dict(r=12.0, h=28.0)),
+        ("basket", 1, dict(r=17.0, h=17.0)),
+    ],
+    #: 市集立面（广场边一排摊）：摊篷领衔，后面才是桶架/菜筐/陶器/袋堆/箱堆
+    "market": [
+        ("market_stall", 1, dict(w=170.0, d=88.0, h=165.0, cloth="cloth_ochre")),
+        ("barrel_stand", -1, dict(w=104.0)),
+        ("produce_baskets", 1, dict(r=18.0, h=18.0)),
+        ("pottery_row", -1, dict(n=5, r=17.0, h=30.0)),
+        ("sack_stack", 1, dict(r=13.0, h=30.0)),
+        ("crate_stack", -1, dict(s=30.0, h=26.0)),
     ],
 }
 
@@ -641,6 +1464,16 @@ WIDTH = {
     "well": 68.0, "banner": 36.0, "clothesline": 84.0, "hay_fork": 28.0,
     "grind_post": 30.0, "rope_coil": 32.0, "mooring_post": 30.0,
     "flower_box": 54.0,
+    # ---- 二轮：市集/民生 ----
+    "market_stall": 206.0, "market_table": 128.0, "awning": 152.0,
+    "hanging_sign": 64.0, "standing_board": 54.0, "basket": 44.0,
+    "produce_baskets": 88.0, "fish_table": 120.0, "pottery_row": 102.0,
+    "wash_tub": 100.0, "sack_stack": 68.0, "barrel_stand": 116.0,
+    "bread_tray": 66.0, "dye_pots": 138.0, "herb_rack": 70.0,
+    "lantern_post": 52.0, "chicken_coop": 104.0, "cart_loaded": 152.0,
+    "stone_pile": 96.0, "firewood_basket": 46.0, "milk_churn": 30.0,
+    "crate_stack": 44.0, "water_butt": 40.0, "hay_bale": 84.0, "stew_pot": 62.0,
+    "broom_bundle": 40.0, "flower_bucket": 44.0,
 }
 
 #: 道具名 -> 函数（供配方表与外部直接调用）
@@ -655,17 +1488,40 @@ TABLE = {
     "clothesline": clothesline, "well": well, "grind_post": grind_post,
     "hay_fork": hay_fork, "flower_box": flower_box, "rope_coil": rope_coil,
     "mooring_post": mooring_post,
+    # ---- 二轮：市集/民生 ----
+    "basket": basket, "produce_baskets": produce_baskets, "market_stall": market_stall,
+    "market_table": market_table, "awning": awning, "hanging_sign": hanging_sign,
+    "standing_board": standing_board, "fish_table": fish_table,
+    "pottery_row": pottery_row, "wash_tub": wash_tub, "dye_pots": dye_pots,
+    "sack_stack": sack_stack, "barrel_stand": barrel_stand, "bread_tray": bread_tray,
+    "herb_rack": herb_rack, "lantern_post": lantern_post,
+    "chicken_coop": chicken_coop, "cart_loaded": cart_loaded, "stone_pile": stone_pile,
+    "firewood_basket": firewood_basket, "milk_churn": milk_churn,
+    "crate_stack": crate_stack, "water_butt": water_butt, "hay_bale": hay_bale,
+    "stew_pot": stew_pot, "broom_bundle": broom_bundle, "flower_bucket": flower_bucket,
 }
 
 #: 贴面件（挂墙，不做进深外移）
-FLUSH = ("tools_rack", "signboard", "flower_box", "clothesline")
+FLUSH = ("tools_rack", "signboard", "flower_box", "clothesline",
+         "awning", "hanging_sign", "herb_rack", "broom_bundle")
 #: 按跨度摆放的件（用 x0/x1 相对跨度 + 统一平移量）
 SPAN = ("fence", "clothesline")
-#: 各自的前后进深（决定 y 外移多少）
+#: 各自的前后进深（决定 y 外移多少）。**口径**：这里给的是"外移量 × 2"，而
+#: `dress()` 的 `y = front_y - DEPTH*0.5` 是**不乘 GAME_SCALE** 的，所以新道具按
+#: "现实进深 × 1.45 × 1.15" 给值 —— 宁可多推出去一点，也不让放大的道具插进墙里。
 DEPTH = {"log_pile": 22.0, "plank_pile": 22.0, "cart": 46.0, "wheelbarrow": 40.0,
          "well": 40.0, "trough": 26.0, "haystack": 44.0, "bench": 28.0,
          "table": 34.0, "fence": 8.0, "grindstone": 26.0, "ladder": 14.0,
-         "hay_fork": 12.0, "coal_pile": 34.0}
+         "hay_fork": 12.0, "coal_pile": 34.0,
+         # ---- 二轮 ----
+         "market_stall": 164.0, "market_table": 92.0, "standing_board": 46.0,
+         "basket": 62.0, "produce_baskets": 70.0, "fish_table": 86.0,
+         "pottery_row": 70.0, "wash_tub": 96.0, "sack_stack": 64.0,
+         "barrel_stand": 70.0, "bread_tray": 56.0, "dye_pots": 72.0,
+         "lantern_post": 50.0, "chicken_coop": 196.0, "cart_loaded": 86.0,
+         "stone_pile": 92.0, "firewood_basket": 66.0, "milk_churn": 42.0,
+         "crate_stack": 54.0, "water_butt": 62.0, "hay_bale": 68.0,
+         "stew_pot": 74.0, "flower_bucket": 48.0}
 
 
 def pack_sides(W, items, door_x, door_w, gap=14.0, spill=0.30, clear=10.0,

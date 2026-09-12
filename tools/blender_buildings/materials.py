@@ -1336,6 +1336,233 @@ def _b_vine(b, gi, bsdf):
                 sheen=0.12, sheen_rough=0.7)
 
 
+# ============================================================ 二轮追加：市集/民生材质
+#
+# **纯追加**：既有 26 个 key 的任何一行都没动（名字/语义/审计口径保持稳定）。
+# 追加的动机来自"道具扩充二轮"（市集摊/鱼摊/菜筐/染缸/面包架…）：这些道具要的颜色
+# 在原 26 个 key 里没有对应物 —— 麻布（canvas）是灰白本色、砖（brick）带灰浆缝、
+# 麻袋（sack）是粗黄褐 —— 都不能当"染色布 / 陶器 / 蔬果 / 鱼 / 面包"用。
+
+def _cloth_dyed(b, gi, bsdf, lo, mid, hi):
+    """染色土布通用层：平纹织 + 手工染斑 + 暴晒褪色 + 垂坠折痕 + 下摆拖脏。
+
+    布色板是"市集摊/挂旗/染坊"最便宜的识别信号：同形不同色的布就能把市集摊、
+    鱼摊、染缸一眼分开，比改几何划算得多。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    col, h, slub, _tr = _weave(b, u, v, uv_cm(2.4), dict(dark=lo, mid=mid, hi=hi))
+    # **压掉逐格跳变**：`_weave` 的逐格明暗跳变在麻布（米白）上只是"粗布感"，但染成
+    # 饱和色后会读成**马赛克瓷砖**（一轮踩过）。染色布整块是一个色，所以先按 mid
+    # 拉平 40%，再用低频染斑制造不匀。
+    col = b.mixc(0.40, col, mid)
+    dye = b.noise(b.vec(b.mul(u, 3.4), b.mul(v, 3.4), 21.0), 1.0, 5.0, 0.55)   # 染得深浅不匀
+    col = b.mul_c(col, b.lin(dye, 0.25, 0.78, 0.84, 1.14))
+    sun = b.noise(b.vec(b.mul(u, 1.1), b.mul(v, 1.1), 37.0), 1.0, 4.0)         # 晒褪
+    col = b.mixc(b.mul(b.ss(sun, 0.52, 0.86), b.mul(wear, 0.42)), col, b.mul_c(col, 1.28))
+    fold = b.noise(b.vec(b.mul(u, 1.7), b.mul(v, 0.22), 13.0), 1.0, 4.0)       # 垂坠折痕（顺 V 拉长）
+    fold_m = b.sub(1.0, b.ss(b.absv(b.sub(fold, 0.5)), 0.02, 0.15))
+    col = b.mul_c(col, b.lin(fold_m, 0.0, 1.0, 0.82, 1.06))
+    dirt = b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 67.0), 1.0, 5.0, 0.5)   # 下摆拖脏
+    col = b.mixc(b.mul(b.ss(dirt, 0.58, 0.86), b.mul(wear, 0.38)), col, (0.230, 0.198, 0.150))
+    h = b.add(h, b.mul(fold_m, 0.32))
+    return dict(color=col, rough=b.add(0.91, b.mul(slub, 0.04)),
+                normal=b.bump(h, 0.65, uv_cm(1.0)), spec=0.12,
+                sheen=0.26, sheen_rough=0.58)
+
+
+def _b_cloth_red(b, gi, bsdf):
+    """染布·茜红：中世纪最常见的"贵色"，偏暗砖红（不是现代正红）。
+
+    色板跨度刻意压窄（dark 约为 mid 的 0.55 倍、hi 约 1.6 倍）：宽跨度 + 逐格跳变
+    在饱和色上就是"红瓷砖"，窄跨度才读得出"一块染红的布"。
+    """
+    return _cloth_dyed(b, gi, bsdf,
+                       (0.168, 0.032, 0.020), (0.300, 0.056, 0.036),
+                       (0.480, 0.118, 0.062))
+
+
+def _b_cloth_blue(b, gi, bsdf):
+    """染布·靛蓝：菘蓝/靛青染，深蓝偏紫，平民最常用的"好颜色"。"""
+    return _cloth_dyed(b, gi, bsdf,
+                       (0.030, 0.050, 0.098), (0.055, 0.090, 0.175),
+                       (0.090, 0.140, 0.255))
+
+
+def _b_cloth_ochre(b, gi, bsdf):
+    """染布·赭黄：洋葱皮/茜草染的暖赭黄，最接近本色麻布的暖调。"""
+    return _cloth_dyed(b, gi, bsdf,
+                       (0.205, 0.142, 0.058), (0.360, 0.248, 0.100),
+                       (0.560, 0.420, 0.205))
+
+
+def _b_wicker(b, gi, bsdf):
+    """柳条编（筐/篓/笼）：横向柳条行 + 竖向立桩压一挑一，暖柳木色。
+
+    与 `wattle` 的分工：那个是**墙用编条篱**（深色、低饱和、带泥底）；筐篓必须亮、
+    干净、看得见"一圈一圈的柳条"，否则在游戏尺寸下读成泥巴坨。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    row = uv_cm(2.6)
+    sv = b.div(v, row)
+    ri = b.flr(sv)
+    fv = b.sub(sv, ri)
+    rod = b.pow(b.pisin(fv), 0.5)                      # 柳条截面（一根一根）
+    rr = b.h1(ri, 7.0)
+    rr2 = b.h1(ri, 41.0)
+    sw = uv_cm(5.5)
+    su = b.div(u, sw)
+    ci = b.flr(su)
+    fu = b.sub(su, ci)
+    stake = b.pow(b.pisin(fu), 0.35)                   # 竖向立桩（压过柳条）
+    over = b.step(b.frc(b.mul(b.add(ci, ri), 0.5)), 0.5)
+    g = b.noise(b.vec(b.mul(u, 8.0), b.mul(v, 8.0), 5.0), 1.0, 5.0, 0.5)
+    col = b.mixc(rr, (0.185, 0.112, 0.044), (0.430, 0.292, 0.132))
+    col = b.mixc(b.mul(rr2, 0.60), col, b.mul_c(col, 0.72))
+    col = b.mul_c(col, b.lin(g, 0.25, 0.75, 0.84, 1.14))
+    col = b.shade(col, rod, 0.55, 1.10)
+    stake_c = b.mixc(b.h1(ci, 13.0), (0.230, 0.140, 0.052), (0.500, 0.338, 0.152))
+    col = b.mixc(b.mul(stake, over), col, stake_c)
+    h = b.add(b.mul(rod, 0.90), b.mul(b.mul(stake, over), 0.50))
+    h = b.add(h, b.mul(b.sub(g, 0.5), 0.35))
+    _ = wear
+    return dict(color=col, rough=b.lin(g, 0.0, 1.0, 0.80, 0.94),
+                normal=b.bump(h, 0.95, uv_cm(1.5)), spec=0.22)
+
+
+def _b_clay(b, gi, bsdf):
+    """无釉红陶（陶罐/染缸/奶桶）：暖橙陶土 + 轮制旋纹 + 窑变火色 + 盐霜磨白。
+
+    陶器和石砌/砖砌的区别不在颜色而在"表面的连续曲面"：所以做轮制旋纹（2.2cm
+    一道）而不是砌块，粗糙度也略低（好陶是磨光的）。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    rings = b.pisin(b.mul(v, 1.0 / uv_cm(2.2)))                                # 轮制旋纹
+    fire = b.noise(b.vec(b.mul(u, 2.2), b.mul(v, 2.2), 11.0), 1.0, 5.0, 0.55)  # 火色深浅
+    grain = b.noise(b.vec(b.mul(u, 14.0), b.mul(v, 14.0), 5.0), 1.0, 4.0)
+    col = b.mixc(fire, (0.180, 0.070, 0.030), (0.430, 0.185, 0.078))
+    col = b.mixc(b.lin(grain, 0.28, 0.76, 0.0, 0.45), col, b.mul_c(col, 0.80))
+    col = b.mul_c(col, b.lin(rings, 0.0, 1.0, 0.92, 1.10))
+    soot = b.noise(b.vec(b.mul(u, 1.4), b.mul(v, 1.4), 29.0), 1.0, 5.0, 0.6)   # 窑变熏黑
+    col = b.mixc(b.mul(b.ss(soot, 0.56, 0.86), b.lin(wear, 0.0, 1.0, 0.16, 0.55)),
+                 col, (0.070, 0.040, 0.028))
+    salt = b.noise(b.vec(b.mul(u, 9.0), b.mul(v, 9.0), 47.0), 1.0, 4.0)        # 泛碱/磨白
+    col = b.mixc(b.mul(b.ss(salt, 0.66, 0.88), b.mul(wear, 0.50)), col, (0.520, 0.480, 0.420))
+    h = b.add(b.mul(rings, 0.55), b.mul(b.sub(grain, 0.5), 0.30))
+    return dict(color=col, rough=b.lin(fire, 0.0, 1.0, 0.38, 0.60),
+                normal=b.bump(h, 0.60, uv_cm(2.0)), spec=0.45)
+
+
+def _b_produce(b, gi, bsdf):
+    """叶菜堆（甘蓝/生菜/香草）：紧凑圆叶细胞 + 叶脉亮线 + 叶缝暗底。
+
+    9cm 的叶单元 —— 比 foliage（7cm 观赏叶）略大、更密、更黄绿，"能吃的一堆"
+    和"种着的一丛"在游戏尺寸下就靠密度与色调区分。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    pal = dict(lo=(0.030, 0.082, 0.020), hi=(0.200, 0.365, 0.082))
+    col, h = _leaves(b, u, v, uv_cm(9.0), pal)
+    n = b.noise(b.vec(b.mul(u, 5.0), b.mul(v, 5.0), 23.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(n, 0.30, 0.75, 0.88, 1.12))
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 3.0), b.mul(v, 3.0), 55.0), 1.0, 5.0),
+                            0.60, 0.86), b.mul(wear, 0.30)), col, (0.230, 0.225, 0.100))  # 蔫叶
+    return dict(color=col, rough=0.52, normal=b.bump(h, 0.88, uv_cm(2.4)), spec=0.42,
+                sheen=0.10, sheen_rough=0.60)
+
+
+def _b_produce_root(b, gi, bsdf):
+    """根菜堆（胡萝卜/洋葱/芜菁）：顺长轴拉长的细胞 + 橙黄土色 + 泥渍。
+
+    细胞刻意在 V 向拉长 3 倍 —— 根菜是"一根一根躺着的"，等轴细胞会读成土豆或石头。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    ku, kv = 1.0 / uv_cm(30.0), 1.0 / uv_cm(11.0)
+    kd, _kc, _kp = b.voro(b.vec(b.mul(u, ku), b.mul(v, kv), 5.0),
+                          scale=1.0, randomness=0.90)
+    idx = b.h2(b.flr(b.mul(u, ku)), b.flr(b.mul(v, kv)), 17.0)
+    col = b.mixc(idx, (0.300, 0.118, 0.020), (0.640, 0.312, 0.058))
+    col = b.mixc(b.lin(b.h1(b.flr(b.mul(u, ku)), 41.0), 0.70, 0.94, 0.0, 0.55),
+                 col, (0.480, 0.400, 0.150))                                  # 少数土黄/青的
+    face = b.sub(1.0, b.ss(kd, 0.32, 0.95))                               # 菜与菜之间的缝
+    col = b.mul_c(col, b.lin(face, 0.0, 1.0, 0.40, 1.12))
+    mud = b.noise(b.vec(b.mul(u, 6.0), b.mul(v, 6.0), 61.0), 1.0, 5.0, 0.5)   # 带泥
+    col = b.mixc(b.mul(b.ss(mud, 0.52, 0.80), b.lin(wear, 0.0, 1.0, 0.30, 0.80)),
+                 col, (0.150, 0.105, 0.058))
+    grn = b.noise(b.vec(b.mul(u, 20.0), b.mul(v, 20.0), 9.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.90, 1.10))
+    h = b.add(b.mul(face, 0.85), b.mul(b.sub(kd, 0.5), 0.40))
+    return dict(color=col, rough=0.62, normal=b.bump(h, 0.85, uv_cm(2.2)), spec=0.38)
+
+
+def _b_fish(b, gi, bsdf):
+    """鱼皮（鲱/鲭/鳕）：银灰偏蓝 + 细鳞格（2.6x1.8cm）+ 虹彩 + 湿光高光。
+
+    鱼必须**潮**：粗糙度 0.24~0.40 + specular 0.6，缩到游戏尺寸才读得出一条反光的
+    鱼；做干的哑光灰条会被读成木棍。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    # 鳞格放大到 4.2x2.6cm：2.6cm 的鳞在游戏尺寸下只有 1.5px，会糊成"褶皱的锡纸"，
+    # 而鱼的第一读法就是"一条银亮的长条 + 细鳞"。
+    c = _cells(b, u, v, uv_cm(4.2), uv_cm(2.6), stagger=0.5, seed=7.0)
+    shade, lip = _row_light(b, c['fv'], top=0.86, grad_to=0.55, lip=0.10)
+    base = b.mixc(c['rand'], (0.180, 0.196, 0.222), (0.470, 0.500, 0.540))
+    base = b.mixc(b.lin(c['rand2'], 0.72, 0.95, 0.0, 0.50), base, (0.250, 0.300, 0.390))
+    col = b.mixc(shade, b.mul_c(base, 0.62), base)
+    irid = b.noise(b.vec(b.mul(u, 3.0), b.mul(v, 3.0), 31.0), 1.0, 4.0)          # 虹彩
+    col = b.mixc(b.mul(b.ss(irid, 0.55, 0.85), 0.28), col, (0.330, 0.240, 0.400))
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 1.6), b.mul(v, 1.6), 71.0), 1.0, 5.0),
+                            0.62, 0.88), b.mul(wear, 0.28)), col, (0.300, 0.280, 0.230))
+    h = b.add(b.mul(lip, 0.50), b.mul(shade, 0.70))
+    h = b.sub(h, b.mul(b.mul(c['rand'], 0.5), 0.20))
+    return dict(color=col, rough=b.lin(c['rand'], 0.0, 1.0, 0.26, 0.40), metal=0.14,
+                normal=b.bump(h, 0.50, uv_cm(1.6)), spec=0.60)
+
+
+def _b_bread(b, gi, bsdf):
+    """面包皮：金褐脆壳 + 割包裂痕（露浅色瓤）+ 浮粉 + 焦边。
+
+    割痕（slashes）是面包的第一识别特征 —— 没有它，圆面包在游戏尺寸下就是一个
+    褐色球；有了三五道裂口，立刻读作"烤过的面包"。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    crust = b.noise(b.vec(b.mul(u, 4.5), b.mul(v, 4.5), 17.0), 1.0, 6.0, 0.60)
+    fine = b.noise(b.vec(b.mul(u, 16.0), b.mul(v, 16.0), 3.0), 1.0, 4.0)
+    col = b.mixc(crust, (0.215, 0.082, 0.020), (0.560, 0.288, 0.082))
+    col = b.mixc(b.lin(fine, 0.25, 0.78, 0.0, 0.42), col, b.mul_c(col, 0.78))
+    sl = b.noise(b.vec(b.mul(u, 0.9), b.mul(v, 26.0), 41.0), 1.0, 3.0)          # 割痕
+    slash = b.mul(b.sub(1.0, b.ss(b.absv(b.sub(sl, 0.5)), 0.0, 0.035)),
+                  b.mul(b.lin(wear, 0.0, 1.0, 0.35, 1.0),
+                        b.lin(crust, 0.35, 0.75, 0.20, 1.0)))
+    col = b.mixc(slash, col, (0.690, 0.570, 0.390))                             # 裂口露浅瓤
+    fl = b.noise(b.vec(b.mul(u, 6.0), b.mul(v, 6.0), 61.0), 1.0, 4.0)           # 浮粉
+    col = b.mixc(b.mul(b.ss(fl, 0.58, 0.86), 0.55), col, (0.800, 0.740, 0.620))
+    col = b.mixc(b.mul(b.ss(b.noise(b.vec(b.mul(u, 3.0), b.mul(v, 3.0), 23.0), 1.0, 5.0),
+                            0.66, 0.90), b.mul(wear, 0.40)), col, (0.115, 0.055, 0.020))
+    h = b.add(b.mul(b.sub(crust, 0.5), 0.50), b.mul(b.sub(fine, 0.5), 0.25))
+    h = b.sub(h, b.mul(slash, 0.60))
+    return dict(color=col, rough=b.lin(crust, 0.0, 1.0, 0.62, 0.82),
+                normal=b.bump(h, 0.70, uv_cm(1.6)), spec=0.24)
+
+
+def _b_dye_bath(b, gi, bsdf):
+    """染缸液面：深靛近黑 + 极低粗糙度 + 微涡纹 + 浮沫（只在染缸口那一小块用）。"""
+    u, v = _uv(b, gi)
+    s1 = b.noise(b.vec(b.mul(u, 7.0), b.mul(v, 7.0), 23.0), 1.0, 5.0, 0.70)
+    s2 = b.noise(b.vec(b.mul(u, 3.0), b.mul(v, 17.0), 41.0), 1.0, 4.0, 0.60)
+    sw = b.mixf(0.5, s1, s2)
+    col = b.mixc(sw, (0.010, 0.018, 0.045), (0.048, 0.082, 0.175))
+    foam = b.ss(b.noise(b.vec(b.mul(u, 22.0), b.mul(v, 22.0), 7.0), 1.0, 4.0), 0.68, 0.86)
+    col = b.mixc(b.mul(foam, 0.45), col, (0.230, 0.290, 0.400))
+    h = b.mul(b.sub(sw, 0.5), 0.60)
+    return dict(color=col, rough=0.10, metal=0.0, normal=b.bump(h, 0.20, uv_cm(3.0)), spec=0.75)
+
+
 # ============================================================ 注册表
 _BUILDERS = {
     # ---- 原有 12 个（名字与语义不变）----
@@ -1366,6 +1593,17 @@ _BUILDERS = {
     'grass_tuft':   (_b_grass_tuft, '独立草簇（alpha）'),
     'foliage':      (_b_foliage, '阔叶绿植'),
     'vine':         (_b_vine, '攀爬藤'),
+    # ---- 二轮追加（道具扩充；既有 26 个 key 未改动）----
+    'cloth_red':    (_b_cloth_red, '染布·茜红'),
+    'cloth_blue':   (_b_cloth_blue, '染布·靛蓝'),
+    'cloth_ochre':  (_b_cloth_ochre, '染布·赭黄'),
+    'wicker':       (_b_wicker, '柳条编'),
+    'clay':         (_b_clay, '无釉红陶'),
+    'produce':      (_b_produce, '叶菜堆'),
+    'produce_root': (_b_produce_root, '根菜堆'),
+    'fish':         (_b_fish, '鱼皮'),
+    'bread':        (_b_bread, '面包皮'),
+    'dye_bath':     (_b_dye_bath, '染缸液面'),
 }
 
 ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
@@ -1374,7 +1612,9 @@ ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
          'cavity', 'water', 'lamp', 'glass_win',
          'shingle', 'log_wall', 'straw', 'rope',
          'sack', 'wattle', 'ground', 'grass_tuft',
-         'foliage', 'vine']
+         'foliage', 'vine',
+         'cloth_red', 'cloth_blue', 'cloth_ochre', 'wicker', 'clay',
+         'produce', 'produce_root', 'fish', 'bread', 'dye_bath']
 
 #: 需要 alpha 混合的 key（裁切用贴片）
 ALPHA_KEYS = {'grass_tuft'}
@@ -1407,6 +1647,17 @@ FEATURES = {
     'grass_tuft':  [("草叶位宽", 2.2), ("草叶净宽", 1.1), ("草叶高(中值)", 30.0)],
     'foliage':     [("叶片", 7.0), ("叶脉", 1.0)],
     'vine':        [("叶片", 6.0), ("藤茎间距", 14.0)],
+    # ---- 二轮追加 ----
+    'cloth_red':   [("织格", 2.4), ("染斑", 30.0), ("折痕间距", 18.0)],
+    'cloth_blue':  [("织格", 2.4), ("染斑", 30.0), ("折痕间距", 18.0)],
+    'cloth_ochre': [("织格", 2.4), ("染斑", 30.0), ("折痕间距", 18.0)],
+    'wicker':      [("柳条行距", 2.6), ("立桩距", 5.5)],
+    'clay':        [("轮制旋纹", 2.2), ("窑变斑", 40.0), ("陶土颗粒", 3.0)],
+    'produce':     [("叶单元", 9.0), ("叶脉", 1.2)],
+    'produce_root': [("根菜长", 30.0), ("根菜粗", 11.0)],
+    'fish':        [("鳞宽", 2.6), ("鳞排高", 1.8), ("虹彩斑", 25.0)],
+    'bread':       [("割痕间距", 6.0), ("脆壳斑", 22.0), ("浮粉", 12.0)],
+    'dye_bath':    [("涡纹", 14.0), ("浮沫", 4.0)],
 }
 
 _GROUP_CACHE = {}
@@ -1572,6 +1823,16 @@ mat_ground = _mk('ground')
 mat_grass_tuft = _mk('grass_tuft')
 mat_foliage = _mk('foliage')
 mat_vine = _mk('vine')
+mat_cloth_red = _mk('cloth_red')
+mat_cloth_blue = _mk('cloth_blue')
+mat_cloth_ochre = _mk('cloth_ochre')
+mat_wicker = _mk('wicker')
+mat_clay = _mk('clay')
+mat_produce = _mk('produce')
+mat_produce_root = _mk('produce_root')
+mat_fish = _mk('fish')
+mat_bread = _mk('bread')
+mat_dye_bath = _mk('dye_bath')
 
 
 def make(key, **kw):

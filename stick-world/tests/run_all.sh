@@ -84,6 +84,8 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_org_panel.tscn"
 	"tests/integration/test_org_command_chain.tscn"
 	"tests/integration/test_org_e2e.tscn"
+	"tests/integration/test_org_report_narrator.tscn"
+	"tests/integration/test_org_panel_badges.tscn"
 	"tests/integration/test_placement_grid_units.tscn"
 	"tests/integration/test_tactical_orders.tscn"
 	"tests/integration/test_save_roundtrip.tscn"
@@ -219,6 +221,8 @@ affected_suites() {
 				picked["tests/integration/test_org_panel.tscn"]=1
 				picked["tests/integration/test_org_command_chain.tscn"]=1
 				picked["tests/integration/test_org_e2e.tscn"]=1
+				picked["tests/integration/test_org_report_narrator.tscn"]=1
+				picked["tests/integration/test_org_panel_badges.tscn"]=1
 				picked["tests/integration/test_recruit_flow.tscn"]=1 ;;
 			stick-world/modules/player_control/*)
 				picked["tests/integration/test_possession.tscn"]=1
@@ -260,6 +264,43 @@ select_suites() {
 mkdir -p "$TMP_DIR"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+# ─────────────────────────── 清单自检（静默漏测盲区）───────────────────────────
+
+## 未登记豁免名单：确属"非 TestRunner 套件"或"待处置"的文件，必须写明理由。
+UNREGISTERED_ALLOWLIST=(
+	# 旧的布局重叠检查器：非 TestRunner 规范（自打印 FAIL 且退出码恒 0）、
+	# 断言口径是 zone 制之前的老布局。处置（重写或下沉 tests/dev）之前先豁免——
+	# 它没有被任何 CI 覆盖，别误以为"有测试在看着布局"。
+	"tests/integration/test_ui_overlap.tscn"
+)
+
+## 盘上存在但未登记进 INTEGRATION_SUITES/SMOKE_SUITES 的套件 = 永远不会被执行，
+## 且不会产生任何红灯（tests/unit 层的同类问题由 batch_runner 自检负责）。
+## 新增测试文件忘记登记时这里会拦下；确属特例的加进上面的豁免名单并写理由。
+manifest_check() {
+	local -A registered=() allowed=()
+	local s base f dir
+	for s in "${INTEGRATION_SUITES[@]}" "${SMOKE_SUITES[@]}"; do registered["${s##*/}"]=1; done
+	for s in "${UNREGISTERED_ALLOWLIST[@]}"; do allowed["${s##*/}"]=1; done
+	local -a missed=()
+	for dir in integration smoke; do
+		for f in "$SCRIPT_DIR/$dir"/*.tscn; do
+			[ -e "$f" ] || continue
+			base="${f##*/}"
+			if [ -z "${registered[$base]:-}" ] && [ -z "${allowed[$base]:-}" ]; then
+				missed+=("tests/$dir/$base")
+			fi
+		done
+	done
+	if [ ${#missed[@]} -gt 0 ]; then
+		echo "[MANIFEST] 以下套件在盘上但未登记，永远不会被执行："
+		printf '    %s
+' "${missed[@]}"
+		echo "[MANIFEST] 处理：登记进 INTEGRATION_SUITES/SMOKE_SUITES，或加入 UNREGISTERED_ALLOWLIST 并写明理由"
+		exit 1
+	fi
+}
+
 run_unit=0 run_integration=0 run_smoke=0
 case "$FILTER" in
 	unit) run_unit=1 ;;
@@ -269,6 +310,8 @@ case "$FILTER" in
 	"") run_unit=1; run_integration=1; run_smoke=1 ;;
 	*) echo "[run_all] 未知 Filter: $FILTER（可选 unit|integration|smoke）"; exit 2 ;;
 esac
+
+manifest_check
 
 if [ -n "$CHANGED" ]; then
 	changed_files=$(git -C "$PROJECT_DIR" diff --name-only "$CHANGED" 2>/dev/null)

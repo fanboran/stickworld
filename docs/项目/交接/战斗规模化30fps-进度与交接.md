@@ -450,6 +450,12 @@ Skeleton2D + AnimationTree 逐单位采样 + 叠加层 + 武器挂点 + 物理�
      `tools/diff_png.py` 逐像素比对出差异统计+热点簇+热图。
      **最终 diff = 0（1920×1080 全帧逐像素一致，双跑稳定复现）**；
      draw_calls_median 588（覆盖层 6 组×(8 相位+plain) 槽，+38 在预算内）。
+     **验证**：diff=0 复现（`python stick-world/tools/diff_png.py`，任意 cwd）；
+     unit 批量 + 6 个受影响集成套件（ai_behaviors / possession /
+     melee_combat / combat_feedback / combat_control / placement_grid_units）
+     全绿；`check_godot_errors.sh` 干净。⚠ `test_ai_enhance.gd` 偶发 FAIL
+     （"硬直结束后应恢复目标获取"）经 stash A/B 对照证实为**既有 flake**
+     （同批基线同样偶发，与本次改动无关），待 main 处置。
      五个根因与解法：
      ① **扰动同源化**：wobble 数值由 CPU（原版 `_wobble` 逐字同式 float64）
        预烘 8 相位表烘进网格 UV——GPU float32 复算 sin 大参数精度不可控且

@@ -228,6 +228,11 @@ const BOOT_STAGES: int = 9
 ## 启动期世界生成阶段（8/9 细分文字 + 分帧让步的开关；游戏内切图关闭——
 ## 不把全屏加载盖回到正在玩的画面上，让帧本身照做只不刷文字）
 var _boot_world_phase: bool = false
+## 世界生成子阶段总数（初始建筑/存档恢复/村庄设施/村民）——副进度条按此切分
+const WORLD_SUB_PHASES: int = 4
+## 当前世界生成子阶段序号（1 起）与名称，供副进度条映射与文字刷新
+var _world_sub_idx: int = 0
+var _world_sub_label: String = ""
 
 
 func _ready() -> void:
@@ -246,7 +251,7 @@ func _ready() -> void:
 	await _yield_frame()
 	# 分段装配：每段先更新文字/进度条 → 等一帧画出来 → 干重活；进度真实推进
 	await _stage(1, "挂载子模块", func(): _mount_child_modules())
-	await _stage(2, "装配界面与子系统", func(): _bootstrap.setup(self))
+	await _setup_systems_staged()
 	await _stage(3, "接入存档系统", func(): _save_system.setup(self))
 	await _stage(4, "接入传送系统", func(): _travel_system.setup(self))
 	await _stage(5, "初始化世界生成器", func(): _worldgen.setup(self))
@@ -284,13 +289,50 @@ func _stage(idx: int, label: String, work: Callable) -> void:
 	work.call()
 
 
+## 阶段 2 专用：装配界面与子系统（29 个 _setup_* 步骤）分帧执行。
+## 原先是整段同步调用——实测 2.2~3.2s 内转圈与文字全定格；分帧后每步一帧、
+## 副进度条随步推进，最坏单次卡顿从「整段」降为「最重的那一步」。
+func _setup_systems_staged() -> void:
+	var steps: Array = _bootstrap.setup_steps(self)
+	var total: int = maxi(1, steps.size())
+	_show_loading(_stage2_msg(""), 2.0 / float(BOOT_STAGES), 0.0)
+	await _yield_frame()
+	for i in steps.size():
+		var step: Array = steps[i]
+		_show_loading(_stage2_msg(str(step[0])), 2.0 / float(BOOT_STAGES), float(i) / float(total))
+		await _yield_frame()
+		(step[1] as Callable).call()
+	_bootstrap.finish_setup()
+	_show_loading(_stage2_msg(""), 2.0 / float(BOOT_STAGES), 1.0)
+
+
+## 阶段 2 的文字（step_label 为空 = 不带细分名）
+func _stage2_msg(step_label: String) -> String:
+	if step_label.is_empty():
+		return "装配界面与子系统…（2/%d）" % BOOT_STAGES
+	return "装配界面与子系统…（2/%d）· %s" % [BOOT_STAGES, step_label]
+
+
 ## 世界生成子阶段：细化 8/9 的阶段文字并让一帧（分帧生成，转圈持续转动）。
 ## 仅启动期刷文字；游戏内切图静默让帧（两态都让，动画在两种场景下都不断流）。
+## 副进度条 = 子阶段序号切片 + 子阶段内细分（_world_sub_progress），单调不回退。
 func _world_sub_phase(label: String) -> void:
+	_world_sub_label = label
+	_world_sub_idx += 1
 	if _boot_world_phase:
 		_show_loading("正在生成世界…（%d/%d）· %s" % [BOOT_STAGES - 1, BOOT_STAGES, label],
-				float(BOOT_STAGES - 1) / float(BOOT_STAGES))
+				float(BOOT_STAGES - 1) / float(BOOT_STAGES),
+				float(_world_sub_idx - 1) / float(WORLD_SUB_PHASES))
 	await _yield_frame()
+
+
+## 世界生成子阶段内部细分进度（逐个建筑/逐个村民等）：副条在当前子阶段切片内推进。
+func _world_sub_progress(done: int, total: int) -> void:
+	if not _boot_world_phase or total <= 0:
+		return
+	var sub: float = (float(_world_sub_idx - 1) + float(done) / float(total)) / float(WORLD_SUB_PHASES)
+	_show_loading("正在生成世界…（%d/%d）· %s" % [BOOT_STAGES - 1, BOOT_STAGES, _world_sub_label],
+			float(BOOT_STAGES - 1) / float(BOOT_STAGES), sub)
 
 
 ## 实例化四个子模块节点并挂到 GameRoot 下。
@@ -552,10 +594,11 @@ func _load_start_village() -> void:
 	scene_loader.load_map(VILLAGE_A_MAP_ID)
 
 
-## 显示世界加载覆盖（启动加载期）
-func _show_loading(message: String, ratio: float = -1.0) -> void:
+## 显示世界加载覆盖（启动加载期）。ratio = 总阶段进度；sub_ratio = 当前阶段
+## 内部细分进度（<0 = 该阶段无细分，副进度条隐藏）。
+func _show_loading(message: String, ratio: float = -1.0, sub_ratio: float = -1.0) -> void:
 	if _world_loading_overlay != null and _world_loading_overlay.has_method("show_loading"):
-		_world_loading_overlay.show_loading(message, ratio)
+		_world_loading_overlay.show_loading(message, ratio, sub_ratio)
 
 
 ## 装配世界加载覆盖层：优先认领启动跳板（loading_screen）挂在**场景树根**的
@@ -667,7 +710,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 	if not map.has_meta("initial_buildings_spawned"):
 		map.set_meta("initial_buildings_spawned", true)
 		await _world_sub_phase("初始建筑")
-		await _worldgen.spawn_initial_buildings(map)
+		await _worldgen.spawn_initial_buildings(map, _world_sub_progress)
 		# 扩图后刷新相机/小地图边界
 		if camera_rig != null and camera_rig.has_method("set_map_bounds"):
 			camera_rig.set_map_bounds(map.map_left, map.map_right)
@@ -737,7 +780,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 			if _minimap != null and _minimap.has_method("set_map_info"):
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 			await _world_sub_phase("村民")
-			await _worldgen.spawn_npcs(map, spawn_y)
+			await _worldgen.spawn_npcs(map, spawn_y, _world_sub_progress)
 		# 跨图携带：spawn 随行编队成员并重建编队（带队出征）
 		_spawn_travel_followers(map, player, spawn_y)
 		# 战场图（battlefield）已退役为 dev 验证图（出征与领地架构 §4.3）：进图不再

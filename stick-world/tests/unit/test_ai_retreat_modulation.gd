@@ -2,8 +2,8 @@ extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
 ## 单元测试：A3 · C6 概率调制撤退（设计文档12号 §三C6 / §五批次表 A3，AI集大成）。
-## 覆盖：档案新键默认值（开关默认关=零回归）/ personality 难度行 retreat_chance
-## （CoH 真值）/ 候选判定因果性（概率是执行机制不是因果）/ 掷骰边界与种子确定性 /
+## 覆盖：档案新键默认值（开关默认关=零回归）/ personality 单一档案 retreat_chance
+## （CoH 真值，难度分档已裁决移除·开放问题#3）/ 候选判定因果性（概率是执行机制不是因果）/ 掷骰边界与种子确定性 /
 ## 后撤(fallback)/撤退(withdraw) 双档语义 / 掷骰节流 / 强制溃逃链优先 /
 ## behavior_retreat withdraw 档行为与降级路径。
 ## 不进场景树（fixture 用 new() + 直注入 _entity，不碰树；BalanceConfig 只读，
@@ -21,7 +21,7 @@ var _runner: TestRunner
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("A3 档案新键默认值（开关默认关 = 零回归）", _test_profile_defaults)
-	_runner.add_test("personality 难度行 retreat_chance（CoH 真值）+ 未知难度 NAN", _test_personality_rows)
+	_runner.add_test("personality 单一档案 retreat_chance（CoH 真值）+ 概率覆写链", _test_personality_rows)
 	_runner.add_test("开关默认关：候选条件满足也不撤退（走 attack）", _test_mod_off_zero_regression)
 	_runner.add_test("因果性：chance=1 但战况健康不撤退", _test_candidate_causality)
 	_runner.add_test("掷骰边界：chance=0 永不撤 / chance=1 候选必撤", _test_dice_boundary)
@@ -58,8 +58,10 @@ func _test_profile_defaults() -> void:
 			"友军判定半径 = 300px")
 	_runner.assert_approx(float(p2.get("retreat_mod_reevaluate", -1.0)), 2.5, 0.001,
 			"掷骰评估周期 = 2.5s（CoH 20 tick）")
-	_runner.assert_approx(float(p2.get("retreat_mod_chance", -1.0)), 0.30, 0.001,
-			"基线掷骰概率 = 0.30（CoH standard）")
+	_runner.assert_true(is_nan(float(p2.get("retreat_mod_chance", -1.0))),
+			"基线掷骰概率未覆写（NAN → personality global 行兜底）")
+	_runner.assert_approx(ScriptBehaviorProfiles.get_personality_retreat_chance(), 0.30, 0.001,
+			"配置兜底掷骰概率 = 0.30（CoH）")
 	_runner.assert_approx(float(p2.get("retreat_mod_withdraw_arrive", -1.0)), 80.0, 0.001,
 			"withdraw 抵达半径 = 80px")
 	_runner.assert_approx(float(p2.get("retreat_mod_withdraw_max_time", -1.0)), 12.0, 0.001,
@@ -70,17 +72,23 @@ func _test_profile_defaults() -> void:
 
 
 func _test_personality_rows() -> void:
-	# CoH retreat_chance 真值：easy 0.30 / standard 0.30 / hard 0.45 / hardest 0.35
-	_runner.assert_approx(ScriptBehaviorProfiles.get_difficulty_retreat_chance("easy"), 0.30, 0.001,
-			"easy retreat_chance = 0.30")
-	_runner.assert_approx(ScriptBehaviorProfiles.get_difficulty_retreat_chance("standard"), 0.30, 0.001,
-			"standard retreat_chance = 0.30")
-	_runner.assert_approx(ScriptBehaviorProfiles.get_difficulty_retreat_chance("hard"), 0.45, 0.001,
-			"hard retreat_chance = 0.45")
-	_runner.assert_approx(ScriptBehaviorProfiles.get_difficulty_retreat_chance("hardest"), 0.35, 0.001,
-			"hardest retreat_chance = 0.35")
-	_runner.assert_true(is_nan(ScriptBehaviorProfiles.get_difficulty_retreat_chance("nope")),
-			"未知难度 = NAN（调用方档案基线兜底）")
+	# CoH retreat_chance 真值上移单一 global 行（难度分档已裁决移除·开放问题#3）
+	_runner.assert_approx(BalanceConfig.get_value("ai.personality.global.retreat_chance"), 0.30, 0.001,
+			"global retreat_chance = 0.30（CoH）")
+	_runner.assert_approx(ScriptBehaviorProfiles.get_personality_retreat_chance(), 0.30, 0.001,
+			"查询函数读单一档案 = 0.30")
+	# 概率三级链：档案显式值（NAN=未覆写）→ personality global 行 → 代码默认
+	# 档案显式覆写优先于配置：chance=1 候选必撤 / chance=0 候选不撤
+	var ctx1 := _make_ctx({"retreat_mod_chance": 1.0})
+	ctx1.health.hp_ratio = 0.4
+	ctx1.ai._try_combat()
+	_runner.assert_equal(ctx1.ai.get_current_behavior(), "retreat", "档案显式覆写 1.0 候选必撤")
+	ctx1.teardown()
+	var ctx0 := _make_ctx({"retreat_mod_chance": 0.0})
+	ctx0.health.hp_ratio = 0.4
+	ctx0.ai._try_combat()
+	_runner.assert_not_equal(ctx0.ai.get_current_behavior(), "retreat", "档案显式覆写 0.0 候选不撤")
+	ctx0.teardown()
 
 
 func _test_mod_off_zero_regression() -> void:
@@ -329,9 +337,8 @@ class _Ctx:
 		battle = _FakeBattle.new()
 		battle.units.append(entity)
 		entity.battle = battle
-		# 默认 difficulty 指向配置未知的档名 → 掷骰概率走档案基线（可注入控制）；
-		# 难度行消费由 _test_personality_rows 直测 BalanceConfig 真值
-		battle.team_ai = _FakeTeamAi.new()
+		# 掷骰概率默认走 personality 单一档案 global 行（ BalanceConfig 真值 0.30）；
+		# 覆写控制经档案显式键 retreat_mod_chance（_test_personality_rows 直测链路）
 		var enemy := _FakeAlly.new()
 		enemy.faction = 2
 		enemy.global_position = Vector2(1000, 300)  # 近身威胁（100px < 140）
@@ -433,13 +440,6 @@ class _FakeAlly extends Node2D:
 
 	func is_routed() -> bool:
 		return routed
-
-
-class _FakeTeamAi extends RefCounted:
-	var difficulty: String = "testdiff"  # 配置未知档名 → retreat_chance 走档案基线
-
-	func get_difficulty() -> String:
-		return difficulty
 
 
 class _FakeBattle extends Node:

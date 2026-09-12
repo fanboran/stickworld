@@ -23,10 +23,10 @@ extends RefCounted
 ##     TimeRule_AddInterval 0.5 真值），双相位轮转一跳一类事——DECIDE（快照+姿态
 ##     决策）/ BUILD（造兵桩），有效决策周期 = 2×beat = 1.0s（与旧
 ##     stance_decision_interval 默认等价，零回归）。
-##   - C2 难度参数化：难度档（easy/standard/hard/hardest）经
-##     TeamAiProfiles.load_personality_overlay 从 BalanceConfig 装载；
-##     开局攻击门禁 = seconds_before_attack ± start_attack_variance 掷骰
-##     （CoH standard 9min±4min 同构，难度=参数不=作弊）；默认种子固定
+##   - C2 参数档案化：行为参数收敛为单一 personality 档案（难度分档维度已裁决
+##     移除·开放问题#3，机制参数保留），经 TeamAiProfiles.load_personality_overlay
+##     从 BalanceConfig 装载；开局攻击门禁 = seconds_before_attack ±
+##     start_attack_variance 掷骰（CoH 9min±4min 同构）；默认种子固定
 ##     （确定性可测/可复现），显式 overrides.random_seed 可逐局随机。
 ##
 ## A2（设计文档12号 C3/C4/C5，AI集大成）：
@@ -38,9 +38,9 @@ extends RefCounted
 ##     权重 CoH 真值（5/10/5/5/1.4）进 personality 档案；攻击槽目标 = 候选敌位
 ##     （敌方军事单位 + 敌质心）argmax，重评分以槽现目标为惯性参照。
 ##   - C5 攻击百分比四规则（优先级高→低）：胜利目标危急（开放问题#1 无 VP
-##     等价物，vp_rule_enabled 缺省关闭【提案/待定】）→ 基地威胁封顶 → 难度基调
-##     （门禁未开 0；开门禁后 baseline + 每分钟递增，封顶 max）→ 军力优势递增；
-##     "领先转防守"挂 VP 分支（随规则一同 dormant）。
+##     等价物，vp_rule_enabled 缺省关闭【提案/待定】）→ 基地威胁封顶 → 基调
+##     （单一参数曲线：门禁未开 0；开门禁后 baseline + 每分钟递增，封顶 max）
+##     → 军力优势递增；"领先转防守"挂 VP 分支（随规则一同 dormant）。
 ##   - 咬合③：CoH 槽内核为主决策内核（姿态由槽驱动：有攻击槽→ATTACK，槽清空
 ##     →DEFEND；SWL 比例条件转写为槽创建/维持门禁——enter=attack_enter，
 ##     维持=ATTACK 态 ratio>attack_exit 滞回带）；SWL 决策函数（should_attack/
@@ -91,11 +91,9 @@ var _stance_reason: String = "init"
 var _beat_acc: float = 0.0
 ## 当前分帧相位（DECIDE/BUILD 轮转，起始 DECIDE 保证首拍即决策）
 var _phase: int = PHASE_DECIDE
-## 难度档名（A1 · C2，setup 显式 overrides["difficulty"]，默认 standard）
-var _difficulty: String = ""
-## 开局攻击门禁截止时刻（战斗秒；setup 期按难度档案掷骰一次定局）
+## 开局攻击门禁截止时刻（战斗秒；setup 期按档案掷骰一次定局）
 var _attack_deadline: float = 0.0
-## 难度档案掷骰随机源（默认固定种子：确定性可测/可复现；overrides.random_seed 覆盖）
+## 档案掷骰随机源（默认固定种子：确定性可测/可复现；overrides.random_seed 覆盖）
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 ## 快照：本方军事单位数（权重>0 的存活单位）
 var _num_military: int = 0
@@ -141,23 +139,26 @@ var _default_behavior_choices: Dictionary = {}
 
 ## 装配（BattleInstance.enable_team_ai 内调用）。
 ## battle 已 setup 且 faction ∈ {1,2}；orders/formation 允许 null（仅测试环境）；
-## overrides 仅 setup 期消费一次——merge 序 = 代码默认 < 难度档案 < 显式 overrides
-## （难度选择键 overrides["difficulty"]，随机种子键 overrides["random_seed"]，A1）。
+## overrides 仅 setup 期消费一次——merge 序 = 代码默认 < personality 单一档案 <
+## 显式 overrides（随机种子键 overrides["random_seed"]，A1；遗留键
+## overrides["difficulty"] 宽容忽略——难度分档维度已裁决移除·开放问题#3，
+## get_profile 仅透传档案既有键集，未知键静默丢弃）。
 func setup(battle: Node, faction: int, orders: Node, formation: Node, overrides: Dictionary = {}) -> void:
 	_battle = battle
 	_faction = faction
 	_orders = orders
 	_formation = formation
-	# C2 难度档案：BalanceConfig 装载（缺载安全回退代码默认），显式 overrides 最高优先
-	_difficulty = str(overrides.get("difficulty", ScriptTeamAiProfiles.DEFAULT_DIFFICULTY))
+	# C2 单一档案：BalanceConfig 装载（缺载安全回退代码默认），显式 overrides 最高优先
+	# （merge overwrite=true 兑现 setup 文档承诺的覆盖序：代码默认 < 档案 < overrides）；
+	# 遗留键 overrides["difficulty"] 宽容忽略（get_profile 档案键集过滤静默丢弃）
 	var effective: Dictionary = {}
-	effective.merge(ScriptTeamAiProfiles.load_personality_overlay(_difficulty))
-	effective.merge(overrides)
+	effective.merge(ScriptTeamAiProfiles.load_personality_overlay())
+	effective.merge(overrides, true)
 	_p = ScriptTeamAiProfiles.get_profile(effective)
 	# A4（追加）：default_behavior v2 参数经 personality.tres global 行装载——get_profile
 	# 仅透传 DEFAULTS 既有键（档案文件键集不动），此处把 A4 新键补挂进 _p。
-	# 优先序 = 显式 overrides > 难度档案（既有 effective.merge 为不改写语义，A4 键
-	# 在此显式兑现 setup 文档承诺的覆盖序；overlay 缺载时键缺席 = 代码默认关）。
+	# 优先序 = 显式 overrides > personality 单一档案（effective 已按覆盖序合并，
+	# A4 键不在 DEFAULTS 键集、须在此显式补挂；overlay 缺载时键缺席 = 代码默认关）。
 	for _a4_key in ["default_behavior_v2_enabled", "demand_increment"]:
 		if overrides.has(_a4_key):
 			_p[_a4_key] = overrides[_a4_key]
@@ -248,11 +249,6 @@ func get_garrison_anchor() -> Vector2:
 ## 最近一次姿态切换原因（battle_sim 采样 / 调试）
 func get_stance_reason() -> String:
 	return _stance_reason
-
-
-## 难度档名（A1 · C2；调试 HUD / battle_sim 采样）
-func get_difficulty() -> String:
-	return _difficulty
 
 
 ## 开局攻击门禁截止时刻（A1 · C2 掷骰产物；调试 HUD / 观测采样）
@@ -349,8 +345,8 @@ func should_attack() -> bool:
 
 
 ## 开局攻击门禁（SecondsBeforeCanLeaveBase 语义近似）：时长未满即便力量占优不切 ATTACK。
-## 门禁时刻 = seconds_before_attack ± start_attack_variance 掷骰（A1 · C2：难度=参数，
-## setup 期一次定局；CoH standard 9min±4min 同构——开局节奏不可预测但难度差异全在参数）
+## 门禁时刻 = seconds_before_attack ± start_attack_variance 掷骰（A1 · C2，
+## setup 期一次定局；CoH 9min±4min 同构——开局节奏不可预测，参数档案可调）
 func _attack_gate_open() -> bool:
 	return _now() >= _attack_deadline
 
@@ -529,9 +525,9 @@ func _task_board_enabled() -> bool:
 ##          翻转防守"语义，本批仅留参数开关位）
 ##   规则二 基地威胁封顶（硬帽，最后施加）：threat_at_base 超阈 →
 ##          pct ≤ max(100 - threat, floor)/100
-##   规则三 难度基调：门禁未开 = 0；开门禁后 baseline + 每分钟递增，封顶 max
-##   规则四 军力优势递增（hard/hardest 消费）：归一化优势超起点 → 按增益抬升，
-##          同受 max 封顶
+##   规则三 基调（单一参数曲线，难度分档已裁决移除·开放问题#3）：门禁未开 = 0；
+##          开门禁后 baseline + 每分钟递增，封顶 max
+##   规则四 军力优势递增：归一化优势超起点 → 按增益抬升，同受 max 封顶
 func recalculate_attack_percentage() -> float:
 	# 规则三（基调）：开局攻击门禁未过 → 0（CoH start_attack_time 前攻击% = 0）
 	if not _attack_gate_open():

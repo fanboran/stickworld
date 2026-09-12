@@ -7,10 +7,10 @@ extends RefCounted
 ## 语义推断初值，**均待实测校准**（先例：UNITS_PER_COLUMN/ROW_GAP）。
 ##
 ## A1（设计文档12号 C1/C2）新增：
-##   - 难度档 personality：easy/standard/hard/hardest 配置在 BalanceConfig
-##     （res://config/ai/personality.tres，类型路径 ai.personality），难度=参数
-##     不=作弊（开局攻击时间/方差全参数化，不送资源）；load_personality_overlay
-##     负责装载，merge 序 = 代码默认 < 难度档案 < setup 显式 overrides。
+##   - personality 单一参数档案：配置在 BalanceConfig（res://config/ai/personality.tres，
+##     类型路径 ai.personality），难度分档维度已裁决移除（开放问题#3）——机制参数
+##     （开局攻击时间/方差/概率）保留、收敛为单一默认档案；load_personality_overlay
+##     负责装载，merge 序 = 代码默认 < personality 档案 < setup 显式 overrides。
 ##   - beat_interval：L4 层基础节拍（C1 收敛红线：每层一个基础节拍，CoH 0.5s 真值），
 ##     取代旧 stance_decision_interval（分帧相位轮转表达，见 team_ai.tick）。
 ##   - start_attack_variance：开局攻击时间 ± 掷骰半宽（CoH 9min±4min 同构）。
@@ -83,10 +83,10 @@ const STANCE_ROUT: int = 3
 ##   attack_target_timeout      攻击槽目标超时→重评分重定向（s，CoH 30s）
 ##   defend_target_timeout      防守槽目标超时→重定位刷数据（s，CoH 2min；不重发号令）
 ##   defend_rally_timeout       防守槽集结超时（s；CoH 未给真值，取防守目标超时 2 倍）
-##   attack_pct_baseline        C5 难度基调：攻击百分比基准（CoH 默认 0.6）
-##   attack_pct_growth_per_min  C5 难度基调：开门禁后每分钟递增（CoH +0.01/min）
-##   max_attack_percentage      C5 攻击百分比上限（CoH standard 0.70）
-##   superiority_ratio_floor    C5 军力优势递增起点（归一化优势，CoH hard/hardest 0.4）
+##   attack_pct_baseline        C5 攻击百分比基调（单一参数曲线，CoH 默认 0.6）
+##   attack_pct_growth_per_min  C5 开门禁后每分钟递增（CoH +0.01/min）
+##   max_attack_percentage      C5 攻击百分比上限（CoH 0.70）
+##   superiority_ratio_floor    C5 军力优势递增起点（归一化优势，CoH 0.4）
 ##   superiority_gain           C5 超出起点部分→pct 增益系数（语义映射初值）
 ##   base_threat_threshold      C5 基地威胁封顶触发值（0-100 口径，CoH 5）
 ##   base_threat_floor          C5 基地威胁封顶下限（%，CoH max(100-threat,5)）
@@ -124,7 +124,7 @@ const DEFAULTS: Dictionary = {
 	"retreat_casualty_rate": -1.0,
 	"retreat_loss_ratio": -1.0,
 	"retreat_timeout": -1.0,
-	# ── A2 · C3/C4/C5（standard 行镜像值 = 零回归基线；CoH 真值见逆向笔记 §3.2/§3.3）──
+	# ── A2 · C3/C4/C5（personality global 行镜像值 = 零回归基线；CoH 真值见逆向笔记 §3.2/§3.3）──
 	"slot_kernel_enabled": true,
 	"score_threat": 5.0,
 	"score_avoid_clumps_at_no_threat": 10.0,
@@ -149,10 +149,6 @@ const DEFAULTS: Dictionary = {
 	"vp_rule_enabled": false,
 }
 
-## 难度档（A1 · C2：personality 难度=参数，配置真值在 config/ai/personality.tres）
-const DEFAULT_DIFFICULTY: String = "standard"
-const DIFFICULTIES: Array[String] = ["easy", "standard", "hard", "hardest"]
-
 ## 基础节拍硬下限（对齐旧 MIN_DECISION_INTERVAL：覆盖注入不得低于此值，防号令风暴）
 const MIN_BEAT_INTERVAL: float = 0.5
 
@@ -164,7 +160,7 @@ const DEFAULT_RANDOM_SEED: int = 20260911
 static var _cache: Dictionary = {}
 
 
-## 获取阵营 AI 参数档案：默认值 + 难度档案/overrides 浅合并（仅 setup 期消费一次）。
+## 获取阵营 AI 参数档案：默认值 + personality 单一档案/overrides 浅合并（仅 setup 期消费一次）。
 ## overrides 只覆盖标量键；unit_weights/type_priority 等容器键整键替换。
 ## 基础节拍钳制到 MIN_BEAT_INTERVAL 下限。
 static func get_profile(overrides: Dictionary = {}) -> Dictionary:
@@ -177,11 +173,10 @@ static func get_profile(overrides: Dictionary = {}) -> Dictionary:
 	return merged
 
 
-## 装载难度档 personality 覆盖层（A1 · C2）：global 行（beat_interval）+ 难度行
-## （seconds_before_attack/start_attack_variance/demand_variance）。
-## BalanceConfig 缺载/路径缺失时返回空字典（get_profile 侧代码默认兜底）；
-## 未知难度同样安全回退（setup 显式 overrides 仍可整体覆盖）。
-static func load_personality_overlay(difficulty: String) -> Dictionary:
+## 装载 personality 单一档案覆盖层（A1 · C2，难度分档已裁决移除·开放问题#3）：
+## 只读 global 行（节拍/开局门禁/方差/攻击百分比/撤退掷骰等机制参数）。
+## BalanceConfig 缺载/路径缺失时返回空字典（get_profile 侧代码默认兜底）。
+static func load_personality_overlay() -> Dictionary:
 	var overlay: Dictionary = {}
 	var cfg: Node = _balance_config()
 	if cfg == null:
@@ -189,9 +184,6 @@ static func load_personality_overlay(difficulty: String) -> Dictionary:
 	var global_v: Variant = cfg.get_value("ai.personality.global")
 	if global_v is Dictionary:
 		overlay.merge(global_v)
-	var row_v: Variant = cfg.get_value("ai.personality." + difficulty)
-	if row_v is Dictionary:
-		overlay.merge(row_v)
 	return overlay
 
 

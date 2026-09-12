@@ -54,7 +54,7 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
-## 装配：注入参数档案引用（TeamAi._p 同实例——难度档案/覆盖重挂即生效）
+## 装配：注入参数档案引用（TeamAi._p 同实例——档案/覆盖重挂即生效）
 func setup(profile: Dictionary) -> void:
 	_p = profile
 

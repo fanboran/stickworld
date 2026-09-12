@@ -167,6 +167,14 @@ func setup(battle: Node, faction: int, orders: Node, formation: Node, overrides:
 			_p[_a4_key] = overrides[_a4_key]
 		elif effective.has(_a4_key):
 			_p[_a4_key] = effective[_a4_key]
+	# W1（追加）：WorldBox 效用选优内核参数同法补挂——softmax 选择规则/量纲归一/温度/
+	# 权重委托/冷却判定五键。缺载时键缺席 = 消费侧代码默认（与档案默认同值）。
+	for _w1_key in ["softmax_enabled", "softmax_weight_scale", "softmax_temperature",
+			"weight_calculate_enabled", "cooldown_enabled"]:
+		if overrides.has(_w1_key):
+			_p[_w1_key] = overrides[_w1_key]
+		elif effective.has(_w1_key):
+			_p[_w1_key] = effective[_w1_key]
 	# 开局攻击门禁掷骰：基准 ± 方差半宽一次定局（CoH standard 9min±4min 同构；
 	# 默认固定种子 → 门禁确定性，单测可锁、battle_sim 可复现）
 	_rng.seed = int(overrides.get("random_seed", ScriptTeamAiProfiles.DEFAULT_RANDOM_SEED))
@@ -1104,8 +1112,10 @@ func _apply_default_behavior_plans(plan_of: Dictionary, mapping: Dictionary) -> 
 		var behavior := _org_default_behavior(root)
 		if behavior.is_empty():
 			continue
-		var choice := _utility_scorer.pick_behavior(behavior, _squad_behavior_ctx(squad_id),
-				squad_id, _behavior_seed())
+		# W1：走提交版入口——选中即记冷却、target 解析非有限（发射失败）也记冷却，
+		# 防对昂贵条件反复探测；候选无 cooldown 声明时记账为空操作（零行为变化）。
+		var choice := _utility_scorer.pick_behavior_and_commit(behavior, _squad_behavior_ctx(squad_id),
+				squad_id, _behavior_seed(), _now())
 		if choice.is_empty():
 			continue
 		plan_of[squad_id] = {

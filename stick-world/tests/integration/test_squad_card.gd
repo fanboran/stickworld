@@ -64,6 +64,7 @@ func _register_tests() -> void:
 		["操作: 移出班组后成员行减少", "_test_remove_member", true],
 		["收起: 清空选择即隐藏", "_test_hide_on_clear", true],
 		["权威对比: 邻近班权威对比行 +「N 人有意转投 X 班」提示条", "_test_authority_compare", true],
+		["触发源: OrgPanel 选中 L1 → 唤起班组卡；关面板 → 收起", "_test_orgpanel_selection_binding", true],
 	]
 	for t in _tests:
 		_runner.add_test(t[0], Callable(self, String(t[1])), bool(t[2]))
@@ -252,3 +253,29 @@ func _test_authority_compare() -> void:
 	_runner.assert_true(hint_text.contains("有意转投") and hint_text.contains("三班"),
 			"提示条应报 「N 人有意转投 三班」（实测 %s）" % hint_text)
 	_runner.assert_true(hint_text.contains("2 人"), "二班两名非班长成员均在半径内（实测 %s）" % hint_text)
+
+
+## 触发源补全（UI-W4b 遗留）：OrgPanel 选中 L1 → 装配层接线唤起班组卡；关闭面板 → 收起。
+## 走 system_setup 装配的真实信号线（org_selection_changed → show_squad/hide_card），
+## 不跨模块 get_node、不新造跨面板状态。
+func _test_orgpanel_selection_binding() -> void:
+	if _card == null or _squad_id.is_empty():
+		return
+	var op: Node = _helper.game_root.ui_root.get_node_or_null("ModalOverlay/OrgPanel")
+	_runner.assert_not_null(op, "OrgPanel 应已由 SystemSetup 装配到 ModalOverlay")
+	if op == null:
+		return
+	_runner.assert_true(op.has_signal("org_selection_changed"),
+			"OrgPanel 应导出选中变更信号（装配层接线入口）")
+	# 模拟 OrgPanel 选中该 L1 组织（信号路径全真）
+	op.org_selection_changed.emit(_squad_id)
+	for i in 4:
+		await get_tree().process_frame
+	_runner.assert_true(_card.visible, "选中 L1 后班组卡应被唤起")
+	_runner.assert_equal(_card.get_bound_squad(), _squad_id, "卡片应绑定该 L1 组织")
+	# 关闭面板 → 导出空选中 → 卡片收起（消费既有 hide 语义，不残留）
+	op.close()
+	for i in 3:
+		await get_tree().process_frame
+	_runner.assert_false(_card.visible, "关闭 OrgPanel 后班组卡应收起")
+	_runner.assert_equal(_card.get_bound_squad(), "", "收起后不应残留绑定")

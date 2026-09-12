@@ -431,6 +431,28 @@ const AUTHORITY_PLAYER_BONUS: float = 0.2
 const AUTHORITY_MARGIN: float = 0.07
 
 
+## 组织数据归一化查询（权威值三计价项的统一取数口）：
+## organization_api.get_organization 的生产形态是 {ok, data} 包装（api → manager，
+## 见 modules/organization/api.gd:95 / organization_manager.gd:223），而单测桩常直接
+## 返回裸组织数据字典。本口两种形态都接受：有 ok+data 键则解包 data（ok=false 视为
+## 无数据），否则裸字典原样返回。缺载/查询不可用返回 {}。
+## 归一化而非"生产侧改读 data"的理由：调用点只有本文件的权威值计价与骨干守卫，
+## 把形态差异收敛在一个取数口，避免每处调用各写一遍包装解包；且 api 未来若退回裸
+## 数据形态，生产路径不需要改动。
+func _org_data(org_id: String) -> Dictionary:
+	if _org_api == null or not _org_api.has_method("get_organization"):
+		return {}
+	var raw: Dictionary = _org_api.get_organization(org_id)
+	if raw.is_empty():
+		return {}
+	if raw.has("ok") and raw.has("data"):
+		if not bool(raw.get("ok", false)):
+			return {}
+		var data: Variant = raw.get("data", {})
+		return data if data is Dictionary else {}
+	return raw
+
+
 ## 小队权威值评分（R4 择班内核）：班长在场 1.0 + 组织指挥官在册 0.5
 ## + 班长被玩家附身 0.2。组织查询不可用（_org_api 缺载/无该方法）时跳过指挥官项。
 ## 小队不存在返回 -INF（调用方以"可入"语义处理无班情况）。
@@ -444,10 +466,9 @@ func get_squad_authority(squad_id: String) -> float:
 		score += AUTHORITY_LEADER_BASE
 		if leader.has_method("is_possessed") and leader.is_possessed():
 			score += AUTHORITY_PLAYER_BONUS
-	if _org_api != null and _org_api.has_method("get_organization"):
-		var org: Dictionary = _org_api.get_organization(squad_id)
-		if not org.is_empty() and str(org.get("commander_id", "")) != "":
-			score += AUTHORITY_COMMANDER_BONUS
+	var org: Dictionary = _org_data(squad_id)
+	if not org.is_empty() and str(org.get("commander_id", "")) != "":
+		score += AUTHORITY_COMMANDER_BONUS
 	return score
 
 
@@ -1472,7 +1493,9 @@ func set_authority_params(params: Dictionary) -> void:
 			_authority_params[k] = params[k]
 
 
-## 跳槽状态快照（调试/UI/测试观测位）。
+## 跳槽状态快照（调试/UI/测试观测位）。前五项为运行态计数，后段为档案实值只读镜像
+## （UI 数值单一真相源：候选半径/冷却等直接取自装载后的 _authority_params，不再让
+## UI 端镜像常量与档案脱钩；键缺失时回落 AUTHORITY_DEFAULTS 同值，出口恒有值）。
 func get_authority_switch_state() -> Dictionary:
 	return {
 		"enabled": bool(_authority_params.get("authority_switch_enabled", false)),
@@ -1480,6 +1503,15 @@ func get_authority_switch_state() -> Dictionary:
 		"evaluated_last": _authority_last_eval_count,
 		"registered": _authority_next_eval.size(),
 		"cooling": _authority_cooldown_until.size(),
+		# ── 档案实值只读镜像（参数出口）──
+		"candidate_radius": float(_authority_params.get("authority_candidate_radius", 800.0)),
+		"cooldown": float(_authority_params.get("authority_switch_cooldown", 20.0)),
+		"scan_interval": float(_authority_params.get("authority_scan_interval", 0.5)),
+		"eval_interval": float(_authority_params.get("authority_eval_interval", 2.0)),
+		"player_squad_bonus": float(_authority_params.get("authority_player_squad_bonus", 0.2)),
+		"stay_in_player_squad_bonus": float(_authority_params.get("authority_stay_in_player_squad_bonus", 0.5)),
+		"leader_release_threshold": float(_authority_params.get("authority_leader_release_threshold", 0.3)),
+		"max_switches_per_squad_tick": int(_authority_params.get("authority_max_switches_per_squad_tick", 1)),
 	}
 
 
@@ -1649,12 +1681,11 @@ func _is_squad_leader_or_commander(u: Node, squad_id: String) -> bool:
 	if squad.get("leader", null) == u:
 		return get_squad_authority(squad_id) \
 				> float(_authority_params.get("authority_leader_release_threshold", 0.3))
-	if _org_api != null and _org_api.has_method("get_organization"):
-		var org: Dictionary = _org_api.get_organization(squad_id)
-		if not org.is_empty():
-			var cmd := String(org.get("commander_id", ""))
-			if not cmd.is_empty() and cmd == str(u.get_instance_id()):
-				return true
+	var org: Dictionary = _org_data(squad_id)
+	if not org.is_empty():
+		var cmd := String(org.get("commander_id", ""))
+		if not cmd.is_empty() and cmd == str(u.get_instance_id()):
+			return true
 	return false
 
 

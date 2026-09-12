@@ -78,8 +78,9 @@ const POLL_INTERVAL: float = 0.25
 ## 每颗威望星代表的权威值（get_squad_authority 量纲：班长 1.0 + 指挥官 0.5 + 玩家 0.2）
 const AUTHORITY_PER_STAR: float = 0.5
 
-## 邻近可投奔班半径（px）：镜像 ai.formation_authority.global.authority_candidate_radius
-## 缺省值 800（formation_system 未暴露该参数读口；档案改值时本表达按缺省近似，不阻塞）
+## 邻近可投奔班半径（px）缺省回落值：真值优先消费 formation 只读参数出口
+## get_authority_switch_state().candidate_radius（档案 ai.formation_authority.global），
+## 出口/字段缺失（formation 未注入或旧版无该口）才回落此常量，UI 数值不与档案脱钩。
 const CANDIDATE_RADIUS: float = 800.0
 ## 权威对比列出上限（本班 + 前 N 名邻近班；L1 稀疏纪律，不堆全表）
 const CANDIDATE_ROW_MAX: int = 3
@@ -557,6 +558,7 @@ func _refresh_defect_hint(current: float, scored: Array, units: Array) -> void:
 func _switch_intent_count(best_id: String, units: Array) -> int:
 	var best_leader: Node = _leader_of(best_id)
 	var self_leader: Node = _leader_of(_squad_id)
+	var radius := _candidate_radius()
 	var count := 0
 	for u in units:
 		if u == null or not is_instance_valid(u):
@@ -574,10 +576,21 @@ func _switch_intent_count(best_id: String, units: Array) -> int:
 			continue
 		if best_leader != null and u is Node2D and best_leader is Node2D \
 				and (u as Node2D).global_position.distance_to(
-						(best_leader as Node2D).global_position) > CANDIDATE_RADIUS:
+						(best_leader as Node2D).global_position) > radius:
 			continue
 		count += 1
 	return count
+
+
+## 邻近可投奔班半径（px）：优先 duck 消费 formation 只读参数出口
+## get_authority_switch_state().candidate_radius（档案实值，与 A9 跳槽同源）；
+## 出口缺失 / 非字典 / 无该键（旧版 formation）→ 回落缺省常量 CANDIDATE_RADIUS。
+func _candidate_radius() -> float:
+	if _formation != null and _formation.has_method("get_authority_switch_state"):
+		var st: Variant = _formation.get_authority_switch_state()
+		if st is Dictionary and (st as Dictionary).has("candidate_radius"):
+			return float((st as Dictionary)["candidate_radius"])
+	return CANDIDATE_RADIUS
 
 
 ## 邻近可投奔班 id：组织相邻口径（同父组织 L1 兄弟班）；散兵/无父级退化为编队全部战斗班

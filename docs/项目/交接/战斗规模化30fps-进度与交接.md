@@ -227,6 +227,20 @@ Terraria/王者真正可借鉴的是**刻内数据化**：单位不是场景树�
   ~192-384 draws——必须画在本单位身体之上（y-sort 语义），降 z 会消失
   在身体后，纯色 MMI 桶装不下纹理武器，暂无低风险合批路径；③血条已
   z=50 全局顶层（当年为防 y-sort 遮挡而设），同 z 连续已自动合批，无余量。
+- 2026-09-12：**血条像素级对齐，且分支已并入 main**。创始人要求桶化血条
+  「像素级一模一样」→ 验收从肉眼截图升级为双跑像素 diff 闭环（bar_probe
+  `--row=rich|crowd` 同布局两跑 + `tools/diff_png.py`），1920×1080 全帧
+  **diff=0** 双跑复现（五个根因见 §十四）。随后 `perf/battle-30fps` 并入
+  main（合并提交 `450b268f`，双父 cf2ca127 + be10d738）：冲突 2 文件 4 块，
+  解法 = 保留 main 侧「`TimeManager.sim_delta` 速度档 + PAUSABLE 引擎暂停
+  总闸」架构（分支侧旧 `is_paused` 早退门已被 main 取代），嫁接分支侧
+  `_sim`/`_crowd` tick 与 D 刀 sim 模式早退，步长统一走 `sim`。
+  **main 上 CrowdRenderer 与 D刀 BattleSim 均默认开**，回退开关
+  `STICK_CROWD=0` / `STICK_BATTLE_SIM=0`（记录设计，见 §十「开关与回滚」）。
+  合并后重验：`check_godot_errors` 干净、unit 55/55、像素 diff=0 复现、
+  全量套件 44/44（并行下 `test_org_e2e` 偶发 flake，隔离运行 8/8 通过）。
+  ⚠ 待创始人实机观感验收（boiling 逐帧抖动动态 + 整体观感）；批次 7
+  （idle/hit/dead 表现变体）与 96 全链验收仍未做。
 
 ## 十二、刀①低帧率分桶：机制、两个坑与解算墙证据（2026-09-11 交付）
 

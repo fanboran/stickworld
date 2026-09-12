@@ -59,7 +59,7 @@ func _register_tests() -> void:
 		["槽存活: 切 BATTLE 模式（clear_context）后卡片仍在", "_test_slot_survives_mode_switch", true],
 		["内容: 班名/成员行/班长栏/操作按钮齐备", "_test_content_wired", false],
 		["号令: order_issued 写入号令栏（玩家直令档）", "_test_order_line", true],
-		["相位: 计划未启用隐藏；激活后显示徽标", "_test_phase_badge", true],
+		["相位: 计划激活显示徽标；撤销后隐藏（GK-4 生产默认开）", "_test_phase_badge", true],
 		["操作: 点行选中 → 任命班长落到编制侧", "_test_assign_leader", true],
 		["操作: 移出班组后成员行减少", "_test_remove_member", true],
 		["收起: 清空选择即隐藏", "_test_hide_on_clear", true],
@@ -143,7 +143,9 @@ func _test_phase_badge() -> void:
 	if _card == null or _squad_id.is_empty():
 		return
 	var phase_label: Label = _card.get_node("Body/Phase")
-	_runner.assert_false(phase_label.visible, "相位计划未启用时不应显示相位徽标")
+	# GK-4 开闸依据：.tres 生效默认已开，推进号令即激活计划——原"默认未启用即隐藏"
+	# 前提不再成立。改为在开态下走「激活→撤销」两态：先验徽标显示，再用
+	# HOLD 非推进号令撤销计划验隐藏（两态断言均保留，不依赖默认值）。
 	_helper.formation.set_phase_plan_params({"phase_plan_enabled": true})
 	_helper.tactical.issue(TacticalOrdersScript.OrderType.ADVANCE_ALL, _squad_id, ADVANCE_TARGET)
 	for i in 3:
@@ -152,6 +154,10 @@ func _test_phase_badge() -> void:
 	_runner.assert_true(
 			String(phase_label.text).contains("跃进中"),
 			"徽标应为相位直译文案（实测 %s）" % String(phase_label.text))
+	_helper.tactical.issue(TacticalOrdersScript.OrderType.HOLD_POSITION, _squad_id, Vector2.ZERO)
+	for i in 2:
+		await get_tree().process_frame
+	_runner.assert_false(phase_label.visible, "计划撤销后不应显示相位徽标")
 
 
 func _test_assign_leader() -> void:

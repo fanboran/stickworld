@@ -2,7 +2,8 @@ extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
 ## 单元测试：9i+ 溃逃保真五项增强（P6 · 6.3）。
-## 覆盖：五开关默认关（零回归闸门）/ 数值默认值 / 可覆盖开启 / TeamAi 姿态查询接口。
+## 覆盖：未开闸开关默认关（零回归闸门）/ 已开闸开关默认开（GK-1 rout_strafe / GK-2
+## rout_reengage+test_engage）/ 数值默认值 / 可覆盖开启 / TeamAi 姿态查询接口。
 ## 不进场景树，确定性（纯档案 + 接口存在性验证）。
 
 @warning_ignore("shadowed_global_identifier")
@@ -16,9 +17,10 @@ var _runner: TestRunner
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("9i+ 四开关默认全关（零回归闸门）", _test_defaults_off)
+	_runner.add_test("9i+ 剩余开关默认关（零回归闸门）", _test_defaults_off)
 	_runner.add_test("近战兵种包抄开启（Demo P5 灵动化）", _test_flank_melee_on)
 	_runner.add_test("溃逃横向游走开启（GK-1 开闸）", _test_rout_strafe_on)
+	_runner.add_test("逃开再战/试探接敌开启（GK-2 开闸）", _test_gk2_engage_on)
 	_runner.add_test("9i+ 数值字段默认值", _test_numeric_defaults)
 	_runner.add_test("re_engage_morale < 低士气阈值 0.25", _test_reengage_morale_bound)
 	_runner.add_test("9i+ 开关可覆盖开启", _test_override_on)
@@ -33,13 +35,13 @@ func _ready() -> void:
 # ─────────────────────────────── 测试用例 ────────────────────────────────
 
 func _test_defaults_off() -> void:
-	# 零回归闸门：所有兵种档案的 9i+ 开关默认 false
+	# 零回归闸门：所有兵种档案中尚未开闸的 9i+ 开关默认 false
 	# （flank_enabled 已拆出：Demo P5 起近战兵种有意开启，由 _test_flank_melee_on 单独守护；
-	#   rout_strafe_enabled 同样已拆出：GK-1 开闸起有意开启，由 _test_rout_strafe_on 单独守护）
+	#   rout_strafe_enabled 同样已拆出：GK-1 开闸起有意开启，由 _test_rout_strafe_on 单独守护；
+	#   rout_reengage_enabled / test_engage_enabled 已拆出：GK-2 开闸起有意开启，
+	#   由 _test_gk2_engage_on 单独守护——baseline 行翻 true，CLASS_PROFILES 无同键覆盖）
 	var switches: Array = [
-		"rout_reengage_enabled",
 		"retreat_keep_block",
-		"test_engage_enabled",
 	]
 	for wtype in [ScriptBehaviorProfiles.SWORD, ScriptBehaviorProfiles.SPEAR,
 			ScriptBehaviorProfiles.BOW, ScriptBehaviorProfiles.STAFF,
@@ -47,6 +49,18 @@ func _test_defaults_off() -> void:
 		var p: Dictionary = ScriptBehaviorProfiles.get_profile(wtype)
 		for sw in switches:
 			_runner.assert_false(bool(p.get(sw, true)), "%s 默认关 (wtype=%d)" % [sw, wtype])
+
+
+## GK-2 开闸契约：逃开再战 + 试探接敌在 baseline 行有意开启（全兵种适用）
+func _test_gk2_engage_on() -> void:
+	for wtype in [ScriptBehaviorProfiles.SWORD, ScriptBehaviorProfiles.SPEAR,
+			ScriptBehaviorProfiles.BOW, ScriptBehaviorProfiles.STAFF,
+			ScriptBehaviorProfiles.PICKAXE]:
+		var p: Dictionary = ScriptBehaviorProfiles.get_profile(wtype)
+		_runner.assert_true(bool(p.get("rout_reengage_enabled", false)),
+				"GK-2 起逃开再战应开启 (wtype=%d)" % wtype)
+		_runner.assert_true(bool(p.get("test_engage_enabled", false)),
+				"GK-2 起试探接敌应开启 (wtype=%d)" % wtype)
 
 
 ## Demo P5 灵动化契约：包抄仅近战兵种开启（剑/矛），远程与工具兵种保持关

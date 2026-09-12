@@ -19,6 +19,21 @@ extends Node
 ## 号令已送达单位
 signal order_delivered(order_type: int, squad_id: String, unit_ids: Array)
 
+## 单跳接力起跑（UI-W3 前置，界面方案 §2.6）：命令沿指挥链逐跳跑秒，每跳起跑即发——
+## eta = 本跳传播秒数（传输层真值），hop_index = 链上序位（0=玩家跳，逐跳 +1）
+signal relay_started(relay_id: String, order_type: int, from_org: String, to_org: String, hop_index: int, eta: float)
+
+## 单跳接力抵达（含被拒收/停驻丢弃——outcome 说明该跳结局，UI 的「命令停驻」表达靠它）
+signal relay_arrived(relay_id: String, order_type: int, from_org: String, to_org: String, hop_index: int, outcome: String)
+
+## 抵达留痕上限（UI 打开晚于下令时的补放数据源；FIFO）
+const RELAY_HISTORY_MAX: int = 32
+
+## 在途跳登记（relay_id -> 项）与抵达到期留痕（FIFO）
+var _relay_seq: int = 0
+var _in_flight: Dictionary = {}
+var _relay_history: Array = []
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## FormationSystem 引用（队内目标点分配用；由装配注入）
 var _formation: Node = null
@@ -66,11 +81,12 @@ func deliver_via_orgs(plan: Dictionary, org_api: Node, order_type: int, behavior
 		if root_org.is_empty():
 			continue
 		var delay: float = _hop_delay(org_api, "", root_org)
+		var relay_id: String = _relay_begin(order_type, "", root_org, 0, delay)
 		if delay > 0.0:
 			# process_always=false：暂停期（引擎总闸）延时一并暂停，指令不在暗中送达
 			# （暂停原语化批次 A 语义，随传令重构移植到逐跳计时点）
 			await get_tree().create_timer(delay, false).timeout
-		_arrive_at_org(root_org, by_source, org_api, order_type, behavior_name, params, spread_mode)
+		_arrive_at_org(root_org, by_source, org_api, order_type, behavior_name, params, spread_mode, 0, relay_id)
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
@@ -86,48 +102,112 @@ func _hop_delay(org_api: Node, from_org: String, to_org: String) -> float:
 ##   L1 → 战斗职责校验（非战斗叶拒收）+ 解析小队成员，即时执行送达；
 ##   中间层 → 无实体动作（不做决策）；伤亡空缺（无指挥官，补位无人）→ 命令停驻丢弃；
 ##   已解散/不存在 → 送达即丢弃（dispatcher DISBANDED 跳过同口径的运行时兜底）。
-func _arrive_at_org(org_id: String, by_source: Dictionary, org_api: Node, order_type: int, behavior_name: String, params: Dictionary, spread_mode: String) -> void:
+## hop_index/relay_id：本跳在链上的序位与在途登记 id（UI 观测用；直呼旧签名两参缺省兼容）
+func _arrive_at_org(org_id: String, by_source: Dictionary, org_api: Node, order_type: int, behavior_name: String, params: Dictionary, spread_mode: String, hop_index: int = 0, relay_id: String = "") -> void:
 	if not org_api.has_method("get_organization"):
+		_relay_end(relay_id, "dropped_invalid")
 		return
 	var info: Dictionary = org_api.get_organization(org_id)
 	if not info.get("ok", false):
+		_relay_end(relay_id, "dropped_invalid")
 		return
 	var data: Dictionary = info.get("data", {})
 	if int(data.get("tier", 1)) <= 1:
-		_deliver_to_l1_squad(org_id, order_type, behavior_name, params, spread_mode)
+		_relay_end(relay_id, _deliver_to_l1_squad(org_id, order_type, behavior_name, params, spread_mode))
 		return
 	# 中间层伤亡空缺（§4.3.1 续传裁决）：旧指挥官没收到/没转发的命令在模拟中不存在——
 	# 直接丢弃，不做队列/续传；新指挥官上任后由下令方重发（team_ai 周期重评估天然覆盖）
 	if String(data.get("commander_id", "")).is_empty():
+		_relay_end(relay_id, "dropped_leaderless")
 		return
 	for hop in by_source.get(org_id, []):
 		var child_org: String = String(hop.get("to_org", ""))
 		if child_org.is_empty():
 			continue
-		_relay_child(org_id, child_org, by_source, org_api, order_type, behavior_name, params, spread_mode)
+		_relay_child(org_id, child_org, by_source, org_api, order_type, behavior_name, params, spread_mode, hop_index + 1)
+	_relay_end(relay_id, "relayed")
 
 
 ## 单条出跳的传播协程：延迟到点后送达 to_org（不 await 的调用 = 并行分支，各自独立计时）
-func _relay_child(from_org: String, to_org: String, by_source: Dictionary, org_api: Node, order_type: int, behavior_name: String, params: Dictionary, spread_mode: String) -> void:
+func _relay_child(from_org: String, to_org: String, by_source: Dictionary, org_api: Node, order_type: int, behavior_name: String, params: Dictionary, spread_mode: String, hop_index: int) -> void:
 	var delay: float = _hop_delay(org_api, from_org, to_org)
+	var relay_id: String = _relay_begin(order_type, from_org, to_org, hop_index, delay)
 	if delay > 0.0:
 		# process_always=false：暂停期（引擎总闸）延时一并暂停（批次 A 语义）
 		await get_tree().create_timer(delay, false).timeout
-	_arrive_at_org(to_org, by_source, org_api, order_type, behavior_name, params, spread_mode)
+	_arrive_at_org(to_org, by_source, org_api, order_type, behavior_name, params, spread_mode, hop_index, relay_id)
 
 
 ## L1 送达执行（§4.2.4）：非战斗叶拒收号令（照 issue 既有 is_combat_squad 口径，
 ## plan 不挡、送达时挡——组织树可能混编）；无小队/无成员（跨图残留、编制空架）静默丢弃。
-func _deliver_to_l1_squad(org_id: String, order_type: int, behavior_name: String, params: Dictionary, spread_mode: String) -> void:
+## 返回本跳结局（在途登记的 outcome 口径）。
+func _deliver_to_l1_squad(org_id: String, order_type: int, behavior_name: String, params: Dictionary, spread_mode: String) -> String:
 	if _formation == null:
-		return
+		return "dropped_no_formation"
 	if _formation.has_method("is_combat_squad") and not _formation.is_combat_squad(org_id):
 		push_warning("[CommandChain] 组织 %s 无战斗职责，拒收号令" % org_id)
-		return
+		return "rejected_noncombat"
 	var units: Array = _formation.get_squad_units(org_id)
 	if units.is_empty():
-		return
+		return "dropped_no_squad"
 	_execute_delivery(order_type, org_id, units, behavior_name, params, spread_mode)
+	return "delivered"
+
+
+# ─────────────────────────── 在途登记（UI 观测面）────────────────────────────
+
+## 在途接力清单（深拷贝，按起跑序）：UI 消费口径——state=="in_flight" 的每一跳一条，
+## 配合 relay_started/relay_arrived 信号可完整还原「命令沿链逐跳跑秒」
+func get_relays_in_flight() -> Array:
+	var out: Array = []
+	for id in _in_flight:
+		out.append((_in_flight[id] as Dictionary).duplicate(true))
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["seq"]) < int(b["seq"]))
+	return out
+
+
+## 最近完结跳留痕（送达/拒收/丢弃；FIFO 上限 RELAY_HISTORY_MAX）——
+## 面板打开晚于下令时，靠它补放刚才沿链发生过什么
+func get_relay_history(limit: int = 16) -> Array:
+	var n: int = mini(maxi(limit, 0), _relay_history.size())
+	var out: Array = []
+	for i in range(_relay_history.size() - n, _relay_history.size()):
+		out.append((_relay_history[i] as Dictionary).duplicate(true))
+	return out
+
+
+## 登记一跳起跑并发射 relay_started；返回在途 id（relay_end 凭它销账）
+func _relay_begin(order_type: int, from_org: String, to_org: String, hop_index: int, eta: float) -> String:
+	_relay_seq += 1
+	var id := "relay_%d" % _relay_seq
+	_in_flight[id] = {
+		"relay_id": id,
+		"order_type": order_type,
+		"from_org": from_org,
+		"to_org": to_org,
+		"hop_index": hop_index,
+		"eta": eta,
+		"seq": _relay_seq,
+		"started_at_ms": Time.get_ticks_msec(),
+		"state": "in_flight",
+	}
+	relay_started.emit(id, order_type, from_org, to_org, hop_index, eta)
+	return id
+
+
+## 一跳销账：移出在途、进留痕 FIFO、发射 relay_arrived（outcome = delivered/relayed/
+## rejected_noncombat/dropped_leaderless/dropped_invalid/dropped_no_squad/dropped_no_formation）
+func _relay_end(relay_id: String, outcome: String) -> void:
+	if relay_id.is_empty() or not _in_flight.has(relay_id):
+		return
+	var entry: Dictionary = _in_flight[relay_id]
+	_in_flight.erase(relay_id)
+	entry["state"] = outcome
+	_relay_history.append(entry)
+	while _relay_history.size() > RELAY_HISTORY_MAX:
+		_relay_history.pop_front()
+	relay_arrived.emit(String(entry["relay_id"]), int(entry["order_type"]), String(entry["from_org"]),
+			String(entry["to_org"]), int(entry["hop_index"]), outcome)
 
 
 ## 实际执行号令送达：设置每个单位的 AIController 命令。

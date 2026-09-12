@@ -48,11 +48,14 @@
 
 1. **宽度**：房屋类宽度 = **单位宽度 4 格（128px）的整数倍**（4/8/12/16 格）；小物件（井/摊/城墙段）例外。
 2. **视角**：**纯正面 + 俯角 20° 微俯视**（2D 侧视微俯视游戏；**禁止水平偏航**）。
+   > 注：参考图 `smithy.png` 的原始生成提示词写的是「相机正对物体的平行投影，**无透视，无俯仰角度，无斜视**」——即参考图本身是**零俯角**的。我们仍取 20° 俯角，是因为零俯角下**坡屋面会被压成一条线**（看不到大面积屋面），而这正是创始人反复念叨的"参考图那种木头顶房子的透视"。20° 是"保住屋面可见面积"与"仍是侧视游戏"之间的取舍点。**城市总览图**可另开到 ~34°（读出行深），但那是配图，不是游戏内视角。
 3. **比例（米制）**：门高 153px(2.0m)；单层檐高 200~207px(2.6~2.7m)；两层檐高 400~413(5.2~5.4m)；窗台 69(0.9m)；窗高 92~100(1.2~1.3m)；屋顶高 ≈ 檐高 × 0.5。
+   > 换算基准：**1 世界单位 ≈ 1.31cm；1 格 = 32 单位 = 0.42m；火柴人 130 单位 = 1.70m**。Builder 的 UV 约定是 **1 个 UV tile = 1 格 = 0.42m**，材质里任何 feature 的尺寸都要按这个换算（这是 texel density 纪律的唯一基准）。
 4. **出檐** = 建筑宽 × 18~23%。
 5. **风格**：写实 PBR 材质 + 真实光照，造型风格化（不与矢量火柴人冲突）；**禁止 2D 手绘笔触路线**。
 6. **流程**：设计文档先行；每环节产出必须过门禁 + 派审查员（玩家/美术视角）打回；大量使用子 agent 并逐轮把关。
 7. **交付**：每轮把关键图**直接贴给创始人**，不要让他去开文件或启动游戏。
+8. **道具是立面的一部分**：参考图里道具贡献约 1/3 画面信息量；空立面在游戏尺寸下必读作"秃"。道具走 `props.py` + `dress()`，不进建筑本体。
 
 ---
 
@@ -71,40 +74,43 @@
 
 ---
 
-## 二、当前状态（v3 第一批 + 两轮修正）
+## 二、当前状态（v3：材质库 / 几何库 / 布局器 / **道具层** / **成图探针**）
 
 ### 已建成
 
 | 模块 | 文件 | 状态 |
 |---|---|---|
 | 规范文档 | `docs/技术/架构/建筑生成管线v3-写实PBR.md` | 九章 + §8 修订决议（含 §8.7 米制）+ §9 品控结论 |
-| 材质库 | `tools/blender_buildings/materials.py` | 12 种 PBR 材质 + UV 工具；6 轮自迭代；品控判定"游戏尺寸下塌成 4 组"（待重建） |
-| 建筑几何库 | `tools/blender_buildings/buildings.py` | 模块 + house/townhouse/barn/smithy1 × 宽度档；门 150/出檐 20.5% 达标；**正在被 agent 扩展** |
-| 城市布局器 | `tools/blender_buildings/city_layout.py` | 4 档确定性布局 + 平面图 + 天际线；数据可用、观感未做 |
-| 渲染探针 | `probe_materials.py` / `probe_buildings.py` / `probe_city_plan.py` | 可复跑 |
+| 材质库 | `tools/blender_buildings/materials.py` | 12 种 PBR 材质 + UV 工具；**正在被 agent 按 texel density 标准重建**（thatch/iron/plaster/stone 重做 + cavity/water/lamp/straw/rope/ground/foliage 新注册） |
+| 建筑几何库 | `tools/blender_buildings/buildings.py` | 10 种装配器 × 宽度档：house/townhouse/barn/smithy1 + **rowhouse(3 层)/windmill/cathedral/tower/gatehouse/lighthouse**；模块库另有拱券/玫瑰窗/尖拱窗/垛口/隅石/扶壁/锥顶/风车叶/灯室 |
+| **道具层** | `tools/blender_buildings/props.py` | **33 件道具**（容器/铁匠工坊/家具/运输围挡/立面挂载）+ `dress()` 门口避让式挂载调度；`GAME_SCALE=1.45` 解决"现实尺寸道具缩到游戏尺寸不可辨" |
+| 城市布局器 | `tools/blender_buildings/city_layout.py` | 4 档确定性布局 + 平面图 + 天际线 + 断言；**DEFS 表已列 24 种建筑** |
+| 探针 | `probe_materials.py` / `probe_buildings.py`（规范自检）<br>`probe_props.py`（道具）<br>`probe_delivery.py`（交付图：总图/街景/1:1 游戏尺寸）<br>`probe_city_scene.py`（**城市成图**：布局器数据 → 渲染） | 均可复跑 |
 
 ### 关键产物（`stick-world/temp/`）
-- `pbr_materials.png` / `pbr_materials_25pct.png`（材质样片 / 游戏尺寸自检）
-- `pbr_buildings_v2.png`（建筑总图，纯正面 + 20° 微俯视，含火柴人比例尺）
-- `city_plan_{hamlet,village,town,city}.png|.json`
-- `pbr_yaw_compare.png`（偏航对照 —— 已废弃该方案，留作证据）
+- `pbr_sheet_2x.png`（全部 def×宽度档总图）、`pbr_c_<def>_w<N>.png`（单体特写）
+- `pbr_game_1x.png`（**1 px/单位 = 游戏内真实大小**的街排；判断"材质/道具会不会糊"只看这张）
+- `pbr_city_town.png`（城镇临街全景，俯角 20°）、`pbr_city_town_top.png`（**总览，俯角 34°**，读出行深）+ `.json` 摆放清单
+- `pbr_props.png`（道具总览条）、`pbr_props_{smithy,house,barn}.png`（前场实景）
+- `city_plan_{hamlet,village,town,city}.png|.json`（城市平面数据）
 
-### 未完成
-- 特殊单体（三层联排/风车/大教堂/塔/城门/灯塔）—— agent 进行中
-- 立面细节（屋面厚度/檐下 AO/窗型表/二层镂空/烟囱泛水）
-- 材质重建（游戏尺寸可辨、iron/thatch 重做、texel density、decal）
-- 道具层 + 灯火自发光；城市街景渲染；运行时接入与入库
+### 未完成（按优先级见 §三）
+- 材质重建（进行中）与**屋顶结构**（屋面厚度/正脊/封檐板/檐下 AO/山墙檩条）
+- 布局器 24 种 def ↔ 装配器 10 种的落差（`probe_city_scene.py` 现用 `DEF_MAP` 兜底）
+- 道具层尚未接进建筑本体（目前由探针并置）
+- 运行时接入与入库（批次 5）
 
 ---
 
 ## 三、下一步（按品控优先级，详见文档 §9.2）
 
-1. **立面修正**（玩家 90% 视线）：屋面可见厚度 + 檐下 AO + 窗型表化（窗台 69 / 窗高 92~100 / 同立面同窗型 ≤2 / 上下层差异化）+ 二层补墙（现在镂空可见天空）+ 烟囱落地泛水。
-2. **材质标准重建**：定 texel density；重铺 12 种使"游戏内 1:1 可辨"；重做 iron 与茅草；污渍改 decal；补泥墙/木瓦/原木/玻璃/自发光。
-3. **道具层与灯火**：20~30 件道具（桶带铁箍/柴垛/招牌/灯笼/推车/篱笆/货箱）+ 炉火灯火自发光与暖光照。
-4. **城市街景**：用布局器把建筑+材质拼成整城渲染（含街道/广场/城墙），出"真实材质版"（非调试色）。
-5. **校验工具**：真火柴人剪影 + 人高刻度；道路占用/纹素密度/材质可辨三条自动校验。
-6. **运行时接入**（批次 5）：def_id 映射、`api.gd` 重定向、内饰图、入库。
+1. **屋顶结构改造**（当前第一观感杀手）：正脊压顶条、檐口封檐板（带厚度）+ 檐下暗带 AO、山墙端可见檩条/椽头出挑 2~3 根。参考图屋顶占剪影高 45~55% 且结构可读。
+2. **材质标准重建收口**（agent 进行中）：thatch 必须"一根根草茎顺坡披下 + 分层草把暗影"，iron 去砾石感，plaster 暖白禁锈褐斑，stone 大块砌块 + 深砂浆缝；`cavity` 近全黑（窗洞发亮的元凶）；`ground` 暖沙。
+3. **立面修正**：屋面可见厚度、窗型表化（窗台 69 / 窗高 92~100 / 同立面同窗型 ≤2 / 上下层差异化）、二层补墙（现在镂空可见天空）、烟囱落地泛水。
+4. **道具层接入装配器**：`dress()` 目前在探针里并置，应下沉到建筑装配器或入库烘焙流程；补 20~30 件道具（市集摊/水槽/招牌样式）。
+5. **补齐布局器 def**：24 种 def 里还缺 14 种装配器（cottage/tavern/bakery/shop/guildhall/hayloft/smithy2~4/church/chapel/shelter/stable/well/market_stall）。
+6. **校验工具**：真火柴人剪影 + 人高刻度；道路占用/纹素密度/材质 25% 可辨三条自动校验。
+7. **运行时接入**（批次 5）：def_id 映射、`modules/building_gen/api.gd` 重定向、内饰图、入库。
 
 ---
 
@@ -114,13 +120,33 @@
 BLENDER="/f/SteamLibrary/steamapps/common/Blender/blender.exe"
 cd "F:/VSCode/game-2/.temp/building-pipeline-v2/tools/blender_buildings"
 "$BLENDER" -b --factory-startup -P probe_materials.py     # 材质样片
-"$BLENDER" -b --factory-startup -P probe_buildings.py     # 建筑单体总图
+"$BLENDER" -b --factory-startup -P probe_buildings.py     # 建筑单体规范自检图
+"$BLENDER" -b --factory-startup -P probe_props.py         # 道具层
+"$BLENDER" -b --factory-startup -P probe_delivery.py      # 交付图（DELIVERY_FAST=1 只出街景）
+CITY_TIERS=town CITY_ROWS=0,1,2 CITY_TILT=34 \
+  "$BLENDER" -b --factory-startup -P probe_city_scene.py  # 城市成图
 python probe_city_plan.py                                  # 城市平面图（纯 Python + PIL）
 ```
+
+---
 
 ## 五、新会话恢复指引
 
 1. 读本文档（**§0 台账必读**）+ 设计文档 §8/§9。
 2. `git worktree list` 确认 `.temp/building-pipeline-v2`；缺则 `git worktree add .temp/building-pipeline-v2 agent/building-pipeline-v2`。
-3. 跑三个 probe 确认环境；按 §三 优先级推进。
+3. 跑几个 probe 确认环境；按 §三 优先级推进。
 4. 规矩：改任何东西前先对齐 §0.3；每环节产出必须派审查员打回；每轮把图直接贴给创始人。
+
+---
+
+## 六、踩坑记录（探针/渲染层，省得再踩一遍）
+
+| 坑 | 现象 | 正解 |
+|---|---|---|
+| **中途 `bpy.ops.wm.read_factory_settings`** | 材质/节点组被清掉，而 `buildings._CACHE` 与 materials 内部缓存仍持旧引用 → `_external_material` 校验失败**静默回退 `_flat_pbr` 纯色**，纹理整片消失（会误判成"材质做坏了"） | 一张场景只 `read_factory_settings` **一次**；多图之间只删网格对象（`probe_props.wipe()`），并同步清材质缓存 |
+| **`dict.setdefault(k, maker())`** | 默认参数先求值 → 每次都新建材质，越积越多 | 写成显式 `if k not in d: d[k] = maker()` |
+| **布局器 `baseline_y` 方向** | 布局器里 y 越大越靠**前**（南），本管线世界坐标 **-Y = 正前**，直接用会把城墙摆到建筑前面糊住整条街 | 世界 y = `-baseline_y` |
+| **建筑以原点为中心 vs 前墙面落地线** | 装配器进深向 ±Y 各半，而布局器给的是"前墙面落地线" | 先实测本地 `measure(ob)["y"][0]`，再算平移量对齐前墙面 |
+| **多行城市在 20° 俯角下行距不足** | 行距仅建筑进深（160~190 单位），折算到屏幕垂直仅 55~65 单位，后行被前行整个盖住 | 渲染层给每深一行额外后推 `ROW_STRETCH`（2.5D 常规美术手段，不动布局数据）；总览图另开 34° 俯角 |
+| **道具"现实尺寸"缩到游戏尺寸不可辨** | 现实 0.55m 的木桶在 130px 火柴人的世界里只有 40px 高 | 挂载统一 `GAME_SCALE`（1.45×）；建模仍按现实尺寸，便于反算 |
+| **尖锥形道具被读成"帐篷"** | 草垛/花盆用圆锥 → 游戏尺寸下读成金色小帐篷 | 草垛改"下缓锥 + 上急锥"的矮胖圆顶；花盆改直筒厚唇 |

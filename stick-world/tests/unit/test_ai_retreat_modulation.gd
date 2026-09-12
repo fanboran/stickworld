@@ -20,7 +20,7 @@ var _runner: TestRunner
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("A3 档案新键默认值（开关默认关 = 零回归）", _test_profile_defaults)
+	_runner.add_test("A3 档案新键默认值（GK-2 开闸：生效默认开 / 代码基线缺载兜底关）", _test_profile_defaults)
 	_runner.add_test("personality 单一档案 retreat_chance（CoH 真值）+ 概率覆写链", _test_personality_rows)
 	_runner.add_test("开关默认关：候选条件满足也不撤退（走 attack）", _test_mod_off_zero_regression)
 	_runner.add_test("因果性：chance=1 但战况健康不撤退", _test_candidate_causality)
@@ -40,14 +40,16 @@ func _ready() -> void:
 # ─────────────────────────────── 测试用例 ────────────────────────────────
 
 func _test_profile_defaults() -> void:
+	# 代码 BASELINE 保持 false（BalanceConfig 缺载兜底）；GK-2 开闸：.tres baseline 行
+	# retreat_mod_enabled=true = 生产生效默认开（CLASS_PROFILES 无同键覆盖 → 全兵种统一）。
 	_runner.assert_false(bool(ScriptBehaviorProfiles.BASELINE.get("retreat_mod_enabled", true)),
-			"retreat_mod_enabled 基线默认关")
+			"retreat_mod_enabled 代码基线默认关（缺载兜底）")
 	for wtype in [ScriptBehaviorProfiles.SWORD, ScriptBehaviorProfiles.SPEAR,
 			ScriptBehaviorProfiles.BOW, ScriptBehaviorProfiles.STAFF,
 			ScriptBehaviorProfiles.PICKAXE, ScriptBehaviorProfiles.MERIC]:
 		var p: Dictionary = ScriptBehaviorProfiles.get_profile(wtype)
-		_runner.assert_false(bool(p.get("retreat_mod_enabled", true)),
-				"retreat_mod_enabled 默认关 (wtype=%d)" % wtype)
+		_runner.assert_true(bool(p.get("retreat_mod_enabled", false)),
+				"GK-2 开闸：retreat_mod_enabled 生效默认开 (wtype=%d)" % wtype)
 	var p2: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
 	_runner.assert_approx(float(p2.get("retreat_mod_hp_ratio", -1.0)), 0.49, 0.001,
 			"hp 阈值 = 0.49（CoH retreat_capacity_percentage）")
@@ -378,9 +380,11 @@ class _Ctx:
 		ai = AIController.new()
 		ai._entity = entity  # 不进树直接注入（_ready cast 等价物，batch 准入：不进场景树）
 		ai._setup_state_machine()
-		if enable_mod:
-			var p: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
-			p["retreat_mod_enabled"] = true
+		# GK-2 开闸依据：.tres 生效默认已翻 true，本夹具须显式钉住开关两态
+		# （enable_mod=true → 强制开用于机制用例；false → 强制关用于零回归用例），
+		# 不再依赖"默认即关"，否则零回归用例会被生产默认值反向污染。
+		var p: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
+		p["retreat_mod_enabled"] = true if enable_mod else false
 		for k in profile_overrides.keys():
 			var p2: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
 			p2[k] = profile_overrides[k]

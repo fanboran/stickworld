@@ -1,0 +1,71 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modules/combat/ui/team_ai_hud.gd" id="1_w1hud"]
+
+[node name="TeamAiHud" type="VBoxContainer"]
+modulate = Color(1, 1, 1, 0.88)
+layout_mode = 3
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -440.0
+offset_top = 156.0
+offset_right = -8.0
+offset_bottom = 268.0
+grow_horizontal = 0
+grow_vertical = 1
+mouse_filter = 2
+theme_override_constants/separation = 4
+script = ExtResource("1_w1hud")
+
+[node name="AtkRow" type="PanelContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="AtkRow"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Tag" type="Label" parent="AtkRow/Row"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "攻"
+
+[node name="Stance" type="Label" parent="AtkRow/Row"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+
+[node name="Info" type="Label" parent="AtkRow/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 12
+text = "…"
+vertical_alignment = 1
+
+[node name="DefRow" type="PanelContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="DefRow"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Tag" type="Label" parent="DefRow/Row"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "守"
+
+[node name="Stance" type="Label" parent="DefRow/Row"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "—"
+
+[node name="Info" type="Label" parent="DefRow/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 12
+text = "…"
+vertical_alignment = 1

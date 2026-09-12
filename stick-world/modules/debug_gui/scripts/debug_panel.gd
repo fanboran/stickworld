@@ -31,6 +31,7 @@ const DRAWER_NAMES_ZH: Dictionary = {
 	"building_names": "建筑名称",
 	"world_ruler": "世界坐标标尺",
 	"entity_info": "实体信息框",
+	"team_ai_hud": "TeamAi姿态HUD",
 }
 
 

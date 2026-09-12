@@ -93,6 +93,11 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 		var extra: Dictionary = {}
 		if "faction_id" in entity:
 			extra["faction_id"] = entity.faction_id
+		# AI 决策时钟族（WB2 错峰读档保真）：只带相对剩余时长 + 错峰种子，
+		# 读档按 spawn 后回填（不重掷假偏移，见 ai_controller.import_timing_state）
+		var ai: Node = entity.get_ai_controller() if entity.has_method("get_ai_controller") else null
+		if ai != null and is_instance_valid(ai) and ai.has_method("export_timing_state"):
+			extra["ai_timing"] = ai.export_timing_state()
 		if not db.insert_row("entities", {
 			"slot_id": slot_id, "map_id": map_id,
 			"entity_id": "ent_%04d" % idx,
@@ -257,9 +262,29 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 		else:
 			if entity.has_method("set_possessed"):
 				entity.set_possessed(false)
+		# AI 决策时钟族（WB2）：档内有 ai_timing 才导入——相位（错峰）保真且不再重掷；
+		# 老存档无该字段（或字段损坏）→ 保持 spawn 时装配语义，不报错
+		var timing: Variant = _parse_extra_field(row, "ai_timing")
+		if timing is Dictionary:
+			var ai: Node = entity.get_ai_controller() if entity.has_method("get_ai_controller") else null
+			if ai != null and is_instance_valid(ai) and ai.has_method("import_timing_state"):
+				ai.import_timing_state(timing)
 		# 玩家与 NPC 都注入 ConstructionManager（玩家按F交互需要）
 		if entity.has_method("set_construction_manager") and _root._construction_api != null:
 			entity.set_construction_manager(_root._construction_api)
+
+
+## 解析 entities.extra_data 中的指定字段（列缺失/空串/非 JSON/非字典/无该键 → null；
+## 老档安全回退，调用方按"字段不存在"处理）
+func _parse_extra_field(row: Dictionary, key: String) -> Variant:
+	var raw: String = str(row.get("extra_data", ""))
+	if raw.is_empty():
+		return null
+	var parsed: Variant = JSON.parse_string(raw)
+	if not (parsed is Dictionary):
+		return null
+	var d: Dictionary = parsed
+	return d[key] if d.has(key) else null
 
 
 # ─────────────────────────────── 对外接口（由 GameRoot 转发） ────────────────────────────────

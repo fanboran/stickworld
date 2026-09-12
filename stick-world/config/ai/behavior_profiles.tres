@@ -21,6 +21,10 @@ variables = {
 			"burst_wait": Vector2(1.2, 1.8),
 			"night_hesitate_mult": 1.0,
 			"heal_buzz_distance": 60.0,
+			"spawn_jitter_enabled": false,
+			"spawn_jitter_ratio": 0.5,
+			"probe_fail_cooldown_enabled": false,
+			"job_scan_interval": 0.5,
 			"description": "R1 主决策间隔 0.3s ± 0 方差（镜像旧 DECISION_INTERVAL 常量）；R3 点射 0 发=关、停顿区间 1.2~1.8s（RWR wait 1.2±0.6）、夜间犹豫倍率 1.0（RWR 昼 0.3~0.6/夜 0.8~1.1 同构）；R5 防扎堆治疗 60px（RWR consider_someone_already_healing_wounded_distance 10m 同构换算）"
 		}
 	]

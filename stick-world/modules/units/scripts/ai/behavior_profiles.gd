@@ -120,6 +120,13 @@ const BASELINE: Dictionary = {
 	"suppression_melee_min_damage": 12.0,   ## 近战重击触发下限（HP；量级对齐 Anims.HIT_BIG_DAMAGE_THRESHOLD=12 重击分级——轻击不压制，防近战互殴全员钉死）
 	"suppression_morale_per_tick": 2.0,     ## 压制期士气流失（点/0.5s tick，语义推断待实测校准；经 lose_morale 只损士气不伤血，与伤害士气损失叠加可推向溃逃）
 	"suppression_immune": false,            ## 豁免规则（兵种级：英雄/巨人类置 true；已溃逃/已死亡/玩家附身恒豁免，不占此键）
+	# ── W2 · WorldBox 决策冷却错峰（M4/Top2；消费点 ai_controller 决策时钟族。
+	#    冷却记"世界时刻"不记剩余秒数；成批出生/读档预置假偏移防群体齐套。
+	#    全部默认关 = 首次到期 = 装配后 interval，与旧累加器语义逐位等价 = 零回归）──
+	"spawn_jitter_enabled": false,          ## 出生错峰假偏移总开关（false=不预置偏移）
+	"spawn_jitter_ratio": 0.5,              ## 假偏移比例：首次到期 = now + interval×(1 - ratio×rand%)（WorldBox rand(0, 0.5×cd) 真值）
+	"probe_fail_cooldown_enabled": false,   ## 域级探测失败也入短冷却（false=失败下一拍即重试=既有语义；WorldBox M6 cooldown_on_launch_failure）
+	"job_scan_interval": 0.5,               ## 派工/采集探测间隔（s，job 域失败冷却长度；语义推断初值待实测校准）
 }
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────

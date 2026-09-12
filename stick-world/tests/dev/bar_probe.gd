@@ -26,7 +26,6 @@ var _use_crowd := false
 
 
 class FakeRig extends Node2D:
-	var body_color := Color(0.156, 0.156, 0.156)
 	var outline_color := Color(0.9, 0.9, 0.9)
 	var _hook := Callable()
 	func set_crowd_hook(c: Callable) -> void:

@@ -30,7 +30,7 @@
 ##       WorldState.game_time，hour 参数显式注入（单测/特殊场景）。
 ##
 ## 职业档案字段：见 profession_registry.gd 类头（id/name_zh/work_site_def/
-## product/produce_amount/consume_res/consume_amount/cycle/tool/uniform/quota）。
+## product/produce_amount/consume_res/consume_amount/cycle/tool/quota）。
 ##
 ## 职业状态协议（弱类型，实体侧零依赖本模块）：
 ##   - 实体 set_profession(id) / get_profession()：空串 = 待业，非空 = 在职。

@@ -552,7 +552,6 @@ func register_unit(entity: Node) -> Dictionary:
 		"t": 0.0,
 		"finished": false,
 		"hidden": false,
-		"body_color": _read_color(rig, "body_color", Color.WHITE),
 		"outline_color": _read_color(rig, "outline_color", Color.BLACK),
 		"slot": slot_idx,  # 全局槽位表下标（与带无关，注册/注销互斥分配）
 		"band": band,
@@ -908,7 +907,8 @@ func _pose_slot(slot: Dictionary, info: Dictionary, t: float) -> void:
 	var unit_xf := Transform2D(0.0, entity.global_position)
 	var rs: Vector2 = rig.scale if rig != null else Vector2.ONE
 	unit_xf = unit_xf.scaled_local(rs)
-	var body: Color = slot.get("body_color", Color.WHITE)
+	# 身体色恒为默认：不读单位身上的颜色（火柴人身体不做身份染色，见 stickman_rig 类头）
+	var body: Color = Skel.DEFAULT_BODY
 	var outline: Color = slot.get("outline_color", Color.BLACK)
 	var band: int = slot.get("band", 0)
 	var band_idx: int = slot.get("band_idx", 0)

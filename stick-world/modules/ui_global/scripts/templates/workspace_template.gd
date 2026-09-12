@@ -85,7 +85,7 @@ func _ready() -> void:
 
 func _build_tabs() -> void:
 	for ws in WORKSPACES:
-		var btn := StickKit.button(_tab_bar, ws["label"],
+		var btn := StickKit.sketch_button(_tab_bar, ws["label"],
 				_select_workspace.bind(ws["id"]), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 		btn.custom_minimum_size = Vector2(120, StickTokens.BTN_H)
 		_tab_buttons[ws["id"]] = btn
@@ -94,13 +94,9 @@ func _build_tabs() -> void:
 func _select_workspace(ws_id: String) -> void:
 	_active_ws = ws_id
 	for id in _tab_buttons:
-		var btn: Button = _tab_buttons[id]
-		if id == ws_id:
-			btn.add_theme_stylebox_override("normal", StickStyle.tab_selected())
-			btn.add_theme_color_override("font_color", StickTokens.ACCENT)
-		else:
-			btn.remove_theme_stylebox_override("normal")
-			btn.remove_theme_color_override("font_color")
+		var btn := _tab_buttons[id] as SketchButton
+		# 选中态 = ACCENT 变体（琥珀描边档），取消 = DARK（调用点零 override）
+		btn.kind = SketchButton.Kind.ACCENT if id == ws_id else SketchButton.Kind.DARK
 	_rebuild_right()
 
 

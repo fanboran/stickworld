@@ -1,6 +1,6 @@
 # UI 运行时架构优化方案 —— 暂停原语化 · HUD 布局收权 · 按钮变体系统
 
-> **状态**：设计基线（AI 设计稿，批次顺序待创始人确认后逐批立项）；工作项跟踪在 [`../../项目/待办事项.md`](../../项目/待办事项.md)「UI 运行时架构三项优化」节。
+> **状态**：设计基线；**A/B/C 三批全部实施完毕**（2026-09-11，分支链 `agent/ui-pause-primitive` → `agent/ui-hud-zones` → `agent/ui-button-variants`，待链尾统一合 main；B 的 zone 注册表实现 = `modules/ui_global/scripts/hud/hud_zone_layout.gd`，C 的变体表 = SketchStyle 静态表）；工作项跟踪在 [`../../项目/待办事项.md`](../../项目/待办事项.md)「UI 运行时架构三项优化」节。
 > **是什么**：针对三类反复出 bug 的 UI 运行时局部架构（暂停、HUD 布局、按钮样式）的根本性重构方案。每项含病灶机制、目标设计、迁移路线、验收标准与风险。
 > **关联**：[`../设计/UI/04-游戏内HUD.md`](../../设计/UI/04-游戏内HUD.md)（HUD 布局现状消费方）、[`场景与战斗/UI.md`](场景与战斗/UI.md)（UI 体系架构）。
 
@@ -42,12 +42,21 @@ TimeManager 自造暂停（`is_paused()` + EventBus `game_paused/game_resumed` �
 
 | 子树 | process_mode | 理由 |
 |------|--------------|------|
-| 世界实体/AI/物理/环境/天气 | PAUSABLE（默认继承） | 引擎一刀冻结 |
-| 相机 rig | ALWAYS | 暂停布置战术时仍可平移/缩放（现行为保留） |
-| UIRoot 全家（含模态栈） | ALWAYS | 菜单可开可点、沸腾动画继续 |
-| TimeManager / AudioManager / EventBus | ALWAYS | 暂停驱动方与音频服务方 |
+| 世界实体/AI/物理/环境/天气（含 SystemSetup 运行时挂载的全部管理器） | PAUSABLE（默认继承） | 引擎一刀冻结 |
+| 相机 rig（CameraRig） | ALWAYS（game_root.tscn） | 暂停布置战术时仍可平移/缩放（输入自门禁防穿透模态） |
+| ShortcutGate（game_root 子节点） | ALWAYS（game_root.tscn） | 暂停期快捷键通道：ESC 退栈/空格恢复/F5F9 存读档必须存活；仅转发输入到 `GameRoot.handle_shortcuts` |
+| UIRoot 全家（含模态栈） | ALWAYS（ui_root.tscn） | 菜单可开可点、沸腾动画继续 |
+| TimeManager / SaveManager | ALWAYS（各自 `_ready`，自动加载不在两棵子树内） | 暂停驱动方；存读档可从暂停菜单发起、LoadGuard 看门狗须计时 |
+| 例外节点：sky_decor | ALWAYS（代码声明+注释） | 云/山视差跟随相机，暂停平移镜头时天空须跟手；风/云漂移由内部 world_paused 分支冻结，星野/飞鸟/极光子节点显式回落 PAUSABLE |
+| 例外节点：post_process_layer / hover_indicator | ALWAYS（代码声明+注释） | 暂停状态的视觉反应（炫光淡出、悬停框清屏）须在暂停期继续 tick |
 
 **倍速选型**：`sim_delta` 自管，不用 `Engine.time_scale`——后者会连带加速 UI tween/粒子，4x 时 UI 动画失控；sim_delta 只作用于模拟层，UI 天然恒速。模拟系统 tick 一律改走 `sim_delta`，顺手统一「倍速作用于昼夜/AI/战斗」的口径。
+
+实施口径细则（as-built）：
+
+- 实体位移积分在 `move_and_slide` 入口放大合成速度（扫掠检测步长放大不隧穿），积分后还原语义速度；循环动画播放速率随档加速防滑步，**oneshot 攻击动画保持 1.0**（rig 内强制，命中帧对齐是承重约束）。
+- `status_effects` 的效果时钟域保持真实秒（`_now()` 墙钟 + delta 计步不接 sim_delta）：X4 只加快游戏节拍，不放大 DoT/HoT 总量。
+- `CommandChain` 令先行延时改 `create_timer(delay, false)`（尊重引擎总闸，暂停期指令不在暗中送达）；游戏内模拟计时禁用默认 `process_always=true` 的 SceneTreeTimer。
 
 **信号层保留**：EventBus `game_paused/game_resumed` 继续存在，作为 UI 反应通道（「已暂停」提示、HUD 状态刷新），不再承担冻结职责。
 

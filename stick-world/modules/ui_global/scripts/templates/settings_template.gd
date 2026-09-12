@@ -99,7 +99,7 @@ func _init_defaults() -> void:
 
 func _build_categories() -> void:
 	for cat in SETTINGS_SCHEMA:
-		var btn := StickKit.button(_category_column, cat["title"],
+		var btn := StickKit.sketch_button(_category_column, cat["title"],
 				_select_category.bind(cat["id"]), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_category_buttons[cat["id"]] = btn
@@ -108,14 +108,9 @@ func _build_categories() -> void:
 func _select_category(cat_id: String) -> void:
 	_active_category = cat_id
 	for id in _category_buttons:
-		var btn: Button = _category_buttons[id]
-		# 选中态：琥珀描边 + 琥珀字
-		if id == cat_id:
-			btn.add_theme_stylebox_override("normal", StickStyle.accent_normal())
-			btn.add_theme_color_override("font_color", StickTokens.ACCENT)
-		else:
-			btn.remove_theme_stylebox_override("normal")
-			btn.remove_theme_color_override("font_color")
+		var btn := _category_buttons[id] as SketchButton
+		# 选中态 = ACCENT 变体（琥珀描边档），取消 = DARK（调用点零 override）
+		btn.kind = SketchButton.Kind.ACCENT if id == cat_id else SketchButton.Kind.DARK
 	_rebuild_content()
 
 

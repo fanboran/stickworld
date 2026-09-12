@@ -5,7 +5,8 @@ extends VBoxContainer
 ## - 最多 MAX_VISIBLE 条同时可见，超出移除最旧
 ## - 每条停留 toast_seconds 后经 fade_seconds 淡出销毁
 ## - 三级着色：info 蓝 / warn 黄 / error 红（EventBus `ui_notification` 的 level）
-## - 由 UIRoot 挂到 HudOverlay 槽（角落 HUD 部件自设 anchor，布局单一真相源见 UI.md）
+## - 定位归 zone：UIRoot 装配时经 place_in_zone 钉进 bottom_left（拉伸填满保留区，
+##   见 hud_zone_layout.gd），本部件不自算屏幕坐标
 
 ## 同时可见上限
 const MAX_VISIBLE := 5
@@ -17,15 +18,7 @@ var fade_seconds: float = StickTokens.T_PANEL
 
 
 func _ready() -> void:
-	# 左下角：贴左 12px、离底 96px（避让底部 ModePanel 高 78 + 空隙）
-	set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	offset_left = 12.0
-	offset_top = -324.0
-	offset_right = 380.0
-	offset_bottom = -96.0
-	grow_horizontal = Control.GROW_DIRECTION_END
-	grow_vertical = Control.GROW_DIRECTION_BEGIN
-	# 新通知贴底；HUD 部件不拦截输入
+	# 新通知贴底；HUD 部件不拦截输入（定位由 zone 表负责）
 	alignment = BoxContainer.ALIGNMENT_END
 	add_theme_constant_override("separation", 4)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE

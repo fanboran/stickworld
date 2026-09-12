@@ -57,13 +57,12 @@ func setup(construction_api: Node, resources_api: Node, scene_loader: Node,
 
 
 func _process(delta: float) -> void:
-	if TimeManager != null and TimeManager.is_paused():
-		return
+	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE）；步长经 sim_delta 携带速度档
 	if _scene_loader == null or not _scene_loader.has_method("get_current_map_id"):
 		return
 	if String(_scene_loader.get_current_map_id()) != HOME_MAP_ID:
 		return
-	_accum += delta
+	_accum += TimeManager.sim_delta(delta) if TimeManager != null else delta
 	if _accum < pop_growth_interval:
 		return
 	_accum = 0.0

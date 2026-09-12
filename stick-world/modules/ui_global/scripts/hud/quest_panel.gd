@@ -1,8 +1,10 @@
 extends SketchPanel
-## Demo 阶段目标卡 —— 右上角常驻小卡：当前目标 + 进度 + 已完成列表。
+## Demo 阶段目标卡 —— 左上角常驻小卡：当前目标 + 进度 + 已完成列表。
 ##
 ## 纯被动显示部件：由 DemoQuest（装配逻辑组件）调用 show_quest / mark_done 驱动，
-## 自身不监听任何业务信号。经 UIKit.widget 创建（锚定由本脚本 _ready 自理）。
+## 自身不监听任何业务信号。定位归 zone：由装配层经 UIRoot.place_in_zone 钉进
+## top_left_stack 堆叠区（资源条下方；未来多任务线扩展 = 多挂几张卡，见
+## hud_zone_layout.gd），本部件只声明体量。
 
 var _current_title: Label
 var _current_desc: Label
@@ -13,17 +15,11 @@ var _title_label: Label
 
 func _ready() -> void:
 	name = "QuestPanel"
-	# 角落部件自设 anchor：左上角（顶栏按钮群下方、资源条之下——右上角已让位
-	# 给时钟+速度弧；后续多任务线扩展时改为左侧可滚动任务列表）
-	set_anchors_preset(Control.PRESET_TOP_LEFT)
-	offset_left = 16.0
-	offset_right = 298.0
-	offset_top = 116.0
-	grow_horizontal = Control.GROW_DIRECTION_END
+	# 体量声明（坐标由 zone 表计算，见 hud_zone_layout.gd）
+	custom_minimum_size = Vector2(282, 0)
 	super._ready()  # SketchPanel：手绘底 + 沸腾
 	tone = Tone.LIGHT
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(282, 0)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 5)

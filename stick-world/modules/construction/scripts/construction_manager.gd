@@ -201,7 +201,10 @@ func is_building_registered(def_id: String) -> bool:
 
 
 func _physics_process(delta: float) -> void:
-	# 推进所有活跃项目
+	# 推进所有活跃项目：步长经 sim_delta 携带速度档；暂停冻结由引擎总闸负责
+	# （本节点 PAUSABLE——此前无暂停门禁，暂停期建造照走，"假暂停"旧账一并了结）
+	if TimeManager != null:
+		delta = TimeManager.sim_delta(delta)
 	for p in _projects.values():
 		if p is ScriptConstructionProject:
 			(p as ScriptConstructionProject).tick(delta)

@@ -28,6 +28,9 @@ func setup(camera_rig: Node, game_root: Node) -> void:
 
 
 func _ready() -> void:
+	# 例外节点（process_mode 分层表）：本节点 ALWAYS——暂停期要跑"清屏重绘"
+	# 摘掉悬停框（下方 is_paused 分支），冻结期间不 tick 框会残留整场暂停
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	size = get_viewport_rect().size
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 

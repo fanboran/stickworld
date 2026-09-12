@@ -192,9 +192,12 @@ func _test_swing_rotation() -> void:
 	# 触发攻击动画（Swordwrath-Attack1 转译）驱动手臂挥砍，剑挂手骨骼跟随移动
 	if atk.has_method("play_attack"):
 		atk.play_attack()
-	# 动画异步推进：等待数帧后检查剑已跟随手臂移动（而非 Tween 自转）
-	for i in 6:
-		await get_tree().process_frame
+	# 动画异步推进：按真实时间轮询等剑跟随手臂移动（headless 下 process_frame
+	# 快于动画推进，帧数等待只推进几毫秒动画——同 _test_cooldown 按真实时间口径）
+	var waited := 0.0
+	while sword.global_position.distance_to(pos_before) <= 2.0 and waited < 1.0:
+		await get_tree().create_timer(0.05).timeout
+		waited += 0.05
 	var pos_after: Vector2 = sword.global_position
 	_runner.assert_true(pos_before.distance_to(pos_after) > 2.0,
 		"攻击后武器应跟随手臂动画挥砍移动，before=%s after=%s" % [pos_before, pos_after])

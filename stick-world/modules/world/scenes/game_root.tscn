@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://modules/world/scripts/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://modules/environment/scripts/environment_system.gd" id="2_env"]
@@ -6,9 +6,14 @@
 [ext_resource type="Script" path="res://modules/world/scripts/loading/scene_loader.gd" id="4_loader"]
 [ext_resource type="Script" path="res://modules/player_control/scripts/input_dispatcher.gd" id="5_input"]
 [ext_resource type="Script" path="res://modules/world/scripts/loading/world_chunk_host.gd" id="6_chunk_host"]
+[ext_resource type="Script" path="res://modules/world/scripts/game_root_shortcut_gate.gd" id="7_shortcut_gate"]
 
 [node name="GameRoot" type="Node2D"]
 script = ExtResource("1_game_root")
+
+[node name="ShortcutGate" type="Node" parent="."]
+process_mode = 3
+script = ExtResource("7_shortcut_gate")
 
 [node name="EnvironmentSystem" type="Node" parent="."]
 script = ExtResource("2_env")
@@ -17,6 +22,7 @@ time_of_day = 8.0
 [node name="CanvasModulate" type="CanvasModulate" parent="EnvironmentSystem"]
 
 [node name="CameraRig" type="Camera2D" parent="."]
+process_mode = 3
 script = ExtResource("3_camera")
 
 [node name="SceneLoader" type="Node" parent="."]

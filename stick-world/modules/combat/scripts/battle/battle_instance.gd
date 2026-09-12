@@ -125,19 +125,19 @@ func start() -> void:
 func _physics_process(delta: float) -> void:
 	if _state != State.ENGAGED:
 		return
-	# TimeManager 暂停门禁（审计 P1-5"假暂停"）：暂停语义全局统一，战斗停 tick
-	if TimeManager != null and TimeManager.is_paused():
-		return
-	_duration += delta
-	_director.tick(delta)
-	# 阵营 AI tick（P6 TeamAi：注册判空，未注册零开销；内部低频节流 + 门禁双保险）
+	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE，暂停期不进入本函数）；
+	# 步长经 sim_delta 携带速度档（X2/X4 战斗同步加速）
+	var sim: float = TimeManager.sim_delta(delta) if TimeManager != null else delta
+	_duration += sim
+	_director.tick(sim)
+	# 阵营 AI tick（P6 TeamAi：注册判空，未注册零开销；内部低频节流）
 	for faction in _team_ai.keys():
 		var tai: ScriptTeamAi = _team_ai[faction]
 		if tai != null:
-			tai.tick(delta)
+			tai.tick(sim)
 	# 胜负清点节流（战斗性能优化）：全灭判定每 0.5s 一次足够——
 	# 此前每物理帧两次 O(n) 存活扫描，196 人混战纯浪费
-	_victory_check_timer -= delta
+	_victory_check_timer -= sim
 	if _victory_check_timer <= 0.0:
 		_victory_check_timer = 0.5
 		_check_victory()

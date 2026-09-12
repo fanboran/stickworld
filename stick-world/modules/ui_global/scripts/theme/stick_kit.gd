@@ -14,8 +14,9 @@ extends RefCounted
 ## 标签档位
 enum LabelKind { TITLE, SECTION, BODY, HINT, TINY }
 
-## 按钮档位（视觉变体）
-enum ButtonKind { NORMAL, ACCENT, PRIMARY, DANGER }
+## 按钮档位（= 视觉变体键，与 SketchButton.Kind / SketchStyle 变体表同名同序，
+## 直转零映射；新观感 = 加变体，见 SketchStyle 按钮变体表）
+enum ButtonKind { NORMAL, ACCENT, PRIMARY, DANGER, PAPER, ICON_SQUARE }
 
 
 # ─────────────────────────────── 标签 ────────────────────────────────
@@ -57,14 +58,14 @@ static func button(parent: Control, text: String, callback: Callable = Callable(
 	return b
 
 
-## 手绘按钮（游戏内默认）：boiling 自绘四态底，交互行为与 button() 完全一致
+## 手绘按钮（游戏内默认）：boiling 自绘四态底，视觉全由 SketchStyle 变体表
+## 驱动（kind 查表，调用点零 override）；交互行为与 button() 完全一致
 static func sketch_button(parent: Control, text: String, callback: Callable = Callable(),
 		kind: ButtonKind = ButtonKind.NORMAL, height: float = StickTokens.BTN_H) -> SketchButton:
 	var b := SketchButton.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, height)
-	# 枚举同名同序直转——不设 kind 的话 _ready 的 _apply_flats 会把 _setup_button
-	# 挂的 ACCENT 贴图覆盖回普通槽位（陈列区靠手动补设 kind 掩盖了这条暗路）
+	# 枚举同名同序直转（NORMAL→DARK 暗底默认档，见变体表）
 	b.kind = kind as SketchButton.Kind
 	_setup_button(b, callback, kind)
 	parent.add_child(b)
@@ -96,38 +97,43 @@ static func motif_badge(btn: Button, motif: StringName, size := 20.0, pad := 10.
 	return tr
 
 
-## 按钮公共装配：点击音 + kind 文字色 + hover 微缩放
+## 按钮公共装配：点击音 + hover 微缩放。视觉不在此装配（UI优化C）：
+## SketchButton 走 SketchStyle 变体表查表应用（装配点零 override）；
+## 原生 Button 仅主题兜底场景（模板陈列/表单），其 kind 档位仍在此挂贴图。
 static func _setup_button(b: Button, callback: Callable, kind: ButtonKind) -> void:
 	# 统一 UI 点击音（AudioManager 框架先行，资产未就位时静默跳过）
 	b.pressed.connect(func() -> void:
 		if AudioManager and AudioManager.has_method("play_event"):
 			AudioManager.play_event("ui_click"))
-	match kind:
-		ButtonKind.ACCENT:
-			# Flat override：对原生 Button 生效；SketchButton 在 _ready 用 Empty 覆盖后自绘
-			b.add_theme_stylebox_override("normal", StickStyle.accent_normal())
-			b.add_theme_stylebox_override("hover", StickStyle.accent_hover())
-			b.add_theme_stylebox_override("pressed", StickStyle.accent_pressed())
-			# 强调按钮字：白 + 伪粗（区分靠琥珀底，不靠字色）
-			b.add_theme_color_override("font_color", StickTokens.TEXT)
-			var bold := SketchFonts.bold()
-			if bold != null:
-				b.add_theme_font_override("font", bold)
-		ButtonKind.PRIMARY:
-			# 主行动点：实底琥珀 + 深墨描边（贴图烘焙），黑字 + 伪粗
-			# ——14% 琥珀底只在黑玻璃上可读，亮背景（主菜单天空）必须实体形态
-			b.add_theme_stylebox_override("normal", StickStyle.primary_normal())
-			b.add_theme_stylebox_override("hover", StickStyle.primary_hover())
-			b.add_theme_stylebox_override("pressed", StickStyle.primary_pressed())
-			b.add_theme_stylebox_override("disabled", StickStyle.primary_disabled())
-			b.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
-			var bold2 := SketchFonts.bold()
-			if bold2 != null:
-				b.add_theme_font_override("font", bold2)
-		ButtonKind.DANGER:
-			b.add_theme_stylebox_override("normal", StickStyle.danger_normal())
-			b.add_theme_stylebox_override("hover", StickStyle.danger_hover())
-			b.add_theme_color_override("font_color", StickTokens.DANGER)
+	if b is SketchButton:
+		pass  # 视觉全归变体表（SketchButton._apply_flats 查表），装配点零 override
+	else:
+		match kind:
+			ButtonKind.ACCENT:
+				# Flat override：对原生 Button 生效；SketchButton 在 _ready 用 Empty 覆盖后自绘
+				b.add_theme_stylebox_override("normal", StickStyle.accent_normal())
+				b.add_theme_stylebox_override("hover", StickStyle.accent_hover())
+				b.add_theme_stylebox_override("pressed", StickStyle.accent_pressed())
+				# 强调按钮字：白 + 伪粗（区分靠琥珀底，不靠字色）
+				b.add_theme_color_override("font_color", StickTokens.TEXT)
+				var bold := SketchFonts.bold()
+				if bold != null:
+					b.add_theme_font_override("font", bold)
+			ButtonKind.PRIMARY:
+				# 主行动点：实底琥珀 + 深墨描边（贴图烘焙），黑字 + 伪粗
+				# ——14% 琥珀底只在黑玻璃上可读，亮背景（主菜单天空）必须实体形态
+				b.add_theme_stylebox_override("normal", StickStyle.primary_normal())
+				b.add_theme_stylebox_override("hover", StickStyle.primary_hover())
+				b.add_theme_stylebox_override("pressed", StickStyle.primary_pressed())
+				b.add_theme_stylebox_override("disabled", StickStyle.primary_disabled())
+				b.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
+				var bold2 := SketchFonts.bold()
+				if bold2 != null:
+					b.add_theme_font_override("font", bold2)
+			ButtonKind.DANGER:
+				b.add_theme_stylebox_override("normal", StickStyle.danger_normal())
+				b.add_theme_stylebox_override("hover", StickStyle.danger_hover())
+				b.add_theme_color_override("font_color", StickTokens.DANGER)
 	if callback.is_valid():
 		b.pressed.connect(callback)
 	# hover 微缩放（精致细节：按钮"浮起"感）。pivot 必须双向居中——装配时宽度

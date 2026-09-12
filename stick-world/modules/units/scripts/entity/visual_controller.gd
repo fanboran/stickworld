@@ -208,10 +208,12 @@ func refresh_idle_stance() -> void:
 		play("idle")
 
 
-## 设置动画播放速率（按当前速度缩放）。
+## 设置动画播放速率（按当前速度缩放；全局速度档再乘一层——4x 下循环动画
+## 同步加速防"滑步"，oneshot 攻击动画在 rig.set_anim_speed 内强制 1.0 保命中帧对齐）。
 func set_anim_speed(v: float) -> void:
 	if _entity.rig != null:
-		_entity.rig.set_anim_speed(maxf(v, MIN_ANIM_SCALE))
+		var sf: float = TimeManager.speed_factor() if TimeManager != null else 1.0
+		_entity.rig.set_anim_speed(maxf(v * sf, MIN_ANIM_SCALE))
 
 
 ## 设置搬运状态：搬运工持物时 walk 切换为 walk_carry 动画。

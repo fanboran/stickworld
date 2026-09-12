@@ -163,6 +163,34 @@ size_flags_vertical = 4
 mouse_filter = 2
 text = "—"
 
+[node name="AuthCompare" type="VBoxContainer" parent="Body"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="AuthTitle" type="Label" parent="Body/AuthCompare"]
+layout_mode = 2
+mouse_filter = 2
+text = "权威对比 · 邻近可投奔班（威望）"
+clip_text = true
+
+[node name="AuthRows" type="VBoxContainer" parent="Body/AuthCompare"]
+layout_mode = 2
+theme_override_constants/separation = 1
+
+[node name="DefectHint" type="PanelContainer" parent="Body/AuthCompare"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+tone = 1
+compact = true
+script = ExtResource("2_panel")
+
+[node name="DefectLabel" type="Label" parent="Body/AuthCompare/DefectHint"]
+layout_mode = 2
+mouse_filter = 2
+text = ""
+
 [node name="Forming" type="HBoxContainer" parent="Body"]
 visible = false
 layout_mode = 2

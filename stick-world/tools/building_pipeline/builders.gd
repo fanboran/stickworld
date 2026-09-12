@@ -6,6 +6,7 @@ const Shell := preload("res://tools/building_pipeline/builders/shell.gd")
 const Smithy := preload("res://tools/building_pipeline/builders/smithy.gd")
 const Civic := preload("res://tools/building_pipeline/builders/civic.gd")
 const Rural := preload("res://tools/building_pipeline/builders/rural.gd")
+const Landmark := preload("res://tools/building_pipeline/builders/landmark.gd")
 
 
 static func build(p, L: Dictionary) -> Dictionary:
@@ -20,6 +21,8 @@ static func build(p, L: Dictionary) -> Dictionary:
 			Civic.build(p, L, meta, b)
 		"barn", "stable", "windmill", "well", "market_stall":
 			Rural.build(p, L, meta, b)
+		"shelter", "lighthouse", "bridge":
+			Landmark.build(p, L, meta, b)
 		_:
 			push_error("未知 builder 类型 %s" % b)
 	return meta

@@ -52,8 +52,8 @@ static func _draw_story(p: Painter, L: Dictionary, idx: int, st: Dictionary, is_
 		if trim != "":
 			Comps.timber_bay(p, inner, trim, srng)
 		if has_windows:
-			var ww := minf(inner.size.x * 0.52, 20.0)
-			var wh := minf(inner.size.y * 0.46, 22.0)
+			var ww := minf(inner.size.x * 0.52, 36.0)
+			var wh := minf(inner.size.y * 0.46, 38.0)
 			var wr := Rect2(inner.get_center().x - ww * 0.5, inner.position.y + inner.size.y * 0.2, ww, wh)
 			Comps.window(p, wr, srng, idx == 0 and srng.randf() < 0.35, bool(st.get("arch", false)), bool(st.get("shutters", false)))
 		elif trim == "":

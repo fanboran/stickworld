@@ -54,9 +54,9 @@ static func _prepare_path(pts: PackedVector2Array, rng: RandomNumberGenerator, o
 	var closed: bool = opts.get("closed", false)
 	var step := 5.0
 	var path := _resample(pts, step)
-	path = _wobble(path, opts.get("amp", 0.75), opts.get("wave", 40.0), rng, closed)
+	path = _wobble(path, opts.get("amp", 0.65), opts.get("wave", 46.0), rng, closed)
 	if not closed:
-		var ov: float = opts.get("overshoot", 2.4)
+		var ov: float = opts.get("overshoot", 2.0)
 		if ov > 0.0 and path.size() >= 2:
 			var head_dir := (path[0] - path[1]).normalized()
 			var tail_dir := (path[path.size() - 1] - path[path.size() - 2]).normalized()
@@ -122,8 +122,8 @@ static func _draw_variable_width(ci: CanvasItem, path: PackedVector2Array, width
 		var t: float = float(i) / maxf(denom, 1.0)
 		var w := width
 		if taper:
-			w = width * (1.0 + 0.32 * sin(t * TAU * freq + phase))
-		w = maxf(w, 0.6)
+			w = width * (1.0 + 0.30 * sin(t * TAU * freq + phase))
+		w = maxf(w, 0.45)
 		ci.draw_line(path[i], path[i + 1], color, w)
 		ci.draw_circle(path[i + 1], w * 0.5, color)
 

@@ -36,14 +36,14 @@ static func eave_shade(p: Painter, band: Rect2, alpha: float = 0.16) -> void:
 static func plinth(p: Painter, body: Rect2, mat: String, h: float, rng: RandomNumberGenerator) -> void:
 	var r := Rect2(Vector2(body.position.x - 1.0, body.end.y - h), Vector2(body.size.x + 2.0, h))
 	p.face(r, mat, "shadow")
-	p.rect_stroke(r, 2.0, {"rng": rng, "amp": 0.6})
+	p.rect_stroke(r, 1.56, {"rng": rng, "amp": 0.6})
 
 
 ## 层间腰线（木梁带）。
 static func belt_course(p: Painter, body: Rect2, y: float, mat: String, rng: RandomNumberGenerator) -> void:
 	var r := Rect2(Vector2(body.position.x - 2.0, y), Vector2(body.size.x + 4.0, 6.0))
 	p.face(r, mat, "base")
-	p.rect_stroke(r, 2.0, {"rng": rng, "amp": 0.6})
+	p.rect_stroke(r, 1.56, {"rng": rng, "amp": 0.6})
 	eave_shade(p, Rect2(Vector2(r.position.x, r.end.y), Vector2(r.size.x, 4.0)), 0.18)
 
 
@@ -52,7 +52,7 @@ static func jetty_beams(p: Painter, x0: float, x1: float, y: float, mat: String,
 	var x := x0 + 6.0
 	while x < x1 - 6.0:
 		var pts := PackedVector2Array([Vector2(x, y), Vector2(x + 5.0, y + 9.0)])
-		p.stroke(pts, 3.2, {"rng": rng, "amp": 0.4, "overshoot": 1.0})
+		p.stroke(pts, 2.50, {"rng": rng, "amp": 0.4, "overshoot": 1.0})
 		x += rng.randf_range(16.0, 26.0)
 
 
@@ -68,24 +68,24 @@ static func gable_roof(p: Painter, body: Rect2, roof: Dictionary, rng: RandomNum
 	var br := Vector2(body.end.x + oh, body.position.y + 2.0)
 	var tri := PackedVector2Array([bl, br, apex])
 	p.poly(tri, p.mat_color(mat, "base"))
-	p.hatch(tri, 8.0, -46.0, 1.2, 0.2)
+	p.hatch(tri, 15.0, -46.0, 1.6, 0.2)
 	# 屋面纵向板条/瓦垄：从底边向 apex 收敛的线
-	var n := maxi(3, int(body.size.x / 40.0))
+	var n := maxi(3, int(body.size.x / 72.0))
 	for i in range(1, n):
 		var t := float(i) / float(n)
 		var b := bl.lerp(br, t)
 		p.stroke(PackedVector2Array([b, b.lerp(apex, 0.92)]), 1.3, {"rng": rng, "amp": 0.5, "overshoot": 0.0, "taper": false})
 	if gable_window:
-		var wrect := Rect2(apex.x - 8.0, apex.y + rise * 0.42, 16.0, 15.0)
+		var wrect := Rect2(apex.x - 15.0, apex.y + rise * 0.42, 30.0, 28.0)
 		window(p, wrect, rng)
-	_eave_band(p, bl, apex, 14.0, mat, -1, rng)
-	_eave_band(p, br, apex, 14.0, mat, 1, rng)
+	_eave_band(p, bl, apex, 26.0, mat, -1, rng)
+	_eave_band(p, br, apex, 26.0, mat, 1, rng)
 	p.stroke(PackedVector2Array([bl + Vector2(-3.0, 1.0), apex + Vector2(-2.0, -2.0)]), 2.6, {"rng": rng})
 	p.stroke(PackedVector2Array([br + Vector2(3.0, 1.0), apex + Vector2(2.0, -2.0)]), 2.6, {"rng": rng})
 	p.stroke(PackedVector2Array([bl, br]), 3.4, {"rng": rng})
 	# 脊顶压瓦帽
-	p.circle(apex, 2.8, p.mat_color(mat, "shadow"))
-	p.stroke(PackedVector2Array([apex + Vector2(-8, -1), apex + Vector2(8, -1)]), 2.4, {"rng": rng, "amp": 0.4, "overshoot": 2.0})
+	p.circle(apex, 5.0, p.mat_color(mat, "shadow"))
+	p.stroke(PackedVector2Array([apex + Vector2(-14, -2), apex + Vector2(14, -2)]), 2.4, {"rng": rng, "amp": 0.4, "overshoot": 2.0})
 
 
 ## 坡面朝前屋顶：平行四边形坡面 + 受光带 + 檐口。
@@ -108,7 +108,7 @@ static func slope_roof(p: Painter, body: Rect2, roof: Dictionary, rng: RandomNum
 	p.stroke(PackedVector2Array([eave_l, eave_r]), 3.4, {"rng": rng})
 	eave_shade(p, Rect2(Vector2(body.position.x, body.position.y + drop), Vector2(body.size.x + oh * 2.0, 7.0)), 0.22)
 	p.stroke(PackedVector2Array([ridge_l, ridge_r]), 2.4, {"rng": rng, "amp": 0.6})
-	var n := maxi(2, int(body.size.x / 48.0))
+	var n := maxi(2, int(body.size.x / 86.0))
 	for i in range(1, n):
 		var t := float(i) / float(n)
 		p.stroke(PackedVector2Array([eave_l.lerp(eave_r, t).lerp(ridge_l.lerp(ridge_r, t), 0.1), ridge_l.lerp(ridge_r, t)]), 1.4, {"rng": rng, "amp": 0.5, "overshoot": 1.0, "taper": false})
@@ -118,7 +118,7 @@ static func slope_roof(p: Painter, body: Rect2, roof: Dictionary, rng: RandomNum
 static func hip_roof(p: Painter, body: Rect2, roof: Dictionary, rng: RandomNumberGenerator) -> void:
 	var rise := float(roof["rise"])
 	var oh := float(roof["overhang"])
-	var inset := float(roof["hip_inset"]) if roof.has("hip_inset") else 12.0
+	var inset := float(roof["hip_inset"]) if roof.has("hip_inset") else 22.0
 	var mat := String(roof["mat"])
 	var eave_l := Vector2(body.position.x - oh, body.position.y + 2.0)
 	var eave_r := Vector2(body.end.x + oh, body.position.y + 2.0)
@@ -137,23 +137,23 @@ static func spire(p: Painter, base_rect: Rect2, roof: Dictionary, rng: RandomNum
 	var h := float(roof["spire_h"])
 	var mat := String(roof["mat"])
 	var apex := Vector2(base_rect.get_center().x, base_rect.position.y - h)
-	var bl := Vector2(base_rect.position.x - 4.0, base_rect.position.y + 2.0)
-	var br := Vector2(base_rect.end.x + 4.0, base_rect.position.y + 2.0)
+	var bl := Vector2(base_rect.position.x - 8.0, base_rect.position.y + 2.0)
+	var br := Vector2(base_rect.end.x + 8.0, base_rect.position.y + 2.0)
 	var tri := PackedVector2Array([bl, br, apex])
 	p.poly(tri, p.mat_color(mat, "base"))
-	p.hatch(tri, 7.0, -60.0, 1.1, 0.22)
+	p.hatch(tri, 13.0, -60.0, 1.4, 0.22)
 	p.stroke(PackedVector2Array([bl, br]), 3.2, {"rng": rng})
 	p.stroke(PackedVector2Array([bl, apex]), 2.6, {"rng": rng})
 	p.stroke(PackedVector2Array([br, apex]), 2.6, {"rng": rng})
 	# 十字风标
-	var c := Vector2(apex.x, apex.y - 9.0)
-	p.stroke(PackedVector2Array([c + Vector2(0, 10), c]), 2.4, {"rng": rng, "amp": 0.2, "overshoot": 0.0})
-	p.stroke(PackedVector2Array([c + Vector2(-5, 2), c + Vector2(5, 2)]), 2.4, {"rng": rng, "amp": 0.2, "overshoot": 1.0})
+	var c := Vector2(apex.x, apex.y - 18.0)
+	p.stroke(PackedVector2Array([c + Vector2(0, 20), c]), 2.4, {"rng": rng, "amp": 0.2, "overshoot": 0.0})
+	p.stroke(PackedVector2Array([c + Vector2(-10, 3), c + Vector2(10, 3)]), 2.4, {"rng": rng, "amp": 0.2, "overshoot": 1.0})
 
 
 ## 城墙垛口（墙顶齿列）。
 static func battlement(p: Painter, x0: float, x1: float, y_top: float, h: float, mat: String, rng: RandomNumberGenerator) -> void:
-	var merlon := 12.0
+	var merlon := 26.0
 	var x := x0
 	while x < x1:
 		var w := minf(merlon, x1 - x)
@@ -161,7 +161,7 @@ static func battlement(p: Painter, x0: float, x1: float, y_top: float, h: float,
 		p.face(r, mat, "base")
 		p.stroke(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y)]), 2.0, {"rng": rng, "amp": 0.5})
 		p.stroke(PackedVector2Array([Vector2(r.position.x, r.position.y), Vector2(r.position.x, r.end.y)]), 1.8, {"rng": rng, "amp": 0.4, "taper": false})
-		x += merlon + 8.0
+		x += merlon + 14.0
 	p.stroke(PackedVector2Array([Vector2(x0, y_top), Vector2(x1, y_top)]), 2.4, {"rng": rng, "amp": 0.5})
 
 
@@ -193,11 +193,11 @@ static func door(p: Painter, rect: Rect2, mat: String, rng: RandomNumberGenerato
 		p.stroke(PackedVector2Array([Vector2(x, rect.position.y + 2), Vector2(x, rect.end.y - 1)]), 1.4, {"rng": rng, "amp": 0.4, "taper": false})
 	if wide:
 		p.stroke(PackedVector2Array([rect.position + Vector2(2, rect.size.y * 0.72), rect.end - Vector2(2, rect.size.y * 0.18)]), 1.6, {"rng": rng, "amp": 0.5})
-	p.rect_stroke(rect, 2.0, {"rng": rng})
+	p.rect_stroke(rect, 1.56, {"rng": rng})
 	var lintel := Rect2(rect.position - Vector2(4, 6), Vector2(rect.size.x + 8, 6))
 	p.face(lintel, mat, "shadow")
-	p.rect_stroke(lintel, 1.8, {"rng": rng, "amp": 0.6})
-	p.circle(Vector2(rect.end.x - rect.size.x * 0.22, rect.get_center().y + 2.0), 1.8, Ink.INK)
+	p.rect_stroke(lintel, 1.40, {"rng": rng, "amp": 0.6})
+	p.circle(Vector2(rect.end.x - rect.size.x * 0.22, rect.get_center().y + 3.0), 3.2, Ink.INK)
 
 
 ## 拱形门洞（石/砖拱圈）。
@@ -233,17 +233,17 @@ static func window(p: Painter, rect: Rect2, rng: RandomNumberGenerator, warm: bo
 	if warm:
 		var inner := Rect2(rect.position + rect.size * 0.18, rect.size * 0.5)
 		p.poly(_rect_pts(inner), Color(GLOW_HI.r, GLOW_HI.g, GLOW_HI.b, 0.6))
-	p.rect_stroke(rect, 1.8, {"rng": rng, "amp": 0.6})
+	p.rect_stroke(rect, 1.40, {"rng": rng, "amp": 0.6})
 	p.stroke(PackedVector2Array([Vector2(rect.get_center().x, rect.position.y + 1), Vector2(rect.get_center().x, rect.end.y - 1)]), 1.2, {"rng": rng, "amp": 0.25, "taper": false})
 	p.stroke(PackedVector2Array([Vector2(rect.position.x + 1, rect.get_center().y), Vector2(rect.end.x - 1, rect.get_center().y)]), 1.2, {"rng": rng, "amp": 0.25, "taper": false})
 	if shutters:
 		for side in [-1, 1]:
-			var sx := rect.position.x - 6.0 if side < 0 else rect.end.x
-			var sr := Rect2(sx, rect.position.y, 6.0, rect.size.y)
+			var sx := rect.position.x - 11.0 if side < 0 else rect.end.x
+			var sr := Rect2(sx, rect.position.y, 11.0, rect.size.y)
 			p.face(sr, "wood_dark", "base")
-			p.rect_stroke(sr, 1.6, {"rng": rng, "amp": 0.4})
+			p.rect_stroke(sr, 1.25, {"rng": rng, "amp": 0.4})
 	# 窗台
-	var sill := Rect2(rect.position.x - 3, rect.end.y, rect.size.x + 6, 3.5)
+	var sill := Rect2(rect.position.x - 5, rect.end.y, rect.size.x + 10, 6.0)
 	p.face(sill, "trim_white", "shadow")
 	p.stroke(PackedVector2Array([sill.position, Vector2(sill.end.x, sill.position.y)]), 1.6, {"rng": rng, "amp": 0.4})
 
@@ -261,7 +261,7 @@ static func arch_window(p: Painter, rect: Rect2, rng: RandomNumberGenerator, war
 		pts.push_back(Vector2(rect.get_center().x - cos(a) * rect.size.x * 0.5, rect.position.y + arch_h - sin(a) * arch_h))
 	pts.push_back(Vector2(rect.end.x, rect.position.y + arch_h))
 	p.poly(pts, GLOW if warm else DARK_HOLE)
-	p.stroke(pts, 2.6, {"rng": rng, "amp": 0.4, "taper": false})
+	p.stroke(pts, 2.03, {"rng": rng, "amp": 0.4, "taper": false})
 	p.stroke(PackedVector2Array([Vector2(rect.position.x, rect.position.y + arch_h), Vector2(rect.position.x, rect.end.y)]), 2.0, {"rng": rng, "amp": 0.4, "taper": false})
 	p.stroke(PackedVector2Array([Vector2(rect.end.x, rect.position.y + arch_h), Vector2(rect.end.x, rect.end.y)]), 2.0, {"rng": rng, "amp": 0.4, "taper": false})
 	# 十字棂
@@ -289,8 +289,8 @@ static func rose_window(p: Painter, center: Vector2, radius: float, rng: RandomN
 	for i in 26:
 		var a := TAU * float(i) / 26.0
 		ring2.push_back(center + Vector2(cos(a), sin(a)) * (radius - 1.5))
-	p.stroke(ring, 2.2, {"rng": rng, "amp": 0.3, "overshoot": 0.0, "taper": false})
-	p.stroke(ring2, 1.6, {"rng": rng, "amp": 0.3, "overshoot": 0.0, "taper": false})
+	p.stroke(ring, 1.72, {"rng": rng, "amp": 0.3, "overshoot": 0.0, "taper": false})
+	p.stroke(ring2, 1.25, {"rng": rng, "amp": 0.3, "overshoot": 0.0, "taper": false})
 
 
 ## 钟（钟楼内悬挂）。
@@ -313,7 +313,7 @@ static func timber_bay(p: Painter, rect: Rect2, mat_trim: String, rng: RandomNum
 	for fx_v in [0.08, 0.5, 0.92]:
 		var fx: float = fx_v
 		var x: float = rect.position.x + rect.size.x * fx
-		p.stroke(PackedVector2Array([Vector2(x, rect.position.y + 1), Vector2(x + rng.randf_range(-1.5, 1.5), rect.end.y - 1)]), 3.2, {"rng": rng, "amp": 0.5})
+		p.stroke(PackedVector2Array([Vector2(x, rect.position.y + 1), Vector2(x + rng.randf_range(-2.0, 2.0), rect.end.y - 1)]), 4.4, {"rng": rng, "amp": 0.5})
 	var cy := rect.get_center().y
 	p.stroke(PackedVector2Array([Vector2(rect.position.x + rect.size.x * 0.08, cy + rect.size.y * 0.18), Vector2(rect.position.x + rect.size.x * 0.5, cy - rect.size.y * 0.16)]), 2.4, {"rng": rng, "amp": 0.5})
 	p.stroke(PackedVector2Array([Vector2(rect.end.x - rect.size.x * 0.08, cy + rect.size.y * 0.18), Vector2(rect.position.x + rect.size.x * 0.5, cy - rect.size.y * 0.16)]), 2.4, {"rng": rng, "amp": 0.5})
@@ -332,34 +332,34 @@ static func blind_bay(p: Painter, rect: Rect2, rng: RandomNumberGenerator) -> vo
 
 static func chimney(p: Painter, body: Rect2, top_y: float, mat: String, rng: RandomNumberGenerator) -> void:
 	p.face(body, mat, "base")
-	p.rect_stroke(body, 2.0, {"rng": rng, "amp": 0.7})
-	var cap := Rect2(body.position - Vector2(3, 4), Vector2(body.size.x + 6, 4))
+	p.rect_stroke(body, 1.56, {"rng": rng, "amp": 0.7})
+	var cap := Rect2(body.position - Vector2(5, 7), Vector2(body.size.x + 10, 7))
 	p.face(cap, mat, "shadow")
-	p.rect_stroke(cap, 1.6, {"rng": rng, "amp": 0.5})
+	p.rect_stroke(cap, 1.25, {"rng": rng, "amp": 0.5})
 	var cx := body.get_center().x
-	p.stroke(PackedVector2Array([Vector2(cx, top_y - 4), Vector2(cx + 4, top_y - 12), Vector2(cx + 1, top_y - 20)]), 1.4, {"rng": rng, "amp": 1.0, "overshoot": 0.0, "color": Color(Ink.INK.r, Ink.INK.g, Ink.INK.b, 0.45), "taper": false})
+	p.stroke(PackedVector2Array([Vector2(cx, top_y - 8), Vector2(cx + 8, top_y - 24), Vector2(cx + 2, top_y - 40)]), 2.2, {"rng": rng, "amp": 1.0, "overshoot": 0.0, "color": Color(Ink.INK.r, Ink.INK.g, Ink.INK.b, 0.45), "taper": false})
 	eave_shade(p, Rect2(Vector2(body.position.x, top_y), Vector2(body.size.x, 5.0)), 0.12)
 
 
 ## 招牌（横杆 + 木板 + 花纹）。
 static func sign_board(p: Painter, anchor: Vector2, side: int, rng: RandomNumberGenerator) -> void:
-	var arm := 14.0
+	var arm := 26.0
 	p.stroke(PackedVector2Array([anchor, anchor + Vector2(arm * float(side), 0)]), 2.6, {"rng": rng, "amp": 0.3, "overshoot": 1.0, "taper": false})
-	var br := Rect2(anchor + Vector2(arm * float(side) - (10.0 if side > 0 else -4.0), 2.0), Vector2(14.0, 12.0))
+	var br := Rect2(anchor + Vector2(arm * float(side) - (18.0 if side > 0 else -7.0), 3.0), Vector2(25.0, 22.0))
 	p.face(br, "cloth_red", "base")
-	p.rect_stroke(br, 1.8, {"rng": rng, "amp": 0.5})
-	p.stroke(PackedVector2Array([br.position + Vector2(3, 4), br.position + Vector2(11, 4)]), 1.4, {"rng": rng, "amp": 0.3, "taper": false, "color": Ink.INK})
-	p.stroke(PackedVector2Array([br.position + Vector2(3, 8), br.position + Vector2(8, 8)]), 1.4, {"rng": rng, "amp": 0.3, "taper": false, "color": Ink.INK})
+	p.rect_stroke(br, 1.40, {"rng": rng, "amp": 0.5})
+	p.stroke(PackedVector2Array([br.position + Vector2(5, 7), br.position + Vector2(20, 7)]), 2.0, {"rng": rng, "amp": 0.3, "taper": false, "color": Ink.INK})
+	p.stroke(PackedVector2Array([br.position + Vector2(5, 14), br.position + Vector2(14, 14)]), 2.0, {"rng": rng, "amp": 0.3, "taper": false, "color": Ink.INK})
 
 
 ## 吊灯笼。
 static func lantern(p: Painter, anchor: Vector2, rng: RandomNumberGenerator) -> void:
-	var y := anchor.y + 14.0
+	var y := anchor.y + 26.0
 	p.stroke(PackedVector2Array([anchor, Vector2(anchor.x, y)]), 1.4, {"rng": rng, "amp": 0.2, "overshoot": 0.0, "taper": false})
-	var body := Rect2(anchor.x - 4.5, y, 9.0, 11.0)
+	var body := Rect2(anchor.x - 8.0, y, 16.0, 20.0)
 	p.face(body, "iron", "base")
-	p.poly(_rect_pts(Rect2(body.position + Vector2(1.5, 2.0), Vector2(6.0, 6.5))), Color(GLOW_HI.r, GLOW_HI.g, GLOW_HI.b, 0.85))
-	p.rect_stroke(body, 1.6, {"rng": rng, "amp": 0.3})
+	p.poly(_rect_pts(Rect2(body.position + Vector2(3.0, 4.0), Vector2(10.0, 11.0))), Color(GLOW_HI.r, GLOW_HI.g, GLOW_HI.b, 0.85))
+	p.rect_stroke(body, 1.25, {"rng": rng, "amp": 0.3})
 
 
 ## 旗帜（杆 + 三角旗）。
@@ -367,11 +367,11 @@ static func flag(p: Painter, base: Vector2, h: float, mat: String, rng: RandomNu
 	p.stroke(PackedVector2Array([base, base + Vector2(0, -h)]), 2.2, {"rng": rng, "amp": 0.3, "overshoot": 1.0, "taper": false})
 	var f := PackedVector2Array([
 		base + Vector2(0, -h),
-		base + Vector2(16.0, -h + 5.0),
-		base + Vector2(0, -h + 11.0),
+		base + Vector2(28.0, -h + 9.0),
+		base + Vector2(0, -h + 19.0),
 	])
 	p.poly(f, p.mat_color(mat, "base"))
-	p.stroke(f, 1.8, {"rng": rng, "amp": 0.4})
+	p.stroke(f, 1.40, {"rng": rng, "amp": 0.4})
 
 
 # ---------- 道具 ----------
@@ -382,10 +382,10 @@ static func forge_stove(p: Painter, base: Vector2, s: float, rng: RandomNumberGe
 	# 基座 + 炉身（上收）
 	var body := PackedVector2Array([
 		Vector2(base.x - w * 0.5, base.y),
-		Vector2(base.x - w * 0.42, base.y - s * 0.72),
-		Vector2(base.x - w * 0.3, base.y - s),
-		Vector2(base.x + w * 0.3, base.y - s),
-		Vector2(base.x + w * 0.42, base.y - s * 0.72),
+		Vector2(base.x - w * 0.48, base.y - s * 0.8),
+		Vector2(base.x - w * 0.42, base.y - s * 0.97),
+		Vector2(base.x + w * 0.42, base.y - s * 0.97),
+		Vector2(base.x + w * 0.48, base.y - s * 0.8),
 		Vector2(base.x + w * 0.5, base.y),
 	])
 	p.poly(body, p.mat_color("iron", "base"))
@@ -412,19 +412,19 @@ static func forge_stove(p: Painter, base: Vector2, s: float, rng: RandomNumberGe
 	var neck := Rect2(base.x - w * 0.12, base.y - s - chimney_h, w * 0.24, chimney_h + 2.0)
 	if chimney_h > 0.0:
 		p.face(neck, "iron", "shadow")
-		p.rect_stroke(neck, 1.8, {"rng": rng, "amp": 0.4})
+		p.rect_stroke(neck, 1.40, {"rng": rng, "amp": 0.4})
 
 
 ## 铁砧（黑铁砧 + 木墩）。
 static func anvil(p: Painter, base: Vector2, s: float, rng: RandomNumberGenerator) -> void:
 	var stump := Rect2(base.x - s * 0.3, base.y - s * 0.5, s * 0.6, s * 0.5)
 	p.face(stump, "wood_dark", "base")
-	p.rect_stroke(stump, 1.6, {"rng": rng, "amp": 0.4})
+	p.rect_stroke(stump, 1.25, {"rng": rng, "amp": 0.4})
 	var body_r := Rect2(base.x - s * 0.42, base.y - s * 0.76, s * 0.84, s * 0.26)
 	p.face(body_r, "iron", "base")
-	p.rect_stroke(body_r, 1.8, {"rng": rng, "amp": 0.4})
+	p.rect_stroke(body_r, 1.40, {"rng": rng, "amp": 0.4})
 	var horn := PackedVector2Array([Vector2(body_r.position.x, body_r.position.y + 2.0), Vector2(body_r.position.x - s * 0.26, body_r.position.y + s * 0.1)])
-	p.stroke(horn, 2.4, {"rng": rng, "amp": 0.2, "taper": false})
+	p.stroke(horn, 1.87, {"rng": rng, "amp": 0.2, "taper": false})
 	p.stroke(PackedVector2Array([body_r.position + Vector2(0, 2), Vector2(body_r.end.x, body_r.position.y + 2)]), 1.4, {"rng": rng, "amp": 0.3, "taper": false, "color": Color(0.75, 0.76, 0.8, 0.5)})
 
 
@@ -433,7 +433,7 @@ static func bench(p: Painter, base: Vector2, w: float, rng: RandomNumberGenerato
 	var h := w * 0.42
 	var top := Rect2(base.x - w * 0.5, base.y - h, w, 4.0)
 	p.face(top, "wood", "base")
-	p.rect_stroke(top, 1.6, {"rng": rng, "amp": 0.4})
+	p.rect_stroke(top, 1.25, {"rng": rng, "amp": 0.4})
 	for sx in [-w * 0.36, w * 0.36]:
 		p.stroke(PackedVector2Array([Vector2(base.x + sx, top.end.y), Vector2(base.x + sx + 1.0, base.y)]), 2.6, {"rng": rng, "amp": 0.3, "taper": false})
 
@@ -459,7 +459,7 @@ static func barrel(p: Painter, base: Vector2, h: float, rng: RandomNumberGenerat
 
 static func crate(p: Painter, rect: Rect2, rng: RandomNumberGenerator) -> void:
 	p.face(rect, "wood", "base")
-	p.rect_stroke(rect, 1.8, {"rng": rng, "amp": 0.5})
+	p.rect_stroke(rect, 1.40, {"rng": rng, "amp": 0.5})
 	p.stroke(PackedVector2Array([rect.position, rect.end]), 1.4, {"rng": rng, "amp": 0.4})
 	p.stroke(PackedVector2Array([Vector2(rect.end.x, rect.position.y), Vector2(rect.position.x, rect.end.y)]), 1.4, {"rng": rng, "amp": 0.4})
 
@@ -482,8 +482,8 @@ static func windmill_blades(p: Painter, hub: Vector2, length: float, rng: Random
 			var c1 := hub.lerp(tip, t) - perp * (1.0 - t * 0.45)
 			p.stroke(PackedVector2Array([c0, c1]), 1.6, {"rng": rng, "amp": 0.3, "overshoot": 0.0, "taper": false})
 		p.stroke(PackedVector2Array([hub.lerp(tip, 0.15), hub.lerp(tip, 0.98)]), 1.8, {"rng": rng, "amp": 0.3, "overshoot": 0.0, "taper": false})
-	p.circle(hub, 4.5, p.mat_color("iron", "base"))
-	p.circle(hub, 2.2, p.mat_color("iron", "shadow"))
+	p.circle(hub, 8.0, p.mat_color("iron", "base"))
+	p.circle(hub, 4.0, p.mat_color("iron", "shadow"))
 
 
 ## 水井（石圈 + 双柱 + 小顶棚 + 吊桶）。
@@ -491,7 +491,7 @@ static func well(p: Painter, base: Vector2, s: float, rng: RandomNumberGenerator
 	var w := s * 1.1
 	var rim := Rect2(base.x - w * 0.5, base.y - s * 0.34, w, s * 0.34)
 	p.face(rim, "stone", "base")
-	p.rect_stroke(rim, 2.0, {"rng": rng, "amp": 0.5})
+	p.rect_stroke(rim, 1.56, {"rng": rng, "amp": 0.5})
 	p.poly(_rect_pts(Rect2(rim.position + Vector2(6, 3), Vector2(rim.size.x - 12, rim.size.y - 6))), DARK_HOLE)
 	for sx in [-w * 0.4, w * 0.4]:
 		p.stroke(PackedVector2Array([Vector2(base.x + sx, rim.position.y + 2), Vector2(base.x + sx, rim.position.y - s * 0.62)]), 2.8, {"rng": rng, "amp": 0.3, "taper": false})
@@ -503,7 +503,7 @@ static func well(p: Painter, base: Vector2, s: float, rng: RandomNumberGenerator
 	p.stroke(PackedVector2Array([Vector2(base.x, rim.position.y - s * 0.58), Vector2(base.x, rim.position.y - s * 0.24)]), 1.2, {"rng": rng, "amp": 0.2, "overshoot": 0.0, "taper": false})
 	var bucket := Rect2(base.x - 4.0, rim.position.y - s * 0.3, 8.0, 8.0)
 	p.face(bucket, "wood_dark", "base")
-	p.rect_stroke(bucket, 1.4, {"rng": rng, "amp": 0.3})
+	p.rect_stroke(bucket, 1.09, {"rng": rng, "amp": 0.3})
 
 
 ## 市集摊（条纹棚 + 台面 + 货物）。
@@ -512,31 +512,32 @@ static func stall(p: Painter, base: Vector2, w: float, rng: RandomNumberGenerato
 	var legs_h := h * 0.34
 	var table := Rect2(base.x - w * 0.5, base.y - legs_h, w, 6.0)
 	p.face(table, "wood", "base")
-	p.rect_stroke(table, 1.8, {"rng": rng, "amp": 0.4})
+	p.rect_stroke(table, 1.40, {"rng": rng, "amp": 0.4})
 	for sx in [-w * 0.44, w * 0.44]:
 		p.stroke(PackedVector2Array([Vector2(base.x + sx, table.end.y), Vector2(base.x + sx, base.y)]), 4.0, {"rng": rng, "amp": 0.3, "taper": false})
-	# 条纹棚（红白相间）
+	# 中世纪麻布顶（无染色条纹）：麻布实底 + 质感 + 木横梁
 	var canopy_pts := [Vector2(base.x - w * 0.62, table.position.y - 3.0), Vector2(base.x + w * 0.62, table.position.y - 3.0), Vector2(base.x + w * 0.5, table.position.y - h * 0.62), Vector2(base.x - w * 0.5, table.position.y - h * 0.62)]
 	var canopy := PackedVector2Array([canopy_pts[0], canopy_pts[1], canopy_pts[2], canopy_pts[3]])
-	p.poly(canopy, p.mat_color("cloth_red", "base"))
-	var stripes := 6
-	for i in stripes:
-		if i % 2 == 1:
-			continue
-		var t0 := float(i) / float(stripes)
-		var t1 := float(i + 1) / float(stripes)
-		var a0: Vector2 = Vector2(canopy_pts[0]).lerp(canopy_pts[1], t0)
-		var a1: Vector2 = Vector2(canopy_pts[0]).lerp(canopy_pts[1], t1)
-		var b0: Vector2 = Vector2(canopy_pts[3]).lerp(canopy_pts[2], t0)
-		var b1: Vector2 = Vector2(canopy_pts[3]).lerp(canopy_pts[2], t1)
-		p.poly(PackedVector2Array([a0, a1, b1, b0]), p.mat_color("trim_white", "base"))
-	p.stroke(canopy, 2.2, {"rng": rng, "amp": 0.4})
+	p.poly(canopy, p.mat_color("hemp", "base"))
+	p.quad_tex("hemp", [canopy_pts[0], canopy_pts[1], canopy_pts[2], canopy_pts[3]], 0.6, p.mat_color("hemp", "base"))
+	p.stroke(canopy, 2.2, {"rng": rng, "amp": 0.5})
+	# 前缘垂边（麻布抖动）
+	var fringe := PackedVector2Array()
+	var fx: float = Vector2(canopy_pts[0]).x
+	while fx < Vector2(canopy_pts[1]).x:
+		fringe.push_back(Vector2(fx + rng.randf_range(-3.0, 3.0), Vector2(canopy_pts[0]).y + rng.randf_range(4.0, 12.0)))
+		fx += 8.0
+	if fringe.size() >= 2:
+		p.stroke(fringe, 1.6, {"rng": rng, "amp": 0.6, "taper": false})
+	# 棚下前撑木
+	p.stroke(PackedVector2Array([Vector2(canopy_pts[0]) + Vector2(5, 2), Vector2(canopy_pts[0]) + Vector2(8, legs_h * 0.95)]), 3.0, {"rng": rng, "amp": 0.3, "taper": false})
+	p.stroke(PackedVector2Array([Vector2(canopy_pts[1]) - Vector2(5, -2), Vector2(canopy_pts[1]) - Vector2(2, -legs_h * 0.95)]), 3.0, {"rng": rng, "amp": 0.3, "taper": false})
 	# 货物（圆形果蔬）
 	var n := maxi(3, int(w / 14.0))
 	for i in n:
 		var cx := table.position.x + table.size.x * (float(i) + 0.5) / float(n)
 		var cy := table.position.y - 3.0
-		var col := p.mat_color("gold", "base") if i % 3 == 0 else (p.mat_color("cloth_red", "base") if i % 3 == 1 else p.mat_color("thatch", "base"))
+		var col := p.mat_color("gold", "base") if i % 3 == 0 else (p.mat_color("brick", "base") if i % 3 == 1 else p.mat_color("thatch", "base"))
 		p.circle(Vector2(cx, cy), 3.2, col)
 		p.stroke(PackedVector2Array([Vector2(cx - 3.2, cy), Vector2(cx + 3.2, cy)]), 1.2, {"rng": rng, "amp": 0.2, "overshoot": 0.5, "taper": false})
 
@@ -553,7 +554,7 @@ static func hay_pile(p: Painter, base: Vector2, w: float, rng: RandomNumberGener
 	])
 	p.poly(pts, p.mat_color("thatch", "base"))
 	p.hatch(pts, 6.0, -30.0, 0.9, 0.2)
-	p.stroke(pts, 2.0, {"rng": rng, "amp": 0.5})
+	p.stroke(pts, 1.56, {"rng": rng, "amp": 0.5})
 
 
 ## 木栅栏（竖直桩 + 横梁）。
@@ -561,7 +562,7 @@ static func fence(p: Painter, x0: float, x1: float, base_y: float, h: float, rng
 	var x := x0
 	while x < x1:
 		p.stroke(PackedVector2Array([Vector2(x, base_y), Vector2(x + rng.randf_range(-1.0, 1.0), base_y - h)]), 2.6, {"rng": rng, "amp": 0.4})
-		x += rng.randf_range(12.0, 18.0)
+		x += rng.randf_range(20.0, 30.0)
 	p.stroke(PackedVector2Array([Vector2(x0, base_y - h * 0.7), Vector2(x1, base_y - h * 0.7)]), 1.8, {"rng": rng, "amp": 0.5, "taper": false})
 
 

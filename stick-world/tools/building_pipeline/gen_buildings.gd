@@ -8,7 +8,7 @@ const Registry := preload("res://tools/building_pipeline/registry.gd")
 const TextureBank := preload("res://tools/building_pipeline/draw/texture_bank.gd")
 const DrawNode := preload("res://tools/building_pipeline/render/draw_node.gd")
 
-const SCALE := 2
+const SCALE := 4
 const MARGIN_X := 8
 
 const PAPER_SHADER := "

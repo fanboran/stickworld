@@ -67,9 +67,6 @@ const RAGE_MORALE_THRESHOLD: float = 0.4
 ## 可复现；与 A1 team_ai DEFAULT_RANDOM_SEED 同值惯例。测试经
 ## _retreat_mod_rng.seed 重掷，生产恒定）
 const RETREAT_MOD_DEFAULT_SEED: int = 20260911
-## 难度档查询降级默认（TeamAi 未注册/查询不可用时按 standard 档读掷骰概率；
-## 本地字符串避免跨模块引用）
-const RETREAT_MOD_FALLBACK_DIFFICULTY: String = "standard"
 
 ## 工作类型（与 FormationSystem.WorkType 保持一致，本地常量避免跨模块依赖）
 const WorkTypeCombat := "WORK_COMBAT"
@@ -390,7 +387,7 @@ func _try_combat() -> bool:
 
 
 ## A3 · C6 概率调制撤退（设计文档12号 §三C6 / 设计原则3）：补"未到强制阈值但
-## 战况恶化"的中间带——血量/士气逼近阈值或周边友军崩坏时，按难度档案概率掷骰
+## 战况恶化"的中间带——血量/士气逼近阈值或周边友军崩坏时，按档案概率掷骰
 ## 触发 RETREAT（非确定性开关，消除阈值边界的机械感；掷骰是执行机制不是因果，
 ## 候选判定仍是真实战况）。与既有强制溃逃链并存：上游 is_routed / 低士气+近身
 ## 威胁已 return（强制链优先），本函数只处理中间带。
@@ -422,12 +419,13 @@ func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bo
 			>= float(profile.get("retreat_mod_ally_break_ratio", 0.51))
 	if hp_ok and morale_ok and not line_collapsed:
 		return false
-	# 按难度档案概率掷骰（难度行 personality.<难度>.retreat_chance 覆盖，档案基线兜底）
-	var chance: float = float(profile.get("retreat_mod_chance", 0.30))
-	var from_cfg: float = ScriptBehaviorProfiles.get_difficulty_retreat_chance(
-			_query_team_difficulty(bi))
-	if not is_nan(from_cfg):
-		chance = from_cfg
+	# 掷骰概率三级链（难度分档已裁决移除·开放问题#3）：档案显式值（NAN=未覆写）
+	# → personality 单一档案 global 行 retreat_chance → 代码默认
+	var chance: float = float(profile.get("retreat_mod_chance", NAN))
+	if is_nan(chance):
+		chance = ScriptBehaviorProfiles.get_personality_retreat_chance()
+	if is_nan(chance):
+		chance = 0.30
 	if _retreat_mod_rng.randf() >= chance:
 		return false
 	# 双档语义：战线崩坏 → 撤退（回锚点）；个人战况恶化 → 后撤（战术后退重整）
@@ -466,19 +464,6 @@ func _nearby_ally_break_ratio(bi: Node, profile: Dictionary) -> float:
 	if total <= 0:
 		return 0.0
 	return float(broken) / float(total)
-
-
-## 查询所属阵营 TeamAi 的难度档名（A1 · C2 消费：duck 调用 + has_method 防御；
-## 未注册/查询不可用降级 standard——与 _query_team_stance 同款守卫）。
-func _query_team_difficulty(bi: Node) -> String:
-	if _entity == null or not is_instance_valid(_entity) or not _entity.has_method("get_faction"):
-		return RETREAT_MOD_FALLBACK_DIFFICULTY
-	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_team_ai"):
-		return RETREAT_MOD_FALLBACK_DIFFICULTY
-	var tai: Variant = bi.get_team_ai(_entity.get_faction())
-	if tai == null or not is_instance_valid(tai) or not tai.has_method("get_difficulty"):
-		return RETREAT_MOD_FALLBACK_DIFFICULTY
-	return str(tai.get_difficulty())
 
 
 ## 是否祭司兵种（MERIC 路由判定，P7 批次 7b）

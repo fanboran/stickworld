@@ -101,7 +101,7 @@
 | 相位/角色变更信号 | squad_phase_plan 零信号 | `phase_changed` / `roles_reassigned` | squad_phase_plan.gd | §2.3 / §3.3③ |
 | attack% 只读查询 | recalculate 为内部计算 | `team_ai.get_attack_percentage()` | team_ai.gd | §2.2 |
 | 撤退调制状态查询 | 字段私有 | `ai_controller.get_retreat_mod_state()` | ai_controller.gd | §2.1 / §2.4 |
-| 在途命令注册表 | CommandChain 接力无登记（[command_chain.gd:52](../../../stick-world/modules/combat/scripts/command/command_chain.gd) `deliver_via_orgs` 无在途记录） | 在途清单查询 + `relay_started` / `relay_arrived` 信号（载 hop 序位/from/to org/ETA） | command_chain.gd | §3.2.B 指挥链动画 |
+| 在途命令注册表 | ~~CommandChain 接力无登记~~ **已补齐**：`relay_started`/`relay_arrived` 信号（relay_id/号令类型/from/to/hop 序位/eta，arrived 另带 outcome 七态含"停驻丢弃"）+ `get_relays_in_flight()`（在途清单）+ `get_relay_history(limit)`（抵达到期留痕，补放用） | （提案接口已实现于 command_chain.gd） | command_chain.gd | §3.2.B 指挥链动画 |
 
 ---
 

@@ -58,87 +58,291 @@ static func is_enabled() -> bool:
 static var _white_tex: ImageTexture = null
 static var _quad_mesh: ArrayMesh = null
 static var _circle_mesh: ArrayMesh = null
-static var _wobble_bar_mesh: ArrayMesh = null
-static var _wobble_circle_mesh: ArrayMesh = null
+## 血条桶 wobble 相位组数：每组 = 一张预烘 wobble 数值表 + 4 张烘焙网格
+## （条填充/条描边环带/圆点填充/圆点描边环带）。数值表用原版
+## health_bar_indicator._wobble 逐字同式的 float64 公式烘制——GPU 侧不复算
+## hash（float32 sin 大参数精度不可控，且无法与 CPU 路径逐位对齐）。这是血条
+## 观感与原版像素级对齐的根基：probe 钉 seed 后两条路径逐顶点同值。
+const WOBBLE_VARIANTS := 8
+## 单位空间常量：条 wobble 纵向系数（0.9px 抖幅 / 7px 行高）、端头凸出系数
+## （0.6×半高 = 2.1px 局部 = 0.3×行高）、圆点径向系数（0.9px / 6px 半径——
+## 圆点实例均匀缩放，可全烘焙；条实例非均匀缩放，法线必须逐实例算）
+const BAR_WOBBLE_U := 0.9 / 7.0
+const BAR_TIP_U := 0.3
+const DOT_WOBBLE_U := 0.9 / 6.0
+static var _wobble_ready := false
+static var _wobble_bar_meshes: Array = []       # ×N 条填充网格
+static var _wobble_bar_ring_meshes: Array = []  # ×N 条描边环带网格
+static var _wobble_dot_meshes: Array = []       # ×N 圆点填充网格
+static var _wobble_dot_ring_meshes: Array = []  # ×N 圆点描边环带网格
+static var _plain_bar_mesh: ArrayMesh = null       # 窄条退化直角填充
+static var _plain_bar_ring_mesh: ArrayMesh = null  # 窄条退化直角描边
+static var _bar_ring_deltas_tbl: Array = []        # ×N 条边单位向量表（16 边）
+static var _bar_ring_coeffs_tbl: Array = []        # ×N 条边端头 x 修正系数表
+static var _plain_ring_deltas_tbl: PackedVector2Array = PackedVector2Array()
 
 
-## 粗粝 10 段圆（对齐原版 _wobbled_circle 拓扑）：血条圆点用，wobble shader
-## 顶点期按段索引 hash 扰动半径复刻手绘感（40 边光滑圆观感不对）
-static func _get_wobble_circle_mesh() -> ArrayMesh:
-	if _wobble_circle_mesh != null:
-		return _wobble_circle_mesh
+static func _get_wobble_bar_mesh(variant: int) -> ArrayMesh:
+	_ensure_wobble()
+	return _wobble_bar_meshes[variant]
+
+
+static func _get_wobble_bar_ring_mesh(variant: int) -> ArrayMesh:
+	_ensure_wobble()
+	return _wobble_bar_ring_meshes[variant]
+
+
+static func _get_wobble_dot_mesh(variant: int) -> ArrayMesh:
+	_ensure_wobble()
+	return _wobble_dot_meshes[variant]
+
+
+static func _get_wobble_dot_ring_mesh(variant: int) -> ArrayMesh:
+	_ensure_wobble()
+	return _wobble_dot_ring_meshes[variant]
+
+
+static func _get_plain_bar_mesh() -> ArrayMesh:
+	_ensure_wobble()
+	return _plain_bar_mesh
+
+
+static func _get_plain_bar_ring_mesh() -> ArrayMesh:
+	_ensure_wobble()
+	return _plain_bar_ring_mesh
+
+
+## 条描边材质参数：该变体 16 条边的单位空间向量（端头按基位，端头位移由
+## COEFF 在 shader 期按实例行高修正——非均匀缩放下边向量随宽高比变化）
+static func _bar_ring_deltas(variant: int) -> PackedVector2Array:
+	_ensure_wobble()
+	return _bar_ring_deltas_tbl[variant]
+
+
+static func _bar_ring_coeffs(variant: int) -> PackedFloat32Array:
+	_ensure_wobble()
+	return _bar_ring_coeffs_tbl[variant]
+
+
+static func _plain_ring_deltas() -> PackedVector2Array:
+	_ensure_wobble()
+	return _plain_ring_deltas_tbl
+
+
+## 预烘 wobble 表 + 变体网格（进程一次）。
+static func _ensure_wobble() -> void:
+	if _wobble_ready:
+		return
+	_wobble_ready = true
+	for k in WOBBLE_VARIANTS:
+		var tab := PackedFloat32Array()
+		tab.resize(64)
+		for i in 64:
+			# 与 health_bar_indicator._wobble 逐字同式（float64）——probe 钉
+			# _wobble_seed=k 时原版路径与本表逐位一致
+			tab[i] = fposmod(sin(float(i) * 127.1 + float(k) * 0.3117) * 43758.5453, 1.0) - 0.5
+		var geo := _bar_geometry(false, tab)
+		_wobble_bar_meshes.append(_build_bar_fill_mesh(geo))
+		_wobble_bar_ring_meshes.append(_build_bar_ring_mesh(geo))
+		_bar_ring_deltas_tbl.append(geo.deltas)
+		_bar_ring_coeffs_tbl.append(geo.coeffs)
+		var dgeo := _dot_geometry(tab)
+		_wobble_dot_meshes.append(_build_dot_fill_mesh(dgeo))
+		_wobble_dot_ring_meshes.append(_build_dot_ring_mesh(dgeo))
+	_plain_bar_mesh = _build_plain_fill_mesh()
+	_plain_bar_ring_mesh = _build_plain_ring_mesh()
+	_plain_ring_deltas_tbl = PackedVector2Array([
+		Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0), Vector2(0, -1),
+		Vector2(0, 0), Vector2(0, 0), Vector2(0, 0), Vector2(0, 0),
+		Vector2(0, 0), Vector2(0, 0), Vector2(0, 0), Vector2(0, 0),
+		Vector2(0, 0), Vector2(0, 0), Vector2(0, 0), Vector2(0, 0),
+	])
+
+
+## 条边界几何（单位条空间 1×1）：上边 7 点（左→右，6 段）→ 右端头 →
+## 下边 7 点（右→左）→ 左端头，与原版 _draw_wobbly_rect 多边形同构。
+## 边顶点 wobble 纵向位移烘进 y（BAR_WOBBLE_U 单位常量）；端头按基位
+## （±0.5, 0），x 位移（凸出+端头抖动）由 shader 按实例行高加出，邻边
+## delta 的缺额由 COEFF 修正。plain = 窄条退化：无 wobble 无凸出。
+static func _bar_geometry(plain: bool, tab: PackedFloat32Array) -> Dictionary:
+	var pts := PackedVector2Array()
+	for i in 7:
+		var wy := 0.0 if plain else tab[i] * BAR_WOBBLE_U
+		pts.append(Vector2(-0.5 + float(i) / 6.0, -0.5 + wy))
+	pts.append(Vector2(0.5, 0.0))
+	for j in 7:
+		var wy2 := 0.0 if plain else tab[40 + j] * BAR_WOBBLE_U
+		pts.append(Vector2(0.5 - float(j) / 6.0, 0.5 + wy2))
+	pts.append(Vector2(-0.5, 0.0))
+	var c_r := 0.0 if plain else BAR_TIP_U + tab[20] * BAR_WOBBLE_U
+	var c_l := 0.0 if plain else -BAR_TIP_U + tab[60] * BAR_WOBBLE_U
+	# 端头 x 位移对邻边向量的修正：抵达端头的边（→cap）计入位移（+c），
+	# 离开端头的边（cap→）基位差需扣回（-c）——同号会把斜边法线算歪
+	var coeffs := PackedFloat32Array()
+	coeffs.resize(16)
+	coeffs[6] = c_r
+	coeffs[7] = -c_r
+	coeffs[14] = c_l
+	coeffs[15] = -c_l
+	var deltas := PackedVector2Array()
+	deltas.resize(16)
+	for i in 16:
+		deltas[i] = pts[(i + 1) % 16] - pts[i]
+	return {"pts": pts, "coeffs": coeffs, "deltas": deltas, "tip_r": c_r, "tip_l": c_l}
+
+
+## UV.y 编码（canvas_item 无 UV2）：code×131072 + q，q = round((t+1)×65536)，
+## t = 端头 x 位移系数（世界 px / 行高，∈[-1,1]），非端头顶点 t=0。
+## code：0 无位移顶点 / 2,3 端头尖填充（左/右）/ 4,5 环带顶点外/内圈 /
+## 6,7 端头尖环带左外/内 / 8,9 端头尖环带右外/内。
+static func _uv_y(code: float, t: float) -> Vector2:
+	var q := roundf((t + 1.0) * 65536.0)
+	return Vector2(0.0, code * 131072.0 + q)
+
+
+static func _finish_mesh(pts: PackedVector2Array, uvs: PackedVector2Array, idx: PackedInt32Array) -> ArrayMesh:
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = pts
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	# 网格必须带全白顶点色：MultiMesh 实例色与网格顶点色相乘，缺 COLOR 属性
+	# 时顶点色按黑处理（实测黑影 bug）；长度必须与顶点数一致
+	var cols := PackedColorArray()
+	cols.resize(pts.size())
+	cols.fill(Color.WHITE)
+	arr[Mesh.ARRAY_COLOR] = cols
+	arr[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return mesh
+
+
+## 条填充网格：边界多边形三角化（Geometry2D.triangulate_polygon，与
+## draw_colored_polygon 内部同函数同输入）；端头尖顶点走 code 2/3。
+static func _build_bar_fill_mesh(geo: Dictionary) -> ArrayMesh:
+	var pts: PackedVector2Array = geo.pts
+	var n := pts.size()
+	var uvs := PackedVector2Array()
+	for j in n:
+		var code := 0.0
+		var t := 0.0
+		if j == 7:
+			code = 2.0
+			t = geo.tip_r
+		elif j == 15:
+			code = 3.0
+			t = geo.tip_l
+		uvs.append(_uv_y(code, t))
+	return _finish_mesh(pts, uvs, Geometry2D.triangulate_polygon(pts))
+
+
+## 条描边环带网格：边界 miter 偏移多边形的内外双拷贝环形缝合（实验实证
+## draw_polyline join = miter，偏移在 shader 逐实例重建，见 crowd_bar_wobble）。
+static func _build_bar_ring_mesh(geo: Dictionary) -> ArrayMesh:
+	var pts: PackedVector2Array = geo.pts
+	var n := 16
+	var verts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	for side in 2:
+		var s := 1.0 if side == 0 else -1.0
+		for j in n:
+			verts.append(pts[j])
+			var code := 4.0 if s > 0.0 else 5.0
+			var t := 0.0
+			if j == 7:
+				code = 8.0 if s > 0.0 else 9.0
+				t = geo.tip_r
+			elif j == 15:
+				code = 6.0 if s > 0.0 else 7.0
+				t = geo.tip_l
+			var i1 := (j + n - 1) % n
+			uvs.append(Vector2(float(i1 * 32 + j), _uv_y(code, t).y))
+	var idx := PackedInt32Array()
+	for j in n:
+		var j1 := (j + 1) % n
+		idx.append_array([j, j1, n + j, j1, n + j1, n + j])
+	return _finish_mesh(verts, uvs, idx)
+
+
+## 窄条退化填充：直角矩形（原版 _draw_wobbly_rect 的 draw_rect 回退）。
+static func _build_plain_fill_mesh() -> ArrayMesh:
+	var pts := PackedVector2Array([
+		Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5),
+	])
+	var uvs := PackedVector2Array()
+	for j in 4:
+		uvs.append(_uv_y(0.0, 0.0))
+	return _finish_mesh(pts, uvs, PackedInt32Array([0, 1, 2, 0, 2, 3]))
+
+
+## 窄条退化描边：矩形 4 角 × 内外圈（shader plain 分支 = (n1+n2)×0.8 直角方
+## 角偏移，对齐 draw_rect 边框语义）。
+static func _build_plain_ring_mesh() -> ArrayMesh:
+	var corners := [
+		Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5),
+	]
+	var verts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	for side in 2:
+		var s := 1.0 if side == 0 else -1.0
+		for j in 4:
+			verts.append(corners[j])
+			var code := 4.0 if s > 0.0 else 5.0
+			var i1 := (j + 3) % 4
+			uvs.append(Vector2(float(i1 * 32 + j), _uv_y(code, 0.0).y))
+	var idx := PackedInt32Array()
+	for j in 4:
+		var j1 := (j + 1) % 4
+		idx.append_array([j, j1, 4 + j, j1, 4 + j1, 4 + j])
+	return _finish_mesh(verts, uvs, idx)
+
+
+## 圆点几何：10 段圆，径向 wobble 全烘焙进半径（DOT_WOBBLE_U 单位常量——
+## 圆点实例均匀缩放 rr，位移与缩放同比，无需 shader 参与）。
+static func _dot_geometry(tab: PackedFloat32Array) -> Dictionary:
+	var pts := PackedVector2Array()
+	for i in 10:
+		var a := TAU * float(i) / 10.0
+		pts.append(Vector2(cos(a), sin(a)) * (1.0 + tab[i] * DOT_WOBBLE_U))
+	return {"pts": pts}
+
+
+static func _build_dot_fill_mesh(geo: Dictionary) -> ArrayMesh:
+	var pts: PackedVector2Array = geo.pts
+	var uvs := PackedVector2Array()
+	for j in 10:
+		uvs.append(_uv_y(0.0, 0.0))
+	return _finish_mesh(pts, uvs, Geometry2D.triangulate_polygon(pts))
+
+
+## 圆点描边环带：miter 偏移在构建期烘焙（均匀缩放 → 单位空间法线即世界
+## 法线），内外双拷贝环形缝合，shader 零位移。
+static func _build_dot_ring_mesh(geo: Dictionary) -> ArrayMesh:
+	var pts: PackedVector2Array = geo.pts
 	var n := 10
-	var pts := PackedVector2Array()
+	var mit := []
+	for j in n:
+		# 两条邻边都必须取「前进方向」向量（j-1→j 与 j→j+1），法线才同朝外——
+		# 一反向则角平分线退化为差向量，miter 偏移严重偏短
+		var e1 := pts[j] - pts[(j + n - 1) % n]
+		var e2 := pts[(j + 1) % n] - pts[j]
+		var n1 := Vector2(e1.y, -e1.x).normalized()
+		var n2 := Vector2(e2.y, -e2.x).normalized()
+		var m := (n1 + n2).normalized()
+		mit.append(m * (0.8 / 6.0) / maxf(m.dot(n1), 0.3))
+	var verts := PackedVector2Array()
 	var uvs := PackedVector2Array()
-	var cols := PackedColorArray()
-	for i in n:
-		var a := TAU * float(i) / float(n)
-		var c := Vector2(cos(a), sin(a))
-		pts.append(c)
-		uvs.append(Vector2(float(i) / float(n), 0.0))
-		cols.append(Color.WHITE)
+	for side in 2:
+		var s := 1.0 if side == 0 else -1.0
+		for j in n:
+			verts.append(pts[j] + mit[j] * s)
+			uvs.append(_uv_y(0.0, 0.0))
 	var idx := PackedInt32Array()
-	for i in n:
-		idx.append_array([0, i, (i + 1) % n])
-	var arr := []
-	arr.resize(Mesh.ARRAY_MAX)
-	arr[Mesh.ARRAY_VERTEX] = pts
-	arr[Mesh.ARRAY_TEX_UV] = uvs
-	arr[Mesh.ARRAY_COLOR] = cols
-	arr[Mesh.ARRAY_INDEX] = idx
-	_wobble_circle_mesh = ArrayMesh.new()
-	_wobble_circle_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	return _wobble_circle_mesh
+	for j in n:
+		var j1 := (j + 1) % n
+		idx.append_array([j, j1, n + j, j1, n + j1, n + j])
+	return _finish_mesh(verts, uvs, idx)
 
-
-## 手绘条模板：1×1 单位条，水平 12 段上下边顶点——血条桶 wobble shader
-## 在顶点期扰动边缘顶点复刻 boiling line（quad 仅 4 角扰动=刚体晃动，不够）
-static func _get_wobble_bar_mesh() -> ArrayMesh:
-	if _wobble_bar_mesh != null:
-		return _wobble_bar_mesh
-	var n := 12
-	var pts := PackedVector2Array()
-	var uvs := PackedVector2Array()
-	var cols := PackedColorArray()
-	# 端头微凸点（x=±0.54，对齐原版端头外凸 0.6×半高≈0.04 单位）
-	pts.append(Vector2(-0.54, 0.0))
-	uvs.append(Vector2(0.0, 0.5))
-	cols.append(Color.WHITE)
-	for i in n + 1:
-		var x := -0.5 + float(i) / float(n)
-		pts.append(Vector2(x, -0.5))
-		pts.append(Vector2(x, 0.5))
-		uvs.append(Vector2(x + 0.5, 0.0))
-		uvs.append(Vector2(x + 0.5, 1.0))
-		cols.append(Color.WHITE)
-		cols.append(Color.WHITE)
-	pts.append(Vector2(0.54, 0.0))
-	uvs.append(Vector2(1.0, 0.5))
-	cols.append(Color.WHITE)
-	var idx := PackedInt32Array()
-	# 左端头扇（cap0 → 上边首 2 点）+ 条身网格 + 右端头扇
-	var cap0 := 0
-	var top0 := 1
-	var bot0 := 2
-	idx.append_array([cap0, bot0, top0])
-	for i in n:
-		var a := 1 + i * 2
-		var b := a + 1
-		var c := a + 2
-		var d := a + 3
-		idx.append_array([a, c, b, b, c, d])
-	var last_top := 1 + n * 2
-	var cap1 := 1 + n * 2 + 1
-	idx.append_array([cap1, last_top, last_top + 1])
-	var arr := []
-	arr.resize(Mesh.ARRAY_MAX)
-	arr[Mesh.ARRAY_VERTEX] = pts
-	arr[Mesh.ARRAY_TEX_UV] = uvs
-	arr[Mesh.ARRAY_COLOR] = cols
-	arr[Mesh.ARRAY_INDEX] = idx
-	_wobble_bar_mesh = ArrayMesh.new()
-	_wobble_bar_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	return _wobble_bar_mesh
 
 
 ## 1x1 纯白不透明纹理：兜底绑定（无纹理 canvas item 理论上按纯色渲染，

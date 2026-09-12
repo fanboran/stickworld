@@ -112,7 +112,9 @@ declare -A SUITE_TIMEOUT=(
 	# 每套件超时：长套件按串行实测 ×2 取整，短套件统一 ≥90s
 	# （2026-08 审计校准：并行 6 下 CPU 争用系数实测最高 ~2.5x，短套件 60s 边界会碰运气误杀）
 	["tests/integration/test_battle_lifecycle.tscn"]=120
-	["tests/integration/test_battle_retreat.tscn"]=180
+	# 实测 94~118s（并行 3 下），原 180 预算按"串行×2"公式偏低——池内争用时曾误杀一次 TIMEOUT。
+	# 提到 240 保留挂死检测能力（真挂死远不止此数），消除争用误杀。
+	["tests/integration/test_battle_retreat.tscn"]=240
 	["tests/integration/test_garrison_spawner.tscn"]=120
 	["tests/integration/test_conquest_flow.tscn"]=180
 	["tests/integration/test_conquest_e2e.tscn"]=180

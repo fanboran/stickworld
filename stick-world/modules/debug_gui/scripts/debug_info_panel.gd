@@ -98,6 +98,8 @@ func _update_text() -> void:
 			lines.append("  HP: %d/%d" % [int(e.health), int(max_hp)])
 		# W1 悬停增强（组织界面与AI状态接线 §2.1）：AI 状态字段追加段
 		_append_ai_info(lines, e)
+		# W6 目标评分留痕（设计文档 12 号 §2.4）：逐项展示"为什么打这个点"
+		_append_task_score_info(lines, e)
 	_label.text = "\n".join(lines)
 
 
@@ -179,6 +181,41 @@ func _append_phase_info(lines: Array[String], e: Node2D) -> void:
 		if not role.is_empty():
 			txt += " · 角色:%s" % role
 	lines.append("  " + txt)
+
+
+## W6 目标评分留痕（设计文档 12 号 §2.4 落点"AI 决策面板"，WorldBox KingdomOpinion
+## "具名因子逐项求和 + tooltip 回答为什么恨你" 同构）：本阵营 AI 最近一次任务槽目标
+## 评分的四因子明细逐项展示，回答"为什么打这个点"。
+## 全链 duck 探测（get_battle_instance → get_team_ai → get_task_board →
+## get_last_score_trace → format_score_detail），任一环不可用即跳过该行——
+## 与本文件既有 AI 字段段同风格，不倒逼战斗侧改结构、零跨模块引用。
+func _append_task_score_info(lines: Array[String], e: Node2D) -> void:
+	if not e.has_method("get_battle_instance") or not e.has_method("get_faction"):
+		return
+	var bi: Node = e.get_battle_instance()
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_team_ai"):
+		return
+	var tai: Variant = bi.get_team_ai(e.get_faction())
+	if tai == null or not is_instance_valid(tai) or not tai.has_method("get_task_board"):
+		return
+	var board: Variant = tai.get_task_board()
+	if board == null or not is_instance_valid(board) \
+			or not board.has_method("get_last_score_trace") or not board.has_method("format_score_detail"):
+		return
+	var trace: Variant = board.get_last_score_trace()
+	if not (trace is Dictionary) or not "candidates" in (trace as Dictionary):
+		return
+	# 展示被选中候选的明细（chosen 标记由生成侧写入；无选中项则无此行）
+	var picked_detail: Variant = null
+	for entry in (trace as Dictionary)["candidates"]:
+		if entry is Dictionary and bool((entry as Dictionary).get("chosen", false)):
+			picked_detail = (entry as Dictionary).get("detail", null)
+			break
+	if not (picked_detail is Dictionary):
+		return
+	var txt: String = str(board.format_score_detail(picked_detail))
+	if not txt.is_empty():
+		lines.append("  " + txt)
 
 
 ## 面板拖动

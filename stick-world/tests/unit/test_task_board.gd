@@ -38,6 +38,13 @@ func _ready() -> void:
 	_runner.add_test("下令路径分流：散兵 issue / 编制 issue_to_org 同根去重", _test_order_path_routing)
 	_runner.add_test("编制整组手动号令避让 + 散兵逐队避让", _test_org_group_manual_guard)
 	_runner.add_test("多小队槽匹配号令：攻击组收槽目标 / 防守位收本方质心", _test_multi_squad_slot_orders)
+	# W6 决策依据留痕（追加；不改既有断言）
+	_runner.add_test("W6 明细：四因子之和 == total / score_target 逐位一致", _test_score_detail_sum)
+	_runner.add_test("W6 明细：距离双计拆解（小队/基地各自贡献）", _test_score_detail_distance_split)
+	_runner.add_test("W6 trace：chosen == pick_target 返回值 / 候选过滤语义", _test_pick_target_trace)
+	_runner.add_test("W6 trace：键齐空结构 / 无候选兜底 / 惯性命中留痕", _test_trace_empty_and_inertia)
+	_runner.add_test("W6 文案：明细 → 中文逐项字符串（纯函数）/ 空明细空串", _test_format_score_detail)
+	_runner.add_test("W6 回归锁：固定 fixture 选择与 total 逐位不变", _test_trace_regression_lock)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -441,6 +448,192 @@ func _test_multi_squad_slot_orders() -> void:
 		# 槽目标 = 评分最优敌位（敌群在 1500+，远离本方质心）
 		_runner.assert_true(target_of["s1"].x > 1000.0, "攻击目标在敌方向")
 	ctx.teardown()
+
+
+# ─────────────────────────────── W6 决策依据留痕 ────────────────────────────────
+
+## 明细：四因子（SCORE_FACTOR_KEYS）之和 == total；score_target 返回值与 total 逐位一致
+## （单点真相锁：score_target 是 score_target_detail 的薄封装，不是并行第二套算法）。
+func _test_score_detail_sum() -> void:
+	var board: ScriptTaskBoard = _make_board()
+	var ctx := {
+		"squad_pos": Vector2.ZERO,
+		"base_pos": Vector2(100, 0),
+		"enemies": [{"pos": Vector2(520, 0), "weight": 10.0}],
+		"own_strength": 10.0,
+		"last_target": Vector2(500, 0),
+	}
+	var pos := Vector2(500, 0)
+	var detail: Dictionary = board.score_target_detail(pos, ctx)
+	var factor_sum: float = 0.0
+	for key in ScriptTaskBoard.SCORE_FACTOR_KEYS:
+		_runner.assert_true(detail.has(key), "明细含求和项键 %s" % key)
+		factor_sum += float(detail.get(key, 0.0))
+	_runner.assert_approx(factor_sum, float(detail["total"]), 1e-4, "四因子之和 == total")
+	_runner.assert_approx(float(detail["total"]),
+			5.0 - 5.0 * (500.0 / 1200.0) - 5.0 * (400.0 / 1200.0) + 1.4,
+			0.001, "手算对账：threat +5.0 − 距小队 − 距基地 + 惯性")
+	# 逐位一致（ε=0 即精确相等）：留痕 total 与评分返回同一数值
+	_runner.assert_approx(board.score_target(pos, ctx), float(detail["total"]), 0.0,
+			"score_target 与明细 total 逐位一致（单点真相）")
+
+
+## 距离因子双计：明细须能分别读出"距小队""距基地"各自的加权贡献（不压成一个数）
+func _test_score_detail_distance_split() -> void:
+	var board: ScriptTaskBoard = _make_board()
+	# 候选 (300,0)：距小队 300 → 归一 0.25（-1.25）；距基地 900 → 归一 0.75（-3.75）
+	var ctx := {
+		"squad_pos": Vector2.ZERO,
+		"base_pos": Vector2(1200, 0),
+		"enemies": [],
+		"own_strength": 10.0,
+		"last_target": Vector2.INF,
+	}
+	var d: Dictionary = board.score_target_detail(Vector2(300, 0), ctx)
+	_runner.assert_approx(float(d["distance_squad"]), -1.25, 0.001, "距离·小队贡献 = −5×0.25")
+	_runner.assert_approx(float(d["distance_base"]), -3.75, 0.001, "距离·基地贡献 = −5×0.75")
+	_runner.assert_approx(float(d["distance"]), -5.0, 0.001, "距离求和项 = 两来源之和（双计）")
+	_runner.assert_approx(float(d["total"]), -5.0, 0.001, "无威胁无惯性时 total = 距离项")
+
+
+## trace：chosen 以 pick_target 实际返回为准（含平局）；candidates 条数 = 参与评分候选数
+func _test_pick_target_trace() -> void:
+	var board: ScriptTaskBoard = _make_board()
+	var ctx := {
+		"squad_pos": Vector2.ZERO,
+		"base_pos": Vector2.ZERO,
+		"enemies": [],
+		"own_strength": 10.0,
+		"last_target": Vector2.INF,
+		"fallback": Vector2(77, 77),
+	}
+	# 平局：两候选等距等分 → 保持候选序首位（确定性），trace.chosen 必须与返回值一致
+	var picked: Vector2 = board.pick_target([Vector2(300, 0), Vector2(-300, 0)], ctx)
+	var trace: Dictionary = board.get_last_score_trace()
+	_runner.assert_true(trace["chosen"] is Vector2 and trace["chosen"] == picked,
+			"trace.chosen == pick_target 返回值（平局亦以实际返回为准）")
+	_runner.assert_equal(int(trace["chosen_index"]), 0, "平局取候选序首位 → 下标 0")
+	_runner.assert_equal((trace["candidates"] as Array).size(), 2, "candidates 条数 == 参与评分候选数")
+	_runner.assert_false(bool(trace["fallback"]), "有候选不走兜底路径")
+	var chosen_count: int = 0
+	for entry_v in trace["candidates"]:
+		var entry: Dictionary = entry_v
+		_runner.assert_true(entry.has("target") and entry.has("detail") and entry.has("chosen"),
+				"候选项含 target/detail/chosen 三键")
+		if bool(entry.get("chosen", false)):
+			chosen_count += 1
+	_runner.assert_equal(chosen_count, 1, "恰一项标记 chosen")
+	# 非 Vector2 候选被过滤、不参与评分 → 也不入 trace.candidates（语义：trace 只记评过的）
+	board.pick_target([Vector2(10, 0), "x", Vector2(20, 0)], ctx)
+	_runner.assert_equal((board.get_last_score_trace()["candidates"] as Array).size(), 2,
+			"非 Vector2 候选不入 trace（未参与评分）")
+	# 深拷贝隔离：改写返回的 trace 不影响内核留痕
+	var t2: Dictionary = board.get_last_score_trace()
+	(t2["candidates"] as Array).clear()
+	_runner.assert_equal((board.get_last_score_trace()["candidates"] as Array).size(), 2,
+			"get_last_score_trace 深拷贝返回（消费端改写不污染内核）")
+
+
+## trace 空结构与兜底路径：键恒在、不返回 null；惯性因子命中在明细里可见（≠ 0）
+func _test_trace_empty_and_inertia() -> void:
+	var board: ScriptTaskBoard = _make_board()
+	# 未评分前：键齐空结构（不是 null）
+	var empty: Dictionary = board.get_last_score_trace()
+	for key in ["chosen", "chosen_index", "candidates", "fallback", "at"]:
+		_runner.assert_true(empty.has(key), "空 trace 键齐：%s" % key)
+	_runner.assert_null(empty["chosen"], "未评分 trace.chosen = null（尚无目标）")
+	_runner.assert_equal((empty["candidates"] as Array).size(), 0, "未评分 candidates 为空数组")
+	var ctx := {
+		"squad_pos": Vector2.ZERO,
+		"base_pos": Vector2.ZERO,
+		"enemies": [],
+		"own_strength": 10.0,
+		"last_target": Vector2.INF,
+		"fallback": Vector2(77, 77),
+	}
+	# 无候选：返回 fallback，trace 记空 candidates + 兜底标记（键齐）
+	var fallback: Vector2 = board.pick_target([], ctx)
+	_runner.assert_true(fallback == Vector2(77, 77), "无候选 → fallback")
+	var t: Dictionary = board.get_last_score_trace()
+	_runner.assert_true(t["chosen"] == Vector2(77, 77), "无候选 trace.chosen = fallback（与返回一致）")
+	_runner.assert_equal(int(t["chosen_index"]), -1, "无候选 chosen_index = -1")
+	_runner.assert_equal((t["candidates"] as Array).size(), 0, "无候选 candidates 空（键齐）")
+	_runner.assert_true(bool(t["fallback"]), "无候选标记兜底路径")
+	_runner.assert_true(float(t["at"]) >= 0.0, "at 时刻可读（进程单调钟）")
+	# 惯性命中：候选 = last_target（容差内）→ 明细 inertia = +w_inertia
+	var ctx_hit := ctx.duplicate()
+	ctx_hit["last_target"] = Vector2(300, 0)
+	board.pick_target([Vector2(300, 0)], ctx_hit)
+	var hit_detail: Dictionary = ((board.get_last_score_trace()["candidates"] as Array)[0] as Dictionary)["detail"]
+	_runner.assert_approx(float(hit_detail["inertia"]), 1.4, 0.001, "与上次目标一致 → 明细 inertia = +1.4")
+	_runner.assert_true(bool(hit_detail["inertia_hit"]), "惯性命中标记为真")
+	# 容差外：明细 inertia = 0
+	var ctx_miss := ctx.duplicate()
+	ctx_miss["last_target"] = Vector2(0, 500)
+	board.pick_target([Vector2(300, 0)], ctx_miss)
+	var miss_detail: Dictionary = ((board.get_last_score_trace()["candidates"] as Array)[0] as Dictionary)["detail"]
+	_runner.assert_approx(float(miss_detail["inertia"]), 0.0, 0.001, "容差外 inertia = 0")
+	_runner.assert_false(bool(miss_detail["inertia_hit"]), "惯性命中标记为假")
+
+
+## 文案纯函数：给定明细 → 精确字符串；空明细 / 缺 total → 空串
+func _test_format_score_detail() -> void:
+	var board: ScriptTaskBoard = _make_board()
+	var detail := {
+		"threat": 5.0,
+		"avoid_clumps": -2.0,
+		"distance": -4.1666667,
+		"inertia": 1.4,
+		"total": 0.2333333,
+	}
+	_runner.assert_equal(board.format_score_detail(detail),
+			"目标评分: 威胁 +5.0 · 聚集 -2.0 · 距离 -4.2 · 惯性 +1.4 = +0.2",
+			"明细 → 中文逐项文案（与四项求和一致）")
+	_runner.assert_equal(board.format_score_detail({}), "", "空明细 → 空串（消费端据此跳行）")
+	_runner.assert_equal(board.format_score_detail({"threat": 1.0}), "", "缺 total → 空串")
+	# 负零归一：-0.0 展示为 +0.0（面板不出现 −0.0）
+	var zero := {"threat": 0.0, "avoid_clumps": -0.0, "distance": -0.0, "inertia": 0.0, "total": 0.0}
+	_runner.assert_equal(board.format_score_detail(zero),
+			"目标评分: 威胁 +0.0 · 聚集 +0.0 · 距离 +0.0 · 惯性 +0.0 = +0.0", "负零归一为 +0.0")
+	# 实战形态样例：真实权重算出的明细 → 面板行（威胁 0.6×5 / 双距 800+200 归一 / 惯性命中）
+	var real: Dictionary = board.score_target_detail(Vector2(800, 0), {
+		"squad_pos": Vector2.ZERO,
+		"base_pos": Vector2(600, 0),
+		"enemies": [{"pos": Vector2(800, 0), "weight": 6.0}],
+		"own_strength": 10.0,
+		"last_target": Vector2(800, 0),
+	})
+	_runner.assert_equal(board.format_score_detail(real),
+			"目标评分: 威胁 +3.0 · 聚集 +0.0 · 距离 -4.2 · 惯性 +1.4 = +0.2", "实战明细 → 面板行文案")
+
+
+## 回归锁：留痕常开前后对固定 fixture 的选择与 total 完全相同（具体数值断言，非"跑通"）
+func _test_trace_regression_lock() -> void:
+	var board: ScriptTaskBoard = _make_board()
+	var ctx := {
+		"squad_pos": Vector2.ZERO,
+		"base_pos": Vector2.ZERO,
+		"enemies": [],
+		"own_strength": 10.0,
+		"last_target": Vector2.INF,
+	}
+	# 等距双候选：距本源 300 → 归一 0.25，双计 → distance = -5.0×0.25×2 = -2.5
+	var d_a: Dictionary = board.score_target_detail(Vector2(300, 0), ctx)
+	_runner.assert_approx(float(d_a["threat"]), 0.0, 1e-6, "无威胁 → threat 0")
+	_runner.assert_approx(float(d_a["avoid_clumps"]), 0.0, 1e-6, "无敌人 → 聚集 0")
+	_runner.assert_approx(float(d_a["distance"]), -2.5, 1e-6, "距离双计 = -2.5")
+	_runner.assert_approx(float(d_a["inertia"]), 0.0, 1e-6, "无上次目标 → 惯性 0")
+	_runner.assert_approx(float(d_a["total"]), -2.5, 1e-6, "固定 fixture total = -2.5")
+	var picked: Vector2 = board.pick_target([Vector2(300, 0), Vector2(-300, 0)], ctx)
+	_runner.assert_true(picked == Vector2(300, 0), "回归锁：平局保持候选序首位")
+	var cands: Array = board.get_last_score_trace()["candidates"]
+	_runner.assert_true(float((cands[0] as Dictionary)["detail"]["total"]) == -2.5,
+			"回归锁：候选明细 total 恒为 -2.5（逐位）")
+	# 威胁 fixture：threat +5.0，距小队/基地各归一 500/1200 → 双计 -4.166667
+	var ctx_hot := ctx.duplicate()
+	ctx_hot["enemies"] = [{"pos": Vector2(520, 0), "weight": 10.0}]
+	_runner.assert_approx(board.score_target(Vector2(500, 0), ctx_hot), 5.0 - 5.0 * (500.0 / 1200.0) * 2.0,
+			1e-6, "回归锁：威胁 fixture total = +0.833333…")
 
 
 # ─────────────────────────────── 夹具 ────────────────────────────────

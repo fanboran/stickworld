@@ -40,6 +40,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_team_ai_orders.gd",
 	"res://tests/unit/test_team_ai_personality.gd",
 	"res://tests/unit/test_ai_param_panel.gd",
+	"res://tests/unit/test_ai_spawn_jitter.gd",
 	"res://tests/unit/test_task_board.gd",
 	"res://tests/unit/test_ai_retreat_modulation.gd",
 	"res://tests/unit/test_suppression.gd",

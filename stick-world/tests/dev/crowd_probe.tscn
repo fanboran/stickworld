@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://crowdprobe0"]
+
+[ext_resource type="Script" path="res://tests/dev/crowd_probe.gd" id="1"]
+
+[node name="CrowdProbe" type="Node2D"]
+script = ExtResource("1")

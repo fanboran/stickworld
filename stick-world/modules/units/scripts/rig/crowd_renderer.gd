@@ -241,18 +241,23 @@ var _shadow_mmi: MultiMeshInstance2D = null
 var _shadow_mm: MultiMesh = null
 var _shadow_buf: PackedFloat32Array = PackedFloat32Array()
 var _shadow_cap: int = 0
-## 血条桶：全局双 MMI（圆点=圆 mesh 1 行/单位、横条=矩形 mesh 3 行/单位——
-## 一个 MMI 只能绑一种 mesh）。z=1000 顶层与原 indicator 同绝对层；颜色全
-## 走实例色（阵营/低血闪/渐隐 alpha），状态机留在 HealthBarIndicator（数据
-## 模式 get_bar_state 快照），wobble shader 增强后续批次
-var _dot_mmi: MultiMeshInstance2D = null
-var _dot_mm: MultiMesh = null
-var _dot_buf: PackedFloat32Array = PackedFloat32Array()
-var _dot_cap: int = 0
-var _bar_mmi: MultiMeshInstance2D = null
-var _bar_mm: MultiMesh = null
-var _bar_buf: PackedFloat32Array = PackedFloat32Array()
-var _bar_cap: int = 0
+## 血条桶：6 组 × N 相位 MMI（N=WOBBLE_VARIANTS；组序=树序=绘制序）。
+## 层序复刻原版 _draw_bar 的描边两遍画：底色 → 描边① → 残影/填充 → 描边②
+## （0.95 半透明描边双绘合成 ≈0.9975：外半环双描、填充段内半环被填充盖住
+## 只剩单描——层序错一条视觉上就是边缘发灰/描边偏细，实测 3/255 系统差）。
+## 手绘感对齐三件套：
+## - boiling：预烘 wobble 表（batch_rig，原版 _wobble 同式 float64）烘进网格
+##   UV，shader 只做线性位移——与原版 _draw 路径逐顶点同值；
+## - 描边：边界 ±0.8px 环带网格（复刻 draw_polyline 1.6px 居中描边），填充层
+##   保持全尺寸原几何——半透明底混页面而非混黑剪影，blending 与原版一致；
+## - 相位组 = indicator wobble seed % N：原版每 0.12s 重掷 seed → 桶侧换组跳
+##   相位（boiling 逐帧抖动一致）；满血圆点 seed 恒 0 → 静止（与原版一致）。
+var _bar_bg: OverlayBucket = null      # 暗底填充（描边①之下）
+var _bar_ring1: OverlayBucket = null   # 描边第一遍
+var _bar_trail_fill: OverlayBucket = null  # 白残影 + 阵营填充（盖描边①内半环）
+var _bar_ring2: OverlayBucket = null   # 描边第二遍（顶层）
+var _dot_fill: OverlayBucket = null
+var _dot_ring: OverlayBucket = null
 ## 武器图集桶：全局单 MMI（武器 z=18 绝对层本就无单位间遮挡语义）。
 ## 带透明底自建图集渲染正常（二值 alpha 实测 OK，坑仅在半透明软渐变纹理——
 ## weapon_probe 四行对照实验定性）；INSTANCE_CUSTOM=(UV 偏移,子区域尺寸)
@@ -335,25 +340,70 @@ func setup(parent: Node2D, y_top: float = 0.0, y_bottom: float = 1024.0) -> void
 	container.add_child(smmi)
 	_shadow_mmi = smmi
 	_shadow_mm = smm
-	# 血条桶双 MMI（z=1000 顶层）
+	# 血条桶：6 组 × (N 相位 + plain 直角退化槽) MMI（z=1000 顶层与原
+	# indicator 同绝对层；组创建顺序 = 树序 = 绘制序：底色→描边①→残影/填充
+	# →描边②→点填充→点描边）。环带材质按变体各带 DELTAS/COEFF 烘表
+	# （shader 逐实例重建世界边向量——条实例非均匀缩放，法线随宽高比变化）。
 	var wobble_shader: Shader = load("res://modules/units/scripts/rig/crowd_bar_wobble.gdshader")
-	_dot_mmi = _make_overlay_mm(container, "CrowdDots", BatchRig._get_wobble_circle_mesh(), wobble_shader, 1.0)
-	_bar_mmi = _make_overlay_mm(container, "CrowdBars", BatchRig._get_wobble_bar_mesh(), wobble_shader, 0.0)
+	var fill_mat := ShaderMaterial.new()
+	fill_mat.shader = wobble_shader
+	fill_mat.set_shader_parameter("mode", 0.0)
+	var dot_mat := ShaderMaterial.new()
+	dot_mat.shader = wobble_shader
+	dot_mat.set_shader_parameter("mode", 1.0)
+	var ring_mats: Array = []
+	for k in BatchRig.WOBBLE_VARIANTS:
+		var rm := ShaderMaterial.new()
+		rm.shader = wobble_shader
+		rm.set_shader_parameter("mode", 0.0)
+		rm.set_shader_parameter("DELTAS", BatchRig._bar_ring_deltas(k))
+		rm.set_shader_parameter("COEFF", BatchRig._bar_ring_coeffs(k))
+		ring_mats.append(rm)
+	var ring_plain_mat := ShaderMaterial.new()
+	ring_plain_mat.shader = wobble_shader
+	ring_plain_mat.set_shader_parameter("mode", 0.0)
+	ring_plain_mat.set_shader_parameter("DELTAS", _pad16(BatchRig._plain_ring_deltas()))
+	var zero16 := PackedFloat32Array()
+	zero16.resize(16)
+	ring_plain_mat.set_shader_parameter("COEFF", zero16)
+	var n := BatchRig.WOBBLE_VARIANTS
+	var fill_meshes: Array = []
+	var fill_mats: Array = []
+	for k in n:
+		fill_meshes.append(BatchRig._get_wobble_bar_mesh(k))
+		fill_mats.append(fill_mat)
+	fill_meshes.append(BatchRig._get_plain_bar_mesh())
+	fill_mats.append(fill_mat)
+	var ring_meshes: Array = []
+	var ring_mats_all: Array = ring_mats.duplicate()
+	for k in n:
+		ring_meshes.append(BatchRig._get_wobble_bar_ring_mesh(k))
+	ring_meshes.append(BatchRig._get_plain_bar_ring_mesh())
+	ring_mats_all.append(ring_plain_mat)
+	var dot_fill_meshes: Array = []
+	var dot_ring_meshes: Array = []
+	var dot_mats: Array = []
+	for k in n:
+		dot_fill_meshes.append(BatchRig._get_wobble_dot_mesh(k))
+		dot_ring_meshes.append(BatchRig._get_wobble_dot_ring_mesh(k))
+		dot_mats.append(dot_mat)
+	_bar_bg = _make_bucket(container, "CrowdBarBg", fill_meshes, fill_mats)
+	_bar_ring1 = _make_bucket(container, "CrowdBarR1", ring_meshes, ring_mats_all)
+	_bar_trail_fill = _make_bucket(container, "CrowdBarTf", fill_meshes, fill_mats)
+	_bar_ring2 = _make_bucket(container, "CrowdBarR2", ring_meshes, ring_mats_all)
+	_dot_fill = _make_bucket(container, "CrowdDotF", dot_fill_meshes, dot_mats)
+	_dot_ring = _make_bucket(container, "CrowdDotR", dot_ring_meshes, dot_mats)
 	# 武器图集桶（z=18 浮于单位身体之上，原武器 Sprite 同层）
 	_weapon_mm = _make_weapon_mm(container)
 
 
-## 顶层覆盖层 MMI 构造（血条桶共用；z=1000 绝对层与原 indicator 一致；
-## wobble shader 顶点期 boiling 扰动，INSTANCE_CUSTOM=(seed, 幅度, 0,0)）
-func _make_overlay_mm(container: Node2D, mm_name: String, mesh: Mesh, wobble_shader: Shader, mode: float) -> MultiMeshInstance2D:
+## 覆盖层 MMI 构造（血条桶共用；z=1000 绝对层与原 indicator 一致）
+func _make_overlay_mm(container: Node2D, mm_name: String, mesh: Mesh, mat: ShaderMaterial) -> MultiMeshInstance2D:
 	var mmi := MultiMeshInstance2D.new()
 	mmi.name = mm_name
 	mmi.texture = BatchRig._get_white_tex()
 	mmi.z_index = 1000
 	mmi.z_as_relative = false
-	var mat := ShaderMaterial.new()
-	mat.shader = wobble_shader
-	mat.set_shader_parameter("mode", mode)
 	mmi.material = mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_2D
@@ -364,13 +414,27 @@ func _make_overlay_mm(container: Node2D, mm_name: String, mesh: Mesh, wobble_sha
 	mm.custom_aabb = AABB(Vector3(-4096.0, -4096.0, 0.0), Vector3(16384.0, 16384.0, 0.0))
 	mmi.multimesh = mm
 	container.add_child(mmi)
-	if mm_name == "CrowdDots":
-		_dot_mm = mm
-		_dot_mmi = mmi
-	else:
-		_bar_mm = mm
-		_bar_mmi = mmi
 	return mmi
+
+
+## 血条桶组构造：逐槽（N 相位 + plain 退化槽）网格/材质配对 + 空缓冲
+func _make_bucket(container: Node2D, prefix: String, meshes: Array, mats: Array) -> OverlayBucket:
+	var b := OverlayBucket.new()
+	for k in meshes.size():
+		b.mmis.append(_make_overlay_mm(container, "%s%d" % [prefix, k], meshes[k], mats[k]))
+		b.bufs.append(PackedFloat32Array())
+		b.caps.append(0)
+		b.cnt.append(0)
+		b.prev.append(0)
+	return b
+
+
+## 补齐 PackedVector2Array 到 16 项（shader uniform 数组定长）
+static func _pad16(arr: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array(arr)
+	while out.size() < 16:
+		out.append(Vector2.ZERO)
+	return out
 
 
 ## 武器图集桶 MMI（use_custom_data 传 UV 子区域，shader 顶点期映射）
@@ -452,27 +516,6 @@ func _ensure_shadow_cap(n: int) -> void:
 	_shadow_mm.instance_count = _shadow_cap
 	_shadow_buf.resize(_shadow_cap * 12)
 	_shadow_mm.buffer = _shadow_buf
-
-
-## 血条桶容量（圆点/横条同款翻倍扩）
-func _ensure_dot_cap(n: int) -> void:
-	if n <= _dot_cap:
-		return
-	while _dot_cap < n:
-		_dot_cap = maxi(_dot_cap * 2, 16)
-	_dot_mm.instance_count = _dot_cap
-	_dot_buf.resize(_dot_cap * 16)
-	_dot_mm.buffer = _dot_buf
-
-
-func _ensure_bar_cap(n: int) -> void:
-	if n <= _bar_cap:
-		return
-	while _bar_cap < n:
-		_bar_cap = maxi(_bar_cap * 2, 16)
-	_bar_mm.instance_count = _bar_cap
-	_bar_buf.resize(_bar_cap * 16)
-	_bar_mm.buffer = _bar_buf
 
 
 ## y → 带号（clamp 到尾带兜底）
@@ -739,12 +782,14 @@ func tick(delta: float) -> void:
 				_shadow_buf[o + 11] = a
 			n += 3
 		_shadow_mm.buffer = _shadow_buf
-	# 血条桶：圆点 2 行（黑描边圆+阵营色圆）+ 横条 4 行（黑描边条+底/残影/填充）
-# /单位。手绘感三件套在 wobble shader 顶点期复刻：boiling 相位 floor(TIME/0.12)
-# 离散跳变（每单位 seed 错相），描边=本体轮廓外扩 OUTLINE_WIDTH 的黑色同行
-# （同 seed 同世界扰动幅度 → 轮廓同步、描边等宽）。行 stride 16（+custom）
-	var nd: int = 0
-	var nb: int = 0
+	# 血条桶：6 组 × N 相位（见成员区注释）。行几何/绘制门与原版 _draw_bar/
+	# _draw_dot 逐层同构；相位组 = wobble seed % N（原版 0.12s 重掷 → 换组跳相）
+	_bar_bg.begin_tick()
+	_bar_ring1.begin_tick()
+	_bar_trail_fill.begin_tick()
+	_bar_ring2.begin_tick()
+	_dot_fill.begin_tick()
+	_dot_ring.begin_tick()
 	for idx in _slots.size():
 		var slot2 = _slots[idx]
 		if slot2 == null or slot2.is_empty() or bool(slot2["hidden"]):
@@ -759,94 +804,51 @@ func tick(delta: float) -> void:
 		var cx: float = ind.global_position.x
 		var cy: float = ind.global_position.y
 		var shown: float = float(st["shown"])
-		var seed: float = fposmod(float(slot2["slot"]) * 2.37, 10.0)
-		# 圆点（原版 _draw_dot 语义：_expand<0.999 才画，展开完成即硬切——
-		# 不用 alpha 渐隐，避免条中残留圆心观感）
-		var dot_a: float = shown * (1.0 - float(st["expand"]))
+		var seed_k: int = int(st["wobble"]) % BatchRig.WOBBLE_VARIANTS
+		# 圆点（原版 _draw_dot：expand<0.999 才画，本体/描边 alpha 同乘 1-expand；
+		# 几何全烘焙，CUSTOM 无用）
 		if float(st["expand"]) < 0.999:
-			_ensure_dot_cap(nd + 2)
+			var dot_a: float = shown * (1.0 - float(st["expand"]))
+			var rr: float = HealthBarIndicator.DOT_RADIUS * bs
 			var dc: Color = st["color"]
-			for layer in 2:
-				var rr: float = (HealthBarIndicator.DOT_RADIUS + (HealthBarIndicator.OUTLINE_WIDTH if layer == 0 else 0.0)) * bs
-				var o := (nd + layer) * 16
-				_dot_buf[o] = rr
-				_dot_buf[o + 1] = 0.0
-				_dot_buf[o + 2] = 0.0
-				_dot_buf[o + 3] = cx
-				_dot_buf[o + 4] = 0.0
-				_dot_buf[o + 5] = rr
-				_dot_buf[o + 6] = 0.0
-				_dot_buf[o + 7] = cy
-				var lc: Color = HealthBarIndicator.COLOR_OUTLINE if layer == 0 else dc
-				_dot_buf[o + 8] = lc.r
-				_dot_buf[o + 9] = lc.g
-				_dot_buf[o + 10] = lc.b
-				# 原版 _draw_dot：描边/本体 alpha 同乘 (1-expand) 渐隐
-				_dot_buf[o + 11] = lc.a * shown * dot_a
-				_dot_buf[o + 12] = seed
-				_dot_buf[o + 13] = HealthBarIndicator.WOBBLE_AMP / maxf(rr, 0.001)
-				_dot_buf[o + 14] = 0.0
-				_dot_buf[o + 15] = 0.0
-			nd += 2
-		# 横条 4 行：黑描边 → 暗底 → 白残影（宽×trail，左对齐）→ 阵营填充（宽×ratio）
-		_ensure_bar_cap(nb + 4)
+			_dot_fill.row(seed_k, cx, cy, rr, rr, Color(dc.r, dc.g, dc.b, dc.a * dot_a), 0.0, 0.0, 0.0)
+			var olc: Color = HealthBarIndicator.COLOR_OUTLINE
+			_dot_ring.row(seed_k, cx, cy, rr, rr, Color(olc.r, olc.g, olc.b, olc.a * dot_a), 0.0, 0.0, 0.0)
+		# 横条（原版 _draw_bar 层序：底→描边①→残影→填充→描边②；受击抖动同式）
 		var half: float = float(st["width"]) * 0.5 * float(st["expand"]) * bs
-		var t: float = float(st["anim_time"])
-		var se: float = float(st["shake"])
-		var shk: float = sin(t * HealthBarIndicator.SHAKE_FREQ) * se * HealthBarIndicator.SHAKE_MAX_OFFSET + sin(t * HealthBarIndicator.SHAKE_FREQ * 2.3) * se * HealthBarIndicator.SHAKE_MAX_OFFSET * 0.3
-		var cx2: float = cx + shk
-		var hh: float = HealthBarIndicator.BAR_HEIGHT * bs * 0.5
-		var ow: float = HealthBarIndicator.OUTLINE_WIDTH * bs
-		var left: float = cx2 - half
-		var bar_amp: float = HealthBarIndicator.WOBBLE_AMP / maxf(HealthBarIndicator.BAR_HEIGHT * bs, 0.001)
-		# 无条态（满血圆点）整行透明——退化条（描边行宽=outline_pad）会画成圆点中心黑竖条
-		var bar_vis: float = 1.0 if half >= 1.0 else 0.0
-		for layer in 4:
-			var bo := (nb + layer) * 16
-			var w_row: float = half * 2.0
-			var h_row: float = HealthBarIndicator.BAR_HEIGHT * bs
-			var outline_pad: float = HealthBarIndicator.OUTLINE_WIDTH * bs
-			var rcol: Color
-			var rx: float = cx2
-			match layer:
-				0:
-					w_row += outline_pad * 2.0
-					h_row += outline_pad * 2.0
-					rcol = Color(HealthBarIndicator.COLOR_OUTLINE.r, HealthBarIndicator.COLOR_OUTLINE.g, HealthBarIndicator.COLOR_OUTLINE.b, HealthBarIndicator.COLOR_OUTLINE.a * shown * bar_vis)
-				1:
-					rcol = Color(HealthBarIndicator.COLOR_BG.r, HealthBarIndicator.COLOR_BG.g, HealthBarIndicator.COLOR_BG.b, HealthBarIndicator.COLOR_BG.a * shown * bar_vis)
-				2:
-					var tw: float = half * 2.0 * clampf(float(st["trail"]), 0.0, 1.0)
-					w_row = tw
-					rx = left + tw * 0.5
-					rcol = Color(HealthBarIndicator.COLOR_TRAIL.r, HealthBarIndicator.COLOR_TRAIL.g, HealthBarIndicator.COLOR_TRAIL.b, HealthBarIndicator.COLOR_TRAIL.a * shown * bar_vis)
-				3:
-					var fw: float = half * 2.0 * float(st["ratio"])
-					w_row = fw
-					rx = left + fw * 0.5
-					var fc: Color = st["color"]
-					rcol = Color(fc.r, fc.g, fc.b, fc.a * shown * bar_vis)
-			_bar_buf[bo] = w_row
-			_bar_buf[bo + 1] = 0.0
-			_bar_buf[bo + 2] = 0.0
-			_bar_buf[bo + 3] = rx
-			_bar_buf[bo + 4] = 0.0
-			_bar_buf[bo + 5] = h_row
-			_bar_buf[bo + 6] = 0.0
-			_bar_buf[bo + 7] = cy
-			_bar_buf[bo + 8] = rcol.r
-			_bar_buf[bo + 9] = rcol.g
-			_bar_buf[bo + 10] = rcol.b
-			_bar_buf[bo + 11] = rcol.a
-			_bar_buf[bo + 12] = seed
-			_bar_buf[bo + 13] = bar_amp
-			_bar_buf[bo + 14] = 0.0
-			_bar_buf[bo + 15] = 0.0
-		nb += 4
-	if _dot_mm != null and _dot_cap > 0:
-		_dot_mm.buffer = _dot_buf
-	if _bar_mm != null and _bar_cap > 0:
-		_bar_mm.buffer = _bar_buf
+		if half >= bs:  # 原版局部 half<1.0 早退（世界 px = 局部×bs）
+			var t: float = float(st["anim_time"])
+			var se: float = float(st["shake"])
+			var shk: float = sin(t * HealthBarIndicator.SHAKE_FREQ) * se * HealthBarIndicator.SHAKE_MAX_OFFSET \
+					+ sin(t * HealthBarIndicator.SHAKE_FREQ * 2.3) * se * HealthBarIndicator.SHAKE_MAX_OFFSET * 0.3
+			var cx2: float = cx + shk
+			var bw: float = half * 2.0
+			var hh: float = HealthBarIndicator.BAR_HEIGHT * bs
+			var left: float = cx2 - half
+			var plain: bool = bw / bs < 6.0  # 原版 _draw_wobbly_rect 窄矩形回退门
+			# plain 路由到直角退化网格槽（桶尾槽 = BatchRig.WOBBLE_VARIANTS）
+			var kbg: int = BatchRig.WOBBLE_VARIANTS if plain else seed_k
+			var bgc: Color = HealthBarIndicator.COLOR_BG
+			_bar_bg.row(kbg, cx2, cy, bw, hh, _colc(HealthBarIndicator.COLOR_BG, shown), bw, plain, hh)
+			_bar_ring1.row(kbg, cx2, cy, bw, hh, _colc(HealthBarIndicator.COLOR_OUTLINE, shown), bw, plain, hh)
+			var trail: float = float(st["trail"])
+			if trail > float(st["ratio"]) + 0.005:  # 原版残影绘制门
+				var tw := bw * trail
+				var kt: int = BatchRig.WOBBLE_VARIANTS if tw / bs < 6.0 else seed_k
+				_bar_trail_fill.row(kt, left + tw * 0.5, cy, tw, hh,
+						_colc(HealthBarIndicator.COLOR_TRAIL, shown), tw, tw / bs < 6.0, hh)
+			var fw := bw * float(st["ratio"])
+			if fw > 0.5 * bs:  # 原版填充绘制门（局部 0.5px）
+				var kf: int = BatchRig.WOBBLE_VARIANTS if fw / bs < 6.0 else seed_k
+				_bar_trail_fill.row(kf, left + fw * 0.5, cy, fw, hh,
+						_colc(st["color"], shown), fw, fw / bs < 6.0, hh)
+			_bar_ring2.row(kbg, cx2, cy, bw, hh, _colc(HealthBarIndicator.COLOR_OUTLINE, shown), bw, plain, hh)
+	_bar_bg.end_tick()
+	_bar_ring1.end_tick()
+	_bar_trail_fill.end_tick()
+	_bar_ring2.end_tick()
+	_dot_fill.end_tick()
+	_dot_ring.end_tick()
 	# 武器图集桶上传（_wcount 压实行数；未用行=零变换隐形）
 	if _weapon_mm != null and _weapon_cap > 0 and _atlas_tex != null:
 		_weapon_mm.buffer = _weapon_buf
@@ -868,14 +870,12 @@ func teardown() -> void:
 	_shadow_mm = null
 	_shadow_buf = PackedFloat32Array()
 	_shadow_cap = 0
-	_dot_mmi = null
-	_dot_mm = null
-	_dot_buf = PackedFloat32Array()
-	_dot_cap = 0
-	_bar_mmi = null
-	_bar_mm = null
-	_bar_buf = PackedFloat32Array()
-	_bar_cap = 0
+	_bar_bg.clear()
+	_bar_ring1.clear()
+	_bar_trail_fill.clear()
+	_bar_ring2.clear()
+	_dot_fill.clear()
+	_dot_ring.clear()
 	_weapon_mmi = null
 	_weapon_mm = null
 	_weapon_buf = PackedFloat32Array()
@@ -1039,3 +1039,86 @@ func _clear_slot_instances(slot: Dictionary) -> void:
 		for o in range(base_i, base_i + per_unit * 12):
 			buf[o] = 0.0
 		mm.buffer = buf
+
+
+## 血条覆盖层桶：一组 N 相位 MMI + 逐相位缓冲。行 stride 16 =
+## 变换 8（w,0,0,cx / 0,h,0,cy）+ 实例色 4 + CUSTOM 4（c0,c1,c2,0）。
+## 每刻 begin→逐单位 row→end：end 时清尾段（死亡/换相位组后旧行残留会渲染
+## 成幽灵血条——instance_count 恒为容量，压实行数之后必须归零）并整缓冲上传。
+class OverlayBucket:
+	extends RefCounted
+
+	var mmis: Array = []           # MultiMeshInstance2D ×N（相位组）
+	var bufs: Array = []           # PackedFloat32Array ×N
+	var caps := PackedInt32Array() # 容量 ×N
+	var cnt := PackedInt32Array()  # 本刻压实行数 ×N
+	var prev := PackedInt32Array() # 上刻高水位 ×N
+
+	func begin_tick() -> void:
+		for k in cnt.size():
+			cnt[k] = 0
+
+	## 写一行实例。cx/cy=中心，w/h=行宽高（世界 px），col=实例色，
+	## CUSTOM = (c0, c1, c2, 0)：条填充/环带 = (行宽, plain, 行高, 0)
+	func row(k: int, cx: float, cy: float, w: float, h: float, col: Color, c0: float, c1: float, c2: float) -> void:
+		var i := cnt[k]
+		_ensure_cap(k, i + 1)
+		var buf: PackedFloat32Array = bufs[k]
+		var o := i * 16
+		buf[o] = w
+		buf[o + 1] = 0.0
+		buf[o + 2] = 0.0
+		buf[o + 3] = cx
+		buf[o + 4] = 0.0
+		buf[o + 5] = h
+		buf[o + 6] = 0.0
+		buf[o + 7] = cy
+		buf[o + 8] = col.r
+		buf[o + 9] = col.g
+		buf[o + 10] = col.b
+		buf[o + 11] = col.a
+		buf[o + 12] = c0
+		buf[o + 13] = c1
+		buf[o + 14] = c2
+		buf[o + 15] = 0.0
+		bufs[k] = buf
+		cnt[k] = i + 1
+
+	func end_tick() -> void:
+		for k in cnt.size():
+			var c := cnt[k]
+			if prev[k] > c:
+				var buf: PackedFloat32Array = bufs[k]
+				for i in range(c * 16, prev[k] * 16):
+					buf[i] = 0.0
+				bufs[k] = buf
+			prev[k] = c
+			if caps[k] > 0:
+				mmis[k].multimesh.buffer = bufs[k]
+
+	## 容量翻倍扩（stride 16）
+	func _ensure_cap(k: int, n: int) -> void:
+		if n <= caps[k]:
+			return
+		var cap := caps[k]
+		while cap < n:
+			cap = maxi(cap * 2, 16)
+		caps[k] = cap
+		var mm: MultiMesh = mmis[k].multimesh
+		mm.instance_count = cap
+		var buf: PackedFloat32Array = bufs[k]
+		buf.resize(cap * 16)
+		bufs[k] = buf
+		mm.buffer = buf
+
+	func clear() -> void:
+		mmis.clear()
+		bufs.clear()
+		caps = PackedInt32Array()
+		cnt = PackedInt32Array()
+		prev = PackedInt32Array()
+
+
+## 颜色 × 显示系数（渐隐 shown；rgb 不动，仅乘 alpha）
+static func _colc(c: Color, a: float) -> Color:
+	return Color(c.r, c.g, c.b, c.a * a)

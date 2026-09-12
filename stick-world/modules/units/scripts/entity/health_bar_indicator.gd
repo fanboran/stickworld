@@ -168,6 +168,9 @@ func get_bar_state() -> Dictionary:
 		"max_hp": _max_hp,
 		"width": clampf(WIDTH_BASE + _max_hp * WIDTH_PER_HP, WIDTH_MIN, WIDTH_MAX),
 		"scale": scale.x,
+		# boiling 相位（CrowdRenderer 据此选预烘相位组：seed % WOBBLE_VARIANTS；
+		# 满血未掉血恒 0 = 静止，与原版 _ever_damaged 门一致）
+		"wobble": _wobble_seed,
 	}
 
 

@@ -20,7 +20,7 @@
 
 ## 设计要点（AI 提案，实施批次可微调）
 
-- **职业档案（ProfessionDef）**：`{id, name_zh, work_site_def(绑定建筑 def_id), product(res_id 产出), cycle(工作节拍), tool(武器/工具变体), uniform(着装色)}`。村民 spawn 时分配职业（或从待业池招募——与 E 线兵源共用"人口"概念）。
+- **职业档案（ProfessionDef）**：`{id, name_zh, work_site_def(绑定建筑 def_id), product(res_id 产出), cycle(工作节拍), tool(武器/工具变体)}`。村民 spawn 时分配职业（或从待业池招募——与 E 线兵源共用"人口"概念）。
 - **采集行为族**：BehaviorHarvest 泛化三种工作循环——走到工位/资源点 → 劳作（动画钩子：打铁锤击/挥斧/挥镐）→ 产物 produce 入 ResourcesApi → 循环。资源点：树（伐木）、矿脉（挖矿，需 B 线装饰层提供矿脉实体或先用现有石头资源点）、铁砧（打铁：矿→锭转化）。
 - **生活节律**：P0 简化为工作/休息两态轮换（避免做完整日夜系统）；NPC 空闲时 wander 概率打开，让村子"活"起来。
 - **规模**：NPC_COUNT 2 → 8~12 起步（AI 提案待实测；性能基准 196 单位远未触顶）。
@@ -33,7 +33,7 @@
 
 | 批次 | 级别 | 任务 | 依赖 | 验收门 | 新会话必读 |
 |---|---|---|---|---|---|
-| **1** | Pro | **职业档案系统**：ProfessionDef(.tres/config) + 村民 spawn 职业分配 + 职业着装（身体色/工具变体，pickaxe 已有）+ 待业/在职状态 | 无 | 村里可见不同着装的村民（视觉 Subagent 截图）+ run_all 绿 | 本档侦察结论；`ai_controller.gd` 行为注册 |
+| **1** | Pro | **职业档案系统**：ProfessionDef(.tres/config) + 村民 spawn 职业分配 + 职业装具（工具变体，pickaxe 已有）+ 待业/在职状态 | 无 | 村里可辨职业的村民（视觉 Subagent 截图）+ run_all 绿 | 本档侦察结论；`ai_controller.gd` 行为注册 |
 | **2** | Pro | **采集行为族（BehaviorHarvest）**：工作循环（寻位→移动→劳作动画钩子→产出入账）三变体（伐木/挖矿/打铁）；树/矿脉资源点实体（ depletion+重生节拍，AI 提案）；打铁=矿→锭转化 | 1 | 集成测试：无人干预 N 分钟后 res_wood/ore/ingot 库存增长；视觉验收（村里有人在干活） | `formation_system.gd` WorkType；`resources/api.gd`；批次 1 落地物（见下） |
 | **3** | Pro | **工作场所运转**：WorkSlots 消费（NPC 就近找工位上班；铁砧工位 A 线到位前 placeholder）+ 工作/休息节律 + wander 打开 | 2 | NPC 白天在岗劳作、空闲走动的观感（视觉 Subagent 时间序列截图） | `building.gd` Interior 契约；A 线交接档 |
 | **4** | Flash | **人口扩充与配比**：NPC_COUNT 2→8~12、职业配比随建筑走（有铁匠铺才有铁匠）+ 编队征用劳工的互斥（在岗 NPC 被征入伍则离岗） | 3 | 村镇生活感整体验收 + run_all 绿（menu/smoke 组） | E 线兵源设计（人口概念对齐） |
@@ -44,21 +44,26 @@
 
 | 批次 | 状态 | 提交 | 备注 |
 |---|---|---|---|
-| 1 | ✅ 完成 | 294b9f5d | 三职业着装可见（视觉 Subagent PASS，截图 `stick-world/tests/dev/professions_out.png`）；run_all 绿（3 失败项单跑全绿=并行 flaky，与本批无关） |
+| 1 | ✅ 完成 | 294b9f5d | 职业区分可见（视觉 Subagent PASS，截图 `stick-world/tests/dev/professions_out.png`；当时的身体着色口径已作废，见下方口径注）；run_all 绿（3 失败项单跑全绿=并行 flaky，与本批无关） |
 | 2 | ✅ 完成 | 78e0738e / 6fdb9178 / 865a71bf / c5ebdc9c | 采集经济闭环通：三职业村民无人干预劳作，res_wood/ore/ingot 三库存增长（集成测试 `test_town_life_harvest` PASS，编排方复现 run_all 39/0）；视觉判定 PASS（截图 `tests/dev/harvest_out_0..5.png`）；check_godot_errors 干净 |
 | 3 | ✅ 完成 | 518388a5 / 0ca1ae24 | WorkSlots 消费+节律+wander 全落地：真建筑槽位上班/拆毁降级占位（集成 `test_town_life_worksite` 3 用例 PASS）、7~19 时工作节律（夜间收工白天回岗）、村民 wander 职业过滤（战斗单位语义不变）；视觉判定 PASS（`tests/dev/rhythm_day_0..2.png` 白天在岗 / `rhythm_night_0..2.png` 夜间散逛）；run_all 40/0 绿；check_godot_errors 干净 |
 | 4 | ✅ 完成 | 5db707bb / 8952781d / 065d40a6 / e518010b | 人口 2→10 配比落地：`assign_village_jobs` 配比分配（铁匠1/伐木3/矿3/待业3，quota+工位容量双约束）、spawn 两簇分布适配 village_a 边界、编队征用离岗互斥（formation duck 清职业+BehaviorHarvest 即时收工）、wander 改身份标志判定+村锚回归（修待业漂出地图）；视觉判定 PASS（`tests/dev/town_overview_0..2.png` / `town_left_0..2.png`）；unit 45/45 绿；check_godot_errors 干净。**四批全部完成、待创始人观感验收后收线**。编排方验收注：批次 4 曾使 selection_formation/battle_ui 稳定挂——NPC 右簇进框致"恰好 3 人"断言失效（测试场地纯净性假设被打破，非生产行为缺陷），已修 e518010b，最终 run_all 40/0 |
 
+> **口径注（身体不做身份染色）**：职业身体着色（`uniform` → `rig.body_color`）已移除——火柴人身体色恒为
+> `Skeleton.DEFAULT_BODY`，不做阵营/职业身份染色；职业识别只走手持武器变体，阵营识别走血条（圆点/横条）。
+> 故批次 1 的"三职业着装可辨"验收口径作废：`professions.tres` 无 `uniform` 字段，
+> `ProfessionRegistry.apply_appearance` 只应用工具。防回归锁见 `tests/unit/test_stickman_no_body_tint.gd`。
+
 ## 批次 1 落地物（批次 2 新会话必读）
 
-- **模块**：`modules/town_life/`——`scripts/profession_registry.gd`（ProfessionRegistry：档案读取/轮转分配/着装应用，静态无状态）+ `api.gd`（TownLifeAPI 契约：assign_village_job/get_professions/get_profession）。
-- **配置**：`config/town_life/professions.tres`（BalanceResource 行数组；读取照 formation_system 先例直读 .tres 带 static 缓存，不依赖 autoload）。字段 id/name_zh/work_site_def/product/cycle/tool/uniform——work_site_def/product/cycle 已落配置待批次 2/3 消费。
+- **模块**：`modules/town_life/`——`scripts/profession_registry.gd`（ProfessionRegistry：档案读取/轮转分配/装具应用，静态无状态）+ `api.gd`（TownLifeAPI 契约：assign_village_job/get_professions/get_profession）。
+- **配置**：`config/town_life/professions.tres`（BalanceResource 行数组；读取照 formation_system 先例直读 .tres 带 static 缓存，不依赖 autoload）。字段 id/name_zh/work_site_def/product/cycle/tool——work_site_def/product/cycle 已落配置待批次 2/3 消费。
 - **实体协议**：`stickman_entity.set_profession/get_profession`（弱类型 id，**空串=待业**；批次 4 征兵离岗走 set_profession("")）。
 - **挂接点**：`initial_content.spawn_npcs` 调 `TownLifeAPI.assign_village_job(npc, i)`（轮转 index % 职业数；真实 NPC_COUNT=2 → 只分到铁匠+伐木工）。
 - **工具暂代**：铁匠 pickaxe 代锤、伐木工 sword 代斧（TOOL_WEAPONS 映射表在 registry；批次 2 上专属工具模型时只改配置与映射）。
 - **资源 id 真名**（resources.tres）：`res_wood / res_stone / res_metal_ore / res_iron_ingot / res_black_asphalt / res_silk`——设计要点里的"res_ore"真名是 **res_metal_ore**。
-- **dev 截图场景**：`tests/dev/snapshot_professions.tscn`（真渲染：`godot --path stick-world res://tests/dev/snapshot_professions.tscn`；补 spawn 矿工凑三职业同框 + stdout 打印职业/颜色证据）。
-- **已知未验证**：着装色与地图背景在不同时段（夜晚）的对比度未测；NPC_COUNT 扩充在批次 4。
+- **dev 截图场景**：`tests/dev/snapshot_professions.tscn`（真渲染：`godot --path stick-world res://tests/dev/snapshot_professions.tscn`；补 spawn 矿工凑三职业同框 + stdout 打印职业证据）。
+- **已知未验证**：NPC_COUNT 扩充在批次 4。
 
 ## 批次 2 落地物（批次 3 新会话必读）
 
@@ -92,7 +97,7 @@
 - **编队征用互斥**：`FormationSystem._requisition_unit()`（duck 检查 `get_profession` 非空则置空）在 `create_squad`/`add_unit` 成员循环调用——最小接线点，不改 E 线领域结构、零 town_life 依赖。劳作中断：`BehaviorHarvest.update` 新增职业清空自查（即时 finish，与节律收工同点位），决策层 `_try_harvest` 同判不会重进。**释放/解散不回岗**（P0 决策：进待业池闲逛，重新分配留给存档/后续招募系统）。
 - **wander 村锚回归**（[提案/待定] 数值）：`BehaviorWander` params 新增可选 `anchor_x`/`anchor_radius`（缺省半径 640，回归力 ANCHOR_FORCE=2 与边界规避同模式）——待业村民全天闲逛无锚会累积漂移，实测漂到 X=-2900（超 village_a 地图边界 -2160）。`ai_controller._villager_wander_params()` 传地图 `town_center_world_x`（village_a=0）；不传锚 = 原语义（敌人/其他 wander 调用零影响）。实体新增 `get_map_reference()` 供读取。修复后待业村民活动范围收敛在村内（实测 393~714）。
 - **测试**：单测扩至 **45 套件全绿**——`test_profession_registry` 补 3 用例（容量计数三态/批量配比/容量 0 全待业，配比断言与 tres quota 联动）；`test_work_slots_rhythm` 补 3 用例（劳作中清职业即时收工/真建筑容量累计与被毁降级/wander 超锚回归）+ 批次 3 wander 用例适配身份标志（DecisionFixture 加 `is_villager`/`FakeSquadFS` 编队桩）；新套件 `test_requisition_exclusion`（4 用例：create_squad/add_unit 征用清职业、待业与无协议单位安全、解散不回岗，已注册 batch_runner）。
-- **视觉验收材料**：`tests/dev/snapshot_town.tscn`（真渲染：village_a 正片 spawn 10 人 + 村内补摆树×3/矿×3——village_a 净空带内无自然资源点，摆点供伐木/挖矿可见；右簇镜头 `town_overview_0..2.png` 工位/伐木/挖矿/闲逛混合 + 左簇镜头 `town_left_0..2.png` 矿工/待业闲逛；stdout 逐帧行为证据）。**判定 PASS**：三职业着装可辨（棕铁匠@工位 1120 / 绿伐木@树 / 灰矿工@矿，挥镐特效+头顶进度条），在岗与闲逛混合，待业村民锚点内活动。
+- **视觉验收材料**：`tests/dev/snapshot_town.tscn`（真渲染：village_a 正片 spawn 10 人 + 村内补摆树×3/矿×3——village_a 净空带内无自然资源点，摆点供伐木/挖矿可见；右簇镜头 `town_overview_0..2.png` 工位/伐木/挖矿/闲逛混合 + 左簇镜头 `town_left_0..2.png` 矿工/待业闲逛；stdout 逐帧行为证据）。**判定 PASS**：职业区分可辨（铁匠@工位 1120 / 伐木@树 / 矿工@矿，挥镐特效+头顶进度条；当时的身体着色口径已作废，见上方口径注），在岗与闲逛混合，待业村民锚点内活动。
 - **run_all 记录**：本批全量 34 通过 / 6 失败（selection_formation / fx_damage_text / esc_key_input / battle_ui / notification_feed / new_game_smoke-TIMEOUT），**6 项逐一单跑全部复绿（exit=0）=并行 flaky**；其中 new_game_smoke 单跑 2/2（60s 持续运行）验证 10 人村庄无性能/崩溃问题，selection_formation 单跑全绿验证征用互斥接线未破坏编队链路。harvest/worksite 集成套件单跑与并行均 PASS（`assign_village_job(npc,2)` 强制分配入口保持兼容，套件零改动）。
 - **已知限制 / 移交**：village_a 正片无自然资源点（净空带覆盖全域）→ 正片里伐木/挖矿劳作不可见（村民寻位失败回 idle+wander），观感补全依赖 B 线城镇生成（资源布局）与 A 线铁匠铺（真工位）——配比逻辑已按"资源点存在性由城镇生成线保证"设计，B 线资源到位后零改动生效；待业村民 wander 半径 640 内可能走到城墙/仓库附近穿帮（建筑无碰撞排除，观感可接受）；wander 锚点只锚 X（村庄横向带），Y 仍由地面带约束。
 - **收线状态**：**四批全部完成**，本线无待办批次；待创始人观感验收（热闹小镇整体观感 + 配比数值定稿）后按流程收线（worktree remove + 合并 `agent/town-life`）。

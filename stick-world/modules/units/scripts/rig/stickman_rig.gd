@@ -6,6 +6,8 @@ extends Skeleton2D
 ## 基于 Skeleton2D + Bone2D，在编辑器中只能旋转骨骼关节（不能拖动位置），
 ## K 帧体验自然。协调骨骼、纹理、动画、武器子系统。
 ## Inspector 可调参数：厚度、颜色、缩放、武器。
+## 身体色不做身份染色：阵营识别走血条（HealthBarIndicator），职业识别走武器变体；
+## 火柴人身体恒为 Skeleton.DEFAULT_BODY，任何按阵营/职业改身体色的做法都不在此处开口子。
 
 const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
 const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
@@ -35,10 +37,6 @@ enum WeaponType { SWORD, SPEAR, BOW, SHIELD, UNARMED }
 @export var thickness_scale: float = 1.0:
 	set(v):
 		thickness_scale = v
-		_rebuild_pending = true
-@export var body_color: Color = Skeleton.DEFAULT_BODY:
-	set(v):
-		body_color = v
 		_rebuild_pending = true
 @export var weapon_color: Color = Skeleton.DEFAULT_WEAPON:
 	set(v):
@@ -381,9 +379,10 @@ func _init_bones() -> void:
 
 
 ## 组装颜色表（矢量肢体直接消费）
+## body 恒为 Skeleton.DEFAULT_BODY：身体不做身份染色（见类头）。
 func _make_colors() -> Dictionary:
 	return {
-		"body": body_color,
+		"body": Skeleton.DEFAULT_BODY,
 		"weapon": weapon_color,
 		"guard": guard_color,
 		"outline": outline_color,

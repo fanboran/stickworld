@@ -76,8 +76,4 @@ func _dump_nearby(pos: Vector2, radius: float) -> void:
 	for e in map.query_neighbors(pos, radius):
 		if e == null or not is_instance_valid(e) or not e.has_method("get_profession"):
 			continue
-		var rig: Variant = e.get("rig")
-		var color: String = "n/a"
-		if rig != null and is_instance_valid(rig) and "body_color" in rig:
-			color = rig.body_color.to_html()
-		print("[PROF] pos=%.0f profession='%s' body_color=%s" % [e.global_position.x, e.get_profession(), color])
+		print("[PROF] pos=%.0f profession='%s'" % [e.global_position.x, e.get_profession()])

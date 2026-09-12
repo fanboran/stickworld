@@ -4,9 +4,8 @@ extends Node
 ## 职责：
 ## - 初始建筑（读 InitialBuildingsList，直接创建 OPERATIONAL 状态建筑）
 ## - 村庄仓库预置
-## - NPC 村民生成（含职业分配与着装，经 TownLifeAPI，town_life 模块实现）
-## - 遭遇战战场敌方生成（红色阵营 + 启动战斗）
-## - 火柴人身体颜色设置
+## - NPC 村民生成（含职业分配与装具，经 TownLifeAPI，town_life 模块实现）
+## - 遭遇战战场敌方生成（启动战斗）
 ##
 ## 由 GameRoot._ready 挂载为 InitialContent 子节点并调用 setup(root)。
 
@@ -134,9 +133,9 @@ func spawn_npcs(map: Node2D, spawn_y: float) -> void:
 ## 遭遇战战场生成敌方火柴人并启动战斗（battlefield 退役后的 dev 直达入口，
 ## 出征与领地架构 §4.3——正式进图不再自动调用，由 tests/dev/verify_battle.gd
 ## 等验证脚本直达组织遭遇战）。
-## 我方为红色阵营（视觉区分），玩家方（allies：玩家 + 随行编队）为进攻方。
+## 玩家方（allies：玩家 + 随行编队）为进攻方，阵营靠血条区分、不染身体。
 ## count: 敌方数量（默认 4，dev 场景可调）。
-## 默认步兵补位：allies 少于 MIN_DEFAULT_INFANTRY 时补 spawn 蓝方基础步兵
+## 默认步兵补位：allies 少于 MIN_DEFAULT_INFANTRY 时补 spawn 基础步兵
 ## （玩家没带队伍也能打像样的仗），返回补位后的 allies 列表。
 func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> Array:
 	if map == null:

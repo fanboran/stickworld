@@ -33,7 +33,7 @@ func _ready() -> void:
 		if rig == null:
 			rig = e.get_node("OutlineGroup/StickmanRig")
 		rig.play("walk")
-		print("[crowd_probe] unit=%d rig=%s scale=%s body=%s" % [i, rig, rig.scale, rig.body_color])
+		print("[crowd_probe] unit=%d rig=%s scale=%s" % [i, rig, rig.scale])
 	# 复现 battle 观察条件：远 zoom 相机（战场全景缩放）
 	var cam := Camera2D.new()
 	cam.position = Vector2(560, 500)

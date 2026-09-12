@@ -96,9 +96,10 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# TimeManager 暂停门禁：与实体同一"暂停"语义（暂停时箭矢悬停，不继续飞）
-	if TimeManager != null and TimeManager.is_paused():
-		return
+	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE，暂停期箭矢悬停）；
+	# 步长经 sim_delta 携带速度档（弹道积分随档位缩放）
+	if TimeManager != null:
+		delta = TimeManager.sim_delta(delta)
 	if _stuck:
 		# 插地淡出（SWL fadeOutOver）
 		_stuck_timer += delta

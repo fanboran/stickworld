@@ -9,6 +9,111 @@ const PANEL_PAD_X := 16
 const PANEL_PAD_Y := 12
 
 
+# ───────────────────────── 按钮变体表（UI优化C）─────────────────────────
+##
+## 变体 = 全属性集，一处定义；调用点零 override——要新观感 = 加变体，
+## 且先进 sketch_compare 陈列评审再入表（防变体表膨胀）。
+## SketchButton.kind 直接索引本表，_apply_flats 一次查表应用
+## （底 / 五态字色 / 描边 / 伪粗 / 图标模式 / 底透明度全从变体取）。
+##
+## 字段：
+##   base          四态贴图槽位前缀（slot = base + "_normal/hover/pressed/disabled"）
+##   fonts         五态字色 {normal / hover / pressed / focus / disabled}
+##   outline       文字描边宽 px：3 = 时间戳式墨边（半透明底晒在任意亮度场景
+##                 上仍可读）；0 = 无（亮底深墨字再加墨描边 = 笔画膨胀糊死，
+##                 主菜单纸面按钮教训）
+##   outline_color 描边色
+##   bold          伪粗手绘体（主行动 / 强调笔画加重）
+##   icon_mode     图标呈现（IconMode）
+##   bg_alpha      底透明度默认（实例 bg_alpha >= 0 时覆盖）
+##   self_draw     true = 组件自绘（icon_square 方底），不走贴图四态
+
+## 图标呈现模式（把 motif_badge 的教训制度化：居中文字按钮一律 badge_left
+## 左缘角标不占排版位，列表按钮 inline_left 行内，纯图标钮 center 撑满）
+enum IconMode { NONE, BADGE_LEFT, INLINE_LEFT, CENTER }
+
+## 列表行内图标宽度上限（inline_left 由组件自管，调用点不得 override）
+const ICON_INLINE_MAX_WIDTH := 18
+
+## 变体键 = SketchButton.Kind 序号（与 StickKit.ButtonKind 同名同序直转；
+## ButtonKind.NORMAL(0) → DARK 暗底默认档）
+const K_DARK := 0
+const K_ACCENT := 1
+const K_PRIMARY := 2
+const K_DANGER := 3
+const K_PAPER := 4
+const K_ICON_SQUARE := 5
+
+static var _variants: Dictionary = {}
+
+
+## 按 SketchButton.Kind 取变体属性集（懒构建，跨类 const 引用不参与常量折叠）
+static func button_variant(kind: int) -> Dictionary:
+	if _variants.is_empty():
+		_build_variants()
+	return _variants[kind]
+
+
+static func _build_variants() -> void:
+	var warm_ink: Color = StickTokens.ACCENT_TEXT
+	# DARK：btn 贴图暗底 / 四态字全白 / 3px 墨描边——游戏内面板与场景按钮
+	# （时间戳式高对比，晒在任意亮度场景上可读）
+	_variants[K_DARK] = {
+		"base": &"btn",
+		"fonts": {"normal": StickTokens.TEXT, "hover": StickTokens.TEXT,
+			"pressed": StickTokens.TEXT, "focus": StickTokens.TEXT,
+			"disabled": StickTokens.TEXT_DISABLED},
+		"outline": 3, "outline_color": StickTokens.INK,
+		"bold": false, "icon_mode": IconMode.BADGE_LEFT, "bg_alpha": 1.0,
+	}
+	# PAPER：btn_ink 纸面 / 暖墨四态 / 无描边——主菜单等亮底
+	_variants[K_PAPER] = {
+		"base": &"btn_ink",
+		"fonts": {"normal": warm_ink, "hover": warm_ink, "pressed": warm_ink,
+			"focus": warm_ink, "disabled": Color(warm_ink, 0.45)},
+		"outline": 0, "outline_color": StickTokens.INK,
+		"bold": false, "icon_mode": IconMode.BADGE_LEFT, "bg_alpha": 1.0,
+	}
+	# PRIMARY：实底琥珀 / 暖墨四态 / 无描边 / 伪粗——主行动点
+	_variants[K_PRIMARY] = {
+		"base": &"btn_primary",
+		"fonts": {"normal": warm_ink, "hover": warm_ink, "pressed": warm_ink,
+			"focus": warm_ink, "disabled": StickTokens.TEXT_DISABLED},
+		"outline": 0, "outline_color": StickTokens.INK,
+		"bold": true, "icon_mode": IconMode.BADGE_LEFT, "bg_alpha": 1.0,
+	}
+	# ACCENT：琥珀描边档 / 白 + 暖墨三态（normal 14% 琥珀暗面白字，
+	# hover/pressed 亮面暖墨字）/ 伪粗——选中态 / 强调
+	_variants[K_ACCENT] = {
+		"base": &"accent",
+		"fonts": {"normal": StickTokens.TEXT, "hover": warm_ink,
+			"pressed": warm_ink, "focus": StickTokens.TEXT,
+			"disabled": StickTokens.TEXT_DISABLED},
+		"outline": 0, "outline_color": StickTokens.INK,
+		"bold": true, "icon_mode": IconMode.BADGE_LEFT, "bg_alpha": 1.0,
+	}
+	# DANGER：红档 / 红系字 / 3px 墨描边——危险确认
+	_variants[K_DANGER] = {
+		"base": &"danger",
+		"fonts": {"normal": StickTokens.DANGER, "hover": StickTokens.DANGER.lightened(0.15),
+			"pressed": StickTokens.DANGER.lightened(0.3), "focus": StickTokens.DANGER,
+			"disabled": StickTokens.TEXT_DISABLED},
+		"outline": 3, "outline_color": StickTokens.INK,
+		"bold": false, "icon_mode": IconMode.BADGE_LEFT, "bg_alpha": 1.0,
+	}
+	# ICON_SQUARE：自绘沸腾方底 / 无文字 / 沸腾描边 / center 图标——纯图标钮
+	#（设置齿轮；底与描边由 SketchGearButton._draw 绘制）
+	_variants[K_ICON_SQUARE] = {
+		"base": &"",
+		"fonts": {"normal": StickTokens.TEXT, "hover": StickTokens.TEXT,
+			"pressed": StickTokens.TEXT, "focus": StickTokens.TEXT,
+			"disabled": StickTokens.TEXT_DISABLED},
+		"outline": 0, "outline_color": StickTokens.INK,
+		"bold": false, "icon_mode": IconMode.CENTER, "bg_alpha": 1.0,
+		"self_draw": true,
+	}
+
+
 static func _box(slot: StringName, pad_x: int, pad_y: int) -> StyleBoxTexture:
 	var sb := StyleBoxTexture.new()
 	SketchTextures.register_box(sb, slot)

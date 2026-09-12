@@ -60,10 +60,10 @@ func _process(_delta: float) -> void:
 
 func _build_ui() -> void:
 	# 收起按钮（可拖动）
-	_toggle_button = Button.new()
+	_toggle_button = SketchButton.new()  # 变体 DARK 默认档（调用点零 override）
 	_toggle_button.text = "调试"
 	_toggle_button.custom_minimum_size = Vector2(64, 28)
-	_toggle_button.add_theme_font_size_override("font_size", 12)
+	_toggle_button.font_size = 12
 	_toggle_button.pressed.connect(_on_button_pressed)
 	_toggle_button.gui_input.connect(_on_drag_input.bind(_toggle_button, "button"))
 	add_child(_toggle_button)
@@ -92,12 +92,12 @@ func _build_ui() -> void:
 	title.add_theme_font_size_override("font_size", 13)
 	_content_panel.add_child(title)
 	# 关闭按钮
-	var close_btn := Button.new()
+	var close_btn := SketchButton.new()  # 变体 DARK 默认档
 	close_btn.text = "×"
 	close_btn.position = Vector2(214, 2)
 	close_btn.size = Vector2(22, 22)
-	close_btn.flat = true
-	close_btn.add_theme_font_size_override("font_size", 14)
+	close_btn.flat = true  # 22px 小钮贴 panel 边：裸文本 ×（不画手绘底）
+	close_btn.font_size = 14
 	close_btn.pressed.connect(_collapse)
 	_content_panel.add_child(close_btn)
 	# 分隔线

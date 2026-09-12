@@ -16,7 +16,7 @@ class_name L1Thumbnail
 ## 点击请求打开 L1 大图（Tab 三态第二步等效入口）
 signal open_l1_requested
 
-## 缩略窗尺寸（正方形，与 Minimap 同高：UIAPI.HUD_MINIMAP_HEIGHT）
+## 缩略窗尺寸（正方形，与 Minimap 同高——体量见 minimap.gd MAP_*，落位见 hud_zone_layout.gd）
 const SIZE := Vector2(120.0, 120.0)
 
 ## 与 Minimap 的水平间隙（设计语言五档 4/6/8/12/16 取 8）

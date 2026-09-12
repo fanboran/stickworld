@@ -46,6 +46,17 @@ func _build(col: VBoxContainer) -> void:
 	var dis := StickKit.sketch_button(row, "禁用", Callable(), StickKit.ButtonKind.NORMAL, 30)
 	dis.disabled = true
 	StickKit.sketch_button(v, "大按钮 BTN_H_LG", Callable(), StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_LG)
+	# 变体全族（UI优化C）：新档先在此陈列评审再入 SketchStyle 变体表
+	var row_v := HBoxContainer.new()
+	row_v.add_theme_constant_override("separation", 8)
+	v.add_child(row_v)
+	_lab(v, "变体全族：PAPER（亮天空纸面）/ PRIMARY（实底琥珀）/ ICON_SQUARE（纯图标方钮）", StickTokens.ACCENT, 15)
+	StickKit.sketch_button(row_v, "纸面", Callable(), StickKit.ButtonKind.PAPER, 30)
+	StickKit.sketch_button(row_v, "主行动", Callable(), StickKit.ButtonKind.PRIMARY, 30)
+	var square := SketchGearButton.new()
+	square.icon = load("res://assets/icons/齿轮_64.png")
+	square.tooltip_text = "ICON_SQUARE 变体"
+	row_v.add_child(square)
 	col.add_child(panel)
 
 	# 输入 + 进度

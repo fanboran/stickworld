@@ -555,9 +555,10 @@ func _find_shield_bone(owner_entity: Node2D) -> Node2D:
 
 
 func _physics_process(delta: float) -> void:
-	# TimeManager 暂停门禁：与实体同一"暂停"语义（暂停时冷却/放箭计时/命中帧全停）
-	if TimeManager != null and TimeManager.is_paused():
-		return
+	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE，暂停期冷却/放箭计时/命中帧全停）；
+	# 步长经 sim_delta 携带速度档
+	if TimeManager != null:
+		delta = TimeManager.sim_delta(delta)
 	update_cooldown(delta)
 	# 格挡重置冷却（原版 blockResetInterval）
 	if _block_reset_timer > 0.0:

@@ -326,7 +326,10 @@ def build_ink_shells(scene, target):
     线宽按目标尺寸参数化：thickness=ortho_scale×px/target（世界单位）。"""
     import bmesh
     cam = scene.camera
-    px = {64: 2.2, 128: 2.6, 256: 3.0}.get(target, 2.2)
+    # 壳宽定值（创始人 2026-09-11 拍板全库统一 1.5px@64；128/256 同比例缩。
+    # 历史：阶段 C 起曾为 {64:2.2, 128:2.6, 256:3.0}，旧快照横跨 v1 图像域与
+    # 早期壳厚多代而参差 1~2px——本次全量重渲后全库一致）
+    px = {64: 1.5, 128: 1.8, 256: 2.0}.get(target, 1.5)
     thickness = cam.data.ortho_scale * px / target
     ink = _ink_mat()
     deps = bpy.context.evaluated_depsgraph_get()

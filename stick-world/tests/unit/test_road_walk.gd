@@ -42,9 +42,10 @@ func _leg(tier: String, length: float, biomes := PackedInt32Array()) -> Dictiona
 
 
 func _test_scene_width() -> void:
-	_runner.assert_equal(RoadMapGenerator.scene_width(100.0, "DIRT"), 2400.0, "土路 ×24")
-	_runner.assert_equal(RoadMapGenerator.scene_width(100.0, "PAVED"), 1600.0, "官道 ×16（大路好走更短）")
-	_runner.assert_equal(RoadMapGenerator.scene_width(1.0, "DIRT"), RoadMapGenerator.MIN_WIDTH, "极短路 clamp 下限")
+	# 系数用例须用足长输入（100m 短路 ×24=2400 会吃 MIN_WIDTH=2500 下限，钳制非系数语义）
+	_runner.assert_equal(RoadMapGenerator.scene_width(200.0, "DIRT"), 4800.0, "土路 ×24")
+	_runner.assert_equal(RoadMapGenerator.scene_width(200.0, "PAVED"), 3200.0, "官道 ×16（大路好走更短）")
+	_runner.assert_equal(RoadMapGenerator.scene_width(10.0, "DIRT"), RoadMapGenerator.MIN_WIDTH, "极短路 clamp 下限 2500")
 	_runner.assert_equal(RoadMapGenerator.scene_width(99999.0, "PAVED"), RoadMapGenerator.MAX_WIDTH, "超长路 clamp 上限")
 	_runner.assert_true(RoadMapGenerator.scene_width(1000.0, "PAVED") < RoadMapGenerator.scene_width(1000.0, "DIRT"),
 			"同长度官道场景短于土路")

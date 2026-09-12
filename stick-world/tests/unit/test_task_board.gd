@@ -2,7 +2,8 @@ extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
 ## 单元测试：TeamAi A2 任务槽 + 目标评分 + 攻击百分比（设计文档12号 C3/C4/C5，AI集大成）。
-## 覆盖：BalanceConfig 装载 A2 参数 / 槽同步与生命周期（集结超时杀槽/目标超时重定向）/
+## 覆盖：BalanceConfig 装载 A2 参数（单一 global 行，难度分档已裁决移除·开放问题#3）/
+## 槽同步与生命周期（集结超时杀槽/目标超时重定向）/
 ## 四因子评分（threat/avoid_clumps/distance/inertia）/ pick_target 确定性 /
 ## 小队匹配 / 攻击百分比四规则（门禁/基调/优势递增/基地威胁封顶/VP 缺省关闭）/
 ## 槽驱动姿态与滞回带 / SWL 退化路径 / 下令路径分流（散兵 issue / 编制 issue_to_org）/
@@ -22,7 +23,7 @@ var _runner: TestRunner
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("BalanceConfig 装载 A2 参数（global 内核行 + 难度攻击百分比行）", _test_config_loaded)
+	_runner.add_test("BalanceConfig 装载 A2 参数（单一 global 行）", _test_config_loaded)
 	_runner.add_test("槽同步：只增删空槽/槽带目标与集结点/超额杀最旧", _test_slot_sync)
 	_runner.add_test("槽生命周期：目标超时重定向记脏 / 集结超时杀槽", _test_slot_lifecycle)
 	_runner.add_test("四因子评分：threat 加分", _test_score_threat)
@@ -54,16 +55,18 @@ func _test_config_loaded() -> void:
 	_runner.assert_approx(BalanceConfig.get_value("ai.personality.global.defend_target_timeout"), 120.0, 0.001, "防守槽目标超时 2min（CoH）")
 	_runner.assert_true(bool(BalanceConfig.get_value("ai.personality.global.slot_kernel_enabled")), "槽内核默认开")
 	_runner.assert_false(bool(BalanceConfig.get_value("ai.personality.global.vp_rule_enabled")), "VP 规则缺省关闭（开放问题#1 提案/待定）")
-	# standard 行：C5 难度基调 = 代码默认镜像（零回归基线）
-	_runner.assert_approx(BalanceConfig.get_value("ai.personality.standard.attack_pct_baseline"), 0.6, 0.001, "standard 基调 0.6（CoH）")
-	_runner.assert_approx(BalanceConfig.get_value("ai.personality.standard.attack_pct_growth_per_min"), 0.01, 0.001, "standard 每分钟 +0.01（CoH）")
-	_runner.assert_approx(BalanceConfig.get_value("ai.personality.standard.max_attack_percentage"), 0.70, 0.001, "standard 封顶 0.70（CoH）")
-	_runner.assert_approx(BalanceConfig.get_value("ai.personality.standard.superiority_gain"), 1.0, 0.001, "standard 优势增益 1.0")
-	# 难度差异全在参数（C2）：easy 不吃优势递增、极难封顶最高
-	_runner.assert_approx(BalanceConfig.get_value("ai.personality.easy.superiority_gain"), 0.0, 0.001, "easy 无优势递增（CoH hard/hardest 才消费同构）")
-	_runner.assert_approx(BalanceConfig.get_value("ai.personality.hardest.max_attack_percentage"), 0.95, 0.001, "hardest 封顶 0.95")
-	# 装载器：overlay 合并携带内核与基调参数
-	var overlay: Dictionary = ScriptTeamAiProfiles.load_personality_overlay("standard")
+	# global 行：C5 攻击百分比参数上移（原 standard 档数值 = 代码默认镜像，零回归基线）
+	_runner.assert_approx(BalanceConfig.get_value("ai.personality.global.attack_pct_baseline"), 0.6, 0.001, "基调 0.6（CoH）")
+	_runner.assert_approx(BalanceConfig.get_value("ai.personality.global.attack_pct_growth_per_min"), 0.01, 0.001, "每分钟 +0.01（CoH）")
+	_runner.assert_approx(BalanceConfig.get_value("ai.personality.global.max_attack_percentage"), 0.70, 0.001, "封顶 0.70（CoH）")
+	_runner.assert_approx(BalanceConfig.get_value("ai.personality.global.superiority_gain"), 1.0, 0.001, "优势增益 1.0")
+	# 难度分档维度已裁决移除：仅余单一 global 行（开放问题#3）
+	var rows: Variant = BalanceConfig.get("data").get("ai.personality", [])
+	_runner.assert_true(rows is Array and (rows as Array).size() == 1, "personality 仅单一行（难度行已移除）")
+	if rows is Array and (rows as Array).size() == 1:
+		_runner.assert_equal(str((rows[0] as Dictionary).get("id", "")), "global", "唯一行 = global")
+	# 装载器：无参 overlay 合并携带内核与基调参数
+	var overlay: Dictionary = ScriptTeamAiProfiles.load_personality_overlay()
 	_runner.assert_approx(float(overlay.get("score_threat", -1.0)), 5.0, 0.001, "overlay 含 C4 权重")
 	_runner.assert_approx(float(overlay.get("attack_pct_baseline", -1.0)), 0.6, 0.001, "overlay 含 C5 基调")
 
@@ -252,14 +255,15 @@ func _test_attack_pct_rules() -> void:
 	ctx3.ai.update()
 	_runner.assert_approx(ctx3.ai.recalculate_attack_percentage(), 0.70, 0.001, "优势递增受 max 封顶 0.70")
 	ctx3.teardown()
-	# 难度=参数：easy 基调 0.5 且无优势递增（gain 0）；duration 30 保证越过 easy 门禁 20±8
+	# 遗留键 difficulty 宽容忽略（难度分档已裁决移除·开放问题#3）：传入不炸，
+	# attack% 仍走单一参数曲线（与 ctx3 同局面同结果：优势递增封顶 0.70）
 	var ctx4 := _make_ctx({"difficulty": "easy"})
 	for i in 10:
 		ctx4.add_own_unit(Vector2(500 + 20.0 * i, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx4.add_enemy_unit(Vector2(1500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx4.battle.duration = 30.0
 	ctx4.ai.update()
-	_runner.assert_approx(ctx4.ai.recalculate_attack_percentage(), 0.5, 0.01, "easy 基调 0.5、无优势递增")
+	_runner.assert_approx(ctx4.ai.recalculate_attack_percentage(), 0.70, 0.001, "遗留 difficulty 键忽略，单一曲线封顶 0.70")
 	ctx4.teardown()
 
 

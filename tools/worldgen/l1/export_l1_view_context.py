@@ -331,6 +331,10 @@ def main():
                          "（tiles polygon/polygons、neighbors、lakes、l1_polygon），"
                          "roads/rivers/states/settlement 等后注入字段原样保留；窗口读包内 "
                          "world_origin+context_size（不重算 margin），跳过底图/索引图重写")
+    ap.add_argument("--base-only", action="store_true",
+                    help="审计#8：只重写 l1_base.png（细化场形状 + 包内 states 现行色，"
+                         "与运行时 get_state_color 同源）；窗口读包内 world_origin，"
+                         "json/索引图/几何一概不动")
     args = ap.parse_args()
     if args.panorama:
         render_panorama(args.panorama_size)
@@ -341,6 +345,11 @@ def main():
     # 输出目录：默认 Tab 单份（config/strategic_map）；--out-dir 批量 L2 下钻数据（每老 L1 一份）
     out_dir = os.path.abspath(args.out_dir) if args.out_dir else GAME_DIR
     os.makedirs(out_dir, exist_ok=True)
+    if args.base_only:
+        # 审计#8：lab_l1 以包内登记为准（批量重烘免传 --start-l1）
+        with open(os.path.join(out_dir, "l1_world.json"), encoding="utf-8") as f:
+            _old = json.load(f)
+        lab_l1 = int(_old.get("parent_l1_label") or args.start_l1)
 
     print("[1/5] 加载 v2 数据（res=%d）..." % res)
     citydata = json.load(open(os.path.join(V2_DIR, "city_data.json"), encoding="utf-8"))
@@ -365,12 +374,12 @@ def main():
     # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距（按 res 缩放）
     # R3 --polys-only：窗口直接读包内 world_origin+context_size（river_export 注入时
     # 与本工具同公式重算过——规避 margin 不统一坑），保证 patch 几何与旧坐标同窗
-    if args.polys_only:
+    if args.polys_only or args.base_only:
         with open(os.path.join(out_dir, "l1_world.json"), encoding="utf-8") as f:
             _old = json.load(f)
         wo = _old.get("world_origin")
         if wo is None:
-            print("错误：--polys-only 需要 %s 内有 world_origin（先跑 river_export 注入）"
+            print("错误：--polys-only/--base-only 需要 %s 内有 world_origin（先跑 river_export 注入）"
                   % out_dir)
             return
         x0, y0 = int(wo[0]), int(wo[1])
@@ -420,6 +429,29 @@ def main():
     birth = is_birth[ctx_city] & (ctx_city > 0)
     ctx_combined = np.where(birth, ctx_city, par + 10000).astype(np.int32)
     ctx_combined[par == 0] = 0
+
+    if args.base_only:
+        # 审计#8：底图换新代形状——城市色取包内 states 现行表（与运行时
+        # get_state_color(owner_state_id) 同源），邻居灰/湖/海规则照旧。
+        # json/索引图/几何一概不动（无需网格提取，提前返回）。
+        col_by_sid = {s.get("state_id", ""): tuple(int(v) for v in s.get("color", [150, 150, 150]))
+                      for s in _old.get("states", [])}
+        n_miss = 0
+        base = np.full((side, side, 3), OCEAN_COLOR, dtype=np.uint8)
+        for t in _old.get("tiles", []):
+            lbl = int(t["tile_id"][5:])
+            col = col_by_sid.get(t.get("owner_state_id", ""))
+            if col is None:
+                col = NEIGHBOR_COLOR
+                n_miss += 1
+            base[ctx_city == lbl] = col
+        base[ctx_combined > 10000] = NEIGHBOR_COLOR
+        base[ctx_lake] = LAKE_COLOR
+        Image.fromarray(base).save(os.path.join(out_dir, "l1_base.png"))
+        print("  --base-only：重写 l1_base.png（%dx%d，states 缺色 %d tile），json 未动"
+              % (side, side, n_miss))
+        return
+
     combined_mesh = mesh_extract.extract_smooth_mesh(ctx_combined)
     city_mesh = {k: v for k, v in combined_mesh.items() if k < 10000}
     legacy_mesh = {k - 10000: v for k, v in combined_mesh.items() if k > 10000}

@@ -85,6 +85,23 @@ def load_inputs():
     return grad, water, land
 
 
+def _city_tile_geom(t, ox, oy):
+    """城块多边形（包内局部 [x,y] → 世界系 shapely；多环首环=外环其余=洞）"""
+    rings = t.get("polygons") or ([t["polygon"]] if t.get("polygon") else [])
+    if not rings:
+        return None
+    w = lambda r: [(float(p[0]) + ox, float(p[1]) + oy) for p in r]
+    pg = Polygon(w(rings[0]), [w(h) for h in rings[1:]])
+    if not pg.is_valid:
+        fixed = pg.buffer(0)
+        if fixed.geom_type == "Polygon":
+            pg = fixed
+        elif fixed.geom_type in ("MultiPolygon", "GeometryCollection"):
+            parts = [x for x in fixed.geoms if x.geom_type == "Polygon"]
+            pg = max(parts, key=lambda x: x.area) if parts else pg
+    return pg if pg.area > 1.0 else None
+
+
 def load_cities():
     """收集 1048 城：世界锚点 / level / population_score / blob_capacity[16] / 周边道路(世界系)"""
     print("[v2] 收集城市锚点与周边道路（L1 视图包，只读）...")
@@ -120,6 +137,7 @@ def load_cities():
                 "ps": float(s.get("population_score") or 0.0),
                 "cap": [float(v) for v in s.get("blob_capacity") or [1.0] * 16],
                 "roads": roads_by_city.get(sid, []),
+                "tile_geom": _city_tile_geom(t, ox, oy),
             }
     spawn_sid = json.load(open(os.path.join(GAME_DIR, "l1_world.json"),
                                encoding="utf-8"))["spawn_settlement_id"]
@@ -512,12 +530,54 @@ def mask_to_polys(mask, sid, wx0, wy0, p, scale=1.0):
     return assemble_polygons(rings, wx0, wy0, p["contour"])
 
 
+def clip_polys_to_tile(polys, city, cp):
+    """建成区 ∩ 本城城块多边形（第四批#9：blob 不出地块框）。
+    相交后沿城块界的边与 L1 视图城块描边逐点同源（同代共享弧几何）；
+    Multi 子块拆独立外环，碎片/小洞沿用 contour 组装同款阈值过滤。
+    返回 (裁剪后 polys, 被裁掉的面积 px²)。"""
+    tp = city.get("tile_geom")
+    if tp is None or not polys:
+        return polys, 0.0
+    out = []
+    area_before = 0.0
+    area_after = 0.0
+    for outer, holes in polys:
+        pg = Polygon(outer, holes)
+        if not pg.is_valid:
+            pg = pg.buffer(0)
+        area_before += pg.area
+        g = pg.intersection(tp)
+        if g.is_empty:
+            continue
+        parts = [g] if g.geom_type == "Polygon" else \
+            [x for x in getattr(g, "geoms", []) if x.geom_type == "Polygon"]
+        for part in parts:
+            if part.area < cp["enclave_min_area"]:
+                continue
+            ext = _simp(part, cp["simplify_tol"])
+            if ext is None or ext.area < cp["enclave_min_area"] * 0.5:
+                continue
+            hs = []
+            for hr in part.interiors:
+                h = _simp(Polygon(hr), cp["simplify_tol"])
+                if h is None or h.area < max(cp["hole_min_frac"] * ext.area,
+                                             cp["hole_min_abs"]):
+                    continue
+                hs.append(np.asarray(h.exterior.coords)[:-1])
+            out.append((np.asarray(ext.exterior.coords)[:-1], hs))
+            area_after += ext.area
+    return out, max(area_before - area_after, 0.0)
+
+
 def generate_city_tier(city, s, tier_idx, ctx, p, lv_bands, fbm_cache):
     """完整单城单档：管线 → 多边形集合（世界坐标）+ 诊断 info"""
     mask, info, (wx0, wy0) = city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache)
     if not mask.any():
         return [], info
     polys = mask_to_polys(mask, city["sid"], wx0, wy0, p, info.get("scale", 1.0))
+    polys, cut = clip_polys_to_tile(polys, city, p["contour"])
+    if cut > 1.0:
+        info["clip_cut"] = int(cut)
     info["n_outer"] = len(polys)
     info["n_holes"] = sum(len(h) for _, h in polys)
     return polys, info
@@ -826,6 +886,10 @@ def main():
     empties = sum(1 for c in order if not results[c["sid"]]["polys"]["mid"])
     n_holes = sum(r["info"][t].get("n_holes", 0) for r in results.values() for t in TIER_ORDER)
     print("[v2] mid 档无建成区 %d / %d 城；三档累计洞 %d 个" % (empties, len(order), n_holes))
+    n_clip = sum(1 for r in results.values() for t in TIER_ORDER if r["info"][t].get("clip_cut"))
+    cut_total = sum(r["info"][t].get("clip_cut", 0)
+                    for r in results.values() for t in TIER_ORDER)
+    print("[v2] 城块框裁剪：出框 %d 档，共裁掉 %d px²" % (n_clip, cut_total))
 
     # ---- 预览 ----
     print("[v2] 预览渲染 ...")

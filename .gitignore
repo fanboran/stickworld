@@ -81,6 +81,8 @@ tools/worldgen/output/**
 # 边界超分 S2/S3 验收预览（共享弧拓扑全景+出生特写+新色板，见交接档「边界超分 S2/S3」）
 !tools/worldgen/output/arcs_preview_*.png
 !tools/worldgen/output/palette_v3_preview_2048.png
+# 数据对齐审计验收图（audit4 湖双几何裁决材料等，见交接档「数据对齐」专节）
+!tools/worldgen/output/audit*_*.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

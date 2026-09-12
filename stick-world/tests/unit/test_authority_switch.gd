@@ -155,7 +155,8 @@ class FakeTeamAi:
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("约束1 默认关: 关闭态零行为零时钟；开闸同一局面才换班", _test_default_off)
+	_runner.add_test("约束1 生效默认: 开闸档同一局面直接换班（GK-5 第二层）", _test_shipped_default_on)
+	_runner.add_test("约束1 零回归门: 显式注入关，关闭态零行为零时钟；同局面开闸才换班", _test_default_off)
 	_runner.add_test("约束2 滞回: 容限带内两侧交替略高不振荡；越界才换", _test_hysteresis)
 	_runner.add_test("约束3 冷却: 跳槽后窗内不评估，窗过恢复", _test_cooldown)
 	_runner.add_test("约束4 排序: A(1.0)→B(1.7)；并列时玩家所在班优先吸引", _test_ordering_and_player_priority)
@@ -168,7 +169,7 @@ func _ready() -> void:
 	_runner.add_test("约束5 守卫: 玩家手动号令保护期内不换班（复用 TeamAi 查询）", _test_guard_manual_order)
 	_runner.add_test("约束5 限流: 单拍单来源班只放行名额内人数", _test_per_squad_flow_cap)
 	_runner.add_test("约束6 错峰/确定性: 非同拍评估 + 同种子同局面可复现", _test_determinism_and_desync)
-	_runner.add_test("档案: config/ai/formation_authority.tres 装载与缺省关闭", _test_resource)
+	_runner.add_test("档案: config/ai/formation_authority.tres 装载与生效默认开闸", _test_resource)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -248,6 +249,26 @@ func _assert_guard(w: Dictionary, msg: String) -> void:
 
 # ─────────────────────────────── 约束 1：默认关 ────────────────────────────────
 
+## 生效默认（GK-5 第二层已开闸）：setup 装载档案后参数档即为开，同一局面直接换班。
+func _test_shipped_default_on() -> void:
+	var w := _new_world()
+	var fs: Node = w["fs"]
+	var a := _unit("a0")
+	var b_lead := _unit("b_lead")
+	var sb := _squad(w, [b_lead])
+	var sa := _squad(w, [a], false)
+	w["org"].commanders[sb] = str(b_lead.get_instance_id())
+	b_lead.possessed = true
+	_runner.assert_approx(fs.get_squad_authority(sb), 1.7, 0.001, "B 班权威应为 1.7")
+	_runner.assert_true(bool(fs._authority_params.get("authority_switch_enabled", false)),
+			"setup 后生效默认应为开（GK-5 第二层）")
+	# 生效默认档 eval_interval=2.0 + 档案种子错峰：推进 3.0s（6 拍）保证覆盖评估窗
+	_tick(fs, 6)
+	_runner.assert_equal(fs.get_unit_squad(a), sb, "生效默认：低权威班成员应投奔高权威班")
+	_runner.assert_gt(float(fs._authority_clock), 0.0, "生效默认：权威时钟应累积（机制在跑）")
+
+
+## 零回归门（显式注入关）：关闭态零行为零时钟；同局面开闸才换班——差异只来自开关。
 func _test_default_off() -> void:
 	var w := _new_world()
 	var fs: Node = w["fs"]
@@ -258,8 +279,10 @@ func _test_default_off() -> void:
 	w["org"].commanders[sb] = str(b_lead.get_instance_id())
 	b_lead.possessed = true
 	_runner.assert_approx(fs.get_squad_authority(sb), 1.7, 0.001, "B 班权威应为 1.7")
+	# 两态：档案生效默认已开，此处显式注入关档造零回归基线
+	fs.set_authority_params({"authority_switch_enabled": false})
 	_runner.assert_false(bool(fs._authority_params.get("authority_switch_enabled", true)),
-			"缺省应关闭（零回归基线）")
+			"显式注入关档（零回归基线）")
 	_tick(fs, 40)
 	_runner.assert_equal(fs.get_unit_squad(a), sa, "关闭态成员不应换班")
 	_runner.assert_approx(fs._authority_clock, 0.0, 0.001, "关闭态不应累积时钟（零开销）")
@@ -512,8 +535,8 @@ func _test_resource() -> void:
 	_runner.assert_equal(rows.size(), 1, "应含 global 行")
 	var row: Dictionary = rows[0]
 	_runner.assert_equal(str(row.get("id", "")), "global", "行 id 应为 global")
-	_runner.assert_equal(bool(row.get("authority_switch_enabled", true)), false,
-			"资源缺省应关闭（零回归基线）")
+	_runner.assert_equal(bool(row.get("authority_switch_enabled", false)), true,
+			"资源生效默认已开闸（GK-5 第二层）")
 	# RWR 真值项（小兵步枪逆向 §2.6）
 	_runner.assert_approx(float(row.get("authority_player_squad_bonus", 0.0)), 0.2, 0.001,
 			"玩家班吸引力 = RWR favor_joining_player_squad_value_increase 0.2")

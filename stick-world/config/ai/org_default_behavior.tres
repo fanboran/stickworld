@@ -8,15 +8,15 @@ resource_name = "org_default_behavior"
 _meta = {
 	"resource_name": "org_default_behavior",
 	"version": "0.1.0",
-	"description": "组织侧 default_behavior 配置档案（GK-5 前置批：补上 A4 效用打分器 UtilityScorer 的配置生产端）。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.org_default_behavior）与热重载。schema：config 行 = 总闸 writer_enabled（唯一权威，缺省 false = 零回归；组织创建期写入方按闸开与否决定是否填充）；匹配行 = {match_tag, default_behavior}，default_behavior 采用 UtilityScorer v2 schema（见 modules/combat/scripts/battle/utility_scorer.gd 类头注释，权威）。匹配优先级 = 精确标签行 > 全域兜底行（match_tag=\"*\"）。全部数值【提案/待定】，锚点 = docs/审计/worldbox-reverse/1-个体AI内核.md §二 M7（威胁保命 4~5 / 主业 2~3 / 习惯 0.5~1 / 闲逛 0.2），待 default_behavior_v2 开闸后实测校准。",
+	"description": "组织侧 default_behavior 配置档案（GK-5 前置批：补上 A4 效用打分器 UtilityScorer 的配置生产端）。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.org_default_behavior）与热重载。schema：config 行 = 总闸 writer_enabled（唯一权威；GK-5 第一层已开闸 = 生效默认 true，测试可显式注入关档测零回归；组织创建期写入方按闸开与否决定是否填充）；匹配行 = {match_tag, default_behavior}，default_behavior 采用 UtilityScorer v2 schema（见 modules/combat/scripts/battle/utility_scorer.gd 类头注释，权威）。匹配优先级 = 精确标签行 > 全域兜底行（match_tag=\"*\"）。全部数值【提案/待定】，锚点 = docs/审计/worldbox-reverse/1-个体AI内核.md §二 M7（威胁保命 4~5 / 主业 2~3 / 习惯 0.5~1 / 闲逛 0.2），待 default_behavior_v2 开闸后实测校准。",
 	"category": "ai"
 }
 variables = {
 	"data": [
 		{
 			"id": "config",
-			"writer_enabled": false,
-			"description": "总闸（唯一权威）。false = 组织创建期写入方完全不读匹配行、不触碰任何组织状态（零回归门，本批缺省）；true = 按行填充 OrganizationState.default_behavior。开闸与 default_behavior_v2_enabled（消费端门）是两个独立闸——本闸只负责把配置灌进组织，是否参与决策由 UtilityScorer/TeamAi 侧消费门决定。【提案/待定】"
+			"writer_enabled": true,
+			"description": "总闸（唯一权威）。false = 组织创建期写入方完全不读匹配行、不触碰任何组织状态（零回归基线，测试可显式注入关档）；true = 按行填充 OrganizationState.default_behavior（GK-5 第一层已开闸 = 生效默认）。开闸与 default_behavior_v2_enabled（消费端门）是两个独立闸——本闸只负责把配置灌进组织，是否参与决策由 UtilityScorer/TeamAi 侧消费门决定。【提案/待定】"
 		},
 		{
 			"id": "default",

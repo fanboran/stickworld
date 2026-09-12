@@ -55,6 +55,16 @@ func reload() -> void:
 	_ingest(load_rows(CONFIG_PATH))
 
 
+## 热重载接线（幂等）：BalanceConfig 重载完成后的 balance_changed → reload()，重读档案总闸
+## 与行集（补前批遗留的热重载盲区：写入方建档后不再回读档案，改 .tres 需重启才生效）。
+## 同一写入方重复调用只连一次；EventBus 缺席（脱离 autoload 的纯单测）/信号缺失时空操作跳过。
+func bind_balance_reload() -> void:
+	if EventBus == null or not EventBus.has_signal("balance_changed"):
+		return
+	if not EventBus.balance_changed.is_connected(reload):
+		EventBus.balance_changed.connect(reload)
+
+
 ## 读取档案行（BalanceResource.variables.data 消毒后深拷贝；失败/类型不符返回空数组）
 ## BalanceResource 为全局 class_name（organization_manager 读 presets.tres 同惯例）
 static func load_rows(path: String) -> Array:

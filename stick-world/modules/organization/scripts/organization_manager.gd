@@ -157,9 +157,10 @@ func _make_state(org_id: String, name: String, tag_enum: int, tier: int, parent_
 # ── 组织侧 default_behavior 写入方（GK-5 前置批）───────────────
 # 落点 = _make_state（create_organization 与 insert_tier 的唯一共用构造点，预设实例化也
 # 经 create_organization 走到此处）——创建期单点接线，组织一诞生即带档案默认行为。
-# 档案 config/ai/org_default_behavior.tres：总闸 writer_enabled 缺省 false = 完全不动作
-# （零回归门，本批不开闸）；闸开按标签行 > 全域兜底行填充 v2 字典（消费端 UtilityScorer）。
-# 显式蓝图 default_behavior 仍优先（见 _instantiate_preset：档案默认 < 蓝图显式配置）。
+# 档案 config/ai/org_default_behavior.tres：总闸 writer_enabled 生效默认 true（GK-5 第一层
+# 已开闸）；显式配 false 可退回零回归门。闸开按标签行 > 全域兜底行填充 v2 字典（消费端
+# UtilityScorer）。显式蓝图 default_behavior 仍优先（见 _instantiate_preset：档案默认 <
+# 蓝图显式配置）。惰性自建路径同时接上 balance_changed → reload()（热重载，改 .tres 免重启）。
 
 ## 装配/测试注入写入方（缺省惰性自建；注入须在创建组织前）
 func set_default_behavior_writer(writer: ScriptDefaultBehaviorWriter) -> void:
@@ -170,6 +171,7 @@ func set_default_behavior_writer(writer: ScriptDefaultBehaviorWriter) -> void:
 func _apply_default_behavior(state: ScriptOrgState) -> bool:
 	if _behavior_writer == null:
 		_behavior_writer = ScriptDefaultBehaviorWriter.new()
+		_behavior_writer.bind_balance_reload()
 	return _behavior_writer.apply_to(state, String(ENUM_TO_TAG.get(state.tag, "")))
 
 

@@ -35,6 +35,7 @@ const ScriptWorldState := preload("res://core/autoload/world_state.gd")
 const ScriptSerializer := preload("res://core/entities/world_state_serializer.gd")
 const ScriptDispatcher := preload("res://modules/organization/scripts/command/org_command_dispatcher.gd")
 const ScriptTransport := preload("res://modules/organization/scripts/command/transport_layer.gd")
+const ScriptDefaultBehaviorWriter := preload("res://modules/organization/scripts/default_behavior_writer.gd")
 
 const TAG_TO_ENUM := {
 	"MILITARY": ScriptOrgState.Tag.MILITARY,
@@ -83,6 +84,10 @@ var _attribute_provider: Callable = Callable()
 
 ## MEDIUM 自主档伤亡上报阈值（存活比跌破即报，§4.4）；常规走 balance.variables 行覆盖
 var _casualty_report_threshold: float = 0.30
+
+## 组织侧 default_behavior 写入方（GK-5 前置批）：惰性自建，档案 ai.org_default_behavior
+## 总闸缺省关 = 不触碰组织状态；装配/测试可经 set_default_behavior_writer 注入
+var _behavior_writer: ScriptDefaultBehaviorWriter = null
 
 
 func _init() -> void:
@@ -145,7 +150,35 @@ func _make_state(org_id: String, name: String, tag_enum: int, tier: int, parent_
 	state.tier = tier
 	state.parent_org = parent_id
 	state.autonomy_level = ScriptOrgState.AutonomyLevel.MEDIUM
+	_apply_default_behavior(state)
 	return state
+
+
+# ── 组织侧 default_behavior 写入方（GK-5 前置批）───────────────
+# 落点 = _make_state（create_organization 与 insert_tier 的唯一共用构造点，预设实例化也
+# 经 create_organization 走到此处）——创建期单点接线，组织一诞生即带档案默认行为。
+# 档案 config/ai/org_default_behavior.tres：总闸 writer_enabled 缺省 false = 完全不动作
+# （零回归门，本批不开闸）；闸开按标签行 > 全域兜底行填充 v2 字典（消费端 UtilityScorer）。
+# 显式蓝图 default_behavior 仍优先（见 _instantiate_preset：档案默认 < 蓝图显式配置）。
+
+## 装配/测试注入写入方（缺省惰性自建；注入须在创建组织前）
+func set_default_behavior_writer(writer: ScriptDefaultBehaviorWriter) -> void:
+	_behavior_writer = writer
+
+
+## 按档案行把 default_behavior 灌进组织状态（闸关/无命中 = 空操作）
+func _apply_default_behavior(state: ScriptOrgState) -> bool:
+	if _behavior_writer == null:
+		_behavior_writer = ScriptDefaultBehaviorWriter.new()
+	return _behavior_writer.apply_to(state, String(ENUM_TO_TAG.get(state.tag, "")))
+
+
+## 读取组织 default_behavior（只读深拷贝；未配置/组织不存在返回空字典）
+func get_default_behavior(org_id: String) -> Dictionary:
+	var org := _get_org(org_id)
+	if org == null:
+		return {}
+	return org.default_behavior.duplicate(true)
 
 
 # ===== 创建/查询 =====
@@ -593,8 +626,12 @@ func _instantiate_preset(preset_data: Dictionary, parent_id: String) -> Dictiona
 			st.personnel_template = tmpl.duplicate() if tmpl is Dictionary else {}
 			var equip: Variant = e.get("equipment_template", {})
 			st.equipment_template = equip.duplicate() if equip is Dictionary else {}
-			var behav: Variant = e.get("default_behavior", {})
-			st.default_behavior = behav.duplicate() if behav is Dictionary else {}
+			# 蓝图显式提供 default_behavior → 覆盖（含显式 {} = 清空）；
+			# 未提供 → 保留创建期档案默认（_make_state 已按 ai.org_default_behavior 写入）。
+			# 层级：档案默认 < 蓝图显式配置（蓝图是更强的显式意图）。
+			var behav: Variant = e.get("default_behavior", null)
+			if behav is Dictionary:
+				st.default_behavior = behav.duplicate()
 			st.autonomy_level = AUTONOMY_TO_ENUM.get(String(e.get("autonomy", "MEDIUM")).to_upper(), ScriptOrgState.AutonomyLevel.MEDIUM)
 		else:
 			failure = str(r.get("error", ""))

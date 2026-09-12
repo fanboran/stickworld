@@ -183,6 +183,15 @@ func set_default_behavior(org_id: String, behavior: Dictionary) -> Dictionary:
 	return _manager.set_default_behavior(org_id, behavior)
 
 
+## 读取默认行为（只读深拷贝；未配置/组织不存在返回空字典）。
+## GK-5：创建期写入方按 config/ai/org_default_behavior.tres 填充，此入口供消费端/UI
+## 取只读视图（utility_scorer v2 schema 见 modules/combat/scripts/battle/utility_scorer.gd 类头）
+func get_default_behavior(org_id: String) -> Dictionary:
+	if not _is_initialized:
+		return {}
+	return _manager.get_default_behavior(org_id)
+
+
 # ===== 人事 =====
 
 ## 任命指挥官

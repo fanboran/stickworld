@@ -1,0 +1,75 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "org_default_behavior"
+_meta = {
+	"resource_name": "org_default_behavior",
+	"version": "0.1.0",
+	"description": "组织侧 default_behavior 配置档案（GK-5 前置批：补上 A4 效用打分器 UtilityScorer 的配置生产端）。手写平衡资源（非 Excel 导出管线背书），BalanceConfig 统一装载（类型路径 ai.org_default_behavior）与热重载。schema：config 行 = 总闸 writer_enabled（唯一权威，缺省 false = 零回归；组织创建期写入方按闸开与否决定是否填充）；匹配行 = {match_tag, default_behavior}，default_behavior 采用 UtilityScorer v2 schema（见 modules/combat/scripts/battle/utility_scorer.gd 类头注释，权威）。匹配优先级 = 精确标签行 > 全域兜底行（match_tag=\"*\"）。全部数值【提案/待定】，锚点 = docs/审计/worldbox-reverse/1-个体AI内核.md §二 M7（威胁保命 4~5 / 主业 2~3 / 习惯 0.5~1 / 闲逛 0.2），待 default_behavior_v2 开闸后实测校准。",
+	"category": "ai"
+}
+variables = {
+	"data": [
+		{
+			"id": "config",
+			"writer_enabled": false,
+			"description": "总闸（唯一权威）。false = 组织创建期写入方完全不读匹配行、不触碰任何组织状态（零回归门，本批缺省）；true = 按行填充 OrganizationState.default_behavior。开闸与 default_behavior_v2_enabled（消费端门）是两个独立闸——本闸只负责把配置灌进组织，是否参与决策由 UtilityScorer/TeamAi 侧消费门决定。【提案/待定】"
+		},
+		{
+			"id": "default",
+			"match_tag": "*",
+			"default_behavior": {
+				"candidates": [
+					{
+						"name": "advance",
+						"filter": {"enemy_present": true},
+						"demand": {"rules": [{"when": {"enemy_present": true}, "score": 1.0}]},
+						"target": {"mode": "enemy_centroid"},
+						"weight": 2.5
+					},
+					{
+						"name": "hold",
+						"demand": {"rules": [{"when": {"threatened": true}, "score": 0.5}]},
+						"target": {"mode": "own_centroid"},
+						"weight": 0.8
+					},
+					{
+						"name": "take_cover",
+						"filter": {"threatened": true},
+						"demand": {"rules": [{"when": {"threatened": true}, "score": 1.0}]},
+						"target": {"mode": "squad_pos"},
+						"weight": 4.5,
+						"cooldown": 8.0
+					}
+				]
+			},
+			"description": "全域兜底行（match_tag=\"*\"）：无精确标签行的组织统一采用。三候选覆盖 M7 三档权重语义并演示 schema 用法——advance=主业（w 2.5，M7 主业 2~3，filter 有敌方有资格 + demand 命中 ±分 + target 敌质心）；hold=习惯/防守（w 0.8，M7 习惯 0.5~1，无 filter 恒有资格，demand 仅被袭时加权）；take_cover=威胁保命（w 4.5，M7 run_away 3.1~5 / run_to_water_when_on_fire 5，filter 要求 threatened + cooldown 8s 示例 W1 M6）。全部数值【提案/待定】。"
+		},
+		{
+			"id": "military",
+			"match_tag": "MILITARY",
+			"default_behavior": {
+				"candidates": [
+					{
+						"name": "advance",
+						"filter": {"enemy_present": true},
+						"demand": {"rules": [{"when": {"enemy_present": true}, "score": 1.0}]},
+						"target": {"mode": "enemy_centroid"},
+						"weight": 3.0,
+						"weight_rules": [{"when": {"own_strength_ratio_max": 0.5}, "weight": 0.3}]
+					},
+					{
+						"name": "hold",
+						"demand": {"rules": [{"when": {"no_enemy": true}, "score": 1.0}]},
+						"target": {"mode": "own_centroid"},
+						"weight": 0.6
+					}
+				]
+			},
+			"description": "军事标签行（示例行的精确匹配层，演示标签优先级）：advance=主业更激进（w 3.0，M7 主业上界），并用 weight_rules 演示 W1 M7 状态调制——本方力量比 ≤0.5（受损过半）时主业权重降到 0.3，即 WorldBox「饿时工作 2→0.3」的战场同构（负需求压主业写成权重分段而非阈值 if 链）；hold=无对手时整队（w 0.6）。全部数值【提案/待定】。"
+		}
+	]
+}

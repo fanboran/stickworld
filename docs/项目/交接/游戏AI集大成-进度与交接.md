@@ -44,12 +44,13 @@
 
 | 批 | 内容 | 前置 | 证据口径 |
 |---|---|---|---|
-| GK-1 | L1 个体动作细节：`heal_enabled`、`arrow_threat_block`、`missing_arrows_tolerance`、`burst_shots`、`night_hesitate_mult`、`flank_enabled`、`rout_strafe_enabled`、`rout_reengage_enabled`、`test_engage_enabled` | AI-GAPS 落地 | 行为差异可辨（点射停顿/夜战变慢/绕侧接近/溃兵不走直线）；unit 全绿 + run_all 失败集不扩大 |
-| GK-2 | L1 状态类：`suppression_enabled`（含近失触发）、`retreat_mod_enabled` | AI-GAPS 落地 | 触发次数与分布（既有查询面：压制状态/`get_retreat_mod_state`）；溃逃节奏与战损不失控 |
+| GK-1 | L1 个体动作细节：`burst_shots`（只在 bow 兵种行开 3 发）、`night_hesitate_mult`（baseline 1.8）、`rout_strafe_enabled`（baseline 开） | — | **已执行**：config 层已锁（`test_rout_enhance` 新增「溃逃横向游走开启」用例、点射落 bow 行不落 baseline）；机制触发 + 单元全绿；integration 待静机复跑 |
+| GK-2 | L1 状态/交战决策类：`suppression_enabled`（含 `suppression_near_miss_enabled`）、`retreat_mod_enabled`、`rout_reengage_enabled`、`test_engage_enabled` | — | 触发次数与分布（既有查询面：压制状态/`get_retreat_mod_state`）；溃逃节奏与战损不失控（后两项属交战决策，比 GK-1 风险高一档） |
 | GK-3 | L1 调度类：`spawn_jitter_enabled`、`probe_fail_cooldown_enabled` | — | 首拍决策离散度上升（`get_decision_timing_state`）、齐套尖峰下降 |
 | GK-4 | L2：`phase_plan_enabled` | — | 相位序列符合计划（`phase_changed` 信号留痕：核心先行→两翼跟进→接敌转掩体） |
-| GK-5 | L4：`default_behavior_v2_enabled`（效用打分宿主）+ 权威值择班开关 | 组织侧 `default_behavior` 配置**写入方**（当前无写入方，开了也没有候选）+ AUTHORITY-SWITCH 落地 | 行为选择分布、换班次数与滞回表现 |
-| 不开 | `vp_rule_enabled`（本游戏无 VP 等价物，留位）；`slot_kernel_enabled`/`team_ai_enabled`/softmax 三键已在默认开，不需开闸 |
+| GK-5 | L4：`default_behavior_v2_enabled`（效用打分宿主）+ `authority_switch_enabled`（择班） | 组织侧 `default_behavior` 配置**写入方**（当前无写入方，宿主开了也没有候选） | 行为选择分布、换班次数与滞回表现 |
+| 已在开（无需开闸，只需确认生效） | `flank_enabled`（SWORD/SPEAR 档）、`arrow_threat_block`（SPEAR 档）、`missing_arrows_tolerance`（BOW 档 10.0）、`heal_enabled`（MERIC 档）、`heal_buzz_distance`、`slot_kernel_enabled`、`team_ai_enabled`、softmax 三键 | — | 这些**一直在生效**（代码兵种覆盖档 CLASS_PROFILES 里已开）——§七 早期版本把它们写成"默认关"是错的，已按「生效默认」口径修正；别再当"待开闸"项 |
+| 不开 | `vp_rule_enabled`（本游戏无 VP 等价物，留位） | — | — |
 
 **证据诚实口径**：能给量化指标的就给（触发次数/分布/离散度/信号序列）；当前确实没有测量手段的（如帧率在 headless 与实机不可比）就明确写"本批仅机制触发 + 零回归，无量化指标"，**不假装有数据**。若某批需要新增测量口，那本身作为该批的一项交付登记在报告里。
 

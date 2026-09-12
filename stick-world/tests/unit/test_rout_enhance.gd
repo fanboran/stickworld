@@ -18,6 +18,7 @@ func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("9i+ 四开关默认全关（零回归闸门）", _test_defaults_off)
 	_runner.add_test("近战兵种包抄开启（Demo P5 灵动化）", _test_flank_melee_on)
+	_runner.add_test("溃逃横向游走开启（GK-1 开闸）", _test_rout_strafe_on)
 	_runner.add_test("9i+ 数值字段默认值", _test_numeric_defaults)
 	_runner.add_test("re_engage_morale < 低士气阈值 0.25", _test_reengage_morale_bound)
 	_runner.add_test("9i+ 开关可覆盖开启", _test_override_on)
@@ -33,11 +34,11 @@ func _ready() -> void:
 
 func _test_defaults_off() -> void:
 	# 零回归闸门：所有兵种档案的 9i+ 开关默认 false
-	# （flank_enabled 已拆出：Demo P5 起近战兵种有意开启，由 _test_flank_melee_on 单独守护）
+	# （flank_enabled 已拆出：Demo P5 起近战兵种有意开启，由 _test_flank_melee_on 单独守护；
+	#   rout_strafe_enabled 同样已拆出：GK-1 开闸起有意开启，由 _test_rout_strafe_on 单独守护）
 	var switches: Array = [
 		"rout_reengage_enabled",
 		"retreat_keep_block",
-		"rout_strafe_enabled",
 		"test_engage_enabled",
 	]
 	for wtype in [ScriptBehaviorProfiles.SWORD, ScriptBehaviorProfiles.SPEAR,
@@ -57,6 +58,16 @@ func _test_flank_melee_on() -> void:
 			ScriptBehaviorProfiles.PICKAXE]:
 		var p2: Dictionary = ScriptBehaviorProfiles.get_profile(wtype)
 		_runner.assert_false(bool(p2.get("flank_enabled", false)), "非近战包抄应保持关 (wtype=%d)" % wtype)
+
+
+## GK-1 开闸契约：溃逃横向游走在 baseline 行有意开启（全兵种适用，区别于只开近战的包抄）
+func _test_rout_strafe_on() -> void:
+	for wtype in [ScriptBehaviorProfiles.SWORD, ScriptBehaviorProfiles.SPEAR,
+			ScriptBehaviorProfiles.BOW, ScriptBehaviorProfiles.STAFF,
+			ScriptBehaviorProfiles.PICKAXE]:
+		var p: Dictionary = ScriptBehaviorProfiles.get_profile(wtype)
+		_runner.assert_true(bool(p.get("rout_strafe_enabled", false)),
+				"GK-1 起溃逃横向游走应开启 (wtype=%d)" % wtype)
 
 
 func _test_numeric_defaults() -> void:

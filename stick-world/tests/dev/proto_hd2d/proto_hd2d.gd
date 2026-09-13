@@ -514,12 +514,9 @@ func _build_world() -> void:
 	# 地面带 = **一整片可行走区**（屏幕下方约 1/3，土/草/路面连续铺）。
 	# 没有建筑的地方全是可走地面；建筑只靠自带"落地裙边"挤占其中一块。
 	# 按区混材质（补充规格 2）：街心 → 近侧 → 外缘，各换一档，读作一条有肌理的街。
-	# 地面：三条带（早上那版结构，每带一种材质，简单均匀）
-	#   路肩带 = 建筑基线**前方**一条带（z 从基线向前 2 格 ≈64px）→ 路缘 → 道路带
-	var z_sh0 := MAIN_BASE_Z
-	var z_sh1 := z_sh0 + 2.0
-	_add_ground_plane("band_shoulder_stone_128.png", z_sh0, z_sh1,
-		0.04, 3.6, Color(0.70, 0.69, 0.66))
+	# 地面：只有两种材质——上=路肩（真 3D 石条，一排排石块），下=道路（石材），中间矮路缘
+	var z_sh1 := MAIN_BASE_Z + 1.9
+	_add_shoulder_blocks()
 	_add_ground_plane("band_road_stone_128.png", z_sh1, ROAD_NEAR_Z,
 		0.02, 10.0, Color(1.0, 1.0, 1.02))
 	_add_kerbs()
@@ -1061,6 +1058,39 @@ func _add_transition_chain(prefix: String, xc: float, band_w: float,
 ## 横着摆才有顶面 + 正立面，才能读出"矮矮一道坎"。
 ## 几何用 BoxMesh（平面贴图没有立面）；高 KERB_H≈11px、宽 KERB_W≈9px（对齐资产口径），
 ## 断续分段（段长 2.5~7 格、断口 0.5~3 格，越靠两端断口越大 → 到土路自然消失）。
+func _add_shoulder_blocks() -> void:
+	# 路肩 = **真 3D 的一颗颗石条**（创始人口径：不是平贴面带，是一条条石头）
+	#   3 排石块铺出约 1.6 格深的石台，每块钱尺寸/高度/色调都抖（手工铺感）
+	var sb := _tex_abs(_temp + GROUND_DIR + "band_shoulder_stone_128.png")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260916
+	var x := -BLOCK_HALF
+	while x < BLOCK_HALF:
+		var w: float = minf(0.55 * rng.randf_range(0.85, 1.25), BLOCK_HALF - x)
+		for r in 3:
+			var h := 0.20 + rng.randf_range(-0.03, 0.05)
+			var bm := BoxMesh.new()
+			bm.size = Vector3(w * 0.94, h, 0.46)
+			var mi := MeshInstance3D.new()
+			mi.mesh = bm
+			mi.position = Vector3(
+				x + w * 0.5 + rng.randf_range(-0.04, 0.04), h * 0.5,
+				MAIN_BASE_Z + 0.28 + float(r) * 0.52 + rng.randf_range(-0.03, 0.03))
+			var gm := ShaderMaterial.new()
+			gm.shader = GROUND_SHADER
+			gm.set_shader_parameter("albedo_tex", sb)
+			gm.set_shader_parameter("mix_amount", 0.0)
+			var t := rng.randf_range(0.86, 1.06)
+			gm.set_shader_parameter("tint", Color(t, t * 0.99, t * 0.96))
+			gm.set_shader_parameter("rough", 0.92)
+			gm.set_shader_parameter("uv_scale", Vector2(w / 1.2, 1.0))
+			mi.material_override = gm
+			mi.name = "ShoulderStone"
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_ground_root.add_child(mi)
+		x += w
+
+
 func _add_kerbs() -> void:
 	var kb := _tex_abs(_temp + GROUND_DIR + "band_kerb_stone_128.png")
 	var rng := RandomNumberGenerator.new()

@@ -139,11 +139,13 @@ class FakeEnemy:
 		return false
 
 
-## 战斗桩：敌方列表 + TeamAi 出口（玩家号令保护期查询链）。
+## 战斗桩：敌方列表 + TeamAi 出口（玩家号令保护期查询链）+ battle_id（相位种子派生源）。
 class FakeBattle:
 	extends Node
 	var enemies: Array = []
 	var team_ai: Node = null
+	## 战斗标识（空串 = 未设置，调用方视为"取不到 battle_id"回落档案基底）
+	var battle_id: String = ""
 
 	func get_enemies_of(_faction: int) -> Array:
 		return enemies
@@ -153,6 +155,9 @@ class FakeBattle:
 
 	func get_team_ai(_faction: int) -> Node:
 		return team_ai
+
+	func get_battle_id() -> String:
+		return battle_id
 
 
 ## TeamAi 桩：只实现保护期查询出口（复用生产侧 is_manual_order_guarded 契约）。
@@ -182,6 +187,8 @@ func _ready() -> void:
 	_runner.add_test("约束5 守卫: 玩家手动号令保护期内不换班（复用 TeamAi 查询）", _test_guard_manual_order)
 	_runner.add_test("约束5 限流: 单拍单来源班只放行名额内人数", _test_per_squad_flow_cap)
 	_runner.add_test("约束6 错峰/确定性: 非同拍评估 + 同种子同局面可复现", _test_determinism_and_desync)
+	_runner.add_test("约束7 相位种子派生: 同 battle_id 可复现 / 异 battle_id 不同 / 无 battle 回落基底", _test_battle_seed_derivation)
+	_runner.add_test("约束7 相位序列: 同 battle_id 两轮一致，异 battle_id 序列不同（抽样两例）", _test_battle_phase_sequences)
 	_runner.add_test("档案: config/ai/formation_authority.tres 装载与生效默认开闸", _test_resource)
 	_runner.add_test("归一化: 包装/裸数据两种组织查询形态均取到指挥官加成", _test_org_query_normalization)
 	_runner.add_test("参数出口: get_authority_switch_state 暴露候选半径/冷却等档案实值", _test_state_exit)
@@ -537,6 +544,101 @@ func _test_determinism_and_desync() -> void:
 				float(fs1._authority_next_eval[units1[i].get_instance_id()]),
 				float(fs2._authority_next_eval[units2[i].get_instance_id()]),
 				0.0001, "第 %d 个单位错峰相位应可复现" % i)
+
+
+# ─────────────────── 约束 7：相位种子按 battle_id 派生（收尾批）───────────────────
+
+## 派生口径：实际相位种子 = 档案基底 XOR battle_id 哈希；无 battle_id 回落档案基底。
+## 覆盖：同 battle_id 两次派生一致（可复现）/ 有 battle 时异于基底 / 异 battle_id 不同
+## （抽样两例）/ 无 battle（空单位、无 battle 链）回落基底且确定。
+func _test_battle_seed_derivation() -> void:
+	var w := _new_world()
+	var fs: Node = w["fs"]
+	_enable(fs)  # authority_rng_seed = 4242（派生基底）
+	var base: int = int(fs._authority_params.get("authority_rng_seed", 0))
+	_runner.assert_equal(base, 4242, "前置：档案基底种子应装载为 4242")
+	# 无 battle_id → 回落档案基底（确定性基线）
+	_runner.assert_equal(fs._authority_phase_seed(null), base, "空单位应回落档案基底种子")
+	var u := _unit("u0")
+	_runner.assert_equal(fs._authority_phase_seed(u), base, "无 battle 链的单位应回落档案基底种子")
+	# 有 battle_id → 派生确定、同 id 两次一致、异于基底
+	var b1 := FakeBattle.new()
+	b1.battle_id = "battle_1001"
+	u.battle = b1
+	var s1: int = fs._authority_phase_seed(u)
+	_runner.assert_equal(fs._authority_phase_seed(u), s1, "同 battle_id 两次派生应一致（可复现）")
+	_runner.assert_not_equal(s1, base, "有 battle_id 时派生种子应异于回落基底")
+	# 不同 battle_id → 不同派生（抽样两例）
+	var b2 := FakeBattle.new()
+	b2.battle_id = "battle_2002"
+	u.battle = b2
+	var s2: int = fs._authority_phase_seed(u)
+	_runner.assert_not_equal(s2, s1, "不同 battle_id（例1）派生种子应不同")
+	var b3 := FakeBattle.new()
+	b3.battle_id = "battle_3003"
+	u.battle = b3
+	var s3: int = fs._authority_phase_seed(u)
+	_runner.assert_not_equal(s3, s1, "不同 battle_id（例2）派生种子应不同于例1")
+	_runner.assert_not_equal(s3, s2, "不同 battle_id（例2）派生种子应不同于例1（另一对照）")
+	u.free()
+	b1.free()
+	b2.free()
+	b3.free()
+
+
+## 相位序列对照世界：A 班 9 人 + B 班高权威班长，全员挂同一 battle_id
+## （评估间隔 2.0s > 扫描拍 0.5s，首拍登记全部相位但只评估到期的少数）。
+func _build_battle_desync_world(battle_id: String) -> Dictionary:
+	var w := _new_world()
+	var fs: Node = w["fs"]
+	var battle := FakeBattle.new()
+	battle.battle_id = battle_id
+	var units: Array = []
+	var a_members: Array = []
+	for i in 9:
+		var u := _unit("a%d" % i)
+		u.battle = battle
+		units.append(u)
+		a_members.append(u)
+	var b_lead := _unit("b_lead")
+	b_lead.battle = battle
+	units.append(b_lead)
+	var sa := _squad(w, a_members)
+	var sb := _squad(w, [b_lead])
+	w["org"].commanders[sb] = str(b_lead.get_instance_id())
+	b_lead.possessed = true
+	_enable(fs, {"authority_eval_interval": 2.0})
+	w.merge({"sa": sa, "sb": sb, "units": units, "battle": battle})
+	return w
+
+
+## 按登记构造序取全部单位的错峰相位（先跑一拍完成首轮登记）。
+func _phases(w: Dictionary) -> Array:
+	var fs: Node = w["fs"]
+	_tick(fs)
+	var out: Array = []
+	for u in w["units"]:
+		out.append(float(fs._authority_next_eval.get(u.get_instance_id(), -1.0)))
+	return out
+
+
+func _test_battle_phase_sequences() -> void:
+	# 同 battle_id 两轮世界 → 相位序列逐单位一致（同战斗内可复现）
+	var pa: Array = _phases(_build_battle_desync_world("battle_alpha"))
+	var pb: Array = _phases(_build_battle_desync_world("battle_alpha"))
+	_runner.assert_equal(pa.size(), 10, "相位序列应覆盖 10 个单位")
+	_runner.assert_equal(pa, pb, "同 battle_id 两轮相位序列应一致（可复现）")
+	# 全部单位都已登记真实相位（无 -1 漏取）
+	_runner.assert_false(pa.has(-1.0), "全部单位首拍应登记错峰相位")
+	# 异 battle_id → 相位序列不同（抽样两例）
+	var pc: Array = _phases(_build_battle_desync_world("battle_bravo"))
+	var pd: Array = _phases(_build_battle_desync_world("battle_charlie"))
+	_runner.assert_not_equal(pc, pa, "不同 battle_id（例1）相位序列应不同")
+	_runner.assert_not_equal(pd, pa, "不同 battle_id（例2）相位序列应不同于例1")
+	_runner.assert_not_equal(pd, pc, "不同 battle_id（例2）相位序列应不同于例1（另一对照）")
+	# 可复现性跨 battle_id 仍成立（同 id 第二轮 = 第一轮）
+	var pc2: Array = _phases(_build_battle_desync_world("battle_bravo"))
+	_runner.assert_equal(pc, pc2, "不同 battle_id 各自仍应逐轮可复现")
 
 
 # ─────────────────────────────── 档案 ────────────────────────────────

@@ -271,12 +271,9 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 # ─────────────────────────── 清单自检（静默漏测盲区）───────────────────────────
 
 ## 未登记豁免名单：确属"非 TestRunner 套件"或"待处置"的文件，必须写明理由。
-UNREGISTERED_ALLOWLIST=(
-	# 旧的布局重叠检查器：非 TestRunner 规范（自打印 FAIL 且退出码恒 0）、
-	# 断言口径是 zone 制之前的老布局。处置（重写或下沉 tests/dev）之前先豁免——
-	# 它没有被任何 CI 覆盖，别误以为"有测试在看着布局"。
-	"tests/integration/test_ui_overlap.tscn"
-)
+## 历史孤儿 `test_ui_overlap.tscn` 已处置（下沉 tests/dev/，移出集成清单视野），
+## 当前无豁免项——盘上存在但未登记的套件一律红灯拦截。
+UNREGISTERED_ALLOWLIST=()
 
 ## 盘上存在但未登记进 INTEGRATION_SUITES/SMOKE_SUITES 的套件 = 永远不会被执行，
 ## 且不会产生任何红灯（tests/unit 层的同类问题由 batch_runner 自检负责）。

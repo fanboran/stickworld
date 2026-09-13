@@ -1437,7 +1437,11 @@ func _org_root_of_squad(squad_id: String) -> String:
 #   自主人事市场（独立开闸 / 独立节拍 / 独立冷却）。两者必须能独立开合——开相位计划
 #   不等于要开士兵换班；合并会把两张闸门焊死，且一处数值改动同时扰动两个机制。
 
-## 权威值跳槽代码默认档（BalanceConfig 缺载兜底；unit 测试 new() 不依赖 autoload）
+## 权威值跳槽代码默认档（BalanceConfig 缺载兜底；unit 测试 new() 不依赖 autoload）。
+## authority_rng_seed = 错峰相位的**派生基底/回落值**：实际相位种子按单位所在战斗
+## （battle_instance.get_battle_id() 哈希）与基底混合派生（见 _authority_phase_seed）——
+## 同一场战斗内种子恒定、相位可复现，不同战斗相位模式不重复（多局同基底不再呆板同相）；
+## 取不到 battle_id（无战斗/单位桩/查询链缺环）时回落此常数种子。
 const AUTHORITY_DEFAULTS: Dictionary = {
 	"authority_switch_enabled": false,
 	"authority_scan_interval": 0.5,
@@ -1566,7 +1570,7 @@ func _evaluate_authority_switches(beat: float) -> void:
 				continue
 			var iid: int = u.get_instance_id()
 			# 首次登记：排定确定性错峰相位（之后每评估一次推进 eval_interval）
-			var next_at: float = _authority_next_at(iid, eval_interval)
+			var next_at: float = _authority_next_at(u, eval_interval)
 			# 冷却窗内不评估（单次跳槽后有冷却，防每拍横跳）
 			if _authority_clock < float(_authority_cooldown_until.get(iid, -INF)):
 				continue
@@ -1619,19 +1623,48 @@ func _evaluate_authority_switches(beat: float) -> void:
 
 
 ## 单位下一次评估时刻：首次登记时按确定性错峰相位排定（相位 ∈ [0, eval_interval)），
-## 之后由评估推进。相位取数 = 种子 + 登记序（不用 instance_id——同一局面构造下
+## 之后由评估推进。相位取数 = 派生种子 + 登记序（不用 instance_id——同一局面构造下
 ## 登记序稳定，结果可复现；instance_id 跨运行不同会破坏确定性）。
-func _authority_next_at(iid: int, eval_interval: float) -> float:
+## 派生种子按单位所在战斗（battle_id）哈希与档案基底混合（见 _authority_phase_seed）。
+func _authority_next_at(u: Node, eval_interval: float) -> float:
+	var iid: int = u.get_instance_id()
 	if _authority_next_eval.has(iid):
 		return float(_authority_next_eval[iid])
 	if not _authority_ordinal.has(iid):
 		_authority_ordinal[iid] = _authority_ordinal_seq
 		_authority_ordinal_seq += 1
 	var rng := RandomNumberGenerator.new()
-	rng.seed = int(_authority_params.get("authority_rng_seed", 20260913)) + int(_authority_ordinal[iid]) * 7919
+	rng.seed = _authority_phase_seed(u) + int(_authority_ordinal[iid]) * 7919
 	var phase: float = rng.randf() * eval_interval
 	_authority_next_eval[iid] = phase
 	return phase
+
+
+## 错峰相位派生种子（档案键 authority_rng_seed 的新语义 = 派生基底/回落值）：
+## 实际种子 = 档案基底 与 单位所在战斗 battle_id 哈希 的异或混合——
+##   - 同一场战斗内 battle_id 恒定 → 种子恒定、相位序列可复现（含跨图重载同战斗）；
+##   - 不同战斗 battle_id 不同 → 派生种子不同、相位模式不重复（治多局同基底的呆板同相）；
+##   - 单位拿不到 battle_id（无战斗/单位桩/查询链缺环）→ 回落档案常数种子，
+##     保持单测与无战斗场景的确定性基线（同种子同局面可复现）。
+## 为何用异或而非直接相加：battle_id 形如 battle_<instance_id>，哈希与基底量级悬殊，
+## 异或混合两位空间不重叠，且纯函数（同输入恒同输出）可复现。
+func _authority_phase_seed(u: Node) -> int:
+	var base: int = int(_authority_params.get("authority_rng_seed", 20260913))
+	var bid: String = _unit_battle_id(u)
+	if bid.is_empty():
+		return base
+	return base ^ int(bid.hash())
+
+
+## 单位 battle_id 查询（duck 链 get_battle_instance → get_battle_id）；
+## 任一环缺失/实例失效/返回空串 → ""（调用方回落档案基底）。
+func _unit_battle_id(u: Node) -> String:
+	if u == null or not is_instance_valid(u) or not u.has_method("get_battle_instance"):
+		return ""
+	var bi: Node = u.get_battle_instance()
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_battle_id"):
+		return ""
+	return String(bi.get_battle_id())
 
 
 ## 已释放实例的相位/冷却/登记序清理（防字典随阵亡单位无界增长）。

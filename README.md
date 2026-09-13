@@ -75,6 +75,60 @@
 - **程序化音频**：自研合成 BGM（Am-F-C-G 氛围 pad 无缝循环）、分层鸟鸣与雨声（FFT 周期化），生成器见 `tools/ai/gen_sfx.py`
 - 参考游戏逆向笔记：[docs/技术/参考逆向/天空与水体逆向笔记.md](docs/技术/参考逆向/天空与水体逆向笔记.md)
 
+## 美术资产画廊（建筑生成管线 v3）
+
+> 建筑美术管线单日约 19 批次迭代的产物：**材质库 64 key · 建筑几何库 27 种装配器 · 道具 94 件 · 内景 29 def · 自然物 16 类 · 地面分段链（3 带 × 3 区带 × 5 变体）· 昼夜分层合成公式标定 · HD-2D 原型验证通过**。全流程为「代码建模 → Blender PBR 渲染 → PNG + JSON 元数据」，硬约束只有建筑宽度 3~16 格（1 格 = 32px ≈ 0.42m），视角为**纯正面 + 俯角 20° 微俯视**。下方为产物的压缩副本（长边 ≤1600px），全尺寸原图在 `stick-world/temp/`（gitignored）；管线规范见[建筑生成管线 v3](docs/技术/架构/建筑生成管线v3-写实PBR.md)。
+
+**建筑几何与材质**
+
+![27 种装配器总览](docs/images/gallery/01_buildings_27_assemblers.png)
+*27 种装配器总览 —— `buildings.py` 程序化建模，宽度取 4/8/12/16 格整数倍；含独立化的法师塔/炼金坊/图书馆/兵营/仓库/马厩/棚屋/干草棚，满图人物剪影为 1.70m 火柴人尺度参照*
+
+![法师塔单体特写](docs/images/gallery/02_mage_tower_pbr.png)
+*法师塔单体特写 —— 塔身 2×3.66m、锥顶比 0.72（比例审计前为 1×4.6m / 0.85）；石板锥顶/石砌塔身/彩色玻璃窗/crystal 与 rune_glow 发光件同框，右下为 1.70m 火柴人对照*
+
+![材质库样片](docs/images/gallery/07_materials_swatches.png)
+*材质库样片（64 key 中的 12 个代表）—— 茅草/瓦/石板/木板/粗木/灰泥/石/砖/铁/白石/帆布；每格右下角为 25% 游戏尺寸可读性门禁预览，做旧另设 13 个 AGE key*
+
+**城市成图与比例审计**
+
+![城镇街区俯视图](docs/images/gallery/03_city_town_top.png)
+*城镇（town 档）街区俯视图 —— `city_layout.py` 四档确定性布局（hamlet/village/town/city）之一，前排街屋 + 高耸城墙背景 + 中心地标*
+
+![城市成图](docs/images/gallery/04_city_city.png)
+*城市（city 档）成图 —— 城墙体系 / 分区权重 / 天际线 / 广场由布局器产出，建筑为单排微俯视街景*
+
+![比例审计总表](docs/images/gallery/05_scale_audit_45_sheet.png)
+*比例审计总表 45 档 —— 每栋带 0.5m 刻度尺与偏差标注，按米制换算规范（1px≈1.31cm、1 格≈0.42m、层高 196~212px）逐栋复核*
+
+![单栋比例标注](docs/images/gallery/06_scale_house_w8_annotated.png)
+*单栋比例标注示例（house 8 格宽）—— 门 1.96m、檐口 2.86m、屋顶 rise 1.46m、总高 4.46m，右侧为 1.70m 火柴人对照*
+
+**道具 · 内景 · 地面 · 自然物**
+
+![道具层 94 件总览](docs/images/gallery/08_props_strip.png)
+*道具层 94 件总览 —— `props.py` 建模 + 14 套 DRESS 配方，挂墙件贴真实前墙面（wall_y/wall_depth/reserved）；道具走 `dress()` 计入建筑立面而非建筑本体*
+
+![内景分层](docs/images/gallery/09_interior_layers.png)
+*内景分层 29 def —— `interiors.py` 每套含后墙+地板+楼板+功能家具+暖光，`_back/_front` 两层带 alpha 交付，像素对齐 29/29 ≤0.5px（复现游戏 WallFront 半透明机制）*
+
+![地面分段链](docs/images/gallery/11_ground_segment_chain.png)
+*地面分段链 —— `ground_tiles.py` 3 带（肩/缘/道）× 3 区带（center 石板大理石 / mid 旧砖碎石 / edge 夯土砾石）× 5 变体，可链式拼接；含规模包含映射（村=edge 子集、镇=mid+edge、城=全档）与位掩码过渡件*
+
+![自然物分布](docs/images/gallery/12_nature_distribution.png)
+*自然物分布 —— `nature.py` + `field_dist.py` 16 类（阔叶/窄冠/针叶/枯树/树桩/灌木/芦苇/草丛/蘑菇群/水晶簇/金铜铁矿露头/矿脉带/碎石/巨岩等），已换 bark / alpha 叶卡 / rock / ore / crystal / grass_band 新材质；三级密度场（簇包络 × 子团 × 开天窗），实测离散指数 2.7（均匀分布≈0）*
+
+**昼夜分层与 HD-2D 原型**
+
+![昼夜分层](docs/images/gallery/10_daynight_layers.png)
+*昼夜分层四联 —— ① 白天 albedo（暖主光 3.5 基线）② albedo × tint_night ③ + glow×1.0（引擎加法层）④ 真实夜晚渲染；合成公式标定为 `夜 = albedo × tint(0.038,0.049,0.092) + glow × 1.0`，MAE 0.011*
+
+![HD-2D 原型](docs/images/gallery/13_hd2d_prototype.png)
+*HD-2D 原型（八方旅人式）—— 真 StickmanRig 经 SubViewport(2x + MSAA 4x) 贴相机对齐 billboard，建筑不透明通道写深度实现零成本遮挡；唯一性能成本为后处理 ≈3.3ms（分阶段方案见[2.5D 与 HD-2D 可行性](docs/技术/架构/2.5D与HD-2D可行性.md)）*
+
+![2.5D 夜景原型](docs/images/gallery/14_25d_night.png)
+*2.5D 夜景原型 —— 同一批建筑与道具在夜晚光照下的合成效果，窗户由引擎侧抽 42% 随机点亮*
+
 ## 工程底座
 
 - **模块化架构**：core（8 个全局服务）+ 14 个功能模块，每模块 `api.gd` 接口契约，模块间只走全局事件总线（32 信号）或 API——跨模块 `get_node` 与循环依赖有审计脚本把关

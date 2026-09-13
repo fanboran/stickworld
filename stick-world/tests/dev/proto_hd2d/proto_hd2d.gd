@@ -514,8 +514,15 @@ func _build_world() -> void:
 	# 地面带 = **一整片可行走区**（屏幕下方约 1/3，土/草/路面连续铺）。
 	# 没有建筑的地方全是可走地面；建筑只靠自带"落地裙边"挤占其中一块。
 	# 按区混材质（补充规格 2）：街心 → 近侧 → 外缘，各换一档，读作一条有肌理的街。
-	# 地面：分带版（路肩 / 路缘 / 道路，band_* 材质——创始人满意的那套）+ 路坎
-	_walkable_ground(HORIZON_Z, ROAD_NEAR_Z)
+	# 地面：三条带（早上那版结构，每带一种材质，简单均匀）
+	#   路肩带（建筑基线往前 3 格 = 96px）→ 路缘（细条）→ 道路带（其余）
+	var z_sh0 := MAIN_BASE_Z - APRON_DEPTH
+	var z_sh1 := z_sh0 + float(BAND_SH_W)
+	_add_ground_plane("band_shoulder_stone_128.png", z_sh0, z_sh1,
+		0.03, 3.6, Color(0.78, 0.77, 0.74))
+	_add_ground_plane("band_road_stone_128.png", z_sh1, ROAD_NEAR_Z,
+		0.02, 10.0, Color(1.0, 1.0, 1.02))
+	_add_kerbs()
 
 	# --- 建筑：临街一排（按累计 gap 排布，街道越过画框两侧）+ 路肩石板场 ---
 	_card_root = Node3D.new()

@@ -1,17 +1,23 @@
 shader_type spatial;
-// card.gdshader —— HD-2D 原型：建筑纸片卡材质
+// card.gdshader —— HD-2D 原型：建筑/道具纸片卡材质
 //
-// 复制自 tests/dev/proto_25d/card.gdshader（只读原目录，本目录独立改造）。
-// 与原件一致的两条关键纪律（proto_25d 五条实测发现）：
+// 与 proto_25d 原件一致的两条关键纪律：
 //   1. albedo 亮度一阶差分伪造切空间法线 —— 平面卡只有靠这个才能吃真 3D 光照；
 //   2. depth_prepass_alpha —— 深度/阴影 pass 也吃 ALPHA 裁剪，否则 quad 会投一块矩形黑影。
 //
-// 本原型新增：`alpha_cut` 可由运行时统一调，用于 A/B 对照"描边融合"式硬边 vs 软边。
+// render_mode 的两条：
+//   depth_draw_opaque：深度写在**不透明通道** —— 这是 HD-2D 遮挡正确性的地基：
+//     建筑卡在不透明通道写深度，2D 角色 quad 在透明通道读深度测试 → 建筑挡角色天然成立。
+//   depth_prepass_alpha：深度预通道同样做 alpha 裁剪（消矩形影）。
+//
+// 云影：卡是云影的主要承影面之一（按世界坐标采样，与地面/角色/背景同一片云）。
+//   注意**只压 albedo，不压 EMISSION**：EMISSION 是窗内灯光/炉火的自发光，
+//   云遮住太阳不该把屋里的灯也调暗。
 
-// depth_prepass_alpha：深度预通道同样做 alpha 裁剪（消矩形影）。
-// depth_draw_opaque：深度写在**不透明通道** —— 这是 HD-2D 遮挡正确性的地基：
-//   建筑卡在不透明通道写深度，2D 角色 quad 在透明通道读深度测试 → 建筑挡角色天然成立。
 render_mode cull_disabled, depth_draw_opaque, depth_prepass_alpha, diffuse_burley, specular_schlick_ggx;
+
+global uniform vec4 cloud_shadow;
+#include "res://tests/dev/proto_hd2d/cloud_noise.gdshaderinc"
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
 uniform sampler2D glow_tex : source_color, filter_linear_mipmap;
@@ -33,9 +39,9 @@ vec3 _blur_smp(sampler2D tex, vec2 uv, vec2 texel, float radius) {
 	float wsum = 1.0;
 	for (int i = 0; i < 10; i++) {
 		float fi = float(i);
-		float a = fi * 2.39996;
+		float ang = fi * 2.39996;
 		float rr = sqrt((fi + 0.5) / 10.0);
-		vec2 off = vec2(cos(a), sin(a)) * rr * radius * texel;
+		vec2 off = vec2(cos(ang), sin(ang)) * rr * radius * texel;
 		float w = 1.0 - rr * 0.5;
 		acc += texture(tex, uv + off).rgb * w;
 		wsum += w;
@@ -51,12 +57,14 @@ float _lum(vec2 uv) {
 
 void fragment() {
 	vec2 d = 1.0 / max(tex_px, vec2(2.0));
+	vec3 wp = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	vec4 c = texture(albedo_tex, UV);
 	ALPHA = c.a;
 	if (c.a < alpha_cut) {
 		discard;
 	}
-	ALBEDO = _blur_smp(albedo_tex, UV, d, blur_radius) * tint;
+	ALBEDO = _blur_smp(albedo_tex, UV, d, blur_radius) * tint
+		* (1.0 - cloud_shadow_at(wp.xz));
 	// albedo 亮度差分 -> 切空间法线（TANGENT/BINORMAL 由 quad 的 UV 给出）
 	float lx = _lum(UV + vec2(d.x, 0.0)) - _lum(UV - vec2(d.x, 0.0));
 	float ly = _lum(UV + vec2(0.0, d.y)) - _lum(UV - vec2(0.0, d.y));

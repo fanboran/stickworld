@@ -29,6 +29,7 @@ BalanceConfig="*res://core/autoload/balance_config.gd"
 AudioManager="*res://core/services/audio_manager.gd"
 SaveManager="*res://core/autoload/save_manager.gd"
 DebugApi="*res://modules/debug_gui/api.gd"
+CloudSetup="*res://tests/dev/proto_hd2d/cloud_setup.gd"
 
 [display]
 
@@ -61,3 +62,10 @@ rendering_device/driver.windows="d3d12"
 renderer/rendering_method.mobile="forward_plus"
 anti_aliasing/quality/msaa_2d=2
 anti_aliasing/quality/msaa_3d=2
+
+[shader_globals]
+
+cloud_shadow={
+"type": "vec4",
+"value": Vector4(0, 0, 0.45, 0.24)
+}

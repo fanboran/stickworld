@@ -35,6 +35,7 @@
   - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
   - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
   - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL/WorldBox 四家登记，批次 A1~A9 + WorldBox WB1~WB10 + 组织界面 UI-W1~UI-W4，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A 系列 + WB1/WB2/WB6 + AI-GAPS + AUTHORITY-SWITCH + UI-W1~W4 界面全套（观测接线/班组卡/上报流/指挥链视图+深化/战略总览）+ GK-1~GK-5 机制开关全部开闸 + 尾巴清零（权威值查询 bug 修复/跨组织调人原子接口 transfer_stickman+总览拖拽/择班种子按 battle_id 派生/孤儿套件下沉/树文案定稿）全部收官合入 main**；现进**校准轮**——观测位 `TeamAi.get_default_behavior_choices()`/`FormationSystem.get_authority_switch_state()` 就绪，等观感/分布数据调数值【数值全为提案/直译锚点，待定】；剩余可选：组织界面图标母题立项、battle_id 跨运行持久化；WB3~WB5/WB7~WB10 分流 30fps·组织·出征·town-life 各线待立项；创始人已裁决不再实机验收，改为按报告验收，分支 `agent/game-ai`，worktree `.temp/game-ai`）
+  - `docs/项目/交接/音效重制-进度与交接.md`（任务：音效替换 Terraria/SWL 提取件 + 触发时机与放置优化 + 建音效管线；**任务书已落档，待执行**；分支 `agent/music-overhaul`，worktree `.temp/music-overhaul`）
   - `docs/项目/交接/音乐重制-进度与交接.md`（任务：音乐重制为正式管线产物——原创主题与变奏集 9 首 + 分层自适应 + 无缝循环 + 环境音层；**管线/文档/引擎集成全部落地，待创始人观感验收**；分支 `agent/music-overhaul`，worktree `.temp/music-overhaul`）
   - `docs/项目/交接/UI运行时三项优化-ABC三批-交接.md`（任务：UI 运行时三项优化 A 暂停原语化/B HUD 布局收权/C 按钮变体，**三批已合并入 main（116d42bf），待创始人观感验收**，分支链 `agent/ui-pause-primitive`→`agent/ui-hud-zones`→`agent/ui-button-variants`）
   - `docs/项目/交接/建筑生成管线v3-写实PBR-进度与交接.md`（任务：推翻旧 building_gen，自建"代码建模→渲染→PNG+元数据"建筑管线；**唯一沿用旧约束=建筑宽度为 4 格（128px）整数倍**。v2 手绘已废弃 → 现行 **v3 = Blender 3D + PBR 材质 + 真实光照**；已落地：规范九章 + 材质库 36 key（做旧+逐体色变，25% 门禁 PASS）+ **19 种装配器**（含风车/大教堂/城门楼/灯塔/三层联排/酒馆/面包房/行会厅等 + 屋顶结构二轮 + 窗型表/烟囱落地泛水）+ **道具层 60 件** + 城市布局器 4 档 + **validate.py 六项自动校验** + 四档城市成图（2026-09-13 凌晨五批次迭代），**待创始人观感验收**；下一步＝barn 系独立化 + 城市观感二轮（交接档 §三）；**接手前必读交接档 §0 创始人诉求台账、§0.3 硬约束、§六 踩坑记录**；分支 `agent/building-pipeline-v2`，worktree `.temp/building-pipeline-v2`）
@@ -53,6 +54,7 @@
 | **查技术架构（模块依赖/实体/EventBus/API 契约/存储/战略图/场景图…）** | `docs/技术/架构/README.md`（架构文档地图，按场景索引全部架构文档） |
 | 了解游戏整体          | `docs/设计/游戏设计文档.md`                                 |
 | 查 UI 体系规划/模板    | `docs/设计/UI/README.md`（索引各篇；模板在 `modules/ui_global/scenes/templates/`） |
+| **音效（SFX）** | 任务书 `docs/项目/交接/音效重制-进度与交接.md`；事件表 = `core/services/audio_manager.gd` 的 `SFX_EVENTS`；替换登记 `docs/项目/素材替换清单.md` |
 | **音乐（设计/技法/管线/运行时）** | 设计索引 `docs/设计/音乐/README.md`；运行时架构 `docs/技术/架构/音乐系统.md`；离线管线 `docs/技术/音频/音乐制作管线.md`；资产许可 `docs/技术/音频/音乐资产登记与来源.md` |
 | 实现某个系统          | `docs/设计/系统/<系统名>.md`                        |
 | 查核心实体/状态机       | `docs/技术/架构/核心实体与状态机.md`               |

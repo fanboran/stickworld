@@ -1353,10 +1353,12 @@ def _px_pave(U, V, nx, ny, sd, kind):
     else:
         metres = {"cobble": 0.12, "granite": 0.34, "marble": 0.56,
                   "rubble": 0.30}.get(kind, 0.30)
-        ku, kv = klatt(nx, metres), klatt(ny, metres)
-        jit = {"cobble": 0.88, "granite": 0.30, "marble": 0.18,
-               "rubble": 0.75}.get(kind, 0.5)
-        f1, f2, cid = pworley(U * ku, V * kv, ku, kv, sd, jit)
+        ku, kv = klatt(nx, metres), max(2, klatt(ny, metres))
+        jit = {"cobble": 0.88, "granite": 0.46, "marble": 0.34,
+               "rubble": 0.78}.get(kind, 0.6)
+        # **剪切坐标**（Us = U + 0.45V）：把轴对齐的单元边界推成斜向，消除"竖纹布"
+        Us = U + 0.45 * V
+        f1, f2, cid = pworley(Us * ku, V * kv, ku, kv, sd, jit)
         mask = smoothstep(0.010, 0.055 if kind == "marble" else 0.09,
                           np.clip(f2 - f1, 0.0, None))
         dome = np.sqrt(np.clip(0.52 - f1, 0.0, None))
@@ -1369,6 +1371,19 @@ def _px_pave(U, V, nx, ny, sd, kind):
             alb = cshade(alb, lerp(0.90, 1.06, np.abs(vein - 0.5) * 2.0))
         h = 0.10 + mask * (0.25 + 0.75 * dome) * (0.62 if kind != "marble" else 0.45)
         rough = lerp(0.95, lerp(0.66, 0.86, cid), mask)
+        if kind in ("marble", "granite"):
+            # 第二尺度**斜向嵌块**（残块拼贴）→ 进一步打散竖向边界
+            U2 = U * 1.73 + V * 1.0
+            ku2, kv2 = max(2, int(ku * 2.2)), max(2, int(kv * 2.2))
+            g1, g2, gid = pworley(U2 * ku2, V * kv2, ku2, kv2, sd + 17, 0.55)
+            inl = smoothstep(0.012, 0.05, np.clip(g2 - g1, 0.0, None))
+            if kind == "marble":
+                pal2 = ((0.560, 0.556, 0.548), (0.780, 0.774, 0.762))
+            else:
+                pal2 = ((0.380, 0.378, 0.380), (0.610, 0.606, 0.602))
+            alb = cmix(inl, alb, cmix(gid, pal2[0], pal2[1]))
+            h = h + inl * 0.06
+            rough = lerp(rough, lerp(0.70, 0.88, gid), inl)
     mor = cmix(gwh(U, V, 0.03, nx, ny, sd + 5, oct=2), ma, mb)
     alb = cmix(mask, mor, alb)
     return alb, h, rough
@@ -1753,21 +1768,9 @@ SEG_BANDS = [("shoulder", "路肩底", STRIP_SHOULDER),
 def _city_band(kind, nx, ny, seed):
     """"城"档：大理石 / 花岗岩成片铺装（含残块拼贴）。"""
     U, V = _uvw(nx, ny)
-    ku, kv = klatt(nx, 1.2), max(2, klatt(ny, 1.2))
-    _f1, _f2, cid = pworley(U * ku, V * kv, ku, kv, seed + 11, 0.55)
-    menu = ["marble", "marble", "granite", "marble", "granite", "cobble"]
-    pick = np.minimum((cid * len(menu)).astype(np.int64), len(menu) - 1)
-    alb = np.zeros((ny, nx, 3))
-    h = np.zeros((ny, nx))
-    rough = np.zeros((ny, nx))
-    for i, kd in enumerate(menu):
-        m = (pick == i)
-        if not m.any():
-            continue
-        a, hh, rr = _px_pave(U, V, nx, ny, seed + 21, kd)
-        alb = np.where(m[..., None], a, alb)
-        h = np.where(m, hh, h)
-        rough = np.where(m, rr, rough)
+    a0, h0, r0 = _px_pave(U, V, nx, ny, seed + 21, "marble")
+    alb, h, rough = _patch_stack(U, V, nx, ny, seed + 11, (a0, h0, r0),
+                                 ["granite", "marble", "cobble", "granite"])
     if kind == "kerb":
         # 城档路缘：仍然是"低而断续"的（不是现代市政路缘），但石块更方、更整
         y_k = 0.42
@@ -1808,6 +1811,47 @@ def _city_band(kind, nx, ny, seed):
     return alb, h, rough
 
 
+def _patch_stack(U, V, nx, ny, seed, base, menu, weights=None):
+    """**多尺度补丁**：0.4 / 0.8 / 1.6 m 三档叠加，按面积加权（大补丁稀、小补丁密）。
+
+    关键手法：补丁只在 Voronoi 单元的**内部**铺（`f2-f1` 大的地方），单元边界留给底料
+    → 每块补丁都是**互相隔离的多边形**，不会出现"相邻同料格纵向合并成竖条"的读法。
+    逐档再叠一个"密度门控"哈希，让大补丁稀疏、小补丁密。
+    """
+    alb, h, rough = base
+    scales = ((1.6, 0.26, True), (0.8, 0.26, False), (0.4, 0.30, False))
+    for si, (metres, dens, rot) in enumerate(scales):
+        ku = max(2, klatt(nx, metres))
+        kv = max(2, klatt(ny, metres))
+        sd = seed + 1000 + si * 137
+        f1, f2, cid = pworley(U * ku, V * kv, ku, kv, sd, 0.88)
+        xi = np.mod(np.floor(U * ku).astype(np.int64), ku)
+        yi = np.mod(np.floor(V * kv).astype(np.int64), kv)
+        ph = _hash01(xi, yi, sd + 7)
+        # 逐格选料；**大补丁按行奇偶错开菜单相位**，进一步打散竖向同料带
+        idx = np.mod((ph * len(menu)).astype(np.int64)
+                     + (yi if rot else 0), len(menu))
+        gate = smoothstep(1.0 - dens, 1.0 - dens + 0.45, _hash01(xi, yi, sd + 13))
+        inner = smoothstep(0.03, 0.0, np.clip(f2 - f1, 0.0, None))
+        m_all = gate * inner
+        for i, kd in enumerate(menu):
+            m = m_all * (idx == i)
+            if not m.any():
+                continue
+            a, hh, rr = (_px_pave(U, V, nx, ny, sd + 21, kd)
+                         if kd in ("rubble", "brick_new", "brick_old", "granite",
+                                   "marble", "cobble")
+                         else _px_loose(U, V, nx, ny, sd + 21, kd))
+            alb = np.where(m[..., None], a, alb)
+            h = np.where(m, hh + 0.05, h)
+            rough = np.where(m, rr, rough)
+        # 补丁边缘的脏线（不规则 → 补丁读得出来）
+        alb = cmix(m_all * 0.35, alb,
+                   cmix(gwh(U, V, 0.05, nx, ny, sd + 31, oct=2),
+                        (0.240, 0.218, 0.192), (0.350, 0.320, 0.280)))
+    return alb, h, rough
+
+
 def b_segment(band, tier, seed=0, nx=SEG_W, ny=None):
     """链式分段：`band` ∈ shoulder/kerb/road，`tier` ∈ village/town/city。
 
@@ -1827,29 +1871,12 @@ def b_segment(band, tier, seed=0, nx=SEG_W, ny=None):
         else:
             r = b_road(fam, nx, ny)
         alb, h, rough = r["alb"], r["h"] * 0.999, r["rough"]
-    # 段内固定少量变化：补丁（跨档混料，但**不越档**：村的段里不出现大理石）
+    # 段内变化：**多尺度补丁**（0.4/0.8/1.6m 三档叠加、按面积加权、互相隔离）
     U, V = _uvw(nx, ny)
-    ku, kv = klatt(nx, 0.85), max(2, klatt(ny, 0.85))
-    f1, f2, cid = pworley(U * ku, V * kv, ku, kv, seed + 211, 0.75)
     menu = {"edge": ["dirt", "gravel", "grass"],
             "mid": ["rubble", "gravel", "brick_new"],
             "center": ["granite", "marble", "cobble"]}[tier]
-    pick = np.minimum((cid * (len(menu) + 1)).astype(np.int64), len(menu))
-    for i, kd in enumerate(menu):
-        m = (pick == i)
-        if not m.any():
-            continue
-        a, hh, rr = (_px_pave(U, V, nx, ny, seed + 221, kd)
-                     if kd in ("rubble", "brick_new", "granite", "marble", "cobble")
-                     else _px_loose(U, V, nx, ny, seed + 221, kd))
-        alb = np.where(m[..., None], a, alb)
-        h = np.where(m, hh, h)
-        rough = np.where(m, rr, rough)
-    edge = smoothstep(0.018, 0.0, np.clip(f2 - f1, 0.0, None))
-    alb = cmix(edge * 0.55, alb, cmix(gwh(U, V, 0.05, nx, ny, seed + 231, oct=2),
-                                      (0.240, 0.218, 0.192),
-                                      (0.340, 0.312, 0.272)))
-    h = h - edge * 0.12
+    alb, h, rough = _patch_stack(U, V, nx, ny, seed + 211, (alb, h, rough), menu)
     return _packw(alb, h, rough, nx, ny, seed + 241,
                   0.026 if ny < 40 else 0.030, ao=0.24, nstr=0.9)
 

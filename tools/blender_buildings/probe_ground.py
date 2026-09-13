@@ -800,18 +800,21 @@ def shot_grid_demo(cam):
         for j in range(nb):
             xa = bx0 + j * G.PIECE_CELLS * CELL
             plane("ring_%d_%d" % (int(cx), j), xa, xa + G.PIECE_CELLS * CELL,
-                  -G.RING_H, 0.0, 2.0, mat("p_ring_mid"), uv_fn=world_uv)
-        plane("capL_%d" % int(cx), bx0 - 96.0, bx0, -G.RING_H, 0.0, 2.0,
-              mat("p_ring_cap_l"))
-        plane("capR_%d" % int(cx), bx1, bx1 + 96.0, -G.RING_H, 0.0, 2.0,
-              mat("p_ring_cap_r"))
+                  -G.RING_H, 0.0, 2.0, mat("p_ring_mid"))
+        _mark_decal(plane("capL_%d" % int(cx), bx0 - 96.0, bx0, -G.RING_H, 0.0,
+                          2.0, G.decal_material("p_ring_cap_l")))
+        _mark_decal(plane("capR_%d" % int(cx), bx1, bx1 + 96.0, -G.RING_H, 0.0,
+                          2.0, G.decal_material("p_ring_cap_r")))
         dx = cx + float(spec.get("door_x", 0.0))
         _mark_decal(plane("path_%d" % int(cx), dx - 64.0, dx + 64.0,
                           -G.RING_H - 32.0, 0.0, 3.0,
-                          G.decal_material("p_path_a"), uv_fn=world_uv))
+                          G.decal_material("p_path_a")))
     # 相邻两栋之间：右邻有建筑 → 该侧改铺过渡件
-    plane("edge_mid", -428.0, -236.0, -G.RING_H, 0.0, 2.5, mat("p_edge_r"),
-          uv_fn=world_uv)
+    # 过渡件宽 192 = 1.5 张件宽 → 用世界 UV 保持件宽比例（2/3 张 + 拉伸）
+    _mark_decal(plane("edge_mid", -428.0, -236.0, -G.RING_H, 0.0, 2.5,
+                      G.decal_material("p_edge_r"),
+                      uv_fn=lambda x, y: ((x + 428.0) / 192.0 * 1.5,
+                                          (y + G.RING_H) / float(G.RING_H))))
     _grid_floor(-640.0, 40)
     _grid_floor(1560.0, 20)          # 右半：拆掉建筑后的静态底
     fit = list(objs)
@@ -1266,13 +1269,24 @@ def neutral_check(out_dir, keys=None, n=G.HD_PX):
 
 
 def shot_night(cam, objs, day_path):
-    """夜晚调制示意：同一批中性贴图 + 冷暗顶光 + 暖色灯笼光斑，同机位再渲一张。"""
+    """夜晚调制示意：同一批中性贴图 + 冷暗顶光 + 暖色灯笼光斑，同机位再渲一张。
+
+    亮度比要跟**同一机位的白天图**比（早先拿另一张不同取景的图当基准 → 数字没意义）。
+    """
     path = os.path.join(OUT_DIR, "pbr_ground_night.png")
+    ref = os.path.join(OUT_DIR, "_night_ref_day.png")
+    bpy.context.scene.world = bpy.data.worlds["gt_wsky"]
+    lights_mode(LIGHTS, "street")
+    render_tilt(cam, objs, 1.0, ref, pad_side=60.0, pad_top=40.0, pad_bottom=620.0)
     bpy.context.scene.world = bpy.data.worlds["gt_wnight"]
     lights_mode(LIGHTS, "night")
     render_tilt(cam, objs, 1.0, path, pad_side=60.0, pad_top=40.0, pad_bottom=620.0)
-    day = _load_png_np(day_path)
+    day = _load_png_np(ref)
     night = _load_png_np(path)
+    try:
+        os.remove(ref)
+    except OSError:
+        pass
     # 只统计画面下方 45%（地面主场），避免天空/屋顶干扰
     cut = int(day.shape[0] * 0.55)
     dl = day[cut:].mean()

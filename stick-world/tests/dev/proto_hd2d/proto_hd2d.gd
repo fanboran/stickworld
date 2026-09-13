@@ -117,6 +117,7 @@ var _sun: DirectionalLight3D
 var _fill: DirectionalLight3D
 var _ground_root: Node3D
 var _card_root: Node3D
+var _front_occ: Array = []
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
@@ -352,9 +353,9 @@ func _build_world() -> void:
 	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
 	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
 	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
-	# 真实地平线 = 末层背景根部（SKYLINE_Z-8）；地面远端收到同值，天空不再露出裸地
-	const FAR_Z := -20.0
-	_add_ground_plane("rammed_earth_128.png", FAR_Z, 0.0,
+	# 真实地平线 = 末层背景根部：地面远端正好收到末层底边（不再往后多出裸地）
+	var far_z: float = SKYLINE_Z - 6.0
+	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
 		0.0, 14.0, Color(1.16, 1.14, 1.10))
 	_add_platform()                       # 人行道台面（垫高 + PBR 法线）+ 台肩一排长条石
 	_add_width_guides()                   # 建筑宽度辅助线（每栋左右边界在地面上画线）
@@ -511,7 +512,8 @@ func _place_rows() -> void:
 		mi.position.y += PLAT_H
 		_spawn_building_shadow(str(e["card"]), cx, mi)
 		occ_front.append([cur, cur + w])
-		cur += w + 1.0
+		cur += w          # 一个格子挨着一个格子（0 缝）
+	_front_occ = occ_front
 	# 三层背景：第二层插第一层的缝、第三层插第二层的缝；末层即"真实地平线"
 	# 近小远大：近层小民居/塔；**远层也限宽 ≤12 格**（w16 大件悬在半空会读作悬浮板）
 	var bg := ["house_w8", "tower_w6", "house_w8", "townhouse_w12", "house_w8", "tower_w6"]
@@ -560,12 +562,9 @@ func _add_width_guides() -> void:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_ground_root.add_child(mi)
 		x += 1.0
-	for e in FRONT_ROW:
-		var meta: Dictionary = _cards.get(str(e["card"]), {})
-		if meta.is_empty():
-			continue
-		var w := float(meta["units"][0]) * S
-		var cx := float(e["x"])
+	for occ in _front_occ:
+		var w := float(occ[1]) - float(occ[0])
+		var cx := (float(occ[0]) + float(occ[1])) * 0.5
 		for s in [-1.0, 1.0]:
 			var pm2 := PlaneMesh.new()
 			pm2.size = Vector2(0.05, 62.0)

@@ -26,7 +26,7 @@
 - 当前活跃交接文档：
   - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，**批次 1~6 全部完成、循环已测试锁死，待创始人观感验收后收线**，分支 `agent/conquest-loop`，worktree `.temp/conquest-loop`）
   - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：描边融合+缩放抗锯齿；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/stickman-visual` 保留）
-  - `docs/项目/交接/世界地图系统完善-进度与交接.md`（任务：观感返工 R 系列，分支 `agent/world-map-rework`，worktree `.temp/world-map-rework`）
+  - `docs/项目/交接/世界地图系统完善-进度与交接.md`（任务：观感返工 R 系列 + 数据对齐审计 #1~#10 + 湖双几何裁决实施；**已合并入 main（`bd51d74f`，合并后全量 47/47、报错自检干净）**，待创始人观感验收；worktree `.temp/world-map-rework` / 分支 `agent/world-map-rework` 暂留——worktree 内 gitignored 中间件（refined 场/blob npz）是复现凭据，验收后可一并 `git worktree remove` + 删分支）
   - `docs/项目/交接/建筑与美术升级-进度与交接.md`（任务：铁匠铺/石头结构件/多层建筑/室内内饰/多材质/village_a 美化；**批次 1-6 全部完成已合并入本分支**，待观感验收；worktree `.temp/building-art` 保留）
   - `docs/项目/交接/城镇生成管线-进度与交接.md`（任务：L1 城镇种子随机生成+风格参数化；**批次 1-4 全部完成已合并入本分支**；待办：八城按地面占比 1/3 重生成；worktree `.temp/town-gen` 保留）
   - `docs/项目/交接/小镇生活与NPC职业-进度与交接.md`（任务：NPC 各司其职（铁匠/伐木/矿工）+经济自动产出端；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/town-life` 保留）

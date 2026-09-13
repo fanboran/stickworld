@@ -302,7 +302,7 @@ func _draw() -> void:
 		var rect := Rect2(_drag_start_screen, _drag_current_screen - _drag_start_screen).abs()
 		draw_rect(rect, BOX_FILL_COLOR, true)
 		draw_rect(rect, BOX_BORDER_COLOR, false, 2.0)
-	# 选中单位脚下的圆环
+	# 选中单位脚下的白色四角线框（创始人 2026-09-14：黄圈改四角框）
 	if _selected_units.is_empty():
 		return
 	var canvas_xform: Transform2D = get_viewport().get_canvas_transform()
@@ -310,8 +310,14 @@ func _draw() -> void:
 		if not is_instance_valid(u):
 			continue
 		var screen_pos: Vector2 = canvas_xform * u.global_position
-		# 椭圆形环（略扁，贴合地面透视）
-		draw_arc(screen_pos, RING_RADIUS, 0.0, TAU, 48, RING_COLOR, 2.0, true)
+		var half_w: float = RING_RADIUS
+		var half_h: float = RING_RADIUS * 0.65
+		var arm: float = RING_RADIUS * 0.38
+		var col: Color = Color(1.0, 1.0, 1.0, 0.95)
+		for c in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+			var corner: Vector2 = screen_pos + Vector2(c.x * half_w, c.y * half_h)
+			draw_line(corner, corner - Vector2(c.x * arm, 0), col, 2.0, true)
+			draw_line(corner, corner - Vector2(0, c.y * arm), col, 2.0, true)
 
 
 # ─────────────────────────────── 查询 API ────────────────────────────────

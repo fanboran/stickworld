@@ -67,6 +67,12 @@ STREET = [
     ("guildhall", 12),
     ("tower", 6),
     ("cathedral", 16),
+    ("barn", 12),
+    ("gatehouse", 8),
+    ("chapel", 8),
+    ("alchemy", 8),
+    ("library", 8),
+    ("mage_tower", 8),
 ]
 
 #: glow 卡里当作"自发光窗/火"的材质名（其余一律压成纯黑，加色叠加下不可见）

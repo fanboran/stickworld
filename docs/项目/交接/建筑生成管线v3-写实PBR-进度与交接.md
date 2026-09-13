@@ -248,6 +248,15 @@ python probe_city_plan.py                                  # 城市平面图（�
 - **天空复用**：`assets/sky/bg_mountain_far/bg_trees_far.png`（SkyDecor 同源贴图）做成剪影 quad 立于背景之后——剪影 PNG 必须开 `TRANSPARENCY_ALPHA`（否则透明区渲成黑带）；高度/饱和度按空气透视压低压淡。
 - 验收产物：`temp/proto_hd2d/hd2d_g6_sky.png`（街景成图）、`temp/proto_hd2d/verify_hd2d_map.png`（**游戏内实机截图**，完整 HUD+3D 街景+附身玩家）。
 
+**第四轮（2026-09-14，六项返修 + 游戏接入深化）**
+- **背景重复度**：烘焙清单扩到 19 张卡（新增 barn12/gatehouse8/alchemy8/library12/mage_tower6 等；chapel 无装配器、mage_tower 仅 6 格档——顺序勿改错）。背景改**主题组合段**：西段教堂天际线 / 中段市集街屋 / 东段田园作坊，卡按 x 段从池顺位取（防邻重）；bg2/bg3 均带补洞（阈值 9.8=最小画面宽 cottage_w6 9.1+0.6 缝）。
+- **道具穿模根因**：`bake_props` 的 anchor 语义=「画面中心对应点」（与 blender_proto 的落地线 anchor 不同），沿用建筑卡落位公式导致卡底入地（桶 -0.44 格、推车 -0.62、市集摊 -0.94）。修复=**卡底贴地落位**：pos.y=地面高+cosθ·半高、pos.z=基线−sinθ·半高。
+- **附身指示**：脚下黄椭圆（`possession_indicator.gd`，二分法定位）改**白色四角线框**；RTS 选中环（`selection_system.gd`）同步改白四角框统一风格。
+- **假火柴人**：静默常驻模式不再 spawn 演示 CHARS（出图模式保留用于遮挡验证）；连带修 `_apply_light/_apply_stage/_build_world` 对 `_char_host` 的空引用。
+- **碰撞**：`proto_hd2d.get_solid_rects()`（前排建筑按格宽对齐中心+道具收窄 15%，灯笼不挡）→ 宿主 `Hd2dStreetMap._build_solid_bodies()` 生成 2D StaticBody 碰撞墙（y 688~1080 行走带后段，前景留横穿），玩家不再穿透建筑/摆件。
+- **出生点**：`GameRoot._on_map_loaded` 加 `map.has_method("get_spawn_point")` 钩子（向后兼容），HD2D 宿主返回街中心前景 (0,1010)。
+- 验证：`tests/dev/verify_hd2d_map.tscn` 实机链路全绿（地图切换/玩家生成/白四角框/无假人/无报错）。
+
 **大项登记（下一阶段）**
 1. **城市搬运 HD-2D**（创始人 2026-09-14 指令）：以 `city_layout.py` 的开局城市数据（村档）驱动 HD-2D 场景——建筑卡按布局摆放、火柴人工作场所（铁匠铺前铁匠等）一并搬入；2D 原型中已译未译内容以该轮为准对账。
 2. **后排动态出现逻辑**：后排背景随前排建筑数量自适应出现/消失（游戏运行时规则，接入时实现）。

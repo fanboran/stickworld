@@ -7,12 +7,15 @@ extends Control
 ##
 ## 依赖由 SystemSetup 装配时 setup() 注入，不自行查找。
 
-const ELLIPSE_COLOR: Color = Color(1.0, 0.95, 0.3, 0.85)
-const ELLIPSE_WIDTH: float = 1.0
+## 白色四角线框（创始人 2026-09-14：黄椭圆改脚下的白色四角框）
+const BRACKET_COLOR: Color = Color(1.0, 1.0, 1.0, 0.95)
+const BRACKET_WIDTH: float = 2.0
 ## 比碰撞箱水平外扩的像素
 const EXPAND_X: float = 6.0
-## 垂直压扁高度（世界像素）
-const FLAT_Y: float = 12.0
+## 框的半高（碰撞箱位置上下各伸一半）
+const BRACKET_HALF_H: float = 16.0
+## 角臂长（四角 L 形短线长度）
+const BRACKET_ARM: float = 9.0
 
 var _camera_rig: Node = null
 var _game_root: Node = null
@@ -54,28 +57,20 @@ func _draw() -> void:
 	if col != null and col.shape is RectangleShape2D:
 		world_pos = col.global_position
 		col_w = (col.shape as RectangleShape2D).size.x
-	# 椭圆半径：水平比碰撞箱宽一圈，垂直压扁
+	# 框半径：水平比碰撞箱宽一圈
 	var rx: float = (col_w * 0.5 + EXPAND_X)
-	var ry: float = FLAT_Y
 	# 手动计算世界坐标 -> 屏幕坐标
 	var cam_pos: Vector2 = camera.global_position
 	var zoom: float = camera.zoom.x if camera.zoom != Vector2.ZERO else 1.0
 	var vp_size: Vector2 = get_viewport_rect().size
 	var screen_pos: Vector2 = (world_pos - cam_pos) * zoom + vp_size * 0.5
 	rx *= zoom
-	ry *= zoom
-	if rx < 6.0:
-		rx = 6.0
-	if ry < 4.0:
-		ry = 4.0
-	# 用 draw_polyline 绘制抗锯齿椭圆
-	var point_count: int = 48
-	var points: PackedVector2Array = PackedVector2Array()
-	for i in range(point_count):
-		var angle: float = TAU * float(i) / float(point_count)
-		points.append(Vector2(screen_pos.x + cos(angle) * rx, screen_pos.y + sin(angle) * ry))
-	points.append(points[0])  # 闭合
-	draw_polyline(points, ELLIPSE_COLOR, ELLIPSE_WIDTH, true)
+	var ry: float = BRACKET_HALF_H
+	# 白色四角线框：四个角的 L 形短线（不是整框，压低视觉权重）
+	for c in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+		var corner: Vector2 = screen_pos + Vector2(c.x * rx, c.y * ry)
+		draw_line(corner, corner - Vector2(c.x * BRACKET_ARM, 0), BRACKET_COLOR, BRACKET_WIDTH, true)
+		draw_line(corner, corner - Vector2(0, c.y * BRACKET_ARM), BRACKET_COLOR, BRACKET_WIDTH, true)
 
 
 func _get_possessed_entity() -> Node2D:

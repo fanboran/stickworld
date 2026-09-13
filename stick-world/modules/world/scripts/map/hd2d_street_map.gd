@@ -8,13 +8,17 @@ class_name Hd2dStreetMap
 ## has_method 守卫自动跳过），current_map_id 由 save_meta 正常记录/恢复，
 ## 实体存取走 MapBase 默认实现（玩家存 entities 表，读档兜底重生成）。
 ##
-## 玩家以 2D 实体（EntityHost）浮于 3D 街景之上（canvas 层在 3D 之后渲染），
-## WASD 可走 —— 最小可玩版；3D 相机固定（Camera2D 只影响 2D 层/HUD）。
+## 碰撞：3D 街景的前排建筑/摆件映射成 2D 静态碰撞墙（get_solid_rects），
+## 玩家在街上走不会被穿透。出生点 = 街中心前景（get_spawn_point）。
 ##
 ## TODO(提炼): 3D 街景场景与卡资产仍在 tests/dev/proto_hd2d（res://temp 产物），
 ## 正式化时迁入 modules 并改走随包导出路径。
 
 const _HD2D_WORLD_SCENE := preload("res://tests/dev/proto_hd2d/proto_hd2d.tscn")
+
+## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）
+const WALK_BACK_Y := 688.0
+const WALK_FRONT_Y := 1080.0
 
 
 func _ready() -> void:
@@ -22,3 +26,29 @@ func _ready() -> void:
 	var hd: Node3D = _HD2D_WORLD_SCENE.instantiate()
 	hd.name = "HD2DWorld"
 	add_child(hd)
+	_build_solid_bodies(hd)
+
+
+func get_spawn_point() -> Vector2:
+	# 街中心前景：玩家落在画面中下（3D 街景可见区内）
+	return Vector2(0.0, 1010.0)
+
+
+## 3D 街景的实心区间（格）→ 2D 静态碰撞墙（px）。
+## 墙的 y 覆盖行走带后段（建筑/摆件所在），前景 y > WALK_FRONT 段留空可横穿。
+func _build_solid_bodies(hd: Node3D) -> void:
+	if not hd.has_method("get_solid_rects"):
+		return
+	var body := StaticBody2D.new()
+	body.name = "HD2DSolids"
+	for r: Variant in hd.get_solid_rects():
+		var x0: float = float(r[0]) * 32.0
+		var x1: float = float(r[1]) * 32.0
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(maxf(8.0, x1 - x0), WALK_FRONT_Y - WALK_BACK_Y)
+		shape.shape = rect
+		shape.position = Vector2((x0 + x1) * 0.5, (WALK_BACK_Y + WALK_FRONT_Y) * 0.5)
+		body.add_child(shape)
+	if body.get_child_count() > 0:
+		add_child(body)

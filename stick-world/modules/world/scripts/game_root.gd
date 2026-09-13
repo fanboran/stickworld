@@ -695,6 +695,11 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 			else:
 				spawn_x = map.map_right - 150.0
 		var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
+		# 地图自定义出生点（如 HD-2D 街景图：街中心前景，而非边缘入口）
+		if map.has_method("get_spawn_point"):
+			var sp: Vector2 = map.get_spawn_point()
+			spawn_x = sp.x
+			spawn_y = sp.y
 		# Spawn 玩家
 		var player: Node2D = map.spawn_entity(_STICKMAN_ENTITY_SCENE, Vector2(spawn_x, spawn_y))
 		if player == null:

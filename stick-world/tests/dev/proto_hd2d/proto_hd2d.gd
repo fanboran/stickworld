@@ -145,6 +145,7 @@ var _prop_root: Node3D
 var _front_occ: Array = []
 var _door_path_xs: Array = []   # 需要门前短径的建筑 x（guildhall / 落地面建筑）
 var _prop_slots: Array = []     # 前排楼间空当 [x0,x1]（道具槽位）
+var _prop_solids: Array = []    # 道具实心区间 [x0,x1]（碰撞用）
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
@@ -346,6 +347,22 @@ func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
 	_bg_base_samples.append(mi.position.z + tan(deg_to_rad(TILT_DEG)) * float(anc[2]) * S)
 
 
+## 前排建筑+道具的实心区间（格，[x0,x1]）——宿主映射成 2D 碰撞墙，
+## 玩家在街上走不会被楼/摆件穿透（创始人 2026-09-14）。
+## 建筑按**建筑格宽**对齐中心（画面宽含出檐，碰撞不该把出檐也堵死）；
+## 道具按卡宽收窄 15%（视觉留余量）。细杆件（灯笼）不挡。
+func get_solid_rects() -> Array:
+	var out: Array = []
+	for occ in _front_occ:
+		var cx: float = (float(occ[0]) + float(occ[1])) * 0.5
+		var card: String = str(occ[2])
+		var cells := float(_cards.get(card, {}).get("cells", 8.0))
+		out.append([cx - cells * 0.5, cx + cells * 0.5])
+	for r in _prop_solids:
+		out.append(r)
+	return out
+
+
 func _median(arr: Array) -> float:
 	if arr.is_empty():
 		return 0.0
@@ -366,8 +383,12 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	q.size = Vector2(float(units[0]) * S, float(units[1]) * S)
 	var mi := MeshInstance3D.new()
 	mi.mesh = q
-	mi.position = Vector3(x, float(anc[2]) * S + (PLAT_H if plat else 0.0),
-		-float(anc[1]) * S + z_off)
+	# 卡底贴地落位（创始人 2026-09-14 修穿模）：道具卡的 anchor 是"画面中心对应点"，
+	# 沿用建筑卡公式会让卡底按半高入地。地面高 = 台面(0.65) 或 路面(0)。
+	var ground: float = PLAT_H if plat else 0.0
+	var half: float = float(units[1]) * S * 0.5
+	var t := deg_to_rad(TILT_DEG)
+	mi.position = Vector3(x, ground + cos(t) * half, z_off - sin(t) * half)
 	mi.basis = _cam_basis()
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER
@@ -383,6 +404,10 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	mi.material_override = m
 	mi.name = "Prop_" + card
 	_prop_root.add_child(mi)
+	# 实心区间（格）：卡宽收窄 15%；细杆件（灯笼）不挡人
+	if card != "lantern":
+		var half_w: float = float(units[0]) * S * 0.5 * 0.85
+		_prop_solids.append([x - half_w, x + half_w])
 	return mi
 
 
@@ -528,7 +553,7 @@ func _build_world() -> void:
 	# 掠射下 mip 会把高对比石板糊成"碎石墙"（实测翻车）。
 	var far_z: float = float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0))
 	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
-		0.0, 14.0, Color(1.16, 1.14, 1.10))
+		0.0, 14.0, Color(0.90, 0.86, 0.80))
 	_add_sky_backdrop()                   # 原 2D 天空贴图（远山/树线）立于背景之后
 	_add_platform()                       # 人行道台面（三段：中石板/两侧夯土+交接条）+ 台肩长条石
 	_add_width_guides()                   # 建筑宽度辅助线（--debug 才显示）
@@ -570,7 +595,9 @@ func _build_world() -> void:
 	_cam.current = true
 
 	# --- 2D 角色宿主（SubViewport -> billboard）---
-	_spawn_char_host(float(str(_opts["svscale"])))
+	# 静默常驻模式（游戏地图挂载）不生成写死的演示火柴人——街上有真玩家了
+	if str(_opts["shots"]) != "none":
+		_spawn_char_host(float(str(_opts["svscale"])))
 
 	# --- HD-2D 后处理（屏幕空间：移轴 + 暗角 + 分级）---
 	_post_layer = CanvasLayer.new()
@@ -593,14 +620,15 @@ func _build_world() -> void:
 	_hud.visible = false
 	_hud2.visible = false
 
-	# 应用 SubViewport 更新模式选项
-	match str(_opts["sv"]):
-		"once":
-			_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
-		"disabled":
-			_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
-		_:
-			_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# 应用 SubViewport 更新模式选项（静默模式无 char_host，跳过）
+	if _char_host != null:
+		match str(_opts["sv"]):
+			"once":
+				_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+			"disabled":
+				_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+			_:
+				_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 
 
 ## 建/重建 2D 角色宿主（SubViewport -> billboard）。px_scale > 1 = SubViewport
@@ -711,7 +739,7 @@ func _place_rows() -> void:
 		_spawn_building_shadow(card, cx, mi)
 		if card == "guildhall_w12" or not on_plat:
 			_door_path_xs.append(cx)   # 宏伟建筑/落地建筑：门前短径
-		occ_front.append([cursor, cursor + w])
+		occ_front.append([cursor, cursor + w, card])
 		cursor += w
 	_prop_slots = gap_slots
 	_front_occ = occ_front
@@ -723,24 +751,40 @@ func _place_rows() -> void:
 	#   注意"缝"按**卡画面宽**算（含出檐，cottage_w6 画面 9.1 格 ≠ 6 格建筑）。
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260914
-	var lists := [
-		["house_w8", "smithy1_w8", "tower_w6", "shop_w8", "house_w8", "bakery_w8"],
-		["shop_w8", "smithy1_w8", "tower_w6", "shop_w8", "house_w8"],
-		["shop_w8", "tower_w6", "smithy1_w8", "cottage_w6"],
+	# 主题组合段（创始人 2026-09-14：背景种类要多、要有好看的组合，不要高重复轮转）：
+	#   西段=教堂天际线（大教堂/礼拜堂/塔）· 中段=市集街屋（酒馆/商铺/联排）
+	#   东段=田园作坊（谷仓/马厩/草棚/铁匠）——卡按楼所在 x 段从池里顺位取，防邻重
+	var bands := [
+		{"x0": -60.0, "x1": -16.0, "pool": ["cathedral_w16", "chapel_w8", "tower_w6", "house_w8", "chapel_w8", "tower_w6"]},
+		{"x0": -16.0, "x1": 16.0, "pool": ["shop_w8", "bakery_w8", "house_w8", "tower_w6", "tavern_w12", "townhouse_w12"]},
+		{"x0": 16.0, "x1": 60.0, "pool": ["barn_w12", "stable_w12", "cottage_w6", "gatehouse_w8", "smithy1_w8", "cottage_w6"]},
 	]
+	var band_cursor := [0, 0, 0]
+	var _pick_in_band := func(x: float, room: float) -> String:
+		for bi in bands.size():
+			var b: Dictionary = bands[bi]
+			if float(b["x0"]) <= x and x < float(b["x1"]):
+				var pool: Array = b["pool"]
+				for k in pool.size():
+					var c: String = str(pool[(band_cursor[bi] + k) % pool.size()])
+					var cw := _cw(c)
+					if cw < 1.0 or cw <= room:
+						band_cursor[bi] = (band_cursor[bi] + k + 1) % pool.size()
+						return c
+				return ""
+		return ""
 	var prev_slots: Array = []      # 前一层楼的画面占用 [x0,x1]
-	for li in lists.size():
+	for li in 3:
 		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
-		var list: Array = lists[li]
 		var occ: Array = []
-		var ci: int = li * 3
 		var tint: Color = BG_TINTS[li]
 		if li == 0:
 			# bg1 自由铺：楼 + 2~3.5 格缝的节奏（根部被前排挡住，楼身从前排楼顶上露出）
 			var gx := -42.0
 			while gx < 42.0:
-				var card: String = str(list[ci % list.size()])
-				ci += 1
+				var card: String = str(_pick_in_band.call(gx, 999.0))
+				if card == "":
+					card = "house_w8"
 				var w := _cw(card)
 				if w < 1.0:
 					w = 8.0
@@ -758,8 +802,7 @@ func _place_rows() -> void:
 					continue
 				var cx: float = (g0 + g1) * 0.5
 				var room: float = cx - (last_x1 + 1.0)   # 左侧可用宽度
-				var card: String = _pick_card(list, ci, room)
-				ci += 1
+				var card: String = _pick_in_band.call(cx, room)
 				if card == "":
 					continue
 				var w := _cw(card)
@@ -768,16 +811,15 @@ func _place_rows() -> void:
 				_spawn_bg_card(card, cx, lz, tint)
 				occ.append([cx - w * 0.5, cx + w * 0.5])
 				last_x1 = cx + w * 0.5
-			if li == lists.size() - 1:
-				# 末层职责 = 遮死地平线：残余空缺补楼（近贴 0.6 格缝）。
+			if li >= 1:
+				# bg2/bg3 职责 = 遮死中景与地平线：吸附放不下的层再补大洞（近贴 0.6 格缝）。
 				# 阈值 9.8 = 库里最小画面宽 cottage_w6(9.1) + 0.6 缝，更窄的洞放不下任何卡。
 				for g in _gaps(occ, -42.0, 42.0):
 					var g0: float = float(g[0])
 					var g1: float = float(g[1])
 					while g1 - g0 > 9.8:
 						var room: float = g1 - g0 - 0.6
-						var card: String = _pick_card(list, ci, room)
-						ci += 1
+						var card: String = _pick_in_band.call((g0 + g1) * 0.5, room)
 						if card == "":
 							break
 						var w := _cw(card)
@@ -1152,7 +1194,8 @@ func _apply_light(mode: String) -> void:
 	for l in _lamps:
 		l.visible = lamp > 0.0
 		l.light_energy = lamp
-	_char_host.set_light(char_tint, char_add)
+	if _char_host != null:
+		_char_host.set_light(char_tint, char_add)
 	_set_post(post)
 	print("[hd2d] 光照档=%s glow=%.2f lamp=%.2f" % [mode, glow, lamp])
 
@@ -1175,7 +1218,8 @@ func _update_px_size() -> void:
 ##   b: 加角色（SubViewport -> billboard），仍无任何后处理
 ##   c: 再加 HD-2D 后处理（glow + DOF + 移轴 + 暗角 + 分级）
 func _apply_stage(stage: String) -> void:
-	_char_host.set_chars_visible(stage != "a")
+	if _char_host != null:
+		_char_host.set_chars_visible(stage != "a")
 	_post_rect.visible = stage == "c" or stage == "d" or stage == "e"
 	_update_px_size()
 	var hd := stage == "c" or stage == "d" or stage == "e"

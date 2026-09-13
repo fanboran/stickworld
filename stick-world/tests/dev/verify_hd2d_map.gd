@@ -19,9 +19,10 @@ func _ready() -> void:
 	sl.load_map("hd2d_street")
 	await _wait(6.0)
 	var player: Node2D = gr.get("_player_entity") if "_player_entity" in gr else null
-	if player == null:
-		var ents: Array = sl.get_current_map().get_entities() if sl.get_current_map() != null else []
-		print("[verify_hd2d] 地图实体数=%d" % ents.size())
+	var ents: Array = sl.get_current_map().get_entities() if sl.get_current_map() != null else []
+	print("[verify_hd2d] 地图实体数=%d" % ents.size())
+	if player == null and ents.size() > 0:
+		player = ents[0]
 	print("[verify_hd2d] 地图=%s" % (sl.get_current_map().name if sl.get_current_map() != null else "无"))
 	await _shot()
 	print("[verify_hd2d] DONE")

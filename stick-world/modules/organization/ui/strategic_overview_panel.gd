@@ -20,15 +20,66 @@ extends StickWindow
 ## 子代挂靠最近匹配祖先——与 org_panel._insert_org_item 同口径）。常量本地镜像
 ## OrgPanel 的 TABS/TAG/STATE/MOTIF 表，避免跨脚本常量耦合，语义保持一致。
 ##
-## 核心操作：**不做跨组织调人**（方案 §五.6——organization 侧 transfer_stickman 原子
-## 接口未落地前留待，UI 层两次 remove/assign 拼装的中途失败回滚成本高）。
+## 核心操作：**跨组织调人（拖拽）**——选中组织行后，成员托盘列出其直属 personnel，
+## 拖盘内成员丢到目标组织行即调 `organization api.transfer_stickman`（方案 §五.6 定稿的
+## 原子接口：合法性校验一体、失败不改状态）。层级可行性（L1↔L1、L1↔L2…）一律由 api 判定，
+## 本面板不做第二套判断：`_can_drop_data` 只认载荷类型，成败与原因只呈现 api 返回值。
+## 失败经既有通知通道 EventBus.ui_notification → UIRoot NotificationFeed（先例
+## org_report_narrator.gd）；成功刷新面板。
 ## 选中组织行只在本面板高亮自身，**不新造跨面板状态同步**（OrgPanel 无既有联动口）。
 ##
 ## 摘要行士气聚合：用「当前地图在场实体表」索引反查（org_panel.gd 同款口径），
 ## **不用全局 instance_from_id**（脏 id 会触发 ObjectDB 越界引擎报错——UI-W2-B 教训）。
+## 组织数据读取一律解包 api 的 {ok, data}（读包装顶层字段是已修复过的 bug 类型）。
 ##
 ## 装配：SystemSetup 阶段表登记，实例挂 UIRoot.ModalOverlay 槽；入口在 OrgPanel 顶部
 ## 「总览」按钮（group("strategic_overview_panel") 查找，与「指挥链」并排，不硬编码节点路径）。
+
+
+# ─────────────────────────── 拖拽控件（内联类）───────────────────────────
+
+## 成员托盘内的可拖成员芯片（拖拽源）。`_get_drag_data` 只产载荷 + 置面板拖拽态，
+## 不预判源/目标可行性（归 api）。不使用 set_drag_preview：无预览亦不影响拖放，
+## 且避免测试直调时的引擎告警（拖拽态由面板横幅 + 目标行描边呈现）。
+class TransferMemberChip extends SketchPanel:
+	var _panel: Node = null
+	var stickman_id: String = ""
+	var from_org: String = ""
+
+	func _get_drag_data(_at_position: Vector2) -> Variant:
+		if _panel == null or not _panel.has_method("_begin_member_drag"):
+			return null
+		return _panel.call("_begin_member_drag", from_org, stickman_id)
+
+	## 拖拽结束（含取消）由引擎发 NOTIFICATION_DRAG_END——复位面板拖拽态
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_DRAG_END and _panel != null \
+				and _panel.has_method("_end_member_drag"):
+			_panel.call("_end_member_drag")
+
+
+## 组织报表行（投放目标）。只认载荷类型，不做层级合法性判断。
+class TransferOrgRow extends SketchPanel:
+	var _panel: Node = null
+	var org_id: String = ""
+
+	func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+		return data is Dictionary and String((data as Dictionary).get("kind", "")) == "stickman_transfer"
+
+	func _drop_data(_at_position: Vector2, data: Variant) -> void:
+		if _panel != null and _panel.has_method("_on_member_dropped"):
+			_panel.call("_on_member_dropped", data, org_id)
+
+
+# ─────────────────────── 拖拽协议常量（调人交互）───────────────────────
+
+## 跨组织调人拖拽载荷类型（源/目标两侧共用同一协议串）
+const TRANSFER_DRAG_KIND := "stickman_transfer"
+## 成员托盘默认提示（拖拽中会被替换为调动提示）
+const TRAY_HINT_DEFAULT := "先点选组织行 → 拖盘内成员丢到目标组织行（层级可行性由组织接口判定，UI 不做二次判断）"
+## 托盘单次最多列出的成员芯片数（超出折叠计数，防长人员表撑爆面板）
+const TRAY_CHIP_MAX := 12
+
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 标签栏（"" = 全部；镜像 OrgPanel.TABS，语义一致）
@@ -101,6 +152,13 @@ var _unit_index_built: bool = false
 var _tag_bar: TabBar = null
 var _row_box: VBoxContainer = null
 var _timeline_box: VBoxContainer = null
+## 成员托盘（跨组织调人：选中组织后列出其直属成员为可拖芯片）
+var _tray_box: HBoxContainer = null
+var _tray_hint: Label = null
+
+# ── 拖拽态（拖拽中记录源组织/成员；NOTIFICATION_DRAG_END 或投放后复位）──
+var _drag_from_org: String = ""
+var _drag_stickman: String = ""
 
 
 func _ready() -> void:
@@ -171,8 +229,24 @@ func _build_content() -> void:
 	_timeline_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_timeline_box.add_theme_constant_override("separation", 4)
 	tscroll.add_child(_timeline_box)
+	# ── 成员托盘（跨组织调人：选中组织行 → 拖盘内成员丢到目标组织行）──
+	var tray_panel := SketchPanel.new()
+	tray_panel.tone = SketchPanel.Tone.LIGHT
+	tray_panel.compact = true
+	_body.add_child(tray_panel)
+	var tray_v := VBoxContainer.new()
+	tray_v.add_theme_constant_override("separation", 3)
+	tray_panel.add_child(tray_v)
+	var tray_top := StickKit.row(tray_v, 8)
+	_add_motif(tray_top, &"印章", 14.0)
+	StickKit.label(tray_top, "成员托盘", StickKit.LabelKind.TINY)
+	_tray_hint = StickKit.label(tray_top, TRAY_HINT_DEFAULT, StickKit.LabelKind.TINY)
+	_tray_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tray_box = HBoxContainer.new()
+	_tray_box.add_theme_constant_override("separation", 6)
+	tray_v.add_child(_tray_box)
 	# ── 底部纪律提示 ──
-	StickKit.label(_body, "选中行仅本面板高亮；跨组织调人待 organization 侧 transfer_stickman 原子接口（方案 §五.6）",
+	StickKit.label(_body, "选中行仅本面板高亮；调人成败与层级可行性一律以组织接口返回为准",
 			StickKit.LabelKind.TINY)
 
 
@@ -224,6 +298,8 @@ func _rebuild_rows() -> void:
 	if not _selected_org.is_empty() and _org_api != null \
 			and not bool(_org_api.get_organization(_selected_org).get("ok", false)):
 		_selected_org = ""
+	# 成员托盘随选中组织同步重建（报表重建后人员表也可能已变）
+	_refresh_member_tray()
 	if _org_api == null or not _org_api.has_method("list_root_orgs"):
 		_add_row_hint("组织系统未装配")
 		return
@@ -264,7 +340,9 @@ func _insert_rows(org_id: String, visible_depth: int) -> bool:
 func _make_row(org_id: String, d: Dictionary, depth: int) -> void:
 	var people := _org_people(org_id)
 	var morale := _people_morale(people)
-	var panel := SketchPanel.new()
+	var panel := TransferOrgRow.new()
+	panel._panel = self
+	panel.org_id = org_id
 	panel.tone = SketchPanel.Tone.LIGHT
 	panel.compact = true
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -352,6 +430,7 @@ func _on_row_input(event: InputEvent, org_id: String) -> void:
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		_selected_org = org_id
 		_apply_selection_visuals()
+		_refresh_member_tray()
 		var panel: Control = _rows.get(org_id, null)
 		if panel != null and is_instance_valid(panel):
 			panel.accept_event()
@@ -362,6 +441,120 @@ func _apply_selection_visuals() -> void:
 		var panel: Control = _rows[id]
 		if panel != null and is_instance_valid(panel):
 			panel.outline_override = StickTokens.ACCENT if id == _selected_org else Color.TRANSPARENT
+
+
+# ─────────────────────── 跨组织调人（拖拽 → api 原子接口）───────────────────────
+
+## 拖拽源回调：置拖拽态 + 产载荷。返回 nil = 无法拖（面板未接线时安全降级）。
+## **不在此处做任何可行性预判**——层级/成员归属合法性一律由 api.transfer_stickman 判定。
+func _begin_member_drag(from_org: String, stickman_id: String) -> Variant:
+	if from_org.is_empty() or stickman_id.is_empty():
+		return null
+	_drag_from_org = from_org
+	_drag_stickman = stickman_id
+	if _tray_hint != null:
+		_tray_hint.text = "调动中 ▲#%s：「%s」→ 丢到目标组织行" % [stickman_id, _org_name(from_org)]
+		_tray_hint.modulate = StickTokens.ACCENT
+	_apply_drag_targets(true)
+	return {"kind": TRANSFER_DRAG_KIND, "stickman_id": stickman_id, "from_org": from_org}
+
+
+## 拖拽结束（引擎 NOTIFICATION_DRAG_END，含取消）或投放后复位拖拽态
+func _end_member_drag() -> void:
+	if _drag_from_org.is_empty() and _drag_stickman.is_empty():
+		return
+	_drag_from_org = ""
+	_drag_stickman = ""
+	if _tray_hint != null:
+		_tray_hint.text = TRAY_HINT_DEFAULT
+		_tray_hint.modulate = StickTokens.TEXT_DIM
+	_apply_drag_targets(false)
+
+
+## 拖拽中提示可投放行（非源组织行加描边）——纯视觉提示，不代表合法性通过
+func _apply_drag_targets(active: bool) -> void:
+	if not active:
+		_apply_selection_visuals()
+		return
+	for id in _rows:
+		var panel: Control = _rows[id]
+		if panel != null and is_instance_valid(panel):
+			panel.outline_override = StickTokens.ACCENT if id == _selected_org else StickTokens.BORDER_STRONG
+
+
+## 投放回调：调 api 原子接口。成败/原因只呈现 api 返回值，UI 不预判、不二次判定。
+## 失败（api 保证不改动状态）→ 既有通知通道报错；成功 → 刷新报表与托盘。
+func _on_member_dropped(data: Variant, to_org: String) -> void:
+	if not (data is Dictionary):
+		return
+	var d: Dictionary = data
+	var stickman_id := String(d.get("stickman_id", ""))
+	var from_org := String(d.get("from_org", ""))
+	_end_member_drag()
+	if _org_api == null or not _org_api.has_method("transfer_stickman"):
+		_notify("调人失败：组织模块未提供 transfer_stickman", "error")
+		return
+	var r: Dictionary = _org_api.transfer_stickman(stickman_id, from_org, to_org)
+	if r.get("ok", false):
+		_notify("已调动 ▲#%s：「%s」→「%s」" % [stickman_id, _org_name(from_org), _org_name(to_org)], "info")
+		_refresh_all()
+		_refresh_member_tray()
+	else:
+		_notify("调动失败：%s" % String(r.get("error", "未知原因")), "warn")
+
+
+## 成员托盘重建：选中组织的直属 personnel → 可拖芯片（超上限折叠计数；无选中/无成员给提示）
+func _refresh_member_tray() -> void:
+	if _tray_box == null:
+		return
+	for child in _tray_box.get_children():
+		_tray_box.remove_child(child)
+		child.queue_free()
+	# 拖拽中不覆盖调动提示
+	if _drag_stickman.is_empty() and _tray_hint != null:
+		_tray_hint.text = TRAY_HINT_DEFAULT
+		_tray_hint.modulate = StickTokens.TEXT_DIM
+	if _selected_org.is_empty():
+		var none_l := StickKit.label(_tray_box, "（未选中组织）", StickKit.LabelKind.TINY)
+		none_l.modulate = StickTokens.TEXT_FAINT
+		return
+	var d: Dictionary = _org_data(_selected_org)
+	var members: Array = d.get("personnel", []) if not d.is_empty() else []
+	if members.is_empty():
+		var empty_l := StickKit.label(_tray_box, "「%s」无直属成员可调" % _org_name(_selected_org),
+				StickKit.LabelKind.TINY)
+		empty_l.modulate = StickTokens.TEXT_FAINT
+		return
+	var n := 0
+	for raw in members:
+		if n >= TRAY_CHIP_MAX:
+			var more_l := StickKit.label(_tray_box, "…+%d" % (members.size() - TRAY_CHIP_MAX),
+					StickKit.LabelKind.TINY)
+			more_l.modulate = StickTokens.TEXT_FAINT
+			break
+		_make_member_chip(String(raw))
+		n += 1
+
+
+## 单个成员芯片（拖拽源；mouse_filter STOP 才可起拖）
+func _make_member_chip(stickman_id: String) -> void:
+	var chip := TransferMemberChip.new()
+	chip._panel = self
+	chip.stickman_id = stickman_id
+	chip.from_org = _selected_org
+	chip.tone = SketchPanel.Tone.LIGHT
+	chip.compact = true
+	chip.mouse_filter = Control.MOUSE_FILTER_STOP
+	chip.tooltip_text = "拖动 ▲#%s 到目标组织行（跨组织调人）" % stickman_id
+	_tray_box.add_child(chip)
+	var l := StickKit.label(chip, "▲#%s" % stickman_id, StickKit.LabelKind.TINY)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.modulate = StickTokens.TEXT
+
+
+func _notify(msg: String, kind: String = "info") -> void:
+	if EventBus != null and EventBus.has_signal("ui_notification"):
+		EventBus.ui_notification.emit("战略总览", msg, kind)
 
 
 # ─────────────────────────────── 上报流时间线 ────────────────────────────────

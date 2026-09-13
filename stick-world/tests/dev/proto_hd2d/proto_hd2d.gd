@@ -148,6 +148,7 @@ const SEG_LEN := 16.0                      # seg_* 段长（格）：512px
 const BAND_ROAD_W := 5.0                   # seg_road_* 带宽（格）：160px
 const BAND_SH_W := 3.0                     # seg_shoulder_* 带宽（格）：96px
 const KERB_H := 0.16                       # 路坎高（格）≈ 5px（创始人：只要"矮"，原 0.34 太高）
+const SHOULDER_H := 0.22                   # 路肩石台高（格）——建筑要抬到石台顶面上
 const KERB_W := 0.30                       # 路坎宽（格）≈ 9px（对齐资产 8px 路缘带）
 ## 路坎所在的进深：门前场地外缘（APRON_DEPTH）之外、道具线之外 —— 即
 ## "路肩（含门前场地与街边家具）↔ 道路" 的分界。横挑件（棚位/悬牌）就压在这条线上。
@@ -552,6 +553,7 @@ func _build_world() -> void:
 		# **前后关系按类型定**（任务 2）：不再随机抖动整排 —— 气派建筑/工坊后退
 		# （dz<0，远离相机）、店铺/民居贴线（dz=0）；参差感交给空当长短与棚位前凸。
 		var mi := _spawn_card(str(e["card"]), cx, MAIN_BASE_Z + dz)
+		mi.position.y += SHOULDER_H        # 建筑坐在石台顶面上（此前没抬，底部与石条穿插）
 		_spawn_building_shadow(str(e["card"]), cx, mi)
 		_add_apron(cx, cells, dz, kind)
 		if dz < -0.35:

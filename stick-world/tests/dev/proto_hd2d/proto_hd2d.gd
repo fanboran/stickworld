@@ -149,6 +149,9 @@ const BAND_ROAD_W := 5.0                   # seg_road_* 带宽（格）：160px
 const BAND_SH_W := 3.0                     # seg_shoulder_* 带宽（格）：96px
 const KERB_H := 0.34                       # 路坎高（格）≈ 11px ≈ 屏上 7px（"矮"）
 const KERB_W := 0.30                       # 路坎宽（格）≈ 9px（对齐资产 8px 路缘带）
+## 路坎所在的进深：门前场地外缘（APRON_DEPTH）之外、道具线之外 —— 即
+## "路肩（含门前场地与街边家具）↔ 道路" 的分界。横挑件（棚位/悬牌）就压在这条线上。
+const KERB_Z := MAIN_BASE_Z + APRON_DEPTH + 1.3
 const TRANS_DIR := "transitions/"          # 相对 GROUND_DIR（temp/ground_tiles/）
 
 ## ── 道具（相对定位，卡由 `bake_props.py` 从 props.py 库烘出）───────────────
@@ -195,14 +198,14 @@ const YARD_PROPS: Array = [
 	{"card": "barrel_stand", "slot": 5, "dx": -0.9, "z": -0.60, "sc": 0.8},
 	{"card": "tools_rack", "slot": 5, "dx": 1.1, "z": -0.86, "lift": 2.06},
 ]
-## 店面棚位/雨篷：前凸到**路坎（z = MAIN_BASE_Z + APRON_DEPTH）上方**、只占空中。
-## `z` 取到 ≈ 路坎位置（1.15~1.35）→ 悬挑件正好压在路坎上空，不落进道路。
+## 店面棚位/雨篷：前凸到**路坎（z = KERB_Z）上方**、只占空中。
+## `z` 取到路坎线上（2.8~3.0）→ 悬挑件正好压在路坎上空，不落进道路。
 const CANOPY_PROPS: Array = [
 	# 店铺（shop_w8）：整座棚贴着店面、棚顶前凸盖到路坎上方
-	{"card": "market_stall", "slot": 1, "dx": -0.4, "z": 1.15, "sc": 0.72},
+	{"card": "market_stall", "slot": 1, "dx": -0.4, "z": 2.90, "sc": 0.72},
 	# 酒馆（tavern_w12）：悬牌 + 悬旗，靠 lift 抬离地面 → 只占路坎上空
-	{"card": "hanging_sign", "slot": 6, "dx": -4.6, "z": 1.35, "lift": 1.5},
-	{"card": "banner", "slot": 6, "dx": -3.0, "z": 1.25, "lift": 0.62},
+	{"card": "hanging_sign", "slot": 6, "dx": -4.6, "z": 3.00, "lift": 1.5},
+	{"card": "banner", "slot": 6, "dx": -3.0, "z": 2.95, "lift": 0.62},
 ]
 ## 角色站位（3 个，全部正对相机）：都站在**硬化街区的铺装路面上**（|x| < BLOCK_HALF，
 ## 路坎以内），z 越大越靠近相机。
@@ -1017,36 +1020,40 @@ func _add_transition_chain(prefix: String, xc: float, band_w: float,
 		z += SEG_LEN
 
 
-## **路坎（item 3）**：只长在**硬化街区外缘** |x| = BLOCK_HALF 上 —— 城市边缘的
-## 土路段没有路坎（同一个 x 空间里，土路在 20..29，所以坎到 20 为止）。
-## 几何用 BoxMesh：**平面贴图做不出"坎"**，必须有一个立面才读得出高差。
-## 尺寸对齐资产口径：宽 KERB_W≈9px、高 KERB_H≈11px（"矮"），断续分段（段长 2.5~7.5 格、
-## 断口 0.5~3 格）。起点退到建筑基线 +2 格，避免压到各栋门前的石板场。
+## **路坎（item 3）**：**沿街长方向（x 轴）横一整条**，压在"门前场地外缘/道具线之外"
+## （z = KERB_Z），只长在**硬化街区的面宽**内（|x| ≤ BLOCK_HALF）——
+## 到城市边缘的土路段就断掉，所以"硬化街区有坎、土路段无坎"由同一套摆布同时成立。
+## 为什么必须沿 x 而不是沿 z：相机几乎沿着 z 看，**沿 z 的坎只会露出一个端面**（读不出高差），
+## 横着摆才有顶面 + 正立面，才能读出"矮矮一道坎"。
+## 几何用 BoxMesh（平面贴图没有立面）；高 KERB_H≈11px、宽 KERB_W≈9px（对齐资产口径），
+## 断续分段（段长 2.5~7 格、断口 0.5~3 格，越靠两端断口越大 → 到土路自然消失）。
 func _add_kerbs() -> void:
 	var kb := _tex_abs(_temp + GROUND_DIR + "band_kerb_stone_128.png")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260915
-	for side in [-1.0, 1.0]:
-		var sd := float(side)
-		var z := MAIN_BASE_Z + 2.0
-		while z < 62.0:
-			var seg := rng.randf_range(2.5, 7.5)
-			var bm := BoxMesh.new()
-			bm.size = Vector3(KERB_W, KERB_H, seg)
-			var mi := MeshInstance3D.new()
-			mi.mesh = bm
-			mi.position = Vector3(sd * BLOCK_HALF, KERB_H * 0.5 + 0.02, z + seg * 0.5)
-			var gm := ShaderMaterial.new()
-			gm.shader = GROUND_SHADER
-			gm.set_shader_parameter("albedo_tex", kb)
-			gm.set_shader_parameter("mix_amount", 0.0)
-			gm.set_shader_parameter("tint", Color(1, 1, 1))
-			gm.set_shader_parameter("rough", 0.9)
-			gm.set_shader_parameter("uv_scale", Vector2(seg / 1.6, 1.0))
-			mi.material_override = gm
-			mi.name = "Kerb"
-			_ground_root.add_child(mi)
-			z += seg + rng.randf_range(0.5, 3.0)
+	var x := -BLOCK_HALF
+	while x < BLOCK_HALF:
+		var t_end := absf(x) / BLOCK_HALF          # 0=街心, 1=硬化块边缘（接土路）
+		var seg: float = minf(rng.randf_range(3.5, 7.0) * (1.0 - 0.35 * t_end),
+			BLOCK_HALF - x)
+		if seg <= 0.4:
+			break
+		var bm := BoxMesh.new()
+		bm.size = Vector3(seg, KERB_H, KERB_W)
+		var mi := MeshInstance3D.new()
+		mi.mesh = bm
+		mi.position = Vector3(x + seg * 0.5, KERB_H * 0.5 + 0.02, KERB_Z)
+		var gm := ShaderMaterial.new()
+		gm.shader = GROUND_SHADER
+		gm.set_shader_parameter("albedo_tex", kb)
+		gm.set_shader_parameter("mix_amount", 0.0)
+		gm.set_shader_parameter("tint", Color(1, 1, 1))
+		gm.set_shader_parameter("rough", 0.9)
+		gm.set_shader_parameter("uv_scale", Vector2(seg / 1.6, 1.0))
+		mi.material_override = gm
+		mi.name = "Kerb"
+		_ground_root.add_child(mi)
+		x += seg + rng.randf_range(0.5, 1.0) + 2.6 * t_end
 
 
 func _add_ground_plane_at(tex_name: String, cx: float, width: float,

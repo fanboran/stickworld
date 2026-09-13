@@ -515,9 +515,8 @@ func _build_world() -> void:
 	# 没有建筑的地方全是可走地面；建筑只靠自带"落地裙边"挤占其中一块。
 	# 按区混材质（补充规格 2）：街心 → 近侧 → 外缘，各换一档，读作一条有肌理的街。
 	# 地面（恢复"最开始的砖石地面"版，创始人指名）：
-	#   远景低对比底衬 + 整条道路砖石带；建筑肩台随卡片生成（band_shoulder_stone）
-	_add_ground_plane("rammed_earth_128.png", -60.0, 0.0,
-		0.0, 14.0, Color(1.16, 1.14, 1.10))
+	#   整条道路砖石带；建筑肩台随卡片生成（band_shoulder_stone）
+	# （远景 rammed_earth 大平面已删——会把背景拉成一堵土墙）
 	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
 		0.02, 10.0, Color(1.0, 1.0, 1.02))
 	_add_kerbs()   # 路坎：沿街长条，只长在硬化街区面宽内（|x| ≤ BLOCK_HALF，断续）

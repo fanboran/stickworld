@@ -147,7 +147,7 @@ const VERGE_HALF := 29.0                   # 土路外缘 → 草皮
 const SEG_LEN := 16.0                      # seg_* 段长（格）：512px
 const BAND_ROAD_W := 5.0                   # seg_road_* 带宽（格）：160px
 const BAND_SH_W := 3.0                     # seg_shoulder_* 带宽（格）：96px
-const KERB_H := 0.34                       # 路坎高（格）≈ 11px ≈ 屏上 7px（"矮"）
+const KERB_H := 0.16                       # 路坎高（格）≈ 5px（创始人：只要"矮"，原 0.34 太高）
 const KERB_W := 0.30                       # 路坎宽（格）≈ 9px（对齐资产 8px 路缘带）
 ## 路坎所在的进深：门前场地外缘（APRON_DEPTH）之外、道具线之外 —— 即
 ## "路肩（含门前场地与街边家具）↔ 道路" 的分界。横挑件（棚位/悬牌）就压在这条线上。
@@ -473,7 +473,7 @@ func _build_world() -> void:
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	# 发现 5 继承：LINEAR。卡是已带光照的烘焙图，任何 filmic/aces 都会把它压灰。
 	_env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
-	_env.tonemap_exposure = 1.0
+	_env.tonemap_exposure = 1.15
 	_env.tonemap_white = 1.0
 	# 辉光（HD-2D 的"电影感"一半来自这里；_a 基线档会关掉做对照）
 	_env.glow_enabled = true
@@ -514,12 +514,8 @@ func _build_world() -> void:
 	# 地面带 = **一整片可行走区**（屏幕下方约 1/3，土/草/路面连续铺）。
 	# 没有建筑的地方全是可走地面；建筑只靠自带"落地裙边"挤占其中一块。
 	# 按区混材质（补充规格 2）：街心 → 近侧 → 外缘，各换一档，读作一条有肌理的街。
-	# 地面（恢复"最开始的砖石地面"版，创始人指名）：
-	#   整条道路砖石带；建筑肩台随卡片生成（band_shoulder_stone）
-	# （远景 rammed_earth 大平面已删——会把背景拉成一堵土墙）
-	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
-		0.02, 10.0, Color(1.0, 1.0, 1.02))
-	_add_kerbs()   # 路坎：沿街长条，只长在硬化街区面宽内（|x| ≤ BLOCK_HALF，断续）
+	# 地面：分带版（路肩 / 路缘 / 道路，band_* 材质——创始人满意的那套）+ 路坎
+	_walkable_ground(HORIZON_Z, ROAD_NEAR_Z)
 
 	# --- 建筑：临街一排（按累计 gap 排布，街道越过画框两侧）+ 路肩石板场 ---
 	_card_root = Node3D.new()
@@ -1155,7 +1151,7 @@ func _apply_light(mode: String) -> void:
 	_sky_mat.ground_bottom_color = Color(0.42, 0.44, 0.46)
 	_sky_mat.energy_multiplier = 1.0
 	_env.ambient_light_color = Color(0.64, 0.71, 0.86)
-	_env.ambient_light_energy = 0.58
+	_env.ambient_light_energy = 0.88
 	# 去雾：阳光明媚口径下大气密度 ≈0（保留开关，量级调到看不出）
 	_env.fog_enabled = false
 	_env.fog_density = 0.06
@@ -1163,10 +1159,10 @@ func _apply_light(mode: String) -> void:
 	_env.fog_depth_begin = 55.0
 	_env.fog_depth_end = 160.0
 	_sun.light_color = Color(1.0, 0.95, 0.83)
-	_sun.light_energy = 0.48
+	_sun.light_energy = 1.10
 	_sun.rotation = Vector3(deg_to_rad(-46.0), deg_to_rad(-62.0), 0)
 	_fill.light_color = Color(0.70, 0.80, 1.0)
-	_fill.light_energy = 0.12
+	_fill.light_energy = 0.32
 	_fill.rotation = Vector3(deg_to_rad(-16.0), deg_to_rad(118.0), 0)
 	var glow := 0.0
 	var lamp := 0.0

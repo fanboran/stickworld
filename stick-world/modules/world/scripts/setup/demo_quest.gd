@@ -278,7 +278,9 @@ func _on_conquest_completed(stats: Dictionary) -> void:
 		overlay.queue_free()
 		return
 	if AudioManager != null:
-		AudioManager.play_event("battle_ended_win")
+		# 通关礼炮是独立语义，不借用战斗结算音：
+		# 共用事件名会在 3 秒内互相掐断（2.84s 的长音被后一个停掉）
+		AudioManager.play_event("victory_fanfare")
 	var game_sec: int = int(float(stats.get("game_time", 0.0)))
 	overlay.show_conquest({
 		"time_text": "%d 分 %02d 秒" % [game_sec / 60, game_sec % 60],
@@ -419,7 +421,7 @@ func _show_victory() -> void:
 		overlay.queue_free()
 		return
 	if AudioManager != null:
-		AudioManager.play_event("battle_ended_win")
+		AudioManager.play_event("victory_fanfare")
 	var elapsed_sec: float = (Time.get_ticks_msec() - _start_msec) / 1000.0
 	var minutes: int = int(elapsed_sec) / 60
 	var seconds: int = int(elapsed_sec) % 60

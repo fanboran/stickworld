@@ -283,12 +283,13 @@ func _play_harvest_feedback(gained: int) -> void:
 		if _body_painting != null and _body_painting.has_method("flash_leaves"):
 			_body_painting.flash_leaves()
 		if AudioManager != null:
-			# 敲击音分材质（Terraria 同构）：树=砍草音，石/矿=挖掘音（三变体随机）
+			# 敲击音分材质（材质敲击 = "世界里的声音"，NPC 劳作同样该有）
+			# **入账音（harvest_gain）不在这里**：那是"给玩家的反馈"，
+			# 留在模型层会让 NPC 伐木采矿也一直叮咚（见 音效触发规范.md §四）
 			if resource_type == ResourceType.WOOD:
-				AudioManager.play_event("harvest_wood")
+				AudioManager.play_event("harvest_wood", global_position)
 			else:
-				AudioManager.play_event("harvest_hit")
-			AudioManager.play_event("harvest_gain")
+				AudioManager.play_event("harvest_hit", global_position)
 		var tween := create_tween()
 		tween.tween_property(self, "scale", Vector2(1.18, 0.82), 0.08)
 		tween.tween_property(self, "scale", Vector2.ONE, 0.14)

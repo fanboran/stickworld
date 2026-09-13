@@ -49,9 +49,13 @@ const FADE_STINGER := 0.35
 const FADE_AMBIENCE := 4.0
 const FADE_DUCK := 0.6
 
-## 压限档位（dB）
+## 压限档位（dB）。**按来源具名请求**（见 AudioManager.request_music_duck）：
+## 暂停 / 战斗 / 结算短句各自独立，生效值取最深的那条，互不覆盖。
 const DUCK_PAUSE := -9.0
 const DUCK_BATTLE_SFX := -6.0
+## 结算短句期间的压限与保持时长（s）：sting 的尾巴不该被全音量音乐盖掉
+const DUCK_STINGER := -4.0
+const DUCK_STINGER_HOLD_S := 2.5
 
 ## 环境音层 → 声压（线性）。环境音只是"底噪"，比音乐低很多。
 const AMBIENCE_LEVEL := 0.34
@@ -182,9 +186,9 @@ func _apply_context() -> void:
 		play_cue(want)
 	# 战斗/暂停时音乐让路（音效与语音优先）
 	if _context["battle"]:
-		duck(DUCK_BATTLE_SFX, FADE_DUCK)
+		request_duck(&"battle", DUCK_BATTLE_SFX, FADE_DUCK)
 	else:
-		unduck(FADE_DUCK)
+		release_duck(&"battle", FADE_DUCK)
 	_update_ambience()
 
 
@@ -252,18 +256,25 @@ func _on_battle_started(_battle_id: String) -> void:
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 	# 先叠一句结算短句，再回到场景音乐（短句不打断主曲，主曲仍按情境解析）
 	play_stinger("sting_victory" if victory else "sting_defeat")
+	# 短句期间保持一段浅压限：否则战斗档一撤、音乐回到全音量，短句尾巴被盖掉
+	request_duck(&"sting", DUCK_STINGER, FADE_DUCK)
+	_release_sting_duck_later()
 	set_context("battle", false)
 
 
+func _release_sting_duck_later() -> void:
+	await get_tree().create_timer(DUCK_STINGER_HOLD_S, true, false, true).timeout
+	release_duck(&"sting", FADE_DUCK)
+
+
 func _on_paused() -> void:
-	duck(DUCK_PAUSE, FADE_DUCK)
+	request_duck(&"pause", DUCK_PAUSE, FADE_DUCK)
 
 
 func _on_resumed() -> void:
+	release_duck(&"pause", FADE_DUCK)
 	if _context["battle"]:
-		duck(DUCK_BATTLE_SFX, FADE_DUCK)
-	else:
-		unduck(FADE_DUCK)
+		request_duck(&"battle", DUCK_BATTLE_SFX, FADE_DUCK)
 
 
 # ─────────────────────────────── 播放曲目 ──────────────────────────────
@@ -436,16 +447,35 @@ func _ambience_for_context() -> String:
 
 # ─────────────────────────────── 压限（duck）──────────────────────────────
 
-## 把音乐整体压低（暂停、战斗音效让路）。音量唯一消费方仍是 AudioManager，
-## 这里只转发请求，避免两处都写 AudioBus 造成彼此覆盖。
+## 具名压限请求（source 是"谁在压"：battle / pause / sting / music_director）。
+## 多个来源同时存在时取最深的那条——所以"战斗中暂停"能同时拿到暂停档。
+func request_duck(source: StringName, db: float, fade_s: float = FADE_DUCK) -> void:
+	if AudioManager and AudioManager.has_method("request_music_duck"):
+		AudioManager.request_music_duck(source, db, fade_s)
+	else:
+		_duck_db = minf(_duck_db, db)
+		return
+	_duck_db = AudioManager.get_music_duck_db()
+
+
+func release_duck(source: StringName, fade_s: float = FADE_DUCK) -> void:
+	if AudioManager and AudioManager.has_method("release_music_duck"):
+		AudioManager.release_music_duck(source, fade_s)
+	# 状态查询用：以 AudioManager 的实际合成值为准（它是唯一真相源）
+	_duck_db = AudioManager.get_music_duck_db() \
+		if AudioManager and AudioManager.has_method("get_music_duck_db") else 0.0
+
+
+## 兼容入口：单来源调用方（旧签名）直接传 dB。
 func duck(db: float, fade_s: float = FADE_DUCK) -> void:
-	_duck_db = db
-	if AudioManager and AudioManager.has_method("set_music_duck_db"):
-		AudioManager.set_music_duck_db(db, fade_s)
+	if db >= 0.0:
+		release_duck(&"music_director", fade_s)
+	else:
+		request_duck(&"music_director", db, fade_s)
 
 
 func unduck(fade_s: float = FADE_DUCK) -> void:
-	duck(0.0, fade_s)
+	release_duck(&"music_director", fade_s)
 
 
 # ─────────────────────────────── 工具 ────────────────────────────────

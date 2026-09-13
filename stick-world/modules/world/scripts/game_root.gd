@@ -603,12 +603,22 @@ func _register_default_maps() -> void:
 	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 
 
+## 切图：注销已释放的音效空间化宿主（新图加载时会在 _on_map_loaded 重新注册）
+func _on_sfx_map_unloaded(_map_id: String) -> void:
+	if AudioManager != null and AudioManager.has_method("set_sfx_host"):
+		AudioManager.set_sfx_host(null)
+
+
 func _load_start_village() -> void:
 	if scene_loader == null or not scene_loader.has_method("load_map"):
 		return
 	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
 	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
 		scene_loader.map_loaded.connect(_on_map_loaded)
+	# 切图时注销音效空间化宿主（旧地图即将释放，留着会悬空）
+	if scene_loader.has_signal("map_unloaded") \
+			and not scene_loader.map_unloaded.is_connected(_on_sfx_map_unloaded):
+		scene_loader.map_unloaded.connect(_on_sfx_map_unloaded)
 	# 监听 travel_started：旧图卸载前收集编队快照（跨图携带）
 	if not scene_loader.travel_started.is_connected(_on_travel_started):
 		scene_loader.travel_started.connect(_on_travel_started)
@@ -739,6 +749,10 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 	var map: Node2D = scene_loader.get_current_map() if scene_loader.has_method("get_current_map") else null
 	if map == null or not map.has_method("spawn_entity"):
 		return
+	# 音效空间化宿主：AudioStreamPlayer2D 必须挂在 Node2D 下（AudioManager 自身是 Node），
+	# 挂在当前地图上即可让"屏外的打架声"随距离衰减（详见 音效触发规范.md §八）
+	if AudioManager != null and AudioManager.has_method("set_sfx_host"):
+		AudioManager.set_sfx_host(map)
 	# 注入地图到 ConstructionManager（供项目实例化建筑用；走 api 收敛）
 	if _construction_api != null and _construction_api.has_method("set_map"):
 		_construction_api.set_map(map)

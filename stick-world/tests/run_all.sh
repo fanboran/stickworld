@@ -103,6 +103,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_town_life_harvest.tscn"
 	"tests/integration/test_town_life_worksite.tscn"
 	"tests/integration/test_music_director.tscn"
+	"tests/integration/test_sfx_policy.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"

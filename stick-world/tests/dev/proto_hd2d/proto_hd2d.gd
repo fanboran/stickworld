@@ -484,10 +484,31 @@ func _spawn_building_shadow(card: String, x: float, mi: MeshInstance3D) -> void:
 ##   · tint 0.78（贴图均值 0.588 → 有效 ≈0.46）与道路（0.455）同档，不再比路面浅一档。
 ## 固定的"路缘"整条已被去掉 —— 干净的直线边正是创始人说的"生硬"来源。
 func _add_width_guides() -> void:
-	# 建筑宽度辅助线：每栋左右边界在地面上画紫色细线（从地平线到台肩前沿）
-	var gm := StandardMaterial3D.new()
-	gm.albedo_color = Color(1.0, 0.25, 0.85, 1.0)
-	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# **整格网格**（1 格 = 一条线，每 4 格加亮）+ 每栋建筑左右边界紫线（方便数几格宽）
+	var thin := StandardMaterial3D.new()
+	thin.albedo_color = Color(0.55, 0.95, 1.0, 0.55)
+	thin.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	thin.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var bold := StandardMaterial3D.new()
+	bold.albedo_color = Color(0.35, 0.85, 1.0, 0.95)
+	bold.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bold.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var edge := StandardMaterial3D.new()
+	edge.albedo_color = Color(1.0, 0.25, 0.85, 1.0)
+	edge.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	var x := -37.0
+	while x <= 37.0:
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(0.02 if int(x) % 4 != 0 else 0.035, 62.0)
+		var mi := MeshInstance3D.new()
+		mi.mesh = pm
+		mi.material_override = thin if int(x) % 4 != 0 else bold
+		mi.position = Vector3(x, PLAT_H + 0.015, -29.0)
+		mi.name = "GridX"
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_ground_root.add_child(mi)
+		x += 1.0
 	for e in FRONT_ROW:
 		var meta: Dictionary = _cards.get(str(e["card"]), {})
 		if meta.is_empty():
@@ -495,15 +516,15 @@ func _add_width_guides() -> void:
 		var w := float(meta["units"][0]) * S
 		var cx := float(e["x"])
 		for s in [-1.0, 1.0]:
-			var pm := PlaneMesh.new()
-			pm.size = Vector2(0.035, 62.0)
-			var mi := MeshInstance3D.new()
-			mi.mesh = pm
-			mi.material_override = gm
-			mi.position = Vector3(cx + s * w * 0.5, PLAT_H + 0.015, -29.0)
-			mi.name = "WidthGuide"
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			_ground_root.add_child(mi)
+			var pm2 := PlaneMesh.new()
+			pm2.size = Vector2(0.05, 62.0)
+			var mi2 := MeshInstance3D.new()
+			mi2.mesh = pm2
+			mi2.material_override = edge
+			mi2.position = Vector3(cx + s * w * 0.5, PLAT_H + 0.018, -29.0)
+			mi2.name = "BldEdge"
+			mi2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_ground_root.add_child(mi2)
 
 
 func _add_platform() -> void:

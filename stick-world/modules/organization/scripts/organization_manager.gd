@@ -374,6 +374,40 @@ func remove_stickman(org_id: String, stickman_id: String) -> Dictionary:
 	return {"ok": true, "data": {}}
 
 
+## 跨组织调人（原子接口，方案 §五.6 定稿口径）：**合法性校验一体、先校验后落地**，
+## 任一校验失败直接返回 {ok:false, error} 且不改动任何状态（不做"先删后加再回滚"）。
+## 校验口径 = 既有 remove_stickman + assign_stickman 校验的并集，不新造规则：
+##   ① 源组织存在  ② 目标组织存在  ③ 源组织 ≠ 目标组织
+##   ④ stickman_id 在源组织 personnel 中  ⑤ stickman_id 不在目标组织 personnel 中（防双挂）
+## 层级/职责约束：现有编制语义不限制容纳层级（中间层 personnel = 直属副官，§4.3 合法），
+## 故不引入 tier/容量新规则。单位存活/实体存在性归 combat 域——组织侧零出向，
+## personnel 中的脏 id（跨图残留/未出场）只按成员表事实处理，不查实体、不崩溃。
+## 成功 = 复用既有 remove_stickman（含指挥官补位）+ assign_stickman，不复制/双写内部逻辑。
+func transfer_stickman(stickman_id: String, from_org: String, to_org: String) -> Dictionary:
+	var src := _get_org(from_org)
+	if src == null:
+		return {"ok": false, "error": "源组织不存在: %s" % from_org}
+	var dst := _get_org(to_org)
+	if dst == null:
+		return {"ok": false, "error": "目标组织不存在: %s" % to_org}
+	if from_org == to_org:
+		return {"ok": false, "error": "源组织与目标组织相同，无需调动"}
+	if stickman_id.is_empty() or stickman_id not in src.personnel:
+		return {"ok": false, "error": "该火柴人不在源组织中: %s" % stickman_id}
+	if stickman_id in dst.personnel:
+		return {"ok": false, "error": "该火柴人已在目标组织中: %s" % stickman_id}
+	# 预检全过 → 落地。两条既有内部路径的其余校验在预检阶段已保证通过，故不会中途失败。
+	# 防御性补偿：万一 assign 失败（不可达分支），把成员放回源组织，维持"失败不改状态"契约。
+	var rm := remove_stickman(from_org, stickman_id)
+	if not rm.get("ok", false):
+		return rm
+	var add := assign_stickman(to_org, stickman_id, "")
+	if not add.get("ok", false):
+		assign_stickman(from_org, stickman_id, "")
+		return add
+	return {"ok": true, "data": {"stickman_id": stickman_id, "from_org": from_org, "to_org": to_org}}
+
+
 # ===== 层级调整 =====
 
 ## 在 org 和其 parent 之间插入一个新组织

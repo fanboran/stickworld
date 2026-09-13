@@ -44,6 +44,8 @@ var _api: Node = null
 var _panel: Control = null
 var _overview: Control = null
 var _stub_map: StubMap = null
+## ui_notification 捕获（拖拽调人成败提示路径断言）
+var _notes: Array = []
 
 
 func _ready() -> void:
@@ -59,6 +61,8 @@ func _ready() -> void:
 	_runner.add_test("总览: commander_assigned → 时间线条目", _test_overview_assign)
 	_runner.add_test("总览: 标签过滤（非匹配组织不生成行）", _test_overview_tag_filter)
 	_runner.add_test("总览: 选中行仅本面板高亮", _test_overview_select_row)
+	_runner.add_test("总览: 拖拽调人成功（迁移+通知+刷新）", _test_overview_transfer_drag_ok)
+	_runner.add_test("总览: 拖拽调人失败走通知（状态不变）", _test_overview_transfer_drag_fail)
 	_setup_env()
 	_runner.run()
 	print(_runner.summary())
@@ -361,3 +365,118 @@ func _row_text(row: Control) -> String:
 	var texts: Array = []
 	_collect_labels(row, texts)
 	return " ".join(texts)
+
+
+# ─────────────────── UI-W4b：战略总览 · 跨组织调人（拖拽） ───────────────────
+
+## 拖拽成功路径：托盘芯片起拖 → 目标行投放 → api 迁移 + info 通知 + 报表刷新。
+## UI 只产载荷、只呈现结果，不做层级可行性预判（归 api，方案 §五.6）。
+func _test_overview_transfer_drag_ok() -> void:
+	var r: Dictionary = _api.create_organization("调人源排", "MILITARY", 1, "")
+	var src := String(r.data.org_id)
+	var r2: Dictionary = _api.create_organization("调人目标排", "MILITARY", 1, "")
+	var dst := String(r2.data.org_id)
+	_api.assign_stickman(src, "8801", "fighter")
+	_overview.open()
+	# 选中源行 → 托盘列出成员芯片
+	var src_row: Control = _overview._rows.get(src, null)
+	_runner.assert_not_null(src_row, "源组织报表行应生成")
+	if src_row == null:
+		return
+	_click_row(src_row)
+	_runner.assert_equal(_overview._selected_org, src, "点行后应选中源组织")
+	var chip := _find_tray_chip("8801")
+	_runner.assert_not_null(chip, "成员托盘应列出成员 8801")
+	if chip == null:
+		return
+	# 起拖：产调人载荷（不预判合法性）
+	var payload: Variant = chip.call("_get_drag_data", Vector2.ZERO)
+	_runner.assert_true(payload is Dictionary \
+			and String((payload as Dictionary).get("kind", "")) == "stickman_transfer",
+			"拖拽载荷应为调人协议，实际：%s" % str(payload))
+	_runner.assert_true(String(_overview._tray_hint.text).contains("调动中"),
+			"拖拽中托盘应提示调动，实际：%s" % _overview._tray_hint.text)
+	var dst_row: Control = _overview._rows.get(dst, null)
+	_runner.assert_not_null(dst_row, "目标组织报表行应生成")
+	if dst_row == null:
+		return
+	_runner.assert_true(bool(dst_row.call("_can_drop_data", Vector2.ZERO, payload)),
+			"目标行应接受调人载荷（类型对即可，合法性归 api）")
+	var notes := _capture_notifications()
+	dst_row.call("_drop_data", Vector2.ZERO, payload)
+	_runner.assert_equal(_api.get_organization(src).data.personnel, [], "源成员表应清空")
+	_runner.assert_equal(_api.get_organization(dst).data.personnel, ["8801"], "目标成员表应加入 8801")
+	_runner.assert_true(notes.size() >= 1 and String(notes[-1].level) == "info",
+			"成功应发 info 通知，实际：%s" % str(notes))
+	_runner.assert_true(String(_overview._tray_hint.text).contains("→"),
+			"投放后拖拽态应复位，实际：%s" % _overview._tray_hint.text)
+	_stop_notifications()
+	_api.disband_organization(src)
+	_api.disband_organization(dst)
+
+
+## 拖拽失败路径：投到源组织自身（api 拒绝）→ warn 通知且两组织状态逐位不变。
+func _test_overview_transfer_drag_fail() -> void:
+	var r: Dictionary = _api.create_organization("失败源排", "MILITARY", 1, "")
+	var src := String(r.data.org_id)
+	_api.assign_stickman(src, "8901", "fighter")
+	_overview.open()
+	var src_row: Control = _overview._rows.get(src, null)
+	_runner.assert_not_null(src_row, "源组织报表行应生成")
+	if src_row == null:
+		return
+	_click_row(src_row)
+	var chip := _find_tray_chip("8901")
+	_runner.assert_not_null(chip, "成员托盘应列出成员 8901")
+	if chip == null:
+		return
+	var payload: Variant = chip.call("_get_drag_data", Vector2.ZERO)
+	# UI 不做第二套判断：同一行也接受载荷，由 api 判否（源=目标）
+	_runner.assert_true(bool(src_row.call("_can_drop_data", Vector2.ZERO, payload)),
+			"UI 不预判归属，载荷类型对即接受投放")
+	var notes := _capture_notifications()
+	src_row.call("_drop_data", Vector2.ZERO, payload)
+	_runner.assert_equal(_api.get_organization(src).data.personnel, ["8901"], "失败后源成员表逐位不变")
+	_runner.assert_true(notes.size() >= 1 and String(notes[-1].level) == "warn",
+			"失败应发 warn 通知，实际：%s" % str(notes))
+	_runner.assert_true(String(notes[-1].body).contains("调动失败"),
+			"失败通知文案应说明失败，实际：%s" % String(notes[-1].body))
+	_stop_notifications()
+	_api.disband_organization(src)
+
+
+## 驱动报表行点击（选中路径）
+func _click_row(row: Control) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	row.gui_input.emit(ev)
+
+
+## 成员托盘内按 stickman_id 查找芯片（duck 探测，不耦合内联类名）
+func _find_tray_chip(stickman_id: String) -> Control:
+	if _overview._tray_box == null:
+		return null
+	for c in _overview._tray_box.get_children():
+		if c.get("stickman_id") != null and String(c.get("stickman_id")) == stickman_id:
+			return c
+	return null
+
+
+func _capture_notifications() -> Array:
+	_notes.clear()
+	if EventBus != null and EventBus.has_signal("ui_notification") \
+			and not EventBus.ui_notification.is_connected(_on_test_notification):
+		EventBus.ui_notification.connect(_on_test_notification)
+	return _notes
+
+
+func _on_test_notification(title: String, body: String, level: String) -> void:
+	_notes.append({"title": title, "body": body, "level": level})
+
+
+func _stop_notifications() -> void:
+	if EventBus != null and EventBus.has_signal("ui_notification") \
+			and EventBus.ui_notification.is_connected(_on_test_notification):
+		EventBus.ui_notification.disconnect(_on_test_notification)
+	_notes.clear()

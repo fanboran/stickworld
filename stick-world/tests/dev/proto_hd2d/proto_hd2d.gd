@@ -569,11 +569,11 @@ func _add_width_guides() -> void:
 	var x := -37.0
 	while x <= 37.0:
 		var pm := PlaneMesh.new()
-		pm.size = Vector2(0.02 if int(x) % 4 != 0 else 0.035, 62.0)
+		pm.size = Vector2(0.02 if int(x) % 4 != 0 else 0.035, 8.6)
 		var mi := MeshInstance3D.new()
 		mi.mesh = pm
 		mi.material_override = thin if int(x) % 4 != 0 else bold
-		mi.position = Vector3(x, PLAT_H + 0.015, -29.0)
+		mi.position = Vector3(x, PLAT_H + 0.015, -2.6)
 		mi.name = "GridX"
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_ground_root.add_child(mi)
@@ -583,11 +583,11 @@ func _add_width_guides() -> void:
 		var cx := (float(occ[0]) + float(occ[1])) * 0.5
 		for s in [-1.0, 1.0]:
 			var pm2 := PlaneMesh.new()
-			pm2.size = Vector2(0.05, 62.0)
+			pm2.size = Vector2(0.05, 8.6)
 			var mi2 := MeshInstance3D.new()
 			mi2.mesh = pm2
 			mi2.material_override = edge
-			mi2.position = Vector3(cx + s * w * 0.5, PLAT_H + 0.018, -29.0)
+			mi2.position = Vector3(cx + s * w * 0.5, PLAT_H + 0.018, -2.6)
 			mi2.name = "BldEdge"
 			mi2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_ground_root.add_child(mi2)
@@ -597,7 +597,7 @@ func _add_platform() -> void:
 	# 人行道台面：整面垫高（PLAT_H）+ PBR（albedo + 法线，石块凸起见深度）
 	# 台肩 = 台面外缘**一排长条石**（现代人行道路缘那种），逐块长度抖动
 	# 台面：从**地平线**（远处 z=-60 与拉远底衬同远端）一直铺到台肩（z=1.95）
-	_add_ground_plane("band_shoulder_stone_128.png", -20.0, BAND_SIDEWALK.y,
+	_add_ground_plane("band_shoulder_stone_128.png", -6.5, BAND_SIDEWALK.y,
 		PLAT_H, 5.0, Color(1.04, 1.00, 0.93))   # 台面：偏暖亮的浅石（与道路明显区分）
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260917

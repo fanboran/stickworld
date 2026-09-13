@@ -502,37 +502,53 @@ func _gaps(occ: Array) -> Array:
 
 
 func _place_rows() -> void:
-	# 前排：**吸附整格**顺序排布（整格宽 + 1 格缝）
+	# 前排：吸附整格、**一格挨一格铺满整条可见街**（左右超出画框，不留空当）
 	var occ_front := []
-	var cur := -23.0
-	for e in FRONT_ROW:
-		var w := _cw(str(e["card"]))
+	var cur := -40.0
+	var names := ["cottage_w6", "house_w8", "shop_w8", "bakery_w8", "townhouse_w12",
+		"guildhall_w12", "smithy1_w8", "tavern_w12", "stable_w12"]
+	var ni := 0
+	while cur < 40.0:
+		var card: String = names[ni % names.size()]
+		ni += 1
+		var w := _cw(card)
+		if w < 1.0:
+			w = 8.0
 		var cx := cur + w * 0.5
-		var mi := _spawn_card(str(e["card"]), cx, 0.85)
+		var mi := _spawn_card(card, cx, 0.85)
 		mi.position.y += PLAT_H
-		_spawn_building_shadow(str(e["card"]), cx, mi)
+		_spawn_building_shadow(card, cx, mi)
 		occ_front.append([cur, cur + w])
 		cur += w          # 一个格子挨着一个格子（0 缝）
 	_front_occ = occ_front
-	# 三层背景：第二层插第一层的缝、第三层插第二层的缝；末层即"真实地平线"
+	# 三层背景：**逐层把前层的缝隙塞满**（每段缝连续铺卡直到盖满），末层即"真实地平线"
 	# 近小远大：近层小民居/塔；**远层也限宽 ≤12 格**（w16 大件悬在半空会读作悬浮板）
-	var bg := ["house_w8", "tower_w6", "house_w8", "townhouse_w12", "house_w8", "tower_w6"]
-	var far := ["house_w8", "tower_w6", "townhouse_w12", "house_w8"]
+	var lists := [
+		["house_w8", "tower_w6", "house_w8", "townhouse_w12"],
+		["townhouse_w12", "house_w8", "tower_w6", "house_w8"],
+		["house_w8", "tower_w6", "townhouse_w12", "house_w8"],
+	]
 	var layer := occ_front
-	var ci := 0
-	for lz in [SKYLINE_Z, SKYLINE_Z - 3.0, SKYLINE_Z - 6.0]:
-		var list: Array = bg if lz == SKYLINE_Z else (bg if lz == SKYLINE_Z - 4.0 else far)
+	for li in lists.size():
+		var lz: float = SKYLINE_Z - 3.0 * float(li)
+		var list: Array = lists[li]
 		var occ := []
+		var ci2: int = li * 5
 		for g in _gaps(layer):
-			var gw: float = float(g[1]) - float(g[0])
-			if gw < 2.0:
+			var g0: float = float(g[0])
+			var g1: float = float(g[1])
+			if g1 - g0 < 0.5:
 				continue
-			var card: String = list[ci % list.size()]
-			ci += 1
-			var w2: float = minf(_cw(card), gw)
-			var cx2: float = (float(g[0]) + float(g[1])) * 0.5
-			_spawn_card(card, cx2, lz, true)
-			occ.append([cx2 - w2 * 0.5, cx2 + w2 * 0.5])
+			while g1 - g0 > 0.5:
+				var card: String = str(list[ci2 % list.size()])
+				ci2 += 1
+				var w2: float = minf(_cw(card), g1 - g0)
+				if w2 < 1.5:
+					break
+				var cx2: float = g0 + w2 * 0.5
+				_spawn_card(card, cx2, lz, true)
+				occ.append([g0, g0 + w2])
+				g0 += w2
 		layer = occ
 
 

@@ -149,6 +149,21 @@ func _ready() -> void:
 	print("[hd2d] 跑法: godot --path stick-world res://tests/dev/proto_hd2d/proto_hd2d.tscn -- --shots=all")
 	_load_cards()
 	_build_world()
+	if bool(_opts.get("save_scene", false)):
+		# 把运行时搭好的节点树**存成真正的 .tscn**（供在编辑器里打开/自由查看）
+		# 注意：代码建的节点 owner 为空，pack 前必须递归补 owner，否则只存根节点
+		var root_node := get_tree().current_scene
+		_set_owner_recursive(root_node, root_node)
+		var packed := PackedScene.new()
+		var err := packed.pack(root_node)
+		if err == OK:
+			var p := "res://tests/dev/proto_hd2d/proto_hd2d_baked.tscn"
+			var e2 := ResourceSaver.save(packed, p)
+			print("[hd2d] 场景已存 -> ", p, " err=", e2)
+		else:
+			print("[hd2d] pack 失败 err=", err)
+		get_tree().quit(0)
+		return
 	if bool(_opts["perf"]):
 		await _run_perf()
 	else:
@@ -160,9 +175,18 @@ func _ready() -> void:
 
 # ------------------------------------------------------------------ 参数
 
+func _set_owner_recursive(n: Node, root: Node) -> void:
+	for c in n.get_children():
+		c.owner = root
+		_set_owner_recursive(c, root)
+
+
 func _parse_args() -> void:
 	for a in OS.get_cmdline_user_args():
 		var s := str(a)
+		if s == "--save-scene":
+			_opts["save_scene"] = true
+			continue
 		if s.begins_with("--shots="):
 			_opts["shots"] = s.get_slice("=", 1)
 		elif s.begins_with("--perf="):
@@ -528,7 +552,7 @@ func _add_ground_plane_at(tex_name: String, cx: float, width: float,
 	mi.position = Vector3(cx, y, (z0 + z1) * 0.5)
 	var gm := StandardMaterial3D.new()
 	# 优先高清 albedo（src/<key>_alb.png = 512），否则退回游戏档 <key>
-	var base := tex_name.get_basename()
+	var base := tex_name.get_basename().replace("_128", "")   # 高清图不带 _128 后缀
 	var t := _tex_abs(_temp + GROUND_DIR + "src/" + base + "_alb.png")
 	if t == null:
 		t = _tex_abs(_temp + GROUND_DIR + tex_name)
@@ -563,7 +587,7 @@ func _add_ground_plane(tex_name: String, z0: float, z1: float, y: float,
 	mi.position = Vector3(0, y, (z0 + z1) * 0.5)
 	var gm := StandardMaterial3D.new()
 	# 优先高清 albedo（src/<key>_alb.png = 512），否则退回游戏档 <key>
-	var base := tex_name.get_basename()
+	var base := tex_name.get_basename().replace("_128", "")   # 高清图不带 _128 后缀
 	var t := _tex_abs(_temp + GROUND_DIR + "src/" + base + "_alb.png")
 	if t == null:
 		t = _tex_abs(_temp + GROUND_DIR + tex_name)

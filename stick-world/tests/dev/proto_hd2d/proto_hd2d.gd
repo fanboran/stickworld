@@ -37,7 +37,7 @@ extends Node3D
 ##   本原型按 anchor 落位（见 _spawn_card），建筑底部严格落在世界 y=0。
 
 const S := 1.0 / 32.0                    # Blender 世界单位(px) -> Godot 单位(格)
-const TILT_DEG := 20.0                   # 俯角（§0.3 硬约束）
+const TILT_DEG := 26.0                   # 俯角：创始人要求"稍微增加"（原 20°），本次 +6°
 const CARD_SHADER := preload("res://tests/dev/proto_hd2d/card.gdshader")
 const CHAR_HOST := preload("res://tests/dev/proto_hd2d/char_sprite_3d.gd")
 const POST_SHADER := preload("res://tests/dev/proto_hd2d/post_hd2d.gdshader")
@@ -73,7 +73,7 @@ const SKYLINE_ROW: Array = [
 	{"card": "guildhall_w12", "x": 28.5},
 	{"card": "tower_w6", "x": 40.0},
 ]
-const SKYLINE_Z := -24.0
+const SKYLINE_Z := -12.0                 # 后排前移到下缘紧贴 1/3 线（原 -24 太远）
 
 ## 地面分带（格；z 增大 = 朝相机）。
 ## 基线纪律（创始人纠偏）：**建筑基线 = 路肩带顶线**。

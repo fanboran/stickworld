@@ -26,7 +26,7 @@ func _process(delta: float) -> void:
 			var d: float = 1.0 if randf() < 0.5 else -1.0
 			_flock = _make_flock(d, -d * (half + MARGIN))
 			if AudioManager != null:
-				AudioManager.play_event("bird_chirp_%s" % ["a", "b", "c"][randi() % 3])
+				AudioManager.play_event("bird_chirp")
 	else:
 		_flock["x"] += _flock["speed"] * _flock["dir"] * delta
 		for b in _flock["birds"]:
@@ -70,7 +70,7 @@ func spawn_now(in_view: bool = false) -> void:
 	var edge: float = half - 150.0 if in_view else half + MARGIN
 	_flock = _make_flock(d, -d * edge)
 	if AudioManager != null:
-		AudioManager.play_event("bird_chirp_%s" % ["a", "b", "c"][randi() % 3])
+		AudioManager.play_event("bird_chirp")
 
 
 func _draw() -> void:

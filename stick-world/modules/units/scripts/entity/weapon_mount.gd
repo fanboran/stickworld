@@ -208,41 +208,9 @@ var _last_heal_effect_spawn: float = -1.0e9
 ## 施法标志位（IsCastingHeal 直译：比查询 rig 动画名更可测，unit 测试直接置位）
 var _heal_anim_playing: bool = false
 
-## 动画内嵌事件转发（Spine events[] 语义）。
-## 目前用于 Sound:* 音效钩子；音效资产落地后按 SFX_PATHS 登记即可发声。
+## 动画内嵌事件转发（Spine events[] 语义）：Sound:* 音效钩子；音效资产与播放策略
+## 见 AudioManager.SFX_EVENTS / SFX_POLICY（唯一真相源）。
 signal weapon_anim_event(anim_name: String, event_name: String, value: String)
-
-## Spine 事件 string（如 "Swoosh"/"Thump"/"MagikillBlast"）→ 音效资源路径
-## （值可单路径或路径数组=随机变体）。取值与动画 metadata/anim_events 的
-## Sound.string 同名同源（SWL 原事件名，资产为 SWL 提取件，见
-## tools/ai/extract_swl_sfx.py 与 docs/项目/素材替换清单.md）。
-## 缺表项 = 该事件只发信号不发声（不会出现加载报错）。
-const SFX_PATHS: Dictionary = {
-	"Swoosh": [
-		"res://assets/audio/sfx/swoosh_a.wav",
-		"res://assets/audio/sfx/swoosh_b.wav",
-		"res://assets/audio/sfx/swoosh_c.wav",
-		"res://assets/audio/sfx/swoosh_d.wav",
-	],
-	"headbutt1":     "res://assets/audio/sfx/headbutt.wav",
-	"MagikillBlast": [
-		"res://assets/audio/sfx/magikill_blast_a.wav",
-		"res://assets/audio/sfx/magikill_blast_b.wav",
-	],
-	"Thump": [
-		"res://assets/audio/sfx/thump_a.wav",
-		"res://assets/audio/sfx/thump_b.wav",
-	],
-	"fall": [
-		"res://assets/audio/sfx/bodyfall_a.wav",
-		"res://assets/audio/sfx/bodyfall_b.wav",
-		"res://assets/audio/sfx/bodyfall_c.wav",
-	],
-	"clang": [
-		"res://assets/audio/sfx/clang_a.wav",
-		"res://assets/audio/sfx/clang_b.wav",
-	],
-}
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -345,13 +313,16 @@ func _connect_rig_events(owner_entity: Node) -> void:
 
 
 ## 动画事件回调：命中帧结算 + 音效事件转发。
-## 只响应本武器对应的攻击动画（防止"播矛刺动画、被剑的事件误触发"）。
+## **Hit（命中帧结算）只认本武器的攻击动画**——防止"播矛刺动画、被剑的事件误触发"。
+## **Sound 不做动画名过滤**：动画作者在哪一帧写了 Sound，就该在哪一帧响
+## （死亡倒地 `fall`/`Thump`、站姿盾牌格挡 `clang` 都声明在非攻击动画上），
+## 引擎侧再拿动画名裁一刀，等于把数据侧的真相源覆盖掉。
 func _on_rig_anim_event(anim_name: String, event_name: String, value: String) -> void:
-	if anim_name != _attack_anim_name():
-		return
 	weapon_anim_event.emit(anim_name, event_name, value)
 	match event_name:
 		"Hit":
+			if anim_name != _attack_anim_name():
+				return
 			_try_strike_frame()
 		"Sound":
 			_play_event_sfx(value)
@@ -363,29 +334,26 @@ func _on_rig_animation_finished(anim_name: String) -> void:
 		_heal_anim_playing = false
 
 
-## 动画内嵌音效事件：查 SFX_PATHS 表播放（缺表项只转发信号、不发声）。
-## 值为数组时随机挑一（SWL 同名事件变体），随机音高抖动与
-## AudioManager.PITCH_JITTER 同参（连播防"机关枪式"机械重复感）。
-const SFX_PITCH_JITTER := 0.05
+## Spine 事件 string（"Swoosh"/"Thump"/"MagikillBlast"…）→ AudioManager 语义事件名。
+## 取值与动画 metadata/anim_events 的 Sound.string 同名同源。**这里不再自带音效路径表**：
+## 资产与播放策略（节流/合并/优先级/抖动/定位）全部收口到
+## AudioManager.SFX_EVENTS / SFX_POLICY（唯一真相源），否则绕过者会让合并策略形同虚设。
+## 缺表项 = 该事件只转发信号、不发声（不会出现加载报错）。
+const SFX_EVENT_NAMES: Dictionary = {
+	"Swoosh":        "weapon_swoosh",
+	"headbutt1":     "weapon_headbutt",
+	"MagikillBlast": "weapon_blast",
+	"Thump":         "weapon_thump",
+	"fall":          "weapon_fall",
+	"clang":         "weapon_clang",
+}
 
 func _play_event_sfx(sfx_name: String) -> void:
-	var entry: Variant = SFX_PATHS.get(sfx_name, "")
-	if entry == null or (entry is String and entry.is_empty()):
+	var event_name: String = SFX_EVENT_NAMES.get(sfx_name, "")
+	if event_name.is_empty():
 		return
-	var paths: Array = entry if entry is Array else [entry]
-	var am: Node = get_node_or_null("/root/AudioManager")
-	if am == null or not am.has_method("play_sfx"):
-		return
-	# 变体池随机挑一（资产未就位时静默跳过，与 play_event 容错口径一致）
-	var existing: Array = []
-	for p in paths:
-		if ResourceLoader.exists(p):
-			existing.append(p)
-	if existing.is_empty():
-		return
-	var player: AudioStreamPlayer = am.play_sfx(existing[randi() % existing.size()])
-	if player != null:
-		player.pitch_scale = 1.0 + randf_range(-SFX_PITCH_JITTER, SFX_PITCH_JITTER)
+	# 世界坐标交给 AudioManager：spatial 事件据此做距离衰减与左右定位
+	AudioManager.play_event(event_name, global_position)
 
 
 ## 本武器的攻击动画名（与实体 play_attack 共用 StickmanAnims 的映射表）

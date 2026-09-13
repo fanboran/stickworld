@@ -54,12 +54,13 @@ func _ready() -> void:
 # A6 近失压制（箭矢投射物侧；压制主体用例见下）
 
 func _test_near_miss_defaults() -> void:
+	# GK-2 开闸：代码 BASELINE 保持 false（缺载兜底），.tres baseline 行已翻 true。
 	_runner.assert_false(bool(ScriptBehaviorProfiles.BASELINE.get("suppression_near_miss_enabled", true)),
-			"suppression_near_miss_enabled 基线默认关（零回归）")
+			"suppression_near_miss_enabled 代码基线默认关（缺载兜底）")
 	_reset_profile_cache()
 	var p: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.BOW)
-	_runner.assert_false(bool(p.get("suppression_near_miss_enabled", true)),
-			"弓手近失门默认关（.tres baseline 行覆盖后仍关）")
+	_runner.assert_true(bool(p.get("suppression_near_miss_enabled", false)),
+			"GK-2 开闸：弓手近失门生效默认开（.tres baseline 行覆盖）")
 	var radius: float = float(p.get("suppression_near_miss_radius", 0.0))
 	_runner.assert_true(radius > ScriptArrowProjectile.HIT_RADIUS,
 			"近失半径须大于命中半径 34（实测 %.1f）" % radius)
@@ -173,14 +174,16 @@ func _test_near_miss_no_damage() -> void:
 
 ## A6 压制主体用例（受击门槛 / 禁令 / 替换点）
 func _test_profile_defaults() -> void:
+	# GK-2 开闸：代码 BASELINE 保持 false（缺载兜底），.tres baseline 行已翻 true
+	# （CLASS_PROFILES 无同键覆盖 → 全兵种统一生效）。
 	_runner.assert_false(bool(ScriptBehaviorProfiles.BASELINE.get("suppression_enabled", true)),
-			"suppression_enabled 基线默认关（零回归）")
+			"suppression_enabled 代码基线默认关（缺载兜底）")
 	for wtype in [ScriptBehaviorProfiles.SWORD, ScriptBehaviorProfiles.SPEAR,
 			ScriptBehaviorProfiles.BOW, ScriptBehaviorProfiles.STAFF,
 			ScriptBehaviorProfiles.PICKAXE, ScriptBehaviorProfiles.MERIC]:
 		var p: Dictionary = ScriptBehaviorProfiles.get_profile(wtype)
-		_runner.assert_false(bool(p.get("suppression_enabled", true)),
-				"suppression_enabled 默认关 (wtype=%d)" % wtype)
+		_runner.assert_true(bool(p.get("suppression_enabled", false)),
+				"GK-2 开闸：suppression_enabled 生效默认开 (wtype=%d)" % wtype)
 	var p2: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
 	_runner.assert_approx(float(p2.get("suppression_duration", -1.0)), 4.5, 0.001,
 			"压制时长 = 4.5s（CoH 7.5s × 节拍比 0.6 校准）")

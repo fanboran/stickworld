@@ -16,8 +16,10 @@ var _runner: TestRunner
 
 # ─────────────────────────────── 桩 ────────────────────────────────
 
-## 假组织 API。commander_id 不随 assign_commander 自动登记——测试显式设置
-## `commanders[org_id]`，以精确构造权威值组合（班长 / 班长+指挥官 / +玩家光环）。
+## 假组织 API（严格按生产形态返回 {ok, data} 包装——organization_api.get_organization
+## 经 manager 即此形态；commander_id 在 data 内）。commander_id 不随 assign_commander
+## 自动登记——测试显式设置 `commanders[org_id]`，以精确构造权威值组合
+## （班长 / 班长+指挥官 / +玩家光环）。裸数据形态的兼容性见 _test_org_query_normalization。
 class FakeOrgApi:
 	extends Node
 	var commanders: Dictionary = {}
@@ -43,9 +45,20 @@ class FakeOrgApi:
 	func get_organization(org_id: String) -> Dictionary:
 		return {
 			"ok": true,
-			"data": {"id": org_id, "parent_org": ""},
-			"commander_id": String(commanders.get(org_id, "")),
+			"data": {"id": org_id, "parent_org": "", "commander_id": String(commanders.get(org_id, ""))},
 		}
+
+
+## 裸数据形态假组织 API（单测历史口径：直接返回组织数据字典，无 ok/data 包装）。
+## 用于验证归一化取数口对两种形态都接受（权威值加成不因形态差异丢失）。
+class BareOrgApi:
+	extends Node
+	var commander_id: String = ""
+
+	func get_organization(org_id: String) -> Dictionary:
+		if commander_id.is_empty():
+			return {}
+		return {"id": org_id, "commander_id": commander_id}
 
 
 ## 单位桩：faction / battle / ai / 附身 / 压制 / 武器射程。
@@ -126,11 +139,13 @@ class FakeEnemy:
 		return false
 
 
-## 战斗桩：敌方列表 + TeamAi 出口（玩家号令保护期查询链）。
+## 战斗桩：敌方列表 + TeamAi 出口（玩家号令保护期查询链）+ battle_id（相位种子派生源）。
 class FakeBattle:
 	extends Node
 	var enemies: Array = []
 	var team_ai: Node = null
+	## 战斗标识（空串 = 未设置，调用方视为"取不到 battle_id"回落档案基底）
+	var battle_id: String = ""
 
 	func get_enemies_of(_faction: int) -> Array:
 		return enemies
@@ -140,6 +155,9 @@ class FakeBattle:
 
 	func get_team_ai(_faction: int) -> Node:
 		return team_ai
+
+	func get_battle_id() -> String:
+		return battle_id
 
 
 ## TeamAi 桩：只实现保护期查询出口（复用生产侧 is_manual_order_guarded 契约）。
@@ -155,7 +173,8 @@ class FakeTeamAi:
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("约束1 默认关: 关闭态零行为零时钟；开闸同一局面才换班", _test_default_off)
+	_runner.add_test("约束1 生效默认: 开闸档同一局面直接换班（GK-5 第二层）", _test_shipped_default_on)
+	_runner.add_test("约束1 零回归门: 显式注入关，关闭态零行为零时钟；同局面开闸才换班", _test_default_off)
 	_runner.add_test("约束2 滞回: 容限带内两侧交替略高不振荡；越界才换", _test_hysteresis)
 	_runner.add_test("约束3 冷却: 跳槽后窗内不评估，窗过恢复", _test_cooldown)
 	_runner.add_test("约束4 排序: A(1.0)→B(1.7)；并列时玩家所在班优先吸引", _test_ordering_and_player_priority)
@@ -168,7 +187,11 @@ func _ready() -> void:
 	_runner.add_test("约束5 守卫: 玩家手动号令保护期内不换班（复用 TeamAi 查询）", _test_guard_manual_order)
 	_runner.add_test("约束5 限流: 单拍单来源班只放行名额内人数", _test_per_squad_flow_cap)
 	_runner.add_test("约束6 错峰/确定性: 非同拍评估 + 同种子同局面可复现", _test_determinism_and_desync)
-	_runner.add_test("档案: config/ai/formation_authority.tres 装载与缺省关闭", _test_resource)
+	_runner.add_test("约束7 相位种子派生: 同 battle_id 可复现 / 异 battle_id 不同 / 无 battle 回落基底", _test_battle_seed_derivation)
+	_runner.add_test("约束7 相位序列: 同 battle_id 两轮一致，异 battle_id 序列不同（抽样两例）", _test_battle_phase_sequences)
+	_runner.add_test("档案: config/ai/formation_authority.tres 装载与生效默认开闸", _test_resource)
+	_runner.add_test("归一化: 包装/裸数据两种组织查询形态均取到指挥官加成", _test_org_query_normalization)
+	_runner.add_test("参数出口: get_authority_switch_state 暴露候选半径/冷却等档案实值", _test_state_exit)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -248,6 +271,26 @@ func _assert_guard(w: Dictionary, msg: String) -> void:
 
 # ─────────────────────────────── 约束 1：默认关 ────────────────────────────────
 
+## 生效默认（GK-5 第二层已开闸）：setup 装载档案后参数档即为开，同一局面直接换班。
+func _test_shipped_default_on() -> void:
+	var w := _new_world()
+	var fs: Node = w["fs"]
+	var a := _unit("a0")
+	var b_lead := _unit("b_lead")
+	var sb := _squad(w, [b_lead])
+	var sa := _squad(w, [a], false)
+	w["org"].commanders[sb] = str(b_lead.get_instance_id())
+	b_lead.possessed = true
+	_runner.assert_approx(fs.get_squad_authority(sb), 1.7, 0.001, "B 班权威应为 1.7")
+	_runner.assert_true(bool(fs._authority_params.get("authority_switch_enabled", false)),
+			"setup 后生效默认应为开（GK-5 第二层）")
+	# 生效默认档 eval_interval=2.0 + 档案种子错峰：推进 3.0s（6 拍）保证覆盖评估窗
+	_tick(fs, 6)
+	_runner.assert_equal(fs.get_unit_squad(a), sb, "生效默认：低权威班成员应投奔高权威班")
+	_runner.assert_gt(float(fs._authority_clock), 0.0, "生效默认：权威时钟应累积（机制在跑）")
+
+
+## 零回归门（显式注入关）：关闭态零行为零时钟；同局面开闸才换班——差异只来自开关。
 func _test_default_off() -> void:
 	var w := _new_world()
 	var fs: Node = w["fs"]
@@ -258,8 +301,10 @@ func _test_default_off() -> void:
 	w["org"].commanders[sb] = str(b_lead.get_instance_id())
 	b_lead.possessed = true
 	_runner.assert_approx(fs.get_squad_authority(sb), 1.7, 0.001, "B 班权威应为 1.7")
+	# 两态：档案生效默认已开，此处显式注入关档造零回归基线
+	fs.set_authority_params({"authority_switch_enabled": false})
 	_runner.assert_false(bool(fs._authority_params.get("authority_switch_enabled", true)),
-			"缺省应关闭（零回归基线）")
+			"显式注入关档（零回归基线）")
 	_tick(fs, 40)
 	_runner.assert_equal(fs.get_unit_squad(a), sa, "关闭态成员不应换班")
 	_runner.assert_approx(fs._authority_clock, 0.0, 0.001, "关闭态不应累积时钟（零开销）")
@@ -501,6 +546,101 @@ func _test_determinism_and_desync() -> void:
 				0.0001, "第 %d 个单位错峰相位应可复现" % i)
 
 
+# ─────────────────── 约束 7：相位种子按 battle_id 派生（收尾批）───────────────────
+
+## 派生口径：实际相位种子 = 档案基底 XOR battle_id 哈希；无 battle_id 回落档案基底。
+## 覆盖：同 battle_id 两次派生一致（可复现）/ 有 battle 时异于基底 / 异 battle_id 不同
+## （抽样两例）/ 无 battle（空单位、无 battle 链）回落基底且确定。
+func _test_battle_seed_derivation() -> void:
+	var w := _new_world()
+	var fs: Node = w["fs"]
+	_enable(fs)  # authority_rng_seed = 4242（派生基底）
+	var base: int = int(fs._authority_params.get("authority_rng_seed", 0))
+	_runner.assert_equal(base, 4242, "前置：档案基底种子应装载为 4242")
+	# 无 battle_id → 回落档案基底（确定性基线）
+	_runner.assert_equal(fs._authority_phase_seed(null), base, "空单位应回落档案基底种子")
+	var u := _unit("u0")
+	_runner.assert_equal(fs._authority_phase_seed(u), base, "无 battle 链的单位应回落档案基底种子")
+	# 有 battle_id → 派生确定、同 id 两次一致、异于基底
+	var b1 := FakeBattle.new()
+	b1.battle_id = "battle_1001"
+	u.battle = b1
+	var s1: int = fs._authority_phase_seed(u)
+	_runner.assert_equal(fs._authority_phase_seed(u), s1, "同 battle_id 两次派生应一致（可复现）")
+	_runner.assert_not_equal(s1, base, "有 battle_id 时派生种子应异于回落基底")
+	# 不同 battle_id → 不同派生（抽样两例）
+	var b2 := FakeBattle.new()
+	b2.battle_id = "battle_2002"
+	u.battle = b2
+	var s2: int = fs._authority_phase_seed(u)
+	_runner.assert_not_equal(s2, s1, "不同 battle_id（例1）派生种子应不同")
+	var b3 := FakeBattle.new()
+	b3.battle_id = "battle_3003"
+	u.battle = b3
+	var s3: int = fs._authority_phase_seed(u)
+	_runner.assert_not_equal(s3, s1, "不同 battle_id（例2）派生种子应不同于例1")
+	_runner.assert_not_equal(s3, s2, "不同 battle_id（例2）派生种子应不同于例1（另一对照）")
+	u.free()
+	b1.free()
+	b2.free()
+	b3.free()
+
+
+## 相位序列对照世界：A 班 9 人 + B 班高权威班长，全员挂同一 battle_id
+## （评估间隔 2.0s > 扫描拍 0.5s，首拍登记全部相位但只评估到期的少数）。
+func _build_battle_desync_world(battle_id: String) -> Dictionary:
+	var w := _new_world()
+	var fs: Node = w["fs"]
+	var battle := FakeBattle.new()
+	battle.battle_id = battle_id
+	var units: Array = []
+	var a_members: Array = []
+	for i in 9:
+		var u := _unit("a%d" % i)
+		u.battle = battle
+		units.append(u)
+		a_members.append(u)
+	var b_lead := _unit("b_lead")
+	b_lead.battle = battle
+	units.append(b_lead)
+	var sa := _squad(w, a_members)
+	var sb := _squad(w, [b_lead])
+	w["org"].commanders[sb] = str(b_lead.get_instance_id())
+	b_lead.possessed = true
+	_enable(fs, {"authority_eval_interval": 2.0})
+	w.merge({"sa": sa, "sb": sb, "units": units, "battle": battle})
+	return w
+
+
+## 按登记构造序取全部单位的错峰相位（先跑一拍完成首轮登记）。
+func _phases(w: Dictionary) -> Array:
+	var fs: Node = w["fs"]
+	_tick(fs)
+	var out: Array = []
+	for u in w["units"]:
+		out.append(float(fs._authority_next_eval.get(u.get_instance_id(), -1.0)))
+	return out
+
+
+func _test_battle_phase_sequences() -> void:
+	# 同 battle_id 两轮世界 → 相位序列逐单位一致（同战斗内可复现）
+	var pa: Array = _phases(_build_battle_desync_world("battle_alpha"))
+	var pb: Array = _phases(_build_battle_desync_world("battle_alpha"))
+	_runner.assert_equal(pa.size(), 10, "相位序列应覆盖 10 个单位")
+	_runner.assert_equal(pa, pb, "同 battle_id 两轮相位序列应一致（可复现）")
+	# 全部单位都已登记真实相位（无 -1 漏取）
+	_runner.assert_false(pa.has(-1.0), "全部单位首拍应登记错峰相位")
+	# 异 battle_id → 相位序列不同（抽样两例）
+	var pc: Array = _phases(_build_battle_desync_world("battle_bravo"))
+	var pd: Array = _phases(_build_battle_desync_world("battle_charlie"))
+	_runner.assert_not_equal(pc, pa, "不同 battle_id（例1）相位序列应不同")
+	_runner.assert_not_equal(pd, pa, "不同 battle_id（例2）相位序列应不同于例1")
+	_runner.assert_not_equal(pd, pc, "不同 battle_id（例2）相位序列应不同于例1（另一对照）")
+	# 可复现性跨 battle_id 仍成立（同 id 第二轮 = 第一轮）
+	var pc2: Array = _phases(_build_battle_desync_world("battle_bravo"))
+	_runner.assert_equal(pc, pc2, "不同 battle_id 各自仍应逐轮可复现")
+
+
 # ─────────────────────────────── 档案 ────────────────────────────────
 
 func _test_resource() -> void:
@@ -512,8 +652,8 @@ func _test_resource() -> void:
 	_runner.assert_equal(rows.size(), 1, "应含 global 行")
 	var row: Dictionary = rows[0]
 	_runner.assert_equal(str(row.get("id", "")), "global", "行 id 应为 global")
-	_runner.assert_equal(bool(row.get("authority_switch_enabled", true)), false,
-			"资源缺省应关闭（零回归基线）")
+	_runner.assert_equal(bool(row.get("authority_switch_enabled", false)), true,
+			"资源生效默认已开闸（GK-5 第二层）")
 	# RWR 真值项（小兵步枪逆向 §2.6）
 	_runner.assert_approx(float(row.get("authority_player_squad_bonus", 0.0)), 0.2, 0.001,
 			"玩家班吸引力 = RWR favor_joining_player_squad_value_increase 0.2")
@@ -527,3 +667,81 @@ func _test_resource() -> void:
 	# margin 仍是评分内核常量（行为侧不重写比较逻辑）
 	_runner.assert_approx(ScriptFormationSystem.AUTHORITY_MARGIN, 0.07, 0.001,
 			"authority_margin 保持 RWR 真值 0.07")
+
+
+# ─────────────── 组织查询归一化（{ok,data} 包装 vs 裸数据）───────────────
+
+## 权威值三计价项在生产路径（api 包装形态）与单测裸数据形态下都必须取到：
+## 生产 bug 曾因直接 org.get("commander_id") 读包装字典顶层而恒空，
+## 指挥官在册 0.5 静默丢失（班长在场 1.0 / 玩家光环 0.2 不受影响）。
+## 归一化取数口同时接受两种形态：本用例对同一权威值组合分别走包装与裸数据断言。
+func _test_org_query_normalization() -> void:
+	# 基线：班长在场（1.0）+ 班长被附身（+0.2 玩家光环），无组织加成
+	var org := FakeOrgApi.new()
+	var fs: FormationSystem = ScriptFormationSystem.new()
+	fs.setup(org)
+	fs._squads["s1"] = {"units": [], "leader": null, "preset_id": "squad_combat",
+			"work_types": [], "role": "fighter", "name": "s1",
+			"follow_squad_id": "", "follow_gap": 0.0, "slots": {}}
+	var leader := _unit("leader")
+	fs._squads["s1"]["leader"] = leader
+	leader.possessed = true
+	_runner.assert_approx(fs.get_squad_authority("s1"), 1.2, 0.001,
+			"班长在场 1.0 + 玩家光环 0.2")
+	# 包装形态：指挥官在册 → +0.5（生产形态回归点）
+	org.commanders["s1"] = "7"
+	_runner.assert_approx(fs.get_squad_authority("s1"), 1.7, 0.001,
+			"包装形态（生产）：班长 1.0 + 指挥官 0.5 + 玩家光环 0.2")
+	# 包装形态 ok=false / 组织不存在 → 指挥官项跳过（回落到 1.2，不误加）
+	org.commanders.erase("s1")
+	_runner.assert_approx(fs.get_squad_authority("s1"), 1.2, 0.001,
+			"组织无指挥官：加成应缺席")
+	fs.free()
+	org.free()
+	# 裸数据形态（单测历史口径）：同一组合仍取到 1.5（班长 1.0 + 指挥官 0.5）
+	var bare := BareOrgApi.new()
+	var fs2: FormationSystem = ScriptFormationSystem.new()
+	fs2.setup(bare)
+	fs2._squads["s1"] = {"units": [], "leader": null, "preset_id": "squad_combat",
+			"work_types": [], "role": "fighter", "name": "s1",
+			"follow_squad_id": "", "follow_gap": 0.0, "slots": {}}
+	var leader2 := _unit("leader2")
+	fs2._squads["s1"]["leader"] = leader2
+	_runner.assert_approx(fs2.get_squad_authority("s1"), 1.0, 0.001, "裸数据：班长 1.0")
+	bare.commander_id = "7"
+	_runner.assert_approx(fs2.get_squad_authority("s1"), 1.5, 0.001,
+			"裸数据：班长 1.0 + 指挥官在册 0.5")
+
+
+# ─────────────── 只读参数出口（UI 数值与档案脱钩修复）───────────────
+
+## get_authority_switch_state 除运行态计数外，须镜像档案实值（候选半径/冷却等），
+## 供 UI duck 消费；默认值 = AUTHORITY_DEFAULTS，注入后随参数变化（单一真相源）。
+func _test_state_exit() -> void:
+	var fresh: FormationSystem = ScriptFormationSystem.new()
+	# 未 setup（_authority_params 空）也要恒有值：回落 AUTHORITY_DEFAULTS 同值
+	var d: Dictionary = fresh.get_authority_switch_state()
+	_runner.assert_approx(float(d.get("candidate_radius", -1.0)),
+			float(ScriptFormationSystem.AUTHORITY_DEFAULTS["authority_candidate_radius"]), 0.001,
+			"未 setup：候选半径应回落代码默认 800")
+	_runner.assert_approx(float(d.get("cooldown", -1.0)),
+			float(ScriptFormationSystem.AUTHORITY_DEFAULTS["authority_switch_cooldown"]), 0.001,
+			"未 setup：冷却应回落代码默认")
+	_runner.assert_false(bool(d.get("enabled", true)), "未 setup：开关默认关")
+	fresh.free()
+	# setup 装载档案实值 → 注入后出口随动（UI 端不再镜像常量）
+	var w := _new_world()
+	var fs: Node = w["fs"]
+	fs.set_authority_params({
+		"authority_switch_enabled": true,
+		"authority_candidate_radius": 1234.0,
+		"authority_switch_cooldown": 42.0,
+	})
+	var d2: Dictionary = fs.get_authority_switch_state()
+	_runner.assert_true(bool(d2.get("enabled", false)), "注入后开关应为开")
+	_runner.assert_approx(float(d2.get("candidate_radius", -1.0)), 1234.0, 0.001,
+			"候选半径应随档案实值（不再与 UI 常量脱钩）")
+	_runner.assert_approx(float(d2.get("cooldown", -1.0)), 42.0, 0.001, "冷却应随档案实值")
+	# 运行态计数键保持不变（向后兼容既有消费方）
+	_runner.assert_true(d2.has("clock") and d2.has("registered") and d2.has("cooling"),
+			"运行态计数键应保持")

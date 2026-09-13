@@ -23,6 +23,8 @@ const _NotificationFeedScript: GDScript = preload("res://modules/ui_global/scrip
 
 ## 统一模态栈（UIModalStack 子节点，ESC/输入屏蔽/暂停的单一权威）
 var modal_stack: UIModalStack = null
+## 顶栏按钮行给 top_right 保留区（时钟）额外留的呼吸间距（px）
+const TOP_BAR_RIGHT_GAP := 8.0
 ## FPS 计数器（设置面板 video/show_fps 开关驱动）
 var _fps_counter: Label = null
 ## 通知流（左下堆叠 feed，EventBus ui_notification 驱动）
@@ -84,6 +86,22 @@ func _setup_zone_layout() -> void:
 		# 右上成组：时钟在上、天数时间其下（top_right 堆叠，右缘对齐）
 		place_in_zone(&"top_right", global_hud.get_node_or_null("ClockWidget"))
 		place_in_zone(&"top_right", global_hud.get_node_or_null("DayTimeLabel"))
+		_reserve_top_right_for_top_bar()
+
+
+## 顶栏按钮行让出 top_right 保留区（时钟所在）：否则最右的「组织」按钮落在时钟
+## 底下——时钟是后画的 Control 且吃鼠标，表现就是"按钮看得见点不到"。
+## 宽度**取自 zone 表本身**（改表即同步），不写死像素，也不改场景：
+## 顶栏那排按钮是场景里 MarginContainer 排的，只调它的右内边距即可整体左移。
+func _reserve_top_right_for_top_bar() -> void:
+	var bar: Control = global_hud.get_node_or_null("MarginContainer")
+	if bar == null:
+		return
+	var region: Array = HudZoneLayout.ZONES[&"top_right"]["region"]
+	# anchors 靠右（1.0）时 region[0] 是"距右缘"的负偏移，其绝对值即保留区宽度
+	var reserved: float = absf(float(region[0]))
+	bar.add_theme_constant_override("margin_right",
+			int(round(reserved + TOP_BAR_RIGHT_GAP)))
 
 
 ## 统一入口：把部件钉进 zone（供装配层 SystemSetup / 本类内部调用）。
@@ -190,17 +208,29 @@ func set_context_content(content: Control) -> void:
 		return
 	# 清空旧内容
 	for child in context_panel.get_children():
+		if not _is_context_dynamic(child):
+			continue
 		child.queue_free()
 	if content:
 		context_panel.add_child(content)
 
 
-## 清空上下文面板
+## 清空上下文面板（只清运行时动态内容）
 func clear_context() -> void:
 	if context_panel == null:
 		return
 	for child in context_panel.get_children():
+		if not _is_context_dynamic(child):
+			continue
 		child.queue_free()
+
+
+## 动态内容判定：场景（.tscn）声明的结构性槽不属动态内容，清理时跳过。
+## 槽（如 ContextPanel/SquadInspector，见 context_panel.tscn）由装配层经
+## add_to_slot 填内容，模式切换（apply_mode_panel → clear_context）不得把槽本身
+## 一起释放——否则切一次 BATTLE 模式槽就消失（owner 非空 = 场景声明节点）。
+func _is_context_dynamic(child: Node) -> bool:
+	return child.owner == null
 
 
 ## 打开模态弹窗

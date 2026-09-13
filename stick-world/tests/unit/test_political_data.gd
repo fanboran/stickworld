@@ -3,8 +3,8 @@ extends Node
 ##
 ## 覆盖：political_data.json 全量覆盖（1040 城无缺漏/无孤儿）/ 归属合法性 +
 ## 字段完整 / 政权总数 == 80（创始人 2026-09-08 定档）/ 出生 8 城邦 id/归属沿用、
-## 色 = CONTENT_PALETTE 族代表色（feedback2 E：旧 P7 HSL 绿渐变梯废除，LUT 序号
-## 排尾不变）/ lut_index 1..80 连续唯一 / l3_city 注入一致（state_id+城文化）/
+## 色值合法且互不相同（C23 起色板唯一真相源 = tools/worldgen/l3/palette.py，LUT
+## 序号排尾不变）/ lut_index 1..80 连续唯一 / l3_city 注入一致（state_id+城文化）/
 ## L2 packs 注入一致 / 文化圈锚定（首都城文化 == 国文化 100%，城文化归属一致率
 ## ≥95%，9 圈都有政权）/ L3 ID mask 与 json 一致（首都 anchor 像素 == lut_index，
 ## 值域合法含 253 自由城邦）/ L2 ID mask 保留码（253 自由城邦/254 湖泊/255 邻区）
@@ -141,15 +141,6 @@ func _test_total_states() -> void:
 	_runner.assert_true(smax <= 120, "单国城数 ≤ 120（实测 %d）" % smax)
 
 
-## 出生 8 城邦族色（feedback2 E，与生成端 state_expand_lite.py
-## BIRTH_CITY_STATE_COLORS 同源——CONTENT_PALETTE 7 族代表原型 + 草绿族麦色变体，
-## 按 sorted(birth_state_id) 字典序分配；改色两端同步）
-const BIRTH_CITY_STATE_COLORS := [
-	[168, 194, 87], [76, 148, 133], [107, 158, 204], [242, 173, 64],
-	[168, 92, 76], [122, 97, 133], [133, 107, 76], [199, 184, 122],
-]
-
-
 func _test_birth_states_preserved() -> void:
 	var birth := _read_json("res://config/strategic_map/l1_world.json")
 	var pd := _read_json("res://config/strategic_map/political_data.json")
@@ -160,25 +151,29 @@ func _test_birth_states_preserved() -> void:
 		birth_sids.append(str(s["state_id"]))
 	birth_sids.sort()
 	var ok := true
+	var distinct := {}
 	for i in birth_sids.size():
 		var sid := str(birth_sids[i])
 		if not states.has(sid):
 			ok = false
 			break
-		# feedback2 E：色 = CONTENT_PALETTE 族代表色（不再是 l1_world 的 HSL 绿渐变梯）；
-		# JSON 数值解析为 float，逐元素 int 化比较
+		# C23：色板唯一真相源 = tools/worldgen/l3/palette.py（OKLCH 色轮候选 +
+		# 城块邻接贪心分配），出生城邦与 72 新国一次参与——本处不再硬编码族色，
+		# 改查「可解析、值域合法、且 8 邦互不相同」的不变量
 		var col: Array = states[sid].get("color", [])
-		var want: Array = BIRTH_CITY_STATE_COLORS[i]
-		if col.size() != 3 or int(col[0]) != int(want[0]) \
-				or int(col[1]) != int(want[1]) or int(col[2]) != int(want[2]):
+		if col.size() != 3:
 			ok = false
 			break
-	_runner.assert_true(ok, "出生 states id 沿用 + 色 = 族代表色（与生成端同源）")
-	# 族色互相可分（无重复）
-	var distinct := {}
-	for col in BIRTH_CITY_STATE_COLORS:
+		for v in col:
+			if int(v) < 0 or int(v) > 255:
+				ok = false
+				break
+		if not ok:
+			break
 		distinct[str(col)] = true
-	_runner.assert_equal(distinct.size(), BIRTH_CITY_STATE_COLORS.size(), "8 族色互不重复")
+	_runner.assert_true(ok, "出生 states id 沿用 + 色值合法（色板见 palette.py）")
+	# 8 邦色互不重复（可分性下限；相邻可分由生成端 ΔE 约束保证）
+	_runner.assert_equal(distinct.size(), birth_sids.size(), "8 邦色互不重复")
 	# 出生城邦 LUT 序号排尾（73..80），新国占 1..72
 	var birth_idx: Array = []
 	for sid in states:
@@ -452,7 +447,9 @@ func _test_political_lut() -> void:
 	# LUT 图像并就地 texture.update()——shader 每帧采样该纹理，L2/L3 政治模式
 	# 即刻换色、零重烘（headless 可证：图像像素即时变化 + update 路径无错）
 	var before := lut.color_of(sample)
-	var alt := Color(1.0, 0.0, 0.0) if before.r < 0.5 else Color(0.0, 0.5, 1.0)
+	# alt 必须 8bit 精确（image.set_pixel 按 RGBA8 量化，is_equal_approx 容差
+	# 1e-5 判不出 0.5→127/255 的差——2026-09-11 色板改暖调后踩坑）
+	var alt := Color8(0, 128, 255)
 	lut.set_state_color(sample, alt)
 	_runner.assert_true(lut.color_of(sample).is_equal_approx(alt),
 			"set_state_color 后 LUT 像素即时更新（%s: %s → %s）" % [sample, before, alt])

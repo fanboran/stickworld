@@ -98,7 +98,27 @@ def main():
     l3w = json.load(open(os.path.join(HERE, "output", "l3_view", "l3_world.json"), encoding="utf-8"))
     adj_by_label = {int(r["label"]): r.get("adjacent", []) for r in l3w["regions"]}
 
-    from mesh_extract import extract_smooth_mesh
+    from mesh_extract import extract_smooth_mesh, f32_clean_ring
+
+    # 审计#3：S1 细化场 → parent_l1 场——静态地块层换新代几何（与 political_mesh
+    # 填充同源同代，悬停描边/色块边界与政权色块逐像素贴合）
+    refined_path = os.path.join(HERE, "output", "l1_v2", "refined_city_labels_8192.npy")
+    refined = np.load(refined_path).astype(np.int32)
+    cd = json.load(open(os.path.join(HERE, "output", "l1_v2", "city_data.json"), encoding="utf-8"))
+    parent_lut = np.zeros(int(max(int(c["label"]) for c in cd["cities"])) + 1, dtype=np.int32)
+    for c in cd["cities"]:
+        parent_lut[int(c["label"])] = int(c["parent_l1"])
+    # 全局 L1 → region（l3_city.json 的 region 字段按 parent 多数；GAME_DIR=l2_packs，取上级）
+    l3c = json.load(open(os.path.join(GAME_DIR, "..", "l3_city.json"), encoding="utf-8"))
+    _pr_cnt = {}
+    for t in l3c["tiles"]:
+        p = parent_lut[int(t["label"])]
+        _pr_cnt.setdefault(p, {})
+        _r = int(t.get("region", 0))
+        _pr_cnt[p][_r] = _pr_cnt[p].get(_r, 0) + 1
+    region_lut = np.zeros(parent_lut.shape[0], dtype=np.int32)
+    for p, cnts in _pr_cnt.items():
+        region_lut[p] = max(cnts.items(), key=lambda kv: kv[1])[0]
 
     for rid in rids:
         rdir = os.path.join(L2_DIR, rid)
@@ -107,6 +127,11 @@ def main():
         x0, y0, x1, y1 = bbox["x0"], bbox["y0"], bbox["x1"], bbox["y1"]
         H, W = y1 - y0 + 1, x1 - x0 + 1
         lab = info["label"]
+        # patch 模式提前读游戏侧 json（local 映射兜底 + 几何 patch 复用）
+        old = None
+        if polys_only:
+            with open(os.path.join(GAME_DIR, rid, "l2_world.json"), encoding="utf-8") as f:
+                old = json.load(f)
 
         # 直接用 8192 裁切原分辨率（像素块细，放大无马赛克感；纯色 PNG 压缩率高）
         seg = np.load(os.path.join(rdir, "tiles_8192.npy"))
@@ -130,35 +155,65 @@ def main():
 
         # 正方形 context 标签图：地图边界外虚空 0
         PAD_EDGE = max(0, ty - y0, tx - x0, y1 + ty - 8191, x1 + tx - 8191)
-        lp = np.pad(labels8192, ((PAD_EDGE, PAD_EDGE), (PAD_EDGE, PAD_EDGE)), mode="constant")
+        rp = np.pad(refined, ((PAD_EDGE, PAD_EDGE), (PAD_EDGE, PAD_EDGE)), mode="constant")
         yy0, xx0 = y0 - ty + PAD_EDGE, x0 - tx + PAD_EDGE
-        ctx = lp[yy0:yy0 + ctx_h, xx0:xx0 + ctx_w].copy()
+        ref_ctx = rp[yy0:yy0 + ctx_h, xx0:xx0 + ctx_w]
         lm = np.pad(lake_mask, ((PAD_EDGE, PAD_EDGE), (PAD_EDGE, PAD_EDGE)), mode="constant")
         ctx_lake = lm[yy0:yy0 + ctx_h, xx0:xx0 + ctx_w]
         TILE_LABEL = 1000
         LAKE_LABEL = 2000
-        ctx[(ctx == 0) & ctx_lake] = LAKE_LABEL
-        # 陆地上所有湖像素标为 LAKE_LABEL（含地块内部 -> 地块洞；含非地块铺地区 -> 湖泊）
-        # （原实现只在 ctx==0 处标湖 + 整块铺地块标签 -> 地块内/非地块区的湖被覆盖成地块色/灰影）
-        ctx[ctx_lake & (ctx != 0)] = LAKE_LABEL
-        tile_zone = tiles_small[0:H, 0:W] > 0
-        land_in_tile = tile_zone & ~ctx_lake[ty:ty + H, tx:tx + W]
-        ctx[ty:ty + H, tx:tx + W][land_in_tile] = TILE_LABEL + tiles_small[0:H, 0:W][land_in_tile]
+        # 细化场 → parent_l1/region 场：本 region 的 L1 块 = tiles（local label 经
+        # tiles_8192×legacy 多数映射反演），其余陆地 = 所属 region（灰邻居），湖 = LAKE。
+        # 以城块真相源为准（legacy 的 EDT 缺口修复像素本就归邻块城块）。
+        par = parent_lut[ref_ctx]
+        reg = region_lut[par]
+        local_lut = np.zeros(parent_lut.shape[0], dtype=np.int32)
+        for k, g in l1_global.items():
+            local_lut[g] = k
+        if old is not None:
+            for t in old.get("tiles", []):
+                g = int(t.get("global_l1_label", 0))
+                if g > 0:
+                    local_lut[g] = int(t["label"])
+        own = (reg == lab) & (par > 0)
+        _mapped = local_lut[par]
+        _miss = int((own & (_mapped == 0)).sum())
+        if _miss:
+            print("  !! %s: %d px 本 region 陆地无 local 映射（旧 tiles 缺块）" % (rid, _miss))
+        ctx = np.zeros((ctx_h, ctx_w), dtype=np.int32)
+        ctx[own] = TILE_LABEL + _mapped[own]
+        other = (par > 0) & (reg != lab)
+        ctx[other] = reg[other]
+        ctx[ctx_lake & (ctx == 0)] = LAKE_LABEL
+        own_land = int(own.sum())
 
         # R3：extract_smooth_mesh 替代「extract_mesh + Chaikin×3」——find_contours
         # 亚像素等值线 + 共享弧统一平滑（Visvalingam + Chaikin），整数台阶根除；
         # 提取后多边形仍是填充 mesh 和描边的唯一真源，保证两者渲染严丝合缝
         ctx_mesh = extract_smooth_mesh(ctx.astype(np.int32))
         # 灰影 = context 内出现的其他地区（8192 精度）
+        def _ring_area_xy(loop):
+            s = 0.0
+            n = len(loop)
+            for i in range(n):
+                y1, x1 = loop[i]
+                y2, x2 = loop[(i + 1) % n]
+                s += y1 * x2 - y2 * x1
+            return abs(s) / 2.0
+
         neighbors_data = []
         for n, mv in ctx_mesh.items():
             if n == LAKE_LABEL or TILE_LABEL < n < TILE_LABEL + 100:
                 continue
             if mv["outer"]:
-                neighbors_data.append({"label": n, "polygons": mv["outer"], "holes": mv["holes"]})
+                neighbors_data.append({"label": n,
+                                       "polygons": [r for p in mv["outer"]
+                                                    for r in f32_clean_ring(p)],
+                                       "holes": [r for p in mv["holes"]
+                                                 for r in f32_clean_ring(p)]})
         lakes = []
         lmv = ctx_mesh.get(LAKE_LABEL, {"outer": [], "holes": []})
-        lakes = lmv["outer"]
+        lakes = [r for p in lmv["outer"] for r in f32_clean_ring(p)]
         # 地块（统一网格取，label 映射回原值；坐标 = 正方形 context 局部）
         tile_mesh = {}
         for k, mv in ctx_mesh.items():
@@ -166,18 +221,22 @@ def main():
                 tile_mesh[k - TILE_LABEL] = mv
 
         colors = unique_colors()
-        # 索引图：label 直编 RGB（8192 级，hover 像素级查询精度）
+        # 索引图：label 直编 RGB（8192 级，hover 像素级查询精度）——细化场重导后
+        # 与新几何同源（审计#3：悬停命中框不再偏移十几 px）
         idx = np.zeros((H, W, 3), dtype=np.uint8)
-        for k in range(1, int(tiles_small.max()) + 1):
-            m = tiles_small == k
-            idx[m, 0] = (k >> 16) & 0xFF
-            idx[m, 1] = (k >> 8) & 0xFF
-            idx[m, 2] = k & 0xFF
+        pb = par[ty:ty + H, tx:tx + W]
+        rb = reg[ty:ty + H, tx:tx + W]
+        ownb = (rb == lab) & (pb > 0)
+        lk = local_lut[pb[ownb]]
+        idx[ownb, 0] = (lk >> 16) & 0xFF
+        idx[ownb, 1] = (lk >> 8) & 0xFF
+        idx[ownb, 2] = lk & 0xFF
 
         # 元数据（tiles 坐标 = tiles 区域局部，渲染时平移 ty/tx 到正方形）
         tiles = []
         for k, mv in tile_mesh.items():
-            polys = mv["outer"]
+            # float32 运行时清洗（bin 顶点 float32 量化后自交 → 运行时三角剖分报错）
+            polys = [r for ring in mv["outer"] for r in f32_clean_ring(ring)]
             holes = mv["holes"]
             m = ctx == (TILE_LABEL + k)
             ys, xs = np.where(m)
@@ -187,15 +246,16 @@ def main():
                 cy = int(sum(p[0] for p in h) / len(h))
                 cx = int(sum(p[1] for p in h) / len(h))
                 is_lake = bool(ctx_lake[cy, cx]) if ctx_lake.shape[0] > cy and ctx_lake.shape[1] > cx else False
-                holes_out.append({"points": h, "lake": is_lake})
+                for hp in f32_clean_ring(h):
+                    holes_out.append({"points": hp, "lake": is_lake})
             tiles.append({
                 "label": k,
                 "global_l1_label": l1_global.get(k, 0),
                 "color": list(colors[(k - 1) % len(colors)]),
                 "area_px": int(m.sum()),
-                "area_ratio": float(m.sum() / (tiles_small > 0).sum()),
+                "area_ratio": float(m.sum() / max(own_land, 1)),
                 "centroid": [float(ys.mean()), float(xs.mean())],
-                "polygon": polys[0] if polys else [],
+                "polygon": max(polys, key=_ring_area_xy) if polys else [],
                 "polygons": polys,
                 "holes": holes_out,
             })
@@ -214,15 +274,11 @@ def main():
 
         outd = os.path.join(OUT_DIR, rid)
         os.makedirs(outd, exist_ok=True)
-        if not polys_only:
-            Image.fromarray(idx).save(os.path.join(outd, "l2_tiles_index.png"))
+        Image.fromarray(idx).save(os.path.join(outd, "l2_tiles_index.png"))
         if polys_only:
             # R3 就地 patch：读游戏侧现有 json（含 cities/states 等后注入字段），
             # 按 label 对齐替换 tiles 几何 + neighbors/lakes，其余字段原样保留；
             # bake 从 merged world 重烘（bin 是几何烘焙，必须与新几何一致）
-            gamed0 = os.path.join(GAME_DIR, rid)
-            with open(os.path.join(gamed0, "l2_world.json"), encoding="utf-8") as f:
-                old = json.load(f)
             old_tiles = {int(t["label"]): t for t in old.get("tiles", [])}
             for nt in world["tiles"]:
                 ot = old_tiles.get(int(nt["label"]))
@@ -232,6 +288,9 @@ def main():
                 ot["polygon"] = nt["polygon"]
                 ot["polygons"] = nt["polygons"]
                 ot["holes"] = nt["holes"]
+                ot["area_px"] = nt["area_px"]
+                ot["area_ratio"] = nt["area_ratio"]
+                ot["centroid"] = nt["centroid"]
             old["neighbors"] = world["neighbors"]
             old["lakes"] = world["lakes"]
             world = old
@@ -245,7 +304,7 @@ def main():
         # 复制到游戏 config
         gamed = os.path.join(GAME_DIR, rid)
         os.makedirs(gamed, exist_ok=True)
-        for fn in ("l2_world.json", "l2_geom.bin"):
+        for fn in ("l2_world.json", "l2_geom.bin", "l2_tiles_index.png"):
             shutil.copy(os.path.join(outd, fn), os.path.join(gamed, fn))
         print("  %s: %dx%d -> 正方形 %d, %d 地块, 邻居 %d, 湖泊 %d | tris T%d H%d L%d N%d | border %d/%d"
               % (rid, W, H, side, len(tiles), len(neighbors_data), len(lakes),

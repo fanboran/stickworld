@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "cue_count": 9,
+  "cues": {
+    "menu_title": {
+      "title": "原野·序",
+      "bpm": 66,
+      "bar_beats": 4,
+      "bars": 32,
+      "beat_count": 128,
+      "loop": true,
+      "loop_offset": 0.0,
+      "key": "D major",
+      "duration_s": 116.364,
+      "loudness_lufs": -15.0,
+      "layers": [
+        {
+          "name": "piano",
+          "file": "menu_title/piano.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "strings",
+          "file": "menu_title/strings.ogg",
+          "tier": 1,
+          "db": 0.0
+        }
+      ]
+    },
+    "field_day": {
+      "title": "原野·昼",
+      "bpm": 72,
+      "bar_beats": 4,
+      "bars": 32,
+      "beat_count": 128,
+      "loop": true,
+      "loop_offset": 0.0,
+      "key": "D major",
+      "duration_s": 106.667,
+      "loudness_lufs": -15.0,
+      "layers": [
+        {
+          "name": "piano",
+          "file": "field_day/piano.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "strings",
+          "file": "field_day/strings.ogg",
+          "tier": 1,
+          "db": 0.0
+        },
+        {
+          "name": "bells",
+          "file": "field_day/bells.ogg",
+          "tier": 2,
+          "db": 0.0
+        },
+        {
+          "name": "harp",
+          "file": "field_day/harp.ogg",
+          "tier": 2,
+          "db": 0.0
+        }
+      ]
+    },
+    "field_night": {
+      "title": "原野·夜",
+      "bpm": 63,
+      "bar_beats": 4,
+      "bars": 32,
+      "beat_count": 128,
+      "loop": true,
+      "loop_offset": 0.0,
+      "key": "B minor",
+      "duration_s": 121.905,
+      "loudness_lufs": -15.0,
+      "layers": [
+        {
+          "name": "piano",
+          "file": "field_night/piano.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "strings",
+          "file": "field_night/strings.ogg",
+          "tier": 1,
+          "db": 0.0
+        },
+        {
+          "name": "bells",
+          "file": "field_night/bells.ogg",
+          "tier": 2,
+          "db": 0.0
+        }
+      ]
+    },
+    "village": {
+      "title": "小镇",
+      "bpm": 84,
+      "bar_beats": 4,
+      "bars": 32,
+      "beat_count": 128,
+      "loop": true,
+      "loop_offset": 0.0,
+      "key": "G major",
+      "duration_s": 91.429,
+      "loudness_lufs": -15.06,
+      "layers": [
+        {
+          "name": "piano",
+          "file": "village/piano.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "guitar",
+          "file": "village/guitar.ogg",
+          "tier": 1,
+          "db": 0.0
+        },
+        {
+          "name": "marimba",
+          "file": "village/marimba.ogg",
+          "tier": 2,
+          "db": 0.0
+        },
+        {
+          "name": "winds",
+          "file": "village/winds.ogg",
+          "tier": 2,
+          "db": 0.0
+        }
+      ]
+    },
+    "interior": {
+      "title": "灯下",
+      "bpm": 58,
+      "bar_beats": 4,
+      "bars": 32,
+      "beat_count": 128,
+      "loop": true,
+      "loop_offset": 0.0,
+      "key": "F major",
+      "duration_s": 132.395,
+      "loudness_lufs": -15.03,
+      "layers": [
+        {
+          "name": "piano",
+          "file": "interior/piano.ogg",
+          "tier": 0,
+          "db": 0.0
+        }
+      ]
+    },
+    "strategic": {
+      "title": "远望",
+      "bpm": 64,
+      "bar_beats": 4,
+      "bars": 32,
+      "beat_count": 128,
+      "loop": true,
+      "loop_offset": 0.0,
+      "key": "C major",
+      "duration_s": 120.0,
+      "loudness_lufs": -15.0,
+      "layers": [
+        {
+          "name": "pad",
+          "file": "strategic/pad.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "piano",
+          "file": "strategic/piano.ogg",
+          "tier": 1,
+          "db": 0.0
+        },
+        {
+          "name": "vibraphone",
+          "file": "strategic/vibraphone.ogg",
+          "tier": 1,
+          "db": 0.0
+        },
+        {
+          "name": "bells",
+          "file": "strategic/bells.ogg",
+          "tier": 2,
+          "db": 0.0
+        }
+      ]
+    },
+    "battle": {
+      "title": "出征",
+      "bpm": 104,
+      "bar_beats": 4,
+      "bars": 32,
+      "beat_count": 128,
+      "loop": true,
+      "loop_offset": 0.0,
+      "key": "D minor",
+      "duration_s": 73.846,
+      "loudness_lufs": -15.0,
+      "layers": [
+        {
+          "name": "piano",
+          "file": "battle/piano.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "perc",
+          "file": "battle/perc.ogg",
+          "tier": 1,
+          "db": 0.0
+        },
+        {
+          "name": "strings",
+          "file": "battle/strings.ogg",
+          "tier": 1,
+          "db": 0.0
+        },
+        {
+          "name": "winds",
+          "file": "battle/winds.ogg",
+          "tier": 2,
+          "db": 0.0
+        }
+      ]
+    },
+    "sting_victory": {
+      "title": "凯旋",
+      "bpm": 72,
+      "bar_beats": 4,
+      "bars": 2,
+      "beat_count": 0,
+      "loop": false,
+      "loop_offset": 0.0,
+      "key": "D major",
+      "duration_s": 6.682,
+      "loudness_lufs": -14.0,
+      "layers": [
+        {
+          "name": "bells",
+          "file": "sting_victory/bells.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "piano",
+          "file": "sting_victory/piano.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "strings",
+          "file": "sting_victory/strings.ogg",
+          "tier": 0,
+          "db": 0.0
+        }
+      ]
+    },
+    "sting_defeat": {
+      "title": "折戟",
+      "bpm": 63,
+      "bar_beats": 4,
+      "bars": 2,
+      "beat_count": 0,
+      "loop": false,
+      "loop_offset": 0.0,
+      "key": "B minor",
+      "duration_s": 8.315,
+      "loudness_lufs": -14.0,
+      "layers": [
+        {
+          "name": "piano",
+          "file": "sting_defeat/piano.ogg",
+          "tier": 0,
+          "db": 0.0
+        },
+        {
+          "name": "strings",
+          "file": "sting_defeat/strings.ogg",
+          "tier": 0,
+          "db": 0.0
+        }
+      ]
+    }
+  }
+}

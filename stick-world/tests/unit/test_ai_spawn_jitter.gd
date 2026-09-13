@@ -24,6 +24,7 @@ var _runner: TestRunner
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("W2 关：首个到期 = 装配时刻 + interval（旧累加器逐拍等价）", _test_off_equivalent)
+	_runner.add_test("W2 生产默认：.tres 开闸后错峰/失败冷却生效默认开（GK-3）", _test_shipped_default_on)
 	_runner.add_test("W2 开：首个到期落于 [now+i×(1-ratio), now+i]（比例边界）", _test_on_bounds)
 	_runner.add_test("W2 确定性：同种子一致、异种子错开", _test_seed_determinism)
 	_runner.add_test("W2 防齐套：20 单位首次到期离散度显著", _test_batch_dispersion)
@@ -62,6 +63,21 @@ func _restore_rows() -> void:
 	ScriptBehaviorProfiles._cache.clear()
 
 
+## GK-3 开闸依据：.tres 生效默认已翻 true（spawn_jitter_enabled / probe_fail_cooldown_enabled）。
+## 专门验证"关 = 旧累加器逐位等价"的用例必须显式注入关档钉住两态，不再依赖"默认即关"。
+func _inject_off_rows() -> void:
+	_inject_rows([{
+		"id": "baseline",
+		"decision_interval": BASE_INTERVAL,
+		"decision_variance": 0.0,
+		"spawn_jitter_enabled": false,
+		"spawn_jitter_ratio": 0.5,
+		"probe_fail_cooldown_enabled": false,
+		"job_scan_interval": 0.5,
+		"acquire_interval": 0.4,
+	}])
+
+
 ## 造一个注入了时钟与种子的 AI 控制器（裸 new，不进场景树：时钟/种子全注入，
 ## 决策时钟族不依赖实体，_get_behavior_profile 对 null 实体回落 SWORD 档）
 func _make_ai(clock: _FakeClock, jitter_seed: int) -> AIController:
@@ -73,8 +89,23 @@ func _make_ai(clock: _FakeClock, jitter_seed: int) -> AIController:
 
 # ─────────────────── ① 关：与旧累加器逐拍等价 ────────────────────
 
+## GK-3 开闸契约：出厂 .tres 行的生效默认已翻 true（全兵种、无 CLASS_PROFILES 覆盖）
+func _test_shipped_default_on() -> void:
+	_restore_rows()
+	var p: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
+	_runner.assert_true(bool(p.get("spawn_jitter_enabled", false)),
+			"GK-3 开闸：spawn_jitter_enabled 生效默认开")
+	_runner.assert_true(bool(p.get("probe_fail_cooldown_enabled", false)),
+			"GK-3 开闸：probe_fail_cooldown_enabled 生效默认开")
+	# 代码 BASELINE 保持 false = BalanceConfig 缺载兜底（_test_config_missing 覆盖）
+	_runner.assert_false(bool(ScriptBehaviorProfiles.BASELINE.get("spawn_jitter_enabled", true)),
+			"spawn_jitter_enabled 代码基线默认关（缺载兜底）")
+	_runner.assert_false(bool(ScriptBehaviorProfiles.BASELINE.get("probe_fail_cooldown_enabled", true)),
+			"probe_fail_cooldown_enabled 代码基线默认关（缺载兜底）")
+
+
 func _test_off_equivalent() -> void:
-	_restore_rows()  # .tres 基线：spawn_jitter_enabled=false（零回归闸门）
+	_inject_off_rows()  # GK-3 开闸：关态语义用例显式注入关档（不再依赖 .tres 默认）
 	var ai: AIController = _make_ai(_FakeClock.new(), 1234)
 	ai.apply_spawn_jitter()
 	# 旧语义 = "从 0 起累计"：首次触发落在装配后 interval 秒
@@ -227,7 +258,7 @@ func _test_batch_dispersion() -> void:
 # ─────────────────── ① 绝对时刻：跳变不连爆 ────────────────────
 
 func _test_absolute_clock_no_burst() -> void:
-	_restore_rows()
+	_inject_off_rows()  # GK-3 开闸：绝对时刻用例显式注入关档（首个到期锚定 interval，便于断言）
 	var clock := _FakeClock.new()
 	var ai: AIController = _make_ai(clock, 42)
 	ai.apply_spawn_jitter()
@@ -358,8 +389,9 @@ func _test_config_missing() -> void:
 
 
 func _test_probe_fail_cooldown() -> void:
-	# 现状判定锁定：失败冷却关（默认）→ 探测失败不做任何冷却，下一拍照常探测
-	_restore_rows()
+	# 关态判定锁定：显式注入失败冷却关（GK-3 开闸后 .tres 默认已为开）→
+	# 探测失败不做任何冷却，下一拍照常探测
+	_inject_off_rows()
 	var clock := _FakeClock.new()
 	var ai: AIController = _make_ai(clock, 11)
 	ai.apply_spawn_jitter()

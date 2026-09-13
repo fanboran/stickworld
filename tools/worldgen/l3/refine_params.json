@@ -1,0 +1,10 @@
+{
+ "comment": "fBm 域扭曲参数：低频大弯+高频细碎，两通道（dx/dy）独立 seed；amp 相对城块平均尺寸(~63px 边长)取 11/3.5px——自然弯曲且不破碎",
+ "low_wavelength": 260,
+ "low_amp": 11.0,
+ "high_wavelength": 64,
+ "high_amp": 3.5,
+ "seed_dx": 20260911,
+ "seed_dy": 91120260,
+ "diag_max_iter": 24
+}

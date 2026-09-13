@@ -1,15 +1,21 @@
 extends Node
-## feedback2 观感修复验收截图（用完即删）：L3 政治三机位 + 出生地区 L2 下钻。
-##   L3 全景（国名+都城星标，验证 B 海洋底/E 城邦族色/A 国界/C 统一界线）/
-##   L3 出生地区特写（五问题主视角）/ L3 深放大 / L2 region_013 政治模式（验证 D 陆地洞）
+## 观感返工第三批验收截图（用完即删）—— 直接驱动**真实场景树**
+## （strategic_map.tscn / strategic_map_l3.tscn / strategic_map_l2.tscn），
+## 因此同时实证两件事：
+##   1) C21「视口满屏」在游戏内配置下是否成立（打印 OceanBackground 的尺寸 vs 视口）；
+##   2) 界线（C19）/ 都城标记（C20）/ 政权配色（C23）/ 标注文字（C24）的实际观感。
+## 截图按**地图内容矩形裁剪**（C22）——不再输出带画布空边的整屏图。
+##
 ## 用法：godot --path . res://tests/dev/r8_label_capture.tscn（需真实渲染，不能 headless）
-## 产物：仓库根 tools/worldgen/output/feedback2_*.png
+## 产物：仓库根 tools/worldgen/output/feedback3_*.png
 
 const OUT_DIR := "../tools/worldgen/output"
-const SM_BASE := "res://config/strategic_map"
+const SM := "res://config/strategic_map"
 const WAIT_FRAMES := 600  # 异步解码等待上限（帧）
 ## 出生地区 label（l3_map_renderer.player_region_label 同源）
 const BIRTH_REGION_LABEL := 13
+## 裁剪外边距（屏幕像素）：给内容留一圈呼吸位
+const CROP_PAD := 18.0
 
 var _vp_size: Vector2
 
@@ -17,67 +23,156 @@ var _vp_size: Vector2
 func _ready() -> void:
 	_vp_size = get_viewport().get_visible_rect().size
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://" + OUT_DIR))
-	# 游戏同构 CanvasLayer（strategic_map_l3.tscn 同款：OceanBackground 首子节点）+
-	# 后挂渲染器；海洋底是否盖住 z=-1 的政治层由此实证
-	var layer := CanvasLayer.new()
-	layer.layer = 101
-	add_child(layer)
-	_add_ocean_background_to(layer)
-	await _shot_l2(layer)
-	await _shot_l3(layer)
+	await _shot_l1()
+	await _shot_l3()
+	await _shot_l2()
 	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
 	print("R8_LABEL_CAPTURE_DONE")
 	get_tree().quit()
 
 
-## 全屏海洋底（feedback2 B）：游戏内 = strategic_map_l3.tscn 的 OceanBackground
-## （l3_map_controller open() 挂载），截图树此前缺件 → 截图四周露编辑器灰底。
-## 色与 political shader empty_color 同源（MapTokens.L3_OCEAN = 30/55/95）。
-func _add_ocean_background_to(layer: CanvasLayer) -> void:
-	var ocean := ColorRect.new()
-	ocean.name = "OceanBackground"
-	ocean.color = MapTokens.L3_OCEAN
-	ocean.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ocean.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# z=-2 与 strategic_map_l3.tscn 同步（feedback2 B 实证：政治 ID mask 层是
-	# 渲染器子节点 z=-1，海洋底 z=0 会把它整个盖住——游戏内同病，场景已修）
-	ocean.z_index = -2
-	layer.add_child(ocean)
+## ── L1（Tab）：出生地块政治模式 + 地形模式，验证 C19/C23/C24 与全屏海洋底 ──
+func _shot_l1() -> void:
+	var scene: Node = preload("res://modules/world_map/scenes/strategic_map.tscn").instantiate()
+	add_child(scene)
+	var content: Node = scene.get_node("Content")
+	var api: Node = content.get_node("Api")
+	api.call("initialize", SM + "/l1_world.json", SM)
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	content.call("open")
+	await _settle(10)
+	_diag_ocean("L1", scene)
+	var cam: MapCamera = content.get("map_camera")
+	var data: L1WorldData = api.call("get_data")
+	var rect := Rect2(Vector2.ZERO, Vector2(data.context_size))
+	await _capture("feedback3_l1_political", cam, rect)
+	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
+	await _settle(14)
+	_diag("L1", content.get("map_renderer"))
+	await _capture("feedback3_l1_terrain", cam, rect)
+	# 交通模式（R6 道路渲染 + l1_travel 底图）——道路图验收
+	MapModeManager.set_mode(MapModeManager.Mode.TRAFFIC)
+	await _settle(14)
+	await _capture("feedback3_l1_traffic", cam, rect)
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	await _settle(6)
+	await _teardown([scene])
 
 
-func _make_camera(renderer: Node2D, zoom: float, center: Vector2) -> MapCamera:
-	var cam := MapCamera.new()
-	cam.drag_enabled = false
-	cam.zoom_enabled = false
-	add_child(cam)
-	cam.target = renderer
-	renderer.set_camera(cam)
-	cam.set_zoom(zoom)
-	# screen = offset + map × zoom → 地图点 center 摆到屏幕中心
-	cam.set_offset(_vp_size * 0.5 - center * zoom)
-	return cam
+## ── L3（M）：政治模式全景 / 出生地区特写 / 深放大，验证界线三级与都城标记 ──
+func _shot_l3() -> void:
+	var scene: Node = preload("res://modules/world_map/scenes/strategic_map_l3.tscn").instantiate()
+	add_child(scene)
+	var content: Node = scene.get_node("Content")
+	var renderer: L3MapRenderer = content.get("map_renderer")
+	var cam: MapCamera = content.get("map_camera")
+	renderer.set_data(L3WorldData.load_from(SM + "/l3_world.json", SM))
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	content.call("open")
+	# 等政权着色层就绪（S3 矢量 fill 优先，mask 异步回退）
+	await _wait_until(func(): return renderer._political_layer != null 		or not renderer._political_fill_meshes.is_empty())
+	await _settle(10)
+	print("DIAG L3 fill_meshes=", renderer._political_fill_meshes.size(),
+		" mask_layer=", renderer._political_layer)
 
 
-func _capture(shot_name: String) -> void:
+	_diag_ocean("L3", scene)
+	_diag("L3fit", renderer)
+	var rect := _l3_land_rect(renderer)
+	print("L3 land_rect=", rect)
+	await _capture("feedback3_l3_political_fit", cam, rect)
+	# 出生地区特写（zoom 0.55，r≈4.7 ≤ 6 → 国名在显）
+	var birth_center := _birth_region_center(renderer.get_data())
+	cam.set_zoom(0.55)
+	cam.set_offset(_vp_size * 0.5 - birth_center * 0.55)
+	await _settle(8)
+	await _capture("feedback3_l3_political_birth", cam, _view_rect(cam))
+	# 深放大（r 远超国名阈值 → 国名退场，只余都城标记 + 界线细节）
+	var stars: Array = renderer._label_layer._stars
+	var center: Vector2 = stars[0]["pos"] if not stars.is_empty() else Vector2.ONE * 4096.0
+	cam.set_zoom(1.2)
+	cam.set_offset(_vp_size * 0.5 - center * 1.2)
+	await _settle(8)
+	await _capture("feedback3_l3_political_zoom", cam, _view_rect(cam))
+	await _teardown([scene])
+
+
+## ── L2（下钻）：region_013 政治模式默认视角 ──
+func _shot_l2() -> void:
+	var scene: Node = preload("res://modules/world_map/scenes/strategic_map_l2.tscn").instantiate()
+	add_child(scene)
+	var content: Node = scene.get_node("Content")
+	content.call("open", "region_%03d" % BIRTH_REGION_LABEL)
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	await _settle(12)
+	_diag_ocean("L2", scene)
+	var cam: MapCamera = content.get("map_camera")
+	var data: L2WorldData = content.get("data")
+	var ctx := Vector2(float(data.context_size.x), float(data.context_size.y))
+	await _capture("feedback3_l2_political", cam, Rect2(Vector2.ZERO, ctx))
+	await _teardown([scene])
+
+
+# ────────────────────────── 工具 ──────────────────────────
+
+## 视口内可视的地图矩形（地图坐标）——放大特写时内容铺满视口，裁到可视域即可
+func _view_rect(cam: MapCamera) -> Rect2:
+	var z: float = maxf(cam.get_zoom(), 0.0001)
+	return Rect2(-cam.get_offset() / z, _vp_size / z)
+
+
+## L3 陆地包围盒（region land_polygons 并集 bbox，[y,x] 序）——裁掉四周空海洋带
+func _l3_land_rect(renderer: L3MapRenderer) -> Rect2:
+	var data: L3WorldData = renderer.get_data()
+	var mn := Vector2.INF
+	var mx := -Vector2.INF
+	for r in data.regions:
+		for poly: Variant in r.get("land_polygons", [r.get("land_polygon", [])]):
+			for pp: Variant in poly:
+				var v: Vector2 = pp if pp is Vector2 else Vector2(pp[1], pp[0])
+				mn = mn.min(v)
+				mx = mx.max(v)
+	if mn == Vector2.INF:
+		return Rect2(0.0, 0.0, float(data.size), float(data.size))
+	return Rect2(mn, mx - mn)
+
+
+## 出生地区质心（centroid 2048 级 [x,y] → 渲染坐标 ×size/2048，_draw_l2_labels 同口径）
+func _birth_region_center(data: L3WorldData) -> Vector2:
+	for r in data.regions:
+		if int(r.get("label", 0)) != BIRTH_REGION_LABEL:
+			continue
+		var c: Array = r.get("centroid", [0, 0])
+		return Vector2(float(c[0]), float(c[1])) * float(data.size) / 2048.0
+	return Vector2.ONE * float(data.size) * 0.5
+
+
+## 按地图内容矩形裁剪保存（C22）：screen = offset + map × zoom，外扩 CROP_PAD，
+## 再与视口求交（内容超出屏幕时自动退化为整屏）
+func _capture(shot_name: String, cam: MapCamera, map_rect: Rect2) -> void:
 	await RenderingServer.frame_post_draw
-	var img := get_viewport().get_texture().get_image()
+	var img: Image = get_viewport().get_texture().get_image()
+	var z: float = maxf(cam.get_zoom(), 0.0001)
+	var scr := Rect2(cam.get_offset() + map_rect.position * z, map_rect.size * z).grow(CROP_PAD)
+	scr = scr.intersection(Rect2(Vector2.ZERO, _vp_size))
+	if scr.size.x < 8.0 or scr.size.y < 8.0:
+		scr = Rect2(Vector2.ZERO, _vp_size)
+	img = img.get_region(Rect2i(roundi(scr.position.x), roundi(scr.position.y),
+		roundi(scr.size.x), roundi(scr.size.y)))
 	var path := "res://%s/%s.png" % [OUT_DIR, shot_name]
 	img.save_png(ProjectSettings.globalize_path(path))
-	print("SHOT ", shot_name, " ", img.get_size())
+	print("SHOT ", shot_name, " ", img.get_size(), " crop=", scr)
 
 
-## 轮询条件满足或超时（条件 callable 返回 true 即通过）
-func _wait_until(cond: Callable) -> void:
-	for i in WAIT_FRAMES:
-		if cond.call():
-			return
-		await get_tree().process_frame
-
-
-func _teardown(nodes: Array) -> void:
-	for n in nodes:
-		n.queue_free()
-	await get_tree().process_frame
+## 全屏海洋底诊断（C21 硬指标：尺寸 ≥ 视口即铺满）
+func _diag_ocean(tag: String, scene: Node) -> void:
+	var ob: Control = scene.get_node_or_null("OceanBackground")
+	var filled: bool = ob != null \
+			and ob.size.x >= _vp_size.x - 0.5 and ob.size.y >= _vp_size.y - 0.5
+	print("OCEAN ", tag, " node=", ob != null,
+		" visible=", ob.visible if ob != null else false,
+		" size=", ob.size if ob != null else Vector2.ZERO,
+		" vp=", _vp_size, " filled=", filled)
 
 
 func _diag(tag: String, renderer: Node2D) -> void:
@@ -88,74 +183,40 @@ func _diag(tag: String, renderer: Node2D) -> void:
 	print("DIAG ", tag, " items=", ll._items.size(), " stars=", ll._stars.size(),
 			" font=", ll._font_reg != null, " bold=", ll._font_bold != null,
 			" vis=", ll.visible, " in_tree=", ll.is_inside_tree(),
-			" mode=", MapModeManager.current_mode,
-			" cam_z=", ll._camera.get_zoom() if ll._camera != null else -1.0)
+			" mode=", MapModeManager.current_mode)
 
 
-## ── L2：region_013（出生地区）政治模式默认视角，验证 D 陆地洞全消 ──
-func _shot_l2(layer: CanvasLayer) -> void:
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	var data := L2WorldData.load_from(
-		SM_BASE + "/l2_packs/region_013/l2_world.json", SM_BASE + "/l2_packs/region_013")
-	var renderer := L2MapRenderer.new()
-	layer.add_child(renderer)
-	var cam := _make_camera(renderer, 1.0, Vector2.ZERO)
-	renderer.set_data(data)
-	renderer.set_map_mode(MapModeManager.Mode.POLITICAL)
-	var ctx := float(maxi(data.context_size.x, data.context_size.y))
-	var fit := _vp_size.y * 0.72 / ctx
-	cam.set_zoom(fit * 1.75)  # 控制器默认视角（重镇名阈值 r≥1.2 之上）
-	cam.set_offset(_vp_size * 0.5 - Vector2(ctx, ctx) * fit * 1.75 * 0.5)
-	for i in 8:
+## 轮询条件满足或超时（条件 callable 返回 true 即通过）
+func _wait_until(cond: Callable) -> void:
+	for i in WAIT_FRAMES:
+		if cond.call():
+			return
 		await get_tree().process_frame
-	_diag("L2", renderer)
-	await _capture("feedback2_l2_birth")
-	await _teardown([renderer, cam])
 
 
-## ── L3：政治模式三连拍（共用一次 8192 数据装载/解码）──
-##   全景适配（B 海洋底/E 城邦族色）/ 出生地区特写（A 国界/C 统一界线）/
-##   深放大（r>6：国名退场，只余星标）
-func _shot_l3(layer: CanvasLayer) -> void:
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	var data := L3WorldData.load_from(SM_BASE + "/l3_world.json", SM_BASE)
-	var renderer := L3MapRenderer.new()
-	layer.add_child(renderer)
-	var cam := _make_camera(renderer, 1.0, Vector2.ZERO)
-	renderer.set_data(data)
-	renderer.set_map_mode(MapModeManager.Mode.POLITICAL)
-	# 等政权 ID mask 后台解码完成（67MB PNG，数秒）
-	await _wait_until(func(): return renderer._political_layer != null)
-	# 取一个都城星标落点做深放大的画面中心（星标在深放大下仍恒显）
-	var stars: Array = renderer._label_layer._stars
-	var center: Vector2 = stars[0]["pos"] if not stars.is_empty() else Vector2.ONE * 4096.0
-	# 出生地区质心（centroid 2048 级 [x,y] → 渲染坐标 ×size 比，_draw_l2_labels 同口径）
-	var birth_center := Vector2.ONE * float(data.size) * 0.5
-	for r in data.regions:
-		if int(r.get("label", 0)) != BIRTH_REGION_LABEL:
-			continue
-		var c: Array = r.get("centroid", [0, 0])
-		birth_center = Vector2(float(c[0]), float(c[1])) * float(data.size) / 2048.0
-	# 1) 整图适配（控制器 open() 口径：视口高 − 上下海洋边距）
-	var fit := (_vp_size.y - 128.0) / float(data.size)
-	cam.set_zoom(fit)
-	cam.set_offset(_vp_size * 0.5 - Vector2(data.size, data.size) * fit * 0.5)
-	for i in 8:
+func _settle(frames: int) -> void:
+	for i in frames:
 		await get_tree().process_frame
-	_diag("L3fit", renderer)
-	await _capture("feedback2_l3_country")
-	# 2) 出生地区特写 zoom 0.55（r≈4.7 ≤ 6 国名在显；地区占满画面）
-	cam.set_zoom(0.55)
-	cam.set_offset(_vp_size * 0.5 - birth_center * 0.55)
-	for i in 8:
-		await get_tree().process_frame
-	_diag("L3birth", renderer)
-	await _capture("feedback2_l3_birth")
-	# 3) 深放大 zoom 1.2（适配 zoom ~0.116 → r ≈ 10 > 6，国名阈值退场）
-	cam.set_zoom(1.2)
-	cam.set_offset(_vp_size * 0.5 - center * 1.2)
-	for i in 8:
-		await get_tree().process_frame
-	_diag("L3zoom", renderer)
-	await _capture("feedback2_l3_zoomed")
-	await _teardown([renderer, cam])
+
+
+func _teardown(nodes: Array) -> void:
+	for n in nodes:
+		n.queue_free()
+	await _settle(3)
+
+
+func _dump_tree(n: Node, depth: int) -> void:
+	if depth > 4:
+		return
+	var info := ""
+	if n is CanvasItem:
+		var ci := n as CanvasItem
+		info = " z=%d vis=%s modulate=%s" % [ci.z_index, ci.visible, ci.modulate]
+		if n is ColorRect:
+			info += " color=%s size=%s" % [(n as ColorRect).color, (n as ColorRect).size]
+		if n is MeshInstance2D:
+			var mi := n as MeshInstance2D
+			info += " surf=%d" % (mi.mesh.get_surface_count() if mi.mesh != null else -1)
+	print("%s%s [%s]%s" % ["  ".repeat(depth), n.name, n.get_class(), info])
+	for c in n.get_children():
+		_dump_tree(c, depth + 1)

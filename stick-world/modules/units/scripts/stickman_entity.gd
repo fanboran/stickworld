@@ -1384,9 +1384,10 @@ func _on_damaged(amount: float, source: Node) -> void:
 		return
 	# 受击硬直：被打瞬间 AI 短暂停滞（行业最佳实践 hit stun）
 	_hit_stun_timer = HIT_STUN_DURATION
-	# 受击音（SWL pain 痛叫三变体；AudioManager 重触发停旧实例 → 大团战不叠音墙）
+	# 受击音（痛叫三变体）。世界坐标交给 AudioManager：人群战斗时同帧请求并成
+	# 1~2 路声部（而不是叠成音墙，也不是"停旧实例"的机关枪顿挫）；屏外单位自然变轻
 	if AudioManager != null:
-		AudioManager.play_event("unit_hurt")
+		AudioManager.play_event("unit_hurt", global_position)
 	# 攻击者在自身朝向侧 = 正面受击（后仰）；否则背面受击（前扑）
 	var from_left: bool = source.global_position.x < global_position.x
 	var facing_right: bool = _facing > 0

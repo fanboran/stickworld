@@ -28,6 +28,8 @@ const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/comm
 const _BattlePanelScript: GDScript = preload("res://modules/combat/ui/battle_panel.gd")
 const _FormationPanelScript: GDScript = preload("res://modules/combat/ui/formation_panel.gd")
 const _OrgPanelScript: GDScript = preload("res://modules/organization/ui/org_panel.gd")
+const _StrategicOverviewPanelScript: GDScript = preload("res://modules/organization/ui/strategic_overview_panel.gd")
+const _CommandChainViewScene: PackedScene = preload("res://modules/organization/ui/command_chain_view.tscn")
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
 const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
@@ -58,7 +60,9 @@ const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/en
 const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
 const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
 const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
+const _OrgReportNarratorScript: GDScript = preload("res://modules/organization/ui/org_report_narrator.gd")
 const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
+const _SquadCardScene: PackedScene = preload("res://modules/combat/ui/squad_card.tscn")
 
 var _root: GameRoot
 
@@ -71,6 +75,9 @@ enum TabMapState { HIDDEN, TOP_MINIMAPS, FULL_L1 }
 var _tab_state: int = TabMapState.HIDDEN
 ## L1 世界缩略窗（与 Minimap 并列）
 var _l1_thumbnail: Control = null
+## L1 班组卡引用（装配层持有，供 OrgPanel 选中联动调用 show_squad/hide_card——
+## 不跨模块 get_node；UI-W4b 班组卡触发源补全）
+var _squad_card: Control = null
 
 
 func setup(root: GameRoot) -> void:
@@ -115,10 +122,14 @@ func _step_table() -> Array:
 		["战斗面板", _setup_battle_panel],
 		["编队面板", _setup_formation_panel],
 		["组织面板", _setup_org_panel],
+		["战略总览", _setup_strategic_overview],
+		["指挥链视图", _setup_command_chain_view],
+		["上报叙事", _setup_org_report_narrator],
 		["设置菜单", _setup_settings_menu_panel],
 		["暂停菜单", _setup_pause_menu_panel],
 		["小地图", _setup_minimap],
 		["TeamAi HUD", _setup_team_ai_hud],
+		["班组卡", _setup_squad_card],
 		["缩放条", _setup_zoom_bar],
 		["背包", _setup_inventory],
 		["附身界面", _setup_possession_interface],
@@ -504,6 +515,23 @@ func _setup_recruit_system() -> void:
 		_root._organization_api.set_recruit_manager(mgr)
 
 
+# ─────────────────────────────── 上报叙事装配（UI-W2-B ②③）───────────────────────────────
+
+## OrgReportNarrator 常驻 GameRoot：消费 organization api 的 report_filed（组织侧
+## 门控后的可见集）与 EventBus.commander_assigned，经 EventBus.ui_notification 落既有通知 feed。
+## 归 organization/ui（消费组织域数据、组织域 UI），不建跨模块面板。
+func _setup_org_report_narrator() -> void:
+	if _root._organization_api == null:
+		return
+	var n := Node.new()
+	n.set_script(_OrgReportNarratorScript)
+	n.name = "OrgReportNarrator"
+	_root.add_child(n)
+	_root._org_report_narrator = n
+	if n.has_method("setup"):
+		n.setup(_root._organization_api)
+
+
 # ─────────────────────────────── 战斗 UI 装配（§15 阶段 0.6）────────────────────────────────
 
 ## 给场景中已存在的 BattlePanel 占位节点挂脚本，并注入系统引用。详见 §10.1。
@@ -558,7 +586,27 @@ func _setup_org_panel() -> void:
 	if not _root.ui_root.add_to_slot("ModalOverlay", op):
 		return
 	_root._org_panel = op
+	# 装配层接线：OrgPanel 选中变更 → 班组卡（UI-W4b 触发源补全，不跨模块 get_node）
+	if op.has_signal("org_selection_changed") \
+			and not op.org_selection_changed.is_connected(_on_org_selection_changed):
+		op.org_selection_changed.connect(_on_org_selection_changed)
 	call_deferred("_setup_org_panel_deferred")
+
+
+## OrgPanel 选中组织 → 班组卡联动（选中 L1 唤起；其余/取消/关面板收起）。
+## 班组卡未装配（步骤表更靠后）时静默跳过，装配完成后自然生效。
+func _on_org_selection_changed(org_id: String) -> void:
+	if _squad_card == null or not is_instance_valid(_squad_card):
+		return
+	var show: bool = false
+	if not org_id.is_empty() and _root._organization_api != null \
+			and _root._organization_api.has_method("get_organization"):
+		var r: Dictionary = _root._organization_api.get_organization(org_id)
+		show = r.get("ok", false) and int((r.get("data", {}) as Dictionary).get("tier", 0)) == 1
+	if show and _squad_card.has_method("show_squad"):
+		_squad_card.call("show_squad", org_id)
+	elif _squad_card.has_method("hide_card"):
+		_squad_card.call("hide_card")
 
 
 func _setup_org_panel_deferred() -> void:
@@ -566,6 +614,39 @@ func _setup_org_panel_deferred() -> void:
 		return
 	if _root._org_panel.has_method("setup"):
 		_root._org_panel.setup(_root)
+
+
+# ─────────────────────────── 战略总览装配（UI-W4b §3.2.C）───────────────────────────
+
+## 实例化 StrategicOverviewPanel（全屏根走 UIKit.full_rect 合规出口，OrgPanel 同款）
+## 挂 UIRoot.ModalOverlay 槽；入口在 OrgPanel 顶部「总览」按钮（group 查找，
+## 装配层不导引用）。数据自取：组织 api 报表 + report_filed/commander_assigned 时间线。
+func _setup_strategic_overview() -> void:
+	if _root.ui_root == null:
+		return
+	var sp := UIKit.full_rect(_StrategicOverviewPanelScript, "StrategicOverviewPanel")
+	if not _root.ui_root.add_to_slot("ModalOverlay", sp):
+		sp.queue_free()
+		return
+	if sp.has_method("setup"):
+		sp.setup(_root)
+
+
+# ─────────────────────────── 指挥链视图装配（UI-W3）───────────────────────────
+
+## 实例化 CommandChainView 场景（command_chain_view.tscn，场景=布局唯一真相源）挂
+## UIRoot.ModalOverlay 槽（独立 FLOATING 窗口，与 OrgPanel 并存不互嵌——方案 §五.2）。
+## 视图自带 group("command_chain_view")，OrgPanel 顶部「指挥链」按钮按 group 打开，
+## 装配层不导引用（不新增 GameRoot getter）。
+func _setup_command_chain_view() -> void:
+	if _root.ui_root == null:
+		return
+	var cv: Control = _CommandChainViewScene.instantiate()
+	if not _root.ui_root.add_to_slot("ModalOverlay", cv):
+		cv.queue_free()
+		return
+	if cv.has_method("setup"):
+		cv.setup(_root)
 
 
 # ─────────────────────────────── 设置菜单装配（齿轮/ESC 打开）────────────────────────────────
@@ -650,6 +731,26 @@ func _setup_team_ai_hud() -> void:
 		return
 	if hud.has_method("setup"):
 		hud.setup(_root.battle_director)
+
+
+# ─────────────────────────────── L1 班组卡装配（W2 · 组织界面）────────────────────────────────
+
+## 挂 L1 班组卡（combat/ui/squad_card.tscn，场景=布局唯一真相源）到 ContextPanel 的
+## SquadInspector 具名槽（槽在 context_panel.tscn 声明，UI.md §10.1 层级图），
+## 并注入 GameRoot（卡片数据自取：框选解析小队 → 编制/相位/士气 duck 取数）。
+## 显隐由卡片自管（框选到小队即有、清空即收），装配层不参与业务判断。
+## 走 add_to_slot 的路径形式——槽在 ContextPanel 之下（UI.md §10.1 组织层级），
+## 槽名即 UIRoot 下的相对 NodePath。
+func _setup_squad_card() -> void:
+	if _root.ui_root == null:
+		return
+	var card := _SquadCardScene.instantiate()
+	if not _root.ui_root.add_to_slot("ContextPanel/SquadInspector", card):
+		card.queue_free()
+		return
+	_squad_card = card
+	if card.has_method("setup"):
+		card.setup(_root)
 
 
 ## 创建 ZoomBar 并挂到 UIRoot，钉进 right_bottom zone（右下贴缘，见 hud_zone_layout.gd）。

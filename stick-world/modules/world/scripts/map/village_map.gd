@@ -391,6 +391,15 @@ func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> 
 	return _resource_gen.generate_resource_nodes(start_cell, end_cell, density)
 
 
+## 分块协程版资源点生成（启动加载用）：每积满时间预算让一帧，把资源点的实例化
+## 与首绘摊到多帧，加载屏副条随 `on_progress(placed, target)` 推进。
+## 返回生成的 ResourceNode 数组（与同步版同一批节点）。
+func generate_resource_nodes_chunked(start_cell: int, end_cell: int, density: float,
+		on_progress: Callable = Callable()) -> Array:
+	return await _resource_gen.generate_resource_nodes_chunked(
+			start_cell, end_cell, density, on_progress)
+
+
 func set_city_bounds(left_x: float, right_x: float) -> void:
 	_terrain.set_city_bounds(left_x, right_x)
 

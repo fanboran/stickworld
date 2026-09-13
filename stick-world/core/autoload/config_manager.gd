@@ -12,7 +12,7 @@ const VOLUME_CHANNELS := ["master", "bgm", "sfx"]
 # 默认值表。首次启动用这些值初始化。
 var _defaults: Dictionary = {
 	"audio/master_volume": 0.8,
-	"audio/bgm_volume": 0.7,
+	"audio/bgm_volume": 0.8,
 	"audio/sfx_volume": 0.9,
 	"display/fullscreen": false,
 	"display/vsync": true,

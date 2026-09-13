@@ -14,6 +14,11 @@ extends StickWindow
 ## FormationPanel 保持战斗侧快捷位不并（各开各的面板，不做跨面板状态同步）。
 ## 由 SystemSetup 装配到 UIRoot.ModalOverlay 槽，open()/close() 控制可见性。
 
+# ─────────────────────────────── 信号 ────────────────────────────────
+## 选中组织变更（"" = 无选中/面板关闭）。装配层据此联动班组卡（system_setup 接线，
+## 组织模块内部导出选中态，不跨模块 get_node——UI-W2-A 遗留补全）。
+signal org_selection_changed(org_id: String)
+
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 标签栏（"" = 全部；顺序照架构 §3.2：军事/科研/工程/行政/商业/劳工/运输）
 const TABS: Array = [
@@ -49,6 +54,19 @@ const STATE_INT_TO_ZH := {
 	0: "组建中", 1: "活跃", 2: "执行中", 3: "休整中", 4: "已解散",
 }
 
+## 组织状态 → 图标母题（StickIcons.tex 直查，母题名 = 图标库文件名）：
+## 帐篷=组建中 / 旗帜=活跃 / 齿轮=执行中 / 篝火=休整中 / 木门=已解散
+## 缺口母题不得硬造，按 docs/设计/UI/图标清单与缺口.md 立项流程走
+const STATE_MOTIF := {
+	0: &"帐篷", 1: &"旗帜", 2: &"齿轮", 3: &"篝火", 4: &"木门",
+}
+
+## 树节点文案可用宽度（px）：左栏 580 − 层级缩进 / 状态图标 / 滚动条预留。
+## 徽标按优先级贴合该预算，放不下的降级到悬停提示——树列不换行，超宽即被裁（防挤爆行宽）。
+const TREE_TEXT_BUDGET := 452.0
+## 悬停提示里补位候选显示枚数（只读展示，完整候选序不铺满提示）
+const TOOLTIP_CANDIDATE_LIMIT := 3
+
 const AUTONOMY_LEVELS: Array = ["HIGH", "MEDIUM", "LOW"]
 const AUTONOMY_TO_ZH := {"HIGH": "高自主", "MEDIUM": "中自主", "LOW": "低自主"}
 
@@ -59,12 +77,22 @@ var _org_api: Node = null
 var _active_tag: String = ""
 ## 选中组织 id（"" = 未选中）
 var _selected_org: String = ""
+## 选中变更信号去重（避免 open/_refresh_tree 多路径重复发同一选中）
+var _last_emitted_selection: String = ""
+var _selection_emitted: bool = false
 ## 导出的蓝图内存持有（name -> v2 data；构筑谱系/UGC 文件化挂后续任务）
 var _blueprints: Dictionary = {}
 ## 非 "" = 详情区处于「插入层级（任命统辖）」流程，值为插入位置 above/below
 var _insert_position: String = ""
 ## true = 详情区成员列表进入「任命指挥官」选择态
 var _choosing_commander: bool = false
+## 子树人员集合缓存（org_id -> Array[String]）：一次建树内复用，避免逐节点重复递归
+var _people_cache: Dictionary = {}
+## 单兵士气缓存（stickman_id -> float，-1 = 不可解析），同一次建树内复用
+var _morale_cache: Dictionary = {}
+## 当前地图在场实体索引（instance_id -> 实体）；建树/刷新详情时重建（见 _ensure_unit_index）
+var _unit_index: Dictionary = {}
+var _unit_index_built: bool = false
 
 # ─────────────────────────────── UI 元素 ────────────────────────────────
 var _tab_bar: TabBar = null
@@ -87,7 +115,8 @@ var _insert_commander_option: OptionButton = null
 func setup(game_root: Node) -> void:
 	_game_root = game_root
 	_org_api = game_root.get_organization_api() if game_root != null and game_root.has_method("get_organization_api") else null
-	window_size = Vector2(820, 520)
+	# 树节点带状态徽标后需更宽的行预算：左栏 580 + 右详情区（见 TREE_TEXT_BUDGET）
+	window_size = Vector2(1040, 580)
 	window_title = "组织管理"
 	behavior = StickWindow.Behavior.FLOATING
 	_build_window()
@@ -113,6 +142,18 @@ func _on_orgs_changed(_org_id: String = "") -> void:
 
 ## 内容装配（StickWindow 已建无遮罩骨架；内容挂 _body：标签栏 + 快捷条 + 左树右详情）
 func _build_content() -> void:
+	# ── 顶部入口：指挥链视图（独立 StickWindow，不嵌本面板——方案 §五.2） ──
+	var top := StickKit.row(_body, 8)
+	StickKit.label(top, "组织管理", StickKit.LabelKind.SECTION)
+	var top_hint := StickKit.label(top, "树 = 编制结构；总览 = 全组织报表；指挥链 = 命令逐跳物理旅程", StickKit.LabelKind.HINT)
+	top_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# ── 战略总览入口（独立大面板，与指挥链并排——方案 §3.2.C） ──
+	var overview_btn := StickKit.sketch_button(top, "总览", _on_open_overview_pressed,
+			StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+	overview_btn.tooltip_text = "打开战略总览（全组织报表 + 上报流时间线）"
+	var chain_btn := StickKit.sketch_button(top, "指挥链", _on_open_chain_pressed,
+			StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_SM)
+	chain_btn.tooltip_text = "打开指挥链视图（命令沿层级逐跳跑秒 + 在途命令清单）"
 	# ── 标签栏 = 树过滤器 ──
 	_tab_bar = TabBar.new()
 	for t in TABS:
@@ -130,7 +171,7 @@ func _build_content() -> void:
 	_body.add_child(hbox)
 	# 左栏：组织树 + 从预设创建
 	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(340, 0)
+	left.custom_minimum_size = Vector2(580, 0)
 	left.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hbox.add_child(left)
 	var tree_label := Label.new()
@@ -139,6 +180,8 @@ func _build_content() -> void:
 	_tree = Tree.new()
 	_tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# 森林多根：隐藏占位根，树从 L5 顶根起画（省一级缩进，行预算全给内容）
+	_tree.hide_root = true
 	_tree.item_selected.connect(_on_tree_item_selected)
 	left.add_child(_tree)
 	var preset_row := HBoxContainer.new()
@@ -175,7 +218,25 @@ func _build_content() -> void:
 
 func open() -> void:
 	_refresh_all()
+	_emit_selection_changed()
 	super.open()
+
+
+## 关闭即导出「无选中」——装配层据此收起班组卡，别让卡残留（消费既有 hide 语义）
+func close() -> void:
+	_selected_org = ""
+	_selection_emitted = false
+	_emit_selection_changed()
+	super.close()
+
+
+## 选中变更导出（去重；"" 表示无选中/关闭）。装配层 system_setup 消费。
+func _emit_selection_changed() -> void:
+	if _selection_emitted and _last_emitted_selection == _selected_org:
+		return
+	_selection_emitted = true
+	_last_emitted_selection = _selected_org
+	org_selection_changed.emit(_selected_org)
 
 
 # ─────────────────────────────── 刷新 ────────────────────────────────
@@ -230,11 +291,16 @@ func _refresh_quick_strip() -> void:
 func _refresh_tree() -> void:
 	if _tree == null:
 		return
+	# 建树前清聚合缓存（人员/士气随组织与实体状态变化，缓存只在单次建树内有效）
+	_people_cache.clear()
+	_morale_cache.clear()
+	_unit_index_built = false
 	_tree.clear()
-	# 选中组织可能已被解散/重组：失效则清空选中
+	# 选中组织可能已被解散/重组：失效则清空选中（并导出——装配层据此收起班组卡）
 	if not _selected_org.is_empty() \
 			and not (_org_api.get_organization(_selected_org).get("ok", false)):
 		_selected_org = ""
+		_emit_selection_changed()
 	var fake_root := _tree.create_item()
 	if _org_api == null or not _org_api.has_method("list_root_orgs"):
 		return
@@ -252,16 +318,29 @@ func _insert_org_item(parent_item: TreeItem, org_id: String) -> void:
 	var item: TreeItem = parent_item
 	if matched:
 		item = _tree.create_item(parent_item)
-		var cmd := String(d.commander_id)
-		var cmd_str := "" if cmd.is_empty() else " ▲#%s" % cmd
-		item.set_text(0, "[L%d] %s · %s %d人%s" % [
-			int(d.tier), String(d.name), String(TAG_INT_TO_ZH.get(int(d.tag), "?")),
-			(d.personnel as Array).size(), cmd_str])
-		item.set_metadata(0, org_id)
-		if org_id == _selected_org:
-			item.select(0)
+		_decorate_org_item(item, d, org_id)
 	for child_id in d.child_orgs:
 		_insert_org_item(item, child_id)
+
+
+## 节点装扮（① 状态徽标增强，不改既有主干文案与 CRUD 能力）：
+## 图标 = 组织状态母题；文案 = 主干 + 状态/统辖/士气徽标（超宽逐项降级）；
+## 「群龙无首」空缺态（架构 §4.3 ③）用危险色 + 空缺标记一眼可辨；补位候选序进悬停提示。
+func _decorate_org_item(item: TreeItem, d: Dictionary, org_id: String) -> void:
+	var people := _org_people(org_id)
+	var morale := _people_morale(people)
+	item.set_text(0, _compose_node_text(d, people, morale))
+	var icon: Texture2D = StickIcons.tex(StringName(STATE_MOTIF.get(int(d.state), &"旗帜")))
+	if icon != null:
+		item.set_icon(0, icon)
+		item.set_icon_max_width(0, 18)
+	item.set_metadata(0, org_id)
+	item.set_tooltip_text(0, _compose_node_tooltip(d, people, morale))
+	# 群龙无首 = 指挥官空缺且中间层（L1 可合法空架招兵，不算空缺）——红字压全行
+	if _is_leaderless(d):
+		item.set_custom_color(0, StickTokens.DANGER)
+	if org_id == _selected_org:
+		item.select(0)
 
 
 ## 刷新详情区：插入流程 > 未选中提示 > 选中组织字段 + 操作 + 成员
@@ -313,6 +392,8 @@ func _render_org_detail(d: Dictionary) -> void:
 		(d.personnel as Array).size(), (d.child_orgs as Array).size(),
 		parent_name, String(d.location) if not String(d.location).is_empty() else "（未设）"]
 	_detail_box.add_child(info)
+	# ── 组织概览卡（状态/士气/统辖/群龙无首/补位候选序）──
+	_render_org_vitals(d)
 	# ── 自主权限（即点即改） ──
 	var auto_row := HBoxContainer.new()
 	auto_row.add_theme_constant_override("separation", 6)
@@ -440,6 +521,59 @@ func _render_org_detail(d: Dictionary) -> void:
 		row.add_child(rm_btn)
 
 
+## 组织概览卡（内嵌 LIGHT 区块）：状态徽标 + 士气条 + 统辖规模 + 空缺警示 + 补位候选序。
+## 与树徽标同源数据（_org_people/_people_morale），避免两处口径分叉。
+func _render_org_vitals(d: Dictionary) -> void:
+	var org_id := String(d.id)
+	var people := _org_people(org_id)
+	var morale := _people_morale(people)
+	var panel := SketchPanel.new()
+	panel.tone = SketchPanel.Tone.LIGHT
+	_detail_box.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	panel.add_child(box)
+	# 状态行（图标母题与树节点一致）
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 6)
+	box.add_child(head)
+	var icon := TextureRect.new()
+	icon.texture = StickIcons.tex(StringName(STATE_MOTIF.get(int(d.state), &"旗帜")))
+	icon.custom_minimum_size = Vector2(20, 20)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	head.add_child(icon)
+	StickKit.label(head, "状态：%s" % String(STATE_INT_TO_ZH.get(int(d.state), "?")),
+			StickKit.LabelKind.BODY)
+	StickKit.label(head, "｜ 直属 %d 人 · 统辖 %d 人" % [
+			(d.personnel as Array).size(), people.size()], StickKit.LabelKind.HINT)
+	# 士气条（存活成员均值；一个都解析不到则不显示该行——取不到就不显示）
+	if morale >= 0.0:
+		var mrow := HBoxContainer.new()
+		mrow.add_theme_constant_override("separation", 6)
+		box.add_child(mrow)
+		StickKit.label(mrow, "士气", StickKit.LabelKind.HINT)
+		var bar := SketchProgress.new()
+		bar.max_value = 1.0
+		bar.value = morale
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(180, 14)
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mrow.add_child(bar)
+		StickKit.label(mrow, "%d%%" % int(round(morale * 100.0)), StickKit.LabelKind.HINT,
+				_morale_color(morale))
+	# 群龙无首：与树标记同一语义（空缺就是空缺，不美化）
+	if _is_leaderless(d):
+		StickKit.label(box, "群龙无首：指挥官空缺，命令将停驻此层——请任命或等待补位",
+				StickKit.LabelKind.HINT, StickTokens.DANGER)
+	# 补位候选序（只读；排序口径归组织侧）
+	var cands := _succession_candidates_of(org_id)
+	if not cands.is_empty():
+		StickKit.label(box, "补位候选序（%d）" % cands.size(), StickKit.LabelKind.SECTION)
+		for i in cands.size():
+			StickKit.label(box, "%d. ▲#%s" % [i + 1, String((cands[i] as Dictionary).get("id", ""))],
+					StickKit.LabelKind.HINT)
+
+
 ## 插入层级流程（任命统辖）：新层级 > 1 须同时指定指挥官；L1 叶层仅命名
 func _render_insert_flow() -> void:
 	var r: Dictionary = _org_api.get_organization(_selected_org)
@@ -507,6 +641,187 @@ func _succession_candidates(d: Dictionary) -> Array[String]:
 	return pool
 
 
+# ───────────────── 组织「活」的可见面（状态 / 士气 / 空缺 / 补位）─────────────────
+# 数据口径：全部走 organization api 只读查询 + 实例 id duck 查询；查询不到即不显示该项，
+# 面板不倒逼组织侧改结构。补位候选序排序口径归组织侧（§4.3.1），面板只读展示。
+
+## 中间层（L2+）指挥官空缺 = 「群龙无首」持续空缺态（组织架构 §4.3 ③）。
+## L1 叶层可合法空架招兵（FORMING），不算空缺——不制造假警报。
+func _is_leaderless(d: Dictionary) -> bool:
+	return int(d.tier) > 1 and String(d.commander_id).is_empty()
+
+
+## 节点行文案：主干 = [L1] 名称 · 标签 [N人] [▲#id]——「N人」= 本层在册直属成员（personnel），
+## 为 0 时整段省略（不显示 0 人，也不造孤零零的分隔点；L2+ 直属通常为 0）。
+## 其后按显示序追加徽标：状态 / 统辖规模 / 士气均值 / 群龙无首（恒末尾）。
+## 除「群龙无首」外逐项做宽度准入——树列不换行，超宽即被裁，宁可少显示也不挤爆行宽。
+func _compose_node_text(d: Dictionary, people: Array[String], morale: float) -> String:
+	var cmd := String(d.commander_id)
+	var direct: int = (d.personnel as Array).size()
+	var text := "[L%d] %s · %s" % [
+		int(d.tier), String(d.name), String(TAG_INT_TO_ZH.get(int(d.tag), "?"))]
+	if direct > 0:
+		text += " %d人" % direct
+	if not cmd.is_empty():
+		text += " ▲#%s" % cmd
+	var leaderless := _is_leaderless(d)
+	var parts: Array[String] = [" · %s" % String(STATE_INT_TO_ZH.get(int(d.state), "?"))]
+	if people.size() > (d.personnel as Array).size():
+		parts.append(" · 辖%d人" % people.size())
+	if morale >= 0.0:
+		parts.append(" · 士气%d%%" % int(round(morale * 100.0)))
+	if leaderless:
+		parts.append(" · 群龙无首")
+	for i in parts.size():
+		# 群龙无首是本批最有信息量的一项：宽度不够也要留下（主干已远窄于预算）
+		var essential := leaderless and i == parts.size() - 1
+		if not essential and _text_width(text + parts[i]) > TREE_TEXT_BUDGET:
+			continue
+		text += parts[i]
+	return text
+
+
+## 悬停提示：状态/指挥官/统辖规模/士气均值/空缺说明 + 补位候选前若干（只读）
+func _compose_node_tooltip(d: Dictionary, people: Array[String], morale: float) -> String:
+	var lines: Array[String] = []
+	lines.append("%s · L%d · %s · %s" % [
+		String(d.name), int(d.tier), String(TAG_INT_TO_ZH.get(int(d.tag), "?")),
+		String(STATE_INT_TO_ZH.get(int(d.state), "?"))])
+	var cmd := String(d.commander_id)
+	lines.append("指挥官：%s" % ("▲#%s" % cmd if not cmd.is_empty() else "（空缺）"))
+	lines.append("直属成员 %d 人 · 统辖 %d 人" % [(d.personnel as Array).size(), people.size()])
+	if morale >= 0.0:
+		lines.append("士气均值：%d%%" % int(round(morale * 100.0)))
+	if _is_leaderless(d):
+		lines.append("群龙无首：命令将停驻此层，等待任命或补位")
+	var cands := _succession_candidates_of(String(d.id))
+	if not cands.is_empty():
+		var shown: Array[String] = []
+		for i in mini(cands.size(), TOOLTIP_CANDIDATE_LIMIT):
+			shown.append("%d. ▲#%s" % [i + 1, String(cands[i].get("id", ""))])
+		lines.append("补位候选序：" + "  ".join(shown))
+	return "\n".join(lines)
+
+
+## 补位候选序（只读消费 organization api；排序口径归组织侧，面板不自算）
+func _succession_candidates_of(org_id: String) -> Array:
+	if _org_api == null or not _org_api.has_method("get_succession_candidates"):
+		return []
+	return _org_api.get_succession_candidates(org_id)
+
+
+## 子树人员集合（本组织成员 ∪ 本组织指挥官 ∪ 各级子组织递归；去重 + 单次建树内缓存）。
+## 聚合口径面向「这一层的指挥官关心什么」——中间层直接成员通常为空，
+## 只有子树聚合才看得到统辖规模与整体士气。
+func _org_people(org_id: String) -> Array[String]:
+	if _people_cache.has(org_id):
+		return _people_cache[org_id]
+	var out: Array[String] = []
+	_collect_people(org_id, out, {})
+	_people_cache[org_id] = out
+	return out
+
+
+func _collect_people(org_id: String, out: Array[String], seen: Dictionary) -> void:
+	if _org_api == null:
+		return
+	var r: Dictionary = _org_api.get_organization(org_id)
+	if not r.get("ok", false):
+		return
+	var d: Dictionary = r.data
+	for raw in [String(d.commander_id)] + (d.personnel as Array):
+		var pid := String(raw)
+		if pid.is_empty() or seen.has(pid):
+			continue
+		seen[pid] = true
+		out.append(pid)
+	for child_id in d.child_orgs:
+		_collect_people(String(child_id), out, seen)
+
+
+## 成员士气均值（0~1，仅存活且可解析成员；无一可解析 → -1 = 不显示该项）
+func _people_morale(people: Array[String]) -> float:
+	var sum := 0.0
+	var n := 0
+	for pid in people:
+		var ratio := _unit_morale(pid)
+		if ratio < 0.0:
+			continue
+		sum += ratio
+		n += 1
+	return sum / float(n) if n > 0 else -1.0
+
+
+func _unit_morale(stickman_id: String) -> float:
+	if _morale_cache.has(stickman_id):
+		return _morale_cache[stickman_id]
+	var value := _probe_unit_morale(stickman_id)
+	_morale_cache[stickman_id] = value
+	return value
+
+
+func _probe_unit_morale(stickman_id: String) -> float:
+	var node := _resolve_unit(stickman_id)
+	if node == null:
+		return -1.0
+	if node.has_method("is_dead") and bool(node.call("is_dead")):
+		return -1.0
+	var health: Node = node.call("get_health") if node.has_method("get_health") else null
+	if health == null or not health.has_method("get_morale_ratio"):
+		return -1.0
+	return clampf(float(health.call("get_morale_ratio")), 0.0, 1.0)
+
+
+## 当前地图实体索引（instance_id -> 在场实体），懒建 + 单次刷新内复用。
+## 不用全局 instance_from_id：那对任意整数（脏档/测试桩数据）会触发 ObjectDB 越界引擎报错；
+## 「地图在场实体表」口径也更诚实——取不到（未出场/他图）就不显示士气。
+func _ensure_unit_index() -> void:
+	if _unit_index_built:
+		return
+	_unit_index_built = true
+	_unit_index.clear()
+	if _game_root == null or not _game_root.has_method("get_current_map"):
+		return
+	var map: Node = _game_root.get_current_map()
+	if map == null or not map.has_method("get_entities"):
+		return
+	for e in map.get_entities():
+		if e != null and is_instance_valid(e) and e.has_method("get_health"):
+			_unit_index[int(e.get_instance_id())] = e
+
+
+## personnel 存的是 stickman 实例 id：经在场实体索引反查（duck 只认能给出 health 的单位）。
+## 只靠实例 id 关联，组织侧与 units 模块零编译期依赖。
+func _resolve_unit(stickman_id: String) -> Node:
+	if not stickman_id.is_valid_int():
+		return null
+	_ensure_unit_index()
+	return _unit_index.get(stickman_id.to_int(), null)
+
+
+## 文案像素宽（量树实际字体）——徽标宽度准入的度量口径
+func _text_width(s: String) -> float:
+	var f: Font = null
+	var fs := 0
+	if _tree != null:
+		f = _tree.get_theme_font("font")
+		fs = _tree.get_theme_font_size("font_size")
+	if f == null:
+		f = ThemeDB.fallback_font
+	if fs <= 0:
+		fs = StickTokens.FONT_BODY
+	return f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+
+
+## 士气条配色：数值之外的颜色冗余（<35% 危险红 / <60% 警告黄 / 其余成功绿）
+func _morale_color(ratio: float) -> Color:
+	if ratio < 0.35:
+		return StickTokens.DANGER
+	if ratio < 0.60:
+		return StickTokens.WARN
+	return StickTokens.SUCCESS
+
+
 # ─────────────────────────────── 回调 ────────────────────────────────
 
 func _on_tab_selected(tab: int) -> void:
@@ -521,6 +836,7 @@ func _on_tree_item_selected() -> void:
 		return
 	_selected_org = String(item.get_metadata(0))
 	_choosing_commander = false
+	_emit_selection_changed()
 	_refresh_detail()
 
 
@@ -674,3 +990,31 @@ func _on_preset_create_pressed(option: OptionButton = null) -> void:
 func _notify(msg: String, kind: String = "info") -> void:
 	if EventBus != null and EventBus.has_signal("ui_notification"):
 		EventBus.ui_notification.emit("组织", msg, kind)
+
+
+# ─────────────────────────── 指挥链视图入口（UI-W3）───────────────────────────
+
+## 打开指挥链视图（独立窗口，system_setup 装配）。用 group 查找而非节点路径——
+## 组织面板与视图各归各的窗口，不做跨面板状态同步（方案 §五.2 提案）。
+func _on_open_chain_pressed() -> void:
+	var view: Node = null
+	if get_tree() != null:
+		view = get_tree().get_first_node_in_group("command_chain_view")
+	if view != null and view.has_method("open"):
+		view.call("open")
+	else:
+		_notify("指挥链视图未装配", "warn")
+
+
+# ─────────────────────────── 战略总览入口（UI-W4b）───────────────────────────
+
+## 打开战略总览面板（独立大面板，system_setup 装配；group 查找，不硬编码节点路径——
+## 与指挥链入口同纪律，组织面板与总览各归各的窗口，不做跨面板状态同步）。
+func _on_open_overview_pressed() -> void:
+	var view: Node = null
+	if get_tree() != null:
+		view = get_tree().get_first_node_in_group("strategic_overview_panel")
+	if view != null and view.has_method("open"):
+		view.call("open")
+	else:
+		_notify("战略总览未装配", "warn")

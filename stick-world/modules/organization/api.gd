@@ -183,6 +183,15 @@ func set_default_behavior(org_id: String, behavior: Dictionary) -> Dictionary:
 	return _manager.set_default_behavior(org_id, behavior)
 
 
+## 读取默认行为（只读深拷贝；未配置/组织不存在返回空字典）。
+## GK-5：创建期写入方按 config/ai/org_default_behavior.tres 填充，此入口供消费端/UI
+## 取只读视图（utility_scorer v2 schema 见 modules/combat/scripts/battle/utility_scorer.gd 类头）
+func get_default_behavior(org_id: String) -> Dictionary:
+	if not _is_initialized:
+		return {}
+	return _manager.get_default_behavior(org_id)
+
+
 # ===== 人事 =====
 
 ## 任命指挥官
@@ -211,6 +220,21 @@ func remove_stickman(org_id: String, stickman_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
 	return _manager.remove_stickman(org_id, stickman_id)
+
+
+## 跨组织调人（原子接口，方案 §五.6 定稿口径）：合法性校验一体（单位不在源/已在目标/
+## 组织不存在/同组织——以既有 remove+assign 校验为准），失败返回 {ok:false, error}
+## 且不改动任何状态；成功复用 manager 既有增删路径（指挥官补位/成员表语义零复制）。
+## 层级可行性（L1↔L1、L1↔L2 等）由本接口校验决定，消费方（拖拽 UI）不做第二套判断。
+## [Q] 成功时对源/目标组织各发一次 org_restructured（成员表变化 = 编制变更）
+func transfer_stickman(stickman_id: String, from_org: String, to_org: String) -> Dictionary:
+	if not _is_initialized:
+		return {"ok": false, "error": "模块未初始化"}
+	var result := _manager.transfer_stickman(stickman_id, from_org, to_org)
+	if result.get("ok", false):
+		org_restructured.emit(from_org)
+		org_restructured.emit(to_org)
+	return result
 
 
 # ===== 层级调整 =====

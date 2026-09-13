@@ -101,7 +101,7 @@
 | 相位/角色变更信号 | squad_phase_plan 零信号 | `phase_changed` / `roles_reassigned` | squad_phase_plan.gd | §2.3 / §3.3③ |
 | attack% 只读查询 | recalculate 为内部计算 | `team_ai.get_attack_percentage()` | team_ai.gd | §2.2 |
 | 撤退调制状态查询 | 字段私有 | `ai_controller.get_retreat_mod_state()` | ai_controller.gd | §2.1 / §2.4 |
-| 在途命令注册表 | CommandChain 接力无登记（[command_chain.gd:52](../../../stick-world/modules/combat/scripts/command/command_chain.gd) `deliver_via_orgs` 无在途记录） | 在途清单查询 + `relay_started` / `relay_arrived` 信号（载 hop 序位/from/to org/ETA） | command_chain.gd | §3.2.B 指挥链动画 |
+| 在途命令注册表 | ~~CommandChain 接力无登记~~ **已补齐**：`relay_started`/`relay_arrived` 信号（relay_id/号令类型/from/to/hop 序位/eta，arrived 另带 outcome 七态含"停驻丢弃"）+ `get_relays_in_flight()`（在途清单）+ `get_relay_history(limit)`（抵达到期留痕，补放用） | （提案接口已实现于 command_chain.gd） | command_chain.gd | §3.2.B 指挥链动画 |
 
 ---
 
@@ -191,6 +191,8 @@
 ---
 
 ## 五、开放问题（留创始人裁决）
+
+> **裁决/落地小结**：1~6 均已定案并落地——①生产默认开（`team_ai_enabled` 进 personality global 行，观察场可显式关）；②独立 StickWindow；③UI 层示意动画（世界层光点留 P2）；④士兵自主跳槽行为已实装（AUTHORITY-SWITCH 批），故班组卡「N 人有意转投」提示条是真实查询非戏假；⑤域内信号走 api 自建、跨模块观测进 EventBus 镜像；⑥`transfer_stickman` 原子接口已落地并接总览拖拽。**7 仍开放**（图标母题待立项）。
 
 1. **TeamAi 生产默认开还是关**：观察场需要「开/关对照」调参（默认关利调试）vs 生产战斗可观测即开。提案：战场默认开、观察场以配置项显式关。
 2. **指挥链视图的窗口形态**：OrgPanel 内标签切页（单窗口心智）vs 独立 StickWindow（FormationPanel 先例 = 各开各的面板、不做跨面板状态同步）。提案：独立窗口——动画层需要常驻不被 CRUD 操作打断。

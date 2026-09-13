@@ -41,7 +41,10 @@ func _find_refs() -> void:
 
 
 func _process(delta: float) -> void:
-	# 暂停冻结由引擎总闸负责（本节点随地图 PAUSABLE，雨滴/天气机一并停）
+	# 本节点随地图 PAUSABLE，暂停时状态机与强度 ramp 都冻结。
+	# **但音频不会跟着停**：`_weather_player` 挂在 autoload AudioManager 下，且实测
+	# `AudioStreamPlayer` 不受 `SceneTree.paused` 约束（播放位置照常推进）——
+	# 暂停时的雨声静音由 AudioManager 订阅 game_paused/game_resumed 显式处置。
 	_time += delta
 	# 状态机
 	_next_change -= delta

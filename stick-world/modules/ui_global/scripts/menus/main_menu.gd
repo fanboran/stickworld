@@ -31,6 +31,8 @@ const MENU_ITEMS: Array[Dictionary] = [
 	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.PRIMARY, "icon": &"旗帜"},
 	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.PAPER, "icon": &"两本书", "alpha": 0.62},
 	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.PAPER, "icon": &"齿轮", "alpha": 0.62},
+	# 制作人员：CC-BY 署名的合规出口（钢琴采样/环境音素材，见 docs/技术/音频/音乐资产登记与来源.md）
+	{"id": "credits", "label": "制作人员", "kind": StickKit.ButtonKind.PAPER, "icon": &"奖章", "alpha": 0.62},
 	# 测试场景入口：仅开发构建显示（正式发布隐藏），字段 debug_only 过滤于 _build_menu
 	{"id": "arena", "label": "测试场景", "kind": StickKit.ButtonKind.PAPER, "debug_only": true, "icon": &"立方体", "alpha": 0.62},
 	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.PAPER, "icon": &"木门", "alpha": 0.62},
@@ -127,6 +129,8 @@ func _on_menu_pressed(item: Dictionary) -> void:
 			_open_load_panel()
 		"settings":
 			_open_settings_panel()
+		"credits":
+			_open_credits_panel()
 		"arena":
 			_open_arena_panel()
 
@@ -345,6 +349,79 @@ func _open_settings_panel() -> void:
 	add_child(_settings_panel)
 	if _settings_panel.has_method("open"):
 		_settings_panel.open()
+
+# ─────────────────────────────── 制作人员面板 ────────────────────────────────
+
+## CC-BY 署名的合规出口（发布义务，依据 docs/技术/音频/音乐资产登记与来源.md
+## §三/§五 与 tools/music/docs/ambience_sources.md §五）。
+## ⚠ 署名串与那两份登记文档同源——音源/素材变动时必须同步这里。
+const CREDITS_TEXT := """火柴人帝国模拟 Demo
+
+—— 音乐 ——
+全部配乐为本项目原创（同一主题的场景变奏），由本地采样音源离线渲染生成。
+· 钢琴采样：Salamander Grand Piano V3 by Alexander Holm（CC BY 3.0）
+· 编制音源：MuseScore General SoundFont（MIT；FluidR3 by Frank Wen / FluidR3Mono by
+  Michael Cowgill / MuseScore_General 适配 by S. Christian Collins）
+
+—— 环境音 ——
+cicada_summer 与 village_ambience 含改编自以下 CC BY 3.0 素材的声音：
+· "Florida Cicada Song" by Gatorguy76（Wikimedia Commons）
+· "Chicken Sound Effect" by imadeit（OpenGameArt）
+二者均以 CC BY 3.0（creativecommons.org/licenses/by/3.0/）提供，
+已作滤波、均衡、混响与混音改编。其余环境音素材为 CC0 / Public Domain。
+
+—— 音效 ——
+全部音效为本项目程序化合成，无第三方素材。
+
+—— 引擎 ——
+Made with Godot Engine（godotengine.org）"""
+
+var _credits_panel: Control = null
+
+func _open_credits_panel() -> void:
+	if _credits_panel != null and is_instance_valid(_credits_panel):
+		_credits_panel.queue_free()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 点暗幕空白处关闭
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed:
+			_close_credits_panel())
+	add_child(dim)
+	_credits_panel = dim
+	var panel := SketchPanel.new()
+	panel.custom_minimum_size = Vector2(720, 620)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	dim.add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+	var title := Label.new()
+	title.text = "制作人员"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	vbox.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(scroll)
+	var body := Label.new()
+	body.text = CREDITS_TEXT
+	# 自动换行的 Label 在 ScrollContainer 里最小宽度为 0（会塌成竖排）→ 必须给宽度
+	body.custom_minimum_size = Vector2(640, 0)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_font_size_override("font_size", 15)
+	scroll.add_child(body)
+	StickKit.sketch_button(vbox, "关闭", _close_credits_panel,
+			StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+
+
+func _close_credits_panel() -> void:
+	if _credits_panel != null and is_instance_valid(_credits_panel):
+		_credits_panel.queue_free()
 
 # ─────────────────────────────── 背景装饰（Demo 第一印象）────────────────────────────────
 

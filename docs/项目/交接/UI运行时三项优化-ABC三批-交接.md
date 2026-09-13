@@ -36,3 +36,19 @@
 - StickKit 原生 Button 分支保留为主题兜底（组件工厂路径，非调用点 override）；未来若彻底退役原生 Button 工厂可一并清除。
 - debug_panel 的 CheckBox 行字号 override（2 处）属表单控件豁免区；如需收编需先给 SketchCheckButton 补 font_size 对称属性。
 - HUD 顶栏「控制」钮为悬停态演示位（验收脚本悬停所置），非样式回归。
+
+## 四、收权后发现的越界（已修）
+
+顶栏按钮行原本**不受 zone 表管**（是场景里 MarginContainer 自己排的，右内边距 12px），
+而右上时钟由 zone 钉在 `top_right` 保留区（距右缘 184px）——两者重叠时，时钟作为后画的
+Control 既盖住按钮又吃鼠标事件，表现是「**组织按钮看得见点不到**」（实测：按钮
+`x 1826..1908`、时钟 `x 1804..1912`，整个按钮在时钟底下，`gui_get_hovered_control()`
+返回 `ClockWidget`）。
+
+修法：`UIRoot._reserve_top_right_for_top_bar()` 从 `HudZoneLayout.ZONES[&"top_right"]`
+**读出保留区宽度**并设成顶栏 MarginContainer 的 `margin_right`（+8px 呼吸间距）——
+改 zone 表即同步，不写死像素、不改场景。修后按钮 `x 1646..1728`，让开时钟 76px，
+鼠标命中 `OrgButton`、真点击可触发。
+
+守卫：`tests/dev/verify_topbar_clock.tscn`（真实游戏进程，1920×1080 + 1280×720 两档：
+几何不相交 + 引擎级 hover 命中 + 真派发点击 + 截图留档 `temp/shots_topbar/`）。

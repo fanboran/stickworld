@@ -62,3 +62,10 @@ func _setup_town_siege() -> void:
 func generate_resource_nodes(start_cell: int, end_cell: int, density: float) -> Array:
 	var clear_cell := int((city_right + 260.0) / 32.0)
 	return super(start_cell, mini(end_cell, clear_cell), density)
+
+
+## 分块版同界收窄（与同步版规则一致：城镇硬化区右侧不撒树）。
+func generate_resource_nodes_chunked(start_cell: int, end_cell: int, density: float,
+		on_progress: Callable = Callable()) -> Array:
+	var clear_cell := int((city_right + 260.0) / 32.0)
+	return await super(start_cell, mini(end_cell, clear_cell), density, on_progress)

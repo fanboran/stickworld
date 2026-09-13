@@ -202,6 +202,8 @@ var _build_menu: Control = null
 var _formation_panel: Control = null
 ## 组织管理窗口（运行时由 SystemSetup 装配到 UIRoot.ModalOverlay）
 var _org_panel: Control = null
+## 上报叙事器（运行时由 SystemSetup 装配为常驻子节点；三型上报 + 补位事件 → 通知 feed）
+var _org_report_narrator: Node = null
 ## 设置菜单（运行时由 SystemSetup 装配到 UIRoot，齿轮/ESC 打开）
 var _settings_menu_panel: Control = null
 ## 暂停菜单（运行时由 SystemSetup 装配到 UIRoot，ESC 打开；ESC 语义统一在 GameRoot 处理）
@@ -252,19 +254,21 @@ func _ready() -> void:
 	_setup_world_loading_overlay()
 	_show_loading("正在启动…", 0.0)
 	await _yield_frame()
-	# 分段装配：每段先更新文字/进度条 → 等一帧画出来 → 干重活；进度真实推进
-	await _stage(1, "挂载子模块", func(): _mount_child_modules())
+	# 分段装配：每段先更新文字/进度条 → 等一帧画出来 → 干重活；进度真实推进。
+	# 每段带子步骤表（下条=阶段内细分），故 1/3~7 段下条也连续可见（不再整段隐藏）。
+	await _stage(1, "挂载子模块", _mount_module_steps())
 	await _setup_systems_staged()
-	await _stage(3, "接入存档系统", func(): _save_system.setup(self))
-	await _stage(4, "接入传送系统", func(): _travel_system.setup(self))
-	await _stage(5, "初始化世界生成器", func(): _worldgen.setup(self))
-	await _stage(6, "校验场景与事件绑定", func():
-		_validate_children()
-		_bind_event_bus())
-	await _stage(7, "注册默认地图", func():
-		_register_default_maps()
-		if TimeManager:
-			TimeManager.set_speed(TimeManager.Speed.X1))
+	await _stage(3, "接入存档系统", _save_system.setup_steps(self))
+	await _stage(4, "接入传送系统", [["订阅传送事件", _setup_travel_system]])
+	await _stage(5, "初始化世界生成器", [["绑定世界生成根", _setup_worldgen]])
+	await _stage(6, "校验场景与事件绑定", [
+		["校验子节点", _validate_children],
+		["绑定事件", _bind_event_bus],
+	])
+	await _stage(7, "注册默认地图", [
+		["注册地图场景与出口", _register_default_maps],
+		["设置默认时间速度", _set_default_time_speed],
+	])
 	# 通知游戏开始
 	if EventBus:
 		EventBus.game_started.emit()
@@ -284,12 +288,21 @@ func _yield_frame() -> void:
 	await RenderingServer.frame_post_draw
 
 
-## 单段装配：更新进度文字/进度条 → 等渲染出这一帧 → 执行重活。
-## 先画后干是关键——顺序反了进度条会在整段装配期一动不动（假进度观感）。
-func _stage(idx: int, label: String, work: Callable) -> void:
-	_show_loading("%s…（%d/%d）" % [label, idx, BOOT_STAGES], float(idx) / float(BOOT_STAGES))
-	await _yield_frame()
-	work.call()
+## 单段装配：更新进度文字/进度条 → 等渲染出这一帧 → 执行子步骤。
+## `steps` = 该段的子步骤表 [[子标签, Callable], ...]：逐项执行，每项先刷文字
+## （含子标签）/下条再让一帧后干活，下条值 = 已完成步数/总步数。单元素表 = 该段
+## 只有一次原子推进，副条仍会完整扫过本段（不再整段隐藏）。headless 下
+## `_yield_frame` 短路，等价同步执行（测试语义不变）。
+func _stage(idx: int, label: String, steps: Array) -> void:
+	var total: int = maxi(1, steps.size())
+	for i in steps.size():
+		var step: Array = steps[i]
+		_show_loading("%s…（%d/%d）· %s" % [label, idx, BOOT_STAGES, str(step[0])],
+				float(idx) / float(BOOT_STAGES), float(i) / float(total))
+		await _yield_frame()
+		(step[1] as Callable).call()
+	_show_loading("%s…（%d/%d）" % [label, idx, BOOT_STAGES],
+			float(idx) / float(BOOT_STAGES), 1.0)
 
 
 ## 阶段 2 专用：装配界面与子系统（29 个 _setup_* 步骤）分帧执行。
@@ -329,37 +342,72 @@ func _world_sub_phase(label: String) -> void:
 	await _yield_frame()
 
 
-## 世界生成子阶段内部细分进度（逐个建筑/逐个村民等）：副条在当前子阶段切片内推进。
-func _world_sub_progress(done: int, total: int) -> void:
+## 世界生成子阶段内部细分进度（逐个建筑/逐个村民/逐个资源点等）：副条在当前子阶段
+## 切片内推进。`detail` 非空时在阶段文字后补「· detail」（同一套下条，不新造 UI）。
+func _world_sub_progress(done: int, total: int, detail: String = "") -> void:
 	if not _boot_world_phase or total <= 0:
 		return
 	var sub: float = (float(_world_sub_idx - 1) + float(done) / float(total)) / float(WORLD_SUB_PHASES)
-	_show_loading("正在生成世界…（%d/%d）· %s" % [BOOT_STAGES - 1, BOOT_STAGES, _world_sub_label],
-			float(BOOT_STAGES - 1) / float(BOOT_STAGES), sub)
+	var msg: String = "正在生成世界…（%d/%d）· %s" % [
+			BOOT_STAGES - 1, BOOT_STAGES, _world_sub_label]
+	if not detail.is_empty():
+		msg += " · " + detail
+	_show_loading(msg, float(BOOT_STAGES - 1) / float(BOOT_STAGES), sub)
 
 
-## 实例化四个子模块节点并挂到 GameRoot 下。
-## 子模块通过 setup(root) 拿到主脚本引用，业务逻辑保持在子模块内部。
-func _mount_child_modules() -> void:
-	_bootstrap = Node.new()
-	_bootstrap.set_script(_SystemSetupScript)
-	_bootstrap.name = "SystemSetup"
-	add_child(_bootstrap)
+## 「村庄设施」子阶段：资源点放置逐项进度（下条文字「布置资源点 n/m」）。
+func _world_sub_phase_resources(placed: int, target: int) -> void:
+	_world_sub_progress(placed, target, "布置资源点 %d/%d" % [placed, target])
 
-	_save_system = Node.new()
-	_save_system.set_script(_SaveHandlerScript)
-	_save_system.name = "SaveHandler"
-	add_child(_save_system)
 
-	_travel_system = Node.new()
-	_travel_system.set_script(_TravelHandlerScript)
-	_travel_system.name = "TravelHandler"
-	add_child(_travel_system)
+## 子模块挂载步骤表（阶段 1 下条细分）：每项 = [子标签, 可调用]。
+## 顺序即依赖顺序（SystemSetup 先挂，其余子模块 setup 依赖它）。
+func _mount_module_steps() -> Array:
+	return [
+		["界面与子系统", _mount_bootstrap],
+		["存档子系统", _mount_save_handler],
+		["传送子系统", _mount_travel_handler],
+		["世界生成子系统", _mount_worldgen],
+	]
 
-	_worldgen = Node.new()
-	_worldgen.set_script(_InitialContentScript)
-	_worldgen.name = "InitialContent"
-	add_child(_worldgen)
+
+## 挂一个脚本化子节点（Node.new + set_script + add_child），返回实例。
+func _mount_scripted_child(script: GDScript, node_name: String) -> Node:
+	var n := Node.new()
+	n.set_script(script)
+	n.name = node_name
+	add_child(n)
+	return n
+
+
+func _mount_bootstrap() -> void:
+	_bootstrap = _mount_scripted_child(_SystemSetupScript, "SystemSetup")
+
+
+func _mount_save_handler() -> void:
+	_save_system = _mount_scripted_child(_SaveHandlerScript, "SaveHandler")
+
+
+func _mount_travel_handler() -> void:
+	_travel_system = _mount_scripted_child(_TravelHandlerScript, "TravelHandler")
+
+
+func _mount_worldgen() -> void:
+	_worldgen = _mount_scripted_child(_InitialContentScript, "InitialContent")
+
+
+## 阶段 4/5 的单次原子装配与阶段 7 的时间速度设置（供 _stage 步骤表引用）。
+func _setup_travel_system() -> void:
+	_travel_system.setup(self)
+
+
+func _setup_worldgen() -> void:
+	_worldgen.setup(self)
+
+
+func _set_default_time_speed() -> void:
+	if TimeManager:
+		TimeManager.set_speed(TimeManager.Speed.X1)
 
 
 # ─────────────────────────────── 系统引用访问（供测试/UI 使用）────────────────────────────────
@@ -470,6 +518,11 @@ func get_org_panel() -> Control:
 	return _org_panel
 
 
+## 获取上报叙事器引用（供测试用）
+func get_org_report_narrator() -> Node:
+	return _org_report_narrator
+
+
 ## 打开/关闭组织管理窗口（GlobalHUD 组织按钮调用）
 func toggle_org_panel() -> void:
 	if _org_panel != null and _org_panel.has_method("toggle"):
@@ -555,12 +608,22 @@ func _register_default_maps() -> void:
 	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 
 
+## 切图：注销已释放的音效空间化宿主（新图加载时会在 _on_map_loaded 重新注册）
+func _on_sfx_map_unloaded(_map_id: String) -> void:
+	if AudioManager != null and AudioManager.has_method("set_sfx_host"):
+		AudioManager.set_sfx_host(null)
+
+
 func _load_start_village() -> void:
 	if scene_loader == null or not scene_loader.has_method("load_map"):
 		return
 	# 永久监听 map_loaded，处理所有地图加载（初始 + 切换）
 	if not scene_loader.map_loaded.is_connected(_on_map_loaded):
 		scene_loader.map_loaded.connect(_on_map_loaded)
+	# 切图时注销音效空间化宿主（旧地图即将释放，留着会悬空）
+	if scene_loader.has_signal("map_unloaded") \
+			and not scene_loader.map_unloaded.is_connected(_on_sfx_map_unloaded):
+		scene_loader.map_unloaded.connect(_on_sfx_map_unloaded)
 	# 监听 travel_started：旧图卸载前收集编队快照（跨图携带）
 	if not scene_loader.travel_started.is_connected(_on_travel_started):
 		scene_loader.travel_started.connect(_on_travel_started)
@@ -691,6 +754,10 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 	var map: Node2D = scene_loader.get_current_map() if scene_loader.has_method("get_current_map") else null
 	if map == null or not map.has_method("spawn_entity"):
 		return
+	# 音效空间化宿主：AudioStreamPlayer2D 必须挂在 Node2D 下（AudioManager 自身是 Node），
+	# 挂在当前地图上即可让"屏外的打架声"随距离衰减（详见 音效触发规范.md §八）
+	if AudioManager != null and AudioManager.has_method("set_sfx_host"):
+		AudioManager.set_sfx_host(map)
 	# 注入地图到 ConstructionManager（供项目实例化建筑用；走 api 收敛）
 	if _construction_api != null and _construction_api.has_method("set_map"):
 		_construction_api.set_map(map)
@@ -779,11 +846,19 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 			var safe_radius: int = 40  # 出生点±40格内为村庄土路区
 			if map.has_method("set_dirt_road_range"):
 				map.set_dirt_road_range(spawn_cell - safe_radius, spawn_cell + safe_radius)
-			if map.has_method("generate_resource_nodes"):
+			if map.has_method("generate_resource_nodes_chunked"):
 				var map_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
 				var map_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
-				# 全地图生成，generate_resource_nodes 内部会跳过土路 cell，保证硬化路面不长资源
-				map.generate_resource_nodes(map_left_cell, map_right_cell, 0.65)
+				# 全地图生成，生成器内部会跳过土路 cell，保证硬化路面不长资源。
+				# 分块版：每积满时间预算让一帧——~154 个资源点的实例化与首绘因此
+				# 摊到多帧，加载屏不再在该子阶段有一段数秒的整屏定格；副条随
+				# 放置进度推进（「布置资源点 n/m」）。
+				await map.generate_resource_nodes_chunked(
+						map_left_cell, map_right_cell, 0.65, _world_sub_phase_resources)
+			elif map.has_method("generate_resource_nodes"):
+				var fb_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
+				var fb_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
+				map.generate_resource_nodes(fb_left_cell, fb_right_cell, 0.65)
 			# 重新设置相机/小地图边界（土路可能向负坐标扩展了 map_left）
 			if camera_rig != null and camera_rig.has_method("set_map_bounds"):
 				camera_rig.set_map_bounds(map.map_left, map.map_right)

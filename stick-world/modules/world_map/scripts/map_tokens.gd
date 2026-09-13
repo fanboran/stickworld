@@ -12,37 +12,67 @@ extends RefCounted
 ## feedback1 去抖动：手绘笔触参数（SEG_LEN_RATIO/AMP_RATIO）随 wobble 退役删除，
 ## 线条平滑直绘——token 只管线宽/语义色/虚线分级。
 
-# ────────────────────── 界线三级（§7.3-6 规范表，政治模式，屏幕像素口径）──────────────────────
+# ────────────────────── 界线三级（观感返工第三批 C19 重设计，政治模式，屏幕像素口径）──
+## 设计：**深墨主线 + 浅羊皮纸底衬（casing）**
+##   - 旧版国界是「白亮实线」，压在深蓝海洋与饱和政权色上都会跳出来（创始人否决）；
+##   - 新版把「亮」从主线移到**底衬**：主线用墨色（与地图标注同墨系），底衬用极浅的
+##     暖白压在主线下层——底衬负责「让界线在任何底色上都读得出来」，主线负责
+##     「读起来是界线而不是划痕」。这是 OSM carto 行政界线的 casing 做法，
+##     也是纸质地图国界的惯例（深墨线 + 浅色描边）。
+##   - 三级仍按「国 > 地区 > 地块」递减：国界有底衬且最粗，地区界细长虚线无底衬，
+##     地块界更浅更细——同一张图上不会两种界抢语义。
 
-## 国界 3px 实线（政治模式最粗界；「亮」= 白亮线压彩色政权底图）
-const LINE_NATIONAL := 3.0
-## 地区界 2px 长虚线
-const LINE_REGION := 2.0
-## 地块界 1px 短虚线（值 = StickTokens.BORDER_W = 1）
+## 国界主线（墨色实线）——宽于底衬的「显形量」经截图实测校准：
+## 1.8px 时底衬（4px）占太宽，远看把国界读成「一条亮线」；2.4px 让墨芯成为主体。
+const LINE_NATIONAL := 2.4
+## 地区界（墨色长虚线）
+const LINE_REGION := 1.3
+## 地块界（浅墨短虚线；值 ≥ StickTokens.BORDER_W = 1）
 const LINE_PLOT := 1.0
-## 自由城邦界 1px（feedback2 A：国 vs 无归属 253 边的降级样式，与地块界同宽档）
+## 自由城邦界（国 vs 无归属 253 边的降级样式，与地块界同宽档）
 const LINE_FREE := 1.0
 
 # ────────────────────── 界线三级配色（内容线槽）──────────────────────
 
-## 国界亮线色：全 token 体系中最亮的中性色（取 StickTokens.TEXT 0.93 白），
-## 压在 LUT 彩色政权底图上保证「最显眼的界」
-const LINE_NATIONAL_COLOR := StickTokens.TEXT
-## 地区界墨色（原 L3MapRenderer.L2_BORDER_COLOR，深墨近黑，政治模式沿用为次级界）
-const LINE_REGION_COLOR := Color(0.14, 0.14, 0.14, 0.85)
-## 地块界墨色（原 L2MapRenderer.TILE_BORDER_COLOR 灰墨）
-const LINE_PLOT_COLOR := Color(0.35, 0.35, 0.35)
-## 自由城邦界灰（feedback2 A：0.45 中性灰 = L1_NEIGHBOR_COLOR/PoliticalLut
-## NEIGHBOR_COLOR 同值灰族；弱于地块界，防与国界抢语义）
-const LINE_FREE_COLOR := Color(0.45, 0.45, 0.45)
+## 国界底衬色：暖白羊皮纸半透明——压在深蓝海洋上提亮、压在浅色政权上压低，
+## 保证主线在两端底色上都有对比（casing 的全部意义就在此）
+const LINE_NATIONAL_CASING_COLOR := Color(0.96, 0.95, 0.90, 0.50)
+## 国界底衬额外宽度（屏幕像素）：casing 宽 = 主线宽 + 本值（每侧各露一半）
+const LINE_NATIONAL_CASING_EXTRA := 1.6
+## 国界主线墨色（与标注墨、首都标记墨同族；不再是白色）
+const LINE_NATIONAL_COLOR := Color(0.11, 0.10, 0.09, 0.95)
+## 地区界墨色（次级：更浅更透，无底衬）
+const LINE_REGION_COLOR := Color(0.18, 0.17, 0.16, 0.60)
+## 地块界墨色（三级之最弱）。第四批反馈「有的城市界黑线会消失」：0.42 太淡，
+## 在中明度政权色上接近隐形 → 提到 0.6（线宽仍 1px，不与地区界抢语义）
+const LINE_PLOT_COLOR := Color(0.22, 0.21, 0.20, 0.60)
+## 自由城邦界灰（内容语义：无归属陆地；灰族与 PoliticalLut.FREE_CITY_COLOR 同语义）
+const LINE_FREE_COLOR := Color(0.42, 0.42, 0.42, 0.75)
+
+## ── 界线几何判定（C19 修正用；8192 级地图单位）──
+## l3_city 城块多边形是各自独立平滑的，两侧顶点不共享（实测 34433 条边只有 2192 条
+## 能精确配对）——「共享边配对」只能覆盖 6% 的国界，所以改由政权 ID mask 判界：
+## 从边中点沿外法向探针采样。
+## 探针距离：够远能跨过两侧多边形 1~3px 的平滑差，又不足以跳过一个薄邻块。
+const BORDER_PROBE_DIST := 4.0
+## 同一物理界两侧各出一条近乎重合的边，用中点空间哈希去重（仅跨城块去重，
+## 同城块内相邻边永不去重——否则短边会被吃掉，界线断口）。
+const BORDER_WELD_GRID := 8.0
+
+## ── 弧界类型（边界超分 S3：political_mesh.arc_border 值，与生成端
+## arc_topology.classify_border 同码表；探针路线退役后为界线唯一来源）──
+const ARC_BORDER_NONE := 0            ## 非界（海岸/同国同地区）
+const ARC_BORDER_NATIONAL := 1        ## 国界（两侧政权不同）
+const ARC_BORDER_REGION := 2          ## 地区界（同国不同地区）
+const ARC_BORDER_FREE_CITY := 3       ## 自由城邦界（恰一侧 253 无归属）
 
 # ────────────────────── 虚线（屏幕像素口径）──────────────────────
 
 ## 长虚线（地区界）：实段/空段
-const DASH_LONG := 16.0
-const DASH_LONG_GAP := 8.0
+const DASH_LONG := 13.0
+const DASH_LONG_GAP := 9.0
 ## 短虚线（地块界）：实段/空段
-const DASH_SHORT := 7.0
+const DASH_SHORT := 6.0
 const DASH_SHORT_GAP := 5.0
 
 # ────────────────────── L1 视图（map_renderer，原值迁移）──────────────────────
@@ -156,29 +186,34 @@ const LABEL_SIZE_CAPITAL := 11.0
 ## 城市名 10px
 const LABEL_SIZE_CITY := 10.0
 
-## 国名字距 = 字号的 15%（§7.3-6 规范表「全大写字距 15%」的中文等价表达）
-const LABEL_COUNTRY_TRACKING := 0.15
+## 字距（= 字号的倍数）：面要素（国名/地区名）拉字距做层级，点要素（城名）几乎不拉。
+## 第三批 C24 重调：国名 0.15→0.18（大字号面标注更需要呼吸感），地区名/城名补档。
+const LABEL_COUNTRY_TRACKING := 0.18
+const LABEL_REGION_TRACKING := 0.10
+const LABEL_CITY_TRACKING := 0.06
 
-## halo 宽（字号 1/6~1/5 ≈ ×0.18，clamp 1.0~2.0px 屏幕口径；随字号下调同步收窄，
-## 防小字 halo 过宽显脏；描边 = 引擎级字形轮廓扩张，宽为像素 int）
-const LABEL_HALO_MIN := 1.0
-const LABEL_HALO_MAX := 2.0
+## halo 宽（字号 ≈ ×0.20，clamp 1.2~2.4px 屏幕口径；描边 = 引擎级字形轮廓扩张，
+## 宽为像素 int）。C24 取值 → 略宽于旧版：墨字落在深蓝海洋/深色政权上时，
+## 浅 halo 要够厚才把字形从深底上「托」出来（纸质地图浅底衬的原理）。
 
-## 政治模式标注用色（L3/L2，彩色政权底图上）：墨白字 + 深墨 halo——
-## 高对比可读优先（任务详单「国名用高对比墨白」）；深墨 = 墨色系（LINE_REGION_COLOR 同族）
-const LABEL_INK_MAP := StickTokens.TEXT
-const LABEL_HALO_DARK := Color(0.06, 0.06, 0.06, 0.72)
-## L1 城市标注用色（浅色地形底图上）：暖墨字 + 白 halo（§7.3-3「白 halo」正例）
+## 标注配色（第三批 C24 重设计）：**全图统一「墨字 + 浅羊皮纸 halo」**——
+## 旧版政治图用「白字 + 深墨 halo」，在饱和政权色上像 UI 浮字、与 L1 的地图字两套语言；
+## 新版换纸质地图的经典做法（深墨字 + 极浅底衬），政治图与地形图标注同一套观感，
+## 也与 C19 的界线墨色同族（地图上「内容墨」只有一个）。
+const LABEL_INK_MAP := Color(0.14, 0.12, 0.10)
+## L1 城市标注用色（浅色地形底图上）：同墨系（比政治图略暖）+ 白 halo
 const LABEL_INK_CITY := Color(0.16, 0.14, 0.11)
-const LABEL_HALO_WHITE := Color(1.0, 1.0, 1.0, 0.85)
 
-## 都城星标：外接圆直径 7px 简洁矢量五星（规范表「首都星标」惯例；feedback1 随字号
-## 下调 8→7 同步缩一档；首都惯例 = 星形符号，OSM carto place-capital）。
-## 金 = CONTENT_PALETTE[9] 琥珀棕——顶级聚落语义（与 L1_BLOB_EDGE_T5 同值同源，
-## 改色两端同步）；描边 = 墨色（LINE_REGION_COLOR 复用）
-const LABEL_STAR_SIZE := 7.0
-const LABEL_STAR_FILL := Color(0.95, 0.68, 0.25)
-const LABEL_STAR_OUTLINE := LINE_REGION_COLOR
+## 都城标记（第三批 C20 重设计）：**同心环 + 中心实点**（经典制图学首都符号，
+## 取代原五星——星形在彩色底图上过像贴纸且小尺寸下糊成一团）。
+## 三层同心：浅色底衬环（让标记在任意底色上读得出，与国界底衬同语言）
+## + 墨色外环 + 墨色中心点。恒定屏幕尺寸、任何缩放级别都常显。
+const LABEL_CAPITAL_RADIUS := 5.2
+const LABEL_CAPITAL_RING_W := 1.5
+const LABEL_CAPITAL_DOT_RADIUS := 1.9
+const LABEL_CAPITAL_COLOR := Color(0.13, 0.12, 0.11)
+const LABEL_CAPITAL_CASING := Color(0.97, 0.96, 0.92, 0.55)
+const LABEL_CAPITAL_CASING_EXTRA := 1.8
 
 ## 缩放显隐阈值（r = zoom / 视图适配 zoom；OSM carto 国家 z3/城市 z6 的分级思路
 ## 按我们三级视图定标）。适配 zoom 由层自算 = 视口高 × fit_hint / 地图跨度。
@@ -229,10 +264,11 @@ const L3_REGION_BORDER_SCREEN_CAP := 20.8
 const L3_HOVER_COLOR := StickTokens.BORDER_STRONG
 const L3_HOVER_WIDTH := 6.5
 const L3_HOVER_SCREEN_CAP := 10.4
-## 玩家所在 L2 地区流动描边（A3 定标双色不透明蓝青，与 L1_GLOW 同语言）
+## 玩家所在 L2 地区流动描边（A3 定标双色不透明蓝青，与 L1_GLOW 同语言）。
+## 第四批反馈「太粗/画风不对」：10→4（地区轮廓只是位置提示，不该压过政权界线）
 const L3_PLAYER_GLOW_A := L1_GLOW_A
 const L3_PLAYER_GLOW_B := L1_GLOW_B
-const L3_PLAYER_GLOW_WIDTH := 10.0
-const L3_PLAYER_GLOW_SCREEN_CAP := 20.0
+const L3_PLAYER_GLOW_WIDTH := 4.0
+const L3_PLAYER_GLOW_SCREEN_CAP := 8.0
 ## F3 调试编号
 const L3_LABEL_SIZE := 40.0

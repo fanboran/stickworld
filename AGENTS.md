@@ -7,6 +7,9 @@
 - 使用中文回答问题。
 - Git写中文提交信息，格式：`类型(模块): 描述`，示例：`feat(combat): 实现基础自动战斗单位AI`
 - 改进待办项记录在 `docs/项目/待办事项.md`
+- **创始人纠正后先对齐再执行**：复述理解 + 拟执行动作给创始人过目，确认后才动手；过目内容对应他所纠正/询问的事，不夹带无关项。
+- **指令范围精确**：停/改/启只作用于被点名的对象，禁止扩大到全部；不可逆操作（终止 agent、删文件、重派）未经确认不执行。
+- **子代理工作纪律：代码先行，渲染最后**：先对照任务清单把全部代码改完并逐项自查（数值/摆布/密度等代码可判的错误不许靠渲染发现），再统一渲染一次出图验收；渲染是最终验证不是开发手段。
 - Godot路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
 
 ### 文档写作规范
@@ -23,21 +26,22 @@
 - **新会话恢复**：用户说「继续 <任务名>」时，先读下方"当前活跃交接文档"恢复上下文，再开始干活，不重新摸底。
 - **任务分支一律用独立 worktree**：`git worktree add .temp/<任务名> -b agent/<后缀>`，任务会话在对应 worktree 内干活；**主工作区（仓库根）留给 `main`**，禁止在主工作区长期 checkout 任务分支（多会话并行共用仓库，占主工作区会把其他会话的提交混进自己的分支）。注意各 worktree 的 `temp/`（gitignored）互相独立，渲染产物/验收档案不共享。收线后 `git worktree remove` + 合并/删分支。
 - **交接档统一放 `docs/项目/交接/`**（索引见其 [README.md](docs/项目/交接/README.md)）；任务收官无待验收项的移入 `docs/项目/交接/归档/`；**代码审计/快照类文档用完直接删除**，不进归档（审计快照放 `docs/审计/`）。
+- **待创始人人工验收的产物必须给完整绝对路径**：凡"需要创始人看/听/点开才能验收"的东西（渲染图、试听样带、报告、存档、可执行产物），在本文件的登记行与交接文档里都要写出**完整 Windows 绝对路径并带盘符**（形如 `F:\VSCode\game-2\.temp\<worktree>\temp\<产物目录>\`），让他能直接粘贴进文件资源管理器跳过去；**只写仓库相对路径（如 `temp/xxx/`）算没写**——相对路径无法在资源管理器里定位，等于让他自己找。各任务在自己 worktree 里干活，产物通常在 `.temp\<任务名>\temp\` 下，也可能在仓库根 `temp\`，**以实际位置为准**（写之前先 `ls` 确认存在）。
 - 当前活跃交接文档：
-  - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，**批次 1~6 全部完成、循环已测试锁死，待创始人观感验收后收线**，分支 `agent/conquest-loop`，worktree `.temp/conquest-loop`）
-  - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：描边融合+缩放抗锯齿；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/stickman-visual` 保留）
-  - `docs/项目/交接/世界地图系统完善-进度与交接.md`（任务：观感返工 R 系列，分支 `agent/world-map-rework`，worktree `.temp/world-map-rework`）
-  - `docs/项目/交接/建筑与美术升级-进度与交接.md`（任务：铁匠铺/石头结构件/多层建筑/室内内饰/多材质/village_a 美化；**批次 1-6 全部完成已合并入本分支**，待观感验收；worktree `.temp/building-art` 保留）
-  - `docs/项目/交接/城镇生成管线-进度与交接.md`（任务：L1 城镇种子随机生成+风格参数化；**批次 1-4 全部完成已合并入本分支**；待办：八城按地面占比 1/3 重生成；worktree `.temp/town-gen` 保留）
-  - `docs/项目/交接/小镇生活与NPC职业-进度与交接.md`（任务：NPC 各司其职（铁匠/伐木/矿工）+经济自动产出端；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/town-life` 保留）
-  - `docs/项目/交接/游戏循环深化-进度与交接.md`（任务：兵源闭环/军饷 sink/战斗规模/敌方反扑——修核心循环 8 断点（诊断见 `docs/设计/核心循环.md` §七）；**并入本分支实施**，批次 1 兵营招兵完成，批次 2-5 待做）
-  - `docs/项目/交接/图标管线与美术升级-进度与交接.md`（任务：图标三渲二管线+程序化美术升级，剩接入 Godot UI，分支 `main`）
-  - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）
-  - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2`）
-  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL/WorldBox 四家登记，批次 A1~A9 + WorldBox WB1~WB10 系列，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A1~A6/A9 七批 + WB1(W1 softmax 选优)/WB2(W2 冷却错峰)/WB6(W6 评分留痕) 三批收官合入 main**；WB3~WB5/WB7~WB10 分流至 30fps·组织·出征·town-life 各任务线待立项；机制观感验收与数值校准轮进行中，分支 `agent/game-ai`，worktree `.temp/game-ai`）
-  - `docs/项目/交接/UI运行时三项优化-ABC三批-交接.md`（任务：UI 运行时三项优化 A 暂停原语化/B HUD 布局收权/C 按钮变体，**三批已合并入 main（116d42bf），待创始人观感验收**，分支链 `agent/ui-pause-primitive`→`agent/ui-hud-zones`→`agent/ui-button-variants`）
-  - `docs/项目/交接/建筑生成管线v3-写实PBR-进度与交接.md`（任务：推翻旧 building_gen，自建"代码建模→渲染→PNG+元数据"建筑管线；**唯一沿用旧约束=宽度 3~16 格**。v2 手绘已废弃 → 现行 **v3 = Blender 3D + PBR 材质 + 真实光照**；已建成规范文档九章/材质库 12 种/建筑几何库/城市布局器 4 档 + 首次品控 + 视角与比例两轮修正；**接手前必读交接档 §0 创始人诉求台账与 §0.3 硬约束**；分支 `agent/building-pipeline-v2`，worktree `.temp/building-pipeline-v2`）
-  - `docs/项目/交接/加载屏双进度条与分帧装配-进度与交接.md`（任务：治加载卡顿 + 两级进度条（上=总阶段/下=阶段内细分）+ dev 探针静音后置底；**批次 1 完成已提交**（`cae2af48`），待创始人观感验收；批次 2 候选与实测数据见文档 §二/§三，分支 `agent/loading-ux`，worktree `.temp/loading-ux`）
+  - `docs/项目/交接/出征与领地循环-进度与交接.md`（任务：出征与领地循环 P0 可玩循环收口，**批次 1~6 全部完成、循环已测试锁死；**已封存收线——本地分支与 worktree 已删，远程分支 `origin/agent/conquest-loop` 为封存档案保留不合并**）；**验收产物：无实体产物（按交接档报告验收）**
+  - `docs/项目/交接/火柴人视觉修复-进度与交接.md`（任务：描边融合+缩放抗锯齿；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/stickman-visual` 已删（分支已并入 main 一并删除，2026-09-14 收线））；**验收产物：`F:\VSCode\game-2\.temp\shots_stickman\`（修前/修后各 3 档机位对比 PNG 共 6 张）**
+  - `docs/项目/交接/世界地图系统完善-进度与交接.md`（任务：观感返工 R 系列 + 数据对齐审计 #1~#10 + 湖双几何裁决实施；**已合并入 main（`bd51d74f`，合并后全量 47/47、报错自检干净）**，待创始人观感验收；worktree `.temp/world-map-rework` / 分支 `agent/world-map-rework` 暂留——分支已并入 main 可删；worktree 内诊断中间件（refined 场/blob npz 等 363M）已迁出至仓库根 `output/diag/`，验收后可 `git worktree remove` + 删分支）；**验收产物：`F:\VSCode\game-2\tools\worldgen\output\feedback\`（验收图 `feedback3_*.png` 7 张）及同根 `audit\`/`blob\`/`arcs\`/`rework\`/`road\`/`preview\` 子目录（各批验收/审计图，2026-09-14 起平铺图归入一级子目录）；诊断中间件归档 `F:\VSCode\game-2\tools\worldgen\output\diag\`（gitignored 不入库）**
+  - `docs/项目/交接/建筑与美术升级-进度与交接.md`（任务：铁匠铺/石头结构件/多层建筑/室内内饰/多材质/village_a 美化；**批次 1-6 全部完成已合并入本分支**，待观感验收；worktree `.temp/building-art` 已删（分支已并入 main 一并删除，2026-09-14 收线））；**验收产物：`C:\Users\fanbo\AppData\Roaming\Godot\app_userdata\火柴人帝国模拟\`（Godot `user://` 目录，六批渲染图 `smithy_render.png`/`stone_render.png`/`multi_story_render.png`/`skyline_render.png`/`interior_render_*.png`/`wall_render_*.png`/`thatch_compare_render.png`/`variant_render.png`/`village_render_*.png`）**
+  - `docs/项目/交接/城镇生成管线-进度与交接.md`（任务：L1 城镇种子随机生成+风格参数化；**批次 1-4 全部完成已合并入本分支**；待办：八城按地面占比 1/3 重生成；worktree `.temp/town-gen` 已删（分支已并入 main 一并删除，2026-09-14 收线））；**验收产物：原 24 张截图已随 worktree 删除（创始人豁免，重生成时重新出图）**
+  - `docs/项目/交接/小镇生活与NPC职业-进度与交接.md`（任务：NPC 各司其职（铁匠/伐木/矿工）+经济自动产出端；**批次 1-4 全部完成已合并入本分支**，待观感验收；worktree `.temp/town-life` 已删（分支已并入 main 一并删除，2026-09-14 收线））；**验收产物：原 20 张截图已随 worktree 删除（创始人豁免，验收时实机重出）**
+  - `docs/项目/交接/游戏循环深化-进度与交接.md`（任务：兵源闭环/军饷 sink/战斗规模/敌方反扑——修核心循环 8 断点（诊断见 `docs/设计/核心循环.md` §七）；**并入本分支实施**，批次 1 兵营招兵完成，批次 2-5 待做）；**验收产物：无实体产物（按交接档报告验收）**
+  - `docs/项目/交接/图标管线与美术升级-进度与交接.md`（任务：图标三渲二管线+程序化美术升级，剩接入 Godot UI，分支 `main`）；**验收产物：`F:\VSCode\game-2\temp\`（64px 验收拼页 `accept_p1/p2.png`、描边宽度档对照页 `stroke_compare.png`、创始人验收标记 `review_result_round3/4.json`、成品库 `icons\`）**
+  - `docs/项目/交接/战斗规模化30fps-进度与交接.md`（任务：战斗单位渲染/模拟规模化至 30fps，分支 `perf/battle-30fps`，worktree `.temp/battle-30fps`）；**验收产物：原留档已随 worktree 删除（创始人豁免；A/B diff 与探针可实机重跑）**
+  - `docs/项目/交接/图标管线v2架构升级-反向壳描边与着色器分档-交接.md`（任务：管线渲染域架构升级——引擎内反向壳描边+着色器 toon 分档，分支已并入 `main`，worktree `.temp/icon-v2` 已删（2026-09-14 收线））；**验收产物：原对照页/验收页已随 worktree 删除（创始人豁免）**
+  - `docs/项目/交接/游戏AI集大成-进度与交接.md`（任务：业界 AI 机制复刻与分层集成——CoH/RWR/SWL/WorldBox 四家登记，批次 A1~A9 + WorldBox WB1~WB10 + 组织界面 UI-W1~UI-W4，设计文档 `docs/设计/系统/12-游戏AI系统.md`；**A 系列 + WB1/WB2/WB6 + AI-GAPS + AUTHORITY-SWITCH + UI-W1~W4 界面全套（观测接线/班组卡/上报流/指挥链视图+深化/战略总览）+ GK-1~GK-5 机制开关全部开闸 + 尾巴清零（权威值查询 bug 修复/跨组织调人原子接口 transfer_stickman+总览拖拽/择班种子按 battle_id 派生/孤儿套件下沉/树文案定稿）全部收官合入 main**；现进**校准轮**——观测位 `TeamAi.get_default_behavior_choices()`/`FormationSystem.get_authority_switch_state()` 就绪，等观感/分布数据调数值【数值全为提案/直译锚点，待定】；剩余可选：组织界面图标母题立项、battle_id 跨运行持久化；WB3~WB5/WB7~WB10 分流 30fps·组织·出征·town-life 各线待立项；创始人已裁决不再实机验收，改为按报告验收，分支 `agent/game-ai`，worktree `.temp/game-ai`）；**验收产物：无实体产物（按交接档报告验收——验收方式已由创始人裁决为看报告而非实机）**
+  - `docs/项目/交接/UI运行时三项优化-ABC三批-交接.md`（任务：UI 运行时三项优化 A 暂停原语化/B HUD 布局收权/C 按钮变体，**三批已合并入 main（116d42bf），待创始人观感验收**，分支链 `agent/ui-pause-primitive`→`agent/ui-hud-zones`→`agent/ui-button-variants`）；**验收产物：无实体产物（按交接档报告验收——§一 所列三档分辨率/before-after 截图随批次 worktree 一并删除、现无留存，观感验收走实机）**
+  - `docs/项目/交接/建筑生成管线v3-写实PBR-进度与交接.md`（任务：推翻旧 building_gen，自建"代码建模→渲染→PNG+元数据"建筑管线；**唯一沿用旧约束=建筑宽度为 4 格（128px）整数倍**。现行 **v3 = Blender 3D + PBR 材质 + 真实光照**；2026-09-13 全天 19 批次：材质库 **64 key**（含 `glazing_win` 真透明窗玻璃，彩窗限教堂）/**27 装配器**（含法师塔/炼金坊/图书馆/兵营/仓库，比例审计 45 档已校正）/**94 件道具**/**29 def 内景前后分层**（对接游戏前墙 alpha0.3 机制）/**野外自然物 16 类+密度场分布**/**地面分段体系**（区带 center/mid/edge + 规模包含 村=edge子集 + 动态建造件 + decal）/**昼夜分层 glow**（合成公式 MAE 0.011）/**HD-2D 八方旅人式原型验证通过**（详见 `docs/技术/架构/2.5D与HD-2D可行性.md`）；新文档另有 建筑室内结构/美术品控-硬边与材质边缘/GDD资产候选(提案)；**接手前必读交接档 §0 台账、§0.3 硬约束、§二 末"今日关键决策"七条、§六 踩坑**；在跑：HD-2D 场景重排+地面返工；下一步=烘焙导出+运行时接入；分支 `agent/building-pipeline-v2`，worktree `.temp/building-pipeline-v2`）；**验收产物：`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\`（`pbr_scale_sheet.png` 45 档比例审计、`pbr_city_{hamlet,village,town,city}*.png` 四档城市成图、`pbr_int_*` 内景、`pbr_props*_*.png` 道具、`pbr_nature_*`/`pbr_ground_*`/`pbr_dn_*`、`proto25d_*.png` 与 `proto_hd2d\` HD-2D 原型）**
+  - `docs/项目/交接/加载屏双进度条与分帧装配-进度与交接.md`（任务：治加载卡顿 + 两级进度条（上=总阶段/下=阶段内细分）+ dev 探针静音后置底；**批次 1 + 批次 2 全部完成**——启动预热器 + 渲染后端 Windows 改 vulkan（D3D12 树木首绘管线编译冻结实测 127s→3.8s）+ 资源点生成放帧摊薄首绘（最长单帧 9285ms→877ms）+ 装配全阶段下条细分，进世界实测 ~152s→~22s，待创始人观感验收（含 vulkan 观感）；⚠ 启动自动写存档 slot 0 见 §四，分支 `agent/loading-ux` 已并入 main 删除，worktree `.temp/loading-ux` 已删（2026-09-14 收线），观感验收走实机）；**验收产物：原进度条留档单图已随 worktree 删除（创始人豁免，验收走实机）**
 - 在役审计快照（用完即删，删除时同步移除登记）：
   - `docs/审计/架构审计_2026-09-11.md`（架构实测基线与重测命令，供 `docs/项目/待办事项.md`「架构收敛 AR 系列」引用；AR 全部执行完毕后删除）
 
@@ -52,6 +56,8 @@
 | **查技术架构（模块依赖/实体/EventBus/API 契约/存储/战略图/场景图…）** | `docs/技术/架构/README.md`（架构文档地图，按场景索引全部架构文档） |
 | 了解游戏整体          | `docs/设计/游戏设计文档.md`                                 |
 | 查 UI 体系规划/模板    | `docs/设计/UI/README.md`（索引各篇；模板在 `modules/ui_global/scenes/templates/`） |
+| **音效（SFX）** | 事件表与播放策略 = `core/services/audio_manager.gd` 的 `SFX_EVENTS`/`SFX_POLICY`；设计口径 `docs/技术/音频/音效设计规范.md`；触发时机 `docs/技术/音频/音效触发规范.md`；来源与许可 `docs/技术/音频/音效资产登记与来源.md`；替换登记 `docs/项目/素材替换清单.md` |
+| **音乐（设计/技法/管线/运行时）** | 设计索引 `docs/设计/音乐/README.md`；运行时架构 `docs/技术/架构/音乐系统.md`；离线管线 `docs/技术/音频/音乐制作管线.md`；资产许可 `docs/技术/音频/音乐资产登记与来源.md` |
 | 实现某个系统          | `docs/设计/系统/<系统名>.md`                        |
 | 查核心实体/状态机       | `docs/技术/架构/核心实体与状态机.md`               |
 | 查 EventBus 信号   | `docs/技术/架构/系统交互与EventBus.md`           |

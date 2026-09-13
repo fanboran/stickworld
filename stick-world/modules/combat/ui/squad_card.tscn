@@ -1,0 +1,238 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://modules/combat/ui/squad_card.gd" id="1_card"]
+[ext_resource type="Script" path="res://modules/ui_global/scripts/sketch/sketch_panel.gd" id="2_panel"]
+[ext_resource type="Script" path="res://modules/ui_global/scripts/sketch/sketch_separator.gd" id="3_sep"]
+[ext_resource type="Script" path="res://modules/ui_global/scripts/sketch/sketch_progress.gd" id="4_bar"]
+[ext_resource type="Texture2D" path="res://assets/icons/旗帜_64.png" id="5_flag"]
+[ext_resource type="Texture2D" path="res://assets/icons/战鼓_64.png" id="6_drum"]
+[ext_resource type="Texture2D" path="res://assets/icons/星章_64.png" id="7_star"]
+[ext_resource type="Texture2D" path="res://assets/icons/帐篷_64.png" id="8_tent"]
+
+[node name="SquadCard" type="PanelContainer"]
+layout_mode = 2
+tone = 1
+compact = true
+script = ExtResource("1_card")
+
+[node name="Body" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Header" type="HBoxContainer" parent="Body"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Flag" type="TextureRect" parent="Body/Header"]
+custom_minimum_size = Vector2(18, 18)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("5_flag")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="SquadName" type="Label" parent="Body/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+text = "班组"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="StatusChip" type="PanelContainer" parent="Body/Header"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+compact = true
+script = ExtResource("2_panel")
+
+[node name="Status" type="Label" parent="Body/Header/StatusChip"]
+layout_mode = 2
+mouse_filter = 2
+text = "活跃"
+
+[node name="OrderRow" type="HBoxContainer" parent="Body"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="OrderIcon" type="TextureRect" parent="Body/OrderRow"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("6_drum")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Order" type="Label" parent="Body/OrderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+text = "号令 —"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Phase" type="Label" parent="Body"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+text = "跃进中·核心组先行"
+
+[node name="Sep" type="Control" parent="Body"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3_sep")
+
+[node name="Members" type="VBoxContainer" parent="Body"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="Overflow" type="Label" parent="Body"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+text = ""
+
+[node name="Sep2" type="Control" parent="Body"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3_sep")
+
+[node name="Commander" type="HBoxContainer" parent="Body"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="LeaderIcon" type="TextureRect" parent="Body/Commander"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("7_star")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Leader" type="Label" parent="Body/Commander"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+text = "班长空缺"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Stars" type="HBoxContainer" parent="Body/Commander"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="Star1" type="TextureRect" parent="Body/Commander/Stars"]
+custom_minimum_size = Vector2(12, 12)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("7_star")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Star2" type="TextureRect" parent="Body/Commander/Stars"]
+custom_minimum_size = Vector2(12, 12)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("7_star")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Star3" type="TextureRect" parent="Body/Commander/Stars"]
+custom_minimum_size = Vector2(12, 12)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("7_star")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Authority" type="Label" parent="Body/Commander"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+text = "—"
+
+[node name="AuthCompare" type="VBoxContainer" parent="Body"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="AuthTitle" type="Label" parent="Body/AuthCompare"]
+layout_mode = 2
+mouse_filter = 2
+text = "权威对比 · 邻近可投奔班（威望）"
+clip_text = true
+
+[node name="AuthRows" type="VBoxContainer" parent="Body/AuthCompare"]
+layout_mode = 2
+theme_override_constants/separation = 1
+
+[node name="DefectHint" type="PanelContainer" parent="Body/AuthCompare"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+tone = 1
+compact = true
+script = ExtResource("2_panel")
+
+[node name="DefectLabel" type="Label" parent="Body/AuthCompare/DefectHint"]
+layout_mode = 2
+mouse_filter = 2
+text = ""
+
+[node name="Forming" type="HBoxContainer" parent="Body"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="FormingIcon" type="TextureRect" parent="Body/Forming"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("8_tent")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="FormingLabel" type="Label" parent="Body/Forming"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+text = "招兵进度"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="FormingBar" type="ProgressBar" parent="Body/Forming"]
+custom_minimum_size = Vector2(36, 8)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+max_value = 1.0
+step = 0.01
+value = 0.0
+show_percentage = false
+script = ExtResource("4_bar")
+
+[node name="Actions" type="VBoxContainer" parent="Body"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ActionsA" type="HBoxContainer" parent="Body/Actions"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ActionsB" type="HBoxContainer" parent="Body/Actions"]
+layout_mode = 2
+theme_override_constants/separation = 6

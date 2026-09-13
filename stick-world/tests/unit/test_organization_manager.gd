@@ -45,6 +45,9 @@ func _ready() -> void:
 	_runner.add_test("Org: get_succession_candidates 排序（cmd 降序）", _test_succession_candidates_api)
 	_runner.add_test("Org: 上报门控三档×三 type 全矩阵（含阈值边界/覆盖）", _test_report_gate_matrix)
 	_runner.add_test("Org: file_report schema 校验与 api 层转发", _test_file_report_schema)
+	_runner.add_test("Org: transfer_stickman 成功迁移（成员表/指挥官补位/双信号）", _test_transfer_ok)
+	_runner.add_test("Org: transfer_stickman 校验失败原子性（状态逐位不变）", _test_transfer_atomic_fail)
+	_runner.add_test("Org: transfer_stickman 脏 id/跨图残留安全降级", _test_transfer_dirty_id)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -371,15 +374,15 @@ func _test_export_roundtrip() -> void:
 	_runner.assert_false(m.export_as_preset("org_999").get("ok", true), "导出不存在的组织应失败")
 
 
-## 预设数据规范化形状：[(name, level, tag, 父名)] 排序后比较（org_id 差异无关结构）
+## 预设数据规范化形状：[(name, level, tag, 父名)] 排序后比较（v2 键 key/parent_key；语义键无关运行时 org_id）
 func _preset_shape(data: Dictionary) -> Array:
-	var name_by_id := {}
+	var name_by_key := {}
 	for e in data.entries:
-		name_by_id[String(e.id)] = String(e.name)
+		name_by_key[String(e.key)] = String(e.name)
 	var rows: Array = []
 	for e in data.entries:
-		var pid := String(e.parent_id)
-		rows.append([String(e.name), int(e.level), String(e.tag), name_by_id.get(pid, "") if pid != "" else ""])
+		var pk := String(e.parent_key)
+		rows.append([String(e.name), int(e.level), String(e.tag), name_by_key.get(pk, "") if pk != "" else ""])
 	rows.sort()
 	return rows
 
@@ -630,3 +633,91 @@ func _test_file_report_schema() -> void:
 	_runner.assert_equal(api_reports.size(), 1, "api 层应转发 manager 上报")
 	_runner.assert_equal(int(api_reports[0].filed_at), 42, "filed_at 透传")
 	api.free()
+
+
+# ─────────────── 跨组织调人（transfer_stickman 原子接口，方案 §五.6） ───────────────
+
+## 成功迁移：源成员表移除、目标成员表加入；被调者为源指挥官时既有补位触发；
+## api 层对源/目标各发一次 org_restructured。
+func _test_transfer_ok() -> void:
+	var m := ScriptOrgManager.new()
+	var a: String = m.create_organization("甲排", "MILITARY", 1, "").data.org_id
+	var b: String = m.create_organization("乙排", "MILITARY", 1, "").data.org_id
+	m.assign_stickman(a, "101", "fighter")
+	m.assign_stickman(a, "102", "fighter")
+	m.assign_stickman(a, "103", "fighter")
+	m.assign_commander(a, "101")
+	m.assign_stickman(b, "201", "fighter")
+	m.assign_commander(b, "201")
+	# 非指挥官调动：源指挥官不动
+	var r: Dictionary = m.transfer_stickman("103", a, b)
+	_runner.assert_true(r.get("ok", false), "调人应成功: " + str(r))
+	_runner.assert_equal(m.get_organization(a).data.personnel, ["101", "102"], "源成员表应移除 103")
+	_runner.assert_equal(m.get_organization(b).data.personnel, ["201", "103"], "目标成员表应加入 103")
+	_runner.assert_equal(String(m.get_organization(a).data.commander_id), "101", "非指挥官调动不改源指挥官")
+	# 被调者 = 源指挥官：remove 既有补位引擎触发（班内 102 顶上）；目标只是普通成员
+	var r2: Dictionary = m.transfer_stickman("101", a, b)
+	_runner.assert_true(r2.get("ok", false), "调动源指挥官应成功: " + str(r2))
+	_runner.assert_equal(String(m.get_organization(a).data.commander_id), "102", "源指挥官调离应触发补位（102 顶上）")
+	_runner.assert_equal(m.get_organization(a).data.personnel, ["102"], "源成员表应只剩 102")
+	_runner.assert_equal(m.get_organization(b).data.personnel, ["201", "103", "101"], "101 应加入目标成员表")
+	# api 层：成功对源/目标各发一次 org_restructured
+	var api := preload("res://modules/organization/api.gd").new()
+	api.setup(m)
+	var sigs: Array = []
+	api.org_restructured.connect(func(oid: String): sigs.append(oid))
+	var c: String = m.create_organization("丙排", "MILITARY", 1, "").data.org_id
+	m.assign_stickman(c, "301", "fighter")
+	var r3: Dictionary = api.transfer_stickman("301", c, b)
+	_runner.assert_true(r3.get("ok", false), "api 调人应成功: " + str(r3))
+	_runner.assert_equal(sigs, [c, b], "成功应各发一次 org_restructured（源→目标）")
+	api.free()
+
+
+## 各类校验失败 → {ok:false} 且两组织状态（成员表/指挥官）逐位不变（先校验后落地，无中途改动）。
+func _test_transfer_atomic_fail() -> void:
+	var m := ScriptOrgManager.new()
+	var a: String = m.create_organization("甲", "MILITARY", 1, "").data.org_id
+	var b: String = m.create_organization("乙", "MILITARY", 1, "").data.org_id
+	m.assign_stickman(a, "11", "fighter")
+	m.assign_commander(a, "11")
+	m.assign_stickman(b, "22", "fighter")
+	m.assign_commander(b, "22")
+	var before_a: Dictionary = m.get_organization(a).data
+	var before_b: Dictionary = m.get_organization(b).data
+	_runner.assert_false(m.transfer_stickman("11", "org_nope", b).get("ok", true), "源组织不存在应失败")
+	_runner.assert_false(m.transfer_stickman("11", a, "org_nope").get("ok", true), "目标组织不存在应失败")
+	_runner.assert_false(m.transfer_stickman("11", a, a).get("ok", true), "源=目标应失败")
+	_runner.assert_false(m.transfer_stickman("99", a, b).get("ok", true), "不在源成员表应失败")
+	_runner.assert_false(m.transfer_stickman("", a, b).get("ok", true), "空 stickman_id 应失败")
+	_runner.assert_false(m.transfer_stickman("11", b, a).get("ok", true), "11 不在源组织 b，反向调动应失败")
+	# 防双挂：11 同时存在于 a 与 b → 拒绝
+	m.assign_stickman(b, "11", "fighter")
+	_runner.assert_false(m.transfer_stickman("11", a, b).get("ok", true), "已在目标组织应失败（防双挂）")
+	m.remove_stickman(b, "11")
+	# 逐位不变
+	var after_a: Dictionary = m.get_organization(a).data
+	var after_b: Dictionary = m.get_organization(b).data
+	_runner.assert_equal(after_a.personnel, before_a.personnel, "失败后源成员表逐位不变")
+	_runner.assert_equal(after_b.personnel, before_b.personnel, "失败后目标成员表逐位不变")
+	_runner.assert_equal(String(after_a.commander_id), String(before_a.commander_id), "失败后源指挥官不变")
+	_runner.assert_equal(String(after_b.commander_id), String(before_b.commander_id), "失败后目标指挥官不变")
+
+
+## 脏 id / 跨图残留：组织侧零出向，只按成员表事实处理，不查实体、不崩溃。
+func _test_transfer_dirty_id() -> void:
+	var m := ScriptOrgManager.new()
+	var a: String = m.create_organization("甲", "MILITARY", 1, "").data.org_id
+	var b: String = m.create_organization("乙", "MILITARY", 1, "").data.org_id
+	m.assign_stickman(a, "ghost_map_other", "fighter")  # 非数字/他图残留 id
+	var r: Dictionary = m.transfer_stickman("ghost_map_other", a, b)
+	_runner.assert_true(r.get("ok", false), "脏 id 只要在源成员表即可安全迁移（不解析实体）: " + str(r))
+	_runner.assert_equal(m.get_organization(a).data.personnel, [], "源成员表应移除脏 id")
+	_runner.assert_equal(m.get_organization(b).data.personnel, ["ghost_map_other"], "目标成员表应加入脏 id")
+	# 完全未知的脏 id → 明确失败且不改状态
+	var r2: Dictionary = m.transfer_stickman("nosuch_id!", a, b)
+	_runner.assert_false(r2.get("ok", true), "未知脏 id 应失败")
+	_runner.assert_equal(m.get_organization(b).data.personnel, ["ghost_map_other"], "失败不改目标成员表")
+	# 非法/空组织 id（注入型脏值）安全失败不崩溃
+	_runner.assert_false(m.transfer_stickman("x", "", "").get("ok", true), "空组织 id 应失败不崩溃")
+	_runner.assert_false(m.transfer_stickman("x", a, "  ").get("ok", true), "空白组织 id 应失败不崩溃")

@@ -69,12 +69,13 @@ func spawn_flock(in_view: bool = false) -> void:
 	_play_chirp()
 
 
-## 远处一声啁啾（视听配对：鸟群入镜时鸣叫；三变体随机）
+## 远处一声啁啾（视听配对：鸟群入镜时鸣叫）
+## 变体抽取交给 AudioManager 的变体池（"bird_chirp" 一个事件名 = 一个去重槽位）：
+## 拆成 bird_chirp_a/b/c 三个事件名会让抗叠机制失效（三只鸟能同时叫）。
 func _play_chirp() -> void:
 	if AudioManager == null:
 		return
-	var pick: int = randi() % 3
-	AudioManager.play_event("bird_chirp_%s" % ["a", "b", "c"][pick])
+	AudioManager.play_event("bird_chirp")
 
 
 func _draw() -> void:

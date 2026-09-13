@@ -431,6 +431,28 @@ const AUTHORITY_PLAYER_BONUS: float = 0.2
 const AUTHORITY_MARGIN: float = 0.07
 
 
+## 组织数据归一化查询（权威值三计价项的统一取数口）：
+## organization_api.get_organization 的生产形态是 {ok, data} 包装（api → manager，
+## 见 modules/organization/api.gd:95 / organization_manager.gd:223），而单测桩常直接
+## 返回裸组织数据字典。本口两种形态都接受：有 ok+data 键则解包 data（ok=false 视为
+## 无数据），否则裸字典原样返回。缺载/查询不可用返回 {}。
+## 归一化而非"生产侧改读 data"的理由：调用点只有本文件的权威值计价与骨干守卫，
+## 把形态差异收敛在一个取数口，避免每处调用各写一遍包装解包；且 api 未来若退回裸
+## 数据形态，生产路径不需要改动。
+func _org_data(org_id: String) -> Dictionary:
+	if _org_api == null or not _org_api.has_method("get_organization"):
+		return {}
+	var raw: Dictionary = _org_api.get_organization(org_id)
+	if raw.is_empty():
+		return {}
+	if raw.has("ok") and raw.has("data"):
+		if not bool(raw.get("ok", false)):
+			return {}
+		var data: Variant = raw.get("data", {})
+		return data if data is Dictionary else {}
+	return raw
+
+
 ## 小队权威值评分（R4 择班内核）：班长在场 1.0 + 组织指挥官在册 0.5
 ## + 班长被玩家附身 0.2。组织查询不可用（_org_api 缺载/无该方法）时跳过指挥官项。
 ## 小队不存在返回 -INF（调用方以"可入"语义处理无班情况）。
@@ -444,10 +466,9 @@ func get_squad_authority(squad_id: String) -> float:
 		score += AUTHORITY_LEADER_BASE
 		if leader.has_method("is_possessed") and leader.is_possessed():
 			score += AUTHORITY_PLAYER_BONUS
-	if _org_api != null and _org_api.has_method("get_organization"):
-		var org: Dictionary = _org_api.get_organization(squad_id)
-		if not org.is_empty() and str(org.get("commander_id", "")) != "":
-			score += AUTHORITY_COMMANDER_BONUS
+	var org: Dictionary = _org_data(squad_id)
+	if not org.is_empty() and str(org.get("commander_id", "")) != "":
+		score += AUTHORITY_COMMANDER_BONUS
 	return score
 
 
@@ -1416,7 +1437,11 @@ func _org_root_of_squad(squad_id: String) -> String:
 #   自主人事市场（独立开闸 / 独立节拍 / 独立冷却）。两者必须能独立开合——开相位计划
 #   不等于要开士兵换班；合并会把两张闸门焊死，且一处数值改动同时扰动两个机制。
 
-## 权威值跳槽代码默认档（BalanceConfig 缺载兜底；unit 测试 new() 不依赖 autoload）
+## 权威值跳槽代码默认档（BalanceConfig 缺载兜底；unit 测试 new() 不依赖 autoload）。
+## authority_rng_seed = 错峰相位的**派生基底/回落值**：实际相位种子按单位所在战斗
+## （battle_instance.get_battle_id() 哈希）与基底混合派生（见 _authority_phase_seed）——
+## 同一场战斗内种子恒定、相位可复现，不同战斗相位模式不重复（多局同基底不再呆板同相）；
+## 取不到 battle_id（无战斗/单位桩/查询链缺环）时回落此常数种子。
 const AUTHORITY_DEFAULTS: Dictionary = {
 	"authority_switch_enabled": false,
 	"authority_scan_interval": 0.5,
@@ -1472,7 +1497,9 @@ func set_authority_params(params: Dictionary) -> void:
 			_authority_params[k] = params[k]
 
 
-## 跳槽状态快照（调试/UI/测试观测位）。
+## 跳槽状态快照（调试/UI/测试观测位）。前五项为运行态计数，后段为档案实值只读镜像
+## （UI 数值单一真相源：候选半径/冷却等直接取自装载后的 _authority_params，不再让
+## UI 端镜像常量与档案脱钩；键缺失时回落 AUTHORITY_DEFAULTS 同值，出口恒有值）。
 func get_authority_switch_state() -> Dictionary:
 	return {
 		"enabled": bool(_authority_params.get("authority_switch_enabled", false)),
@@ -1480,6 +1507,15 @@ func get_authority_switch_state() -> Dictionary:
 		"evaluated_last": _authority_last_eval_count,
 		"registered": _authority_next_eval.size(),
 		"cooling": _authority_cooldown_until.size(),
+		# ── 档案实值只读镜像（参数出口）──
+		"candidate_radius": float(_authority_params.get("authority_candidate_radius", 800.0)),
+		"cooldown": float(_authority_params.get("authority_switch_cooldown", 20.0)),
+		"scan_interval": float(_authority_params.get("authority_scan_interval", 0.5)),
+		"eval_interval": float(_authority_params.get("authority_eval_interval", 2.0)),
+		"player_squad_bonus": float(_authority_params.get("authority_player_squad_bonus", 0.2)),
+		"stay_in_player_squad_bonus": float(_authority_params.get("authority_stay_in_player_squad_bonus", 0.5)),
+		"leader_release_threshold": float(_authority_params.get("authority_leader_release_threshold", 0.3)),
+		"max_switches_per_squad_tick": int(_authority_params.get("authority_max_switches_per_squad_tick", 1)),
 	}
 
 
@@ -1534,7 +1570,7 @@ func _evaluate_authority_switches(beat: float) -> void:
 				continue
 			var iid: int = u.get_instance_id()
 			# 首次登记：排定确定性错峰相位（之后每评估一次推进 eval_interval）
-			var next_at: float = _authority_next_at(iid, eval_interval)
+			var next_at: float = _authority_next_at(u, eval_interval)
 			# 冷却窗内不评估（单次跳槽后有冷却，防每拍横跳）
 			if _authority_clock < float(_authority_cooldown_until.get(iid, -INF)):
 				continue
@@ -1587,19 +1623,48 @@ func _evaluate_authority_switches(beat: float) -> void:
 
 
 ## 单位下一次评估时刻：首次登记时按确定性错峰相位排定（相位 ∈ [0, eval_interval)），
-## 之后由评估推进。相位取数 = 种子 + 登记序（不用 instance_id——同一局面构造下
+## 之后由评估推进。相位取数 = 派生种子 + 登记序（不用 instance_id——同一局面构造下
 ## 登记序稳定，结果可复现；instance_id 跨运行不同会破坏确定性）。
-func _authority_next_at(iid: int, eval_interval: float) -> float:
+## 派生种子按单位所在战斗（battle_id）哈希与档案基底混合（见 _authority_phase_seed）。
+func _authority_next_at(u: Node, eval_interval: float) -> float:
+	var iid: int = u.get_instance_id()
 	if _authority_next_eval.has(iid):
 		return float(_authority_next_eval[iid])
 	if not _authority_ordinal.has(iid):
 		_authority_ordinal[iid] = _authority_ordinal_seq
 		_authority_ordinal_seq += 1
 	var rng := RandomNumberGenerator.new()
-	rng.seed = int(_authority_params.get("authority_rng_seed", 20260913)) + int(_authority_ordinal[iid]) * 7919
+	rng.seed = _authority_phase_seed(u) + int(_authority_ordinal[iid]) * 7919
 	var phase: float = rng.randf() * eval_interval
 	_authority_next_eval[iid] = phase
 	return phase
+
+
+## 错峰相位派生种子（档案键 authority_rng_seed 的新语义 = 派生基底/回落值）：
+## 实际种子 = 档案基底 与 单位所在战斗 battle_id 哈希 的异或混合——
+##   - 同一场战斗内 battle_id 恒定 → 种子恒定、相位序列可复现（含跨图重载同战斗）；
+##   - 不同战斗 battle_id 不同 → 派生种子不同、相位模式不重复（治多局同基底的呆板同相）；
+##   - 单位拿不到 battle_id（无战斗/单位桩/查询链缺环）→ 回落档案常数种子，
+##     保持单测与无战斗场景的确定性基线（同种子同局面可复现）。
+## 为何用异或而非直接相加：battle_id 形如 battle_<instance_id>，哈希与基底量级悬殊，
+## 异或混合两位空间不重叠，且纯函数（同输入恒同输出）可复现。
+func _authority_phase_seed(u: Node) -> int:
+	var base: int = int(_authority_params.get("authority_rng_seed", 20260913))
+	var bid: String = _unit_battle_id(u)
+	if bid.is_empty():
+		return base
+	return base ^ int(bid.hash())
+
+
+## 单位 battle_id 查询（duck 链 get_battle_instance → get_battle_id）；
+## 任一环缺失/实例失效/返回空串 → ""（调用方回落档案基底）。
+func _unit_battle_id(u: Node) -> String:
+	if u == null or not is_instance_valid(u) or not u.has_method("get_battle_instance"):
+		return ""
+	var bi: Node = u.get_battle_instance()
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_battle_id"):
+		return ""
+	return String(bi.get_battle_id())
 
 
 ## 已释放实例的相位/冷却/登记序清理（防字典随阵亡单位无界增长）。
@@ -1649,12 +1714,11 @@ func _is_squad_leader_or_commander(u: Node, squad_id: String) -> bool:
 	if squad.get("leader", null) == u:
 		return get_squad_authority(squad_id) \
 				> float(_authority_params.get("authority_leader_release_threshold", 0.3))
-	if _org_api != null and _org_api.has_method("get_organization"):
-		var org: Dictionary = _org_api.get_organization(squad_id)
-		if not org.is_empty():
-			var cmd := String(org.get("commander_id", ""))
-			if not cmd.is_empty() and cmd == str(u.get_instance_id()):
-				return true
+	var org: Dictionary = _org_data(squad_id)
+	if not org.is_empty():
+		var cmd := String(org.get("commander_id", ""))
+		if not cmd.is_empty() and cmd == str(u.get_instance_id()):
+			return true
 	return false
 
 

@@ -80,10 +80,13 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_esc_key_input.tscn"
 	"tests/integration/test_ui_layout.tscn"
 	"tests/integration/test_battle_ui.tscn"
+	"tests/integration/test_squad_card.tscn"
 	"tests/integration/test_formation_system_assembly.tscn"
 	"tests/integration/test_org_panel.tscn"
 	"tests/integration/test_org_command_chain.tscn"
 	"tests/integration/test_org_e2e.tscn"
+	"tests/integration/test_org_report_narrator.tscn"
+	"tests/integration/test_org_panel_badges.tscn"
 	"tests/integration/test_placement_grid_units.tscn"
 	"tests/integration/test_tactical_orders.tscn"
 	"tests/integration/test_save_roundtrip.tscn"
@@ -99,6 +102,8 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_recruit_flow.tscn"
 	"tests/integration/test_town_life_harvest.tscn"
 	"tests/integration/test_town_life_worksite.tscn"
+	"tests/integration/test_music_director.tscn"
+	"tests/integration/test_sfx_policy.tscn"
 )
 SMOKE_SUITES=(
 	"tests/smoke/test_new_game_smoke.tscn"
@@ -109,7 +114,9 @@ declare -A SUITE_TIMEOUT=(
 	# 每套件超时：长套件按串行实测 ×2 取整，短套件统一 ≥90s
 	# （2026-08 审计校准：并行 6 下 CPU 争用系数实测最高 ~2.5x，短套件 60s 边界会碰运气误杀）
 	["tests/integration/test_battle_lifecycle.tscn"]=120
-	["tests/integration/test_battle_retreat.tscn"]=180
+	# 实测 94~118s（并行 3 下），原 180 预算按"串行×2"公式偏低——池内争用时曾误杀一次 TIMEOUT。
+	# 提到 240 保留挂死检测能力（真挂死远不止此数），消除争用误杀。
+	["tests/integration/test_battle_retreat.tscn"]=240
 	["tests/integration/test_garrison_spawner.tscn"]=120
 	["tests/integration/test_conquest_flow.tscn"]=180
 	["tests/integration/test_conquest_e2e.tscn"]=180
@@ -134,6 +141,7 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_esc_key_input.tscn"]=150
 	["tests/integration/test_ui_layout.tscn"]=90
 	["tests/integration/test_battle_ui.tscn"]=90
+	["tests/integration/test_squad_card.tscn"]=120
 	["tests/integration/test_formation_system_assembly.tscn"]=90
 	["tests/integration/test_tactical_orders.tscn"]=90
 	["tests/integration/test_debug_api.tscn"]=90
@@ -219,6 +227,8 @@ affected_suites() {
 				picked["tests/integration/test_org_panel.tscn"]=1
 				picked["tests/integration/test_org_command_chain.tscn"]=1
 				picked["tests/integration/test_org_e2e.tscn"]=1
+				picked["tests/integration/test_org_report_narrator.tscn"]=1
+				picked["tests/integration/test_org_panel_badges.tscn"]=1
 				picked["tests/integration/test_recruit_flow.tscn"]=1 ;;
 			stick-world/modules/player_control/*)
 				picked["tests/integration/test_possession.tscn"]=1
@@ -260,6 +270,40 @@ select_suites() {
 mkdir -p "$TMP_DIR"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+# ─────────────────────────── 清单自检（静默漏测盲区）───────────────────────────
+
+## 未登记豁免名单：确属"非 TestRunner 套件"或"待处置"的文件，必须写明理由。
+## 历史孤儿 `test_ui_overlap.tscn` 已处置（下沉 tests/dev/，移出集成清单视野），
+## 当前无豁免项——盘上存在但未登记的套件一律红灯拦截。
+UNREGISTERED_ALLOWLIST=()
+
+## 盘上存在但未登记进 INTEGRATION_SUITES/SMOKE_SUITES 的套件 = 永远不会被执行，
+## 且不会产生任何红灯（tests/unit 层的同类问题由 batch_runner 自检负责）。
+## 新增测试文件忘记登记时这里会拦下；确属特例的加进上面的豁免名单并写理由。
+manifest_check() {
+	local -A registered=() allowed=()
+	local s base f dir
+	for s in "${INTEGRATION_SUITES[@]}" "${SMOKE_SUITES[@]}"; do registered["${s##*/}"]=1; done
+	for s in "${UNREGISTERED_ALLOWLIST[@]}"; do allowed["${s##*/}"]=1; done
+	local -a missed=()
+	for dir in integration smoke; do
+		for f in "$SCRIPT_DIR/$dir"/*.tscn; do
+			[ -e "$f" ] || continue
+			base="${f##*/}"
+			if [ -z "${registered[$base]:-}" ] && [ -z "${allowed[$base]:-}" ]; then
+				missed+=("tests/$dir/$base")
+			fi
+		done
+	done
+	if [ ${#missed[@]} -gt 0 ]; then
+		echo "[MANIFEST] 以下套件在盘上但未登记，永远不会被执行："
+		printf '    %s
+' "${missed[@]}"
+		echo "[MANIFEST] 处理：登记进 INTEGRATION_SUITES/SMOKE_SUITES，或加入 UNREGISTERED_ALLOWLIST 并写明理由"
+		exit 1
+	fi
+}
+
 run_unit=0 run_integration=0 run_smoke=0
 case "$FILTER" in
 	unit) run_unit=1 ;;
@@ -269,6 +313,8 @@ case "$FILTER" in
 	"") run_unit=1; run_integration=1; run_smoke=1 ;;
 	*) echo "[run_all] 未知 Filter: $FILTER（可选 unit|integration|smoke）"; exit 2 ;;
 esac
+
+manifest_check
 
 if [ -n "$CHANGED" ]; then
 	changed_files=$(git -C "$PROJECT_DIR" diff --name-only "$CHANGED" 2>/dev/null)

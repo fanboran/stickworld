@@ -19,15 +19,25 @@ variables = {
 			"decision_variance": 0.0,
 			"burst_shots": 0,
 			"burst_wait": Vector2(1.2, 1.8),
-			"night_hesitate_mult": 1.0,
+			"night_hesitate_mult": 1.8,
+			"rout_strafe_enabled": true,
 			"heal_buzz_distance": 60.0,
-			"spawn_jitter_enabled": false,
+			"retreat_mod_enabled": true,
+			"suppression_enabled": true,
+			"suppression_near_miss_enabled": true,
+			"rout_reengage_enabled": true,
+			"test_engage_enabled": true,
+			"spawn_jitter_enabled": true,
 			"spawn_jitter_ratio": 0.5,
-			"probe_fail_cooldown_enabled": false,
+			"probe_fail_cooldown_enabled": true,
 			"job_scan_interval": 0.5,
-			"suppression_near_miss_enabled": false,
 			"suppression_near_miss_radius": 80.0,
-			"description": "R1 主决策间隔 0.3s ± 0 方差（镜像旧 DECISION_INTERVAL 常量）；R3 点射 0 发=关、停顿区间 1.2~1.8s（RWR wait 1.2±0.6）、夜间犹豫倍率 1.0（RWR 昼 0.3~0.6/夜 0.8~1.1 同构）；R5 防扎堆治疗 60px（RWR consider_someone_already_healing_wounded_distance 10m 同构换算）；A6 近失压制默认关 + 近失半径 80px（须 > 命中半径 34，语义推断待实测校准）"
+			"description": "R1 主决策间隔 0.3s ± 0 方差（镜像旧 DECISION_INTERVAL 常量）；R3 点射 0 发=关、停顿区间 1.2~1.8s（RWR wait 1.2±0.6）、夜间犹豫倍率（GK-1 开闸 1.8 = RWR 夜/昼反应比 1.8~2.7 的保守下界）；R5 防扎堆治疗 60px（RWR consider_someone_already_healing_wounded_distance 10m 同构换算）；A6 近失半径 80px（须 > 命中半径 34，语义推断待实测校准）；GK-2 开闸：压制总门 + 近失压制 + 概率调制撤退 + 逃开再战 + 试探接敌五行一并翻 true（CLASS_PROFILES 无同键覆盖，全兵种统一生效；代码 BASELINE 保持 false 作为缺载兜底）；GK-3 开闸：出生错峰 + 域级失败冷却两键翻 true（同为零覆盖、全兵种统一；读档相位回填走 ai_timing 存档链）；GK-1 开闸：夜间犹豫 1.8 + 溃逃横向游走开（点射只在 bow 兵种行开，不落 baseline）"
+		},
+		{
+			"id": "bow",
+			"burst_shots": 3,
+			"description": "GK-1 开闸（兵种覆盖档）：弓手连发 3 发后插入 burst_wait 停顿再射——RWR burst_time 0.3±0.2 的计数化改编，3 发为保守初值；点射只开在远程兵种（近战无此语义），故落兵种行不落 baseline 行"
 		}
 	]
 }

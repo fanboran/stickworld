@@ -146,9 +146,9 @@ func _ready() -> void:
 	_runner.add_test("接敌反应: 背敌成员 → seek_cover（既有行为接入）", _test_back_enemy_cover)
 	_runner.add_test("接敌反应: 被瞄准（被压制代理）成员 → seek_cover", _test_suppressed_cover)
 	_runner.add_test("守卫: 士气行为/玩家号令/接战成员不被相位号令打断", _test_guards)
-	_runner.add_test("零回归: 缺省关闭无计划；其余号令撤销计划", _test_default_off)
+	_runner.add_test("零回归: 关态无计划；开态号令建/撤计划（GK-4 生产默认开）", _test_default_off)
 	_runner.add_test("触发: 组织号令通知整编制入计划", _test_org_notify)
-	_runner.add_test("计划=数据: 资源装载与缺省关闭（config/ai/squad_phase_plan.tres）", _test_resource)
+	_runner.add_test("计划=数据: 资源装载与 GK-4 开闸默认开（config/ai/squad_phase_plan.tres）", _test_resource)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -453,7 +453,11 @@ func _test_default_off() -> void:
 	var fs: Node = w["fs"]
 	var units: Array = w["units"]
 	var sid: String = w["sid"]
-	_runner.assert_false(bool(fs._phase_plan_params.get("phase_plan_enabled", true)), "缺省应关闭（零回归基线）")
+	# GK-4 开闸依据：.tres global 行 phase_plan_enabled 已翻 true = 生产生效默认开。
+	# 关态零回归语义改用显式注入钉住（不再依赖"默认即关"）。
+	_runner.assert_true(bool(fs._phase_plan_params.get("phase_plan_enabled", false)),
+			"GK-4 开闸：生产缺省应开启")
+	fs.set_phase_plan_params({"phase_plan_enabled": false})
 	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1000, 500))
 	_runner.assert_true(fs._squad_phase_plans.is_empty(), "关闭态推进号令不应建计划")
 	fs._tick_phase_plans(0.5)
@@ -485,7 +489,7 @@ func _test_org_notify() -> void:
 
 
 func _test_resource() -> void:
-	# 计划=数据资源：BalanceConfig 类型路径 ai.squad_phase_plan 装载 + 缺省关闭
+	# 计划=数据资源：BalanceConfig 类型路径 ai.squad_phase_plan 装载 + GK-4 开闸默认开
 	var res: Resource = load("res://config/ai/squad_phase_plan.tres")
 	_runner.assert_not_null(res, "计划参数资源应可加载")
 	if res == null:
@@ -494,12 +498,13 @@ func _test_resource() -> void:
 	_runner.assert_equal(rows.size(), 1, "应含 global 行")
 	var row: Dictionary = rows[0]
 	_runner.assert_equal(str(row.get("id", "")), "global", "行 id 应为 global")
-	_runner.assert_equal(bool(row.get("phase_plan_enabled", true)), false, "资源缺省应关闭（零回归基线）")
+	_runner.assert_equal(bool(row.get("phase_plan_enabled", false)), true,
+			"GK-4 开闸：资源生效默认应开启")
 	# CoH 真值等待窗（infantry-plan 2~4s / 2~3.5s）
 	_runner.assert_approx(float(row.get("wait_core_min", 0.0)), 2.0, 0.001, "核心等待下限 = CoH 真值 2s")
 	_runner.assert_approx(float(row.get("wait_core_max", 0.0)), 4.0, 0.001, "核心等待上限 = CoH 真值 4s")
 	_runner.assert_approx(float(row.get("wait_flank_min", 0.0)), 2.0, 0.001, "两翼等待下限 = CoH 真值 2s")
 	_runner.assert_approx(float(row.get("wait_flank_max", 0.0)), 3.5, 0.001, "两翼等待上限 = CoH 真值 3.5s")
-	# 代码默认档同步缺省关闭（BalanceConfig 缺载兜底）
+	# 代码默认档保持缺省关闭 = BalanceConfig 缺载兜底（.tres 才是生产真值）
 	_runner.assert_equal(bool(ScriptSquadPhasePlan.DEFAULTS.get("phase_plan_enabled", true)), false,
-			"代码默认档应缺省关闭")
+			"代码默认档缺省关闭（BalanceConfig 缺载兜底）")

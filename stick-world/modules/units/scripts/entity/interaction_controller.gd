@@ -52,11 +52,13 @@ func try_interact() -> void:
 				project.deliver_material()
 				_entity.set_carrying(false)
 			elif not project.needs_material():
-				# 敲击一次：推进建造进度 + 播放 build 动画
+				# 敲击一次：推进建造进度 + 播放 build 动画 + 敲击音
+				# （长动作必须有过程反馈：采集有、建造没有就是不一致）
 				var per_hit: float = project.total_work / 8.0
 				project.add_build_progress(per_hit)
 				_entity.set_action_anim("build")
 				_entity.set_player_build_timer(1.8)
+				_play_world_sfx("build_hit")
 		"warehouse":
 			if _entity.is_carrying():
 				# 扔回材料到仓库
@@ -64,10 +66,13 @@ func try_interact() -> void:
 			else:
 				_entity.set_carrying(true)
 		"barracks":
-			# 招兵（成败与原因通知由 RecruitManager 内发，交互层零通知职责）
+			# 招兵（成败与原因通知由 RecruitManager 内发，交互层零通知职责；
+			# 但**听觉反馈**在这里：花资源招兵是重要动作，成败各给一声）
 			if _entity.get_organization_api() != null \
 					and _entity.get_organization_api().has_method("recruit"):
-				_entity.get_organization_api().recruit()
+				var result: Variant = _entity.get_organization_api().recruit()
+				var ok: bool = result is Dictionary and bool((result as Dictionary).get("ok", false))
+				AudioManager.play_event("ui_confirm" if ok else "ui_denied")
 		"resource":
 			_try_harvest_resource_node(target as Node2D)
 
@@ -89,12 +94,28 @@ func _try_harvest_resource_node(rn: Node2D) -> void:
 		return
 	var gained: int = rn.harvest(HARVEST_PER_ACTION)
 	if gained <= 0:
+		# 采不到（枯竭/超距）要有明确负反馈，否则玩家以为按键失灵。
+		# 同时给一个短动作锁：按住 F 时 try_hold_interact 每物理帧重试，
+		# 不锁就会把"拒绝"变成连打（即使有节流也是 6~7 次/秒的嗡嗡声）
+		AudioManager.play_event("ui_denied")
+		_entity.set_player_build_timer(0.6)
 		return
 	var api: Node = _get_resources_api()
 	if api != null and api.has_method("produce"):
 		api.produce(String(rn.get_resource_id()), gained, HARVEST_REGION, "手动采集")
+	# 入账音是"给玩家的反馈"：只在玩家手动采集时响（NPC 自动劳作不发，
+	# 否则城镇里会一直叮咚）；敲击音留在资源点模型层（那是"世界里的声音"）
+	_play_world_sfx("harvest_gain")
 	_entity.set_action_anim("build")
 	_entity.set_player_build_timer(1.8)
+
+
+## 世界音效出口：统一带上实体的世界坐标。spatial 事件据此做距离衰减 + 左右定位
+## （屏外 40 人混战不再与耳边采集等响）；调用点保持哑巴，策略全在 AudioManager 表里。
+func _play_world_sfx(event_name: String) -> void:
+	if _entity == null or not is_instance_valid(_entity):
+		return
+	AudioManager.play_event(event_name, _entity.global_position)
 
 
 ## 惰性获取 ResourcesApi（GameRoot 下具名节点；采集入库必须走模块 API）

@@ -434,6 +434,21 @@ func _recompute_base_zoom() -> void:
 func _apply_zoom() -> void:
 	effective_zoom = base_zoom * user_zoom
 	zoom = Vector2(effective_zoom, effective_zoom)
+	_push_spatial_max_distance()
+
+
+## 把"半屏"的听觉半径推给 AudioManager（音效空间化的衰减半径）。
+##
+## 为什么必须随缩放走：`AudioStreamPlayer2D` 的监听点是**屏幕中心**（实测），
+## 超出 max_distance 即完全静音。而本机可视半屏随缩放 4 倍变化
+## （ZOOM_MIN 0.5 → 半宽 1920px，ZOOM_MAX 2.0 → 480px）：写死一个值，要么拉到
+## 最远时把**看得见的**单位静音，要么贴近时屏外噪音不肯消失。
+## 取"半对角线 × 1.05"：可见范围全在衰减曲线内，屏外自然变轻/消失。
+func _push_spatial_max_distance() -> void:
+	if AudioManager == null or not AudioManager.has_method("set_spatial_max_distance"):
+		return
+	var half: Vector2 = get_viewport_rect().size * 0.5 / maxf(effective_zoom, 0.01)
+	AudioManager.set_spatial_max_distance(half.length() * 1.05)
 
 
 func _zoom_at_mouse(step: float) -> void:

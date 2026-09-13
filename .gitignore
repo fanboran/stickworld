@@ -57,32 +57,41 @@ tools/worldgen/output/**
 !tools/worldgen/output/locked/**
 # Demo 工作量展示素材（创始人指示入库留档，见 tools/worldgen/README.md §Demo）
 !tools/worldgen/output/l3_terrain.png
-!tools/worldgen/output/l2_preview_*.png
-# F8 缩略窗全景 preview（候选底图素材 + 坐标映射 sidecar，见交接档 Flash 队列 F8）
-!tools/worldgen/output/l1_panorama_preview.png
-!tools/worldgen/output/l1_panorama_preview.json
-# R3 地块边缘平滑特写对比图（观感验收素材，见交接档 R 系列 R3）
-!tools/worldgen/output/smooth_closeup_*.png
-# R9 L1 地形烘焙对比预览图（观感验收素材，见交接档 R 系列 R9 批2）
-!tools/worldgen/output/l1_terrain_preview_*.png
-# R6 道路自然化新旧对比图（观感验收素材，见交接档 R 系列 R6 批3）
-!tools/worldgen/output/road_v2_*.png
-# R4 三模式并排验收预览（地形/政治/交通，见交接档 R 系列 R4 批3）
-!tools/worldgen/output/r4_modes_*.png
-# R5 建成区场叠加管线验收图（特写/贫瘠抽查/分形自检，见交接档 R 系列 R5）
-!tools/worldgen/output/blob_v2_*.png
-# R8 标注体系验收预览（三级视图标注效果，见交接档 R 系列 R8 层3）
-!tools/worldgen/output/r8_label_*.png
+# ―― 平铺验收图已归入一级子目录（feedback/audit/rework/blob/arcs/road/preview）：
+#    子目录须先放行目录本身再放行文件（父目录被上方 output/** 压住会短路白名单）――
+!tools/worldgen/output/feedback/
 # feedback1 创始人验收第一批修复预览（去抖动/掉色修复/新字号，见交接档 feedback1）
-!tools/worldgen/output/feedback1_*.png
+!tools/worldgen/output/feedback/feedback1_*.png
 # feedback3 创始人第三批观感返工验收预览（C19 界线 / C20 都城标记 / C21 全屏海洋 /
 # C22 裁剪 / C23 政权配色 / C24 标注文字，见交接档「创始人第三批观感反馈」）
-!tools/worldgen/output/feedback3_*.png
-# 边界超分 S2/S3 验收预览（共享弧拓扑全景+出生特写+新色板，见交接档「边界超分 S2/S3」）
-!tools/worldgen/output/arcs_preview_*.png
-!tools/worldgen/output/palette_v3_preview_2048.png
+!tools/worldgen/output/feedback/feedback3_*.png
+!tools/worldgen/output/audit/
 # 数据对齐审计验收图（audit4 湖双几何裁决材料等，见交接档「数据对齐」专节）
-!tools/worldgen/output/audit*_*.png
+!tools/worldgen/output/audit/audit*_*.png
+!tools/worldgen/output/rework/
+# R4 三模式并排验收预览（地形/政治/交通，见交接档 R 系列 R4 批3）
+!tools/worldgen/output/rework/r4_modes_*.png
+# R8 标注体系验收预览（三级视图标注效果，见交接档 R 系列 R8 层3）
+!tools/worldgen/output/rework/r8_label_*.png
+!tools/worldgen/output/blob/
+# R5 建成区场叠加管线验收图（特写/贫瘠抽查/分形自检，见交接档 R 系列 R5）
+!tools/worldgen/output/blob/blob_v2_*.png
+!tools/worldgen/output/arcs/
+# 边界超分 S2/S3 验收预览（共享弧拓扑全景+出生特写+新色板，见交接档「边界超分 S2/S3」）
+!tools/worldgen/output/arcs/arcs_preview_*.png
+!tools/worldgen/output/road/
+# R6 道路自然化新旧对比图（观感验收素材，见交接档 R 系列 R6 批3）
+!tools/worldgen/output/road/road_v2_*.png
+!tools/worldgen/output/preview/
+# F8 缩略窗全景 preview（候选底图素材 + 坐标映射 sidecar，见交接档 Flash 队列 F8）
+!tools/worldgen/output/preview/l1_panorama_preview.png
+!tools/worldgen/output/preview/l1_panorama_preview.json
+# R3 地块边缘平滑特写对比图（观感验收素材，见交接档 R 系列 R3）
+!tools/worldgen/output/preview/smooth_closeup_*.png
+# R9 L1 地形烘焙对比预览图（观感验收素材，见交接档 R 系列 R9 批2）
+!tools/worldgen/output/preview/l1_terrain_preview_*.png
+!tools/worldgen/output/preview/l2_preview_*.png
+!tools/worldgen/output/preview/palette_v3_preview_2048.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

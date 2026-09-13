@@ -45,6 +45,8 @@ const CARD_SHADER := preload("res://tests/dev/proto_hd2d/card.gdshader")
 const CHAR_HOST := preload("res://tests/dev/proto_hd2d/char_sprite_3d.gd")
 const POST_SHADER := preload("res://tests/dev/proto_hd2d/post_hd2d.gdshader")
 const BACKDROP_SHADER := preload("res://tests/dev/proto_hd2d/backdrop.gdshader")
+## 地面/场地统一走这个 shader（吃云影 global + 采样分段资产贴图；见其头注）
+const GROUND_SHADER := preload("res://tests/dev/proto_hd2d/ground.gdshader")
 
 const CARDS_JSON := "proto25d/cards.json"
 const CARD_DIR := "proto25d/cards/"
@@ -78,43 +80,49 @@ const WALK_Z := Vector2(14.0, 26.0)
 ##   workshop（工坊：铁匠铺）    → 后退 1.0 格，门前那块地作**前场**摆家伙什；
 ##   shop / dwell（店铺/民居）   → **贴线**（dz=0）；
 ##   店面的棚位/雨篷在 `CANOPY_PROPS` 里**前凸悬挑到路坎上方**（只占路坎上空，不占道路）。
-## `gap` = 该栋左邻的净距（格）：0~2.2 为主，偶有 3.5 / 4.4 格空当放市集与杂物。
-## 节奏自然不规则 = 空当长短 + 气派建筑/工坊退让 + 棚位前凸 + 道具零散，不是等距等深。
+## **间距按出檐规则**（item 2）：卡是按"含出檐的包围盒"裁的 —— 实测卡的可见宽 ≈
+## 占地格宽 × 1.4（cottage 6 格 → 卡 8.5 格；见 cards.json units/内容包围盒）。
+## 故相邻两栋**净距必须 ≥ 0.2 × (w1 + w2)**，否则两卡的出檐会相交。下面的 gap 全部
+## 取该下限 + 0.1~0.2 的节奏余量（不再是 0~1 格紧贴 —— 紧贴必然出檐相交）。
+## 节奏自然不规则 = 空当长短 + 气派建筑/工坊退让 + 棚位前凸 + 道具零散。
+const EAVE_K := 1.4                        # 有效占宽系数（含出檐）
 const STREET: Array = [
 	{"card": "cottage_w6", "gap": 0.0, "dz": 0.0, "kind": "dwell"},
-	{"card": "shop_w8", "gap": 1.3, "dz": 0.0, "kind": "shop"},
-	{"card": "bakery_w8", "gap": 2.1, "dz": 0.0, "kind": "shop"},
-	{"card": "townhouse_w12", "gap": 4.4, "dz": 0.0, "kind": "dwell"},
-	{"card": "guildhall_w12", "gap": 1.2, "dz": -1.3, "kind": "grand"},
-	{"card": "smithy1_w8", "gap": 0.5, "dz": -1.0, "kind": "workshop"},
-	{"card": "tavern_w12", "gap": 1.6, "dz": 0.0, "kind": "shop"},
-	{"card": "cottage_w6", "gap": 3.5, "dz": 0.0, "kind": "dwell"},
-	{"card": "tower_w6", "gap": 1.4, "dz": -1.1, "kind": "grand"},
-	{"card": "house_w8", "gap": 2.2, "dz": 0.0, "kind": "dwell"},
+	{"card": "shop_w8", "gap": 3.0, "dz": 0.0, "kind": "shop"},
+	{"card": "bakery_w8", "gap": 3.4, "dz": 0.0, "kind": "shop"},
+	{"card": "townhouse_w12", "gap": 4.2, "dz": 0.0, "kind": "dwell"},
+	{"card": "guildhall_w12", "gap": 5.0, "dz": -1.3, "kind": "grand"},
+	{"card": "smithy1_w8", "gap": 4.2, "dz": -1.0, "kind": "workshop"},
+	{"card": "tavern_w12", "gap": 4.1, "dz": 0.0, "kind": "shop"},
+	{"card": "tower_w6", "gap": 3.8, "dz": -1.1, "kind": "grand"},
 ]
 ## 后景：**两层为主 + 偶尔第三层**（各层内部稀疏零散：x 不等距 + 每栋 z 抖动），
 ## 模糊**逐层递增**（bg1 1.6 → bg2 4.0 → bg3 9.0px，卡片 shader `blur_radius`），
-## 再往后是远山树线剪影 12px。三层 + 树线共同把地平线压住（背景不再成排贴死）。
-## 三层的 z 都比基线**近 1~3 格**，但第一层距主排基线仍有 14 格 —— 明显分离、不贴近。
+## 再往后是远山树线剪影 12px。
+## **地基必须落在地面带里**（item 1）：地面带 = 地平线(z=HORIZON_Z)以下到画框底，
+## 即 pct ∈ (62, 100]。所以**所有背景层的基座 z 都必须 > HORIZON_Z**——
+## 基线把背景放到 z=-11.5/-20/-30，后两层的地基 pct 是 57.9/51.9（在地平线以上 =
+## 悬空/骑线），这是打回点。现改为全部压进地面带内（z=-7.4/-4.9/-2.4 → pct 63.9/65.4/66.9），
+## 与主排基线（70.9）仍有 4~8 格的进深差 —— 层次靠"基线高度差 + 逐层模糊 + 冷色"读。
 const BG1_ROW: Array = [
-	{"card": "house_w8", "x": -29.0, "dz": -0.6},
-	{"card": "townhouse_w12", "x": -5.4, "dz": 0.5},
-	{"card": "tavern_w12", "x": 18.6, "dz": -0.4},
+	{"card": "house_w8", "x": -29.0, "dz": -0.5},
+	{"card": "townhouse_w12", "x": -5.4, "dz": 0.4},
+	{"card": "tavern_w12", "x": 18.6, "dz": -0.3},
 	{"card": "rowhouse_w12", "x": 42.5, "dz": 0.2},
 ]
 const BG2_ROW: Array = [
-	{"card": "cathedral_w16", "x": -13.0, "dz": 0.7},
-	{"card": "guildhall_w12", "x": 9.5, "dz": -0.5},
-	{"card": "tower_w6", "x": 32.0, "dz": 0.6},
+	{"card": "cathedral_w16", "x": -13.0, "dz": 0.5},
+	{"card": "guildhall_w12", "x": 9.5, "dz": -0.4},
+	{"card": "tower_w6", "x": 32.0, "dz": 0.4},
 ]
 ## 第三层只在两处补（"偶尔三层"），且补在第一、二层的**空当**里，让远景有深浅
 const BG3_ROW: Array = [
-	{"card": "tower_w6", "x": -18.0, "dz": 0.4},
-	{"card": "tower_w6", "x": 38.5, "dz": -0.5},
+	{"card": "tower_w6", "x": -18.0, "dz": 0.3},
+	{"card": "tower_w6", "x": 38.5, "dz": -0.4},
 ]
-const BG_Z := -9.8
-const BG2_Z := -17.2
-const BG3_Z := -27.0
+const BG_Z := -2.4
+const BG2_Z := -4.9
+const BG3_Z := -7.4
 const BG1_BLUR := 1.6
 const BG2_BLUR := 4.0
 const BG3_BLUR := 9.0
@@ -122,15 +130,26 @@ const BG3_BLUR := 9.0
 const TREELINE_Z := -60.0
 const CLOUD_Z := -80.0
 
-## 地面分带（格）。路肩不再是一条通铺带 —— 见 `_add_apron()`：
-## 只在**有建筑的面宽**内贴基座画一块有机边缘的石板场，空地一律草皮/杂土。
+## 地面分带（格）。**真正消费分段资产**（temp/ground_tiles 的 seg_* / gtx_* / band_*）：
+##   地面带 = 地平线以下到画框底（pct 62..100），街面按"区带"分工：
+##     |x| ≤ ZONE_CENTER      街心：center 档（石板/大理石）      → seg_road_center_v1
+##     ZONE_CENTER..BLOCK_HALF 中环：mid 档（旧砖+碎石）           → seg_road_mid_v1
+##     BLOCK_HALF..VERGE_HALF 城市边缘：edge 档**土路**           → seg_road_edge_v1
+##     > VERGE_HALF           草皮（真资产 grass_sparse_128）
+##   **路坎（item 3）**：只长在硬化街区外缘 |x| = BLOCK_HALF 上（沿街长断续分段），
+##   城市边缘的土路段没有路坎 —— 与"城市边缘无路坎"同一条线，两个要求在这里合流。
+##   区带交接一律用**预制过渡件**（transitions/gtx_*，手工折线边界），不用程序噪声。
 const APRON_DEPTH := 1.5
 const BAND_ROAD := Vector2(MAIN_BASE_Z, ROAD_NEAR_Z)
-## **城市边缘无路坎**（任务 3）：街心石板只到 |x| = ROAD_HALF，往外 6 格是夯土路肩，
-## 再往外全是草皮；街缘用 `_add_verge_blend()` 撒有机草缘"咬"到路边 ——
-## 画框两端不再有路缘石，草皮直接咬到街边。
-const ROAD_HALF := 24.0
-const VERGE_HALF := 30.0
+const ZONE_CENTER := 8.0                   # 街心档半宽
+const BLOCK_HALF := 20.0                   # 硬化街区（铺装）半宽 = 路坎所在
+const VERGE_HALF := 29.0                   # 土路外缘 → 草皮
+const SEG_LEN := 16.0                      # seg_* 段长（格）：512px
+const BAND_ROAD_W := 5.0                   # seg_road_* 带宽（格）：160px
+const BAND_SH_W := 3.0                     # seg_shoulder_* 带宽（格）：96px
+const KERB_H := 0.34                       # 路坎高（格）≈ 11px ≈ 屏上 7px（"矮"）
+const KERB_W := 0.30                       # 路坎宽（格）≈ 9px（对齐资产 8px 路缘带）
+const TRANS_DIR := "transitions/"          # 相对 GROUND_DIR（temp/ground_tiles/）
 
 ## ── 道具（相对定位，卡由 `bake_props.py` 从 props.py 库烘出）───────────────
 ## `GAP_PROPS`：站在第 `slot` 号槽**左侧空当**里（`dx` 相对空当中点）
@@ -139,18 +158,18 @@ const VERGE_HALF := 30.0
 ## `z` = 相对主排基线的进深（正 = 更近相机）；`lift` = 整卡抬高（悬空件用）；
 ## `sc` = 缩放（锚点仍落地面，缩放只改卡面尺寸）。
 const GAP_PROPS: Array = [
-	# 市集大空当（townhouse 左 4.4 格）
-	{"card": "market_stall", "slot": 3, "dx": -0.3, "z": 0.9, "sc": 0.78},
-	{"card": "market_table", "slot": 3, "dx": 2.9, "z": 2.4, "sc": 0.9},
-	{"card": "produce_baskets", "slot": 3, "dx": -3.0, "z": 1.5, "sc": 0.9},
-	{"card": "sack_stack", "slot": 3, "dx": 4.6, "z": 1.0},
-	{"card": "barrel", "slot": 3, "dx": 5.8, "z": 0.6},
-	{"card": "crate", "slot": 3, "dx": -4.4, "z": 0.7},
-	# 第二空当（cottage 左 3.5 格）
-	{"card": "cart", "slot": 7, "dx": 0.4, "z": 2.4},
-	{"card": "log_pile", "slot": 7, "dx": -2.4, "z": 1.2},
-	{"card": "wheelbarrow", "slot": 7, "dx": 2.6, "z": 1.6},
-	{"card": "haystack", "slot": 7, "dx": -1.0, "z": 0.7},
+	# 市集大空当（guildhall 左 5.0 格，正好落在气派建筑门前场地里）
+	{"card": "market_stall", "slot": 4, "dx": -0.3, "z": 0.9, "sc": 0.78},
+	{"card": "market_table", "slot": 4, "dx": 2.6, "z": 2.4, "sc": 0.9},
+	{"card": "produce_baskets", "slot": 4, "dx": -3.4, "z": 1.5, "sc": 0.9},
+	{"card": "sack_stack", "slot": 4, "dx": 4.4, "z": 1.0},
+	{"card": "barrel", "slot": 4, "dx": 5.6, "z": 0.6},
+	{"card": "crate", "slot": 4, "dx": -1.4, "z": 0.7},
+	# 车马空当（smithy 与 tavern 之间 4.1 格，靠城市边缘的土路）
+	{"card": "cart", "slot": 6, "dx": -0.4, "z": 2.4},
+	{"card": "log_pile", "slot": 6, "dx": -2.6, "z": 1.2},
+	{"card": "wheelbarrow", "slot": 6, "dx": 2.6, "z": 1.6},
+	{"card": "haystack", "slot": 6, "dx": 0.8, "z": 0.7},
 ]
 const FRONT_PROPS: Array = [
 	{"card": "well", "slot": 0, "dx": 1.8, "z": 1.3},
@@ -160,11 +179,11 @@ const FRONT_PROPS: Array = [
 	{"card": "planter", "slot": 4, "dx": -4.8, "z": 0.6},
 	{"card": "trough", "slot": 6, "dx": 4.4, "z": 0.5},
 	{"card": "pot", "slot": 6, "dx": 1.2, "z": 1.0},
-	{"card": "bench", "slot": 7, "dx": -2.6, "z": 2.2},
-	{"card": "standing_board", "slot": 9, "dx": -1.4, "z": 0.9},
-	{"card": "basket", "slot": 9, "dx": -2.8, "z": 0.6},
+	{"card": "grindstone", "slot": 6, "dx": 6.6, "z": 0.6},
 	{"card": "flower_box", "slot": 2, "dx": 2.9, "z": 0.4},
-	{"card": "grindstone", "slot": 8, "dx": -3.0, "z": 0.6},
+	{"card": "bench", "slot": 7, "dx": -2.6, "z": 2.2},
+	{"card": "standing_board", "slot": 7, "dx": -1.4, "z": 0.9},
+	{"card": "basket", "slot": 7, "dx": -2.8, "z": 0.6},
 ]
 ## 工坊前场：铁匠铺退 1.0 格留出来的那块地（石板场前场 + 退出来的那格），
 ## 家伙什与料堆**贴墙摆**（z 取负 → 世界 z 落在铁匠铺墙脚与路坎之间那块地里）。
@@ -185,10 +204,10 @@ const CANOPY_PROPS: Array = [
 	{"card": "hanging_sign", "slot": 6, "dx": -4.6, "z": 1.35, "lift": 1.5},
 	{"card": "banner", "slot": 6, "dx": -3.0, "z": 1.25, "lift": 0.62},
 ]
-## 角色站位（3 个，全部正对相机）：都站在**街心石板路**上（|x| < ROAD_HALF），
-## z 越大越靠近相机。
+## 角色站位（3 个，全部正对相机）：都站在**硬化街区的铺装路面上**（|x| < BLOCK_HALF，
+## 路坎以内），z 越大越靠近相机。
 const CHARS: Array = [
-	{"x": -21.5, "z": 23.0, "flip": true},
+	{"x": -18.0, "z": 23.0, "flip": true},
 	{"x": -9.0, "z": 18.0, "flip": false},
 	{"x": 14.0, "z": 13.5, "flip": true},
 ]
@@ -235,6 +254,8 @@ var _lamps: Array[OmniLight3D] = []
 ## 主排槽位台账（布局时填）：{x0, x1, cx, cells, kind, dz} —— 道具靠它做**相对定位**，
 ## 于是改 `STREET` 的间距/类型时道具不会跟建筑错位（不再写死绝对 x）。
 var _slots: Array = []
+## 全部已落位建筑（含背景层）：{card,x,z,mode,cells} —— 排布自检用（断言，不靠肉眼）
+var _built: Array = []
 ## 交付取景的相机原点（`--focus` 分项取景时按它做偏移，不动世界本身）
 var _cam_home := Vector3.ZERO
 
@@ -387,6 +408,8 @@ func _spawn_card(card: String, x: float, z_off: float, mode: String = "main") ->
 	mi.material_override = m
 	mi.name = "Card_" + card
 	_card_root.add_child(mi)
+	_built.append({"card": card, "x": x, "z": z_off, "mode": mode,
+		"cells": _card_cells(card)})
 	return mi
 
 
@@ -515,6 +538,8 @@ func _build_world() -> void:
 		_spawn_card(str(e["card"]), float(e["x"]), BG2_Z + float(e.get("dz", 0.0)), "bg2")
 	for e in BG3_ROW:
 		_spawn_card(str(e["card"]), float(e["x"]), BG3_Z + float(e.get("dz", 0.0)), "bg3")
+	# --- 排布自检（断言：地基全在地面带内、同排出檐零相交）---
+	_audit_layout()
 	# --- 树线/远山剪影（不透明，遮住地平线以上的多余地面）+ 云带 ---
 	# 树线/远山：基座压在地平线**下方 1.5%**（重叠一点防缝），不透明剪影向上盖住
 	# 地平线以上的全部区域 → "地面延伸到无穷远 + 地平线"这件事在画面里不存在。
@@ -621,11 +646,11 @@ func _spawn_char_host(px_scale: float = 1.0) -> void:
 ## `_add_apron` 的 fringe 分支）—— 画框两端读作城郊草地，不是一条石路缘。
 func _apron_tex(cx: float) -> String:
 	var ax := absf(cx)
-	if ax < 16.0:
-		return "flagstone_128.png" if ax < 7.0 else "band_shoulder_stone_128.png"
-	if ax < VERGE_HALF:
-		return "brick_pave_128.png"
-	return "band_shoulder_earth_128.png"
+	if ax <= ZONE_CENTER:
+		return "seg_shoulder_center_v1.png"
+	if ax <= BLOCK_HALF:
+		return "seg_shoulder_mid_v1.png"
+	return "seg_shoulder_edge_v1.png"
 
 
 func _add_apron(cx: float, cells: float, z_off: float, kind: String = "dwell") -> void:
@@ -643,16 +668,13 @@ func _add_apron(cx: float, cells: float, z_off: float, kind: String = "dwell") -
 			_add_ground_plane_at("band_shoulder_earth_128.png",
 				cx + rng.randf_range(-half * 0.8, half * 0.8), rng.randf_range(1.8, 3.4),
 				z0, z0 + depth + rng.randf_range(0.3, 1.1), 0.035, 3.4,
-				Color(0.78 + rng.randf_range(-0.06, 0.06),
-					0.75 + rng.randf_range(-0.06, 0.06),
-					0.68 + rng.randf_range(-0.06, 0.06)),
-				rng.randf_range(-0.45, 0.45))
+				Color(1, 1, 1), rng.randf_range(-0.45, 0.45))
 		for i in 2:
 			var z0 := z0b + rng.randf_range(-0.5, 0.4)
 			_add_ground_plane_at("grass_sparse_128.png",
 				cx + rng.randf_range(-half, half), rng.randf_range(1.6, 3.0),
 				z0, z0 + depth + rng.randf_range(0.2, 0.9), 0.048, 5.0,
-				Color(0.96, 1.0, 0.90), rng.randf_range(-0.7, 0.7))
+				Color(1, 1, 1), rng.randf_range(-0.7, 0.7))
 		return
 	var n := 3 + int(cells / 4.0)
 	var w := cells / float(n)
@@ -660,11 +682,9 @@ func _add_apron(cx: float, cells: float, z_off: float, kind: String = "dwell") -
 		var z0 := z0b + rng.randf_range(-0.10, 0.14)
 		var z1 := z0 + depth + rng.randf_range(-0.30, 0.45)
 		var x0 := cx - half + float(i) * w
+		# 白 tint：颜色交给资产（item 4：不再用调色盖资产）
 		_add_ground_plane_at(tex, x0 + w * 0.5, w * (1.0 if rng.randf() > 0.25 else 0.72),
-			z0, z1, 0.035, 3.6,
-			Color(0.72 + rng.randf_range(-0.08, 0.08),
-				0.71 + rng.randf_range(-0.08, 0.08),
-				0.68 + rng.randf_range(-0.08, 0.08)),
+			z0, z1, 0.035, BAND_SH_W, Color(1, 1, 1),
 			rng.randf_range(-0.07, 0.07))
 
 
@@ -680,10 +700,9 @@ func _add_door_trace(cx: float, z_from: float, z_to: float) -> void:
 		var t0 := float(i) / float(n)
 		var z0 := lerpf(z_from, z_to, t0)
 		var z1 := lerpf(z_from, z_to, float(i + 1) / float(n)) + 0.06
-		var a := 0.90 - 0.10 * t0
 		_add_ground_plane_at("dirt_rut_128.png", cx + rng.randf_range(-0.30, 0.30),
-			2.1 - 0.6 * t0 + rng.randf_range(-0.30, 0.30), z0, z1, 0.052, 1.6,
-			Color(a, a * 0.97, a * 0.91), rng.randf_range(-0.6, 0.6))
+			2.1 - 0.6 * t0 + rng.randf_range(-0.30, 0.30), z0, z1,
+			0.052 - 0.004 * t0, 1.6, Color(1, 1, 1), rng.randf_range(-0.6, 0.6))
 
 
 ## 道具卡：与建筑卡同一套 anchor 落位（基座落世界 y=0 的 z_off 平面）。
@@ -757,6 +776,59 @@ func _place_props() -> void:
 		_spawn_prop(str(e["card"]), _slot_cx(int(e["slot"])) + float(e.get("dx", 0.0)),
 			MAIN_BASE_Z + float(e["z"]), float(e.get("lift", 0.0)),
 			float(e.get("sc", 1.0)))
+
+
+# ------------------------------------------------------------------ 排布自检
+
+## **排布自检（创始人要求写成断言，不靠肉眼）**
+## ① 逐栋地基审计：每栋的**地基世界点** (x, y=0, z) 的屏幕落点 pct 必须落在地面带内
+##    —— 地面带 = 地平线（z=HORIZON_Z 的地面点）以下到画框底。悬空（pct 在地平线以上）
+##    与骑线（pct 贴地平线 ±0.6%）都判失败。背景层因此必须压进 z > HORIZON_Z。
+## ② 出檐不重叠审计：同一排内按 x 排序后**相邻**两栋的**有效占宽**区间
+##    [cx ± cells·EAVE_K/2] 不得相交（卡的可见宽 ≈ 占地格宽 × 1.4，出檐就是这多出来的 0.4）。
+func _audit_layout() -> void:
+	var hz := _pct(0.0, HORIZON_Z)
+	print("[audit] 地面带 = pct (%.2f .. 100]（地平线 %.2f，地面带高 %.1f%%，规格 ~1/3）" % [
+		hz, hz, 100.0 - hz])
+	var bad_base := 0
+	var rows := {}
+	for b in _built:
+		var bb: Dictionary = b
+		var pct := _pct(0.0, float(bb["z"]))
+		var ok := pct > hz + 0.6 and pct <= 100.0
+		if not ok:
+			bad_base += 1
+		print("  地基 %-14s %-5s x=%+7.2f z=%+6.2f  pct=%6.2f  %s" % [
+			str(bb["card"]), str(bb["mode"]), float(bb["x"]), float(bb["z"]), pct,
+			"ok" if ok else "**悬空/骑线**"])
+		var key := str(bb["mode"])
+		if not rows.has(key):
+			rows[key] = []
+		(rows[key] as Array).append(bb)
+	assert(bad_base == 0, "有 %d 栋建筑的地基不在地面带内（悬空/骑线）" % bad_base)
+	var bad_ov := 0
+	for key in ["main", "bg1", "bg2", "bg3"]:
+		if not rows.has(key):
+			continue
+		var arr: Array = rows[key]
+		arr.sort_custom(func(a, b): return float(a["x"]) < float(b["x"]))
+		for i in range(arr.size() - 1):
+			var a: Dictionary = arr[i]
+			var b: Dictionary = arr[i + 1]
+			var ea := float(a["cells"]) * EAVE_K
+			var eb := float(b["cells"]) * EAVE_K
+			var a1 := float(a["x"]) + ea * 0.5
+			var b0 := float(b["x"]) - eb * 0.5
+			var overlap := a1 - b0
+			# 规范下限 = 0.2×(w1+w2) 净距；重叠 > 0 即失败
+			print("  出檐 %-5s %-14s|%-14s 净距=%+5.2f（下限 %.2f）%s" % [
+				key, str(a["card"]), str(b["card"]), -overlap,
+				0.2 * (float(a["cells"]) + float(b["cells"])),
+				"ok" if overlap <= 0.0 else "**相交**"])
+			if overlap > 0.0:
+				bad_ov += 1
+	assert(bad_ov == 0, "同排相邻建筑出檐相交 %d 处" % bad_ov)
+	print("[audit] 排布自检通过：%d 栋地基全部在地面带内、同排出檐零相交" % _built.size())
 
 
 ## 背景封底层（补充规格 3）：用 `base_pct` 直接指定基座屏幕高度，靠 `_y_for_pct`
@@ -852,60 +924,129 @@ func _make_label(pos: Vector2, size: int) -> Label:
 
 ## **整片可行走地面**（不是"路肩带 + 道路带"两截）：z 从地平线一直到画面外，
 ## 在 x 上按 街心/路肩/外缘 换材质，读作一条有肌理的街；建筑靠自带裙边挤占。
-## **城市边缘无路坎**（任务 3）：街心石板只到 |x| = ROAD_HALF，外 6 格夯土路肩，
-## 再外全草皮；两条分界都由 `_add_verge_blend()` 用有机草缘互相"咬"，不留直线路缘石。
+## **可行走地面**：z 从地平线一直到画面外，x 上按区带铺**真资产**（item 4）——
+##   center 档（街心石板/大理石）→ mid 档（旧砖+碎石）→ edge 档（**土路**）→ 草皮，
+##   区带交接用 `transitions/gtx_*` 预制过渡件；硬化街区外缘长**路坎**（item 3）。
+## 全部 tint = 白（不再用程序化调色盖资产本身的颜色）。
 func _walkable_ground(z0: float, z1: float) -> void:
-	var zones := [
-		{"x0": -340.0, "x1": -VERGE_HALF, "tex": "grass_sparse_128.png", "tint": Color(0.98, 1.0, 0.92)},
-		{"x0": -VERGE_HALF, "x1": -ROAD_HALF, "tex": "dirt_rut_128.png", "tint": Color(1.0, 0.99, 0.96)},
-		{"x0": -ROAD_HALF, "x1": ROAD_HALF, "tex": "band_road_stone_128.png", "tint": Color(1.0, 1.0, 1.02)},
-		{"x0": ROAD_HALF, "x1": VERGE_HALF, "tex": "dirt_rut_128.png", "tint": Color(1.0, 0.99, 0.96)},
-		{"x0": VERGE_HALF, "x1": 340.0, "tex": "grass_sparse_128.png", "tint": Color(0.98, 1.0, 0.92)},
-	]
-	for z in zones:
-		var zz: Dictionary = z
-		_add_ground_plane_at(str(zz["tex"]), (float(zz["x0"]) + float(zz["x1"])) * 0.5,
-			float(zz["x1"]) - float(zz["x0"]), z0, z1, 0.02, 9.0, zz["tint"])
-	_add_verge_blend()
+	# 街面三条带（沿街长 chaining：段长 16 格，资产横向严格周期 → 任意顺序相接）
+	_add_street_lane("seg_road_center_v1", -ZONE_CENTER, ZONE_CENTER, z0, z1, SEG_LEN, BAND_ROAD_W)
+	_add_street_lane("seg_road_mid_v1", -BLOCK_HALF, -ZONE_CENTER, z0, z1, SEG_LEN, BAND_ROAD_W)
+	_add_street_lane("seg_road_mid_v1", ZONE_CENTER, BLOCK_HALF, z0, z1, SEG_LEN, BAND_ROAD_W)
+	# 街心↔中环：没有 flagstone↔brick 预制件，按"先软混"口径用**两段贴图线性叠加**
+	# （禁止程序噪声/纯色）。带 3 格宽，骑在 |x|=ZONE_CENTER 上。
+	_add_street_lane("seg_road_mid_v1", -ZONE_CENTER - 1.5, -ZONE_CENTER + 1.5, z0, z1,
+		SEG_LEN, BAND_ROAD_W, 0.025, "seg_road_center_v1", 0.5)
+	_add_street_lane("seg_road_mid_v1", ZONE_CENTER - 1.5, ZONE_CENTER + 1.5, z0, z1,
+		SEG_LEN, BAND_ROAD_W, 0.025, "seg_road_center_v1", 0.5)
+	# 城市边缘土路（edge 档）：铺装 ↔ 土路的交接由 gtx 预制件负责（见下），这里铺土路本体
+	_add_street_lane("seg_road_edge_v1", -VERGE_HALF, -BLOCK_HALF, z0, z1, SEG_LEN, BAND_ROAD_W)
+	_add_street_lane("seg_road_edge_v1", BLOCK_HALF, VERGE_HALF, z0, z1, SEG_LEN, BAND_ROAD_W)
+	# 铺装 ↔ 土路：gtx_flagstone_dirt_road_*（手工折线边界，5 格宽骑在 |x|=BLOCK_HALF）
+	_add_transition_chain("gtx_flagstone_dirt_road_v", BLOCK_HALF, BAND_ROAD_W, z0, z1)
+	# 土路 ↔ 草皮：gtx_rammed_grass_shoulder_*（3 格宽骑在 |x|=VERGE_HALF）
+	_add_transition_chain("gtx_rammed_grass_shoulder_v", VERGE_HALF, BAND_SH_W, z0, z1)
+	# 画框两端以外：草皮（真资产）—— 从 |x| = VERGE_HALF 一直铺到画框外
+	_add_ground_plane_at("grass_sparse_128.png", -(340.0 + VERGE_HALF) * 0.5,
+		340.0 - VERGE_HALF, z0, z1, 0.025, 5.0, Color(1, 1, 1))
+	_add_ground_plane_at("grass_sparse_128.png", (340.0 + VERGE_HALF) * 0.5,
+		340.0 - VERGE_HALF, z0, z1, 0.025, 5.0, Color(1, 1, 1))
+	_add_kerbs()
 
 
-## 街缘交织（**没有路缘石**）：街心石板与草皮之间不做硬边界，而是两边互相"咬"——
-##   · 草皮舌：从路肩外缘往街心咬进 1~4 格，越靠画框两端（|x| 大）越多越深
-##     → 城市边缘读作草地咬到路边；
-##   · 夯土块：反咬草地边界，打断草皮那条直线；
-##   · 石板碎块：撒在街心边缘，让石板路的边也不是一条直线。
-## 只撒在道路带（z > 建筑基线 + 路肩深）—— 不压到建筑门前的石板场。
-func _add_verge_blend() -> void:
+## **分段资产的"车道"铺法**：u 沿街长(z)、v 沿街宽(x) —— 把平面绕 Y 转 90° 实现
+## （PlaneMesh 的局部 X 默认对世界 X，转 90° 后对世界 Z）。
+## uv_scale = (街长/段长, 街宽/带宽) → **按资产的真实世界尺寸铺**（seg_road_* 16×5 格）。
+## `mix_tex/mix_amount` 非空时走两段贴图线性叠加（区带软混，无噪声）。
+func _add_street_lane(tex_name: String, x0: float, x1: float, z0: float, z1: float,
+		seg_len: float, band_w: float, y: float = 0.02,
+		mix_tex: String = "", mix_amount: float = 0.0) -> void:
+	if x1 - x0 <= 0.0 or z1 - z0 <= 0.0:
+		return
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(z1 - z0, x1 - x0)
+	var mi := MeshInstance3D.new()
+	mi.mesh = pm
+	mi.position = Vector3((x0 + x1) * 0.5, y, (z0 + z1) * 0.5)
+	mi.rotation = Vector3(0.0, PI * 0.5, 0.0)
+	var gm := ShaderMaterial.new()
+	gm.shader = GROUND_SHADER
+	gm.set_shader_parameter("albedo_tex", _tex_abs(_temp + GROUND_DIR + tex_name + ".png"))
+	gm.set_shader_parameter("mix_tex", _tex_abs(_temp + GROUND_DIR + mix_tex + ".png")
+		if mix_tex != "" else null)
+	gm.set_shader_parameter("mix_amount", mix_amount)
+	gm.set_shader_parameter("tint", Color(1, 1, 1))
+	gm.set_shader_parameter("rough", 0.95)
+	gm.set_shader_parameter("uv_scale", Vector2((z1 - z0) / seg_len, (x1 - x0) / band_w))
+	mi.material_override = gm
+	mi.name = "Lane_" + tex_name
+	_ground_root.add_child(mi)
+
+
+## **预制过渡件链**：gtx_* 每件 = 512px（16 格）长、band_w 格宽，`x_tileable=false`
+## （手工折线边界）→ 只能**逐段铺、不可平铺**。沿 z 每 16 格放一件，变体按固定
+## 伪随机序轮换（避免接缝处突变太大），骑在 xc 上（左右各半 = 两种材质）。
+func _add_transition_chain(prefix: String, xc: float, band_w: float,
+		z0: float, z1: float) -> void:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 881
-	var z_lo := MAIN_BASE_Z + APRON_DEPTH + 0.3
+	rng.seed = int(xc * 131.0) + 97
+	var variants := [1, 2, 1, 3, 2, 1, 3, 2]
+	var idx := 0
+	var z := z0
+	while z < z1:
+		var span: float = minf(SEG_LEN, z1 - z)
+		var v: int = variants[idx % variants.size()]
+		idx += 1
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(span, band_w)
+		var mi := MeshInstance3D.new()
+		mi.mesh = pm
+		mi.position = Vector3(xc, 0.032, z + span * 0.5)
+		mi.rotation = Vector3(0.0, PI * 0.5, 0.0)
+		var gm := ShaderMaterial.new()
+		gm.shader = GROUND_SHADER
+		var tx := _tex_abs(_temp + GROUND_DIR + TRANS_DIR + prefix + str(v) + ".png")
+		gm.set_shader_parameter("albedo_tex", tx)
+		gm.set_shader_parameter("mix_amount", 0.0)
+		gm.set_shader_parameter("tint", Color(1, 1, 1))
+		gm.set_shader_parameter("rough", 0.95)
+		gm.set_shader_parameter("uv_scale", Vector2(span / SEG_LEN, 1.0))
+		mi.material_override = gm
+		mi.name = "Gtx_" + prefix + str(v)
+		_ground_root.add_child(mi)
+		z += SEG_LEN
+
+
+## **路坎（item 3）**：只长在**硬化街区外缘** |x| = BLOCK_HALF 上 —— 城市边缘的
+## 土路段没有路坎（同一个 x 空间里，土路在 20..29，所以坎到 20 为止）。
+## 几何用 BoxMesh：**平面贴图做不出"坎"**，必须有一个立面才读得出高差。
+## 尺寸对齐资产口径：宽 KERB_W≈9px、高 KERB_H≈11px（"矮"），断续分段（段长 2.5~7.5 格、
+## 断口 0.5~3 格）。起点退到建筑基线 +2 格，避免压到各栋门前的石板场。
+func _add_kerbs() -> void:
+	var kb := _tex_abs(_temp + GROUND_DIR + "band_kerb_stone_128.png")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260915
 	for side in [-1.0, 1.0]:
 		var sd := float(side)
-		# 草皮舌：多而小、全部随机转角 —— 边界的"有机感"靠数量与转角，不靠大块
-		for i in 46:
-			var t := float(i) / 45.0                 # 0=街心侧, 1=画框两端
-			var bite := 0.8 + 3.4 * t                # 许可咬进街心的深度（格）
-			var cx := sd * (ROAD_HALF + 0.5 + rng.randf_range(-bite, 3.0) + 2.0 * t)
-			var w := rng.randf_range(0.9, 3.2)
-			var z0 := rng.randf_range(z_lo, 96.0)
-			var d := rng.randf_range(1.0, 3.4)
-			var g := Color(0.96, 1.0, 0.90).lerp(Color(0.90, 0.97, 0.82), t)
-			_add_ground_plane_at("grass_sparse_128.png", cx, w, z0, z0 + d, 0.045, 3.2, g,
-				rng.randf_range(-0.9, 0.9))
-		# 夯土块：反咬草地边界（同样小、同样转角）
-		for i in 24:
-			var cx2 := sd * (VERGE_HALF - 3.0 + rng.randf_range(-5.0, 8.0))
-			var z0b := rng.randf_range(z_lo, 94.0)
-			_add_ground_plane_at("dirt_rut_128.png", cx2, rng.randf_range(1.0, 3.2),
-				z0b, z0b + rng.randf_range(0.9, 2.6), 0.038, 2.6, Color(1.0, 0.98, 0.94),
-				rng.randf_range(-0.9, 0.9))
-		# 石板碎块：骑在街心边缘上，把"直边"啃毛
-		for i in 22:
-			var cx3 := sd * (ROAD_HALF + rng.randf_range(-2.6, 2.6))
-			var z0c := rng.randf_range(z_lo, 94.0)
-			_add_ground_plane_at("band_road_stone_128.png", cx3, rng.randf_range(0.9, 2.8),
-				z0c, z0c + rng.randf_range(0.8, 2.4), 0.032, 2.6, Color(0.99, 0.99, 1.0),
-				rng.randf_range(-0.9, 0.9))
+		var z := MAIN_BASE_Z + 2.0
+		while z < 62.0:
+			var seg := rng.randf_range(2.5, 7.5)
+			var bm := BoxMesh.new()
+			bm.size = Vector3(KERB_W, KERB_H, seg)
+			var mi := MeshInstance3D.new()
+			mi.mesh = bm
+			mi.position = Vector3(sd * BLOCK_HALF, KERB_H * 0.5 + 0.02, z + seg * 0.5)
+			var gm := ShaderMaterial.new()
+			gm.shader = GROUND_SHADER
+			gm.set_shader_parameter("albedo_tex", kb)
+			gm.set_shader_parameter("mix_amount", 0.0)
+			gm.set_shader_parameter("tint", Color(1, 1, 1))
+			gm.set_shader_parameter("rough", 0.9)
+			gm.set_shader_parameter("uv_scale", Vector2(seg / 1.6, 1.0))
+			mi.material_override = gm
+			mi.name = "Kerb"
+			_ground_root.add_child(mi)
+			z += seg + rng.randf_range(0.5, 3.0)
 
 
 func _add_ground_plane_at(tex_name: String, cx: float, width: float,
@@ -1155,26 +1296,28 @@ func _run_shots(which: String) -> void:
 	print("[hd2d] 出图用时 %.1f s" % (float(Time.get_ticks_usec() - t0) / 1000000.0))
 
 
-## 场景摆布交付/自检图（一次运行出四张，不重复起进程）：
-##   g_01 背景层（抬机位看远景分层与稀疏）  g_02 主排前脸（近观类型化退让）
-##   g_03 地面两端边缘（草皮咬到路边、无路缘石）  g_04 默认交付取景（day + 后处理）
+## 场景摆布交付/自检图（一次运行出五张，对应创始人打回的四条 + 交付图）：
+##   g_01_base   ① 地基：拉平看所有层的地基都落在地面带里
+##   g_02_row    ② 出檐间距：主排前脸（相邻出檐不相交、类型化进退）
+##   g_03_kerb   ③ 路坎：贴到 |x|=20 看硬化街区外缘的分段路坎
+##   g_04_ground ④ 真资产：土路/铺装/草皮的区带与预制过渡件
+##   g_05_final  交付取景（day + 后处理）
 func _shot_layout() -> void:
 	_apply_light("day")
 	_apply_stage("c")
-	var plan := [["bg", "hd2d_g_01_bg"], ["row", "hd2d_g_02_mainrow"],
-		["edge", "hd2d_g_03_edges"], ["", "hd2d_g_04_final"]]
+	var plan := [["base", "hd2d_g_01_base"], ["row", "hd2d_g_02_row"],
+		["kerb", "hd2d_g_03_kerb"], ["ground", "hd2d_g_04_ground"],
+		["", "hd2d_g_05_final"]]
 	for p in plan:
 		_apply_focus(str(p[0]))
 		await _settle(1.1)
 		await _shot(str(p[1]))
 
 
-## `--focus=bg|row|edge` 分项取景（只动相机取景，不动世界）：
-## 正交相机沿屏幕上轴平移 + 换视宽 —— 用于把某一层拉满画幅做自检，
-## 空串 = 回默认交付取景。世界摆放全部按默认机位推导，改这里不会影响交付构图。
+## `--focus=` 分项取景（只动相机取景，不动世界）：沿屏幕上轴平移 + 换视宽 + 横向偏移。
 ## 落点公式（实测校验过，比 pct 经验式准）：
-##   f = 0.5 - dot(P - cam', up) / (56.25 * zoom)，cam' = cam + up*shift，up=(0,.94,-.342)
-##   主排基线 P=(0,0,4.2) → dot0 = -11.78；f=0.65 时 shift = -8（zoom .45）。
+##   f = 0.5 - dot(P - cam', up) / (56.25 * zoom)，cam' = cam + up*shift + X*xoff
+##   up=(0,.94,-.342)。主排基线 P=(0,0,4.2) → dot0=-11.78；f=0.65 时 shift≈-8（zoom .45）。
 ## ⚠ 正交相机**视锥底面**落到世界 y≈0 以下时（cam_y < 28.1·zoom·cos20°），那片像素
 ## 往斜下方走、**永远打不到地面**，会露出天空下半球色 —— 取景别靠降相机压画幅。
 func _apply_focus(kind: String) -> void:
@@ -1182,13 +1325,28 @@ func _apply_focus(kind: String) -> void:
 	var up := Vector3(0.0, cos(t), -sin(t))
 	var shift := 0.0
 	var zoom := 1.0
+	var xoff := 0.0
 	match kind:
 		"bg":
 			shift = 7.5
 			zoom = 0.72
+		"base":
+			# 拉平看地基：地面带（地平线 61.98 → 主排基线 70.9）落在画面 42~57%
+			shift = -7.6
+			zoom = 0.60
 		"row":
 			shift = -8.0
 			zoom = 0.45
+		"kerb":
+			# 贴到硬化街区外缘 |x|=20 看路坎（基线落在 55% → 坎在画面下半）
+			shift = -11.0
+			zoom = 0.30
+			xoff = 14.5
+		"ground":
+			# 看土路/铺装/草皮区带与预制过渡件（基线落在 62%）
+			shift = -9.0
+			zoom = 0.40
+			xoff = 23.0
 		"edge":
 			shift = 4.0
 			zoom = 0.95
@@ -1196,7 +1354,7 @@ func _apply_focus(kind: String) -> void:
 			shift = 0.0
 			zoom = 1.0
 	_cam.size = CAM_W * zoom
-	_cam.position = _cam_home + up * shift
+	_cam.position = _cam_home + up * shift + Vector3(xoff, 0.0, 0.0)
 
 
 ## 遮挡验证：两个角色、同 x、只差 z。两格并排。

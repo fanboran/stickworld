@@ -8,6 +8,11 @@ shader_type spatial;
 //
 // 平铺：PlaneMesh 的 UV 是 0..1，平铺倍数由 uv_scale 给（= 面尺寸 / 贴图世界尺寸），
 // 与原 `uv1_scale` 同义。
+//
+// 贴图：**直接消费烘焙好的分段资产**（temp/ground_tiles 的 seg_* / gtx_* / band_*），
+// 不做任何程序化着色 —— `tint` 一律给白，地面颜色就是资产自己的颜色。
+// `mix_tex/mix_amount` 只做**两段贴图的线性叠加**（区带软混；创始人明确禁止程序噪声
+// 渐变，所以这里不引入任何噪声，纯线性）。
 render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 
 // 云影（全场共享的 global shader parameter）
@@ -15,14 +20,20 @@ global uniform vec4 cloud_shadow;
 #include "res://tests/dev/proto_hd2d/cloud_noise.gdshaderinc"
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
+uniform sampler2D mix_tex : source_color, filter_linear_mipmap;
+uniform float mix_amount : hint_range(0.0, 1.0) = 0.0;
 uniform vec4 tint : source_color = vec4(1.0);
 uniform float rough : hint_range(0.0, 1.0) = 0.95;
 uniform vec2 uv_scale = vec2(1.0, 1.0);
 
 void fragment() {
 	vec3 wp = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	ALBEDO = texture(albedo_tex, UV * uv_scale).rgb * tint.rgb
-		* (1.0 - cloud_shadow_at(wp.xz));
+	vec2 uv = UV * uv_scale;
+	vec3 base = texture(albedo_tex, uv).rgb;
+	if (mix_amount > 0.0) {
+		base = mix(base, texture(mix_tex, uv).rgb, mix_amount);
+	}
+	ALBEDO = base * tint.rgb * (1.0 - cloud_shadow_at(wp.xz));
 	ROUGHNESS = rough;
 	SPECULAR = 0.08;
 }

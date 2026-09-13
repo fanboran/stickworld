@@ -52,8 +52,9 @@ RATIO_BAND = (0.85, 1.50)
 #: §8.2 各宽度档的绝对剪影总高区间（用于自检打表）
 GRID_H_BAND = {4: (109, 192), 6: (163, 288), 8: (218, 384),
                12: (326, 576), 16: (435, 768)}
-#: §8.2 双层单列层高区间
-STOREY_H_BAND = (175.0, 195.0)
+#: §8.7 米制口径下的双层单列层高区间（200~207px = 2.62~2.71m；**取代 §8.2 的 175~195**：
+#: 那一档对应"门占层高 85%"，正是创始人点名的病根，§8.7 已改判 2.6~2.7m）。
+STOREY_H_BAND = (196.0, 212.0)
 #: §8.2 出檐占建筑宽的比例区间（每侧）
 EAVE_RATIO_BAND = (0.18, 0.23)
 #: 相机固定俯角 20°（§0.3 视角硬约束：纯正面 + 俯角 20°）。檐口出檐会遮住墙顶
@@ -2655,7 +2656,8 @@ def assemble_tower(width_cells=6):
     spec = _mk("tower", width_cells, {
         "depth": D, "plinth_h": plinth_h, "wall_h": body_h, "eave_h": z_top,
         "rise": 50.0, "total_h": z_top + 50.0, "overhang": 8.0, "roof_t": 0.0,
-        "storey_h": [body_h], "door": (door_w, DOOR_H), "door_x": 0.0,
+        "storey_h": [body_h], "tower_sections": 3,
+        "door": (door_w, DOOR_H), "door_x": 0.0,
         "floor_h": FLOOR_H_SPEC, "window": None, "arrow_rows": 3,
         "ratio_exempt": True, "eave_exempt": True,
         "width_exempt": (width_cells < MIN_DOOR_CELLS),
@@ -3057,9 +3059,10 @@ def water_wheel(b, x, y, z, r=62.0, mat="wood_dark", iron="iron", spokes=8,
 # ---------------------------------------------------------------- 7.1 村舍 cottage
 
 COTTAGE_TIERS = {
+    # 6 格 = 小屋（§8.7 允许 183px=2.4m 层高）；8 格带门层抬到 200px=2.62m（门占 75%）
     6: dict(D=120.0, plinth=14.0, wall=182.0, rise=76.0, wt=16.0, door_w=48.0,
             ch_w=28.0, ch_up=18.0, ratio_band=(0.85, 1.70)),
-    8: dict(D=152.0, plinth=14.0, wall=190.0, rise=94.0, wt=18.0, door_w=52.0,
+    8: dict(D=152.0, plinth=14.0, wall=200.0, rise=94.0, wt=18.0, door_w=52.0,
             ch_w=30.0, ch_up=30.0, ratio_band=None),
 }
 
@@ -3155,9 +3158,10 @@ def assemble_cottage(width_cells=8):
 # ---------------------------------------------------------------- 7.2 酒馆 tavern
 
 TAVERN_TIERS = {
-    12: dict(D=208.0, plinth=18.0, storey=190.0, rise=112.0, wt=20.0, door_w=58.0,
+    # 带门层 200px = 2.62m（门占 75%，§8.7 点名"门占层高 74% 才自然"）
+    12: dict(D=208.0, plinth=18.0, storey=200.0, rise=104.0, wt=20.0, door_w=58.0,
              jetty=10.0, ch_w=30.0, dorm_x=(0.26, -0.26), dorm_f=0.60, dorm_h=60.0),
-    16: dict(D=232.0, plinth=20.0, storey=193.0, rise=120.0, wt=22.0, door_w=58.0,
+    16: dict(D=232.0, plinth=20.0, storey=200.0, rise=120.0, wt=22.0, door_w=58.0,
              jetty=11.0, ch_w=34.0, dorm_x=(0.28, -0.28), dorm_f=0.62, dorm_h=62.0),
 }
 
@@ -3294,9 +3298,10 @@ def wall_blocks(dx, door_w, wins, frame=8.0, extra=()):
 # ---------------------------------------------------------------- 7.3 面包房 bakery
 
 BAKERY_TIERS = {
-    8: dict(D=160.0, plinth=16.0, wall=190.0, rise=96.0, wt=18.0, door_w=52.0,
+    # 带门层 200px = 2.62m（门占 75%）
+    8: dict(D=160.0, plinth=16.0, wall=200.0, rise=96.0, wt=18.0, door_w=52.0,
             ch_w=34.0, ch_d=30.0, ch_up=22.0, win_scale=1.25),
-    12: dict(D=196.0, plinth=18.0, wall=196.0, rise=104.0, wt=20.0, door_w=56.0,
+    12: dict(D=196.0, plinth=18.0, wall=200.0, rise=104.0, wt=20.0, door_w=56.0,
              ch_w=34.0, ch_d=30.0, ch_up=30.0, win_scale=1.25),
 }
 
@@ -3381,10 +3386,12 @@ def assemble_bakery(width_cells=8):
 # ---------------------------------------------------------------- 7.4 商铺 shop
 
 SHOP_TIERS = {
-    8:  dict(D=156.0, plinth=16.0, storey=186.0, knee=42.0, rise=96.0, wt=18.0,
+    # 8 格 = 单层店面 + 阁楼膝墙；带门层 200px = 2.62m（门占 75%），
+    # 屋面 rise 收到 84（坡 33°）以把"店面 + 膝墙 + 坡顶"压在 8 格剪影带内。
+    8:  dict(D=156.0, plinth=16.0, storey=200.0, knee=42.0, rise=84.0, wt=18.0,
              door_w=52.0, front_cx=50.0, front_w=112.0, rail_drop=24.0,
              pier_win=None),
-    12: dict(D=196.0, plinth=18.0, storey=178.0, rise=104.0, wt=20.0, door_w=56.0,
+    12: dict(D=196.0, plinth=18.0, storey=200.0, rise=104.0, wt=20.0, door_w=56.0,
              jetty=10.0, front_cx=78.0, front_w=180.0, rail_drop=22.0,
              pier_win=-51.0),
 }
@@ -3523,8 +3530,9 @@ def assemble_shop(width_cells=8):
 # ---------------------------------------------------------------- 7.5 行会大厅 guildhall
 
 GUILDHALL_TIERS = {
-    12: dict(D=210.0, plinth=20.0, storey=190.0, rise=120.0, wt=22.0, door_w=58.0),
-    16: dict(D=240.0, plinth=22.0, storey=193.0, rise=130.0, wt=24.0, door_w=58.0),
+    # 带门层 200px = 2.62m（门占 75%）；两层半 = 2×200 + 山墙阁层 → 剪影比自带口径
+    12: dict(D=210.0, plinth=20.0, storey=200.0, rise=120.0, wt=22.0, door_w=58.0),
+    16: dict(D=240.0, plinth=22.0, storey=200.0, rise=130.0, wt=24.0, door_w=58.0),
 }
 
 
@@ -3629,7 +3637,7 @@ def assemble_guildhall(width_cells=12):
         "door_x": dx, "bays": bays, "gable_front": True, "guild_emblem": True,
         "window": (wins1[0]["ow"], wins1[0]["oh"], wins1[0]["z0"] - plinth_h),
         "window_up": (wins2[0]["ow"], wins2[0]["oh"], wins2[0]["z0"] - z2),
-        "chimneys": ch_list, "ratio_band": (1.05, 1.60),
+        "chimneys": ch_list, "ratio_band": (1.05, 1.60), "ridge_axis": "Y",
         "material": "石砌底层 + 抹灰半木上层 / 陶瓦 + 白石饰"})
     return ob, spec
 
@@ -3637,9 +3645,12 @@ def assemble_guildhall(width_cells=12):
 # ---------------------------------------------------------------- 7.6 干草棚 hayloft
 
 HAYLOFT_TIERS = {
-    8:  dict(D=160.0, plinth=14.0, low=134.0, up=88.0, rise=92.0, wt=18.0,
+    # **底层必须高过门**（门 150 + 门槛 8 = 158）：旧 low=134/146 使门顶越过地面层顶
+    # 10~24px，被上层木墙压住 → 可见净高只有 1.83/1.86m（火柴人 1.70m 都贴头）。
+    # 抬 low 到 158/162（2.07/2.12m）后门顶留出门楣带，屋面 rise 相应压平保住剪影带。
+    8:  dict(D=160.0, plinth=14.0, low=158.0, up=88.0, rise=76.0, wt=18.0,
              door_w=54.0, post=15.0),
-    12: dict(D=200.0, plinth=16.0, low=146.0, up=94.0, rise=100.0, wt=20.0,
+    12: dict(D=200.0, plinth=16.0, low=162.0, up=94.0, rise=92.0, wt=20.0,
              door_w=56.0, post=16.0),
 }
 
@@ -3825,9 +3836,10 @@ def assemble_smithy2(width_cells=8):
 # ---------------------------------------------------------------- 7.8 铁匠工坊 smithy3
 
 SMITHY3_TIERS = {
-    8:  dict(D=160.0, plinth=16.0, wall=190.0, rise=100.0, wt=18.0, door_w=54.0,
+    # 带门层 200px = 2.62m（门占 75%）
+    8:  dict(D=160.0, plinth=16.0, wall=200.0, rise=100.0, wt=18.0, door_w=54.0,
              ch_w=32.0),
-    12: dict(D=196.0, plinth=18.0, wall=196.0, rise=108.0, wt=20.0, door_w=56.0,
+    12: dict(D=196.0, plinth=18.0, wall=200.0, rise=108.0, wt=20.0, door_w=56.0,
              ch_w=36.0),
 }
 
@@ -4194,26 +4206,37 @@ def crate_stack(b, x, y, z=0.0, seed=0):
 # ---------------------------------------------------------------- 8.1 法师塔 mage_tower
 
 MAGE_TOWER_TIERS = {
-    4: dict(R=54.0, plinth=16.0, tower_h=300.0, taper=0.74, spire_h=104.0, door_w=46.0),
-    6: dict(R=80.0, plinth=18.0, tower_h=348.0, taper=0.76, spire_h=122.0, door_w=52.0),
-    8: dict(R=106.0, plinth=20.0, tower_h=392.0, taper=0.78, spire_h=140.0, door_w=56.0),
+    # 塔身 **2 层**（不是 3 段装饰鼓）：每层净高 ≈ 3.5~3.8m（现实塔每层 3.5~4.5m），
+    # 于是"塔身 : 门高" ≈ 3.5~3.8×（够两层）、锥顶组 = 塔身 × 0.41 ≤ 塔身。
+    # 旧值（tower_h 300/348/392 ÷3 段 = 每层 1.3~1.7m）矮于门（2.0m），
+    # 读数变成"矮鼓 + 大帽子"—— 比例审计里唯一被点名的一栋。
+    4: dict(R=54.0, plinth=16.0, tower_h=536.0, taper=0.74, spire_h=224.0,
+            door_w=46.0, sec=2, lantern_h=96.0),
+    6: dict(R=80.0, plinth=18.0, tower_h=560.0, taper=0.76, spire_h=232.0,
+            door_w=52.0, sec=2, lantern_h=100.0),
+    8: dict(R=106.0, plinth=20.0, tower_h=584.0, taper=0.78, spire_h=240.0,
+            door_w=56.0, sec=2, lantern_h=104.0),
 }
 
 
 def assemble_mage_tower(width_cells=6):
-    """法师塔：收分石塔 + 悬挑观星台 + 水晶灯室 + 尖锥顶 + 彩窗/符文自发光/悬浮水晶。
+    """法师塔：收分石塔（**2 层**，每层 3.5~3.8m）+ 悬挑观星台 + 水晶灯室 + 尖锥顶 +
+    彩窗/符文自发光/悬浮水晶。
 
     剑与魔法世界观的"名片建筑"——一眼不是民居的四条依据：
-    ① 体量：3 段收分圆塔 + 外挑观星台 + 高尖锥顶（塔类竖向体量，显式豁免剪影比）；
+    ① 体量：2 层收分圆塔 + 外挑观星台 + 水晶灯室 + 尖锥顶（塔类竖向体量，显式豁免剪影比）；
     ② 材质：彩窗（stained_glass）+ 符文带（rune_glow 自发光）+ 水晶灯室（crystal）；
     ③ 魔法件：塔顶灯室自发光 + **三颗无支撑悬浮水晶**（正面/上方可见）；
-    ④ 立面：尖拱彩窗成列 + 门楣符文石板 —— 民居一项都没有。
+    ④ 立面：**逐层一扇**尖拱彩窗 + 门楣符文石板 —— 民居一项都没有。
+
+    比例口径（§0.3 塔类）：塔身每层 3.5~4.5m、锥顶组 ≤ 塔身（锥顶不得压过塔身）；
+    塔身 ≥ 3× 门高（门 2.0m → 塔身 ≥ 6m，人才不会觉得"门长在鼓上"）。
     """
     t = MAGE_TOWER_TIERS[width_cells]
     W = width_cells * CELL
     R, plinth_h = t["R"], t["plinth"]
     tower_h, taper, spire_h = t["tower_h"], t["taper"], t["spire_h"]
-    door_w = t["door_w"]
+    door_w, n_sec, lantern_h = t["door_w"], int(t["sec"]), t["lantern_h"]
     D = 2.0 * R
     top_r = R * taper
     yf = -R - 10.0
@@ -4225,10 +4248,10 @@ def assemble_mage_tower(width_cells=6):
     contact_shadow(b, D, D, spread=28.0)
     b.cylinder((0.0, 0.0, plinth_h * 0.6), R * 1.12, plinth_h * 1.2, "stone_dark",
                segments=20)
-    sec = tower_h / 3.0
+    sec = tower_h / float(n_sec)
     r_prev = R
-    for k in range(3):
-        r_next = R * (taper ** ((k + 1) / 3.0))
+    for k in range(n_sec):
+        r_next = R * (taper ** ((k + 1) / float(n_sec)))
         b.cylinder((0.0, 0.0, plinth_h + sec * (k + 0.5)), r_prev, sec, "stone",
                    segments=20, taper=r_next / r_prev)
         if k:
@@ -4245,21 +4268,24 @@ def assemble_mage_tower(width_cells=6):
     b.cylinder((0.0, 0.0, z_top + 8.0), top_r * 1.28, 18.0, "stone", segments=20)
     b.cylinder((0.0, 0.0, z_top + 19.0), top_r * 1.32, 6.0, "white_stone",
                segments=20)
-    # ---- 符文带（门楣上一道 + 观星台下一道）+ 一道大尖拱彩窗（塔身只剩这一段净高：
-    #      门带拱头吃掉 ~180，彩窗必须落在门拱之上、观星台之下，别做两层撞在一起）
+    # ---- 符文带（门楣上一道 + 层间一道 + 观星台下一道）+ **每层一扇**尖拱彩窗
     head_z = DOOR_SILL + DOOR_H + door_w * 0.5
-    for zz in (head_z + 6.0, z_top - 10.0):
+    for zz in (head_z + 6.0, plinth_h + sec, z_top - 10.0):
         rr = R * (1.0 - (zz - plinth_h) / tower_h * (1.0 - taper))
         b.cylinder((0.0, 0.0, zz), max(6.0, rr) * 1.035, 9.0, rune, segments=20)
     lanc = win_rect("lancet", w_scale=1.04, h_scale=1.0, mat=stained)
-    w1z = head_z + 16.0
-    w_oh = min(lanc["oh"], max(56.0, z_top - 26.0 - w1z))
-    rr1 = R * (1.0 - (w1z - plinth_h) / tower_h * (1.0 - taper))
-    # 圆塔是凸面：宽窗必须**整片让到塔身前脸之外**（用 -sqrt 取边角深度会让塔身
-    # 中央的鼓起挡住玻璃中段，读成"窗中央一根石柱"）—— 直接取 -rr - 2 让它微凸。
-    wy = -rr1 - 2.0
-    lancet_window(b, 0.0, wy, w1z, lanc["ow"], w_oh, head=lanc["ow"] * 0.55,
-                  glass=stained, depth=9.0)
+    for k in range(n_sec):
+        z_sec = plinth_h + sec * k
+        # 底层窗底要让开拱门头（head_z）；上层窗底留一道窗台墙
+        wz = head_z + 18.0 if k == 0 else z_sec + 62.0
+        # 窗顶不许压到本层顶（层间白石材带之下留 16）
+        room = (plinth_h + sec * (k + 1) - 16.0) - wz
+        w_oh = max(52.0, min(lanc["oh"], room))
+        rr1 = R * (1.0 - (wz - plinth_h) / tower_h * (1.0 - taper))
+        # 圆塔是凸面：宽窗必须**整片让到塔身前脸之外**（用 -sqrt 取边角深度会让塔身
+        # 中央的鼓起挡住玻璃中段，读成"窗中央一根石柱"）—— 直接取 -rr - 2 让它微凸。
+        lancet_window(b, 0.0, -rr1 - 2.0, wz, lanc["ow"], w_oh,
+                      head=lanc["ow"] * 0.55, glass=stained, depth=9.0)
     # ---- 底部拱门 + 门楣符文石板
     arched_doorway(b, 0.0, yf, 30.0, door_w, head=door_w * 0.5, mat="stone",
                    porch_w=door_w + 46.0)
@@ -4267,9 +4293,9 @@ def assemble_mage_tower(width_cells=6):
                  DOOR_SILL + DOOR_H + door_w * 0.5 + 14.0, rune)
     # ---- 水晶灯室（crystal 自发光）+ 尖锥顶 + 顶尖晶柱
     z_lan = z_top + 36.0
-    lantern_room(b, 0.0, 0.0, z_lan, top_r * 0.66, 64.0, glass=crystal,
+    lantern_room(b, 0.0, 0.0, z_lan, top_r * 0.66, lantern_h, glass=crystal,
                  frame="iron", roof_mat="slate", roof_h=spire_h, posts=8)
-    z_spire_top = z_lan + 64.0 + 10.0 + spire_h + 26.0
+    z_spire_top = z_lan + lantern_h + 10.0 + spire_h + 26.0
     crystal_shard(b, 0.0, 0.0, z_spire_top - 4.0, 12.0, 40.0, crystal)
     # ---- 三颗悬浮水晶（无支撑；正面/上方可见）
     for (sx, sy, sz, sr, sh) in ((-R * 0.95, -R * 1.02, z_top + 34.0, 13.0, 48.0),
@@ -4281,13 +4307,15 @@ def assemble_mage_tower(width_cells=6):
     spec = _mk("mage_tower", width_cells, {
         "depth": D, "plinth_h": plinth_h, "wall_h": tower_h, "eave_h": z_top,
         "rise": z_spire_top - z_top, "total_h": z_spire_top + 44.0,
-        "overhang": top_r * 0.14, "roof_t": 0.0, "storey_h": [tower_h],
+        "overhang": top_r * 0.14, "roof_t": 0.0, "storey_h": [tower_h / n_sec] * n_sec,
+        "tower_sections": n_sec, "tower_h": tower_h, "spire_h": spire_h,
+        "lantern_h": lantern_h,
         "door": (door_w, DOOR_H), "door_x": 0.0, "floor_h": FLOOR_H_SPEC,
         "window": (lanc["ow"], lanc["oh"], lanc["z0"] - plinth_h),
         "round_tower": True, "magic": True, "floating_crystals": 3,
         "ratio_exempt": True, "eave_exempt": True,
         "width_exempt": (width_cells < MIN_DOOR_CELLS),
-        "reason": "法师塔：竖向塔体（收分塔身 + 悬挑观星台 + 水晶灯室 + 尖锥顶）；"
+        "reason": "法师塔：竖向塔体（2 层收分塔身 + 悬挑观星台 + 水晶灯室 + 尖锥顶）；"
                   "锥顶出檐按塔半径比例（非民居坡檐 18~23% 口径）",
         "material": "石砌 / 板岩尖顶 + 彩窗 + 符文自发光 + 悬浮水晶"})
     return ob, spec
@@ -4296,7 +4324,8 @@ def assemble_mage_tower(width_cells=6):
 # ---------------------------------------------------------------- 8.2 炼金工坊 alchemy
 
 ALCHEMY_TIERS = {
-    8:  dict(D=168.0, plinth=16.0, wall=192.0, rise=86.0, wt=18.0, door_w=52.0),
+    # 带门层 200px = 2.62m（门占 75%）；8 格档 rise 80（坡 30°）以把剪影比压在 1.5 内
+    8:  dict(D=168.0, plinth=16.0, wall=200.0, rise=80.0, wt=18.0, door_w=52.0),
     12: dict(D=200.0, plinth=18.0, wall=200.0, rise=104.0, wt=20.0, door_w=56.0),
 }
 
@@ -4397,7 +4426,8 @@ def assemble_alchemy(width_cells=8):
 # ---------------------------------------------------------------- 8.3 图书馆/学院 library
 
 LIBRARY_TIERS = {
-    12: dict(D=204.0, plinth=20.0, storey=196.0, rise=94.0, wt=22.0, door_w=58.0),
+    # 带门层 200/202px = 2.62/2.64m（门占 75/74%）
+    12: dict(D=204.0, plinth=20.0, storey=200.0, rise=94.0, wt=22.0, door_w=58.0),
     16: dict(D=236.0, plinth=22.0, storey=202.0, rise=140.0, wt=24.0, door_w=60.0),
 }
 
@@ -4478,8 +4508,11 @@ def assemble_library(width_cells=12):
         "rise": rise, "total_h": eave + rise, "overhang": over, "roof_t": 15.0,
         "storey_h": [storey, storey], "double_storey": True,
         "storey_band": (175.0, 208.0),
+        "ratio_band": (1.05, 1.60),
         "door": (door_w, DOOR_H), "door_x": 0.0, "bays": bays, "frontispiece": fp_w,
         "window": (44.0, 124.0, 69.0), "lamp_posts": 2,
+        "reason": "图书馆：两层石楼（层高 2.62m，两层檐高 5.23m 合规）+ 中央凸出门楼"
+                  "自带小山墙抬剪影，剪影比 ≈1.50 属高层公共体量（§8.7 多层 1.2~1.6）",
         "material": "石砌 / 板岩 + 铅条高窗成组 + 门楼铭牌 + 石阶灯柱"})
     return ob, spec
 
@@ -4682,9 +4715,12 @@ def assemble_warehouse(width_cells=12):
 # ---------------------------------------------------------------- 8.6 马厩 stable（独立化）
 
 STABLE_TIERS = {
-    8:  dict(D=160.0, plinth=14.0, low=126.0, up=78.0, rise=104.0, wt=18.0,
+    # **底层必须高过门**（门 150 + 门槛 8 = 158）：旧 low=126/134 让门顶越过地面层顶
+    # 8~18px、被上层木墙压住（可见净高 1.73/1.86m，低于设计门高）；抬到 158/162
+    # （2.07/2.12m）后门顶有门楣带，屋面 rise 压平以保住剪影带。
+    8:  dict(D=160.0, plinth=14.0, low=158.0, up=78.0, rise=88.0, wt=18.0,
              leaf=54.0, post=15.0, hay_dw=60.0, hay_dh=54.0),
-    12: dict(D=196.0, plinth=16.0, low=134.0, up=88.0, rise=118.0, wt=20.0,
+    12: dict(D=196.0, plinth=16.0, low=162.0, up=88.0, rise=100.0, wt=20.0,
              leaf=56.0, post=16.0, hay_dw=66.0, hay_dh=58.0),
 }
 

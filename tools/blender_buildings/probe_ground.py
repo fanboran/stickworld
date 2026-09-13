@@ -117,67 +117,6 @@ def plane(name, x0, x1, y0, y1, z, mat, uv_scale=0.0, uv_swap=False, uv_fn=None)
     return link(bpy.data.objects.new(name, me))
 
 
-def _mark_decal(ob):
-    ob["is_decal"] = True
-    return ob
-
-
-def _two_layer_shoot(cam, path, res_x, res_y):
-    """**两层分离渲染 + numpy 合成**：底（不透明）+ decal 层（透明底）→ 正确半透明叠加。
-
-    为什么不用 EEVEE 的 alpha 混合：这台机器上的 EEVEE 预览链路对 BLENDED/DITHERED
-    的 Alpha 直连处理不可靠（实测贴图 alpha 0.39 时整片渲染成不透明，或整片消失），
-    给创始人看的图不能是白块/形状框。两层分离 + 自己合成是确定性的，且与引擎无关
-    （引擎用的是导出的 RGBA PNG，自行混合）。
-    """
-    sc = bpy.context.scene
-    ground_tmp = os.path.join(OUT_DIR, "_tmp_ground.png")
-    decal_tmp = os.path.join(OUT_DIR, "_tmp_decal.png")
-    objs = list(bpy.data.objects)
-    dec = [o for o in objs if o.get("is_decal")]
-    for o in dec:
-        o.hide_render = True
-    sc.render.film_transparent = False
-    sc.render.image_settings.color_mode = "RGB"
-    sc.render.resolution_x, sc.render.resolution_y = res_x, res_y
-    sc.render.resolution_percentage = 100
-    sc.render.filepath = ground_tmp
-    bpy.ops.render.render(write_still=True)
-    for o in dec:
-        o.hide_render = False
-    for o in objs:
-        if not o.get("is_decal") and o.type in ("MESH", "FONT", "CURVE"):
-            o.hide_render = True
-    sc.render.film_transparent = True
-    sc.render.image_settings.color_mode = "RGBA"
-    sc.render.filepath = decal_tmp
-    bpy.ops.render.render(write_still=True)
-    for o in objs:
-        o.hide_render = False
-    a = _load_png_rgba(ground_tmp)
-    b = _load_png_rgba(decal_tmp)
-    al = np.clip(b[..., 3:4], 0.0, 1.0)
-    out = b[..., :3] * al + a[..., :3] * (1.0 - al)
-    G._save_png(out, path, "sRGB")
-    for f in (ground_tmp, decal_tmp):
-        try:
-            os.remove(f)
-        except OSError:
-            pass
-    print("-> %s  %dx%d  (两层合成：底 + decal alpha)" % (os.path.basename(path),
-                                                         res_x, res_y))
-
-
-def _load_png_rgba(path):
-    img = bpy.data.images.load(path, check_existing=False)
-    w, h = img.size
-    buf = np.empty(w * h * 4, dtype=np.float32)
-    img.pixels.foreach_get(buf)
-    a = buf.reshape(h, w, 4).astype(np.float64)
-    bpy.data.images.remove(img)
-    return a
-
-
 def band_uv(y_base, height, u_scale=128.0):
     """分带 UV：U 按世界 X 每 u_scale 单位铺一张；V 把 [y_base-height, y_base] 映到 0~1。
 
@@ -713,11 +652,10 @@ def shot_decals(cam):
         plane("dc_bg_%d" % i, cx, cx + cell, y - cell, y, 0.0,
               mat("seg_road_mid_v1"), uv_fn=world_uv)
         nx, ny = G.kind_size(dk)
-        _mark_decal(plane("dca_%d" % i, cx + (cell - nx * 0.7) / 2.0,
-                          cx + (cell + nx * 0.7) / 2.0,
-                          y - (cell + ny * 0.7) / 2.0,
-                          y - (cell - ny * 0.7) / 2.0, 1.0,
-                          G.decal_material(dk)))
+        plane("dca_%d" % i, cx + (cell - nx * 0.7) / 2.0,
+              cx + (cell + nx * 0.7) / 2.0, y - (cell + ny * 0.7) / 2.0,
+              y - (cell - ny * 0.7) / 2.0, 1.0,
+              alpha_material("gt_da_%d" % i, "%s_alb_%d.png" % (dk, G.GAME_PX)))
         label(dk.replace("dc_", ""), cx + cell / 2.0, y - cell - 14.0, 20.0)
     y -= cell + 26.0 + title
     for i, ln in enumerate((
@@ -725,13 +663,8 @@ def shot_decals(cam):
             "污渍 0.6/10m·0.5~1格   水洼 0.4/10m·1~2格   裂缝 0.5/10m·1~2格   苔藓 0.5/10m·1~2格",
             "碎屑 1.2/10m·0.5~1格   磨光带 0.3/10m·1~2格   修补块 0.25/10m·1.5~2格   门口径 每门 1 件")):
         label(ln, x0 + 520.0, y - i * 40.0, 20.0)
-    sc = bpy.context.scene
-    cam.data.sensor_fit = "HORIZONTAL"
-    cam.data.ortho_scale = W
-    cam.location = ((x0 + x0 + W) / 2.0, (y1 - H + y1) / 2.0, 6000.0)
-    cam.rotation_euler = (0.0, 0.0, 0.0)
-    _two_layer_shoot(cam, os.path.join(OUT_DIR, "pbr_ground_decals.png"),
-                     int(round(W * 0.85)), int(round(H * 0.85)))
+    render_rect(cam, x0, x0 + W, y1 - H, y1, 0.85,
+                os.path.join(OUT_DIR, "pbr_ground_decals.png"))
 
 
 def shot_pieces(cam):
@@ -754,20 +687,14 @@ def shot_pieces(cam):
         cx = x0 + gap + c * (cellw + gap)
         cy = y - r * (cellh + 44.0)
         _backing(cx, cy - cellh, cellw, cellh, name="bkp_%s" % key)
-        _mark_decal(plane("pp_%s" % key, cx + (cellw - nx) / 2.0,
-                          cx + (cellw + nx) / 2.0,
-                          cy - cellh + (cellh - ny) / 2.0,
-                          cy - cellh + (cellh + ny) / 2.0, 0.0, mat(key)))
+        plane("pp_%s" % key, cx + (cellw - nx) / 2.0, cx + (cellw + nx) / 2.0,
+              cy - cellh + (cellh - ny) / 2.0, cy - cellh + (cellh + ny) / 2.0,
+              0.0, mat(key))
         q = G._PIECE_OF[key]
         label("%s\n%s（%d×%d 格）" % (key, nm, q["cells"][0], q["cells"][1]),
               cx + cellw / 2.0, cy - cellh - 18.0, 19.0)
-    sc = bpy.context.scene
-    cam.data.sensor_fit = "HORIZONTAL"
-    cam.data.ortho_scale = W
-    cam.location = ((x0 + x0 + W) / 2.0, (y1 - H + y1) / 2.0, 6000.0)
-    cam.rotation_euler = (0.0, 0.0, 0.0)
-    _two_layer_shoot(cam, os.path.join(OUT_DIR, "pbr_ground_pieces.png"),
-                     int(round(W)), int(round(H)))
+    render_rect(cam, x0, x0 + W, y1 - H, y1, 1.0,
+                os.path.join(OUT_DIR, "pbr_ground_pieces.png"))
 
 
 def _grid_floor(cx0, width_cells, rows=3):
@@ -800,21 +727,17 @@ def shot_grid_demo(cam):
         for j in range(nb):
             xa = bx0 + j * G.PIECE_CELLS * CELL
             plane("ring_%d_%d" % (int(cx), j), xa, xa + G.PIECE_CELLS * CELL,
-                  -G.RING_H, 0.0, 2.0, mat("p_ring_mid"))
-        _mark_decal(plane("capL_%d" % int(cx), bx0 - 96.0, bx0, -G.RING_H, 0.0,
-                          2.0, G.decal_material("p_ring_cap_l")))
-        _mark_decal(plane("capR_%d" % int(cx), bx1, bx1 + 96.0, -G.RING_H, 0.0,
-                          2.0, G.decal_material("p_ring_cap_r")))
+                  -G.RING_H, 0.0, 2.0, mat("p_ring_mid"), uv_fn=world_uv)
+        plane("capL_%d" % int(cx), bx0 - 96.0, bx0, -G.RING_H, 0.0, 2.0,
+              mat("p_ring_cap_l"))
+        plane("capR_%d" % int(cx), bx1, bx1 + 96.0, -G.RING_H, 0.0, 2.0,
+              mat("p_ring_cap_r"))
         dx = cx + float(spec.get("door_x", 0.0))
-        _mark_decal(plane("path_%d" % int(cx), dx - 64.0, dx + 64.0,
-                          -G.RING_H - 32.0, 0.0, 3.0,
-                          G.decal_material("p_path_a")))
+        plane("path_%d" % int(cx), dx - 64.0, dx + 64.0, -G.RING_H - 32.0, 0.0, 3.0,
+              G.decal_material("p_path_a"), uv_fn=world_uv)
     # 相邻两栋之间：右邻有建筑 → 该侧改铺过渡件
-    # 过渡件宽 192 = 1.5 张件宽 → 用世界 UV 保持件宽比例（2/3 张 + 拉伸）
-    _mark_decal(plane("edge_mid", -428.0, -236.0, -G.RING_H, 0.0, 2.5,
-                      G.decal_material("p_edge_r"),
-                      uv_fn=lambda x, y: ((x + 428.0) / 192.0 * 1.5,
-                                          (y + G.RING_H) / float(G.RING_H))))
+    plane("edge_mid", -428.0, -236.0, -G.RING_H, 0.0, 2.5, mat("p_edge_r"),
+          uv_fn=world_uv)
     _grid_floor(-640.0, 40)
     _grid_floor(1560.0, 20)          # 右半：拆掉建筑后的静态底
     fit = list(objs)
@@ -840,8 +763,13 @@ def shot_grid_demo(cam):
     label("拆掉建筑后：露出静态基础层（分段底），无需特殊资产", 1600.0,
           max(vs) + 10.0, 34.0)
     sc = bpy.context.scene
-    _two_layer_shoot(cam, os.path.join(OUT_DIR, "pbr_ground_grid_demo.png"),
-                     max(64, int(round(W))), max(64, int(round(Hh))))
+    sc.render.resolution_x = max(64, int(round(W)))
+    sc.render.resolution_y = max(64, int(round(Hh)))
+    sc.render.resolution_percentage = 100
+    sc.render.filepath = os.path.join(OUT_DIR, "pbr_ground_grid_demo.png")
+    bpy.ops.render.render(write_still=True)
+    print("-> pbr_ground_grid_demo.png  %dx%d" % (sc.render.resolution_x,
+                                                  sc.render.resolution_y))
     return objs
 
 
@@ -1269,24 +1197,13 @@ def neutral_check(out_dir, keys=None, n=G.HD_PX):
 
 
 def shot_night(cam, objs, day_path):
-    """夜晚调制示意：同一批中性贴图 + 冷暗顶光 + 暖色灯笼光斑，同机位再渲一张。
-
-    亮度比要跟**同一机位的白天图**比（早先拿另一张不同取景的图当基准 → 数字没意义）。
-    """
+    """夜晚调制示意：同一批中性贴图 + 冷暗顶光 + 暖色灯笼光斑，同机位再渲一张。"""
     path = os.path.join(OUT_DIR, "pbr_ground_night.png")
-    ref = os.path.join(OUT_DIR, "_night_ref_day.png")
-    bpy.context.scene.world = bpy.data.worlds["gt_wsky"]
-    lights_mode(LIGHTS, "street")
-    render_tilt(cam, objs, 1.0, ref, pad_side=60.0, pad_top=40.0, pad_bottom=620.0)
     bpy.context.scene.world = bpy.data.worlds["gt_wnight"]
     lights_mode(LIGHTS, "night")
     render_tilt(cam, objs, 1.0, path, pad_side=60.0, pad_top=40.0, pad_bottom=620.0)
-    day = _load_png_np(ref)
+    day = _load_png_np(day_path)
     night = _load_png_np(path)
-    try:
-        os.remove(ref)
-    except OSError:
-        pass
     # 只统计画面下方 45%（地面主场），避免天空/屋顶干扰
     cut = int(day.shape[0] * 0.55)
     dl = day[cut:].mean()

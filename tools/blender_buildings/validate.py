@@ -5,8 +5,10 @@
 ------
 把"靠人眼/agent 自评"的几条出厂门禁变成可复跑的自动检查（交接档 §三.5），覆盖六项：
 
-  1. def↔装配器覆盖表   city_layout.DEFS(24) × probe_city_scene.DEF_MAP，逐 def 打印
-                        映射与缺口（缺哪个列哪个，不许静默跳过）
+  1. def↔装配器覆盖表   city_layout.DEFS(24) × probe_city_scene.DEF_MAP/PROP_LOTS，逐 def
+                        打印映射与缺口（缺哪个列哪个，不许静默跳过）。道具型 lot
+                        （well/market_stall）走 PROP_LOTS 聚簇：校验配方道具名已注册
+                        且实测占位不撑出地块
   2. 地块合规           4 档 tier × 各 3 seed 跑 plan_city：同排 lots x 区间不重叠 /
                         w_px ≤ 该 def 映射的最大装配宽 / 每 lot 至少一个「尺寸放得下」
                         的装配宽度档
@@ -155,6 +157,44 @@ def load_def_map():
     raise RuntimeError("probe_city_scene.py 里找不到 DEF_MAP 字面量")
 
 
+def load_prop_lots():
+    """同样用 ast 取 PROP_LOTS 字面量（道具型 lot：well / market_stall）。"""
+    src = open(PROBE_SRC, encoding="utf-8").read()
+    tree = ast.parse(src)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "PROP_LOTS" for t in node.targets):
+            return ast.literal_eval(node.value)
+    return {}
+
+
+def prop_footprint(recipe, pw):
+    """按 PROP_LOTS 配方**实测**聚簇占地跨度（镜像探针的 build_prop_lot，不 import 探针）。
+
+    返回 (实际摆出的件数, x 跨度)。道具函数里没注册的名字由调用方先查表拦下。
+    """
+    b = B.Builder("propval_foot")
+    n = 0
+    for (pname, xf, yoff, kw) in recipe:
+        fn = P.TABLE.get(pname)
+        if fn is None:
+            continue
+        p = dict(kw)
+        for k in ("r", "h", "w", "d", "s"):
+            if k in p:
+                p[k] = p[k] * P.GAME_SCALE
+        x = xf * pw
+        try:
+            fn(b, x=x, y=yoff, z=0.0, seed=7, **p)
+        except TypeError:
+            fn(b, x=x, y=yoff, z=0.0, **p)
+        n += 1
+    ob = b.to_object()
+    mx = B.measure(ob)
+    wipe_meshes()
+    return n, mx["x"][1] - mx["x"][0]
+
+
 class Result(object):
     def __init__(self, idx, name):
         self.idx, self.name = idx, name
@@ -195,9 +235,9 @@ def parse_seeds():
 # ══════════════════════════════════════════════════════════════════════════
 # 检查 1：def ↔ 装配器覆盖表
 # ══════════════════════════════════════════════════════════════════════════
-def check_coverage(def_map):
+def check_coverage(def_map, prop_map):
     res = Result(1, "def↔装配器覆盖")
-    print("\n[1] def ↔ 装配器覆盖表（city_layout.DEFS × probe_city_scene.DEF_MAP）")
+    print("\n[1] def ↔ 装配器覆盖表（city_layout.DEFS × probe_city_scene.DEF_MAP/PROP_LOTS）")
     head = "%-14s %-10s %-8s %-14s %-16s %s" % (
         "def", "中文", "声明宽度", "装配器映射", "该装配器宽度档", "判定")
     print(head)
@@ -207,6 +247,31 @@ def check_coverage(def_map):
         d = CL.DEFS[defn]
         decl = list(d["widths"])
         m = def_map.get(defn)
+        if m is None and defn in prop_map:
+            recipe = prop_map[defn]
+            bad = [n for (n, _x, _y, _k) in recipe if n not in P.TABLE]
+            if not recipe:
+                res.fail("道具型 lot %s（%s）：PROP_LOTS 配方为空" % (defn, d["cn"]))
+                gaps += 1
+                status = "缺口：配方为空"
+            elif bad:
+                res.fail("道具型 lot %s（%s）：配方含未注册道具 %s（渲染会静默丢弃）"
+                         % (defn, d["cn"], bad))
+                gaps += 1
+                status = "缺口：未注册道具 %s" % bad
+            else:
+                spans = []
+                for w in decl:
+                    n, sp = prop_footprint(recipe, w * CELL)
+                    spans.append("%d格:%.0fpx" % (w, sp))
+                    if sp > w * CELL + 1.0:
+                        res.fail("道具型 lot %s 在 %d 格地块（%.0fpx）上实测占位 %.0fpx →"
+                                 " 撑出地块 %.0fpx" % (defn, w, w * CELL, sp, sp - w * CELL))
+                        gaps += 1
+                status = "OK（道具型 lot：%d 件 / 占位 %s）" % (len(recipe), ",".join(spans))
+            print("%-14s %-10s %-8s %-14s %-16s %s"
+                  % (defn, d["cn"], decl, "—(道具)", "—", status))
+            continue
         if m is None:
             status = "缺口：无装配器映射"
             gaps += 1
@@ -242,13 +307,14 @@ def check_coverage(def_map):
         print("%-14s %-10s %-8s %-14s %-16s %s"
               % (defn, d["cn"], decl, "%s%s" % (asm, "" if asm in B.ASSEMBLERS else "?"),
                  allowed, status))
-    stray = sorted(set(def_map) - set(CL.DEFS))
+    stray = sorted((set(def_map) | set(prop_map)) - set(CL.DEFS))
     if stray:
-        res.fail("DEF_MAP 多余的键（不在 DEFS 里）：%s" % stray)
+        res.fail("DEF_MAP/PROP_LOTS 多余的键（不在 DEFS 里）：%s" % stray)
     res.count = len(CL.DEFS)
-    res.note("DEFS %d 种 / DEF_MAP %d 键 / 缺口 %d 种；跳过种（无映射）=%s"
-             % (len(CL.DEFS), len(def_map), gaps,
-                [k for k in sorted(CL.DEFS) if k not in def_map]))
+    res.note("DEFS %d 种 / DEF_MAP %d 键 / PROP_LOTS %d 键 / 缺口 %d 种；跳过种（无映射）=%s"
+             % (len(CL.DEFS), len(def_map), len(prop_map), gaps,
+                [k for k in sorted(CL.DEFS)
+                 if k not in def_map and k not in prop_map]))
     return res
 
 
@@ -645,13 +711,14 @@ def main():
     results = []
     try:
         def_map = load_def_map()
+        prop_map = load_prop_lots()
     except Exception as exc:
-        print("!! DEF_MAP 解析失败：%s" % exc)
+        print("!! DEF_MAP/PROP_LOTS 解析失败：%s" % exc)
         print(traceback.format_exc())
         return 1
 
     runners = [
-        (1, lambda: check_coverage(def_map)),
+        (1, lambda: check_coverage(def_map, prop_map)),
         (2, lambda: check_lots(def_map, seeds)),
         (3, lambda: check_assembly(def_map)),
         (4, lambda: check_window_spec()),

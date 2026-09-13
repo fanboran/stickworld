@@ -12,11 +12,12 @@
 布局器只出**数据**（plan dict）和平面图；本文件是它的**消费端**（前端渲染）。
 只读 plan，不改布局器。
 
-**已知落差（重要）**：布局器的 DEFS 表有 24 种建筑，而 `buildings.ASSEMBLERS` 目前
-只装配出 10 种（house/townhouse/barn/smithy1/rowhouse/windmill/cathedral/tower/
-gatehouse/lighthouse）。所以本文件用 `DEF_MAP` 把缺的种类**临时映射**到最接近的
-装配器（如 tavern→townhouse、shop→house、church→cathedral）；`well` / `market_stall`
-没有对应装配器，直接跳过。补齐 24 种是本任务后续批次的工作。
+**已知落差（重要）**：布局器的 DEFS 表有 24 种建筑，而 `buildings.ASSEMBLERS` 只有
+19 种。本文件用 `DEF_MAP` 把缺的种类**映射**到最接近的装配器（如 stable/shelter→
+barn、plaster_house→house、church/chapel→cathedral）；`well` / `market_stall`
+本质是道具，不能硬套建筑，走 `PROP_LOTS` 的**道具聚簇**（直接摆 `props.TABLE` 的件）。
+布局器与装配器的宽度口径由 `city_layout.DEFS.widths` 的"可装配下限"保证对齐
+（`validate.py` 检查 2/3 会实测这一条）。
 
 跑法::
     blender -b --factory-startup -P probe_city_scene.py
@@ -56,6 +57,8 @@ CELL = 32.0
 
 #: 布局器 def → (装配器, 该装配器支持且**尽量不小于平面格宽**的宽度档)
 #: 宽度档取自 buildings.py 的各 *_TIERS 表；挑最小的"够宽"档，不够就取最大档。
+#: 布局器的 DEFS.widths 已按"可装配下限"裁过（见 city_layout.py 表头注释），
+#: 所以每个 def 声明的每一档都能被这里路由到 ≤ 自身的装配宽度（不撑出地块）。
 DEF_MAP = {
     "cottage":       ("cottage", [6, 8]),
     "house":         ("house", [8, 12, 16]),
@@ -74,11 +77,37 @@ DEF_MAP = {
     "smithy3":       ("smithy3", [8, 12]),
     "smithy4":       ("smithy4", [12]),
     "church":        ("cathedral", [12, 16]),
-    "chapel":        ("cathedral", [12, 16]),
+    # 小礼拜堂：村档核心 landmark（塔顶要压过全村）。8 格 = cathedral 的小教堂档，
+    # 不另起装配器 —— 与教会语言同源（石砌 + 玫瑰窗 + 单钟楼尖顶），只是中殿压到一层半。
+    "chapel":        ("cathedral", [8]),
     "tower":         ("tower", [4, 6]),
     "gatehouse":     ("gatehouse", [6, 8, 12]),
     "lighthouse":    ("lighthouse", [4, 6]),
     "windmill":      ("windmill", [4, 6, 8]),
+}
+
+#: 「道具型 lot」：这些 def 本身就是道具（§0.3「小物件例外」），既没有装配器，
+#: 也不该硬套一个建筑装配器 —— 直接按聚簇配方把 `props.TABLE` 里的件摆在自己的
+#: 地块上（不新增装配器、不改 props.py）。条目 = (道具名, 占地块宽比例, 前后偏移,
+#: kwargs)；前后偏移 0 = 地块前进线，负值 = 更靠前（与 `dress()` 的门口前场同向）。
+#: 尺寸统一乘 `P.GAME_SCALE`（与 `dress()` 同口径：不放大在游戏尺寸下读不出）。
+#: **字典一律写字面量**：validate.py 用 ast.literal_eval 读这张表（不能是 dict(...) 调用）。
+PROP_LOTS = {
+    # 井：石井 + 井台边的盘绳 + 接水桶（村中心/院坝的固定组合）
+    "well": [
+        ("well",        0.00, -30.0, {"r": 26.0, "roof": True}),
+        ("rope_coil",  -0.25, -14.0, {"r": 12.0}),
+        ("water_butt",  0.16, -18.0, {"r": 16.0, "h": 54.0, "lid": True, "tap": True}),
+    ],
+    # 市集摊：摊篷 + **篷下的案桌**（market_table 允许摆在摊篷下，不横向叠占） +
+    # 摊前两侧的筐货（摆在摊篷**之前**，不挤进摊位立柱与柜台之间）
+    "market_stall": [
+        ("market_stall",    0.00,  -26.0, {"w": 158.0, "d": 88.0, "h": 165.0,
+                                          "cloth": "cloth_ochre"}),
+        ("market_table",    0.00,  -50.0, {"w": 120.0, "d": 60.0, "goods": "produce"}),
+        ("basket",         -0.30, -104.0, {"r": 15.0, "h": 16.0}),
+        ("produce_baskets", 0.28, -110.0, {"r": 16.0, "h": 17.0}),
+    ],
 }
 
 #: 装配器 → 道具配方键
@@ -307,6 +336,33 @@ def pick_width(want, allowed):
     return max(smaller) if smaller else min(allowed)
 
 
+def build_prop_lot(defn, lot, seed=0):
+    """道具型 lot（well / market_stall）：把 `PROP_LOTS` 的聚簇配方摆在本地原点附近。
+
+    坐标约定与建筑一致：返回对象的 (0,0,0) 就是**地块前进线中点**，调用方按
+    "世界 y = -baseline_y + 行距拉伸"平移即可；配方里的 y 偏移为负 = 更靠前。
+    """
+    pw = float(lot["w_cells"]) * CELL
+    b = B.Builder("proplot_%d_%s" % (lot["index"], defn))
+    placed = []
+    for (pname, xf, yoff, kw) in PROP_LOTS[defn]:
+        fn = P.TABLE.get(pname)
+        if fn is None:
+            print("!! 道具型 lot %s 的配方含未注册道具 %s" % (defn, pname))
+            continue
+        p = {k: v for k, v in kw.items()}
+        for k in ("r", "h", "w", "d", "s"):
+            if k in p:
+                p[k] = p[k] * P.GAME_SCALE          # 与 dress() 同口径
+        x = xf * pw
+        try:
+            fn(b, x=x, y=yoff, z=0.0, seed=int(seed), **p)
+        except TypeError:
+            fn(b, x=x, y=yoff, z=0.0, **p)
+        placed.append((pname, round(x, 1), yoff))
+    return b.to_object(), placed
+
+
 def build_city(tier, seed=611036, rows=(0,), report=None):
     """按 plan 摆放临街建筑（rows 指定参与渲染的行深档）。
 
@@ -328,6 +384,22 @@ def build_city(tier, seed=611036, rows=(0,), report=None):
     for lot in sorted(plan["lots"], key=lambda l: (l["row"], l["x_px"])):
         if lot["row"] not in rows:
             continue
+        cx = lot["x_px"] + lot["w_px"] / 2.0
+        # ---- 道具型 lot（well / market_stall）：不走装配器，摆一组道具
+        if lot["def"] in PROP_LOTS:
+            ob, _placed = build_prop_lot(
+                lot["def"], lot, seed=lot["index"] * 37 + (seed % 1000))
+            dy = -float(lot["baseline_y"]) + lot["row"] * ROW_STRETCH
+            ob.location = (cx, dy, 0.0)
+            bpy.context.view_layer.update()
+            objs.append(ob)
+            mx = B.measure(ob)
+            ys.append((mx["y"][0], mx["y"][1], lot))
+            placed.append({"index": lot["index"], "def": lot["def"],
+                           "zone": lot["zone"], "row": lot["row"], "asm": "@props",
+                           "cells": int(lot["w_cells"]), "x": round(cx, 1),
+                           "y": round(dy, 1)})
+            continue
         m = DEF_MAP.get(lot["def"])
         if m is None:
             skipped.append(lot["def"])
@@ -340,7 +412,6 @@ def build_city(tier, seed=611036, rows=(0,), report=None):
             print("!! %s(%s->%d) 装配失败：%s" % (lot["def"], asm, wc, exc))
             skipped.append(lot["def"])
             continue
-        cx = lot["x_px"] + lot["w_px"] / 2.0
         front_local = B.measure(ob)["y"][0]
         # 道具层：以本地前墙面为基准挂载，再与建筑一起平移（保证道具贴在同一面墙上）
         pob = None

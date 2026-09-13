@@ -2287,7 +2287,12 @@ WINDMILL_TIERS = {
     8: dict(R=112.0, plinth=18.0, tower_h=320.0, taper=0.70, cone_h=104.0, door_w=56.0),
 }
 #: 大教堂：中殿两层（檐高 400~413）+ 山墙正立面（玫瑰窗/尖拱门廊）+ 双塔或单钟楼 + 尖顶
+#: 8 格档 = **小礼拜堂**（单钟楼、中殿压到一层半）：村档的核心 landmark 就是它，
+#: 塔顶仍要压过村内一切建筑；剪影比走"单钟楼档"豁免（见 assemble_cathedral 的 reason）。
 CATHEDRAL_TIERS = {
+    8:  dict(D=176.0, plinth=16.0, nave_h=270.0, rise=104.0, wt=18.0, twin=False,
+             tower_w=92.0, tower_h=372.0, spire_h=88.0, portal_w=70.0,
+             leaf=32.0, rose_r=38.0, rose_z=196.0),
     12: dict(D=200.0, plinth=18.0, nave_h=400.0, rise=136.0, wt=22.0, twin=False,
              tower_w=124.0, tower_h=560.0, spire_h=118.0, portal_w=88.0,
              leaf=42.0, rose_r=54.0, rose_z=298.0),

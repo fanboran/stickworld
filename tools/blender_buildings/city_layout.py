@@ -87,20 +87,26 @@ TIER_SPECS = {
 # ── §3.3 建筑规格表 ─────────────────────────────────────────────────────
 # widths 允许宽度档 / wall_h 墙高 / roof 屋顶 rise / tower_h 竖向 landmark 顶高（含尖顶）
 # depth 平面进深（格）/ wall_mat·roof_mat·variant 材质与色差档（§5.1 茅草新/旧等）
+#
+# **宽度下限 = 可装配下限**：带门建筑 §8.2 已取消 4 格档（门 150 + 楣梁装不下），
+# 且每个 def 只能装配到它映射的装配器支持的最小档。布局器一旦排出更窄的 lot，
+# 渲染端只能拿超宽建筑去填 → 撑出地块压邻居。故 widths 的最小值必须 ≥ 装配器最小档：
+#   cottage 6 / house·shop·shelter·stable 8 / smithy2·smithy3·church·townhouse 12 /
+#   smithy4 12 / tavern 12 / chapel 8 / market_stall 8（道具型，见探针的 PROP_LOTS）
 DEFS = {
-    "cottage":       dict(cn="茅草农舍", widths=[4, 8],          wall_h=200, roof=110,
+    "cottage":       dict(cn="茅草农舍", widths=[6, 8],          wall_h=200, roof=110,
                           depth=5, wall_mat="plaster", roof_mat="thatch", variant="old"),
-    "house":         dict(cn="民居",     widths=[4, 8, 12],      wall_h=210, roof=115,
+    "house":         dict(cn="民居",     widths=[8, 12],         wall_h=210, roof=115,
                           depth=6, wall_mat="plaster", roof_mat="thatch", variant="new"),
-    "townhouse":     dict(cn="木骨街屋", widths=[8, 12, 16],     wall_h=390, roof=120,
+    "townhouse":     dict(cn="木骨街屋", widths=[12, 16],        wall_h=390, roof=120,
                           depth=7, wall_mat="plaster_timber", roof_mat="tile", variant="a"),
     "plaster_house": dict(cn="抹灰街屋", widths=[8, 12],         wall_h=390, roof=110,
                           depth=7, wall_mat="plaster", roof_mat="slate", variant="a"),
-    "tavern":        dict(cn="酒馆",     widths=[8, 12],         wall_h=400, roof=120,
+    "tavern":        dict(cn="酒馆",     widths=[12],            wall_h=400, roof=120,
                           depth=7, wall_mat="wood", roof_mat="tile", variant="a"),
     "bakery":        dict(cn="面包房",   widths=[8, 12],         wall_h=380, roof=105,
                           depth=7, wall_mat="brick", roof_mat="tile", variant="b"),
-    "shop":          dict(cn="商铺",     widths=[4, 8],          wall_h=205, roof=115,
+    "shop":          dict(cn="商铺",     widths=[8],             wall_h=205, roof=115,
                           depth=5, wall_mat="wood", roof_mat="thatch", variant="new"),
     "guildhall":     dict(cn="行会馆",   widths=[12, 16],        wall_h=430, roof=130,
                           depth=8, wall_mat="stone", roof_mat="tile", variant="a"),
@@ -108,16 +114,16 @@ DEFS = {
                           depth=7, wall_mat="plaster", roof_mat="thatch", variant="old"),
     "smithy1":       dict(cn="茅草棚工坊", widths=[6, 8],        wall_h=190, roof=130,
                           depth=5, wall_mat="timber", roof_mat="thatch", variant="old"),
-    "smithy2":       dict(cn="木屋工坊", widths=[6, 8, 12],      wall_h=210, roof=130,
+    "smithy2":       dict(cn="木屋工坊", widths=[8, 12],         wall_h=210, roof=130,
                           depth=5, wall_mat="plank", roof_mat="plank", variant="a"),
-    "smithy3":       dict(cn="石砌工坊", widths=[6, 8, 12],      wall_h=220, roof=95,
+    "smithy3":       dict(cn="石砌工坊", widths=[8, 12],         wall_h=220, roof=95,
                           depth=5, wall_mat="stone", roof_mat="slate", variant="a"),
-    "smithy4":       dict(cn="砖石行会", widths=[8, 12, 16],     wall_h=235, roof=120,
+    "smithy4":       dict(cn="砖石行会", widths=[12, 16],        wall_h=235, roof=120,
                           depth=6, wall_mat="brick", roof_mat="tile", variant="c"),
-    "church":        dict(cn="教堂",     widths=[10, 12, 16],    wall_h=280, roof=150,
+    "church":        dict(cn="教堂",     widths=[12, 16],        wall_h=280, roof=150,
                           tower_h=630, depth=10, wall_mat="stone", roof_mat="slate",
                           variant="a", aspect_exempt=True),
-    "chapel":        dict(cn="小礼拜堂", widths=[6, 8],          wall_h=200, roof=100,
+    "chapel":        dict(cn="小礼拜堂", widths=[8],             wall_h=200, roof=100,
                           tower_h=390, depth=6, wall_mat="stone", roof_mat="slate",
                           variant="b", aspect_exempt=True),
     "tower":         dict(cn="瞭望塔",   widths=[4, 6],          wall_h=400, roof=30,
@@ -129,11 +135,11 @@ DEFS = {
     "lighthouse":    dict(cn="灯塔",     widths=[4, 6],          wall_h=400, roof=70,
                           depth=4, wall_mat="stone_white", roof_mat="slate", variant="a",
                           aspect_exempt=True),
-    "shelter":       dict(cn="草棚",     widths=[4, 8],          wall_h=190, roof=130,
+    "shelter":       dict(cn="草棚",     widths=[8],             wall_h=190, roof=130,
                           depth=5, wall_mat="timber", roof_mat="thatch", variant="new"),
     "barn":          dict(cn="谷仓",     widths=[8, 12, 16],     wall_h=210, roof=160,
                           depth=8, wall_mat="plank", roof_mat="plank", variant="b"),
-    "stable":        dict(cn="马厩",     widths=[6, 8],          wall_h=175, roof=90,
+    "stable":        dict(cn="马厩",     widths=[8],             wall_h=175, roof=90,
                           depth=5, wall_mat="wood", roof_mat="thatch", variant="old"),
     "windmill":      dict(cn="风车磨坊", widths=[4, 6],          wall_h=300, roof=80,
                           depth=5, wall_mat="stone", roof_mat="cone", variant="a",
@@ -141,7 +147,7 @@ DEFS = {
     "well":          dict(cn="水井",     widths=[4],             wall_h=120, roof=60,
                           depth=4, wall_mat="stone", roof_mat="thatch", variant="new",
                           aspect_exempt=True),
-    "market_stall":  dict(cn="市集摊",   widths=[4, 8],          wall_h=150, roof=70,
+    "market_stall":  dict(cn="市集摊",   widths=[8],             wall_h=150, roof=70,
                           depth=4, wall_mat="wood", roof_mat="linen", variant="a",
                           aspect_exempt=True),
 }
@@ -893,19 +899,30 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
                     "height_px": DEFS["gatehouse"]["wall_h"] + MERLON_PX,
                     "baseline_y": GROUND_Y, "passable": True})
 
-    # 塔楼高度：夹到「唯一最高点（教堂钟楼）之下」，并把富余高度按可用余量摊开，
-    # 保证 §4.4「高低错落 ±15%」不被夹成一刀切（全同高 = 观感发假）
+    # 塔楼高度：夹到「唯一最高点（教堂钟楼）之下」，并把可用余量**分层**摊开。
+    # 分层是必须的：村档可分配余量只有 ~116px，纯随机抽 3 座塔会挤成一簇（实测极差
+    # 仅 2px），被 §4.4「高低错落、防等高发假」判定为全同高。这里用低差异序列
+    # （黄金比轮转 + 每趟相位）保证同一趟内的塔天然拉开，抖动只作微调。
     core_lots = [l for l in lots if l["zone"] == "core"]
     cap = (max(l["top_h_px"] for l in core_lots) - 30) if core_lots else None
-    for t in walls["towers"]:
-        base = wall_h + MERLON_PX
-        room = max(0.0, (cap - base)) if cap else wall_h * TOWER_EXTRA_RATIO * 1.15
-        frac = 0.35 + 0.65 * rng.random()          # 在可用高度内 35%~100%
-        t["height_px"] = int(round(base + room * frac))
-        t["height_frac"] = round(frac, 3)
-        if cap:
-            t["capped_below_core"] = True
-        assert t["height_px"] < (cap if cap else 10 ** 9), t
+    base = wall_h + MERLON_PX
+    room = max(0.0, (cap - base)) if cap else wall_h * TOWER_EXTRA_RATIO * 1.15
+    gold = 0.6180339887498949
+    phase = {"left": 0.0, "right": 0.37, "back": 0.71}
+    for side in ("left", "right", "back"):
+        for k, t in enumerate([q for q in walls["towers"] if q["side"] == side]):
+            jit = rng.random()          # 每塔一次取样（与旧实现同序，下游 rng 流不变）
+            frac = 0.35 + 0.65 * (((k + 1) * gold + phase[side]) % 1.0) \
+                + (jit - 0.5) * 0.06
+            h = int(round(base + room * frac))
+            if cap:
+                # round 可能顶到 cap 正上方；压 1px 保住"严格低于唯一最高点"
+                h = min(h, int(cap) - 1)
+            t["height_px"] = h
+            t["height_frac"] = round(frac, 3)
+            if cap:
+                t["capped_below_core"] = True
+            assert t["height_px"] < (cap if cap else 10 ** 9), t
 
     # ── L 前景 props（§4.5：桶/摊/树/车，必须落在街道内） ───────────────
     props = []

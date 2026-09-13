@@ -82,6 +82,7 @@ const SKYLINE_Z := -24.0
 ## 路肩前移 0.4 格（屏幕上约 3px）后深度测试干净，且那 3px 正好留给建筑的接触阴影，
 ## 形成"建筑站在路肩上、脚下有一线接地影"的正确观感。
 const BAND_SIDEWALK := Vector2(0.42, 1.95)  # 路肩（建筑根部 → 外缘；细条，占位）
+const PLAT_H := 0.30                        # 人行道台面高（格）≈8px：整面垫高，建筑落在台面上
 const BAND_ROAD := Vector2(1.9, 46.0)       # 道路（角色活动面，铺到画面外）
 ## 建筑接地影的 z 区间**必须整段落在路肩之外**（z ≥ 2.0）：
 ## 影和路肩都是贴地水平面，z 区间一旦重叠，深度值必然相等 → z-fighting。
@@ -322,7 +323,7 @@ func _build_world() -> void:
 	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
 	_add_ground_plane("rammed_earth_128.png", -60.0, 0.0,
 		0.0, 14.0, Color(1.16, 1.14, 1.10))
-	_add_sidewalk()
+	_add_platform()                       # 人行道台面（垫高 + PBR 法线）+ 台肩一排长条石
 	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
 		0.02, 10.0, Color(1.0, 1.0, 1.02))
 
@@ -334,7 +335,10 @@ func _build_world() -> void:
 	_shadow_root.name = "BuildingShadows"
 	add_child(_shadow_root)
 	for e in FRONT_ROW:
-		var mi := _spawn_card(str(e["card"]), float(e["x"]), 0.0)
+		# 建筑落在垫高的台面内：离台肩的远近按条目错开（有的贴近台肩、有的退一点点）
+		var zb: float = 0.55 + float(abs(int(e["x"])) % 3) * 0.42
+		var mi := _spawn_card(str(e["card"]), float(e["x"]), zb)
+		mi.position.y += PLAT_H
 		_spawn_building_shadow(str(e["card"]), float(e["x"]), mi)
 	for e in SKYLINE_ROW:
 		_spawn_card(str(e["card"]), float(e["x"]), SKYLINE_Z, true)
@@ -447,6 +451,35 @@ func _spawn_building_shadow(card: String, x: float, mi: MeshInstance3D) -> void:
 ##   · 沿 x 切成 30 段，每段前后边缘各抖 ±0.2 格 → 打断直线边，读作被啃噬的碎块；
 ##   · tint 0.78（贴图均值 0.588 → 有效 ≈0.46）与道路（0.455）同档，不再比路面浅一档。
 ## 固定的"路缘"整条已被去掉 —— 干净的直线边正是创始人说的"生硬"来源。
+func _add_platform() -> void:
+	# 人行道台面：整面垫高（PLAT_H）+ PBR（albedo + 法线，石块凸起见深度）
+	# 台肩 = 台面外缘**一排长条石**（现代人行道路缘那种），逐块长度抖动
+	_add_ground_plane("band_shoulder_stone_128.png", BAND_SIDEWALK.x, BAND_SIDEWALK.y,
+		PLAT_H, 3.6, Color(0.88, 0.87, 0.84))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260917
+	var t := _tex_abs(_temp + GROUND_DIR + "band_kerb_stone_128.png")
+	var x := -40.0
+	while x < 40.0:
+		var w: float = minf(rng.randf_range(0.8, 1.3), 40.0 - x)
+		var bm := BoxMesh.new()
+		bm.size = Vector3(w * 0.95, PLAT_H, 0.42)
+		var mi := MeshInstance3D.new()
+		mi.mesh = bm
+		mi.position = Vector3(x + w * 0.5, PLAT_H * 0.5,
+			BAND_SIDEWALK.y + 0.12)
+		var gm := StandardMaterial3D.new()
+		if t != null:
+			gm.albedo_texture = t
+		gm.uv1_scale = Vector3(w / 1.1, 1.0, 1.0)
+		gm.roughness = 0.90
+		mi.material_override = gm
+		mi.name = "PlatRim"
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_ground_root.add_child(mi)
+		x += w
+
+
 func _add_sidewalk() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260913

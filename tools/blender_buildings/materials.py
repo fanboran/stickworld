@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """写实西幻建筑程序化 PBR 材质库 v3.1（Blender 5.2 / EEVEE）。
 
-key 家族（共 **54** 个；`ORDER` 即注册顺序，`audit()` 打印全部特征尺寸）
+key 家族（共 **57** 个；`ORDER` 即注册顺序，`audit()` 打印全部特征尺寸）
 ---------------------------------------------------------------
 * **结构 26**：茅草/瓦/木/抹灰/石砌/砖/铁 + 窗玻璃/暗腔/水/灯 + 地面/草簇/绿植…
 * **道具 10**（二轮追加）：染色土布×3 / 柳条 / 陶 / 叶菜 / 根菜 / 鱼 / 面包 / 染缸液面
@@ -11,6 +11,9 @@ key 家族（共 **54** 个；`ORDER` 即注册顺序，`audit()` 打印全部�
 * **城市地面 10**（三轮追加 B）：`cobble_small/large` / `brick_paving` / `stone_flag` /
   `dirt_packed` / `dirt_mud` / `gravel` / `grass_lawn` / `sand` / `wood_deck`
   —— **一律不挂 `AGE`（近地溅泥）与 `OBJ_VAR`（逐体色变）**，理由见该段注释。
+* **道具系 3**（三轮追加 C）：`glow_water`（法阵/魔力泉发光液面）/ `parchment`
+  （书页/卷轴/标签）/ `leather`（书皮/鞍具/皮带）—— 供道具层三轮摆件用；
+  同为摆件材质，**既不挂 AGE 也不挂 OBJ_VAR**。
 
 尺度契约（本轮重定标，一切 feature 尺寸都必须走这里的换算）
 --------------------------------------------------------
@@ -2262,6 +2265,96 @@ def _b_patina(b, gi, bsdf):
                 normal=b.bump(h, 0.60, uv_cm(2.6)))
 
 
+# ============================================================ 三轮追加 C：道具系（玻璃/魔法摆件配套）
+#
+# 道具层第三轮（玻璃/魔法/宗教/军政农事摆件）要用的三支**非结构**材质：
+# `glow_water`（法阵/魔力泉的发光液面）、`parchment`（书页/卷轴/标签）、
+# `leather`（书皮/鞍具/皮带）。三条尺度纪律同全库：细读层照现实尺寸，
+# 但每支都带一条 **≥30 cm** 的粗读层（辉光带 / 折痕 / 皱痕），否则 25%
+#（19 px/m）下只剩一片平涂色。
+
+
+def _b_glow_water(b, gi, bsdf):
+    """魔力泉 / 召唤阵池：**青蓝发光液面 + 涟漪 + 浮光带 + 边缘渗光**。
+
+    与 `water` 的分工：`water` 是"深色反光"（近黑，靠极低粗糙度反天光）；
+    这一支是**自发光**的，靠 emit 在游戏尺寸下跳出来。自发光色刻意压在中低明度
+    （0.02~0.42 青蓝）—— 给近白/高饱和会在 Standard 视图变换下过曝成一块白斑
+    （`lamp` 踩过同一个坑）。粗读层 = 40 cm 的浮光带（25% 下 7.6 px，仍读得出"水面有明暗"）。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    # 涟漪：两组交叉方向的各向异性噪声（一波窄而亮的水纹）
+    rip = b.noise(b.vec(b.mul(u, 9.0), b.mul(v, 9.0), 17.0), 1.0, 5.0, 0.45)
+    rip2 = b.noise(b.vec(b.mul(u, 4.5), b.mul(v, 20.0), 37.0), 1.0, 5.0, 0.45)
+    # sin(pi*x) 只在 x∈[0,1] 非负，先压到 [0,1] 再取幂（负底数取幂在节点里出 NaN）
+    wav = b.pow(b.mul(b.add(b.pisin(b.mul(b.add(b.mul(rip, 0.6), b.mul(rip2, 0.4)), 14.0)),
+                       1.0), 0.5), 1.6)
+    base = b.mixc(wav, (0.012, 0.062, 0.090), (0.060, 0.215, 0.265))
+    band = b.noise(b.vec(b.mul(u, 1.2), b.mul(v, 2.4), 5.0), 1.0, 4.0)          # 40cm 浮光带
+    base = b.mul_c(base, b.lin(band, 0.20, 0.82, 0.62, 1.46))
+    blob = b.ss(b.noise(b.vec(b.mul(u, 6.5), b.mul(v, 6.5), 23.0), 1.0, 5.0, 0.6), 0.58, 0.86)
+    base = b.mixc(b.mul(blob, 0.45), base, (0.150, 0.470, 0.580))               # 15cm 亮斑
+    # 浅处/波峰更亮 → "发光的是水"（而不是一块发光板）
+    lit = b.add(b.mul(wav, 0.55), b.mul(blob, 0.45))
+    emit = b.mul_c(base, b.lin(lit, 0.0, 1.0, 0.70, 1.80))
+    h = b.add(b.mul(b.sub(rip, 0.5), 0.55), b.mul(b.sub(rip2, 0.5), 0.45))
+    rough = b.add(0.045, b.mul(b.sub(1.0, wav), 0.075))
+    col = b.mul_c(base, b.lin(wear, 0.0, 1.0, 1.0, 0.88))
+    return dict(color=col, rough=rough, metal=0.0, trans=0.35,
+                emit=emit, emit_str=1.65, ior=1.33, spec=0.90,
+                normal=b.bump(h, 0.35, uv_cm(2.4)))
+
+
+def _b_parchment(b, gi, bsdf):
+    """羊皮纸 / 书页：**暖奶白 + 纤维 + 污渍斑 + 折痕 + 页边压暗**。
+
+    书页与卷轴在游戏尺寸下是"几块浅色薄片"，读法靠三件事：① 比书皮（深皮革）亮得
+    多的暖白；② 30 cm 一道的**折痕/卷曲暗带**（粗读层）；③ 12 cm 的陈旧污渍
+    （避免一片死白像塑料）。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    base = (0.750, 0.690, 0.550)
+    fib = b.noise(b.vec(b.mul(u, 40.0), b.mul(v, 40.0), 7.0), 1.0, 4.0)     # 1.5cm 纤维
+    base = b.mul_c(base, b.lin(fib, 0.25, 0.78, 0.93, 1.06))
+    stain = b.noise(b.vec(b.mul(u, 3.4), b.mul(v, 3.4), 19.0), 1.0, 5.0, 0.55)
+    base = b.mixc(b.mul(b.ss(stain, 0.54, 0.84), b.lin(wear, 0.0, 1.0, 0.16, 0.62)),
+                  base, (0.510, 0.410, 0.265))                              # 12cm 陈旧污渍
+    fold = b.pow(b.pisin(b.frc(b.add(b.div(u, uv_cm(30.0)), b.mul(v, 0.08)))), 0.7)
+    base = b.mul_c(base, b.lin(fold, 0.0, 1.0, 0.80, 1.10))                 # 30cm 折痕明暗
+    # 页边压暗（盒式投影下 u 是水平世界坐标，细长薄片的端头会自然落到低 u）
+    base = b.mul_c(base, b.sub(1.0, b.mul(b.ss(u, 0.88, 0.99), 0.30)))
+    h = b.add(b.mul(b.sub(fib, 0.5), 0.22), b.mul(b.sub(fold, 0.5), 0.30))
+    return dict(color=base, rough=b.lin(stain, 0.0, 1.0, 0.66, 0.82), metal=0.0,
+                normal=b.bump(h, 0.22, uv_cm(1.5)), spec=0.24)
+
+
+def _b_leather(b, gi, bsdf):
+    """皮革（书皮/鞍具/背带）：**深褐底 + 粒面 + 皱痕 + 被摸亮区**。
+
+    皮革的读法靠"哑光 + 皱"：粗糙度 0.30~0.62（比布亮、比铜哑得多），粒面 3 cm
+    （Voronoi 细胞），20 cm 一道的皱痕（粗读层），常用处/棱角**被摸亮**（粗糙度 0.30）。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    gd, gc, _gp = b.voro(b.vec(b.mul(u, 14.0), b.mul(v, 14.0), 11.0),
+                         scale=1.0, randomness=0.95)
+    base = b.mixc(b.lin(gd, 0.10, 0.80, 0.0, 1.0), (0.098, 0.046, 0.021), (0.235, 0.118, 0.052))
+    base = b.mul_c(base, b.lin(b.sep_c(gc)[0], 0.0, 1.0, 0.88, 1.14))       # 逐粒色差
+    mic = b.noise(b.vec(b.mul(u, 34.0), b.mul(v, 34.0), 13.0), 1.0, 4.0)
+    base = b.mul_c(base, b.lin(mic, 0.25, 0.78, 0.90, 1.10))
+    crease = b.noise(b.vec(b.mul(u, 2.2), b.mul(v, 6.0), 29.0), 1.0, 5.0, 0.6)
+    cm = b.ss(crease, 0.48, 0.72)
+    base = b.mul_c(base, b.lin(cm, 0.0, 1.0, 1.0, 0.70))                    # 20cm 皱痕
+    shine = b.mul(b.ss(b.noise(b.vec(b.mul(u, 1.4), b.mul(v, 1.4), 41.0), 1.0, 4.0),
+                       0.60, 0.86), b.lin(wear, 0.0, 1.0, 0.35, 0.90))
+    base = b.mul_c(base, b.lin(shine, 0.0, 1.0, 1.0, 1.22))                 # 摸亮
+    h = b.add(b.mul(b.sub(gd, 0.5), 0.45), b.mul(cm, 0.55))
+    return dict(color=base, rough=b.mixf(shine, b.lin(crease, 0.0, 1.0, 0.42, 0.62), 0.30),
+                metal=0.0, spec=0.36, normal=b.bump(h, 0.50, uv_cm(2.0)))
+
+
 # ============================================================ 三轮追加 B：城市地面系
 #
 # 城市地面（铺装/土路/草地）与墙面的三条差别，决定了这一族的设计：
@@ -2820,6 +2913,10 @@ _BUILDERS = {
     'rune_glow':    (_b_rune_glow, '符文石刻（自发光刻痕）'),
     'bronze':       (_b_bronze, '青铜（锤打+铜绿）'),
     'patina':       (_b_patina, '铜绿（结壳+露铜）'),
+    # ---- 三轮追加 C（道具摆件配套；既不挂 AGE 也不挂 OBJ_VAR——它们是摆件不是墙）----
+    'glow_water':   (_b_glow_water, '魔力泉水/法阵辉光液面（自发光）'),
+    'parchment':    (_b_parchment, '羊皮纸/书页（折痕+污渍）'),
+    'leather':      (_b_leather, '皮革（粒面+皱痕）'),
     # ---- 三轮追加 B（城市地面系；均不挂 AGE/OBJ_VAR，理由见该段注释）----
     'cobble_small': (_b_cobble_small, '小方石铺地 9cm'),
     'cobble_large': (_b_cobble_large, '大方石铺地 16cm'),
@@ -2844,6 +2941,7 @@ ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
          'produce', 'produce_root', 'fish', 'bread', 'dye_bath',
          'stained_glass', 'glass_lead', 'glass_clear', 'glass_bottle',
          'crystal', 'rune_glow', 'bronze', 'patina',
+         'glow_water', 'parchment', 'leather',
          'cobble_small', 'cobble_large', 'brick_paving', 'stone_flag',
          'dirt_packed', 'dirt_mud', 'gravel', 'grass_lawn', 'sand', 'wood_deck']
 
@@ -2920,6 +3018,11 @@ FEATURES = {
                     ("（自发光 1.2，刻痕+渗光）", 0.0)],
     'bronze':      [("锤打棱面", 7.0), ("锤痕", 2.0), ("铜绿斑", 30.0)],
     'patina':      [("结壳葱皮", 30.0), ("露铜斑", 12.0), ("滴痕", 8.0)],
+    # ---- 三轮追加 C：道具摆件配套 ----
+    'glow_water':  [("涟漪", 4.5), ("浮光带（粗读层）", 40.0), ("亮斑团", 15.0),
+                    ("（自发光 1.65 / 透射 0.35）", 0.0)],
+    'parchment':   [("纤维", 1.5), ("折痕（粗读层）", 30.0), ("陈旧污渍", 12.0)],
+    'leather':     [("粒面", 3.0), ("皱痕（粗读层）", 20.0), ("摸亮区", 8.0)],
     # ---- 三轮追加 B：城市地面系（粗读层 ≥40cm 是过 25% 门禁的那一层）----
     'cobble_small': [("石块", 9.0), ("石缝", 1.4), ("干湿斑（粗读层）", 42.0), ("尘土膜", 33.0)],
     'cobble_large': [("石块", 16.0), ("石缝", 2.6), ("干湿斑（粗读层）", 42.0), ("深石斑", 60.0)],
@@ -3132,6 +3235,9 @@ mat_crystal = _mk('crystal')
 mat_rune_glow = _mk('rune_glow')
 mat_bronze = _mk('bronze')
 mat_patina = _mk('patina')
+mat_glow_water = _mk('glow_water')
+mat_parchment = _mk('parchment')
+mat_leather = _mk('leather')
 mat_cobble_small = _mk('cobble_small')
 mat_cobble_large = _mk('cobble_large')
 mat_brick_paving = _mk('brick_paving')

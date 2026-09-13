@@ -73,7 +73,7 @@ const SKYLINE_ROW: Array = [
 	{"card": "smithy1_w8", "x": 28.5},
 	{"card": "tower_w6", "x": 40.0},
 ]
-const SKYLINE_Z := -12.0                 # 后排前移到下缘紧贴 1/3 线（原 -24 太远）
+const SKYLINE_Z := -9.5                  # 26° 俯角下基线正好落在 1/3 线（60.98%）——按投影公式解得
 
 ## 地面分带（格；z 增大 = 朝相机）。
 ## 基线纪律（创始人纠偏）：**建筑基线 = 路肩带顶线**。
@@ -518,12 +518,12 @@ func _place_rows() -> void:
 	var far := ["house_w8", "tower_w6", "townhouse_w12", "house_w8"]
 	var layer := occ_front
 	var ci := 0
-	for lz in [SKYLINE_Z, SKYLINE_Z - 4.0, SKYLINE_Z - 8.0]:
+	for lz in [SKYLINE_Z, SKYLINE_Z - 3.0, SKYLINE_Z - 6.0]:
 		var list: Array = bg if lz == SKYLINE_Z else (bg if lz == SKYLINE_Z - 4.0 else far)
 		var occ := []
 		for g in _gaps(layer):
 			var gw: float = float(g[1]) - float(g[0])
-			if gw < 3.0:
+			if gw < 2.0:
 				continue
 			var card: String = list[ci % list.size()]
 			ci += 1

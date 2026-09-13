@@ -150,16 +150,15 @@ func _ready() -> void:
 	_load_cards()
 	_build_world()
 	if bool(_opts.get("save_scene", false)):
-		# 把运行时搭好的节点树**存成真正的 .tscn**（供在编辑器里打开/自由查看）
-		# 注意：代码建的节点 owner 为空，pack 前必须递归补 owner，否则只存根节点
-		var root_node := get_tree().current_scene
-		_set_owner_recursive(root_node, root_node)
+		# 只存**地面/台肩几何**（_ground_root 子树）——含运行时光栅的角色/后期会把场景撑到几百 MB
+		var gr: Node = _ground_root
+		_set_owner_recursive(gr, gr)
 		var packed := PackedScene.new()
-		var err := packed.pack(root_node)
+		var err := packed.pack(gr)
 		if err == OK:
-			var p := "res://tests/dev/proto_hd2d/proto_hd2d_baked.tscn"
+			var p := "res://tests/dev/proto_hd2d/proto_hd2d_ground.tscn"
 			var e2 := ResourceSaver.save(packed, p)
-			print("[hd2d] 场景已存 -> ", p, " err=", e2)
+			print("[hd2d] 地面场景已存 -> ", p, " err=", e2)
 		else:
 			print("[hd2d] pack 失败 err=", err)
 		get_tree().quit(0)
@@ -221,6 +220,14 @@ func _load_cards() -> void:
 func _tex_abs(p: String) -> Texture2D:
 	if _tex_cache.has(p):
 		return _tex_cache[p]
+	# 优先用**工程内副本**（res://…/tex/）——这样场景存成 .tscn 时是外链引用而非内嵌
+	if p.contains("/temp/"):
+		var q := "res://tests/dev/proto_hd2d/tex/" + p.get_slice("/temp/", 1)
+		if ResourceLoader.exists(q):
+			var rt := ResourceLoader.load(q)
+			if rt is Texture2D:
+				_tex_cache[p] = rt
+				return rt
 	if not FileAccess.file_exists(p):
 		push_error("[hd2d] 纹理缺失: " + p)
 		return null
@@ -348,6 +355,7 @@ func _build_world() -> void:
 	_add_ground_plane("rammed_earth_128.png", -60.0, 0.0,
 		0.0, 14.0, Color(1.16, 1.14, 1.10))
 	_add_platform()                       # 人行道台面（垫高 + PBR 法线）+ 台肩一排长条石
+	_add_width_guides()                   # 建筑宽度辅助线（每栋左右边界在地面上画线）
 	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
 		0.02, 10.0, Color(0.86, 0.89, 0.96))    # 道路：偏冷深石（与台面拉开）
 
@@ -475,6 +483,29 @@ func _spawn_building_shadow(card: String, x: float, mi: MeshInstance3D) -> void:
 ##   · 沿 x 切成 30 段，每段前后边缘各抖 ±0.2 格 → 打断直线边，读作被啃噬的碎块；
 ##   · tint 0.78（贴图均值 0.588 → 有效 ≈0.46）与道路（0.455）同档，不再比路面浅一档。
 ## 固定的"路缘"整条已被去掉 —— 干净的直线边正是创始人说的"生硬"来源。
+func _add_width_guides() -> void:
+	# 建筑宽度辅助线：每栋左右边界在地面上画紫色细线（从地平线到台肩前沿）
+	var gm := StandardMaterial3D.new()
+	gm.albedo_color = Color(1.0, 0.25, 0.85, 1.0)
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	for e in FRONT_ROW:
+		var meta: Dictionary = _cards.get(str(e["card"]), {})
+		if meta.is_empty():
+			continue
+		var w := float(meta["units"][0]) * S
+		var cx := float(e["x"])
+		for s in [-1.0, 1.0]:
+			var pm := PlaneMesh.new()
+			pm.size = Vector2(0.035, 62.0)
+			var mi := MeshInstance3D.new()
+			mi.mesh = pm
+			mi.material_override = gm
+			mi.position = Vector3(cx + s * w * 0.5, PLAT_H + 0.015, -29.0)
+			mi.name = "WidthGuide"
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_ground_root.add_child(mi)
+
+
 func _add_platform() -> void:
 	# 人行道台面：整面垫高（PLAT_H）+ PBR（albedo + 法线，石块凸起见深度）
 	# 台肩 = 台面外缘**一排长条石**（现代人行道路缘那种），逐块长度抖动
@@ -494,8 +525,8 @@ func _add_platform() -> void:
 		bm.size = Vector3(w * 0.96, PLAT_H, PLAT_H)   # 方形截面：高 = 深 = 台面高
 		var mi := MeshInstance3D.new()
 		mi.mesh = bm
-		# 顶面与台面齐平（y 顶 = PLAT_H）；沿台面前沿镶边（一半在台面下、一半外露）
-		mi.position = Vector3(x + w * 0.5, PLAT_H * 0.5,
+		# 顶面**压低一丝**（-0.01）避免与台面共面 z-fighting；沿台面前沿镶边
+		mi.position = Vector3(x + w * 0.5, PLAT_H * 0.5 - 0.01,
 			BAND_SIDEWALK.y + PLAT_H * 0.35)
 		var gm := StandardMaterial3D.new()
 		if t != null:
@@ -504,7 +535,7 @@ func _add_platform() -> void:
 			gm.normal_enabled = true
 			gm.normal_texture = nt
 			gm.normal_scale = 1.0
-		gm.uv1_scale = Vector3(w / 2.2, PLAT_H / 0.9, 1.0)
+		gm.uv1_scale = Vector3(w / 1.2, PLAT_H / 1.2, 1.0)   # 1 UV ≈ 1.2 格：方石尺度正常
 		gm.roughness = 0.90
 		mi.material_override = gm
 		mi.name = "PlatRim"

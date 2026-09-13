@@ -7,6 +7,9 @@
 - 使用中文回答问题。
 - Git写中文提交信息，格式：`类型(模块): 描述`，示例：`feat(combat): 实现基础自动战斗单位AI`
 - 改进待办项记录在 `docs/项目/待办事项.md`
+- **创始人纠正后先对齐再执行**：复述理解 + 拟执行动作给创始人过目，确认后才动手；过目内容对应他所纠正/询问的事，不夹带无关项。
+- **指令范围精确**：停/改/启只作用于被点名的对象，禁止扩大到全部；不可逆操作（终止 agent、删文件、重派）未经确认不执行。
+- **子代理工作纪律：代码先行，渲染最后**：先对照任务清单把全部代码改完并逐项自查（数值/摆布/密度等代码可判的错误不许靠渲染发现），再统一渲染一次出图验收；渲染是最终验证不是开发手段。
 - Godot路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
 
 ### 文档写作规范
@@ -39,7 +42,7 @@
   - `docs/项目/交接/音效重制-进度与交接.md`（任务：音效替换 Terraria/SWL 提取件 + 触发时机与放置优化 + 建音效管线；**代码侧（策略引擎/收口/压限请求集/空间化/暂停处置/调用点时机）与资产侧（34 件程序化合成交付、零提取件、`qa_sfx.py --check` 退出码 0）全部完成**，剩余只有人耳观感验收；**验收产物：`F:\VSCode\game-2\.temp\music-overhaul\temp\sfx_preview\`（7 条样带 MP3 + manifest，按层分条、未归一化＝游戏内层间关系）**；两条实测结论见交接档 §二——引擎**不会**随树暂停停音频；2D 距离衰减只需 `Camera2D`、且监听点是**屏幕中心**（→半径随缩放自适应）；分支 `agent/music-overhaul`，worktree `.temp/music-overhaul`）
   - `docs/项目/交接/音乐重制-进度与交接.md`（任务：音乐重制为正式管线产物——原创主题与变奏集 9 首 + 分层自适应 + 无缝循环 + 环境音层；**管线/文档/引擎集成全部落地，待创始人观感验收**；**验收产物：`F:\VSCode\game-2\temp\music_preview\`（24 个文件：逐曲分层试听 + 试听串烧 MP3）**；分支 `agent/music-overhaul`，worktree `.temp/music-overhaul`）
   - `docs/项目/交接/UI运行时三项优化-ABC三批-交接.md`（任务：UI 运行时三项优化 A 暂停原语化/B HUD 布局收权/C 按钮变体，**三批已合并入 main（116d42bf），待创始人观感验收**，分支链 `agent/ui-pause-primitive`→`agent/ui-hud-zones`→`agent/ui-button-variants`）；**验收产物：无实体产物（按交接档报告验收——§一 所列三档分辨率/before-after 截图随批次 worktree 一并删除、现无留存，观感验收走实机）**
-  - `docs/项目/交接/建筑生成管线v3-写实PBR-进度与交接.md`（任务：推翻旧 building_gen，自建"代码建模→渲染→PNG+元数据"建筑管线；**唯一沿用旧约束=建筑宽度为 4 格（128px）整数倍**。v2 手绘已废弃 → 现行 **v3 = Blender 3D + PBR 材质 + 真实光照**；已落地：规范九章 + 材质库 36 key（做旧+逐体色变，25% 门禁 PASS）+ **19 种装配器**（含风车/大教堂/城门楼/灯塔/三层联排/酒馆/面包房/行会厅等 + 屋顶结构二轮 + 窗型表/烟囱落地泛水）+ **道具层 60 件** + 城市布局器 4 档 + **validate.py 六项自动校验** + 四档城市成图（2026-09-13 凌晨五批次迭代），**待创始人观感验收**；下一步＝barn 系独立化 + 城市观感二轮（交接档 §三）；**接手前必读交接档 §0 创始人诉求台账、§0.3 硬约束、§六 踩坑记录**；分支 `agent/building-pipeline-v2`，worktree `.temp/building-pipeline-v2`）；**验收产物：`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\`（`pbr_scale_sheet.png` 45 档比例审计、`pbr_city_{hamlet,village,town,city}*.png` 四档城市成图、`pbr_int_*` 内景、`pbr_props*_*.png` 道具、`pbr_nature_*`/`pbr_ground_*`/`pbr_dn_*`、`proto25d_*.png` 与 `proto_hd2d\` HD-2D 原型）**
+  - `docs/项目/交接/建筑生成管线v3-写实PBR-进度与交接.md`（任务：推翻旧 building_gen，自建"代码建模→渲染→PNG+元数据"建筑管线；**唯一沿用旧约束=建筑宽度为 4 格（128px）整数倍**。现行 **v3 = Blender 3D + PBR 材质 + 真实光照**；2026-09-13 全天 19 批次：材质库 **64 key**（含 `glazing_win` 真透明窗玻璃，彩窗限教堂）/**27 装配器**（含法师塔/炼金坊/图书馆/兵营/仓库，比例审计 45 档已校正）/**94 件道具**/**29 def 内景前后分层**（对接游戏前墙 alpha0.3 机制）/**野外自然物 16 类+密度场分布**/**地面分段体系**（区带 center/mid/edge + 规模包含 村=edge子集 + 动态建造件 + decal）/**昼夜分层 glow**（合成公式 MAE 0.011）/**HD-2D 八方旅人式原型验证通过**（详见 `docs/技术/架构/2.5D与HD-2D可行性.md`）；新文档另有 建筑室内结构/美术品控-硬边与材质边缘/GDD资产候选(提案)；**接手前必读交接档 §0 台账、§0.3 硬约束、§二 末"今日关键决策"七条、§六 踩坑**；在跑：HD-2D 场景重排+地面返工；下一步=烘焙导出+运行时接入；分支 `agent/building-pipeline-v2`，worktree `.temp/building-pipeline-v2`）；**验收产物：`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\`（`pbr_scale_sheet.png` 45 档比例审计、`pbr_city_{hamlet,village,town,city}*.png` 四档城市成图、`pbr_int_*` 内景、`pbr_props*_*.png` 道具、`pbr_nature_*`/`pbr_ground_*`/`pbr_dn_*`、`proto25d_*.png` 与 `proto_hd2d\` HD-2D 原型）**
   - `docs/项目/交接/加载屏双进度条与分帧装配-进度与交接.md`（任务：治加载卡顿 + 两级进度条（上=总阶段/下=阶段内细分）+ dev 探针静音后置底；**批次 1 + 批次 2 全部完成**——启动预热器 + 渲染后端 Windows 改 vulkan（D3D12 树木首绘管线编译冻结实测 127s→3.8s）+ 资源点生成放帧摊薄首绘（最长单帧 9285ms→877ms）+ 装配全阶段下条细分，进世界实测 ~152s→~22s，待创始人观感验收（含 vulkan 观感）；⚠ 启动自动写存档 slot 0 见 §四，分支 `agent/loading-ux`，worktree `.temp/loading-ux`）；**验收产物：`F:\VSCode\game-2\.temp\loading-ux\stick-world\tests\dev\loading_bar_probe_out.png`（两级进度条视觉留档单图；进世界耗时为实测数据见交接档 §二）**
 - 在役审计快照（用完即删，删除时同步移除登记）：
   - `docs/审计/架构审计_2026-09-11.md`（架构实测基线与重测命令，供 `docs/项目/待办事项.md`「架构收敛 AR 系列」引用；AR 全部执行完毕后删除）

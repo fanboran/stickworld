@@ -1,42 +1,36 @@
 # -*- coding: utf-8 -*-
 """ground_transitions.py —— 手工预制过渡件库（建筑管线 v3 · 地面体系）
 
-为什么单独一套
---------------
-创始人两次纠正：材质之间的过渡**要手工制作的预制块**（红警的 auto-shore 海岸块 /
-泰拉瑞亚的 blob 边块那一路），不是"程序噪声算出来的渐变"。所以本文件里：
+创始人定的常识（这条是全部逻辑的起点）
+--------------------------------------
+现实里两块地之间**有路坎**：铺装边缘要有 edge restraint（路缘石 / 镶边石 / 立砌砖牙 /
+枕木横档），红警的海岸过渡块、泰拉瑞亚的草↔土边界也都是**硬质边界件**，
+**不是两种材质大面积互相渗透**。所以本库：
 
-* **边界形状是手写的关键点折线**（`MASTERS[...][i]["kp"]`）——不对称、犬牙交错，
-  一段一段直线连起来，像画师勾的边，不是 `sin` / 噪声函数拟的。
-* **缝里的每颗石子 / 草簇 / 碎砖逐个显式摆放**（`MASTERS[...][i]["els"]`）——
-  每一条都写死：`dx`（相对该行边界的横向偏移）、`y`（整幅里的绝对纵坐标）、
-  尺寸、转角、明度。**没有任何一处用噪声决定位置**。
+* **先在材质之间立一道硬质收边**，两侧材质在收边处**硬切**（不犬牙互咬）：
+    - 石板 / 砾石 ↔ 土 / 草皮 → `sett` 镶边石（一列手凿方石）
+    - 旧砖 ↔ 碎石 → `soldier` 立砌砖牙（砖侧立收边）
+    - 夯土 ↔ 草皮 → `turf` 草皮切边（草皮像被切开的毯子，边缘略翘、切口露土）
+    - 木栈道 ↔ 泥地 → `sleeper` 端头横档 / 枕木（板端顶着横档）
+* **收边件逐块手摆**：放线（`line`）是人写的缓折线；收边上的**每一块**
+  （方向偏移 / 沿边长短 / 转角 / 明度）都写死在 `units` 里 —— 像铺装工人一块一块砌。
+* **溢出极少量**：`els` 只写 3~5 条贴着收边的碎屑 / 草须（不是大面积互渗）。
 * 两侧材质直接调 `ground_tiles` 的平铺生成器（与分段集同源），
-  所以石板还是石板、草皮还是草皮，一眼可辨；铺法也是引擎的铺法（128px 游戏档
-  × 显式指定的变体序列），件级不引入新的材质定义。
-* 与既有 `tr_*`（`ground_tiles.t_transition`：边界来自 `gwh` 噪声）**并存**：
-  那三个是"带内噪声咬合"，本库是"手工预制件"，用途不同（见
-  `docs/技术/架构/建筑管线v3-地面体系.md` §三 新旧过渡段 / §五 预制过渡块）。
+  铺法也是引擎的铺法（128px 游戏档 × 显式指定的变体序列）。
 
-画幅与分带（为什么是"整幅 264 再切三带"）
-------------------------------------------
-地面纵向是一条连续的带子：路肩 96 + 路缘 8 + 道路 160 = **264px**（`ground_tiles`
-同一口径）。手工边界**在一整幅 264px 上画一次**（折线与摆件的 y 都是整幅坐标），
-然后按带**裁剪**出件：道路带 = 整幅 y∈[0,160)、路肩带 = y∈[168,264)。
-于是把"路肩件 + 路缘 + 道路件"上下摞起来，边界与摆件**自然连成一条**——
-这正是红警式预制块的做法（同一张手绘边切成 tile），而不是每带各画一遍。
-
-* 路缘带（8px）不单出件：10.5cm 的缘石条上做材质过渡看不出名堂，
-  过渡由道路件 + 路肩件两头夹住（json 里写清）。
-* 摆件被裁到件外是**对的**：被裁掉的那半在相邻带的那一件里，摞起来才是完整一颗。
+画幅与分带
+----------
+地面纵向是连续一条：路肩 96 + 路缘 8 + 道路 160 = **264px**（`ground_tiles` 同口径）。
+放线 / 收边 / 碎屑**在一整幅 264px 上做一次**，再按带裁剪成件：道路带 y∈[0,160)、
+路肩带 y∈[168,264)。上下摞起来收边自然连成一条（红警式预制块的切法）。
 
 一件的规格：16 格宽（512px = 与分段集同口径）× 所属带高；左 = 材质 A、右 = 材质 B。
 
 产物（`stick-world/temp/ground_tiles/transitions/`）
     src/<key>_alb.png / _nrm.png / _rgh.png    反照率（sRGB）/ 法线 / 粗糙度
-    <key>.json                                  契约（材质对 / 左右约定 / 变体号 / 摆件数）
+    <key>.json                                  契约（材质对 / 收边类型 / 左右约定 / 变体号 / 块数）
     _manifest.json                              件清单
-成图见 `probe_transitions.py` → `pbr_ground_transitions.png`（全件 + 两侧分段拼接对照）。
+成图见 `probe_transitions.py` → `pbr_ground_transitions.png`。
 
 跑法::
     blender -b --factory-startup -P ground_transitions.py
@@ -96,7 +90,7 @@ CELL = G.CELL
 GAME_W = 512
 #: 整幅高 = 路肩 96 + 路缘 8 + 道路 160（地面纵向连续带）
 CHART_H = G.STRIP_SHOULDER + G.STRIP_KERB + G.STRIP_ROAD
-#: 内部超采样倍率（落盘前箱式降采样，边界毛刺才干净）
+#: 内部超采样倍率（落盘前箱式降采样）
 RASTER = 2
 #: 每个带在哪一段（整幅坐标，y 从道路带底边起算；数组第 0 行 = 图片底部）
 BANDS = {
@@ -104,31 +98,59 @@ BANDS = {
     "shoulder": (G.STRIP_ROAD + G.STRIP_KERB, CHART_H),           # y 168..263
 }
 #: 件级起伏（米）：与分段集同口径
-RELIEF_M = 0.030
-#: 主料层的基准高度与摆件可用的剩余高度
-H_BASE = 0.42
-H_MAT = 0.34
+RELIEF_M = 0.036
+#: 两侧主料层的基准高度
+HB_A, HB_B, HM = 0.46, 0.40, 0.30
+
+#: 收边类型：w = 收边进深 px / rise = 顶面高出 A 侧主料多少 / col 两色 / face 缝里与立面暗
+EDGES = {
+    "sett": dict(w=16, rise=0.13, rough=0.86, lip=0.0, joint=0.30,
+                 col=((0.235, 0.232, 0.234), (0.575, 0.556, 0.520)),
+                 face=(0.200, 0.172, 0.140),
+                 name="镶边石", note="一列手凿方石压住铺装边；缝里塞土，石顶被踩磨亮"),
+    "soldier": dict(w=15, rise=0.10, rough=0.88, lip=0.0, joint=0.30,
+                    col=((0.270, 0.140, 0.104), (0.545, 0.320, 0.230)),
+                    face=(0.185, 0.115, 0.085),
+                    name="立砌砖牙", note="砖侧立收边：一块块砖牙顶着碎石垫层，砖缝对着走道"),
+    "turf": dict(w=18, rise=0.12, rough=0.92, lip=1.0, joint=0.18,
+                 col=((0.185, 0.285, 0.098), (0.335, 0.460, 0.176)),
+                 face=(0.205, 0.155, 0.100),
+                 name="草皮切边", note="草皮像被切开的毯子：边缘略翘、切口露土，几根草须漫过来"),
+    "sleeper": dict(w=20, rise=0.09, rough=0.82, lip=0.0, joint=0.30,
+                    col=((0.245, 0.160, 0.092), (0.520, 0.372, 0.222)),
+                    face=(0.160, 0.115, 0.072),
+                    name="端头横档", note="栈道板端顶在枕木横档上；横档外就是泥，档面溅着泥点"),
+}
 
 
 # ============================================================ 材质：128px 游戏档平铺
 _TILE = {}
 
 
-def tile(key, variant=0, raster=RASTER):
-    """取一张平铺贴图（游戏档 128px → raster 倍密度）。与分段集同一批生成器。"""
-    k = (key, variant, raster)
+def tile(key, variant=0, raster=RASTER, rot90=False):
+    """取一张平铺贴图（游戏档 128px → raster 倍密度）。与分段集同一批生成器。
+
+    `rot90`：把贴图转 90°（板纹走向要垂直于纵向边界时用，见木栈道）。
+    平铺贴图两轴都是周期函数，转 90° 后仍严格周期 → 仍可无缝平铺。
+    """
+    k = (key, variant, raster, bool(rot90))
     if k not in _TILE:
-        _TILE[k] = G.generate(key, 128 * raster, variant=int(variant))
+        d = G.generate(key, 128 * raster, variant=int(variant))
+        if rot90:
+            d = dict(d)
+            for ch in ("alb", "h", "rough"):
+                d[ch] = np.ascontiguousarray(np.swapaxes(d[ch], 0, 1))
+        _TILE[k] = d
     return _TILE[k]
 
 
-def _column(key, variant, rows, tpx, raster, pad=0):
+def _column(key, variant, rows, tpx, raster, pad=0, rot90=False):
     """一列（1 格宽 = 128×raster px）纵向按同一变体铺。
 
-    纵向：同变体重复 → 周期函数 → 无缝。横向：左右各多铺 `pad` px 的**周期延拓**
-    （同一张周期贴图的下一个循环），供列边界的十字淡接取用。
+    纵向：同变体重复 → 周期函数 → 无缝。横向：左右各多铺 `pad` px 的**周期延拓**，
+    供列边界的十字淡接取用。
     """
-    d = tile(key, variant, raster)
+    d = tile(key, variant, raster, rot90)
     width = tpx + 2 * pad
     idx = np.mod(np.arange(width) - pad, tpx)
     alb = np.zeros((rows * tpx, width, 3), dtype=np.float64)
@@ -142,13 +164,12 @@ def _column(key, variant, rows, tpx, raster, pad=0):
     return alb, hh, rr
 
 
-def mosaic(key, w, h, seq, raster=RASTER, fade=20):
+def mosaic(key, w, h, seq, raster=RASTER, fade=20, rot90=False):
     """按**显式给定的变体序列**把平铺贴图铺成 w×h。
 
     `seq` 是人写的（哪一格用哪个相位由人定），不是随机撒。同一变体纵向重复天然无缝；
     **列与列之间**换变体则会在 128px 处留下一条低频色阶（实测看得见），所以在列边界
-    按 `fade`（游戏 px，人定）把左右两列各自的**周期延拓**十字淡接 —— 两边是同一材质、
-    同一特征尺度，读起来是"这一带斑驳换了"，不是一条硬缝。
+    按 `fade`（游戏 px，人定）把左右两列各自的**周期延拓**十字淡接。
     `fade=0` 用于必须逐像素周期连续的材料（木栈道：板色与钉子会重影）。
     """
     tpx = 128 * raster
@@ -158,7 +179,7 @@ def mosaic(key, w, h, seq, raster=RASTER, fade=20):
     colv = [seq[i % n] for i in range(cols)]
     fw = int(fade * raster)
     half = max(1, fw // 2)
-    cans = [_column(key, v, rows, tpx, raster, half) for v in colv]
+    cans = [_column(key, v, rows, tpx, raster, half, rot90) for v in colv]
     alb = np.zeros((rows * tpx, cols * tpx, 3), dtype=np.float64)
     hh = np.zeros((rows * tpx, cols * tpx), dtype=np.float64)
     rr = np.ones((rows * tpx, cols * tpx), dtype=np.float64)
@@ -187,57 +208,20 @@ def mosaic(key, w, h, seq, raster=RASTER, fade=20):
     return alb[:h, :w], hh[:h, :w], rr[:h, :w]
 
 
-# ============================================================ 手写边界 → 逐行边界 x
-def seam_x(kp, raster=RASTER, tz=(1.0, 0.62, 0.88, 0.72)):
-    """手写折线关键点 → 整幅逐行边界 x（光栅 px）。
+# ============================================================ 放线 → 逐行边界 x
+def line_x(line, raster=RASTER):
+    """人写的**放线**折线 → 整幅逐行边界 x（光栅 px）。
 
-    `kp` = [(x_game_px, y_chart_px[, n, amp]), ...] 按 y 升序，首尾盖满 0..CHART_H。
-    点与点之间**直线相连**（折线，不是样条）；`n`/`amp` = 这一段上再崩出的几颗犬牙
-    （`n` 颗、峰值 ±`amp` px，左右交替，幅度按手写的循环系数 `tz` 错开）。
-    大形状来自点怎么摆、小齿来自这一段"崩了几口"，两者都是人写的，不是噪声。
+    `line` = [(x_game_px, y_chart_px), ...] 按 y 升序，首尾盖满 0..CHART_H。
+    放线是缓的（工人拉线），局部错落交给逐块摆的收边件 —— 这正是"手工"的落点。
     """
-    xx, yy = [], []
-    for i, q in enumerate(kp):
-        x, y = float(q[0]), float(q[1])
-        if i:
-            px, py = float(kp[i - 1][0]), float(kp[i - 1][1])
-            n = int(q[2]) if len(q) > 2 else 0
-            amp = float(q[3]) if len(q) > 3 else 0.0
-            for j in range(n):
-                f = (j + 1.0) / (n + 1.0)
-                sgn = 1.0 if j % 2 == 0 else -1.0
-                a0 = amp * tz[j % len(tz)]
-                d = 0.30 / (n + 1.0)          # 齿顶不是尖锥：两颗顶点撑出一个小梯形口
-                for ff, aa in ((f - d, a0), (f + d, a0 * 0.70)):
-                    xx.append(x * ff + px * (1.0 - ff) + sgn * aa)
-                    yy.append(y * ff + py * (1.0 - ff))
-        xx.append(x)
-        yy.append(y)
-    ys = np.array(yy, dtype=np.float64) * raster
-    xs = np.array(xx, dtype=np.float64) * raster
-    yy2 = np.arange(CHART_H * raster, dtype=np.float64) + 0.5
-    return np.interp(yy2, ys, xs)
+    ys = np.array([p[1] for p in line], dtype=np.float64) * raster
+    xs = np.array([p[0] for p in line], dtype=np.float64) * raster
+    yy = np.arange(CHART_H * raster, dtype=np.float64) + 0.5
+    return np.interp(yy, ys, xs)
 
 
-def seam_x_deck(ends, raster=RASTER):
-    """木栈道专用：**每块板一条断口 x**（板长轴沿 y，断口是竖切）。
-
-    `ends` = 每块 16px 板程的断口 x（游戏 px）。竖切落在板程边界上 → 每块板
-    端是一刀直的切口（画师逐块锯断），板程之间才横移。
-    """
-    tpx = 16 * raster
-    cnt = int(math.ceil(CHART_H / 16.0))
-    kp = []
-    for i in range(cnt):
-        x = float(ends[min(i, len(ends) - 1)])
-        y0 = min(i * 16, CHART_H)
-        y1 = min((i + 1) * 16, CHART_H)
-        kp.append((x, y0))
-        kp.append((x, y1))
-    return seam_x(kp, raster)
-
-
-# ============================================================ 摆件原语（逐个显式摆）
+# ============================================================ 画法原语
 def _mixc(t, a, b):
     """标量 t 的两色混合（tone 是人写的一个数；G.cmix 只吃数组掩码）。"""
     t = float(t)
@@ -251,15 +235,6 @@ def _mixm(m, a, b):
     A = a if np.ndim(a) == 3 else np.asarray(a, dtype=np.float64).reshape(1, 1, 3)
     B = b if np.ndim(b) == 3 else np.asarray(b, dtype=np.float64).reshape(1, 1, 3)
     return A + (B - A) * m3
-
-
-#: 石子/碎料周围压出来的接触暗（土色偏冷，不是纯灰）
-STONE_SHADOW = (0.175, 0.150, 0.118)
-
-
-def _stone_col(tone):
-    """石子色：tone 0 = 冷灰深，1 = 暖灰浅（明度由人写，不是随机）。"""
-    return _mixc(tone, (0.228, 0.226, 0.228), (0.556, 0.538, 0.500))
 
 
 def _win(cx, cy, rw, rh, W, H):
@@ -279,12 +254,17 @@ def _local(x0, x1, y0, y1, cx, cy, rot):
     return X * c + Y * s, -X * s + Y * c
 
 
-def el_stone(cv, cx, cy, w, hgt, rot, tone):
-    """一颗石子：**手画的不规则轮廓** + 穹顶 + 周围一圈接触压痕。
+#: 石子/碎料周围压出来的接触暗（土色偏冷，不是纯灰）
+STONE_SHADOW = (0.175, 0.150, 0.118)
 
-    高度进 h、颜色进 albedo，明暗交给引擎（光源垂直向下 → 不烘方向光）。
-    轮廓用低阶角向起伏拿"石头不是椭圆"的读法，起伏相位取作者写的 `rot`。
-    """
+
+def _stone_col(tone):
+    """石子色：tone 0 = 冷灰深，1 = 暖灰浅（明度由人写，不是随机）。"""
+    return _mixc(tone, (0.228, 0.226, 0.228), (0.556, 0.538, 0.500))
+
+
+def el_stone(cv, cx, cy, w, hgt, rot, tone):
+    """一颗石子：不规则轮廓 + 穹顶 + 周围接触压痕（只用于缝里漏出的小碎屑）。"""
     alb, h, rough, W, H = cv
     rx, ry = max(1.2, w * 0.5), max(1.2, hgt * 0.5)
     x0, x1, y0, y1 = _win(cx, cy, max(rx, ry) * 1.8, max(rx, ry) * 1.8, W, H)
@@ -308,7 +288,7 @@ def el_stone(cv, cx, cy, w, hgt, rot, tone):
 
 
 def el_peb(cv, cx, cy, w, hgt, count, tone):
-    """一小把碎石（4~8 颗）：位置按固定扇形散开（画笔的"点一下"，不是噪声）。"""
+    """一小把碎屑（3~6 颗）：位置按固定扇形散开（画笔点一下，不是噪声）。"""
     n = max(1, int(count))
     for i in range(n):
         t = (i + 0.5) / n
@@ -321,7 +301,7 @@ def el_peb(cv, cx, cy, w, hgt, count, tone):
 
 
 def el_brk(cv, cx, cy, w, hgt, rot, tone):
-    """碎砖 / 碎板：带缺角的小矩形。"""
+    """碎砖 / 碎板：带缺角的小块。"""
     alb, h, rough, W, H = cv
     rx, ry = max(1.5, w * 0.5), max(1.2, hgt * 0.5)
     x0, x1, y0, y1 = _win(cx, cy, max(rx, ry) * 1.8, max(rx, ry) * 1.8, W, H)
@@ -331,7 +311,7 @@ def el_brk(cv, cx, cy, w, hgt, rot, tone):
     r = np.maximum(np.abs(u) / rx, np.abs(v) / ry)
     m = np.clip((1.0 - r) * 7.0, 0.0, 1.0)
     chip = np.clip(1.12 - 0.58 * (np.abs(u) / rx + np.abs(v) / ry), 0.0, 1.0)
-    m = m * chip                                   # 缺角（不是完美砖块）
+    m = m * chip
     ring = np.exp(-(((r - 1.16) / 0.18) ** 2))
     sl = (slice(y0, y1), slice(x0, x1))
     alb[sl] = _mixm(ring * 0.18, alb[sl], STONE_SHADOW)
@@ -341,10 +321,7 @@ def el_brk(cv, cx, cy, w, hgt, rot, tone):
 
 
 def el_tuft(cv, cx, cy, ln, spread, nbl, rot, tone):
-    """草簇：n 根叶从根部成扇形散开 + 根下一小块压暗的土。
-
-    叶的角度由 `rot`/`spread` 定，叶长叶宽也写死 —— 是"画的"，不是撒的。
-    """
+    """草簇 / 几根草须：n 根叶从根部成扇形散开 + 根下一小块压暗的土。"""
     alb, h, rough, W, H = cv
     n = max(1, int(nbl))
     _clump_shadow(alb, h, cx, cy, ln * 0.62, ln * 0.30)
@@ -358,19 +335,6 @@ def el_tuft(cv, cx, cy, ln, spread, nbl, rot, tone):
                    + 0.30 * (1.0 - abs(t) * 2.0),
                    (0.150, 0.248, 0.076), (0.335, 0.470, 0.175))
         _blade(alb, h, rough, bx, by, L, max(2.4, ln * 0.14), ang, gr, W, H)
-
-
-def _clump_shadow(alb, h, cx, cy, rx, ry):
-    """草簇 / 小件根下的那点暗（接触读法，不加方向光）。"""
-    W, H = alb.shape[1], alb.shape[0]
-    x0, x1, y0, y1 = _win(cx, cy, rx * 1.4, ry * 1.4, W, H)
-    if x1 <= x0 or y1 <= y0:
-        return
-    u, v = _local(x0, x1, y0, y1, cx, cy, 0.0)
-    m = np.clip((1.0 - np.hypot(u / max(1.0, rx), v / max(1.0, ry))) * 2.2, 0.0, 1.0)
-    sl = (slice(y0, y1), slice(x0, x1))
-    alb[sl] = _mixm(m * 0.42, alb[sl], STONE_SHADOW)
-    h[sl] = h[sl] - m * 0.10
 
 
 def _blade(alb, h, rough, cx, cy, ln, wd, ang, col, W, H):
@@ -387,8 +351,21 @@ def _blade(alb, h, rough, cx, cy, ln, wd, ang, col, W, H):
     rough[sl] = rough[sl] * (1.0 - m) + m * 0.94
 
 
+def _clump_shadow(alb, h, cx, cy, rx, ry):
+    """草簇 / 小件根下的那点暗（接触读法，不加方向光）。"""
+    W, H = alb.shape[1], alb.shape[0]
+    x0, x1, y0, y1 = _win(cx, cy, rx * 1.4, ry * 1.4, W, H)
+    if x1 <= x0 or y1 <= y0:
+        return
+    u, v = _local(x0, x1, y0, y1, cx, cy, 0.0)
+    m = np.clip((1.0 - np.hypot(u / max(1.0, rx), v / max(1.0, ry))) * 2.2, 0.0, 1.0)
+    sl = (slice(y0, y1), slice(x0, x1))
+    alb[sl] = _mixm(m * 0.42, alb[sl], STONE_SHADOW)
+    h[sl] = h[sl] - m * 0.10
+
+
 def el_smear(cv, cx, cy, w, hgt, rot, tone, col_a, col_b):
-    """漫上来的料（土 / 砾 / 泥）：对方材质色的一块，压平、压暗。tone=0 取 B 色。"""
+    """一小块糊上去的料（溅在收边上的泥点）。tone=0 取 B 的均色。"""
     alb, h, rough, W, H = cv
     rx, ry = max(1.5, w * 0.5), max(1.5, hgt * 0.5)
     x0, x1, y0, y1 = _win(cx, cy, max(rx, ry) * 1.6, max(rx, ry) * 1.6, W, H)
@@ -404,13 +381,66 @@ def el_smear(cv, cx, cy, w, hgt, rot, tone, col_a, col_b):
     rough[sl] = rough[sl] * (1.0 - m) + m * 0.96
 
 
-#: 摆件派发表：(kind, dx, y, ...) → 画法。dx = 相对该行边界 x 的偏移（游戏 px）。
+# ---------------------------------------------------------------- 收边块（逐块手摆）
+def unit_block(cv, cx, cy, w, ln, rot, tone, spec, top):
+    """一块收边件：方正顶面 + 立面（靠 h 的落差，明暗交给引擎）+ 四周接触暗。
+
+    `top` = 顶面绝对高度（两侧主料都比它低 → 收边读成"砌起来的一道边"）。
+    `turf` 类型额外带一条向 A 侧探出的翘边（草皮被切开的毯子边）。
+    """
+    alb, h, rough, W, H = cv
+    rx, ry = max(1.5, w * 0.5), max(1.2, ln * 0.5)
+    x0, x1, y0, y1 = _win(cx, cy, max(rx, ry) + 5, max(rx, ry) + 5, W, H)
+    if x1 <= x0 or y1 <= y0:
+        return
+    u, v = _local(x0, x1, y0, y1, cx, cy, rot)
+    r = np.maximum(np.abs(u) / rx, np.abs(v) / ry)
+    m = np.clip((1.0 - r) * 9.0, 0.0, 1.0)
+    corner = np.clip((np.abs(u) / rx + np.abs(v) / ry - 0.76) / 0.30, 0.0, 1.0)
+    m = m * (1.0 - 0.28 * corner)                     # 手凿的方石：棱角略钝
+    ring = np.exp(-(((r - 1.06) / 0.14) ** 2))
+    sl = (slice(y0, y1), slice(x0, x1))
+    col = _mixc(tone, spec["col"][0], spec["col"][1])
+    alb[sl] = _mixm(ring * spec["joint"], alb[sl], spec["face"])
+    alb[sl] = _mixm(m * 0.97, alb[sl], col)
+    h[sl] = h[sl] * (1.0 - m) + top * m
+    h[sl] = h[sl] - ring * 0.10
+    rough[sl] = rough[sl] * (1.0 - m) + m * spec["rough"]
+    if spec["lip"] > 0.0:                             # 草皮翘边：向 A 侧探出一小条
+        lw = max(2.0, w * 0.22)
+        xa = cx - rx - lw * 0.5
+        x2, x3, y2, y3 = _win(xa, cy, lw, ln * 0.5, W, H)
+        if x3 > x2 and y3 > y2:
+            uu, vv = _local(x2, x3, y2, y3, xa, cy, rot)
+            mm = np.clip((1.0 - np.maximum(np.abs(uu) / (lw * 0.5),
+                                           np.abs(vv) / (ln * 0.5))) * 6.0, 0.0, 1.0)
+            s2 = (slice(y2, y3), slice(x2, x3))
+            alb[s2] = _mixm(mm * 0.78, alb[s2], col * 0.88)
+            h[s2] = h[s2] * (1.0 - mm) + (top - 0.02) * mm
+
+
+def draw_units(cv, units, xb, spec, raster, top):
+    """沿放线**逐块**摆收边件；每块的方向偏移/长短/转角/明度都是人写的。"""
+    y = 0.0
+    placed = []
+    for q in units:
+        dx, ln, rot, tone = (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+        ymid = y + ln * 0.5
+        row = int(min(max(0, ymid * raster), CHART_H * raster - 1))
+        cx = float(xb[row]) + dx * raster
+        unit_block(cv, cx, ymid * raster, spec["w"] * raster, ln * raster,
+                   rot, tone, spec, top)
+        placed.append((ymid, dx, ln))
+        y += ln
+    return placed
+
+
 def place(cv, e, xb, raster, cols):
-    """摆一颗/一簇：`e` 是人写在 MASTERS 里的那条数据。"""
+    """缝里漏出的小碎屑：`e` 是人写在 MASTERS 里的那条数据。"""
     kind = e[0]
     y = float(e[2]) * raster
     row = int(min(max(0, y), CHART_H * raster - 1))
-    cx = (float(xb[row]) + float(e[1]) * raster)
+    cx = float(xb[row]) + float(e[1]) * raster
     cy = y
     p = e[3:]
     if kind == "st":
@@ -430,41 +460,30 @@ def place(cv, e, xb, raster, cols):
 
 # ============================================================ 整幅 → 带
 def build_chart(pair, master, raster=RASTER):
-    """画一整幅（512 × 264）：两材质拼接 + 手写边界 + 逐个摆件。"""
+    """画一整幅（512 × 264）：两材质硬切 + 一道手摆收边 + 少量贴边碎屑。"""
     W, H = GAME_W * raster, CHART_H * raster
     fade = int(pair.get("fade", 20))
-    albA, hA, rA = mosaic(pair["a"], W, H, master["seq_a"], raster, fade)
-    albB, hB, rB = mosaic(pair["b"], W, H, master["seq_b"], raster, fade)
-    if "plank_ends" in master:
-        xb = seam_x_deck(master["plank_ends"], raster)
-    else:
-        xb = seam_x(master["kp"], raster)
+    albA, hA, rA = mosaic(pair["a"], W, H, master.get("seq_a", (0,)), raster, fade,
+                          bool(pair.get("rot90_a")))
+    albB, hB, rB = mosaic(pair["b"], W, H, master.get("seq_b", (1,)), raster, fade,
+                          bool(pair.get("rot90_b")))
+    xb = line_x(master["line"], raster)
 
     X = (np.arange(W, dtype=np.float64) + 0.5)[None, :]
-    left = X < xb[:, None]                       # 左 = 材质 A
+    left = X < xb[:, None]                       # 左 = 材质 A（收边压在分界上）
     lift = float(pair.get("lift", 0.0))
     alb = np.where(left[..., None], albA, albB)
-    h = np.where(left, H_BASE + H_MAT * hA + lift, H_BASE + H_MAT * hB)
+    h = np.where(left, HB_A + HM * hA + lift, HB_B + HM * hB)
     rough = np.where(left, rA, rB)
 
-    # 缝：贴边接触暗（微 AO，允许）+ 缝里低一档（沉积）
-    d = (X - xb[:, None]) / float(raster)
-    g = np.exp(-((d / 2.4) ** 2))
-    h = h - g * (0.20 + 0.10 * lift)
-    alb = G.cshade(alb, 1.0 - g * 0.30)
-    rough = np.clip(rough + g * 0.05, 0.05, 1.0)
-    # 抬高件的"台下阴影"（只压 B 侧）：木栈道这类高出地面一级的件，台下要暗一层
-    es = float(pair.get("edge_shadow", 0.0))
-    if es > 0.0:
-        sh = np.exp(-((np.clip(d, 0.0, None) / es) ** 2)) * (d > 0.0)
-        alb = G.cshade(alb, 1.0 - sh * 0.34)
-        h = h - sh * 0.07
-
+    spec = EDGES[pair["edge"]]
+    top = HB_A + HM * 0.5 + lift + spec["rise"]
     cv = [alb, h, rough, W, H]
+    placed = draw_units(cv, master["units"], xb, spec, raster, top)
     cols = (albA.reshape(-1, 3).mean(axis=0), albB.reshape(-1, 3).mean(axis=0))
     for e in master["els"]:
         place(cv, e, xb, raster, cols)
-    return cv[0], cv[1], cv[2], xb
+    return cv[0], cv[1], cv[2], xb, placed, top
 
 
 def _box2(a, k=RASTER):
@@ -473,49 +492,53 @@ def _box2(a, k=RASTER):
         return a
     h, w = a.shape[0] // k * k, a.shape[1] // k * k
     a = a[:h, :w]
-    out = a.reshape(h // k, k, w // k, k, *a.shape[2:]).mean(axis=(1, 3))
-    return out
+    return a.reshape(h // k, k, w // k, k, *a.shape[2:]).mean(axis=(1, 3))
 
 
 def generate(key, raster=RASTER):
-    """出一件（按 key 里的材质对 / 带 / 变体号）。返回 alb/h/rough/nrm + 元数据。"""
+    """出一件（按 key 里的材质对 / 带 / 变体号）。返回 alb/nrm/rough + 元数据。"""
     rec = _PIECE_OF[key]
     pair, master = _PAIR_OF[rec["pair"]], _MASTER_OF[rec["pair"]][rec["variant"] - 1]
-    alb, h, rough, xb = build_chart(pair, master, raster)
-    # 按带裁剪：整幅上画一次，件 = 该带那一段（跨带的摆件两头各留一半，摞起来才连着）
+    alb, h, rough, xb, placed, top = build_chart(pair, master, raster)
     y0, y1 = BANDS[rec["band"]]
     sl = (slice(y0 * raster, y1 * raster), slice(0, alb.shape[1]))
     alb, h, rough = alb[sl], h[sl], rough[sl]
-    # 摆件后统一收口（颗粒 + 谷底 AO），再取法线
     out = G._packw(alb, h, rough, alb.shape[1], alb.shape[0],
                    seed=7000 + rec["pair_idx"] * 97 + rec["variant"] * 13,
                    relief_m=RELIEF_M, ao=0.30, nstr=0.95)
     nrm = G.normal_map_w(out["h"], alb.shape[1], alb.shape[0], RELIEF_M, out["nstr"])
-    a_down = _box2(out["alb"])
-    n_down = _box2(nrm)
-    r_down = _box2(out["rough"])
+    a_down, n_down, r_down = _box2(out["alb"]), _box2(nrm), _box2(out["rough"])
     return {"alb": a_down, "nrm": n_down, "rough": r_down,
             "relief_m": RELIEF_M, "nstr": out["nstr"],
             "size": (a_down.shape[1], a_down.shape[0]),
-            "pair": pair, "master": master, "rec": rec}
-
-
-def elements_in_band(master, band, pad=22.0):
-    """这件实际摆到的摆件条数（整幅上画一次、按带切开；跨带边缘的算进来）。"""
-    y0, y1 = BANDS[band]
-    return sum(1 for e in master["els"]
-               if y0 - pad <= float(e[2]) < y1 + pad)
-
-
-def element_kinds_in_band(master, band, pad=22.0):
-    y0, y1 = BANDS[band]
-    return sorted(set(e[0] for e in master["els"]
-                      if y0 - pad <= float(e[2]) < y1 + pad))
+            "pair": pair, "master": master, "rec": rec,
+            "units": placed, "kerb_top": top}
 
 
 # ============================================================ 落盘
 def _stats(alb):
     return [round(float(alb[..., i].mean()), 3) for i in range(3)]
+
+
+def units_in_band(master, band, pad=6.0):
+    """这件实际摆到的收边块数（整幅上一次摆好、按带切开）。"""
+    y0, y1 = BANDS[band]
+    y = 0.0
+    n = 0
+    for q in master["units"]:
+        ln = float(q[1])
+        ymid = y + ln * 0.5
+        if y0 - ln * 0.5 - pad <= ymid < y1 + ln * 0.5 + pad:
+            n += 1
+        y += ln
+    return n
+
+
+def elements_in_band(master, band, pad=22.0):
+    """这件实际摆到的贴边碎屑条数。"""
+    y0, y1 = BANDS[band]
+    return sum(1 for e in master["els"]
+               if y0 - pad <= float(e[2]) < y1 + pad)
 
 
 def export_all(out_dir, quiet=False):
@@ -526,14 +549,17 @@ def export_all(out_dir, quiet=False):
         d = generate(key)
         pair, rec = d["pair"], d["rec"]
         nx, ny = d["size"]
+        spec = EDGES[pair["edge"]]
         src = os.path.join(out_dir, "src")
         G._save_png(d["alb"], os.path.join(src, "%s_alb.png" % key), "sRGB")
         G._save_png(d["nrm"], os.path.join(src, "%s_nrm.png" % key), "Non-Color")
         G._save_png(d["rough"], os.path.join(src, "%s_rgh.png" % key), "Non-Color")
+        nunit = units_in_band(d["master"], rec["band"])
+        nel = elements_in_band(d["master"], rec["band"])
         meta = {
             "key": key,
-            "name": "手工过渡·%s·%s·变体%d" % (pair["name"], BAND_CN[rec["band"]],
-                                              rec["variant"]),
+            "name": "手工收边过渡·%s·%s·变体%d" % (pair["name"], BAND_CN[rec["band"]],
+                                                rec["variant"]),
             "kind": "transition",
             "master": rec["pair"],
             "handmade": True,
@@ -542,27 +568,27 @@ def export_all(out_dir, quiet=False):
             "pair_name": pair["name"],
             "band": rec["band"],
             "tier": "handmade",
+            "edge_restraint": {
+                "type": pair["edge"],
+                "name": spec["name"],
+                "width_px": spec["w"],
+                "note": spec["note"],
+                "units_in_this_piece": nunit,
+                "units_master": len(d["master"]["units"]),
+                "unit_ledger": "每块的方向偏移/长短/转角/明度写死在 MASTERS[*].units",
+                "spill_elements": nel,
+                "spill_note": "只写贴着收边的少量碎屑/草须，不做大面积互渗",
+            },
             "px": [nx, ny],
             "cells_w": nx // CELL,
             "px_per_cell": CELL,
             "supersample": RASTER,
-            "edge_convention": "左=材质A、右=材质B；边界是手写关键点折线（犬牙交错、不对称）；"
-                               "两外侧各接对应材质的纯料面（分段/补丁）",
+            "edge_convention": "左=材质A、右=材质B，**两者在收边处硬切**；收边（%s）由逐块手摆的件"
+                               "连成一条；两外侧各接对应材质的纯料面（分段/补丁）" % spec["name"],
             "x_tileable": False,
             "y_tileable": False,
-            "note": pair["note"] + "；边界折线与摆件坐标全部写死在 ground_transitions.py 的 MASTERS 里",
-            "lighting_neutral": "albedo + 微 AO（缝边接触暗）；光源=垂直向下 SUN，"
-                                "无水平分量 → 无方向性明暗",
-            "handmade": {
-                "boundary": ("plank_ends（每块板一条断口 x）" if "plank_ends"
-                             in d["master"] else "keypoints（手写折线）"),
-                "boundary_points": (len(d["master"]["plank_ends"])
-                                    if "plank_ends" in d["master"]
-                                    else len(d["master"]["kp"])),
-                "placed_elements": elements_in_band(d["master"], rec["band"]),
-                "placed_elements_master": len(d["master"]["els"]),
-                "element_kinds": element_kinds_in_band(d["master"], rec["band"]),
-            },
+            "note": pair["note"],
+            "lighting_neutral": "albedo + 微 AO（收边立面靠法线出层次，不烘方向光）；光源=垂直向下 SUN",
             "mean_srgb": _stats(d["alb"]),
             "sides": {"left": pair["a"], "right": pair["b"]},
             "usage": pair["usage"],
@@ -577,28 +603,30 @@ def export_all(out_dir, quiet=False):
             json.dump(meta, fh, ensure_ascii=False, indent=1)
         recs.append(meta)
         if not quiet:
-            print("  %-34s %-14s %-6s 摆件%2d  边界%2d点  meanRGB=(%.2f,%.2f,%.2f) %dx%d"
-                  % (key, pair["name"], BAND_CN[rec["band"]],
-                     meta["handmade"]["placed_elements"],
-                     meta["handmade"]["boundary_points"],
-                     meta["mean_srgb"][0], meta["mean_srgb"][1],
+            print("  %-34s %-14s %-6s %-6s 块%2d 屑%2d  meanRGB=(%.2f,%.2f,%.2f) %dx%d"
+                  % (key, pair["name"], BAND_CN[rec["band"]], spec["name"],
+                     nunit, nel, meta["mean_srgb"][0], meta["mean_srgb"][1],
                      meta["mean_srgb"][2], nx, ny))
     man = {
-        "spec": "手工预制过渡件库 v1（手写折线边界 + 逐个显式摆件；红警式预制块）",
-        "why": "创始人定：材质过渡要手工做的预制块（预画好、按邻居选块），不要程序噪声渐变",
+        "spec": "手工预制过渡件库 v2（硬质收边 + 逐块手摆；红警式预制块）",
+        "why": "创始人纠偏：现实里两块地之间有路坎（edge restraint），过渡=一条硬质收边，"
+               "不是两种材质大面积互相渗透",
         "chart_px": [GAME_W, CHART_H],
         "bands_px": {"shoulder": G.STRIP_SHOULDER, "kerb": G.STRIP_KERB,
                      "road": G.STRIP_ROAD},
-        "band_note": "边界在一整幅 264px（路肩96+路缘8+道路160）上手写一次，再按带裁剪；"
+        "band_note": "放线/收边/碎屑在一整幅 264px（路肩96+路缘8+道路160）上做一次，再按带裁剪；"
                      "路缘带 8px 不单出件（过渡由路肩件+道路件夹住）",
+        "edge_kinds": {k: dict(name=v["name"], width_px=v["w"], note=v["note"])
+                       for k, v in EDGES.items()},
         "raster": RASTER,
         "pairs": [dict(key=p["key"], name=p["name"], left=p["a"], right=p["b"],
-                       bands=list(p["bands"]), usage=p["usage"]) for p in PAIRS],
+                       edge=p["edge"], bands=list(p["bands"]), usage=p["usage"])
+                  for p in PAIRS],
         "pieces": [dict(key=r["key"], master=r["master"], band=r["band"],
                         variant=r["variant"], sides=r["sides"],
-                        boundary=r["handmade"]["boundary"],
-                        points=r["handmade"]["boundary_points"],
-                        elements=r["handmade"]["placed_elements"])
+                        edge=r["edge_restraint"]["type"],
+                        units=r["edge_restraint"]["units_in_this_piece"],
+                        spill=r["edge_restraint"]["spill_elements"])
                    for r in recs],
     }
     with open(os.path.join(out_dir, "_manifest.json"), "w", encoding="utf-8") as fh:
@@ -611,33 +639,39 @@ def render_dir():
                         "stick-world", "temp", "ground_tiles", "transitions")
 
 
-# ============================================================ 自检（摆件是否真在缝上）
+# ============================================================ 自检
 def selfcheck():
-    """逐个摆件回报：它离边界多远。写歪了（>60px 落在纯色区里）会报出来。"""
+    """查四件事：收边盖满整幅 / 每块偏移不露边 / 碎屑贴着收边 / 放线两侧留够料面。"""
     bad = 0
     for key in piece_keys():
         rec = _PIECE_OF[key]
+        pair = _PAIR_OF[rec["pair"]]
         master = _MASTER_OF[rec["pair"]][rec["variant"] - 1]
-        if "plank_ends" in master:
-            xb = seam_x_deck(master["plank_ends"], 1)
-        else:
-            xb = seam_x(master["kp"], 1)
-        for e in master["els"]:
-            y = int(min(max(0, float(e[2])), CHART_H - 1))
-            dd = abs(float(e[1]))
-            if dd > 60.0:
-                bad += 1
-                print("  [歪] %s y=%d dx=%.0f（离缝 %.0fpx）" % (key, y, e[1], dd))
-        # 边界是否始终落在画面内、两侧都留得下料
-        if xb.min() < 120 or xb.max() > GAME_W - 120:
+        spec = EDGES[pair["edge"]]
+        total = sum(float(q[1]) for q in master["units"])
+        if total < CHART_H - 1.0:
             bad += 1
-            print("  [窄] %s 边界 x∈[%.0f,%.0f]（两侧料面不足）"
+            print("  [缺口] %s 收边只铺了 %.0fpx（要 ≥%d）" % (key, total, CHART_H))
+        for q in master["units"]:
+            if abs(float(q[0])) > spec["w"] * 0.5 - 2.0:
+                bad += 1
+                print("  [露边] %s 某块偏移 %.0f 超出 %.0fpx 进深"
+                      % (key, q[0], spec["w"]))
+        lim = spec["w"] * 0.5 + 16.0
+        for e in master["els"]:
+            if abs(float(e[1])) > lim:
+                bad += 1
+                print("  [离边] %s 碎屑 dx=%.0f 离收边太远（>%.0f）" % (key, e[1], lim))
+        xb = line_x(master["line"], 1)
+        if xb.min() < 150 or xb.max() > GAME_W - 150:
+            bad += 1
+            print("  [偏线] %s 放线 x∈[%.0f,%.0f]（两侧料面不足）"
                   % (key, xb.min(), xb.max()))
-    print("手工过渡自检：%s" % ("OK" if bad == 0 else "%d 处需修" % bad))
+    print("手工收边过渡自检：%s" % ("OK" if bad == 0 else "%d 处需修" % bad))
     return bad
 
 
-# ============================================================ 登记表（按 key 索引）
+# ============================================================ 登记表
 _PIECE_OF = {}
 _PAIR_OF = {}
 _MASTER_OF = {}
@@ -663,489 +697,205 @@ def piece_keys():
     return list(sorted(_PIECE_OF.keys()))
 
 
-# ============================================================ 手工数据（下面是全部"画"的部分）
-# ↓↓↓ 全部手写数据：材质对 / 手写边界折线 / 逐个摆件
-# 摆件一条 = (kind, dx, y, ...)：
-#   dx = 相对**该行手写边界 x** 的横向偏移（游戏 px，负=往左=材质A一侧）
-#   y  = 整幅纵向坐标（0 = 道路带底边，264 = 墙根；路肩带是 y∈[168,264)）
-# kind / 后面跟的参数：
-#   st   石子     w, h, rot, tone(0冷深→1暖浅)
-#   peb  一把碎石 w, h, count, tone
-#   brk  碎砖/碎板 w, h, rot, tone
-#   tuft 草簇     len, spread°, 叶数, rot°, tone
-#   smear 漫上来的料 w, h, rot, tone(0=取B的均色 1=取A的均色)
+# ============================================================ 手工数据
+# 材质对：a=左（材质 A）/ b=右（材质 B）；edge = 收边类型；lift = A 侧比 B 侧高多少（h 单位）
 PAIRS = [
     dict(key="flagstone_dirt", a="flagstone", b="dirt_rut", name="石板↔土",
-         bands=("shoulder", "road"), lift=0.10,
-         note="城区石板铺装 ↔ 荒废土面：板缝积土、土侧的湿泥漫上板角",
-         usage="城区(center/中环)铺装与荒废土面交界；村边、拆掉房子的空地四周"),
+         edge="sett", bands=("shoulder", "road"), lift=0.10,
+         note="石板铺装边上砌一列镶边石压住板边；石头外就是踩实的土面（土面低一档）",
+         usage="城区(center/中环)石板铺装与土面/空地交界；拆掉房子后的空地四周"),
     dict(key="brick_gravel", a="brick_pave", b="gravel", name="旧砖↔碎石",
-         bands=("shoulder", "road"), lift=0.06,
-         note="中环旧砖铺装 ↔ 工地/次级巷碎石垫层：砖被撬走留下断口，碎石填进缺砖的坑",
+         edge="soldier", bands=("shoulder", "road"), lift=0.08,
+         note="砖铺装边立砌一列砖牙收边，砖牙外是碎石垫层；砖牙缝里塞着碎石与碎砖",
          usage="中环(mid)砖铺装与碎石垫层/工地/马厩前交界"),
     dict(key="rammed_grass", a="rammed_earth", b="grass", name="夯土↔草皮",
-         bands=("shoulder", "road"), lift=0.00,
-         note="院坝夯土 ↔ 城边草皮：草从夯土干裂里钻出来，土侧被草啃掉一层",
-         usage="edge 档夯土路肩/院坝与草地交界；城墙外、村口"),
+         edge="turf", bands=("shoulder", "road"), lift=-0.14,
+         note="草皮被切成毯子边：边缘略翘、切口露土，土面被踩低一档；只有几根草须漫过来",
+         usage="edge 档夯土路/院坝与草地交界；城墙外的踩踏路缘"),
     dict(key="gravel_grass", a="gravel", b="grass", name="砾石↔草皮",
-         bands=("shoulder", "road"), lift=0.00,
-         note="edge 档内部：砾石路肩被草啃（村里最常见的两种料），砾石滚进草里",
-         usage="edge 档砾石巷与草皮交界；村庄边缘最常见的一道过渡"),
+         edge="sett", bands=("shoulder", "road"), lift=0.08,
+         note="矮路缘石挡住砾石不往草里跑；草把石缝长满，只有零散几颗砾石滚过界",
+         usage="edge 档砾石巷与草皮交界；村庄边缘最常见的一道收边"),
     dict(key="boardwalk_dirt", a="boardwalk", b="dirt_rut", name="木栈道↔泥地",
-         bands=("road",), lift=0.52, edge_shadow=14.0,
-         note="檐廊/码头木栈道断口 ↔ 泥地：板逐块锯成不同长度，缝里塞着泥和碎石",
-         usage="商铺前檐廊、码头木栈道末端与泥地交界（栈道整体抬高一级）",
-         plank_ends=True, fade=0),
+         edge="sleeper", bands=("road",), lift=0.50, fade=0, rot90_a=True,
+         note="栈道板端顶在一条枕木横档上（板长轴垂直于横档）；横档外就是泥，档面溅着泥点",
+         usage="商铺前檐廊、码头木栈道的长边/端头与泥地交界（栈道整体抬高一级）"),
 ]
-BAND_CN = {"road": "道路带", "shoulder": "路肩带", "kerb": "路缘带"}
 
-#: 手写母版：每对 3 变体，每变体一张整幅（264px）折线 + 一列表摆件
+#: 手写母版：每对 3 变体
+#   line  = 放线（缓折线，工人的线）
+#   units = 收边件：**逐块**写 (方向偏移, 沿边长短, 转角, 明度)；从 y=0 起沿 y 顺序铺
+#   els   = 缝里漏出的少量碎屑 (kind, dx, y, ...)：st 石子 / peb 碎屑 / brk 碎砖 / tuft 草须 / smear 泥点
 MASTERS = {
-    # ---------------------------------------------------------------- 石板 ↔ 土
+    # ================================================================ 石板 ↔ 土（镶边石）
     "flagstone_dirt": [
-        # v1 大咬 + 长舌：土侧在 y≈0.32 处整块咬进石板，石板在 y≈0.55 伸出一条长舌
-        dict(seq_a=(0, 2, 1, 3), seq_b=(1, 3, 0, 2),
-             kp=[(238, 0, 1, 5), (254, 18, 2, 8), (230, 34, 1, 11), (244, 52, 2, 6),
-                 (214, 68, 1, 10), (206, 82, 2, 5), (222, 92, 1, 7),
-                 (232, 102, 0, 0), (220, 118, 1, 9), (240, 126, 1, 6),
-                 (268, 134, 2, 10), (282, 150, 1, 6), (262, 160, 2, 8),
-                 (236, 176, 1, 7), (248, 200, 2, 10), (224, 216, 1, 6),
-                 (240, 234, 2, 9), (230, 252, 1, 5), (254, 264, 0, 0)],
-             els=[
-                 # --- 道路带（y 0..159）
-                 ("st", -9, 22, 24, 18, -18, 0.62),
-                 ("peb", 8, 40, 16, 13, 4, 0.50),
-                 ("smear", -12, 58, 40, 22, 8, 0.00),
-                 ("st", 11, 74, 19, 15, 24, 0.72),
-                 ("tuft", 17, 88, 22, 46, 5, 78, 0.20),
-                 ("peb", -19, 100, 20, 15, 5, 0.58),
-                 ("st", -24, 110, 24, 19, 8, 0.55),
-                 ("brk", 7, 122, 21, 13, -32, 0.66),
-                 ("st", 30, 136, 22, 17, -12, 0.68),
-                 ("st", 41, 146, 17, 14, 30, 0.60),
-                 ("smear", 13, 130, 38, 21, -14, 0.00),
-                 # --- 路缘 + 路肩带（y 160..264）
-                 ("peb", -6, 166, 18, 14, 4, 0.46),
-                 ("st", -11, 180, 21, 16, -22, 0.70),
-                 ("tuft", -10, 196, 20, 34, 4, 96, 0.35),
-                 ("st", -6, 210, 15, 12, 14, 0.52),
-                 ("smear", 10, 224, 34, 20, 6, 0.50),
-                 ("tuft", 15, 238, 22, 36, 5, 96, 0.10),
-                 ("peb", 10, 252, 17, 13, 4, 0.56),
-                 ("tuft", 12, 64, 19, 40, 5, 66, 0.3),
-                 ("tuft", -9, 104, 20, 44, 4, 100, 0.2),
-                 ("tuft", 8, 190, 18, 36, 4, 88, 0.25),
-             ]),
-        # v2 细碎犬牙：小幅高频的齿（14~18px 摆幅），碎料多、草多
+        dict(seq_a=(0, 2, 1, 3), seq_b=(1, 0, 3, 2),
+             line=[(248, 0), (242, 62), (252, 124), (245, 186), (250, 264)],
+             units=[(1, 26, -2, 0.55), (3, 24, 1, 0.62), (-2, 28, -3, 0.48),
+                    (2, 25, -1, 0.66), (-3, 27, 2, 0.52), (1, 24, -2, 0.60),
+                    (4, 26, 1, 0.44), (-1, 25, -3, 0.58), (2, 27, 2, 0.64),
+                    (-2, 28, -1, 0.50), (1, 26, 1, 0.56)],
+             els=[("brk", 13, 42, 13, 9, 16, 0.58),
+                  ("peb", 14, 112, 12, 9, 3, 0.50),
+                  ("tuft", -12, 170, 12, 26, 3, 8, 0.20),
+                  ("st", 12, 236, 12, 10, -18, 0.60)]),
         dict(seq_a=(1, 3, 2, 0), seq_b=(2, 0, 3, 1),
-             kp=[(248, 0, 1, 6), (236, 14, 1, 9), (254, 26, 2, 6), (240, 40, 1, 8),
-                 (258, 52, 1, 5), (244, 66, 2, 9), (232, 78, 1, 7),
-                 (250, 92, 1, 10), (238, 106, 2, 6), (224, 118, 1, 8),
-                 (242, 132, 1, 7), (232, 146, 2, 9), (254, 158, 1, 6),
-                 (240, 172, 1, 8), (226, 184, 2, 7), (248, 198, 1, 9),
-                 (234, 212, 1, 6), (244, 226, 2, 8), (232, 240, 1, 7),
-                 (246, 252, 1, 5), (238, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("st", -7, 17, 17, 13, -24, 0.58),
-                 ("peb", 6, 30, 15, 12, 4, 0.48),
-                 ("st", 8, 45, 15, 12, 16, 0.70),
-                 ("smear", -9, 58, 32, 18, 0, 0.00),
-                 ("tuft", 12, 70, 18, 42, 5, 74, 0.30),
-                 ("peb", -12, 84, 16, 12, 5, 0.62),
-                 ("st", -14, 96, 19, 15, 28, 0.52),
-                 ("brk", 9, 108, 17, 11, 24, 0.64),
-                 ("tuft", -11, 120, 19, 40, 4, 102, 0.25),
-                 ("st", 13, 132, 16, 13, -14, 0.74),
-                 ("peb", 8, 146, 14, 11, 4, 0.55),
-                 ("smear", 12, 138, 30, 17, 8, 0.00),
-                 # --- 路肩带
-                 ("st", -8, 176, 18, 14, 12, 0.60),
-                 ("tuft", -6, 190, 18, 38, 5, 92, 0.20),
-                 ("peb", 9, 204, 15, 12, 4, 0.50),
-                 ("st", 7, 218, 17, 13, -20, 0.66),
-                 ("tuft", 11, 232, 19, 36, 4, 98, 0.35),
-                 ("smear", -7, 246, 30, 18, -6, 0.00),
-                 ("peb", -10, 256, 15, 12, 4, 0.58),
-                 ("tuft", -10, 52, 17, 38, 4, 104, 0.2),
-                 ("tuft", 9, 118, 18, 40, 5, 70, 0.3),
-                 ("tuft", -7, 222, 17, 36, 4, 92, 0.15),
-             ]),
-        # v3 斜切 + 断口：边界整体右斜，两处硬断口（一处崩掉一块板，一处塌进土里）
+             line=[(240, 0), (250, 58), (244, 124), (256, 188), (246, 264)],
+             units=[(-1, 24, 2, 0.48), (2, 26, -1, 0.58), (3, 22, 2, 0.66),
+                    (-2, 27, 1, 0.52), (1, 25, -2, 0.62), (-3, 23, 3, 0.44),
+                    (2, 28, -1, 0.56), (-1, 26, 2, 0.68), (3, 24, -2, 0.50),
+                    (-2, 25, 1, 0.60), (1, 26, -1, 0.46)],
+             els=[("peb", 13, 64, 12, 9, 3, 0.52),
+                  ("st", -11, 136, 12, 10, 14, 0.62),
+                  ("tuft", -12, 198, 11, 24, 3, 6, 0.25),
+                  ("brk", 12, 248, 12, 8, -20, 0.56)]),
         dict(seq_a=(3, 0, 2, 1), seq_b=(0, 2, 1, 3),
-             kp=[(214, 0, 1, 7), (226, 20, 2, 9), (220, 40, 1, 6), (246, 56, 2, 11),
-                 (240, 76, 1, 5), (262, 92, 2, 8), (252, 112, 1, 9),
-                 (232, 128, 2, 7), (280, 144, 1, 12), (292, 162, 2, 6),
-                 (272, 182, 1, 8), (256, 200, 2, 10), (264, 218, 1, 6),
-                 (242, 236, 2, 8), (258, 252, 1, 5), (250, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("st", -10, 20, 26, 20, -14, 0.64),
-                 ("brk", -18, 40, 24, 15, 18, 0.60),
-                 ("st", 12, 58, 22, 17, 22, 0.72),
-                 ("peb", -8, 76, 20, 15, 6, 0.52),
-                 ("st", 16, 92, 25, 19, -8, 0.58),
-                 ("tuft", -14, 108, 22, 44, 5, 66, 0.30),
-                 ("smear", 14, 122, 44, 24, 10, 0.45),
-                 ("st", 34, 140, 26, 20, 26, 0.68),
-                 ("st", 48, 152, 20, 16, -18, 0.56),
-                 ("peb", 30, 150, 18, 14, 4, 0.48),
-                 # --- 路肩带
-                 ("st", -12, 176, 24, 18, 14, 0.62),
-                 ("peb", 10, 194, 19, 15, 5, 0.54),
-                 ("tuft", -10, 212, 21, 40, 5, 94, 0.15),
-                 ("st", 9, 228, 22, 17, -26, 0.70),
-                 ("smear", -12, 244, 36, 22, -8, 0.00),
-                 ("peb", 8, 256, 17, 13, 4, 0.50),
-                 ("tuft", 11, 46, 19, 42, 5, 76, 0.25),
-                 ("tuft", -8, 116, 18, 38, 4, 98, 0.2),
-                 ("tuft", 9, 204, 17, 36, 4, 84, 0.3),
-             ]),
+             line=[(252, 0), (246, 50), (258, 114), (248, 178), (254, 264)],
+             units=[(2, 26, 1, 0.62), (-1, 27, -2, 0.52), (3, 24, 2, 0.58),
+                    (-2, 26, -1, 0.66), (1, 29, 3, 0.46), (-3, 25, 1, 0.60),
+                    (2, 24, -2, 0.54), (-1, 27, 2, 0.64), (3, 26, -1, 0.48),
+                    (-2, 26, 2, 0.58), (1, 25, -1, 0.50)],
+             els=[("st", 12, 54, 13, 10, 20, 0.56),
+                  ("tuft", -11, 124, 12, 24, 3, 12, 0.22),
+                  ("peb", 13, 182, 11, 8, 3, 0.48),
+                  ("brk", 12, 240, 12, 9, -14, 0.60)]),
     ],
-    # ---------------------------------------------------------------- 旧砖 ↔ 碎石
+    # ================================================================ 旧砖 ↔ 碎石（立砌砖牙）
     "brick_gravel": [
-        # v1 整砖层缺角：砖按 8px 一个砖程被撬走（边界落在砖缝上），碎石填进缺砖的坑
         dict(seq_a=(0, 1, 3, 2), seq_b=(2, 3, 0, 1),
-             kp=[(256, 0, 0, 0), (256, 8, 0, 0), (240, 8, 0, 0), (240, 16, 0, 0),
-                 (256, 16, 1, 4), (256, 32, 0, 0), (240, 32, 0, 0),
-                 (240, 40, 0, 0), (224, 40, 0, 0), (224, 48, 0, 0),
-                 (240, 48, 1, 3), (240, 64, 0, 0), (256, 64, 0, 0),
-                 (256, 80, 0, 0), (240, 80, 0, 0), (240, 96, 0, 0),
-                 (224, 96, 0, 0), (224, 104, 0, 0), (240, 104, 1, 4),
-                 (240, 120, 0, 0), (256, 120, 0, 0), (256, 136, 0, 0),
-                 (272, 136, 0, 0), (272, 144, 0, 0), (256, 144, 1, 3),
-                 (256, 160, 0, 0), (240, 160, 0, 0), (240, 176, 0, 0),
-                 (256, 176, 0, 0), (256, 192, 0, 0), (240, 192, 0, 0),
-                 (240, 208, 0, 0), (224, 208, 0, 0), (224, 216, 0, 0),
-                 (240, 216, 1, 4), (240, 232, 0, 0), (256, 232, 0, 0),
-                 (256, 248, 0, 0), (240, 248, 0, 0), (240, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("st", 6, 12, 20, 15, 16, 0.55),
-                 ("brk", -9, 28, 22, 13, -14, 0.62),
-                 ("peb", 10, 44, 22, 16, 6, 0.48),
-                 ("brk", -12, 60, 20, 12, 28, 0.68),
-                 ("smear", 8, 74, 34, 20, 6, 0.00),
-                 ("st", 14, 88, 22, 17, -22, 0.60),
-                 ("brk", -8, 104, 24, 14, 12, 0.58),
-                 ("peb", -14, 118, 20, 15, 5, 0.52),
-                 ("st", 9, 132, 19, 15, 24, 0.72),
-                 ("brk", -16, 146, 22, 13, -30, 0.64),
-                 ("peb", 12, 152, 18, 14, 4, 0.46),
-                 # --- 路肩带
-                 ("brk", 8, 172, 22, 13, 10, 0.60),
-                 ("peb", -10, 188, 19, 15, 5, 0.50),
-                 ("brk", -13, 204, 20, 12, -18, 0.66),
-                 ("st", 11, 220, 21, 16, 20, 0.58),
-                 ("brk", 7, 236, 21, 13, 26, 0.56),
-                 ("peb", 9, 252, 18, 14, 4, 0.52),
-                 ("tuft", 9, 68, 16, 36, 4, 74, 0.3),
-                 ("tuft", -8, 208, 15, 34, 4, 92, 0.25),
-             ]),
-        # v2 大崩口：一边被扒掉一大片砖（露出碎石垫层），断口参差
+             line=[(250, 0), (246, 60), (254, 130), (248, 196), (252, 264)],
+             units=[(0, 8, 0, 0.58), (1, 8, -2, 0.46), (-1, 8, 1, 0.62),
+                    (0, 8, 0, 0.52), (1, 8, -1, 0.66), (-1, 8, 2, 0.44),
+                    (0, 8, 0, 0.56), (1, 8, -2, 0.60), (-1, 8, 1, 0.48),
+                    (0, 8, 0, 0.64), (1, 8, -1, 0.52), (-1, 8, 2, 0.58),
+                    (0, 8, 0, 0.46), (1, 8, -2, 0.62), (-1, 8, 1, 0.54),
+                    (0, 8, 0, 0.60), (1, 8, -1, 0.48), (-1, 8, 2, 0.66),
+                    (0, 8, 0, 0.52), (1, 8, -2, 0.58), (-1, 8, 1, 0.44),
+                    (0, 8, 0, 0.62), (1, 8, -1, 0.56), (-1, 8, 2, 0.50),
+                    (0, 8, 0, 0.64), (1, 8, -2, 0.46), (-1, 8, 1, 0.60),
+                    (0, 8, 0, 0.54), (1, 8, -1, 0.62), (-1, 8, 2, 0.48),
+                    (0, 8, 0, 0.58), (1, 8, -2, 0.52), (-1, 8, 1, 0.64)],
+             els=[("brk", 13, 76, 12, 8, 18, 0.60),
+                  ("peb", 14, 152, 11, 8, 3, 0.50),
+                  ("tuft", -13, 216, 11, 22, 3, 8, 0.25)]),
         dict(seq_a=(2, 0, 1, 3), seq_b=(1, 2, 3, 0),
-             kp=[(272, 0, 0, 0), (272, 16, 0, 0), (256, 16, 0, 0), (256, 24, 1, 4),
-                 (232, 24, 0, 0), (232, 32, 0, 0), (208, 32, 0, 0),
-                 (208, 40, 0, 0), (232, 40, 1, 5), (232, 56, 0, 0),
-                 (256, 56, 0, 0), (256, 72, 0, 0), (240, 72, 0, 0),
-                 (240, 88, 0, 0), (216, 88, 0, 0), (216, 96, 1, 4),
-                 (240, 96, 0, 0), (240, 112, 0, 0), (256, 112, 0, 0),
-                 (256, 128, 0, 0), (272, 128, 0, 0), (272, 152, 0, 0),
-                 (256, 152, 0, 0), (256, 168, 0, 0), (240, 168, 0, 0),
-                 (240, 192, 0, 0), (224, 192, 0, 0), (224, 200, 1, 3),
-                 (240, 200, 0, 0), (240, 216, 0, 0), (256, 216, 0, 0),
-                 (256, 240, 0, 0), (240, 240, 0, 0), (240, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("st", 8, 20, 21, 16, -18, 0.52),
-                 ("peb", -20, 36, 26, 18, 7, 0.44),
-                 ("st", -26, 46, 24, 18, 12, 0.66),
-                 ("brk", 9, 64, 22, 13, 22, 0.60),
-                 ("smear", -16, 80, 42, 24, -10, 0.00),
-                 ("st", 10, 96, 20, 16, -26, 0.58),
-                 ("peb", -8, 110, 24, 17, 6, 0.50),
-                 ("brk", -12, 126, 24, 14, 14, 0.64),
-                 ("st", 13, 140, 19, 15, 30, 0.70),
-                 ("peb", 11, 154, 20, 15, 5, 0.46),
-                 # --- 路肩带
-                 ("brk", 9, 176, 22, 13, 8, 0.58),
-                 ("st", -14, 192, 23, 18, -16, 0.62),
-                 ("peb", -9, 208, 21, 16, 6, 0.48),
-                 ("brk", 12, 226, 21, 12, 28, 0.62),
-                 ("st", 8, 242, 20, 16, 18, 0.56),
-                 ("peb", -11, 256, 18, 14, 4, 0.50),
-                 ("tuft", 10, 104, 16, 36, 4, 78, 0.3),
-                 ("tuft", -8, 200, 15, 34, 4, 90, 0.25),
-             ]),
-        # v3 断口 + 塌陷：边界近竖直（沿一条砖缝走），中段塌进两个坑
+             line=[(244, 0), (252, 70), (246, 140), (254, 210), (248, 264)],
+             units=[(-1, 8, 1, 0.50), (0, 8, 0, 0.62), (1, 8, -2, 0.44),
+                    (0, 8, 0, 0.58), (-1, 8, 2, 0.52), (1, 8, -1, 0.66),
+                    (0, 8, 0, 0.48), (-1, 8, 1, 0.60), (1, 8, -2, 0.54),
+                    (0, 8, 0, 0.64), (-1, 8, 2, 0.46), (1, 8, -1, 0.58),
+                    (0, 8, 0, 0.52), (-1, 8, 1, 0.62), (1, 8, -2, 0.50),
+                    (0, 8, 0, 0.66), (-1, 8, 2, 0.44), (1, 8, -1, 0.60),
+                    (0, 8, 0, 0.56), (-1, 8, 1, 0.64), (1, 8, -2, 0.48),
+                    (0, 8, 0, 0.58), (-1, 8, 2, 0.52), (1, 8, -1, 0.66),
+                    (0, 8, 0, 0.46), (-1, 8, 1, 0.60), (1, 8, -2, 0.54),
+                    (0, 8, 0, 0.62), (-1, 8, 2, 0.50), (1, 8, -1, 0.58),
+                    (0, 8, 0, 0.64), (-1, 8, 1, 0.48), (1, 8, -2, 0.56)],
+             els=[("peb", 13, 46, 12, 9, 3, 0.54),
+                  ("brk", 12, 120, 12, 8, -16, 0.58),
+                  ("st", -12, 188, 12, 9, 12, 0.60)]),
         dict(seq_a=(3, 2, 0, 1), seq_b=(0, 3, 2, 1),
-             kp=[(248, 0, 0, 0), (248, 24, 1, 4), (232, 24, 0, 0), (232, 48, 0, 0),
-                 (248, 48, 1, 3), (248, 72, 0, 0), (264, 72, 0, 0),
-                 (264, 88, 0, 0), (248, 88, 0, 0), (248, 112, 0, 0),
-                 (232, 112, 0, 0), (232, 128, 1, 4), (216, 128, 0, 0),
-                 (216, 136, 0, 0), (232, 136, 0, 0), (232, 160, 0, 0),
-                 (248, 160, 0, 0), (248, 184, 1, 3), (232, 184, 0, 0),
-                 (232, 200, 1, 4), (248, 200, 0, 0), (248, 224, 0, 0),
-                 (264, 224, 0, 0), (264, 240, 0, 0), (248, 240, 0, 0),
-                 (248, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("brk", 7, 16, 23, 14, -12, 0.62),
-                 ("peb", 9, 36, 21, 16, 6, 0.48),
-                 ("st", -8, 56, 20, 16, 20, 0.66),
-                 ("brk", -11, 76, 22, 13, -22, 0.58),
-                 ("peb", -7, 96, 23, 17, 5, 0.52),
-                 ("smear", 10, 110, 36, 22, 0, 0.00),
-                 ("st", -9, 124, 21, 16, 26, 0.60),
-                 ("brk", 8, 140, 21, 13, 16, 0.64),
-                 ("peb", 12, 154, 19, 14, 4, 0.46),
-                 # --- 路肩带
-                 ("peb", -9, 174, 20, 15, 5, 0.50),
-                 ("brk", 10, 190, 22, 13, 10, 0.60),
-                 ("st", -12, 208, 22, 17, -18, 0.64),
-                 ("brk", 8, 226, 21, 13, 24, 0.56),
-                 ("peb", -8, 242, 19, 15, 5, 0.52),
-                 ("st", 11, 256, 20, 16, 14, 0.58),
-                 ("tuft", -9, 90, 16, 34, 4, 96, 0.25),
-                 ("tuft", 8, 216, 15, 34, 4, 80, 0.3),
-             ]),
+             line=[(252, 0), (248, 88), (256, 170), (250, 264)],
+             units=[(1, 8, -1, 0.62), (0, 8, 0, 0.48), (-1, 8, 2, 0.58),
+                    (1, 8, -2, 0.52), (0, 8, 0, 0.66), (-1, 8, 1, 0.44),
+                    (1, 8, -1, 0.60), (0, 8, 0, 0.54), (-1, 8, 2, 0.64),
+                    (1, 8, -2, 0.46), (0, 8, 0, 0.58), (-1, 8, 1, 0.62),
+                    (1, 8, -1, 0.50), (0, 8, 0, 0.66), (-1, 8, 2, 0.56),
+                    (1, 8, -2, 0.48), (0, 8, 0, 0.60), (-1, 8, 1, 0.64),
+                    (1, 8, -1, 0.44), (0, 8, 0, 0.58), (-1, 8, 2, 0.52),
+                    (1, 8, -2, 0.62), (0, 8, 0, 0.46), (-1, 8, 1, 0.60),
+                    (1, 8, -1, 0.54), (0, 8, 0, 0.64), (-1, 8, 2, 0.50),
+                    (1, 8, -2, 0.58), (0, 8, 0, 0.62), (-1, 8, 1, 0.48),
+                    (1, 8, -1, 0.56), (0, 8, 0, 0.66), (-1, 8, 2, 0.52)],
+             els=[("brk", 13, 62, 13, 8, 20, 0.62),
+                  ("brk", -12, 170, 12, 8, -12, 0.56),
+                  ("tuft", -13, 242, 11, 20, 3, 10, 0.20)]),
     ],
-    # ---------------------------------------------------------------- 夯土 ↔ 草皮
+    # ================================================================ 夯土 ↔ 草皮（草皮切边）
     "rammed_grass": [
-        # v1 草啃边：草侧沿夯层一层层啃进来，夯土侧一块块崩掉（崩口对齐夯层 14cm≈10px）
         dict(seq_a=(0, 3, 1, 2), seq_b=(2, 1, 3, 0),
-             kp=[(258, 0, 1, 6), (246, 12, 1, 8), (262, 24, 2, 6), (248, 36, 1, 9),
-                 (266, 48, 1, 5), (252, 62, 2, 8), (236, 74, 1, 7),
-                 (254, 86, 1, 9), (240, 98, 2, 6), (226, 110, 1, 8),
-                 (244, 124, 1, 6), (234, 138, 2, 8), (252, 150, 1, 5),
-                 (238, 164, 1, 7), (224, 178, 2, 6), (242, 192, 1, 8),
-                 (230, 206, 1, 6), (246, 220, 2, 7), (234, 234, 1, 6),
-                 (248, 248, 1, 5), (240, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("tuft", 9, 14, 20, 44, 5, 76, 0.15),
-                 ("st", -6, 28, 15, 12, -16, 0.55),
-                 ("tuft", 12, 42, 18, 40, 4, 82, 0.30),
-                 ("peb", -9, 56, 16, 12, 5, 0.50),
-                 ("tuft", 8, 68, 19, 46, 5, 72, 0.10),
-                 ("smear", -10, 82, 34, 20, 6, 0.00),
-                 ("tuft", 13, 96, 18, 38, 4, 88, 0.25),
-                 ("st", -7, 108, 16, 13, 22, 0.62),
-                 ("tuft", 10, 122, 20, 42, 5, 80, 0.20),
-                 ("peb", 11, 136, 15, 12, 4, 0.46),
-                 ("tuft", 9, 148, 17, 40, 4, 94, 0.35),
-                 # --- 路肩带
-                 ("tuft", 10, 172, 19, 42, 5, 86, 0.20),
-                 ("st", -6, 186, 15, 12, -14, 0.58),
-                 ("tuft", 11, 200, 18, 38, 4, 78, 0.15),
-                 ("peb", -8, 214, 16, 13, 5, 0.52),
-                 ("tuft", 9, 228, 19, 44, 5, 90, 0.30),
-                 ("st", 7, 242, 16, 13, 18, 0.60),
-                 ("tuft", 10, 254, 17, 36, 4, 84, 0.10),
-             ]),
-        # v2 草斑成片：两大块草皮盖在夯土上（草从坡上滚下来），中间夯土成岛
+             line=[(252, 0), (246, 70), (254, 140), (247, 210), (252, 264)],
+             units=[(1, 28, 2, 0.55), (-2, 30, -1, 0.62), (2, 26, 1, 0.48),
+                    (-1, 32, -2, 0.58), (3, 28, 2, 0.66), (-2, 26, -1, 0.52),
+                    (1, 30, 1, 0.60), (-3, 28, -2, 0.46), (2, 26, 2, 0.64),
+                    (-1, 28, -1, 0.56)],
+             els=[("tuft", -13, 60, 14, 30, 3, 170, 0.35),
+                  ("tuft", -12, 144, 13, 26, 3, 168, 0.30),
+                  ("peb", 13, 106, 12, 9, 3, 0.52),
+                  ("tuft", -13, 234, 14, 28, 3, 172, 0.40)]),
         dict(seq_a=(1, 2, 3, 0), seq_b=(0, 3, 1, 2),
-             kp=[(228, 0, 1, 7), (242, 16, 1, 6), (224, 32, 2, 8), (246, 44, 1, 5),
-                 (234, 58, 1, 9), (254, 70, 2, 6), (240, 84, 1, 8),
-                 (258, 96, 1, 6), (244, 110, 2, 7), (262, 122, 1, 5),
-                 (248, 136, 1, 9), (264, 148, 2, 6), (248, 162, 1, 7),
-                 (266, 176, 1, 5), (250, 190, 2, 8), (262, 204, 1, 6),
-                 (246, 218, 1, 7), (256, 232, 2, 6), (242, 246, 1, 5),
-                 (250, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("tuft", 10, 12, 21, 46, 6, 74, 0.20),
-                 ("st", -8, 26, 16, 13, 20, 0.54),
-                 ("tuft", 14, 40, 22, 50, 6, 82, 0.15),
-                 ("tuft", 18, 54, 19, 44, 5, 70, 0.30),
-                 ("peb", -10, 68, 17, 13, 5, 0.48),
-                 ("smear", -9, 84, 36, 22, -6, 0.00),
-                 ("tuft", 12, 98, 20, 42, 5, 88, 0.10),
-                 ("st", -6, 112, 15, 12, -18, 0.60),
-                 ("tuft", 11, 126, 21, 48, 6, 78, 0.25),
-                 ("tuft", 15, 142, 18, 40, 4, 92, 0.35),
-                 # --- 路肩带
-                 ("tuft", 9, 172, 20, 44, 5, 84, 0.15),
-                 ("peb", -7, 186, 16, 12, 4, 0.50),
-                 ("tuft", 12, 200, 21, 46, 6, 76, 0.20),
-                 ("st", 8, 214, 15, 12, 16, 0.56),
-                 ("tuft", 10, 228, 19, 42, 5, 90, 0.30),
-                 ("tuft", 13, 244, 18, 38, 4, 80, 0.10),
-                 ("peb", -6, 256, 15, 12, 4, 0.46),
-             ]),
-        # v3 干裂延伸：夯土的干裂顺着裂缝张开，草长在裂缝里（裂缝走向与边界同向）
+             line=[(246, 0), (254, 80), (248, 150), (256, 216), (250, 264)],
+             units=[(2, 30, 1, 0.62), (-1, 28, -2, 0.50), (1, 32, 2, 0.58),
+                    (-2, 26, -1, 0.66), (2, 28, 1, 0.46), (-3, 30, -2, 0.54),
+                    (1, 26, 2, 0.60), (-1, 32, -1, 0.44), (2, 28, 2, 0.62),
+                    (-2, 26, -1, 0.52)],
+             els=[("tuft", -12, 74, 13, 28, 3, 166, 0.30),
+                  ("tuft", -13, 180, 14, 30, 3, 172, 0.25),
+                  ("brk", 13, 126, 12, 9, 18, 0.54),
+                  ("tuft", -12, 250, 12, 24, 3, 170, 0.35)]),
         dict(seq_a=(2, 0, 3, 1), seq_b=(3, 1, 0, 2),
-             kp=[(246, 0, 1, 5), (260, 14, 1, 7), (244, 28, 2, 5), (258, 42, 1, 8),
-                 (242, 56, 1, 6), (256, 70, 2, 7), (240, 84, 1, 5),
-                 (254, 98, 1, 8), (238, 112, 2, 6), (252, 126, 1, 7),
-                 (236, 140, 1, 5), (250, 154, 2, 8), (234, 168, 1, 6),
-                 (248, 182, 1, 7), (232, 196, 2, 5), (246, 210, 1, 8),
-                 (230, 224, 1, 6), (244, 238, 2, 7), (228, 252, 1, 5),
-                 (242, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("st", -7, 18, 16, 12, -20, 0.58),
-                 ("tuft", 8, 34, 17, 38, 4, 80, 0.25),
-                 ("peb", -8, 48, 15, 12, 5, 0.50),
-                 ("tuft", 10, 62, 19, 44, 5, 74, 0.15),
-                 ("st", -6, 78, 14, 11, 18, 0.62),
-                 ("tuft", 9, 94, 18, 40, 5, 86, 0.30),
-                 ("smear", -9, 108, 32, 20, 4, 0.50),
-                 ("tuft", 11, 124, 16, 36, 4, 92, 0.20),
-                 ("peb", 7, 138, 14, 11, 4, 0.44),
-                 ("st", -5, 152, 15, 12, -12, 0.56),
-                 # --- 路肩带
-                 ("tuft", 8, 174, 18, 40, 5, 88, 0.20),
-                 ("peb", -7, 188, 15, 12, 4, 0.48),
-                 ("tuft", 10, 204, 17, 38, 4, 78, 0.30),
-                 ("st", -6, 218, 15, 12, 16, 0.60),
-                 ("tuft", 9, 234, 18, 42, 5, 90, 0.15),
-                 ("peb", 8, 252, 14, 11, 4, 0.52),
-             ]),
+             line=[(250, 0), (248, 56), (256, 132), (249, 204), (253, 264)],
+             units=[(0, 26, 2, 0.50), (-2, 30, -1, 0.58), (2, 28, 1, 0.64),
+                    (-3, 26, -2, 0.46), (1, 32, 2, 0.56), (-1, 28, -1, 0.62),
+                    (2, 26, 1, 0.50), (-2, 30, 2, 0.60), (1, 28, -1, 0.48),
+                    (-3, 26, 2, 0.66), (2, 26, 1, 0.54)],
+             els=[("tuft", -13, 44, 13, 26, 3, 164, 0.32),
+                  ("peb", 13, 150, 12, 9, 3, 0.50),
+                  ("tuft", -12, 228, 14, 30, 3, 174, 0.28)]),
     ],
-    # ---------------------------------------------------------------- 砾石 ↔ 草皮
+    # ================================================================ 砾石 ↔ 草皮（矮路缘石）
     "gravel_grass": [
-        # v1 砾石散进草里：边界两侧各留一把滚出去的砾石（近处密远处疏）
         dict(seq_a=(0, 2, 3, 1), seq_b=(1, 0, 2, 3),
-             kp=[(250, 0, 1, 7), (238, 14, 1, 9), (254, 28, 2, 6), (240, 42, 1, 8),
-                 (256, 56, 1, 6), (242, 70, 2, 9), (226, 84, 1, 7),
-                 (244, 98, 1, 8), (230, 112, 2, 6), (246, 126, 1, 9),
-                 (232, 140, 1, 7), (248, 154, 2, 8), (234, 168, 1, 6),
-                 (250, 182, 1, 9), (236, 196, 2, 7), (252, 210, 1, 6),
-                 (238, 224, 1, 8), (252, 238, 2, 6), (240, 252, 1, 5),
-                 (248, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("peb", 8, 16, 22, 16, 7, 0.50),
-                 ("st", -7, 30, 16, 13, -18, 0.58),
-                 ("tuft", 11, 44, 18, 40, 4, 78, 0.25),
-                 ("peb", -11, 58, 20, 15, 6, 0.62),
-                 ("peb", 13, 72, 18, 14, 5, 0.44),
-                 ("smear", -9, 86, 32, 20, 6, 0.00),
-                 ("st", 10, 100, 17, 13, 22, 0.66),
-                 ("tuft", -10, 114, 19, 42, 5, 86, 0.15),
-                 ("peb", 12, 128, 24, 17, 8, 0.52),
-                 ("peb", -13, 142, 21, 16, 6, 0.48),
-                 ("st", 9, 154, 15, 12, -14, 0.60),
-                 # --- 路肩带
-                 ("peb", 10, 172, 20, 15, 6, 0.46),
-                 ("tuft", -9, 188, 18, 38, 4, 80, 0.20),
-                 ("st", 8, 204, 16, 13, 18, 0.62),
-                 ("peb", -8, 220, 19, 14, 5, 0.54),
-                 ("tuft", 11, 234, 18, 40, 5, 88, 0.30),
-                 ("peb", 9, 252, 17, 13, 5, 0.50),
-                 ("tuft", -9, 36, 17, 38, 4, 84, 0.2),
-                 ("tuft", 10, 120, 18, 40, 5, 72, 0.3),
-             ]),
-        # v2 草吞砾石：草成片盖过来，只剩零散几颗砾石探出草面
+             line=[(250, 0), (245, 72), (255, 146), (248, 214), (253, 264)],
+             units=[(1, 24, -2, 0.56), (-2, 26, 1, 0.50), (2, 23, -1, 0.62),
+                    (-1, 25, 2, 0.46), (3, 24, -2, 0.58), (-2, 27, 1, 0.64),
+                    (1, 23, -1, 0.52), (-3, 25, 2, 0.60), (2, 24, -1, 0.48),
+                    (-1, 26, 1, 0.66), (1, 26, -2, 0.54)],
+             els=[("peb", 13, 68, 13, 9, 3, 0.50),
+                  ("tuft", -11, 142, 12, 24, 3, 166, 0.30),
+                  ("peb", 12, 222, 12, 9, 3, 0.54)]),
         dict(seq_a=(1, 3, 0, 2), seq_b=(2, 1, 3, 0),
-             kp=[(238, 0, 1, 6), (250, 18, 2, 8), (236, 36, 1, 7), (248, 52, 1, 9),
-                 (232, 70, 2, 6), (244, 88, 1, 8), (228, 104, 1, 7),
-                 (242, 122, 2, 9), (226, 140, 1, 6), (240, 156, 1, 8),
-                 (224, 174, 2, 7), (238, 192, 1, 6), (222, 210, 1, 8),
-                 (236, 228, 2, 6), (220, 246, 1, 7), (234, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("peb", 9, 20, 20, 15, 6, 0.48),
-                 ("tuft", -8, 36, 20, 44, 5, 76, 0.15),
-                 ("peb", 11, 54, 17, 13, 5, 0.52),
-                 ("st", -6, 70, 15, 12, -20, 0.56),
-                 ("tuft", 12, 88, 21, 46, 6, 82, 0.30),
-                 ("smear", -10, 104, 34, 21, 0, 0.00),
-                 ("peb", 13, 120, 22, 16, 7, 0.44),
-                 ("tuft", -11, 136, 19, 42, 5, 90, 0.20),
-                 ("peb", 10, 152, 19, 14, 5, 0.50),
-                 # --- 路肩带
-                 ("tuft", 9, 176, 19, 42, 5, 84, 0.20),
-                 ("peb", -8, 192, 18, 14, 5, 0.50),
-                 ("tuft", 11, 208, 20, 44, 5, 78, 0.15),
-                 ("peb", 9, 224, 19, 14, 5, 0.46),
-                 ("tuft", -9, 240, 18, 40, 4, 88, 0.30),
-                 ("peb", 10, 256, 16, 13, 4, 0.52),
-                 ("tuft", 10, 46, 17, 38, 4, 80, 0.25),
-                 ("tuft", -9, 100, 17, 36, 4, 96, 0.2),
-             ]),
-        # v3 车辙切边：砾石侧的车辙（两道）在边界处断掉，草从断口长出来
+             line=[(244, 0), (252, 64), (246, 140), (254, 206), (248, 264)],
+             units=[(-1, 23, 1, 0.52), (2, 25, -2, 0.60), (3, 22, 2, 0.46),
+                    (-2, 26, 1, 0.64), (1, 24, -1, 0.50), (-3, 25, 2, 0.58),
+                    (2, 23, -2, 0.48), (1, 26, 1, 0.62), (-2, 24, -1, 0.54),
+                    (3, 25, 2, 0.66), (-1, 24, 1, 0.56)],
+             els=[("peb", 12, 88, 13, 9, 4, 0.52),
+                  ("tuft", -12, 174, 12, 26, 3, 170, 0.28),
+                  ("st", 13, 236, 12, 9, 14, 0.58)]),
         dict(seq_a=(2, 1, 3, 0), seq_b=(0, 2, 1, 3),
-             kp=[(256, 0, 1, 6), (244, 16, 1, 8), (260, 32, 2, 7), (248, 48, 1, 6),
-                 (264, 64, 1, 8), (250, 80, 2, 7), (236, 96, 1, 6),
-                 (252, 112, 1, 9), (238, 128, 2, 6), (254, 144, 1, 7),
-                 (240, 160, 1, 8), (256, 176, 2, 6), (242, 192, 1, 7),
-                 (258, 208, 1, 8), (244, 224, 2, 6), (258, 240, 1, 7),
-                 (246, 252, 1, 5), (254, 264, 0, 0)],
-             els=[
-                 # --- 道路带
-                 ("peb", -10, 14, 21, 15, 6, 0.46),
-                 ("st", 8, 30, 17, 13, 20, 0.60),
-                 ("peb", 12, 46, 19, 14, 5, 0.54),
-                 ("tuft", -9, 62, 19, 42, 5, 80, 0.25),
-                 ("peb", -12, 78, 20, 15, 6, 0.50),
-                 ("st", 10, 94, 16, 13, -16, 0.64),
-                 ("tuft", 11, 110, 20, 44, 5, 86, 0.15),
-                 ("peb", -11, 126, 22, 16, 7, 0.48),
-                 ("smear", -8, 140, 32, 20, 8, 0.00),
-                 ("peb", 10, 152, 18, 14, 5, 0.52),
-                 # --- 路肩带
-                 ("peb", -9, 172, 19, 14, 5, 0.48),
-                 ("tuft", 10, 188, 19, 42, 5, 82, 0.20),
-                 ("st", -7, 204, 16, 13, 16, 0.58),
-                 ("peb", 11, 220, 20, 15, 6, 0.52),
-                 ("tuft", -8, 236, 18, 40, 4, 88, 0.30),
-                 ("peb", 9, 254, 17, 13, 4, 0.46),
-                 ("tuft", -8, 54, 16, 34, 4, 92, 0.25),
-                 ("tuft", 9, 132, 17, 38, 4, 76, 0.3),
-             ]),
+             line=[(252, 0), (247, 96), (257, 164), (250, 264)],
+             units=[(2, 25, -1, 0.60), (1, 23, 2, 0.48), (-2, 26, -2, 0.56),
+                    (3, 24, 1, 0.64), (-1, 25, -1, 0.50), (2, 22, 2, 0.58),
+                    (-3, 26, -2, 0.46), (1, 24, 1, 0.62), (-2, 25, -1, 0.52),
+                    (2, 24, 2, 0.66), (-1, 25, -1, 0.56)],
+             els=[("tuft", -11, 52, 12, 24, 3, 168, 0.30),
+                  ("peb", 13, 158, 12, 9, 3, 0.52),
+                  ("brk", 12, 244, 12, 8, -18, 0.56)]),
     ],
-    # ---------------------------------------------------------------- 木栈道 ↔ 泥地
+    # ================================================================ 木栈道 ↔ 泥地（端头横档）
     "boardwalk_dirt": [
-        # v1 逐块锯断：每块板一条断口 x（板宽 16px），断口在板程边界上竖切
         dict(seq_a=(0,), seq_b=(1,),
-             plank_ends=[264, 264, 248, 248, 248, 232, 232, 248, 264, 264,
-                         280, 280, 264, 248, 248, 232, 248],
-             els=[
-                 # --- 道路带（栈道侧抬高一级 → 崖下的泥地里塞着掉下去的碎石与板屑）
-                 ("st", -8, 20, 20, 15, -16, 0.58),
-                 ("brk", -11, 38, 22, 13, 14, 0.62),
-                 ("peb", -14, 56, 20, 15, 6, 0.46),
-                 ("smear", -16, 74, 40, 22, -8, 0.00),
-                 ("st", -10, 92, 17, 13, 22, 0.66),
-                 ("peb", -9, 110, 18, 14, 5, 0.50),
-                 ("brk", -13, 128, 20, 12, -24, 0.58),
-                 ("st", -7, 146, 16, 12, 12, 0.62),
-                 ("peb", -11, 156, 17, 13, 4, 0.48),
-             ]),
-        # v2 大断口：中段被整片锯掉（三块板同一刀），断口外斜
+             line=[(266, 0), (262, 90), (268, 180), (264, 264)],
+             units=[(1, 132, 0, 0.58), (-1, 132, 0, 0.62)],
+             els=[("peb", 15, 58, 14, 10, 4, 0.48),
+                  ("peb", 17, 182, 15, 10, 4, 0.52),
+                  ("brk", 14, 238, 13, 9, 16, 0.58),
+                  ("smear", 13, 118, 24, 16, 4, 0.0)]),
         dict(seq_a=(2,), seq_b=(3,),
-             plank_ends=[272, 272, 272, 272, 256, 248, 240, 224, 224, 224,
-                         240, 256, 272, 272, 256, 256, 256],
-             els=[
-                 # --- 道路带
-                 ("peb", -9, 16, 21, 16, 6, 0.48),
-                 ("st", -12, 34, 22, 17, 18, 0.62),
-                 ("brk", -15, 52, 24, 14, -12, 0.60),
-                 ("smear", -20, 70, 46, 24, 6, 0.45),
-                 ("peb", -13, 88, 22, 16, 7, 0.52),
-                 ("st", -8, 106, 18, 14, -20, 0.56),
-                 ("brk", -10, 124, 21, 13, 26, 0.64),
-                 ("peb", -14, 142, 20, 15, 6, 0.46),
-                 ("st", -9, 158, 17, 13, 14, 0.60),
-             ]),
-        # v3 长短交错：断口一长一短来回（像被人随手拔掉几块板）
+             line=[(262, 0), (268, 96), (260, 186), (266, 264)],
+             units=[(-1, 148, 0, 0.60), (1, 116, 0, 0.56)],
+             els=[("peb", 16, 44, 14, 10, 4, 0.52),
+                  ("smear", 15, 96, 22, 15, 4, 0.0),
+                  ("peb", 15, 196, 15, 10, 4, 0.48),
+                  ("st", 14, 252, 13, 10, -14, 0.58)]),
         dict(seq_a=(3,), seq_b=(2,),
-             plank_ends=[280, 248, 280, 232, 264, 248, 264, 232, 248, 264,
-                         248, 280, 264, 248, 232, 248, 264],
-             els=[
-                 # --- 道路带
-                 ("st", -10, 18, 19, 15, -22, 0.60),
-                 ("peb", -12, 36, 20, 15, 5, 0.50),
-                 ("brk", -14, 54, 22, 13, 16, 0.58),
-                 ("peb", -16, 72, 24, 17, 7, 0.44),
-                 ("smear", -18, 90, 42, 23, 4, 0.00),
-                 ("st", -9, 108, 18, 14, 20, 0.64),
-                 ("peb", -11, 126, 19, 14, 5, 0.48),
-                 ("brk", -13, 144, 20, 12, -18, 0.62),
-                 ("st", -8, 158, 16, 13, 10, 0.56),
-             ]),
+             line=[(266, 0), (261, 72), (269, 158), (263, 264)],
+             units=[(1, 120, 0, 0.54), (-1, 88, 0, 0.62), (1, 56, 0, 0.58)],
+             els=[("peb", 16, 72, 14, 10, 4, 0.50),
+                  ("smear", 14, 150, 26, 17, 4, 0.0),
+                  ("brk", 14, 222, 13, 9, -16, 0.60),
+                  ("peb", 15, 262, 14, 10, 4, 0.46)]),
     ],
 }
 
@@ -1156,7 +906,7 @@ _register()
 def main():
     out = render_dir()
     os.makedirs(os.path.join(out, "src"), exist_ok=True)
-    print("== 手工过渡件落盘 →", out)
+    print("== 手工收边过渡件落盘 →", out)
     recs = export_all(out)
     print("GTX_OK", len(recs))
     selfcheck()

@@ -296,7 +296,7 @@ def piece_chart(pair, variant):
     """过渡件整幅（512×264）：直接调生成端，与落盘件同一份数据。"""
     p = X._PAIR_OF[pair]
     master = X._MASTER_OF[pair][variant - 1]
-    alb, h, rough, _xb = X.build_chart(p, master, 1)
+    alb, h, rough = X.build_chart(p, master, 1)[:3]
     return alb, h, rough
 
 
@@ -358,7 +358,7 @@ def shot_zoom(cam):
         hgt = float(y1 - y0)
         plane(key, -X.GAME_W / 2.0, X.GAME_W / 2.0, -hgt / 2.0, hgt / 2.0, m)
         render_rect(cam, -110.0, 140.0, -hgt / 2.0, hgt / 2.0, 3.0,
-                    os.path.join(OUT_DIR, "_gtx_zoom.png"))
+                    os.path.join(OUT_DIR, "_gtx_zoom_%s.png" % key))
 
 
 def shot_sheet(cam):
@@ -372,17 +372,19 @@ def shot_sheet(cam):
     W = 3 * CHART_W + 2 * gap + 2 * pad
     H = 64.0 + len(blocks) * blk + 16.0
     x0, y1 = -W / 2.0, H / 2.0
-    label("手工预制过渡件（红警式预制块）：边界=手写关键点折线、缝里每颗石子/草簇/碎砖逐个写死坐标；"
+    label("手工预制过渡件（红警式预制块）：两块地之间**先立一道硬质收边**（镶边石 / 立砌砖牙 / "
+          "草皮切边 / 端头横档），两侧材质在收边处硬切；收边逐块手摆、缝里只漏出少量碎屑；"
           "两边接对应材质的真分段（ground_tiles.b_segment 现场算）",
-          0.0, y1 - 30.0, 26.0)
+          0.0, y1 - 30.0, 25.0)
     y = y1 - 64.0
     for (pk, v) in blocks:
         pair = X._PAIR_OF[pk]
         nbL, nbR = NB[pk]
+        ms = X._MASTER_OF[pk][v - 1]
         nms = ["左邻：" + TIER_CN[nbL[1]] + "（真分段三带摞起来）",
-               "手工过渡件 %s · 变体%d（这件 %d 条显式摆件）"
-               % (pair["name"], v, X.elements_in_band(X._MASTER_OF[pk][v - 1],
-                                                      "road")),
+               "手工过渡件 %s · 变体%d（%s %d 块 + 贴边碎屑 %d 条）"
+               % (pair["name"], v, X.EDGES[pair["edge"]]["name"],
+                  X.units_in_band(ms, "road"), X.elements_in_band(ms, "road")),
                "右邻：" + TIER_CN[nbR[1]]
                + ("（真分段三带摞起来）" if nbR[0] == "seg" else "（平铺贴图摞起来）")]
         for i, nk in enumerate((nbL, None, nbR)):
@@ -395,8 +397,10 @@ def shot_sheet(cam):
                            relief, nstr)
                 plane("c%d_%s_v%d" % (i, pk, v), cx, cx + CHART_W, y - CHART_H, y, m)
             label(nms[i], cx + CHART_W / 2.0, y - CHART_H - lab * 0.55, 19.0)
-        label("%s  ←  材质对 %s ↔ %s（%s）" % (pair["name"], pair["a"], pair["b"],
-                                             BAND_TXT), x0 + pad + CHART_W / 2.0,
+        label("%s：%s ↔ %s，中间砌一条%s（进深 %dpx，%d 块手摆）  ←  %s"
+              % (pair["name"], pair["a"], pair["b"],
+                 X.EDGES[pair["edge"]]["name"], X.EDGES[pair["edge"]]["w"],
+                 len(ms["units"]), BAND_TXT), x0 + pad + CHART_W / 2.0,
               y + 8.0, 20.0)
         y -= blk
     render_rect(cam, x0, x0 + W, y1 - H, y1, zoom,

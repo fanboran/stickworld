@@ -60,8 +60,15 @@ var _shadow: MeshInstance3D = null
 var _shadow_mat: ShaderMaterial = null
 
 
+## 主场景俯角（build 时传入，与 proto_hd2d.TILT_DEG 同源——角色卡必须与相机正对）
+var _tilt_deg: float = 26.0
+var _host: Node = null
+
+
 ## 建 SubViewport + 火柴人。parent 必须是已在树内的节点。
-func build(parent: Node, anim: String = "idle") -> void:
+func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
+	_host = parent
+	_tilt_deg = tilt_deg
 	# 强制走**矢量部件路径**（旧路径），不走 MultiMesh 批渲染。
 	# 实测：批渲染路径在本 SubViewport 里渲染出的是"未解算的横躺姿态"，
 	# 用 probe_rig3.gd（--char 对照）可复现。
@@ -183,8 +190,10 @@ func clear_extra() -> void:
 ## 创始人两次澄清后的最终口径：火柴人卡 = 相机对齐 billboard（不是垂直插地），
 ## 与建筑卡同平面贴相机是**正确**结果，不得为"3D 感"给角色加任何角度。
 ## 只有"脚底锚定地面点"这一半是 3D 的：quad 中心沿世界 y 摆到脚底落 y=0。
+## 俯角从主场景传入（2026-09-14 修：此前硬编码 20°，场景加俯角到 26° 后
+## 没同步，角色卡与相机差 6° 不正对——"身高/角度不对"的观感即来自这里）。
 func _cam_basis() -> Basis:
-	var t := deg_to_rad(20.0)
+	var t := deg_to_rad(_tilt_deg)
 	return Basis(Vector3(1, 0, 0),
 		Vector3(0, cos(t), -sin(t)), Vector3(0, sin(t), cos(t)))
 

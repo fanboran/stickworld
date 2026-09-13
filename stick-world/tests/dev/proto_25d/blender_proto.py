@@ -42,9 +42,11 @@ OUT_DIR = os.path.join(REPO, "stick-world", "temp", "proto25d")
 CARD_DIR = os.path.join(OUT_DIR, "cards")
 GLB_PATH = os.path.join(OUT_DIR, "proto25d_buildings.glb")
 
-# 2.5D 目标视角（§0.3 硬约束：纯正面 + 20° 微俯视，禁水平偏航）
+# 2.5D 目标视角（§0.3 硬约束：纯正面 + 微俯视，禁水平偏航）。
+# 俯角 26°：与 proto_hd2d 场景 TILT_DEG 一致（场景加俯角后，卡的烘焙视角必须同步重烘，
+# 否则卡的俯视感停留在旧角度、与角色 billboard 的取向对不上）。
 YAW = 0.0
-TILT = 20.0
+TILT = 26.0
 ZOOM = 2.0            # 烘焙像素/世界单位（2x）
 PAD = 10.0            # 卡四周留白（世界单位）
 RES_MAX = 3000        # 单卡最长边像素上限（护显存）
@@ -53,6 +55,7 @@ SCALE = 1.0 / 32.0    # 世界单位(px) -> Godot 单位(格)
 #: 街排（def, 格数）——宽度档按 §0.3 取 4 的整数倍，6 格档仅装配器允许时用
 STREET = [
     ("cottage", 6),
+    ("shelter", 6),
     ("house", 8),
     ("smithy1", 8),
     ("bakery", 8),

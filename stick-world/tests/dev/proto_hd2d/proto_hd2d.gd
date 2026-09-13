@@ -45,11 +45,35 @@ const BUILDING_SHADOW_SHADER := preload("res://tests/dev/proto_hd2d/building_sha
 
 const CARDS_JSON := "proto25d/cards.json"
 const CARD_DIR := "proto25d/cards/"
+const PROPS_JSON := "proto_hd2d/props.json"
+const PROP_DIR := "proto_hd2d/props/"
 const GROUND_DIR := "ground_tiles/"
 
 const CAM_W := 74.0                      # 正交视宽（格）-> 1920 宽下 25.9 px/格
 const CAM_CY := 11.0                     # 相机视线轴的世界高度
 const CAM_DIST := 40.0
+
+## 道具（bake_props.py 从 props.py 库烘的卡，26° 与建筑卡同视角）。
+## 创始人 2026-09-14：小零件之前被回退掉了，要加回来。
+## plat=true → 摆在人行道台面上（y+PLAT_H，楼脚前带）；false → 路面（y=0，角色活动区）。
+const PROPS: Array = [
+	{"card": "market_stall", "x": -21.0, "z": 4.6, "plat": false},
+	{"card": "market_table", "x": -17.4, "z": 5.8, "plat": false},
+	{"card": "cart", "x": 12.4, "z": 5.2, "plat": false},
+	{"card": "log_pile", "x": -14.2, "z": 6.2, "plat": false},
+	{"card": "well", "x": -28.6, "z": 1.15, "plat": true},
+	{"card": "barrel", "x": -6.8, "z": 1.35, "plat": true},
+	{"card": "sack_stack", "x": -5.6, "z": 1.15, "plat": true},
+	{"card": "crate", "x": 17.9, "z": 1.3, "plat": true},
+	{"card": "barrel_stand", "x": 31.6, "z": 1.25, "plat": true},
+	{"card": "signboard", "x": 10.2, "z": 1.35, "plat": true},
+	{"card": "basket", "x": -33.4, "z": 1.3, "plat": true},
+	{"card": "lantern", "x": -2.0, "z": 1.35, "plat": true},
+	{"card": "bench", "x": 24.6, "z": 1.2, "plat": true},
+	{"card": "pot", "x": 36.4, "z": 1.25, "plat": true},
+	{"card": "grindstone", "x": 14.8, "z": 1.2, "plat": true},
+	{"card": "anvil", "x": 2.6, "z": 1.25, "plat": true},
+]
 
 ## 街排：**只有临街一排**（创始人两次质疑"为什么好多层建筑"）。
 ## 背后只留一层极远的城墙/塔楼剪影（雾里）撑天际线，不算"第二排建筑"。
@@ -107,6 +131,7 @@ const OCC_BEHIND_Z := -3.0
 var _root := ""
 var _temp := ""
 var _cards: Dictionary = {}
+var _props: Dictionary = {}
 var _tex_cache: Dictionary = {}
 
 var _env: Environment
@@ -115,7 +140,9 @@ var _sun: DirectionalLight3D
 var _fill: DirectionalLight3D
 var _ground_root: Node3D
 var _card_root: Node3D
+var _prop_root: Node3D
 var _front_occ: Array = []
+var _door_path_xs: Array = []   # 需要门前短径的建筑 x（guildhall / 落地面建筑）
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
@@ -134,7 +161,7 @@ var _bg_base_samples: Array = []  # 当前层各卡卡底 z 的采样（层结�
 
 var _opts := {
 	"shots": "all", "perf": false, "res": "", "sv": "always",
-	"char": "blend", "tag": "", "svscale": "2", "flat": false,
+	"char": "blend", "tag": "", "svscale": "2", "flat": false, "debug": false,
 }
 
 # 帧采样
@@ -204,6 +231,9 @@ func _parse_args() -> void:
 		elif s.begins_with("--flat="):
 			# --flat=1：关远焦 DOF（辅助线核对版出图用——DOF 满糊会把辅助线一起晕开）
 			_opts["flat"] = s.get_slice("=", 1) != "0"
+		elif s.begins_with("--debug="):
+			# --debug=1：辅助线（网格/紫线/1/3 线/末层基线）——调试模式才出现（创始人口径）
+			_opts["debug"] = s.get_slice("=", 1) != "0"
 
 
 # ------------------------------------------------------------------ 资源
@@ -219,6 +249,16 @@ func _load_cards() -> void:
 		for c in arr:
 			_cards[str(c["card"])] = c
 	print("[hd2d] 烘焙卡 %d 张" % _cards.size())
+	var pp := _temp + PROPS_JSON
+	if FileAccess.file_exists(pp):
+		var pf := FileAccess.open(pp, FileAccess.READ)
+		var parr: Variant = JSON.parse_string(pf.get_as_text())
+		if parr is Array:
+			for c in parr:
+				_props[str(c["card"])] = c
+		print("[hd2d] 道具卡 %d 张" % _props.size())
+	else:
+		push_warning("[hd2d] 缺 props.json（先跑 bake_props.py）：" + pp)
 
 
 func _tex_abs(p: String) -> Texture2D:
@@ -306,6 +346,74 @@ func _median(arr: Array) -> float:
 	return float(a[a.size() / 2])
 
 
+## 道具卡：与建筑卡同一套 anchor 落位（基座落 z_off 平面；plat 版再加台面高）。
+func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstance3D:
+	var meta: Dictionary = _props.get(card, {})
+	if meta.is_empty():
+		push_warning("[hd2d] 无此道具卡: " + card)
+		return null
+	var units: Array = meta["units"]
+	var anc: Array = meta["anchor"]
+	var q := QuadMesh.new()
+	q.size = Vector2(float(units[0]) * S, float(units[1]) * S)
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	mi.position = Vector3(x, float(anc[2]) * S + (PLAT_H if plat else 0.0),
+		-float(anc[1]) * S + z_off)
+	mi.basis = _cam_basis()
+	var m := ShaderMaterial.new()
+	m.shader = CARD_SHADER
+	m.set_shader_parameter("albedo_tex", _tex_abs(_temp + PROP_DIR + card + ".png"))
+	m.set_shader_parameter("glow_tex", _tex_abs(_temp + PROP_DIR + card + "_glow.png"))
+	var px: Array = meta.get("px", [128, 128])
+	m.set_shader_parameter("tex_px", Vector2(float(px[0]), float(px[1])))
+	m.set_shader_parameter("relief", 4.5)
+	m.set_shader_parameter("alpha_cut", 0.4)
+	m.set_shader_parameter("glow_energy", 0.0)
+	m.set_shader_parameter("tint", Color(1, 1, 1))
+	_card_mats.append(m)
+	mi.material_override = m
+	mi.name = "Prop_" + card
+	_prop_root.add_child(mi)
+	return mi
+
+
+func _place_props() -> void:
+	for e in PROPS:
+		_spawn_prop(str(e["card"]), float(e["x"]), float(e["z"]), bool(e.get("plat", true)))
+
+
+## 门前径（创始人 2026-09-14：宏伟建筑门前有特别短的小路接进街道）。
+## dc_door_path decal 贴图尚未烘，先用低对比夯土贴条代替（楼脚 → 台肩 → 路面两段）。
+func _add_door_path(x: float, _front_z: float = 3.4) -> void:
+	# 两段：台面段（楼脚→台肩）+ 路面段（台肩→街面），在路肩石处断开避免穿插
+	var segs := [
+		{"z0": 1.0, "z1": 1.94, "y": PLAT_H + 0.012},
+		{"z0": 1.96, "z1": 3.4, "y": 0.03},
+	]
+	for s in segs:
+		var depth: float = float(s["z1"]) - float(s["z0"])
+		if depth <= 0.05:
+			continue
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(1.6, depth)
+		var mi := MeshInstance3D.new()
+		mi.mesh = pm
+		var gm := StandardMaterial3D.new()
+		var t := _tex_abs(_temp + GROUND_DIR + "rammed_earth_128.png")
+		if t != null:
+			gm.albedo_texture = t
+		gm.albedo_color = Color(0.88, 0.80, 0.66)
+		gm.roughness = 0.95
+		gm.uv1_scale = Vector3(1.6 / 4.0, depth / 4.0, 1.0)
+		gm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		mi.material_override = gm
+		mi.position = Vector3(x, float(s["y"]), (float(s["z0"]) + float(s["z1"])) * 0.5)
+		mi.name = "DoorPath"
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_ground_root.add_child(mi)
+
+
 ## 从 list[ci] 起顺位找第一张**画面宽 ≤ room** 的卡（放得下才用）；找不到返回 ""。
 ## 背景"缝"按卡画面宽算（含出檐），cottage_w6 画面 ~9.1 格、townhouse_w12 ~15.9 格。
 func _pick_card(list: Array, ci: int, room: float) -> String:
@@ -390,6 +498,10 @@ func _build_world() -> void:
 	_shadow_root.name = "BuildingShadows"
 	add_child(_shadow_root)
 	_place_rows()   # 前排吸附整格 + 三层背景留缝、后层插前层缝
+	_prop_root = Node3D.new()
+	_prop_root.name = "Props"
+	add_child(_prop_root)
+	_place_props()  # 街面小零件（摊/桶/车/井…）
 
 	# --- 地面：底衬（远端=末层实测根部，即真实地平线）+ 台面 + 辅助线 + 道路 ---
 	_ground_root = Node3D.new()
@@ -404,9 +516,11 @@ func _build_world() -> void:
 	var far_z: float = float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0))
 	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
 		0.0, 14.0, Color(1.16, 1.14, 1.10))
-	_add_platform()                       # 人行道台面（垫高 + PBR 法线）+ 台肩一排长条石
-	_add_width_guides()                   # 建筑宽度辅助线（每栋左右边界在地面上画线）
-	_add_horizon_guides()                 # 1/3 线（橙）+ 第三排基线（绿）
+	_add_platform()                       # 人行道台面（三段：中石板/两侧夯土+交接条）+ 台肩长条石
+	_add_width_guides()                   # 建筑宽度辅助线（--debug 才显示）
+	_add_horizon_guides()                 # 1/3 线（橙）+ 第三排基线（绿）（--debug 才显示）
+	for dx in _door_path_xs:
+		_add_door_path(float(dx), 3.6)    # 门前短径（楼脚→台肩→路面）
 	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
 		0.02, 10.0, Color(0.86, 0.89, 0.96))    # 道路：偏冷深石（与台面拉开）
 
@@ -484,7 +598,7 @@ func _spawn_char_host(px_scale: float = 1.0) -> void:
 	_char_host.name = "CharHost"
 	add_child(_char_host)
 	_char_host.set_px_scale(px_scale)
-	_char_host.build(self, "walk")
+	_char_host.build(self, "walk", TILT_DEG)
 	for e in CHARS:
 		_char_host.add_char(float(e["x"]), float(e["z"]), bool(e["flip"]))
 	_char_host.mark_regular()
@@ -541,11 +655,15 @@ func _gaps(occ: Array, lo: float = -40.0, hi: float = 40.0) -> Array:
 
 
 func _place_rows() -> void:
-	# 前排：吸附整格、**一格挨一格铺满整条可见街**（左右超出画框，不留空当）
+	# 前排：吸附整格、**一格挨一格铺满整条可见街**（左右超出画框，不留空当）。
+	# 进退错落（创始人 2026-09-14）：与路肩保持 0.2~1.1 格缝（此前贴死）；
+	# 少数退得更靠后；个别（~10%）不上台面直接落地（y=0 路面标高）。
 	var occ_front := []
 	var cur := -40.0
 	var names := ["cottage_w6", "house_w8", "shop_w8", "bakery_w8", "townhouse_w12",
-		"guildhall_w12", "smithy1_w8", "tavern_w12", "stable_w12"]
+		"guildhall_w12", "smithy1_w8", "tavern_w12", "stable_w12", "shelter_w6"]
+	var rng_f := RandomNumberGenerator.new()
+	rng_f.seed = 20260915
 	var ni := 0
 	while cur < 40.0:
 		var card: String = names[ni % names.size()]
@@ -554,9 +672,21 @@ func _place_rows() -> void:
 		if w < 1.0:
 			w = 8.0
 		var cx := cur + w * 0.5
-		var mi := _spawn_card(card, cx, 0.85)
-		mi.position.y += PLAT_H
+		# 进退：0.35~1.35 为主（楼根离台肩外缘留缝）、~12% 退到 1.6、~10% 落地面
+		var roll := rng_f.randf()
+		var z_off := 0.35 + rng_f.randf_range(0.0, 1.0)
+		var on_plat := true
+		if roll > 0.90:
+			z_off = 2.2 + rng_f.randf_range(0.0, 0.6)
+			on_plat = false        # 直接落地面（路面标高，不上台面）
+		elif roll > 0.78:
+			z_off = 1.6
+		var mi := _spawn_card(card, cx, z_off)
+		if on_plat:
+			mi.position.y += PLAT_H
 		_spawn_building_shadow(card, cx, mi)
+		if card == "guildhall_w12" or not on_plat:
+			_door_path_xs.append(cx)   # 宏伟建筑/落地建筑：门前短径
 		occ_front.append([cur, cur + w])
 		cur += w          # 一个格子挨着一个格子（0 缝）
 	_front_occ = occ_front
@@ -635,6 +765,8 @@ func _place_rows() -> void:
 
 
 func _add_width_guides() -> void:
+	if not bool(_opts["debug"]):
+		return
 	# **整格网格**（1 格 = 一条线，每 4 格加亮）+ 每栋建筑左右边界紫线（方便数几格宽）
 	var thin := StandardMaterial3D.new()
 	thin.albedo_color = Color(0.55, 0.95, 1.0, 0.55)
@@ -676,6 +808,8 @@ func _add_width_guides() -> void:
 
 
 func _add_horizon_guides() -> void:
+	if not bool(_opts["debug"]):
+		return
 	# 两条全屏水平辅助线（创始人 2026-09-14 要求；贴地 unshaded，无阴影）：
 	#   橙 = 屏幕 1/3 线（33.3% 从底）：第二排基线 + 第一排（+地面）屏幕区的上边界
 	#   绿 = 第三排（末层）基线 = 真实地平线（底衬远端收到同一点）
@@ -701,25 +835,62 @@ func _add_horizon_guides() -> void:
 
 
 func _add_platform() -> void:
-	# 人行道台面：整面垫高（PLAT_H）+ PBR（albedo + 法线，石块凸起见深度）
-	# 台肩 = 台面外缘**一排长条石**（现代人行道路缘那种），逐块长度抖动
-	# 台面：从**地平线**（远处 z=-60 与拉远底衬同远端）一直铺到台肩（z=1.95）
-	_add_ground_plane("band_shoulder_stone_128.png", -6.5, BAND_SIDEWALK.y,
-		PLAT_H, 5.0, Color(1.04, 1.00, 0.93))   # 台面：偏暖亮的浅石（与道路明显区分）
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20260917
-	var t := _tex_abs(_temp + GROUND_DIR + "src/band_kerb_stone_alb.png")
+	# 人行道台面（创始人 2026-09-14：路肩是**城中心专属**，城边是土路）：
+	#   中段（±28 格）= 石板台面 + 石路肩镶边（城中心）；
+	#   两侧 = 夯土台面 + 土坎镶边（近城边），材质在 ±28 格处交接。
+	_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
+	_add_ground_plane_at("rammed_earth_128.png", -42.0, 28.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
+	_add_ground_plane_at("rammed_earth_128.png", 42.0, 28.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
+	# 石↔土交接条（gtx 手工收边件，压在交接线上）
+	_add_decal("transitions/gtx_brick_gravel_road_v1.png", -28.0, PLAT_H + 0.008,
+		Vector2(4.8, 1.55))
+	_add_decal("transitions/gtx_brick_gravel_road_v2.png", 28.0, PLAT_H + 0.008,
+		Vector2(4.8, 1.55))
+	# 台肩镶边：中段石条 / 两侧土条（方形截面，高=深=台面高）
+	_kerb_run(-28.0, 28.0, "band_kerb_stone")
+	_kerb_run(-56.0, -28.0, "band_kerb_earth")
+	_kerb_run(28.0, 56.0, "band_kerb_earth")
+
+
+## 贴地 decal：单张 PNG 平铺一个 PlaneMesh（贴图原比例由调用者给世界尺寸）。
+func _add_decal(png_rel: String, x: float, y: float, size: Vector2) -> void:
+	var t := _tex_abs(_temp + GROUND_DIR + png_rel)
 	if t == null:
-		t = _tex_abs(_temp + GROUND_DIR + "band_kerb_stone_128.png")
-	var nt := _tex_abs(_temp + GROUND_DIR + "src/band_kerb_stone_nrm.png")
-	var x := -40.0
-	while x < 40.0:
-		var w: float = minf(rng.randf_range(1.7, 2.6), 40.0 - x)
+		return
+	var pm := PlaneMesh.new()
+	pm.size = size
+	var mi := MeshInstance3D.new()
+	mi.mesh = pm
+	var gm := StandardMaterial3D.new()
+	gm.albedo_texture = t
+	gm.roughness = 0.95
+	gm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	mi.material_override = gm
+	mi.position = Vector3(x, y, (BAND_SIDEWALK.x + BAND_SIDEWALK.y) * 0.5)
+	mi.name = "Decal_" + png_rel.get_file().get_basename()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_ground_root.add_child(mi)
+
+
+## 台肩镶边：沿 [x0,x1) 一排方形截面长条石（高=深=台面高），逐块长度抖动。
+func _kerb_run(x0: float, x1: float, tex_base: String) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260917 + int(x0)
+	var t := _tex_abs(_temp + GROUND_DIR + "src/" + tex_base + "_alb.png")
+	if t == null:
+		t = _tex_abs(_temp + GROUND_DIR + tex_base + "_128.png")
+	var nt := _tex_abs(_temp + GROUND_DIR + "src/" + tex_base + "_nrm.png")
+	var x := x0
+	while x < x1:
+		var w: float = minf(rng.randf_range(1.7, 2.6), x1 - x)
 		var bm := BoxMesh.new()
 		bm.size = Vector3(w * 0.96, PLAT_H, PLAT_H)   # 方形截面：高 = 深 = 台面高
 		var mi := MeshInstance3D.new()
 		mi.mesh = bm
-		# 顶面**压低一丝**（-0.01）避免与台面共面 z-fighting；沿台面前沿镶边
+		# 顶面压低一丝（-0.01）避免与台面共面 z-fighting；沿台面前沿镶边
 		mi.position = Vector3(x + w * 0.5, PLAT_H * 0.5 - 0.01,
 			BAND_SIDEWALK.y + PLAT_H * 0.35)
 		var gm := StandardMaterial3D.new()
@@ -730,6 +901,8 @@ func _add_platform() -> void:
 			gm.normal_texture = nt
 			gm.normal_scale = 1.0
 		gm.uv1_scale = Vector3(w / 1.2, PLAT_H / 1.2, 1.0)   # 1 UV ≈ 1.2 格：方石尺度正常
+		if tex_base != "band_kerb_stone":
+			gm.albedo_color = Color(0.82, 0.76, 0.66)        # 土坎：偏夯土色
 		gm.roughness = 0.90
 		mi.material_override = gm
 		mi.name = "PlatRim"

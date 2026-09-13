@@ -54,25 +54,26 @@ const CAM_CY := 11.0                     # 相机视线轴的世界高度
 const CAM_DIST := 40.0
 
 ## 道具（bake_props.py 从 props.py 库烘的卡，26° 与建筑卡同视角）。
-## 创始人 2026-09-14：小零件之前被回退掉了，要加回来。
-## plat=true → 摆在人行道台面上（y+PLAT_H，楼脚前带）；false → 路面（y=0，角色活动区）。
+## 摆位语义（复刻 1bb80d47 示例口径）：道具**填前排楼间空当**——`slot` = 前排
+## 空当序号（gap≥1.5 格的段，从左数），`dx` = 槽内偏移（格，0=居中）。
+## `plat=true` → 台面（楼脚前带，y+PLAT_H）；false → 路面（y=0）。
 const PROPS: Array = [
-	{"card": "market_stall", "x": -21.0, "z": 4.6, "plat": false},
-	{"card": "market_table", "x": -17.4, "z": 5.8, "plat": false},
-	{"card": "cart", "x": 12.4, "z": 5.2, "plat": false},
-	{"card": "log_pile", "x": -14.2, "z": 6.2, "plat": false},
-	{"card": "well", "x": -28.6, "z": 1.15, "plat": true},
-	{"card": "barrel", "x": -6.8, "z": 1.35, "plat": true},
-	{"card": "sack_stack", "x": -5.6, "z": 1.15, "plat": true},
-	{"card": "crate", "x": 17.9, "z": 1.3, "plat": true},
-	{"card": "barrel_stand", "x": 31.6, "z": 1.25, "plat": true},
-	{"card": "signboard", "x": 10.2, "z": 1.35, "plat": true},
-	{"card": "basket", "x": -33.4, "z": 1.3, "plat": true},
-	{"card": "lantern", "x": -2.0, "z": 1.35, "plat": true},
-	{"card": "bench", "x": 24.6, "z": 1.2, "plat": true},
-	{"card": "pot", "x": 36.4, "z": 1.25, "plat": true},
-	{"card": "grindstone", "x": 14.8, "z": 1.2, "plat": true},
-	{"card": "anvil", "x": 2.6, "z": 1.25, "plat": true},
+	{"card": "market_stall", "slot": 0, "dx": -0.8, "z": 4.4, "plat": false},
+	{"card": "market_table", "slot": 0, "dx": 1.0, "z": 5.6, "plat": false},
+	{"card": "produce_baskets", "slot": 0, "dx": 2.4, "z": 4.6, "plat": false},
+	{"card": "barrel", "slot": 1, "dx": -0.6, "z": 1.3, "plat": true},
+	{"card": "sack_stack", "slot": 1, "dx": 0.8, "z": 1.15, "plat": true},
+	{"card": "cart", "slot": 2, "dx": 0.0, "z": 5.2, "plat": false},
+	{"card": "crate", "slot": 2, "dx": 2.0, "z": 1.3, "plat": true},
+	{"card": "log_pile", "slot": 3, "dx": 0.0, "z": 6.0, "plat": false},
+	{"card": "well", "slot": 4, "dx": 0.0, "z": 1.1, "plat": true},
+	{"card": "anvil", "slot": 5, "dx": 0.0, "z": 1.2, "plat": true},
+	{"card": "grindstone", "slot": 5, "dx": -1.6, "z": 1.3, "plat": true},
+	{"card": "barrel_stand", "slot": 6, "dx": 0.0, "z": 1.25, "plat": true},
+	{"card": "basket", "slot": 7, "dx": -0.5, "z": 1.3, "plat": true},
+	{"card": "lantern", "slot": 7, "dx": 0.9, "z": 1.35, "plat": true},
+	{"card": "bench", "slot": 8, "dx": 0.0, "z": 1.2, "plat": true},
+	{"card": "pot", "slot": 9, "dx": 0.0, "z": 1.25, "plat": true},
 ]
 
 ## 街排：**只有临街一排**（创始人两次质疑"为什么好多层建筑"）。
@@ -143,6 +144,7 @@ var _card_root: Node3D
 var _prop_root: Node3D
 var _front_occ: Array = []
 var _door_path_xs: Array = []   # 需要门前短径的建筑 x（guildhall / 落地面建筑）
+var _prop_slots: Array = []     # 前排楼间空当 [x0,x1]（道具槽位）
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
@@ -160,9 +162,9 @@ var _bg_base_z := {}            # 背景层 -> 实测卡基线 z（辅助线/底
 var _bg_base_samples: Array = []  # 当前层各卡卡底 z 的采样（层结束取中位数）
 
 var _opts := {
-	"shots": "all", "perf": false, "res": "", "sv": "always",
+	"shots": "none", "perf": false, "res": "", "sv": "always",
 	"char": "blend", "tag": "", "svscale": "2", "flat": false, "debug": false,
-}
+}  # shots 默认 "none" = 静默常驻模式（游戏地图挂载用；probe 出图须显式 --shots=…）
 
 # 帧采样
 var _measuring := false
@@ -190,6 +192,12 @@ func _ready() -> void:
 		else:
 			print("[hd2d] pack 失败 err=", err)
 		get_tree().quit(0)
+		return
+	if str(_opts["shots"]) == "none":
+		# 静默常驻（游戏内地图模式）：白天全效档点亮场景即返回，不截屏不退出
+		_apply_light("day")
+		_apply_stage("c")
+		_update_px_size()
 		return
 	if bool(_opts["perf"]):
 		await _run_perf()
@@ -380,7 +388,12 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 
 func _place_props() -> void:
 	for e in PROPS:
-		_spawn_prop(str(e["card"]), float(e["x"]), float(e["z"]), bool(e.get("plat", true)))
+		var slot: int = int(e.get("slot", 0))
+		if slot >= _prop_slots.size():
+			continue
+		var span: Array = _prop_slots[slot]
+		var x: float = (float(span[0]) + float(span[1])) * 0.5 + float(e.get("dx", 0.0))
+		_spawn_prop(str(e["card"]), x, float(e["z"]), bool(e.get("plat", true)))
 
 
 ## 门前径（创始人 2026-09-14：宏伟建筑门前有特别短的小路接进街道）。
@@ -516,6 +529,7 @@ func _build_world() -> void:
 	var far_z: float = float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0))
 	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
 		0.0, 14.0, Color(1.16, 1.14, 1.10))
+	_add_sky_backdrop()                   # 原 2D 天空贴图（远山/树线）立于背景之后
 	_add_platform()                       # 人行道台面（三段：中石板/两侧夯土+交接条）+ 台肩长条石
 	_add_width_guides()                   # 建筑宽度辅助线（--debug 才显示）
 	_add_horizon_guides()                 # 1/3 线（橙）+ 第三排基线（绿）（--debug 才显示）
@@ -655,40 +669,51 @@ func _gaps(occ: Array, lo: float = -40.0, hi: float = 40.0) -> Array:
 
 
 func _place_rows() -> void:
-	# 前排：吸附整格、**一格挨一格铺满整条可见街**（左右超出画框，不留空当）。
-	# 进退错落（创始人 2026-09-14）：与路肩保持 0.2~1.1 格缝（此前贴死）；
-	# 少数退得更靠后；个别（~10%）不上台面直接落地（y=0 路面标高）。
+	# 前排：**gap 推进 + 站位抖动**（1bb80d47 示例口径）。
+	# 推进用**卡画面宽**（含出檐）——相邻建筑永不互相重叠（创始人 2026-09-14：
+	# "城市爱多大多大"，街长随建筑数量自然延展，禁止为塞进画框压缩间距）；
+	# 生成循环铺满可视范围+出框余量，可见窗口内保持 ~8 栋的密度。
+	# gap 以 0~1.5 格为主、偶有 2~5 格空当放道具；约 1/3 回退、~8% 落地面。
 	var occ_front := []
-	var cur := -40.0
-	var names := ["cottage_w6", "house_w8", "shop_w8", "bakery_w8", "townhouse_w12",
-		"guildhall_w12", "smithy1_w8", "tavern_w12", "stable_w12", "shelter_w6"]
+	var gap_slots: Array = []          # 空当 [x0,x1]（道具按槽位填，仅登记可见范围）
+	var names := ["cottage_w6", "shop_w8", "bakery_w8", "townhouse_w12",
+		"cottage_w6", "house_w8", "smithy1_w8", "tavern_w12", "shelter_w6", "guildhall_w12"]
+	var gaps := [1.2, 0.0, 2.2, 5.0, 1.2, 3.0, 0.0, 4.2, 1.0, 1.6]
 	var rng_f := RandomNumberGenerator.new()
-	rng_f.seed = 20260915
-	var ni := 0
-	while cur < 40.0:
-		var card: String = names[ni % names.size()]
-		ni += 1
+	rng_f.seed = 20260914
+	var cursor: float = -55.0           # 从画框（±37）左侧外起铺，铺到右侧外
+	var idx := 0
+	while cursor < 55.0:
+		var gap: float = float(gaps[idx % gaps.size()])
+		var card: String = str(names[idx % names.size()])
+		idx += 1
 		var w := _cw(card)
 		if w < 1.0:
 			w = 8.0
-		var cx := cur + w * 0.5
-		# 进退：0.35~1.35 为主（楼根离台肩外缘留缝）、~12% 退到 1.6、~10% 落地面
-		var roll := rng_f.randf()
-		var z_off := 0.35 + rng_f.randf_range(0.0, 1.0)
+		if gap >= 1.5 and cursor > -46.0 and cursor < 46.0:
+			gap_slots.append([cursor + 0.3, cursor + gap - 0.3])
+		cursor += gap
+		var cx: float = cursor + w * 0.5
+		# 站位抖动：1/3 回退 0.5~1.2、15% 凸前 0.2~0.4；~8% 落地面（不上台面）
+		var r := rng_f.randf()
+		var z_off := 0.55 + rng_f.randf_range(0.0, 0.8)
 		var on_plat := true
-		if roll > 0.90:
+		if r > 0.92:
 			z_off = 2.2 + rng_f.randf_range(0.0, 0.6)
-			on_plat = false        # 直接落地面（路面标高，不上台面）
-		elif roll > 0.78:
-			z_off = 1.6
+			on_plat = false        # 直接落地面（路面标高）
+		elif r < 0.33:
+			z_off += rng_f.randf_range(0.5, 1.2)
+		elif r < 0.48:
+			z_off -= rng_f.randf_range(0.2, 0.4)
 		var mi := _spawn_card(card, cx, z_off)
-		if on_plat:
+		if mi != null and on_plat:
 			mi.position.y += PLAT_H
 		_spawn_building_shadow(card, cx, mi)
 		if card == "guildhall_w12" or not on_plat:
 			_door_path_xs.append(cx)   # 宏伟建筑/落地建筑：门前短径
-		occ_front.append([cur, cur + w])
-		cur += w          # 一个格子挨着一个格子（0 缝）
+		occ_front.append([cursor, cursor + w])
+		cursor += w
+	_prop_slots = gap_slots
 	_front_occ = occ_front
 	# 三层背景（创始人 2026-09-14 定案，算法职责）：
 	#   · 每层楼与楼**留缝不贴死**；后层的楼**吸附进前层的缝隙**——从缝里透出
@@ -700,8 +725,8 @@ func _place_rows() -> void:
 	rng.seed = 20260914
 	var lists := [
 		["house_w8", "smithy1_w8", "tower_w6", "shop_w8", "house_w8", "bakery_w8"],
-		["townhouse_w12", "house_w8", "tower_w6", "shop_w8", "house_w8"],
-		["house_w8", "tower_w6", "shop_w8", "cottage_w6"],
+		["shop_w8", "smithy1_w8", "tower_w6", "shop_w8", "house_w8"],
+		["shop_w8", "tower_w6", "smithy1_w8", "cottage_w6"],
 	]
 	var prev_slots: Array = []      # 前一层楼的画面占用 [x0,x1]
 	for li in lists.size():
@@ -853,6 +878,42 @@ func _add_platform() -> void:
 	_kerb_run(-28.0, 28.0, "band_kerb_stone")
 	_kerb_run(-56.0, -28.0, "band_kerb_earth")
 	_kerb_run(28.0, 56.0, "band_kerb_earth")
+
+
+## 原天空贴图剪影板：复用 2D 游戏的 assets/sky/*（SkyDecor 同源），两张不透明
+## 剪影 quad（billboard 相机基）立在末层背景之后、底衬远端之前——基线落在地面内，
+## 不露"3D 天空直连地面"的缝，楼群缝隙里透出远山/树线。
+func _add_sky_backdrop() -> void:
+	# 原天空贴图剪影板：复用 2D 游戏的 assets/sky/*（SkyDecor 同源）。剪影 PNG 带
+	# alpha——必须开透明混合（否则透明区渲成黑带）；高度/饱和度按空气透视压低压淡，
+	# 立在末层背景之后、底衬远端之前（基线落在地面内，不露"3D 天空直连地面"的缝）。
+	var far_z: float = float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0))
+	var layers := [
+		{"tex": "bg_mountain_far.png", "dz": 2.0, "h": 8.0, "tint": Color(0.74, 0.79, 0.88)},
+		{"tex": "bg_trees_far.png", "dz": 5.0, "h": 5.5, "tint": Color(0.64, 0.70, 0.64)},
+	]
+	for L in layers:
+		var tex := _tex_abs(_root + "assets/sky/" + str(L["tex"]))
+		if tex == null:
+			print("[hd2d] 缺天空贴图，跳过: " + str(L["tex"]))
+			continue
+		var h: float = float(L["h"])
+		var aspect: float = tex.get_width() / float(tex.get_height())
+		var pm := QuadMesh.new()
+		pm.size = Vector2(h * aspect, h)
+		var mi := MeshInstance3D.new()
+		mi.mesh = pm
+		var gm := StandardMaterial3D.new()
+		gm.albedo_texture = tex
+		gm.albedo_color = L["tint"]
+		gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mi.material_override = gm
+		mi.basis = _cam_basis()
+		mi.position = Vector3(0, h * 0.5 * cos(deg_to_rad(TILT_DEG)) + 0.3, far_z - float(L["dz"]))
+		mi.name = "SkyBackdrop_" + str(L["tex"]).get_basename()
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_ground_root.add_child(mi)
 
 
 ## 贴地 decal：单张 PNG 平铺一个 PlaneMesh（贴图原比例由调用者给世界尺寸）。

@@ -52,6 +52,8 @@ const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/
 const _SIEGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/siege_battlefield.tscn")
 ## 森林附属区域场景（阶段 F）
 const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/forest_zone.tscn")
+# HD-2D 街景图（3D 原型接入验证场；静态布景，玩家 2D 实体浮于 3D 街景之上）
+const _HD2D_STREET_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_street.tscn")
 ## L1 八城邦聚落场景（P5 进城闭环；tools/worldgen/l1/settlement_mapgen.py 产出，
 ## map_id 与 l1_world.json 的 settlement.map_id 一一对应）
 const _L1_SETTLEMENT_SCENES: Array[PackedScene] = [
@@ -82,6 +84,7 @@ const BATTLEFIELD_MAP_ID := "battlefield"
 const SIEGE_MAP_ID := "siege_battlefield"
 ## 森林附属区域地图 ID（阶段 F）
 const FOREST_ZONE_MAP_ID := "forest_zone"
+const HD2D_STREET_MAP_ID := "hd2d_street"
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
 const PLAYER_SPAWN_X: float = 0.0
 ## NPC 村民数量（小镇生活批次 4 [提案/待定]：起步小镇人口 10——配比在岗
@@ -489,6 +492,8 @@ func _register_default_maps() -> void:
 	scene_loader.register_map(SIEGE_MAP_ID, _SIEGE_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 阶段 F：注册森林附属区域
 	scene_loader.register_map(FOREST_ZONE_MAP_ID, _FOREST_ZONE_SCENE, WorldAPI.MapType.VILLAGE)
+	# HD-2D 街景图（创始人 2026-09-14：接入游戏内场景；设置面板「调试→测试地图」可选）
+	scene_loader.register_map(HD2D_STREET_MAP_ID, _HD2D_STREET_SCENE, WorldAPI.MapType.VILLAGE)
 	# P5/D1：注册 L1 八城邦聚落图（城内边界不配 register_map_exit——玩家顶到边界
 	# 3 秒由 MapBoundaryDetector 开 L1 大图回战略图，双击下一城再进）
 	for i: int in _L1_SETTLEMENT_SCENES.size():

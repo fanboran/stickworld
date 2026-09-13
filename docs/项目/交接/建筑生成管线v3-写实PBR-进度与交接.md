@@ -236,6 +236,18 @@ python probe_city_plan.py                                  # 城市平面图（�
 - **纹理全部落 `res://tests/dev/proto_hd2d/tex/`**（建筑/道具/gtx 过渡，111 张）——`--save-scene` 外链化前提就位（待办①完成贴图侧）。
 - 验收产物：`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\` 下 `hd2d_g3_dof.png`（正常观感）/`hd2d_g3_flat.png`（无糊细节）/`hd2d_g3_debug.png`（辅助线）。
 
+**第三轮（2026-09-14，道具复刻 + 游戏接入）**
+- **道具摆位复刻 `1bb80d47` 示例口径**：前排改 gap 推进（0~1.5 格为主、偶有 2~5 格空当），道具按**空当槽位**摆放（slot+dx 引用，不再手撒坐标）。踩过的坑：推进宽度用「卡画面宽」会把街撑到 200+ 格（2/3 在画外）、用「建筑格宽」会让卡互相重叠——**正解 = 画面宽推进 + 生成循环铺满可视范围**（"城市爱多大多大"，不压缩间距）。
+- **HD-2D 街景接入游戏**（创始人 2026-09-14：直接接入游戏内场景要玩）：
+  - `proto_hd2d.gd` 加静默常驻模式（`--shots` 默认 `none`：不截屏不退出；probe 出图须显式传参）；
+  - 新地图 `hd2d_street`：宿主 `Hd2dStreetMap`（`modules/world/scripts/map/hd2d_street_map.gd`，extends MapBase 全套 duck API）+ 场景 `modules/world/scenes/maps/hd2d_street.tscn`（EntityHost 等节点齐全）；
+  - `game_root.gd` 注册（MapType.VILLAGE）——设置面板「调试→测试地图」自动出现，战略图 SettlementRef 改 map_id 即可正式接通；
+  - 存档：静态布景无专有状态（不实现 save_to_db，SaveHandler 守卫跳过），current_map_id 正常随档；玩家 2D 实体走 entities 表正常存取；
+  - 玩家=2D 火柴人浮于 3D 街景之上（canvas 层），WASD 可走——**最小可玩版**；3D 相机固定，玩家横移无视差（待接：玩家 x 映射 3D 相机横移）；
+  - 验证探针 `tests/dev/verify_hd2d_map.tscn`（GameRoot 完整装配链加载 hd2d_street → 截图 → 退出），实跑无报错、玩家生成、游戏 HUD/3D 街景同屏。
+- **天空复用**：`assets/sky/bg_mountain_far/bg_trees_far.png`（SkyDecor 同源贴图）做成剪影 quad 立于背景之后——剪影 PNG 必须开 `TRANSPARENCY_ALPHA`（否则透明区渲成黑带）；高度/饱和度按空气透视压低压淡。
+- 验收产物：`temp/proto_hd2d/hd2d_g6_sky.png`（街景成图）、`temp/proto_hd2d/verify_hd2d_map.png`（**游戏内实机截图**，完整 HUD+3D 街景+附身玩家）。
+
 **大项登记（下一阶段）**
 1. **城市搬运 HD-2D**（创始人 2026-09-14 指令）：以 `city_layout.py` 的开局城市数据（村档）驱动 HD-2D 场景——建筑卡按布局摆放、火柴人工作场所（铁匠铺前铁匠等）一并搬入；2D 原型中已译未译内容以该轮为准对账。
 2. **后排动态出现逻辑**：后排背景随前排建筑数量自适应出现/消失（游戏运行时规则，接入时实现）。

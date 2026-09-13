@@ -513,8 +513,9 @@ func _place_rows() -> void:
 		occ_front.append([cur, cur + w])
 		cur += w + 1.0
 	# 三层背景：第二层插第一层的缝、第三层插第二层的缝；末层即"真实地平线"
-	var bg := ["tower_w6", "cathedral_w16", "townhouse_w12", "tower_w6",
-		"house_w8", "guildhall_w12", "tower_w6", "house_w8"]
+	# 近小远大：第一层小民居/塔，大教堂/大会堂放最远层（否则近处一块巨板悬浮感）
+	var bg := ["house_w8", "tower_w6", "house_w8", "townhouse_w12", "house_w8",
+		"tower_w6", "guildhall_w12", "cathedral_w16"]
 	var layer := occ_front
 	var ci := 0
 	for lz in [SKYLINE_Z, SKYLINE_Z - 4.0, SKYLINE_Z - 8.0]:

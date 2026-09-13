@@ -352,7 +352,9 @@ func _build_world() -> void:
 	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
 	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
 	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
-	_add_ground_plane("rammed_earth_128.png", -60.0, 0.0,
+	# 真实地平线 = 末层背景根部（SKYLINE_Z-8）；地面远端收到同值，天空不再露出裸地
+	const FAR_Z := -20.0
+	_add_ground_plane("rammed_earth_128.png", FAR_Z, 0.0,
 		0.0, 14.0, Color(1.16, 1.14, 1.10))
 	_add_platform()                       # 人行道台面（垫高 + PBR 法线）+ 台肩一排长条石
 	_add_width_guides()                   # 建筑宽度辅助线（每栋左右边界在地面上画线）
@@ -366,14 +368,7 @@ func _build_world() -> void:
 	_shadow_root = Node3D.new()
 	_shadow_root.name = "BuildingShadows"
 	add_child(_shadow_root)
-	for e in FRONT_ROW:
-		# 建筑落在垫高的台面内：离台肩的远近按条目错开（有的贴近台肩、有的退一点点）
-		var zb: float = 0.55 + float(abs(int(e["x"])) % 3) * 0.42
-		var mi := _spawn_card(str(e["card"]), float(e["x"]), zb)
-		mi.position.y += PLAT_H
-		_spawn_building_shadow(str(e["card"]), float(e["x"]), mi)
-	for e in SKYLINE_ROW:
-		_spawn_card(str(e["card"]), float(e["x"]), SKYLINE_Z, true)
+	_place_rows()   # 前排吸附整格 + 三层背景按缝隙算法后层插前层
 
 	# --- 灯笼点光源（暖光；让"真 3D 光照"这条线可验证）---
 	_lamp_root = Node3D.new()
@@ -483,6 +478,60 @@ func _spawn_building_shadow(card: String, x: float, mi: MeshInstance3D) -> void:
 ##   · 沿 x 切成 30 段，每段前后边缘各抖 ±0.2 格 → 打断直线边，读作被啃噬的碎块；
 ##   · tint 0.78（贴图均值 0.588 → 有效 ≈0.46）与道路（0.455）同档，不再比路面浅一档。
 ## 固定的"路缘"整条已被去掉 —— 干净的直线边正是创始人说的"生硬"来源。
+func _cw(card: String) -> float:
+	var meta: Dictionary = _cards.get(card, {})
+	if meta.is_empty():
+		return 8.0
+	return float(meta["units"][0]) * S
+
+
+func _gaps(occ: Array) -> Array:
+	# 已占用区间 [x0,x1] 的补集（在 [-40, 40] 内）——用于"后层插前层缝"
+	var s := occ.duplicate()
+	s.sort_custom(func(a, b): return float(a[0]) < float(b[0]))
+	var out := []
+	var cur := -40.0
+	for iv in s:
+		if float(iv[0]) > cur + 0.5:
+			out.append([cur, float(iv[0])])
+		cur = maxf(cur, float(iv[1]))
+	if cur < 39.5:
+		out.append([cur, 40.0])
+	return out
+
+
+func _place_rows() -> void:
+	# 前排：**吸附整格**顺序排布（整格宽 + 1 格缝）
+	var occ_front := []
+	var cur := -23.0
+	for e in FRONT_ROW:
+		var w := _cw(str(e["card"]))
+		var cx := cur + w * 0.5
+		var mi := _spawn_card(str(e["card"]), cx, 0.85)
+		mi.position.y += PLAT_H
+		_spawn_building_shadow(str(e["card"]), cx, mi)
+		occ_front.append([cur, cur + w])
+		cur += w + 1.0
+	# 三层背景：第二层插第一层的缝、第三层插第二层的缝；末层即"真实地平线"
+	var bg := ["tower_w6", "cathedral_w16", "townhouse_w12", "tower_w6",
+		"house_w8", "guildhall_w12", "tower_w6", "house_w8"]
+	var layer := occ_front
+	var ci := 0
+	for lz in [SKYLINE_Z, SKYLINE_Z - 4.0, SKYLINE_Z - 8.0]:
+		var occ := []
+		for g in _gaps(layer):
+			var gw: float = float(g[1]) - float(g[0])
+			if gw < 3.0:
+				continue
+			var card: String = bg[ci % bg.size()]
+			ci += 1
+			var w2: float = minf(_cw(card), gw)
+			var cx2: float = (float(g[0]) + float(g[1])) * 0.5
+			_spawn_card(card, cx2, lz, true)
+			occ.append([cx2 - w2 * 0.5, cx2 + w2 * 0.5])
+		layer = occ
+
+
 func _add_width_guides() -> void:
 	# **整格网格**（1 格 = 一条线，每 4 格加亮）+ 每栋建筑左右边界紫线（方便数几格宽）
 	var thin := StandardMaterial3D.new()
@@ -531,7 +580,7 @@ func _add_platform() -> void:
 	# 人行道台面：整面垫高（PLAT_H）+ PBR（albedo + 法线，石块凸起见深度）
 	# 台肩 = 台面外缘**一排长条石**（现代人行道路缘那种），逐块长度抖动
 	# 台面：从**地平线**（远处 z=-60 与拉远底衬同远端）一直铺到台肩（z=1.95）
-	_add_ground_plane("band_shoulder_stone_128.png", -60.0, BAND_SIDEWALK.y,
+	_add_ground_plane("band_shoulder_stone_128.png", -20.0, BAND_SIDEWALK.y,
 		PLAT_H, 5.0, Color(1.04, 1.00, 0.93))   # 台面：偏暖亮的浅石（与道路明显区分）
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260917

@@ -82,7 +82,7 @@ const SKYLINE_Z := -24.0
 ## 路肩前移 0.4 格（屏幕上约 3px）后深度测试干净，且那 3px 正好留给建筑的接触阴影，
 ## 形成"建筑站在路肩上、脚下有一线接地影"的正确观感。
 const BAND_SIDEWALK := Vector2(0.42, 1.95)  # 路肩（建筑根部 → 外缘；细条，占位）
-const PLAT_H := 0.30                        # 人行道台面高（格）≈8px：整面垫高，建筑落在台面上
+const PLAT_H := 0.65                        # 人行道台面高（格）≈17px：整面垫高，建筑落在台面上
 const BAND_ROAD := Vector2(1.9, 46.0)       # 道路（角色活动面，铺到画面外）
 ## 建筑接地影的 z 区间**必须整段落在路肩之外**（z ≥ 2.0）：
 ## 影和路肩都是贴地水平面，z 区间一旦重叠，深度值必然相等 → z-fighting。
@@ -458,20 +458,27 @@ func _add_platform() -> void:
 		PLAT_H, 3.6, Color(0.88, 0.87, 0.84))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260917
-	var t := _tex_abs(_temp + GROUND_DIR + "band_kerb_stone_128.png")
+	var t := _tex_abs(_temp + GROUND_DIR + "src/band_kerb_stone_alb.png")
+	if t == null:
+		t = _tex_abs(_temp + GROUND_DIR + "band_kerb_stone_128.png")
+	var nt := _tex_abs(_temp + GROUND_DIR + "src/band_kerb_stone_nrm.png")
 	var x := -40.0
 	while x < 40.0:
-		var w: float = minf(rng.randf_range(0.8, 1.3), 40.0 - x)
+		var w: float = minf(rng.randf_range(1.7, 2.6), 40.0 - x)
 		var bm := BoxMesh.new()
-		bm.size = Vector3(w * 0.95, PLAT_H, 0.42)
+		bm.size = Vector3(w * 0.96, PLAT_H, 0.72)
 		var mi := MeshInstance3D.new()
 		mi.mesh = bm
 		mi.position = Vector3(x + w * 0.5, PLAT_H * 0.5,
-			BAND_SIDEWALK.y + 0.12)
+			BAND_SIDEWALK.y + 0.20)
 		var gm := StandardMaterial3D.new()
 		if t != null:
 			gm.albedo_texture = t
-		gm.uv1_scale = Vector3(w / 1.1, 1.0, 1.0)
+		if nt != null:
+			gm.normal_enabled = true
+			gm.normal_texture = nt
+			gm.normal_scale = 1.0
+		gm.uv1_scale = Vector3(w / 2.2, PLAT_H / 0.9, 1.0)
 		gm.roughness = 0.90
 		mi.material_override = gm
 		mi.name = "PlatRim"
@@ -518,9 +525,21 @@ func _add_ground_plane_at(tex_name: String, cx: float, width: float,
 	mi.mesh = pm
 	mi.position = Vector3(cx, y, (z0 + z1) * 0.5)
 	var gm := StandardMaterial3D.new()
-	var t := _tex_abs(_temp + GROUND_DIR + tex_name)
+	# 优先高清 albedo（src/<key>_alb.png = 512），否则退回游戏档 <key>
+	var base := tex_name.get_basename()
+	var t := _tex_abs(_temp + GROUND_DIR + "src/" + base + "_alb.png")
+	if t == null:
+		t = _tex_abs(_temp + GROUND_DIR + tex_name)
 	if t != null:
 		gm.albedo_texture = t
+	# 法线（深度）：src/<key>_nrm.png
+	var nt := _tex_abs(_temp + GROUND_DIR + "src/" + base + "_nrm.png")
+	if nt == null:
+		nt = _tex_abs(_temp + GROUND_DIR + "src/" + base + "_nrm_512.png")
+	if nt != null:
+		gm.normal_enabled = true
+		gm.normal_texture = nt
+		gm.normal_scale = 1.0
 	gm.albedo_color = tint
 	gm.roughness = 0.95
 	gm.uv1_scale = Vector3(width / tile, depth / tile, 1.0)
@@ -541,9 +560,21 @@ func _add_ground_plane(tex_name: String, z0: float, z1: float, y: float,
 	mi.mesh = pm
 	mi.position = Vector3(0, y, (z0 + z1) * 0.5)
 	var gm := StandardMaterial3D.new()
-	var t := _tex_abs(_temp + GROUND_DIR + tex_name)
+	# 优先高清 albedo（src/<key>_alb.png = 512），否则退回游戏档 <key>
+	var base := tex_name.get_basename()
+	var t := _tex_abs(_temp + GROUND_DIR + "src/" + base + "_alb.png")
+	if t == null:
+		t = _tex_abs(_temp + GROUND_DIR + tex_name)
 	if t != null:
 		gm.albedo_texture = t
+	# 法线（深度）：src/<key>_nrm.png
+	var nt := _tex_abs(_temp + GROUND_DIR + "src/" + base + "_nrm.png")
+	if nt == null:
+		nt = _tex_abs(_temp + GROUND_DIR + "src/" + base + "_nrm_512.png")
+	if nt != null:
+		gm.normal_enabled = true
+		gm.normal_texture = nt
+		gm.normal_scale = 1.0
 	gm.albedo_color = tint
 	gm.roughness = 0.95
 	gm.uv1_scale = Vector3(600.0 / tile, depth / tile, 1.0)

@@ -135,14 +135,35 @@ def trim_to_event(x: np.ndarray, fs: int, lead_db: float = -70.0,
 
 # ─────────────────────────── 立体声化与母带链 ──────────────────────────
 
+def _env_follow(m: np.ndarray, fs: int, hold_ms: float = 10.0,
+                release_ms: float = 80.0) -> np.ndarray:
+    """信号包络（峰值保持 + 单极点慢落），用来把去相关噪声锁在声音包络上。
+
+    为什么必须有它：噪声若按**整段 RMS** 缩放，就会在衰减 40~80dB 的尾音里
+    裸露出一条常驻噪声底——实测 `game_started` 尾巴 5–12kHz 侧声道 −45dBFS、
+    中声道 −85dBFS（侧/中 +40dB），听感就是"电流麦"。锁到包络上，噪声随声音一起消失。
+    """
+    from scipy.ndimage import maximum_filter1d
+    a = np.abs(np.asarray(m, dtype=np.float64))
+    w = max(1, int(hold_ms * fs / 1000.0))
+    peak = maximum_filter1d(a, size=w, mode="nearest")
+    g = float(np.exp(-1.0 / max(release_ms * fs / 1000.0, 1.0)))
+    return signal.lfilter([1.0 - g], [1.0, -g], peak)
+
+
 def stereoize(mono: np.ndarray, fs: int, width: float = 0.0, seed: int = 0,
               bass_mono_hz: float = 200.0) -> np.ndarray:
     """单声道 → 立体声。
 
     `width=0` 得到**左右完全相同**（双单声道）：最稳、折叠单声道零损失，UI 反馈
     与采集敲击都用它——这类音是被"点"出来的，加宽度只会让它在耳机里偏移。
-    `width>0` 时往侧信号注入少量去相关噪声并做低频单声道化（复用 musiclib
-    的 `dsp.widen`，其低频单声道化是"直接对侧信号高通"的干净写法）。
+    `width>0` 时往侧信号注入少量**包络锁定**的去相关噪声并做低频单声道化
+    （复用 musiclib 的 `dsp.widen`，其低频单声道化是"直接对侧信号高通"的干净写法）。
+
+    噪声的两条硬约束（踩过"电流麦"的坑）：
+      1. **必须锁包络**（`_env_follow`）——按整段 RMS 缩放的噪声会在尾音里裸露成底噪；
+      2. **频带压在中频**（300–3000Hz）——`dsp.widen` 会高通侧声道，噪声若取到 9kHz，
+         高通后剩下的正好是最刺耳的"嘶嘶"段。
     """
     m = np.asarray(mono, dtype=np.float64)
     if m.ndim == 2:
@@ -150,14 +171,16 @@ def stereoize(mono: np.ndarray, fs: int, width: float = 0.0, seed: int = 0,
     y = np.repeat(m[:, None], 2, axis=1)
     if width <= 0.0:
         return y
-    rng = np.random.default_rng(int(seed) & 0x7FFFFFFF)
-    # 用一小段真正去相关的噪声喂侧信号；dsp.widen 会负责低频单声道化
     n = len(m)
-    side = SYN.band_noise(n / fs, fs, int(seed) + 991, 300.0, 9000.0,
+    side = SYN.band_noise(n / fs, fs, int(seed) + 991, 300.0, 3000.0,
                           order=2, color="pink", rms=1.0)[:n]
     if len(side) < n:
         side = np.pad(side, (0, n - len(side)))
-    side = side * float(np.sqrt(np.mean(m ** 2)) + 1e-12) * width * 0.5
+    # 归一化包络（峰值 = 1）+ 按整段 RMS 定标：**最响处的噪声量与旧口径一致**
+    # （那一瞬被声音掩蔽、听不出），但离开最响处就随包络一起掉下去 → 尾音无底噪。
+    env = _env_follow(m, fs)
+    env = env / (float(env.max()) + 1e-12)
+    side = side * env * float(np.sqrt(np.mean(m ** 2)) + 1e-12) * width * 0.5
     lr = np.stack([m + side, m - side], axis=1)
     return dsp.widen(lr, amount=1.0, bass_mono_hz=bass_mono_hz, fs=fs)
 

@@ -67,6 +67,9 @@ BUSY_TOTAL_MAX = 320.0       # 2–5kHz 累计占用（ms）
 LONG_MS = 900.0              # "长音"门槛（ms）
 LONG_BUSY_RUN_MAX = 80.0     # 长音的 2–5kHz 连续占用上限（ms）
 DC_MAX = 0.005               # 直流偏移上限
+# 尾音侧声道噪声底（"电流声"）：绝对电平上限（dBFS）与谱平坦度下限（两者同时成立才判违规）
+TAIL_SIDE_MAX_DBFS = -50.0
+TAIL_SIDE_FLAT_MIN = 0.4
 LAYERS = ("ui", "harvest", "lifecycle", "combat_fx", "battle")
 
 COLUMNS = [
@@ -106,6 +109,7 @@ def collect() -> list:
                                dur_range_ms=r.dur_ms)
             rep["interior_dropouts"] = interior_dropouts(
                 x.mean(axis=1), sr, thresh_db=-60.0, min_ms=50.0)
+            rep["tail_side_floor"] = tail_side_noise_floor(x, sr)
             rep.update({
                 "file": p.relative_to(REPO).as_posix(),
                 "bytes": p.stat().st_size,
@@ -142,6 +146,40 @@ def collect_kept() -> list:
                                 else round(float(loudness.integrated_lufs(x, sr)), 2)),
         })
     return out
+
+
+def tail_side_noise_floor(x: np.ndarray, fs: int) -> dict | None:
+    """抓"电流声"：尾音里**侧声道的常驻噪声底**。
+
+    背景（真踩过）：`stereoize` 早期把去相关噪声按**整段 RMS** 缩放，于是尾音衰减
+    40~80dB 后，噪声还停在原地，在侧声道裸露出一条常驻 5–12kHz 底噪——立体声下听感
+    就是"电流麦"。既有指标全测不出它：积分响度/真峰值/削波/2–5kHz 占用都不看
+    "侧声道相对内容有没有底噪"。判据两条同时成立才算违规：
+      ① 尾巴（后 40%）侧声道 5–12kHz 绝对电平 > TAIL_SIDE_MAX_DBFS；
+      ② 该段侧声道谱平坦度高（噪声而非内容）。
+    双单声道（width=0）无侧信号，直接跳过。
+    """
+    if x.ndim != 2 or x.shape[1] < 2:
+        return None
+    L, R = x[:, 0].astype(np.float64), x[:, 1].astype(np.float64)
+    side = (L - R) / 2.0
+    if float(np.max(np.abs(side))) <= 1e-6:
+        return None
+    n = len(side)
+    tail = side[int(0.6 * n):]
+    if len(tail) < int(0.02 * fs):
+        return None
+    from scipy import signal as _sig
+    ny = fs / 2.0
+    b, a = _sig.butter(4, [5000.0 / ny, min(12000.0, ny * 0.98) / ny], btype="band")
+    e = _sig.lfilter(b, a, tail)
+    dbfs = float(20.0 * np.log10(float(np.sqrt(np.mean(e ** 2))) + 1e-20))
+    f, P = _sig.welch(tail, fs=fs, nperseg=min(2048, len(tail)))
+    sel = (f >= 2000.0) & (f <= 10000.0)
+    Ps = P[sel]
+    flat = float(np.exp(np.mean(np.log(Ps + 1e-20))) / (np.mean(Ps) + 1e-20))
+    return {"dbfs": round(dbfs, 1), "flat": round(flat, 3),
+            "bad": bool(dbfs > TAIL_SIDE_MAX_DBFS and flat > TAIL_SIDE_FLAT_MIN)}
 
 
 # ─────────────────────────────── 判定 ─────────────────────────────────
@@ -202,6 +240,11 @@ def check_reports(reports: list, missing: list) -> tuple:
                        % (r["name"], r["interior_dropouts"]))
         if abs(r["dc_offset"]) > DC_MAX:
             bad.append("%s: 直流偏移 %.4f" % (r["name"], r["dc_offset"]))
+        tsf = r.get("tail_side_floor")
+        if tsf and tsf["bad"]:
+            bad.append("%s: 尾音侧声道有常驻噪声底 %.1f dBFS（平坦度 %.2f）"
+                       "——听感是「电流声」，检查 stereoize 的去相关噪声是否锁了包络"
+                       % (r["name"], tsf["dbfs"], tsf["flat"]))
 
     # ② 层内一致性 + 覆盖件
     layer_facts = []

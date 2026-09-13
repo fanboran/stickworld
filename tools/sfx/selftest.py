@@ -28,7 +28,7 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "music"))
 
-from musiclib import loudness                        # noqa: E402
+from musiclib import dsp, loudness                    # noqa: E402
 from sfxlib import design as D, post, synth as S      # noqa: E402
 
 SR = 48000
@@ -341,6 +341,32 @@ def test_mastering() -> None:
           fold_excess <= 1.5,
           "%.2f LU（基线双单声道 %.2f LU / 本件 %.2f LU）"
           % (fold_excess, base["mono_loss_lu"], mc["mono_loss_lu"]))
+
+    # 去相关噪声必须**锁包络**：否则尾音衰减后噪声还停在原地，立体声下就是「电流声」。
+    # 实战缺陷：按整段 RMS 缩放 → 实测 game_started 尾巴 5–12kHz 侧/中 +40dB。
+    _n = int(1.2 * SR)
+    _t = np.arange(_n) / SR
+    decay = np.exp(-_t / 0.18) * np.sin(2.0 * np.pi * 220.0 * _t)
+    _bad_side = S.band_noise(1.2, SR, 991, 300.0, 9000.0, order=2, color="pink",
+                             rms=1.0)[:_n]
+    _bad_side = _bad_side * float(np.sqrt(np.mean(decay ** 2))) * 0.2 * 0.5
+    lr_bad = dsp.widen(np.stack([decay + _bad_side, decay - _bad_side], axis=1),
+                       amount=1.0, bass_mono_hz=200.0, fs=SR)
+    lr_ok = post.stereoize(decay, SR, width=0.2, seed=991)
+    _tail = slice(int(0.6 * _n), None)
+    from scipy import signal as _s
+    _ny = SR / 2.0
+    _bb, _aa = _s.butter(4, [5000.0 / _ny, 12000.0 / _ny], btype="band")
+
+    def _side_tail_db(lr):
+        s = (lr[_tail, 0] - lr[_tail, 1]) / 2.0
+        return 20 * np.log10(float(np.sqrt(np.mean(_s.lfilter(_bb, _aa, s) ** 2))) + 1e-20)
+
+    _db_bad, _db_ok = _side_tail_db(lr_bad), _side_tail_db(lr_ok)
+    check("stereoize：反例（噪声按整段 RMS 缩放）确实留下尾音噪声底",
+          _db_bad > -50.0, "侧声道尾巴 5–12kHz = %.1f dBFS" % _db_bad)
+    check("stereoize：实现（噪声锁包络）尾音无噪声底",
+          _db_ok < -60.0, "侧声道尾巴 5–12kHz = %.1f dBFS" % _db_ok)
 
     # 2–5kHz 占用时长：已知答案
     nz = S.band_noise(0.2, SR, 1, 2500.0, 4500.0)

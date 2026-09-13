@@ -239,6 +239,10 @@ var _sun: DirectionalLight3D
 var _fill: DirectionalLight3D
 var _ground_root: Node3D
 var _card_root: Node3D
+var _shadow_root: Node3D
+const BUILDING_SHADOW_SHADER := preload("res://tests/dev/proto_hd2d/building_shadow.gdshader")
+const BSHADOW_Z := 3.3
+const BSHADOW_DEPTH := 2.6
 var _apron_root: Node3D
 var _prop_root: Node3D
 var _backdrop_root: Node3D
@@ -379,6 +383,24 @@ func _card_cells(card: String) -> float:
 	return float(m.get("cells", 8))
 
 
+func _spawn_building_shadow(card: String, x: float, mi: MeshInstance3D) -> void:
+	# 建筑接地投影（早上那版的阳光感来源）——创始人指名恢复
+	var meta: Dictionary = _cards.get(card, {})
+	if meta.is_empty() or mi == null:
+		return
+	var w := float(meta["units"][0]) * S
+	var sq := QuadMesh.new()
+	sq.size = Vector2(w * 0.86, BSHADOW_DEPTH)
+	var sh := MeshInstance3D.new()
+	sh.mesh = sq
+	var sm := ShaderMaterial.new()
+	sm.shader = BUILDING_SHADOW_SHADER
+	sh.material_override = sm
+	sh.position = Vector3(x, 0.07, BSHADOW_Z)
+	sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_shadow_root.add_child(sh)
+
+
 func _spawn_card(card: String, x: float, z_off: float, mode: String = "main") -> MeshInstance3D:
 	var meta: Dictionary = _cards.get(card, {})
 	if meta.is_empty():
@@ -492,12 +514,21 @@ func _build_world() -> void:
 	# 地面带 = **一整片可行走区**（屏幕下方约 1/3，土/草/路面连续铺）。
 	# 没有建筑的地方全是可走地面；建筑只靠自带"落地裙边"挤占其中一块。
 	# 按区混材质（补充规格 2）：街心 → 近侧 → 外缘，各换一档，读作一条有肌理的街。
-	_walkable_ground(HORIZON_Z, ROAD_NEAR_Z)
+	# 地面（恢复"最开始的砖石地面"版，创始人指名）：
+	#   远景低对比底衬 + 整条道路砖石带；建筑肩台随卡片生成（band_shoulder_stone）
+	_add_ground_plane("rammed_earth_128.png", -60.0, 0.0,
+		0.0, 14.0, Color(1.16, 1.14, 1.10))
+	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
+		0.02, 10.0, Color(1.0, 1.0, 1.02))
+	_add_kerbs()   # 路坎：沿街长条，只长在硬化街区面宽内（|x| ≤ BLOCK_HALF，断续）
 
 	# --- 建筑：临街一排（按累计 gap 排布，街道越过画框两侧）+ 路肩石板场 ---
 	_card_root = Node3D.new()
 	_card_root.name = "Cards"
 	add_child(_card_root)
+	_shadow_root = Node3D.new()
+	_shadow_root.name = "BuildingShadows"
+	add_child(_shadow_root)
 	_apron_root = Node3D.new()
 	_apron_root.name = "Aprons"
 	add_child(_apron_root)
@@ -521,7 +552,8 @@ func _build_world() -> void:
 		var kind := str(e["kind"])
 		# **前后关系按类型定**（任务 2）：不再随机抖动整排 —— 气派建筑/工坊后退
 		# （dz<0，远离相机）、店铺/民居贴线（dz=0）；参差感交给空当长短与棚位前凸。
-		_spawn_card(str(e["card"]), cx, MAIN_BASE_Z + dz)
+		var mi := _spawn_card(str(e["card"]), cx, MAIN_BASE_Z + dz)
+		_spawn_building_shadow(str(e["card"]), cx, mi)
 		_add_apron(cx, cells, dz, kind)
 		if dz < -0.35:
 			# 门前**踩踏衔接痕**（不是路）：只贴门口那一小段（≈ 十几 px），
@@ -763,7 +795,7 @@ func _gap_mid(idx: int) -> float:
 
 ## 道具落位（四张相对表）：空当/门前/工坊前场/店面棚位
 func _place_props() -> void:
-	for e in GAP_PROPS:
+	for e in []:  # 创始人：移除建筑前的小地摊（GAP_PROPS 停用）
 		_spawn_prop(str(e["card"]), _gap_mid(int(e["slot"])) + float(e.get("dx", 0.0)),
 			MAIN_BASE_Z + float(e["z"]), float(e.get("lift", 0.0)),
 			float(e.get("sc", 1.0)))

@@ -9,12 +9,16 @@
 
 约定（与 buildings.py 的公共 API 对齐，**不修改 buildings.py**）
 --------------
-* **正面 = -Y**（与 `window(face_dir=-1.0)`、`door()` 一致）。道具一律摆在建筑前墙
-  面之外：`y = front_y - depth/2`，`front_y` 取 `buildings.measure(ob)["y"][0]`。
+* **正面 = -Y**（与 `window(face_dir=-1.0)`、`door()` 一致）。**落地**道具摆在建筑
+  **包围盒最外沿**之外：`y = front_y - depth/2`，`front_y` 取 `measure(ob)["y"][0]`。
+  **挂墙件**不能按最外沿贴 —— 深门廊/雨棚立面上最外沿比真实墙面靠前 1.2~1.8m，
+  按它挂会整排悬空；挂墙件一律贴 `wall_y_of(...)` 求出的**真实前墙面**（可传
+  `wall_y` / `wall_depth`，缺省按 `WALL_PROTRUSION` 从最外沿内退）。
 * z 向上，地面 z=0；`box_bottom` 的 xy 是水平中心。
 * 确定性：所有随机走 `random.Random(seed)`；同一 seed 逐顶点同结果。
 * 材质名沿用 buildings 的材质表（见 `buildings.SPEC_COLOR` / `MATERIAL_ALIAS`）。
-  深腔用 `glass`（近黑、非金属），发热用 `fire` / `ember`（自发光）。
+  深腔用 `glass`（近黑、非金属），发热用 `fire` / `ember`（自发光）；**要看清内胆
+  的照明玻璃**（灯笼/烛罩/蒸馏甑）走 `clear_glass()`，不用低透射的 `glass`/`glass_lead`。
 
 跑法：装配器里 `import props as P; P.dress(b, "smithy", W, front_y, seed=...)`。
 """
@@ -47,6 +51,24 @@ def _arc_pts(cx, cz, y, r, a0, a1, steps=10):
         a = a0 + (a1 - a0) * t
         out.append((cx + r * math.cos(a), y, cz + r * math.sin(a)))
     return out
+
+
+def clear_glass():
+    """**能看见内胆的照明玻璃 key**：优先 `glazing_win`（并行新增，alpha 真透明），
+    未注册则回退 `glass_clear`。
+
+    为什么不能沿用 `glass`（→ glass_win）或 `glass_lead`：两者透射都低
+    （glass_lead 最高 0.30），灯笼/烛罩罩上后灯芯与光核被吃掉，游戏尺寸下整盏
+    读作"黑灯笼"。`glass_lead` 只留给"灯没点着"的铅条分格款。
+
+    **只给"要看穿罩子看里面"的件用**（灯笼 / 六棱玻璃灯 / 烛罩）。玻璃器皿
+    （蒸馏甑 / 瓶 / 高脚杯）的**形体本身**就是读法，要用有色半透的
+    `glass_bottle` / `glass_clear` —— 全透明的 glazing_win 会让它们整个消失。
+    """
+    try:
+        return B.magic_key(("glazing_win", "glass_clear"))
+    except Exception:
+        return "glass_clear"
 
 
 # ================================================================ 容器类
@@ -316,8 +338,14 @@ def signboard(b, x=0.0, y=0.0, z=0.0, w=54.0, h=40.0, mat="wood_dark",
 
 
 def lantern(b, x=0.0, y=0.0, z=0.0, s=17.0, h=26.0, bracket=True, lit=True,
-            glass="glass"):
-    """灯笼/风灯（铁框 + 玻璃四面 + 顶盖 + 暖光核心）。"""
+            glass=None):
+    """灯笼/风灯（铁框 + 玻璃四面 + 顶盖 + 暖光核心）。
+
+    罩体默认走 `clear_glass()`（清水玻璃）—— **必须能看见 `fire` 灯芯**：早期用
+    `glass`/`glass_lead` 时透射只有 0.16~0.30，整盏灯在游戏尺寸下发黑（实测）。
+    想要"没点灯的黑灯笼"才显式传 `glass="glass_lead"`。
+    """
+    glass = glass if glass else clear_glass()
     if bracket:
         b.box_bottom((6.0, 6.0, h + 18.0), (x, y), z + h * 0.35, "iron")
         b.box((14.0, 6.0, 6.0), (x, y - 7.0, z + h + 12.0), "iron")
@@ -838,8 +866,8 @@ def awning(b, x=0.0, y=0.0, z=0.0, w=140.0, cloth="cloth_red",
            arms="iron", valance=4):
     """纯布篷（挂立面）：墙面横梁 + 两根斜撑杆 + 斜布面 + 前缘不等长布幔。
 
-    y = 墙面（贴面件由 `dress()` 给 `front_y - 4`）。布面向 -Y 伸出 `w*0.42`，
-    靠墙侧高、外缘低 —— 微俯视下能看见布面，不会被压成一条线（§8.1）。
+    y = **真实前墙面**（贴面件由 `dress()` 定位，见 `wall_y_of`）。布面向 -Y 伸出
+    `w*0.42`，靠墙侧高、外缘低 —— 微俯视下能看见布面，不会被压成一条线（§8.1）。
 
     布幔**必须同色**：两色交替会被读成"一块块方盒"而不是垂布（一轮踩过）。
     布幔之间留缝、长度不一、上缘压一道深色条，"垂布"的读法才立得住。
@@ -1336,8 +1364,8 @@ def flower_bucket(b, x=0.0, y=0.0, z=0.0, r=10.0, h=21.0, n=9, seed=0, bucket2=T
 #   "一块发光的彩色纸片"。
 # * 自发光一律走材质（`lamp` / `fire` / `ember` / `crystal` / `rune_glow` /
 #   `glow_water`），几何不另做辉光片 —— 光晕交给探针的合成器 bloom。
-# * 挂墙件（FLUSH）的进深必须 ≤10 单位：`dress()` 只把它们的 `y` 推到
-#   `front_y - 4`，厚了会一半埋进墙里。
+# * 挂墙件（FLUSH）的进深必须 ≤10 单位：`dress()` 把它们贴到**真实前墙面**
+#   （`wall_y_of()`，缺省按 `WALL_PROTRUSION` 从包围盒最外沿内退），厚了会一半埋进墙里。
 
 
 def _ring_band(b, cx, cy, z, r, width, h, mat, seg=24):
@@ -1488,14 +1516,15 @@ def stained_arch_frame(b, x=0.0, y=0.0, z=0.0, w=54.0, h=104.0, lean=12.0, seed=
 
 
 def glass_lantern(b, x=0.0, y=0.0, z=0.0, h=46.0, s=None, lit=True,
-                  glass="glass_clear", hang=False, seed=0):
+                  glass=None, hang=False, seed=0):
     """玻璃灯笼（六棱玻璃罩 + 铁框 + 暖光核）：**全高 0.60 m**。
 
     与一轮 `lantern`（方、小、四面铁框风灯）的分工：这个是**六棱收腰**的大玻璃罩。
-    罩体默认 `glass_clear`（透射最高 0.94）—— **必须能看见里面的 `lamp` 光核**：
-    用 `glass_lead`（透射仅 0.30）时整盏灯在游戏尺寸下发暗、读作"黑灯笼"（实测踩过）。
+    罩体默认 `clear_glass()`（清水玻璃，透射最高 0.94）—— **必须能看见里面的 `lamp`
+    光核**：用 `glass_lead`（透射仅 0.30）时整盏灯在游戏尺寸下发暗、读作"黑灯笼"。
     想要铅条分格款就传 `glass="glass_lead"`，但那样只能当"没点灯"的灯用。
     """
+    glass = glass if glass else clear_glass()
     s = s if s else h * 0.60
     r = s / 2.0
     iz = z + h * 0.10
@@ -1578,7 +1607,10 @@ def alembic(b, x=0.0, y=0.0, z=0.0, h=108.0, w=None, heat=True, seed=0):
 
     四段同框才是"蒸馏器"：**炉火（自发光）→ 玻璃葫芦甑 → 铜曲颈 → 侧面接液瓶**，
     缺任何一段都会被读成"大花瓶"或"火锅"。铜管用 `bronze`（暖金 + 铜绿），
-    玻璃甑用 `glass_bottle`（绿厚玻璃），炉膛走 `fire`/`ember`。
+    炉膛走 `fire`/`ember`。甑体保留 `glass_bottle`（绿厚玻璃，透射 0.58~0.82）：
+    它的**形体本身**是这段读法，必须看得见 —— 换成全透明的 `clear_glass()`（缺省解析到
+    `glazing_win`，alpha 真透明）后甑体在游戏尺寸下直接消失，只剩炉子 + 铜管 + 瓶子。
+    接液瓶同理用绿瓶玻璃（小体量、有色反而更像"接了东西"）。
     """
     w = w if w else h * 0.44
     fr = w * 0.46
@@ -1621,9 +1653,10 @@ def alembic(b, x=0.0, y=0.0, z=0.0, h=108.0, w=None, heat=True, seed=0):
 def candle_glass(b, x=0.0, y=0.0, z=0.0, h=50.0, s=None, lit=True, seed=0):
     """玻璃罩烛台（木座 + 铜箍 + 蜡烛 + 清水玻璃罩）：**全高 0.66 m**。
 
-    罩体用 `glass_clear`（有 45cm 假反射斜带 + 灰雾斑，缩到游戏尺寸仍读得出"有层
-    玻璃"），里面点一根蜡烛（`lamp` 烛焰）—— 酒馆窗台 / 旅店门厅的常见灯具。
+    罩体用 `clear_glass()`（有 45cm 假反射斜带 + 灰雾斑，缩到游戏尺寸仍读得出"有层
+    玻璃"，透射够高才看得见里面的烛焰）—— 酒馆窗台 / 旅店门厅的常见灯具。
     """
+    cg = clear_glass()
     s = s if s else h * 0.38
     r = s / 2.0
     b.box_bottom((s * 1.65, s * 1.65, h * 0.055), (x, y), z, "wood_dark")
@@ -1632,7 +1665,7 @@ def candle_glass(b, x=0.0, y=0.0, z=0.0, h=50.0, s=None, lit=True, seed=0):
     _ring(b, (x, y, z + h * 0.28), r * 0.30, h * 0.10, "canvas", 10)      # 蜡烛
     if lit:
         b.box_bottom((r * 0.28, r * 0.28, h * 0.06), (x, y), z + h * 0.38, "lamp")
-    _ring(b, (x, y, z + h * 0.45), r, h * 0.54, "glass_clear", 12)        # 玻璃罩
+    _ring(b, (x, y, z + h * 0.45), r, h * 0.54, cg, 12)                   # 玻璃罩
     for i in range(4):                                                    # 罩体竖棱
         a = 2.0 * math.pi * i / 4.0
         b.box((r * 0.10, r * 0.10, h * 0.55),
@@ -1675,9 +1708,13 @@ def hourglass(b, x=0.0, y=0.0, z=0.0, h=40.0, s=None, sand=True, frame="bronze",
     """沙漏（铜/木框 + 双锥玻璃 + 流沙）：**全高 0.52 m**。
 
     玻璃锥必须**锥尖相对**（taper 收到 0.14 而不收到 0：完全收死会破面），中间留
-    约 6% 的颈；沙只画"下锥里的沙面 + 中间细流 + 底部小堆"三处，比堆满更读得出"在流"。
-    沙用 `cloth_ochre`（暖赭）而不是 `sand` —— `sand` 是地面材质（近白），
-    在沙土地上等于隐形（实测踩过）。
+    约 6% 的颈。锥体用 `glass_bottle`（绿瓶玻璃）而不是清水玻璃 —— 沙漏的**剪影就是
+    那对玻璃锥**，`glass_clear` 在游戏尺寸下等于没画（只剩一个框 + 一团沙，读作"小钟"，
+    实测踩过）；绿玻璃有明确轮廓，里面才轮到沙说话。
+    沙用 `produce_root`（暗橙黄土）而不是 `sand`/`cloth_ochre`：`sand` 是地面材质
+    （近白）在沙土地上等于隐形；`cloth_ochre` 暖赭仍偏浅、缩到游戏尺寸后沙与玻璃
+    糊成一片，只有更暗的土色才读得出"玻璃里有一坨沙"。沙按上下两盏的**锥形**填：
+    下盏一坨平顶堆、上盏一个倒锥漏斗、中间一道粗流沙，三处合起来才是"在漏"。
     """
     s = s if s else h * 0.46
     r = s / 2.0
@@ -1689,16 +1726,19 @@ def hourglass(b, x=0.0, y=0.0, z=0.0, h=40.0, s=None, sand=True, frame="bronze",
         b.box((s * 0.13, s * 0.13, h - 2.0 * t),
               (x + math.cos(a) * r * 0.90, y + math.sin(a) * r * 0.90, z + h / 2.0), frame)
     hh = h - 2.0 * t
-    _ring(b, (x, y, z + t + hh * 0.25), r * 0.96, hh * 0.50, "glass_clear", 12, "Z",
+    _ring(b, (x, y, z + t + hh * 0.25), r * 0.96, hh * 0.50, "glass_bottle", 12, "Z",
           taper=0.14)
-    _ring(b, (x, y, z + h - t - hh * 0.25), r * 0.96 * 0.14, hh * 0.50, "glass_clear", 12,
+    _ring(b, (x, y, z + h - t - hh * 0.25), r * 0.96 * 0.14, hh * 0.50, "glass_bottle", 12,
           "Z", taper=1.0 / 0.14)
     if sand:
-        _ring(b, (x, y, z + t + hh * 0.13), r * 0.68, hh * 0.22, "cloth_ochre", 10, "Z",
-              taper=0.42)
-        b.cylinder((x, y, z + h * 0.46), r * 0.09, h * 0.30, "cloth_ochre", 6)
-        _ring(b, (x, y, z + h - t - hh * 0.06), r * 0.54, hh * 0.12, "cloth_ochre", 10,
-              "Z", taper=0.34)
+        # 下盏：平顶沙堆（底部满、顶面收窄）
+        _ring(b, (x, y, z + t + hh * 0.16), r * 0.88, hh * 0.32, "produce_root", 12, "Z",
+              taper=0.40)
+        # 流沙：够粗（r*0.16 → 游戏里约 2px），细线读不出"在漏"
+        b.cylinder((x, y, z + h * 0.37), r * 0.16, h * 0.24, "produce_root", 6)
+        # 上盏：倒锥漏斗（沙面在下、向颈部收）
+        _ring(b, (x, y, z + h * 0.50 + hh * 0.11), r * 0.16, hh * 0.22, "produce_root", 10,
+              "Z", taper=3.4)
     _ = seed
 
 
@@ -2635,6 +2675,26 @@ def scarecrow(b, x=0.0, y=0.0, z=0.0, h=150.0, w=None, seed=0):
 #: 挂载时统一放大到 1.45 倍（现实尺寸仍记录在各自 docstring 里，便于反算）。
 GAME_SCALE = 1.45
 
+#: **小件补偿放大**（在 `GAME_SCALE` 之上再乘，只影响挂载，不改建模尺寸）。
+#: 桌面摆件（沙漏 0.52m / 墨水瓶组 0.58×0.36m / 玻璃罩烛台 0.66m …）现实尺寸本就
+#: 半米级，×1.45 后在游戏里仍只有十几个像素、读不出是什么。放开 GAME_SCALE 会连带
+#: 把桶/车/长凳全部放大（比例锚崩），所以只在挂载时给这些小件补一档 —— 建模尺寸与
+#: docstring 里的现实尺寸原样保留，反算时把这里的系数算上即可。
+MOUNT_SCALE = {
+    "hourglass": 1.55,
+    "inkwell_quill": 1.50,
+    "candle_glass": 1.30,
+    "censer": 1.20,
+    "astrolabe": 1.20,
+    "crystal_orb": 1.15,
+    "rope_coil": 1.15,
+}
+
+
+def mount_scale(name):
+    """单件的挂载补偿系数（供 `dress()` 与探针共用同一口径）。"""
+    return MOUNT_SCALE.get(name, 1.0)
+
 #: 每种建筑类型的前场配方：(道具名, 侧别, kwargs)。侧别 -1 = 门左侧、+1 = 门右侧；
 #: 列表**从前到后即优先级**，宽度不够或没位置时从尾部丢弃。
 #: 之所以按"门左右两侧向外铺"而不是按全宽均分：门是立面的视觉锚点，道具必须
@@ -2770,14 +2830,12 @@ DRESS = {
         ("crate_stack", -1, dict(s=30.0, h=26.0)),
     ],
     # ---- 三轮新增配方：炼金坊 / 教堂 / 图书馆 ---------------------------------
-    #: 炼金坊立面：**蒸馏器领衔**，然后药瓶架 / 坩埚 / 符文碑 / 晶簇 / 玻璃器皿箱 /
-    #: 香炉／书堆／法杖架／水晶球。排列上把高大的（符文碑、蒸馏器）放前面，矮的
-    #: （书堆、水晶球）从尾部丢 —— 炼金坊自己已带外置蒸馏台，重复的那件在宽不够时
-    #: 会被先丢掉，不会堆成两套。
+    #: 炼金坊立面：**装配器自带前场的蒸馏台 + 小火盆 + 玻璃瓶组 + 药草晾架**，所以本
+    #: 配方**只补空位**、不重复摆同类家什（早期放了 alembic / cauldron / potion_bottles，
+    #: 与装配器那套前后各一层、读作"两套叠在一起"）。留下的都是装配器没有的：
+    #: 符文碑 / 晶簇 / 玻璃器皿箱 / 香炉 / 书堆 / 法杖架 / 水晶球。
+    #: `dress(..., reserved=...)` 可传入装配器**前场占位区间**，本配方会绕开那些 x 段。
     "alchemy": [
-        ("alembic", 1, dict()),
-        ("potion_bottles", 1, dict()),
-        ("cauldron", -1, dict()),
         ("rune_stone", 1, dict(h=132.0)),
         ("crystal_cluster", -1, dict()),
         ("glass_crate", 1, dict()),
@@ -2786,17 +2844,20 @@ DRESS = {
         ("staff_rack", -1, dict()),
         ("crystal_orb", 1, dict()),
     ],
-    #: 教堂立面：**祭坛领衔**，供烛架 / 彩窗板挂墙（z=150 抬到门楣之上）/ 圣水盆 /
+    #: 教堂立面：**祭坛领衔**，供烛架 / 彩窗板挂墙 / 圣水盆 /
     #: 香炉 / 长椅；尖拱残框靠墙根。顺序 = 优先级（宽不够从尾部丢），
     #: 所以"彩窗板 + 祭坛 + 烛架"这三件一定在前四位 —— 8 格立面也保得住。
-    #: 彩窗板是 FLUSH 件（y = front_y - 4、几何进深 6），有门廊/台阶的立面上它会落在
-    #: 最外沿平面 —— 正交 20° 微俯视下与门廊面重叠、只向下错开 ~47 单位，读作
-    #: "挂在门廊上"（无透视，不产生明显的悬浮视差）。
+    #: 彩窗板是 FLUSH 件（几何进深 6），挂在**真实前墙面**上（见 `WALL_PROTRUSION`
+    #: 与 `dress(..., wall_y=...)`）：cathedral 的尖拱门廊前凸 ~0.4D，若拿建筑包围盒
+    #: 最外沿当墙面，两块板会整片浮在门廊前方 ~1.6m 的空中（正交微俯视下"读不出"但
+    #: 是硬穿帮），所以这里必须退到 `-D/2` 的墙面上。
+    #: z=262：抬到**门廊拱顶（≈232）与自家尖拱长窗（146~238）之上**、钟楼玫瑰窗之上、
+    #: 檐口（418）之下的一段净墙面 —— 低了会正好叠在建筑自己的彩窗上（两层彩窗）。
     "chapel": [
         # 彩窗板**必须排最前**：FLUSH 件一旦被 pack_sides 挤过立面端头 → 挂在半空
         # （地面件溢出立面只是"堆到屋前"，挂墙件溢出就是穿帮）。先占住门两侧。
-        ("stained_glass_panel", -1, dict(z=150.0)),
-        ("stained_glass_panel", 1, dict(z=150.0)),
+        ("stained_glass_panel", -1, dict(z=262.0)),
+        ("stained_glass_panel", 1, dict(z=262.0)),
         ("altar", 1, dict()),
         ("candle_rack", -1, dict()),
         ("font", -1, dict()),
@@ -2899,7 +2960,7 @@ TABLE = {
 #: 贴面件（挂墙，不做进深外移）
 FLUSH = ("tools_rack", "signboard", "flower_box", "clothesline",
          "awning", "hanging_sign", "herb_rack", "broom_bundle",
-         # ---- 三轮：挂墙件（进深 ≤10 单位，`dress()` 把 y 推到 front_y - 4）----
+         # ---- 三轮：挂墙件（进深 ≤10 单位，`dress()` 把 y 贴到真实墙面）----
          "stained_glass_panel", "shield_plaque")
 #: 按跨度摆放的件（用 x0/x1 相对跨度 + 统一平移量）
 SPAN = ("fence", "clothesline")
@@ -2932,39 +2993,118 @@ DEPTH = {"log_pile": 22.0, "plank_pile": 22.0, "cart": 46.0, "wheelbarrow": 40.0
          "fork_stand": 44.0, "wheel_pile": 62.0, "wine_cart": 90.0,
          "scarecrow": 44.0}
 
+#: 各配方的**门廊 / 门楼前凸量**（单位，实测 = `shape_bbox` 前沿 − 真实前墙面）。
+#: 值为 [(建筑宽 W, 前凸量), ...]（同族建筑前凸随宽度近似等比，按 W 线性插值/外推）。
+#:
+#: 为什么需要这张表：`dress()` 拿到的 `front_y` 是**建筑包围盒最外沿**，而门廊
+#: （cathedral 尖拱门廊）与门楼（library）都比真实前墙面**再前凸 95~135 单位
+#: （1.2~1.8m）**。挂墙件若按最外沿贴，就会整排浮在门廊前方空中 —— 正交 20° 微俯视
+#: 下投影只错开 ~cos20°×130 ≈ 122 单位，肉眼读不出，但是硬穿帮。
+#: 只登记**前凸量确认很大、且挂墙件落在主墙面上是对的**的配方；其余一律维持旧口径
+#: （rowhouse 的挑楼、shop 的出檐本身就是挂高件的正确贴面；library 的中央门楼太宽，
+#: 无脑内退会把挂件埋进门楼实体）。要精确贴墙就显式传 `dress(wall_y=...)`
+#: （推荐 `-spec["depth"]/2`）+ `flush_reserved=[门廊 x 区间]`。
+WALL_PROTRUSION = {
+    "cathedral": [(256.0, 95.0), (384.0, 127.0)],      # 尖拱门廊（实体，凸 0.4D）
+    "chapel":    [(256.0, 95.0), (384.0, 127.0)],      # 同 cathedral
+}
+
+#: 门廊**比门洞每侧多出的半宽**（`porch_w = door_w + 2*val`）。挂墙件退到墙面后若仍
+#: 落在这个 x 带内，就会埋进门廊实体里（cathedral 的门廊是凸出的实心体量，不是凹进
+#: 的洞）—— 所以 `dress()` 在缺省情况下自动把这段 x 当挂墙件的避让区。
+WALL_PORCH = {
+    "cathedral": 30.0,
+    "chapel": 30.0,
+}
+
+
+def wall_y_of(kind, W, front_y, wall_y=None, wall_depth=None):
+    """求挂墙件要贴的**真实前墙面 y**。
+
+    优先级：显式 `wall_y` > 显式 `wall_depth`（从最外沿往建筑内退的量）>
+    `WALL_PROTRUSION` 按配方/宽度插值 > 维持旧口径（返回 `front_y`）。
+    """
+    if wall_y is not None:
+        return float(wall_y)
+    if wall_depth is not None:
+        return front_y + float(wall_depth)
+    pts = WALL_PROTRUSION.get(kind)
+    if not pts:
+        return front_y
+    if len(pts) == 1 or W <= pts[0][0]:
+        return front_y + pts[0][1]
+    if W >= pts[-1][0]:
+        return front_y + pts[-1][1]
+    (w0, p0), (w1, p1) = pts[0], pts[-1]
+    t = (W - w0) / (w1 - w0)
+    return front_y + p0 + (p1 - p0) * t
+
 
 def pack_sides(W, items, door_x, door_w, gap=14.0, spill=0.30, clear=10.0,
-               scale=GAME_SCALE):
+               scale=GAME_SCALE, reserved=None, flush_reserved=None):
     """把道具从门口向左右两侧铺开，返回 [(name, x)]；放不下的从尾部丢弃。
 
     保证：① 任何道具不与门洞重叠（左右游标从门边 clear 处起步）；
-    ② 同侧道具之间留 gap；③ 允许溢出立面两端 spill×W，视觉上更像"堆在屋前"。
+    ② 同侧道具之间留 gap；③ 允许溢出立面两端 spill×W，视觉上更像"堆在屋前"；
+    ④ `reserved` 是**落地件**要绕开的 x 区间（装配器自带前场家什占位），
+    `flush_reserved` 是**挂墙件**要绕开的 x 区间（凸出门廊/门楼的实体，免得挂件
+    埋进去看不见；默认沿用 `reserved`）。跨度件（栅栏/晾衣绳）不受限。
     """
     lo = -W / 2.0 - W * spill
     hi = W / 2.0 + W * spill
-    cur = {"L": door_x - door_w / 2.0 - clear, "R": door_x + door_w / 2.0 + clear}
+    # **两层游标**：挂墙件（FLUSH）与落地件各自独立推进 —— 挂高件在 z 上另起一层，
+    # 不该吃掉落地件在门两侧的位置（否则 chapel 的彩窗板把祭坛挤出门外）。
+    cur = {"Lg": door_x - door_w / 2.0 - clear, "Rg": door_x + door_w / 2.0 + clear,
+           "Lf": door_x - door_w / 2.0 - clear, "Rf": door_x + door_w / 2.0 + clear}
+    if flush_reserved is None:
+        flush_reserved = reserved
+    rz = sorted((min(a, b), max(a, b)) for (a, b) in (reserved or []))
+    rzf = sorted((min(a, b), max(a, b)) for (a, b) in (flush_reserved or []))
+
+    def _hits(zone, c0, c1):
+        return [(x0, x1) for (x0, x1) in zone if c0 < x1 and c1 > x0]
+
     out = []
     for (name, side, kw) in items:
         w = WIDTH.get(name, 40.0) * scale
         if name in SPAN:                       # 跨度件：按自身跨度算占位
             w = abs(kw.get("x1", 0.0) - kw.get("x0", 0.0)) * scale + 20.0
-        key = "L" if side < 0 else "R"
-        if key == "L":
-            cx = cur["L"] - w / 2.0
+        if name in SPAN:
+            zone, ck = None, None
+        elif name in FLUSH:
+            zone, ck = rzf, "f"
+        else:
+            zone, ck = rz, "g"
+        key = ("L" if side < 0 else "R") + (ck or "g")
+        if key[0] == "L":
+            cx = cur[key] - w / 2.0
+            for _ in range(8):                 # 撞上占用区就继续往左让位
+                hit = _hits(zone, cx - w / 2.0, cx + w / 2.0) if zone else None
+                if not hit:
+                    break
+                cur[key] = hit[0][0] - gap
+                cx = cur[key] - w / 2.0
             if cx - w / 2.0 < lo:
                 continue
-            cur["L"] = cx - w / 2.0 - gap
+            cur[key] = cx - w / 2.0 - gap
         else:
-            cx = cur["R"] + w / 2.0
+            cx = cur[key] + w / 2.0
+            for _ in range(8):
+                hit = _hits(zone, cx - w / 2.0, cx + w / 2.0) if zone else None
+                if not hit:
+                    break
+                cur[key] = hit[0][1] + gap
+                cx = cur[key] + w / 2.0
             if cx + w / 2.0 > hi:
                 continue
-            cur["R"] = cx + w / 2.0 + gap
+            cur[key] = cx + w / 2.0 + gap
         out.append((name, cx, side, kw))
     return out
 
 
 def dress(b, kind, W, front_y, seed=0, door_x=0.0, door_w=50.0, y_jitter=4.0,
-          scale=GAME_SCALE, max_items=None):
+          scale=GAME_SCALE, max_items=None, wall_y=None, wall_depth=None,
+          reserved=None, flush_reserved=None):
     """给一个立面挂上该类型的全部道具。
 
     参数
@@ -2972,20 +3112,33 @@ def dress(b, kind, W, front_y, seed=0, door_x=0.0, door_w=50.0, y_jitter=4.0,
     b        : `buildings.Builder`（与建筑同一个 builder，同对象同材质槽）
     kind     : DRESS 的键（house/townhouse/barn/smithy/windmill/cathedral/...）
     W        : 建筑网格宽（格 × 32）
-    front_y  : 建筑前墙面 y（= measure(ob)["y"][0]）；道具摆在它 -Y 侧之外
+    front_y  : 建筑**包围盒最外沿** y（= measure(ob)["y"][0]）；落地道具摆在它 -Y 侧
     seed     : 确定性种子（建议与建筑的 seed 派生同源）
+    wall_y   : 真实前墙面 y（推荐传 `-spec["depth"]/2`）。挂墙件贴它而不是最外沿
+    wall_depth : 从 `front_y` 往建筑内退多少才是墙面（与 `wall_y` 二选一，`wall_y` 优先）
+    reserved : 装配器**自带前场家什已占的 x 区间** [(x0, x1), ...]；落地件绕开，只补空位
+    flush_reserved : 挂墙件要绕开的 x 区间（凸出门廊/门楼的实体）；缺省沿用 `reserved`
     返回     : 挂载清单 (道具名, x, y)，供自检打印
 
-    y 取值规则：贴面件（工具架/招牌/花箱/晾衣绳）贴墙 `front_y - 4`；其余按道具
-    自身进深外移，再加 0~y_jitter 的抖动 —— 一排道具不在同一 y 才读得出"摆在地上"
-    而不是"贴在墙上"。
+    y 取值规则：
+    * **挂墙件（FLUSH）贴真实前墙面** `wall_y_of(...) - 4`。深门廊 / 凹进立面上
+      `front_y`（包围盒最外沿）比墙面靠前 90~130 单位，直接按它挂会整排悬空。
+    * 其余按道具自身进深从 `front_y` 外移，再加 0~y_jitter 的抖动 —— 一排道具
+      不在同一 y 才读得出"摆在地上"而不是"贴在墙上"。
+    * 小件（沙漏 / 墨水瓶 / 烛罩…）在 `GAME_SCALE` 之上再乘 `MOUNT_SCALE` 补偿放大。
     """
     recipe = DRESS.get(kind)
     if not recipe:
         return []
     rng = random.Random(seed * 977 + 13)
     items = recipe if max_items is None else recipe[:max_items]
-    plan = pack_sides(W, items, door_x, door_w, scale=scale)
+    if flush_reserved is None and reserved is None and kind in WALL_PORCH:
+        # 缺省防空：退到墙面后别落在凸出门廊的 x 带里（否则埋进门廊实体看不见）
+        half = door_w / 2.0 + WALL_PORCH[kind]
+        flush_reserved = [(-half, half)]
+    plan = pack_sides(W, items, door_x, door_w, scale=scale, reserved=reserved,
+                      flush_reserved=flush_reserved)
+    flush_y = wall_y_of(kind, W, front_y, wall_y, wall_depth) - 4.0
     placed = []
     for (pname, x, side, kw) in plan:
         fn = TABLE.get(pname)
@@ -2994,13 +3147,14 @@ def dress(b, kind, W, front_y, seed=0, door_x=0.0, door_w=50.0, y_jitter=4.0,
         p = dict(kw)
         zz = p.pop("z", 0.0)          # 挂墙件可自带 z 偏移（如晾衣绳挂高）
         if pname in FLUSH:
-            y = front_y - 4.0
+            y = flush_y
         else:
             y = front_y - DEPTH.get(pname, 30.0) * 0.5 - rng.uniform(0.0, y_jitter)
-        if scale != 1.0:
+        eff = scale * mount_scale(pname)
+        if eff != 1.0:
             for k in ("r", "h", "w", "d", "s"):
                 if k in p:
-                    p[k] = p[k] * scale
+                    p[k] = p[k] * eff
         p["seed"] = int(rng.randrange(1 << 30))
         try:
             fn(b, x=x, y=y, z=zz, **p)

@@ -9,9 +9,14 @@
 （`alchemy` 炼金坊 / `chapel` 教堂 / `library` 图书馆）的实景。
 
 产物（stick-world/temp/）::
-    pbr_props4_strip.png    新道具总览条（真实尺寸 + 变体 + 火柴人比例尺 + 挂墙件补墙板）
-    pbr_props4_alchemy.png  炼金坊立面（真实装配器 alchemy(8) + `alchemy` 配方）
-    pbr_props4_chapel.png   教堂立面（cathedral(8) + `chapel` 配方；彩窗板/祭坛/烛架）
+    pbr_props4_strip.png    新道具总览条（**挂载后的游戏尺寸** + 变体 + 火柴人比例尺 +
+                            挂墙件补墙板；小件含 `props.MOUNT_SCALE` 补偿放大）
+    pbr_props4_alchemy.png  炼金坊立面（真实装配器 alchemy(12) + `alchemy` 配方；
+                            配方只补空位，装配器自带前场蒸馏台/火盆不再与配方叠两套）
+    pbr_props4_chapel.png   教堂立面（cathedral(12) + `chapel` 配方；彩窗板贴真实墙面）
+    pbr_props4_wallfix.png  **门廊贴墙对照图**（侧视剖影）：同一深门廊立面上，
+                            左=旧口径（按包围盒最外沿挂 → 悬空在门廊前方），
+                            右=新口径（贴真实前墙面）。cathedral 尖拱门廊前凸 ~0.4D。
 
 跑法::
     blender -b --factory-startup -P probe_props4.py
@@ -62,7 +67,7 @@ def clear():
 
 def wipe():
     for ob in list(bpy.data.objects):
-        if ob.type == "MESH":
+        if ob.type in ("MESH", "FONT", "CURVE", "SURFACE"):
             bpy.data.objects.remove(ob, do_unlink=True)
 
 
@@ -178,18 +183,23 @@ def make_camera():
     return ob
 
 
-def place_camera(cam, anchor, dist=14000.0):
-    right, up = B.cam_axes(YAW, TILT)
+def place_camera(cam, anchor, dist=14000.0, yaw=None, tilt=None):
+    yaw = YAW if yaw is None else yaw
+    tilt = TILT if tilt is None else tilt
+    right, up = B.cam_axes(yaw, tilt)
     fwd = -(right.cross(up))
     cam.location = tuple(Vector(anchor) - fwd * dist)
-    cam.rotation_euler = (math.radians(90.0 - TILT), 0.0, math.radians(YAW))
+    cam.rotation_euler = (math.radians(90.0 - tilt), 0.0, math.radians(yaw))
 
 
-def shoot_fit(cam, objs, zoom, path, pad=40.0, pad_top=30.0, res_max=7000):
+def shoot_fit(cam, objs, zoom, path, pad=40.0, pad_top=30.0, res_max=7000,
+              yaw=None, tilt=None):
+    yaw = YAW if yaw is None else yaw
+    tilt = TILT if tilt is None else tilt
     pts = []
     for ob in objs:
         pts += B.shape_points(ob, skip_ground=False)
-    right, up = B.cam_axes(YAW, TILT)
+    right, up = B.cam_axes(yaw, tilt)
     us = [p.dot(right) for p in pts]
     vs = [p.dot(up) for p in pts]
     u0, u1 = min(us) - pad, max(us) + pad
@@ -198,7 +208,7 @@ def shoot_fit(cam, objs, zoom, path, pad=40.0, pad_top=30.0, res_max=7000):
     cu, cv = (u0 + u1) / 2.0, (v0 + v1) / 2.0
     ref = pts[0]
     anchor = ref + right * (cu - ref.dot(right)) + up * (cv - ref.dot(up))
-    place_camera(cam, anchor)
+    place_camera(cam, anchor, yaw=yaw, tilt=tilt)
     k = min(1.0, res_max / float(max(w, h) * zoom))
     rx = max(64, int(round(w * zoom * k)))
     ry = max(64, int(round(h * zoom * k)))
@@ -210,17 +220,37 @@ def shoot_fit(cam, objs, zoom, path, pad=40.0, pad_top=30.0, res_max=7000):
     sc.render.filepath = path
     bpy.ops.render.render(write_still=True)
     print("-> %s  %dx%d  (%.2f px/unit)" % (os.path.basename(path), rx, ry, zoom * k))
-    return {"path": path, "res": (rx, ry)}
+    return {"path": path, "res": (rx, ry), "u0": u0, "w": w, "ppx": zoom * k}
+
+
+def add_label(text, x, y, z, size=54.0):
+    """在场景里放一块面向相机（+X）的 ASCII 文字牌（侧视对照图标注用）。
+
+    用 Blender 自带 FONT 曲线（无外部依赖）；Blender 默认字体不含中文字形，故标注
+    一律 ASCII。`to_track_quat("Z","Y")`：字面法线朝 +X、字身朝上。
+    """
+    cu = bpy.data.curves.new("lbl_" + text, type="FONT")
+    cu.body = text
+    cu.size = size
+    cu.align_x = "CENTER"
+    cu.align_y = "BOTTOM"
+    ob = bpy.data.objects.new("lbl_" + text, cu)
+    ob.location = (x, y, z)
+    ob.rotation_mode = "QUATERNION"
+    ob.rotation_quaternion = Vector((1.0, 0.0, 0.0)).to_track_quat("Z", "Y")
+    bpy.context.scene.collection.objects.link(ob)
+    return ob
 
 
 def put(b, pname, x, y, z=0.0, scale=P.GAME_SCALE, **kw):
-    """按 `dress()` 同口径挂载单件（主尺寸 ×GAME_SCALE，z 不缩放）。"""
+    """按 `dress()` 同口径挂载单件（主尺寸 ×GAME_SCALE×MOUNT_SCALE，z 不缩放）。"""
     fn = P.TABLE[pname]
     p = dict(kw)
-    if scale != 1.0:
+    eff = scale * P.mount_scale(pname)
+    if eff != 1.0:
         for k in ("r", "h", "w", "d", "s"):
             if k in p:
-                p[k] = p[k] * scale
+                p[k] = p[k] * eff
     p.setdefault("seed", int(abs(x) + abs(y)))
     p["seed"] = int(p["seed"])
     try:
@@ -228,6 +258,52 @@ def put(b, pname, x, y, z=0.0, scale=P.GAME_SCALE, **kw):
     except TypeError:
         p.pop("seed", None)
         fn(b, x=x, y=y, z=z, **p)
+
+
+def front_side_zones(ob, wall_y, W, gap=26.0, min_w=8.0, pad=6.0, z_min=26.0,
+                     z_max=None, depth=20.0, x_margin=20.0):
+    """建筑**前墙面之外**的**立式体量/家什**的 x 占位区间（门廊体量 / 前场家什）。
+
+    喂给 `P.dress(reserved=...)`：落地件绕开这些 x 段（不往装配器自带的家什上堆），
+    挂墙件也绕开（免得埋进凸出门廊的实体里 —— cathedral 的尖拱门廊是 x 向 ±93 的
+    实体，彩窗板落到它后面就整个看不见了）。
+
+    过滤（都是"横贯全宽、不代表可让位的家什"的几何，必须剔掉，否则区间会连成一片）：
+      ① 接地阴影贴片（材质名含 `shadow_`）；
+      ② `z < z_min` 的贴地贴片（台基凸唇 / 门前石阶）；
+      ③ `z > z_max` 的屋面（传建筑的 `eave_h`）；
+      ④ `|x| > W/2 + x_margin` 的**屋面侧向挑檐**（超出立面宽度）；
+      ⑤ 进深不足 `depth` 的墙面凸出物（窗台/门框，只凸出几单位，不是障碍）。
+    返回 [(x0, x1), ...]（外扩 pad；过窄的碎区间丢弃）。
+    """
+    me = ob.data
+    mw = ob.matrix_world
+    zhi = float("inf") if z_max is None else float(z_max)
+    xl = W / 2.0 + x_margin
+    xs = []
+    for p in me.polygons:
+        mat = me.materials[p.material_index] if p.material_index < len(me.materials) else None
+        if mat is not None and "shadow_" in mat.name:
+            continue
+        for i in p.vertices:
+            co = mw @ me.vertices[i].co
+            if (co.y < wall_y - depth and z_min < co.z < zhi and abs(co.x) <= xl):
+                xs.append(co.x)
+    if not xs:
+        return []
+    xs.sort()
+    zones, s, last = [], xs[0], xs[0]
+    for x in xs[1:]:
+        if x - last > gap:
+            zones.append((s, last))
+            s = x
+        last = x
+    zones.append((s, last))
+    # 只保留落在立面可铺范围内的区间（屋面侧挑檐等残段在立面之外，避让它们没意义）
+    inner = W / 2.0 - 30.0
+    keep = [(a - pad, b + pad) for (a, b) in zones
+            if b - a >= min_w and b > -inner and a < inner]
+    return keep
 
 
 # ---------------------------------------------------------------- 总览条
@@ -287,18 +363,29 @@ STRIP = [
 
 
 def strip_objects(camera_objs):
-    """建总览条，返回 (objs, 总宽, 摆放清单)。camera_objs 留着给调用方塞火柴人。"""
+    """建总览条，返回 (objs, 总宽, 摆放清单)。camera_objs 留着给调用方塞火柴人。
+
+    条上按**挂载口径**出图（主尺寸 ×GAME_SCALE×MOUNT_SCALE）—— 1 单位≈1px，所以
+    条上的像素尺寸就是游戏里的尺寸；否则小件（沙漏/墨水瓶）在条上比游戏里还大，
+    看不出"放大后够不够读"。
+    """
     objs, placed, cursor = [], [], 0.0
     for (pname, kw, span) in STRIP:
         b = B.Builder("prop4_%s_%.0f" % (pname, cursor))
         zz = float(kw.get("z", 0.0))
+        eff = P.GAME_SCALE * P.mount_scale(pname)
+        uspan = span * P.mount_scale(pname)
         if pname in P.FLUSH and zz > 40.0:
-            bh = max(WALL_BOARD_H, zz + float(kw.get("h", 60.0)) + 20.0)
+            bh = max(WALL_BOARD_H, zz + float(kw.get("h", 60.0)) * eff + 20.0)
             # 墙板用**浅色抹灰**：木色墙板会把木盾/皮革道具整个吃掉（实测盾牌浮雕在
             # 木墙板上完全看不见），抹灰才衬得出深色器物。
-            b.box_bottom((span - 10.0, 14.0, bh), (0.0, 7.0), 0.0, "plaster")
+            b.box_bottom((uspan - 10.0, 14.0, bh), (0.0, 7.0), 0.0, "plaster")
         p = dict(kw)
         p.pop("z", None)
+        if eff != 1.0:
+            for k in ("r", "h", "w", "d", "s"):
+                if k in p:
+                    p[k] = p[k] * eff
         p["seed"] = int(cursor) + 3
         try:
             P.TABLE[pname](b, x=0.0, y=0.0, z=zz, **p)
@@ -309,8 +396,8 @@ def strip_objects(camera_objs):
         ob.location.x = cursor
         bpy.context.view_layer.update()
         objs.append(ob)
-        placed.append((pname, cursor, span))
-        cursor += span
+        placed.append((pname, cursor, uspan))
+        cursor += uspan
     return objs, cursor, placed
 
 
@@ -326,21 +413,44 @@ def add_stickmen(objs, total, n=9, y=-210.0):
 
 # ---------------------------------------------------------------- 立面实景
 
-def dressed(name, wc, kind, seed, tag, front_y=None):
+#: 需要"绕开装配器自带前场家什"的配方（落地件避让；其余配方地面照铺）。
+GROUND_AVOID = ("alchemy",)
+
+
+def dressed(name, wc, kind, seed, tag, front_y=None, wall_mode="wall"):
+    """装一套立面道具。
+
+    `wall_mode`：
+      * `"wall"`  —— 挂墙件贴**真实前墙面**（`-spec["depth"]/2`），并按建筑前凸几何
+        生成 `reserved` 避让区间（门廊体量 / 出檐 / 装配器自带前场家什）；
+      * `"outer"` —— 旧口径：挂墙件按包围盒最外沿（`front_y - 4`），只用于 wallfix 对照。
+    """
     ob, spec = B.ASSEMBLERS[name](wc)
     mx = B.measure(ob)
     fy = front_y if front_y is not None else mx["y"][0]
+    wall = -spec["depth"] / 2.0
+    zones = front_side_zones(ob, wall, spec["grid_w"],
+                             z_max=spec.get("eave_h", mx["z"][1]) - 6.0)
     pb = B.Builder("props4_" + tag)
     d = spec.get("door")
-    placed = P.dress(pb, kind, spec["grid_w"], fy, seed=seed,
-                     door_x=spec.get("door_x", 0.0), door_w=(d[0] if d else 0.0))
+    kw = dict(seed=seed, door_x=spec.get("door_x", 0.0),
+              door_w=(d[0] if d else 0.0), flush_reserved=zones)
+    if kind in GROUND_AVOID:           # 只有"装配器自带前场家什"的配方才避让地面
+        kw["reserved"] = zones
+    if wall_mode == "outer":
+        kw["wall_depth"] = 0.0
+    else:
+        kw["wall_y"] = wall
+    placed = P.dress(pb, kind, spec["grid_w"], fy, **kw)
     pob = pb.to_object()
     return ob, pob, spec, placed, mx
 
 
-def shoot_facade(cam, name, wc, kind, tag, seed=7, zoom=ZOOM_SCENE, people=2):
+def shoot_facade(cam, name, wc, kind, tag, seed=7, zoom=ZOOM_SCENE, people=2,
+                 wall_mode="wall"):
     wipe()
-    ob, pob, spec, placed, mx = dressed(name, wc, kind, seed, tag)
+    ob, pob, spec, placed, mx = dressed(name, wc, kind, seed, tag,
+                                        wall_mode=wall_mode)
     objs = [ob, pob]
     sb = B.Builder("stick4_" + tag)
     # 比例尺人放在**立面两端之外**（i 越大越远）：站进立面里会挡住溢出到屋前的道具
@@ -351,11 +461,91 @@ def shoot_facade(cam, name, wc, kind, tag, seed=7, zoom=ZOOM_SCENE, people=2):
     make_ground(mx["x"][0] - 600.0, mx["x"][1] + 600.0, -900.0, 700.0)
     shoot_fit(cam, objs, zoom, os.path.join(OUT_DIR, tag + ".png"),
               pad=70.0, pad_top=50.0)
-    print("   %s(%d) W=%.0f door_x=%.0f door_w=%.1f  前墙面 y=%.1f"
+    print("   %s(%d) W=%.0f door_x=%.0f door_w=%.1f  包围盒最外沿 y=%.1f  真实墙面 y=%.1f"
           % (name, wc, spec["grid_w"], spec.get("door_x", 0.0),
-             (spec["door"][0] if spec.get("door") else 0.0), mx["y"][0]))
+             (spec["door"][0] if spec.get("door") else 0.0), mx["y"][0],
+             -spec["depth"] / 2.0))
     print("   挂载：%s" % (placed,))
     return placed
+
+
+# ---------------------------------------------------------------- 门廊贴墙对照
+
+#: 对照用例的参数：深门廊装配器 + 用它的配方。
+WALLFIX = ("cathedral", 12, "chapel")
+
+
+def shoot_wallfix(cam, name=None, wc=None, kind=None, zoom=1.30):
+    """深门廊立面的**挂墙件贴墙对照**（侧视剖影，新旧并排）。
+
+    侧视（yaw=90°）：屏幕横轴 = 建筑进深 Y、纵轴 = 高度 Z，两栋同款建筑的**侧影剖面**
+    沿 Y 错开放置 → 屏幕上并排两条剖面。正交前视看不出这 ~1.5m 的进深差
+    （投影只错开 cos20°×127 ≈ 122 单位），侧视才读得出。
+
+    每栋旁边立**两根参照柱**（在立面宽度之外，不挡剖面）：
+      * `white_stone` 柱 = 真实前墙面（`-depth/2`）；
+      * `brick` 柱 = 建筑包围盒最外沿（门廊/雨棚前缘）。
+    左栋 = **旧口径**（挂墙件与 brick 柱齐 → 悬空）；右栋 = **新口径**（与 white_stone
+    柱齐 → 贴墙）。挂墙件本身是彩窗板（`stained_glass`），一眼能找到它对齐哪根柱。
+    """
+    name, wc, kind = name or WALLFIX[0], wc or WALLFIX[1], kind or WALLFIX[2]
+    wipe()
+    objs = []
+    for (ytag, mode) in (("旧：按包围盒最外沿挂（悬空）", "outer"),
+                         ("新：贴真实前墙面（wall_y）", "wall")):
+        ob, spec = B.ASSEMBLERS[name](wc)
+        mx = B.measure(ob)
+        wall = -spec["depth"] / 2.0
+        zones = front_side_zones(ob, wall, spec["grid_w"],
+                                 z_max=spec.get("eave_h", mx["z"][1]) - 6.0)
+        pb = B.Builder("wallfix_%s" % mode)
+        d = spec.get("door")
+        kw = dict(seed=13, door_x=spec.get("door_x", 0.0),
+                  door_w=(d[0] if d else 0.0), flush_reserved=zones)
+        if mode == "outer":
+            kw["wall_depth"] = 0.0
+        else:
+            kw["wall_y"] = wall
+        placed = P.dress(pb, kind, spec["grid_w"], mx["y"][0], **kw)
+        # 再补一件**向前挑出**的挂墙件（铁艺挂招牌）：侧视里能看出挑臂是从墙面伸出、
+        # 还是从空中伸出 —— 平贴的彩窗板侧看只剩一条线，挑臂才有"挂上了"的读法。
+        mount = (mx["y"][0] if mode == "outer" else wall) - 4.0
+        put(pb, "hanging_sign", spec["grid_w"] * 0.42, mount, z=150.0,
+            w=48.0, h=38.0)
+        pob = pb.to_object()
+        off = -YSIDE if mode == "outer" else YSIDE    # 屏幕横轴 +Y：旧在左、新在右
+        # 参照柱：**墙面**（lamp 自发光黄）/ **包围盒最外沿**（cloth_red 红）。柱高停在
+        # 挂墙件下沿以下（彩窗板 z=262 起）—— 既当"色标尺"，又不会挡住彩窗板本身；
+        # 柱立在立面宽度之外且在建筑物之前，不被剖面轮廓挡住。看哪根柱正下方就是哪一层。
+        rb = B.Builder("wallref_%s" % mode)
+        xref = spec["grid_w"] / 2.0 + 90.0
+        ztop = 250.0
+        rb.box_bottom((24.0, 24.0, ztop), (xref, wall), 0.0, "lamp")
+        rb.box_bottom((24.0, 24.0, ztop), (xref, mx["y"][0]), 0.0, "cloth_red")
+        rob = rb.to_object()
+        rob.location.y = off
+        ob.location.y = off
+        pob.location.y = off
+        bpy.context.view_layer.update()
+        objs += [ob, pob, rob]
+        add_label("WALL", xref, wall + off, 375.0, size=34.0)
+        add_label("EDGE", xref, mx["y"][0] + off, 375.0, size=34.0)
+        print("[wallfix] %-28s offset_y=%+7.1f  最外沿=%.1f 墙面=%.1f  挂墙件 y=%s"
+              % (ytag, off, mx["y"][0], wall,
+                 [p[2] for p in placed if p[0] in P.FLUSH]))
+    make_ground(-700.0, 700.0, -YSIDE - 900.0, YSIDE + 900.0)
+    proj = shoot_fit(cam, objs, zoom, os.path.join(OUT_DIR, "pbr_props4_wallfix.png"),
+                     pad=60.0, pad_top=210.0, yaw=90.0, tilt=6.0)
+    # 打印三个平面的**屏幕像素列**，供人对着图核验（u = y，侧视）
+    ppx, u0 = proj["ppx"], proj["u0"]
+    for (tag, off) in (("旧 outer", -YSIDE), ("新 wall", YSIDE)):
+        px = lambda yy: round((yy + off - u0) * ppx)          # noqa: E731
+        print("    %s 像素列： EDGE(y=%.0f)=%d   WALL(y=%.0f)=%d"
+              % (tag, mx["y"][0], px(mx["y"][0]), wall, px(wall)))
+
+
+#: wallfix 对照里两栋建筑的 Y 向错位（侧视屏幕横轴）
+YSIDE = 620.0
 
 
 # ---------------------------------------------------------------- 主流程
@@ -368,6 +558,12 @@ def main():
 
     focus = [s.strip() for s in os.environ.get("PROPS4_FOCUS", "").split(",") if s.strip()]
     only_focus = os.environ.get("PROPS4_ONLY_FOCUS") == "1"
+    only_wallfix = os.environ.get("PROPS4_ONLY_WALLFIX") == "1"
+
+    if only_wallfix:                      # 只迭代 wallfix 对照图（秒级）
+        shoot_wallfix(cam)
+        print("\nPROPS4_PROBE_OK")
+        return
 
     if not only_focus:
         # 1) 新道具总览条（含变体 + 火柴人比例尺）
@@ -380,11 +576,14 @@ def main():
         shoot_fit(cam, objs, ZOOM_STRIP, os.path.join(OUT_DIR, "pbr_props4_strip.png"),
                   pad=44.0, pad_top=18.0)
 
-        # 2) 炼金坊立面（真实装配器 alchemy(8) + `alchemy` 配方）
+        # 2) 炼金坊立面（真实装配器 alchemy(12) + `alchemy` 配方：只补空位）
         shoot_facade(cam, "alchemy", 12, "alchemy", "pbr_props4_alchemy", seed=11)
 
-        # 3) 教堂立面（cathedral(8) + `chapel` 配方：彩窗板 / 祭坛 / 烛架）
+        # 3) 教堂立面（cathedral(12) + `chapel` 配方：彩窗板贴真实前墙面 / 祭坛 / 烛架）
         shoot_facade(cam, "cathedral", 12, "chapel", "pbr_props4_chapel", seed=13)
+
+        # 3b) 深门廊挂墙件贴墙对照（侧视剖影：旧=悬空，新=贴墙）
+        shoot_wallfix(cam)
 
     # 4) 诊断用高清条：PROPS4_FOCUS="alembic,glass_crate" 只出这几件（3.4 px/单位）
     if focus:
@@ -393,14 +592,19 @@ def main():
         for pname in focus:
             kw = dict(next((k for (n, k, _s) in STRIP if n == pname), {}))
             span = next((s for (n, _k, s) in STRIP if n == pname), 120.0)
-            span = max(span, 90.0)
+            span = max(span, 90.0) * P.mount_scale(pname)
+            eff = P.GAME_SCALE * P.mount_scale(pname)
             b = B.Builder("focus_%s" % pname)
             zz = float(kw.get("z", 0.0))
             if pname in P.FLUSH and zz > 40.0:
-                bh = max(WALL_BOARD_H, zz + float(kw.get("h", 60.0)) + 20.0)
+                bh = max(WALL_BOARD_H, zz + float(kw.get("h", 60.0)) * eff + 20.0)
                 b.box_bottom((span - 10.0, 14.0, bh), (0.0, 7.0), 0.0, "plaster")
             p = dict(kw)
             p.pop("z", None)
+            if eff != 1.0:
+                for k in ("r", "h", "w", "d", "s"):
+                    if k in p:
+                        p[k] = p[k] * eff
             p["seed"] = int(cursor) + 3
             try:
                 P.TABLE[pname](b, x=0.0, y=0.0, z=zz, **p)
@@ -420,4 +624,5 @@ def main():
     print("\nPROPS4_PROBE_OK")
 
 
-main()
+if __name__ == "__main__":
+    main()

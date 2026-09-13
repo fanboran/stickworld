@@ -75,6 +75,14 @@ tools/worldgen/output/**
 !tools/worldgen/output/r8_label_*.png
 # feedback1 创始人验收第一批修复预览（去抖动/掉色修复/新字号，见交接档 feedback1）
 !tools/worldgen/output/feedback1_*.png
+# feedback3 创始人第三批观感返工验收预览（C19 界线 / C20 都城标记 / C21 全屏海洋 /
+# C22 裁剪 / C23 政权配色 / C24 标注文字，见交接档「创始人第三批观感反馈」）
+!tools/worldgen/output/feedback3_*.png
+# 边界超分 S2/S3 验收预览（共享弧拓扑全景+出生特写+新色板，见交接档「边界超分 S2/S3」）
+!tools/worldgen/output/arcs_preview_*.png
+!tools/worldgen/output/palette_v3_preview_2048.png
+# 数据对齐审计验收图（audit4 湖双几何裁决材料等，见交接档「数据对齐」专节）
+!tools/worldgen/output/audit*_*.png
 # npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
 tools/worldgen/output/**/*.npy
 # 世界生成诊断输出（生成产物，不提交）

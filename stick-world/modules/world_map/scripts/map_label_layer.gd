@@ -1,23 +1,26 @@
 class_name MapLabelLayer
 extends Node2D
-## 地图标注层（观感返工 §R8 层3）—— 三级标注（国名/地区名/城市）+ 都城星标，
-## 挂在各视图渲染器（L3MapRenderer/L2MapRenderer/MapRenderer）子节点，随视图开关。
+## 地图标注层（观感返工 §R8 层3）—— 三级标注（国名/地区名/城市）+ 都城标记。
+## ⚠️ 挂渲染器的**父级**（Content，无相机变换），本层自己换算屏幕坐标——
+## 字形按真实屏幕像素光栅化（与 UI 同路径，清晰；旧方案 fs=fs_px/zoom 传
+## 引擎被相机缩回，TextServer 在 155px 光栅化再缩 0.116 → AA 全糊，可读性
+## 远逊 UI 文字的根因）。坐标链：绘制点 = 地图坐标 × zoom + offset。
 ##
-## 规范来源（§7.3-3 标注两步法 / §7.3-6 规范表）：
-##   - 字号分级：国名 18px Bold（中文无大写，以字距 15%/字重表达）> 地区名 14px
-##     > 首都 13px Bold > 城市 12px（相邻档差 ≥2pt）；尺寸屏幕像素口径（÷zoom 换算）
-##   - halo：字号 1/6~1/5 clamp 1.0~2.0px，引擎级字形描边（draw_string_outline，
-##     feedback1 由四向偏移改入——偏移字形放大显阶梯锯齿毛刺）；政治模式彩色底 =
-##     墨白字 + 深墨 halo，L1 浅色地形底 = 暖墨字 + 白 halo
+## 规范来源（§7.3-3 标注两步法 / §7.3-6 规范表；第三批 C20/C24 重调）：
+##   - 字号分级：国名 14px Bold（中文无大写，以字距/字重表达）> 地区名 11px
+##     > 首都 11px Bold > 城市 10px；屏幕像素口径恒定
+##   - **描边/halo 退役**（创始人 2026-09-11 裁决：白色毛边=描边产物，纯墨字，
+##     可读性靠字重/字色/字号，不玩花活）
+##   - 字距分级（C24）：国名 0.18em / 地区名 0.10em / 城名 0.06em（面要素拉字距做层级）
 ##   - 字体 = StickHand（SketchFonts，与游戏 UI 同源；禁止 fallback 字体）
 ##   - 缩放显隐阈值（r = zoom / 视图适配 zoom，OSM carto z3/z5/z6 思路按三级视图定标）：
-##       L3 国名 r≤6 / 都城星标恒显；L2 地区名 r≤6 / 重镇名 r≥1.2 / 首都恒显；
+##       L3 国名 r≤6 / 都城标记恒显；L2 地区名 r≤6 / 重镇名 r≥1.2 / 首都恒显；
 ##       L1 城市名 r≥0.55 / 首都恒显
 ##   - 防压盖：同屏候选按优先级（首都 > 国名 > 地区 > 重镇/城市）贪心避让——
 ##     get_string_size 碰撞盒 + 锚点四向候选（右>上>下>左，Axis Maps 简化版），
 ##     全碰撞时首都兜底右锚强显、其余丢弃
-##   - 都城星标：外接圆直径 8px 简洁矢量五星（规范表「首都 8px 星标」；固定 seed
-##     微转角，手绘感不沸腾），金 = CONTENT_PALETTE[9]（顶级聚落语义，同 T5 描边）
+##   - 都城标记（C20）：同心环 + 中心实点（浅底衬环 + 墨环 + 墨点），恒定屏幕
+##     尺寸、恒显；取代原「金色五星」（小尺寸下糊成一团、彩色底上像贴纸）
 ##
 ## 数据源：L3 = l3_city.json（80 国 name/capital + 1040 城块 centroid/area）；
 ## L2 = l2_world.json（region_id + cities[level] + states.capital）；L1 = 包内
@@ -33,6 +36,8 @@ const FIT_HINT_L1 := 0.85   # l1 控制器 target_h = 视口高 × 0.85
 enum Tier { COUNTRY, REGION, CAPITAL, TOWN, CITY }
 
 var _camera: MapCamera = null
+## 宿主渲染器（挂 Content 后不再随渲染器子树显隐——视图开关由本层自查宿主）
+var _host: Node2D = null
 var _items: Array[Dictionary] = []
 var _stars: Array[Dictionary] = []
 ## true = 标注是政治语义（L3/L2），仅 POLITICAL 模式绘制；false = 全模式（L1）
@@ -57,6 +62,11 @@ func _ready() -> void:
 
 func set_camera(camera: MapCamera) -> void:
 	_camera = camera
+
+
+## 绑定宿主渲染器（视图显隐跟随；挂 Content 后必设）
+func set_host(renderer: Node2D) -> void:
+	_host = renderer
 
 
 ## ===== 数据装配（set_data 时由各渲染器调用；换数据重复调用即全量重建）=====
@@ -252,6 +262,8 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if _items.is_empty() and _stars.is_empty():
 		return
+	if _host != null and not _host.visible:   # 视图关闭跟随（headless 安全：直读 visible）
+		return
 	if _political_only and MapModeManager.current_mode != MapModeManager.Mode.POLITICAL:
 		return
 	var z := 1.0
@@ -268,14 +280,15 @@ func _draw() -> void:
 	# 可视域（地图坐标）：S = offset + M×zoom → M = (S − offset)/zoom
 	var view := Rect2(-off / z, vp_size / z).grow(_map_extent * 0.05)
 	var occupied: Array[Rect2] = []
-	# 1. 都城星标占位进碰撞集（文字盒及其 halo 不压星；星本体最后画，压不住）
-	var star_r := MapTokens.LABEL_STAR_SIZE * 0.5 / z
+	# 1. 都城标记占位进碰撞集（屏幕域）
+	var star_r := float(MapTokens.LABEL_CAPITAL_RADIUS)
 	for st in _stars:
 		var sp: Vector2 = st["pos"]
 		if not view.has_point(sp):
 			continue
-		var sr := star_r + MapTokens.LABEL_COLLIDE_PAD / z
-		occupied.append(Rect2(sp - Vector2(sr, sr), Vector2(sr, sr) * 2.0))
+		var ss := sp * z + off   # 地图 → 屏幕
+		var sr := star_r + float(MapTokens.LABEL_COLLIDE_PAD)
+		occupied.append(Rect2(ss - Vector2(sr, sr), Vector2(sr, sr) * 2.0))
 	# 2. 标注候选：阈值过滤 + 视口裁剪 + 优先级排序（sort 小者先落位）
 	var cands: Array[Dictionary] = []
 	var ratio := _zoom_ratio(z, vp_size)
@@ -287,13 +300,13 @@ func _draw() -> void:
 		cands.append(item)
 	cands.sort_custom(func(a, b): return float(a["sort"]) < float(b["sort"]))
 	for item in cands:
-		_draw_label(item, z, occupied)
-	# 3. 都城星标最后画（压在标签 halo 之上，任何情况下都是清晰的完整星形）
+		_draw_label(item, z, off, occupied)
+	# 3. 都城标记最后画（压在文字之上，任何情况下都是清晰完整的符号）
 	for st in _stars:
 		var sp: Vector2 = st["pos"]
 		if not view.has_point(sp):
 			continue
-		_draw_star(sp, star_r, MapSketch.id_seed(str(st["id"])), z)
+		_draw_capital_marker(sp * z + off, star_r)
 
 
 ## 显隐阈值表（r = zoom / 视图适配 zoom；MapTokens.LABEL_ZOOM_*）：
@@ -318,45 +331,39 @@ func _zoom_ratio(z: float, vp_size: Vector2) -> float:
 	return z / fit if fit > 0.0001 else 1.0
 
 
-## 单条标注：按锚点候选序（面标注居中单候选 / 点标注 右>上>下>左）贪心避让，
-## 全碰撞时首都兜底右锚强显、其余丢弃。halo = 四向偏移描边（字号 1/6~1/5 clamp）。
-func _draw_label(item: Dictionary, z: float, occupied: Array[Rect2]) -> void:
+## 单条标注（屏幕口径）：绘制点 = 地图坐标 × zoom + offset，fs 直接屏幕像素——
+## TextServer 按真实显示字号光栅化（与 UI 同路径，缩放恒清晰）。按锚点候选序
+##（面标注居中单候选 / 点标注 右>上>下>左）贪心避让，全碰撞时首都兜底右锚强显、
+## 其余丢弃。纯墨字直绘（描边/halo 已退役——毛边来源）。
+func _draw_label(item: Dictionary, z: float, off: Vector2, occupied: Array[Rect2]) -> void:
 	var tier: int = item["tier"]
 	var bold := tier == Tier.COUNTRY or tier == Tier.CAPITAL
 	var font := _font_bold if bold else _font_reg
 	if font == null:
 		return
-	var fs_px := _tier_font_size(tier)
-	var fs := fs_px / z  # 屏幕像素 → 地图单位（本层随渲染器被相机缩放）
+	var fs := float(_tier_font_size(tier))   # 屏幕像素
 	var text: String = item["text"]
-	var pos: Vector2 = item["pos"]
-	var tracking := fs * MapTokens.LABEL_COUNTRY_TRACKING if tier == Tier.COUNTRY else 0.0
+	var pos: Vector2 = item["pos"] * z + off   # 地图 → 屏幕
+	var tracking := fs * _tier_tracking(tier)
 	var text_w := _spaced_width(font, text, fs, tracking)
 	var line_h := font.get_height(fs)
 	var ascent := font.get_ascent(fs)
 	var ink: Color = MapTokens.LABEL_INK_MAP if item["style"] == "map" else MapTokens.LABEL_INK_CITY
-	var halo: Color = MapTokens.LABEL_HALO_DARK if item["style"] == "map" else MapTokens.LABEL_HALO_WHITE
-	var gap := MapTokens.LABEL_ANCHOR_GAP / z
-	# halo 宽：屏幕像素口径 clamp（字号 1/6~1/5，1.0~2.0px）再 ÷zoom 成地图单位——
-	# clamp 必须发生在屏幕尺度，否则远 zoom 时 halo 被放大/吃掉。
-	# feedback1 毛刺修复：描边换引擎级字形轮廓扩张（draw_string_outline，
-	# TextServer 对字形位图做平滑外扩进 glyph 缓存），替代四向偏移叠字
-	# （放大后四份偏移字形的阶梯锯齿显形 = 毛刺根因）
-	var halo_w := clampf(fs_px * 0.18, MapTokens.LABEL_HALO_MIN, MapTokens.LABEL_HALO_MAX) / z
+	var gap := float(MapTokens.LABEL_ANCHOR_GAP)
 	# 锚点候选（文字盒左上角相对锚点）；面标注（国名/地区名）按制图惯例居中单候选。
-	# 点标注首候选「右」：都城须让出星标半径（星最后画，但文字盒先让位不与之重叠）
+	# 点标注首候选「右」：都城须让出标记半径（标记最后画，但文字盒先让位不与之重叠）
 	var anchors: Array[Vector2] = [Vector2(-text_w * 0.5, -line_h * 0.5)]
 	if tier != Tier.COUNTRY and tier != Tier.REGION:
 		var lead := gap
 		if tier == Tier.CAPITAL:
-			lead = MapTokens.LABEL_STAR_SIZE * 0.5 / z + gap
+			lead = float(MapTokens.LABEL_CAPITAL_RADIUS) + gap
 		anchors = [
-			Vector2(lead, -line_h * 0.5),           # 右（都城：星缘之外）
+			Vector2(lead, -line_h * 0.5),           # 右（都城：标记缘之外）
 			Vector2(-text_w * 0.5, -line_h - gap),  # 上
 			Vector2(-text_w * 0.5, gap),            # 下
 			Vector2(-text_w - gap, -line_h * 0.5),  # 左
 		]
-	var pad := MapTokens.LABEL_COLLIDE_PAD / z
+	var pad := float(MapTokens.LABEL_COLLIDE_PAD)
 	var chosen := -1
 	var chosen_rect := Rect2()
 	for i in anchors.size():
@@ -379,29 +386,16 @@ func _draw_label(item: Dictionary, z: float, occupied: Array[Rect2]) -> void:
 	# 绘制原点 = 文字盒左上 + 基线偏移；国名走逐字距绘制
 	var origin := chosen_rect.position + Vector2(-pad, -pad) + Vector2(0.0, ascent)
 	if tracking > 0.0:
-		_draw_spaced(font, text, origin, fs, tracking, halo_w, halo, ink)
+		_draw_spaced(font, text, origin, fs, tracking, ink)
 	else:
-		_draw_halo_string(font, text, origin, fs, halo_w, halo, ink)
+		draw_string(font, origin, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)
 
 
-## 引擎级描边 halo + 主文（§7.3-3 白/深 halo 语义不变）。
-## feedback1 毛刺修复：四向偏移叠字（放大后偏移字形阶梯锯齿显形）→
-## draw_string_outline（TextServer 字形轮廓平滑外扩，与 LabelSettings.outline 同一
-## 渲染路径且进 glyph 缓存）；halo_w 已是地图单位，outline size 随字号同尺度取整
-func _draw_halo_string(font: Font, text: String, pos: Vector2, fs: float, halo_w: float,
-		halo: Color, ink: Color) -> void:
-	var ow := maxi(1, roundi(halo_w))
-	draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ow, halo)
-	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)
-
-
-## 国名逐字绘制（字距 15%——中文无大写，以字距/字重表达层级）；halo 同引擎级描边
+## 国名逐字绘制（字距分级——中文无大写，以字距/字重表达层级）；纯墨字直绘
 func _draw_spaced(font: Font, text: String, pos: Vector2, fs: float, tracking: float,
-		halo_w: float, halo: Color, ink: Color) -> void:
+		ink: Color) -> void:
 	var cursor := pos
-	var ow := maxi(1, roundi(halo_w))
 	for ch in text:
-		draw_string_outline(font, cursor, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ow, halo)
 		draw_string(font, cursor, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)
 		cursor.x += font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + tracking
 
@@ -418,6 +412,19 @@ func _spaced_width(font: Font, text: String, fs: float, tracking: float) -> floa
 	return w
 
 
+## 分级字距（第三批 C24）：面要素（国名/地区名）拉字距做层级，点要素几乎不拉
+func _tier_tracking(tier: int) -> float:
+	match tier:
+		Tier.COUNTRY:
+			return MapTokens.LABEL_COUNTRY_TRACKING
+		Tier.REGION:
+			return MapTokens.LABEL_REGION_TRACKING
+		Tier.CAPITAL:
+			return MapTokens.LABEL_CITY_TRACKING
+		_:
+			return MapTokens.LABEL_CITY_TRACKING
+
+
 func _tier_font_size(tier: int) -> float:
 	match tier:
 		Tier.COUNTRY:
@@ -430,22 +437,20 @@ func _tier_font_size(tier: int) -> float:
 			return MapTokens.LABEL_SIZE_CITY
 
 
-## 都城星标：外接圆直径 8px 简洁矢量五星（规范表），固定 seed 微转角（手绘感
-## 不沸腾——星标是静态符号，不做 boiling）；金填充 + 墨描边
-func _draw_star(center: Vector2, outer_r: float, seed: int, z: float) -> void:
+## 都城标记（第三批 C20 重设计）：同心环 + 中心实点（经典制图学首都符号）。
+## 三层自下而上：浅色底衬环（读得出）→ 墨色外环（形状）→ 墨色中心点（锚位）。
+## 全部尺寸屏幕像素固定（÷zoom），静态符号不做动画。
+func _draw_capital_marker(center: Vector2, outer_r: float) -> void:
 	if outer_r <= 0.0001:
 		return
-	var rot := fposmod(float(seed) * 0.6180339887, 1.0) * 0.24 - 0.12
-	var pts := PackedVector2Array()
-	pts.resize(10)
-	for i in 10:
-		var ang := rot - PI * 0.5 + TAU * float(i) / 10.0
-		var rr := outer_r if i % 2 == 0 else outer_r * 0.42
-		pts[i] = center + Vector2(cos(ang), sin(ang)) * rr
-	draw_colored_polygon(pts, MapTokens.LABEL_STAR_FILL)
-	var closed := pts.duplicate()
-	closed.append(pts[0])
-	draw_polyline(closed, MapTokens.LABEL_STAR_OUTLINE, 1.2 / z, true)
+	var casing_w := float(MapTokens.LABEL_CAPITAL_RING_W
+			+ MapTokens.LABEL_CAPITAL_CASING_EXTRA)
+	draw_arc(center, outer_r, 0.0, TAU, 48,
+		MapTokens.LABEL_CAPITAL_CASING, casing_w, true)
+	draw_arc(center, outer_r, 0.0, TAU, 48,
+		MapTokens.LABEL_CAPITAL_COLOR, float(MapTokens.LABEL_CAPITAL_RING_W), true)
+	draw_circle(center, float(MapTokens.LABEL_CAPITAL_DOT_RADIUS),
+		MapTokens.LABEL_CAPITAL_COLOR)
 
 
 ## 多边形组（Vector2 / [y,x] 数组两态兼容）的包围盒中心；空/无效返回 Vector2.INF

@@ -7,8 +7,8 @@
     → 面积幂律分布，大小悬殊自然
   - 扩张代价加高程带重罚（山脊）+ 河流径流罚 → 边界自动贴河线/山脊
   - normalize 多数邻域翻转消飞地（FMG normalize 同款）
-  - 政权色从 CONTENT_PALETTE 派生（R8 层3：7 族 × 族内明度/饱和档，废除 HSL 黄金角），
-    贪心图着色保证「相邻国不同族优先、同族不同档」
+  - 政权色 = OKLCH 感知均匀色轮候选（观感返工第三批 C23；palette.py 唯一真相源），
+    贪心图着色保证相邻国 OKLab ΔE ≥ 阈值
   - 政治色不再烘焙颜色贴图（R9 过渡态裁决）：改产政权 ID mask
     （L3 一张 8192 单通道 PNG + L2 每地区窗口裁切，像素值 = lut_index 1..80），
     运行时 LUT 查表上色——改 LUT 即全图换色，零重烘
@@ -32,12 +32,16 @@ import json
 import math
 import os
 import random
+import sys
 from collections import Counter, defaultdict
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from scipy.ndimage import map_coordinates
 from skimage.graph import MCP_Geometric
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import palette  # noqa: E402  （同目录：候选色生成 + 贪心分配，见其模块注释）
 
 SIZE = 2048
 SIZE_FULL = 8192
@@ -56,37 +60,11 @@ CODE_LAKE = 254      # 湖泊（l2_map_renderer.LAKE_COLOR）
 CODE_NEIGHBOR = 255  # 邻区灰底（l2_map_renderer.NEIGHBOR_COLOR）
 CODE_FREE = 253      # 自由城邦灰（无归属陆地：政治图 feedback2 D，0 仍=海洋）
 
-# ---------- CONTENT_PALETTE（20 色内容色板，7 族） ----------
-# 来源：stick-world/modules/ui_global/scripts/theme/stick_tokens.gd 的 CONTENT_PALETTE
-# （派生自游戏贴图盘点，见 docs/设计/UI/01-设计语言.md §2.6；作用域含「地图点缀」）。
-# 色值与 token 同源（float × 255 四舍五入），政权色由各族变体派生——保证与游戏
-# 纹章/组织标签色同语言，替代体系外的 HSL 黄金角（R8 层3 裁决）。
-CONTENT_PALETTE_FAMILIES = [
-    # 草绿族（地面 grassland #84b43c/#6c9c3c/#54843c + 麦色）
-    ("grass", [(0.78, 0.72, 0.48), (0.66, 0.76, 0.34), (0.48, 0.68, 0.32), (0.33, 0.52, 0.28)]),
-    # 青碧族（背景树线/近山 #3c8484/#549cb4/#246c54）
-    ("teal", [(0.30, 0.58, 0.52), (0.35, 0.62, 0.64), (0.20, 0.42, 0.38)]),
-    # 天蓝族（远山/云 #6c9ccc/#cce4fc）
-    ("sky", [(0.42, 0.62, 0.80), (0.35, 0.48, 0.66)]),
-    # 琥珀棕族（UI 琥珀同源 + 木建筑/木盾 #845424/#6c3c0c）
-    ("amber", [(0.95, 0.68, 0.25), (0.62, 0.44, 0.26), (0.45, 0.30, 0.18), (0.80, 0.68, 0.42)]),
-    # 土石族（资源图标 #6c543c/#9c9c9c/#848484）
-    ("earth", [(0.52, 0.42, 0.30), (0.62, 0.52, 0.40), (0.62, 0.62, 0.58), (0.44, 0.45, 0.47)]),
-    # 红族（阵营/战旗补缺：语义红降饱和压暗）
-    ("red", [(0.66, 0.36, 0.30), (0.52, 0.27, 0.25)]),
-    # 紫族（补缺）
-    ("purple", [(0.48, 0.38, 0.52)]),
-]
-
-# 出生 8 城邦族色（feedback2 E）：CONTENT_PALETTE 7 族各取一枚代表原型 + 草绿族
-# 麦色变体补第 8 邦。城邦之间不接壤，不受「相邻不同族」图着色约束，只需互相
-# 可分（旧 P7 HSL 色是绿色渐变梯，观感如同一国的渐变带——废除）。
-# (族下标, 原型下标)；0..1 float × 255 取整落 states[].color。lut_index 73..80 不变。
-_BIRTH_COLOR_PICKS = [(0, 1), (1, 0), (2, 0), (3, 0), (5, 0), (6, 0), (4, 0), (0, 0)]
-BIRTH_CITY_STATE_COLORS = [
-    tuple(int(round(v * 255)) for v in CONTENT_PALETTE_FAMILIES[f][1][i])
-    for f, i in _BIRTH_COLOR_PICKS
-]
+# ---------- 政权色板（观感返工第三批 C23）----------
+# 候选色生成与贪心分配的唯一真相源 = palette.py（OKLCH 等彩度色轮；色板参数在
+# state_params.json 的 colors 段）。本文件与 state_recolor.py 调用同一函数，
+# 保证「全量重跑」与「只重排颜色」结果逐位一致。出生 8 城邦与 72 新国一次参与
+# 分配（不再单独指定族代表色）。
 
 
 def sid_of(label):
@@ -467,60 +445,8 @@ def normalize_enclaves(owner, capitals_idx, adj, city_region, sid_culture, regio
     return flipped_total
 
 
-# ---------- Step 5：政权色（CONTENT_PALETTE 派生，R8 层3） ----------
-
-def derive_color_pool(n_per_family):
-    """7 族 × 族内明度/饱和档 → 72 个候选色。
-
-    每个变体的色相/饱和直接取族内原型色（第 i 档用原型 i mod len），明度走全幅
-    梯子 [0.30, 0.74]——同族相邻档 ΔL ≈ 0.04，配合贪心分配「同族只邻不同档」。
-    """
-    pool = []
-    for fi, (_, proto) in enumerate(CONTENT_PALETTE_FAMILIES):
-        n = n_per_family[fi] if fi < len(n_per_family) else 11
-        ls = np.linspace(0.30, 0.74, n)
-        for i in range(n):
-            r0, g0, b0 = proto[i % len(proto)]
-            h, li, si = colorsys.rgb_to_hls(r0, g0, b0)
-            r, g, b = colorsys.hls_to_rgb(h, float(ls[i]), si)
-            pool.append({
-                "family": fi, "tier": i, "L": float(ls[i]),
-                "rgb": (int(round(r * 255)), int(round(g * 255)), int(round(b * 255))),
-            })
-    return pool
-
-
-def assign_state_colors(pool, states_by_size, state_neighbors, min_gap):
-    """贪心图着色：按规模降序逐国取色；相邻国不同族优先，同族须明度档差 ≥ min_gap。
-
-    返回 sid -> pool item；并统计冲突（同族且 ΔL < min_gap 的相邻国对数）。
-    """
-    assigned = {}
-    fam_cycle = 0
-    n_fam = len(CONTENT_PALETTE_FAMILIES)
-    for ord_i, sid in enumerate(states_by_size):
-        nbr_items = [assigned[s] for s in state_neighbors.get(sid, ()) if s in assigned]
-        order = sorted(range(len(pool)),
-                       key=lambda pi: ((pool[pi]["family"] + fam_cycle) % n_fam, pi))
-        fam_cycle += 1
-        best_pi, best_pen = None, None
-        for pi in order:
-            p = pool[pi]
-            pen = 0
-            for q in nbr_items:
-                if q["family"] == p["family"]:
-                    pen += 1 if abs(q["L"] - p["L"]) >= min_gap else 50
-            if best_pen is None or pen < best_pen:
-                best_pi, best_pen = pi, pen
-        assigned[sid] = pool.pop(best_pi)
-    conflicts = []
-    for sid, nbrs in state_neighbors.items():
-        for nb in nbrs:
-            if nb in assigned and sid < nb:
-                a, b = assigned[sid], assigned[nb]
-                if a["family"] == b["family"] and abs(a["L"] - b["L"]) < min_gap:
-                    conflicts.append((sid, nb))
-    return assigned, conflicts
+# ---------- Step 5：政权色（观感返工第三批 C23 → palette.py） ----------
+# 候选色生成 / 城块邻接提取 / 贪心分配全部在 palette.py（与 state_recolor.py 共用）。
 
 
 # ---------- 命名接口（name_source，创始人 2026-09-08 定） ----------
@@ -908,38 +834,33 @@ def main():
                 states[sid]["name"] = "%s·%02d" % (label, i + 1)
                 name_table["names"][sid] = states[sid]["name"]
 
-    # Step 6 色：CONTENT_PALETTE 派生 + 贪心图着色；出生 8 邦取族代表色
-    # （feedback2 E：旧 P7 HSL 绿渐变梯观感如同一国的渐变带，废除）
+    # Step 6 色（观感返工第三批 C23）：OKLCH 色轮候选 + 城块共享边邻接贪心分配，
+    # 出生 8 城邦与 72 新国**一次参与**分配（palette.py 为唯一真相源，
+    # state_recolor.py 同函数同结果——「只重排颜色」与「全量重跑」不打架）。
     sizes_new = Counter(city_owners.values())
     new_states_by_size = sorted(
         [sid for (_, sid, _) in capitals], key=lambda s: (-sizes_new.get(s, 0), s))
-    state_neighbors = defaultdict(set)
-    for i in range(len(sub)):
-        oi = owner_sub[i]
-        for nbr, _w in adj[i]:
-            oj = owner_sub[nbr]
-            if oi != oj and oi != -1 and oj != -1:
-                state_neighbors[oi].add(oj)
-                state_neighbors[oj].add(oi)
-    pool = derive_color_pool(P["colors"]["n_per_family"])
-    if len(pool) < len(new_states_by_size):
-        # 防御：n_states_total 改档超出 7 族配额时按紫族明度梯子补（正常 72 == 72）
-        extra = derive_color_pool([0, 0, 0, 0, 0, 0, len(new_states_by_size) - len(pool)])
-        pool += extra
-    assigned, conflicts = assign_state_colors(
-        pool, new_states_by_size, state_neighbors, P["colors"]["min_lightness_gap"])
-    print("相邻国色冲突（同族且 ΔL<%.2f）：%d 对" % (
-        P["colors"]["min_lightness_gap"], len(conflicts)))
+    owners_by_label = {}
+    for t in city_json["tiles"]:
+        sid = city_owners.get(sid_of(int(t["label"])))
+        if sid:
+            owners_by_label[int(t["label"])] = sid
+    candidates = palette.build_candidates(P["colors"])
+    sizes_all = {sid: int(sizes_new.get(sid, 0)) for sid in states}
+    assigned, conflicts = palette.assign_from_tiles(
+        candidates, city_json["tiles"], owners_by_label, sizes_all,
+        float(P["colors"]["min_delta_e"]))
+    print("色板：候选 %d（%d 色相 × %d 明度档），相邻国 ΔE<%.3f 的对数 = %d" % (
+        len(candidates), int(P["colors"]["hue_count"]),
+        len(P["colors"]["tiers"]), float(P["colors"]["min_delta_e"]), len(conflicts)))
 
-    # lut_index：新国按规模降序 1..72，出生城邦 73..80（序号排尾不变；feedback2 E
-    # 只换色：城邦色 = BIRTH_CITY_STATE_COLORS 族代表色，按 sid 字典序确定性分配）
+    # lut_index：新国按规模降序 1..72，出生城邦 73..80（序号排尾不变——ID mask 编码）
     for i, sid in enumerate(new_states_by_size):
         states[sid]["lut_index"] = i + 1
         states[sid]["color"] = list(assigned[sid]["rgb"])
-    birth_sids = sorted(birth_states)
-    for j, sid in enumerate(birth_sids):
+    for j, sid in enumerate(sorted(birth_states)):
         states[sid]["lut_index"] = len(new_states_by_size) + 1 + j
-        states[sid]["color"] = list(BIRTH_CITY_STATE_COLORS[j % len(BIRTH_CITY_STATE_COLORS)])
+        states[sid]["color"] = list(assigned[sid]["rgb"])
     for sid in states:
         states[sid]["n_cities"] = 0
     for sid in city_owners.values():
@@ -986,9 +907,15 @@ def main():
             "params": "state_params.json",
             "n_states": len(states), "n_cities": len(city_owners),
             "n_states_total": P["n_states_total"],
-            "color_source": "CONTENT_PALETTE 派生（stick_tokens.gd 20 色内容色板，"
-                            "7 族 × 族内明度/饱和档；出生 8 城邦 = CONTENT_PALETTE "
-                            "族代表色 BIRTH_CITY_STATE_COLORS，旧 P7 HSL 渐变梯废除）",
+            "color_source": "OKLCH 感知均匀色轮派生（观感返工第三批 C23："
+                            "%d 色相 × %d 明度档等彩度候选，贪心图着色保证相邻国 "
+                            "OKLab ΔE ≥ %.3f；palette.py 为唯一真相源，"
+                            "state_recolor.py 同函数可只重排颜色）"
+                            % (int(P["colors"]["hue_count"]),
+                               len(P["colors"]["tiers"]),
+                               float(P["colors"]["min_delta_e"])),
+            "color_palette_version": "v3-oklch-%dx%d" % (
+                int(P["colors"]["hue_count"]), len(P["colors"]["tiers"])),
             "names_status": "提案/待定（出生 8 城邦除外）；正式国名由世界观会话定稿后换 "
                             + P["name_source"] + " 重跑",
             "id_mask": {
@@ -1098,7 +1025,7 @@ def make_previews(P, city_json, states, owners_by_label, mask8, idx_by_label,
     canvas = Image.new("RGB", (SIZE + 460, SIZE), (14, 16, 22))
     canvas.paste(prev, (0, 0))
     dr2 = ImageDraw.Draw(canvas)
-    dr2.text((SIZE + 20, 24), "政权版图（R7 80 国 · CONTENT_PALETTE 派生色）",
+    dr2.text((SIZE + 20, 24), "政权版图（80 国 · OKLCH 色轮派生色，C23）",
              font=font, fill=(240, 240, 245))
     draw_legend(dr2, entries, SIZE + 20, 70, font_s)
     canvas.save(os.path.join(OUTPUT_DIR, "political_v2_overview_2048.png"))

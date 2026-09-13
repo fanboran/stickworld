@@ -194,10 +194,21 @@ func _test_political_layer() -> void:
 	var was_mode: int = MapModeManager.current_mode
 	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
 	await get_tree().process_frame
+	# 边界超分 S3：political_mesh 注入后矢量 fill 优先（MeshInstance2D 垫底 +
+	# 顶点色查表 shader）；mask（Sprite2D）降级回退。按实际路线断言。
+	var fills: Array = _l2_renderer._political_fill_meshes
 	var layer: Sprite2D = _l2_renderer._political_layer
-	_runner.assert_true(layer != null, "政治着色层已构建")
-	if layer == null:
+	_runner.assert_true(not fills.is_empty() or layer != null, "政治着色层已构建")
+	if fills.is_empty() and layer == null:
 		MapModeManager.set_mode(was_mode)
+		return
+	if not fills.is_empty():
+		# 矢量主路线（S3）：draw_mesh 直绘 + 顶点色直烘 LUT 最终 RGB
+		_runner.assert_true(fills[0] is ArrayMesh, "矢量 fill 缓存为 ArrayMesh 分块列表")
+		var vlut := PoliticalLut.load_shared()
+		_runner.assert_true(vlut != null, "共享 PoliticalLut 可查（与 L3/图例同源）")
+		MapModeManager.set_mode(was_mode)
+		await get_tree().process_frame
 		return
 	_runner.assert_true(layer.visible, "POLITICAL 下着色层可见")
 	var mat: ShaderMaterial = layer.material

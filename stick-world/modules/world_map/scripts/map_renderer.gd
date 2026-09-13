@@ -63,11 +63,15 @@ var _road_dirt_lines: Array[PackedVector2Array] = []
 var _road_paved_lines: Array[PackedVector2Array] = []
 var _segs_valid: bool = false
 
-## 静态色块层 ArrayMesh（城市色块 / 湖泊各自一张，set_data 后烘焙一次；描边/轮廓/hover 仍动态）。
+## 静态色块层 ArrayMesh（城市色块 / 湖泊 / 邻居灰底各自一张，set_data 后烘焙一次；
+## 描边/轮廓/hover 仍动态）。
 ## 拆两层：河流通篇画在中间（tiles 之上、湖泊之下——河入湖被湖面覆盖，河穿城市块正常显示）。
 ## Geometry2D.triangulate_polygon 一次三角剖分 → 每帧 2 次 draw_mesh，免每帧 earcut（8 城 4750 点 + 湖）。
 var _tiles_mesh: ArrayMesh = null
 var _lakes_mesh: ArrayMesh = null
+## 邻居老 L1 块灰底（第四批反馈：政治模式下邻居不再空心，整块填灰——与 L2 的
+## NEIGHBOR 同语义；仅 POLITICAL 消费，地形/交通模式保持底图原样）
+var _neighbors_mesh: ArrayMesh = null
 
 ## ===== 建成区 blob V2 状态（§R5；仅 TERRAIN 模式消费）=====
 ## 包几何（blob_v2_geo.bin：每城三档环顶点 + 烘焙档；SettlementBlob.load_pack_geometry）
@@ -227,6 +231,7 @@ func set_data(data: L1WorldData) -> void:
 	_segs_valid = false
 	_tiles_mesh = null
 	_lakes_mesh = null
+	_neighbors_mesh = null
 	_route_road_pts.clear()
 	_route_nodes = PackedVector2Array()
 	# 换包：旧贴图/旧线程/旧 blob 状态作废（join 防未完成 Thread 销毁段错误）
@@ -280,7 +285,13 @@ func _ensure_label_layer() -> void:
 	if _label_layer == null:
 		_label_layer = MapLabelLayer.new()
 		_label_layer.set_camera(_camera)
-		add_child(_label_layer)
+		# 挂渲染器父级（Content，无相机变换）：屏幕像素口径（同 L3/L2 注）
+		var host := get_parent()
+		if host != null:
+			host.add_child(_label_layer)
+		else:
+			add_child(_label_layer)
+		_label_layer.set_host(self)
 	_label_layer.setup_l1(_data)
 
 
@@ -667,6 +678,9 @@ func _draw() -> void:
 	if not terrain_base:
 		if _tiles_mesh == null:
 			_bake_base_meshes()
+		# 4.4 邻居老 L1 块灰底（仅政治模式；A3 空心化的补集——空心轮廓留在灰底之上）
+		if map_mode == MapModeManager.Mode.POLITICAL and _neighbors_mesh != null:
+			draw_mesh(_neighbors_mesh, null)
 		if _tiles_mesh != null:
 			draw_mesh(_tiles_mesh, null)
 		# 1.4 道路（R6 实线分级，废 F5 虚线）：仅交通模式回退时画——
@@ -912,19 +926,27 @@ func _lake_edge_tol() -> float:
 func _bake_base_meshes() -> void:
 	_tiles_mesh = null
 	_lakes_mesh = null
+	_neighbors_mesh = null
 	var ctx := _data.context_size
 	if ctx.x <= 0 or ctx.y <= 0:
 		return
 	# 收集 (多边形, 颜色)：海洋 = 全矩形底由渲染器背景承担（OCEAN 回退分支 + 相机外区域）
 	var tile_pairs: Array = []   # [[PackedVector2Array, Color], ...]
 	var lake_pairs: Array = []
+	var neighbor_pairs: Array = []
 	for tile in _data.tiles:
 		if tile.polygon.size() >= 3:
 			tile_pairs.append([tile.polygon, _data.get_state_color(tile.owner_state_id)])
 	for lake in _data.lakes:
 		lake_pairs.append([_pts(lake), LAKE_COLOR])
+	for ni in _data.neighbors.size():
+		for poly in _data.neighbors[ni].get("polygons", []):
+			var pts := _pts(poly)
+			if pts.size() >= 3:
+				neighbor_pairs.append([pts, NEIGHBOR_COLOR])
 	_tiles_mesh = _mesh_from_pairs(tile_pairs)
 	_lakes_mesh = _mesh_from_pairs(lake_pairs)
+	_neighbors_mesh = _mesh_from_pairs(neighbor_pairs)
 
 
 ## 多边形组 → 顶点色 ArrayMesh（每三角形独立顶点，避免共享顶点颜色冲突）

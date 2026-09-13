@@ -432,28 +432,15 @@ def _ring_area(loop):
     return area * 0.5
 
 
-def extract_smooth_mesh(labels, min_area_px=2.0, visvalingam_area=1.5,
-                        chaikin_passes=2, verbose=False):
-    """R3：find_contours 亚像素等值线 + 共享弧统一平滑版网格提取。
+def _extract_rings_welded(labels, min_area_px=2.0):
+    """R3 前半程：per-label find_contours 亚像素环提取 + 全局点计数 + T 形点焊。
 
-    与 extract_mesh 的差异（观感返工 R3，消除地块边缘马赛克的根治版）：
-      - 等值线 = skimage.find_contours(0.5)（每 label 二值场，bbox 裁剪），
-        顶点落在半像素格点/线性插值点上——无整数台阶，放大无楼梯
-      - 相邻 label 共享边界段在弧缓存中只平滑一次（Visvalingam + Chaikin，
-        端点=共享锚点锁定），两侧逐点一致 → 无缝
-      - 环面积 < min_area_px 的碎环丢弃（等值线提取天然多出 1px 毛刺环）
-
-    Args:
-        labels: (H, W) int，0 = 海洋/背景
-        min_area_px: 碎环面积下限（px²）
-        visvalingam_area: Visvalingam 删除阈值（px² 有效面积）
-        chaikin_passes: 切角轮数
-    Returns:
-        {label: {"outer": [[(y, x) float, ...], ...], "holes": [...]}}（同 extract_mesh）
+    extract_smooth_mesh / extract_smooth_mesh_with_arcs 共用的环供给（逐行同原
+    extract_smooth_mesh 前半程，保证两条管线输入完全一致）。
+    返回 rings：[ {lab, pts(list[(y,x)] float，已焊), is_hole} ]
     """
     from skimage import measure
 
-    H, W = labels.shape
     lp = np.pad(labels.astype(np.float32), 1, mode="constant", constant_values=0.0)
     # per-label bbox（lp 系，外扩 1 像素背景 → field 内等值线完整闭合不贴边截断）
     sl_by_label = {}
@@ -533,11 +520,35 @@ def extract_smooth_mesh(labels, min_area_px=2.0, visvalingam_area=1.5,
     if merged:
         for r in rings:
             r["pts"] = [merged[q(p)] if q(p) in merged else p for p in r["pts"]]
-        count = {}
-        for r in rings:
-            for p in r["pts"]:
-                k = q(p)
-                count[k] = count.get(k, 0) + 1
+    return rings
+
+
+def extract_smooth_mesh(labels, min_area_px=2.0, visvalingam_area=1.5,
+                        chaikin_passes=2, verbose=False):
+    """R3：find_contours 亚像素等值线 + 共享弧统一平滑版网格提取。
+
+    与 extract_mesh 的差异（观感返工 R3，消除地块边缘马赛克的根治版）：
+      - 等值线 = skimage.find_contours(0.5)（每 label 二值场，bbox 裁剪），
+        顶点落在半像素格点/线性插值点上——无整数台阶，放大无楼梯
+      - 相邻 label 共享边界段在弧缓存中只平滑一次（Visvalingam + Chaikin，
+        端点=共享锚点锁定），两侧逐点一致 → 无缝
+      - 环面积 < min_area_px 的碎环丢弃（等值线提取天然多出 1px 毛刺环）
+
+    Args:
+        labels: (H, W) int，0 = 海洋/背景
+        min_area_px: 碎环面积下限（px²）
+        visvalingam_area: Visvalingam 删除阈值（px² 有效面积）
+        chaikin_passes: 切角轮数
+    Returns:
+        {label: {"outer": [[(y, x) float, ...], ...], "holes": [...]}}（同 extract_mesh）
+    """
+    rings = _extract_rings_welded(labels, min_area_px)
+    q = lambda p: (round(p[0], 6), round(p[1], 6))
+    count = {}
+    for r in rings:
+        for p in r["pts"]:
+            k = q(p)
+            count[k] = count.get(k, 0) + 1
 
     # ---- 切弧 + 平滑 + 拼装 ----
     cache = {}
@@ -600,3 +611,181 @@ def extract_smooth_mesh(labels, min_area_px=2.0, visvalingam_area=1.5,
         if verbose:
             print("  lab %s ring: %d pts -> %d (segs=%d)" % (r["lab"], n, len(out_pts), len(segs_out)))
     return result
+
+
+# ==================== S2 显式弧图版（边界超分/去采样化） ====================
+
+def extract_smooth_mesh_with_arcs(labels, min_area_px=2.0, visvalingam_area=1.5,
+                                  chaikin_passes=2):
+    """S2：与 extract_smooth_mesh 同源平滑，但输出**显式共享弧拓扑**（TopoJSON 式）。
+
+    与 extract_smooth_mesh 的关系：环提取/点焊/切段/平滑全部同一条路径（同参数下
+    展开顶点逐位一致），差异只在拼装阶段——不把平滑后的弧顶点复制进每个 label，
+    而是给每条弧一个全局 id，label 的环 = 弧引用序列。相邻地块共享同一弧对象
+    （坐标唯一串），这才是「边界 = 解析值」的权威表示：
+      - 城块间弧两侧 label 齐备（配对率 100%），界线直接取弧（几何单一真相源）；
+      - 填充多边形由弧拼装展开，接缝零裂缝零重叠（水密）。
+
+    Returns:
+        (result, arcs, ring_refs)
+        result:   {label: {"outer": [[(y,x)...]], "holes": [...]}}——弧展开拼装的多边形
+                  （与 extract_smooth_mesh 同形同值，供兼容消费/自检对拍）
+        arcs:     [ { "pts": [(y,x) float, ...]   弧顶点（开弧，端点=三界交点/海岸锚点；
+                      闭合弧首尾不重复）,
+                      "sides": (lab_a, lab_b)      两侧标签（0=海洋/背景；闭合弧两侧同 label）} ]
+        ring_refs:{label: {"outer": [ [(arc_id, forward), ...], ... ],
+                           "holes": [ [(arc_id, forward), ...], ... ]}}
+                  forward=False 表示沿弧反转方向拼装
+    """
+    rings = _extract_rings_welded(labels, min_area_px)
+    q = lambda p: (round(p[0], 6), round(p[1], 6))
+    count = {}
+    for r in rings:
+        for p in r["pts"]:
+            k = q(p)
+            count[k] = count.get(k, 0) + 1
+
+    # ---- 切段收集（与 extract_smooth_mesh 同一切段规则）----
+    # segs: [ {pts, lab, is_hole, is_shared} ]
+    segs = []
+    ring_seg_idx = []   # rings 顺序 → [段在 segs 的下标序]
+    for r in rings:
+        pts = r["pts"]
+        n = len(pts)
+        shared = [count.get(q(p), 0) >= 2 for p in pts]
+        change = [i for i in range(n)
+                  if shared[i] != shared[(i + 1) % n]
+                  or pts[i] == pts[(i + 1) % n]]
+        idxs = []
+        if not change:
+            segs.append({"pts": pts + [pts[0]], "lab": r["lab"],
+                         "is_hole": r["is_hole"], "is_shared": False,
+                         "closed": True})
+            idxs.append(len(segs) - 1)
+        else:
+            change = change + [change[0] + n]
+            for i in range(len(change) - 1):
+                a = (change[i] + 1) % n
+                b = change[i + 1] % n
+                seg = []
+                j = a
+                while True:
+                    seg.append(pts[j])
+                    if j == b:
+                        break
+                    j = (j + 1) % n
+                segs.append({"pts": seg, "lab": r["lab"],
+                             "is_hole": r["is_hole"], "is_shared": shared[a],
+                             "closed": False})
+                idxs.append(len(segs) - 1)
+        ring_seg_idx.append(idxs)
+
+    # ---- 弧化：canonical key（首尾点+点数，无序）分组成弧，每弧只平滑一次 ----
+    # ⚠️ 与旧 _smooth_arc cache 的关键差异：旧 key 是有向的（正反两条 key），反向命中
+    # 靠运行时反转；这里 canonical 化后同段两侧天然落到同一组，弧引用带 forward 标志。
+    groups = {}   # ckey -> [ (seg_idx, forward) ]
+    for si, s in enumerate(segs):
+        pts = s["pts"]
+        k1 = (pts[0], pts[-1], len(pts))
+        k2 = (pts[-1], pts[0], len(pts))
+        ckey = k1 if k1 <= k2 else k2
+        forward = (k1 <= k2)
+        groups.setdefault(ckey, []).append((si, forward))
+
+    arcs = []
+    arc_of_seg = {}   # seg_idx -> (arc_id, forward)
+    for ckey, occ in groups.items():
+        # 弧点列 = occ[0] 段的**原方向**平滑——occ[0] 恰是原管线 cache 首写的段
+        # （segs 按环序构建），Visvalingam 的 tie-breaking 对方向不对称，动方向
+        # 会产出与原管线不同的插值点；展开端标志按 occ[0] 实际方向换算
+        raw = segs[occ[0][0]]["pts"]
+        occ0_fwd = occ[0][1]
+        if segs[occ[0][0]]["closed"]:
+            # 闭合弧（孤岛整环）：首点锁定闭合平滑（同 extract_smooth_mesh 同质环路径）
+            out = _chaikin_open(_visvalingam(raw, visvalingam_area), chaikin_passes)
+            out = _visvalingam(out, visvalingam_area)[:-1]
+            lab = segs[occ[0][0]]["lab"]
+            arcs.append({"pts": out, "sides": (lab, lab)})
+            for si, fw in occ:
+                arc_of_seg[si] = (len(arcs) - 1, True)
+        else:
+            labs = sorted({segs[si]["lab"] for si, _ in occ})
+            side_b = labs[1] if len(labs) > 1 else 0   # 只出现一次 = 海岸/边界弧（另一侧背景）
+            if side_b > 0:
+                # 共享弧：与 _smooth_arc 同路径（二次 Visvalingam 压缩）
+                out = _chaikin_open(_visvalingam(raw, visvalingam_area), chaikin_passes)
+                out = _visvalingam(out, visvalingam_area)
+            else:
+                # 海岸弧：与原管线独有段同路径（Chaikin∘Visvalingam 一次，无二次压缩）
+                out = _chaikin_open(_visvalingam(raw, visvalingam_area), chaikin_passes)
+            arcs.append({"pts": out, "sides": (labs[0], side_b)})
+            for si, fw in occ:
+                # forward = 本段方向是否与弧点列（occ[0] 段）方向一致
+                arc_of_seg[si] = (len(arcs) - 1, fw == occ0_fwd)
+
+    # ---- 拼装：环 = 弧引用序列；展开 = 弧顺连（与 extract_smooth_mesh 同形同值）----
+    result = {}
+    ring_refs = {}
+    for ri, r in enumerate(rings):
+        refs = []
+        out_pts = []
+        for si in ring_seg_idx[ri]:
+            aid, fw = arc_of_seg[si]
+            refs.append((aid, fw))
+            ap = arcs[aid]["pts"]
+            out_pts.extend(ap if fw else list(reversed(ap)))
+        dedup = [out_pts[0]]
+        for p in out_pts[1:]:
+            if p != dedup[-1]:
+                dedup.append(p)
+        if len(dedup) > 1 and dedup[-1] == dedup[0]:
+            dedup.pop()
+        if len(dedup) < 3:
+            continue
+        slot = "holes" if r["is_hole"] else "outer"
+        result.setdefault(r["lab"], {"outer": [], "holes": []})
+        result[r["lab"]][slot].append(dedup)
+        ring_refs.setdefault(r["lab"], {"outer": [], "holes": []})
+        ring_refs[r["lab"]][slot].append(refs)
+    return result, arcs, ring_refs
+
+
+# ── float32 运行时清洗（审计#1 踩坑）──────────────────────────────────────
+# bin 的 polygon 字段按 PackedVector2Array(Vector2) 序列化 = float32。json float64
+# 下合法（shapely is_valid）的环，量化到 float32 后可能出现重合点/自交——Godot
+# 运行时 Geometry2D.triangulate_polygon 直接报「Invalid polygon data」并整面丢弃。
+# 顶点密度越高（S1 细化场）越易触发。导出端统一先量化再清洗，保证运行时环合法。
+
+
+def f32_clean_ring(ring):
+    """float32 量化 + 相邻重合点去重；量化后自交的环用 shapely buffer(0) 拆分。
+
+    返回环列表（通常 1 个；自交拆分为多个；退化返回空）。坐标序不限（逐元量化）。"""
+    import numpy as _np
+    from shapely.geometry import Polygon as _SP
+
+    def _q(r):
+        q = []
+        for p in r:
+            v = (float(_np.float32(p[0])), float(_np.float32(p[1])))
+            if not q or v != q[-1]:
+                q.append(v)
+        if len(q) > 1 and q[0] == q[-1]:
+            q.pop()
+        return q
+
+    q = _q(ring)
+    if len(q) < 3:
+        return []
+    p = _SP(q)
+    if p.is_valid:
+        return [q]
+    cleaned = p.buffer(0)
+    geoms = list(cleaned.geoms) if cleaned.geom_type == "MultiPolygon" else (
+        [cleaned] if not cleaned.is_empty else [])
+    out = []
+    for g in geoms:
+        r = _q(list(g.exterior.coords)[:-1])
+        if len(r) >= 3:
+            out.append(r)
+    return out

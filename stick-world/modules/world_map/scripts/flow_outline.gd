@@ -65,3 +65,47 @@ static func draw_flow(canvas: CanvasItem, pts: PackedVector2Array, color_a: Colo
 		var wave: float = FLOW_FLOOR + (1.0 - FLOW_FLOOR) \
 				* (0.5 + 0.5 * sin(TAU * (k - t * FLOW_SPEED)))
 		canvas.draw_line(pts[i], pts[(i + 1) % n], color_a.lerp(color_b, wave), width, true)
+
+
+## 开折线版本：均匀弧长重采样（不闭合，两端锁定）。
+static func resample_open(pts: PackedVector2Array, segments: int = -1) -> PackedVector2Array:
+	var n_in := pts.size()
+	if n_in < 2:
+		return PackedVector2Array()
+	var total := 0.0
+	var lens := PackedFloat32Array()
+	lens.resize(n_in - 1)
+	for i in n_in - 1:
+		var l: float = pts[i].distance_to(pts[i + 1])
+		lens[i] = l
+		total += l
+	if total <= 0.0:
+		return PackedVector2Array()
+	var n_seg: int = segments if segments > 0 else int(clampf(total / SEG_LEN_HINT, 8.0, 128.0))
+	var out := PackedVector2Array()
+	out.resize(n_seg + 1)
+	var seg := 0
+	var acc := 0.0
+	for k in range(1, n_seg + 1):
+		var target := total * float(k) / float(n_seg)
+		while seg < n_in - 1 and acc + lens[seg] < target:
+			acc += lens[seg]
+			seg += 1
+		var l := maxf(lens[seg], 0.000001)
+		var t := clampf((target - acc) / l, 0.0, 1.0)
+		out[k] = pts[seg].lerp(pts[seg + 1], t)
+	out[0] = pts[0]
+	return out
+
+
+## 开折线流动光：逐段连线（首尾不闭合），色调波沿弧长移动。
+static func draw_flow_open(canvas: CanvasItem, pts: PackedVector2Array, color_a: Color,
+		color_b: Color, t: float, width: float) -> void:
+	var n := pts.size()
+	if n < 2:
+		return
+	for i in n - 1:
+		var k := float(i) / float(n)
+		var wave: float = FLOW_FLOOR + (1.0 - FLOW_FLOOR) \
+				* (0.5 + 0.5 * sin(TAU * (k - t * FLOW_SPEED)))
+		canvas.draw_line(pts[i], pts[i + 1], color_a.lerp(color_b, wave), width, true)

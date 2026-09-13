@@ -62,6 +62,13 @@ var terrain_texture: Texture2D = null
 ## 由 PoliticalLut 运行时查表上色（改 LUT 即全图换色）
 var political_id_texture: Texture2D = null
 
+## 政治矢量 mesh（边界超分 S3，l2_world.json 注入字段 "political_mesh"，context
+## 坐标 [x,y]）：fill 三角网顶点色 = lut code + 三级界线折线。verts 非空 =
+## POLITICAL 模式优先矢量路线（解析边界任意缩放零马赛克）；缺失/空 = mask 回退。
+## 字段：verts(PackedVector2Array)/code/idx/borders_national/borders_region/
+##       borders_free（Array[PackedVector2Array]）
+var political_mesh: Dictionary = {}
+
 ## 政权表（P7，l2_world.json 顶层 "states"）：state_id -> {name,capital,culture,alliance,color,...}
 var states: Dictionary = {}
 
@@ -90,6 +97,11 @@ static func load_from(json_path: String, base_dir: String) -> L2WorldData:
 	world.cities = _cities_from(data.get("cities", []))
 	for sd in (data.get("states", {}) as Dictionary):
 		world.states[sd] = data["states"][sd]
+	# 政治矢量 mesh（可选，边界超分 S3；缺失时 POLITICAL 回退 mask 路线）
+	if data.has("political_mesh"):
+		var pm: Dictionary = data["political_mesh"]
+		_compact_political_mesh(pm)
+		world.political_mesh = pm
 	world.load_baked_geom("%s/l2_geom.bin" % base_dir)
 	# 城市模式贴图（可选）
 	var cprev_path := "%s/l2_city_preview.png" % base_dir
@@ -274,6 +286,43 @@ static func _to_vec2(poly: Array) -> PackedVector2Array:
 	for i in poly.size():
 		var p: Array = poly[i]
 		arr[i] = Vector2(float(p[1]), float(p[0]))  # json [y,x] → Vector2(x,y)
+	return arr
+
+
+## 政治矢量 mesh 的 JSON 回退紧凑化（bin 产物已紧凑，幂等）：顶点 [x,y] 直转
+## Vector2(x,y)（mesh 新格式无序交换）、数值数组转 Packed、界线折线转 Packed 数组
+static func _compact_political_mesh(pm: Dictionary) -> void:
+	if pm.get("verts") is Array:
+		var va := PackedVector2Array()
+		va.resize((pm["verts"] as Array).size())
+		for i in va.size():
+			var p: Array = pm["verts"][i]
+			va[i] = Vector2(float(p[0]), float(p[1]))
+		pm["verts"] = va
+	for f in ["code", "idx"]:
+		if pm.get(f) is Array:
+			var ia := PackedInt32Array()
+			ia.resize((pm[f] as Array).size())
+			for i in ia.size():
+				ia[i] = int(pm[f][i])
+			pm[f] = ia
+	for f in ["borders_national", "borders_region", "borders_free"]:
+		if pm.get(f) is Array:
+			var lines := []
+			for ln in (pm[f] as Array):
+				if ln is Array:
+					lines.append(_to_vec2_xy(ln))
+				else:
+					lines.append(ln)   # 已是 PackedVector2Array（bin 路径）
+			pm[f] = lines
+
+
+static func _to_vec2_xy(poly: Array) -> PackedVector2Array:
+	var arr := PackedVector2Array()
+	arr.resize(poly.size())
+	for i in poly.size():
+		var p: Array = poly[i]
+		arr[i] = Vector2(float(p[0]), float(p[1]))
 	return arr
 
 

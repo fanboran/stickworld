@@ -155,5 +155,66 @@ def main():
     print("[5/5] 完成。配色调鲜艳：s=%.2f, v=%.2f~%.2f；城市贴图 l3_city_preview_8192.png" % (SAT, V0, V1))
 
 
+def main_polys_only():
+    """审计#2：老 L1 层几何换新代——S1 细化场 → parent_l1 场一次提取（共享弧，
+    与 political_mesh 填充同源同代），group/color 沿用现有 l3_l1.json 不变观感，
+    几何/centroid/area_px 重算，索引图随 parent 场重写。不做 DP 抽稀（相邻块
+    共享弧两侧逐点一致，抽稀反向运行可能错刀出缝；69 块全顶点体积可接受）。"""
+    print("[P1] 加载细化场 + parent 映射 ...")
+    refined = np.load(os.path.join(V2_DIR, "refined_city_labels_8192.npy")).astype(np.int32)
+    cd = json.load(open(os.path.join(V2_DIR, "city_data.json"), encoding="utf-8"))
+    parent_lut = np.zeros(int(refined.max()) + 1, dtype=np.int32)
+    for c in cd["cities"]:
+        parent_lut[int(c["label"])] = int(c["parent_l1"])
+    par = parent_lut[refined]
+    n_l1 = int(par.max())
+    print("  老 L1 %d 块（细化场 parent 聚合）" % n_l1)
+
+    print("[P2] parent 场提取（8192 全图，共享弧）...")
+    mesh = mesh_extract.extract_smooth_mesh(par, verbose=True)
+
+    old = json.load(open(os.path.join(GAME_DIR, "l3_l1.json"), encoding="utf-8"))
+    old_by = {int(t["label"]): t for t in old.get("tiles", [])}
+    tiles = []
+    for lab in range(1, n_l1 + 1):
+        mv = mesh.get(lab) or {}
+        outs = mv.get("outer", [])
+        if not outs:
+            print("  !! label %d 无外环（缺块，跳过）" % lab)
+            continue
+        m = par == lab
+        ys, xs = np.where(m)
+        ot = old_by.get(lab, {})
+        tiles.append({
+            "label": lab,
+            "group": ot.get("group", 0),
+            "color": ot.get("color", [200, 200, 200]),
+            "polygons": [r for p in outs for r in mesh_extract.f32_clean_ring(p)],
+            "holes": [r for p in mv.get("holes", [])
+                      for r in mesh_extract.f32_clean_ring(p)],
+            "centroid": [float(ys.mean()), float(xs.mean())],
+            "area_px": int(m.sum()),
+        })
+    with open(os.path.join(GAME_DIR, "l3_l1.json"), "w", encoding="utf-8") as f:
+        json.dump({"name": "L3 老 L1 视觉层", "size": SIZE, "n_l1": n_l1, "tiles": tiles},
+                  f, ensure_ascii=False, separators=(",", ":"))
+    shutil.copy(os.path.join(GAME_DIR, "l3_l1.json"), os.path.join(V2_DIR, "l3_l1.json"))
+    print("  老 L1 层 %d 块 -> l3_l1.json" % len(tiles))
+
+    print("[P3] 老 L1 索引图重写（parent 场 label 直编）...")
+    idx = np.zeros((SIZE, SIZE, 3), dtype=np.uint8)
+    land = par > 0
+    idx[land, 0] = (par[land] >> 16) & 0xFF
+    idx[land, 1] = (par[land] >> 8) & 0xFF
+    idx[land, 2] = par[land] & 0xFF
+    Image.fromarray(idx).save(os.path.join(GAME_DIR, "l3_l1_index_8192.png"))
+    shutil.copy(os.path.join(GAME_DIR, "l3_l1_index_8192.png"),
+                os.path.join(V2_DIR, "l3_l1_index_8192.png"))
+    print("[P4] 完成。bin 须重跑 l_world_bake.gd")
+
+
 if __name__ == "__main__":
-    main()
+    if "--polys-only" in sys.argv:
+        main_polys_only()
+    else:
+        main()

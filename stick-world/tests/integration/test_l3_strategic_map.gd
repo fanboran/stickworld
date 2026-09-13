@@ -151,20 +151,31 @@ func _test_display_mode() -> void:
 
 
 func _test_political_layer() -> void:
-	# R7/R9 政治模式：POLITICAL 下异步解码政权 ID mask → 建查表着色层
-	# （z=-1 垫底 + PoliticalLut 共享 LUT 纹理）。改 LUT 即全图换色的
-	# CPU 侧自证在 test_political_data（unit），此处验证真实接线：
-	# MapModeManager 广播 → L3 控制器 → 渲染器 set_map_mode。
+	# R7/R9 政治模式 + 边界超分 S3：POLITICAL 下矢量 fill 优先（共享弧三角网 +
+	# 顶点色查 PoliticalLut，同步就绪即建）；political_mesh 缺失时回退 ID mask
+	# 异步解码路线。改 LUT 即全图换色的 CPU 侧自证在 test_political_data（unit），
+	# 此处验证真实接线：MapModeManager 广播 → L3 控制器 → 渲染器 set_map_mode。
 	if _scene == null or _renderer == null or _data == null:
 		_runner.assert_true(false, "前置：L3 场景未装载")
 		return
 	var was_mode: int = MapModeManager.current_mode
 	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
 	var deadline := Time.get_ticks_msec() + 15000
-	while _renderer._political_layer == null and Time.get_ticks_msec() < deadline:
+	while _renderer._political_layer == null and _renderer._political_fill_meshes.is_empty() \
+			and Time.get_ticks_msec() < deadline:
 		await get_tree().process_frame
-	_runner.assert_true(_renderer._political_layer != null,
-		"政治着色层已构建（mask 异步解码完成）")
+	_runner.assert_true(not _renderer._political_fill_meshes.is_empty()
+			or _renderer._political_layer != null,
+		"政治着色层已构建（矢量 fill / mask 回退）")
+	if not _renderer._political_fill_meshes.is_empty():
+		# 矢量主路线（S3）：draw_mesh 直绘 + 顶点色直烘 LUT 最终 RGB
+		#（重烘链路由 state_color_changed 信号驱动）；验证缓存与共享 LUT 接线
+		_runner.assert_true(_renderer._political_fill_meshes[0] is ArrayMesh,
+			"矢量 fill 缓存为 ArrayMesh 分块列表")
+		var vlut := PoliticalLut.load_shared()
+		_runner.assert_true(vlut != null, "共享 PoliticalLut 可查（fill 顶点色真相源）")
+		MapModeManager.set_mode(was_mode)
+		return
 	if _renderer._political_layer == null:
 		MapModeManager.set_mode(was_mode)
 		return

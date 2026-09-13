@@ -454,7 +454,8 @@ func _spawn_building_shadow(card: String, x: float, mi: MeshInstance3D) -> void:
 func _add_platform() -> void:
 	# 人行道台面：整面垫高（PLAT_H）+ PBR（albedo + 法线，石块凸起见深度）
 	# 台肩 = 台面外缘**一排长条石**（现代人行道路缘那种），逐块长度抖动
-	_add_ground_plane("band_shoulder_stone_128.png", BAND_SIDEWALK.x, BAND_SIDEWALK.y,
+	# 台面：从**地平线**（远处 z=-60 与拉远底衬同远端）一直铺到台肩（z=1.95）
+	_add_ground_plane("band_shoulder_stone_128.png", -60.0, BAND_SIDEWALK.y,
 		PLAT_H, 5.0, Color(1.04, 1.00, 0.93))   # 台面：偏暖亮的浅石（与道路明显区分）
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260917

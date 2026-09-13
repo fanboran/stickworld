@@ -325,7 +325,7 @@ func _build_world() -> void:
 		0.0, 14.0, Color(1.16, 1.14, 1.10))
 	_add_platform()                       # 人行道台面（垫高 + PBR 法线）+ 台肩一排长条石
 	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
-		0.02, 10.0, Color(1.0, 1.0, 1.02))
+		0.02, 10.0, Color(0.86, 0.89, 0.96))    # 道路：偏冷深石（与台面拉开）
 
 	# --- 建筑卡：临街一排 + 远处城墙剪影 ---
 	_card_root = Node3D.new()
@@ -455,7 +455,7 @@ func _add_platform() -> void:
 	# 人行道台面：整面垫高（PLAT_H）+ PBR（albedo + 法线，石块凸起见深度）
 	# 台肩 = 台面外缘**一排长条石**（现代人行道路缘那种），逐块长度抖动
 	_add_ground_plane("band_shoulder_stone_128.png", BAND_SIDEWALK.x, BAND_SIDEWALK.y,
-		PLAT_H, 3.6, Color(0.88, 0.87, 0.84))
+		PLAT_H, 5.0, Color(1.04, 1.00, 0.93))   # 台面：偏暖亮的浅石（与道路明显区分）
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260917
 	var t := _tex_abs(_temp + GROUND_DIR + "src/band_kerb_stone_alb.png")

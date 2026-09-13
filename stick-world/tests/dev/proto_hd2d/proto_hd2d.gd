@@ -466,12 +466,14 @@ func _add_platform() -> void:
 	var x := -40.0
 	while x < 40.0:
 		var w: float = minf(rng.randf_range(1.7, 2.6), 40.0 - x)
+		var hh := PLAT_H + 0.14          # 石条**高出台面一档**（石唇），顶面才读得出来
 		var bm := BoxMesh.new()
-		bm.size = Vector3(w * 0.96, PLAT_H, 0.72)
+		bm.size = Vector3(w * 0.96, hh, 0.72)
 		var mi := MeshInstance3D.new()
 		mi.mesh = bm
-		mi.position = Vector3(x + w * 0.5, PLAT_H * 0.5,
-			BAND_SIDEWALK.y + 0.20)
+		mi.position = Vector3(x + w * 0.5, hh * 0.5,
+			BAND_SIDEWALK.y + 0.16)
+		mi.rotation = Vector3(deg_to_rad(-12.0), 0, 0)   # 朝相机微倾：顶面更露（直觉优先）
 		var gm := StandardMaterial3D.new()
 		if t != null:
 			gm.albedo_texture = t

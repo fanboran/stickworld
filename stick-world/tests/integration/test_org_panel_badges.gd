@@ -10,6 +10,7 @@ extends Node
 ##   - 「群龙无首」空缺标记（L2+ 指挥官空缺；L1 空架不算）
 ##   - 补位候选序（悬停提示 + 详情卡只读展示）
 ##   - 既有主干文案不变（[L1] 名称 · 标签 N人 ▲#id）
+##   - 直属为 0 时省略「N人」段（L2+ 不显示 0人、不留空段/孤分隔点）
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -51,6 +52,7 @@ var _notes: Array = []
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("树: 主干文案不回归 + 状态徽标", _test_trunk_and_state)
+	_runner.add_test("树: 直属为 0 省略 N人 段（不留空段）", _test_zero_direct_omits_headcount)
 	_runner.add_test("树: 士气均值徽标（聚合成员实体）", _test_morale_badge)
 	_runner.add_test("树: 群龙无首标记（L2+ 空缺，红字）", _test_leaderless_mark)
 	_runner.add_test("树: 补位候选序进悬停提示（只读）", _test_tooltip_candidates)
@@ -160,6 +162,39 @@ func _test_trunk_and_state() -> void:
 	_runner.assert_true(text.contains("▲#7001"), "指挥官标记应保持 ▲#id，实际：%s" % text)
 	# 状态徽标（新建组织默认 state=FORMING=0 → 组建中）
 	_runner.assert_true(text.contains("组建中"), "应带组织状态徽标，实际：%s" % text)
+
+
+## 直属成员为 0 时，主干省略「N人」段：不显示 0人、不造空段/孤分隔点（L2+ 直属通常为 0）。
+func _test_zero_direct_omits_headcount() -> void:
+	# ① L2 无直属、无下级：只留「标签」段，不出现 0人 与连续分隔点
+	var r: Dictionary = _api.create_organization("连戊", "MILITARY", 2, "")
+	var company := String(r.data.org_id)
+	_panel._refresh_tree()
+	var item := _find_item(company)
+	_runner.assert_not_null(item, "树应含连戊节点")
+	if item != null:
+		var text := String(item.get_text(0))
+		_runner.assert_false(text.contains("0人"), "直属为 0 不得显示 0人，实际：%s" % text)
+		_runner.assert_false(text.contains("· ·"), "不得出现连续分隔点，实际：%s" % text)
+		_runner.assert_true(text.begins_with("[L2] 连戊 · 军事"), "标签段应保留，实际：%s" % text)
+	# ② L2 无直属、有下级：仍省略直属段，但保留统辖规模段
+	var c: Dictionary = _api.create_organization("排戊1", "MILITARY", 1, company)
+	_api.assign_stickman(String(c.data.org_id), "7201", "fighter")
+	_api.assign_commander(String(c.data.org_id), "7201")
+	_panel._refresh_tree()
+	var item2 := _find_item(company)
+	_runner.assert_not_null(item2, "树应含连戊节点（带下级）")
+	if item2 != null:
+		var text2 := String(item2.get_text(0))
+		_runner.assert_false(text2.contains("0人"), "直属为 0 不得显示 0人，实际：%s" % text2)
+		_runner.assert_true(text2.contains("辖1人"), "有下级时应保留统辖规模段，实际：%s" % text2)
+	# ③ L1 叶层直属 >0：N人 段照旧保留（不误伤既有口径）
+	var leaf := _find_item(String(c.data.org_id))
+	_runner.assert_not_null(leaf, "树应含排戊1节点")
+	if leaf != null:
+		_runner.assert_true(String(leaf.get_text(0)).contains("[L1] 排戊1 · 军事 1人"),
+				"直属 >0 时 N人 段应保留，实际：%s" % leaf.get_text(0))
+	_api.disband_organization(company)
 
 
 func _test_morale_badge() -> void:

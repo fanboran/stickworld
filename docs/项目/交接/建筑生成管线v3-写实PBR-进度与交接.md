@@ -74,48 +74,67 @@
 
 ---
 
-## 二、当前状态（v3：材质库 / 几何库 / 布局器 / **道具层** / **成图探针** / **自动校验** —— **全部落地并经 2026-09-13 凌晨五批次迭代，待创始人观感验收**）
+## 二、当前状态（v3：材质 / 几何 / 道具 / **内景** / **自然物** / **地面体系** / **昼夜分层** / **HD-2D 原型** / 自动校验 —— **2026-09-13 全天约 19 批次迭代完毕，待创始人观感验收**）
 
 ### 已建成
 
 | 模块 | 文件 | 状态 |
 |---|---|---|
-| 规范文档 | `docs/技术/架构/建筑生成管线v3-写实PBR.md` | 九章 + §8 修订决议（含 §8.7 米制）+ §9 品控结论 |
-| 材质库 **v3.1（已重建）** | `tools/blender_buildings/materials.py` | **36 个 key**（26 结构 + 10 道具追加 cloth_red/blue/ochre、wicker、clay、produce、produce_root、fish、bread、dye_bath），全库改为「现实尺寸 → UV」标定（`M_PER_UV = 0.42`，1 UV = 1 格 = 42cm；入口 `uv_m/uv_cm/uv_mm`，`audit(verbose=True)` 打印每材质换算后的现实特征尺寸）。茅草改**逐根草茎索引**建模（2.8cm 茎宽 + 27cm 层高 + 分撮明暗），铁改低粗糙度大锤打棱面，抹灰暖米白禁锈褐斑，石块大块 + 深砂浆缝。**修掉 `cavity` 硬 bug**（以前 `get()` 返回 None → 回退浅色 → 所有窗洞发亮）。新增 `water/lamp(自发光)/straw/rope/sack/glass_win/wattle/shingle/log_wall/ground/grass_tuft/foliage/vine`。`get()` 为任意已注册 key 的通用入口；`reset_cache()` + `_alive()` 失效探测（救 `read_factory_settings` 坑）。集成校验：buildings 装配名**零纯色回退**；跨进程逐位一致。**2026-09-13 做旧 + 逐体色变**：AGE 表 13 key（近地 35~45cm 溅泥/苔藓 V 向渐入 + 垂直雨渍 ≤6% + 木质大尺度褪色，水平面法线门控）；OBJ_VAR 14 个结构 key 用 Object Info Random 逐体色偏（抹灰 ±3%/木 ±8%/陶瓦 ±6%，跨进程确定性不变，道具系 10 key 不做）；陶瓦/石板逐片双维随机、茅草加 50cm 斑驳；全库校准（暖石 0.68/抹灰暖米白）；**25% 门禁 agent 自评 PASS**（`pbr_mat2_true25.png`） |
-| 建筑几何库 | `tools/blender_buildings/buildings.py` | **19 种装配器 × 宽度档**：house/townhouse/barn/smithy1 + rowhouse(3 层)/windmill/cathedral/tower/gatehouse/lighthouse + **cottage/tavern/bakery/shop/guildhall/hayloft/smithy2~4**（2026-09-13，差异点≥两项肉眼可辨）；cathedral 新增 8 格小教堂档（供 chapel 映射）。模块库另有拱券/玫瑰窗/尖拱窗/垛口/隅石/扶壁/锥顶/风车叶/灯室。**屋顶结构二轮**：檐口断面厚度（草顶 16~24 卷唇/瓦木顶封檐板+瓦条）、檐下 AO 暗带（遮挡线下置）、山墙檩条端头（下探到 20° 俯视可见）、茅草檐缘草束+脊穗。**立面修正**：`WINDOW_SPEC` 窗表 10 档（窗台 69/窗高 92~100/同立面 ≤2 型/上下层差异化，全部装配器接入）、wall_panel 去重修掉二层透空、烟囱全部落地+穿屋面泛水裙+基座石裙。`SPEC_COLOR` 补 `cavity/lamp/water/straw/rope/shadow_ao` 回退（`lamp` 进 `EMISSIVE` 强度 2.6），接触阴影三级已压深（shadow_near 0.20） |
-| **道具层** | `tools/blender_buildings/props.py` | **60 件道具**（33 基础 + 27 市集/民生扩充：market_stall/awning/hanging_sign/fish_table/chicken_coop(含 4 鸡)/cart_loaded 等）+ `dress()` 门口避让式挂载调度 + `shop`/`market` 两套新配方（8 套既有配方尾部各增强 2~3 件）；`GAME_SCALE=1.45` 解决"现实尺寸道具缩到游戏尺寸不可辨" |
-| **自动校验** | `tools/blender_buildings/validate.py` | 六项检查（def 覆盖/地块合规/装配适配/窗规格 lint/纹素密度纪律/道具挂载回归），~7 秒零渲染，退出码 0/1；现状：①②④⑤⑥ PASS，③ 仅剩 barn16/smithy1w6 两条已知基线 FAIL、宽度超 lot=0 |
-| 城市布局器 | `tools/blender_buildings/city_layout.py` | 4 档确定性布局 + 平面图 + 天际线 + 断言；**DEFS 表已列 24 种建筑** |
-| 探针 | `probe_materials.py` / `probe_buildings.py`（规范自检）<br>`probe_materials_v2.py`（**新材质样片**：材质 × 平面/球/立方体，每格并列 100% 与**物理 25%** 双缩略）<br>`probe_props.py` / `probe_props3.py`（道具，后者 `PROPS3_FOCUS=名` 出单件高清）<br>`probe_delivery.py`（交付图：总图/街景/1:1 游戏尺寸）<br>`probe_city_scene.py`（**城市成图**：布局器数据 → 渲染；well/market_stall 走 `PROP_LOTS` 道具聚簇路径）<br>`probe_roof2 / probe_facade / probe_d3a / probe_mat3`（屋顶/立面/新装配器/材质做旧专项特写） | 均可复跑 |
+| 规范文档 | `docs/技术/架构/建筑生成管线v3-写实PBR.md` | 九章 + §8 修订决议（§8.7 米制）+ §9 品控结论 |
+| **今日新增文档** | `建筑室内结构.md`（A/B 类室内+z 序契约+31 def 矩阵）<br>`2.5D与HD-2D可行性.md`（原型档案+实测+分阶段方案；图在 `图/2.5d-proto/` 6 张已入库）<br>`美术品控-硬边与材质边缘.md`（真倒角/边缘磨损/trim 交接/棱线高光门禁，附业界调研）<br>`docs/项目/交接/建筑管线v3-GDD资产候选.md`（**提案/待定**） | 均已提交 |
+| 材质库 | `materials.py` | **64 key**：26 基础 → 54（玻璃系 `stained_glass/glass_lead/glass_clear/glass_bottle/crystal/rune_glow/bronze/patina` + 城市地面 10）→ 57（`glow_water/parchment/leather`）→ 64（**`glazing_win` 真透明窗玻璃（隔窗见内景已实证，alpha≈0.075/峰 0.16）**、`bark/leaf_card(alpha 叶卡)/rock/copper_ore/gold_ore/grass_band`）。做旧 AGE 13 key + 逐体色变 OBJ_VAR（跨进程确定）。`glazing_win` 进 ALPHA_KEYS(BLENDED)+透射阴影；`stained_glass`/`glass_lead` 语义收窄"仅 cathedral/chapel"。回归：新旧逐像素 max diff=1/255；25% 门禁自评 PASS |
+| 建筑几何库 | `buildings.py` | **27 种装配器**（19 + 第三轮 8：mage_tower/alchemy/library/barracks/warehouse/stable/shelter 独立化 + hayloft；barn 黑盒子已消）。屋顶二轮（檐口断面/檐下 AO/檩条/草束）+ 立面修正（WINDOW_SPEC 窗表/二层补墙/烟囱落地泛水）。**比例审计已校正**：mage_tower 塔身 1×4.6m→2×3.66m、锥顶比 0.85→0.72；stable/hayloft 底层抬到 2.07/2.12m；带门层统一 2.62m（门占 75%）；`STOREY_H_BAND` 196~212；townhouse16 由 FAIL 转 PASS |
+| 道具层 | `props.py` | **94 件**（60 + 34 玻璃/魔法/宗教/军政：彩窗板/蒸馏器/符文碑/祭坛/兵器架/蜂箱…）+ 14 套 DRESS 配方（含 alchemy/chapel/library）；挂墙件贴**真实前墙面**（`wall_y/wall_depth/reserved`，cathedral 彩窗板悬空已修）；`MOUNT_SCALE` 小件补偿；炼金坊前场避让 |
+| **内景层** | `interiors.py` | **29 def 全覆盖**（7+19+3 别名），每套后墙+地板+楼板+功能家具+暖光；`_back/_front` 两层带 alpha 交付，**像素对齐 29/29 ≤0.5px**（复现游戏 `WallFront.modulate.a=0.3` 机制）；`clip_to_walls()` 修 GAME_SCALE 越界。cottage/shelter 判定需 12 格档；gatehouse=门洞通道 |
+| **自然物** | `nature.py` + `field_dist.py` | 16 类（阔叶/窄冠/针叶/枯树/树桩/灌木/芦苇/草丛/蘑菇群/水晶簇/金铜铁矿露头/矿脉带/碎石/巨岩），已换新材质（bark/alpha 叶卡/rock/ore/crystal/grass_band）；三级密度场分布（簇包络×子团×开天窗，实测离散指数 2.7 vs 均匀≈0） |
+| **地面体系** | `ground_tiles.py` | **分段链**：3 带（肩/缘/道）× 3 区带（center 石板大理石/mid 旧砖碎石/edge 夯土砾石）× 5 变体，可链式拼接；**规模包含映射**（村=[edge] 子集、镇=mid+edge、城=全档，`_manifest.json`）；**动态建造件**（落地环/门前径/位掩码过渡边角件，跟 PlacementGrid）；decal 8 种带撒布参数；新旧过渡段 3；多尺度补丁（0.4/0.8/1.6m）+ 去竖纹返工。硬指标：周期残差 ~e-13、光照中性 0/57 违规、夜晚调制 -44% |
+| **昼夜分层** | `daynight.py` | 发光白名单（按节点 Emission 真值：flat_fire/flat_ember/stained_glass/glass_lead/rune_glow/crystal）；glow 层干净分离（非黑像素 1.72% 全为发光件）；**合成公式已标定：夜 = albedo×tint(0.038,0.049,0.092) + glow×1.0，MAE 0.011**；窗户引擎侧抽 42% 随机亮 |
+| **HD-2D 原型** | `stick-world/tests/dev/proto_25d/`、`proto_hd2d/` | **八方旅人式验证通过**：2D 火柴人（真 StickmanRig）经 SubViewport(2x+MSAA4x) 贴相机对齐 billboard；建筑不透明通道写深度/角色透明通道测深度=零成本遮挡；性能唯一成本=后处理 ≈3.3ms；阳光高调（雾零，mean 0.440 无死黑无过曝）。**场景重排进行中**（地面语义/间距/非线性模糊/稀疏封底） |
+| 自动校验 | `validate.py` | 六项（def 覆盖/地块/装配/窗规格/纹素/道具挂载），~7 秒；①②④⑤⑥ PASS |
+| 城市布局器 | `city_layout.py` | 4 档确定性布局；DEFS 24 种（**新 8 def 未入表，待补**） |
+| 探针 | `probe_buildings/props/props3/props4/delivery/city_scene/roof2/facade/d3a/d3b/mat3/mat4/mat5/scale/interiors/nature/ground/daynight` + `probe_city_plan` | 均可复跑（§四） |
 
-### 关键产物（`stick-world/temp/`，2026-09-13 最新一轮，已用新材质全量重渲）
-- `pbr_mat2_probe.png`（26 材质样片，100% + 物理 25% 双缩略）、`pbr_mat2_true25.png`（整表 25% 出厂门禁真值）
-- `pbr_sheet_2x.png`（全部 def×宽度档总图）、`pbr_c_<def>_w<N>.png`（15 个单体特写）
-- `pbr_game_1x.png`（**1 px/单位 = 游戏内真实大小**的街排；判断"材质/道具会不会糊"只看这张）、`pbr_street_2x.png`
-- `pbr_city_town_top.png`（**城镇总览，俯角 34° + 行距拉伸**，21 栋 + 城墙，最好的一张）、`pbr_city_town.png`（临街 20° 游戏内视角）、`pbr_city_village.png` + 各自 `.json` 摆放清单
-- `pbr_props.png`（道具总览条）、`pbr_props_{smithy,house,barn}.png`（前场实景）
-- `city_plan_{hamlet,village,town,city}.png|.json`（城市平面数据）
-- **2026-09-13 五批次新增**：`pbr_city_{hamlet,village,town,city}.png` + `_2x` + `.json`（四档城市全图，20° 游戏视角）+ `pbr_city_town_top.png`（34° 总览，12/16/22/32 栋）；`pbr_props3_strip.png`（60 件总览条）/`pbr_props3_{shop,market}.png`；`pbr_roof2_{eave,gable,ridge}.png`、`pbr_facade_{win,chimney,gable}.png`、`pbr_d3a_<def>.png`（9 栋新装配器）、`pbr_mat3_*.png`（做旧/逐体色变对照）、`pbr_buildings_v2.png`（29 栋总对比图）
+### 关键产物（`stick-world/temp/`）
+- 材质：`pbr_mat2/mat3/mat4/mat5_*.png`（样片/做旧对照/玻璃地面/透明实证与自然物）
+- 建筑：`pbr_buildings_v2.png`、`pbr_b2_*`、`pbr_d3a/d3b_<def>.png`、`pbr_roof2_*`、`pbr_facade_*`、**`pbr_scale_sheet.png`（45 档带 0.5m 刻度尺与偏差标注）** + `pbr_scale_<def>.png`×45
+- 道具：`pbr_props{,3,4}_*.png`（94 件总览/实景/挂墙修正对照）
+- 内景：`pbr_int_<def>_{back,front}.png`×29、`pbr_int_{sheet2x,layers,window}.png`
+- 自然：`pbr_nature_{strip,forest,ore}.png`、`pbr_field_dist.png`
+- 地面：`pbr_ground_{segments,chain_demo,pieces,grid_demo,decals,street,night}.png` + `ground_tiles/`（分段/件/decal + `_manifest.json`）
+- 昼夜：`pbr_dn_{day,night,glow,layers}.png`
+- 城市：`pbr_city_{hamlet,village,town,city}[_2x|_top].png` + `.json`、`city_plan_*`
+- HD-2D：`proto25d_*.png`、`proto_hd2d/hd2d_{a,b,c,d,e}_*.png`（入库副本在 `docs/技术/架构/图/2.5d-proto/`）
 
 ### 已知落差（诚实清单）
-- 布局器 **24 种 def ↔ 装配器 19 种**：shelter/stable/hayloft 仍兜底映射 barn、church→cathedral、chapel→cathedral[8]、well/market_stall→PROP_LOTS 道具聚簇。**副作用：barn 系深色木板墙连排读作"黑盒子"**（barn 本体墙面明度所致）。
-- 道具层尚未接进建筑本体（目前由探针在渲染时并置，`props.dress()` 独立对象）。
-- 布局器 band 余量/院坝不渲染 → hamlet/village 有成片裸地读作空 lot。
-- hamlet/village 城墙仅 140/220px、矮于建筑，围城感 town 档才成立（规范 §4.1 与 §3.3 既有冲突，待创始人裁）。
-- 做旧仍偏克制（抹灰墙脚仅 −12% 明度，远看偏干净）；布篷/搭布是平板布无垂坠褶皱；鱼摊的鱼在游戏尺寸下读法弱；灯笼/炉火无 bloom 光晕（Blender 5.2 合成器 `node_tree` 不可用）。
-- 25% 门禁 agent 自评 PASS，但 canvas/sack/rope/wattle 在 25% 下仍偏"同族纤维面"、靠颜色区分（19px/m 物理极限），终判留给人眼。
-- check_spec 既有基线 FAIL（house16、townhouse12/16、barn16、smithy1w6）未清，属旧口径遗留，未扩大。
+- **比例根因待裁**：20° 俯角把"进深×sin20°"计入屏幕高度（house12 屋顶屏占≈墙高 79%），是"头重脚轻"主因——相机为硬约束未动几何；门宽 0.60~0.76m 与规范 0.9~1.0m 冲突（§8.7 与 §8.3 自相矛盾）；窗宽 0.53~1.15m 待 WINDOW_SPEC 统一；瞭望塔 1.83m/段不达标（改高动城档天际线）。
+- 内景：gatehouse 偏暗；cottage/shelter 进深不足家具贴墙一排；塔类层间梯读作长斜板；cathedral 中殿净深 2.6~4m 长椅只 2 排；manor/stone_warehouse/placeholder 运行时 def 未出图。
+- 自然物：针叶树冠仍实心锥台（叶卡会上洞）；bark 辨识度一般；叶卡偶见直线边。
+- HD-2D：2D 角色与 3D 光照非逐像素耦合（tint 近似）；角色 `depth_draw_never` 在高深度背景前有 DOF 误糊风险；批渲染路径未解算（矢量路径可用）。
+- 城市布局器新 8 def（mage_tower/alchemy/library/barracks/warehouse/stable/shelter/hayloft 独立档）未入 `city_layout.DEFS`；validate 的 ASM_TIER_ATTR 待补 stable/shelter。
+- 做旧偏克制；布篷无垂坠；灯笼无 bloom（Blender 5.2 合成器不可用）；25% 门禁 canvas/sack/rope/wattle 同族靠色分。
+- check_spec 基线 FAIL：house16、townhouse12、barn16、smithy1w6（旧口径遗留，未扩大）。
 
 ---
 
-## 三、下一步（按品控优先级，2026-09-13 凌晨五批次后更新）
+## 三、下一步（2026-09-13 晚更新）
 
-1. **barn 系独立化**：shelter/stable/hayloft 出各自装配器（或先调 barn 墙面明度），消"黑盒子连排"；church/well/market_stall 独立化可选。
-2. **城市观感二轮**：空 lot 院坝内容物（柴堆/菜园/板车/箱桶，消裸地）；hamlet/village 城墙高度问题提请创始人裁定（§4.1 vs §3.3 冲突）。
-3. **质感补刀**：做旧加强（墙脚更脏）；布料几何垂坠；鱼摊读法；灯笼光晕替代方案（自发光贴片/辉光 sprite）。
-4. **道具层接入装配器/入库烘焙流程**：`dress()` 下沉到装配器调用；烘焙产物入库 `assets/buildings/gen/`。
-5. **运行时接入**（批次 5）：def_id 映射、`modules/building_gen/api.gd` 重定向、内饰图。
-6. **待创始人观感验收**：屋顶结构二轮、立面修正、材质做旧+逐体色变、60 件道具、19 装配器、四档城市成图（§二 关键产物，直接看图）。
+1. **HD-2D 场景重排收尾**（agent 进行中）：地面语义=下方 1/3 整体可走区+建筑挤占（删横贯路肩带）、间距 1~3 格为主、非线性逐层模糊、后景多层稀疏封底盖地平线+远山贴图 → 出 `hd2d_c_final.png` 给创始人验收。
+2. **地面返工验收**（agent 进行中）：多尺度补丁/去竖纹/预览 alpha，重出四张图。
+3. **烘焙导出脚本 + 游戏集成规范**（批次 5 入口）：全 def 出 PNG（albedo+glow+back/front 三层）+ json 元数据（格宽/锚点/门/工位）+ 阴影层方案 + **游戏内一屏单排图**；入库 `assets/buildings/gen/`。
+4. **city_layout 补 8 新 def** + validate ASM_TIER_ATTR 对齐 + 分段地面接入 `probe_city_scene` 全档重渲。
+5. **比例遗留提请创始人裁定**：门宽/窗宽规范冲突、瞭望塔段高、（可选）俯角 vs 屋顶屏占。
+6. **README 素材库画廊**（创始人点名：挑图复制+索引，体现工作量）。
+7. **待创始人观感验收**：比例审计 45 档标注图、真透明窗玻璃实证、内景 29 def、自然物、地面分段体系、昼夜分层、HD-2D 原型。
+
+### 今日关键决策（创始人拍板，2026-09-13）
+
+1. **地面语义**：屏幕下方约 1/3 = **整体可行走区域**；建筑建成后**挤占**该区域一块（落地箱 96px 挡住），**无预留路肩带**；落地裙边/门前小径只属于建筑（=动态建造件）。
+2. **地面体系**：分段链 + 区带（center/mid/edge）+ **规模包含**（村=edge 子集/镇=mid+edge/城=全档）+ decal 撒布 + 动态建造件（位掩码过渡）。禁止整条死长条与运行时 autotile。
+3. **玻璃口径**：窗玻璃=真透明（`glazing_win`，透视内景）；**彩色玻璃仅 cathedral/chapel**。
+4. **室内**：A 类剖视内景全 def 默认；B 类可进入只给地标（提案 4 个待裁）；"窗后内景常驻 vs 交互区门控"待裁（已登记待办）。
+5. **HD-2D**：八方旅人式可行且已原型验证；火柴人卡**正对相机**（与建筑卡同取向）；**阳光高调**（雾零、暖主冷补、抬黑、高饱和）；景深=**非线性逐层**、只糊远景、主体全锐；后景**多层稀疏**共同盖住地平线+远山贴图。
+6. **硬边品控**：真倒角+边缘磨损（倒角面属性标记，EEVEE 无 Bevel 节点）+ trim 过渡；新增"棱线高光检查图/1x 可见性/交接缝扫描"三门禁。
+7. **建筑站位**：约 1/3 回退 0.5~1.5 格+门前小短路、约 15% 凸前、其余贴线；禁止完美直线排。
 
 ---
 

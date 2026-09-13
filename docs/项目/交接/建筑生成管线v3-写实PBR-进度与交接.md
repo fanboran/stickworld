@@ -257,6 +257,25 @@ python probe_city_plan.py                                  # 城市平面图（�
 - **出生点**：`GameRoot._on_map_loaded` 加 `map.has_method("get_spawn_point")` 钩子（向后兼容），HD2D 宿主返回街中心前景 (0,1010)。
 - 验证：`tests/dev/verify_hd2d_map.tscn` 实机链路全绿（地图切换/玩家生成/白四角框/无假人/无报错）。
 
+**第五轮（2026-09-14，main 合并 + 交接给下一会话）**
+- **origin/main 已合并**（零冲突，merge commit `1e8ba99b`）：main 领先 87 提交并入（AI 系统 config/ai、system_setup/save_handler/initial_content/game_root 改动、加载屏两级进度条等）；本分支的 hd2d 注册/出生点钩子合并后完好；报错自检干净。`tools/blender_buildings/` 全部健在（仅存在于本分支，main 没有——`git diff HEAD origin/main` 里的 4.8 万 deletions 是本分支独有文件的显示，非丢失）。
+- **子代理**：本对话的子代理欠费不可用；**新会话子代理可用，调研照常派 Explore**（提示词见第 2 条）。
+
+**第六轮待办（下一会话第一优先——创始人已下指令，逐条执行）**
+
+创始人指令原文要点：①黄圈归给选中系统做；②main 对主场景 2D 的修改按功能语义翻译到 HD-2D 场景；③玩家出生主场景不能算法生成，要手工摆；④启动直接进入新主场景，不再加载旧场景；⑤野外树木/矿物实装；⑥「把覆盖率弄到 100%」（主场景功能面完整翻译，不留缺）。
+
+执行分解（按序）：
+
+1. **指示器归并（小活，先做）**：删除 `modules/ui_global/scripts/indicators/possession_indicator.gd` 的装配（`system_setup.gd` 里 grep PossessionIndicator 找装配点移除）+ 文件退役；在 `modules/combat/scripts/command/selection_system.gd` 的 `_draw()` 里为 **possessed 玩家**画同样的白色四角框（脚底 Collider 位置，复用已写的 BRACKET 绘制，参照本文件选中单位的画法）。注意 selection_system 需要拿到 possessed entity（可经 game_root.get_current_map().get_possessed_entity()）。
+2. **语义翻译调研（派 Explore 子代理，提示词照抄）**：把下面提示词发给子代理——
+   > 调研 Godot 工程 F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world（res:// 根=stick-world/）。目的：把「开局主场景（village_a 2D 卷轴地图）」的全部功能与内容按语义翻译到新的 HD-2D 3D 场景地图（hd2d_street，宿主 Hd2dStreetMap extends MapBase），并让新游戏启动直接进入它。给出 8 点结论：①开局主场景内容全清单（village_a 的 InitialBuildingsList：读 modules/world/scripts/map/initial_buildings_list.gd 与其 defs_json_path 指向的 config JSON——每栋 def_id/cell_x/width/语义用途；布局语义如西村口民居→石造仓库→铁匠铺→宅邸→东民居；边界/城门/ChunkTrigger 出口）；②资源点系统（resource_gen.gd 的树/矿/草类型、密度 0.65 含义、分布规则、resource_node 交互数据）；③村民 NPC（spawn_npcs 数量/职业/工作场所绑定/行为）；④玩家交互面（interaction_controller 的交互目标类型清单及所需节点/组件）；⑤玩家对地图的 duck 方法依赖（stickman_entity 及组件调 map 的所有方法名，Hd2dStreetMap 需补哪些）；⑥启动直连改造点（_load_start_village 的 VILLAGE_A_MAP_ID 引用处、出生村专属步骤 spawn_initial_warehouse/set_dirt_road_range/generate_resource_nodes/spawn_npcs 对 hd2d_street 的适配建议、加载屏阶段是否耦合村A）；⑦main 最近对主场景 2D 的修改清单（合并进来的提交里影响 village_a 玩法/视觉/装配的，标出 HD-2D 需跟进的语义点）；⑧时间昼夜（TimeManager 是否影响 village_a 视觉、HD-2D 的 day/night 档如何挂时钟）。最后给「翻译到 hd2d_street 的实施清单」（必须/应该/可以分级，每项一句话）。附关键文件绝对路径:行号。
+   调研回来后自己再用 grep 核对关键结论（子代理结论要抽查）。
+3. **手工摆主场景**：按初始建筑 JSON 的语义布局（西村口民居→石造仓库→铁匠铺→宅邸地标→东民居……）写死进 proto_hd2d 前排（替换 9 种混排轮转），每栋对齐 def 语义（铁匠铺=smithy1_w8 卡、仓库=warehouse 卡需补烘、宅邸=manor 卡需补烘——缺的 def 加进 `blender_proto.py` STREET 重烘）。
+4. **树木/矿物实装**：烘焙自然物卡（`tools/blender_buildings/nature.py` 的 16 类：阔叶/针叶/枯树/矿脉/水晶等）——写烘焙脚本或扩 bake_export；摆在街道两侧前景/背景缝隙（野外感），带碰撞（大树挡人）。
+5. **启动直连**：`game_root.gd` 的 `_load_start_village` 把 `VILLAGE_A_MAP_ID` 换成 `HD2D_STREET_MAP_ID`；「出生村专属」步骤（spawn_initial_warehouse/set_dirt_road_range/generate_resource_nodes/spawn_npcs）对 hd2d_street 的适配——trees/ore 走 HD2D 自己的摆位（不走 2D resource_gen），NPC 工作场所待 HD-2D 化后开。
+6. **覆盖率核对**：把调研清单逐项过一遍：交互（按F 采集/取放——需要 2D 资源点与仓库实体存在于 HD2D 图内或做等价物）、存档（entities/maps 表已通）、昼夜（TimeManager 挂 HD2D 的 day/night 档——proto_hd2d._apply_light("day"/"night") 由时钟驱动）、小地图/边界/旅行出口逐个确认或显式豁免。
+
 **大项登记（下一阶段）**
 1. **城市搬运 HD-2D**（创始人 2026-09-14 指令）：以 `city_layout.py` 的开局城市数据（村档）驱动 HD-2D 场景——建筑卡按布局摆放、火柴人工作场所（铁匠铺前铁匠等）一并搬入；2D 原型中已译未译内容以该轮为准对账。
 2. **后排动态出现逻辑**：后排背景随前排建筑数量自适应出现/消失（游戏运行时规则，接入时实现）。

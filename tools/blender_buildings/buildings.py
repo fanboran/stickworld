@@ -109,6 +109,9 @@ WINDOW_SPEC = {
     "peephole": dict(sill=0.0, h=34.0, w=26.0, muntins=0),              # 塔身小窗
     "lancet":  dict(sill=69.0, h=96.0, w=61.0, muntins=0),              # 尖拱长窗
     "belfry":  dict(sill=0.0, h=112.0, w=0.0, muntins=0),               # 钟楼开口（宽随塔宽）
+    # ---- D3b 追加：图书馆/学院的竖向长铅条窗（**固定宽**，不走开间比例，故不参与
+    # 居室窗高带 lint）；h=124 是"大跨高窗"的显式自声明档，靠两扇成组读竖向。
+    "tall_lead": dict(sill=69.0, h=124.0, w=44.0, muntins=0),           # 铅条高窗（成组）
 }
 
 
@@ -2540,17 +2543,19 @@ def assemble_cathedral(width_cells=16):
     # 单钟楼档（12 格）：中央塔身凸在正立面之前 → 玫瑰窗改开在**塔身上**（否则被塔挡住）
     lanc = win_rect("lancet", floor_z=plinth_h)
     if twin:
-        rose_window(b, 0.0, yf - 6.0, rose_z, rose_r, spokes=10)
+        rose_window(b, 0.0, yf - 6.0, rose_z, rose_r, spokes=10,
+                    glass=magic_key(GLASS_STAINED))
     else:
         rose_window(b, 0.0, yf - 12.0 - tw - 4.0, plinth_h + nave_h * 0.72, rose_r,
-                    spokes=10)
+                    spokes=10, glass=magic_key(GLASS_STAINED))
     inner = pw / 2.0 if twin else tw / 2.0
     outer = (W / 2.0 - tw) if twin else W / 2.0
     ox = (inner + outer) / 2.0
     if ox + 36.0 < outer - 16.0:
         for sx in (-1.0, 1.0):
             lancet_window(b, sx * ox, yf - 4.0, plinth_h + 130.0, lanc["ow"],
-                          lanc["oh"], head=lanc["ow"] * 0.52)
+                          lanc["oh"], head=lanc["ow"] * 0.52,
+                          glass=magic_key(GLASS_LEAD))
     # ---- 山墙正立面（三角 + 石压顶 + 顶尖十字）
     tri_prism_y(b, 0.0, yf + 14.0, W / 2.0, rise, eave, 28.0, "stone")
     cope = (W / 2.0 - tw) if twin else W / 2.0
@@ -2584,7 +2589,8 @@ def assemble_cathedral(width_cells=16):
                        th - 186.0, tw * 0.26, belf["oh"], tw * 0.18, mat="cavity",
                        ring="white_stone", blocks=6, depth=10.0, profile="point")
         lancet_window(b, cx, ty - tw / 2.0 - 2.0, plinth_h + nave_h * 0.50, tw * 0.30,
-                      lanc["oh"], head=lanc["ow"] * 0.52) if twin else None
+                      lanc["oh"], head=lanc["ow"] * 0.52,
+                      glass=magic_key(GLASS_LEAD)) if twin else None
         # （单塔档塔身留给玫瑰窗）
     ob = b.to_object()
     spec = _mk("cathedral", width_cells, {
@@ -4033,6 +4039,839 @@ PROBE_LIST += [("cottage", 6), ("cottage", 8),
                ("guildhall", 12), ("guildhall", 16),
                ("hayloft", 8), ("hayloft", 12),
                ("smithy2", 8), ("smithy3", 8), ("smithy3", 12), ("smithy4", 12)]
+
+
+# ================================================================ §8 魔法 / 军政 / 畜牧装配器（批次 D3b）
+#
+# 7 个新 def：mage_tower / alchemy / library / barracks / warehouse / stable / shelter。
+# （hayloft 已在 D3a 独立化，本批**不改其几何** —— 既有剪影 <1px 纪律。）
+# 纪律：只新增函数 / 常量 / 窗口档；既有 19 栋装配器与既有 WINDOW_SPEC 条目一律不动。
+# 玻璃 / 魔法材质 key（stained_glass / glass_lead / crystal / rune_glow）由并行 agent
+# 加入 materials.py；本文件用 `magic_key()` 探测，未注册则优雅回退既有 glass_win / lamp。
+
+#: (首选 key, 回退 key)：`magic_key()` 的探测表
+GLASS_STAINED = ("stained_glass", "glass_win")   # 教堂彩窗（玫瑰窗 / 尖拱窗）
+GLASS_LEAD = ("glass_lead", "glass_win")         # 铅条玻璃窗（图书馆 / 炼金 / 学院）
+MAT_CRYSTAL = ("crystal", "lamp")                # 魔法水晶（自发光冷光）
+MAT_RUNE = ("rune_glow", "lamp")                 # 符文石刻（自发光）
+
+_MAGIC_KEYS = {}
+
+
+def magic_key(pair):
+    """解析新材料 key：已注册用新 key，未注册回退 `pair[1]`（优雅降级，不落抹灰纯色）。
+
+    探测顺序与 `material()` 一致：注入解析器 → materials.get()；两处都没有该 key 时
+    返回回退名（glass_win / lamp）。结果带缓存（同进程内 materials.py 不会中途重载）。
+    """
+    if pair in _MAGIC_KEYS:
+        return _MAGIC_KEYS[pair]
+    name, fallback = pair
+    out, ok = fallback, False
+    if _RESOLVER is not None:
+        try:
+            m = _RESOLVER(name)
+            ok = m is not None and hasattr(m, "node_tree")
+        except Exception:
+            ok = False
+    if not ok:
+        if "materials" not in sys.modules:
+            here = os.path.dirname(os.path.abspath(__file__))
+            if here not in sys.path:
+                sys.path.insert(0, here)
+            try:
+                __import__("materials")
+            except Exception:
+                pass
+        mod = sys.modules.get("materials")
+        fn = getattr(mod, "get", None) if mod is not None else None
+        if callable(fn):
+            try:
+                ok = fn(name) is not None
+            except Exception:
+                ok = False
+    if ok:
+        out = name
+    _MAGIC_KEYS[pair] = out
+    return out
+
+
+# ---- 追加材质回退色（纯追加；materials.py 缺 key 时的兜底，免得落到抹灰纯色） ----
+SPEC_COLOR["stained_glass"] = ((0.20, 0.12, 0.34), 0.35, 0.0)
+EMISSIVE["stained_glass"] = ((0.58, 0.36, 0.98), 1.4)
+SPEC_COLOR["glass_lead"] = ((0.14, 0.16, 0.20), 0.45, 0.0)
+SPEC_COLOR["crystal"] = ((0.55, 0.72, 0.88), 0.16, 0.0)
+EMISSIVE["crystal"] = ((0.36, 0.64, 1.00), 2.2)
+SPEC_COLOR["rune_glow"] = ((0.35, 0.85, 0.95), 0.40, 0.0)
+EMISSIVE["rune_glow"] = ((0.30, 0.80, 1.00), 3.0)
+SPEC_COLOR["cloth_red"] = ((0.46, 0.08, 0.07), 0.92, 0.0)
+
+
+def crystal_shard(b, x, y, z, r, h, mat="crystal", segments=6):
+    """悬浮水晶晶柱：六棱柱 + 上尖锥（**底部无支撑** —— 魔法感来自"浮着"）。"""
+    b.cylinder((x, y, z + h * 0.5), r, h, mat, segments=segments)
+    cone_roof(b, x, y, z + h, r, h * 0.55, mat, segments=segments, eave_ring=False)
+
+
+def lamp_post(b, x, y, z=0.0, h=178.0, mat="iron", glass="lamp"):
+    """门廊灯柱：石基座 + 铁柱 + 四面铁框玻璃灯罩（自发光 lamp）+ 小锥帽。"""
+    b.box_bottom((20.0, 20.0, 12.0), (x, y), z, "stone_dark")
+    b.cylinder((x, y, z + 12.0 + (h - 60.0) / 2.0), 6.5, h - 60.0, mat, segments=8)
+    zl = z + h - 48.0
+    b.box((17.0, 17.0, 30.0), (x, y, zl + 15.0), glass)
+    for k in range(4):
+        th = math.pi * 0.5 * k
+        b.box_bottom((5.0, 5.0, 32.0),
+                     (x + math.cos(th) * 9.5, y + math.sin(th) * 9.5), zl - 1.0, mat)
+    b.box_bottom((21.0, 21.0, 7.0), (x, y), zl - 3.0, mat)
+    b.box_bottom((21.0, 21.0, 6.0), (x, y), zl + 30.0, mat)
+    cone_roof(b, x, y, zl + 36.0, 13.0, 13.0, mat, segments=6, eave_ring=False)
+
+
+def weapon_rack_wall(b, x, y_wall, z, w=118.0, shields=2, spears=5, mat="wood_dark"):
+    """兵营兵器架（贴正立面）：竖杆 + 两道横杆 + 斜靠长矛 + 挂盾。"""
+    for sx in (-1.0, 1.0):
+        b.box_bottom((9.0, 9.0, 100.0), (x + sx * (w / 2.0 - 4.5), y_wall - 7.0), z, mat)
+    for zz in (z + 30.0, z + 88.0):
+        b.box_bottom((w, 9.0, 9.0), (x, y_wall - 7.0), zz, mat)
+    n = max(2, int(spears))
+    for i in range(n):
+        px = x - w * 0.40 + w * 0.80 * i / (n - 1.0)
+        lean = 0.16 if i % 2 else -0.16
+        b.box((6.0, 6.0, 156.0), (px + lean * 12.0, y_wall - 11.0, z + 80.0), "wood",
+              rot=(0.0, lean, 0.0))
+        b.box((9.0, 7.0, 16.0), (px + lean * 22.0, y_wall - 11.0, z + 152.0), "iron")
+    for i in range(max(1, int(shields))):
+        sx = x - w * 0.5 + w * (i + 0.5) / max(1, int(shields))
+        b.cylinder((sx, y_wall - 17.0, z + 78.0), 23.0, 8.0, "iron", segments=8,
+                   axis="Y")
+        b.box_bottom((7.0, 6.0, 14.0), (sx, y_wall - 15.0), z + 92.0, mat)
+
+
+def herb_rack(b, x, y_wall, z, w=96.0, bundles=4, mat="wood_dark"):
+    """药草晾架：两根竖杆 + 顶横杆 + 倒挂草束（foliage）+ 麻绳捆扎。"""
+    for sx in (-1.0, 1.0):
+        b.box_bottom((8.0, 8.0, 92.0), (x + sx * (w / 2.0 - 4.0), y_wall - 8.0), z, mat)
+    b.box_bottom((w, 8.0, 8.0), (x, y_wall - 8.0), z + 84.0, mat)
+    n = max(1, int(bundles))
+    for i in range(n):
+        j0, j1 = _jit(i, 701), _jit(i, 719)
+        px = x - w * 0.42 + w * 0.84 * (i + 0.5) / n
+        b.box((11.0 + 2.0 * j0, 9.0, 34.0 + 6.0 * j1),
+              (px, y_wall - 10.0, z + 60.0), "foliage")
+        b.box((7.0, 6.0, 9.0), (px, y_wall - 10.0, z + 80.0), "rope")
+
+
+def hoist_arm(b, x, y_wall, z, reach=96.0, rope=76.0, crate=(46.0, 40.0, 38.0)):
+    """仓库吊臂/滑车：墙座 + 前挑横臂 + 斜撑 + 滑轮 + 吊绳 + 悬空货箱。"""
+    b.box_bottom((18.0, 16.0, 16.0), (x, y_wall - 6.0), z, "wood_dark")
+    beam(b, reach, 13.0, 13.0, "wood_dark", x, y_wall - reach / 2.0 - 6.0, z + 4.0,
+         axis="Y")
+    strut(b, (x, y_wall - 6.0, z - 46.0), (x, y_wall - reach + 12.0, z + 2.0),
+          10.0, "wood_dark")
+    b.cylinder((x, y_wall - reach + 12.0, z - 3.0), 11.0, 9.0, "iron", segments=10,
+               axis="X")
+    b.box((4.5, 4.5, rope), (x, y_wall - reach + 12.0, z - 6.0 - rope / 2.0), "rope")
+    zc = z - 6.0 - rope - crate[2]
+    b.box_bottom(crate, (x, y_wall - reach + 12.0), zc, "wood_light")
+    for sx in (-1.0, 1.0):
+        b.box_bottom((5.0, crate[1] * 0.98, crate[2] * 0.94),
+                     (x + sx * (crate[0] / 2.0 - 2.5), y_wall - reach + 12.0), zc,
+                     "wood_dark")
+
+
+def crate_stack(b, x, y, z=0.0, seed=0):
+    """货箱/麻袋堆（仓库货台 / 草棚辎重）：两只板箱 + 叠箱 + 麻袋 + 木桶。"""
+    b.box_bottom((58.0, 44.0, 40.0), (x - 22.0, y), z, "wood_light")
+    b.box_bottom((44.0, 40.0, 34.0), (x + 34.0, y + 6.0), z, "wood_light")
+    b.box_bottom((40.0, 36.0, 34.0), (x - 18.0, y + 2.0), z + 40.0, "wood")
+    for sx in (-1.0, 1.0):
+        b.box_bottom((3.0, 46.0, 42.0), (x - 22.0 + sx * 26.0, y), z + 1.0, "wood_dark")
+    b.box_bottom((34.0, 30.0, 36.0), (x + 30.0, y + 6.0), z + 34.0, "canvas")
+    barrel(b, x + 62.0, y - 6.0, z, r=15.0, h=42.0, lid=True)
+
+
+# ---------------------------------------------------------------- 8.1 法师塔 mage_tower
+
+MAGE_TOWER_TIERS = {
+    4: dict(R=54.0, plinth=16.0, tower_h=300.0, taper=0.74, spire_h=104.0, door_w=46.0),
+    6: dict(R=80.0, plinth=18.0, tower_h=348.0, taper=0.76, spire_h=122.0, door_w=52.0),
+    8: dict(R=106.0, plinth=20.0, tower_h=392.0, taper=0.78, spire_h=140.0, door_w=56.0),
+}
+
+
+def assemble_mage_tower(width_cells=6):
+    """法师塔：收分石塔 + 悬挑观星台 + 水晶灯室 + 尖锥顶 + 彩窗/符文自发光/悬浮水晶。
+
+    剑与魔法世界观的"名片建筑"——一眼不是民居的四条依据：
+    ① 体量：3 段收分圆塔 + 外挑观星台 + 高尖锥顶（塔类竖向体量，显式豁免剪影比）；
+    ② 材质：彩窗（stained_glass）+ 符文带（rune_glow 自发光）+ 水晶灯室（crystal）；
+    ③ 魔法件：塔顶灯室自发光 + **三颗无支撑悬浮水晶**（正面/上方可见）；
+    ④ 立面：尖拱彩窗成列 + 门楣符文石板 —— 民居一项都没有。
+    """
+    t = MAGE_TOWER_TIERS[width_cells]
+    W = width_cells * CELL
+    R, plinth_h = t["R"], t["plinth"]
+    tower_h, taper, spire_h = t["tower_h"], t["taper"], t["spire_h"]
+    door_w = t["door_w"]
+    D = 2.0 * R
+    top_r = R * taper
+    yf = -R - 10.0
+    stained = magic_key(GLASS_STAINED)
+    crystal = magic_key(MAT_CRYSTAL)
+    rune = magic_key(MAT_RUNE)
+
+    b = Builder("mage_tower_w%d" % width_cells)
+    contact_shadow(b, D, D, spread=28.0)
+    b.cylinder((0.0, 0.0, plinth_h * 0.6), R * 1.12, plinth_h * 1.2, "stone_dark",
+               segments=20)
+    sec = tower_h / 3.0
+    r_prev = R
+    for k in range(3):
+        r_next = R * (taper ** ((k + 1) / 3.0))
+        b.cylinder((0.0, 0.0, plinth_h + sec * (k + 0.5)), r_prev, sec, "stone",
+                   segments=20, taper=r_next / r_prev)
+        if k:
+            b.cylinder((0.0, 0.0, plinth_h + sec * k), r_prev * 1.10, 12.0,
+                       "white_stone", segments=20)
+        r_prev = r_next
+    z_top = plinth_h + tower_h
+    # ---- 悬挑观星台：一圈外挑石檐 + 一排牛腿
+    for k in range(12):
+        th = 2.0 * math.pi * k / 12.0
+        b.box_bottom((11.0, 11.0, 22.0),
+                     (math.cos(th) * top_r * 1.02, math.sin(th) * top_r * 1.02),
+                     z_top - 14.0, "stone_dark")
+    b.cylinder((0.0, 0.0, z_top + 8.0), top_r * 1.28, 18.0, "stone", segments=20)
+    b.cylinder((0.0, 0.0, z_top + 19.0), top_r * 1.32, 6.0, "white_stone",
+               segments=20)
+    # ---- 符文带（门楣上一道 + 观星台下一道）+ 一道大尖拱彩窗（塔身只剩这一段净高：
+    #      门带拱头吃掉 ~180，彩窗必须落在门拱之上、观星台之下，别做两层撞在一起）
+    head_z = DOOR_SILL + DOOR_H + door_w * 0.5
+    for zz in (head_z + 6.0, z_top - 10.0):
+        rr = R * (1.0 - (zz - plinth_h) / tower_h * (1.0 - taper))
+        b.cylinder((0.0, 0.0, zz), max(6.0, rr) * 1.035, 9.0, rune, segments=20)
+    lanc = win_rect("lancet", w_scale=1.04, h_scale=1.0, mat=stained)
+    w1z = head_z + 16.0
+    w_oh = min(lanc["oh"], max(56.0, z_top - 26.0 - w1z))
+    rr1 = R * (1.0 - (w1z - plinth_h) / tower_h * (1.0 - taper))
+    # 圆塔是凸面：宽窗必须**整片让到塔身前脸之外**（用 -sqrt 取边角深度会让塔身
+    # 中央的鼓起挡住玻璃中段，读成"窗中央一根石柱"）—— 直接取 -rr - 2 让它微凸。
+    wy = -rr1 - 2.0
+    lancet_window(b, 0.0, wy, w1z, lanc["ow"], w_oh, head=lanc["ow"] * 0.55,
+                  glass=stained, depth=9.0)
+    # ---- 底部拱门 + 门楣符文石板
+    arched_doorway(b, 0.0, yf, 30.0, door_w, head=door_w * 0.5, mat="stone",
+                   porch_w=door_w + 46.0)
+    b.box_bottom((door_w + 20.0, 9.0, 26.0), (0.0, yf - 3.0),
+                 DOOR_SILL + DOOR_H + door_w * 0.5 + 14.0, rune)
+    # ---- 水晶灯室（crystal 自发光）+ 尖锥顶 + 顶尖晶柱
+    z_lan = z_top + 36.0
+    lantern_room(b, 0.0, 0.0, z_lan, top_r * 0.66, 64.0, glass=crystal,
+                 frame="iron", roof_mat="slate", roof_h=spire_h, posts=8)
+    z_spire_top = z_lan + 64.0 + 10.0 + spire_h + 26.0
+    crystal_shard(b, 0.0, 0.0, z_spire_top - 4.0, 12.0, 40.0, crystal)
+    # ---- 三颗悬浮水晶（无支撑；正面/上方可见）
+    for (sx, sy, sz, sr, sh) in ((-R * 0.95, -R * 1.02, z_top + 34.0, 13.0, 48.0),
+                                 (R * 0.92, -R * 0.94, z_top + 78.0, 10.0, 38.0),
+                                 (R * 0.06, -R * 1.40, z_top + 104.0, 8.0, 30.0)):
+        crystal_shard(b, sx, sy, sz, sr, sh, crystal)
+
+    ob = b.to_object()
+    spec = _mk("mage_tower", width_cells, {
+        "depth": D, "plinth_h": plinth_h, "wall_h": tower_h, "eave_h": z_top,
+        "rise": z_spire_top - z_top, "total_h": z_spire_top + 44.0,
+        "overhang": top_r * 0.14, "roof_t": 0.0, "storey_h": [tower_h],
+        "door": (door_w, DOOR_H), "door_x": 0.0, "floor_h": FLOOR_H_SPEC,
+        "window": (lanc["ow"], lanc["oh"], lanc["z0"] - plinth_h),
+        "round_tower": True, "magic": True, "floating_crystals": 3,
+        "ratio_exempt": True, "eave_exempt": True,
+        "width_exempt": (width_cells < MIN_DOOR_CELLS),
+        "reason": "法师塔：竖向塔体（收分塔身 + 悬挑观星台 + 水晶灯室 + 尖锥顶）；"
+                  "锥顶出檐按塔半径比例（非民居坡檐 18~23% 口径）",
+        "material": "石砌 / 板岩尖顶 + 彩窗 + 符文自发光 + 悬浮水晶"})
+    return ob, spec
+
+
+# ---------------------------------------------------------------- 8.2 炼金工坊 alchemy
+
+ALCHEMY_TIERS = {
+    8:  dict(D=168.0, plinth=16.0, wall=192.0, rise=86.0, wt=18.0, door_w=52.0),
+    12: dict(D=200.0, plinth=18.0, wall=200.0, rise=104.0, wt=20.0, door_w=56.0),
+}
+
+
+def assemble_alchemy(width_cells=8):
+    """炼金工坊：砖石工坊 + **多管歪斜烟道群** + 外置蒸馏台 + 药草晾架 + 玻璃器皿。
+
+    与 smithy3（石砌工坊）的差异（≥2 项肉眼可辨）：
+    ① 剪影：三根高低错落的砖烟囱、其中一根顶部接**歪斜砖管**（smithy3 是单根直烟囱）；
+    ② 立面：铅条玻璃大窗（glass_lead）+ 门前外置蒸馏台（葫芦玻璃甑 + 铜蛇管 + 小火盆）；
+    ③ 道具：挂药草束的晾架（foliage + 麻绳）—— 工坊族没有；
+    ④ 材质：陶瓦顶 + 砖烟囱 + 门侧玻璃瓶组。
+    """
+    t = ALCHEMY_TIERS[width_cells]
+    W = width_cells * CELL
+    D, plinth_h, wall_h, rise = t["D"], t["plinth"], t["wall"], t["rise"]
+    wt, door_w = t["wt"], t["door_w"]
+    over = eave_over(W)
+    eave = plinth_h + wall_h
+    yf = -D / 2.0
+    bays = bays_of(width_cells)
+    lead = magic_key(GLASS_LEAD)
+    dx, wins = bay_openings(W, bays, WIN_LOW, door_w=door_w, door_bay=0,
+                            floor_z=plinth_h, w_scale=1.12, h_scale=1.06, mat=lead)
+    side_w = win_rect(WIN_SIDE, bay_w=D, floor_z=plinth_h, bars=True, mat=lead)
+    side_w["u"] = -D * 0.12
+
+    b = Builder("alchemy_w%d" % width_cells)
+    contact_shadow(b, W, D, spread=28.0)
+    plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0,
+           gap=(dx - door_w / 2.0 - 6.0, dx + door_w / 2.0 + 6.0), lip=10.0)
+    room_shell(b, W, D, plinth_h, wall_h, wt, "stone",
+               front_openings=[(dx, door_w, DOOR_SILL, DOOR_SILL + DOOR_H)]
+                              + win_holes(wins),
+               side_openings=[(side_w["u"], side_w["ow"], side_w["z0"],
+                               side_w["z1"])])
+    door(b, h=DOOR_H, w=door_w, mat="wood_door", x=dx, y=yf, z=DOOR_SILL,
+         frame_mat="timber", planks=3)
+    step_stone(b, w=door_w + 32.0, depth=26.0, h=10.0, x=dx, y=yf - 18.0)
+    for w in wins:
+        put_window(b, w, w["cx"], yf, frame_mat="timber")
+    put_window(b, side_w, side_w["u"], W / 2.0, axis="Y", face_dir=1.0,
+               frame_mat="iron")
+    roof_gable(b, W, D, rise, over, "tile", z=eave, thickness=15.0,
+               mat_under="wood_dark", cap_size=(30.0, 14.0), cap_mat="stone_dark",
+               board_h=9.0)
+    gable_w = win_rect("garret", bay_w=D * 0.5, floor_z=eave,
+                       over=dict(w=34.0, h=36.0))
+    gable_w["u"] = -D * 0.12
+    gable_infill(b, W, D, rise, "stone", z=eave, thickness=14.0,
+                 hole=(gable_w["u"], gable_w["ow"], gable_w["z0"], gable_w["z1"]))
+    for sx in (-1.0, 1.0):
+        gable_timber(b, D, rise, "timber", (sx * (W / 2.0), 0.0), eave,
+                     axis="Y", face_dir=sx, thick=11.0)
+        put_window(b, gable_w, gable_w["u"], sx * (W / 2.0), axis="Y", face_dir=sx)
+    # ---- 多管歪斜烟道群（三根高低错落，其中一根顶部歪斜）
+    ch_y = -D * 0.14
+    ch_z = gable_roof_z(eave, rise, D / 2.0 + over, ch_y)
+    for (cxx, up, lean, cd) in ((-W * 0.32, 10.0, 0.20, 24.0),
+                                (W * 0.04, 26.0, 0.0, 22.0),
+                                (W * 0.34, 4.0, -0.17, 26.0)):
+        ch_top = eave + rise + up
+        chimney(b, cd, cd, ch_top, "brick", cxx, ch_y, foot=0.0,
+                cap_mat="stone_dark", cap=10.0, roof=ch_z, flue=True)
+        if abs(lean) > 1e-6:
+            b.box((cd * 0.86, cd * 0.86, 36.0),
+                  (cxx + lean * 20.0, ch_y, ch_top + 26.0), "brick",
+                  rot=(0.0, lean, 0.0))
+            b.box_bottom((cd + 6.0, cd + 6.0, 9.0), (cxx + lean * 38.0, ch_y),
+                         ch_top + 40.0, "stone_dark")
+    # ---- 外置蒸馏台（摆在门前前场：玻璃甑 + 铜蛇管 + 小火盆 + 玻璃瓶组）----
+    #       y 必须落在前墙之外（yf 更负 = 更靠前），否则整套家什被埋进室内看不见。
+    ax, ay = W * 0.16, yf - 44.0
+    bench(b, x=ax, y=ay, z=0.0, w=92.0, d=34.0, h=52.0)
+    b.cylinder((ax - 18.0, ay, 72.0), 14.0, 40.0, lead, segments=12)
+    b.cylinder((ax - 18.0, ay, 98.0), 7.5, 14.0, lead, segments=10)
+    b.box((6.5, 6.5, 52.0), (ax + 8.0, ay, 82.0), "iron", rot=(0.0, 0.62, 0.0))
+    b.box_bottom((30.0, 30.0, 10.0), (ax + 30.0, ay + 2.0), 0.0, "iron")
+    b.box((24.0, 24.0, 9.0), (ax + 30.0, ay + 2.0, 13.0), "fire")
+    for i in range(3):
+        b.cylinder((ax - 40.0 + i * 11.0, ay + 12.0, 64.0), 5.0, 24.0, lead,
+                   segments=8)
+    # ---- 药草晾架：门前最左端落地（窄一点，别挡住大门）
+    herb_rack(b, -W * 0.42, yf - 30.0, 0.0, w=64.0, bundles=3)
+    barrel(b, x=W * 0.40, y=D * 0.06, z=0.0, r=15.0, h=42.0, lid=True)
+
+    ob = b.to_object()
+    spec = _mk("alchemy", width_cells, {
+        "depth": D, "plinth_h": plinth_h, "wall_h": wall_h, "eave_h": eave,
+        "rise": rise, "total_h": eave + rise + 46.0, "overhang": over,
+        "roof_t": 15.0, "storey_h": [wall_h], "door": (door_w, DOOR_H),
+        "door_x": dx, "bays": bays, "flues": 3, "alembic": True, "herb_rack": True,
+        "window": (wins[0]["ow"], wins[0]["oh"], wins[0]["z0"] - plinth_h),
+        "material": "石砌 / 陶瓦 + 多管歪斜烟道 + 外置蒸馏器 + 药草晾架"})
+    return ob, spec
+
+
+# ---------------------------------------------------------------- 8.3 图书馆/学院 library
+
+LIBRARY_TIERS = {
+    12: dict(D=204.0, plinth=20.0, storey=196.0, rise=94.0, wt=22.0, door_w=58.0),
+    16: dict(D=236.0, plinth=22.0, storey=202.0, rise=140.0, wt=24.0, door_w=60.0),
+}
+
+
+def assemble_library(width_cells=12):
+    """图书馆/学院：两层石砌 + 大跨铅条高窗成组 + 中央凸出门楼（山墙铭牌+圆窗）+ 石阶灯柱。
+
+    与 cathedral（石砌公共建筑）的差异（≥2 项肉眼可辨）：
+    ① 体量：两层**矩形石楼** + 中央凸出门楼（cathedral 是山墙正立面 + 中殿坡顶 + 钟楼）；
+    ② 立面：铅条玻璃**成组高窗**（每开间两扇成对、上下两层对齐）+ 门楼铭牌；
+    ③ 入口：双扇拱门 + 三级石阶 + 两侧自发光灯柱（cathedral 是尖拱门廊 + 扶手）；
+    ④ 屋顶：低坡板岩 + 门楼小山墙 —— 无钟楼、无尖顶。
+    """
+    t = LIBRARY_TIERS[width_cells]
+    W = width_cells * CELL
+    D, plinth_h, storey = t["D"], t["plinth"], t["storey"]
+    rise, wt, door_w = t["rise"], t["wt"], t["door_w"]
+    over = eave_over(W)
+    eave = plinth_h + storey * 2.0
+    z2 = plinth_h + storey
+    yf = -D / 2.0
+    bays = bays_of(width_cells)
+    lead = magic_key(GLASS_LEAD)
+    fp_w = min(190.0, W * 0.34)          # 中央门楼宽
+    # 门楼必须**凸出到屋檐线之外**（否则整根门楼被自家前坡挡到只剩一个尖）：
+    # 凸出量 = 出檐 + 18，门楼前脸才完整可读。
+    fp = over + 18.0
+    fp_rise = rise + 26.0
+    fpy = yf - fp / 2.0
+
+    b = Builder("library_w%d" % width_cells)
+    contact_shadow(b, W, D + fp, spread=32.0)
+    plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0,
+           gap=(-door_w / 2.0 - 8.0, door_w / 2.0 + 8.0), lip=12.0)
+    # ---- 两层石砌墙（正面不开窗洞：高窗为外贴式铅条窗）
+    room_shell(b, W, D, plinth_h, storey, wt, "stone")
+    room_shell(b, W, D, z2, storey, wt, "stone")
+    b.box_bottom((W + 12.0, D + 12.0, 12.0), (0.0, 0.0), z2 - 12.0, "white_stone")
+    # ---- 中央凸出门楼（地面到檐口）+ 山墙铭牌 + 圆窗 + 双扇拱门
+    b.box_bottom((fp_w, fp, eave), (0.0, fpy), 0.0, "stone")
+    tri_prism_y(b, 0.0, fpy, fp_w / 2.0, fp_rise, eave, fp, "stone")
+    for sx in (-1.0, 1.0):
+        strut(b, (0.0, fpy - fp / 2.0 - 1.0, eave + fp_rise - 6.0),
+              (sx * (fp_w / 2.0 - 4.0), fpy - fp / 2.0 - 1.0, eave + 4.0), 16.0,
+              "white_stone")
+    rose_window(b, 0.0, fpy - fp / 2.0 - 1.0, eave + fp_rise * 0.40, 24.0, glass=lead,
+                spokes=8, tracery="white_stone")
+    b.box_bottom((fp_w * 0.60, 10.0, 44.0), (0.0, fpy - fp / 2.0 - 2.0),
+                 DOOR_SILL + DOOR_H + 30.0, "stone_dark")
+    for k in range(3):
+        b.box_bottom((fp_w * 0.46, 5.0, 5.0), (0.0, fpy - fp / 2.0 - 8.0),
+                     DOOR_SILL + DOOR_H + 40.0 + k * 11.0, "white_stone")
+    arched_doorway(b, 0.0, yf - fp, 34.0, door_w, head=door_w * 0.55, mat="white_stone",
+                   profile="round", door_mat="wood", leaves=2, porch_w=door_w + 64.0)
+    for k, (dy, dw, dh) in enumerate(((0.0, fp_w + 30.0, 12.0),
+                                      (22.0, fp_w + 58.0, 8.0),
+                                      (42.0, fp_w + 84.0, 6.0))):
+        step_stone(b, w=dw, depth=26.0, h=dh, x=0.0, y=yf - fp - dy - 13.0, z=0.0)
+    for sx in (-1.0, 1.0):
+        lamp_post(b, sx * (fp_w / 2.0 + 34.0), yf - fp - 60.0, 0.0, h=186.0)
+    # ---- 成组铅条高窗：每开间成对两扇、上下两层对齐（跳过中央门楼）
+    cs = bay_centers(W, bays)
+    for cx in cs:
+        if abs(cx) < fp_w / 2.0 + 34.0:
+            continue
+        for fz in (plinth_h, z2):
+            for off in (-16.0, 16.0):
+                tw = win_rect("tall_lead", floor_z=fz, mat=lead)
+                put_window(b, tw, cx + off, yf, frame_mat="stone_dark")
+    roof_gable(b, W, D, rise, over, "slate", z=eave, thickness=15.0,
+               mat_under="wood_dark", cap_size=(28.0, 14.0), cap_mat="stone_dark",
+               board_mat="wood_dark", board_h=9.0)
+    gable_infill(b, W, D, rise, "stone", z=eave, thickness=15.0)
+
+    ob = b.to_object()
+    spec = _mk("library", width_cells, {
+        "depth": D + fp, "plinth_h": plinth_h, "wall_h": storey * 2.0, "eave_h": eave,
+        "rise": rise, "total_h": eave + rise, "overhang": over, "roof_t": 15.0,
+        "storey_h": [storey, storey], "double_storey": True,
+        "storey_band": (175.0, 208.0),
+        "door": (door_w, DOOR_H), "door_x": 0.0, "bays": bays, "frontispiece": fp_w,
+        "window": (44.0, 124.0, 69.0), "lamp_posts": 2,
+        "material": "石砌 / 板岩 + 铅条高窗成组 + 门楼铭牌 + 石阶灯柱"})
+    return ob, spec
+
+
+# ---------------------------------------------------------------- 8.4 兵营 barracks
+
+BARRACKS_TIERS = {
+    12: dict(D=208.0, plinth=24.0, storey=200.0, rise=86.0, wt=22.0, door_w=58.0,
+             leaf=58.0, porch_w=196.0),
+    16: dict(D=240.0, plinth=26.0, storey=202.0, rise=92.0, wt=24.0, door_w=60.0,
+             leaf=60.0, porch_w=220.0),
+}
+
+
+def assemble_barracks(width_cells=12):
+    """兵营：石砌底层（加固石底）+ 抹灰上层 + **门楼式垛口入口** + 箭窗 + 盾/矛兵器架 + 军旗。
+
+    与 house/townhouse 的差异（≥2 项肉眼可辨）：
+    ① 入口：中央**前凸门楼**（拱门洞 + 垛口压顶 + 旗杆军旗）—— 民居没有；
+    ② 防御：底层石墙上成排**窄缝箭窗**（squint）；上层小窗；
+    ③ 装备：立面挂**盾牌/长矛架**（八棱盾 + 斜靠长矛）；
+    ④ 体量：加固石底占满一层、屋顶平缓（rise 只占层高 ~44%）。
+    """
+    t = BARRACKS_TIERS[width_cells]
+    W = width_cells * CELL
+    D, plinth_h, storey = t["D"], t["plinth"], t["storey"]
+    rise, wt = t["rise"], t["wt"]
+    leaf, pw = t["leaf"], t["porch_w"]
+    opening_w = leaf * 2.0 + 6.0
+    over = eave_over(W)
+    eave = plinth_h + storey * 2.0
+    yf = -D / 2.0
+    bays = bays_of(width_cells)
+    dx = 0.0
+    slit = win_rect("squint")
+    _dz, up_wins = bay_openings(W, bays, WIN_UP, floor_z=plinth_h + storey,
+                                w_scale=0.82, h_scale=0.88)
+
+    b = Builder("barracks_w%d" % width_cells)
+    contact_shadow(b, W, D + 30.0, spread=32.0)
+    plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0,
+           gap=(-opening_w / 2.0 - 8.0, opening_w / 2.0 + 8.0), lip=12.0)
+    room_shell(b, W, D, plinth_h, storey, wt, "stone",
+               front_openings=[(dx, opening_w, DOOR_SILL, DOOR_SILL + DOOR_H)])
+    room_shell(b, W, D, plinth_h + storey, storey, wt, "plaster_old",
+               front_openings=win_holes(up_wins))
+    quoins(b, W - 2.0 * wt, D, storey * 0.9, "white_stone", 0.0, yf + wt / 2.0,
+           plinth_h + 6.0, size=22.0, step=46.0, front=False, sides=True)
+    # ---- 底层箭窗（成排窄缝，贴石墙）
+    for sx in (-1.0, 1.0):
+        for zz in (plinth_h + 66.0, plinth_h + 132.0):
+            arrow_slit(b, sx * W * 0.30, yf - 1.0, zz, slit["ow"], slit["oh"])
+        _side_slit(b, sx * (W / 2.0 - 1.0), -D * 0.12, plinth_h + 74.0, slit["ow"],
+                   slit["oh"])
+    # ---- 门楼：前凸拱门洞（真洞）+ 半敞门扇 + 垛口压顶 + 旗杆
+    ph = plinth_h + storey + 34.0
+    gy = yf - 16.0
+    arch_wall(b, pw, ph, 32.0, "stone", dx, gy, 0.0,
+              openings=[(0.0, opening_w, DOOR_SILL, DOOR_SILL + DOOR_H, 40.0, "round")])
+    b.box((opening_w - 2.0, 26.0, DOOR_SILL + DOOR_H),
+          (dx, gy + 4.0, (DOOR_SILL + DOOR_H) / 2.0), "cavity")
+    for k in range(2):
+        b.box_bottom((11.0, 32.0, DOOR_SILL + DOOR_H + 44.0),
+                     (dx + (-1.0 if k == 0 else 1.0) * (opening_w / 2.0 - 5.5), gy),
+                     0.0, "stone_dark")
+    for sx in (-1.0, 1.0):
+        door(b, h=DOOR_H, w=leaf, mat="wood_door", x=dx + sx * (leaf / 2.0 + 3.0),
+             y=gy - 16.0, z=DOOR_SILL, frame_mat="timber", frame=9.0, planks=3,
+             iron=True)
+    b.box_bottom((pw + 16.0, 42.0, 14.0), (dx, gy), ph, "white_stone")
+    crenellation(b, pw - 14.0, 30.0, ph + 14.0, "stone", dx, gy, merlon=26.0,
+                 gap=16.0, h=26.0, band=12.0)
+    # 旗杆压到**檐口遮挡线以下**（z ≤ eave - 出檐×tan20°），否则旗子被自家屋顶挡死
+    b.box_bottom((9.0, 9.0, 100.0), (dx + pw * 0.30, gy), ph + 26.0, "wood_dark")
+    b.box((54.0, 6.0, 32.0), (dx + pw * 0.30 + 29.0, gy, ph + 26.0 + 68.0),
+          "cloth_red")
+    # ---- 上层窗 + 兵器架（落地摆在门前，避开窗洞墙垛的窄限制）
+    for w in up_wins:
+        put_window(b, w, w["cx"], yf, frame_mat="timber")
+    for sx in (-1.0, 1.0):
+        weapon_rack_wall(b, sx * W * 0.30, yf - 42.0, 0.0, w=90.0, shields=2,
+                         spears=3)
+    roof_gable(b, W, D, rise, over, "tile", z=eave, thickness=15.0,
+               mat_under="wood_dark", cap_size=(30.0, 14.0), cap_mat="stone_dark",
+               board_mat="wood_dark", board_h=9.0)
+    gable_infill(b, W, D, rise, "plaster_old", z=eave, thickness=14.0)
+
+    ob = b.to_object()
+    spec = _mk("barracks", width_cells, {
+        "depth": D + 32.0, "plinth_h": plinth_h, "wall_h": storey * 2.0, "eave_h": eave,
+        "rise": rise, "total_h": eave + rise, "overhang": over, "roof_t": 15.0,
+        "storey_h": [storey, storey], "double_storey": True,
+        "storey_band": (175.0, 208.0),
+        "door": (opening_w, DOOR_H), "composite_door": True, "door_x": dx, "bays": bays,
+        "window": (up_wins[0]["ow"], up_wins[0]["oh"],
+                   up_wins[0]["z0"] - (plinth_h + storey)),
+        "arrow_slits": 6, "weapon_rack": True, "gate_porch": pw,
+        "material": "石砌底层 / 抹灰上层 / 陶瓦 + 门楼垛口 + 兵器架军旗"})
+    return ob, spec
+
+
+# ---------------------------------------------------------------- 8.5 仓库 warehouse
+
+WAREHOUSE_TIERS = {
+    12: dict(D=204.0, plinth=28.0, wall=230.0, rise=118.0, wt=22.0, door_w=56.0,
+             cargo_w=132.0),
+    16: dict(D=236.0, plinth=36.0, wall=268.0, rise=148.0, wt=24.0, door_w=58.0,
+             cargo_w=156.0),
+}
+
+
+def assemble_warehouse(width_cells=12):
+    """仓库：砖石混构 + **高大门洞（近两层高）** + 铁滑轨推拉门 + 吊臂/滑车 + 堆货平台。
+
+    与 barn（大跨木棚）的差异（≥2 项肉眼可辨）：
+    ① 材料：砖墙 + 高石勒脚 + 白石隅石（barn 是通体木板）；
+    ② 立面：**近两层高的货门洞** + 铁滑轨/吊环 + 半推开的滑门（barn 是双扇木门）；
+    ③ 机械：从上层伸出的**吊臂 + 滑轮 + 悬空货箱**（正面可见）；
+    ④ 门前货台（石台 + 货箱/麻袋/木桶堆）。
+    """
+    t = WAREHOUSE_TIERS[width_cells]
+    W = width_cells * CELL
+    D, plinth_h, wall_h, rise = t["D"], t["plinth"], t["wall"], t["rise"]
+    wt, door_w, cargo_w = t["wt"], t["door_w"], t["cargo_w"]
+    over = eave_over(W)
+    eave = plinth_h + wall_h
+    yf = -D / 2.0
+    dx = W * 0.30
+    cargo_dx = -W * 0.12
+    cargo_z1 = eave - 26.0
+    front = [(dx, door_w, plinth_h, plinth_h + DOOR_H),
+             (cargo_dx, cargo_w, plinth_h, cargo_z1)]
+    gw = win_rect("garret", over=dict(w=28.0, h=32.0))
+    gap_w, gx = free_gap(W / 2.0, wall_blocks(dx, door_w, [],
+                                              extra=((cargo_dx - cargo_w / 2.0 - 12.0,
+                                                      cargo_dx + cargo_w / 2.0 + 12.0),)))
+    cl_z = eave - 58.0
+    if gap_w > 96.0:
+        front += [(gx - 34.0, gw["ow"], cl_z, cl_z + gw["oh"]),
+                  (gx + 34.0, gw["ow"], cl_z, cl_z + gw["oh"])]
+
+    b = Builder("warehouse_w%d" % width_cells)
+    contact_shadow(b, W, D + 96.0, spread=36.0)
+    plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0,
+           gap=(cargo_dx - cargo_w / 2.0 - 6.0, cargo_dx + cargo_w / 2.0 + 6.0),
+           lip=12.0)
+    room_shell(b, W, D, plinth_h, wall_h, wt, "brick", front_openings=front)
+    quoins(b, W - 2.0 * wt, D, wall_h * 0.92, "white_stone", 0.0, yf + wt / 2.0,
+           plinth_h + 6.0, size=22.0, step=50.0, front=False, sides=True)
+    # ---- 人员小门（开在勒脚之上）
+    door(b, h=DOOR_H, w=door_w, mat="wood_door", x=dx, y=yf, z=plinth_h,
+         frame_mat="iron", frame=9.0, planks=4)
+    step_stone(b, w=door_w + 30.0, depth=26.0, h=plinth_h, x=dx, y=yf - 18.0)
+    # ---- 货门：洞内暗腔 + 半推开滑门（亮板条，读作"门半开"而不是"缺一面墙"）+ 滑轨/吊环
+    ch = cargo_z1 - plinth_h
+    b.box((cargo_w - 4.0, 24.0, ch), (cargo_dx, yf + 48.0, plinth_h + ch / 2.0),
+          "cavity")
+    b.box((cargo_w * 0.62, 8.0, ch), (cargo_dx + cargo_w * 0.19, yf - 7.0,
+                                      plinth_h + ch / 2.0), "wood_light")
+    for k in range(4):
+        b.box((7.0, 4.0, ch), (cargo_dx + cargo_w * 0.19 - cargo_w * 0.24
+                               + cargo_w * 0.48 * k / 3.0, yf - 12.0,
+                               plinth_h + ch / 2.0), "wood_dark")
+    b.box((cargo_w * 0.60, 8.0, ch), (cargo_dx - cargo_w * 0.72, yf - 15.0,
+                                      plinth_h + ch / 2.0), "wood_door")
+    b.box_bottom((cargo_w * 1.7, 11.0, 11.0), (cargo_dx - cargo_w * 0.1, yf - 9.0),
+                 cargo_z1 + 6.0, "iron")
+    for k in range(4):
+        b.box_bottom((5.0, 5.0, 10.0),
+                     (cargo_dx - cargo_w * 0.55 + cargo_w * 1.1 * k / 3.0, yf - 15.0),
+                     cargo_z1 - 2.0, "iron")
+    b.box_bottom((cargo_w + 26.0, 34.0, 14.0), (cargo_dx, yf - 4.0), cargo_z1 + 17.0,
+                 "white_stone")
+    # ---- 高侧小窗
+    if gap_w > 96.0:
+        for cx in (gx - 34.0, gx + 34.0):
+            cw = dict(gw, cx=cx, z0=cl_z, z1=cl_z + gw["oh"])
+            put_window(b, cw, cx, yf, frame_mat="iron")
+    # ---- 吊臂/滑车 + 门前货台（石台 + 货箱/麻袋/木桶）
+    hoist_arm(b, cargo_dx, yf, eave - 58.0, reach=120.0, rope=42.0)
+    b.box_bottom((cargo_w + 56.0, 66.0, 24.0), (cargo_dx, yf - 50.0), 0.0,
+                 "stone_dark")
+    crate_stack(b, cargo_dx - 16.0, yf - 44.0, 24.0, seed=width_cells)
+    roof_gable(b, W, D, rise, over, "tile", z=eave, thickness=16.0,
+               mat_under="wood_dark", cap_size=(32.0, 15.0), cap_mat="stone_dark",
+               board_h=10.0)
+    gable_infill(b, W, D, rise, "brick", z=eave, thickness=16.0)
+
+    ob = b.to_object()
+    spec = _mk("warehouse", width_cells, {
+        "depth": D + 68.0, "plinth_h": plinth_h, "wall_h": wall_h, "eave_h": eave,
+        "rise": rise, "total_h": eave + rise, "overhang": over, "roof_t": 16.0,
+        "storey_h": [wall_h], "door": (door_w, DOOR_H), "door_x": dx, "bays": 0,
+        "cargo_door": (cargo_w, ch, plinth_h, cargo_z1), "hoist": True,
+        "window": (gw["ow"], gw["oh"], cl_z - plinth_h) if gap_w > 96.0 else None,
+        "material": "砖石混构 / 陶瓦 + 高大门洞 + 滑轨推拉门 + 吊臂货台"})
+    return ob, spec
+
+
+# ---------------------------------------------------------------- 8.6 马厩 stable（独立化）
+
+STABLE_TIERS = {
+    8:  dict(D=160.0, plinth=14.0, low=126.0, up=78.0, rise=104.0, wt=18.0,
+             leaf=54.0, post=15.0, hay_dw=60.0, hay_dh=54.0),
+    12: dict(D=196.0, plinth=16.0, low=134.0, up=88.0, rise=118.0, wt=20.0,
+             leaf=56.0, post=16.0, hay_dw=66.0, hay_dh=58.0),
+}
+
+
+def assemble_stable(width_cells=8):
+    """马厩（独立化，不再兜底 barn）：石砌底层大开敞厩门 + 明亮木板上层 + 干草阁楼口 + 拴马桩。
+
+    与 barn（深色木板通高 + 双扇门）的差异（≥2 项肉眼可辨）：
+    ① 材质明度：底层**石砌**、上层**wood_light 明木板**（barn 通体深木板 → 黑盒子），
+       墙面明度显著抬升；
+    ② 立面：大开敞厩门洞内是**两道横栏 + 立柱**（读作隔栏厩舍，不是封死的大门）；
+    ③ 附属：干草阁楼口（真洞 + 上翻门板）+ 门前拴马桩 + 槽料；
+    ④ 屋顶换陶瓦（barn 是木板顶）。
+    """
+    t = STABLE_TIERS[width_cells]
+    W = width_cells * CELL
+    D, plinth_h, low, up = t["D"], t["plinth"], t["low"], t["up"]
+    rise, wt, leaf = t["rise"], t["wt"], t["leaf"]
+    post_s, hay_dw, hay_dh = t["post"], t["hay_dw"], t["hay_dh"]
+    opening_w = leaf * 2.0 + 6.0
+    over = eave_over(W)
+    z_mid = plinth_h + low
+    eave = z_mid + up
+    yf, yb = -D / 2.0, D / 2.0
+    vent = win_rect("vent", floor_z=plinth_h)
+    vents = [dict(vent, cx=-W * 0.37), dict(vent, cx=W * 0.37)]
+    hdx = -W * 0.26
+
+    b = Builder("stable_w%d" % width_cells)
+    contact_shadow(b, W, D, spread=28.0)
+    plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0,
+           gap=(-opening_w / 2.0 - 6.0, opening_w / 2.0 + 6.0), lip=9.0)
+    # ---- 底层：石砌 + 大开敞厩门 + 侧通风
+    room_shell(b, W, D, plinth_h, low, wt, "stone",
+               front_openings=[(0.0, opening_w, DOOR_SILL, DOOR_SILL + DOOR_H)]
+                              + win_holes(vents),
+               side_openings=[(-D * 0.14, vent["ow"], vent["z0"], vent["z1"])])
+    # 大开敞厩门 = 木门框 + **下半扇实木半门** + 上半立柱/横栏（读作隔栏厩舍，
+    # 不是封死的大门；不要在两扇全高门板上再叠立柱 —— 会糊成木笼）。
+    for sx in (-1.0, 1.0):
+        b.box_bottom((11.0, 16.0, DOOR_H + 12.0),
+                     (sx * (opening_w / 2.0 + 5.5), yf), DOOR_SILL - 6.0, "timber")
+    b.box_bottom((opening_w + 22.0, 16.0, 13.0), (0.0, yf), DOOR_SILL + DOOR_H,
+                 "timber")
+    for sx in (-1.0, 1.0):
+        b.box((leaf - 3.0, 7.0, 76.0), (sx * (leaf / 2.0 + 2.0), yf - 4.0,
+                                        DOOR_SILL + 38.0), "wood_door")
+        b.box((6.0, 4.0, 68.0), (sx * (leaf / 2.0 + 2.0), yf - 8.0,
+                                 DOOR_SILL + 38.0), "timber")
+    for px in (-opening_w * 0.30, 0.0, opening_w * 0.30):
+        b.box_bottom((9.0, 12.0, 66.0), (px, yf - 2.0), DOOR_SILL + 80.0,
+                     "wood_light")
+    b.box((opening_w - 6.0, 9.0, 9.0), (0.0, yf - 2.0, DOOR_SILL + 140.0),
+          "wood_light")
+    step_stone(b, w=opening_w + 30.0, depth=28.0, h=10.0, x=0.0, y=yf - 19.0)
+    for w in vents:
+        put_window(b, w, w["cx"], yf, frame_mat="wood_dark")
+    # ---- 上层：明亮木板墙（四面封 + 前墙留干草阁楼口，阁楼**封闭带小门** →
+    # 与 hayloft 的"整面开敞草垛外露"明确分家）+ 角柱
+    z_loft = z_mid + 16.0
+    wall_panel(b, W, up, 13.0, "wood_light", 0.0, yb - 6.5, z_mid)
+    wall_panel(b, W, up, 13.0, "wood_light", 0.0, yf + 6.5, z_mid,
+               openings=[(hdx, hay_dw, z_loft, z_loft + hay_dh)])
+    for sx in (-1.0, 1.0):
+        wall_panel(b, D, up, 13.0, "wood_light", sx * (W / 2.0 - 6.5), 0.0, z_mid,
+                   axis="Y")
+        for yy in (yb - post_s / 2.0, yf + post_s / 2.0):
+            post(b, post_s, up, "wood_dark", sx * (W / 2.0 - post_s / 2.0), yy, z_mid)
+    posts_x = [0.0] if width_cells <= 8 else [-W / 4.0, W / 4.0]
+    for px in posts_x:
+        post(b, post_s, up, "wood_dark", px, yf + post_s / 2.0, z_mid)
+    for yy in (yf + post_s / 2.0, yb - post_s / 2.0):
+        beam(b, W, 17.0, 15.0, "wood_dark", 0.0, yy, eave - 15.0)
+    for sx in (-1.0, 1.0):
+        beam(b, D - post_s, 15.0, 15.0, "wood_dark",
+             sx * (W / 2.0 - post_s / 2.0), 0.0, eave - 15.0, axis="Y")
+    hay_door(b, hay_dw, hay_dh, x=hdx, y=yf, z=z_loft, mat="wood_light",
+             frame_mat="timber")
+    # ---- 拴马桩 + 草料槽（前场；横杆收短压低，别在门前读成一道围栏）
+    for sx in (-1.0, 1.0):
+        post(b, 12.0, 80.0, "wood_dark", sx * W * 0.34, yf - 58.0)
+    beam(b, W * 0.62, 10.0, 10.0, "wood_dark", 0.0, yf - 58.0, 62.0)
+    b.box_bottom((76.0, 26.0, 18.0), (W * 0.24, yf + D * 0.16), 0.0, "wood_light")
+    roof_gable(b, W, D, rise, over, "tile", z=eave, thickness=14.0,
+               mat_under="wood_dark", cap_size=(30.0, 14.0), cap_mat="stone_dark",
+               board_mat="wood_dark", board_h=8.0)
+    gable_w = win_rect("garret", bay_w=D * 0.5, floor_z=eave,
+                       over=dict(w=32.0, h=34.0))
+    gable_w["u"] = -D * 0.12
+    gable_infill(b, W, D, rise, "wood_light", z=eave, thickness=13.0,
+                 hole=(gable_w["u"], gable_w["ow"], gable_w["z0"], gable_w["z1"]))
+    for sx in (-1.0, 1.0):
+        gable_timber(b, D, rise, "timber", (sx * (W / 2.0), 0.0), eave,
+                     axis="Y", face_dir=sx, thick=11.0)
+        put_window(b, gable_w, gable_w["u"], sx * (W / 2.0), axis="Y", face_dir=sx)
+
+    ob = b.to_object()
+    spec = _mk("stable", width_cells, {
+        "depth": D, "plinth_h": plinth_h, "wall_h": low + up, "eave_h": eave,
+        "rise": rise, "total_h": eave + rise, "overhang": over, "roof_t": 14.0,
+        "storey_h": [low, up], "door": (opening_w, DOOR_H), "composite_door": True,
+        "door_x": 0.0, "open_stall": True, "hay_loft": True, "tether_posts": 2,
+        "material": "石砌底层 / 明亮木板上层 / 陶瓦 + 开敞厩门 + 干草阁楼口"})
+    return ob, spec
+
+
+# ---------------------------------------------------------------- 8.7 柱撑草棚 shelter（独立化）
+
+SHELTER_TIERS = {
+    4: dict(D=112.0, post_h=124.0, rise=36.0, post=16.0, roof_t=15.0),
+    6: dict(D=150.0, post_h=170.0, rise=58.0, post=17.0, roof_t=17.0),
+    # 8 格档：city_layout 的 shelter 声明宽度含 8（村/城档 production 区），必须能装配
+    8: dict(D=186.0, post_h=188.0, rise=66.0, post=18.0, roof_t=18.0),
+}
+
+
+def assemble_shelter(width_cells=6):
+    """柱撑草棚（独立化，不再兜底 barn）：四柱撑草顶、三面开敞、可放辎重。
+
+    创始人早期点名的"几根柱子那种草棚"——本批做成独立 def：
+    ① 只有四角柱（6 格加两根前中柱）+ 檐檩 + 斜撑，**三面开敞**（只封背面下半）；
+    ② 草顶更薄、出檐按宽 20.5%；
+    ③ 棚下放辎重（货箱/麻袋/木桶/草垛）+ 斜靠板材 —— 与 smithy1（有后墙 + 铁炉铁砧）分家。
+    """
+    t = SHELTER_TIERS[width_cells]
+    W = width_cells * CELL
+    D, post_h, rise, post_s = t["D"], t["post_h"], t["rise"], t["post"]
+    roof_t = t["roof_t"]
+    over = eave_over(W)
+    yf = -D / 2.0 + post_s / 2.0
+    yb = D / 2.0 - post_s / 2.0
+
+    b = Builder("shelter_w%d" % width_cells)
+    contact_shadow(b, W, D * 1.12, spread=26.0)
+    for sx in (-1.0, 1.0):
+        for yy in (yb, yf):
+            post(b, post_s, post_h, "wood_dark", sx * (W / 2.0 - post_s / 2.0), yy)
+    posts_x = [] if width_cells <= 4 else [-W / 4.0, W / 4.0]
+    for px in posts_x:
+        post(b, post_s, post_h, "wood_dark", px, yf)
+    for yy in (yf, yb):
+        beam(b, W, 16.0, 15.0, "wood_dark", 0.0, yy, post_h - 15.0)
+    for sx in (-1.0, 1.0):
+        beam(b, D - post_s, 15.0, 15.0, "wood_dark",
+             sx * (W / 2.0 - post_s / 2.0), 0.0, post_h - 15.0, axis="Y")
+        strut(b, (sx * (W / 2.0 - post_s - 2.0), yf, post_h - 38.0),
+              (sx * (W / 2.0 - 70.0), yf, post_h - 4.0), 10.0, "wood_dark")
+    # 背面下半封板（其余三面开敞），压得更矮，免得把开敞读成"矮房子"
+    wall_panel(b, W, post_h * 0.30, 12.0, "wood_light", 0.0, yb + 6.0, 0.0)
+    # 开放棚的顶棚用**亮望板**（mat_under=wood_light）：暗顶棚会把柱子吞掉，
+    # 柱子必须衬在亮底上才读得出"几根柱子撑着一个草顶"。
+    roof_gable(b, W, D, rise, over, "thatch", z=post_h, thickness=roof_t,
+               mat_under="wood_light", cap_size=(30.0, 15.0), cap_mat="thatch",
+               board_mat="wood_dark", board_h=8.0, eave_ao=False)
+    # ---- 棚下辎重（只留三件、全压在后半棚左侧，前三面留空读开敞）
+    b.box_bottom((52.0, 36.0, 36.0), (-W * 0.22, D * 0.24), 0.0, "wood_light")
+    b.box_bottom((47.0, 38.0, 5.0), (-W * 0.22, D * 0.24), 0.0, "wood_dark")
+    barrel(b, x=-W * 0.02, y=D * 0.26, z=0.0, r=12.0, h=34.0, lid=True)
+    hay_heap(b, W * 0.20, yb - D * 0.20, 0.0, w=W * 0.24, d=D * 0.18, h=26.0,
+             rows=1, seed=width_cells + 3)
+
+    ob = b.to_object()
+    spec = _mk("shelter", width_cells, {
+        "depth": D, "plinth_h": 0.0, "wall_h": post_h, "eave_h": post_h,
+        "rise": rise, "total_h": post_h + rise, "overhang": over, "roof_t": roof_t,
+        "storey_h": [post_h], "door": None, "open_shed": True, "columns": 4,
+        "cargo": True,
+        "material": "木柱 / 茅草顶 + 三面开敞 + 辎重"})
+    return ob, spec
+
+
+ASSEMBLERS["mage_tower"] = assemble_mage_tower
+ASSEMBLERS["alchemy"] = assemble_alchemy
+ASSEMBLERS["library"] = assemble_library
+ASSEMBLERS["barracks"] = assemble_barracks
+ASSEMBLERS["warehouse"] = assemble_warehouse
+ASSEMBLERS["stable"] = assemble_stable
+ASSEMBLERS["shelter"] = assemble_shelter
+
+#: 批次 D3b 探针条目（追加在既有条目之后，不动既有 —— 既有各条判定必须不变）
+PROBE_LIST += [("mage_tower", 4), ("mage_tower", 6), ("mage_tower", 8),
+               ("alchemy", 8), ("alchemy", 12),
+               ("library", 12), ("library", 16),
+               ("barracks", 12), ("barracks", 16),
+               ("warehouse", 12), ("warehouse", 16),
+               ("stable", 8), ("stable", 12),
+               ("shelter", 4), ("shelter", 6), ("shelter", 8)]
 
 
 def print_ratio_metrics():

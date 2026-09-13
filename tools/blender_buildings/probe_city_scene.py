@@ -70,8 +70,17 @@ DEF_MAP = {
     "guildhall":     ("guildhall", [12, 16]),
     "hayloft":       ("hayloft", [8, 12]),
     "barn":          ("barn", [8, 12, 16]),
-    "stable":        ("barn", [8, 12, 16]),
-    "shelter":       ("barn", [8, 12, 16]),
+    # stable / shelter：D3b 起独立装配器（不再兜底 barn，消"深色木板墙读作黑盒子"）
+    "stable":        ("stable", [8, 12]),
+    "shelter":       ("shelter", [4, 6, 8]),
+    # D3b 魔法 / 公共 / 物流线（city_layout.DEFS 尚未列这些 def，属**前置接线**：
+    # 待布局器补 def 后即可直接路由，无需再改本表；validate 的 DEFS 覆盖表会先报
+    # "多余键 / 待补 tier 表"，由 validate.py 归属方补 ASM_TIER_ATTR 后转绿）
+    "mage_tower":    ("mage_tower", [4, 6, 8]),
+    "alchemy":       ("alchemy", [8, 12]),
+    "library":       ("library", [12, 16]),
+    "barracks":      ("barracks", [12, 16]),
+    "warehouse":     ("warehouse", [12, 16]),
     "smithy1":       ("smithy1", [6, 8]),
     "smithy2":       ("smithy2", [8]),
     "smithy3":       ("smithy3", [8, 12]),
@@ -130,6 +139,9 @@ DRESS_BY_DEF = {
     "church": "cathedral", "chapel": "cathedral",
     "tower": "tower", "gatehouse": "gatehouse", "lighthouse": "lighthouse",
     "windmill": "windmill",
+    # D3b 新 def（前置接线；配方一律取自 props.DRESS 既有键，不新增/不改 props.py）
+    "mage_tower": "tower", "alchemy": "smithy", "library": "cathedral",
+    "barracks": "smithy", "warehouse": "barn",
 }
 
 

@@ -22,6 +22,26 @@ uniform float glow_energy : hint_range(0.0, 8.0) = 0.0;
 uniform vec3 glow_tint : source_color = vec3(1.0, 0.78, 0.46);
 uniform vec3 tint : source_color = vec3(1.0);
 uniform float rough : hint_range(0.0, 1.0) = 0.85;
+// 逐层递增的"后景模糊"：按半径做 10 tap 黄金角螺旋模糊（只糊颜色，不糊 alpha
+// 与伪法线 —— 剪影保持硬边、明暗结构仍在，读作"轻/中/重虚化的远景层"）。
+// 为什么不用 Environment 的 DOF：DOF 只能给"近/远两档"，做不出"第一层轻糊、
+// 第二层中糊、远山重糊"的逐层递增；逐层 uniform 是可控且可验证的做法。
+uniform float blur_radius : hint_range(0.0, 32.0) = 0.0;
+
+vec3 _blur_smp(sampler2D tex, vec2 uv, vec2 texel, float radius) {
+	vec3 acc = texture(tex, uv).rgb;
+	float wsum = 1.0;
+	for (int i = 0; i < 10; i++) {
+		float fi = float(i);
+		float a = fi * 2.39996;
+		float rr = sqrt((fi + 0.5) / 10.0);
+		vec2 off = vec2(cos(a), sin(a)) * rr * radius * texel;
+		float w = 1.0 - rr * 0.5;
+		acc += texture(tex, uv + off).rgb * w;
+		wsum += w;
+	}
+	return acc / wsum;
+}
 
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -36,7 +56,7 @@ void fragment() {
 	if (c.a < alpha_cut) {
 		discard;
 	}
-	ALBEDO = c.rgb * tint;
+	ALBEDO = _blur_smp(albedo_tex, UV, d, blur_radius) * tint;
 	// albedo 亮度差分 -> 切空间法线（TANGENT/BINORMAL 由 quad 的 UV 给出）
 	float lx = _lum(UV + vec2(d.x, 0.0)) - _lum(UV - vec2(d.x, 0.0));
 	float ly = _lum(UV + vec2(0.0, d.y)) - _lum(UV - vec2(0.0, d.y));
@@ -44,5 +64,5 @@ void fragment() {
 	NORMAL = normalize(TANGENT * n.x + BINORMAL * n.y + NORMAL * n.z);
 	ROUGHNESS = rough;
 	SPECULAR = 0.15;
-	EMISSION = texture(glow_tex, UV).rgb * glow_energy * glow_tint;
+	EMISSION = _blur_smp(glow_tex, UV, d, blur_radius * 1.5) * glow_energy * glow_tint;
 }

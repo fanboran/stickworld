@@ -64,13 +64,14 @@ def cue_tier_map() -> dict:
     }
 
 
-# 交付给引擎的默认层音量（dB）。tier>0 的层起始静音，由 MusicDirector 淡入。
-TIER_DEFAULT_DB = {
-    "piano": 0.0, "strings": -3.0, "pad": -5.0, "harp": -5.0, "bells": -7.0,
-    "vibraphone": -6.0, "marimba": -7.0, "guitar": -5.0, "winds": -4.0,
-    "cello": -4.0, "perc": -4.0, "mix": 0.0,
-}
-
+# 交付给引擎的每层默认音量：**一律 unity（0dB）**。
+#
+# 为什么是 0 而不是"各层给个 -3/-5dB"：分层文件在渲染阶段就已经带着**配平后的
+# 音量**（相对钢琴的目标偏移由 mix.py 的 LAYER_BALANCE_DB 自动配平并烘焙进文件）。
+# 若清单再叠一次固定偏移，运行时听到的混音就**不等于**混音阶段验收过的母带——
+# 实测那样会让铃类层比设计值再低 6~7dB、把人声部压没。
+# 平衡的唯一真相源是渲染/混音阶段；`db` 字段保留为**运行时可选的微调**，默认 0。
+TIER_DEFAULT_DB = {}
 
 def build_manifest(reports: list) -> dict:
     """把各 cue 的混音报告汇总成引擎消费的清单。"""
@@ -98,7 +99,9 @@ def build_manifest(reports: list) -> dict:
                 "name": stem,
                 "file": "%s/%s.ogg" % (cid, stem),
                 "tier": tier_map.get(stem, 0),
-                "db": TIER_DEFAULT_DB.get(stem, 0.0),
+                # 交付分层已含全部增益（含总线标量），运行时按 unity 叠加即可。
+                # 平衡的唯一真相源是渲染/混音阶段；此字段保留为运行时可选的微调。
+                "db": 0.0,
             })
         entry["layers"].sort(key=lambda l: (l["tier"], l["name"]))
         cues[cid] = entry

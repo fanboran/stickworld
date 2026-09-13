@@ -75,6 +75,18 @@ def _safe(name: str) -> str:
 
 # ─────────────────────────── 分层叠加（同增益）────────────────────────────
 
+def _subset_sum(layers: dict, tier_of: dict, tier: int) -> np.ndarray:
+    """某个强度档位下"会发声的层之和"。
+
+    各档位**不做各自归一化**——否则三档听起来一样响，恰好把"叠层"的效果抹平。
+    """
+    names = [n for n in layers if int(tier_of.get(n, 0)) <= tier]
+    y = np.zeros_like(layers[names[0]])
+    for n in names:
+        y = y + layers[n][:len(y)]
+    return y
+
+
 def tier_sums(cue, processed: dict, report: dict, tier_of: dict,
               tiers=(0, 1, 2)) -> dict:
     """按强度档位求和，**所有档位用同一个增益与同一个限制器**。
@@ -138,6 +150,19 @@ def build(cue_id: str, out_dir: Path, fmt: str, do_tiers: bool,
         cue, paths, overrides=CUES.MIX_OVERRIDES.get(cue_id, {}),
         target_lufs=None if is_loop else -14.0,
         wrap_tail=is_loop, return_stems=True)
+    # 试听用的"全层版"要用**交付分层之和**，而不是母带：
+    # 游戏里播的就是各层相加，两者若不取自同一来源，就会出现
+    # "试听好听、进游戏不一样"这种无法对齐的差别。
+    layers, dinfo = MIX.deliver_layers(
+        cue, processed, target_lufs=None if is_loop else -14.0,
+        wrap_tail=is_loop,
+        loop_start_sample=report["loop_start_sample"],
+        loop_end_sample=report["loop_end_sample"],
+        master_gain_env=report.get("_master_gain_env"),
+        target_len=report.get("shaped_len"))
+    full = np.zeros_like(next(iter(layers.values())))
+    for z in layers.values():
+        full += z[:len(full)]
     tier_of = export.cue_tier_map().get(cue_id, {})
     title = _safe(cue.title)
     made = []
@@ -150,11 +175,10 @@ def build(cue_id: str, out_dir: Path, fmt: str, do_tiers: bool,
         print("    %-42s %5.2f MB   %s" % ((out_dir / ('%s_%s.%s' % (title, suffix, fmt))).name, meta["mb"], note))
         made.append(meta)
 
-    emit(full, "全层", "%.2f LUFS / 限制器压 %.2f dB"
-         % (report["integrated_lufs"], report.get("limiter_max_gr_db", 0.0)))
+    emit(full, "全层", "%.2f LUFS（= 游戏内叠加）" % dinfo["deliver_lufs"])
 
     if do_tiers and tier_of and is_loop:
-        sums = tier_sums(cue, processed, report, tier_of)
+        sums = {t: _subset_sum(layers, tier_of, t) for t in (0, 1, 2)}
         names = {0: "tier0_只有地基层", 1: "tier1_加常规层", 2: "tier2_全层（同增益对比）"}
         for t, s in sums.items():
             emit(s, names[t], "叠 %d 层" % sum(1 for v in tier_of.values() if v <= t))

@@ -140,16 +140,79 @@ def main() -> int:
 
     print_table(reports)
 
-    all_fails = []
-    for r in reports:
-        spec = dict(THRESHOLDS)
-        if not r.get("loop", True):
-            # 一次性短句（stinger）没有动态范围可言——它本身就是"一个音 + 衰减尾巴"，
-            # 短时响度从起音一路降到静音，LRA 必然很大（实测 15~17 LU）。
-            # 拿循环曲目的 LRA 上限去卡它是用错指标，故对非循环项豁免。
-            spec.pop("loudness_range_lu", None)
-        for msg in loudness.check_thresholds(r, spec):
-            all_fails.append("%s: %s" % (r["cue_id"], msg))
+    # 交付件专项校验：把同一 cue 的所有层按 unity 求和，应当≈母带。
+    # 这条检查抓的是"分层文件与混音结果不一致"——例如清单里多叠了一层音量偏移，
+    # 或某个层漏渲、重复渲。听觉上表现为"游戏里和试听样带不一样"，极难排查。
+    sum_fails = []
+    if args.delivered:
+        layer_db = {}
+        if (DELIVER / "music_manifest.json").exists():
+            _man = json.loads((DELIVER / "music_manifest.json").read_text(encoding="utf-8"))
+            for _cid, _c in _man.get("cues", {}).items():
+                for _l in _c.get("layers", []):
+                    layer_db["%s/%s" % (_cid, _l["name"])] = float(_l.get("db", 0.0))
+        by_cue = {}
+        for r in reports:
+            cid = r["cue_id"].split("/")[0]
+            by_cue.setdefault(cid, []).append(r)
+        print("%-16s %10s %10s %8s"
+              % ("cue（分层求和 vs 母带）", "求和 LUFS", "母带 LUFS", "差 LU"))
+        for cid, reps in sorted(by_cue.items()):
+            master = MASTER / ("%s.wav" % cid)
+            if not master.exists():
+                continue
+            mx, msr = sf.read(str(master), always_2d=True, dtype="float32")
+            acc = None
+            sr = 48000
+            for r in reps:
+                y, sr = sf.read(str(REPO / r["source"]), always_2d=True,
+                                dtype="float32")
+                # 清单里为避过载声明的修剪量要按运行时那样补上
+                trim = float(layer_db.get(r["cue_id"].split("/")[-1], 0.0))
+                if abs(trim) > 1e-6:
+                    y = y * (10.0 ** (trim / 20.0))
+                if acc is None:
+                    acc = y.astype("float64")
+                else:
+                    n0 = min(len(acc), len(y))
+                    acc[:n0] += y[:n0]
+            n = min(len(acc), len(mx))
+            sum_l = loudness.integrated_lufs(acc[:n], sr)
+            ref_l = loudness.integrated_lufs(mx[:n], msr)
+            diff = sum_l - ref_l
+            print("%-16s %10.2f %10.2f %8.2f" % (cid, sum_l, ref_l, diff))
+            if abs(diff) > 0.6:
+                sum_fails.append("%s: 分层求和与母带差 %.2f LU（应 <0.6）"
+                                 % (cid, diff))
+
+    all_fails = list(sum_fails)
+    if args.delivered:
+        # 交付模式：分层文件**不是**完整的混音，拿整曲阈值（响度/频谱/单声道）
+        # 去卡单个层是用错指标——单层自然比整曲轻十几 dB，稀疏层的频谱指标
+        # 也会被静音段带偏（实测平坦度顶到 1.0）。这里只检查真正对分层有意义的项：
+        # 削波、静音空洞、以及"层与层等长"（不等长会让运行时叠层错位）。
+        layer_spec = {"clipped_samples": {"max": 0}, "silence_holes": {"max": 0}}
+        by_cue_len = {}
+        for r in reports:
+            for msg in loudness.check_thresholds(r, layer_spec):
+                all_fails.append("%s: %s" % (r["cue_id"], msg))
+            cid = r["cue_id"].split("/")[0]
+            by_cue_len.setdefault(cid, []).append((r["cue_id"], r["duration_s"]))
+        for cid, items in by_cue_len.items():
+            durs = [d for _n, d in items]
+            if max(durs) - min(durs) > 0.02:
+                all_fails.append("%s: 各层时长不一致（%s）——运行时叠层会错位"
+                                 % (cid, durs))
+    else:
+        for r in reports:
+            spec = dict(THRESHOLDS)
+            if not r.get("loop", True):
+                # 一次性短句（stinger）没有动态范围可言——它本身就是"一个音 + 衰减尾巴"，
+                # 短时响度从起音一路降到静音，LRA 必然很大（实测 15~17 LU）。
+                # 拿循环曲目的 LRA 上限去卡它是用错指标，故对非循环项豁免。
+                spec.pop("loudness_range_lu", None)
+            for msg in loudness.check_thresholds(r, spec):
+                all_fails.append("%s: %s" % (r["cue_id"], msg))
 
     Path(args.json).parent.mkdir(parents=True, exist_ok=True)
     Path(args.json).write_text(

@@ -60,9 +60,18 @@ def process_cue(cue, skip_render: bool = False, skip_ogg: bool = False,
     # 一次性 sting 比循环曲目高 1dB（-14 vs -15）：事件强调靠的是瞬态与不被掩蔽，
     # 不靠绝对响度，所以不把它做成"比音乐响很多"的号角。
     target = None if is_loop else -14.0
-    audio, report = MIX.mix_cue(cue, {n: i["wav"] for n, i in render_info.items()},
-                                overrides=overrides, target_lufs=target,
-                                wrap_tail=is_loop)
+    audio, report, processed = MIX.mix_cue(
+        cue, {n: i["wav"] for n, i in render_info.items()},
+        overrides=overrides, target_lufs=target, wrap_tail=is_loop,
+        return_stems=True)
+    # 交付分层 = 逐层做线性整形 + 同一个总线增益（这样叠起来才等于母带）
+    layers, dinfo = MIX.deliver_layers(
+        cue, processed, target_lufs=target, wrap_tail=is_loop,
+        loop_start_sample=report["loop_start_sample"],
+        loop_end_sample=report["loop_end_sample"],
+        master_gain_env=report.pop("_master_gain_env", None),
+        target_len=report.pop("shaped_len", None))
+    report["delivery"] = dinfo
     report["loop"] = is_loop
     report["bar_beats"] = cue.beats_per_bar
     report["render_seconds"] = round(time.time() - t0, 1)
@@ -75,9 +84,13 @@ def process_cue(cue, skip_render: bool = False, skip_ogg: bool = False,
         ddir = DELIVER / cid
         ddir.mkdir(parents=True, exist_ok=True)
         report["delivered"] = []
-        for name, info in render_info.items():
+        for name in render_info.keys():
             ogg = ddir / ("%s.ogg" % name)
-            meta = EX.ogg_encode(info["wav"], str(ogg), quality=ogg_quality)
+            # 先落一份"交付版分层" WAV（已含总线增益与循环整形），再编码；
+            # 这份 WAV 也是"各层之和 ≈ 母带"这条校验的对象。
+            lwav = OUT / "deliver" / cid / ("%s.wav" % name)
+            MIX.save_mix(layers[name], str(lwav))
+            meta = EX.ogg_encode(str(lwav), str(ogg), quality=ogg_quality)
             report["delivered"].append({"stem": name, **meta})
             print("    [ogg] %-10s %s  (%.2f MB, %.0f kbps)"
                   % (name, ogg.name, meta["bytes"] / 1e6, meta["kbps"]))
@@ -85,10 +98,13 @@ def process_cue(cue, skip_render: bool = False, skip_ogg: bool = False,
         report["stems"] = sorted(render_info.keys())
         report["loop_beats"] = (cue.loop_end_beat - cue.loop_start_beat)
 
-    print("    响度 %.2f LUFS | 真峰值 %.2f dBTP | LRA %.2f LU | 刺耳度 %.3f | "
-          "循环接缝 %s | 用时 %.0fs"
-          % (report["integrated_lufs"], report["true_peak_dbtp"],
-             report["loudness_range_lu"], report["harshness_score"],
+    print("    母带 %.2f LUFS | 交付叠加 %.2f LUFS / 峰值 %.2f dBFS（差 %+.2f dB）"
+          % (report["integrated_lufs"], dinfo["deliver_lufs"],
+             dinfo["deliver_peak_dbfs"],
+             dinfo["deliver_lufs"] - report["integrated_lufs"]))
+    print("    真峰值 %.2f dBTP | LRA %.2f LU | 刺耳度 %.3f | 循环接缝 %s | 用时 %.0fs"
+          % (report["true_peak_dbtp"], report["loudness_range_lu"],
+             report["harshness_score"],
              ("%.1f dB" % report["seam_jump_rms_db"]) if "seam_jump_rms_db" in report else "—",
              report["render_seconds"]))
     return report
@@ -107,8 +123,8 @@ def main() -> int:
                     help="跳过采样渲染，复用 out/stems 里已有的 WAV")
     ap.add_argument("--skip-ogg", action="store_true", help="不编码 OGG")
     ap.add_argument("--ogg-quality", type=int, default=7)
-    ap.add_argument("--no-clean", action="store_true",
-                    help="不清理交付目录里的陈旧文件")
+    ap.add_argument("--manifest-only", action="store_true",
+                    help="不重渲也不重混，只按已有的 mix_report.json 重建清单")
     args = ap.parse_args()
 
     if args.list:
@@ -120,6 +136,19 @@ def main() -> int:
         return 0
 
     OUT.mkdir(parents=True, exist_ok=True)
+
+    if args.manifest_only:
+        if not MIX_REPORT.exists():
+            print("[错误] 找不到 %s；先跑一次 render_all.py" % MIX_REPORT, file=sys.stderr)
+            return 2
+        reports = json.loads(MIX_REPORT.read_text(encoding="utf-8"))
+        manifest = EX.build_manifest(reports)
+        EX.write_manifest(manifest, str(DELIVER / "music_manifest.json"))
+        print("[清单] 已按现有报告重建：%d 个 cue / %d 个层"
+              % (manifest["cue_count"],
+                 sum(len(c["layers"]) for c in manifest["cues"].values())))
+        return 0
+
     selected = args.only or [cid for cid, _ in CUES.BUILDERS]
 
     # 渲染引擎可用性预检，早失败早报错

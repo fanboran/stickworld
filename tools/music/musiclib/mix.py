@@ -300,16 +300,25 @@ def master_bus(mix: np.ndarray, fs: int, bus: dict | None = None,
     tgt = b["target_lufs"] if target_lufs is None else target_lufs
     y = mix
 
+    # 目标与"逐样点增益包络"一起维护。包络的意义：母带链上除了**软饱和**
+    # 之外全是"逐样点乘一个增益"（压缩器、限制器）或线性滤波（倾斜 EQ），
+    # 这些都能**分解到每一层**（乘法可分配、线性滤波可加）。交付分层时把这
+    # 条包络施加到每一层，"叠加"就严格复现母带——这是让游戏里听到的东西
+    # 等于验收过的母带的关键（见 deliver_layers）。
+    G = np.ones(len(y), dtype=np.float64)
+
     # ① 前置增益：抬到比目标高 3dB（给母带链留出被压缩的量）
     total_gain = 0.0
     cur = loudness.integrated_lufs(y, fs)
     if np.isfinite(cur):
         pre = float(np.clip((tgt + 3.0) - cur, -36.0, b["pre_gain_max_db"]))
         y = dsp.apply_gain_db(y, pre)
+        G *= float(10.0 ** (pre / 20.0))
         total_gain += pre
 
-    # ② 处理链
-    y = dsp.compressor(y, fs, **b["glue"])
+    # ② 处理链（压缩器交出它自己的逐样点增益；倾斜 EQ 是线性滤波，逐层再做一遍）
+    y, glue_gain = dsp.compressor(y, fs, return_gain=True, **b["glue"])
+    G *= glue_gain
     y = dsp.tilt(y, fs, b["tilt_low_db"], b["tilt_high_db"], b["tilt_pivot"])
     y = dsp.soft_clip(y, **b["soft"])
 
@@ -318,19 +327,25 @@ def master_bus(mix: np.ndarray, fs: int, bus: dict | None = None,
     if np.isfinite(cur):
         fine = float(np.clip(tgt - cur, -12.0, 12.0))
         y = dsp.apply_gain_db(y, fine)
+        G *= float(10.0 ** (fine / 20.0))
         total_gain += fine
 
-    y, gr_db = dsp.limiter(
+    y, lim_gain = dsp.limiter(
         y, fs, ceiling_db=b["tp_ceiling_db"] - b["limiter_headroom_db"],
-        return_gr=True)
+        return_gain=True)
+    G *= lim_gain
+    gr_db = 20.0 * float(np.log10(float(np.min(lim_gain)) + 1e-12))
 
     # ④ 真峰值兜底：限制器管的是**采样峰值**，采样间过冲仍可能越线。
     # 用一次静态增益修正把真峰值压回上限之下（静态增益不影响动态结构，
     # 比再加一级限制器更干净）。
     tp = loudness.true_peak_dbfs(y, fs)
     if np.isfinite(tp) and tp > b["tp_ceiling_db"]:
-        y = dsp.apply_gain_db(y, b["tp_ceiling_db"] - tp)
-    return y.astype(np.float32), gr_db, total_gain
+        corr = b["tp_ceiling_db"] - tp
+        y = dsp.apply_gain_db(y, corr)
+        G *= float(10.0 ** (corr / 20.0))
+        total_gain += corr
+    return y.astype(np.float32), gr_db, total_gain, G
 
 
 # ─────────────────────────── 循环尾巴折回 ────────────────────────────
@@ -385,6 +400,123 @@ def wrap_loop_tail(x: np.ndarray, fs: int, loop_start_sample: int,
     return y
 
 
+
+# ─────────────────── 交付分层：让"各层之和"等于母带 ────────────────────
+#
+# 交付给引擎的是**分层文件**，运行时把它们叠起来播。所以交付的分层必须满足：
+#
+#     层1 + 层2 + ... + 层N  ≈  比母带略低不到 2dB
+#
+# 这件事不像看起来那么自动。母带链末尾的**总线归一增益**（把很轻的分轨求和抬到
+# -15 LUFS，实测 +13 ~ +28dB）原本只加在母带上；若不把它同样加到每个层上，
+# 游戏里叠出来的音乐就会比验收过的母带低 8~24dB——"预览听着正常、进游戏却几乎
+# 听不见"这种极难定位的问题就是这么来的。
+#
+# 做法上有一个必须绕开的坑：**总线链是非线性的**（胶合压缩、软饱和、限制器），
+# 非线性环节没法"逐层分解"——把同一个增益分别加到每层，并不等于对和加了同样的
+# 处理。所以这里：
+#
+#   1. 每层只做**线性**整形（循环尾巴折回 / 一次性短句裁剪淡出）；
+#   2. 求和，得到与母带链**同一形状**的信号；
+#   3. 用"和"的统计量算出一个**共同标量**——既抬到目标响度，又保证峰值不越线；
+#   4. 把这个标量施加到每一层。
+#
+# 这样各层之间的平衡**严格保持**（同一标量不改变相对关系），而叠出来的东西
+# 就是"未经限制器的母带"——与母带的差别只剩限制器那 ≤2dB，且方向是安全的
+# （交付的版本略保守，运行时还有总线限幅兜底）。
+
+
+def deliver_layers(cue, processed: dict, fs: int = 48000,
+                   target_lufs: float | None = None,
+                   bus: dict | None = None,
+                   wrap_tail: bool = True,
+                   loop_start_sample: int = 0,
+                   loop_end_sample: int = 0,
+                   master_gain_env: np.ndarray | None = None,
+                   target_len: int | None = None,
+                   fade_s: float = 0.7) -> tuple:
+    """把每个层做成可直接交付的音频。返回 ({层名: 音频}, 信息字典)。
+
+    交付分层必须满足：**各层之和 ≈ 混音母带**。否则游戏里听到的音乐会与
+    验收过的母带不一致——"预览正常、进游戏偏小"这类问题就是这么来的。
+
+    做法：母带链上除软饱和外全是可分解的操作，于是
+        交付层_i = 母带增益包络 × 倾斜EQ(循环整形(处理后的层_i))
+    求和后 = 母带增益包络 × 倾斜EQ(原始和) = "未经软饱和的母带"。
+    软饱和是唯一不可分解的环节，但它很轻（mix 0.22，在 0dBFS 附近近似单位增益），
+    残差在 0.3dB 量级——比"整体差 13~24dB"好上两个数量级。
+    """
+    b = dict(BUS)
+    if bus:
+        b.update(bus)
+    tgt = b["target_lufs"] if target_lufs is None else target_lufs
+
+    # ① 逐层线性整形 + 逐层做与母带相同的倾斜 EQ（线性滤波可加，故等价）
+    #
+    # 长度必须**统一到母带整形后的长度**：循环曲目的折回是确定性的（都截到
+    # loop_end），但一次性短句的"裁掉尾部静音"对"和"与对"单层"会落在不同位置
+    # （和的余音更长），逐层各裁各的就会出现长度不一致、叠加时报广播错误。
+    # 所以：非循环项在这里**不各自裁剪**，一律对齐到 target_len 再统一加淡出
+    # ——淡出曲线对每层相同，求和后的淡出与母带的淡出一致。
+    shaped = {}
+    for name, y in processed.items():
+        z = y
+        if wrap_tail and loop_end_sample > loop_start_sample:
+            z = wrap_loop_tail(z, fs, loop_start_sample, loop_end_sample)
+        if target_len is not None:
+            z = z[:target_len]
+            if len(z) < target_len:
+                z = np.concatenate([z, np.zeros((target_len - len(z), z.shape[1]),
+                                                dtype=z.dtype)], axis=0)
+        if not wrap_tail and target_len is not None:
+            k = min(len(z), int(fade_s * fs))
+            if k > 1:
+                t = np.linspace(0.0, 1.0, k)
+                g = np.cos(t * np.pi / 2) ** 1.5
+                z = z.copy()
+                z[len(z) - k:] *= g[:, None]
+        z = dsp.tilt(z, fs, b["tilt_low_db"], b["tilt_high_db"], b["tilt_pivot"])
+        shaped[name] = z
+
+    n = max(len(v) for v in shaped.values())
+    total = np.zeros((n, 2), dtype=np.float64)
+    for z in shaped.values():
+        total[:len(z)] += z
+
+    gain = master_gain_env
+    if gain is None:
+        # 没有母带包络时退化为"共同标量"：按和定响度、按和峰值保底。
+        # （这条路径用于不方便跑母带链的场合；正常流程一定走包络。）
+        loud_gain = tgt - loudness.integrated_lufs(total, fs)
+        peak = float(np.max(np.abs(total))) if total.size else 0.0
+        ceil_lin = 10.0 ** (b["tp_ceiling_db"] / 20.0)
+        peak_gain = (20.0 * float(np.log10(ceil_lin / peak))) if peak > ceil_lin else 1e9
+        g_scalar = float(np.clip(min(loud_gain, peak_gain), -36.0, 60.0))
+        gain = np.full(n, 10.0 ** (g_scalar / 20.0))
+
+    G = gain if gain.ndim == 1 else gain
+    out = {}
+    for name, z in shaped.items():
+        m = min(len(z), len(G))
+        w = np.zeros_like(z)
+        w[:m] = z[:m] * G[:m, None]
+        if len(z) > m:
+            w[m:] = z[m:] * G[-1]
+        out[name] = w.astype(np.float32)
+
+    total_out = np.zeros((n, 2), dtype=np.float64)
+    for z in out.values():
+        total_out += z
+    info = {
+        "deliver_gain_db": round(20.0 * float(np.log10(
+            float(np.median(G)) + 1e-12)), 2),
+        "deliver_lufs": round(loudness.integrated_lufs(total_out, fs), 2),
+        "deliver_peak_dbfs": round(20.0 * float(np.log10(
+            max(1e-12, float(np.max(np.abs(total_out)))))), 2),
+    }
+    return out, info
+
+
 # ─────────────────────────────── 一首曲子 ──────────────────────────────
 
 def mix_cue(cue, stem_paths: dict, fs: int = 48000,
@@ -395,6 +527,9 @@ def mix_cue(cue, stem_paths: dict, fs: int = 48000,
 
     返回 (mix, report)；return_stems=True 时再返回第三项 processed
     （{层名: 该层处理后的完整音频，未经求和与总线处理}）。
+
+    ⚠ report 里的 `_master_gain_env` 是**临时键**（numpy 数组，供交付分层复现
+    母带增益），调用方取走后应立即 pop，否则报告无法 JSON 序列化。
     试听样带需要它来做"同一增益下的分层 A/B"——分别归一化会让各档听起来
     一样响，反而听不出叠层的差别。
     """
@@ -450,7 +585,7 @@ def mix_cue(cue, stem_paths: dict, fs: int = 48000,
         # 一次性短句：裁尾静音 + 淡出（不是循环曲，不需要尾巴折回）
         mix = trim_and_fade(mix, fs)
 
-    mix, gr_db, total_gain = master_bus(mix, fs, bus, target_lufs)
+    mix, gr_db, total_gain, master_G = master_bus(mix, fs, bus, target_lufs)
 
     report = {
         "limiter_max_gr_db": round(gr_db, 2),
@@ -471,6 +606,8 @@ def mix_cue(cue, stem_paths: dict, fs: int = 48000,
                            / cue.beats_per_bar, 3),
     }
     report.update(loudness.full_report(mix, fs, loop_start, loop_end))
+    report["_master_gain_env"] = master_G      # 供交付分层按同一包络施加
+    report["shaped_len"] = int(len(mix))       # 交付分层要对齐到这个长度
     if return_stems:
         return mix, report, processed
     return mix, report

@@ -24,7 +24,7 @@
           "name": "strings",
           "file": "menu_title/strings.ogg",
           "tier": 1,
-          "db": -3.0
+          "db": 0.0
         }
       ]
     },
@@ -50,19 +50,19 @@
           "name": "strings",
           "file": "field_day/strings.ogg",
           "tier": 1,
-          "db": -3.0
+          "db": 0.0
         },
         {
           "name": "bells",
           "file": "field_day/bells.ogg",
           "tier": 2,
-          "db": -7.0
+          "db": 0.0
         },
         {
           "name": "harp",
           "file": "field_day/harp.ogg",
           "tier": 2,
-          "db": -5.0
+          "db": 0.0
         }
       ]
     },
@@ -88,13 +88,13 @@
           "name": "strings",
           "file": "field_night/strings.ogg",
           "tier": 1,
-          "db": -3.0
+          "db": 0.0
         },
         {
           "name": "bells",
           "file": "field_night/bells.ogg",
           "tier": 2,
-          "db": -7.0
+          "db": 0.0
         }
       ]
     },
@@ -120,19 +120,19 @@
           "name": "guitar",
           "file": "village/guitar.ogg",
           "tier": 1,
-          "db": -5.0
+          "db": 0.0
         },
         {
           "name": "marimba",
           "file": "village/marimba.ogg",
           "tier": 2,
-          "db": -7.0
+          "db": 0.0
         },
         {
           "name": "winds",
           "file": "village/winds.ogg",
           "tier": 2,
-          "db": -4.0
+          "db": 0.0
         }
       ]
     },
@@ -172,7 +172,7 @@
           "name": "pad",
           "file": "strategic/pad.ogg",
           "tier": 0,
-          "db": -5.0
+          "db": 0.0
         },
         {
           "name": "piano",
@@ -184,13 +184,13 @@
           "name": "vibraphone",
           "file": "strategic/vibraphone.ogg",
           "tier": 1,
-          "db": -6.0
+          "db": 0.0
         },
         {
           "name": "bells",
           "file": "strategic/bells.ogg",
           "tier": 2,
-          "db": -7.0
+          "db": 0.0
         }
       ]
     },
@@ -216,19 +216,19 @@
           "name": "perc",
           "file": "battle/perc.ogg",
           "tier": 1,
-          "db": -4.0
+          "db": 0.0
         },
         {
           "name": "strings",
           "file": "battle/strings.ogg",
           "tier": 1,
-          "db": -3.0
+          "db": 0.0
         },
         {
           "name": "winds",
           "file": "battle/winds.ogg",
           "tier": 2,
-          "db": -4.0
+          "db": 0.0
         }
       ]
     },
@@ -248,7 +248,7 @@
           "name": "bells",
           "file": "sting_victory/bells.ogg",
           "tier": 0,
-          "db": -7.0
+          "db": 0.0
         },
         {
           "name": "piano",
@@ -260,7 +260,7 @@
           "name": "strings",
           "file": "sting_victory/strings.ogg",
           "tier": 0,
-          "db": -3.0
+          "db": 0.0
         }
       ]
     },
@@ -286,7 +286,7 @@
           "name": "strings",
           "file": "sting_defeat/strings.ogg",
           "tier": 0,
-          "db": -3.0
+          "db": 0.0
         }
       ]
     }

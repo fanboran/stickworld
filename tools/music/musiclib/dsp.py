@@ -140,7 +140,7 @@ def _detector(x: np.ndarray) -> np.ndarray:
 def compressor(x: np.ndarray, fs: int, threshold_db: float = -18.0,
                ratio: float = 2.0, attack_ms: float = 25.0,
                release_ms: float = 250.0, makeup_db: float = 0.0,
-               soft_knee_db: float = 6.0) -> np.ndarray:
+               soft_knee_db: float = 6.0, return_gain: bool = False):
     """前馈压缩器（峰值检测 + 软拐点）。
 
     对 Pad/弦乐垫用很轻的档位（ratio 1.5~2）就够：目的是把长音的起伏压平一点，
@@ -159,10 +159,10 @@ def compressor(x: np.ndarray, fs: int, threshold_db: float = -18.0,
     if knee.any() and soft_knee_db > 0:
         d = over[knee] - knee_lo
         gain_db[knee] = -(1.0 - 1.0 / ratio) * (d ** 2) / (2.0 * soft_knee_db)
-    gain = 10.0 ** ((gain_db + makeup_db) / 20.0)
-    if x.ndim == 2:
-        gain = gain[:, None]
-    return x * gain.astype(x.dtype)
+    lin = 10.0 ** ((gain_db + makeup_db) / 20.0)
+    g = lin[:, None] if x.ndim == 2 else lin
+    y = x * g.astype(x.dtype)
+    return (y, lin) if return_gain else y
 
 
 def soft_clip(x: np.ndarray, drive: float = 1.0, mix: float = 1.0) -> np.ndarray:
@@ -173,7 +173,8 @@ def soft_clip(x: np.ndarray, drive: float = 1.0, mix: float = 1.0) -> np.ndarray
 
 
 def limiter(x: np.ndarray, fs: int, ceiling_db: float = -1.0,
-            release_ms: float = 120.0, return_gr: bool = False):
+            release_ms: float = 120.0, return_gr: bool = False,
+            return_gain: bool = False):
     """峰值限制器（前瞻 + 平滑释放）。母带最后一关，保证真峰值不越界。
 
     return_gr=True 时额外返回"最大增益衰减量"（dB，≤0）。这个数应该被报出来：
@@ -186,6 +187,8 @@ def limiter(x: np.ndarray, fs: int, ceiling_db: float = -1.0,
     gr_db = 20.0 * float(np.log10(float(np.min(gain)) + 1e-12)) if gain.size else 0.0
     g = gain[:, None] if x.ndim == 2 else gain
     y = x * g.astype(x.dtype)
+    if return_gain:
+        return y, gain
     return (y, gr_db) if return_gr else y
 
 

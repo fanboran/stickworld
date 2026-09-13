@@ -96,7 +96,126 @@ func _update_text() -> void:
 		if "health" in e:
 			var max_hp: float = float(e.max_health) if "max_health" in e else 100.0
 			lines.append("  HP: %d/%d" % [int(e.health), int(max_hp)])
+		# W1 悬停增强（组织界面与AI状态接线 §2.1）：AI 状态字段追加段
+		_append_ai_info(lines, e)
+		# W6 目标评分留痕（设计文档 12 号 §2.4）：逐项展示"为什么打这个点"
+		_append_task_score_info(lines, e)
 	_label.text = "\n".join(lines)
+
+
+## W1 悬停增强（组织界面与AI状态接线总体方案 §2.1）：AI 状态字段——行为名 /
+## AI 机制参数摘要（单一档案机制参数，无难度字段——难度维度已裁决移除）/
+## 相位与角色（A5 相位计划）/ 撤退调制状态（W1 新 getter）。
+## 全部 duck 探测，查询不可用即跳过该行（方案 §2.0 总原则：调试面板不倒逼
+## 战斗侧改结构）；档案摘要经 AIController 既有档案查询取数，本模块零跨模块引用。
+func _append_ai_info(lines: Array[String], e: Node2D) -> void:
+	var ai: Node = e.get_ai_controller() if e.has_method("get_ai_controller") else null
+	if ai == null or not is_instance_valid(ai):
+		return
+	# 行为名（AIController 既有查询）
+	if ai.has_method("get_current_behavior"):
+		var behavior := str(ai.get_current_behavior())
+		if not behavior.is_empty():
+			lines.append("  行为: %s" % behavior)
+	# AI 机制参数摘要（BehaviorProfiles 兵种覆盖档关键字段；档案查询为
+	# AIController 内部消费口，duck 调用失败跳过）
+	if ai.has_method("_get_behavior_profile"):
+		var prof: Dictionary = ai.call("_get_behavior_profile")
+		var parts: Array[String] = []
+		if prof.has("decision_interval"):
+			var di_txt := "决策%.2fs" % float(prof["decision_interval"])
+			if prof.has("decision_variance") and float(prof["decision_variance"]) > 0.0:
+				di_txt += "±%.2f" % float(prof["decision_variance"])
+			parts.append(di_txt)
+		if prof.has("burst_shots") and int(prof["burst_shots"]) > 0:
+			parts.append("连射%d" % int(prof["burst_shots"]))
+		if prof.has("retreat_mod_enabled"):
+			parts.append("概率撤退%s" % ("开" if bool(prof["retreat_mod_enabled"]) else "关"))
+		if not parts.is_empty():
+			lines.append("  AI参数: %s" % " ".join(parts))
+	# 相位与角色（A5 相位计划：经编队系统查询，无计划/未激活/查询不可用跳过）
+	_append_phase_info(lines, e)
+	# 撤退调制状态（W1 · §2.6 接口缺口补齐的只读 getter）
+	if ai.has_method("get_retreat_mod_state"):
+		var st: Dictionary = ai.get_retreat_mod_state()
+		if bool(st.get("enabled", false)):
+			var f: Dictionary = st.get("last_factors", {})
+			var hits: Array[String] = []
+			for k in ["hp_low", "morale_low", "line_collapsed"]:
+				if bool(f.get(k, false)):
+					hits.append(k)
+			var factor_txt := "无因子"
+			if not hits.is_empty():
+				factor_txt = "因子:" + "+".join(hits)
+			var roll_txt := "未评估"
+			var chance: float = float(st.get("last_chance", NAN))
+			if not is_nan(chance):
+				roll_txt = "掷%.2f/%.2f%s" % [float(st.get("last_roll", 0.0)), chance,
+						"触" if bool(st.get("last_result", false)) else "未触"]
+			lines.append("  撤退调制: %s · %s" % [roll_txt, factor_txt])
+
+
+## 相位/角色行（方案 §2.1）：小队相位计划查询（get_phase_name/get_role_of 既有
+## 接口）；计划经编队系统私有表 duck 探测（_squad_phase_plans），无计划/未激活
+## 跳过——非战斗单位（工人/村民）自然无此行。
+func _append_phase_info(lines: Array[String], e: Node2D) -> void:
+	if not e.has_method("get_formation_system"):
+		return
+	var fs: Node = e.get_formation_system()
+	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_squad"):
+		return
+	var squad_id := str(fs.get_unit_squad(e))
+	if squad_id.is_empty() or not "_squad_phase_plans" in fs:
+		return
+	var plans_v: Variant = fs.get("_squad_phase_plans")
+	if not (plans_v is Dictionary):
+		return
+	var plan: Variant = (plans_v as Dictionary).get(squad_id)
+	if plan == null or not is_instance_valid(plan) or not plan.has_method("get_phase_name"):
+		return
+	if plan.has_method("is_active") and not bool(plan.is_active()):
+		return
+	var txt := "相位: %s" % str(plan.get_phase_name())
+	if plan.has_method("get_role_of"):
+		var role := str(plan.get_role_of(e))
+		if not role.is_empty():
+			txt += " · 角色:%s" % role
+	lines.append("  " + txt)
+
+
+## W6 目标评分留痕（设计文档 12 号 §2.4 落点"AI 决策面板"，WorldBox KingdomOpinion
+## "具名因子逐项求和 + tooltip 回答为什么恨你" 同构）：本阵营 AI 最近一次任务槽目标
+## 评分的四因子明细逐项展示，回答"为什么打这个点"。
+## 全链 duck 探测（get_battle_instance → get_team_ai → get_task_board →
+## get_last_score_trace → format_score_detail），任一环不可用即跳过该行——
+## 与本文件既有 AI 字段段同风格，不倒逼战斗侧改结构、零跨模块引用。
+func _append_task_score_info(lines: Array[String], e: Node2D) -> void:
+	if not e.has_method("get_battle_instance") or not e.has_method("get_faction"):
+		return
+	var bi: Node = e.get_battle_instance()
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_team_ai"):
+		return
+	var tai: Variant = bi.get_team_ai(e.get_faction())
+	if tai == null or not is_instance_valid(tai) or not tai.has_method("get_task_board"):
+		return
+	var board: Variant = tai.get_task_board()
+	if board == null or not is_instance_valid(board) \
+			or not board.has_method("get_last_score_trace") or not board.has_method("format_score_detail"):
+		return
+	var trace: Variant = board.get_last_score_trace()
+	if not (trace is Dictionary) or not "candidates" in (trace as Dictionary):
+		return
+	# 展示被选中候选的明细（chosen 标记由生成侧写入；无选中项则无此行）
+	var picked_detail: Variant = null
+	for entry in (trace as Dictionary)["candidates"]:
+		if entry is Dictionary and bool((entry as Dictionary).get("chosen", false)):
+			picked_detail = (entry as Dictionary).get("detail", null)
+			break
+	if not (picked_detail is Dictionary):
+		return
+	var txt: String = str(board.format_score_detail(picked_detail))
+	if not txt.is_empty():
+		lines.append("  " + txt)
 
 
 ## 面板拖动

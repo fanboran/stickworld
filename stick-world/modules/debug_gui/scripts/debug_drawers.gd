@@ -413,3 +413,10 @@ static func draw_entity_info(control: Control, ctx: Dictionary) -> void:
 		"世界:(%d,%d)" % [int(mouse_world.x), int(mouse_world.y)],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.8, 1.0, 0.8, 0.7)
 	)
+
+
+## TeamAi 姿态 HUD 开关占位（W1 观测接线批）：HUD 本体是独立 Control
+## （combat/ui/team_ai_hud.tscn，随 F3 + team_ai_hud 开关显隐），无逐帧绘制
+## 内容——注册进 DebugApi 仅为进 F3 开关族（debug_panel 复选框清单口径）。
+static func draw_team_ai_hud(_control: Control, _ctx: Dictionary) -> void:
+	pass

@@ -58,6 +58,7 @@ const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/en
 const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
 const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
 const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
+const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
 
 var _root: GameRoot
 
@@ -74,42 +75,64 @@ var _l1_thumbnail: Control = null
 
 func setup(root: GameRoot) -> void:
 	_root = root
+	for step in _step_table():
+		(step[1] as Callable).call()
+	finish_setup()
+
+
+## 分帧装配入口（启动加载屏用）：绑定 root 并返回步骤表——调用方逐步执行，
+## 每步之间让一帧并推进副进度条（原先整段同步 ~2-3s，转圈全程定格）。
+## 与 setup() 共用同一张表，顺序与语义完全一致。
+func setup_steps(root: GameRoot) -> Array:
+	_root = root
+	return _step_table()
+
+
+## 装配收尾（Demo 目标链 deferred：需在资源初始发放之后做基线快照）
+func finish_setup() -> void:
+	call_deferred("_setup_demo_quest_deferred")
+
+
+## 装配步骤表：每项 = [细分标签, 可调用]。顺序有依赖（UI 根/核心系统先于
+## 依赖它们的面板，LOD 在核心系统之后）。setup() 与 setup_steps() 共用。
+func _step_table() -> Array:
 	# 激活平衡配置装载：扫描 res://config 下全部 BalanceResource .tres
 	# （此前 reload() 零调用者，数据驱动层运行时为空字典，2026-08 审计修复）
 	BalanceConfig.reload()
-	_setup_ui_root()
-	_setup_debug_overlay()
-	_setup_construction_system()
-	_setup_combat_system()
-	_setup_resources_system()
-	_setup_selection_system()
-	_setup_organization_system()
-	_setup_formation_system()
-	_setup_tactical_system()
-	_setup_command_transport()
-	_setup_conquest_system()
-	_setup_recruit_system()
-	_setup_battle_panel()
-	_setup_formation_panel()
-	_setup_org_panel()
-	_setup_settings_menu_panel()
-	_setup_pause_menu_panel()
-	_setup_minimap()
-	_setup_zoom_bar()
-	_setup_inventory()
-	_setup_possession_interface()
-	_setup_possess_panel()
-	_register_explore_handler()
-	_setup_boundary_detector()
-	_setup_game_ui()
-	_setup_build_menu()
-	_setup_post_process()
-	_setup_map_transition()
-	# 单位 LOD 调度（性能优化）：核心系统装配完成后挂载，自动发现模式——
-	# 覆盖演练场（battle_arena）/世界村庄/真实战斗全部场景（headless 无相机时空转）
-	_setup_unit_lod()
-	# Demo 目标链最后装（deferred：需在资源初始发放之后做基线快照）
-	call_deferred("_setup_demo_quest_deferred")
+	return [
+		["界面根", _setup_ui_root],
+		["调试层", _setup_debug_overlay],
+		["建造系统", _setup_construction_system],
+		["战斗系统", _setup_combat_system],
+		["资源系统", _setup_resources_system],
+		["选择系统", _setup_selection_system],
+		["组织系统", _setup_organization_system],
+		["编队系统", _setup_formation_system],
+		["战术系统", _setup_tactical_system],
+		["指挥传输", _setup_command_transport],
+		["征服系统", _setup_conquest_system],
+		["招兵系统", _setup_recruit_system],
+		["战斗面板", _setup_battle_panel],
+		["编队面板", _setup_formation_panel],
+		["组织面板", _setup_org_panel],
+		["设置菜单", _setup_settings_menu_panel],
+		["暂停菜单", _setup_pause_menu_panel],
+		["小地图", _setup_minimap],
+		["TeamAi HUD", _setup_team_ai_hud],
+		["缩放条", _setup_zoom_bar],
+		["背包", _setup_inventory],
+		["附身界面", _setup_possession_interface],
+		["附身面板", _setup_possess_panel],
+		["探索交互", _register_explore_handler],
+		["边界检测", _setup_boundary_detector],
+		["游戏 UI", _setup_game_ui],
+		["建造菜单", _setup_build_menu],
+		["后处理", _setup_post_process],
+		["地图过渡", _setup_map_transition],
+		# 单位 LOD 调度（性能优化）：核心系统装配完成后挂载，自动发现模式——
+		# 覆盖演练场（battle_arena）/世界村庄/真实战斗全部场景（headless 无相机时空转）
+		["单位 LOD", _setup_unit_lod],
+	]
 
 
 # ─────────────────────────────── UI / Debug 覆盖层装配 ────────────────────────────────
@@ -612,6 +635,23 @@ func _setup_minimap() -> void:
 	_l1_thumbnail.visible = false
 
 
+# ─────────────────────────────── TeamAi 状态 HUD 装配（W1 观测接线批）────────────────────────────────
+
+## 挂 TeamAi 姿态 HUD（combat/ui/team_ai_hud.tscn，场景=布局唯一真相源）到
+## HudOverlay 槽并注入 BattleDirector 引用（数据自取，本层只装配）。显隐走
+## DebugApi drawer "team_ai_hud"（F3 开关族，注册见 register_debug_drawers）；
+## 槽位路由见 UI.md §10.7，模块专属 UI 归 combat/ui（组织界面与AI状态接线 §2.2）。
+func _setup_team_ai_hud() -> void:
+	if _root.ui_root == null or _root.battle_director == null:
+		return
+	var hud := _TeamAiHudScene.instantiate()
+	if not _root.ui_root.add_to_slot("HudOverlay", hud):
+		hud.queue_free()
+		return
+	if hud.has_method("setup"):
+		hud.setup(_root.battle_director)
+
+
 ## 创建 ZoomBar 并挂到 UIRoot，钉进 right_bottom zone（右下贴缘，见 hud_zone_layout.gd）。
 func _setup_zoom_bar() -> void:
 	if _root.ui_root == null:
@@ -1023,6 +1063,8 @@ func register_debug_drawers() -> void:
 	DebugApi.register_drawer("building_names", Callable(_DebugDrawers, "draw_building_names"))
 	DebugApi.register_drawer("world_ruler", Callable(_DebugDrawers, "draw_world_ruler"))
 	DebugApi.register_drawer("entity_info", Callable(_DebugDrawers, "draw_entity_info"))
+	# W1 观测接线批：TeamAi 姿态 HUD 开关（HUD 本体独立 Control，此注册仅进 F3 复选框族）
+	DebugApi.register_drawer("team_ai_hud", Callable(_DebugDrawers, "draw_team_ai_hud"))
 
 
 # ─────────────────────────────── Demo 目标链装配 ────────────────────────────────

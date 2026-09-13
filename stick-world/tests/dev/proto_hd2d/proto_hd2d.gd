@@ -513,18 +513,19 @@ func _place_rows() -> void:
 		occ_front.append([cur, cur + w])
 		cur += w + 1.0
 	# 三层背景：第二层插第一层的缝、第三层插第二层的缝；末层即"真实地平线"
-	# 近小远大：第一层小民居/塔，大教堂/大会堂放最远层（否则近处一块巨板悬浮感）
-	var bg := ["house_w8", "tower_w6", "house_w8", "townhouse_w12", "house_w8",
-		"tower_w6", "guildhall_w12", "cathedral_w16"]
+	# 近小远大：近层小民居/塔；**远层也限宽 ≤12 格**（w16 大件悬在半空会读作悬浮板）
+	var bg := ["house_w8", "tower_w6", "house_w8", "townhouse_w12", "house_w8", "tower_w6"]
+	var far := ["house_w8", "tower_w6", "townhouse_w12", "house_w8"]
 	var layer := occ_front
 	var ci := 0
 	for lz in [SKYLINE_Z, SKYLINE_Z - 4.0, SKYLINE_Z - 8.0]:
+		var list: Array = bg if lz == SKYLINE_Z else (bg if lz == SKYLINE_Z - 4.0 else far)
 		var occ := []
 		for g in _gaps(layer):
 			var gw: float = float(g[1]) - float(g[0])
 			if gw < 3.0:
 				continue
-			var card: String = bg[ci % bg.size()]
+			var card: String = list[ci % list.size()]
 			ci += 1
 			var w2: float = minf(_cw(card), gw)
 			var cx2: float = (float(g[0]) + float(g[1])) * 0.5

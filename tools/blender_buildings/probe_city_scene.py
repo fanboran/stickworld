@@ -12,12 +12,14 @@
 布局器只出**数据**（plan dict）和平面图；本文件是它的**消费端**（前端渲染）。
 只读 plan，不改布局器。
 
-**已知落差（重要）**：布局器的 DEFS 表有 24 种建筑，而 `buildings.ASSEMBLERS` 只有
-19 种。本文件用 `DEF_MAP` 把缺的种类**映射**到最接近的装配器（如 stable/shelter→
-barn、plaster_house→house、church/chapel→cathedral）；`well` / `market_stall`
-本质是道具，不能硬套建筑，走 `PROP_LOTS` 的**道具聚簇**（直接摆 `props.TABLE` 的件）。
+**已知落差（重要）**：布局器的 DEFS 表有 29 种建筑，`buildings.ASSEMBLERS` 有 26 种
+（stable/shelter/hayloft 等第三轮装配器已独立成器，barn 不再兜底）。本文件用
+`DEF_MAP` 把缺的种类**映射**到最接近的装配器（如 plaster_house→house、
+church/chapel→cathedral）；`well` / `market_stall` 本质是道具，不能硬套建筑，走
+`PROP_LOTS` 的**道具聚簇**（直接摆 `props.TABLE` 的件）。
 布局器与装配器的宽度口径由 `city_layout.DEFS.widths` 的"可装配下限"保证对齐
-（`validate.py` 检查 2/3 会实测这一条）。
+（`validate.py` 检查 2/3 会实测这一条）。布局器 J3 投放的特殊建筑（mage_tower/
+library/barracks/warehouse/alchemy）由 `DEF_MAP` 直接路由，无需另行处理。
 
 跑法::
     blender -b --factory-startup -P probe_city_scene.py
@@ -73,9 +75,8 @@ DEF_MAP = {
     # stable / shelter：D3b 起独立装配器（不再兜底 barn，消"深色木板墙读作黑盒子"）
     "stable":        ("stable", [8, 12]),
     "shelter":       ("shelter", [4, 6, 8]),
-    # D3b 魔法 / 公共 / 物流线（city_layout.DEFS 尚未列这些 def，属**前置接线**：
-    # 待布局器补 def 后即可直接路由，无需再改本表；validate 的 DEFS 覆盖表会先报
-    # "多余键 / 待补 tier 表"，由 validate.py 归属方补 ASM_TIER_ATTR 后转绿）
+    # 第三轮魔法 / 公共 / 军政 / 物流线（city_layout.DEFS 已入表，宽度档与装配器
+    # *_TIERS 一一对齐；J3 特殊建筑投放按 SPECIAL_DEFS 的区带权重落到院坝空段）
     "mage_tower":    ("mage_tower", [4, 6, 8]),
     "alchemy":       ("alchemy", [8, 12]),
     "library":       ("library", [12, 16]),
@@ -130,6 +131,11 @@ DRESS_OF = {"smithy1": "smithy", "smithy2": "smithy", "smithy3": "smithy",
 #: tavern→townhouse（含 hanging_sign）、shop→shop（布篷 + 铁艺招牌 + 面包架）、
 #: bakery→market（市集摊 + 桶架 + 菜筐，面包房门口摆摊的老传统）、
 #: guildhall→cathedral（门口灯柱 + 长凳 + 摊桌的市政/行会前场）。
+#: 第三轮：mage_tower→alchemy（水晶簇 / 符文碑 / 水晶球，法师塔的魔法件）、
+#: library→library（卷轴架 / 书堆 / 星盘 / 墨水瓶）、barracks→gatehouse（兵器架 /
+#: 箭靶 / 盾牌 / 军旗，军政语言同源）、warehouse→market（货箱堆 / 麻袋堆 / 桶架；
+#: props 既有配方里没有"推车 + 货箱"合一的套，推车在 barn 配方里、货箱在 market
+#: 配方里，取货箱堆为仓储主读）、stable/hayloft/shelter→barn（料槽 / 草垛 / 车）。
 DRESS_BY_DEF = {
     "smithy1": "smithy", "smithy2": "smithy", "smithy3": "smithy", "smithy4": "smithy",
     "tavern": "townhouse", "townhouse": "townhouse", "guildhall": "cathedral",
@@ -139,10 +145,15 @@ DRESS_BY_DEF = {
     "church": "cathedral", "chapel": "cathedral",
     "tower": "tower", "gatehouse": "gatehouse", "lighthouse": "lighthouse",
     "windmill": "windmill",
-    # D3b 新 def（前置接线；配方一律取自 props.DRESS 既有键，不新增/不改 props.py）
-    "mage_tower": "tower", "alchemy": "smithy", "library": "cathedral",
-    "barracks": "smithy", "warehouse": "barn",
+    # 第三轮新 def（配方一律取自 props.DRESS 既有键，不新增/不改 props.py）
+    "mage_tower": "alchemy", "alchemy": "alchemy", "library": "library",
+    "barracks": "gatehouse", "warehouse": "market",
 }
+
+#: 挂墙件基准 y 需要显式覆盖的 def：**圆塔**（mage_tower）的包围盒最外沿是悬浮
+#: 水晶伸出的位置（-1.4R），拿它当"前墙面"会把道具摆到塔身外一圈空气里。
+#: 圆塔的真实前墙面 = 塔身切点 -D/2（= -R）。
+WALL_Y_DEPTH2 = {"mage_tower"}
 
 
 # ---------------------------------------------------------------- 场景
@@ -431,9 +442,13 @@ def build_city(tier, seed=611036, rows=(0,), report=None):
         if kind:
             pb = B.Builder("props_%d" % lot["index"])
             d = spec.get("door")
+            # 圆塔（mage_tower）：前墙面取塔身切点 -D/2，不取含水悬浮水晶的包围盒外沿
+            wall_y = (-spec["depth"] / 2.0
+                      if lot["def"] in WALL_Y_DEPTH2 else None)
             P.dress(pb, kind, spec["grid_w"], front_local,
                     seed=lot["index"] * 37 + (seed % 1000),
-                    door_x=spec.get("door_x", 0.0), door_w=(d[0] if d else 0.0))
+                    door_x=spec.get("door_x", 0.0), door_w=(d[0] if d else 0.0),
+                    wall_y=wall_y)
             pob = pb.to_object()
         dy = -float(lot["baseline_y"]) - front_local + lot["row"] * ROW_STRETCH
         ob.location = (cx, dy, 0.0)
@@ -467,6 +482,7 @@ def build_city(tier, seed=611036, rows=(0,), report=None):
     if report is not None:
         report["placed"] = placed
         report["skipped_defs"] = sorted(set(skipped))
+        report["plan_specials"] = plan.get("specials", [])
         report["plan_checks"] = plan.get("checks", {})
         report["tier"] = tier
         report["seed"] = seed

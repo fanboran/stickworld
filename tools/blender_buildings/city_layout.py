@@ -34,6 +34,10 @@
   H y 分带（b 空间）：主街 → row0 → 巷 → row1 → …（广场侵入的排补余量）
   I 广场：居中于核心带、紧贴主街北缘、6~10 格（§4.3），中心放水井 + 市集摊群
   J 打包 lot：逐排逐段落位，前进线贴街（退线）+ 每 4~6 栋留 1 格小巷（§4.3），余量记 yard
+  J3 特殊建筑投放：mage_tower/library/barracks/warehouse/alchemy 按 SPECIAL_DEFS 的
+     区带权重与档位频率，落进 J2 的院坝空段（**独立通道**：不消耗既有 rng 取样，
+     既有 def 的 x/行/宽逐位不变）；落位按 §8.2 **出檐留位**（剪影口径，见 EAVE_RATIO
+     段）—— 先扣两侧邻居出檐的缺口，剩余段放得下剪影才落，放不下降档/换段
   K 城墙：左/右/后三趟等分墙段 + 塔楼（间距 800~1200px 带抖动、塔高 ±15%）+ 左右城门
   L 前景 props（§4.5 桶/摊/树/车，必须落在街道内）
   M 天际线：逐列取最高点得 profile；唯一最高点 / 墙顶高于 80% 建筑 / 等高连排校验
@@ -135,11 +139,22 @@ DEFS = {
     "lighthouse":    dict(cn="灯塔",     widths=[4, 6],          wall_h=400, roof=70,
                           depth=4, wall_mat="stone_white", roof_mat="slate", variant="a",
                           aspect_exempt=True),
+    # shelter：装配器实际支持 4/6/8（buildings.SHELTER_TIERS），布局层**只声明 8**：
+    #   ① 4/6 两档不满足 §3.2 剪影比（柱撑草棚顶高 320px ÷ 6 格 192px = 1.67 > 带顶
+    #      1.40），declare 了也只是被 _aspect_ratio_ok 挡住；
+    #   ② 更要紧的是 G 步降档：`_pick_width` 取首个合规档（仍 = 8），但降档候选
+    #      「w_cells > min(widths)」一旦因声明 4 而降为 4，8 格草棚就成了降档候选，
+    #      会被降到 6 格 → hamlet/village/town 整城漂移（实测 36 组合中 22 组变化）。
+    #   故 widths 保留 [8]：城市肌理里草棚只用得到 8 格，4/6 档由 DEF_MAP（探针接线）
+    #      + validate 检查 3（装配支持面逐档实测）覆盖，不属于布局层的合规档。
     "shelter":       dict(cn="草棚",     widths=[8],             wall_h=190, roof=130,
                           depth=5, wall_mat="timber", roof_mat="thatch", variant="new"),
     "barn":          dict(cn="谷仓",     widths=[8, 12, 16],     wall_h=210, roof=160,
                           depth=8, wall_mat="plank", roof_mat="plank", variant="b"),
-    "stable":        dict(cn="马厩",     widths=[8],             wall_h=175, roof=90,
+    # stable：装配器实际支持 8/12（buildings.STABLE_TIERS），声明同一组（对齐）。
+    #   实测加 12 档**零漂移**：_pick_width 取首个合规档仍 = 8（12 格的剪影比
+    #   265/384 = 0.69 不达标），且 8 格马厩不因多一个更大的档而进入 G 步降档候选。
+    "stable":        dict(cn="马厩",     widths=[8, 12],         wall_h=175, roof=90,
                           depth=5, wall_mat="wood", roof_mat="thatch", variant="old"),
     "windmill":      dict(cn="风车磨坊", widths=[4, 6],          wall_h=300, roof=80,
                           depth=5, wall_mat="stone", roof_mat="cone", variant="a",
@@ -150,7 +165,74 @@ DEFS = {
     "market_stall":  dict(cn="市集摊",   widths=[8],             wall_h=150, roof=70,
                           depth=4, wall_mat="wood", roof_mat="linen", variant="a",
                           aspect_exempt=True),
+    # ── 第三轮装配器新 def（第三轮共 8 个：mage_tower/alchemy/library/barracks/
+    #    warehouse/stable/shelter/hayloft；后三个已在表，stable/shelter 的宽度档
+    #    与装配器对齐情况见各自的 widths 注释）
+    # 顶高口径：登记 buildings.py 各 *_TIERS 的**实测 total_h**（主体 + 屋面），
+    # 不登记细尖顶/悬浮件——§4.4「唯一最高点 = 核心 landmark」由它守。
+    # mage_tower 例外：按塔身（不含水晶灯室与尖锥顶）登记 560，压在教堂（630）之下，
+    # 否则一座塔就会夺走「唯一最高点」而违 §4.4（装配实测塔顶 ~1030px，见
+    # buildings.MAGE_TOWER_TIERS；布局层只登记天际线有效体量高度）。
+    "mage_tower":    dict(cn="法师塔",   widths=[4, 6, 8],      wall_h=536, roof=224,
+                          tower_h=560, depth=7, wall_mat="stone", roof_mat="slate",
+                          variant="mage", aspect_exempt=True),
+    "alchemy":       dict(cn="炼金工坊", widths=[8, 12],         wall_h=200, roof=142,
+                          depth=7, wall_mat="stone", roof_mat="tile", variant="b"),
+    "library":       dict(cn="图书馆",   widths=[12, 16],        wall_h=400, roof=114,
+                          depth=8, wall_mat="stone", roof_mat="slate", variant="b"),
+    "barracks":      dict(cn="兵营",     widths=[12, 16],        wall_h=400, roof=110,
+                          depth=8, wall_mat="stone", roof_mat="tile", variant="c"),
+    "warehouse":     dict(cn="货栈",     widths=[12, 16],        wall_h=270, roof=155,
+                          depth=8, wall_mat="brick", roof_mat="tile", variant="a"),
 }
+
+#: 部分 def 的**进深随宽度档变化**（= 装配器 *_TIERS 的 D 实测值 ÷ 32 取上整）。
+#: 由 J2 之后的特殊建筑投放使用：落位排的 b 带深度必须 ≥ 该档实际进深，否则后墙
+#: 会压进排间巷（verify_plan ② 退线断言会打回）。DEFS[...]["depth"] 取其中的最大值。
+DEPTH_BY_WIDTH = {
+    "mage_tower": {4: 4, 6: 5, 8: 7},          # D = 2R：108 / 160 / 212
+    "alchemy":    {8: 6, 12: 7},               # D：168 / 200
+    "library":    {12: 7, 16: 8},              # D：204 / 236
+    "barracks":   {12: 7, 16: 8},              # D：208 / 240
+    "warehouse":  {12: 7, 16: 8},              # D：204 / 236
+}
+
+# ── 特殊建筑投放：区带权重 + 出现频率克制（§4.2 / §4.1） ───────────────
+# **为什么不进 ZONE_POOLS**：抽签池一旦加入新 def，B 步的 `_weighted_pick` 结果、
+# 单元宽度、solve_bands 的 rng.shuffle 次数都会变 → 既有 24 def 的布局整城漂移。
+# 硬约束（同 seed 逐字节一致 + 既有布局不漂移）要求新 def 走**独立通道**：J2 打包
+# 完成后，把新 def 投进各带/排的院坝（yard）空段里——不新增任何 rng 取样，
+# 既有 lots 的 x / 行 / 宽度逐位不变，只多出几栋稀疏的特殊建筑。
+#
+# zone_weight：区带权重（越大越优先；0 = 该带不许落）。区带序由中心向外：
+#   core → market → artisan → residential → production（§4.2 镜像带）。
+# freq：各规模档的上限（缺档默认 0 = 不出现）；特殊建筑只在镇/城级出现，
+#   村档院坝余量（≤9 格）本就装不下 8~16 格建筑，且 §4.4 的礼拜堂（390）压不住
+#   兵营/图书馆/货栈（425~514）——与 ZONE_POOLS 里「酒馆/面包房属镇级设施」同口径。
+# near：center = 贴城市中轴选段；gate = 贴左右城墙（城门在左右两端）选段。
+# row_pref：front = 贴主街那排（立面与门前家什可读）；deep = 后排（塔类与大体量公共
+#   建筑退后，20° 微俯视下不遮前排街面；两档落在同一 x 段时**让高者退后**，
+#   免得高的把矮的整栋遮住——镇档的 12 格余段只有一处 x，兵营/货栈只能上下叠）。
+#   注：deep 只影响同权重同锚点的排序，不改变区带优先（权重更高者仍先挑）。
+# 档位取舍：mage_tower 只投 city——镇档中轴/市场带没有 8 格以上的余段（中轴段被
+#   广场占满），而 1026px 的塔放进 344px 城墙的镇里读作"巨人"；镇档频率让给
+#   warehouse（镇档真正的边缘带余量只有 8~9 格，12 格货栈只能落工匠带 16 格段）。
+SPECIAL_DEFS = {
+    "mage_tower": dict(zone_weight={"core": 4, "market": 3, "artisan": 1,
+                                    "production": 1},
+                       freq={"city": 1}, near="center", row_pref="deep"),
+    "library":    dict(zone_weight={"core": 4, "market": 3, "artisan": 1},
+                       freq={"town": 1, "city": 1}, near="center", row_pref="deep"),
+    "barracks":   dict(zone_weight={"production": 4, "artisan": 2, "residential": 1},
+                       freq={"town": 1, "city": 1}, near="gate", row_pref="deep"),
+    "warehouse":  dict(zone_weight={"production": 4, "artisan": 2, "residential": 1},
+                       freq={"town": 1, "city": 1}, near="gate", row_pref="front"),
+    "alchemy":    dict(zone_weight={"artisan": 4, "production": 2, "residential": 1,
+                                    "market": 1},
+                       freq={"town": 1, "city": 1}, near="gate", row_pref="front"),
+}
+#: 投放顺序（前面的先挑段；确定性，不消耗 rng）
+SPECIAL_ORDER = ("library", "mage_tower", "barracks", "warehouse", "alchemy")
 
 # §4.4「墙顶高于 80% 建筑」中的「高建筑」= 顶高超过城墙档者
 TALL_DEFS = {"townhouse", "plaster_house", "tavern", "bakery", "guildhall",
@@ -160,6 +242,49 @@ TALL_DEFS = {"townhouse", "plaster_house", "tavern", "bakery", "guildhall",
 # 12 格 330~500 / 16 格 440~680）换算带宽 [0.86, 1.33] 不自洽，校验取逐档例值带 + 容差
 ASPECT_BAND = (0.86, 1.33)
 ASPECT_TOL = 0.05
+
+# ── §8.2 出檐留位（**可见剪影**口径，非占地框） ─────────────────────────
+# 根因（烘焙图查实）：出檐 = 建筑宽 × 20.5%/侧（`buildings.eave_over`，规范带
+#   18~23%），故**可见剪影宽 ≈ 占地宽 × 1.4**（实测 8 格 → 12 格 / 12 格 → 16 格 /
+#   16 格 → 22 格，见 `sil_w_cells`）。相邻两栋若按**占地框**排布，两侧出檐必然互压
+#   （檐口平面互相穿刺，就是"建筑重叠"的根因）：两栋 8 格民居贴排时檐口各伸 1.63 格，
+#   净距 0 → 剪影互压 3.3 格；16 格货栈贴 8 格厩舍 → 互压 4.9 格。
+# 口径：**排布推进按「有效占宽」= 剪影宽，不按占地宽**；两个占地框之间净距至少
+#   `eave(a) + eave(b) + EAVE_NET_MIN`（EAVE_NET_MIN 见下：取 0 = 剪影可相触但
+#   不互压；满铺肌理付不起"留 1 格巷"，见下一段的实测）。
+#
+# 【本档落实范围与结构性限制（实测数字，非估计）】
+#   · **新增 def 全部按剪影留位**：J3 特殊建筑投放（SPECIAL_DEFS）从院坝空段落位时，
+#     先扣掉两侧邻居的出檐（+1 格巷），剩余段必须放得下 `sil_w_cells(w)`，否则降档
+#     或放弃该段（频率克制的一部分）。既有 lot 的 x/行/宽逐位不动（独立通道）。
+#   · **既有 24 def 的肌理不适用**：肌理是"带宽 = 该区最宽排载荷"的满铺解
+#     （solve_bands），四档的可用侧宽与 §4.1 建筑数互为约束。实测：同排相邻对的
+#     可用空隙合计 **0.0 格**（city 仅 2.0 格），而按剪影口径需要 **6.6~36.5 格**；
+#     单侧总需求（把 row_load 换成剪影宽后实跑）hamlet 37 > 可用 31 / village 49
+#     > 39 / town 53 > 52 / city 48 ≤ 84（按区一带）。**并区（4 带并成 1 带）后**最
+#     接近可行：hamlet 33 > 31（差 2 格）/ village 44 > 39（差 5）/ town 51 ≤ 52
+#     （恰卡线）/ city 可行 —— 即只有镇级及以上勉强能整城按剪影排，且并区会同时抹掉
+#     §4.2 的分带支路（`separators` 归零）。⇒ 属**设计口径变更**（四档总宽 ×1.4，
+#     或明确下调 §4.1 建筑数 8~25%，或接受肌理檐口相接），不在布局层单方面推翻；
+#     故肌理保留占地满铺，由 `verify_plan` 的 `eave` 检查**如实报出**同排剪影互压
+#     对数与缺口格数供裁决。
+EAVE_RATIO = 0.205
+#: 剪影之间要求的最小净距（格）。取 **0 = 只要求不互压**（檐口可相触，读作连排屋
+#: 檐——真实镇子的连排本就是檐口相接）；取 1 会每个相邻对多吃 2 格，实测把 J3 的
+#: 大体量新 def（兵营/货栈 12~16 格 → 剪影 16~22 格）在镇/城全部挤掉：院坝是满铺
+#: 肌理的余量（最大的生产带院坝实测 ~20 格），22 格的需求无段可落。故净距下限取 0，
+#: "不互压"是硬门禁，"留 1 格巷"在满铺肌理里付不起。
+EAVE_NET_MIN = 0
+
+
+def eave_cells(w_cells: int) -> int:
+    """每侧出檐（格）：与 `buildings.eave_over(grid_w)` 同口径（px 取整后换格）。"""
+    return int(int(w_cells * CELL_W * EAVE_RATIO + 0.5) / float(CELL_W) + 0.5)
+
+
+def sil_w_cells(w_cells: int) -> int:
+    """可见剪影占宽（格）= 占地宽 + 两侧出檐 ≈ 占地宽 × 1.4。"""
+    return w_cells + 2 * eave_cells(w_cells)
 
 # ── 各区 def 池（forced 必配；weight 剩余槽位按权重抽） ──────────────────
 ZONE_POOLS = {
@@ -303,6 +428,29 @@ def _push_yard(yards, x0, x1, row, zone, side):
         yards.append({"x0": int(x0), "x1": int(x1), "row": int(row), "zone": zone,
                       "side": side,
                       "kind": "field" if zone == "production" else "yard"})
+
+
+def _eave_deficit(row_lots, edge_x, to_left):
+    """在院坝边缘 `edge_x` 处，为该侧邻居的**出檐 + 1 格巷**还缺几格（0 = 已够）。
+
+    剪影口径（§8.2，见 EAVE_RATIO 段）：本栋占地框到邻居占地框的净距至少要
+    `eave(邻居) + eave(本栋) + EAVE_NET_MIN`。本栋那半由 `sil_w_cells(w) ≤ span`
+    保证，本函数只管**邻居那半**：院坝边缘到邻居实际空隙不足「邻居出檐 + 净距」的
+    部分从院坝里扣掉（`to_left=True` 找左邻，False 找右邻；无邻居 = 段外是巷道/墙 → 0）。
+    """
+    if to_left:
+        nb = [l for l in row_lots if l["x_cells"][1] <= edge_x]
+        if not nb:
+            return 0
+        n = max(nb, key=lambda l: l["x_cells"][1])
+        gap = edge_x - n["x_cells"][1]
+    else:
+        nb = [l for l in row_lots if l["x_cells"][0] >= edge_x]
+        if not nb:
+            return 0
+        n = min(nb, key=lambda l: l["x_cells"][0])
+        gap = n["x_cells"][0] - edge_x
+    return int(max(0, eave_cells(n["w_cells"]) + EAVE_NET_MIN - gap))
 
 
 def _split_sides(defs):
@@ -836,6 +984,101 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
                 if bb > cur:
                     _push_yard(yards, cur, bb, r, bd["zone"], side)
 
+    # ── J3 特殊建筑投放（§4.2 区带权重 + 频率克制，见 SPECIAL_DEFS 表头） ──
+    # 只在 J2 的院坝空段里落位：不碰既有 lots 的 x / 行 / 宽度，也不消耗任何
+    # 既有 rng 取样 → 「同 seed 逐字节一致 + 既有 24 def 布局不漂移」两条硬约束
+    # 同时成立。落位规则（全部确定性）：区带权重 → 锚点距离（中轴/城门）→ 排偏好
+    # → 档宽 → x；宽度取段内可用的最大合规档；进深必须落进该排 b 带。
+    special_lots = []
+
+    def place_specials():
+        nonlocal lot_no
+        for dname in SPECIAL_ORDER:
+            cfg = SPECIAL_DEFS[dname]
+            for _ in range(int(cfg["freq"].get(tier, 0))):
+                best = None
+                for y in yards:
+                    wz = cfg["zone_weight"].get(y["zone"], 0)
+                    if wz <= 0:
+                        continue
+                    row = y["row"]
+                    # §4.3 广场内不放建筑（well/摊除外）：与广场 b×x 区间相交即跳过
+                    if plaza and not (row_off[row] >= plaza["b1"]
+                                      or row_off[row] + row_depth[row]
+                                      <= plaza["b0"]) \
+                            and y["x0"] < plaza["x1"] and y["x1"] > plaza["x0"]:
+                        continue
+                    # ── §8.2 出檐留位（剪影口径，见文件头 EAVE_RATIO 段） ──
+                    # 院坝空段的左右边缘各自扣掉「该侧邻居出檐 + EAVE_NET_MIN」的
+                    # 缺口（缺多少扣多少；段外是巷道/端头则不用扣），剩余段必须容得下
+                    # 本栋**剪影** sil_w_cells(w)。放不下就降档，仍放不下换下一个段。
+                    row_lots = [l for l in lots if l["row"] == row
+                                and l.get("side") == y["side"]]
+                    lp = _eave_deficit(row_lots, y["x0"], True)
+                    rp = _eave_deficit(row_lots, y["x1"], False)
+                    span = (y["x1"] - y["x0"]) - lp - rp
+                    ws = [w for w in DEFS[dname]["widths"]
+                          if sil_w_cells(w) <= span and _aspect_ratio_ok(dname, w)
+                          and DEPTH_BY_WIDTH.get(dname, {}).get(w, DEFS[dname]["depth"])
+                          <= row_depth[row]]
+                    if not ws:
+                        continue
+                    w = max(ws)
+                    near_key = (-abs((y["x0"] + y["x1"]) / 2.0 - cols / 2.0)
+                                if cfg["near"] == "center"
+                                else -min(y["x0"], cols - y["x1"]))
+                    # key 取最大：front = 排号小者优先（贴主街），deep = 排号大者优先
+                    row_key = -y["row"] if cfg["row_pref"] == "front" else y["row"]
+                    key = (wz, near_key, row_key, w, -y["x0"])
+                    if best is None or key > best[0]:
+                        best = (key, y, w, lp, rp)
+                if best is None:
+                    continue
+                _key, y, w, lp, rp = best
+                row = y["row"]
+                # 剪影在剩余段内居中 → 占地框两侧各退一个出檐
+                x0 = (y["x0"] + lp
+                      + max(0, ((y["x1"] - y["x0"]) - lp - rp
+                                - sil_w_cells(w)) // 2)
+                      + eave_cells(w))
+                d = DEFS[dname]
+                depth = DEPTH_BY_WIDTH.get(dname, {}).get(w, d["depth"])
+                fb = row_off[row]
+                lot_no += 1
+                lots.append({
+                    "index": lot_no, "def": dname, "def_cn": d["cn"],
+                    "zone": y["zone"], "side": y["side"], "row": row,
+                    "w_cells": w, "depth_cells": depth,
+                    "x_cells": [x0, x0 + w], "x_px": x0 * CELL_W,
+                    "w_px": w * CELL_W,
+                    "front_b": fb, "baseline_y": GROUND_Y - fb * CELL_W,
+                    "facing": "S", "front_faces_plaza": False,
+                    "front_y_cell": cell_y(fb),
+                    "back_y_cell": cell_y(fb) - depth + 1,
+                    "top_h_px": def_top_h(dname),
+                    "wall_mat": d["wall_mat"], "roof_mat": d["roof_mat"],
+                    "special": True,
+                })
+                special_lots.append({
+                    "def": dname, "def_cn": d["cn"], "zone": y["zone"],
+                    "side": y["side"], "row": row, "w_cells": w,
+                    "depth_cells": depth, "x_cells": [x0, x0 + w],
+                    "x_px": x0 * CELL_W, "baseline_y": GROUND_Y - fb * CELL_W,
+                    "top_h_px": def_top_h(dname),
+                    "band_weight": cfg["zone_weight"].get(y["zone"], 0),
+                    "near": cfg["near"]})
+                # 抠掉已用段（余下左右两段 ≥2 格才留）
+                nl = []
+                for yy in yards:
+                    if yy is not y:
+                        nl.append(yy)
+                        continue
+                    _push_yard(nl, y["x0"], x0, row, y["zone"], y["side"])
+                    _push_yard(nl, x0 + w, y["x1"], row, y["zone"], y["side"])
+                yards[:] = nl
+
+    place_specials()
+
     # ── K 城墙 / 塔楼 / 城门 ────────────────────────────────────────────
     walls = {"tier": spec["wall_tier"], "height_px": wall_h,
              "seg_cells": WALL_SEG_CELLS, "runs": [], "towers": [], "gates": []}
@@ -1070,6 +1313,7 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
                       if plaza else None),
         },
         "lots": lots,
+        "specials": special_lots,
         "yards": yards,
         "props": props,
         "anchors": {
@@ -1268,11 +1512,17 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
                         wall_ratio_all * 100))
 
     # 分区权重 §4.2（按建筑数量）
-    cnt = Counter(l["zone"] for l in lots if l["zone"] in ZONE_WEIGHTS)
+    # **特殊建筑（J3 投放的 landmark）不计入本项**：它们按 SPECIAL_DEFS 的区带权重
+    # 稀疏落位（另一套设计律，如兵营必须靠城门/生产带），把 1~5 栋 landmark 摊进
+    # §4.2 的比例会把小档城镇推过 ±8pp（实测 120 个 seed 中 town 17 例断言失败）；
+    # §4.2 管的是城市**肌理**（民居/工匠/市场的配比），landmark 是叠加层。
+    # 计入项 = 非 special 的 lot，数量记在 `specials_excluded` 以便复核。
+    fabric = [l for l in lots if not l.get("special")]
+    cnt = Counter(l["zone"] for l in fabric if l["zone"] in ZONE_WEIGHTS)
     total = sum(cnt.values())
     share = {z: cnt[z] / max(1, total) for z in ZONE_ORDER}
     frontage = {z: 0 for z in ZONE_ORDER}
-    for l in lots:
+    for l in fabric:
         if l["zone"] in frontage:
             frontage[l["zone"]] += l["w_cells"]
     tot_f = max(1, sum(frontage.values()))
@@ -1288,6 +1538,38 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
     no_compliant = sorted({l["def"] for l in lots
                            if not _has_compliant_width(l["def"])
                            and not DEFS[l["def"]].get("aspect_exempt")})
+
+    # ⑦ 出檐留位（§8.2 剪影口径，见 EAVE_RATIO 段）：**诊断，不作断言**
+    # 同排同侧相邻对要求净距 ≥ eave(a) + eave(b) + ALLEY_W。新增 def（J3 投放）
+    # 已按此口径留位；既有肌理是满铺解（可用空隙实测 0.0 格），缺口如实报出。
+    eave_pairs, eave_fabric, special_bad = 0, [], []
+    eave_short_cells = 0
+    for r, ls in by_row.items():
+        for side in ("left", "right", "center"):
+            seq = sorted([l for l in ls if l.get("side") == side],
+                         key=lambda l: l["x_cells"][0])
+            for a, b in zip(seq, seq[1:]):
+                need = eave_cells(a["w_cells"]) + eave_cells(b["w_cells"]) + EAVE_NET_MIN
+                gap = b["x_cells"][0] - a["x_cells"][1]
+                eave_pairs += 1
+                if gap >= need:
+                    continue
+                rec = {"row": r, "a": a["def"], "b": b["def"], "gap": gap,
+                       "need": need, "a_special": bool(a.get("special")),
+                       "b_special": bool(b.get("special"))}
+                eave_short_cells += need - gap
+                if a.get("special") or b.get("special"):
+                    special_bad.append(rec)
+                else:
+                    eave_fabric.append(rec)
+    if eave_fabric:
+        notes.append("§8.2 出檐留位：肌理同排相邻对 %d/%d 对仍剪影互压（缺 %d 格）——"
+                     "既有 24 def 是满铺解（可用空隙 0 格），按剪影推进需砍 §4.1 建筑数"
+                     "或加宽档位总宽，属设计口径变更，见文件头 EAVE_RATIO 段"
+                     % (len(eave_fabric), eave_pairs, eave_short_cells))
+    if special_bad:
+        issues.append("§8.2 出檐留位失效（J3 投放的新 def 与邻居剪影互压 %d 对）：%s"
+                      % (len(special_bad), special_bad[:3]))
 
     # §4.4 次高点应为城墙塔楼（塔并入高度排序校验；报告里 second_highest 仍只列建筑）
     tower_top = max(tower_hs) if tower_hs else 0
@@ -1352,6 +1634,7 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
                         "max_dev_pp": round(max(dev.values()) * 100, 2),
                         "frontage_share": {z: round(frontage[z] / tot_f, 4)
                                            for z in ZONE_ORDER},
+                        "specials_excluded": len(lots) - len(fabric),
                         "ok": bool(weight_ok)},
         "aspect": {"checked": len(lots), "violations": asp_bad,
                    "defs_without_compliant_width": no_compliant,
@@ -1359,6 +1642,15 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
                    "note": "§3.2 表头比 1:0.75~1.15 与逐档例值换算带宽 [0.86,1.33] "
                            "不自洽；本校验取逐档例值带 +5% 容差",
                    "ok": not asp_bad},
+        "eave": {"pairs": eave_pairs, "fabric_bad": len(eave_fabric),
+                 "specials_bad": len(special_bad),
+                 "shortfall_cells": eave_short_cells,
+                 "shortfall_pairs": eave_fabric + special_bad,
+                 "caliber": {"eave_per_side": "建筑宽 × 20.5%",
+                             "sil_w": "占地宽 × ≈1.4",
+                             "net_min_cells": EAVE_NET_MIN,
+                             "scope": "新增 def（J3）已留位；肌理为满铺解，缺口如实报出"},
+                 "ok": not (eave_fabric or special_bad)},
         "leftover_units": plan.get("leftover_units", []),
         "issues": issues,
         "notes": notes,
@@ -1428,6 +1720,15 @@ def summary(plan: dict) -> str:
         "  长宽比：%d 栋中违规 %d，无合规档位 def=%s"
         % (c["aspect"]["checked"], len(c["aspect"]["violations"]),
            c["aspect"]["defs_without_compliant_width"]),
+        "  出檐：同排相邻 %d 对，剪影互压 %d 对（肌理 %d / 新 def %d，共缺 %d 格）"
+        % (c["eave"]["pairs"], len(c["eave"]["shortfall_pairs"]),
+           c["eave"]["fabric_bad"], c["eave"]["specials_bad"],
+           c["eave"]["shortfall_cells"]),
+        "  特殊建筑（区带权重/频率克制）：%s"
+        % (", ".join("%s[%s/%s带 r%d x%d %d格]"
+                     % (s["def"], s["def_cn"], s["zone"], s["row"],
+                        s["x_cells"][0], s["w_cells"])
+                     for s in plan.get("specials", [])) or "无（该档不投）"),
     ] + (["  ISSUES: " + " | ".join(c["issues"])] if c["issues"] else [])
       + (["  NOTES: " + " | ".join(c["notes"])] if c["notes"] else []))
 

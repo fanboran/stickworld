@@ -5,7 +5,7 @@
 ------
 把"靠人眼/agent 自评"的几条出厂门禁变成可复跑的自动检查（交接档 §三.5），覆盖六项：
 
-  1. def↔装配器覆盖表   city_layout.DEFS(24) × probe_city_scene.DEF_MAP/PROP_LOTS，逐 def
+  1. def↔装配器覆盖表   city_layout.DEFS(29) × probe_city_scene.DEF_MAP/PROP_LOTS，逐 def
                         打印映射与缺口（缺哪个列哪个，不许静默跳过）。道具型 lot
                         （well/market_stall）走 PROP_LOTS 聚簇：校验配方道具名已注册
                         且实测占位不撑出地块
@@ -98,6 +98,12 @@ ASM_TIER_ATTR = {
     "shop": "SHOP_TIERS", "guildhall": "GUILDHALL_TIERS",
     "hayloft": "HAYLOFT_TIERS", "smithy2": "SMITHY2_TIERS",
     "smithy3": "SMITHY3_TIERS", "smithy4": "SMITHY4_TIERS",
+    # 第三轮 8 装配器（mage_tower/alchemy/library/barracks/warehouse 为 city_layout
+    # 新入表的 def；stable/shelter 早已在 DEFS 里、此处补齐宽度档表映射）
+    "mage_tower": "MAGE_TOWER_TIERS", "alchemy": "ALCHEMY_TIERS",
+    "library": "LIBRARY_TIERS", "barracks": "BARRACKS_TIERS",
+    "warehouse": "WAREHOUSE_TIERS", "stable": "STABLE_TIERS",
+    "shelter": "SHELTER_TIERS",
 }
 
 #: 窗规格标准（交接档 §0.3 / 任务书）
@@ -329,6 +335,9 @@ def check_lots(def_map, seeds):
     print("-" * 84)
     # 缺口按「类型」聚合：{(def,wc,need): [(tier,seed), ...]}
     nofit_agg, overmax_agg, overlap_agg = {}, {}, {}
+    special_seen = {}
+    special_bands = {}
+    eave_tot = {"pairs": 0, "fabric_bad": 0, "specials_bad": 0, "short": 0}
     called = 0
     for tier in TIERS:
         for seed in seeds:
@@ -343,6 +352,20 @@ def check_lots(def_map, seeds):
             called += 1
             lots = plan["lots"]
             res.count += len(lots)
+            # §8.2 出檐留位诊断（剪影口径）：肌理满铺解报缺口，新 def（J3）应 0
+            ev = plan.get("checks", {}).get("eave")
+            if ev:
+                eave_tot["pairs"] += ev["pairs"]
+                eave_tot["fabric_bad"] += ev["fabric_bad"]
+                eave_tot["specials_bad"] += ev["specials_bad"]
+                eave_tot["short"] += ev["shortfall_cells"]
+                if ev["specials_bad"]:
+                    res.fail("§8.2 出檐留位失效：%s/%d 的新 def 与邻居剪影互压 %d 对"
+                             % (tier, seed, ev["specials_bad"]))
+            # 特殊建筑（SPECIAL_DEFS 投放）：记下实际出现在哪些档/带（区带权重是否生效）
+            for s in plan.get("specials", []):
+                special_seen.setdefault(s["def"], []).append("%s/%d" % (tier, seed))
+                special_bands.setdefault(s["def"], set()).add(s["zone"])
             # 2a 同排 x 区间重叠
             by_row = {}
             for l in lots:
@@ -394,9 +417,25 @@ def check_lots(def_map, seeds):
                     ",".join("%s/%d" % c for c in seen)))
     print("聚合缺口：同排重叠 %d 类 / 超最大装配宽 %d 类 / 无可用装配档 %d 类"
           % (len(overlap_agg), len(overmax_agg), len(nofit_agg)))
+    if special_seen:
+        print("特殊建筑投放（SPECIAL_DEFS，独立于抽签池）：")
+        for d in sorted(special_seen):
+            tiers = sorted({t for t, _s in (x.split("/") for x in special_seen[d])})
+            print("  %-11s → 档 %s / 落位带 %s / %d 个组合"
+                  % (d, tiers, sorted(special_bands[d]), len(special_seen[d])))
+    else:
+        print("特殊建筑投放：0（SPECIAL_DEFS.freq 未覆盖本次档位/seed）")
+    print("出檐留位（§8.2 剪影口径）：同排相邻 %d 对 → 互压 %d 对（肌理 %d / 新 def %d，"
+          "共缺 %d 格）"
+          % (eave_tot["pairs"], eave_tot["fabric_bad"] + eave_tot["specials_bad"],
+             eave_tot["fabric_bad"], eave_tot["specials_bad"], eave_tot["short"]))
+    res.note("出檐留位：新 def（J3）互压 %d 对（门禁 0）；肌理同排互压 %d 对 / 缺 %d 格"
+             "——肌理是满铺解（可用空隙实测 0 格），改按剪影推进需砍 §4.1 建筑数或加"
+             "档位总宽，属设计口径变更（见 city_layout 文件头 EAVE_RATIO 段）"
+             % (eave_tot["specials_bad"], eave_tot["fabric_bad"], eave_tot["short"]))
     res.note("plan_city 成功 %d/%d 组合；同排重叠为布局器既有保证（本项 0 即口径成立）；"
-             "「无可用装配档」是 DEF_MAP 桥接缺口（同见 [1]/[3]）"
-             % (called, len(TIERS) * len(seeds)))
+             "「无可用装配档」是 DEF_MAP 桥接缺口（同见 [1]/[3]）；特殊建筑 %d 种出现在计划里"
+             % (called, len(TIERS) * len(seeds), len(special_seen)))
     return res
 
 

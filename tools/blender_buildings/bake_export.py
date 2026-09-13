@@ -725,12 +725,29 @@ def render_mode():
 
 DEMO_W, DEMO_H = 1920, 1080
 DEMO_GROUND_H = int(round(DEMO_H * 0.36))        # 屏幕下方约 36% = 地面带
-DEMO_GROUND_Y = DEMO_H - DEMO_GROUND_H           # 建筑基线（落地线）所在行
-#: 街排：def → 格宽（必须已导出）。间距 1~3 格（32/64/96px），禁止完美直线均布。
-DEMO_STREET = [("house", 8, 2), ("smithy1", 8, 1), ("townhouse", 12, 2),
-               ("shop", 8, 1), ("bakery", 8, 2), ("shelter", 6, 0)]
-#: 火柴人：130px（=1.70m），站在 x 处（脚落在地面线）
-DEMO_PEOPLE = [(240, "walk"), (700, "stand"), (1180, "stand")]
+#: 地面带**顶线** = 地平线 = `ground_y`（火柴人可走带上边界，见 建筑室内结构.md §2.2）
+DEMO_HORIZON_Y = DEMO_H - DEMO_GROUND_H
+#: **建筑基线 = `ground_y + 96`**（落地箱底边；`construction_project.gd:322` 的
+#: `vis.position = (cell_x*32, ground_y+96)`）。锚在这一行，建筑才"种"在地里而不是
+#: 站在地平线上（本轮修的第二个问题）。自检：`baseline == DEMO_HORIZON_Y + 96`。
+DEMO_BASELINE_Y = DEMO_HORIZON_Y + 96
+DEMO_MARGIN = 24
+#: 地面分带（与 `ground_tiles.py` 的 `STRIP_*` 同口径：路肩 3 格 / 路缘 8px / 道路 5 格）。
+#: 纵向剖面（自远及近，屏幕 y 向下为正）：
+#:   地平线 `ground_y` → 远处地面（土）→ **建筑基线 `ground_y+96`**
+#:   → 路肩 96（贴墙根硬化面；出檐投影与烘入的接地阴影落在这条带上）
+#:   → 路缘 8 → 道路 160 → 屏底。
+DEMO_BAND_SHOULDER = 96
+DEMO_BAND_KERB = 8
+DEMO_ZONE = "edge"                       # 单排村街 = edge 档（见 ground_tiles scale_rules）
+#: 街排：`(def, 格宽, 与**前一栋可见剪影**的净距[格])`。
+#: **必须按可见剪影排，不能按占地框排**：出檐 = 建筑宽 × 18~23%（buildings.py §8.2 硬约束），
+#: 剪影宽 ≈ 占地宽 × 1.4，按占地框排相邻两栋的出檐必然互压（本轮修的第一个问题）。
+#: 1920px 一屏装不下 6 栋的剪影总宽（实测 2280px），故取 4 栋，净距 1~2 格。
+DEMO_STREET = [("house", 8, 1), ("smithy1", 8, 2),
+               ("townhouse", 12, 1), ("bakery", 8, 1)]
+#: **建筑样例图不放角色**（角色只属于"游戏内一屏"类演示，且必须用游戏真表现 =
+#: SubViewport + StickmanRig）。本文件不再画任何火柴人。
 
 
 def _srgb_to_linear(a):
@@ -807,72 +824,92 @@ def _paste_rgb(canvas, rgb, x, y):
     canvas[yb + sy0:yb + sy1, x0:x1, 3] = 1.0
 
 
-def _tile_ground(canvas, x_from=0, x_to=None, zone="edge"):
-    """按"路肩 96 + 路缘 64 + 道路 160"分段拼地面带（用现有 ground_tiles 段）。
+def _seg_game_px(band, zone, variant):
+    """读一段地面分段（raster 是 2 texel/游戏px）→ 盒式降到游戏像素（1px=1单位）。
 
-    段是 512px 宽的横向可链条带：路肩顶边 = 建筑落地线（`DEMO_GROUND_Y`），以下依次
-    路缘、道路；道路带铺满屏幕下缘为止。**这是演示用的一次性铺法**，游戏内走
-    `ground_tiles` 的分段链 + 规模包含映射（见 `_manifest.json`）。
-
-    返回 `(用到了段?, 段来源说明)`。**段文件缺失时**（地面任务线正在重出时会出现）退回
-    "纯色夯土带 + 文字标注"，不让演示图因为别人的中间态而变成天空色（任务书允许的兜底）。
+    段文件是 1024px 宽（16 格 × 64 raster px）；manifest `supersample=2` 且
+    `px_per_cell=64` → 游戏像素 = raster / 2。返回**底行序** RGB 0..1（与 `_paste_rgb` 一致）。
     """
     import numpy as np
     from PIL import Image
-    x_to = DEMO_W if x_to is None else x_to
-    gt = os.path.join(TEMP, "ground_tiles")
-    bands = (("shoulder", 96), ("kerb", 64), ("road", 160))
-    arr = {}
-    for name, _h in bands:
-        for pat in ("seg_%s_%s_v1.png" % (name, zone), "seg_%s_%s_*.png" % (name, zone)):
-            hits = sorted(glob.glob(os.path.join(gt, pat)))
-            if hits:
-                arr[name] = np.asarray(Image.open(hits[0]).convert("RGB"),
-                                       dtype=np.float32)[::-1] / 255.0
-                break
-    n_ground = DEMO_H - DEMO_GROUND_Y
-    if not arr:
-        # 兜底：纯色夯土带（用 manifest 的 edge 档语义色），自顶 DEMO_GROUND_Y 起铺满下缘
-        soil = np.zeros((n_ground, DEMO_W, 3), np.float32)
-        soil[:] = np.array([0.34, 0.28, 0.20], np.float32)
-        _paste_rgb(canvas, soil, 0, DEMO_GROUND_Y)
-        return False, "纯色夯土带（ground_tiles 段当前不可用）"
-    xx = x_from
-    while xx < x_to:
-        y = DEMO_GROUND_Y
-        for name, hh in bands:
-            if name in arr:
-                _paste_rgb(canvas, arr[name], xx, y)
-            y += hh
-        road = arr.get("road")
-        while road is not None and y < DEMO_H:
-            _paste_rgb(canvas, road, xx, y)
-            y += road.shape[0]
-        xx += 512
-    return True, "ground_tiles 分段段（shoulder/kerb/road）"
+    p = os.path.join(TEMP, "ground_tiles",
+                     "seg_%s_%s_v%d.png" % (band, zone, variant))
+    if not os.path.exists(p):
+        return None
+    im = Image.open(p).convert("RGB")
+    w, h = im.size
+    a = np.asarray(im.resize((max(1, w // 2), max(1, h // 2)), Image.BOX),
+                   dtype=np.float32) / 255.0
+    return a[::-1]
 
 
-def _stickman(canvas, x, h=130.0, mode="stand"):
-    """130px 火柴人剪影（比例与 buildings.stickman 一致：腿 36% / 躯干 42% / 头 22%）。"""
+def _fill_band(canvas, band, zone, y_top, y_bot, x_from, x_to, v0=1):
+    """把某分段（横向 512px 严格周期）铺进画布 `[y_top, y_bot) × [x_from, x_to)`。
+
+    纵向不足按段高**平铺**（段是结构方向，不纵向拉伸）；横向 512px 链式相接，
+    变体 v1..v5 轮换（edge_convention：横向严格周期 → 任意顺序可接）。
+    返回是否真的用到了分段（False = 段文件缺失，调用方走兜底）。
+    """
     import numpy as np
-    leg = h * 0.36
-    torso = h * 0.42
-    head = h - leg - torso
-    w = h * 0.235
-    col = np.array([0.085, 0.078, 0.088], np.float32)
+    h = int(y_bot) - int(y_top)
+    if h <= 0:
+        return True
+    used, x, i = False, int(x_from), 0
+    while x < x_to:
+        seg = _seg_game_px(band, zone, ((v0 - 1 + i) % 5) + 1)
+        if seg is None:
+            return used
+        used = True
+        reps = -(-h // seg.shape[0])                     # ceil
+        # 底行序数组的**末 h 行** = 段顶部 h 行 → 顶对齐平铺（不拉伸）
+        block = np.tile(seg, (reps, 1, 1))[-h:]
+        _paste_rgb(canvas, block, x, int(y_top))
+        x += seg.shape[1]
+        i += 1
+    return used
 
-    def rect(cx, cy_top, ww, hh):
-        r = np.zeros((int(round(hh)), int(round(ww)), 4), np.float32)
-        r[..., :3] = col
-        r[..., 3] = 1.0
-        _paste(canvas, r, int(round(cx - ww / 2.0)),
-               int(round(DEMO_GROUND_Y - cy_top - hh)))
 
-    for sx in (-1.0, 1.0):                                   # 双腿
-        rect(x + sx * w * 0.30, 0.0, w * 0.34, leg)
-    rect(x, leg, w, torso)                                   # 躯干
-    rect(x, leg + torso - h * 0.16, w * 1.45, h * 0.055)     # 双臂
-    rect(x, leg + torso, w * 0.62, head)                     # 头
+def _tile_ground(canvas):
+    """铺地面带（真分段，`stick-world/temp/ground_tiles/`）。
+
+    纵向剖面（自远及近，屏幕 y 向下为正）见文件里 `DEMO_BAND_*` 注释：
+      地平线 `ground_y` → 远处地面（土）→ 建筑基线 `ground_y+96`
+      → 路肩 96（贴墙根）→ 路缘 8 → 道路 → 屏底。
+    这段剖面与 `ground_tiles.b_street_strip` 的带序一致（上=建筑基线，下=道路）。
+
+    返回 `(用到了真分段?, 说明)`。**分段缺失时**（地面任务线重出会出现中间态）退回
+    "纯色夯土带 + 文字标注"，不让演示图因别人的中间态变成天空色（任务书允许的兜底）。
+    """
+    import numpy as np
+    gt = os.path.join(TEMP, "ground_tiles")
+    have = sorted(glob.glob(os.path.join(gt, "seg_*_%s_*.png" % DEMO_ZONE)))
+    base, kerb = DEMO_BASELINE_Y, DEMO_BASELINE_Y + DEMO_BAND_SHOULDER
+    road = kerb + DEMO_BAND_KERB
+    if not have:
+        soil = np.zeros((DEMO_H - DEMO_HORIZON_Y, DEMO_W, 3), np.float32)
+        soil[:] = np.array([0.34, 0.28, 0.20], np.float32)
+        _paste_rgb(canvas, soil, 0, DEMO_HORIZON_Y)
+        return False, "纯色夯土带（ground_tiles 分段当前不可用）"
+    used = all((
+        _fill_band(canvas, "road", DEMO_ZONE, DEMO_HORIZON_Y, base, 0, DEMO_W, v0=3),
+        _fill_band(canvas, "shoulder", DEMO_ZONE, base, kerb, 0, DEMO_W, v0=1),
+        _fill_band(canvas, "kerb", DEMO_ZONE, kerb, road, 0, DEMO_W, v0=1),
+        _fill_band(canvas, "road", DEMO_ZONE, road, DEMO_H, 0, DEMO_W, v0=1),
+    ))
+    if not used:
+        return False, "纯色夯土带（ground_tiles 分段读不到）"
+    return True, ("ground_tiles 真分段·edge 档（远处地面 | 路肩 %d | 路缘 %d | 道路 %d）"
+                  % (DEMO_BAND_SHOULDER, DEMO_BAND_KERB,
+                     DEMO_H - road))
+
+
+def _sil_bbox(sprite, thr=0.06):
+    """alpha 包围盒（sprite 为底行序数组）：返回 sprite 内 (x0, x1, y0, y1)。"""
+    import numpy as np
+    ys, xs = np.nonzero(sprite[..., 3] > thr)
+    if len(xs) == 0:
+        return None
+    return int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
 
 
 def _label(img, text, xy, size=22, fill=(238, 234, 226, 255),
@@ -888,7 +925,14 @@ def _label(img, text, xy, size=22, fill=(238, 234, 226, 255),
 
 
 def _compose_screen(night):
-    """把导出的 sprite 按游戏真实比例拼成一屏。返回 (PIL.Image, report dict)。"""
+    """把导出的 sprite 按游戏真实比例拼成**建筑样例**一屏。返回 (PIL.Image, report)。
+
+    三条硬规则（本轮修的三个问题）：
+      ① 排布按**可见剪影**（alpha 包围盒）量净距，不按占地框 —— 否则出檐互压；
+      ② 建筑锚点（前墙面基线）= `ground_y + 96`，落在地面带顶线下方 96px；
+      ③ 不画任何角色（样例图不出火柴人）。
+    plus 自检：相邻包围盒相交 / 基线不对 / 越界 → 报错（`compose_mode` 退出码 1）。
+    """
     import numpy as np
     from PIL import Image
     tint, gstr = _daynight_consts()
@@ -905,10 +949,12 @@ def _compose_screen(night):
     canvas[..., :3] = sky[:, None, :]
     canvas[..., 3] = 1.0
 
-    # ---- 地面带（现有 ground 段；边缘档 = 村子级地面，与单排街景相符）
-    have_seg, ground_src = _tile_ground(canvas, 0, DEMO_W)
+    # ---- 地面带（真分段：远处地面 | 路肩 | 路缘 | 道路）
+    have_seg, ground_src = _tile_ground(canvas)
 
-    rows_out, x = [], 32
+    # ---- 建筑：按"可见剪影 + 格对齐"排；锚点（前墙面基线）落在 DEMO_BASELINE_Y
+    rows_out, rects = [], []
+    cursor = None                                    # 上一栋剪影右缘（画布列）
     for (dname, wc, gap_cells) in DEMO_STREET:
         folder = os.path.join(OUT_ROOT, "%s_w%d" % (dname, wc))
         ap = os.path.join(folder, "albedo.png")
@@ -930,51 +976,98 @@ def _compose_screen(night):
                 [out, np.maximum(alb[..., 3:4], g[..., 3:4])], axis=2)
         else:
             sprite = alb
-        # 锚点语义验证：锚点像素落在 (x + col, DEMO_GROUND_Y)
-        _paste(canvas, sprite, x - int(round(anchor[0])),
-               DEMO_GROUND_Y - int(round(anchor[1])))
+        sil = _sil_bbox(sprite)
+        if sil is None:
+            print("   ! %s_w%d albedo 全透明，跳过" % (dname, wc))
+            continue
         sh, sw = sprite.shape[:2]
-        rows_out.append(dict(def_name=dname, wc=wc, x=x, sprite=[sw, sh],
-                             anchor=[anchor[0], anchor[1]],
-                             top=DEMO_GROUND_Y - int(round(anchor[1])),
-                             left=x - int(round(anchor[0])),
-                             glow=meta["glow_count"]))
-        x += wc * int(CELL) + gap_cells * int(CELL)
+        bx0, bx1, by0, by1 = sil
+        ax = int(round(anchor[0]))                   # 锚点列 = 建筑横向中心
+        ay = int(round(anchor[1]))                   # 锚点行 = 前墙面基线
+        foot_dx = ax - wc * int(CELL) // 2           # 占地框左缘在 sprite 内的列
+        # 本栋剪影左缘 = 上一栋剪影右缘 + 净距（格）；首栋 = 左边距
+        left_min = (DEMO_MARGIN if cursor is None
+                    else cursor + gap_cells * int(CELL)) - bx0
+        rem = (left_min + foot_dx) % int(CELL)       # 格对齐（vis.position = cell*32）
+        if rem:
+            left_min += int(CELL) - rem
+        L = int(round(left_min))
+        Ty = DEMO_BASELINE_Y - ay
+        _paste(canvas, sprite, L, Ty)
+        # 画布包围盒（自顶行号）；sprite 是底行序，行 by → 画布行 Ty + (sh-1-by)
+        rect = dict(x0=L + bx0, x1=L + bx1,
+                    y0=Ty + (sh - 1 - by1), y1=Ty + (sh - 1 - by0))
+        rects.append(dict(name="%s_w%d" % (dname, wc), rect=rect))
+        rows_out.append(dict(
+            def_name=dname, wc=wc, gap_cells=gap_cells,
+            footprint_px=wc * int(CELL), silhouette_px=bx1 - bx0 + 1,
+            canvas_bbox=[rect["x0"], rect["y0"], rect["x1"], rect["y1"]],
+            anchor=[anchor[0], anchor[1]],
+            baseline=dict(x=L + ax, y=DEMO_BASELINE_Y),
+            glow=meta["glow_count"]))
+        cursor = rect["x1"]
 
-    # ---- 火柴人（130px = 1.70m）站在街面前沿
-    for (px, mode) in DEMO_PEOPLE:
-        _stickman(canvas, px, 130.0, mode)
+    # ---- 自检 ①：建筑基线 == 地面带顶线(ground_y) 下方 96px
+    baseline_ok = (DEMO_BASELINE_Y == DEMO_HORIZON_Y + 96
+                   and all(r["baseline"]["y"] == DEMO_BASELINE_Y for r in rows_out))
+    # ---- 自检 ②：相邻建筑包围盒不得相交
+    overlaps = []
+    for a, b in zip(rects, rects[1:]):
+        ra, rb = a["rect"], b["rect"]
+        if (ra["x0"] <= rb["x1"] and rb["x0"] <= ra["x1"]
+                and ra["y0"] <= rb["y1"] and rb["y0"] <= ra["y1"]):
+            overlaps.append(dict(
+                a=a["name"], b=b["name"],
+                overlap_x_px=min(ra["x1"], rb["x1"]) - max(ra["x0"], rb["x0"]) + 1,
+                overlap_y_px=min(ra["y1"], rb["y1"]) - max(ra["y0"], rb["y0"]) + 1))
+    # ---- 自检 ③：不得越出画幅
+    out_of_frame = [x["name"] for x in rects
+                    if x["rect"]["x0"] < 0 or x["rect"]["x1"] > DEMO_W]
 
     # ---- 夜间地面压暗（与建筑同一 tint；地面无 alpha 直乘）
-    # 注意：canvas 是**底行序**（行 0 = 屏幕底），而 DEMO_GROUND_Y 是**自顶行号** ——
-    # 地面带 = 底行序的 [0, H-1-GROUND_Y]。这里踩过一次坑：写成 canvas[GROUND_Y:] 会把
-    # tint 全加在天空上、地面纹丝不动（夜里地面仍是白天色）。
+    # 注意 canvas 是**底行序**（行 0 = 屏幕底），地面带 = 底行序的 [0, DEMO_GROUND_H]。
     if night:
-        n_ground = DEMO_H - DEMO_GROUND_Y
+        n_ground = DEMO_H - DEMO_HORIZON_Y
         gnd = _srgb_to_linear(canvas[:n_ground, :, :3])
         canvas[:n_ground, :, :3] = _linear_to_srgb(
             gnd * np.asarray(tint, np.float32)[None, None, :])
 
     arr8 = (np.clip(canvas[::-1], 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
     img = Image.fromarray(arr8, "RGBA").convert("RGB")
+
     tag = "夜" if night else "昼"
-    _label(img, "建筑管线 v3 游戏内一屏（%s）· 1px=1单位 · 1格=32px · "
-                "地面带=屏高36%% · 火柴人=130px(1.70m)" % tag, (18, 12), 22)
-    _label(img, "sprite 按 meta.anchor（前墙面基线）落位；建筑挤占地面；间距 1~3 格",
-           (18, 42), 18, fill=(208, 206, 200, 255))
-    _label(img, "待分段地面：本演示的 %s（shoulder96+kerb64+road160）；游戏内走分段链+规模包含"
-           % ground_src, (18, DEMO_H - 30), 18, fill=(226, 222, 210, 255))
+    _label(img, "建筑管线 v3 建筑样例（%s）· 1px=1单位 · 1格=32px · "
+                "地面带=屏高36%% · 无角色" % tag, (18, 12), 22)
+    _label(img, "建筑基线 = 地平线下方 96px（落地箱底，自检过）；sprite 按 meta.anchor "
+                "落位；相邻包围盒零相交（自检过）", (18, 42), 18, fill=(208, 206, 200, 255))
+    _label(img, "地面：%s" % ground_src, (18, DEMO_H - 30), 18,
+           fill=(226, 222, 210, 255))
     rep = dict(screen=[DEMO_W, DEMO_H], ground_h=DEMO_GROUND_H,
-               ground_y=DEMO_GROUND_Y, night=night, ground_source=ground_src,
-               ground_uses_segments=have_seg,
-               stickman_px=130, street=rows_out,
+               horizon_y=DEMO_HORIZON_Y, baseline_y=DEMO_BASELINE_Y,
+               baseline_ok=baseline_ok, overlaps=overlaps,
+               out_of_frame=out_of_frame, night=night, ground_source=ground_src,
+               ground_uses_segments=have_seg, street=rows_out,
                tint_night=list(tint) if night else None,
                glow_strength=gstr if night else None)
     return img, rep
 
 
+def _draw_ref_lines(img):
+    """在副本上画自检参考线（地平线 / 建筑基线）；**只用于 debug 文件，交付图不含**。"""
+    from PIL import ImageDraw
+    d = ImageDraw.Draw(img)
+    d.line([(0, DEMO_HORIZON_Y), (DEMO_W, DEMO_HORIZON_Y)],
+           fill=(60, 200, 220), width=2)                 # 地平线 ground_y
+    d.line([(0, DEMO_BASELINE_Y), (DEMO_W, DEMO_BASELINE_Y)],
+           fill=(240, 60, 200), width=2)                 # 建筑基线 ground_y+96
+    return img
+
+
 def compose_mode():
-    """合成模式入口：出 `bake_game_screen.png` 与 `bake_game_screen_night.png`。"""
+    """合成模式入口：出 `bake_game_screen.png` 与 `bake_game_screen_night.png`。
+
+    `BAKE_DEMO_DEBUG=1` 时**另存**参考线调试图（`*_debug.png`），交付图始终无参考线。
+    """
     os.makedirs(TEMP, exist_ok=True)
     day, r1 = _compose_screen(False)
     night, r2 = _compose_screen(True)
@@ -982,11 +1075,33 @@ def compose_mode():
     p2 = os.path.join(TEMP, "bake_game_screen_night.png")
     day.save(p1)
     night.save(p2)
+    if os.environ.get("BAKE_DEMO_DEBUG"):
+        from PIL import Image
+        _draw_ref_lines(day.copy()).save(
+            os.path.join(TEMP, "bake_game_screen_debug.png"))
+        _draw_ref_lines(night.copy()).save(
+            os.path.join(TEMP, "bake_game_screen_night_debug.png"))
     with open(os.path.join(OUT_ROOT, "_game_screen_report.json"), "w",
               encoding="utf-8") as fh:
         json.dump(dict(day=r1, night=r2), fh, ensure_ascii=False, indent=1)
     print("   -> %s  %dx%d" % (p1, *day.size))
     print("   -> %s  %dx%d" % (p2, *night.size))
+    # 自检报错：相邻包围盒相交 / 基线不在 ground_y+96 / 越界
+    bad = []
+    for tag, r in (("昼", r1), ("夜", r2)):
+        for o in r["overlaps"]:
+            bad.append("[%s] 相邻建筑包围盒相交 %s↔%s（x %dpx）"
+                       % (tag, o["a"], o["b"], o["overlap_x_px"]))
+        if not r["baseline_ok"]:
+            bad.append("[%s] 建筑基线 ≠ 地平线+96" % tag)
+        if r["out_of_frame"]:
+            bad.append("[%s] 建筑越出画幅: %s" % (tag, r["out_of_frame"]))
+    if bad:
+        print("!! 合成自检不过：")
+        for b in sorted(set(bad)):
+            print("   - %s" % b)
+        sys.exit(1)
+    print("   自检 OK：相邻包围盒零相交 / 基线=地平线+96 / 未越界 / 无角色")
     print("BAKE_COMPOSE_OK")
 
 

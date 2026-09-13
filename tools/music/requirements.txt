@@ -1,0 +1,15 @@
+# 音乐管线离线依赖
+#
+# 注意：**必须用 Python 3.12 的正式发行版解释器**
+#   C:\Users\fanbo\AppData\Local\Programs\Python\Python312\python.exe
+# PATH 里的 `python` 可能是别的发行版（本机曾踩到 Inkscape 自带解释器缺库）。
+#
+# 安装：pip install -r tools/music/requirements.txt
+
+numpy>=2.0           # 全部 DSP 与谱面运算的基础
+scipy>=1.13          # 滤波器 / FFT 卷积 / 重采样（K 加权、混响、真峰值过采样）
+soundfile>=0.12      # WAV/FLAC/OGG 读写（libsndfile 绑定；需 1.1+ 才支持 Ogg Vorbis）
+mido>=1.3            # MIDI 文件写入（分轨渲染的输入）
+requests>=2.31       # 工具链下载（与 curl 互为兜底）
+pyloudnorm>=0.1.1    # BS.1770 的独立实现——用于**交叉验证**我们自己的 LUFS
+imageio-ffmpeg>=0.4  # 提供 ffmpeg 可执行文件：高质量 OGG Vorbis 编码（libvorbis q=7）

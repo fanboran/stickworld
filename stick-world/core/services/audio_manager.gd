@@ -39,6 +39,12 @@ var _unfocused_muted: bool = false
 ## 静音前的主音量（恢复用）
 var _master_before_mute: float = 1.0
 
+## 音乐整体压限量（dB）。暂停 / 战斗音效让路时由 MusicDirector 请求。
+## 放在这里而不是让总监自己写总线的原因：**总线音量的唯一消费方是本管理器**
+## （设置面板的音量滑条也走这里），两处都写会互相覆盖。
+var _music_duck_db: float = 0.0
+var _duck_tween: Tween = null
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
@@ -99,20 +105,51 @@ func _ensure_buses() -> void:
 
 
 ## 通道音量 → AudioServer 总线（线性 0~1 → dB）。
+## BGM 总线额外叠加音乐压限量（见 _music_duck_db）。
 func _apply_volumes_to_buses() -> void:
 	_set_bus_volume_db(BUS_MASTER, float(_volumes["master"]))
-	_set_bus_volume_db(BUS_BGM, float(_volumes["bgm"]))
+	_set_bus_volume_db(BUS_BGM, float(_volumes["bgm"]), _music_duck_db)
 	_set_bus_volume_db(BUS_SFX, float(_volumes["sfx"]))
 
 
-func _set_bus_volume_db(bus_name: String, linear: float) -> void:
+func _set_bus_volume_db(bus_name: String, linear: float,
+		extra_db: float = 0.0) -> void:
 	var idx: int = AudioServer.get_bus_index(bus_name)
 	if idx < 0:
 		return
-	AudioServer.set_bus_volume_db(idx, _to_db(linear))
+	AudioServer.set_bus_volume_db(idx, _to_db(linear) + extra_db)
+
+
+## 设置音乐整体压限量（dB，负数=压低）。fade_s>0 时用等功率曲线过渡，
+## 避免压限本身听出"台阶"。音量滑条变动时会自动带上当前压限量。
+func set_music_duck_db(db: float, fade_s: float = 0.0) -> void:
+	_music_duck_db = db
+	var idx: int = AudioServer.get_bus_index(BUS_BGM)
+	if idx < 0:
+		return
+	var target: float = _to_db(float(_volumes["bgm"])) + db
+	if _duck_tween != null and _duck_tween.is_valid():
+		_duck_tween.kill()
+	if fade_s <= 0.0:
+		AudioServer.set_bus_volume_db(idx, target)
+		return
+	_duck_tween = create_tween()
+	_duck_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	_duck_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_duck_tween.tween_method(
+		func(v: float) -> void: AudioServer.set_bus_volume_db(idx, v),
+		AudioServer.get_bus_volume_db(idx), target, fade_s)
+
+
+func get_music_duck_db() -> float:
+	return _music_duck_db
 
 
 # ─────────────────────────────── BGM 播放 ────────────────────────────────
+#
+# 说明：游戏音乐的播放**已交给 MusicDirector**（分层/交叉淡化/自适应强度都在那边）。
+# 本节的 play_bgm/stop_bgm 保留为"单文件直放"的底层能力（调试、单曲试听、
+# 未来的一次性过场），不再被游戏流程调用。音量仍然走同一条 BGM 总线。
 
 func play_bgm(path: String, loop: bool = true) -> void:
 	if _bgm_player == null:
@@ -313,13 +350,13 @@ func play_event(event_name: String) -> void:
 	_event_players[event_name] = player
 
 
-## 接线 EventBus 全局生命周期信号（战斗/存档；UI 点击由 StickKit 直接调 play_event）
+## 接线 EventBus 全局生命周期信号（战斗/存档；UI 点击由 StickKit 直接调 play_event）。
+## 音乐不在这里放：曲目选择与分层由 MusicDirector 负责（见 core/services/music_director.gd），
+## 本管理器只管音量与音效。
 func _wire_event_bus() -> void:
 	if not EventBus or not EventBus.has_signal("battle_started"):
 		return
-	EventBus.game_started.connect(func() -> void:
-		play_event("game_started")
-		play_bgm("res://assets/audio/bgm/ambient_pad.wav"))
+	EventBus.game_started.connect(func() -> void: play_event("game_started"))
 	EventBus.game_saved.connect(func(_slot: int) -> void: play_event("game_saved"))
 	EventBus.battle_started.connect(func(_battle_id: String) -> void: play_event("battle_started"))
 	EventBus.battle_ended.connect(func(_battle_id: String, victory: bool) -> void:

@@ -168,6 +168,9 @@ stick-world/Godot/
 # git worktree（F:\VSCode\game-2\.worktrees\ 与 .temp\ 下的多分支工作区，不入库）
 .worktrees/
 .temp/
+# 音乐管线的中间产物（分轨 WAV / 母带 WAV / MIDI / 报告，体积极大）
+# 交付件在 stick-world/assets/audio/bgm/ 与 ambience/，那些要进版本库
+tools/music/out/
 
 # 导出构建产物（export/ 下的说明文档仍入库，只忽略二进制产物）
 export/**/*.exe

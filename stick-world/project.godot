@@ -27,6 +27,7 @@ ConfigManager="*res://core/autoload/config_manager.gd"
 TimeManager="*res://core/autoload/time_manager.gd"
 BalanceConfig="*res://core/autoload/balance_config.gd"
 AudioManager="*res://core/services/audio_manager.gd"
+MusicDirector="*res://core/services/music_director.gd"
 SaveManager="*res://core/autoload/save_manager.gd"
 DebugApi="*res://modules/debug_gui/api.gd"
 

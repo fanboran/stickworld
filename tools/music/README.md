@@ -26,7 +26,11 @@ python tools/music/render_all.py
 python tools/music/qa_audio.py           # 出表
 python tools/music/qa_audio.py --check   # 有违规即非零退出（可进 CI）
 
-# 5) 音色体检（改混音配方前后对比八度带分布，别凭感觉调 EQ）
+# 5) 试听样带（把分层叠好、编码成能直接双击播放的 MP3，供人听验收）
+python tools/music/preview.py
+python tools/music/preview.py --cue field_day --tier-cues field_day
+
+# 6) 音色体检（改混音配方前后对比八度带分布，别凭感觉调 EQ）
 python tools/music/tone_check.py
 python tools/music/tone_check.py --stems interior
 python tools/music/tone_check.py --raw C4v10.flac
@@ -59,6 +63,7 @@ python tools/music/qa_audio.py --delivered             # 检查交付的 OGG 而
 | `musiclib/loudness.py` | 客观指标（BS.1770 LUFS / 真峰值 / LRA / 刺耳度 / 接缝 / 单声道） |
 | `musiclib/export.py` | OGG 编码 + 引擎清单生成 |
 | `render_all.py` | 总编排 |
+| `preview.py` | **试听样带**：分层叠好→MP3（全层版/分层同增益对比/串烧/循环三遍验接缝） |
 | `qa_audio.py` | 质检报告与阈值判定 |
 | `tone_check.py` | 音色体检（八度带分布 / 频谱斜率 / 有源帧谱质心） |
 | `ambience.py` | 环境音层生成（风/鸟/蝉/夜虫/海浪/溪流） |

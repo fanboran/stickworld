@@ -30,8 +30,8 @@ MIX_REPORT = OUT / "mix_report.json"
 
 # 阈值（音乐总线口径）。见质检规范 §五。
 THRESHOLDS = {
-    "integrated_lufs": {"min": -19.0, "max": -15.5},
-    "true_peak_dbtp": {"max": -1.1},
+    "integrated_lufs": {"min": -17.5, "max": -13.0},
+    "true_peak_dbtp": {"max": -0.9},
     "loudness_range_lu": {"min": 0.5, "max": 10.0},
     "crest_factor_db": {"min": 7.0},
     "clipped_samples": {"max": 0},

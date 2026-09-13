@@ -123,6 +123,20 @@ def _envelope(rect: np.ndarray, fs: int, attack_ms: float,
     return np.maximum(_pole(attack_ms), _pole(release_ms))
 
 
+def _detector(x: np.ndarray) -> np.ndarray:
+    """峰值检测信号：立体声取**声道最大值**，不是左右求和。
+
+    这是一个容易踩、而且踩了不报错的坑：左右声道去相关之后（经过混响与 M/S
+    展宽几乎必然如此），两声道之和的峰值可能远低于单个声道的峰值——限幅器
+    于是"看不见"该压的峰，限幅形同虚设；峰值控制被甩给了链子后面的静态降增益，
+    结果是**整个混音白白降下来 1~2dB**（实测钢琴独奏曲目就吃过这个亏，
+    在真峰值上限前只能到 -16.8 LUFS 而非目标的 -15.0）。
+    检测用声道最大值、增益同时施加到两个声道（联动限幅），既压得住又不破坏声像。
+    """
+    a = np.abs(x)
+    return a if a.ndim == 1 else a.max(axis=1)
+
+
 def compressor(x: np.ndarray, fs: int, threshold_db: float = -18.0,
                ratio: float = 2.0, attack_ms: float = 25.0,
                release_ms: float = 250.0, makeup_db: float = 0.0,
@@ -132,8 +146,7 @@ def compressor(x: np.ndarray, fs: int, threshold_db: float = -18.0,
     对 Pad/弦乐垫用很轻的档位（ratio 1.5~2）就够：目的是把长音的起伏压平一点，
     让它在钢琴下面当"床"，而不是真的去压缩动态。
     """
-    mono = np.abs(to_mono(x))
-    env = _envelope(mono, fs, attack_ms, release_ms)
+    env = _envelope(_detector(x), fs, attack_ms, release_ms)
     env_db = 20.0 * np.log10(env + 1e-12)
     over = env_db - threshold_db
     # 软拐点：拐点宽度内二次过渡，之外按比率压缩
@@ -160,15 +173,20 @@ def soft_clip(x: np.ndarray, drive: float = 1.0, mix: float = 1.0) -> np.ndarray
 
 
 def limiter(x: np.ndarray, fs: int, ceiling_db: float = -1.0,
-            release_ms: float = 120.0) -> np.ndarray:
-    """峰值限制器（前瞻 + 平滑释放）。母带最后一关，保证真峰值不越界。"""
+            release_ms: float = 120.0, return_gr: bool = False):
+    """峰值限制器（前瞻 + 平滑释放）。母带最后一关，保证真峰值不越界。
+
+    return_gr=True 时额外返回"最大增益衰减量"（dB，≤0）。这个数应该被报出来：
+    提响度与保动态是一对矛盾，压了多少必须可见，否则"变响了"背后牺牲了什么
+    就没人知道了。
+    """
     ceil = 10.0 ** (ceiling_db / 20.0)
-    mono = np.abs(to_mono(x))
-    env = _envelope(mono, fs, 0.2, release_ms)
+    env = _envelope(_detector(x), fs, 0.2, release_ms)
     gain = np.minimum(1.0, ceil / (env + 1e-12))
-    if x.ndim == 2:
-        gain = gain[:, None]
-    return x * gain.astype(x.dtype)
+    gr_db = 20.0 * float(np.log10(float(np.min(gain)) + 1e-12)) if gain.size else 0.0
+    g = gain[:, None] if x.ndim == 2 else gain
+    y = x * g.astype(x.dtype)
+    return (y, gr_db) if return_gr else y
 
 
 def normalize_peak(x: np.ndarray, target_db: float = -1.0) -> np.ndarray:

@@ -58,7 +58,6 @@ common/physics_ticks_per_second=30
 
 [rendering]
 
-rendering_device/driver.windows="vulkan"
 renderer/rendering_method.mobile="forward_plus"
 anti_aliasing/quality/msaa_2d=2
 anti_aliasing/quality/msaa_3d=2

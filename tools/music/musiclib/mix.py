@@ -130,14 +130,30 @@ STEM_RECIPES = {
 # 总线（母带）配方。目标响度按游戏惯例明显低于流媒体（见交付规范）：
 # 要给音效/语音留 headroom，也要保住自适应音乐赖以生存的动态对比。
 BUS = {
-    "glue": dict(threshold_db=-15.0, ratio=1.55, attack_ms=35.0,
-                 release_ms=320.0, makeup_db=0.0),
+    # 胶合压缩：把各曲目之间的响度差收窄。
+    # 为什么需要它——钢琴是衰减型素材，峰值比平均响度高 13~16dB；
+    # 在真峰值上限固定（-1 dBTP）的前提下，**动态越大就越响不起来**。
+    # 实测部分曲子（如《灯下》）靠归一只能到 -16.5 LUFS，比目标低 1.5dB。
+    # 这里用很轻的总线压缩（ratio 1.7）先收 1dB 左右的峰均比，
+    # 再让限制器只做"最后 1dB"的事——比把限制器推狠要干净得多。
+    # 想更响就调这个；代价是动态（"柔和"）会被牺牲一点，两者不可兼得。
+    "glue": dict(threshold_db=-20.0, ratio=1.7, attack_ms=40.0,
+                 release_ms=380.0, makeup_db=0.5),
     "tilt_low_db": 0.6,
     "tilt_high_db": -1.2,
     "tilt_pivot": 900.0,
     "soft": dict(drive=1.12, mix=0.22),
-    "target_lufs": -17.0,
-    "tp_ceiling_db": -1.2,
+    # 交付响度按"流媒体标准"而不是"游戏总线留白"来定：文件响度是**素材属性**，
+    # 把它放到游戏混音里的正确位置是音量滑条的职责（BGM 通道默认 0.8 ≈ -1.9dB）。
+    # 早先按 -17 LUFS 交付，等于把"留 headroom"这件事烘焙进了素材，
+    # 结果在播放器里比商业音乐明显小声（用户反馈"略小"），在游戏里又被滑条再压一次。
+    "target_lufs": -15.0,
+    "tp_ceiling_db": -1.0,
+    # 限制器把**采样峰值**压到真峰值上限之下这么多，给采样间过冲留空间。
+    # 少了这一步，限制器"压了但真峰值还是超"，只能靠整体降增益收场——
+    # 结果是高动态的曲子（钢琴独奏最明显）永远到不了目标响度，白白丢掉 1~2dB。
+    # 0.8dB 是常见的过冲余量（4× 过采样下 ABA 重建的过冲一般 <1dB）。
+    "limiter_headroom_db": 0.8,
     "pre_gain_max_db": 30.0,
 }
 
@@ -269,7 +285,7 @@ def process_stem(x: np.ndarray, fs: int, r: StemRecipe,
 # ─────────────────────────────── 总线 ────────────────────────────────
 
 def master_bus(mix: np.ndarray, fs: int, bus: dict | None = None,
-               target_lufs: float | None = None) -> np.ndarray:
+               target_lufs: float | None = None) -> tuple:
     """总线母带：**先做增益分级，再处理**。
 
     为什么不能"先压再补音量"：压缩器、软饱和都是非线性环节，输入电平
@@ -285,10 +301,12 @@ def master_bus(mix: np.ndarray, fs: int, bus: dict | None = None,
     y = mix
 
     # ① 前置增益：抬到比目标高 3dB（给母带链留出被压缩的量）
+    total_gain = 0.0
     cur = loudness.integrated_lufs(y, fs)
     if np.isfinite(cur):
         pre = float(np.clip((tgt + 3.0) - cur, -36.0, b["pre_gain_max_db"]))
         y = dsp.apply_gain_db(y, pre)
+        total_gain += pre
 
     # ② 处理链
     y = dsp.compressor(y, fs, **b["glue"])
@@ -298,9 +316,13 @@ def master_bus(mix: np.ndarray, fs: int, bus: dict | None = None,
     # ③ 精修到目标响度（此时电平已接近，修正量应很小）
     cur = loudness.integrated_lufs(y, fs)
     if np.isfinite(cur):
-        y = dsp.apply_gain_db(y, float(np.clip(tgt - cur, -12.0, 12.0)))
+        fine = float(np.clip(tgt - cur, -12.0, 12.0))
+        y = dsp.apply_gain_db(y, fine)
+        total_gain += fine
 
-    y = dsp.limiter(y, fs, ceiling_db=b["tp_ceiling_db"])
+    y, gr_db = dsp.limiter(
+        y, fs, ceiling_db=b["tp_ceiling_db"] - b["limiter_headroom_db"],
+        return_gr=True)
 
     # ④ 真峰值兜底：限制器管的是**采样峰值**，采样间过冲仍可能越线。
     # 用一次静态增益修正把真峰值压回上限之下（静态增益不影响动态结构，
@@ -308,7 +330,7 @@ def master_bus(mix: np.ndarray, fs: int, bus: dict | None = None,
     tp = loudness.true_peak_dbfs(y, fs)
     if np.isfinite(tp) and tp > b["tp_ceiling_db"]:
         y = dsp.apply_gain_db(y, b["tp_ceiling_db"] - tp)
-    return y.astype(np.float32)
+    return y.astype(np.float32), gr_db, total_gain
 
 
 # ─────────────────────────── 循环尾巴折回 ────────────────────────────
@@ -368,10 +390,13 @@ def wrap_loop_tail(x: np.ndarray, fs: int, loop_start_sample: int,
 def mix_cue(cue, stem_paths: dict, fs: int = 48000,
             overrides: dict | None = None, bus: dict | None = None,
             target_lufs: float | None = None,
-            wrap_tail: bool = True) -> tuple:
+            wrap_tail: bool = True, return_stems: bool = False) -> tuple:
     """把某个 cue 的分轨混成成品。
 
-    返回 (mix, report)；mix 为 (n, 2) float32，report 含各轨电平与总线指标。
+    返回 (mix, report)；return_stems=True 时再返回第三项 processed
+    （{层名: 该层处理后的完整音频，未经求和与总线处理}）。
+    试听样带需要它来做"同一增益下的分层 A/B"——分别归一化会让各档听起来
+    一样响，反而听不出叠层的差别。
     """
     overrides = overrides or {}
     loaded = {}
@@ -413,8 +438,10 @@ def mix_cue(cue, stem_paths: dict, fs: int = 48000,
     for y in processed.values():
         mix += y
 
-    mix = master_bus(mix, fs, bus, target_lufs)
-
+    # ── 循环整形必须在母带链**之前** ──
+    # 尾巴折回是"把循环体之后的余音加到开头"，这是一次**相加**，会让开头变响、
+    # 峰值变高。若先母带（含限制器）再折回，新长出来的峰值就没人管了——
+    # 限制器只对它之前的信号负责。所以顺序是：分层处理 → 求和 → 循环整形 → 母带。
     loop_start = int(round(cue.seconds(cue.loop_start_beat) * fs))
     loop_end = int(round(cue.seconds(cue.loop_end_beat) * fs))
     if wrap_tail and loop_end < len(mix):
@@ -423,7 +450,13 @@ def mix_cue(cue, stem_paths: dict, fs: int = 48000,
         # 一次性短句：裁尾静音 + 淡出（不是循环曲，不需要尾巴折回）
         mix = trim_and_fade(mix, fs)
 
+    mix, gr_db, total_gain = master_bus(mix, fs, bus, target_lufs)
+
     report = {
+        "limiter_max_gr_db": round(gr_db, 2),
+        "applied_gain_db": round(total_gain, 2),
+        "tp_ceiling_db": float(bus.get("tp_ceiling_db", BUS["tp_ceiling_db"])
+                               if bus else BUS["tp_ceiling_db"]),
         "cue_id": cue.cue_id,
         "title": cue.title,
         "bpm": cue.bpm,
@@ -438,6 +471,8 @@ def mix_cue(cue, stem_paths: dict, fs: int = 48000,
                            / cue.beats_per_bar, 3),
     }
     report.update(loudness.full_report(mix, fs, loop_start, loop_end))
+    if return_stems:
+        return mix, report, processed
     return mix, report
 
 

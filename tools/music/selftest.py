@@ -138,8 +138,20 @@ def test_dsp() -> None:
     check("压缩器产生负增益 (>3dB)", gr < -3.0, "%.2f dB" % gr)
 
     lim = dsp.limiter(stereo(tone(110.0, 1.0, 3.0)), SR, ceiling_db=-1.0)
-    check("限制器不越 ceiling", loudness.sample_peak_dbfs(lim) <= -0.9,
+    check("限制器不越 ceiling（相关立体声）",
+          loudness.sample_peak_dbfs(lim) <= -0.9,
           "%.2f dB" % loudness.sample_peak_dbfs(lim))
+
+    # **去相关立体声**是限幅器最容易失手的情形：左右相位不同时，
+    # "左右求和"的峰值远低于单声道峰值。若检测信号用求和，限幅器会看不见
+    # 该压的峰（实测漏压到 +0.78 dBFS），整个混音只能靠事后降增益收场。
+    hot_l = tone(220.0, 1.0, 3.0)
+    hot_r = np.roll(hot_l, 600)            # 右声道整体错开相位 → 强去相关
+    lim2 = dsp.limiter(np.stack([hot_l, hot_r], axis=1), SR, ceiling_db=-1.0)
+    check("限制器不越 ceiling（去相关立体声）",
+          loudness.sample_peak_dbfs(lim2) <= -0.9,
+          "%.2f dB（这是踩过的坑：曾漏压到 +0.78dB）"
+          % loudness.sample_peak_dbfs(lim2))
 
     # M/S 展宽：**分开测**低频与中频。
     # 测试信号用"左右增益不同的纯音"而不是"纯音+去相关噪声"：后者会往

@@ -57,9 +57,9 @@ def process_cue(cue, skip_render: bool = False, skip_ogg: bool = False,
         render_info = R.render_cue(cue, midi_map, stems_dir)
 
     overrides = CUES.MIX_OVERRIDES.get(cid, {})
-    # 一次性 sting 比循环曲目略高 1dB：事件强调靠的是瞬态与不被掩蔽，
+    # 一次性 sting 比循环曲目高 1dB（-14 vs -15）：事件强调靠的是瞬态与不被掩蔽，
     # 不靠绝对响度，所以不把它做成"比音乐响很多"的号角。
-    target = None if is_loop else -16.0
+    target = None if is_loop else -14.0
     audio, report = MIX.mix_cue(cue, {n: i["wav"] for n, i in render_info.items()},
                                 overrides=overrides, target_lufs=target,
                                 wrap_tail=is_loop)

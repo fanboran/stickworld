@@ -12,7 +12,7 @@
       "loop_offset": 0.0,
       "key": "D major",
       "duration_s": 116.364,
-      "loudness_lufs": -16.99,
+      "loudness_lufs": -15.0,
       "layers": [
         {
           "name": "piano",
@@ -38,7 +38,7 @@
       "loop_offset": 0.0,
       "key": "D major",
       "duration_s": 106.667,
-      "loudness_lufs": -16.99,
+      "loudness_lufs": -15.0,
       "layers": [
         {
           "name": "piano",
@@ -76,7 +76,7 @@
       "loop_offset": 0.0,
       "key": "B minor",
       "duration_s": 121.905,
-      "loudness_lufs": -16.99,
+      "loudness_lufs": -15.0,
       "layers": [
         {
           "name": "piano",
@@ -108,7 +108,7 @@
       "loop_offset": 0.0,
       "key": "G major",
       "duration_s": 91.429,
-      "loudness_lufs": -16.99,
+      "loudness_lufs": -15.06,
       "layers": [
         {
           "name": "piano",
@@ -146,7 +146,7 @@
       "loop_offset": 0.0,
       "key": "F major",
       "duration_s": 132.395,
-      "loudness_lufs": -17.0,
+      "loudness_lufs": -15.03,
       "layers": [
         {
           "name": "piano",
@@ -166,7 +166,7 @@
       "loop_offset": 0.0,
       "key": "C major",
       "duration_s": 120.0,
-      "loudness_lufs": -16.98,
+      "loudness_lufs": -15.0,
       "layers": [
         {
           "name": "pad",
@@ -204,7 +204,7 @@
       "loop_offset": 0.0,
       "key": "D minor",
       "duration_s": 73.846,
-      "loudness_lufs": -16.98,
+      "loudness_lufs": -15.0,
       "layers": [
         {
           "name": "piano",
@@ -241,8 +241,8 @@
       "loop": false,
       "loop_offset": 0.0,
       "key": "D major",
-      "duration_s": 8.742,
-      "loudness_lufs": -16.0,
+      "duration_s": 6.682,
+      "loudness_lufs": -14.0,
       "layers": [
         {
           "name": "bells",
@@ -273,8 +273,8 @@
       "loop": false,
       "loop_offset": 0.0,
       "key": "B minor",
-      "duration_s": 10.038,
-      "loudness_lufs": -16.0,
+      "duration_s": 8.315,
+      "loudness_lufs": -14.0,
       "layers": [
         {
           "name": "piano",

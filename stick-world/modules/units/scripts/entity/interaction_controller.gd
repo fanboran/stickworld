@@ -66,12 +66,13 @@ func try_interact() -> void:
 			else:
 				_entity.set_carrying(true)
 		"barracks":
-			# 招兵（成败与原因通知由 RecruitManager 内发，交互层零通知职责）
+			# 招兵（成败与原因通知由 RecruitManager 内发，交互层零通知职责；
+			# 但**听觉反馈**在这里：花资源招兵是重要动作，成败各给一声）
 			if _entity.get_organization_api() != null \
 					and _entity.get_organization_api().has_method("recruit"):
-				_entity.get_organization_api().recruit()
-				# 听觉确认：花资源招兵是个重要的玩家动作，不该静默
-				AudioManager.play_event("ui_confirm")
+				var result: Variant = _entity.get_organization_api().recruit()
+				var ok: bool = result is Dictionary and bool((result as Dictionary).get("ok", false))
+				AudioManager.play_event("ui_confirm" if ok else "ui_denied")
 		"resource":
 			_try_harvest_resource_node(target as Node2D)
 
@@ -93,8 +94,11 @@ func _try_harvest_resource_node(rn: Node2D) -> void:
 		return
 	var gained: int = rn.harvest(HARVEST_PER_ACTION)
 	if gained <= 0:
-		# 采不到（枯竭/超距）要有明确负反馈，否则玩家以为按键失灵
+		# 采不到（枯竭/超距）要有明确负反馈，否则玩家以为按键失灵。
+		# 同时给一个短动作锁：按住 F 时 try_hold_interact 每物理帧重试，
+		# 不锁就会把"拒绝"变成连打（即使有节流也是 6~7 次/秒的嗡嗡声）
 		AudioManager.play_event("ui_denied")
+		_entity.set_player_build_timer(0.6)
 		return
 	var api: Node = _get_resources_api()
 	if api != null and api.has_method("produce"):

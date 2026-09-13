@@ -441,7 +441,7 @@ const SFX_POLICY := {
 	"unit_hurt":         {"prio":  7, "min_ms": 90,   "merge_slots": 2, "jitter": 0.12, "spatial": true},
 	"weapon_swoosh":     {"prio":  4, "min_ms": 50,   "merge_slots": 2, "jitter": 0.12, "spatial": true},
 	"weapon_thump":      {"prio":  7, "min_ms": 120,  "merge_slots": 2, "jitter": 0.10, "spatial": true},
-	"weapon_clang":      {"prio":  4, "min_ms": 80,   "merge_slots": 2, "jitter": 0.08, "spatial": true},
+	"weapon_clang":      {"prio":  4, "min_ms": 1500, "merge_slots": 2, "jitter": 0.08, "spatial": true},
 	"weapon_fall":       {"prio":  7, "min_ms": 120,  "merge_slots": 1, "jitter": 0.08, "spatial": true},
 	"weapon_headbutt":   {"prio":  7, "min_ms": 120,  "merge_slots": 1, "jitter": 0.08, "spatial": true},
 	"weapon_blast":      {"prio":  7, "min_ms": 150,  "merge_slots": 2, "jitter": 0.08, "spatial": true},
@@ -591,6 +591,10 @@ func _ensure_merge_timer() -> void:
 func _flush_merge_window() -> void:
 	var batch: Dictionary = _merge_pending
 	_merge_pending = {}
+	# 收尾时已暂停：整批丢弃。否则这批声部会在暂停中被"起播"（player 是 PAUSABLE），
+	# 恢复瞬间一起补响，听起来像"pause 把声音攒起来了"
+	if get_tree() != null and get_tree().paused:
+		return
 	for event_name in batch.keys():
 		var slot: Dictionary = batch[event_name]
 		var n: int = int(slot.get("count", 0))

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """写实西幻建筑程序化 PBR 材质库 v3.1（Blender 5.2 / EEVEE）。
 
-key 家族（共 **57** 个；`ORDER` 即注册顺序，`audit()` 打印全部特征尺寸）
+key 家族（共 **64** 个；`ORDER` 即注册顺序，`audit()` 打印全部特征尺寸）
 ---------------------------------------------------------------
 * **结构 26**：茅草/瓦/木/抹灰/石砌/砖/铁 + 窗玻璃/暗腔/水/灯 + 地面/草簇/绿植…
 * **道具 10**（二轮追加）：染色土布×3 / 柳条 / 陶 / 叶菜 / 根菜 / 鱼 / 面包 / 染缸液面
@@ -14,6 +14,10 @@ key 家族（共 **57** 个；`ORDER` 即注册顺序，`audit()` 打印全部�
 * **道具系 3**（三轮追加 C）：`glow_water`（法阵/魔力泉发光液面）/ `parchment`
   （书页/卷轴/标签）/ `leather`（书皮/鞍具/皮带）—— 供道具层三轮摆件用；
   同为摆件材质，**既不挂 AGE 也不挂 OBJ_VAR**。
+* **自然物 7**（四轮追加）：`glazing_win`（**真透明窗玻璃**）/ `bark`（树皮）/
+  `leaf_card`（**alpha 裁切树冠叶卡**）/ `rock`（天然岩体）/ `copper_ore`（铜矿脉）/
+  `gold_ore`（金矿脉）/ `grass_band`（野外地被草带）。其中 `glazing_win`、
+  `leaf_card` 走 alpha 混合（`ALPHA_KEYS`），前者另挂 `GLASS_KEYS`。
 
 尺度契约（本轮重定标，一切 feature 尺寸都必须走这里的换算）
 --------------------------------------------------------
@@ -1858,7 +1862,8 @@ def _b_dye_bath(b, gi, bsdf):
 # 否则在 76 px/m 下铅条会糊成一层灰雾、窗户读作一团色斑。
 
 #: 需要"瑞利折射 + 透射阴影"设置的 key（`_instance` 里调用 `_set_glass`）
-GLASS_KEYS = {'stained_glass', 'glass_lead', 'glass_clear', 'glass_bottle', 'crystal'}
+GLASS_KEYS = {'stained_glass', 'glass_lead', 'glass_clear', 'glass_bottle', 'crystal',
+              'glazing_win'}
 
 
 def _lead_grid(b, fu, fv, cw, ch, w_uv, soft=1.35):
@@ -1873,64 +1878,75 @@ def _lead_grid(b, fu, fv, cw, ch, w_uv, soft=1.35):
 
 
 def _lead_color(b, u, v, seed=43.0):
-    """铅条本体色：深铅灰 + 氧化微差（纯黑在 2D 立绘里读成"洞"）。"""
+    """铅条本体色：深铅灰 + 氧化微差（纯黑在 2D 立绘里读成"洞"）。
+
+    四轮把整体压暗一档（0.018~0.070）：铅条越深，宝石色块被"框"得越紧，
+    彩窗的对比与"闷"感就出来了（去乐高感靠这个与色板压暗一起给）。
+    """
     return b.mixc(b.noise(b.vec(b.mul(u, 42.0), b.mul(v, 42.0), seed), 1.0, 3.0),
-                  (0.028, 0.028, 0.034), (0.098, 0.098, 0.110))
+                  (0.018, 0.018, 0.022), (0.070, 0.070, 0.082))
 
 
 def _b_stained_glass(b, gi, bsdf):
-    """教堂彩窗：**多色宝石色块 + 铅条分格 + 微透光**。
+    """教堂彩窗（**仅 cathedral / chapel 使用** —— 创始人口径：不要彩色玻璃，
+    彩窗只留大教堂）：**深邃宝石色块 + 铅条分格 + 低透光**。
 
-    读法（从粗到细）：① 每块 18×20 cm 的饱和宝石色块（25% 下 3.4 px，靠**饱和色相**
+    读法（从粗到细）：① 每块 18×20 cm 的**深宝石色块**（25% 下 3.4 px，靠**饱和色相**
     而不是亮度跳变读出来）；② 1.8 cm 铅条（深色细网 + 受光滚边，把色块"框"住）；
     ③ 块内"背光"（格心亮、格边暗，像一块透光的玻璃）、气泡、外侧灰泥雨渍。
 
-    **透射只给 0.22**（实测教训）：EEVEE 的屏幕空间折射在"背后没东西"时会把窗格整段
+    **去"乐高感"三刀**（四轮）：色板整体压暗一档并向中性收（红/蓝/绿都从"正色"落到
+    "深宝石色"，白/金去掉高亮面）；块内亮度上限从 1.15 压到 0.98、自发光托底从 0.75
+    压到 0.45 —— 整扇窗更暗更闷，读作"教堂里嵌着的旧玻璃"而不是"彩色塑料砖"；
+    铅条更黑、滚边更利（对比提上去，格线才抓得住色块）。
+
+    **透射只给 0.16**（实测教训）：EEVEE 的屏幕空间折射在"背后没东西"时会把窗格整段
     渲没 —— 透射 0.62 时同一扇窗只有中间几行还看得见，上下变成背景色（读作"窗子破了两块"）。
-    彩窗在游戏里的典型看法是"背光发亮的彩色窗格"，所以由**自发光托底 0.85 + 低透射**立住，
-    透射只负责"这不是一块不透明的彩色板"。
+    彩窗在游戏里的典型看法是"背光发亮的彩色窗格"，所以由**自发光托底 + 低透射**立住。
     """
     u, v = _uv(b, gi)
     cw, ch = uv_cm(18.0), uv_cm(20.0)
     c = _cells(b, u, v, cw, ch, stagger=0.5, seed=5.0, jitter=0.22)
     r1, r2 = c['rand'], c['rand2']
-    lw = uv_cm(1.8)
+    lw = uv_cm(2.4)                       # 铅条加粗（去乐高感：格线抓得住色块）
     came, d = _lead_grid(b, c['fu'], c['fv'], cw, ch, lw)
 
-    # ---- 宝石色板：红/蓝/绿/琥珀/紫/青/金/灰白玉（段间留软过渡 = 混色玻璃）
-    pane = b.mixc(b.ss(r1, 0.00, 0.13), (0.700, 0.048, 0.038), (0.060, 0.085, 0.600))
-    pane = b.mixc(b.ss(r1, 0.13, 0.28), pane, (0.035, 0.380, 0.145))
-    pane = b.mixc(b.ss(r1, 0.28, 0.44), pane, (0.880, 0.415, 0.038))
-    pane = b.mixc(b.ss(r1, 0.44, 0.58), pane, (0.360, 0.060, 0.560))
-    pane = b.mixc(b.ss(r1, 0.58, 0.72), pane, (0.025, 0.340, 0.370))
-    pane = b.mixc(b.ss(r1, 0.72, 0.86), pane, (0.860, 0.700, 0.260))
-    pane = b.mixc(b.ss(r1, 0.86, 0.94), pane, (0.780, 0.755, 0.670))
+    # ---- 深宝石色板：红/蓝/绿/琥珀/紫/青/暗金/暗玉（色相数减少 + 整体压暗 → 去乐高感）
+    pane = b.mixc(b.ss(r1, 0.00, 0.13), (0.330, 0.045, 0.048), (0.040, 0.062, 0.270))
+    pane = b.mixc(b.ss(r1, 0.13, 0.28), pane, (0.030, 0.170, 0.092))
+    pane = b.mixc(b.ss(r1, 0.28, 0.44), pane, (0.400, 0.200, 0.040))
+    pane = b.mixc(b.ss(r1, 0.44, 0.58), pane, (0.165, 0.045, 0.240))
+    pane = b.mixc(b.ss(r1, 0.58, 0.72), pane, (0.030, 0.150, 0.175))
+    pane = b.mixc(b.ss(r1, 0.72, 0.86), pane, (0.300, 0.240, 0.100))
+    pane = b.mixc(b.ss(r1, 0.86, 0.94), pane, (0.200, 0.205, 0.190))
+    # 整体向深灰中性收 32%（去"彩色塑料砖"的最后一刀：饱和度与明度一起降）
+    pane = b.mixc(0.32, pane, (0.085, 0.088, 0.105))
     # 块内背光（格心亮、格边暗）+ 逐块深浅 + 吹制玻璃的水波
-    # 亮度上限刻意压在 1.15：抬到 1.3 时红/蓝会被推成粉紫（"宝石色"读成"糖果色"）
+    # 亮度上限压到 0.90：抬到 1.3 时红/蓝会被推成粉紫（"宝石色"读成"糖果色"）
     pdome = b.pow(b.mul(b.pisin(c['fu']), b.pisin(c['fv'])), 0.35)
-    pane = b.mul_c(pane, b.lin(pdome, 0.0, 1.0, 0.62, 1.15))
-    pane = b.mul_c(pane, b.lin(r2, 0.0, 1.0, 0.88, 1.12))
+    pane = b.mul_c(pane, b.lin(pdome, 0.0, 1.0, 0.42, 0.90))
+    pane = b.mul_c(pane, b.lin(r2, 0.0, 1.0, 0.82, 1.02))
     unev = b.noise(b.vec(b.mul(u, 9.0), b.mul(v, 9.0), 31.0), 1.0, 4.0)
-    pane = b.mul_c(pane, b.lin(unev, 0.25, 0.78, 0.86, 1.16))
+    pane = b.mul_c(pane, b.lin(unev, 0.25, 0.78, 0.80, 1.10))
     # 气泡/砂眼：**只往同色更亮里混**（混成白点会把彩窗读成"马赛克瓷砖"）
     bub = b.ss(b.noise(b.vec(b.mul(u, 26.0), b.mul(v, 26.0), 37.0), 1.0, 4.0), 0.74, 0.86)
-    pane = b.mixc(b.mul(bub, 0.22), pane, b.mul_c(pane, 1.30))
-    # 外侧灰泥/雨渍：只压明度不换色（朝街一面是脏的）
+    pane = b.mixc(b.mul(bub, 0.18), pane, b.mul_c(pane, 1.16))
+    # 外侧灰泥/雨渍：只压明度不换色（朝街一面是脏的；"闷"的来源之一）
     dirt = b.noise(b.vec(b.mul(u, 3.6), b.mul(v, 1.5), 41.0), 1.0, 5.0, 0.5)
-    pane = b.mul_c(pane, b.lin(b.mul(b.ss(dirt, 0.56, 0.82), 0.30), 0.0, 1.0, 1.0, 0.78))
+    pane = b.mul_c(pane, b.lin(b.mul(b.ss(dirt, 0.52, 0.82), 0.38), 0.0, 1.0, 1.0, 0.74))
 
-    # ---- 铅条：深铅灰 + 内侧一条受光滚边（读"细网"全靠它）
+    # ---- 铅条：深铅灰 + 内侧一条受光滚边（读"细网"全靠它；对比提到 0.52）
     lead = _lead_color(b, u, v)
     col = b.mixc(came, pane, lead)
-    hi = b.sub(1.0, b.ss(d, b.mul(lw, 0.34), b.mul(lw, 0.78)))
-    col = b.mixc(b.mul(hi, 0.42), col, (0.400, 0.425, 0.470))
+    hi = b.sub(1.0, b.ss(d, b.mul(lw, 0.30), b.mul(lw, 0.74)))
+    col = b.mixc(b.mul(hi, 0.52), col, (0.470, 0.500, 0.545))
 
     h = b.add(b.mul(came, 0.62), b.mul(b.sub(unev, 0.5), 0.20))
-    trans = b.mul(b.sub(1.0, came), 0.22)                  # 铅条不透光
-    emit = b.mixc(came, b.mul_c(pane, 0.78), (0.008, 0.008, 0.010))
+    trans = b.mul(b.sub(1.0, came), 0.16)                  # 铅条不透光
+    emit = b.mixc(came, b.mul_c(pane, 0.72), (0.006, 0.006, 0.008))
     rough = b.add(b.lin(pdome, 0.0, 1.0, 0.20, 0.09), b.mul(came, 0.30))
     return dict(color=col, rough=rough, metal=b.mul(came, 0.42),
-                trans=trans, emit=emit, emit_str=0.75, ior=1.52, spec=0.58,
+                trans=trans, emit=emit, emit_str=0.22, ior=1.52, spec=0.58,
                 normal=b.bump(h, 0.55, uv_cm(1.4)))
 
 
@@ -1940,6 +1956,15 @@ def _b_glass_lead(b, gi, bsdf):
     分格用 45° 旋转坐标 → 菱形 quarry（中世纪 leaded light 的标准做法）。
     玻璃是"吹制圆筒玻璃"：竖向波筋（厚薄不均）+ 气泡 + 浅绿灰污；
     铅条 1.6~2.2 cm，不透光、带受光滚边，把每块玻璃"框"出来。
+
+    **语义（四轮收窄）**：教堂/礼拜堂优先（与 `stained_glass` 同族）；其它建筑窗洞
+    请用真透明的 `glazing_win`。
+
+    **修"发黑"（四轮）**：旧版透射只给 0.30、基底偏深（0.30~0.64）、波筋还往下压到
+    0.60 倍 —— 道具 agent 实测"灯笼用 glass_lead 会发黑看不见灯芯"。这一版把
+    透射提到 **0.72**（灯芯/背后物件能透过来）、基底提亮（0.42~0.74）、波筋压深收敛到
+    0.72 倍、粗糙度降到 0.05~0.12，并保留自发光托底（0.30 → 0.30 强度 0.30）
+    兜底"背后什么都没有"时不至于死黑。
     """
     u, v = _uv(b, gi)
     s = uv_cm(13.0)
@@ -1952,28 +1977,28 @@ def _b_glass_lead(b, gi, bsdf):
     lw = uv_cm(1.9)                                        # 菱形斜边的垂直宽度 ≈ lw/√2
     came, d = _lead_grid(b, fu, fv, s, s, lw)
 
-    # ---- 淡青绿玻璃：逐块色差 + 竖向波筋（沿 v 拉长的噪声）+ 气泡
-    base = b.mixc(r1, (0.300, 0.520, 0.440), (0.640, 0.800, 0.700))
+    # ---- 淡青绿玻璃（提亮）：逐块色差 + 竖向波筋（沿 v 拉长的噪声）+ 气泡
+    base = b.mixc(r1, (0.420, 0.620, 0.545), (0.740, 0.880, 0.790))
     wav = b.noise(b.vec(b.mul(u, 20.0), b.mul(v, 2.2), 11.0), 1.0, 5.0, 0.55)
-    base = b.mixc(b.lin(wav, 0.30, 0.80, 0.0, 0.60), base, b.mul_c(base, 0.60))   # 厚玻璃带偏深
-    base = b.mul_c(base, b.lin(r2, 0.0, 1.0, 0.88, 1.12))
+    base = b.mixc(b.lin(wav, 0.30, 0.80, 0.0, 0.42), base, b.mul_c(base, 0.72))   # 厚玻璃带偏深
+    base = b.mul_c(base, b.lin(r2, 0.0, 1.0, 0.90, 1.10))
     bub = b.ss(b.noise(b.vec(b.mul(u, 26.0), b.mul(v, 26.0), 17.0), 1.0, 4.0), 0.70, 0.82)
-    base = b.mixc(b.mul(bub, 0.34), base, (0.840, 0.920, 0.880))
+    base = b.mixc(b.mul(bub, 0.30), base, (0.880, 0.950, 0.920))
     # 外侧灰泥/雨渍（比彩窗轻：淡青玻璃本来就"雾"）
     dirt = b.noise(b.vec(b.mul(u, 3.0), b.mul(v, 1.4), 29.0), 1.0, 5.0, 0.5)
-    base = b.mixc(b.mul(b.ss(dirt, 0.58, 0.86), 0.20), base, (0.075, 0.105, 0.098))
+    base = b.mixc(b.mul(b.ss(dirt, 0.58, 0.86), 0.18), base, (0.085, 0.115, 0.108))
 
     lead = _lead_color(b, u, v, seed=67.0)
     col = b.mixc(came, base, lead)
     hi = b.sub(1.0, b.ss(d, b.mul(lw, 0.34), b.mul(lw, 0.80)))
-    col = b.mixc(b.mul(hi, 0.38), col, (0.385, 0.410, 0.450))
+    col = b.mixc(b.mul(hi, 0.42), col, (0.430, 0.455, 0.495))
 
     h = b.add(b.mul(came, 0.58), b.mul(b.sub(wav, 0.5), 0.26))
-    trans = b.mul(b.sub(1.0, came), 0.30)      # 同彩窗：低透射 + 自发光托底，避免屏幕空间折射"吃掉"窗格
-    emit = b.mixc(came, b.mul_c(base, 0.62), (0.006, 0.010, 0.010))
-    rough = b.add(b.lin(wav, 0.0, 1.0, 0.07, 0.16), b.mul(came, 0.26))
+    trans = b.mul(b.sub(1.0, came), 0.72)      # 透射提到 0.72：灯笼/器皿能看见里面的灯芯
+    emit = b.mixc(came, b.mul_c(base, 0.40), (0.006, 0.010, 0.010))
+    rough = b.add(b.lin(wav, 0.0, 1.0, 0.05, 0.12), b.mul(came, 0.26))
     return dict(color=col, rough=rough, metal=b.mul(came, 0.40),
-                trans=trans, emit=emit, emit_str=0.45, ior=1.52, spec=0.60,
+                trans=trans, emit=emit, emit_str=0.30, ior=1.52, spec=0.60,
                 normal=b.bump(h, 0.50, uv_cm(1.2)))
 
 
@@ -1981,17 +2006,18 @@ def _b_glass_clear(b, gi, bsdf):
     """清水玻璃（门窗小格 / 摆件罩子）：**浅青底 + 极低粗糙 + 假反射斜带 + 灰雾/擦痕**。
 
     纯透射在"背后没东西"时会渲成死黑，所以这版的读法靠三样**画出来**的东西：
-      ① 极浅青绿底（0.86 级，不是纯白 → 边缘/厚处有颜色）；
+      ① 极浅青底（0.88 级，**近中性**：旧版 B 通道过高 → 玻璃发绿）；
       ② 一片 30~60 cm 的斜向柔和高光带（室内窗玻璃上那道"反光"）；
       ③ 5~20 cm 的灰雾斑 + 竖向擦痕（脏了才看得见玻璃）。
-    透射 0.4~0.95 由灰雾斑调制（脏处散射、透得少）。
+    透射地板抬到 **0.80**（旧版 0.45 的"发实"就是从此而来）：清水玻璃在游戏里
+    必须**基本透得过**，靠反光带与灰雾读"这是玻璃"，而不是靠一层不透明的青绿膜。
     """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
-    base = (0.760, 0.845, 0.820)
+    base = (0.885, 0.912, 0.902)
     cloud = b.noise(b.vec(b.mul(u, 5.2), b.mul(v, 5.2), 13.0), 1.0, 5.0, 0.6)
     cm = b.ss(cloud, 0.50, 0.84)
-    col = b.mixc(b.mul(cm, 0.45), base, (0.520, 0.580, 0.570))
+    col = b.mixc(b.mul(cm, 0.30), base, (0.660, 0.690, 0.685))
     # 擦痕（抹布痕：一组一组的斜向细纹）
     wipe = b.noise(b.vec(b.mul(b.add(u, b.mul(v, 0.45)), 22.0), b.mul(v, 1.2), 19.0), 1.0, 4.0)
     wm = b.mul(b.ss(wipe, 0.60, 0.86), b.lin(wear, 0.0, 1.0, 0.35, 1.0))
@@ -2001,7 +2027,7 @@ def _b_glass_clear(b, gi, bsdf):
     dgl = b.add(b.mul(u, 0.36), b.mul(v, 0.94))
     gl = b.noise(b.vec(b.mul(dgl, 0.42), 3.0, 7.0), 1.0, 4.0)
     gm = b.ss(gl, 0.44, 0.74)
-    col = b.mixc(b.mul(gm, 0.62), col, (1.200, 1.280, 1.330))
+    col = b.mixc(b.mul(gm, 0.45), col, (1.080, 1.140, 1.180))
     # 第二道弱反射（斜带错开一段）+ 窗框边缘的暗描边（贴墙的玻璃在框边总是暗一圈）
     gl2 = b.ss(b.noise(b.vec(b.mul(b.sub(dgl, 0.35), 0.55), 5.0, 23.0), 1.0, 4.0), 0.62, 0.86)
     col = b.mixc(b.mul(gl2, 0.28), col, (1.060, 1.100, 1.140))
@@ -2010,8 +2036,8 @@ def _b_glass_clear(b, gi, bsdf):
                  b.mul(_v_ground(b, v, 0.14), 0.55))
     col = b.mixc(dust, col, (0.520, 0.500, 0.440))
 
-    trans = b.mx(b.sub(b.mul(b.sub(1.0, b.mul(cm, 0.40)), 0.92), b.mul(wm, 0.08)), 0.45)
-    rough = b.add(b.add(0.030, b.mul(cm, 0.140)), b.mul(wm, 0.045))
+    trans = b.mx(b.sub(b.mul(b.sub(1.0, b.mul(cm, 0.30)), 0.98), b.mul(wm, 0.06)), 0.80)
+    rough = b.add(b.add(0.025, b.mul(cm, 0.090)), b.mul(wm, 0.035))
     h = b.add(b.mul(b.sub(cloud, 0.5), 0.10), b.mul(b.sub(wipe, 0.5), 0.06))
     return dict(color=col, rough=rough, metal=0.0, trans=trans, ior=1.45, spec=0.62,
                 normal=b.bump(h, 0.10, uv_cm(6.0)))
@@ -2020,13 +2046,16 @@ def _b_glass_clear(b, gi, bsdf):
 def _b_glass_bottle(b, gi, bsdf):
     """瓶玻璃（绿/橄榄绿厚玻璃）：**模制竖纹 + 气泡 + 厚薄暗带 + 底部水垢**。
 
-    瓶玻璃是"有色且厚"的透光体：色比清水玻璃深得多（0.07~0.30 级），
-    竖纹（模具分界/吹制痕迹）2.5 cm 一道，加上水垢/液面痕（≥8 cm，守 25% 门禁）。
+    瓶玻璃是"有色且厚"的透光体，但**不能搞成一截实心绿棒**（道具 agent 实测抱怨
+    "蒸馏器玻璃偏绿发实"）。四轮收敛：基底从"饱和橄榄绿"收到**灰橄榄**（绿只比 R/B
+    高一点），透射从 0.58~0.82 提到 **0.78~0.92**，粗糙度降到 0.035~0.08 ——
+    仍然读得出"这是绿瓶玻璃"，但里面的液体/灯芯/背后能透过来。
+    竖纹（模具分界/吹制痕迹）2.5 cm 一道，水垢/液面痕 ≥8 cm（守 25% 门禁）。
     """
     wear = gi.outputs['Wear']
     u, v = _uv(b, gi)
     base = b.mixc(b.noise(b.vec(b.mul(u, 1.8), b.mul(v, 1.8), 5.0), 1.0, 4.0),
-                  (0.075, 0.165, 0.090), (0.195, 0.365, 0.215))
+                  (0.095, 0.155, 0.110), (0.235, 0.335, 0.255))
     # 模制竖纹（沿 v 的细道，2.5 cm 一道）+ 厚玻璃暗带（5~9 cm）
     stria = b.pow(b.pisin(b.frc(b.div(b.add(u, b.mul(b.sub(b.noise(b.vec(b.mul(v, 1.6), 3.0, 9.0), 1.0, 3.0), 0.5), uv_cm(1.5))), uv_cm(2.5)))), 0.6)
     base = b.mul_c(base, b.lin(stria, 0.0, 1.0, 0.80, 1.22))
@@ -2041,13 +2070,59 @@ def _b_glass_bottle(b, gi, bsdf):
     col = b.mixc(scum, base, (0.300, 0.330, 0.270))
 
     h = b.add(b.mul(stria, 0.45), b.mul(b.sub(thick, 0.5), 0.30))
-    trans = b.lin(thick, 0.30, 0.80, 0.82, 0.58)
-    trans = b.mul(trans, b.sub(1.0, b.mul(scum, 0.75)))
-    rough = b.add(b.lin(thick, 0.0, 1.0, 0.045, 0.105), b.mul(scum, 0.30))
-    emit = b.mul_c(base, 0.30)                     # 弱托底：绝不读成"黑瓶子"
+    trans = b.lin(thick, 0.30, 0.80, 0.92, 0.78)
+    trans = b.mx(b.mul(trans, b.sub(1.0, b.mul(scum, 0.55))), 0.60)
+    rough = b.add(b.lin(thick, 0.0, 1.0, 0.035, 0.080), b.mul(scum, 0.28))
+    emit = b.mul_c(base, 0.26)                     # 弱托底：绝不读成"黑瓶子"
     return dict(color=col, rough=rough, metal=0.0, trans=trans,
-                emit=emit, emit_str=0.42, ior=1.52, spec=0.60,
+                emit=emit, emit_str=0.36, ior=1.52, spec=0.60,
                 normal=b.bump(h, 0.30, uv_cm(1.6)))
+
+
+def _b_glazing_win(b, gi, bsdf):
+    """真透明窗玻璃（**窗洞专用**；与道具/器皿的厚玻璃 `glass_clear` 分工）。
+
+    创始人口径：要"真透明、能透视到室内"的玻璃，**不要彩色玻璃**（彩窗只留大教堂）。
+    所以这一支的读法与全库其它玻璃都不同 —— 它**不靠"把玻璃画出来"**，而是靠真的透过去：
+
+    * **Alpha 混合**（`surface_render_method='BLENDED'`；key 登记在 `ALPHA_KEYS`）：
+      Principled 的 Alpha 压到 **单面 ≈0.075**（有厚度盒两面叠加净 ≈0.14）。这是
+      "前层 PNG 真透明"的**唯一可靠机制** —— EEVEE 下 Transmission **不会**写进 alpha
+      通道（`film_transparent` 出图时窗格 alpha 仍是 255，分层合成会把内景整块挡住，
+      `interiors.py` 实测踩过），只有 Alpha 混合会让窗格像素真的透明、能透视到后面内景。
+    * 基底**压到 ~0.5 级**（与 `interiors.thin_glass()` 的替身一致），只 G/B 略高于 R
+      一点点给"极微青"；过亮会发奶白、把内景糊掉。
+    * 另加一道 30~45 cm 的**低频柔光斜带**（室内窗玻璃上那道天光反光）：一层薄纱 +
+      一道反光就够读"这是玻璃"，斜带处 alpha 仅多 +0.10，仍远低于"挡住"。
+    * 低粗糙度（~0.035）给一点点镜面高光；`trans` 设高值只是让它在"非 alpha 通道/
+      不透明出图"下也带玻璃的折射性格，看到内景主要靠 Alpha。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    base = (0.470, 0.535, 0.525)                      # ~0.5 级、近无色极微青（同 thin_glass）
+    # 极低对比的薄雾（只做存在感，绝不成膜挡视线）
+    cloud = b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 13.0), 1.0, 4.0, 0.5)
+    veil = b.ss(cloud, 0.52, 0.88)
+    col = b.mixc(b.mul(veil, 0.12), base, (0.400, 0.452, 0.446))
+    # 45° 低频柔光斜带（玻璃的"存在感"来源；~35cm 级，25% 下仍读得出）
+    # 斜带色**跟随基底成比例提亮**（不用固定近白色）：白天是一道柔和反光，
+    # 夜晚（albedo 被冷蓝调压暗）随之变暗，不会变成一道发白的亮条。
+    dgl = b.add(b.mul(u, 0.30), b.mul(v, 0.92))
+    gl = b.noise(b.vec(b.mul(dgl, 0.34), 3.0, 7.0), 1.0, 4.0)
+    gm = b.ss(gl, 0.46, 0.80)
+    col = b.mixc(b.mul(gm, 0.16), col, b.mul_c(col, 1.85))
+    # 指纹/水渍（随 Wear）：只压一点点明度，不做雾膜
+    dirt = b.noise(b.vec(b.mul(u, 5.0), b.mul(v, 5.0), 31.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(b.mul(b.ss(dirt, 0.62, 0.90), b.mul(wear, 0.5)),
+                             0.0, 1.0, 1.0, 0.93))
+    # ---- Alpha：主体 0.075（≈93% 透过去）；薄雾 +5%、斜带 +10% → 峰值仍 <0.23
+    alpha = b.add(0.075, b.mul(veil, 0.05))
+    alpha = b.add(alpha, b.mul(gm, 0.10))
+    rough = b.add(0.035, b.mul(b.mul(veil, 0.030), b.lin(wear, 0.0, 1.0, 0.6, 1.0)))
+    h = b.add(b.mul(b.sub(cloud, 0.5), 0.05), b.mul(b.sub(gl, 0.5), 0.04))
+    return dict(color=col, rough=rough, metal=0.0, alpha=alpha,
+                trans=0.85, ior=1.45, spec=0.62,
+                normal=b.bump(h, 0.06, uv_cm(9.0)))
 
 
 def _b_crystal(b, gi, bsdf):
@@ -2863,6 +2938,273 @@ def _b_wood_deck(b, gi, bsdf):
                 normal=b.bump(h, 0.80, uv_cm(2.2)))
 
 
+# ============================================================ 四轮追加：自然物系
+#
+# 这一族服务 `nature.py`（树 / 灌木 / 岩石 / 矿脉 / 野外地面）。此前自然物只能
+# **借**建筑材质：树皮借 timber、树冠借 foliage、岩体借 slate_roof（板岩层理 →
+# 读作"叠瓦/片岩"）、铜金矿借 slate_roof 染绿 / iron 染金 —— 这是"野外一眼假"的根因。
+# 四轮把缺口补成真 key：`bark` / `leaf_card`（alpha 裁切）/ `rock` / `copper_ore` /
+# `gold_ore` / `grass_band`。
+#
+# 与结构材质的纪律差别：
+#   * 自然物是**独立体量**、全向观看，所以不走 `AGE`（近地溅泥那一套是给墙面/屋面的）
+#     也不走 `OBJ_VAR`（同种树逐棵偏色会在条带上读成"一片不同树"，且 nature 侧已用
+#     `tune(tint)` 给树种/岩性做色差）；
+#   * `leaf_card` 必须输出 alpha（`ALPHA_KEYS`），是"叶团不再像实心贴片"的关键。
+
+
+def _b_bark(b, gi, bsdf):
+    """树皮：**纵向裂沟是主角 + 长条板块脊 + 苔/地衣**（灰褐，无层理、无周期）。
+
+    树干/枝干是圆柱，`nature._tube` 显式给了 uv_axes=(轴, 切向) → UV 的 V 沿轴向、
+    U 绕周，所以"纵向"= 沿 V 低频、沿 U 高频。**不做横向层理**（那是 `slate_roof`
+    的读法，借来做树皮会读成"叠瓦"）。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    # 长条板块：Voronoi 细胞沿 V 拉长 → 树皮的"长条板块"（圆钝，不是砌块）
+    kd, kc, kp = b.voro(b.vec(b.mul(u, 3.2), b.mul(v, 0.85), 3.0),
+                        scale=1.0, randomness=0.92)
+    cu = b.flr(b.mul(u, 3.2))
+    cv = b.flr(b.mul(v, 0.85))
+    idx = b.h2(cu, cv, 11.0)
+    idx2 = b.h2(cu, cv, 29.0)
+    col = b.mixc(idx, (0.082, 0.070, 0.057), (0.245, 0.212, 0.172))
+    col = b.mixc(b.lin(idx2, 0.70, 0.96, 0.0, 0.55), col, (0.152, 0.146, 0.134))  # 灰皮板块
+    # 板块圆脊（细胞心亮、缝暗 → 圆钝的长条读法）
+    dome = b.pow(b.sub(1.0, b.ss(kd, 0.18, 0.92)), 0.55)
+    col = b.shade(col, dome, 0.62, 1.18)
+    # 纵向裂沟：两组"沿 U 高频、沿 V 低频"的噪声取中带 → 又深又长的竖向裂缝
+    f1 = b.noise(b.vec(b.mul(u, 7.5), b.mul(v, 0.70), 5.0), 1.0, 6.0, 0.55)
+    f2 = b.noise(b.vec(b.mul(u, 17.0), b.mul(v, 1.05), 13.0), 1.0, 5.0)
+    cr1 = b.sub(1.0, b.ss(b.absv(b.sub(f1, 0.5)), 0.0, 0.030))
+    cr2 = b.sub(1.0, b.ss(b.absv(b.sub(f2, 0.5)), 0.0, 0.022))
+    crack = b.mx(cr1, b.mul(cr2, 0.72))
+    crack = b.mul(crack, b.lin(b.noise(b.vec(b.mul(u, 1.3), b.mul(v, 0.55), 41.0),
+                                     1.0, 4.0), 0.30, 0.75, 0.35, 1.0))   # 断续
+    col = b.mixc(b.mul(crack, 0.85), col, (0.028, 0.020, 0.014))
+    # 苔/地衣（低频斑，随 Wear 增；灰绿 + 灰白两种）
+    lm = b.mul(b.ss(b.noise(b.vec(b.mul(u, 1.4), b.mul(v, 1.1), 61.0), 1.0, 5.0, 0.55),
+                    0.50, 0.78),
+               b.lin(wear, 0.0, 1.0, 0.15, 0.85))
+    col = b.mixc(b.mul(lm, 0.55), col, (0.145, 0.170, 0.088))
+    pale = b.mul(b.ss(b.noise(b.vec(b.mul(u, 3.4), b.mul(v, 2.6), 67.0), 1.0, 4.0),
+                      0.62, 0.86), b.mul(wear, 0.35))
+    col = b.mixc(pale, col, (0.330, 0.335, 0.300))
+    grn = b.noise(b.vec(b.mul(u, 22.0), b.mul(v, 22.0), 9.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.90, 1.10))
+    h = b.add(b.mul(dome, 0.75), b.mul(b.sub(f1, 0.5), 0.30))
+    h = b.sub(h, b.mul(crack, 1.10))
+    h = b.add(h, b.mul(b.sub(grn, 0.5), 0.22))
+    rough = b.add(b.lin(grn, 0.0, 1.0, 0.80, 0.95), b.mul(crack, 0.03))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.90, uv_cm(1.6)), spec=0.18)
+
+
+def _b_leaf_card(b, gi, bsdf):
+    """alpha 裁切的树冠叶卡：**簇状叶团 + 不规则边缘 + 2~3 种叶型/色相变体**。
+
+    治"叶团像实心贴片"的关键：团内是叶、**团间真的透明**（alpha=0），面片边缘由
+    alpha 打碎而不是靠几何剪影。尺度：叶单元 8.5 cm（一片 0.3~0.6 m 的卡上有 3~10 片叶），
+    叶簇团 0.42 m 级；色相 3 变体（深绿 / 中绿 / 黄绿）+ 逐叶明度差。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    # 叶簇团（大尺度团块：团内密、团间透）
+    clump = b.ss(b.noise(b.vec(b.mul(u, 1.9), b.mul(v, 1.9), 5.0), 1.0, 4.0, 0.35),
+                 0.20, 0.48)
+    # 叶单元（Voronoi 最近点 → 圆润叶形；距离加噪声扰动 → 边缘不规则）
+    k = 1.0 / uv_cm(8.5)
+    kd, kc, kp = b.voro(b.vec(b.mul(u, k), b.mul(v, k), 7.0),
+                        scale=1.0, randomness=0.93)
+    cu = b.flr(b.mul(u, k))
+    cv = b.flr(b.mul(v, k))
+    idx = b.h2(cu, cv, 17.0)
+    idx2 = b.h2(cu, cv, 31.0)
+    idx3 = b.h2(cu, cv, 47.0)
+    thr = b.lin(idx, 0.0, 1.0, 0.38, 0.52)               # 叶幅 3 档
+    wob = b.noise(b.vec(b.mul(u, 30.0), b.mul(v, 30.0), 11.0), 1.0, 3.0)
+    dsh = b.add(kd, b.mul(b.sub(wob, 0.5), 0.09))
+    px_, py_, _pz = b.sep(kp)
+    lobe = b.add(1.0, b.mul(b.mul(b.absv(px_), 0.40),
+                            b.lin(idx2, 0.0, 1.0, -0.80, 0.45)))    # 一处缺刻
+    dsh = b.mul(dsh, b.mx(lobe, 0.55))
+    leaf = b.sub(1.0, b.ss(dsh, b.mul(thr, 0.82), thr))
+    alpha = b.mul(leaf, clump)
+    # 叶色：2~3 种色相（深绿 / 中绿 / 黄绿）+ 逐叶明度
+    col = b.mixc(idx2, (0.052, 0.130, 0.028), (0.135, 0.255, 0.062))
+    col = b.mixc(b.ss(idx3, 0.66, 0.92), col, (0.205, 0.275, 0.078))       # 黄绿
+    col = b.mixc(b.lin(idx, 0.72, 0.96, 0.0, 0.45), col, (0.088, 0.115, 0.052))  # 深绿
+    # 叶面受光：格心亮、格边暗（叶是鼓的）
+    col = b.mul_c(col, b.lin(kd, 0.0, 0.55, 1.18, 0.66))
+    vein = b.sub(1.0, b.ss(b.absv(b.mul(px_, 2.0)), 0.05, 0.20))          # 叶脉暗线
+    col = b.mixc(b.mul(vein, b.mul(leaf, 0.65)), col, b.mul_c(col, 0.70))
+    h = b.add(b.mul(leaf, 0.35), b.mul(vein, 0.20))
+    rough = b.add(b.lin(idx, 0.0, 1.0, 0.66, 0.86), b.mul(b.sub(wob, 0.5), 0.06))
+    return dict(color=col, rough=rough, alpha=alpha,
+                normal=b.bump(h, 0.55, uv_cm(2.0)), spec=0.24,
+                sheen=0.14, sheen_rough=0.65)
+
+
+def _b_rock(b, gi, bsdf):
+    """天然岩体：**圆钝大块 + 风化斑 + 苔/地衣；无层理**（区别于 `slate_roof` 的板岩）。
+
+    读法：① 大 Voronoi 细胞（30~45 cm）给"圆钝的岩瘤面"，细胞心亮缝暗（球面感，
+    注意别做太强 → 会读成鹅卵石）；② 60 cm 级风化斑（冷灰/暖褐互串）；
+    ③ 25 cm 级苔与地衣；④ 中频颗粒。**不贯通裂纹**（贯通就成层理/瓦片）。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    kd, kc, kp = b.voro(b.vec(b.mul(u, 1.15), b.mul(v, 1.15), 3.0),
+                        scale=1.0, randomness=0.88)
+    cu = b.flr(b.mul(u, 1.15))
+    cv = b.flr(b.mul(v, 1.15))
+    idx = b.h2(cu, cv, 13.0)
+    idx2 = b.h2(cu, cv, 37.0)
+    col = b.mixc(idx, (0.155, 0.152, 0.146), (0.372, 0.362, 0.342))
+    col = b.mixc(b.lin(idx2, 0.74, 0.96, 0.0, 0.50), col, (0.290, 0.246, 0.196))  # 暖褐块
+    dome = b.pow(b.sub(1.0, b.ss(kd, 0.10, 0.95)), 0.6)
+    col = b.shade(col, dome, 0.66, 1.18)
+    # 风化斑（冷灰/暖褐互串，大尺度）
+    w1 = b.noise(b.vec(b.mul(u, 1.7), b.mul(v, 1.7), 23.0), 1.0, 5.0, 0.55)
+    col = b.mixc(b.ss(w1, 0.40, 0.74), col, (0.235, 0.240, 0.248))
+    w2 = b.noise(b.vec(b.mul(u, 3.2), b.mul(v, 3.2), 29.0), 1.0, 5.0, 0.5)
+    col = b.mul_c(col, b.lin(w2, 0.25, 0.78, 0.80, 1.16))
+    # 短碎裂纹（不贯通 → 不读成层理）
+    cr = b.noise(b.vec(b.mul(u, 14.0), b.mul(v, 14.0), 41.0), 1.0, 5.0, 0.6)
+    crack = b.mul(b.sub(1.0, b.ss(b.absv(b.sub(cr, 0.5)), 0.0, 0.018)),
+                  b.mul(b.lin(wear, 0.0, 1.0, 0.25, 0.80), 0.70))
+    col = b.mixc(crack, col, (0.075, 0.073, 0.070))
+    # 苔 / 地衣
+    mm = b.mul(b.ss(b.noise(b.vec(b.mul(u, 2.6), b.mul(v, 2.6), 61.0), 1.0, 5.0, 0.55),
+                    0.48, 0.72),
+               b.lin(wear, 0.0, 1.0, 0.15, 0.85))
+    col = b.mixc(b.mul(mm, 0.60), col, (0.135, 0.175, 0.078))
+    lichen = b.mul(b.ss(b.noise(b.vec(b.mul(u, 5.0), b.mul(v, 5.0), 67.0), 1.0, 4.0),
+                       0.66, 0.88), b.mul(wear, 0.45))
+    col = b.mixc(lichen, col, (0.360, 0.372, 0.330))
+    grn = b.noise(b.vec(b.mul(u, 18.0), b.mul(v, 18.0), 9.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.90, 1.10))
+    h = b.add(b.mul(dome, 0.80), b.mul(b.sub(w2, 0.5), 0.30))
+    h = b.sub(h, b.mul(crack, 0.50))
+    h = b.add(h, b.mul(b.sub(grn, 0.5), 0.24))
+    rough = b.add(b.lin(grn, 0.0, 1.0, 0.78, 0.94), b.mul(mm, 0.04))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(3.0)), spec=0.22)
+
+
+def _b_copper_ore(b, gi, bsdf):
+    """铜矿脉：暗母岩 + **孔雀石青绿锈斑**（成簇、沿裂隙）+ 少量蓝铜矿。
+
+    氧化铜矿的第一读法是"石头缝里长出的青绿"，所以锈斑**成簇**而不是满涂；
+    青绿略具光泽（rough 0.44）、且带一点金属度，与哑母岩分开。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    kd, kc, kp = b.voro(b.vec(b.mul(u, 2.0), b.mul(v, 2.0), 3.0),
+                        scale=1.0, randomness=0.90)
+    cu = b.flr(b.mul(u, 2.0))
+    cv = b.flr(b.mul(v, 2.0))
+    idx = b.h2(cu, cv, 13.0)
+    col = b.mixc(idx, (0.070, 0.068, 0.060), (0.185, 0.176, 0.155))
+    col = b.mul_c(col, b.lin(b.pow(b.sub(1.0, b.ss(kd, 0.15, 0.95)), 0.6),
+                             0.0, 1.0, 0.72, 1.16))
+    patch = b.noise(b.vec(b.mul(u, 1.5), b.mul(v, 1.5), 23.0), 1.0, 4.0, 0.4)
+    pm = b.ss(patch, 0.36, 0.62)
+    ore = b.noise(b.vec(b.mul(u, 7.0), b.mul(v, 7.0), 31.0), 1.0, 5.0, 0.6)
+    spec_ = b.mul(pm, b.ss(ore, 0.42, 0.70))
+    green = b.mixc(b.noise(b.vec(b.mul(u, 12.0), b.mul(v, 12.0), 41.0), 1.0, 4.0),
+                   (0.028, 0.310, 0.185), (0.090, 0.560, 0.345))       # 孔雀石绿
+    col = b.mixc(b.mul(spec_, 0.95), col, green)
+    az = b.mul(b.ss(b.h2(b.flr(b.mul(u, 7.0)), b.flr(b.mul(v, 7.0)), 53.0),
+                    0.80, 0.92), b.mul(spec_, 0.85))
+    col = b.mixc(az, col, (0.030, 0.110, 0.290))                        # 蓝铜矿
+    col = b.mixc(b.mul(b.ss(ore, 0.80, 0.92), b.mul(spec_, 0.5)), col,
+                 (0.300, 0.470, 0.400))                                 # 粉霜面
+    grn = b.noise(b.vec(b.mul(u, 20.0), b.mul(v, 20.0), 9.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.90, 1.10))
+    met = b.mul(spec_, 0.35)
+    rough = b.mixf(b.mul(spec_, 0.9), b.lin(grn, 0.0, 1.0, 0.80, 0.94), 0.44)
+    h = b.add(b.mul(spec_, 0.35), b.mul(b.sub(ore, 0.5), 0.24))
+    h = b.add(h, b.mul(b.sub(grn, 0.5), 0.20))
+    return dict(color=col, rough=rough, metal=met,
+                normal=b.bump(h, 0.60, uv_cm(1.8)), spec=0.32)
+
+
+def _b_gold_ore(b, gi, bsdf):
+    """金矿脉：灰岩/石英母岩 + **白色石英脉** + **裸金点**（金属高光）。
+
+    金的第一读法是"暗石上的几个亮金点/金线"，覆盖面必须小（>15% 就成"黄石头"）。
+    金斑 metal≈1.0、rough 0.16 → 实时环境里真的反高光，游戏尺寸下才"闪"得出来。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    kd, kc, kp = b.voro(b.vec(b.mul(u, 1.8), b.mul(v, 1.8), 3.0),
+                        scale=1.0, randomness=0.90)
+    cu = b.flr(b.mul(u, 1.8))
+    cv = b.flr(b.mul(v, 1.8))
+    idx = b.h2(cu, cv, 13.0)
+    col = b.mixc(idx, (0.085, 0.082, 0.076), (0.195, 0.188, 0.172))
+    col = b.mul_c(col, b.lin(b.pow(b.sub(1.0, b.ss(kd, 0.15, 0.95)), 0.6),
+                             0.0, 1.0, 0.76, 1.14))
+    # 石英脉（两组错开方向的低频条带取并；覆盖面收小，别把母岩刷成白石头）
+    vein = b.mx(b.ss(b.noise(b.vec(b.mul(u, 1.7), b.mul(v, 0.55), 23.0), 1.0, 4.0, 0.3),
+                       0.60, 0.80),
+                b.ss(b.noise(b.vec(b.mul(u, 0.6), b.mul(v, 2.2), 29.0), 1.0, 4.0, 0.3),
+                     0.64, 0.84))
+    quartz = b.mixc(b.noise(b.vec(b.mul(u, 9.0), b.mul(v, 9.0), 37.0), 1.0, 4.0),
+                    (0.330, 0.328, 0.312), (0.560, 0.552, 0.525))
+    col = b.mixc(b.mul(vein, 0.90), col, quartz)
+    # 裸金：**金线（整条石英脉发金）+ 金点** —— 金在游戏尺寸下必须"一眼看到黄色"，
+    # 只给几颗 <5% 面积的小点会读成"石头上的反光"，所以脉带本身也镀金。
+    goldm = b.mx(b.mul(vein, 0.95),
+                 b.mul(b.ss(b.noise(b.vec(b.mul(u, 24.0), b.mul(v, 24.0), 47.0),
+                                  1.0, 4.0), 0.50, 0.68), 0.90))
+    gold = b.mixc(b.noise(b.vec(b.mul(u, 16.0), b.mul(v, 16.0), 53.0), 1.0, 4.0),
+                  (0.980, 0.720, 0.160), (1.000, 0.900, 0.380))
+    col = b.mixc(b.mul(goldm, 0.95), col, gold)
+    grn = b.noise(b.vec(b.mul(u, 20.0), b.mul(v, 20.0), 9.0), 1.0, 4.0)
+    col = b.mul_c(col, b.lin(grn, 0.25, 0.75, 0.92, 1.08))
+    met = b.mul(goldm, 0.55)          # 留 45% 漫反射 → 金点带黄色而不是"反天空的灰点"
+    rough = b.mixf(goldm, b.lin(grn, 0.0, 1.0, 0.80, 0.94), 0.22)
+    h = b.add(b.mul(vein, 0.30), b.mul(b.sub(grn, 0.5), 0.24))
+    h = b.add(h, b.mul(goldm, 0.35))
+    return dict(color=col, rough=rough, metal=met,
+                normal=b.bump(h, 0.60, uv_cm(2.0)), spec=0.40)
+
+
+def _b_grass_band(b, gi, bsdf):
+    """野外地被草带：**低频混合草色**（野外大平面地面；粗读层 75 cm 级）。
+
+    与城市 `grass_lawn`（修剪草坪/主方向块）的分工：这一支是**野草** —— 冷暖草色大块
+    互串 + 干黄斑 + 稀疏裸土 + 细草叶簇，缩到 25%（19 px/m）仍是一片"活的草"，
+    而不是一块平涂的绿。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    # 大尺度草色带（~75 cm）：绿 ↔ 橄榄 ↔ 干黄
+    b1 = b.noise(b.vec(b.mul(u, 0.55), b.mul(v, 0.55), 3.0), 1.0, 4.0)
+    col = b.mixc(b.ss(b1, 0.28, 0.72), (0.115, 0.205, 0.060), (0.235, 0.235, 0.088))
+    # 干黄/枯草斑（中尺度）
+    b2 = b.noise(b.vec(b.mul(u, 1.5), b.mul(v, 1.5), 7.0), 1.0, 5.0, 0.5)
+    col = b.mixc(b.mul(b.ss(b2, 0.55, 0.84), 0.60), col, (0.430, 0.372, 0.150))
+    # 裸土斑（低频、稀疏）
+    soil = b.noise(b.vec(b.mul(u, 0.9), b.mul(v, 0.9), 11.0), 1.0, 4.0, 0.5)
+    col = b.mixc(b.mul(b.ss(soil, 0.70, 0.90), 0.55), col, (0.300, 0.235, 0.150))
+    # 草叶簇（细读层：3~6 cm 抖动 + 叶簇暗底）
+    blade = b.noise(b.vec(b.mul(u, 16.0), b.mul(v, 16.0), 17.0), 1.0, 5.0, 0.55)
+    bm = b.ss(blade, 0.42, 0.72)
+    col = b.mul_c(col, b.lin(blade, 0.22, 0.80, 0.82, 1.18))
+    col = b.mixc(b.mul(bm, 0.30), col, (0.070, 0.150, 0.040))
+    # 干湿斑（Wear 增湿）
+    wet = b.mul(b.ss(b.noise(b.vec(b.mul(u, 2.2), b.mul(v, 2.2), 23.0), 1.0, 4.0),
+                     0.58, 0.86), b.lin(wear, 0.0, 1.0, 0.25, 0.70))
+    col = b.mul_c(col, b.lin(wet, 0.0, 1.0, 1.0, 0.78))
+    h = b.mul(b.sub(blade, 0.5), 0.40)
+    h = b.add(h, b.mul(b.sub(b1, 0.5), 0.30))
+    rough = b.add(b.lin(blade, 0.0, 1.0, 0.90, 0.99), b.mul(wet, 0.02))
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.55, uv_cm(2.2)), spec=0.18,
+                sheen=0.08, sheen_rough=0.70)
+
+
 # ============================================================ 注册表
 _BUILDERS = {
     # ---- 原有 12 个（名字与语义不变）----
@@ -2928,6 +3270,14 @@ _BUILDERS = {
     'grass_lawn':   (_b_grass_lawn, '修剪草坪'),
     'sand':         (_b_sand, '细砂地（风纹）'),
     'wood_deck':    (_b_wood_deck, '木铺板 14cm'),
+    # ---- 四轮追加（自然物系；不挂 AGE/OBJ_VAR，理由见该段注释）----
+    'bark':         (_b_bark, '树皮（纵裂+板块+苔）'),
+    'leaf_card':    (_b_leaf_card, '树冠叶卡（alpha 裁切）'),
+    'rock':         (_b_rock, '天然岩体（圆钝+风化+苔）'),
+    'copper_ore':   (_b_copper_ore, '铜矿脉（孔雀石锈斑）'),
+    'gold_ore':     (_b_gold_ore, '金矿脉（石英脉+裸金）'),
+    'grass_band':   (_b_grass_band, '野外地被草带'),
+    'glazing_win':  (_b_glazing_win, '真透明窗玻璃（alpha 透视）'),
 }
 
 ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
@@ -2943,10 +3293,13 @@ ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
          'crystal', 'rune_glow', 'bronze', 'patina',
          'glow_water', 'parchment', 'leather',
          'cobble_small', 'cobble_large', 'brick_paving', 'stone_flag',
-         'dirt_packed', 'dirt_mud', 'gravel', 'grass_lawn', 'sand', 'wood_deck']
+         'dirt_packed', 'dirt_mud', 'gravel', 'grass_lawn', 'sand', 'wood_deck',
+         # 四轮追加（追加在末尾，既有 key 的相对顺序不变 → 既有样片排布不动）
+         'bark', 'leaf_card', 'rock', 'copper_ore', 'gold_ore', 'grass_band',
+         'glazing_win']
 
 #: 需要 alpha 混合的 key（裁切用贴片）
-ALPHA_KEYS = {'grass_tuft'}
+ALPHA_KEYS = {'grass_tuft', 'leaf_card', 'glazing_win'}
 
 #: 每族的"现实特征尺寸"（cm），供 audit() 打印 texel density 对照。
 #: 含做旧层的特征（近地溅泥带/雨渍/日照褪色斑）——**必须 ≥35 cm**：25% 下 <7px
@@ -3004,14 +3357,14 @@ FEATURES = {
     'bread':       [("割痕间距", 6.0), ("脆壳斑", 22.0), ("浮粉", 12.0)],
     'dye_bath':    [("涡纹", 14.0), ("浮沫", 4.0)],
     # ---- 三轮追加 A：玻璃系 / 魔法元素（自发光/透射在括号里标出强度）----
-    'stained_glass': [("彩色玻璃块", 13.0), ("铅条宽", 1.8), ("块内气泡", 2.0),
-                      ("（自发光托底 0.75 / 透射 0.62）", 0.0)],
+    'stained_glass': [("彩色玻璃块", 13.0), ("铅条宽", 2.4), ("块内气泡", 2.0),
+                      ("（自发光托底 0.22 / 透射 0.16）", 0.0)],
     'glass_lead':  [("菱形玻璃块", 9.0), ("铅条宽", 1.9), ("波筋", 6.0), ("气泡", 2.0),
-                    ("（自发光托底 0.34 / 透射 0.82）", 0.0)],
+                    ("（自发光托底 0.30 / 透射 0.72）", 0.0)],
     'glass_clear': [("灰雾斑", 8.0), ("擦痕道距", 4.0), ("假反射斜带", 45.0), ("底部积尘带", 14.0),
-                    ("（透射 0.35~0.94）", 0.0)],
+                    ("（透射 0.80~0.98）", 0.0)],
     'glass_bottle': [("模制竖纹", 2.5), ("厚玻璃暗带", 9.0), ("气泡", 2.0), ("底部水垢带", 12.0),
-                     ("（透射 0.66~0.88）", 0.0)],
+                     ("（透射 0.60~0.92）", 0.0)],
     'crystal':     [("晶面", 5.5), ("乳白包裹体", 8.0), ("闪点", 1.6), ("内部辉光", 5.5),
                     ("（自发光 0.9 / 透射 0.28~0.80）", 0.0)],
     'rune_glow':   [("符文格", 26.0), ("刻痕宽", 2.4), ("辉光晕", 9.0), ("雕刻带凹槽", 30.0),
@@ -3035,6 +3388,19 @@ FEATURES = {
                      ("修剪/干湿斑（粗读层）", 76.0), ("小花", 3.0)],
     'sand':         [("风纹波长", 24.0), ("砂粒", 2.2), ("湿砂斑（粗读层）", 130.0), ("扰动斑", 28.0)],
     'wood_deck':    [("板宽", 14.0), ("板缝", 1.4), ("板端接缝", 60.0), ("磨损带（粗读层）", 56.0)],
+    # ---- 四轮追加：自然物系（粗读层 ≥40cm 是过 25% 门禁的那一层）----
+    'bark':         [("树皮板块", 32.0), ("纵向裂沟", 6.0), ("细裂纹", 2.0),
+                     ("苔/地衣斑（粗读层）", 45.0)],
+    'leaf_card':    [("叶簇团（粗读层）", 42.0), ("叶片", 8.5), ("叶脉", 1.2),
+                     ("（Alpha 裁切，团间透明）", 0.0)],
+    'rock':         [("岩瘤面", 36.0), ("风化斑（粗读层）", 60.0), ("苔/地衣斑", 25.0),
+                     ("颗粒", 4.0)],
+    'copper_ore':   [("孔雀石斑簇（粗读层）", 45.0), ("锈斑", 12.0), ("晶粒", 3.0)],
+    'gold_ore':     [("石英脉（粗读层）", 55.0), ("裸金斑", 9.0), ("矿粒", 2.5)],
+    'grass_band':   [("草色带（粗读层）", 75.0), ("干黄斑", 38.0), ("草叶簇", 5.0),
+                     ("裸土斑", 46.0)],
+    'glazing_win':  [("柔光斜带（粗读层）", 90.0), ("薄雾", 18.0),
+                     ("（Alpha 0.075~0.23 / 透射 0.85）", 0.0)],
 }
 
 _GROUP_CACHE = {}
@@ -3248,6 +3614,13 @@ mat_gravel = _mk('gravel')
 mat_grass_lawn = _mk('grass_lawn')
 mat_sand = _mk('sand')
 mat_wood_deck = _mk('wood_deck')
+mat_bark = _mk('bark')
+mat_leaf_card = _mk('leaf_card')
+mat_rock = _mk('rock')
+mat_copper_ore = _mk('copper_ore')
+mat_gold_ore = _mk('gold_ore')
+mat_grass_band = _mk('grass_band')
+mat_glazing_win = _mk('glazing_win')
 
 
 def make(key, **kw):
@@ -3276,6 +3649,13 @@ _ALIAS = {
     "lawn": "grass_lawn", "grass_lawn_wild": "ground",
     "deck": "wood_deck", "bronze_aged": "patina",
     "rune": "rune_glow", "gem": "crystal", "window_stained": "stained_glass",
+    # 四轮追加的常用叫法（自然物系 + 真透明窗玻璃；不改动任何既有映射）
+    "glazing": "glazing_win", "glass_thin": "glazing_win", "window_clear": "glazing_win",
+    "bark_oak": "bark", "tree_bark": "bark",
+    "leaf_card_wild": "leaf_card", "canopy": "leaf_card",
+    "rock_natural": "rock", "boulder": "rock",
+    "ore_copper": "copper_ore", "ore_gold": "gold_ore",
+    "grass_wild": "grass_band", "field_grass": "grass_band",
 }
 
 

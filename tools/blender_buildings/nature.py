@@ -22,16 +22,14 @@ seed），供游戏当 sprite 消费，也供 `field_dist.py` 做野外分布。
 * 正面 = -Y（与 buildings/props 一致），但自然物是**全向体量**，只要求"迎光面
   朝前最好看"（种子决定枝干朝向，无需按 -Y 特化）。
 
-材质纪律（**不得修改 materials.py**）
-------------------------------------
-只用既有 key，缺的用 `materials.tune()` 的 tint/wear/scale 三旋钮硬凑，并把
-**缺失的 key 记进汇报**由后续批次补。真正的缺口：
-    bark（树皮，现借 timber / log_wall → 只有棕色系，灰白桦树皮做不出）
-    leaf_card（**带 alpha 裁切的树冠面片**；全库 ALPHA_KEYS 只有 grass_tuft，
-               所以阔叶树冠只能用"实体叶球 + 几何叶卡片"堆，读法偏"实心团"）
-    ore_copper / ore_gold / crystal（铜青绿锈 / 裸金 / 自发光晶柱，现借
-               slate_roof 染绿、iron 染金、glass_win 染蓝）
-    bark_mossy / lichen（树皮地衣，现借 stone 染绿）
+材质纪律
+--------
+* **四轮起 `materials.py` 已有自然物专用 key**（`bark` / `leaf_card` / `rock` /
+  `copper_ore` / `gold_ore` / `grass_band`），本层通过 `MAT_SPEC` 直接引用，
+  不再拿建筑材质硬凑；树种/岩性/叶色的差别只走 `materials.tune()` 的
+  tint / wear / scale 三旋钮。
+* 仍然**不改 materials.py 的入口/缓存/尺度契约**（`get/reset_cache/uv_*/M_PER_UV`）。
+* 已知未接入：针叶树冠仍是实心锥台层（贴 alpha 叶卡会打洞），见汇报清单。
 
 跑法（只做规格自检，不渲染）::
     blender -b --factory-startup -P nature.py
@@ -74,39 +72,44 @@ def _rng(seed):
 #: 本层材质名 → (materials.py 注册 key, tune 参数)。tint 可 >1（乘法，用于提亮/染色）。
 #: **全部落在既有 key 内**；括号里注明"借"的语义与缺口。
 MAT_SPEC = {
-    # ---- 树皮（借 timber：斧劈棱面 + 顺纹 + 干裂，色相只有棕系）----
-    "bark_oak":   ("timber", dict(tint=(1.05, 1.00, 0.92), wear=0.62, scale=0.75)),
-    "bark_pine":  ("timber", dict(tint=(0.88, 0.74, 0.62), wear=0.55, scale=0.62)),
-    "bark_dead":  ("timber", dict(tint=(0.78, 0.74, 0.68), wear=0.88, scale=0.85)),
-    "bark_birch": ("timber", dict(tint=(0.62, 0.60, 0.58), wear=0.35, scale=0.9)),
-    # ---- 树冠 ----
-    "leaf_a":     ("foliage", dict(scale=0.62, wear=0.34)),
-    "leaf_b":     ("foliage", dict(tint=(0.80, 0.86, 0.70), scale=0.52, wear=0.44)),
+    # ---- 树皮（四轮：真 `bark` key —— 纵向裂沟 + 长条板块 + 苔；树种靠 tint 分）----
+    "bark_oak":   ("bark", dict(tint=(1.12, 1.00, 0.84), wear=0.45, scale=0.85)),
+    "bark_pine":  ("bark", dict(tint=(0.98, 0.70, 0.48), wear=0.40, scale=0.72)),   # 红松皮
+    "bark_dead":  ("bark", dict(tint=(0.98, 0.92, 0.84), wear=0.88, scale=1.00)),
+    "bark_birch": ("bark", dict(tint=(1.90, 1.86, 1.74), wear=0.22, scale=1.15)),   # 白桦
+    # ---- 树冠（四轮：**alpha 裁切叶卡** `leaf_card`，治"叶团像实心贴片"）----
+    "leaf_a":     ("leaf_card", dict(scale=1.00, wear=0.34)),
+    "leaf_b":     ("leaf_card", dict(tint=(0.82, 0.90, 0.72), scale=0.85, wear=0.44)),
+    "leaf_core":  ("foliage", dict(tint=(0.42, 0.55, 0.36), scale=0.80, wear=0.55)),
+    "leaf_dead":  ("leaf_card", dict(tint=(1.30, 1.05, 0.62), scale=0.75, wear=0.70)),
+    # 针叶：针叶树几何是**实心锥台层**（不是面片），把 alpha 叶卡贴上去会打出洞 →
+    # 仍用不透明 `vine` 的针束读法（诚实清单里注明）。
     "leaf_pine":  ("vine",    dict(scale=0.56, wear=0.30)),
     "leaf_pine2": ("vine",    dict(tint=(0.72, 0.86, 0.80), scale=0.46, wear=0.22)),
-    "leaf_dead":  ("vine",    dict(tint=(0.95, 0.80, 0.55), scale=0.60, wear=0.60)),
-    # ---- 地被（grass_tuft 是全库唯一带 alpha 裁切的 key，芦苇/草丛靠它）----
+    # ---- 地被 ----
     "reed":       ("grass_tuft", dict(tint=(1.15, 1.26, 0.80))),
     "grass":      ("grass_tuft", dict(tint=(1.00, 1.12, 0.76))),
     "grass_dry":  ("grass_tuft", dict(tint=(1.85, 1.60, 0.85))),
     "moss":       ("foliage", dict(tint=(0.55, 0.72, 0.42), scale=1.5, wear=0.4)),
-    # ---- 岩石 ----
-    # 天然岩体借 slate_roof（板岩层理 → 读作"层状岩/片岩"）；`stone` 是料石砌，
-    # 只能用于**采石场碎石**（rubble 用 cut_stone）。
-    "rock":       ("slate_roof", dict(tint=(1.12, 1.09, 1.02), scale=0.50, wear=0.55)),
-    "rock_dark":  ("slate_roof", dict(tint=(0.82, 0.85, 0.90), scale=0.62, wear=0.45)),
-    "rock_light": ("slate_roof", dict(tint=(1.28, 1.24, 1.16), scale=0.40, wear=0.65)),
-    "rock_mossy": ("slate_roof", dict(tint=(0.78, 0.92, 0.64), scale=0.46, wear=0.90)),
+    # 野外地被（四轮新 key）：供 `probe_nature.make_ground` / field_dist 大地面
+    "field_ground": ("grass_band", dict(scale=1.00, wear=0.40)),
+    # ---- 岩石（四轮：真 `rock` key —— 圆钝岩瘤 + 风化 + 苔，**不再借 slate_roof 层理**）----
+    "rock":       ("rock", dict(tint=(1.05, 1.02, 0.96), scale=0.60, wear=0.45)),
+    "rock_dark":  ("rock", dict(tint=(0.72, 0.74, 0.78), scale=0.72, wear=0.38)),
+    "rock_light": ("rock", dict(tint=(1.35, 1.31, 1.22), scale=0.50, wear=0.55)),
+    "rock_mossy": ("rock", dict(tint=(0.80, 0.95, 0.66), scale=0.56, wear=0.85)),
     "cut_stone":  ("stone", dict(tint=(0.92, 0.92, 0.95), scale=1.00, wear=0.70)),
     # ---- 矿 ----
     # 铁块必须**明显暗于岩体、且带红棕氧化**，否则整块露头读作"普通石头堆"；
     # tint 是乘法且作用于氧化后的颜色，所以提高 tint 就能把 dark 基底与锈色一起抬起来。
     "ore_iron":   ("iron", dict(tint=(2.10, 1.12, 0.78), wear=0.72, scale=1.05)),
     "rust":       ("iron", dict(wear=1.00, scale=0.42, tint=(3.60, 1.55, 0.65))),
-    "ore_copper": ("slate_roof", dict(tint=(0.95, 2.95, 1.80), scale=1.7, wear=0.12)),
-    "ore_gold":   ("iron", dict(tint=(5.40, 3.90, 1.05), wear=0.06, scale=2.2)),
-    "crystal_a":  ("glass_win", dict(tint=(0.50, 1.45, 3.80), scale=1.4)),
-    "crystal_b":  ("glass_win", dict(tint=(0.85, 2.20, 2.60), scale=1.2)),
+    # 四轮：铜/金矿改真 key（原来借 slate_roof 染绿 / iron 染金，读作"染色石头"）
+    "ore_copper": ("copper_ore", dict(tint=(1.05, 1.00, 0.98), scale=1.00, wear=0.20)),
+    "ore_gold":   ("gold_ore", dict(tint=(1.05, 1.00, 0.95), scale=1.00, wear=0.12)),
+    # 水晶（四轮：不再借 glass_win 染蓝，改真 `crystal` key —— 半透明 + 内发光）
+    "crystal_a":  ("crystal", dict(tint=(0.72, 1.15, 2.30), scale=1.00)),
+    "crystal_b":  ("crystal", dict(tint=(0.95, 1.70, 1.90), scale=0.85)),
     "quartz":     ("white_stone", dict(tint=(1.15, 1.18, 1.25), scale=1.5, wear=0.30)),
     # ---- 木质断面 ----
     "wood_break": ("plank_wall", dict(tint=(1.55, 1.48, 1.28), scale=1.5)),   # 断枝口露白木
@@ -252,26 +255,30 @@ def _blob(b, c, r, mat, rings=5, segs=9, seed=0.0, jitter=0.22,
 
 
 def _leafcard(b, c, size, normal, mat="leaf_a", seed=0.0, curl=0.22):
-    """一片**叶形**面片（六边形剪影 + 尖端上翘），随机朝向铺在树冠表面。
+    """一张 **alpha 裁切的叶卡**（十字交叉的两片方形面片）。
 
-    不做矩形卡片：矩形在游戏尺寸下读作"绿色贴片"；叶形 + 尖端起翘 + 大量朝向
-    各异的叠放，才能把叶团的边缘打碎。alpha 裁切要 `leaf_card` 新 key（见汇报），
-    这里用实体叶形几何代替。
+    四轮返工：此前用"实心叶形多边形"堆叶团 → 边缘是几何剪影，游戏尺寸下读作
+    "实心贴片"。现在改用 `leaf_card` 材质（alpha 裁切：团内是叶、团间透明），
+    几何退化成两张交叉方片 —— 叶团的碎边由 alpha 给出，"叶簇"读法才成立。
+
+    卡要**够大**（0.3~0.6 m）才在卡内看到 3~10 片叶；卡太小会整张落进 alpha 空隙
+    里消失（尺寸由调用方给，见 broadleaf/bush）。
     """
     n = Vector(normal).normalized()
     ref = Vector((0.0, 0.0, 1.0)) if abs(n.z) < 0.9 else Vector((1.0, 0.0, 0.0))
     up = (n.cross(ref)).cross(n).normalized()
     right = up.cross(n)
     s = size * 0.5
-    prof = [(0.00, 1.00), (0.46, 0.40), (0.40, -0.05), (0.00, -1.00),
-            (-0.40, -0.05), (-0.46, 0.40)]
-    pts = []
-    for (pu, pv) in prof:
-        v = Vector(c) + right * (pu * s) + up * (pv * s)
-        if pv > 0.6:                                   # 尖端朝外起翘
-            v = v + n * (curl * size * (pv - 0.6))
-        pts.append(v)
-    b.poly(pts, mat, outward=n)
+    tilt = max(-0.35, min(0.35, curl))
+    a = (up * math.cos(tilt) + n * math.sin(tilt)).normalized()
+    cc = Vector(c)
+    b.poly([cc - right * s - a * s, cc + right * s - a * s,
+            cc + right * s + a * s, cc - right * s + a * s], mat, outward=n)
+    ca, sa = math.cos(1.12), math.sin(1.12)
+    r2 = (right * ca + a * sa).normalized()
+    a2 = (a * ca - right * sa).normalized()
+    b.poly([cc - r2 * s - a2 * s, cc + r2 * s - a2 * s,
+            cc + r2 * s + a2 * s, cc - r2 * s + a2 * s], mat, outward=n)
 
 
 def _rock(b, x, y, z, r, mat="rock", seed=0.0, squash=0.72, n=1, spread=0.55,
@@ -392,8 +399,15 @@ def broadleaf(b, x=0.0, y=0.0, z=0.0, seed=0, h=0.0, spread=0.0, lod="full",
     if lod == "simple":
         for i, c in enumerate(((x, y, z + clear + H * 0.34),
                                (x + bx * 0.5, y + by * 0.5, z + clear + H * 0.54))):
-            _blob(b, c, crown_r * 0.62, leaf, rings=4, segs=8, seed=seed + i,
-                  jitter=0.26, rz=crown_r * 0.5)
+            # 远景 LOD：内核用不透明 `leaf_core` 撑剪影 + 少量大叶卡打碎边缘
+            _blob(b, c, crown_r * 0.58, "leaf_core", rings=4, segs=8, seed=seed + i,
+                  jitter=0.26, rz=crown_r * 0.46)
+            for q in range(3):
+                d = _sphere_dir(rng)
+                _leafcard(b, (c[0] + d.x * crown_r * 0.5, c[1] + d.y * crown_r * 0.5,
+                              c[2] + d.z * crown_r * 0.4),
+                          crown_r * 0.55, d, leaf, seed=seed + 8.0 + q,
+                          curl=rng.uniform(-0.2, 0.2))
         _pad(b, x, y, crown_r * 2.0)
         return {"h": H, "crown": crown_r, "trunk": trunk_r}
 
@@ -409,23 +423,26 @@ def broadleaf(b, x=0.0, y=0.0, z=0.0, seed=0, h=0.0, spread=0.0, lod="full",
             off = rr * rng.uniform(0.15, 0.78)
             c = (x + bx * 0.6 + math.cos(th) * off, y + by * 0.6 + math.sin(th) * off,
                  zz + rng.uniform(-0.09, 0.09) * H)
-            _blob(b, c, rr * rng.uniform(0.74, 0.96), leaf,
-                  rings=5, segs=9, seed=seed + 40.0 + li * 5 + k, jitter=0.24,
-                  rz=rr * 0.78)
-            # 簇面叶卡片
-            for q in range(rng.randint(9, 15)):
+            # 实心内核（暗、不透明 → 撑住体积，避免树冠"空心"）+ 比旧版小一圈
+            _blob(b, c, rr * rng.uniform(0.56, 0.72), "leaf_core",
+                  rings=4, segs=8, seed=seed + 40.0 + li * 5 + k, jitter=0.24,
+                  rz=rr * 0.58)
+            # 外层 **alpha 叶卡**（大卡、多朝向 → 由 alpha 打出碎叶边）
+            lm = leaf if rng.random() < 0.68 else "leaf_b"
+            for q in range(rng.randint(9, 13)):
                 d = _sphere_dir(rng)
-                pc = Vector(c) + d * (rr * rng.uniform(0.82, 1.02) * 0.9)
-                _leafcard(b, pc, rr * rng.uniform(0.075, 0.135), d, leaf,
-                          seed=seed + q, curl=rng.uniform(-0.04, 0.10))
-    # 枝梢叶卡片（树冠外缘的稀疏感）
+                pc = Vector(c) + d * (rr * rng.uniform(0.50, 1.05))
+                _leafcard(b, pc, rr * rng.uniform(0.58, 1.02), d, lm,
+                          seed=seed + 40.0 + q * 1.7,
+                          curl=rng.uniform(-0.30, 0.30))
+    # 枝梢叶卡片（树冠外缘的稀疏感；卡放大到能显出叶簇）
     for (tp, mat_i) in tips:
-        for q in range(rng.randint(3, 6)):
+        for q in range(rng.randint(4, 7)):
             d = _sphere_dir(rng)
-            _leafcard(b, (tp[0] + d.x * 0.14 * M, tp[1] + d.y * 0.14 * M,
-                          tp[2] + d.z * 0.14 * M),
-                      crown_r * rng.uniform(0.13, 0.21), d, leaf,
-                      seed=seed + 90.0 + q, curl=rng.uniform(0.0, 0.16))
+            _leafcard(b, (tp[0] + d.x * 0.18 * M, tp[1] + d.y * 0.18 * M,
+                          tp[2] + d.z * 0.18 * M),
+                      crown_r * rng.uniform(0.28, 0.46), d, leaf,
+                      seed=seed + 90.0 + q, curl=rng.uniform(-0.12, 0.24))
     _pad(b, x, y, crown_r * 2.0)
     return {"h": H, "crown": crown_r, "trunk": trunk_r}
 
@@ -453,10 +470,10 @@ def _limb(b, rng, p, d, ln, r, bark, leaf, depth, tips, seed, cards):
             t = rng.uniform(0.20, 0.98)
             pc = p + (p1 - p) * t
             dd = _sphere_dir(rng)
-            _leafcard(b, (pc.x + dd.x * ln * 0.14, pc.y + dd.y * ln * 0.14,
-                          pc.z + dd.z * ln * 0.14),
-                      max(0.09 * M, ln * rng.uniform(0.10, 0.18)), dd, leaf,
-                      seed=seed + 400.0 + q, curl=rng.uniform(0.0, 0.10))
+            _leafcard(b, (pc.x + dd.x * ln * 0.18, pc.y + dd.y * ln * 0.18,
+                          pc.z + dd.z * ln * 0.18),
+                      max(0.26 * M, ln * rng.uniform(0.26, 0.42)), dd, leaf,
+                      seed=seed + 400.0 + q, curl=rng.uniform(-0.12, 0.22))
     if depth <= 0 or ln < 0.28 * M:
         tips.append((tuple(p1), 0))
         return
@@ -583,8 +600,10 @@ def dead_tree(b, x=0.0, y=0.0, z=0.0, seed=0, h=0.0, lod="full", leaves=0):
                  z + H * rng.uniform(0.65, 0.95))
             for q in range(4):
                 dd = _sphere_dir(rng)
-                _leafcard(b, (c[0] + dd.x, c[1] + dd.y, c[2] + dd.z),
-                          H * 0.05, dd, "leaf_dead", seed=seed + q)
+                _leafcard(b, (c[0] + dd.x * H * 0.06, c[1] + dd.y * H * 0.06,
+                              c[2] + dd.z * H * 0.06),
+                          H * 0.14, dd, "leaf_dead", seed=seed + q * 3.1,
+                          curl=rng.uniform(-0.15, 0.2))
     _pad(b, x, y, H * 0.16)
     return {"h": H, "crown": H * 0.05, "trunk": trunk_r}
 
@@ -648,17 +667,18 @@ def bush(b, x=0.0, y=0.0, z=0.0, seed=0, r=0.0, lod="full"):
         rr = R * rng.uniform(0.48, 0.80)
         c = (x + math.cos(th) * off, y + math.sin(th) * off,
              z + rr * rng.uniform(0.55, 0.85))
-        _blob(b, c, rr, mat, rings=4, segs=8, seed=seed + 10.0 + i, jitter=0.28,
-              rz=rr * 0.82, floor=z + 0.5)
+        # 实心内核（暗）+ 外层 alpha 叶卡（同阔叶树冠的做法）
+        _blob(b, c, rr * rng.uniform(0.60, 0.78), "leaf_core", rings=4, segs=8,
+              seed=seed + 10.0 + i, jitter=0.28, rz=rr * 0.66, floor=z + 0.5)
         if lod == "full":
-            for q in range(rng.randint(3, 6)):
+            for q in range(rng.randint(4, 7)):
                 d = _sphere_dir(rng)
                 if d.z < -0.25:              # 贴地那圈不铺叶卡（会被地面吃掉/扎地）
                     continue
-                _leafcard(b, (c[0] + d.x * rr * 0.9, c[1] + d.y * rr * 0.9,
-                              c[2] + d.z * rr * 0.9),
-                          rr * rng.uniform(0.42, 0.62), d, mat, seed=seed + q,
-                          curl=rng.uniform(-0.1, 0.3))
+                _leafcard(b, (c[0] + d.x * rr * 0.85, c[1] + d.y * rr * 0.85,
+                              c[2] + d.z * rr * 0.85),
+                          rr * rng.uniform(0.55, 0.90), d, mat, seed=seed + q * 2.3,
+                          curl=rng.uniform(-0.25, 0.30))
     # 基部杂草
     if lod == "full":
         for i in range(rng.randint(2, 4)):
@@ -854,22 +874,31 @@ def gold_vein(b, x=0.0, y=0.0, z=0.0, seed=0, w=0.0, h=0.0):
     rng = _rng(seed)
     W = w * M if w else rng.uniform(1.6, 2.6) * M
     H = h * M if h else rng.uniform(1.1, 2.0) * M
-    _ore_body(b, x, y, z, W * 0.5, rng, seed, "rock_light", squash=H / (W * 0.5) * 0.9)
+    # 母岩用**中灰** `rock`（不用 rock_light）：白石头上的金点看不见，
+    # 暗母岩才衬得出裸金的黄（四轮实拍教训）。
+    _ore_body(b, x, y, z, W * 0.5, rng, seed, "rock", squash=H / (W * 0.5) * 0.9)
     # 石英脉（近垂直的白条）
-    for i in range(rng.randint(3, 5)):
+    for i in range(rng.randint(2, 4)):
         th = rng.uniform(-2.55, -0.59)
         rr = W * rng.uniform(0.18, 0.44)
         _chunk(b, (x + math.cos(th) * rr, y + math.sin(th) * rr,
                    z + H * rng.uniform(0.35, 0.9)),
                W * rng.uniform(0.16, 0.28), "quartz", rng)
-    # 裸金点
-    for i in range(rng.randint(8, 13)):
+    # 裸金点（放大 + 加密 + 往外顶：15px 的小点在游戏尺寸下读成"石头上的脏点"）
+    for i in range(rng.randint(10, 16)):
         th = rng.uniform(-2.55, -0.59)
-        rr = W * rng.uniform(0.18, 0.50)
-        zz = z + H * rng.uniform(0.35, 0.95)
+        rr = W * rng.uniform(0.30, 0.62)
+        zz = z + H * rng.uniform(0.32, 0.95)
         _blob(b, (x + math.cos(th) * rr, y + math.sin(th) * rr, zz),
-              W * rng.uniform(0.115, 0.200), "ore_gold", rings=2, segs=6,
-              seed=seed + i, jitter=0.3, rz=W * 0.10)
+              W * rng.uniform(0.18, 0.30), "ore_gold", rings=2, segs=6,
+              seed=seed + i, jitter=0.3, rz=W * 0.14)
+    # 大块金脉板（3 块；给"一眼看到黄"的粗读层）
+    for i in range(3):
+        th = rng.uniform(-2.45, -0.69)
+        rr = W * rng.uniform(0.30, 0.54)
+        _chunk(b, (x + math.cos(th) * rr, y + math.sin(th) * rr,
+                   z + H * rng.uniform(0.45, 0.90)), W * rng.uniform(0.26, 0.40),
+               "ore_gold", rng)
     _pebbles(b, x, y, z, W * 0.5, rng.randint(5, 9), "rock_light", seed=seed + 9.0,
              spread=0.7)
     _pad(b, x, y, W * 1.3)

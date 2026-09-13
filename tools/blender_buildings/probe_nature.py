@@ -125,7 +125,7 @@ def make_ground(x0, x1, y0, y1):
     """地面：**用 Builder 拼四边形**，自动拿到 UV = 世界/32 → 既有 `ground` 材质
     就是世界空间程序纹理（from_pydata 拼的面没有 UV，会得到一片平涂死白——踩过）。"""
     b = B.Builder("ground")
-    b.poly([(x0, y0, 0.0), (x1, y0, 0.0), (x1, y1, 0.0), (x0, y1, 0.0)], "ground",
+    b.poly([(x0, y0, 0.0), (x1, y0, 0.0), (x1, y1, 0.0), (x0, y1, 0.0)], "field_ground",
            outward=(0.0, 0.0, 1.0))
     return b.to_object()
 

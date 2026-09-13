@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """写实西幻建筑程序化 PBR 材质库 v3.1（Blender 5.2 / EEVEE）。
 
-key 家族（共 **64** 个；`ORDER` 即注册顺序，`audit()` 打印全部特征尺寸）
+key 家族（共 **65** 个；`ORDER` 即注册顺序，`audit()` 打印全部特征尺寸）
 ---------------------------------------------------------------
 * **结构 26**：茅草/瓦/木/抹灰/石砌/砖/铁 + 窗玻璃/暗腔/水/灯 + 地面/草簇/绿植…
 * **道具 10**（二轮追加）：染色土布×3 / 柳条 / 陶 / 叶菜 / 根菜 / 鱼 / 面包 / 染缸液面
@@ -18,6 +18,11 @@ key 家族（共 **64** 个；`ORDER` 即注册顺序，`audit()` 打印全部�
   `leaf_card`（**alpha 裁切树冠叶卡**）/ `rock`（天然岩体）/ `copper_ore`（铜矿脉）/
   `gold_ore`（金矿脉）/ `grass_band`（野外地被草带）。其中 `glazing_win`、
   `leaf_card` 走 alpha 混合（`ALPHA_KEYS`），前者另挂 `GLASS_KEYS`。
+* **端头封端 1**（五轮追加）：`wood_end`（木料端面年轮+干裂）—— 木梁端面/竖板端头/
+  屋面板端头在 20° 俯视下正对镜头，见 `docs/技术/架构/美术品控-硬边与材质边缘.md` §2.2。
+* **倒角磨白层**（五轮追加，非新 key）：`EDGE_WEAR` 登记的 16 个 key 会用 Attribute
+  节点读几何属性 `edge`（倒角面 = 1），在倒角带混入磨白/掉漆/抛光金属色 —— EEVEE
+  下替代 Cycles `Bevel` 节点。属性缺失时掩码恒 0 → **既有 key 行为逐像素不变**。
 
 尺度契约（本轮重定标，一切 feature 尺寸都必须走这里的换算）
 --------------------------------------------------------
@@ -463,6 +468,10 @@ AGE = {
     'bronze':      dict(splash=0.34, mud=(0.196, 0.155, 0.106), moss=(0.120, 0.152, 0.074),
                         rain=0.050, h=0.30),
     'patina':      dict(rain=0.055, sun=0.10, sun_gray=(0.560, 0.640, 0.600)),
+    # 五轮追加：木料端面（端头封端）。端面吸水快 → 雨渍略重、日照发灰；
+    # 竖板端头贴地 → 溅泥带照给，但强度压低（端面小，脏一点就糊成一块）。
+    'wood_end':    dict(splash=0.30, mud=(0.170, 0.136, 0.096), moss=(0.118, 0.140, 0.066),
+                        rain=0.062, sun=0.10, sun_gray=(0.598, 0.556, 0.470), h=0.30),
 }
 
 #: 逐体色变幅度 (hue, val)：hue = 通道增益偏差（近似小色相旋转），val = 明度 ±。
@@ -598,6 +607,64 @@ def _aged(b, u, v, col, key):
     if key in OBJ_VAR:
         col = b.mul_c(col, _obj_var(b, key))
     return col
+
+
+# ============================================================ 倒角磨白层（EEVEE）
+#: 倒角带磨白（§2.2 第 4 条）：key → (磨白色, 强度, 粗糙度目标|None)。
+#: 建模侧把 bevel 面写了几何属性 `edge=1`（buildings.Builder.bevel_faces），这里用
+#: Attribute 节点读出来，在**倒角带**混入磨白/掉漆色 —— 这是 EEVEE 下替代
+#: Cycles `Bevel` 节点（该节点 EEVEE 不可用）的可靠做法：几何自己带掩码。
+#: 强度都压在 ≤0.65 且用噪声打碎（均匀一圈白边本身就是新的"死线"）。
+EDGE_WEAR = {
+    # 木质 → 浅木色（棱上的木纤维先被磨掉、露浅色早材）
+    'plank_wall':  ((0.640, 0.520, 0.360), 0.52, None),
+    'timber':      ((0.470, 0.330, 0.200), 0.50, None),
+    'log_wall':    ((0.580, 0.440, 0.280), 0.48, None),
+    'shingle':     ((0.560, 0.500, 0.410), 0.42, None),
+    'wood_deck':   ((0.600, 0.500, 0.350), 0.42, None),
+    'wood_end':    ((0.520, 0.400, 0.260), 0.44, None),
+    # 抹灰 → 露底灰/砖（低对比暖褐，不走锈褐斑；只落在棱上）
+    'plaster':     ((0.520, 0.400, 0.300), 0.45, None),
+    'wattle':      ((0.480, 0.400, 0.300), 0.42, None),
+    # 石/砖 → 被摸亮的石棱（比底色略亮略暖，砖走高饱和砖芯色）
+    'stone':       ((0.720, 0.700, 0.640), 0.46, None),
+    'white_stone': ((0.900, 0.880, 0.830), 0.42, None),
+    'brick':       ((0.620, 0.300, 0.190), 0.42, None),
+    # 屋面：瓦口/脊瓦棱磨白
+    'tile_roof':   ((0.640, 0.400, 0.290), 0.40, None),
+    'slate_roof':  ((0.580, 0.610, 0.640), 0.38, None),
+    # 铁/铜 → 金属亮边（同时把粗糙度压到 0.24/0.30 = 抛光）
+    'iron':        ((0.620, 0.630, 0.660), 0.62, 0.24),
+    'bronze':      ((0.800, 0.640, 0.380), 0.52, 0.30),
+    'patina':      ((0.700, 0.620, 0.520), 0.40, 0.42),
+}
+
+
+def _edge_wear(b, gi, key, col, rough_in=None):
+    """读几何属性 `edge`，在倒角带混磨白层。返回 (color, rough|None)。
+
+    * 属性缺失（旧网格/贴片/地面）→ Attribute 输出 0 → 掩码 0 → **像素不变**，
+      这就是"既有 key 行为不变"的保证；
+    * 掩码沿长度用两级噪声打碎（14 cm 主段 + 40 cm 成团）→ 不是一整条均匀白边；
+    * 面属性是逐面常量，靠噪声在带内做出断续，才不会读成"描边"。
+    """
+    cfg = EDGE_WEAR.get(key)
+    if not cfg:
+        return col, None
+    wcol, amt, rtar = cfg
+    at = b.nd('ShaderNodeAttribute')
+    at.attribute_name = 'edge'
+    at.label = "倒角面标记 edge"
+    u, v = _uv(b, gi)
+    n1 = b.noise(b.vec(b.mul(u, 3.0), b.mul(v, 3.0), 151.0), 1.0, 4.0)
+    n2 = b.noise(b.vec(b.mul(u, 1.0), b.mul(v, 1.0), 157.0), 1.0, 3.0)
+    bd = b.lin(b.mixf(0.62, n1, n2), 0.26, 0.74, 0.38, 1.05)
+    m = b.mul(at.outputs['Fac'], b.mul(amt, bd))
+    col = b.mixc(m, col, wcol)
+    rough = None
+    if rtar is not None and rough_in is not None:
+        rough = b.mixf(m, rough_in, rtar)
+    return col, rough
 
 
 # ============================================================ 茅草
@@ -1040,6 +1107,46 @@ def _b_timber(b, gi, bsdf):
     _ = hd
     col = _aged(b, u, v, col, 'timber')
     return dict(color=col, rough=rough, normal=b.bump(h, 0.85, uv_cm(2.4)), spec=0.30)
+
+
+def _b_wood_end(b, gi, bsdf):
+    """木料**端面**（端头封端）：同心年轮 + 放射干裂（五轮追加）。
+
+    为什么要单独一个 key：屋面板端头 / 木梁端面 / 竖板端头在 20° 俯视下**正对
+    镜头**，若沿用侧面木纹（顺 U 的板缝 + 长纤维），端面读作"贴图被切断的斜纹板"
+    （§2.3 第 5 条点名的病灶）。真木料端面只有一个读法：一圈年轮 + 从髓心射出的干裂。
+    年轮间距 3 cm（≈2.3 px@游戏 1:1 / 4.6 px@2x）——1x 下仍读得出 3~4 圈。
+    """
+    wear = gi.outputs['Wear']
+    u, v = _uv(b, gi)
+    fu, fv = b.frc(u), b.frc(v)
+    dx, dy = b.sub(fu, 0.5), b.sub(fv, 0.5)
+    r = b.op('SQRT', b.add(b.mul(dx, dx), b.mul(dy, dy)))
+    ring_w = uv_cm(3.0)
+    band = b.pisin(b.frc(b.div(r, ring_w)))               # 0→早材(浅) 0.5→晚材(深)
+    ring_id = b.flr(b.div(r, ring_w))
+    col = b.ramp(band, [(0.06, (0.048, 0.022, 0.010)),
+                        (0.55, (0.212, 0.104, 0.048)),
+                        (0.95, (0.312, 0.170, 0.086))])
+    col = b.mixc(b.mul(b.h1(ring_id, 17.0), 0.42), col, b.mul_c(col, 1.34))
+    # 放射干裂：4 条，按 cell 哈希只给一部分端头（不是每根梁都裂）
+    ang = b.op('ARCTAN2', dy, dx)
+    t = b.frc(b.mul(b.div(ang, 6.2831853), 4.0))
+    line = b.mn(t, b.sub(1.0, t))
+    gate = b.mr(b.h1(b.flr(b.mul(u, 1.0)), 29.0), 0.30, 0.42, 0.0, 1.0)
+    crack = b.mul(b.sub(1.0, b.ss(line, 0.006, 0.030)), gate)
+    crack = b.mul(crack, b.lin(wear, 0.15, 0.95, 0.35, 1.0))
+    col = b.mixc(crack, col, (0.030, 0.014, 0.007))
+    # 锯痕（横向浅弧，2 道）：端面不是镜面，要有"被锯出来"的横纹
+    saw = b.mul(b.sub(1.0, b.ss(b.absv(b.sub(b.frc(b.div(dy, uv_cm(9.0))), 0.5)), 0.34, 0.46)),
+                0.55)
+    col = b.mul_c(col, b.mixf(saw, 0.88, 1.10))
+    h = b.mul(band, 0.45)
+    h = b.add(h, b.mul(b.sub(band, 0.5), 0.20))
+    h = b.sub(h, b.mul(crack, 0.9))
+    rough = b.lin(band, 0.0, 1.0, 0.72, 0.92)
+    col = _aged(b, u, v, col, 'wood_end')
+    return dict(color=col, rough=rough, normal=b.bump(h, 0.70, uv_cm(2.0)), spec=0.28)
 
 
 # ============================================================ 抹灰
@@ -3278,6 +3385,8 @@ _BUILDERS = {
     'gold_ore':     (_b_gold_ore, '金矿脉（石英脉+裸金）'),
     'grass_band':   (_b_grass_band, '野外地被草带'),
     'glazing_win':  (_b_glazing_win, '真透明窗玻璃（alpha 透视）'),
+    # ---- 五轮追加（硬边品控：端头封端；既有 64 key 全部未改动）----
+    'wood_end':     (_b_wood_end, '木料端面（年轮+干裂；木梁/板端封端）'),
 }
 
 ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
@@ -3296,7 +3405,9 @@ ORDER = ['thatch', 'thatch_old', 'tile_roof', 'slate_roof',
          'dirt_packed', 'dirt_mud', 'gravel', 'grass_lawn', 'sand', 'wood_deck',
          # 四轮追加（追加在末尾，既有 key 的相对顺序不变 → 既有样片排布不动）
          'bark', 'leaf_card', 'rock', 'copper_ore', 'gold_ore', 'grass_band',
-         'glazing_win']
+         'glazing_win',
+         # 五轮追加（端头封端；同样追加在末尾）
+         'wood_end']
 
 #: 需要 alpha 混合的 key（裁切用贴片）
 ALPHA_KEYS = {'grass_tuft', 'leaf_card', 'glazing_win'}
@@ -3401,10 +3512,20 @@ FEATURES = {
                      ("裸土斑", 46.0)],
     'glazing_win':  [("柔光斜带（粗读层）", 90.0), ("薄雾", 18.0),
                      ("（Alpha 0.075~0.23 / 透射 0.85）", 0.0)],
+    # ---- 五轮追加：端头封端（倒角面宽 = r√2 → BEV_BIG 2.0 ≈ 3.7 cm）----
+    'wood_end':     [("年轮间距", 3.0), ("放射干裂", 40.0), ("锯痕弧距", 9.0),
+                     ("倒角磨白带", 3.7)],
 }
 
 _GROUP_CACHE = {}
 _INST_CACHE = {}
+
+#: 倒角磨白带（§2.2 边缘磨损）的现实尺寸：90° 棱 chamfer r 后，新倒角面宽 = r√2，
+#: 故 BEV_BIG 2.0 → 2.8 世界单位 ≈ 3.7 cm ≈ 2.8 px@游戏 1:1（1x 下 ≥1px 可辨）。
+#: 只登记 EDGE_WEAR 里的 key（这些材质的棱上会混磨白层）。
+for _k in EDGE_WEAR:
+    if _k in FEATURES and not any(_n == "倒角磨白带" for _n, _c in FEATURES[_k]):
+        FEATURES[_k].append(("倒角磨白带", 3.7))
 
 
 def _alive(x):
@@ -3456,6 +3577,10 @@ def _get_group(key, force=False):
     res = _BUILDERS[key][0](b, gi, bsdf)
 
     col = b.mul_c(res['color'], gi.outputs['Tint'])
+    # 倒角带磨白（EEVEE 版边缘磨损）：属性缺失时掩码恒 0 → 旧网格像素不变
+    ew_rough = None
+    if key in EDGE_WEAR:
+        col, ew_rough = _edge_wear(b, gi, key, col, res.get('rough'))
     b.l.new(col, bsdf.inputs['Base Color'])
     for k, name in (('rough', 'Roughness'), ('metal', 'Metallic'), ('normal', 'Normal'),
                     ('spec', 'Specular IOR Level'), ('sheen', 'Sheen Weight'),
@@ -3463,6 +3588,11 @@ def _get_group(key, force=False):
                     ('emit', 'Emission Color'), ('ior', 'IOR'),
                     ('coat', 'Coat Weight'), ('trans', 'Transmission Weight')):
         if k not in res:
+            if k == 'rough' and ew_rough is not None:
+                b.l.new(ew_rough, bsdf.inputs['Roughness'])
+            continue
+        if k == 'rough' and ew_rough is not None:
+            b.l.new(ew_rough, bsdf.inputs['Roughness'])   # 磨损边另给粗糙度
             continue
         v = res[k]
         if isinstance(v, (int, float)) and not isinstance(v, bool):
@@ -3621,6 +3751,7 @@ mat_copper_ore = _mk('copper_ore')
 mat_gold_ore = _mk('gold_ore')
 mat_grass_band = _mk('grass_band')
 mat_glazing_win = _mk('glazing_win')
+mat_wood_end = _mk('wood_end')
 
 
 def make(key, **kw):

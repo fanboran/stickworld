@@ -68,6 +68,22 @@ STRAW_ROLL_SQUASH = 0.60
 MIN_DOOR_CELLS = 6
 U_WIDTHS = (4, 8, 12, 16)   # 小物件以外，房屋类宽度取 4 的整数倍（4 格仅限小物件）
 
+#: ---------------------------------------------------------------- 真倒角半径档
+#: 见 `docs/技术/架构/美术品控-硬边与材质边缘.md` §2.1。半径是**几何硬口径**：
+#: 全 12 棱 chamfer 后，每个面的角点沿两个面内轴各内缩 r，故投影剪影变化
+#: ≈ r·sin(俯角)·(上端 + 下端)。game 0°/20° 下 = 2r·sin20° = 0.685r；check_spec
+#: 12°/10° 下 = 0.342r。倒角面另写 `edge=1` 供材质混磨白层。
+BEV_BIG = 2.0       # 建筑大件：梁 / 柱 / 檐口 / 窗台板 / 勒脚 / 台阶 / 垛口 / 隅石
+BEV_MID = 1.5       # 木骨与家具板边 / 门框 / 封檐板
+BEV_SMALL = 0.8     # 小件：瓦条、檩端、铁活、箍
+BEV_SEG = 1         # 倒角段数：1 = 真 chamfer（本管线默认；2 只给需要圆角的柱头）
+#: 实测口径（58 个 def×宽度档 A/B：倒角 ON vs OFF）：
+#:   * check_spec 12°/10° 剪影 —— 最差 0.83 px，超 1px 条目 **0**；check_spec 判定翻转 0；
+#:   * game 0°/20° 剪影 —— 宽 0.00（檐口外沿落在 y_out，不动宽度），高最差 1.37 px，
+#:     全部来自"正脊压顶顶面 / 勒脚底面"这对极值端点被 r 内缩（2r·sin20°=1.37）；
+#:     BEV_BIG 曾取 2.6 → 12/10 剪影 1.07 px（>1 打回），取 2.0 后守住 check_spec 口径。
+#: 结论：**宽度（宽度纪律的约束量）零变化**；高度变化 ≤1.4px（≈栋高 0.3%，不可辨）。
+
 
 def eave_over(grid_w):
     """§8.2 出檐（每侧）= 建筑宽 × 20.5%，稳落 18~23% 带内。"""
@@ -370,13 +386,25 @@ def _solid_segments(span, holes):
 
 
 class Builder(object):
-    """把模块积木累积进一个 bmesh，最终吐出一个多材质槽对象（确定性）。"""
+    """把模块积木累积进一个 bmesh，最终吐出一个多材质槽对象（确定性）。
+
+    真倒角（§2.1 硬边品控）
+    ----------------------
+    `box*` / `cylinder` 原语带 `bevel=<半径>` 即对该件做**真 chamfer**，倒角面写
+    几何属性 `edge=1`，由 materials.py 读出来混"磨白层"（EEVEE 可用的边缘磨损）。
+    不用 Blender `Bevel` modifier：本管线每个 `poly()` 都新建顶点 → 盒体是 6 张
+    **互不焊接的散面**，modifier 会把所有边界边当棱切出错误几何；原语级倒角
+    先按面组局部焊接再倒角，才切得到真正的可见棱。
+    """
 
     def __init__(self, name, tile=CELL):
         self.name = name
         self.tile = tile           # UV 世界尺度：每 tile 单位重复一次（1 格 = 32px）
         self.bm = bmesh.new()
         self.uv = self.bm.loops.layers.uv.new("UVMap")
+        #: 倒角面标记（FACE/FLOAT）：1 = 该面是磨出来的倒角带，材质读它做磨白
+        self.edge_lay = self.bm.faces.layers.float.new("edge")
+        self.bevel_stats = {"calls": 0, "faces": 0, "r_max": 0.0}
         self.mat_names = []
 
     # -- 低层 ---------------------------------------------------------
@@ -424,8 +452,94 @@ class Builder(object):
             loop[self.uv].uv = uv
         return f
 
-    def box_oriented(self, center, axes, half, mat, uv_axes=None):
-        """任意朝向长方体：center + (-1/1)*half[i]*axes[i]。axes 需右手系。"""
+    def _project_uv(self, faces, uv_axes=None):
+        """对倒角新面重做盒式投影 UV（与 `poly()` 同一规则）。
+
+        bevel 会把相邻面的 UV 插值到倒角带上；直接投影比插值更准，而且与邻面
+        在共享边上完全对齐（投影是世界空间的，跨面天然连续）。
+        """
+        t = self.tile
+        for f in faces:
+            if not f.is_valid:
+                continue
+            n = f.normal
+            if n.length < 1e-9:
+                continue
+            ax = max(range(3), key=lambda i: abs(n[i]))
+            for loop in f.loops:
+                c = loop.vert.co
+                if uv_axes is not None:
+                    ua, va = uv_axes
+                    loop[self.uv].uv = (c.dot(ua) / t, c.dot(va) / t)
+                elif ax == 0:
+                    loop[self.uv].uv = (c.y / t, c.z / t)
+                elif ax == 1:
+                    loop[self.uv].uv = (c.x / t, c.z / t)
+                else:
+                    loop[self.uv].uv = (c.x / t, c.y / t)
+
+    def bevel_faces(self, faces, radius, segments=1, threshold=30.0, uv_axes=None):
+        """对给定面组（一个原语）的**可见外棱**做真倒角，倒角面写 `edge=1`。
+
+        * 先按面组局部焊接（见类注释：不焊接就没有"棱"）；
+        * 只倒两面夹角 ≥ `threshold`（默认 30°）的边 —— 共面拼接缝不倒，
+          所以 `wall_panel` 那种"多块箱体拼一面墙"不会切出假缝；
+        * `segments`=1 真倒角 / 2 圆角过渡；`clamp_overlap` 防薄板倒角炸开；
+        * `material=-1` → 倒角面继承相邻面材质（多材质槽对象不会被刷成槽 0）；
+        * **半径纪律**：全棱 chamfer 后每个面的角点沿两个面内轴各内缩 r，故剪影变化
+          随 r 线性增长（game 0/20 ≈ 0.685r px、check_spec 12/10 ≈ 0.342r px；实测见
+          `BEV_BIG` 上方注释）。调用点一律用 BEV_BIG/BEV_MID/BEV_SMALL 三档，别写裸数字。
+        """
+        bm = self.bm
+        fs = [f for f in faces if f.is_valid]
+        if not fs or radius <= 0.0:
+            return []
+        vs = list({v for f in fs for v in f.verts})
+        if len(vs) > 4:
+            bmesh.ops.remove_doubles(bm, verts=vs, dist=1e-4)
+        fs = [f for f in fs if f.is_valid]
+        seen, geom = set(), []
+        for f in fs:
+            if not f.is_valid:
+                continue
+            for e in f.edges:
+                if e in seen:
+                    continue
+                seen.add(e)
+                if len(e.link_faces) != 2:      # 开口/非流形边：不是棱，跳过
+                    continue
+                try:
+                    ang = math.degrees(e.calc_face_angle(0.0))
+                except Exception:
+                    ang = 0.0
+                if ang >= threshold:
+                    geom.append(e)
+        if not geom:
+            return []
+        try:
+            res = bmesh.ops.bevel(bm, geom=geom, offset=float(radius),
+                                  offset_type='OFFSET', segments=int(segments),
+                                  profile=0.5, affect='EDGES', clamp_overlap=True,
+                                  loop_slide=True, material=-1)
+        except Exception as exc:                 # 退化几何（零厚箱体等）：放弃倒角不报错
+            print("[bevel] %s 放弃（%s）" % (self.name, exc))
+            return []
+        new = [f for f in res.get('faces', []) if f.is_valid]
+        for f in new:
+            f[self.edge_lay] = 1.0
+        self._project_uv(new, uv_axes)
+        self.bevel_stats["calls"] += 1
+        self.bevel_stats["faces"] += len(new)
+        self.bevel_stats["r_max"] = max(self.bevel_stats["r_max"], float(radius))
+        return new
+
+    def box_oriented(self, center, axes, half, mat, uv_axes=None, bevel=None,
+                     bevel_segments=1, bevel_threshold=30.0, ends=None):
+        """任意朝向长方体：center + (-1/1)*half[i]*axes[i]。axes 需右手系。
+
+        bevel = 真倒角半径（None/0 = 不倒）；ends = (轴向量, 材质名)：把该件沿
+        该轴两端的端面换成另一材质（木梁端面年轮、砖砌/板材端头收边）。
+        """
         c = Vector(center)
         a0, a1, a2 = (Vector(a) for a in axes)
         h0, h1, h2 = half
@@ -441,25 +555,48 @@ class Builder(object):
             ((0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)),   # +a2
             ((0, 0, 0), (0, 1, 0), (1, 1, 0), (1, 0, 0)),   # -a2
         )
+        fs = []
         for q in quads:
-            self.poly([v(*i) for i in q], mat, uv_axes=uv_axes)
+            f = self.poly([v(*i) for i in q], mat, uv_axes=uv_axes)
+            if f is not None:
+                fs.append(f)
+        if ends is not None and fs and ends[1]:
+            ex, em = Vector(ends[0]), ends[1]
+            if ex.length > 1e-9:
+                ex = ex.normalized()
+                si = self._slot(em)
+                for f in fs:
+                    n = _face_normal([vt.co for vt in f.verts])
+                    if n is not None and abs(n.dot(ex)) > 0.9:
+                        f.material_index = si
+        if bevel:
+            self.bevel_faces(fs, bevel, bevel_segments, bevel_threshold, uv_axes=uv_axes)
+        return fs
 
-    def box(self, size, center, mat, rot=None, uv_axes=None):
+    def box(self, size, center, mat, rot=None, uv_axes=None, bevel=None,
+            bevel_segments=1, ends=None):
         """轴对齐（或给 rot=Euler 弧度三元组）长方体。size=(sx,sy,sz)，center=盒心。"""
         if rot is None:
             axes = (Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)))
         else:
             m = Euler(rot, "XYZ").to_matrix()
             axes = (m.col[0], m.col[1], m.col[2])
-        self.box_oriented(center, axes, (size[0] / 2.0, size[1] / 2.0, size[2] / 2.0),
-                          mat, uv_axes=uv_axes)
+        return self.box_oriented(center, axes, (size[0] / 2.0, size[1] / 2.0, size[2] / 2.0),
+                                 mat, uv_axes=uv_axes, bevel=bevel,
+                                 bevel_segments=bevel_segments, ends=ends)
 
-    def box_bottom(self, size, xy, z_bottom, mat, rot=None):
+    def box_bottom(self, size, xy, z_bottom, mat, rot=None, bevel=None,
+                   bevel_segments=1, ends=None):
         """底面对齐版 box：xy=(x,y) 水平中心，z_bottom=底面高度。"""
-        self.box(size, (xy[0], xy[1], z_bottom + size[2] / 2.0), mat, rot)
+        return self.box(size, (xy[0], xy[1], z_bottom + size[2] / 2.0), mat, rot,
+                        bevel=bevel, bevel_segments=bevel_segments, ends=ends)
 
-    def cylinder(self, center, radius, height, mat, segments=16, axis="Z", taper=1.0):
-        """手写棱柱（规避 bmesh.ops API 漂移）。center=柱心，height=全长。"""
+    def cylinder(self, center, radius, height, mat, segments=16, axis="Z", taper=1.0,
+                 bevel=None, bevel_segments=1, bevel_threshold=30.0):
+        """手写棱柱（规避 bmesh.ops API 漂移）。center=柱心，height=全长。
+
+        bevel = 只倒**两端环棱**（相邻侧面夹角 = 360/segments < 30° 被阈值滤掉）。
+        """
         c = Vector(center)
         if axis == "Z":
             ax = (Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)))
@@ -475,12 +612,19 @@ class Builder(object):
             u, v = math.cos(th), math.sin(th)
             ring0.append(c + ax[0] * (radius * u) + ax[1] * (radius * v) - ax[2] * h)
             ring1.append(c + ax[0] * (r2 * u) + ax[1] * (r2 * v) + ax[2] * h)
+        fs = []
         for i in range(segments):
             j = (i + 1) % segments
             mid = (ring0[i] + ring0[j] + ring1[j] + ring1[i]) / 4.0
-            self.poly([ring0[i], ring0[j], ring1[j], ring1[i]], mat, outward=(mid - c))
-        self.poly(list(reversed(ring0)), mat, outward=(-ax[2]))
-        self.poly(list(ring1), mat, outward=ax[2])
+            f = self.poly([ring0[i], ring0[j], ring1[j], ring1[i]], mat, outward=(mid - c))
+            if f is not None:
+                fs.append(f)
+        for f in (self.poly(list(reversed(ring0)), mat, outward=(-ax[2])),
+                  self.poly(list(ring1), mat, outward=ax[2])):
+            if f is not None:
+                fs.append(f)
+        if bevel and taper > 0.05:
+            self.bevel_faces(fs, bevel, bevel_segments, bevel_threshold)
 
     def ellipse_prism(self, center, ry, rz, length, mat, segments=10, axis="X",
                       jitter=0.0, seed=0):
@@ -618,12 +762,27 @@ def _roof_family(mat):
     return "wood"
 
 
+#: 木料族（端头封端用 wood_end = 端面年轮）
+WOOD_MATS = ("wood", "wood_light", "wood_dark", "wood_roof", "wood_door",
+             "timber", "plank_wall", "log_wall", "shingle", "bark")
+
+
+def end_grain_mat(m):
+    """给定构件材质 → 端头封端材质（木料 → 年轮；石材 → 细料石；其余不换）。"""
+    if m in WOOD_MATS:
+        return "wood_end"
+    if m in ("stone", "stone_dark", "brick", "white_stone", "plaster"):
+        return "white_stone"
+    return None
+
+
 def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
                thickness=9.0, mat_under=None, gable_overhang=None, ridge_cap=True,
                cap_mat=None, cap_size=(0, 0), eave_board=True, board_mat=None,
                board_h=0.0, slope_uv=True, uv_swap=False, eave_ao=True,
                rafter_ends=3, eave_section=True, straw_eave=True, straw_ridge=True,
-               ao_faces=None, ao_mat=None, ao_h=0.0, purlin_ext=(6.0, 14.0)):
+               ao_faces=None, ao_mat=None, ao_h=0.0, purlin_ext=(6.0, 14.0),
+               tile_ends=True):
     """双坡屋顶（屋脊沿 X，正面朝 -Y，相机侧看到整片前坡）。
 
     w        = 屋脊方向覆盖的建筑宽度（X，不含出檐）
@@ -645,6 +804,8 @@ def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
        （旧实现埋在 f 0.22~0.72 处，被自家出檐整条挡死）；草顶出挑收敛到 60%。
     ④ `straw_eave`/`straw_ridge` 茅草檐口草束（沿两道檐缘悬垂、微下垂梳齿感，straw 材质）
        + 屋脊草穗（仅在 ridge_cap 时）；瓦/木顶不做此项。
+    ⑤ `tile_ends` 屋面板端头瓦当（仅瓦/石板顶）：每块瓦端加一个低段数圆盘封端
+       （§2.2 端头封端）；压顶/封檐板/檩端另做真倒角 + 端面年轮（§2.1）。
     """
     ov_x = overhang if gable_overhang is None else gable_overhang
     ridge_len = w + 2.0 * ov_x
@@ -691,8 +852,10 @@ def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
     if ridge_cap:
         cw = (cap_size[0] if cap_size and cap_size[0] else 26.0)
         # 正脊压顶条：默认取深色（瓦/石顶用石脊、草/木顶用木脊）→ 正脊可读，不抬剪影
+        cm = cap_mat or ("stone_dark" if fam == "tile" else "wood_dark")
+        cem = end_grain_mat(cm)
         b.box_bottom((ridge_len + 2.0, cw, cap_h), (x, y), z + rise - cap_h * 0.35,
-                     cap_mat or ("stone_dark" if fam == "tile" else "wood_dark"))
+                     cm, bevel=BEV_BIG, ends=((1, 0, 0), cem) if cem else None)
     # ---- ① 檐口可见厚度断面 ------------------------------------------------
     if eave_section:
         if fam == "thatch":
@@ -705,11 +868,14 @@ def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
                                 seed=int(sign < 0.0))
         else:
             bh = min(10.0, max(6.0, board_h if board_h else 8.5))
+            fem = end_grain_mat(fmat)
             for sign in (-1.0, 1.0):
                 ey = y + sign * half
                 # 封檐板：竖直板条（6~10 高），坡度角下读到"檐口有厚度"
+                # 顶棱是 20° 俯视下 **整栋最长的连续高光线** → BEV_MID 真倒角
                 b.box_bottom((ridge_len - 1.0, 9.0, bh), (x, ey + sign * 1.0),
-                             z - bh * 0.62, fmat)
+                             z - bh * 0.62, fmat, bevel=BEV_MID,
+                             ends=((1, 0, 0), fem) if fem else None)
                 # 瓦口/瓦条断面：一排瓦端（凸出封檐板 4~6、长短与高度抖动）
                 n = max(6, min(44, int(round(ridge_len / 15.0))))
                 for i in range(n):
@@ -718,14 +884,27 @@ def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
                     bw_ = 12.5 + 2.5 * _jit(i, 41 + sa_)
                     dp_ = 15.0 + 3.5 * _jit(i, 73 + sa_)
                     hh_ = 7.0 + 1.6 * _jit(i, 97 + sa_)
-                    b.box_bottom((bw_, dp_, hh_), (x + u, ey + sign * 2.5),
-                                 z - 1.0 + 1.3 * _jit(i, 131 + sa_),
-                                 mat if fam == "tile" else fmat)
+                    zt_ = z - 1.0 + 1.3 * _jit(i, 131 + sa_)
+                    y_out = ey + sign * (2.5 + dp_ * 0.5)      # 原瓦条外端面 = 檐口外沿
+                    if fam == "tile" and tile_ends:
+                        # 瓦口瓦条**收短 2.6**、里端面不动，把最外一段让给瓦当圆盘：
+                        # 檐口的几何外沿仍落在 y_out（剪影/包围盒零变化）。
+                        dp2 = dp_ - 2.6
+                        b.box_bottom((bw_, dp2, hh_),
+                                     (x + u, y_out - sign * (dp2 * 0.5 + 2.6)), zt_, mat)
+                        # 端头瓦当：圆盘外沿正好压在 y_out，半径收在瓦条高度之内。
+                        # （这段不读"圆棒"——segment=6 + 只见端面，是瓦当的圆唇。）
+                        b.cylinder((x + u, y_out - sign * 1.6, zt_ + hh_ * 0.5),
+                                   hh_ * 0.46, 3.2, mat, segments=6, axis="Y",
+                                   bevel=BEV_SMALL, bevel_threshold=70.0)
+                    else:
+                        b.box_bottom((bw_, dp_, hh_), (x + u, ey + sign * 2.5), zt_,
+                                     fmat)
     elif eave_board:                                # 旧行为退路（eave_section=False）
         bh = board_h if board_h else max(7.0, thickness * 0.42)
         for sign in (-1.0, 1.0):
             b.box_bottom((ridge_len + 1.0, 9.0, bh), (x, y + sign * (half - 2.0)),
-                         z - bh * 0.55, fmat)
+                         z - bh * 0.55, fmat, bevel=BEV_MID)
     # ---- ② 檐下 AO 暗带（贴墙窄条带；几何实现，非贴图） ---------------------
     # 位置：顶面压到"出檐遮挡线"之下（z - 出檐×tan20° - 2），高度 10~14；
     # 凸出墙面仅 3（小于木骨 4）→ 木骨会遮住它，暗带读作"木骨后的阴影"而不是贴条。
@@ -774,7 +953,11 @@ def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
                     zocc = z - AO_TILT_TAN * (half * f) - ca * thickness * 0.5
                     zbot = min(zocc - 12.0, ztop - 10.0)                  # 露在遮挡线下
                     xc = x + sx * (w / 2.0 + ext - ln / 2.0)
-                    b.box_bottom((ln, 10.0, ztop - zbot), (xc, yc), zbot, fmat)
+                    fem = end_grain_mat(fmat)
+                    # 檩端：端面年轮是主要读法（§2.2），0.8 的倒角在 10 宽的端头上
+                    # 只有 1.6 px 宽 → 不倒角，省 16×20 面。
+                    b.box_bottom((ln, 10.0, ztop - zbot), (xc, yc), zbot, fmat,
+                                 ends=((1, 0, 0), fem) if fem else None)
     # ---- ④ 茅草檐口草束 + 脊部草穗（仅草顶；瓦/木顶不做） --------------------
     if straw_eave and fam == "thatch":
         n_b = max(8, min(40, int(round(ridge_len / 12.0))))
@@ -864,9 +1047,13 @@ def door(b, h=DOOR_H, w=50.0, mat="wood_dark", x=0.0, y=0.0, z=DOOR_SILL,
         print("[warn] door width %.1f 超出规范 %s" % (w, DOOR_W_RANGE))
     zc = z + h / 2.0
     # 门框：两侧立柱 + 上楣（在洞口外扩 frame）—— box_bottom 尺寸序为 (X, Y, Z)
-    b.box_bottom((frame, depth, h + frame), (x - w / 2.0 - frame / 2.0, y), z, frame_mat)
-    b.box_bottom((frame, depth, h + frame), (x + w / 2.0 + frame / 2.0, y), z, frame_mat)
-    b.box_bottom((w + 2 * frame, depth, frame), (x, y), z + h, frame_mat)
+    # 门框是"梁/柱"族的立面主构件 → 真倒角（20° 俯视下门楣顶棱给一道高光线）
+    b.box_bottom((frame, depth, h + frame), (x - w / 2.0 - frame / 2.0, y), z, frame_mat,
+                 bevel=BEV_MID)
+    b.box_bottom((frame, depth, h + frame), (x + w / 2.0 + frame / 2.0, y), z, frame_mat,
+                 bevel=BEV_MID)
+    b.box_bottom((w + 2 * frame, depth, frame), (x, y), z + h, frame_mat,
+                 bevel=BEV_MID, ends=((1, 0, 0), "wood_end"))
     # 门扇（凹进墙面 7px：有真实门洞进深才有阴影，齐平会读成一块贴板）
     yl = y + 7.0 - depth * 0.5
     b.box((w - 2.0, leaf_depth, h - 2.0), (x, yl, zc), mat)
@@ -880,7 +1067,8 @@ def door(b, h=DOOR_H, w=50.0, mat="wood_dark", x=0.0, y=0.0, z=DOOR_SILL,
         b.cylinder((x + w * 0.24, yl - leaf_depth * 0.55, z + h * 0.5), 4.5, 3.0,
                    "iron", segments=10, axis="Y")
     if sill:
-        b.box_bottom((w + 2 * frame, 8.0, DOOR_SILL), (x, y), z - DOOR_SILL, "stone")
+        b.box_bottom((w + 2 * frame, 8.0, DOOR_SILL), (x, y), z - DOOR_SILL, "stone",
+                     bevel=BEV_MID)
     return {"clear_w": w, "clear_h": h, "z0": z, "z1": z + h, "frame": frame}
 
 
@@ -897,14 +1085,18 @@ def window(b, ow=52.0, oh=58.0, x=0.0, y=0.0, z=0.0, mat="glass",
     else:
         origin, u0 = (x, 0.0), y
 
-    def seg(a0, a1, o0, o1, z0, z1, m):
-        _seg(b, axis, origin, face_dir, a0, a1, o0, o1, z0, z1, m)
+    def seg(a0, a1, o0, o1, z0, z1, m, bevel=None, ends=None):
+        _seg(b, axis, origin, face_dir, a0, a1, o0, o1, z0, z1, m, bevel=bevel,
+             ends=ends)
 
     ao, ai = depth / 2.0, -depth / 2.0
     # 木框：左右立柱 + 上楣 + 下槛（都比洞口外扩 frame）
-    seg(u0 - ow / 2.0 - frame, u0 - ow / 2.0, ai, ao, z - frame, z + oh + frame, frame_mat)
-    seg(u0 + ow / 2.0, u0 + ow / 2.0 + frame, ai, ao, z - frame, z + oh + frame, frame_mat)
-    seg(u0 - ow / 2.0 - frame, u0 + ow / 2.0 + frame, ai, ao, z + oh, z + oh + frame, frame_mat)
+    seg(u0 - ow / 2.0 - frame, u0 - ow / 2.0, ai, ao, z - frame, z + oh + frame,
+        frame_mat, bevel=BEV_MID)
+    seg(u0 + ow / 2.0, u0 + ow / 2.0 + frame, ai, ao, z - frame, z + oh + frame,
+        frame_mat, bevel=BEV_MID)
+    seg(u0 - ow / 2.0 - frame, u0 + ow / 2.0 + frame, ai, ao, z + oh, z + oh + frame,
+        frame_mat, bevel=BEV_MID)
     seg(u0 - ow / 2.0, u0 + ow / 2.0, ai, ao, z - frame, z, frame_mat)
     # 玻璃（凹进墙面 depth/2 之后）
     g0, g1 = -depth / 2.0 + 1.0, -depth / 2.0 + 5.0
@@ -918,8 +1110,10 @@ def window(b, ow=52.0, oh=58.0, x=0.0, y=0.0, z=0.0, mat="glass",
             uu = u0 - ow / 2.0 + ow * i / 4.0
             seg(uu - 1.25, uu + 1.25, g0 - 3.0, g0, z, z + oh, "iron")
     if sill:
+        # 窗台板 = §2.1 点名的高光带来源 → 真倒角 + 两端收边（端面换细料石）
         seg(u0 - ow / 2.0 - frame - 3.0, u0 + ow / 2.0 + frame + 3.0, ai, ao + 1.0,
-            z - frame - 6.0, z - frame, "stone")
+            z - frame - 6.0, z - frame, "stone", bevel=BEV_MID,
+            ends=("u", "white_stone"))
     if shutters:
         for sx in (-1.0, 1.0):
             uu = u0 + sx * (ow / 2.0 + frame + ow * 0.22)
@@ -969,53 +1163,69 @@ def chimney(b, w=26.0, d=26.0, top=60.0, mat="stone_dark", x=0.0, y=0.0, foot=0.
       （见 `_roof_flash`）；屋脊以下、檐口以上都能穿。
     """
     h = max(1.0, top - foot)
-    b.box_bottom((w, d, h), (x, y), foot, mat)
+    b.box_bottom((w, d, h), (x, y), foot, mat, bevel=BEV_MID)
     # 基座石裙（两阶：下阶更宽更矮，上阶收窄）——烟囱根部落到地面/勒脚上
     b.box_bottom((w + 2.0 * skirt_lip, d + 2.0 * skirt_lip, skirt_h), (x, y), foot,
-                 "stone")
+                 "stone", bevel=BEV_BIG)
     b.box_bottom((w + 1.1 * skirt_lip, d + 1.1 * skirt_lip, skirt_h * 0.55), (x, y),
-                 foot + skirt_h, "stone_dark")
+                 foot + skirt_h, "stone_dark", bevel=BEV_MID)
     if roof is not None:
         _roof_flash(b, x, y, w, d, roof, up=flash_up,
                     out=flash_out if flash_out > 0.0 else max(12.0, w * 0.44),
                     mat=flash_mat)
     cap_mat = cap_mat or mat
-    b.box_bottom((w + 12.0, d + 12.0, cap), (x, y), top, cap_mat)
+    b.box_bottom((w + 12.0, d + 12.0, cap), (x, y), top, cap_mat, bevel=BEV_BIG,
+                 ends=((1, 0, 0), "white_stone"))
     if flue:
         b.cylinder((x, y, top + cap + 6.0), min(w, d) * 0.36, 12.0, "iron", segments=12)
     return {"h": h, "w": w, "top": top + cap, "foot": foot, "roof": roof}
 
 
-def plinth(b, w, d, h, mat="stone_dark", x=0.0, y=0.0, z=0.0, gap=None, lip=8.0):
-    """勒脚/台基：比墙体外扩 lip。gap=(x0,x1) 时为门洞留缺口（另加门槛石）。"""
+def plinth(b, w, d, h, mat="stone_dark", x=0.0, y=0.0, z=0.0, gap=None, lip=8.0,
+           bevel=BEV_BIG):
+    """勒脚/台基：比墙体外扩 lip。gap=(x0,x1) 时为门洞留缺口（另加门槛石）。
+
+    顶面↔立面的转折是 20° 俯视下最主要的高光带来源 → 默认真倒角（可 bevel=0 关）。
+    """
     if gap is None:
-        b.box_bottom((w + 2 * lip, d + 2 * lip, h), (x, y), z, mat)
+        b.box_bottom((w + 2 * lip, d + 2 * lip, h), (x, y), z, mat, bevel=bevel)
     else:
         for (sx0, sx1) in _solid_segments((x - w / 2.0 - lip, x + w / 2.0 + lip),
                                           [(x + gap[0], x + gap[1])]):
-            b.box_bottom((sx1 - sx0, d + 2 * lip, h), ((sx0 + sx1) / 2.0, y), z, mat)
+            b.box_bottom((sx1 - sx0, d + 2 * lip, h), ((sx0 + sx1) / 2.0, y), z, mat,
+                         bevel=bevel)
     return {"h": h, "lip": lip}
 
 
-def step_stone(b, w=76.0, depth=26.0, h=10.0, x=0.0, y=0.0, z=0.0, mat="stone"):
+def step_stone(b, w=76.0, depth=26.0, h=10.0, x=0.0, y=0.0, z=0.0, mat="stone",
+               bevel=BEV_BIG):
     """门前台阶石。y 应传墙面前方（-Y 方向）。"""
-    b.box_bottom((w, depth, h), (x, y), z, mat)
+    b.box_bottom((w, depth, h), (x, y), z, mat, bevel=bevel)
 
 
-def post(b, size=16.0, h=190.0, mat="wood", x=0.0, y=0.0, z=0.0, d=None):
+def post(b, size=16.0, h=190.0, mat="wood", x=0.0, y=0.0, z=0.0, d=None,
+         bevel=BEV_BIG):
     """立柱（方截面 size×size，可另给 d 作 Y 向深度）。"""
-    b.box_bottom((size, d or size, h), (x, y), z, mat)
+    b.box_bottom((size, d or size, h), (x, y), z, mat, bevel=bevel)
     return {"size": size, "h": h}
 
 
-def beam(b, length, size=14.0, depth=None, mat="wood", x=0.0, y=0.0, z=0.0, axis="X"):
-    """横梁（默认沿 X）。z = 梁底。"""
+def beam(b, length, size=14.0, depth=None, mat="wood", x=0.0, y=0.0, z=0.0, axis="X",
+         bevel=BEV_BIG, end_mat="wood_end"):
+    """横梁（默认沿 X）。z = 梁底。
+
+    端头封端：两端端面换 `wood_end`（端面年轮）—— 长条木料的端面在 20° 俯视下
+    正对镜头，不封端就是"贴图硬切在棱上"的典型病灶。
+    """
     d = depth or size
     size_v = (length, d, size) if axis == "X" else (d, length, size)
-    b.box_bottom(size_v, (x, y), z, mat)
+    ends = None
+    if end_mat:
+        ends = ((1, 0, 0) if axis == "X" else (0, 1, 0), end_mat)
+    b.box_bottom(size_v, (x, y), z, mat, bevel=bevel, ends=ends)
 
 
-def strut(b, p1, p2, size=10.0, mat="wood"):
+def strut(b, p1, p2, size=10.0, mat="wood", bevel=BEV_MID):
     """两点间斜撑/斜梁（任意朝向方料）。"""
     a, c = Vector(p1), Vector(p2)
     v = c - a
@@ -1026,7 +1236,8 @@ def strut(b, p1, p2, size=10.0, mat="wood"):
     helper = Vector((0, 0, 1)) if abs(d.z) < 0.9 else Vector((1, 0, 0))
     u = helper.cross(d).normalized()
     w = d.cross(u).normalized()
-    b.box_oriented((a + c) / 2.0, (d, u, w), (L / 2.0, size / 2.0, size / 2.0), mat)
+    b.box_oriented((a + c) / 2.0, (d, u, w), (L / 2.0, size / 2.0, size / 2.0), mat,
+                   bevel=bevel)
 
 
 def _pt(axis, origin, fdir, u, o, z):
@@ -1041,29 +1252,42 @@ def _pt(axis, origin, fdir, u, o, z):
     return (origin[0] + fdir * o, origin[1] + u, z)
 
 
-def _seg(b, axis, origin, fdir, u0, u1, o0, o1, z0, z1, mat):
-    """局部墙面坐标里的一个长方体段。"""
+def _seg(b, axis, origin, fdir, u0, u1, o0, o1, z0, z1, mat, bevel=None, ends=None):
+    """局部墙面坐标里的一个长方体段。
+
+    bevel = 真倒角半径；ends = ("u"|"z"|None, 材质)：把该段沿该局部轴的一端端面
+    换材质（木板端头年轮 / 砖石收边）。
+    """
     c = _pt(axis, origin, fdir, (u0 + u1) / 2.0, (o0 + o1) / 2.0, (z0 + z1) / 2.0)
     if axis == "X":
         size = (abs(u1 - u0), abs(o1 - o0), abs(z1 - z0))
     else:
         size = (abs(o1 - o0), abs(u1 - u0), abs(z1 - z0))
-    b.box(size, c, mat)
+    ev = None
+    if ends is not None:
+        which, emat = ends
+        if which == "u":
+            ev = ((1.0, 0.0, 0.0) if axis == "X" else (0.0, 1.0, 0.0), emat)
+        elif which == "z":
+            ev = ((0.0, 0.0, 1.0), emat)
+    b.box(size, c, mat, bevel=bevel, ends=ev)
 
 
 def timber_frame(b, w, h, mat="timber", origin=(0.0, 0.0), z=0.0, depth=7.0,
                  post=12.0, top_band=16.0, mid_band=None, bays=3, braces=True,
-                 openings=(), axis="X", face_dir=-1.0, embed=3.0):
+                 openings=(), axis="X", face_dir=-1.0, embed=3.0, bevel=BEV_MID):
     """木骨架（半露木/木骨墙）：上下横带 + 竖柱 + 斜撑，贴墙面凸出。
 
     origin / axis / face_dir 见 `_pt`。openings=[(u, ow), ...] 为洞口（u 相对墙心），
     竖柱与斜撑自动避让洞口，避免木骨横穿门窗。
+    木骨是"梁"族 → 默认真倒角（20° 俯视下横带的顶棱就是立面高光线）。
     """
     half = w / 2.0
     o_in, o_out = -embed, depth - embed
 
     def seg(u0, u1, z0, z1, m=None):
-        _seg(b, axis, origin, face_dir, u0, u1, o_in, o_out, z0, z1, m or mat)
+        _seg(b, axis, origin, face_dir, u0, u1, o_in, o_out, z0, z1, m or mat,
+             bevel=bevel)
 
     def pt(u, zz):
         return _pt(axis, origin, face_dir, u, (o_in + o_out) / 2.0, zz)
@@ -1089,18 +1313,19 @@ def timber_frame(b, w, h, mat="timber", origin=(0.0, 0.0), z=0.0, depth=7.0,
                 continue
             zb = z + top_band * 0.8
             zt = zb + bay_h * 0.42
-            strut(b, pt(u0 + 3.0, zb), pt(u1 - 3.0, zt), post * 0.7, mat)
-            strut(b, pt(u1 - 3.0, zb), pt(u0 + 3.0, zt), post * 0.7, mat)
+            strut(b, pt(u0 + 3.0, zb), pt(u1 - 3.0, zt), post * 0.7, mat, bevel=bevel)
+            strut(b, pt(u1 - 3.0, zb), pt(u0 + 3.0, zt), post * 0.7, mat, bevel=bevel)
 
 
 def gable_timber(b, span, rise, mat="timber", origin=(0.0, 0.0), z=0.0,
                  axis="X", face_dir=-1.0, depth=7.0, embed=3.0, thick=11.0,
-                 tie=True, king=True, collar=0.42):
+                 tie=True, king=True, collar=0.42, bevel=BEV_MID):
     """山墙三角面的木骨（戗檐斜梁 + 中柱 + 系梁），全部落在三角形内部。"""
     half = span / 2.0
 
     def seg(u0, u1, z0, z1):
-        _seg(b, axis, origin, face_dir, u0, u1, -embed, depth - embed, z0, z1, mat)
+        _seg(b, axis, origin, face_dir, u0, u1, -embed, depth - embed, z0, z1, mat,
+             bevel=bevel)
 
     def pt(u, zz):
         return _pt(axis, origin, face_dir, u, (depth - 2 * embed) / 2.0, zz)
@@ -1109,7 +1334,7 @@ def gable_timber(b, span, rise, mat="timber", origin=(0.0, 0.0), z=0.0,
         seg(-half + thick, half - thick, z, z + thick * 0.8)
     for sx in (-1.0, 1.0):                       # 戗檐斜梁：沿三角形两腰
         strut(b, pt(sx * (half - thick * 0.6), z + 2.0), pt(0.0, z + rise - 4.0),
-              thick, mat)
+              thick, mat, bevel=bevel)
     if king:
         seg(-thick / 2.0, thick / 2.0, z, z + rise - 6.0)
     if collar:
@@ -1120,11 +1345,14 @@ def gable_timber(b, span, rise, mat="timber", origin=(0.0, 0.0), z=0.0,
 
 def plank_siding(b, w, h, mat="wood", origin=(0.0, 0.0), z=0.0, plank_w=20.0,
                  gap=2.0, depth=5.0, openings=(), jitter=2.0, seed=1,
-                 axis="X", face_dir=-1.0, gable_rise=0.0, embed=3.2, top_jitter=4.0):
+                 axis="X", face_dir=-1.0, gable_rise=0.0, embed=3.2, top_jitter=4.0,
+                 bevel=BEV_MID, end_mat="wood_end"):
     """竖向木板饰面（谷仓/木屋/山墙）：一排竖板贴墙面，按洞口裁切。
 
     gable_rise > 0 时板顶按三角形轮廓收（用于山墙满铺竖板）。
     openings = [(u, ow, z0, z1), ...]（u 相对墙心，z 为绝对高度）。
+    板端封端：上下端面换 `wood_end`（端面年轮）——竖板端头正对 20° 俯视镜头，
+    不封端就是一排"贴图被切断"的竖条。
     """
     half = w / 2.0
     n = max(1, int(round(w / plank_w)))
@@ -1148,23 +1376,25 @@ def plank_siding(b, w, h, mat="wood", origin=(0.0, 0.0), z=0.0, plank_w=20.0,
             if zb - za < 6.0:
                 continue
             _seg(b, axis, origin, face_dir, u0 + gap / 2.0, u1 - gap / 2.0,
-                 -embed, depth - embed + jt, za, zb, mat)
+                 -embed, depth - embed + jt, za, zb, mat, bevel=bevel,
+                 ends=("z", end_mat) if end_mat else None)
 
 
 def railing(b, w, x=0.0, y=0.0, z=0.0, mat="wood", h=60.0, posts=4, size=9.0):
     """栏杆/矮栏（棚屋前沿、二层挑台）。z = 栏底。"""
-    b.box_bottom((w, size, 8.0), (x, y), z + h - size, mat)
+    b.box_bottom((w, size, 8.0), (x, y), z + h - size, mat, bevel=BEV_SMALL)
     for i in range(max(2, posts)):
         px = x - w / 2.0 + size / 2.0 + (w - size) * i / float(max(2, posts) - 1)
-        b.box_bottom((size, size, h), (px, y), z, mat)
+        b.box_bottom((size, size, h), (px, y), z, mat, bevel=BEV_SMALL)
 
 
 def barrel(b, x=0.0, y=0.0, z=0.0, r=15.0, h=40.0, mat="wood", band_mat="iron",
            segments=12, lid=False):
     """木桶（带两道铁箍）。"""
-    b.cylinder((x, y, z + h / 2.0), r, h, mat, segments=segments)
+    b.cylinder((x, y, z + h / 2.0), r, h, mat, segments=segments, bevel=BEV_SMALL)
     for t in (0.18, 0.82):
-        b.cylinder((x, y, z + h * t), r * 1.06, 5.0, band_mat, segments=segments)
+        b.cylinder((x, y, z + h * t), r * 1.06, 5.0, band_mat, segments=segments,
+                   bevel=BEV_SMALL)
     if lid:
         b.cylinder((x, y, z + h + 1.0), r * 0.94, 3.0, "wood_dark", segments=segments)
 
@@ -1172,14 +1402,15 @@ def barrel(b, x=0.0, y=0.0, z=0.0, r=15.0, h=40.0, mat="wood", band_mat="iron",
 def anvil(b, x=0.0, y=0.0, z=0.0, mat="iron", stump=True):
     """铁砧（含可选木墩）：总高约 60。"""
     if stump:
-        b.cylinder((x, y, z + 20.0), 17.0, 40.0, "wood_dark", segments=12)
+        b.cylinder((x, y, z + 20.0), 17.0, 40.0, "wood_dark", segments=12, bevel=BEV_SMALL)
         base_z = z + 40.0
     else:
         base_z = z
-    b.box_bottom((34.0, 20.0, 7.0), (x, y), base_z, mat)                 # 底座
-    b.box_bottom((18.0, 15.0, 15.0), (x, y), base_z + 7.0, mat)          # 腰
-    b.box_bottom((45.0, 19.0, 10.0), (x, y), base_z + 22.0, mat)         # 砧面
-    b.cylinder((x + 28.0, y, base_z + 27.0), 6.5, 22.0, mat, segments=10, axis="X", taper=0.35)
+    b.box_bottom((34.0, 20.0, 7.0), (x, y), base_z, mat, bevel=BEV_SMALL)        # 底座
+    b.box_bottom((18.0, 15.0, 15.0), (x, y), base_z + 7.0, mat, bevel=BEV_SMALL)  # 腰
+    b.box_bottom((45.0, 19.0, 10.0), (x, y), base_z + 22.0, mat, bevel=BEV_SMALL)  # 砧面
+    b.cylinder((x + 28.0, y, base_z + 27.0), 6.5, 22.0, mat, segments=10, axis="X",
+               taper=0.35)
 
 
 def forge(b, x=0.0, y=0.0, z=0.0, w=54.0, d=46.0, body_h=64.0, mat="iron",
@@ -1188,13 +1419,14 @@ def forge(b, x=0.0, y=0.0, z=0.0, w=54.0, d=46.0, body_h=64.0, mat="iron",
 
     炉体由左右/后/顶/底五块板拼成，前方开口 -> 炉膛与火焰真实可见。
     """
-    b.box_bottom((w + 14.0, d + 12.0, 16.0), (x, y), z, masonry)          # 砖石基座
+    b.box_bottom((w + 14.0, d + 12.0, 16.0), (x, y), z, masonry, bevel=BEV_MID)   # 砖石基座
     z0 = z + 16.0
     top_h = 12.0
-    b.box_bottom((wall, d, body_h), (x - w / 2.0 + wall / 2.0, y), z0, mat)      # 左板
-    b.box_bottom((wall, d, body_h), (x + w / 2.0 - wall / 2.0, y), z0, mat)      # 右板
-    b.box_bottom((w - 2 * wall, wall, body_h), (x, y + d / 2.0 - wall / 2.0), z0, mat)
-    b.box_bottom((w, d, top_h), (x, y), z0 + body_h - top_h, mat)         # 炉顶
+    b.box_bottom((wall, d, body_h), (x - w / 2.0 + wall / 2.0, y), z0, mat, bevel=BEV_SMALL)   # 左板
+    b.box_bottom((wall, d, body_h), (x + w / 2.0 - wall / 2.0, y), z0, mat, bevel=BEV_SMALL)   # 右板
+    b.box_bottom((w - 2 * wall, wall, body_h), (x, y + d / 2.0 - wall / 2.0), z0, mat,
+                 bevel=BEV_SMALL)
+    b.box_bottom((w, d, top_h), (x, y), z0 + body_h - top_h, mat, bevel=BEV_SMALL)  # 炉顶
     b.box_bottom((w - 2 * wall, d - wall, 12.0), (x, y + wall * 0.5), z0, mat)   # 炉底
     fw = w - 2 * wall - 4.0
     b.box_bottom((fw, 6.0, body_h - top_h - 16.0), (x, y + d / 2.0 - wall - 5.0),
@@ -1204,8 +1436,10 @@ def forge(b, x=0.0, y=0.0, z=0.0, w=54.0, d=46.0, body_h=64.0, mat="iron",
                  z0 + 16.0, "fire")
     b.box_bottom((fw - 6.0, 20.0, 6.0), (x, y - d / 2.0 + wall + 12.0),
                  z0 + 16.0, "ember")                                      # 炉口炭层
-    b.box_bottom((w * 0.74, d * 0.74, 12.0), (x, y), z0 + body_h, mat)    # 炉台
-    b.box_bottom((24.0, 24.0, 14.0), (x, y), z0 + body_h + 12.0, mat)     # 炉罩
+    b.box_bottom((w * 0.74, d * 0.74, 12.0), (x, y), z0 + body_h, mat,
+                 bevel=BEV_SMALL)                                         # 炉台
+    b.box_bottom((24.0, 24.0, 14.0), (x, y), z0 + body_h + 12.0, mat,
+                 bevel=BEV_SMALL)                                         # 炉罩
     top = z0 + body_h + 26.0
     b.cylinder((x, y, top + flue_h / 2.0), flue_r, flue_h, mat, segments=12)
     b.cylinder((x, y, top + flue_h + 5.0), flue_r * 1.25, 7.0, mat, segments=12)
@@ -1215,20 +1449,23 @@ def forge(b, x=0.0, y=0.0, z=0.0, w=54.0, d=46.0, body_h=64.0, mat="iron",
 
 def bench(b, x=0.0, y=0.0, z=0.0, w=64.0, d=30.0, h=48.0, mat="wood"):
     """工作台/长凳。"""
-    b.box_bottom((w, d, 7.0), (x, y), z + h - 7.0, mat)
+    b.box_bottom((w, d, 7.0), (x, y), z + h - 7.0, mat, bevel=BEV_MID,
+                 ends=((1, 0, 0), "wood_end"))
     for sx in (-1.0, 1.0):
         for sy in (-1.0, 1.0):
             b.box_bottom((8.0, 8.0, h - 7.0),
-                         (x + sx * (w / 2.0 - 8.0), y + sy * (d / 2.0 - 8.0)), z, mat)
+                         (x + sx * (w / 2.0 - 8.0), y + sy * (d / 2.0 - 8.0)), z, mat,
+                         bevel=BEV_SMALL)
 
 
 def stool(b, x=0.0, y=0.0, z=0.0, r=13.0, h=30.0, mat="wood"):
     """圆凳。"""
-    b.cylinder((x, y, z + h - 4.0), r, 8.0, mat, segments=10)
+    b.cylinder((x, y, z + h - 4.0), r, 8.0, mat, segments=10, bevel=BEV_SMALL)
     for i in range(3):
         th = 2 * math.pi * i / 3.0
         b.box_bottom((6.0, 6.0, h - 8.0),
-                     (x + math.cos(th) * r * 0.55, y + math.sin(th) * r * 0.55), z, mat)
+                     (x + math.cos(th) * r * 0.55, y + math.sin(th) * r * 0.55), z, mat,
+                     bevel=BEV_SMALL)
 
 
 def contact_shadow(b, w, d, x=0.0, y=0.0, spread=26.0, steps=3):
@@ -2108,28 +2345,37 @@ def arrow_slit(b, x, y, z, w=15.0, h=52.0, mat="cavity", frame="stone_dark",
 
 
 def crenellation(b, w, d, z, mat, x=0.0, y=0.0, merlon=34.0, gap=20.0, h=34.0,
-                 band=16.0, band_lip=8.0):
-    """垛口：外挑压顶走道 + 前后沿/侧沿交替垛子。z = 压顶底。"""
-    b.box_bottom((w + 2.0 * band_lip, d + 2.0 * band_lip, band), (x, y), z, mat)
+                 band=16.0, band_lip=8.0, bevel=BEV_BIG):
+    """垛口：外挑压顶走道 + 前后沿/侧沿交替垛子。z = 压顶底。
+
+    垛子顶面在 20° 俯视下是城墙上唯一的高光点（§2.1 点名必倒角）。
+    """
+    b.box_bottom((w + 2.0 * band_lip, d + 2.0 * band_lip, band), (x, y), z, mat,
+                 bevel=BEV_MID)
     nx = max(2, int(round(w / (merlon + gap))))
     stepx = w / float(nx)
     mw = max(18.0, stepx * 0.62)
     for i in range(nx):
         px = x - w / 2.0 + stepx * (i + 0.5)
         for sy in (-1.0, 1.0):
-            b.box_bottom((mw, 18.0, h), (px, y + sy * (d / 2.0 - 9.0)), z + band, mat)
+            b.box_bottom((mw, 18.0, h), (px, y + sy * (d / 2.0 - 9.0)), z + band, mat,
+                         bevel=bevel)
     ny = max(1, int(round(d / (merlon + gap))))
     stepy = d / float(ny)
     md = max(18.0, stepy * 0.62)
     for i in range(ny):
         py = y - d / 2.0 + stepy * (i + 0.5)
         for sx in (-1.0, 1.0):
-            b.box_bottom((18.0, md, h), (x + sx * (w / 2.0 - 9.0), py), z + band, mat)
+            b.box_bottom((18.0, md, h), (x + sx * (w / 2.0 - 9.0), py), z + band, mat,
+                         bevel=bevel)
 
 
 def quoins(b, w, d, h, mat="white_stone", x=0.0, y=0.0, z=0.0, size=24.0,
-           step=40.0, front=True, sides=True):
-    """角部隅石：竖边依次交替的凸出料石（塔/石宅边角读法）。"""
+           step=40.0, front=True, sides=True, bevel=BEV_BIG):
+    """角部隅石：竖边依次交替的凸出料石（塔/石宅边角读法）。
+
+    隅石本身就是石墙转角处的"收边石"（§2.2 第 5 条）→ 每块都倒角。
+    """
     n = max(1, int(h / step))
     for i in range(n):
         zz = z + i * step
@@ -2139,17 +2385,18 @@ def quoins(b, w, d, h, mat="white_stone", x=0.0, y=0.0, z=0.0, size=24.0,
         for sx in (-1.0, 1.0):
             if front:
                 b.box_bottom((size, 14.0, hh), (x + sx * (w / 2.0 - size * 0.24),
-                                                y - d / 2.0 + 3.0), zz, mat)
+                                                y - d / 2.0 + 3.0), zz, mat, bevel=bevel)
             if sides:
                 b.box_bottom((14.0, size, hh), (x + sx * (w / 2.0 - 3.0),
-                                                y - d / 2.0 + d * 0.18), zz, mat)
+                                                y - d / 2.0 + d * 0.18), zz, mat,
+                             bevel=bevel)
 
 
 def buttress(b, x, y, z, w, h, depth=20.0, mat="stone", cap_h=24.0,
-             cap_mat="white_stone"):
+             cap_mat="white_stone", bevel=BEV_BIG):
     """扶壁：竖向墩 + 斜顶帽。y 为墩心（凸出正立面）。"""
-    b.box_bottom((w, depth, h - cap_h), (x, y), z, mat)
-    b.box_bottom((w + 6.0, depth + 6.0, 8.0), (x, y), z + h - 4.0, cap_mat)
+    b.box_bottom((w, depth, h - cap_h), (x, y), z, mat, bevel=bevel)
+    b.box_bottom((w + 6.0, depth + 6.0, 8.0), (x, y), z + h - 4.0, cap_mat, bevel=bevel)
 
 
 def tri_prism_y(b, x, y, half_w, rise, z_base, depth, mat):
@@ -4127,16 +4374,18 @@ def crystal_shard(b, x, y, z, r, h, mat="crystal", segments=6):
 
 def lamp_post(b, x, y, z=0.0, h=178.0, mat="iron", glass="lamp"):
     """门廊灯柱：石基座 + 铁柱 + 四面铁框玻璃灯罩（自发光 lamp）+ 小锥帽。"""
-    b.box_bottom((20.0, 20.0, 12.0), (x, y), z, "stone_dark")
-    b.cylinder((x, y, z + 12.0 + (h - 60.0) / 2.0), 6.5, h - 60.0, mat, segments=8)
+    b.box_bottom((20.0, 20.0, 12.0), (x, y), z, "stone_dark", bevel=BEV_MID)
+    b.cylinder((x, y, z + 12.0 + (h - 60.0) / 2.0), 6.5, h - 60.0, mat, segments=8,
+               bevel=BEV_SMALL)
     zl = z + h - 48.0
     b.box((17.0, 17.0, 30.0), (x, y, zl + 15.0), glass)
     for k in range(4):
         th = math.pi * 0.5 * k
         b.box_bottom((5.0, 5.0, 32.0),
-                     (x + math.cos(th) * 9.5, y + math.sin(th) * 9.5), zl - 1.0, mat)
-    b.box_bottom((21.0, 21.0, 7.0), (x, y), zl - 3.0, mat)
-    b.box_bottom((21.0, 21.0, 6.0), (x, y), zl + 30.0, mat)
+                     (x + math.cos(th) * 9.5, y + math.sin(th) * 9.5), zl - 1.0, mat,
+                     bevel=BEV_SMALL)
+    b.box_bottom((21.0, 21.0, 7.0), (x, y), zl - 3.0, mat, bevel=BEV_MID)
+    b.box_bottom((21.0, 21.0, 6.0), (x, y), zl + 30.0, mat, bevel=BEV_MID)
     cone_roof(b, x, y, zl + 36.0, 13.0, 13.0, mat, segments=6, eave_ring=False)
 
 

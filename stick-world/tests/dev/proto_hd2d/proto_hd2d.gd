@@ -515,11 +515,11 @@ func _build_world() -> void:
 	# 没有建筑的地方全是可走地面；建筑只靠自带"落地裙边"挤占其中一块。
 	# 按区混材质（补充规格 2）：街心 → 近侧 → 外缘，各换一档，读作一条有肌理的街。
 	# 地面：三条带（早上那版结构，每带一种材质，简单均匀）
-	#   路肩带（建筑基线往前 3 格 = 96px）→ 路缘（细条）→ 道路带（其余）
-	var z_sh0 := MAIN_BASE_Z - APRON_DEPTH
-	var z_sh1 := z_sh0 + float(BAND_SH_W)
+	#   路肩带 = 建筑基线**前方**一条带（z 从基线向前 2 格 ≈64px）→ 路缘 → 道路带
+	var z_sh0 := MAIN_BASE_Z
+	var z_sh1 := z_sh0 + 2.0
 	_add_ground_plane("band_shoulder_stone_128.png", z_sh0, z_sh1,
-		0.03, 3.6, Color(0.78, 0.77, 0.74))
+		0.04, 3.6, Color(0.70, 0.69, 0.66))
 	_add_ground_plane("band_road_stone_128.png", z_sh1, ROAD_NEAR_Z,
 		0.02, 10.0, Color(1.0, 1.0, 1.02))
 	_add_kerbs()

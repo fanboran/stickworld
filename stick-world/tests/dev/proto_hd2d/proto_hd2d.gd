@@ -60,20 +60,18 @@ const FRONT_ROW: Array = [
 	{"card": "shop_w8", "x": 16.0},
 	{"card": "stable_w12", "x": 32.0},
 ]
-## 远处剪影层：**允许且要求**（创始人：加深景模糊的背景建筑层）。
-## 低饱和、略偏冷、不投真阴影、不参与夜景窗火自发光 → 只靠"轮廓"说话，
-## 再由 DOF 的远焦模糊把细节糊掉（模糊量取"轮廓仍读得出、细节糊掉"）。
-const SKYLINE_ROW: Array = [
-	{"card": "tower_w6", "x": -42.0},
-	{"card": "townhouse_w12", "x": -30.0},
-	{"card": "house_w8", "x": -19.5},
-	{"card": "tower_w6", "x": -9.5},
-	{"card": "shop_w8", "x": 3.0},
-	{"card": "tower_w6", "x": 16.5},
-	{"card": "smithy1_w8", "x": 28.5},
-	{"card": "tower_w6", "x": 40.0},
+## 背景层（创始人 2026-09-14 定案）：
+##   · 第二排基线压**屏幕下 1/3 线**（33.3% 从底）——该线同时是第一排（+地面）
+##     屏幕区的上边界：下 1/3 归前排与街面，中 1/3 起归背景楼群，两排在一条线交界；
+##   · 前排楼身挡住 bg1 根部、bg1 从前排楼顶上方露出（高低咬合）＝"第二排插第一排缝"；
+##   · 三层背景每层**楼间留缝不贴死**，后层楼**吸附进前层的缝隙**；
+##   · 末层基线 = 真实地平线（底衬远端同步收到此处），楼身把地平线遮死。
+const SKYLINE_Z := -6.73                 # 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
+const BG_LAYER_GAP := 6.0                # 背景层距（格）：屏幕上每层基线差 ≈6.3% 屏高
+## 背景层距离染色（空气透视：越远越淡越冷）
+const BG_TINTS: Array = [
+	Color(0.80, 0.84, 0.93), Color(0.85, 0.885, 0.945), Color(0.90, 0.925, 0.96),
 ]
-const SKYLINE_Z := -9.5                  # 26° 俯角下基线正好落在 1/3 线（60.98%）——按投影公式解得
 
 ## 地面分带（格；z 增大 = 朝相机）。
 ## 基线纪律（创始人纠偏）：**建筑基线 = 路肩带顶线**。
@@ -131,10 +129,12 @@ var _hud2: Label
 
 var _card_mats: Array[ShaderMaterial] = []
 var _lamps: Array[OmniLight3D] = []
+var _bg_base_z := {}            # 背景层 -> 实测卡基线 z（辅助线/底衬远端对齐用）
+var _bg_base_samples: Array = []  # 当前层各卡卡底 z 的采样（层结束取中位数）
 
 var _opts := {
 	"shots": "all", "perf": false, "res": "", "sv": "always",
-	"char": "blend", "tag": "", "svscale": "2",
+	"char": "blend", "tag": "", "svscale": "2", "flat": false,
 }
 
 # 帧采样
@@ -201,6 +201,9 @@ func _parse_args() -> void:
 			_opts["char"] = s.get_slice("=", 1)
 		elif s.begins_with("--tag="):
 			_opts["tag"] = s.get_slice("=", 1)
+		elif s.begins_with("--flat="):
+			# --flat=1：关远焦 DOF（辅助线核对版出图用——DOF 满糊会把辅助线一起晕开）
+			_opts["flat"] = s.get_slice("=", 1) != "0"
 
 
 # ------------------------------------------------------------------ 资源
@@ -268,17 +271,50 @@ func _spawn_card(card: String, x: float, z_off: float, skyline: bool = false) ->
 	if skyline:
 		# 远景剪影层：① 不投真阴影 —— 卡片会按 alpha 剪影向地面投真影，一张 17 格高的
 		# 塔会在中部空地上拖出一大片斜影，而那片空地没有别的东西来"接住"它，读作脏斑；
-		# ② 用一份独立材质做距离染色（偏冷偏亮）且**不注册进 _card_mats**（不参与夜景
-		# 窗火自发光），让它彻底退到背景层。
+		# ② 用一份独立材质做距离染色（tint 由 _spawn_bg_card 按层分档）且**不注册进
+		# _card_mats**（不参与夜景窗火自发光），让它彻底退到背景层。
 		m = m.duplicate()
-		# 低饱和 + 偏冷：把卡的颜色往灰蓝压，读作"远处的同一座城"
-		m.set_shader_parameter("tint", Color(0.80, 0.84, 0.93))
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_card_mats.erase(m)
 	mi.material_override = m
 	mi.name = "Card_" + card
 	_card_root.add_child(mi)
 	return mi
+
+
+## 背景卡 = skyline 卡 + 按层距离染色；同时**实测卡底世界 z**（供层基线辅助线与
+## 底衬远端对齐）。卡底 z 不能直接用层 z：anchor 在卡画面上的深度偏移各卡不同，
+## 正确推导 = 卡底点 = anchor 点沿 -cam_up 下移 cv，cv = anchor.y / cosθ
+## → 底 z = pos.z + tanθ · anchor.y。
+func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
+	var mi := _spawn_card(card, x, lz, true)
+	if mi == null:
+		return
+	(mi.material_override as ShaderMaterial).set_shader_parameter("tint", tint)
+	var meta: Dictionary = _cards.get(card, {})
+	if meta.is_empty():
+		return
+	var anc: Array = meta["anchor"]
+	_bg_base_samples.append(mi.position.z + tan(deg_to_rad(TILT_DEG)) * float(anc[2]) * S)
+
+
+func _median(arr: Array) -> float:
+	if arr.is_empty():
+		return 0.0
+	var a := arr.duplicate()
+	a.sort()
+	return float(a[a.size() / 2])
+
+
+## 从 list[ci] 起顺位找第一张**画面宽 ≤ room** 的卡（放得下才用）；找不到返回 ""。
+## 背景"缝"按卡画面宽算（含出檐），cottage_w6 画面 ~9.1 格、townhouse_w12 ~15.9 格。
+func _pick_card(list: Array, ci: int, room: float) -> String:
+	for k in list.size():
+		var c: String = str(list[(ci + k) % list.size()])
+		var w := _cw(c)
+		if w < 1.0 or w <= room:
+			return c
+	return ""
 
 
 func _card_material(card: String) -> ShaderMaterial:
@@ -346,30 +382,33 @@ func _build_world() -> void:
 	_fill.shadow_enabled = false
 	add_child(_fill)
 
-	# --- 地面：底衬 + 三条分带（路肩 / 路缘 / 道路）---
-	_ground_root = Node3D.new()
-	_ground_root.name = "Ground"
-	add_child(_ground_root)
-	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
-	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
-	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
-	# 真实地平线 = 末层背景根部：地面远端正好收到末层底边（不再往后多出裸地）
-	var far_z: float = SKYLINE_Z - 6.0
-	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
-		0.0, 14.0, Color(1.16, 1.14, 1.10))
-	_add_platform()                       # 人行道台面（垫高 + PBR 法线）+ 台肩一排长条石
-	_add_width_guides()                   # 建筑宽度辅助线（每栋左右边界在地面上画线）
-	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
-		0.02, 10.0, Color(0.86, 0.89, 0.96))    # 道路：偏冷深石（与台面拉开）
-
-	# --- 建筑卡：临街一排 + 远处城墙剪影 ---
+	# --- 建筑卡（先摆楼：底衬远端/辅助线要用实测的层基线）---
 	_card_root = Node3D.new()
 	_card_root.name = "Cards"
 	add_child(_card_root)
 	_shadow_root = Node3D.new()
 	_shadow_root.name = "BuildingShadows"
 	add_child(_shadow_root)
-	_place_rows()   # 前排吸附整格 + 三层背景按缝隙算法后层插前层
+	_place_rows()   # 前排吸附整格 + 三层背景留缝、后层插前层缝
+
+	# --- 地面：底衬（远端=末层实测根部，即真实地平线）+ 台面 + 辅助线 + 道路 ---
+	_ground_root = Node3D.new()
+	_ground_root.name = "Ground"
+	add_child(_ground_root)
+	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
+	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
+	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
+	# 中远景地面：低对比夯土（rammed_earth std=0.034）。中景已被 bg1（z=-6.7）
+	# 楼群+前排楼身咬合遮住，只剩楼缝间少量露出；别用 cobble（std=0.107）——
+	# 掠射下 mip 会把高对比石板糊成"碎石墙"（实测翻车）。
+	var far_z: float = float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0))
+	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
+		0.0, 14.0, Color(1.16, 1.14, 1.10))
+	_add_platform()                       # 人行道台面（垫高 + PBR 法线）+ 台肩一排长条石
+	_add_width_guides()                   # 建筑宽度辅助线（每栋左右边界在地面上画线）
+	_add_horizon_guides()                 # 1/3 线（橙）+ 第三排基线（绿）
+	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
+		0.02, 10.0, Color(0.86, 0.89, 0.96))    # 道路：偏冷深石（与台面拉开）
 
 	# --- 灯笼点光源（暖光；让"真 3D 光照"这条线可验证）---
 	_lamp_root = Node3D.new()
@@ -486,18 +525,18 @@ func _cw(card: String) -> float:
 	return float(meta["units"][0]) * S
 
 
-func _gaps(occ: Array) -> Array:
-	# 已占用区间 [x0,x1] 的补集（在 [-40, 40] 内）——用于"后层插前层缝"
+func _gaps(occ: Array, lo: float = -40.0, hi: float = 40.0) -> Array:
+	# 已占用区间 [x0,x1] 的补集（在 [lo,hi] 内）——用于"后层插前层缝"
 	var s := occ.duplicate()
 	s.sort_custom(func(a, b): return float(a[0]) < float(b[0]))
 	var out := []
-	var cur := -40.0
+	var cur := lo
 	for iv in s:
 		if float(iv[0]) > cur + 0.5:
 			out.append([cur, float(iv[0])])
 		cur = maxf(cur, float(iv[1]))
-	if cur < 39.5:
-		out.append([cur, 40.0])
+	if cur < hi - 0.5:
+		out.append([cur, hi])
 	return out
 
 
@@ -521,35 +560,78 @@ func _place_rows() -> void:
 		occ_front.append([cur, cur + w])
 		cur += w          # 一个格子挨着一个格子（0 缝）
 	_front_occ = occ_front
-	# 三层背景：**逐层把前层的缝隙塞满**（每段缝连续铺卡直到盖满），末层即"真实地平线"
-	# 近小远大：近层小民居/塔；**远层也限宽 ≤12 格**（w16 大件悬在半空会读作悬浮板）
+	# 三层背景（创始人 2026-09-14 定案，算法职责）：
+	#   · 每层楼与楼**留缝不贴死**；后层的楼**吸附进前层的缝隙**——从缝里透出
+	#     后层楼身，即"后层插前层缝"；
+	#   · bg1 基线 = 屏幕 1/3 线（SKYLINE_Z），该线兼任前排建筑高度上限；
+	#   · 末层缝最小 + 补洞，把地平线（底衬远端）遮死。
+	#   注意"缝"按**卡画面宽**算（含出檐，cottage_w6 画面 9.1 格 ≠ 6 格建筑）。
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260914
 	var lists := [
-		["house_w8", "tower_w6", "house_w8", "townhouse_w12"],
-		["townhouse_w12", "house_w8", "tower_w6", "house_w8"],
-		["house_w8", "tower_w6", "townhouse_w12", "house_w8"],
+		["house_w8", "smithy1_w8", "tower_w6", "shop_w8", "house_w8", "bakery_w8"],
+		["townhouse_w12", "house_w8", "tower_w6", "shop_w8", "house_w8"],
+		["house_w8", "tower_w6", "shop_w8", "cottage_w6"],
 	]
-	var layer := occ_front
+	var prev_slots: Array = []      # 前一层楼的画面占用 [x0,x1]
 	for li in lists.size():
-		var lz: float = SKYLINE_Z - 3.0 * float(li)
+		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
 		var list: Array = lists[li]
-		var occ := []
-		var ci2: int = li * 5
-		for g in _gaps(layer):
-			var g0: float = float(g[0])
-			var g1: float = float(g[1])
-			if g1 - g0 < 0.5:
-				continue
-			while g1 - g0 > 0.5:
-				var card: String = str(list[ci2 % list.size()])
-				ci2 += 1
-				var w2: float = minf(_cw(card), g1 - g0)
-				if w2 < 1.5:
-					break
-				var cx2: float = g0 + w2 * 0.5
-				_spawn_card(card, cx2, lz, true)
-				occ.append([g0, g0 + w2])
-				g0 += w2
-		layer = occ
+		var occ: Array = []
+		var ci: int = li * 3
+		var tint: Color = BG_TINTS[li]
+		if li == 0:
+			# bg1 自由铺：楼 + 2~3.5 格缝的节奏（根部被前排挡住，楼身从前排楼顶上露出）
+			var gx := -42.0
+			while gx < 42.0:
+				var card: String = str(list[ci % list.size()])
+				ci += 1
+				var w := _cw(card)
+				if w < 1.0:
+					w = 8.0
+				_spawn_bg_card(str(card), gx + w * 0.5, lz, tint)
+				occ.append([gx, gx + w])
+				gx += w + rng.randf_range(2.0, 3.5)
+		else:
+			# bg2/bg3 吸附前层缝：每条缝中心放一栋楼（从缝里露出楼身）。
+			# 本层自身保持 ≥1 格缝（给再后一层插）；放不下的缝放弃（末层补洞兜底）。
+			var last_x1 := -999.0
+			for g in _gaps(prev_slots, -42.0, 42.0):
+				var g0: float = float(g[0])
+				var g1: float = float(g[1])
+				if g1 - g0 < 1.0:
+					continue
+				var cx: float = (g0 + g1) * 0.5
+				var room: float = cx - (last_x1 + 1.0)   # 左侧可用宽度
+				var card: String = _pick_card(list, ci, room)
+				ci += 1
+				if card == "":
+					continue
+				var w := _cw(card)
+				if w < 1.0:
+					w = 8.0
+				_spawn_bg_card(card, cx, lz, tint)
+				occ.append([cx - w * 0.5, cx + w * 0.5])
+				last_x1 = cx + w * 0.5
+			if li == lists.size() - 1:
+				# 末层职责 = 遮死地平线：残余空缺补楼（近贴 0.6 格缝）。
+				# 阈值 9.8 = 库里最小画面宽 cottage_w6(9.1) + 0.6 缝，更窄的洞放不下任何卡。
+				for g in _gaps(occ, -42.0, 42.0):
+					var g0: float = float(g[0])
+					var g1: float = float(g[1])
+					while g1 - g0 > 9.8:
+						var room: float = g1 - g0 - 0.6
+						var card: String = _pick_card(list, ci, room)
+						ci += 1
+						if card == "":
+							break
+						var w := _cw(card)
+						_spawn_bg_card(card, g0 + w * 0.5, lz, tint)
+						occ.append([g0, g0 + w])
+						g0 += w + 0.6
+		prev_slots = occ
+		_bg_base_z[li] = _median(_bg_base_samples)
+		_bg_base_samples.clear()
 
 
 func _add_width_guides() -> void:
@@ -591,6 +673,31 @@ func _add_width_guides() -> void:
 			mi2.name = "BldEdge"
 			mi2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_ground_root.add_child(mi2)
+
+
+func _add_horizon_guides() -> void:
+	# 两条全屏水平辅助线（创始人 2026-09-14 要求；贴地 unshaded，无阴影）：
+	#   橙 = 屏幕 1/3 线（33.3% 从底）：第二排基线 + 第一排（+地面）屏幕区的上边界
+	#   绿 = 第三排（末层）基线 = 真实地平线（底衬远端收到同一点）
+	# z 取实测卡基线（anchor 深度偏移各卡不同，见 _spawn_bg_card）。
+	var specs := [
+		{"z": float(_bg_base_z.get(0, SKYLINE_Z)), "col": Color(1.0, 0.62, 0.10)},
+		{"z": float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0)),
+			"col": Color(0.20, 1.0, 0.45)},
+	]
+	for i in specs.size():
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(150.0, 0.12)
+		var mi := MeshInstance3D.new()
+		mi.mesh = pm
+		var m := StandardMaterial3D.new()
+		m.albedo_color = specs[i]["col"]
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mi.material_override = m
+		mi.position = Vector3(0, 0.025, float(specs[i]["z"]))
+		mi.name = "Guide%d" % i
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_ground_root.add_child(mi)
 
 
 func _add_platform() -> void:
@@ -848,7 +955,7 @@ func _apply_stage(stage: String) -> void:
 	# far 48 + 过渡 20：临街卡(41~45.5) 完全在 48 以内 → 100% 锐利；远景 66 →
 	# (66-48)/20 = 90% 满档模糊 —— 轮廓仍读得出、细节糊掉。
 	_cam_attrs.dof_blur_near_enabled = false
-	_cam_attrs.dof_blur_far_enabled = hd
+	_cam_attrs.dof_blur_far_enabled = hd and not bool(_opts["flat"])
 	_cam_attrs.dof_blur_near_distance = 24.0
 	_cam_attrs.dof_blur_near_transition = 10.0
 	_cam_attrs.dof_blur_far_distance = 48.0

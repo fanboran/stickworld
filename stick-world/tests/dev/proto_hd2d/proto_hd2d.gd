@@ -68,9 +68,9 @@ const SKYLINE_ROW: Array = [
 	{"card": "townhouse_w12", "x": -30.0},
 	{"card": "house_w8", "x": -19.5},
 	{"card": "tower_w6", "x": -9.5},
-	{"card": "cathedral_w16", "x": 3.0},
+	{"card": "shop_w8", "x": 3.0},
 	{"card": "tower_w6", "x": 16.5},
-	{"card": "guildhall_w12", "x": 28.5},
+	{"card": "smithy1_w8", "x": 28.5},
 	{"card": "tower_w6", "x": 40.0},
 ]
 const SKYLINE_Z := -12.0                 # 后排前移到下缘紧贴 1/3 线（原 -24 太远）

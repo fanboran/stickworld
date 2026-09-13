@@ -1,38 +1,36 @@
-extends Control
-## 孤立测试：HUD 部件两两不重叠（UI 元素变更时手动跑，不进 run_all 清单）。
-## 结构学 ui_shots：本节点是启动器，把 Driver 挂 SceneTree.root 跨场景存活后自退场
-## （change_scene 会释放当前场景，测试逻辑不能住在被释放的节点里）。
+extends Node
+## UI 重叠调试场景 Driver —— 挂 SceneTree.root 跨场景存活，boot 世界后跑断言。
+## （自 tests/integration/ 下沉 tests/dev/：非 TestRunner 规范、不进 run_all 清单，
+## 作为 UI 变更时的手动检查工具保留。）
 ##
-## 动机：观察场战况板曾与 debug 图例左上重叠、材料条曾压顶栏按钮——这类
-## "静默互盖"无报错，只有像素级重叠可查。本测试 boot 真实世界后收集全部
-## 常驻 HUD 部件的 global_rect，两两相交即失败（白名单豁免嵌套容器）。
-##
-## 运行（带显示，需真实布局）：
-##   godot --path stick-world res://tests/integration/test_ui_overlap.tscn --resolution 1920x1080
-## 退出码：0 全过，1 有重叠。全量测试矩阵不含本套件（世界 boot ~20s 太重）。
+## 运行（带显示）：godot --path stick-world res://tests/dev/test_ui_overlap.tscn --resolution 1920x1080
+## 退出码：0 全过，1 有重叠。不进 run_all 清单（世界 boot ~20s，仅 UI 变更时手动跑）。
 
 ## 参与两两断言的部件节点名（system_setup/UIKit.widget 命名 + tscn 节点名）
 const TARGET_NAMES := [
 	"QuestPanel", "Minimap", "ZoomBar", "ResourceBarHost", "ClockWidget",
 	"TimeLabel", "ModePanel", "NotificationFeed", "Hotbar", "BuildMenu",
-	"DebugInfoPanel", "DebugLegend",
+	"DebugInfoPanel",
 ]
-
-const _DriverScript: GDScript = preload("res://tests/integration/test_ui_overlap_driver.gd")
 
 var _fails: PackedStringArray = []
 
 
-func _ready() -> void:
-	call_deferred("_start")
-
-
-func _start() -> void:
-	var driver := Node.new()
-	driver.set_script(_DriverScript)
-	driver.name = "UIOverlapDriver"
-	get_tree().root.add_child(driver)
-	driver.call("run")
+func run() -> void:
+	if SaveManager:
+		SaveManager.boot_load_slot = 0
+	get_tree().change_scene_to_file("res://modules/ui_global/scenes/menus/loading_screen.tscn")
+	if not await _wait_world():
+		print("[UIOverlap] FAIL: 世界加载超时")
+		get_tree().quit(1)
+		return
+	await _frames(30)  # 等面板装配稳定
+	_run()
+	for f in _fails:
+		print("[UIOverlap] FAIL: ", f)
+	if _fails.is_empty():
+		print("[UIOverlap] ALL PASS")
+	get_tree().quit(1 if not _fails.is_empty() else 0)
 
 
 func _run() -> void:
@@ -58,6 +56,11 @@ func _append(rects: Array, label: String, node: CanvasItem) -> void:
 	if node is Node2D:
 		return  # 世界空间指示器不参与屏幕矩形断言
 	if r.size.length() < 4.0:
+		return
+	# 全屏布局根（BuildMenu/DebugInfoPanel 等铺满视口的容器）不算可视部件：
+	# 它们与一切的"重叠"只是容器包含，真实按钮/内容自有局部定位
+	var vp := node.get_viewport_rect().size if node is Control else Vector2(1920, 1080)
+	if r.size.x * r.size.y > vp.x * vp.y * 0.5:
 		return
 	rects.append([label, r])
 

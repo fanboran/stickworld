@@ -47,3 +47,9 @@ godot --path stick-world res://tests/dev/dev_playtest.tscn
 ## 新增调试需求
 
 需要新的"一键状态"时：在 `dev_playtest.gd` 追加参数分支（如 `--map mega_interior`、`--no-enemies`），保持 GameRoot 零改动原则；无法零改动时优先给 GameRoot 加**默认值安全的公开字段**（参照 `dev_enemy_count`）。
+
+## 其他手动检查场景
+
+| 场景 | 用途 | 运行 |
+|---|---|---|
+| `test_ui_overlap.tscn` | HUD 部件两两不重叠检查（自 tests/integration/ 下沉：非 TestRunner 规范套件、不进任何 CI 清单；断言口径停留在 zone 制之前的老布局，结果仅供参考） | `godot --path stick-world res://tests/dev/test_ui_overlap.tscn --resolution 1920x1080` |

@@ -374,15 +374,15 @@ func _test_export_roundtrip() -> void:
 	_runner.assert_false(m.export_as_preset("org_999").get("ok", true), "导出不存在的组织应失败")
 
 
-## 预设数据规范化形状：[(name, level, tag, 父名)] 排序后比较（org_id 差异无关结构）
+## 预设数据规范化形状：[(name, level, tag, 父名)] 排序后比较（v2 键 key/parent_key；语义键无关运行时 org_id）
 func _preset_shape(data: Dictionary) -> Array:
-	var name_by_id := {}
+	var name_by_key := {}
 	for e in data.entries:
-		name_by_id[String(e.id)] = String(e.name)
+		name_by_key[String(e.key)] = String(e.name)
 	var rows: Array = []
 	for e in data.entries:
-		var pid := String(e.parent_id)
-		rows.append([String(e.name), int(e.level), String(e.tag), name_by_id.get(pid, "") if pid != "" else ""])
+		var pk := String(e.parent_key)
+		rows.append([String(e.name), int(e.level), String(e.tag), name_by_key.get(pk, "") if pk != "" else ""])
 	rows.sort()
 	return rows
 

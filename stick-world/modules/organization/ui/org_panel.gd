@@ -651,14 +651,19 @@ func _is_leaderless(d: Dictionary) -> bool:
 	return int(d.tier) > 1 and String(d.commander_id).is_empty()
 
 
-## 节点行文案：主干与既有格式完全一致（[L1] 名称 · 标签 N人 ▲#id），
+## 节点行文案：主干 = [L1] 名称 · 标签 [N人] [▲#id]——「N人」= 本层在册直属成员（personnel），
+## 为 0 时整段省略（不显示 0 人，也不造孤零零的分隔点；L2+ 直属通常为 0）。
 ## 其后按显示序追加徽标：状态 / 统辖规模 / 士气均值 / 群龙无首（恒末尾）。
 ## 除「群龙无首」外逐项做宽度准入——树列不换行，超宽即被裁，宁可少显示也不挤爆行宽。
 func _compose_node_text(d: Dictionary, people: Array[String], morale: float) -> String:
 	var cmd := String(d.commander_id)
-	var text := "[L%d] %s · %s %d人%s" % [
-		int(d.tier), String(d.name), String(TAG_INT_TO_ZH.get(int(d.tag), "?")),
-		(d.personnel as Array).size(), "" if cmd.is_empty() else " ▲#%s" % cmd]
+	var direct: int = (d.personnel as Array).size()
+	var text := "[L%d] %s · %s" % [
+		int(d.tier), String(d.name), String(TAG_INT_TO_ZH.get(int(d.tag), "?"))]
+	if direct > 0:
+		text += " %d人" % direct
+	if not cmd.is_empty():
+		text += " ▲#%s" % cmd
 	var leaderless := _is_leaderless(d)
 	var parts: Array[String] = [" · %s" % String(STATE_INT_TO_ZH.get(int(d.state), "?"))]
 	if people.size() > (d.personnel as Array).size():

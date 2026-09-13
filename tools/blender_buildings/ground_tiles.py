@@ -603,8 +603,7 @@ def t_dirt_rut(n):
     wob = (gnoise(U, V, 0.35, n, 921, oct=2) - 0.5) * 0.035
     s = 0.13 / TILE_M                       # 13cm 半宽（V 比例）
     vv = V + wob
-    rut = np.clip(np.exp(-((wdist(vv, 0.34) / s) ** 2))
-                  + np.exp(-((wdist(vv, 0.66) / s) ** 2)), 0.0, 1.0)
+    rut = np.zeros((ny, nx))  # 城市地面无车辙（创始人 2026-09-14）
     crown = np.exp(-((wdist(V, 0.50) / (s * 1.4)) ** 2))
     # 辙内被碾实：更暗、更光、顺路向拉出细密压实纹
     stamp = gnoise2(U, V, 0.070, 0.028, n, 931, oct=2)
@@ -991,8 +990,7 @@ def b_road(fam, nx=ROAD_PX, ny=ROAD_PX):
     s = 0.13 / TILE_M
     wob = (gwh(U, V, 0.35, nx, ny, 4801, oct=2) - 0.5) * 0.030
     vv = V + wob
-    rut = np.clip(np.exp(-((wdist(vv, 0.34) / s) ** 2))
-                  + np.exp(-((wdist(vv, 0.66) / s) ** 2)), 0.0, 1.0)
+    rut = np.zeros((ny, nx))  # 城市地面无车辙（创始人 2026-09-14）
     stamp = gwh2(U, V, 0.09, 0.026, nx, ny, 4811, oct=2)
     peb = np.zeros((ny, nx))
     if fam == "stone":
@@ -1387,7 +1385,7 @@ def _px_loose(U, V, nx, ny, sd, kind):
                                gwh2(U, V, 0.05, 0.10, nx, ny, sd + 3, oct=2)))
         h = 0.30 + tuft * 0.55
         return alb, h, np.full_like(h, 0.90)
-    metres = {"gravel": 0.08, "rubble": 0.14, "dirt": 0.30, "mud": 0.40}.get(kind, 0.12)
+    metres = {"gravel": 0.08, "rubble": 0.14, "dirt": 0.22, "mud": 0.40}.get(kind, 0.12)
     ku, kv = klatt(nx, metres), klatt(ny, metres)
     f1, f2, cid = pworley(U * ku, V * kv, ku, kv, sd, 0.92 if kind != "dirt" else 0.7)
     mask = smoothstep(0.012, 0.10, np.clip(f2 - f1, 0.0, None))
@@ -1466,13 +1464,13 @@ def b_street_strip(seed=0, nx=STRIP_W, ny=STRIP_H, zone="street"):
                  (0.230, 0.208, 0.180), (0.330, 0.300, 0.262))
     alb = cmix(edge * 0.75, alb, dirty)
     h = h - edge * 0.16
-    # ---- 车辙：沿 X 连续三道，辙内压实、露浅色基层，局部汇成泥洼
+    # ---- 车辙停用（创始人 2026-09-14：城市地面不要车辙，至多野外后续另做）
     s = 0.13 / TILE_M
     rut = np.zeros((ny, nx))
     for vc in (0.10, 0.30, 0.52):
         wob = (gwh(U, V, 0.35, nx, ny, seed + 501, oct=2) - 0.5) * 0.030
         rut = np.maximum(rut, np.exp(-((wdist(V + wob, vc) / s) ** 2)))
-    rut = rut * road * (0.55 + 0.45 * smoothstep(
+    rut = rut * 0.0 * road * (0.55 + 0.45 * smoothstep(
         0.35, 0.75, gwh(U, V, 0.8, nx, ny, seed + 511, oct=2)))
     base = cmix(gwh(U, V, 0.025, nx, ny, seed + 521, oct=2),
                 (0.560, 0.545, 0.520), (0.700, 0.686, 0.658))
@@ -1831,7 +1829,7 @@ def b_segment(band, tier, seed=0, nx=SEG_W, ny=None):
     U, V = _uvw(nx, ny)
     ku, kv = klatt(nx, 0.85), max(2, klatt(ny, 0.85))
     f1, f2, cid = pworley(U * ku, V * kv, ku, kv, seed + 211, 0.75)
-    menu = {"edge": ["dirt", "gravel", "grass"],
+    menu = {"edge": ["dirt", "dirt", "dirt", "gravel", "grass"],
             "mid": ["rubble", "gravel", "brick_new"],
             "center": ["granite", "marble", "cobble"]}[tier]
     pick = np.minimum((cid * (len(menu) + 1)).astype(np.int64), len(menu))

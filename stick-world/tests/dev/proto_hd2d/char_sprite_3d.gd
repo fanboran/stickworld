@@ -24,6 +24,7 @@ extends Node3D
 const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
 const CHAR_SHADER := preload("res://tests/dev/proto_hd2d/char_billboard.gdshader")
 const SHADOW_SHADER := preload("res://tests/dev/proto_hd2d/char_shadow.gdshader")
+const StickmanOutline := preload("res://modules/units/scripts/rig/stickman_outline.gd")
 
 const SV_W := 144            # SubViewport 宽（px）
 const SV_H := 176            # SubViewport 高（px）
@@ -116,6 +117,15 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 		float(_sv_size.x) * 0.5 - FOOT_ANCHOR.x * rig_scale,
 		_foot_row - FOOT_ANCHOR.y * rig_scale)
 	rig.play(anim)
+	# 全融合描边（创始人定稿：白描边只包外轮廓、内部零描边）：OutlineGroup
+	# 整棵收进 CanvasGroup（子树同搬保 IK 路径），ID+描边 pass 作用于组缓冲
+	var og := inst.get_node_or_null("OutlineGroup")
+	if og != null and og is Node2D and not og is CanvasGroup:
+		var cg := CanvasGroup.new()
+		cg.name = "FusedOutlineGroup"
+		inst.add_child(cg)
+		og.reparent(cg)
+		StickmanOutline.setup(cg)
 
 	mat = ShaderMaterial.new()
 	mat.shader = CHAR_SHADER

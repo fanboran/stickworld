@@ -31,7 +31,7 @@ func _ready() -> void:
 # ─────────────────────────────── 参数解析 ────────────────────────────────
 
 func _parse_args() -> Dictionary:
-	var result := {"map": "hd2d_street", "party": 0, "enemies": 4, "follow": false}
+	var result := {"map": "hd2d_street", "party": 0, "enemies": 4, "follow": false, "watch": 0.0}
 	# Godot 命令行：-- 之后的参数以空格分隔（--map battlefield）或 key=value 均可
 	var raw: Array = OS.get_cmdline_user_args()
 	var i: int = 0
@@ -57,6 +57,8 @@ func _parse_args() -> Dictionary:
 					result["enemies"] = int(val)
 				"follow":
 					result["follow"] = val == "true" or val == "1" or val == "yes"
+				"watch":
+					result["watch"] = float(val)
 		i += 1
 	return result
 
@@ -93,6 +95,10 @@ func _run(args: Dictionary) -> void:
 	print("[DevPlaytest] 就绪：map=%s party=%d enemies=%d follow=%s（按 Q 切换战斗模式，编制面板编队）" % [
 		str(args["map"]), int(args["party"]), int(args["enemies"]), bool(args["follow"])
 	])
+	# --watch <秒>：村民行为采样（AI 实况诊断：位置格/行为/速度），结束自动退出
+	if float(args["watch"]) > 0.0:
+		await _watch_villagers(float(args["watch"]))
+		return
 	# headless 下（CI 验证场景可跑）2 秒后自动退出
 	if DisplayServer.get_name() == "headless":
 		await get_tree().create_timer(2.0).timeout
@@ -128,3 +134,34 @@ func _spawn_party(count: int, follow: bool) -> void:
 		if follow and not squad_id.is_empty() and formation.has_method("set_squad_follow"):
 			formation.set_squad_follow(squad_id, true)
 	print("[DevPlaytest] 随行战斗班已生成：%d 人（跟随=%s）" % [units.size(), follow])
+
+
+# ─────────────────────────── 村民行为采样（--watch）───────────────────────────
+
+## 每 2 秒打印一次全部村民：位置（格/px）、当前行为、速度模长——AI 实况诊断用。
+func _watch_villagers(seconds: float) -> void:
+	var t0 := Time.get_ticks_msec()
+	var frame := 0
+	while Time.get_ticks_msec() - t0 < int(seconds * 1000.0):
+		await get_tree().create_timer(2.0).timeout
+		frame += 1
+		var map: Node2D = _game_root.get_current_map()
+		if map == null or not map.has_method("get_entities"):
+			continue
+		var lines: Array = []
+		for e in map.get_entities():
+			if e == null or not is_instance_valid(e) or e.get("is_villager") != true:
+				continue
+			var beh := "?"
+			var ai: Node = (e as Node).get_node_or_null("AIController")
+			if ai != null:
+				var sm: Variant = ai.get("_state_machine")
+				if sm != null and sm.has_method("get_current_behavior_name"):
+					beh = str(sm.get_current_behavior_name())
+			var vel: float = (e as CharacterBody2D).velocity.length() if e is CharacterBody2D else 0.0
+			lines.append("%s(%.1f格,%.0f) %s v=%.0f" % [
+				str(e.name).trim_prefix("@CharacterBody2D@"),
+				e.global_position.x / 32.0, e.global_position.y, beh, vel])
+		print("[Watch#%d] %s" % [frame, " | ".join(lines)])
+	print("[Watch] 采样结束")
+	get_tree().quit(0)

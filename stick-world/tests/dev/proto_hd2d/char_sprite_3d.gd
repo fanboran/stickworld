@@ -185,6 +185,58 @@ func add_char(x: float, z: float, flip: bool = false) -> MeshInstance3D:
 	return mi
 
 
+## 3D 脚下四角框（possessed 玩家专用）：贴地 quad，同接地影口径——
+## 框随 billboard 在同一相机/空间内，速度位置天然一致
+static var _bracket_tex: ImageTexture = null
+
+static func _get_bracket_tex() -> ImageTexture:
+	if _bracket_tex == null:
+		var w := 96
+		var h := 64
+		var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+		img.fill(Color(0, 0, 0, 0))
+		var arm := 18
+		var t := 4
+		var white := Color(1, 1, 1, 0.95)
+		for k in range(4):
+			var cx := 8 if k % 2 == 0 else w - 8
+			var cy := 8 if k < 2 else h - 8
+			var dx := 1 if k % 2 == 0 else -1
+			var dy := 1 if k < 2 else -1
+			for i in range(arm):
+				img.set_pixel(cx + dx * i, cy, white)
+				for tt in range(t):
+					img.set_pixel(cx + dx * i, cy + tt if dy > 0 else cy - tt, white)
+			for j in range(arm):
+				for tt in range(t):
+					img.set_pixel(cx + tt if dx > 0 else cx - tt, cy + dy * j, white)
+		_bracket_tex = ImageTexture.create_from_image(img)
+	return _bracket_tex
+
+var _bracket_quad: MeshInstance3D = null
+
+func set_bracket_visible(v: bool) -> void:
+	if v and _bracket_quad == null and not quads.is_empty():
+		var q := QuadMesh.new()
+		q.size = Vector2(3.4, 2.2)
+		var mi := MeshInstance3D.new()
+		mi.mesh = q
+		var m := StandardMaterial3D.new()
+		m.albedo_texture = _get_bracket_tex()
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.render_priority = 5
+		mi.material_override = m
+		mi.rotation = Vector3(deg_to_rad(-90), 0, 0)
+		mi.position = Vector3(0, 0.10, 0.35)
+		mi.name = "FootBracket"
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		quads[0].get_parent().add_child(mi)
+		_bracket_quad = mi
+	if _bracket_quad != null:
+		_bracket_quad.visible = v
+
+
 ## 游戏接入：逐帧更新本角色的世界位置/朝向/纵深缩放（quad 贴相机基+接地影贴地）。
 func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0) -> void:
 	if _quad == null:
@@ -202,6 +254,9 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0) -> void:
 	if _my_shadow != null:
 		_my_shadow.position = Vector3(x, 0.09, z)
 		_my_shadow.scale = Vector3(depth * SIZE_K, depth * SIZE_K, 1.0)
+	if _bracket_quad != null:
+		_bracket_quad.position = Vector3(x, 0.10, z + 0.35)
+		_bracket_quad.scale = Vector3(depth, depth, 1.0)
 
 
 ## 动画切换（只在变化时 play，避免每帧重置动画进度）

@@ -450,7 +450,11 @@ func get_solid_rects() -> Array:
 		var cx: float = (float(occ[0]) + float(occ[1])) * 0.5
 		var card: String = str(occ[2])
 		var cells := float(_cards.get(card, {}).get("cells", 8.0))
-		out.append([cx - cells * 0.5, cx + cells * 0.5])
+		# 建筑碰撞=**地基范围**（创始人 2026-09-14）：x=建筑格宽，
+		# y=行走带后段到建筑基线外扩 1.4 格的一条带——不再贯穿整条街
+		var z: float = float(occ[3]) if occ.size() > 3 else 0.6
+		var base_y: float = 688.0 + z * 32.0
+		out.append([cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0])
 	for r in _prop_solids:
 		out.append(r)
 	return out
@@ -607,6 +611,13 @@ func get_layout_width() -> float:
 func set_cam_x(cx: float) -> void:
 	if _cam != null:
 		_cam.position.x = cx
+
+
+## 3D 相机缩放镜像（2D 滚轮 zoom）：2D 放大 n 倍 = 3D 正交视宽缩 1/n——
+## 否则 2D 世界缩放时街景纹丝不动，两套相机速度/位置脱钩
+func set_cam_zoom(zoom: float) -> void:
+	if _cam != null and zoom > 0.05:
+		_cam.size = CAM_W / clampf(zoom, 0.25, 8.0)
 
 
 ## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）
@@ -946,7 +957,7 @@ func _place_rows() -> void:
 		if bool(e.get("door", false)) or not on_plat:
 			_door_path_xs.append(cx)   # 宏伟建筑/落地建筑：门前短径
 		var w: float = _cw(card)
-		occ_front.append([cx - w * 0.5, cx + w * 0.5, card])
+		occ_front.append([cx - w * 0.5, cx + w * 0.5, card, z_off])
 	_prop_slots = []
 	_front_occ = occ_front
 	# 三层背景（创始人 2026-09-14 定案，算法职责）：

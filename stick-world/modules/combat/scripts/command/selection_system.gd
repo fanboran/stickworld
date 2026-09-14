@@ -312,19 +312,23 @@ func _screen_to_world(screen_pos: Vector2) -> Vector2:
 
 func _draw() -> void:
 	# possessed 玩家脚下的白色四角线框（原 PossessionIndicator 职责归并于此）。
-	# 脚底 = 实体原点向下 foot_offset（Entity 的 global_position 是腰部参照，
-	# Collider 是居中的碰撞箱——两者在 2D 卷轴图近似贴脚，在 HD-2D 图上
-	# foot 修正后都会偏出脚底，必须显式下移 foot_offset）。
-	var p: Node2D = _get_possessed_entity()
-	if p != null and is_instance_valid(p):
-		var col_w: float = 32.0
-		var col: CollisionShape2D = p.get_node_or_null("Collider") as CollisionShape2D
-		if col != null and col.shape is RectangleShape2D:
-			col_w = (col.shape as RectangleShape2D).size.x
-		var foot_off: float = float(p.get("foot_offset")) if "foot_offset" in p else 0.0
-		var foot: Vector2 = p.global_position + Vector2(0.0, foot_off)
-		_draw_corner_bracket(get_viewport().get_canvas_transform() * foot,
-				col_w * 0.5 + POSSESSED_EXPAND_X, POSSESSED_HALF_H, POSSESSED_ARM, POSSESSED_COLOR)
+	# HD-2D 图跳过：possessed 框由角色 billboard 的 3D 脚下框承担——
+	# 2D 画布坐标与 3D billboard 投影的速度/位置不一致，画了反而错位。
+	# 2D 卷轴图照画：脚底 = 实体原点向下 foot_offset（Entity 的 global_position
+	# 是腰部参照，Collider 是居中碰撞箱，都需显式下移 foot_offset）。
+	var map_now := _get_current_map()
+	var use_2d_bracket: bool = not (map_now != null and map_now.has_method("wants_3d_bracket"))
+	if use_2d_bracket:
+		var p: Node2D = _get_possessed_entity()
+		if p != null and is_instance_valid(p):
+			var col_w: float = 32.0
+			var col: CollisionShape2D = p.get_node_or_null("Collider") as CollisionShape2D
+			if col != null and col.shape is RectangleShape2D:
+				col_w = (col.shape as RectangleShape2D).size.x
+			var foot_off: float = float(p.get("foot_offset")) if "foot_offset" in p else 0.0
+			var foot: Vector2 = p.global_position + Vector2(0.0, foot_off)
+			_draw_corner_bracket(get_viewport().get_canvas_transform() * foot,
+					col_w * 0.5 + POSSESSED_EXPAND_X, POSSESSED_HALF_H, POSSESSED_ARM, POSSESSED_COLOR)
 	# 拖拽中的选中框
 	if _dragging:
 		var rect := Rect2(_drag_start_screen, _drag_current_screen - _drag_start_screen).abs()
@@ -345,7 +349,6 @@ func _draw() -> void:
 		_draw_corner_bracket(screen_pos, half_w, half_h, arm, col)
 
 
-## 四角 L 形短线框（不是整框，压低视觉权重）
 func _draw_corner_bracket(center: Vector2, half_w: float, half_h: float, arm: float, col: Color) -> void:
 	for c in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
 		var corner: Vector2 = center + Vector2(c.x * half_w, c.y * half_h)

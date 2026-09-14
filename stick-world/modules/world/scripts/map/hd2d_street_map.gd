@@ -86,8 +86,11 @@ func _process(_delta: float) -> void:
 	# 3D 相机镜像 2D CameraRig：1/4 区域跟随、顶栏"居中"开关、边缘滚动、
 	# 中键拖拽/滚轮缩放全部在 CameraRig 上驱动，3D 侧只镜像 x（正交 1:1）。
 	var cam2d := get_viewport().get_camera_2d()
-	if cam2d != null and _hd != null and _hd.has_method("set_cam_x"):
-		_hd.set_cam_x(cam2d.global_position.x / CELL_PX)
+	if cam2d != null and _hd != null:
+		if _hd.has_method("set_cam_x"):
+			_hd.set_cam_x(cam2d.global_position.x / CELL_PX)
+		if _hd.has_method("set_cam_zoom"):
+			_hd.set_cam_zoom(cam2d.zoom.x)   # 滚轮缩放同步，防两套相机脱钩
 	_sync_character_render()
 	_apply_time_of_day(false)
 
@@ -122,6 +125,10 @@ func _sync_character_render() -> void:
 			if sh2d != null:
 				sh2d.visible = false
 		alive[id] = ch
+		# possessed 玩家：脚下四角框走 3D（与 billboard 同空间同相机，
+		# 速度位置天然一致；2D 画布框在 HD-2D 图上会与角色脱钩）
+		if ch.has_method("set_bracket_visible"):
+			ch.set_bracket_visible(e.has_method("is_possessed") and e.is_possessed())
 		# y 行走带 → 3D 纵深 z（道具/树的 z 同一映射，遮挡关系自动正确）
 		var z: float = (body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN) * 12.25
 		var vel: Vector2 = (body as CharacterBody2D).velocity if body is CharacterBody2D else Vector2.ZERO
@@ -211,6 +218,20 @@ func get_npc_spawn_points() -> Array:
 		Vector2(30.0 * CELL_PX, 990.0),    # 谷仓前
 	]
 	return pts
+
+
+## 3D 脚下四角框声明（SelectionSystem 读到后跳过 2D 画布框）
+func wants_3d_bracket() -> bool:
+	return true
+
+
+## F3 调试可视化：把 HD-2D 碰撞墙并入 walk barrier 绘制（蓝框）
+func get_walk_barriers() -> Array:
+	var out: Array = super()
+	var solids := get_node_or_null("HD2DSolids")
+	if solids != null:
+		out.append(solids)
+	return out
 
 
 ## 露天工位（转发 3D 侧摆位表：铁砧 → 铁匠）

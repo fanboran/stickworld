@@ -67,7 +67,8 @@ var _root: GameRoot
 
 # ─────────────────────────────── Tab 三态（A3） ────────────────────────────────
 
-## Tab 键循环：关闭 → 顶部小地图（双窗）→ 原 Tab 大图 → 关闭。
+## Tab 键循环：缩略窗 ↔ L1 大图互切（创始人反馈：Tab 地图默认展开，关闭大图
+## 回到缩略窗，缩略窗与 Minimap 同为常驻）。HIDDEN 态保留作兜底，正常流程不可达。
 ## 顶部小地图区双窗 = Minimap（本城市俯视）+ L1Thumbnail（出生 L1 世界缩略）。
 enum TabMapState { HIDDEN, TOP_MINIMAPS, FULL_L1 }
 
@@ -130,6 +131,11 @@ func _step_table() -> Array:
 		["TeamAi HUD", _setup_team_ai_hud],
 		["班组卡", _setup_squad_card],
 		["缩放条", _setup_zoom_bar],
+		# 战略图初始化从懒加载提前进装配（创始人反馈：Tab 地图默认展开）——
+		# 拆成 L1/L3 两步分帧消化 JSON+索引图重载，副进度条如实显示
+		["战略图 L1", _setup_l1_strategic_map],
+		["战略图 L3", _setup_l3_strategic_map],
+		["地图缩略窗", _open_tab_map_default],
 		["背包", _setup_inventory],
 		["附身界面", _setup_possession_interface],
 		["附身面板", _setup_possess_panel],
@@ -692,13 +698,14 @@ func _setup_pause_menu_panel_deferred() -> void:
 
 ## 创建顶部小地图区（Minimap + L1 缩略窗）并挂到 UIRoot。详见 §10.4。
 ## Minimap（本城市俯视）**常驻恒显**——Tab 三态不影响（创始人反馈）；
-## 仅 L1 缩略窗由 Tab 三态控制，默认隐藏。
+## L1 缩略窗也常驻（创始人反馈：Tab 地图默认展开），初始隐藏，由步骤表
+## 后段的「地图缩略窗」步骤喂完数据后显示。
 func _setup_minimap() -> void:
 	if _root.ui_root == null:
 		return
 	var mm := UIKit.widget(_MinimapScript, "Minimap")
 	_root.ui_root.add_to_slot("HudOverlay", mm)
-	# 定位归 zone（顶部中央保留区，见 hud_zone_layout.gd）；先落位再 setup，
+	# 定位归 zone（顶部中央堆叠区，见 hud_zone_layout.gd）；先落位再 setup，
 	# 让 L1 缩略窗读到最终 rect
 	_root.ui_root.place_in_zone(&"top_center", mm)
 	_root._minimap = mm
@@ -711,7 +718,9 @@ func _setup_minimap() -> void:
 	if _l1_thumbnail.has_signal("open_l1_requested"):
 		_l1_thumbnail.open_l1_requested.connect(_on_l1_thumbnail_clicked)
 	if _l1_thumbnail.has_method("place_right_of_minimap"):
-		_l1_thumbnail.place_right_of_minimap(mm)
+		# deferred：top_center 已改 stack 模式，Minimap 的 rect 由 deferred 重排
+		# 写入，立即调用会读到旧 rect（0,0 起）；call_deferred 排在重排之后必就绪
+		_l1_thumbnail.call_deferred("place_right_of_minimap", mm)
 	_l1_thumbnail.visible = false
 
 
@@ -752,13 +761,13 @@ func _setup_squad_card() -> void:
 		card.setup(_root)
 
 
-## 创建 ZoomBar 并挂到 UIRoot，钉进 right_bottom zone（右下贴缘，见 hud_zone_layout.gd）。
+## 创建 ZoomBar 并挂到 UIRoot，钉进 top_center stack（Minimap 正下方，见 hud_zone_layout.gd）。
 func _setup_zoom_bar() -> void:
 	if _root.ui_root == null:
 		return
 	var zb := UIKit.widget(_ZoomBarScript, "ZoomBar")
 	_root.ui_root.add_to_slot("HudOverlay", zb)
-	_root.ui_root.place_in_zone(&"right_bottom", zb)
+	_root.ui_root.place_in_zone(&"top_center", zb)
 	_root._zoom_bar = zb
 	if zb.has_method("setup"):
 		zb.setup(_root.camera_rig)
@@ -863,8 +872,9 @@ func _setup_boundary_detector() -> void:
 	# 注入 GameRoot（替代根节点遍历反查）
 	if _root._boundary_detector.has_method("setup"):
 		_root._boundary_detector.setup(_root)
-	# 战略图懒加载：启动时不再实例化/初始化（耗时阻塞主线程，曾致启动 10s+ 灰屏），
-	# 首次打开（Tab / M / 边界提示）时经 _ensure_strategic_maps 初始化，见 _open_strategic_map。
+	# 战略图初始化已进装配步骤表（「战略图 L1/L3」两步分帧，创始人反馈 Tab 地图
+	# 默认展开）；此处仍留 _ensure_strategic_maps 兜底——步骤表未跑到的早开路径
+	# （Tab / M / 边界提示）首次触发时补初始化，见 _open_strategic_map。
 	_root._boundary_detector.open_world_map_requested.connect(_open_strategic_map)
 	# 战略图关闭 -> 恢复场景图输入（api.close_strategic_map / ESC 都发此信号）
 	if EventBus != null:
@@ -877,7 +887,7 @@ func _setup_boundary_detector() -> void:
 
 
 ## 玩家所在场景图变化（F2/C1）：经 world_map api 反查所在聚落。
-## api 未初始化（战略图懒加载未触发）时跳过——图钉默认锚出生聚落，语义仍正确。
+## api 未初始化（战略图未装配）时跳过——图钉默认锚出生聚落，语义仍正确。
 func _on_player_map_changed(map_id: String, _map_type: int) -> void:
 	if _root._strategic_map == null:
 		return
@@ -886,11 +896,14 @@ func _on_player_map_changed(map_id: String, _map_type: int) -> void:
 	if api != null and api.has_method("is_initialized") and api.is_initialized() \
 			and api.has_method("set_player_map"):
 		api.set_player_map(map_id)
+	# 缩略窗常驻（创始人反馈）：随场景图切换重喂，保当前位置标记新鲜
+	_feed_thumbnail_data()
 
 
-## 战略图懒加载：首次打开（Tab / M / 边界提示）才实例化并初始化。
-## 战略图启动时 Content 隐藏，其 instantiate + 数据加载（l1/l3 JSON + 索引图）耗时巨大，
-## 必须移出启动装配，否则每次启动卡 10s+。
+## 战略图初始化（幂等兜底）：常规路径由装配步骤表「战略图 L1/L3」分帧完成，
+## 早于步骤表的打开路径（Tab / M / 边界提示）经此处补齐。
+## 战略图 Content 常驻隐藏，其 instantiate + 数据加载（l1/l3 JSON + 索引图）耗时巨大，
+## 已拆进步骤表借加载屏分帧消化（当年整段同步曾致启动卡 10s+）。
 func _ensure_strategic_maps() -> void:
 	if _root._strategic_map == null:
 		_setup_l1_strategic_map()
@@ -967,10 +980,9 @@ func _toggle_l3_strategic_map() -> void:
 		_pause_scene_input(true)
 
 
-## Tab / 边界触发入口（A3 三态循环；F1 验收反馈修订：Minimap 常驻不受 Tab 影响）。
+## Tab / 边界触发入口（Minimap 常驻不受 Tab 影响；L1 缩略窗也常驻——创始人反馈）。
 ## full_map=true（边界自动触发，如顶边界持续推进）：直接开 L1 大图（保留原"出城看图"语义）；
-## full_map=false（玩家按 Tab）：缩略窗关 → 缩略窗开 → 原 Tab 大图 → 缩略窗关 循环
-## （当前城市 Minimap 三态全程常驻，只有 L1 缩略窗随态显隐）。
+## full_map=false（玩家按 Tab）：缩略窗态开 L1 大图 / 大图态关闭回缩略窗（互切）。
 ## M（L3/L2）会话期间忽略：新开视图 = 玩家所见的互斥原则——否则状态机在 L3 海洋层下
 ## 悄悄切态（L1 被盖住打开），M 一关 L1 意外弹出。
 func _open_strategic_map(full_map: bool) -> void:
@@ -1008,7 +1020,7 @@ func _is_l3_session_active() -> bool:
 			and l3_content.l2_view.visible
 
 
-## L1 缩略窗显隐（Tab 三态唯一作用对象；Minimap 常驻不在此列——创始人反馈）
+## L1 缩略窗显隐（仅开 L1 大图时收起、关闭即回显；Minimap/缩略窗双常驻——创始人反馈）
 func _set_l1_thumbnail_visible(v: bool) -> void:
 	if _l1_thumbnail != null:
 		_l1_thumbnail.visible = v
@@ -1025,6 +1037,16 @@ func _feed_thumbnail_data() -> void:
 	if api != null and api.has_method("is_initialized") and api.is_initialized() \
 			and api.has_method("get_data"):
 		_l1_thumbnail.set_map_data(api.get_data())
+
+
+## 地图缩略窗默认展开（装配步骤表「地图缩略窗」；创始人反馈：Tab 地图开局即显示）。
+## 前置：战略图 L1/L3 步骤已完成初始化，此处只喂数据 + 置顶双窗态。
+func _open_tab_map_default() -> void:
+	if _l1_thumbnail == null:
+		return
+	_feed_thumbnail_data()
+	_tab_state = TabMapState.TOP_MINIMAPS
+	_set_l1_thumbnail_visible(true)
 
 
 ## 打开 L1 大图（三态第三态；L1 缩略窗先收起，Minimap 常驻不动）
@@ -1060,10 +1082,13 @@ func _on_l1_thumbnail_clicked() -> void:
 
 func _on_strategic_map_closed() -> void:
 	_pause_scene_input(false)
-	# L1 大图任何路径关闭（ESC / Tab / M 互斥）都归位三态起点；
-	# TOP_MINIMAPS 态下的 M 开关 L3 不影响（其 close 也发此信号，但此时不在 FULL_L1）
+	# L1 大图任何路径关闭（ESC / Tab / M 互斥）都回到顶部双窗态（缩略窗常驻，
+	# 创始人反馈；关闭时重喂数据刷新当前位置标记）。TOP_MINIMAPS 态下的 M 开关
+	# L3 不影响（其 close 也发此信号，但此时不在 FULL_L1）
 	if _tab_state == TabMapState.FULL_L1:
-		_tab_state = TabMapState.HIDDEN
+		_tab_state = TabMapState.TOP_MINIMAPS
+		_feed_thumbnail_data()
+		_set_l1_thumbnail_visible(true)
 
 
 ## 暂停/恢复场景图输入（战略图打开时场景图不响应输入）

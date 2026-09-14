@@ -42,11 +42,11 @@ const ZONES: Dictionary = {
 	},
 	&"top_center": {
 		"anchors": [0.5, 0.0, 0.5, 0.0],
-		"region": [-190.0, 8.0, 190.0, 132.0],
-		"mode": "dock",
-		"dock_h": "center",
-		"dock_v": "begin",
-		"desc": "顶部中央：Minimap（窄窗口下与堆叠区逼近，防撞以 1920 基准为准）",
+		"region": [-206.0, 8.0, 206.0, 170.0],
+		"mode": "stack",
+		"stack_h": "center",
+		"gap": 6.0,
+		"desc": "顶部中央堆叠：Minimap→ZoomBar（缩放条贴小地图下方；L1Thumbnail 不入区，贴 Minimap 右侧自算；窄窗口下与堆叠区逼近，防撞以 1920 基准为准）",
 	},
 	&"top_right": {
 		"anchors": [1.0, 0.0, 1.0, 0.0],
@@ -55,14 +55,6 @@ const ZONES: Dictionary = {
 		"stack_h": "end",
 		"gap": 4.0,
 		"desc": "右上成组：ClockWidget→DayTimeLabel",
-	},
-	&"right_bottom": {
-		"anchors": [1.0, 1.0, 1.0, 1.0],
-		"region": [-560.0, -160.0, -8.0, -96.0],
-		"mode": "dock",
-		"dock_h": "end",
-		"dock_v": "end",
-		"desc": "右下贴缘：ZoomBar（底边让开 ModePanel 80px + 16px 空隙）",
 	},
 	&"bottom_left": {
 		"anchors": [0.0, 1.0, 0.0, 1.0],

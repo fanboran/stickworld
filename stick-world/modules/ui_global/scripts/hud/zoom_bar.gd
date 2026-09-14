@@ -1,6 +1,6 @@
 class_name ZoomBar
 extends HBoxContainer
-## 缩放条 —— 右下贴缘的相机缩放滑块（right_bottom zone，见 hud_zone_layout.gd）。
+## 缩放条 —— 顶部中央小地图正下方的相机缩放滑块（top_center stack，见 hud_zone_layout.gd）。
 ##
 ## 滑块占左侧，右侧显示缩放百分比。支持拖动滑块和滚轮缩放双向同步。
 ## 定位归 zone：由装配层经 UIRoot.place_in_zone 落位，本部件只声明体量
@@ -11,6 +11,11 @@ const BAR_WIDTH: float = 360.0
 const BAR_HEIGHT: float = 24.0
 ## 右侧百分比标签宽度
 const LABEL_WIDTH: float = 48.0
+## 缩放范围与档位（与 CameraRig.ZOOM_* 同值——ui_global 禁止反向依赖 world 模块，
+## 取不了其常量，此处为 UI 侧镜像；刻度 0.5~2.0 每 0.1 一档 = 16 档，默认 100% 恰落在刻度上）
+const ZOOM_MIN: float = 0.5
+const ZOOM_MAX: float = 2.0
+const ZOOM_STEP: float = 0.1
 
 var _slider: HSlider = null
 var _label: Label = null
@@ -36,6 +41,11 @@ func _build_ui() -> void:
 	# 滑块：条本体宽 = BAR_WIDTH，水平排列由容器管理（无手写 offset）
 	_slider = SketchHSlider.new()
 	_slider.custom_minimum_size = Vector2(BAR_WIDTH, BAR_HEIGHT)
+	# 滑块量程必须对齐相机 user_zoom 域：HSlider 默认 0~100，不设则相机值
+	# 0.5~2.0 只占量程 1%~2%（手柄滚轮缩放几乎不动的根因），拖动则被 clamp 瞬跳
+	_slider.min_value = ZOOM_MIN
+	_slider.max_value = ZOOM_MAX
+	_slider.step = ZOOM_STEP
 	_slider.value_changed.connect(_on_slider_changed)
 	add_child(_slider)
 	# 缩放档位刻度：原生 tick_count 机制（0.5~2.0 每 0.1 一档 = 16 档，

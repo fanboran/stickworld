@@ -34,7 +34,7 @@ TimeManager 自造暂停（`is_paused()` + EventBus `game_paused/game_resumed` �
 
 | 语义 | 实现层 | 机制 |
 |------|--------|------|
-| 硬暂停（玩家按 ‖ / 模态自动暂停） | **引擎** | `SceneTree.paused = true`，世界子树整体冻结，零逐系统检查 |
+| 硬暂停（玩家按 ‖ / 模态自动暂停） | **引擎** | `SceneTree.paused = true`，世界子树整体冻结，零逐系统检查。模态自动暂停仅游戏内生效：`StickScreen.open()` 的暂停簿记以"树里存在 UIRoot"为闸（主菜单复用该基类但没有游戏时间可暂停，拉总闸只会冻结主菜单自身） |
 | 倍速（1x/2x/4x） | TimeManager | 模拟系统统一经 `TimeManager.sim_delta(delta)` 取步长（delta × 速度因子） |
 | 附身微操减速 | TimeManager | 倍速的一种预设值（如 0.3x），不新造机制 |
 
@@ -97,9 +97,8 @@ zone 注册表（单文件 const 表，改布局=改表，占位一屏可读）�
 |------|------|--------------------------|--------|
 | `top_bar` | 顶部通栏 | y 0..60 | GlobalHUD 顶栏 |
 | `top_left_stack` | 左上角，**顺序堆叠** | x 8..，y 64 起逐件下移 | ResourceBarHost → QuestPanel（→ 未来任务列表） |
-| `top_center` | 顶部中央 | 屏中 ±190，y 8..132 | Minimap |
+| `top_center` | 顶部中央，**顺序堆叠** | 屏中 ±206，y 8..170 | Minimap → ZoomBar（缩放条贴小地图正下方） |
 | `top_right` | 右上角 | x -184..-8，y 8..150 | ClockWidget + DayTimeLabel（成组） |
-| `right_bottom` | 右下 | 贴右缘 | ZoomBar |
 | `bottom_left` | 左下 | 贴底 | NotificationFeed |
 
 API：`UIRoot.place_in_zone(zone: StringName, control: Control) -> void`——统一设 anchor+offset；堆叠 zone 维护游标（后挂的排在先挂的下方）。

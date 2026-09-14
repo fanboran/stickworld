@@ -93,14 +93,24 @@ func open() -> void:
 	_panel.offset_top = -panel_size.y * 0.5
 	_panel.offset_right = panel_size.x * 0.5
 	_panel.offset_bottom = panel_size.y * 0.5
-	# 模态打开自动暂停（世界/玩家/缩放/悬停反馈全部冻结；close 恢复原速度）
-	if TimeManager:
+	# 模态打开自动暂停（世界/玩家/缩放/悬停反馈全部冻结；close 恢复原速度）。
+	# 仅游戏内生效（树里存在 UIRoot，与 _system_overlay / UIModalStack.find
+	# 同一判定约定）：主菜单复用本基类但没有游戏时间可暂停，拉总闸只会冻住
+	# 主菜单自身——PAUSABLE 子树下的确认框/制作人员等非 ALWAYS 面板全部失灵。
+	if TimeManager and _in_game_context():
 		if TimeManager.is_paused():
 			_prev_speed = -1
 		else:
 			_prev_speed = TimeManager.current_speed
 			TimeManager.set_speed(TimeManager.Speed.PAUSED)
 	visible = true
+
+
+## 是否处于游戏场景（树里存在 UIRoot）；主菜单无 UIRoot 返回 false，
+## open() 跳过暂停簿记，close() 因 _prev_speed 恒 -1 自然变纯显隐。
+func _in_game_context() -> bool:
+	var tree := get_tree()
+	return tree != null and tree.get_first_node_in_group("ui_root") != null
 
 
 func close() -> void:

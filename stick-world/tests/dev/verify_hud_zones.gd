@@ -109,14 +109,17 @@ func _check_layout_1920() -> void:
 		var r := mm.get_global_rect()
 		_check(absf(r.get_center().x - vp.x * 0.5) < 2.0, "Minimap 水平居中（center=%.1f）" % r.get_center().x)
 		_check(r.size == Vector2(360, 120), "Minimap 体量 360x120（实际 %s）" % r.size)
-		_check(r.position.y >= 7.0 and r.end.y <= 133.0, "Minimap 落在 top_center 保留区 y 8..132（%s）" % r)
+		_check(r.position.y >= 7.0 and r.end.y <= 133.0, "Minimap 占 top_center 堆叠首位 y 8..128（%s）" % r)
 	var zb: Control = _game_root.ui_root.get_node_or_null("HudOverlay/ZoomBar")
 	if zb == null:
 		_fail("ZoomBar 未装配")
 	else:
 		var r := zb.get_global_rect()
-		_check(absf(r.end.x - vp.x + 8.0) < 2.0, "ZoomBar 贴右缘 8px（right=%.1f）" % r.end.x)
-		_check(r.end.y <= vp.y - 96.0 + 1.0, "ZoomBar 底边让开 ModePanel（bottom=%.1f ≤ %.1f）" % [r.end.y, vp.y - 96.0])
+		_check(absf(r.get_center().x - vp.x * 0.5) < 2.0, "ZoomBar 随 Minimap 水平居中（center=%.1f）" % r.get_center().x)
+		if mm != null:
+			var mr := mm.get_global_rect()
+			_check(absf(r.position.y - mr.end.y - 6.0) < 2.0, "ZoomBar 贴 Minimap 正下方 gap=6（top=%.1f，小地图底=%.1f）" % [r.position.y, mr.end.y])
+			_check(not r.intersects(mr), "ZoomBar 与 Minimap 无重叠")
 	_check_stack_base()
 	_check_feed(vp)
 	var debug_layer: Node = _game_root.ui_root.get_node_or_null("HudZoneDebug")
@@ -138,7 +141,7 @@ func _check_layout_720() -> void:
 	var zb: Control = _game_root.ui_root.get_node_or_null("HudOverlay/ZoomBar")
 	if zb != null:
 		var r := zb.get_global_rect()
-		_check(absf(r.end.x - get_viewport().get_visible_rect().size.x + 8.0) < 2.0, "720p ZoomBar 仍贴右缘（right=%.1f）" % r.end.x)
+		_check(absf(r.get_center().x - get_viewport().get_visible_rect().size.x * 0.5) < 2.0, "720p ZoomBar 仍随小地图居中（center=%.1f）" % r.get_center().x)
 	_check_stack_base()
 	_check_feed(get_viewport().get_visible_rect().size)
 
@@ -155,7 +158,7 @@ func _check_layout_1610() -> void:
 	var zb: Control = _game_root.ui_root.get_node_or_null("HudOverlay/ZoomBar")
 	if zb != null:
 		var r := zb.get_global_rect()
-		_check(absf(r.end.x - vp.x + 8.0) < 2.0, "16:10 ZoomBar 贴新右缘（right=%.1f / %.1f）" % [r.end.x, vp.x])
+		_check(absf(r.get_center().x - vp.x * 0.5) < 2.0, "16:10 ZoomBar 随画布重排仍居中（center=%.1f / 画布宽 %.1f）" % [r.get_center().x, vp.x])
 	_check_feed(vp)
 
 

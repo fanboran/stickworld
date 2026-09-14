@@ -164,8 +164,11 @@ func _add_section_title(text: String) -> void:
 	_content_vbox.add_child(label)
 
 
-## 时间速度控制（暂停/1x/2x/4x）
+## 时间速度控制（暂停/1x/2x/4x；仅游戏内显示——主菜单没有游戏时间可调，
+## 在菜单里翻总闸只会冻结主菜单自身，与脱离卡死按钮同判定）
 func _add_speed_buttons() -> void:
+	if _game_root == null:
+		return
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	_content_vbox.add_child(row)

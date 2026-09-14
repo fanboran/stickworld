@@ -445,6 +445,9 @@ var _dirty: bool = false
 ## 复刻旧路径的部件参数缓存（reconfigure 重烘用）
 var _thickness_scale: float = 1.0
 var _colors: Dictionary = {}
+## 当前描边单侧宽（zoom 补偿动态；StickmanRig._update_outline_zoom 低频更新，
+## 未更新时 = 设计世界宽度 OUTLINE_WIDTH，与矢量路径构建期初值同口径）
+var _ow: float = Skel.OUTLINE_WIDTH
 
 
 ## 构建：骨骼树先序 + 部件桶 + 初始实例缓冲。失败返回 false（调用方回退旧矢量路径）。
@@ -472,6 +475,20 @@ func reconfigure(thickness_scale: float, colors: Dictionary) -> void:
 	_rebuild_instance_data()
 	if _mm.is_empty():
 		return
+	_write_transforms()
+	_dirty = true
+
+
+## 描边宽更新（画布缩放变化时由 StickmanRig._update_outline_zoom 调用，低频）：
+## 重烘 4 桶预烘局部变换（描边件宽随 eff）并立即重写实例缓冲；骨骼树未变，
+## 实例数/槽位不变，MMI 无需重建。
+func set_outline_width(eff: float) -> void:
+	if absf(eff - _ow) < 0.001:
+		return
+	_ow = eff
+	if _mm.is_empty():
+		return
+	_rebuild_instance_data()
 	_write_transforms()
 	_dirty = true
 
@@ -557,7 +574,7 @@ func _emit_limb(data: Dictionary, bone_pre_idx: int) -> void:
 	var w := maxf(float(data.get("thickness", 0)) * _thickness_scale, 1.0)
 	var fill_color: Color = Skel._color_for_type(node_type, _colors)
 	var stroke_color: Color = _colors.get("outline", Skel.DEFAULT_OUTLINE)
-	var ow := Skel.OUTLINE_WIDTH
+	var ow := _ow
 	if node_type == Skel.TYPE_CIRCLE:
 		var r := maxf(length, w * 2.0) / 2.0
 		var base := Transform2D(0.0, Vector2(data["x"], data["y"]))

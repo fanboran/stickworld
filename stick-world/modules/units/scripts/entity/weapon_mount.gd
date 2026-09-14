@@ -288,8 +288,8 @@ func _mount_one(scene: PackedScene, bone: Node2D, node_name: String) -> Node2D:
 	# 层级跟随单位所在带（EntityHost z=3）：相对层级 + 树序近似 SWL 槽序。
 	# 旧写法 z_as_relative=false 是"绝对 z"——武器 -2 掉到所有地图瓦片层
 	# （地面 0/装饰 1/建筑 2）之下、盾 20 压过前景层 10，武器被地面盖住。
-	# 链式分层渲染（stickman_skeleton.gd CHAIN_STROKE_Z）下肢体填充层
-	# 相对 z 最高 +6（外臂），武器/盾取 +7 盖全身肢体；树序盾挂外臂
+	# 全局两遍渲染（stickman_skeleton.gd）下肢体填充层相对 z 最高 0，
+	# 武器/盾取 +7 盖全身肢体；树序盾挂外臂
 	# subtree（后画）盖武器——保持"盾 > 武器"的原语义。全局 z=10 与
 	# 地图前景层同值：树序单位在后，仅武器尖角过前景支柱时轻微盖柱
 	# （身体仍正确被前景遮挡）。

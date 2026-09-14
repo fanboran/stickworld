@@ -55,6 +55,10 @@ static var _anim_tables: Dictionary = {}
 static var _bucket_bidx: Array = []  # PackedInt32Array ×4
 static var _bucket_xform: Array = [] # Array[Transform2D] ×4
 static var _bucket_color: Array = [] # PackedColorArray ×4（身体色占位白，注册时按单位实际色替换）
+## 部件预烘当前描边单侧宽（zoom 补偿；_refresh_outline_zoom 在画布缩放变化时
+## 重烘全表。全表共享，按 1.0 体型基准补偿——0.65× 体型单位描边同比偏细，
+## 与不补偿时的比例行为一致，不逐单位分表）
+static var _bake_ow: float = Skel.OUTLINE_WIDTH
 static var _statics_ready: bool = false
 
 
@@ -95,7 +99,11 @@ static func _build_bone_topology() -> void:
 
 
 ## 部件预烘（照搬 batch_rig._emit_limb 的尺寸语义，父骨下标换成本表先序下标）。
+## 可重入：zoom 补偿变化描边宽时重烘全表（先清后建，实例数恒定）。
 static func _build_bucket_tables() -> void:
+	_bucket_bidx.clear()
+	_bucket_xform.clear()
+	_bucket_color.clear()
 	for j in 4:
 		_bucket_bidx.append(PackedInt32Array())
 		_bucket_xform.append([])
@@ -124,7 +132,7 @@ static func _emit_limb(data: Dictionary, bone_idx: int) -> void:
 	var node_type: int = int(data.get("type", -1))
 	var length := float(data.get("length", 1))
 	var w := maxf(float(data.get("thickness", 0)), 1.0)
-	var ow := Skel.OUTLINE_WIDTH
+	var ow := _bake_ow
 	var is_body: bool = node_type != Skel.TYPE_TRIANGLE and node_type != Skel.TYPE_ELLIPSE
 	var fill_color: Color = Color.WHITE if is_body else Skel._color_for_type(node_type, {})
 	if node_type == Skel.TYPE_CIRCLE:
@@ -219,6 +227,8 @@ const BAND_COUNT := 12
 ## 挂载节点（BattleInstance 子节点，z=ENTITY 层；MMI 树序在实体前——
 ## 小兵 rig 已隐藏，仅武器 Sprite（若保留）会盖在其上）
 var _host: Node = null
+## 描边补偿已应用的画布缩放（-1 = 未初始化；zoom 变化时重烘静态部件表）
+var _ow_canvas_scale: float = -1.0
 ## 4 带 × 4 桶 MultiMesh/缓冲（下标 band*4+j）
 var _mm: Array = []     # MultiMesh ×16
 var _buf: Array = []    # PackedFloat32Array ×16
@@ -696,11 +706,30 @@ func set_slot_hidden(slot: Dictionary, hidden: bool) -> void:
 	# 取消隐藏：下一 tick 重写槽位即恢复
 
 
+## 描边宽 zoom 补偿（每刻首查，写入仅缩放变化帧）：画布缩放变化时按
+## Skel.outline_world_width 重烘静态部件表（描边件随 eff 加宽/收窄）。
+## tick 逐槽位全量重写实例行，重烘后同刻写入即生效，无需触碰带桶缓冲结构。
+func _refresh_outline_zoom() -> void:
+	var vp: Viewport = _host.get_viewport() if _host is Node else null
+	if vp == null:
+		return
+	var s: float = vp.get_canvas_transform().get_scale().x
+	if absf(s - _ow_canvas_scale) < 0.001:
+		return
+	_ow_canvas_scale = s
+	var eff: float = Skel.outline_world_width(s)
+	if absf(eff - _bake_ow) < 0.001:
+		return
+	_bake_ow = eff
+	_build_bucket_tables()
+
+
 ## 每物理刻推进（BattleInstance._physics_process 调用，在 sim.tick 之后——
 ## 读实体最新位置）。插值 → 累乘 → 写 4 桶 buffer → 上传。
 func tick(delta: float) -> void:
 	if _host == null or _slots.is_empty():
 		return
+	_refresh_outline_zoom()
 	_rebuild_atlas()  # 注册期收集的武器纹理在此一次 blit+上传
 	_weapon_count = 0
 	for idx in _slots.size():

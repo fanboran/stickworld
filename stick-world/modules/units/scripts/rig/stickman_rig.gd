@@ -221,10 +221,6 @@ func _process(delta: float) -> void:
 	# 平时每帧只有一次取矩阵+浮点比较的开销。编辑器内不补偿，保持设计空间观感）
 	if not Engine.is_editor_hint():
 		_update_outline_zoom()
-		# 开口侧线头圆动态裁剪（近臂双线；手臂摆动时起点始终钳在头圆外，
-		# 静息留隙只是标定基准——创始人反馈"线条不要进脑袋"的运行时兜底）
-		if _sprites.has(1) and _sprites.has(10):
-			Skeleton.clip_open_root_sides_to_head(_sprites, 10)
 	# 批渲染 pose 脏标记（自动驱动模式）：AnimationTree 自主推进，无法感知姿态
 	# 变化帧，保守每帧标脏（无动画树则姿态恒定，跳过）
 	if _batch != null and not _anim_driven and _anim_tree != null:
@@ -538,9 +534,10 @@ func _do_rebuild() -> void:
 ## 补偿公式须除掉 rig 自身 scale（BASE_SCALE × body_scale）：描边宽写在本地
 ## 坐标、渲染时再乘节点 scale——0.65× 体型单位若只按画布缩放补偿，本地描边
 ## 被灌到超粗（渲染后屏幕占比过大），深灰填充被白描边盖成"白色小人"
-## （视觉验收抓过，1× 机位小护卫）。
+## （视觉验收抓过，1× 机位小护卫）。批渲染路径同口径（StickmanBatchRig
+## 重烘预烘局部变换），矢量路径改 stroke 几何。
 func _update_outline_zoom() -> void:
-	if _sprites.is_empty() or not is_inside_tree():
+	if not is_inside_tree():
 		return
 	var vp := get_viewport()
 	if vp == null:
@@ -551,7 +548,11 @@ func _update_outline_zoom() -> void:
 		return
 	_outline_canvas_scale = s
 	_outline_rig_scale = rig_scale
-	Skeleton.apply_outline_zoom(_sprites, Skeleton.outline_world_width(s * rig_scale))
+	var eff: float = Skeleton.outline_world_width(s * rig_scale)
+	if _batch != null:
+		_batch.set_outline_width(eff)
+	else:
+		Skeleton.apply_outline_zoom(_sprites, eff)
 
 
 # ============================================================

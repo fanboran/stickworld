@@ -227,16 +227,10 @@ static func draw_entity_colliders(control: Control, ctx: Dictionary) -> void:
 	var fill_color := Color(0.2, 1.0, 1.0, 0.2)
 	var border_color := Color(0.2, 1.0, 1.0, 0.8)
 	var zoom: float = ctx.get("effective_zoom", 1.0)
-	# HD-2D 图：地面受俯角前缩，角色渲染在 3D 投影域——碰撞箱若按 2D 投影
-	# 直绘会与角色"定位不重合、纵向两倍速、尺寸对不上"。宿主声明
-	# remap_fx_pos 时把箱中心压到 3D 投影同一地面线；高度压缩率用重映射的
-	# 局部导数（1px 探针差分）求出，普通 2D 图导数恒为 1 零扰动。
-	var squash: float = 1.0
+	# HD-2D 图：角色渲染在 3D 投影域——碰撞箱按 2D 投影直绘会与角色
+	# "定位不重合、纵向速差"。宿主声明 remap_fx_pos 时把箱中心压到
+	# 3D 投影同一地面线；箱体尺寸不压（创始人：压扁的碰撞箱读不出碰撞语义）
 	var remaps: bool = map.has_method("remap_fx_pos")
-	if remaps:
-		var a: Vector2 = map.remap_fx_pos(Vector2(0.0, 1000.0))
-		var b: Vector2 = map.remap_fx_pos(Vector2(0.0, 1001.0))
-		squash = absf(b.y - a.y)
 	for entity in entity_host.get_children():
 		if not entity is CharacterBody2D:
 			continue
@@ -246,7 +240,7 @@ static func draw_entity_colliders(control: Control, ctx: Dictionary) -> void:
 		var rs: RectangleShape2D = col.shape as RectangleShape2D
 		var wpos: Vector2 = col.global_position
 		var screen_pos := world_to_screen(map.remap_fx_pos(wpos) if remaps else wpos, ctx)
-		var screen_size := Vector2(rs.size.x * zoom, rs.size.y * zoom * squash)
+		var screen_size := Vector2(rs.size.x * zoom, rs.size.y * zoom)
 		var rect := Rect2(screen_pos - screen_size * 0.5, screen_size)
 		control.draw_rect(rect, fill_color, true)
 		control.draw_rect(rect, border_color, false, 1.0)

@@ -52,7 +52,9 @@ const NATURE_DIR := "proto_hd2d/nature/"
 const LAYOUT_DIR := "proto_hd2d/hd2d_layouts/"   # city_layout 导出的布局 JSON（算法驱动模式）
 const GROUND_DIR := "ground_tiles/"
 
-const CAM_W := 74.0                      # 正交视宽（格）-> 1920 宽下 25.9 px/格
+const CAM_W := 74.0                      # 初始视宽（格）；游戏内由 set_cam_zoom 按 2D 1:1 动态接管
+## 设计分辨率基准高（px）：与 CameraRig.DESIGN_HEIGHT 同源，1:1 换算用
+const DESIGN_HEIGHT := 1080.0
 const CAM_CY := 11.0                     # 相机视线轴的世界高度
 const CAM_DIST := 40.0
 
@@ -613,24 +615,24 @@ func set_cam_x(cx: float) -> void:
 		_cam.position.x = cx
 
 
-## 3D 相机缩放镜像——与 2D CameraRig 同一语义：**以地面下边界为基准缩放**。
-## zoom=1 时与原取景逐位一致（CAM_CY 的原始定标：街面近沿贴屏幕底沿、
-## 地面占屏幕下 1/3、天际线基线压 1/3 线）；缩放时视宽缩 1/n、相机沿 z
-## 反向平移，让**街面近沿这条世界线永远钉在屏幕底沿**——正交默认绕屏幕
-## 中心扩缩，不这样做就会与 2D 脱钩（玩家/NPC 在两套锚点间漂移）。
-## 推导：视线地面交点 z_c = P.z - P.y/tanθ；地面点 z 每大 1 格，屏幕下移
-## sinθ；屏幕底沿地面 z = z_c + h_v/(2 sinθ)（h_v = size·视口高宽比，KEEP_WIDTH
-## 下 size=视宽）⇒ 锚线 z_near 取 zoom=1 的原底沿值，反解 P.z。
-func set_cam_zoom(zoom: float) -> void:
-	if _cam == null or zoom <= 0.05:
+## 3D 相机缩放镜像——与 2D CameraRig **逐像素 1:1**（创始人：紫箱水平移动
+## 比角色快 / 蓝线与屏幕下边界不重合的根因 = 旧固定视宽 74 格在 1920 下
+## 25.9 px/格，与 2D 的 32 px/格差 19%，所有 2D 投影物相对 3D 世界漂移）。
+## 可视宽（格）= 2D 可视世界宽 px / 32 = DESIGN_HEIGHT·宽高比/(32·user_zoom)；
+## 纵向 px/格 随之同为 32。锚线 z_near 按"地面占屏幕下 1/3、天际线基线压
+## 1/3 线"的构图契约取值，缩放时钉死在屏幕底沿。
+## 推导：屏幕底沿地面 z = z_c + h_v/(2 sinθ)（z_c = P.z − P.y/tanθ，
+## h_v = DESIGN_HEIGHT/(32·user_zoom)）⇒ P.z = z_near − h_v/(2 sinθ) + P.y/tanθ。
+func set_cam_zoom(user_zoom: float) -> void:
+	if _cam == null or user_zoom <= 0.05:
 		return
-	_cam.size = CAM_W / clampf(zoom, 0.25, 8.0)
+	var uz: float = clampf(user_zoom, 0.25, 8.0)
 	var vp := _cam.get_viewport().get_visible_rect().size
-	var ar: float = vp.y / maxf(vp.x, 1.0)
+	_cam.size = DESIGN_HEIGHT * vp.x / (32.0 * vp.y * uz)
 	var t := deg_to_rad(TILT_DEG)
-	var h_v: float = _cam.size * ar        # 当前视高（格）
-	var h_v1: float = CAM_W * ar           # zoom=1 基准视高
-	var z_near: float = -CAM_CY / tan(t) + h_v1 * 0.5 / sin(t)
+	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)   # = DESIGN_HEIGHT/(32·uz)
+	var h_v1: float = DESIGN_HEIGHT / 32.0               # zoom=1 基准视高（格）
+	var z_near: float = SKYLINE_Z + h_v1 / (3.0 * sin(t))
 	_cam.position.z = z_near - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
 	# 景深与缩放解耦：far blur 起点钉在天际线基线这条**世界线**上——
 	# dof_blur_far_distance 是相机本地距离，缩放移动相机后若不同步换算，
@@ -639,12 +641,12 @@ func set_cam_zoom(zoom: float) -> void:
 		_cam_attrs.dof_blur_far_distance = (_cam.position.z - SKYLINE_Z) / cos(t)
 
 
-## 3D 视图对地面纵深的屏幕压缩率（俯角前缩）：地面 1 格在屏幕上的竖直像素
-## = sin(俯角) × 每格横像素。2D 画布的特效/调试框若按 2D y 直绘，会与 3D
-## 世界里同一点错开 (1-压缩率) 倍——宿主用本值做坐标重映射（remap_fx_pos）。
+## 3D 视图对地面纵深的屏幕压缩率（俯角前缩）：3D 与 2D 逐像素 1:1 后，
+## 1 格地面纵深在屏幕上的竖直像素 = 32·sin(俯角)，压缩率即纯 sin(俯角)。
+## 2D 画布的特效/调试框按 2D y 直绘会与 3D 世界错开 (1-压缩率) 倍——
+## 宿主用本值做坐标重映射（remap_fx_pos）。
 func get_ground_squash() -> float:
-	var vp := get_viewport().get_visible_rect().size
-	return sin(deg_to_rad(TILT_DEG)) * vp.x / (CAM_W * 32.0)
+	return sin(deg_to_rad(TILT_DEG))
 
 
 ## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）

@@ -28,9 +28,12 @@ class_name Hd2dStreetMap
 
 const _HD2D_WORLD_SCENE := preload("res://tests/dev/proto_hd2d/proto_hd2d.tscn")
 
-## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）
+## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
+## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
+## 构图契约"地面占屏幕下 1/3"）——屏幕底沿、2D ground_bottom（蓝线）、
+## 可行走深度三点合一，整条可见街面都能走。
 const WALK_BACK_Y := 688.0
-const WALK_FRONT_Y := 1080.0
+const WALK_FRONT_Y := 1294.0
 
 ## 3D 街景横移换算：1 格 = 32px
 const CELL_PX := 32.0
@@ -66,6 +69,9 @@ const _RESOURCE_AMOUNTS := {
 
 func _ready() -> void:
 	super()
+	# 屏幕下边界（CameraRig ground_bottom，即 F3 地面蓝线）钉在 3D 街面的
+	# 可见近沿上——与 3D 相机缩放锚线同一世界线，2D/3D 底沿逐像素重合
+	ground_bottom = WALK_FRONT_Y
 	# 注册 2D 特效坐标重映射器（FxLibrary.remap_pos 读此组）：HD-2D 图的地面
 	# 受俯角前缩，飘字/粒子按 2D y 直绘会飘在半空，须压到 3D 投影同一地面线
 	add_to_group("fx_pos_remapper")
@@ -134,8 +140,9 @@ func _sync_character_render() -> void:
 		# 速度位置天然一致；2D 画布框在 HD-2D 图上会与角色脱钩）
 		if ch.has_method("set_bracket_visible"):
 			ch.set_bracket_visible(e.has_method("is_possessed") and e.is_possessed())
-		# y 行走带 → 3D 纵深 z（道具/树的 z 同一映射，遮挡关系自动正确）
-		var z: float = (body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN) * 12.25
+		# y 行走带 → 3D 纵深 z（道具/树的 z 同一映射，遮挡关系自动正确）；
+		# 线性格 1 格 = 32px——行走带前端即 3D 屏幕底沿锚线（z_near）
+		var z: float = (body.position.y - DEPTH_Y_MIN) / CELL_PX
 		var vel: Vector2 = (body as CharacterBody2D).velocity if body is CharacterBody2D else Vector2.ZERO
 		var moving: bool = vel.length_squared() > 25.0
 		if ch.has_method("set_world_pos"):
@@ -163,7 +170,7 @@ func _sync_character_render() -> void:
 ## 只缩 RigHost（视觉骨架），不碰碰撞体；实体体型缩放（_apply_scale）是稀有
 ## 事件，其结果会被本帧 base+depth 重建覆盖——以 meta 记录的基准为准。
 const DEPTH_Y_MIN := 688.0
-const DEPTH_Y_MAX := 1080.0
+const DEPTH_Y_MAX := WALK_FRONT_Y
 const DEPTH_SCALE_MIN := 0.92
 const DEPTH_SCALE_MAX := 1.10
 

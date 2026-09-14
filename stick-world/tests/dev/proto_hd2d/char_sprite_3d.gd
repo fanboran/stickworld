@@ -116,6 +116,16 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 		float(_sv_size.x) * 0.5 - FOOT_ANCHOR.x * rig_scale,
 		_foot_row - FOOT_ANCHOR.y * rig_scale)
 	rig.play(anim)
+	# 邻接融合描边（旧版观感复活，2026-09-14）：把 OutlineGroup 整体收进
+	# CanvasGroup——整棵子树一起搬，rig→IK marker 的相对路径不变；
+	# ID+描边 pass 作用于组缓冲，输出即带融合描边的最终形象
+	var og := inst.get_node_or_null("OutlineGroup")
+	if og != null and og is Node2D and not og is CanvasGroup:
+		var cg := CanvasGroup.new()
+		cg.name = "FusedOutlineGroup"
+		inst.add_child(cg)
+		og.reparent(cg)
+		StickmanOutline.setup(cg)
 
 	mat = ShaderMaterial.new()
 	mat.shader = CHAR_SHADER

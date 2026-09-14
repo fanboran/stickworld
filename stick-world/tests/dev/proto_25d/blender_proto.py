@@ -53,10 +53,13 @@ RES_MAX = 3000        # 单卡最长边像素上限（护显存）
 SCALE = 1.0 / 32.0    # 世界单位(px) -> Godot 单位(格)
 
 #: 街排（def, 格数）——宽度档按 §0.3 取 4 的整数倍，6 格档仅装配器允许时用
+#: 2026-09-14 补 house_w16 / warehouse_w16：手工摆主场景（村A语义翻译）需要
+#: 16 格档的民居与仓库（村A InitialBuildingsList 的 placeholder/stone_warehouse 均 w16）
 STREET = [
     ("cottage", 6),
     ("shelter", 6),
     ("house", 8),
+    ("house", 16),
     ("smithy1", 8),
     ("bakery", 8),
     ("shop", 8),
@@ -71,8 +74,9 @@ STREET = [
     ("gatehouse", 8),
     ("chapel", 8),
     ("alchemy", 8),
-    ("library", 8),
+    ("library", 12),
     ("mage_tower", 8),
+    ("warehouse", 16),
 ]
 
 #: glow 卡里当作"自发光窗/火"的材质名（其余一律压成纯黑，加色叠加下不可见）

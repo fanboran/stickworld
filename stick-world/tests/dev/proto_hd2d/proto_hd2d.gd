@@ -47,6 +47,8 @@ const CARDS_JSON := "proto25d/cards.json"
 const CARD_DIR := "proto25d/cards/"
 const PROPS_JSON := "proto_hd2d/props.json"
 const PROP_DIR := "proto_hd2d/props/"
+const NATURE_JSON := "proto_hd2d/nature.json"
+const NATURE_DIR := "proto_hd2d/nature/"
 const GROUND_DIR := "ground_tiles/"
 
 const CAM_W := 74.0                      # 正交视宽（格）-> 1920 宽下 25.9 px/格
@@ -54,36 +56,95 @@ const CAM_CY := 11.0                     # 相机视线轴的世界高度
 const CAM_DIST := 40.0
 
 ## 道具（bake_props.py 从 props.py 库烘的卡，26° 与建筑卡同视角）。
-## 摆位语义（复刻 1bb80d47 示例口径）：道具**填前排楼间空当**——`slot` = 前排
-## 空当序号（gap≥1.5 格的段，从左数），`dx` = 槽内偏移（格，0=居中）。
-## `plat=true` → 台面（楼脚前带，y+PLAT_H）；false → 路面（y=0）。
+## 摆位（2026-09-14 手工摆=村A主场景语义翻译，随建筑落位走绝对坐标）：
+## `x` = 街格坐标；`z` = 纵深（台面楼脚前带 ≈4.2~5.8 / 路面 ≈5.5~6.5）；
+## `plat=true` → 台面（y+PLAT_H）；false → 路面（y=0）。
 const PROPS: Array = [
-	{"card": "market_stall", "slot": 0, "dx": -0.8, "z": 4.4, "plat": false},
-	{"card": "market_table", "slot": 0, "dx": 1.0, "z": 5.6, "plat": false},
-	{"card": "produce_baskets", "slot": 0, "dx": 2.4, "z": 4.6, "plat": false},
-	{"card": "barrel", "slot": 1, "dx": -0.6, "z": 1.3, "plat": true},
-	{"card": "sack_stack", "slot": 1, "dx": 0.8, "z": 1.15, "plat": true},
-	{"card": "cart", "slot": 2, "dx": 0.0, "z": 5.2, "plat": false},
-	{"card": "crate", "slot": 2, "dx": 2.0, "z": 1.3, "plat": true},
-	{"card": "log_pile", "slot": 3, "dx": 0.0, "z": 6.0, "plat": false},
-	{"card": "well", "slot": 4, "dx": 0.0, "z": 1.1, "plat": true},
-	{"card": "anvil", "slot": 5, "dx": 0.0, "z": 1.2, "plat": true},
-	{"card": "grindstone", "slot": 5, "dx": -1.6, "z": 1.3, "plat": true},
-	{"card": "barrel_stand", "slot": 6, "dx": 0.0, "z": 1.25, "plat": true},
-	{"card": "basket", "slot": 7, "dx": -0.5, "z": 1.3, "plat": true},
-	{"card": "lantern", "slot": 7, "dx": 0.9, "z": 1.35, "plat": true},
-	{"card": "bench", "slot": 8, "dx": 0.0, "z": 1.2, "plat": true},
-	{"card": "pot", "slot": 9, "dx": 0.0, "z": 1.25, "plat": true},
+	# 铁匠铺（smithy@-17）门前工位
+	{"card": "anvil", "x": -18.6, "z": 4.5, "plat": true},
+	{"card": "grindstone", "x": -15.4, "z": 4.3, "plat": true},
+	# 铁匠-宅邸之间市集广场（-12~-6）
+	{"card": "market_stall", "x": -11.8, "z": 4.6, "plat": false},
+	{"card": "market_table", "x": -9.0, "z": 5.6, "plat": false},
+	{"card": "produce_baskets", "x": -7.0, "z": 4.6, "plat": false},
+	{"card": "well", "x": -13.8, "z": 5.2, "plat": false},
+	# 宅邸地标（guildhall@+1）前
+	{"card": "banner", "x": -2.6, "z": 4.5, "plat": true},
+	{"card": "lantern", "x": 5.6, "z": 4.6, "plat": true},
+	{"card": "bench", "x": 1.2, "z": 5.4, "plat": false},
+	# 西村口民居（house@-51）与石造仓库（warehouse@-34）前
+	{"card": "basket", "x": -48.6, "z": 4.4, "plat": true},
+	{"card": "cart", "x": -43.5, "z": 6.0, "plat": false},
+	{"card": "crate", "x": -30.4, "z": 4.4, "plat": true},
+	{"card": "barrel", "x": -27.6, "z": 4.2, "plat": true},
+	{"card": "sack_stack", "x": -33.2, "z": 5.8, "plat": false},
+	# 东民居（house@+17）前
+	{"card": "barrel_stand", "x": 20.6, "z": 4.3, "plat": true},
+	{"card": "pot", "x": 23.4, "z": 4.4, "plat": true},
+	# 谷仓（barn@+33 落地面）与酒馆（tavern@+48）前
+	{"card": "haystack", "x": 38.0, "z": 5.6, "plat": false},
+	{"card": "log_pile", "x": 29.8, "z": 6.0, "plat": false},
+	{"card": "flower_box", "x": 50.6, "z": 4.4, "plat": true},
+	{"card": "bench", "x": 45.5, "z": 5.0, "plat": false},
+	# 东城门塔（gatehouse@+59）前
+	{"card": "wheelbarrow", "x": 55.2, "z": 5.4, "plat": false},
 ]
 
-## 街排：**只有临街一排**（创始人两次质疑"为什么好多层建筑"）。
-## 背后只留一层极远的城墙/塔楼剪影（雾里）撑天际线，不算"第二排建筑"。
+## 自然物（bake_nature.py 从 nature.py 16 类库烘的卡）——野外树木/矿物实装。
+## 摆位语义对齐村A：西侧 -67~-42 是森林带（伐木/采矿劳作区），东段城外散布；
+## `res` = 该点位同步生成的 2D ResourceNode 采集类型（wood/stone/metal/gold/
+## diamond；空串 = 纯景，不可采）。`z` ≥ 5 前景带（玩家从树前走过）。
+const NATURE_SPOTS: Array = [
+	# 西森林带（村A 左侧森林带语义）
+	{"card": "dead_tree", "x": -66.0, "z": 9.0, "res": ""},
+	{"card": "broadleaf", "x": -62.5, "z": 8.0, "res": "wood"},
+	{"card": "conifer", "x": -58.0, "z": 10.0, "res": "wood"},
+	{"card": "bush", "x": -60.5, "z": 5.5, "res": ""},
+	{"card": "grass_clump", "x": -56.5, "z": 5.0, "res": ""},
+	{"card": "broadleaf_tall", "x": -54.0, "z": 7.5, "res": "wood"},
+	{"card": "mushrooms", "x": -55.5, "z": 5.2, "res": ""},
+	{"card": "iron_outcrop", "x": -51.5, "z": 8.5, "res": "metal"},
+	{"card": "boulder", "x": -49.0, "z": 6.2, "res": "stone"},
+	{"card": "copper_vein", "x": -46.5, "z": 9.5, "res": "metal"},
+	{"card": "stump", "x": -45.0, "z": 5.5, "res": ""},
+	{"card": "gold_vein", "x": -42.5, "z": 8.0, "res": "gold"},
+	# 东段城外散布
+	{"card": "grass_clump", "x": 38.5, "z": 5.0, "res": ""},
+	{"card": "conifer", "x": 40.5, "z": 10.5, "res": "wood"},
+	{"card": "bush", "x": 43.0, "z": 5.5, "res": ""},
+	{"card": "broadleaf", "x": 44.5, "z": 8.5, "res": "wood"},
+	{"card": "stump", "x": 42.5, "z": 5.4, "res": ""},
+	{"card": "crystal_cluster", "x": 50.5, "z": 7.5, "res": "diamond"},
+	{"card": "bush", "x": 52.5, "z": 5.0, "res": ""},
+	{"card": "dead_tree", "x": 60.5, "z": 9.5, "res": ""},
+	{"card": "conifer", "x": 55.5, "z": 11.0, "res": "wood"},
+	{"card": "rubble", "x": 57.0, "z": 5.5, "res": ""},
+	{"card": "iron_outcrop", "x": 63.5, "z": 8.0, "res": "metal"},
+	{"card": "boulder", "x": 66.0, "z": 6.5, "res": "stone"},
+]
+
+## 前排主街（2026-09-14 **手工摆** = 村A主场景 InitialBuildingsList 的语义翻译，
+## 规模按创始人指令放大到村A全域（左森林带 -67 → 右城墙 +59），不再随机轮转）：
+##   cottage_w6   @-65  西村外孤屋（野外感起点，村A无对应，补景）
+##   house_w16    @-51  西村口民居   ← 村A placeholder@-51
+##   warehouse_w16@-34  石造仓库     ← 村A stone_warehouse@-34
+##   smithy1_w8   @-17  铁匠铺       ← 村A smithy_lv1@-17
+##   guildhall_w12@ +1  宅邸地标     ← 村A manor@+1（v3 无 manor 装配器，取最宏伟行政楼）
+##   house_w16    @+17  东民居       ← 村A placeholder@+17（spawn_initial_warehouse 补建位）
+##   barn_w12     @+33  田园谷仓（落地面，补景加密）
+##   tavern_w12   @+48  酒馆（补景加密）
+##   gatehouse_w8 @+59  东城门塔（村A右城墙@+59 语义收尾）
+## `z` = 纵深错落（0.4~1.3 台面为主，谷仓落地面）；`door` = 门前短径。
 const FRONT_ROW: Array = [
-	{"card": "cottage_w6", "x": -24.0},
-	{"card": "house_w8", "x": -11.0},
-	{"card": "smithy1_w8", "x": 2.5},
-	{"card": "shop_w8", "x": 16.0},
-	{"card": "stable_w12", "x": 32.0},
+	{"card": "cottage_w6", "x": -65.0, "z": 0.9, "door": false},
+	{"card": "house_w16", "x": -51.0, "z": 0.7, "door": true},
+	{"card": "warehouse_w16", "x": -34.0, "z": 1.25, "door": false},
+	{"card": "smithy1_w8", "x": -17.0, "z": 0.45, "door": true},
+	{"card": "guildhall_w12", "x": 1.0, "z": 0.85, "door": true},
+	{"card": "house_w16", "x": 17.0, "z": 0.6, "door": true},
+	{"card": "barn_w12", "x": 33.0, "z": 2.4, "door": false},
+	{"card": "tavern_w12", "x": 48.0, "z": 1.0, "door": true},
+	{"card": "gatehouse_w8", "x": 59.0, "z": 0.4, "door": true},
 ]
 ## 背景层（创始人 2026-09-14 定案）：
 ##   · 第二排基线压**屏幕下 1/3 线**（33.3% 从底）——该线同时是第一排（+地面）
@@ -133,6 +194,7 @@ var _root := ""
 var _temp := ""
 var _cards: Dictionary = {}
 var _props: Dictionary = {}
+var _nature: Dictionary = {}
 var _tex_cache: Dictionary = {}
 
 var _env: Environment
@@ -146,6 +208,7 @@ var _front_occ: Array = []
 var _door_path_xs: Array = []   # 需要门前短径的建筑 x（guildhall / 落地面建筑）
 var _prop_slots: Array = []     # 前排楼间空当 [x0,x1]（道具槽位）
 var _prop_solids: Array = []    # 道具实心区间 [x0,x1]（碰撞用）
+var _res_spawns: Array = []     # 自然物对应的采集资源点位 [{pos,type}]（宿主读）
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
@@ -268,6 +331,16 @@ func _load_cards() -> void:
 		print("[hd2d] 道具卡 %d 张" % _props.size())
 	else:
 		push_warning("[hd2d] 缺 props.json（先跑 bake_props.py）：" + pp)
+	var np := _temp + NATURE_JSON
+	if FileAccess.file_exists(np):
+		var nf := FileAccess.open(np, FileAccess.READ)
+		var narr: Variant = JSON.parse_string(nf.get_as_text())
+		if narr is Array:
+			for c in narr:
+				_nature[str(c["card"])] = c
+		print("[hd2d] 自然物卡 %d 张" % _nature.size())
+	else:
+		push_warning("[hd2d] 缺 nature.json（先跑 bake_nature.py）：" + np)
 
 
 func _tex_abs(p: String) -> Texture2D:
@@ -413,12 +486,73 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 
 func _place_props() -> void:
 	for e in PROPS:
-		var slot: int = int(e.get("slot", 0))
-		if slot >= _prop_slots.size():
-			continue
-		var span: Array = _prop_slots[slot]
-		var x: float = (float(span[0]) + float(span[1])) * 0.5 + float(e.get("dx", 0.0))
-		_spawn_prop(str(e["card"]), x, float(e["z"]), bool(e.get("plat", true)))
+		_spawn_prop(str(e["card"]), float(e["x"]), float(e["z"]), bool(e.get("plat", true)))
+
+
+## 自然物卡：与道具同一套卡底贴地落位（全落地面/草地面，不上台面）；
+## 实心卡（树/巨岩/矿露头）登记碰撞；带 res 的点位登记给宿主生成 ResourceNode。
+func _place_nature() -> void:
+	for e in NATURE_SPOTS:
+		var mi := _spawn_nature_card(str(e["card"]), float(e["x"]), float(e["z"]))
+		if mi != null and str(e.get("res", "")) != "":
+			# 2D 行走带 y 与 3D z 的近似映射：y = 688 + z*32（资源点必须落在
+			# 玩家可达带内，交互距离判定才够得着）
+			_res_spawns.append({
+				"pos": Vector2(float(e["x"]) * 32.0, 688.0 + float(e["z"]) * 32.0),
+				"type": str(e["res"]),
+			})
+
+
+## 自然物卡落位（卡底贴地，同 _spawn_prop 公式；目录/元数据走 nature 侧）。
+func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
+	var meta: Dictionary = _nature.get(card, {})
+	if meta.is_empty():
+		push_warning("[hd2d] 无此自然物卡: " + card)
+		return null
+	var units: Array = meta["units"]
+	var q := QuadMesh.new()
+	q.size = Vector2(float(units[0]) * S, float(units[1]) * S)
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	var half: float = float(units[1]) * S * 0.5
+	var t := deg_to_rad(TILT_DEG)
+	mi.position = Vector3(x, cos(t) * half, z_off - sin(t) * half)
+	mi.basis = _cam_basis()
+	var m := ShaderMaterial.new()
+	m.shader = CARD_SHADER
+	m.set_shader_parameter("albedo_tex", _tex_abs(_temp + NATURE_DIR + card + ".png"))
+	m.set_shader_parameter("glow_tex", _tex_abs(_temp + NATURE_DIR + card + "_glow.png"))
+	var px: Array = meta.get("px", [128, 128])
+	m.set_shader_parameter("tex_px", Vector2(float(px[0]), float(px[1])))
+	m.set_shader_parameter("relief", 4.5)
+	m.set_shader_parameter("alpha_cut", 0.4)
+	m.set_shader_parameter("glow_energy", 0.0)
+	m.set_shader_parameter("tint", Color(1, 1, 1))
+	_card_mats.append(m)
+	mi.material_override = m
+	mi.name = "Nature_" + card
+	_prop_root.add_child(mi)
+	# 挡人的种类（树/巨岩/矿露头/水晶，bake_nature 的 solid 标记）：卡宽收窄 15%
+	if bool(meta.get("solid", false)):
+		var half_w: float = float(units[0]) * S * 0.5 * 0.85
+		_prop_solids.append([x - half_w, x + half_w])
+	return mi
+
+
+## 带采集资源的自然物点位（宿主 Hd2dStreetMap 读取后生成 ResourceNode）。
+func get_nature_spawns() -> Array:
+	return _res_spawns
+
+
+## 3D 街景横移（宿主按玩家 x 驱动；正交相机，视宽 74 格）
+func set_cam_x(cx: float) -> void:
+	if _cam != null:
+		_cam.position.x = cx
+
+
+## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）
+func set_light_mode(mode: String) -> void:
+	_apply_light(mode)
 
 
 ## 门前径（创始人 2026-09-14：宏伟建筑门前有特别短的小路接进街道）。
@@ -540,6 +674,7 @@ func _build_world() -> void:
 	_prop_root.name = "Props"
 	add_child(_prop_root)
 	_place_props()  # 街面小零件（摊/桶/车/井…）
+	_place_nature() # 野外树木/矿物卡（西森林带+东段城外）
 
 	# --- 地面：底衬（远端=末层实测根部，即真实地平线）+ 台面 + 辅助线 + 道路 ---
 	_ground_root = Node3D.new()
@@ -567,9 +702,10 @@ func _build_world() -> void:
 	_lamp_root = Node3D.new()
 	_lamp_root.name = "Lamps"
 	add_child(_lamp_root)
-	for i in 9:
+	# 沿街每 8.5 格一盏，铺满村A全域街长（相机横移后夜灯不缺位）
+	for i in 21:
 		var l := OmniLight3D.new()
-		l.position = Vector3(-32.0 + float(i) * 8.5, 2.5, 4.2)
+		l.position = Vector3(-85.0 + float(i) * 8.5, 2.5, 4.2)
 		l.light_color = Color(1.0, 0.63, 0.30)
 		l.light_energy = 1.6
 		l.omni_range = 9.5
@@ -697,51 +833,27 @@ func _gaps(occ: Array, lo: float = -40.0, hi: float = 40.0) -> Array:
 
 
 func _place_rows() -> void:
-	# 前排：**gap 推进 + 站位抖动**（1bb80d47 示例口径）。
-	# 推进用**卡画面宽**（含出檐）——相邻建筑永不互相重叠（创始人 2026-09-14：
-	# "城市爱多大多大"，街长随建筑数量自然延展，禁止为塞进画框压缩间距）；
-	# 生成循环铺满可视范围+出框余量，可见窗口内保持 ~8 栋的密度。
-	# gap 以 0~1.5 格为主、偶有 2~5 格空当放道具；约 1/3 回退、~8% 落地面。
+	# 前排：**手工摆**（2026-09-14，村A主场景 InitialBuildingsList 的语义翻译，
+	# 街长铺到村A全域 -67~+67）——逐栋写死在 FRONT_ROW，不再随机轮转。
+	# z 错落/门前径也随清单写死；建筑格宽重叠由摆位表保证（相邻名义缝 ≥0.5 格）。
 	var occ_front := []
-	var gap_slots: Array = []          # 空当 [x0,x1]（道具按槽位填，仅登记可见范围）
-	var names := ["cottage_w6", "shop_w8", "bakery_w8", "townhouse_w12",
-		"cottage_w6", "house_w8", "smithy1_w8", "tavern_w12", "shelter_w6", "guildhall_w12"]
-	var gaps := [1.2, 0.0, 2.2, 5.0, 1.2, 3.0, 0.0, 4.2, 1.0, 1.6]
 	var rng_f := RandomNumberGenerator.new()
 	rng_f.seed = 20260914
-	var cursor: float = -55.0           # 从画框（±37）左侧外起铺，铺到右侧外
-	var idx := 0
-	while cursor < 55.0:
-		var gap: float = float(gaps[idx % gaps.size()])
-		var card: String = str(names[idx % names.size()])
-		idx += 1
-		var w := _cw(card)
-		if w < 1.0:
-			w = 8.0
-		if gap >= 1.5 and cursor > -46.0 and cursor < 46.0:
-			gap_slots.append([cursor + 0.3, cursor + gap - 0.3])
-		cursor += gap
-		var cx: float = cursor + w * 0.5
-		# 站位抖动：1/3 回退 0.5~1.2、15% 凸前 0.2~0.4；~8% 落地面（不上台面）
-		var r := rng_f.randf()
-		var z_off := 0.55 + rng_f.randf_range(0.0, 0.8)
-		var on_plat := true
-		if r > 0.92:
-			z_off = 2.2 + rng_f.randf_range(0.0, 0.6)
-			on_plat = false        # 直接落地面（路面标高）
-		elif r < 0.33:
-			z_off += rng_f.randf_range(0.5, 1.2)
-		elif r < 0.48:
-			z_off -= rng_f.randf_range(0.2, 0.4)
+	for e in FRONT_ROW:
+		var card: String = str(e["card"])
+		var cx: float = float(e["x"])
+		var z_off: float = float(e.get("z", 0.6))
+		# 台面站位：卡底落在台面标高；谷仓 z>2 = 落地面（不上台面，路面标高）
+		var on_plat: bool = z_off < 2.0
 		var mi := _spawn_card(card, cx, z_off)
 		if mi != null and on_plat:
 			mi.position.y += PLAT_H
 		_spawn_building_shadow(card, cx, mi)
-		if card == "guildhall_w12" or not on_plat:
+		if bool(e.get("door", false)) or not on_plat:
 			_door_path_xs.append(cx)   # 宏伟建筑/落地建筑：门前短径
-		occ_front.append([cursor, cursor + w, card])
-		cursor += w
-	_prop_slots = gap_slots
+		var w: float = _cw(card)
+		occ_front.append([cx - w * 0.5, cx + w * 0.5, card])
+	_prop_slots = []
 	_front_occ = occ_front
 	# 三层背景（创始人 2026-09-14 定案，算法职责）：
 	#   · 每层楼与楼**留缝不贴死**；后层的楼**吸附进前层的缝隙**——从缝里透出
@@ -755,9 +867,9 @@ func _place_rows() -> void:
 	#   西段=教堂天际线（大教堂/礼拜堂/塔）· 中段=市集街屋（酒馆/商铺/联排）
 	#   东段=田园作坊（谷仓/马厩/草棚/铁匠）——卡按楼所在 x 段从池里顺位取，防邻重
 	var bands := [
-		{"x0": -60.0, "x1": -16.0, "pool": ["cathedral_w16", "chapel_w8", "tower_w6", "house_w8", "chapel_w8", "tower_w6"]},
+		{"x0": -104.0, "x1": -16.0, "pool": ["cathedral_w16", "tower_w6", "house_w8", "guildhall_w12", "tower_w6", "house_w16"]},
 		{"x0": -16.0, "x1": 16.0, "pool": ["shop_w8", "bakery_w8", "house_w8", "tower_w6", "tavern_w12", "townhouse_w12"]},
-		{"x0": 16.0, "x1": 60.0, "pool": ["barn_w12", "stable_w12", "cottage_w6", "gatehouse_w8", "smithy1_w8", "cottage_w6"]},
+		{"x0": 16.0, "x1": 104.0, "pool": ["barn_w12", "stable_w12", "cottage_w6", "gatehouse_w8", "smithy1_w8", "cottage_w6"]},
 	]
 	var band_cursor := [0, 0, 0]
 	var _pick_in_band := func(x: float, room: float) -> String:
@@ -780,8 +892,8 @@ func _place_rows() -> void:
 		var tint: Color = BG_TINTS[li]
 		if li == 0:
 			# bg1 自由铺：楼 + 2~3.5 格缝的节奏（根部被前排挡住，楼身从前排楼顶上露出）
-			var gx := -42.0
-			while gx < 42.0:
+			var gx := -104.0
+			while gx < 104.0:
 				var card: String = str(_pick_in_band.call(gx, 999.0))
 				if card == "":
 					card = "house_w8"
@@ -795,7 +907,7 @@ func _place_rows() -> void:
 			# bg2/bg3 吸附前层缝：每条缝中心放一栋楼（从缝里露出楼身）。
 			# 本层自身保持 ≥1 格缝（给再后一层插）；放不下的缝放弃（末层补洞兜底）。
 			var last_x1 := -999.0
-			for g in _gaps(prev_slots, -42.0, 42.0):
+			for g in _gaps(prev_slots, -104.0, 104.0):
 				var g0: float = float(g[0])
 				var g1: float = float(g[1])
 				if g1 - g0 < 1.0:
@@ -814,7 +926,7 @@ func _place_rows() -> void:
 			if li >= 1:
 				# bg2/bg3 职责 = 遮死中景与地平线：吸附放不下的层再补大洞（近贴 0.6 格缝）。
 				# 阈值 9.8 = 库里最小画面宽 cottage_w6(9.1) + 0.6 缝，更窄的洞放不下任何卡。
-				for g in _gaps(occ, -42.0, 42.0):
+				for g in _gaps(occ, -104.0, 104.0):
 					var g0: float = float(g[0])
 					var g1: float = float(g[1])
 					while g1 - g0 > 9.8:
@@ -847,8 +959,8 @@ func _add_width_guides() -> void:
 	edge.albedo_color = Color(1.0, 0.25, 0.85, 1.0)
 	edge.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
-	var x := -37.0
-	while x <= 37.0:
+	var x := -70.0
+	while x <= 70.0:
 		var pm := PlaneMesh.new()
 		pm.size = Vector2(0.02 if int(x) % 4 != 0 else 0.035, 8.6)
 		var mi := MeshInstance3D.new()
@@ -905,11 +1017,12 @@ func _add_platform() -> void:
 	# 人行道台面（创始人 2026-09-14：路肩是**城中心专属**，城边是土路）：
 	#   中段（±28 格）= 石板台面 + 石路肩镶边（城中心）；
 	#   两侧 = 夯土台面 + 土坎镶边（近城边），材质在 ±28 格处交接。
+	#   街长铺到村A全域 ±67（2026-09-14 规模放大），夯土段随之铺到 ±70。
 	_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
-	_add_ground_plane_at("rammed_earth_128.png", -42.0, 28.0,
+	_add_ground_plane_at("rammed_earth_128.png", -66.0, 76.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
-	_add_ground_plane_at("rammed_earth_128.png", 42.0, 28.0,
+	_add_ground_plane_at("rammed_earth_128.png", 66.0, 76.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
 	# 石↔土交接条（gtx 手工收边件，压在交接线上）
 	_add_decal("transitions/gtx_brick_gravel_road_v1.png", -28.0, PLAT_H + 0.008,
@@ -918,8 +1031,8 @@ func _add_platform() -> void:
 		Vector2(4.8, 1.55))
 	# 台肩镶边：中段石条 / 两侧土条（方形截面，高=深=台面高）
 	_kerb_run(-28.0, 28.0, "band_kerb_stone")
-	_kerb_run(-56.0, -28.0, "band_kerb_earth")
-	_kerb_run(28.0, 56.0, "band_kerb_earth")
+	_kerb_run(-104.0, -28.0, "band_kerb_earth")
+	_kerb_run(28.0, 104.0, "band_kerb_earth")
 
 
 ## 原天空贴图剪影板：复用 2D 游戏的 assets/sky/*（SkyDecor 同源），两张不透明
@@ -941,21 +1054,27 @@ func _add_sky_backdrop() -> void:
 			continue
 		var h: float = float(L["h"])
 		var aspect: float = tex.get_width() / float(tex.get_height())
-		var pm := QuadMesh.new()
-		pm.size = Vector2(h * aspect, h)
-		var mi := MeshInstance3D.new()
-		mi.mesh = pm
-		var gm := StandardMaterial3D.new()
-		gm.albedo_texture = tex
-		gm.albedo_color = L["tint"]
-		gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mi.material_override = gm
-		mi.basis = _cam_basis()
-		mi.position = Vector3(0, h * 0.5 * cos(deg_to_rad(TILT_DEG)) + 0.3, far_z - float(L["dz"]))
-		mi.name = "SkyBackdrop_" + str(L["tex"]).get_basename()
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_ground_root.add_child(mi)
+		# 沿街长平铺（相机横移后单张会露边）；层间错半张防接缝对齐
+		var span: float = h * aspect
+		var sx := -106.0 - float(L["dz"])
+		while sx < 106.0:
+			var pm := QuadMesh.new()
+			pm.size = Vector2(span, h)
+			var mi := MeshInstance3D.new()
+			mi.mesh = pm
+			var gm := StandardMaterial3D.new()
+			gm.albedo_texture = tex
+			gm.albedo_color = L["tint"]
+			gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mi.material_override = gm
+			mi.basis = _cam_basis()
+			mi.position = Vector3(sx + span * 0.5,
+				h * 0.5 * cos(deg_to_rad(TILT_DEG)) + 0.3, far_z - float(L["dz"]))
+			mi.name = "SkyBackdrop_" + str(L["tex"]).get_basename()
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_ground_root.add_child(mi)
+			sx += span
 
 
 ## 贴地 decal：单张 PNG 平铺一个 PlaneMesh（贴图原比例由调用者给世界尺寸）。
@@ -1305,6 +1424,16 @@ func _run_shots(which: String) -> void:
 				_apply_stage("e")
 				await _settle(1.6)
 				await _shot("hd2d_e_night")
+			"s":
+				# 主街巡览（2026-09-14 手工摆+街长扩到村A全域的验收档）：
+				# 沿街四机位横移（set_cam_x），各出一张白天最终观感图
+				_apply_light("day")
+				_apply_stage("c")
+				for cam_x: float in [-40.0, -12.0, 20.0, 50.0]:
+					set_cam_x(cam_x)
+					await _settle(1.2)
+					await _shot("hd2d_s_street_x%d" % int(cam_x))
+				set_cam_x(0.0)
 	print("[hd2d] 出图用时 %.1f s" % (float(Time.get_ticks_usec() - t0) / 1000000.0))
 
 

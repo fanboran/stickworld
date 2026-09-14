@@ -497,10 +497,13 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	mi.material_override = m
 	mi.name = "Prop_" + card
 	_prop_root.add_child(mi)
-	# 实心区间（格）：卡宽收窄 15%；细杆件（灯笼）不挡人
+	# 实心区间（格）：卡宽收窄 15%；细杆件（灯笼）不挡人。
+	# 道具是台面/路面上的点障碍——碰撞只在其纵深带附近（z→y 窄带），
+	# 不挡整条行走带（玩家/NPC 从前景绕过去）。
 	if card != "lantern":
 		var half_w: float = float(units[0]) * S * 0.5 * 0.85
-		_prop_solids.append([x - half_w, x + half_w])
+		var y_c: float = 688.0 + z_off * 32.0
+		_prop_solids.append([x - half_w, x + half_w, y_c - 26.0, y_c + 26.0])
 	return mi
 
 
@@ -566,16 +569,31 @@ func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
 	mi.material_override = m
 	mi.name = "Nature_" + card
 	_prop_root.add_child(mi)
-	# 挡人的种类（树/巨岩/矿露头/水晶，bake_nature 的 solid 标记）：卡宽收窄 15%
+	# 挡人的种类（树/巨岩/矿露头/水晶，bake_nature 的 solid 标记）：卡宽收窄 15%。
+	# 同道具：点障碍只在自身纵深带附近（树干在脚下，不挡整条行走带）
 	if bool(meta.get("solid", false)):
 		var half_w: float = float(units[0]) * S * 0.5 * 0.85
-		_prop_solids.append([x - half_w, x + half_w])
+		var y_c: float = 688.0 + z_off * 32.0
+		_prop_solids.append([x - half_w, x + half_w, y_c - 30.0, y_c + 30.0])
 	return mi
 
 
 ## 带采集资源的自然物点位（宿主 Hd2dStreetMap 读取后生成 ResourceNode）。
 func get_nature_spawns() -> Array:
 	return _res_spawns
+
+
+## 露天工位点（宿主转发给 TownLife 露天工位 duck）：台面上的铁砧=铁匠工位。
+## 返回 2D 行走带坐标（z → y 近似映射同 _place_nature）。
+func get_open_work_sites() -> Array:
+	var out: Array = []
+	for e in PROPS:
+		if str(e["card"]) == "anvil":
+			out.append({
+				"pos": Vector2(float(e["x"]) * 32.0, 688.0 + float(e["z"]) * 32.0),
+				"work_site_def": "smithy_lv1",
+			})
+	return out
 
 
 ## 布局驱动模式的街宽（格）；手摆主街返回 0（宿主用 tscn 边界）
@@ -772,7 +790,8 @@ func _build_world() -> void:
 	_cam.current = true
 
 	# --- 2D 角色宿主（SubViewport -> billboard）---
-	# 静默常驻模式（游戏地图挂载）不生成写死的演示火柴人——街上有真玩家了
+	# 静默常驻模式（游戏地图挂载）不生成写死的演示火柴人——街上有真玩家了；
+	# 实体角色渲染由宿主调 enable_play_characters() 接管（玩家/NPC 进 3D 场景）
 	if str(_opts["shots"]) != "none":
 		_spawn_char_host(float(str(_opts["svscale"])))
 
@@ -808,9 +827,31 @@ func _build_world() -> void:
 				_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 
 
+## 游戏地图挂载：启用 3D 角色渲染通道（不生成演示站位）。
+## 宿主把玩家/NPC 逐个 add_char 并逐帧 set_world_pos——角色写深度站进场景，
+## 能被前景遮挡、与建筑正确排序（HD-2D 最佳实践，替代 2D canvas 浮层）。
+func enable_play_characters() -> void:
+	if _char_host == null:
+		_spawn_char_host(1.0, false)
+
+
+## 游戏接入：生成一个**独立**角色实例（各自 SubViewport/骨架/动画）。
+## 玩家与村民各自独立动画（共享 viewport 会全员同姿态），由宿主逐帧驱动。
+func spawn_character() -> Node:
+	var h: Node = CHAR_HOST.new()
+	h.name = "Char%d" % _char_seq
+	_char_seq += 1
+	add_child(h)
+	h.set_px_scale(1.0)
+	h.build(self, "idle", TILT_DEG)
+	h.add_char(0.0, 0.0, false)
+	return h
+
+var _char_seq: int = 0
+
 ## 建/重建 2D 角色宿主（SubViewport -> billboard）。px_scale > 1 = SubViewport
 ## 以更高分辨率渲染同一个 2D 角色（世界占位不变），用于隔离它的渲染开销。
-func _spawn_char_host(px_scale: float = 1.0) -> void:
+func _spawn_char_host(px_scale: float = 1.0, with_demo: bool = true) -> void:
 	if _char_host != null:
 		_char_host.queue_free()
 	_char_host = CHAR_HOST.new()
@@ -818,9 +859,10 @@ func _spawn_char_host(px_scale: float = 1.0) -> void:
 	add_child(_char_host)
 	_char_host.set_px_scale(px_scale)
 	_char_host.build(self, "walk", TILT_DEG)
-	for e in CHARS:
-		_char_host.add_char(float(e["x"]), float(e["z"]), bool(e["flip"]))
-	_char_host.mark_regular()
+	if with_demo:
+		for e in CHARS:
+			_char_host.add_char(float(e["x"]), float(e["z"]), bool(e["flip"]))
+		_char_host.mark_regular()
 
 
 ## 建筑接地影：贴在路肩带**之上**（y=0.07，高过所有分带面）的程序化软影。

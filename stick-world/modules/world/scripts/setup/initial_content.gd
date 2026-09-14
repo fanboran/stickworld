@@ -85,22 +85,32 @@ func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable())
 	# NPC 生成在东侧民居右缘之外，避开民居 PassageBarrier（cell 17~33, X 544~1088，
 	# 建筑与美术升级线批次 6 布局）；右簇起点 1100 与两簇设计对齐（铁匠工位 X=1120）
 	var npc_start_x: float = 1100.0
+	# HD-2D 街（2026-09-14）：地图可声明按语义预排的落脚点（铁砧旁/森林带资源点旁
+	# /街市），取代 2D 村图的两簇硬编码坐标
+	var spawn_points: Array = []
+	if map.has_method("get_npc_spawn_points"):
+		spawn_points = map.get_npc_spawn_points()
 	var npcs: Array = []
 	for i in _root.NPC_COUNT:
 		# 先上报再干活：副进度条这一格代表「本村民即将开始」（与建筑同一口径）
 		if on_progress.is_valid():
 			on_progress.call(i, _root.NPC_COUNT)
 		var x: float = npc_start_x + 180.0 * float(i) if i < 5 else -250.0 - 180.0 * float(i - 5)
+		var y: float = spawn_y
+		if spawn_points.size() > 0:
+			var sp: Vector2 = spawn_points[i % spawn_points.size()]
+			x = sp.x
+			y = sp.y
 		# 确保在地图边界内（village_a 右簇最远 1770 < map_right-100=2060，不触发）
 		if x > map.map_right - 100.0:
 			x = npc_start_x + randf_range(0.0, 400.0)
 		elif x < map.map_left + 100.0:
 			x = randf_range(-400.0, -100.0)
-		var npc: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
+		var npc: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(x, y))
 		if npc != null:
-			# 修正 Y：让脚部对齐 spawn_y
+			# 修正 Y：让脚部对齐落脚面
 			if npc.get("foot_offset") != null:
-				npc.global_position.y = spawn_y - npc.foot_offset
+				npc.global_position.y = y - npc.foot_offset
 			if npc.has_method("set_possessed"):
 				npc.set_possessed(false)  # NPC 不被附身，AIController 自动接管
 			# 注入 ConstructionAPI 引用（统一走 api，2026-08 审计收敛），使 NPC 可被派工（§15 阶段 0.4）

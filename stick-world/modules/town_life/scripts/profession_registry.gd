@@ -99,6 +99,16 @@ static func get_work_site(entity: Node2D, work_site_def: String) -> Dictionary:
 					best_slot_x = slot.x
 		if best_building != null:
 			return {"pos": Vector2(best_slot_x, NAN), "building": best_building}
+	# 露天工位（HD-2D 街 2026-09-14）：地图可声明无建筑的固定工位点——
+	# 铁匠铺卡前的露天铁砧就是铁匠工位（创始人口径），不必等建筑实体。
+	var anc := entity.get_parent()
+	while anc != null:
+		if anc.has_method("get_open_work_sites"):
+			for ws: Variant in anc.get_open_work_sites():
+				if String(ws.get("work_site_def", "")) == work_site_def:
+					return {"pos": ws["pos"], "building": null}
+			break
+		anc = anc.get_parent()
 	var px := get_placeholder_work_site_x(work_site_def)
 	if not is_nan(px):
 		return {"pos": Vector2(px, NAN), "building": null}

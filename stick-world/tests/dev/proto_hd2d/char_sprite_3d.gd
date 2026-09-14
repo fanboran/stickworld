@@ -64,6 +64,13 @@ var _shadow_mat: ShaderMaterial = null
 var _tilt_deg: float = 26.0
 var _host: Node = null
 
+# 游戏接入（2026-09-14）：每实体一个本实例，渲染随 2D 实体逐帧移动
+var _quad: MeshInstance3D = null
+var _my_shadow: MeshInstance3D = null
+var _flip := false
+var _anim := "idle"
+var _depth := 1.0
+
 
 ## 建 SubViewport + 火柴人。parent 必须是已在树内的节点。
 func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
@@ -158,7 +165,35 @@ func add_char(x: float, z: float, flip: bool = false) -> MeshInstance3D:
 	add_child(sh)
 	if _shadow == null:
 		_shadow = sh
+	# 游戏接入：记录本实例的 quad/影引用（set_world_pos 每帧驱动）
+	_quad = mi
+	_my_shadow = sh
 	return mi
+
+
+## 游戏接入：逐帧更新本角色的世界位置/朝向/纵深缩放（quad 贴相机基+接地影贴地）。
+func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0) -> void:
+	if _quad == null:
+		return
+	_flip = flip
+	_depth = depth
+	var b := _cam_basis()
+	if flip:
+		b = Basis(Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)) * b
+	_quad.basis = b
+	_quad.scale = Vector3(depth, depth, depth)
+	_quad.position = Vector3(x, quad_center_offset_y() * depth, z)
+	if _my_shadow != null:
+		_my_shadow.position = Vector3(x, 0.09, z)
+		_my_shadow.scale = Vector3(depth, depth, 1.0)
+
+
+## 动画切换（只在变化时 play，避免每帧重置动画进度）
+func set_anim(anim: String) -> void:
+	if _anim == anim or rig == null:
+		return
+	_anim = anim
+	rig.play(anim)
 
 
 ## 显示/隐藏全部角色（含影）。用于 A/B 对照出图。
@@ -220,11 +255,6 @@ func measure_bbox() -> Rect2i:
 		return Rect2i()
 	bbox = Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1)
 	return bbox
-
-
-func set_anim(name: String) -> void:
-	if rig != null:
-		rig.play(name)
 
 
 func set_light(tint: Color, add: Color) -> void:

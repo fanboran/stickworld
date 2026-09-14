@@ -845,6 +845,9 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 				or map.supports_village_facilities()
 		if not _initial_map_loaded:
 			_initial_map_loaded = true
+			# 村民 NPC 与 2D 建筑设施分开门控：HD-2D 主街无 2D 设施
+			# （仓库/程序化资源点跳过）但要有人劳作（伐木/采矿/铁匠铁砧）
+			var wants_npcs: bool = has_facilities or 					(map.has_method("wants_villager_npcs") and map.wants_villager_npcs())
 			if has_facilities:
 				await _world_sub_phase("村庄设施")
 				# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
@@ -867,6 +870,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 					var fb_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
 					var fb_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
 					map.generate_resource_nodes(fb_left_cell, fb_right_cell, 0.65)
+			if wants_npcs:
 				await _world_sub_phase("村民")
 				await _worldgen.spawn_npcs(map, spawn_y, _world_sub_progress)
 			# 重新设置相机/小地图边界（与设施无关，任何地图都要）

@@ -72,6 +72,10 @@ func _ready() -> void:
 		_hd.set("layout_name", layout_name)
 	add_child(_hd)
 	_apply_layout_bounds()
+	# 角色（玩家/NPC）渲染进 3D 场景：逻辑仍在 2D（物理/输入/AI 不动），
+	# 视觉走 proto 的 billboard 通道——写深度、可被前景遮挡、自带接地影
+	if _hd.has_method("enable_play_characters"):
+		_hd.enable_play_characters()
 	_build_solid_bodies(_hd)
 	_spawn_resource_nodes(_hd)
 	_build_exit_triggers()
@@ -79,11 +83,83 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	# 相机横移：跟随附身玩家（正交相机，街景随世界坐标自然卷动）
-	var p := get_possessed_entity()
-	if p != null and is_instance_valid(p) and _hd != null and _hd.has_method("set_cam_x"):
-		_hd.set_cam_x(p.global_position.x / CELL_PX)
+	# 3D 相机镜像 2D CameraRig：1/4 区域跟随、顶栏"居中"开关、边缘滚动、
+	# 中键拖拽/滚轮缩放全部在 CameraRig 上驱动，3D 侧只镜像 x（正交 1:1）。
+	var cam2d := get_viewport().get_camera_2d()
+	if cam2d != null and _hd != null and _hd.has_method("set_cam_x"):
+		_hd.set_cam_x(cam2d.global_position.x / CELL_PX)
+	_sync_character_render()
 	_apply_time_of_day(false)
+
+
+## 角色 → 3D billboard 渲染同步（HD-2D 最佳实践层）。
+## 2D 实体只做逻辑（物理/输入/AI），RigHost 2D 视觉隐藏；
+## 每实体一个 char_host（SubViewport billboard），逐帧镜像 x/z + 朝向 + 动画。
+## 纵深缩放由 char 侧 depth 承担（近大远小）。
+var _char_map: Dictionary = {}   # 实体 instance_id -> char_host(Node3D)
+
+func _sync_character_render() -> void:
+	if _hd == null or not _hd.has_method("spawn_character"):
+		return
+	var alive: Dictionary = {}
+	for e in get_entities():
+		if e is not Node2D or not is_instance_valid(e):
+			continue
+		var body := e as Node2D
+		var rig_host := body.get_node_or_null("RigHost") as Node2D
+		if rig_host == null:
+			continue
+		var id: int = e.get_instance_id()
+		var ch: Node3D = _char_map.get(id)
+		if ch == null or not is_instance_valid(ch):
+			ch = _hd.spawn_character()
+			_char_map[id] = ch
+			# 关 2D 侧视觉（骨架 + 2D 接触影），渲染交给 3D billboard
+			rig_host.visible = false
+			var sh2d := body.get_node_or_null("ContactShadow") as Node2D
+			if sh2d != null:
+				sh2d.visible = false
+		alive[id] = ch
+		# y 行走带 → 3D 纵深 z（道具/树的 z 同一映射，遮挡关系自动正确）
+		var z: float = (body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN) * 12.25
+		var vel: Vector2 = (body as CharacterBody2D).velocity if body is CharacterBody2D else Vector2.ZERO
+		var moving: bool = vel.length_squared() > 25.0
+		if ch.has_method("set_world_pos"):
+			ch.set_world_pos(body.position.x / CELL_PX, z,
+					int(body.get("_facing")) < 0,
+					lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
+							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)))
+		if ch.has_method("set_anim"):
+			ch.set_anim("walk" if moving else "idle")
+	# 清理已消失实体（死亡/切图）
+	for id in _char_map.keys():
+		if not alive.has(id):
+			var ch: Node3D = _char_map[id]
+			if ch != null and is_instance_valid(ch):
+				ch.queue_free()
+			_char_map.erase(id)
+
+
+## 纵深融入（HD-2D 最佳实践第一层）：行走带 y → 实体视觉近大远小 + 接地感。
+## 只缩 RigHost（视觉骨架），不碰碰撞体；实体体型缩放（_apply_scale）是稀有
+## 事件，其结果会被本帧 base+depth 重建覆盖——以 meta 记录的基准为准。
+const DEPTH_Y_MIN := 688.0
+const DEPTH_Y_MAX := 1080.0
+const DEPTH_SCALE_MIN := 0.92
+const DEPTH_SCALE_MAX := 1.10
+
+func _apply_depth_visual() -> void:
+	for e in get_entities():
+		if e is not Node2D or not is_instance_valid(e):
+			continue
+		var rig := (e as Node2D).get_node_or_null("RigHost") as Node2D
+		if rig == null:
+			continue
+		if not e.has_meta("hd2d_base_rig_scale"):
+			e.set_meta("hd2d_base_rig_scale", rig.scale)
+		var t: float = clampf(((e as Node2D).position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)
+		var k: float = lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX, t)
+		rig.scale = (e.get_meta("hd2d_base_rig_scale") as Vector2) * k
 
 
 func get_spawn_point() -> Vector2:
@@ -104,10 +180,42 @@ func _apply_layout_bounds() -> void:
 	map_right = half_px
 
 
-## 出生村专属设施（运营仓库/村民 NPC）是否适用本图（GameRoot 门控读）。
-## HD-2D 静态布景图无 2D 建筑宿主与工作场所——全跳过（树/矿走自然物卡+资源点）。
+## 出生村专属的 2D 建筑设施（运营仓库/2D 资源点生成）是否适用本图。
+## HD-2D 街无 2D 建筑宿主——仓库/程序化资源点跳过（树/矿走自然物卡）。
+## 村民 NPC 单独由 wants_villager_npcs() 门控（主街要有人干活）。
 func supports_village_facilities() -> bool:
 	return false
+
+
+## 是否生成村民 NPC（主街要有人劳作：伐木/采矿在资源点、铁匠在露天铁砧）
+func wants_villager_npcs() -> bool:
+	return true
+
+
+## 村民落脚点（按主街语义分配，配比 professions：铁匠1/伐木3/矿工3/待业3）：
+## 0 号 = 露天铁砧旁（铁匠），1~6 = 西森林带资源点旁（伐木/矿工），
+## 7~9 = 街市/东段（待业闲逛）。
+func get_npc_spawn_points() -> Array:
+	var pts: Array = [
+		Vector2(-16.6 * CELL_PX, 1010.0),  # 铁砧旁（前方路面，避铁砧碰撞带）
+		Vector2(-61.0 * CELL_PX, 1030.0),  # 森林带资源点前方路面
+		Vector2(-57.5 * CELL_PX, 1040.0),
+		Vector2(-53.5 * CELL_PX, 1020.0),
+		Vector2(-49.5 * CELL_PX, 1045.0),
+		Vector2(-46.0 * CELL_PX, 1030.0),
+		Vector2(-43.5 * CELL_PX, 1050.0),
+		Vector2(-6.0 * CELL_PX, 1000.0),   # 市集广场
+		Vector2(2.0 * CELL_PX, 1030.0),
+		Vector2(30.0 * CELL_PX, 990.0),    # 谷仓前
+	]
+	return pts
+
+
+## 露天工位（转发 3D 侧摆位表：铁砧 → 铁匠）
+func get_open_work_sites() -> Array:
+	if _hd != null and _hd.has_method("get_open_work_sites"):
+		return _hd.get_open_work_sites()
+	return []
 
 
 ## 3D 街景的实心区间（格）→ 2D 静态碰撞墙（px）。
@@ -120,11 +228,15 @@ func _build_solid_bodies(hd: Node3D) -> void:
 	for r: Variant in hd.get_solid_rects():
 		var x0: float = float(r[0]) * CELL_PX
 		var x1: float = float(r[1]) * CELL_PX
+		# y 带：4 元条目 = 点障碍（道具/树木，只在其纵深带附近挡人，可绕行）；
+		# 2 元条目 = 建筑墙体（贯穿整个行走带后段）
+		var y0: float = float(r[3]) if r.size() > 3 else WALK_BACK_Y
+		var y1: float = float(r[4]) if r.size() > 4 else WALK_FRONT_Y
 		var shape := CollisionShape2D.new()
 		var rect := RectangleShape2D.new()
-		rect.size = Vector2(maxf(8.0, x1 - x0), WALK_FRONT_Y - WALK_BACK_Y)
+		rect.size = Vector2(maxf(8.0, x1 - x0), maxf(8.0, y1 - y0))
 		shape.shape = rect
-		shape.position = Vector2((x0 + x1) * 0.5, (WALK_BACK_Y + WALK_FRONT_Y) * 0.5)
+		shape.position = Vector2((x0 + x1) * 0.5, (y0 + y1) * 0.5)
 		body.add_child(shape)
 	if body.get_child_count() > 0:
 		add_child(body)

@@ -48,7 +48,6 @@ const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/script
 const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
 const _StrategicMapL3Scene: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l3.tscn")
 const _StrategicMapL2Scene: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l2.tscn")
-const _PossessionIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/possession_indicator.gd")
 const _HoverIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/hover_indicator.gd")
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/scripts/indicators/middle_scroll_overlay.gd")
 const _BuildMenuScript: GDScript = preload("res://modules/construction/ui/build_menu.gd")
@@ -1089,15 +1088,7 @@ func _on_world_map_travel(target_map_id: String, entry_side: int) -> void:
 # ─────────────────────────────── 游玩 UI ────────────────────────────────
 
 func _setup_game_ui() -> void:
-	# 主控单位圆圈（屏幕空间绘制，挂 HudOverlay 槽，坐标系与视口一致）
-	_root._possession_indicator = UIKit.widget(_PossessionIndicatorScript, "PossessionIndicator")
-	_root._possession_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if _root._possession_indicator.has_method("setup"):
-		_root._possession_indicator.setup(_root.camera_rig, _root)
-	if _root.ui_root != null:
-		_root.ui_root.add_to_slot("HudOverlay", _root._possession_indicator)
-	else:
-		_root.add_child(_root._possession_indicator)
+	# （possessed 玩家白四角框已归并入 SelectionSystem._draw，2026-09-14）
 	# 鼠标悬停方框
 	_root._hover_indicator = UIKit.widget(_HoverIndicatorScript, "HoverIndicator")
 	_root._hover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE

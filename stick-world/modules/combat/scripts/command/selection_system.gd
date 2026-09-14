@@ -31,6 +31,14 @@ const BOX_FILL_COLOR: Color = Color(0.4, 0.85, 1.0, 0.15)
 const RING_COLOR: Color = Color(0.35, 1.0, 0.5, 0.9)
 ## 选中圆环半径（屏幕像素）
 const RING_RADIUS: float = 30.0
+## possessed 玩家四角框颜色（与选中框同白）
+const POSSESSED_COLOR: Color = Color(1.0, 1.0, 1.0, 0.95)
+## possessed 框比碰撞箱水平外扩的像素
+const POSSESSED_EXPAND_X: float = 6.0
+## possessed 框的半高
+const POSSESSED_HALF_H: float = 16.0
+## possessed 框角臂长
+const POSSESSED_ARM: float = 9.0
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 选择变化时发射，参数为选中单位的 instance_id 数组
@@ -53,6 +61,8 @@ var _selected_units: Array = []
 var _selectable_faction: int = 0
 ## GameRoot 引用（用于查找当前地图；由 SystemSetup 装配时注入，2026-08 收敛）
 var _game_root: Node = null
+## 上帧是否有 possessed 玩家（用于"消失时补一次清屏"的零重绘判定）
+var _last_had_possessed: bool = false
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -61,9 +71,9 @@ func _ready() -> void:
 	# 不拦截 UI 事件，仅通过 _unhandled_input 处理游戏世界点击
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	# 初始禁用输入/帧处理，等 BATTLE 模式激活再开启
+	# _process 常开（possessed 四角框在 EXPLORE 模式也要跟随），内部按 _active 自门控；
+	# 仅输入处理等 BATTLE 模式激活再开启
 	set_process_unhandled_input(false)
-	set_process(false)
 
 
 ## 装配注入（SystemSetup 调用）：替代 group 反查 game_root
@@ -77,14 +87,12 @@ func _on_mode_activated(mode: int) -> void:
 	if mode == PlayerControlAPI.Mode.BATTLE:
 		_active = true
 		set_process_unhandled_input(true)
-		set_process(true)
 
 
 func _on_mode_deactivated(mode: int, _new_mode: int = PlayerControlAPI.Mode.NONE) -> void:
 	if mode == PlayerControlAPI.Mode.BATTLE:
 		_active = false
 		set_process_unhandled_input(false)
-		set_process(false)
 		_left_held = false
 		_dragging = false
 		clear_selection()
@@ -255,8 +263,14 @@ func _get_selectable_units() -> Array:
 	return units
 
 
-## 死亡/释放的单位自动移除
+## 死亡/释放的单位自动移除；同时驱动 possessed 四角框跟随重绘
 func _process(_delta: float) -> void:
+	# possessed 玩家逐帧跟随（EXPLORE/BATTLE 都显示）；无附身时零重绘
+	var possessed: Node2D = _get_possessed_entity()
+	var has_possessed: bool = possessed != null and is_instance_valid(possessed)
+	if has_possessed or _last_had_possessed:
+		queue_redraw()
+	_last_had_possessed = has_possessed
 	if not _active:
 		return
 	if _selected_units.is_empty():
@@ -297,6 +311,17 @@ func _screen_to_world(screen_pos: Vector2) -> Vector2:
 # ─────────────────────────────── 绘制 ────────────────────────────────
 
 func _draw() -> void:
+	# possessed 玩家脚下的白色四角线框（原 PossessionIndicator 职责归并于此）
+	var p: Node2D = _get_possessed_entity()
+	if p != null and is_instance_valid(p):
+		var foot: Vector2 = p.global_position
+		var col_w: float = 32.0
+		var col: CollisionShape2D = p.get_node_or_null("Collider") as CollisionShape2D
+		if col != null and col.shape is RectangleShape2D:
+			foot = col.global_position
+			col_w = (col.shape as RectangleShape2D).size.x
+		_draw_corner_bracket(get_viewport().get_canvas_transform() * foot,
+				col_w * 0.5 + POSSESSED_EXPAND_X, POSSESSED_HALF_H, POSSESSED_ARM, POSSESSED_COLOR)
 	# 拖拽中的选中框
 	if _dragging:
 		var rect := Rect2(_drag_start_screen, _drag_current_screen - _drag_start_screen).abs()
@@ -314,10 +339,25 @@ func _draw() -> void:
 		var half_h: float = RING_RADIUS * 0.65
 		var arm: float = RING_RADIUS * 0.38
 		var col: Color = Color(1.0, 1.0, 1.0, 0.95)
-		for c in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
-			var corner: Vector2 = screen_pos + Vector2(c.x * half_w, c.y * half_h)
-			draw_line(corner, corner - Vector2(c.x * arm, 0), col, 2.0, true)
-			draw_line(corner, corner - Vector2(0, c.y * arm), col, 2.0, true)
+		_draw_corner_bracket(screen_pos, half_w, half_h, arm, col)
+
+
+## 四角 L 形短线框（不是整框，压低视觉权重）
+func _draw_corner_bracket(center: Vector2, half_w: float, half_h: float, arm: float, col: Color) -> void:
+	for c in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+		var corner: Vector2 = center + Vector2(c.x * half_w, c.y * half_h)
+		draw_line(corner, corner - Vector2(c.x * arm, 0), col, 2.0, true)
+		draw_line(corner, corner - Vector2(0, c.y * arm), col, 2.0, true)
+
+
+## 当前附身实体（无则 null）
+func _get_possessed_entity() -> Node2D:
+	var map: Node2D = _get_current_map()
+	if map == null:
+		return null
+	if map.has_method("get_possessed_entity"):
+		return map.get_possessed_entity()
+	return null
 
 
 # ─────────────────────────────── 查询 API ────────────────────────────────

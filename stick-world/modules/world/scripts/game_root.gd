@@ -85,6 +85,13 @@ const SIEGE_MAP_ID := "siege_battlefield"
 ## 森林附属区域地图 ID（阶段 F）
 const FOREST_ZONE_MAP_ID := "forest_zone"
 const HD2D_STREET_MAP_ID := "hd2d_street"
+## 新游戏开局主场景（创始人 2026-09-14：启动直连 HD-2D 主街，不再加载村A旧图；
+## 村A保留注册仅供调试，旅行链/出生链全部改挂本图）
+const START_MAP_ID := HD2D_STREET_MAP_ID
+## 启动图覆盖（测试/开发用，仿 SaveManager.boot_load_slot 模式）：非空时
+## _load_start_village 加载它而不是 START_MAP_ID。集成测试测 2D 村庄玩法
+## （工位/招兵/战斗…）需要以 village_a 为初始图（含设施生成），显式声明。
+var boot_map_id_override: String = ""
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
 const PLAYER_SPAWN_X: float = 0.0
 ## NPC 村民数量（小镇生活批次 4 [提案/待定]：起步小镇人口 10——配比在岗
@@ -189,8 +196,6 @@ var _strategic_map: Node = null
 @warning_ignore("unused_private_class_variable")
 var _strategic_map_l3: Node = null
 # ─────────────────────────────── 游玩 UI（SystemSetup 跨脚本写入，故加忽略）────────────────────────────────
-@warning_ignore("unused_private_class_variable")
-var _possession_indicator: Control = null
 @warning_ignore("unused_private_class_variable")
 var _hover_indicator: Control = null
 @warning_ignore("unused_private_class_variable")
@@ -593,16 +598,18 @@ func _register_default_maps() -> void:
 	# 3 秒由 MapBoundaryDetector 开 L1 大图回战略图，双击下一城再进）
 	for i: int in _L1_SETTLEMENT_SCENES.size():
 		scene_loader.register_map("l1_settlement_%02d" % i, _L1_SETTLEMENT_SCENES[i], WorldAPI.MapType.VILLAGE)
-	# 配置地图出口（步行衔接，详见 §6.2）
-	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
-	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	# 配置地图出口（步行衔接，详见 §6.2）。
+	# 2026-09-14 启动直连：旅行链原挂在 village_a，现全部改挂 hd2d_street
+	# （新主场景）；村A 保留注册仅供调试，不再承担主场景职责。
+	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT, VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT, ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	# 阶段 F：健全地图系统（任何地图可步行回村，链式衔接：村↔战场↔森林）
-	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	scene_loader.register_map_exit(VILLAGE_A_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	# 守城图（独立区域）左出回村A：仅作为 travel 目标登记；平时进出走村A城门选项
-	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT, VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	# 守城图（独立区域）左出回主街：仅作为 travel 目标登记；平时进出走村口选项
+	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	# 恢复原链：遭遇战场右出通森林（守城图独立后不再串链）
 	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
@@ -659,7 +666,7 @@ func _load_start_village() -> void:
 			float(BOOT_STAGES - 1) / float(BOOT_STAGES))
 	# 同上：先渲染"生成世界"帧，再进地图实例化的最长同步块
 	await _yield_frame()
-	scene_loader.load_map(VILLAGE_A_MAP_ID)
+	scene_loader.load_map(boot_map_id_override if not boot_map_id_override.is_empty() else START_MAP_ID)
 
 
 ## 显示世界加载覆盖（启动加载期）。ratio = 总阶段进度；sub_ratio = 当前阶段
@@ -835,37 +842,42 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 进入即对准玩家（水平居中；1/4 跟随机制下不 snap 会在触发线偏移）
 		if camera_rig != null and camera_rig.has_method("snap_to_follow_target"):
 			camera_rig.snap_to_follow_target()
-		# 仅初始加载时 spawn 村庄仓库、土路资源与 NPC（出生村专属）
+		# 仅初始加载时 spawn 村庄仓库、土路资源与 NPC（出生村专属）。
+		# 地图可通过 supports_village_facilities()=false 声明无 2D 村庄设施
+		# （HD-2D 主街：树/矿走自然物卡+资源点，无运营仓库/工位，NPC 暂不开）。
+		var has_facilities: bool = (not map.has_method("supports_village_facilities")) \
+				or map.supports_village_facilities()
 		if not _initial_map_loaded:
 			_initial_map_loaded = true
-			await _world_sub_phase("村庄设施")
-			# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
-			_worldgen.spawn_initial_warehouse()
-			# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
-			var spawn_cell: int = int(PLAYER_SPAWN_X / 32.0)
-			var safe_radius: int = 40  # 出生点±40格内为村庄土路区
-			if map.has_method("set_dirt_road_range"):
-				map.set_dirt_road_range(spawn_cell - safe_radius, spawn_cell + safe_radius)
-			if map.has_method("generate_resource_nodes_chunked"):
-				var map_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
-				var map_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
-				# 全地图生成，生成器内部会跳过土路 cell，保证硬化路面不长资源。
-				# 分块版：每积满时间预算让一帧——~154 个资源点的实例化与首绘因此
-				# 摊到多帧，加载屏不再在该子阶段有一段数秒的整屏定格；副条随
-				# 放置进度推进（「布置资源点 n/m」）。
-				await map.generate_resource_nodes_chunked(
-						map_left_cell, map_right_cell, 0.65, _world_sub_phase_resources)
-			elif map.has_method("generate_resource_nodes"):
-				var fb_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
-				var fb_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
-				map.generate_resource_nodes(fb_left_cell, fb_right_cell, 0.65)
-			# 重新设置相机/小地图边界（土路可能向负坐标扩展了 map_left）
+			if has_facilities:
+				await _world_sub_phase("村庄设施")
+				# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
+				_worldgen.spawn_initial_warehouse()
+				# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
+				var spawn_cell: int = int(PLAYER_SPAWN_X / 32.0)
+				var safe_radius: int = 40  # 出生点±40格内为村庄土路区
+				if map.has_method("set_dirt_road_range"):
+					map.set_dirt_road_range(spawn_cell - safe_radius, spawn_cell + safe_radius)
+				if map.has_method("generate_resource_nodes_chunked"):
+					var map_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
+					var map_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
+					# 全地图生成，生成器内部会跳过土路 cell，保证硬化路面不长资源。
+					# 分块版：每积满时间预算让一帧——~154 个资源点的实例化与首绘因此
+					# 摊到多帧，加载屏不再在该子阶段有一段数秒的整屏定格；副条随
+					# 放置进度推进（「布置资源点 n/m」）。
+					await map.generate_resource_nodes_chunked(
+							map_left_cell, map_right_cell, 0.65, _world_sub_phase_resources)
+				elif map.has_method("generate_resource_nodes"):
+					var fb_left_cell: int = int(float(map.get("map_left")) / 32.0) if "map_left" in map else 0
+					var fb_right_cell: int = int(float(map.get("map_right")) / 32.0) if "map_right" in map else 256
+					map.generate_resource_nodes(fb_left_cell, fb_right_cell, 0.65)
+				await _world_sub_phase("村民")
+				await _worldgen.spawn_npcs(map, spawn_y, _world_sub_progress)
+			# 重新设置相机/小地图边界（与设施无关，任何地图都要）
 			if camera_rig != null and camera_rig.has_method("set_map_bounds"):
 				camera_rig.set_map_bounds(map.map_left, map.map_right)
 			if _minimap != null and _minimap.has_method("set_map_info"):
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-			await _world_sub_phase("村民")
-			await _worldgen.spawn_npcs(map, spawn_y, _world_sub_progress)
 		# 跨图携带：spawn 随行编队成员并重建编队（带队出征）
 		_spawn_travel_followers(map, player, spawn_y)
 		# 战场图（battlefield）已退役为 dev 验证图（出征与领地架构 §4.3）：进图不再

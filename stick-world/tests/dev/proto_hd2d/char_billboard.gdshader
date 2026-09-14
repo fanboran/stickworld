@@ -10,13 +10,13 @@ shader_type spatial;
 //     albedo，就等于给 2D 精灵重新打光（会得到 proto_25d 那种"发灰"的观感）。
 //     场景的光影响通过 `tint` / `light_add` 两个 uniform **近似**注入（夜景暖光池），
 //     不做逐像素光照 —— 这是本路线的取舍，见汇报。
-//  2. `depth_draw_never`：透明通道**不写深度**。深度测试保持开启（默认）。
-//     → 建筑卡（不透明通道 depth_draw_opaque）先把深度写进缓冲，
-//       角色像素若比建筑远，深度测试直接判负 → 天然被建筑遮挡。
-//       遮挡不需要任何手工排序，这是 Godot 不透明/透明两通道划分的免费红利。
-//     → 代价：角色**不参与深度**，因此 DOF（景深）在角色像素上读到的是它背后
-//       几何的深度。实测影响见汇报（当前配置下不构成问题，因为角色背后是
-//       深度≈35 的路面/前排建筑，都在清晰带内）。
+//  2. `depth_draw_always`：角色像素**写深度**（alpha_cut 以下的碎片 discard
+//     连深度一起跳过，不会留"透明墙"）。角色与建筑卡（不透明通道）、以及
+//     同透明通道里后画的大面积 quad（建筑投影/夜光/地面雾）之间的遮掩
+//     全部交给深度缓冲判——此前 depth_draw_never 让角色不参与深度，谁
+//     后画谁盖上，站在楼前也会被投影/光晕整片抹掉（"显示层级错乱"根因）。
+//     八方旅人的角色卡同为 cutout alpha + 深度参与，行业标准做法。
+//     → 角色互相重叠：同为相机基平行平面，深度判近者胜，天然正确。
 //  3. `cull_disabled`：quad 要在 x 轴翻面复用同一张纹理（左右朝向），
 //     背面不剔除省一次材质复制。
 //
@@ -26,7 +26,7 @@ shader_type spatial;
 //
 // 保持 SubViewport texel 原样：不做 mipmap 之外的过滤，UV 直接 1:1 映射。
 
-render_mode blend_mix, cull_disabled, depth_draw_never, unshaded;
+render_mode blend_mix, cull_disabled, depth_draw_always, unshaded;
 
 uniform sampler2D char_tex : source_color, filter_linear_mipmap, repeat_disable;
 // 场景光近似（day = 1,1,1；night = 冷蓝压暗）

@@ -228,6 +228,19 @@ static func count_work_capacity(ref_entity: Node, work_site_def: String) -> int:
 				total += (b.get_work_slot_positions() as Array).size()
 	if total > 0:
 		return total
+	# 露天工位（HD-2D 街）：地图声明的固定工位也算容量——与 get_work_site
+	# 的回退链同一口径（铁砧 = smithy_lv1）。漏了这里会让配额算 0，
+	# "一整圈无位即全待业"→ 全村 NPC 原地发呆。
+	var anc := ref_entity.get_parent()
+	while anc != null:
+		if anc.has_method("get_open_work_sites"):
+			for ws: Variant in anc.get_open_work_sites():
+				if String(ws.get("work_site_def", "")) == work_site_def:
+					total += 1
+			break
+		anc = anc.get_parent()
+	if total > 0:
+		return total
 	return 0 if is_nan(get_placeholder_work_site_x(work_site_def)) else 1
 
 

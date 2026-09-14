@@ -53,8 +53,6 @@ const LAYOUT_DIR := "proto_hd2d/hd2d_layouts/"   # city_layout 导出的布局 J
 const GROUND_DIR := "ground_tiles/"
 
 const CAM_W := 74.0                      # 正交视宽（格）-> 1920 宽下 25.9 px/格
-## 行走带前缘的 3D z（2D y=1080 的地面投影线：(1080-688)/32）——缩放下边界锚点
-const WALK_FRONT_Z := 12.25
 const CAM_CY := 11.0                     # 相机视线轴的世界高度
 const CAM_DIST := 40.0
 
@@ -615,23 +613,38 @@ func set_cam_x(cx: float) -> void:
 		_cam.position.x = cx
 
 
-## 3D 相机缩放镜像——与 2D CameraRig 同一语义：**下边界锚定**（创始人口径：
-## "原来那种缩放以下边界为基准"）。CameraRig 把屏幕底沿钉在 ground_bottom
-## （本图=1080=行走带前缘）；3D 侧对应把屏幕底沿钉在 WALK_FRONT_Z，缩放时
-## 视宽缩 1/n、相机沿 z 反向平移让底沿不动、画面只向上扩——正交默认绕
-## 屏幕中心扩缩，不这样做就会与 2D 脱钩（玩家/NPC 在两套锚点间漂移）。
+## 3D 相机缩放镜像——与 2D CameraRig 同一语义：**以地面下边界为基准缩放**。
+## zoom=1 时与原取景逐位一致（CAM_CY 的原始定标：街面近沿贴屏幕底沿、
+## 地面占屏幕下 1/3、天际线基线压 1/3 线）；缩放时视宽缩 1/n、相机沿 z
+## 反向平移，让**街面近沿这条世界线永远钉在屏幕底沿**——正交默认绕屏幕
+## 中心扩缩，不这样做就会与 2D 脱钩（玩家/NPC 在两套锚点间漂移）。
 ## 推导：视线地面交点 z_c = P.z - P.y/tanθ；地面点 z 每大 1 格，屏幕下移
 ## sinθ；屏幕底沿地面 z = z_c + h_v/(2 sinθ)（h_v = size·视口高宽比，KEEP_WIDTH
-## 下 size=视宽）⇒ 钉底沿在 WALK_FRONT_Z ⇒ z_c = WALK_FRONT_Z - h_v/(2 sinθ)。
+## 下 size=视宽）⇒ 锚线 z_near 取 zoom=1 的原底沿值，反解 P.z。
 func set_cam_zoom(zoom: float) -> void:
 	if _cam == null or zoom <= 0.05:
 		return
 	_cam.size = CAM_W / clampf(zoom, 0.25, 8.0)
 	var vp := _cam.get_viewport().get_visible_rect().size
-	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)
+	var ar: float = vp.y / maxf(vp.x, 1.0)
 	var t := deg_to_rad(TILT_DEG)
-	var z_center: float = WALK_FRONT_Z - h_v * 0.5 / sin(t)
-	_cam.position.z = z_center + _cam.position.y / tan(t)
+	var h_v: float = _cam.size * ar        # 当前视高（格）
+	var h_v1: float = CAM_W * ar           # zoom=1 基准视高
+	var z_near: float = -CAM_CY / tan(t) + h_v1 * 0.5 / sin(t)
+	_cam.position.z = z_near - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
+	# 景深与缩放解耦：far blur 起点钉在天际线基线这条**世界线**上——
+	# dof_blur_far_distance 是相机本地距离，缩放移动相机后若不同步换算，
+	# 模糊带会跟着缩放漂移（创始人：景深不应受镜头缩放影响）
+	if _cam_attrs != null:
+		_cam_attrs.dof_blur_far_distance = (_cam.position.z - SKYLINE_Z) / cos(t)
+
+
+## 3D 视图对地面纵深的屏幕压缩率（俯角前缩）：地面 1 格在屏幕上的竖直像素
+## = sin(俯角) × 每格横像素。2D 画布的特效/调试框若按 2D y 直绘，会与 3D
+## 世界里同一点错开 (1-压缩率) 倍——宿主用本值做坐标重映射（remap_fx_pos）。
+func get_ground_squash() -> float:
+	var vp := get_viewport().get_visible_rect().size
+	return sin(deg_to_rad(TILT_DEG)) * vp.x / (CAM_W * 32.0)
 
 
 ## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）

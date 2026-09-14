@@ -83,6 +83,7 @@ func burst(effect_id: String, global_pos: Vector2) -> void:
 static func spawn_burst(tree: SceneTree, effect_id: String, global_pos: Vector2) -> void:
 	if tree == null:
 		return
+	global_pos = FxLibrary.remap_pos(tree, global_pos)
 	var pool := tree.get_first_node_in_group("fx_pool") as FxPool
 	if pool == null:
 		if OS.is_debug_build():

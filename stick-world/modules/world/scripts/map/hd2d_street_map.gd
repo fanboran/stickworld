@@ -66,6 +66,9 @@ const _RESOURCE_AMOUNTS := {
 
 func _ready() -> void:
 	super()
+	# 注册 2D 特效坐标重映射器（FxLibrary.remap_pos 读此组）：HD-2D 图的地面
+	# 受俯角前缩，飘字/粒子按 2D y 直绘会飘在半空，须压到 3D 投影同一地面线
+	add_to_group("fx_pos_remapper")
 	_hd = _HD2D_WORLD_SCENE.instantiate()
 	_hd.name = "HD2DWorld"
 	if not layout_name.is_empty():
@@ -221,6 +224,16 @@ func get_npc_spawn_points() -> Array:
 ## 3D 脚下四角框声明（SelectionSystem 读到后跳过 2D 画布框）
 func wants_3d_bracket() -> bool:
 	return true
+
+
+## 2D 特效/坐标重映射（fx_pos_remapper 组协议）：2D 世界 y → 3D 投影呈现的
+## 同一地面线。y=1080（前缘）不动，纵深越深压缩越多（俯角前缩率由 3D 侧
+## get_ground_squash 给出）——飘字/粒子由此与角色 feet 对齐。
+func remap_fx_pos(pos: Vector2) -> Vector2:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return pos
+	var k: float = float(_hd.get_ground_squash())
+	return Vector2(pos.x, WALK_FRONT_Y - (WALK_FRONT_Y - pos.y) * k)
 
 
 ## F3 调试可视化：把 HD-2D 碰撞墙并入 walk barrier 绘制（蓝框）

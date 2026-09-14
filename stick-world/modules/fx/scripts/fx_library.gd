@@ -257,6 +257,19 @@ static func _ramp_tex(grad: Gradient) -> Texture2D:
 
 # ─────────────────────────────── 伤害飘字（Demo 打磨包）────────────────────────────────
 
+## 2D 特效坐标重映射（HD-2D 图专用钩子）：地面在 3D 视图里受俯角前缩，
+## 2D 画布直绘的粒子/飘字会与 3D 世界错开 (1-压缩率) 倍。场景中有
+## fx_pos_remapper 组节点（HD-2D 宿主图注册）时把坐标压到 3D 投影的同一
+## 地面线上；普通 2D 图无此节点，原样返回零扰动。
+static func remap_pos(tree: SceneTree, pos: Vector2) -> Vector2:
+	if tree == null:
+		return pos
+	var m := tree.get_first_node_in_group("fx_pos_remapper")
+	if m != null and m.has_method("remap_fx_pos"):
+		return m.remap_fx_pos(pos)
+	return pos
+
+
 ## 飘字复用池（战斗性能优化：混战每秒几十次 Label.new+Tween 创建销毁，
 ## 池化后 Label 只建一次反复改文本/位置重飘；场景切换后失效引用自动丢弃）
 static var _damage_text_pool: Array = []
@@ -267,6 +280,7 @@ static var _damage_text_pool: Array = []
 static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit: bool) -> void:
 	if tree == null or tree.current_scene == null:
 		return
+	pos = remap_pos(tree, pos)
 	var label: Label = null
 	if not _damage_text_pool.is_empty():
 		# 弹出到无类型临时再判活：池里可能有场景切换时被释放的悬垂引用，
@@ -323,6 +337,7 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 static func spawn_slash_arc(tree: SceneTree, pos: Vector2, angle_rad: float, crit: bool = false) -> void:
 	if tree == null or tree.current_scene == null:
 		return
+	pos = remap_pos(tree, pos)
 	var arc := Polygon2D.new()
 	var seg: int = 20
 	var r0: float = 14.0

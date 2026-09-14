@@ -1,13 +1,18 @@
 class_name ResourceNode
 extends Node2D
-## 城内资源点 -- 阶段 F §5.7.4.5
+## 城内资源点 -- 纯逻辑节点（阶段 F §5.7.4.5）
 ##
-## 城内树木/石头/铁矿，储量有限；采空后进入枯竭态（隐藏+不可采），
-## 按重生节拍自动恢复（NPC 采集经济配套，小镇生活批次 2；重生节拍为
-## AI 提案数值，待实测定稿——原"砍完彻底不再生"语义不满足长期经济循环）。
+## 储量有限；采空后进入枯竭态（隐藏+不可采），按重生节拍自动恢复（NPC 采集
+## 经济配套，小镇生活批次 2；重生节拍为 AI 提案数值，待实测定稿——原"砍完
+## 彻底不再生"语义不满足长期经济循环）。
 ## 已知限制：枯竭态节点不写入存档（save_resource_nodes_to_db 过滤
-## is_depleted），跨存档读回后该点消失、不处于重生倒计时。
-## 建造时自动清场（砍树给木材）。
+## is_depleted），跨存档读回后该点消失、不处于重生倒计时。建造时自动清场。
+##
+## **2D 笔触视觉根除（创始人 2026-09-14）**：程序化树/岩块/贴图池全部删除——
+## 树冠闪绿光（tree_painting.flash_leaves，2026-09-06 逆向定稿）属于 2D 笔触
+## 树，随之移除；HD-2D 图观感由自然物 PBR 卡承担（点位/类型由资源分布算法
+## 给出，卡随点落）。采集反馈保留飘字与音效；飘字在 HD-2D 图经
+## fx_pos_remapper 组重映射到 3D 投影地面线。
 
 ## 资源类型枚举
 enum ResourceType {
@@ -27,9 +32,6 @@ enum ResourceType {
 
 var _is_depleted: bool = false
 var _debug_label: Label = null
-var _body_rect: ColorRect = null
-var _body_sprite: Sprite2D = null
-var _body_rock: Node2D = null
 var _initial_amount: int = 0
 var _crit_gain: bool = false
 
@@ -37,9 +39,13 @@ var _crit_gain: bool = false
 func _ready() -> void:
 	add_to_group("resource_node")
 	_initial_amount = maxi(amount, 1)
-	# 2.5D 纵深排序（与 stickman_entity 同款）：变高后的树在纵深带上前后遮挡正确
-	z_index = int(global_position.y * 0.1)
-	_apply_visual()
+	# 调试标签：显示资源类型名（F3 开关控制，生产不可见）
+	_debug_label = Label.new()
+	_debug_label.text = _get_type_name()
+	_debug_label.add_theme_font_size_override("font_size", 10)
+	_debug_label.position = Vector2(-node_size * 0.5, node_size * 0.5)
+	add_child(_debug_label)
+	_update_debug_visibility()
 	# 2026-08 修复依赖反转：经 EventBus 订阅调试可见性（生产代码不再依赖 debug_gui autoload）
 	if EventBus != null and EventBus.has_signal("debug_visibility_changed"):
 		EventBus.debug_visibility_changed.connect(_update_debug_visibility)
@@ -48,173 +54,6 @@ func _ready() -> void:
 func _update_debug_visibility(_v: bool = false) -> void:
 	if _debug_label != null:
 		_debug_label.visible = _v
-
-
-## 笔触变体贴图池（tools/ai/gen_trees.py：树/石结构参数化直绘透明画布 + 笔触拟合，
-## 结构蒙版精确出 RGBA，零抠图零白边；每变体参数随机 = 天然多种多样）
-const _TEXTURE_POOLS: Dictionary = {
-	ResourceType.WOOD: [
-		"res://assets/resources/tree_paint_tree_v0.png",
-		"res://assets/resources/tree_paint_tree_v1.png",
-		"res://assets/resources/tree_paint_tree_v2.png",
-		"res://assets/resources/tree_paint_tree_v3.png",
-		"res://assets/resources/tree_paint_tree_v4.png",
-		"res://assets/resources/tree_paint_tree_v5.png",
-		"res://assets/resources/tree_paint_tree_v6.png",
-		"res://assets/resources/tree_paint_tree_v7.png",
-		"res://assets/resources/tree_paint_tree_v8.png",
-		"res://assets/resources/tree_paint_tree_v9.png",
-	],
-	ResourceType.STONE: [
-		"res://assets/resources/stone_paint_stone_v0.png",
-		"res://assets/resources/stone_paint_stone_v1.png",
-		"res://assets/resources/stone_paint_stone_v2.png",
-		"res://assets/resources/stone_paint_stone_v3.png",
-		"res://assets/resources/stone_paint_stone_v4.png",
-		"res://assets/resources/stone_paint_stone_v5.png",
-	],
-	ResourceType.METAL: [
-		"res://assets/resources/metal_paint_metal_v0.png",
-		"res://assets/resources/metal_paint_metal_v1.png",
-		"res://assets/resources/metal_paint_metal_v2.png",
-		"res://assets/resources/metal_paint_metal_v3.png",
-	],
-}
-## 变体池缺失时的兜底单张（旧管线产物，保持兼容）
-const _TEXTURE_FALLBACK: Dictionary = {
-	ResourceType.WOOD: "res://assets/resources/tree_paint.png",
-	ResourceType.STONE: "res://assets/resources/stone_paint.png",
-	ResourceType.METAL: "res://assets/resources/metal_paint.png",
-}
-## 贴图显示基线尺寸（px，宽高）；实例再乘 0.85~1.25 随机抖动
-## 树 342×750（贴图 416×912 等比）：大半屏高（视口 1080），干显示 ≈41px≈一人宽
-const _TEXTURE_SIZES: Dictionary = {
-	ResourceType.WOOD: Vector2(342.0, 750.0),
-	ResourceType.STONE: Vector2(120.0, 94.0),
-	ResourceType.METAL: Vector2(120.0, 94.0),
-}
-
-
-## 外观确定性 RNG：以世界位置哈希为种子——位置随存档持久化，
-## 读档后同一棵树选到同样的变体/缩放/翻转/色偏（存档同树同貌）
-func _visual_rng() -> RandomNumberGenerator:
-	var rng := RandomNumberGenerator.new()
-	var p := global_position
-	rng.seed = int(abs(fmod(p.x * 7919.0 + p.y * 104729.0, 2147483647.0)))
-	return rng
-
-
-## 树程序化视觉（终版架构：干/枝算法直绘 + 毛线团树叶实时飘动，种子驱动）
-const _TreePainting := preload("res://modules/world/scripts/map/tree_painting.gd")
-## 岩块程序化视觉（石/金/钻；铁矿保留原贴图）
-const _RockPainting := preload("res://modules/world/scripts/map/rock_painting.gd")
-
-var _body_painting: Node2D = null
-
-
-func _apply_visual() -> void:
-	var vrng := _visual_rng()
-	# 树走程序化组装（2026-09-05 终版架构）：位置哈希种子 → 干直绘 + 侧枝 + 毛线团，
-	# 每棵树独一无二；显示基准对齐旧贴图（总高 750 = 局部 880 × 0.852）
-	if resource_type == ResourceType.WOOD:
-		var painting: Node2D = _TreePainting.new()
-		painting.setup(vrng.randi())
-		var s: float = 750.0 / 880.0 * vrng.randf_range(0.85, 1.25)
-		var flip: float = -1.0 if vrng.randf() < 0.5 else 1.0
-		painting.scale = Vector2(s * flip, s)
-		# 树根对齐节点底（地面接触线，与旧贴图分支同规则）
-		painting.position = Vector2(0.0, node_size * 0.5)
-		# 轻微明度/冷暖抖动（±5%）：同一种子两次摆放也不同
-		var dv := vrng.randf_range(-0.05, 0.05)
-		var dw := vrng.randf_range(-0.03, 0.03)
-		painting.modulate = Color(1.0 + dv + dw, 1.0 + dv, 1.0 + dv - dw, 1.0)
-		add_child(painting)
-		_body_painting = painting
-	# 石/金/钻走程序化岩块（2026-09-06 用户定调：不规则棱角块+密实笔触+分叉
-	# 矿脉枝干，非圆形；铁矿原贴图形状本来就好看，保留贴图不动）
-	elif _ROCK_KINDS.has(resource_type):
-		var kind: Dictionary = _ROCK_KINDS[resource_type]
-		var rock: Node2D = _RockPainting.new()
-		var rr: float = vrng.randf_range(56.0, 82.0)  # 显示高 ~90-120px（半人~一人高）
-		rock.set("radius", rr)
-		rock.set("base_seed", vrng.randi())
-		rock.set("palette", kind["palette"])
-		rock.set("vein_color", kind["vein"])
-		rock.set("vein_ratio", kind["vein_ratio"])
-		# 块底（局部 y ≈ +0.64×radius 的平底）贴齐地面接触线
-		rock.position = Vector2(0.0, node_size * 0.5 - rr * 0.64)
-		var flip_r: float = -1.0 if vrng.randf() < 0.5 else 1.0
-		rock.scale = Vector2(flip_r * vrng.randf_range(0.9, 1.1), vrng.randf_range(0.9, 1.1))
-		add_child(rock)
-		_body_rock = rock
-	else:
-		_apply_legacy_texture_visual(vrng)
-	# 调试标签：显示资源类型名（F3 开关控制）
-	_debug_label = Label.new()
-	_debug_label.text = _get_type_name()
-	_debug_label.add_theme_font_size_override("font_size", 10)
-	_debug_label.position = Vector2(-node_size * 0.5, node_size * 0.5)
-	add_child(_debug_label)
-	_update_debug_visibility()
-
-
-## 石/矿种参数表（METAL 铁矿不在此列——原贴图形状保留）：底色板（浅/中/深三档）
-## + 矿脉色与占比（石头=灰系+极淡灰纹；金=土黄+亮金脉；钻=青灰+冰蓝脉）
-const _ROCK_KINDS: Dictionary = {
-	ResourceType.STONE: {
-		"palette": [Color8(150, 154, 160), Color8(114, 120, 128), Color8(80, 86, 94)],
-		"vein": Color8(196, 200, 206), "vein_ratio": 0.10,
-	},
-	ResourceType.GOLD: {
-		"palette": [Color8(158, 138, 96), Color8(122, 104, 72), Color8(90, 76, 54)],
-		"vein": Color8(255, 214, 74), "vein_ratio": 0.55,
-	},
-	ResourceType.DIAMOND: {
-		"palette": [Color8(136, 156, 170), Color8(104, 124, 142), Color8(76, 92, 108)],
-		"vein": Color8(150, 240, 255), "vein_ratio": 0.85,
-	},
-}
-
-
-## 旧贴图分支（兜底兼容，程序化分支之外的资源类型走这里）
-func _apply_legacy_texture_visual(vrng: RandomNumberGenerator) -> void:
-	var paths: Array = _TEXTURE_POOLS.get(resource_type, [])
-	var tex_path: String = String(_TEXTURE_FALLBACK.get(resource_type, ""))
-	if not paths.is_empty():
-		var pick: String = String(paths[vrng.randi() % paths.size()])
-		if ResourceLoader.exists(pick):
-			tex_path = pick
-	if not tex_path.is_empty() and ResourceLoader.exists(tex_path):
-		# 笔触贴图分支：底边对齐节点底（地面接触线）
-		var spr := Sprite2D.new()
-		spr.texture = load(tex_path)
-		var size: Vector2 = (_TEXTURE_SIZES.get(resource_type, Vector2(64.0, 64.0))
-			* vrng.randf_range(0.85, 1.25))
-		spr.scale = size / Vector2(spr.texture.get_width(), spr.texture.get_height())
-		spr.flip_h = vrng.randf() < 0.5
-		# 轻微明度/冷暖抖动（±5%）：同一变体两次摆放也不同
-		var dv2 := vrng.randf_range(-0.05, 0.05)
-		var dw2 := vrng.randf_range(-0.03, 0.03)
-		spr.modulate = Color(1.0 + dv2 + dw2, 1.0 + dv2, 1.0 + dv2 - dw2, 1.0)
-		spr.position = Vector2(0.0, node_size * 0.5 - size.y * 0.5)
-		add_child(spr)
-		_body_sprite = spr
-	else:
-		# 简单色块表示资源点（P0 占位）
-		var colors: Array[Color] = [
-			Color(0.2, 0.5, 0.2),  # WOOD=绿
-			Color(0.5, 0.5, 0.5),  # STONE=灰
-			Color(0.6, 0.3, 0.2),  # METAL=棕
-			Color(0.4, 0.8, 0.9),  # DIAMOND=冰蓝
-			Color(0.9, 0.8, 0.2),  # GOLD=金黄
-		]
-		var color: Color = colors[resource_type] if resource_type < colors.size() else Color.WHITE
-		var rect := ColorRect.new()
-		rect.color = color
-		rect.size = Vector2(node_size, node_size)
-		rect.position = Vector2(-node_size * 0.5, -node_size * 0.5)
-		add_child(rect)
-		_body_rect = rect
 
 
 ## 采集指定数量，返回实际采集量
@@ -234,7 +73,7 @@ func harvest(qty: int) -> int:
 
 
 ## 枯竭态表现与重生（小镇生活批次 2，重生节拍 [提案/待定] 90s 游戏秒）：
-## 采空不再自毁，改为隐藏（视觉枯萎占位）+ 单次 Timer 到点重生长满。
+## 采空不再自毁，改为隐藏 + 单次 Timer 到点重生长满。
 ## 存档过滤不写枯竭节点（见类头已知限制）；建造清场 queue_free 不受影响。
 const REGEN_TIME: float = 90.0
 
@@ -254,34 +93,22 @@ func _enter_depleted() -> void:
 	_regen_timer.start()
 
 
-## 重生长满：储量回满、解除枯竭、恢复可见（变体/位置不变 = "原地长回来"）。
-## 采集渐隐（_play_harvest_feedback 压 modulate.a）同步复位不透明。
+## 重生长满：储量回满、解除枯竭、恢复可见（点位/类型不变 = "原地长回来"）
 func _regrow() -> void:
 	amount = maxi(_initial_amount, 1)
 	_crit_gain = false
 	_is_depleted = false
 	visible = true
-	if _body_rect != null:
-		_body_rect.modulate.a = 1.0
-	elif _body_sprite != null:
-		_body_sprite.modulate.a = 1.0
-	elif _body_painting != null:
-		_body_painting.modulate.a = 1.0
-	elif _body_rock != null:
-		_body_rock.modulate.a = 1.0
 	if _regen_timer != null and is_instance_valid(_regen_timer):
 		_regen_timer.queue_free()
 	_regen_timer = null
 
 
-## 采集即时反馈：挤压弹跳 + 飘字 + 剩余量渐隐（GDD 核心循环"采集成功的微奖励"）
+## 采集即时反馈：飘字 + 敲击音（GDD 核心循环"采集成功的微奖励"）
 func _play_harvest_feedback(gained: int) -> void:
 	if gained > 0:
 		_spawn_gain_label(gained, _crit_gain)
 		_crit_gain = false
-		# 树的采集反馈：树冠闪各色绿光（不在根部）
-		if _body_painting != null and _body_painting.has_method("flash_leaves"):
-			_body_painting.flash_leaves()
 		if AudioManager != null:
 			# 敲击音分材质（材质敲击 = "世界里的声音"，NPC 劳作同样该有）
 			# **入账音（harvest_gain）不在这里**：那是"给玩家的反馈"，
@@ -290,20 +117,11 @@ func _play_harvest_feedback(gained: int) -> void:
 				AudioManager.play_event("harvest_wood", global_position)
 			else:
 				AudioManager.play_event("harvest_hit", global_position)
-		var tween := create_tween()
-		tween.tween_property(self, "scale", Vector2(1.18, 0.82), 0.08)
-		tween.tween_property(self, "scale", Vector2.ONE, 0.14)
-	if _body_rect != null:
-		_body_rect.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
-	elif _body_sprite != null:
-		_body_sprite.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
-	elif _body_painting != null:
-		_body_painting.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
-	elif _body_rock != null:
-		_body_rock.modulate.a = clampf(float(amount) / float(_initial_amount), 0.35, 1.0)
 
 
-## 资源点上方飘出 "+N 资材" 的增益数字（0.8s 上浮淡出后自毁）
+## 资源点上方飘出 "+N 资材" 的增益数字（0.8s 上浮淡出后自毁）。
+## HD-2D 图（fx_pos_remapper 组在树）把出生点压到 3D 投影地面线、挂到地图
+## 宿主下绘制；纯 2D 图维持原语义（挂节点自身、节点局部坐标）。
 func _spawn_gain_label(gained: int, crit: bool = false) -> void:
 	var label := Label.new()
 	label.text = ("暴击 +%d %s!" % [gained, _get_type_name()]) if crit else ("+%d %s" % [gained, _get_type_name()])
@@ -311,13 +129,20 @@ func _spawn_gain_label(gained: int, crit: bool = false) -> void:
 	label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.25) if crit else Color(1.0, 0.93, 0.65))
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	label.add_theme_constant_override("outline_size", 4)
-	label.position = Vector2(-36, -44)
 	label.size = Vector2(72, 20)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(label)
+	var remapper: Node = get_tree().get_first_node_in_group("fx_pos_remapper") \
+			if get_tree() != null else null
+	if remapper != null and remapper.has_method("remap_fx_pos"):
+		label.position = (remapper.remap_fx_pos(global_position) as Vector2) + Vector2(-36.0, -56.0)
+		var host: Node = get_parent() if get_parent() != null else self
+		host.add_child(label)
+	else:
+		label.position = Vector2(-36, -44)
+		add_child(label)
 	var tween := label.create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(label, "position:y", -96.0, 0.8).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "position:y", label.position.y - 52.0, 0.8).set_ease(Tween.EASE_OUT)
 	tween.tween_property(label, "modulate:a", 0.0, 0.6).set_delay(0.25)
 	tween.chain().tween_callback(label.queue_free)
 
@@ -357,10 +182,3 @@ func get_resource_id() -> String:
 		ResourceType.DIAMOND: return "res_diamond"
 		ResourceType.GOLD: return "res_gold"
 	return ""
-
-
-## 获取资源点的 cell_x
-func get_cell_x(grid: Node) -> int:
-	if grid == null or not grid.has_method("world_to_cell"):
-		return -1
-	return grid.world_to_cell(global_position)

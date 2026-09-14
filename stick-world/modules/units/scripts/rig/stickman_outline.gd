@@ -39,12 +39,7 @@ const BONE_GROUP: Dictionary = {
 	"foot_inner": P_LEG_INNER, "toe_inner": P_LEG_INNER,
 }
 
-## 仅肢体链经肩甲桥接融合：躯干↔肩甲↔双臂；腿与一切重叠画分隔线（SWL 观感）
-const ADJACENCY := [
-	[P_SHOULDER, P_TORSO],
-	[P_SHOULDER, P_ARM_OUTER],
-	[P_SHOULDER, P_ARM_INNER],
-]
+## 全融合口径下邻接表不再承载语义（全部零件同 ID）——保留空表。
 
 ## 肩甲补丁半径（rig 本地单位；旧版直径 30 逻辑像素同量级）
 const SHOULDER_PATCH_RADIUS := 15.0
@@ -61,7 +56,7 @@ static func setup(group: CanvasGroup) -> void:
 	if rig == null:
 		return
 	_assign_ids(rig)
-	_create_shoulder_patches(rig)
+	_hide_stroke_layers(rig)
 	var outline_mat := ShaderMaterial.new()
 	outline_mat.shader = OUTLINE_SHADER
 	outline_mat.set_shader_parameter("outline_color", Color.WHITE)
@@ -73,14 +68,12 @@ static func setup(group: CanvasGroup) -> void:
 ## 零件容器（sprite_*）按骨骼祖先归组，给容器挂 ID 材质——子级
 ## Line2D/Polygon2D 无自备材质时继承，整组统一进同一 ID。
 static func _assign_ids(rig: Node) -> void:
+	# 全部零件同一 ID：is_adjacent(a==a)=true → 内部任何重叠永不出线，
+	# 白描边只画整体剪影外轮廓（创始人定稿口径：内部无任何描边）
 	for container in _iter_limb_containers(rig):
-		var bone := _find_bone_ancestor(container)
-		var part_id: int = P_MISC
-		if bone != null:
-			part_id = BONE_GROUP.get(String(bone.name), P_MISC)
 		var mat := ShaderMaterial.new()
 		mat.shader = ID_SHADER
-		mat.set_shader_parameter("part_id", part_id)
+		mat.set_shader_parameter("part_id", P_TORSO)
 		(container as CanvasItem).material = mat
 
 
@@ -105,37 +98,17 @@ static func _find_bone_ancestor(node: Node) -> Bone2D:
 	return null
 
 
-## 肩甲补丁：体色小圆盘挂双臂骨骼原点（肩关节），part_id=P_SHOULDER。
-## 与躯干、双臂都相邻 → 关节处融合无分隔线；手臂与腹部交叉处仍画线。
-## 体色读现行填充色常量（与骨架 DEFAULT_BODY 同源）。
-static func _create_shoulder_patches(rig: Node) -> void:
-	const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
-	var color: Color = Skeleton.DEFAULT_BODY
-	for arm_path in ["upper_arm_outer", "upper_arm_inner"]:
-		var arm := rig.get_node_or_null(NodePath(arm_path)) as Bone2D
-		if arm == null:
-			continue
-		var patch := Polygon2D.new()
-		patch.name = "ShoulderPatch"
-		var pts := PackedVector2Array()
-		for i in 20:
-			var a := TAU * float(i) / 20.0
-			pts.append(Vector2(cos(a), sin(a)) * SHOULDER_PATCH_RADIUS)
-		patch.polygon = pts
-		patch.color = color
-		var mat := ShaderMaterial.new()
-		mat.shader = ID_SHADER
-		mat.set_shader_parameter("part_id", P_SHOULDER)
-		patch.material = mat
-		arm.add_child(patch)
+## 隐藏每段肢体的自备描边层（stroke 盒含 tip_arc）：内部不允许任何描边，
+## 轮廓由 Outline Pass 的外轮廓白描边独自承担。
+static func _hide_stroke_layers(rig: Node) -> void:
+	for container in _iter_limb_containers(rig):
+		var stroke := (container as Node).get_node_or_null("stroke")
+		if stroke is CanvasItem:
+			(stroke as CanvasItem).visible = false
 
 
 static func _build_adjacency_texture() -> ImageTexture:
+	# 全融合口径：全零表（全部零件同 ID，is_adjacent 走 a==b 短路）
 	var img := Image.create(16, 16, false, Image.FORMAT_R8)
 	img.fill(Color(0.0, 0.0, 0.0, 1.0))
-	for pair in ADJACENCY:
-		var a: int = pair[0]
-		var b: int = pair[1]
-		img.set_pixel(a, b, Color(1.0, 0.0, 0.0, 1.0))
-		img.set_pixel(b, a, Color(1.0, 0.0, 0.0, 1.0))
 	return ImageTexture.create_from_image(img)

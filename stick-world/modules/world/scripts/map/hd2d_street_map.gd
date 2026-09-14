@@ -75,6 +75,9 @@ func _ready() -> void:
 	# 注册 2D 特效坐标重映射器（FxLibrary.remap_pos 读此组）：HD-2D 图的地面
 	# 受俯角前缩，飘字/粒子按 2D y 直绘会飘在半空，须压到 3D 投影同一地面线
 	add_to_group("fx_pos_remapper")
+	# 注册城门引导路由器（BehaviorHarvest 读此组）：村民采集直线 steering 遇
+	# 城墙时，经 gate_steer_point 引导从门洞出/入城
+	add_to_group("gate_router")
 	_hd = _HD2D_WORLD_SCENE.instantiate()
 	_hd.name = "HD2DWorld"
 	if not layout_name.is_empty():
@@ -219,17 +222,17 @@ func wants_villager_npcs() -> bool:
 
 
 ## 村民落脚点（按主街语义分配，配比 professions：铁匠1/伐木3/矿工3/待业3）：
-## 0 号 = 露天铁砧旁（铁匠），1~6 = 西森林带资源点旁（伐木/矿工），
-## 7~9 = 街市/东段（待业闲逛）。
+## 0 号 = 露天铁砧旁（铁匠），1~6 = 西城门内侧（伐木/矿工由此出城去墙外
+## 森林带劳作，采集引导走 gate_steer_point），7~9 = 街市/东段（待业闲逛）。
 func get_npc_spawn_points() -> Array:
 	var pts: Array = [
 		Vector2(-16.6 * CELL_PX, 1010.0),  # 铁砧旁（前方路面，避铁砧碰撞带）
-		Vector2(-61.0 * CELL_PX, 1030.0),  # 森林带资源点前方路面
-		Vector2(-57.5 * CELL_PX, 1040.0),
-		Vector2(-53.5 * CELL_PX, 1020.0),
-		Vector2(-49.5 * CELL_PX, 1045.0),
-		Vector2(-46.0 * CELL_PX, 1030.0),
-		Vector2(-43.5 * CELL_PX, 1050.0),
+		Vector2(-55.0 * CELL_PX, 1010.0),  # 西城门内侧（出城砍树/采矿）
+		Vector2(-52.0 * CELL_PX, 1040.0),
+		Vector2(-48.5 * CELL_PX, 1020.0),
+		Vector2(-45.0 * CELL_PX, 1050.0),
+		Vector2(-41.5 * CELL_PX, 1030.0),
+		Vector2(-38.0 * CELL_PX, 1050.0),
 		Vector2(-6.0 * CELL_PX, 1000.0),   # 市集广场
 		Vector2(2.0 * CELL_PX, 1030.0),
 		Vector2(30.0 * CELL_PX, 990.0),    # 谷仓前
@@ -250,6 +253,30 @@ func remap_fx_pos(pos: Vector2) -> Vector2:
 		return pos
 	var k: float = float(_hd.get_ground_squash())
 	return Vector2(pos.x, WALK_FRONT_Y - (WALK_FRONT_Y - pos.y) * k)
+
+
+## 城门引导点（gate_router 组协议，BehaviorHarvest 消费）：直线 steering 的
+## 采集村民遇城墙时，引导其先走到门洞口（墙内侧 1 格、y 对齐门洞中心），
+## 站到门口后直线不再被门洞带外的墙挡住，恢复直走。返回 Vector2.ZERO =
+## 无需引导（不跨墙线 / 跨越点已落在门洞带内）。
+func gate_steer_point(from: Vector2, to: Vector2) -> Vector2:
+	if _hd == null or not _hd.has_method("get_gates"):
+		return Vector2.ZERO
+	for g: Variant in _hd.get_gates():
+		var gx: float = float(g["x"]) * CELL_PX
+		var y0: float = float(g["y0"])
+		var y1: float = float(g["y1"])
+		if (from.x - gx) * (to.x - gx) >= 0.0:
+			continue   # 不跨这条墙线
+		if absf(to.x - from.x) < 0.001:
+			continue
+		var t: float = (gx - from.x) / (to.x - from.x)
+		var y_cross: float = from.y + (to.y - from.y) * t
+		if y_cross >= y0 and y_cross <= y1:
+			continue   # 正对门洞，直走即穿
+		var side: float = signf(gx - from.x)   # 门洞口在墙的哪一侧（墙内）
+		return Vector2(gx - side * CELL_PX, (y0 + y1) * 0.5)
+	return Vector2.ZERO
 
 
 ## F3 调试可视化：把 HD-2D 碰撞墙并入 walk barrier 绘制（蓝框）

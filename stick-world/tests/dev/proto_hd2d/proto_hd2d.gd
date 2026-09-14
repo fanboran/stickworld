@@ -81,73 +81,83 @@ const PROPS: Array = [
 	{"card": "crate", "x": -30.4, "z": 4.4, "plat": true},
 	{"card": "barrel", "x": -27.6, "z": 4.2, "plat": true},
 	{"card": "sack_stack", "x": -33.2, "z": 5.8, "plat": false},
+	# 西城门塔（tower@-63）前
+	{"card": "lantern", "x": -60.5, "z": 4.6, "plat": true},
 	# 东民居（house@+17）前
 	{"card": "barrel_stand", "x": 20.6, "z": 4.3, "plat": true},
 	{"card": "pot", "x": 23.4, "z": 4.4, "plat": true},
-	# 谷仓（barn@+33 落地面）与酒馆（tavern@+48）前
-	{"card": "haystack", "x": 38.0, "z": 5.6, "plat": false},
-	{"card": "log_pile", "x": 29.8, "z": 6.0, "plat": false},
+	# 谷仓（barn@+31.5 落地面）、风车（windmill@+41）与酒馆（tavern@+50.5）前
+	{"card": "haystack", "x": 36.5, "z": 5.6, "plat": false},
+	{"card": "log_pile", "x": 28.5, "z": 6.0, "plat": false},
 	{"card": "flower_box", "x": 50.6, "z": 4.4, "plat": true},
 	{"card": "bench", "x": 45.5, "z": 5.0, "plat": false},
-	# 东城门塔（gatehouse@+59）前
-	{"card": "wheelbarrow", "x": 55.2, "z": 5.4, "plat": false},
+	# 东城门塔（gatehouse@+61.5）前
+	{"card": "wheelbarrow", "x": 58.5, "z": 5.4, "plat": false},
 ]
 
 ## 自然物（bake_nature.py 从 nature.py 16 类库烘的卡）——野外树木/矿物实装。
-## 摆位语义对齐村A：西侧 -67~-42 是森林带（伐木/采矿劳作区），东段城外散布；
-## `res` = 该点位同步生成的 2D ResourceNode 采集类型（wood/stone/metal/gold/
-## diamond；空串 = 纯景，不可采）。`z` ≥ 5 前景带（玩家从树前走过）。
+## 摆位语义（创始人 2026-09-14：资源点全在城墙外）：西墙外 -95~-67 森林带
+## （伐木/采矿劳作区，村民出西门即达），东墙外 +67~+95 东路野地（B 村方向）；
+## 城内不摆资源点。`res` = 该点位同步生成的 2D ResourceNode 采集类型
+## （wood/stone/metal/gold/diamond；空串 = 纯景，不可采）。`z` ≥ 5 前景带。
 const NATURE_SPOTS: Array = [
-	# 西森林带（村A 左侧森林带语义）
-	{"card": "dead_tree", "x": -66.0, "z": 9.0, "res": ""},
-	{"card": "broadleaf", "x": -62.5, "z": 8.0, "res": "wood"},
-	{"card": "conifer", "x": -58.0, "z": 10.0, "res": "wood"},
-	{"card": "bush", "x": -60.5, "z": 5.5, "res": ""},
-	{"card": "grass_clump", "x": -56.5, "z": 5.0, "res": ""},
-	{"card": "broadleaf_tall", "x": -54.0, "z": 7.5, "res": "wood"},
-	{"card": "mushrooms", "x": -55.5, "z": 5.2, "res": ""},
-	{"card": "iron_outcrop", "x": -51.5, "z": 8.5, "res": "metal"},
-	{"card": "boulder", "x": -49.0, "z": 6.2, "res": "stone"},
-	{"card": "copper_vein", "x": -46.5, "z": 9.5, "res": "metal"},
-	{"card": "stump", "x": -45.0, "z": 5.5, "res": ""},
-	{"card": "gold_vein", "x": -42.5, "z": 8.0, "res": "gold"},
-	# 东段城外散布
-	{"card": "grass_clump", "x": 38.5, "z": 5.0, "res": ""},
-	{"card": "conifer", "x": 40.5, "z": 10.5, "res": "wood"},
-	{"card": "bush", "x": 43.0, "z": 5.5, "res": ""},
-	{"card": "broadleaf", "x": 44.5, "z": 8.5, "res": "wood"},
-	{"card": "stump", "x": 42.5, "z": 5.4, "res": ""},
-	{"card": "crystal_cluster", "x": 50.5, "z": 7.5, "res": "diamond"},
-	{"card": "bush", "x": 52.5, "z": 5.0, "res": ""},
-	{"card": "dead_tree", "x": 60.5, "z": 9.5, "res": ""},
-	{"card": "conifer", "x": 55.5, "z": 11.0, "res": "wood"},
-	{"card": "rubble", "x": 57.0, "z": 5.5, "res": ""},
-	{"card": "iron_outcrop", "x": 63.5, "z": 8.0, "res": "metal"},
-	{"card": "boulder", "x": 66.0, "z": 6.5, "res": "stone"},
+	# 西墙外森林带（伐木/采矿劳作区）
+	{"card": "dead_tree", "x": -92.0, "z": 9.0, "res": ""},
+	{"card": "broadleaf", "x": -88.5, "z": 8.0, "res": "wood"},
+	{"card": "bush", "x": -90.5, "z": 5.5, "res": ""},
+	{"card": "grass_clump", "x": -86.0, "z": 5.0, "res": ""},
+	{"card": "conifer", "x": -83.0, "z": 10.0, "res": "wood"},
+	{"card": "broadleaf_tall", "x": -79.0, "z": 7.5, "res": "wood"},
+	{"card": "mushrooms", "x": -78.0, "z": 5.2, "res": ""},
+	{"card": "iron_outcrop", "x": -75.5, "z": 8.5, "res": "metal"},
+	{"card": "boulder", "x": -73.0, "z": 6.2, "res": "stone"},
+	{"card": "copper_vein", "x": -70.5, "z": 9.5, "res": "metal"},
+	{"card": "stump", "x": -84.5, "z": 5.5, "res": ""},
+	{"card": "gold_vein", "x": -69.5, "z": 8.0, "res": "gold"},
+	# 东墙外东路野地（B 村方向）
+	{"card": "grass_clump", "x": 69.5, "z": 5.0, "res": ""},
+	{"card": "conifer", "x": 71.5, "z": 10.5, "res": "wood"},
+	{"card": "bush", "x": 74.0, "z": 5.5, "res": ""},
+	{"card": "broadleaf", "x": 75.5, "z": 8.5, "res": "wood"},
+	{"card": "stump", "x": 73.5, "z": 5.4, "res": ""},
+	{"card": "crystal_cluster", "x": 81.5, "z": 7.5, "res": "diamond"},
+	{"card": "bush", "x": 83.5, "z": 5.0, "res": ""},
+	{"card": "dead_tree", "x": 89.0, "z": 9.5, "res": ""},
+	{"card": "conifer", "x": 86.0, "z": 11.0, "res": "wood"},
+	{"card": "rubble", "x": 88.0, "z": 5.5, "res": ""},
+	{"card": "iron_outcrop", "x": 90.5, "z": 8.0, "res": "metal"},
+	{"card": "boulder", "x": 92.0, "z": 6.5, "res": "stone"},
 ]
 
 ## 前排主街（2026-09-14 **手工摆** = 村A主场景 InitialBuildingsList 的语义翻译，
-## 规模按创始人指令放大到村A全域（左森林带 -67 → 右城墙 +59），不再随机轮转）：
-##   cottage_w6   @-65  西村外孤屋（野外感起点，村A无对应，补景）
+## 规模按创始人指令放大到村A全域，两端由城墙收口 ±67，不再随机轮转）：
+##   cottage_w6   @-72  西村外孤屋（墙外野外带，落地面）
+##   tower_w6     @-63  西城门塔（城墙转角收边地标）
 ##   house_w16    @-51  西村口民居   ← 村A placeholder@-51
 ##   warehouse_w16@-34  石造仓库     ← 村A stone_warehouse@-34
 ##   smithy1_w8   @-17  铁匠铺       ← 村A smithy_lv1@-17
 ##   guildhall_w12@ +1  宅邸地标     ← 村A manor@+1（v3 无 manor 装配器，取最宏伟行政楼）
 ##   house_w16    @+17  东民居       ← 村A placeholder@+17（spawn_initial_warehouse 补建位）
-##   barn_w12     @+33  田园谷仓（落地面，补景加密）
-##   tavern_w12   @+48  酒馆（补景加密）
-##   gatehouse_w8 @+59  东城门塔（村A右城墙@+59 语义收尾）
-## `z` = 纵深错落（0.4~1.3 台面为主，谷仓落地面）；`door` = 门前短径。
+##   barn_w12     @+31.5 田园谷仓（落地面）
+##   windmill_w6  @+41  风车（田园作坊区加密）
+##   tavern_w12   @+50.5 酒馆
+##   gatehouse_w8 @+61.5 东城门塔（村A右城墙@+59 语义收尾，城墙转角旁）
+## 城区规划（对齐算法村 §4.2 分带）：西段=居住/仓储，中段=市集/行政，东段=作坊/田园；
+## 未进前排的卡种（教堂/法师塔/图书馆/兵营/炼金坊/联排/马厩…共 26 种）全量参与
+## 背景层分带轮转——全城可见、各归其位。
+## `z` = 纵深错落（0.4~1.3 台面为主，谷仓/孤屋落地面）；`door` = 门前短径。
 const FRONT_ROW: Array = [
-	{"card": "cottage_w6", "x": -65.0, "z": 0.9, "door": false},
+	{"card": "cottage_w6", "x": -72.0, "z": 2.4, "door": false},
+	{"card": "tower_w6", "x": -63.0, "z": 0.9, "door": false},
 	{"card": "house_w16", "x": -51.0, "z": 0.7, "door": true},
 	{"card": "warehouse_w16", "x": -34.0, "z": 1.25, "door": false},
 	{"card": "smithy1_w8", "x": -17.0, "z": 0.45, "door": true},
 	{"card": "guildhall_w12", "x": 1.0, "z": 0.85, "door": true},
 	{"card": "house_w16", "x": 17.0, "z": 0.6, "door": true},
-	{"card": "barn_w12", "x": 33.0, "z": 2.4, "door": false},
-	{"card": "tavern_w12", "x": 48.0, "z": 1.0, "door": true},
-	{"card": "gatehouse_w8", "x": 59.0, "z": 0.4, "door": true},
+	{"card": "barn_w12", "x": 31.5, "z": 2.4, "door": false},
+	{"card": "windmill_w6", "x": 41.0, "z": 0.7, "door": false},
+	{"card": "tavern_w12", "x": 50.5, "z": 1.0, "door": true},
+	{"card": "gatehouse_w8", "x": 61.5, "z": 0.4, "door": true},
 ]
 ## 背景层（创始人 2026-09-14 定案）：
 ##   · 第二排基线压**屏幕下 1/3 线**（33.3% 从底）——该线同时是第一排（+地面）
@@ -171,6 +181,22 @@ const BG_TINTS: Array = [
 const BAND_SIDEWALK := Vector2(0.42, 1.95)  # 路肩（建筑根部 → 外缘；细条，占位）
 const PLAT_H := 0.65                        # 人行道台面高（格）≈17px：整面垫高，建筑落在台面上
 const BAND_ROAD := Vector2(1.9, 46.0)       # 道路（角色活动面，铺到画面外）
+
+## 城墙（创始人 2026-09-14：地图两侧到城墙，城镇由城墙收口）。墙板沿纵深方向
+## 立在 ±WALL_X，正交视角下呈"窄竖条 + 墙顶垛口"的转角收边读法；门洞开在路面
+## 纵深带（GATE_Z0~Z1，2D 行走带 y 960~1120 可直穿）。碰撞带与门洞数据经
+## get_solid_rects()/get_gates() 供宿主消费：出城必须走门洞，村民采集由
+## gate_steer_point（gate_router 组协议）引导从门洞穿行。
+const WALL_X := 67.0          # 城墙线（格，±）
+const WALL_T := 1.2           # 墙厚（格）
+const WALL_H := 6.5           # 墙高（格）
+const GATE_Z0 := 8.0          # 门洞纵深带起（格）
+const GATE_Z1 := 14.0         # 门洞纵深带止（格）
+const WALK_FRONT_PX := 1294.0 # 行走带前端 px（宿主 WALK_FRONT_Y；= 688 + 18.93*32）
+## 墙外野外带（格）：西=森林带（伐木/采矿），东=东路（B 村方向）。资源点全在
+## 墙外（创始人：城市内不该有资源点），地图边界随之扩到 ±95 格。
+const WILD_X0 := 67.0         # 野外带内沿（= 城墙线）
+const WILD_X1 := 95.0         # 野外带外沿（= 地图边界）
 ## 建筑接地影的 z 区间**必须整段落在路肩之外**（z ≥ 2.0）：
 ## 影和路肩都是贴地水平面，z 区间一旦重叠，深度值必然相等 → z-fighting。
 const BSHADOW_Z := 3.3
@@ -459,7 +485,25 @@ func get_solid_rects() -> Array:
 		out.append([cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0])
 	for r in _prop_solids:
 		out.append(r)
+	# 城墙碰撞带（±墙线，门洞带 y 960~1120 留空）：墙沿纵深贯行走带，
+	# 出城必须走门洞（村民由宿主 gate_steer_point 引导，玩家自行穿行）
+	var wx: float = _wall_x()
+	for sx: float in [-1.0, 1.0]:
+		var wx0: float = sx * wx - WALL_T * 0.5
+		var wx1: float = sx * wx + WALL_T * 0.5
+		out.append([wx0, wx1, 688.0, 688.0 + GATE_Z0 * 32.0])
+		out.append([wx0, wx1, 688.0 + GATE_Z1 * 32.0, WALK_FRONT_PX])
 	return out
+
+
+## 城门洞表（x 格 / y px 带）——宿主 gate_steer_point 引导村民出城用
+func get_gates() -> Array:
+	var gy0: float = 688.0 + GATE_Z0 * 32.0
+	var gy1: float = 688.0 + GATE_Z1 * 32.0
+	return [
+		{"x": -_wall_x(), "y0": gy0, "y1": gy1},
+		{"x": _wall_x(), "y0": gy0, "y1": gy1},
+	]
 
 
 func _median(arr: Array) -> float:
@@ -809,21 +853,29 @@ func _build_world() -> void:
 	_ground_root.add_child(fb_mi)
 	_add_sky_backdrop()                   # 原 2D 天空贴图（远山/树线）立于背景之后
 	_add_platform()                       # 人行道台面（三段：中石板/两侧夯土+交接条）+ 台肩长条石
+	_build_walls()                        # 城墙转角收边 + 门洞（碰撞走 get_solid_rects）
 	_add_width_guides()                   # 建筑宽度辅助线（--debug 才显示）
 	_add_horizon_guides()                 # 1/3 线（橙）+ 第三排基线（绿）（--debug 才显示）
 	for dx in _door_path_xs:
 		_add_door_path(float(dx), 3.6)    # 门前短径（楼脚→台肩→路面）
-	_add_ground_plane("band_road_stone_128.png", BAND_ROAD.x, BAND_ROAD.y,
-		0.02, 10.0, Color(0.86, 0.89, 0.96))    # 道路：偏冷深石（与台面拉开）
+	# 道路只铺城内（±墙线）；墙外是野外带——夯土调草灰绿（西森林带）/土黄
+	# （东大道），路面 y 抬 0.02 防与兜底大地皮 z-fight
+	var wx: float = _wall_x()
+	_add_ground_plane_at("band_road_stone_128.png", 0.0, wx * 2.0,
+		BAND_ROAD.x, BAND_ROAD.y, 0.02, 10.0, Color(0.86, 0.89, 0.96))
+	_add_ground_plane_at("rammed_earth_128.png", -(wx + 14.0), 28.0,
+		0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.68, 0.74, 0.54))
+	_add_ground_plane_at("rammed_earth_128.png", (wx + 14.0), 28.0,
+		0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.78, 0.74, 0.60))
 
 	# --- 灯笼点光源（暖光；让"真 3D 光照"这条线可验证）---
 	_lamp_root = Node3D.new()
 	_lamp_root.name = "Lamps"
 	add_child(_lamp_root)
-	# 沿街每 8.5 格一盏，铺满村A全域街长（相机横移后夜灯不缺位）
-	for i in 21:
+	# 沿街每 8.5 格一盏，铺满城内街长（城墙收口后灯不越界）
+	for i in 15:
 		var l := OmniLight3D.new()
-		l.position = Vector3(-85.0 + float(i) * 8.5, 2.5, 4.2)
+		l.position = Vector3(-59.25 + float(i) * 8.5, 2.5, 4.2)
 		l.light_color = Color(1.0, 0.63, 0.30)
 		l.light_energy = 1.6
 		l.omni_range = 9.5
@@ -1018,12 +1070,13 @@ func _place_rows() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260914
 	# 主题组合段（创始人 2026-09-14：背景种类要多、要有好看的组合，不要高重复轮转）：
-	#   西段=教堂天际线（大教堂/礼拜堂/塔）· 中段=市集街屋（酒馆/商铺/联排）
-	#   东段=田园作坊（谷仓/马厩/草棚/铁匠）——卡按楼所在 x 段从池里顺位取，防邻重
+	#   西段=教堂/法师塔天际线 · 中段=市集街屋 · 东段=田园作坊——卡按楼所在 x 段
+	#   从池里顺位取，防邻重；26 种卡全量入池（各归城区），背景层限界随城墙收口
+	#   （背景楼群只在城内 ±65，墙外是野外天空）
 	var bands := [
-		{"x0": -104.0, "x1": -16.0, "pool": ["cathedral_w16", "tower_w6", "house_w8", "guildhall_w12", "tower_w6", "house_w16"]},
-		{"x0": -16.0, "x1": 16.0, "pool": ["shop_w8", "bakery_w8", "house_w8", "tower_w6", "tavern_w12", "townhouse_w12"]},
-		{"x0": 16.0, "x1": 104.0, "pool": ["barn_w12", "stable_w12", "cottage_w6", "gatehouse_w8", "smithy1_w8", "cottage_w6"]},
+		{"x0": -65.0, "x1": -16.0, "pool": ["cathedral_w16", "tower_w6", "house_w8", "guildhall_w12", "mage_tower_w8", "library_w12", "house_w16", "townhouse_w12", "alchemy_w8"]},
+		{"x0": -16.0, "x1": 16.0, "pool": ["shop_w8", "bakery_w8", "house_w8", "tower_w6", "tavern_w12", "townhouse_w12", "rowhouse_w12", "library_w12"]},
+		{"x0": 16.0, "x1": 65.0, "pool": ["barn_w12", "stable_w12", "cottage_w6", "hayloft_w8", "smithy2_w8", "smithy3_w8", "smithy4_w12", "shelter_w6", "barracks_w12", "windmill_w6", "rowhouse_w12"]},
 	]
 	var band_cursor := [0, 0, 0]
 	var _pick_in_band := func(x: float, room: float) -> String:
@@ -1056,8 +1109,8 @@ func _place_rows() -> void:
 				occ.append([cx2 - w2 * 0.5, cx2 + w2 * 0.5])
 		elif li == 0:
 			# bg1 自由铺：楼 + 2~3.5 格缝的节奏（根部被前排挡住，楼身从前排楼顶上露出）
-			var gx := -104.0
-			while gx < 104.0:
+			var gx := -65.0
+			while gx < 65.0:
 				var card: String = str(_pick_in_band.call(gx, 999.0))
 				if card == "":
 					card = "house_w8"
@@ -1071,7 +1124,7 @@ func _place_rows() -> void:
 			# bg2/bg3 吸附前层缝：每条缝中心放一栋楼（从缝里露出楼身）。
 			# 本层自身保持 ≥1 格缝（给再后一层插）；放不下的缝放弃（末层补洞兜底）。
 			var last_x1 := -999.0
-			for g in _gaps(prev_slots, -104.0, 104.0):
+			for g in _gaps(prev_slots, -65.0, 65.0):
 				var g0: float = float(g[0])
 				var g1: float = float(g[1])
 				if g1 - g0 < 1.0:
@@ -1090,7 +1143,7 @@ func _place_rows() -> void:
 			if li >= 1:
 				# bg2/bg3 职责 = 遮死中景与地平线：吸附放不下的层再补大洞（近贴 0.6 格缝）。
 				# 阈值 9.8 = 库里最小画面宽 cottage_w6(9.1) + 0.6 缝，更窄的洞放不下任何卡。
-				for g in _gaps(occ, -104.0, 104.0):
+				for g in _gaps(occ, -65.0, 65.0):
 					var g0: float = float(g[0])
 					var g1: float = float(g[1])
 					while g1 - g0 > 9.8:
@@ -1181,12 +1234,12 @@ func _add_platform() -> void:
 	# 人行道台面（创始人 2026-09-14：路肩是**城中心专属**，城边是土路）：
 	#   中段（±28 格）= 石板台面 + 石路肩镶边（城中心）；
 	#   两侧 = 夯土台面 + 土坎镶边（近城边），材质在 ±28 格处交接。
-	#   街长铺到村A全域 ±67（2026-09-14 规模放大），夯土段随之铺到 ±70。
+	#   台面/镶边只铺城内（±WALL_X 城墙收口），墙外是野地。
 	_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
-	_add_ground_plane_at("rammed_earth_128.png", -66.0, 76.0,
+	_add_ground_plane_at("rammed_earth_128.png", -47.5, 39.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
-	_add_ground_plane_at("rammed_earth_128.png", 66.0, 76.0,
+	_add_ground_plane_at("rammed_earth_128.png", 47.5, 39.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
 	# 石↔土交接条（gtx 手工收边件，压在交接线上）
 	_add_decal("transitions/gtx_brick_gravel_road_v1.png", -28.0, PLAT_H + 0.008,
@@ -1195,8 +1248,8 @@ func _add_platform() -> void:
 		Vector2(4.8, 1.55))
 	# 台肩镶边：中段石条 / 两侧土条（方形截面，高=深=台面高）
 	_kerb_run(-28.0, 28.0, "band_kerb_stone")
-	_kerb_run(-104.0, -28.0, "band_kerb_earth")
-	_kerb_run(28.0, 104.0, "band_kerb_earth")
+	_kerb_run(-_wall_x(), -28.0, "band_kerb_earth")
+	_kerb_run(28.0, _wall_x(), "band_kerb_earth")
 
 
 ## 原天空贴图剪影板：复用 2D 游戏的 assets/sky/*（SkyDecor 同源），两张不透明
@@ -1242,6 +1295,78 @@ func _add_sky_backdrop() -> void:
 
 
 ## 贴地 decal：单张 PNG 平铺一个 PlaneMesh（贴图原比例由调用者给世界尺寸）。
+## 墙线取值（格）：手摆主街 = WALL_X；布局驱动（算法村）= 布局半宽
+## （city_layout §4.5 城墙收口随街宽）。
+func _wall_x() -> float:
+	if not _layout.is_empty():
+		var w: float = get_layout_width()
+		if w > 8.0:
+			return w * 0.5
+	return WALL_X
+
+
+## 城墙转角收边（§4.5）：±墙线立石墙板（沿纵深方向，正交视角下呈窄竖条
+## + 墙顶垛口），门洞开在路面纵深带 GATE_Z0~Z1——门柱加厚、叠涩内挑、横梁
+## 过顶组成"门楼"读法（深一档石材与墙面拉开），出城从门洞直穿。
+func _build_walls() -> void:
+	var wx: float = _wall_x()
+	var mat := _wall_material(Color(0.85, 0.83, 0.79))
+	var pmat := _wall_material(Color(0.62, 0.60, 0.57))
+	var root := Node3D.new()
+	root.name = "CityWalls"
+	add_child(root)
+	for sx: float in [-1.0, 1.0]:
+		# 两段墙板夹出门洞（后段从建筑线后起，前段铺到行走带前缘外）
+		for seg: Variant in [[-1.0, GATE_Z0], [GATE_Z1, 19.5]]:
+			var z0: float = float(seg[0])
+			var z1: float = float(seg[1])
+			_box(root, mat, Vector3(WALL_T, WALL_H, z1 - z0),
+					Vector3(sx * wx, WALL_H * 0.5, (z0 + z1) * 0.5))
+			# 墙顶垛口
+			var z: float = z0 + 0.7
+			while z < z1 - 0.4:
+				_box(root, mat, Vector3(WALL_T, 0.55, 0.85),
+						Vector3(sx * wx, WALL_H + 0.275, z))
+				z += 1.7
+		# 门楼件：门柱（加厚微高出墙头）+ 叠涩（洞内两壁逐级内挑）
+		# + 横梁（洞底 5.0 格，行人净空足）+ 梁上垛口
+		for pz: float in [GATE_Z0 - 0.35, GATE_Z1 + 0.35]:
+			_box(root, pmat, Vector3(WALL_T + 0.55, WALL_H + 0.7, 0.7),
+					Vector3(sx * wx, (WALL_H + 0.7) * 0.5, pz))
+		for cz: float in [GATE_Z0 + 0.45, GATE_Z1 - 0.45]:
+			_box(root, pmat, Vector3(WALL_T + 0.35, 1.2, 0.55),
+					Vector3(sx * wx, 4.4, cz))
+		_box(root, pmat, Vector3(WALL_T + 0.3, WALL_H - 5.0, GATE_Z1 - GATE_Z0),
+				Vector3(sx * wx, 5.0 + (WALL_H - 5.0) * 0.5, (GATE_Z0 + GATE_Z1) * 0.5))
+		for mz: float in [GATE_Z0 + 0.9, (GATE_Z0 + GATE_Z1) * 0.5, GATE_Z1 - 0.9]:
+			_box(root, pmat, Vector3(WALL_T + 0.3, 0.5, 0.8),
+					Vector3(sx * wx, WALL_H + 0.25, mz))
+
+
+## 墙体石材（路肩石贴图三平面投射，免逐面 UV；tint 分档）
+func _wall_material(tint: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	var tex := _tex_abs(_temp + GROUND_DIR + "band_shoulder_stone_128.png")
+	if tex != null:
+		m.albedo_texture = tex
+		m.uv1_triplanar = true
+		m.uv1_world_triplanar = true
+		m.uv1_scale = Vector3(0.4, 0.4, 0.4)
+	m.albedo_color = tint
+	m.roughness = 0.92
+	return m
+
+
+func _box(root: Node3D, mat: Material, size: Vector3, pos: Vector3) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.position = pos
+	mi.material_override = mat
+	root.add_child(mi)
+
+
 func _add_decal(png_rel: String, x: float, y: float, size: Vector2) -> void:
 	var t := _tex_abs(_temp + GROUND_DIR + png_rel)
 	if t == null:
@@ -1591,10 +1716,11 @@ func _run_shots(which: String) -> void:
 				await _shot("hd2d_e_night")
 			"s":
 				# 主街巡览（2026-09-14 手工摆+街长扩到村A全域的验收档）：
-				# 沿街四机位横移（set_cam_x），各出一张白天最终观感图
+				# 沿街机位横移（set_cam_x），含两端城墙/门洞与墙外野外带，
+				# 各出一张白天最终观感图
 				_apply_light("day")
 				_apply_stage("c")
-				for cam_x: float in [-40.0, -12.0, 20.0, 50.0]:
+				for cam_x: float in [-75.0, -55.0, -12.0, 20.0, 50.0, 62.0]:
 					set_cam_x(cam_x)
 					await _settle(1.2)
 					await _shot("hd2d_s_street_x%d" % int(cam_x))

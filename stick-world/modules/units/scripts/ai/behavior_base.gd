@@ -72,3 +72,18 @@ func face_position(pos: Vector2) -> void:
 		return
 	if entity.has_method("face_towards"):
 		entity.face_towards(pos)
+
+
+# ─────────────────────────── 城墙门洞引导（gate_router 协议）──────────────────────────
+
+## 直线 steering 遇城墙时的门洞引导（HD-2D 主街等带墙图）：向所在图的
+## gate_router（MapBase 侧 gate_steer_point）要一个门洞口引导点，先绕到门口
+## 再直穿。无路由器/不跨墙线/跨越点已落在门洞带内时原样返回 target。
+func gate_steered_target(target: Vector2) -> Vector2:
+	if entity == null or not is_instance_valid(entity) or entity.get_tree() == null:
+		return target
+	var router: Node = entity.get_tree().get_first_node_in_group("gate_router")
+	if router == null or not router.has_method("gate_steer_point"):
+		return target
+	var wp: Vector2 = router.gate_steer_point(entity.global_position, target)
+	return target if wp == Vector2.ZERO else wp

@@ -179,6 +179,14 @@ func _update_travel() -> void:
 		if not _locate():
 			finish()
 		return
+	# 城墙门洞引导：直线撞墙时先绕到门洞口（gate_router 协议），站到门口后
+	# 直线穿门恢复直走——墙外资源点的劳作往返都经此出/入城
+	var steer: Vector2 = gate_steered_target(target)
+	if steer != target:
+		if entity.global_position.distance_to(steer) > ARRIVE_THRESHOLD:
+			if entity.has_method("ai_move"):
+				entity.ai_move((steer - entity.global_position).normalized())
+			return
 	var dist: float = entity.global_position.distance_to(target)
 	if dist > ARRIVE_THRESHOLD:
 		if entity.has_method("ai_move"):

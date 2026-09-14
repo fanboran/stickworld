@@ -311,15 +311,18 @@ func _screen_to_world(screen_pos: Vector2) -> Vector2:
 # ─────────────────────────────── 绘制 ────────────────────────────────
 
 func _draw() -> void:
-	# possessed 玩家脚下的白色四角线框（原 PossessionIndicator 职责归并于此）
+	# possessed 玩家脚下的白色四角线框（原 PossessionIndicator 职责归并于此）。
+	# 脚底 = 实体原点向下 foot_offset（Entity 的 global_position 是腰部参照，
+	# Collider 是居中的碰撞箱——两者在 2D 卷轴图近似贴脚，在 HD-2D 图上
+	# foot 修正后都会偏出脚底，必须显式下移 foot_offset）。
 	var p: Node2D = _get_possessed_entity()
 	if p != null and is_instance_valid(p):
-		var foot: Vector2 = p.global_position
 		var col_w: float = 32.0
 		var col: CollisionShape2D = p.get_node_or_null("Collider") as CollisionShape2D
 		if col != null and col.shape is RectangleShape2D:
-			foot = col.global_position
 			col_w = (col.shape as RectangleShape2D).size.x
+		var foot_off: float = float(p.get("foot_offset")) if "foot_offset" in p else 0.0
+		var foot: Vector2 = p.global_position + Vector2(0.0, foot_off)
 		_draw_corner_bracket(get_viewport().get_canvas_transform() * foot,
 				col_w * 0.5 + POSSESSED_EXPAND_X, POSSESSED_HALF_H, POSSESSED_ARM, POSSESSED_COLOR)
 	# 拖拽中的选中框

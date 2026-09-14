@@ -45,6 +45,7 @@ func _ready() -> void:
 	# [SUSPENDED 2026-09-14] 原 2D 设施宿主（村A）已随 HD-2D 化删除。
 	# 建造循环：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
 	print("[SUSPENDED] ", "建造循环")
+	print("=== 测试汇总: 0 / 0 通过（断言 0 次）===  [SUSPENDED 跳过]")
 	get_tree().quit(0)
 	_runner = TestRunner.new()
 	_runner.add_test("建造: 未设地图时开工返回失败", _test_no_map, true)

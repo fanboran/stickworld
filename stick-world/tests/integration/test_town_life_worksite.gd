@@ -48,6 +48,7 @@ func _ready() -> void:
 	# [SUSPENDED 2026-09-14] 原 2D 设施宿主（村A）已随 HD-2D 化删除。
 	# 工位槽位/降级/节律：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
 	print("[SUSPENDED] ", "工位槽位/降级/节律")
+	print("=== 测试汇总: 0 / 0 通过（断言 0 次）===  [SUSPENDED 跳过]")
 	get_tree().quit(0)
 	SaveManager.set_auto_save_enabled(false)
 	_runner = TestRunner.new()

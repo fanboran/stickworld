@@ -251,11 +251,12 @@ func _run_phase_3_tests() -> void:
 	_runner.assert_equal(sl.get_current_map_type(), WorldAPI.MapType.VILLAGE, "类型应为 VILLAGE")
 	_runner.end_test()
 
-	_runner.begin_test("村落B: VillageMap 实例")
+	_runner.begin_test("村落B: HD-2D 村实例")
 	var map := _get_current_map()
 	_runner.assert_true(map != null, "地图应存在")
 	if map:
-		_runner.assert_true(map is ScriptVillageMap, "地图应为 VillageMap")
+		_runner.assert_true(map.has_method("get_layout_width") or map is ScriptVillageMap,
+				"村B 应为 HD-2D 布局村（或 2D 村图）")
 	_runner.end_test()
 
 	_runner.begin_test("村落B: 子节点齐全")
@@ -275,14 +276,14 @@ func _run_phase_3_tests() -> void:
 			_runner.assert_true(has_left, "应有 ExitLeft 触发器")
 	_runner.end_test()
 
-	_runner.begin_test("村落B: 玩家已生成（左侧入口）")
+	_runner.begin_test("村落B: 玩家已生成（街中心出生点）")
 	if map:
 		var player: Node2D = map.get_possessed_entity()
 		_runner.assert_true(player != null, "应有玩家附身实体")
-		if player:
-			var expect_left_b: float = float(map.map_left) + 150.0
-			_runner.assert_true(absf(player.global_position.x - expect_left_b) < 10.0,
-					"玩家应在左侧入口附近 (x≈%d)" % int(expect_left_b))
+		if player and map.has_method("get_spawn_point"):
+			var sp: Vector2 = map.get_spawn_point()
+			_runner.assert_true(absf(player.global_position.x - sp.x) < 10.0,
+					"玩家应在出生点附近 (x≈%d)" % int(sp.x))
 	_runner.end_test()
 
 	_runner.begin_test("完整链路: EventBus 旅行信号累计")

@@ -1,0 +1,223 @@
+{
+ "name": "village_b",
+ "tier": "village",
+ "seed": 611036,
+ "cell_w": 32,
+ "width_cells": 96,
+ "buildings": [
+  {
+   "card": "smithy2_w8",
+   "def": "smithy2",
+   "x": -19.464285714285715,
+   "cells": 8,
+   "row": 0,
+   "door": false,
+   "zone": "artisan",
+   "wall_mat": "plank",
+   "roof_mat": "plank"
+  },
+  {
+   "card": "house_w8",
+   "def": "house",
+   "x": -41.91428571428572,
+   "cells": 8,
+   "row": 0,
+   "door": false,
+   "zone": "residential",
+   "wall_mat": "plaster",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "cottage_w6",
+   "def": "cottage",
+   "x": -30.783035714285717,
+   "cells": 6,
+   "row": 0,
+   "door": false,
+   "zone": "residential",
+   "wall_mat": "plaster",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "shop_w8",
+   "def": "shop",
+   "x": 2.0857142857142836,
+   "cells": 8,
+   "row": 0,
+   "door": false,
+   "zone": "market",
+   "wall_mat": "wood",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "stable_w12",
+   "def": "stable",
+   "x": 17.466964285714283,
+   "cells": 8,
+   "row": 0,
+   "door": false,
+   "zone": "artisan",
+   "wall_mat": "wood",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "cottage_w6",
+   "def": "cottage",
+   "x": 31.441964285714285,
+   "cells": 6,
+   "row": 0,
+   "door": false,
+   "zone": "residential",
+   "wall_mat": "plaster",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "shelter_w6",
+   "def": "shelter",
+   "x": 41.166964285714286,
+   "cells": 8,
+   "row": 0,
+   "door": false,
+   "zone": "production",
+   "wall_mat": "timber",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "tower_w6",
+   "def": "chapel",
+   "x": 10.860001046316963,
+   "cells": 8,
+   "row": 1,
+   "door": false,
+   "zone": "core",
+   "wall_mat": "stone",
+   "roof_mat": "slate"
+  },
+  {
+   "card": "shop_w8",
+   "def": "shop",
+   "x": 0.2587498256138394,
+   "cells": 8,
+   "row": 1,
+   "door": false,
+   "zone": "market",
+   "wall_mat": "wood",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "smithy1_w8",
+   "def": "smithy1",
+   "x": -12.278750174386161,
+   "cells": 6,
+   "row": 1,
+   "door": false,
+   "zone": "artisan",
+   "wall_mat": "timber",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "cottage_w6",
+   "def": "cottage",
+   "x": -23.41000017438616,
+   "cells": 6,
+   "row": 1,
+   "door": false,
+   "zone": "residential",
+   "wall_mat": "plaster",
+   "roof_mat": "thatch"
+  },
+  {
+   "card": "barn_w12",
+   "def": "barn",
+   "x": -37.385000174386164,
+   "cells": 8,
+   "row": 1,
+   "door": false,
+   "zone": "production",
+   "wall_mat": "plank",
+   "roof_mat": "plank"
+  },
+  {
+   "card": "smithy2_w8",
+   "def": "smithy2",
+   "x": 24.61499982561384,
+   "cells": 8,
+   "row": 1,
+   "door": false,
+   "zone": "artisan",
+   "wall_mat": "plank",
+   "roof_mat": "plank"
+  },
+  {
+   "card": "house_w8",
+   "def": "house",
+   "x": 37.33999982561384,
+   "cells": 8,
+   "row": 1,
+   "door": false,
+   "zone": "residential",
+   "wall_mat": "plaster",
+   "roof_mat": "thatch"
+  }
+ ],
+ "props": [
+  {
+   "card": "market_stall",
+   "x": -10.0,
+   "z": 4.6,
+   "plat": false,
+   "row": 0
+  },
+  {
+   "card": "market_stall",
+   "x": 11.0,
+   "z": 4.6,
+   "plat": false,
+   "row": 1
+  },
+  {
+   "card": "barrel",
+   "x": -41.5,
+   "z": 5.2,
+   "plat": false,
+   "row": 0
+  },
+  {
+   "card": "crate",
+   "x": -27.5,
+   "z": 5.2,
+   "plat": false,
+   "row": 0
+  },
+  {
+   "card": "haystack",
+   "x": -14.5,
+   "z": 5.2,
+   "plat": false,
+   "row": 0
+  },
+  {
+   "card": "cart",
+   "x": 0.5,
+   "z": 5.2,
+   "plat": false,
+   "row": 0
+  },
+  {
+   "card": "barrel",
+   "x": 41.5,
+   "z": 5.2,
+   "plat": false,
+   "row": 0
+  }
+ ],
+ "trees": [
+  {
+   "card": "conifer",
+   "x": 12.5,
+   "z": 5.5,
+   "res": "wood"
+  }
+ ],
+ "skipped": []
+}

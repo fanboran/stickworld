@@ -39,7 +39,8 @@ const _InitialContentScript: GDScript = preload("res://modules/world/scripts/set
 const _WorldLoadingOverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/world_loading_overlay.gd")
 
 ## 第二个测试村落地图场景（阶段 0.8 多场景衔接）
-const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/maps/village_b.tscn")
+## 村B = 第一个 city_layout 算法驱动的 HD-2D 村（2026-09-14 全面 HD-2D 化）
+const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_village_b.tscn")
 ## 道路地图场景（阶段 0.8 村落间道路）
 const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/road_a_b.tscn")
 ## 测试大建筑内部地图场景（阶段 0.9.5 传送切换）

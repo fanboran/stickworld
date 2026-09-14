@@ -42,6 +42,10 @@ const HOUR_NIGHT_FALL := 19.0
 ## 村民闲逛锚（ai_controller.wander 用；街中心 = 出生点）
 var town_center_world_x: float = 0.0
 
+## 布局驱动模式（city_layout 算法村）：非空时 3D 场景按
+## tex/hd2d_layouts/<名>.json 摆街；空 = 手摆主街。村B 等算法村用。
+@export var layout_name: String = ""
+
 ## 前景层（interaction_controller 交互提示挂这里；同 village_map 的暴露方式）
 @onready var foreground_layer: Node2D = get_node_or_null("ForegroundLayer") as Node2D
 
@@ -64,7 +68,10 @@ func _ready() -> void:
 	super()
 	_hd = _HD2D_WORLD_SCENE.instantiate()
 	_hd.name = "HD2DWorld"
+	if not layout_name.is_empty():
+		_hd.set("layout_name", layout_name)
 	add_child(_hd)
+	_apply_layout_bounds()
 	_build_solid_bodies(_hd)
 	_spawn_resource_nodes(_hd)
 	_build_exit_triggers()
@@ -80,8 +87,21 @@ func _process(_delta: float) -> void:
 
 
 func get_spawn_point() -> Vector2:
-	# 街中心前景：玩家落在画面中下（3D 街景可见区内），正对宅邸地标
+	# 街中心前景：玩家落在画面中下（3D 街景可见区内）。
+	# 布局驱动模式与手摆模式都以 0 为街中心（导出器已把布局 x 中心化）。
 	return Vector2(0.0, 1010.0)
+
+
+## 布局驱动模式：按布局街宽收地图边界（±半宽 + 8 格余量），覆盖 tscn 默认值。
+func _apply_layout_bounds() -> void:
+	if layout_name.is_empty() or _hd == null or not _hd.has_method("get_layout_width"):
+		return
+	var w: float = _hd.get_layout_width()
+	if w <= 0.0:
+		return
+	var half_px: float = (w * 0.5 + 8.0) * CELL_PX
+	map_left = -half_px
+	map_right = half_px
 
 
 ## 出生村专属设施（运营仓库/村民 NPC）是否适用本图（GameRoot 门控读）。

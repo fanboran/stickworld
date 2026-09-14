@@ -49,6 +49,7 @@ const PROPS_JSON := "proto_hd2d/props.json"
 const PROP_DIR := "proto_hd2d/props/"
 const NATURE_JSON := "proto_hd2d/nature.json"
 const NATURE_DIR := "proto_hd2d/nature/"
+const LAYOUT_DIR := "proto_hd2d/hd2d_layouts/"   # city_layout 导出的布局 JSON（算法驱动模式）
 const GROUND_DIR := "ground_tiles/"
 
 const CAM_W := 74.0                      # 正交视宽（格）-> 1920 宽下 25.9 px/格
@@ -195,6 +196,8 @@ var _temp := ""
 var _cards: Dictionary = {}
 var _props: Dictionary = {}
 var _nature: Dictionary = {}
+var _layout: Dictionary = {}      # 布局驱动模式的数据（空 = 手摆主街模式）
+var layout_name := ""             # 布局名（--layout= 或地图宿主 set；空 = 手摆主街）
 var _tex_cache: Dictionary = {}
 
 var _env: Environment
@@ -226,7 +229,7 @@ var _bg_base_z := {}            # 背景层 -> 实测卡基线 z（辅助线/底
 var _bg_base_samples: Array = []  # 当前层各卡卡底 z 的采样（层结束取中位数）
 
 var _opts := {
-	"shots": "none", "perf": false, "res": "", "sv": "always",
+	"shots": "none", "perf": false, "res": "", "sv": "always", "layout": "",
 	"char": "blend", "tag": "", "svscale": "2", "flat": false, "debug": false,
 }  # shots 默认 "none" = 静默常驻模式（游戏地图挂载用；probe 出图须显式 --shots=…）
 
@@ -239,9 +242,16 @@ func _ready() -> void:
 	_root = ProjectSettings.globalize_path("res://")
 	_temp = _root + "temp/"
 	_parse_args()
+	if not layout_name.is_empty():
+		_opts["layout"] = layout_name   # 地图宿主注入优先于命令行
 	print("[hd2d] 工程根=", _root)
 	print("[hd2d] 跑法: godot --path stick-world res://tests/dev/proto_hd2d/proto_hd2d.tscn -- --shots=all")
 	_load_cards()
+	if not str(_opts["layout"]).is_empty():
+		_layout = _read_json_rel(LAYOUT_DIR + str(_opts["layout"]) + ".json")
+		if _layout.is_empty():
+			push_error("[hd2d] 布局缺失，退回手摆主街: " + str(_opts["layout"]))
+	print("[hd2d] 模式=", "布局驱动:" + str(_opts["layout"]) if not _layout.is_empty() else "手摆主街")
 	_build_world()
 	if bool(_opts.get("save_scene", false)):
 		# 只存**地面/台肩几何**（_ground_root 子树）——含运行时光栅的角色/后期会把场景撑到几百 MB
@@ -303,6 +313,9 @@ func _parse_args() -> void:
 		elif s.begins_with("--flat="):
 			# --flat=1：关远焦 DOF（辅助线核对版出图用——DOF 满糊会把辅助线一起晕开）
 			_opts["flat"] = s.get_slice("=", 1) != "0"
+		elif s.begins_with("--layout="):
+			# 布局驱动：读 city_layout 导出的布局 JSON 摆街（算法村，如村B）
+			_opts["layout"] = s.get_slice("=", 1)
 		elif s.begins_with("--debug="):
 			# --debug=1：辅助线（网格/紫线/1/3 线/末层基线）——调试模式才出现（创始人口径）
 			_opts["debug"] = s.get_slice("=", 1) != "0"
@@ -335,6 +348,19 @@ func _load_cards() -> void:
 	for c: Variant in _load_meta_json(NATURE_JSON):
 		_nature[str(c["card"])] = c
 	print("[hd2d] 自然物卡 %d 张" % _nature.size())
+
+
+## 读 JSON（Object）：优先烘焙工作区 temp/，缺失回退工程内 tex/ 入库副本。
+func _read_json_rel(rel: String) -> Dictionary:
+	for p: String in [_temp + rel, "res://tests/dev/proto_hd2d/tex/" + rel]:
+		if FileAccess.file_exists(p):
+			var f := FileAccess.open(p, FileAccess.READ)
+			var v: Variant = JSON.parse_string(f.get_as_text())
+			if v is Dictionary:
+				return v
+			push_error("[hd2d] JSON 解析失败: " + p)
+			return {}
+	return {}
 
 
 func _tex_abs(p: String) -> Texture2D:
@@ -479,6 +505,11 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 
 
 func _place_props() -> void:
+	if not _layout.is_empty():
+		for e: Variant in _layout.get("props", []):
+			_spawn_prop(str(e["card"]), float(e["x"]), float(e.get("z", 5.0)),
+					bool(e.get("plat", false)))
+		return
 	for e in PROPS:
 		_spawn_prop(str(e["card"]), float(e["x"]), float(e["z"]), bool(e.get("plat", true)))
 
@@ -486,6 +517,15 @@ func _place_props() -> void:
 ## 自然物卡：与道具同一套卡底贴地落位（全落地面/草地面，不上台面）；
 ## 实心卡（树/巨岩/矿露头）登记碰撞；带 res 的点位登记给宿主生成 ResourceNode。
 func _place_nature() -> void:
+	if not _layout.is_empty():
+		for e: Variant in _layout.get("trees", []):
+			_spawn_nature_card(str(e["card"]), float(e["x"]), float(e.get("z", 5.5)))
+			if str(e.get("res", "")) != "":
+				_res_spawns.append({
+					"pos": Vector2(float(e["x"]) * 32.0, 688.0 + float(e.get("z", 5.5)) * 32.0),
+					"type": str(e["res"]),
+				})
+		return
 	for e in NATURE_SPOTS:
 		var mi := _spawn_nature_card(str(e["card"]), float(e["x"]), float(e["z"]))
 		if mi != null and str(e.get("res", "")) != "":
@@ -536,6 +576,13 @@ func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
 ## 带采集资源的自然物点位（宿主 Hd2dStreetMap 读取后生成 ResourceNode）。
 func get_nature_spawns() -> Array:
 	return _res_spawns
+
+
+## 布局驱动模式的街宽（格）；手摆主街返回 0（宿主用 tscn 边界）
+func get_layout_width() -> float:
+	if not _layout.is_empty():
+		return float(_layout.get("width_cells", 96.0))
+	return 0.0
 
 
 ## 3D 街景横移（宿主按玩家 x 驱动；正交相机，视宽 74 格）
@@ -833,7 +880,18 @@ func _place_rows() -> void:
 	var occ_front := []
 	var rng_f := RandomNumberGenerator.new()
 	rng_f.seed = 20260914
-	for e in FRONT_ROW:
+	# 前排来源：布局驱动（city_layout row0，算法村）或手摆主街 FRONT_ROW
+	var front_list: Array = FRONT_ROW
+	if not _layout.is_empty():
+		front_list = []
+		for b: Variant in _layout.get("buildings", []):
+			if int(b["row"]) != 0:
+				continue
+			# 站位错落由 x 哈希确定（同 seed 同街景）
+			var jitter: float = 0.55 + fposmod(absf(float(b["x"])) * 0.37, 0.7)
+			front_list.append({"card": str(b["card"]), "x": float(b["x"]),
+				"z": jitter, "door": bool(b.get("door", false))})
+	for e in front_list:
 		var card: String = str(e["card"])
 		var cx: float = float(e["x"])
 		var z_off: float = float(e.get("z", 0.6))
@@ -884,7 +942,17 @@ func _place_rows() -> void:
 		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
 		var occ: Array = []
 		var tint: Color = BG_TINTS[li]
-		if li == 0:
+		if li == 0 and not _layout.is_empty():
+			# bg1 = 布局后排（city_layout row>=1，x 由算法分配互不重叠）
+			for b: Variant in _layout.get("buildings", []):
+				if int(b["row"]) < 1:
+					continue
+				var card2: String = str(b["card"])
+				var cx2: float = float(b["x"])
+				var w2 := _cw(card2)
+				_spawn_bg_card(card2, cx2, lz, tint)
+				occ.append([cx2 - w2 * 0.5, cx2 + w2 * 0.5])
+		elif li == 0:
 			# bg1 自由铺：楼 + 2~3.5 格缝的节奏（根部被前排挡住，楼身从前排楼顶上露出）
 			var gx := -104.0
 			while gx < 104.0:
@@ -1365,6 +1433,7 @@ func _settle(sec: float) -> void:
 func _shot(name: String) -> String:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
+	DirAccess.make_dir_recursive_absolute(_temp + "proto_hd2d")
 	var p := _temp + "proto_hd2d/" + name + ".png"
 	var err := img.save_png(p)
 	if err != OK:

@@ -77,6 +77,13 @@ STREET = [
     ("library", 12),
     ("mage_tower", 8),
     ("warehouse", 16),
+    # 2026-09-14 city_layout 算法驱动 HD-2D：布局会排到的 def 补卡
+    ("barracks", 12),
+    ("hayloft", 8),
+    ("smithy2", 8),
+    ("smithy3", 8),
+    ("smithy4", 12),
+    ("windmill", 6),
 ]
 
 #: glow 卡里当作"自发光窗/火"的材质名（其余一律压成纯黑，加色叠加下不可见）

@@ -281,9 +281,29 @@ python probe_city_plan.py                                  # 城市平面图（�
 `hd2d_s_street_x-40.png`（西村口森林带+矿组）/ `hd2d_s_street_x-12.png`（仓库+市集）/ `hd2d_s_street_x20.png`（宅邸+东民居）/ `hd2d_s_street_x50.png`（谷仓+酒馆+城门+水晶簇）/ `verify_hd2d_map.png`（**实机开局**：启动直连主街+玩家白四角框+完整 HUD）/ `hd2d_e_night.png`（夜档窗火）。
 
 **大项登记（下一阶段）**
-1. **城市搬运 HD-2D**（创始人 2026-09-14 指令）：以 `city_layout.py` 的开局城市数据（村档）驱动 HD-2D 场景——建筑卡按布局摆放、火柴人工作场所（铁匠铺前铁匠等）一并搬入；2D 原型中已译未译内容以该轮为准对账。
+1. ~~城市搬运 HD-2D~~ **已完成（第七轮，见下）**。
 2. **后排动态出现逻辑**：后排背景随前排建筑数量自适应出现/消失（游戏运行时规则，接入时实现）。
-3. city_layout 补 8 新 def 入 DEFS（原遗留 4，见 §二已知落差）。
+
+**第七轮（2026-09-14，全部完成）——全面 HD-2D 化第一步：删旧世界 + 算法村**
+
+创始人指令链：①废弃代码与旧场景直接删（Git 历史可找回）；②质疑「测试床=在到不了的地方测试是假测试」成立；③**整个游戏都要变成 HD-2D**（村B 也要）；④「之前你说根据村子规模生成建筑排布的算法做了吗」→ 就是 `city_layout.py`，把它接进游戏；⑤同排建筑重叠 → 算法修正；⑥测试快速跳过，要可玩原型。
+
+1. **旧世界清退 ✔**：删 village_a.tscn（旧主场景）、village_b.tscn（2D 村）、v2 Godot 建筑管线 `tools/building_pipeline/`、拍旧村工具 render_village/snapshot_town、探索产物 proto_hd2d_ground.tscn；road_a_b 西端出口改指主街；map_titles/settings 清旧村条目。
+2. **city_layout 接进游戏 ✔**（大项 1 落地）：
+   - 新增 `tools/blender_buildings/export_city_layout.py`（纯 Python）：`plan_city(tier, seed)` 布局 → HD-2D 布局 JSON（def→卡映射 church→cathedral/plaster_house→house/chapel→tower；market_stall/well→道具层；**同排推挤修正**——布局 x 是墙格位、卡画面含出檐，按画面间隙 ≥0.6 格推挤+质心回正，修创始人指出的同排重叠）；x 中心化（与主街/出生点同坐标系）。
+   - `proto_hd2d.gd` 加**布局驱动模式**（`--layout=<名>` 或宿主 set）：前排=布局 row0、bg1=布局后排（bg2/3 保留插缝补满）、道具/树按布局；手摆 FRONT_ROW 保留为主街模式。
+   - 补烘 6 卡（barracks12/hayloft8/smithy2-3 w8/smithy4 w12/windmill6），卡库 26 张覆盖布局全部 def。
+3. **村B = 第一个算法村 ✔**：`hd2d_village_b.tscn`（Hd2dStreetMap + layout_name="village_b"，village 档 seed 611036 → 14 栋：前排 7+背景 7+道具 7+树 1）；旅行链 主街↔道路↔村B 不变；宿主按布局街宽自适应地图边界。
+4. **测试处置 ✔**（快速跳过裁决）：设施类 7 套（工位/采集/招兵/建造/存档往返/驻军/村功能面）SUSPENDED——2D 设施宿主已删，待「玩法设施 HD-2D 化」后在主街/村B 重建；战斗类 4 套 boot 迁 battlefield（生产可达）；cross_map_travel 改新旅行链断言。
+5. **运行时资产自洽 ✔**：卡元数据 JSON（cards/props/nature/布局）入库 tex/，`_load_cards`/`_read_json_rel` 支持烘焙工作区缺失时回退读取；地面高清源贴图（rammed_earth 等 5 key）入库——**新机器 clone 后无需先跑烘焙即可玩**。
+6. 验证：自检干净；算法村成图 `hd2d_c_final.png`（--layout=village_b）推挤修正后同排零重叠。
+
+**第八轮待办（下一会话第一优先）**
+1. **玩法设施 HD-2D 化立项**：主街/村B 上接 PlacementGrid/兵营/仓库实体（调研⑦「可以 #12」），完成后重建 7 套 SUSPENDED 测试（在生产图上）。
+2. **战场/道路/守城图 HD-2D 化立项**（battlefield 仍 2D）；战斗类测试随迁。
+3. 村B 工作场所（铁匠 NPC 站 smithy2 前等）随设施 HD-2D 化一并搬入（原大项 1 的后半）。
+
+**第七轮验收产物**：`F:\VSCode\game-2\stick-world\temp\proto_hd2d\hd2d_c_final.png`（算法村 village_b 成图）；主街巡览四机位与实机开局图沿用第六轮（`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\`，主工作区重出：`F:\VSCode\game-2\stick-world\temp\proto_hd2d\`）。
 
 **遗留/待反馈**
 - 「屏幕下 1/3 线作为第一排上限」按「第一排(+地面)屏幕区的上边界」执行（前排楼根在下 1/3 区、楼身自然伸入中区）；若创始人本意是「前排楼顶不得过线」需回炉（前排须全改 1 层，与闹市 2~3 层冲突，提请再裁）。

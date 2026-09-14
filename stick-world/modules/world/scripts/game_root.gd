@@ -38,8 +38,6 @@ const _InitialContentScript: GDScript = preload("res://modules/world/scripts/set
 ## audit-exempt: 组合根装配 ui_global 组件，与 system_setup.gd 同性质
 const _WorldLoadingOverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/world_loading_overlay.gd")
 
-## 测试村落地图场景（P0 硬编码）
-const _VILLAGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/village_a.tscn")
 ## 第二个测试村落地图场景（阶段 0.8 多场景衔接）
 const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/maps/village_b.tscn")
 ## 道路地图场景（阶段 0.8 村落间道路）
@@ -70,9 +68,7 @@ const _L1_SETTLEMENT_SCENES: Array[PackedScene] = [
 const _UnitsApiScript: GDScript = preload("res://modules/units/api.gd")
 const _STICKMAN_ENTITY_SCENE: PackedScene = _UnitsApiScript.STICKMAN_ENTITY_SCENE
 
-## 测试村落地图 ID
-const VILLAGE_A_MAP_ID := "village_a"
-## 道路地图 ID（村落 A -> 村落 B）
+## 道路地图 ID（主街 -> 村落 B）
 const ROAD_MAP_ID := "road_a_b"
 ## 第二个测试村落地图 ID
 const VILLAGE_B_MAP_ID := "village_b"
@@ -582,7 +578,6 @@ func _register_default_maps() -> void:
 	if scene_loader == null or not scene_loader.has_method("register_map"):
 		return
 	# 注册地图场景
-	scene_loader.register_map(VILLAGE_A_MAP_ID, _VILLAGE_MAP_SCENE, WorldAPI.MapType.VILLAGE)
 	scene_loader.register_map(ROAD_MAP_ID, _ROAD_MAP_SCENE, WorldAPI.MapType.ROAD)
 	scene_loader.register_map(VILLAGE_B_MAP_ID, _VILLAGE_MAP_B_SCENE, WorldAPI.MapType.VILLAGE)
 	scene_loader.register_map(MEGA_INTERIOR_MAP_ID, _MEGA_INTERIOR_SCENE, WorldAPI.MapType.MEGA_INTERIOR)

@@ -310,37 +310,31 @@ func _parse_args() -> void:
 
 # ------------------------------------------------------------------ 资源
 
+## 读卡元数据 JSON：优先烘焙工作区 temp/（烘卡机上的最新产物）；缺失回退
+## 工程内 tex/ 副本（随包入库——别的机器 clone 后没跑过烘焙也能出图）。
+func _load_meta_json(rel: String) -> Array:
+	for p: String in [_temp + rel, "res://tests/dev/proto_hd2d/tex/" + rel]:
+		if FileAccess.file_exists(p):
+			var f := FileAccess.open(p, FileAccess.READ)
+			var arr: Variant = JSON.parse_string(f.get_as_text())
+			if arr is Array:
+				return arr
+			push_error("[hd2d] JSON 解析失败: " + p)
+			return []
+	push_warning("[hd2d] 缺卡元数据（先跑对应烘焙脚本）: " + rel)
+	return []
+
+
 func _load_cards() -> void:
-	var p := _temp + CARDS_JSON
-	if not FileAccess.file_exists(p):
-		push_error("[hd2d] 缺 cards.json，先跑 proto_25d 的 Blender 半场: " + p)
-		return
-	var f := FileAccess.open(p, FileAccess.READ)
-	var arr: Variant = JSON.parse_string(f.get_as_text())
-	if arr is Array:
-		for c in arr:
-			_cards[str(c["card"])] = c
+	for c: Variant in _load_meta_json(CARDS_JSON):
+		_cards[str(c["card"])] = c
 	print("[hd2d] 烘焙卡 %d 张" % _cards.size())
-	var pp := _temp + PROPS_JSON
-	if FileAccess.file_exists(pp):
-		var pf := FileAccess.open(pp, FileAccess.READ)
-		var parr: Variant = JSON.parse_string(pf.get_as_text())
-		if parr is Array:
-			for c in parr:
-				_props[str(c["card"])] = c
-		print("[hd2d] 道具卡 %d 张" % _props.size())
-	else:
-		push_warning("[hd2d] 缺 props.json（先跑 bake_props.py）：" + pp)
-	var np := _temp + NATURE_JSON
-	if FileAccess.file_exists(np):
-		var nf := FileAccess.open(np, FileAccess.READ)
-		var narr: Variant = JSON.parse_string(nf.get_as_text())
-		if narr is Array:
-			for c in narr:
-				_nature[str(c["card"])] = c
-		print("[hd2d] 自然物卡 %d 张" % _nature.size())
-	else:
-		push_warning("[hd2d] 缺 nature.json（先跑 bake_nature.py）：" + np)
+	for c: Variant in _load_meta_json(PROPS_JSON):
+		_props[str(c["card"])] = c
+	print("[hd2d] 道具卡 %d 张" % _props.size())
+	for c: Variant in _load_meta_json(NATURE_JSON):
+		_nature[str(c["card"])] = c
+	print("[hd2d] 自然物卡 %d 张" % _nature.size())
 
 
 func _tex_abs(p: String) -> Texture2D:

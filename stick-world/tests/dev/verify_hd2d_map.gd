@@ -63,5 +63,6 @@ func _wait(sec: float) -> void:
 func _shot() -> void:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://temp/proto_hd2d"))
 	img.save_png("res://temp/proto_hd2d/verify_hd2d_map.png")
 	print("[verify_hd2d] shot -> temp/proto_hd2d/verify_hd2d_map.png")

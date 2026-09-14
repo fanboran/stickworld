@@ -30,7 +30,7 @@ position = Vector2(0, 810)
 [node name="ExitLeft" type="Area2D" parent="ChunkTriggers"]
 script = ExtResource("2_trigger")
 exit_side = 0
-target_map_id = "village_a"
+target_map_id = "hd2d_street"
 target_entry_side = 1
 trigger_width = 64.0
 

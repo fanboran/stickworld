@@ -9,7 +9,7 @@ extends Node
 ##   godot --path stick-world res://tests/dev/dev_playtest.tscn -- --map battlefield --party 3 --enemies 4 --follow
 ##
 ## 参数：
-##   --map <id>      目标地图（village_a 默认 / battlefield / road_a_b / village_b）
+##   --map <id>      目标地图（hd2d_street 默认 / battlefield / road_a_b / village_b）
 ##   --party <N>     随行战斗班人数（跨图时自动携带；0 = 不带）
 ##   --enemies <N>   遭遇战敌方数量（默认 4，仅 battlefield 生效）
 ##   --follow        队伍自动开启"跟随玩家"
@@ -31,7 +31,7 @@ func _ready() -> void:
 # ─────────────────────────────── 参数解析 ────────────────────────────────
 
 func _parse_args() -> Dictionary:
-	var result := {"map": "village_a", "party": 0, "enemies": 4, "follow": false}
+	var result := {"map": "hd2d_street", "party": 0, "enemies": 4, "follow": false}
 	# Godot 命令行：-- 之后的参数以空格分隔（--map battlefield）或 key=value 均可
 	var raw: Array = OS.get_cmdline_user_args()
 	var i: int = 0
@@ -76,7 +76,7 @@ func _run(args: Dictionary) -> void:
 		_spawn_party(int(args["party"]), bool(args["follow"]))
 
 	# 直达目标地图（编队经快照机制自动携带到战场）
-	if str(args["map"]) != "village_a":
+	if str(args["map"]) != "hd2d_street":
 		var sl: Node = _game_root.scene_loader
 		if sl != null and sl.has_method("travel_to_map"):
 			sl.travel_to_map(str(args["map"]), WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)

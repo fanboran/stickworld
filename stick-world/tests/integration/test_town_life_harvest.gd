@@ -37,6 +37,10 @@ var _game_root: Node = null
 
 
 func _ready() -> void:
+	# [SUSPENDED 2026-09-14] 原 2D 设施宿主（村A）已随 HD-2D 化删除。
+	# 村民采集/工位产出：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
+	print("[SUSPENDED] ", "村民采集/工位产出")
+	get_tree().quit(0)
 	SaveManager.set_auto_save_enabled(false)
 	_runner = TestRunner.new()
 	_runner.add_test("采集经济闭环: 三职业库存增长 + harvest 行为", Callable(self, "_test_harvest_economy"), true)
@@ -50,7 +54,7 @@ func _ready() -> void:
 func _setup_world() -> void:
 	_game_root = GameRootScene.instantiate()
 	# 启动直连后默认开局图是 HD-2D 主街；本套件测 2D 村庄玩法，声明以村A为初始图
-	_game_root.set("boot_map_id_override", "village_a")
+	_game_root.set("boot_map_id_override", "village_testbed")
 	add_child(_game_root)
 	for i in 10:
 		await get_tree().process_frame

@@ -1,7 +1,8 @@
 extends Node
 ## HUD zone 落位验收（批次 B 验收辅助）：
 ##   1. 真实游戏窗口化启动（game_root.tscn → SystemSetup 全量装配）
-##   2. 1920×1080 与 1280×720 两档分辨率 HUD 截图（真渲染，zone debug 画框可见）
+##   2. 1920×1080 与 1280×720 两档分辨率 HUD 截图（真渲染，zone debug 画框可见——
+##      画框随 F3 显隐，本探针运行期强制打开、收尾还原）
 ##   3. 临时挂两张验收卡进 top_left_stack，截图证明堆叠游标逐件下移无重叠
 ##   4. 断言六区落位符合 hud_zone_layout.gd 保留区合同（锚定+偏移，随分辨率自适应）
 ## 运行（不要 --headless，headless 是哑渲染截不出图）：
@@ -41,6 +42,10 @@ func _run() -> void:
 		_fail("世界未就绪（BOOT_TIMEOUT_FRAMES 内地图未加载）")
 		return _finish()
 	_ok("世界就绪（map=%s）" % map.name)
+
+	# zone 画框随 F3 调试总开关显隐；验收截图需要框可见 → 本进程内强制打开，收尾还原
+	_was_debug_visible = DebugApi.is_visible()
+	DebugApi.set_overlay_visible(true)
 
 	# 等 HUD 装配稳定（demo_quest deferred、资源注入、容器首轮布局）
 	var quest: Control = null
@@ -116,6 +121,12 @@ func _check_layout_1920() -> void:
 	_check_feed(vp)
 	var debug_layer: Node = _game_root.ui_root.get_node_or_null("HudZoneDebug")
 	_check(debug_layer != null, "zone debug 画框层存在（截图可见半透明框）")
+	if debug_layer is Control:
+		_check((debug_layer as Control).visible, "F3 开 → zone 画框显示")
+		DebugApi.set_overlay_visible(false)
+		_check(not (debug_layer as Control).visible, "F3 关 → zone 画框隐藏")
+		DebugApi.set_overlay_visible(true)
+		_check((debug_layer as Control).visible, "F3 再开 → zone 画框复现")
 
 
 func _check_layout_720() -> void:
@@ -240,9 +251,12 @@ func _fail(label: String) -> void:
 
 
 var _pass_count: int = 0
+## 本进程强制打开 F3 前的调试覆盖层状态（收尾还原，不污染玩家配置）
+var _was_debug_visible: bool = false
 
 
 func _finish() -> void:
+	DebugApi.set_overlay_visible(_was_debug_visible)
 	print("=== HUD zone 验收：%d 项断言，%d 失败 ===" % [_pass_count + _fails.size(), _fails.size()])
 	if _fails.is_empty():
 		print("=== HUD zone 验收：全部通过 ===")

@@ -17,7 +17,6 @@ const SYSTEM_SETUP_SCRIPT := "res://modules/world/scripts/setup/system_setup.gd"
 const _WarmupScript: GDScript = preload("res://modules/ui_global/scripts/loading/boot_warmup.gd")
 
 static var MAP_PATHS: PackedStringArray = [
-	"res://modules/world/scenes/maps/village_a.tscn",
 	"res://modules/world/scenes/maps/village_b.tscn",
 	"res://modules/world/scenes/maps/road_a_b.tscn",
 	"res://modules/world/scenes/maps/mega_interior.tscn",

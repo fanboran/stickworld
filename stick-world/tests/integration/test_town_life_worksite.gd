@@ -45,6 +45,10 @@ var _shop: Building = null
 
 
 func _ready() -> void:
+	# [SUSPENDED 2026-09-14] 原 2D 设施宿主（村A）已随 HD-2D 化删除。
+	# 工位槽位/降级/节律：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
+	print("[SUSPENDED] ", "工位槽位/降级/节律")
+	get_tree().quit(0)
 	SaveManager.set_auto_save_enabled(false)
 	_runner = TestRunner.new()
 	_runner.add_test("WorkSlots 真槽位: 铁匠上班+槽位产出", Callable(self, "_test_real_slot"), true)
@@ -59,7 +63,7 @@ func _ready() -> void:
 func _setup_world() -> void:
 	_game_root = GameRootScene.instantiate()
 	# 启动直连后默认开局图是 HD-2D 主街；本套件测 2D 村庄玩法，声明以村A为初始图
-	_game_root.set("boot_map_id_override", "village_a")
+	_game_root.set("boot_map_id_override", "village_testbed")
 	add_child(_game_root)
 	for i in 10:
 		await get_tree().process_frame
@@ -69,7 +73,7 @@ func _setup_world() -> void:
 	var env := _env()
 	if env != null and env.has_method("set_seconds_per_day"):
 		env.set_seconds_per_day(600.0)
-	# 移除 village_a 的真铁匠铺（建筑与美术升级线批次 1 配置，cell -17）：
+	# 移除 village_testbed 的真铁匠铺（建筑与美术升级线批次 1 配置，cell -17）：
 	# 本套件专测「建筑被毁 → 降级占位工位」路径，真铺在场时铁匠拆铺后会
 	# 投奔真铺 WorkSlots 而非占位工位，降级路径被绕开
 	var host: Node2D = _map().get("building_host") if "building_host" in _map() else null

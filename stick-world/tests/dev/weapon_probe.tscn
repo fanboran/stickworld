@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://weaponprobe0"]
+[gd_scene format=3 uid="uid://weaponprobe0"]
 
 [ext_resource type="Script" path="res://tests/dev/weapon_probe.gd" id="1"]
 

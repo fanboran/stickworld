@@ -72,8 +72,8 @@ func _run_tests_async() -> void:
 	sl.travel_to_map(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	sl.travel_to_map(ScriptGameRoot.VILLAGE_A_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
-	await _await_current_map(ScriptGameRoot.VILLAGE_A_MAP_ID)
+	sl.travel_to_map(ScriptGameRoot.HD2D_STREET_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
+	await _await_current_map(ScriptGameRoot.HD2D_STREET_MAP_ID)
 	_run_phase_4_tests()
 
 	# 汇总
@@ -119,13 +119,12 @@ func _run_phase_1_tests() -> void:
 	if sl == null:
 		_runner.end_test()
 		return
-	_runner.assert_true(sl.has_map(ScriptGameRoot.VILLAGE_A_MAP_ID), "应注册 village_a")
 	_runner.assert_true(sl.has_map(ScriptGameRoot.ROAD_MAP_ID), "应注册 road_a_b")
 	_runner.assert_true(sl.has_map(ScriptGameRoot.VILLAGE_B_MAP_ID), "应注册 village_a_b")
 	_runner.end_test()
 
 	_runner.begin_test("SceneLoader: 出口配置正确")
-	# 2026-09-14 启动直连：主旅行链改挂 hd2d_street（village_a 保留注册仅供调试）
+	# 2026-09-14 启动直连+村A退役：旅行链 = 主街 ↔ 道路 ↔ 村落B
 	var exit_right: Dictionary = sl.get_map_exit(ScriptGameRoot.HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	_runner.assert_equal(exit_right.get("target", ""), ScriptGameRoot.ROAD_MAP_ID, "主街 右出应指向道路")
 	_runner.assert_equal(exit_right.get("entry", -1), WorldAPI.EntrySide.LEFT, "主街 右出应从左侧进入道路")
@@ -310,7 +309,7 @@ func _await_current_map(map_id: String) -> void:
 func _run_phase_4_tests() -> void:
 	_runner.begin_test("反向旅行: 回到村落A")
 	var sl := _get_scene_loader()
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_A_MAP_ID, "当前应回到 village_a")
+	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.HD2D_STREET_MAP_ID, "当前应回到主街")
 	_runner.end_test()
 
 	_runner.begin_test("反向旅行: 玩家在右侧入口")

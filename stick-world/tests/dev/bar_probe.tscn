@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://barprobe000"]
+[gd_scene format=3 uid="uid://barprobe000"]
 
 [ext_resource type="Script" path="res://tests/dev/bar_probe.gd" id="1"]
 

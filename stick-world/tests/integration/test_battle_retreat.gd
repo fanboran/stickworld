@@ -50,7 +50,7 @@ func _run_tests_async() -> void:
 		get_tree().quit(1)
 		return
 	_game_root = packed.instantiate()
-	_game_root.set("boot_map_id_override", "village_a")  # 战斗测试需要 2D 空旷初始图
+	_game_root.set("boot_map_id_override", "battlefield")  # 战斗发生在战场图（生产可达）  # 战斗测试需要 2D 空旷初始图
 	add_child(_game_root)
 	for i in 8:
 		await get_tree().process_frame

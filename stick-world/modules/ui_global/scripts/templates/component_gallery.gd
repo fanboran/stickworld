@@ -125,6 +125,13 @@ func _build_tabs() -> void:
 		tabs.add_child(page)
 		tabs.set_tab_title(page.get_index(), title)
 	sec.add_child(tabs)
+	# 独立 TabBar 版（过滤器/切换器语义，无页面容器）：组织面板树过滤器同款
+	StickKit.field_row(sec, "独立页签", "SketchTabBar（过滤器语义，组织面板同款）")
+	var bar := SketchTabBar.new()
+	for title in ["树", "总览", "指挥链"]:
+		bar.add_tab(title)
+	bar.custom_minimum_size = Vector2(0, 34)
+	sec.add_child(bar)
 
 
 # ─────────────────────────────── 滑条与进度 ────────────────────────────────

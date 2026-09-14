@@ -33,11 +33,7 @@
 | ![加载页](docs/演示/加载页.png) | ![读取存档](docs/演示/读取存档.png) |
 | ![暂停菜单](docs/演示/暂停菜单.png) | ![设置面板](docs/演示/设置面板.png) |
 
-**自绘 UI 组件库（开发者向活文档）**
-
-![组件展示](docs/演示/组件展示.png)
-
-**UI 备选图（2026-09 手绘皮肤审计整改后全 UI 家族，`stick-world/tests/dev/ui_audit_capture.tscn` 一键复跑）**
+**自绘 UI 组件库（2026-09 手绘皮肤审计整改后全 UI 家族，`stick-world/tests/dev/ui_audit_capture.tscn` 一键复跑）**
 
 ![主菜单·手绘皮肤](docs/演示/备选图/主菜单.png)
 

@@ -95,7 +95,7 @@ var _unit_index: Dictionary = {}
 var _unit_index_built: bool = false
 
 # ─────────────────────────────── UI 元素 ────────────────────────────────
-var _tab_bar: TabBar = null
+var _tab_bar: SketchTabBar = null
 var _quick_box: HBoxContainer = null
 var _tree: Tree = null
 var _preset_option: OptionButton = null
@@ -155,7 +155,7 @@ func _build_content() -> void:
 			StickKit.ButtonKind.ACCENT, StickTokens.BTN_H_SM)
 	chain_btn.tooltip_text = "打开指挥链视图（命令沿层级逐跳跑秒 + 在途命令清单）"
 	# ── 标签栏 = 树过滤器 ──
-	_tab_bar = TabBar.new()
+	_tab_bar = SketchTabBar.new()
 	for t in TABS:
 		_tab_bar.add_tab(String(t["label"]))
 	_tab_bar.tab_selected.connect(_on_tab_selected)

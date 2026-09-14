@@ -156,6 +156,18 @@ static func _apply_tabs(t: Theme, s: Object) -> void:
 	t.set_color("font_unselected_color", "TabContainer", StickTokens.TEXT_DIM)
 	t.set_color("font_hovered_color", "TabContainer", StickTokens.TEXT)
 	t.set_font_size("font_size", "TabContainer", StickTokens.FONT_BODY)
+	# TabBar 独立控件同款皮肤（值与 TabContainer 一致；TabContainer 内部的
+	# TabBar 命中 TabBar 条目取到同值，结果不变）——boiling 描边与琥珀底线
+	# 由 SketchTabBar._draw 叠加，此处保证裸 TabBar 至少有手绘底色与字色
+	t.set_stylebox("tab_selected", "TabBar", s.tab_selected())
+	t.set_stylebox("tab_hovered", "TabBar", s.tab_hover())
+	t.set_stylebox("tab_unselected", "TabBar", s.tab_normal())
+	t.set_stylebox("tab_disabled", "TabBar", s.tab_normal())
+	t.set_color("font_selected_color", "TabBar", StickTokens.TEXT)
+	t.set_color("font_unselected_color", "TabBar", StickTokens.TEXT_DIM)
+	t.set_color("font_hovered_color", "TabBar", StickTokens.TEXT)
+	t.set_color("font_disabled_color", "TabBar", StickTokens.TEXT_DIM)
+	t.set_font_size("font_size", "TabBar", StickTokens.FONT_BODY)
 
 
 static func _apply_list(t: Theme, s: Object) -> void:

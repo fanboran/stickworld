@@ -169,7 +169,9 @@ const TEMPLATE_SCENES: Array[Dictionary] = [
 
 ## 场景分组（左分类栏）：names=按文件基名收编，prefix=按前缀收编，
 ## templates=界面模板固定组；未匹配场景进「其他」组兜底
+## 界面模板组置顶（组件展示是 UI 门面活文档，不藏末位）
 const SCENE_GROUPS: Array[Dictionary] = [
+	{"id": "templates", "title": "界面模板", "templates": true},
 	{"id": "play", "title": "试玩与观测", "names": ["battle_arena", "unit_action_gallery",
 		"dev_playtest", "battle_sim", "battle_perf", "world_perf", "siege_wall_showcase",
 		"record_demo", "record_night"]},
@@ -177,7 +179,6 @@ const SCENE_GROUPS: Array[Dictionary] = [
 		"preview_glass_demo"]},
 	{"id": "verify", "title": "功能验证", "prefix": "verify_"},
 	{"id": "diag", "title": "诊断脚本", "prefix": "diag_"},
-	{"id": "templates", "title": "界面模板", "templates": true},
 ]
 
 ## 扫描 res://tests/dev 的全部场景，按 SCENE_GROUPS 分桶（下划线前缀 = 内部

@@ -149,7 +149,7 @@ var _unit_index: Dictionary = {}
 var _unit_index_built: bool = false
 
 # ─────────────────────────────── UI 元素 ────────────────────────────────
-var _tag_bar: TabBar = null
+var _tag_bar: SketchTabBar = null
 var _row_box: VBoxContainer = null
 var _timeline_box: VBoxContainer = null
 ## 成员托盘（跨组织调人：选中组织后列出其直属成员为可拖芯片）
@@ -191,7 +191,7 @@ func _build_content() -> void:
 			StickKit.LabelKind.HINT)
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# ── 标签栏 = 报表过滤（语义同 OrgPanel）──
-	_tag_bar = TabBar.new()
+	_tag_bar = SketchTabBar.new()
 	for t in TABS:
 		_tag_bar.add_tab(String(t["label"]))
 	_tag_bar.tab_selected.connect(_on_tab_selected)

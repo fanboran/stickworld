@@ -561,4 +561,5 @@ func _violates_forest_clear(world_x: float) -> bool:
 		return false
 	var cell := floori(world_x / 32.0)
 	var dist: int = maxi(maxi(lo - cell, cell - hi), 0)
-	return dist <= _ResourceGen.FOREST_CLEAR_CELLS
+	# 梯度档已改实例 var（HD-2D 图按带宽压缩）；村图用默认档字面量同源
+	return dist <= 30

@@ -27,6 +27,8 @@ class_name Hd2dStreetMap
 ## 正式化时迁入 modules 并改走随包导出路径。
 
 const _HD2D_WORLD_SCENE := preload("res://tests/dev/proto_hd2d/proto_hd2d.tscn")
+## 野外资源分布算法（world 模块内，群落散布+林区梯度）
+const _ResourceGenScript := preload("res://modules/world/scripts/map/resource_gen.gd")
 
 ## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
 ## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
@@ -57,14 +59,13 @@ var _hd: Node3D = null
 ## 当前光照档（避免每帧重复切换）
 var _light_mode := ""
 
-const _RESOURCE_TYPE_IDS := {
-	"wood": 0, "stone": 1, "metal": 2, "diamond": 3, "gold": 4,
-}
-## 采集储量中值（resource_gen.gd 的类型区间：木 150-320/石 100-180/铁 80-140/
-## 钻 40-70/金 60-100）
-const _RESOURCE_AMOUNTS := {
-	"wood": 230, "stone": 140, "metal": 110, "diamond": 55, "gold": 80,
-}
+## resource_gen 算法对接（野外资源分布）：算法只认"硬化地面不长资源"，
+## 这里把 ±墙线内算硬化（城内无资源点），墙外算野外——林区梯度（近墙净空
+## → 渐密 → 满密度）由此免费获得，兼作城中心→边缘的密度渐变。
+const TERRAIN_DIRT_ROAD := 1
+## 算法宿主图层（generate_resource_nodes 的入口守卫与节点父级）
+var decoration_layer: Node2D = null
+## 采集储量中值已随算法内置（resource_gen 按类型区间掷储量），不再手填
 
 
 func _ready() -> void:
@@ -76,7 +77,7 @@ func _ready() -> void:
 	# 受俯角前缩，飘字/粒子按 2D y 直绘会飘在半空，须压到 3D 投影同一地面线
 	add_to_group("fx_pos_remapper")
 	# 注册城门引导路由器（BehaviorHarvest 读此组）：村民采集直线 steering 遇
-	# 城墙时，经 gate_steer_point 引导从门洞出/入城
+	# 城墙时，经 gate_steer_point 引导到门口，进传送带即跨墙
 	add_to_group("gate_router")
 	_hd = _HD2D_WORLD_SCENE.instantiate()
 	_hd.name = "HD2DWorld"
@@ -89,7 +90,8 @@ func _ready() -> void:
 	if _hd.has_method("enable_play_characters"):
 		_hd.enable_play_characters()
 	_build_solid_bodies(_hd)
-	_spawn_resource_nodes(_hd)
+	_spawn_resource_nodes()
+	_build_gate_portals()
 	_build_exit_triggers()
 	_apply_time_of_day(true)
 
@@ -319,29 +321,106 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		add_child(body)
 
 
-## 采集资源点：点位/类型来自 3D 摆位表（get_nature_spawns），
-## 视觉由 PBR 自然物卡承担——ResourceNode 自身的 2D 笔触画隐藏。
-func _spawn_resource_nodes(hd: Node3D) -> void:
-	if not hd.has_method("get_nature_spawns"):
+## 野外资源点：走 resource_gen 程序化分布算法（创始人：算法就在那——群落
+## 散布 + 林区梯度直接复用，不手摆）。点检经 spawn_nature_card_at 让 PBR 卡
+## 随点落；ResourceNode 自身已无 2D 视觉（笔触树根除），无需隐藏。
+func _spawn_resource_nodes() -> void:
+	if _hd == null or not _hd.has_method("spawn_nature_card_at"):
 		return
-	var host: Node2D = get_node_or_null("EntityHost") as Node2D
-	for s: Variant in hd.get_nature_spawns():
-		var type_name: String = str(s["type"])
-		var type_id: int = int(_RESOURCE_TYPE_IDS.get(type_name, -1))
-		if type_id < 0:
-			continue
-		var node := ResourceNode.new()
-		node.resource_type = type_id
-		node.amount = int(_RESOURCE_AMOUNTS.get(type_name, 100))
-		node.position = s["pos"]
-		if host != null:
-			host.add_child(node)
-		else:
-			add_child(node)
-		# 隐藏 2D 笔触视觉（PBR 卡负责观感）；调试标签等行为子节点保留
-		for c in node.get_children():
-			if c is Node2D:
-				(c as Node2D).visible = false
+	# 算法入口守卫：无 decoration_layer 直接返回空——主街是 2D 静态布景图，
+	# 没有该图层属性，这里补上（作 ResourceNode 的宿主）
+	decoration_layer = Node2D.new()
+	decoration_layer.name = "DecorationLayer"
+	add_child(decoration_layer)
+	var gen := Node.new()
+	gen.set_script(_ResourceGenScript)
+	gen.name = "ResourceGen"
+	add_child(gen)
+	# 墙外带只有 28 格，算法默认净空 30 格会把整带清空——压缩梯度档：
+	# 近墙 3 格净空 → 12 格渐密 → 满密度（渐变读法保留，城门口即有活干）
+	gen.set("FOREST_CLEAR_CELLS", 3)
+	gen.set("FOREST_RAMP_CELLS", 12)
+	if gen.has_method("setup"):
+		gen.setup(self)
+	var a: int = int(map_left / CELL_PX) + 2
+	var b: int = int(map_right / CELL_PX) - 2
+	var nodes: Array = gen.call("generate_resource_nodes", a, b, 0.65)
+	# 类型 → 自然物卡池（多株轮转防同卡连排）
+	var card_pools := {
+		ResourceNode.ResourceType.WOOD: ["broadleaf", "conifer", "broadleaf_tall"],
+		ResourceNode.ResourceType.STONE: ["boulder"],
+		ResourceNode.ResourceType.METAL: ["iron_outcrop", "copper_vein"],
+		ResourceNode.ResourceType.DIAMOND: ["crystal_cluster"],
+		ResourceNode.ResourceType.GOLD: ["gold_vein"],
+	}
+	var cursors := {}
+	for n: Node2D in nodes:
+		var rtype: int = int(n.resource_type)
+		var pool: Array = card_pools.get(rtype, ["broadleaf"])
+		var ci: int = int(cursors.get(rtype, 0))
+		cursors[rtype] = ci + 1
+		_hd.spawn_nature_card_at(str(pool[ci % pool.size()]), n.position.x, n.position.y)
+	print("[hd2d] 野外资源点 %d 处（resource_gen 算法分布，墙外带）" % nodes.size())
+
+
+func get_terrain_type_at_cell(cx: int) -> int:
+	return TERRAIN_DIRT_ROAD if absi(cx) <= 67 else 0
+
+
+## 城门传送带（创始人 2026-09-14：到门口就传送，门外也得传送过去）。
+## 每端城墙内外各一条 Area2D 竖带（贴墙、门洞纵深带内）：只对"朝着墙走"
+## 的身体触发（斜向闲逛蹭到不触发），跨墙落到对面带外侧 + 冷却防弹跳。
+## 墙体碰撞已整带封死（proto get_solid_rects），传送是唯一过墙方式。
+const _TP_STRIP_W := 64.0          # 传送带厚度（px）
+const _TP_COOLDOWN_MS := 600       # 防弹跳冷却
+var _tp_cooldown: Dictionary = {}  # body instance_id -> 解禁时刻(msec)
+
+func _build_gate_portals() -> void:
+	if _hd == null or not _hd.has_method("get_gates"):
+		return
+	var host := Node2D.new()
+	host.name = "GatePortals"
+	add_child(host)
+	for g: Variant in _hd.get_gates():
+		var wx: float = float(g["x"]) * CELL_PX
+		var y0: float = float(g["y0"])
+		var y1: float = float(g["y1"])
+		var toward_town: float = -signf(wx)   # 从墙指向城内的方向（西墙 +1）
+		var inner_face: float = wx + toward_town * 19.0   # 墙内面（墙厚半宽 19px）
+		for side: int in [-1, 1]:   # -1 = 城内侧带, +1 = 城外侧带
+			var strip := Area2D.new()
+			strip.name = "GateTP_%s_%s" % [("W" if wx < 0.0 else "E"), ("in" if side < 0 else "out")]
+			# 角色本体在 collision_layer=2（hitbox.gd 位约定 BODY）——默认 mask 1
+			# 只看得见墙体，永远收不到角色进入事件（创始人实测卡门口的根因）
+			strip.collision_mask = 2
+			strip.monitorable = false
+			var shape := CollisionShape2D.new()
+			var rect := RectangleShape2D.new()
+			rect.size = Vector2(_TP_STRIP_W, y1 - y0 - 8.0)
+			shape.shape = rect
+			shape.position = Vector2(inner_face + toward_town * side * -40.0, (y0 + y1) * 0.5)
+			strip.add_child(shape)
+			strip.body_entered.connect(_on_gate_strip_entered.bind(wx, y0, y1))
+			host.add_child(strip)
+
+
+func _on_gate_strip_entered(body: Node2D, wx: float, y0: float, y1: float) -> void:
+	if body is not CharacterBody2D or not is_instance_valid(body):
+		return
+	# 方向判定：只传送"朝着墙走"的身体（沿街横穿/闲逛蹭进带子不触发）
+	var toward: float = signf(wx - body.global_position.x)
+	if toward == 0.0 or (body as CharacterBody2D).velocity.x * toward < 8.0:
+		return
+	# 冷却防弹跳（刚被传过来的身体在对面带不回传）
+	var id: int = body.get_instance_id()
+	var now: int = Time.get_ticks_msec()
+	if int(_tp_cooldown.get(id, 0)) > now:
+		return
+	_tp_cooldown[id] = now + _TP_COOLDOWN_MS
+	# 跨墙落点：墙线对面 ~4.3 格（带外缘再留 32px 白区），y 夹回门洞带内
+	var land_x: float = wx + toward * 139.0
+	var land_y: float = clampf(body.global_position.y, y0 + 8.0, y1 - 8.0)
+	body.global_position = Vector2(land_x, land_y)
 
 
 ## 东西村口出口触发器（语义对齐村A旅行链：东出上路去 B 村方向、西出原野）。

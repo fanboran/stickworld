@@ -97,14 +97,24 @@ static func draw_barriers(control: Control, ctx: Dictionary) -> void:
 
 ## 辅助：绘制障碍体的矩形范围（WalkBarrier/PassageBarrier 为 StaticBody2D）
 static func _draw_area_rect(control: Control, ctx: Dictionary, area: Node2D, color: Color) -> void:
+	var map: Node2D = ctx.get("map", null)
+	var remaps: bool = map != null and is_instance_valid(map) and map.has_method("remap_fx_pos")
 	for child in area.get_children():
 		if child is CollisionShape2D:
 			var cs: CollisionShape2D = child as CollisionShape2D
 			if cs.shape is RectangleShape2D:
 				var rs: RectangleShape2D = cs.shape as RectangleShape2D
 				var world_pos: Vector2 = area.global_position + cs.position
+				var size_y: float = rs.size.y
+				if remaps:
+					# HD-2D 图：碰撞箱画进 3D 投影域（y 压缩率与角色渲染一致），
+					# 否则蓝箱与角色实际所在画面位置对不上（创始人 2026-09-14）
+					var y0: float = map.remap_fx_pos(Vector2(0.0, world_pos.y - rs.size.y * 0.5)).y
+					var y1: float = map.remap_fx_pos(Vector2(0.0, world_pos.y + rs.size.y * 0.5)).y
+					world_pos.y = (y0 + y1) * 0.5
+					size_y = y1 - y0
 				var screen_pos := world_to_screen(world_pos, ctx)
-				var screen_size := Vector2(rs.size.x * ctx.get("effective_zoom", 1.0), rs.size.y * ctx.get("effective_zoom", 1.0))
+				var screen_size := Vector2(rs.size.x * ctx.get("effective_zoom", 1.0), size_y * ctx.get("effective_zoom", 1.0))
 				var rect := Rect2(screen_pos - screen_size * 0.5, screen_size)
 				control.draw_rect(rect, color, true)
 				control.draw_rect(rect, Color(color.r, color.g, color.b, 0.8), false, 1.0)
@@ -128,6 +138,8 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 
 ## 辅助：根据 PassageBarrier 绘制建筑边界框 + 碰撞体下边界红色标记线
 static func _draw_building_outline(control: Control, ctx: Dictionary, building: Node2D, color: Color) -> void:
+	var map: Node2D = ctx.get("map", null)
+	var remaps: bool = map != null and is_instance_valid(map) and map.has_method("remap_fx_pos")
 	var pb: Node = building.get_node_or_null("PassageBarrier")
 	if pb == null or not pb is Area2D:
 		return
@@ -137,9 +149,16 @@ static func _draw_building_outline(control: Control, ctx: Dictionary, building: 
 			if cs.shape is RectangleShape2D:
 				var rs: RectangleShape2D = cs.shape as RectangleShape2D
 				var world_pos: Vector2 = building.global_position + cs.position
+				var size_y: float = rs.size.y
+				if remaps:
+					# HD-2D 图：建筑碰撞箱同蓝箱口径画进 3D 投影域
+					var y0: float = map.remap_fx_pos(Vector2(0.0, world_pos.y - rs.size.y * 0.5)).y
+					var y1: float = map.remap_fx_pos(Vector2(0.0, world_pos.y + rs.size.y * 0.5)).y
+					world_pos.y = (y0 + y1) * 0.5
+					size_y = y1 - y0
 				var screen_pos := world_to_screen(world_pos, ctx)
 				var zoom: float = ctx.get("effective_zoom", 1.0)
-				var screen_size := Vector2(rs.size.x * zoom, rs.size.y * zoom)
+				var screen_size := Vector2(rs.size.x * zoom, size_y * zoom)
 				var rect := Rect2(screen_pos - screen_size * 0.5, screen_size)
 				control.draw_rect(rect, color, false, 1.5)
 				# 红色下边界横线：按建筑 width 属性 × 32px 绘制，左边缘对齐碰撞箱左边缘（网格对齐）

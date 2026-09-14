@@ -95,38 +95,24 @@ const PROPS: Array = [
 	{"card": "wheelbarrow", "x": 58.5, "z": 5.4, "plat": false},
 ]
 
-## 自然物（bake_nature.py 从 nature.py 16 类库烘的卡）——野外树木/矿物实装。
-## 摆位语义（创始人 2026-09-14：资源点全在城墙外）：西墙外 -95~-67 森林带
-## （伐木/采矿劳作区，村民出西门即达），东墙外 +67~+95 东路野地（B 村方向）；
-## 城内不摆资源点。`res` = 该点位同步生成的 2D ResourceNode 采集类型
-## （wood/stone/metal/gold/diamond；空串 = 纯景，不可采）。`z` ≥ 5 前景带。
+## 自然物（bake_nature.py 从 nature.py 16 类库烘的卡）——手摆**纯景**散布。
+## 资源点不在此表：野外资源分布走 resource_gen 程序化算法（群落散布+林区
+## 梯度，创始人：算法就在那），宿主生成 ResourceNode 后经 spawn_nature_card_at
+## 让 PBR 卡随点落。`z` ≥ 5 前景带。
 const NATURE_SPOTS: Array = [
-	# 西墙外森林带（伐木/采矿劳作区）
-	{"card": "dead_tree", "x": -92.0, "z": 9.0, "res": ""},
-	{"card": "broadleaf", "x": -88.5, "z": 8.0, "res": "wood"},
-	{"card": "bush", "x": -90.5, "z": 5.5, "res": ""},
-	{"card": "grass_clump", "x": -86.0, "z": 5.0, "res": ""},
-	{"card": "conifer", "x": -83.0, "z": 10.0, "res": "wood"},
-	{"card": "broadleaf_tall", "x": -79.0, "z": 7.5, "res": "wood"},
-	{"card": "mushrooms", "x": -78.0, "z": 5.2, "res": ""},
-	{"card": "iron_outcrop", "x": -75.5, "z": 8.5, "res": "metal"},
-	{"card": "boulder", "x": -73.0, "z": 6.2, "res": "stone"},
-	{"card": "copper_vein", "x": -70.5, "z": 9.5, "res": "metal"},
-	{"card": "stump", "x": -84.5, "z": 5.5, "res": ""},
-	{"card": "gold_vein", "x": -69.5, "z": 8.0, "res": "gold"},
-	# 东墙外东路野地（B 村方向）
-	{"card": "grass_clump", "x": 69.5, "z": 5.0, "res": ""},
-	{"card": "conifer", "x": 71.5, "z": 10.5, "res": "wood"},
-	{"card": "bush", "x": 74.0, "z": 5.5, "res": ""},
-	{"card": "broadleaf", "x": 75.5, "z": 8.5, "res": "wood"},
-	{"card": "stump", "x": 73.5, "z": 5.4, "res": ""},
-	{"card": "crystal_cluster", "x": 81.5, "z": 7.5, "res": "diamond"},
-	{"card": "bush", "x": 83.5, "z": 5.0, "res": ""},
-	{"card": "dead_tree", "x": 89.0, "z": 9.5, "res": ""},
-	{"card": "conifer", "x": 86.0, "z": 11.0, "res": "wood"},
-	{"card": "rubble", "x": 88.0, "z": 5.5, "res": ""},
-	{"card": "iron_outcrop", "x": 90.5, "z": 8.0, "res": "metal"},
-	{"card": "boulder", "x": 92.0, "z": 6.5, "res": "stone"},
+	# 西墙外森林带纯景
+	{"card": "dead_tree", "x": -92.0, "z": 9.0},
+	{"card": "bush", "x": -90.5, "z": 5.5},
+	{"card": "grass_clump", "x": -86.0, "z": 5.0},
+	{"card": "mushrooms", "x": -78.0, "z": 5.2},
+	{"card": "stump", "x": -84.5, "z": 5.5},
+	# 东墙外东路纯景
+	{"card": "grass_clump", "x": 69.5, "z": 5.0},
+	{"card": "bush", "x": 74.0, "z": 5.5},
+	{"card": "stump", "x": 73.5, "z": 5.4},
+	{"card": "bush", "x": 83.5, "z": 5.0},
+	{"card": "dead_tree", "x": 89.0, "z": 9.5},
+	{"card": "rubble", "x": 88.0, "z": 5.5},
 ]
 
 ## 前排主街（2026-09-14 **手工摆** = 村A主场景 InitialBuildingsList 的语义翻译，
@@ -239,7 +225,6 @@ var _front_occ: Array = []
 var _door_path_xs: Array = []   # 需要门前短径的建筑 x（guildhall / 落地面建筑）
 var _prop_slots: Array = []     # 前排楼间空当 [x0,x1]（道具槽位）
 var _prop_solids: Array = []    # 道具实心区间 [x0,x1]（碰撞用）
-var _res_spawns: Array = []     # 自然物对应的采集资源点位 [{pos,type}]（宿主读）
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
@@ -485,14 +470,12 @@ func get_solid_rects() -> Array:
 		out.append([cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0])
 	for r in _prop_solids:
 		out.append(r)
-	# 城墙碰撞带（±墙线，门洞带 y 960~1120 留空）：墙沿纵深贯行走带，
-	# 出城必须走门洞（村民由宿主 gate_steer_point 引导，玩家自行穿行）
+	# 城墙碰撞带（±墙线，整带封死）：过墙只走门洞传送带（宿主 Area2D，
+	# 到门口即跨墙同图瞬移——创始人口径"到门口就传送，门外也得传送过去"；
+	# 整面直墙同时消除门缝夹角楔人问题）
 	var wx: float = _wall_x()
 	for sx: float in [-1.0, 1.0]:
-		var wx0: float = sx * wx - WALL_T * 0.5
-		var wx1: float = sx * wx + WALL_T * 0.5
-		out.append([wx0, wx1, 688.0, 688.0 + GATE_Z0 * 32.0])
-		out.append([wx0, wx1, 688.0 + GATE_Z1 * 32.0, WALK_FRONT_PX])
+		out.append([sx * wx - WALL_T * 0.5, sx * wx + WALL_T * 0.5, 688.0, WALK_FRONT_PX])
 	return out
 
 
@@ -567,27 +550,19 @@ func _place_props() -> void:
 		_spawn_prop(str(e["card"]), float(e["x"]), float(e["z"]), bool(e.get("plat", true)))
 
 
-## 自然物卡：与道具同一套卡底贴地落位（全落地面/草地面，不上台面）；
-## 实心卡（树/巨岩/矿露头）登记碰撞；带 res 的点位登记给宿主生成 ResourceNode。
+## 自然物卡：与道具同一套卡底贴地落位（全落地面/草地面，不上台面）。
 func _place_nature() -> void:
 	if not _layout.is_empty():
 		for e: Variant in _layout.get("trees", []):
 			_spawn_nature_card(str(e["card"]), float(e["x"]), float(e.get("z", 5.5)))
-			if str(e.get("res", "")) != "":
-				_res_spawns.append({
-					"pos": Vector2(float(e["x"]) * 32.0, 688.0 + float(e.get("z", 5.5)) * 32.0),
-					"type": str(e["res"]),
-				})
 		return
 	for e in NATURE_SPOTS:
-		var mi := _spawn_nature_card(str(e["card"]), float(e["x"]), float(e["z"]))
-		if mi != null and str(e.get("res", "")) != "":
-			# 2D 行走带 y 与 3D z 的近似映射：y = 688 + z*32（资源点必须落在
-			# 玩家可达带内，交互距离判定才够得着）
-			_res_spawns.append({
-				"pos": Vector2(float(e["x"]) * 32.0, 688.0 + float(e["z"]) * 32.0),
-				"type": str(e["res"]),
-			})
+		_spawn_nature_card(str(e["card"]), float(e["x"]), float(e["z"]))
+
+
+## 宿主按资源分布算法落卡（ResourceNode 点位 → 匹配自然物 PBR 卡，卡随点落）
+func spawn_nature_card_at(card: String, x_px: float, y_px: float) -> void:
+	_spawn_nature_card(card, x_px / 32.0, (y_px - 688.0) / 32.0)
 
 
 ## 自然物卡落位（卡底贴地，同 _spawn_prop 公式；目录/元数据走 nature 侧）。
@@ -619,18 +594,9 @@ func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
 	mi.material_override = m
 	mi.name = "Nature_" + card
 	_prop_root.add_child(mi)
-	# 挡人的种类（树/巨岩/矿露头/水晶，bake_nature 的 solid 标记）：卡宽收窄 15%。
-	# 同道具：点障碍只在自身纵深带附近（树干在脚下，不挡整条行走带）
-	if bool(meta.get("solid", false)):
-		var half_w: float = float(units[0]) * S * 0.5 * 0.85
-		var y_c: float = 688.0 + z_off * 32.0
-		_prop_solids.append([x - half_w, x + half_w, y_c - 30.0, y_c + 30.0])
+	# 自然物一律不挡人（2D 时代资源点即无碰撞；树干/岩脚与角色轻微交叠换取
+	# 采集可达——村民须走进资源点 24px 阈值，实体碰撞会把采集 AI 卡死在卡边）
 	return mi
-
-
-## 带采集资源的自然物点位（宿主 Hd2dStreetMap 读取后生成 ResourceNode）。
-func get_nature_spawns() -> Array:
-	return _res_spawns
 
 
 ## 露天工位点（宿主转发给 TownLife 露天工位 duck）：台面上的铁砧=铁匠工位。
@@ -858,11 +824,15 @@ func _build_world() -> void:
 	_add_horizon_guides()                 # 1/3 线（橙）+ 第三排基线（绿）（--debug 才显示）
 	for dx in _door_path_xs:
 		_add_door_path(float(dx), 3.6)    # 门前短径（楼脚→台肩→路面）
-	# 道路只铺城内（±墙线）；墙外是野外带——夯土调草灰绿（西森林带）/土黄
-	# （东大道），路面 y 抬 0.02 防与兜底大地皮 z-fight
+	# 道路三级渐变（城心石板 ±48 → 近墙夯土过渡 → 墙外野地）——创始人：
+	# 城市中心到边缘要有渐变。路面 y 抬升防与兜底大地皮 z-fight
 	var wx: float = _wall_x()
-	_add_ground_plane_at("band_road_stone_128.png", 0.0, wx * 2.0,
+	_add_ground_plane_at("band_road_stone_128.png", 0.0, 96.0,
 		BAND_ROAD.x, BAND_ROAD.y, 0.02, 10.0, Color(0.86, 0.89, 0.96))
+	_add_ground_plane_at("rammed_earth_128.png", -(wx + 48.0) * 0.5, wx - 48.0,
+		BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
+	_add_ground_plane_at("rammed_earth_128.png", (wx + 48.0) * 0.5, wx - 48.0,
+		BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
 	_add_ground_plane_at("rammed_earth_128.png", -(wx + 14.0), 28.0,
 		0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.68, 0.74, 0.54))
 	_add_ground_plane_at("rammed_earth_128.png", (wx + 14.0), 28.0,
@@ -872,10 +842,10 @@ func _build_world() -> void:
 	_lamp_root = Node3D.new()
 	_lamp_root.name = "Lamps"
 	add_child(_lamp_root)
-	# 沿街每 8.5 格一盏，铺满城内街长（城墙收口后灯不越界）
-	for i in 15:
+	# 沿街每 8 格一盏，只铺城心 ±48——越近城墙越暗（昼夜渐变的一部分）
+	for i in 13:
 		var l := OmniLight3D.new()
-		l.position = Vector3(-59.25 + float(i) * 8.5, 2.5, 4.2)
+		l.position = Vector3(-48.0 + float(i) * 8.0, 2.5, 4.2)
 		l.light_color = Color(1.0, 0.63, 0.30)
 		l.light_energy = 1.6
 		l.omni_range = 9.5
@@ -1108,7 +1078,8 @@ func _place_rows() -> void:
 				_spawn_bg_card(card2, cx2, lz, tint)
 				occ.append([cx2 - w2 * 0.5, cx2 + w2 * 0.5])
 		elif li == 0:
-			# bg1 自由铺：楼 + 2~3.5 格缝的节奏（根部被前排挡住，楼身从前排楼顶上露出）
+			# bg1 自由铺：楼 + 1.2~2.6 格缝的节奏（比旧 2~3.5 更密——创始人
+			# 要种类全量可见，缝收紧才排得下 26 卡；根部被前排挡住）
 			var gx := -65.0
 			while gx < 65.0:
 				var card: String = str(_pick_in_band.call(gx, 999.0))
@@ -1119,7 +1090,7 @@ func _place_rows() -> void:
 					w = 8.0
 				_spawn_bg_card(str(card), gx + w * 0.5, lz, tint)
 				occ.append([gx, gx + w])
-				gx += w + rng.randf_range(2.0, 3.5)
+				gx += w + rng.randf_range(1.2, 2.6)
 		else:
 			# bg2/bg3 吸附前层缝：每条缝中心放一栋楼（从缝里露出楼身）。
 			# 本层自身保持 ≥1 格缝（给再后一层插）；放不下的缝放弃（末层补洞兜底）。
@@ -1237,10 +1208,15 @@ func _add_platform() -> void:
 	#   台面/镶边只铺城内（±WALL_X 城墙收口），墙外是野地。
 	_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
-	_add_ground_plane_at("rammed_earth_128.png", -47.5, 39.0,
+	_add_ground_plane_at("rammed_earth_128.png", -38.0, 20.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
-	_add_ground_plane_at("rammed_earth_128.png", 47.5, 39.0,
+	_add_ground_plane_at("rammed_earth_128.png", 38.0, 20.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
+	# 近墙段台面换 v1 变体 + 再暗半档（台面也走中心→边缘渐变）
+	_add_ground_plane_at("rammed_earth_128_v1.png", -57.5, 19.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.79, 0.74, 0.63))
+	_add_ground_plane_at("rammed_earth_128_v1.png", 57.5, 19.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.79, 0.74, 0.63))
 	# 石↔土交接条（gtx 手工收边件，压在交接线上）
 	_add_decal("transitions/gtx_brick_gravel_road_v1.png", -28.0, PLAT_H + 0.008,
 		Vector2(4.8, 1.55))

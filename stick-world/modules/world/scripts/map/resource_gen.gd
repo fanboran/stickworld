@@ -91,9 +91,11 @@ func _too_close(px: float, py: float, nodes: Array) -> bool:
 ## 树林区梯度（用户 2026-09-06：树"略近一段出现"即可 + 稀疏→密集过渡可感知）：
 ## 距硬化地面（土路带）约半屏（960px）净空，再约 0.75 屏渐密，之外满密度 2×。
 ## 石/矿同样走梯度（石头在森林里，村庄净空区干净）。
-const FOREST_CLEAR_CELLS := 30    ## 960px / 32px：硬化区旁净空
-const FOREST_RAMP_CELLS := 45    ## 再 45 格渐密
-const FOREST_DENSITY_MULT := 2.0 ## 最密处 = 基线密度的倍数
+## var 而非 const：小纵深图（HD-2D 主街墙外带仅 28 格）按需压缩梯度档，
+## 否则默认净空 30 格 > 带宽会把整带清空。
+var FOREST_CLEAR_CELLS := 30    ## 硬化区旁净空（格）
+var FOREST_RAMP_CELLS := 45    ## 再 N 格渐密
+var FOREST_DENSITY_MULT := 2.0 ## 最密处 = 基线密度的倍数
 
 ## 该 cell 的树密度倍率（0 = 不长树；FOREST_DENSITY_MULT = 满密度）
 func _forest_rate(cell_x: int, road_min: int, road_max: int) -> float:

@@ -30,6 +30,7 @@ const SV_H := 176            # SubViewport 高（px）
 const RIG_SCALE := 0.475      # 原生 ~274px -> ~130px（= 130 世界单位 = 1.70m，§0.3 比例锚）
 const FOOT_ROW := 144        # 脚底落在 SubViewport 的第几行（自顶向下，留 32px 底边）
 const PX := 1.0 / 32.0       # 1 SubViewport px = 1 Blender 世界单位 = 1/32 格
+const SIZE_K := 1.2          # 角色 billboard 世界占位放大（2026-09-14：偏小反馈）
 ## 双脚 IK 目标的中点（stickman_test.tscn 里 outfoot=(28,131) / innerfoot=(-22,131)），
 ## 用来把角色水平居中、脚底钉在 FOOT_ROW。这两个 Marker 是**骨骼 IK 的契约锚点**，
 ## 位置稳定（不随动画帧漂），所以比 alpha 包围盒更适合当摆位基准。
@@ -129,7 +130,7 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 ## 每 SubViewport 像素 = PX/px_scale 格（超采样后 1 像素更小）。
 ## world_y(row) = center_y + (sv_h/2 - row) * PX/px_scale，令 world_y(foot_row) = 0。
 func quad_center_offset_y() -> float:
-	return (_foot_row - float(_sv_size.y) * 0.5) * (PX / px_scale)
+	return (_foot_row - float(_sv_size.y) * 0.5) * (PX / px_scale) * SIZE_K
 
 
 ## 在 (x, z) 放一个角色（脚底落世界 y=0）。flip 只翻 x，共用同一张 SubViewport 纹理。
@@ -137,7 +138,7 @@ func quad_center_offset_y() -> float:
 ## SubViewport 变大只是让 2D 角色被画得更精细，世界占位始终 4.06 格。
 func add_char(x: float, z: float, flip: bool = false) -> MeshInstance3D:
 	var q := QuadMesh.new()
-	q.size = Vector2(SV_W * PX, SV_H * PX)
+	q.size = Vector2(SV_W * PX, SV_H * PX) * SIZE_K
 	var mi := MeshInstance3D.new()
 	mi.mesh = q
 	mi.material_override = mat
@@ -154,7 +155,7 @@ func add_char(x: float, z: float, flip: bool = false) -> MeshInstance3D:
 
 	# 接地影：贴地水平 quad，随角色 x/z 走
 	var sq := QuadMesh.new()
-	sq.size = Vector2(4.2, 2.6)
+	sq.size = Vector2(4.2, 2.6) * SIZE_K
 	var sh := MeshInstance3D.new()
 	sh.mesh = sq
 	sh.material_override = _shadow_mat
@@ -177,15 +178,17 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0) -> void:
 		return
 	_flip = flip
 	_depth = depth
+	# 缩放并入 basis 一次赋值（scale setter 与 basis 先后赋值互相覆盖）；
+	# 朝向翻转走 shader 的 UV 镜像（basis 镜像会把俯仰轴一起翻——旧 bug）
 	var b := _cam_basis()
-	if flip:
-		b = Basis(Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)) * b
+	b = b.scaled(Vector3(depth, depth, depth))
 	_quad.basis = b
-	_quad.scale = Vector3(depth, depth, depth)
 	_quad.position = Vector3(x, quad_center_offset_y() * depth, z)
+	if mat != null:
+		mat.set_shader_parameter("flip_uv", flip)
 	if _my_shadow != null:
 		_my_shadow.position = Vector3(x, 0.09, z)
-		_my_shadow.scale = Vector3(depth, depth, 1.0)
+		_my_shadow.scale = Vector3(depth * SIZE_K, depth * SIZE_K, 1.0)
 
 
 ## 动画切换（只在变化时 play，避免每帧重置动画进度）

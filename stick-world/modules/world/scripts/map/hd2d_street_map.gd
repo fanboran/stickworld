@@ -111,6 +111,8 @@ func _sync_character_render() -> void:
 			continue
 		var id: int = e.get_instance_id()
 		var ch: Node3D = _char_map.get(id)
+		if ch == null and not (e.has_method("is_possessed") and e.is_possessed()):
+			continue   # [DEBUG 数量假设验证] 暂时只给附身玩家建 billboard
 		if ch == null or not is_instance_valid(ch):
 			ch = _hd.spawn_character()
 			_char_map[id] = ch

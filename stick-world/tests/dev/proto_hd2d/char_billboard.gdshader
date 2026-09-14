@@ -40,8 +40,14 @@ uniform float alpha_cut : hint_range(0.0, 0.5) = 0.004;
 // 与环境格格不入"）。0 = 不处理，0.35 ≈ 屏幕上 ~1px 的过渡带。
 uniform float alpha_soften : hint_range(0.0, 1.0) = 0.35;
 
+uniform bool flip_uv = false;   // 朝左 = UV 水平镜像（basis 镜像会破坏俯仰，弃用）
+
 void fragment() {
-	vec4 c = texture(char_tex, UV);
+	vec2 uv = UV;
+	if (flip_uv) {
+		uv.x = 1.0 - uv.x;
+	}
+	vec4 c = texture(char_tex, uv);
 	if (c.a <= alpha_cut) {
 		discard;
 	}

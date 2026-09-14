@@ -114,8 +114,6 @@ func _sync_character_render() -> void:
 			continue
 		var id: int = e.get_instance_id()
 		var ch: Node3D = _char_map.get(id)
-		if ch == null and not (e.has_method("is_possessed") and e.is_possessed()):
-			continue   # [DEBUG 数量假设验证] 暂时只给附身玩家建 billboard
 		if ch == null or not is_instance_valid(ch):
 			ch = _hd.spawn_character()
 			_char_map[id] = ch
@@ -251,10 +249,10 @@ func _build_solid_bodies(hd: Node3D) -> void:
 	for r: Variant in hd.get_solid_rects():
 		var x0: float = float(r[0]) * CELL_PX
 		var x1: float = float(r[1]) * CELL_PX
-		# y 带：4 元条目 = 点障碍（道具/树木，只在其纵深带附近挡人，可绕行）；
-		# 2 元条目 = 建筑墙体（贯穿整个行走带后段）
-		var y0: float = float(r[3]) if r.size() > 3 else WALK_BACK_Y
-		var y1: float = float(r[4]) if r.size() > 4 else WALK_FRONT_Y
+		# y 带：实心条目统一 4 元组 [x0, x1, y0, y1]——建筑=地基带
+		# [688, 基线+44]，道具/树=自身纵深带（点障碍，可绕行）
+		var y0: float = float(r[2]) if r.size() > 2 else WALK_BACK_Y
+		var y1: float = float(r[3]) if r.size() > 3 else WALK_FRONT_Y
 		var shape := CollisionShape2D.new()
 		var rect := RectangleShape2D.new()
 		rect.size = Vector2(maxf(8.0, x1 - x0), maxf(8.0, y1 - y0))

@@ -53,6 +53,8 @@ const LAYOUT_DIR := "proto_hd2d/hd2d_layouts/"   # city_layout 导出的布局 J
 const GROUND_DIR := "ground_tiles/"
 
 const CAM_W := 74.0                      # 正交视宽（格）-> 1920 宽下 25.9 px/格
+## 行走带前缘的 3D z（2D y=1080 的地面投影线：(1080-688)/32）——缩放下边界锚点
+const WALK_FRONT_Z := 12.25
 const CAM_CY := 11.0                     # 相机视线轴的世界高度
 const CAM_DIST := 40.0
 
@@ -613,11 +615,23 @@ func set_cam_x(cx: float) -> void:
 		_cam.position.x = cx
 
 
-## 3D 相机缩放镜像（2D 滚轮 zoom）：2D 放大 n 倍 = 3D 正交视宽缩 1/n——
-## 否则 2D 世界缩放时街景纹丝不动，两套相机速度/位置脱钩
+## 3D 相机缩放镜像——与 2D CameraRig 同一语义：**下边界锚定**（创始人口径：
+## "原来那种缩放以下边界为基准"）。CameraRig 把屏幕底沿钉在 ground_bottom
+## （本图=1080=行走带前缘）；3D 侧对应把屏幕底沿钉在 WALK_FRONT_Z，缩放时
+## 视宽缩 1/n、相机沿 z 反向平移让底沿不动、画面只向上扩——正交默认绕
+## 屏幕中心扩缩，不这样做就会与 2D 脱钩（玩家/NPC 在两套锚点间漂移）。
+## 推导：视线地面交点 z_c = P.z - P.y/tanθ；地面点 z 每大 1 格，屏幕下移
+## sinθ；屏幕底沿地面 z = z_c + h_v/(2 sinθ)（h_v = size·视口高宽比，KEEP_WIDTH
+## 下 size=视宽）⇒ 钉底沿在 WALK_FRONT_Z ⇒ z_c = WALK_FRONT_Z - h_v/(2 sinθ)。
 func set_cam_zoom(zoom: float) -> void:
-	if _cam != null and zoom > 0.05:
-		_cam.size = CAM_W / clampf(zoom, 0.25, 8.0)
+	if _cam == null or zoom <= 0.05:
+		return
+	_cam.size = CAM_W / clampf(zoom, 0.25, 8.0)
+	var vp := _cam.get_viewport().get_visible_rect().size
+	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)
+	var t := deg_to_rad(TILT_DEG)
+	var z_center: float = WALK_FRONT_Z - h_v * 0.5 / sin(t)
+	_cam.position.z = z_center + _cam.position.y / tan(t)
 
 
 ## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）
@@ -799,6 +813,7 @@ func _build_world() -> void:
 	_cam.attributes = _cam_attrs
 	add_child(_cam)
 	_cam.current = true
+	set_cam_zoom(1.0)   # 初始取景即按"下边界锚定"校正（否则首帧前是旧中心取景）
 
 	# --- 2D 角色宿主（SubViewport -> billboard）---
 	# 静默常驻模式（游戏地图挂载）不生成写死的演示火柴人——街上有真玩家了；

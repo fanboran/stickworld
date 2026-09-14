@@ -842,7 +842,7 @@ func spawn_character() -> Node:
 	h.name = "Char%d" % _char_seq
 	_char_seq += 1
 	add_child(h)
-	h.set_px_scale(1.0)
+	h.set_px_scale(2.0)   # 2x 超采样：描边锐利无彩边
 	h.build(self, "idle", TILT_DEG)
 	h.add_char(0.0, 0.0, false)
 	return h

@@ -121,6 +121,9 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	mat.shader = CHAR_SHADER
 	mat.set_shader_parameter("char_tex", viewport.get_texture())
 	mat.set_shader_parameter("tint", Color(1, 1, 1))
+	# 硬边切割（目标旧版=干净直轮廓）：软羽化边在明亮地面上会透出彩边
+	mat.set_shader_parameter("alpha_soften", 0.0)
+	mat.set_shader_parameter("alpha_cut", 0.35)
 
 	_shadow_mat = ShaderMaterial.new()
 	_shadow_mat.shader = SHADOW_SHADER

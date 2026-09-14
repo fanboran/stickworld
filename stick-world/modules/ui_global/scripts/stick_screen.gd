@@ -35,6 +35,10 @@ var _prev_speed: int = -1
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	# 模态骨架自声明 ALWAYS：open() 契约是"打开即拉引擎总闸（SceneTree.paused）"，
+	# 面板必须在总闸落下后仍可交互。游戏内有 UIRoot ALWAYS 子树庇护，主菜单把
+	# 面板直接挂在 PAUSABLE 子树下——不自声明会把自己冻结（按钮全失灵）。
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
 
 

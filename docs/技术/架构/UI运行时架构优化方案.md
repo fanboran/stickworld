@@ -107,7 +107,7 @@ API：`UIRoot.place_in_zone(zone: StringName, control: Control) -> void`——�
 **规约**（进 review 检查项）：
 - 角部部件内**禁止**自算 `set_anchors_preset`/`position`/`offset_*` 定位；只允许 `custom_minimum_size` 声明体量。
 - 保留区即防撞合同：新部件入 zone 必须能放进保留区，放不下改表而不是改部件。
-- 开发期可视：debug 构建下 zone 保留区画框（`Engine.is_debug_build()` 时画半透明矩形），越界 `push_warning`。
+- 开发期可视：debug 构建下 zone 保留区画框（半透明矩形 + 区名），显隐随 F3 调试总开关（`DebugApi.visibility_changed`），越界 `push_warning`；环境变量 `HUD_ZONES_DEBUG=0` 可彻底关闭该层。
 
 **与未来需求的接口**：`top_left_stack` 的堆叠语义即多任务线任务列表的落点（待办「任务卡多任务线扩展」）——N 张任务卡顺序下移，不用再改任何部件。
 

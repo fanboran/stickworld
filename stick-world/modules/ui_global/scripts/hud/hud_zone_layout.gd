@@ -8,9 +8,10 @@ extends RefCounted
 ##   - 坐标全部锚定+偏移实现（边距固定像素，锚定边随分辨率自适应），无 1920 绝对值。
 ##   - 堆叠 zone（mode="stack"）维护游标：后挂的排在先挂的下方，按成员实际 rect
 ##     推进（成员尺寸变化经 resized 信号触发重排，deferred 合并同帧多次）。
-##   - debug 构建下常驻画 zone 保留区半透明框（设环境变量 HUD_ZONES_DEBUG=0 关闭），
+##   - debug 构建下画 zone 保留区半透明框（设环境变量 HUD_ZONES_DEBUG=0 彻底关闭），
 ##     部件越界保留区 push_warning（每部件一次）。
-##   - 可见性判定 OS.is_debug_build()：编辑器/调试运行可见，发行导出自动消失。
+##   - 画框随 F3 调试总开关显隐（订阅 DebugApi.visibility_changed），不再常驻；
+##     是否存在该层由 OS.is_debug_build() 决定：发行导出不创建。
 ##
 ## 设计基线：docs/技术/架构/UI运行时架构优化方案.md §三。
 ## 约束：堆叠成员须挂在「顶部通栏全宽、原点即屏左上」的父级下（GlobalHUD /
@@ -82,13 +83,14 @@ var _dock_occupant: Dictionary = {}
 var _warned: Dictionary = {}
 ## 重排合并闸门（同帧多次 resized 只排一次）：StringName -> true
 var _restack_pending: Dictionary = {}
-## debug 画框层（debug 构建且未被环境变量关闭时存在）
+## debug 画框层（debug 构建且未被环境变量关闭时存在；显隐随 F3）
 var _debug_overlay: Control = null
 
 
 # ─────────────────────────────── 装配 ────────────────────────────────
 
 ## 挂到 UIRoot：创建 zone debug 画框层（release 构建为空操作）。
+## 创建后由层自身订阅 DebugApi 可见性——F3 开则画、F3 关则隐藏。
 func attach(ui_root: CanvasLayer) -> void:
 	if not OS.is_debug_build():
 		return
@@ -281,8 +283,9 @@ func _warn_if_outside(zone_id: StringName, m: Control, used: Rect2, region: Arra
 
 # ─────────────────────────────── debug 画框层 ────────────────────────────────
 
-## zone 保留区可视化：半透明橙框 + 区名，debug 构建常驻——把「全部占位」变成
-## 一眼可查（防撞合同的可见形态）。挂 UIRoot 下，z 压过 HUD 槽、低于模态/系统层。
+## zone 保留区可视化：半透明橙框 + 区名——把「全部占位」变成一眼可查（防撞合同
+## 的可见形态）。挂 UIRoot 下，z 压过 HUD 槽、低于模态/系统层。
+## 显隐跟随 F3 调试总开关（DebugApi.visibility_changed），无 DebugApi 时退化为常显。
 class DebugZones:
 	extends Control
 
@@ -299,7 +302,16 @@ class DebugZones:
 
 	func _ready() -> void:
 		get_viewport().size_changed.connect(queue_redraw)
+		if DebugApi != null:
+			DebugApi.visibility_changed.connect(_on_debug_visibility_changed)
+			_on_debug_visibility_changed(DebugApi.is_visible())
 		queue_redraw()
+
+	## F3 开则画、F3 关则整层隐藏（隐藏即不绘制，无逐帧成本）
+	func _on_debug_visibility_changed(p_visible: bool) -> void:
+		visible = p_visible
+		if p_visible:
+			queue_redraw()
 
 	func _draw() -> void:
 		var vp := get_viewport_rect().size

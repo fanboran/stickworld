@@ -93,7 +93,11 @@ func _process(_delta: float) -> void:
 		if _hd.has_method("set_cam_x"):
 			_hd.set_cam_x(cam2d.global_position.x / CELL_PX)
 		if _hd.has_method("set_cam_zoom"):
-			_hd.set_cam_zoom(cam2d.zoom.x)   # 滚轮缩放同步，防两套相机脱钩
+			# CameraRig 的 zoom = base_zoom(分辨率适配) × user_zoom(玩家滚轮)。
+			# 3D 侧只认玩家缩放：base_zoom 已经把"世界像素/屏幕像素"归一，
+			# 不除掉它，换分辨率后 3D 构图整体错一档（默认缩放按绝对像素算）。
+			var base: float = float(cam2d.get("base_zoom")) if "base_zoom" in cam2d else 1.0
+			_hd.set_cam_zoom(cam2d.zoom.x / maxf(base, 0.001))   # 滚轮缩放同步，防两套相机脱钩
 	_sync_character_render()
 	_apply_time_of_day(false)
 
@@ -141,6 +145,11 @@ func _sync_character_render() -> void:
 							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)))
 		if ch.has_method("set_anim"):
 			ch.set_anim("walk" if moving else "idle")
+		# 武器/工具镜像：2D 骨架已隐藏，武器须挂进 billboard 内部骨架
+		# （职业识别走武器——工具不渲染 = 村民"没有职业"的观感）
+		var mount: Variant = body.get("weapon_mount")
+		if mount != null and is_instance_valid(mount) and ch.has_method("set_weapon_type"):
+			ch.set_weapon_type(int(mount.get("weapon_type")))
 	# 清理已消失实体（死亡/切图）
 	for id in _char_map.keys():
 		if not alive.has(id):

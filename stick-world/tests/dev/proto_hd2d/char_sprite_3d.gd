@@ -267,6 +267,41 @@ func set_anim(anim: String) -> void:
 	rig.play(anim)
 
 
+## 主手武器镜像（HD-2D billboard）：实体的武器挂在 2D 骨架手骨
+## （hip/…/hand_inner/weapon_hand）上，随 RigHost 一起被隐藏——NPC 的
+## 镐/斧/剑因此在街上"空手"。把同一武器场景挂进本 SubViewport 骨架的
+## 同名骨，GripPoint 对齐口径与 WeaponMount._mount_one 一致（握点落手骨原点）。
+var _weapon_instance: Node2D = null
+var _weapon_type_cached: int = -1
+
+func set_weapon_type(wt: int) -> void:
+	if wt == _weapon_type_cached:
+		return
+	_weapon_type_cached = wt
+	if _weapon_instance != null and is_instance_valid(_weapon_instance):
+		_weapon_instance.queue_free()
+		_weapon_instance = null
+	if rig == null or wt == int(WeaponMount.WeaponType.NONE):
+		return
+	var scene_path: String = str(WeaponMount.WEAPON_SCENE_PATHS.get(wt, ""))
+	if scene_path.is_empty():
+		return
+	var bone: Node2D = rig.get_node_or_null(
+			"hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner/hand_inner/weapon_hand") as Node2D
+	if bone == null:
+		return
+	var scene: PackedScene = load(scene_path)
+	if scene == null:
+		return
+	var instance: Node2D = scene.instantiate()
+	var grip := instance.get_node_or_null("GripPoint") as Marker2D
+	var spr := instance.get_node_or_null("Sprite") as Sprite2D
+	if grip != null and spr != null:
+		instance.position = -(grip.position * spr.scale).rotated(spr.rotation)
+	bone.add_child(instance)
+	_weapon_instance = instance
+
+
 ## 显示/隐藏全部角色（含影）。用于 A/B 对照出图。
 func set_chars_visible(v: bool) -> void:
 	for c in get_children():

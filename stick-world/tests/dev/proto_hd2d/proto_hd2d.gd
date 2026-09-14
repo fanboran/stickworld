@@ -786,6 +786,25 @@ func _build_world() -> void:
 	var far_z: float = float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0))
 	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
 		0.0, 14.0, Color(0.90, 0.86, 0.80))
+	# 兜底大地皮：街面分段各有边界，缩太小视野越出分段范围就露天空
+	# （创始人：缩太小下边界出现虚空）。这层压在所有分段之下（y=-0.05），
+	# 只在分段没铺到的区域露脸；±600 格宽 + z -30~40，任何缩放都不露底。
+	var fb_mesh := PlaneMesh.new()
+	fb_mesh.size = Vector2(1200.0, 70.0)
+	var fb_mi := MeshInstance3D.new()
+	fb_mi.mesh = fb_mesh
+	var fb_mat := StandardMaterial3D.new()
+	var fb_tex := _tex_abs(_temp + GROUND_DIR + "rammed_earth_128.png")
+	if fb_tex != null:
+		fb_mat.albedo_texture = fb_tex
+	fb_mat.albedo_color = Color(0.70, 0.65, 0.57)
+	fb_mat.roughness = 0.95
+	fb_mat.uv1_scale = Vector3(300.0, 17.5, 1.0)
+	fb_mi.material_override = fb_mat
+	fb_mi.position = Vector3(0.0, -0.05, 5.0)
+	fb_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	fb_mi.name = "GroundFallback"
+	_ground_root.add_child(fb_mi)
 	_add_sky_backdrop()                   # 原 2D 天空贴图（远山/树线）立于背景之后
 	_add_platform()                       # 人行道台面（三段：中石板/两侧夯土+交接条）+ 台肩长条石
 	_add_width_guides()                   # 建筑宽度辅助线（--debug 才显示）

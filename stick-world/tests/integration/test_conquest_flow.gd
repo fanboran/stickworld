@@ -23,7 +23,7 @@ const TID_2 := "ter_bandit_camp_02"  # 赤岭寨：l1_settlement_03，守军 5 +
 const TID_3 := "ter_warlord_keep_01"  # 铁腕要塞：l1_settlement_04
 const MAP_1 := "l1_settlement_02"
 const MAP_2 := "l1_settlement_03"
-const HOME_MAP := "village_a"
+const HOME_MAP := "hd2d_street"  # 2026-09-14 启动直连：家图 = HD-2D 主街
 ## 战斗结束/回村轮询节奏：0.25s 步进（战斗结束超时 30s，回村轮询 20s）
 const POLL_INTERVAL := 0.25
 const BATTLE_TIMEOUT := 30.0

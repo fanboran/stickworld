@@ -19,7 +19,8 @@ extends Node
 ## region_owner_changed 的玩家侧归属标识（P0 无接收端；§9.1 语义：发 tile 级 id）
 const PLAYER_OWNER_ID := "player"
 ## 败仗回村（game_root._register_default_maps 的注册 id；expansion 不引 world 常量）
-const HOME_MAP_ID := "village_a"
+## 2026-09-14 启动直连：家图 = HD-2D 主街 hd2d_street
+const HOME_MAP_ID := "hd2d_street"
 ## 奖励入账 region（与初始资源发放/建造扣减同池，保证玩家可直接消费）
 const REWARD_REGION := "test_region"
 

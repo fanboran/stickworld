@@ -25,7 +25,8 @@ const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 
 ## 地图显示名（map_id -> 中文名；未收录的 id 直接显示原始 id）
 const MAP_DISPLAY_NAMES: Dictionary = {
-	"village_a": "村落 A（初始村）",
+	"hd2d_street": "主街（HD-2D 初始村）",
+	"village_a": "村落 A（旧初始村，调试）",
 	"village_b": "村落 B",
 	"road_a_b": "道路（村落 A↔B）",
 	"battlefield": "遭遇战战场",

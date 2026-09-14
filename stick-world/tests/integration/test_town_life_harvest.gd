@@ -49,6 +49,8 @@ func _ready() -> void:
 ## 世界搭建：村庄加载 + 补矿工 + 摆树/矿 + 预置铁匠原料
 func _setup_world() -> void:
 	_game_root = GameRootScene.instantiate()
+	# 启动直连后默认开局图是 HD-2D 主街；本套件测 2D 村庄玩法，声明以村A为初始图
+	_game_root.set("boot_map_id_override", "village_a")
 	add_child(_game_root)
 	for i in 10:
 		await get_tree().process_frame

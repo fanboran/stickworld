@@ -29,8 +29,11 @@ const BARRACKS_DEF_ID := "barracks"
 const POP_CAP_DEFAULT := 8
 ## 人口再生默认间隔（游戏秒；TimeManager 暂停不计时）
 const POP_GROWTH_DEFAULT := 45.0
-## P0 人口再生只在村A（多城人口归 C 线/城镇生成线）
-const HOME_MAP_ID := "village_a"
+## P0 人口再生只在家图（多城人口归 C 线/城镇生成线）
+## 2026-09-14 启动直连：家图 = HD-2D 主街 hd2d_street
+const HOME_MAP_ID := "hd2d_street"
+## 家图实例字段（默认 = HOME_MAP_ID；测试可覆盖——再生机制测试在 2D 村A图上跑）
+var home_map_id: String = HOME_MAP_ID
 ## 新村民出生排布（照 initial_content.spawn_npcs：仓库右侧 1050 起）
 const NPC_START_X := 1050.0
 
@@ -60,7 +63,7 @@ func _process(delta: float) -> void:
 	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE）；步长经 sim_delta 携带速度档
 	if _scene_loader == null or not _scene_loader.has_method("get_current_map_id"):
 		return
-	if String(_scene_loader.get_current_map_id()) != HOME_MAP_ID:
+	if String(_scene_loader.get_current_map_id()) != home_map_id:
 		return
 	_accum += TimeManager.sim_delta(delta) if TimeManager != null else delta
 	if _accum < pop_growth_interval:

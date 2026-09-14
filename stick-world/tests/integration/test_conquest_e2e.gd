@@ -29,7 +29,7 @@ const ScriptGarrisonSpawner := preload("res://modules/expansion/scripts/garrison
 const TID_1 := "ter_bandit_camp_01"  # 黑石营地：l1_settlement_02，守军 3 + 敌将
 const TID_2 := "ter_bandit_camp_02"  # 赤岭寨：l1_settlement_03，守军 5 + 敌将
 const TID_3 := "ter_warlord_keep_01"  # 铁腕要塞：l1_settlement_04，守军 8 + 敌将
-const HOME_MAP := "village_a"
+const HOME_MAP := "hd2d_street"  # 2026-09-14 启动直连：新开局/败仗回村都在 HD-2D 主街
 ## 战斗结束/回村轮询节奏：0.25s 步进（战斗结束超时 30s，回村轮询 20s）
 const POLL_INTERVAL := 0.25
 const BATTLE_TIMEOUT := 30.0

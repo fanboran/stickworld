@@ -7,8 +7,12 @@
     "现有 map_id：village_a（出生地）/ village_b / road_a_b / mega_interior / battlefield / forest_zone。",
     "战略图聚落（settlement）接入场景图后，同样按其 map_id 在此登记。"
   ],
+  "hd2d_street": {
+    "title": "起始之地",
+    "subtitle": "街市 · 铁匠铺 · 宅邸"
+  },
   "village_a": {
-    "title": "起始之地"
+    "title": "旧村（调试）"
   },
   "village_b": {
     "title": "村落B"

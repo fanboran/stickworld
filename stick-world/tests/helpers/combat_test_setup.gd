@@ -39,6 +39,8 @@ func start(host: Node) -> void:
 		host.get_tree().quit(1)
 		return
 	game_root = packed.instantiate()
+	# 战斗测试需要 2D 空旷初始图（启动直连后默认开局图是 HD-2D 主街布景）
+	game_root.set("boot_map_id_override", "village_a")
 	host.add_child(game_root)
 	# 等待地图加载和实体生成
 	for i in 8:

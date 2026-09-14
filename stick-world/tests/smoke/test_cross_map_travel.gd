@@ -125,24 +125,25 @@ func _run_phase_1_tests() -> void:
 	_runner.end_test()
 
 	_runner.begin_test("SceneLoader: 出口配置正确")
-	var exit_right: Dictionary = sl.get_map_exit(ScriptGameRoot.VILLAGE_A_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	_runner.assert_equal(exit_right.get("target", ""), ScriptGameRoot.ROAD_MAP_ID, "村落A 右出应指向道路")
-	_runner.assert_equal(exit_right.get("entry", -1), WorldAPI.EntrySide.LEFT, "村落A 右出应从左侧进入道路")
+	# 2026-09-14 启动直连：主旅行链改挂 hd2d_street（village_a 保留注册仅供调试）
+	var exit_right: Dictionary = sl.get_map_exit(ScriptGameRoot.HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	_runner.assert_equal(exit_right.get("target", ""), ScriptGameRoot.ROAD_MAP_ID, "主街 右出应指向道路")
+	_runner.assert_equal(exit_right.get("entry", -1), WorldAPI.EntrySide.LEFT, "主街 右出应从左侧进入道路")
 	var road_left: Dictionary = sl.get_map_exit(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
-	_runner.assert_equal(road_left.get("target", ""), ScriptGameRoot.VILLAGE_A_MAP_ID, "道路左出应指向村落A")
+	_runner.assert_equal(road_left.get("target", ""), ScriptGameRoot.HD2D_STREET_MAP_ID, "道路左出应指向主街")
 	var road_right: Dictionary = sl.get_map_exit(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	_runner.assert_equal(road_right.get("target", ""), ScriptGameRoot.VILLAGE_B_MAP_ID, "道路右出应指向村落B")
 	var vb_left: Dictionary = sl.get_map_exit(ScriptGameRoot.VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
 	_runner.assert_equal(vb_left.get("target", ""), ScriptGameRoot.ROAD_MAP_ID, "村落B 左出应指向道路")
 	_runner.end_test()
 
-	_runner.begin_test("初始地图: 村落A 已加载")
+	_runner.begin_test("初始地图: 主街（hd2d_street）已加载")
 	_runner.assert_true(sl.is_map_loaded(), "应已加载地图")
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_A_MAP_ID, "当前应为 village_a")
+	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.HD2D_STREET_MAP_ID, "当前应为 hd2d_street")
 	_runner.assert_equal(sl.get_current_map_type(), WorldAPI.MapType.VILLAGE, "类型应为 VILLAGE")
 	_runner.end_test()
 
-	_runner.begin_test("初始地图: VillageMap 子节点齐全")
+	_runner.begin_test("初始地图: 主街子节点齐全")
 	var map := _get_current_map()
 	_runner.assert_true(map != null, "地图应存在")
 	if map:
@@ -150,7 +151,7 @@ func _run_phase_1_tests() -> void:
 		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS) != null, "ChunkTriggers 应存在")
 	_runner.end_test()
 
-	_runner.begin_test("初始地图: ChunkTrigger 存在（村落A 右出口）")
+	_runner.begin_test("初始地图: ChunkTrigger 存在（主街东西出口）")
 	if map:
 		var triggers: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS)
 		_runner.assert_true(triggers != null and triggers.get_child_count() > 0, "ChunkTriggers 应有子节点")

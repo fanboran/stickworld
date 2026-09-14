@@ -65,6 +65,8 @@ func _run_tests_async() -> void:
 		get_tree().quit(1)
 		return
 	_game_root = packed.instantiate()
+	# 启动直连后默认开局图是 HD-2D 主街；本套件测村A功能面，声明以村A为初始图
+	_game_root.set("boot_map_id_override", "village_a")
 	add_child(_game_root)
 	# 等待 map_loaded 信号触发（call_deferred + 一帧）
 	await get_tree().process_frame

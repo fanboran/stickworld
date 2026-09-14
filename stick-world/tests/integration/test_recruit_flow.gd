@@ -43,6 +43,7 @@ func _ready() -> void:
 
 func _run_tests() -> void:
 	_game_root = (load("res://modules/world/scenes/game_root.tscn") as PackedScene).instantiate()
+	_game_root.set("boot_map_id_override", "village_a")  # 招兵链路依赖村A设施
 	add_child(_game_root)
 	# boot：地图就绪 + deferred 装配（construction api 初始化）完成
 	var ok: bool = await TestHelpers.await_condition(func():
@@ -56,6 +57,10 @@ func _run_tests() -> void:
 		return
 	_org_api = _game_root.get_organization_api()
 	_recruit = _game_root.get_recruit_manager()
+	# 家图常量已随启动直连改为 hd2d_street（NPC 设施在该图豁免未开）；
+	# 本套件测人口再生/招兵机制本身，把再生家图覆盖回 2D 村A图
+	if _recruit != null:
+		_recruit.set("home_map_id", "village_a")
 	_resources = _game_root.get_resources_api()
 	_construction = _game_root.get_construction_api()
 	_runner.assert_not_null(_org_api, "OrganizationApi 就绪")

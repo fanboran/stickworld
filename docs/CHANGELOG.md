@@ -8,6 +8,12 @@
 
 ## [未发布]
 
+### 主街村民劳作修复——读档持久化 + billboard 劳作可见（2026-09-15）
+
+- **根因（读档全员罚站）**：存档 entities.extra_data 从未落 `profession`/`is_villager`，读档恢复的村民是"无职业、非村民"实体，AI 决策链双拒（`_try_harvest` 拒待业、`_is_villager` 拒无标志——连 wander 都不进）——新游戏有职业会干活、读档全员静止。修复：两字段随档（`SaveHandler._save_entities`）+ 读档回填并重挂职业装具（`TownLifeAPI.apply_profession_appearance`，工具不入档按 id 重应用）；老档安全回退、未知职业 id 回待业池。锁：`tests/unit/test_townlife_save_persistence.gd`（4 用例，进 batch_runner）
+- **次因（劳作不可见）**：主街镜像层把 attack 动画强制降级 walk/idle，且头顶进度条挂的 RigHost 在街上被整体隐藏——就算在干活也看不出。修复：镜像动画全放行（attack oneshot 自动回切，逐拍重触发靠 set_anim 变更检测）+ billboard 自带 3D 头顶进度条（`char_sprite_3d.set_work_progress`，bg/fill 双 quad 左锚定、随纵深缩放），数据源统一 `entity.get_action_progress()`（2D 指示器挪挂 RigHost 防街上双重渲染）
+- 诊断线索存档：用户 15:31 实机会话进主街全程无 `[TownLife] 村庄配比` 打印（该行只在新游戏 spawn 路径输出）= 读档路径实锤
+
 ### 看板遮挡治理 + 运行图对齐 Frappe Gantt 惯例（2026-09-04）
 
 - **程序化遮挡审计**：枚举全部 fixed/absolute 浮层矩形两两求交——坐实三项结构冲突后逐项归零

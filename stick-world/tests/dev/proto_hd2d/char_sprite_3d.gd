@@ -237,6 +237,71 @@ func set_bracket_visible(v: bool) -> void:
 		_bracket_quad.visible = v
 
 
+## ── 3D 头顶动作进度条（HD-2D 劳作可见）──
+## 2D 进度条挂 RigHost，街上 RigHost 整棵隐藏——billboard 自带一根条。
+## bg+fill 双 quad，fill 左锚定缩放；随 set_world_pos 同帧摆位（近大远小同 depth）。
+const WP_SIZE := Vector2(1.3, 0.16)   # 世界格（bar 宽 1.3 格，压在角色卡上方）
+const WP_LIFT := -0.15                # 相对卡顶的偏移（负 = 卡内收）：视口上沿留白
+                                      # ~0.5 格，内收后条贴在角色头顶（头部≈卡顶下 0.5 格）
+var _wp_bg: MeshInstance3D = null
+var _wp_fill: MeshInstance3D = null
+var _wp_ratio: float = -1.0           # -1 = 隐藏
+var _wp_anchor := Vector3.ZERO        # 本帧 (x, bar_y, z)，set_world_pos 写入
+
+func _ensure_work_bar() -> void:
+	if _wp_bg != null or _quad == null:
+		return
+	_wp_bg = _make_flat_quad(WP_SIZE, Color(0.08, 0.08, 0.10, 0.72), 6)
+	_wp_fill = _make_flat_quad(WP_SIZE, Color(0.95, 0.72, 0.18, 0.95), 7)
+	_wp_bg.visible = false
+	_wp_fill.visible = false
+
+## 竖立朝相机的无光照小 quad（进度条/四角框同口径：无真影、render_priority 抬层）
+func _make_flat_quad(size: Vector2, color: Color, priority: int) -> MeshInstance3D:
+	var q := QuadMesh.new()
+	q.size = size
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.render_priority = priority
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	return mi
+
+## 劳作进度（镜像层逐帧调）：ratio 0~1 显示，<0 隐藏。
+## 逐拍由行为层 set_action_progress/hide_action_progress 驱动（2D/3D 同一数据源）
+func set_work_progress(ratio: float) -> void:
+	if is_equal_approx(_wp_ratio, ratio):
+		return
+	_wp_ratio = ratio
+	if ratio >= 0.0:
+		_ensure_work_bar()
+	_layout_work_bar()
+
+## 按缓存锚位摆 bg/fill（set_world_pos 与 set_work_progress 共用）；
+## 纵深缩放同四角框口径（depth 进 basis，近大远小与角色卡一致）
+func _layout_work_bar() -> void:
+	if _wp_bg == null:
+		return
+	var show: bool = _wp_ratio >= 0.0 and _quad != null
+	_wp_bg.visible = show
+	_wp_fill.visible = show
+	if not show:
+		return
+	var d: float = _depth
+	_wp_bg.basis = _cam_basis().scaled(Vector3(d, d, 1.0))
+	_wp_bg.position = _wp_anchor
+	var r: float = clampf(_wp_ratio, 0.0, 1.0)
+	# fill 左锚定：宽随 r×depth 缩，中心 x 回补半宽差
+	_wp_fill.basis = _cam_basis().scaled(Vector3(d * r, d, 1.0))
+	_wp_fill.position = Vector3(
+		_wp_anchor.x - WP_SIZE.x * 0.5 * (1.0 - r) * d, _wp_anchor.y, _wp_anchor.z + 0.02)
+
+
 ## 游戏接入：逐帧更新本角色的世界位置/朝向/纵深缩放（quad 贴相机基+接地影贴地）。
 func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0) -> void:
 	if _quad == null:
@@ -257,6 +322,12 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0) -> void:
 	if _bracket_quad != null:
 		_bracket_quad.position = Vector3(x, 0.10, z + 0.35)
 		_bracket_quad.scale = Vector3(depth, depth, 1.0)
+	# 劳作条锚位：角色卡顶（卡中心 y + 半卡高）+ 净空，全部随 depth 缩放
+	if _wp_bg != null:
+		_wp_anchor = Vector3(x,
+				quad_center_offset_y() * depth + (SV_H * PX * SIZE_K * 0.5 + WP_LIFT) * depth,
+				z)
+		_layout_work_bar()
 
 
 ## 动画切换（只在变化时 play，避免每帧重置动画进度）

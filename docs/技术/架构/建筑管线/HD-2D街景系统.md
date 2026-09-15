@@ -25,7 +25,7 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 ### 2.1 卡与落位（proto_hd2d.gd）
 
 - 建筑卡 = Blender 正交相机（yaw 0°/tilt 26°，与游戏 3D 相机同角度）烘的透明底 PNG + glow 层。卡是 QuadMesh 贴图，**写深度**参与遮挡，吃伪法线光照。
-- **台基不烘**（创始人 2026-09-15）：地面灰白台基在烘端不生成（`buildings.py PLINTH_ENABLED=False`），接触阴影踏面同步剥除、整楼按实测最低点下沉贴地；引擎的 `base_cut` 裁剪随之退役（恒 0，旧公式会误切真墙）。
+- **台基不烘**（创始人 2026-09-15）：地面灰白台基在烘端不生成（`buildings.py PLINTH_ENABLED=False`），接触阴影踏面同步剥除、整楼按实测最低点下沉贴地。引擎 `base_cut` 改口径：**alpha 扫描卡底透明留白**（同 `_prop_bottom_pad`，PAD≈10px 不沉墙脚会浮空），下沉后墙脚回到与台基时代同一条基线，接地影 blob（固定 `BSHADOW_Z`）不用动。
 - **地面占地随卡导出**：`cards/props/nature.json` 每条带 `footprint: [宽格, 深格]`（贴地顶点实测，排除出檐悬挑）。宽度档规则（创始人拍板）：**新增档位一律 2 格整数倍**，存量 4/6/8/12/16 档保留不动。
 - 卡落位按 `cards.json` 的 anchor（画面中心对应世界点）；道具/自然物按**卡底贴地**公式（否则卡底入地）。
 - 元数据 JSON（cards/props/nature.json）**随包入库 tex/**，加载先找烘焙工作区 `temp/`、缺失回退 `res://…/tex/`——新机器 clone 后不跑 Blender 也能玩。

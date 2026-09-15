@@ -740,13 +740,51 @@ func _prop_bottom_pad(card: String) -> float:
 	return pad
 
 
-## 建筑卡底部台基裁剪比例（founder 2026-09-15："地基上一圈浅灰方形"=浅灰台基，
-## 台基裁剪已退役（创始人 2026-09-15：地面灰白台基改为烘端不生成——
-## buildings.py PLINTH_ENABLED=False + 整楼下沉贴地），卡底即墙脚，不再裁。
-## 旧实现按 anchor 纵深分量推台基带高度再整段裁掉（实证 barn 0.142 与贴图
-## 0.146 吻合）；台基消失后该公式会误切真墙，故恒 0。
-func _card_base_cut(_card: String) -> float:
-	return 0.0
+## 建筑卡底部透明留白占比 = base_cut（卡底贴地的落位修正量）。
+## 台基已退役（烘端 PLINTH_ENABLED=False），但烘卡四周仍有 PAD 透明留白——
+## 不裁不沉，卡底贴地贴的就是留白的底，墙脚悬空 ~0.3 格（创始人指认"浮空"）。
+## 口径同 _prop_bottom_pad：alpha 自底向上扫第一行内容（墙脚/台阶，接触阴影
+## 已在烘端剥除，扫不到残影），占比既作 shader 裁剪也作落位下沉量。
+## 下沉后墙脚回到 (ground, z_off)——与台基时代同一条基线，接地影 blob 不用动。
+var _card_pad_cache: Dictionary = {}
+
+func _card_base_cut(card: String) -> float:
+	if _card_pad_cache.has(card):
+		return float(_card_pad_cache[card])
+	var cut := 0.0
+	var img := _card_image(card)
+	if img != null:
+		if img.get_format() != Image.FORMAT_RGBA8:
+			img.convert(Image.FORMAT_RGBA8)
+		var h := img.get_height()
+		var w := img.get_width()
+		var data := img.get_data()
+		var row_bytes := w * 4
+		var y := h - 1
+		while y >= 0:
+			var row0 := y * row_bytes
+			var hit := false
+			for i in range(3, row_bytes, 4):
+				if data[row0 + i] > 16:
+					hit = true
+					break
+			if hit:
+				break
+			y -= 1
+		cut = clampf(float(h - 1 - y) / float(h), 0.0, 0.3)
+	_card_pad_cache[card] = cut
+	return cut
+
+
+## 建筑卡 albedo 图（temp 优先，缺失回退 tex/ 入库副本；都不在返回 null）
+func _card_image(card: String) -> Image:
+	for p in [_temp + CARD_DIR + card + ".png",
+			"res://tests/dev/proto_hd2d/tex/" + CARD_DIR + card + ".png"]:
+		if FileAccess.file_exists(p):
+			var img := Image.new()
+			if img.load(p) == OK:
+				return img
+	return null
 
 
 func _place_props() -> void:

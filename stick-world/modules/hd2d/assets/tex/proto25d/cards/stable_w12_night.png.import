@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dvkqtx6mb4khj"
-path="res://.godot/imported/stable_w12_night.png-0b5745247d5ccea0b777641b6de60b62.ctex"
+path="res://.godot/imported/stable_w12_night.png-cf1d4d699da16ca2de1b89c0f48fcb6b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/stable_w12_night.png"
-dest_files=["res://.godot/imported/stable_w12_night.png-0b5745247d5ccea0b777641b6de60b62.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/stable_w12_night.png"
+dest_files=["res://.godot/imported/stable_w12_night.png-cf1d4d699da16ca2de1b89c0f48fcb6b.ctex"]
 
 [params]
 

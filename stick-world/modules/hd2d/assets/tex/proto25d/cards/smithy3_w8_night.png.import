@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d2ty8hxd1ntyk"
-path="res://.godot/imported/smithy3_w8_night.png-25c66d30bec151dd7b1c922593e54b1a.ctex"
+path="res://.godot/imported/smithy3_w8_night.png-d24a9f98e2b62f4ed0d79d81a65146e2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/smithy3_w8_night.png"
-dest_files=["res://.godot/imported/smithy3_w8_night.png-25c66d30bec151dd7b1c922593e54b1a.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/smithy3_w8_night.png"
+dest_files=["res://.godot/imported/smithy3_w8_night.png-d24a9f98e2b62f4ed0d79d81a65146e2.ctex"]
 
 [params]
 

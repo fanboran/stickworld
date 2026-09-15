@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cmd1g2gqbdmpm"
-path="res://.godot/imported/hanging_basket.png-55bb70f423c434181f54179e77daac5b.ctex"
+path="res://.godot/imported/hanging_basket.png-5381503ba293bcbdc38139fab36bd99c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/hanging_basket.png"
-dest_files=["res://.godot/imported/hanging_basket.png-55bb70f423c434181f54179e77daac5b.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/hanging_basket.png"
+dest_files=["res://.godot/imported/hanging_basket.png-5381503ba293bcbdc38139fab36bd99c.ctex"]
 
 [params]
 

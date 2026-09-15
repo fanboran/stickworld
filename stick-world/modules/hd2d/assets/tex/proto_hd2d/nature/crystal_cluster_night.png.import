@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://fe5nfaybmohq"
-path="res://.godot/imported/crystal_cluster_night.png-52b8ad8726a655dfce1cc27f9edad52b.ctex"
+path="res://.godot/imported/crystal_cluster_night.png-ebd8c2f8b2f43a6f62f153b99a3d5b1c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/nature/crystal_cluster_night.png"
-dest_files=["res://.godot/imported/crystal_cluster_night.png-52b8ad8726a655dfce1cc27f9edad52b.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/nature/crystal_cluster_night.png"
+dest_files=["res://.godot/imported/crystal_cluster_night.png-ebd8c2f8b2f43a6f62f153b99a3d5b1c.ctex"]
 
 [params]
 

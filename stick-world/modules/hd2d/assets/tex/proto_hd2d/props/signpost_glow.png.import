@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cx2ubmy2f6v21"
-path="res://.godot/imported/signpost_glow.png-d3903ee865fa66ec63855a160f114d04.ctex"
+path="res://.godot/imported/signpost_glow.png-71fa19d1f16633c15e0b8272de25d21b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/signpost_glow.png"
-dest_files=["res://.godot/imported/signpost_glow.png-d3903ee865fa66ec63855a160f114d04.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/signpost_glow.png"
+dest_files=["res://.godot/imported/signpost_glow.png-71fa19d1f16633c15e0b8272de25d21b.ctex"]
 
 [params]
 

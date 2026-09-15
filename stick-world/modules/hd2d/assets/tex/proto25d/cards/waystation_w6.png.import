@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bpnvmsqawxm8e"
-path="res://.godot/imported/waystation_w6.png-851f392d1da43e142a3dd15143ac9997.ctex"
+path="res://.godot/imported/waystation_w6.png-c7583f51a38f064e4e20b71b5489fc05.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/waystation_w6.png"
-dest_files=["res://.godot/imported/waystation_w6.png-851f392d1da43e142a3dd15143ac9997.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/waystation_w6.png"
+dest_files=["res://.godot/imported/waystation_w6.png-c7583f51a38f064e4e20b71b5489fc05.ctex"]
 
 [params]
 

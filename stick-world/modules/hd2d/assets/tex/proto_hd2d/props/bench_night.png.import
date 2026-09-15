@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c6d6c3142acoa"
-path="res://.godot/imported/bench_night.png-84bd64553caba762f5722c45b5618008.ctex"
+path="res://.godot/imported/bench_night.png-e429777b9301b6c22e9db223a6f07f78.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/bench_night.png"
-dest_files=["res://.godot/imported/bench_night.png-84bd64553caba762f5722c45b5618008.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/bench_night.png"
+dest_files=["res://.godot/imported/bench_night.png-e429777b9301b6c22e9db223a6f07f78.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ca8sbe17db7us"
-path="res://.godot/imported/bench_wood_glow.png-af3a971f99fb871e4c91f81315fcbd6d.ctex"
+path="res://.godot/imported/bench_wood_glow.png-c6a2a9fee70b5859107efc4492e7455e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/bench_wood_glow.png"
-dest_files=["res://.godot/imported/bench_wood_glow.png-af3a971f99fb871e4c91f81315fcbd6d.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/bench_wood_glow.png"
+dest_files=["res://.godot/imported/bench_wood_glow.png-c6a2a9fee70b5859107efc4492e7455e.ctex"]
 
 [params]
 

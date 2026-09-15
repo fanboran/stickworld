@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://baqnmhtus4p5a"
-path="res://.godot/imported/ladder_night.png-2887da0406df842c5045ae9a7d54e11a.ctex"
+path="res://.godot/imported/ladder_night.png-9a16fe3088f12189f71303b61d596ab2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/ladder_night.png"
-dest_files=["res://.godot/imported/ladder_night.png-2887da0406df842c5045ae9a7d54e11a.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/ladder_night.png"
+dest_files=["res://.godot/imported/ladder_night.png-9a16fe3088f12189f71303b61d596ab2.ctex"]
 
 [params]
 

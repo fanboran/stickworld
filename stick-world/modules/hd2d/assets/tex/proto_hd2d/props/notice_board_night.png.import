@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cti2aldgcvdmh"
-path="res://.godot/imported/notice_board_night.png-6d4052de227dd9601043138678b0ad5d.ctex"
+path="res://.godot/imported/notice_board_night.png-ad274e800d7b928976ef753493d83508.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/notice_board_night.png"
-dest_files=["res://.godot/imported/notice_board_night.png-6d4052de227dd9601043138678b0ad5d.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/notice_board_night.png"
+dest_files=["res://.godot/imported/notice_board_night.png-ad274e800d7b928976ef753493d83508.ctex"]
 
 [params]
 

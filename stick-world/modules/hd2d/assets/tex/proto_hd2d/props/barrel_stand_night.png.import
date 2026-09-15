@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b37xuh0f71k36"
-path="res://.godot/imported/barrel_stand_night.png-72719d20bafb76142ec2338546dbd0af.ctex"
+path="res://.godot/imported/barrel_stand_night.png-4f3e49f40195a056696058a0fbc4ac67.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/barrel_stand_night.png"
-dest_files=["res://.godot/imported/barrel_stand_night.png-72719d20bafb76142ec2338546dbd0af.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/barrel_stand_night.png"
+dest_files=["res://.godot/imported/barrel_stand_night.png-4f3e49f40195a056696058a0fbc4ac67.ctex"]
 
 [params]
 

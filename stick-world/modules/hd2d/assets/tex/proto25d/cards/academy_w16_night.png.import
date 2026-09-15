@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://yec5ve640e6x"
-path="res://.godot/imported/academy_w16_night.png-da5bb0940ed1627ea129d071cddeb7d3.ctex"
+path="res://.godot/imported/academy_w16_night.png-a7dc00caa28f2c62678376401fccb089.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/academy_w16_night.png"
-dest_files=["res://.godot/imported/academy_w16_night.png-da5bb0940ed1627ea129d071cddeb7d3.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/academy_w16_night.png"
+dest_files=["res://.godot/imported/academy_w16_night.png-a7dc00caa28f2c62678376401fccb089.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bjx1kn7dwx0rf"
-path="res://.godot/imported/rowhouse_w12_night.png-9145ff2d7031473731b7e1fd26e9ba57.ctex"
+path="res://.godot/imported/rowhouse_w12_night.png-d55b9a1042fb90cb08d64e467684853e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/rowhouse_w12_night.png"
-dest_files=["res://.godot/imported/rowhouse_w12_night.png-9145ff2d7031473731b7e1fd26e9ba57.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/rowhouse_w12_night.png"
+dest_files=["res://.godot/imported/rowhouse_w12_night.png-d55b9a1042fb90cb08d64e467684853e.ctex"]
 
 [params]
 

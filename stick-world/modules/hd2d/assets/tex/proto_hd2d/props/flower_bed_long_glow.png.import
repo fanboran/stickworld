@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c58tbmp4e37us"
-path="res://.godot/imported/flower_bed_long_glow.png-da7997f224f2868b3cb6fff946ccbc57.ctex"
+path="res://.godot/imported/flower_bed_long_glow.png-d84036e65873a2275afe0bd446847789.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/flower_bed_long_glow.png"
-dest_files=["res://.godot/imported/flower_bed_long_glow.png-da7997f224f2868b3cb6fff946ccbc57.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/flower_bed_long_glow.png"
+dest_files=["res://.godot/imported/flower_bed_long_glow.png-d84036e65873a2275afe0bd446847789.ctex"]
 
 [params]
 

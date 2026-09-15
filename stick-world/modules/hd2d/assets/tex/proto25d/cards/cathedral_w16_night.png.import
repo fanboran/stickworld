@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://but6yeocnqoyh"
-path="res://.godot/imported/cathedral_w16_night.png-8dc8145c095b8a727130b40e6d12289d.ctex"
+path="res://.godot/imported/cathedral_w16_night.png-c57092dce935558b3fe368b15df540a2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/cathedral_w16_night.png"
-dest_files=["res://.godot/imported/cathedral_w16_night.png-8dc8145c095b8a727130b40e6d12289d.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/cathedral_w16_night.png"
+dest_files=["res://.godot/imported/cathedral_w16_night.png-c57092dce935558b3fe368b15df540a2.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b3cw28rrgradu"
-path="res://.godot/imported/lantern_night.png-6ac4d46fae6382a07accfb3a7958b4f0.ctex"
+path="res://.godot/imported/lantern_night.png-4ca6ed29682907b8b0814a39ab00a250.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/lantern_night.png"
-dest_files=["res://.godot/imported/lantern_night.png-6ac4d46fae6382a07accfb3a7958b4f0.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/lantern_night.png"
+dest_files=["res://.godot/imported/lantern_night.png-4ca6ed29682907b8b0814a39ab00a250.ctex"]
 
 [params]
 

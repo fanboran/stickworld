@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cp0i65iatmq1n"
-path="res://.godot/imported/council_hall_w8_glow.png-61e84045105c3839d923da5d6be64e10.ctex"
+path="res://.godot/imported/council_hall_w8_glow.png-137095fe164040bb00ebe32085c756f0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/council_hall_w8_glow.png"
-dest_files=["res://.godot/imported/council_hall_w8_glow.png-61e84045105c3839d923da5d6be64e10.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/council_hall_w8_glow.png"
+dest_files=["res://.godot/imported/council_hall_w8_glow.png-137095fe164040bb00ebe32085c756f0.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bpo0jd54lij1w"
-path="res://.godot/imported/crate_night.png-b6eb4f4b404beebc754e0ddec6101808.ctex"
+path="res://.godot/imported/crate_night.png-fcfe18bb6a7cb042a6b06c38368617c3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/crate_night.png"
-dest_files=["res://.godot/imported/crate_night.png-b6eb4f4b404beebc754e0ddec6101808.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/crate_night.png"
+dest_files=["res://.godot/imported/crate_night.png-fcfe18bb6a7cb042a6b06c38368617c3.ctex"]
 
 [params]
 

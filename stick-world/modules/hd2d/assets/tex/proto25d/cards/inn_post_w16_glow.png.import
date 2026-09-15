@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ds7wifwkvnt6n"
-path="res://.godot/imported/inn_post_w16_glow.png-97f414728723674f9b1f99a8be193a36.ctex"
+path="res://.godot/imported/inn_post_w16_glow.png-ab0ea3197fda8ba28daa9be049ccd8f0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/inn_post_w16_glow.png"
-dest_files=["res://.godot/imported/inn_post_w16_glow.png-97f414728723674f9b1f99a8be193a36.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/inn_post_w16_glow.png"
+dest_files=["res://.godot/imported/inn_post_w16_glow.png-ab0ea3197fda8ba28daa9be049ccd8f0.ctex"]
 
 [params]
 

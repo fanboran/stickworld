@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cmqbv0ypung4a"
-path="res://.godot/imported/haystack_night.png-7297b4b89f1c374aeeda3c88cb3fdf06.ctex"
+path="res://.godot/imported/haystack_night.png-f4ac1bec6bb1af8f8d4e97076a022e86.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/haystack_night.png"
-dest_files=["res://.godot/imported/haystack_night.png-7297b4b89f1c374aeeda3c88cb3fdf06.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/haystack_night.png"
+dest_files=["res://.godot/imported/haystack_night.png-f4ac1bec6bb1af8f8d4e97076a022e86.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dxv6ysppb5ckl"
-path="res://.godot/imported/signboard_night.png-5bd3de0b43402a19d8a9c42eb3f4b0cc.ctex"
+path="res://.godot/imported/signboard_night.png-682c42aa645cb09ee42c43bc885b4023.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/signboard_night.png"
-dest_files=["res://.godot/imported/signboard_night.png-5bd3de0b43402a19d8a9c42eb3f4b0cc.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/signboard_night.png"
+dest_files=["res://.godot/imported/signboard_night.png-682c42aa645cb09ee42c43bc885b4023.ctex"]
 
 [params]
 

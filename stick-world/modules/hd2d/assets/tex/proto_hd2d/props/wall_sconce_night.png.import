@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dv7km0wwdsy5r"
-path="res://.godot/imported/wall_sconce_night.png-f6392e1b07b6bab43dd03565836c9976.ctex"
+path="res://.godot/imported/wall_sconce_night.png-66e3758cf890b406b60f79199c204c66.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/wall_sconce_night.png"
-dest_files=["res://.godot/imported/wall_sconce_night.png-f6392e1b07b6bab43dd03565836c9976.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/wall_sconce_night.png"
+dest_files=["res://.godot/imported/wall_sconce_night.png-66e3758cf890b406b60f79199c204c66.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://csucwmbx071qf"
-path="res://.godot/imported/town_hall_w16_glow.png-345d3bdd878fe121cd961d686a750378.ctex"
+path="res://.godot/imported/town_hall_w16_glow.png-4e657af57e43a45af49d55d67538ee72.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/town_hall_w16_glow.png"
-dest_files=["res://.godot/imported/town_hall_w16_glow.png-345d3bdd878fe121cd961d686a750378.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/town_hall_w16_glow.png"
+dest_files=["res://.godot/imported/town_hall_w16_glow.png-4e657af57e43a45af49d55d67538ee72.ctex"]
 
 [params]
 

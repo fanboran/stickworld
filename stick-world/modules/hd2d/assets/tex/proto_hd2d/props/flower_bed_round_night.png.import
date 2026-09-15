@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://do4520moh68nx"
-path="res://.godot/imported/flower_bed_round_night.png-6864109d94230530fb7ea667cb092f4f.ctex"
+path="res://.godot/imported/flower_bed_round_night.png-323f9f8339f53ea81f0acd1a4392bedd.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/flower_bed_round_night.png"
-dest_files=["res://.godot/imported/flower_bed_round_night.png-6864109d94230530fb7ea667cb092f4f.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/flower_bed_round_night.png"
+dest_files=["res://.godot/imported/flower_bed_round_night.png-323f9f8339f53ea81f0acd1a4392bedd.ctex"]
 
 [params]
 

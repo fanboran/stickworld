@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://btas5thv6f3oi"
-path="res://.godot/imported/hanging_sign_night.png-f9838115f63a73419200134e596a2574.ctex"
+path="res://.godot/imported/hanging_sign_night.png-91328a632bb1c782868263ab9647f211.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/hanging_sign_night.png"
-dest_files=["res://.godot/imported/hanging_sign_night.png-f9838115f63a73419200134e596a2574.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/hanging_sign_night.png"
+dest_files=["res://.godot/imported/hanging_sign_night.png-91328a632bb1c782868263ab9647f211.ctex"]
 
 [params]
 

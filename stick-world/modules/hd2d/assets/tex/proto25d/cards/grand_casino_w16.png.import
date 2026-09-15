@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dl0y3x03kusol"
-path="res://.godot/imported/grand_casino_w16.png-3ef6ffff6220a61b65860cbead159d23.ctex"
+path="res://.godot/imported/grand_casino_w16.png-1bd0e6acf10126f2f15e35772bac11fe.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/grand_casino_w16.png"
-dest_files=["res://.godot/imported/grand_casino_w16.png-3ef6ffff6220a61b65860cbead159d23.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/grand_casino_w16.png"
+dest_files=["res://.godot/imported/grand_casino_w16.png-1bd0e6acf10126f2f15e35772bac11fe.ctex"]
 
 [params]
 

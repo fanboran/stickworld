@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://de121xudhb0p6"
-path="res://.godot/imported/sack_stack_night.png-12239b8ac4c3088bc2d35b396e7069e8.ctex"
+path="res://.godot/imported/sack_stack_night.png-358c3c1024a6bb0d523fa9c7e5442c32.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/sack_stack_night.png"
-dest_files=["res://.godot/imported/sack_stack_night.png-12239b8ac4c3088bc2d35b396e7069e8.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/sack_stack_night.png"
+dest_files=["res://.godot/imported/sack_stack_night.png-358c3c1024a6bb0d523fa9c7e5442c32.ctex"]
 
 [params]
 

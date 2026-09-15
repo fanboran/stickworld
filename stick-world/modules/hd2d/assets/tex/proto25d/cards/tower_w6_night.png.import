@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://uk1c65gtt1nh"
-path="res://.godot/imported/tower_w6_night.png-b9352fc1dd902a59b7ced7c011d7b543.ctex"
+path="res://.godot/imported/tower_w6_night.png-c8a0e72c564a4e3341b31f1f08f9debe.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/tower_w6_night.png"
-dest_files=["res://.godot/imported/tower_w6_night.png-b9352fc1dd902a59b7ced7c011d7b543.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/tower_w6_night.png"
+dest_files=["res://.godot/imported/tower_w6_night.png-c8a0e72c564a4e3341b31f1f08f9debe.ctex"]
 
 [params]
 

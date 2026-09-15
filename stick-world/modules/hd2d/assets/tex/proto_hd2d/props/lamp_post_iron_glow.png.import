@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://y61wwu6wnsax"
-path="res://.godot/imported/lamp_post_iron_glow.png-843b28588f45e00e55c43453c5ae0cbb.ctex"
+path="res://.godot/imported/lamp_post_iron_glow.png-5e6351cc50f274852c38eff2d4ef9e9a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/lamp_post_iron_glow.png"
-dest_files=["res://.godot/imported/lamp_post_iron_glow.png-843b28588f45e00e55c43453c5ae0cbb.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/lamp_post_iron_glow.png"
+dest_files=["res://.godot/imported/lamp_post_iron_glow.png-5e6351cc50f274852c38eff2d4ef9e9a.ctex"]
 
 [params]
 

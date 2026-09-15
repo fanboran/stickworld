@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://3mxnv73l1g2s"
-path="res://.godot/imported/bush_night.png-aeb4a7ebf39241eceb213a80d0704ba1.ctex"
+path="res://.godot/imported/bush_night.png-f2389ed2696fb38186f96f5542ca8d99.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/nature/bush_night.png"
-dest_files=["res://.godot/imported/bush_night.png-aeb4a7ebf39241eceb213a80d0704ba1.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/nature/bush_night.png"
+dest_files=["res://.godot/imported/bush_night.png-f2389ed2696fb38186f96f5542ca8d99.ctex"]
 
 [params]
 

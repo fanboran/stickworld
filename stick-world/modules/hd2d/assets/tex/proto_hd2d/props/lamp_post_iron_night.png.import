@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://blx3i0bl5x8gh"
-path="res://.godot/imported/lamp_post_iron_night.png-123b9a709c72e94a271e7b42bdda368f.ctex"
+path="res://.godot/imported/lamp_post_iron_night.png-c75a525635fb1da597945d164ea7fe32.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/lamp_post_iron_night.png"
-dest_files=["res://.godot/imported/lamp_post_iron_night.png-123b9a709c72e94a271e7b42bdda368f.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/lamp_post_iron_night.png"
+dest_files=["res://.godot/imported/lamp_post_iron_night.png-c75a525635fb1da597945d164ea7fe32.ctex"]
 
 [params]
 

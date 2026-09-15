@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://hnyua0k40gwa"
-path="res://.godot/imported/horse_trough_glow.png-7a3d83266628ec31e11ead47d2e9b370.ctex"
+path="res://.godot/imported/horse_trough_glow.png-448767cd4177b90e4bbf64ac4c81bdda.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/horse_trough_glow.png"
-dest_files=["res://.godot/imported/horse_trough_glow.png-7a3d83266628ec31e11ead47d2e9b370.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/horse_trough_glow.png"
+dest_files=["res://.godot/imported/horse_trough_glow.png-448767cd4177b90e4bbf64ac4c81bdda.ctex"]
 
 [params]
 

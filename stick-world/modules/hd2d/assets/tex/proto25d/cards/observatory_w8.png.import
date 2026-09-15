@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://in3n46kus77t"
-path="res://.godot/imported/observatory_w8.png-3d24872656b79afa79d64cdfdcd2c404.ctex"
+path="res://.godot/imported/observatory_w8.png-268a4f64f074e95de1068b5e56a25f5e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/observatory_w8.png"
-dest_files=["res://.godot/imported/observatory_w8.png-3d24872656b79afa79d64cdfdcd2c404.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/observatory_w8.png"
+dest_files=["res://.godot/imported/observatory_w8.png-268a4f64f074e95de1068b5e56a25f5e.ctex"]
 
 [params]
 

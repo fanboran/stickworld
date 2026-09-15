@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://getqspxthfyn"
-path="res://.godot/imported/mint_w12_night.png-1ba47b537b9c2395ec5c1fd222778907.ctex"
+path="res://.godot/imported/mint_w12_night.png-5e6cfde3deea242e5a47efdee85d663b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/mint_w12_night.png"
-dest_files=["res://.godot/imported/mint_w12_night.png-1ba47b537b9c2395ec5c1fd222778907.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/mint_w12_night.png"
+dest_files=["res://.godot/imported/mint_w12_night.png-5e6cfde3deea242e5a47efdee85d663b.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dklsyfxohlcik"
-path="res://.godot/imported/stump_night.png-2ef0980e48ab52334c4ca0930d9c29bd.ctex"
+path="res://.godot/imported/stump_night.png-c390d07d07cbad3b5aaf986398f7a5ce.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/nature/stump_night.png"
-dest_files=["res://.godot/imported/stump_night.png-2ef0980e48ab52334c4ca0930d9c29bd.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/nature/stump_night.png"
+dest_files=["res://.godot/imported/stump_night.png-c390d07d07cbad3b5aaf986398f7a5ce.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://doqlsc5rcv1vk"
-path="res://.godot/imported/belfry_w6.png-fdf177bad5e3a82b3c10d3a77d3b0d2d.ctex"
+path="res://.godot/imported/belfry_w6.png-276b8afafedeb04db21443a3e60e0646.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/belfry_w6.png"
-dest_files=["res://.godot/imported/belfry_w6.png-fdf177bad5e3a82b3c10d3a77d3b0d2d.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/belfry_w6.png"
+dest_files=["res://.godot/imported/belfry_w6.png-276b8afafedeb04db21443a3e60e0646.ctex"]
 
 [params]
 

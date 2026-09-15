@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://p7oxkwuqnn1"
-path="res://.godot/imported/flower_shop_w12_glow.png-398bb94f48148877c047a2670c95b111.ctex"
+path="res://.godot/imported/flower_shop_w12_glow.png-8d230283e2675e502cfd1bd505458780.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/flower_shop_w12_glow.png"
-dest_files=["res://.godot/imported/flower_shop_w12_glow.png-398bb94f48148877c047a2670c95b111.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/flower_shop_w12_glow.png"
+dest_files=["res://.godot/imported/flower_shop_w12_glow.png-8d230283e2675e502cfd1bd505458780.ctex"]
 
 [params]
 

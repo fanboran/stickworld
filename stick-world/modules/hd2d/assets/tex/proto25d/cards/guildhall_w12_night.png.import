@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bqv857vygicnd"
-path="res://.godot/imported/guildhall_w12_night.png-29ad9ec926746109adab8270803b698b.ctex"
+path="res://.godot/imported/guildhall_w12_night.png-7643ed882520c85f650459bcb0821f90.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/guildhall_w12_night.png"
-dest_files=["res://.godot/imported/guildhall_w12_night.png-29ad9ec926746109adab8270803b698b.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/guildhall_w12_night.png"
+dest_files=["res://.godot/imported/guildhall_w12_night.png-7643ed882520c85f650459bcb0821f90.ctex"]
 
 [params]
 

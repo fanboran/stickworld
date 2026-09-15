@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b8bj51tcc0gb8"
-path="res://.godot/imported/signpost_night.png-e635938c7bf91631be6f147dc9fd6ef3.ctex"
+path="res://.godot/imported/signpost_night.png-4da935e4b61979cc158d41ad71d511ed.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/signpost_night.png"
-dest_files=["res://.godot/imported/signpost_night.png-e635938c7bf91631be6f147dc9fd6ef3.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/signpost_night.png"
+dest_files=["res://.godot/imported/signpost_night.png-4da935e4b61979cc158d41ad71d511ed.ctex"]
 
 [params]
 

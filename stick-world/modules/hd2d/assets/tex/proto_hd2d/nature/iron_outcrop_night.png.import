@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ctsxikxsj362c"
-path="res://.godot/imported/iron_outcrop_night.png-03e6f6c741280c1d5b4624fad79ac471.ctex"
+path="res://.godot/imported/iron_outcrop_night.png-52a640b842fe64a68405eb9123b5c8f1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/nature/iron_outcrop_night.png"
-dest_files=["res://.godot/imported/iron_outcrop_night.png-03e6f6c741280c1d5b4624fad79ac471.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/nature/iron_outcrop_night.png"
+dest_files=["res://.godot/imported/iron_outcrop_night.png-52a640b842fe64a68405eb9123b5c8f1.ctex"]
 
 [params]
 

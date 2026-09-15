@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dlath7gl36v08"
-path="res://.godot/imported/cathedral_w8_glow.png-530fa84d400c7ae07ff5f2effcb73788.ctex"
+path="res://.godot/imported/cathedral_w8_glow.png-dc4d2e05ebc1736dac4aede820449134.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/cathedral_w8_glow.png"
-dest_files=["res://.godot/imported/cathedral_w8_glow.png-530fa84d400c7ae07ff5f2effcb73788.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/cathedral_w8_glow.png"
+dest_files=["res://.godot/imported/cathedral_w8_glow.png-dc4d2e05ebc1736dac4aede820449134.ctex"]
 
 [params]
 

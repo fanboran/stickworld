@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://176ew4kkjdwp"
-path="res://.godot/imported/statue_base_night.png-db8b3f619ab3beb7bffae4c3a1c4a3e3.ctex"
+path="res://.godot/imported/statue_base_night.png-7f016ff303b6d458ac5e33d8cda39853.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/statue_base_night.png"
-dest_files=["res://.godot/imported/statue_base_night.png-db8b3f619ab3beb7bffae4c3a1c4a3e3.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/statue_base_night.png"
+dest_files=["res://.godot/imported/statue_base_night.png-7f016ff303b6d458ac5e33d8cda39853.ctex"]
 
 [params]
 

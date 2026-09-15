@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://5j2w6ppa68qm"
-path="res://.godot/imported/bakery_w8_night.png-b6a3447c083bed47140f2f3b75c2b042.ctex"
+path="res://.godot/imported/bakery_w8_night.png-d55cc2e62a739314e978439f68f411a3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/bakery_w8_night.png"
-dest_files=["res://.godot/imported/bakery_w8_night.png-b6a3447c083bed47140f2f3b75c2b042.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/bakery_w8_night.png"
+dest_files=["res://.godot/imported/bakery_w8_night.png-d55cc2e62a739314e978439f68f411a3.ctex"]
 
 [params]
 

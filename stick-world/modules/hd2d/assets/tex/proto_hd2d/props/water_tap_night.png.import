@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://gq7n1lo2pchr"
-path="res://.godot/imported/water_tap_night.png-53dd4633a9e612e2965adc32e3d90ed7.ctex"
+path="res://.godot/imported/water_tap_night.png-4db9f267641bdc55be102ab7785b9197.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/water_tap_night.png"
-dest_files=["res://.godot/imported/water_tap_night.png-53dd4633a9e612e2965adc32e3d90ed7.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/water_tap_night.png"
+dest_files=["res://.godot/imported/water_tap_night.png-4db9f267641bdc55be102ab7785b9197.ctex"]
 
 [params]
 

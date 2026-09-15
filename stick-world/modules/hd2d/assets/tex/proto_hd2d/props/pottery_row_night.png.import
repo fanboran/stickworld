@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://hgdlhw36avjo"
-path="res://.godot/imported/pottery_row_night.png-f77f47d8a3f435ce3dc93a9bebe8eb1d.ctex"
+path="res://.godot/imported/pottery_row_night.png-d2041dccee0c84fb70c55e05bf5546ae.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/pottery_row_night.png"
-dest_files=["res://.godot/imported/pottery_row_night.png-f77f47d8a3f435ce3dc93a9bebe8eb1d.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/pottery_row_night.png"
+dest_files=["res://.godot/imported/pottery_row_night.png-d2041dccee0c84fb70c55e05bf5546ae.ctex"]
 
 [params]
 

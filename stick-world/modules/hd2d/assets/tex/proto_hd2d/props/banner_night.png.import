@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://3nq00cym7lik"
-path="res://.godot/imported/banner_night.png-1179596530f33e2755bee25c8b934157.ctex"
+path="res://.godot/imported/banner_night.png-7297d71427213e621832d232dfdfa5f6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/banner_night.png"
-dest_files=["res://.godot/imported/banner_night.png-1179596530f33e2755bee25c8b934157.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/banner_night.png"
+dest_files=["res://.godot/imported/banner_night.png-7297d71427213e621832d232dfdfa5f6.ctex"]
 
 [params]
 

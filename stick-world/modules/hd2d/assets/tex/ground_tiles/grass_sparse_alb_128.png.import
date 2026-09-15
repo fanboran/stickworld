@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://chmy1vyppkm0d"
-path="res://.godot/imported/grass_sparse_alb_128.png-227f1f8ccbd3488fcc4a5fe0a2f0fbfd.ctex"
+path="res://.godot/imported/grass_sparse_alb_128.png-681d69ffb851b398cbb6d3c4f26f1bdc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/ground_tiles/grass_sparse_alb_128.png"
-dest_files=["res://.godot/imported/grass_sparse_alb_128.png-227f1f8ccbd3488fcc4a5fe0a2f0fbfd.ctex"]
+source_file="res://modules/hd2d/assets/tex/ground_tiles/grass_sparse_alb_128.png"
+dest_files=["res://.godot/imported/grass_sparse_alb_128.png-681d69ffb851b398cbb6d3c4f26f1bdc.ctex"]
 
 [params]
 

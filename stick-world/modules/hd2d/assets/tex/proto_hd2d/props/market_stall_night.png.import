@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b1pi5r6awgmap"
-path="res://.godot/imported/market_stall_night.png-3363adb940cd13d30a1787164df7ae9b.ctex"
+path="res://.godot/imported/market_stall_night.png-6af20d0a370559b0b09ca913435d2a91.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/market_stall_night.png"
-dest_files=["res://.godot/imported/market_stall_night.png-3363adb940cd13d30a1787164df7ae9b.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/market_stall_night.png"
+dest_files=["res://.godot/imported/market_stall_night.png-6af20d0a370559b0b09ca913435d2a91.ctex"]
 
 [params]
 

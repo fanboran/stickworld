@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://0ldxsjhpu00d"
-path="res://.godot/imported/townhouse_w12_night.png-4a0e0554fefc8e29dbc0f0d6f87fb1f0.ctex"
+path="res://.godot/imported/townhouse_w12_night.png-c0b41611d87e2908263a929419f130f6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/townhouse_w12_night.png"
-dest_files=["res://.godot/imported/townhouse_w12_night.png-4a0e0554fefc8e29dbc0f0d6f87fb1f0.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/townhouse_w12_night.png"
+dest_files=["res://.godot/imported/townhouse_w12_night.png-c0b41611d87e2908263a929419f130f6.ctex"]
 
 [params]
 

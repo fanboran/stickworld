@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cm47rew03okdg"
-path="res://.godot/imported/flag_pole_glow.png-ed312de4052c936e90e0c098880589a7.ctex"
+path="res://.godot/imported/flag_pole_glow.png-d0c2331f4dc56d17bc9fb3126dd8c694.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/flag_pole_glow.png"
-dest_files=["res://.godot/imported/flag_pole_glow.png-ed312de4052c936e90e0c098880589a7.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/flag_pole_glow.png"
+dest_files=["res://.godot/imported/flag_pole_glow.png-d0c2331f4dc56d17bc9fb3126dd8c694.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cxeocutsjys32"
-path="res://.godot/imported/windmill_w6_night.png-009da44961f32a2df2ad4de043838d57.ctex"
+path="res://.godot/imported/windmill_w6_night.png-aa97d5e823ce3b9c1ff6f17d36dff224.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/windmill_w6_night.png"
-dest_files=["res://.godot/imported/windmill_w6_night.png-009da44961f32a2df2ad4de043838d57.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/windmill_w6_night.png"
+dest_files=["res://.godot/imported/windmill_w6_night.png-aa97d5e823ce3b9c1ff6f17d36dff224.ctex"]
 
 [params]
 

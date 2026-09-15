@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dxc8ypy2tnxqg"
-path="res://.godot/imported/hayloft_w8_night.png-584de73d623e8453108dc5cc4a79bb1a.ctex"
+path="res://.godot/imported/hayloft_w8_night.png-bbb7b6132ba7aad752e7c03e3904734b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/hayloft_w8_night.png"
-dest_files=["res://.godot/imported/hayloft_w8_night.png-584de73d623e8453108dc5cc4a79bb1a.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/hayloft_w8_night.png"
+dest_files=["res://.godot/imported/hayloft_w8_night.png-bbb7b6132ba7aad752e7c03e3904734b.ctex"]
 
 [params]
 

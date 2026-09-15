@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c3n21p3kgcqqd"
-path="res://.godot/imported/coach_house_w16_night.png-e699dad3b84f72bc35d66a2223d7b025.ctex"
+path="res://.godot/imported/coach_house_w16_night.png-21df08891984e7cdb6e8336639cae5d9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/coach_house_w16_night.png"
-dest_files=["res://.godot/imported/coach_house_w16_night.png-e699dad3b84f72bc35d66a2223d7b025.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/coach_house_w16_night.png"
+dest_files=["res://.godot/imported/coach_house_w16_night.png-21df08891984e7cdb6e8336639cae5d9.ctex"]
 
 [params]
 

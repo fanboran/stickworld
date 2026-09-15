@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cu2ss7p7k7d4c"
-path="res://.godot/imported/grindstone_night.png-a28bae24896b8f1145b8e8041fcf448c.ctex"
+path="res://.godot/imported/grindstone_night.png-29b440a2c2ae45963c8deb308df5afbb.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/grindstone_night.png"
-dest_files=["res://.godot/imported/grindstone_night.png-a28bae24896b8f1145b8e8041fcf448c.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/grindstone_night.png"
+dest_files=["res://.godot/imported/grindstone_night.png-29b440a2c2ae45963c8deb308df5afbb.ctex"]
 
 [params]
 

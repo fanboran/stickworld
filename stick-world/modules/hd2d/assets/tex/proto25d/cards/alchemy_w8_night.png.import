@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cku1er136h4ht"
-path="res://.godot/imported/alchemy_w8_night.png-68cdd310c053ef4d81640bba9c623fdc.ctex"
+path="res://.godot/imported/alchemy_w8_night.png-d0a8d0e0b6f2f0c217b1f3971538f5c3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/alchemy_w8_night.png"
-dest_files=["res://.godot/imported/alchemy_w8_night.png-68cdd310c053ef4d81640bba9c623fdc.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/alchemy_w8_night.png"
+dest_files=["res://.godot/imported/alchemy_w8_night.png-d0a8d0e0b6f2f0c217b1f3971538f5c3.ctex"]
 
 [params]
 

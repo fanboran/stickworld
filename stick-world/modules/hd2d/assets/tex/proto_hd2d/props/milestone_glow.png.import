@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ctkpuue4y468x"
-path="res://.godot/imported/milestone_glow.png-d0810dfa171295a4840464cdcaa2e81d.ctex"
+path="res://.godot/imported/milestone_glow.png-847f06cf8cb285fc78f3d3a71ccc7875.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/milestone_glow.png"
-dest_files=["res://.godot/imported/milestone_glow.png-d0810dfa171295a4840464cdcaa2e81d.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/milestone_glow.png"
+dest_files=["res://.godot/imported/milestone_glow.png-847f06cf8cb285fc78f3d3a71ccc7875.ctex"]
 
 [params]
 

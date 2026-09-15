@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://do3n26vqe5bg1"
-path="res://.godot/imported/mint_w16_glow.png-beeaa251cbeea06f69127bd440bd2a28.ctex"
+path="res://.godot/imported/mint_w16_glow.png-d0eb9c8a342689f3325a9c3a46f82130.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/mint_w16_glow.png"
-dest_files=["res://.godot/imported/mint_w16_glow.png-beeaa251cbeea06f69127bd440bd2a28.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/mint_w16_glow.png"
+dest_files=["res://.godot/imported/mint_w16_glow.png-d0eb9c8a342689f3325a9c3a46f82130.ctex"]
 
 [params]
 

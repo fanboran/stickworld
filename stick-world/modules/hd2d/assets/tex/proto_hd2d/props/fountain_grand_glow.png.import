@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://diqhq7ggbkcnr"
-path="res://.godot/imported/fountain_grand_glow.png-ccc87183dce4e0ecccb5ab79b1959c3a.ctex"
+path="res://.godot/imported/fountain_grand_glow.png-9468d94b5243827302e9d7274296b470.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/fountain_grand_glow.png"
-dest_files=["res://.godot/imported/fountain_grand_glow.png-ccc87183dce4e0ecccb5ab79b1959c3a.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/fountain_grand_glow.png"
+dest_files=["res://.godot/imported/fountain_grand_glow.png-9468d94b5243827302e9d7274296b470.ctex"]
 
 [params]
 

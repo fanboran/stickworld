@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bp6oo16cbe45h"
-path="res://.godot/imported/barrel_night.png-8ae8b265510c8f00865ca933b536faa6.ctex"
+path="res://.godot/imported/barrel_night.png-82dbd11de252449e21de1c8282648abc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/barrel_night.png"
-dest_files=["res://.godot/imported/barrel_night.png-8ae8b265510c8f00865ca933b536faa6.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/barrel_night.png"
+dest_files=["res://.godot/imported/barrel_night.png-82dbd11de252449e21de1c8282648abc.ctex"]
 
 [params]
 

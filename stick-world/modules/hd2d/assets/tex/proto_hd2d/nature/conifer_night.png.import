@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://1hi88o7xemkr"
-path="res://.godot/imported/conifer_night.png-171711fe0ba58a947f9c380a39c09fa2.ctex"
+path="res://.godot/imported/conifer_night.png-763ba833cb4d978fb9f59fba4a143a45.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/nature/conifer_night.png"
-dest_files=["res://.godot/imported/conifer_night.png-171711fe0ba58a947f9c380a39c09fa2.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/nature/conifer_night.png"
+dest_files=["res://.godot/imported/conifer_night.png-763ba833cb4d978fb9f59fba4a143a45.ctex"]
 
 [params]
 

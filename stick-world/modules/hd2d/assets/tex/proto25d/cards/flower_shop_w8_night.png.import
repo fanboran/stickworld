@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bdgc4sn5rl424"
-path="res://.godot/imported/flower_shop_w8_night.png-4e50a77e5cc24fc91806456f48c3fff9.ctex"
+path="res://.godot/imported/flower_shop_w8_night.png-5882b94080dcec376f0a026cf829a42f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/flower_shop_w8_night.png"
-dest_files=["res://.godot/imported/flower_shop_w8_night.png-4e50a77e5cc24fc91806456f48c3fff9.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/flower_shop_w8_night.png"
+dest_files=["res://.godot/imported/flower_shop_w8_night.png-5882b94080dcec376f0a026cf829a42f.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://u7em3oj4kd0h"
-path="res://.godot/imported/table_outdoor_glow.png-b2c70fc1359a3a3770564a5f1aba6303.ctex"
+path="res://.godot/imported/table_outdoor_glow.png-586de2a7bf2867a5bc2f3340f3234ee0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/table_outdoor_glow.png"
-dest_files=["res://.godot/imported/table_outdoor_glow.png-b2c70fc1359a3a3770564a5f1aba6303.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/table_outdoor_glow.png"
+dest_files=["res://.godot/imported/table_outdoor_glow.png-586de2a7bf2867a5bc2f3340f3234ee0.ctex"]
 
 [params]
 

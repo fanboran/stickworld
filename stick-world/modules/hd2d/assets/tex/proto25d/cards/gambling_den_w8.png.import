@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b5tfg31egs7j3"
-path="res://.godot/imported/gambling_den_w8.png-4e40a778552ed8600207bbb532685736.ctex"
+path="res://.godot/imported/gambling_den_w8.png-556131c8a655161eb8e35bc498e3c1f9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/gambling_den_w8.png"
-dest_files=["res://.godot/imported/gambling_den_w8.png-4e40a778552ed8600207bbb532685736.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/gambling_den_w8.png"
+dest_files=["res://.godot/imported/gambling_den_w8.png-556131c8a655161eb8e35bc498e3c1f9.ctex"]
 
 [params]
 

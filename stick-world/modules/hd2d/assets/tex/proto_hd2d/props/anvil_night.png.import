@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bfhn1uc4qtwyg"
-path="res://.godot/imported/anvil_night.png-8823814fcc426b827c81b9e2c1fefde9.ctex"
+path="res://.godot/imported/anvil_night.png-41ca2ac29f78f98cb02989e61acbb25f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/anvil_night.png"
-dest_files=["res://.godot/imported/anvil_night.png-8823814fcc426b827c81b9e2c1fefde9.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/anvil_night.png"
+dest_files=["res://.godot/imported/anvil_night.png-41ca2ac29f78f98cb02989e61acbb25f.ctex"]
 
 [params]
 

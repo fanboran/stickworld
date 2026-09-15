@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://xckl1o3l437v"
-path="res://.godot/imported/governor_palace_w16.png-caa42b37c6d5d2716376dc6c96d5f265.ctex"
+path="res://.godot/imported/governor_palace_w16.png-6c496555278fa2942555eb05140ae1e9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/governor_palace_w16.png"
-dest_files=["res://.godot/imported/governor_palace_w16.png-caa42b37c6d5d2716376dc6c96d5f265.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/governor_palace_w16.png"
+dest_files=["res://.godot/imported/governor_palace_w16.png-6c496555278fa2942555eb05140ae1e9.ctex"]
 
 [params]
 

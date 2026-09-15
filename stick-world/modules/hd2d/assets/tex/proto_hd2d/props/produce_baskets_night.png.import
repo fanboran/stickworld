@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://n0yv1n0nahw0"
-path="res://.godot/imported/produce_baskets_night.png-ab3f39d9f6dd2615304d485c0a49ad14.ctex"
+path="res://.godot/imported/produce_baskets_night.png-fe1537e24550864c53664df9c323e9ea.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/produce_baskets_night.png"
-dest_files=["res://.godot/imported/produce_baskets_night.png-ab3f39d9f6dd2615304d485c0a49ad14.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/produce_baskets_night.png"
+dest_files=["res://.godot/imported/produce_baskets_night.png-fe1537e24550864c53664df9c323e9ea.ctex"]
 
 [params]
 

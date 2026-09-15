@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://f15g1308ik6c"
-path="res://.godot/imported/lamp_post_stone_glow.png-a04ee78f1e18cac9997c23e09f7f1819.ctex"
+path="res://.godot/imported/lamp_post_stone_glow.png-9360952d6dd1e70464d2bdb46a27a6b1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/props/lamp_post_stone_glow.png"
-dest_files=["res://.godot/imported/lamp_post_stone_glow.png-a04ee78f1e18cac9997c23e09f7f1819.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/props/lamp_post_stone_glow.png"
+dest_files=["res://.godot/imported/lamp_post_stone_glow.png-9360952d6dd1e70464d2bdb46a27a6b1.ctex"]
 
 [params]
 

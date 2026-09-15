@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c7uvoaaon3lp2"
-path="res://.godot/imported/tavern_w12_night.png-f31533b6e8d28cca0fbfbc71c0ec3fea.ctex"
+path="res://.godot/imported/tavern_w12_night.png-f908bef9b09b102323821d2de669bba8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/tavern_w12_night.png"
-dest_files=["res://.godot/imported/tavern_w12_night.png-f31533b6e8d28cca0fbfbc71c0ec3fea.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/tavern_w12_night.png"
+dest_files=["res://.godot/imported/tavern_w12_night.png-f908bef9b09b102323821d2de669bba8.ctex"]
 
 [params]
 

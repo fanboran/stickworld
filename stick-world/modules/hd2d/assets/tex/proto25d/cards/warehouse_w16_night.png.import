@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://biiivmvddybra"
-path="res://.godot/imported/warehouse_w16_night.png-c7828ea34ec7cbf7878768e609a55040.ctex"
+path="res://.godot/imported/warehouse_w16_night.png-e01a542cb5b7e133b47cbf70f797c988.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto25d/cards/warehouse_w16_night.png"
-dest_files=["res://.godot/imported/warehouse_w16_night.png-c7828ea34ec7cbf7878768e609a55040.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto25d/cards/warehouse_w16_night.png"
+dest_files=["res://.godot/imported/warehouse_w16_night.png-e01a542cb5b7e133b47cbf70f797c988.ctex"]
 
 [params]
 

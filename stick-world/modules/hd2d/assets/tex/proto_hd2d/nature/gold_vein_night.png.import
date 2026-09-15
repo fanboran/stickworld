@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://j8u0tscfxrem"
-path="res://.godot/imported/gold_vein_night.png-38c782b7a95a5f2088d56898450a3bb5.ctex"
+path="res://.godot/imported/gold_vein_night.png-990cbc625a8c4735cd37c023c4a0e70b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://tests/dev/proto_hd2d/tex/proto_hd2d/nature/gold_vein_night.png"
-dest_files=["res://.godot/imported/gold_vein_night.png-38c782b7a95a5f2088d56898450a3bb5.ctex"]
+source_file="res://modules/hd2d/assets/tex/proto_hd2d/nature/gold_vein_night.png"
+dest_files=["res://.godot/imported/gold_vein_night.png-990cbc625a8c4735cd37c023c4a0e70b.ctex"]
 
 [params]
 

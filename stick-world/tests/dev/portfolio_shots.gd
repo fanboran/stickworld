@@ -37,8 +37,16 @@ func run() -> void:
 	await _shot("portfolio_loading_mid")
 	# ── 等世界就绪（HD-2D 主街）──
 	await _wait_world()
-	await _seconds(1.0)
+	await _seconds(4.0)
 	var gr := get_tree().current_scene
+	# ── 白天主街（README 第二位图机位，村民走动几秒后入镜）──
+	await _shot("portfolio_street_day")
+	# 拉远到 0.75 倍（视宽 ~80 格，贴近原型宽景取景）再拍一张
+	var rig: Camera2D = gr.get("camera_rig") if gr.get("camera_rig") != null else null
+	if rig != null and rig.has_method("set_user_zoom"):
+		rig.call("set_user_zoom", 0.75)
+		await _seconds(0.6)
+		await _shot("portfolio_street_wide")
 	# ── 游戏内设置面板 ──
 	if gr.has_method("toggle_settings_menu"):
 		gr.toggle_settings_menu()

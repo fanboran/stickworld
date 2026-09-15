@@ -181,14 +181,15 @@ const FRONT_ROW: Array = [
 ##     前排与街面，中 1/3 起归背景楼群；
 ##   · bg1 整排连铺 = 主天际线；bg2 **地平线补缝**：只往 bg1 没遮住的地平线缝隙
 ##     里稀疏插楼（楼身站上真实地平线，穿缝可见、楼顶可越前排露出），不再整排铺；
-##   · 层距等距（创始人：第二三排距离=第一二排距离）；
+##   · bg2 紧贴 bg1（层距 3.5 格——创始人 2026-09-15：第三排紧贴第二排）；
 ##   · bg2 基线 = 真实地平线（底衬远端同步收到此处）。
 const SKYLINE_Z := -6.73                 # bg1 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
 const BG_LAYERS := 2                     # 背景排数（前排+两排=三排，创始人 2026-09-15）
-## 前排典型脚位 z（CityGen z 契约 0.45~1.3 的中值）——层距等距口径的基准
-const FRONT_Z_NOMINAL := 0.7
-## 背景层距（格）= 前排脚位→SKYLINE_Z 的实际距离（等距纵深节奏）
-const BG_LAYER_GAP := -(SKYLINE_Z - FRONT_Z_NOMINAL)
+## 背景层距（格）：bg2 紧贴 bg1
+const BG_LAYER_GAP := 3.5
+## bg1 选卡的画面高上限（格）：排除塔楼/教堂/宫殿等"太抬高"卡
+## （创始人 2026-09-15：第二排尽量别出现太抬高的建筑；过滤后无卡可用则放开）
+const BG1_MAX_H := 14.0
 ## 远焦模糊起点：天际线基线向镜头前移的格数（世界线，经 set_cam_zoom 随缩放换算、
 ## 不随缩放漂移）——前排零模糊口径不变，第二排从这里开始吃半档模糊
 ## （创始人 2026-09-15：第二排景深太不明显，根因=起点原钉在天际线上、第二排恰好吃不到）
@@ -1370,7 +1371,7 @@ func _place_rows() -> void:
 			var guard := 0
 			while edge < span_hi and guard < 80:
 				guard += 1
-				var card := _pick_bg_card("", edge, li)
+				var card := _pick_bg_card("", edge, li, BG1_MAX_H)
 				var w := _cw(card)
 				if w < 1.0:
 					w = 8.0
@@ -1409,16 +1410,21 @@ func _place_rows() -> void:
 		_bg_base_samples.clear()
 
 
-## 背景楼选卡：全卡池，排除前排本卡与最近用过的卡（同屏避同卡）；
+## 背景楼选卡：全卡池，排除前排本卡与附近已用卡（同屏避同卡）；max_h = 画面高
+## 上限（格），bg1 用它排除过高卡（过滤后池空则放开——"尽量"口径，不无楼可摆）。
 ## 种子由（前排 x, 层）决定——多局一致，加建前排时同样确定性补楼。
 var _bg_rng := RandomNumberGenerator.new()
 var _bg_recent: Array[String] = []
 
-func _pick_bg_card(front_card: String, fx: float, li: int) -> String:
+func _pick_bg_card(front_card: String, fx: float, li: int, max_h: float = INF) -> String:
 	_bg_rng.seed = int(abs(fx * 7919.0)) + li * 104729 + 13
 	var pool: Array = []
 	for c: String in _cards.keys():
 		if c == front_card or _bg_recent.has(c):
+			continue
+		var meta: Dictionary = _cards.get(c, {})
+		if max_h != INF and not meta.is_empty() \
+				and float(meta["units"][1]) * S > max_h:
 			continue
 		pool.append(c)
 	if pool.is_empty():
@@ -1435,7 +1441,7 @@ func _pick_bg_card(front_card: String, fx: float, li: int) -> String:
 ## 前排加建时补背景楼（建造系统事件接线入口；初始生成走 _place_rows）：
 ## 只补 bg1 主天际线——bg2 是地平线补缝位，由遮挡关系自然成立，不随加建补
 func spawn_bg_for_front(front_card: String, fx: float) -> void:
-	var card := _pick_bg_card(front_card, fx, 0)
+	var card := _pick_bg_card(front_card, fx, 0, BG1_MAX_H)
 	_spawn_bg_card(card, roundf(fx), SKYLINE_Z, BG_TINTS[0])
 
 

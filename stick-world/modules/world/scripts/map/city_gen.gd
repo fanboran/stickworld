@@ -1,50 +1,139 @@
 class_name CityGen
 extends RefCounted
-## 初始城市生成器（GD 移植，与 tools/blender_buildings/gen_initial_city.py 同算法）。
+## 初始城市生成器（GD 运行时版，与 tools/blender_buildings/gen_initial_city.py
+## 同算法；建筑池按 docs/技术/架构/聚落等级与建筑分级.md 的**级别窗口表**取）。
 ##
 ## 语义（创始人 2026-09-15 裁决）：
-##   · 城市大小 = 建筑排完的自然跨度 + 墙留边，不写死——建筑变多城市扩展；
+##   · 城市大小 = 建筑排完的自然跨度 + 墙留边，不写死——建筑变多城市扩展，
+##     城墙自动前移（运行时从 width_cells 推导），野地资源窗随之露出；
 ##   · 核心居中，市场/工匠/居住/生产四带随机分配到某侧（轻量配平，非镜像）；
-##   · 居住/仓储随机塞；教堂等特殊建筑浮动插位；
-##   · 从中心向两侧逐栋排布，画面宽推挤 + 产物级修复，零重叠；
+##   · 居住/仓储随机塞；教堂等特殊建筑浮动插位；从中心向两侧逐栋排布；
+##   · 画面宽推挤 + 产物级修复，零重叠；
 ##   · 背景两层（row1/row2）随分区锚点落。
 ##
-## 生成时机：宿主首次进入该城时按**确定性种子**生成（多局尽量一致）；
-## 产物即 proto_hd2d 的 layout_data 契约（width_cells/buildings/props）。
+## 选池铁律（级别窗口表 §三）：铁匠 3 级封顶、草棚/干草棚村舍进城消亡、
+## 赌场 city 起、花店 town 起（DRESS）、仓库 city 起——别把村舍摆进首都。
+## 行政槽：每档主街中心必有一件当级行政建筑（§二），候选按优先级取
+## 第一张**已烘卡**（未烘自动降级，不阻塞生成）。
+##
+## 生成时机：宿主首次进入该城时按**确定性种子**生成（多局尽量一致）。
 
 const MIN_GAP := 0.6
 const WALL_MARGIN := 3.0
 
+## 八档链（§一）。建筑数取档位区间下限（密度随扩建增长）。
+## zones: 各分区建筑数；admin: 行政候选（取第一张已烘卡）；furniture: 街具数。
 const TIERS := {
-	"tiny": {"core": 0, "market": 0, "craft": 1, "living": 3, "production": 1, "storage": 0, "zoned": false},
-	"hamlet": {"core": 1, "market": 1, "craft": 1, "living": 3, "production": 1, "storage": 1, "zoned": true},
-	"starter": {"core": 1, "market": 2, "craft": 2, "living": 5, "production": 2, "storage": 1, "zoned": true},
-	"village": {"core": 1, "market": 3, "craft": 3, "living": 7, "production": 3, "storage": 2, "zoned": true},
-	"town": {"core": 1, "market": 4, "craft": 4, "living": 9, "production": 4, "storage": 3, "zoned": true},
+	"hamlet": {"cells": 80, "n": 10, "admin": ["council_hall_w8", "guildhall_w12"],
+		"furniture": 4, "zones": {"market": 1, "craft": 1, "living": 3, "production": 1, "storage": 1}},
+	"village": {"cells": 96, "n": 14, "admin": ["council_hall_w8", "guildhall_w12"],
+		"furniture": 7, "zones": {"market": 2, "craft": 2, "living": 4, "production": 2, "storage": 1}},
+	"townlet": {"cells": 112, "n": 16, "admin": ["council_hall_w8", "guildhall_w12"],
+		"furniture": 8, "zones": {"market": 2, "craft": 3, "living": 5, "production": 2, "storage": 1}},
+	"town": {"cells": 128, "n": 18, "admin": ["guildhall_w12"],
+		"furniture": 10, "zones": {"market": 3, "craft": 3, "living": 5, "production": 3, "storage": 1}},
+	"burgh": {"cells": 160, "n": 22, "admin": ["guildhall_w12"],
+		"furniture": 12, "zones": {"market": 4, "craft": 4, "living": 6, "production": 3, "storage": 2}},
+	"city": {"cells": 192, "n": 26, "admin": ["guildhall_w12"],
+		"furniture": 13, "zones": {"market": 5, "craft": 4, "living": 8, "production": 4, "storage": 2}},
 }
 
+## 分区 def 池（按级别窗口表取**已烘卡**；运行时按 card_widths 过滤，
+## 未烘的自动跳过——资产侧补烘后即生效，生成器无需改码）
 const ZONE_POOLS := {
-	"core": ["guildhall_w12"],
-	"market": ["shop_w8", "bakery_w8", "tavern_w12", "shop_w8"],
-	"craft": ["smithy1_w8", "smithy2_w8", "smithy3_w8"],
-	"living": ["house_w16", "house_w8", "house_w8", "cottage_w6", "hayloft_w8",
-		"house_w16", "rowhouse_w12", "townhouse_w12", "cottage_w6"],
-	"production": ["barn_w12", "windmill_w6", "barn_w12", "stable_w12"],
-	"storage": ["warehouse_w16", "warehouse_w16"],
+	"hamlet": {
+		"core": ["council_hall_w8", "guildhall_w12"],
+		"market": ["shop_w8"],
+		"craft": ["smithy1_w8"],
+		"living": ["cottage_w6", "house_w8", "house_w16"],
+		"production": ["barn_w12"],
+		"storage": ["shelter_w6", "hayloft_w8"],
+	},
+	"village": {
+		"core": ["council_hall_w8", "guildhall_w12"],
+		"market": ["shop_w8", "tavern_w12"],
+		"craft": ["smithy1_w8", "smithy2_w8"],
+		"living": ["house_w16", "house_w8", "house_w8", "cottage_w6", "hayloft_w8"],
+		"production": ["barn_w12", "windmill_w6"],
+		"storage": ["shelter_w6", "hayloft_w8"],
+	},
+	"townlet": {
+		"core": ["council_hall_w8", "guildhall_w12"],
+		"market": ["shop_w8", "bakery_w8"],
+		"craft": ["smithy1_w8", "smithy2_w8", "alchemy_w8"],
+		"living": ["house_w16", "house_w8", "house_w8", "cottage_w6", "hayloft_w8"],
+		"production": ["barn_w12", "windmill_w6"],
+		"storage": ["shelter_w6", "hayloft_w8"],
+	},
+	"town": {
+		"core": ["guildhall_w12"],
+		"market": ["shop_w8", "bakery_w8", "tavern_w12"],
+		"craft": ["smithy1_w8", "smithy2_w8", "alchemy_w8"],
+		"living": ["house_w16", "house_w8", "house_w8", "townhouse_w12", "hayloft_w8"],
+		"production": ["barn_w12", "windmill_w6", "stable_w12"],
+		"storage": ["shelter_w6", "hayloft_w8"],
+	},
+	"burgh": {
+		"core": ["guildhall_w12"],
+		"market": ["shop_w8", "bakery_w8", "tavern_w12", "shop_w8"],
+		"craft": ["smithy1_w8", "smithy2_w8", "smithy3_w8", "alchemy_w8"],
+		"living": ["house_w16", "house_w8", "townhouse_w12", "rowhouse_w12", "townhouse_w12", "house_w16"],
+		"production": ["barn_w12", "windmill_w6", "stable_w12"],
+		"storage": ["shelter_w6", "hayloft_w8"],
+	},
+	"city": {
+		"core": ["guildhall_w12"],
+		"market": ["shop_w8", "bakery_w8", "tavern_w12", "rowhouse_w12", "shop_w8"],
+		"craft": ["smithy1_w8", "smithy2_w8", "smithy3_w8", "smithy4_w12", "alchemy_w8"],
+		"living": ["house_w16", "house_w8", "townhouse_w12", "rowhouse_w12", "townhouse_w12",
+			"rowhouse_w12", "house_w16", "house_w8"],
+		"production": ["barn_w12", "stable_w12", "windmill_w6", "stable_w12"],
+		"storage": ["warehouse_w16", "shelter_w6", "hayloft_w8"],
+	},
 }
-const FLOAT_DEFS := ["cathedral_w16", "mage_tower_w8", "library_w12", "tower_w6"]
-const BG_POOL := ["cathedral_w16", "mage_tower_w8", "library_w12", "tavern_w12",
-	"townhouse_w12", "rowhouse_w12", "alchemy_w8", "barracks_w12",
-	"smithy4_w12", "shelter_w6"]
-const BG_DEF_ZONE := {
-	"cathedral_w16": "core", "mage_tower_w8": "core", "library_w12": "core",
-	"tower_w6": "core", "tavern_w12": "market", "townhouse_w12": "market",
-	"rowhouse_w12": "living", "shelter_w6": "living",
-	"alchemy_w8": "craft", "smithy4_w12": "craft", "barracks_w12": "production",
+
+## 浮动建筑（不属分区，随机插位）：教堂 chapel（Lv1）/法师塔（平行不占级）/
+## 城防塔——窗口内按档取
+const FLOAT_DEFS := {
+	"hamlet": ["cathedral_w8", "tower_w6"],
+	"village": ["cathedral_w8", "mage_tower_w8", "tower_w6"],
+	"townlet": ["cathedral_w8", "mage_tower_w8", "tower_w6"],
+	"town": ["cathedral_w16", "mage_tower_w8", "tower_w6"],
+	"burgh": ["cathedral_w16", "mage_tower_w8", "tower_w6"],
+	"city": ["cathedral_w16", "mage_tower_w8", "tower_w6", "library_w12"],
 }
 const GATE_DEF := "gatehouse_w8"
-const DOOR_DEFS := ["guildhall", "gatehouse", "shop", "tavern", "smithy1"]
+const DOOR_DEFS := ["guildhall", "gatehouse", "shop", "tavern", "smithy1", "council_hall"]
 const GROUND_DEFS := ["barn", "cottage"]
+
+## 街具节奏（port 自 props.py dress_street 的 founder 定稿参数）：
+## 灯距 8~12 格两侧错位；组距 10~16（长椅必配花）；喷泉留广场位；
+## 公告板贴行政建筑；里程碑/路标守街口。档位街具数 = 表内 furniture。
+const FURNITURE_LAMP_EVERY := Vector2(8.0, 12.0)
+const FURNITURE_GROUP_EVERY := Vector2(10.0, 16.0)
+const FURNITURE_LAMPS := ["lamp_post_stone", "lamp_post_iron", "lantern"]
+const FURNITURE_GROUPS := [
+	["bench_wood", "planter_ring"], ["bench_stone", "barrel_planter"],
+	["horse_trough"], ["signpost"], ["milestone"], ["water_tap"],
+]
+
+
+## 道具卡名集合（props.json；街具节奏里的未烘卡由调用侧过滤）
+static func prop_names() -> Dictionary:
+	var out: Dictionary = {}
+	for base_path: String in ["res://temp/proto_hd2d/props.json",
+			"res://tests/dev/proto_hd2d/tex/proto_hd2d/props.json"]:
+		if not FileAccess.file_exists(base_path):
+			continue
+		var f := FileAccess.open(base_path, FileAccess.READ)
+		if f == null:
+			continue
+		var v: Variant = JSON.parse_string(f.get_as_text())
+		if v is Array:
+			for c: Variant in v:
+				out[str(c["card"])] = true
+			break
+	return out
 
 
 ## 卡画面宽表（格）：temp/proto25d/cards.json，缺失回退 tex 入库副本
@@ -68,67 +157,77 @@ static func card_widths() -> Dictionary:
 				"smithy3", "smithy4", "house", "cottage", "hayloft", "rowhouse",
 				"townhouse", "barn", "windmill", "stable", "warehouse", "alchemy",
 				"library", "mage_tower", "barracks", "shelter", "tower", "cathedral",
-				"gatehouse"]:
+				"council_hall", "gatehouse"]:
 			for w: int in [4, 6, 8, 12, 16]:
 				out["%s_w%d" % [d, w]] = float(w) + 2.0
 	return out
 
 
-## 生成布局（tier/seed 确定性）。tier 见 TIERS；seed 固定 → 多局一致。
-static func generate(tier: String, seed_v: int) -> Dictionary:
+## 生成布局（tier ∈ TIERS；seed 确定性 → 多局尽量一致）。
+## 返回 proto_hd2d 的 layout_data 契约（width_cells/buildings/props/trees）。
+static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Dictionary:
 	var widths := card_widths()
-	var prof: Dictionary = TIERS.get(tier, TIERS["starter"])
+	var prof: Dictionary = TIERS.get(tier, TIERS["townlet"])
+	var pools: Dictionary = ZONE_POOLS.get(tier, ZONE_POOLS["townlet"])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_v
 
-	# ── 1. 分区 → 侧位（随机序 + 轻量配平）────────────────────────────
+	# ── 1. 分区 → 侧位（随机序 + 轻量配平，非镜像）────────────────────
 	var zones: Array = ["market", "craft", "living", "production", "storage"]
 	zones.shuffle()
 	var sides: Dictionary = {}
 	var load := {-1: 0.0, 1: 0.0}
 	for z: String in zones:
-		if not bool(prof.get("zoned", true)):
+		var n: int = int(prof["zones"].get(z, 0))
+		if n <= 0:
 			sides[z] = 0
 			continue
 		var zload := 0.0
-		for i in int(prof.get(z, 0)):
-			zload += float(widths.get(str(ZONE_POOLS[z][i % ZONE_POOLS[z].size()]), 8.0))
+		for i in n:
+			zload += float(widths.get(str(pools[z][i % pools[z].size()]), 8.0))
 		var s := -1 if float(load[-1]) <= float(load[1]) else 1
 		sides[z] = s
 		load[s] = float(load[s]) + zload
 
-	# ── 2. 各区塞够建筑（队列洗牌 = 随机塞）───────────────────────────
+	# ── 2. 各区塞够建筑（池内顺位循环；未烘卡过滤）────────────────────
 	var queues: Dictionary = {}
 	for z: String in zones:
 		var defs: Array = []
-		var n: int = int(prof.get(z, 0))
+		var n: int = int(prof["zones"].get(z, 0))
 		for i in n:
-			defs.append(ZONE_POOLS[z][i % ZONE_POOLS[z].size()])
+			var d: String = str(pools[z][i % pools[z].size()])
+			if widths.has(d) and not d in defs:
+				defs.append(d)
+		if defs.is_empty():
+			defs.append("house_w8")   # 池全未烘兜底（民居通用填充件）
 		defs.shuffle()
 		queues[z] = defs
 
-	# ── 3. 两侧序列拼接 + 浮动建筑随机插位 ────────────────────────────
+	# ── 3. 两侧序列拼接 + 浮动建筑随机插位（未烘过滤）─────────────────
 	var seq := {-1: PackedStringArray(), 1: PackedStringArray()}
 	for z: String in zones:
-		var side: int = int(sides[z])
-		var target: int = side
-		if side == 0:
+		var target: int = int(sides[z])
+		if target == 0:
 			target = -1 if rng.randf() < 0.5 else 1
 		for d: String in queues[z]:
 			seq[target].append(d)
-	for i in mini(2, FLOAT_DEFS.size()):
+	for d: String in FLOAT_DEFS.get(tier, []):
+		if not widths.has(d):
+			continue
 		var side2: int = -1 if rng.randf() < 0.5 else 1
 		var at: int = rng.randi_range(0, seq[side2].size())
-		seq[side2].insert(at, FLOAT_DEFS[i])
+		seq[side2].insert(at, d)
 
-	# ── 4. 核心居中，从中心向两侧排布（推挤保底）──────────────────────
-	var placements: Array = []   # {def, x, w, zone, door}
-	var cursor := {-1: 0.0, 1: 0.0}
-	for d: String in ZONE_POOLS["core"]:
-		var w := float(widths.get(d, 8.0))
-		placements.append({"def": d, "x": 0.0, "w": w, "zone": "core"})
-		cursor[-1] = -w * 0.5 - MIN_GAP
-		cursor[1] = w * 0.5 + MIN_GAP
+	# ── 4. 行政居中（当级行政槽，§二），从中心向两侧排布（推挤保底）────
+	var admin: String = "guildhall_w12"
+	for d: String in prof["admin"]:
+		if widths.has(d):
+			admin = d
+			break
+	var placements: Array = []   # {def, x, w, zone}
+	var w_a := float(widths.get(admin, 12.0))
+	placements.append({"def": admin, "x": 0.0, "w": w_a, "zone": "core"})
+	var cursor := {-1: -w_a * 0.5 - MIN_GAP, 1: w_a * 0.5 + MIN_GAP}
 	var qi := {-1: 0, 1: 0}
 	while int(qi[-1]) < seq[-1].size() or int(qi[1]) < seq[1].size():
 		for s: int in [-1, 1]:
@@ -166,15 +265,21 @@ static func generate(tier: String, seed_v: int) -> Dictionary:
 		var zn: String = str(p["zone"])
 		if zn == "core" or zn == "gate":
 			continue
-		zone_anchor[zn] = (float(zone_anchor.get(zn, p["x"])) + float(p["x"])) * 0.5
+		zone_anchor[zn] = (float(zone_anchor.get(zn, float(p["x"]))) + float(p["x"])) * 0.5
 	var bg_rows := {1: [], 2: []}
-	for i in mini(9, BG_POOL.size()):
-		var d: String = BG_POOL[i]
-		var row: int = 1 if i % 2 == 0 else 2
-		var zone: String = BG_DEF_ZONE.get(d, "living")
-		var anchor: float = float(zone_anchor.get(zone, 0.0))
-		bg_rows[row].append({"def": d, "x": anchor + rng.randf_range(-9.0, 9.0),
-			"w": float(widths.get(d, 8.0))})
+	var bg_i := 0
+	for p: Dictionary in placements:
+		var zn2: String = str(p["zone"])
+		if zn2 == "core" or zn2 == "gate":
+			continue
+		var zpool: Array = pools.get(zn2, ["house_w8"])
+		for k in 2:
+			var d: String = str(zpool[(bg_i + k) % zpool.size()])
+			bg_i += 1
+			var row: int = 1 if bg_i % 2 == 0 else 2
+			var anchor: float = float(zone_anchor.get(zn2, float(p["x"])))
+			bg_rows[row].append({"def": d, "x": anchor + rng.randf_range(-9.0, 9.0),
+				"w": float(widths.get(d, 8.0))})
 	for row: int in [1, 2]:
 		var bs: Array = bg_rows[row]
 		bs.sort_custom(func(a, b): return float(a["x"]) < float(b["x"]))
@@ -183,35 +288,47 @@ static func generate(tier: String, seed_v: int) -> Dictionary:
 			if float(bs[i]["x"]) < need:
 				bs[i]["x"] = need
 
-	# ── 6. 道具随分区落 ───────────────────────────────────────────────
+	# ── 6. 道具：功能件随分区 + 街具节奏（dress_street 参数移植）───────
 	var props: Array = []
 	var zone_x := func(z: String) -> float:
 		return float(zone_anchor.get(z, 0.0))
-	var add_prop := func(card: String, z: String, dx: float, py: float, plat: bool = false) -> void:
-		props.append({"card": card, "x": snappedf(float(zone_x.call(z)) + dx, 0.1),
-			"z": py, "plat": plat})
-	if int(prof["craft"]) > 0:
-		add_prop.call("anvil", "craft", -1.1, 4.5, true)
-		add_prop.call("grindstone", "craft", 1.6, 4.3, true)
-	if int(prof["market"]) > 0:
-		add_prop.call("well", "market", -2.5, 5.2)
-		add_prop.call("market_stall", "market", 1.5, 4.6)
-		add_prop.call("market_table", "market", 4.2, 5.6)
-		add_prop.call("produce_baskets", "market", 6.5, 4.6)
-	if int(prof["core"]) > 0:
-		add_prop.call("banner", "core", -2.0, 4.5, true)
-	if int(prof["storage"]) > 0:
-		add_prop.call("crate", "storage", -1.5, 4.4, true)
-		add_prop.call("barrel", "storage", 1.2, 4.2, true)
-		add_prop.call("sack_stack", "storage", 3.6, 5.8)
-	if int(prof["production"]) > 0:
-		add_prop.call("haystack", "production", -2.0, 5.6)
-		add_prop.call("log_pile", "production", 2.4, 6.0)
-		add_prop.call("trough", "production", 5.0, 5.0)
-	add_prop.call("bench", "market", -5.5, 5.0)
-	add_prop.call("bench", "living", 2.0, 5.0)
-	add_prop.call("lantern", "gate", -2.2, 4.6, true)
-	add_prop.call("lantern", "gate", 2.2, 4.6, true)
+	var add_prop := func(card: String, zx: float, py: float, plat: bool = false) -> void:
+		props.append({"card": card, "x": snappedf(zx, 0.1), "z": py, "plat": plat})
+	# 功能件
+	if pools.has("craft"):
+		add_prop.call("anvil", float(zone_x.call("craft")) - 1.1, 4.5, true)
+		add_prop.call("grindstone", float(zone_x.call("craft")) + 1.6, 4.3, true)
+	if pools.has("market"):
+		add_prop.call("well", float(zone_x.call("market")) - 2.5, 5.2)
+		add_prop.call("market_stall", float(zone_x.call("market")) + 1.5, 4.6)
+		add_prop.call("market_table", float(zone_x.call("market")) + 4.2, 5.6)
+		add_prop.call("produce_baskets", float(zone_x.call("market")) + 6.5, 4.6)
+	add_prop.call("banner", float(zone_x.call("core")) - 2.0, 4.5, true)
+	# 街具节奏：灯两侧错位（周期 8~12 格内确定性抽取）+ 组槽（10~16 格，
+	# 长椅必配花）+ 广场喷泉（市场锚点）+ 街口路标/里程碑
+	var furniture_n: int = int(prof["furniture"])
+	var period: float = rng.randf_range(FURNITURE_LAMP_EVERY.x, FURNITURE_LAMP_EVERY.y)
+	var lamp_card: String = FURNITURE_LAMPS[0] if widths.has(FURNITURE_LAMPS[0]) else "lantern"
+	var xx := -width_cells * 0.5 + 6.0
+	var side := 1
+	while xx < width_cells * 0.5 - 6.0:
+		add_prop.call(lamp_card, xx, 4.6 if side > 0 else 6.2, side > 0)
+		xx += period
+		side = -side
+	var gx := -width_cells * 0.5 + 10.0
+	var gi := 0
+	while gx < width_cells * 0.5 - 10.0:
+		var grp: Array = FURNITURE_GROUPS[gi % FURNITURE_GROUPS.size()]
+		for d: String in grp:
+			if prop_set.is_empty() or prop_set.has(d):
+				add_prop.call(d, gx + rng.randf_range(-1.0, 1.0),
+						5.0 if d.begins_with("bench") else 4.8, d.begins_with("bench"))
+		gx += rng.randf_range(FURNITURE_GROUP_EVERY.x, FURNITURE_GROUP_EVERY.y)
+		gi += 1
+	if pools.has("market"):
+		add_prop.call("fountain_small", float(zone_x.call("market")) + 9.0, 5.4)
+	add_prop.call("signpost", -width_cells * 0.5 + 3.0, 5.0)
+	add_prop.call("milestone", width_cells * 0.5 - 3.0, 5.0)
 
 	# ── 7. 组装（row0=前排，row1/2=背景两层）+ 产物级重叠修复 ─────────
 	var buildings: Array = []

@@ -31,8 +31,9 @@ const _HD2D_WORLD_SCENE := preload("res://tests/dev/proto_hd2d/proto_hd2d.tscn")
 const _ResourceGenScript := preload("res://modules/world/scripts/map/resource_gen.gd")
 ## 城门选项框（玩家走近弹窗出城；村民走静默传送带）
 const _GatePromptScript := preload("res://modules/world/scripts/map/hd2d_gate_prompt.gd")
-## 初始城市档（城市规模只是建筑数量问题——扩建=换档重生成）
-const CITY_TIER := "starter"
+## 初始城市档（八档链：townlet 村镇过渡——创始人"东西稍全、工区两三栋"）
+## 城市规模只是建筑数量问题——扩建=换档重生成
+const CITY_TIER := "townlet"
 
 ## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
 ## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
@@ -100,7 +101,7 @@ func _ready() -> void:
 		# 城市生成时机（创始人 2026-09-15：第一次进入该城市生成）——确定性
 		# 种子（城名哈希）→ 多局尽量一致；同存档每次进图同城。城市扩建 =
 		# 换档重生成（城墙自动前移，野地资源窗随之露出）
-		var plan: Dictionary = CityGen.generate(CITY_TIER, hash("city:" + layout_name))
+		var plan: Dictionary = CityGen.generate(CITY_TIER, hash("city:" + layout_name), CityGen.prop_names())
 		_hd.set("layout_data", plan)
 	_configure_hd(_hd)
 	add_child(_hd)

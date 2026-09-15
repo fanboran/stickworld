@@ -31,6 +31,16 @@ class_name MapRenderer
 ##   -> 城市中心点 -> hover 描边 -> 当前城流动描边 -> 内容区纸边黑框 -> F3 编号 -> 玩家标记
 ##
 ## 交互：hover 命中城市块（经相机换算 + 索引图查询），点击选中由控制器经 api 处理。
+##
+## 子域拆分（同目录助手，本文件保留全部状态/常量/公共 API/层序编排）：
+##   map_renderer_geo.gd        静态几何库（点列工具/邻湖判定/静态几何缓存构建/底色 mesh 烘焙）
+##   map_renderer_blob_layer.gd 建成区 blob V2（包几何装载/档位对账/单城补丁/两套档位绘制件）
+##   map_renderer_tex_jobs.gd   贴图异步加载机制（queue/pump/解码线程体/join/poll）
+##   map_renderer_layers.gd     交互叠加绘制件（路由高亮/邻居轮廓/城市点/F3 编号/玩家标记）
+const _Geo := preload("res://modules/world_map/scripts/map_renderer_geo.gd")
+const _BlobLayer := preload("res://modules/world_map/scripts/map_renderer_blob_layer.gd")
+const _TexJobs := preload("res://modules/world_map/scripts/map_renderer_tex_jobs.gd")
+const _Layers := preload("res://modules/world_map/scripts/map_renderer_layers.gd")
 
 ## 关联的 L1 世界数据
 var _data: L1WorldData = null
@@ -225,6 +235,26 @@ var _glow_time := 0.0
 ## 玩家位置脉冲环相位（秒，PLAYER_PULSE_PERIOD 周期循环）
 var _pulse_time := 0.0
 
+## ===== 子域助手实例（懒建：首建后仅返回引用，每帧路径零新增分配）=====
+var _blob_layer: RefCounted = null
+var _tex_jobs: RefCounted = null
+
+
+## 建成区 blob V2 助手访问器（_h 回引本宿主）
+func _blob() -> RefCounted:
+	if _blob_layer == null:
+		_blob_layer = _BlobLayer.new()
+		_blob_layer._h = self
+	return _blob_layer
+
+
+## 贴图异步加载助手访问器（_h 回引本宿主）
+func _tex() -> RefCounted:
+	if _tex_jobs == null:
+		_tex_jobs = _TexJobs.new()
+		_tex_jobs._h = self
+	return _tex_jobs
+
 
 func set_data(data: L1WorldData) -> void:
 	_data = data
@@ -235,7 +265,7 @@ func set_data(data: L1WorldData) -> void:
 	_route_road_pts.clear()
 	_route_nodes = PackedVector2Array()
 	# 换包：旧贴图/旧线程/旧 blob 状态作废（join 防未完成 Thread 销毁段错误）
-	_join_texture_thread()
+	_tex().join()
 	_mode_textures = {}
 	_terrain_img = null
 	_blob_tex.clear()
@@ -250,12 +280,9 @@ func set_data(data: L1WorldData) -> void:
 	# 生效档初值 = 烘焙档（贴图画的就是它，reconcile 后修正为运行时判档）
 	_city_tier = {}
 	if _data != null:
-		_geo = SettlementBlob.load_pack_geometry(_data.base_dir)
-		for tile in _data.tiles:
-			if tile.settlement == null:
-				continue
-			_city_tier[tile.settlement.settlement_id] = \
-				SettlementBlob.bake_tier_of(_geo, tile.settlement.settlement_id)
+		var pack := _BlobLayer.load_pack(_data)
+		_geo = pack["geo"]
+		_city_tier = pack["tiers"]
 	# 当前所在地块默认 = 出生聚落所在块（玩家跨城移动后由 set_current_tile 切换）
 	if _data != null and not _data.spawn_settlement_id.is_empty():
 		for tile in _data.tiles:
@@ -270,7 +297,7 @@ func set_data(data: L1WorldData) -> void:
 				break
 	_build_glow_outline()
 	# 当前模式需要静态底图（TERRAIN/TRAFFIC）时按需触发异步加载（POLITICAL 无贴图）
-	_ensure_static_textures()
+	_tex().ensure()
 	_ensure_label_layer()
 	queue_redraw()
 
@@ -307,58 +334,20 @@ func set_current_tile(tile_id: String) -> void:
 			return
 
 
-## 档位对账（三档贴图就绪后一次）：运行时扰动分 vs 烘焙档不同的城 → 补丁队列
-## （分帧生成，生成前保持烘焙档画面——±15% jitter 边界城的短暂小偏差，可接受）
-func _reconcile_tiers() -> void:
-	if not _blob_ready or _data == null:
-		return
-	for tile in _data.tiles:
-		if tile.settlement == null:
-			continue
-		var sid := tile.settlement.settlement_id
-		var t := SettlementBlob.tier_of(tile.settlement.population_score)
-		if t != int(_city_tier.get(sid, -1)):
-			_city_tier[sid] = t
-			if not _overlay_queue.has(sid):
-				_overlay_queue.append(sid)
-	queue_redraw()
-
-
 ## 单城档位刷新（EventBus.settlement_updated → api 调用；SettlementRef.population_score
 ## 已由 api 更新，这里重判档位并把该城排进补丁队列优先生成。不在当前数据中的 id 忽略）
 func invalidate_blob(settlement_id: String) -> void:
-	if _data == null:
-		return
-	var sref := _data.get_settlement(settlement_id)
-	if sref == null:
-		return
-	var new_tier := SettlementBlob.tier_of(sref.population_score)
-	if new_tier != int(_city_tier.get(settlement_id, new_tier)):
-		_city_tier[settlement_id] = new_tier
-		_overlay_queue.erase(settlement_id)     # 去重：同一城只保留一个待补丁条目
-		_overlay_queue.insert(0, settlement_id)
-		_process_overlay_queue()
-	queue_redraw()
+	_blob().invalidate(settlement_id)
 
 
 ## 构建当前城流动描边缓存（R2）：几何 = 当前城 mid 档建成区轮廓（包几何最大外环，
 ## 与建成区图形重合的 R2 语义；旧径向 blob 轮廓已随 §R5 退役）。
-## 固定 mid 档——分数变化不再引起描边几何跳变。
+## 固定 mid 档——分数变化不再引起描边几何跳变。（轮廓提取见 blob 助手 static 纯函数）
 func _build_glow_outline() -> void:
 	_glow_outline = PackedVector2Array()
 	if _data == null or _current_tile_id.is_empty():
 		return
-	for tile in _data.tiles:
-		if tile.tile_id == _current_tile_id:
-			if tile.settlement != null:
-				var ring := SettlementBlob.glow_outline(_geo, tile.settlement.settlement_id)
-				if ring.size() >= 3:
-					var pts := PackedVector2Array()
-					pts.resize(ring.size())
-					for i in ring.size():
-						pts[i] = ring[i] + tile.settlement.position
-					_glow_outline = FlowOutline.resample_closed(pts)
-			return
+	_glow_outline = _BlobLayer.current_city_outline(_geo, _data, _current_tile_id)
 
 
 func set_camera(camera: MapCamera) -> void:
@@ -371,7 +360,7 @@ func set_map_mode(mode: int) -> void:
 		return
 	map_mode = mode
 	# 切到需静态底图的模式（TERRAIN/TRAFFIC）时按需触发加载（首帧/其他模式期间未加载过）
-	_ensure_static_textures()
+	_tex().ensure()
 	queue_redraw()
 
 
@@ -402,87 +391,9 @@ func refresh() -> void:
 	queue_redraw()
 
 
-## ===== 静态贴图异步加载（R9/R4 底图 + §R5 建成区三档；l3_map_renderer 三线程同款样板）=====
-## 后台线程 FileAccess 直读 + PNG 解码（纯 CPU、线程安全，主线程零阻塞）；
-## 单线程串行消费 _load_queue（任务含 kind/slot，完成时按它归档）。
-## 完成前当前模式回退矢量管线，解码完成后 queue_redraw 自动切上。
-func _ensure_static_textures() -> void:
-	if _data == null:
-		return
-	_queue_static_textures()
-	_pump_load_queue()
-
-
-## 按当前模式把「需要而未装载/未排队/未在途」的贴图任务入队
-func _queue_static_textures() -> void:
-	if MODE_TEXTURES.has(map_mode) and not _mode_textures.has(map_mode):
-		_load_queue.append({
-			"kind": "mode", "slot": map_mode,
-			"path": "%s/%s" % [_data.base_dir, MODE_TEXTURES[map_mode]],
-		})
-	# 建成区三档只在 TERRAIN 模式消费（POLITICAL/TRAFFIC 不显示建成区，§R4）
-	if map_mode == MapModeManager.Mode.TERRAIN and not _blob_ready:
-		for ti in SettlementBlob.TIER_COUNT:
-			if _blob_tex[ti] == null:
-				_load_queue.append({
-					"kind": "blob", "slot": ti,
-					"path": "%s/%s" % [_data.base_dir, SettlementBlob.TIER_FILES[ti]],
-				})
-
-
-## 线程空闲时从队列取一个任务启动（缺失文件直接跳过继续取下一个）
-func _pump_load_queue() -> void:
-	while _tex_thread == null and not _load_queue.is_empty():
-		var job: Dictionary = _load_queue.pop_front()
-		if not FileAccess.file_exists(job.path):
-			continue
-		_tex_slot = job
-		_tex_thread = Thread.new()
-		_tex_thread.start(_load_texture_async.bind(job.path))
-
-
-func _load_texture_async(path: String) -> void:
-	var f := FileAccess.open(path, FileAccess.READ)
-	if f == null:
-		return
-	var img := Image.new()
-	if img.load_png_from_buffer(f.get_buffer(f.get_length())) == OK:
-		_tex_result = img
-
-
-## join 后台线程并丢弃未消费结果（set_data 换包 / _exit_tree 销毁前必须调用——
-## 未完成的 Thread 直接销毁在 Windows 上会段错误）
-func _join_texture_thread() -> void:
-	_load_queue.clear()
-	_tex_slot = {}
-	if _tex_thread != null:
-		_tex_thread.wait_to_finish()
-		_tex_thread = null
-	_tex_result = null
-
-
-## 每帧检查后台线程：解码完成 → wait_to_finish + 主线程建 ImageTexture 按 slot 归档；
-## blob 三档齐 → 档位对账；随后按当前模式补启动下一个任务
-func _poll_texture_load() -> void:
-	if _tex_thread != null and not _tex_thread.is_alive():
-		_tex_thread.wait_to_finish()
-		_tex_thread = null
-		if _tex_result != null and not _tex_slot.is_empty():
-			var tex := ImageTexture.create_from_image(_tex_result)
-			if str(_tex_slot.get("kind")) == "mode":
-				_mode_textures[_tex_slot.slot] = tex
-				if int(_tex_slot.get("slot", -1)) == MapModeManager.Mode.TERRAIN:
-					_terrain_img = _tex_result   # 降档擦除贴图的取样源
-			elif str(_tex_slot.get("kind")) == "blob":
-				var slot := int(_tex_slot.get("slot", -1))
-				if slot >= 0 and slot < _blob_tex.size():
-					_blob_tex[slot] = tex
-					_check_blob_ready()
-			_tex_result = null
-			_tex_slot = {}
-			queue_redraw()
-		_queue_static_textures()
-		_pump_load_queue()
+## ===== 贴图异步加载机制体在 map_renderer_tex_jobs.gd（_h 回引本宿主）=====
+## 状态（_tex_thread/_tex_result/_tex_slot/_load_queue）留本文件；queue/pump/join/poll
+## 经 _tex() 访问器驱动。完成前当前模式回退矢量管线，解码完成后 queue_redraw 自动切上。
 
 
 func _check_blob_ready() -> void:
@@ -492,133 +403,22 @@ func _check_blob_ready() -> void:
 		if tex == null:
 			return
 	_blob_ready = true
-	_reconcile_tiers()
+	_blob().reconcile_tiers()
 
 
-## ===== 单城档位补丁（§R5 单城刷新；分帧生成防栅格化卡顿）=====
-
-## 每帧消费补丁队列（_process 调用；settlement_updated 走同步直通不走此队列等待）
-func _process_overlay_queue() -> void:
-	var n := 0
-	while not _overlay_queue.is_empty() and n < OVERLAY_BUDGET_PER_FRAME:
-		_build_city_patch(_overlay_queue.pop_front())
-		n += 1
-	if n > 0:
-		queue_redraw()
-
-
-## 单城补丁：按「生效档 vs 烘焙档」的差异方向生成 overlay/erase。
-## 升档：嵌套覆盖（新形状 ⊇ 旧形状）→ 只需该城新档小贴图；
-## 降档：旧档像素超出新形状 → 先以 l1_terrain.png 原样回贴擦除旧档区域，
-##       再重画影响域内各城（含被波及的邻城）的生效档形状。
-func _build_city_patch(sid: String) -> void:
-	if not _blob_ready or _data == null:
-		return
-	var sref := _data.get_settlement(sid)
-	if sref == null or not _geo.has(sid):
-		return
-	var tier := int(_city_tier.get(sid, -1))
-	if tier < 0:
-		return
-	var bake := SettlementBlob.bake_tier_of(_geo, sid)
-	if tier > bake:
-		_city_erases.erase(sid)
-		var ov := _make_city_overlay(sid, tier)
-		if ov.is_empty():
-			_city_overlays.erase(sid)
-		else:
-			_city_overlays[sid] = ov
-	elif tier < bake:
-		var bb := _city_context_bbox(sid, bake, sref)
-		if bb.size.x <= 0.0:
-			return
-		var ep := _make_erase_patch(bb)
-		if not ep.is_empty():
-			_city_erases[sid] = ep
-		for other_sid in _cities_touching(bb):
-			var ot := int(_city_tier.get(other_sid, SettlementBlob.bake_tier_of(_geo, other_sid)))
-			var ov2 := _make_city_overlay(other_sid, ot)
-			if ov2.is_empty():
-				_city_overlays.erase(other_sid)
-			else:
-				_city_overlays[other_sid] = ov2
-
-
-## 单城生效档形状 → 小贴图（相对锚点局部栅格化 + 锚点平移定位）。该档无建成区返回 {}。
-func _make_city_overlay(sid: String, tier: int) -> Dictionary:
-	var sref := _data.get_settlement(sid)
-	if sref == null:
-		return {}
-	var res := SettlementBlob.rasterize_evenodd(
-		SettlementBlob.city_rings(_geo, sid, tier), BLOB_FILL)
-	if res.is_empty():
-		return {}
-	var origin: Vector2 = res["origin"]
-	var img: Image = res["img"]
-	return {
-		"tex": ImageTexture.create_from_image(img),
-		"rect": Rect2(origin + sref.position, Vector2(img.get_width(), img.get_height())),
-	}
-
-
-## 擦除补丁：l1_terrain.png 原样回贴（区域 = 旧档形状 bbox 外扩 2px，裁进 context）。
-## 底图 Image 未就绪（贴图加载失败等）返回 {}——降档城保持烘焙画面（报告遗留项）。
-func _make_erase_patch(bb: Rect2) -> Dictionary:
-	if _terrain_img == null:
-		return {}
-	var ctx := _data.context_size
-	var bounds := Rect2(Vector2.ZERO, Vector2(ctx.x, ctx.y))
-	var rect := bb.grow(2.0).intersection(bounds)
-	if rect.size.x <= 1.0 or rect.size.y <= 1.0:
-		return {}
-	var img := _terrain_img.get_region(Rect2i(int(rect.position.x), int(rect.position.y),
-		int(rect.size.x), int(rect.size.y)))
-	return {"tex": ImageTexture.create_from_image(img), "rect": rect}
-
-
-## 城 tier 档形状的 context 坐标包围盒（锚点 = settlement.position）
-func _city_context_bbox(sid: String, tier: int, sref: SettlementRef) -> Rect2:
-	var bb := Rect2()
-	var polys := SettlementBlob.city_rings(_geo, sid, tier)
-	var first := true
-	for poly: Variant in polys:
-		var outer: PackedVector2Array = (poly as Dictionary).get("outer", PackedVector2Array())
-		for p in outer:
-			var pt := p + sref.position
-			if first:
-				bb = Rect2(pt, Vector2.ZERO)
-				first = false
-			else:
-				bb = bb.expand(pt)
-	return bb
-
-
-## 包围盒触及的城 sid 集合（各城烘焙档形状 bbox 相交判定——擦除区内所有
-## 可能被波及的城都要重画）
-func _cities_touching(bb: Rect2) -> Array[String]:
-	var out: Array[String] = []
-	if bb.size.x <= 0.0:
-		return out
-	for tile in _data.tiles:
-		if tile.settlement == null:
-			continue
-		var sid := tile.settlement.settlement_id
-		var ot := int(_city_tier.get(sid, SettlementBlob.bake_tier_of(_geo, sid)))
-		var obb := _city_context_bbox(sid, maxi(ot, SettlementBlob.bake_tier_of(_geo, sid)),
-			tile.settlement)
-		if obb.size.x > 0.0 and obb.intersects(bb):
-			out.append(sid)
-	return out
+## ===== 单城档位补丁机制体在 map_renderer_blob_layer.gd（_h 回引本宿主）=====
+## 状态（_geo/_city_tier/_blob_tex/_city_overlays/_city_erases/_overlay_queue）留本文件；
+## 对账/补丁生成/档位绘制经 _blob() 访问器驱动（公共入口 invalidate_blob 转发同助手）。
 
 
 func _exit_tree() -> void:
-	_join_texture_thread()
+	_tex().join()
 
 
 func _process(delta: float) -> void:
-	_poll_texture_load()
+	_tex().poll()
 	# 单城档位补丁分帧生成（栅格化较重，一帧限两城）
-	_process_overlay_queue()
+	_blob().process_overlay_queue()
 	if not is_visible_in_tree() or _data == null:
 		return
 	# 动画相位推进：当前城流动光 + 玩家位置脉冲环（有任一动画即逐帧重绘；
@@ -677,7 +477,7 @@ func _draw() -> void:
 	# 1. 矢量回退层（贴图缺失/未解码完成时）；POLITICAL 恒走本层（政权色全填充）
 	if not terrain_base:
 		if _tiles_mesh == null:
-			_bake_base_meshes()
+			_Geo.bake_base_meshes(self)
 		# 4.4 邻居老 L1 块灰底（仅政治模式；A3 空心化的补集——空心轮廓留在灰底之上）
 		if map_mode == MapModeManager.Mode.POLITICAL and _neighbors_mesh != null:
 			draw_mesh(_neighbors_mesh, null)
@@ -699,25 +499,13 @@ func _draw() -> void:
 	# 1.6 快速旅行路由高亮（P6）：途经道路琥珀虚线加粗 + 节点空心圆（全模式——
 	#     UI 操作语义的虚线，§7.2-4；水系之上连续可见）。
 	#     R8 层2：操作线 = ACCENT。feedback1 去抖动：平滑直绘（虚线切段保留）
-	if not _route_road_pts.is_empty():
-		var rw: float = maxf(ctx_size.x * ROUTE_HIGHLIGHT_WIDTH, 2.0)
-		var dash_segs := PackedVector2Array()
-		for ri in _route_road_pts.size():
-			MapSketch.dash_segments(dash_segs, _route_road_pts[ri],
-				ctx_size.x * ROUTE_DASH, ctx_size.x * ROUTE_GAP)
-		if dash_segs.size() >= 2:
-			draw_multiline(dash_segs, ROUTE_HIGHLIGHT_COLOR, rw, true)
-		var nr: float = ROUTE_NODE_RADIUS
-		if zz > 0.0001:
-			nr = ROUTE_NODE_RADIUS / zz
-		for pos in _route_nodes:
-			draw_arc(pos, nr, 0.0, TAU, 48, Color.WHITE, maxf(rw * 0.35, 1.0), true)
+	_Layers.draw_route_highlight(self, ctx_size, zz)
 	if _tiles_mesh == null and not terrain_base:
 		# 回退：数据异常时逐层绘制（邻居空心：只描边，见第 4.5 层）
 		draw_rect(Rect2(Vector2.ZERO, ctx_size), OCEAN_COLOR)
 		for lake in _data.lakes:
 			if (lake as Array).size() >= 3:
-				draw_colored_polygon(_pts(lake), LAKE_COLOR)
+				draw_colored_polygon(_Geo.pts(lake), LAKE_COLOR)
 		for tile in _data.tiles:
 			if tile.polygon.size() < 3:
 				continue
@@ -727,50 +515,11 @@ func _draw() -> void:
 	#     （先 erase 回贴底图，再 overlay 生效档形状）；未就绪 = 包几何矢量回退。
 	if map_mode == MapModeManager.Mode.TERRAIN:
 		if _blob_ready:
-			for tex in _blob_tex:
-				if tex != null:
-					draw_texture_rect(tex, Rect2(Vector2.ZERO, ctx_size), false)
-			# 降档擦除（底图原样回贴）→ 单城生效档 overlay（顺序不可换：
-			# 全部 erase 完成后再统一 overlay，多城 patch 相互覆盖才正确）
-			for patch: Dictionary in _city_erases.values():
-				draw_texture_rect(patch.tex, patch.rect, false)
-			for patch: Dictionary in _city_overlays.values():
-				draw_texture_rect(patch.tex, patch.rect, false)
+			_blob().draw_tier_textures(ctx_size)
 		else:
-			# 矢量回退：包几何按生效档平涂（洞不挖——过渡画面数帧）；描边沿用级别色
-			var bew: float = BLOB_EDGE_WIDTH
-			if zz > 0.0001:
-				bew = BLOB_EDGE_WIDTH / zz
-			for tile in _data.tiles:
-				var sref := tile.settlement
-				if sref == null:
-					continue
-				var tier := int(_city_tier.get(sref.settlement_id, SettlementBlob.TIER_LOW))
-				var polys := SettlementBlob.city_rings(_geo, sref.settlement_id, tier)
-				if polys.is_empty():
-					continue
-				var edge := BLOB_EDGE
-				if sref.level >= 5:
-					edge = BLOB_EDGE_T5
-				elif sref.level >= 4:
-					edge = BLOB_EDGE_T4
-				for poly: Variant in polys:
-					var outer: PackedVector2Array = (poly as Dictionary).get("outer",
-						PackedVector2Array())
-					if outer.size() < 3:
-						continue
-					var pts := PackedVector2Array()
-					pts.resize(outer.size())
-					for i in outer.size():
-						pts[i] = outer[i] + sref.position
-					draw_colored_polygon(pts, BLOB_FILL)
-					draw_polyline(_closed(pts), edge, bew, true)
+			_blob().draw_vector_fallback(zz)
 	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
-	var nbw: float = NEIGHBOR_BORDER_WIDTH
-	if zz > 0.0001:
-		nbw = NEIGHBOR_BORDER_WIDTH / zz
-	for outline in _cached_neighbor_outlines:
-		draw_polyline(outline, NEIGHBOR_COLOR, nbw, true)
+	_Layers.draw_neighbor_outlines(self, zz)
 	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）。
 	#    描边段不随 zoom/hover 变化 → 缓存复用（原每帧重建 = 4668 段 × 湖边数 距离计算，hover 卡顿源）
 	var tw: float = TILE_BORDER_WIDTH
@@ -786,16 +535,7 @@ func _draw() -> void:
 		draw_polyline(_cached_l1_closed, BORDER_COLOR, bw, true)
 	# 6.5 城市中心标记点（小圆点 + 细环，屏幕像素固定——半径和环宽都随缩放换算成地图单位，
 	# 放大环不遮白点、缩小环不消失；粗细保持屏幕一致）
-	var dot_r: float = CITY_DOT_RADIUS
-	var ring_w: float = CITY_DOT_RING_WIDTH
-	if zz > 0.0001:
-		dot_r = CITY_DOT_RADIUS / zz
-		ring_w = CITY_DOT_RING_WIDTH / zz
-	for tile in _data.tiles:
-		if tile.settlement == null:
-			continue
-		draw_circle(tile.settlement.position, dot_r, CITY_DOT_COLOR)
-		draw_arc(tile.settlement.position, dot_r, 0.0, TAU, 48, CITY_DOT_RING, ring_w, true)
+	_Layers.draw_city_dots(self, zz)
 	# 7. hover 城市块描边（交互线槽；屏幕像素固定；feedback1 去抖动：平滑闭合直绘）
 	if not hovered_tile_id.is_empty():
 		var hw: float = HOVER_WIDTH
@@ -803,7 +543,7 @@ func _draw() -> void:
 			hw = HOVER_WIDTH / zz
 		for tile in _data.tiles:
 			if tile.tile_id == hovered_tile_id and tile.polygon.size() >= 3:
-				draw_polyline(_closed(tile.polygon), HOVER_COLOR, hw, true)
+				draw_polyline(_Geo.closed(tile.polygon), HOVER_COLOR, hw, true)
 				break
 	# 7.5 当前所在城市地块：蓝光流动描边（"你在这里"；屏幕像素固定，画在纸边框内）。
 	#     FlowOutline 流动语义保留（色调波沿线移动）；feedback1 去抖动：
@@ -820,19 +560,10 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, ctx_size), PAPER_BORDER_COLOR, false, pw)
 	# 8. F3 调试：城市编号（标在聚落位置）
 	if DebugApi != null and DebugApi.is_visible():
-		_draw_city_labels()
+		_Layers.draw_city_labels(self)
 	# 9. 玩家位置标记（R2 GPS 范式：中心点 + 静态环 + 脉冲扩散环，画在最上层）
 	if _player_visible:
-		_draw_player_marker(zz)
-
-
-## 闭合多边形点列（首尾相连）
-func _closed(pts: PackedVector2Array) -> PackedVector2Array:
-	if pts.size() < 3:
-		return pts
-	var out := pts.duplicate()
-	out.append(out[0])
-	return out
+		_Layers.draw_player_marker(self, zz)
 
 
 ## 设置玩家位置（L1 地图坐标 = 所在聚落 position_px；api.set_player_map 接线。
@@ -880,164 +611,11 @@ func clear_route_highlight() -> void:
 	queue_redraw()
 
 
-## 玩家位置标记（R2，替代拟物图钉；feedback1 去抖动：环回平滑 draw_arc）：
-## 中心 4px 玩家国色点（白描边）+ 12px 静态细环（白，半透明）
-## + 1.5s 周期脉冲扩散环（12→36px alpha 0.5→0，玩家国色）。全部屏幕像素固定。
-func _draw_player_marker(zz: float) -> void:
-	var dot_r := PLAYER_DOT_RADIUS
-	var dot_ow := PLAYER_DOT_OUTLINE_W
-	var ring_r := PLAYER_RING_RADIUS
-	var ring_w := PLAYER_RING_WIDTH
-	var p_from := PLAYER_PULSE_FROM
-	var p_to := PLAYER_PULSE_TO
-	if zz > 0.0001:
-		dot_r /= zz
-		dot_ow /= zz
-		ring_r /= zz
-		ring_w /= zz
-		p_from /= zz
-		p_to /= zz
-	# 静态细环（白，半透明度略降避免喧宾夺主）
-	draw_arc(_player_pos, ring_r, 0.0, TAU, 64, MapTokens.L1_PLAYER_RING_COLOR, ring_w, true)
-	# 脉冲扩散环：0→1 相位，半径 12→36px、alpha 0.5→0，玩家国色
-	var t := fmod(_pulse_time, PLAYER_PULSE_PERIOD) / PLAYER_PULSE_PERIOD
-	var pa := lerpf(PLAYER_PULSE_ALPHA, 0.0, t)
-	if pa > 0.01:
-		draw_arc(_player_pos, lerpf(p_from, p_to, t), 0.0, TAU, 64,
-			Color(_player_state_color, pa), ring_w, true)
-	# 中心点：玩家国色填充 + 白描边
-	draw_circle(_player_pos, dot_r, _player_state_color)
-	draw_arc(_player_pos, dot_r, 0.0, TAU, 48, Color.WHITE, dot_ow, true)
-
-
-## 邻湖判定容差（地图单元）：边中点距湖多边形 ≤ 该值视为"地块-湖泊"边界不描边。
-## 8192 级 context 下沿湖边 ~0-10、最近非湖边 ~10.1，取 context 1%（798≈8）安全。
-func _lake_edge_tol() -> float:
-	var tol := 4.0
-	if _data.context_size.x > 0:
-		tol = _data.context_size.x * 0.01
-	return tol
-
-
-## 烘焙静态色块层：城市色块与湖泊各一张 ArrayMesh（顶点色，三角形独立顶点）。
-## Geometry2D.triangulate_polygon 一次性 earcut（C++，含凹多边形），仅 set_data / 首帧调用一次。
-## 邻居老 L1 块不参与（A3 空心化：只描边不填充，轮廓走 _build_cached_geometry 缓存）。
-## 拆两张 mesh：河流画在两层层间（tiles 上、lakes 下），见 _draw 1.5 层。
-func _bake_base_meshes() -> void:
-	_tiles_mesh = null
-	_lakes_mesh = null
-	_neighbors_mesh = null
-	var ctx := _data.context_size
-	if ctx.x <= 0 or ctx.y <= 0:
-		return
-	# 收集 (多边形, 颜色)：海洋 = 全矩形底由渲染器背景承担（OCEAN 回退分支 + 相机外区域）
-	var tile_pairs: Array = []   # [[PackedVector2Array, Color], ...]
-	var lake_pairs: Array = []
-	var neighbor_pairs: Array = []
-	for tile in _data.tiles:
-		if tile.polygon.size() >= 3:
-			tile_pairs.append([tile.polygon, _data.get_state_color(tile.owner_state_id)])
-	for lake in _data.lakes:
-		lake_pairs.append([_pts(lake), LAKE_COLOR])
-	for ni in _data.neighbors.size():
-		for poly in _data.neighbors[ni].get("polygons", []):
-			var pts := _pts(poly)
-			if pts.size() >= 3:
-				neighbor_pairs.append([pts, NEIGHBOR_COLOR])
-	_tiles_mesh = _mesh_from_pairs(tile_pairs)
-	_lakes_mesh = _mesh_from_pairs(lake_pairs)
-	_neighbors_mesh = _mesh_from_pairs(neighbor_pairs)
-
-
-## 多边形组 → 顶点色 ArrayMesh（每三角形独立顶点，避免共享顶点颜色冲突）
-func _mesh_from_pairs(pairs: Array) -> ArrayMesh:
-	var verts := PackedVector2Array()
-	var cols := PackedColorArray()
-	for pair in pairs:
-		var pts: PackedVector2Array = pair[0]
-		if pts.size() < 3:
-			continue
-		var tris := Geometry2D.triangulate_polygon(pts)
-		if tris.is_empty():
-			continue
-		for i in range(0, tris.size(), 3):
-			for k in range(3):
-				verts.append(pts[tris[i + k]])
-				cols.append(pair[1])
-	if verts.is_empty():
-		return null
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_COLOR] = cols
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
-
-
-## 构建不随 zoom/hover 变化的静态几何缓存：城市描边段（跳过邻湖边）+ 出生 L1 轮廓
-## + 邻居空心轮廓（A3）+ 河流折线。仅 set_data / 首帧调用一次。
-## feedback1 去抖动：缓存存原始平滑点列（直绘，Godot antialiased）；
-## 无向边去重保留——共享边只描一次，线条严丝合缝不叠双线。
+## 玩家位置标记绘制件在 map_renderer_layers.gd（static，第一参传宿主）；
+## 邻湖判定容差/静态几何缓存构建在 map_renderer_geo.gd（build_cached_geometry，
+## 写回本宿主 _cached_* / 河流 / 道路分级缓存字段；本壳名保留供 bench 直调）。
 func _build_cached_geometry() -> void:
-	_cached_segs = PackedVector2Array()
-	_cached_l1_closed = PackedVector2Array()
-	_cached_neighbor_outlines = []
-	_river_lines = []
-	_river_widths = PackedFloat32Array()
-	# 邻居空心轮廓（闭合折线缓存）
-	for ni in _data.neighbors.size():
-		for poly in _data.neighbors[ni].get("polygons", []):
-			var pts := _pts(poly)
-			if pts.size() >= 3:
-				_cached_neighbor_outlines.append(_closed(pts))
-	var lake_tol := _lake_edge_tol()
-	# 湖 bbox（外扩 tol）预筛：段中点不在任何湖 bbox 内 → 直接非邻湖，省精确距离计算
-	var lake_boxes: Array[Rect2] = []
-	for lake in _data.lakes:
-		lake_boxes.append(_lake_bbox(lake, lake_tol))
-	# 城界描边段：无向边去重（相邻 tile 共享边只描一次——同一物理边一份描边，
-	# 端点与邻边共点，三岔交界严丝合缝）
-	var seen_edges := {}
-	for tile in _data.tiles:
-		if tile.polygon.size() < 3:
-			continue
-		var pts := tile.polygon
-		var n := pts.size()
-		for i in range(n):
-			var a := pts[i]
-			var b := pts[(i + 1) % n]
-			if _edge_touches_lake_fast(a, b, lake_tol, lake_boxes):
-				continue
-			var key := MapSketch.edge_key(a, b)
-			if seen_edges.has(key):
-				continue
-			seen_edges[key] = true
-			_cached_segs.append(a)
-			_cached_segs.append(b)
-	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环）——闭合缓存
-	if _data.l1_polygon.size() >= 3:
-		_cached_l1_closed = _closed(_data.l1_polygon)
-	# 河流折线（矢量回退层；宽随河流数据）
-	for ri in _data.rivers.size():
-		var rv: Dictionary = _data.rivers[ri]
-		var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
-		if rpts.size() >= 2:
-			_river_lines.append(rpts)
-			_river_widths.append(maxf(float(rv.get("w", 2.0)), RIVER_MIN_WIDTH))
-	# 道路分级（R6 实线分级，废 F5 虚线切分）：土路细 / 官道粗；
-	# 仅交通模式矢量回退时绘制（正常观感走 l1_travel.png 贴图）
-	_road_dirt_lines = []
-	_road_paved_lines = []
-	for rd in _data.roads:
-		var pts: PackedVector2Array = rd.get("pts", PackedVector2Array())
-		if pts.size() < 2:
-			continue
-		if str(rd.get("tier", "DIRT")) == "PAVED":
-			_road_paved_lines.append(pts)
-		else:
-			_road_dirt_lines.append(pts)
-	_segs_valid = true
+	_Geo.build_cached_geometry(self)
 
 
 ## 无向边去重 key：已迁 `MapSketch.edge_key`（L1 城界共享边去重 / L3 国界邻接共用）。
@@ -1045,88 +623,3 @@ func _build_cached_geometry() -> void:
 
 ## 折线按 dash/gap 弧长切段：已迁 `MapSketch.dash_segments`（R8 层2 通用化——
 ## 路由高亮与 L2/L3 政治模式虚线界线共用同一实现）。
-
-
-## 湖多边形包围盒（外扩 tol）——邻湖判定预筛用
-func _lake_bbox(lake: Array, tol: float) -> Rect2:
-	var bb := Rect2()
-	var first := true
-	for pt in _pts(lake):
-		if first:
-			bb = Rect2(pt, Vector2.ZERO)
-			first = false
-		else:
-			bb = bb.expand(pt)
-	return bb.grow(tol)
-
-
-## 边中点是否贴着某湖（bbox 预筛加速版）：中点不在任何湖 bbox 内直接 false
-func _edge_touches_lake_fast(a: Vector2, b: Vector2, tol: float, lake_boxes: Array[Rect2]) -> bool:
-	if lake_boxes.is_empty():
-		return false
-	var mid := (a + b) * 0.5
-	for li in range(lake_boxes.size()):
-		if not lake_boxes[li].has_point(mid):
-			continue
-		var pts := _pts(_data.lakes[li])
-		var ln := pts.size()
-		for i in range(ln):
-			if _dist_point_segment(mid, pts[i], pts[(i + 1) % ln]) <= tol:
-				return true
-	return false
-
-
-## 点到线段的最短距离
-func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
-	var ab := b - a
-	var len2 := ab.length_squared()
-	if len2 <= 0.000001:
-		return p.distance_to(a)
-	var t := clampf((p - a).dot(ab) / len2, 0.0, 1.0)
-	return p.distance_to(a + ab * t)
-
-
-## Array[[x,y],...] -> PackedVector2Array
-func _pts(arr: Array) -> PackedVector2Array:
-	var pts := PackedVector2Array()
-	for pt in arr:
-		if pt is Array and pt.size() >= 2:
-			pts.append(Vector2(float(pt[0]), float(pt[1])))
-	return pts
-
-
-## F3 调试：给城市打编号（屏幕恒定字号，不随缩放放大成大字）。
-## 字体归正（R8 层3）：StickHand 与全游戏 UI 同源，不用 fallback 字体
-func _draw_city_labels() -> void:
-	var font := SketchFonts.hand()
-	if font == null:
-		return
-	var zz: float = 1.0
-	if _camera != null and _camera.has_method("get_zoom"):
-		zz = _camera.get_zoom()
-	var fs: float = LABEL_SIZE
-	if zz > 0.0001:
-		# 原生渲染：固定地图单元字号（随地图缩放，默认整图适配即可见、大小合适）。
-		# 不再 ÷ 缩放——曾让局部字号过小（如 2.6 地图单元）导致 Godot 渲染消失；
-		# 仅高缩放时按屏幕像素上限封顶，防"雷霆大字"。
-		fs = minf(LABEL_SIZE, LABEL_SCREEN_CAP / zz)
-	var halo: float = maxf(1.5, fs * 0.12)
-	for tile in _data.tiles:
-		if tile.settlement == null:
-			continue
-		var num := _city_num_from_tile_id(tile.tile_id)
-		if num.is_empty():
-			continue
-		var pos := tile.settlement.position
-		var txt := "L1城#" + num
-		draw_string_outline(font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
-			maxi(1, roundi(halo)), LABEL_BG)
-		draw_string(font, pos + Vector2(2.0, -fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, LABEL_COLOR)
-
-
-## 从 tile_id（"city_2082"）解析城市编号
-func _city_num_from_tile_id(tile_id: String) -> String:
-	var prefix := "city_"
-	if tile_id.begins_with(prefix):
-		return tile_id.substr(prefix.length())
-	return tile_id

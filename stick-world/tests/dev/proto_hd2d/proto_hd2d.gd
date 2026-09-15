@@ -183,14 +183,19 @@ const FRONT_ROW: Array = [
 	{"card": "stable_w12", "x": 76.0, "z": 0.7, "door": false},
 	{"card": "gatehouse_w8", "x": 88.5, "z": 0.4, "door": true},
 ]
-## 背景层（创始人 2026-09-14 定案）：
+## 背景层（创始人 2026-09-14 定案；2026-09-15 改两排——"后面有两排就够了"）：
 ##   · 第二排基线压**屏幕下 1/3 线**（33.3% 从底）——该线同时是第一排（+地面）
 ##     屏幕区的上边界：下 1/3 归前排与街面，中 1/3 起归背景楼群，两排在一条线交界；
 ##   · 前排楼身挡住 bg1 根部、bg1 从前排楼顶上方露出（高低咬合）＝"第二排插第一排缝"；
-##   · 三层背景每层**楼间留缝不贴死**，后层楼**吸附进前层的缝隙**；
-##   · 末层基线 = 真实地平线（底衬远端同步收到此处），楼身把地平线遮死。
+##   · 两排背景每层**楼间留缝不贴死**，后层楼**吸附进前层的缝隙**；
+##   · 末层（bg2）基线 = 真实地平线（底衬远端同步收到此处），楼身把地平线遮死。
 const SKYLINE_Z := -6.73                 # 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
+const BG_LAYERS := 2                     # 背景排数（创始人 2026-09-15：后面有两排就够了）
 const BG_LAYER_GAP := 6.0                # 背景层距（格）：屏幕上每层基线差 ≈6.3% 屏高
+## 远焦模糊起点：天际线基线向镜头前移的格数（世界线，经 set_cam_zoom 随缩放换算、
+## 不随缩放漂移）——前排零模糊口径不变，第二排从这里开始吃半档模糊
+## （创始人 2026-09-15：第二排景深太不明显，根因=起点原钉在天际线上、第二排恰好吃不到）
+const DOF_FAR_START_AHEAD := 3.0
 ## 背景层距离染色（空气透视：越远越淡越冷）
 const BG_TINTS: Array = [
 	Color(0.80, 0.84, 0.93), Color(0.85, 0.885, 0.945), Color(0.90, 0.925, 0.96),
@@ -742,11 +747,12 @@ func set_cam_zoom(user_zoom: float) -> void:
 	var h_v1: float = DESIGN_HEIGHT / 32.0               # zoom=1 基准视高（格）
 	var z_near: float = SKYLINE_Z + h_v1 / (3.0 * sin(t))
 	_cam.position.z = z_near - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
-	# 景深与缩放解耦：far blur 起点钉在天际线基线这条**世界线**上——
+	# 景深与缩放解耦：far blur 起点钉在**世界线**上——天际线基线向镜头前移
+	# DOF_FAR_START_AHEAD 格（第二排从这条线起吃半档模糊；创始人：第二排景深要明显）。
 	# dof_blur_far_distance 是相机本地距离，缩放移动相机后若不同步换算，
 	# 模糊带会跟着缩放漂移（创始人：景深不应受镜头缩放影响）
 	if _cam_attrs != null:
-		_cam_attrs.dof_blur_far_distance = (_cam.position.z - SKYLINE_Z) / cos(t)
+		_cam_attrs.dof_blur_far_distance = (_cam.position.z - SKYLINE_Z - DOF_FAR_START_AHEAD) / cos(t)
 
 
 ## 3D 视图对地面纵深的屏幕压缩率（俯角前缩）：3D 与 2D 逐像素 1:1 后，
@@ -877,7 +883,7 @@ func _build_world() -> void:
 	_shadow_root.name = "BuildingShadows"
 	add_child(_shadow_root)
 	if not battlefield:
-		_place_rows()   # 前排吸附整格 + 三层背景留缝、后层插前层缝
+		_place_rows()   # 前排吸附整格 + 两排背景留缝、后层插前层缝
 	_prop_root = Node3D.new()
 	_prop_root.name = "Props"
 	add_child(_prop_root)
@@ -894,7 +900,8 @@ func _build_world() -> void:
 	# 中远景地面：低对比夯土（rammed_earth std=0.034）。中景已被 bg1（z=-6.7）
 	# 楼群+前排楼身咬合遮住，只剩楼缝间少量露出；别用 cobble（std=0.107）——
 	# 掠射下 mip 会把高对比石板糊成"碎石墙"（实测翻车）。
-	var far_z: float = float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0))
+	var far_z: float = float(_bg_base_z.get(BG_LAYERS - 1,
+		SKYLINE_Z - BG_LAYER_GAP * float(BG_LAYERS - 1)))
 	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
 		0.0, 14.0, Color(0.90, 0.86, 0.80))
 	# 兜底大地皮：街面分段各有边界，缩太小视野越出分段范围就露天空
@@ -1144,11 +1151,11 @@ func _place_rows() -> void:
 		occ_front.append([cx - w * 0.5, cx + w * 0.5, card, z_off])
 	_prop_slots = []
 	_front_occ = occ_front
-	# 三层背景（创始人 2026-09-14 定案，算法职责）：
+	# 两排背景（创始人 2026-09-15 定案：后面两排就够，算法职责）：
 	#   · 每层楼与楼**留缝不贴死**；后层的楼**吸附进前层的缝隙**——从缝里透出
 	#     后层楼身，即"后层插前层缝"；
 	#   · bg1 基线 = 屏幕 1/3 线（SKYLINE_Z），该线兼任前排建筑高度上限；
-	#   · 末层缝最小 + 补洞，把地平线（底衬远端）遮死。
+	#   · 末层（bg2）缝最小 + 补洞，把地平线（底衬远端）遮死。
 	#   注意"缝"按**卡画面宽**算（含出檐，cottage_w6 画面 9.1 格 ≠ 6 格建筑）。
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260914
@@ -1176,10 +1183,11 @@ func _place_rows() -> void:
 				return ""
 		return ""
 	var prev_slots: Array = []      # 前一层楼的画面占用 [x0,x1]
-	for li in 3:
+	for li in BG_LAYERS:
 		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
 		var occ: Array = []
-		var tint: Color = BG_TINTS[li]
+		# 末排吃最远档染色（空气透视拉满，纵深分离读得出来）
+		var tint: Color = BG_TINTS[0] if li == 0 else BG_TINTS[BG_TINTS.size() - 1]
 		if li == 0 and not _layout.is_empty():
 			# bg1 = 布局后排（city_layout row>=1，x 由算法分配互不重叠）
 			for b: Variant in _layout.get("buildings", []):
@@ -1205,8 +1213,8 @@ func _place_rows() -> void:
 				occ.append([gx, gx + w])
 				gx += w + rng.randf_range(1.2, 2.6)
 		else:
-			# bg2/bg3 吸附前层缝：每条缝中心放一栋楼（从缝里露出楼身）。
-			# 本层自身保持 ≥1 格缝（给再后一层插）；放不下的缝放弃（末层补洞兜底）。
+			# bg2（末排）吸附前排缝隙：每条缝中心放一栋楼（从缝里露出楼身）；
+			# 放不下的缝由下方补洞兜底（末排职责=把地平线遮死）。
 			var last_x1 := -999.0
 			for g in _gaps(prev_slots, -93.0, 93.0):
 				var g0: float = float(g[0])
@@ -1225,7 +1233,7 @@ func _place_rows() -> void:
 				occ.append([cx - w * 0.5, cx + w * 0.5])
 				last_x1 = cx + w * 0.5
 			if li >= 1:
-				# bg2/bg3 职责 = 遮死中景与地平线：吸附放不下的层再补大洞（近贴 0.6 格缝）。
+				# bg2（末排）职责 = 遮死中景与地平线：吸附放不下的洞再补大洞（近贴 0.6 格缝）。
 				# 阈值 9.8 = 库里最小画面宽 cottage_w6(9.1) + 0.6 缝，更窄的洞放不下任何卡。
 				for g in _gaps(occ, -93.0, 93.0):
 					var g0: float = float(g[0])
@@ -1292,11 +1300,12 @@ func _add_horizon_guides() -> void:
 		return
 	# 两条全屏水平辅助线（创始人 2026-09-14 要求；贴地 unshaded，无阴影）：
 	#   橙 = 屏幕 1/3 线（33.3% 从底）：第二排基线 + 第一排（+地面）屏幕区的上边界
-	#   绿 = 第三排（末层）基线 = 真实地平线（底衬远端收到同一点）
+	#   绿 = 末排（bg2）基线 = 真实地平线（底衬远端收到同一点）
 	# z 取实测卡基线（anchor 深度偏移各卡不同，见 _spawn_bg_card）。
 	var specs := [
 		{"z": float(_bg_base_z.get(0, SKYLINE_Z)), "col": Color(1.0, 0.62, 0.10)},
-		{"z": float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0)),
+		{"z": float(_bg_base_z.get(BG_LAYERS - 1,
+			SKYLINE_Z - BG_LAYER_GAP * float(BG_LAYERS - 1))),
 			"col": Color(0.20, 1.0, 0.45)},
 	]
 	for i in specs.size():
@@ -1348,7 +1357,8 @@ func _add_sky_backdrop() -> void:
 	# 原天空贴图剪影板：复用 2D 游戏的 assets/sky/*（SkyDecor 同源）。剪影 PNG 带
 	# alpha——必须开透明混合（否则透明区渲成黑带）；高度/饱和度按空气透视压低压淡，
 	# 立在末层背景之后、底衬远端之前（基线落在地面内，不露"3D 天空直连地面"的缝）。
-	var far_z: float = float(_bg_base_z.get(2, SKYLINE_Z - BG_LAYER_GAP * 2.0))
+	var far_z: float = float(_bg_base_z.get(BG_LAYERS - 1,
+		SKYLINE_Z - BG_LAYER_GAP * float(BG_LAYERS - 1)))
 	var layers := [
 		{"tex": "bg_mountain_far.png", "dz": 2.0, "h": 8.0, "tint": Color(0.74, 0.79, 0.88)},
 		{"tex": "bg_trees_far.png", "dz": 5.0, "h": 5.5, "tint": Color(0.64, 0.70, 0.64)},
@@ -1727,17 +1737,19 @@ func _apply_stage(stage: String) -> void:
 	# 只让远背景层吃远焦模糊。
 	# 深度坐标（相机视图空间，实测本机位）：角色 29~35 | 临街建筑卡 41~45.5 |
 	# 中景地面 44~62 | 远景剪影层(z=-24) ≈ 66。
-	# far 48 + 过渡 20：临街卡(41~45.5) 完全在 48 以内 → 100% 锐利；远景 66 →
-	# (66-48)/20 = 90% 满档模糊 —— 轮廓仍读得出、细节糊掉。
+	# far 46.5 + 过渡 9：临街卡(41~45.5) 完全在 46.5 以内 → 100% 锐利；
+	# 第二排 bg1（≈51）→ (51-46.5)/9 = 50% 半档模糊（创始人：第二排景深要明显）；
+	# 末排 bg2（≈56）→ 满档。运行时经 set_cam_zoom 重算为同一世界线
+	# （天际线前移 DOF_FAR_START_AHEAD 格），两处口径一致。
 	_cam_attrs.dof_blur_near_enabled = false
 	_cam_attrs.dof_blur_far_enabled = hd and not bool(_opts["flat"])
 	_cam_attrs.dof_blur_near_distance = 24.0
 	_cam_attrs.dof_blur_near_transition = 10.0
-	_cam_attrs.dof_blur_far_distance = 48.0
-	_cam_attrs.dof_blur_far_transition = 20.0
-	# amount 0.20：远景剪影层（深度 66）达到"轮廓读得出、细节糊掉"的观感。
+	_cam_attrs.dof_blur_far_distance = 46.5
+	_cam_attrs.dof_blur_far_transition = 9.0
+	# amount 0.26：第二排半档、远景剪影层满档达到"轮廓读得出、细节糊掉"的观感。
 	# 0.08 那种量级在这种"已带细节的卡"上几乎看不出模糊。
-	_cam_attrs.dof_blur_amount = 0.20
+	_cam_attrs.dof_blur_amount = 0.26
 
 
 # ------------------------------------------------------------------ 出图

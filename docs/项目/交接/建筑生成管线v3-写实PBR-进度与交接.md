@@ -80,9 +80,9 @@
 | 行政内景 5 套 | 议事厅/政厅门厅/总督会客厅/**王座厅**（机制图代表）/铸币厂；内景总量 **34 套**，前后两层对齐实测 34/34（`pbr_int_alignment.json`） | `0ca381f2` |
 | 批 2 装配器 8 件 | 驿站族 waystation 6,8 / inn_post 12,16 / coach_house 12,16；赌场 gambling_den 8,12 / grand_casino 16；academy 12,16；observatory 8；flower_shop 8,12（提案/待定窗口）。**装配器总量 41** | `ee3f77fa` |
 
-### 7.2 在途（本会话结束时未收）——新会话先处置这个
+### 7.2 布局器八档重建（**已完成并入库 `9c988f6a`**）
 
-**布局器八档重建 agent 在跑、未完成**：`tools/blender_buildings/city_layout.py`、`probe_city_scene.py`、`validate.py` 有其**未提交改动**。任务规格：4 档→8 档（hamlet/village/townlet/town/burgh/city/capital/metropolis，**现行四档核心 lots 同 seed 零漂移**）；TIER_SPEC 等级参数化（街长/城墙/区带/行政槽位/家具密度）；行政 DEFS 实名登记（含 tower_h 882/1068 接管最高点断言）；belfry/mint 走 **`specials` 只增通道**（我已裁定：核心 lots 不动、特殊投放以独立追加列表输出，belfry 准入 city 档）；burgh 的市政厅用 guildhall[16]+TODO 过渡；DEFS 登记建议两条消息已发（行政 6 件 + 批 2 的 8 件，含窗口与分区）。**新会话处置**：先 `python -m py_compile` 三文件 + 跑 validate（退出码）+ 看 `stick-world/temp/pbr_city_*.png` 是否已出八档图；完成则按 7.1 惯例验收提交，未完成则按上述规格继续或重派（改动若已不可用，`git checkout --` 三文件恢复后重派）。
+`city_layout.py`/`probe_city_scene.py`/`validate.py` 重写完毕：TIER_SPECS 八档显式参数表（hamlet 80格/10-12栋/围栏140 … capital 256格/40-48栋/砖墙520/总督府882 … metropolis 384格/60-72栋/砖墙640/宫殿1068）；**旧四档×5 seed 零漂移实测（lots/props/walls 逐字节一致）**；行政槽 `admin_slots` 全档写入（town/city 由 guildhall 充当、新四档实装 role="admin"）；批 2 八装配器接线进新四档池（town/city 仅 DEFS 登记、接线待后续——窗口与漂移预算冲突，见 agent 遗留点②）；belfry 走 specials 只增通道（为保"教堂守最高点"只声明 4 格档）；validate 6/6 绿（44 def 0 缺口、78 装配对 0 新 FAIL）。**遗留四点**：①法师塔登记 560 但实测含水晶尖顶约 1030px 仍压过教堂（既有限象，capital/metropolis 靠宫殿压住）；②批 2 "town 起/city 起"窗口与既有档接线未完成；③6 格砖钟楼变体（656px 越位）进不了布局；④八档验收图在 `F:\VSCode\game-2\temp\city8tier\final\`（`pbr_city_<八档>.png` + capital/metropolis 34° 总览 `_top`，大图 23~31MB 需压缩预览，`prev_*.png` 为缩版）。
 
 ### 7.3 下一步（按序）
 

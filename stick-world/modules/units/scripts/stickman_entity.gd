@@ -18,18 +18,19 @@ extends CharacterBody2D
 ##   ├── VisualController (Node, visual_controller.gd —— 动画播放/头顶进度条)
 ##   ├── InteractionController (Node, interaction_controller.gd —— 按F交互/提示弹窗)
 ##   └── CollisionShape2D
+##
+## 子域助手（方法体所在，_init 注入回引，状态字段全留本类）：
+##   entity/entity_motion.gd     —— 移动/分离/加减速（WALK_ANIM_BASE/ANIM_SPEED_MULT/
+##                                  IDLE_THRESHOLD/SEPARATION_* 运动常量随迁）
+##   entity/entity_possession.gd —— 玩家附身输入（移动/攻击/举盾/模式切换；
+##                                  引擎回调 _input/_unhandled_input 薄壳留本类）
+##   entity/entity_scale_rig.gd  —— 渲染判定缩放/markers 同步/接触阴影/碰撞基准
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 基础行走速度（px/s）—— ×1.6 加速后
 var WALK_SPEED: float = 160.0
 ## 奔跑速度—— ×1.6 加速后
 var RUN_SPEED: float = 208.0
-## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT）
-const WALK_ANIM_BASE: float = 100.0
-## 动画整体播放倍率（×1.4 加速，与 visual_controller.gd 一致）
-const ANIM_SPEED_MULT: float = 1.4
-## 切到 idle 的速度阈值
-const IDLE_THRESHOLD: float = 5.0
 ## 火柴人渲染缩放（对齐 stickman_test.BASE_SCALE * 1.5，适配 DESIGN_HEIGHT=1080）
 var BASE_SCALE: float = 0.5
 ## 主手武器类型 -> 攻击动画名：单一真相源在 StickmanAnims.WEAPON_ATTACK_ANIM。
@@ -48,6 +49,12 @@ const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/e
 const _InteractionControllerScript: GDScript = preload("res://modules/units/scripts/entity/interaction_controller.gd")
 ## 头顶血条组件脚本（受击后显示 HP，满血隐藏）
 const _HealthBarScript: GDScript = preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
+## 运动助手脚本（移动/分离/加减速，方法体所在）
+const _MotionScript: GDScript = preload("res://modules/units/scripts/entity/entity_motion.gd")
+## 附身输入助手脚本（玩家控制，方法体所在）
+const _PossessionScript: GDScript = preload("res://modules/units/scripts/entity/entity_possession.gd")
+## 缩放/骨架同步助手脚本（渲染判定缩放/markers 同步，方法体所在）
+const _ScaleRigScript: GDScript = preload("res://modules/units/scripts/entity/entity_scale_rig.gd")
 
 # ─────────────────────────────── @export ────────────────────────────────
 ## 是否被玩家附身（true=玩家控制，false=AI 控制）
@@ -167,7 +174,6 @@ var is_villager: bool = false
 var rig: Node2D = null
 ## IK markers 父节点引用
 var _markers_parent: Node2D = null
-## IK markers 父节点引用
 ## 当前速度（标量，px/s）
 var _current_speed: float = 0.0
 ## 是否在奔跑
@@ -239,31 +245,10 @@ var _sep_rate_div: int = 2
 const REST_MORALE_REGEN: float = 4.0
 
 # ─────────────────────────────── 群体分离（防叠人/1字长蛇）────────────────────────────────
-## 分离检测半径（px）：与友军/任何单位过近时互相推开——
-## 必须略大于碰撞体宽（≈52），否则中心距 42 时身体已深度重叠
+## 分离检测半径（真身与推力参数在 entity_motion.gd；bench_units_main.gd 直读本壳）。
 const SEPARATION_RADIUS: float = 54.0
-## 分离推力系数（叠加到 AI 移动方向）
-const SEPARATION_FORCE: float = 1.6
-## 静态分离单帧位置修正上限（px）：N 路推力累加后仍 ≤ 此值，防瞬移（审计 P0-3）
-const MAX_SEPARATION_CORRECTION: float = 3.0
 ## 头顶血条组件引用（_mount_components 装配）
 var _health_bar: Node = null
-## Collider 原始尺寸（_ready 时保存，_apply_scale 时乘以 BASE_SCALE）
-var _collider_base_size: Vector2 = Vector2.ZERO
-## Range 原始尺寸（悬停检测范围，与 Collider 同步缩放）
-var _range_base_size: Vector2 = Vector2.ZERO
-## Collider 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
-var _collider_base_x: float = 0.0
-## Range 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
-var _range_base_x: float = 0.0
-## Range 基准 Y 偏移（BASE_SCALE 后、body_scale=1.0 基线；9q y 偏移随体型缩放）
-var _range_base_y: float = 0.0
-## Hitbox 子 CollisionShape2D 原始尺寸（受击判定，与 Collider 同步缩放）
-var _hitbox_base_size: Vector2 = Vector2.ZERO
-## Hitbox 子 CollisionShape2D 原始 X 偏移（缩放后，朝右时基准；_apply_scale 时乘以 _facing 镜像）
-var _hitbox_base_x: float = 0.0
-## Hitbox 基准 Y 偏移（BASE_SCALE 后基线；9q y 偏移随体型缩放）
-var _hitbox_base_y: float = 0.0
 
 # ─────────────────────────────── 战斗组件引用（§7.1）────────────────────────────────
 @onready var health_component: Node = get_node_or_null("HealthComponent")
@@ -275,6 +260,19 @@ var _hitbox_base_y: float = 0.0
 var _visual: Node = null
 ## 交互控制器（按F交互/提示弹窗，_ready 装配）
 var _interaction: Node = null
+## 运动助手（移动/分离/加减速方法体所在）
+var _motion: RefCounted = null
+## 附身输入助手（玩家控制方法体所在）
+var _possession: RefCounted = null
+## 缩放/骨架同步助手（渲染判定缩放/markers 同步方法体所在）
+var _scale_rig: RefCounted = null
+
+
+func _init() -> void:
+	# 子域助手注入（_init 注入防 spawn 侧 add_child 前调用撞 null）
+	_motion = _MotionScript.new(self)
+	_possession = _PossessionScript.new(self)
+	_scale_rig = _ScaleRigScript.new(self)
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -303,33 +301,23 @@ func _input(event: InputEvent) -> void:
 		_toggle_combat_mode()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		# 玩家点击：挥砍攻击（仅当鼠标不在 UI 控件上——编制按钮/建造菜单等优先）
-		if _is_mouse_over_ui():
+		if _possession._is_mouse_over_ui():
 			return
 		_player_attack()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		# 副手盾：按住右键举盾、松开放下（UI 上按下不触发；松开总生效）
-		if event.pressed and _is_mouse_over_ui():
+		if event.pressed and _possession._is_mouse_over_ui():
 			return
-		_set_player_blocking(event.pressed)
+		_possession._set_player_blocking(event.pressed)
 		if event.pressed:
 			get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_G:
 		# 空挥（复刻原版 User Control）：无目标也出攻击动作，纯动作无伤害
-		_player_swing()
+		_possession._player_swing()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
-
-
-## 鼠标是否悬停在 UI 控件上（悬停时玩家左键不攻击，保证按钮可点）。
-func _is_mouse_over_ui() -> bool:
-	var vp := get_viewport()
-	if vp == null:
-		return false
-	if vp.has_method("gui_get_hovered_control"):
-		return vp.gui_get_hovered_control() != null
-	return false
 
 
 func _ready() -> void:
@@ -359,7 +347,7 @@ func _ready() -> void:
 		add_child(se)
 		_status_effects = se
 	# 接触阴影（Demo 打磨：脚底椭圆软阴影，Terraria 式落地感；纯视觉 z 垫底）
-	_spawn_contact_shadow()
+	_scale_rig._spawn_contact_shadow()
 	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
 	_apply_balance_data()
 	# 获取 AIController 子节点（§7.1）
@@ -375,36 +363,10 @@ func _ready() -> void:
 		_sep_rate_div = 2
 	# 从模型 marker 动态计算 foot_offset 基准（适配不同参考系）；
 	# 实际 foot_offset = 基准 × body_scale（_apply_scale 内重算，9q）
-	_foot_offset_base = _calculate_foot_offset()
+	_foot_offset_base = _scale_rig._calculate_foot_offset()
 	foot_offset = _foot_offset_base
-	# 碰撞体移到脚部位置（保留原始 X 偏移并缩放，不硬编码为 0）
-	var col := get_node_or_null("Collider") as CollisionShape2D
-	if col != null:
-		var col_orig_x: float = col.position.x
-		_collider_base_x = col_orig_x * BASE_SCALE
-		col.position = Vector2(_collider_base_x, foot_offset)
-		# duplicate shape 避免多实例共享同一资源导致 _apply_scale 互相覆盖
-		if col.shape is RectangleShape2D:
-			col.shape = (col.shape as RectangleShape2D).duplicate()
-			_collider_base_size = (col.shape as RectangleShape2D).size
-	# Range 节点也 duplicate shape 并保存原始尺寸
-	var rng := get_node_or_null("Range") as CollisionShape2D
-	if rng != null and rng.shape is RectangleShape2D:
-		rng.shape = (rng.shape as RectangleShape2D).duplicate()
-		_range_base_size = (rng.shape as RectangleShape2D).size
-		# Range position 也需要缩放（编辑器中的值基于原始大小，运行时需乘以 BASE_SCALE）
-		_range_base_x = rng.position.x * BASE_SCALE
-		rng.position *= BASE_SCALE
-		_range_base_y = rng.position.y
-	# Hitbox 子 CollisionShape2D 同步缩放并保存原始尺寸/偏移
-	if hitbox != null:
-		var hb_shape := hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
-		if hb_shape != null and hb_shape.shape is RectangleShape2D:
-			hb_shape.shape = (hb_shape.shape as RectangleShape2D).duplicate()
-			_hitbox_base_size = (hb_shape.shape as RectangleShape2D).size
-			_hitbox_base_x = hb_shape.position.x * BASE_SCALE
-			hb_shape.position *= BASE_SCALE
-			_hitbox_base_y = hb_shape.position.y
+	# 碰撞基准捕获（方法体在 entity_scale_rig.gd；时序：foot_offset 后、_apply_scale 前）
+	_scale_rig._capture_collision_bases()
 	# 应用初始缩放
 	_apply_scale()
 	# 播放 idle
@@ -489,22 +451,6 @@ func _mount_components() -> void:
 		_health_bar.setup(get_node_or_null("HealthComponent"))
 
 
-## 从 RigHost 的 outfoot marker 位置计算脚部 Y 偏移。
-## 公式：foot_offset = root_y + outfoot_local_y * BASE_SCALE
-## 这样无论模型参考系怎么改，脚部位置都能正确对齐地面。
-func _calculate_foot_offset() -> float:
-	var rig_host := get_node_or_null("RigHost")
-	if rig_host == null:
-		return 45.0
-	var root_y: float = (rig_host as Node2D).position.y
-	var outfoot := rig_host.get_node_or_null("OutlineGroup/Node2D/outfoot") as Node2D
-	if outfoot == null:
-		return 45.0
-	var outfoot_y: float = outfoot.position.y
-	var offset: float = root_y + outfoot_y * BASE_SCALE
-	return offset
-
-
 func _physics_process(delta: float) -> void:
 	# 死亡收口（2026-08-31 审计 P0-1）：尸体没有物理帧——不跑 AI、不减速回切
 	# （正是这套回切把 0.8s 死亡动画在 0.25s 内覆盖成 walk/idle，尸体"站起来"）、
@@ -552,7 +498,7 @@ func _physics_process(delta: float) -> void:
 			z_index = zi
 	# 仅在被附身时处理玩家输入
 	if possessed:
-		_handle_player_input(delta)
+		_possession._handle_player_input(delta)
 	else:
 		# AI 控制：先让 AIController 决策（设置 _ai_move_dir），再处理移动。
 		# 战斗性能优化：AI 决策与行为状态机降到 30Hz（隔物理帧、传倍增 delta
@@ -569,7 +515,7 @@ func _physics_process(delta: float) -> void:
 		if not _sim_active():
 			_sep_frame_counter += 1
 			if _sep_frame_counter % _sep_rate_div == 0:
-				_apply_static_separation()
+				_motion._apply_static_separation()
 
 	if _sim_active():
 		# sim 模式：移动/分离/边界/击退衰减/z_index 全由 BattleSim 批处理；
@@ -658,215 +604,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ─────────────────────────────── 玩家输入 ────────────────────────────────
 
-func _handle_player_input(delta: float) -> void:
-	# 敲击建造动作锁定：1.8s 内禁止移动
-	if _player_build_timer > 0.0:
-		_apply_movement(delta, Vector2.ZERO, false, false)
-		return
-	# 攻击动作锁定（仅近战）：出招站定，动画播完恢复移动——否则按住方向键时
-	# run/walk 每帧覆盖攻击动画，F 空挥/左键攻击看起来"没反应"。
-	# **远程（弓/杖）不锁**：SWL 原版主控可边撤退边走 A（dump Unit 真值
-	# USER_CONTROLLED_ATTACK_SPEED=1.3 只加攻速不停步），攻击动画与移动解耦，
-	# 移动侧不覆盖攻击动画（见 _handle_acceleration/_handle_deceleration 攻击保护）
-	if _current_anim.begins_with("attack") and not _is_ranged_weapon():
-		_apply_movement(delta, Vector2.ZERO, false, false)
-		return
-	var dir := Vector2.ZERO
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		dir.x -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		dir.x += 1.0
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		dir.y -= 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		dir.y += 1.0
-	_apply_movement(delta, dir, false, not _walk_only)
-
-
-## 获取当前脚下地形的移动速度倍率（土路=1.0，非土路=0.8）。
-func _terrain_speed_mult() -> float:
-	# _map_has_terrain_mult：set_map_reference 时缓存的方法存在性（免每帧字符串反射）
-	if _map_ref != null and is_instance_valid(_map_ref) and _map_has_terrain_mult:
-		return _map_ref.get_move_speed_mult_at_x(global_position.x)
-	return 1.0
-
-
-## 持盾移速倍率（盾姿态分层，计划 5）：举盾时读 WeaponMount 上的档案
-## block_move_mult（SPEAR 0.8），未举盾/无字段 = 1.0。
-func _blocking_speed_mult() -> float:
-	if weapon_mount == null or not is_instance_valid(weapon_mount):
-		return 1.0
-	# is_blocking 方法/block_move_mult 字段存在性不变 → 首次查一次记布尔（每帧反射免了）
-	if not _wm_checked:
-		_wm_checked = true
-		_wm_has_blocking = weapon_mount.has_method("is_blocking")
-		_wm_has_block_move_mult = "block_move_mult" in weapon_mount
-	if not _wm_has_blocking or not weapon_mount.is_blocking():
-		return 1.0
-	if _wm_has_block_move_mult:
-		return float(weapon_mount.block_move_mult)
-	return 1.0
-
-
-## 主手是否远程武器（弓/杖）：远程主控攻击不锁移动（走 A）。
-func _is_ranged_weapon() -> bool:
-	if weapon_mount == null or not is_instance_valid(weapon_mount) \
-			or not "weapon_type" in weapon_mount:
-		return false
-	return int(weapon_mount.weapon_type) == 2 or int(weapon_mount.weapon_type) == 4
-
-
-## 玩家按住/松开右键：举盾格挡（副手盾；无盾实体设了姿态也挡不住，
-## 见 WeaponMount.is_shield_blocking 三重判定）。搬运材料时双手被占不举盾。
-func _set_player_blocking(v: bool) -> void:
-	if v and is_carrying():
-		return
-	if weapon_mount == null or not is_instance_valid(weapon_mount):
-		return
-	if weapon_mount.has_method("set_blocking"):
-		weapon_mount.set_blocking(v)
-
-
 ## 护甲减伤余率（DamagePipeline 消费：0.82 = 三件锁子减伤 18%）。
 func get_armor_factor() -> float:
 	return 1.0 - clampf(armor_damage_reduction, 0.0, 1.0)
 
 
-func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
-	var se: Node = get_status_effects()
-	if not _se_checked:
-		_se_checked = true
-		_se_has_stun = se != null and se.has_method("has_stun")
-		_se_has_speed_mult = se != null and se.has_method("get_speed_mult")
-	# slow_mult：SLOW 状态减速倍率（无组件/无方法 = 1.0；存在性走缓存布尔）
-	var slow_mult: float = 1.0
-	if se != null and _se_has_speed_mult:
-		slow_mult = se.get_speed_mult()
-	# 持盾移速惩罚（盾姿态分层，计划 5）：举盾行军更沉稳（档案 block_move_mult）
-	var block_mult: float = _blocking_speed_mult()
-	var mult: float = _terrain_speed_mult() * move_speed_mult * slow_mult * block_mult * armor_speed_factor
-	var walk_cap: float = WALK_SPEED * mult
-	var run_cap: float = RUN_SPEED * mult
-	# 攻击动画期间不切移动动画（SWL 攻击与移动解耦：走 A 边跑边拉弓，
-	# 动画播完由 rig animation_finished 回切；否则 run/walk 每帧覆盖拉弓动画）
-	var attacking: bool = _current_anim.begins_with("attack")
-	if _is_running:
-		_current_speed = run_cap
-		return
-	_current_speed += accel * delta
-	if allow_run and _current_speed >= walk_cap:
-		_is_running = true
-		_current_speed = run_cap
-		if not attacking:
-			_visual.play("run")
-			_visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
-	else:
-		# 不允许跑时，速度封顶在 walk_cap（受地形影响）
-		_current_speed = minf(_current_speed, walk_cap)
-		if not attacking and _current_anim != "walk" and _current_anim != "run":
-			_visual.play("walk")
-		if _current_anim == "walk" and not _is_running:
-			_visual.set_anim_speed(_current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT)
-
-
-func _handle_deceleration(delta: float) -> void:
-	if _is_running:
-		_is_running = false
-		_current_speed = WALK_SPEED * _terrain_speed_mult() * move_speed_mult * _blocking_speed_mult() * armor_speed_factor
-		_visual.play("walk")
-	# 攻击动画期间不切移动动画（同 _handle_acceleration：走 A 保护）
-	var attacking: bool = _current_anim.begins_with("attack")
-	if _current_speed > 0:
-		_current_speed -= decel * delta
-		if _current_speed <= IDLE_THRESHOLD:
-			_current_speed = 0.0
-			if not attacking:
-				_visual.play("idle")
-		else:
-			if not attacking and _current_anim == "idle":
-				_visual.play("walk")
-			if _current_anim == "walk" and not attacking:
-				_visual.set_anim_speed(_current_speed / WALK_ANIM_BASE * ANIM_SPEED_MULT)
-
-
 # ─────────────────────────────── AI 输入处理 ────────────────────────────────
 
-## AI 驱动移动：根据 _ai_move_dir 处理加速/减速/动画，复用与玩家输入相同的物理逻辑。
-## 移动方向叠加群体分离（防叠人/1字长蛇，行业 soft-body separation 简化版）。
+## AI 驱动移动（方法体在 entity_motion.gd；bench_units_main.gd 直呼本壳，契约保持）。
 func _handle_ai_input(delta: float) -> void:
-	var dir: Vector2 = _ai_move_dir
-	if dir != Vector2.ZERO:
-		dir = _apply_separation(dir)
-	_apply_movement(delta, dir, _ai_running, false)
-
-
-## 群体分离：扫描附近过近的单位（地图空间网格邻域查询），
-## 距离越近推力越强，叠加到移动方向（RTS 单位移动标准做法，参考
-## StickmanEntity 的 soft-body separation：位置推开 + 速度修正）。
-func _apply_separation(dir: Vector2) -> Vector2:
-	# sim 模式：走 sim 网格快照的内联推力查询（无逐邻居 Node 遍历）
-	if _sim_active():
-		var push_sim: Vector2 = _sim.separation_push(_sim_sid, SEPARATION_RADIUS)
-		if push_sim == Vector2.ZERO:
-			return dir
-		return (dir + push_sim * SEPARATION_FORCE).normalized()
-	if _map_ref == null or not is_instance_valid(_map_ref) or not _map_has_query:
-		return dir
-	# 帧率优化：分离扫描隔物理帧跑（与静态分离共用帧计数）
-	if _sep_frame_counter % _sep_rate_div != 0:
-		return dir
-	var push := Vector2.ZERO
-	for e in _map_ref.query_neighbors(global_position, SEPARATION_RADIUS):
-		if e == self or not is_instance_valid(e):
-			continue
-		if not (e is CharacterBody2D):
-			continue
-		if e.has_method("is_dead") and e.is_dead():
-			continue
-		var offset: Vector2 = global_position - e.global_position
-		var dist: float = offset.length()
-		if dist >= SEPARATION_RADIUS or dist <= 0.001:
-			continue
-		# 越近推力越大（1 - dist/radius 线性权重）
-		push += offset.normalized() * (1.0 - dist / SEPARATION_RADIUS)
-	if push == Vector2.ZERO:
-		return dir
-	return (dir + push * SEPARATION_FORCE).normalized()
-
-
-## 静态分离（soft-body 位置修正）：对过近邻居直接推位置（重叠量各半，双向）。
-## 与 _apply_separation 的区别：后者只在移动时生效；停住的单位（射程边缘
-## 互停的敌我）靠本方法持续分开，解决"黏住"bug。参考 RtsGame.resolveSoftCollisions。
-## 2026-08-31 审计 P0-3：所有邻居的推力**先累加再限幅**——原实现对每路推力
-## 直接写坐标线性叠加（被 N 人围住 = N 路叠加无上限，一帧几十上百 px = 肉眼瞬移），
-## 现在单帧总修正 ≤ MAX_SEPARATION_CORRECTION。
-func _apply_static_separation() -> void:
-	if _map_ref == null or not is_instance_valid(_map_ref) or not _map_has_query:
-		return
-	var total_push := Vector2.ZERO
-	# +8px 余量：网格位置是本帧重建时刻的快照，覆盖帧内已发生的位移
-	for e in _map_ref.query_neighbors(global_position, SEPARATION_RADIUS + 8.0):
-		if e == self or not is_instance_valid(e):
-			continue
-		if not (e is CharacterBody2D):
-			continue
-		if e.has_method("is_dead") and e.is_dead():
-			continue
-		var offset: Vector2 = global_position - e.global_position
-		var dist: float = offset.length()
-		if dist >= SEPARATION_RADIUS:
-			continue
-		if dist <= 0.001:
-			# 完全重叠：退化为固定方向（向上），否则无法计算推开方向
-			offset = Vector2.UP
-			dist = 0.001
-		# 重叠量的一半推给自己（对方也在推自己，双向合计推开整个重叠量）
-		total_push += offset.normalized() * ((SEPARATION_RADIUS - dist) * 0.5)
-	if total_push == Vector2.ZERO:
-		return
-	if total_push.length() > MAX_SEPARATION_CORRECTION:
-		total_push = total_push.normalized() * MAX_SEPARATION_CORRECTION
-	global_position += total_push
+	_motion._handle_ai_input(delta)
 
 
 ## 获取头顶血条组件（供测试/调试）
@@ -874,142 +621,26 @@ func get_health_bar() -> Node:
 	return _health_bar
 
 
-## 统一移动处理（玩家与 AI 共用）：方向 → 朝向/加速/奔跑 → velocity。
-## run=true 强制奔跑；allow_run=false 时不会自动加速到奔跑（NPC 散步）。
-## sim 模式：velocity 照算（动画曲线/速度标量与旧链完全同源），
-## 但不落 move_and_slide——末尾写入 sim 意图，由批循环积分。
+## 统一移动处理（方法体在 entity_motion.gd；possession 经实体回引共用的入口）。
 func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> void:
-	if dir != Vector2.ZERO:
-		if dir.length() > 1.0:
-			dir = dir.normalized()
-		if dir.x != 0:
-			var new_facing := 1 if dir.x > 0 else -1
-			if new_facing != _facing:
-				_facing = new_facing
-				_apply_scale()
-		if run:
-			_is_running = true
-			_current_speed = RUN_SPEED * _terrain_speed_mult() * move_speed_mult
-			_visual.play("run")
-			_visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
-		else:
-			_handle_acceleration(delta, allow_run)
-		velocity = dir * _current_speed
-	else:
-		_handle_deceleration(delta)
-		if _current_speed > 0:
-			# 保留方向但减速
-			var v_dir := velocity.normalized() if velocity.length() > 0.001 else Vector2.ZERO
-			velocity = v_dir * _current_speed
-		else:
-			velocity = Vector2.ZERO
-	if _sim_active():
-		_sim.set_intent(_sim_sid, velocity)
+	_motion._apply_movement(delta, dir, run, allow_run)
 
 
 # ─────────────────────────────── 渲染同步 ────────────────────────────────
 
-## 脚底接触阴影：径向渐变纹理压扁为椭圆，跟随 foot_offset（体型缩放同步）。
-## 纹理全单位共享一张（静态缓存）——此前每单位运行时生成一张 GradientTexture2D，
-## 196 单位混战=196 份冗余纹理与上传
-static var _contact_shadow_tex: GradientTexture2D = null
-
-
-static func _get_contact_shadow_tex() -> GradientTexture2D:
-	if _contact_shadow_tex == null:
-		var tex := GradientTexture2D.new()
-		tex.fill = GradientTexture2D.FILL_RADIAL
-		tex.fill_from = Vector2(0.5, 0.5)
-		tex.fill_to = Vector2(0.5, 0.0)
-		tex.width = 64
-		tex.height = 64
-		var grad := Gradient.new()
-		grad.set_color(0, Color(0, 0, 0, 0.34))
-		grad.set_color(1, Color(0, 0, 0, 0.0))
-		tex.gradient = grad
-		_contact_shadow_tex = tex
-	return _contact_shadow_tex
-
-
-func _spawn_contact_shadow() -> void:
-	var spr := Sprite2D.new()
-	spr.name = "ContactShadow"
-	spr.texture = _get_contact_shadow_tex()
-	spr.scale = Vector2(0.9, 0.26)  # 压成椭圆
-	spr.position = Vector2(0.0, foot_offset + 2.0)
-	# 刀②合批：绝对 z=1（DECORATION 层——地面之上可见、建筑/单位正常遮盖，
-	# 与装饰同层但树序在后成连续段）。此前 z=-2 为相对实体 z（y 序 0~14 →
-	# 阴影实际 z 各异、交错在各单位之间）——同纹理却因渲染序列不连续无法
-	# 合批，96v96 192 个阴影 = 192 draws。
-	spr.z_as_relative = false
-	spr.z_index = 1
-	add_child(spr)
-
-
+## 渲染/判定缩放应用（方法体在 entity_scale_rig.gd；翻面/foot_offset 重算联动）。
 func _apply_scale() -> void:
-	if rig == null:
-		return
-	var s: float = BASE_SCALE * body_scale
-	rig.scale = Vector2(s * _facing, s)
-	# rig 局部缩放变了 → markers 同步置脏（_sync_markers_transform 只在脏时写，
-	# 免每物理帧 200 单位 × 全局矩阵读写的纯浪费，见该函数注释）
-	_markers_dirty = true
-	# 9q：foot_offset 随体型重算（缩放单位脚随体型上移；消费点全部读本字段）
-	foot_offset = _foot_offset_base * body_scale
-	# 同步缩放 Collider shape（Collider 不在 rig 层级下，不受 rig.scale 影响）
-	if _collider_base_size != Vector2.ZERO:
-		var col := get_node_or_null("Collider") as CollisionShape2D
-		if col != null and col.shape is RectangleShape2D:
-			(col.shape as RectangleShape2D).size = _collider_base_size * s
-			# X 偏移随朝向镜像（原点不在碰撞箱中心时，翻转需镜像偏移）
-			col.position.x = _collider_base_x * _facing
-			# Y 偏移：2D 图口径 Collider 跟到脚上（origin=髋、脚在 +foot_offset）；
-			# origin 空间（HD-2D）origin 即视觉脚线，物理脚印贴脚线（箱居 origin）
-			# ——否则物理脚印悬在视觉脚线"前方" ~foot_offset·k·ez，停位与视觉
-			# 脱节（创始人 2026-09-16"实际逻辑位置也偏很多"）
-			col.position.y = 0.0 if _ground_constraints_origin_space else foot_offset
-	# 同步缩放 Range shape（悬停检测范围，与 Collider 同步缩放）
-	if _range_base_size != Vector2.ZERO:
-		var rng := get_node_or_null("Range") as CollisionShape2D
-		if rng != null and rng.shape is RectangleShape2D:
-			(rng.shape as RectangleShape2D).size = _range_base_size * s
-			rng.position.x = _range_base_x * _facing
-			rng.position.y = _range_base_y * body_scale
-	# 同步缩放 Hitbox 子 shape（受击判定，与 Collider 同步缩放）
-	if _hitbox_base_size != Vector2.ZERO and hitbox != null:
-		var hb_shape := hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
-		if hb_shape != null and hb_shape.shape is RectangleShape2D:
-			(hb_shape.shape as RectangleShape2D).size = _hitbox_base_size * s
-			hb_shape.position.x = _hitbox_base_x * _facing
-			hb_shape.position.y = _hitbox_base_y * body_scale
-	# 血条跟随体型（minidon 小一圈时血条高度/大小同步缩小，不再浮在半空）
-	if _health_bar != null and is_instance_valid(_health_bar) \
-			and _health_bar.has_method("set_body_scale"):
-		_health_bar.set_body_scale(body_scale)
-	_sync_markers_transform()
+	_scale_rig._apply_scale()
 
 
-## 设置体型缩放（SWL minidon 召唤护卫小一圈）：设置后立即重应用渲染/判定缩放。
+## 设置体型缩放（方法体在 entity_scale_rig.gd；behavior_attack 与 tests/dev duck 调用）。
 func set_body_scale(v: float) -> void:
-	body_scale = maxf(0.1, v)
-	_apply_scale()
+	_scale_rig.set_body_scale(v)
 
 
-## markers 同步脏标记（性能）：markers_parent 与 rig 同父（RigHost/OutlineGroup），
-## 二者局部 transform 一致时，全局变换随父节点自动保持一致——父（实体）移动
-## 不需要重写。rig 的局部 transform 只在 _apply_scale（翻转/体型缩放）变化，
-## 故只在置脏后写一次，替代此前每物理帧的全局矩阵读写（大群单位的稳定开销）。
-var _markers_dirty: bool = true
-
-
+## markers 变换同步（方法体在 entity_scale_rig.gd；bench_units_main.gd 直呼本壳）。
 func _sync_markers_transform() -> void:
-	if _markers_parent == null or rig == null:
-		return
-	if not _markers_dirty:
-		return
-	_markers_dirty = false
-	# IK markers 父节点必须与 StickmanRig 同 transform，否则 IK 不可达
-	_markers_parent.global_transform = rig.global_transform
+	_scale_rig._sync_markers_transform()
 
 
 # ─────────────────────────────── 动画 API（转发到 VisualController）────────────────────────────────
@@ -1064,26 +695,9 @@ func get_current_anim() -> String:
 
 # ─────────────────────────────── 玩家战斗模式（Q 键切换）────────────────────────────────
 
-## 切换建造/战斗模式：EXPLORE <-> BATTLE。
-## 由 Q 键触发（仅附身时）。BATTLE 模式下玩家保持附身（ExploreHandler 不释放），
-## 左键 = 挥砍攻击；EXPLORE 模式下左键用于交互/框选。
+## 切换建造/战斗模式（方法体在 entity_possession.gd；test_combat_control.gd 无守卫直呼）。
 func _toggle_combat_mode() -> void:
-	var dispatcher: Node = _find_input_dispatcher()
-	if dispatcher == null or not dispatcher.has_method("get_mode"):
-		return
-	var new_mode: int = PlayerControlAPI.Mode.BATTLE
-	if dispatcher.get_mode() == PlayerControlAPI.Mode.BATTLE:
-		new_mode = PlayerControlAPI.Mode.EXPLORE
-	if dispatcher.has_method("set_mode"):
-		dispatcher.set_mode(new_mode)
-	if EventBus != null and EventBus.has_signal("ui_notification"):
-		var label: String = "战斗模式（左键挥砍，Q 切回）" if new_mode == PlayerControlAPI.Mode.BATTLE else "探索模式"
-		EventBus.ui_notification.emit("模式", label, "info")
-
-
-## 查找 InputDispatcher（经 PlayerControlAPI 注册表；GameRoot 装配时注册）。
-func _find_input_dispatcher() -> Node:
-	return PlayerControlAPI.get_input_dispatcher()
+	_possession._toggle_combat_mode()
 
 
 ## 获取所在地图引用（可能为 null，供 AI 行为查询玩家等）。
@@ -1093,56 +707,14 @@ func get_map() -> Node2D:
 
 # ─────────────────────────────── 玩家攻击（§7.5）────────────────────────────────
 
-## 玩家附身时鼠标左键攻击：找最近敌人InRange并执行攻击。
-## 搬运材料时双手被占用（放下前不可攻击）。
+## 玩家鼠标左键攻击（方法体在 entity_possession.gd；test_possession.gd 守卫调用）。
 func _player_attack() -> void:
-	if is_carrying():
-		return
-	if weapon_mount == null or not weapon_mount.has_method("can_attack"):
-		return
-	if not weapon_mount.can_attack():
-		return
-	var target: Node = _find_nearest_enemy_in_range()
-	if target == null:
-		return
-	weapon_mount.perform_attack(target)
+	_possession._player_attack()
 
 
-## 玩家空挥（G 键，复刻原版 User Control）：无目标出攻击动作，纯动作无伤害。
-## 受冷却约束（can_attack），冷却中按 G 不响应；搬运中双手被占同样不响应。
-func _player_swing() -> void:
-	if is_carrying():
-		return
-	if weapon_mount == null or not weapon_mount.has_method("perform_swing"):
-		return
-	weapon_mount.perform_swing()
-
-
-## 找最近敌人（不同阵营且存活）在武器射程内
+## 找最近敌人在武器射程内（方法体在 entity_possession.gd；test_possession.gd 守卫调用）。
 func _find_nearest_enemy_in_range() -> Node:
-	if _map_ref == null or not is_instance_valid(_map_ref):
-		return null
-	if not _map_ref.has_method("get_entities"):
-		return null
-	var attack_range: float = weapon_mount.attack_range if weapon_mount != null and weapon_mount.get("attack_range") != null else 140.0
-	var nearest: Node = null
-	var nearest_dist: float = attack_range
-	for e in _map_ref.get_entities():
-		if e == self or not is_instance_valid(e):
-			continue
-		if not (e is CharacterBody2D):
-			continue
-		# 跳过同阵营
-		if e.has_method("get_faction") and e.get_faction() == faction_id:
-			continue
-		# 跳过死亡
-		if e.has_method("is_dead") and e.is_dead():
-			continue
-		var dist: float = global_position.distance_to(e.global_position)
-		if dist <= nearest_dist:
-			nearest_dist = dist
-			nearest = e
-	return nearest
+	return _possession._find_nearest_enemy_in_range()
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -1387,7 +959,6 @@ func set_role(r: String) -> void:
 ## 获取角色类型（空=未编队）。
 func get_role() -> String:
 	return role
-
 
 
 # ─────────────────────────────── 战斗 API（§8）────────────────────────────────

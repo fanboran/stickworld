@@ -11,6 +11,8 @@ scenes/
 ├── game_root.tscn         主场景（GameRoot），项目入口（project.godot run/main_scene）
 └── maps/                  地图场景文件（16 张）
     ├── hd2d_street.tscn           HD-2D 主街（新游戏默认起始图，START_MAP_ID）
+    ├── hd2d_resource_w.tscn       西郊林地（主街西门传送的资源图，map_id = "hd2d_resource_w"）
+    ├── hd2d_resource_e.tscn       东郊林地（主街东门传送的资源图，map_id = "hd2d_resource_e"）
     ├── hd2d_village_b.tscn        村落 B（HD-2D，map_id = "village_b"，道路另一端）
     ├── road_a_b.tscn              道路地图（主街西门外 ↔ 村落 B 之间的行军道路）
     ├── hd2d_battlefield.tscn      HD-2D 城郊战场（map_id = "battlefield"，东门外野地）
@@ -29,6 +31,8 @@ scenes/
 | map_id | 场景 | MapType |
 |--------|------|---------|
 | `hd2d_street` | hd2d_street.tscn | VILLAGE（新游戏起始图） |
+| `hd2d_resource_w` | hd2d_resource_w.tscn | BATTLEFIELD（战场式开阔野地变体） |
+| `hd2d_resource_e` | hd2d_resource_e.tscn | BATTLEFIELD（同上） |
 | `village_b` | hd2d_village_b.tscn | VILLAGE |
 | `road_a_b` | road_a_b.tscn | ROAD |
 | `battlefield` | hd2d_battlefield.tscn | BATTLEFIELD |
@@ -38,14 +42,16 @@ scenes/
 | `mega_interior` | mega_interior.tscn | MEGA_INTERIOR |
 | `l1_settlement_00~07` | l1_settlement_XX.tscn | VILLAGE |
 
-出口配置一部分走 `scene_loader.register_map_exit(...)`（左右缘步行出口），HD-2D 主街两端走**城门传送带**（`hd2d_gate_prompt.gd`：玩家走近城门弹"出城"选项框，村民走静默传送带，`gate_router` 组引导采集村民跨墙）。
+出口配置一部分走 `scene_loader.register_map_exit(...)`（左右缘步行出口），HD-2D 主街两端走**城门传送带**（`hd2d_gate_prompt.gd`：玩家走近城门弹"出城"选项框——选项由本方向出口表动态生成：西/东郊资源图直达 + 沿村间道路去对岸村庄；弹出时同步在城外上空展开城外舆图 `hd2d_sky_region_map.gd`，悬浮目的地项高亮舆图对应地块，舆图画出村间道路；村民走静默传送带，`gate_router` 组引导采集村民跨墙）。
 
 ## 地图切换流程
 
 ```
 主街 (hd2d_street，新游戏直连)
-  ├── 西城门传送带 → 道路 (road_a_b) → 村落 B (hd2d_village_b)
-  ├── 东城门传送带 → 城郊战场 (battlefield = hd2d_battlefield)
+  ├── 西城门传送带 → 西郊林地 (hd2d_resource_w)   ─┐ 选项框直达传送，
+  ├── 东城门传送带 → 东郊林地 (hd2d_resource_e)   ─┘ 内缘触发器回主街
+  ├── 西缘步行出口 → 道路 (road_a_b) → 村落 B (hd2d_village_b)
+  ├── 东缘 ChunkTrigger → 城郊战场 (battlefield = hd2d_battlefield)
   │                   ├── 左缘出口 → 回主街
   │                   └── 右缘出口 → 森林 (forest_zone)
   └── Tab 战略图 → L1 聚落图 (l1_settlement_00~07) / 守城战 (siege_battlefield，西城门发起)

@@ -625,8 +625,11 @@ func _register_default_maps() -> void:
 	# 恢复原链：遭遇战场右出通森林（守城图独立后不再串链）
 	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	# 资源图内缘回城（西图右缘→主街西门内；东图左缘→主街东门内）；去程走城门
-	# 选项框直达 travel，回程登记供其内缘触发器用
+	# 资源图↔主街双缘登记（西图接主街西门/东图接主街东门）：城门选项框的
+	# 目的地按钮与城外舆图读出口表生成（hd2d_gate_prompt），内缘触发器回程
+	# 也走这里
+	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT, RESOURCE_W_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT, RESOURCE_E_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(RESOURCE_W_MAP_ID, WorldAPI.EntrySide.RIGHT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(RESOURCE_E_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
 

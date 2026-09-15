@@ -4,12 +4,20 @@
     "键 = 场景图 map_id（SceneLoader 注册 id，即 EventBus.map_loaded 信号第一个参数）。",
     "值 = 报幕内容：title 主标题（必填）、subtitle 副标题（可选，缺省不显示副行）。",
     "规则：未配置的 map_id 一律不播报幕；下划线开头的键是文档说明，解析时跳过。",
-    "现有 map_id：village_a（出生地）/ village_b / road_a_b / mega_interior / battlefield / forest_zone。",
+    "map_id 非穷举，现有如：hd2d_street（新游戏起始主街）/ hd2d_resource_w / hd2d_resource_e /",
+    "village_b / road_a_b / mega_interior / battlefield / forest_zone / siege_battlefield 等。",
+    "城门选项框目的地文案与城外舆图瓦片名也读本表（hd2d_gate_prompt）。",
     "战略图聚落（settlement）接入场景图后，同样按其 map_id 在此登记。"
   ],
   "hd2d_street": {
     "title": "起始之地",
     "subtitle": "街市 · 铁匠铺 · 宅邸"
+  },
+  "hd2d_resource_w": {
+    "title": "西郊林地"
+  },
+  "hd2d_resource_e": {
+    "title": "东郊林地"
   },
   "village_b": {
     "title": "村落B"

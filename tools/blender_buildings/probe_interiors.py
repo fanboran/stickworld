@@ -21,9 +21,10 @@
 合成模式产出::
 
     pbr_int_layers.png  三格并排：back / front 全不透明 / front alpha=0.3 叠在 back 上
-                        （第三格直接模拟游戏 `WallFront.modulate.a = 0.3` 的合成结果）
+                        （第三格直接模拟游戏 `WallFront.modulate.a = 0.3` 的合成结果；
+                        代表 def = imperial_palace 王座厅，LAYERS_FRAME 取景）
     pbr_int_window.png  shop 大窗特写（front 不透明叠 back）：透过真透明窗格看到内景家具与暖光
-    pbr_int_sheet2x.png 七套内景 back 的 2x 拼页（自检 + 观感验收用）
+    pbr_int_sheet2x.png 全部 def 内景 back 的 2x 拼页（自检 + 观感验收用）
 
 约定：视角 yaw=0 / tilt=20（硬约束）；相机对 back/front 是**同一台、同一取景**，
 所以两张图天然像素级对齐（前层叠后层不需要任何对位）。
@@ -43,13 +44,13 @@ try:
 except ImportError:            # 系统 python：走合成模式
     HAVE_BPY = False
 
-OUT_DIR = ("F:/VSCode/game-2/.temp/building-pipeline-v2/stick-world/temp")
+OUT_DIR = ("F:/VSCode/game-2/stick-world/temp")
 
 YAW = 0.0
 TILT = 20.0
 
 #: 交付清单（与 interiors.defs() 一致；内景与前层共用同一档宽度）
-#: 扩展轮：7 套已有 + 19 套装配器 def + 3 个别名 def = 29 套全 def 覆盖。
+#: 29 套既有全 def 覆盖 + 行政轮 5 套（belfry 钟楼无内景，跳过）= 34 套。
 DEFS = (("house", 12), ("townhouse", 12), ("smithy1", 8), ("tavern", 12),
         ("bakery", 12), ("shop", 12), ("cathedral", 16),
         ("barn", 12), ("cottage", 8), ("stable", 12), ("shelter", 6),
@@ -57,15 +58,21 @@ DEFS = (("house", 12), ("townhouse", 12), ("smithy1", 8), ("tavern", 12),
         ("smithy4", 12), ("barracks", 12), ("warehouse", 12), ("alchemy", 12),
         ("library", 12), ("rowhouse", 12), ("windmill", 6), ("tower", 6),
         ("gatehouse", 8), ("mage_tower", 6), ("lighthouse", 6),
-        ("plaster_house", 12), ("church", 12), ("chapel", 8))
+        ("plaster_house", 12), ("church", 12), ("chapel", 8),
+        ("council_hall", 8), ("town_hall", 12), ("governor_palace", 16),
+        ("imperial_palace", 16), ("mint", 12))
 
-#: 三格机制图（back / front 不透明 / front@0.3 over back）用的 def：
-#: 取 barracks —— 本批新增、两层、上下层都有窗，最能同时演示"窗后见内景"与
-#: "前墙 alpha 0.3 剖视"两条机制。
-LAYERS_DEF = ("barracks", 12)
+#: 三格机制图（back / front 不透明 / front@0.3 over back）用的 def 与取景框：
+#: 行政轮换成 imperial_palace 王座厅当代表（全档最华丽、最有视觉冲击）。
+#: 取景框（世界坐标 x0, x1, z0, z1）压到台基大台阶~三层下段，王座厅占画面主体，
+#: 不带双塔穹顶（否则 1000+ 全高会把王座厅压成一条）。
+LAYERS_DEF = ("imperial_palace", 16)
+LAYERS_FRAME = (-340.0, 340.0, -170.0, 700.0)
 
-#: 像素对齐抽样实测（渲完后读 PNG 的 alpha 包围盒核对，见 `_verify_alignment`）
-ALIGN_SAMPLE = ("house", "barn", "tower")
+#: 像素对齐抽样实测（渲完后读 PNG 的 alpha 包围盒核对，见 `_verify_alignment`）：
+#: 行政轮追加 council_hall / imperial_palace / mint（全量渲时 34 套全查）。
+ALIGN_SAMPLE = ("house", "barn", "tower",
+                "council_hall", "imperial_palace", "mint")
 
 #: 窗户特写用的 def 与取景矩形（世界坐标：x0, x1, z0, z1，落在前墙面上）
 #: shop w12 的橱窗 = x 78±90、玻璃 z 62~140（`assemble_shop`：glass_z0 = plinth+44）
@@ -425,8 +432,9 @@ def render_mode():
             lv_name, lv_wc = LAYERS_DEF
             lv_b = os.path.join(OUT_DIR, "_int_layers_back.png")
             lv_f = os.path.join(OUT_DIR, "_int_layers_front.png")
+            lv_fr = _framing_rect(B, *LAYERS_FRAME)
             _render_pair(B, interiors, cam, ext, lv_name, lv_wc, 2.0, lv_b, lv_f,
-                         samples=64)
+                         frame=lv_fr, samples=64)
         except Exception as exc:
             failed.append("layers:%s" % LAYERS_DEF[0])
             print("!! 三格机制图渲染失败: %s" % exc)

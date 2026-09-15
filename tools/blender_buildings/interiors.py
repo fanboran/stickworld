@@ -116,6 +116,9 @@ _WIDTHS = {
     "mage_tower": 6, "lighthouse": 6,
     # —— 3 个**别名 def**（无独立装配器，front 走 DEF_MAP 的目标装配器）
     "plaster_house": 12, "church": 12, "chapel": 8,
+    # —— 行政轮 5 套（档位 = 各行政 TIER 表唯一/基准档；belfry 钟楼无内景，跳过）
+    "council_hall": 8, "town_hall": 12, "governor_palace": 16,
+    "imperial_palace": 16, "mint": 12,
 }
 
 #: 别名 def → 前层实际使用的 (装配器名, 宽度档)。与 `probe_city_scene.DEF_MAP` 同源，
@@ -319,6 +322,38 @@ def layout(def_name, wc=None):
                  storey=None, back_h=clear, eave=t["plinth"] + clear,
                  floor="cobble_small", wall_low="stone", wall_up="stone",
                  gate_clear=clear)
+    # ---------------------------------------------------------- 行政线（行政/地标轮）
+    elif def_name == "council_hall":
+        t = B.COUNCIL_TIERS[wc]              # 只有 8 格档（单层 + 阁楼）
+        L = dict(W=wc * CELL, D=t["D"], plinth=t["plinth"], wt=t["wt"],
+                 storey=None, back_h=t["wall"], eave=t["plinth"] + t["wall"],
+                 floor="wood_deck", wall_low="plaster", wall_up="plaster")
+    elif def_name == "town_hall":
+        t = B.TOWNHALL_TIERS[wc]             # 两层：石/砖底层 + 抹灰半木上层
+        st = t["storey"]
+        L = dict(W=wc * CELL, D=t["D"], plinth=t["plinth"], wt=t["wt"],
+                 storey=st, back_h=st * 2.0, eave=t["plinth"] + st * 2.0,
+                 floor="stone_flag", wall_low=t["low_mat"], wall_up="plaster_old")
+    elif def_name == "governor_palace":
+        t = B.GOVERNOR_TIERS[wc]             # 三层：砖基座 / 白石拱廊层 / 白石殿上层
+        st = t["storey"]
+        L = dict(W=wc * CELL, D=t["D"], plinth=t["plinth"], wt=t["wt"],
+                 storey=st, storeys=[st, st, st], back_h=st * 3.0,
+                 eave=t["plinth"] + st * 3.0,
+                 floor="white_stone", wall_low="brick", wall_up="white_stone")
+    elif def_name == "imperial_palace":
+        t = B.IMPERIAL_TIERS[wc]             # 台基(podium) + 石基座 / 白石×2 三段式
+        sts = list(t["storeys"])
+        L = dict(W=wc * CELL, D=t["D"], plinth=t["podium"], wt=t["wt"],
+                 storey=sts[0], storeys=sts, back_h=sum(sts),
+                 eave=t["podium"] + sum(sts),
+                 floor="white_stone", wall_low="stone", wall_up="white_stone")
+    elif def_name == "mint":
+        t = B.MINT_TIERS[wc]                 # 两层砖楼（封闭厚重）
+        st = t["storey"]
+        L = dict(W=wc * CELL, D=t["D"], plinth=t["plinth"], wt=t["wt"],
+                 storey=st, back_h=st * 2.0, eave=t["plinth"] + st * 2.0,
+                 floor="stone_flag", wall_low="brick", wall_up="brick")
     else:
         raise KeyError("无内景定义: %s" % def_name)
 
@@ -1845,7 +1880,407 @@ def _rowhouse(b, L):
     _prop(P.pot, b, x=20.0, y=yb - 11.0, z=sh3[0], r=8.0, h=14.0, mat="clay")
     _prop(P.stool, b, x=0.0, y=yf + 52.0, z=z3, r=12.0, h=28.0)
     _rug(b, 0.0, yf + 54.0, z3 + 0.6, 140.0, 84.0, "cloth_ochre")
-    _wall_lantern(b, x=-xh * 0.28, y_wall=yb, z=z3 + 124.0, s=18.0)
+    _wall_lantern(b, -xh * 0.28, y_wall=yb, z=z3 + 124.0, s=18.0)
+
+
+# ---------------------------------------------------------------- 行政线内景（行政/地标轮）
+# 5 个行政装配器 def（belfry 钟楼无内景，跳过）：council_hall / town_hall /
+# governor_palace / imperial_palace / mint。定尺全部从 buildings.py §9 行政 TIER 表读，
+# 墙体分段与装配器立面三段式（石基座/白石拱廊层/殿上层）同材对齐 —— 外墙改材内景跟随。
+
+def _column(b, x, y, z, h, r=13.0, mat="white_stone", base="stone_dark", cap=None):
+    """室内柱：柱础板 + 柱身 + 柱头板（cap 缺省同柱身；金饰柱头传 "bronze"）。"""
+    cap_h = 12.0
+    b.box_bottom((r * 2.9, r * 2.9, 12.0), (x, y), z, base)
+    b.cylinder((x, y, z + 12.0 + (h - 12.0 - cap_h) * 0.5), r, h - 12.0 - cap_h,
+               mat, 12)
+    b.box_bottom((r * 3.3, r * 3.3, cap_h), (x, y), z + h - cap_h, cap or mat)
+
+
+def _chandelier(b, x, y, z_ceil, drop=56.0, r=40.0, arms=6):
+    """大厅吊灯：吊链 + 青铜毂 + 双正交横臂 + 环列蜡烛（火苗 lamp 芯自发光）。
+
+    z_ceil = 吊挂点楼板底；灯体挂在链末端、蜡烛在臂端。"""
+    zc = z_ceil - drop
+    b.box_bottom((4.0, 4.0, drop), (x, y), zc, "iron")
+    b.cylinder((x, y, zc - 5.0), 7.0, 10.0, "bronze", 10)
+    for k in range(2):
+        if k == 0:
+            b.box_bottom((r * 2.0, 6.0, 6.0), (x, y), zc - 12.0, "bronze")
+        else:
+            b.box_bottom((6.0, r * 2.0, 6.0), (x, y), zc - 12.0, "bronze")
+    for k in range(arms):
+        th = 2.0 * math.pi * k / float(arms)
+        ax, ay = x + math.cos(th) * r, y + math.sin(th) * r
+        b.cylinder((ax, ay, zc - 20.0), 2.2, 16.0, "canvas", 6)
+        _flame(b, ax, ay, zc - 12.0)
+    b.cylinder((x, y, zc - 18.0), 9.0, 6.0, "bronze", 10)
+
+
+def _high_seat(b, x, y, z, back=76.0, mat="white_stone", cloth="cloth_red",
+               trim="bronze"):
+    """高背主座（总督座/王座共用）：侧板 + 座面 + 坐垫 + 高背板 + 顶冠 + 扶手。
+
+    z = 座下地面（台阶/座台面）；back = 座面以上的背板高。"""
+    for sx in (-1.0, 1.0):
+        b.box_bottom((12.0, 44.0, 40.0), (x + sx * 23.0, y), z, mat)
+    b.box_bottom((58.0, 44.0, 10.0), (x, y), z + 40.0, mat)
+    b.box_bottom((54.0, 40.0, 7.0), (x, y - 2.0), z + 50.0, cloth)
+    b.box_bottom((58.0, 11.0, back + 40.0), (x, y + 17.0), z, mat)
+    b.box_bottom((48.0, 6.0, back * 0.55), (x, y + 12.5), z + 52.0, cloth)
+    b.box_bottom((70.0, 13.0, 11.0), (x, y + 17.0), z + back + 40.0, trim)
+    for sx in (-1.0, 1.0):
+        b.box_bottom((9.0, 34.0, 8.0), (x + sx * 25.0, y - 3.0), z + 50.0, trim)
+
+
+def _wall_emblem(b, x, y_wall, z, r=16.0):
+    """悬挂徽记（贴后墙）：木底牌 + 石环 + 金属芯（村徽/镇徽的室内读法）。"""
+    b.box_bottom((r * 2.8, 6.0, r * 3.4), (x, y_wall - 4.0), z - r * 1.7,
+                 "wood_dark")
+    b.cylinder((x, y_wall - 9.0, z), r, 6.0, "white_stone", 14, axis="Y")
+    b.cylinder((x, y_wall - 12.5, z), r * 0.62, 5.0, "bronze", 14, axis="Y")
+
+
+def _council_hall(b, L):
+    """村议事厅（行政 L1，8 格单层）：长条议事桌 + 条凳 + 壁炉 + 悬挂村徽 + 文件架。
+
+    8 格档净深 134px(1.75m)：桌（含凳）占中前场、壁炉独占右后、文件架贴左后，
+    一条从门口到桌尾的通道 —— 任务书五件摆得下，密度到此为止（再添就穿模）。
+    """
+    pl, yb, yf, xh = L["plinth"], L["yb"], L["yf"], L["xh"]
+    _shell(b, L)
+    # 长条议事桌（横向中前场）+ 两条长凳 + 两端凳 + 桌面文具
+    tx, ty = -4.0, -22.0
+    _prop(P.table, b, x=tx, y=ty, z=pl, w=104.0, d=32.0, h=46.0)
+    _prop(P.bench, b, x=tx, y=ty - 38.0, z=pl, w=84.0, d=24.0, h=28.0)
+    _prop(P.bench, b, x=tx, y=ty + 38.0, z=pl, w=84.0, d=24.0, h=28.0)
+    _prop(P.stool, b, x=tx - 86.0, y=ty, z=pl, r=12.0, h=30.0)
+    _prop(P.stool, b, x=tx + 82.0, y=ty, z=pl, r=12.0, h=30.0)
+    _prop(P.book_stack, b, x=tx - 18.0, y=ty, z=pl + 46.0 * GAME, w=30.0, h=24.0,
+          n=4, seed=2)
+    _prop(P.candle_glass, b, x=tx + 16.0, y=ty, z=pl + 46.0 * GAME, h=36.0,
+          lit=True, seed=4)
+    _prop(P.inkwell_quill, b, x=tx + 2.0, y=ty, z=pl + 46.0 * GAME, w=22.0, n=1,
+          seed=6)
+    _rug(b, tx, ty, pl + 0.6, 150.0, 84.0, "cloth_ochre")
+    # 壁炉（右后）+ 台面陶罐 + 火芯（_flame 补 lamp 芯，`fire` 材质无自发光）
+    hx = xh - 54.0
+    hm = _hearth(b, hx, yb, pl, w=50.0, h=118.0)
+    _flame(b, hx, yb - 17.0, pl + 10.0, s=1.4)
+    _prop(P.pot, b, x=hx - 14.0, y=yb - 26.0, z=hm["mantle"], r=8.0, h=14.0,
+          mat="clay")
+    _prop(P.pot, b, x=hx + 16.0, y=yb - 26.0, z=hm["mantle"], r=7.0, h=12.0,
+          mat="stone_dark")
+    # 悬挂村徽（后墙正中、桌面正上方，四周留空保证可辨）+ 文件架（左后落地）
+    # + 文件层板（文件架上方，与徽记错位）
+    _wall_emblem(b, x=-4.0, y_wall=yb, z=pl + 148.0, r=19.0)
+    _prop(P.scroll_rack, b, x=-xh + 40.0, y=yb - 24.0, z=pl, w=48.0, h=64.0,
+          seed=4)
+    sh = _shelf(b, x=-60.0, y_wall=yb, z=pl + 112.0, w=50.0, levels=2, d=18.0,
+                dh=42.0)
+    _prop(P.book_stack, b, x=-66.0, y=yb - 11.0, z=sh[0], w=26.0, h=20.0, n=4,
+          seed=3)
+    _prop(P.book_stack, b, x=-50.0, y=yb - 11.0, z=sh[1], w=26.0, h=20.0, n=3,
+          seed=5)
+    # 地面零碎
+    _prop(P.chest, b, x=-xh + 26.0, y=yf + 38.0, z=pl, w=44.0, d=28.0, h=30.0)
+    _prop(P.firewood_basket, b, x=80.0, y=12.0, z=pl, r=20.0, h=20.0)
+    _prop(P.bucket, b, x=42.0, y=26.0, z=pl, r=9.0, h=20.0)
+    _wall_lantern(b, x=-xh + 22.0, y_wall=yb, z=pl + 144.0, s=18.0)
+
+
+def _town_hall(b, L):
+    """镇政厅（行政 L2，两层）：一层门厅（接待柜台 + 公告板 + 会议长桌 + 吊灯 + 楼梯），
+    二层议事/档案。钟楼/脊塔上不去 —— 内景只做墙体两层，家具集中一层门厅。"""
+    pl, yb, yf, xh, mid = L["plinth"], L["yb"], L["yf"], L["xh"], L["mid"]
+    _shell(b, L, storey_split=True)
+    # ---- 一层门厅：接待柜台（左后）+ 账册架 + 柜面文具 + 服务铃
+    _counter(b, -xh + 100.0, yb - 56.0, pl, w=150.0, d=32.0, h=60.0)
+    sh = _shelf(b, x=-xh + 100.0, y_wall=yb, z=pl + 34.0, w=130.0, levels=3,
+                d=22.0, dh=46.0)
+    for zz, sd in ((sh[0], 3), (sh[1], 5), (sh[2], 2)):
+        _prop(P.book_stack, b, x=-xh + 104.0, y=yb - 12.0, z=zz, w=30.0,
+              h=24.0, n=sd, seed=sd)          # 每层一摞账册 + 一列陶罐（双摞会
+        _prop(P.pot, b, x=-xh + 66.0, y=yb - 12.0, z=zz, r=8.0, h=14.0,
+              mat="clay")                     #  糊成"木板墙"，见自检记录）
+    _prop(P.book_stack, b, x=-xh + 128.0, y=yb - 56.0, z=pl + 60.0, w=30.0,
+          h=24.0, n=4, seed=8)
+    _prop(P.inkwell_quill, b, x=-xh + 92.0, y=yb - 56.0, z=pl + 60.0, w=26.0,
+          n=2, seed=3)
+    _prop(P.candle_glass, b, x=-xh + 62.0, y=yb - 56.0, z=pl + 60.0, h=34.0,
+          lit=True, seed=5)
+    b.cylinder((-xh + 46.0, yb - 56.0, pl + 64.0), 7.0, 8.0, "bronze", 10)
+    b.cylinder((-xh + 46.0, yb - 56.0, pl + 70.0), 2.2, 6.0, "iron", 8)
+    # 公告板（右后，行政识别件搬进门厅）
+    B.notice_board(b, 58.0, yb - 26.0, pl, w=86.0)
+    # 会议长桌（前中）+ 双长凳 + 端凳 + 烛
+    tx, ty = -36.0, -28.0
+    _prop(P.table, b, x=tx, y=ty, z=pl, w=140.0, d=40.0, h=52.0)
+    _prop(P.bench, b, x=tx, y=ty - 44.0, z=pl, w=104.0, d=24.0, h=30.0)
+    _prop(P.bench, b, x=tx, y=ty + 44.0, z=pl, w=104.0, d=24.0, h=30.0)
+    _prop(P.stool, b, x=tx - 112.0, y=ty, z=pl, r=12.0, h=31.0)
+    _prop(P.stool, b, x=tx + 110.0, y=ty, z=pl, r=12.0, h=31.0)
+    _prop(P.candle_glass, b, x=tx - 30.0, y=ty, z=pl + 52.0 * GAME, h=38.0,
+          lit=True, seed=2)
+    _prop(P.candle_glass, b, x=tx + 30.0, y=ty, z=pl + 52.0 * GAME, h=38.0,
+          lit=True, seed=7)
+    _rug(b, tx, ty, pl + 0.6, 190.0, 92.0, "cloth_blue")
+    # 楼梯（右墙，去二层档案）
+    _stairs(b, xh - 70.0, yf + 38.0, pl, mid, w=96.0, mat="wood", steps=9)
+    # 吊灯（从二层楼板垂下）+ 火盆 + 零碎
+    _chandelier(b, 0.0, -40.0, mid, drop=46.0, r=40.0, arms=6)
+    _brazier(b, -xh + 22.0, yf + 26.0, pl, r=15.0, h=22.0)
+    _prop(P.chest, b, x=xh - 34.0, y=yb - 48.0, z=pl, w=46.0, d=30.0, h=32.0)
+    _wall_lantern(b, x=-90.0, y_wall=yb, z=pl + 140.0, s=19.0)
+    # ---- 二层：议事 / 档案
+    z2 = mid
+    for sx in (-xh * 0.5, xh * 0.2):
+        sh2 = _shelf(b, x=sx, y_wall=yb, z=z2 + 28.0, w=86.0, levels=3, d=22.0,
+                     dh=44.0)
+        for j, zz in enumerate(sh2):
+            _prop(P.book_stack, b, x=sx + 2.0, y=yb - 12.0, z=zz, w=30.0,
+                  h=24.0, n=4, seed=j + int(abs(sx)) % 5)
+            _prop(P.pot, b, x=sx - 26.0, y=yb - 12.0, z=zz, r=8.0, h=14.0,
+                  mat="clay")
+    _prop(P.table, b, x=-10.0, y=yf + 52.0, z=z2, w=118.0, d=36.0, h=48.0)
+    _prop(P.stool, b, x=-98.0, y=yf + 52.0, z=z2, r=12.0, h=29.0)
+    _prop(P.stool, b, x=76.0, y=yf + 52.0, z=z2, r=12.0, h=29.0)
+    _candelabra(b, 118.0, yf + 48.0, z2, h=74.0, candles=5)
+    _prop(P.chest, b, x=xh - 36.0, y=yb - 30.0, z=z2, w=44.0, d=28.0, h=30.0)
+    _prop(P.banner, b, x=-xh + 34.0, y=yb - 4.0, z=z2 + 150.0, w=28.0, h=78.0,
+          mat="cloth_red", pole=False)
+    _rug(b, -10.0, yf + 52.0, z2 + 0.6, 170.0, 84.0, "cloth_ochre")
+    _wall_lantern(b, x=-52.0, y_wall=yb, z=z2 + 148.0, s=18.0)
+
+
+def _governor_palace(b, L):
+    """总督府（行政 L4，三层）：一层会客厅（柱廊 + 红毯 + 大吊灯 + 总督座 + 旗帜对 +
+    白石墙裙的大理石感），二层行政厅，三层档案房。"""
+    pl, yb, yf, xh = L["plinth"], L["yb"], L["yf"], L["xh"]
+    mids = L["mids"]
+    L["wall_segments"] = [(L["storey"], "brick"), (L["storey"], "white_stone"),
+                          (L["storey"], "plaster_old")]
+    _shell(b, L)
+    # ---- 一层会客厅：柱廊（两侧各两根白石柱 + 柱顶横梁）
+    col_x = xh * 0.58
+    for yy in (yf + 54.0, yb - 54.0):
+        for sx in (-1.0, 1.0):
+            _column(b, sx * col_x, yy, pl, 170.0, r=13.0, mat="white_stone",
+                    base="stone_dark", cap="white_stone")
+        b.box_bottom((col_x * 2.0 + 34.0, 12.0, 12.0), (0.0, yy), pl + 170.0,
+                     "white_stone")
+    # 后墙白石墙裙（大理石感由地面/柱/墙裙 + 红毯共同给）
+    b.box_bottom((xh * 2.0 - 20.0, 8.0, 54.0), (0.0, yb - 5.0), pl, "white_stone")
+    # 大红毯（中央纵贯）
+    _rug(b, 0.0, -6.0, pl + 0.6, 320.0, 148.0, "cloth_red")
+    # 总督座：双层台阶 + 高背座 + 正后方整幅红帷（座位的红底，远看先读出"座位"）
+    # + 两侧仪仗旗对 + 火盆
+    b.box_bottom((190.0, 54.0, 12.0), (0.0, yb - 64.0), pl, "white_stone")
+    b.box_bottom((164.0, 76.0, 24.0), (0.0, yb - 40.0), pl, "white_stone")
+    _hang_cloth(b, 0.0, yb - 8.0, pl + 178.0, 110.0, 95.0, "cloth_red", rope=14.0)
+    _high_seat(b, 0.0, yb - 48.0, pl + 24.0, back=76.0)
+    for sx in (-1.0, 1.0):
+        B.flag_pole(b, sx * 108.0, yb - 58.0, pl, h=172.0,
+                    cloth="cloth_red" if sx < 0 else "cloth_blue",
+                    flag_w=34.0, flag_h=52.0, style="banner")
+        _brazier(b, sx * 168.0, yf + 42.0, pl, r=18.0, h=26.0)
+        _candelabra(b, sx * 118.0, yb - 108.0, pl, h=88.0, candles=5)
+        _prop(P.bench, b, x=sx * 170.0, y=yb - 20.0, z=pl, w=54.0, d=24.0,
+              h=30.0)
+    # 大吊灯（从二层楼板垂下，六臂烛环）
+    _chandelier(b, 0.0, -10.0, mids[1], drop=62.0, r=46.0, arms=6)
+    # 侧件：箱柜
+    _prop(P.chest, b, x=xh - 36.0, y=yf + 34.0, z=pl, w=50.0, d=32.0, h=36.0)
+    _wall_lantern(b, x=-xh * 0.42, y_wall=yb, z=pl + 138.0, s=20.0)
+    # ---- 二层行政厅
+    z2 = mids[1]
+    for sx in (-xh * 0.42, xh * 0.16):
+        sh2 = _shelf(b, x=sx, y_wall=yb, z=z2 + 30.0, w=96.0, levels=3, d=22.0,
+                     dh=44.0)
+        for j, zz in enumerate(sh2):
+            _prop(P.book_stack, b, x=sx + 2.0, y=yb - 12.0, z=zz, w=32.0,
+                  h=26.0, n=5, seed=j + int(abs(sx)) % 6)
+            _prop(P.pot, b, x=sx - 28.0, y=yb - 12.0, z=zz, r=8.0, h=14.0,
+                  mat="clay")
+    _prop(P.table, b, x=-28.0, y=yf + 54.0, z=z2, w=124.0, d=38.0, h=50.0)
+    _prop(P.stool, b, x=-114.0, y=yf + 54.0, z=z2, r=12.0, h=30.0)
+    _prop(P.stool, b, x=58.0, y=yf + 54.0, z=z2, r=12.0, h=30.0)
+    _rug(b, -28.0, yf + 54.0, z2 + 0.6, 200.0, 100.0, "cloth_blue")
+    _candelabra(b, 128.0, yf + 48.0, z2, h=78.0, candles=5)
+    _prop(P.chest, b, x=xh - 40.0, y=yb - 30.0, z=z2, w=46.0, d=30.0, h=32.0)
+    _prop(P.banner, b, x=xh * 0.64, y=yb - 4.0, z=z2 + 152.0, w=28.0, h=78.0,
+          mat="cloth_red", pole=False)
+    _wall_lantern(b, x=-xh * 0.30, y_wall=yb, z=z2 + 150.0, s=18.0)
+    # ---- 三层档案房
+    z3 = mids[2]
+    _prop(P.scroll_rack, b, x=-xh + 62.0, y=yb - 28.0, z=z3, w=44.0, h=62.0,
+          seed=4)
+    _prop(P.scroll_rack, b, x=-xh + 148.0, y=yb - 28.0, z=z3, w=44.0, h=62.0,
+          seed=6)
+    sh3 = _shelf(b, x=30.0, y_wall=yb, z=z3 + 34.0, w=110.0, levels=3, d=20.0,
+                 dh=42.0)
+    for j, zz in enumerate(sh3):
+        _prop(P.book_stack, b, x=24.0, y=yb - 11.0, z=zz, w=30.0, h=24.0, n=4,
+              seed=j + 1)
+        _prop(P.pot, b, x=58.0, y=yb - 11.0, z=zz, r=8.0, h=14.0, mat="clay")
+    _prop(P.table, b, x=60.0, y=yf + 50.0, z=z3, w=90.0, d=34.0, h=46.0)
+    _prop(P.stool, b, x=-16.0, y=yf + 50.0, z=z3, r=12.0, h=29.0)
+    _prop(P.chest, b, x=xh - 40.0, y=yf + 30.0, z=z3, w=46.0, d=30.0, h=32.0)
+    _rug(b, 60.0, yf + 50.0, z3 + 0.6, 160.0, 80.0, "cloth_ochre")
+    _wall_lantern(b, x=-40.0, y_wall=yb, z=z3 + 148.0, s=18.0)
+
+
+def _imperial_palace(b, L):
+    """帝国宫殿（行政 L5，三层）：一层王座厅（大台阶 + 王座 + 华盖 + 双侧仪仗旗 +
+    柱列 + 金饰，全档最华丽），二层宫务厅，三层仪仗/卫戍。"""
+    pl, yb, yf, xh = L["plinth"], L["yb"], L["yf"], L["xh"]
+    mids = L["mids"]
+    st = L["storeys"]
+    L["wall_segments"] = [(st[0], "stone"), (st[1], "white_stone"),
+                          (st[2], "white_stone")]
+    _shell(b, L)
+    # ---- 一层王座厅（净高 210）：柱列（双侧各两根白石柱 + 青铜柱头/柱础金环）
+    col_x = xh * 0.60
+    for yy in (yf + 52.0, -4.0):
+        for sx in (-1.0, 1.0):
+            _column(b, sx * col_x, yy, pl, 172.0, r=15.0, mat="white_stone",
+                    base="stone_dark", cap="bronze")
+            b.cylinder((sx * col_x, yy, pl + 16.0), 16.5, 6.0, "bronze", 12)
+    # 大台阶 + 王座台（后墙正中，三级白石）
+    b.box_bottom((250.0, 58.0, 14.0), (0.0, yb - 80.0), pl, "white_stone")
+    b.box_bottom((222.0, 52.0, 28.0), (0.0, yb - 66.0), pl, "white_stone")
+    b.box_bottom((194.0, 88.0, 28.0), (0.0, yb - 44.0), pl, "white_stone")
+    # 王座（高背 + 金冠）+ 华盖（双柱 + 顶板 + 金檐带 + 垂幔 + 背幔）
+    _high_seat(b, 0.0, yb - 56.0, pl + 28.0, back=88.0)
+    for sx in (-1.0, 1.0):
+        b.box_bottom((12.0, 12.0, 150.0), (sx * 82.0, yb - 22.0), pl + 28.0,
+                     "white_stone")
+        b.cylinder((sx * 82.0, yb - 22.0, pl + 178.0), 7.0, 10.0, "bronze", 10)
+    b.box_bottom((190.0, 46.0, 10.0), (0.0, yb - 34.0), pl + 178.0, "white_stone")
+    b.box_bottom((178.0, 8.0, 8.0), (0.0, yb - 55.0), pl + 168.0, "bronze")
+    for i in range(5):
+        _hang_cloth(b, -72.0 + i * 36.0, yb - 56.0, pl + 188.0, 26.0, 30.0,
+                    "cloth_red", rope=0.0)
+    b.box_bottom((160.0, 6.0, 92.0), (0.0, yb - 16.0), pl + 40.0, "cloth_red")
+    # 双侧仪仗旗（台阶两侧 + 前角各一对）+ 火盆 + 台前烛台对
+    for sx in (-1.0, 1.0):
+        B.flag_pole(b, sx * 132.0, yb - 84.0, pl, h=182.0, cloth="cloth_red",
+                    flag_w=36.0, flag_h=56.0, style="banner")
+        B.flag_pole(b, sx * 206.0, yf + 42.0, pl, h=174.0, cloth="cloth_red",
+                    flag_w=36.0, flag_h=56.0, style="banner")
+        _brazier(b, sx * 168.0, yf + 44.0, pl, r=19.0, h=28.0)
+        _candelabra(b, sx * 60.0, yb - 120.0, pl, h=88.0, candles=5)
+    # 金饰檐带（后墙顶部青铜带）
+    b.box_bottom((xh * 2.0 - 16.0, 8.0, 12.0), (0.0, yb - 5.0), pl + 188.0,
+                 "bronze")
+    # 红毯纵道（门口直通台阶）
+    _rug(b, 0.0, -26.0, pl + 0.6, 96.0, 190.0, "cloth_red")
+    _wall_lantern(b, x=-xh * 0.44, y_wall=yb, z=pl + 136.0, s=20.0)
+    # ---- 二层宫务厅
+    z2 = mids[1]
+    _prop(P.table, b, x=-28.0, y=yf + 56.0, z=z2, w=130.0, d=40.0, h=52.0)
+    _prop(P.bench, b, x=-28.0, y=yf + 14.0, z=z2, w=104.0, d=24.0, h=30.0)
+    _prop(P.bench, b, x=-28.0, y=yf + 98.0, z=z2, w=104.0, d=24.0, h=30.0)
+    _prop(P.stool, b, x=-146.0, y=yf + 56.0, z=z2, r=12.0, h=31.0)
+    _prop(P.stool, b, x=90.0, y=yf + 56.0, z=z2, r=12.0, h=31.0)
+    _rug(b, -28.0, yf + 56.0, z2 + 0.6, 210.0, 106.0, "cloth_red")
+    for sx in (-xh * 0.44, xh * 0.14):
+        sh2 = _shelf(b, x=sx, y_wall=yb, z=z2 + 30.0, w=92.0, levels=3, d=22.0,
+                     dh=44.0)
+        for j, zz in enumerate(sh2):
+            _prop(P.book_stack, b, x=sx + 2.0, y=yb - 12.0, z=zz, w=32.0,
+                  h=26.0, n=5, seed=j * 2 + int(abs(sx)) % 7)
+            _prop(P.pot, b, x=sx - 28.0, y=yb - 12.0, z=zz, r=8.0, h=14.0,
+                  mat="clay")
+    _prop(P.banner, b, x=xh * 0.62, y=yb - 4.0, z=z2 + 152.0, w=28.0, h=78.0,
+          mat="cloth_red", pole=False)
+    _candelabra(b, 136.0, yf + 52.0, z2, h=80.0, candles=5)
+    _prop(P.chest, b, x=xh - 38.0, y=yb - 30.0, z=z2, w=46.0, d=30.0, h=32.0)
+    _wall_lantern(b, x=-xh * 0.28, y_wall=yb, z=z2 + 148.0, s=18.0)
+    # ---- 三层仪仗 / 卫戍
+    z3 = mids[2]
+    _prop(P.weapon_rack, b, x=-xh + 52.0, y=yb - 16.0, z=z3, w=48.0, h=60.0,
+          seed=3)
+    _prop(P.bench, b, x=16.0, y=yb - 54.0, z=z3, w=96.0, d=26.0, h=32.0)
+    _prop(P.stool, b, x=-72.0, y=yb - 54.0, z=z3, r=12.0, h=29.0)
+    _prop(P.stool, b, x=104.0, y=yb - 54.0, z=z3, r=12.0, h=29.0)
+    for px in (-58.0, 2.0, 62.0):
+        _prop(P.shield_plaque, b, x=px, y=yb - 4.0, z=z3 + 108.0, w=36.0,
+              h=42.0, mat="wood_light", boss="bronze",
+              seed=int(abs(px)) % 6 + 2)
+    _prop(P.chest, b, x=xh - 40.0, y=yf + 32.0, z=z3, w=46.0, d=30.0, h=32.0)
+    _rug(b, 16.0, yb - 64.0, z3 + 0.6, 150.0, 110.0, "cloth_ochre")
+    _wall_lantern(b, x=xh * 0.42, y_wall=yb, z=z3 + 146.0, s=18.0)
+
+
+def _mint(b, L):
+    """铸币厂（行政，两层砖楼）：一层铸造间（铸币炉 + 砧台 + 天平 + 钱箱堆 + 卫兵位），
+    二层金库（钱箱成排 + 麻袋 + 兵器架）。封闭厚重：铁器多、开口少、光偏橙暗。"""
+    pl, yb, yf, xh, mid = L["plinth"], L["yb"], L["yf"], L["xh"], L["mid"]
+    _shell(b, L)
+    ceil = L["ceil"]
+    # ---- 一层铸造间：铸币炉（左后：暗石炉体 + 拱火口 + 坩埚 + 砖烟道通到二层楼板
+    #      为止 —— 烟道穿二层会插进金库钱箱，室内炉本就该止于楼板）。
+    #      炉体用 stone_dark 与砖墙拉开明度；炉口右移半步避开左前钱箱的遮挡
+    fx, fy = -xh + 82.0, yb - 34.0
+    b.box_bottom((84.0, 66.0, 18.0), (fx, fy), pl, "iron")
+    b.box_bottom((70.0, 60.0, 78.0), (fx, fy), pl + 18.0, "stone_dark")
+    b.box_bottom((38.0, 14.0, 44.0), (fx, fy - 33.0), pl + 28.0, "cavity")
+    b.box_bottom((30.0, 14.0, 28.0), (fx, fy - 29.0), pl + 32.0, "fire")
+    b.box_bottom((34.0, 16.0, 8.0), (fx, fy - 30.0), pl + 28.0, "ember")
+    _flame(b, fx, fy - 32.0, pl + 34.0, s=2.8)
+    _prop(P.pot, b, x=fx, y=fy, z=pl + 96.0, r=10.0, h=15.0, mat="iron",
+          plant=False)
+    b.box_bottom((32.0, 32.0, max(24.0, mid - pl - 122.0)), (fx, fy),
+                 pl + 114.0, "brick")
+    for zz in (pl + 150.0, pl + 190.0):
+        b.box_bottom((38.0, 38.0, 7.0), (fx, fy), zz, "iron")
+    # 砧台（炉右：工作台 + 台上铁砧 + 火钳）
+    bx, by = -6.0, 42.0
+    _prop(P.bench, b, x=bx, y=by, z=pl, w=58.0, d=26.0, h=36.0)
+    _prop(P.anvil, b, x=bx, y=by, z=pl + 52.0, stump=False)
+    _prop(P.tongs, b, x=bx - 34.0, y=by - 4.0, z=pl + 58.0)
+    # 天平（右后）+ 称量桌（前中右：钱堆/账簿/墨水）
+    _scale_beam(b, 56.0, yb - 14.0, pl, w=56.0, h=76.0)
+    _prop(P.table, b, x=52.0, y=-40.0, z=pl, w=64.0, d=34.0, h=46.0)
+    for k in range(3):
+        b.box_bottom((18.0, 12.0, 6.0), (34.0 + k * 22.0, -40.0),
+                     pl + 46.0 * GAME, "bronze")
+    _prop(P.book_stack, b, x=20.0, y=-40.0, z=pl + 46.0 * GAME, w=28.0, h=22.0,
+          n=4, seed=6)
+    _prop(P.inkwell_quill, b, x=76.0, y=-40.0, z=pl + 46.0 * GAME, w=24.0, n=1,
+          seed=3)
+    # 钱箱堆（前左：双箱叠 + 单箱；货箱挪开炉口正前，别把炉挡住）
+    _prop(P.chest, b, x=-xh + 44.0, y=-44.0, z=pl, w=46.0, d=30.0, h=32.0)
+    _prop(P.chest, b, x=-xh + 44.0, y=-44.0, z=pl + 46.0, w=42.0, d=28.0, h=28.0)
+    _prop(P.chest, b, x=-xh + 108.0, y=-40.0, z=pl, w=46.0, d=30.0, h=32.0)
+    _prop(P.crate_stack, b, x=60.0, y=8.0, z=pl, s=30.0, h=26.0, n=3)
+    # 卫兵位（右前：兵器架 + 凳 + 盾徽 ×2）+ 火盆 + 零碎
+    _prop(P.weapon_rack, b, x=134.0, y=-42.0, z=pl, w=48.0, h=62.0, seed=5)
+    _prop(P.stool, b, x=134.0, y=-76.0, z=pl, r=11.0, h=28.0)
+    for sxx in (118.0, 148.0):
+        _prop(P.shield_plaque, b, x=sxx, y=yb - 4.0, z=pl + 108.0, w=34.0,
+              h=40.0, mat="wood_light", boss="iron", seed=3)
+    _brazier(b, -xh + 26.0, -44.0, pl, r=16.0, h=24.0)
+    _prop(P.barrel, b, x=-58.0, y=-70.0, z=pl, r=15.0, h=42.0, open_top=True)
+    _prop(P.bucket, b, x=-96.0, y=-74.0, z=pl, r=9.0, h=20.0)
+    _wall_lantern(b, x=20.0, y_wall=yb, z=pl + 128.0, s=19.0)
+    # ---- 二层金库
+    z2 = mid
+    for cx in (-xh + 52.0, -xh + 124.0, 12.0):
+        _prop(P.chest, b, x=cx, y=yb - 42.0, z=z2, w=48.0, d=30.0, h=34.0)
+    sh2 = _shelf(b, x=68.0, y_wall=yb, z=z2 + 30.0, w=90.0, levels=3, d=20.0,
+                 dh=40.0)
+    for zz in sh2:
+        _prop(P.crate, b, x=58.0, y=yb - 12.0, z=zz, s=22.0, h=18.0)
+        _prop(P.crate, b, x=84.0, y=yb - 12.0, z=zz, s=20.0, h=16.0)
+    _prop(P.sack_stack, b, x=108.0, y=-34.0, z=z2, r=13.0, h=30.0, seed=4)
+    _prop(P.sack_stack, b, x=148.0, y=-34.0, z=z2, r=13.0, h=30.0, seed=7)
+    _prop(P.weapon_rack, b, x=-xh * 0.72, y=-38.0, z=z2, w=44.0, h=58.0, seed=2)
+    _brazier(b, 0.0, -40.0, z2, r=15.0, h=22.0)
+    _prop(P.barrel, b, x=xh - 30.0, y=40.0, z=z2, r=14.0, h=40.0)
+    _prop(P.crate_stack, b, x=xh - 84.0, y=-44.0, z=z2, s=26.0, h=22.0, n=2)
+    _wall_lantern(b, x=34.0, y_wall=yb, z=z2 + 128.0, s=18.0)
 
 
 _INTERIORS = {
@@ -1861,6 +2296,10 @@ _INTERIORS = {
     "gatehouse": _gatehouse, "mage_tower": _mage_tower, "lighthouse": _lighthouse,
     # —— 别名 3 套（复用同源内景）
     "plaster_house": _plaster_house, "church": _cathedral, "chapel": _cathedral,
+    # —— 行政轮 5 套（belfry 钟楼无内景，跳过）
+    "council_hall": _council_hall, "town_hall": _town_hall,
+    "governor_palace": _governor_palace, "imperial_palace": _imperial_palace,
+    "mint": _mint,
 }
 
 
@@ -1945,6 +2384,47 @@ def lights(def_name, L):
                      color=(1.0, 0.64, 0.34), radius=70.0),
                 dict(loc=(-xh * 0.44, yb - 40.0, pl + L["back_h"] * 0.34),
                      energy=150000.0, color=(1.0, 0.58, 0.28), radius=66.0)]
+    if def_name == "council_hall":              # 村议事厅：桌上方主光 + 壁炉侧光
+        return [dict(loc=(-xh * 0.26, yf + 50.0, pl + 128.0), energy=310000.0,
+                     color=(1.0, 0.62, 0.32), radius=86.0),
+                dict(loc=(xh * 0.52, yb - 44.0, pl + 116.0), energy=200000.0,
+                     color=(1.0, 0.58, 0.28), radius=80.0)]
+    if def_name == "town_hall":                 # 门厅吊灯位主光 + 柜台侧光 + 二层
+        z2 = L["mid"]
+        return [dict(loc=(0.0, yf + 56.0, pl + 152.0), energy=430000.0,
+                     color=(1.0, 0.64, 0.34), radius=104.0),
+                dict(loc=(xh * 0.52, yb - 46.0, pl + 118.0), energy=210000.0,
+                     color=(1.0, 0.58, 0.28), radius=86.0),
+                dict(loc=(-xh * 0.28, yf + 50.0, z2 + 126.0), energy=250000.0,
+                     color=(1.0, 0.66, 0.36), radius=92.0)]
+    if def_name == "governor_palace":           # 会客厅全暖：大厅主光 + 火盆侧光 + 上下层
+        zm = L["mids"]
+        return [dict(loc=(0.0, yf + 66.0, pl + 158.0), energy=520000.0,
+                     color=(1.0, 0.66, 0.34), radius=116.0),
+                dict(loc=(xh * 0.50, yb - 52.0, pl + 118.0), energy=240000.0,
+                     color=(1.0, 0.60, 0.30), radius=92.0),
+                dict(loc=(-xh * 0.30, yf + 54.0, zm[1] + 128.0), energy=270000.0,
+                     color=(1.0, 0.66, 0.36), radius=96.0),
+                dict(loc=(xh * 0.24, yf + 48.0, zm[2] + 124.0), energy=230000.0,
+                     color=(1.0, 0.68, 0.38), radius=92.0)]
+    if def_name == "imperial_palace":           # 王座厅：冷白主光（仪典感）+ 暖辅光（炉火）
+        zm = L["mids"]
+        return [dict(loc=(0.0, yf + 60.0, pl + 176.0), energy=820000.0,
+                     color=(0.80, 0.89, 1.0), radius=132.0),
+                dict(loc=(0.0, yb - 70.0, pl + 122.0), energy=340000.0,
+                     color=(1.0, 0.60, 0.28), radius=92.0),
+                dict(loc=(-xh * 0.30, yf + 54.0, zm[1] + 130.0), energy=280000.0,
+                     color=(1.0, 0.66, 0.36), radius=96.0),
+                dict(loc=(xh * 0.24, yf + 50.0, zm[2] + 126.0), energy=240000.0,
+                     color=(1.0, 0.68, 0.38), radius=92.0)]
+    if def_name == "mint":                      # 铸币厂：炉口橙光为主，整体压暗
+        z2 = L["mid"]
+        return [dict(loc=(-xh * 0.36, yb - 54.0, pl + 96.0), energy=340000.0,
+                     color=(1.0, 0.52, 0.24), radius=76.0),
+                dict(loc=(xh * 0.44, yf + 42.0, pl + 128.0), energy=220000.0,
+                     color=(1.0, 0.66, 0.36), radius=84.0),
+                dict(loc=(0.0, yb - 46.0, z2 + 110.0), energy=210000.0,
+                     color=(1.0, 0.62, 0.32), radius=84.0)]
     mids = list(L.get("mids") or [pl])
     n = len(mids)
     # 圆塔是小房间（半径 ~70）：同样能量在更小空间里才够亮，补 1.6× 并收半径

@@ -261,6 +261,7 @@ var _tex_cache: Dictionary = {}
 var _env: Environment
 var _sky_mat: ProceduralSkyMaterial
 var _sun: DirectionalLight3D
+var _sun_disc: MeshInstance3D   # 显式太阳盘（相机子节点，昼显夜隐，建筑自动遮挡）
 var _fill: DirectionalLight3D
 var _ground_root: Node3D
 var _card_root: Node3D
@@ -1063,8 +1064,10 @@ func _build_world() -> void:
 	for dx in _door_path_xs:
 		_add_door_path(float(dx), 3.6)    # 门前短径（楼脚→台肩→路面）
 	if not battlefield:
-		# 道路三级渐变（城心石板 ±30 ≈一屏 → 夯土过渡 → 墙外野地 30 格半屏）——
-		# 创始人：石地面只有城心一屏左右；路面 y 抬升防与兜底大地皮 z-fight
+		# 三带明晰（创始人 2026-09-15，详见 HD-2D街景系统.md §三带）：
+		#   建筑带（台面）= 城心石板/近缘草地；道路带（z 1.9~46）= 城心石板
+		#   ±30 → 夯土过渡（不长草）→ 城外草地；背景地面带 = 兜底大地皮。
+		# 路面 y 抬升防与兜底大地皮 z-fight
 		var wx: float = _wall_x()
 		_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.02, 10.0, Color(0.86, 0.89, 0.96))
@@ -1072,10 +1075,11 @@ func _build_world() -> void:
 			BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
 		_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
-		_add_ground_plane_at("rammed_earth_128.png", -(wx + 14.0), 28.0,
-			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.68, 0.74, 0.54))
-		_add_ground_plane_at("rammed_earth_128.png", (wx + 14.0), 28.0,
-			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.78, 0.74, 0.60))
+		# 城外野地 = 草地贴图（稀疏草土地，非道路带）
+		_add_ground_plane_at("grass_sparse_alb_128.png", -(wx + 15.0), 30.0,
+			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.88, 0.90, 0.80))
+		_add_ground_plane_at("grass_sparse_alb_128.png", (wx + 15.0), 30.0,
+			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.90, 0.88, 0.78))
 
 	# --- 灯笼点光源（暖光；让"真 3D 光照"这条线可验证）---
 	# 战场无街灯（野外夜档靠月光档，不沿街布灯）
@@ -1111,6 +1115,26 @@ func _build_world() -> void:
 	add_child(_cam)
 	_cam.current = true
 	set_cam_zoom(1.0)   # 初始取景即按"下边界锚定"校正（否则首帧前是旧中心取景）
+
+	# --- 太阳盘（相机子节点：固定在画面顶空带，建筑物自动遮挡它）---
+	# 无阴影/无雾/自发光，昼档显示夜档隐藏（夜空有星）； Ortho 相机下
+	# 程序化天空的太阳盘永远进不了视锥，只能用显式面片补
+	_sun_disc = MeshInstance3D.new()
+	var sd := SphereMesh.new()
+	sd.radius = 1.8
+	sd.height = 3.6
+	_sun_disc.mesh = sd
+	var sun_m := StandardMaterial3D.new()
+	sun_m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sun_m.albedo_color = Color(1.0, 0.94, 0.74)
+	sun_m.emission_enabled = true
+	sun_m.emission = Color(1.0, 0.9, 0.62)
+	sun_m.emission_energy_multiplier = 2.8
+	sun_m.disable_fog = true
+	_sun_disc.material_override = sun_m
+	_sun_disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_sun_disc.position = Vector3(-7.0, 12.5, -34.0)   # 相机局部：顶空带偏左
+	_cam.add_child(_sun_disc)
 
 	# --- 2D 角色宿主（SubViewport -> billboard）---
 	# 静默常驻模式（游戏地图挂载）不生成写死的演示火柴人——街上有真玩家了；
@@ -1412,7 +1436,8 @@ func _add_platform() -> void:
 	# 人行道台面（创始人 2026-09-14：路肩是**城中心专属**，城边是土路）：
 	#   中段（±28 格）= 石板台面 + 石路肩镶边（城中心）；
 	#   两侧 = 夯土台面 + 土坎镶边（近城边），材质在 ±28 格处交接。
-	#   台面/镶边只铺城内（±WALL_X 城墙收口），墙外是野地。
+	#   台面/镶边只铺城内（±墙线收口）；**城缘段台面换草地贴图**（创始人
+	#   2026-09-15：边缘区只有道路带不长草，其他地方都是草地）
 	_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
 	_add_ground_plane_at("rammed_earth_128.png", -38.0, 20.0,
@@ -1420,10 +1445,10 @@ func _add_platform() -> void:
 	_add_ground_plane_at("rammed_earth_128.png", 38.0, 20.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
 	# 近墙段台面换 v1 变体 + 再暗半档（台面也走中心→边缘渐变；±48 延到 ±墙线）
-	_add_ground_plane_at("rammed_earth_128_v1.png", -71.5, 47.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.79, 0.74, 0.63))
-	_add_ground_plane_at("rammed_earth_128_v1.png", 71.5, 47.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.79, 0.74, 0.63))
+	_add_ground_plane_at("grass_alb_128.png", -71.5, 47.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.86, 0.90, 0.76))
+	_add_ground_plane_at("grass_alb_128.png", 71.5, 47.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.86, 0.90, 0.76))
 	# 石↔土交接条（gtx 手工收边件，压在交接线上）
 	_add_decal("transitions/gtx_brick_gravel_road_v1.png", -28.0, PLAT_H + 0.008,
 		Vector2(4.8, 1.55))

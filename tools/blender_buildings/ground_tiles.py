@@ -374,7 +374,7 @@ def _dotsw(nx, ny, count, seed, radius_px):
     yy, xx = np.mgrid[0:ny, 0:nx].astype(np.float64)
     xx = np.mod(xx + float(_SHIFT[0]), float(nx))
     yy = np.mod(yy + float(_SHIFT[1]), float(ny))
-    out = np.zeros((ny, nx))
+    out = np.zeros((n, n))
     for i in range(int(count)):
         px = float(_hash01(np.array([i]), np.array([0]), seed)[0]) * nx
         py = float(_hash01(np.array([i]), np.array([1]), seed)[0]) * ny
@@ -603,7 +603,7 @@ def t_dirt_rut(n):
     wob = (gnoise(U, V, 0.35, n, 921, oct=2) - 0.5) * 0.035
     s = 0.13 / TILE_M                       # 13cm 半宽（V 比例）
     vv = V + wob
-    rut = np.zeros((ny, nx))  # 城市地面无车辙（创始人 2026-09-14）
+    rut = np.zeros((n, n))  # 城市地面无车辙（创始人 2026-09-14）
     crown = np.exp(-((wdist(V, 0.50) / (s * 1.4)) ** 2))
     # 辙内被碾实：更暗、更光、顺路向拉出细密压实纹
     stamp = gnoise2(U, V, 0.070, 0.028, n, 931, oct=2)
@@ -990,9 +990,9 @@ def b_road(fam, nx=ROAD_PX, ny=ROAD_PX):
     s = 0.13 / TILE_M
     wob = (gwh(U, V, 0.35, nx, ny, 4801, oct=2) - 0.5) * 0.030
     vv = V + wob
-    rut = np.zeros((ny, nx))  # 城市地面无车辙（创始人 2026-09-14）
+    rut = np.zeros((n, n))  # 城市地面无车辙（创始人 2026-09-14）
     stamp = gwh2(U, V, 0.09, 0.026, nx, ny, 4811, oct=2)
-    peb = np.zeros((ny, nx))
+    peb = np.zeros((n, n))
     if fam == "stone":
         f1, f2, cid = pworley(U * 16, V * 16, 16, 16, 4821, 0.80)
         setts = smoothstep(0.020, 0.13, np.clip(f2 - f1, 0.0, None))
@@ -1448,8 +1448,8 @@ def b_street_strip(seed=0, nx=STRIP_W, ny=STRIP_H, zone="street"):
                                 "cobble", "rubble")
                       else _px_loose(U, V, nx, ny, seed + 311, kd))
     alb = np.zeros((ny, nx, 3))
-    h = np.zeros((ny, nx))
-    rough = np.zeros((ny, nx))
+    h = np.zeros((n, n))
+    rough = np.zeros((n, n))
     for i, kd in enumerate(menu):
         m = (pick == i)
         if not m.any():
@@ -1466,7 +1466,7 @@ def b_street_strip(seed=0, nx=STRIP_W, ny=STRIP_H, zone="street"):
     h = h - edge * 0.16
     # ---- 车辙停用（创始人 2026-09-14：城市地面不要车辙，至多野外后续另做）
     s = 0.13 / TILE_M
-    rut = np.zeros((ny, nx))
+    rut = np.zeros((n, n))
     for vc in (0.10, 0.30, 0.52):
         wob = (gwh(U, V, 0.35, nx, ny, seed + 501, oct=2) - 0.5) * 0.030
         rut = np.maximum(rut, np.exp(-((wdist(V + wob, vc) / s) ** 2)))
@@ -1541,8 +1541,8 @@ def p_ring_mid(seed=0, nx=PIECE_CELLS * CELL, ny=RING_H):
     menu = ["dirt", "gravel", "rubble", "dirt", "brick_old", "grass"]
     pick = np.minimum((cid * len(menu)).astype(np.int64), len(menu) - 1)
     alb = np.zeros((ny, nx, 3))
-    h = np.zeros((ny, nx))
-    rough = np.zeros((ny, nx))
+    h = np.zeros((n, n))
+    rough = np.zeros((n, n))
     for i, kd in enumerate(menu):
         m = (pick == i)
         if not m.any():
@@ -1756,8 +1756,8 @@ def _city_band(kind, nx, ny, seed):
     menu = ["marble", "marble", "granite", "marble", "granite", "cobble"]
     pick = np.minimum((cid * len(menu)).astype(np.int64), len(menu) - 1)
     alb = np.zeros((ny, nx, 3))
-    h = np.zeros((ny, nx))
-    rough = np.zeros((ny, nx))
+    h = np.zeros((n, n))
+    rough = np.zeros((n, n))
     for i, kd in enumerate(menu):
         m = (pick == i)
         if not m.any():
@@ -1792,7 +1792,7 @@ def _city_band(kind, nx, ny, seed):
         h = h + nib * 0.10
     else:
         s = 0.13 / TILE_M
-        rut = np.zeros((ny, nx))
+        rut = np.zeros((n, n))
         for vc in (0.22, 0.62):
             wob = (gwh(U, V, 0.35, nx, ny, seed + 81, oct=2) - 0.5) * 0.030
             rut = np.maximum(rut, np.exp(-((wdist(V + wob, vc) / s) ** 2)))

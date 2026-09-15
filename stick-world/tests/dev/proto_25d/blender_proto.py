@@ -134,14 +134,15 @@ NIGHT_BG_COLOR, NIGHT_BG_STRENGTH = (0.09, 0.12, 0.22), 0.55
 DAY_KEY = {"energy": 3.3, "color": (1.0, 0.95, 0.85), "rot": (40, 0, -38), "angle": 3.0}
 NIGHT_KEY = {"energy": 2.2, "color": (0.62, 0.74, 1.0), "rot": (55, 0, -75), "angle": 8.0}
 DAY_FILL_ENERGY, NIGHT_FILL_ENERGY = 0.15, 0.06
-#: 夜版 albedo 里换成自发光的材质族（与各卡库 GLOW_MATS 同源，窗/火分色）。
-#: 强度压在 1.0 档——首版 1.9 直冲 8bit 上限，窗子全吹成纯白方块（贴片感）。
+#: 夜版 albedo 里叠半透明发光的材质族（与各卡库 GLOW_MATS 同源，窗/火分色）。
+#: 强度=半透明档：<1 原材质透得出，1.5+ 才压过原材质（首版"整块换发光片 +
+#: 1.9 直冲 8bit"把窗子吹成纯白方块，创始人改口径为半透明发光）。
 NIGHT_WIN_MATS = {"glass", "glass_win", "glazing_win", "clear_glass"}
-NIGHT_WIN_RGB, NIGHT_WIN_STRENGTH = (1.0, 0.87, 0.68), 0.92
+NIGHT_WIN_RGB, NIGHT_WIN_STRENGTH = (1.0, 0.87, 0.68), 0.75
 NIGHT_FIRE_MATS = {"fire", "ember", "flat_fire", "candle", "torch", "lamp"}
-NIGHT_FIRE_RGB, NIGHT_FIRE_STRENGTH = (1.0, 0.62, 0.30), 2.2
+NIGHT_FIRE_RGB, NIGHT_FIRE_STRENGTH = (1.0, 0.62, 0.30), 1.5
 NIGHT_CRYSTAL_MATS = {"crystal_a", "crystal_b"}
-NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH = (0.62, 0.88, 1.0), 1.4
+NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH = (0.62, 0.88, 1.0), 0.9
 
 # setup_world() 填充：昼/夜灯位切换要改的三个对象引用
 _WORLD_BG = None
@@ -221,20 +222,31 @@ def set_night(on):
     _SUN_FILL.data.energy = DAY_FILL_ENERGY if day else NIGHT_FILL_ENERGY
 
 
-def _night_mat(name, rgb, strength):
-    """夜版 albedo 用的自发光纯色材质（窗/火/水晶——亮着灯而不是橙块）。"""
-    m = bpy.data.materials.new("__night_" + name)
-    m.use_nodes = True
-    bsdf = m.node_tree.nodes.get("Principled BSDF")
-    if bsdf is None:
+def _night_glow_mat(orig, rgb, strength):
+    """夜版发光材质（创始人 2026-09-15：**半透明发光**——原材质要透出来）。
+
+    不是把材质整块换成发光片，而是 copy 原材质（连节点树）后在 Material Output
+    前并一枚 Emission（Add Shader）——原表面的明暗/纹理/反射全部保留，发光
+    半透明叠上去；强度 <1 档时原材质读得出，>1 档才压过原材质。
+    """
+    m = orig.copy()
+    m.name = "__nightglow_" + orig.name
+    nt = m.node_tree
+    out = None
+    for n in nt.nodes:
+        if n.type == "OUTPUT_MATERIAL":
+            out = n
+            break
+    if out is None:
         return m
-    bsdf.inputs["Base Color"].default_value = (0.02, 0.02, 0.02, 1.0)
-    if "Emission Color" in bsdf.inputs:
-        bsdf.inputs["Emission Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
-        bsdf.inputs["Emission Strength"].default_value = strength
-    for key in ("Roughness", "Metallic", "Specular IOR Level"):
-        if key in bsdf.inputs:
-            bsdf.inputs[key].default_value = 1.0 if key == "Roughness" else 0.0
+    emi = nt.nodes.new("ShaderNodeEmission")
+    emi.inputs["Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
+    emi.inputs["Strength"].default_value = strength
+    add = nt.nodes.new("ShaderNodeAddShader")
+    if out.inputs["Surface"].is_linked:
+        nt.links.new(out.inputs["Surface"].links[0].from_socket, add.inputs[0])
+    nt.links.new(emi.outputs["Emission"], add.inputs[1])
+    nt.links.new(add.outputs["Shader"], out.inputs["Surface"])
     return m
 
 
@@ -367,11 +379,11 @@ def bake_cards(entry, cam):
     for mat in slots:
         nm = mat.name if mat else ""
         if nm in NIGHT_WIN_MATS:
-            night_repl.append(_night_mat(nm + "_win", NIGHT_WIN_RGB, NIGHT_WIN_STRENGTH))
+            night_repl.append(_night_glow_mat(mat, NIGHT_WIN_RGB, NIGHT_WIN_STRENGTH))
         elif nm in NIGHT_FIRE_MATS:
-            night_repl.append(_night_mat(nm + "_fire", NIGHT_FIRE_RGB, NIGHT_FIRE_STRENGTH))
+            night_repl.append(_night_glow_mat(mat, NIGHT_FIRE_RGB, NIGHT_FIRE_STRENGTH))
         elif nm in NIGHT_CRYSTAL_MATS:
-            night_repl.append(_night_mat(nm + "_cry", NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH))
+            night_repl.append(_night_glow_mat(mat, NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH))
         else:
             night_repl.append(None)
     for i, s in enumerate(ob.material_slots):

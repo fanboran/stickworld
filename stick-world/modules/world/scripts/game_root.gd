@@ -682,7 +682,13 @@ func _load_start_village() -> void:
 			float(BOOT_STAGES - 1) / float(BOOT_STAGES))
 	# 同上：先渲染"生成世界"帧，再进地图实例化的最长同步块
 	await _yield_frame()
-	scene_loader.load_map(boot_map_id_override if not boot_map_id_override.is_empty() else START_MAP_ID)
+	scene_loader.load_map(_start_map_id_for_fallback())
+
+
+## 开局图唯一出口：boot 覆盖（测试声明初始图）优先，否则启动直连主图。
+## 新游戏开局与存档缺地图信息兜底（SaveHandler）共用，保证两路取图一致。
+func _start_map_id_for_fallback() -> String:
+	return boot_map_id_override if not boot_map_id_override.is_empty() else START_MAP_ID
 
 
 ## 显示世界加载覆盖（启动加载期）。ratio = 总阶段进度；sub_ratio = 当前阶段

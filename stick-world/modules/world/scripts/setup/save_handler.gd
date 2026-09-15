@@ -160,7 +160,7 @@ func _on_game_loaded(slot_index: int) -> void:
 	if _root._cached_load_map_id.is_empty():
 		push_warning("[SaveHandler] 存档槽位 %d 无地图信息，回退新游戏开局" % slot_index)
 		_root._pending_save_load = false
-		_root._cached_load_map_id = _root.VILLAGE_A_MAP_ID
+		_root._cached_load_map_id = _root._start_map_id_for_fallback()
 		# 无恢复流程，立即关闭 DB（不等 _load_guard 30s 超时）
 		if SaveManager and SaveManager.has_method("end_load"):
 			SaveManager.end_load()
@@ -209,7 +209,7 @@ func _load_map_for_save() -> void:
 	if not _root.scene_loader.map_loaded.is_connected(_root._on_map_loaded):
 		_root.scene_loader.map_loaded.connect(_root._on_map_loaded)
 	if _root._cached_load_map_id.is_empty():
-		_root._cached_load_map_id = _root.VILLAGE_A_MAP_ID
+		_root._cached_load_map_id = _root._start_map_id_for_fallback()
 	_root.scene_loader.load_map(_root._cached_load_map_id)
 
 

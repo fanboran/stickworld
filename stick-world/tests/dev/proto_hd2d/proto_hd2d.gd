@@ -557,18 +557,20 @@ func _spawn_card(card: String, x: float, z_off: float, skyline: bool = false,
 
 
 ## 背景卡 = skyline 卡 + 按层距离染色；同时**实测卡底世界 z**（供层基线辅助线与
-## 底衬远端对齐）。卡底贴地落位后底边 z = 层 z 本身，不再依赖 anchor 推导。
+## 底衬远端对齐）。卡底贴地落位后底边 z = 层 z 本身；ground=台面标高——
+## 后景楼站在城内地面上（与建筑带同高，创始人 2026-09-15）
 func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
-	var mi := _spawn_card(card, x, lz, true)
+	var mi := _spawn_card(card, x, lz, true, PLAT_H)
 	if mi == null:
 		return
 	(mi.material_override as ShaderMaterial).set_shader_parameter("tint", tint)
 	_bg_base_samples.append(lz)
 
 
-## 单栋前排建筑的地基实心带（[x0,x1,y0,y1]：**x=格、y=px** 的混合口径，
-## 与碰撞墙消费端一致）：x=建筑格宽（4 格整倍数口径，碰撞不把出檐算进去），
-## y=行走带后段到建筑基线外扩 1.4 格的一条带。
+## 单栋前排建筑的地基实心带（[x0,x1,y0,y1,基线y,卡可见高]：**x=格、y=px** 的
+## 混合口径，与碰撞墙消费端一致）：x=建筑格宽（4 格整倍数口径，碰撞不把出檐
+## 算进去），y=行走带后段到建筑基线外扩 1.4 格的一条带；[4]=卡底基线 px
+## （F3 直立包楼框的底）、[5]=卡可见高 px（已扣 base_cut 地下裁切）。
 ## get_solid_rects 与 get_building_rects 共用，保证碰撞与宽度辅助线同宽。
 func _building_solid_rect(occ: Array) -> Array:
 	var cx: float = (float(occ[0]) + float(occ[1])) * 0.5
@@ -576,7 +578,15 @@ func _building_solid_rect(occ: Array) -> Array:
 	var cells := float(_cards.get(card, {}).get("cells", 8.0))
 	var z: float = float(occ[3]) if occ.size() > 3 else 0.6
 	var base_y: float = 688.0 + z * 32.0
-	return [cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0]
+	return [cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0,
+			base_y, _card_visual_height(card)]
+
+
+## 卡可见高（px）：picture 高扣掉 base_cut 的地下裁切——卡底贴地落位后
+## 从基线到卡顶的屏幕高度（F3 建筑直立框用）
+func _card_visual_height(card: String) -> float:
+	var units: Array = _cards.get(card, {}).get("units", [0.0, 0.0])
+	return float(units[1]) * (1.0 - _card_base_cut(card))
 
 
 ## 前排建筑+道具的实心区间（格，[x0,x1]）——宿主映射成 2D 碰撞墙，
@@ -945,7 +955,10 @@ func _add_door_path(x: float, _front_z: float = 3.4) -> void:
 			gm.albedo_texture = t
 		gm.albedo_color = Color(0.88, 0.80, 0.66)
 		gm.roughness = 0.95
-		gm.uv1_scale = Vector3(1.6 / 4.0, depth / 4.0, 1.0)
+		# 世界锚定 UV（同全球地面网格，夯土 tile=6）
+		gm.uv1_triplanar = true
+		gm.uv1_world_triplanar = true
+		gm.uv1_scale = Vector3.ONE / 6.0
 		gm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 		mi.material_override = gm
 		mi.position = Vector3(x, float(s["y"]), (float(s["z0"]) + float(s["z1"])) * 0.5)
@@ -1059,19 +1072,22 @@ func _build_world() -> void:
 	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
 	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
 	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
-	# 中远景地面（背景地面带）：**与道路带同材质分幅**（城心石板/夯土过渡/
-	# 城外草土）——1/3 线以下每个横向区段只有一种贴图，不再被远端草地带
-	# 劈成两段（创始人 2026-09-15）；只铺到第二排后景根部，末排以后露
-	# 程序化天空的土黄地平带 = 远景雾霭层。
+	# 中远景地面（背景地面带）：**与道路带同材质分幅**（城心石板/夯土过渡），
+	# 且**与建筑带（台面）同高**（创始人 2026-09-15：建筑带身后的城内地面保持
+	# 台面标高一直到地平线，不存在"踩空"落差；野地在墙外两侧，维持 y=0）。
+	# 战场/资源图无台面语义，远景带维持 y=0 平铺。所有地皮走世界锚定 UV
+	# （_add_ground_plane_at 内统一）——同材质跨带无缝续接、缩放全局一致。
 	var far_z: float = float(_bg_base_z.get(1,
 		SKYLINE_Z - BG_LAYER_GAP * 1.0))
 	var wx: float = _wall_x()
+	var far_y: float = 0.0 if battlefield else PLAT_H
+	var far_near_z: float = 0.0 if battlefield else BAND_SIDEWALK.x
 	_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
-		far_z, 0.0, 0.0, 10.0, Color(0.86, 0.89, 0.96))
+		far_z, far_near_z, far_y, 10.0, Color(0.86, 0.89, 0.96))
 	_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
-		far_z, 0.0, 0.0, 6.0, Color(0.80, 0.78, 0.62))
+		far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
 	_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
-		far_z, 0.0, 0.0, 6.0, Color(0.80, 0.78, 0.62))
+		far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
 	# 兜底大地皮：街面分段各有边界，缩太小视野越出分段范围就露天空
 	# （创始人：缩太小下边界出现虚空）。这层压在所有分段之下（y=-0.05），
 	# 只在分段没铺到的区域露脸。远端收在**第二排后景基线**（=真实地平线，
@@ -1088,7 +1104,9 @@ func _build_world() -> void:
 		fb_mat.albedo_texture = fb_tex
 	fb_mat.albedo_color = Color(0.70, 0.65, 0.57)
 	fb_mat.roughness = 0.95
-	fb_mat.uv1_scale = Vector3(300.0, fb_depth / 4.0, 1.0)
+	fb_mat.uv1_triplanar = true
+	fb_mat.uv1_world_triplanar = true
+	fb_mat.uv1_scale = Vector3.ONE / 6.0
 	fb_mi.material_override = fb_mat
 	fb_mi.position = Vector3(0.0, -0.05, (far_z + 40.0) * 0.5)
 	fb_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -1498,14 +1516,16 @@ func _add_platform() -> void:
 	#   两侧 = 夯土台面 + 土坎镶边（近城边），材质在 ±28 格处交接。
 	#   台面/镶边只铺城内（±墙线收口）；**城缘段台面全是草地**（创始人
 	#   2026-09-15：边缘区只有道路带不长草，其他地方都是草地；跨度随墙线
-	#   参数化——布局扩建后草地带自动跟到新墙线）
+	#   参数化——布局扩建后草地带自动跟到新墙线）。
+	#   台面收窄为建筑脚下一条（z 0.42~1.95，创始人 2026-09-15：建筑带身后
+	#   的城内地面与台面同高、由远景地面带直铺到地平线，台面不再向后延伸）
 	_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
+		BAND_SIDEWALK.x, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
 	var gx0: float = _wall_x()
 	_add_ground_plane_at("grass_alb_128.png", -(30.0 + gx0) * 0.5, gx0 - 30.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
+		BAND_SIDEWALK.x, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
 	_add_ground_plane_at("grass_alb_128.png", (30.0 + gx0) * 0.5, gx0 - 30.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
+		BAND_SIDEWALK.x, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
 	# 石↔土交接条（gtx 手工收边件，压在交接线上）
 	_add_decal("transitions/gtx_brick_gravel_road_v1.png", -28.0, PLAT_H + 0.008,
 		Vector2(4.8, 1.55))
@@ -1781,7 +1801,12 @@ func _add_ground_plane_at(tex_name: String, cx: float, width: float,
 		gm.normal_scale = 1.0
 	gm.albedo_color = tint
 	gm.roughness = 0.95
-	gm.uv1_scale = Vector3(width / tile, depth / tile, 1.0)
+	# 世界坐标锚定三平面 UV（创始人 2026-09-15：前后景地面必须连续对齐）——
+	# 所有地皮采样同一张全球网格：同材质跨带无缝续接、缩放全局一致；
+	# 贴图每 tile 格重复一次，各带 tile 常量即该材质的表观纹样大小
+	gm.uv1_triplanar = true
+	gm.uv1_world_triplanar = true
+	gm.uv1_scale = Vector3.ONE / tile
 	gm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mi.material_override = gm
 	mi.name = "Seg_" + tex_name.get_basename()

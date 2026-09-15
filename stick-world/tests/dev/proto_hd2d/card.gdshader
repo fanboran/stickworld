@@ -22,6 +22,10 @@ uniform float glow_energy : hint_range(0.0, 8.0) = 0.0;
 uniform vec3 glow_tint : source_color = vec3(1.0, 0.78, 0.46);
 uniform vec3 tint : source_color = vec3(1.0);
 uniform float rough : hint_range(0.0, 1.0) = 0.85;
+// 底部台基裁剪（创始人 2026-09-15：地基上的浅灰台基整段删除）。0 = 不裁；
+// 0.15 = 裁掉贴图底部 15% 高度（卡底贴地落位后，台基带会铺在楼脚前地面上，
+// 读作"地基上一圈浅灰方形"，故按卡内容整段裁掉，墙体底缘=可视底=落地线）。
+uniform float base_cut : hint_range(0.0, 0.45) = 0.0;
 
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -31,6 +35,10 @@ float _lum(vec2 uv) {
 
 void fragment() {
 	vec2 d = 1.0 / max(tex_px, vec2(2.0));
+	// 底部台基整段删除（含其下的透明留白）：先于一切光照处理
+	if (UV.y > 1.0 - base_cut) {
+		discard;
+	}
 	vec4 c = texture(albedo_tex, UV);
 	ALPHA = c.a;
 	if (c.a < alpha_cut) {

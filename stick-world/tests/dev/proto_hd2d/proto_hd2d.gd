@@ -190,7 +190,7 @@ const FRONT_ROW: Array = [
 ##   · 两排背景每层**楼间留缝不贴死**，后层楼**吸附进前层的缝隙**；
 ##   · 末层（bg2）基线 = 真实地平线（底衬远端同步收到此处），楼身把地平线遮死。
 const SKYLINE_Z := -6.73                 # 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
-const BG_LAYERS := 3                     # 背景排数（2026-09-15 回到 3 层——两层糊成一片看不出渐变）
+const BG_LAYERS := 2                     # 背景排数（创始人 2026-09-15：第三层挡天空+太阳，删掉）
 const BG_LAYER_GAP := 3.5                # 背景层距（格）：屏幕上每层基线差 ≈3.7% 屏高（创始人：后排别内缩太多）
 ## 远焦模糊起点：天际线基线向镜头前移的格数（世界线，经 set_cam_zoom 随缩放换算、
 ## 不随缩放漂移）——前排零模糊口径不变，第二排从这里开始吃半档模糊
@@ -288,6 +288,7 @@ var _bg_base_samples: Array = []  # 当前层各卡卡底 z 的采样（层结�
 var _opts := {
 	"shots": "none", "perf": false, "res": "", "sv": "always", "layout": "",
 	"char": "blend", "tag": "", "svscale": "2", "flat": false, "debug": false,
+	"hide": "",
 }  # shots 默认 "none" = 静默常驻模式（游戏地图挂载用；probe 出图须显式 --shots=…）
 
 # 帧采样
@@ -315,6 +316,7 @@ func _ready() -> void:
 	if battlefield:
 		print("[hd2d] 战场模式（无墙无街开阔野地）")
 	_build_world()
+	_apply_hide_groups()
 	if bool(_opts.get("save_scene", false)):
 		# 只存**地面/台肩几何**（_ground_root 子树）——含运行时光栅的角色/后期会把场景撑到几百 MB
 		var gr: Node = _ground_root
@@ -345,6 +347,39 @@ func _ready() -> void:
 
 
 # ------------------------------------------------------------------ 参数
+
+## 诊断对照实验：按 --hide= 组名隐藏节点组（shadow=接地影面片 / plat=台面系几何 /
+## cards=建筑卡 / kerb=台肩镶边）。只影响显示，不改落位。
+func _apply_hide_groups() -> void:
+	var spec := str(_opts.get("hide", ""))
+	if spec.is_empty():
+		return
+	for grp: String in spec.split(","):
+		var roots: Array = []
+		match grp:
+			"shadow":
+				roots = [_shadow_root]
+			"cards":
+				roots = [_card_root]
+			"plat":
+				for n: Node in _ground_root.get_children():
+					var nm := str(n.name)
+					if nm.begins_with("Seg_") or nm.begins_with("Band_") \
+							or nm.begins_with("PlatRim") or nm.begins_with("Decal_") \
+							or nm.begins_with("DoorPath"):
+						n.visible = false
+				continue
+			"kerb":
+				for n: Node in _ground_root.get_children():
+					if str(n.name).begins_with("PlatRim"):
+						n.visible = false
+				continue
+			_:
+				continue
+		for r: Node3D in roots:
+			r.visible = false
+	print("[hd2d] 已隐藏分组: ", spec)
+
 
 func _set_owner_recursive(n: Node, root: Node) -> void:
 	for c in n.get_children():
@@ -384,6 +419,9 @@ func _parse_args() -> void:
 		elif s.begins_with("--debug="):
 			# --debug=1：辅助线（网格/紫线/1/3 线/末层基线）——调试模式才出现（创始人口径）
 			_opts["debug"] = s.get_slice("=", 1) != "0"
+		elif s.begins_with("--hide="):
+			# --hide=shadow,plat,cards：诊断用分组隐藏（对照实验定位视觉缺陷来源）
+			_opts["hide"] = s.get_slice("=", 1)
 
 
 # ------------------------------------------------------------------ 资源
@@ -471,22 +509,27 @@ func _cam_basis() -> Basis:
 		Vector3(0, cos(t), -sin(t)), Vector3(0, sin(t), cos(t)))
 
 
-## 建筑卡：**按 cards.json 的 anchor 落位**。
-## anchor 是"卡画面中心对应的世界点"，它落在过建筑地面原点的相机平面内；
-## 于是 quad 中心 = anchor，quad 底边在 cam_up 方向下移 cv px 正好是世界 y=0 线
-## （cv = anchor.y / sin(TILT)，推导见汇报）。x 用槽位中心，anchor.x 只作参考。
-func _spawn_card(card: String, x: float, z_off: float, skyline: bool = false) -> MeshInstance3D:
+## 建筑卡：**卡底贴地落位**（与 _spawn_prop 道具卡同口径）。
+## 旧公式把 cards.json 的 anchor 当"画面中心"落位——anchor 实际是"前墙基线"
+## （bake_export: kind="front_wall_baseline"），导致卡几何底边插进台面下方约 2 格，
+## 卡面底部（台阶/台基带）被台面深度遮挡压暗——创始人指出的"最下方一段被截断"
+## 与"地基上一圈浅灰方形"同源于此。现改为卡底贴地：可视底（裁掉台基后的墙脚线）
+## 正好落在 ground 平面（台面 PLAT_H 或路面 0），z 落在 z_off。
+func _spawn_card(card: String, x: float, z_off: float, skyline: bool = false,
+		ground: float = 0.0) -> MeshInstance3D:
 	var meta: Dictionary = _cards.get(card, {})
 	if meta.is_empty():
 		push_warning("[hd2d] 无此卡: " + card)
 		return null
 	var units: Array = meta["units"]
-	var anc: Array = meta["anchor"]
 	var q := QuadMesh.new()
 	q.size = Vector2(float(units[0]) * S, float(units[1]) * S)
 	var mi := MeshInstance3D.new()
 	mi.mesh = q
-	mi.position = Vector3(x, float(anc[2]) * S, -float(anc[1]) * S + z_off)
+	var t := deg_to_rad(TILT_DEG)
+	# 可视半高：卡底被 base_cut 裁掉后，以"墙脚线"为落地点取 quad 中心
+	var half: float = q.size.y * (0.5 - _card_base_cut(card))
+	mi.position = Vector3(x, ground + cos(t) * half, z_off - sin(t) * half)
 	mi.basis = _cam_basis()
 	var m := _card_material(card)
 	if skyline:
@@ -504,19 +547,13 @@ func _spawn_card(card: String, x: float, z_off: float, skyline: bool = false) ->
 
 
 ## 背景卡 = skyline 卡 + 按层距离染色；同时**实测卡底世界 z**（供层基线辅助线与
-## 底衬远端对齐）。卡底 z 不能直接用层 z：anchor 在卡画面上的深度偏移各卡不同，
-## 正确推导 = 卡底点 = anchor 点沿 -cam_up 下移 cv，cv = anchor.y / cosθ
-## → 底 z = pos.z + tanθ · anchor.y。
+## 底衬远端对齐）。卡底贴地落位后底边 z = 层 z 本身，不再依赖 anchor 推导。
 func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
 	var mi := _spawn_card(card, x, lz, true)
 	if mi == null:
 		return
 	(mi.material_override as ShaderMaterial).set_shader_parameter("tint", tint)
-	var meta: Dictionary = _cards.get(card, {})
-	if meta.is_empty():
-		return
-	var anc: Array = meta["anchor"]
-	_bg_base_samples.append(mi.position.z + tan(deg_to_rad(TILT_DEG)) * float(anc[2]) * S)
+	_bg_base_samples.append(lz)
 
 
 ## 前排建筑+道具的实心区间（格，[x0,x1]）——宿主映射成 2D 碰撞墙，
@@ -658,7 +695,6 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 ## 道具卡底部透明留白（世界格）——卡底贴地公式只把卡底边放地面，卡内容
 ## 底部若留白就浮空；按留白行数下沉。缓存避免重复扫图。
 var _prop_pad_cache: Dictionary = {}
-
 func _prop_bottom_pad(card: String) -> float:
 	if _prop_pad_cache.has(card):
 		return float(_prop_pad_cache[card])
@@ -689,6 +725,27 @@ func _prop_bottom_pad(card: String) -> float:
 		break
 	_prop_pad_cache[card] = pad
 	return pad
+
+
+## 建筑卡底部台基裁剪比例（founder 2026-09-15："地基上一圈浅灰方形"=浅灰台基，
+## 处置=整段删除）。裁剪高度直接取 cards.json 的 anchor 纵深分量占卡高之比：
+## anchor[1] 烘焙时记录的就是"墙脚基线到卡底的纵深带"=台基/台阶带高度
+## （实证 barn：57.3px/403.5 = 0.142，与贴图实测台基带 0.146 吻合；
+## 全卡落在此 0.13~0.20 区间）。该带含台阶、左右基座柱与透明留白，整段删除后
+## 墙体底缘 = 可视底 = 落地线，不再出现铺在楼脚前的浅灰方框。
+var _card_cut_cache: Dictionary = {}
+
+func _card_base_cut(card: String) -> float:
+	if _card_cut_cache.has(card):
+		return float(_card_cut_cache[card])
+	var meta: Dictionary = _cards.get(card, {})
+	var cut := 0.0
+	var anc: Array = meta.get("anchor", [0.0, 0.0, 0.0])
+	var units: Array = meta.get("units", [0.0, 0.0])
+	if float(units[1]) > 1.0:
+		cut = clampf(float(anc[1]) / float(units[1]), 0.0, 0.24)
+	_card_cut_cache[card] = cut
+	return cut
 
 
 func _place_props() -> void:
@@ -893,6 +950,7 @@ func _card_material(card: String) -> ShaderMaterial:
 	m.set_shader_parameter("alpha_cut", 0.4)
 	m.set_shader_parameter("glow_energy", 0.0)
 	m.set_shader_parameter("tint", Color(1, 1, 1))
+	m.set_shader_parameter("base_cut", _card_base_cut(card))   # 浅灰台基整段删除
 	_card_mats.append(m)
 	return m
 
@@ -1188,16 +1246,15 @@ func _place_rows() -> void:
 	var rng_f := RandomNumberGenerator.new()
 	rng_f.seed = 20260914
 	# 前排来源：布局驱动（city_layout row0，算法村）或手摆主街 FRONT_ROW
+	# 布局 JSON 的 z 字段是定稿契约：0.45~1.3 = 台面、2.4 = 落地面，直接采用。
 	var front_list: Array = FRONT_ROW
 	if not _layout.is_empty():
 		front_list = []
 		for b: Variant in _layout.get("buildings", []):
 			if int(b["row"]) != 0:
 				continue
-			# 站位错落由 x 哈希确定（同 seed 同街景）
-			var jitter: float = 0.55 + fposmod(absf(float(b["x"])) * 0.37, 0.7)
 			front_list.append({"card": str(b["card"]), "x": float(b["x"]),
-				"z": jitter, "door": bool(b.get("door", false))})
+				"z": float(b.get("z", 0.6)), "door": bool(b.get("door", false))})
 	else:
 		# 手摆主街：意图表过摆位求解器（画面宽推挤 + 微抖动）
 		front_list = _resolve_front_row(front_list)
@@ -1207,9 +1264,7 @@ func _place_rows() -> void:
 		var z_off: float = float(e.get("z", 0.6))
 		# 台面站位：卡底落在台面标高；谷仓 z>2 = 落地面（不上台面，路面标高）
 		var on_plat: bool = z_off < 2.0
-		var mi := _spawn_card(card, cx, z_off)
-		if mi != null and on_plat:
-			mi.position.y += PLAT_H
+		var mi := _spawn_card(card, cx, z_off, false, PLAT_H if on_plat else 0.0)
 		_spawn_building_shadow(card, cx, mi)
 		if bool(e.get("door", false)) or not on_plat:
 			_door_path_xs.append(cx)   # 宏伟建筑/落地建筑：门前短径
@@ -1217,23 +1272,35 @@ func _place_rows() -> void:
 		occ_front.append([cx - w * 0.5, cx + w * 0.5, card, z_off])
 	_prop_slots = []
 	_front_occ = occ_front
-	# ── 背景实时生成（创始人 2026-09-15 裁决：随机但种子一致——多局游戏尽量
-	#    相同；前排有楼后排才配楼；同屏尽量不重复用卡；不必对齐前排楼位；
-	#    日后游戏内加建前排，调 spawn_bg_for_front 自动补后排）。
+	# ── 背景连续铺装（创始人 2026-09-15：背景必须是连续天际线，只比前排
+	#    短几格；随机但种子一致——多局游戏尽量相同；同屏尽量不重复用卡。
+	#    此前"每前排一栋"的改法在核心区留空当，已废弃回连续扫铺）。
 	_bg_rng.seed = 20260915
 	_bg_recent.clear()
+	# 前排跨度（背景铺满到只比前排短几格）
+	var front_lo := INF
+	var front_hi := -INF
+	for e: Variant in front_list:
+		var fw := _cw(str(e["card"]))
+		front_lo = minf(front_lo, float(e["x"]) - fw * 0.5)
+		front_hi = maxf(front_hi, float(e["x"]) + fw * 0.5)
+	var span_lo: float = front_lo + 3.0
+	var span_hi: float = front_hi - 3.0
 	for li in BG_LAYERS:
 		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
 		var tint: Color = BG_TINTS[0] if li == 0 else BG_TINTS[BG_TINTS.size() - 1]
-		var last_right := -INF
-		for e: Variant in front_list:
-			var fx: float = float(e["x"])
-			var card := _pick_bg_card(str(e["card"]), fx, li)
+		var gx: float = span_lo
+		var guard := 0
+		while gx < span_hi and guard < 80:
+			guard += 1
+			var card := _pick_bg_card("", gx, li)
 			var w := _cw(card)
-			var bx: float = fx + _bg_rng.randf_range(-4.0, 4.0)
-			bx = maxf(bx, last_right + 0.5 + w * 0.5)   # 同排轻推挤，不贴死
-			last_right = bx + w * 0.5
-			_spawn_bg_card(card, bx, lz, tint)
+			if w < 1.0:
+				w = 8.0
+			if gx + w > span_hi + 2.0:
+				break   # 末卡放不下（越界超 2 格就收边，不出墙）
+			_spawn_bg_card(card, gx + w * 0.5, lz, tint)
+			gx += w + _bg_rng.randf_range(1.2, 2.6)   # 楼间缝 1.2~2.6 格
 		_bg_base_z[li] = _median(_bg_base_samples)
 		_bg_base_samples.clear()
 
@@ -1729,6 +1796,9 @@ func _shot(name: String) -> String:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	DirAccess.make_dir_recursive_absolute(_temp + "proto_hd2d")
+	var tag := str(_opts.get("tag", ""))
+	if not tag.is_empty():
+		name += tag
 	var p := _temp + "proto_hd2d/" + name + ".png"
 	var err := img.save_png(p)
 	if err != OK:

@@ -153,8 +153,9 @@ const GROUND_DEFS := ["barn", "cottage"]
 ## 街宽（八档实测组距落 11~17 格，合组距 10~16 契约），组内件按卡宽肩并肩、
 ## 配方洗牌袋轮转不连号复读；远侧街具踩台面贴建筑基线、近侧铺前场路面
 ## （probe_props5 验收机位同口径）；里程碑/路标守街口（不进组轮转）；
-## 喷泉留市场广场位。台面已收窄为建筑脚下细带（z 0.42~1.95，proto
-## BAND_SIDEWALK）：z≥2 的道具一律落路面——plat 出台面带 = 悬空 0.65 格。
+## 喷泉留市场广场位。路肩台面带=建筑脚下 z 0.42~1.95（proto BAND_SIDEWALK；
+## 楼后地面自 0f14021e 抬至同标高连片到地平线）：z≥2 的道具一律落路面——
+## plat 出台面带 = 悬空 0.65 格。
 const FURNITURE_LAMP_EVERY := Vector2(8.0, 12.0)
 const FURNITURE_LAMPS := ["lamp_post_stone", "lamp_post_iron", "lantern"]
 const FURNITURE_GROUPS := [
@@ -412,10 +413,11 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	add_prop.call("banner", float(zone_x.call("core")) - 2.0, FURNITURE_Z_PLAT + 0.2, true)
 	# 杂物堆随分区（清单与落位 port 自 gen_initial_city.py 道具步：仓储带
 	# 箱桶麻袋、生产带草垛柴堆——锚点区无前排建筑时不落）。
-	# 箱桶贴仓库台面，麻袋/草垛/柴堆/食槽铺路面
+	# 杂物全部铺路面（建筑前读法）；建筑**间**的占格杂物由隔壁批次按
+	# 八档 city_layout 语义（x_cells+y_cells 真占格）加回，不落在此处。
 	if zone_anchor.has("storage"):
-		add_prop.call("crate", float(zone_x.call("storage")) - 1.5, FURNITURE_Z_PLAT - 0.1, true)
-		add_prop.call("barrel", float(zone_x.call("storage")) + 1.2, FURNITURE_Z_PLAT - 0.2, true)
+		add_prop.call("crate", float(zone_x.call("storage")) - 1.5, 4.4)
+		add_prop.call("barrel", float(zone_x.call("storage")) + 1.2, 4.2)
 		add_prop.call("sack_stack", float(zone_x.call("storage")) + 3.6, 5.8)
 	if zone_anchor.has("production"):
 		add_prop.call("haystack", float(zone_x.call("production")) - 2.0, 5.6)

@@ -71,16 +71,15 @@ const TERRAIN_DIRT_ROAD := 1
 ## 算法宿主图层（generate_resource_nodes 的入口守卫与节点父级）
 var decoration_layer: Node2D = null
 ## 采集储量中值已随算法内置（resource_gen 按类型区间掷储量），不再手填
-## 资源点密度基线（每格期望数，resource_gen 语义）：主街墙外带 0.03——
+## 林线稀疏口径（创始人 2026-09-15：野外树/石稀疏、城门前尤甚——
+## 净空 14 格起步，群落"一段一段"的聚簇感由 resource_gen 群落散布承担）
+var forest_clear_cells := 14
+var forest_ramp_cells := 10
 ## 创始人 2026-09-15：视野内两三个露头即可（别写死数量，算法按带幅推），
 ## 大宗采集在城门传送的资源图（Hd2dResourceMap，密度另调）；
 ## 子类可调（战场图调稀——野地要开阔可列阵）
 var resource_density := 0.03
-## 林区梯度档（resource_gen 语义）：主街墙外带 28 格，净空 12+渐密 20——
-## 创始人 2026-09-15：紧挨城门外是树林不对，传送出去先见开阔野地，走一段
-## 才进林线（战场图子类按图幅覆写：净空 6+渐密 30——东缘才渐入林线）
-var forest_clear_cells := 10
-var forest_ramp_cells := 12
+
 
 
 func _ready() -> void:

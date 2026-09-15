@@ -190,12 +190,12 @@ const FRONT_ROW: Array = [
 ##   · 两排背景每层**楼间留缝不贴死**，后层楼**吸附进前层的缝隙**；
 ##   · 末层（bg2）基线 = 真实地平线（底衬远端同步收到此处），楼身把地平线遮死。
 const SKYLINE_Z := -6.73                 # 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
-const BG_LAYERS := 2                     # 背景排数（创始人 2026-09-15：后面有两排就够了）
+const BG_LAYERS := 3                     # 背景排数（2026-09-15 回到 3 层——两层糊成一片看不出渐变）
 const BG_LAYER_GAP := 3.5                # 背景层距（格）：屏幕上每层基线差 ≈3.7% 屏高（创始人：后排别内缩太多）
 ## 远焦模糊起点：天际线基线向镜头前移的格数（世界线，经 set_cam_zoom 随缩放换算、
 ## 不随缩放漂移）——前排零模糊口径不变，第二排从这里开始吃半档模糊
 ## （创始人 2026-09-15：第二排景深太不明显，根因=起点原钉在天际线上、第二排恰好吃不到）
-const DOF_FAR_START_AHEAD := 3.0
+const DOF_FAR_START_AHEAD := 0.0   # 回到初始渐变（创始人 2026-09-15：前移+强过渡让渐变糊成一档）
 ## 背景层距离染色（空气透视：越远越淡越冷）
 const BG_TINTS: Array = [
 	Color(0.80, 0.84, 0.93), Color(0.85, 0.885, 0.945), Color(0.90, 0.925, 0.96),
@@ -753,8 +753,13 @@ func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
 	mi.material_override = m
 	mi.name = "Nature_" + card
 	_prop_root.add_child(mi)
-	# 自然物一律不挡人（2D 时代资源点即无碰撞；树干/岩脚与角色轻微交叠换取
-	# 采集可达——村民须走进资源点 24px 阈值，实体碰撞会把采集 AI 卡死在卡边）
+	# 自然物有建模体积（创始人 2026-09-15）：恢复实体——但碰撞收窄成
+	# "树干/岩心"窄条（±0.4 格，非整卡宽）：挡得住穿体，村民又能走到
+	# 资源点 24px 阈值内（此前整卡宽碰撞把采集 AI 卡死在卡边的教训）
+	if bool(meta.get("solid", false)):
+		var half_w: float = 0.4
+		var y_c: float = 688.0 + z_off * 32.0
+		_prop_solids.append([x - half_w, x + half_w, y_c - 26.0, y_c + 26.0])
 	return mi
 
 
@@ -1707,11 +1712,11 @@ func _apply_stage(stage: String) -> void:
 	_cam_attrs.dof_blur_far_enabled = hd and not bool(_opts["flat"])
 	_cam_attrs.dof_blur_near_distance = 24.0
 	_cam_attrs.dof_blur_near_transition = 10.0
-	_cam_attrs.dof_blur_far_distance = 46.5
-	_cam_attrs.dof_blur_far_transition = 9.0
-	# amount 0.26：第二排半档、远景剪影层满档达到"轮廓读得出、细节糊掉"的观感。
-	# 0.08 那种量级在这种"已带细节的卡"上几乎看不出模糊。
-	_cam_attrs.dof_blur_amount = 0.26
+	_cam_attrs.dof_blur_far_distance = 48.0
+	_cam_attrs.dof_blur_far_transition = 20.0
+	# amount 0.20：回到初始渐变（第二排半档、远景满档）——0.26+9 过渡把两层
+	# 糊成一档，渐变读不出来（创始人 2026-09-15）。
+	_cam_attrs.dof_blur_amount = 0.20
 
 
 # ------------------------------------------------------------------ 出图

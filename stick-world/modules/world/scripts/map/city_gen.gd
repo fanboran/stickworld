@@ -36,6 +36,10 @@ const TIERS := {
 		"furniture": 12, "zones": {"market": 4, "craft": 4, "living": 6, "production": 3, "storage": 2}},
 	"city": {"cells": 192, "n": 26, "admin": ["guildhall_w12"],
 		"furniture": 13, "zones": {"market": 5, "craft": 4, "living": 8, "production": 4, "storage": 2}},
+	"capital": {"cells": 256, "n": 40, "admin": ["governor_palace_w16", "guildhall_w12"],
+		"furniture": 18, "zones": {"market": 9, "craft": 8, "living": 14, "production": 6, "storage": 3}},
+	"metropolis": {"cells": 384, "n": 60, "admin": ["imperial_palace_w16", "governor_palace_w16"],
+		"furniture": 24, "zones": {"market": 13, "craft": 13, "living": 20, "production": 8, "storage": 6}},
 }
 
 ## 分区 def 池（按级别窗口表取**已烘卡**；运行时按 card_widths 过滤，
@@ -83,12 +87,46 @@ const ZONE_POOLS := {
 	},
 	"city": {
 		"core": ["guildhall_w12"],
+		"float_extra": ["gambling_den_w8"],
 		"market": ["shop_w8", "bakery_w8", "tavern_w12", "rowhouse_w12", "shop_w8"],
 		"craft": ["smithy1_w8", "smithy2_w8", "smithy3_w8", "smithy4_w12", "alchemy_w8"],
 		"living": ["house_w16", "house_w8", "townhouse_w12", "rowhouse_w12", "townhouse_w12",
 			"rowhouse_w12", "house_w16", "house_w8"],
 		"production": ["barn_w12", "stable_w12", "windmill_w6", "stable_w12"],
 		"storage": ["warehouse_w16", "shelter_w6", "hayloft_w8"],
+	},
+	"capital": {
+		"core": ["governor_palace_w16", "guildhall_w12"],
+		"market": ["rowhouse_w12", "bakery_w8", "tavern_w12", "rowhouse_w12", "shop_w8",
+			"tavern_w12", "flower_shop_w8", "rowhouse_w12", "bakery_w8"],
+		"craft": ["smithy4_w12", "smithy3_w8", "alchemy_w8", "coach_house_w12",
+			"smithy4_w12", "alchemy_w8", "coach_house_w12", "smithy3_w8"],
+		"living": ["townhouse_w12", "rowhouse_w12", "house_w16", "townhouse_w12",
+			"rowhouse_w12", "house_w16", "rowhouse_w12", "townhouse_w12",
+			"house_w16", "rowhouse_w12", "townhouse_w12", "house_w16",
+			"rowhouse_w12", "townhouse_w12"],
+		"production": ["barn_w12", "stable_w12", "coach_house_w16", "barn_w12",
+			"stable_w12", "coach_house_w16"],
+		"storage": ["warehouse_w16", "warehouse_w16", "inn_post_w12"],
+	},
+	"metropolis": {
+		"core": ["imperial_palace_w16", "governor_palace_w16"],
+		"market": ["rowhouse_w12", "tavern_w12", "flower_shop_w8", "rowhouse_w12",
+			"bakery_w8", "rowhouse_w12", "tavern_w12", "flower_shop_w8", "rowhouse_w12",
+			"bakery_w8", "shop_w8", "rowhouse_w12", "tavern_w12"],
+		"craft": ["smithy4_w12", "alchemy_w8", "academy_w12", "smithy4_w12",
+			"alchemy_w8", "academy_w12", "coach_house_w16", "smithy4_w12",
+			"alchemy_w8", "academy_w12", "observatory_w8", "coach_house_w16",
+			"smithy4_w12"],
+		"living": ["townhouse_w12", "rowhouse_w12", "house_w16", "rowhouse_w12",
+			"townhouse_w12", "house_w16", "rowhouse_w12", "townhouse_w12",
+			"house_w16", "rowhouse_w12", "townhouse_w12", "house_w16",
+			"rowhouse_w12", "townhouse_w12", "rowhouse_w12", "townhouse_w12",
+			"house_w16", "rowhouse_w12", "townhouse_w12", "house_w16"],
+		"production": ["barn_w12", "stable_w12", "coach_house_w16", "inn_post_w12",
+			"stable_w12", "coach_house_w16", "inn_post_w12", "stable_w12"],
+		"storage": ["warehouse_w16", "warehouse_w16", "mint_w12", "warehouse_w16",
+			"inn_post_w16", "warehouse_w16"],
 	},
 }
 
@@ -100,7 +138,11 @@ const FLOAT_DEFS := {
 	"townlet": ["cathedral_w8", "mage_tower_w8", "tower_w6"],
 	"town": ["cathedral_w16", "mage_tower_w8", "tower_w6"],
 	"burgh": ["cathedral_w16", "mage_tower_w8", "tower_w6"],
-	"city": ["cathedral_w16", "mage_tower_w8", "tower_w6", "library_w12"],
+	"city": ["cathedral_w16", "mage_tower_w8", "tower_w6", "library_w12", "gambling_den_w8"],
+	"capital": ["cathedral_w16", "mage_tower_w8", "tower_w6", "academy_w12",
+		"gambling_den_w12", "mint_w12", "belfry_w6"],
+	"metropolis": ["cathedral_w16", "mage_tower_w8", "tower_w6", "academy_w12",
+		"grand_casino_w16", "mint_w12", "belfry_w6", "observatory_w8"],
 }
 const GATE_DEF := "gatehouse_w8"
 const DOOR_DEFS := ["guildhall", "gatehouse", "shop", "tavern", "smithy1", "council_hall"]
@@ -211,7 +253,13 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 			target = -1 if rng.randf() < 0.5 else 1
 		for d: String in queues[z]:
 			seq[target].append(d)
+	var float_list: Array = []
 	for d: String in FLOAT_DEFS.get(tier, []):
+		float_list.append(d)
+	for d: String in ZONE_POOLS.get(tier, {}).get("float_extra", []):
+		if widths.has(d):
+			float_list.append(d)
+	for d: String in float_list:
 		if not widths.has(d):
 			continue
 		var side2: int = -1 if rng.randf() < 0.5 else 1
@@ -280,9 +328,28 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 			var anchor: float = float(zone_anchor.get(zn2, float(p["x"])))
 			bg_rows[row].append({"def": d, "x": anchor + rng.randf_range(-9.0, 9.0),
 				"w": float(widths.get(d, 8.0))})
+	# 背景跨度契约（创始人：后景只比前景短几格）——每排线性拉伸到
+	# 前排跨度各收 3 格，拉伸后再行内推挤（间隙只增不减）
+	var front_lo: float = INF
+	var front_hi: float = -INF
+	for p: Dictionary in placements:
+		front_lo = minf(front_lo, float(p["x"]) - float(p["w"]) * 0.5)
+		front_hi = maxf(front_hi, float(p["x"]) + float(p["w"]) * 0.5)
+	var front_span: float = front_hi - front_lo
 	for row: int in [1, 2]:
 		var bs: Array = bg_rows[row]
 		bs.sort_custom(func(a, b): return float(a["x"]) < float(b["x"]))
+		if bs.is_empty():
+			continue
+		var lo: float = float(bs[0]["x"]) - float(bs[0]["w"]) * 0.5
+		var hi: float = float(bs[bs.size() - 1]["x"]) + float(bs[bs.size() - 1]["w"]) * 0.5
+		var target_lo: float = front_lo + 3.0
+		var target_hi: float = front_hi - 3.0
+		if hi - lo > 1.0 and target_hi - target_lo > hi - lo:
+			var k: float = (target_hi - target_lo) / (hi - lo)
+			var mid: float = (lo + hi) * 0.5
+			for b: Dictionary in bs:
+				b["x"] = mid + (float(b["x"]) - mid) * k
 		for i in range(1, bs.size()):
 			var need: float = float(bs[i - 1]["x"]) + float(bs[i - 1]["w"]) * 0.5 + MIN_GAP + float(bs[i]["w"]) * 0.5
 			if float(bs[i]["x"]) < need:

@@ -297,15 +297,17 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 		placements.append({"def": GATE_DEF, "x": x2, "w": w2, "zone": "gate", "door": true})
 		cursor[s] = float(cursor[s]) + s * (w2 + MIN_GAP)
 
-	# 城心 = 行政建筑（x=0 不再按跨度平移——出生点/广场贴着行政槽，创始人
-	# 2026-09-15：别让出生点贴着城边）；墙线取两侧最远需求（对称城门）
+	# 城市中心 = 前排跨度中点（创始人 2026-09-15：出生点应在城市中心——
+	# 分区非对称时行政槽自然偏于一侧属城区分布，出生点仍落跨度正中）
 	var left := INF
 	var right := -INF
 	for p: Dictionary in placements:
 		left = minf(left, float(p["x"]) - float(p["w"]) * 0.5)
 		right = maxf(right, float(p["x"]) + float(p["w"]) * 0.5)
-	var wall_x: float = maxf(right, -left) + WALL_MARGIN
-	var width_cells := int(round(wall_x * 2.0))
+	var shift: float = (left + right) * 0.5
+	for p: Dictionary in placements:
+		p["x"] = float(p["x"]) - shift
+	var width_cells := int(round(right - left + WALL_MARGIN * 2.0))
 
 	# ── 5. 背景两层随分区锚点落（行内推挤）────────────────────────────
 	var zone_anchor: Dictionary = {}

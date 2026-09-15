@@ -1115,26 +1115,9 @@ func _build_world() -> void:
 	add_child(_cam)
 	_cam.current = true
 	set_cam_zoom(1.0)   # 初始取景即按"下边界锚定"校正（否则首帧前是旧中心取景）
-
-	# --- 太阳盘（相机子节点：固定在画面顶空带，建筑物自动遮挡它）---
-	# 无阴影/无雾/自发光，昼档显示夜档隐藏（夜空有星）； Ortho 相机下
-	# 程序化天空的太阳盘永远进不了视锥，只能用显式面片补
-	_sun_disc = MeshInstance3D.new()
-	var sd := SphereMesh.new()
-	sd.radius = 1.8
-	sd.height = 3.6
-	_sun_disc.mesh = sd
-	var sun_m := StandardMaterial3D.new()
-	sun_m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	sun_m.albedo_color = Color(1.0, 0.94, 0.74)
-	sun_m.emission_enabled = true
-	sun_m.emission = Color(1.0, 0.9, 0.62)
-	sun_m.emission_energy_multiplier = 2.8
-	sun_m.disable_fog = true
-	_sun_disc.material_override = sun_m
-	_sun_disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_sun_disc.position = Vector3(-7.0, 12.5, -34.0)   # 相机局部：顶空带偏左
-	_cam.add_child(_sun_disc)
+	# 太阳 = 程序化天空自带太阳盘（ProceduralSkyMaterial 对 DirectionalLight3D
+	# 自动渲染，位置由 _sun 的 Euler 决定，现居画面右上）——不再另造日盘；
+	# 它是否被楼群遮挡由深度测试天然处理（详见 HD-2D街景系统.md §太阳）。
 
 	# --- 2D 角色宿主（SubViewport -> billboard）---
 	# 静默常驻模式（游戏地图挂载）不生成写死的演示火柴人——街上有真玩家了；
@@ -1436,19 +1419,16 @@ func _add_platform() -> void:
 	# 人行道台面（创始人 2026-09-14：路肩是**城中心专属**，城边是土路）：
 	#   中段（±28 格）= 石板台面 + 石路肩镶边（城中心）；
 	#   两侧 = 夯土台面 + 土坎镶边（近城边），材质在 ±28 格处交接。
-	#   台面/镶边只铺城内（±墙线收口）；**城缘段台面换草地贴图**（创始人
-	#   2026-09-15：边缘区只有道路带不长草，其他地方都是草地）
+	#   台面/镶边只铺城内（±墙线收口）；**城缘段台面全是草地**（创始人
+	#   2026-09-15：边缘区只有道路带不长草，其他地方都是草地；跨度随墙线
+	#   参数化——布局扩建后草地带自动跟到新墙线）
 	_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
 		-6.5, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
-	_add_ground_plane_at("rammed_earth_128.png", -38.0, 20.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
-	_add_ground_plane_at("rammed_earth_128.png", 38.0, 20.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.85, 0.79, 0.68))
-	# 近墙段台面换 v1 变体 + 再暗半档（台面也走中心→边缘渐变；±48 延到 ±墙线）
-	_add_ground_plane_at("grass_alb_128.png", -71.5, 47.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.86, 0.90, 0.76))
-	_add_ground_plane_at("grass_alb_128.png", 71.5, 47.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.86, 0.90, 0.76))
+	var gx0: float = _wall_x()
+	_add_ground_plane_at("grass_alb_128.png", -(30.0 + gx0) * 0.5, gx0 - 30.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
+	_add_ground_plane_at("grass_alb_128.png", (30.0 + gx0) * 0.5, gx0 - 30.0,
+		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
 	# 石↔土交接条（gtx 手工收边件，压在交接线上）
 	_add_decal("transitions/gtx_brick_gravel_road_v1.png", -28.0, PLAT_H + 0.008,
 		Vector2(4.8, 1.55))
@@ -1478,7 +1458,10 @@ func _build_walls() -> void:
 	root.name = "CityWalls"
 	add_child(root)
 	for sx: float in [-1.0, 1.0]:
-		for seg: Variant in [[-1.0, GATE_Z0], [GATE_Z1, 19.5]]:
+		# 两段墙板夹出门洞：**后段从天际线（z=-7，背景楼群根部）起**——
+		# 城墙纵深贯通全场景（创始人：垂直向城墙不能只有道路带那么短），
+		# 前段铺到行走带前缘外
+		for seg: Variant in [[-7.0, GATE_Z0], [GATE_Z1, 19.5]]:
 			var z0: float = float(seg[0])
 			var z1: float = float(seg[1])
 			_box(root, mat, Vector3(WALL_T, WALL_H, z1 - z0),

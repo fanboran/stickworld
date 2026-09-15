@@ -328,16 +328,28 @@ func depth_scale_at(y: float) -> float:
 			clampf((y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0))
 
 
+## billboard 视觉身高（canvas px，悬浮框/选中框锚定用）：char_sprite_3d 尺寸
+## 契约——rig 原生 ~274px × RIG_SCALE 0.475 = 130 SV px（§0.3 比例锚 130px=
+## 1.70m）× SIZE_K 1.2（2026-09-14 偏小反馈的占位放大，纹理随 quad 同步放大
+## = 视觉身高）= 156；PX(1/32 格/SV px) 与"1 格=32 canvas px"相抵，故 130×1.2
+## 直接就是 canvas px。⚠ 改 char_sprite_3d 的 RIG_SCALE/SIZE_K 时同步本值。
+## billlboard 不随 body_scale 缩放（set_world_pos 无此参），本值亦不乘。
+const BILLBOARD_BODY_H_PX := 156.0
+
+
 ## 悬浮框视觉域矩形（MapBase 协议覆写）：HD-2D billboard 几何——origin=视觉
-## 脚线（remap 压进投影域），身体直立向上、宽高随深度缩放；Range 框的 2D
-## 局部语义（origin=髋部、框心居 Range 节点）在此不适用。_hd 未就绪时回退
+## 脚线（remap 压进投影域），**高=billboard 视觉身高**（156，非 Range 的 2D
+## 全身高 277——那是髋部原点语义，比 billboard 高出约半个身子，创始人
+## 2026-09-15"另一个线框比角色高半个身子"）；宽沿用 Range 宽（悬停放宽余量，
+## 已烘焙 body_scale）。Range 框的 2D 局部语义在此不适用。_hd 未就绪时回退
 ## 2D 恒等框（super）。
 func entity_hover_rect(range_center: Vector2, range_size: Vector2, entity: Node2D) -> Rect2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return super(range_center, range_size, entity)
 	var k: float = float(_hd.get_ground_squash())
+	var box_size := Vector2(range_size.x, BILLBOARD_BODY_H_PX)
 	return Hd2dProjection.billboard_hover_rect(
-			entity.global_position, range_size, k, WALK_FRONT_Y, depth_scale_at(entity.global_position.y))
+			entity.global_position, box_size, k, WALK_FRONT_Y, depth_scale_at(entity.global_position.y))
 
 
 ## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。

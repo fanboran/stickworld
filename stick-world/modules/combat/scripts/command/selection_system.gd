@@ -346,13 +346,11 @@ func _draw() -> void:
 	for u in _selected_units:
 		if not is_instance_valid(u):
 			continue
-		# HD-2D 图：锚到**视觉脚线**（origin 经 remap_fx_pos 压进 3D 投影域）——
-		# origin 按 2D 直绘会比角色高 (1−k)×纵深距离（y=1000 时 ≈124px@0.75，
-		# 创始人 2026-09-15：悬浮方框比角色高很多；压缩模型见
-		# docs/技术/架构/建筑管线/HD-2D街景系统.md §4.2）
-		var anchor: Vector2 = u.global_position
-		if map_now != null and map_now.has_method("remap_fx_pos"):
-			anchor = map_now.remap_fx_pos(anchor)
+		# 锚=身体中心（悬浮框矩形中心，与点选/悬浮判定同一几何）——HD-2D 图 =
+		# 视觉脚线上方半个身子（billboard 视觉身高 156 的一半，创始人
+		# 2026-09-15"别当成脚下的线框"：选中框锚半身高、非脚下）；2D 图 =
+		# Range 框中心≈髋部（原 origin 口径语义）
+		var anchor: Vector2 = _unit_anchor(map_now, u)
 		var screen_pos: Vector2 = canvas_xform * anchor
 		var half_w: float = RING_RADIUS
 		var half_h: float = RING_RADIUS * 0.65

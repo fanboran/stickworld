@@ -221,8 +221,13 @@ round-trip 由 `tests/unit/test_hd2d_projection.gd` 锁死）；运行时出口�
    俯角只压地面纵深）——悬浮框高、血条偏移、面板上提量（如城门提示 −130px）
    一律原值。
 3. HD-2D 图 origin=**视觉脚线**（billboard 脚锚），悬浮框 billboard 几何 =
-   底边贴视觉脚线、宽高随深度缩放（`depth_scale_at`，与 billboard/2D rig 同源）；
-   Range 框的 2D 局部语义（origin=髋部、框心居 Range 节点）仅 2D 图适用。
+   底边贴视觉脚线、**高=billboard 视觉身高 `BILLBOARD_BODY_H_PX` 156**
+   （130 SV px×SIZE_K 1.2；⚠ 非 Range 的 2D 全身高 277——那是髋部原点语义，
+   直接搬用会高出约半个身子），宽随深度缩放（`depth_scale_at`，与
+   billboard/2D rig 同源）；Range 框的 2D 局部语义（origin=髋部、框心居
+   Range 节点）仅 2D 图适用。
+   **白色选中框锚半身高**（框心=悬浮框矩形中心=脚线上方 78px，创始人
+   2026-09-15"别当成脚下的线框"——选中框非脚下框；蓝 F3 碰撞框才贴脚下线）。
 4. 调用链上已有 remap 的出口（如 `FxPool.spawn_burst` 内部 remap 地面锚），
    上游传视觉域坐标前须先 `unmap_fx_pos` 逆回，防二次压缩。
 

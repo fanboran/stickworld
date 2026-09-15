@@ -37,11 +37,13 @@ static func visual_to_ground_y(yv: float, k: float, front_y: float) -> float:
 
 ## 悬浮框视觉域矩形（billboard 几何）：HD-2D 图 origin=视觉脚线（canvas 域），
 ## 身体直立向上、宽高随深度缩放——Range 框的 2D 局部语义（origin=髋部居中）
-## 在此不适用，输出矩形**底边贴视觉脚线**、覆盖 billboard 全身。
-## range_size 已含实体 body_scale（实体 _apply_scale 烘焙），此处只乘深度缩放。
-static func billboard_hover_rect(origin: Vector2, range_size: Vector2,
+## 在此不适用，输出矩形**底边贴视觉脚线**。box_size 由宿主图计算：
+## 宽沿用 Range 宽（悬停放宽余量），高=billboard 视觉身高
+## （Hd2dStreetMap.BILLBOARD_BODY_H_PX=156，非 Range 的 2D 全身高），
+## 两者均已烘焙 body_scale，此处只乘深度缩放。
+static func billboard_hover_rect(origin: Vector2, box_size: Vector2,
 		k: float, front_y: float, depth_scale: float) -> Rect2:
-	var w := range_size.x * depth_scale
-	var h := range_size.y * depth_scale
+	var w := box_size.x * depth_scale
+	var h := box_size.y * depth_scale
 	var foot_v := ground_to_visual_y(origin.y, k, front_y)
 	return Rect2(origin.x - w * 0.5, foot_v - h, w, h)

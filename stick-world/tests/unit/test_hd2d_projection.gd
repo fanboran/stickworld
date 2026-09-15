@@ -85,8 +85,11 @@ func _test_street_hover_rect() -> void:
 	var foot_v: float = map.remap_fx_pos(Vector2(0.0, 800.0)).y
 	_runner.assert_approx(rect.end.y, foot_v, 0.0001, "底边贴视觉脚线（origin=脚）")
 	_runner.assert_approx(rect.get_center().x, 100.0, 0.0001, "x 以 origin 居中（billboard 无朝向偏移）")
-	_runner.assert_approx(rect.size.x, 90.0 * ds, 0.0001, "宽随深度缩放")
-	_runner.assert_approx(rect.size.y, 277.0 * ds, 0.0001, "高随深度缩放")
+	_runner.assert_approx(rect.size.x, 90.0 * ds, 0.0001, "宽随深度缩放（Range 宽口径）")
+	_runner.assert_approx(rect.size.y, Hd2dStreetMap.BILLBOARD_BODY_H_PX * ds, 0.0001,
+			"高=billboard 视觉身高 156（非 Range 2D 全身高 277）")
+	_runner.assert_approx(rect.get_center().y, foot_v - Hd2dStreetMap.BILLBOARD_BODY_H_PX * ds * 0.5,
+			0.0001, "框心=半身高（脚下线框裁决：选中/悬浮锚身体中心）")
 	map.free()   # ent 为 map 子节点，随 map 一并释放（勿二次 free）
 
 

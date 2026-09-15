@@ -40,11 +40,21 @@ Range 矩形）都不做 HD-2D 投影压缩，而角色 billboard 视觉位置�
   不再使用的 camera_rig（system_setup 装配点同步）；
 - `selection_system.gd`：框选/点选锚点统一 `_unit_anchor()` = 悬浮框矩形中心
   （与悬浮判定同一几何；点胸口不脱靶），Range 缺失回退 origin 经 remap；
+  **选中框锚半身高**（第二轮创始人裁决"别当成脚下的线框"——白选中框锚悬浮框
+  矩形中心=脚线上方约 78px，非脚下）；
 - `hd2d_gate_prompt.gd`：选项框锚经 remap（fx_pos_remapper 组查找），−130px
   上提为身体纵向不压缩；
 - `debug_tools_panel.gd`：FX 放置 canvas 逆变换后先 unmap 防二次压缩；
 - `hd2d_street_map.gd`：三处内联深度缩放 lerp 收编 `depth_scale_at()`（billboard
   渲染 / 2D rig 镜像 / 悬浮框几何同源）。
+
+**第二轮修正（创始人实机验收反馈，2026-09-15）**：悬浮框高错用 2D Range 全身
+高 277（髋部原点语义），比 billboard 视觉身高高出约半个身子——改为
+`BILLBOARD_BODY_H_PX=156`（130 SV px×SIZE_K 1.2，§0.3 比例锚）；白选中框
+从视觉脚线上移到半身高（框心=悬浮框矩形中心）。蓝 F3 碰撞框贴脚下线维持
+本分支画法（底边钉视觉脚线）——⚠ 主工作区建筑管线v3 会话未提交的
+debug_drawers 改动把蓝框移到"物理碰撞位"（低于脚线 ~62px·ez），与本轮
+裁决冲突，合并时以本裁决为准、该未提交改动应舍弃。
 
 **分类核验为无需改动**：fx_library、resource_node（已走 remap 协议）；
 debug_drawers F3 口径（创始人已裁决的数据口径，坐标换算已走 remap）；

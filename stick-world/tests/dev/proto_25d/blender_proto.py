@@ -262,12 +262,22 @@ def _night_glow_mat(orig, rgb, fac):
 
 def ground_footprint(ob, z_max=8.0):
     """贴地顶点的 x/y 范围（世界单位）——真实地面占地，排除出檐/顶棚等高处悬挑
-    （创始人 2026-09-15：烘卡时把建筑地面占地范围一起输出）。z_max 以下才算地脚。"""
+    （创始人 2026-09-15：烘卡时把建筑地面占地范围一起输出）。
+    阈值是**相对**的：z ≤ 对象自身最低点 + z_max——整楼按最低点贴地后，基座环
+    若有台阶/坡度，绝对阈值会把大部分墙脚顶点排除在外、量出扁片占地
+    （创始人 2026-09-15 指认"紫色扁片"后的修正）。"""
     mw = ob.matrix_world
+    zs = []
+    for v in ob.data.vertices:
+        zs.append((mw @ v.co).z)
+    if not zs:
+        m = B.measure(ob)
+        return m["x"], m["y"]
+    z_floor = min(zs) + z_max
     xs, ys = [], []
     for v in ob.data.vertices:
         p = mw @ v.co
-        if p.z <= z_max:
+        if p.z <= z_floor:
             xs.append(p.x)
             ys.append(p.y)
     if not xs:
@@ -280,6 +290,55 @@ def footprint_cells(ob):
     """占地 [宽格, 深格]（1 格 = 32 世界单位）。"""
     (x0, x1), (y0, y1) = ground_footprint(ob)
     return [round((x1 - x0) / 32.0, 2), round((y1 - y0) / 32.0, 2)]
+
+
+def footprint_full(ob):
+    """全模型包围盒 [宽格, 深格]（不过滤高度——含屋顶出檐的整楼地面占用）。
+    引擎紫占地带/碰撞的深度口径（创始人 2026-09-15：紫色不能是扁片，
+    墙脚贴地实测对大屋顶建筑只是窄条）。注意 B.measure 返回的是 (min,max)
+    元组对而非跨度，直接自算最稳。"""
+    mw = ob.matrix_world
+    xs, ys = [], []
+    for v in ob.data.vertices:
+        pt = mw @ v.co
+        xs.append(pt.x)
+        ys.append(pt.y)
+    if not xs:
+        m = B.measure(ob)
+        return [round((m["x"][1] - m["x"][0]) / 32.0, 2),
+                round((m["y"][1] - m["y"][0]) / 32.0, 2)]
+    return [round((max(xs) - min(xs)) / 32.0, 2),
+            round((max(ys) - min(ys)) / 32.0, 2)]
+
+
+def footprint_off(ob):
+    """占地原点偏移 [dx格, dz格]（1 格 = 32 世界单位），footprint 的配套字段。
+
+    dx = 占地包围盒x中心 − 剪影包围盒x中心：相对**卡面（剪影）中心**——引擎把
+    图片中心钉在槽位 x。剪影与取景（bake_cards 的 pts/us）同源：同一
+    B.shape_points(ob, skip_ground=False) + B.cam_axes(YAW, TILT) 投影。
+    dz = 墙脚基线y − 占地包围盒y中心：相对**墙脚基线**——引擎卡底贴地落位把该
+    线钉在落位 z（_card_base_cut 扫到的卡可视底边内容行），正 dz 朝相机/前方。
+    基线 y 取卡可视底边内容行的地面等效值：地面点 v = y·sin t，故基线 y =
+    min(v)/sin(tilt)（与取景同源，典型建筑 = 前墙基线 y）。
+    兜底（ground_footprint 走 B.measure）同样出数；无剪影/异常回退 [0.0, 0.0]
+    （引擎侧退化为居中 + 从基线向后，与旧 JSON 行为一致）。
+    """
+    try:
+        (x0, x1), (y0, y1) = ground_footprint(ob)
+        right, up = B.cam_axes(YAW, TILT)
+        pts = B.shape_points(ob, skip_ground=False)
+        if not pts:
+            return [0.0, 0.0]
+        us = [p.dot(right) for p in pts]
+        vs = [p.dot(up) for p in pts]
+        base_y = min(vs) / math.sin(math.radians(TILT))
+        dx = (x0 + x1) * 0.5 - (min(us) + max(us)) * 0.5
+        dz = base_y - (y0 + y1) * 0.5
+        return [round(dx / 32.0, 2), round(dz / 32.0, 2)]
+    except Exception:
+        return [0.0, 0.0]
+
 
 def make_camera():
     d = bpy.data.cameras.new("cam")
@@ -483,7 +542,11 @@ def bake_cards(entry, cam):
         "px": [rx, ry], "zoom": rx / w if w > 0 else ZOOM,
         "units": [rx / (rx / w) if w > 0 else w, ry / (rx / w) if w > 0 else h],
         "anchor": [anchor.x, anchor.y, anchor.z],
-        "footprint": footprint_cells(ob),   # 真实地面占地 [宽格, 深格]（贴地顶点）
+        "footprint": footprint_cells(ob),   # 墙脚贴地占地 [宽格, 深格]（相对阈值贴地顶点）
+        "footprint_full": footprint_full(ob),   # 全模型占地 [宽格, 深格]（含屋顶出檐——碰撞深度口径）
+        # 占地原点 [dx格, dz格]：dx 相对卡面（剪影）中心（引擎把图片中心钉在槽位 x）；
+        # dz 相对墙脚基线（引擎把该线钉在落位 z），正 dz 朝相机
+        "footprint_off": footprint_off(ob),
         "glow_mats": sorted(set(hit)),
     }
 

@@ -21,6 +21,14 @@
    3.4,
    1.78
   ],
+  "footprint_full": [
+   8.5,
+   6.88
+  ],
+  "footprint_off": [
+   -0.99,
+   -0.83
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -47,6 +55,14 @@
    6.0,
    4.8
   ],
+  "footprint_full": [
+   8.5,
+   7.8
+  ],
+  "footprint_off": [
+   0.0,
+   -2.34
+  ],
   "glow_mats": []
  },
  {
@@ -70,6 +86,14 @@
   "footprint": [
    2.56,
    2.53
+  ],
+  "footprint_full": [
+   11.31,
+   8.62
+  ],
+  "footprint_off": [
+   -2.0,
+   -1.2
   ],
   "glow_mats": [
    "glass"
@@ -97,6 +121,14 @@
    3.9,
    3.09
   ],
+  "footprint_full": [
+   22.62,
+   14.75
+  ],
+  "footprint_off": [
+   -5.42,
+   -1.48
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -123,6 +155,14 @@
    8.0,
    5.5
   ],
+  "footprint_full": [
+   11.31,
+   9.46
+  ],
+  "footprint_off": [
+   0.0,
+   -2.69
+  ],
   "glow_mats": []
  },
  {
@@ -146,6 +186,14 @@
   "footprint": [
    3.88,
    2.09
+  ],
+  "footprint_full": [
+   11.31,
+   8.98
+  ],
+  "footprint_off": [
+   1.41,
+   -0.98
   ],
   "glow_mats": [
    "glass"
@@ -173,6 +221,14 @@
    7.59,
    1.33
   ],
+  "footprint_full": [
+   11.31,
+   9.3
+  ],
+  "footprint_off": [
+   0.48,
+   -0.6
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -198,6 +254,14 @@
   "footprint": [
    8.54,
    3.39
+  ],
+  "footprint_full": [
+   17.0,
+   11.8
+  ],
+  "footprint_off": [
+   0.0,
+   -1.63
   ],
   "glow_mats": [
    "glass"
@@ -225,6 +289,14 @@
    4.19,
    1.53
   ],
+  "footprint_full": [
+   17.0,
+   12.48
+  ],
+  "footprint_off": [
+   -3.34,
+   -0.7
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -250,6 +322,14 @@
   "footprint": [
    9.4,
    4.19
+  ],
+  "footprint_full": [
+   17.0,
+   12.36
+  ],
+  "footprint_off": [
+   -0.71,
+   -2.03
   ],
   "glow_mats": [
    "glass"
@@ -277,6 +357,14 @@
    4.16,
    1.53
   ],
+  "footprint_full": [
+   17.0,
+   12.48
+  ],
+  "footprint_off": [
+   -3.33,
+   -0.7
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -302,6 +390,14 @@
   "footprint": [
    12.5,
    4.14
+  ],
+  "footprint_full": [
+   17.13,
+   10.38
+  ],
+  "footprint_off": [
+   0.0,
+   -2.01
   ],
   "glow_mats": [
    "glass"
@@ -329,6 +425,14 @@
    3.25,
    1.58
   ],
+  "footprint_full": [
+   6.36,
+   5.88
+  ],
+  "footprint_off": [
+   0.0,
+   -0.77
+  ],
   "glow_mats": []
  },
  {
@@ -353,6 +457,14 @@
    6.31,
    3.81
   ],
+  "footprint_full": [
+   16.5,
+   10.44
+  ],
+  "footprint_off": [
+   0.0,
+   -1.84
+  ],
   "glow_mats": []
  },
  {
@@ -376,6 +488,14 @@
   "footprint": [
    5.31,
    1.25
+  ],
+  "footprint_full": [
+   17.0,
+   11.92
+  ],
+  "footprint_off": [
+   0.0,
+   -0.56
   ],
   "glow_mats": [
    "glass"
@@ -403,6 +523,14 @@
    8.0,
    6.19
   ],
+  "footprint_full": [
+   8.31,
+   6.72
+  ],
+  "footprint_off": [
+   0.0,
+   -3.09
+  ],
   "glow_mats": []
  },
  {
@@ -426,6 +554,14 @@
   "footprint": [
    8.06,
    5.21
+  ],
+  "footprint_full": [
+   11.31,
+   9.23
+  ],
+  "footprint_off": [
+   -0.33,
+   -2.61
   ],
   "glow_mats": [
    "glass"
@@ -453,6 +589,14 @@
    6.74,
    5.17
   ],
+  "footprint_full": [
+   17.0,
+   14.49
+  ],
+  "footprint_off": [
+   0.0,
+   -2.07
+  ],
   "glow_mats": [
    "lamp"
   ]
@@ -479,6 +623,14 @@
    7.42,
    7.42
   ],
+  "footprint_full": [
+   7.42,
+   8.56
+  ],
+  "footprint_off": [
+   0.0,
+   -3.63
+  ],
   "glow_mats": []
  },
  {
@@ -502,6 +654,14 @@
   "footprint": [
    11.41,
    2.44
+  ],
+  "footprint_full": [
+   22.62,
+   15.02
+  ],
+  "footprint_off": [
+   0.47,
+   -1.22
   ],
   "glow_mats": [
    "glass"
@@ -529,6 +689,14 @@
    10.15,
    1.78
   ],
+  "footprint_full": [
+   17.0,
+   12.17
+  ],
+  "footprint_off": [
+   0.07,
+   -0.81
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -554,6 +722,14 @@
   "footprint": [
    2.62,
    1.0
+  ],
+  "footprint_full": [
+   11.31,
+   8.92
+  ],
+  "footprint_off": [
+   -2.0,
+   -0.44
   ],
   "glow_mats": [
    "glass"
@@ -581,6 +757,14 @@
    8.0,
    6.25
   ],
+  "footprint_full": [
+   11.69,
+   9.98
+  ],
+  "footprint_off": [
+   0.0,
+   -3.06
+  ],
   "glow_mats": []
  },
  {
@@ -604,6 +788,14 @@
   "footprint": [
    8.04,
    5.08
+  ],
+  "footprint_full": [
+   11.31,
+   8.98
+  ],
+  "footprint_off": [
+   0.48,
+   -2.48
   ],
   "glow_mats": [
    "glass"
@@ -631,6 +823,14 @@
    11.51,
    7.87
   ],
+  "footprint_full": [
+   17.0,
+   12.18
+  ],
+  "footprint_off": [
+   0.18,
+   -3.87
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -656,6 +856,14 @@
   "footprint": [
    5.78,
    5.84
+  ],
+  "footprint_full": [
+   11.21,
+   6.05
+  ],
+  "footprint_off": [
+   0.0,
+   -2.9
   ],
   "glow_mats": [
    "glass"
@@ -683,6 +891,14 @@
    9.76,
    4.83
   ],
+  "footprint_full": [
+   11.31,
+   9.79
+  ],
+  "footprint_off": [
+   -0.47,
+   -2.4
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -708,6 +924,14 @@
   "footprint": [
    12.44,
    4.8
+  ],
+  "footprint_full": [
+   17.0,
+   12.17
+  ],
+  "footprint_off": [
+   0.0,
+   -2.34
   ],
   "glow_mats": [
    "glass"
@@ -735,6 +959,14 @@
    16.44,
    5.1
   ],
+  "footprint_full": [
+   22.62,
+   14.67
+  ],
+  "footprint_off": [
+   0.0,
+   -2.49
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -760,6 +992,14 @@
   "footprint": [
    14.81,
    12.95
+  ],
+  "footprint_full": [
+   22.62,
+   18.59
+  ],
+  "footprint_off": [
+   0.0,
+   -6.43
   ],
   "glow_mats": [
    "glass",
@@ -788,6 +1028,14 @@
    16.75,
    15.31
   ],
+  "footprint_full": [
+   22.62,
+   18.96
+  ],
+  "footprint_off": [
+   0.0,
+   -7.59
+  ],
   "glow_mats": [
    "glass",
    "lamp"
@@ -815,6 +1063,14 @@
    2.88,
    1.64
   ],
+  "footprint_full": [
+   5.34,
+   5.34
+  ],
+  "footprint_off": [
+   0.0,
+   -0.8
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -841,6 +1097,14 @@
    3.06,
    1.64
   ],
+  "footprint_full": [
+   7.62,
+   7.62
+  ],
+  "footprint_off": [
+   0.0,
+   -0.8
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -866,6 +1130,14 @@
   "footprint": [
    7.02,
    5.63
+  ],
+  "footprint_full": [
+   17.0,
+   12.36
+  ],
+  "footprint_off": [
+   0.35,
+   -2.75
   ],
   "glow_mats": [
    "glass",
@@ -894,6 +1166,14 @@
    8.68,
    5.84
   ],
+  "footprint_full": [
+   22.62,
+   14.55
+  ],
+  "footprint_off": [
+   0.4,
+   -2.86
+  ],
   "glow_mats": [
    "glass",
    "lamp"
@@ -921,6 +1201,14 @@
    6.01,
    6.67
   ],
+  "footprint_full": [
+   8.5,
+   8.29
+  ],
+  "footprint_off": [
+   -0.0,
+   -3.27
+  ],
   "glow_mats": []
  },
  {
@@ -945,6 +1233,14 @@
    8.0,
    8.02
   ],
+  "footprint_full": [
+   11.31,
+   10.06
+  ],
+  "footprint_off": [
+   0.0,
+   -3.95
+  ],
   "glow_mats": []
  },
  {
@@ -968,6 +1264,14 @@
   "footprint": [
    12.83,
    4.09
+  ],
+  "footprint_full": [
+   17.0,
+   12.36
+  ],
+  "footprint_off": [
+   0.36,
+   -2.05
   ],
   "glow_mats": [
    "glass",
@@ -996,6 +1300,14 @@
    16.26,
    4.5
   ],
+  "footprint_full": [
+   22.62,
+   14.92
+  ],
+  "footprint_off": [
+   0.13,
+   -2.25
+  ],
   "glow_mats": [
    "glass",
    "lamp"
@@ -1023,6 +1335,14 @@
    11.9,
    6.19
   ],
+  "footprint_full": [
+   17.0,
+   12.13
+  ],
+  "footprint_off": [
+   0.4,
+   -2.61
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -1049,6 +1369,14 @@
    15.1,
    6.75
   ],
+  "footprint_full": [
+   22.62,
+   14.36
+  ],
+  "footprint_off": [
+   0.4,
+   -2.89
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -1074,6 +1402,14 @@
   "footprint": [
    6.53,
    2.12
+  ],
+  "footprint_full": [
+   11.31,
+   9.11
+  ],
+  "footprint_off": [
+   -0.18,
+   -1.01
   ],
   "glow_mats": [
    "glass",
@@ -1102,6 +1438,14 @@
    8.12,
    2.12
   ],
+  "footprint_full": [
+   17.0,
+   11.8
+  ],
+  "footprint_off": [
+   0.23,
+   -1.01
+  ],
   "glow_mats": [
    "glass",
    "lamp"
@@ -1129,6 +1473,14 @@
    11.07,
    7.66
   ],
+  "footprint_full": [
+   22.62,
+   14.67
+  ],
+  "footprint_off": [
+   -0.94,
+   -3.8
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -1154,6 +1506,14 @@
   "footprint": [
    3.19,
    1.28
+  ],
+  "footprint_full": [
+   17.0,
+   11.8
+  ],
+  "footprint_off": [
+   0.0,
+   -0.58
   ],
   "glow_mats": [
    "glass"
@@ -1181,6 +1541,14 @@
    3.25,
    1.28
   ],
+  "footprint_full": [
+   22.62,
+   14.3
+  ],
+  "footprint_off": [
+   0.0,
+   -0.58
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -1207,6 +1575,14 @@
    6.58,
    6.58
   ],
+  "footprint_full": [
+   7.09,
+   7.09
+  ],
+  "footprint_off": [
+   0.0,
+   -3.25
+  ],
   "glow_mats": []
  },
  {
@@ -1230,6 +1606,14 @@
   "footprint": [
    10.14,
    1.36
+  ],
+  "footprint_full": [
+   11.7,
+   9.4
+  ],
+  "footprint_off": [
+   -0.65,
+   -0.68
   ],
   "glow_mats": [
    "glass"
@@ -1257,6 +1641,14 @@
    13.13,
    2.38
   ],
+  "footprint_full": [
+   17.0,
+   12.11
+  ],
+  "footprint_off": [
+   -0.35,
+   -1.14
+  ],
   "glow_mats": [
    "glass"
   ]
@@ -1282,6 +1674,14 @@
   "footprint": [
    5.19,
    3.81
+  ],
+  "footprint_full": [
+   8.3,
+   9.25
+  ],
+  "footprint_off": [
+   0.0,
+   -1.84
   ],
   "glow_mats": []
  }

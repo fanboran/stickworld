@@ -51,7 +51,7 @@ tools/trim_*.py
 tools/extract_*.py
 tools/filter_*.py
 
-# 世界生成可再生产物（保留 locked/ 金标准与运行时 config/strategic_map 副本）
+# 世界生成可再生产物（保留 locked/ 金标准；运行时数据在 submodule stickworld-mapdata，不经主库历史）
 tools/worldgen/output/**
 !tools/worldgen/output/locked/
 !tools/worldgen/output/locked/**

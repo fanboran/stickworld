@@ -80,6 +80,11 @@ var _threat_ledger := IncomingThreatLedger.new()
 var ground_y: float = 450.0
 ## 地面底部 Y（火柴人可走区域底部，= ground_y + DESIGN_HEIGHT * ground_ratio）
 var ground_bottom: float = 882.0
+## 地面约束口径：false = 2D 图口径（origin=髋、脚在 origin+foot_offset，
+## 约束面内收 foot_offset）；true = origin 空间直用（HD-2D 图：视觉脚线=origin，
+## 传来的 [ground_y, ground_bottom] 即行走带本身——再内收会让角色走进
+## 建筑带身后，视觉被楼卡遮挡、青箱与蓝带整体脱钩，创始人 2026-09-15）
+var _ground_constraints_origin_space: bool = false
 ## X 活动范围左边界（由 MapInstance 注入）
 var map_left: float = 0.0
 ## X 活动范围右边界（由 MapInstance 注入）
@@ -600,9 +605,10 @@ func _physics_process(delta: float) -> void:
 	# 受击硬直计时递减
 	if _hit_stun_timer > 0.0:
 		_hit_stun_timer = maxf(0.0, _hit_stun_timer - delta)
-	# Y 范围约束：脚部保持在 [ground_y, ground_bottom] 内
-	var y_min: float = ground_y - foot_offset
-	var y_max: float = ground_bottom - foot_offset
+	# Y 范围约束：脚部保持在 [ground_y, ground_bottom] 内（口径见
+	# _ground_constraints_origin_space 注——HD-2D 图直用，2D 图内收 foot_offset）
+	var y_min: float = ground_y if _ground_constraints_origin_space else ground_y - foot_offset
+	var y_max: float = ground_bottom if _ground_constraints_origin_space else ground_bottom - foot_offset
 	global_position.y = clampf(global_position.y, y_min, y_max)
 	# X 边界约束
 	global_position.x = clampf(global_position.x, map_left, map_right)
@@ -1102,11 +1108,12 @@ func _find_nearest_enemy_in_range() -> Node:
 # ─────────────────────────────── 公共 API ────────────────────────────────
 
 ## 由 MapInstance.spawn_entity 调用，注入地面约束参数（§7.1.1）
-func set_ground_constraints(p_ground_y: float, p_ground_bottom: float, p_map_left: float, p_map_right: float) -> void:
+func set_ground_constraints(p_ground_y: float, p_ground_bottom: float, p_map_left: float, p_map_right: float, p_origin_space: bool = false) -> void:
 	ground_y = p_ground_y
 	ground_bottom = p_ground_bottom
 	map_left = p_map_left
 	map_right = p_map_right
+	_ground_constraints_origin_space = p_origin_space
 
 
 ## 由 MapInstance.spawn_entity 调用，注入地图引用（供通行障碍查询，§7.1.2）

@@ -303,7 +303,10 @@ func _layout_work_bar() -> void:
 
 
 ## 游戏接入：逐帧更新本角色的世界位置/朝向/纵深缩放（quad 贴相机基+接地影贴地）。
-func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0) -> void:
+## ground_lift = 该落点的地面世界抬升（台面/台后城内地面 PLAT_H，宿主按
+## get_ground_lift_world 算好传入）——卡/接地影/脚下框/劳作条整体随之抬起
+func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0,
+		ground_lift: float = 0.0) -> void:
 	if _quad == null:
 		return
 	_flip = flip
@@ -313,19 +316,20 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0) -> void:
 	var b := _cam_basis()
 	b = b.scaled(Vector3(depth, depth, depth))
 	_quad.basis = b
-	_quad.position = Vector3(x, quad_center_offset_y() * depth, z)
+	_quad.position = Vector3(x, ground_lift + quad_center_offset_y() * depth, z)
 	if mat != null:
 		mat.set_shader_parameter("flip_uv", flip)
 	if _my_shadow != null:
-		_my_shadow.position = Vector3(x, 0.09, z)
+		_my_shadow.position = Vector3(x, ground_lift + 0.09, z)
 		_my_shadow.scale = Vector3(depth * SIZE_K, depth * SIZE_K, 1.0)
 	if _bracket_quad != null:
-		_bracket_quad.position = Vector3(x, 0.10, z + 0.35)
+		_bracket_quad.position = Vector3(x, ground_lift + 0.10, z + 0.35)
 		_bracket_quad.scale = Vector3(depth, depth, 1.0)
 	# 劳作条锚位：角色卡顶（卡中心 y + 半卡高）+ 净空，全部随 depth 缩放
 	if _wp_bg != null:
 		_wp_anchor = Vector3(x,
-				quad_center_offset_y() * depth + (SV_H * PX * SIZE_K * 0.5 + WP_LIFT) * depth,
+				ground_lift + quad_center_offset_y() * depth
+						+ (SV_H * PX * SIZE_K * 0.5 + WP_LIFT) * depth,
 				z)
 		_layout_work_bar()
 

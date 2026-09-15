@@ -105,13 +105,21 @@ func spawn_entity(entity_scene: PackedScene, p_position: Vector2, def_id: String
 	# 刷新初始有效位置（实体 _ready 中默认 (0,0)，此处修正）
 	if instance.has_method("set_last_valid_position"):
 		instance.set_last_valid_position(p_position)
-	# 注入地面约束参数
+	# 注入地面约束参数（口径由 _origin_space_walk_band 决定，见该虚方法注）
 	if instance.has_method("set_ground_constraints"):
-		instance.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)
+		instance.set_ground_constraints(ground_y, ground_bottom, map_left, map_right,
+				_origin_space_walk_band())
 	# 注入地图引用（供通行障碍查询）
 	if instance.has_method("set_map_reference"):
 		instance.set_map_reference(self)
 	return instance
+
+
+## 行走带约束口径（虚方法）：false = 2D 图口径——origin=髋、脚在
+## origin+foot_offset，实体把约束面内收 foot_offset；true = origin 空间直用
+## ——HD-2D 图覆写（视觉脚线=origin，[ground_y, ground_bottom] 即行走带本身）。
+func _origin_space_walk_band() -> bool:
+	return false
 
 
 ## 获取所有 StickmanEntity。

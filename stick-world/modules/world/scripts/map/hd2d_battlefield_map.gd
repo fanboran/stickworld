@@ -17,6 +17,12 @@ func _configure_hd(hd: Node3D) -> void:
 	hd.set("battlefield", true)
 
 
+## 深端行走界维持旧带（688）：战场阵型间距/部署按旧行走域调的，不随
+## 主街"前景可行走到黄线"契约扩（战斗手感不变）
+func _walk_deep_y() -> float:
+	return WALK_BACK_Y
+
+
 func _ready() -> void:
 	# 战场野地资源稀于主街墙外带，且**西半不开树**：中央偏西全为硬化区
 	# （resource_gen 净空带机制，复用主街"算法就在那"的对接），林线从东半

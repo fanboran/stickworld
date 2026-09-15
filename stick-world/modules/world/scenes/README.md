@@ -1,6 +1,7 @@
 # world/scenes 目录结构
 
 > World 模块的场景文件。game_root.tscn 是主场景，maps/ 下是各类型地图场景。
+> 当前地图已全面 HD-2D 化（3D 背景 + 2D 玩法层），旧 2D 村落图（village_a/village_b）已随旧世界清退下线。
 
 ## 文件说明
 
@@ -8,52 +9,49 @@
 scenes/
 ├── README.md              本文件
 ├── game_root.tscn         主场景（GameRoot），项目入口（project.godot run/main_scene）
-└── maps/                  地图场景文件
-    ├── village_a.tscn             村落 A（默认起始地图，玩家 + NPC + 初始建筑）
-    ├── village_b.tscn             村落 B（阶段 0.8 多场景衔接，道路另一端）
-    ├── road_a_b.tscn              道路地图（村落 A ↔ 村落 B 之间的行军道路）
-    ├── battlefield.tscn           遭遇战战场（ground_ratio=0.6 大垂直跨度，空旷地面）
-    ├── forest_zone.tscn           森林附属区域（含 ResourceNode 树木/石头，无限资源）
-    ├── mega_interior.tscn         大建筑内部（传送切换目标场景，阶段 0.9.5 待接线）
+└── maps/                  地图场景文件（16 张）
+    ├── hd2d_street.tscn           HD-2D 主街（新游戏默认起始图，START_MAP_ID）
+    ├── hd2d_village_b.tscn        村落 B（HD-2D，map_id = "village_b"，道路另一端）
+    ├── road_a_b.tscn              道路地图（主街西门外 ↔ 村落 B 之间的行军道路）
+    ├── hd2d_battlefield.tscn      HD-2D 城郊战场（map_id = "battlefield"，东门外野地）
+    ├── battlefield.tscn           旧 2D 空旷战场（map_id = "battlefield_2d"，dev 演练场——战斗/AI 测试开机图，不进旅行链）
+    ├── siege_battlefield.tscn     守城战战场（城墙/城门阵地）
+    ├── forest_zone.tscn           森林附属区域（战场东出，含资源点）
+    ├── mega_interior.tscn         大建筑内部（传送切换目标场景）
+    ├── l1_settlement_00~07.tscn   L1 八城邦聚落图（战略图城市进入，城内边界不配出口）
     └── decorations/               装饰物子场景（tree.tscn / stone.tscn，任意地图可复用）
 ```
 
-## 地图类型对应
-
-| 场景文件 | WorldAPI.MapType | 说明 |
-|---------|-----------------|------|
-| village_a | VILLAGE | 村落/城镇，玩家建造/采集/居住 |
-| village_b | VILLAGE | 第二个村落，用于测试多场景衔接 |
-| road_a_b | ROAD | 道路，连接村落的行军场景 |
-| battlefield | BATTLEFIELD | 遭遇战战场，空旷 + 大垂直跨度 |
-| forest_zone | VILLAGE | 森林附属区域（复用 VILLAGE 类型，简化版 DynamicMap） |
-| mega_interior | MEGA_INTERIOR | 大建筑内部，传送切换目标（所有建筑 mega_interior_map_id 尚未配置，暂不可达） |
-
 ## 地图注册
 
-所有地图在 `game_root.gd` 的 `_register_default_maps()` 中注册到 SceneLoader：
+所有地图在 `game_root.gd` 的 `_register_default_maps()` 中注册到 SceneLoader（map_id → 场景 + `WorldAPI.MapType`）：
 
-```gdscript
-scene_loader.register_map(VILLAGE_A_MAP_ID, _VILLAGE_MAP_SCENE, WorldAPI.MapType.VILLAGE)
-scene_loader.register_map(BATTLEFIELD_MAP_ID, _BATTLEFIELD_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
-# ...
-```
+| map_id | 场景 | MapType |
+|--------|------|---------|
+| `hd2d_street` | hd2d_street.tscn | VILLAGE（新游戏起始图） |
+| `village_b` | hd2d_village_b.tscn | VILLAGE |
+| `road_a_b` | road_a_b.tscn | ROAD |
+| `battlefield` | hd2d_battlefield.tscn | BATTLEFIELD |
+| `battlefield_2d` | battlefield.tscn | BATTLEFIELD（dev 直达） |
+| `siege_battlefield` | siege_battlefield.tscn | BATTLEFIELD |
+| `forest_zone` | forest_zone.tscn | VILLAGE |
+| `mega_interior` | mega_interior.tscn | MEGA_INTERIOR |
+| `l1_settlement_00~07` | l1_settlement_XX.tscn | VILLAGE |
 
-地图间出口配置（ChunkTrigger / MapBoundaryDetector）也在 `_register_default_maps()` 中设置，
-场景内 ChunkTrigger 节点的 `target_map_id` 与注册的 map_id 一致（如 village_a 右出口 → "road_a_b"）。
+出口配置一部分走 `scene_loader.register_map_exit(...)`（左右缘步行出口），HD-2D 主街两端走**城门传送带**（`hd2d_gate_prompt.gd`：玩家走近城门弹"出城"选项框，村民走静默传送带，`gate_router` 组引导采集村民跨墙）。
 
 ## 地图切换流程
 
 ```
-村落 A (village_a)
-  ├── Tab / 边界 → 大世界地图面板 → 选择目的地
-  │   ├── 道路 (road_a_b) → 村落 B (village_b)
-  │   ├── 遭遇战战场 (battlefield)
-  │   └── 森林附属区域 (forest_zone)
-  └── ChunkTrigger ExitRight → 道路 → 村落 B
+主街 (hd2d_street，新游戏直连)
+  ├── 西城门传送带 → 道路 (road_a_b) → 村落 B (hd2d_village_b)
+  ├── 东城门传送带 → 城郊战场 (battlefield = hd2d_battlefield)
+  │                   ├── 左缘出口 → 回主街
+  │                   └── 右缘出口 → 森林 (forest_zone)
+  └── Tab 战略图 → L1 聚落图 (l1_settlement_00~07) / 守城战 (siege_battlefield，西城门发起)
 ```
 
 ## 命名规范
 
-- 场景文件按实际作用命名（village_a / road_a_b / battlefield …），与 map_id 常量一致
-- 正式版地图场景应放在 `config/maps/` 下按 `.tres` 数据驱动生成
+- 场景文件按实际作用命名（hd2d_street / road_a_b / battlefield …），与 map_id 常量一致（game_root.gd 头部 MAP_ID 常量区）
+- HD-2D 图脚本在 `modules/world/scripts/map/hd2d_*_map.gd`（继承主街宿主：碰撞映射/昼夜/相机/角色进 3D）

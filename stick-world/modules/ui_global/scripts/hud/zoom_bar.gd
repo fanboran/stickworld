@@ -12,10 +12,14 @@ const BAR_HEIGHT: float = 24.0
 ## 右侧百分比标签宽度
 const LABEL_WIDTH: float = 48.0
 ## 缩放范围与档位（与 CameraRig.ZOOM_* 同值——ui_global 禁止反向依赖 world 模块，
-## 取不了其常量，此处为 UI 侧镜像；刻度 0.5~2.0 每 0.1 一档 = 16 档，默认 100% 恰落在刻度上）
+## 取不了其常量，此处为 UI 侧镜像；刻度 0.5~2.0 每 0.1 一档 = 16 档）
 const ZOOM_MIN: float = 0.5
 const ZOOM_MAX: float = 2.0
 const ZOOM_STEP: float = 0.1
+## 显示基准档：user_zoom=0.75（HD-2D 构图契约默认档，CameraRig 同值镜像）
+## 显示为 100%（创始人 2026-09-15：缩放条 75% 的数字映射为 100%）。
+## 只改数字口径，滑块位置/滚轮步进仍是 user_zoom 域（每档 0.1 ≈ 显示 13%）
+const ZOOM_BASE: float = 0.75
 
 var _slider: HSlider = null
 var _label: Label = null
@@ -70,7 +74,7 @@ func _update_label() -> void:
 	if _label == null:
 		return
 	if _camera_rig != null and _camera_rig.has_method("get_user_zoom"):
-		_label.text = "%d%%" % int(round(_camera_rig.get_user_zoom() * 100))
+		_label.text = "%d%%" % int(round(_camera_rig.get_user_zoom() / ZOOM_BASE * 100))
 
 
 ## 滚轮缩放后由 GameRoot 调用，同步滑块位置

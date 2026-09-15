@@ -62,8 +62,8 @@ const CAM_DIST := 40.0
 ## 摆位（2026-09-14 手工摆=村A主场景语义翻译，随建筑落位走绝对坐标）：
 ## `x` = 街格坐标；`z` = 纵深（台面带 ≈1.2~1.8 / 路面 ≈4.5~7.0）；
 ## `plat=true` → 台面（y+PLAT_H）；false → 路面（y=0）。
-## 台面已收窄为建筑脚下细带（BAND_SIDEWALK z 0.42~1.95）——z≥2 的 plat
-## 一律按路面落（旧宽台面口径的 plat 坐标会悬空 0.65 格）。
+## 路肩台面带=建筑脚下细带（BAND_SIDEWALK z 0.42~1.95；楼后地面已抬至
+## 同标高连片到地平线）——z≥2 是路面，带 plat 即悬空 0.65 格。
 const PROPS: Array = [
 	# 铁匠铺（smithy@-7.5）门前工位
 	{"card": "anvil", "x": -9.5, "z": 4.5, "plat": true},
@@ -186,6 +186,10 @@ const FRONT_ROW: Array = [
 ##   · bg2 紧贴 bg1（层距 3.5 格——创始人 2026-09-15：第三排紧贴第二排）；
 ##   · bg2 基线 = 真实地平线（底衬远端同步收到此处）。
 const SKYLINE_Z := -6.73                 # bg1 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
+## 深端行走界（2D y）：前后景分界线（黄线）+2px 防与 bg1 卡共面闪烁——前景
+## 整段可行走，建筑 footprint/城墙带是真正障碍（创始人 2026-09-15：黄线以下
+## 就是可行走地面范围，碰撞箱顶到黄线才停，不留肉眼可见的余量）
+const DEEP_WALK_Y := 688.0 + SKYLINE_Z * 32.0 + 2.0
 const BG_LAYERS := 2                     # 背景排数（前排+两排=三排，创始人 2026-09-15）
 ## 背景层距（格）：bg2 紧贴 bg1
 const BG_LAYER_GAP := 3.5
@@ -575,18 +579,44 @@ func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
 
 
 ## 单栋前排建筑的地基实心带（[x0,x1,y0,y1,基线y,卡可见高]：**x=格、y=px** 的
-## 混合口径，与碰撞墙消费端一致）：x=建筑格宽（4 格整倍数口径，碰撞不把出檐
-## 算进去），y=行走带后段到建筑基线外扩 1.4 格的一条带；[4]=卡底基线 px
-## （F3 直立包楼框的底）、[5]=卡可见高 px（已扣 base_cut 地下裁切）。
-## get_solid_rects 与 get_building_rects 共用，保证碰撞与宽度辅助线同宽。
+## 混合口径，与碰撞墙消费端一致）。
+## 宽度=**占位槽宽**（cells，4 格整倍数）——创始人 2026-09-15 定案：紫占地带
+## 起码与白包楼框同宽（墙脚实测宽常远小于槽位，house_w16 实测仅 3.9 格，
+## "比白色框还窄"读作错误）；[6][7] 与 [0][1] 因此同为槽位宽。
+## 深度=烘焙实测 footprint[1]（贴地顶点相对阈值，烘端 2026-09-15 修正扁片后
+## 为真实基座深），下限 2 格防个别模型仍量出扁片；落位 dz 相对墙脚基线
+## （`footprint_off`[1]，烘端实测，正=朝相机），带前后沿 y = 基线
+## +(dz ± fd/2)×32。旧 JSON 无 footprint_off 时默认 dz=-fd/2（带=[基线-fd×32,
+## 基线]），不重烘行为不变。旧口径 [688, 基线+44] 前端比楼脚多伸 1.4 格、
+## 后端退到街心 z=0（创始人：显示的碰撞箱比楼低很多），已废。
+## [4]=卡底基线 px（F3 直立包楼框的底）、[5]=卡可见高 px。get_solid_rects
+## 与 get_building_rects 共用。
 func _building_solid_rect(occ: Array) -> Array:
 	var cx: float = (float(occ[0]) + float(occ[1])) * 0.5
 	var card: String = str(occ[2])
-	var cells := float(_cards.get(card, {}).get("cells", 8.0))
+	var meta: Dictionary = _cards.get(card, {})
+	var cells := float(meta.get("cells", 8.0))
+	# 深度=**全模型占地深**（含屋顶出檐，footprint_full[1]；旧 JSON 回退贴地
+	# 实测 footprint[1] 再回退 2.0），下限 2 格防扁片——创始人 2026-09-15：
+	# 紫色不能是扁片，墙脚贴地实测对大屋顶建筑只是窄条
+	var fp_full: Array = meta.get("footprint_full", Array())
+	var fp: Array = meta.get("footprint", [cells, 2.0])
+	var fd: float = 2.0
+	if fp_full.size() > 1:
+		fd = float(fp_full[1])
+	elif fp.size() > 1:
+		fd = float(fp[1])
+	fd = maxf(fd, 2.0)
 	var z: float = float(occ[3]) if occ.size() > 3 else 0.6
 	var base_y: float = 688.0 + z * 32.0
-	return [cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0,
-			base_y, _card_visual_height(card)]
+	# 带后沿不越过深端行走界（黄线）——大屋顶卡的全深可能越过可行走边界
+	var y0: float = maxf(base_y - fd * 32.0, DEEP_WALK_Y)
+	# [0][1] 与 [6][7] 同为占位槽宽（宽度口径=白包楼框，创始人定案：
+	# 紫带起码与白框同宽）
+	return [cx - cells * 0.5, cx + cells * 0.5,
+			y0, base_y,
+			base_y, _card_visual_height(card),
+			cx - cells * 0.5, cx + cells * 0.5]
 
 
 ## 卡可见高（px）：picture 高扣掉 base_cut 的地下裁切——卡底贴地落位后
@@ -613,7 +643,7 @@ func get_solid_rects() -> Array:
 	# 整面直墙同时消除门缝夹角楔人问题）
 	var wx: float = _wall_x()
 	for sx: float in [-1.0, 1.0]:
-		out.append([sx * wx - WALL_T * 0.5, sx * wx + WALL_T * 0.5, 688.0, WALK_FRONT_PX])
+		out.append([sx * wx - WALL_T * 0.5, sx * wx + WALL_T * 0.5, DEEP_WALK_Y, WALK_FRONT_PX])
 	return out
 
 
@@ -709,7 +739,7 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	mi.mesh = q
 	# 卡底贴地落位（创始人 2026-09-14 修穿模）：道具卡的 anchor 是"画面中心对应点"，
 	# 沿用建筑卡公式会让卡底按半高入地。地面高 = 台面(0.65) 或 路面(0)。
-	# 台面只认台面带（z<2.0）：旧宽台面口径的 plat 坐标在此强制回路面。
+	# 台面只认台面带（z<2.0）：台面带外（路面）的 plat 在此强制回路面。
 	if z_off >= 2.0:
 		plat = false
 	var ground: float = PLAT_H if plat else 0.0
@@ -985,6 +1015,22 @@ func set_cam_zoom(user_zoom: float) -> void:
 ## 宿主用本值做坐标重映射（remap_fx_pos）。
 func get_ground_squash() -> float:
 	return sin(deg_to_rad(TILT_DEG))
+
+
+## 地面世界抬升（格）：台面/台后城内地面比街面高 PLAT_H——角色走到 z<路肩
+## 前缘（BAND_SIDEWALK.y）且在墙线以内时脚底抬到台面标高（创始人 2026-09-15：
+## 玩家移动到台面时该抬升）。战场/资源图无台面语义恒 0；墙外野地维持 y=0。
+func get_ground_lift_world(x: float, z: float) -> float:
+	if battlefield or resource_field:
+		return 0.0
+	return PLAT_H if (z < BAND_SIDEWALK.y and absf(x) <= _wall_x()) else 0.0
+
+
+## 2D 画布域抬升（px，zoom=1 基准）：世界抬升 × 32 × cosθ——与角色 billboard
+## 脚底抬升同源同值，宿主 remap_fx_pos 消费，青箱/FX/黄线随之贴到抬升后的地面
+func get_ground_lift_px(x_px: float, y_px: float) -> float:
+	var z: float = (y_px - 688.0) / 32.0
+	return get_ground_lift_world(x_px / 32.0, z) * 32.0 * cos(deg_to_rad(TILT_DEG))
 
 
 ## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）

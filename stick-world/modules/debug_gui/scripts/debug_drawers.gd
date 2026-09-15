@@ -189,7 +189,7 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 	# 3D 侧占地数据（F3 building_drawer 开关管辖；白 0.6 口径同 2D 描边，
 	# 宽度=建筑格宽，经 _ground_y 压进 3D 投影域）
 	if map.has_method("get_building_rects"):
-		var edge_col := Color(1.0, 1.0, 1.0, 0.6)
+		var edge_col := Color(1.0, 1.0, 0.6)
 		for r: Variant in map.get_building_rects():
 			var top_y: float = world_to_screen(Vector2(0.0, _ground_y(map, float(r[2]))), ctx).y
 			var bot_y: float = world_to_screen(Vector2(0.0, _ground_y(map, float(r[3]))), ctx).y
@@ -197,12 +197,32 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 			for rx: float in [float(r[0]) * 32.0, float(r[1]) * 32.0]:
 				var sx: float = world_to_screen(Vector2(rx, 0.0), ctx).x
 				control.draw_line(Vector2(sx, top_y), Vector2(sx, bot_y), edge_col, 1.5)
+			# 占地格子宽度显示（创始人 2026-09-15：左右边界竖线+逐格浅线，
+			# 一格一档数宽，不标数字）：footprint 内部每 1 格一条浅分隔线，
+			# 压在紫占地带上仍可读
+			var cells_n := maxi(1, int(round(float(r[1]) - float(r[0]))))
+			for i in range(1, cells_n):
+				var cx_line: float = world_to_screen(
+						Vector2((float(r[0]) + i) * 32.0, 0.0), ctx).x
+				control.draw_line(Vector2(cx_line, top_y), Vector2(cx_line, bot_y),
+						Color(1.0, 1.0, 1.0, 0.35), 1.0)
+			# 紫色占地带（PassageBarrier 口径，2D 图建筑紫框语义；创始人 2026-09-15
+			# 问"紫色碰撞箱是不是不显示了"）：真实墙脚 footprint 的地面投影，
+			# y0/y1 各自 remap——占地贴着楼脚，不再躺到楼前街面上
+			var px0: float = world_to_screen(Vector2(float(r[0]) * 32.0, 0.0), ctx).x
+			var px1: float = world_to_screen(Vector2(float(r[1]) * 32.0, 0.0), ctx).x
+			var prect := Rect2(Vector2(px0, top_y), Vector2(px1 - px0, bot_y - top_y))
+			control.draw_rect(prect, Color(0.6, 0.2, 0.8, 0.3), true)
+			control.draw_rect(prect, Color(0.6, 0.2, 0.8, 0.8), false, 1.0)
 			# 直立包楼框（白 0.6 描边）：底=卡底基线（贴卡底贴地落位）、
-			# 宽=建筑格宽、高=卡可见高——框住楼的视觉范围（创始人 2026-09-15：
-			# 平铺地面带的碰撞框"垂直范围不对"）；真实地面阻挡带=[2][3] 即上面竖线
+			# 宽=**占位格宽**（[6][7]，4 格整倍数槽位——创始人已认可口径；
+			# 真实墙脚 footprint=[0][1] 归紫占地带）、高=卡可见高——框住楼的
+			# 视觉范围；真实地面阻挡带=[2][3] 即上面紫带
 			if r.size() >= 6:
-				var bx0: float = world_to_screen(Vector2(float(r[0]) * 32.0, 0.0), ctx).x
-				var bx1: float = world_to_screen(Vector2(float(r[1]) * 32.0, 0.0), ctx).x
+				var occ_x0: float = float(r[6]) if r.size() >= 8 else float(r[0])
+				var occ_x1: float = float(r[7]) if r.size() >= 8 else float(r[1])
+				var bx0: float = world_to_screen(Vector2(occ_x0 * 32.0, 0.0), ctx).x
+				var bx1: float = world_to_screen(Vector2(occ_x1 * 32.0, 0.0), ctx).x
 				var base_line: float = world_to_screen(
 						Vector2(0.0, _ground_y(map, float(r[4]))), ctx).y
 				var box_h: float = float(r[5]) * ctx.get("effective_zoom", 1.0)
@@ -341,16 +361,15 @@ static func draw_entity_colliders(control: Control, ctx: Dictionary) -> void:
 		var w: float = rs.size.x * zoom
 		var h: float = rs.size.y * zoom
 		if remaps:
-			# HD-2D：直立脚框——底边钉在角色**视觉脚线**（billboard 脚锚于
-			# origin 的地面线，特效/接地影同线；而物理箱中心在 origin+(8.5,130)、
-			# 脚底 origin+142，按物理位直绘会低于角色 ~62px·ez——创始人
-			# 2026-09-15）。宽高不压，x 用物理箱真实横向范围。锚点链详见
-			# docs/技术/架构/建筑管线/HD-2D街景系统.md §4.6
-			var feet_world_y: float = (map.remap_fx_pos(
-					Vector2(0.0, entity.global_position.y)) as Vector2).y
-			var feet_y: float = world_to_screen(Vector2(0.0, feet_world_y), ctx).y
-			var cx: float = world_to_screen(Vector2(col.global_position.x, 0.0), ctx).x
-			var rect := Rect2(Vector2(cx - w * 0.5, feet_y - h), Vector2(w, h))
+			# HD-2D：画在**物理碰撞位**（F3=碰撞真相视图，所有箱子同域同规：
+			# 箱中心 y 经 remap_fx_pos 压进 3D 投影域，宽高不压、x 用物理箱
+			# 真实横向范围）——角色被蓝/紫带挡停时青箱恰好压在对方带上，
+			# "碰上即停"逐像素可读（创始人 2026-09-15：绘制的箱子移动到
+			# 碰撞箱位置，F3 不迁就视觉脚线）。锚点链详见
+			# docs/技术/架构/建筑管线/HD-2D街景系统.md §4.4
+			var c_world: Vector2 = map.remap_fx_pos(col.global_position)
+			var screen_pos := world_to_screen(c_world, ctx)
+			var rect := Rect2(screen_pos - Vector2(w, h) * 0.5, Vector2(w, h))
 			control.draw_rect(rect, fill_color, true)
 			control.draw_rect(rect, border_color, false, 1.0)
 		else:

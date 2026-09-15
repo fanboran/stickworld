@@ -90,11 +90,6 @@ func _ready() -> void:
 	# 屏幕下边界（CameraRig ground_bottom，即 F3 地面蓝线）钉在 3D 街面的
 	# 可见近沿上——与 3D 相机缩放锚线同一世界线，2D/3D 底沿逐像素重合
 	ground_bottom = WALK_FRONT_Y
-	# 视野下边界契约（屏幕映射三同步之一）：CameraRig 只认 ground_y + 1080×ground_ratio
-	# 的换算值（**不读 ground_bottom 变量**），此处强制换算使 rig 视野下边界钉在
-	# 3D 底沿锚线 WALK_FRONT_Y 上——差多少，F3 覆盖层/FX 等 2D 画布元素就整体
-	# 偏多少（1080p 下曾差 95px 致 F3 碰撞箱全体错位；推导见 HD-2D街景系统.md §屏幕映射）
-	ground_ratio = (WALK_FRONT_Y - ground_y) / 1080.0
 	# 注册 2D 特效坐标重映射器（FxLibrary.remap_pos 读此组）：HD-2D 图的地面
 	# 受俯角前缩，飘字/粒子按 2D y 直绘会飘在半空，须压到 3D 投影同一地面线
 	add_to_group("fx_pos_remapper")
@@ -113,6 +108,16 @@ func _ready() -> void:
 	_configure_hd(_hd)
 	add_child(_hd)
 	_apply_layout_bounds()
+	# 深端行走界=前后景分界线（黄线）+2px 防与 bg1 卡共面闪烁：前景整段可行走，
+	# 建筑 footprint/城墙带是真正障碍（创始人 2026-09-15：黄线以下就是可行走
+	# 地面范围，两楼之间应能一路走到黄线）——不设则 MapBase 默认 720 把人拦在
+	# 街心。须在 _hd 就绪后取值（边界来自 3D 侧构图常量），战场图覆写保旧带
+	ground_y = _walk_deep_y()
+	# 视野下边界契约（屏幕映射三同步之一）：CameraRig 只认 ground_y + 1080×ground_ratio
+	# 的换算值（**不读 ground_bottom 变量**），此处强制换算使 rig 视野下边界钉在
+	# 3D 底沿锚线 WALK_FRONT_Y 上——差多少，F3 覆盖层/FX 等 2D 画布元素就整体
+	# 偏多少（1080p 下曾差 95px 致 F3 碰撞箱全体错位；推导见 HD-2D街景系统.md §屏幕映射）
+	ground_ratio = (WALK_FRONT_Y - ground_y) / 1080.0
 	# 角色（玩家/NPC）渲染进 3D 场景：逻辑仍在 2D（物理/输入/AI 不动），
 	# 视觉走 proto 的 billboard 通道——写深度、可被前景遮挡、自带接地影
 	if _hd.has_method("enable_play_characters"):
@@ -129,6 +134,12 @@ func _ready() -> void:
 	if prompt.has_method("setup"):
 		prompt.setup(self)
 	_apply_time_of_day(true)
+
+
+## 深端行走界（origin 空间钳制下限，_ready 在 _hd 就绪后调用）：黄线+2px。
+## 战场图覆写维持旧带（688）——战斗阵型间距按旧可行走域调的，不随本契约扩
+func _walk_deep_y() -> float:
+	return get_fg_bg_boundary_y() + 2.0
 
 
 func _process(_delta: float) -> void:
@@ -186,10 +197,16 @@ func _sync_character_render() -> void:
 		var vel: Vector2 = (body as CharacterBody2D).velocity if body is CharacterBody2D else Vector2.ZERO
 		var moving: bool = vel.length_squared() > 25.0
 		if ch.has_method("set_world_pos"):
+			# 台面/台后地面抬升：落点在路肩前缘以内且墙内 → 脚底抬到台面标高
+			var lift: float = 0.0
+			if _hd.has_method("get_ground_lift_world"):
+				lift = float(_hd.get_ground_lift_world(
+						body.position.x / CELL_PX, z))
 			ch.set_world_pos(body.position.x / CELL_PX, z,
 					int(body.get("_facing")) < 0,
 					lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
-							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)))
+							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)),
+					lift)
 		if ch.has_method("set_anim"):
 			# 动画镜像读实体真实状态：walk/run/idle + 劳作 attack 全放行。
 			# attack 是 oneshot——播完实体侧自动回切 idle/walk，逐拍重触发由
@@ -304,6 +321,12 @@ func wants_3d_bracket() -> bool:
 	return true
 
 
+## 行走带约束口径：HD-2D 图按 origin 空间直用（视觉脚线=origin，billboard
+## 脚锚；2D 图是 origin+foot_offset=脚）。基类默认 false（脚部约束口径）。
+func _origin_space_walk_band() -> bool:
+	return true
+
+
 ## 2D 特效/坐标重映射（fx_pos_remapper 组协议）：2D 世界 y → 3D 投影呈现的
 ## 同一地面线。y=1080（前缘）不动，纵深越深压缩越多（俯角前缩率由 3D 侧
 ## get_ground_squash 给出）——飘字/粒子由此与角色 feet 对齐。
@@ -311,7 +334,12 @@ func remap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	return Vector2(pos.x, WALK_FRONT_Y - (WALK_FRONT_Y - pos.y) * k)
+	var ry: float = WALK_FRONT_Y - (WALK_FRONT_Y - pos.y) * k
+	# 台面/台后地面抬升（2D 画布域）：与角色 billboard 脚底抬升同源同值——
+	# 角色走上台面后，青箱/FX/选中框等一切锚 origin 的画布元素跟着贴到抬升后的地面
+	if _hd.has_method("get_ground_lift_px"):
+		ry -= float(_hd.get_ground_lift_px(pos.x, pos.y))
+	return Vector2(pos.x, ry)
 
 
 ## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。
@@ -566,9 +594,11 @@ func _build_exit_triggers() -> void:
 		trig.trigger_width = 96.0
 		var shape := CollisionShape2D.new()
 		var rect := RectangleShape2D.new()
-		rect.size = Vector2(96.0, WALK_FRONT_Y - WALK_BACK_Y)
+		# 触发带纵深跨整个可行走域（深端=黄线，非旧墙脚线 688）——角色在
+		# 两楼之间的台后区也能正常走出去
+		rect.size = Vector2(96.0, WALK_FRONT_Y - ground_y)
 		shape.shape = rect
-		shape.position = Vector2(float(spec["x"]), (WALK_BACK_Y + WALK_FRONT_Y) * 0.5)
+		shape.position = Vector2(float(spec["x"]), (ground_y + WALK_FRONT_Y) * 0.5)
 		trig.add_child(shape)
 		triggers_host.add_child(trig)
 

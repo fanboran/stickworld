@@ -29,6 +29,8 @@ class_name Hd2dStreetMap
 const _HD2D_WORLD_SCENE := preload("res://tests/dev/proto_hd2d/proto_hd2d.tscn")
 ## 野外资源分布算法（world 模块内，群落散布+林区梯度）
 const _ResourceGenScript := preload("res://modules/world/scripts/map/resource_gen.gd")
+## 城门选项框（玩家走近弹窗出城；村民走静默传送带）
+const _GatePromptScript := preload("res://modules/world/scripts/map/hd2d_gate_prompt.gd")
 
 ## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
 ## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
@@ -102,6 +104,13 @@ func _ready() -> void:
 	_spawn_resource_nodes()
 	_build_gate_portals()
 	_build_exit_triggers()
+	# 城门选项框（玩家走近 ±城门弹"出城/收起"，2D 村图同款；村民走静默带）
+	var prompt := Node.new()
+	prompt.set_script(_GatePromptScript)
+	prompt.name = "GatePrompt"
+	add_child(prompt)
+	if prompt.has_method("setup"):
+		prompt.setup(self)
 	_apply_time_of_day(true)
 
 
@@ -427,9 +436,22 @@ func _build_gate_portals() -> void:
 func _on_gate_strip_entered(body: Node2D, wx: float, y0: float, y1: float) -> void:
 	if body is not CharacterBody2D or not is_instance_valid(body):
 		return
+	# 玩家不走静默瞬移：走近城门由 hd2d_gate_prompt 弹选项框（2D 村图同款
+	# "靠近城门蹦出弹窗"口径，创始人 2026-09-15）；村民采集走静默带
+	if body.has_method("is_possessed") and body.is_possessed():
+		return
 	# 方向判定：只传送"朝着墙走"的身体（沿街横穿/闲逛蹭进带子不触发）
 	var toward: float = signf(wx - body.global_position.x)
 	if toward == 0.0 or (body as CharacterBody2D).velocity.x * toward < 8.0:
+		return
+	_gate_teleport(body, wx, y0, y1)
+
+
+## 跨墙瞬移核心（村民静默带与玩家弹窗选项共用）：带冷却防弹跳
+func _gate_teleport(body: CharacterBody2D, wx: float, y0: float, y1: float) -> void:
+	# 方向判定：朝墙才传（弹窗路径玩家可能静止/背向，按当前朝墙意图算）
+	var toward: float = signf(wx - body.global_position.x)
+	if toward == 0.0:
 		return
 	# 冷却防弹跳（刚被传过来的身体在对面带不回传）
 	var id: int = body.get_instance_id()
@@ -437,10 +459,27 @@ func _on_gate_strip_entered(body: Node2D, wx: float, y0: float, y1: float) -> vo
 	if int(_tp_cooldown.get(id, 0)) > now:
 		return
 	_tp_cooldown[id] = now + _TP_COOLDOWN_MS
-	# 跨墙落点：墙线对面 ~4.3 格（带外缘再留 32px 白区），y 夹回门洞带内
+	# 跨墙落点：墙线对面 ~4.3 格（带外缘再留 32px 白区），y 夹回行走带内
 	var land_x: float = wx + toward * 139.0
 	var land_y: float = clampf(body.global_position.y, y0 + 8.0, y1 - 8.0)
 	body.global_position = Vector2(land_x, land_y)
+
+
+## 玩家弹窗出城（hd2d_gate_prompt 消费）：跨最近城墙，y 保持
+func gate_teleport_player(player: Node2D) -> void:
+	var wall_px: float = get_wall_px()
+	var side: float = signf(player.global_position.x)   # 玩家在哪半场就出哪侧门
+	if side == 0.0:
+		side = -1.0
+	var wx: float = side * wall_px
+	_gate_teleport(player as CharacterBody2D, wx, DEPTH_Y_MIN, DEPTH_Y_MAX)
+
+
+## 墙线 px（弹窗组件触发带用）
+func get_wall_px() -> float:
+	if _hd != null and _hd.has_method("get_wall_x"):
+		return _hd.get_wall_x() * CELL_PX
+	return 0.0
 
 
 ## 东西村口出口触发器（语义对齐村A旅行链：西出原野去 B 村方向、东出战场）。

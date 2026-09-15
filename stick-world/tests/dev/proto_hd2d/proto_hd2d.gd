@@ -160,31 +160,17 @@ const BF_NATURE_SPOTS: Array = [
 	{"card": "mushrooms", "x": 62.0, "z": 6.2},
 ]
 
-## 前排主街（2026-09-15 **按真实画面宽重排**——此前按格宽排，出檐互相压
-## （house_w16/warehouse_w16 画面 23.2 格 ≠ 16 格），创始人指出建筑重叠；
-## 城墙收口 ±95，村A 语义顺序保留、锚点位随画面宽重排）：
-##   cottage_w6   @-102   西村外孤屋（墙外开阔带，落地面）
-##   tower_w6     @-90    西城门塔（画面 8.1）
-##   shelter_w6   @-80.5  草棚（画面 9.1）
-##   hayloft_w8   @-69    草棚顶民居（画面 11.9）
-##   house_w16    @-50    西村口民居（画面 23.2）← 村A placeholder
-##   warehouse_w16@-26    石造仓库（画面 23.2）← 村A stone_warehouse
-##   smithy1_w8   @-7.5   铁匠铺（画面 11.9）← 村A smithy_lv1（铁砧随迁）
-##   guildhall_w12@ +8    宅邸地标（画面 17.8）← 村A manor
-##   shop_w8      @+23.5  商铺（画面 11.9）
-##   house_w8     @+36    东民居（画面 11.9）← 村A placeholder 语义
-##   barn_w12     @+51.5  田园谷仓（画面 17.6，落地面）
-##   windmill_w6  @+67    风车（画面 11.8）
-##   stable_w12   @+76    马厩（画面 17.6）
-##   gatehouse_w8 @+88.5  东城门塔（画面 10.5，城墙转角旁）
-## 任意相邻**画面间隙 ≥0.6 格**（scripts 出图口径）；城区规划（§4.2）：西段=
-## 居住/仓储，中段=市集/行政，东段=作坊/田园；未进前排的卡种全量参与背景层
-## 分带轮转——全城可见、各归其位。
+## 前排**摆位意图表**（2026-09-15 行业惯例重构，创始人：别把位置绑死整数格）：
+## 人只声明 card + 语义锚点 x + 纵深（"大概在哪"），实际 x 由 _resolve_front_row
+## 按**画面宽**（cards.json units 数据包围盒）推挤分配——重叠在求解阶段就不可能
+## 发生，锚点 ±0.2 格确定性微抖动破机械栅格感。顺序 = 村A 语义翻译：
+## 西段居住/仓储（tower/hayloft/house_w16/warehouse）→ 中段市集/行政（smithy1/
+## guildhall/shop/house_w8）→ 东段作坊/田园（barn/windmill/stable/gatehouse）；
+## cottage 落墙外开阔带。未进前排的卡种全量参与背景层分带轮转。
 ## `z` = 纵深错落（0.4~1.3 台面为主，谷仓/孤屋落地面）；`door` = 门前短径。
 const FRONT_ROW: Array = [
 	{"card": "cottage_w6", "x": -102.0, "z": 2.4, "door": false},
 	{"card": "tower_w6", "x": -90.0, "z": 0.9, "door": false},
-	{"card": "shelter_w6", "x": -80.5, "z": 0.6, "door": false},
 	{"card": "hayloft_w8", "x": -69.0, "z": 0.7, "door": false},
 	{"card": "house_w16", "x": -50.0, "z": 0.7, "door": true},
 	{"card": "warehouse_w16", "x": -26.0, "z": 1.25, "door": false},
@@ -564,6 +550,33 @@ func get_gates() -> Array:
 ## 墙线取值公开口（宿主地形硬化判定用：城内 = 资源算法的"硬化地面"）
 func get_wall_x() -> float:
 	return _wall_x()
+
+
+## 前排摆位求解器（行业惯例，创始人 2026-09-15：别把位置绑死整数格）：
+##   1. 意图表的锚点只是"想要的位置"，占位/间隙一律用**画面宽**（cards.json
+##      units 的数据包围盒）计算——重叠在求解阶段就不可能出现；
+##   2. 左→右逐栋推挤：本栋画面左缘 ≥ 前栋画面右缘 + 保底间隙（0.6 格）；
+##   3. 确定性微抖动 ±0.2 格（锚点哈希种子，同 seed 同街景）破机械栅格感；
+##      抖动后再次保底夹回，间隙承诺不破。
+func _resolve_front_row(intent: Array) -> Array:
+	var MIN_GAP := 0.6
+	var out: Array = []
+	var prev_right := -INF
+	for e: Variant in intent:
+		var card: String = str(e["card"])
+		var w := _cw(card)
+		if w < 1.0:
+			w = 8.0   # 卡元数据缺失兜底（_cw 同口径）
+		var x: float = float(e["x"])
+		# 微抖动（±0.2 格）：锚点哈希做种子
+		var jit: float = (fposmod(absf(x) * 0.618, 0.4) - 0.2) * 0.5
+		x += jit
+		# 推挤保底（抖动前后各夹一次）
+		x = maxf(x, prev_right + MIN_GAP + w * 0.5)
+		prev_right = x + w * 0.5
+		out.append({"card": card, "x": x, "z": e.get("z", 0.6),
+			"door": bool(e.get("door", false))})
+	return out
 
 
 func _median(arr: Array) -> float:
@@ -1112,6 +1125,9 @@ func _place_rows() -> void:
 			var jitter: float = 0.55 + fposmod(absf(float(b["x"])) * 0.37, 0.7)
 			front_list.append({"card": str(b["card"]), "x": float(b["x"]),
 				"z": jitter, "door": bool(b.get("door", false))})
+	else:
+		# 手摆主街：意图表过摆位求解器（画面宽推挤 + 微抖动）
+		front_list = _resolve_front_row(front_list)
 	for e in front_list:
 		var card: String = str(e["card"])
 		var cx: float = float(e["x"])

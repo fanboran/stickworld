@@ -74,6 +74,12 @@ COMMONS_SOURCES = {
         url="https://upload.wikimedia.org/wikipedia/commons/3/33/"
             "R%C3%A9veil_des_oiseaux.ogg",
         lic="CC0", author="Joseph Sardin"),
+    # 创始人 2026-09-15：reveil 听着像解包，birds_day 垫底换本条（PD，可商用）
+    "dawn_chorus_uk": dict(
+        file="Dawnchorus-uk.ogg",
+        url="https://upload.wikimedia.org/wikipedia/commons/d/de/"
+            "Dawnchorus-uk.ogg",
+        lic="Public domain", author="（Commons 上传者，PD 无署名义务）"),
     "cicada_cn": dict(
         file="c70888723.ogg",
         url="https://upload.wikimedia.org/wikipedia/commons/9/90/"
@@ -586,28 +592,33 @@ def _blend_src_beds(keys, n, xf, fs, **kw):
 
 
 def build_birds_day(n, fs):
-    """白天远处鸟鸣：**纯合成**（创始人 2026-09-15：真实录音垫底听着像解包，
-    全部自研）——稀疏合成叫 + 合成远群絮语（低通合唱簇）+ 极轻风底。"""
+    """白天远处鸟鸣：**可商用采样垫底 + 合成稀疏叫**（2026-09-15 终版路线——
+    创始人否掉纯合成，指定找网上可商用采样；原 CC0 reveil 听着像解包弃用，
+    换 Public domain 的 Dawnchorus-uk）。采样缺失时退化纯合成簇兜底。"""
     xf = 2 * fs
-    # 远群絮语：多只合成叫叠成簇、重度低通+混响 = "远处那群鸟"（替代原 CC0 录音垫底）
-    bed = np.zeros((n, 2))
-    brng = rng_for("birds_day", "bed")
-    bt = 0.8
-    while bt < n / xf - 1.5:
-        phrase = bird_phrase(BIRD_CALLS[list(BIRD_CALLS.keys())[
-            int(brng.integers(0, len(BIRD_CALLS)))]], fs, brng)
-        cluster = np.zeros((len(phrase), 2))
-        for k in range(int(brng.integers(3, 7))):   # 一簇 3~6 只
-            off = int(brng.uniform(0, xf * 0.4))
-            g = phrase * float(brng.uniform(0.25, 0.5))
-            g = np.roll(g, off)
-            gl, gr = pan_gains(float(brng.uniform(-0.9, 0.9)))
-            cluster[:, 0] += g * gl
-            cluster[:, 1] += g * gr
-        cluster = dsp.lowpass(cluster, fs, 1800, 2)
-        gl, gr = pan_gains(float(brng.uniform(-0.8, 0.8)))
-        circ_add(bed, _norm(cluster.mean(axis=1), 1.0) * 0.42, int(bt * fs), gl, gr)
-        bt += float(brng.uniform(1.2, 2.8))
+    # Dawnchorus-uk（PD）：真晨鸣，压到 3kHz 以下 + 高架衰减 → 电平 0.16 = 远处鸟群
+    bed = src_bed("dawn_chorus_uk", n, xf, fs, lp=3000, hp=250,
+                  shelf_hi=(2600.0, -10.0), gain=0.16)
+    if bed is None:
+        # 兜底：合成远群絮语（低通合唱簇），保 QA 不过死寂
+        bed = np.zeros((n, 2))
+        brng = rng_for("birds_day", "bed")
+        bt = 0.8
+        while bt < n / xf - 1.5:
+            phrase = bird_phrase(BIRD_CALLS[list(BIRD_CALLS.keys())[
+                int(brng.integers(0, len(BIRD_CALLS)))]], fs, brng)
+            cluster = np.zeros((len(phrase), 2))
+            for k in range(int(brng.integers(3, 7))):   # 一簇 3~6 只
+                off = int(brng.uniform(0, xf * 0.4))
+                g = phrase * float(brng.uniform(0.25, 0.5))
+                g = np.roll(g, off)
+                gl, gr = pan_gains(float(brng.uniform(-0.9, 0.9)))
+                cluster[:, 0] += g * gl
+                cluster[:, 1] += g * gr
+            cluster = dsp.lowpass(cluster, fs, 1800, 2)
+            gl, gr = pan_gains(float(brng.uniform(-0.8, 0.8)))
+            circ_add(bed, _norm(cluster.mean(axis=1), 1.0) * 0.42, int(bt * fs), gl, gr)
+            bt += float(brng.uniform(1.2, 2.8))
     bed = circ_reverb(bed, fs, rt60=1.1, pre_ms=18.0, seed=5,
                       style="room", mix=0.25)
     # 极轻的风底，避免叫与叫之间死寂
@@ -944,7 +955,7 @@ LAYERS = {
                       route="两者融合：三段柳风录音（PD）叠底 + 谱合成阵风/低频"),
     "birds_day": dict(seconds=20.0, target=-28.5, build=build_birds_day,
                       zh="白天远处鸟鸣",
-                      route="纯合成：合成稀疏叫 + 合成远群絮语（低通合唱簇），无录音素材",
+                      route="两者融合：破晓鸟鸣录音（Public domain，Dawnchorus-uk）当远底 + 合成稀疏叫",
                       spec_overrides={"band_2_5k_p95": 0.92}),
     "cicada_summer": dict(seconds=18.0, target=-28.0, build=build_cicada_summer,
                           zh="夏日远蝉",

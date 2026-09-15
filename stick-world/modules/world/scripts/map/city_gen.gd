@@ -167,6 +167,10 @@ const FURNITURE_GROUPS := [
 ## x 相遇时呈前后遮挡而非同深叠影
 const FURNITURE_Z_PLAT := 1.55
 const FURNITURE_Z_NEAR := 6.9
+## 一格空位：小概率塞入建筑序列的占格空档（宽 1 格，不出任何卡）——
+## 街景偶尔出现刻意的整格留白（创始人：较小概率随机出现一格空位）
+const GAP_SLOT := "_gap"
+const GAP_SLOT_CHANCE := 0.12
 
 
 ## 道具卡宽表（格 = props.json units[0]/32；兼当"已烘卡名集合"用——
@@ -296,6 +300,13 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 				continue
 			clutter_all[d] = true
 			seq[side3].insert(rng.randi_range(0, seq[side3].size()), d)
+	# 一格空位：从尾向头插（插入不扰动未遍历下标），每位置小概率出空档
+	for gap_side: int in [-1, 1]:
+		var gi2: int = int(seq[gap_side].size()) - 1
+		while gi2 >= 0:
+			if rng.randf() < GAP_SLOT_CHANCE:
+				seq[gap_side].insert(gi2, GAP_SLOT)
+			gi2 -= 1
 
 	# ── 4. 行政居中（当级行政槽，§二），从中心向两侧排布（推挤保底）────
 	var admin: String = "guildhall_w12"
@@ -313,20 +324,30 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 			if int(qi[s]) < seq[s].size():
 				var d: String = seq[s][int(qi[s])]
 				qi[s] = int(qi[s]) + 1
-				# 杂物卡不在建筑卡宽表——先查道具卡宽表（prop_set 值=格宽）
-				var w := float(prop_set.get(d, float(widths.get(d, 8.0))))
-				var x: float = float(cursor[s]) + s * w * 0.5
-				var zone := "float"
-				if clutter_all.has(d):
-					zone = "clutter"
+				if d == GAP_SLOT:
+					# 一格空位：占 1 整格不出卡（整格留白）
+					var xg: float = float(cursor[s]) + s * 0.5
+					placements.append({"def": d, "x": xg, "w": 1.0, "zone": "gap",
+						"gap": true})
+					cursor[s] = float(cursor[s]) + s * (1.0 + MIN_GAP)
 				else:
-					for z: String in queues:
-						if d in queues[z]:
-							zone = z
-							break
-				placements.append({"def": d, "x": x, "w": w, "zone": zone,
-					"clutter": clutter_all.has(d)})
-				cursor[s] = float(cursor[s]) + s * (w + MIN_GAP)
+					# 杂物卡不在建筑卡宽表——先查道具卡宽表（prop_set 值=格宽）；
+					# 占格件宽向上取整到整数格（创始人：格子向上取整）
+					var w := float(prop_set.get(d, float(widths.get(d, 8.0))))
+					if clutter_all.has(d):
+						w = ceilf(w)
+					var x: float = float(cursor[s]) + s * w * 0.5
+					var zone := "float"
+					if clutter_all.has(d):
+						zone = "clutter"
+					else:
+						for z: String in queues:
+							if d in queues[z]:
+								zone = z
+								break
+					placements.append({"def": d, "x": x, "w": w, "zone": zone,
+						"clutter": clutter_all.has(d)})
+					cursor[s] = float(cursor[s]) + s * (w + MIN_GAP)
 	for s: int in [-1, 1]:
 		var w2 := float(widths.get(GATE_DEF, 10.5))
 		var x2: float = float(cursor[s]) + s * w2 * 0.5
@@ -374,14 +395,14 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	var zone_anchor: Dictionary = {}
 	for p: Dictionary in placements:
 		var zn: String = str(p["zone"])
-		if zn == "core" or zn == "gate" or zn == "clutter":
+		if zn == "core" or zn == "gate" or zn == "clutter" or zn == "gap":
 			continue
 		zone_anchor[zn] = (float(zone_anchor.get(zn, float(p["x"]))) + float(p["x"])) * 0.5
 	var bg_rows := {1: [], 2: []}
 	var bg_i := 0
 	for p: Dictionary in placements:
 		var zn2: String = str(p["zone"])
-		if zn2 == "core" or zn2 == "gate" or zn2 == "clutter":
+		if zn2 == "core" or zn2 == "gate" or zn2 == "clutter" or zn2 == "gap":
 			continue
 		var zpool: Array = pools.get(zn2, ["house_w8"])
 		for k in 2:
@@ -496,6 +517,8 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	var buildings: Array = []
 	for p: Dictionary in placements:
 		var d: String = str(p["def"])
+		if bool(p.get("gap", false)):
+			continue   # 一格空位：只占格不出卡
 		# 建筑间杂物：与建筑同 Z 带（台面 z=1.0，门脸线上），占格坐标随排布来
 		if bool(p.get("clutter", false)):
 			add_prop.call(d, float(p["x"]), 1.0, true)

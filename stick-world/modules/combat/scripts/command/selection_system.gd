@@ -341,7 +341,14 @@ func _draw() -> void:
 	for u in _selected_units:
 		if not is_instance_valid(u):
 			continue
-		var screen_pos: Vector2 = canvas_xform * u.global_position
+		# HD-2D 图：锚到**视觉脚线**（origin 经 remap_fx_pos 压进 3D 投影域）——
+		# origin 按 2D 直绘会比角色高 (1−k)×纵深距离（y=1000 时 ≈124px@0.75，
+		# 创始人 2026-09-15：悬浮方框比角色高很多；压缩模型见
+		# docs/技术/架构/建筑管线/HD-2D街景系统.md §4.2）
+		var anchor: Vector2 = u.global_position
+		if map_now != null and map_now.has_method("remap_fx_pos"):
+			anchor = map_now.remap_fx_pos(anchor)
+		var screen_pos: Vector2 = canvas_xform * anchor
 		var half_w: float = RING_RADIUS
 		var half_h: float = RING_RADIUS * 0.65
 		var arm: float = RING_RADIUS * 0.38

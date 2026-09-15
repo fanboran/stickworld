@@ -22,7 +22,8 @@ const MIN_GAP := 0.6
 const WALL_MARGIN := 3.0
 
 ## 八档链（§一）。建筑数取档位区间下限（密度随扩建增长）。
-## zones: 各分区建筑数；admin: 行政候选（取第一张已烘卡）；furniture: 街具数。
+## zones: 各分区建筑数；admin: 行政候选（取第一张已烘卡）；furniture: 街具数
+## （街具组已删、字段暂留不用）。
 const TIERS := {
 	"hamlet": {"cells": 80, "n": 10, "admin": ["council_hall_w8", "guildhall_w12"],
 		"furniture": 4, "zones": {"market": 1, "craft": 1, "living": 3, "production": 1, "storage": 1}},
@@ -63,7 +64,7 @@ const ZONE_POOLS := {
 	},
 	"townlet": {
 		"core": ["council_hall_w8", "guildhall_w12"],
-		"market": ["shop_w8", "bakery_w8"],
+		"market": ["shop_w8", "tavern_w12", "bakery_w8"],
 		"craft": ["smithy1_w8", "smithy2_w8", "alchemy_w8"],
 		"living": ["house_w16", "house_w8", "house_w8", "cottage_w6", "hayloft_w8"],
 		"production": ["barn_w12", "windmill_w6"],
@@ -73,27 +74,27 @@ const ZONE_POOLS := {
 		"core": ["guildhall_w12"],
 		"market": ["shop_w8", "bakery_w8", "tavern_w12"],
 		"craft": ["smithy1_w8", "smithy2_w8", "alchemy_w8"],
-		"living": ["house_w16", "house_w8", "house_w8", "townhouse_w12", "hayloft_w8"],
-		"production": ["barn_w12", "windmill_w6", "stable_w12"],
+		"living": ["house_w16", "townhouse_w12", "house_w8", "rowhouse_w12", "hayloft_w8"],
+		"production": ["inn_post_w12", "barn_w12", "stable_w12", "windmill_w6"],
 		"storage": ["shelter_w6", "hayloft_w8"],
 	},
 	"burgh": {
 		"core": ["guildhall_w12"],
-		"market": ["shop_w8", "bakery_w8", "tavern_w12", "shop_w8"],
+		"market": ["shop_w8", "tavern_w12", "bakery_w8", "rowhouse_w12"],
 		"craft": ["smithy1_w8", "smithy2_w8", "smithy3_w8", "alchemy_w8"],
 		"living": ["house_w16", "house_w8", "townhouse_w12", "rowhouse_w12", "townhouse_w12", "house_w16"],
-		"production": ["barn_w12", "windmill_w6", "stable_w12"],
+		"production": ["inn_post_w12", "barn_w12", "stable_w12", "windmill_w6"],
 		"storage": ["shelter_w6", "hayloft_w8"],
 	},
 	"city": {
 		"core": ["guildhall_w12"],
 		"float_extra": ["gambling_den_w8"],
-		"market": ["shop_w8", "bakery_w8", "tavern_w12", "rowhouse_w12", "shop_w8"],
+		"market": ["rowhouse_w12", "tavern_w12", "bakery_w8", "shop_w8", "flower_shop_w8"],
 		"craft": ["smithy1_w8", "smithy2_w8", "smithy3_w8", "smithy4_w12", "alchemy_w8"],
 		"living": ["house_w16", "house_w8", "townhouse_w12", "rowhouse_w12", "townhouse_w12",
 			"rowhouse_w12", "house_w16", "house_w8"],
 		"production": ["barn_w12", "stable_w12", "windmill_w6", "stable_w12"],
-		"storage": ["warehouse_w16", "shelter_w6", "hayloft_w8"],
+		"storage": ["inn_post_w12", "warehouse_w16", "shelter_w6", "hayloft_w8"],
 	},
 	"capital": {
 		"core": ["governor_palace_w16", "guildhall_w12"],
@@ -148,29 +149,40 @@ const GATE_DEF := "gatehouse_w8"
 const DOOR_DEFS := ["guildhall", "gatehouse", "shop", "tavern", "smithy1", "council_hall"]
 const GROUND_DEFS := ["barn", "cottage"]
 
-## 街具节奏（port 自 props.py dress_street + probe_props5 验收机位）：
-## 灯距 8~12 格两侧错位（石/铁灯柱逐盏轮换）；组槽每侧 furniture_n 个均分
-## 街宽（八档实测组距落 11~17 格，合组距 10~16 契约），组内件按卡宽肩并肩、
-## 配方洗牌袋轮转不连号复读；远侧街具踩台面贴建筑基线、近侧铺前场路面
-## （probe_props5 验收机位同口径）；里程碑/路标守街口（不进组轮转）；
-## 喷泉留市场广场位。路肩台面带=建筑脚下 z 0.42~1.95（proto BAND_SIDEWALK；
-## 楼后地面自 0f14021e 抬至同标高连片到地平线）：z≥2 的道具一律落路面——
-## plat 出台面带 = 悬空 0.65 格。
+## 街具（2026-09-16 创始人定案：小件全撤、常识重摆）——**每件道具必须有
+## 功能理由**：铁砧/磨刀石=铁匠工位（贴楼）、井=市集聚点、摊/桌/果篮=市集面、
+## 旗帜=行政楼前（贴楼）、长椅=井旁对置（village 起）、喷泉=镇起广场位、
+## 路标/里程碑=街口、灯=沿街照明、杂物堆=仓储/生产带占格件（§3.5）。
+## 随机街具组轮转（长椅/花坛/水龙头等乱点）整体删除——没有功能理由的
+## 小件不上街（创始人：好多摆放起来根本没有美感，以后我再微调）。
+## 灯距 8~12 格两侧错位（石/铁灯柱逐盏轮换，卡全缺回退灯笼）。
+## **带语义**：台面带只留"按建筑算"的东西（建筑+杂物占格件+贴楼功能小件），
+## 街具铺路面带（远缘 5.8 / 近缘 7.0 两档错位）；高件 x 避让门脸段。
+## **同带互斥**：道具落位即登记 [x0,x1,z]，后放者避让 z 差<1.5 格的已放件
+## （≥1.5=前后遮挡合法，保留街景层次），避不开跳过该件。
 const FURNITURE_LAMP_EVERY := Vector2(8.0, 12.0)
 const FURNITURE_LAMPS := ["lamp_post_stone", "lamp_post_iron", "lantern"]
-const FURNITURE_GROUPS := [
-	["bench_wood", "planter_ring"], ["bench_stone", "barrel_planter"],
-	["horse_trough"], ["water_tap"], ["flower_bed_long"], ["table_outdoor"],
-]
-## 街具纵深（格）：台面带内分三档错开（组 1.25 贴楼脚 / 功能件 1.55 /
-## 灯 1.85 压路缘），近侧路面两档（灯 6.8 / 组 7.2）——同带不同深，
-## x 相遇时呈前后遮挡而非同深叠影
+## 街具纵深（格）：台面带功能件 1.55 贴楼脚；路面带两档（远缘 5.8 / 近缘
+## 7.0，同带不同深、x 相遇呈前后遮挡而非同深叠影）
 const FURNITURE_Z_PLAT := 1.55
-const FURNITURE_Z_NEAR := 6.9
-## 一格空位：小概率塞入建筑序列的占格空档（宽 1 格，不出任何卡）——
-## 街景偶尔出现刻意的整格留白（创始人：较小概率随机出现一格空位）
+const FURNITURE_Z_ROAD_FAR := 5.8
+const FURNITURE_Z_ROAD_NEAR := 7.0
+## 同带互斥的 z 差阈值（格）：|Δz|<1.5 视觉必叠须互斥；≥1.5 前后遮挡合法
+const PROP_EXCL_BAND := 1.5
+## 一格/两格空位：小概率塞入建筑序列的占格空档（不出任何卡）——街景偶尔
+## 出现刻意的整格留白（创始人：较小概率随机出现，偶尔两格宽）
 const GAP_SLOT := "_gap"
-const GAP_SLOT_CHANCE := 0.12
+const GAP_SLOT_WIDE := "_gap2"
+const GAP_SLOT_CHANCE := 0.09
+const GAP_SLOT_WIDE_CHANCE := 0.03
+## 前排 2 层卡白名单（已烘、立面节奏用；档位可得性由各区池守级别窗口——
+## 只对池内已出现的 def 复制补位，不越级引进新 def）。千篇一律一层楼的
+## 解法：按档配额保前排 2 层占比（townlet 2 / town 5 / burgh 8 / city 9 /
+## capital 14 / metropolis 18，hamlet/village 村貌不上配额）。
+const TALL2_DEFS := ["tavern", "townhouse", "rowhouse", "inn_post",
+	"coach_house", "academy", "mint", "barracks", "library"]
+const TALL2_QUOTA := {"townlet": 2, "town": 5, "burgh": 8, "city": 9,
+	"capital": 14, "metropolis": 18}
 
 
 ## 道具卡宽表（格 = props.json units[0]/32；兼当"已烘卡名集合"用——
@@ -224,6 +236,7 @@ static func card_widths() -> Dictionary:
 ## 返回 proto_hd2d 的 layout_data 契约（width_cells/buildings/props/trees）。
 static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Dictionary:
 	var widths := card_widths()
+	var prop_fp := prop_footprints()   # 杂物占格宽/贴楼 z 用（footprint=[宽,纵深]）
 	var prof: Dictionary = TIERS.get(tier, TIERS["townlet"])
 	var pools: Dictionary = ZONE_POOLS.get(tier, ZONE_POOLS["townlet"])
 	var rng := RandomNumberGenerator.new()
@@ -248,14 +261,17 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 		sides[z] = s
 		load[s] = float(load[s]) + zload
 
-	# ── 2. 各区塞够建筑（池内顺位循环；未烘卡过滤）────────────────────
+	# ── 2. 各区塞够建筑（池内顺位循环；未烘卡过滤；2 层卡每区放宽到 2 张
+	#    ——连排街屋本就同款相邻，配额靠它凑数）────────────────────────
 	var queues: Dictionary = {}
 	for z: String in zones:
 		var defs: Array = []
 		var n: int = int(prof["zones"].get(z, 0))
 		for i in n:
 			var d: String = str(pools[z][i % pools[z].size()])
-			if widths.has(d) and not d in defs:
+			var dup_ok: bool = TALL2_DEFS.has(d.rsplit("_w", true, 1)[0]) \
+					and defs.count(d) < 2
+			if widths.has(d) and (not d in defs or dup_ok):
 				defs.append(d)
 		if defs.is_empty():
 			defs.append("house_w8")   # 池全未烘兜底（民居通用填充件）
@@ -286,27 +302,69 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	# ── 3.5 建筑间杂物（占格件，创始人定案）：与建筑同 Z 的杂物默认占水平
 	#     格——塞入所属分区侧序列的随机位置段，随建筑一起整格排布推挤；
 	#     随机插入位让空档分布不均（偶尔空一格自然出现）。未烘卡跳过。
+	#     2026-09-16 创始人定案"小件全撤"：杂物缩回仓储/生产两带（箱桶麻袋
+	#     /草垛柴堆料槽——都是撑得起两格以上槽位的体量件），盆/筐/花箱等
+	#     又矮又小的不上街。
 	var clutter_defs := {
 		"storage": ["crate", "barrel", "sack_stack"],
 		"production": ["haystack", "log_pile", "trough"],
 	}
+	var clutter_per_zone: int = 1 if tier in ["hamlet", "village", "townlet"] else 2
 	var clutter_all: Dictionary = {}
 	for z: String in clutter_defs:
 		var side3: int = int(sides.get(z, 0))
 		if side3 == 0:
 			side3 = -1 if rng.randf() < 0.5 else 1
-		for d: String in clutter_defs[z]:
+		var lst: Array = (clutter_defs[z] as Array).duplicate()
+		_shuffle_rng(lst, rng)
+		var taken := 0
+		for d: String in lst:
+			if taken >= clutter_per_zone:
+				break
 			if not prop_set.is_empty() and not prop_set.has(d):
 				continue
 			clutter_all[d] = true
 			seq[side3].insert(rng.randi_range(0, seq[side3].size()), d)
-	# 一格空位：从尾向头插（插入不扰动未遍历下标），每位置小概率出空档
+			taken += 1
+	# 一格/两格空位：从尾向头插（插入不扰动未遍历下标），每位置小概率出空档
 	for gap_side: int in [-1, 1]:
 		var gi2: int = int(seq[gap_side].size()) - 1
 		while gi2 >= 0:
-			if rng.randf() < GAP_SLOT_CHANCE:
+			var r: float = rng.randf()
+			if r < GAP_SLOT_WIDE_CHANCE:
+				seq[gap_side].insert(gi2, GAP_SLOT_WIDE)
+			elif r < GAP_SLOT_WIDE_CHANCE + GAP_SLOT_CHANCE:
 				seq[gap_side].insert(gi2, GAP_SLOT)
 			gi2 -= 1
+
+	# ── 3.7 前排 2 层配额（创始人：主街别千篇一律一层楼）：配额按档取
+	#     （TALL2_QUOTA），缺额从已有 2 层卡的区队列复制补位（每 def ≤2 张，
+	#     连排街屋同款相邻属真实肌理）；池内无 2 层卡（hamlet/village）不动。
+	var quota: int = int(TALL2_QUOTA.get(tier, 0))
+	if quota > 0:
+		var n_tall := 0
+		for s: int in [-1, 1]:
+			for d: String in seq[s]:
+				if TALL2_DEFS.has(str(d).rsplit("_w", true, 1)[0]):
+					n_tall += 1
+		var guard := 0
+		while n_tall < quota and guard < 32:
+			guard += 1
+			var placed := false
+			for z: String in queues:
+				for d: String in queues[z]:
+					if TALL2_DEFS.has(d.rsplit("_w", true, 1)[0]):
+						var side4: int = int(sides.get(z, -1))
+						if side4 == 0:
+							continue
+						seq[side4].append(d)
+						n_tall += 1
+						placed = true
+						break
+				if placed:
+					break
+			if not placed:
+				break
 
 	# ── 4. 行政居中（当级行政槽，§二），从中心向两侧排布（推挤保底）────
 	var admin: String = "guildhall_w12"
@@ -324,18 +382,23 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 			if int(qi[s]) < seq[s].size():
 				var d: String = seq[s][int(qi[s])]
 				qi[s] = int(qi[s]) + 1
-				if d == GAP_SLOT:
-					# 一格空位：占 1 整格不出卡（整格留白）
-					var xg: float = float(cursor[s]) + s * 0.5
-					placements.append({"def": d, "x": xg, "w": 1.0, "zone": "gap",
+				if d == GAP_SLOT or d == GAP_SLOT_WIDE:
+					# 刻意留白：占 1~2 整格不出卡
+					var gw: float = 2.0 if d == GAP_SLOT_WIDE else 1.0
+					var xg: float = float(cursor[s]) + s * gw * 0.5
+					placements.append({"def": d, "x": xg, "w": gw, "zone": "gap",
 						"gap": true})
-					cursor[s] = float(cursor[s]) + s * (1.0 + MIN_GAP)
+					cursor[s] = float(cursor[s]) + s * (gw + MIN_GAP)
 				else:
-					# 杂物卡不在建筑卡宽表——先查道具卡宽表（prop_set 值=格宽）；
-					# 占格件宽向上取整到整数格（创始人：格子向上取整）
-					var w := float(prop_set.get(d, float(widths.get(d, 8.0))))
+					# 杂物占格宽按**真实地面占地**（footprint[0]）向上取整——画面宽
+					# 含透视外扩，按它取整会让盆/筐这类小件虚占 2~3 格（创始人
+					# 2026-09-15 指正）；卡库缺失兜底 footprint [2.0,1.5]→2 格。
+					# 建筑照旧查卡宽表。
+					var w_default := 2.0 if clutter_all.has(d) else float(widths.get(d, 8.0))
+					var w := float(prop_set.get(d, w_default))
 					if clutter_all.has(d):
-						w = ceilf(w)
+						var fpw: Array = prop_fp.get(d, [2.0, 1.5])
+						w = ceilf(float(fpw[0]))
 					var x: float = float(cursor[s]) + s * w * 0.5
 					var zone := "float"
 					if clutter_all.has(d):
@@ -439,26 +502,86 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 			if float(bs[i]["x"]) < need:
 				bs[i]["x"] = need
 
-	# ── 6. 道具：功能件随分区 + 街具节奏（dress_street 参数移植）───────
+	# ── 6. 道具（2026-09-16 创始人定案：小件全撤、常识重摆）────────────
+	# 每件道具必须有功能理由（见 PROP 注）：铁砧/磨刀石=铁匠工位（贴楼）、
+	# 井=市集聚点、摊/桌/果篮=市集面、旗帜=行政楼前（贴楼）、长椅=井旁
+	# 对置（village 起，聚点语义）、喷泉=镇起广场位、路标/里程碑=街口、
+	# 灯=沿街照明、杂物堆=仓储/生产带占格件（§3.5）。
+	# **同带互斥登记表**：每件道具落位即登记 [x0,x1,z]；后放者避让所有
+	# z 差<PROP_EXCL_BAND 的已放件（≥阈值=前后遮挡合法，保留街景层次），
+	# 避不开跳过该件——道具↔道具零穿模（实测旧版同带叠对 28~62/城）。
 	var props: Array = []
 	var zone_x := func(z: String) -> float:
 		return float(zone_anchor.get(z, 0.0))
 	var add_prop := func(card: String, zx: float, py: float, plat: bool = false) -> void:
 		props.append({"card": card, "x": snappedf(zx, 0.1), "z": py, "plat": plat})
-	# 功能件：工坊件/台基件踩台面（贴建筑门脸），市集/生产件铺路面（开敞读法）
+	var prop_reg: Array = []   # 已放道具/杂物 [x0,x1,z]（同带互斥登记表）
+	var reg_same := func(z: float) -> Array:
+		var out: Array = []
+		for sp: Variant in prop_reg:
+			if absf(float(sp[2]) - z) < PROP_EXCL_BAND:
+				out.append(sp)
+		return out
+	# 杂物占格段先入表（台面带；z 与第 7 步出卡公式同源）
+	for p: Dictionary in placements:
+		if bool(p.get("clutter", false)):
+			var fp0: Array = prop_fp.get(str(p["def"]), [2.0, 1.5])
+			var cz0: float = clampf(0.42 + float(fp0[1]) * 0.45, 0.42, 1.75)
+			prop_reg.append([float(p["x"]) - float(p["w"]) * 0.5,
+					float(p["x"]) + float(p["w"]) * 0.5, cz0])
+	# 门脸建筑段（高件避让用；建筑不入互斥表——贴楼功能件语义上属于建筑）
+	var door_spans: Array = []
+	for p: Dictionary in placements:
+		var base_d: String = str(p["def"]).rsplit("_w", true, 1)[0]
+		if (bool(p.get("door", false)) or base_d in DOOR_DEFS) \
+				and not bool(p.get("clutter", false)):
+			door_spans.append([float(p["x"]) - float(p["w"]) * 0.5,
+					float(p["x"]) + float(p["w"]) * 0.5])
+	# 带避让放置：目标位被同带已放件/追加段压住就平移，避不开返回 INF
+	# （不出卡）；落位即登记。half=画面半宽+0.1 容差。
+	var add_prop_free := func(card: String, zx: float, py: float, plat: bool,
+			max_shift: float, extra: Array = []) -> float:
+		var half: float = float(prop_set.get(card, 1.5)) * 0.5 + 0.1
+		var fx := _avoid_spans(zx, half, reg_same.call(py) + extra, max_shift)
+		if not is_finite(fx):
+			return INF
+		add_prop.call(card, fx, py, plat)
+		prop_reg.append([fx - half, fx + half, py])
+		return fx
+	# 功能件：工坊件/旗帜踩台面（贴建筑门脸），市集件铺路面（开敞读法）。
+	# 顺序=主件先于填充件：井→井旁椅→摊/桌/果篮→旗帜→喷泉→灯→街口件，
+	# 后放者避让先放者（喷泉若 +9 侧放不下试 −9 侧——广场件择空而居）。
 	if pools.has("craft"):
-		add_prop.call("anvil", float(zone_x.call("craft")) - 1.1, FURNITURE_Z_PLAT, true)
-		add_prop.call("grindstone", float(zone_x.call("craft")) + 1.6, FURNITURE_Z_PLAT - 0.2, true)
+		add_prop_free.call("anvil", float(zone_x.call("craft")) - 1.1,
+				FURNITURE_Z_PLAT, true, 4.0)
+		add_prop_free.call("grindstone", float(zone_x.call("craft")) + 1.6,
+				FURNITURE_Z_PLAT - 0.2, true, 4.0)
+	var well_x := INF
 	if pools.has("market"):
-		add_prop.call("well", float(zone_x.call("market")) - 2.5, 5.2)
-		add_prop.call("market_stall", float(zone_x.call("market")) + 1.5, 4.6)
-		add_prop.call("market_table", float(zone_x.call("market")) + 4.2, 5.6)
-		add_prop.call("produce_baskets", float(zone_x.call("market")) + 8.6, 4.6)
-	add_prop.call("banner", float(zone_x.call("core")) - 2.0, FURNITURE_Z_PLAT + 0.2, true)
-	# 杂物已改为建筑间占格件（§3.5 随机位置段插入，随建筑排布）——不再铺路面
-	# 街具节奏①路灯：灯两侧错位（周期 8~12 格内确定性抽取）+ 灯柱卡查道具
-	# 卡库（prop_set）而非建筑卡宽表：两款灯柱逐盏轮换（dress_street 定稿
-	# 语义），卡全缺时才回退灯笼。远侧踩台面、近侧铺路面。
+		well_x = float(add_prop_free.call("well", float(zone_x.call("market")) - 2.5,
+				5.2, false, 5.0))
+		if is_finite(well_x) and tier != "hamlet":
+			add_prop_free.call("bench_wood", well_x - 3.4, 5.2, false, 3.0)
+			add_prop_free.call("bench_stone", well_x + 3.4, 5.2, false, 3.0)
+		# 市集两翼展开：右翼摊+果篮、左翼桌——避让会自动把件推开到不叠处
+		add_prop_free.call("market_stall", float(zone_x.call("market")) + 8.0,
+				4.6, false, 8.0)
+		add_prop_free.call("market_table", float(zone_x.call("market")) - 8.0,
+				5.6, false, 8.0)
+		add_prop_free.call("produce_baskets", float(zone_x.call("market")) + 12.5,
+				4.6, false, 8.0)
+	add_prop_free.call("banner", float(zone_x.call("core")) - 2.0,
+			FURNITURE_Z_PLAT + 0.2, true, 4.0)
+	# 喷泉：镇起的广场位（市场锚点侧翼，+9 侧放不下试 −9 侧；小村落没喷泉）
+	if pools.has("market") and tier in ["townlet", "town", "burgh", "city",
+			"capital", "metropolis"]:
+		var fx := float(add_prop_free.call("fountain_small",
+				float(zone_x.call("market")) + 9.0, 5.4, false, 8.0, door_spans))
+		if not is_finite(fx):
+			add_prop_free.call("fountain_small", float(zone_x.call("market")) - 9.0,
+					5.4, false, 8.0, door_spans)
+	# 街灯：沿街照明（周期 8~12 格两侧/两档纵深错位，石/铁柱逐盏轮换，
+	# 卡全缺回退灯笼）；x 避让同带道具+门脸段，避不开跳过该盏。
 	var period: float = rng.randf_range(FURNITURE_LAMP_EVERY.x, FURNITURE_LAMP_EVERY.y)
 	var lamp_cards: PackedStringArray = []
 	for d: String in FURNITURE_LAMPS:
@@ -470,48 +593,19 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	var side := 1
 	var li := 0
 	while xx < width_cells * 0.5 - 6.0:
-		add_prop.call(lamp_cards[li % lamp_cards.size()], xx,
-				(FURNITURE_Z_PLAT + 0.3) if side > 0 else (FURNITURE_Z_NEAR - 0.1),
-				side > 0)
-		li += 1
+		var lz: float = FURNITURE_Z_ROAD_FAR if side > 0 else FURNITURE_Z_ROAD_NEAR
+		var lx := _avoid_spans(xx, 1.0, reg_same.call(lz) + door_spans, 6.0)
+		if is_finite(lx):
+			add_prop.call(lamp_cards[li % lamp_cards.size()], lx, lz, false)
+			prop_reg.append([lx - 1.0, lx + 1.0, lz])
+			li += 1
 		xx += period
 		side = -side
-	# 街具节奏②家具组：每侧 furniture_n 个槽位均分街宽（组距随档位落
-	# 11~17 格），组内件按卡宽肩并肩（卡宽 = prop_names 值，缺失兜底 1.5 格）；
-	# 远侧踩台面、近侧铺路面；配方洗牌袋轮转，同配方不连号复读。
-	# 路标/里程碑不进组——只守街口（旧版进组轮转 = 半条街一个路标在复读）。
-	var furniture_n: int = int(prof["furniture"])
-	var g_lo := -width_cells * 0.5 + 10.0
-	var g_hi := width_cells * 0.5 - 10.0
-	if furniture_n > 0 and g_hi - g_lo >= 6.0:
-		for g_side: int in [1, -1]:
-			var gz: float = (FURNITURE_Z_PLAT - 0.3) if g_side > 0 else (FURNITURE_Z_NEAR + 0.3)
-			var gplat: bool = g_side > 0
-			var bag: Array = FURNITURE_GROUPS.duplicate()
-			var step: float = (g_hi - g_lo) / float(furniture_n)
-			for gi in furniture_n:
-				if bag.is_empty():
-					bag = FURNITURE_GROUPS.duplicate()
-				var grp: Array = bag.pop_at(rng.randi_range(0, bag.size() - 1))
-				var items: Array = []
-				var span := 0.0
-				for d: String in grp:
-					if prop_set.is_empty() or prop_set.has(d):
-						items.append(d)
-						span += float(prop_set.get(d, 1.5)) + 0.5
-				if items.is_empty():
-					continue
-				span -= 0.5   # 末件不留尾缝
-				var gx: float = g_lo + (float(gi) + 0.5) * step + rng.randf_range(-1.5, 1.5)
-				var cx: float = gx - span * 0.5
-				for d: String in items:
-					var w2: float = float(prop_set.get(d, 1.5))
-					add_prop.call(d, cx + w2 * 0.5, gz, gplat)
-					cx += w2 + 0.5
-	if pools.has("market"):
-		add_prop.call("fountain_small", float(zone_x.call("market")) + 9.0, 5.4)
-	add_prop.call("signpost", -width_cells * 0.5 + 3.0, FURNITURE_Z_PLAT, true)
-	add_prop.call("milestone", width_cells * 0.5 - 3.0, FURNITURE_Z_PLAT, true)
+	# 街口路标/里程碑（城门旁侧翼找位——门脸段避让不许压门，预算放大防挤没）
+	add_prop_free.call("signpost", -width_cells * 0.5 + 3.0,
+			FURNITURE_Z_ROAD_FAR, false, 8.0, door_spans)
+	add_prop_free.call("milestone", width_cells * 0.5 - 3.0,
+			FURNITURE_Z_ROAD_FAR, false, 8.0, door_spans)
 
 	# ── 7. 组装（row0=前排，row1/2=背景两层）+ 产物级重叠修复 ─────────
 	var buildings: Array = []
@@ -519,9 +613,14 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 		var d: String = str(p["def"])
 		if bool(p.get("gap", false)):
 			continue   # 一格空位：只占格不出卡
-		# 建筑间杂物：与建筑同 Z 带（台面 z=1.0，门脸线上），占格坐标随排布来
+		# 建筑间杂物：与建筑同 Z 带（台面带内，z 按卡自身 footprint 纵深推导——
+		# 浅卡贴楼脚、深卡略靠前），占格坐标随排布来；occ_cells=占格宽，
+		# 渲染端据此把杂物并进 F3 建筑辅助线（双黄线，与建筑同口径）
 		if bool(p.get("clutter", false)):
-			add_prop.call(d, float(p["x"]), 1.0, true)
+			var fp: Array = prop_fp.get(d, [2.0, 1.5])
+			var cz: float = clampf(0.42 + float(fp[1]) * 0.45, 0.42, 1.75)
+			props.append({"card": d, "x": snappedf(float(p["x"]), 0.1),
+				"z": snappedf(cz, 0.01), "plat": true, "occ_cells": float(p["w"])})
 			continue
 		var base: String = d.rsplit("_w", true, 1)[0]
 		var z: float = 2.4 if base in GROUND_DEFS else 0.45 + fposmod(absf(float(p["x"])) * 0.618, 0.85)
@@ -538,6 +637,49 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 		"buildings": buildings, "props": props, "trees": []}
 	_repair_rows(plan)
 	return plan
+
+
+## 道具卡占地表：props.json footprint = [宽格, 纵深格]——杂物占格宽按**真实
+## 地面占地宽**（footprint[0]）向上取整（画面宽含透视外扩，按它取整小件
+## 虚占格子），贴楼脚 z 落深按纵深分量（footprint[1]）推导。
+static func prop_footprints() -> Dictionary:
+	var out: Dictionary = {}
+	for base_path: String in ["res://temp/proto_hd2d/props.json",
+			"res://tests/dev/proto_hd2d/tex/proto_hd2d/props.json"]:
+		if not FileAccess.file_exists(base_path):
+			continue
+		var f := FileAccess.open(base_path, FileAccess.READ)
+		if f == null:
+			continue
+		var v: Variant = JSON.parse_string(f.get_as_text())
+		if v is Array:
+			for c: Variant in v:
+				var fp: Variant = c.get("footprint", [1.5, 1.5])
+				var fpa: Array = fp if fp is Array else [1.5, 1.5]
+				out[str(c["card"])] = [float(fpa[0]) if fpa.size() > 0 else 1.5,
+						float(fpa[1]) if fpa.size() > 1 else 1.5]
+			break
+	return out
+
+
+## 高件避让：把目标 x 平移到 [x-half, x+half] 不与任何占格段相交的最近位置
+## （±交替步进扫描，格距 0.5）；max_shift 内找不到返回 INF（调用方跳过）。
+## 候选先对齐 0.1 格再测——add_prop 落盘同样 snappedf(0.1)，"测的值=最终值"，
+## 否则四舍五入会把合法落点反推进占格段（实测 0.0125 格咬边）。
+static func _avoid_spans(x: float, half: float, spans: Array, max_shift: float) -> float:
+	var d := 0.0
+	while d <= max_shift:
+		for sgn: int in [1, -1]:
+			var cand: float = snappedf(x + float(sgn) * d, 0.1)
+			var ok := true
+			for sp: Variant in spans:
+				if cand + half > float(sp[0]) and cand - half < float(sp[1]):
+					ok = false
+					break
+			if ok:
+				return cand
+		d += 0.5
+	return INF
 
 
 ## 种子驱动洗牌（Fisher-Yates）：替代 Array.shuffle()——后者用全局随机源，

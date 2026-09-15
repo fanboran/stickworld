@@ -74,8 +74,8 @@ var resource_density := 0.65
 ## 林区梯度档（resource_gen 语义）：主街墙外带 28 格，净空 12+渐密 20——
 ## 创始人 2026-09-15：紧挨城门外是树林不对，传送出去先见开阔野地，走一段
 ## 才进林线（战场图子类按图幅覆写：净空 6+渐密 30——东缘才渐入林线）
-var forest_clear_cells := 12
-var forest_ramp_cells := 20
+var forest_clear_cells := 10
+var forest_ramp_cells := 12
 
 
 func _ready() -> void:
@@ -234,7 +234,9 @@ func _apply_layout_bounds() -> void:
 	var w: float = _hd.get_layout_width()
 	if w <= 0.0:
 		return
-	var half_px: float = (w * 0.5 + 8.0) * CELL_PX
+	# 墙外只留半屏（≈30 格）野地带——创始人口径：可以走出城墙，但墙外就
+	# 半屏距离；地图边界随布局宽度推导（城市扩建 → 墙前移 → 野地窗跟着挪）
+	var half_px: float = (w * 0.5 + 30.0) * CELL_PX
 	map_left = -half_px
 	map_right = half_px
 
@@ -255,18 +257,22 @@ func wants_villager_npcs() -> bool:
 ## 0 号 = 露天铁砧旁（铁匠），1~6 = 西城门内侧（伐木/矿工由此出城去墙外
 ## 森林带劳作，采集引导走 gate_steer_point），7~9 = 街市/东段（待业闲逛）。
 func get_npc_spawn_points() -> Array:
-	var pts: Array = [
-		Vector2(-8.5 * CELL_PX, 1010.0),  # 铁砧旁（前方路面，避铁砧碰撞带）
-		Vector2(-55.0 * CELL_PX, 1010.0),  # 西城门内侧（出城砍树/采矿）
-		Vector2(-52.0 * CELL_PX, 1040.0),
-		Vector2(-48.5 * CELL_PX, 1020.0),
-		Vector2(-45.0 * CELL_PX, 1050.0),
-		Vector2(-41.5 * CELL_PX, 1030.0),
-		Vector2(-38.0 * CELL_PX, 1050.0),
-		Vector2(-6.0 * CELL_PX, 1000.0),   # 市集广场
-		Vector2(2.0 * CELL_PX, 1030.0),
-		Vector2(30.0 * CELL_PX, 990.0),    # 谷仓前
-	]
+	# 布局感知：铁匠跟铁砧（布局 props/手摆 PROPS 均可），其余按墙线比例
+	# 分散内街（伐木/矿工靠西侧待命，出城引导走城门）；不绑死整数格坐标
+	var pts: Array = []
+	var anvil := Vector2.ZERO
+	for s: Variant in get_open_work_sites():
+		anvil = s["pos"]
+		break
+	pts.append(anvil + Vector2(0.0, 60.0))
+	var half: float = get_wall_px() / CELL_PX
+	if half <= 1.0:
+		half = 95.0   # 布局缺失兜底（tscn 手摆语义）
+	for i in 6:
+		pts.append(Vector2((-0.55 + i * 0.16) * half * CELL_PX, 985.0 + (i % 3) * 30.0))
+	pts.append(Vector2(-6.0 * CELL_PX, 1000.0))   # 市集广场
+	pts.append(Vector2(2.0 * CELL_PX, 1030.0))
+	pts.append(Vector2(half * 0.3 * CELL_PX, 1000.0))
 	return pts
 
 
@@ -320,6 +326,19 @@ func get_walk_barriers() -> Array:
 
 ## 露天工位（转发 3D 侧摆位表：铁砧 → 铁匠）
 func get_open_work_sites() -> Array:
+	var out: Array = []
+	# 布局驱动：铁砧点位来自布局 props（生成器随工匠区落位）
+	if _hd != null and _hd.has_method("get_layout_props"):
+		for e: Variant in _hd.get_layout_props():
+			if str(e.get("card", "")) == "anvil":
+				out.append({
+					"pos": Vector2(float(e["x"]) * CELL_PX,
+							DEPTH_Y_MIN + float(e.get("z", 4.5)) * CELL_PX),
+					"work_site_def": "smithy_lv1",
+				})
+		if not out.is_empty():
+			return out
+	# 手摆回退：PROPS 表的铁砧
 	if _hd != null and _hd.has_method("get_open_work_sites"):
 		return _hd.get_open_work_sites()
 	return []

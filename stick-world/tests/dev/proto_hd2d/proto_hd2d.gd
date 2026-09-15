@@ -715,6 +715,11 @@ func get_open_work_sites() -> Array:
 	return out
 
 
+## 布局道具表（宿主工位/NPC 出生点推导用；手摆模式返回空）
+func get_layout_props() -> Array:
+	return _layout.get("props", []) if not _layout.is_empty() else []
+
+
 ## 布局驱动模式的街宽（格）；手摆主街返回 0（宿主用 tscn 边界）
 func get_layout_width() -> float:
 	if not _layout.is_empty():
@@ -939,14 +944,14 @@ func _build_world() -> void:
 	for dx in _door_path_xs:
 		_add_door_path(float(dx), 3.6)    # 门前短径（楼脚→台肩→路面）
 	if not battlefield:
-		# 道路三级渐变（城心石板 ±48 → 近墙夯土过渡 → 墙外野地）——创始人：
-		# 城市中心到边缘要有渐变。路面 y 抬升防与兜底大地皮 z-fight
+		# 道路三级渐变（城心石板 ±30 ≈一屏 → 夯土过渡 → 墙外野地 30 格半屏）——
+		# 创始人：石地面只有城心一屏左右；路面 y 抬升防与兜底大地皮 z-fight
 		var wx: float = _wall_x()
-		_add_ground_plane_at("band_road_stone_128.png", 0.0, 96.0,
+		_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.02, 10.0, Color(0.86, 0.89, 0.96))
-		_add_ground_plane_at("rammed_earth_128.png", -(wx + 48.0) * 0.5, wx - 48.0,
+		_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
-		_add_ground_plane_at("rammed_earth_128.png", (wx + 48.0) * 0.5, wx - 48.0,
+		_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
 		_add_ground_plane_at("rammed_earth_128.png", -(wx + 14.0), 28.0,
 			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.68, 0.74, 0.54))
@@ -1151,105 +1156,57 @@ func _place_rows() -> void:
 		occ_front.append([cx - w * 0.5, cx + w * 0.5, card, z_off])
 	_prop_slots = []
 	_front_occ = occ_front
-	# 两排背景（创始人 2026-09-15 定案：后面两排就够，算法职责）：
-	#   · 每层楼与楼**留缝不贴死**；后层的楼**吸附进前层的缝隙**——从缝里透出
-	#     后层楼身，即"后层插前层缝"；
-	#   · bg1 基线 = 屏幕 1/3 线（SKYLINE_Z），该线兼任前排建筑高度上限；
-	#   · 末层（bg2）缝最小 + 补洞，把地平线（底衬远端）遮死。
-	#   注意"缝"按**卡画面宽**算（含出檐，cottage_w6 画面 9.1 格 ≠ 6 格建筑）。
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20260914
-	# 主题组合段（创始人 2026-09-14：背景种类要多、要有好看的组合，不要高重复轮转）：
-	#   西段=教堂/法师塔天际线 · 中段=市集街屋 · 东段=田园作坊——卡按楼所在 x 段
-	#   从池里顺位取，防邻重；26 种卡全量入池（各归城区），背景层限界随城墙收口
-	#   （背景楼群只在城内 ±65，墙外是野外天空）
-	var bands := [
-		{"x0": -93.0, "x1": -16.0, "pool": ["cathedral_w16", "tower_w6", "house_w8", "guildhall_w12", "mage_tower_w8", "library_w12", "house_w16", "townhouse_w12", "alchemy_w8"]},
-		{"x0": -16.0, "x1": 16.0, "pool": ["shop_w8", "bakery_w8", "house_w8", "tower_w6", "tavern_w12", "townhouse_w12", "rowhouse_w12", "library_w12"]},
-		{"x0": 16.0, "x1": 93.0, "pool": ["barn_w12", "stable_w12", "cottage_w6", "hayloft_w8", "smithy2_w8", "smithy3_w8", "smithy4_w12", "shelter_w6", "barracks_w12", "windmill_w6", "rowhouse_w12", "tavern_w12"]},
-	]
-	var band_cursor := [0, 0, 0]
-	var _pick_in_band := func(x: float, room: float) -> String:
-		for bi in bands.size():
-			var b: Dictionary = bands[bi]
-			if float(b["x0"]) <= x and x < float(b["x1"]):
-				var pool: Array = b["pool"]
-				for k in pool.size():
-					var c: String = str(pool[(band_cursor[bi] + k) % pool.size()])
-					var cw := _cw(c)
-					if cw < 1.0 or cw <= room:
-						band_cursor[bi] = (band_cursor[bi] + k + 1) % pool.size()
-						return c
-				return ""
-		return ""
-	var prev_slots: Array = []      # 前一层楼的画面占用 [x0,x1]
+	# ── 背景实时生成（创始人 2026-09-15 裁决：随机但种子一致——多局游戏尽量
+	#    相同；前排有楼后排才配楼；同屏尽量不重复用卡；不必对齐前排楼位；
+	#    日后游戏内加建前排，调 spawn_bg_for_front 自动补后排）。
+	_bg_rng.seed = 20260915
+	_bg_recent.clear()
 	for li in BG_LAYERS:
 		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
-		var occ: Array = []
-		# 末排吃最远档染色（空气透视拉满，纵深分离读得出来）
 		var tint: Color = BG_TINTS[0] if li == 0 else BG_TINTS[BG_TINTS.size() - 1]
-		if li == 0 and not _layout.is_empty():
-			# bg1 = 布局后排（city_layout row>=1，x 由算法分配互不重叠）
-			for b: Variant in _layout.get("buildings", []):
-				if int(b["row"]) < 1:
-					continue
-				var card2: String = str(b["card"])
-				var cx2: float = float(b["x"])
-				var w2 := _cw(card2)
-				_spawn_bg_card(card2, cx2, lz, tint)
-				occ.append([cx2 - w2 * 0.5, cx2 + w2 * 0.5])
-		elif li == 0:
-			# bg1 自由铺：楼 + 1.2~2.6 格缝的节奏（比旧 2~3.5 更密——创始人
-			# 要种类全量可见，缝收紧才排得下 26 卡；根部被前排挡住）
-			var gx := -93.0
-			while gx < 93.0:
-				var card: String = str(_pick_in_band.call(gx, 999.0))
-				if card == "":
-					card = "house_w8"
-				var w := _cw(card)
-				if w < 1.0:
-					w = 8.0
-				_spawn_bg_card(str(card), gx + w * 0.5, lz, tint)
-				occ.append([gx, gx + w])
-				gx += w + rng.randf_range(1.2, 2.6)
-		else:
-			# bg2（末排）吸附前排缝隙：每条缝中心放一栋楼（从缝里露出楼身）；
-			# 放不下的缝由下方补洞兜底（末排职责=把地平线遮死）。
-			var last_x1 := -999.0
-			for g in _gaps(prev_slots, -93.0, 93.0):
-				var g0: float = float(g[0])
-				var g1: float = float(g[1])
-				if g1 - g0 < 1.0:
-					continue
-				var cx: float = (g0 + g1) * 0.5
-				var room: float = cx - (last_x1 + 1.0)   # 左侧可用宽度
-				var card: String = _pick_in_band.call(cx, room)
-				if card == "":
-					continue
-				var w := _cw(card)
-				if w < 1.0:
-					w = 8.0
-				_spawn_bg_card(card, cx, lz, tint)
-				occ.append([cx - w * 0.5, cx + w * 0.5])
-				last_x1 = cx + w * 0.5
-			if li >= 1:
-				# bg2（末排）职责 = 遮死中景与地平线：吸附放不下的洞再补大洞（近贴 0.6 格缝）。
-				# 阈值 9.8 = 库里最小画面宽 cottage_w6(9.1) + 0.6 缝，更窄的洞放不下任何卡。
-				for g in _gaps(occ, -93.0, 93.0):
-					var g0: float = float(g[0])
-					var g1: float = float(g[1])
-					while g1 - g0 > 9.8:
-						var room: float = g1 - g0 - 0.6
-						var card: String = _pick_in_band.call((g0 + g1) * 0.5, room)
-						if card == "":
-							break
-						var w := _cw(card)
-						_spawn_bg_card(card, g0 + w * 0.5, lz, tint)
-						occ.append([g0, g0 + w])
-						g0 += w + 0.6
-		prev_slots = occ
+		var last_right := -INF
+		for e: Variant in front_list:
+			var fx: float = float(e["x"])
+			var card := _pick_bg_card(str(e["card"]), fx, li)
+			var w := _cw(card)
+			var bx: float = fx + _bg_rng.randf_range(-4.0, 4.0)
+			bx = maxf(bx, last_right + 0.5 + w * 0.5)   # 同排轻推挤，不贴死
+			last_right = bx + w * 0.5
+			_spawn_bg_card(card, bx, lz, tint)
 		_bg_base_z[li] = _median(_bg_base_samples)
 		_bg_base_samples.clear()
+
+
+## 背景楼选卡：全卡池，排除前排本卡与最近用过的卡（同屏避同卡）；
+## 种子由（前排 x, 层）决定——多局一致，加建前排时同样确定性补楼。
+var _bg_rng := RandomNumberGenerator.new()
+var _bg_recent: Array[String] = []
+
+func _pick_bg_card(front_card: String, fx: float, li: int) -> String:
+	_bg_rng.seed = int(abs(fx * 7919.0)) + li * 104729 + 13
+	var pool: Array = []
+	for c: String in _cards.keys():
+		if c == front_card or _bg_recent.has(c):
+			continue
+		pool.append(c)
+	if pool.is_empty():
+		for c: String in _cards.keys():
+			if c != front_card:
+				pool.append(c)
+	var card: String = str(pool[_bg_rng.randi_range(0, pool.size() - 1)])
+	_bg_recent.append(card)
+	while _bg_recent.size() > 4:
+		_bg_recent.pop_front()
+	return card
+
+
+## 前排加建时补背景楼（建造系统事件接线入口；初始生成走 _place_rows）
+func spawn_bg_for_front(front_card: String, fx: float) -> void:
+	for li in BG_LAYERS:
+		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
+		var tint: Color = BG_TINTS[0] if li == 0 else BG_TINTS[BG_TINTS.size() - 1]
+		var card := _pick_bg_card(front_card, fx, li)
+		_spawn_bg_card(card, fx + _bg_rng.randf_range(-4.0, 4.0), lz, tint)
 
 
 func _add_width_guides() -> void:
@@ -1821,7 +1778,7 @@ func _run_shots(which: String) -> void:
 				# 各出一张白天最终观感图
 				_apply_light("day")
 				_apply_stage("c")
-				for cam_x: float in [-105.0, -60.0, -12.0, 20.0, 60.0, 92.0]:
+				for cam_x: float in [-115.0, -55.0, 0.0, 55.0, 100.0, 122.0]:
 					set_cam_x(cam_x)
 					await _settle(1.2)
 					await _shot("hd2d_s_street_x%d" % int(cam_x))

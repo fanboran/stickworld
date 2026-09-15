@@ -13,6 +13,7 @@
 产物（stick-world/temp/proto_hd2d/nature/）::
 
     <name>.png / <name>_glow.png    自然物卡（albedo + 自发光层）
+    <name>_night.png                夜版卡（月夜灯位 + 水晶自发光，night_mix 切换用）
     nature.json                      px / units / anchor / glow_mats
 
 坐标与尺度口径与建筑卡一致：Godot 单位 = 1 格 = 32 Blender 单位；
@@ -51,6 +52,27 @@ RES_MAX = 2048
 
 # 水晶簇的 crystal_a/crystal_b 是本层唯一自发光材质（nature.MAT_SPEC → crystal key）
 GLOW_MATS = {"crystal_a", "crystal_b"}
+
+# ------------------------------------------------------------------ 夜档灯位
+# 创始人 2026-09-15：月光在 Blender 里烘亮——每件自然物多烘一张 <名>_night.png：
+# 亮冷蓝月亮方向光 + 低强度夜环境，水晶自发光烘进夜版 albedo
+# （运行时 card.gdshader 的 night_mix 切换；树/矿/水晶夜里不再全黑）。
+DAY_BG_COLOR, DAY_BG_STRENGTH = (0.62, 0.70, 0.82), 0.60
+# 夜环境给足深蓝底光（阴影面不死黑）；月亮从**正面高角度**斜打（同 blender_proto
+# 首版 z=+142 背光导致立面全黑的教训）。
+NIGHT_BG_COLOR, NIGHT_BG_STRENGTH = (0.09, 0.12, 0.22), 0.55
+DAY_KEY = {"energy": 3.3, "color": (1.0, 0.95, 0.85), "rot": (40, 0, -38), "angle": 3.0}
+NIGHT_KEY = {"energy": 2.2, "color": (0.62, 0.74, 1.0), "rot": (55, 0, -75), "angle": 8.0}
+DAY_FILL_ENERGY, NIGHT_FILL_ENERGY = 0.15, 0.06
+NIGHT_WIN_MATS = set()
+NIGHT_FIRE_MATS = set()
+NIGHT_CRYSTAL_MATS = {"crystal_a", "crystal_b"}
+NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH = (0.62, 0.88, 1.0), 1.4
+
+# setup_world() 填充：昼/夜灯位切换要改的三个对象引用
+_WORLD_BG = None
+_SUN_KEY = None
+_SUN_FILL = None
 
 #: 街景两侧要用的自然物（点名烘；ore_band 是 10m 长条分布件、非单体，不进本批）
 NATURE = [
@@ -118,6 +140,42 @@ def setup_world():
 
     sun("key", 3.3, (40, 0, -38))
     sun("fill", 0.15, (55, 0, 128), 20.0, (0.85, 0.90, 1.0))
+
+    global _WORLD_BG, _SUN_KEY, _SUN_FILL
+    _WORLD_BG = bg
+    _SUN_KEY = bpy.data.objects["key"]
+    _SUN_FILL = bpy.data.objects["fill"]
+
+
+def set_night(on):
+    """昼/夜灯位切换：夜烘期间切入，烘完切回（日档产物逐位不变）。"""
+    day = on is False
+    k_bg = DAY_BG_COLOR if day else NIGHT_BG_COLOR
+    _WORLD_BG.inputs[0].default_value = (k_bg[0], k_bg[1], k_bg[2], 1.0)
+    _WORLD_BG.inputs[1].default_value = DAY_BG_STRENGTH if day else NIGHT_BG_STRENGTH
+    key = DAY_KEY if day else NIGHT_KEY
+    _SUN_KEY.data.energy = key["energy"]
+    _SUN_KEY.data.color = key["color"]
+    _SUN_KEY.data.angle = math.radians(key["angle"])
+    _SUN_KEY.rotation_euler = tuple(math.radians(a) for a in key["rot"])
+    _SUN_FILL.data.energy = DAY_FILL_ENERGY if day else NIGHT_FILL_ENERGY
+
+
+def _night_mat(name, rgb, strength):
+    """夜版 albedo 用的自发光纯色材质（水晶——夜里的发光簇）。"""
+    m = bpy.data.materials.new("__nnight_" + name)
+    m.use_nodes = True
+    bsdf = m.node_tree.nodes.get("Principled BSDF")
+    if bsdf is None:
+        return m
+    bsdf.inputs["Base Color"].default_value = (0.02, 0.02, 0.02, 1.0)
+    if "Emission Color" in bsdf.inputs:
+        bsdf.inputs["Emission Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
+        bsdf.inputs["Emission Strength"].default_value = strength
+    for key in ("Roughness", "Metallic", "Specular IOR Level"):
+        if key in bsdf.inputs:
+            bsdf.inputs[key].default_value = 1.0 if key == "Roughness" else 0.0
+    return m
 
 
 def make_camera():
@@ -233,6 +291,31 @@ def bake_card(ob, cam, name):
     bpy.ops.render.render(write_still=True)
     for i, s in enumerate(ob.material_slots):
         s.material = slots[i]
+
+    # -- 夜档层：月夜灯位 + 水晶自发光烘进 albedo（创始人：月光在 Blender 里烘亮）--
+    night_png = os.path.join(CARD_DIR, name + "_night.png")
+    set_night(True)
+    night_repl = []
+    for mat in slots:
+        nm = mat.name if mat else ""
+        if nm in NIGHT_CRYSTAL_MATS:
+            night_repl.append(_night_mat(nm + "_cry", NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH))
+        elif nm in NIGHT_WIN_MATS:
+            night_repl.append(_night_mat(nm + "_win", (1.0, 0.87, 0.68), 1.9))
+        elif nm in NIGHT_FIRE_MATS:
+            night_repl.append(_night_mat(nm + "_fire", (1.0, 0.62, 0.30), 3.2))
+        else:
+            night_repl.append(None)
+    for i, s in enumerate(ob.material_slots):
+        if night_repl[i] is not None:
+            s.material = night_repl[i]
+    sc.render.filepath = night_png
+    bpy.ops.render.render(write_still=True)
+    for i, s in enumerate(ob.material_slots):
+        if night_repl[i] is not None:
+            s.material = slots[i]
+    set_night(False)
+
     for other, hv in saved_hide.items():
         other.hide_render = hv
 

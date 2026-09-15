@@ -38,6 +38,7 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 
 - **相机镜像**：3D 正交相机每帧镜像 2D CameraRig 的 x 与 zoom——1/4 区域跟随、顶栏居中、边缘滚动、中键拖拽、滚轮缩放全部在 CameraRig 上驱动。**为什么**：CameraRig 是全部相机操作的单一入口，3D 侧只做镜像；自己钉死玩家 x 会让手动操作全部失效（踩过）。
 - **昼夜**：读 `WorldState.game_time`（单位=小时 0~24，EnvironmentSystem 写入），6:00/19:00 切 `_apply_light("day"/"night")`。2D 的 CanvasModulate 够不到 3D 场景，必须自己挂。
+- **月夜档（2026-09-15 创始人定稿：月光在 Blender 里烘亮）**：夜观感主体是**夜版卡**——烘卡端每卡多烘一张 `<卡>_night.png`（亮冷蓝月亮方向光 + 低夜环境，窗/火/水晶自发光直接烘进 albedo，建筑/道具/自然物三库全量；月亮必须从**正面高角度**斜打，背面打光会把正立面全留在阴影里）；运行时 `card.gdshader` 的 `night_mix` 整卡切换（夜版缺失回退日版），`night_comp` 用 EMISSION 把烘卡亮度补回 ≈1.0（夜间场景光按地面/角色需要给暗档冷光，不许再压卡）。三条配套口径：① **夜雾删掉**（后景/远处"纯黑"的元凶是近黑雾色+后景吃满雾程；层次交给后景分层染色 + 远焦 DOF）；② 场景月亮方向光只给 0.15 能量、盘面张角缩到 2°（`sun_angle_max`，默认 30° 的巨大盘会被远焦 DOF 糊成斜光带）；③ **窗光去黄**——glow 染色暖白 `CARD_GLOW_TINT`、能量降档，夜版窗自发光强度压在 1.0 档（超 1 直冲 8bit 上限吹成纯白方块），后景窗光按 `BG_GLOW_RATIO` 低档点缀（后景卡登记进 `_bg_card_mats`），街灯降饱和降能。
 - **边界自适应**：布局驱动模式按布局街宽收 map_left/right（±半宽+8 格）。
 - **出口**：东西村口 ChunkTrigger（纯代码创建），旅行链注册在 game_root。
 - **设施门控**：`supports_village_facilities()`=false 跳过 2D 建筑设施（仓库/程序化资源点）；`wants_villager_npcs()`=true 照常生成村民——两个门控分开，因为村民不需要 2D 建筑也能干活（见 2.6）。
@@ -83,13 +84,14 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 ## 三、跑法与资产再生产
 
 ```
-# 烘卡（改了建筑/道具/自然物库后）
+# 烘卡（改了建筑/道具/自然物库后；三套脚本每卡出 日版/glow/夜版 三张）
 blender -b --factory-startup -P stick-world/tests/dev/proto_25d/blender_proto.py    # 建筑卡→temp/proto25d/
 blender -b --factory-startup -P stick-world/tests/dev/proto_hd2d/bake_props.py      # 道具卡
 blender -b --factory-startup -P stick-world/tests/dev/proto_hd2d/bake_nature.py     # 自然物卡
 # 算法村布局
 python tools/blender_buildings/export_city_layout.py --tier village --seed 611036 --name village_b
-# 烘完把 temp/{proto25d,proto_hd2d} 的 png+json 同步进 tests/dev/proto_hd2d/tex/（入库）
+# 烘完把 temp/{proto25d,proto_hd2d} 的 png+json 同步进 tests/dev/proto_hd2d/tex/（入库）；
+# 只补夜版时同步 *_night.png 即可（月夜档，见 §2.3）
 # 出图/调试
 godot --path stick-world res://tests/dev/proto_hd2d/proto_hd2d.tscn -- --shots=b --layout=village_b
 # 实机链路验证

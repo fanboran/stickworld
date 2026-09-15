@@ -200,6 +200,10 @@ const DOF_FAR_START_AHEAD := 0.0   # 回到初始渐变（创始人 2026-09-15�
 const BG_TINTS: Array = [
 	Color(0.80, 0.84, 0.93), Color(0.85, 0.885, 0.945), Color(0.90, 0.925, 0.96),
 ]
+## 卡窗光染色（创始人 2026-09-15：窗光去黄——旧档橙 (1.0,0.78,0.46) 把画面染黄）
+const CARD_GLOW_TINT := Color(1.0, 0.90, 0.78)
+## 后景卡窗光档（相对前排倍率）：后景窗火只做点缀，不与前排抢
+const BG_GLOW_RATIO := 0.45
 
 ## 地面分带（格；z 增大 = 朝相机）。
 ## 基线纪律（创始人纠偏）：**建筑基线 = 路肩带顶线**。
@@ -282,6 +286,7 @@ var _hud: Label
 var _hud2: Label
 
 var _card_mats: Array[ShaderMaterial] = []
+var _bg_card_mats: Array[ShaderMaterial] = []   # 后景卡材质：夜间窗光按低档给（见 _apply_light）
 var _lamps: Array[OmniLight3D] = []
 var _bg_base_z := {}            # 背景层 -> 实测卡基线 z（辅助线/底衬远端对齐用）
 var _bg_base_samples: Array = []  # 当前层各卡卡底 z 的采样（层结束取中位数）
@@ -536,11 +541,13 @@ func _spawn_card(card: String, x: float, z_off: float, skyline: bool = false,
 	if skyline:
 		# 远景剪影层：① 不投真阴影 —— 卡片会按 alpha 剪影向地面投真影，一张 17 格高的
 		# 塔会在中部空地上拖出一大片斜影，而那片空地没有别的东西来"接住"它，读作脏斑；
-		# ② 用一份独立材质做距离染色（tint 由 _spawn_bg_card 按层分档）且**不注册进
-		# _card_mats**（不参与夜景窗火自发光），让它彻底退到背景层。
-		m = m.duplicate()
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# ② 用一份独立材质做距离染色（tint 由 _spawn_bg_card 按层分档），从前排
+		# _card_mats 撤下、登记进 _bg_card_mats——夜间窗光按低档给（后景窗火
+		# 只做点缀，不与前排抢），夜版月光贴图照常生效（创始人：后景建筑也给灯光）。
 		_card_mats.erase(m)
+		m = m.duplicate()
+		_bg_card_mats.append(m)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.material_override = m
 	mi.name = "Card_" + card
 	_card_root.add_child(mi)
@@ -672,6 +679,11 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER
 	m.set_shader_parameter("albedo_tex", _tex_abs(_temp + PROP_DIR + card + ".png"))
+	# 夜版道具卡缺失回退日版（街边小物件夜里的月光来自 Blender 烘的夜版贴图）
+	var prop_night := _tex_abs_soft(_temp + PROP_DIR + card + "_night.png")
+	if prop_night == null:
+		prop_night = _tex_abs(_temp + PROP_DIR + card + ".png")
+	m.set_shader_parameter("albedo_night_tex", prop_night)
 	m.set_shader_parameter("glow_tex", _tex_abs(_temp + PROP_DIR + card + "_glow.png"))
 	var px: Array = meta.get("px", [128, 128])
 	m.set_shader_parameter("tex_px", Vector2(float(px[0]), float(px[1])))
@@ -800,6 +812,11 @@ func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER
 	m.set_shader_parameter("albedo_tex", _tex_abs(_temp + NATURE_DIR + card + ".png"))
+	# 夜版自然物卡缺失回退日版（树/矿/水晶夜里的月光来自 Blender 烘的夜版贴图）
+	var nature_night := _tex_abs_soft(_temp + NATURE_DIR + card + "_night.png")
+	if nature_night == null:
+		nature_night = _tex_abs(_temp + NATURE_DIR + card + ".png")
+	m.set_shader_parameter("albedo_night_tex", nature_night)
 	m.set_shader_parameter("glow_tex", _tex_abs(_temp + NATURE_DIR + card + "_glow.png"))
 	var px: Array = meta.get("px", [128, 128])
 	m.set_shader_parameter("tex_px", Vector2(float(px[0]), float(px[1])))
@@ -941,9 +958,15 @@ func _card_material(card: String) -> ShaderMaterial:
 	var glo := _tex_abs(base + card + "_glow.png")
 	if alb == null:
 		return null
+	# 夜版卡（Blender 月夜灯位烘的 <卡>_night.png）：缺失回退日版不报错——
+	# 未重烘卡库的机器上夜间档安全退化为"日版卡+场景光压暗"的旧行为
+	var ngt := _tex_abs_soft(base + card + "_night.png")
+	if ngt == null:
+		ngt = alb
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER
 	m.set_shader_parameter("albedo_tex", alb)
+	m.set_shader_parameter("albedo_night_tex", ngt)
 	m.set_shader_parameter("glow_tex", glo)
 	var px: Array = meta.get("px", [1024, 1024])
 	m.set_shader_parameter("tex_px", Vector2(float(px[0]), float(px[1])))
@@ -1091,8 +1114,10 @@ func _build_world() -> void:
 		for i in 13:
 			var l := OmniLight3D.new()
 			l.position = Vector3(-48.0 + float(i) * 8.0, 2.5, 4.2)
-			l.light_color = Color(1.0, 0.63, 0.30)
-			l.light_energy = 1.6
+			# 窗光去黄（创始人 2026-09-15）：街灯降饱和（旧 (1.0,0.63,0.30) 一路刷墙
+			# 把画面带黄），能量档由 _apply_light 按昼/夜给
+			l.light_color = Color(1.0, 0.72, 0.45)
+			l.light_energy = 1.0
 			l.omni_range = 9.5
 			l.shadow_enabled = i % 2 == 0
 			l.light_specular = 0.2
@@ -1677,6 +1702,7 @@ func _apply_light(mode: String) -> void:
 	_sky_mat.ground_horizon_color = Color(0.78, 0.84, 0.92)
 	_sky_mat.ground_bottom_color = Color(0.42, 0.44, 0.46)
 	_sky_mat.energy_multiplier = 1.0
+	_sky_mat.sun_angle_max = 30.0   # 日档太阳盘默认张角（夜档缩成小月亮，见 night 分支）
 	_env.ambient_light_color = Color(0.64, 0.71, 0.86)
 	_env.ambient_light_energy = 0.58
 	# 去雾：阳光明媚口径下大气密度 ≈0（保留开关，量级调到看不出）
@@ -1693,6 +1719,8 @@ func _apply_light(mode: String) -> void:
 	_fill.rotation = Vector3(deg_to_rad(-16.0), deg_to_rad(118.0), 0)
 	var glow := 0.0
 	var lamp := 0.0
+	var night_mix := 0.0   # 夜档=1：整卡换用 Blender 月夜灯位烘的 <卡>_night.png
+	var night_comp := 0.0  # 夜档卡亮度补偿（烘卡亮度不被场景光二次压暗，见 card.gdshader）
 	var char_tint := Color(1, 1, 1)
 	var char_add := Color(0, 0, 0)
 	var post := {
@@ -1706,47 +1734,66 @@ func _apply_light(mode: String) -> void:
 	}
 	match mode:
 		"night":
-			_sky_mat.sky_top_color = Color(0.015, 0.025, 0.07)
-			_sky_mat.sky_horizon_color = Color(0.06, 0.08, 0.16)
-			_sky_mat.ground_horizon_color = Color(0.05, 0.06, 0.11)
-			_sky_mat.ground_bottom_color = Color(0.02, 0.02, 0.04)
-			_env.ambient_light_color = Color(0.14, 0.19, 0.34)
-			_env.ambient_light_energy = 0.17
-			# 夜景保留一点薄雾（白天的"去雾"口径只针对阳光明媚版主展示图）
-			_env.fog_enabled = true
-			_env.fog_density = 0.28
-			_env.glow_intensity = 1.0
-			_env.glow_bloom = 0.12
-			_env.fog_light_color = Color(0.05, 0.07, 0.14)
-			_env.fog_depth_begin = 32.0
-			_env.fog_depth_end = 86.0
-			_sun.light_color = Color(0.55, 0.68, 1.0)
-			_sun.light_energy = 0.06
+			# 月夜档（创始人 2026-09-15 三条口径）：
+			#   ① **夜雾删掉**——后景/远处地面"纯黑"的元凶就是这层雾（雾色近黑
+			#     (0.05,0.07,0.14)、后景正好吃满雾程）；距离层次交给后景分层染色
+			#     + 远焦 DOF，与白天同口径；
+			#   ② 月光主要**烘在卡里**（Blender 夜版贴图），场景光按"卡已带光、
+			#     合成 ≈1.0"纪律给中性冷色保底——旧档有效亮度只有 ≈5%，是
+			#     "建筑卡夜里全黑"的主因；街边小物件夜里的月光同样来自夜版贴图；
+			#   ③ 窗光去黄——glow 染色收暖白（CARD_GLOW_TINT）、能量降档，街灯
+			#     降能减饱和，画面不再整片泛橙。
+			_sky_mat.sky_top_color = Color(0.03, 0.05, 0.12)
+			_sky_mat.sky_horizon_color = Color(0.10, 0.13, 0.24)
+			_sky_mat.ground_horizon_color = Color(0.08, 0.10, 0.19)
+			_sky_mat.ground_bottom_color = Color(0.04, 0.05, 0.09)
+			_env.ambient_light_color = Color(0.60, 0.68, 0.90)
+			_env.ambient_light_energy = 0.42
+			_env.fog_enabled = false
+			_env.glow_intensity = 0.9
+			_env.glow_bloom = 0.08
+			# 月亮方向光只给 0.15：能量一高，程序化天空的月亮盘会被远焦 DOF 糊成
+			# 一道斜光带（首版 0.35 实测翻车）；卡亮度由夜版贴图 + night_comp 承担。
+			# 盘面张角缩到 2°——默认 30° 的巨大盘被 DOF 拉成光带（二轮实测），
+			# 缩小后是一颗清晰小月亮
+			_sky_mat.sun_angle_max = 2.0
+			_sun.light_color = Color(0.62, 0.72, 1.0)
+			_sun.light_energy = 0.15
 			_sun.rotation = Vector3(deg_to_rad(-62.0), deg_to_rad(140.0), 0)
-			_fill.light_energy = 0.02
-			glow = 1.15
-			lamp = 1.1
-			# 2D 角色在夜里被"场景光"照到：冷蓝压暗 + 灯笼暖光池（加色，别过量，
-			# 加多了角色会拖一圈橙边，读作发热而不是被照亮）
-			char_tint = Color(0.46, 0.52, 0.74)
-			char_add = Color(0.16, 0.09, 0.03)
+			_fill.light_energy = 0.03
+			glow = 0.7
+			lamp = 1.3
+			night_mix = 1.0
+			night_comp = 0.6
+			# 2D 角色在夜里被"场景光"照到：冷蓝压暗 + 灯笼暖光池（加色收敛——
+			# 加多了角色拖橙边，也把画面带黄）
+			char_tint = Color(0.55, 0.61, 0.80)
+			char_add = Color(0.10, 0.055, 0.02)
 			# 夜景同样不做屏幕空间移轴：主场景零模糊是全局口径，夜幕的层次交给远焦 DOF
 			post["tilt_level"] = 0.0
-			post["vig_strength"] = 0.62
-			post["exposure"] = 1.12
-			post["saturation"] = 1.06
-			post["lift"] = Color(0.006, 0.008, 0.018)
+			post["vig_strength"] = 0.50
+			post["exposure"] = 1.08
+			post["saturation"] = 1.02
+			post["lift"] = Color(0.008, 0.010, 0.022)
 		_:
 			pass  # day
 	for m in _card_mats:
 		m.set_shader_parameter("glow_energy", glow)
+		m.set_shader_parameter("night_mix", night_mix)
+		m.set_shader_parameter("night_comp", night_comp)
+		m.set_shader_parameter("glow_tint", CARD_GLOW_TINT)
+	for m in _bg_card_mats:
+		m.set_shader_parameter("glow_energy", glow * BG_GLOW_RATIO)   # 后景窗火只做点缀
+		m.set_shader_parameter("night_mix", night_mix)
+		m.set_shader_parameter("night_comp", night_comp)
+		m.set_shader_parameter("glow_tint", CARD_GLOW_TINT)
 	for l in _lamps:
 		l.visible = lamp > 0.0
 		l.light_energy = lamp
 	if _char_host != null:
 		_char_host.set_light(char_tint, char_add)
 	_set_post(post)
-	print("[hd2d] 光照档=%s glow=%.2f lamp=%.2f" % [mode, glow, lamp])
+	print("[hd2d] 光照档=%s glow=%.2f lamp=%.2f night_mix=%.1f comp=%.2f" % [mode, glow, lamp, night_mix, night_comp])
 
 
 func _set_post(d: Dictionary) -> void:

@@ -189,25 +189,35 @@ func load_baked_geom(bin_path: String) -> void:
 		var verts := PackedVector3Array()
 		var colors := PackedColorArray()
 		var indices := PackedInt32Array()
-		for _t in range(tri_count):
-			var v0 := Vector3(f.get_float(), f.get_float(), 0.0)
-			var v1 := Vector3(f.get_float(), f.get_float(), 0.0)
-			var v2 := Vector3(f.get_float(), f.get_float(), 0.0)
-			var r := f.get_8()
-			var g := f.get_8()
-			var b := f.get_8()
-			f.get_8()  # alpha
-			var base := verts.size()
-			verts.append(v0)
-			verts.append(v1)
-			verts.append(v2)
-			var col := Color(r / 255.0, g / 255.0, b / 255.0)
-			colors.append(col)
-			colors.append(col)
-			colors.append(col)
-			indices.append(base)
-			indices.append(base + 1)
-			indices.append(base + 2)
+		if tri_count > 0:
+			# 批量解码：一次读整段（每三角形 28B = 6 顶点 float(x,y，z 恒 0 不落盘) + 4B 颜色），
+			# 顶点走 to_float32_array（C++ 批量），替代逐三角形 10 次 FileAccess 调用
+			var buf := f.get_buffer(tri_count * 28)
+			var fl := buf.to_float32_array()  # 每 7 float 一组：前 6 为 (x,y)×3，第 7 是 RGBA 凑整（不用）
+			var n := tri_count * 3
+			verts.resize(n)
+			colors.resize(n)
+			indices.resize(n)
+			var vi := 0
+			var fi := 0      # float 视角游标（每三角形 7 float）
+			var bi := 0      # 字节视角游标（颜色 4 字节在每三角形 28B 尾部）
+			for _t in tri_count:
+				var col := Color(
+						float(buf[bi + 24]) / 255.0,
+						float(buf[bi + 25]) / 255.0,
+						float(buf[bi + 26]) / 255.0)
+				verts[vi] = Vector3(fl[fi], fl[fi + 1], 0.0)
+				verts[vi + 1] = Vector3(fl[fi + 2], fl[fi + 3], 0.0)
+				verts[vi + 2] = Vector3(fl[fi + 4], fl[fi + 5], 0.0)
+				colors[vi] = col
+				colors[vi + 1] = col
+				colors[vi + 2] = col
+				indices[vi] = vi
+				indices[vi + 1] = vi + 1
+				indices[vi + 2] = vi + 2
+				vi += 3
+				fi += 7
+				bi += 28
 		baked_meshes.append({"verts": verts, "colors": colors, "indices": indices})
 	# 2 个 border section
 	tile_border_segs = _read_border_section(f)
@@ -218,11 +228,17 @@ func load_baked_geom(bin_path: String) -> void:
 func _read_border_section(f: FileAccess) -> Array:
 	var out := []
 	var seg_count := f.get_32()
-	for _i in range(seg_count):
-		var a := Vector2(f.get_float(), f.get_float())
-		var b := Vector2(f.get_float(), f.get_float())
-		var line := PackedVector2Array([a, b])
-		out.append(line)
+	if seg_count <= 0:
+		return out
+	# 批量解码：一次读整段（每段 16B = 4 float：a.x,a.y,b.x,b.y），
+	# 替代逐段 4 次 FileAccess.get_float
+	var fl := f.get_buffer(seg_count * 16).to_float32_array()
+	out.resize(seg_count)
+	var fi := 0
+	for i in seg_count:
+		out[i] = PackedVector2Array([
+			Vector2(fl[fi], fl[fi + 1]), Vector2(fl[fi + 2], fl[fi + 3])])
+		fi += 4
 	return out
 
 

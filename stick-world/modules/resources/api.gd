@@ -44,7 +44,8 @@ func _process(delta: float) -> void:
 	_price_tick_accumulator += TimeManager.sim_delta(delta) if TimeManager != null else delta
 	if _price_tick_accumulator < PRICE_TICK_INTERVAL:
 		return
-	_price_tick_accumulator = 0.0
+	# 保留超出部分（清零会每拍丢一帧 delta，长期产生节奏漂移）
+	_price_tick_accumulator -= PRICE_TICK_INTERVAL
 	for change: Dictionary in _resource_manager.tick_supply_demand():
 		price_changed.emit(
 			str(change["resource_id"]), float(change["old"]), float(change["new"]), str(change["region_id"]))

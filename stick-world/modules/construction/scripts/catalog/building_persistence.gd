@@ -28,16 +28,20 @@ func setup(root: Node) -> void:
 # 详见 modules/README.md §8 存储分层
 
 ## 保存建筑和建造项目到 DB
+## 写入走 insert_rows 事务批包：逐行 insert_row 是 autocommit，每行一次磁盘提交
+## （Windows 实测 200 栋 0.3~10 s，基准 tests/dev/bench_infra_save.tscn），
+## 批包后单次提交同量数据 <100 ms。字段与行构造保持逐一对应，存档格式不变。
 func save_to_db(db, slot_id: int, map_id: String) -> void:
 	# 建筑
 	if not db.query_with_bindings(_SQL_BLD_DELETE, [slot_id, map_id]):
 		push_error("[BuildingPersistence] buildings 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
+	var bld_rows: Array = []
 	for b_id in _root._buildings.keys():
 		var b: Node = _root._buildings[b_id]
 		if not is_instance_valid(b) or not (b is Building):
 			continue
 		var typed: Building = b as Building
-		if not db.insert_row("buildings", {
+		bld_rows.append({
 			"slot_id": slot_id, "building_id": b_id, "map_id": map_id,
 			"def_id": typed.def_id, "cell_x": typed.cell_x,
 			"width": typed.width, "state": typed.state,
@@ -46,23 +50,26 @@ func save_to_db(db, slot_id: int, map_id: String) -> void:
 			"wall_tier": typed.wall_tier,
 			"is_gate": 1 if typed.is_gate else 0,
 			"region_id": str(typed.get_meta("region_id", "")),
-		}):
-			push_error("[BuildingPersistence] 建筑写入失败 slot=%d map=%s id=%s: %s" % [slot_id, map_id, str(b_id), str(db.error_message)])
+		})
+	if not bld_rows.is_empty() and not db.insert_rows("buildings", bld_rows):
+		push_error("[BuildingPersistence] 建筑批量写入失败 slot=%d map=%s（%d 行）: %s" % [slot_id, map_id, bld_rows.size(), str(db.error_message)])
 	# 建造项目（只存未完工的）
 	if not db.query_with_bindings(_SQL_PRJ_DELETE, [slot_id, map_id]):
 		push_error("[BuildingPersistence] construction_projects 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
+	var prj_rows: Array = []
 	for p_id in _root._projects.keys():
 		var p: ScriptConstructionProject = _root._projects[p_id]
 		if p.state == ScriptConstructionProject.State.OPERATIONAL:
 			continue
-		if not db.insert_row("construction_projects", {
+		prj_rows.append({
 			"slot_id": slot_id, "project_id": p_id, "map_id": map_id,
 			"def_id": p.def_id, "cell_x": p.cell_x, "width": p.width,
 			"state": p.state, "total_work": p.total_work,
 			"current_work": p.current_work, "region_id": p.region_id,
 			"material_progress": p.material_progress,
-		}):
-			push_error("[BuildingPersistence] 建造项目写入失败 slot=%d map=%s id=%s: %s" % [slot_id, map_id, str(p_id), str(db.error_message)])
+		})
+	if not prj_rows.is_empty() and not db.insert_rows("construction_projects", prj_rows):
+		push_error("[BuildingPersistence] 建造项目批量写入失败 slot=%d map=%s（%d 行）: %s" % [slot_id, map_id, prj_rows.size(), str(db.error_message)])
 
 
 ## 从 DB 恢复建筑和建造项目
@@ -102,6 +109,9 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 	# 更新 ID 计数器（建筑实例 id 为纯数字无前缀）
 	_root._next_building_id = _calc_next_id(_root._buildings.keys(), "") + 1
 	_root._next_project_id = _calc_next_id(_root._projects.keys(), "proj_") + 1
+	# 直写注册表收尾：同步仓库子集缓存与项目快照缓存失效
+	_root._on_buildings_changed()
+	_root._on_projects_changed()
 
 
 ## 清空所有建筑和项目（读档前调用）
@@ -112,6 +122,9 @@ func _clear_all_buildings_and_projects() -> void:
 	_root._buildings.clear()
 	_root._building_to_id.clear()
 	_root._projects.clear()
+	_root._finished_projects.clear()
+	_root._on_buildings_changed()
+	_root._on_projects_changed()
 	# 阶段 E：清理进度条
 	_root._indicators.clear_all()
 

@@ -33,7 +33,15 @@ func _process(delta: float) -> void:
 	_scan_and_attach()
 
 
+## 本次扫描的视口/相机缓存（数百节点每 0.5s 各查一遍 get_viewport+get_camera_2d
+## 纯属重复——首个节点初始化，本次扫描内全部复用）
+var _scan_vp: Viewport = null
+var _scan_cam: Camera2D = null
+
+
 func _scan_and_attach() -> void:
+	_scan_vp = null
+	_scan_cam = null
 	var nodes: Array = get_tree().get_nodes_in_group("resource_node")
 	for n in nodes:
 		if not is_instance_valid(n):
@@ -49,32 +57,39 @@ func _scan_and_attach() -> void:
 			_detach_sparkles(node)
 
 
+func _refresh_scan_camera(node: Node2D) -> void:
+	if _scan_vp != null and is_instance_valid(_scan_vp) \
+			and _scan_cam != null and is_instance_valid(_scan_cam):
+		return
+	_scan_vp = node.get_viewport()
+	_scan_cam = _scan_vp.get_camera_2d() if _scan_vp != null else null
+
+
+## 可视世界半宽：Godot4 zoom>1=放大，半宽 = 视口半宽 / zoom。
+## （原实现误乘 zoom：放大时挂/卸界反而外扩——zoom 1.3 时界外扩 69%，
+## 离屏粒子照常 CPU 模拟，正好架空 800px 迟滞卸载；缩小时界内缩，可见点不挂闪光）
+func _cam_half_world() -> Vector2:
+	return Vector2(_scan_vp.get_visible_rect().size) * 0.5 / _scan_cam.zoom
+
+
 ## 只给视野附近的资源点挂粒子（原版也只对激活区域跑发射）
 func _near_view(node: Node2D) -> bool:
-	var vp := node.get_viewport()
-	if vp == null:
-		return false
-	var cam := vp.get_camera_2d()
-	if cam == null:
+	_refresh_scan_camera(node)
+	if _scan_cam == null:
 		return true
-	var half := Vector2(vp.get_visible_rect().size) * 0.5 * cam.zoom
-	half += Vector2(VIEW_MARGIN, VIEW_MARGIN)
-	return absf(node.global_position.x - cam.global_position.x) <= half.x \
-			and absf(node.global_position.y - cam.global_position.y) <= half.y
+	var half := _cam_half_world() + Vector2(VIEW_MARGIN, VIEW_MARGIN)
+	return absf(node.global_position.x - _scan_cam.global_position.x) <= half.x \
+			and absf(node.global_position.y - _scan_cam.global_position.y) <= half.y
 
 
 ## 远超视野（含迟滞带）才卸载；任一轴越界即算远
 func _far_from_view(node: Node2D) -> bool:
-	var vp := node.get_viewport()
-	if vp == null:
+	_refresh_scan_camera(node)
+	if _scan_cam == null:
 		return false
-	var cam := vp.get_camera_2d()
-	if cam == null:
-		return false
-	var half := Vector2(vp.get_visible_rect().size) * 0.5 * cam.zoom
-	half += Vector2(VIEW_MARGIN + DETACH_EXTRA, VIEW_MARGIN + DETACH_EXTRA)
-	return absf(node.global_position.x - cam.global_position.x) > half.x \
-			or absf(node.global_position.y - cam.global_position.y) > half.y
+	var half := _cam_half_world() + Vector2(VIEW_MARGIN + DETACH_EXTRA, VIEW_MARGIN + DETACH_EXTRA)
+	return absf(node.global_position.x - _scan_cam.global_position.x) > half.x \
+			or absf(node.global_position.y - _scan_cam.global_position.y) > half.y
 
 
 ## 卸载即 queue_free 组件（attach_to 自包含，再入视野时重挂全量重建）

@@ -171,12 +171,15 @@ func get_base_price(resource_id: String) -> float:
 ## 模型：目标价 = 基准价 × (均衡库存/当前库存)^弹性 × (1+税率)，单次限幅逼近；
 ## 显式上下限（set_price_ceiling/floor）优先于模型目标。
 ## 返回 {resource_id, region_id, old, new}（纯计算，不发信号——由 api 发射 price_changed）。
+## 热路径注：api 每 5 秒对全部 资源×区域 组合各调一次（基准 bench_infra_market），
+## 此处 stocks/prices 直接下标读替代 get_stock/get_base_price 调用
+## （_ensure_paths 已保证键存在，下标语义等价，省每组合 3 次函数调用）。
 func update_price(resource_id: String, region_id: String) -> Dictionary:
 	_ensure_paths(resource_id, region_id)
-	var stock: float = get_stock(resource_id, region_id)
+	var stock: float = stocks[resource_id][region_id]
 	# 稀缺度：库存低于均衡 → >1 提价；高于均衡 → <1 降价
 	var scarcity: float = EQUILIBRIUM_STOCK / maxf(stock, 1.0)
-	var target: float = get_base_price(resource_id) * pow(scarcity, PRICE_ELASTICITY) * (1.0 + tax_rate)
+	var target: float = float(_base_prices.get(resource_id, 1.0)) * pow(scarcity, PRICE_ELASTICITY) * (1.0 + tax_rate)
 	if price_ceilings.has(resource_id):
 		target = minf(target, price_ceilings[resource_id])
 	if price_floors.has(resource_id):
@@ -198,10 +201,12 @@ func update_price(resource_id: String, region_id: String) -> Dictionary:
 
 ## 供需周期：遍历所有已开库的 资源×区域 组合各步进一次价格。
 ## 返回变更数组（元素同 update_price 返回值）；由 api 定时驱动并发信号。
+## 热路径注：直接迭代字典替代 keys()（省每拍 2N 个临时数组分配，N=资源数）。
 func tick_supply_demand() -> Array:
 	var changes: Array = []
-	for res_id in stocks.keys():
-		for region_id in stocks[res_id].keys():
+	for res_id: String in stocks:
+		var stock_by_region: Dictionary = stocks[res_id]
+		for region_id: String in stock_by_region:
 			changes.append(update_price(res_id, region_id))
 	return changes
 

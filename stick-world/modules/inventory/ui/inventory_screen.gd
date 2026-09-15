@@ -78,7 +78,9 @@ func _build_content() -> void:
 	_cursor_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cursor_layer.draw.connect(_draw_cursor)
 	add_child(_cursor_layer)
-	set_process(true)
+	# 初始隐藏（StickScreen 默认 visible=false），open/close 切换 process——
+	# 关闭后不再每帧空跑光标跟随
+	set_process(false)
 
 
 func _make_equip_widget(slot: int, cap: String) -> ItemSlotWidget:
@@ -196,6 +198,7 @@ func _draw_cursor() -> void:
 
 func open() -> void:
 	super.open()
+	set_process(true)
 	refresh()
 
 
@@ -208,3 +211,4 @@ func close() -> void:
 					% [_cursor_stack.def_id, rest])
 		_cursor_stack = null
 	super.close()
+	set_process(false)

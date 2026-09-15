@@ -36,8 +36,10 @@ const _BuildingPersistenceScript: GDScript = preload("res://modules/construction
 
 ## 派工系统
 var _assigner: ScriptWorkCrewAssigner = null
-## 活跃项目列表 {project_id → ConstructionProject}
+## 活跃项目列表 {project_id → ConstructionProject}（_physics_process 只 tick 本表）
 var _projects: Dictionary = {}
+## 已完工项目 {project_id → ConstructionProject}（不再 tick，保留供 get_project_state 查询）
+var _finished_projects: Dictionary = {}
 ## 已完工建筑注册表 {building_id → Building}
 var _buildings: Dictionary = {}
 ## 建筑 → building_id 反查（用于 demolish）
@@ -135,46 +137,93 @@ func get_map() -> Node2D:
 	return _map
 
 
+## 仓库子集缓存（搬运工取货/交互提示每物理帧查询，免每次全建筑扫描）。
+## _buildings 任何变更点（完工注册/直建/拆除/读档清空重建）置脏，下帧查询重扫一次。
+## 废墟过滤按查询时 state 实时判（建筑可在注册后被炸成 DESTROYED）。
+var _warehouse_cache: Array = []
+var _warehouse_cache_dirty: bool = true
+
+
+## _buildings 变更后调用（本模块与 building_persistence 直接写表处共用）
+func _on_buildings_changed() -> void:
+	_warehouse_cache_dirty = true
+
+
+func _get_warehouse_list() -> Array:
+	if _warehouse_cache_dirty:
+		_warehouse_cache = []
+		var stale_ids: Array[String] = []
+		for building_id: String in _buildings.keys():
+			var entry = _buildings[building_id]
+			# 先校验有效性再转型：对已释放对象执行 `as Node2D` 会报 "Trying to cast a freed object"
+			if not is_instance_valid(entry):
+				stale_ids.append(building_id)
+				continue
+			var b: Node2D = entry as Node2D
+			if b != null and (b.get("def_id") == "warehouse" or b.get("def_id") == "placeholder"):
+				_warehouse_cache.append(b)
+		for bid in stale_ids:
+			_buildings.erase(bid)
+		_warehouse_cache_dirty = false
+	return _warehouse_cache
+
+
 ## 查找距离 pos 最近的已完工仓库建筑（def_id=="warehouse"）。
 ## 用于搬运工取货。无仓库返回 null。
 func get_nearest_warehouse(pos: Vector2) -> Node2D:
 	var best: Node2D = null
-	var best_dist: float = INF
-	var stale: Array[String] = []
-	for building_id: String in _buildings.keys():
-		var entry = _buildings[building_id]
-		# 先校验有效性再转型：对已释放对象执行 `as Node2D` 会报 "Trying to cast a freed object"
-		if not is_instance_valid(entry):
-			stale.append(building_id)
+	var best_dist_sq: float = INF
+	for b in _get_warehouse_list():
+		if not is_instance_valid(b):
+			_warehouse_cache_dirty = true
 			continue
-		var b: Node2D = entry as Node2D
-		if b == null:
+		# 废墟不当仓库（被炸毁后注册表尚未移除的窗口期，搬运工不再认废墟取货）
+		if b is Building and (b as Building).state == Building.State.DESTROYED:
 			continue
-		if b.get("def_id") != "warehouse" and b.get("def_id") != "placeholder":
-			continue
-		var d: float = b.global_position.distance_to(pos)
-		if d < best_dist:
-			best_dist = d
+		var d_sq: float = b.global_position.distance_squared_to(pos)
+		if d_sq < best_dist_sq:
+			best_dist_sq = d_sq
 			best = b
-	for bid in stale:
-		_buildings.erase(bid)
 	return best
+
+
+## 项目查询快照缓存（get_nearest_project 被搬运工 AI 每物理帧调用，100 项目下
+## 每次全扫 values() 数组分配 + 逐项类型断言占成本大头，基准 bench_infra_construction）。
+## 缓存元素 = [center_x: float, project]（项目选址字段创建后不可变，中心坐标预计算）。
+## _projects 增删点（开工/完工移表/读档清空重建）置脏；state 过滤在查询时实时判——
+## PLANNED→UNDER_CONSTRUCTION 转换不经 manager，但缓存持引用不过滤状态，无失效窗口。
+var _project_cache: Array = []
+var _project_cache_dirty: bool = true
+
+
+## _projects 增删后调用（开工注册/完工移表/读档清空重建共用）
+func _on_projects_changed() -> void:
+	_project_cache_dirty = true
+
+
+func _rebuild_project_cache() -> void:
+	_project_cache = []
+	for p in _projects.values():
+		if p is ScriptConstructionProject:
+			var proj: ScriptConstructionProject = p as ScriptConstructionProject
+			_project_cache.append([float(proj.cell_x) * 32.0 + float(proj.width) * 16.0, proj])
+	_project_cache_dirty = false
 
 
 ## 查找距离 pos 最近的活跃建造项目（UNDER_CONSTRUCTION）。无项目返回 null。
 func get_nearest_project(pos: Vector2) -> RefCounted:
+	if _project_cache_dirty:
+		_rebuild_project_cache()
 	var best: RefCounted = null
 	var best_dist: float = INF
-	for p in _projects.values():
-		if p is ScriptConstructionProject:
-			var proj: ScriptConstructionProject = p as ScriptConstructionProject
-			if proj.state != proj.State.UNDER_CONSTRUCTION:
-				continue
-			var center_x: float = float(proj.cell_x) * 32.0 + float(proj.width) * 16.0
-			var d: float = absf(center_x - pos.x)
-			if d < best_dist:
-				best_dist = d
-				best = proj
+	for entry: Array in _project_cache:
+		var proj: ScriptConstructionProject = entry[1]
+		if proj.state != proj.State.UNDER_CONSTRUCTION:
+			continue
+		var d: float = absf(entry[0] - pos.x)
+		if d < best_dist:
+			best_dist = d
+			best = proj
 	return best
 
 
@@ -205,9 +254,12 @@ func _physics_process(delta: float) -> void:
 	# （本节点 PAUSABLE——此前无暂停门禁，暂停期建造照走，"假暂停"旧账一并了结）
 	if TimeManager != null:
 		delta = TimeManager.sim_delta(delta)
-	for p in _projects.values():
-		if p is ScriptConstructionProject:
-			(p as ScriptConstructionProject).tick(delta)
+	# 推进所有活跃项目（完工项目移入 _finished_projects，本循环不再随历史建造数增长）；
+	# 复用项目快照缓存（_projects 增删点置脏），免每帧 values() 数组分配
+	if _project_cache_dirty:
+		_rebuild_project_cache()
+	for entry: Array in _project_cache:
+		(entry[1] as ScriptConstructionProject).tick(delta)
 
 
 # ─────────────────────────────── 开工建造 ────────────────────────────────
@@ -259,6 +311,7 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	# D2 数据驱动：def 随项目携带，完工时 apply_building_def 应用到建筑（interior_mode 等）
 	project.building_def = def
 	_projects[project_id] = project
+	_on_projects_changed()
 	_assigner.add_project(project)
 	# 项目创建即立工地障碍（不等派工——否则无空闲工人时工地无碰撞箱，玩家可走进工地）
 	project._create_barrier()
@@ -282,6 +335,11 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 func _on_project_completed(project: ScriptConstructionProject, building: Node) -> void:
 	# 阶段 E：移除建造进度条
 	_indicators.untrack(project.project_id)
+	# 完工项目移出活跃表（此前只增不删，_physics_process 30Hz 遍历量随历史建造数
+	# 单调增长）；转入 _finished_projects 保留查询（get_project_state 测试契约）
+	_projects.erase(project.project_id)
+	_on_projects_changed()
+	_finished_projects[project.project_id] = project
 	if building == null:
 		return
 	var building_id := "%04d" % _next_building_id
@@ -296,6 +354,7 @@ func _on_project_completed(project: ScriptConstructionProject, building: Node) -
 			(building as Building).apply_building_def(def)
 	_buildings[building_id] = building
 	_building_to_id[building] = building_id
+	_on_buildings_changed()
 	print_verbose("[ConstructionManager] 建筑完工: %s (def=%s, cell_x=%d)" % [building_id, project.def_id, project.cell_x])
 	# 阶段 F：城墙完工时更新地形遮罩
 	if building is Building and (building as Building).is_wall():
@@ -404,11 +463,15 @@ func get_building_state(building_id: String) -> Dictionary:
 	}
 
 
-## 查询项目状态（P0 扩展接口，供测试/调试用）
+## 查询项目状态（P0 扩展接口，供测试/调试用）。活跃与已完工项目均可查。
 func get_project_state(project_id: String) -> Dictionary:
-	if not _projects.has(project_id):
+	var p: ScriptConstructionProject = null
+	if _projects.has(project_id):
+		p = _projects[project_id] as ScriptConstructionProject
+	elif _finished_projects.has(project_id):
+		p = _finished_projects[project_id] as ScriptConstructionProject
+	if p == null:
 		return {"ok": false, "error": "项目不存在: %s" % project_id}
-	var p: ScriptConstructionProject = _projects[project_id] as ScriptConstructionProject
 	return {
 		"ok": true,
 		"project_id": project_id,
@@ -421,9 +484,9 @@ func get_project_state(project_id: String) -> Dictionary:
 	}
 
 
-## 获取所有项目 ID（供测试用）
+## 获取所有项目 ID（供测试用，含已完工）
 func get_all_project_ids() -> Array:
-	return _projects.keys()
+	return _projects.keys() + _finished_projects.keys()
 
 
 # ─────────────────────────────── 拆除 ────────────────────────────────
@@ -540,6 +603,7 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 		(building as Building).set_meta("building_id", building_id)
 	_buildings[building_id] = building
 	_building_to_id[building] = building_id
+	_on_buildings_changed()
 
 	print_verbose("[ConstructionManager] 预置建筑已生成: %s (def=%s, cell_x=%d, width=%d)" % [building_id, def_id, cell_x, width])
 	return {"ok": true, "building_id": building_id, "cell_x": cell_x, "width": width}
@@ -569,6 +633,7 @@ func demolish_building(building_id: String) -> Dictionary:
 	# 从注册表移除
 	_buildings.erase(building_id)
 	_building_to_id.erase(b)
+	_on_buildings_changed()
 	# 释放节点
 	if b is Node:
 		(b as Node).queue_free()

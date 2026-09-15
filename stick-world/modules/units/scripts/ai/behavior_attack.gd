@@ -89,6 +89,37 @@ var _evade_dir: float = 0.0
 var _burst_count: int = 0
 var _burst_wait_until: float = -1.0e9
 
+# ── 实体能力位缓存（战斗性能优化）──
+## update 每物理帧逐单位调用，链式 entity.has_method(...) 是纯重复开销：
+## 实体脚本方法表在实例存续期不变，首次 update 检测一次即可（零语义差异）
+var _cap_checked: bool = false
+var _cap_is_dead: bool = false
+var _cap_hit_stun: bool = false
+var _cap_ai_stop: bool = false
+var _cap_ai_move: bool = false
+var _cap_get_health: bool = false
+var _cap_get_weapon: bool = false
+var _cap_play_attack: bool = false
+var _cap_get_facing: bool = false
+var _cap_get_faction: bool = false
+var _cap_get_map: bool = false
+var _cap_get_battle: bool = false
+
+
+func _check_caps() -> void:
+	_cap_checked = true
+	_cap_is_dead = entity.has_method("is_dead")
+	_cap_hit_stun = entity.has_method("is_in_hit_stun")
+	_cap_ai_stop = entity.has_method("ai_stop")
+	_cap_ai_move = entity.has_method("ai_move")
+	_cap_get_health = entity.has_method("get_health")
+	_cap_get_weapon = entity.has_method("get_weapon")
+	_cap_play_attack = entity.has_method("play_attack")
+	_cap_get_facing = entity.has_method("get_facing")
+	_cap_get_faction = entity.has_method("get_faction")
+	_cap_get_map = entity.has_method("get_map")
+	_cap_get_battle = entity.has_method("get_battle_instance")
+
 
 func _ready() -> void:
 	behavior_name = "attack"
@@ -121,7 +152,9 @@ func update(delta: float) -> void:
 	if entity == null or not is_instance_valid(entity):
 		finish()
 		return
-	if entity.has_method("is_dead") and entity.is_dead():
+	if not _cap_checked:
+		_check_caps()
+	if _cap_is_dead and entity.is_dead():
 		finish()
 		return
 	# 压制禁令消费段（A6 · C9）：压制期停滞——不追不打不调整，同受击硬直口径。
@@ -135,24 +168,24 @@ func update(delta: float) -> void:
 		return
 	# 受击硬直（行业最佳实践 hit stun）：被打瞬间短暂停滞，不追不打；
 	# 醒后小概率规避小跳（RWR 士兵被打了会挪窝，不站桩吃第二下）
-	var stunned: bool = entity.has_method("is_in_hit_stun") and entity.is_in_hit_stun()
+	var stunned: bool = _cap_hit_stun and entity.is_in_hit_stun()
 	if stunned:
 		if not _in_stun_prev and _evade_hold <= 0.0:
 			if randf() < 0.30:
 				_evade_hold = 0.35
 				_evade_dir = 1.0 if randf() < 0.5 else -1.0
 		_in_stun_prev = true
-		if entity.has_method("ai_stop"):
+		if _cap_ai_stop:
 			entity.ai_stop()
 		return
 	_in_stun_prev = false
 	if _evade_hold > 0.0:
 		_evade_hold -= delta
-		if entity.has_method("ai_move"):
+		if _cap_ai_move:
 			entity.ai_move(Vector2(0.0, _evade_dir), false)
 		return
 	if _battle == null or not is_instance_valid(_battle) or not _battle.has_method("is_active") or not _battle.is_active():
-		if entity.has_method("ai_stop"):
+		if _cap_ai_stop:
 			entity.ai_stop()
 		finish()
 		return
@@ -182,13 +215,13 @@ func update(delta: float) -> void:
 		# 感知节奏按兵种档案（RWR 扫视轮询）：基线 0.5s，弓/剑 0.4s 等
 		_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
 		if _target == null:
-			if entity.has_method("ai_stop"):
+			if _cap_ai_stop:
 				entity.ai_stop()
 			finish()
 			return
 
 	# 自身状态检查：士气/HP 过低 -> finish 让 AIController 决策
-	var health: Node = entity.get_health() if entity.has_method("get_health") else null
+	var health: Node = entity.get_health() if _cap_get_health else null
 	if health != null:
 		if health.has_method("is_routed") and health.is_routed():
 			finish()
@@ -206,7 +239,7 @@ func update(delta: float) -> void:
 	# night_hesitate_mult，RWR day/night reaction_time 分段同构）
 	if _hesitate_timer > 0.0:
 		_hesitate_timer -= delta
-		if entity.has_method("ai_stop"):
+		if _cap_ai_stop:
 			entity.ai_stop()
 		return
 	_hesitate_check_timer -= delta
@@ -218,12 +251,12 @@ func update(delta: float) -> void:
 			if night_mult != 1.0 and _is_night():
 				ht *= night_mult
 			_hesitate_timer = randf_range(ht.x, ht.y)
-			if entity.has_method("ai_stop"):
+			if _cap_ai_stop:
 				entity.ai_stop()
 			return
 
 	# 攻击 / 接近逻辑
-	var weapon: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
 	var dist: float = entity.global_position.distance_to(_target.global_position)
 	# 召唤护卫（SWL MagikillAi.ShouldCastSummon 直译）：敌人逼近施法距离且冷却
@@ -236,7 +269,7 @@ func update(delta: float) -> void:
 	var kite_range: float = _p("kite_range", 0.0)
 	if kite_range > 0.0 and dist < kite_range:
 		var away: Vector2 = (entity.global_position - _target.global_position).normalized()
-		if entity.has_method("ai_move"):
+		if _cap_ai_move:
 			entity.ai_move(away, _p("kite_run", 0.0) > 0.5)
 		# 风筝还击（SWL 弓手边撤边射）：前摇/弹道与移动解耦（延迟结算计时独立），
 		# 冷却好就边跑边放——不再被追着跑还不还手
@@ -249,7 +282,7 @@ func update(delta: float) -> void:
 	elif dist <= attack_range:
 		# 在射程内：停止移动并攻击。弓手先进瞄准节奏（SWL ShouldAim）：持瞄随机
 		# 时长再放箭，放箭瞬间重掷（GenerateNextShotRandomness），节奏不再是卡冷却平A
-		if entity.has_method("ai_stop"):
+		if _cap_ai_stop:
 			entity.ai_stop()
 		_face_target()  # 开火面向目标（走位/漂移后可能侧身）
 		# 9p（SWL ShouldAim/CanAttack 的 y 门槛，档案 y_aim_tolerance）：|Δy| 超容忍时
@@ -257,7 +290,7 @@ func update(delta: float) -> void:
 		var aim_tol: float = _p("y_aim_tolerance", 0.0)
 		var dy_align: float = _target.global_position.y - entity.global_position.y
 		if aim_tol > 0.0 and absf(dy_align) > aim_tol and _can_adjust_y_position_only(attack_range):
-			if entity.has_method("ai_move"):
+			if _cap_ai_move:
 				entity.ai_move(Vector2(0.0, signf(dy_align)), false)
 			_update_aim_rhythm(delta)  # 持瞄节奏照常走，y 对齐即放箭
 			return
@@ -270,7 +303,7 @@ func update(delta: float) -> void:
 			if _p("block_after_attack", 0.0) > 0.0:
 				_post_block_until = Time.get_ticks_msec() / 1000.0 + _p("block_after_attack", 0.0)
 			# 攻击命中帧触发攻击动画（反编译参考实装 C）：播完由 rig.animation_finished 回切
-			if entity.has_method("play_attack"):
+			if _cap_play_attack:
 				entity.play_attack()
 		# 战斗微移步（RWR"不安分"感）：站桩输出时随机小步横移，活着的感觉
 		_strafe_timer -= delta
@@ -281,7 +314,7 @@ func update(delta: float) -> void:
 				_strafe_hold = 0.30
 		if _strafe_hold > 0.0:
 			_strafe_hold -= delta
-			if entity.has_method("ai_move"):
+			if _cap_ai_move:
 				entity.ai_move(Vector2(0.0, _strafe_dir), false)
 		# 射手容错间距（SWL PushApartTolerance）：站桩输出时与友军保持间距
 		if _p("push_apart", 0.0) > 0.0:
@@ -310,7 +343,7 @@ func update(delta: float) -> void:
 		var run: bool = _determine_x_run_power(desired_pos, attack_range) >= 1.0
 		if not run and randf() < (RAGE_PUSH_PROB if _rage else _p("aggressive_push_prob", prob_aggressive_push)):
 			run = true
-		if entity.has_method("ai_move"):
+		if _cap_ai_move:
 			entity.ai_move(dir, run)
 
 
@@ -382,7 +415,7 @@ func _update_aim_rhythm(delta: float) -> bool:
 	if not _aiming:
 		_aiming = true
 		_aim_timer = _gauss((hold.x + hold.y) * 0.5, maxf(0.05, (hold.y - hold.x) / 3.0))
-		var weapon: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+		var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 		if weapon != null and weapon.has_method("get_sustained_fire_heat") \
 				and weapon.get_sustained_fire_heat() >= BURST_HEAT_THRESHOLD:
 			_aim_timer *= randf_range(BURST_WAIT_MULT.x, BURST_WAIT_MULT.y)
@@ -580,9 +613,9 @@ func _apply_push_apart(spacing: float, delta: float) -> void:
 	if _spacing_timer > 0.0:
 		return
 	_spacing_timer = 0.4
-	var faction: int = entity.get_faction() if entity.has_method("get_faction") else 0
+	var faction: int = entity.get_faction() if _cap_get_faction else 0
 	var pos: Vector2 = entity.global_position
-	var map: Node = entity.get_map() if entity.has_method("get_map") else null
+	var map: Node = entity.get_map() if _cap_get_map else null
 	if faction != 0 and map != null and is_instance_valid(map) and map.has_method("query_neighbors"):
 		for a in map.query_neighbors(pos, spacing + 8.0):
 			if a == null or not is_instance_valid(a) or a == entity:
@@ -594,12 +627,12 @@ func _apply_push_apart(spacing: float, delta: float) -> void:
 			var d: float = pos.distance_to(a.global_position)
 			if d < spacing and d > 0.01:
 				var away: Vector2 = (pos - a.global_position).normalized()
-				if entity.has_method("ai_move"):
+				if _cap_ai_move:
 					entity.ai_move(away * 0.6, false)
 				return
 		return
 	# 回落：战斗友军列表全扫（旧语义）
-	if not entity.has_method("get_battle_instance"):
+	if not _cap_get_battle:
 		return
 	var bi: Node = entity.get_battle_instance()
 	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_allies_of"):
@@ -612,7 +645,7 @@ func _apply_push_apart(spacing: float, delta: float) -> void:
 		var d: float = pos.distance_to(a.global_position)
 		if d < spacing and d > 0.01:
 			var away: Vector2 = (pos - a.global_position).normalized()
-			if entity.has_method("ai_move"):
+			if _cap_ai_move:
 				entity.ai_move(away * 0.6, false)
 			return
 
@@ -639,13 +672,13 @@ func _update_summon(dist: float, delta: float) -> void:
 	_summon_cd = _p("summon_cooldown", 12.0)
 	var spawned: Array = _spawn_minidons(mini(count - _summons_alive.size(), count))
 	_summons_alive.append_array(spawned)
-	if not spawned.is_empty() and entity.has_method("play_attack"):
+	if not spawned.is_empty() and _cap_play_attack:
 		entity.play_attack()  # 施法动画（Magikill-Spell1）
 
 
 ## 召唤触发距离：施法距离内（贴太远召了也白召）
 func _summon_trigger_range() -> float:
-	var weapon: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 	return weapon.attack_range if weapon != null and "attack_range" in weapon else 280.0
 
 
@@ -755,7 +788,7 @@ func _get_squad_target() -> Node:
 func _is_beyond_leash() -> bool:
 	if _target == null or not is_instance_valid(_target) or entity == null:
 		return false
-	var weapon: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
 	return entity.global_position.distance_to(_target.global_position) > attack_range * _p("leash_mult", LEASH_MULT)
 

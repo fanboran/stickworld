@@ -335,5 +335,8 @@ func update_hint() -> void:
 		var ground_y: float = map.get("ground_y") if map != null and "ground_y" in map else 810.0
 		hint_y = ground_y - 280.0
 	_interact_hint_node.global_position = Vector2(float(info.center_x), hint_y)
-	_interact_hint_label.text = String(info.hint)
+	# text setter 每次赋值都触发 Label 重排：文案没变不写（本函数每物理帧被调）
+	var hint_text := String(info.hint)
+	if _interact_hint_label.text != hint_text:
+		_interact_hint_label.text = hint_text
 	_interact_hint_node.visible = true

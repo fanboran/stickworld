@@ -22,9 +22,6 @@ var speed: Vector2 = Vector2.ZERO
 var gravity_acceleration: float = 0.0
 var speed_slowdown: float = 0.0
 
-## 池（原版 Queue<IngredientVisualEffectController>）
-var pool: Array[IngredientVisualEffectController] = []
-
 
 static func _new_effect(effect: IngredientVisualEffect) -> IngredientVisualEffectController:
 	var c := IngredientVisualEffectController.new()
@@ -80,6 +77,8 @@ static func spawn(pool_owner: Node, effect: IngredientVisualEffect, appear_type:
 		c.speed_slowdown = effect.speed_slowdown_explosion
 	c.gravity_acceleration = effect.gravity_acceleration
 	c.sprite.texture = effect.sprites[rng.randi_range(0, effect.sprites.size() - 1)] if effect.sprites.size() > 0 else null
+	# 回池实例的 modulate.a 停在上次淡出的 ~0：spawn 当帧先复位，否则复用首帧隐身跳变
+	c.sprite.modulate.a = 1.0
 	c.visible = true
 	pool_owner.add_child(c)
 

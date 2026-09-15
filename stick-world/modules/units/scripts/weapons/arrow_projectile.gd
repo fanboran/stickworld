@@ -79,6 +79,9 @@ var _near_miss_radius: float = 0.0
 var _near_miss_shooter_faction: int = 0
 ## 近失候选注入出口（单测确定性断言用；空数组 = 按落点做物理半径查询）
 var near_miss_candidates_override: Array = []
+## 目标 Collider 引用缓存（setup 时解析一次）：箭雨场景每物理帧数百次
+## 目标身体位置查询免 get_node 路径解析；引用失效时回落实时查找
+var _target_collider: Node2D = null
 
 
 ## 发射参数：初速度矢量、伤害、射手、目标、拉弓力度（0~1）、重力（缺省 0=直线，兼容旧调用）、
@@ -100,6 +103,8 @@ func setup(vel: Vector2, dmg: float, shooter: Node, target: Node = null, draw_po
 	# 11d 在飞伤害登记目标（终态扣减，见 _clear_incoming）
 	if target != null and is_instance_valid(target) and "incoming_arrow_damage" in target:
 		_registered_target = target
+		# 目标 Collider 引用顺手缓存（_target_body_pos 每物理帧消费）
+		_target_collider = target.get_node_or_null("Collider") as Node2D
 
 
 func _ready() -> void:
@@ -155,11 +160,16 @@ func _physics_process(delta: float) -> void:
 		_stick_ground()
 
 
-## 目标身体（碰撞体）世界位置：Collider 节点优先，缺省回落 root + 典型偏移
-static func _target_body_pos(target: Node) -> Vector2:
-	var collider: Node = target.get_node_or_null("Collider")
-	if collider != null and collider is Node2D:
-		return (collider as Node2D).global_position
+## 目标身体（碰撞体）世界位置：Collider 节点优先，缺省回落 root + 典型偏移。
+## Collider 引用 setup 缓存（箭雨每物理帧数百次查询免 get_node 路径解析），
+## 缓存失效（未缓存/已释放）时回落实时查找并重新缓存。
+func _target_body_pos(target: Node) -> Vector2:
+	var col: Node2D = _target_collider
+	if (col == null or not is_instance_valid(col)) and target != null:
+		col = target.get_node_or_null("Collider") as Node2D
+		_target_collider = col
+	if col != null:
+		return col.global_position
 	return (target as Node2D).global_position + Vector2(8.5, 130)
 
 

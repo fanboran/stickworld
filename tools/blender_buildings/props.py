@@ -2667,6 +2667,669 @@ def scarecrow(b, x=0.0, y=0.0, z=0.0, h=150.0, w=None, seed=0):
     _ = rng
 
 
+# ================================================================ 六轮：街道家具
+#
+# 创始人点名「路灯花坛之类的建筑也可以有」。分工：`dress()` 管"建筑门口那一圈"，
+# 本节管**街道公共家具**（路灯/花坛/长椅/市政件），由 `dress_street()` 按节奏
+# 摆沿街两侧（供 HD-2D 主街与城市布局消费）。
+#
+# 尺寸纪律与既有件一致：现实尺寸建模（1m ≈ 76 单位）、主尺寸只用 r/h/w/d/s、
+# 每件带 seed。路灯自发光走 `lamp`/`fire`（与门口灯笼同一套，夜里不会异色）；
+# 喷泉水用 `water`（深色水面，不是玻璃）；花头用染布色（与 flower_bucket 同口径）。
+
+def _lamp_head(b, x, y, z, s, lit=True):
+    """油路灯头：铁底板 + 清玻璃罩（看得见灯芯）+ 四角框 + 四棱锥顶帽 + 灯芯。
+
+    玻璃必须走 `clear_glass()`（真透明）——低透射玻璃会把整盏灯吃成黑块（一轮踩过）；
+    顶帽用 4 段急锥柱体 = 四棱锥，微俯视下正好读作"灯帽"。
+    """
+    g = clear_glass()
+    b.box_bottom((s, s, 3.0), (x, y), z, "iron")
+    b.box_bottom((s * 0.84, s * 0.84, s * 1.42), (x, y), z + 3.0, g)
+    for sx in (-1.0, 1.0):
+        for sy in (-1.0, 1.0):
+            b.box_bottom((2.6, 2.6, s * 1.42), (x + sx * s * 0.44, y + sy * s * 0.44),
+                         z + 3.0, "iron")
+    b.box_bottom((s * 1.08, s * 1.08, 3.5), (x, y), z + 3.0 + s * 1.42, "iron")
+    _ring(b, (x, y, z + 6.5 + s * 1.42 + s * 0.34), s * 0.74, s * 0.68, "iron", 4,
+          "Z", taper=0.30)
+    b.cylinder((x, y, z + 7.0 + s * 1.42 + s * 0.68 + s * 0.10), s * 0.11, s * 0.22,
+               "iron", 8)
+    if lit:
+        b.box_bottom((s * 0.40, s * 0.40, s * 0.72), (x, y), z + 4.0 + s * 0.30, "fire")
+
+
+def lamp_post_stone(b, x=0.0, y=0.0, z=0.0, h=200.0, lit=True, seed=0, r=None):
+    """石柱油灯（全高 ~2.6m）：石砌双级底座 + 收分石柱 + 柱头 + 油灯头。
+
+    与既有 `lantern_post`（木柱挑臂挂灯）的分工：石柱款是**镇广场/石砌街**的门面，
+    灯头坐在柱顶而不是挑出去，剪影是一条重心的直线。`seed` 只影响石座细缝的微差。
+    """
+    r = r if r else h * 0.055
+    b.box_bottom((h * 0.16, h * 0.16, h * 0.07), (x, y), z, "stone")
+    b.box_bottom((h * 0.125, h * 0.125, h * 0.05), (x, y), z + h * 0.07, "stone_dark")
+    _ring(b, (x, y, z + h * 0.12 + h * 0.36), r, h * 0.72, "stone", 10, "Z", taper=0.80)
+    _ring(b, (x, y, z + h * 0.48), r * 1.22, h * 0.030, "stone_dark", 10)
+    b.box_bottom((r * 2.6, r * 2.6, h * 0.045), (x, y), z + h * 0.84, "stone_dark")
+    b.box_bottom((r * 2.2, r * 2.2, h * 0.028), (x, y), z + h * 0.885, "stone")
+    _lamp_head(b, x, y, z + h * 0.915, s=h * 0.098, lit=lit)
+    _ = seed
+
+
+def lamp_post_iron(b, x=0.0, y=0.0, z=0.0, h=225.0, lit=True, seed=0, r=None):
+    """铁艺弯臂挂灯（全高 ~3.0m）：铁座 + 细铁杆 + 弯臂（三段折线，带滚轮环）+ 挂灯。
+
+    弯臂不能一根直杆斜出去——三段折出"先平伸再下钩"的弧感，才是铁艺的读法；
+    臂根加一个 X 向圆环（卷轴装饰），破掉"路灯杆=电线杆"的现代感。
+    """
+    r = r if r else h * 0.025
+    a = h * 0.24                                              # 臂长
+    b.box_bottom((h * 0.15, h * 0.15, h * 0.035), (x, y), z, "stone")
+    b.box_bottom((h * 0.10, h * 0.10, h * 0.045), (x, y), z + h * 0.035, "iron")
+    _ring(b, (x, y, z + h * 0.08 + h * 0.46), r, h * 0.92, "iron", 10, "Z", taper=0.72)
+    _ring(b, (x, y, z + h * 0.42), r * 1.9, h * 0.018, "iron", 10)
+    top = z + h
+    b.box((a * 0.55, r * 0.9, r * 0.9), (x, y - a * 0.26, top - r * 0.4), "iron")
+    _strut(b, (x, y, top - h * 0.02), (x, y - a * 0.5, top + h * 0.012), r * 1.1, "iron")
+    _strut(b, (x, y - a * 0.5, top + h * 0.012), (x, y - a * 0.85, top - h * 0.02),
+           r * 1.0, "iron")
+    _strut(b, (x, y - a * 0.85, top - h * 0.02), (x, y - a, top - h * 0.085), r * 0.9,
+           "iron")
+    _ring(b, (x, y, top - h * 0.055), h * 0.030, h * 0.016, "iron", 10, "X")   # 卷轴环
+    s = h * 0.082
+    b.box_bottom((3.0, 3.0, s * 0.5), (x, y - a + s * 0.1), top - h * 0.085 - s * 0.5,
+                 "iron")                                       # 挂钩短杆
+    _lamp_head(b, x, y - a, top - h * 0.085 - s * 0.5, s=s, lit=lit)
+    _ = seed
+
+
+def wall_sconce(b, x=0.0, y=0.0, z=0.0, h=36.0, lit=True, seed=0):
+    """壁灯（挂立面，FLUSH）：墙面背板 + 下探弯臂 + 小油灯头。
+
+    y = 真实前墙面（`dress()` 自动贴，进深 ~16 单位外挑）。灯头比路灯小一档
+    （s = h*0.36），夜里亮起来是立面上的"点光"信号。
+    """
+    b.box_bottom((h * 0.34, 3.5, h * 0.95), (x, y + 1.5), z - h * 0.18, "iron")
+    _strut(b, (x, y, z + h * 0.30), (x, y - h * 0.30, z + h * 0.06), h * 0.09, "iron")
+    _strut(b, (x, y - h * 0.30, z + h * 0.06), (x, y - h * 0.42, z), h * 0.08, "iron")
+    _lamp_head(b, x, y - h * 0.42, z - h * 0.52, s=h * 0.36, lit=lit)
+    _ = seed
+
+
+def _flower_clump(b, x, y, z, s, rng, palette=None, n=5):
+    """一丛花：绿叶茎 + 花头。花头走染布色（cloth_red/ochre/blue），与
+    `flower_bucket` 同口径 —— 游戏尺寸下它们就是"一团饱和色"，比任何"花瓣几何"都耐看。
+    """
+    palette = palette or ("cloth_red", "cloth_ochre", "cloth_blue")
+    for i in range(n):
+        th = rng.uniform(0.0, math.pi * 2.0)
+        rad = rng.uniform(0.0, s * 1.7)
+        ln = s * rng.uniform(2.0, 3.4)
+        sx, sy = x + math.cos(th) * rad, y + math.sin(th) * rad
+        b.box((2.2, 2.2, ln), (sx, sy, z + ln * 0.5), "foliage",
+              rot=(rng.uniform(-0.26, 0.26), rng.uniform(-0.26, 0.26), 0.0))
+        b.box((s * 1.55, s * 1.55, s * 1.15), (sx, sy, z + ln + s * 0.35),
+              palette[i % len(palette)],
+              rot=(rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), rng.uniform(0.0, 3.0)))
+
+
+def flower_bed_round(b, x=0.0, y=0.0, z=0.0, r=55.0, h=34.0, seed=0, flowers=True):
+    """圆形石砌花坛（直径 ~1.45m）：八边形石缘墙 + 石压顶 + 内腔土面 + 花丛分色区。
+
+    花丛**按扇区分色**（ rng 把圆分成 2~3 个扇区，每区一个主色）——一环杂色
+    会读成"插满小旗"，分色区才是花坛的种法。
+    """
+    rng = random.Random(seed)
+    _ring_band(b, x, y, z, r, max(8.0, r * 0.17), h, "stone", seg=8)
+    _ring_band(b, x, y, z + h, r + r * 0.02, r * 0.26, 4.0, "stone_dark", seg=8)
+    b.cylinder((x, y, z + h * 0.44), r * 0.82, h * 0.7, "cavity", 8)
+    if flowers:
+        zones = rng.choice((2, 3))
+        for zi in range(zones):
+            a0 = 2.0 * math.pi * zi / zones + rng.uniform(-0.2, 0.2)
+            pal = (("cloth_red", "cloth_ochre"), ("cloth_blue", "cloth_red"),
+                   ("cloth_ochre", "cloth_blue"))[zi % 3]
+            for k in range(6):
+                a = a0 + (k + 0.5) * (2.0 * math.pi / zones / 6.0)
+                rad = r * rng.uniform(0.12, 0.66)
+                _flower_clump(b, x + math.cos(a) * rad, y + math.sin(a) * rad,
+                              z + h - 4.0, r * 0.095, rng, palette=pal, n=5)
+        _flower_clump(b, x, y, z + h - 3.0, r * 0.11, rng,
+                      palette=("cloth_red", "cloth_blue"), n=6)      # 圆心一丛
+        for k in range(7):                                   # 几茎高出来的（破平均高度）
+            a = rng.uniform(0.0, math.pi * 2.0)
+            rad = r * rng.uniform(0.1, 0.55)
+            b.box((2.6, 2.6, r * rng.uniform(0.36, 0.52)),
+                  (x + math.cos(a) * rad, y + math.sin(a) * rad, z + h + r * 0.17),
+                  "foliage", rot=(rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), 0.0))
+    _ = rng
+
+
+def flower_bed_long(b, x=0.0, y=0.0, z=0.0, w=170.0, d=44.0, h=38.0, seed=0):
+    """长条木箱花池（长 ~2.2m）：木箱四壁 + 角柱 + 土面 + 分段花带。
+
+    花**沿长度分段换色**（每 3~4 丛换一段主色），比一色到底或逐丛杂色都更像"种出来"的。
+    """
+    rng = random.Random(seed)
+    t = d * 0.13
+    for sy in (-1.0, 1.0):
+        b.box_bottom((w, t, h), (x, y + sy * (d / 2.0 - t / 2.0)), z, "wood")
+    for sx in (-1.0, 1.0):
+        b.box_bottom((t, d - 2 * t, h), (x + sx * (w / 2.0 - t / 2.0), y), z, "wood")
+    for sx in (-1.0, 1.0):
+        for sy in (-1.0, 1.0):
+            b.box_bottom((t * 1.3, t * 1.3, h + 3.0),
+                         (x + sx * (w / 2.0 - t * 0.6), y + sy * (d / 2.0 - t * 0.6)), z,
+                         "wood_dark")
+    b.box_bottom((w - 2 * t, d - 2 * t, 2.5), (x, y), z + h * 0.72, "cavity")
+    n = max(3, int(w / 22.0))
+    seg = 0
+    for i in range(n):
+        if i % 3 == 0:
+            seg += 1
+        pal = (("cloth_red", "cloth_ochre"), ("cloth_blue", "cloth_red"),
+               ("cloth_ochre", "cloth_blue"))[seg % 3]
+        px = x - w / 2.0 + t + (i + 0.5) * ((w - 2 * t) / n)
+        _flower_clump(b, px, y + rng.uniform(-d * 0.12, d * 0.12), z + h - 4.0,
+                      d * 0.10, rng, palette=pal, n=4)
+    _ = rng
+
+
+def hanging_basket(b, x=0.0, y=0.0, z=0.0, r=16.0, seed=0, on_post=False, post_r=None):
+    """吊篮（FLUSH / 灯柱两用）：墙面托架（或柱箍短臂）+ 三链 + 柳条篮 + 溢出花球。
+
+    `on_post=True` 时挂在灯柱/挑臂上（柱箍代替墙板）——`dress_street()` 用这个
+    口径把吊篮挂到路灯上；挂立面走 `dress()` 的 FLUSH 贴墙口径。花要**鼓出篮沿**
+    （花心高于沿 1~2 单位）+ 1~2 条垂蔓，"吊"的读法靠垂蔓不靠链。
+    """
+    rng = random.Random(seed)
+    post_r = post_r if post_r else r * 0.34
+    if on_post:
+        _ring(b, (x, y, z - r * 0.55), post_r + 3.0, r * 0.5, "iron", 12)
+        b.box((post_r * 2.4 + r * 1.4, post_r * 1.6, 3.5),
+              (x, y - post_r - r * 0.32, z - r * 0.55), "iron")
+        tip_y = y - post_r * 1.8 - r * 0.35
+    else:
+        b.box_bottom((r * 0.9, 3.5, r * 0.9), (x, y + 1.5), z - r * 0.5, "iron")
+        _strut(b, (x, y, z - r * 0.10), (x, y - r * 1.05, z - r * 0.55), r * 0.14, "iron")
+        tip_y = y - r * 1.05
+    hook_z = z - r * 0.75
+    b.cylinder((x, tip_y, hook_z), r * 0.10, r * 0.35, "iron", 8)
+    bz = hook_z - r * 0.85
+    for k in range(3):
+        a = 2.0 * math.pi * k / 3.0 + 0.5
+        _strut(b, (x, tip_y, hook_z),
+               (x + math.cos(a) * r * 0.92, tip_y + math.sin(a) * r * 0.92, bz + r * 0.5),
+               1.8, "iron")
+    basket(b, x, tip_y, bz - r * 0.28, r=r, h=r * 0.62, mat="wicker")
+    b.cylinder((x, tip_y, bz + r * 0.30), r * 0.72, 2.5, "cavity", 12)          # 土面
+    _flower_clump(b, x, tip_y, bz + r * 0.32, r * 0.26, rng,
+                  palette=("cloth_red", "cloth_ochre"), n=6)
+    for k in range(2):                                            # 垂蔓
+        a = 2.0 * math.pi * k / 2.0 + 1.2
+        b.box((3.0, 3.0, r * 0.9),
+              (x + math.cos(a) * r * 0.95, tip_y + math.sin(a) * r * 0.95,
+               bz - r * 0.28), "foliage",
+              rot=(math.radians(18.0), 0.0, a))
+
+
+def planter_ring(b, x=0.0, y=0.0, z=0.0, r=34.0, h=18.0, seed=0, tufts=True):
+    """树池围圈（直径 ~0.9m）：六段石缘 + 隆起土面 + 几簇草。
+
+    石缘**加高到 18**（0.24m）——早先 15 高 + 内腔贴地，游戏尺寸下读成"井盖"；
+    土面做成中间隆起的慢锥，圈里才看得出"填了土"。
+    """
+    _ring_band(b, x, y, z, r, r * 0.38, h, "stone", seg=6)
+    b.cylinder((x, y, z + h * 0.42), r * 0.80, h * 0.84, "cavity", 12, "Z", taper=0.80)
+    if tufts:
+        rng = random.Random(seed)
+        for k in range(5):
+            a = rng.uniform(0.0, math.pi * 2.0)
+            rad = r * rng.uniform(0.2, 0.55)
+            b.box((5.5, 5.5, 9.0), (x + math.cos(a) * rad, y + math.sin(a) * rad,
+                                    z + h * 0.72), "foliage",
+                  rot=(rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), a))
+        for k in range(3):                                   # 木屑覆盖层（破纯色土面）
+            a = rng.uniform(0.0, math.pi * 2.0)
+            rad = r * rng.uniform(0.3, 0.6)
+            b.box_bottom((6.0, 4.0, 2.0), (x + math.cos(a) * rad, y + math.sin(a) * rad),
+                         z + h * 0.78, "straw")
+
+
+def bench_wood(b, x=0.0, y=0.0, z=0.0, w=130.0, d=44.0, h=44.0, seed=0, mat="wood"):
+    """木长椅（带靠背 + 扶手，全高 ~1.15m）：端架 + 座面板条 + 斜靠背 + 扶手。
+
+    与既有 `bench`（无靠背条凳/工作台）的分工：这是街边"坐下来"的家具，
+    靠背与扶手是它的辨认特征。靠背**斜 12°**，直立的背板会读成"一块门板"。
+    """
+    k = w / 130.0
+    lean = math.radians(-12.0)
+    for sx in (-1.0, 1.0):
+        fx = x + sx * (w / 2.0 - 7.0 * k)
+        b.box_bottom((9.0 * k, d * 0.9, h * 0.62), (fx, y), z, "timber")
+        b.box_bottom((9.0 * k, d * 0.9, h * 0.42), (fx, y + d * 0.18), z + h * 0.30,
+                     "timber")                                   # 后腿（升出座面）
+        b.box_bottom((9.0 * k, 7.0 * k, h * 0.30), (fx, y - d * 0.30), z + h - 4.0,
+                     mat)                                        # 扶手托
+        b.box((9.0 * k * 0.9, d * 0.78, 6.0 * k), (fx, y - d * 0.12, z + h + 14.0 * k),
+              mat)                                               # 扶手
+    for i in range(4):                                            # 座面 4 条板
+        sy = y - d * 0.36 + i * (d * 0.72 / 3.0)
+        b.box_bottom((w - 6.0 * k, d * 0.155, 4.5), (x, sy), z + h - 4.5, mat)
+    for i in range(3):                                            # 靠背 3 条板（斜）
+        bz = z + h + (16.0 + i * 13.0) * k
+        by = y + d * 0.34 + math.sin(-lean) * (bz - (z + h)) * 0.5
+        b.box((w - 6.0 * k, 7.5 * k, 3.6), (x, by, bz), mat, rot=(lean, 0.0, 0.0))
+    _ = seed
+
+
+def bench_stone(b, x=0.0, y=0.0, z=0.0, w=120.0, d=40.0, h=44.0, seed=0,
+                mat="stone", foot="stone_dark"):
+    """石凳（无背，全高 ~0.58m）：双墩 + 厚石板面（板面出挑）。
+
+    石凳**不做靠背**——石料的靠背会读成"一段矮墙"；无背厚板才是广场石凳。
+    与 bench_wood 成对出现在 dress_street 的组配方里。
+    """
+    k = w / 120.0
+    for sx in (-1.0, 1.0):
+        b.box_bottom((26.0 * k, d * 0.86, h * 0.70), (x + sx * (w / 2.0 - 18.0 * k), y),
+                     z, foot)
+    b.box_bottom((w, d, 12.0 * k), (x, y), z + h - 12.0 * k, mat)
+    b.box_bottom((w * 0.96, d * 0.5, 3.0 * k), (x, y - d * 0.12), z + h * 0.40,
+                 "white_stone")                                  # 板下踢脚线（刻缝）
+    _ = seed
+
+
+def table_outdoor(b, x=0.0, y=0.0, z=0.0, w=96.0, h=58.0, seed=0, stools=3):
+    """露天桌+凳组（占径 ~2.2m）：圆桌面 + 束腰支柱 + 十字脚 + 环桌三凳。
+
+    凳子**贴桌沿摆放且留出手肘空隙**（凳心半径 = w*0.62）；高度 0.76m/0.45m
+    是啤酒园桌的现实档，别拔高——高脚桌会读成"吧台"。
+    """
+    k = w / 96.0
+    _ring(b, (x, y, z + h - 3.0), w * 0.5, 6.0 * k, "wood_light", 14)
+    b.cylinder((x, y, z + h * 0.34), w * 0.09, h * 0.62, "wood", 10, "Z", taper=1.25)
+    b.box_bottom((w * 0.56, w * 0.10, 5.0 * k), (x, y), z, "wood_dark")
+    b.box_bottom((w * 0.10, w * 0.56, 5.0 * k), (x, y), z, "wood_dark")
+    b.cylinder((x, y, z + h * 0.70), w * 0.13, 4.0 * k, "wood_dark", 10)        # 束腰
+    rng = random.Random(seed)
+    for i in range(max(0, stools)):
+        a = 2.0 * math.pi * i / max(1, stools) + rng.uniform(-0.15, 0.15)
+        stool(b, x + math.cos(a) * w * 0.62, y + math.sin(a) * w * 0.62, z,
+              r=w * 0.14, h=h * 0.62, legs=3)
+    _ = rng
+
+
+def fountain_small(b, x=0.0, y=0.0, z=0.0, r=50.0, h=110.0, seed=0):
+    """小石喷泉（全高 ~1.45m）：八角水池 + 中央柱 + 上承水盘 + 水柱。
+
+    水面一律 `water`（深色水面）——探针里试过玻璃系材质，微俯视下"水像玻璃"；
+    `water` 的暗色 + 涟漪才是水的读法。**池沿与水面只差 4 单位**、水面半径收到
+    池沿内 1/8 —— 早先水面沉在池底、池沿又是深色石，游戏尺寸下整口池"消失"，
+    只剩一只悬空的接水盘（实测踩过）。
+    """
+    _ring_band(b, x, y, z, r, r * 0.18, h * 0.30, "stone", seg=8)
+    _ring_band(b, x, y, z + h * 0.30, r + 2.0, r * 0.26, 4.5, "stone_dark", seg=8)
+    b.cylinder((x, y, z + h * 0.30 - 4.5), r * 0.86, 2.6, "water", 12)          # 池水
+    # 柱身从池底（0.10h）直通上承水盘（0.72h）——中心 = 两端中点，别再写错
+    b.cylinder((x, y, z + h * 0.41), r * 0.19, h * 0.62, "stone", 10, "Z", taper=0.72)
+    bw = h * 0.72
+    _ring(b, (x, y, z + bw + h * 0.045), r * 0.36, h * 0.09, "stone", 10, "Z", taper=1.45)
+    _ring_band(b, x, y, z + bw + h * 0.085, r * 0.44, r * 0.10, 3.5, "stone_dark", seg=10)
+    b.cylinder((x, y, z + bw + h * 0.068), r * 0.32, 2.4, "water", 10)          # 盘水
+    b.cylinder((x, y, z + bw + h * 0.06), 3.2, h * 0.26, "water", 8)            # 水柱
+    b.cylinder((x, y, z + bw + h * 0.10), r * 0.07, h * 0.07, "bronze", 8)      # 喷口
+    _ = seed
+
+
+def fountain_grand(b, x=0.0, y=0.0, z=0.0, r=115.0, h=260.0, seed=0):
+    """大喷泉（三层，全高 ~3.4m，给大城市广场）：宽池 + 中盘 + 顶盘 + 青铜顶饰。
+
+    三层盘**半径逐层收**（r → 0.46r → 0.24r），高度节奏 0 / 0.42 / 0.75 —— 这是
+    巴洛克三层喷泉的标准构图；柱身每层加一圈石座（盘下的"托"），不然读成"叠蛋糕"。
+    """
+    _ring_band(b, x, y, z, r, r * 0.12, h * 0.15, "stone", seg=12)
+    _ring_band(b, x, y, z + h * 0.15, r + 3.0, r * 0.16, 5.0, "stone_dark", seg=12)
+    b.cylinder((x, y, z + h * 0.15 - 9.0), r * 0.88, 2.8, "water", 16)
+    b.cylinder((x, y, z + h * 0.26), r * 0.26, h * 0.32, "stone", 12, "Z", taper=0.85)
+    _ring(b, (x, y, z + h * 0.36), r * 0.20, h * 0.035, "stone_dark", 10)
+    my = z + h * 0.42
+    _ring(b, (x, y, my + h * 0.035), r * 0.46, h * 0.07, "stone", 12, "Z", taper=1.35)
+    _ring_band(b, x, y, my + h * 0.068, r * 0.52, r * 0.07, 3.5, "stone_dark", seg=12)
+    b.cylinder((x, y, my + h * 0.055), r * 0.38, 2.6, "water", 12)
+    b.cylinder((x, y, z + h * 0.615), r * 0.085, h * 0.27, "stone", 10, "Z", taper=0.85)
+    uy = z + h * 0.75
+    _ring(b, (x, y, uy + h * 0.028), r * 0.24, h * 0.055, "stone", 10, "Z", taper=1.40)
+    _ring_band(b, x, y, uy + h * 0.052, r * 0.27, r * 0.05, 3.0, "stone_dark", seg=10)
+    b.cylinder((x, y, uy + h * 0.042), r * 0.19, 2.4, "water", 10)
+    b.cylinder((x, y, z + h * 0.85), r * 0.045, h * 0.10, "water", 8)           # 顶水柱
+    b.cylinder((x, y, z + h * 0.94), r * 0.075, r * 0.15, "bronze", 10)         # 青铜顶球
+    _ = seed
+
+
+def notice_board(b, x=0.0, y=0.0, z=0.0, w=110.0, h=190.0, seed=0):
+    """公告板（全高 ~2.5m）：双柱 + 木框板身 + 软木内芯 + 纸页 + 单坡小瓦顶。
+
+    纸页要**大小不一、微转、个别斜挂**——一板整整齐齐的同尺寸纸会读成"格栅"；
+    夹一张染红布的"告示"，是中世纪市镇公告板的一眼记号。
+    """
+    rng = random.Random(seed)
+    for sx in (-1.0, 1.0):
+        b.box_bottom((10.0, 10.0, h * 0.92), (x + sx * (w / 2.0 - 5.0), y), z, "timber")
+    bz, bh = z + h * 0.36, h * 0.42
+    b.box_bottom((w, 6.0, bh), (x, y), bz, "wood_dark")
+    b.box_bottom((w - 14.0, 3.0, bh - 12.0), (x, y - 2.5), bz + 6.0, "wood_light")
+    for i in range(rng.randint(6, 9)):
+        pw = rng.uniform(11.0, 17.0)
+        ph = rng.uniform(13.0, 22.0)
+        px = x - (w - 26.0) / 2.0 + rng.uniform(0.0, w - 26.0)
+        b.box((pw, 1.2, ph), (px, y - 4.4, bz + 6.0 + ph * 0.55 + rng.uniform(0.0, bh - ph - 14.0)),
+              "cloth_red" if i == 0 else "parchment",
+              rot=(rng.uniform(-0.06, 0.06), 0.0, rng.uniform(-0.10, 0.10)))
+    rz = bz + bh + 2.0
+    for sy in (-1.0, 1.0):                                       # 单坡小瓦顶（两片搭接）
+        b.box((w + 10.0, bh * 0.42, 3.5), (x, y + sy * bh * 0.19, rz + sy * bh * 0.10 + 4.0),
+              "shingle", rot=(math.radians(-24.0 * sy), 0.0, 0.0))
+    for sx in (-1.0, 1.0):
+        b.box_bottom((4.0, 4.0, 8.0), (x + sx * (w / 2.0 - 3.0), y), rz, "wood_dark")
+
+
+def flag_pole(b, x=0.0, y=0.0, z=0.0, h=300.0, seed=0, cloth="cloth_blue"):
+    """旗杆（全高 ~3.9m）：石座 + 木杆 + 悬旗 + 青铜顶球。
+
+    旗面**永远微斜**（rot z 4°）——笔直的旗面读成"一块木板"；旗幅布用染布色，
+    与 banner 同口径（麻布本色=灰床单）。
+    """
+    rng = random.Random(seed)
+    b.box_bottom((h * 0.10, h * 0.10, h * 0.04), (x, y), z, "stone")
+    b.cylinder((x, y, z + h * 0.04 + h * 0.025), h * 0.035, h * 0.05, "stone_dark", 10,
+               "Z", taper=0.72)
+    _ring(b, (x, y, z + h * 0.09 + h * 0.44), h * 0.013, h * 0.88, "wood_dark", 8)
+    fz = z + h * 0.74
+    fw, fh = h * 0.21, h * 0.13
+    b.box((fw, 2.5, fh), (x + fw * 0.5 + h * 0.013, y, fz), cloth,
+          rot=(0.0, math.radians(-3.0), math.radians(4.0)))
+    b.box((fw * 0.5, 2.0, fh * 0.62),
+          (x + fw * 0.55 + h * 0.013, y - 2.4, fz - fh * 0.06), "brick",
+          rot=(0.0, math.radians(-3.0), math.radians(4.0)))
+    b.box_bottom((4.0, 4.0, 5.0), (x + 3.0, y), fz + fh * 0.6, "iron")
+    b.cylinder((x, y, z + h * 0.985), h * 0.014, h * 0.03, "bronze", 8)
+    _ = rng
+
+
+def statue_base(b, x=0.0, y=0.0, z=0.0, s=60.0, h=185.0, seed=0, mat="stone_dark"):
+    """雕像基座+披风石像（全高 ~2.4m，广场中心用）：三级基座 + 长袍立像剪影。
+
+    石像**只做剪影**（长袍锥身 + 肩 + 头 + 后披一片）——写实脸部在这个游戏尺寸
+    下必然糊成一团，剪影反而立得住（与火柴人的"造型风格化"同一逻辑）。
+    """
+    b.box_bottom((s + 26.0, s + 26.0, s * 0.16), (x, y), z, "stone")
+    b.box_bottom((s + 12.0, s + 12.0, s * 0.20), (x, y), z + s * 0.16, "stone_dark")
+    b.box_bottom((s, s, h * 0.30), (x, y), z + s * 0.36, "stone")
+    b.box_bottom((s + 4.0, s + 4.0, s * 0.06), (x, y), z + s * 0.36 + h * 0.30,
+                 "stone_dark")
+    pz = z + s * 0.36 + h * 0.30 + s * 0.06
+    ph = h - (pz - z) - s * 0.10
+    # 石像只做剪影：**外撇袍摆 + 收腰 + 肩台 + 头**四段读法（纯直锥会读成方尖碑）
+    _ring(b, (x, y, pz + ph * 0.06), s * 0.40, ph * 0.12, mat, 10, "Z", taper=1.12)
+    _ring(b, (x, y, pz + ph * 0.44), s * 0.30, ph * 0.80, mat, 10, "Z", taper=0.66)
+    b.box_bottom((s * 0.62, s * 0.36, s * 0.13), (x, y - s * 0.02), pz + ph * 0.88, mat)
+    b.cylinder((x, y, pz + ph * 0.945), s * 0.10, s * 0.06, mat, 8)              # 颈
+    b.cylinder((x, y, pz + ph * 0.985), s * 0.105, s * 0.19, mat, 8)             # 头
+    _ring(b, (x, y, pz + ph * 1.02), s * 0.125, s * 0.10, mat, 8, "Z", taper=0.55)  # 兜帽
+    b.box_bottom((s * 0.20, s * 0.07, ph * 0.62), (x, y + s * 0.28), pz + ph * 0.28,
+                 mat)                                                            # 后披
+    b.box((s * 0.11, s * 0.11, s * 0.38), (x + s * 0.26, y + s * 0.08, pz + ph * 0.58),
+          mat, rot=(math.radians(-24.0), 0.0, 0.0))                              # 前臂（持物姿）
+    b.box_bottom((s * 0.05, s * 0.05, s * 0.16), (x, y - s * 0.34), pz + ph * 0.30,
+                 mat)                                                            # 前袍开缝
+    _ = seed
+
+
+def milestone(b, x=0.0, y=0.0, z=0.0, h=70.0, seed=0):
+    """里程碑/路标石（全高 ~0.9m）：石垫 + 圆顶碑身 + 刻牌 + 里程刻痕。
+
+    圆顶用 X 向半圆柱（与碑身同宽的"拱头"），方头小碑会读成"界桩方墩"。
+    """
+    w = h * 0.28
+    b.box_bottom((w + 8.0, w * 0.72, h * 0.09), (x, y), z, "stone_dark")
+    b.box_bottom((w, w * 0.56, h * 0.66), (x, y), z + h * 0.09, "stone")
+    b.cylinder((x, y, z + h * 0.75), w * 0.5, w * 0.56, "stone", 10, "X")
+    b.box_bottom((w * 0.62, 1.5, h * 0.30), (x, y - w * 0.29), z + h * 0.38,
+                 "white_stone")                                  # 刻牌
+    for i in range(3):
+        b.box_bottom((w * 0.34, 0.8, 2.2), (x, y - w * 0.315), z + h * (0.44 + i * 0.075),
+                     "iron")                                     # 里程刻痕
+    _ = seed
+
+
+def signpost(b, x=0.0, y=0.0, z=0.0, h=190.0, seed=0, arms=3):
+    """指路牌（多臂，全高 ~2.5m）：木柱 + 2~4 块指向牌（长短/高低/指向错落）。
+
+    各臂**沿 X 指向街两端**（沿街读法）、长度与高度全错开——三块同长同高的臂
+    会读成"电线杆横担"。牌端加小尖头（两块斜拼），是路牌"指过去"的关键。
+    """
+    rng = random.Random(seed)
+    b.box_bottom((h * 0.09, h * 0.09, h * 0.05), (x, y), z, "stone_dark")
+    b.box_bottom((h * 0.045, h * 0.045, h * 0.94), (x, y), z + h * 0.05, "wood_dark")
+    for i in range(max(2, arms)):
+        az = z + h * (0.46 + i * 0.17) + rng.uniform(-4.0, 4.0)
+        sgn = -1.0 if i % 2 == 0 else 1.0
+        ln = h * rng.uniform(0.24, 0.36)
+        ax = x + sgn * (h * 0.045 / 2.0 + ln / 2.0)
+        b.box_bottom((ln, 7.0, 6.0), (ax, y - h * 0.012), az, "wood")
+        b.box((12.0, 6.5, 5.5), (ax + sgn * ln * 0.5, y - h * 0.012, az + 2.5), "wood",
+              rot=(0.0, 0.0, math.radians(sgn * 45.0)))          # 端头尖
+        b.box_bottom((5.0, 8.0, h * 0.05), (x + sgn * h * 0.03, y - h * 0.012),
+                     az + h * 0.025, "iron")
+    b.cylinder((x, y, z + h * 0.99), h * 0.017, h * 0.035, "iron", 8)
+    _ = rng
+
+
+def horse_trough(b, x=0.0, y=0.0, z=0.0, w=96.0, d=36.0, h=34.0, seed=0,
+                 mat="stone_dark"):
+    """石马槽（长 ~1.26m）：双墩 + 石槽身 + 厚沿 + 槽内水面。
+
+    与既有 `trough`（木质、无脚、贴墙用）的分工：这是街边牲口饮水台，石料 + 脚
+    + 厚沿是它的"公共设施"读法。**街面一侧的槽壁只做 55% 高**——20° 微俯视下
+    全高槽壁会把水面挡死（atan(槽深/壁高)>43° 才看得见内腔），整件就塌成
+    "一块方石墩"（实测踩过）；矮墙露出一线深色水面才是"装着水的槽"。
+    """
+    t = d * 0.18
+    for sx in (-1.0, 1.0):
+        b.box_bottom((20.0, d * 0.80, h * 0.28), (x + sx * (w / 2.0 - 14.0), y), z, mat)
+    for sy in (1.0,):                                            # 后壁（全高）
+        b.box_bottom((w, t, h), (x, y + sy * (d / 2.0 - t / 2.0)), z + h * 0.10, mat)
+    b.box_bottom((t, d - 2 * t, h), (x - (w / 2.0 - t / 2.0), y), z + h * 0.10, mat)
+    b.box_bottom((t, d - 2 * t, h), (x + (w / 2.0 - t / 2.0), y), z + h * 0.10, mat)
+    b.box_bottom((w, t, h * 0.55), (x, y - (d / 2.0 - t / 2.0)), z + h * 0.10, mat)
+    b.box_bottom((w + 4.0, t + 4.0, 5.0), (x, y + (d / 2.0 - t / 2.0)),
+                 z + h * 0.10 + h - 5.0, "stone")                # 后沿厚压顶
+    for sx in (-1.0, 1.0):
+        b.box_bottom((t + 4.0, d + 4.0, 5.0), (x + sx * (w / 2.0 - t / 2.0), y),
+                     z + h * 0.10 + h - 5.0, "stone")            # 端头压顶
+    b.box_bottom((w - 2 * t, d - 2 * t, 2.4), (x, y), z + h * 0.10 + h * 0.48, "water")
+    _ = seed
+
+
+def water_tap(b, x=0.0, y=0.0, z=0.0, h=110.0, seed=0):
+    """公用水龙头/压水井（全高 ~1.45m）：木背架 + 铁管弯嘴 + 抬杆 + 落水石盆。
+
+    出水嘴**必须下弯**（两段折管），直挺挺一根管读成"旗杆"；石盆接在嘴下、
+    盆里给水面——"有人来打水"的整套读法就齐了。
+    """
+    b.box_bottom((h * 0.12, h * 0.09, h), (x, y + h * 0.055), z, "timber")
+    b.box_bottom((h * 0.16, h * 0.12, h * 0.05), (x, y), z, "stone")
+    _strut(b, (x, y + h * 0.03, z + h * 0.05), (x, y + h * 0.03, z + h * 0.72),
+           h * 0.045, "iron")
+    _strut(b, (x, y + h * 0.03, z + h * 0.72), (x, y - h * 0.16, z + h * 0.60),
+           h * 0.045, "iron")
+    _strut(b, (x, y - h * 0.16, z + h * 0.60), (x, y - h * 0.19, z + h * 0.52),
+           h * 0.042, "iron")
+    b.box_bottom((h * 0.055, h * 0.055, h * 0.035), (x, y - h * 0.20), z + h * 0.49,
+                 "iron")                                         # 嘴口
+    b.box((h * 0.05, h * 0.05, h * 0.26), (x + h * 0.06, y + h * 0.05, z + h * 0.86),
+          "iron", rot=(0.0, math.radians(-32.0), 0.0))           # 抬杆
+    b.box_bottom((h * 0.30, h * 0.24, h * 0.09), (x, y - h * 0.16), z, "stone_dark")
+    b.box_bottom((h * 0.22, h * 0.16, 2.2), (x, y - h * 0.16), z + h * 0.075, "water")
+    _ = seed
+
+
+def barrel_planter(b, x=0.0, y=0.0, z=0.0, r=18.0, h=42.0, seed=0):
+    """桶栽花（桶高 ~0.55m）：半敞旧桶 + 土面 + 溢出花球 + 垂蔓。
+
+    与既有 `flower_bucket`（提桶插剪花，花是一根根茎挑着的）的分工：桶栽是
+    **整球花冠盖过桶沿** + 两条垂蔓，"种在桶里"的蓬盛感。桶身复用 `barrel()`。
+    """
+    rng = random.Random(seed)
+    barrel(b, x, y, z, r=r, h=h, bands=3, open_top=True)
+    b.cylinder((x, y, z + h - 2.0), r * 0.84, 3.0, "cavity", 14)
+    _flower_clump(b, x, y, z + h + 1.0, r * 0.30, rng,
+                  palette=("cloth_red", "cloth_ochre", "cloth_red"), n=9)
+    for k in range(2):
+        a = 2.0 * math.pi * k / 2.0 + 0.8
+        b.box((3.2, 3.2, r * 1.05),
+              (x + math.cos(a) * r * 0.88, y + math.sin(a) * r * 0.88, z + h - r * 0.36),
+              "foliage", rot=(math.radians(24.0), 0.0, a))
+
+
+#: 街道家具的成组配方（组内 x 间距 = 前一件半宽 + 后一件半宽 + GAP）：
+#: 长椅类必配一件"花"——没有花的椅子是"候车室"，有花才是"街景"。
+STREET_GROUPS = (
+    (("bench_wood", 0.0), ("barrel_planter", 0.78)),
+    (("bench_stone", 0.0), ("flower_bed_round", 0.92)),
+    (("flower_bed_long", 0.0),),
+    (("table_outdoor", 0.0),),
+)
+
+#: 单件小家什（组槽位随机补）：路标/里程碑给街段"这里通到哪"的信号。
+STREET_SMALLS = ("signpost", "milestone", "planter_ring", "water_tap")
+
+
+def dress_street(W, seed=0, lamp_every=(8.0, 12.0), group_every=(10.0, 16.0),
+                 density=1.0, plaza_x=None, plaza_half=5.0, plaza_kind="fountain_small",
+                 entrance=5.0, notice=True, lamps=("lamp_post_stone", "lamp_post_iron")):
+    """沿一条 W 格长的街**两侧**摆街道家具，返回摆放清单（供 HD-2D 主街/城市消费）。
+
+    节奏（都可调）：
+    * **路灯等距、两侧错位**：同侧间距 = `lamp_every` 区间内抽的周期 p（格），
+      两侧相位差 p/2 —— 对面那盏永远落在两盏之间，这是街灯的标准种法；
+    * **家具成组**：每 `group_every`（格）一个组槽位（配方见 `STREET_GROUPS`，
+      长椅必配花）；槽位被灯/邻组占了就在 ±2 格内**换位重试**（4 次），全占才丢；
+      `density`（0.5~1.5）缩放组距与挂篮/小件概率；
+    * **公告板放街口**（距街端 `entrance` 格，豁免街端净空检查），旗杆偶尔守对侧街口；
+    * **喷泉留给广场位**：`plaza_x`（格，相对街中心）给定的保护区内不清场
+      不摆灯椅，中央放 `plaza_kind`（fountain_small/fountain_grand/statue_base），
+      两侧一对 planter_ring 陪衬。
+
+    返回：[{"name","x","side","y_off","kw"}, ...]。x=世界单位（街中心为 0）；
+    side +1=远侧（贴建筑基线）、-1=近侧（前场带）、0=街轴中央（广场件）；
+    y_off=建议外移量（`DEPTH` 半深，供调用方把家具中心摆到自己的参考线上）。
+    确定性：同一 (W, seed, 参数) 逐项同结果。
+    """
+    rng = random.Random(seed * 6131 + 5)
+    X0, X1 = -W * CELL / 2.0, W * CELL / 2.0
+    out = []
+    # 占位一律按**挂载宽**（WIDTH×GAME_SCALE，×0.94 容差）——挂载放大后真实footprint
+    # 超出建模宽，按建模宽排会互相压边。灯与家具分两条占用表：**组内件允许与灯共位**
+    # （花坛/长椅在灯杆侧前方是真实街景的常态，y 已错开），但家具彼此不叠。
+    occ = {-1: [], 1: []}                  # 家具（硬占用）
+    lamps_occ = {-1: [], 1: []}            # 路灯（软占用）
+    pl = None
+    if plaza_x is not None:
+        pl = (plaza_x * CELL - plaza_half * CELL, plaza_x * CELL + plaza_half * CELL)
+    end0, end1 = X0 + entrance * CELL * 0.5, X1 - entrance * CELL * 0.5
+
+    def _eff_w(name):
+        return WIDTH.get(name, 40.0) * GAME_SCALE * 0.94
+
+    def _blocked(side, x0, x1, ends=True, soft=False):
+        if pl and x0 < pl[1] and x1 > pl[0]:
+            return True
+        if ends and (x0 < end0 or x1 > end1):
+            return True
+        if any(x0 < b1 and x1 > b0 for (b0, b1) in occ[side]):
+            return True
+        if not soft:
+            return any(x0 < b1 and x1 > b0 for (b0, b1) in lamps_occ[side])
+        return False
+
+    def _put(name, x, side, **kw):
+        w = _eff_w(name)
+        out.append({"name": name, "x": round(x, 1), "side": side,
+                    "y_off": round(DEPTH.get(name, 30.0) * 0.5, 1), "kw": kw})
+        # 吊篮挂在灯柱上，与柱共位是设计语义，不占地面净空
+        if side and name != "hanging_basket":
+            (lamps_occ if name in lamps else occ)[side].append((x - w / 2.0, x + w / 2.0))
+
+    # ① 路灯：等距 + 两侧错位半周期（首盏落在街口 0.3~0.7 周期内，别让街端半条街没灯）
+    p = rng.uniform(*lamp_every) * CELL
+    x = X0 + rng.uniform(0.3, 0.7) * p
+    side0 = rng.choice((-1.0, 1.0))
+    li = 0
+    while x < X1 - p * 0.25:
+        side = side0 if li % 2 == 0 else -side0
+        lw = _eff_w(lamps[li % len(lamps)])
+        if not _blocked(side, x - lw / 2.0, x + lw / 2.0):
+            kind = lamps[li % len(lamps)]
+            _put(kind, x, side)
+            if rng.random() < 0.35 * density:                      # 灯柱挂吊篮
+                _put("hanging_basket", x + rng.uniform(-4.0, 4.0), side,
+                     on_post=True, post_r=7.0 if kind == "lamp_post_iron" else 9.0)
+        li += 1
+        x += p * 0.5
+    # ② 街口公告板 +（偶尔）对侧旗杆——**先于家具组占位**（公告板守街口是硬节奏，
+    #   不能被先到的组挤掉；街具豁免街端净空，本来就守街口）
+    if notice:
+        nx = X0 + entrance * CELL * 0.7
+        nw = _eff_w("notice_board")
+        if not _blocked(1, nx - nw / 2.0, nx + nw / 2.0, ends=False, soft=True):
+            _put("notice_board", nx, 1)
+        if rng.random() < 0.55:
+            fx = X1 - entrance * CELL * 0.7
+            fw = _eff_w("flag_pole")
+            if not _blocked(1, fx - fw / 2.0, fx + fw / 2.0, ends=False, soft=True):
+                _put("flag_pole", fx, 1)
+    # ③ 家具组：两侧各一条组游标；从槽位起**向前扫描**找第一个放得下的位置
+    #   （组内件与灯共位合法 → 只躲家具/广场/街端，窗口足够放下组）
+    for side in (1, -1):
+        gx = X0 + entrance * CELL + rng.uniform(1.0, 3.0) * CELL
+        while gx < X1 - entrance * CELL:
+            names = STREET_GROUPS[rng.randrange(len(STREET_GROUPS))]
+            wds = [_eff_w(nm) for (nm, _o) in names]
+            span = sum(wds) + 14.0 * (len(names) - 1)
+            placed = False
+            tx = gx - span / 2.0
+            while tx + span < X1 - entrance * CELL * 0.5:
+                if not _blocked(side, tx, tx + span, soft=True):
+                    cur = tx
+                    for ((nm, _o), wd) in zip(names, wds):
+                        _put(nm, cur + wd / 2.0, side, seed=int(rng.randrange(1 << 30)))
+                        cur += wd + 14.0
+                    if rng.random() < 0.35 * density:              # 组尾补小件
+                        sn = STREET_SMALLS[rng.randrange(len(STREET_SMALLS))]
+                        swd = _eff_w(sn)
+                        sx = cur + swd * 0.30
+                        if not _blocked(side, sx - swd / 2.0, sx + swd / 2.0, soft=True):
+                            _put(sn, sx, side)
+                    placed = True
+                    break
+                tx += CELL * 0.5
+            gx += rng.uniform(*group_every) * CELL / max(0.35, density)
+            _ = placed
+    # ④ 广场件：中央喷泉/雕像 + 一对树池
+    if pl:
+        kind = plaza_kind if plaza_kind else "fountain_small"
+        out.append({"name": kind, "x": round((pl[0] + pl[1]) / 2.0, 1), "side": 0,
+                    "y_off": 0.0, "kw": {"seed": int(rng.randrange(1 << 30))}})
+        ring_dx = (pl[1] - pl[0]) * 0.5 + WIDTH["planter_ring"] * 0.7
+        for sgn in (-1.0, 1.0):
+            out.append({"name": "planter_ring", "x": round((pl[0] + pl[1]) / 2.0 + sgn * ring_dx, 1),
+                        "side": 0, "y_off": 0.0,
+                        "kw": {"seed": int(rng.randrange(1 << 30))}})
+    return out
+
+
 # ================================================================ 挂载调度
 
 #: 游戏内 1:1 可辨的默认放大系数。道具按"现实尺寸"建模（桶高 0.55m、铁砧全高 1.2m），
@@ -2916,6 +3579,14 @@ WIDTH = {
     "weapon_rack": 86.0, "training_dummy": 62.0, "archery_target": 58.0,
     "beehive": 50.0, "saddle_rack": 86.0, "fork_stand": 56.0, "wheel_pile": 80.0,
     "wine_cart": 160.0, "shield_plaque": 34.0, "scarecrow": 68.0,
+    # ---- 六轮：街道家具（占位宽按几何宽取整，宁可略宽不重叠）----
+    "lamp_post_stone": 36.0, "lamp_post_iron": 44.0, "wall_sconce": 30.0,
+    "flower_bed_round": 116.0, "flower_bed_long": 180.0, "hanging_basket": 36.0,
+    "planter_ring": 74.0, "bench_wood": 140.0, "bench_stone": 128.0,
+    "table_outdoor": 190.0, "fountain_small": 106.0, "fountain_grand": 240.0,
+    "notice_board": 118.0, "flag_pole": 40.0, "statue_base": 92.0,
+    "milestone": 36.0, "signpost": 90.0, "horse_trough": 104.0,
+    "water_tap": 44.0, "barrel_planter": 48.0,
 }
 
 #: 道具名 -> 函数（供配方表与外部直接调用）
@@ -2955,13 +3626,25 @@ TABLE = {
     "archery_target": archery_target, "beehive": beehive, "saddle_rack": saddle_rack,
     "fork_stand": fork_stand, "wheel_pile": wheel_pile, "wine_cart": wine_cart,
     "shield_plaque": shield_plaque, "scarecrow": scarecrow,
+    # ---- 六轮：街道家具 ----
+    "lamp_post_stone": lamp_post_stone, "lamp_post_iron": lamp_post_iron,
+    "wall_sconce": wall_sconce, "flower_bed_round": flower_bed_round,
+    "flower_bed_long": flower_bed_long, "hanging_basket": hanging_basket,
+    "planter_ring": planter_ring, "bench_wood": bench_wood, "bench_stone": bench_stone,
+    "table_outdoor": table_outdoor, "fountain_small": fountain_small,
+    "fountain_grand": fountain_grand, "notice_board": notice_board,
+    "flag_pole": flag_pole, "statue_base": statue_base, "milestone": milestone,
+    "signpost": signpost, "horse_trough": horse_trough, "water_tap": water_tap,
+    "barrel_planter": barrel_planter,
 }
 
 #: 贴面件（挂墙，不做进深外移）
 FLUSH = ("tools_rack", "signboard", "flower_box", "clothesline",
          "awning", "hanging_sign", "herb_rack", "broom_bundle",
          # ---- 三轮：挂墙件（进深 ≤10 单位，`dress()` 把 y 贴到真实墙面）----
-         "stained_glass_panel", "shield_plaque")
+         "stained_glass_panel", "shield_plaque",
+         # ---- 六轮：街道家具挂墙件（壁灯 / 吊篮；吊篮 on_post 时不经 dress()）----
+         "wall_sconce", "hanging_basket")
 #: 按跨度摆放的件（用 x0/x1 相对跨度 + 统一平移量）
 SPAN = ("fence", "clothesline")
 #: 各自的前后进深（决定 y 外移多少）。**口径**：这里给的是"外移量 × 2"，而
@@ -2991,7 +3674,15 @@ DEPTH = {"log_pile": 22.0, "plank_pile": 22.0, "cart": 46.0, "wheelbarrow": 40.0
          "candle_rack": 52.0, "weapon_rack": 60.0, "training_dummy": 56.0,
          "archery_target": 60.0, "beehive": 56.0, "saddle_rack": 60.0,
          "fork_stand": 44.0, "wheel_pile": 62.0, "wine_cart": 90.0,
-         "scarecrow": 44.0}
+         "scarecrow": 44.0,
+         # ---- 六轮：口径同既有（现实进深 × 1.45 × 1.15，宁可多推出去）----
+         "lamp_post_stone": 50.0, "lamp_post_iron": 50.0,
+         "flower_bed_round": 184.0, "flower_bed_long": 74.0,
+         "planter_ring": 114.0, "bench_wood": 74.0, "bench_stone": 68.0,
+         "table_outdoor": 168.0, "fountain_small": 168.0, "fountain_grand": 386.0,
+         "notice_board": 60.0, "flag_pole": 50.0, "statue_base": 134.0,
+         "milestone": 34.0, "signpost": 34.0, "horse_trough": 62.0,
+         "water_tap": 68.0, "barrel_planter": 62.0}
 
 #: 各配方的**门廊 / 门楼前凸量**（单位，实测 = `shape_bbox` 前沿 − 真实前墙面）。
 #: 值为 [(建筑宽 W, 前凸量), ...]（同族建筑前凸随宽度近似等比，按 W 线性插值/外推）。

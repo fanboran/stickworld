@@ -279,6 +279,24 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 		var at: int = rng.randi_range(0, seq[side2].size())
 		seq[side2].insert(at, d)
 
+	# ── 3.5 建筑间杂物（占格件，创始人定案）：与建筑同 Z 的杂物默认占水平
+	#     格——塞入所属分区侧序列的随机位置段，随建筑一起整格排布推挤；
+	#     随机插入位让空档分布不均（偶尔空一格自然出现）。未烘卡跳过。
+	var clutter_defs := {
+		"storage": ["crate", "barrel", "sack_stack"],
+		"production": ["haystack", "log_pile", "trough"],
+	}
+	var clutter_all: Dictionary = {}
+	for z: String in clutter_defs:
+		var side3: int = int(sides.get(z, 0))
+		if side3 == 0:
+			side3 = -1 if rng.randf() < 0.5 else 1
+		for d: String in clutter_defs[z]:
+			if not prop_set.is_empty() and not prop_set.has(d):
+				continue
+			clutter_all[d] = true
+			seq[side3].insert(rng.randi_range(0, seq[side3].size()), d)
+
 	# ── 4. 行政居中（当级行政槽，§二），从中心向两侧排布（推挤保底）────
 	var admin: String = "guildhall_w12"
 	for d: String in prof["admin"]:
@@ -295,14 +313,19 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 			if int(qi[s]) < seq[s].size():
 				var d: String = seq[s][int(qi[s])]
 				qi[s] = int(qi[s]) + 1
-				var w := float(widths.get(d, 8.0))
+				# 杂物卡不在建筑卡宽表——先查道具卡宽表（prop_set 值=格宽）
+				var w := float(prop_set.get(d, float(widths.get(d, 8.0))))
 				var x: float = float(cursor[s]) + s * w * 0.5
 				var zone := "float"
-				for z: String in queues:
-					if d in queues[z]:
-						zone = z
-						break
-				placements.append({"def": d, "x": x, "w": w, "zone": zone})
+				if clutter_all.has(d):
+					zone = "clutter"
+				else:
+					for z: String in queues:
+						if d in queues[z]:
+							zone = z
+							break
+				placements.append({"def": d, "x": x, "w": w, "zone": zone,
+					"clutter": clutter_all.has(d)})
 				cursor[s] = float(cursor[s]) + s * (w + MIN_GAP)
 	for s: int in [-1, 1]:
 		var w2 := float(widths.get(GATE_DEF, 10.5))
@@ -351,14 +374,14 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	var zone_anchor: Dictionary = {}
 	for p: Dictionary in placements:
 		var zn: String = str(p["zone"])
-		if zn == "core" or zn == "gate":
+		if zn == "core" or zn == "gate" or zn == "clutter":
 			continue
 		zone_anchor[zn] = (float(zone_anchor.get(zn, float(p["x"]))) + float(p["x"])) * 0.5
 	var bg_rows := {1: [], 2: []}
 	var bg_i := 0
 	for p: Dictionary in placements:
 		var zn2: String = str(p["zone"])
-		if zn2 == "core" or zn2 == "gate":
+		if zn2 == "core" or zn2 == "gate" or zn2 == "clutter":
 			continue
 		var zpool: Array = pools.get(zn2, ["house_w8"])
 		for k in 2:
@@ -411,18 +434,7 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 		add_prop.call("market_table", float(zone_x.call("market")) + 4.2, 5.6)
 		add_prop.call("produce_baskets", float(zone_x.call("market")) + 8.6, 4.6)
 	add_prop.call("banner", float(zone_x.call("core")) - 2.0, FURNITURE_Z_PLAT + 0.2, true)
-	# 杂物堆随分区（清单与落位 port 自 gen_initial_city.py 道具步：仓储带
-	# 箱桶麻袋、生产带草垛柴堆——锚点区无前排建筑时不落）。
-	# 杂物全部铺路面（建筑前读法）；建筑**间**的占格杂物由隔壁批次按
-	# 八档 city_layout 语义（x_cells+y_cells 真占格）加回，不落在此处。
-	if zone_anchor.has("storage"):
-		add_prop.call("crate", float(zone_x.call("storage")) - 1.5, 4.4)
-		add_prop.call("barrel", float(zone_x.call("storage")) + 1.2, 4.2)
-		add_prop.call("sack_stack", float(zone_x.call("storage")) + 3.6, 5.8)
-	if zone_anchor.has("production"):
-		add_prop.call("haystack", float(zone_x.call("production")) - 2.0, 5.6)
-		add_prop.call("log_pile", float(zone_x.call("production")) + 2.4, 6.0)
-		add_prop.call("trough", float(zone_x.call("production")) + 5.0, 5.0)
+	# 杂物已改为建筑间占格件（§3.5 随机位置段插入，随建筑排布）——不再铺路面
 	# 街具节奏①路灯：灯两侧错位（周期 8~12 格内确定性抽取）+ 灯柱卡查道具
 	# 卡库（prop_set）而非建筑卡宽表：两款灯柱逐盏轮换（dress_street 定稿
 	# 语义），卡全缺时才回退灯笼。远侧踩台面、近侧铺路面。
@@ -484,6 +496,10 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	var buildings: Array = []
 	for p: Dictionary in placements:
 		var d: String = str(p["def"])
+		# 建筑间杂物：与建筑同 Z 带（台面 z=1.0，门脸线上），占格坐标随排布来
+		if bool(p.get("clutter", false)):
+			add_prop.call(d, float(p["x"]), 1.0, true)
+			continue
 		var base: String = d.rsplit("_w", true, 1)[0]
 		var z: float = 2.4 if base in GROUND_DEFS else 0.45 + fposmod(absf(float(p["x"])) * 0.618, 0.85)
 		buildings.append({"card": d, "def": base, "x": snappedf(float(p["x"]), 0.01),

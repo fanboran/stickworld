@@ -8,7 +8,7 @@
 
 ## 一、是什么
 
-当前**全部游戏内地图的呈现形态**（2026-09-14 起）：主街（出生村 hd2d_street）、算法村（hd2d_village_b）均为 HD-2D 图；战场/道路/守城图仍是 2D 旧图（待迁移）。
+当前**全部游戏内地图的呈现形态**：主街（hd2d_street）、算法村（hd2d_village_b）、城郊战场（hd2d_battlefield）与城外资源图（hd2d_resource_w/e）为 HD-2D 图；道路/守城/森林/室内/L1 聚落与 battlefield_2d（dev 空旷演练场，不进旅行链）仍是 2D 旧图（旧图清单与规格出处见 [`遗留参照与功能差距.md`](遗留参照与功能差距.md)）。
 
 三个组成部分：
 
@@ -30,12 +30,12 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 
 ## 二、关键设计
 
-### 2.1 卡与落位（proto_hd2d.gd）
+### 2.1 卡与落位（hd2d_world.gd）
 
 - 建筑卡 = Blender 正交相机（yaw 0°/tilt 26°，与游戏 3D 相机同角度）烘的透明底 PNG + glow 层。卡是 QuadMesh 贴图，**写深度**参与遮挡，吃伪法线光照。
 - **台基不烘**（创始人 2026-09-15）：地面灰白台基在烘端不生成（`buildings.py PLINTH_ENABLED=False`），接触阴影踏面同步剥除、整楼按实测最低点下沉贴地。引擎 `base_cut` 改口径：**alpha 扫描卡底透明留白**（同 `_prop_bottom_pad`，PAD≈10px 不沉墙脚会浮空），下沉后墙脚回到与台基时代同一条基线，接地影 blob（固定 `BSHADOW_Z`）不用动。
 - **地面占地随卡导出**：`cards/props/nature.json` 每条带 `footprint: [宽格, 深格]`（贴地顶点实测，排除出檐悬挑）。宽度档规则（创始人拍板）：**新增档位一律 2 格整数倍**，存量 4/6/8/12/16 档保留不动。
-- **卡库 meta 字段契约**（cards.json / props.json / nature.json 同构；烘焙端三脚本产出，`proto_hd2d.gd` 装进 `_cards/_props/_nature` 字典）：
+- **卡库 meta 字段契约**（cards.json / props.json / nature.json 同构；烘焙端三脚本产出，`hd2d_world.gd` 装进 `_cards/_props/_nature` 字典）：
 
 | 字段 | 含义 |
 |---|---|
@@ -120,7 +120,7 @@ blender -b --factory-startup -P stick-world/tests/dev/proto_hd2d/bake_props.py  
 blender -b --factory-startup -P stick-world/tests/dev/proto_hd2d/bake_nature.py     # 自然物卡
 # 算法村布局
 python tools/blender_buildings/export_city_layout.py --tier village --seed 611036 --name village_b
-# 烘完把 temp/{proto25d,proto_hd2d} 的 png+json 同步进 tests/dev/proto_hd2d/tex/（入库）；
+# 烘完把 temp/{proto25d,proto_hd2d} 的 png+json 同步进 stick-world/modules/hd2d/assets/tex/（随包入库）；
 # 只补夜版时同步 *_night.png 即可（月夜档，见 §2.3）
 # 出图/调试
 godot --path stick-world res://modules/hd2d/scenes/hd2d_world.tscn -- --shots=b --layout=village_b
@@ -140,9 +140,9 @@ godot --path stick-world res://tests/dev/verify_hd2d_map.tscn
 
 **太阳**：场景里的太阳 = **程序化天空自带的太阳盘**（ProceduralSkyMaterial
 对场景里的 DirectionalLight3D `_sun` 自动渲染，无独立贴图/无独立节点）；位置由
-`_sun.rotation`（昼档 Euler −62°/140°）决定，现居画面**右上**；昼档可见、夜档
-随天空变暗。它被建筑卡遮挡 = 深度测试天然处理，无需开关逻辑。改名/挪位都改
-`_sun.rotation`，不要新建第二个太阳。
+`_sun.rotation`（昼档 Euler 俯仰 −46°/偏航 −62°，夜档月位 −62°/140°）决定，昼档
+居画面**右上**；昼档可见、夜档随天空变暗。它被建筑卡遮挡 = 深度测试天然处理，
+无需开关逻辑。改名/挪位都改 `_sun.rotation`，不要新建第二个太阳。
 
 草地规则：**只有道路带不长草**——建筑带台面、城外野地全部草地贴图（草地/稀疏草土两档，ground_tiles.py 的 t_grass/t_grass_sparse 烘制）。
 
@@ -366,7 +366,65 @@ walk_band` 旗帜门控，实体 set_ground_constraints 注入）。视觉系（
 选中框/悬浮框）与物理系共用脚线锚。物理脚底 origin+142 的 2D 语义只在 2D 图
 存在；HD-2D 若再观察到"停位与视觉脱节"先查实体口径旗帜。
 
-### 4.6 已知边界
+### 4.6 坐标投影协议（消费方速查）
+
+> 本节是 4.2/4.2.1 的出口索引：一切"画"与"判定"从哪个函数进视觉域、谁在链上
+> 已经 remap 过。铁律本体（只有地面锚点参与压缩、禁止手搓公式、缩放算进初始值）
+> 见 4.2.1，不在此重复。
+
+**数学核 → 运行时出口 → 消费方** 三层：
+
+| 层 | 位置 | 职责 |
+|---|---|---|
+| 数学核 | `Hd2dProjection`（`modules/world/scripts/map/hd2d_projection.gd`，静态类） | `squash_k()`=sin(俯角)（`TILT_DEG` 26°）、`ground_to_visual_y`/`visual_to_ground_y` 正逆变换、`billboard_hover_rect` 悬浮框矩形；纯仿射、正逆互为精确逆，round-trip 由 `tests/unit/test_hd2d_projection.gd` 锁死。消费方**不直接调本类**，一律走地图协议 |
+| 运行时出口 | `MapBase` 三方法（2D 图恒等）→ `Hd2dStreetMap` 覆写 | `remap_fx_pos`（画布域→视觉域，含台面 lift）、`unmap_fx_pos`（视觉域→画布域）、`entity_hover_rect`（悬浮/选中/点选/框选共用矩形）；屏幕域逆变换另有 `screen_y_to_ground_y`（F3 鼠标读数） |
+| 消费方 | fx / debug_gui / ui_global / combat | 见下两条链 |
+
+**画（飘字/粒子）链**：地图宿主 `_ready` 时 `add_to_group("fx_pos_remapper")`；
+`FxLibrary.remap_pos(tree, pos)` 静态查该组并转发到地图的 `remap_fx_pos`
+（组外/2D 图原样返回零扰动）；`spawn_damage_text`/`spawn_slash_arc` 等入口内部
+已过此口。**调用链上已有 remap 的出口（如 `FxPool.spawn_burst` 内部先
+`FxLibrary.remap_pos` 再发射），上游传视觉域坐标前须先 `unmap_fx_pos` 逆回，
+防二次压缩**（4.2.1 铁律 4）。
+
+**判定（屏幕点→世界）链**：屏幕点先经 `viewport canvas_transform.affine_inverse()`
+落进视觉域，再经 `unmap_fx_pos` 逆回画布域比较——两段缺一不可，消费方：
+`SelectionSystem._screen_to_world`+`_unit_anchor`（点选/框选锚=悬浮框矩形中心）、
+`HoverIndicator._update_hovered`（悬停命中）、`debug_tools_panel.gd` 的特效放置点
+拾取。F3 鼠标世界坐标读数（`DebugDrawers.draw_entity_info`）走另一出口：
+y 经 `screen_y_to_ground_y`（屏幕域压缩逆），x 维持仿射逆。
+
+**canvas 变换收编**：相机半程（zoom/视口/相机位移）一律交给
+`viewport canvas_transform` 引擎真值——"世界→屏幕"用正变换、"屏幕→世界"用逆
+变换。现行收编点：`DebugDrawers.world_to_screen`（F3 全部抽屉的投影口；仅
+headless 无 control 时退回手搓兜底）、`HoverIndicator`（画框与命中同走变换）、
+`SelectionSystem`（拖拽矩形/选中框整体过变换，角臂长从**屏幕矩形**短边自导出）。
+禁止手搓 `(mouse−vp/2)/zoom+cam` 或 `(pos−cam)·zoom+vp/2` 直绘（相机
+offset/limits 变化时手搓漂、变换不会）。
+
+### 4.7 缩放链路（缩放条整 10 档 ↔ CameraRig ↔ 3D 镜像）
+
+- **CameraRig（`modules/world/scripts/camera/camera_rig.gd`）**：`user_zoom`
+  默认 **0.75**（HD-2D 构图基准档），夹制 `[ZOOM_MIN 0.5, ZOOM_MAX 2.0]`；
+  滚轮步进 `ZOOM_STEP 0.1 × zoom_speed_mult`（设置面板 control/zoom_speed）；
+  `base_zoom = vp_h/1080`（分辨率适配），`effective_zoom = base_zoom × user_zoom`
+  才是 Camera2D 真值。缩放水平以鼠标为锚点、垂直钉视野下边界（4.3 锚线契约）。
+- **缩放条（`ZoomBar`，`modules/ui_global/scripts/hud/zoom_bar.gd`，SystemSetup
+  装配进 UIRoot top_center 槽）**：滑块量程=**显示百分比域，整 10 档**——
+  70%~260%、步进 10%（20 档刻度，SketchHSlider 自绘）；显示基准 `ZOOM_BASE
+  = 0.75` → **100%**（默认档恰在刻度上）。拖动 = `set_user_zoom(显示% ×
+  ZOOM_BASE / 100)`（70%→0.525、260%→1.95，均落在 CameraRig 夹制区间内）；
+  滚轮缩放后 `_process` 每帧 `sync_from_camera` 把句柄吸附最近整 10 刻度、
+  标签读相机真实值。ui_global 不反向依赖 world——`CameraRig.ZOOM_*` 不取，
+  夹制由 CameraRig 自身保证。
+- **3D 镜像（`Hd2dStreetMap._process` → `hd2d_world.set_cam_zoom`）**：传给
+  3D 的是 `cam2d.zoom.x / base_zoom`（剥掉分辨率适配，**只认 user_zoom**）；
+  3D 侧 `_cam.size = 1080·宽高比/(32·user_zoom)`（`KEEP_WIDTH`，与 2D 逐像素
+  1:1，4.1 三同步）并按锚线公式重钉 `position.z`；DOF far 距离是相机本地量，
+  同步按世界线换算（4.8 已知边界）。两套相机脱钩的症结在"多除/少除一次
+  base_zoom"，改任何一侧前先核对这条换算链。
+
+### 4.8 已知边界
 
 - 战场/资源/村B 图继承 Hd2dStreetMap，契约自动生效；2D 旧图（village_map 系）
   走 MapBase 恒等协议（视觉域=画布域，见 4.2.1），行为不变。
@@ -376,15 +434,15 @@ walk_band` 旗帜门控，实体 set_ground_constraints 注入）。视觉系（
 
 ## 五、待迁移与已知边界
 
-- 战场/道路/守城图仍是 2D 旧图；战斗类测试 boot 在 battlefield 上。
+- 道路/守城/森林/室内/L1 聚落图仍是 2D 旧图；战斗类测试以 battlefield_2d（2D 空旷演练场，`boot_map_id_override` 开机）为底。
 - 设施类测试 7 套 SUSPENDED（.tscn.suspended 摘出矩阵）：待玩法设施（PlacementGrid/兵营/仓库实体）接入 HD-2D 图后在生产图重建。
-- 角色 billboard 当前无武器/盾渲染（武器挂在 2D WeaponMount，随 RigHost 一起隐藏）——HD-2D 化武器渲染是独立工作项。
+- 角色 billboard 已镜像主手武器：`weapon_mount.weapon_type` → `char_sprite_3d.set_weapon_type`，武器场景挂进 billboard 内部骨架的同名手骨（GripPoint 对齐口径同 WeaponMount）——武器随 2D RigHost 隐藏导致的"村民空手=没有职业"观感由此闭合；副手/盾不在 WeaponMount 类型表内，未镜像。
 - 村民待业/工作行为依赖 WorldState.game_time 节律，与昼夜挂钩同源。
 
 ## 六、主街结构解剖（现状基线）
 
 > 本节把"主街这张图由什么组成、每层摆在哪、为什么"一次讲全，是改布局/构图/背景前的必读底账。
-> 依据 = `tests/dev/proto_hd2d/proto_hd2d.gd`（3D 街景本体）+ `modules/world/scripts/map/hd2d_street_map.gd`（宿主）+ `modules/world/scripts/map/city_gen.gd`（摆街数据）。
+> 依据 = `modules/hd2d/scripts/hd2d_world.gd`（3D 街景本体）+ `modules/world/scripts/map/hd2d_street_map.gd`（宿主）+ `modules/world/scripts/map/city_gen.gd`（摆街数据）。
 > 战场/资源图 = 同一场景的 `battlefield`/`resource_field` 开关（无墙无街的开阔野地，铺装与摆位走分支），本节只解剖主街形态。
 
 ### 6.1 坐标与相机
@@ -433,15 +491,15 @@ walk_band` 旗帜门控，实体 set_ground_constraints 注入）。视觉系（
 
 ### 6.5 光照 / 昼夜 / 后处理 / 景深
 
-- 档位：宿主按 WorldState.game_time（小时）在 6:00/19:00 切 day/night；`_apply_light` 幂等（先复位再覆盖）。
-- **day = 阳光明媚高调照明**：渐变天空（天顶深蓝→地平线青白）+ 主光暖白 0.48（太阳盘右上）+ 冷天空环境 0.56（两光和≈1.0——卡是烘焙图，光照别双计）+ 冷补光 0.12 抬暗部（明暗比≈1.15:1）；雾关；tonemap LINEAR（filmic/aces 会把烘焙卡压灰）。
-- **night**：月光蓝 0.06 + 环境 0.17 + 薄雾 + 窗火 glow 1.15 + 灯笼 1.1 + 角色冷蓝 tint/暖 add（灯池感）。
+- 档位：宿主按 WorldState.game_time（小时）在 6:00/19:00 切 day/night（`HOUR_DAY_BREAK`/`HOUR_NIGHT_FALL`，`_apply_time_of_day` 逐帧比对、只在档位变化时调 `set_light_mode`）；`_apply_light` 幂等（先复位再覆盖）。
+- **day = 阳光明媚高调照明**：渐变天空（天顶深蓝→地平线青白）+ 主光暖白 0.48（太阳盘右上）+ 冷天空环境 0.58 + 冷补光 0.12 抬暗部——主光/环境按"卡已带白天光照、合成 ≈1.0"纪律配平（**光照别双计**，卡是烘焙图）；雾关；tonemap LINEAR（filmic/aces 会把烘焙卡压灰）。
+- **night（月夜档）**：天空近黑蓝 + 环境 0.42 + 月亮方向光 0.15（盘面张角缩到 2°，防远焦 DOF 糊成斜光带）+ 雾关 + 窗火 glow 0.7 + 街灯 1.3 + 角色冷蓝 tint/暖 add（灯池感）；卡侧 `night_mix=1`（整卡切夜版贴图）+ `night_comp=0.6`（EMISSION 补回烘卡亮度，见 §6.6）；后景窗火按 `BG_GLOW_RATIO` 0.45 折扣；夜雾删掉（层次交后景分层染色 + 远焦 DOF，§2.3）。
 - 后处理 post_hd2d（layer 100）：移轴 0（**主场景零模糊=全局口径**，层次全交远焦 DOF）、暗角 0.28、曝光 1.14、饱和 1.18、lift/gain 微暖。
 - DOF 只开远焦：far 距离钉**世界线**（天际线基线−DOF_FAR_START_AHEAD，随 set_cam_zoom 重算防缩放漂移）；bg1 半档、bg2 满档（amount 0.20、过渡 20）；`--flat=1` 出辅助线核对图时关。
 
 ### 6.6 卡渲染要点（card.gdshader）
 
-- albedo 亮度差分伪法线（relief 4.5）→ 平面卡吃真 3D 光照；depth_prepass_alpha 消矩形影；alpha_cut 0.4；窗火 glow 按昼夜档 0/1.15。
+- albedo 亮度差分伪法线（relief 4.5）→ 平面卡吃真 3D 光照；depth_prepass_alpha 消矩形影；alpha_cut 0.4；窗火 glow 按昼夜档 0/0.7（后景卡再乘 `BG_GLOW_RATIO` 0.45）；夜档 `night_mix=1` 日/夜贴图按同一份混色采样（亮度差分法线吃同一份混色，烘进夜版的月光方向感才不丢）、`night_comp` 把烘卡亮度经 EMISSION 补回；夜版缺失时 `_card_material` 以日版垫底（`_tex_abs_soft` 回退），夜间安全退化为"日版卡+场景光压暗"。
 - base_cut = anchor 纵深分量/卡高（0.13~0.24）：整段裁掉烘焙台基带，墙脚线=可视底=落地线（"地基上一圈浅灰方形"的处置）。
 - 背景剪影档：独立材质不注册窗火表 + 关阴影投射（免得卡影投在无物可接的空地）+ 按层 tint 距离染色。
 

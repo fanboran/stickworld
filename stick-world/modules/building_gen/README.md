@@ -12,30 +12,34 @@
 
 ```
 modules/building_gen/
-├── api.gd                          # 模块对外 API（def→场景注册表，材质 API 见 TextureGenApi）
+├── api.gd                          # 模块对外 API（def→场景注册表，材质 API 见 TextureGenAPI）
 ├── README.md                       # 本文件：系统级说明
-├── buildings/                      # 程序化建筑定义（核心）
+├── buildings/                      # 程序化建筑定义（核心；命名约定详见 buildings/README.md）
 │   ├── placeholder.tscn            #   草棚外壳（房屋类建筑共用，16格宽，可拉伸）
 │   ├── thatch_hut.gd               #   草棚调色板子类（extends BuildingExterior）
 │   ├── building_exterior.gd        #   外观装配基类（外壳几何 + 纹理生成）
-│   ├── barracks.tscn / warehouse.tscn / smithy_lv1.tscn  #  差异化外观建筑（子类 + 调色板）
-│   ├── wall_tier1.tscn             #   低矮土墙（耦合：场景手绘，非材质/模块分离）
-│   ├── wall_tier2.tscn             #   标准城墙
-│   ├── wall_tier3.tscn             #   大型城墙
-│   ├── wall_gate.tscn              #   城门
-│   └── reference/                  #   建筑级参考图（设计稿）
-├── scripts/
-│   ├── building.gd                 # Building 基类（class_name）
-│   └── building_snap.gd            # 编辑器吸附工具（@tool，配合预览场景做场景搭建/测试）
-└── assets/
-    └── white_tex.png               # 4x4 白色纹理，激活 Sprite2D UV
+│   ├── building_palette.gd         #   调色板 Resource（各建筑以 .tres 注入色板）
+│   ├── interior_props.gd           #   室内家具程序化生成库（床/桌/灯等）
+│   ├── smithy_lv1.gd / .tscn       #   铁匠铺 Lv1（开放锻造棚：石炉/烟囱/铁砧/工作台挂件）
+│   ├── barracks.gd / .tscn         #   兵营（军事化外壳：深木色 + 檐口军旗 + 盾牌圆饰）
+│   ├── warehouse.gd / .tscn        #   仓库（商贸外壳：暖木色 + 货箱堆 + 麻袋）
+│   ├── stone_warehouse.gd / .tscn  #   石造仓库（纯石头建筑：垛口石墙/拱窗/石带/角石）
+│   ├── manor.gd / .tscn            #   宅邸（二层半木悬挑建筑：外梯+阳台+穿坡烟囱）
+│   ├── timber_cottage.gd / .tscn   #   木骨石基民居（石基+半木+金茅草）
+│   ├── grand_hall.gd / .tscn       #   议事厅（地标级混合精修：石砌基层+半木+茅草坡+脊上钟楼）
+│   ├── wall_tier1.tscn / wall_tier2.tscn / wall_tier3.tscn / wall_gate.tscn  #  土墙/标准城墙/大型城墙/城门
+│   ├── wall_segment.gd             #   城墙段程序化外观（wall_tier 系列共用，extends BuildingExterior）
+│   ├── *_palette.tres              #   各建筑调色板（茅草/木作/石作色板注入）
+│   └── reference/                  #   建筑级参考图（铁匠铺 lv1-lv4 设计稿）
+└── scripts/
+    └── building.gd                 # Building 基类（class_name）
 ```
 
 ---
 
 ## 依赖
 
-- `modules/texture_gen/`：CPU 程序化贴图（`ProceduralMaterials`）、GPU Shader 材质、截图工具链
+- `modules/texture_gen/`：CPU 程序化贴图（`TextureGenAPI` 静态方法、`StoneBrickGen` 石砖纹理）
 
 ---
 
@@ -56,4 +60,4 @@ Move-Item -Path $tmp -Destination $f -Force
 
 ### Godot 脚本缓存导致旧错误反复出现
 
-`.godot/imported/` 目录缓存了旧版本的 `.gd` 脚本解析结果。如果修改了 `run_tests.gd` 之类文件但 Godot 仍报旧的解析错误，说明缓存未刷新。解决：`--editor --quit` 重导入，或手动删 `.godot/global_script_class_cache.cfg`。
+`.godot/imported/` 目录缓存了旧版本的 `.gd` 脚本解析结果。如果修改了 `run_tests.gd` 之类文件但 Godot 仍报旧的解析错误，说明缓存未刷新。解决：`--editor --quit` 重导入，或手动删 `.godot/` 下的 `global_script_class_cache.cfg`。

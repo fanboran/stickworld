@@ -21,6 +21,13 @@ extends Node2D
 ##   Magikill-Spell1 Hit@1.0s），由 tools/baking/spine_import.gd 导出为动画元数据，
 ##   运行期经 StickmanRig.get_anim_event_time() 读取。
 ##   仅当动画确实没有事件数据（如程序化动画/测试桩）时才回退到 STRIKE_FRAME_RATIO_FALLBACK。
+##
+## 子域拆分索引（逻辑下沉同目录助手；状态与公共 API 留本类，行为不变）：
+## - weapon_balance.gd  数值校准：P5/SWL 真值覆盖 + 全局手感调参 + 冷却校验
+##                      （static 库，_reload_weapons 尾部调用 WeaponBalance.apply）
+## - weapon_ranged.gd   远程弹道：弓延迟放箭 / 杖施法 / 法术 AOE / 抛物线发射（_ranged）
+## - weapon_block.gd    持盾格挡：三重判定 + blockResetInterval 节流（_block；
+##                      is_shield_blocking/notify_block_succeeded facade 留本类）
 
 const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
 ## 兵种行为档案（aim_scatter 等按武器类型读取）
@@ -31,6 +38,12 @@ const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_
 # audit-exempt: headless 防御性路径 preload（经 api 转发会重新依赖 class_name 注册，
 # 失去防御意义）；TargetFinder 为 combat 对外公共类型（combat/api.gd 已声明契约）
 const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+## 数值校准助手（static 函数库；WEAPON_DEF_ID 本地整数键先例见该文件头注释）
+const WeaponBalance := preload("res://modules/units/scripts/entity/weapon_balance.gd")
+## 远程弹道助手（弓延迟放箭/杖施法/法术 AOE/抛物线发射）
+const WeaponRanged := preload("res://modules/units/scripts/entity/weapon_ranged.gd")
+## 持盾格挡助手（三重判定 + blockResetInterval 节流）
+const WeaponBlock := preload("res://modules/units/scripts/entity/weapon_block.gd")
 
 # ─────────────────────────────── 武器类型 ────────────────────────────────
 enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF, MERIC, NONE }
@@ -176,6 +189,9 @@ enum Mood {
 @export var reflect_damage: float = 0.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
+## 域助手实例（_init 装配；状态留本类，逻辑见各助手文件头注释）
+var _ranged = null
+var _block = null
 ## 当前冷却剩余（秒）
 var _cooldown_timer: float = 0.0
 ## 主手武器实例（挂 hand_inner 骨骼，跟随手臂）
@@ -214,6 +230,12 @@ signal weapon_anim_event(anim_name: String, event_name: String, value: String)
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
+
+func _init() -> void:
+	# 助手装配（须在 _init 运行期绑定 self，不用引用 self 的字段初始化器）
+	_ranged = WeaponRanged.new(self)
+	_block = WeaponBlock.new(self)
+
 
 func _ready() -> void:
 	# 延迟挂载：WeaponMount 是实体子节点，_ready 先于实体执行，
@@ -381,127 +403,15 @@ func _reload_weapons() -> void:
 	block_move_mult = float(
 			ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("block_move_mult", 1.0))
 	# P5 数值校准（批次 2）：按武器类型从 BalanceConfig 读 SWL 真值覆盖默认
-	_apply_balance_calibration()
+	# （本体下沉 weapon_balance.gd）
+	WeaponBalance.apply(self)
 
 
-## 武器类型 → 兵种数值 def（config/units/stickmen.tres 行 id）。
-## P5 数值校准：HP/伤害/冷却以 SWL wiki Normal 模式面板值为真值落表，
-## 武器挂载在 _reload_weapons 时按此映射读 BalanceConfig 覆盖 @export 默认。
-const WEAPON_DEF_ID: Dictionary = {
-	WeaponType.SWORD: "stm_sword_001",
-	WeaponType.SPEAR: "stm_spear_001",
-	WeaponType.BOW: "stm_bow_001",
-	WeaponType.PICKAXE: "stm_miner_001",
-	WeaponType.STAFF: "stm_staff_001",
-	WeaponType.MERIC: "stm_meric_001",
-}
 ## HP 校准只做一次（出生满血基线）；换武器只迁移伤害/冷却/爆头加值，
 ## 不动当前 HP（主控换武器不应回血/扣血，装备迁移归 P9 物品栏）。
+## （weapon_type → 兵种 def 映射表 WEAPON_DEF_ID 已下沉 weapon_balance.gd，
+## 校准入口 WeaponBalance.apply(self) 在 _reload_weapons 尾部触发。）
 var _hp_calibrated: bool = false
-
-
-## 从 BalanceConfig 读兵种数值并覆盖（读不到/未装载保持 @export 默认，零回归）。
-## 数据源：stickmen.tres SWL 校准行（P5 批次 2，namu wiki Normal 模式面板值）。
-## 整行读取（get_value(行路径) 返回行字典）——逐字段 get_value 会对缺列行刷警告。
-func _apply_balance_calibration() -> void:
-	if BalanceConfig == null or BalanceConfig.data.is_empty():
-		return  # 独立测试场景未装载 BalanceConfig（system_setup 未跑），跳过避免刷警告
-	var def_id: String = str(WEAPON_DEF_ID.get(weapon_type, ""))
-	if def_id.is_empty():
-		return
-	var row_v: Variant = BalanceConfig.get_value("units.stickmen." + def_id)
-	if not (row_v is Dictionary):
-		return
-	var row: Dictionary = row_v
-	# Excel 空单元格经管线导出为 null：float(null) 会抛"Nonexistent float constructor"，
-	# 数值列统一先判 null 再转换，缺列/空值保持代码默认（零回归）
-	if _num_or_zero(row, "base_attack") > 0.0:
-		damage = _num_or_zero(row, "base_attack")
-	if _num_or_zero(row, "attack_cooldown") > 0.0:
-		cooldown = _num_or_zero(row, "attack_cooldown")
-	if row.get("head_shot_bonus_damage") != null:
-		head_shot_bonus_damage = _num_or_zero(row, "head_shot_bonus_damage")
-	if not _hp_calibrated and _num_or_zero(row, "base_hp") > 0.0:
-		var hp: float = _num_or_zero(row, "base_hp")
-		var owner_entity: CharacterBody2D = get_owner_entity()
-		if owner_entity != null and owner_entity.has_method("get_health"):
-			var health: Node = owner_entity.get_health()
-			if health != null and "max_hp" in health:
-				health.max_hp = hp
-				# 满血基线只写活体：deferred 校准可能落在出生帧之后，若单位已死
-				#（同帧接敌/陷阱/溅射），回写 hp 会把尸体复活成满血——只校准上限
-				if not (health.has_method("is_dead") and health.is_dead()):
-					health.hp = hp
-			_hp_calibrated = true
-	_check_cooldown_vs_anim()
-	_apply_global_tuning()
-
-
-## 配置行数值字段安全读取：null/缺键返回 0.0（float(null) 在运行时会抛错）
-func _num_or_zero(row: Dictionary, key: String) -> float:
-	var v: Variant = row.get(key)
-	if v == null:
-		return 0.0
-	return float(v)
-
-
-## 全局手感数值校准：从 balance.variables（Excel 平衡变量表 var_* 行）读
-## 弹道/格挡/HITSTOP/击退覆盖代码默认。行缺失保持默认，零回归。
-func _apply_global_tuning() -> void:
-	var rows_v: Variant = BalanceConfig.get_value("balance.variables")
-	if not (rows_v is Array):
-		return
-	var by_id := {}
-	for tuning_row: Dictionary in rows_v:
-		if tuning_row.has("id"):
-			by_id[tuning_row["id"]] = tuning_row.get("value")
-	ARROW_VX = _tuned(by_id, "var_arrow_vx", ARROW_VX)
-	ARROW_GRAVITY = _tuned(by_id, "var_arrow_gravity", ARROW_GRAVITY)
-	ARROW_LEAD_FACTOR = _tuned(by_id, "var_arrow_lead_factor", ARROW_LEAD_FACTOR)
-	BLOCK_CHANCE = _tuned(by_id, "var_block_chance", BLOCK_CHANCE)
-	BLOCK_DAMAGE_FACTOR = _tuned(by_id, "var_block_damage_factor", BLOCK_DAMAGE_FACTOR)
-	BLOCK_RESET_INTERVAL = _tuned(by_id, "var_block_reset_interval", BLOCK_RESET_INTERVAL)
-	BLOCK_FRONT_DOT = _tuned(by_id, "var_block_front_dot", BLOCK_FRONT_DOT)
-	HITSTOP_TIME_SCALE = _tuned(by_id, "var_hitstop_time_scale", HITSTOP_TIME_SCALE)
-	HITSTOP_DURATION = _tuned(by_id, "var_hitstop_duration", HITSTOP_DURATION)
-	HITSTOP_MIN_INTERVAL = _tuned(by_id, "var_hitstop_min_interval", HITSTOP_MIN_INTERVAL)
-	KNOCKBACK_PER_DAMAGE = _tuned(by_id, "var_knockback_per_damage", KNOCKBACK_PER_DAMAGE)
-
-
-## 单变量取值：行存在且 value 为数值时返回 value，否则回退 fallback
-func _tuned(by_id: Dictionary, id: String, fallback: float) -> float:
-	var v: Variant = by_id.get(id)
-	return float(v) if (v is float or v is int) else fallback
-
-
-## 冷却 vs 动画检查告警去重（每武器类型只告警一次，防逐单位刷屏）
-static var _cooldown_warned: Dictionary = {}
-
-
-## 9d 检查项：冷却与攻击动画的约束校验。
-## 硬约束：冷却 ≥ 命中帧时间（否则动画没挥到命中帧就重挥，永远打不出伤害）；
-## 软提示：冷却 < 动画全长为原版合法语义——命中帧后尾段可被打断
-## （AnimationCancelFraction；原版剑士攻速 1.0/s vs 攻击动画 1.33s 即同款）。
-func _check_cooldown_vs_anim() -> void:
-	var owner_entity: CharacterBody2D = get_owner_entity()
-	if owner_entity == null or not "rig" in owner_entity:
-		return
-	var rig: Node = owner_entity.get("rig")
-	if rig == null or not rig.has_method("get_anim_length"):
-		return
-	_resolve_hit_event_time()
-	var anim_name := _attack_anim_name()
-	var anim_len: float = rig.get_anim_length(anim_name)
-	if anim_len <= 0.0:
-		return
-	if _hit_event_time >= 0.0 and cooldown < _hit_event_time:
-		if not _cooldown_warned.has(weapon_type):
-			_cooldown_warned[weapon_type] = true
-			push_warning("[WeaponMount] 冷却 %.2fs < 命中帧 %.2fs（%s）：命中帧前重挥，永远打不出伤害" % [cooldown, _hit_event_time, anim_name])
-	elif cooldown < anim_len:
-		if not _cooldown_warned.has(weapon_type):
-			_cooldown_warned[weapon_type] = true
-			push_warning("[WeaponMount] 冷却 %.2fs < 攻击动画时长 %.2fs（%s）：依赖命中帧后打断语义（原版剑士同款）" % [cooldown, anim_len, anim_name])
 
 
 ## 查找武器骨 weapon_hand（SWL pickaxe1 补译；挂 hand_inner 手骨原点，
@@ -545,9 +455,9 @@ func _physics_process(delta: float) -> void:
 			_bow_fire_timer -= delta
 			if _bow_fire_timer <= 0.0:
 				if weapon_type == WeaponType.BOW:
-					_fire_arrow(_pending_ranged_target)
+					_ranged.fire_arrow(_pending_ranged_target)
 				else:
-					_cast_magic(_pending_ranged_target)
+					_ranged.cast_magic(_pending_ranged_target)
 				_pending_ranged_target = null
 		else:
 			_pending_ranged_target = null
@@ -644,9 +554,9 @@ func perform_attack(target: Node) -> Dictionary:
 	if target == null or not is_instance_valid(target):
 		result["reason"] = "invalid_target"
 		return result
-	# 弓：发射箭矢（命中由箭矢决定）；杖：延迟施法结算
+	# 弓：发射箭矢（命中由箭矢决定）；杖：延迟施法结算（本体下沉 weapon_ranged.gd）
 	if weapon_type == WeaponType.BOW or weapon_type == WeaponType.STAFF:
-		return _attack_ranged(target)
+		return _ranged.attack_ranged(target)
 	var health: Node = _get_health(target)
 	if health == null or health.is_dead():
 		result["reason"] = "no_health_or_dead"
@@ -757,9 +667,9 @@ func sim_fire_now() -> void:
 	if not is_instance_valid(target):
 		return
 	if weapon_type == WeaponType.BOW:
-		_fire_arrow(target)
+		_ranged.fire_arrow(target)
 	else:
-		_cast_magic(target)
+		_ranged.cast_magic(target)
 
 
 ## 命中帧结算本体（旧 _try_strike_frame 的结算段；触发源：旧链动画到点 /
@@ -927,176 +837,6 @@ func update_cooldown(delta: float) -> void:
 	_sustained_fire_heat = maxf(0.0, _sustained_fire_heat - SUSTAINED_FIRE_DIMINISH * delta)
 
 
-# ─────────────────────────────── 远程攻击（弓）────────────────────────────────
-
-## 远程攻击（弓）：发射箭矢朝向目标（命中由箭矢实际飞行碰撞决定，非概率）。
-## 延迟发射：记录目标 + 倒计时，拉弓拉满（attack_bow 的 Hit 事件 @0.5333s）时放箭。
-## 返回 {hit:false, damage:0, reason:"fired"/...}——命中结果由箭头落地后报告。
-## sim 模式：倒计时与冷却归 BattleSim，到点回调 sim_fire_now()。
-func _attack_ranged(target: Node) -> Dictionary:
-	var result: Dictionary = {"hit": false, "damage": 0.0, "reason": ""}
-	var owner_entity: CharacterBody2D = get_owner_entity()
-	if owner_entity == null:
-		result["reason"] = "no_owner"
-		return result
-	var dist: float = owner_entity.global_position.distance_to(target.global_position)
-	if dist > attack_range:
-		result["reason"] = "out_of_range"
-		return result
-	_pending_ranged_target = target
-	var s := _sim()
-	if s != null:
-		s.register_ranged(_sim_sid(), self, target, _get_bow_fire_delay())
-		s.set_cooldown(_sim_sid(), _get_effective_cooldown())
-	else:
-		_bow_fire_timer = _get_bow_fire_delay()
-		_cooldown_timer = _get_effective_cooldown()
-	result["reason"] = "fired"
-	return result
-
-
-## 放箭/施法结算延迟（s）：读攻击动画的 Hit 事件真值
-## （弓 Archidon-Draw Hit@0.5333s 满弓 / 杖 Magikill-Spell1 Hit@1.0s 施法前摇），
-## 无事件数据时回退 BOW_FIRE_DELAY_FALLBACK。
-func _get_bow_fire_delay() -> float:
-	var owner_entity: CharacterBody2D = get_owner_entity()
-	if owner_entity == null or not "rig" in owner_entity:
-		return BOW_FIRE_DELAY_FALLBACK
-	var rig: Node = owner_entity.get("rig")
-	if rig == null or not rig.has_method("get_anim_event_time"):
-		return BOW_FIRE_DELAY_FALLBACK
-	var t: float = rig.get_anim_event_time(_attack_anim_name(), "Hit")
-	return t if t >= 0.0 else BOW_FIRE_DELAY_FALLBACK
-
-
-## 法术结算（SWL Magikill.CastStun 施法前摇到点）：对目标结算 SPELL 伤害——
-## 格挡对法术无效（is_blockable=false，原版盾挡箭不挡魔法）。
-## **命中点爆炸 AOE（放倒一片）**：对齐 dump Magikill.CastStun/StunOpponents/
-## unitsToDamage/STUN_RANGE 真值——命中点半径内敌人同时受击 + 击晕（2026-09-01 反馈 9e），
-## 半径挂档案 spell_aoe_radius（STAFF 90），并触发 MAGIC_BLAST 爆炸粒子。
-func _cast_magic(target: Node) -> void:
-	var owner_entity: CharacterBody2D = get_owner_entity()
-	if owner_entity == null or target == null or not is_instance_valid(target):
-		return
-	var health: Node = _get_health(target)
-	if health == null or health.is_dead():
-		return
-	var p := DamagePipeline.Params.new(damage, owner_entity)
-	p.direction = (target.global_position - owner_entity.global_position).normalized()
-	p.type = DamagePipeline.DAMAGE_TYPE.SPELL
-	p.is_blockable = false
-	var dealt: float = DamagePipeline.apply(target, p)
-	# 击晕（SWL Magikill 法术效果，StunSystem 语义）：被法术命中短暂眩晕——
-	# 给召唤护卫争取围堵时间；状态效果系统的首个消费者
-	if dealt > 0.0 and target.has_method("apply_status"):
-		target.apply_status(ScriptStatusEffects.Type.STUN, 0.5, 0.0, owner_entity)
-	# 登记攻击者（防集火；与箭矢一致）
-	if owner_entity.has_method("get_battle_instance"):
-		var battle: Node = owner_entity.get_battle_instance()
-		if battle != null and is_instance_valid(battle) and battle.has_method("register_attacker"):
-			battle.register_attacker(target, owner_entity)
-	if dealt > 0.0 and target.has_method("apply_hit_reaction"):
-		target.apply_hit_reaction(p.direction, dealt * KNOCKBACK_PER_DAMAGE)
-	# 命中点爆炸 AOE（放倒一片）+ 爆炸粒子
-	var aoe_radius: float = float(
-			ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("spell_aoe_radius", 0.0))
-	if aoe_radius > 0.0:
-		_apply_spell_blast(owner_entity, target, aoe_radius)
-	if owner_entity.get_tree() != null:
-		FxPool.spawn_burst(owner_entity.get_tree(), FxLibrary.MAGIC_BLAST,
-				_body_pos(target) + Vector2(0, -30))
-
-
-## 法术爆炸 AOE 结算（SWL StunOpponents 直译）：命中点 radius 内其他敌人
-## 受 50% SPELL 伤害 + 同步击晕——"放倒一片"的核心；主目标已在 _cast_magic 全额结算。
-func _apply_spell_blast(owner_entity: CharacterBody2D, center: Node, radius: float) -> void:
-	var faction: int = owner_entity.get_faction() if owner_entity.has_method("get_faction") else 0
-	if faction == 0 or not owner_entity.has_method("get_battle_instance"):
-		return
-	var battle: Node = owner_entity.get_battle_instance()
-	if battle == null or not is_instance_valid(battle) or not battle.has_method("get_enemies_of"):
-		return
-	var center_pos: Vector2 = (center as Node2D).global_position
-	for e in battle.get_enemies_of(faction):
-		if e == null or not is_instance_valid(e) or e == center:
-			continue
-		if e.has_method("is_dead") and e.is_dead():
-			continue
-		if not (e is Node2D):
-			continue
-		if (e as Node2D).global_position.distance_to(center_pos) > radius:
-			continue
-		var ep := DamagePipeline.Params.new(damage * 0.5, owner_entity)
-		ep.direction = ((e as Node2D).global_position - center_pos).normalized()
-		ep.type = DamagePipeline.DAMAGE_TYPE.SPLASH
-		ep.is_blockable = false
-		DamagePipeline.apply(e, ep)
-		if e.has_method("apply_status"):
-			e.apply_status(ScriptStatusEffects.Type.STUN, 0.5, 0.0, owner_entity)
-		if e.has_method("get_battle_instance"):
-			var b2: Node = e.get_battle_instance()
-			if b2 != null and is_instance_valid(b2) and b2.has_method("register_attacker"):
-				b2.register_attacker(e, owner_entity)
-
-
-## 发射箭矢：从射手胸口**抛物线**发射（SWL Arrow.launchY/AimAngle 弹道）。
-## 固定重力 G，水平分速按距离解算，竖直初速度解抛物线过目标点——
-## 近距离平射、远距自动高弧越顶（友军前排不挡箭），这是弓手能站后排
-## 远程压制的物理基础（直线弹道会把箭全打在自己前排背上）。
-func _fire_arrow(target: Node) -> void:
-	var owner_entity: CharacterBody2D = get_owner_entity()
-	if owner_entity == null:
-		return
-	var scene: PackedScene = ARROW_SCENE
-	if scene == null:
-		push_warning("[WeaponMount] 箭矢场景加载失败: %s" % ARROW_SCENE_PATH)
-		return
-	# 射手胸口（Collider 上部）与目标身体中心（Collider 位置）
-	var from: Vector2 = _body_pos(owner_entity) + Vector2(0, -70)
-	var aim_point: Vector2 = _body_pos(target)
-	# 抛物线解算（SWL AimAngle 语义）+ 移动目标预判迭代 → ArrowBallistics
-	var target_vel: Vector2 = (target as CharacterBody2D).velocity if target is CharacterBody2D else Vector2.ZERO
-	var solution: Dictionary = ArrowBallistics.solve(from, aim_point, target_vel, ARROW_VX, ARROW_LEAD_FACTOR, ARROW_GRAVITY)
-	var vel: Vector2 = solution["vel"]
-	var t: float = solution["t"]
-	aim_point = solution["aim_point"]
-	# SWL AimAngle 散布（currentShotBodyRandomness/NextGaussian）：出弓方向加高斯扰动，
-	# σ 取兵种档案 aim_scatter（rad）× RWR sustained_fire 热度放大（连射越打越散）——
-	# 箭雨自然散开，不再人人弹道全同
-	var scatter: float = float(ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("aim_scatter", 0.0)) \
-			* (1.0 + _sustained_fire_heat)
-	if scatter > 0.0:
-		vel = vel.rotated(ArrowBallistics.next_gaussian(0.0, scatter, -2.0 * scatter, 2.0 * scatter))
-	_sustained_fire_heat = minf(_sustained_fire_heat + SUSTAINED_FIRE_GROW, SUSTAINED_FIRE_HEAT_MAX)
-	var arrow: Node2D = scene.instantiate()
-	var parent: Node = owner_entity.get_parent()
-	if parent == null:
-		parent = get_tree().current_scene
-	parent.add_child(arrow)
-	arrow.global_position = from
-	# SWL drawPower：拉弓满弓比例（BOW_FIRE_DELAY 计时结束 = 满弓 1.0）；
-	# 传解算飞行时间 t + 瞄准点地面线（Collider 中心下方约半个身位≈地面）——
-	# 箭越过目标后落在目标脚下地面（miss 插进敌阵），不再"低于出射点 500px"插地（9c）
-	if arrow.has_method("setup"):
-		arrow.call("setup", vel, damage, owner_entity, target, 1.0, ARROW_GRAVITY, t, aim_point.y + 65.0)
-	# MissingArrowsTolerance 估计口径（11d）：在飞箭矢按满伤害登记到目标头上，
-	# 弓手出手前据此避免对将死目标浪费箭（箭矢终态扣减，见 arrow_projectile）
-	if target != null and is_instance_valid(target) and "incoming_arrow_damage" in target:
-		target.incoming_arrow_damage += damage
-	# 箭矢威胁标记（SWL SpeartonAi.IsAnyArrowThreat 感知源）：出弓瞬间通知目标，
-	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾
-	if target != null and is_instance_valid(target) and "arrow_threat_time" in target:
-		target.arrow_threat_time = Time.get_ticks_msec() / 1000.0
-
-
-## 实体身体位置（Collider 世界坐标，缺省回落 global + 典型偏移）
-func _body_pos(entity: Node) -> Vector2:
-	var collider: Node = entity.get_node_or_null("Collider")
-	if collider != null and collider is Node2D:
-		return (collider as Node2D).global_position
-	return entity.global_position + Vector2(8.5, 130)
-
-
 ## 获取挂在手部的武器实例（null=未挂载）
 func get_weapon_node() -> Node2D:
 	return _weapon
@@ -1107,24 +847,11 @@ func get_shield_node() -> Node2D:
 	return _shield
 
 
-## 持盾格挡判定（被攻击方调用；DamagePipeline 的格挡入口）。
-## 复刻原版三件套，缺一不可：
-##   ① 装备了盾（持盾单位才可能挡）
-##   ② **处于举盾姿态** IsBlocking()——原版不是无条件概率，Spearton 要真的举盾才挡
-##   ③ 伤害来自**正面**（CanBlockAttack() 的姿态/方向判定）
-## 外加 blockResetInterval 节流：刚格挡过的一段时间内不能再挡。
-## incoming_dir: 攻击者→受击者方向；留空（零向量）时跳过正面判定。
+## 持盾格挡判定（被攻击方调用；DamagePipeline 的格挡入口，签名不可变）。
+## 判定本体（盾存在/举盾姿态/正面扇区/重置节流/概率掷骰）下沉 weapon_block.gd，
+## 状态（_shield/_blocking/_block_reset_timer/BLOCK_*）留本类，此处仅转发。
 func is_shield_blocking(incoming_dir: Vector2 = Vector2.ZERO) -> bool:
-	if _shield == null or not is_instance_valid(_shield):
-		return false
-	if not _blocking:
-		return false
-	if _block_reset_timer > 0.0:
-		return false
-	var facing := _owner_facing_value()
-	if not BlockResolver.is_frontal(incoming_dir, facing, BLOCK_FRONT_DOT):
-		return false
-	return BlockResolver.roll_block(BLOCK_CHANCE)
+	return _block.is_shield_blocking(incoming_dir)
 
 
 ## 举盾姿态（原版 IsBlocking()）：true = 该单位正处于防御姿态。
@@ -1151,29 +878,15 @@ func get_blocking() -> bool:
 
 
 ## 标记一次成功格挡（由 DamagePipeline 调用）：启动 blockResetInterval 冷却，
-## 防止高攻速单位被同一面盾连续无限吃掉伤害。
+## 防止高攻速单位被同一面盾连续无限吃掉伤害（本体下沉 weapon_block.gd）。
 func notify_block_succeeded() -> void:
-	_block_reset_timer = BLOCK_RESET_INTERVAL
+	_block.notify_block_succeeded()
 
 
 ## 是否可被反伤（原版 Unit.CanReceiveReflectDamage 虚方法，缺省可被反伤）。
 ## 未来免疫反伤的单位类型（雕像/亡灵等）在此覆写。
 func can_receive_reflect_damage() -> bool:
 	return true
-
-
-## 正面判定：来袭方向（攻击者→自己）与自身朝向相反 ⇒ 从正面打来。
-## facing=+1 面向右 ⇒ 来自右侧的攻击（incoming_dir.x > 0）是正面。
-func _is_frontal(incoming_dir: Vector2) -> bool:
-	return BlockResolver.is_frontal(incoming_dir, _owner_facing_value(), BLOCK_FRONT_DOT)
-
-
-## 持有实体朝向（缺省 1.0 = 面向右）
-func _owner_facing_value() -> float:
-	var owner_entity: Node = get_owner_entity()
-	if owner_entity != null and owner_entity.has_method("get_facing"):
-		return float(owner_entity.get_facing())
-	return 1.0
 
 
 ## 是否正在挥砍（程序化挥砍已移除，挥砍由攻击动画驱动，恒 false）

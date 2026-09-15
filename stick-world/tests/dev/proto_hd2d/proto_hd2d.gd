@@ -777,10 +777,13 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	# 实心区间（格）：卡宽收窄 15%；细杆件（灯笼）不挡人。
 	# 道具是台面/路面上的点障碍——碰撞只在其纵深带附近（z→y 窄带），
 	# 不挡整条行走带（玩家/NPC 从前景绕过去）。
+	# 纵深带=卡底贴地基线向街心延伸 [y_c−52, y_c]（2026-09-16：此前基线前后
+	# 各跨 26，前缘伸到基线前方，角色在基线前 ~38px（26+脚框半宽 12）就被
+	# 挡住——观感"碰撞箱向下偏移 ~32px"（38·ez@113% 档），创始人指认）。
 	if card != "lantern":
 		var half_w: float = float(units[0]) * S * 0.5 * 0.85
 		var y_c: float = 688.0 + z_off * 32.0
-		_prop_solids.append([x - half_w, x + half_w, y_c - 26.0, y_c + 26.0])
+		_prop_solids.append([x - half_w, x + half_w, y_c - 52.0, y_c])
 	return mi
 
 

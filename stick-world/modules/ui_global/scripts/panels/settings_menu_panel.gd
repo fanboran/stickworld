@@ -472,7 +472,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 	{
 		"id": "audio", "title": "音频", "icon": &"哨子",
 		"fields": [
-			{"key": "audio/master_volume", "label": "主音量", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 80},
+			{"key": "audio/master_volume", "label": "主音量", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 100},
 			{"key": "audio/bgm_volume", "label": "音乐", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 70},
 			{"key": "audio/sfx_volume", "label": "音效", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 90},
 			{"key": "audio/mute_when_unfocused", "label": "失焦时静音", "type": "toggle", "default": true},

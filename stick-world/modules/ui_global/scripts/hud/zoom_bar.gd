@@ -11,14 +11,17 @@ const BAR_WIDTH: float = 360.0
 const BAR_HEIGHT: float = 24.0
 ## 右侧百分比标签宽度
 const LABEL_WIDTH: float = 48.0
-## 缩放范围与档位（与 CameraRig.ZOOM_* 同值——ui_global 禁止反向依赖 world 模块，
-## 取不了其常量，此处为 UI 侧镜像；刻度 0.5~2.0 每 0.1 一档 = 16 档）
-const ZOOM_MIN: float = 0.5
-const ZOOM_MAX: float = 2.0
-const ZOOM_STEP: float = 0.1
+## 缩放滑块量程：**显示百分比域，整 10 档**（创始人 2026-09-16"缩放的最大
+## 最小范围变成整10"）——70%~260%、步进 10%，20 档；user_zoom = 显示% ×
+## ZOOM_BASE / 100（70%→0.525 / 260%→1.95，均在 CameraRig 夹制 [0.5, 2.0]
+## 内；100% 默认档恰在刻度上）。滚轮缩放仍走 CameraRig 步进，句柄按最近
+## 整 10 刻度吸附，标签读相机真实值。
+## ui_global 禁止反向依赖 world 模块，CameraRig.ZOOM_* 不取，夹制由其自身保证。
+const DISPLAY_MIN: float = 70.0
+const DISPLAY_MAX: float = 260.0
+const DISPLAY_STEP: float = 10.0
 ## 显示基准档：user_zoom=0.75（HD-2D 构图契约默认档，CameraRig 同值镜像）
 ## 显示为 100%（创始人 2026-09-15：缩放条 75% 的数字映射为 100%）。
-## 只改数字口径，滑块位置/滚轮步进仍是 user_zoom 域（每档 0.1 ≈ 显示 13%）
 const ZOOM_BASE: float = 0.75
 
 var _slider: HSlider = null
@@ -37,24 +40,24 @@ func setup(camera_rig: Node) -> void:
 	_camera_rig = camera_rig
 	_build_ui()
 	if _camera_rig != null and _camera_rig.has_method("get_user_zoom"):
-		_slider.set_value_no_signal(_camera_rig.get_user_zoom())
-		_update_label()
+		sync_from_camera()
 
 
 func _build_ui() -> void:
 	# 滑块：条本体宽 = BAR_WIDTH，水平排列由容器管理（无手写 offset）
 	_slider = SketchHSlider.new()
 	_slider.custom_minimum_size = Vector2(BAR_WIDTH, BAR_HEIGHT)
-	# 滑块量程必须对齐相机 user_zoom 域：HSlider 默认 0~100，不设则相机值
-	# 0.5~2.0 只占量程 1%~2%（手柄滚轮缩放几乎不动的根因），拖动则被 clamp 瞬跳
-	_slider.min_value = ZOOM_MIN
-	_slider.max_value = ZOOM_MAX
-	_slider.step = ZOOM_STEP
+	# 滑块量程=显示百分比域（整 10 档）：旧 user_zoom 域 0.5~2.0 换算显示
+	# 66.7%~266.7%，端点非整 10（创始人 2026-09-16）。拖动改相机 user_zoom
+	# = 显示%×ZOOM_BASE/100，量程始终覆盖 CameraRig 夹制区间
+	_slider.min_value = DISPLAY_MIN
+	_slider.max_value = DISPLAY_MAX
+	_slider.step = DISPLAY_STEP
 	_slider.value_changed.connect(_on_slider_changed)
 	add_child(_slider)
-	# 缩放档位刻度：原生 tick_count 机制（0.5~2.0 每 0.1 一档 = 16 档，
-	# 默认 100% 恰落在刻度上）；刻度渲染由 SketchHSlider 自绘接管
-	_slider.tick_count = 16
+	# 缩放档位刻度：70~260 每 10 一档 = 20 档（默认 100% 恰落在刻度上）；
+	# 刻度渲染由 SketchHSlider 自绘接管
+	_slider.tick_count = int((DISPLAY_MAX - DISPLAY_MIN) / DISPLAY_STEP) + 1
 	# 百分比标签：条右侧
 	_label = Label.new()
 	_label.custom_minimum_size = Vector2(LABEL_WIDTH, 0.0)
@@ -65,8 +68,9 @@ func _build_ui() -> void:
 
 
 func _on_slider_changed(value: float) -> void:
+	# value = 显示百分比（整 10 档）→ 换算相机 user_zoom
 	if _camera_rig != null and _camera_rig.has_method("set_user_zoom"):
-		_camera_rig.set_user_zoom(value)
+		_camera_rig.set_user_zoom(value / 100.0 * ZOOM_BASE)
 	_update_label()
 
 
@@ -77,13 +81,13 @@ func _update_label() -> void:
 		_label.text = "%d%%" % int(round(_camera_rig.get_user_zoom() / ZOOM_BASE * 100))
 
 
-## 滚轮缩放后由 GameRoot 调用，同步滑块位置
+## 滚轮缩放后由 GameRoot 调用，同步滑块位置（句柄吸附最近整 10 刻度）
 func sync_from_camera() -> void:
 	if _slider == null or _camera_rig == null or not _camera_rig.has_method("get_user_zoom"):
 		return
-	var cam_zoom: float = _camera_rig.get_user_zoom()
-	if absf(_slider.value - cam_zoom) > 0.001:
-		_slider.set_value_no_signal(cam_zoom)
+	var display: float = _camera_rig.get_user_zoom() / ZOOM_BASE * 100.0
+	if absf(_slider.value - display) > 0.05:
+		_slider.set_value_no_signal(display)
 		_update_label()
 
 

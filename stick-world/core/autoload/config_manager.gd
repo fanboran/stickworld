@@ -10,9 +10,12 @@ const SETTINGS_PATH := "user://settings.cfg"
 const VOLUME_CHANNELS := ["master", "bgm", "sfx"]
 
 # 默认值表。首次启动用这些值初始化。
+# 音量出厂值按 BGM 交付响度标定（全层叠加实测 -15.65 LUFS）：master 满格不预压
+# （防削波由素材真峰值上限与 SFX 限幅器承担），bgm 0.7（-3.1dB）让游戏内音乐
+# 落在"背景"带（全层 ≈ -18.8 LUFS），比前景音效低 4dB 以上。
 var _defaults: Dictionary = {
-	"audio/master_volume": 0.8,
-	"audio/bgm_volume": 0.8,
+	"audio/master_volume": 1.0,
+	"audio/bgm_volume": 0.7,
 	"audio/sfx_volume": 0.9,
 	"display/fullscreen": false,
 	"display/vsync": true,

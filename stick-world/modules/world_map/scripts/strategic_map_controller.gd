@@ -11,6 +11,7 @@ class_name StrategicMapController
 ## 交互：
 ##   - 左键单击聚落：选中（发 settlement_clicked）
 ##   - 左键双击聚落：进入场景图（发 settlement_activated → api.enter_settlement）
+##   - 右键聚落：F3 调试模式下直接传送进城（绕过到访/路网校验）
 ##   - ESC：关闭战略图
 ##   - 中键拖拽 + 滚轮缩放（由 MapCamera 处理）
 
@@ -141,6 +142,11 @@ func _input(event: InputEvent) -> void:
 			if get_viewport().gui_get_hovered_control() != null:
 				return
 			_handle_left_click(mb.position)
+		elif mb.button_index == MOUSE_BUTTON_RIGHT and _debug_teleport_enabled():
+			# F3 调试传送：右键命中聚落直接进城（GUI 先决同左键）
+			if get_viewport().gui_get_hovered_control() != null:
+				return
+			_handle_debug_teleport(mb.position)
 	# ESC：统一走 handle_escape（下钻返回 L2 / 关闭地图）；消费事件防止
 	# GameRoot 再收到后弹暂停菜单（GameRoot 也通过 handle_escape 分发，双路径互斥）
 	elif event is InputEventKey and event.pressed and not event.is_echo():
@@ -208,6 +214,29 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 		api.select(settlement.settlement_id)
 		if api.has_signal("settlement_clicked"):
 			api.settlement_clicked.emit(settlement.settlement_id)
+
+
+## F3 调试传送开关：调试覆盖层可见（F3 开启）时生效
+func _debug_teleport_enabled() -> bool:
+	return DebugApi != null and DebugApi.is_visible()
+
+
+## F3 调试传送：右键命中聚落直接进城。走 enter_settlement 原生链路（travel_requested
+## → SceneLoader → 到访记录），但不做到访/路网/战斗校验——调试期快速移动用；
+## 无 map_id 聚落仍拒绝（场景图不存在无处可传）。
+func _handle_debug_teleport(screen_pos: Vector2) -> void:
+	if api == null or not api.has_method("query_at_screen"):
+		return
+	if _fast_travel_pending:
+		return
+	var settlement: SettlementRef = api.query_at_screen(screen_pos).get("settlement", null)
+	if settlement == null:
+		return
+	var display_name: String = settlement.name if not settlement.name.is_empty() else settlement.settlement_id
+	if api.enter_settlement(settlement.settlement_id):
+		EventBus.ui_notification.emit("调试传送", "已传送到 %s" % display_name, "info")
+	else:
+		EventBus.ui_notification.emit("调试传送失败", "%s 未开放场景图" % display_name, "warn")
 
 
 ## 双击聚落分流（P6/E3 交互流，总体设计 §5.10）：

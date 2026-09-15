@@ -282,6 +282,7 @@ var _front_occ: Array = []
 var _door_path_xs: Array = []   # 需要门前短径的建筑 x（guildhall / 落地面建筑）
 var _prop_slots: Array = []     # 前排楼间空当 [x0,x1]（道具槽位）
 var _prop_solids: Array = []    # 道具实心区间 [x0,x1]（碰撞用）
+var _clutter_occ: Array = []    # 建筑间杂物占格带（F3 建筑辅助线用，同建筑 rect 口径）
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
@@ -649,11 +650,15 @@ func get_solid_rects() -> Array:
 
 ## 前排建筑占地带（px 四元组 [x0,x1,y0,y1]，不含道具/城墙）——宿主转发给
 ## F3 建筑宽度辅助线：左右边界竖线 + 整格浅网格（创始人 2026-09-15，
-## 2D 图 F3 版式样原样搬入 HD-2D；宽度口径=建筑格宽，与碰撞同源）
+## 2D 图 F3 版式样原样搬入 HD-2D；宽度口径=建筑格宽，与碰撞同源）。
+## 建筑间杂物占格带同列（创始人 2026-09-15：杂物按建筑算，F3 里同样
+## 画出双黄线与紫占地带——4 元组 rect，无直立包楼框）
 func get_building_rects() -> Array:
 	var out: Array = []
 	for occ in _front_occ:
 		out.append(_building_solid_rect(occ))
+	for occ in _clutter_occ:
+		out.append(occ)
 	return out
 
 
@@ -880,6 +885,13 @@ func _place_props() -> void:
 		for e: Variant in _layout.get("props", []):
 			_spawn_prop(str(e["card"]), float(e["x"]), float(e.get("z", 5.0)),
 					bool(e.get("plat", false)))
+			# 占格件（CityGen 杂物）：并进 F3 建筑辅助线——左右边界双黄线 +
+			# 紫占地带，与建筑同口径；碰撞仍走 _prop_solids 点障碍
+			if float(e.get("occ_cells", 0.0)) > 0.0:
+				var oc_y: float = 688.0 + float(e.get("z", 5.0)) * 32.0
+				var oc_x0: float = float(e["x"]) - float(e["occ_cells"]) * 0.5
+				_clutter_occ.append([oc_x0, oc_x0 + float(e["occ_cells"]),
+						oc_y - 26.0, oc_y + 26.0])
 		return
 	for e in PROPS:
 		_spawn_prop(str(e["card"]), float(e["x"]), float(e["z"]), bool(e.get("plat", true)))

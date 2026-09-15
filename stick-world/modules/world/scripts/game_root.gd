@@ -673,6 +673,12 @@ func _load_start_village() -> void:
 	# 新游戏：重置游戏时间 + 本局随机种子（防上一局残留；读档路径经 load_save_data 恢复种子）
 	if WorldState and "game_time" in WorldState:
 		WorldState.game_time = 0.0
+	# EnvironmentSystem 本地时钟每帧写回 WorldState（其 _process），且同进程重开一局时
+	# 其 _ready 已把上一局残留时刻采纳进本地——只归零 WorldState 会被下一帧覆盖回去，
+	# 须一并重置到清晨，否则上一局玩到夜里重开的新地图开局即黑夜
+	var env := get_node_or_null("EnvironmentSystem")
+	if env != null and env.has_method("reset_to_new_run_clock"):
+		env.reset_to_new_run_clock()
 	if WorldState and WorldState.has_method("start_new_run"):
 		WorldState.start_new_run()
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码

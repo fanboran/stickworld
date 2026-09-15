@@ -198,9 +198,6 @@ const DOF_FAR_START_AHEAD := 0.0   # 回到初始渐变（创始人 2026-09-15�
 const BG_TINTS: Array = [
 	Color(0.80, 0.84, 0.93), Color(0.85, 0.885, 0.945), Color(0.90, 0.925, 0.96),
 ]
-## 昼档天空纯蓝（创始人 2026-09-15：天空改纯蓝）：上下半球同色、无地平亮带，
-## 太阳盘照常由材质渲染；夜档色值仍在 _apply_light
-const DAY_SKY_BLUE := Color(0.36, 0.56, 0.92)
 ## 漂移云牌（创始人 2026-09-15：2D 地图的手绘云加进新天空）——sketch_cloud
 ## 程序化画风烘成贴图上 Sprite3D billboard；风驱漂移+出带回绕（SkyDecor 云同语义）
 const SKETCH_CLOUD := preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
@@ -1008,12 +1005,12 @@ func _build_world() -> void:
 	_env = Environment.new()
 	_env.background_mode = Environment.BG_SKY
 	_sky_mat = ProceduralSkyMaterial.new()
-	# 天空纯色（昼=纯蓝，创始人 2026-09-15）：四色统一、无地平亮带——太阳盘
-	# 照常由材质渲染；昼夜实际色值以 _apply_light 为准（此处只是首帧前兜底）
-	_sky_mat.sky_top_color = DAY_SKY_BLUE
-	_sky_mat.sky_horizon_color = DAY_SKY_BLUE
-	_sky_mat.ground_horizon_color = DAY_SKY_BLUE
-	_sky_mat.ground_bottom_color = DAY_SKY_BLUE
+	# 渐变天空初值（昼档同 _apply_light；此处只是首帧前兜底）——太阳盘照常由
+	# 材质渲染
+	_sky_mat.sky_top_color = Color(0.31, 0.47, 0.78)
+	_sky_mat.sky_horizon_color = Color(0.80, 0.87, 0.95)
+	_sky_mat.ground_horizon_color = Color(0.78, 0.84, 0.92)
+	_sky_mat.ground_bottom_color = Color(0.42, 0.44, 0.46)
 	var sky := Sky.new()
 	sky.sky_material = _sky_mat
 	_env.sky = sky
@@ -1866,11 +1863,10 @@ func _apply_light(mode: String) -> void:
 	#   · 冷补光 0.12 抬暗部：明暗比从 ~1.6:1 压到 ~1.15:1（亮部 1.01 / 暗部 0.68
 	#     → 乘 albedo 后 0.86 / 0.58），暗部抬亮但**不致死黑**；
 	#   · 白平衡略偏暖（主光暖 + gain 微暖 + lift 微抬）。
-	# 昼档天空=纯蓝一档（创始人 2026-09-15）：上下半球同色、无地平亮带
-	_sky_mat.sky_top_color = DAY_SKY_BLUE
-	_sky_mat.sky_horizon_color = DAY_SKY_BLUE
-	_sky_mat.ground_horizon_color = DAY_SKY_BLUE
-	_sky_mat.ground_bottom_color = DAY_SKY_BLUE
+	_sky_mat.sky_top_color = Color(0.31, 0.47, 0.78)
+	_sky_mat.sky_horizon_color = Color(0.80, 0.87, 0.95)
+	_sky_mat.ground_horizon_color = Color(0.78, 0.84, 0.92)
+	_sky_mat.ground_bottom_color = Color(0.42, 0.44, 0.46)
 	_sky_mat.energy_multiplier = 1.0
 	_env.ambient_light_color = Color(0.64, 0.71, 0.86)
 	_env.ambient_light_energy = 0.58

@@ -12,6 +12,11 @@
     "F:/SteamLibrary/steamapps/common/Blender/blender.exe" -b --factory-startup \
         -P stick-world/tests/dev/proto_25d/blender_proto.py
 
+增量跑法（只烘点名 def，其余跳过；cards.json 合并写回，不出 glb/report）::
+
+    BAKE_ONLY=council_hall,cathedral "F:/.../blender.exe" -b --factory-startup \
+        -P stick-world/tests/dev/proto_25d/blender_proto.py
+
 产物（stick-world/temp/proto25d/）::
 
     cards/<def>_w<N>.png        albedo 卡（透明底）
@@ -84,10 +89,44 @@ STREET = [
     ("smithy3", 8),
     ("smithy4", 12),
     ("windmill", 6),
+    # 2026-09-14 行政/金融/驿站/赌场/科研族装配器补卡（宽度档 = buildings.py 各
+    # XXX_TIERS 字典的实际键，逐档一张卡；6 格档仅装配器允许时用）
+    ("council_hall", 8),
+    ("town_hall", 12),
+    ("town_hall", 16),
+    ("governor_palace", 16),
+    ("imperial_palace", 16),
+    ("belfry", 4),
+    ("belfry", 6),
+    ("mint", 12),
+    ("mint", 16),
+    ("waystation", 6),
+    ("waystation", 8),
+    ("inn_post", 12),
+    ("inn_post", 16),
+    ("coach_house", 12),
+    ("coach_house", 16),
+    ("gambling_den", 8),
+    ("gambling_den", 12),
+    ("grand_casino", 16),
+    ("academy", 12),
+    ("academy", 16),
+    ("observatory", 8),
+    ("flower_shop", 8),
+    ("flower_shop", 12),
+    # cathedral 补 w8 小礼拜堂档（CATHEDRAL_TIERS 有 8/12/16 三档，此前只烘了 16）
+    ("cathedral", 8),
 ]
 
 #: glow 卡里当作"自发光窗/火"的材质名（其余一律压成纯黑，加色叠加下不可见）
 GLOW_MATS = {"glass", "glass_win", "lamp", "fire", "ember", "candle", "torch"}
+
+#: 增量烘焙过滤：设 BAKE_ONLY=council_hall,cathedral（逗号分隔 def 名）时只装配并
+#: 烘这些 def（STREET 其余条目跳过）；未设/空 = 全量，默认行为不变。增量模式下
+#: cards.json 做**合并写回**（旧条目保留原序、同名覆盖、新卡追加尾部），并跳过
+#: glb / build_report 这两个全量产物（避免被增量批次覆盖）。
+BAKE_ONLY = [s.strip() for s in os.environ.get("BAKE_ONLY", "").split(",")
+             if s.strip()]
 
 
 # ------------------------------------------------------------------ 场景
@@ -154,6 +193,8 @@ def layout():
     built = []
     cursor = 0.0
     for (name, wc) in STREET:
+        if BAKE_ONLY and name not in BAKE_ONLY:
+            continue
         if name not in B.ASSEMBLERS:
             print("[SKIP] 无装配器: %s" % name)
             continue
@@ -315,6 +356,35 @@ def report(built, cards):
             "cards": cards}
 
 
+def load_cards(path):
+    """读旧 cards.json（缺失/损坏返回空列表，增量合并不因旧档异常而中断）。"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def merge_cards(new_cards):
+    """增量合并：旧 cards.json 条目保留原序（同名去重保首个），本批同名覆盖、
+    新卡按 STREET 序追加尾部。全量模式不经过此函数，写盘行为不变。"""
+    old = load_cards(os.path.join(OUT_DIR, "cards.json"))
+    by_card = {c["card"]: c for c in new_cards}
+    out, seen = [], set()
+    for c in old:
+        k = c.get("card")
+        if k is None or k in seen:
+            continue
+        out.append(by_card.get(k, c))
+        seen.add(k)
+    for c in new_cards:
+        if c["card"] not in seen:
+            out.append(c)
+            seen.add(c["card"])
+    return out
+
+
 def main():
     clear()
     setup_world()
@@ -332,21 +402,30 @@ def main():
               % (c["card"], c["px"][0], c["px"][1], c["anchor"][0], c["anchor"][1],
                  c["anchor"][2], ",".join(c["glow_mats"]) or "-"))
 
-    export_glb(built)
-    rep = report(built, cards)
-    with open(os.path.join(OUT_DIR, "cards.json"), "w", encoding="utf-8") as f:
-        json.dump(cards, f, ensure_ascii=False, indent=1)
-    with open(os.path.join(OUT_DIR, "build_report.json"), "w", encoding="utf-8") as f:
-        json.dump(rep, f, ensure_ascii=False, indent=1)
+    if BAKE_ONLY:
+        # 增量模式：只合并写回 cards.json，不碰 glb / build_report 全量产物
+        merged = merge_cards(cards)
+        with open(os.path.join(OUT_DIR, "cards.json"), "w", encoding="utf-8") as f:
+            json.dump(merged, f, ensure_ascii=False, indent=1)
+        print("[proto] BAKE_ONLY=(%s) 本批 %d 卡，合并后共 %d 条 -> cards.json"
+              % (",".join(BAKE_ONLY), len(cards), len(merged)))
+    else:
+        export_glb(built)
+        rep = report(built, cards)
+        with open(os.path.join(OUT_DIR, "cards.json"), "w", encoding="utf-8") as f:
+            json.dump(cards, f, ensure_ascii=False, indent=1)
+        with open(os.path.join(OUT_DIR, "build_report.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump(rep, f, ensure_ascii=False, indent=1)
 
-    print("\n=== 报表 ===")
-    print("glb=%s  %.2f MB" % (GLB_PATH, rep["glb_bytes"] / 1048576.0))
-    print("三角面合计 %d；唯一材质 %d 个" % (rep["tris_total"],
-                                            rep["unique_material_count"]))
-    for k, v in rep["buildings"].items():
-        print("  %-16s tris=%-6d verts=%-6d slots=%-3d  %.0f x %.0f x %.0f px"
-              % (k, v["tris"], v["verts"], v["mat_slots"], v["w"], v["h"], v["d"]))
-    print("材质名清单:", ", ".join(rep["unique_materials"]))
+        print("\n=== 报表 ===")
+        print("glb=%s  %.2f MB" % (GLB_PATH, rep["glb_bytes"] / 1048576.0))
+        print("三角面合计 %d；唯一材质 %d 个" % (rep["tris_total"],
+                                                rep["unique_material_count"]))
+        for k, v in rep["buildings"].items():
+            print("  %-16s tris=%-6d verts=%-6d slots=%-3d  %.0f x %.0f x %.0f px"
+                  % (k, v["tris"], v["verts"], v["mat_slots"], v["w"], v["h"], v["d"]))
+        print("材质名清单:", ", ".join(rep["unique_materials"]))
     print("PROTO_OK")
 
 

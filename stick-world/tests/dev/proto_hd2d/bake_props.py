@@ -49,7 +49,11 @@ PAD = 6.0
 RES_MAX = 1024
 
 GLOW_MATS = {"glass", "glass_win", "lamp", "fire", "ember", "candle", "torch",
-             "clear_glass"}
+             "clear_glass",
+             # materials.py 实名（2026-09-14 实测）：六轮街具灯头走 props.clear_glass()
+             # -> 罩子注册名 glazing_win；灯芯 "fire" 不在 materials 注册表、走
+             # _flat_pbr 回退后对象名带前缀 = flat_fire。不含这两名则灯具 glow 全空。
+             "glazing_win", "flat_fire"}
 
 #: 街景空当要用的道具（点名烘，不做全库 —— 每件两次渲染）
 PROPS = [
@@ -58,9 +62,23 @@ PROPS = [
     "hanging_sign", "lantern", "well", "cart", "wheelbarrow", "log_pile",
     "haystack", "anvil", "pot", "planter", "ladder", "standing_board",
     "flower_box", "pottery_row", "tools_rack", "trough", "banner",
-    "grindstone", "market_stall",
+    "grindstone",
+    # ---- 六轮：街道家具 20 件（props.py TABLE "六轮"段全量；石灯/铁艺灯/壁灯/
+    #      花坛×4/长椅×2/露天桌/大小喷泉/公告板/旗杆/雕像基座/里程碑/路标/马槽/
+    #      水龙头/桶栽/吊篮）----
+    "lamp_post_stone", "lamp_post_iron", "wall_sconce",
+    "flower_bed_round", "flower_bed_long", "hanging_basket", "planter_ring",
+    "bench_wood", "bench_stone", "table_outdoor", "fountain_small",
+    "fountain_grand", "notice_board", "flag_pole", "statue_base",
+    "milestone", "signpost", "horse_trough", "water_tap", "barrel_planter",
 ]
 #: 库里签名不是"点摆件"的（fence/clothesline 要 x0,x1），不进本批
+
+#: 增量烘焙过滤：设 BAKE_ONLY=lamp_post_stone,fountain_grand（逗号分隔件名）时
+#: 只烘点名件（PROPS 其余跳过）；未设/空 = 全量，默认行为不变。增量模式下
+#: props.json 做**合并写回**（旧条目保留原序、同名覆盖、新卡追加尾部）。
+BAKE_ONLY = [s.strip() for s in os.environ.get("BAKE_ONLY", "").split(",")
+             if s.strip()]
 
 
 # ------------------------------------------------------------------ 场景
@@ -235,6 +253,35 @@ def bake_card(ob, cam, name):
     }
 
 
+def load_props_json():
+    """读旧 props.json（缺失/损坏返回空列表，增量合并不因旧档异常而中断）。"""
+    try:
+        with open(os.path.join(OUT_DIR, "props.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def merge_cards(new_cards):
+    """增量合并：旧 props.json 条目保留原序（同名去重保首个，顺带修掉旧表里的
+    重复件），本批同名覆盖、新卡追加尾部。全量模式不经过此函数，写盘行为不变。"""
+    old = load_props_json()
+    by_card = {c["card"]: c for c in new_cards}
+    out, seen = [], set()
+    for c in old:
+        k = c.get("card")
+        if k is None or k in seen:
+            continue
+        out.append(by_card.get(k, c))
+        seen.add(k)
+    for c in new_cards:
+        if c["card"] not in seen:
+            out.append(c)
+            seen.add(c["card"])
+    return out
+
+
 def main():
     clear()
     setup_world()
@@ -243,6 +290,8 @@ def main():
 
     cards = []
     for name in PROPS:
+        if BAKE_ONLY and name not in BAKE_ONLY:
+            continue
         # 每件单独进一个新场景太重；在同一个场景里逐件建、烘完即删
         try:
             ob = build_prop(name)
@@ -262,6 +311,10 @@ def main():
         bpy.data.objects.remove(ob, do_unlink=True)
         bpy.data.meshes.remove(me)
 
+    if BAKE_ONLY:
+        # 增量模式：合并写回（旧条目保留、同名覆盖、新卡追加）
+        cards = merge_cards(cards)
+        print("[prop] BAKE_ONLY=(%s) 合并后共 %d 条" % (",".join(BAKE_ONLY), len(cards)))
     with open(os.path.join(OUT_DIR, "props.json"), "w", encoding="utf-8") as f:
         json.dump(cards, f, ensure_ascii=False, indent=1)
     print("[prop] 共 %d 件 -> %s" % (len(cards), os.path.join(OUT_DIR, "props.json")))

@@ -14,10 +14,16 @@
 
 ```
 Blender 离线端（tools/blender_buildings/）        Godot 运行时端
-├─ buildings.py 27 装配器 → 烘建筑卡              ├─ proto_hd2d.tscn  3D 街景（卡+地面+光照）
-├─ props.py 94 件 → 烘道具卡          ──卡库──→  ├─ char_sprite_3d   角色 billboard（每实体一个）
-├─ nature.py 16 类 → 烘自然物卡                  ├─ Hd2dStreetMap    宿主（MapBase 子类）
+├─ buildings.py 27 装配器 → 烘建筑卡              ├─ modules/hd2d/scenes/hd2d_world.tscn  3D 世界（卡+地面+光照）
+├─ props.py 94 件 → 烘道具卡          ──卡库──→  ├─ modules/hd2d/scripts/（hd2d_world + char_sprite_3d）
+├─ nature.py 16 类 → 烘自然物卡                  ├─ Hd2dMapBase 系宿主（world 侧，MapBase 子类）
 └─ city_layout.py 规模档布局算法                  └─ 布局 JSON ←── export_city_layout.py
+
+> **正式化（2026-09-15）**：3D 世界场景与卡资产已从 `tests/dev/proto_hd2d/` 迁入正式模块
+> `modules/hd2d/`（api.gd 契约 + scenes/scripts/shaders/assets 四类目录）；烘卡机产物 temp/
+> 优先、随包镜像 `modules/hd2d/assets/tex/` 兜底，新机器 clone 后不跑 Blender 也能玩。
+> 职责拆分（world 根编排 + cards/placer/ground/walls/char_stage 组件化）为挂起工作项，
+> 见 `docs/项目/交接/HD-2D架构正式化-进度与交接.md`（含组件映射表 v2）。
 ```
 
 主街这张图的完整结构解剖（分层坐标 / 构图三钉 / 摆街数据流 / 光照档）见 **§六**——改布局、构图、背景前先读。
@@ -117,7 +123,7 @@ python tools/blender_buildings/export_city_layout.py --tier village --seed 61103
 # 烘完把 temp/{proto25d,proto_hd2d} 的 png+json 同步进 tests/dev/proto_hd2d/tex/（入库）；
 # 只补夜版时同步 *_night.png 即可（月夜档，见 §2.3）
 # 出图/调试
-godot --path stick-world res://tests/dev/proto_hd2d/proto_hd2d.tscn -- --shots=b --layout=village_b
+godot --path stick-world res://modules/hd2d/scenes/hd2d_world.tscn -- --shots=b --layout=village_b
 # 实机链路验证
 godot --path stick-world res://tests/dev/verify_hd2d_map.tscn
 ```

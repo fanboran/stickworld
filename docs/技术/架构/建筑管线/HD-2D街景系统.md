@@ -29,6 +29,21 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - 建筑卡 = Blender 正交相机（yaw 0°/tilt 26°，与游戏 3D 相机同角度）烘的透明底 PNG + glow 层。卡是 QuadMesh 贴图，**写深度**参与遮挡，吃伪法线光照。
 - **台基不烘**（创始人 2026-09-15）：地面灰白台基在烘端不生成（`buildings.py PLINTH_ENABLED=False`），接触阴影踏面同步剥除、整楼按实测最低点下沉贴地。引擎 `base_cut` 改口径：**alpha 扫描卡底透明留白**（同 `_prop_bottom_pad`，PAD≈10px 不沉墙脚会浮空），下沉后墙脚回到与台基时代同一条基线，接地影 blob（固定 `BSHADOW_Z`）不用动。
 - **地面占地随卡导出**：`cards/props/nature.json` 每条带 `footprint: [宽格, 深格]`（贴地顶点实测，排除出檐悬挑）。宽度档规则（创始人拍板）：**新增档位一律 2 格整数倍**，存量 4/6/8/12/16 档保留不动。
+- **卡库 meta 字段契约**（cards.json / props.json / nature.json 同构；烘焙端三脚本产出，`proto_hd2d.gd` 装进 `_cards/_props/_nature` 字典）：
+
+| 字段 | 含义 |
+|---|---|
+| `card` | 卡名（建筑 `def_w<格数>`，道具/自然物为件名） |
+| `def` | 装配器/件名 |
+| `cells` | 宽度档格数（仅建筑；新档一律 2 格整数倍） |
+| `px` | 卡像素尺寸 |
+| `zoom` | 烘焙像素/世界单位（2x） |
+| `units` | 卡画面投影宽高（世界单位，**含出檐**——落位/剪影排布用，不是占地） |
+| `anchor` | 画面中心对应世界点（卡底贴地落位用） |
+| `footprint` | **地面占地 [宽格, 深格]**：贴地顶点（z≤8px）实测、排除出檐；1 格=32。目前仅导出，运行时尚无消费方 |
+| `glow_mats` | 参与自发光层的材质名清单 |
+| `solid` | 是否挡人（仅 nature.json） |
+
 - 卡落位按 `cards.json` 的 anchor（画面中心对应世界点）；道具/自然物按**卡底贴地**公式（否则卡底入地）。
 - 元数据 JSON（cards/props/nature.json）**随包入库 tex/**，加载先找烘焙工作区 `temp/`、缺失回退 `res://…/tex/`——新机器 clone 后不跑 Blender 也能玩。
 

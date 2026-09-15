@@ -5,6 +5,8 @@
 #   - unit 层：单进程批量（batch_runner.tscn，套件数见 UNIT_SCRIPTS 清单）
 #   - integration / smoke 层：进程级并行池（默认 4，上限 8），套件间互不共享状态
 #   - 每套件耗时输出 + JSON 报告
+#   - 清单内套件 .tscn 缺失但有同名 .tscn.suspended → 悬置：[SKIP] 跳过，不计通过/失败；
+#     .tscn 缺失且无悬置标记 → 清单错误，计失败（防误删/拼错名被静默放过）
 #
 # 用法（在 stick-world/ 或任意目录均可）：
 #   tests/run_all.sh                          # 全量
@@ -265,6 +267,37 @@ select_suites() {
 	printf '%s\n' "${out[@]}"
 }
 
+## 悬置/缺失分流（集中入口）：
+## 全量、-Changed、-Match 三条路径选出的套件最终都汇入 pool，在此统一做一次盘面核对，
+## 不在各过滤路径散落处理。三种情形：
+##   .tscn 在盘                             → 保留执行
+##   .tscn 缺失 + 同名 .tscn.suspended 在盘 → 悬置：[SKIP] 跳过，不计通过/失败
+##   .tscn 缺失且无悬置标记                 → 清单错误（误删/拼错名），报错并计入失败
+classify_pool() {
+	local -a runnable=()
+	local scene
+	for scene in "${pool[@]}"; do
+		if [ -f "$PROJECT_DIR/$scene" ]; then
+			runnable+=("$scene")
+		elif [ -f "$PROJECT_DIR/$scene.suspended" ]; then
+			echo "[SKIP] $scene (suspended)"
+			total_skip=$((total_skip + 1))
+			report_entries+=("{\"suite\":\"$scene\",\"result\":\"suspended\"}")
+		else
+			echo "[MANIFEST] 套件已登记但盘上缺失，且无同名 .tscn.suspended 悬置标记: $scene"
+			echo "[FAIL] $scene (missing)"
+			total_fail=$((total_fail + 1))
+			failures+=("$scene (MISSING)")
+			report_entries+=("{\"suite\":\"$scene\",\"result\":\"missing\"}")
+		fi
+	done
+	if [ ${#runnable[@]} -gt 0 ]; then
+		pool=("${runnable[@]}")
+	else
+		pool=()
+	fi
+}
+
 # ─────────────────────────────── 主流程 ───────────────────────────────
 
 mkdir -p "$TMP_DIR"
@@ -280,6 +313,8 @@ UNREGISTERED_ALLOWLIST=()
 ## 盘上存在但未登记进 INTEGRATION_SUITES/SMOKE_SUITES 的套件 = 永远不会被执行，
 ## 且不会产生任何红灯（tests/unit 层的同类问题由 batch_runner 自检负责）。
 ## 新增测试文件忘记登记时这里会拦下；确属特例的加进上面的豁免名单并写理由。
+## 反方向（登记而盘上无 .tscn）由 classify_pool 兜底：有同名 .suspended 标记则悬置跳过，
+## 无标记则计失败。本函数只拦"盘上 .tscn 未登记"，.tscn.suspended 不匹配 *.tscn glob，不会误报。
 manifest_check() {
 	local -A registered=() allowed=()
 	local s base f dir
@@ -375,6 +410,12 @@ while IFS= read -r l; do
 done < <(select_suites "${pool[@]}")
 pool=("${filtered[@]}")
 
+# 悬置/缺失分流（集中入口）：全量 / -Changed / -Match 三条路径都汇到这里统一核对盘面
+total_skip=0
+if [ ${#pool[@]} -gt 0 ]; then
+	classify_pool
+fi
+
 if [ ${#pool[@]} -gt 0 ]; then
 	active=0
 	# 单套件执行器（后台函数体）：不用 xargs/export，避免 Windows Git Bash 环境变量过大
@@ -440,7 +481,7 @@ fi
 # JSON 报告（-Report）
 if [ -n "$REPORT" ] && [ ${#report_entries[@]} -gt 0 ]; then
 	{
-		printf '{\n  "summary": {"passed": %d, "failed": %d},\n  "suites": [\n' "$total_pass" "$total_fail"
+		printf '{\n  "summary": {"passed": %d, "failed": %d, "skipped": %d},\n  "suites": [\n' "$total_pass" "$total_fail" "$total_skip"
 		printf '    %s\n' "$(printf '%s\n' "${report_entries[@]}" | paste -sd',')"
 		printf '  ]\n}\n'
 	} >"$REPORT"
@@ -448,7 +489,11 @@ if [ -n "$REPORT" ] && [ ${#report_entries[@]} -gt 0 ]; then
 fi
 
 echo ""
-echo "=== 汇总: $total_pass 通过 / $total_fail 失败（并行 $PARALLEL）==="
+if [ "$total_skip" -gt 0 ]; then
+	echo "=== 汇总: $total_pass 通过 / $total_fail 失败 / $total_skip 悬置跳过（并行 $PARALLEL）==="
+else
+	echo "=== 汇总: $total_pass 通过 / $total_fail 失败（并行 $PARALLEL）==="
+fi
 if [ ${#failures[@]} -gt 0 ]; then
 	echo "失败项:"
 	for f in "${failures[@]}"; do echo "  - $f"; done

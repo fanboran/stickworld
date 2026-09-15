@@ -195,3 +195,6 @@ docs/.obsidian/
 
 .trae/
 简历*.md
+# tests/dev 顶层渲染输出图（diag/探针脚本每次运行重生成，不入库；proto_hd2d 等子目录输入贴图不受影响）
+stick-world/tests/dev/*.png
+stick-world/tests/dev/*.jpg

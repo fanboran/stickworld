@@ -35,6 +35,16 @@ extends PanelContainer
 ##
 ## 装配：SystemSetup 挂 UIRoot「ContextPanel/SquadInspector」槽并注入 GameRoot。
 ## 场景（squad_card.tscn）是布局唯一真相源；本脚本只装配内容与 token 样式。
+##
+## 子域索引（拆分后；两助手经 _ensure_helpers 在 _ready/setup 双入口幂等补线）：
+##   取数语义（全 duck 系统查询/框选解析/号令波及/徽标聚合 + 单兵 static 探测）
+##     → squad_card_data.gd（取数助手，_host 回引现读本文件状态）；
+##   权威值择班表达 + 权威对比取数（AuthCompare 子树渲染/邻近班私有取数）
+##     → squad_card_authority.gd（UI-W4a 对比块助手，setup(host, data) 注入）。
+##   本文件保留：全部状态、全部语义常量、公共 API、引擎回调、相位计划接线
+##   （_current_plan/_capture_plan）、区块渲染与核心操作。
+## 区块渲染留宿主的论据：各 _refresh_* 与 20 个 @onready 节点引用及三组可变状态
+## （_rows/_member_sig/_selected_unit）读写交织，属场景装配职责，拆出无边界收益。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 相位徽标（键 = SquadPhasePlan 相位英文名，get_phase_name 直译；未登记名回退原样显示）
@@ -86,6 +96,10 @@ const CANDIDATE_RADIUS: float = 800.0
 const CANDIDATE_ROW_MAX: int = 3
 
 const MemberRowScene: PackedScene = preload("res://modules/combat/ui/squad_member_row.tscn")
+## 取数助手（全 duck 系统查询 + 单兵 static 探测；无 class_name，const preload 引用）
+const SquadCardData: GDScript = preload("res://modules/combat/ui/squad_card_data.gd")
+## 权威对比块助手（UI-W4a 择班表达渲染 + 邻近班私有取数）
+const SquadCardAuthority: GDScript = preload("res://modules/combat/ui/squad_card_authority.gd")
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
@@ -112,6 +126,10 @@ var _last_order_tier: int = -1
 var _plan: Variant = null
 ## 轮询累积器
 var _poll_acc: float = 0.0
+## 取数助手（squad_card_data.gd 实例；状态留本文件，助手经 _host 回引现读）
+var _data_part: RefCounted = null
+## 权威对比块助手（squad_card_authority.gd 实例；setup(host, data) 注入）
+var _auth_part: RefCounted = null
 
 # ─────────────────────────────── 节点引用 ────────────────────────────────
 @onready var _name_label: Label = $Body/Header/SquadName
@@ -142,7 +160,20 @@ var _chain_btn: Button = null
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
+## 子域助手幂等补线（_ready/setup 双入口调用）：_ready 先于 setup 时 EventBus 信号
+## 可能早到触发取数路径，助手必须已就绪——原单文件实现经空选择降级天然安全，
+## 拆分后由本函数保持等价鲁棒性（已就绪即跳过，重复调用零副作用）。
+func _ensure_helpers() -> void:
+	if _data_part == null:
+		_data_part = SquadCardData.new()
+		_data_part.setup(self)
+	if _auth_part == null:
+		_auth_part = SquadCardAuthority.new()
+		_auth_part.setup(self, _data_part)
+
+
 func _ready() -> void:
+	_ensure_helpers()
 	_apply_tokens()
 	_build_actions()
 	_connect_signals()
@@ -151,6 +182,7 @@ func _ready() -> void:
 
 ## 装配注入（SystemSetup 挂槽后调用）：GameRoot 引用 + 各系统 duck 取用
 func setup(game_root: Node) -> void:
+	_ensure_helpers()
 	_game_root = game_root
 	_selection = game_root.get_selection_system() if game_root.has_method("get_selection_system") else null
 	_formation = game_root.get_formation_system() if game_root.has_method("get_formation_system") else null
@@ -167,10 +199,10 @@ func _process(delta: float) -> void:
 		return
 	_poll_acc = 0.0
 	# 框选权威：手动绑定（show_squad）时不做重绑兜底，选择变化信号自会解除手动态
-	if not _manual_bind and _squad_from_selection() != _squad_id:
+	if not _manual_bind and _data_part._squad_from_selection() != _squad_id:
 		_rebind_from_selection()  # 选择已变（信号丢失兜底）
 		return
-	if not _squad_exists():
+	if not _data_part._squad_exists():
 		hide_card()               # 小队消亡（解散）
 		return
 	_refresh()
@@ -216,23 +248,9 @@ func get_bound_squad() -> String:
 
 # ─────────────────────────────── 绑定与信号 ────────────────────────────────
 
-## 框选解析：取选中单位里第一个能解析出所属编制的小队（多小队混选时以首个为准）
-func _squad_from_selection() -> String:
-	if _selection == null or not _selection.has_method("get_selected_units"):
-		return ""
-	if _formation == null or not _formation.has_method("get_unit_squad"):
-		return ""
-	for u in _selection.get_selected_units():
-		if u == null or not is_instance_valid(u):
-			continue
-		var sid := String(_formation.get_unit_squad(u))
-		if not sid.is_empty():
-			return sid
-	return ""
-
-
+## 框选解析（_squad_from_selection）在 squad_card_data.gd，此处只做绑定分诊。
 func _rebind_from_selection() -> void:
-	var sid := _squad_from_selection()
+	var sid := _data_part._squad_from_selection()
 	if sid.is_empty():
 		hide_card()
 		return
@@ -274,7 +292,7 @@ func _on_selection_changed(_unit_ids: Array) -> void:
 
 
 func _on_order_issued(order_type: int, target_squad_id: String, source_tier: int) -> void:
-	if _squad_id.is_empty() or not _order_reaches(target_squad_id):
+	if _squad_id.is_empty() or not _data_part._order_reaches(target_squad_id):
 		return
 	_last_order_type = order_type
 	_last_order_tier = source_tier
@@ -288,7 +306,7 @@ func _on_commander_assigned(squad_id: String, _unit_id: int) -> void:
 
 func _on_squad_created(_a = null, _b = null) -> void:
 	# 编制变动可能把选中单位纳编 → 重解析（当前无班则挂上，已有班则保持）
-	if _squad_from_selection() != _squad_id:
+	if _data_part._squad_from_selection() != _squad_id:
 		_rebind_from_selection()
 
 
@@ -307,26 +325,7 @@ func _on_plan_roles_reassigned(squad_id: String) -> void:
 		_refresh()
 
 
-## 号令是否波及本班：直接点名，或点名其上级组织（逐层接力终会送达本班）
-func _order_reaches(target_id: String) -> bool:
-	if target_id.is_empty():
-		return false
-	if target_id == _squad_id:
-		return true
-	if _org_api == null or not _org_api.has_method("get_organization"):
-		return false
-	var cur := _squad_id
-	for _i in 8:
-		var r: Dictionary = _org_api.get_organization(cur)
-		if not r.get("ok", false):
-			return false
-		var parent := String((r.get("data", {}) as Dictionary).get("parent_org", ""))
-		if parent.is_empty():
-			return false
-		if parent == target_id:
-			return true
-		cur = parent
-	return false
+## 号令波及判定（_order_reaches）在 squad_card_data.gd（号令语义取数的一部分）。
 
 
 # ─────────────────────────────── 刷新 ────────────────────────────────
@@ -334,21 +333,21 @@ func _order_reaches(target_id: String) -> bool:
 func _refresh() -> void:
 	if _squad_id.is_empty():
 		return
-	var units := _alive_units()
+	var units := _data_part._alive_units()
 	_refresh_header(units)
 	_refresh_order()
 	_refresh_phase()
 	_refresh_members(units)
 	_refresh_commander()
-	_refresh_authority_compare(units)
+	_auth_part._refresh_authority_compare(units)
 	_refresh_forming()
 	_refresh_actions()
 
 
 ## 头部：班名 + 状态徽标（org state × 成员行为聚合；不可判定则不显示徽标）
 func _refresh_header(units: Array) -> void:
-	_name_label.text = _squad_name()
-	var badge := _status_badge(units)
+	_name_label.text = _data_part._squad_name()
+	var badge := _data_part._status_badge(units)
 	_status_chip.visible = not badge.is_empty()
 	if badge.is_empty():
 		return
@@ -356,36 +355,7 @@ func _refresh_header(units: Array) -> void:
 	_status_chip.modulate = _status_color(badge)
 
 
-## 状态徽标聚合（org state × 成员行为）：撤退中 > 接战 > 活跃 / 组建中。
-## 组织态 State 目前在册值恒为 FORMING（组织模块只写初值，无 ACTIVE 迁移实现），
-## 满员班组贴「组建中」是谎报——故组建中只在空班（尚未编入成员 = 真招兵态）成立，
-## 其余按成员行为聚合；组织查询不可用且无成员可查则不显示徽标。
-func _status_badge(units: Array) -> String:
-	var state := _org_state()
-	if state == ORG_STATE_DISBANDED:
-		return ""
-	if state == ORG_STATE_FORMING and units.is_empty():
-		return STATUS_FORMING
-	var retreating := false
-	var contact := false
-	for u in units:
-		var ai := _ai_of(u)
-		var beh := ""
-		if ai != null and ai.has_method("get_current_behavior"):
-			beh = String(ai.get_current_behavior())
-		if beh == "retreat" or _is_routed(u):
-			retreating = true
-		elif beh == "attack":
-			contact = true
-	if retreating:
-		return STATUS_RETREAT
-	if contact:
-		return STATUS_CONTACT
-	if not units.is_empty() or state >= 0:
-		return STATUS_ACTIVE
-	return ""
-
-
+## 状态徽标聚合（_status_badge）在 squad_card_data.gd；此处只做徽标配色映射。
 func _status_color(badge: String) -> Color:
 	match badge:
 		STATUS_FORMING:
@@ -429,18 +399,18 @@ func _refresh_phase() -> void:
 
 ## 成员行：集合未变只更新数值（保住选中/悬停态），变化才重建
 func _refresh_members(units: Array) -> void:
-	var sig := _signature(units)
+	var sig := SquadCardData.signature(units)
 	var shown: int = mini(units.size(), ROW_MAX)
 	if sig != _member_sig or _rows.size() != shown:
 		_rebuild_rows()
 		_member_sig = sig
-	var roles := _roles_of_plan()
+	var roles := _data_part._roles_of_plan()
 	for i in shown:
 		var u: Node = units[i]
 		var role := str(roles.get(u.get_instance_id(), ""))
 		if role.is_empty():
-			role = _role_of(u)
-		_rows[i].set_data(u, role, _morale_of(u), _state_flags(u))
+			role = _data_part._role_of(u)
+		_rows[i].set_data(u, role, SquadCardData.morale_of(u), SquadCardData.state_flags(u))
 		_rows[i].set_selected(_selected_unit != null and is_instance_valid(_selected_unit) and u == _selected_unit)
 	_overflow_label.visible = units.size() > ROW_MAX
 	if _overflow_label.visible:
@@ -454,7 +424,7 @@ func _rebuild_rows() -> void:
 		_members_box.remove_child(child)
 		child.queue_free()
 	_rows.clear()
-	var units := _alive_units()
+	var units := _data_part._alive_units()
 	var shown: int = mini(units.size(), ROW_MAX)
 	for i in shown:
 		var row: Node = MemberRowScene.instantiate()
@@ -464,7 +434,7 @@ func _rebuild_rows() -> void:
 	# 空班明确空态（FORMING 招兵中 / 全员阵亡两种语义分开，不塌成空白）
 	if shown == 0:
 		var hint := Label.new()
-		hint.text = "尚未编入成员（招兵中）" if _org_state() == ORG_STATE_FORMING else "无存活成员"
+		hint.text = "尚未编入成员（招兵中）" if _data_part._org_state() == ORG_STATE_FORMING else "无存活成员"
 		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hint.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 		hint.modulate = StickTokens.TEXT_FAINT
@@ -476,13 +446,13 @@ func _refresh_commander() -> void:
 	var leader: Node = null
 	if _formation != null and _formation.has_method("get_squad_leader"):
 		leader = _formation.get_squad_leader(_squad_id)
-	if leader != null and is_instance_valid(leader) and not _is_dead(leader):
-		_leader_label.text = "班长 %s" % _role_zh(leader)
+	if leader != null and is_instance_valid(leader) and not SquadCardData.is_dead(leader):
+		_leader_label.text = "班长 %s" % SquadCardData.role_zh(leader)
 		_leader_label.modulate = StickTokens.TEXT
 	else:
 		_leader_label.text = "班长空缺"
 		_leader_label.modulate = StickTokens.WARN
-	var authority := _authority()
+	var authority := _data_part._authority()
 	if is_nan(authority):
 		_authority_label.text = ""
 		_stars_box.visible = false
@@ -495,210 +465,16 @@ func _refresh_commander() -> void:
 	_stars_box.visible = level > 0
 
 
-# ─────────────────────── 权威值择班表达（UI-W4a §3.3①）───────────────────────
-
-## 权威对比块：本班权威/星级 + 邻近可投奔班对比 +「N 人有意转投 X 班」提示条。
-## 全真实查询；任一出口缺失或本班权威不可解 → 整块隐藏（不显示占位噪声）。
-func _refresh_authority_compare(units: Array) -> void:
-	if _auth_compare == null:
-		return
-	var current := _authority()
-	if is_nan(current) or _formation == null \
-			or not _formation.has_method("get_squad_authority") \
-			or not _formation.has_method("should_switch_squad"):
-		_auth_compare.visible = false
-		return
-	var scored := _scored_neighbors()
-	if scored.is_empty():
-		_auth_compare.visible = false
-		return
-	_auth_compare.visible = true
-	_clear_rows()
-	_add_auth_row("本班·%s" % _squad_name(), current, true, 0.0)
-	for i in mini(scored.size(), CANDIDATE_ROW_MAX):
-		var e: Dictionary = scored[i]
-		_add_auth_row(String(e["name"]), float(e["auth"]), false, float(e["auth"]) - current)
-	_refresh_defect_hint(current, scored, units)
-
-
-## 邻近可投奔班评分表（[{id,name,auth}]，权威降序；无班长候选剔除 = 同 A9 口径）
-func _scored_neighbors() -> Array:
-	var scored: Array = []
-	for cid in _candidate_squads():
-		if not _is_live_leader(cid):
-			continue
-		var a: Variant = _authority_of(cid)
-		if a == null:
-			continue
-		scored.append({"id": cid, "name": _name_of(cid), "auth": float(a)})
-	scored.sort_custom(func(x: Dictionary, y: Dictionary) -> bool:
-		return float(x["auth"]) > float(y["auth"]))
-	return scored
-
-
-## 提示条：最强邻近班经 should_switch_squad 滞回判定够格时，统计本班有意转投人数。
-## N = 通过「不该动的别动」守卫（班长/附身/溃逃找掩体/被压制）且落在候选半径内的成员数。
-func _refresh_defect_hint(current: float, scored: Array, units: Array) -> void:
-	if scored.is_empty():
-		_defect_hint.visible = false
-		return
-	var best: Dictionary = scored[0]
-	if not bool(_formation.should_switch_squad(current, float(best["auth"]))):
-		_defect_hint.visible = false
-		return
-	var n := _switch_intent_count(String(best["id"]), units)
-	if n <= 0:
-		_defect_hint.visible = false
-		return
-	_defect_label.text = "%d 人有意转投 %s（威望 %.1f）" % [n, String(best["name"]), float(best["auth"])]
-	_defect_hint.visible = true
-
-
-## 有意转投本班 → best 班的成员数（真实成员表 + 半径/守卫过滤，非戏假）
-func _switch_intent_count(best_id: String, units: Array) -> int:
-	var best_leader: Node = _leader_of(best_id)
-	var self_leader: Node = _leader_of(_squad_id)
-	var radius := _candidate_radius()
-	var count := 0
-	for u in units:
-		if u == null or not is_instance_valid(u):
-			continue
-		if u.has_method("is_possessed") and bool(u.is_possessed()):
-			continue
-		if u == self_leader:
-			continue  # 班长本人不被抽走（A9 同守卫）
-		var ai := _ai_of(u)
-		if ai != null and ai.has_method("get_current_behavior") \
-				and String(ai.get_current_behavior()) in ["retreat", "seek_cover"]:
-			continue
-		var se := _status_of(u)
-		if se != null and se.has_method("has_suppressed") and bool(se.has_suppressed()):
-			continue
-		if best_leader != null and u is Node2D and best_leader is Node2D \
-				and (u as Node2D).global_position.distance_to(
-						(best_leader as Node2D).global_position) > radius:
-			continue
-		count += 1
-	return count
-
-
-## 邻近可投奔班半径（px）：优先 duck 消费 formation 只读参数出口
-## get_authority_switch_state().candidate_radius（档案实值，与 A9 跳槽同源）；
-## 出口缺失 / 非字典 / 无该键（旧版 formation）→ 回落缺省常量 CANDIDATE_RADIUS。
-func _candidate_radius() -> float:
-	if _formation != null and _formation.has_method("get_authority_switch_state"):
-		var st: Variant = _formation.get_authority_switch_state()
-		if st is Dictionary and (st as Dictionary).has("candidate_radius"):
-			return float((st as Dictionary)["candidate_radius"])
-	return CANDIDATE_RADIUS
-
-
-## 邻近可投奔班 id：组织相邻口径（同父组织 L1 兄弟班）；散兵/无父级退化为编队全部战斗班
-func _candidate_squads() -> Array:
-	var out: Array = []
-	var parent := _parent_org()
-	if not parent.is_empty() and _org_api != null and _org_api.has_method("get_organization"):
-		var pr: Dictionary = _org_api.get_organization(parent)
-		if pr.get("ok", false):
-			for c in (pr.get("data", {}) as Dictionary).get("child_orgs", []):
-				var cid := String(c)
-				if cid.is_empty() or cid == _squad_id:
-					continue
-				if _tier_of(cid) != 1:
-					continue
-				out.append(cid)
-	if not out.is_empty():
-		return out
-	if _formation != null and _formation.has_method("get_all_squads"):
-		for sid in _formation.get_all_squads():
-			var s := String(sid)
-			if s.is_empty() or s == _squad_id:
-				continue
-			if _formation.has_method("is_combat_squad") and not _formation.is_combat_squad(s):
-				continue
-			out.append(s)
-	return out
-
-
-## 权威对比行（星级 + 名称 + 威望；本班行高亮，候选行标注差值方向）
-func _add_auth_row(label_text: String, authority: float, is_current: bool, delta: float) -> void:
-	var level := clampi(int(round(authority / AUTHORITY_PER_STAR)), 0, 5)
-	var stars := "—" if level <= 0 else "★".repeat(level)
-	var delta_text := ""
-	if not is_current:
-		delta_text = "（%+.1f）" % delta
-	var l := StickKit.label(_auth_rows, "%s %s  威望 %.1f%s" % [stars, label_text, authority, delta_text],
-			StickKit.LabelKind.TINY)
-	l.clip_text = true
-	if is_current:
-		l.modulate = StickTokens.ACCENT
-	elif delta > 0.0:
-		l.modulate = StickTokens.WARN
-	else:
-		l.modulate = StickTokens.TEXT_DIM
-
-
-func _clear_rows() -> void:
-	for child in _auth_rows.get_children():
-		_auth_rows.remove_child(child)
-		child.queue_free()
-
-
-# ─────────────────────── 权威对比取数（duck；缺则整块降级）───────────────────────
-
-## 某班权威值（不可解返回 null；-INF = 不在编队册）
-func _authority_of(squad_id: String) -> Variant:
-	if _formation == null or not _formation.has_method("get_squad_authority"):
-		return null
-	var v: Variant = _formation.get_squad_authority(squad_id)
-	if not (v is float) or not is_finite(v):
-		return null
-	return float(v)
-
-
-func _leader_of(squad_id: String) -> Node:
-	if _formation == null or not _formation.has_method("get_squad_leader"):
-		return null
-	var leader: Node = _formation.get_squad_leader(squad_id)
-	if leader == null or not is_instance_valid(leader) or _is_dead(leader):
-		return null
-	return leader
-
-
-func _is_live_leader(squad_id: String) -> bool:
-	return _leader_of(squad_id) != null
-
-
-func _name_of(squad_id: String) -> String:
-	if _formation != null and _formation.has_method("get_squad_name"):
-		var n := String(_formation.get_squad_name(squad_id))
-		if not n.is_empty():
-			return n
-	return squad_id
-
-
-func _parent_org() -> String:
-	if _org_api == null or not _org_api.has_method("get_organization"):
-		return ""
-	var r: Dictionary = _org_api.get_organization(_squad_id)
-	if not r.get("ok", false):
-		return ""
-	return String((r.get("data", {}) as Dictionary).get("parent_org", ""))
-
-
-func _tier_of(org_id: String) -> int:
-	if _org_api == null or not _org_api.has_method("get_organization"):
-		return -1
-	var r: Dictionary = _org_api.get_organization(org_id)
-	if not r.get("ok", false):
-		return -1
-	return int((r.get("data", {}) as Dictionary).get("tier", -1))
+## 权威值择班表达（UI-W4a §3.3①：_refresh_authority_compare/_scored_neighbors/
+## _refresh_defect_hint/_switch_intent_count/_candidate_squads/_add_auth_row/_clear_rows）
+## 与权威对比取数（_authority_of/_leader_of/_is_live_leader/_name_of/_parent_org/_tier_of）
+## 下沉 squad_card_authority.gd；_candidate_radius 因测试契约留委托壳（文末）。
 
 
 ## FORMING 招兵进度位：真组建态（在册 FORMING 且尚未编入成员）时占位；
 ## 已编成班组不占这一行（进度值待兵营招兵接线后填入）。
 func _refresh_forming() -> void:
-	if _org_state() != ORG_STATE_FORMING or not _alive_units().is_empty():
+	if _data_part._org_state() != ORG_STATE_FORMING or not _data_part._alive_units().is_empty():
 		_forming_row.visible = false
 		return
 	_forming_row.visible = true
@@ -749,7 +525,7 @@ func _on_assign_pressed() -> void:
 		var r: Dictionary = _org_api.assign_commander(_squad_id, str(_selected_unit.get_instance_id()))
 		ok = bool(r.get("ok", false))
 	if ok:
-		_notify("已任命班长：%s" % _role_zh(_selected_unit))
+		_notify("已任命班长：%s" % SquadCardData.role_zh(_selected_unit))
 	_refresh()
 
 
@@ -759,79 +535,14 @@ func _on_remove_pressed() -> void:
 		return
 	if _formation == null or not _formation.has_method("remove_unit"):
 		return
-	_notify("已移出班组：%s" % _role_zh(_selected_unit))
+	_notify("已移出班组：%s" % SquadCardData.role_zh(_selected_unit))
 	_formation.remove_unit(_selected_unit)
 	_selected_unit = null
 	_member_sig = ""
 	_refresh()
 
 
-# ─────────────────────────────── 取数（全 duck，缺则降级）────────────────────────────────
-
-## 小队是否仍存在：编制在册（FormationSystem 公开表）或组织册上的 L1 组织
-## （后者 = 组织面板直接建的 FORMING 空班，招兵位仍要看，不算消亡）
-func _squad_exists() -> bool:
-	if _formation != null and _formation.has_method("get_all_squads") \
-			and _squad_id in _formation.get_all_squads():
-		return true
-	if _org_api != null and _org_api.has_method("get_organization"):
-		var r: Dictionary = _org_api.get_organization(_squad_id)
-		if not r.get("ok", false):
-			return false
-		return int((r.get("data", {}) as Dictionary).get("tier", 0)) == 1
-	return false
-
-
-## 存活成员（小队快照 + 有效性/阵亡过滤；小队不存在返回空）
-func _alive_units() -> Array:
-	var alive: Array = []
-	if _formation == null or not _formation.has_method("get_squad_units"):
-		return alive
-	for u in _formation.get_squad_units(_squad_id):
-		if u == null or not is_instance_valid(u):
-			continue
-		if _is_dead(u):
-			continue
-		alive.append(u)
-	return alive
-
-
-func _squad_name() -> String:
-	if _formation != null and _formation.has_method("get_squad_name"):
-		var n := String(_formation.get_squad_name(_squad_id))
-		if not n.is_empty():
-			return n
-	if _org_api != null and _org_api.has_method("get_organization"):
-		var r: Dictionary = _org_api.get_organization(_squad_id)
-		if r.get("ok", false):
-			var n2 := String((r.get("data", {}) as Dictionary).get("name", ""))
-			if not n2.is_empty():
-				return n2
-	return _squad_id
-
-
-## 组织态（OrganizationState.State int；不可查返回 -1）
-func _org_state() -> int:
-	if _org_api == null or not _org_api.has_method("get_organization"):
-		return -1
-	var r: Dictionary = _org_api.get_organization(_squad_id)
-	if not r.get("ok", false):
-		return -1
-	var data: Dictionary = r.get("data", {})
-	if not data.has("state"):
-		return -1
-	return int(data["state"])
-
-
-## 权威值（get_squad_authority；小队不存在/查询缺返回 NAN = 不显示）
-func _authority() -> float:
-	if _formation == null or not _formation.has_method("get_squad_authority"):
-		return NAN
-	var v: Variant = _formation.get_squad_authority(_squad_id)
-	if not (v is float) or not is_finite(v):
-		return NAN
-	return float(v)
-
+# ─────────────────────── 相位计划接线 ────────────────────────
 
 ## 相位计划对象（宿主私有表 duck：debug_info_panel.gd 已立先例；取到即接信号）
 func _current_plan() -> Variant:
@@ -864,98 +575,6 @@ func _capture_plan(plan: Variant) -> void:
 		_plan.phase_changed.connect(_on_plan_phase_changed)
 	if _plan.has_signal("roles_reassigned") and not _plan.roles_reassigned.is_connected(_on_plan_roles_reassigned):
 		_plan.roles_reassigned.connect(_on_plan_roles_reassigned)
-
-
-## 角色表（iid -> ROLE_*；计划缺失返回空字典 = 角标降级为"—"）
-func _roles_of_plan() -> Dictionary:
-	var plan: Variant = _current_plan()
-	if plan == null or not plan.has_method("get_roles"):
-		return {}
-	var roles: Variant = plan.get_roles()
-	return roles if roles is Dictionary else {}
-
-
-func _role_of(u: Node) -> String:
-	var plan: Variant = _current_plan()
-	if plan == null or not plan.has_method("get_role_of"):
-		return ""
-	return str(plan.get_role_of(u))
-
-
-## 士气比例（get_health().get_morale_ratio；不可查回 1.0 = 条形满、不误报低压）
-func _morale_of(u: Node) -> float:
-	var h := _health_of(u)
-	if h != null and h.has_method("get_morale_ratio"):
-		return float(h.get_morale_ratio())
-	return 1.0
-
-
-func _is_routed(u: Node) -> bool:
-	var h := _health_of(u)
-	return h != null and h.has_method("is_routed") and bool(h.is_routed())
-
-
-## 单兵状态事实（事实注入行，行内做文案映射；查询缺口即 false = 不显示角标）
-func _state_flags(u: Node) -> Dictionary:
-	var flags := {"routed": _is_routed(u)}
-	var se := _status_of(u)
-	if se == null:
-		return flags
-	if se.has_method("has_suppressed"):
-		flags["suppressed"] = bool(se.has_suppressed())
-	if se.has_method("has_effect"):
-		flags["stunned"] = bool(se.has_effect(EFFECT_STUN))
-		flags["healing"] = bool(se.has_effect(EFFECT_HEAL))
-	return flags
-
-
-func _health_of(u: Node) -> Node:
-	if u == null or not is_instance_valid(u) or not u.has_method("get_health"):
-		return null
-	var h: Node = u.get_health()
-	if h == null or not is_instance_valid(h):
-		return null
-	return h
-
-
-func _status_of(u: Node) -> Node:
-	if u == null or not is_instance_valid(u) or not u.has_method("get_status_effects"):
-		return null
-	var se: Node = u.get_status_effects()
-	if se == null or not is_instance_valid(se):
-		return null
-	return se
-
-
-func _ai_of(u: Node) -> Node:
-	if u == null or not is_instance_valid(u) or not u.has_method("get_ai_controller"):
-		return null
-	var ai: Node = u.get_ai_controller()
-	if ai == null or not is_instance_valid(ai):
-		return null
-	return ai
-
-
-func _is_dead(u: Node) -> bool:
-	return u != null and is_instance_valid(u) and u.has_method("is_dead") and bool(u.is_dead())
-
-
-## 职责中文（fighter/builder/worker → 战士/建造工/工人）
-func _role_zh(u: Node) -> String:
-	if u == null or not is_instance_valid(u) or not u.has_method("get_role"):
-		return "火柴人"
-	var role := String(u.get_role())
-	return String(ROLE_ZH.get(role, "火柴人"))
-
-
-## 成员集合签名（人数 + instance_id 序列；顺序变化也算变化，行序与快照一致）。
-## 带人数前缀：空班签名不为 ""，与"未初始化"哨兵值区分（否则空班不会触发重建，
-## 残留上一班的旧行——本文件曾踩此坑）。
-func _signature(units: Array) -> String:
-	var ids: Array[String] = []
-	for u in units:
-		ids.append(str(u.get_instance_id()))
-	return "n=%d|%s" % [units.size(), ",".join(ids)]
 
 
 # ─────────────────────────────── 装配 ────────────────────────────────
@@ -999,3 +618,14 @@ func _build_actions() -> void:
 func _notify(msg: String) -> void:
 	if EventBus != null and EventBus.has_signal("ui_notification"):
 		EventBus.ui_notification.emit("班组", msg, "info")
+
+
+# ─────────────────────── 测试契约委托壳 ────────────────────────
+
+## 邻近可投奔班半径（px）：实现在 SquadCardAuthority._candidate_radius（duck 消费
+## formation 只读参数出口 get_authority_switch_state().candidate_radius，缺则回落
+## CANDIDATE_RADIUS）。测试契约：test_squad_card.gd 以 has_method/call 直呼宿主
+## _candidate_radius，故保留委托壳转发（先幂等补线保助手就绪，行为与拆分前一致）。
+func _candidate_radius() -> float:
+	_ensure_helpers()
+	return _auth_part._candidate_radius()

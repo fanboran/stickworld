@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modules/hd2d/scripts/hd2d_world.gd" id="1_hd2d"]
+
+[node name="Hd2dWorld" type="Node3D"]
+script = ExtResource("1_hd2d")

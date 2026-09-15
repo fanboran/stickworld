@@ -2,7 +2,7 @@ extends Hd2dStreetMap
 class_name Hd2dBattlefieldMap
 ## HD-2D 战场图 —— 主街东门外的城郊战场（旧 12V12 战场图的 HD-2D 重建）。
 ##
-## 3D 层走 proto_hd2d 战场模式（battlefield=true）：无城墙/门洞/街灯/楼群，
+## 3D 层走 Hd2dWorld 战场模式（battlefield=true）：无城墙/门洞/街灯/楼群，
 ## 开阔野地 + 战痕散布（proto 侧 BF_PROPS/BF_NATURE_SPOTS）；资源点仍走
 ## resource_gen 算法全域撒布（调稀——野地要开阔可列阵，东缘渐入林带）。
 ## 2D 宿主逻辑（碰撞映射/昼夜/相机镜像/角色进 3D/城门引导）与主街同一套，

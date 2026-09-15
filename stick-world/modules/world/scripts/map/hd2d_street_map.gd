@@ -23,10 +23,10 @@ class_name Hd2dStreetMap
 ## 出生村专属设施（运营仓库/村民 NPC）：无 2D 建筑宿主与工作场所，
 ## supports_village_facilities() 返回 false，GameRoot 门控跳过。
 ##
-## TODO(提炼): 3D 街景场景与卡资产仍在 tests/dev/proto_hd2d（res://temp 产物），
-## 正式化时迁入 modules 并改走随包导出路径。
+## 3D 世界场景与卡资产已正式化迁入 modules/hd2d（烘卡机产物 temp/ 优先、
+## 随包镜像 assets/tex 兜底，新机器 clone 后不跑 Blender 也能玩）。
 
-const _HD2D_WORLD_SCENE := preload("res://tests/dev/proto_hd2d/proto_hd2d.tscn")
+const _HD2D_WORLD_SCENE := preload("res://modules/hd2d/scenes/hd2d_world.tscn")
 ## 野外资源分布算法（world 模块内，群落散布+林区梯度）
 const _ResourceGenScript := preload("res://modules/world/scripts/map/resource_gen.gd")
 

@@ -18,8 +18,16 @@ const TRIGGER_FAR := 132.0
 const HYSTERESIS := 120.0
 
 
+var _root: Node = null   # GameRoot（scene_loader 旅行用，同 SiegeGatePrompt 口径）
+
 func setup(map: Node2D) -> void:
 	_map = map
+	var n: Node = _map
+	while n != null:
+		if "scene_loader" in n:
+			_root = n
+			break
+		n = n.get_parent()
 
 
 func _process(_delta: float) -> void:
@@ -127,7 +135,8 @@ func _build_panel(side: int) -> Control:
 	title.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85))
 	col.add_child(title)
 	for entry: Dictionary in [
-		{"text": "出城（传送到墙外野地）", "act": "out"},
+		{"text": "去西郊林地（传送）" if side < 0 else "去东郊林地（传送）",
+		 "act": "resource"},
 		{"text": "收起", "act": "dismiss"},
 	]:
 		var btn := Button.new()
@@ -139,11 +148,14 @@ func _build_panel(side: int) -> Control:
 
 func _on_choice(act: String) -> void:
 	match act:
-		"out":
-			var player: Node2D = _find_player()
-			if player != null and _map.has_method("gate_teleport_player"):
-				_map.gate_teleport_player(player)
+		"resource":
+			# 左右城墙各自传送到对应的城外资源点地图（创始人 2026-09-15）；
+			# 入缘侧 = 资源图朝主街的那条边（西图右缘 / 东图左缘），落地即回城口
+			var entry: int = WorldAPI.EntrySide.RIGHT if _shown_side < 0 else WorldAPI.EntrySide.LEFT
+			var target: String = "hd2d_resource_w" if _shown_side < 0 else "hd2d_resource_e"
 			_hide_panel()
+			if _root != null and _root.scene_loader != null:
+				_root.scene_loader.travel_to_map(target, WorldAPI.TravelMode.TELEPORT, entry)
 		"dismiss":
 			# 收起：抑制同侧再弹，直到玩家退出触发带
 			_suppress_side = _shown_side

@@ -31,6 +31,8 @@ const _HD2D_WORLD_SCENE := preload("res://tests/dev/proto_hd2d/proto_hd2d.tscn")
 const _ResourceGenScript := preload("res://modules/world/scripts/map/resource_gen.gd")
 ## 城门选项框（玩家走近弹窗出城；村民走静默传送带）
 const _GatePromptScript := preload("res://modules/world/scripts/map/hd2d_gate_prompt.gd")
+## 初始城市档（城市规模只是建筑数量问题——扩建=换档重生成）
+const CITY_TIER := "starter"
 
 ## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
 ## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
@@ -68,9 +70,11 @@ const TERRAIN_DIRT_ROAD := 1
 ## 算法宿主图层（generate_resource_nodes 的入口守卫与节点父级）
 var decoration_layer: Node2D = null
 ## 采集储量中值已随算法内置（resource_gen 按类型区间掷储量），不再手填
-## 资源点密度基线（每格期望数，resource_gen 语义）：主街墙外带 0.65；
+## 资源点密度基线（每格期望数，resource_gen 语义）：主街墙外带 0.03——
+## 创始人 2026-09-15：视野内两三个露头即可（别写死数量，算法按带幅推），
+## 大宗采集在城门传送的资源图（Hd2dResourceMap，密度另调）；
 ## 子类可调（战场图调稀——野地要开阔可列阵）
-var resource_density := 0.65
+var resource_density := 0.03
 ## 林区梯度档（resource_gen 语义）：主街墙外带 28 格，净空 12+渐密 20——
 ## 创始人 2026-09-15：紧挨城门外是树林不对，传送出去先见开阔野地，走一段
 ## 才进林线（战场图子类按图幅覆写：净空 6+渐密 30——东缘才渐入林线）
@@ -93,6 +97,11 @@ func _ready() -> void:
 	_hd.name = "HD2DWorld"
 	if not layout_name.is_empty():
 		_hd.set("layout_name", layout_name)
+		# 城市生成时机（创始人 2026-09-15：第一次进入该城市生成）——确定性
+		# 种子（城名哈希）→ 多局尽量一致；同存档每次进图同城。城市扩建 =
+		# 换档重生成（城墙自动前移，野地资源窗随之露出）
+		var plan: Dictionary = CityGen.generate(CITY_TIER, hash("city:" + layout_name))
+		_hd.set("layout_data", plan)
 	_configure_hd(_hd)
 	add_child(_hd)
 	_apply_layout_bounds()
@@ -483,15 +492,6 @@ func _gate_teleport(body: CharacterBody2D, wx: float, y0: float, y1: float) -> v
 	var land_y: float = clampf(body.global_position.y, y0 + 8.0, y1 - 8.0)
 	body.global_position = Vector2(land_x, land_y)
 
-
-## 玩家弹窗出城（hd2d_gate_prompt 消费）：跨最近城墙，y 保持
-func gate_teleport_player(player: Node2D) -> void:
-	var wall_px: float = get_wall_px()
-	var side: float = signf(player.global_position.x)   # 玩家在哪半场就出哪侧门
-	if side == 0.0:
-		side = -1.0
-	var wx: float = side * wall_px
-	_gate_teleport(player as CharacterBody2D, wx, DEPTH_Y_MIN, DEPTH_Y_MAX)
 
 
 ## 墙线 px（弹窗组件触发带用）

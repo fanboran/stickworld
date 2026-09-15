@@ -191,7 +191,7 @@ const FRONT_ROW: Array = [
 ##   · 末层（bg2）基线 = 真实地平线（底衬远端同步收到此处），楼身把地平线遮死。
 const SKYLINE_Z := -6.73                 # 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
 const BG_LAYERS := 2                     # 背景排数（创始人 2026-09-15：后面有两排就够了）
-const BG_LAYER_GAP := 6.0                # 背景层距（格）：屏幕上每层基线差 ≈6.3% 屏高
+const BG_LAYER_GAP := 3.5                # 背景层距（格）：屏幕上每层基线差 ≈3.7% 屏高（创始人：后排别内缩太多）
 ## 远焦模糊起点：天际线基线向镜头前移的格数（世界线，经 set_cam_zoom 随缩放换算、
 ## 不随缩放漂移）——前排零模糊口径不变，第二排从这里开始吃半档模糊
 ## （创始人 2026-09-15：第二排景深太不明显，根因=起点原钉在天际线上、第二排恰好吃不到）
@@ -250,8 +250,12 @@ var _cards: Dictionary = {}
 var _props: Dictionary = {}
 var _nature: Dictionary = {}
 var _layout: Dictionary = {}      # 布局驱动模式的数据（空 = 手摆主街模式）
+## 运行时生成的布局（宿主"首次进入生成"注入，创始人 2026-09-15）——
+## 优先于 JSON 文件；非空时 _ready 直接吃它。
+@export var layout_data: Dictionary = {}
 var layout_name := ""             # 布局名（--layout= 或地图宿主 set；空 = 手摆主街）
 var battlefield := false          # 战场模式（城东开阔野地：无墙无街无楼群，战痕散布）
+var resource_field := false       # 城外资源图模式（同战场式开阔，但无战争遗物、无天空剪影）
 var _tex_cache: Dictionary = {}
 
 var _env: Environment
@@ -300,7 +304,10 @@ func _ready() -> void:
 	print("[hd2d] 工程根=", _root)
 	print("[hd2d] 跑法: godot --path stick-world res://tests/dev/proto_hd2d/proto_hd2d.tscn -- --shots=all")
 	_load_cards()
-	if not str(_opts["layout"]).is_empty():
+	# 运行时生成的布局优先（宿主"首次进入生成"）；否则读烘焙好的布局 JSON
+	if not layout_data.is_empty():
+		_layout = layout_data
+	elif not str(_opts["layout"]).is_empty():
 		_layout = _read_json_rel(LAYOUT_DIR + str(_opts["layout"]) + ".json")
 		if _layout.is_empty():
 			push_error("[hd2d] 布局缺失，退回手摆主街: " + str(_opts["layout"]))
@@ -552,6 +559,16 @@ func get_gates() -> Array:
 	]
 
 
+## 墙线取值（格）：手摆主街 = WALL_X；布局驱动（算法村/生成器）= 布局半宽
+## ——城墙位置由布局宽度推导（城市扩建墙自动前移的运行时根基）。
+func _wall_x() -> float:
+	if not _layout.is_empty():
+		var w: float = get_layout_width()
+		if w > 8.0:
+			return w * 0.5
+	return WALL_X
+
+
 ## 墙线取值公开口（宿主地形硬化判定用：城内 = 资源算法的"硬化地面"）
 func get_wall_x() -> float:
 	return _wall_x()
@@ -609,7 +626,10 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	var ground: float = PLAT_H if plat else 0.0
 	var half: float = float(units[1]) * S * 0.5
 	var t := deg_to_rad(TILT_DEG)
-	mi.position = Vector3(x, ground + cos(t) * half, z_off - sin(t) * half)
+	# 卡底留白下沉（创始人 2026-09-15：浮空摆件）——alpha 扫描卡底透明行，
+	# 卡内容实际落到地面（留白比例每卡只扫一次，缓存）
+	mi.position = Vector3(x, ground + cos(t) * half - _prop_bottom_pad(card) * S,
+			z_off - sin(t) * half)
 	mi.basis = _cam_basis()
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER
@@ -635,8 +655,44 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	return mi
 
 
+## 道具卡底部透明留白（世界格）——卡底贴地公式只把卡底边放地面，卡内容
+## 底部若留白就浮空；按留白行数下沉。缓存避免重复扫图。
+var _prop_pad_cache: Dictionary = {}
+
+func _prop_bottom_pad(card: String) -> float:
+	if _prop_pad_cache.has(card):
+		return float(_prop_pad_cache[card])
+	var pad := 0.0
+	for base_path: String in [_temp + PROP_DIR + card + ".png",
+			"res://tests/dev/proto_hd2d/tex/proto_hd2d/props/" + card + ".png"]:
+		if not FileAccess.file_exists(base_path):
+			continue
+		var img := Image.new()
+		var gp: String = ProjectSettings.globalize_path(base_path) if base_path.begins_with("res://") else base_path
+		if img.load(gp) != OK:
+			continue
+		var w := img.get_width()
+		var h := img.get_height()
+		if h == 0 or w == 0:
+			break
+		var rows := 0
+		for yy in range(h - 1, -1, -1):
+			var any := false
+			for xx in range(0, w, maxi(1, w / 32)):
+				if img.get_pixel(xx, yy).a > 0.12:
+					any = true
+					break
+			if any:
+				break
+			rows += 1
+		pad = float(rows) / 32.0
+		break
+	_prop_pad_cache[card] = pad
+	return pad
+
+
 func _place_props() -> void:
-	if battlefield:
+	if battlefield and not resource_field:
 		for e in BF_PROPS:
 			_spawn_prop(str(e["card"]), float(e["x"]), float(e.get("z", 5.0)), false)
 		return
@@ -651,7 +707,7 @@ func _place_props() -> void:
 
 ## 自然物卡：与道具同一套卡底贴地落位（全落地面/草地面，不上台面）。
 func _place_nature() -> void:
-	if battlefield:
+	if battlefield and not resource_field:
 		for e in BF_NATURE_SPOTS:
 			_spawn_nature_card(str(e["card"]), float(e["x"]), float(e["z"]))
 		return
@@ -1311,55 +1367,8 @@ func _add_platform() -> void:
 ## 剪影 quad（billboard 相机基）立在末层背景之后、底衬远端之前——基线落在地面内，
 ## 不露"3D 天空直连地面"的缝，楼群缝隙里透出远山/树线。
 func _add_sky_backdrop() -> void:
-	# 原天空贴图剪影板：复用 2D 游戏的 assets/sky/*（SkyDecor 同源）。剪影 PNG 带
-	# alpha——必须开透明混合（否则透明区渲成黑带）；高度/饱和度按空气透视压低压淡，
-	# 立在末层背景之后、底衬远端之前（基线落在地面内，不露"3D 天空直连地面"的缝）。
-	var far_z: float = float(_bg_base_z.get(BG_LAYERS - 1,
-		SKYLINE_Z - BG_LAYER_GAP * float(BG_LAYERS - 1)))
-	var layers := [
-		{"tex": "bg_mountain_far.png", "dz": 2.0, "h": 8.0, "tint": Color(0.74, 0.79, 0.88)},
-		{"tex": "bg_trees_far.png", "dz": 5.0, "h": 5.5, "tint": Color(0.64, 0.70, 0.64)},
-	]
-	for L in layers:
-		var tex := _tex_abs(_root + "assets/sky/" + str(L["tex"]))
-		if tex == null:
-			print("[hd2d] 缺天空贴图，跳过: " + str(L["tex"]))
-			continue
-		var h: float = float(L["h"])
-		var aspect: float = tex.get_width() / float(tex.get_height())
-		# 沿街长平铺（相机横移后单张会露边）；层间错半张防接缝对齐
-		var span: float = h * aspect
-		var sx := -106.0 - float(L["dz"])
-		while sx < 106.0:
-			var pm := QuadMesh.new()
-			pm.size = Vector2(span, h)
-			var mi := MeshInstance3D.new()
-			mi.mesh = pm
-			var gm := StandardMaterial3D.new()
-			gm.albedo_texture = tex
-			gm.albedo_color = L["tint"]
-			gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			mi.material_override = gm
-			mi.basis = _cam_basis()
-			mi.position = Vector3(sx + span * 0.5,
-				h * 0.5 * cos(deg_to_rad(TILT_DEG)) + 0.3, far_z - float(L["dz"]))
-			mi.name = "SkyBackdrop_" + str(L["tex"]).get_basename()
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			_ground_root.add_child(mi)
-			sx += span
-
-
-## 贴地 decal：单张 PNG 平铺一个 PlaneMesh（贴图原比例由调用者给世界尺寸）。
-## 墙线取值（格）：手摆主街 = WALL_X；布局驱动（算法村）= 布局半宽
-## （city_layout §4.5 城墙收口随街宽）。
-func _wall_x() -> float:
-	if not _layout.is_empty():
-		var w: float = get_layout_width()
-		if w > 8.0:
-			return w * 0.5
-	return WALL_X
-
+	pass   # 解包山脉/树线剪影板已删（创始人 2026-09-15：assets/sky 贴图是解包素材）——
+	# 远景 = 程序化天空 + 底衬远端，背景两层楼群自行遮地平线
 
 ## 城墙转角收边（§4.5）：±墙线立石墙板（沿纵深方向，正交视角下呈窄竖条
 ## + 墙顶垛口），门洞开在路面纵深带 GATE_Z0~Z1——门柱加厚、叠涩内挑、横梁
@@ -1372,20 +1381,16 @@ func _build_walls() -> void:
 	root.name = "CityWalls"
 	add_child(root)
 	for sx: float in [-1.0, 1.0]:
-		# 两段墙板夹出门洞（后段从建筑线后起，前段铺到行走带前缘外）
 		for seg: Variant in [[-1.0, GATE_Z0], [GATE_Z1, 19.5]]:
 			var z0: float = float(seg[0])
 			var z1: float = float(seg[1])
 			_box(root, mat, Vector3(WALL_T, WALL_H, z1 - z0),
 					Vector3(sx * wx, WALL_H * 0.5, (z0 + z1) * 0.5))
-			# 墙顶垛口
 			var z: float = z0 + 0.7
 			while z < z1 - 0.4:
 				_box(root, mat, Vector3(WALL_T, 0.55, 0.85),
 						Vector3(sx * wx, WALL_H + 0.275, z))
 				z += 1.7
-		# 门楼件：门柱（加厚微高出墙头）+ 叠涩（洞内两壁逐级内挑）
-		# + 横梁（洞底 5.0 格，行人净空足）+ 梁上垛口
 		for pz: float in [GATE_Z0 - 0.35, GATE_Z1 + 0.35]:
 			_box(root, pmat, Vector3(WALL_T + 0.55, WALL_H + 0.7, 0.7),
 					Vector3(sx * wx, (WALL_H + 0.7) * 0.5, pz))

@@ -210,7 +210,8 @@ func _on_stuck_pressed() -> void:
 	close()
 
 
-## 设置项字段行（slider / option / toggle），值变化写入 _values。
+## 设置项字段行（slider / option / toggle），值变化经 _on_field_changed 分流：
+## 即时项写穿生效，待应用项只暂存。
 ## 未实装字段（field.implemented == false）：整体降透明度 + 控件禁用 + 「未实装」标注。
 func _add_field_row(field: Dictionary) -> void:
 	var row := HBoxContainer.new()
@@ -238,7 +239,7 @@ func _add_field_row(field: Dictionary) -> void:
 			s.custom_minimum_size = Vector2(240, 0)
 			s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			row.add_child(s)
-			s.value_changed.connect(func(v: float): _values[key] = v)
+			s.value_changed.connect(_on_field_changed.bind(key))
 			widget = s
 		"option":
 			var o := SketchOptionButton.new()
@@ -247,13 +248,13 @@ func _add_field_row(field: Dictionary) -> void:
 			o.selected = _values[key]
 			o.custom_minimum_size = Vector2(220, StickTokens.BTN_H)
 			row.add_child(o)
-			o.item_selected.connect(func(idx: int): _values[key] = idx)
+			o.item_selected.connect(_on_field_changed.bind(key))
 			widget = o
 		"toggle":
 			var c := SketchCheckButton.new()
 			c.button_pressed = _values[key]
 			row.add_child(c)
-			c.toggled.connect(func(on: bool): _values[key] = on)
+			c.toggled.connect(_on_field_changed.bind(key))
 			widget = c
 	if not implemented and widget != null:
 		row.modulate = Color(1.0, 1.0, 1.0, 0.5)
@@ -263,6 +264,20 @@ func _add_field_row(field: Dictionary) -> void:
 
 
 # ─────────────────────────────── 应用 / 恢复 ────────────────────────────────
+
+## 字段改动统一入口（slider/option/toggle 的 value_changed 均接这里）：
+## 待应用项只暂存进 _values；其余即时写穿——写 ConfigManager（自动落盘）+
+## 调真实系统即时生效，对齐 07-设置界面 §五「即时生效项」。
+func _on_field_changed(value: Variant, key: String) -> void:
+	_values[key] = value
+	if key in _APPLY_LATER_KEYS:
+		return
+	var stored: Variant = value
+	if key in _VOLUME_KEYS and typeof(value) in [TYPE_FLOAT, TYPE_INT]:
+		stored = clampf(float(value) / 100.0, 0.0, 1.0)
+	if ConfigManager and ConfigManager.has_method("set_value"):
+		ConfigManager.set_value(key, stored)
+	_apply_live_setting(key, value)
 
 ## 应用：把 _values 写入 ConfigManager 并落盘，同时把已实装项立即接线到真实系统。
 func _on_apply() -> void:
@@ -295,6 +310,9 @@ func _apply_live_setting(key: String, value: Variant) -> void:
 				ConfigManager.apply_window_mode(int(value))
 		"video/ui_scale":
 			get_window().content_scale_factor = float(value) / 100.0
+		"display/vsync":
+			if ConfigManager and ConfigManager.has_method("set_vsync"):
+				ConfigManager.set_vsync(bool(value))
 		"video/show_fps":
 			_set_fps_counter_visible(bool(value))
 		"audio/master_volume":
@@ -340,6 +358,18 @@ func _camera() -> Node:
 	if _game_root == null:
 		return null
 	return _game_root.get("camera_rig") if "camera_rig" in _game_root else null
+
+
+## 关闭（footer 按钮 / ESC 出栈同路）：待应用项随关闭自动生效并落盘，
+## 不静默丢弃用户改动（07-设置界面 §五；相比弹"放弃修改？"确认框，
+## 免去模态栈出栈后再拦关闭的状态簿记）。
+func close() -> void:
+	for key in _APPLY_LATER_KEYS:
+		if _values.has(key):
+			if ConfigManager and ConfigManager.has_method("set_value"):
+				ConfigManager.set_value(key, _values[key])
+			_apply_live_setting(key, _values[key])
+	super.close()
 
 
 ## 显示/隐藏 FPS 计数器（经 UIRoot 槽；无 UIRoot（主菜单）时静默跳过）
@@ -416,6 +446,10 @@ func _on_return_to_menu_confirmed() -> void:
 ## 一致：master/bgm/sfx，见 _on_apply 换算）
 const _VOLUME_KEYS: Array[String] = ["audio/master_volume", "audio/bgm_volume", "audio/sfx_volume"]
 
+## 待应用项（07-设置界面 §五「应用生效」）：改动只进 _values 暂存，点「应用」
+## 或关闭面板时才生效。其余字段全部即时生效（改动即写 ConfigManager + 实时接线）。
+const _APPLY_LATER_KEYS: Array[String] = ["video/window_mode", "video/ui_scale"]
+
 const SETTINGS_SCHEMA: Array[Dictionary] = [
 	{
 		"id": "game", "title": "游戏", "icon": &"罗盘",
@@ -426,14 +460,15 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 			{"key": "game/ui_fade_zoom", "label": "缩放时 UI 渐隐渐显", "type": "toggle", "default": true, "implemented": false},
 		],
 	},
-	{
-		"id": "video", "title": "画面", "icon": &"望远镜",
-		"fields": [
-			{"key": "video/window_mode", "label": "窗口模式", "type": "option", "options": ["窗口化", "无边框全屏", "独占全屏"], "default": 0},
-			{"key": "video/ui_scale", "label": "界面缩放", "type": "slider", "min": 75, "max": 150, "step": 5, "default": 100},
-			{"key": "video/show_fps", "label": "显示 FPS", "type": "toggle", "default": false},
-		],
-	},
+		{
+			"id": "video", "title": "画面", "icon": &"望远镜",
+			"fields": [
+				{"key": "video/window_mode", "label": "窗口模式", "type": "option", "options": ["窗口化", "无边框全屏", "独占全屏"], "default": 0},
+				{"key": "display/vsync", "label": "垂直同步", "type": "toggle", "default": true},
+				{"key": "video/ui_scale", "label": "界面缩放", "type": "slider", "min": 75, "max": 150, "step": 5, "default": 100},
+				{"key": "video/show_fps", "label": "显示 FPS", "type": "toggle", "default": false},
+			],
+		},
 	{
 		"id": "audio", "title": "音频", "icon": &"哨子",
 		"fields": [

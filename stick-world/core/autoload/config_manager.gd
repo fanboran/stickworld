@@ -42,7 +42,7 @@ func _ready() -> void:
 	apply_startup_display()
 
 
-## 启动时应用画面类设置（video/window_mode、video/ui_scale）。
+## 启动时应用画面类设置（video/window_mode、video/ui_scale、display/vsync）。
 ## 键未存储（首次启动）时保持引擎默认，避免强改用户环境；headless 测试跳过。
 func apply_startup_display() -> void:
 	if DisplayServer.get_name() == "headless":
@@ -51,6 +51,10 @@ func apply_startup_display() -> void:
 		apply_window_mode(int(_data["video/window_mode"]))
 	if _data.has("video/ui_scale"):
 		get_window().content_scale_factor = float(_data["video/ui_scale"]) / 100.0
+	if _data.has("display/vsync"):
+		DisplayServer.window_set_vsync_mode(
+				DisplayServer.VSYNC_ENABLED if bool(_data["display/vsync"])
+				else DisplayServer.VSYNC_DISABLED)
 
 
 ## 应用窗口模式：0=窗口化，1=无边框全屏，2=独占全屏（设置面板 video/window_mode）。

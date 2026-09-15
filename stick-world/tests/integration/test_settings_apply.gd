@@ -7,6 +7,9 @@ extends Node
 ## 覆盖：
 ##   - 音量（master/bgm/sfx）→ AudioServer 总线即时生效（AudioManager 唯一消费方）
 ##   - 设置面板「应用」端到端：面板域百分比 → 存储域线性 → 总线 dB
+##   - 即时生效：音量拖动不经「应用」直达总线与 ConfigManager（07 §五）
+##   - 待应用：窗口模式暂存、「应用」生效；界面缩放随关闭自动生效（不静默丢弃）
+##   - 垂直同步：面板开关 → ConfigManager + 引擎 vsync 模式
 ##   - show_fps → UIRoot FPS 计数器显隐（含脚本存活验证）
 ##   - 重启恢复：磁盘 round-trip（ConfigManager 落盘 → 新实例读回）+
 ##     消费方启动应用（新 AudioManager 实例读 ConfigManager → 总线；新 UIRoot 读 show_fps）
@@ -32,12 +35,15 @@ func _ready() -> void:
 	_backup_cfg_file()
 	ConfigManager.set_auto_save(false)
 	# 确定性起点：清掉本进程内可能的存量设置（含真实 cfg 读入值）
-	for key in ["video/show_fps", "video/window_mode", "video/ui_scale", "audio/mute_when_unfocused"]:
+	for key in ["video/show_fps", "video/window_mode", "video/ui_scale", "audio/mute_when_unfocused", "display/vsync"]:
 		if ConfigManager.has_key(key):
 			ConfigManager._data.erase(key)
 	_runner = TestRunner.new()
 	_runner.add_test("音量: set_volume → AudioServer 总线即时生效", _test_volume_to_bus, true)
 	_runner.add_test("设置面板: 应用端到端（百分比→线性→总线）", _test_panel_apply_end_to_end, true)
+	_runner.add_test("即时生效: 音量拖动不经「应用」直达总线", _test_immediate_volume, true)
+	_runner.add_test("待应用: 暂存/应用生效/关闭自动应用", _test_apply_later_keys, true)
+	_runner.add_test("垂直同步: 面板开关 → ConfigManager + 引擎", _test_vsync_toggle, true)
 	_runner.add_test("FPS: show_fps 驱动 UIRoot 计数器显隐", _test_show_fps, true)
 	_runner.add_test("重启恢复: 磁盘 round-trip + 消费方启动应用", _test_restart_restore, true)
 	_run_tests_async()
@@ -96,6 +102,63 @@ func _test_panel_apply_end_to_end() -> void:
 	var sfx_idx: int = AudioServer.get_bus_index("SFX")
 	_runner.assert_approx(AudioServer.get_bus_volume_db(sfx_idx),
 			ConfigManager.linear_to_db(0.60), 0.01, "应用后 SFX 总线应即时生效")
+	panel.queue_free()
+
+
+## 即时生效：模拟拖动音效滑条（面板域百分比），不经「应用」应直达总线与 ConfigManager
+func _test_immediate_volume() -> void:
+	var panel: Control = SettingsPanelScript.new()
+	add_child(panel)
+	panel.setup(null)
+	await get_tree().process_frame
+	panel._on_field_changed(30.0, "audio/sfx_volume")
+	var sfx_idx: int = AudioServer.get_bus_index("SFX")
+	_runner.assert_approx(AudioServer.get_bus_volume_db(sfx_idx),
+			ConfigManager.linear_to_db(0.30), 0.01, "拖动音效滑条应即时写总线（不经应用）")
+	_runner.assert_equal(ConfigManager.get_value("audio/sfx_volume"), 0.30,
+			"拖动音效滑条应即时写 ConfigManager")
+	panel.queue_free()
+
+
+## 待应用项（窗口模式/界面缩放）：改动暂存不生效；「应用」生效；
+## 关闭面板时未应用的暂存项自动生效（不静默丢弃）
+func _test_apply_later_keys() -> void:
+	var panel: Control = SettingsPanelScript.new()
+	add_child(panel)
+	panel.setup(null)
+	await get_tree().process_frame
+	panel._on_field_changed(2, "video/window_mode")
+	_runner.assert_true(ConfigManager.get_value("video/window_mode") != 2,
+			"窗口模式改动应只暂存，不即时写 ConfigManager")
+	panel._on_apply()
+	_runner.assert_equal(int(ConfigManager.get_value("video/window_mode")), 2,
+			"点「应用」后窗口模式应写入 ConfigManager")
+	panel._on_field_changed(120.0, "video/ui_scale")
+	panel.close()
+	_runner.assert_equal(int(ConfigManager.get_value("video/ui_scale")), 120,
+			"关闭面板时应自动应用暂存的界面缩放")
+	# 清理：恢复默认缩放与窗口模式，免影响后续用例与真实窗口
+	ConfigManager.set_value("video/ui_scale", 100)
+	ConfigManager.set_value("video/window_mode", 0)
+	get_window().content_scale_factor = 1.0
+	panel.queue_free()
+
+
+## 垂直同步：面板开关即时写 ConfigManager；非 headless 下引擎 vsync 模式同步切换
+func _test_vsync_toggle() -> void:
+	var panel: Control = SettingsPanelScript.new()
+	add_child(panel)
+	panel.setup(null)
+	await get_tree().process_frame
+	panel._on_field_changed(false, "display/vsync")
+	_runner.assert_false(bool(ConfigManager.get_value("display/vsync")),
+			"关垂直同步应即时写 ConfigManager")
+	_runner.assert_false(ConfigManager.is_vsync(), "is_vsync 应反映新值")
+	if DisplayServer.get_name() != "headless":
+		_runner.assert_equal(DisplayServer.window_get_vsync_mode(),
+				DisplayServer.VSYNC_DISABLED, "关垂直同步应即时作用于窗口")
+	panel._on_field_changed(true, "display/vsync")
+	_runner.assert_true(ConfigManager.is_vsync(), "恢复垂直同步应写回 ConfigManager")
 	panel.queue_free()
 
 

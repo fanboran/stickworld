@@ -104,6 +104,85 @@
 
 `F:\VSCode\game-2\stick-world\temp\` 根：`pbr_props5_street.png`（40 格街道家具节奏实景）、`pbr_props5_strip.png`；`pbr_admin_ladder.png`（行政阶梯四件同框）、`pbr_admin_<def>.png`×6、`pbr_admin_edge.png`（棱线门禁）；`pbr_int_layers.png`（王座厅前/后分层）、`pbr_int_sheet2x.png`（34 套总览）；`pbr_b2x_family_post.png`（驿站族）、`pbr_b2x_family_casino.png`、`pbr_b2x_<def>_w<N>.png`×14、`pbr_b2x_edge.png`。
 
+### 7.7 主街街具四连修（2026-09-15，代码已提交、文档行随共享未提交批）
+
+创始人反馈：道路上很多道具浮空、分布离谱、同类物品重复乱放、超级小灯被当路灯摆。四个症状四个根因，全部在 GD 侧（参考实现 props.py dress_street 本身没问题）：
+
+- **浮空（双根因）**：①道具 plat 语义从参考脚本移植起就是错的——路肩台面带只到 z 1.95（建筑脚下细带；楼后地面同标高连片到地平线），z=4.3~5.0 全是路面，带 `plat=true` 即悬空 0.65 格——CityGen 街具 z 全面对齐 + `_spawn_prop` 加 z≥2 强制回路面守卫；②卡底留白下沉公式 rows/32×S 偏小 16 倍（烘卡 px 是建模 px 的 2 倍），"浮空摆件"修复从未生效——`_card_bottom_pad` 按卡元数据密度换算，自然物卡首次接上。
+- **小灯当路灯**：灯卡选中查建筑卡表（cards.json 无道具卡）→ 永远落灯笼兜底；改查 props.json 卡宽表（`prop_names()` 值升级为卡宽，兼容旧 has/is_empty 用法）。
+- **复读乱放**：家具组固定循环 + 组内件同点抖动互叠 → 每侧 furniture_n 槽均分街宽、组内件按卡宽肩并肩、洗牌袋轮转；路标/里程碑只守街口。
+- **城市每进城重排（意外收获）**：`zones.shuffle()`/`defs.shuffle()` 吃全局随机源不吃种子——"确定性种子→多局一致"契约实际是破的；改 `_shuffle_rng`（Fisher-Yates 走 rng），实测同种子两次生成逐字节一致。
+- **杂物占格（创始人定案，两轮纠偏后）**：与建筑同 Z 的杂物默认**占水平格**——CityGen §3.5 把仓储/生产六件（crate/barrel/sack_stack、haystack/log_pile/trough）塞入所属分区侧序列的随机位置段，随建筑整格排布推挤（z=1.0 台面、plat，渲染端卡底落地+接地影落在台面）；**占格宽向上取整到整数格**；序列里小概率（12%）塞**一格空位**（占格不出卡的刻意留白）；不设纵向格——路面道具沿用各自的默认 z 标记。
+
+### 7.8 建筑间杂物
+
+**基础机制已落 CityGen**（创始人定案）：与建筑同 Z 的杂物占水平格、塞入随机位置段随建筑排布（见 §7.7 杂物占格条）——纵向格子不设，路面道具沿用各自默认 z 标记。本节留作**加密度/选卡的参考**：示例场景（八档 `probe_city_scene.py`）的 richer 配方 = **跟建筑 def 走的前场配方**（`props.py DRESS` 表，聚簇占建筑门口地块，宽度≤地块）+ **道具型地块**（`PROP_LOTS`：井台组、市集摊组，整组占格）。`sack_stack`（麻袋堆）为标志性件，挂四处：风车 / 城门·军营 / 商铺 / 仓库·面包房（市集配方仓储主读）。已烘卡可直接用的约 20 种（house/barrel·log_pile·haystack·pot·basket，barn/cart·trough，smithy/anvil·tools_rack·grindstone·barrel_stand，shop/hanging_sign·produce_baskets，行政/flower_box·market_table，gatehouse/banner·crate 等）；炼金/图书馆系配方全部未烘，city 档才需要。**摆法规则（创始人定）**：偶尔空一格，不每缝都填；门口悬挂照明勿用 lantern（小手灯），用 hanging_sign/wall_sconce 或补烘挂壁灯卡。
+
+**（2026-09-15 晚更新）本节口径已被 §7.9 覆盖**：杂物扩全带、z 按 footprint 推导、空位两档、占格宽度量换 footprint——以 §7.9 为准。
+
+验证：报错自检干净；八档不变量探针全绿（未烘卡/台面带外 plat/灯笼当路灯/同深叠放四项，探针 `stick-world/temp/check_citygen.gd` 一次性不入库）。契约落 `HD-2D街景系统.md` §6.4。**并行协同**：隔壁会话同窗口期修灯卡选中（同诊断）+ 夜版贴图 + `_card_base_cut` 像素扫描 + 分区杂物堆，改动同文件已合流互认；其 walk-band/F3 批次（§7.6）与本批互不依赖。
+
+---
+
+
+### 7.6 F3 显示反馈轮（2026-09-15，未提交、与上一会话 F3 修复同批）
+
+创始人反馈：①缩放条 75% 的数字应显示 100%；②碰撞箱位置显示"还是不对、差了很多"。**根因实测（headless 探针 `stick-world/temp/hd2d_probe/`，gitignored）**：F3 地面锚定物绘制位 vs 3D `unproject` 真值误差 0.1px——画的全是对的，错在**实体 Y 行走带钳制**：沿用 2D 图口径（origin=髋、脚=origin+foot_offset → 约束面内收脚距）且深端吃 MapBase 默认 `ground_y=720`，而 HD-2D 的视觉脚线=origin（billboard 脚锚），角色能走到 y≈589（墙脚线外 ~3 格）被楼卡遮挡"消失"、青箱跟着锚进楼里——"青箱与蓝带不对应"的真根因。
+
+修复（4 文件）：`zoom_bar.gd` 显示口径 `user_zoom÷0.75×100`（ZOOM_BASE 常量，默认档=100%，滑块/滚轮域不变）；`MapBase` 虚方法 `_origin_space_walk_band()`（2D 图 false 维持脚部口径）+ `Hd2dStreetMap` 覆写 true 且 `ground_y=WALK_BACK_Y=688` + `StickmanEntity` 钳制按口径分流（`_ground_constraints_origin_space`）——HD-2D 下 origin∈[688,1294]。契约已落 `HD-2D街景系统.md` §4.5。
+
+- **创始人裁决**：楼底疑似被砍/白框 14px 级残差（楼卡立 0.65 格台面、画框按路面投影）**暂不管**，白框保持现状。
+- **残余读法（已落档 §4.5）**：被道具蓝带挡停瞬间青箱底悬在蓝带远沿上 ~29×缩放 px——同源 142px 2D 历史锚点，消除须"origin=脚底统一"立项（牵动 AI/交互/存档）。
+- **测试**：41/49——7 失败=SUSPENDED 套件空跑（已登记）、1=cross_map_travel 双失败（审计 2026-09-14 同签名），零新增回归；报错自检干净。
+- **并行协同**：隔壁 AI 同期在修"蓝箱对齐包"（疑点①道具带与求解器一致性——已核同源：`_prop_solids` 在 `_spawn_prop` 内用最终落位生成；②meta 跳过点保留，白框承担建筑显示）。**给它的关键移交：蓝带/青箱绘制链无需再改，改钳制口径才是对症**。
+
+**第二轮（同日，footprint 反馈，未提交）**：创始人让烘焙管线给每卡导出 `footprint`=[宽格,深格]（cards.json 50/50），并反馈①建筑碰撞箱显示比楼低很多②紫箱不见了③主控框对、悬浮框比角色高很多④青箱待复验。落实：
+
+1. **碰撞体积接真实 footprint**：`_building_solid_rect` 从 `[688, 基线+44]`（前端比楼脚多伸 1.4 格、后端退到街心 z=0——"比楼低很多"的由来）改为墙脚基线向后量深格（探针实证：cottage 带 [707.8, 764.8]=1.78 格×32 ✓）。碰撞墙/紫带/宽度辅助线同源消费。
+2. **紫占地带恢复**（F3 building_drawer HD-2D 分支，PassageBarrier 紫口径）——回答"紫色碰撞箱是不是不显示了"：HD-2D 无 2D PassageBarrier 节点，紫框此前被白框顶替。
+3. **占地元组扩 8 元**：[6][7]=占位格宽（白包楼框维持创始人已认可口径）、[0][1]=真实墙脚（紫带/辅助线/碰撞）——两口径并存防白框变窄破坏"包楼"语义。
+4. **选中/悬浮四角框修锚**（selection_system.gd）：HD-2D 下 origin 经 `remap_fx_pos` 锚视觉脚线——原 2D 直绘比角色高 (1−k)×纵深（y=1000 时 ≈124px@0.75）。主控框走 3D 脚下框本就正确，未动。
+5. 文档：`HD-2D街景系统.md` §4.4 重写（8 元元组/紫带/双宽度口径/选中框锚点）。⚠ **规范纠偏（创始人）**：CHANGELOG 只在 GitHub 发版时更新，本批误加的两段已撤、批次记录归交接档——规矩已入 AGENTS.md 文档写作规范。
+
+**第三轮（同日，碰撞行为+前景可行走反馈，未提交）**：创始人反馈①角色碰撞箱碰到别的箱子不停止移动、与表现不符②走不到黄线（两楼之间也被提前拦下）。裁定：**F3=碰撞真相视图，所有箱子都画在真实碰撞位**（"绘制的箱子移动到碰撞箱位置"——此前画在视觉脚线的版本会穿过蓝带停不住）；**黄线以下就是可行走地面范围**（立项起即如此），碰撞箱顶到黄线才停、不留玩法余量；玩家走上台面该抬升。落实：
+
+1. **青箱画回物理位**（debug_drawers entity_collider HD-2D 分支）：箱中心经 remap_fx_pos 压投影域、宽高不压——角色被挡停时青箱恰好压在对方带上，"碰上即停"逐像素可读。物理脚箱（origin+foot_offset）不动。
+2. **深端行走界钉黄线**：proto 新增 `DEEP_WALK_Y`（黄线+2px 防与 bg1 卡共面闪烁，非玩法余量）；`Hd2dStreetMap._walk_deep_y()` 虚方法取值（须 _hd 就绪后），`_ready` 重排；城墙碰撞带拉通全深、出口触发器纵深跨整个可行走域。**战场图覆写 `_walk_deep_y` 保旧带 688**（战斗阵型按旧域调的）。
+3. **台面/台后地面抬升**：proto `get_ground_lift_world(x,z)`（z<路肩前缘 1.95 且墙内 → PLAT_H，战场/资源图/墙外恒 0）+ `get_ground_lift_px`（×32×cosθ）；char_sprite_3d `set_world_pos` 加 ground_lift（卡/接地影/脚下框/劳作条整体抬）；宿主 `_sync_character_render` 传抬升、`remap_fx_pos` 扣同源抬升——青箱/FX/选中框/黄线自动贴合抬升地面。副作用：建筑白框底的 18.7×缩放 px 残差归零（探针实测全绿，含台面上角色脚 0.1px）。
+4. 文档：§4.2 remap 公式加抬升项、§4.4 实体碰撞箱口径、§4.5 行走带深端+已知口径重写（F3=碰撞真相定案入档）。测试 41/49 基线不变、自检干净。
+
+**第四轮（同日，footprint 原点字段，未提交）**：三套烘卡脚本（blender_proto/bake_props/bake_nature）新增 `footprint_off(ob)` 导出 `[dx格,dz格]`——dx=占地中心相对**卡面（剪影）中心**（与取景同源 shape_points/cam_axes）、dz=占地中心相对**墙脚基线**（引擎卡底贴地钉的"卡可视底边内容行"的地面等效 y=min(v)/sin(tilt)），正 dz 朝相机，兜底/异常回退 [0,0]；引擎 `_building_solid_rect` 消费（带中心 x=槽位中心+dx、带=[基线+(dz∓fd/2)×32]），**旧 JSON 无字段默认 [0,−fd/2] 精确退化回旧口径**——三张样卡（cottage_w6/house_w16/cathedral_w16）python 复算逐项相等，重烘前行为不变；重烘后地脚不居中的卡（如 house_w16 地脚偏左 ~192 模型 px）按实测原点精确落位（道具/自然物仅导出、引擎消费端本轮未接）。自检：py_compile×3 过、报错自检净、测试 41/8 基线不变；文档同步 `HD-2D街景系统.md` §4.4+§2.1 字段表。**重烘命令（需 Blender，本机 PATH 无 blender，待创始人/隔壁会话跑）**：
+`"F:/SteamLibrary/steamapps/common/Blender/blender.exe" -b --factory-startup -P stick-world/tests/dev/proto_25d/blender_proto.py`（建筑卡）／`"F:/SteamLibrary/steamapps/common/Blender/blender.exe" -b --factory-startup -P stick-world/tests/dev/proto_hd2d/bake_props.py`（道具卡）／`"F:/SteamLibrary/steamapps/common/Blender/blender.exe" -b --factory-startup -P stick-world/tests/dev/proto_hd2d/bake_nature.py`（自然物卡）
+
+**第五轮（同日，紫带范围两连修，未提交；Blender 实际在 F:/SteamLibrary/steamapps/common/Blender/，建筑卡已由本会话重烘两次）**：创始人指认①紫带比白框窄②紫带是扁片。落实：
+1. **宽度口径=占位槽宽**（=白包楼框宽；墙脚实测对 house_w16 只有 3.9 格/槽位 16 格，"比白框还窄"读作错误）——[0][1] 与 [6][7] 归一，footprint_off 的 dx 退出带位计算（字段仍导出备用）。
+2. **深度口径=全模型占地深**：三份烘卡脚本新增 `footprint_full(ob)` 导出（不过滤高度的整楼包围盒、含屋顶出檐——墙脚贴地实测对大屋顶建筑只有 1~3 格窄条；坑：`B.measure` 返回 (min,max) 元组对非跨度，除 32 直接 TypeError，改为顶点自算）。引擎深度=max(全深, 2格)、后沿封顶深端行走界。重烘实测：barn_w12 全深 11.92 格（墙脚仅 1.25）、house_w16 全深 14.75 格。
+3. **工具教训**：烘卡命令管道接 `tail -N` 会吞光诊断（第二轮重烘看似成功实则 TypeError 半途而废）——重烘日志必须全量落盘看（本轮起 `> stick-world/temp/proto25d_rebake.log`）。
+4. tex 快照同步（temp→tex 50/50 含 footprint_full）；自检净；测试 41/49 基线不变；文档 §2.1 字段表补 footprint_full 行、§4.4 口径更新。
+
+### 7.9 带语义定案轮（2026-09-15 晚，未提交）
+
+创始人反馈串（同日多轮对齐）：①杂物不该只堆在仓储/生产带，可以覆盖任何带，且每张卡有自己的纵深（footprint 元数据）；②长椅等街具仍与建筑重合、灯柱/路牌这类高件别立在门前与杂物前；③主街千篇一律全是一层；④**带语义定案：Z 在台面带位置的东西一律"按建筑算"**，街具一律不上台面；⑤空位偶尔两格宽；⑥独轮车暂不上街；⑦喷泉这类广场件可以放建筑区；⑧盆/筐这类超级小件不该虚占格子；⑨杂物也要像建筑一样有双黄线。落实（全在 `city_gen.gd` + `proto_hd2d.gd`）：
+
+1. **带语义（总口径）**：台面/建筑带只留"按建筑算"的东西——建筑 + 杂物占格件 + 贴楼功能小件（铁砧/磨刀石=铁匠工位、旗帜=行政楼前，属建筑语义不动）；灯柱/长椅组/路牌/里程碑全部铺**路面带**（远缘 5.8 / 近缘 7.0 两档纵深错位，原远侧台面位 z1.25~1.85 全撤——长椅叠楼的根源）；喷泉留市集广场位（建筑区，Founder 豁免件）。
+2. **杂物扩全带**（§3.5 重写）：五条分区带各 1~2 件（craft 桶/箱/工具架、market 桶/筐、living 桶/盆/花箱；storage/production 原清单保留；**独轮车除名**），洗牌袋确定性取件；杂物 z 按卡自身 footprint 纵深推导（clamp 0.42~1.75），不再统一 1.0。
+3. **空位两档**：9% 一格 + 3% 两格（原 12% 一格），占格不出卡的刻意留白。
+4. **高件避让**：`_avoid_spans()` ±0.5 步进扫描，灯柱/喷泉/路标/里程碑 x 避让门脸建筑（DOOR_DEFS）与杂物占格段，避不开跳过该盏。**坑**：避让合法落点被 `add_prop` 的 `snappedf(0.1)` 反推进占格段 0.0125 格（city 档 lamp@-33.8 压 tavern 左缘实测）——修法=候选先对齐 0.1 再测（测的值=最终值）。
+5. **前排 2 层卡配额**（§3.7，治千篇一律一层楼）：townlet 2 / town 5 / burgh 8 / city 9 / capital 14 / metropolis 18（hamlet/village 村貌不上配额）；白名单九卡（tavern/townhouse/rowhouse/inn_post/coach_house/academy/mint/barracks/library）、每 def ≤2 张从区队列复制补位；第 2 步去重对白名单放宽到 2 张。分区池按级别窗口调整：townlet 市场+tavern（窗口"过渡档提前解锁"本就登记）、town 居住+rowhouse/生产+inn_post、burgh 市场+rowhouse/生产+inn_post、city 市场+flower_shop/仓储+inn_post（rowhouse Lv2=town 起、inn Lv2=town 起、专精店种=town 起，均守 §三窗口表）。
+6. **占格宽度量修正**（创始人指正"盆啊啥的超级小东西也占格子"）：占格宽改按 props.json **footprint[0]（真实地面占地宽）**向上取整，弃用画面宽（含透视外扩，盆 1.47 格画面→虚占 2 格）——实测盆 2→1、筐 3→2、花箱 3→2、柴堆 6→5；`prop_footprints()` 返回 [宽,纵深] 两维；卡库缺失兜底 footprint [2.0,1.5]→2 格（空 prop_set 不再爆宽，village 276→239 格）。
+7. **杂物进 F3 双黄线**：CityGen 杂物道具带 `occ_cells`（占格宽）出产物；proto_hd2d `_place_props` 收进 `_clutter_occ` 并入 `get_building_rects()`——F3 建筑辅助线给杂物画左右边界双黄线+紫占地带+逐格浅线（4 元组 rect，无直立包楼框），与建筑同口径；碰撞仍走 `_prop_solids` 点障碍。
+8. 文档：`HD-2D街景系统.md` props z/plat 契约段 + 层位表第 9 行同步（带语义/footprint 占格/occ_cells/避让 snap 口径）。
+
+验证：五档探针全绿（杂物↔建筑互斥违例 0、台面带违例 0、高件压脸 0；配额 town 6/5、city 10/9、capital 15/14、metropolis 20/18 全达标）；报错自检干净；unit 63/63。**并行协同**：本节与 §7.7/7.8（前会话街具四连修+杂物占格首版）同文件接力，其"12% 一格空位 / z=1.0 / 画面宽取整"口径已被本节覆盖；工作区另有 §7.6 walk-band/F3 未提交批与本批同文件不同区域，提交时注意分批。
+
+**微调轮（2026-09-16 晨，未提交）——创始人拍板"小件全撤、常识重摆"**：反馈=好多小物件（盆之类）摆在建筑区没美感、前排物件互相穿模。落实：
+
+1. **随机街具组轮转整系统删除**（FURNITURE_GROUPS/组槽/洗牌袋）——随机配方是美感杀手；`furniture` 字段暂留 TIERS 不用。
+2. **常识摆法**（每件道具必须有功能理由，无理由不上街）：井=市集聚点、摊/桌/果篮=市集两翼（摊+果篮右翼、桌左翼，锚点+避让自组织）、长椅=井旁对置（village 起，聚点语义）、喷泉=镇起广场位（+9/−9 择空，hamlet/village 没喷泉）、铁砧/磨刀石=铁匠工位、旗帜=行政楼前、路标/里程碑=街口侧翼（避让预算 8 防被城门段挤没）、灯=沿街照明、杂物=仓储/生产带占格件（盆/筐/花箱小件全撤出建筑带）。
+3. **道具↔道具同带互斥登记表**（实测旧版同带叠对 28~62/城：market_stall 画面宽 8.85 格与井/桌/果篮全叠、街具组压井压灯）：每件道具落位登记 [x0,x1,z]，后放者 `_avoid_spans` 避让 z 差<PROP_EXCL_BAND(1.5 格) 的已放件，≥1.5=前后遮挡合法保留层次；避不开跳过该件；放置顺序=主件先于填充件（井→椅→摊桌→喷泉→灯→街口件）。**坑**：井旁椅曾错用 market_stall 落点作锚（长椅全被摊的画面宽挤死）+ 喷泉排 20 盏灯后同带无窗——顺序修正后全出。
+4. 道具量收敛：village 49→32、city 113→57（同带穿模对 28~62→**0**）。
+5. 文档：`HD-2D街景系统.md` props 契约段重写（常识摆法清单/同带互斥阈值/组删除）。验证：五档探针（穿模 0/互斥 0/必件无缺：井摊桌果篮椅喷泉路标里程碑各就位）+ 自检干净（首跑 4 错=并行会话日志残留，复扫净）+ unit 63/63。
+
 ---
 
 ## 一、试错史：v2（2D 手绘）为何废弃 —— 教训，不要重走

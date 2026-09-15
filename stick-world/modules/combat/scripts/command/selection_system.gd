@@ -346,17 +346,16 @@ func _draw() -> void:
 	for u in _selected_units:
 		if not is_instance_valid(u):
 			continue
-		# 锚=身体中心（悬浮框矩形中心，与点选/悬浮判定同一几何）——HD-2D 图 =
-		# 视觉脚线上方半个身子（billboard 视觉身高 156 的一半，创始人
-		# 2026-09-15"别当成脚下的线框"：选中框锚半身高、非脚下）；2D 图 =
-		# Range 框中心≈髋部（原 origin 口径语义）
-		var anchor: Vector2 = _unit_anchor(map_now, u)
-		var screen_pos: Vector2 = canvas_xform * anchor
-		var half_w: float = RING_RADIUS
-		var half_h: float = RING_RADIUS * 0.65
-		var arm: float = RING_RADIUS * 0.38
+		# 选中框=**全身包裹**（创始人 2026-09-16"框住整个火柴人"）：与悬浮框/
+		# 点选判定同一几何（entity_hover_rect）——2D 图=Range 原框（≈全身），
+		# HD-2D 图=billboard 视觉身高框（脚线~头顶）；角臂画在矩形四角
+		var rect: Rect2 = _unit_hover_rect(map_now, u)
+		if rect.size == Vector2.ZERO:
+			continue
+		var screen_center: Vector2 = canvas_xform * rect.get_center()
 		var col: Color = Color(1.0, 1.0, 1.0, 0.95)
-		_draw_corner_bracket(screen_pos, half_w, half_h, arm, col)
+		_draw_corner_bracket(screen_center, rect.size.x * 0.5, rect.size.y * 0.5,
+				RING_RADIUS * 0.38, col)
 
 
 func _draw_corner_bracket(center: Vector2, half_w: float, half_h: float, arm: float, col: Color) -> void:
@@ -415,18 +414,24 @@ func set_selectable_faction(fid: int) -> void:
 
 # ─────────────────────────────── 内部辅助 ────────────────────────────────
 
-## 单位判定锚点（视觉域，与悬浮框同一几何）：HD-2D 图 = billboard 视觉域矩形
-## 中心（视觉脚线锚定+深度缩放，点胸口不脱靶）；2D 图 = Range 框中心≈髋部
-## （entity_hover_rect 恒等，语义同旧 origin 口径）。Range 缺失时回退 origin
-## 经 remap（视觉脚线）。
-func _unit_anchor(map: Node2D, u: Node) -> Vector2:
+## 单位悬浮框矩形（视觉域，画框/点选/框选共用同一几何）：Range 框经地图
+## 视觉域协议映射——2D 图=Range 原框（≈全身），HD-2D 图=billboard 视觉身高框
+## （脚线~头顶）。Range 缺失时回退 origin 经 remap 的固定尺寸框。
+func _unit_hover_rect(map: Node2D, u: Node) -> Rect2:
 	if map == null:
-		return u.global_position
+		return Rect2()
 	var rng: CollisionShape2D = u.get_node_or_null("Range") as CollisionShape2D
 	if rng != null and rng.shape is RectangleShape2D:
 		return map.entity_hover_rect(rng.global_position,
-				(rng.shape as RectangleShape2D).size, u).get_center()
-	return map.remap_fx_pos(u.global_position)
+				(rng.shape as RectangleShape2D).size, u)
+	return Rect2(map.remap_fx_pos(u.global_position) - Vector2(30, 60), Vector2(60, 120))
+
+
+## 单位判定锚点（视觉域）= 悬浮框矩形中心（点胸口不脱靶）。
+func _unit_anchor(map: Node2D, u: Node) -> Vector2:
+	if map == null:
+		return u.global_position
+	return _unit_hover_rect(map, u).get_center()
 
 
 func _get_current_map() -> Node2D:

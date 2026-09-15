@@ -48,13 +48,18 @@ Range 矩形）都不做 HD-2D 投影压缩，而角色 billboard 视觉位置�
 - `hd2d_street_map.gd`：三处内联深度缩放 lerp 收编 `depth_scale_at()`（billboard
   渲染 / 2D rig 镜像 / 悬浮框几何同源）。
 
-**第二轮修正（创始人实机验收反馈，2026-09-15）**：悬浮框高错用 2D Range 全身
-高 277（髋部原点语义），比 billboard 视觉身高高出约半个身子——改为
-`BILLBOARD_BODY_H_PX=156`（130 SV px×SIZE_K 1.2，§0.3 比例锚）；白选中框
-从视觉脚线上移到半身高（框心=悬浮框矩形中心）。蓝 F3 碰撞框贴脚下线维持
-本分支画法（底边钉视觉脚线）——⚠ 主工作区建筑管线v3 会话未提交的
-debug_drawers 改动把蓝框移到"物理碰撞位"（低于脚线 ~62px·ez），与本轮
-裁决冲突，合并时以本裁决为准、该未提交改动应舍弃。
+**第三轮修正（创始人实机验收裁决，2026-09-16）**：白色选中框=**全身包裹**——
+与悬浮框/点选/框选判定共用同一 `entity_hover_rect` 矩形，角臂画四角（此前
+半身高/脚下两版均废弃）。实测工具：`tests/dev/probe_brackets.tscn`（窗口模式
+起真实 GameRoot→选中玩家+悬停→截屏 `temp/probe_brackets.png`，渲染最终验证）。
+对比截图归档 `F:\VSCode\game-2\temp\bracket_probe\`（main 构建 vs 修复分支）。
+
+**合并前置（阻塞项）**：main 工作区建筑管线v3 会话的在途未提交改动
+（hd2d_street_map.gd/map_base.gd 等）与本项目改同文件，git merge 会被拒。
+需该批次先落库（内容=创始人 2026-09-15 返修批：台面 lift remap/行走带/
+F3 口径，连贯完整；其中 debug_drawers 蓝框"物理碰撞位"画法与最新裁决
+"蓝框贴脚下线"冲突，合并后需一笔 revert-fix），或创始人授权本项目会话
+代提交。
 
 **分类核验为无需改动**：fx_library、resource_node（已走 remap 协议）；
 debug_drawers F3 口径（创始人已裁决的数据口径，坐标换算已走 remap）；

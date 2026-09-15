@@ -200,6 +200,32 @@ godot --path stick-world res://tests/dev/verify_hd2d_map.tscn
 锚点 y=1294 压缩不变（remap 恒等），所以"屏幕底沿"上的元素直绘/remap 两可；
 越深的点偏得越多（2D 直绘会比 3D 实际位置低 (1−k)≈56% 纵深距离）。
 
+#### 4.2.1 视觉域坐标协议（唯一出口，2026-09-15 收编）
+
+正逆两式的**数学核**收编在 `Hd2dProjection`（world 模块静态类，正逆互为精确逆，
+round-trip 由 `tests/unit/test_hd2d_projection.gd` 锁死）；运行时出口是地图上的
+三个方法（`MapBase` 默认恒等=2D 图，`Hd2dStreetMap` 覆写）：
+
+| 方法 | 方向 | 用途 |
+|---|---|---|
+| `remap_fx_pos(pos)` | 画布域→视觉域 | 一切"画"：飘字粒子/悬浮框/选中框/提示面板的地面锚 |
+| `unmap_fx_pos(pos)` | 视觉域→画布域 | 一切"判定"：屏幕点落世界坐标（先 canvas 逆变换落视觉域，再经此逆回画布域） |
+| `entity_hover_rect(center, size, entity)` | Range 框→视觉域矩形 | 悬浮框/点选框选锚点（画与判定共用同一矩形=所见即所判） |
+
+**协议铁律**：
+1. 消费方一律走地图协议，**禁止手搓相机/压缩公式**（相机半程交给 viewport
+   `canvas_transform` 引擎真值；曾因手搓 `(mouse−vp/2)/zoom+cam` + 直绘 origin
+   导致悬浮方框悬空在角色上方 100px+、鼠标须悬到角色上方才触发——创始人
+   2026-09-15 报告，即本协议收编的直接动因）。
+2. 只有**地面锚点**参与压缩；**身体纵向尺寸/偏移不压缩**（billboard 直立绘制，
+   俯角只压地面纵深）——悬浮框高、血条偏移、面板上提量（如城门提示 −130px）
+   一律原值。
+3. HD-2D 图 origin=**视觉脚线**（billboard 脚锚），悬浮框 billboard 几何 =
+   底边贴视觉脚线、宽高随深度缩放（`depth_scale_at`，与 billboard/2D rig 同源）；
+   Range 框的 2D 局部语义（origin=髋部、框心居 Range 节点）仅 2D 图适用。
+4. 调用链上已有 remap 的出口（如 `FxPool.spawn_burst` 内部 remap 地面锚），
+   上游传视觉域坐标前须先 `unmap_fx_pos` 逆回，防二次压缩。
+
 ### 4.3 锚线契约（最易踩的坑）
 
 **CameraRig 不垂直滚动**：`_compute_camera_y` 永远把视野下边界钉在
@@ -283,7 +309,7 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
 ### 4.6 已知边界
 
 - 战场/资源/村B 图继承 Hd2dStreetMap，契约自动生效；2D 旧图（village_map 系）
-  无 remap_fx_pos，`_ground_y` 恒等直通，行为不变。
+  走 MapBase 恒等协议（视觉域=画布域，见 4.2.1），行为不变。
 - 3D 相机不镜像 cam2d.y（垂直取景固定）——任何"2D 相机 y 与 3D 同步"的假设
   都不成立，垂直对齐只经 4.2/4.3 的锚线+压缩，别无他路。
 - DOF far 距离是相机本地量，缩放时须同步换算（set_cam_zoom 已处理，改相机勿删）。

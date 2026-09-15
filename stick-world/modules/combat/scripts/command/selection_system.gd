@@ -199,19 +199,24 @@ func clear_selection() -> void:
 # ─────────────────────────────── 内部选择实现 ────────────────────────────────
 
 func _do_box_select(world_rect: Rect2, additive: bool) -> Array:
+	var map: Node2D = _get_current_map()
 	var in_box: Array = []
 	for u in _get_selectable_units():
-		if world_rect.has_point(u.global_position):
+		# 判定域统一（MapBase 视觉域协议）：world_rect 是视觉域（canvas 逆变换
+		# 而来），单位锚点须映射到同一域再比较——HD-2D 图 origin 直绘会比角色
+		# 高 (1−k)×纵深，框选会漏掉深处的单位
+		if world_rect.has_point(_unit_anchor(map, u)):
 			in_box.append(u)
 	_apply_selection(in_box, additive)
 	return in_box.duplicate()
 
 
 func _do_click_select(world_pos: Vector2, additive: bool) -> bool:
+	var map: Node2D = _get_current_map()
 	var best: Node = null
 	var best_dist: float = CLICK_TOLERANCE
 	for u in _get_selectable_units():
-		var d: float = u.global_position.distance_to(world_pos)
+		var d: float = _unit_anchor(map, u).distance_to(world_pos)
 		if d < best_dist:
 			best_dist = d
 			best = u
@@ -411,6 +416,20 @@ func set_selectable_faction(fid: int) -> void:
 
 
 # ─────────────────────────────── 内部辅助 ────────────────────────────────
+
+## 单位判定锚点（视觉域，与悬浮框同一几何）：HD-2D 图 = billboard 视觉域矩形
+## 中心（视觉脚线锚定+深度缩放，点胸口不脱靶）；2D 图 = Range 框中心≈髋部
+## （entity_hover_rect 恒等，语义同旧 origin 口径）。Range 缺失时回退 origin
+## 经 remap（视觉脚线）。
+func _unit_anchor(map: Node2D, u: Node) -> Vector2:
+	if map == null:
+		return u.global_position
+	var rng: CollisionShape2D = u.get_node_or_null("Range") as CollisionShape2D
+	if rng != null and rng.shape is RectangleShape2D:
+		return map.entity_hover_rect(rng.global_position,
+				(rng.shape as RectangleShape2D).size, u).get_center()
+	return map.remap_fx_pos(u.global_position)
+
 
 func _get_current_map() -> Node2D:
 	if _game_root == null:

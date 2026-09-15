@@ -188,8 +188,7 @@ func _sync_character_render() -> void:
 		if ch.has_method("set_world_pos"):
 			ch.set_world_pos(body.position.x / CELL_PX, z,
 					int(body.get("_facing")) < 0,
-					lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
-							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)))
+					depth_scale_at(body.position.y))
 		if ch.has_method("set_anim"):
 			# 动画镜像读实体真实状态：walk/run/idle + 劳作 attack 全放行。
 			# attack 是 oneshot——播完实体侧自动回切 idle/walk，逐拍重触发由
@@ -234,9 +233,7 @@ func _apply_depth_visual() -> void:
 			continue
 		if not e.has_meta("hd2d_base_rig_scale"):
 			e.set_meta("hd2d_base_rig_scale", rig.scale)
-		var t: float = clampf(((e as Node2D).position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)
-		var k: float = lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX, t)
-		rig.scale = (e.get_meta("hd2d_base_rig_scale") as Vector2) * k
+		rig.scale = (e.get_meta("hd2d_base_rig_scale") as Vector2) * depth_scale_at((e as Node2D).position.y)
 
 
 func get_spawn_point() -> Vector2:
@@ -304,14 +301,43 @@ func wants_3d_bracket() -> bool:
 	return true
 
 
-## 2D 特效/坐标重映射（fx_pos_remapper 组协议）：2D 世界 y → 3D 投影呈现的
-## 同一地面线。y=1080（前缘）不动，纵深越深压缩越多（俯角前缩率由 3D 侧
-## get_ground_squash 给出）——飘字/粒子由此与角色 feet 对齐。
+## 2D 特效/坐标重映射（fx_pos_remapper 组协议 + MapBase 视觉域协议）：2D 世界
+## y → 3D 投影呈现的同一地面线。锚线 WALK_FRONT_Y 不动，纵深越深压缩越多
+## （俯角前缩 k=sinθ，数学核 Hd2dProjection）——飘字/粒子由此与角色 feet 对齐。
 func remap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	return Vector2(pos.x, WALK_FRONT_Y - (WALK_FRONT_Y - pos.y) * k)
+	return Vector2(pos.x, Hd2dProjection.ground_to_visual_y(pos.y, k, WALK_FRONT_Y))
+
+
+## 地面锚点逆映射（MapBase 协议覆写）：视觉域 → 画布域，与 remap_fx_pos 互为
+## 精确逆。屏幕点击 → 世界判定（unmap）与 F3 鼠标读数（screen_y_to_ground_y，
+## 屏幕域版）共用同一压缩模型；台面 lift 区逆解未含，路面口径。
+func unmap_fx_pos(pos: Vector2) -> Vector2:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return pos
+	var k: float = float(_hd.get_ground_squash())
+	return Vector2(pos.x, Hd2dProjection.visual_to_ground_y(pos.y, k, WALK_FRONT_Y))
+
+
+## billboard 深度缩放（0.92~1.10 随纵深线性）：3D billboard 渲染、2D rig 镜像
+## 与悬浮框几何共用同一口径，禁止各处内联 lerp（改档位时三处必须同源）。
+func depth_scale_at(y: float) -> float:
+	return lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
+			clampf((y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0))
+
+
+## 悬浮框视觉域矩形（MapBase 协议覆写）：HD-2D billboard 几何——origin=视觉
+## 脚线（remap 压进投影域），身体直立向上、宽高随深度缩放；Range 框的 2D
+## 局部语义（origin=髋部、框心居 Range 节点）在此不适用。_hd 未就绪时回退
+## 2D 恒等框（super）。
+func entity_hover_rect(range_center: Vector2, range_size: Vector2, entity: Node2D) -> Rect2:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return super(range_center, range_size, entity)
+	var k: float = float(_hd.get_ground_squash())
+	return Hd2dProjection.billboard_hover_rect(
+			entity.global_position, range_size, k, WALK_FRONT_Y, depth_scale_at(entity.global_position.y))
 
 
 ## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。

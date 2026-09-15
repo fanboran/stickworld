@@ -113,7 +113,13 @@ func _follow(player: Node2D) -> void:
 	var ui_root: CanvasLayer = _find_ui_root()
 	if ui_root == null:
 		return
-	var screen_pos: Vector2 = ui_root.get_viewport().get_canvas_transform() * player.global_position
+	# 地面锚经视觉域协议 remap（HD-2D 图 = 视觉脚线，origin 直绘会浮在角色
+	# 上方 (1−k)×纵深处）；上提 130px 是身体纵向偏移，按协议铁律不参与压缩
+	var anchor: Vector2 = player.global_position
+	var remapper: Node = get_tree().get_first_node_in_group("fx_pos_remapper")
+	if remapper != null and remapper.has_method("remap_fx_pos"):
+		anchor = remapper.remap_fx_pos(anchor)
+	var screen_pos: Vector2 = ui_root.get_viewport().get_canvas_transform() * anchor
 	_panel.position = screen_pos - Vector2(_panel.size.x * 0.5, 130.0)
 
 

@@ -2,7 +2,11 @@
 
 > 任务：HD-2D 投影数学一劳永逸收编——画布域↔视觉域坐标变换唯一出口协议，
 > 修复悬浮方框悬空（创始人 2026-09-15 报告）并统一全部消费点判定域。
-> 分支 `agent/hd2d-projection-unify`，worktree `.temp/hd2d-projection-unify`。
+> **状态：已合并收线（2026-09-16）**——`45df93e3` 合并入 main（冲突解：静态核
+> +保留台面 lift）+ `081fe908` 蓝框贴脚下线 revert-fix；worktree 与分支已删；
+> 三轮创始人裁决迭代（悬空修复→视觉身高 156→选中框全身包裹）；待创始人
+> main 实机复验。实测对比图 `F:\VSCode\game-2\temp\bracket_probe\`（main
+> 修复前/修复后/放大）。
 
 ## 一、问题与根因
 
@@ -54,12 +58,10 @@ Range 矩形）都不做 HD-2D 投影压缩，而角色 billboard 视觉位置�
 起真实 GameRoot→选中玩家+悬停→截屏 `temp/probe_brackets.png`，渲染最终验证）。
 对比截图归档 `F:\VSCode\game-2\temp\bracket_probe\`（main 构建 vs 修复分支）。
 
-**合并前置（阻塞项）**：main 工作区建筑管线v3 会话的在途未提交改动
-（hd2d_street_map.gd/map_base.gd 等）与本项目改同文件，git merge 会被拒。
-需该批次先落库（内容=创始人 2026-09-15 返修批：台面 lift remap/行走带/
-F3 口径，连贯完整；其中 debug_drawers 蓝框"物理碰撞位"画法与最新裁决
-"蓝框贴脚下线"冲突，合并后需一笔 revert-fix），或创始人授权本项目会话
-代提交。
+**合并前置（已解除）**：建筑管线v3 会话已于 2026-09-16 00:42 将在途批次全部
+落库（`969052eb` 台面 lift remap/行走带/`1e7ec7be` 街景契约等），merge 遂可执行。
+其中 debug_drawers 蓝框"物理碰撞位"画法与创始人 09-16 裁决冲突，已按计划
+补 revert-fix `081fe908`（蓝框贴脚下线）。
 
 **分类核验为无需改动**：fx_library、resource_node（已走 remap 协议）；
 debug_drawers F3 口径（创始人已裁决的数据口径，坐标换算已走 remap）；

@@ -60,8 +60,10 @@ const CAM_DIST := 40.0
 
 ## 道具（bake_props.py 从 props.py 库烘的卡，26° 与建筑卡同视角）。
 ## 摆位（2026-09-14 手工摆=村A主场景语义翻译，随建筑落位走绝对坐标）：
-## `x` = 街格坐标；`z` = 纵深（台面楼脚前带 ≈4.2~5.8 / 路面 ≈5.5~6.5）；
+## `x` = 街格坐标；`z` = 纵深（台面带 ≈1.2~1.8 / 路面 ≈4.5~7.0）；
 ## `plat=true` → 台面（y+PLAT_H）；false → 路面（y=0）。
+## 台面已收窄为建筑脚下细带（BAND_SIDEWALK z 0.42~1.95）——z≥2 的 plat
+## 一律按路面落（旧宽台面口径的 plat 坐标会悬空 0.65 格）。
 const PROPS: Array = [
 	# 铁匠铺（smithy@-7.5）门前工位
 	{"card": "anvil", "x": -9.5, "z": 4.5, "plat": true},
@@ -707,12 +709,15 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	mi.mesh = q
 	# 卡底贴地落位（创始人 2026-09-14 修穿模）：道具卡的 anchor 是"画面中心对应点"，
 	# 沿用建筑卡公式会让卡底按半高入地。地面高 = 台面(0.65) 或 路面(0)。
+	# 台面只认台面带（z<2.0）：旧宽台面口径的 plat 坐标在此强制回路面。
+	if z_off >= 2.0:
+		plat = false
 	var ground: float = PLAT_H if plat else 0.0
 	var half: float = float(units[1]) * S * 0.5
 	var t := deg_to_rad(TILT_DEG)
 	# 卡底留白下沉（创始人 2026-09-15：浮空摆件）——alpha 扫描卡底透明行，
 	# 卡内容实际落到地面（留白比例每卡只扫一次，缓存）
-	mi.position = Vector3(x, ground + cos(t) * half - _prop_bottom_pad(card) * S,
+	mi.position = Vector3(x, ground + cos(t) * half - _card_bottom_pad(card, _props, PROP_DIR),
 			z_off - sin(t) * half)
 	mi.basis = _cam_basis()
 	var m := ShaderMaterial.new()
@@ -744,15 +749,19 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	return mi
 
 
-## 道具卡底部透明留白（世界格）——卡底贴地公式只把卡底边放地面，卡内容
-## 底部若留白就浮空；按留白行数下沉。缓存避免重复扫图。
-var _prop_pad_cache: Dictionary = {}
-func _prop_bottom_pad(card: String) -> float:
-	if _prop_pad_cache.has(card):
-		return float(_prop_pad_cache[card])
+## 卡底部透明留白（世界格）——卡底贴地公式只把卡底边放地面，卡内容
+## 底部若留白就浮空；按留白行数下沉。PNG px → 格用卡元数据密度换算：
+## 烘卡 px 是建模 px 的 2 倍（如 market_stall px=566 对 units=283），
+## 旧公式 rows/32 再乘 S 双重偏差（偏小 16 倍），浮空修复实际未生效。
+## 道具/自然物卡通用（传入各自的元数据表与贴图目录）。缓存避免重复扫图。
+var _pad_cache: Dictionary = {}
+func _card_bottom_pad(card: String, cards: Dictionary, dir: String) -> float:
+	var key := dir + card
+	if _pad_cache.has(key):
+		return float(_pad_cache[key])
 	var pad := 0.0
-	for base_path: String in [_temp + PROP_DIR + card + ".png",
-			"res://tests/dev/proto_hd2d/tex/proto_hd2d/props/" + card + ".png"]:
+	for base_path: String in [_temp + dir + card + ".png",
+			"res://tests/dev/proto_hd2d/tex/" + dir + card + ".png"]:
 		if not FileAccess.file_exists(base_path):
 			continue
 		var img := Image.new()
@@ -773,16 +782,22 @@ func _prop_bottom_pad(card: String) -> float:
 			if any:
 				break
 			rows += 1
-		pad = float(rows) / 32.0
+		var meta: Dictionary = cards.get(card, {})
+		var units_a: Array = meta.get("units", [])
+		var px_a: Array = meta.get("px", [])
+		if not units_a.is_empty() and not px_a.is_empty() and float(px_a[0]) > 1.0:
+			pad = float(rows) * float(units_a[0]) / (32.0 * float(px_a[0]))
+		else:
+			pad = float(rows) / 64.0   # 元数据缺失兜底：现烘卡 2px/建模px
 		break
-	_prop_pad_cache[card] = pad
+	_pad_cache[key] = pad
 	return pad
 
 
 ## 建筑卡底部透明留白占比 = base_cut（卡底贴地的落位修正量）。
 ## 台基已退役（烘端 PLINTH_ENABLED=False），但烘卡四周仍有 PAD 透明留白——
 ## 不裁不沉，卡底贴地贴的就是留白的底，墙脚悬空 ~0.3 格（创始人指认"浮空"）。
-## 口径同 _prop_bottom_pad：alpha 自底向上扫第一行内容（墙脚/台阶，接触阴影
+## 口径同 _card_bottom_pad：alpha 自底向上扫第一行内容（墙脚/台阶，接触阴影
 ## 已在烘端剥除，扫不到残影），占比既作 shader 裁剪也作落位下沉量。
 ## 下沉后墙脚回到 (ground, z_off)——与台基时代同一条基线，接地影 blob 不用动。
 var _card_pad_cache: Dictionary = {}
@@ -872,7 +887,10 @@ func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
 	mi.mesh = q
 	var half: float = float(units[1]) * S * 0.5
 	var t := deg_to_rad(TILT_DEG)
-	mi.position = Vector3(x, cos(t) * half, z_off - sin(t) * half)
+	# 卡底留白下沉（与道具卡同公式）：自然物卡底部同样有透明留白行，
+	# 不下沉则树/石全体悬空一线
+	mi.position = Vector3(x, cos(t) * half - _card_bottom_pad(card, _nature, NATURE_DIR),
+			z_off - sin(t) * half)
 	mi.basis = _cam_basis()
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER

@@ -148,19 +148,29 @@ const GATE_DEF := "gatehouse_w8"
 const DOOR_DEFS := ["guildhall", "gatehouse", "shop", "tavern", "smithy1", "council_hall"]
 const GROUND_DEFS := ["barn", "cottage"]
 
-## 街具节奏（port 自 props.py dress_street 的 founder 定稿参数）：
-## 灯距 8~12 格两侧错位；组距 10~16（长椅必配花）；喷泉留广场位；
-## 公告板贴行政建筑；里程碑/路标守街口。档位街具数 = 表内 furniture。
+## 街具节奏（port 自 props.py dress_street + probe_props5 验收机位）：
+## 灯距 8~12 格两侧错位（石/铁灯柱逐盏轮换）；组槽每侧 furniture_n 个均分
+## 街宽（八档实测组距落 11~17 格，合组距 10~16 契约），组内件按卡宽肩并肩、
+## 配方洗牌袋轮转不连号复读；远侧街具踩台面贴建筑基线、近侧铺前场路面
+## （probe_props5 验收机位同口径）；里程碑/路标守街口（不进组轮转）；
+## 喷泉留市场广场位。台面已收窄为建筑脚下细带（z 0.42~1.95，proto
+## BAND_SIDEWALK）：z≥2 的道具一律落路面——plat 出台面带 = 悬空 0.65 格。
 const FURNITURE_LAMP_EVERY := Vector2(8.0, 12.0)
-const FURNITURE_GROUP_EVERY := Vector2(10.0, 16.0)
 const FURNITURE_LAMPS := ["lamp_post_stone", "lamp_post_iron", "lantern"]
 const FURNITURE_GROUPS := [
 	["bench_wood", "planter_ring"], ["bench_stone", "barrel_planter"],
-	["horse_trough"], ["signpost"], ["milestone"], ["water_tap"],
+	["horse_trough"], ["water_tap"], ["flower_bed_long"], ["table_outdoor"],
 ]
+## 街具纵深（格）：台面带内分三档错开（组 1.25 贴楼脚 / 功能件 1.55 /
+## 灯 1.85 压路缘），近侧路面两档（灯 6.8 / 组 7.2）——同带不同深，
+## x 相遇时呈前后遮挡而非同深叠影
+const FURNITURE_Z_PLAT := 1.55
+const FURNITURE_Z_NEAR := 6.9
 
 
-## 道具卡名集合（props.json；街具节奏里的未烘卡由调用侧过滤）
+## 道具卡宽表（格 = props.json units[0]/32；兼当"已烘卡名集合"用——
+## has()/is_empty() 语义与卡名集合一致，值=卡画面宽供组内肩并肩排布）。
+## 街具节奏里的未烘卡由调用侧过滤。
 static func prop_names() -> Dictionary:
 	var out: Dictionary = {}
 	for base_path: String in ["res://temp/proto_hd2d/props.json",
@@ -173,7 +183,7 @@ static func prop_names() -> Dictionary:
 		var v: Variant = JSON.parse_string(f.get_as_text())
 		if v is Array:
 			for c: Variant in v:
-				out[str(c["card"])] = true
+				out[str(c["card"])] = float(c["units"][0]) / 32.0
 			break
 	return out
 
@@ -215,8 +225,10 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	rng.seed = seed_v
 
 	# ── 1. 分区 → 侧位（随机序 + 轻量配平，非镜像）────────────────────
+	# 洗牌必须走 rng（种子驱动）——Array.shuffle() 用全局随机源，会让
+	# 同种子每次进城街区侧位重排，"确定性种子→多局尽量一致"契约即破。
 	var zones: Array = ["market", "craft", "living", "production", "storage"]
-	zones.shuffle()
+	_shuffle_rng(zones, rng)
 	var sides: Dictionary = {}
 	var load := {-1: 0.0, 1: 0.0}
 	for z: String in zones:
@@ -242,7 +254,7 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 				defs.append(d)
 		if defs.is_empty():
 			defs.append("house_w8")   # 池全未烘兜底（民居通用填充件）
-		defs.shuffle()
+		_shuffle_rng(defs, rng)
 		queues[z] = defs
 
 	# ── 3. 两侧序列拼接 + 浮动建筑随机插位（未烘过滤）─────────────────
@@ -388,41 +400,83 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 		return float(zone_anchor.get(z, 0.0))
 	var add_prop := func(card: String, zx: float, py: float, plat: bool = false) -> void:
 		props.append({"card": card, "x": snappedf(zx, 0.1), "z": py, "plat": plat})
-	# 功能件
+	# 功能件：工坊件/台基件踩台面（贴建筑门脸），市集/生产件铺路面（开敞读法）
 	if pools.has("craft"):
-		add_prop.call("anvil", float(zone_x.call("craft")) - 1.1, 4.5, true)
-		add_prop.call("grindstone", float(zone_x.call("craft")) + 1.6, 4.3, true)
+		add_prop.call("anvil", float(zone_x.call("craft")) - 1.1, FURNITURE_Z_PLAT, true)
+		add_prop.call("grindstone", float(zone_x.call("craft")) + 1.6, FURNITURE_Z_PLAT - 0.2, true)
 	if pools.has("market"):
 		add_prop.call("well", float(zone_x.call("market")) - 2.5, 5.2)
 		add_prop.call("market_stall", float(zone_x.call("market")) + 1.5, 4.6)
 		add_prop.call("market_table", float(zone_x.call("market")) + 4.2, 5.6)
-		add_prop.call("produce_baskets", float(zone_x.call("market")) + 6.5, 4.6)
-	add_prop.call("banner", float(zone_x.call("core")) - 2.0, 4.5, true)
-	# 街具节奏：灯两侧错位（周期 8~12 格内确定性抽取）+ 组槽（10~16 格，
-	# 长椅必配花）+ 广场喷泉（市场锚点）+ 街口路标/里程碑
-	var furniture_n: int = int(prof["furniture"])
+		add_prop.call("produce_baskets", float(zone_x.call("market")) + 8.6, 4.6)
+	add_prop.call("banner", float(zone_x.call("core")) - 2.0, FURNITURE_Z_PLAT + 0.2, true)
+	# 杂物堆随分区（清单与落位 port 自 gen_initial_city.py 道具步：仓储带
+	# 箱桶麻袋、生产带草垛柴堆——锚点区无前排建筑时不落）。
+	# 箱桶贴仓库台面，麻袋/草垛/柴堆/食槽铺路面
+	if zone_anchor.has("storage"):
+		add_prop.call("crate", float(zone_x.call("storage")) - 1.5, FURNITURE_Z_PLAT - 0.1, true)
+		add_prop.call("barrel", float(zone_x.call("storage")) + 1.2, FURNITURE_Z_PLAT - 0.2, true)
+		add_prop.call("sack_stack", float(zone_x.call("storage")) + 3.6, 5.8)
+	if zone_anchor.has("production"):
+		add_prop.call("haystack", float(zone_x.call("production")) - 2.0, 5.6)
+		add_prop.call("log_pile", float(zone_x.call("production")) + 2.4, 6.0)
+		add_prop.call("trough", float(zone_x.call("production")) + 5.0, 5.0)
+	# 街具节奏①路灯：灯两侧错位（周期 8~12 格内确定性抽取）+ 灯柱卡查道具
+	# 卡库（prop_set）而非建筑卡宽表：两款灯柱逐盏轮换（dress_street 定稿
+	# 语义），卡全缺时才回退灯笼。远侧踩台面、近侧铺路面。
 	var period: float = rng.randf_range(FURNITURE_LAMP_EVERY.x, FURNITURE_LAMP_EVERY.y)
-	var lamp_card: String = FURNITURE_LAMPS[0] if widths.has(FURNITURE_LAMPS[0]) else "lantern"
+	var lamp_cards: PackedStringArray = []
+	for d: String in FURNITURE_LAMPS:
+		if d != "lantern" and (prop_set.is_empty() or prop_set.has(d)):
+			lamp_cards.append(d)
+	if lamp_cards.is_empty():
+		lamp_cards.append("lantern")
 	var xx := -width_cells * 0.5 + 6.0
 	var side := 1
+	var li := 0
 	while xx < width_cells * 0.5 - 6.0:
-		add_prop.call(lamp_card, xx, 4.6 if side > 0 else 6.2, side > 0)
+		add_prop.call(lamp_cards[li % lamp_cards.size()], xx,
+				(FURNITURE_Z_PLAT + 0.3) if side > 0 else (FURNITURE_Z_NEAR - 0.1),
+				side > 0)
+		li += 1
 		xx += period
 		side = -side
-	var gx := -width_cells * 0.5 + 10.0
-	var gi := 0
-	while gx < width_cells * 0.5 - 10.0:
-		var grp: Array = FURNITURE_GROUPS[gi % FURNITURE_GROUPS.size()]
-		for d: String in grp:
-			if prop_set.is_empty() or prop_set.has(d):
-				add_prop.call(d, gx + rng.randf_range(-1.0, 1.0),
-						5.0 if d.begins_with("bench") else 4.8, d.begins_with("bench"))
-		gx += rng.randf_range(FURNITURE_GROUP_EVERY.x, FURNITURE_GROUP_EVERY.y)
-		gi += 1
+	# 街具节奏②家具组：每侧 furniture_n 个槽位均分街宽（组距随档位落
+	# 11~17 格），组内件按卡宽肩并肩（卡宽 = prop_names 值，缺失兜底 1.5 格）；
+	# 远侧踩台面、近侧铺路面；配方洗牌袋轮转，同配方不连号复读。
+	# 路标/里程碑不进组——只守街口（旧版进组轮转 = 半条街一个路标在复读）。
+	var furniture_n: int = int(prof["furniture"])
+	var g_lo := -width_cells * 0.5 + 10.0
+	var g_hi := width_cells * 0.5 - 10.0
+	if furniture_n > 0 and g_hi - g_lo >= 6.0:
+		for g_side: int in [1, -1]:
+			var gz: float = (FURNITURE_Z_PLAT - 0.3) if g_side > 0 else (FURNITURE_Z_NEAR + 0.3)
+			var gplat: bool = g_side > 0
+			var bag: Array = FURNITURE_GROUPS.duplicate()
+			var step: float = (g_hi - g_lo) / float(furniture_n)
+			for gi in furniture_n:
+				if bag.is_empty():
+					bag = FURNITURE_GROUPS.duplicate()
+				var grp: Array = bag.pop_at(rng.randi_range(0, bag.size() - 1))
+				var items: Array = []
+				var span := 0.0
+				for d: String in grp:
+					if prop_set.is_empty() or prop_set.has(d):
+						items.append(d)
+						span += float(prop_set.get(d, 1.5)) + 0.5
+				if items.is_empty():
+					continue
+				span -= 0.5   # 末件不留尾缝
+				var gx: float = g_lo + (float(gi) + 0.5) * step + rng.randf_range(-1.5, 1.5)
+				var cx: float = gx - span * 0.5
+				for d: String in items:
+					var w2: float = float(prop_set.get(d, 1.5))
+					add_prop.call(d, cx + w2 * 0.5, gz, gplat)
+					cx += w2 + 0.5
 	if pools.has("market"):
 		add_prop.call("fountain_small", float(zone_x.call("market")) + 9.0, 5.4)
-	add_prop.call("signpost", -width_cells * 0.5 + 3.0, 5.0)
-	add_prop.call("milestone", width_cells * 0.5 - 3.0, 5.0)
+	add_prop.call("signpost", -width_cells * 0.5 + 3.0, FURNITURE_Z_PLAT, true)
+	add_prop.call("milestone", width_cells * 0.5 - 3.0, FURNITURE_Z_PLAT, true)
 
 	# ── 7. 组装（row0=前排，row1/2=背景两层）+ 产物级重叠修复 ─────────
 	var buildings: Array = []
@@ -443,6 +497,16 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 		"buildings": buildings, "props": props, "trees": []}
 	_repair_rows(plan)
 	return plan
+
+
+## 种子驱动洗牌（Fisher-Yates）：替代 Array.shuffle()——后者用全局随机源，
+## 不吃 rng.seed，会破坏生成器的确定性契约
+static func _shuffle_rng(arr: Array, rng: RandomNumberGenerator) -> void:
+	for i in range(arr.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp: Variant = arr[i]
+		arr[i] = arr[j]
+		arr[j] = tmp
 
 
 ## 产物级修复：同排逐栋推挤，画面间隙保底（重叠不可能出现在产物里）；

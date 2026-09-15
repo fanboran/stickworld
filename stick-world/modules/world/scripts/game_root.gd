@@ -46,7 +46,8 @@ const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/ro
 ## 测试大建筑内部地图场景（阶段 0.9.5 传送切换）
 const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/mega_interior.tscn")
 ## 遭遇战战场地图场景（已退役为 dev 验证图，出征与领地架构 §4.3：进图不自动开战）
-const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
+const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_battlefield.tscn")
+const _BATTLEFIELD_2D_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
 ## 守城战战场地图场景（右端城墙+波次敌军，接在遭遇战之后）
 const _SIEGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/siege_battlefield.tscn")
 ## 森林附属区域场景（阶段 F）
@@ -75,8 +76,11 @@ const ROAD_MAP_ID := "road_a_b"
 const VILLAGE_B_MAP_ID := "village_b"
 ## 测试大建筑内部地图 ID
 const MEGA_INTERIOR_MAP_ID := "mega_interior"
-## 遭遇战战场地图 ID（dev 验证图；注册与步行出口保留供 dev 直达）
+## 战场地图 ID（HD-2D 城郊战场，主街东门旅行链可达）
 const BATTLEFIELD_MAP_ID := "battlefield"
+## 旧 2D 战场保留为 dev 空旷演练场：战斗/AI 测试与 dev 探针的开机图
+## （测试需要 2D 空旷初始图 + 秒级开机；不进任何旅行链）
+const BATTLEFIELD_2D_MAP_ID := "battlefield_2d"
 ## 守城战战场地图 ID（右端城墙+波次敌军）
 const SIEGE_MAP_ID := "siege_battlefield"
 ## 森林附属区域地图 ID（阶段 F）
@@ -582,8 +586,11 @@ func _register_default_maps() -> void:
 	scene_loader.register_map(ROAD_MAP_ID, _ROAD_MAP_SCENE, WorldAPI.MapType.ROAD)
 	scene_loader.register_map(VILLAGE_B_MAP_ID, _VILLAGE_MAP_B_SCENE, WorldAPI.MapType.VILLAGE)
 	scene_loader.register_map(MEGA_INTERIOR_MAP_ID, _MEGA_INTERIOR_SCENE, WorldAPI.MapType.MEGA_INTERIOR)
-	# 阶段 F：注册遭遇战战场地图
+	# 阶段 F：注册遭遇战战场地图（2026-09-14 HD-2D 重建：主街东门外城郊战场，
+	# 旧 battlefield.tscn 退役 dev 验证图）
 	scene_loader.register_map(BATTLEFIELD_MAP_ID, _BATTLEFIELD_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
+	# 旧 2D 战场 = dev 空旷演练场（战斗/AI 测试开机图，不进旅行链）
+	scene_loader.register_map(BATTLEFIELD_2D_MAP_ID, _BATTLEFIELD_2D_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 守城战战场地图（遭遇战右出即达；城防布景+波次敌军由 SiegeDirector 组织）
 	scene_loader.register_map(SIEGE_MAP_ID, _SIEGE_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 阶段 F：注册森林附属区域
@@ -602,8 +609,9 @@ func _register_default_maps() -> void:
 	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT, VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT, ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	# 阶段 F：健全地图系统（任何地图可步行回村，链式衔接：村↔战场↔森林）
+	# （主街↔战场双缘衔接走两图场景内 ChunkTrigger 硬目标——street 的西出
+	# 实际挂 road_a_b，此处不配 street 左出战场，防与场景触发器语义打架）
 	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	# 守城图（独立区域）左出回主街：仅作为 travel 目标登记；平时进出走村口选项
 	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	# 恢复原链：遭遇战场右出通森林（守城图独立后不再串链）
@@ -880,8 +888,8 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 				_minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 		# 跨图携带：spawn 随行编队成员并重建编队（带队出征）
 		_spawn_travel_followers(map, player, spawn_y)
-		# 战场图（battlefield）已退役为 dev 验证图（出征与领地架构 §4.3）：进图不再
-		# 自动刷敌开战；dev 验证走 tests/dev/verify_battle.gd 直达调
+		# 战场图（battlefield，HD-2D 城郊战场）：进图不再自动刷敌开战（出征与
+		# 领地架构 §4.3）；dev 验证走 tests/dev/verify_battle.gd 直达调
 		# InitialContent.spawn_battlefield_enemies 组织遭遇战。
 		# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if input_dispatcher and input_dispatcher.has_method("set_mode"):

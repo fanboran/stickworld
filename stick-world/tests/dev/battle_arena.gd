@@ -151,7 +151,7 @@ func _spawn_and_start() -> void:
 	# 切到空旷战场地图（village 是玩家村，建筑/资源点干扰观察）
 	var loader: Node = _game_root.get("scene_loader")
 	if loader != null and loader.has_method("load_map"):
-		loader.load_map("battlefield")
+		loader.load_map("battlefield_2d")
 		# 等新图装配（旧图延迟销毁，get_current_map 稳定到 battlefield 再继续）
 		for i in 20:
 			await get_tree().process_frame

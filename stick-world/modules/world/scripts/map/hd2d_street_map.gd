@@ -66,6 +66,14 @@ const TERRAIN_DIRT_ROAD := 1
 ## 算法宿主图层（generate_resource_nodes 的入口守卫与节点父级）
 var decoration_layer: Node2D = null
 ## 采集储量中值已随算法内置（resource_gen 按类型区间掷储量），不再手填
+## 资源点密度基线（每格期望数，resource_gen 语义）：主街墙外带 0.65；
+## 子类可调（战场图调稀——野地要开阔可列阵）
+var resource_density := 0.65
+## 林区梯度档（resource_gen 语义）：主街墙外带 28 格，净空 12+渐密 20——
+## 创始人 2026-09-15：紧挨城门外是树林不对，传送出去先见开阔野地，走一段
+## 才进林线（战场图子类按图幅覆写：净空 6+渐密 30——东缘才渐入林线）
+var forest_clear_cells := 12
+var forest_ramp_cells := 20
 
 
 func _ready() -> void:
@@ -83,6 +91,7 @@ func _ready() -> void:
 	_hd.name = "HD2DWorld"
 	if not layout_name.is_empty():
 		_hd.set("layout_name", layout_name)
+	_configure_hd(_hd)
 	add_child(_hd)
 	_apply_layout_bounds()
 	# 角色（玩家/NPC）渲染进 3D 场景：逻辑仍在 2D（物理/输入/AI 不动），
@@ -156,7 +165,12 @@ func _sync_character_render() -> void:
 					lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
 							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)))
 		if ch.has_method("set_anim"):
-			ch.set_anim("walk" if moving else "idle")
+			# 动画镜像读实体真实状态（走两步加速切 run 由实体逻辑驱动）——
+			# 此前只发 walk/idle 二值，billboard 角色永远不跑（创始人 2026-09-15）
+			var anim: String = str(body.get("_current_anim"))
+			if anim.is_empty() or anim.begins_with("attack"):
+				anim = "walk" if moving else "idle"
+			ch.set_anim(anim)
 		# 武器/工具镜像：2D 骨架已隐藏，武器须挂进 billboard 内部骨架
 		# （职业识别走武器——工具不渲染 = 村民"没有职业"的观感）
 		var mount: Variant = body.get("weapon_mount")
@@ -199,6 +213,11 @@ func get_spawn_point() -> Vector2:
 	return Vector2(0.0, 1010.0)
 
 
+## HD 场景模式注入钩子（add_child 前调，子类覆写开模式；如战场图开 battlefield）
+func _configure_hd(_hd: Node3D) -> void:
+	pass
+
+
 ## 布局驱动模式：按布局街宽收地图边界（±半宽 + 8 格余量），覆盖 tscn 默认值。
 func _apply_layout_bounds() -> void:
 	if layout_name.is_empty() or _hd == null or not _hd.has_method("get_layout_width"):
@@ -228,7 +247,7 @@ func wants_villager_npcs() -> bool:
 ## 森林带劳作，采集引导走 gate_steer_point），7~9 = 街市/东段（待业闲逛）。
 func get_npc_spawn_points() -> Array:
 	var pts: Array = [
-		Vector2(-16.6 * CELL_PX, 1010.0),  # 铁砧旁（前方路面，避铁砧碰撞带）
+		Vector2(-8.5 * CELL_PX, 1010.0),  # 铁砧旁（前方路面，避铁砧碰撞带）
 		Vector2(-55.0 * CELL_PX, 1010.0),  # 西城门内侧（出城砍树/采矿）
 		Vector2(-52.0 * CELL_PX, 1040.0),
 		Vector2(-48.5 * CELL_PX, 1020.0),
@@ -338,13 +357,13 @@ func _spawn_resource_nodes() -> void:
 	add_child(gen)
 	# 墙外带只有 28 格，算法默认净空 30 格会把整带清空——压缩梯度档：
 	# 近墙 3 格净空 → 12 格渐密 → 满密度（渐变读法保留，城门口即有活干）
-	gen.set("FOREST_CLEAR_CELLS", 3)
-	gen.set("FOREST_RAMP_CELLS", 12)
+	gen.set("FOREST_CLEAR_CELLS", forest_clear_cells)
+	gen.set("FOREST_RAMP_CELLS", forest_ramp_cells)
 	if gen.has_method("setup"):
 		gen.setup(self)
 	var a: int = int(map_left / CELL_PX) + 2
 	var b: int = int(map_right / CELL_PX) - 2
-	var nodes: Array = gen.call("generate_resource_nodes", a, b, 0.65)
+	var nodes: Array = gen.call("generate_resource_nodes", a, b, resource_density)
 	# 类型 → 自然物卡池（多株轮转防同卡连排）
 	var card_pools := {
 		ResourceNode.ResourceType.WOOD: ["broadleaf", "conifer", "broadleaf_tall"],
@@ -364,7 +383,8 @@ func _spawn_resource_nodes() -> void:
 
 
 func get_terrain_type_at_cell(cx: int) -> int:
-	return TERRAIN_DIRT_ROAD if absi(cx) <= 67 else 0
+	var wall_x: float = _hd.get_wall_x() if _hd != null and _hd.has_method("get_wall_x") else 95.0
+	return TERRAIN_DIRT_ROAD if absi(cx) <= int(wall_x) else 0
 
 
 ## 城门传送带（创始人 2026-09-14：到门口就传送，门外也得传送过去）。
@@ -423,19 +443,13 @@ func _on_gate_strip_entered(body: Node2D, wx: float, y0: float, y1: float) -> vo
 	body.global_position = Vector2(land_x, land_y)
 
 
-## 东西村口出口触发器（语义对齐村A旅行链：东出上路去 B 村方向、西出原野）。
+## 东西村口出口触发器（语义对齐村A旅行链：西出原野去 B 村方向、东出战场）。
 ## 触发区压在地图边界内侧一条（玩家走到村口即切图）。
 func _build_exit_triggers() -> void:
 	var triggers_host := Node2D.new()
 	triggers_host.name = "ChunkTriggers"
 	add_child(triggers_host)
-	var specs := [
-		{"name": "ExitLeft", "x": map_left + 48.0, "target": "road_a_b",
-		 "entry": WorldAPI.EntrySide.LEFT},
-		{"name": "ExitRight", "x": map_right - 48.0, "target": "battlefield",
-		 "entry": WorldAPI.EntrySide.RIGHT},
-	]
-	for spec: Dictionary in specs:
+	for spec: Dictionary in _exit_specs():
 		var trig := ChunkTrigger.new()
 		trig.name = str(spec["name"])
 		trig.target_map_id = str(spec["target"])
@@ -448,6 +462,18 @@ func _build_exit_triggers() -> void:
 		shape.position = Vector2(float(spec["x"]), (WALK_BACK_Y + WALK_FRONT_Y) * 0.5)
 		trig.add_child(shape)
 		triggers_host.add_child(trig)
+
+
+## 出口表（子类按旅行链覆写，如战场图左出回主街/右出去森林）。
+## 东出进战场从其 LEFT 缘落（与步行方向一致——原 RIGHT 会把人扔到战场
+## 最东端，背对全部内容）。
+func _exit_specs() -> Array:
+	return [
+		{"name": "ExitLeft", "x": map_left + 48.0, "target": "road_a_b",
+		 "entry": WorldAPI.EntrySide.LEFT},
+		{"name": "ExitRight", "x": map_right - 48.0, "target": "battlefield",
+		 "entry": WorldAPI.EntrySide.LEFT},
+	]
 
 
 ## 昼夜挂钩：WorldState.game_time 单位即**小时（0~24，EnvironmentSystem 写入）**

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bqploo062p5ra"
-path="res://.godot/imported/proto25d_night.png-1cfa6a8792330ec3efc664f471a7291f.ctex"
+path="res://.godot/imported/proto25d_night.png-66d66ddf4b59d1d3b06ad986ef526272.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/技术/架构/图/2.5d-proto/proto25d_night.png"
-dest_files=["res://.godot/imported/proto25d_night.png-1cfa6a8792330ec3efc664f471a7291f.ctex"]
+source_file="res://docs/技术/架构/建筑管线/图/2.5d-proto/proto25d_night.png"
+dest_files=["res://.godot/imported/proto25d_night.png-66d66ddf4b59d1d3b06ad986ef526272.ctex"]
 
 [params]
 

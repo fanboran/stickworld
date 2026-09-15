@@ -190,12 +190,18 @@ func _sync_character_render() -> void:
 					lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
 							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)))
 		if ch.has_method("set_anim"):
-			# 动画镜像读实体真实状态（走两步加速切 run 由实体逻辑驱动）——
-			# 此前只发 walk/idle 二值，billboard 角色永远不跑（创始人 2026-09-15）
+			# 动画镜像读实体真实状态：walk/run/idle + 劳作 attack 全放行。
+			# attack 是 oneshot——播完实体侧自动回切 idle/walk，逐拍重触发由
+			# set_anim 的变更检测天然完成（此前 attack 被强制降级 walk/idle，
+			# 挥镐/挥锤在街上不可见 = 干活与罚站无法区分，创始人 2026-09-15）
 			var anim: String = str(body.get("_current_anim"))
-			if anim.is_empty() or anim.begins_with("attack"):
+			if anim.is_empty():
 				anim = "walk" if moving else "idle"
 			ch.set_anim(anim)
+		# 劳作进度镜像：2D 进度条挂 RigHost 已随街景隐藏，billboard 用自带
+		# 3D 头顶条（-1 = 隐藏）。采集/派工/搬运同源（set_action_progress 通道）
+		if ch.has_method("set_work_progress") and body.has_method("get_action_progress"):
+			ch.set_work_progress(float(body.get_action_progress()))
 		# 武器/工具镜像：2D 骨架已隐藏，武器须挂进 billboard 内部骨架
 		# （职业识别走武器——工具不渲染 = 村民"没有职业"的观感）
 		var mount: Variant = body.get("weapon_mount")

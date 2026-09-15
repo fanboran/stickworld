@@ -1005,6 +1005,12 @@ func hide_action_progress() -> void:
 	_visual.hide_progress()
 
 
+## 当前动作进度观测口（0~1；-1 = 无进行中动作）。HD-2D billboard 镜像逐帧
+## 读取（街上 2D 进度条随 RigHost 隐藏，劳作可视化走 billboard 自带 3D 条）。
+func get_action_progress() -> float:
+	return _visual.get_progress_value() if _visual != null else -1.0
+
+
 ## 获取当前动画名
 func get_current_anim() -> String:
 	return _current_anim

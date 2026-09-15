@@ -82,6 +82,8 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - 落脚点：地图 `get_npc_spawn_points()` 按语义预排（铁砧旁/森林带资源点旁/街市）；没有则退回 2D 村图的两簇硬编码。
 - **露天工位** duck：TownLife 找不到建筑工位时，向上找地图 `get_open_work_sites()`——铁匠铺卡前的露天铁砧就是铁匠工位（`work_site_def="smithy_lv1"`）。回退链：建筑 WorkSlots > 露天工位 > 占位表。
 - 伐木/矿工直接用场上的 2D ResourceNode（13 个采集点由自然物摆位表驱动生成，2D 笔触视觉隐藏、PBR 卡负责观感）。
+- **劳作可见（billboard 通道，2026-09-15）**：镜像层动画**全放行**——attack 是 oneshot，播完实体侧自动回切 idle/walk，逐拍重触发靠 `set_anim` 变更检测天然完成；此前 attack 被强制降级 walk/idle，挥镐/挥锤在街上不可见，干活与罚站无法区分。头顶进度条走双通道：2D 条挂 **RigHost**（街上随 RigHost 整体隐藏，不再重复渲染），billboard 用自带 3D 条（`char_sprite_3d.set_work_progress`，bg+fill 双 quad 左锚定、随 depth 缩放）；数据源统一为 `entity.get_action_progress()`（VisualController 进度值缓存，采集/派工/搬运同源）。
+- **读档劳作恢复（2026-09-15）**：职业 id 与 `is_villager` 随 entities.extra_data 落档（`SaveHandler._save_entities`），读档回填并经 `TownLifeAPI.apply_profession_appearance` 重挂装具（工具不入档，按 id 重应用）——此前存档从不带这两字段，读档村民是"无职业、非村民"实体，AI 决策双拒（不采集也不闲逛），主街读档即全员罚站。老档（extra 无字段）安全回退保持默认；配置已删改的职业 id 回待业池。锁：`tests/unit/test_townlife_save_persistence.gd`。
 
 ## 三、跑法与资产再生产
 

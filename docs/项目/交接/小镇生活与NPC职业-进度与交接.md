@@ -102,6 +102,17 @@
 - **已知限制 / 移交**：village_a 正片无自然资源点（净空带覆盖全域）→ 正片里伐木/挖矿劳作不可见（村民寻位失败回 idle+wander），观感补全依赖 B 线城镇生成（资源布局）与 A 线铁匠铺（真工位）——配比逻辑已按"资源点存在性由城镇生成线保证"设计，B 线资源到位后零改动生效；待业村民 wander 半径 640 内可能走到城墙/仓库附近穿帮（建筑无碰撞排除，观感可接受）；wander 锚点只锚 X（村庄横向带），Y 仍由地面带约束。
 - **收线状态**：**四批全部完成**，本线无待办批次；待创始人观感验收（热闹小镇整体观感 + 配比数值定稿）后按流程收线（worktree remove + 合并 `agent/town-life`）。
 
+## 批次 5 落地物（2026-09-15 补丁批——读档持久化 + 主街劳作可见）
+
+> 触发：创始人报告"主街火柴人全都不在工作"。诊断：**读档路径职业全丢**（根因）+ **billboard 吞劳作动画**（次因观感）。worktree `.temp/townlife-save-fix`（分支 `agent/townlife-save-fix`）。
+
+- **根因**：`_save_entities` 的 extra_data 只存 faction_id/ai_timing——`profession`/`is_villager` 从不入档；读档路径（`_pending_save_load` → `_restore_from_save` → `_restore_entities`）跳过 spawn_npcs，恢复的村民是"无职业、非村民"实体 → `_try_harvest`（ai_controller 拒空职业）与 `_is_villager`（拒无标志）双拒 → 全员静止（连 wander 都没有）。**新游戏不受影响**（spawn_npcs 正常分配），故此前观感正常、读档即罚站。
+- **修复（存侧）**：`_save_entities` extra_data 增 `profession`（String）与 `is_villager`（bool，仅实体带该字段时写）。
+- **修复（取侧）**：`_restore_entities` 回填两字段；职业回填后经 `TownLifeAPI.apply_profession_appearance(entity, id)`（新增转发 → `ProfessionRegistry.apply_appearance`）重挂装具（工具不入档）；未知职业 id（配置删改）回待业池不挂空档案；老档（extra 无字段）安全回退保持默认——**存量档的村民职业无法凭空恢复，需开一次新游戏重刷**（boot 自动写档 slot 0 会立即带出新字段）。
+- **修复（观感，HD-2D 侧）**：见 `docs/技术/架构/建筑管线/HD-2D街景系统.md` §2.7——镜像 attack 放行 + billboard 3D 头顶进度条 + `entity.get_action_progress()` 观测口（2D 指示器挪挂 RigHost 防街上双重渲染）。
+- **测试**：`tests/unit/test_townlife_save_persistence.gd`（4 用例：在职村民往返+装具重挂/待业村民往返/老档回退/未知职业，真实 SQLite+真 SaveHandler+真体场景，`GameRoot.new()` 作 _root 桩不进树），进 batch_runner 清单。
+- **已知边界**：征用离岗（set_profession("")）与释放不回岗语义随档保真（存的就是空串）；工位占用/资源点枯竭态仍不入档（既有已知限制，不变）。
+
 ## 关键决策速查
 
 | 决策 | 结论 |

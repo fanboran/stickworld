@@ -1,8 +1,11 @@
 extends Control
 ## 鼠标悬停指示器 -- 4 角直角呼吸方框（游玩 UI，非调试）。
 ##
-## 鼠标悬停在 NPC/玩家上时显示 4 角方框，方框大小匹配 Range 节点范围。
-## 轻微向外呼吸放大（基准大小即最小范围，不向内收缩）。
+## 鼠标悬停在 NPC/玩家上时显示 4 角方框。方框 = 实体 Range 框经地图视觉域
+## 协议（MapBase.entity_hover_rect）映射出的矩形——**画与命中判定共用同一
+## 矩形（所见即所判）**：HD-2D 图下即 billboard 几何（视觉脚线锚定+深度缩放），
+## 2D 图恒等。鼠标屏幕点经 viewport canvas_transform 逆变换进视觉域，
+## 不手搓相机公式（协议铁律见 MapBase 视觉域坐标协议段）。
 ##
 ## 依赖由 SystemSetup 装配时 setup() 注入，不自行查找。
 
@@ -18,12 +21,10 @@ var _hovered_range: CollisionShape2D = null
 var _scan_acc: float = 0.0
 var _breath_time: float = 0.0
 
-var _camera_rig: Node = null
 var _game_root: Node = null
 
 
-func setup(camera_rig: Node, game_root: Node) -> void:
-	_camera_rig = camera_rig
+func setup(game_root: Node) -> void:
 	_game_root = game_root
 
 
@@ -58,32 +59,22 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	if _hovered_entity == null or not is_instance_valid(_hovered_entity):
+	var rect := _hovered_visual_rect()
+	if rect.size == Vector2.ZERO:
 		return
-	if _hovered_range == null or not is_instance_valid(_hovered_range):
-		return
-	var camera: Camera2D = _camera_rig as Camera2D
-	if camera == null:
-		return
-	var cam_pos: Vector2 = camera.global_position
-	var zoom: float = camera.zoom.x if camera.zoom != Vector2.ZERO else 1.0
-	var vp_size: Vector2 = get_viewport_rect().size
-	# 方框位置和大小基于 Range 节点
-	var range_pos: Vector2 = _hovered_range.global_position
-	var screen_pos: Vector2 = (range_pos - cam_pos) * zoom + vp_size * 0.5
-	var rs: RectangleShape2D = _hovered_range.shape as RectangleShape2D
-	if rs == null:
-		return
+	var xform: Transform2D = get_viewport().get_canvas_transform()
+	var screen_rect: Rect2 = xform * rect
 	# 呼吸只往外扩：将 sin 映射到 [0,1]，基准大小即最小范围
 	var breath: float = (sin(_breath_time * BREATH_SPEED) * 0.5 + 0.5) * BREATH_AMP
-	var hw: float = rs.size.x * 0.5 * zoom + breath
-	var hh: float = rs.size.y * 0.5 * zoom + breath
-	var cl: float = CORNER_LEN * zoom
+	var cl: float = CORNER_LEN * xform.get_scale().x
+	var c: Vector2 = screen_rect.get_center()
+	var hw: float = screen_rect.size.x * 0.5 + breath
+	var hh: float = screen_rect.size.y * 0.5 + breath
 	# 4 角直角方框
-	_draw_corner(screen_pos + Vector2(-hw, -hh), Vector2(cl, 0), Vector2(0, cl))
-	_draw_corner(screen_pos + Vector2(hw, -hh), Vector2(-cl, 0), Vector2(0, cl))
-	_draw_corner(screen_pos + Vector2(-hw, hh), Vector2(cl, 0), Vector2(0, -cl))
-	_draw_corner(screen_pos + Vector2(hw, hh), Vector2(-cl, 0), Vector2(0, -cl))
+	_draw_corner(c + Vector2(-hw, -hh), Vector2(cl, 0), Vector2(0, cl))
+	_draw_corner(c + Vector2(hw, -hh), Vector2(-cl, 0), Vector2(0, cl))
+	_draw_corner(c + Vector2(-hw, hh), Vector2(cl, 0), Vector2(0, -cl))
+	_draw_corner(c + Vector2(hw, hh), Vector2(-cl, 0), Vector2(0, -cl))
 
 
 func _draw_corner(origin: Vector2, h_dir: Vector2, v_dir: Vector2) -> void:
@@ -92,25 +83,17 @@ func _draw_corner(origin: Vector2, h_dir: Vector2, v_dir: Vector2) -> void:
 
 
 func _update_hovered() -> void:
-	var camera: Camera2D = _camera_rig as Camera2D
-	if camera == null:
-		_hovered_entity = null
-		_hovered_range = null
-		return
-	var zoom: float = camera.zoom.x if camera.zoom != Vector2.ZERO else 1.0
-	var vp_size: Vector2 = get_viewport_rect().size
-	var cam_pos: Vector2 = camera.global_position
-	var mouse_screen: Vector2 = get_viewport().get_mouse_position()
-	var mouse_world: Vector2 = (mouse_screen - vp_size * 0.5) / zoom + cam_pos
 	if _game_root == null or not _game_root.has_method("get_current_map"):
-		_hovered_entity = null
-		_hovered_range = null
+		_clear_hovered()
 		return
 	var map: Node2D = _game_root.get_current_map()
 	if map == null or not map.has_method("get_entities"):
-		_hovered_entity = null
-		_hovered_range = null
+		_clear_hovered()
 		return
+	# 鼠标屏幕点 → 视觉域：canvas_transform 逆变换（相机真值）。与
+	# entity_hover_rect 输出同域——方框画在哪，鼠标就判在哪
+	var mouse_visual: Vector2 = get_viewport().get_canvas_transform().affine_inverse() \
+			* get_viewport().get_mouse_position()
 	var closest: Node2D = null
 	var closest_range: CollisionShape2D = null
 	var closest_dist: float = 999999.0
@@ -122,13 +105,36 @@ func _update_hovered() -> void:
 		var rng: CollisionShape2D = e.get_node_or_null("Range") as CollisionShape2D
 		if rng == null or not (rng.shape is RectangleShape2D):
 			continue
-		var rs: RectangleShape2D = rng.shape as RectangleShape2D
-		var diff: Vector2 = mouse_world - rng.global_position
-		if absf(diff.x) <= rs.size.x * 0.5 and absf(diff.y) <= rs.size.y * 0.5:
-			var d: float = diff.length()
+		var rect: Rect2 = map.entity_hover_rect(
+				rng.global_position, (rng.shape as RectangleShape2D).size, e)
+		if rect.has_point(mouse_visual):
+			var d: float = mouse_visual.distance_to(rect.get_center())
 			if d < closest_dist:
 				closest_dist = d
 				closest = e
 				closest_range = rng
 	_hovered_entity = closest
 	_hovered_range = closest_range
+
+
+## 当前悬停目标的视觉域矩形（画与判定共用）：Range 框经地图视觉域协议映射。
+## 无有效目标/地图未就绪时返回零矩形（_draw 直接跳过）。
+func _hovered_visual_rect() -> Rect2:
+	if _hovered_entity == null or not is_instance_valid(_hovered_entity):
+		return Rect2()
+	if _hovered_range == null or not is_instance_valid(_hovered_range):
+		return Rect2()
+	if not (_hovered_range.shape is RectangleShape2D):
+		return Rect2()
+	if _game_root == null or not _game_root.has_method("get_current_map"):
+		return Rect2()
+	var map: Node2D = _game_root.get_current_map()
+	if map == null:
+		return Rect2()
+	return map.entity_hover_rect(_hovered_range.global_position,
+			(_hovered_range.shape as RectangleShape2D).size, _hovered_entity)
+
+
+func _clear_hovered() -> void:
+	_hovered_entity = null
+	_hovered_range = null

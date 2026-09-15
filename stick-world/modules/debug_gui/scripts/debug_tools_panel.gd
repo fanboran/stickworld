@@ -80,6 +80,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		var world_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
+		# canvas 逆变换落点是视觉域；FxPool.spawn_burst 内部会对地面锚再做
+		# remap——先逆回画布域防二次压缩（2D 图恒等零扰动）
+		var remapper: Node = get_tree().get_first_node_in_group("fx_pos_remapper")
+		if remapper != null and remapper.has_method("unmap_fx_pos"):
+			world_pos = remapper.unmap_fx_pos(world_pos)
 		_spawn_fx(world_pos)
 		get_viewport().set_input_as_handled()
 

@@ -20,8 +20,12 @@ extends Node
 ## 泰拉瑞亚夜晚无随身光源，地表靠剪影+星光辨识；P2 逐光源布点时再启用）
 @export var camp_light_enabled: bool = false
 
+## 新游戏开局时刻（清晨 8 点，昼夜档位=白天；GameRoot 新游戏分支经
+## reset_to_new_run_clock 播种，与 tscn 内 time_of_day=8.0 同源）
+const MORNING_HOUR := 8.0
+
 ## 当前时间（0.0 ~ 24.0）
-@export var time_of_day: float = 8.0:
+@export var time_of_day: float = MORNING_HOUR:
 	set(v):
 		time_of_day = fposmod(v, 24.0)
 
@@ -46,8 +50,30 @@ func _ready() -> void:
 			time_of_day = WorldState.game_time
 		else:
 			WorldState.game_time = time_of_day
+	# 读档不重载本场景（SaveHandler 原地换地图）：game_loaded 发射时 WorldState.game_time
+	# 已恢复为存档时刻，本地时钟须回读对齐——否则 _process 下一帧会用读档前的旧值
+	# 覆盖掉刚恢复的时间，读档永远回不到存档时刻
+	if EventBus and EventBus.has_signal("game_loaded"):
+		EventBus.game_loaded.connect(_on_game_loaded)
 	# 立即设置初始光照，避免首帧白屏
 	_update_lighting()
+
+
+## 读档时钟对齐。WorldState 在 autoload 阶段先连接 game_loaded（恢复 game_time），
+## 本节点场景加载时后连——信号按连接顺序派发，本回调进入时恢复已完成。
+## game_time==0 与 _ready 同约定视为"无时间信息"（旧档缺字段），维持当前时钟不跳 0 点。
+func _on_game_loaded(_slot_index: int) -> void:
+	if WorldState and WorldState.game_time > 0.0:
+		time_of_day = WorldState.game_time
+
+
+## 新开局时钟重置（GameRoot 新游戏分支调用）。本节点 _ready 只在场景加载时跑一次，
+## 同进程重开一局时 _ready 已把上一局残留时刻采纳进本地时钟，须显式重置回清晨；
+## 同时写回 WorldState，避免 GameRoot 归零值（0 点）在中间帧被地图读到判成黑夜。
+func reset_to_new_run_clock() -> void:
+	time_of_day = MORNING_HOUR
+	if WorldState:
+		WorldState.game_time = time_of_day
 
 
 func _process(delta: float) -> void:

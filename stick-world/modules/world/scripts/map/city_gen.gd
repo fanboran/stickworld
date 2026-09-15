@@ -307,6 +307,31 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	var shift: float = (left + right) * 0.5
 	for p: Dictionary in placements:
 		p["x"] = float(p["x"]) - shift
+	# 整格吸附（创始人 2026-09-15：建筑位置必须整格摆放——宽度本就是格
+	# 整数倍）：中心取整，同排整格步进推开（间隙承诺 ≥MIN_GAP 由整格步距
+	# ≥1 格兑现），再把跨度中点回正（整数平移保持整格）
+	for p: Dictionary in placements:
+		p["x"] = float(roundi(float(p["x"])))
+	placements.sort_custom(func(a, b): return float(a["x"]) < float(b["x"]))
+	for i in range(1, placements.size()):
+		var need_i: float = float(placements[i - 1]["x"]) + float(placements[i - 1]["w"]) * 0.5 \
+				+ MIN_GAP + float(placements[i]["w"]) * 0.5
+		if float(placements[i]["x"]) < need_i:
+			placements[i]["x"] = float(ceilf(need_i))
+	left = INF
+	right = -INF
+	for p: Dictionary in placements:
+		left = minf(left, float(p["x"]) - float(p["w"]) * 0.5)
+		right = maxf(right, float(p["x"]) + float(p["w"]) * 0.5)
+	var mid_shift := (left + right) * 0.5
+	if absf(mid_shift) >= 0.5:
+		for p: Dictionary in placements:
+			p["x"] = float(p["x"]) - roundf(mid_shift)
+	left = INF
+	right = -INF
+	for p: Dictionary in placements:
+		left = minf(left, float(p["x"]) - float(p["w"]) * 0.5)
+		right = maxf(right, float(p["x"]) + float(p["w"]) * 0.5)
 	var width_cells := int(round(right - left + WALL_MARGIN * 2.0))
 
 	# ── 5. 背景两层随分区锚点落（行内推挤）────────────────────────────
@@ -420,7 +445,8 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 	return plan
 
 
-## 产物级修复：同排逐栋推挤，画面间隙保底（重叠不可能出现在产物里）
+## 产物级修复：同排逐栋推挤，画面间隙保底（重叠不可能出现在产物里）；
+## 推挤落点向上取整——前排已是整格吸附口径，修复不把中心拉回分数位
 static func _repair_rows(plan: Dictionary) -> void:
 	var rows: Dictionary = {}
 	for b: Variant in plan["buildings"]:
@@ -434,4 +460,4 @@ static func _repair_rows(plan: Dictionary) -> void:
 		for i in range(1, bs.size()):
 			var need: float = float(bs[i - 1]["x"]) + float(bs[i - 1]["cells"]) * 0.5 + MIN_GAP + float(bs[i]["cells"]) * 0.5
 			if float(bs[i]["x"]) < need:
-				bs[i]["x"] = snappedf(need, 0.01)
+				bs[i]["x"] = snappedf(ceilf(need), 0.01)

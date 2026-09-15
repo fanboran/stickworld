@@ -8,6 +8,11 @@
 
 ## [未发布]
 
+### 主街村民劳作修复——读档持久化 + billboard 劳作可见（2026-09-15）
+
+- **根因（读档全员罚站）**：存档 entities.extra_data 从未落 `profession`/`is_villager`，读档恢复的村民是"无职业、非村民"实体，AI 决策链双拒（`_try_harvest` 拒待业、`_is_villager` 拒无标志——连 wander 都不进）——新游戏有职业会干活、读档全员静止。修复：两字段随档（`SaveHandler._save_entities`）+ 读档回填并重挂职业装具（`TownLifeAPI.apply_profession_appearance`，工具不入档按 id 重应用）；老档安全回退、未知职业 id 回待业池。锁：`tests/unit/test_townlife_save_persistence.gd`（4 用例，进 batch_runner）
+- **次因（劳作不可见）**：主街镜像层把 attack 动画强制降级 walk/idle，且头顶进度条挂的 RigHost 在街上被整体隐藏——就算在干活也看不出。修复：镜像动画全放行（attack oneshot 自动回切，逐拍重触发靠 set_anim 变更检测）+ billboard 自带 3D 头顶进度条（`char_sprite_3d.set_work_progress`，bg/fill 双 quad 左锚定、随纵深缩放），数据源统一 `entity.get_action_progress()`（2D 指示器挪挂 RigHost 防街上双重渲染）
+- 诊断线索存档：用户 15:31 实机会话进主街全程无 `[TownLife] 村庄配比` 打印（该行只在新游戏 spawn 路径输出）= 读档路径实锤
 ### HD-2D 月夜档：夜版卡烘焙 + 夜间光照重标定（2026-09-15）
 
 - **夜版卡（月光烘进 Blender）**：三套烘卡脚本（blender_proto/bake_props/bake_nature）每卡多烘一张 `<卡>_night.png`——亮冷蓝月亮方向光（正面高角度斜打）+ 深蓝夜环境，窗/火/水晶叠**半透明发光**（copy 原材质 + Mix Shader 按 FAC 混合，原材质按比例透出；Add 加法会淹没暗原材质、整块换发光片更是白块，均为创始人指认后修正）；建筑 50 + 道具 48 + 自然物 15 全量入库 `tex/`（113 张）。另修两坑：月亮首版从背面打光致正立面全黑（定稿 (55°,-75°)）；道具库裸 `glass` 是井口/水面占位材质，进发光名单会把井口烘成白圈（创始人指认），道具发光名单摘除裸 `glass`

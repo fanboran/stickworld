@@ -37,7 +37,8 @@ const CITY_TIER := "townlet"
 
 ## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
 ## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
-## 构图契约"地面占屏幕下 1/3"）——屏幕底沿、2D ground_bottom（蓝线）、
+## 构图契约"地面占屏幕下 1/3"@zoom=1——默认缩放 0.75 下分界线压屏幕下 1/4，
+## 见 HD-2D街景系统.md §4.0）——屏幕底沿、2D ground_bottom（蓝线）、
 ## 可行走深度三点合一，整条可见街面都能走。
 const WALK_BACK_Y := 688.0
 const WALK_FRONT_Y := 1294.0
@@ -75,6 +76,8 @@ var decoration_layer: Node2D = null
 ## 净空 14 格起步，群落"一段一段"的聚簇感由 resource_gen 群落散布承担）
 var forest_clear_cells := 14
 var forest_ramp_cells := 10
+## 资源间距（px）：树冠卡画面宽 2~3 格，64px 会互相穿模（创始人 2026-09-15）
+var resource_min_spacing := 96.0
 ## 创始人 2026-09-15：视野内两三个露头即可（别写死数量，算法按带幅推），
 ## 大宗采集在城门传送的资源图（Hd2dResourceMap，密度另调）；
 ## 子类可调（战场图调稀——野地要开阔可列阵）
@@ -87,6 +90,11 @@ func _ready() -> void:
 	# 屏幕下边界（CameraRig ground_bottom，即 F3 地面蓝线）钉在 3D 街面的
 	# 可见近沿上——与 3D 相机缩放锚线同一世界线，2D/3D 底沿逐像素重合
 	ground_bottom = WALK_FRONT_Y
+	# 视野下边界契约（屏幕映射三同步之一）：CameraRig 只认 ground_y + 1080×ground_ratio
+	# 的换算值（**不读 ground_bottom 变量**），此处强制换算使 rig 视野下边界钉在
+	# 3D 底沿锚线 WALK_FRONT_Y 上——差多少，F3 覆盖层/FX 等 2D 画布元素就整体
+	# 偏多少（1080p 下曾差 95px 致 F3 碰撞箱全体错位；推导见 HD-2D街景系统.md §屏幕映射）
+	ground_ratio = (WALK_FRONT_Y - ground_y) / 1080.0
 	# 注册 2D 特效坐标重映射器（FxLibrary.remap_pos 读此组）：HD-2D 图的地面
 	# 受俯角前缩，飘字/粒子按 2D y 直绘会飘在半空，须压到 3D 投影同一地面线
 	add_to_group("fx_pos_remapper")
@@ -183,12 +191,18 @@ func _sync_character_render() -> void:
 					lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
 							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)))
 		if ch.has_method("set_anim"):
-			# 动画镜像读实体真实状态（走两步加速切 run 由实体逻辑驱动）——
-			# 此前只发 walk/idle 二值，billboard 角色永远不跑（创始人 2026-09-15）
+			# 动画镜像读实体真实状态：walk/run/idle + 劳作 attack 全放行。
+			# attack 是 oneshot——播完实体侧自动回切 idle/walk，逐拍重触发由
+			# set_anim 的变更检测天然完成（此前 attack 被强制降级 walk/idle，
+			# 挥镐/挥锤在街上不可见 = 干活与罚站无法区分，创始人 2026-09-15）
 			var anim: String = str(body.get("_current_anim"))
-			if anim.is_empty() or anim.begins_with("attack"):
+			if anim.is_empty():
 				anim = "walk" if moving else "idle"
 			ch.set_anim(anim)
+		# 劳作进度镜像：2D 进度条挂 RigHost 已随街景隐藏，billboard 用自带
+		# 3D 头顶条（-1 = 隐藏）。采集/派工/搬运同源（set_action_progress 通道）
+		if ch.has_method("set_work_progress") and body.has_method("get_action_progress"):
+			ch.set_work_progress(float(body.get_action_progress()))
 		# 武器/工具镜像：2D 骨架已隐藏，武器须挂进 billboard 内部骨架
 		# （职业识别走武器——工具不渲染 = 村民"没有职业"的观感）
 		var mount: Variant = body.get("weapon_mount")
@@ -300,6 +314,17 @@ func remap_fx_pos(pos: Vector2) -> Vector2:
 	return Vector2(pos.x, WALK_FRONT_Y - (WALK_FRONT_Y - pos.y) * k)
 
 
+## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。
+## 3D 取景垂直固定（不随 2D 相机纵移）：屏幕底沿 = 锚线 WALK_FRONT_Y，
+## 每格纵深在屏幕上占 32×压缩率×缩放 px（公式推导见 HD-2D街景系统.md §屏幕映射）
+func screen_y_to_ground_y(screen_y: float, effective_zoom: float) -> float:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return screen_y
+	var k: float = float(_hd.get_ground_squash())
+	var vp_h: float = get_viewport_rect().size.y
+	return WALK_FRONT_Y - (vp_h - screen_y) / (k * maxf(effective_zoom, 0.001))
+
+
 ## 城门引导点（gate_router 组协议，BehaviorHarvest 消费）：直线 steering 的
 ## 采集村民遇城墙时，引导其先走到门洞口（墙内侧 1 格、y 对齐门洞中心），
 ## 站到门口后直线不再被门洞带外的墙挡住，恢复直走。返回 Vector2.ZERO =
@@ -333,6 +358,22 @@ func get_walk_barriers() -> Array:
 	return out
 
 
+## F3 建筑宽度辅助线数据口（debug_gui 抽屉 duck 读取）：3D 侧前排建筑
+## 占地实心带（[x0,x1,y0,y1]：x=格、y=px 混合口径，同 get_solid_rects）
+func get_building_rects() -> Array:
+	if _hd != null and _hd.has_method("get_building_rects"):
+		return _hd.get_building_rects()
+	return []
+
+
+## F3 黄线数据口（debug_gui duck 读取）：前后景分界线的 2D 等价 y
+## （zoom=1 压屏幕下 1/3 线；旧文档叫"地平线"，实为前后景分界，勿混淆）
+func get_fg_bg_boundary_y() -> float:
+	if _hd != null and _hd.has_method("get_fg_bg_boundary_y"):
+		return float(_hd.get_fg_bg_boundary_y())
+	return ground_y
+
+
 ## 露天工位（转发 3D 侧摆位表：铁砧 → 铁匠）
 func get_open_work_sites() -> Array:
 	var out: Array = []
@@ -360,6 +401,12 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		return
 	var body := StaticBody2D.new()
 	body.name = "HD2DSolids"
+	# 前排建筑形状打 meta（get_solid_rects 前 N 项=建筑，与 get_building_rects
+	# 同序）：F3 显示改走直立包楼框（draw_buildings），障碍抽屉跳过防双重绘制
+	var building_count: int = 0
+	if hd.has_method("get_building_rects"):
+		building_count = hd.get_building_rects().size()
+	var idx: int = 0
 	for r: Variant in hd.get_solid_rects():
 		var x0: float = float(r[0]) * CELL_PX
 		var x1: float = float(r[1]) * CELL_PX
@@ -372,6 +419,9 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		rect.size = Vector2(maxf(8.0, x1 - x0), maxf(8.0, y1 - y0))
 		shape.shape = rect
 		shape.position = Vector2((x0 + x1) * 0.5, (y0 + y1) * 0.5)
+		if idx < building_count:
+			shape.set_meta("hd2d_building", true)
+		idx += 1
 		body.add_child(shape)
 	if body.get_child_count() > 0:
 		add_child(body)
@@ -396,6 +446,7 @@ func _spawn_resource_nodes() -> void:
 	# 近墙 3 格净空 → 12 格渐密 → 满密度（渐变读法保留，城门口即有活干）
 	gen.set("FOREST_CLEAR_CELLS", forest_clear_cells)
 	gen.set("FOREST_RAMP_CELLS", forest_ramp_cells)
+	gen.set("MIN_SPACING", resource_min_spacing)
 	if gen.has_method("setup"):
 		gen.setup(self)
 	var a: int = int(map_left / CELL_PX) + 2

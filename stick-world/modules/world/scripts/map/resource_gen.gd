@@ -28,7 +28,9 @@ const _COMMUNITY_KINDS: Array = [
 ## 群落内最小株距（px）：树冠交叠成墙、树干不贴干；石/树互斥同用此距
 ## （72→64：2026-09-06 密度实收——56 时全图 378 棵超"2 倍"目标过多，
 ## 64 实测约 2.5-3 倍且树墙感保留）
-const MIN_SPACING: float = 64.0
+## var 而非 const：HD-2D 卡的画面宽（含树冠）可达 3 格，64px 间距会互相
+## 穿模——宿主按卡宽调大（主街 96）
+var MIN_SPACING: float = 64.0
 
 var _root: Node2D = null
 

@@ -260,6 +260,10 @@ func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking:
 
 # ─────────────────────────────── 头顶动作进度条 ────────────────────────────────
 
+## 当前动作进度缓存（0~1；-1 = 无进行中动作）——HD-2D billboard 镜像经
+## 实体 get_action_progress() 读取，2D 指示器自身不依赖此值
+var _progress_value: float = -1.0
+
 ## 确保头顶进度条节点存在。
 func _ensure_action_indicator() -> void:
 	if _action_progress_indicator != null and is_instance_valid(_action_progress_indicator):
@@ -270,11 +274,17 @@ func _ensure_action_indicator() -> void:
 		return
 	_action_progress_indicator = cls.new()
 	_action_progress_indicator.position = Vector2(0, -130.0)  # 头顶上方
-	_entity.add_child(_action_progress_indicator)
+	# 挂 RigHost（与骨架同树）而非实体根：HD-2D 街景整棵隐藏 RigHost，2D 进度
+	# 条随之隐藏（街上由 billboard 侧 set_work_progress 出 3D 条，避免双重渲染）
+	var host: Node = _entity.get_node_or_null("RigHost")
+	if host == null:
+		host = _entity
+	host.add_child(_action_progress_indicator)
 
 
 ## 设置头顶动作进度（0~1，>0 显示，0 隐藏）。由 BehaviorHaul/BehaviorWork/玩家调用。
 func set_progress(ratio: float) -> void:
+	_progress_value = clampf(ratio, 0.0, 1.0)
 	_ensure_action_indicator()
 	if _action_progress_indicator != null:
 		_action_progress_indicator.set_progress(ratio)
@@ -282,5 +292,11 @@ func set_progress(ratio: float) -> void:
 
 ## 隐藏头顶动作进度条。
 func hide_progress() -> void:
+	_progress_value = -1.0
 	if _action_progress_indicator != null:
 		_action_progress_indicator.hide_bar()
+
+
+## 当前动作进度观测口（0~1；-1 = 无进行中动作）。实体 get_action_progress 转发。
+func get_progress_value() -> float:
+	return _progress_value

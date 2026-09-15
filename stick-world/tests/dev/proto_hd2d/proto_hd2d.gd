@@ -100,19 +100,12 @@ const PROPS: Array = [
 ## 梯度，创始人：算法就在那），宿主生成 ResourceNode 后经 spawn_nature_card_at
 ## 让 PBR 卡随点落。`z` ≥ 5 前景带。
 const NATURE_SPOTS: Array = [
-	# 西墙外**开阔带**纯景（近墙净空 12 格后才是林线——创始人：传送出去先见野地）
+	# 西墙外开阔带纯景（创始人 2026-09-15：就一两棵树和木头，别摆密）
 	{"card": "dead_tree", "x": -118.0, "z": 9.0},
-	{"card": "bush", "x": -114.0, "z": 5.5},
 	{"card": "grass_clump", "x": -108.0, "z": 5.0},
-	{"card": "mushrooms", "x": -116.0, "z": 5.2},
-	{"card": "stump", "x": -111.0, "z": 5.5},
 	# 东墙外东路开阔带纯景
-	{"card": "grass_clump", "x": 98.5, "z": 5.0},
 	{"card": "bush", "x": 101.0, "z": 5.5},
-	{"card": "stump", "x": 100.0, "z": 5.4},
-	{"card": "bush", "x": 109.0, "z": 5.0},
 	{"card": "dead_tree", "x": 116.0, "z": 9.5},
-	{"card": "rubble", "x": 114.0, "z": 5.5},
 ]
 
 ## 战场遗物（battlefield 模式手摆）：旧 12V12 战场旧址的残营读法——残旗/破车/
@@ -160,10 +153,10 @@ const BF_NATURE_SPOTS: Array = [
 	{"card": "mushrooms", "x": 62.0, "z": 6.2},
 ]
 
-## 前排**摆位意图表**（2026-09-15 行业惯例重构，创始人：别把位置绑死整数格）：
-## 人只声明 card + 语义锚点 x + 纵深（"大概在哪"），实际 x 由 _resolve_front_row
-## 按**画面宽**（cards.json units 数据包围盒）推挤分配——重叠在求解阶段就不可能
-## 发生，锚点 ±0.2 格确定性微抖动破机械栅格感。顺序 = 村A 语义翻译：
+## 前排**摆位意图表**：人只声明 card + 语义锚点 x + 纵深（"大概在哪"），
+## 实际 x 由 _resolve_front_row 按**画面宽**（cards.json units 数据包围盒）
+## 推挤分配——重叠在求解阶段就不可能发生；中心吸附整格（创始人 2026-09-15：
+## 建筑位置必须整格摆放）。顺序 = 村A 语义翻译：
 ## 西段居住/仓储（tower/hayloft/house_w16/warehouse）→ 中段市集/行政（smithy1/
 ## guildhall/shop/house_w8）→ 东段作坊/田园（barn/windmill/stable/gatehouse）；
 ## cottage 落墙外开阔带。未进前排的卡种全量参与背景层分带轮转。
@@ -183,15 +176,20 @@ const FRONT_ROW: Array = [
 	{"card": "stable_w12", "x": 76.0, "z": 0.7, "door": false},
 	{"card": "gatehouse_w8", "x": 88.5, "z": 0.4, "door": true},
 ]
-## 背景层（创始人 2026-09-14 定案；2026-09-15 改两排——"后面有两排就够了"）：
-##   · 第二排基线压**屏幕下 1/3 线**（33.3% 从底）——该线同时是第一排（+地面）
-##     屏幕区的上边界：下 1/3 归前排与街面，中 1/3 起归背景楼群，两排在一条线交界；
-##   · 前排楼身挡住 bg1 根部、bg1 从前排楼顶上方露出（高低咬合）＝"第二排插第一排缝"；
-##   · 两排背景每层**楼间留缝不贴死**，后层楼**吸附进前层的缝隙**；
-##   · 末层（bg2）基线 = 真实地平线（底衬远端同步收到此处），楼身把地平线遮死。
-const SKYLINE_Z := -6.73                 # 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
-const BG_LAYERS := 2                     # 背景排数（创始人 2026-09-15：第三层挡天空+太阳，删掉）
-const BG_LAYER_GAP := 3.5                # 背景层距（格）：屏幕上每层基线差 ≈3.7% 屏高（创始人：后排别内缩太多）
+## 背景层（创始人 2026-09-14 定案；2026-09-15 补缝口径——"后两排的职责=遮挡地平线"）：
+##   · bg1 基线压**屏幕下 1/3 线**（=前后景分界线，屏幕映射 §4.0）——下 1/3 归
+##     前排与街面，中 1/3 起归背景楼群；
+##   · bg1 整排连铺 = 主天际线；bg2 **地平线补缝**：只往 bg1 没遮住的地平线缝隙
+##     里稀疏插楼（楼身站上真实地平线，穿缝可见、楼顶可越前排露出），不再整排铺；
+##   · bg2 紧贴 bg1（层距 3.5 格——创始人 2026-09-15：第三排紧贴第二排）；
+##   · bg2 基线 = 真实地平线（底衬远端同步收到此处）。
+const SKYLINE_Z := -6.73                 # bg1 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
+const BG_LAYERS := 2                     # 背景排数（前排+两排=三排，创始人 2026-09-15）
+## 背景层距（格）：bg2 紧贴 bg1
+const BG_LAYER_GAP := 3.5
+## bg1 选卡的画面高上限（格）：排除塔楼/教堂/宫殿等"太抬高"卡
+## （创始人 2026-09-15：第二排尽量别出现太抬高的建筑；过滤后无卡可用则放开）
+const BG1_MAX_H := 14.0
 ## 远焦模糊起点：天际线基线向镜头前移的格数（世界线，经 set_cam_zoom 随缩放换算、
 ## 不随缩放漂移）——前排零模糊口径不变，第二排从这里开始吃半档模糊
 ## （创始人 2026-09-15：第二排景深太不明显，根因=起点原钉在天际线上、第二排恰好吃不到）
@@ -204,6 +202,11 @@ const BG_TINTS: Array = [
 const CARD_GLOW_TINT := Color(1.0, 0.90, 0.78)
 ## 后景卡窗光档（相对前排倍率）：后景窗火只做点缀，不与前排抢
 const BG_GLOW_RATIO := 0.45
+## 漂移云牌（创始人 2026-09-15：2D 地图的手绘云加进新天空）——sketch_cloud
+## 程序化画风烘成贴图上 Sprite3D billboard；风驱漂移+出带回绕（SkyDecor 云同语义）
+const SKETCH_CLOUD := preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
+## 云池规模（2D SkyDecor 同量：视带内 14、屏内约 9）
+const CLOUD_POOL := 14
 
 ## 地面分带（格；z 增大 = 朝相机）。
 ## 基线纪律（创始人纠偏）：**建筑基线 = 路肩带顶线**。
@@ -264,8 +267,7 @@ var _tex_cache: Dictionary = {}
 
 var _env: Environment
 var _sky_mat: ProceduralSkyMaterial
-var _sun: DirectionalLight3D
-var _sun_disc: MeshInstance3D   # 显式太阳盘（相机子节点，昼显夜隐，建筑自动遮挡）
+var _sun: DirectionalLight3D   # 太阳盘 = 程序化天空按本灯方向自动渲染（右上）
 var _fill: DirectionalLight3D
 var _ground_root: Node3D
 var _card_root: Node3D
@@ -290,6 +292,11 @@ var _bg_card_mats: Array[ShaderMaterial] = []   # 后景卡材质：夜间窗光
 var _lamps: Array[OmniLight3D] = []
 var _bg_base_z := {}            # 背景层 -> 实测卡基线 z（辅助线/底衬远端对齐用）
 var _bg_base_samples: Array = []  # 当前层各卡卡底 z 的采样（层结束取中位数）
+
+var _clouds3d: Array = []       # 云牌池 [{node, p, scale_f}]（p=深度风驱系数）
+var _wind_t := 0.0
+var _wind := 0.0
+var _last_light_mode := "day"
 
 var _opts := {
 	"shots": "none", "perf": false, "res": "", "sv": "always", "layout": "",
@@ -555,13 +562,36 @@ func _spawn_card(card: String, x: float, z_off: float, skyline: bool = false,
 
 
 ## 背景卡 = skyline 卡 + 按层距离染色；同时**实测卡底世界 z**（供层基线辅助线与
-## 底衬远端对齐）。卡底贴地落位后底边 z = 层 z 本身，不再依赖 anchor 推导。
+## 底衬远端对齐）。卡底贴地落位后底边 z = 层 z 本身；ground=台面标高——
+## 后景楼站在城内地面上（与建筑带同高，创始人 2026-09-15）
 func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
-	var mi := _spawn_card(card, x, lz, true)
+	var mi := _spawn_card(card, x, lz, true, PLAT_H)
 	if mi == null:
 		return
 	(mi.material_override as ShaderMaterial).set_shader_parameter("tint", tint)
 	_bg_base_samples.append(lz)
+
+
+## 单栋前排建筑的地基实心带（[x0,x1,y0,y1,基线y,卡可见高]：**x=格、y=px** 的
+## 混合口径，与碰撞墙消费端一致）：x=建筑格宽（4 格整倍数口径，碰撞不把出檐
+## 算进去），y=行走带后段到建筑基线外扩 1.4 格的一条带；[4]=卡底基线 px
+## （F3 直立包楼框的底）、[5]=卡可见高 px（已扣 base_cut 地下裁切）。
+## get_solid_rects 与 get_building_rects 共用，保证碰撞与宽度辅助线同宽。
+func _building_solid_rect(occ: Array) -> Array:
+	var cx: float = (float(occ[0]) + float(occ[1])) * 0.5
+	var card: String = str(occ[2])
+	var cells := float(_cards.get(card, {}).get("cells", 8.0))
+	var z: float = float(occ[3]) if occ.size() > 3 else 0.6
+	var base_y: float = 688.0 + z * 32.0
+	return [cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0,
+			base_y, _card_visual_height(card)]
+
+
+## 卡可见高（px）：picture 高扣掉 base_cut 的地下裁切——卡底贴地落位后
+## 从基线到卡顶的屏幕高度（F3 建筑直立框用）
+func _card_visual_height(card: String) -> float:
+	var units: Array = _cards.get(card, {}).get("units", [0.0, 0.0])
+	return float(units[1]) * (1.0 - _card_base_cut(card))
 
 
 ## 前排建筑+道具的实心区间（格，[x0,x1]）——宿主映射成 2D 碰撞墙，
@@ -571,14 +601,7 @@ func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
 func get_solid_rects() -> Array:
 	var out: Array = []
 	for occ in _front_occ:
-		var cx: float = (float(occ[0]) + float(occ[1])) * 0.5
-		var card: String = str(occ[2])
-		var cells := float(_cards.get(card, {}).get("cells", 8.0))
-		# 建筑碰撞=**地基范围**（创始人 2026-09-14）：x=建筑格宽，
-		# y=行走带后段到建筑基线外扩 1.4 格的一条带——不再贯穿整条街
-		var z: float = float(occ[3]) if occ.size() > 3 else 0.6
-		var base_y: float = 688.0 + z * 32.0
-		out.append([cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0])
+		out.append(_building_solid_rect(occ))
 	for r in _prop_solids:
 		out.append(r)
 	if battlefield:
@@ -590,6 +613,25 @@ func get_solid_rects() -> Array:
 	for sx: float in [-1.0, 1.0]:
 		out.append([sx * wx - WALL_T * 0.5, sx * wx + WALL_T * 0.5, 688.0, WALK_FRONT_PX])
 	return out
+
+
+## 前排建筑占地带（px 四元组 [x0,x1,y0,y1]，不含道具/城墙）——宿主转发给
+## F3 建筑宽度辅助线：左右边界竖线 + 整格浅网格（创始人 2026-09-15，
+## 2D 图 F3 版式样原样搬入 HD-2D；宽度口径=建筑格宽，与碰撞同源）
+func get_building_rects() -> Array:
+	var out: Array = []
+	for occ in _front_occ:
+		out.append(_building_solid_rect(occ))
+	return out
+
+
+## 前后景分界线的 2D 等价 y（px）——可行走地面（前景）与后景的构图分界：
+## zoom=1 压屏幕下 1/3 线（SKYLINE_Z 的推导即来自该契约）。注意术语：
+## 旧文档多把这条线叫"地平线/天际线基线"，实为**前后景分界线**；真实地平线
+## （新地平线）是末排背景基线，在这条线更远更高处，勿混淆（创始人 2026-09-15）。
+## F3 黄线（ground_line_drawer）在 HD-2D 图画这条世界线，缩放时跟着真实分界走
+func get_fg_bg_boundary_y() -> float:
+	return 688.0 + SKYLINE_Z * 32.0
 
 
 ## 城门洞表（x 格 / y px **全行走带**）——传送带贴整面墙（创始人：城墙即
@@ -619,12 +661,11 @@ func get_wall_x() -> float:
 	return _wall_x()
 
 
-## 前排摆位求解器（行业惯例，创始人 2026-09-15：别把位置绑死整数格）：
+## 前排摆位求解器（原型兜底路径；游戏内前排来自 CityGen 整格吸附）：
 ##   1. 意图表的锚点只是"想要的位置"，占位/间隙一律用**画面宽**（cards.json
 ##      units 的数据包围盒）计算——重叠在求解阶段就不可能出现；
-##   2. 左→右逐栋推挤：本栋画面左缘 ≥ 前栋画面右缘 + 保底间隙（0.6 格）；
-##   3. 确定性微抖动 ±0.2 格（锚点哈希种子，同 seed 同街景）破机械栅格感；
-##      抖动后再次保底夹回，间隙承诺不破。
+##   2. 中心吸附整格 + 左→右整格步进推挤（创始人 2026-09-15：位置必须整格
+##      摆放；保底间隙 0.6 格由整格步距 ≥1 格兑现，间隙承诺不破）。
 func _resolve_front_row(intent: Array) -> Array:
 	var MIN_GAP := 0.6
 	var out: Array = []
@@ -634,12 +675,10 @@ func _resolve_front_row(intent: Array) -> Array:
 		var w := _cw(card)
 		if w < 1.0:
 			w = 8.0   # 卡元数据缺失兜底（_cw 同口径）
-		var x: float = float(e["x"])
-		# 微抖动（±0.2 格）：锚点哈希做种子
-		var jit: float = (fposmod(absf(x) * 0.618, 0.4) - 0.2) * 0.5
-		x += jit
-		# 推挤保底（抖动前后各夹一次）
+		var x: float = roundf(float(e["x"]))
+		# 推挤保底：不小于"前栋右缘 + 间隙 + 本栋半宽"的最小整格
 		x = maxf(x, prev_right + MIN_GAP + w * 0.5)
+		x = ceilf(x)
 		prev_right = x + w * 0.5
 		out.append({"card": card, "x": x, "z": e.get("z", 0.6),
 			"door": bool(e.get("door", false))})
@@ -957,7 +996,10 @@ func _add_door_path(x: float, _front_z: float = 3.4) -> void:
 			gm.albedo_texture = t
 		gm.albedo_color = Color(0.88, 0.80, 0.66)
 		gm.roughness = 0.95
-		gm.uv1_scale = Vector3(1.6 / 4.0, depth / 4.0, 1.0)
+		# 世界锚定 UV（同全球地面网格，夯土 tile=6）
+		gm.uv1_triplanar = true
+		gm.uv1_world_triplanar = true
+		gm.uv1_scale = Vector3.ONE / 6.0
 		gm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 		mi.material_override = gm
 		mi.position = Vector3(x, float(s["y"]), (float(s["z0"]) + float(s["z1"])) * 0.5)
@@ -1012,6 +1054,12 @@ func _build_world() -> void:
 	_env = Environment.new()
 	_env.background_mode = Environment.BG_SKY
 	_sky_mat = ProceduralSkyMaterial.new()
+	# 渐变天空初值（昼档同 _apply_light；此处只是首帧前兜底）——太阳盘照常由
+	# 材质渲染
+	_sky_mat.sky_top_color = Color(0.31, 0.47, 0.78)
+	_sky_mat.sky_horizon_color = Color(0.80, 0.87, 0.95)
+	_sky_mat.ground_horizon_color = Color(0.78, 0.84, 0.92)
+	_sky_mat.ground_bottom_color = Color(0.42, 0.44, 0.46)
 	var sky := Sky.new()
 	sky.sky_material = _sky_mat
 	_env.sky = sky
@@ -1071,18 +1119,30 @@ func _build_world() -> void:
 	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
 	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
 	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
-	# 中远景地面：低对比夯土（rammed_earth std=0.034）。中景已被 bg1（z=-6.7）
-	# 楼群+前排楼身咬合遮住，只剩楼缝间少量露出；别用 cobble（std=0.107）——
-	# 掠射下 mip 会把高对比石板糊成"碎石墙"（实测翻车）。
-	var far_z: float = float(_bg_base_z.get(BG_LAYERS - 1,
-		SKYLINE_Z - BG_LAYER_GAP * float(BG_LAYERS - 1)))
-	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
-		0.0, 14.0, Color(0.90, 0.86, 0.80))
+	# 中远景地面（背景地面带）：**与道路带同材质分幅**（城心石板/夯土过渡），
+	# 且**与建筑带（台面）同高**（创始人 2026-09-15：建筑带身后的城内地面保持
+	# 台面标高一直到地平线，不存在"踩空"落差；野地在墙外两侧，维持 y=0）。
+	# 战场/资源图无台面语义，远景带维持 y=0 平铺。所有地皮走世界锚定 UV
+	# （_add_ground_plane_at 内统一）——同材质跨带无缝续接、缩放全局一致。
+	var far_z: float = float(_bg_base_z.get(1,
+		SKYLINE_Z - BG_LAYER_GAP * 1.0))
+	var wx: float = _wall_x()
+	var far_y: float = 0.0 if battlefield else PLAT_H
+	var far_near_z: float = 0.0 if battlefield else BAND_SIDEWALK.x
+	_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
+		far_z, far_near_z, far_y, 10.0, Color(0.86, 0.89, 0.96))
+	_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
+		far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
+	_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
+		far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
 	# 兜底大地皮：街面分段各有边界，缩太小视野越出分段范围就露天空
 	# （创始人：缩太小下边界出现虚空）。这层压在所有分段之下（y=-0.05），
-	# 只在分段没铺到的区域露脸；±600 格宽 + z -30~40，任何缩放都不露底。
+	# 只在分段没铺到的区域露脸。远端收在**第二排后景基线**（=真实地平线，
+	# 创始人 2026-09-15：地平线=第二排楼脚）——远端若越过楼脚，第二排后面
+	# 会多出一条远景地面，可见地平线就被抬高；近端保留到 z=40 防前缘露底。
+	var fb_depth: float = 40.0 - far_z
 	var fb_mesh := PlaneMesh.new()
-	fb_mesh.size = Vector2(1200.0, 70.0)
+	fb_mesh.size = Vector2(1200.0, fb_depth)
 	var fb_mi := MeshInstance3D.new()
 	fb_mi.mesh = fb_mesh
 	var fb_mat := StandardMaterial3D.new()
@@ -1091,13 +1151,16 @@ func _build_world() -> void:
 		fb_mat.albedo_texture = fb_tex
 	fb_mat.albedo_color = Color(0.70, 0.65, 0.57)
 	fb_mat.roughness = 0.95
-	fb_mat.uv1_scale = Vector3(300.0, 17.5, 1.0)
+	fb_mat.uv1_triplanar = true
+	fb_mat.uv1_world_triplanar = true
+	fb_mat.uv1_scale = Vector3.ONE / 6.0
 	fb_mi.material_override = fb_mat
-	fb_mi.position = Vector3(0.0, -0.05, 5.0)
+	fb_mi.position = Vector3(0.0, -0.05, (far_z + 40.0) * 0.5)
 	fb_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	fb_mi.name = "GroundFallback"
 	_ground_root.add_child(fb_mi)
 	_add_sky_backdrop()                   # 原 2D 天空贴图（远山/树线）立于背景之后
+	_place_clouds()                       # 2D 手绘云烘贴图 → 漂移云牌（异步烘制）
 	if battlefield:
 		# 战场野地铺装：全域草灰绿（同主街墙外野地调）+ 中轴夯土东路
 		# （东门大道的延续，压出"路通战场"的走向）。无台面/墙/街灯。
@@ -1117,18 +1180,18 @@ func _build_world() -> void:
 		#   建筑带（台面）= 城心石板/近缘草地；道路带（z 1.9~46）= 城心石板
 		#   ±30 → 夯土过渡（不长草）→ 城外草地；背景地面带 = 兜底大地皮。
 		# 路面 y 抬升防与兜底大地皮 z-fight
-		var wx: float = _wall_x()
 		_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.02, 10.0, Color(0.86, 0.89, 0.96))
 		_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
 		_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
-		# 城外野地 = 草地贴图（稀疏草土地，非道路带）
+		# 城外草地带：**整块贯通**（从后景地平线 far_z 到下边界外——
+		# 创始人：城外从下边界线到后景地平线全是贯通材质，不分段）
 		_add_ground_plane_at("grass_sparse_alb_128.png", -(wx + 15.0), 30.0,
-			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.88, 0.90, 0.80))
+			far_z, BAND_ROAD.y, 0.0, 6.0, Color(0.92, 0.92, 0.84))
 		_add_ground_plane_at("grass_sparse_alb_128.png", (wx + 15.0), 30.0,
-			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.90, 0.88, 0.78))
+			far_z, BAND_ROAD.y, 0.0, 6.0, Color(0.92, 0.92, 0.84))
 
 	# --- 灯笼点光源（暖光；让"真 3D 光照"这条线可验证）---
 	# 战场无街灯（野外夜档靠月光档，不沿街布灯）
@@ -1330,9 +1393,12 @@ func _place_rows() -> void:
 		occ_front.append([cx - w * 0.5, cx + w * 0.5, card, z_off])
 	_prop_slots = []
 	_front_occ = occ_front
-	# ── 背景连续铺装（创始人 2026-09-15：背景必须是连续天际线，只比前排
-	#    短几格；随机但种子一致——多局游戏尽量相同；同屏尽量不重复用卡。
-	#    此前"每前排一栋"的改法在核心区留空当，已废弃回连续扫铺）。
+	# ── 背景铺装（创始人 2026-09-15：后两排的职责=遮挡地平线）──
+	# bg1 主天际线：从前排跨度两端各收 3 格起连续扫铺，整格摆位（位置必须吸附
+	# 整格）、楼间缝 2~3 整格（取整余数最多再 +1，实际缝 2~4 格）；随机但种子
+	# 一致——多局游戏尽量相同；同屏避重卡只排除附近已用的卡。
+	# bg2 地平线补缝：算出 bg1 覆盖区间的补集（=露出的地平线缝），逐缝稀疏插
+	# 一栋（中心整格、可越出缝宽——被 bg1 挡住的部分自然不可见），不再整排铺。
 	_bg_rng.seed = 20260915
 	_bg_recent.clear()
 	# 前排跨度（背景铺满到只比前排短几格）
@@ -1344,35 +1410,69 @@ func _place_rows() -> void:
 		front_hi = maxf(front_hi, float(e["x"]) + fw * 0.5)
 	var span_lo: float = front_lo + 3.0
 	var span_hi: float = front_hi - 3.0
+	var bg1_spans: Array = []   # bg1 各卡画面覆盖区间 [x0,x1]（bg2 补缝用）
 	for li in BG_LAYERS:
 		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
 		var tint: Color = BG_TINTS[0] if li == 0 else BG_TINTS[BG_TINTS.size() - 1]
-		var gx: float = span_lo
-		var guard := 0
-		while gx < span_hi and guard < 80:
-			guard += 1
-			var card := _pick_bg_card("", gx, li)
-			var w := _cw(card)
-			if w < 1.0:
-				w = 8.0
-			if gx + w > span_hi + 2.0:
-				break   # 末卡放不下（越界超 2 格就收边，不出墙）
-			_spawn_bg_card(card, gx + w * 0.5, lz, tint)
-			gx += w + _bg_rng.randf_range(1.2, 2.6)   # 楼间缝 1.2~2.6 格
+		if li == 0:
+			var edge: float = span_lo
+			var guard := 0
+			while edge < span_hi and guard < 80:
+				guard += 1
+				var card := _pick_bg_card("", edge, li, BG1_MAX_H)
+				var w := _cw(card)
+				if w < 1.0:
+					w = 8.0
+				# 中心吸附整格：取 ≥ edge+半宽 的最小整数（左缘 ≥ edge，不回叠）
+				var cxi: int = ceili(edge + w * 0.5 - 0.001)
+				if float(cxi) + w * 0.5 > span_hi + 2.0:
+					break   # 末卡放不下（越界超 2 格就收边，不出墙）
+				_spawn_bg_card(card, float(cxi), lz, tint)
+				bg1_spans.append([float(cxi) - w * 0.5, float(cxi) + w * 0.5])
+				edge = float(cxi) + w * 0.5 + float(_bg_rng.randi_range(2, 3))
+		else:
+			bg1_spans.sort_custom(func(a, b): return float(a[0]) < float(b[0]))
+			var gaps: Array = []
+			var cur: float = span_lo
+			for s: Variant in bg1_spans:
+				if float(s[0]) > cur + 1.5:
+					gaps.append([cur, float(s[0])])
+				cur = maxf(cur, float(s[1]))
+			if span_hi > cur + 1.5:
+				gaps.append([cur, span_hi])
+			for g: Variant in gaps:
+				var gc: float = (float(g[0]) + float(g[1])) * 0.5
+				var card2 := _pick_bg_card("", gc, li)
+				var w2 := _cw(card2)
+				if w2 < 1.0:
+					w2 = 8.0
+				# 中心整格 + 卡身收边不出跨度（越出部分虽被 bg1 挡住，但越过
+				# 墙线的楼会立在城外地平线上）
+				var c_lo: float = ceilf(span_lo - 2.0 + w2 * 0.5)
+				var c_hi: float = floorf(span_hi + 2.0 - w2 * 0.5)
+				if c_lo > c_hi:
+					continue
+				var c2i: int = clampi(roundi(gc), int(c_lo), int(c_hi))
+				_spawn_bg_card(card2, float(c2i), lz, tint)
 		_bg_base_z[li] = _median(_bg_base_samples)
 		_bg_base_samples.clear()
 
 
-## 背景楼选卡：全卡池，排除前排本卡与最近用过的卡（同屏避同卡）；
+## 背景楼选卡：全卡池，排除前排本卡与附近已用卡（同屏避同卡）；max_h = 画面高
+## 上限（格），bg1 用它排除过高卡（过滤后池空则放开——"尽量"口径，不无楼可摆）。
 ## 种子由（前排 x, 层）决定——多局一致，加建前排时同样确定性补楼。
 var _bg_rng := RandomNumberGenerator.new()
 var _bg_recent: Array[String] = []
 
-func _pick_bg_card(front_card: String, fx: float, li: int) -> String:
+func _pick_bg_card(front_card: String, fx: float, li: int, max_h: float = INF) -> String:
 	_bg_rng.seed = int(abs(fx * 7919.0)) + li * 104729 + 13
 	var pool: Array = []
 	for c: String in _cards.keys():
 		if c == front_card or _bg_recent.has(c):
+			continue
+		var meta: Dictionary = _cards.get(c, {})
+		if max_h != INF and not meta.is_empty() \
+				and float(meta["units"][1]) * S > max_h:
 			continue
 		pool.append(c)
 	if pool.is_empty():
@@ -1386,13 +1486,11 @@ func _pick_bg_card(front_card: String, fx: float, li: int) -> String:
 	return card
 
 
-## 前排加建时补背景楼（建造系统事件接线入口；初始生成走 _place_rows）
+## 前排加建时补背景楼（建造系统事件接线入口；初始生成走 _place_rows）：
+## 只补 bg1 主天际线——bg2 是地平线补缝位，由遮挡关系自然成立，不随加建补
 func spawn_bg_for_front(front_card: String, fx: float) -> void:
-	for li in BG_LAYERS:
-		var lz: float = SKYLINE_Z - BG_LAYER_GAP * float(li)
-		var tint: Color = BG_TINTS[0] if li == 0 else BG_TINTS[BG_TINTS.size() - 1]
-		var card := _pick_bg_card(front_card, fx, li)
-		_spawn_bg_card(card, fx + _bg_rng.randf_range(-4.0, 4.0), lz, tint)
+	var card := _pick_bg_card(front_card, fx, 0, BG1_MAX_H)
+	_spawn_bg_card(card, roundf(fx), SKYLINE_Z, BG_TINTS[0])
 
 
 func _add_width_guides() -> void:
@@ -1472,14 +1570,16 @@ func _add_platform() -> void:
 	#   两侧 = 夯土台面 + 土坎镶边（近城边），材质在 ±28 格处交接。
 	#   台面/镶边只铺城内（±墙线收口）；**城缘段台面全是草地**（创始人
 	#   2026-09-15：边缘区只有道路带不长草，其他地方都是草地；跨度随墙线
-	#   参数化——布局扩建后草地带自动跟到新墙线）
+	#   参数化——布局扩建后草地带自动跟到新墙线）。
+	#   台面收窄为建筑脚下一条（z 0.42~1.95，创始人 2026-09-15：建筑带身后
+	#   的城内地面与台面同高、由远景地面带直铺到地平线，台面不再向后延伸）
 	_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
+		BAND_SIDEWALK.x, BAND_SIDEWALK.y, PLAT_H, 5.0, Color(1.04, 1.00, 0.93))
 	var gx0: float = _wall_x()
 	_add_ground_plane_at("grass_alb_128.png", -(30.0 + gx0) * 0.5, gx0 - 30.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
+		BAND_SIDEWALK.x, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
 	_add_ground_plane_at("grass_alb_128.png", (30.0 + gx0) * 0.5, gx0 - 30.0,
-		-6.5, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
+		BAND_SIDEWALK.x, BAND_SIDEWALK.y, PLAT_H, 8.0, Color(0.90, 0.93, 0.80))
 	# 石↔土交接条（gtx 手工收边件，压在交接线上）
 	_add_decal("transitions/gtx_brick_gravel_road_v1.png", -28.0, PLAT_H + 0.008,
 		Vector2(4.8, 1.55))
@@ -1498,11 +1598,97 @@ func _add_sky_backdrop() -> void:
 	pass   # 解包山脉/树线剪影板已删（创始人 2026-09-15：assets/sky 贴图是解包素材）——
 	# 远景 = 程序化天空 + 底衬远端，背景两层楼群自行遮地平线
 
+
+## 漂移云牌：2D 手绘云（SketchCloud）逐朵烘成贴图 → 3D billboard。
+## 烘法：透明底 SubViewport 渲一帧取 ImageTexture（每朵独立 seed，多局一致）；
+## 世界锚定 + 风驱 x 漂移 + 出带回绕（_drift_clouds），纵深视差由 3D 深度天然给出。
+func _place_clouds() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260915
+	var far: float = float(_bg_base_z.get(1, SKYLINE_Z - BG_LAYER_GAP))
+	for i in CLOUD_POOL:
+		var scale_f: float = rng.randf_range(0.7, 1.3)
+		var tex: Texture2D = await _bake_cloud_texture([5, 5, 5, 4][i % 4], scale_f, i)
+		if tex == null:
+			continue
+		var sp := Sprite3D.new()
+		sp.name = "Cloud%d" % i
+		sp.texture = tex
+		sp.pixel_size = 1.0 / 32.0            # 烘焙 px → 世界格（1 格 = 32px）
+		sp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sp.shaded = false
+		sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+		add_child(sp)
+		# 小云（远档）更高——2D SkyDecor 同构；z 钉在 bg2（地平线）身后
+		sp.position = Vector3(rng.randf_range(-60.0, 60.0),
+				28.0 - (scale_f - 0.7) / 0.6 * 8.0 + rng.randf_range(-1.5, 1.5),
+				far - rng.randf_range(2.0, 8.0))
+		_clouds3d.append({"node": sp, "scale_f": scale_f,
+				"p": lerpf(0.05, 0.22, (scale_f - 0.7) / 0.6)})
+	_apply_cloud_light(_last_light_mode)
+
+
+## 单朵云烘贴图：透明底 SubViewport + 冻结的 SketchCloud 渲一帧
+func _bake_cloud_texture(style_i: int, scale_f: float, seed_i: int) -> Texture2D:
+	var size := Vector2(200.0, 83.0) * scale_f * 1.35   # 2D 云同款尺寸档
+	var vp := SubViewport.new()
+	vp.size = Vector2i(int(size.x) + 48, int(size.y) + 48)
+	vp.transparent_bg = true
+	vp.disable_3d = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	add_child(vp)
+	var cloud: Node2D = SKETCH_CLOUD.new()
+	cloud.set("style", style_i)
+	cloud.set("cloud_size", size)
+	vp.add_child(cloud)
+	cloud.position = Vector2(vp.size) * 0.5 + Vector2(0.0, size.y * 0.18)
+	cloud.set("_seed", 1000 + seed_i * 7)
+	cloud.set("_base_seed", 1000 + seed_i * 7)
+	cloud.set("_edge_seed", 2000 + seed_i * 7)
+	cloud.process_mode = Node.PROCESS_MODE_DISABLED   # 冻结重掷节拍，烘静态一帧
+	for i in 2:
+		await RenderingServer.frame_post_draw
+	var img: Image = vp.get_texture().get_image()
+	var tex := ImageTexture.create_from_image(img)
+	vp.queue_free()
+	return tex
+
+
+## 云牌昼夜着色（昼白 / 夜暗蓝——2D SkyDecor 云同语义）
+func _apply_cloud_light(mode: String) -> void:
+	var m := Color(1.0, 1.0, 1.0, 0.92) if mode == "day" else Color(0.40, 0.48, 0.72, 0.55)
+	for c in _clouds3d:
+		var n: Sprite3D = c["node"]
+		if n != null and is_instance_valid(n):
+			n.modulate = m
+
+
+## 云漂移（SkyDecor 云池同机制简化版）：风驱 x + 出带回绕（绕相机 ±70 格）
+func _drift_clouds(delta: float) -> void:
+	if _clouds3d.is_empty():
+		return
+	_wind_t += delta
+	_wind = sin(_wind_t * 0.05) * 0.6
+	var cam_x: float = _cam.position.x if _cam != null else 0.0
+	for c in _clouds3d:
+		var n: Sprite3D = c["node"]
+		if n == null or not is_instance_valid(n):
+			continue
+		n.position.x += _wind * 9.0 * float(c["p"]) * delta * 60.0 / 32.0
+		if n.position.x > cam_x + 70.0:
+			n.position.x -= 140.0
+		elif n.position.x < cam_x - 70.0:
+			n.position.x += 140.0
+
 ## 城墙转角收边（§4.5）：±墙线立石墙板（沿纵深方向，正交视角下呈窄竖条
 ## + 墙顶垛口），门洞开在路面纵深带 GATE_Z0~Z1——门柱加厚、叠涩内挑、横梁
 ## 过顶组成"门楼"读法（深一档石材与墙面拉开），出城从门洞直穿。
 func _build_walls() -> void:
 	var wx: float = _wall_x()
+	# 墙纵深贯通到后景地平线（背景地面带远端，创始人：包括城墙也是一直
+	# 延伸到后景地平线）
+	var wall_far_z: float = float(_bg_base_z.get(1,
+		SKYLINE_Z - BG_LAYER_GAP * 1.0))
 	var mat := _wall_material(Color(0.85, 0.83, 0.79))
 	var pmat := _wall_material(Color(0.62, 0.60, 0.57))
 	var root := Node3D.new()
@@ -1512,7 +1698,7 @@ func _build_walls() -> void:
 		# 两段墙板夹出门洞：**后段从天际线（z=-7，背景楼群根部）起**——
 		# 城墙纵深贯通全场景（创始人：垂直向城墙不能只有道路带那么短），
 		# 前段铺到行走带前缘外
-		for seg: Variant in [[-7.0, GATE_Z0], [GATE_Z1, 19.5]]:
+		for seg: Variant in [[wall_far_z, GATE_Z0], [GATE_Z1, 19.5]]:
 			var z0: float = float(seg[0])
 			var z1: float = float(seg[1])
 			_box(root, mat, Vector3(WALL_T, WALL_H, z1 - z0),
@@ -1669,7 +1855,12 @@ func _add_ground_plane_at(tex_name: String, cx: float, width: float,
 		gm.normal_scale = 1.0
 	gm.albedo_color = tint
 	gm.roughness = 0.95
-	gm.uv1_scale = Vector3(width / tile, depth / tile, 1.0)
+	# 世界坐标锚定三平面 UV（创始人 2026-09-15：前后景地面必须连续对齐）——
+	# 所有地皮采样同一张全球网格：同材质跨带无缝续接、缩放全局一致；
+	# 贴图每 tile 格重复一次，各带 tile 常量即该材质的表观纹样大小
+	gm.uv1_triplanar = true
+	gm.uv1_world_triplanar = true
+	gm.uv1_scale = Vector3.ONE / tile
 	gm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mi.material_override = gm
 	mi.name = "Seg_" + tex_name.get_basename()
@@ -1816,6 +2007,8 @@ func _apply_light(mode: String) -> void:
 	for l in _lamps:
 		l.visible = lamp > 0.0
 		l.light_energy = lamp
+	_last_light_mode = mode
+	_apply_cloud_light(mode)
 	if _char_host != null:
 		_char_host.set_light(char_tint, char_add)
 	_set_post(post)
@@ -2103,3 +2296,4 @@ func _measure(label: String, seconds: float) -> void:
 func _process(delta: float) -> void:
 	if _measuring:
 		_samples.append(delta * 1000.0)
+	_drift_clouds(delta)

@@ -67,7 +67,7 @@ DAY_FILL_ENERGY, NIGHT_FILL_ENERGY = 0.15, 0.06
 NIGHT_WIN_MATS = set()
 NIGHT_FIRE_MATS = set()
 NIGHT_CRYSTAL_MATS = {"crystal_a", "crystal_b"}
-NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH = (0.62, 0.88, 1.0), 0.9
+NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_FAC = (0.62, 0.88, 1.0), 0.7
 
 # setup_world() 填充：昼/夜灯位切换要改的三个对象引用
 _WORLD_BG = None
@@ -161,12 +161,12 @@ def set_night(on):
     _SUN_FILL.data.energy = DAY_FILL_ENERGY if day else NIGHT_FILL_ENERGY
 
 
-def _night_glow_mat(orig, rgb, strength):
+def _night_glow_mat(orig, rgb, fac):
     """夜版发光材质（创始人 2026-09-15：**半透明发光**——原材质要透出来）。
 
-    copy 原材质（连节点树）后在 Material Output 前并一枚 Emission（Add Shader）
-    ——原表面的明暗/纹理全部保留，发光半透明叠上去。copy() 不删原件，
-    materials.py 的材质缓存引用不受影响。
+    copy 原材质后在 Material Output 前插 Mix Shader：原表面占 (1-fac)、
+    Emission 占 fac（字面半透明；Add 加法会把暗原材质淹没成平光块）。
+    copy() 不删原件，materials.py 的材质缓存引用不受影响。
     """
     m = orig.copy()
     m.name = "__nnightglow_" + orig.name
@@ -180,14 +180,36 @@ def _night_glow_mat(orig, rgb, strength):
         return m
     emi = nt.nodes.new("ShaderNodeEmission")
     emi.inputs["Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
-    emi.inputs["Strength"].default_value = strength
-    add = nt.nodes.new("ShaderNodeAddShader")
+    emi.inputs["Strength"].default_value = 1.0
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    mix.inputs["Fac"].default_value = fac
     if out.inputs["Surface"].is_linked:
-        nt.links.new(out.inputs["Surface"].links[0].from_socket, add.inputs[0])
-    nt.links.new(emi.outputs["Emission"], add.inputs[1])
-    nt.links.new(add.outputs["Shader"], out.inputs["Surface"])
+        nt.links.new(out.inputs["Surface"].links[0].from_socket, mix.inputs[1])
+    nt.links.new(emi.outputs["Emission"], mix.inputs[2])
+    nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
     return m
 
+
+def ground_footprint(ob, z_max=8.0):
+    """贴地顶点的 x/y 范围（世界单位）——真实地面占地，排除出檐/顶棚等高处悬挑
+    （创始人 2026-09-15：烘卡时把建筑地面占地范围一起输出）。z_max 以下才算地脚。"""
+    mw = ob.matrix_world
+    xs, ys = [], []
+    for v in ob.data.vertices:
+        p = mw @ v.co
+        if p.z <= z_max:
+            xs.append(p.x)
+            ys.append(p.y)
+    if not xs:
+        m = B.measure(ob)
+        return m["x"], m["y"]
+    return (min(xs), max(xs)), (min(ys), max(ys))
+
+
+def footprint_cells(ob):
+    """占地 [宽格, 深格]（1 格 = 32 世界单位）。"""
+    (x0, x1), (y0, y1) = ground_footprint(ob)
+    return [round((x1 - x0) / 32.0, 2), round((y1 - y0) / 32.0, 2)]
 
 def make_camera():
     d = bpy.data.cameras.new("cam")
@@ -310,11 +332,11 @@ def bake_card(ob, cam, name):
     for mat in slots:
         nm = mat.name if mat else ""
         if nm in NIGHT_CRYSTAL_MATS:
-            night_repl.append(_night_glow_mat(mat, NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH))
+            night_repl.append(_night_glow_mat(mat, NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_FAC))
         elif nm in NIGHT_WIN_MATS:
-            night_repl.append(_night_glow_mat(mat, (1.0, 0.87, 0.68), 0.75))
+            night_repl.append(_night_glow_mat(mat, (1.0, 0.87, 0.68), 0.65))
         elif nm in NIGHT_FIRE_MATS:
-            night_repl.append(_night_glow_mat(mat, (1.0, 0.62, 0.30), 1.5))
+            night_repl.append(_night_glow_mat(mat, (1.0, 0.62, 0.30), 0.85))
         else:
             night_repl.append(None)
     for i, s in enumerate(ob.material_slots):
@@ -335,6 +357,7 @@ def bake_card(ob, cam, name):
         "px": [rx, ry], "zoom": rx / w if w > 0 else ZOOM,
         "units": [rx / (rx / w) if w > 0 else w, ry / (rx / w) if w > 0 else h],
         "anchor": [anchor.x, anchor.y, anchor.z],
+        "footprint": footprint_cells(ob),   # 真实地面占地 [宽格, 深格]（贴地顶点）
         "solid": name in SOLID,
         "glow_mats": sorted(set(hit)),
     }

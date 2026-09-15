@@ -25,6 +25,8 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 ### 2.1 卡与落位（proto_hd2d.gd）
 
 - 建筑卡 = Blender 正交相机（yaw 0°/tilt 26°，与游戏 3D 相机同角度）烘的透明底 PNG + glow 层。卡是 QuadMesh 贴图，**写深度**参与遮挡，吃伪法线光照。
+- **台基不烘**（创始人 2026-09-15）：地面灰白台基在烘端不生成（`buildings.py PLINTH_ENABLED=False`），接触阴影踏面同步剥除、整楼按实测最低点下沉贴地；引擎的 `base_cut` 裁剪随之退役（恒 0，旧公式会误切真墙）。
+- **地面占地随卡导出**：`cards/props/nature.json` 每条带 `footprint: [宽格, 深格]`（贴地顶点实测，排除出檐悬挑）。宽度档规则（创始人拍板）：**新增档位一律 2 格整数倍**，存量 4/6/8/12/16 档保留不动。
 - 卡落位按 `cards.json` 的 anchor（画面中心对应世界点）；道具/自然物按**卡底贴地**公式（否则卡底入地）。
 - 元数据 JSON（cards/props/nature.json）**随包入库 tex/**，加载先找烘焙工作区 `temp/`、缺失回退 `res://…/tex/`——新机器 clone 后不跑 Blender 也能玩。
 
@@ -38,7 +40,7 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 
 - **相机镜像**：3D 正交相机每帧镜像 2D CameraRig 的 x 与 zoom——1/4 区域跟随、顶栏居中、边缘滚动、中键拖拽、滚轮缩放全部在 CameraRig 上驱动。**为什么**：CameraRig 是全部相机操作的单一入口，3D 侧只做镜像；自己钉死玩家 x 会让手动操作全部失效（踩过）。
 - **昼夜**：读 `WorldState.game_time`（单位=小时 0~24，EnvironmentSystem 写入），6:00/19:00 切 `_apply_light("day"/"night")`。2D 的 CanvasModulate 够不到 3D 场景，必须自己挂。
-- **月夜档（2026-09-15 创始人定稿：月光在 Blender 里烘亮）**：夜观感主体是**夜版卡**——烘卡端每卡多烘一张 `<卡>_night.png`（亮冷蓝月亮方向光 + 低夜环境，窗/火/水晶自发光直接烘进 albedo，建筑/道具/自然物三库全量；月亮必须从**正面高角度**斜打，背面打光会把正立面全留在阴影里）；运行时 `card.gdshader` 的 `night_mix` 整卡切换（夜版缺失回退日版），`night_comp` 用 EMISSION 把烘卡亮度补回 ≈1.0（夜间场景光按地面/角色需要给暗档冷光，不许再压卡）。三条配套口径：① **夜雾删掉**（后景/远处"纯黑"的元凶是近黑雾色+后景吃满雾程；层次交给后景分层染色 + 远焦 DOF）；② 场景月亮方向光只给 0.15 能量、盘面张角缩到 2°（`sun_angle_max`，默认 30° 的巨大盘会被远焦 DOF 糊成斜光带）；③ **窗光去黄 + 半透明发光**——glow 染色暖白 `CARD_GLOW_TINT`、能量降档；夜版发光**不是整块换发光片**，而是 copy 原材质后在其 Material Output 前并一枚 Emission（Add Shader），原表面的明暗/纹理透出来、发光半透明叠上（强度 <1 档，如窗 0.75/火 1.5）；**道具库裸 `glass` 是井口/水面占位材质**（well 井口、trough 水面），不进发光名单（否则井口烘成白圈），街具灯头走 `glazing_win`/`clear_glass`；后景窗光按 `BG_GLOW_RATIO` 低档点缀（后景卡登记进 `_bg_card_mats`），街灯降饱和降能。
+- **月夜档（2026-09-15 创始人定稿：月光在 Blender 里烘亮）**：夜观感主体是**夜版卡**——烘卡端每卡多烘一张 `<卡>_night.png`（亮冷蓝月亮方向光 + 低夜环境，窗/火/水晶自发光直接烘进 albedo，建筑/道具/自然物三库全量；月亮必须从**正面高角度**斜打，背面打光会把正立面全留在阴影里）；运行时 `card.gdshader` 的 `night_mix` 整卡切换（夜版缺失回退日版），`night_comp` 用 EMISSION 把烘卡亮度补回 ≈1.0（夜间场景光按地面/角色需要给暗档冷光，不许再压卡）。三条配套口径：① **夜雾删掉**（后景/远处"纯黑"的元凶是近黑雾色+后景吃满雾程；层次交给后景分层染色 + 远焦 DOF）；② 场景月亮方向光只给 0.15 能量、盘面张角缩到 2°（`sun_angle_max`，默认 30° 的巨大盘会被远焦 DOF 糊成斜光带）；③ **窗光去黄 + 半透明发光**——glow 染色暖白 `CARD_GLOW_TINT`、能量降档；夜版发光**不是整块换发光片**，而是 copy 原材质后在 Material Output 前插一枚 **Mix Shader**（原表面占 1-FAC、Emission 占 FAC，字面半透明——Add 加法会把暗原材质淹没成平光块），玻璃的月光反光/框格透出来（窗 FAC 0.65/火 0.85/水晶 0.7）；**道具库裸 `glass` 是井口/水面占位材质**（well 井口、trough 水面），不进发光名单（否则井口烘成白圈），街具灯头走 `glazing_win`/`clear_glass`；后景窗光按 `BG_GLOW_RATIO` 低档点缀（后景卡登记进 `_bg_card_mats`），街灯降饱和降能。
 - **边界自适应**：布局驱动模式按布局街宽收 map_left/right（±半宽+8 格）。
 - **出口**：东西村口 ChunkTrigger（纯代码创建），旅行链注册在 game_root。
 - **设施门控**：`supports_village_facilities()`=false 跳过 2D 建筑设施（仓库/程序化资源点）；`wants_villager_npcs()`=true 照常生成村民——两个门控分开，因为村民不需要 2D 建筑也能干活（见 2.6）。

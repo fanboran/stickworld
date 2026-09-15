@@ -741,24 +741,12 @@ func _prop_bottom_pad(card: String) -> float:
 
 
 ## 建筑卡底部台基裁剪比例（founder 2026-09-15："地基上一圈浅灰方形"=浅灰台基，
-## 处置=整段删除）。裁剪高度直接取 cards.json 的 anchor 纵深分量占卡高之比：
-## anchor[1] 烘焙时记录的就是"墙脚基线到卡底的纵深带"=台基/台阶带高度
-## （实证 barn：57.3px/403.5 = 0.142，与贴图实测台基带 0.146 吻合；
-## 全卡落在此 0.13~0.20 区间）。该带含台阶、左右基座柱与透明留白，整段删除后
-## 墙体底缘 = 可视底 = 落地线，不再出现铺在楼脚前的浅灰方框。
-var _card_cut_cache: Dictionary = {}
-
-func _card_base_cut(card: String) -> float:
-	if _card_cut_cache.has(card):
-		return float(_card_cut_cache[card])
-	var meta: Dictionary = _cards.get(card, {})
-	var cut := 0.0
-	var anc: Array = meta.get("anchor", [0.0, 0.0, 0.0])
-	var units: Array = meta.get("units", [0.0, 0.0])
-	if float(units[1]) > 1.0:
-		cut = clampf(float(anc[1]) / float(units[1]), 0.0, 0.24)
-	_card_cut_cache[card] = cut
-	return cut
+## 台基裁剪已退役（创始人 2026-09-15：地面灰白台基改为烘端不生成——
+## buildings.py PLINTH_ENABLED=False + 整楼下沉贴地），卡底即墙脚，不再裁。
+## 旧实现按 anchor 纵深分量推台基带高度再整段裁掉（实证 barn 0.142 与贴图
+## 0.146 吻合）；台基消失后该公式会误切真墙，故恒 0。
+func _card_base_cut(_card: String) -> float:
+	return 0.0
 
 
 func _place_props() -> void:

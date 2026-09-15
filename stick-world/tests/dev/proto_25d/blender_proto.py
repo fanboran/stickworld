@@ -44,6 +44,11 @@ if TOOLS not in sys.path:
 
 import buildings as B  # noqa: E402  只读导入
 
+# 台基/勒脚不生成（创始人 2026-09-15：地面灰白台基别烘进卡）——墙脚原本砌在
+# 台基顶（plinth_h）上，摘掉后整楼下沉贴地（见 layout() 的 _ground_shift）；
+# 引擎侧 base_cut 裁剪随之退役。2D bake_export 管线不置此值，不受影响。
+B.PLINTH_ENABLED = False
+
 OUT_DIR = os.path.join(REPO, "stick-world", "temp", "proto25d")
 CARD_DIR = os.path.join(OUT_DIR, "cards")
 GLB_PATH = os.path.join(OUT_DIR, "proto25d_buildings.glb")
@@ -58,7 +63,9 @@ PAD = 10.0            # 卡四周留白（世界单位）
 RES_MAX = 3000        # 单卡最长边像素上限（护显存）
 SCALE = 1.0 / 32.0    # 世界单位(px) -> Godot 单位(格)
 
-#: 街排（def, 格数）——宽度档按 §0.3 取 4 的整数倍，6 格档仅装配器允许时用
+#: 街排（def, 格数）——宽度档规则（创始人 2026-09-15 拍板）：**新增档位一律
+#: 2 格整数倍**（2/4/6/8/10…），推翻旧"4 格整数倍"约束；存量 4/6/8/12/16 档
+#: 保留不动、不返工
 #: 2026-09-14 补 house_w16 / warehouse_w16：手工摆主场景（村A语义翻译）需要
 #: 16 格档的民居与仓库（村A InitialBuildingsList 的 placeholder/stone_warehouse 均 w16）
 STREET = [
@@ -135,14 +142,14 @@ DAY_KEY = {"energy": 3.3, "color": (1.0, 0.95, 0.85), "rot": (40, 0, -38), "angl
 NIGHT_KEY = {"energy": 2.2, "color": (0.62, 0.74, 1.0), "rot": (55, 0, -75), "angle": 8.0}
 DAY_FILL_ENERGY, NIGHT_FILL_ENERGY = 0.15, 0.06
 #: 夜版 albedo 里叠半透明发光的材质族（与各卡库 GLOW_MATS 同源，窗/火分色）。
-#: 强度=半透明档：<1 原材质透得出，1.5+ 才压过原材质（首版"整块换发光片 +
-#: 1.9 直冲 8bit"把窗子吹成纯白方块，创始人改口径为半透明发光）。
+#: FAC=发光占比（Mix Shader）：原材质占 (1-FAC) 透出来——灯笼罩架那种"透"
+#: 靠几何遮挡，平面窗玻璃要靠 FAC 压低发光、留出原材质的月光反光。
 NIGHT_WIN_MATS = {"glass", "glass_win", "glazing_win", "clear_glass"}
-NIGHT_WIN_RGB, NIGHT_WIN_STRENGTH = (1.0, 0.87, 0.68), 0.75
+NIGHT_WIN_RGB, NIGHT_WIN_FAC = (1.0, 0.87, 0.68), 0.65
 NIGHT_FIRE_MATS = {"fire", "ember", "flat_fire", "candle", "torch", "lamp"}
-NIGHT_FIRE_RGB, NIGHT_FIRE_STRENGTH = (1.0, 0.62, 0.30), 1.5
+NIGHT_FIRE_RGB, NIGHT_FIRE_FAC = (1.0, 0.62, 0.30), 0.85
 NIGHT_CRYSTAL_MATS = {"crystal_a", "crystal_b"}
-NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH = (0.62, 0.88, 1.0), 0.9
+NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_FAC = (0.62, 0.88, 1.0), 0.7
 
 # setup_world() 填充：昼/夜灯位切换要改的三个对象引用
 _WORLD_BG = None
@@ -222,12 +229,14 @@ def set_night(on):
     _SUN_FILL.data.energy = DAY_FILL_ENERGY if day else NIGHT_FILL_ENERGY
 
 
-def _night_glow_mat(orig, rgb, strength):
+def _night_glow_mat(orig, rgb, fac):
     """夜版发光材质（创始人 2026-09-15：**半透明发光**——原材质要透出来）。
 
-    不是把材质整块换成发光片，而是 copy 原材质（连节点树）后在 Material Output
-    前并一枚 Emission（Add Shader）——原表面的明暗/纹理/反射全部保留，发光
-    半透明叠上去；强度 <1 档时原材质读得出，>1 档才压过原材质。
+    copy 原材质（连节点树）后在 Material Output 前插一枚 Mix Shader：
+    原表面占 (1-fac)、Emission 占 fac——**字面意义的半透明叠加**，原材质的
+    月光反光/明暗按比例保留。不用 Add 加法（原材质夜里很暗，加法会把
+    原材质淹没成平光块——实测窗子烘出来看不出透）。copy() 不删原件，
+    materials.py 的材质缓存引用不受影响。
     """
     m = orig.copy()
     m.name = "__nightglow_" + orig.name
@@ -241,14 +250,36 @@ def _night_glow_mat(orig, rgb, strength):
         return m
     emi = nt.nodes.new("ShaderNodeEmission")
     emi.inputs["Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
-    emi.inputs["Strength"].default_value = strength
-    add = nt.nodes.new("ShaderNodeAddShader")
+    emi.inputs["Strength"].default_value = 1.0
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    mix.inputs["Fac"].default_value = fac
     if out.inputs["Surface"].is_linked:
-        nt.links.new(out.inputs["Surface"].links[0].from_socket, add.inputs[0])
-    nt.links.new(emi.outputs["Emission"], add.inputs[1])
-    nt.links.new(add.outputs["Shader"], out.inputs["Surface"])
+        nt.links.new(out.inputs["Surface"].links[0].from_socket, mix.inputs[1])
+    nt.links.new(emi.outputs["Emission"], mix.inputs[2])
+    nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
     return m
 
+
+def ground_footprint(ob, z_max=8.0):
+    """贴地顶点的 x/y 范围（世界单位）——真实地面占地，排除出檐/顶棚等高处悬挑
+    （创始人 2026-09-15：烘卡时把建筑地面占地范围一起输出）。z_max 以下才算地脚。"""
+    mw = ob.matrix_world
+    xs, ys = [], []
+    for v in ob.data.vertices:
+        p = mw @ v.co
+        if p.z <= z_max:
+            xs.append(p.x)
+            ys.append(p.y)
+    if not xs:
+        m = B.measure(ob)
+        return m["x"], m["y"]
+    return (min(xs), max(xs)), (min(ys), max(ys))
+
+
+def footprint_cells(ob):
+    """占地 [宽格, 深格]（1 格 = 32 世界单位）。"""
+    (x0, x1), (y0, y1) = ground_footprint(ob)
+    return [round((x1 - x0) / 32.0, 2), round((y1 - y0) / 32.0, 2)]
 
 def make_camera():
     d = bpy.data.cameras.new("cam")
@@ -263,6 +294,49 @@ def make_camera():
 
 # ------------------------------------------------------------------ 装配
 
+def _strip_shadow_faces(ob):
+    """删除接地阴影踏板面片（flat_shadow_*）：台基删除+整楼下沉后它落到地面以下，
+    读作卡底脏带；游戏的接地感由引擎 building_shadow 自绘承担。"""
+    me = ob.data
+    kill = {i for i, m in enumerate(me.materials)
+            if m is not None and "shadow" in m.name}
+    if not kill:
+        return
+    # Blender 5.2 的 Mesh.polygons 无 remove()，删面走 bmesh
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    dead = [f for f in bm.faces if f.material_index in kill]
+    if dead:
+        bmesh.ops.delete(bm, geom=dead, context="FACES")
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+
+
+def _ground_shift(ob):
+    """本体（非阴影面片）最低点落到 z=0——台基不生成后墙脚悬在 plinth_h 高度，
+    整楼按实测最低点（墙脚/台阶石）下沉贴地。（非阴影顶点集合只算一遍——
+    放在逐顶点循环里是 O(顶点×面数)，实测直接把整轮烘焙卡死。）"""
+    me = ob.data
+    mw = ob.matrix_world
+    kill = {i for i, m in enumerate(me.materials)
+            if m is not None and "shadow" in m.name}
+    zs = [(mw @ me.vertices[vi].co).z for vi in _verts_of(me, kill)]
+    if zs:
+        ob.location.z -= min(zs)
+
+
+def _verts_of(me, kill_mats):
+    """非阴影面片用到的顶点索引集合。"""
+    vs = set()
+    for p in me.polygons:
+        if p.material_index in kill_mats:
+            continue
+        vs.update(p.vertices)
+    return vs
+
+
 def layout():
     """沿 X 摆开一条街；返回 [{def,cells,obj,spec,origin}]。"""
     built = []
@@ -274,6 +348,9 @@ def layout():
             print("[SKIP] 无装配器: %s" % name)
             continue
         ob, spec = B.ASSEMBLERS[name](wc)
+        _strip_shadow_faces(ob)
+        _ground_shift(ob)
+        bpy.context.view_layer.update()
         m = B.measure(ob)
         width = m["x"][1] - m["x"][0]
         bx = cursor + width / 2.0
@@ -379,11 +456,11 @@ def bake_cards(entry, cam):
     for mat in slots:
         nm = mat.name if mat else ""
         if nm in NIGHT_WIN_MATS:
-            night_repl.append(_night_glow_mat(mat, NIGHT_WIN_RGB, NIGHT_WIN_STRENGTH))
+            night_repl.append(_night_glow_mat(mat, NIGHT_WIN_RGB, NIGHT_WIN_FAC))
         elif nm in NIGHT_FIRE_MATS:
-            night_repl.append(_night_glow_mat(mat, NIGHT_FIRE_RGB, NIGHT_FIRE_STRENGTH))
+            night_repl.append(_night_glow_mat(mat, NIGHT_FIRE_RGB, NIGHT_FIRE_FAC))
         elif nm in NIGHT_CRYSTAL_MATS:
-            night_repl.append(_night_glow_mat(mat, NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_STRENGTH))
+            night_repl.append(_night_glow_mat(mat, NIGHT_CRYSTAL_RGB, NIGHT_CRYSTAL_FAC))
         else:
             night_repl.append(None)
     for i, s in enumerate(ob.material_slots):
@@ -406,6 +483,7 @@ def bake_cards(entry, cam):
         "px": [rx, ry], "zoom": rx / w if w > 0 else ZOOM,
         "units": [rx / (rx / w) if w > 0 else w, ry / (rx / w) if w > 0 else h],
         "anchor": [anchor.x, anchor.y, anchor.z],
+        "footprint": footprint_cells(ob),   # 真实地面占地 [宽格, 深格]（贴地顶点）
         "glow_mats": sorted(set(hit)),
     }
 

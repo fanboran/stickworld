@@ -1181,12 +1181,20 @@ def chimney(b, w=26.0, d=26.0, top=60.0, mat="stone_dark", x=0.0, y=0.0, foot=0.
     return {"h": h, "w": w, "top": top + cap, "foot": foot, "roof": roof}
 
 
+#: 台基/勒脚总开关：HD-2D 卡片烘焙侧置 False（创始人 2026-09-15：地面灰白台基
+#: 别烘进卡，引擎侧 base_cut 裁剪随之退役）；2D bake_export 管线不置此值，
+#: 默认 True 照常生成，不受影响。
+PLINTH_ENABLED = True
+
+
 def plinth(b, w, d, h, mat="stone_dark", x=0.0, y=0.0, z=0.0, gap=None, lip=8.0,
            bevel=BEV_BIG):
     """勒脚/台基：比墙体外扩 lip。gap=(x0,x1) 时为门洞留缺口（另加门槛石）。
 
     顶面↔立面的转折是 20° 俯视下最主要的高光带来源 → 默认真倒角（可 bevel=0 关）。
     """
+    if not PLINTH_ENABLED:
+        return None
     if gap is None:
         b.box_bottom((w + 2 * lip, d + 2 * lip, h), (x, y), z, mat, bevel=bevel)
     else:

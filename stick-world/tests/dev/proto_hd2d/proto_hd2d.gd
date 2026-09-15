@@ -100,19 +100,12 @@ const PROPS: Array = [
 ## 梯度，创始人：算法就在那），宿主生成 ResourceNode 后经 spawn_nature_card_at
 ## 让 PBR 卡随点落。`z` ≥ 5 前景带。
 const NATURE_SPOTS: Array = [
-	# 西墙外**开阔带**纯景（近墙净空 12 格后才是林线——创始人：传送出去先见野地）
+	# 西墙外开阔带纯景（创始人 2026-09-15：就一两棵树和木头，别摆密）
 	{"card": "dead_tree", "x": -118.0, "z": 9.0},
-	{"card": "bush", "x": -114.0, "z": 5.5},
 	{"card": "grass_clump", "x": -108.0, "z": 5.0},
-	{"card": "mushrooms", "x": -116.0, "z": 5.2},
-	{"card": "stump", "x": -111.0, "z": 5.5},
 	# 东墙外东路开阔带纯景
-	{"card": "grass_clump", "x": 98.5, "z": 5.0},
 	{"card": "bush", "x": 101.0, "z": 5.5},
-	{"card": "stump", "x": 100.0, "z": 5.4},
-	{"card": "bush", "x": 109.0, "z": 5.0},
 	{"card": "dead_tree", "x": 116.0, "z": 9.5},
-	{"card": "rubble", "x": 114.0, "z": 5.5},
 ]
 
 ## 战场遗物（battlefield 模式手摆）：旧 12V12 战场旧址的残营读法——残旗/破车/
@@ -260,8 +253,7 @@ var _tex_cache: Dictionary = {}
 
 var _env: Environment
 var _sky_mat: ProceduralSkyMaterial
-var _sun: DirectionalLight3D
-var _sun_disc: MeshInstance3D   # 显式太阳盘（相机子节点，昼显夜隐，建筑自动遮挡）
+var _sun: DirectionalLight3D   # 太阳盘 = 程序化天空按本灯方向自动渲染（右上）
 var _fill: DirectionalLight3D
 var _ground_root: Node3D
 var _card_root: Node3D
@@ -557,6 +549,18 @@ func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
 	_bg_base_samples.append(lz)
 
 
+## 单栋前排建筑的地基实心带（px 四元组 [x0,x1,y0,y1]）：x=建筑格宽（4 格整倍数
+## 口径，碰撞不把出檐算进去），y=行走带后段到建筑基线外扩 1.4 格的一条带。
+## get_solid_rects 与 get_building_rects 共用，保证碰撞与宽度辅助线同宽。
+func _building_solid_rect(occ: Array) -> Array:
+	var cx: float = (float(occ[0]) + float(occ[1])) * 0.5
+	var card: String = str(occ[2])
+	var cells := float(_cards.get(card, {}).get("cells", 8.0))
+	var z: float = float(occ[3]) if occ.size() > 3 else 0.6
+	var base_y: float = 688.0 + z * 32.0
+	return [cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0]
+
+
 ## 前排建筑+道具的实心区间（格，[x0,x1]）——宿主映射成 2D 碰撞墙，
 ## 玩家在街上走不会被楼/摆件穿透（创始人 2026-09-14）。
 ## 建筑按**建筑格宽**对齐中心（画面宽含出檐，碰撞不该把出檐也堵死）；
@@ -564,14 +568,7 @@ func _spawn_bg_card(card: String, x: float, lz: float, tint: Color) -> void:
 func get_solid_rects() -> Array:
 	var out: Array = []
 	for occ in _front_occ:
-		var cx: float = (float(occ[0]) + float(occ[1])) * 0.5
-		var card: String = str(occ[2])
-		var cells := float(_cards.get(card, {}).get("cells", 8.0))
-		# 建筑碰撞=**地基范围**（创始人 2026-09-14）：x=建筑格宽，
-		# y=行走带后段到建筑基线外扩 1.4 格的一条带——不再贯穿整条街
-		var z: float = float(occ[3]) if occ.size() > 3 else 0.6
-		var base_y: float = 688.0 + z * 32.0
-		out.append([cx - cells * 0.5, cx + cells * 0.5, 688.0, base_y + 44.0])
+		out.append(_building_solid_rect(occ))
 	for r in _prop_solids:
 		out.append(r)
 	if battlefield:
@@ -582,6 +579,16 @@ func get_solid_rects() -> Array:
 	var wx: float = _wall_x()
 	for sx: float in [-1.0, 1.0]:
 		out.append([sx * wx - WALL_T * 0.5, sx * wx + WALL_T * 0.5, 688.0, WALK_FRONT_PX])
+	return out
+
+
+## 前排建筑占地带（px 四元组 [x0,x1,y0,y1]，不含道具/城墙）——宿主转发给
+## F3 建筑宽度辅助线：左右边界竖线 + 整格浅网格（创始人 2026-09-15，
+## 2D 图 F3 版式样原样搬入 HD-2D；宽度口径=建筑格宽，与碰撞同源）
+func get_building_rects() -> Array:
+	var out: Array = []
+	for occ in _front_occ:
+		out.append(_building_solid_rect(occ))
 	return out
 
 
@@ -963,6 +970,10 @@ func _build_world() -> void:
 	_env = Environment.new()
 	_env.background_mode = Environment.BG_SKY
 	_sky_mat = ProceduralSkyMaterial.new()
+	# 天空"地面半球"调成土黄雾霭色：背景地面带只铺到第二排后景根部，
+	# 末排楼脚以后露出的这条带读作远景地气，而不是突兀的深蓝
+	_sky_mat.ground_horizon_color = Color(0.42, 0.40, 0.34)
+	_sky_mat.ground_bottom_color = Color(0.24, 0.23, 0.20)
 	var sky := Sky.new()
 	sky.sky_material = _sky_mat
 	_env.sky = sky
@@ -1022,13 +1033,19 @@ func _build_world() -> void:
 	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
 	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
 	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
-	# 中远景地面：低对比夯土（rammed_earth std=0.034）。中景已被 bg1（z=-6.7）
-	# 楼群+前排楼身咬合遮住，只剩楼缝间少量露出；别用 cobble（std=0.107）——
-	# 掠射下 mip 会把高对比石板糊成"碎石墙"（实测翻车）。
-	var far_z: float = float(_bg_base_z.get(BG_LAYERS - 1,
-		SKYLINE_Z - BG_LAYER_GAP * float(BG_LAYERS - 1)))
-	_add_ground_plane("rammed_earth_128.png", far_z, 0.0,
-		0.0, 14.0, Color(0.90, 0.86, 0.80))
+	# 中远景地面（背景地面带）：**与道路带同材质分幅**（城心石板/夯土过渡/
+	# 城外草土）——1/3 线以下每个横向区段只有一种贴图，不再被远端草地带
+	# 劈成两段（创始人 2026-09-15）；只铺到第二排后景根部，末排以后露
+	# 程序化天空的土黄地平带 = 远景雾霭层。
+	var far_z: float = float(_bg_base_z.get(1,
+		SKYLINE_Z - BG_LAYER_GAP * 1.0))
+	var wx: float = _wall_x()
+	_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
+		far_z, 0.0, 0.0, 10.0, Color(0.86, 0.89, 0.96))
+	_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
+		far_z, 0.0, 6.0, Color(0.80, 0.78, 0.62))
+	_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
+		far_z, 0.0, 6.0, Color(0.80, 0.78, 0.62))
 	# 兜底大地皮：街面分段各有边界，缩太小视野越出分段范围就露天空
 	# （创始人：缩太小下边界出现虚空）。这层压在所有分段之下（y=-0.05），
 	# 只在分段没铺到的区域露脸；±600 格宽 + z -30~40，任何缩放都不露底。
@@ -1068,18 +1085,18 @@ func _build_world() -> void:
 		#   建筑带（台面）= 城心石板/近缘草地；道路带（z 1.9~46）= 城心石板
 		#   ±30 → 夯土过渡（不长草）→ 城外草地；背景地面带 = 兜底大地皮。
 		# 路面 y 抬升防与兜底大地皮 z-fight
-		var wx: float = _wall_x()
 		_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.02, 10.0, Color(0.86, 0.89, 0.96))
 		_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
 		_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
 			BAND_ROAD.x, BAND_ROAD.y, 0.015, 6.0, Color(0.80, 0.78, 0.62))
-		# 城外野地 = 草地贴图（稀疏草土地，非道路带）
+		# 城外草地带：**整块贯通**（从后景地平线 far_z 到下边界外——
+		# 创始人：城外从下边界线到后景地平线全是贯通材质，不分段）
 		_add_ground_plane_at("grass_sparse_alb_128.png", -(wx + 15.0), 30.0,
-			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.88, 0.90, 0.80))
+			far_z, BAND_ROAD.y, 0.0, 6.0, Color(0.92, 0.92, 0.84))
 		_add_ground_plane_at("grass_sparse_alb_128.png", (wx + 15.0), 30.0,
-			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.90, 0.88, 0.78))
+			far_z, BAND_ROAD.y, 0.0, 6.0, Color(0.92, 0.92, 0.84))
 
 	# --- 灯笼点光源（暖光；让"真 3D 光照"这条线可验证）---
 	# 战场无街灯（野外夜档靠月光档，不沿街布灯）
@@ -1452,6 +1469,10 @@ func _add_sky_backdrop() -> void:
 ## 过顶组成"门楼"读法（深一档石材与墙面拉开），出城从门洞直穿。
 func _build_walls() -> void:
 	var wx: float = _wall_x()
+	# 墙纵深贯通到后景地平线（背景地面带远端，创始人：包括城墙也是一直
+	# 延伸到后景地平线）
+	var wall_far_z: float = float(_bg_base_z.get(1,
+		SKYLINE_Z - BG_LAYER_GAP * 1.0))
 	var mat := _wall_material(Color(0.85, 0.83, 0.79))
 	var pmat := _wall_material(Color(0.62, 0.60, 0.57))
 	var root := Node3D.new()
@@ -1461,7 +1482,7 @@ func _build_walls() -> void:
 		# 两段墙板夹出门洞：**后段从天际线（z=-7，背景楼群根部）起**——
 		# 城墙纵深贯通全场景（创始人：垂直向城墙不能只有道路带那么短），
 		# 前段铺到行走带前缘外
-		for seg: Variant in [[-7.0, GATE_Z0], [GATE_Z1, 19.5]]:
+		for seg: Variant in [[wall_far_z, GATE_Z0], [GATE_Z1, 19.5]]:
 			var z0: float = float(seg[0])
 			var z1: float = float(seg[1])
 			_box(root, mat, Vector3(WALL_T, WALL_H, z1 - z0),

@@ -36,6 +36,16 @@ static func _map_child(map: Node, ctx: Dictionary, key: String) -> Node:
 	return map.get_node_or_null(path) if path != "" else null
 
 
+## HD-2D 图地面 y 重映射：地图声明 remap_fx_pos 时把行走带 y 压进 3D 投影域
+## （2D 图原样返回）。F3 抽屉画"地面锚定物"（线/框/文字/标记）一律经此口，
+## 禁止按 2D y 直绘——否则与 3D 世界错开 (1-压缩率) 倍，公式见
+## docs/技术/架构/建筑管线/HD-2D街景系统.md §屏幕映射
+static func _ground_y(map: Node, y: float) -> float:
+	if map != null and is_instance_valid(map) and map.has_method("remap_fx_pos"):
+		return (map.remap_fx_pos(Vector2(0.0, y)) as Vector2).y
+	return y
+
+
 # ─────────────────────────────── 绘制器 ────────────────────────────────
 
 ## PlacementGrid 竖向条带（绿=占用 红=不可建）+ 网格竖线
@@ -45,6 +55,10 @@ static func draw_grid(control: Control, ctx: Dictionary) -> void:
 		return
 	var grid: Node = _map_child(map, ctx, "placement_grid")
 	if grid == null:
+		# HD-2D 图无 PlacementGrid：整格浅网格画在建筑段包络内
+		# （创始人 2026-09-15：画"地面的建筑段内"），样式=2D 图 F3 白色口径
+		if map.has_method("get_building_rects"):
+			_draw_hd2d_cell_lines(control, ctx, map)
 		return
 	var cell_size: float = float(grid.get("CELL_SIZE")) if grid.get("CELL_SIZE") != null else 32.0
 	# 阶段 F：使用动态边界（支持负数 cell_x）
@@ -78,6 +92,38 @@ static func draw_grid(control: Control, ctx: Dictionary) -> void:
 			control.draw_rect(Rect2(screen_x, line_top, screen_cell, line_bottom - line_top), Color(1.0, 0.3, 0.3, 0.15), true)
 		# 网格竖线
 		control.draw_line(Vector2(screen_x, line_top), Vector2(screen_x, line_bottom), Color(1.0, 1.0, 1.0, 0.08), 1.0)
+
+
+## HD-2D 建筑段整格浅网格（F3 grid_drawer 开关管辖）：32px（1 格）一条竖线，
+## 横纵都裁在建筑占地包络内（创始人 2026-09-15：画"地面的建筑段内"），
+## 纵向经 _ground_y 压进 3D 投影域，样式对齐 2D 图 F3（白 0.08 细线）
+static func _draw_hd2d_cell_lines(control: Control, ctx: Dictionary, map: Node2D) -> void:
+	var rects: Array = map.get_building_rects()
+	if rects.is_empty():
+		return
+	var x0: float = INF
+	var x1: float = -INF
+	var y_top: float = INF
+	var y_bottom: float = -INF
+	for r: Variant in rects:
+		x0 = minf(x0, float(r[0]))
+		x1 = maxf(x1, float(r[1]))
+		y_top = minf(y_top, float(r[2]))
+		y_bottom = maxf(y_bottom, float(r[3]))
+	var zoom: float = ctx.get("effective_zoom", 1.0)
+	var cam_pos: Vector2 = ctx.get("camera_pos", Vector2.ZERO)
+	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
+	var view_left: float = cam_pos.x - vp_size.x / (2.0 * zoom)
+	var view_right: float = cam_pos.x + vp_size.x / (2.0 * zoom)
+	var line_top: float = world_to_screen(Vector2(0.0, _ground_y(map, y_top)), ctx).y
+	var line_bottom: float = world_to_screen(Vector2(0.0, _ground_y(map, y_bottom)), ctx).y
+	var col := Color(1.0, 1.0, 1.0, 0.08)
+	var x: float = ceilf(maxf(x0, view_left) / 32.0) * 32.0
+	var to_x: float = minf(x1, view_right)
+	while x <= to_x:
+		var screen_x: float = world_to_screen(Vector2(x, 0.0), ctx).x
+		control.draw_line(Vector2(screen_x, line_top), Vector2(screen_x, line_bottom), col, 1.0)
+		x += 32.0
 
 
 ## WalkBarrier（蓝）+ PassageBarrier（紫）
@@ -134,6 +180,17 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 	if terrain_buildings != null:
 		for building in terrain_buildings.get_children():
 			_draw_building_outline(control, ctx, building, Color(0.8, 0.8, 0.8, 0.4))
+	# HD-2D 图：2D 建筑宿主为空壳（视觉在 3D 卡片），建筑左右边界竖线直接取
+	# 3D 侧占地数据（F3 building_drawer 开关管辖；白 0.6 口径同 2D 描边，
+	# 宽度=建筑格宽，经 _ground_y 压进 3D 投影域）
+	if map.has_method("get_building_rects"):
+		var edge_col := Color(1.0, 1.0, 1.0, 0.6)
+		for r: Variant in map.get_building_rects():
+			var top_y: float = world_to_screen(Vector2(0.0, _ground_y(map, float(r[2]))), ctx).y
+			var bot_y: float = world_to_screen(Vector2(0.0, _ground_y(map, float(r[3]))), ctx).y
+			for rx: float in [float(r[0]), float(r[1])]:
+				var sx: float = world_to_screen(Vector2(rx, 0.0), ctx).x
+				control.draw_line(Vector2(sx, top_y), Vector2(sx, bot_y), edge_col, 1.5)
 
 
 ## 辅助：根据 PassageBarrier 绘制建筑边界框 + 碰撞体下边界红色标记线
@@ -184,8 +241,8 @@ static func draw_ground_lines(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
 		return
-	var ground_y: float = map.ground_y if "ground_y" in map else 0.0
-	var ground_bottom: float = map.ground_bottom if "ground_bottom" in map else 0.0
+	var ground_y: float = _ground_y(map, map.ground_y if "ground_y" in map else 0.0)
+	var ground_bottom: float = _ground_y(map, map.ground_bottom if "ground_bottom" in map else 0.0)
 	var map_left: float = map.map_left if "map_left" in map else 0.0
 	var map_right: float = map.map_right if "map_right" in map else 0.0
 	# ground_y 线（黄色）
@@ -224,7 +281,8 @@ static func draw_entity_states(control: Control, ctx: Dictionary) -> void:
 	for entity in entity_host.get_children():
 		if not entity is CharacterBody2D:
 			continue
-		var screen_pos := world_to_screen(entity.global_position, ctx)
+		var screen_pos := world_to_screen(Vector2(
+				entity.global_position.x, _ground_y(map, entity.global_position.y)), ctx)
 		var info := "pos:(%d,%d)" % [int(entity.global_position.x), int(entity.global_position.y)]
 		if "possessed" in entity:
 			info += " %s" % ("[P]" if entity.possessed else "[AI]")
@@ -303,7 +361,8 @@ static func draw_resource_nodes(control: Control, ctx: Dictionary) -> void:
 		if not node is Node2D or not is_instance_valid(node):
 			continue
 		var n: Node2D = node as Node2D
-		var screen_pos := world_to_screen(n.global_position, ctx)
+		var screen_pos := world_to_screen(
+				Vector2(n.global_position.x, _ground_y(map, n.global_position.y)), ctx)
 		var s: float = 16.0 * zoom
 		# 资源类型颜色
 		var rtype: int = n.get("resource_type") if "resource_type" in n else 0
@@ -380,7 +439,7 @@ static func draw_world_ruler(control: Control, ctx: Dictionary) -> void:
 	var map: Node2D = ctx.get("map", null)
 	if map == null or not is_instance_valid(map):
 		return
-	var ground_y: float = map.ground_y if "ground_y" in map else 810.0
+	var ground_y: float = _ground_y(map, map.ground_y if "ground_y" in map else 810.0)
 	var map_left: float = map.map_left if "map_left" in map else 0.0
 	var map_right: float = map.map_right if "map_right" in map else 8192.0
 	var zoom: float = ctx.get("effective_zoom", 1.0)
@@ -429,11 +488,16 @@ static func draw_entity_info(control: Control, ctx: Dictionary) -> void:
 	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
 	var mouse_screen: Vector2 = control.get_viewport().get_mouse_position()
 	var mouse_world: Vector2 = (mouse_screen - vp_size * 0.5) / zoom + cam_pos
+	# HD-2D 图：垂直方向 3D 取景固定（不随 2D 相机纵移），鼠标命中的是地面
+	# 点——y 走压缩逆变换（x 仍是仿射）；2D 图维持仿射逆变换
+	var map: Node2D = ctx.get("map", null)
+	if map != null and is_instance_valid(map) and map.has_method("screen_y_to_ground_y"):
+		mouse_world.y = map.screen_y_to_ground_y(mouse_screen.y, zoom)
 	var font: Font = control.get_theme_default_font()
-	# 鼠标旁边显示绿色世界坐标
-	var diag_pos := world_to_screen(mouse_world, ctx)
+	# 鼠标旁边显示绿色世界坐标（标签钉鼠标屏幕位——HD-2D 的世界 y 是地面带
+	# 坐标，经 2D 投影回屏幕会漂，不能再用 world_to_screen）
 	control.draw_string(
-		font, diag_pos + Vector2(12, -12),
+		font, mouse_screen + Vector2(12, -12),
 		"世界:(%d,%d)" % [int(mouse_world.x), int(mouse_world.y)],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.8, 1.0, 0.8, 0.7)
 	)

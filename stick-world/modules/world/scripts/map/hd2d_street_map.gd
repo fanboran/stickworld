@@ -75,6 +75,8 @@ var decoration_layer: Node2D = null
 ## 净空 14 格起步，群落"一段一段"的聚簇感由 resource_gen 群落散布承担）
 var forest_clear_cells := 14
 var forest_ramp_cells := 10
+## 资源间距（px）：树冠卡画面宽 2~3 格，64px 会互相穿模（创始人 2026-09-15）
+var resource_min_spacing := 96.0
 ## 创始人 2026-09-15：视野内两三个露头即可（别写死数量，算法按带幅推），
 ## 大宗采集在城门传送的资源图（Hd2dResourceMap，密度另调）；
 ## 子类可调（战场图调稀——野地要开阔可列阵）
@@ -87,6 +89,11 @@ func _ready() -> void:
 	# 屏幕下边界（CameraRig ground_bottom，即 F3 地面蓝线）钉在 3D 街面的
 	# 可见近沿上——与 3D 相机缩放锚线同一世界线，2D/3D 底沿逐像素重合
 	ground_bottom = WALK_FRONT_Y
+	# 视野下边界契约（屏幕映射三同步之一）：CameraRig 只认 ground_y + 1080×ground_ratio
+	# 的换算值（**不读 ground_bottom 变量**），此处强制换算使 rig 视野下边界钉在
+	# 3D 底沿锚线 WALK_FRONT_Y 上——差多少，F3 覆盖层/FX 等 2D 画布元素就整体
+	# 偏多少（1080p 下曾差 95px 致 F3 碰撞箱全体错位；推导见 HD-2D街景系统.md §屏幕映射）
+	ground_ratio = (WALK_FRONT_Y - ground_y) / 1080.0
 	# 注册 2D 特效坐标重映射器（FxLibrary.remap_pos 读此组）：HD-2D 图的地面
 	# 受俯角前缩，飘字/粒子按 2D y 直绘会飘在半空，须压到 3D 投影同一地面线
 	add_to_group("fx_pos_remapper")
@@ -300,6 +307,17 @@ func remap_fx_pos(pos: Vector2) -> Vector2:
 	return Vector2(pos.x, WALK_FRONT_Y - (WALK_FRONT_Y - pos.y) * k)
 
 
+## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。
+## 3D 取景垂直固定（不随 2D 相机纵移）：屏幕底沿 = 锚线 WALK_FRONT_Y，
+## 每格纵深在屏幕上占 32×压缩率×缩放 px（公式推导见 HD-2D街景系统.md §屏幕映射）
+func screen_y_to_ground_y(screen_y: float, effective_zoom: float) -> float:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return screen_y
+	var k: float = float(_hd.get_ground_squash())
+	var vp_h: float = get_viewport_rect().size.y
+	return WALK_FRONT_Y - (vp_h - screen_y) / (k * maxf(effective_zoom, 0.001))
+
+
 ## 城门引导点（gate_router 组协议，BehaviorHarvest 消费）：直线 steering 的
 ## 采集村民遇城墙时，引导其先走到门洞口（墙内侧 1 格、y 对齐门洞中心），
 ## 站到门口后直线不再被门洞带外的墙挡住，恢复直走。返回 Vector2.ZERO =
@@ -331,6 +349,14 @@ func get_walk_barriers() -> Array:
 	if solids != null:
 		out.append(solids)
 	return out
+
+
+## F3 建筑宽度辅助线数据口（debug_gui 抽屉 duck 读取）：3D 侧前排建筑
+## 占地实心带（px 四元组 [x0,x1,y0,y1]，x=建筑格宽、y=地基纵深带）
+func get_building_rects() -> Array:
+	if _hd != null and _hd.has_method("get_building_rects"):
+		return _hd.get_building_rects()
+	return []
 
 
 ## 露天工位（转发 3D 侧摆位表：铁砧 → 铁匠）
@@ -396,6 +422,7 @@ func _spawn_resource_nodes() -> void:
 	# 近墙 3 格净空 → 12 格渐密 → 满密度（渐变读法保留，城门口即有活干）
 	gen.set("FOREST_CLEAR_CELLS", forest_clear_cells)
 	gen.set("FOREST_RAMP_CELLS", forest_ramp_cells)
+	gen.set("MIN_SPACING", resource_min_spacing)
 	if gen.has_method("setup"):
 		gen.setup(self)
 	var a: int = int(map_left / CELL_PX) + 2

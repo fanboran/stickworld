@@ -37,7 +37,8 @@ const CITY_TIER := "townlet"
 
 ## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
 ## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
-## 构图契约"地面占屏幕下 1/3"）——屏幕底沿、2D ground_bottom（蓝线）、
+## 构图契约"地面占屏幕下 1/3"@zoom=1——默认缩放 0.75 下分界线压屏幕下 1/4，
+## 见 HD-2D街景系统.md §4.0）——屏幕底沿、2D ground_bottom（蓝线）、
 ## 可行走深度三点合一，整条可见街面都能走。
 const WALK_BACK_Y := 688.0
 const WALK_FRONT_Y := 1294.0
@@ -358,11 +359,19 @@ func get_walk_barriers() -> Array:
 
 
 ## F3 建筑宽度辅助线数据口（debug_gui 抽屉 duck 读取）：3D 侧前排建筑
-## 占地实心带（px 四元组 [x0,x1,y0,y1]，x=建筑格宽、y=地基纵深带）
+## 占地实心带（[x0,x1,y0,y1]：x=格、y=px 混合口径，同 get_solid_rects）
 func get_building_rects() -> Array:
 	if _hd != null and _hd.has_method("get_building_rects"):
 		return _hd.get_building_rects()
 	return []
+
+
+## F3 黄线数据口（debug_gui duck 读取）：前后景分界线的 2D 等价 y
+## （zoom=1 压屏幕下 1/3 线；旧文档叫"地平线"，实为前后景分界，勿混淆）
+func get_fg_bg_boundary_y() -> float:
+	if _hd != null and _hd.has_method("get_fg_bg_boundary_y"):
+		return float(_hd.get_fg_bg_boundary_y())
+	return ground_y
 
 
 ## 露天工位（转发 3D 侧摆位表：铁砧 → 铁匠）
@@ -392,6 +401,12 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		return
 	var body := StaticBody2D.new()
 	body.name = "HD2DSolids"
+	# 前排建筑形状打 meta（get_solid_rects 前 N 项=建筑，与 get_building_rects
+	# 同序）：F3 显示改走直立包楼框（draw_buildings），障碍抽屉跳过防双重绘制
+	var building_count: int = 0
+	if hd.has_method("get_building_rects"):
+		building_count = hd.get_building_rects().size()
+	var idx: int = 0
 	for r: Variant in hd.get_solid_rects():
 		var x0: float = float(r[0]) * CELL_PX
 		var x1: float = float(r[1]) * CELL_PX
@@ -404,6 +419,9 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		rect.size = Vector2(maxf(8.0, x1 - x0), maxf(8.0, y1 - y0))
 		shape.shape = rect
 		shape.position = Vector2((x0 + x1) * 0.5, (y0 + y1) * 0.5)
+		if idx < building_count:
+			shape.set_meta("hd2d_building", true)
+		idx += 1
 		body.add_child(shape)
 	if body.get_child_count() > 0:
 		add_child(body)

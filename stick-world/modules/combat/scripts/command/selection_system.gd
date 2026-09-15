@@ -27,10 +27,6 @@ const CLICK_TOLERANCE: float = 45.0
 const BOX_BORDER_COLOR: Color = Color(0.4, 0.85, 1.0, 0.9)
 ## 选中框填充颜色
 const BOX_FILL_COLOR: Color = Color(0.4, 0.85, 1.0, 0.15)
-## 选中单位脚下的圆环颜色
-const RING_COLOR: Color = Color(0.35, 1.0, 0.5, 0.9)
-## 选中圆环半径（屏幕像素）
-const RING_RADIUS: float = 30.0
 ## possessed 玩家四角框颜色（与选中框同白）
 const POSSESSED_COLOR: Color = Color(1.0, 1.0, 1.0, 0.95)
 ## possessed 框比碰撞箱水平外扩的像素
@@ -339,23 +335,25 @@ func _draw() -> void:
 		var rect := Rect2(_drag_start_screen, _drag_current_screen - _drag_start_screen).abs()
 		draw_rect(rect, BOX_FILL_COLOR, true)
 		draw_rect(rect, BOX_BORDER_COLOR, false, 2.0)
-	# 选中单位脚下的白色四角线框（创始人 2026-09-14：黄圈改四角框）
+	# 选中单位**全身包裹**白色四角框（创始人 2026-09-16"框住整个火柴人"）
 	if _selected_units.is_empty():
 		return
 	var canvas_xform: Transform2D = get_viewport().get_canvas_transform()
 	for u in _selected_units:
 		if not is_instance_valid(u):
 			continue
-		# 选中框=**全身包裹**（创始人 2026-09-16"框住整个火柴人"）：与悬浮框/
-		# 点选判定同一几何（entity_hover_rect）——2D 图=Range 原框（≈全身），
-		# HD-2D 图=billboard 视觉身高框（脚线~头顶）；角臂画在矩形四角
+		# 选中框=与悬浮框/点选判定同一几何（entity_hover_rect）——2D 图=Range
+		# 原框（≈全身），HD-2D 图=billboard 视觉身高框（脚线~头顶）。
+		# 缩放收编：矩形整体过 canvas 变换（zoom 进变换，角臂从屏幕矩形
+		# 自缩放）——半宽半高不得以画布像素直当屏幕像素（会随缩放失配）
 		var rect: Rect2 = _unit_hover_rect(map_now, u)
 		if rect.size == Vector2.ZERO:
 			continue
-		var screen_center: Vector2 = canvas_xform * rect.get_center()
+		var screen_rect: Rect2 = canvas_xform * rect
+		var arm: float = clampf(minf(screen_rect.size.x, screen_rect.size.y) * 0.15, 5.0, 16.0)
 		var col: Color = Color(1.0, 1.0, 1.0, 0.95)
-		_draw_corner_bracket(screen_center, rect.size.x * 0.5, rect.size.y * 0.5,
-				RING_RADIUS * 0.38, col)
+		_draw_corner_bracket(screen_rect.get_center(), screen_rect.size.x * 0.5,
+				screen_rect.size.y * 0.5, arm, col)
 
 
 func _draw_corner_bracket(center: Vector2, half_w: float, half_h: float, arm: float, col: Color) -> void:

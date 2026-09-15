@@ -63,6 +63,17 @@ Range 矩形）都不做 HD-2D 投影压缩，而角色 billboard 视觉位置�
 其中 debug_drawers 蓝框"物理碰撞位"画法与创始人 09-16 裁决冲突，已按计划
 补 revert-fix `081fe908`（蓝框贴脚下线）。
 
+**第四轮修正（创始人实机复验反馈，2026-09-16）**：合并后蓝框贴脚线但
+"显示偏上、实际逻辑位置也偏很多，合并前蓝紫相撞真的会停"——病根=HD-2D
+（origin 空间）实体 Collider 仍挂 2D 髋部语义的 origin+foot_offset（≈130），
+物理脚印悬在视觉脚线"前方" ~130·k·ez，停位与视觉脱节。修复=origin 空间图
+**Collider 居 origin**（物理脚印=视觉脚线；`set_ground_constraints` 旗帜门控
++口径翻转重摆 `_apply_scale`，2D 图不变）；F3 蓝框回**物理碰撞位**渲染——
+修复后物理位=脚下线框位，"碰撞真相"与"贴脚下线框"两裁决合一。同轮缩放
+收编：F3 `world_to_screen` 走 viewport canvas_transform（ctx 注入 control）；
+选中框矩形整体过变换+角臂自缩放（此前画布像素直当屏幕像素，框大 1.33×）。
+单测新增实体碰撞箱门控用例（unit 63/63 全绿）。
+
 **分类核验为无需改动**：fx_library、resource_node（已走 remap 协议）；
 debug_drawers F3 口径（创始人已裁决的数据口径，坐标换算已走 remap）；
 pond/tree_yarn_ball/rock_painting（2D 图专属装饰，恒等域）；siege_gate_prompt

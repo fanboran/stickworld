@@ -936,8 +936,11 @@ func _apply_scale() -> void:
 			(col.shape as RectangleShape2D).size = _collider_base_size * s
 			# X 偏移随朝向镜像（原点不在碰撞箱中心时，翻转需镜像偏移）
 			col.position.x = _collider_base_x * _facing
-			# 9q：Y 偏移（脚部位置）随体型缩放，Collider 跟到缩放后的脚上
-			col.position.y = foot_offset
+			# Y 偏移：2D 图口径 Collider 跟到脚上（origin=髋、脚在 +foot_offset）；
+			# origin 空间（HD-2D）origin 即视觉脚线，物理脚印贴脚线（箱居 origin）
+			# ——否则物理脚印悬在视觉脚线"前方" ~foot_offset·k·ez，停位与视觉
+			# 脱节（创始人 2026-09-16"实际逻辑位置也偏很多"）
+			col.position.y = 0.0 if _ground_constraints_origin_space else foot_offset
 	# 同步缩放 Range shape（悬停检测范围，与 Collider 同步缩放）
 	if _range_base_size != Vector2.ZERO:
 		var rng := get_node_or_null("Range") as CollisionShape2D
@@ -1113,7 +1116,12 @@ func set_ground_constraints(p_ground_y: float, p_ground_bottom: float, p_map_lef
 	ground_bottom = p_ground_bottom
 	map_left = p_map_left
 	map_right = p_map_right
+	# 口径翻转时重摆物理脚印：注入发生在 add_child 之后（_ready 已跑过，
+	# Collider 当时按默认 2D 口径摆）——origin 空间须把箱挪回脚线
+	var flag_changed: bool = _ground_constraints_origin_space != p_origin_space
 	_ground_constraints_origin_space = p_origin_space
+	if flag_changed:
+		_apply_scale()
 
 
 ## 由 MapInstance.spawn_entity 调用，注入地图引用（供通行障碍查询，§7.1.2）

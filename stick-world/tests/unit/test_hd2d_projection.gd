@@ -28,6 +28,7 @@ func _ready() -> void:
 	_runner.add_test("Hd2dStreetMap: remap/unmap 互逆（mock k）", _test_street_remap_round_trip)
 	_runner.add_test("Hd2dStreetMap: 悬浮框 billboard 几何", _test_street_hover_rect)
 	_runner.add_test("Hd2dStreetMap: _hd 未就绪回退 2D 恒等", _test_street_fallback_identity)
+	_runner.add_test("实体碰撞箱: origin 空间贴脚线门控", _test_entity_collider_origin_space)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -101,3 +102,23 @@ func _test_street_fallback_identity() -> void:
 	_runner.assert_true(rect == Rect2(Vector2(-36.5, -129.0), Vector2(90, 277)),
 			"未就绪悬浮框回退 2D 恒等")
 	map.free()
+
+
+func _test_entity_collider_origin_space() -> void:
+	# 物理脚印口径门控（stickman_entity origin 空间）：2D=箱跟脚 origin+foot_offset
+	# （origin=髋部语义）；origin 空间（HD-2D）=箱居 origin（视觉脚线）——
+	# 否则物理脚印悬在视觉脚线前方，停位与视觉脱节（创始人 2026-09-16）
+	var scene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
+	var ent: Node2D = scene.instantiate()
+	add_child(ent)
+	var col: CollisionShape2D = ent.get_node("Collider") as CollisionShape2D
+	var foot_offset: float = ent.foot_offset
+	_runner.assert_approx(col.position.y, foot_offset, 0.001,
+			"默认 2D 口径：箱跟脚 origin+foot_offset")
+	ent.set_ground_constraints(0.0, 1294.0, -1000.0, 1000.0, true)
+	_runner.assert_approx(col.position.y, 0.0, 0.001,
+			"origin 空间：物理脚印贴脚线（箱居 origin）")
+	ent.set_ground_constraints(0.0, 1294.0, -1000.0, 1000.0, false)
+	_runner.assert_approx(col.position.y, foot_offset, 0.001, "翻回 2D 口径：箱回脚位")
+	remove_child(ent)
+	ent.free()

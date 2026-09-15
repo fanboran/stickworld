@@ -16,8 +16,15 @@ static var _building_name_cache: Dictionary = {}
 
 # ─────────────────────────────── 辅助 ────────────────────────────────
 
-## 世界坐标 -> 屏幕坐标
+## 世界坐标 -> 屏幕坐标：经 viewport canvas_transform（引擎真值，zoom/vp/相机
+## 全部由变换一次承载——缩放算进变换，消费点不再各自附加）。与旧手搓公式
+## (pos−cam)·zoom+vp/2 在 CameraRig 居中锚定下逐像素等价；相机 offset/limits
+## 变化时手搓会漂而变换不会（协议：禁止手搓相机公式）。
+## ctx 无 control（headless 直调）时退回手搓兜底。
 static func world_to_screen(world_pos: Vector2, ctx: Dictionary) -> Vector2:
+	var control: Control = ctx.get("control", null)
+	if control != null and control.is_inside_tree():
+		return control.get_viewport().get_canvas_transform() * world_pos
 	var cam_pos: Vector2 = ctx.get("camera_pos", Vector2.ZERO)
 	var zoom: float = ctx.get("effective_zoom", 1.0)
 	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
@@ -361,16 +368,15 @@ static func draw_entity_colliders(control: Control, ctx: Dictionary) -> void:
 		var w: float = rs.size.x * zoom
 		var h: float = rs.size.y * zoom
 		if remaps:
-			# HD-2D：直立脚框——底边钉在角色**视觉脚线**（billboard 脚锚于
-			# origin 的地面线，含台面 lift）。物理箱中心在 origin+(8.5,130)、
-			# 脚底 origin+142，按物理位直绘会低于角色 ~57px·ez——创始人
-			# 2026-09-16 裁决"碰撞箱要和脚下线框一个位置"（推翻 09-15
-			# "画物理位"口径）。宽高不压，x 用物理箱真实横向范围。
-			var feet_world_y: float = (map.remap_fx_pos(
-					Vector2(0.0, entity.global_position.y)) as Vector2).y
-			var feet_y: float = world_to_screen(Vector2(0.0, feet_world_y), ctx).y
-			var cx: float = world_to_screen(Vector2(col.global_position.x, 0.0), ctx).x
-			var rect := Rect2(Vector2(cx - w * 0.5, feet_y - h), Vector2(w, h))
+			# HD-2D：画在**物理碰撞位**（F3=碰撞真相）。物理脚印已由实体
+			# origin 空间口径贴到视觉脚线（Collider 居 origin，stickman_entity
+			# set_ground_constraints 门控）——物理位=脚下线框位，两口径合一
+			# （创始人 2026-09-16："碰撞箱要和脚下线框一个位置"+"蓝紫相撞
+			# 真的会停"）。箱心经 remap（含台面 lift），宽高不压、x 用物理箱
+			# 真实横向范围。
+			var c_world: Vector2 = map.remap_fx_pos(col.global_position)
+			var screen_pos := world_to_screen(c_world, ctx)
+			var rect := Rect2(screen_pos - Vector2(w, h) * 0.5, Vector2(w, h))
 			control.draw_rect(rect, fill_color, true)
 			control.draw_rect(rect, border_color, false, 1.0)
 		else:

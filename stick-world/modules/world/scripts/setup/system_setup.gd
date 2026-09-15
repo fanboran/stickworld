@@ -1118,7 +1118,7 @@ func _setup_game_ui() -> void:
 	_root._hover_indicator = UIKit.widget(_HoverIndicatorScript, "HoverIndicator")
 	_root._hover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _root._hover_indicator.has_method("setup"):
-		_root._hover_indicator.setup(_root.camera_rig, _root)
+		_root._hover_indicator.setup(_root)
 	if _root.ui_root != null:
 		_root.ui_root.add_to_slot("HudOverlay", _root._hover_indicator)
 	else:

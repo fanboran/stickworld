@@ -120,6 +120,13 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 		var extra: Dictionary = {}
 		if "faction_id" in entity:
 			extra["faction_id"] = entity.faction_id
+		# town_life 持久化：职业 id 与村民身份随档（读档回填恢复劳作循环）。
+		# 装具（工具变体）不落档——读档按 profession 重新应用（_restore_entities），
+		# 与 assign 路径同一出口（TownLifeAPI.apply_profession_appearance）。
+		if "is_villager" in entity:
+			extra["is_villager"] = bool(entity.get("is_villager"))
+		if entity.has_method("get_profession"):
+			extra["profession"] = String(entity.get_profession())
 		# AI 决策时钟族（WB2 错峰读档保真）：只带相对剩余时长 + 错峰种子，
 		# 读档按 spawn 后回填（不重掷假偏移，见 ai_controller.import_timing_state）
 		var ai: Node = entity.get_ai_controller() if entity.has_method("get_ai_controller") else null
@@ -160,7 +167,7 @@ func _on_game_loaded(slot_index: int) -> void:
 	if _root._cached_load_map_id.is_empty():
 		push_warning("[SaveHandler] 存档槽位 %d 无地图信息，回退新游戏开局" % slot_index)
 		_root._pending_save_load = false
-		_root._cached_load_map_id = _root.VILLAGE_A_MAP_ID
+		_root._cached_load_map_id = _root._start_map_id_for_fallback()
 		# 无恢复流程，立即关闭 DB（不等 _load_guard 30s 超时）
 		if SaveManager and SaveManager.has_method("end_load"):
 			SaveManager.end_load()
@@ -209,7 +216,7 @@ func _load_map_for_save() -> void:
 	if not _root.scene_loader.map_loaded.is_connected(_root._on_map_loaded):
 		_root.scene_loader.map_loaded.connect(_root._on_map_loaded)
 	if _root._cached_load_map_id.is_empty():
-		_root._cached_load_map_id = _root.VILLAGE_A_MAP_ID
+		_root._cached_load_map_id = _root._start_map_id_for_fallback()
 	_root.scene_loader.load_map(_root._cached_load_map_id)
 
 
@@ -296,6 +303,20 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 			var ai: Node = entity.get_ai_controller() if entity.has_method("get_ai_controller") else null
 			if ai != null and is_instance_valid(ai) and ai.has_method("import_timing_state"):
 				ai.import_timing_state(timing)
+		# town_life 回填（职业/村民身份随档）：读档后村民才能继续劳作——
+		# 职业回填后重挂装具（工具不入档，按 id 重新应用）。老档无字段 →
+		# 保持默认（无职业/非村民），不报错；配置已删改的职业 id 回待业池。
+		var prof: Variant = _parse_extra_field(row, "profession")
+		if prof is String and entity.has_method("set_profession"):
+			var pid := str(prof)
+			if not pid.is_empty() and TownLifeAPI.get_profession(pid).is_empty():
+				pid = ""
+			entity.set_profession(pid)
+			if not pid.is_empty():
+				TownLifeAPI.apply_profession_appearance(entity, pid)
+		var villager: Variant = _parse_extra_field(row, "is_villager")
+		if villager != null:
+			entity.set("is_villager", bool(villager))
 		# 玩家与 NPC 都注入 ConstructionManager（玩家按F交互需要）
 		if entity.has_method("set_construction_manager") and _root._construction_api != null:
 			entity.set_construction_manager(_root._construction_api)

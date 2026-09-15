@@ -60,6 +60,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_incoming_threat_ledger.gd",
 	"res://tests/unit/test_inventory.gd",
 	"res://tests/unit/test_map_camera_clamp.gd",
+	"res://tests/unit/test_hd2d_projection.gd",
 	"res://tests/unit/test_map_mode_manager.gd",
 	"res://tests/unit/test_population_jitter.gd",
 	"res://tests/unit/test_river_parse.gd",
@@ -77,6 +78,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_behavior_harvest.gd",
 	"res://tests/unit/test_work_slots_rhythm.gd",
 	"res://tests/unit/test_requisition_exclusion.gd",
+	"res://tests/unit/test_townlife_save_persistence.gd",
 ]
 
 const PER_TEST_TIMEOUT_SEC: float = 30.0

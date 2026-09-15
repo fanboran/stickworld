@@ -16,6 +16,8 @@ func _draw() -> void:
 		"camera_pos": camera.global_position,
 		"viewport_size": get_viewport_rect().size,
 		"effective_zoom": camera.zoom.x if camera.zoom != Vector2.ZERO else 1.0,
+		# 绘制宿主自身：world_to_screen 经 viewport canvas_transform（引擎真值）用
+		"control": self,
 	}
 	# 获取当前地图实例（通过 GameRoot.get_current_map）
 	var map: Node2D = _get_current_map()

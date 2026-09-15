@@ -47,6 +47,8 @@ const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/ro
 const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/mega_interior.tscn")
 ## 遭遇战战场地图场景（已退役为 dev 验证图，出征与领地架构 §4.3：进图不自动开战）
 const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_battlefield.tscn")
+const _RESOURCE_W_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_resource_w.tscn")
+const _RESOURCE_E_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_resource_e.tscn")
 const _BATTLEFIELD_2D_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
 ## 守城战战场地图场景（右端城墙+波次敌军，接在遭遇战之后）
 const _SIEGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/siege_battlefield.tscn")
@@ -78,6 +80,8 @@ const VILLAGE_B_MAP_ID := "village_b"
 const MEGA_INTERIOR_MAP_ID := "mega_interior"
 ## 战场地图 ID（HD-2D 城郊战场，主街东门旅行链可达）
 const BATTLEFIELD_MAP_ID := "battlefield"
+const RESOURCE_W_MAP_ID := "hd2d_resource_w"
+const RESOURCE_E_MAP_ID := "hd2d_resource_e"
 ## 旧 2D 战场保留为 dev 空旷演练场：战斗/AI 测试与 dev 探针的开机图
 ## （测试需要 2D 空旷初始图 + 秒级开机；不进任何旅行链）
 const BATTLEFIELD_2D_MAP_ID := "battlefield_2d"
@@ -589,6 +593,10 @@ func _register_default_maps() -> void:
 	# 阶段 F：注册遭遇战战场地图（2026-09-14 HD-2D 重建：主街东门外城郊战场，
 	# 旧 battlefield.tscn 退役 dev 验证图）
 	scene_loader.register_map(BATTLEFIELD_MAP_ID, _BATTLEFIELD_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
+	# 城外资源图两张（创始人 2026-09-15：左右城墙各自传送到一个资源点地图）——
+	# 战场式开阔野地变体，resource_gen 全域密布；城门选项框直达，内缘触发器回城
+	scene_loader.register_map(RESOURCE_W_MAP_ID, _RESOURCE_W_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
+	scene_loader.register_map(RESOURCE_E_MAP_ID, _RESOURCE_E_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 旧 2D 战场 = dev 空旷演练场（战斗/AI 测试开机图，不进旅行链）
 	scene_loader.register_map(BATTLEFIELD_2D_MAP_ID, _BATTLEFIELD_2D_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 守城战战场地图（遭遇战右出即达；城防布景+波次敌军由 SiegeDirector 组织）
@@ -617,6 +625,10 @@ func _register_default_maps() -> void:
 	# 恢复原链：遭遇战场右出通森林（守城图独立后不再串链）
 	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	# 资源图内缘回城（西图右缘→主街西门内；东图左缘→主街东门内）；去程走城门
+	# 选项框直达 travel，回程登记供其内缘触发器用
+	scene_loader.register_map_exit(RESOURCE_W_MAP_ID, WorldAPI.EntrySide.RIGHT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT)
+	scene_loader.register_map_exit(RESOURCE_E_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
 
 
 ## 切图：注销已释放的音效空间化宿主（新图加载时会在 _on_map_loaded 重新注册）
@@ -661,6 +673,12 @@ func _load_start_village() -> void:
 	# 新游戏：重置游戏时间 + 本局随机种子（防上一局残留；读档路径经 load_save_data 恢复种子）
 	if WorldState and "game_time" in WorldState:
 		WorldState.game_time = 0.0
+	# EnvironmentSystem 本地时钟每帧写回 WorldState（其 _process），且同进程重开一局时
+	# 其 _ready 已把上一局残留时刻采纳进本地——只归零 WorldState 会被下一帧覆盖回去，
+	# 须一并重置到清晨，否则上一局玩到夜里重开的新地图开局即黑夜
+	var env := get_node_or_null("EnvironmentSystem")
+	if env != null and env.has_method("reset_to_new_run_clock"):
+		env.reset_to_new_run_clock()
 	if WorldState and WorldState.has_method("start_new_run"):
 		WorldState.start_new_run()
 	# 原型阶段：每次启动都是新游戏（重建存档），不自动读档——旧存档与新代码
@@ -670,7 +688,13 @@ func _load_start_village() -> void:
 			float(BOOT_STAGES - 1) / float(BOOT_STAGES))
 	# 同上：先渲染"生成世界"帧，再进地图实例化的最长同步块
 	await _yield_frame()
-	scene_loader.load_map(boot_map_id_override if not boot_map_id_override.is_empty() else START_MAP_ID)
+	scene_loader.load_map(_start_map_id_for_fallback())
+
+
+## 开局图唯一出口：boot 覆盖（测试声明初始图）优先，否则启动直连主图。
+## 新游戏开局与存档缺地图信息兜底（SaveHandler）共用，保证两路取图一致。
+func _start_map_id_for_fallback() -> String:
+	return boot_map_id_override if not boot_map_id_override.is_empty() else START_MAP_ID
 
 
 ## 显示世界加载覆盖（启动加载期）。ratio = 总阶段进度；sub_ratio = 当前阶段

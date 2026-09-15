@@ -29,10 +29,16 @@ class_name Hd2dStreetMap
 const _HD2D_WORLD_SCENE := preload("res://modules/hd2d/scenes/hd2d_world.tscn")
 ## 野外资源分布算法（world 模块内，群落散布+林区梯度）
 const _ResourceGenScript := preload("res://modules/world/scripts/map/resource_gen.gd")
+## 城门选项框（玩家走近弹窗出城；村民走静默传送带）
+const _GatePromptScript := preload("res://modules/world/scripts/map/hd2d_gate_prompt.gd")
+## 初始城市档（八档链：townlet 村镇过渡——创始人"东西稍全、工区两三栋"）
+## 城市规模只是建筑数量问题——扩建=换档重生成
+const CITY_TIER := "townlet"
 
 ## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
 ## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
-## 构图契约"地面占屏幕下 1/3"）——屏幕底沿、2D ground_bottom（蓝线）、
+## 构图契约"地面占屏幕下 1/3"@zoom=1——默认缩放 0.75 下分界线压屏幕下 1/4，
+## 见 HD-2D街景系统.md §4.0）——屏幕底沿、2D ground_bottom（蓝线）、
 ## 可行走深度三点合一，整条可见街面都能走。
 const WALK_BACK_Y := 688.0
 const WALK_FRONT_Y := 1294.0
@@ -66,14 +72,17 @@ const TERRAIN_DIRT_ROAD := 1
 ## 算法宿主图层（generate_resource_nodes 的入口守卫与节点父级）
 var decoration_layer: Node2D = null
 ## 采集储量中值已随算法内置（resource_gen 按类型区间掷储量），不再手填
-## 资源点密度基线（每格期望数，resource_gen 语义）：主街墙外带 0.65；
+## 林线稀疏口径（创始人 2026-09-15：野外树/石稀疏、城门前尤甚——
+## 净空 14 格起步，群落"一段一段"的聚簇感由 resource_gen 群落散布承担）
+var forest_clear_cells := 14
+var forest_ramp_cells := 10
+## 资源间距（px）：树冠卡画面宽 2~3 格，64px 会互相穿模（创始人 2026-09-15）
+var resource_min_spacing := 96.0
+## 创始人 2026-09-15：视野内两三个露头即可（别写死数量，算法按带幅推），
+## 大宗采集在城门传送的资源图（Hd2dResourceMap，密度另调）；
 ## 子类可调（战场图调稀——野地要开阔可列阵）
-var resource_density := 0.65
-## 林区梯度档（resource_gen 语义）：主街墙外带 28 格，净空 12+渐密 20——
-## 创始人 2026-09-15：紧挨城门外是树林不对，传送出去先见开阔野地，走一段
-## 才进林线（战场图子类按图幅覆写：净空 6+渐密 30——东缘才渐入林线）
-var forest_clear_cells := 12
-var forest_ramp_cells := 20
+var resource_density := 0.03
+
 
 
 func _ready() -> void:
@@ -91,9 +100,24 @@ func _ready() -> void:
 	_hd.name = "HD2DWorld"
 	if not layout_name.is_empty():
 		_hd.set("layout_name", layout_name)
+		# 城市生成时机（创始人 2026-09-15：第一次进入该城市生成）——确定性
+		# 种子（城名哈希）→ 多局尽量一致；同存档每次进图同城。城市扩建 =
+		# 换档重生成（城墙自动前移，野地资源窗随之露出）
+		var plan: Dictionary = CityGen.generate(CITY_TIER, hash("city:" + layout_name), CityGen.prop_names())
+		_hd.set("layout_data", plan)
 	_configure_hd(_hd)
 	add_child(_hd)
 	_apply_layout_bounds()
+	# 深端行走界=前后景分界线（黄线）+2px 防与 bg1 卡共面闪烁：前景整段可行走，
+	# 建筑 footprint/城墙带是真正障碍（创始人 2026-09-15：黄线以下就是可行走
+	# 地面范围，两楼之间应能一路走到黄线）——不设则 MapBase 默认 720 把人拦在
+	# 街心。须在 _hd 就绪后取值（边界来自 3D 侧构图常量），战场图覆写保旧带
+	ground_y = _walk_deep_y()
+	# 视野下边界契约（屏幕映射三同步之一）：CameraRig 只认 ground_y + 1080×ground_ratio
+	# 的换算值（**不读 ground_bottom 变量**），此处强制换算使 rig 视野下边界钉在
+	# 3D 底沿锚线 WALK_FRONT_Y 上——差多少，F3 覆盖层/FX 等 2D 画布元素就整体
+	# 偏多少（1080p 下曾差 95px 致 F3 碰撞箱全体错位；推导见 HD-2D街景系统.md §屏幕映射）
+	ground_ratio = (WALK_FRONT_Y - ground_y) / 1080.0
 	# 角色（玩家/NPC）渲染进 3D 场景：逻辑仍在 2D（物理/输入/AI 不动），
 	# 视觉走 proto 的 billboard 通道——写深度、可被前景遮挡、自带接地影
 	if _hd.has_method("enable_play_characters"):
@@ -102,7 +126,20 @@ func _ready() -> void:
 	_spawn_resource_nodes()
 	_build_gate_portals()
 	_build_exit_triggers()
+	# 城门选项框（玩家走近 ±城门弹"出城/收起"，2D 村图同款；村民走静默带）
+	var prompt := Node.new()
+	prompt.set_script(_GatePromptScript)
+	prompt.name = "GatePrompt"
+	add_child(prompt)
+	if prompt.has_method("setup"):
+		prompt.setup(self)
 	_apply_time_of_day(true)
+
+
+## 深端行走界（origin 空间钳制下限，_ready 在 _hd 就绪后调用）：黄线+2px。
+## 战场图覆写维持旧带（688）——战斗阵型间距按旧可行走域调的，不随本契约扩
+func _walk_deep_y() -> float:
+	return get_fg_bg_boundary_y() + 2.0
 
 
 func _process(_delta: float) -> void:
@@ -160,17 +197,28 @@ func _sync_character_render() -> void:
 		var vel: Vector2 = (body as CharacterBody2D).velocity if body is CharacterBody2D else Vector2.ZERO
 		var moving: bool = vel.length_squared() > 25.0
 		if ch.has_method("set_world_pos"):
+			# 台面/台后地面抬升：落点在路肩前缘以内且墙内 → 脚底抬到台面标高
+			var lift: float = 0.0
+			if _hd.has_method("get_ground_lift_world"):
+				lift = float(_hd.get_ground_lift_world(
+						body.position.x / CELL_PX, z))
 			ch.set_world_pos(body.position.x / CELL_PX, z,
 					int(body.get("_facing")) < 0,
-					lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
-							clampf((body.position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)))
+					depth_scale_at(body.position.y),
+					lift)
 		if ch.has_method("set_anim"):
-			# 动画镜像读实体真实状态（走两步加速切 run 由实体逻辑驱动）——
-			# 此前只发 walk/idle 二值，billboard 角色永远不跑（创始人 2026-09-15）
+			# 动画镜像读实体真实状态：walk/run/idle + 劳作 attack 全放行。
+			# attack 是 oneshot——播完实体侧自动回切 idle/walk，逐拍重触发由
+			# set_anim 的变更检测天然完成（此前 attack 被强制降级 walk/idle，
+			# 挥镐/挥锤在街上不可见 = 干活与罚站无法区分，创始人 2026-09-15）
 			var anim: String = str(body.get("_current_anim"))
-			if anim.is_empty() or anim.begins_with("attack"):
+			if anim.is_empty():
 				anim = "walk" if moving else "idle"
 			ch.set_anim(anim)
+		# 劳作进度镜像：2D 进度条挂 RigHost 已随街景隐藏，billboard 用自带
+		# 3D 头顶条（-1 = 隐藏）。采集/派工/搬运同源（set_action_progress 通道）
+		if ch.has_method("set_work_progress") and body.has_method("get_action_progress"):
+			ch.set_work_progress(float(body.get_action_progress()))
 		# 武器/工具镜像：2D 骨架已隐藏，武器须挂进 billboard 内部骨架
 		# （职业识别走武器——工具不渲染 = 村民"没有职业"的观感）
 		var mount: Variant = body.get("weapon_mount")
@@ -202,9 +250,7 @@ func _apply_depth_visual() -> void:
 			continue
 		if not e.has_meta("hd2d_base_rig_scale"):
 			e.set_meta("hd2d_base_rig_scale", rig.scale)
-		var t: float = clampf(((e as Node2D).position.y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0)
-		var k: float = lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX, t)
-		rig.scale = (e.get_meta("hd2d_base_rig_scale") as Vector2) * k
+		rig.scale = (e.get_meta("hd2d_base_rig_scale") as Vector2) * depth_scale_at((e as Node2D).position.y)
 
 
 func get_spawn_point() -> Vector2:
@@ -225,7 +271,9 @@ func _apply_layout_bounds() -> void:
 	var w: float = _hd.get_layout_width()
 	if w <= 0.0:
 		return
-	var half_px: float = (w * 0.5 + 8.0) * CELL_PX
+	# 墙外只留半屏（≈30 格）野地带——创始人口径：可以走出城墙，但墙外就
+	# 半屏距离；地图边界随布局宽度推导（城市扩建 → 墙前移 → 野地窗跟着挪）
+	var half_px: float = (w * 0.5 + 30.0) * CELL_PX
 	map_left = -half_px
 	map_right = half_px
 
@@ -246,18 +294,22 @@ func wants_villager_npcs() -> bool:
 ## 0 号 = 露天铁砧旁（铁匠），1~6 = 西城门内侧（伐木/矿工由此出城去墙外
 ## 森林带劳作，采集引导走 gate_steer_point），7~9 = 街市/东段（待业闲逛）。
 func get_npc_spawn_points() -> Array:
-	var pts: Array = [
-		Vector2(-8.5 * CELL_PX, 1010.0),  # 铁砧旁（前方路面，避铁砧碰撞带）
-		Vector2(-55.0 * CELL_PX, 1010.0),  # 西城门内侧（出城砍树/采矿）
-		Vector2(-52.0 * CELL_PX, 1040.0),
-		Vector2(-48.5 * CELL_PX, 1020.0),
-		Vector2(-45.0 * CELL_PX, 1050.0),
-		Vector2(-41.5 * CELL_PX, 1030.0),
-		Vector2(-38.0 * CELL_PX, 1050.0),
-		Vector2(-6.0 * CELL_PX, 1000.0),   # 市集广场
-		Vector2(2.0 * CELL_PX, 1030.0),
-		Vector2(30.0 * CELL_PX, 990.0),    # 谷仓前
-	]
+	# 布局感知：铁匠跟铁砧（布局 props/手摆 PROPS 均可），其余按墙线比例
+	# 分散内街（伐木/矿工靠西侧待命，出城引导走城门）；不绑死整数格坐标
+	var pts: Array = []
+	var anvil := Vector2.ZERO
+	for s: Variant in get_open_work_sites():
+		anvil = s["pos"]
+		break
+	pts.append(anvil + Vector2(0.0, 60.0))
+	var half: float = get_wall_px() / CELL_PX
+	if half <= 1.0:
+		half = 95.0   # 布局缺失兜底（tscn 手摆语义）
+	for i in 6:
+		pts.append(Vector2((-0.55 + i * 0.16) * half * CELL_PX, 985.0 + (i % 3) * 30.0))
+	pts.append(Vector2(-6.0 * CELL_PX, 1000.0))   # 市集广场
+	pts.append(Vector2(2.0 * CELL_PX, 1030.0))
+	pts.append(Vector2(half * 0.3 * CELL_PX, 1000.0))
 	return pts
 
 
@@ -266,14 +318,77 @@ func wants_3d_bracket() -> bool:
 	return true
 
 
-## 2D 特效/坐标重映射（fx_pos_remapper 组协议）：2D 世界 y → 3D 投影呈现的
-## 同一地面线。y=1080（前缘）不动，纵深越深压缩越多（俯角前缩率由 3D 侧
-## get_ground_squash 给出）——飘字/粒子由此与角色 feet 对齐。
+## 行走带约束口径：HD-2D 图按 origin 空间直用（视觉脚线=origin，billboard
+## 脚锚；2D 图是 origin+foot_offset=脚）。基类默认 false（脚部约束口径）。
+func _origin_space_walk_band() -> bool:
+	return true
+
+
+## 2D 特效/坐标重映射（fx_pos_remapper 组协议 + MapBase 视觉域协议）：2D 世界
+## y → 3D 投影呈现的同一地面线。锚线 WALK_FRONT_Y 不动，纵深越深压缩越多
+## （俯角前缩 k=sinθ，数学核 Hd2dProjection）——飘字/粒子由此与角色 feet 对齐。
 func remap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	return Vector2(pos.x, WALK_FRONT_Y - (WALK_FRONT_Y - pos.y) * k)
+	var ry: float = Hd2dProjection.ground_to_visual_y(pos.y, k, WALK_FRONT_Y)
+	# 台面/台后地面抬升（2D 画布域）：与角色 billboard 脚底抬升同源同值——
+	# 角色走上台面后，青箱/FX/选中框等一切锚 origin 的画布元素跟着贴到抬升后的地面
+	if _hd.has_method("get_ground_lift_px"):
+		ry -= float(_hd.get_ground_lift_px(pos.x, pos.y))
+	return Vector2(pos.x, ry)
+
+
+## 地面锚点逆映射（MapBase 协议覆写）：视觉域 → 画布域，与 remap_fx_pos 的
+## 压缩项互为精确逆（台面 lift 区逆解未含，路面口径）。屏幕点击 → 世界判定
+## （unmap）与 F3 鼠标读数（screen_y_to_ground_y，屏幕域版）共用同一压缩模型。
+func unmap_fx_pos(pos: Vector2) -> Vector2:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return pos
+	var k: float = float(_hd.get_ground_squash())
+	return Vector2(pos.x, Hd2dProjection.visual_to_ground_y(pos.y, k, WALK_FRONT_Y))
+
+
+## billboard 深度缩放（0.92~1.10 随纵深线性）：3D billboard 渲染、2D rig 镜像
+## 与悬浮框几何共用同一口径，禁止各处内联 lerp（改档位时三处必须同源）。
+func depth_scale_at(y: float) -> float:
+	return lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
+			clampf((y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0))
+
+
+## billboard 视觉身高（canvas px，悬浮框/选中框锚定用）：char_sprite_3d 尺寸
+## 契约——rig 原生 ~274px × RIG_SCALE 0.475 = 130 SV px（§0.3 比例锚 130px=
+## 1.70m）× SIZE_K 1.2（2026-09-14 偏小反馈的占位放大，纹理随 quad 同步放大
+## = 视觉身高）= 156；PX(1/32 格/SV px) 与"1 格=32 canvas px"相抵，故 130×1.2
+## 直接就是 canvas px。⚠ 改 char_sprite_3d 的 RIG_SCALE/SIZE_K 时同步本值。
+## billlboard 不随 body_scale 缩放（set_world_pos 无此参），本值亦不乘。
+const BILLBOARD_BODY_H_PX := 156.0
+
+
+## 悬浮框视觉域矩形（MapBase 协议覆写）：HD-2D billboard 几何——origin=视觉
+## 脚线（remap 压进投影域），**高=billboard 视觉身高**（156，非 Range 的 2D
+## 全身高 277——那是髋部原点语义，比 billboard 高出约半个身子，创始人
+## 2026-09-15"另一个线框比角色高半个身子"）；宽沿用 Range 宽（悬停放宽余量，
+## 已烘焙 body_scale）。Range 框的 2D 局部语义在此不适用。_hd 未就绪时回退
+## 2D 恒等框（super）。
+func entity_hover_rect(range_center: Vector2, range_size: Vector2, entity: Node2D) -> Rect2:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return super(range_center, range_size, entity)
+	var k: float = float(_hd.get_ground_squash())
+	var box_size := Vector2(range_size.x, BILLBOARD_BODY_H_PX)
+	return Hd2dProjection.billboard_hover_rect(
+			entity.global_position, box_size, k, WALK_FRONT_Y, depth_scale_at(entity.global_position.y))
+
+
+## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。
+## 3D 取景垂直固定（不随 2D 相机纵移）：屏幕底沿 = 锚线 WALK_FRONT_Y，
+## 每格纵深在屏幕上占 32×压缩率×缩放 px（公式推导见 HD-2D街景系统.md §屏幕映射）
+func screen_y_to_ground_y(screen_y: float, effective_zoom: float) -> float:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return screen_y
+	var k: float = float(_hd.get_ground_squash())
+	var vp_h: float = get_viewport_rect().size.y
+	return WALK_FRONT_Y - (vp_h - screen_y) / (k * maxf(effective_zoom, 0.001))
 
 
 ## 城门引导点（gate_router 组协议，BehaviorHarvest 消费）：直线 steering 的
@@ -309,8 +424,37 @@ func get_walk_barriers() -> Array:
 	return out
 
 
+## F3 建筑宽度辅助线数据口（debug_gui 抽屉 duck 读取）：3D 侧前排建筑
+## 占地实心带（[x0,x1,y0,y1]：x=格、y=px 混合口径，同 get_solid_rects）
+func get_building_rects() -> Array:
+	if _hd != null and _hd.has_method("get_building_rects"):
+		return _hd.get_building_rects()
+	return []
+
+
+## F3 黄线数据口（debug_gui duck 读取）：前后景分界线的 2D 等价 y
+## （zoom=1 压屏幕下 1/3 线；旧文档叫"地平线"，实为前后景分界，勿混淆）
+func get_fg_bg_boundary_y() -> float:
+	if _hd != null and _hd.has_method("get_fg_bg_boundary_y"):
+		return float(_hd.get_fg_bg_boundary_y())
+	return ground_y
+
+
 ## 露天工位（转发 3D 侧摆位表：铁砧 → 铁匠）
 func get_open_work_sites() -> Array:
+	var out: Array = []
+	# 布局驱动：铁砧点位来自布局 props（生成器随工匠区落位）
+	if _hd != null and _hd.has_method("get_layout_props"):
+		for e: Variant in _hd.get_layout_props():
+			if str(e.get("card", "")) == "anvil":
+				out.append({
+					"pos": Vector2(float(e["x"]) * CELL_PX,
+							DEPTH_Y_MIN + float(e.get("z", 4.5)) * CELL_PX),
+					"work_site_def": "smithy_lv1",
+				})
+		if not out.is_empty():
+			return out
+	# 手摆回退：PROPS 表的铁砧
 	if _hd != null and _hd.has_method("get_open_work_sites"):
 		return _hd.get_open_work_sites()
 	return []
@@ -323,6 +467,12 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		return
 	var body := StaticBody2D.new()
 	body.name = "HD2DSolids"
+	# 前排建筑形状打 meta（get_solid_rects 前 N 项=建筑，与 get_building_rects
+	# 同序）：F3 显示改走直立包楼框（draw_buildings），障碍抽屉跳过防双重绘制
+	var building_count: int = 0
+	if hd.has_method("get_building_rects"):
+		building_count = hd.get_building_rects().size()
+	var idx: int = 0
 	for r: Variant in hd.get_solid_rects():
 		var x0: float = float(r[0]) * CELL_PX
 		var x1: float = float(r[1]) * CELL_PX
@@ -335,6 +485,9 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		rect.size = Vector2(maxf(8.0, x1 - x0), maxf(8.0, y1 - y0))
 		shape.shape = rect
 		shape.position = Vector2((x0 + x1) * 0.5, (y0 + y1) * 0.5)
+		if idx < building_count:
+			shape.set_meta("hd2d_building", true)
+		idx += 1
 		body.add_child(shape)
 	if body.get_child_count() > 0:
 		add_child(body)
@@ -359,6 +512,7 @@ func _spawn_resource_nodes() -> void:
 	# 近墙 3 格净空 → 12 格渐密 → 满密度（渐变读法保留，城门口即有活干）
 	gen.set("FOREST_CLEAR_CELLS", forest_clear_cells)
 	gen.set("FOREST_RAMP_CELLS", forest_ramp_cells)
+	gen.set("MIN_SPACING", resource_min_spacing)
 	if gen.has_method("setup"):
 		gen.setup(self)
 	var a: int = int(map_left / CELL_PX) + 2
@@ -427,9 +581,22 @@ func _build_gate_portals() -> void:
 func _on_gate_strip_entered(body: Node2D, wx: float, y0: float, y1: float) -> void:
 	if body is not CharacterBody2D or not is_instance_valid(body):
 		return
+	# 玩家不走静默瞬移：走近城门由 hd2d_gate_prompt 弹选项框（2D 村图同款
+	# "靠近城门蹦出弹窗"口径，创始人 2026-09-15）；村民采集走静默带
+	if body.has_method("is_possessed") and body.is_possessed():
+		return
 	# 方向判定：只传送"朝着墙走"的身体（沿街横穿/闲逛蹭进带子不触发）
 	var toward: float = signf(wx - body.global_position.x)
 	if toward == 0.0 or (body as CharacterBody2D).velocity.x * toward < 8.0:
+		return
+	_gate_teleport(body, wx, y0, y1)
+
+
+## 跨墙瞬移核心（村民静默带与玩家弹窗选项共用）：带冷却防弹跳
+func _gate_teleport(body: CharacterBody2D, wx: float, y0: float, y1: float) -> void:
+	# 方向判定：朝墙才传（弹窗路径玩家可能静止/背向，按当前朝墙意图算）
+	var toward: float = signf(wx - body.global_position.x)
+	if toward == 0.0:
 		return
 	# 冷却防弹跳（刚被传过来的身体在对面带不回传）
 	var id: int = body.get_instance_id()
@@ -437,10 +604,18 @@ func _on_gate_strip_entered(body: Node2D, wx: float, y0: float, y1: float) -> vo
 	if int(_tp_cooldown.get(id, 0)) > now:
 		return
 	_tp_cooldown[id] = now + _TP_COOLDOWN_MS
-	# 跨墙落点：墙线对面 ~4.3 格（带外缘再留 32px 白区），y 夹回门洞带内
+	# 跨墙落点：墙线对面 ~4.3 格（带外缘再留 32px 白区），y 夹回行走带内
 	var land_x: float = wx + toward * 139.0
 	var land_y: float = clampf(body.global_position.y, y0 + 8.0, y1 - 8.0)
 	body.global_position = Vector2(land_x, land_y)
+
+
+
+## 墙线 px（弹窗组件触发带用）
+func get_wall_px() -> float:
+	if _hd != null and _hd.has_method("get_wall_x"):
+		return _hd.get_wall_x() * CELL_PX
+	return 0.0
 
 
 ## 东西村口出口触发器（语义对齐村A旅行链：西出原野去 B 村方向、东出战场）。
@@ -457,9 +632,11 @@ func _build_exit_triggers() -> void:
 		trig.trigger_width = 96.0
 		var shape := CollisionShape2D.new()
 		var rect := RectangleShape2D.new()
-		rect.size = Vector2(96.0, WALK_FRONT_Y - WALK_BACK_Y)
+		# 触发带纵深跨整个可行走域（深端=黄线，非旧墙脚线 688）——角色在
+		# 两楼之间的台后区也能正常走出去
+		rect.size = Vector2(96.0, WALK_FRONT_Y - ground_y)
 		shape.shape = rect
-		shape.position = Vector2(float(spec["x"]), (WALK_BACK_Y + WALK_FRONT_Y) * 0.5)
+		shape.position = Vector2(float(spec["x"]), (ground_y + WALK_FRONT_Y) * 0.5)
 		trig.add_child(shape)
 		triggers_host.add_child(trig)
 

@@ -105,13 +105,21 @@ func spawn_entity(entity_scene: PackedScene, p_position: Vector2, def_id: String
 	# 刷新初始有效位置（实体 _ready 中默认 (0,0)，此处修正）
 	if instance.has_method("set_last_valid_position"):
 		instance.set_last_valid_position(p_position)
-	# 注入地面约束参数
+	# 注入地面约束参数（口径由 _origin_space_walk_band 决定，见该虚方法注）
 	if instance.has_method("set_ground_constraints"):
-		instance.set_ground_constraints(ground_y, ground_bottom, map_left, map_right)
+		instance.set_ground_constraints(ground_y, ground_bottom, map_left, map_right,
+				_origin_space_walk_band())
 	# 注入地图引用（供通行障碍查询）
 	if instance.has_method("set_map_reference"):
 		instance.set_map_reference(self)
 	return instance
+
+
+## 行走带约束口径（虚方法）：false = 2D 图口径——origin=髋、脚在
+## origin+foot_offset，实体把约束面内收 foot_offset；true = origin 空间直用
+## ——HD-2D 图覆写（视觉脚线=origin，[ground_y, ground_bottom] 即行走带本身）。
+func _origin_space_walk_band() -> bool:
+	return false
 
 
 ## 获取所有 StickmanEntity。
@@ -199,3 +207,28 @@ func get_passage_barriers() -> Array:
 			if pb != null and pb is StaticBody2D:
 				barriers.append(pb)
 	return barriers
+
+
+# ── 视觉域坐标协议（HD-2D 投影唯一出口；2D 图全部恒等）──────────────────
+## 2D 图视觉域=画布域，三个方法均恒等；HD-2D 图在 Hd2dStreetMap 覆写。
+## 铁律：只有**地面锚点**参与映射；**身体纵向尺寸/偏移不映射**（billboard
+## 直立绘制，俯角只压地面纵深）。一切锚定实体位置的画布元素（悬浮框/选中框/
+## 飘字粒子/提示面板）与一切屏幕点选判定，都必须经本组方法进同一域再比较，
+## 禁止各自手搓相机/压缩公式（数学核见 Hd2dProjection，round-trip 有单测锁死）。
+
+## 地面锚点重映射：画布域 → 视觉域（fx_pos_remapper 组协议同名方法）。
+func remap_fx_pos(pos: Vector2) -> Vector2:
+	return pos
+
+
+## 地面锚点逆映射：视觉域 → 画布域。屏幕点击 → 世界坐标判定用：
+## 先 canvas_transform.affine_inverse() 落视觉域，再经此逆回画布域。
+func unmap_fx_pos(pos: Vector2) -> Vector2:
+	return pos
+
+
+## 实体悬浮框的视觉域矩形：输入 Range 框（画布域中心/尺寸，实体局部语义）
+## 与实体引用，输出"画"与"命中判定"共用的视觉域矩形（所见即所判）。
+## 2D 恒等 = Range 原框；HD-2D 图覆写为 billboard 几何（脚线锚定+深度缩放）。
+func entity_hover_rect(range_center: Vector2, range_size: Vector2, entity: Node2D) -> Rect2:
+	return Rect2(range_center - range_size * 0.5, range_size)

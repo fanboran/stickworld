@@ -17,10 +17,9 @@
 
 **战场与编队**
 
-| | |
-|---|---|
-| ![遭遇战开场](docs/演示/遭遇战开场.png) | ![编队管理与夜空](docs/演示/编队与夜空.png) |
-| ![小地图](docs/演示/小地图.png) | ![村庄建造与阶段目标](docs/演示/村庄建造.png) |
+| | | |
+|---|---|---|
+| ![遭遇战开场](docs/演示/遭遇战开场.png) | ![编队管理与夜空](docs/演示/编队与夜空.png) | ![小地图](docs/演示/小地图.png) |
 
 **程序化大陆战略图（Tab/M 随时打开）**
 
@@ -75,7 +74,7 @@
 
 ## 美术资产画廊（建筑生成管线 v3）
 
-> 建筑美术管线产物：**材质库 64 key · 建筑几何库 27 种装配器 · 道具 94 件 · 内景 29 def · 自然物 16 类 · 地面分段链（3 带 × 3 区带 × 5 变体）· 昼夜分层合成公式标定 · HD-2D 原型验证通过**。全流程为「代码建模 → Blender PBR 渲染 → PNG + JSON 元数据」，硬约束只有建筑宽度 3~16 格（1 格 = 32px ≈ 0.42m），视角为**纯正面 + 俯角 20° 微俯视**。下方为产物的压缩副本（长边 ≤1600px），全尺寸原图在 `stick-world/temp/`（gitignored）；管线规范见[建筑生成管线 v3](docs/技术/架构/建筑生成管线v3-写实PBR.md)。
+> 建筑美术管线产物：**材质库 64 key · 建筑几何库 27 种装配器 · 道具 94 件 · 内景 29 def · 自然物 16 类 · 地面分段链（3 带 × 3 区带 × 5 变体）· 昼夜分层合成公式标定 · HD-2D 原型验证通过**。全流程为「代码建模 → Blender PBR 渲染 → PNG + JSON 元数据」，硬约束只有建筑宽度 3~16 格（1 格 = 32px ≈ 0.42m），视角为**纯正面 + 俯角 20° 微俯视**。下方为产物的压缩副本（长边 ≤1600px），全尺寸原图在 `stick-world/temp/`（gitignored）；管线规范见[建筑生成管线 v3](docs/技术/架构/建筑管线/建筑生成管线v3-写实PBR.md)。
 
 **建筑几何与材质**
 
@@ -122,7 +121,7 @@
 *昼夜分层四联 —— ① 白天 albedo（暖主光 3.5 基线）② albedo × tint_night ③ + glow×1.0（引擎加法层）④ 真实夜晚渲染；合成公式标定为 `夜 = albedo × tint(0.038,0.049,0.092) + glow × 1.0`，MAE 0.011*
 
 ![HD-2D 原型](docs/images/gallery/13_hd2d_prototype.png)
-*HD-2D 原型（八方旅人式）—— 真 StickmanRig 经 SubViewport(2x + MSAA 4x) 贴相机对齐 billboard，建筑不透明通道写深度实现零成本遮挡；唯一性能成本为后处理 ≈3.3ms（分阶段方案见[2.5D 与 HD-2D 可行性](docs/技术/架构/2.5D与HD-2D可行性.md)）*
+*HD-2D 原型（八方旅人式）—— 真 StickmanRig 经 SubViewport(2x + MSAA 4x) 贴相机对齐 billboard，建筑不透明通道写深度实现零成本遮挡；唯一性能成本为后处理 ≈3.3ms（分阶段方案见[2.5D 与 HD-2D 可行性](docs/技术/架构/建筑管线/2.5D与HD-2D可行性.md)）*
 
 ![2.5D 夜景原型](docs/images/gallery/14_25d_night.png)
 *2.5D 夜景原型 —— 同一批建筑与道具在夜晚光照下的合成效果，窗户由引擎侧抽 42% 随机点亮*
@@ -191,4 +190,4 @@ bash stick-world/tests/run_all.sh
 
 **流程与协作**
 
-- [CONTRIBUTING](docs/CONTRIBUTING.md)（开发规范）· [AGENTS.md](AGENTS.md)（AI 辅助开发主规则：架构规范/文档导航/核心指令）· [CHANGELOG](docs/CHANGELOG.md) · [待办事项](docs/项目/待办事项.md) · [编辑器工具索引](docs/技术/编辑器工具索引.md)（addons/ + tools/ 全部脚本）
+- [CONTRIBUTING](docs/CONTRIBUTING.md)（开发规范）· [AGENTS.md](AGENTS.md)（AI 辅助开发主规则：架构规范/文档导航/核心指令）· [待办事项](docs/项目/待办事项.md) · [编辑器工具索引](docs/技术/编辑器工具索引.md)（addons/ + tools/ 全部脚本）

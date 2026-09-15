@@ -2,7 +2,7 @@
 
 > 用途：**手动体验**目标游戏状态（打击感/走位/战斗节奏），免去"启动→村庄→编队→跨图"手工流程。
 > 定位：与自动化测试（unit/integration/smoke）互补——自动化验证"逻辑正确"，本场景验证"好不好玩"。
-> **不进 CI**（run_all.ps1 不包含）。
+> **不进 CI**（run_all.sh 不包含）。
 
 ## 快速开始
 
@@ -13,7 +13,7 @@ godot --path stick-world res://tests/dev/dev_playtest.tscn -- --map battlefield 
 # 加压测试：5 人 vs 8 敌人
 godot --path stick-world res://tests/dev/dev_playtest.tscn -- --map battlefield --party 5 --enemies 8 --follow
 
-# 只进村庄（默认）
+# 只进主街（默认）
 godot --path stick-world res://tests/dev/dev_playtest.tscn
 ```
 
@@ -21,7 +21,7 @@ godot --path stick-world res://tests/dev/dev_playtest.tscn
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `--map <id>` | village_a | 目标地图：battlefield / road_a_b / village_b |
+| `--map <id>` | hd2d_street | 目标地图：hd2d_street / battlefield / road_a_b / village_b |
 | `--party <N>` | 0 | 随行战斗班人数（战斗班预设，跨图自动携带） |
 | `--enemies <N>` | 4 | 遭遇战敌方数量（仅 battlefield 生效） |
 | `--follow` | 关 | 队伍自动开启"跟随玩家" |
@@ -41,7 +41,7 @@ godot --path stick-world res://tests/dev/dev_playtest.tscn
 ## 实现说明
 
 - `dev_playtest.gd`：解析启动参数 → 实例化正式 GameRoot（零改动）→ 村庄生成战斗班（编队+跟随）→ travel 到目标地图（编队快照机制自动携带）
-- 敌人数量经 `GameRoot.dev_enemy_count` 传入（默认 4，正式游戏不受影响）
+- battlefield 刷敌走 `initial_content.spawn_battlefield_enemies` 直达入口（战场已退役自动刷敌，dev 验证不进旅行链）
 - headless 下自动 2s 退出（供 CI 验证场景可跑，不产生断言）
 
 ## 新增调试需求

@@ -82,8 +82,10 @@ var _drag_start_cam: Vector2 = Vector2.ZERO
 # ─────────────────────────────── 缩放状态 ────────────────────────────────
 ## 基础缩放（适配分辨率，= viewport_height / DESIGN_HEIGHT，使世界垂直范围恒定）
 var base_zoom: float = 1.0
-## 用户缩放（1.0~2.0，玩家可调看特写）
-var user_zoom: float = 1.0:
+## 用户缩放（滚轮/滑块可调）。默认 0.75 = HD-2D 构图契约基准档：
+## 前后景分界线压屏幕下 **1/4 线**、火柴人整体 0.75×（zoom=1 时分界线在 1/3、
+## 角色偏大——创始人 2026-09-15 定 0.75）。开场推镜（demo_quest）动态读本值。
+var user_zoom: float = 0.75:
 	set(v):
 		user_zoom = clampf(v, ZOOM_MIN, ZOOM_MAX)
 		_apply_zoom()

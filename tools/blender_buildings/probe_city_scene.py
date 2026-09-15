@@ -12,11 +12,12 @@
 布局器只出**数据**（plan dict）和平面图；本文件是它的**消费端**（前端渲染）。
 只读 plan，不改布局器。
 
-**已知落差（重要）**：布局器的 DEFS 表有 29 种建筑，`buildings.ASSEMBLERS` 有 26 种
-（stable/shelter/hayloft 等第三轮装配器已独立成器，barn 不再兜底）。本文件用
-`DEF_MAP` 把缺的种类**映射**到最接近的装配器（如 plaster_house→house、
-church/chapel→cathedral）；`well` / `market_stall` 本质是道具，不能硬套建筑，走
-`PROP_LOTS` 的**道具聚簇**（直接摆 `props.TABLE` 的件）。
+**已知落差（重要）**：布局器的 DEFS 表有 36 种建筑（29 + 行政阶梯 5：council_hall/
+town_hall/city_hall/governor_palace/imperial_palace + belfry/mint），其中行政批次
+已交付 6 个装配器（city_hall 待立项，过渡期映射 guildhall[16]，见 DEF_MAP TODO），
+`buildings.ASSEMBLERS` 有 32 种。`DEF_MAP` 把暂缺的种类**映射**到最接近的装配器
+（如 plaster_house→house、church/chapel→cathedral）；`well` / `market_stall` 本质是
+道具，不能硬套建筑，走 `PROP_LOTS` 的**道具聚簇**（直接摆 `props.TABLE` 的件）。
 布局器与装配器的宽度口径由 `city_layout.DEFS.widths` 的"可装配下限"保证对齐
 （`validate.py` 检查 2/3 会实测这一条）。布局器 J3 投放的特殊建筑（mage_tower/
 library/barracks/warehouse/alchemy）由 `DEF_MAP` 直接路由，无需另行处理。
@@ -94,6 +95,27 @@ DEF_MAP = {
     "gatehouse":     ("gatehouse", [6, 8, 12]),
     "lighthouse":    ("lighthouse", [4, 6]),
     "windmill":      ("windmill", [4, 6, 8]),
+    # ── 行政建筑阶梯（聚落等级与建筑分级.md §二，AI 提案/待定） ─────────
+    # 行政批次已交付 4 装配器（council_hall/town_hall/governor_palace/
+    # imperial_palace），映射到实名装配器；city_hall 暂无装配器（待 city_hall
+    # 装配器立项后替换），过渡期按任务书 §二 由 guildhall[16] 兼。
+    "council_hall":   ("council_hall", [8]),
+    "town_hall":      ("town_hall", [12, 16]),
+    "city_hall":      ("guildhall", [16]),      # TODO: 待 city_hall 装配器立项后替换
+    "governor_palace": ("governor_palace", [16]),
+    "imperial_palace": ("imperial_palace", [16]),
+    # 天际线点缀/首府公共建筑（SPECIAL_DEFS 投放；装配器同批交付）
+    "belfry":         ("belfry", [4, 6]),
+    "mint":           ("mint", [12, 16]),
+    # 批 2（驿站族/赌场族/科研族/花店，装配器同批交付实名）
+    "waystation":     ("waystation", [6, 8]),
+    "inn_post":       ("inn_post", [12, 16]),
+    "coach_house":    ("coach_house", [12, 16]),
+    "gambling_den":   ("gambling_den", [8, 12]),
+    "grand_casino":   ("grand_casino", [16]),
+    "academy":        ("academy", [12, 16]),
+    "observatory":    ("observatory", [8]),
+    "flower_shop":    ("flower_shop", [8, 12]),
 }
 
 #: 「道具型 lot」：这些 def 本身就是道具（§0.3「小物件例外」），既没有装配器，
@@ -148,12 +170,22 @@ DRESS_BY_DEF = {
     # 第三轮新 def（配方一律取自 props.DRESS 既有键，不新增/不改 props.py）
     "mage_tower": "alchemy", "alchemy": "alchemy", "library": "library",
     "barracks": "gatehouse", "warehouse": "market",
+    # 行政阶梯（装配器同批交付；市政/行政前场与 guildhall 同配方 = cathedral 键）
+    "council_hall": "house", "town_hall": "cathedral", "city_hall": "cathedral",
+    "governor_palace": "cathedral", "imperial_palace": "cathedral",
+    "belfry": "tower", "mint": "smithy",
+    # 批 2（配方取 props.DRESS 既有键；inn_post→townhouse 取挂招牌灯笼同源，
+    # academy/observatory→library 取书堆星盘学术件，grand_casino→cathedral 取
+    # 柱廊灯柱长凳门面前场）
+    "waystation": "barn", "inn_post": "townhouse", "coach_house": "barn",
+    "gambling_den": "shop", "grand_casino": "cathedral", "academy": "library",
+    "observatory": "library", "flower_shop": "shop",
 }
 
 #: 挂墙件基准 y 需要显式覆盖的 def：**圆塔**（mage_tower）的包围盒最外沿是悬浮
 #: 水晶伸出的位置（-1.4R），拿它当"前墙面"会把道具摆到塔身外一圈空气里。
-#: 圆塔的真实前墙面 = 塔身切点 -D/2（= -R）。
-WALL_Y_DEPTH2 = {"mage_tower"}
+#: 圆塔的真实前墙面 = 塔身切点 -D/2（= -R）。observatory 同为收分圆塔。
+WALL_Y_DEPTH2 = {"mage_tower", "observatory"}
 
 
 # ---------------------------------------------------------------- 场景
@@ -473,8 +505,11 @@ def build_city(tier, seed=611036, rows=(0,), report=None):
         bx0 = min(B.measure(o)["x"][0] for o in objs)
         bx1 = max(B.measure(o)["x"][1] for o in objs)
         wb = B.Builder("city_wall")
-        city_wall(wb, bx0 - 340.0, bx1 + 340.0, wall_y, wh,
-                  "stone_dark" if plan["wall_tier"] >= 2 else "stone")
+        # 墙体材质按档：tier 1 石 / tier 2 深色石 / tier 3 砖（capital 520 /
+        # metropolis 640，任务书 §一；既有档判定不变 → 旧图零漂移）
+        wall_mat = ("brick" if plan["wall_tier"] >= 3
+                    else "stone_dark" if plan["wall_tier"] >= 2 else "stone")
+        city_wall(wb, bx0 - 340.0, bx1 + 340.0, wall_y, wh, wall_mat)
         wob = wb.to_object()
         objs.append(wob)
         placed.append({"index": -1, "def": "city_wall", "zone": "wall", "row": -1,
@@ -483,6 +518,7 @@ def build_city(tier, seed=611036, rows=(0,), report=None):
         report["placed"] = placed
         report["skipped_defs"] = sorted(set(skipped))
         report["plan_specials"] = plan.get("specials", [])
+        report["plan_admin_slots"] = plan.get("admin_slots", [])
         report["plan_checks"] = plan.get("checks", {})
         report["tier"] = tier
         report["seed"] = seed

@@ -186,11 +186,12 @@ export/**/*.exe
 export/**/*.pck
 export/**/*.dll
 export/**/*.zip
-简历-游戏客户端实习-范博然.md
-temp/swl_audio/
 
 # 诊断截图等临时产物（不入库）
 temp/
 external/swl_apk/
 .tmp_shots/
 docs/.obsidian/
+
+.trae/
+简历*.md

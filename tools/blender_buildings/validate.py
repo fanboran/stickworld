@@ -9,7 +9,7 @@
                         打印映射与缺口（缺哪个列哪个，不许静默跳过）。道具型 lot
                         （well/market_stall）走 PROP_LOTS 聚簇：校验配方道具名已注册
                         且实测占位不撑出地块
-  2. 地块合规           4 档 tier × 各 3 seed 跑 plan_city：同排 lots x 区间不重叠 /
+  2. 地块合规           8 档 tier × 各 5 seed 跑 plan_city：同排 lots x 区间不重叠 /
                         w_px ≤ 该 def 映射的最大装配宽 / 每 lot 至少一个「尺寸放得下」
                         的装配宽度档
   3. 装配适配           DEF_MAP 里每个映射按布局器声明的宽度档实际调一次装配器：
@@ -79,12 +79,18 @@ import materials as MAT        # noqa: E402
 import props as P              # noqa: E402
 
 CELL = 32.0
-TIERS = ("hamlet", "village", "town", "city")
+#: 八档等级链（聚落等级与建筑分级.md §一）：4 既有档 + townlet/burgh 过渡档 +
+#: capital/metropolis 行政档
+TIERS = ("hamlet", "village", "townlet", "town", "burgh", "city", "capital",
+         "metropolis")
 PROBE_SRC = os.path.join(HERE, "probe_city_scene.py")
 MAT_SRC_PATH = os.path.join(HERE, "materials.py")
 
-#: probe_buildings.PROBE_LIST 实测基线里已知的 check_spec FAIL（交接任务给定）
-KNOWN_SPEC_FAIL = {("house", 16), ("townhouse", 12), ("townhouse", 16)}
+#: probe_buildings.PROBE_LIST 实测基线里已知的 check_spec FAIL（交接任务给定；
+#: 交接档 §二「已知落差」登记的四处旧口径遗留：house16 / townhouse12 / barn16 /
+#: smithy1w6——townhouse16 已由比例审计校正转 PASS，保留在集内无害）
+KNOWN_SPEC_FAIL = {("house", 16), ("townhouse", 12), ("townhouse", 16),
+                   ("barn", 16), ("smithy1", 6)}
 
 #: 布局器 def 宽度档在装配器里的支撑表：装配器名 → buildings 的参数表属性名
 ASM_TIER_ATTR = {
@@ -104,6 +110,16 @@ ASM_TIER_ATTR = {
     "library": "LIBRARY_TIERS", "barracks": "BARRACKS_TIERS",
     "warehouse": "WAREHOUSE_TIERS", "stable": "STABLE_TIERS",
     "shelter": "SHELTER_TIERS",
+    # 行政阶梯 6 装配器（行政批次交付：council_hall/town_hall/governor_palace/
+    # imperial_palace/belfry/mint）
+    "council_hall": "COUNCIL_TIERS", "town_hall": "TOWNHALL_TIERS",
+    "governor_palace": "GOVERNOR_TIERS", "imperial_palace": "IMPERIAL_TIERS",
+    "belfry": "BELFRY_TIERS", "mint": "MINT_TIERS",
+    # 批 2 八装配器（驿站族/赌场族/科研族/花店）
+    "waystation": "WAYSTATION_TIERS", "inn_post": "INN_POST_TIERS",
+    "coach_house": "COACH_HOUSE_TIERS", "gambling_den": "GAMBLING_TIERS",
+    "grand_casino": "CASINO_TIERS", "academy": "ACADEMY_TIERS",
+    "observatory": "OBSERVATORY_TIERS", "flower_shop": "FLOWER_SHOP_TIERS",
 }
 
 #: 窗规格标准（交接档 §0.3 / 任务书）
@@ -127,7 +143,8 @@ WIN_PER_FACADE_MAX = 2
 M_PER_UV_EXPECT = 0.42
 PROPS_DEFAULT_W = float(os.environ.get("VALIDATE_PROPS_W", "384"))
 
-DEFAULT_SEEDS = (611036, 1, 777)
+#: 八档 × 每 5 个 seed（任务书：全跑 plan_city 无断言无重叠）
+DEFAULT_SEEDS = (611036, 1, 777, 42, 20260914)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -329,7 +346,7 @@ def check_coverage(def_map, prop_map):
 # ══════════════════════════════════════════════════════════════════════════
 def check_lots(def_map, seeds):
     res = Result(2, "地块合规")
-    print("\n[2] 地块合规（plan_city 4 档 × %d seed=%s）" % (len(seeds), seeds))
+    print("\n[2] 地块合规（plan_city %d 档 × %d seed=%s）" % (len(TIERS), len(seeds), seeds))
     print("%-8s %-8s %6s %8s %8s %8s %s"
           % ("tier", "seed", "lots", "同排重叠", "超最大宽", "无可用档", "判定"))
     print("-" * 84)

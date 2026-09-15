@@ -28,6 +28,9 @@
 ##   - TownLifeAPI.is_work_time(hour := NAN) -> bool
 ##       村民劳作节律判定（批次 3，[提案/待定] 7~19 时在岗）：缺省读
 ##       WorldState.game_time，hour 参数显式注入（单测/特殊场景）。
+##   - TownLifeAPI.apply_profession_appearance(entity, id)
+##       按职业 id 重挂装具（读档回填用）：存档只存职业 id，工具不入档，
+##       SaveHandler._restore_entities 回填职业后经此重挂。
 ##
 ## 职业档案字段：见 profession_registry.gd 类头（id/name_zh/work_site_def/
 ## product/produce_amount/consume_res/consume_amount/cycle/tool/quota）。
@@ -82,3 +85,10 @@ static func get_work_site(entity: Node2D, work_site_def: String) -> Dictionary:
 ## 是否工作时段（劳作节律 [提案/待定]：7~19 时在岗；hour 注入缺省读全局时间）。
 static func is_work_time(hour: float = NAN) -> bool:
 	return ProfessionRegistry.is_work_time(hour)
+
+
+## 按职业 id 应用装具（读档回填用，SaveHandler._restore_entities 调用）：
+## 装具不随档——存档只存 profession id，读档回填后经此按 id 重挂工具变体。
+## 未命中职业（配置删改）安全无动作。
+static func apply_profession_appearance(entity: Node, id: String) -> void:
+	ProfessionRegistry.apply_appearance(entity, ProfessionRegistry.get_profession(id))

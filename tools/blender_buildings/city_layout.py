@@ -9,8 +9,11 @@
 ------------------------------------------------------------------
   cell_w   = 32 px
   ground_y = 720 px（运行时街立面基线）
-  width_px：hamlet 2560 / village 3072 / town 4096 / city 6144
-            （city_profiles 只登记 hamlet/town/city 三档；village 按 96 格补齐四档）
+  width_px：hamlet 2560 / village 3072 / townlet 3584 / town 4096 / burgh 5120 /
+            city 6144 / capital 8192 / metropolis 12288
+            （八档 = 4 既有档 + 2 过渡档（townlet/burgh）+ 2 高级行政档
+            （capital/metropolis），分级依据 docs/技术/架构/聚落等级与建筑分级.md
+            【AI 提案/待定】）
 
   平面 x_px ∈ [0, width_px)   —— 横向；左右两端为城墙（§4.5「左右两端以城墙转角收边」）
   平面 y_px ∈ [0, depth_px)   —— 0 = 城后（北）边缘，正方向指向观察者（南/前）
@@ -75,8 +78,22 @@ ZONE_WEIGHTS = {"core": 0.08, "market": 0.22, "artisan": 0.22,
 ZONE_CN = {"core": "核心", "market": "市场", "artisan": "工匠",
            "residential": "居住", "production": "生产"}
 
-# ── §4.1 规模分级 ───────────────────────────────────────────────────────
-TIER_ORDER = {"hamlet": 0, "village": 1, "town": 2, "city": 3}
+# ── §4.1 规模分级（4 既有档 + townlet/burgh 过渡档 + capital/metropolis 行政档） ──
+# **零漂移硬约束（SPECIAL_DEFS 表头既律）**：既有 4 行一个数字都不动——TIER_ORDER
+# 整数是 `_rng_for` 的种子盐与街具数公式的输入，改了即全档漂移。新档：
+#   · TIER_ORDER 续 4~7（只作 rng 盐；街具数/塔间距等新档一律用本表**显式参数**，
+#     见 §7.4 第 9 条）；
+#   · 过渡档 = 低档建筑池拷贝 + 解锁 1~2 个高档 def（townlet 解锁 tavern/bakery+
+#     教堂 w12 首现；burgh 解锁 smithy4/mage_tower），行政建筑按任务书 §二进 core
+#     forced（moot_hall/city_hall）；
+#   · capital/metropolis 按任务书折中方案 = 同一参数化管线 + 专属建筑池
+#     （GDD 口径 T5"单独建筑集"不走常规档——是否另起管线提请创始人裁决，见任务书
+#     §7.4 第 8 条）；行政建筑（governor_palace/imperial_palace）进 core forced 且
+#     以 tower_h 800/1040 **首次夺天际线最高点**（教堂 630 压其下）。
+# street_band/plaza_band/tower_gap/n_props 为 verify_plan 与街具数的**按档显式值**；
+# 既有 4 档不带这些键 → .get 默认值逐位复现旧行为（checks 输出也零漂移）。
+TIER_ORDER = {"hamlet": 0, "village": 1, "town": 2, "city": 3,
+              "townlet": 4, "burgh": 5, "capital": 6, "metropolis": 7}
 TIER_SPECS = {
     "hamlet": dict(cols=80, width_px=2560, wall_h=140, wall_tier=1, n=(10, 12),
                    street=2, lot_rows=2, plaza=None, margin=2, side_roads=1),
@@ -86,6 +103,47 @@ TIER_SPECS = {
                  street=3, lot_rows=3, plaza=8, margin=3, side_roads=2),
     "city": dict(cols=192, width_px=6144, wall_h=420, wall_tier=2, n=(26, 32),
                  street=3, lot_rows=3, plaza=10, margin=3, side_roads=4),
+    # ── 以下为新档（任务书 §一表；提案/待定） ─────────────────────────────
+    "townlet": dict(cols=112, width_px=3584, wall_h=270, wall_tier=1, n=(16, 18),
+                    street=2, lot_rows=3, plaza=6, margin=2, side_roads=1,
+                    n_props=9, tower_gap=(800, 1200), street_band=(2, 3),
+                    plaza_band=(6, 10)),
+    "burgh": dict(cols=160, width_px=5120, wall_h=370, wall_tier=2, n=(22, 26),
+                  street=3, lot_rows=3, plaza=8, margin=3, side_roads=3,
+                  n_props=12, tower_gap=(800, 1200), street_band=(2, 3),
+                  plaza_band=(6, 10)),
+    "capital": dict(cols=256, width_px=8192, wall_h=520, wall_tier=3, n=(40, 48),
+                    street=4, lot_rows=3, plaza=12, margin=4, side_roads=5,
+                    n_props=18, tower_gap=(700, 1000), street_band=(3, 4),
+                    plaza_band=(6, 16)),
+    "metropolis": dict(cols=384, width_px=12288, wall_h=640, wall_tier=3,
+                       n=(60, 72), street=5, lot_rows=3, plaza=16, margin=4,
+                       side_roads=6, n_props=24, tower_gap=(600, 900),
+                       street_band=(4, 6), plaza_band=(6, 16)),
+}
+
+# ── 每档元数据（消费端读：地面分段区带 / 天际线地标槽位 / 行政建筑） ────────
+# ground_bands：ground_tiles 的三区带（center 石板 / mid 旧砖 / edge 夯土），
+#   沿交接档「规模包含」口径（村=edge 子集、镇=mid+edge、城=全档）；
+# landmark：天际线唯一最高点（def, 顶高 px），与 DEFS 的 tower_h 联动登记；
+# admin：行政建筑 def 名（任务书 §二阶梯；None = 无专职，hamlet 井+礼拜堂为中心）。
+TIER_META = {
+    "hamlet":     dict(ground_bands=["edge"],
+                       landmark=("chapel", 390), admin=None),
+    "village":    dict(ground_bands=["edge"],
+                       landmark=("chapel", 390), admin="council_hall"),
+    "townlet":    dict(ground_bands=["edge"],
+                       landmark=("church", 630), admin="town_hall"),
+    "town":       dict(ground_bands=["mid", "edge"],
+                       landmark=("church", 630), admin="town_hall"),
+    "burgh":      dict(ground_bands=["mid", "edge"],
+                       landmark=("church", 630), admin="city_hall"),
+    "city":       dict(ground_bands=["center", "mid", "edge"],
+                       landmark=("church", 630), admin="city_hall"),
+    "capital":    dict(ground_bands=["center", "mid", "edge"],
+                       landmark=("governor_palace", 882), admin="governor_palace"),
+    "metropolis": dict(ground_bands=["center", "mid", "edge"],
+                       landmark=("imperial_palace", 1068), admin="imperial_palace"),
 }
 
 # ── §3.3 建筑规格表 ─────────────────────────────────────────────────────
@@ -184,6 +242,63 @@ DEFS = {
                           depth=8, wall_mat="stone", roof_mat="tile", variant="c"),
     "warehouse":     dict(cn="货栈",     widths=[12, 16],        wall_h=270, roof=155,
                           depth=8, wall_mat="brick", roof_mat="tile", variant="a"),
+    # ── 行政建筑阶梯（任务书 §二，AI 提案/待定；装配器已由行政批次交付入
+    #    buildings.py——登记名与装配器实名一致，宽度档照 COUNCIL_TIERS/
+    #    TOWNHALL_TIERS/GOVERNOR_TIERS/IMPERIAL_TIERS 实测） ────────────────
+    # 顶高口径与 §4.4「唯一最高点」联动：L4 总督府 882 / L5 宫殿 1068 = 该档天际线
+    # 最高点（**行政建筑首次夺最高点**，教堂 630 压其下）；council_hall/town_hall
+    # 压在教堂之下。充当关系：town/city 两档（零漂移硬约束）不新增 lot，由
+    # plan["admin_slots"] 指认既有 guildhall lot（acting_for）。
+    "council_hall":  dict(cn="村议事小屋", widths=[8],              wall_h=216, roof=104,
+                          depth=6, wall_mat="timber", roof_mat="shingle", variant="a"),
+    "town_hall":     dict(cn="镇政厅",   widths=[12, 16],           wall_h=430, roof=94,
+                          depth=8, wall_mat="stone", roof_mat="tile", variant="a"),
+    "city_hall":     dict(cn="城市政厅", widths=[16],               wall_h=430, roof=130,
+                          depth=8, wall_mat="brick", roof_mat="tile", variant="a"),
+    "governor_palace": dict(cn="行省总督府", widths=[16],           wall_h=641, roof=78,
+                          tower_h=882, depth=14, wall_mat="brick", roof_mat="copper",
+                          variant="a", aspect_exempt=True),
+    "imperial_palace": dict(cn="帝国宫殿", widths=[16],             wall_h=669, roof=100,
+                          tower_h=1068, depth=16, wall_mat="stone_white",
+                          roof_mat="gold", variant="a", aspect_exempt=True),
+    # belfry（钟楼，任务书 §五）：独立细高塔天际线点缀，走 SPECIAL_DEFS 独立通道
+    # （§7.4 第 4 条；city 档按「只增不改」 specials 追加口径批准接入——既有 lots
+    # 逐字段不动）。布局层只声明 4 格档：6 格砖塔身实测顶 656px 会压过教堂 630
+    # （shelter 只声明 8 的同一先例）；4 格木塔身 594px 守在教堂之下。
+    "belfry":        dict(cn="钟楼",     widths=[4],               wall_h=466, roof=128,
+                          tower_h=594, depth=4, wall_mat="wood", roof_mat="slate",
+                          variant="a", aspect_exempt=True),
+    # mint（铸币厂，任务书 §五）：铁栅重门+铸币烟囱，capital 起（生产带低权重投放）。
+    "mint":          dict(cn="铸币厂",   widths=[12, 16],          wall_h=422, roof=96,
+                          depth=8, wall_mat="brick", roof_mat="slate", variant="a"),
+    # ── 批 2 装配器（驿站族/赌场族/科研族/花店；窗口按修订版任务书，与文档命名
+    #    有差异处以装配器实名为准） ─────────────────────────────────────────
+    # 窗口里的 town/city 属既有档：零漂移硬约束下不动其抽签池——窗口先在此登记、
+    # 接线从新四档（townlet/burgh/capital/metropolis）起步，既有档待漂移预算审批。
+    # waystation 6 格档按 smithy1 w6 先例开"小物件"口子（与 4 格倍数硬约束存在
+    # 口径张力，任务方知情登记）；布局层 aspect 带会把 6 档挡在 _pick_width 之外，
+    # 实际只落 8 格档。inn_post/coach_house 前凸翼向基线前伸 58~72px：depth 按
+    # D+翼实测总延伸取整格（探针按包围盒前缘对齐基线，登记不足后墙顶进排间巷）。
+    "waystation":    dict(cn="路驿马棚", widths=[6, 8],           wall_h=200, roof=78,
+                          depth=6, wall_mat="wood", roof_mat="shingle", variant="a"),
+    "inn_post":      dict(cn="客栈驿站", widths=[12, 16],         wall_h=424, roof=118,
+                          depth=10, wall_mat="plaster_timber", roof_mat="tile",
+                          variant="a"),
+    "coach_house":   dict(cn="车马行",   widths=[12, 16],         wall_h=300, roof=118,
+                          depth=10, wall_mat="brick", roof_mat="slate", variant="a"),
+    "gambling_den":  dict(cn="赌坊",     widths=[8, 12],          wall_h=220, roof=98,
+                          depth=7, wall_mat="wood", roof_mat="tile", variant="a"),
+    "grand_casino":  dict(cn="大赌场",   widths=[16],             wall_h=428, roof=100,
+                          depth=9, wall_mat="plaster", roof_mat="copper", variant="a"),
+    "academy":       dict(cn="学院",     widths=[12, 16],         wall_h=418, roof=96,
+                          depth=8, wall_mat="stone", roof_mat="slate", variant="a"),
+    # observatory：收分圆塔 → 登记天际线有效体量（塔身+铜穹顶+尖顶 390，压在教堂
+    # 630 之下）；探针挂墙件按圆塔前墙面取切点（probe 的 WALL_Y_DEPTH2）。
+    "observatory":   dict(cn="观星台",   widths=[8],              wall_h=320, roof=54,
+                          tower_h=390, depth=6, wall_mat="stone", roof_mat="copper",
+                          variant="a", aspect_exempt=True),
+    "flower_shop":   dict(cn="花店",     widths=[8, 12],          wall_h=218, roof=96,
+                          depth=7, wall_mat="plaster", roof_mat="tile", variant="a"),
 }
 
 #: 部分 def 的**进深随宽度档变化**（= 装配器 *_TIERS 的 D 实测值 ÷ 32 取上整）。
@@ -195,6 +310,20 @@ DEPTH_BY_WIDTH = {
     "library":    {12: 7, 16: 8},              # D：204 / 236
     "barracks":   {12: 7, 16: 8},              # D：208 / 240
     "warehouse":  {12: 7, 16: 8},              # D：204 / 236
+    "town_hall":  {12: 7, 16: 8},              # D：208 / 236
+    "mint":       {12: 7, 16: 8},              # D：212 / 232
+    # 总督府/宫殿：占地进深 + 前院（court/podium+大台阶）沿 y 的实测总延伸，
+    # 取整格上整——装配器把前院/台阶也建在 y 负向，探针按包围盒前缘对齐基线，
+    # 进深登记不足会让后墙顶进城墙带（verify ② 的口径按登记值算，须登记真值）。
+    "governor_palace": {16: 14},               # D 252 + 前院 170 = 422px ≈ 13.2 格
+    "imperial_palace": {16: 16},               # D 264 + 台基/大台阶 ≈ 490px ≈ 15.3 格
+    # 批 2：前凸翼/雨篷向基线前伸的 def 按总延伸登记（主池 lot 用 DEFS.depth，
+    # 此处供 J3 投放与登记复核；inn_post/coach_house 的 depth 字段已是总延伸）。
+    "inn_post":     {12: 9, 16: 10},           # D 204/232 + 翼前伸 64/72
+    "coach_house":  {12: 9, 16: 10},           # D 198/226 + 翼前伸 58/64
+    "grand_casino": {16: 9},                   # D 236 + 门楼前凸 26
+    "academy":      {12: 7, 16: 8},            # D：196 / 224
+    "flower_shop":  {8: 6, 12: 7},             # D：158 / 196
 }
 
 # ── 特殊建筑投放：区带权重 + 出现频率克制（§4.2 / §4.1） ───────────────
@@ -209,6 +338,9 @@ DEPTH_BY_WIDTH = {
 # freq：各规模档的上限（缺档默认 0 = 不出现）；特殊建筑只在镇/城级出现，
 #   村档院坝余量（≤9 格）本就装不下 8~16 格建筑，且 §4.4 的礼拜堂（390）压不住
 #   兵营/图书馆/货栈（425~514）——与 ZONE_POOLS 里「酒馆/面包房属镇级设施」同口径。
+#   新档扩编（任务书 §7.4 第 4 条，既有档键值不动 → 既有布局 rng 逐位不变）：
+#   burgh 解锁 mage_tower（法师塔 560 < 教堂 630，安全）；capital：mage_tower 1 /
+#   library 2 / barracks 2；metropolis 翻倍加密。
 # near：center = 贴城市中轴选段；gate = 贴左右城墙（城门在左右两端）选段。
 # row_pref：front = 贴主街那排（立面与门前家什可读）；deep = 后排（塔类与大体量公共
 #   建筑退后，20° 微俯视下不遮前排街面；两档落在同一 x 段时**让高者退后**，
@@ -220,19 +352,37 @@ DEPTH_BY_WIDTH = {
 SPECIAL_DEFS = {
     "mage_tower": dict(zone_weight={"core": 4, "market": 3, "artisan": 1,
                                     "production": 1},
-                       freq={"city": 1}, near="center", row_pref="deep"),
+                       freq={"city": 1, "burgh": 1, "capital": 1, "metropolis": 2},
+                       near="center", row_pref="deep"),
     "library":    dict(zone_weight={"core": 4, "market": 3, "artisan": 1},
-                       freq={"town": 1, "city": 1}, near="center", row_pref="deep"),
+                       freq={"town": 1, "city": 1, "metropolis": 2},
+                       near="center", row_pref="deep"),
     "barracks":   dict(zone_weight={"production": 4, "artisan": 2, "residential": 1},
-                       freq={"town": 1, "city": 1}, near="gate", row_pref="deep"),
+                       freq={"town": 1, "city": 1, "capital": 2, "metropolis": 2},
+                       near="gate", row_pref="deep"),
     "warehouse":  dict(zone_weight={"production": 4, "artisan": 2, "residential": 1},
-                       freq={"town": 1, "city": 1}, near="gate", row_pref="front"),
+                       freq={"town": 1, "city": 1, "capital": 2, "metropolis": 3},
+                       near="gate", row_pref="front"),
     "alchemy":    dict(zone_weight={"artisan": 4, "production": 2, "residential": 1,
                                     "market": 1},
-                       freq={"town": 1, "city": 1}, near="gate", row_pref="front"),
+                       freq={"town": 1, "city": 1, "capital": 2, "metropolis": 2},
+                       near="gate", row_pref="front"),
+    # belfry（钟楼）：行政批次交付的天际线点缀，走 J3 独立通道（任务书 §7.4 第 4
+    # 条）。city 档按创始人批准的「只增不改」口径：既有 lots 逐字段不动，钟楼只以
+    # specials 追加（确定性落位、不消耗既有 rng）——零漂移语义保住。freq=上限：
+    # 院坝放不下就放弃（稀缺"变奏地标"，约半数城市出现属预期）。
+    "belfry":     dict(zone_weight={"core": 3, "market": 2, "artisan": 1},
+                       freq={"city": 1, "burgh": 1, "capital": 1, "metropolis": 2},
+                       near="center", row_pref="deep"),
+    # observatory（观星台，科研族 capital 识别件，批 2 交付）：同 J3 通道，
+    # capital 专属（freq=1），贴中轴退后排（圆塔+铜穹顶读天际线）。
+    "observatory": dict(zone_weight={"core": 3, "market": 2, "artisan": 1},
+                        freq={"capital": 1}, near="center", row_pref="deep"),
 }
-#: 投放顺序（前面的先挑段；确定性，不消耗 rng）
-SPECIAL_ORDER = ("library", "mage_tower", "barracks", "warehouse", "alchemy")
+#: 投放顺序（前面的先挑段；确定性，不消耗 rng）。追加项（belfry/observatory）排在
+#: 既有五 def 之后：不参与前段挑选 → 既有档既有 def 的落位逐位不变（零漂移）。
+SPECIAL_ORDER = ("library", "mage_tower", "barracks", "warehouse", "alchemy",
+                 "belfry", "observatory")
 
 # §4.4「墙顶高于 80% 建筑」中的「高建筑」= 顶高超过城墙档者
 TALL_DEFS = {"townhouse", "plaster_house", "tavern", "bakery", "guildhall",
@@ -330,11 +480,101 @@ ZONE_POOLS = {
         "production":  dict(forced=["barn"], weight=[("barn", 2), ("shelter", 3),
                                                      ("windmill", 1)]),
     },
+    # ── 新档池（任务书 §7.4 第 2 条：过渡档 = 低档池拷贝 + 解锁 1~2 个高档 def；
+    #    首府/首都 = 专属池，行政建筑进 core forced。注意：SPECIAL_DEFS 管的
+    #    mage_tower/library/barracks/warehouse/alchemy 走 J3 独立通道，
+    #    **不得**进抽签池——否则抽签 rng 漂移 + 双重落位） ──────────────────
+    # townlet（村镇过渡）：村池底子 + 解锁 tavern/bakery（市场带）+ 教堂 w12 首现
+    #   （替代礼拜堂守 630 天际线）+ town_hall（行政 L2，w12 档）进 core。
+    "townlet": {
+        "core":        dict(forced=["church", "town_hall"], weight=[]),
+        "market":      dict(forced=["tavern", "bakery"],
+                            weight=[("shop", 3), ("market_stall", 2)]),
+        "artisan":     dict(forced=["smithy1"], weight=[("stable", 3), ("smithy2", 3),
+                                                        ("smithy3", 1)]),
+        "residential": dict(forced=["house"], weight=[("house", 3), ("cottage", 4)]),
+        "production":  dict(forced=["barn"], weight=[("shelter", 3), ("windmill", 1),
+                                                     ("waystation", 1)]),
+    },
+    # burgh（城镇过渡）：镇池底子 + 解锁 smithy4（工匠带）/mage_tower（J3 频率 1）
+    #   + city_hall（行政 L3，过渡期 guildhall[16] 兼当装配）。
+    "burgh": {
+        "core":        dict(forced=["church", "city_hall"], weight=[("chapel", 1)]),
+        # 批 2 窗口（burgh 起）：赌坊/花店/客栈入市场带，学院入工匠带（core 候补
+        # 待 core_count 参数化后再进 core），路驿入生产带。
+        "market":      dict(forced=["tavern", "bakery"],
+                            weight=[("shop", 5), ("market_stall", 3),
+                                    ("gambling_den", 1), ("flower_shop", 1),
+                                    ("inn_post", 1)]),
+        "artisan":     dict(forced=["smithy2", "smithy3"],
+                            weight=[("smithy4", 2), ("stable", 3), ("hayloft", 1),
+                                    ("academy", 1)]),
+        "residential": dict(forced=["house", "townhouse"],
+                            weight=[("house", 4), ("cottage", 3), ("plaster_house", 2)]),
+        "production":  dict(forced=["barn"], weight=[("shelter", 3), ("windmill", 2),
+                                                     ("waystation", 1)]),
+    },
+    # capital（行省首府）：总督府进 core forced（tower_h 882 夺天际线最高点）；
+    #   生产带解锁 mint 铸币厂（低权重保稀缺，软上限 ~1 座）；工匠/公共建筑靠
+    #   J3 频率 library 2 / barracks 2 / warehouse 2 / belfry 加密。
+    "capital": {
+        "core":        dict(forced=["church", "governor_palace"], weight=[("chapel", 1)]),
+        # 批 2 窗口（city 起，city 属既有档故从 capital 落地）：赌坊/花店/客栈/
+        # 大赌场入市场带，车马行入工匠带；academy 接管 library 的学术位（library
+        # 的 capital freq 撤除，town/city/metropolis 不变）。
+        "market":      dict(forced=["tavern", "bakery"],
+                            weight=[("shop", 5), ("market_stall", 3),
+                                    ("gambling_den", 1), ("grand_casino", 1),
+                                    ("flower_shop", 1), ("inn_post", 1)]),
+        "artisan":     dict(forced=["smithy2", "smithy3"],
+                            weight=[("smithy1", 2), ("smithy4", 3), ("stable", 2),
+                                    ("hayloft", 1), ("coach_house", 1),
+                                    ("academy", 2)]),
+        "residential": dict(forced=["house", "townhouse"],
+                            weight=[("house", 5), ("cottage", 2), ("plaster_house", 3)]),
+        "production":  dict(forced=["barn"], weight=[("barn", 2), ("shelter", 3),
+                                                     ("windmill", 1), ("mint", 1)]),
+    },
+    # metropolis（帝国首都）：宫殿进 core forced（tower_h 1068 = 全链最高点）；
+    #   任务书折中方案 = 同一参数化管线 + 专属池（不另起 T5 独立管线，§7.4 第 8 条
+    #   是否保留独立管线提请创始人裁决）。
+    "metropolis": {
+        "core":        dict(forced=["church", "imperial_palace"], weight=[("chapel", 1)]),
+        # 批 2 窗口：与 capital 同批入带（academy 权重降为 1，library 保留 2）。
+        "market":      dict(forced=["tavern", "bakery"],
+                            weight=[("shop", 5), ("market_stall", 3),
+                                    ("gambling_den", 1), ("grand_casino", 1),
+                                    ("flower_shop", 1), ("inn_post", 1)]),
+        "artisan":     dict(forced=["smithy2", "smithy3"],
+                            weight=[("smithy1", 2), ("smithy4", 3), ("stable", 2),
+                                    ("hayloft", 1), ("coach_house", 1),
+                                    ("academy", 1)]),
+        "residential": dict(forced=["house", "townhouse"],
+                            weight=[("house", 5), ("cottage", 2), ("plaster_house", 3)]),
+        "production":  dict(forced=["barn"], weight=[("barn", 2), ("shelter", 3),
+                                                     ("windmill", 1), ("mint", 1)]),
+    },
 }
 
 # 高楼预算（占总数比例）：§4.4 要求墙顶高于 80% 建筑 → 高楼占比 ≤ 20%。
 # 小档城墙矮（140/220），该规则与 §4.1 档位本身不自洽 → 预算放宽，校验项记录冲突。
-MAX_TALL_RATIO = {"hamlet": 0.30, "village": 0.30, "town": 0.30, "city": 0.20}
+# 新档按任务书 §7.4 第 5 条统一取 0.20（显式按档登记，既有 4 档不动）。
+MAX_TALL_RATIO = {"hamlet": 0.30, "village": 0.30, "town": 0.30, "city": 0.20,
+                  "townlet": 0.20, "burgh": 0.20, "capital": 0.20,
+                  "metropolis": 0.20}
+
+# ── 行政建筑槽位（任务书第 2 节） ────────────────────────────────────────
+# · 实装档（新 4 档）：行政 def 进 core forced，落位后 lot 打 `role="admin"` 标记；
+# · 充当档（town/city，零漂移硬约束）：不新增/不改既有 lots——由 plan["admin_slots"]
+#   指认既有 guildhall lot（acting_for = 任务书行政名）；
+# · 预留档（village）：moot_hall 装配器未落地 + 零漂移不许动 lots → admin_slots 记
+#   status="reserved" 的槽位（井旁核心带），待漂移预算审批后实装。
+ADMIN_LOT_DEFS = ("council_hall", "town_hall", "city_hall", "governor_palace",
+                  "imperial_palace")
+#: 充当关系：tier → (既有 def, 任务书行政名)。行政装配器已交付（council_hall/
+#: town_hall/governor_palace/imperial_palace），town/city 仍按零漂移硬约束由
+#: 既有 guildhall lot 充当（drift 预算批准后可换真装配器 lot）。
+ADMIN_ACTING = {"town": ("guildhall", "town_hall"), "city": ("guildhall", "city_hall")}
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -463,6 +703,48 @@ def _split_sides(defs):
         for i, d in enumerate(by_def[name]):
             (left if i % 2 == 0 else right).append(d)
     return left, right
+
+
+def build_admin_slots(tier: str, lots: list, cols: int) -> list:
+    """行政建筑槽位（任务书第 2 节）：写在 plan["admin_slots"]，消费端可识别。
+
+    · 实装（新 4 档）：行政 def 的 lot 打 `role="admin"`，槽位指认该 lot；
+    · 充当（town/city，零漂移）：指认既有 guildhall lot，acting_for 记任务书行政名；
+    · 预留（village）：moot_hall 待装配器落地 + 漂移预算审批，槽位只登记不落 lot；
+    · hamlet 无专职（井+礼拜堂为中心）→ 空表。
+    """
+    slots = []
+    for l in lots:
+        if l["def"] in ADMIN_LOT_DEFS:
+            l["role"] = "admin"
+            slots.append({"role": "admin", "def": l["def"], "def_cn": l["def_cn"],
+                          "status": "built", "lot_index": l["index"],
+                          "x_cells": list(l["x_cells"]), "row": l["row"],
+                          "baseline_y": l["baseline_y"],
+                          "top_h_px": l["top_h_px"]})
+    if tier in ADMIN_ACTING:
+        acting, admin_def = ADMIN_ACTING[tier]
+        for l in lots:
+            if l["def"] == acting and l["zone"] == "core":
+                slots.append({"role": "admin", "def": acting, "admin_def": admin_def,
+                              "def_cn": "%s（兼%s）" % (DEFS[acting]["cn"],
+                                                       DEFS[admin_def]["cn"]),
+                              "status": "built", "acting_for": admin_def,
+                              "lot_index": l["index"],
+                              "x_cells": list(l["x_cells"]), "row": l["row"],
+                              "baseline_y": l["baseline_y"],
+                              "top_h_px": l["top_h_px"],
+                              "note": "任务书 §二：guildhall 直接充当；零漂移硬约束下"
+                                      "不改既有 lots，DRESS 语义变体待装配器批次"})
+                break
+    if tier == "village":
+        slots.append({"role": "admin", "def": "council_hall",
+                      "def_cn": DEFS["council_hall"]["cn"], "status": "reserved",
+                      "lot_index": None, "row": 0, "zone": "core",
+                      "x_cells": [cols // 2 - 4, cols // 2 + 4],
+                      "note": "任务书 §二 L1：井旁核心带预留槽位（装配器 council_hall "
+                              "w8 已交付）；零漂移硬约束下暂不落 lot，按漂移预算审批接入"})
+    return slots
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -869,6 +1151,20 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
                 gap = ALLEY_W if (placed and since >= threshold) else 0
                 if prev_zone is not None and z != prev_zone:
                     gap = max(gap, ALLEY_W)          # 区界至少 1 格巷
+                # §4.4 同 def 不相邻：本单元与刚落位单元同 def 且将**无缝**相邻
+                # （放下去必判违规）时，从队列找第一个异 def 单元顶上（确定性，
+                # 不消耗 rng）；整队同 def 才退而留 1 格巷。该分支仅在「不处理就
+                # 违规」时触发——既有 4 档零违规 ⇒ 取样序/落位逐位不变（零漂移）。
+                if gap == 0 and placed and u["def"] == placed[-1]["unit"]["def"]:
+                    alt_i = next((i for i, (_zz, uu) in enumerate(queue)
+                                  if uu["def"] != u["def"]), None)
+                    if alt_i is not None:
+                        queue.insert(0, queue.pop(alt_i))
+                        z, u = queue[0]
+                        if prev_zone is not None and z != prev_zone:
+                            gap = max(gap, ALLEY_W)  # 换上的单元跨区界 → 补巷
+                    else:
+                        gap = ALLEY_W
                 if x + gap + u["w_cells"] > bb:
                     break
                 fb = front_b_for(row, u, x + gap)
@@ -1080,6 +1376,9 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
     place_specials()
 
     # ── K 城墙 / 塔楼 / 城门 ────────────────────────────────────────────
+    # 塔楼间距按档（任务书 §7.4 第 9 条）：既有 4 档不带 tower_gap 键 → 取全局
+    # TOWER_GAP_PX，取样序逐位不变；capital/metropolis 城墙长 → 间距加密登记。
+    gap_lo, gap_hi = spec.get("tower_gap", TOWER_GAP_PX)
     walls = {"tier": spec["wall_tier"], "height_px": wall_h,
              "seg_cells": WALL_SEG_CELLS, "runs": [], "towers": [], "gates": []}
     if wall:
@@ -1109,7 +1408,7 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
             total_len = length_cells * CELL_W
             pos = 0.0                     # 上一座塔的**中心**位置（沿趟的 px）
             while True:
-                spacing = (rng.uniform(*TOWER_GAP_PX)
+                spacing = (rng.uniform(gap_lo, gap_hi)
                            * (1 + rng.uniform(-TOWER_GAP_JITTER, TOWER_GAP_JITTER)))
                 center = pos + spacing
                 if center + tw_px / 2 > total_len:
@@ -1170,7 +1469,10 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
     # ── L 前景 props（§4.5：桶/摊/树/车，必须落在街道内） ───────────────
     props = []
     prop_kinds = ["barrel", "crate", "hay", "cart", "tree", "stall"]
-    n_props = 4 + TIER_ORDER[tier] * 3
+    # 街具数（任务书 §7.4 第 9 条）：既有 4 档 = 4 + TIER_ORDER×3（公式与取样序
+    # 逐位不动）；新档用 TIER_SPECS 的显式 n_props（townlet 9 / burgh 12 /
+    # capital 18 / metropolis 24，任务书 §一「街具密度」列）。
+    n_props = spec["n_props"] if "n_props" in spec else 4 + TIER_ORDER[tier] * 3
     for i in range(n_props):
         c = int(cols * (i + 0.5) / n_props) + rng.randint(-2, 2)
         c = max(wall_th + margin, min(cols - wall_th - margin - 1, c))
@@ -1230,7 +1532,10 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
     tallest = sorted_lots[0] if sorted_lots else None
     second = sorted_lots[1] if len(sorted_lots) > 1 else None
     tallest_point = max(profile)
-    core_names = {"church", "chapel", "guildhall"}
+    # 核心 landmark 名单：教堂系 + 行会馆 + 行政阶梯（L4 起行政建筑夺最高点，
+    # 任务书 §7.4 第 3 条）
+    core_names = {"church", "chapel", "guildhall", "moot_hall", "town_hall",
+                  "city_hall", "governor_palace", "imperial_palace"}
     core_tall = [l for l in lots if l["def"] in core_names]
     highest_is_core = bool(core_tall) and max(l["top_h_px"] for l in core_tall) \
         == tallest["top_h_px"] and tallest["def"] in core_names
@@ -1266,6 +1571,10 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
                       for l in sorted(lots, key=lambda l: l["x_px"])],
     }
 
+    # ── 行政建筑槽位（任务书第 2 节）：新档实装 lot 打 role 标记，town/city 充当
+    #    指认既有 guildhall，village 预留——零漂移硬约束见 ADMIN_LOT_DEFS 注释。
+    admin_slots = build_admin_slots(tier, lots, cols)
+
     plan = {
         "tier": tier, "seed": int(seed), "cell_w": CELL_W, "ground_y": GROUND_Y,
         "width_px": width_px, "depth_px": depth_px, "cols": cols, "rows": rows,
@@ -1292,11 +1601,12 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
                         "baseline_y": GROUND_Y - row_off[r] * CELL_W}
                        for r in range(lot_rows)],
         "walls": walls,
-        "roads": {
+            "roads": {
             "main": {"axis": "x", "x_cells": [0, cols],
                      "y_cells": [street_y0, rows], "w_cells": street_w,
                      "w_px": street_w * CELL_W,
-                     "kind": "stone" if tier in ("town", "city") else "dirt",
+                     "kind": "dirt" if tier in ("hamlet", "village", "townlet")
+                             else "stone",
                      "through": True, "baseline_y": GROUND_Y},
             "branches": branches,
             "lanes": [{"b0": row_off[r] + row_depth[r],
@@ -1313,6 +1623,7 @@ def plan_city(tier: str, seed: int = 611036, width_px: int = None,
                       if plaza else None),
         },
         "lots": lots,
+        "admin_slots": admin_slots,
         "specials": special_lots,
         "yards": yards,
         "props": props,
@@ -1367,13 +1678,16 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
             if is_road_cell(c, y):
                 road_cells.add((c, y))
 
-    # ① 街道宽度 §4.3（2~3 格）
+    # ① 街道宽度 §4.3（主街按档带：L1~L3 2~3 格 / L4=4 / L5=4~6 大道，任务书
+    #    §7.4 第 5 条；支路/巷维持 2~3）。既有 4 档不带 street_band 键 → (2,3) 原样。
+    spec_band = TIER_SPECS[tier].get("street_band", (2, 3))
     branch_ws = sorted({b["w"] for b in plan["roads"]["branches"]})
     lane_ws = sorted({l["w_cells"] for l in plan["roads"]["lanes"]})
-    street_ok = (2 <= street_w <= 3) and all(2 <= w <= 3 for w in branch_ws + lane_ws)
+    street_ok = (spec_band[0] <= street_w <= spec_band[1]) \
+        and all(2 <= w <= 3 for w in branch_ws + lane_ws)
     if not street_ok:
-        issues.append("街宽越界：主街 %d / 支路 %s / 巷 %s（规范 2~3 格）"
-                      % (street_w, branch_ws, lane_ws))
+        issues.append("街宽越界：主街 %d（档带 %s）/ 支路 %s / 巷 %s"
+                      % (street_w, list(spec_band), branch_ws, lane_ws))
 
     # ② 建筑退线：不侵路；前进线须贴街
     overlap = 0
@@ -1413,7 +1727,8 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
         issues.append("小巷违规：同排最长连排 %d 栋（上限 %d）"
                       % (max_run, ALLEY_EVERY[1]))
 
-    # ④ 广场 §4.3
+    # ④ 广场 §4.3（[6,10]，首府/首都放宽到 16：任务书 §7.4 第 5 条）
+    plaza_band = TIER_SPECS[tier].get("plaza_band", (6, 10))
     pl = plan["roads"]["plaza"]
     if pl is None:
         plaza_ok, plaza_info = True, {"none": True, "note": "§4.1 hamlet 无广场"}
@@ -1424,7 +1739,8 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
                           and l["front_y_cell"] >= pl["y_cells"][0]
                           and l["back_y_cell"] <= pl["y_cells"][1])
         plaza_props = sum(1 for p in plan["props"] if p.get("in_plaza"))
-        plaza_ok = bool(6 <= pl["w_cells"] <= 10 and 6 <= pl["h_cells"] <= 10
+        plaza_ok = bool(plaza_band[0] <= pl["w_cells"] <= plaza_band[1]
+                        and plaza_band[0] <= pl["h_cells"] <= plaza_band[1]
                         and pl["zone"] == "market" and lots_inside == 0
                         and pl["flush_north_of_main_street"])
         plaza_info = {"w_cells": pl["w_cells"], "h_cells": pl["h_cells"],
@@ -1433,7 +1749,8 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
         if not plaza_ok:
             issues.append("广场违规：%s" % plaza_info)
 
-    # ⑤ 天际线 §4.4
+    # ⑤ 天际线 §4.4（塔间距带按档：既有 4 档 = 全局 TOWER_GAP_PX 原样）
+    tg_lo, tg_hi = TIER_SPECS[tier].get("tower_gap", TOWER_GAP_PX)
     sky = plan["skyline"]
     tower_gaps = []
     for side in ("left", "right", "back"):
@@ -1441,16 +1758,16 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
                     key=lambda t: t["i_px"])
         for a, b2 in zip(ts, ts[1:]):
             tower_gaps.append(b2["i_px"] - a["i_px"])
-    gap_ok = all(TOWER_GAP_PX[0] * 0.9 <= g <= TOWER_GAP_PX[1] * 1.1
-                 for g in tower_gaps) if tower_gaps else True
+    gap_ok = all(tg_lo * 0.9 <= g <= tg_hi * 1.1 for g in tower_gaps) \
+        if tower_gaps else True
     tower_hs = [t["height_px"] for t in plan["walls"]["towers"]]
     h_spread = (max(tower_hs) - min(tower_hs)) if tower_hs else 0
     fake_equidistant = bool(gap_ok and len(tower_gaps) >= 3
                             and len(set(tower_gaps)) <= 1)
     fake_same_height = bool(len(tower_hs) >= 3 and h_spread < 8)
     if not gap_ok and tower_gaps:
-        issues.append("塔楼间距越界：min %d max %d px（规范 800~1200）"
-                      % (min(tower_gaps), max(tower_gaps)))
+        issues.append("塔楼间距越界：min %d max %d px（档带 %d~%d）"
+                      % (min(tower_gaps), max(tower_gaps), tg_lo, tg_hi))
     if fake_equidistant:
         issues.append("塔楼间距完全等距（%d 段同距）→ 观感发假" % len(tower_gaps))
     h_range_pct = (((max(tower_hs) - min(tower_hs)) / (sum(tower_hs) / len(tower_hs)))
@@ -1591,7 +1908,7 @@ def verify_plan(plan: dict, strict: bool = True) -> dict:
 
     checks = {
         "street_width": {"main_cells": street_w, "branch_cells": branch_ws,
-                         "lane_cells": lane_ws, "spec_cells": [2, 3],
+                         "lane_cells": lane_ws, "spec_cells": list(spec_band),
                          "ok": bool(street_ok)},
         "setback": {"lot_road_overlap_cells": overlap,
                     "lots_without_frontage": len(no_frontage),
@@ -1740,13 +2057,15 @@ def _dump(o):
 def main():
     ap = argparse.ArgumentParser(description="城镇平面布局求解器（§4 城市设计规范）")
     ap.add_argument("--tier", default="city",
-                    choices=["hamlet", "village", "town", "city", "all"])
+                    choices=["hamlet", "village", "townlet", "town", "burgh",
+                             "city", "capital", "metropolis", "all"])
     ap.add_argument("--seed", type=int, default=611036)
     ap.add_argument("--out", default=None, help="布局 JSON 输出路径（--tier all 时为目录）")
     ap.add_argument("--selftest", action="store_true", help="确定性自检")
     args = ap.parse_args()
 
-    tiers = ["hamlet", "village", "town", "city"] if args.tier == "all" else [args.tier]
+    tiers = (["hamlet", "village", "townlet", "town", "burgh", "city",
+              "capital", "metropolis"] if args.tier == "all" else [args.tier])
     plans = {}
     for t in tiers:
         p = plan_city(t, seed=args.seed)

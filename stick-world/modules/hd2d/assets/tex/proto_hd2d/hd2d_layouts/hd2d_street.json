@@ -1,0 +1,362 @@
+{
+ "cell_w": 32,
+ "width_cells": 252,
+ "tier": "starter",
+ "seed": 20260915,
+ "zone_sides": {
+  "craft": -1,
+  "production": 1,
+  "living": -1,
+  "market": 1,
+  "storage": 1
+ },
+ "buildings": [
+  {
+   "card": "guildhall_w12",
+   "def": "guildhall",
+   "x": 23.38,
+   "cells": 17.75,
+   "row": 0,
+   "door": true,
+   "z": 0.51,
+   "zone": "core"
+  },
+  {
+   "card": "cathedral_w16",
+   "def": "cathedral",
+   "x": 4.11,
+   "cells": 19.6,
+   "row": 0,
+   "door": false,
+   "z": 1.18,
+   "zone": "float"
+  },
+  {
+   "card": "barn_w12",
+   "def": "barn",
+   "x": 41.66,
+   "cells": 17.62,
+   "row": 0,
+   "door": false,
+   "z": 2.4,
+   "zone": "production"
+  },
+  {
+   "card": "mage_tower_w8",
+   "def": "mage_tower",
+   "x": -10.71,
+   "cells": 8.84,
+   "row": 0,
+   "door": false,
+   "z": 0.65,
+   "zone": "float"
+  },
+  {
+   "card": "windmill_w6",
+   "def": "windmill",
+   "x": 57.0,
+   "cells": 11.84,
+   "row": 0,
+   "door": false,
+   "z": 1.04,
+   "zone": "production"
+  },
+  {
+   "card": "smithy2_w8",
+   "def": "smithy2",
+   "x": -21.89,
+   "cells": 12.31,
+   "row": 0,
+   "door": false,
+   "z": 0.83,
+   "zone": "craft"
+  },
+  {
+   "card": "shop_w8",
+   "def": "shop",
+   "x": 69.5,
+   "cells": 11.94,
+   "row": 0,
+   "door": true,
+   "z": 1.12,
+   "zone": "market"
+  },
+  {
+   "card": "smithy1_w8",
+   "def": "smithy1",
+   "x": -34.62,
+   "cells": 11.94,
+   "row": 0,
+   "door": true,
+   "z": 1.21,
+   "zone": "craft"
+  },
+  {
+   "card": "bakery_w8",
+   "def": "bakery",
+   "x": 82.04,
+   "cells": 11.94,
+   "row": 0,
+   "door": false,
+   "z": 0.58,
+   "zone": "market"
+  },
+  {
+   "card": "house_w8",
+   "def": "house",
+   "x": -47.16,
+   "cells": 11.94,
+   "row": 0,
+   "door": false,
+   "z": 0.67,
+   "zone": "living"
+  },
+  {
+   "card": "warehouse_w16",
+   "def": "warehouse",
+   "x": 100.23,
+   "cells": 23.25,
+   "row": 0,
+   "door": false,
+   "z": 0.98,
+   "zone": "storage"
+  },
+  {
+   "card": "hayloft_w8",
+   "def": "hayloft",
+   "x": -59.7,
+   "cells": 11.94,
+   "row": 0,
+   "door": false,
+   "z": 1.09,
+   "zone": "living"
+  },
+  {
+   "card": "house_w8",
+   "def": "house",
+   "x": -72.27,
+   "cells": 11.94,
+   "row": 0,
+   "door": false,
+   "z": 0.55,
+   "zone": "living"
+  },
+  {
+   "card": "cottage_w6",
+   "def": "cottage",
+   "x": -83.4,
+   "cells": 9.12,
+   "row": 0,
+   "door": false,
+   "z": 2.4,
+   "zone": "living"
+  },
+  {
+   "card": "house_w16",
+   "def": "house",
+   "x": -100.2,
+   "cells": 23.25,
+   "row": 0,
+   "door": false,
+   "z": 0.98,
+   "zone": "living"
+  },
+  {
+   "card": "gatehouse_w8",
+   "def": "gatehouse",
+   "x": -117.7,
+   "cells": 10.55,
+   "row": 0,
+   "door": true,
+   "z": 1.08,
+   "zone": "gate"
+  },
+  {
+   "card": "gatehouse_w8",
+   "def": "gatehouse",
+   "x": 117.73,
+   "cells": 10.55,
+   "row": 0,
+   "door": true,
+   "z": 1.08,
+   "zone": "gate"
+  },
+  {
+   "card": "alchemy_w8",
+   "def": "alchemy",
+   "x": -28.46,
+   "cells": 11.94,
+   "row": 1,
+   "door": false
+  },
+  {
+   "card": "smithy4_w12",
+   "def": "smithy4",
+   "x": -13.08,
+   "cells": 17.62,
+   "row": 1,
+   "door": false
+  },
+  {
+   "card": "library_w12",
+   "def": "library",
+   "x": 5.15,
+   "cells": 17.62,
+   "row": 1,
+   "door": false
+  },
+  {
+   "card": "cathedral_w16",
+   "def": "cathedral",
+   "x": 24.36,
+   "cells": 19.6,
+   "row": 1,
+   "door": false
+  },
+  {
+   "card": "townhouse_w12",
+   "def": "townhouse",
+   "x": 74.94,
+   "cells": 17.62,
+   "row": 1,
+   "door": false
+  },
+  {
+   "card": "rowhouse_w12",
+   "def": "rowhouse",
+   "x": -82.68,
+   "cells": 17.62,
+   "row": 2,
+   "door": false
+  },
+  {
+   "card": "mage_tower_w8",
+   "def": "mage_tower",
+   "x": -4.48,
+   "cells": 8.84,
+   "row": 2,
+   "door": false
+  },
+  {
+   "card": "barracks_w12",
+   "def": "barracks",
+   "x": 47.93,
+   "cells": 17.62,
+   "row": 2,
+   "door": false
+  },
+  {
+   "card": "tavern_w12",
+   "def": "tavern",
+   "x": 79.88,
+   "cells": 17.62,
+   "row": 2,
+   "door": false
+  }
+ ],
+ "props": [
+  {
+   "card": "anvil",
+   "x": -29.4,
+   "z": 4.5,
+   "plat": true
+  },
+  {
+   "card": "grindstone",
+   "x": -26.7,
+   "z": 4.3,
+   "plat": true
+  },
+  {
+   "card": "well",
+   "x": 73.2,
+   "z": 5.2,
+   "plat": false
+  },
+  {
+   "card": "market_stall",
+   "x": 77.2,
+   "z": 4.6,
+   "plat": false
+  },
+  {
+   "card": "market_table",
+   "x": 79.9,
+   "z": 5.6,
+   "plat": false
+  },
+  {
+   "card": "produce_baskets",
+   "x": 82.2,
+   "z": 4.6,
+   "plat": false
+  },
+  {
+   "card": "banner",
+   "x": -2.0,
+   "z": 4.5,
+   "plat": true
+  },
+  {
+   "card": "crate",
+   "x": 98.7,
+   "z": 4.4,
+   "plat": true
+  },
+  {
+   "card": "barrel",
+   "x": 101.4,
+   "z": 4.2,
+   "plat": true
+  },
+  {
+   "card": "sack_stack",
+   "x": 103.8,
+   "z": 5.8,
+   "plat": false
+  },
+  {
+   "card": "haystack",
+   "x": 47.3,
+   "z": 5.6,
+   "plat": false
+  },
+  {
+   "card": "log_pile",
+   "x": 51.7,
+   "z": 6.0,
+   "plat": false
+  },
+  {
+   "card": "trough",
+   "x": 54.3,
+   "z": 5.0,
+   "plat": false
+  },
+  {
+   "card": "bench",
+   "x": 70.2,
+   "z": 5.0,
+   "plat": false
+  },
+  {
+   "card": "bench",
+   "x": -84.7,
+   "z": 5.0,
+   "plat": false
+  },
+  {
+   "card": "lantern",
+   "x": -2.2,
+   "z": 4.6,
+   "plat": true
+  },
+  {
+   "card": "lantern",
+   "x": 2.2,
+   "z": 4.6,
+   "plat": true
+  }
+ ],
+ "trees": []
+}

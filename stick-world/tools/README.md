@@ -89,7 +89,7 @@ godot --headless --path "f:/VSCode/game-2/stick-world" -s res://tools/dev/code_s
 
 挂在 VillageMap 场景下使用，读取父节点的 `ground_y` / `ground_bottom` / `map_right` 属性。由 `MapEditor` 插件设置 `ghost_*` 属性来高亮建筑将占用的竖条。
 
-- **引用场景：** `modules/world/scenes/maps/village_a.tscn`
+- **引用场景：** `modules/world/scenes/maps/l1_settlement_00.tscn`（L1 聚落图八张均挂载）
 - **全局类型：** `MapGridDrawer`（通过 `class_name` 注册）
 
 ---

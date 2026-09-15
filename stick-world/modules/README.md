@@ -21,18 +21,22 @@
 | ---------------------- | --------------------------- | ----------- |
 | `world`                | 常驻主场景（GameRoot）+ 地图/相机/输入分发 | ✅ P0 完整     |
 | `world/placement_grid` | 32px 竖向条带占地网格               | ✅ P0 完整     |
-| `world_map`            | 战略图（鸟瞰多边形领土，玩家不在其中）         | 🔄 P0 新 0.9 重写中（L1 单层） |
+| `world_map`            | 战略图（鸟瞰多边形领土，玩家不在其中）         | ✅ L1 单层在役（六期观感返工已合并） |
 | `units`                | 火柴人角色（实体 + 骨骼 + AI）         | ✅ P0 完整     |
 | `combat`               | 小队级战斗实例 + 编队/指令/掩体          | ✅ P0 完整     |
 | `construction`         | 建造/升级/拆除/修理（运行时）            | ✅ P0 完整     |
 | `building_gen`         | 程序化建筑生成（BuildingDef → 节点树）  | 🟡 B0-B2 阶段 |
 | `texture_gen`          | CPU 贴图 + GPU Shader 材质库     | ✅ 完整        |
-| `organization`         | 五层级通用组织管理（军/科/工/政/商）        | 🟡 部分       |
-| `resources`            | 资源库存/价格/消耗/产出               | 🟡 待接入      |
+| `organization`         | 五层级通用组织管理（军/科/工/政/商）        | ✅ 已收官（组织深化 + UI-W1~W4） |
+| `resources`            | 资源库存/价格/消耗/产出               | ✅ 在役（town_life 经济产出端） |
 | `environment`          | 跨场景天空/天气/光照/震动              | 🟡 仅光照      |
 | `player_control`       | 输入分发 + 附身                    | ✅ P0.7 完整   |
 | `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
 | `debug_gui`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
+| `fx`                   | 战斗特效（粒子池 FxPool + FxLibrary 效果配置：血溅/火花/飘字等） | ✅ 在役     |
+| `inventory`            | 玩家专属物品栏（Hotbar 快捷栏/背包/统计屏，经 InventoryService） | ✅ 在役     |
+| `expansion`            | 出征与领地（TerritoryRegistry/GarrisonSpawner/ConquestManager） | ✅ P0 在役（C1~C7） |
+| `town_life`            | NPC 小镇生活（职业分工/劳作/经济自动产出端）   | ✅ 在役     |
 
 > **已废弃**：~~`modules/world_map/scripts/world_map_controller.gd`~~ 已删除（重构为 `strategic_map_controller.gd`；P0 新 0.9 进一步重写为 L1 单层，旧三级粒度框架弃用，见 [待办事项.md](../../docs/项目/待办事项.md) 高优先级）。
 
@@ -41,48 +45,59 @@
 ## 2. 模块依赖图
 
 > **单向规则**：箭头方向 = "依赖"，高层依赖底层，低层不反向调用。`api.gd` 是允许的耦合点。
+> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 5 个依赖环：combat⇄units / expansion⇄world / organization⇄world / town_life⇄units / world⇄world_map（末者为唯一编译期环，见待办 AR-2）。
 
 ```
-                            ┌──────────────┐
-                            │  GameRoot    │  ← 常驻主场景（在 modules/world/scenes/）
-                            │  (autoload 0)│
-                            └──────┬───────┘
-                                   │ 装配 + 注入
-        ┌──────────────┬───────────┼──────────────┬──────────────┐
-        ▼              ▼           ▼              ▼              ▼
-   ┌─────────┐   ┌─────────┐  ┌─────────┐  ┌──────────┐  ┌─────────┐
-   │   ui    │   │  debug  │  │environ. │  │player_   │  │ world_  │
-   │  (P0)   │   │  (P0)   │  │  ment   │  │ control  │  │   map   │  ← 战略图
-   └────┬────┘   └────┬────┘  └─────────┘  └────┬─────┘  └────┬────┘
-        │              │                          │            │
-        │              │                          │            │
-        ▼              ▼                          ▼            ▼
-   ┌─────────────────────────────────────────────────────────────┐
-   │              玩法系统层（核心循环）                          │
-   │  organization  construction  combat  resources              │
-   │   (枢纽)         (建造)       (战斗)   (经济)                │
-   └────────┬─────────────────────────────────┬──────────────────┘
-            │                                 │
-            ▼                                 ▼
-       ┌─────────┐                       ┌──────────┐
-       │  units  │ ← 一切执行者           │  world   │ ← 场景图容器
-       │  (AI)   │                       │ (maps)   │
-       └────┬────┘                       └────┬─────┘
-            │                                 │
-            └────────────┬────────────────────┘
-                         ▼
-                  ┌────────────┐
-                  │ building_gen│ ← 程序化建筑
-                  │ texture_gen │ ← 纹理/材质（building_gen 单向依赖此）
-                  └────────────┘
+                              ┌────────────────────────────────┐
+                              │  world（装配根，GameRoot）      │ ← 依赖全部 16 个模块
+                              └────────────────────────────────┘
+   ┌────────────┬─────────────┼─────────────┬──────────────┐
+   ▼            ▼             ▼             ▼              ▼
+┌─────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐
+│ world_  │ │ organiza│ │ expansion│ │ combat   │ │ inventory │   玩法/视图层
+│   map   │ │  tion   │ │          │ │          │ │           │
+└────┬────┘ └────┬────┘ └────┬─────┘ └────┬─────┘ └─────┬─────┘
+     │           │           │            │             │
+     │           │           ▼            ▼             │
+     │           │      ┌─────────────────────┐        │
+     │           │      │ units ⇄ combat      │        │   执行者（town_life→units）
+     │           │      └─────────────────────┘        │
+     ▼           ▼                                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│  基础设施：ui_global→fx ｜ player_control→ui_global          │
+│   construction→{building_gen, player_control, ui_global}    │
+│   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
+└─────────────────────────────────────────────────────────────┘
+   （fx / environment / resources 无出向依赖）
 ```
+
+**实测边表**（`python tools/audit_deps.py`，直接依赖）：
+
+| 模块 | 依赖（出向） |
+|------|------------|
+| `world` | 全部 16 模块（building_gen/combat/construction/debug_gui/environment/expansion/fx/inventory/organization/player_control/resources/texture_gen/town_life/ui_global/units/world_map） |
+| `world_map` | ui_global, world |
+| `organization` | building_gen, ui_global, units, world |
+| `expansion` | units, world |
+| `combat` | fx, player_control, ui_global, units |
+| `units` | combat, fx, player_control, town_life |
+| `town_life` | units |
+| `inventory` | ui_global, units |
+| `construction` | building_gen, player_control, ui_global |
+| `player_control` | ui_global |
+| `debug_gui` | fx, ui_global |
+| `texture_gen` | ui_global |
+| `building_gen` | texture_gen |
+| `ui_global` | fx |
+| `fx` / `environment` / `resources` | （无） |
 
 **关键路径**：
 
+- `world` 是装配根：所有模块实例由 `system_setup.gd` 在 GameRoot 下装配注入
 - `organization` 是枢纽：军事组织触发 `combat`、工程组织触发 `construction`、商业组织触发 `resources` 流动
-- `units` 是被调用方：所有玩法系统通过 `units/api.gd` 拉取/驱动火柴人
+- `units` 是被调用方：玩法系统（combat/town_life/expansion）通过 `units/api.gd` 拉取/驱动火柴人
 - `world` 是场景图容器：所有运行实体（建筑、单位、组织实例）都挂在它的 `MapInstance` 下
-- `world_map` 与 `world` 正交：前者是鸟瞰视图，玩家不在其中；后者是玩家实际所在
+- `world_map` 是战略图视图：依赖 `world` 取数据、`ui_global` 出 UI；玩家不在其中
 
 详见 [§6 模块间通信准则](#6-模块间通信准则) 与 [§9 EventBus 信号分类](#9-eventbus-信号分类)。
 
@@ -425,7 +440,8 @@ UIRoot
 ├── GlobalHUD              # 顶层常驻：时间速度、资源数、通知、居中模式
 ├── ModePanel              # 模式容器：Village/Battle/Possess 槽位（内容由各模块装配）
 ├── ContextPanel           # 上下文容器：选中什么显示什么
-├── HudOverlay             # HUD 槽：Minimap / ZoomBar / ResourceBar / ClockWidget（角落 HUD 自设 anchor 挂此槽）
+├── HudOverlay             # HUD 槽：Minimap / ZoomBar / ResourceBar / ClockWidget 等部件挂此槽，
+│                            屏幕定位全部交 hud_zone_layout.gd zone 注册表（place_in_zone）
 └── ModalOverlay           # 弹窗容器（暂停/设置/存档/编制/战略图）
 ```
 
@@ -440,7 +456,7 @@ UIRoot
 
 - UI 组件一律由 `SystemSetup` 装配时通过 `setup(...)` 注入依赖（CameraRig / GameRoot / 各系统引用），**禁止**自行向上遍历祖先或遍历 `get_tree().root` 查找（历史反模式已清除）
 - 业务面板通过 `has_method` 防御式调用注入的引用；跨模块数据查询走模块 API（如小地图用 `VillageMap.get_minimap_buildings()`，不遍历地图节点树）
-- 共享 HUD 布局常量（小地图/缩放条尺寸位置）定义在 `ui_global/api.gd` 的 `HUD_*`，禁止各文件硬编码
+- HUD 部件定位统一归 `ui_global/scripts/hud/hud_zone_layout.gd` zone 注册表（`top_bar` / `top_left_stack` / `top_center` 堆叠区=Minimap→ZoomBar / `top_right` / `bottom_left`）：部件只声明内容，屏幕坐标一律由注册表计算，禁止各文件硬编码（原 `UIAPI.HUD_*` 布局常量已退役）
 
 **小地图**（§10.4）：
 
@@ -908,17 +924,22 @@ config/
 
 ### 9.2 跨模块事件（EventBus 转发）
 
+> 按 `core/autoload/event_bus.gd` 声明序对齐。
+
 | 类别 | 信号 |
 | -- | -- |
-| 生命周期 | `game_started` / `game_loaded` / `game_saving` / `game_saved` / `game_paused` / `game_resumed` |
+| 生命周期 | `game_started` / `game_loaded(slot_index)` / `game_saving(slot_index)` / `game_saved(slot_index)` / `game_paused` / `game_resumed` |
 | 战斗 | `battle_started(battle_id)` / `battle_ended(battle_id, victory)` / `team_ai_stance_changed(battle_id, faction, from_stance, to_stance, reason)` / `heal_cast(battle_id, caster_id, target_id, anim_name)` |
-| 编队 | `selection_changed` / `squad_created` / `order_issued` / `commander_assigned` |
-| 场景/旅行 | `travel_requested` / `travel_started` / `travel_completed` / `map_loaded` / `map_unloaded` / `chunk_loaded` / `chunk_unloaded` |
-| 战略图 | `strategic_map_opened` / `strategic_map_closed` |
+| 任务 | `quest_advanced(quest_id)` |
+| 编队 | `selection_changed(unit_ids)` / `squad_created(squad_id, unit_ids)` / `order_issued(order_type, target_squad_id, source_tier)` / `commander_assigned(squad_id, unit_id)` |
+| 指挥中继 | `relay_started(relay_id, order_type, from_org, to_org, hop_index, eta)` / `relay_arrived(relay_id, order_type, from_org, to_org, hop_index, outcome)` |
+| 场景/旅行 | `travel_requested(map_id, travel_mode)` / `travel_started(from_id, to_id, mode)` / `travel_completed(to_id)` / `map_loaded(map_id, map_type)` / `map_unloaded(map_id)` / `chunk_loaded(chunk_idx)` / `chunk_unloaded(chunk_idx)` |
+| 战略图 | `strategic_map_opened` / `strategic_map_closed` / `settlement_updated(settlement_id, population_score)` |
+| 领地 | `territory_state_changed(territory_id, new_state)` / `region_owner_changed(region_id, new_owner)` / `unlock_granted(unlock_id)` |
 | 附身 | `possession_started(entity)` / `possession_ended(entity)` |
-| UI | `ui_notification` |
-| 室内交互 | `interior_entered` / `interior_exited` / `mega_interior_entered` / `mega_interior_exited` |
-| 其他 | `balance_changed` / `debug_visibility_changed` |
+| UI | `ui_notification(title, body, level)` |
+| 室内交互 | `interior_entered(building_id)` / `interior_exited(building_id)` / `mega_interior_entered(building_id, map_id)` / `mega_interior_exited(return_map_id)` |
+| 其他 | `balance_changed` / `debug_visibility_changed(visible)` |
 
 **信号准则**：
 
@@ -931,7 +952,7 @@ config/
 
 ## 10. Autoload 依赖
 
-> 全局单例清单（来自 `project.godot`，共 8 个）。新增 autoload 需经批准。
+> 全局单例清单（来自 `project.godot`，共 9 个）。新增 autoload 需经批准。
 
 | 名称              | 脚本                                     | 职责                          | 接线状态     |
 | --------------- | -------------------------------------- | --------------------------- | -------- |
@@ -940,11 +961,12 @@ config/
 | `ConfigManager` | `core/autoload/config_manager.gd`      | 用户设置读写                      | ✅ core 内使用 |
 | `TimeManager`   | `core/autoload/time_manager.gd`        | 时间/速度管理                     | ✅ 活跃     |
 | `BalanceConfig` | `core/autoload/balance_config.gd`      | 平衡变量加载（`balance_changed` 热重载） | 🟡 预留     |
-| `AudioManager`  | `core/services/audio_manager.gd`       | 音频播放（P1 音效实现时接线）            | 🟡 预留     |
+| `AudioManager`  | `core/services/audio_manager.gd`       | 音效播放（`SFX_EVENTS` 34 wav 映射） | ✅ 在役     |
+| `MusicDirector` | `core/services/music_director.gd`      | 音乐播放（主题变奏集/分层自适应/环境音层）      | ✅ 在役     |
 | `SaveManager`   | `core/autoload/save_manager.gd`        | 存档/读档（SQLite）                | ✅ 活跃     |
 | `DebugApi`      | `modules/debug_gui/api.gd`             | 调试覆盖层管理                     | ✅ 活跃     |
 
-**初始化顺序**（自上而下，project.godot 声明序）：`EventBus → WorldState → ConfigManager → TimeManager → BalanceConfig → AudioManager → SaveManager → DebugApi`
+**初始化顺序**（自上而下，project.godot 声明序）：`EventBus → WorldState → ConfigManager → TimeManager → BalanceConfig → AudioManager → MusicDirector → SaveManager → DebugApi`
 
 **职责边界**：
 

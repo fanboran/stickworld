@@ -27,10 +27,6 @@ const CLICK_TOLERANCE: float = 45.0
 const BOX_BORDER_COLOR: Color = Color(0.4, 0.85, 1.0, 0.9)
 ## 选中框填充颜色
 const BOX_FILL_COLOR: Color = Color(0.4, 0.85, 1.0, 0.15)
-## 选中单位脚下的圆环颜色
-const RING_COLOR: Color = Color(0.35, 1.0, 0.5, 0.9)
-## 选中圆环半径（屏幕像素）
-const RING_RADIUS: float = 30.0
 ## possessed 玩家四角框颜色（与选中框同白）
 const POSSESSED_COLOR: Color = Color(1.0, 1.0, 1.0, 0.95)
 ## possessed 框比碰撞箱水平外扩的像素
@@ -199,19 +195,24 @@ func clear_selection() -> void:
 # ─────────────────────────────── 内部选择实现 ────────────────────────────────
 
 func _do_box_select(world_rect: Rect2, additive: bool) -> Array:
+	var map: Node2D = _get_current_map()
 	var in_box: Array = []
 	for u in _get_selectable_units():
-		if world_rect.has_point(u.global_position):
+		# 判定域统一（MapBase 视觉域协议）：world_rect 是视觉域（canvas 逆变换
+		# 而来），单位锚点须映射到同一域再比较——HD-2D 图 origin 直绘会比角色
+		# 高 (1−k)×纵深，框选会漏掉深处的单位
+		if world_rect.has_point(_unit_anchor(map, u)):
 			in_box.append(u)
 	_apply_selection(in_box, additive)
 	return in_box.duplicate()
 
 
 func _do_click_select(world_pos: Vector2, additive: bool) -> bool:
+	var map: Node2D = _get_current_map()
 	var best: Node = null
 	var best_dist: float = CLICK_TOLERANCE
 	for u in _get_selectable_units():
-		var d: float = u.global_position.distance_to(world_pos)
+		var d: float = _unit_anchor(map, u).distance_to(world_pos)
 		if d < best_dist:
 			best_dist = d
 			best = u
@@ -334,19 +335,25 @@ func _draw() -> void:
 		var rect := Rect2(_drag_start_screen, _drag_current_screen - _drag_start_screen).abs()
 		draw_rect(rect, BOX_FILL_COLOR, true)
 		draw_rect(rect, BOX_BORDER_COLOR, false, 2.0)
-	# 选中单位脚下的白色四角线框（创始人 2026-09-14：黄圈改四角框）
+	# 选中单位**全身包裹**白色四角框（创始人 2026-09-16"框住整个火柴人"）
 	if _selected_units.is_empty():
 		return
 	var canvas_xform: Transform2D = get_viewport().get_canvas_transform()
 	for u in _selected_units:
 		if not is_instance_valid(u):
 			continue
-		var screen_pos: Vector2 = canvas_xform * u.global_position
-		var half_w: float = RING_RADIUS
-		var half_h: float = RING_RADIUS * 0.65
-		var arm: float = RING_RADIUS * 0.38
+		# 选中框=与悬浮框/点选判定同一几何（entity_hover_rect）——2D 图=Range
+		# 原框（≈全身），HD-2D 图=billboard 视觉身高框（脚线~头顶）。
+		# 缩放收编：矩形整体过 canvas 变换（zoom 进变换，角臂从屏幕矩形
+		# 自缩放）——半宽半高不得以画布像素直当屏幕像素（会随缩放失配）
+		var rect: Rect2 = _unit_hover_rect(map_now, u)
+		if rect.size == Vector2.ZERO:
+			continue
+		var screen_rect: Rect2 = canvas_xform * rect
+		var arm: float = clampf(minf(screen_rect.size.x, screen_rect.size.y) * 0.15, 5.0, 16.0)
 		var col: Color = Color(1.0, 1.0, 1.0, 0.95)
-		_draw_corner_bracket(screen_pos, half_w, half_h, arm, col)
+		_draw_corner_bracket(screen_rect.get_center(), screen_rect.size.x * 0.5,
+				screen_rect.size.y * 0.5, arm, col)
 
 
 func _draw_corner_bracket(center: Vector2, half_w: float, half_h: float, arm: float, col: Color) -> void:
@@ -404,6 +411,26 @@ func set_selectable_faction(fid: int) -> void:
 
 
 # ─────────────────────────────── 内部辅助 ────────────────────────────────
+
+## 单位悬浮框矩形（视觉域，画框/点选/框选共用同一几何）：Range 框经地图
+## 视觉域协议映射——2D 图=Range 原框（≈全身），HD-2D 图=billboard 视觉身高框
+## （脚线~头顶）。Range 缺失时回退 origin 经 remap 的固定尺寸框。
+func _unit_hover_rect(map: Node2D, u: Node) -> Rect2:
+	if map == null:
+		return Rect2()
+	var rng: CollisionShape2D = u.get_node_or_null("Range") as CollisionShape2D
+	if rng != null and rng.shape is RectangleShape2D:
+		return map.entity_hover_rect(rng.global_position,
+				(rng.shape as RectangleShape2D).size, u)
+	return Rect2(map.remap_fx_pos(u.global_position) - Vector2(30, 60), Vector2(60, 120))
+
+
+## 单位判定锚点（视觉域）= 悬浮框矩形中心（点胸口不脱靶）。
+func _unit_anchor(map: Node2D, u: Node) -> Vector2:
+	if map == null:
+		return u.global_position
+	return _unit_hover_rect(map, u).get_center()
+
 
 func _get_current_map() -> Node2D:
 	if _game_root == null:

@@ -4,3 +4,6 @@
 	branch = master
 	update = checkout
 	shallow = true
+[submodule "stick-world/config/strategic_map"]
+	path = stick-world/config/strategic_map
+	url = F:/VSCode/stickworld-mapdata

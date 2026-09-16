@@ -3069,14 +3069,14 @@ ASSEMBLERS["windmill"] = assemble_windmill
 # ---------------------------------------------------------------- 7.x 大修道院 abbey
 
 ABBEY_TIERS = {
-    # 24 格超宽连体：左侧三分之一处高耸石塔（大幅前凸冲街）+ 向右一整条厚重石砌翼楼。
-    # 塔身总高（基座顶到锥顶底）≈ 922，加尖顶杆整件 ≈ 948 —— 远超翼楼屋脊（576），
-    # "左塔右殿"天际线 landmark。塔身全高前凸出翼楼前檐（proj=72 > 出檐 60），
-    # 塔面不被翼楼坡顶遮挡。翼楼两层等高（檐口 448），上层仅一排 4 个小盲窗
-    # （禁域：极少开窗、大面积光秃石墙），主入口开在塔底（修道院读法），翼楼无门。
+    # 24 格超宽连体：左侧三分之一处高耸石塔（**与翼楼同一面墙**，塔面共面嵌入主体，
+    # 创始人 2026-09-16：塔的正面墙应和建筑身体一体）+ 向右一整条厚重石砌翼楼。
+    # 塔身总高（基座顶到锥顶底）≈ 922 —— 远超翼楼屋脊（576），"左塔右殿"天际线 landmark。
+    # 翼楼坡顶分左右两段、终止于塔身两侧（屋檐不横穿塔面）。翼楼两层等高（檐口 448），
+    # 上层仅一排 4 个小盲窗（禁域：极少开窗、大面积光秃石墙），主入口开在塔底，翼楼无门。
     24: dict(D=250.0, plinth=24.0, tw=150.0, th=770.0, spire_h=112.0,
              wing_h=424.0, rise=128.0, wt=26.0, portal_w=56.0,
-             tower_x=-0.22, proj=72.0),
+             tower_x=-0.22, proj=2.0),
 }
 
 
@@ -3094,11 +3094,11 @@ def assemble_abbey(width_cells=24):
     wing_h, rise, wt = t["wing_h"], t["rise"], t["wt"]
     pw = t["portal_w"]
     tx = W * t["tower_x"]                       # 塔心（左侧三分之一带）
-    proj = t["proj"]                            # 塔身前凸量（须 > 出檐 60，塔面全高可见）
+    proj = t["proj"]                            # 塔面嵌缝余量（≈0：与翼楼墙面共面一体）
     eave = plinth_h + wing_h
     ridge = eave + rise
     yf = -D / 2.0
-    ty = yf - proj + tw / 2.0                   # 塔身大幅前凸出翼楼墙面
+    ty = yf - proj + tw / 2.0                   # 塔面与翼楼前墙共面（proj=嵌缝 2）
     ty_face = ty - tw / 2.0                     # 塔正立面 y
 
     b = Builder("abbey_w%d" % width_cells)
@@ -3121,12 +3121,25 @@ def assemble_abbey(width_cells=24):
         buttress(b, bx, yf + 4.0, plinth_h, 28.0, wing_h * 0.58, depth=28.0,
                  cap_h=20.0, mat="stone")
 
-    # ---- 翼楼长坡顶（脊沿 X，石板瓦）+ 檐口绝对封顶
+    # ---- 翼楼长坡顶：分左右两段、终止于塔身两侧（屋檐不横穿塔面——塔与主体一体）
     over = eave_over(W)
-    roof_gable(b, W, D, rise, over, "slate", z=eave, thickness=16.0,
-               mat_under="wood_dark", cap_size=(26.0, 13.0), cap_mat="stone_dark",
-               eave_board=False)
-    gable_infill(b, W, D, rise, "stone_dark", z=eave, thickness=14.0)
+    wl = (tx - tw / 2.0) - (-W / 2.0)           # 左段：左端到塔左面
+    wr = W / 2.0 - (tx + tw / 2.0)              # 右段：塔右面到右端
+    for (sw, scx, outer_sx) in ((wl, -W / 2.0 + wl / 2.0, -1.0),
+                                (wr, tx + tw / 2.0 + wr / 2.0, 1.0)):
+        if sw < 40.0:
+            continue
+        roof_gable(b, sw, D, rise, over, "slate", x=scx, z=eave, thickness=16.0,
+                   mat_under="wood_dark", cap_size=(26.0, 13.0), cap_mat="stone_dark",
+                   eave_board=False)
+        # 山墙填充只补外端（内端三角在塔体内，被塔吞掉）；gable_infill 双端成对，
+        # 内端三角与塔身共面无害（塔体先画、同材质深色，接缝不可见）
+        gable_infill(b, sw, D, rise, "stone_dark", z=eave, thickness=14.0)
+    # ---- 屋面终止于塔身的收头：檐板端面用石砌肩块盖住（前檐交角 ×2）
+    for sx in (-1.0, 1.0):
+        xa = tx + sx * (tw / 2.0 + 3.0)
+        b.box_bottom((10.0, 26.0, 54.0), (xa, yf - over + 8.0),
+                     eave - 14.0, "stone_dark")
 
     # ---- 左侧高耸石塔（大幅前凸，冲出翼楼屋脊）----
     b.box_bottom((tw, tw, th - plinth_h), (tx, ty), plinth_h, "stone")

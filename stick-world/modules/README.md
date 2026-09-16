@@ -30,6 +30,7 @@
 | `organization`         | 五层级通用组织管理（军/科/工/政/商）        | ✅ 已收官（组织深化 + UI-W1~W4） |
 | `resources`            | 资源库存/价格/消耗/产出               | ✅ 在役（town_life 经济产出端） |
 | `environment`          | 跨场景天空/天气/光照/震动              | 🟡 仅光照      |
+| `hd2d`                 | HD-2D 街景渲染栈（3D 世界 + 烘焙卡 + 角色 billboard，供 world 地图宿主消费） | ✅ 在役     |
 | `player_control`       | 输入分发 + 附身                    | ✅ P0.7 完整   |
 | `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
 | `debug_gui`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
@@ -49,7 +50,7 @@
 
 ```
                               ┌────────────────────────────────┐
-                              │  world（装配根，GameRoot）      │ ← 依赖全部 16 个模块
+                              │  world（装配根，GameRoot）      │ ← 依赖全部 17 个模块
                               └────────────────────────────────┘
    ┌────────────┬─────────────┼─────────────┬──────────────┐
    ▼            ▼             ▼             ▼              ▼
@@ -67,6 +68,7 @@
 │  基础设施：ui_global→fx ｜ player_control→ui_global          │
 │   construction→{building_gen, player_control, ui_global}    │
 │   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
+│   hd2d→{ui_global, units}                                   │
 └─────────────────────────────────────────────────────────────┘
    （fx / environment / resources 无出向依赖）
 ```
@@ -75,7 +77,7 @@
 
 | 模块 | 依赖（出向） |
 |------|------------|
-| `world` | 全部 16 模块（building_gen/combat/construction/debug_gui/environment/expansion/fx/inventory/organization/player_control/resources/texture_gen/town_life/ui_global/units/world_map） |
+| `world` | 全部 17 模块（building_gen/combat/construction/debug_gui/environment/expansion/fx/hd2d/inventory/organization/player_control/resources/texture_gen/town_life/ui_global/units/world_map） |
 | `world_map` | ui_global, world |
 | `organization` | building_gen, ui_global, units, world |
 | `expansion` | units, world |
@@ -89,6 +91,7 @@
 | `texture_gen` | ui_global |
 | `building_gen` | texture_gen |
 | `ui_global` | fx |
+| `hd2d` | ui_global, units |
 | `fx` / `environment` / `resources` | （无） |
 
 **关键路径**：

@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/gatehouse_w8.png-c02e6b2613c56b34e3e3588d065c
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

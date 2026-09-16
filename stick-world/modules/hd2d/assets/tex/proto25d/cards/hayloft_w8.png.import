@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/hayloft_w8.png-bbe1e6ded03495f271f4cb3f100391
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

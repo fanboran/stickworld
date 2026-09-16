@@ -385,7 +385,13 @@ func set_anim(anim: String) -> void:
 ## （hip/…/hand_inner/weapon_hand）上，随 RigHost 一起被隐藏——NPC 的
 ## 镐/斧/剑因此在街上"空手"。把同一武器场景挂进本 SubViewport 骨架的
 ## 同名骨，GripPoint 对齐口径与 WeaponMount._mount_one 一致（握点落手骨原点）。
+##
+## 描边豁免（创始人 2026-09-15：武器不应该有描边）：武器**不进 OutlineGroup**
+## （全融合描边 pass 只包火柴人身体剪影）——挂 viewport 根下、经
+## RemoteTransform2D 跟手骨变换：RT2D 自身无绘制不产像素，武器在组外
+## 不吃描边，但缩放/旋转/挥动仍逐帧跟手（含 rig 缩放，比例与 2D 挂骨一致）。
 var _weapon_instance: Node2D = null
+var _weapon_follow: RemoteTransform2D = null
 var _weapon_type_cached: int = -1
 
 func set_weapon_type(wt: int) -> void:
@@ -395,6 +401,9 @@ func set_weapon_type(wt: int) -> void:
 	if _weapon_instance != null and is_instance_valid(_weapon_instance):
 		_weapon_instance.queue_free()
 		_weapon_instance = null
+	if _weapon_follow != null and is_instance_valid(_weapon_follow):
+		_weapon_follow.queue_free()
+		_weapon_follow = null
 	if rig == null or wt == int(WeaponMount.WeaponType.NONE):
 		return
 	var scene_path: String = str(WeaponMount.WEAPON_SCENE_PATHS.get(wt, ""))
@@ -412,8 +421,17 @@ func set_weapon_type(wt: int) -> void:
 	var spr := instance.get_node_or_null("Sprite") as Sprite2D
 	if grip != null and spr != null:
 		instance.position = -(grip.position * spr.scale).rotated(spr.rotation)
-	bone.add_child(instance)
+	# 挂杆（viewport 根，OutlineGroup 之外）：武器根持 GripPoint 补偿局部变换，
+	# RT2D 把手骨全局变换推给挂杆——武器完全复现"挂骨"位姿，但在描边组外
+	var stick_root := rig.get_parent()
+	if stick_root == null:
+		stick_root = viewport
+	stick_root.add_child(instance)
 	_weapon_instance = instance
+	var follow := RemoteTransform2D.new()
+	bone.add_child(follow)
+	follow.remote_path = instance.get_path()
+	_weapon_follow = follow
 
 
 ## 显示/隐藏全部角色（含影）。用于 A/B 对照出图。

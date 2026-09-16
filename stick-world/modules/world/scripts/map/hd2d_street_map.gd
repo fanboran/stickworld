@@ -194,8 +194,11 @@ func _sync_character_render() -> void:
 		if ch == null or not is_instance_valid(ch):
 			ch = _hd.spawn_character()
 			_char_map[id] = ch
-			# 关 2D 侧视觉（骨架 + 2D 接触影），渲染交给 3D billboard
+			# 2D 视觉冻结（视觉唯一骨架方向）：billboard 接管渲染后，实体 2D
+			# 骨架整树停处理（不可见且不再烧 IK/动画/描边开销）。数据侧组件
+			# （血条状态机/WeaponMount/_current_anim）都在实体层，不受影响
 			rig_host.visible = false
+			rig_host.process_mode = Node.PROCESS_MODE_DISABLED
 			var sh2d := body.get_node_or_null("ContactShadow") as Node2D
 			if sh2d != null:
 				sh2d.visible = false

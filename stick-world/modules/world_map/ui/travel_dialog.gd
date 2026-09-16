@@ -16,7 +16,7 @@ class_name TravelDialog
 ## 走过去 = api.walk_to 步行道路场景流程（F6）；NO_SCENE / SELF 不开本弹窗
 ## （控制器前置分流）。
 
-## 玩家确认旅行方式：mode = WorldAPI.TravelMode.WALK / FAST_TRAVEL
+## 玩家确认旅行方式：mode = WorldAPI.TravelMode.WALK / FAST_TRAVEL / TELEPORT
 signal travel_confirmed(settlement_id: String, mode: int)
 
 ## 全屏遮罩（压暗地图 + 消费鼠标防点穿）
@@ -29,6 +29,8 @@ var _walk_btn: Button = null
 var _fast_btn: Button = null
 ## 当前弹窗目标（空 = 关闭态）
 var _settlement_id: String = ""
+## 确认模式（open_confirm）：主按钮变「传送」并发 TELEPORT（直达，不查可达性）
+var _teleport_mode: bool = false
 ## 步行状态复核钩子（装配注入：func(settlement_id) -> Dictionary {ok, reason}；
 ## 弹窗不直接依赖 api 实例——控制器连接时绑定）
 var walk_status_fn: Callable = Callable()
@@ -82,8 +84,12 @@ func _cancel_button(parent: Control) -> void:
 ## 打开弹窗（status = api.get_travel_status 结果；只对有 map_id 的聚落调用）
 func open_for(settlement_id: String, settlement_name: String, status: Dictionary) -> void:
 	_settlement_id = settlement_id
+	_teleport_mode = false
 	var code: String = str(status.get("code", ""))
 	_title_label.text = "%s · 旅行" % (settlement_name if not settlement_name.is_empty() else settlement_id)
+	_walk_btn.visible = true
+	_walk_btn.text = "走过去"
+	_fast_btn.text = "快速旅行"
 	# 走过去：路网连通即可（不要求已到访）；连通性走 walk_status_fn 复核
 	var walk := {"ok": code == "OK", "reason": ""}
 	if code != "OK" and walk_status_fn.is_valid():
@@ -108,8 +114,25 @@ func open_for(settlement_id: String, settlement_name: String, status: Dictionary
 	visible = true
 
 
+## 直达传送确认模式（常规单击交互，创始人 2026-09-16）：单击聚落弹本窗，
+## [取消 | 传送✦]——不查到访/路网（传送即到访）；步行按钮隐藏
+func open_confirm(settlement_id: String, settlement_name: String) -> void:
+	_settlement_id = settlement_id
+	_teleport_mode = true
+	_title_label.text = "%s · 传送" % (settlement_name if not settlement_name.is_empty() else settlement_id)
+	_status_label.text = "直接传送到该城（无需到访与路网连通）"
+	_status_label.modulate = StickTokens.SUCCESS
+	_walk_btn.visible = false
+	_fast_btn.visible = true
+	_fast_btn.text = "传送"
+	_fast_btn.disabled = false
+	_fast_btn.tooltip_text = ""
+	visible = true
+
+
 func close() -> void:
 	_settlement_id = ""
+	_teleport_mode = false
 	visible = false
 
 
@@ -131,6 +154,7 @@ func _on_walk_pressed() -> void:
 
 func _on_fast_pressed() -> void:
 	var sid := _settlement_id
+	var mode: int = WorldAPI.TravelMode.TELEPORT if _teleport_mode else WorldAPI.TravelMode.FAST_TRAVEL
 	close()
 	if not sid.is_empty():
-		travel_confirmed.emit(sid, WorldAPI.TravelMode.FAST_TRAVEL)
+		travel_confirmed.emit(sid, mode)

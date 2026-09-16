@@ -28,8 +28,9 @@ func _walk_deep_y() -> float:
 const FRONT_MARGIN_Y := 260.0
 
 
-## 前界 24 格（768px 带）：standard 刻度下 zoom 1.0 时带占屏 ~56%、
-## 单位占屏 ~12%——README 战斗头图的比例
+## 前界 24 格（768px 带）+ 前缘余量：观战缩放 0.75（缩放条 100% 档）下
+## 3D 契约把地平线（绿草远端）钉屏幕上 1/3 线，地面恒占屏 2/3
+## （set_cam_zoom 战场分支，HD-2D街景系统.md §4.1）——README 战斗头图口径
 func _front_band_y() -> float:
 	return 688.0 + 24.0 * 32.0
 

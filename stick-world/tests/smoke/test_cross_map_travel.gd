@@ -8,18 +8,16 @@ extends Node
 ##
 ## 测试内容：
 ##   1. SceneLoader 多地图注册 + 出口配置
-##   2. 初始村落 A 加载
-##   3. 旅行到道路地图（EventBus 信号转发）
-##   4. RoadMap 结构与 API
-##   5. 旅行到村落 B
-##   6. 完整链路：村落A -> 道路 -> 村落B
-##   7. ChunkTrigger 配置验证
+##   2. 初始主街（hd2d_street）加载
+##   3. 旅行到村落 B（EventBus 信号转发）
+##   4. HD-2D 村图结构与 API
+##   5. 反向旅行回主街
+##   6. ChunkTrigger 配置验证
+## （2026-09-16 旧 2D 图清退：道路图 road_a_b 删除，跨图链改为主街↔村落B 直达）
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptSceneLoader := preload("res://modules/world/scripts/loading/scene_loader.gd")
-const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")
-const ScriptRoadMap := preload("res://modules/world/scripts/map/road_map.gd")
 const ScriptChunkTrigger := preload("res://modules/world/scripts/loading/chunk_trigger.gd")
 const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
 # WorldAPI / PlayerControlAPI 是全局 class_name
@@ -56,25 +54,16 @@ func _run_tests_async() -> void:
 	# ── Phase 1: 初始状态测试 ──
 	_run_phase_1_tests()
 
-	# ── Phase 2: 旅行到道路 ──
+	# ── Phase 2: 旅行到村落 B ──
 	var sl := _get_scene_loader()
-	sl.travel_to_map(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
-	await get_tree().process_frame
-	await get_tree().process_frame
+	sl.travel_to_map(ScriptGameRoot.VILLAGE_B_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
+	await _await_current_map(ScriptGameRoot.VILLAGE_B_MAP_ID)
 	_run_phase_2_tests()
 
-	# ── Phase 3: 旅行到村落 B ──
-	sl.travel_to_map(ScriptGameRoot.VILLAGE_B_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
-	await _await_current_map(ScriptGameRoot.VILLAGE_B_MAP_ID)
-	_run_phase_3_tests()
-
-	# ── Phase 4: 反向旅行（村落B -> 道路 -> 村落A）──
-	sl.travel_to_map(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	sl.travel_to_map(ScriptGameRoot.HD2D_STREET_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
+	# ── Phase 3: 反向旅行回主街 ──
+	sl.travel_to_map(ScriptGameRoot.HD2D_STREET_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
 	await _await_current_map(ScriptGameRoot.HD2D_STREET_MAP_ID)
-	_run_phase_4_tests()
+	_run_phase_3_tests()
 
 	# 汇总
 	print(_runner.summary())
@@ -113,27 +102,25 @@ func _connect_event_bus_signals() -> void:
 # ─────────────────────────────── Phase 1: 初始状态 ────────────────────────────────
 
 func _run_phase_1_tests() -> void:
-	_runner.begin_test("SceneLoader: 多地图注册（3张地图）")
+	_runner.begin_test("SceneLoader: 多地图注册")
 	var sl := _get_scene_loader()
 	_runner.assert_true(sl != null, "SceneLoader 应存在")
 	if sl == null:
 		_runner.end_test()
 		return
-	_runner.assert_true(sl.has_map(ScriptGameRoot.ROAD_MAP_ID), "应注册 road_a_b")
-	_runner.assert_true(sl.has_map(ScriptGameRoot.VILLAGE_B_MAP_ID), "应注册 village_a_b")
+	_runner.assert_true(sl.has_map(ScriptGameRoot.VILLAGE_B_MAP_ID), "应注册 village_b")
+	_runner.assert_true(sl.has_map(ScriptGameRoot.BATTLEFIELD_MAP_ID), "应注册 battlefield")
+	_runner.assert_true(sl.has_map(ScriptGameRoot.RESOURCE_W_MAP_ID), "应注册 hd2d_resource_w")
 	_runner.end_test()
 
 	_runner.begin_test("SceneLoader: 出口配置正确")
-	# 2026-09-14 启动直连+村A退役：旅行链 = 主街 ↔ 道路 ↔ 村落B
-	var exit_right: Dictionary = sl.get_map_exit(ScriptGameRoot.HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	_runner.assert_equal(exit_right.get("target", ""), ScriptGameRoot.ROAD_MAP_ID, "主街 右出应指向道路")
-	_runner.assert_equal(exit_right.get("entry", -1), WorldAPI.EntrySide.LEFT, "主街 右出应从左侧进入道路")
-	var road_left: Dictionary = sl.get_map_exit(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
-	_runner.assert_equal(road_left.get("target", ""), ScriptGameRoot.HD2D_STREET_MAP_ID, "道路左出应指向主街")
-	var road_right: Dictionary = sl.get_map_exit(ScriptGameRoot.ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	_runner.assert_equal(road_right.get("target", ""), ScriptGameRoot.VILLAGE_B_MAP_ID, "道路右出应指向村落B")
-	var vb_left: Dictionary = sl.get_map_exit(ScriptGameRoot.VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
-	_runner.assert_equal(vb_left.get("target", ""), ScriptGameRoot.ROAD_MAP_ID, "村落B 左出应指向道路")
+	# 2026-09-16 旧 2D 图清退：出口 = 战场左出回主街 + 主街东西门直达资源图
+	var bf_left: Dictionary = sl.get_map_exit(ScriptGameRoot.BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT)
+	_runner.assert_equal(bf_left.get("target", ""), ScriptGameRoot.HD2D_STREET_MAP_ID, "战场左出应指向主街")
+	var street_w: Dictionary = sl.get_map_exit(ScriptGameRoot.HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT)
+	_runner.assert_equal(street_w.get("target", ""), ScriptGameRoot.RESOURCE_W_MAP_ID, "主街西出应指向城西资源区")
+	var street_e: Dictionary = sl.get_map_exit(ScriptGameRoot.HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
+	_runner.assert_equal(street_e.get("target", ""), ScriptGameRoot.RESOURCE_E_MAP_ID, "主街东出应指向城东资源区")
 	_runner.end_test()
 
 	_runner.begin_test("初始地图: 主街（hd2d_street）已加载")
@@ -150,7 +137,7 @@ func _run_phase_1_tests() -> void:
 		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS) != null, "ChunkTriggers 应存在")
 	_runner.end_test()
 
-	_runner.begin_test("初始地图: ChunkTrigger 存在（主街东西出口）")
+	_runner.begin_test("初始地图: ChunkTrigger 存在（东出口）")
 	if map:
 		var triggers: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS)
 		_runner.assert_true(triggers != null and triggers.get_child_count() > 0, "ChunkTriggers 应有子节点")
@@ -167,7 +154,7 @@ func _run_phase_1_tests() -> void:
 	_runner.end_test()
 
 
-# ─────────────────────────────── Phase 2: 道路地图 ────────────────────────────────
+# ─────────────────────────────── Phase 2: 村落 B ────────────────────────────────
 
 func _run_phase_2_tests() -> void:
 	_runner.begin_test("旅行信号: EventBus 转发正确")
@@ -176,78 +163,9 @@ func _run_phase_2_tests() -> void:
 	_runner.assert_true(_event_bus_signals.has("map_loaded"), "应收到 EventBus.map_loaded")
 	_runner.end_test()
 
-	_runner.begin_test("道路地图: 已加载")
-	var sl := _get_scene_loader()
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.ROAD_MAP_ID, "当前应为 road_a_b")
-	_runner.assert_equal(sl.get_current_map_type(), WorldAPI.MapType.ROAD, "类型应为 ROAD")
-	_runner.end_test()
-
-	_runner.begin_test("道路地图: RoadMap 实例")
-	var map := _get_current_map()
-	_runner.assert_true(map != null, "地图应存在")
-	if map:
-		_runner.assert_true(map is ScriptRoadMap, "地图应为 RoadMap")
-	_runner.end_test()
-
-	_runner.begin_test("道路地图: 子节点齐全")
-	if map:
-		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_LAYER) != null, "TerrainLayer 应存在")
-		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST) != null, "EntityHost 应存在")
-		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS) != null, "ChunkTriggers 应存在")
-		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_GROUND_LINE) != null, "GroundLine 应存在")
-	_runner.end_test()
-
-	_runner.begin_test("道路地图: 地面字段正确")
-	if map:
-		var rm: ScriptRoadMap = map as ScriptRoadMap
-		_runner.assert_equal(rm.get_ground_y(), 720.0, "ground_y 应为 720（地面占比 1/3）")
-		_runner.assert_equal(rm.get_ground_bottom(), 1080.0, "ground_bottom 应为 1080")
-		var bounds: Vector2 = rm.get_camera_bounds()
-		_runner.assert_equal(bounds, Vector2(0, 4096), "camera_bounds 应为 (0, 4096)")
-	_runner.end_test()
-
-	_runner.begin_test("道路地图: 双向出口触发器")
-	if map:
-		var triggers: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS)
-		_runner.assert_true(triggers != null, "ChunkTriggers 应存在")
-		if triggers:
-			_runner.assert_equal(triggers.get_child_count(), 2, "应有 2 个出口触发器（左右）")
-			# 检查 ExitLeft 和 ExitRight
-			var has_left: bool = triggers.get_node_or_null("ExitLeft") != null
-			var has_right: bool = triggers.get_node_or_null("ExitRight") != null
-			_runner.assert_true(has_left, "应有 ExitLeft 触发器")
-			_runner.assert_true(has_right, "应有 ExitRight 触发器")
-	_runner.end_test()
-
-	_runner.begin_test("道路地图: 玩家已生成（左侧入口）")
-	if map:
-		var player: Node2D = map.get_possessed_entity()
-		_runner.assert_true(player != null, "应有玩家附身实体")
-		if player:
-			# ENTRY_LEFT: spawn_x = map_left + 150 = 150
-			var expect_left: float = float(map.map_left) + 150.0
-			# 期望与 game_root 入口公式一致（map_left + 150）：初始建筑落位可能
-			# 触发 expand_map 左扩，入口落点跟随扩图后边界而非写死的 150
-			_runner.assert_true(absf(player.global_position.x - expect_left) < 10.0,
-					"玩家应在左侧入口附近 (x≈%d)" % int(expect_left))
-	_runner.end_test()
-
-	_runner.begin_test("道路地图: 公共 API 可用")
-	if map:
-		var rm: ScriptRoadMap = map as ScriptRoadMap
-		_runner.assert_true(rm.has_method("spawn_entity"), "应有 spawn_entity 方法")
-		_runner.assert_true(rm.has_method("get_entities"), "应有 get_entities 方法")
-		_runner.assert_true(rm.has_method("get_walk_barriers"), "应有 get_walk_barriers 方法")
-		_runner.assert_equal(rm.get_map_width(), 4096.0, "地图宽度应为 4096")
-	_runner.end_test()
-
-
-# ─────────────────────────────── Phase 3: 村落 B ────────────────────────────────
-
-func _run_phase_3_tests() -> void:
 	_runner.begin_test("村落B: 已加载")
 	var sl := _get_scene_loader()
-	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_B_MAP_ID, "当前应为 village_a_b")
+	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_B_MAP_ID, "当前应为 village_b")
 	_runner.assert_equal(sl.get_current_map_type(), WorldAPI.MapType.VILLAGE, "类型应为 VILLAGE")
 	_runner.end_test()
 
@@ -255,8 +173,7 @@ func _run_phase_3_tests() -> void:
 	var map := _get_current_map()
 	_runner.assert_true(map != null, "地图应存在")
 	if map:
-		_runner.assert_true(map.has_method("get_layout_width") or map is ScriptVillageMap,
-				"村B 应为 HD-2D 布局村（或 2D 村图）")
+		_runner.assert_true(map.has_method("get_spawn_point"), "村B 应为 HD-2D 布局村（get_spawn_point）")
 	_runner.end_test()
 
 	_runner.begin_test("村落B: 子节点齐全")
@@ -266,17 +183,7 @@ func _run_phase_3_tests() -> void:
 		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST) != null, "BuildingHost 应存在")
 	_runner.end_test()
 
-	_runner.begin_test("村落B: 左出口触发器")
-	if map:
-		var triggers: Node2D = map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS)
-		_runner.assert_true(triggers != null, "ChunkTriggers 应存在")
-		if triggers:
-			_runner.assert_true(triggers.get_child_count() >= 1, "应至少有 1 个触发器")
-			var has_left: bool = triggers.get_node_or_null("ExitLeft") != null
-			_runner.assert_true(has_left, "应有 ExitLeft 触发器")
-	_runner.end_test()
-
-	_runner.begin_test("村落B: 玩家已生成（街中心出生点）")
+	_runner.begin_test("村落B: 玩家已生成（出生点附近）")
 	if map:
 		var player: Node2D = map.get_possessed_entity()
 		_runner.assert_true(player != null, "应有玩家附身实体")
@@ -293,11 +200,10 @@ func _run_phase_3_tests() -> void:
 	_runner.end_test()
 
 
-# ─────────────────────────────── Phase 4: 反向旅行 ────────────────────────────────
+# ─────────────────────────────── Phase 3: 反向旅行 ────────────────────────────────
 
 ## 轮询等待 SceneLoader 当前地图实例与 id 一致（旧图 queue_free 延迟释放，
-## get_current_map 短暂返回旧图；建筑与美术升级线收窄村A 后图宽差异即暴露——
-## 位置断言必须等新图实体就位再读）
+## get_current_map 短暂返回旧图——位置断言必须等新图实体就位再读）
 func _await_current_map(map_id: String) -> void:
 	var sl := _get_scene_loader()
 	for i in 120:
@@ -307,26 +213,26 @@ func _await_current_map(map_id: String) -> void:
 		await get_tree().process_frame
 
 
-func _run_phase_4_tests() -> void:
-	_runner.begin_test("反向旅行: 回到村落A")
+func _run_phase_3_tests() -> void:
+	_runner.begin_test("反向旅行: 回到主街")
 	var sl := _get_scene_loader()
 	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.HD2D_STREET_MAP_ID, "当前应回到主街")
 	_runner.end_test()
 
-	_runner.begin_test("反向旅行: 玩家在右侧入口")
+	_runner.begin_test("反向旅行: 玩家在出生点")
 	var map := _get_current_map()
 	if map:
 		var player: Node2D = map.get_possessed_entity()
 		_runner.assert_true(player != null, "应有玩家附身实体")
-		if player:
-			# ENTRY_RIGHT: spawn_x = map_right - 150（村A右缘已收窄到右城墙外 2160）
-			var expect_x: float = float(map.map_right) - 150.0
-			_runner.assert_true(absf(player.global_position.x - expect_x) < 10.0,
-					"玩家应在右侧入口附近 (x≈%d)" % int(expect_x))
+		if player and map.has_method("get_spawn_point"):
+			# HD-2D 图按设计用自定义出生点（get_spawn_point 覆盖边缘入口落点）
+			var sp: Vector2 = map.get_spawn_point()
+			_runner.assert_true(absf(player.global_position.x - sp.x) < 10.0,
+					"玩家应在出生点附近 (期望 x≈%d，实得 %d)" % [int(sp.x), int(player.global_position.x)])
 	_runner.end_test()
 
 	_runner.begin_test("SceneLoader: last_entry_side 记录正确")
 	var sl2 := _get_scene_loader()
-	_runner.assert_equal(sl2.get_last_entry_side(), WorldAPI.EntrySide.RIGHT, "最后进入方向应为 RIGHT")
+	_runner.assert_equal(sl2.get_last_entry_side(), WorldAPI.EntrySide.LEFT, "最后进入方向应为 LEFT")
 	_runner.assert_equal(sl2.get_last_travel_mode(), WorldAPI.TravelMode.WALK, "最后旅行方式应为 WALK")
 	_runner.end_test()

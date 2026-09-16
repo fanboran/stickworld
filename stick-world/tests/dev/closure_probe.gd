@@ -6,7 +6,7 @@ extends SceneTree
 ##
 ## 用法：godot --headless --path . --script res://tests/dev/closure_probe.gd -- --stage=<模式>
 ##   模式 none       ：什么都不预热（基线，应复现 ~9.6s）
-##   模式 maps       ：预热 15 张地图 PackedScene
+##   模式 maps       ：预热 13 张地图 PackedScene
 ##   模式 setup      ：预热 system_setup.gd（编译器会连带编译其 45 个 preload 脚本）
 ##   模式 maps,setup ：两者都预热
 ##   模式 warmup     ：走生产预热器 BootWarmup.prepare() 的闭包清单（**同步**全量加载，
@@ -17,20 +17,19 @@ const SYSTEM_SETUP_SCRIPT := "res://modules/world/scripts/setup/system_setup.gd"
 const _WarmupScript: GDScript = preload("res://modules/ui_global/scripts/loading/boot_warmup.gd")
 
 static var MAP_PATHS: PackedStringArray = [
-	"res://modules/world/scenes/maps/village_b.tscn",
-	"res://modules/world/scenes/maps/road_a_b.tscn",
-	"res://modules/world/scenes/maps/mega_interior.tscn",
-	"res://modules/world/scenes/maps/battlefield.tscn",
-	"res://modules/world/scenes/maps/siege_battlefield.tscn",
-	"res://modules/world/scenes/maps/forest_zone.tscn",
-	"res://modules/world/scenes/maps/l1_settlement_00.tscn",
-	"res://modules/world/scenes/maps/l1_settlement_01.tscn",
-	"res://modules/world/scenes/maps/l1_settlement_02.tscn",
-	"res://modules/world/scenes/maps/l1_settlement_03.tscn",
-	"res://modules/world/scenes/maps/l1_settlement_04.tscn",
-	"res://modules/world/scenes/maps/l1_settlement_05.tscn",
-	"res://modules/world/scenes/maps/l1_settlement_06.tscn",
-	"res://modules/world/scenes/maps/l1_settlement_07.tscn",
+	"res://modules/world/scenes/maps/hd2d_street.tscn",
+	"res://modules/world/scenes/maps/hd2d_village_b.tscn",
+	"res://modules/world/scenes/maps/hd2d_battlefield.tscn",
+	"res://modules/world/scenes/maps/hd2d_resource_w.tscn",
+	"res://modules/world/scenes/maps/hd2d_resource_e.tscn",
+	"res://modules/world/scenes/maps/hd2d_settlement_00.tscn",
+	"res://modules/world/scenes/maps/hd2d_settlement_01.tscn",
+	"res://modules/world/scenes/maps/hd2d_settlement_02.tscn",
+	"res://modules/world/scenes/maps/hd2d_settlement_03.tscn",
+	"res://modules/world/scenes/maps/hd2d_settlement_04.tscn",
+	"res://modules/world/scenes/maps/hd2d_settlement_05.tscn",
+	"res://modules/world/scenes/maps/hd2d_settlement_06.tscn",
+	"res://modules/world/scenes/maps/hd2d_settlement_07.tscn",
 ]
 
 

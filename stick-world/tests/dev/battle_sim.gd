@@ -136,7 +136,7 @@ func _run() -> void:
 		await get_tree().process_frame
 	var loader: Node = _game_root.get("scene_loader")
 	if loader != null and loader.has_method("load_map"):
-		loader.load_map("battlefield_2d")
+		loader.load_map("battlefield")
 	for i in 20:
 		await get_tree().process_frame
 		var m: Node2D = _game_root.get_current_map()

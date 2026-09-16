@@ -39,8 +39,8 @@ func start(host: Node) -> void:
 		host.get_tree().quit(1)
 		return
 	game_root = packed.instantiate()
-	# 战斗测试需要 2D 空旷初始图（启动直连后默认开局图是 HD-2D 主街布景）
-	game_root.set("boot_map_id_override", "battlefield_2d")  # dev 空旷演练场开机（战斗测试需要 2D 空旷图 + 秒级开机）
+	# 战斗测试需要空旷初始图（启动直连后默认开局图是 HD-2D 主街布景）
+	game_root.set("boot_map_id_override", "battlefield")  # HD-2D 城郊战场开机（旧 2D 演练场已随旧 2D 图清退删除）
 	host.add_child(game_root)
 	# 等待地图加载和实体生成
 	for i in 8:

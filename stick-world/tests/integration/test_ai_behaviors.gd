@@ -11,7 +11,6 @@ extends Node
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
-const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")
 const ScriptAIController := preload("res://modules/units/scripts/ai/ai_controller.gd")
 const ScriptBehaviorStateMachine := preload("res://modules/units/scripts/ai/behavior_state_machine.gd")
 const ScriptBehaviorBase := preload("res://modules/units/scripts/ai/behavior_base.gd")
@@ -58,7 +57,7 @@ func _run_tests_async() -> void:
 		get_tree().quit(1)
 		return
 	_game_root = packed.instantiate()
-	_game_root.set("boot_map_id_override", "battlefield_2d")  # dev 空旷演练场开机（战斗测试需要 2D 空旷图 + 秒级开机）
+	_game_root.set("boot_map_id_override", "battlefield")  # HD-2D 城郊战场开机（旧 2D 演练场已随旧 2D 图清退删除）
 	# 关闭阶段 0.4 演示建造（避免 NPC 被派工影响 idle/wander 测试）
 	add_child(_game_root)
 	# 等待地图加载和实体生成
@@ -113,7 +112,7 @@ func _get_player_entity() -> ScriptStickmanEntity:
 	var map_node := _get_current_map()
 	if map_node == null:
 		return null
-	var map: ScriptVillageMap = map_node as ScriptVillageMap
+	var map: Node2D = map_node as Node2D
 	if map == null:
 		return null
 	for e in map.get_entities():

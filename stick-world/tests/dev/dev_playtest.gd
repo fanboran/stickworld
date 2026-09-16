@@ -9,7 +9,7 @@ extends Node
 ##   godot --path stick-world res://tests/dev/dev_playtest.tscn -- --map battlefield --party 3 --enemies 4 --follow
 ##
 ## 参数：
-##   --map <id>      目标地图（hd2d_street 默认 / battlefield / road_a_b / village_b）
+##   --map <id>      目标地图（hd2d_street 默认 / battlefield / village_b）
 ##   --party <N>     随行战斗班人数（跨图时自动携带；0 = 不带）
 ##   --enemies <N>   遭遇战敌方数量（默认 4，仅 battlefield 生效）
 ##   --follow        队伍自动开启"跟随玩家"

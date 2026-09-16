@@ -168,7 +168,7 @@ func _test_default_infantry() -> void:
 		var sp: Control = _helper.game_root.get_settings_menu_panel()
 		if sp != null and sp.visible:
 			_helper.game_root.toggle_settings_menu()
-	sl.travel_to_map(ScriptGameRoot.BATTLEFIELD_2D_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
+	sl.travel_to_map(ScriptGameRoot.BATTLEFIELD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
 	for i in 4:
 		await get_tree().process_frame
 	# 战场图已退役自动刷敌（出征与领地架构 §4.3）：直达组织遭遇战，

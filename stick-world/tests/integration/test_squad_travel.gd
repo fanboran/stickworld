@@ -96,7 +96,7 @@ func _test_travel_with_squad() -> void:
 	if sl == null or not sl.has_method("travel_to_map"):
 		_runner.assert_true(false, "SceneLoader 为空")
 		return
-	sl.travel_to_map(ScriptGameRoot.BATTLEFIELD_2D_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
+	sl.travel_to_map(ScriptGameRoot.BATTLEFIELD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
 	# 等待新地图加载与跟随者 spawn（map_loaded 同步执行，多等几帧稳妥）
 	for i in 4:
 		await get_tree().process_frame

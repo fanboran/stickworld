@@ -38,14 +38,12 @@ func _ready() -> void:
 		var expect_x: float = float(map.get("map_left")) + 150.0
 		_check(absf(player.global_position.x - expect_x) < 10.0,
 				"玩家应在西缘入口 x≈%d（实得 %d）" % [int(expect_x), int(player.global_position.x)])
-	# 出口触发器：左出回主街、右出去森林
+	# 出口触发器：森林图清退后只剩左出回主街
 	var triggers: Node2D = map.get_node_or_null("ChunkTriggers")
-	_check(triggers != null and triggers.get_child_count() == 2, "战场图应有东西两个出口触发器")
+	_check(triggers != null and triggers.get_child_count() == 1, "战场图应只剩左出触发器")
 	if triggers != null:
 		var el: Node = triggers.get_node_or_null("ExitLeft")
-		var er: Node = triggers.get_node_or_null("ExitRight")
 		_check(el != null and String(el.get("target_map_id")) == "hd2d_street", "左出应回主街")
-		_check(er != null and String(er.get("target_map_id")) == "forest_zone", "右出应去森林")
 	# 大乱斗战场不产资源（树丛=杂物，创始人 2026-09-15；资源采集在主街墙外带）
 	var nodes := get_tree().get_nodes_in_group("resource_node")
 	_check(nodes.size() == 0, "战场应无资源点（实得 %d）" % nodes.size())

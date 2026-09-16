@@ -14,16 +14,16 @@ extends Camera2D
 ## 设计基准垂直像素（世界坐标恒定，= 1080P 垂直分辨率）
 ## 1080P 为默认设计分辨率，其他分辨率按此换算（base_zoom = vp_h / 1080）
 const DESIGN_HEIGHT: float = 1080.0
-## 用户缩放下限（0.5=缩小到一半视野，看更广）
-const ZOOM_MIN: float = 0.5
-## 用户缩放上限（最大迫近，2.0=放大2倍看特写）
-const ZOOM_MAX: float = 2.0
+## 用户缩放下限（0.6667=缩小到旧 0.5 档视野，看更广）
+const ZOOM_MIN: float = 0.6667
+## 用户缩放上限（最大迫近，2.6667=旧 2.0 档特写）
+const ZOOM_MAX: float = 2.6667
 ## 缩放步长
-const ZOOM_STEP: float = 0.1
+const ZOOM_STEP: float = 0.075
 ## 边缘滚动死区（屏幕宽度比例）
 const EDGE_DEAD_ZONE: float = 0.05
-## 边缘滚动速度（世界坐标 px/s；设置面板 control/edge_scroll_speed 1~10 档可调，5 档 = 400）
-var edge_scroll_speed: float = 400.0
+## 边缘滚动速度（世界坐标 px/s；设置面板 control/edge_scroll_speed 1~10 档可调，5 档 = 300）
+var edge_scroll_speed: float = 300.0
 ## 滚轮缩放步长倍率（control/zoom_speed 1~10 档，5 档 = 1.0）
 var zoom_speed_mult: float = 1.0
 ## 跟随平滑系数（值越大越跟手）
@@ -87,10 +87,11 @@ var _drag_start_cam: Vector2 = Vector2.ZERO
 # ─────────────────────────────── 缩放状态 ────────────────────────────────
 ## 基础缩放（适配分辨率，= viewport_height / DESIGN_HEIGHT，使世界垂直范围恒定）
 var base_zoom: float = 1.0
-## 用户缩放（滚轮/滑块可调）。默认 0.75 = HD-2D 构图契约基准档：
-## 前后景分界线压屏幕下 **1/4 线**、火柴人整体 0.75×（zoom=1 时分界线在 1/3、
-## 角色偏大——创始人 2026-09-15 定 0.75）。开场推镜（demo_quest）动态读本值。
-var user_zoom: float = 0.75:
+## 用户缩放（滚轮/滑块可调）。默认 1.0 = HD-2D 构图契约基准档（2026-09-16 换轨
+## 24px/格 后归一）：1 格 = 24 世界单位 = 24 设计像素，前后景分界线压屏幕下
+## **1/4 线**的构图与旧 0.75 档逐像素一致（旧档已折入世界常量）。开场推镜
+## （demo_quest）动态读本值。
+var user_zoom: float = 1.0:
 	set(v):
 		user_zoom = clampf(v, ZOOM_MIN, ZOOM_MAX)
 		_apply_zoom()

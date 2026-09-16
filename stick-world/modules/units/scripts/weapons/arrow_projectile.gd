@@ -13,17 +13,17 @@ extends Area2D
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 命中判定半径（px）：箭到目标碰撞体中心的距离小于此值即命中
-const HIT_RADIUS: float = 34.0
+const HIT_RADIUS: float = 25.5
 ## 击退力度系数（与近战一致：伤害 × KNOCKBACK_PER_DAMAGE）
-const KNOCKBACK_PER_DAMAGE: float = 16.0
+const KNOCKBACK_PER_DAMAGE: float = 12.0
 ## 爆头判定：命中点相对目标碰撞体中心向上超过此比例 × 身高 → 爆头
 const HEADSHOT_Y_RATIO := 0.22
 ## 箭插地留存时间（s），之后淡出（复刻 fadeOutOver）
 const STUCK_LIFETIME: float = 4.0
 ## 爆头判定身高（目标碰撞体典型高度，px）
-const BODY_HEIGHT := 130.0
+const BODY_HEIGHT := 97.5
 ## 落地判定：下落段相对出射点下降超过此值 → 插地（SWL InGroundArrows）
-const GROUND_DROP: float = 500.0
+const GROUND_DROP: float = 375.0
 ## 兜底寿命（s）：超时强制插地（防极端弹道永生）
 const MAX_FLIGHT_TIME: float = 6.0
 ## 近失半径查询的碰撞掩码（= 单位根节点层，镜像 arrow.tscn 的 collision_mask：

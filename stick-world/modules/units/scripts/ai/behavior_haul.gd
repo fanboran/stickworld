@@ -17,7 +17,7 @@ extends BehaviorBase
 
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-const CELL_SIZE: float = 32.0
+const CELL_SIZE: float = 24.0
 const ARRIVE_THRESHOLD: float = 28.0
 const WORK_OFFSET_Y: float = 40.0
 

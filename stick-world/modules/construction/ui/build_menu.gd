@@ -50,7 +50,7 @@ var _last_cell_end: int = 0
 var _confirm_btn: Button = null
 ## ghost 预览高度（像素，向上，接近大多数建筑视觉高度）
 const _GHOST_HEIGHT: float = 280.0
-const _CELL_SIZE: int = 32
+const _CELL_SIZE: int = 24  # 24px 换轨（旧 32）
 ## 放置默认宽度（cell 数）
 const _DEFAULT_WIDTH_CELLS: int = 16
 

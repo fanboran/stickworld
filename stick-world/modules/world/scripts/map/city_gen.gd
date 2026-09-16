@@ -135,8 +135,8 @@ const ZONE_POOLS := {
 ## 城防塔——窗口内按档取
 const FLOAT_DEFS := {
 	"hamlet": ["cathedral_w8", "tower_w6"],
-	"village": ["cathedral_w8", "mage_tower_w8", "tower_w6"],
-	"townlet": ["cathedral_w8", "mage_tower_w8", "tower_w6"],
+	"village": ["abbey_w24", "cathedral_w8", "mage_tower_w8", "tower_w6"],
+	"townlet": ["abbey_w24", "cathedral_w8", "mage_tower_w8", "tower_w6"],
 	"town": ["cathedral_w16", "mage_tower_w8", "tower_w6"],
 	"burgh": ["cathedral_w16", "mage_tower_w8", "tower_w6"],
 	"city": ["cathedral_w16", "mage_tower_w8", "tower_w6", "library_w12", "gambling_den_w8"],

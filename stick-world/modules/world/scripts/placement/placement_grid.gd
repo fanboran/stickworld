@@ -17,7 +17,7 @@ extends Node
 const ScriptGridCell := preload("res://modules/world/scripts/placement/grid_cell.gd")
 
 ## 单元格尺寸（像素，即每个竖向条带的宽度）
-const CELL_SIZE: int = 32
+const CELL_SIZE: int = 24  # 24px 换轨（旧 32；1 格显示 24 设计像素@zoom1）
 
 ## 信号：条带被占用
 signal cell_occupied(cell_x: int, occupant: Variant)

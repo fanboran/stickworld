@@ -28,7 +28,7 @@ enum ResourceType {
 ## 储量（剩余可采集量）
 @export var amount: int = 100
 ## 占地大小（像素）
-@export var node_size: float = 32.0
+@export var node_size: float = 24.0
 
 var _is_depleted: bool = false
 var _debug_label: Label = null

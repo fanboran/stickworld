@@ -322,7 +322,7 @@ func _draw() -> void:
 	if use_2d_bracket:
 		var p: Node2D = _get_possessed_entity()
 		if p != null and is_instance_valid(p):
-			var col_w: float = 32.0
+			var col_w: float = 24.0
 			var col: CollisionShape2D = p.get_node_or_null("Collider") as CollisionShape2D
 			if col != null and col.shape is RectangleShape2D:
 				col_w = (col.shape as RectangleShape2D).size.x

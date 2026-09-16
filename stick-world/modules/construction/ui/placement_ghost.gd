@@ -7,17 +7,17 @@ extends Node2D
 ##
 ## BuildMenu 每帧更新字段后调用 queue_redraw()。
 
-const CELL_SIZE: int = 32
-const CELL_INSET_X: float = 3.0
-const CELL_INSET_Y: float = 2.0
+const CELL_SIZE: int = 24   # 24px 换轨（旧 32）
+const CELL_INSET_X: float = 2.25
+const CELL_INSET_Y: float = 1.5
 const CORNER_ARM: float = 10.0
 const CORNER_OUTER: float = 2.0
 ## 端部三角：等边三角，尖朝外（左尖朝左、右尖朝右），整体位于端格靠内一侧。
 ## 底边靠近但不越过端格内侧边线（保持正距离，不贴线、不越线）
-const TRI_BASE: float = 14.0
+const TRI_BASE: float = 10.5
 const TRI_HEIGHT: float = TRI_BASE * 0.866
 ## 三角底边距端格内侧边线的距离（px，靠内一侧、保持正距离、不贴线不重合）
-const TRI_EDGE_INSET: float = 10.0
+const TRI_EDGE_INSET: float = 7.5
 ## 点击反馈时长（ms）
 const WOBBLE_DUR_MS: float = 400.0
 const RIPPLE_DUR_MS: float = 300.0

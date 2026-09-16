@@ -124,7 +124,7 @@ func _spawn_travel_followers(map: Node2D, player: Node2D, spawn_y: float) -> Arr
 			var old_iid: int = int(m.get("iid", 0))
 			if old_iid == 0 or entity_map.has(old_iid):
 				continue
-			var x: float = player.global_position.x + 70.0 * idx
+			var x: float = player.global_position.x + 52.5 * idx  # 24px 换轨（旧 70）
 			var f: Node2D = map.spawn_entity(_host._STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
 			if f == null:
 				continue
@@ -185,9 +185,9 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 			spawn_x = _host.PLAYER_SPAWN_X
 		else:
 			if entry_side == WorldAPI.EntrySide.LEFT:
-				spawn_x = map.map_left + 150.0
+				spawn_x = map.map_left + 112.5  # 24px 换轨（旧 150）
 			else:
-				spawn_x = map.map_right - 150.0
+				spawn_x = map.map_right - 112.5  # 24px 换轨（旧 150）
 		var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
 		# 地图自定义出生点（如 HD-2D 街景图：街中心前景，而非边缘入口）
 		if map.has_method("get_spawn_point"):
@@ -235,7 +235,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 				# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
 				_host._worldgen.spawn_initial_warehouse()
 				# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
-				var spawn_cell: int = int(_host.PLAYER_SPAWN_X / 32.0)
+				var spawn_cell: int = int(_host.PLAYER_SPAWN_X / 24.0)  # 24px 换轨
 				var safe_radius: int = 40  # 出生点±40格内为村庄土路区
 				if map.has_method("set_dirt_road_range"):
 					map.set_dirt_road_range(spawn_cell - safe_radius, spawn_cell + safe_radius)

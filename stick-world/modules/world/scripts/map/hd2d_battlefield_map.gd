@@ -18,7 +18,7 @@ func _configure_hd(hd: Node3D) -> void:
 	hd.set("battlefield", true)
 
 
-## 深端行走界维持旧带（688）：战场阵型间距/部署按旧行走域调的，不随
+## 深端行走界维持旧带（516）：战场阵型间距/部署按旧行走域调的，不随
 ## 主街"前景可行走到黄线"契约扩（战斗手感不变）
 func _walk_deep_y() -> float:
 	return walk_back_y
@@ -26,14 +26,15 @@ func _walk_deep_y() -> float:
 
 ## 前缘画面余量（px）：可行走前缘（walk_front_y）之下再铺的地面深度——
 ## 屏幕底沿锚在余量下沿——战线贴前缘时也保持在画面内、不沉底不被热键栏压住
-const FRONT_MARGIN_Y := 260.0
+const FRONT_MARGIN_Y := 195.0
 
 
-## 前界 24 格（768px 带）+ 前缘余量：观战缩放 0.75（缩放条 100% 档）下
+## 前界 24 格（576px 带）+ 前缘余量：观战缩放（缩放条 100% 档）下
 ## 3D 契约把地平线（绿草远端）钉屏幕上 1/3 线，地面恒占屏 2/3
 ## （set_cam_zoom 战场分支，HD-2D街景系统.md §4.1）——README 战斗头图口径
+## （24px 换轨：旧 688+24×32=1456 → 516+24×24=1092）
 func _front_band_y() -> float:
-	return 688.0 + 24.0 * 32.0
+	return 516.0 + 24.0 * 24.0
 
 
 func _ready() -> void:

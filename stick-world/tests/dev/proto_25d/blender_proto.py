@@ -70,6 +70,7 @@ SCALE = 1.0 / 32.0    # 世界单位(px) -> Godot 单位(格)
 #: 16 格档的民居与仓库（村A InitialBuildingsList 的 placeholder/stone_warehouse 均 w16）
 STREET = [
     ("cottage", 6),
+    ("cottage", 8),   # 观感对照档（2026-09-16 过目轮）：体加宽 2 格 vs 原 6 格，创始人拍板后定去留
     ("shelter", 6),
     ("house", 8),
     ("house", 16),
@@ -124,6 +125,7 @@ STREET = [
     ("flower_shop", 12),
     # cathedral 补 w8 小礼拜堂档（CATHEDRAL_TIERS 有 8/12/16 三档，此前只烘了 16）
     ("cathedral", 8),
+    ("abbey", 24),   # 大修道院（左塔右翼楼超宽连体，2026-09-16 创始人立项）
 ]
 
 #: glow 卡里当作"自发光窗/火"的材质名（其余一律压成纯黑，加色叠加下不可见）

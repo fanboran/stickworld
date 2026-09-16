@@ -10,7 +10,7 @@ extends Node
 ## VillageMap 的 generate_resource_nodes 等公开方法转发到本组件。
 
 ## 垂直格子大小（与水平 CELL_SIZE 一致，32px）
-const TERRAIN_CELL_SIZE_Y: float = 32.0
+const TERRAIN_CELL_SIZE_Y: float = 24.0
 const ScriptResourceNode := preload("res://modules/world/scripts/map/resource_node.gd")
 
 ## 生态群落表（2026-09-06 用户重定调）：石头在森林里、密度远低于树

@@ -5,11 +5,11 @@
 [node name="Hd2dVillageB" type="Node2D"]
 script = ExtResource("1_hd2d")
 layout_name = "village_b"
-ground_y = 810.0
+ground_y = 607.5
 ground_ratio = 0.36
-map_left = -2160.0
-map_right = 2160.0
-ground_bottom = 1080.0
+map_left = -1620.0
+map_right = 1620.0
+ground_bottom = 810.0
 
 [node name="EntityHost" type="Node2D" parent="."]
 

@@ -135,7 +135,7 @@ variables = {
 		{
 			"id": "var_arrow_vx",
 			"category": "combat",
-			"value": 850,
+			"value": 637.5,
 			"min": 0,
 			"max": 2000,
 			"step": 10,
@@ -144,7 +144,7 @@ variables = {
 		{
 			"id": "var_arrow_gravity",
 			"category": "combat",
-			"value": 2000,
+			"value": 1500,
 			"min": 0,
 			"max": 5000,
 			"step": 10,
@@ -225,7 +225,7 @@ variables = {
 		{
 			"id": "var_knockback_per_damage",
 			"category": "combat",
-			"value": 16,
+			"value": 12,
 			"min": 0,
 			"max": 100,
 			"step": 0.5,
@@ -234,7 +234,7 @@ variables = {
 		{
 			"id": "var_walk_speed",
 			"category": "movement",
-			"value": 160,
+			"value": 120,
 			"min": 40,
 			"max": 600,
 			"step": 5,
@@ -243,7 +243,7 @@ variables = {
 		{
 			"id": "var_run_speed",
 			"category": "movement",
-			"value": 320,
+			"value": 240,
 			"min": 40,
 			"max": 800,
 			"step": 5,
@@ -252,7 +252,7 @@ variables = {
 		{
 			"id": "var_base_scale",
 			"category": "movement",
-			"value": 0.5,
+			"value": 0.375,
 			"min": 0.25,
 			"max": 2,
 			"step": 0.05,
@@ -261,7 +261,7 @@ variables = {
 		{
 			"id": "var_spread_spacing",
 			"category": "formation",
-			"value": 32,
+			"value": 24,
 			"min": 8,
 			"max": 128,
 			"step": 1,
@@ -270,7 +270,7 @@ variables = {
 		{
 			"id": "var_follow_default_gap",
 			"category": "formation",
-			"value": 150,
+			"value": 112.5,
 			"min": 40,
 			"max": 400,
 			"step": 5,
@@ -279,7 +279,7 @@ variables = {
 		{
 			"id": "var_row_gap",
 			"category": "formation",
-			"value": 56,
+			"value": 42,
 			"min": 16,
 			"max": 160,
 			"step": 1,
@@ -288,7 +288,7 @@ variables = {
 		{
 			"id": "var_catchup_run_dist",
 			"category": "formation",
-			"value": 140,
+			"value": 105,
 			"min": 40,
 			"max": 400,
 			"step": 5,
@@ -297,7 +297,7 @@ variables = {
 		{
 			"id": "var_courier_speed",
 			"category": "command",
-			"value": 208,
+			"value": 156,
 			"min": 50,
 			"max": 600,
 			"step": 1,
@@ -306,7 +306,7 @@ variables = {
 		{
 			"id": "var_command_cross_map_distance",
 			"category": "command",
-			"value": 2000,
+			"value": 1500,
 			"min": 0,
 			"max": 10000,
 			"step": 100,

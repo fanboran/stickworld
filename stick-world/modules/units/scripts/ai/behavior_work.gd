@@ -19,7 +19,7 @@ extends BehaviorBase
 # ─────────────────────────────── 常量 ────────────────────────────────
 
 ## 网格单元大小（与 PlacementGrid.CELL_SIZE 一致）
-const CELL_SIZE: float = 32.0
+const CELL_SIZE: float = 24.0
 ## 到达阈值（距目标小于此值视为已到达，避免抖动）
 const ARRIVE_THRESHOLD: float = 24.0
 ## 单格高度（工作位相对地面线下方一点，避免遮住建筑）

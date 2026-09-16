@@ -15,7 +15,7 @@
 * 带门建筑最小 6 格（MIN_DOOR_CELLS），4 格档只做小物件（§8.2）
 * 长宽比：网格宽 : 剪影总高 ∈ RATIO_BAND = 1 : 0.85~1.5（§8.2，单层硬约束）
 * 双层单列层高 ∈ STOREY_H_BAND = 175~195（§8.2）
-* 出檐（每侧）∈ EAVE_RATIO_BAND = 建筑宽 × 18~23%（§8.2）
+* 出檐（每侧）= **绝对长度封顶 60**（EAVE_ABS_MAX，创始人 2026-09-16 定值；小建筑 ≤w6 维持 20.5% 现状=39）。旧「宽×20.5%」百分比口径在大建筑上绝对檐长过大（w16 达 105）
 * 相机固定 3/4 偏航：水平 12°、俯角 10°（§8.1，见 probe_buildings.YAW/TILT）
 
 材质接口
@@ -44,7 +44,7 @@ from mathutils import Euler, Matrix, Vector
 
 CELL = 32.0                 # 1 格 = 32px（PlacementGrid.CELL_SIZE）
 STICKMAN_H = 130.0          # 火柴人身高（arrow_projectile.gd BODY_HEIGHT）
-DOOR_H = 150.0              # 门净高（硬性）
+DOOR_H = 150.0              # 门净高（硬性）。人体锚链：火柴人 130（=1.70m）→ 门 150=1.15×人 → 层高带 196~212=1.5~1.63×人（门/挑高恒随人体锚，不随建筑宽变）
 DOOR_W_RANGE = (45.0, 60.0)  # 单扇门宽允许区间
 DOOR_SILL = 8.0             # 门槛高：门洞 z 从 8 到 158
 # §8.2 长宽比硬口径：网格宽 : 剪影总高 = 1 : 0.85 ~ 1 : 1.5
@@ -56,7 +56,7 @@ GRID_H_BAND = {4: (109, 192), 6: (163, 288), 8: (218, 384),
 #: 那一档对应"门占层高 85%"，正是创始人点名的病根，§8.7 已改判 2.6~2.7m）。
 STOREY_H_BAND = (196.0, 212.0)
 #: §8.2 出檐占建筑宽的比例区间（每侧）
-EAVE_RATIO_BAND = (0.18, 0.23)
+EAVE_ABS_MAX = 60.0         # 出檐绝对封顶（2026-09-16 创始人定 60；39 过紧）
 #: 相机固定俯角 20°（§0.3 视角硬约束：纯正面 + 俯角 20°）。檐口出檐会遮住墙顶
 #: `出檐 × tan20°` 高的一条墙面 —— 檐下 AO 条带必须压在**这条遮挡线之下**才看得见，
 #: 否则整条带都被自家屋檐挡掉（旧实现在墙顶贴 shadow_near，实测完全不可见）。
@@ -86,8 +86,9 @@ BEV_SEG = 1         # 倒角段数：1 = 真 chamfer（本管线默认；2 只�
 
 
 def eave_over(grid_w):
-    """§8.2 出檐（每侧）= 建筑宽 × 20.5%，稳落 18~23% 带内。"""
-    return round(grid_w * 0.205)
+    """出檐（每侧）= min(建筑宽 × 20.5%, 60 绝对封顶)：≤w6 小建筑维持现状观感（39），
+    大建筑一律封到 60 绝对长度（旧百分比口径 w16 檐达 105，悬殊感来源）。"""
+    return min(round(grid_w * 0.205), int(EAVE_ABS_MAX))
 
 
 def bays_of(width_cells):
@@ -788,7 +789,7 @@ def roof_gable(b, w, span, rise, overhang, mat, x=0.0, y=0.0, z=0.0,
     w        = 屋脊方向覆盖的建筑宽度（X，不含出檐）
     span     = 坡面跨越的建筑进深（Y，不含出檐）
     rise     = 屋脊相对檐口高度（越大坡越陡、正面可见屋面越大）
-    overhang = 出檐（§8.2：每侧 = 建筑宽 × 18~23%）
+    overhang = 出檐（§8.2：每侧 = 建筑宽 × 9~13%）
     z        = 檐口高度（= 墙顶）
     返回 dict：檐口/屋脊高、坡长、坡度角。
 
@@ -1604,9 +1605,9 @@ TOWNHOUSE_TIERS = {
              wt=20.0, jetty=10.0),
 }
 BARN_TIERS = {
-    8:  dict(D=170.0, plinth=12.0, wall=200.0, rise=118.0, wt=20.0, leaf=58.0),
-    12: dict(D=200.0, plinth=14.0, wall=205.0, rise=124.0, wt=22.0, leaf=62.0),
-    16: dict(D=224.0, plinth=16.0, wall=210.0, rise=128.0, wt=22.0, leaf=62.0),
+    8:  dict(D=170.0, plinth=12.0, wall=275, rise=118.0, wt=20.0, leaf=58.0),
+    12: dict(D=200.0, plinth=14.0, wall=275, rise=124.0, wt=22.0, leaf=62.0),
+    16: dict(D=224.0, plinth=16.0, wall=275, rise=128.0, wt=22.0, leaf=62.0),
 }
 SMITHY1_TIERS = {
     6: dict(D=144.0, post_h=200.0, rise=110.0, post=16.0, roof_t=18.0),
@@ -2021,7 +2022,11 @@ def check_spec(spec, ob=None):
         "grid_band_ok": (band is None) or (band[0] <= sil_h <= band[1]),
         "eave_px": spec["overhang"],
         "eave_ratio": spec["overhang"] / grid_w,
-        "eave_ok": EAVE_RATIO_BAND[0] <= spec["overhang"] / grid_w <= EAVE_RATIO_BAND[1],
+        "eave_ok": spec.get("eave_exempt") or (spec["overhang"] <= EAVE_ABS_MAX + 0.5),
+        # 坡度下限（2026-09-16）：26° 俯角下 rise < (进深/2+出檐)×tan26° 会露出背面坡
+        "pitch_ok": spec.get("eave_exempt") or spec.get("open_shed") or
+                    (spec.get("rise", 0.0) <= 0.0) or
+                    (spec["rise"] >= (spec["depth"] / 2.0 + spec["overhang"]) * math.tan(math.radians(26.0))),
         "door_ok": (door is None) or (abs(door[1] - DOOR_H) < 0.5 and
                                       (spec.get("composite_door") or
                                        DOOR_W_RANGE[0] <= door[0] <= DOOR_W_RANGE[1])),
@@ -2549,13 +2554,13 @@ WINDMILL_TIERS = {
 #: 8 格档 = **小礼拜堂**（单钟楼、中殿压到一层半）：村档的核心 landmark 就是它，
 #: 塔顶仍要压过村内一切建筑；剪影比走"单钟楼档"豁免（见 assemble_cathedral 的 reason）。
 CATHEDRAL_TIERS = {
-    8:  dict(D=176.0, plinth=16.0, nave_h=270.0, rise=104.0, wt=18.0, twin=False,
+    8:  dict(D=176.0, plinth=16.0, nave_h=345.0, rise=104.0, wt=18.0, twin=False,
              tower_w=92.0, tower_h=372.0, spire_h=88.0, portal_w=70.0,
              leaf=32.0, rose_r=38.0, rose_z=196.0),
-    12: dict(D=200.0, plinth=18.0, nave_h=400.0, rise=136.0, wt=22.0, twin=False,
+    12: dict(D=200.0, plinth=18.0, nave_h=535.0, rise=136.0, wt=22.0, twin=False,
              tower_w=124.0, tower_h=560.0, spire_h=118.0, portal_w=88.0,
              leaf=42.0, rose_r=54.0, rose_z=298.0),
-    16: dict(D=232.0, plinth=20.0, nave_h=410.0, rise=150.0, wt=24.0, twin=True,
+    16: dict(D=232.0, plinth=20.0, nave_h=535.0, rise=150.0, wt=24.0, twin=True,
              tower_w=106.0, tower_h=578.0, spire_h=150.0, portal_w=106.0,
              leaf=50.0, rose_r=64.0, rose_z=334.0),
 }
@@ -2748,7 +2753,7 @@ def assemble_windmill(width_cells=6):
         "ratio_exempt": True, "eave_exempt": True,
         "width_exempt": (width_cells < MIN_DOOR_CELLS),
         "reason": "风车塔：竖向体量（塔身 + 锥顶 + 四叶跨度）；锥顶出檐按塔半径比例"
-                  "（非民居坡檐 18~23% 口径）",
+                  "（非民居坡檐口径，eave_exempt）",
         "material": "石砌 / 陶瓦锥顶 + 木格栅叶"})
     return ob, spec
 
@@ -3065,7 +3070,121 @@ def assemble_lighthouse(width_cells=6):
 
 ASSEMBLERS["rowhouse"] = assemble_rowhouse
 ASSEMBLERS["windmill"] = assemble_windmill
+# ---------------------------------------------------------------- 7.x 大修道院 abbey
+
+ABBEY_TIERS = {
+    # 24 格超宽连体：石塔**左端顶格**（塔左面=建筑左端，创始人 2026-09-16：塔顶格、
+    # 塔面与翼楼同一面墙）+ 向右一整条厚重石砌翼楼；塔占位段无屋顶——坡顶只在塔右侧
+    # 一整条（rise=100：下限=(进深/2+出檐)×tan26°≈90，再浅露背面坡——创始人实测发现；100 仍比旧 128 矮 22%）。塔身总高 ≈ 922 远超屋脊（548），
+    # "左塔右殿"天际线 landmark。翼楼两层等高（檐口 448），上层仅一排 4 个小盲窗
+    # （禁域：极少开窗、大面积光秃石墙），主入口开在塔底，翼楼无门。
+    24: dict(D=250.0, plinth=24.0, tw=150.0, th=770.0, spire_h=112.0,
+             wing_h=424.0, rise=100.0, wt=26.0, portal_w=56.0,
+             proj=2.0),
+}
+
+
+def assemble_abbey(width_cells=24):
+    """大修道院：左侧高耸石塔（大幅前凸冲街，全高可见）+ 向右延伸的巨型厚重石砌翼楼。
+
+    塔身：底层真拱主入口 + 四层细缝窗 + 角扶壁 + 白石腰线 + 钟楼双联盲拱 + 矮锥顶；
+    翼楼外墙无门无真窗，仅上层一排小盲窗，大面积光秃石墙；扶壁均布贴脚；
+    石板瓦长坡顶（脊沿 X，正面见坡面）。
+    """
+    t = ABBEY_TIERS[width_cells]
+    W = width_cells * CELL
+    D, plinth_h = t["D"], t["plinth"]
+    tw, th, sh = t["tw"], t["th"], t["spire_h"]
+    wing_h, rise, wt = t["wing_h"], t["rise"], t["wt"]
+    pw = t["portal_w"]
+    tx = -W / 2.0 + tw / 2.0                    # 塔左端顶格（塔左面=建筑左端）
+    proj = t["proj"]                            # 塔面嵌缝余量（≈0：与翼楼墙面共面一体）
+    eave = plinth_h + wing_h
+    ridge = eave + rise
+    yf = -D / 2.0
+    ty = yf - proj + tw / 2.0                   # 塔面与翼楼前墙共面（proj=嵌缝 2）
+    ty_face = ty - tw / 2.0                     # 塔正立面 y
+
+    b = Builder("abbey_w%d" % width_cells)
+    contact_shadow(b, W, D, spread=34.0)
+    plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0, lip=12.0)
+
+    # ---- 翼楼（整条厚重石墙，无门，上层仅一排小盲窗）+ 扶壁均布
+    room_shell(b, W, D, plinth_h, wing_h, wt, "stone_dark")
+    win_n = 4
+    x0 = tx + tw / 2.0                            # 窗带从塔右缘起算（不浪费在塔后）
+    for i in range(win_n):
+        cx = x0 + (W / 2.0 - x0) * (i + 0.5) / float(win_n)
+        blind_arch(b, cx, yf - wt / 2.0 - 1.0, eave - 112.0, 14.0, 38.0,
+                   mat="cavity", ring="white_stone", blocks=4, depth=8.0)
+    nb = max(3, int(round(W / 190.0)))
+    for i in range(nb):
+        bx = -W / 2.0 + W * (i + 0.5) / float(nb)
+        if abs(bx - tx) < tw / 2.0 + 30.0:
+            continue                              # 塔身占位段不放扶壁
+        buttress(b, bx, yf + 4.0, plinth_h, 28.0, wing_h * 0.58, depth=28.0,
+                 cap_h=20.0, mat="stone")
+
+    # ---- 翼楼长坡顶：单段，自塔右面起到右端（塔占位段无屋顶——创始人口径）
+    over = eave_over(W)
+    sw = W / 2.0 - (tx + tw / 2.0)
+    scx = tx + tw / 2.0 + sw / 2.0
+    roof_gable(b, sw, D, rise, over, "slate", x=scx, z=eave, thickness=16.0,
+               mat_under="wood_dark", cap_size=(26.0, 13.0), cap_mat="stone_dark",
+               eave_board=False, gable_overhang=0.0)   # 山墙出檐归零：左端终止于塔面（不穿模塔）
+    # 山墙填充：右端为外露山墙；左端三角落在塔右侧体内（同材质深色，接缝不可见）
+    gable_infill(b, sw, D, rise, "stone_dark", z=eave, thickness=14.0)
+    # ---- 屋面终止于塔身的收头：檐板端面用石砌肩块盖住（前檐交角）
+    b.box_bottom((10.0, 26.0, 54.0), (tx + tw / 2.0 + 3.0, yf - over + 8.0),
+                 eave - 14.0, "stone_dark")
+
+    # ---- 左侧高耸石塔（大幅前凸，冲出翼楼屋脊）----
+    b.box_bottom((tw, tw, th - plinth_h), (tx, ty), plinth_h, "stone")
+    # 角扶壁：正面两角竖向墩（哥特塔角读法），暗色与亮塔身对比才读得出墩条
+    for sx in (-1.0, 1.0):
+        buttress(b, tx + sx * (tw / 2.0 - 15.0), ty_face + 16.0, plinth_h,
+                 36.0, th * 0.52, depth=34.0, cap_h=24.0, mat="stone_dark")
+    # 底层主入口（修道院门开在塔底，圆拱头真拱洞 + 白石拱券 + 单扇木门）
+    arched_doorway(b, tx, ty_face - 6.0, 30.0, pw, DOOR_H, head=22.0, mat="stone",
+                   profile="round", leaves=1, porch_w=pw + 36.0,
+                   sill=False, step=True)
+    step_stone(b, w=pw + 60.0, depth=26.0, h=10.0, x=tx, y=ty_face - 40.0)
+    # 细缝窗四层：中段三层（门上起、逐层升高）+ 高段一层（腰线之上）
+    for k in range(3):
+        blind_arch(b, tx, ty_face - 1.0, plinth_h + 166.0 + k * 130.0,
+                   13.0, 42.0, mat="cavity", depth=8.0)
+    # 白石腰线：钟楼段与塔身的分界（钟楼段读法）
+    b.box_bottom((tw + 14.0, tw + 14.0, 14.0), (tx, ty), th - 200.0, "white_stone")
+    blind_arch(b, tx, ty_face - 1.0, th - 160.0, 13.0, 42.0, mat="cavity", depth=8.0)
+    # 钟楼双联盲拱（加大加宽）+ 矮锥顶
+    belf = win_rect("belfry")
+    for sx in (-1.0, 1.0):
+        blind_arch(b, tx + sx * tw * 0.25, ty_face - 1.0, th - 104.0,
+                   tw * 0.28, belf["oh"], tw * 0.20, mat="cavity",
+                   ring="white_stone", blocks=6, depth=10.0)
+    b.box_bottom((tw + 16.0, tw + 16.0, 16.0), (tx, ty),
+                 plinth_h + (th - plinth_h), "white_stone")
+    cone_roof(b, tx, ty, plinth_h + (th - plinth_h) + 16.0, tw / 2.0 * 1.16, sh,
+              "slate", segments=8)
+    b.cylinder((tx, ty, plinth_h + (th - plinth_h) + 16.0 + sh + 8.0), 7.0, 18.0,
+               "iron", segments=8)
+
+    ob = b.to_object()
+    spec = _mk("abbey", width_cells, {
+        "depth": D, "plinth_h": plinth_h, "wall_h": wing_h, "eave_h": eave,
+        "rise": rise, "total_h": plinth_h + th + sh + 16.0, "overhang": over,
+        "roof_t": 16.0, "storey_h": [wing_h * 0.5, wing_h * 0.5],
+        "door": (pw, DOOR_H), "door_x": tx,
+        "roof_mat": "slate",
+        "window": (14.0, 38.0, eave - 112.0 - plinth_h),
+        "ratio_band": None,
+        "reason": "超宽连体天际线件：塔+翼楼一体（塔超出翼楼屋脊属竖向 landmark，豁免）",
+        "material": "厚石墙 / 石板瓦长坡顶（修女院禁域翼楼）"})
+    return ob, spec
+
+
 ASSEMBLERS["cathedral"] = assemble_cathedral
+ASSEMBLERS["abbey"] = assemble_abbey
 ASSEMBLERS["tower"] = assemble_tower
 ASSEMBLERS["gatehouse"] = assemble_gatehouse
 ASSEMBLERS["lighthouse"] = assemble_lighthouse
@@ -3414,9 +3533,9 @@ def assemble_cottage(width_cells=8):
 
 TAVERN_TIERS = {
     # 带门层 200px = 2.62m（门占 75%，§8.7 点名"门占层高 74% 才自然"）
-    12: dict(D=208.0, plinth=18.0, storey=200.0, rise=104.0, wt=20.0, door_w=58.0,
+    12: dict(D=208.0, plinth=18.0, storey=229, rise=104.0, wt=20.0, door_w=58.0,
              jetty=10.0, ch_w=30.0, dorm_x=(0.26, -0.26), dorm_f=0.60, dorm_h=60.0),
-    16: dict(D=232.0, plinth=20.0, storey=200.0, rise=120.0, wt=22.0, door_w=58.0,
+    16: dict(D=232.0, plinth=20.0, storey=229, rise=120.0, wt=22.0, door_w=58.0,
              jetty=11.0, ch_w=34.0, dorm_x=(0.28, -0.28), dorm_f=0.62, dorm_h=62.0),
 }
 
@@ -3554,9 +3673,9 @@ def wall_blocks(dx, door_w, wins, frame=8.0, extra=()):
 
 BAKERY_TIERS = {
     # 带门层 200px = 2.62m（门占 75%）
-    8: dict(D=160.0, plinth=16.0, wall=200.0, rise=96.0, wt=18.0, door_w=52.0,
+    8: dict(D=160.0, plinth=16.0, wall=221, rise=96.0, wt=18.0, door_w=52.0,
             ch_w=34.0, ch_d=30.0, ch_up=22.0, win_scale=1.25),
-    12: dict(D=196.0, plinth=18.0, wall=200.0, rise=104.0, wt=20.0, door_w=56.0,
+    12: dict(D=196.0, plinth=18.0, wall=221, rise=104.0, wt=20.0, door_w=56.0,
              ch_w=34.0, ch_d=30.0, ch_up=30.0, win_scale=1.25),
 }
 
@@ -3643,10 +3762,10 @@ def assemble_bakery(width_cells=8):
 SHOP_TIERS = {
     # 8 格 = 单层店面 + 阁楼膝墙；带门层 200px = 2.62m（门占 75%），
     # 屋面 rise 收到 84（坡 33°）以把"店面 + 膝墙 + 坡顶"压在 8 格剪影带内。
-    8:  dict(D=156.0, plinth=16.0, storey=200.0, knee=42.0, rise=84.0, wt=18.0,
+    8:  dict(D=156.0, plinth=16.0, storey=221, knee=42.0, rise=84.0, wt=18.0,
              door_w=52.0, front_cx=50.0, front_w=112.0, rail_drop=24.0,
              pier_win=None),
-    12: dict(D=196.0, plinth=18.0, storey=200.0, rise=104.0, wt=20.0, door_w=56.0,
+    12: dict(D=196.0, plinth=18.0, storey=221, rise=104.0, wt=20.0, door_w=56.0,
              jetty=10.0, front_cx=78.0, front_w=180.0, rail_drop=22.0,
              pier_win=-51.0),
 }
@@ -3786,8 +3905,8 @@ def assemble_shop(width_cells=8):
 
 GUILDHALL_TIERS = {
     # 带门层 200px = 2.62m（门占 75%）；两层半 = 2×200 + 山墙阁层 → 剪影比自带口径
-    12: dict(D=210.0, plinth=20.0, storey=200.0, rise=120.0, wt=22.0, door_w=58.0),
-    16: dict(D=240.0, plinth=22.0, storey=200.0, rise=130.0, wt=24.0, door_w=58.0),
+    12: dict(D=210.0, plinth=20.0, storey=260, rise=120.0, wt=22.0, door_w=58.0),
+    16: dict(D=240.0, plinth=22.0, storey=260, rise=130.0, wt=24.0, door_w=58.0),
 }
 
 
@@ -4018,7 +4137,7 @@ def assemble_smithy2(width_cells=8):
     W = width_cells * CELL
     D, post_h, rise, post_s = t["D"], t["post_h"], t["rise"], t["post"]
     roof_t, door_w = t["roof_t"], t["door_w"]
-    over = round(W * 0.225)                   # 更大棚檐（仍在 §8.2 18~23% 带内）
+    over = int(EAVE_ABS_MAX)                  # 棚檐（绝对封顶口径；旧宽百分比已废）
     yf = -D / 2.0 + post_s / 2.0
     yb = D / 2.0 - post_s / 2.0
     half = D / 2.0 + over
@@ -4684,8 +4803,8 @@ def assemble_alchemy(width_cells=8):
 
 LIBRARY_TIERS = {
     # 带门层 200/202px = 2.62/2.64m（门占 75/74%）
-    12: dict(D=204.0, plinth=20.0, storey=200.0, rise=94.0, wt=22.0, door_w=58.0),
-    16: dict(D=236.0, plinth=22.0, storey=202.0, rise=140.0, wt=24.0, door_w=60.0),
+    12: dict(D=204.0, plinth=20.0, storey=260, rise=94.0, wt=22.0, door_w=58.0),
+    16: dict(D=236.0, plinth=22.0, storey=260, rise=140.0, wt=24.0, door_w=60.0),
 }
 
 
@@ -4777,9 +4896,9 @@ def assemble_library(width_cells=12):
 # ---------------------------------------------------------------- 8.4 兵营 barracks
 
 BARRACKS_TIERS = {
-    12: dict(D=208.0, plinth=24.0, storey=200.0, rise=86.0, wt=22.0, door_w=58.0,
+    12: dict(D=208.0, plinth=24.0, storey=221, rise=86.0, wt=22.0, door_w=58.0,
              leaf=58.0, porch_w=196.0),
-    16: dict(D=240.0, plinth=26.0, storey=202.0, rise=92.0, wt=24.0, door_w=60.0,
+    16: dict(D=240.0, plinth=26.0, storey=221, rise=92.0, wt=24.0, door_w=60.0,
              leaf=60.0, porch_w=220.0),
 }
 
@@ -5435,9 +5554,9 @@ def assemble_council_hall(width_cells=8):
 TOWNHALL_TIERS = {
     # 两层（带门层 205）~两层半（阁楼层）；12 格 = 钟挂立面，16 格 = 脊上钟楼（升级识别件）
     # 12 格档 rise 94：384 宽下剪影带上限 576 挤得紧（檐 430 + 坡 + 山墙端点投影）
-    12: dict(D=208.0, plinth=20.0, storey=205.0, rise=94.0, wt=22.0,
+    12: dict(D=208.0, plinth=20.0, storey=260, rise=94.0, wt=22.0,
              portal=122.0, leaf=58.0, turret=False, low_mat="stone"),
-    16: dict(D=236.0, plinth=22.0, storey=205.0, rise=122.0, wt=24.0,
+    16: dict(D=236.0, plinth=22.0, storey=260, rise=122.0, wt=24.0,
              portal=122.0, leaf=58.0, turret=True, low_mat="brick"),
 }
 
@@ -6023,9 +6142,9 @@ def assemble_belfry(width_cells=4):
 MINT_TIERS = {
     # 砖石混构两层 + 铁栅重门 + 高窗铁栅 + 铸币烟囱 + 卫兵位（"安全重地"封闭感）
     # 12 格档：rise 86 + 烟囱只出脊 10（384 宽剪影带 ≤576，烟囱铁箍读"工业"即可）
-    12: dict(D=212.0, plinth=22.0, storey=200.0, rise=86.0, wt=22.0, door_w=56.0,
+    12: dict(D=212.0, plinth=22.0, storey=260, rise=86.0, wt=22.0, door_w=56.0,
              ch_w=44.0, ch_up=10.0),
-    16: dict(D=232.0, plinth=24.0, storey=205.0, rise=100.0, wt=24.0, door_w=56.0,
+    16: dict(D=232.0, plinth=24.0, storey=260, rise=100.0, wt=24.0, door_w=56.0,
              ch_w=48.0, ch_up=44.0),
 }
 
@@ -6401,10 +6520,10 @@ def assemble_waystation(width_cells=6):
 INN_POST_TIERS = {
     # 客栈驿站（驿站族 Lv2，town 起；townlet 过渡提前解锁见布局器）：两层主楼 +
     # 大院拱门（真洞双扇）+ 前凸马厩翼（开敞厩位）+ 驿号旗 + 红灯笼对 + 铁艺挂招牌。
-    12: dict(D=204.0, plinth=18.0, storey=200.0, rise=104.0, wt=20.0, door_w=56.0,
+    12: dict(D=204.0, plinth=18.0, storey=229, rise=104.0, wt=20.0, door_w=56.0,
              jetty=10.0, wing_w=120.0, wing_fwd=64.0, wing_h=150.0, wing_rise=44.0,
              gate_w=104.0, gate_head=36.0, flag_h=252.0),
-    16: dict(D=232.0, plinth=20.0, storey=202.0, rise=118.0, wt=22.0, door_w=58.0,
+    16: dict(D=232.0, plinth=20.0, storey=229, rise=118.0, wt=22.0, door_w=58.0,
              jetty=12.0, wing_w=138.0, wing_fwd=72.0, wing_h=156.0, wing_rise=48.0,
              gate_w=112.0, gate_head=40.0, flag_h=264.0),
 }
@@ -7196,9 +7315,9 @@ def assemble_observatory(width_cells=8):
 FLOWER_SHOP_TIERS = {
     # 花店（town 起，窗口标提案/待定——文档原口径为 shop 载体 DRESS，本批按任务指令落独立件）：
     # 大开间店面 + 实布雨篷 + 悬篮 + 窗台花箱 + 桶栽组。识别度全靠花（花量是硬指标）。
-    8:  dict(D=158.0, plinth=16.0, storey=200.0, knee=44.0, rise=80.0, wt=18.0,
+    8:  dict(D=158.0, plinth=16.0, storey=221, knee=44.0, rise=80.0, wt=18.0,
              door_w=54.0, front_w=116.0, front_cx=44.0, awn_z=150.0, awn_d=54.0),
-    12: dict(D=196.0, plinth=18.0, storey=200.0, rise=96.0, wt=20.0, door_w=56.0,
+    12: dict(D=196.0, plinth=18.0, storey=221, rise=96.0, wt=20.0, door_w=56.0,
              jetty=10.0, front_w=178.0, front_cx=64.0, awn_z=152.0, awn_d=58.0),
 }
 

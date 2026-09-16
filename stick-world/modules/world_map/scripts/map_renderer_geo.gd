@@ -89,8 +89,13 @@ static func edge_touches_lake_fast(data: L1WorldData, a: Vector2, b: Vector2, to
 static func build_cached_geometry(h) -> void:
 	h._cached_segs = PackedVector2Array()
 	h._cached_l1_closed = PackedVector2Array()
-	h._cached_neighbor_outlines = []
-	h._river_lines = []
+	# 宿主缓存为元素类型化数组（Array[PackedVector2Array]）：跨脚本动态赋普通 []
+	# 会被运行时拒绝（Invalid assignment），类型化数组须 clear() 就地清空
+	# 宿主缓存为元素类型化数组（Array[PackedVector2Array]）：跨脚本动态赋普通 []
+	# 会被运行时拒绝（Invalid assignment）且中止本函数，后续构建全部跳过；
+	# 类型化数组须 clear() 就地清空
+	h._cached_neighbor_outlines.clear()
+	h._river_lines.clear()
 	h._river_widths = PackedFloat32Array()
 	# 邻居空心轮廓（闭合折线缓存）
 	for ni in h._data.neighbors.size():
@@ -134,8 +139,8 @@ static func build_cached_geometry(h) -> void:
 			h._river_widths.append(maxf(float(rv.get("w", 2.0)), h.RIVER_MIN_WIDTH))
 	# 道路分级（R6 实线分级，废 F5 虚线切分）：土路细 / 官道粗；
 	# 仅交通模式矢量回退时绘制（正常观感走 l1_travel.png 贴图）
-	h._road_dirt_lines = []
-	h._road_paved_lines = []
+	h._road_dirt_lines.clear()
+	h._road_paved_lines.clear()
 	for rd in h._data.roads:
 		var rdpts: PackedVector2Array = rd.get("pts", PackedVector2Array())
 		if rdpts.size() < 2:

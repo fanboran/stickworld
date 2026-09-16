@@ -243,7 +243,7 @@ variables = {
 		{
 			"id": "var_run_speed",
 			"category": "movement",
-			"value": 208,
+			"value": 320,
 			"min": 40,
 			"max": 800,
 			"step": 5,

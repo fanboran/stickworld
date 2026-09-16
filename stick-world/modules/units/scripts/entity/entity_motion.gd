@@ -22,6 +22,9 @@ func _init(entity: Node) -> void:
 # ─────────────────────────────── 运动常量 ────────────────────────────────
 ## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT）
 const WALK_ANIM_BASE: float = 100.0
+## run 动画基准速率（跑速=RUN_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT，即原校准点；
+## 动画速率随 RUN_SPEED 等比联动——跑得越快步频越快，防滑步）
+const RUN_ANIM_BASE: float = 208.0
 ## 动画整体播放倍率（×1.4 加速，与 visual_controller.gd 一致）
 const ANIM_SPEED_MULT: float = 1.4
 ## 切到 idle 的速度阈值（减速停止判定；原实体常量随减速公式迁入）
@@ -89,7 +92,7 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 		_entity._current_speed = run_cap
 		if not attacking:
 			_entity._visual.play("run")
-			_entity._visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
+			_entity._visual.set_anim_speed(run_cap / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 	else:
 		# 不允许跑时，速度封顶在 walk_cap（受地形影响）
 		_entity._current_speed = minf(_entity._current_speed, walk_cap)
@@ -218,7 +221,7 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 			_entity._is_running = true
 			_entity._current_speed = _entity.RUN_SPEED * _terrain_speed_mult() * _entity.move_speed_mult
 			_entity._visual.play("run")
-			_entity._visual.set_anim_speed(1.0 * ANIM_SPEED_MULT)
+			_entity._visual.set_anim_speed(_entity._current_speed / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 		else:
 			_handle_acceleration(delta, allow_run)
 		_entity.velocity = dir * _entity._current_speed

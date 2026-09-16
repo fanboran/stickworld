@@ -29,8 +29,8 @@ extends CharacterBody2D
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 基础行走速度（px/s）—— ×1.6 加速后
 var WALK_SPEED: float = 160.0
-## 奔跑速度—— ×1.6 加速后
-var RUN_SPEED: float = 208.0
+## 奔跑速度（= 步行 ×2：现实中跑步约为步行两倍步速，run≈2×walk 是动作游戏通行比例）
+var RUN_SPEED: float = 320.0
 ## 火柴人渲染缩放（对齐 stickman_test.BASE_SCALE * 1.5，适配 DESIGN_HEIGHT=1080）
 var BASE_SCALE: float = 0.5
 ## 主手武器类型 -> 攻击动画名：单一真相源在 StickmanAnims.WEAPON_ATTACK_ANIM。

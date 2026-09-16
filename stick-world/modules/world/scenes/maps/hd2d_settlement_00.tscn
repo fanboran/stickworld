@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://c1hd2dsettl00"]
+[gd_scene format=3 uid="uid://c2j2lx4n5x5e4"]
 
 [ext_resource type="Script" path="res://modules/world/scripts/map/hd2d_street_map.gd" id="1_hd2d"]
 

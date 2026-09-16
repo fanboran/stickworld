@@ -114,9 +114,9 @@ modules/units/
 
 实际移速 = 基速 × 多级乘子，逐级独立可调：
 
-- 基速：`WALK_SPEED=160` / `RUN_SPEED=208` px/s（balance.variables 的 var_walk_speed / var_run_speed / var_base_scale 可覆盖；附身时 Alt 切散步模式锁 walk）。
+- 基速：`WALK_SPEED=160` / `RUN_SPEED=320` px/s（run=步行×2 的常识比例；balance.variables 的 var_walk_speed / var_run_speed / var_base_scale 可覆盖；附身时 Alt 切散步模式锁 walk）。
 - 乘子链（`_apply_movement`）：地形倍率（地图查询）× `move_speed_mult`（行为档案 move_mult 写入，兵种机动性差异）× 状态减速（SLOW ×0.5）× 举盾倍率 × `armor_speed_factor`（背包装备三件 speed_penalty 乘积）。
-- 动画联动：walk 动画播放速率随速度缩放（速度 100px/s 对应 1.0×，整体再 ×1.4，下限 0.6×），低于 `IDLE_THRESHOLD=5` px/s 回 idle。
+- 动画联动：walk 动画播放速率随速度缩放（速度 100px/s 对应 1.0×，整体再 ×1.4，下限 0.6×）；run 动画速率随跑速等比缩放（跑速 208px/s 对应 1.0×，同 ×1.4），低于 `IDLE_THRESHOLD=5` px/s 回 idle。
 
 ### 朝向翻转
 

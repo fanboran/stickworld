@@ -3069,20 +3069,23 @@ ASSEMBLERS["windmill"] = assemble_windmill
 # ---------------------------------------------------------------- 7.x 大修道院 abbey
 
 ABBEY_TIERS = {
-    # 24 格超宽连体：左三分之一处高耸石塔（前凸）+ 向右一整条厚重石砌翼楼。
-    # 翼楼两层等高（各 210=2.75m，总 5.5m），上层一排 5 个小盲窗（禁域：极少开窗、
-    # 大面积光秃石墙），石板长坡顶。中世纪游戏常见的天际线 landmark。
-    24: dict(D=250.0, plinth=24.0, tw=118.0, th=640.0, spire_h=92.0,
-             wing_h=420.0, rise=128.0, wt=26.0, portal_w=56.0,
-             tower_x=-0.25),
+    # 24 格超宽连体：石塔**左端顶格**（塔左面=建筑左端，创始人 2026-09-16：塔顶格、
+    # 塔面与翼楼同一面墙）+ 向右一整条厚重石砌翼楼；塔占位段无屋顶——坡顶只在塔右侧
+    # 一整条（rise=100：下限=(进深/2+出檐)×tan26°≈90，再浅露背面坡——创始人实测发现；100 仍比旧 128 矮 22%）。塔身总高 ≈ 922 远超屋脊（548），
+    # "左塔右殿"天际线 landmark。翼楼两层等高（檐口 448），上层仅一排 4 个小盲窗
+    # （禁域：极少开窗、大面积光秃石墙），主入口开在塔底，翼楼无门。
+    24: dict(D=250.0, plinth=24.0, tw=150.0, th=770.0, spire_h=112.0,
+             wing_h=424.0, rise=100.0, wt=26.0, portal_w=56.0,
+             proj=2.0),
 }
 
 
 def assemble_abbey(width_cells=24):
-    """大修道院：左侧高耸石塔（前凸冲街）+ 向右延伸的巨型厚重石砌翼楼（修女院禁域读法）。
+    """大修道院：左侧高耸石塔（大幅前凸冲街，全高可见）+ 向右延伸的巨型厚重石砌翼楼。
 
-    翼楼外墙开窗极少（上层一排小盲窗），大面积光秃石墙；扶壁均布贴脚；
-    石板瓦长坡顶（脊沿 X，正面见坡面）。塔身细缝窗三层上收、钟楼双联盲拱、矮锥顶。
+    塔身：底层真拱主入口 + 四层细缝窗 + 角扶壁 + 白石腰线 + 钟楼双联盲拱 + 矮锥顶；
+    翼楼外墙无门无真窗，仅上层一排小盲窗，大面积光秃石墙；扶壁均布贴脚；
+    石板瓦长坡顶（脊沿 X，正面见坡面）。
     """
     t = ABBEY_TIERS[width_cells]
     W = width_cells * CELL
@@ -3090,22 +3093,25 @@ def assemble_abbey(width_cells=24):
     tw, th, sh = t["tw"], t["th"], t["spire_h"]
     wing_h, rise, wt = t["wing_h"], t["rise"], t["wt"]
     pw = t["portal_w"]
-    tx = W * t["tower_x"]                       # 塔心（偏左四分之一）
+    tx = -W / 2.0 + tw / 2.0                    # 塔左端顶格（塔左面=建筑左端）
+    proj = t["proj"]                            # 塔面嵌缝余量（≈0：与翼楼墙面共面一体）
     eave = plinth_h + wing_h
     ridge = eave + rise
     yf = -D / 2.0
-    ty = yf - 8.0 + tw / 2.0                    # 塔身前凸出翼楼墙面
+    ty = yf - proj + tw / 2.0                   # 塔面与翼楼前墙共面（proj=嵌缝 2）
+    ty_face = ty - tw / 2.0                     # 塔正立面 y
 
     b = Builder("abbey_w%d" % width_cells)
     contact_shadow(b, W, D, spread=34.0)
     plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0, lip=12.0)
 
-    # ---- 翼楼（整条厚重石墙，正面仅上层一排小盲窗）+ 扶壁均布
+    # ---- 翼楼（整条厚重石墙，无门，上层仅一排小盲窗）+ 扶壁均布
     room_shell(b, W, D, plinth_h, wing_h, wt, "stone_dark")
-    win_n = 5
+    win_n = 4
+    x0 = tx + tw / 2.0                            # 窗带从塔右缘起算（不浪费在塔后）
     for i in range(win_n):
-        cx = -W / 2.0 + tw + (W - tw) * (i + 0.5) / float(win_n)
-        blind_arch(b, cx, yf - wt / 2.0 - 1.0, eave - 118.0, 16.0, 44.0,
+        cx = x0 + (W / 2.0 - x0) * (i + 0.5) / float(win_n)
+        blind_arch(b, cx, yf - wt / 2.0 - 1.0, eave - 112.0, 14.0, 38.0,
                    mat="cavity", ring="white_stone", blocks=4, depth=8.0)
     nb = max(3, int(round(W / 190.0)))
     for i in range(nb):
@@ -3115,35 +3121,46 @@ def assemble_abbey(width_cells=24):
         buttress(b, bx, yf + 4.0, plinth_h, 28.0, wing_h * 0.58, depth=28.0,
                  cap_h=20.0, mat="stone")
 
-    # ---- 禁域小门（塔右侧贴塔脚，真拱洞 + 单扇木门 + 石框）
-    arched_doorway(b, tx + tw / 2.0 + 62.0, yf - 24.0, 30.0, pw, DOOR_H,
-                   mat="stone", profile="round", leaves=1, porch_w=pw + 44.0,
-                   sill=False, step=True)
-    step_stone(b, w=pw + 60.0, depth=26.0, h=10.0, x=tx + tw / 2.0 + 62.0,
-               y=yf - 58.0)
-
-    # ---- 翼楼长坡顶（脊沿 X，石板瓦）+ 檐口绝对封顶
+    # ---- 翼楼长坡顶：单段，自塔右面起到右端（塔占位段无屋顶——创始人口径）
     over = eave_over(W)
-    roof_gable(b, W, D, rise, over, "slate", z=eave, thickness=16.0,
+    sw = W / 2.0 - (tx + tw / 2.0)
+    scx = tx + tw / 2.0 + sw / 2.0
+    roof_gable(b, sw, D, rise, over, "slate", x=scx, z=eave, thickness=16.0,
                mat_under="wood_dark", cap_size=(26.0, 13.0), cap_mat="stone_dark",
-               eave_board=False)
-    gable_infill(b, W, D, rise, "stone_dark", z=eave, thickness=14.0)
+               eave_board=False, gable_overhang=0.0)   # 山墙出檐归零：左端终止于塔面（不穿模塔）
+    # 山墙填充：右端为外露山墙；左端三角落在塔右侧体内（同材质深色，接缝不可见）
+    gable_infill(b, sw, D, rise, "stone_dark", z=eave, thickness=14.0)
+    # ---- 屋面终止于塔身的收头：檐板端面用石砌肩块盖住（前檐交角）
+    b.box_bottom((10.0, 26.0, 54.0), (tx + tw / 2.0 + 3.0, yf - over + 8.0),
+                 eave - 14.0, "stone_dark")
 
-    # ---- 左侧高耸石塔（前凸，冲出翼楼屋脊）+ 细缝窗三层 + 钟楼双联盲拱 + 矮锥顶
+    # ---- 左侧高耸石塔（大幅前凸，冲出翼楼屋脊）----
     b.box_bottom((tw, tw, th - plinth_h), (tx, ty), plinth_h, "stone")
-    quoins(b, tw, tw, (th - plinth_h) * 0.92, "white_stone", tx, ty, plinth_h,
-           size=22.0, step=44.0, sides=False)
-    b.box_bottom((tw + 16.0, tw + 16.0, 16.0), (tx, ty),
-                 plinth_h + (th - plinth_h), "white_stone")
+    # 角扶壁：正面两角竖向墩（哥特塔角读法），暗色与亮塔身对比才读得出墩条
+    for sx in (-1.0, 1.0):
+        buttress(b, tx + sx * (tw / 2.0 - 15.0), ty_face + 16.0, plinth_h,
+                 36.0, th * 0.52, depth=34.0, cap_h=24.0, mat="stone_dark")
+    # 底层主入口（修道院门开在塔底，圆拱头真拱洞 + 白石拱券 + 单扇木门）
+    arched_doorway(b, tx, ty_face - 6.0, 30.0, pw, DOOR_H, head=22.0, mat="stone",
+                   profile="round", leaves=1, porch_w=pw + 36.0,
+                   sill=False, step=True)
+    step_stone(b, w=pw + 60.0, depth=26.0, h=10.0, x=tx, y=ty_face - 40.0)
+    # 细缝窗四层：中段三层（门上起、逐层升高）+ 高段一层（腰线之上）
     for k in range(3):
-        blind_arch(b, tx, ty - tw / 2.0 - 1.0, plinth_h + 150.0 + k * 130.0,
-                   10.0, 26.0, mat="cavity", depth=8.0)
+        blind_arch(b, tx, ty_face - 1.0, plinth_h + 166.0 + k * 130.0,
+                   13.0, 42.0, mat="cavity", depth=8.0)
+    # 白石腰线：钟楼段与塔身的分界（钟楼段读法）
+    b.box_bottom((tw + 14.0, tw + 14.0, 14.0), (tx, ty), th - 200.0, "white_stone")
+    blind_arch(b, tx, ty_face - 1.0, th - 160.0, 13.0, 42.0, mat="cavity", depth=8.0)
+    # 钟楼双联盲拱（加大加宽）+ 矮锥顶
     belf = win_rect("belfry")
     for sx in (-1.0, 1.0):
-        blind_arch(b, tx + sx * tw * 0.23, ty - tw / 2.0 - 1.0, th - 150.0,
-                   tw * 0.26, belf["oh"], tw * 0.18, mat="cavity",
+        blind_arch(b, tx + sx * tw * 0.25, ty_face - 1.0, th - 104.0,
+                   tw * 0.28, belf["oh"], tw * 0.20, mat="cavity",
                    ring="white_stone", blocks=6, depth=10.0)
-    cone_roof(b, tx, ty, plinth_h + (th - plinth_h) + 16.0, tw / 2.0 * 1.02, sh,
+    b.box_bottom((tw + 16.0, tw + 16.0, 16.0), (tx, ty),
+                 plinth_h + (th - plinth_h), "white_stone")
+    cone_roof(b, tx, ty, plinth_h + (th - plinth_h) + 16.0, tw / 2.0 * 1.16, sh,
               "slate", segments=8)
     b.cylinder((tx, ty, plinth_h + (th - plinth_h) + 16.0 + sh + 8.0), 7.0, 18.0,
                "iron", segments=8)
@@ -3153,9 +3170,9 @@ def assemble_abbey(width_cells=24):
         "depth": D, "plinth_h": plinth_h, "wall_h": wing_h, "eave_h": eave,
         "rise": rise, "total_h": plinth_h + th + sh + 16.0, "overhang": over,
         "roof_t": 16.0, "storey_h": [wing_h * 0.5, wing_h * 0.5],
-        "door": (pw, DOOR_H), "door_x": tx + tw / 2.0 + 62.0,
+        "door": (pw, DOOR_H), "door_x": tx,
         "roof_mat": "slate",
-        "window": (16.0, 44.0, eave - 118.0 - plinth_h),
+        "window": (14.0, 38.0, eave - 112.0 - plinth_h),
         "ratio_band": None,
         "reason": "超宽连体天际线件：塔+翼楼一体（塔超出翼楼屋脊属竖向 landmark，豁免）",
         "material": "厚石墙 / 石板瓦长坡顶（修女院禁域翼楼）"})

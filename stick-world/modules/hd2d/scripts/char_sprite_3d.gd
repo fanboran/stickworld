@@ -421,11 +421,12 @@ func set_weapon_type(wt: int) -> void:
 	var spr := instance.get_node_or_null("Sprite") as Sprite2D
 	if grip != null and spr != null:
 		instance.position = -(grip.position * spr.scale).rotated(spr.rotation)
-	# 挂杆（viewport 根，OutlineGroup 之外）：武器根持 GripPoint 补偿局部变换，
-	# RT2D 把手骨全局变换推给挂杆——武器完全复现"挂骨"位姿，但在描边组外
-	var stick_root := rig.get_parent()
-	if stick_root == null:
-		stick_root = viewport
+	# 挂杆（viewport 根，CanvasGroup 描边组之外）：武器根持 GripPoint 补偿局部
+	# 变换，RT2D 把手骨全局变换推给挂杆——武器完全复现"挂骨"位姿。挂载点必须
+	# 取 viewport 本身：rig 的父链 OutlineGroup 已整体收进 CanvasGroup（描边
+	# pass 作用于组缓冲），武器挂进去会吃白色外轮廓——细武器（矛杆/剑刃两三
+	# 像素宽）会被描边吞成"白武器"（创始人 2026-09-15：武器不应该有描边）。
+	var stick_root: Node = viewport
 	stick_root.add_child(instance)
 	_weapon_instance = instance
 	var follow := RemoteTransform2D.new()

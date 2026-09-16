@@ -200,9 +200,10 @@ const CLOUD_POOL := 14
 const BAND_SIDEWALK := Vector2(0.42, 1.95)  # 路肩（建筑根部 → 外缘；细条，占位）
 const PLAT_H := 0.65                        # 人行道台面高（格）≈17px：整面垫高，建筑落在台面上
 const BAND_ROAD := Vector2(1.9, 46.0)       # 道路（角色活动面，铺到画面外）
-## 野地草色（战场全幅草专用档；街景城外草地用淡草色 0.90/0.93/0.80——
-## 创始人 2026-09-17：城外近野/远条一色不断缝，深绿只留战场）
-const GRASS_WILD := Color(0.40, 0.58, 0.30)
+## 草地染色统一淡草档：草地贴图已换回创始人认可的原 AI 手绘源（自带花草
+## 笔触与配色），深绿染色档会把花草压成暗橄榄——战场全幅草与街景城外草带
+## 同用一档，野地草色一色（创始人 2026-09-17：AI 草地按原色呈现）
+const GRASS_TINT := Color(0.90, 0.93, 0.80)
 
 ## 城墙（创始人 2026-09-14：地图两侧到城墙，城镇由城墙收口；2026-09-15
 ## 城镇扩到 ±95——"没走多久就城门"；墙高升 10 格 town 档——"城墙这么矮"）。
@@ -982,7 +983,6 @@ func set_cam_x(cx: float) -> void:
 
 ## 3D 相机缩放镜像——与 2D CameraRig **逐像素 1:1**（创始人：紫箱水平移动
 ## 比角色快 / 蓝线与屏幕下边界不重合的根因 = 旧固定视宽 74 格在 1920 下
-## 25.9 px/格，与 2D 的 32 px/格差 19%，所有 2D 投影物相对 3D 世界漂移）。
 ## 25.9 px/格，与 2D 的 24 px/格差档，所有 2D 投影物相对 3D 世界漂移）。
 ## 可视宽（格）= 2D 可视世界宽 px / 24 = DESIGN_HEIGHT·宽高比/(24·user_zoom)；
 ## 纵向 px/格 随之同为 24。锚线 z_near 按"地面占屏幕下 1/3、天际线基线压
@@ -1018,15 +1018,6 @@ func set_cam_zoom(user_zoom: float) -> void:
 	var depth_bottom: float = _cam.position.y * sin(t) - cos(t) * (z_bottom - _cam.position.z)
 	var back: float = maxf(0.0, CAM_NEAR_SAFE - depth_bottom)
 	_cam.position += Vector3(0.0, sin(t), cos(t)) * back
-=======
-	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)   # = DESIGN_HEIGHT/(24·uz)
-	# 构图锚（格口径，换轨不变）：旧 zoom=1 基准视高 1080/32 = 33.75 格——
-	# 天际线基线压 1/3 线的世界锚线。换轨后默认档 h_v=45 格（旧 0.75 档），
-	# 分界线随之仍压屏幕 1/4 线；动这个数 = 动默认构图（创始人契约）。
-	var h_anchor: float = DESIGN_HEIGHT / 32.0
-	var z_near: float = SKYLINE_Z + h_anchor / (3.0 * sin(t))
-	_cam.position.z = z_near - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
->>>>>>> agent/hd2d-unit-24
 	# 景深与缩放解耦：far blur 起点钉在**世界线**上——天际线基线向镜头前移
 	# DOF_FAR_START_AHEAD 格（第二排从这条线起吃半档模糊；创始人：第二排景深要明显）。
 	# dof_blur_far_distance 是相机本地距离，缩放移动相机后若不同步换算，
@@ -1224,8 +1215,8 @@ func _build_world() -> void:
 		# 会在深缩放档露出底沿外的天幕蓝条（创始人 2026-09-17 指认的"缩太小
 		# 出蓝条"在战场/资源图的另一半成因）；常态缩放档这段在画面外零开销。
 		# 木本杂物已清空
-		_add_ground_plane_at("grass_alb_128.png", 0.0, 600.0,
-			0.0, 210.0, 0.0, 8.0, GRASS_WILD)
+			_add_ground_plane_at("grass_alb_128.png", 0.0, 600.0,
+				0.0, 210.0, 0.0, 8.0, GRASS_TINT)
 	else:
 		# 远景地面带（与台面同高 y=PLAT_H，**与台面同一块面、代码里同一段**）：
 		# 城内段 flagstone 石板从第三层楼根拉通到台面外缘（创始人 2026-09-16：
@@ -1256,8 +1247,8 @@ func _build_world() -> void:
 	var fb_tex := _tex_abs(_temp + GROUND_DIR + "grass_alb_128.png")
 	if fb_tex != null:
 		fb_mat.albedo_texture = fb_tex
-	# 战场=野地绿档；街景=淡草色（与城外草地同色）
-	fb_mat.albedo_color = GRASS_WILD if battlefield else Color(0.90, 0.93, 0.80)
+	# 战场与街景同用淡草档（草色一色，见 GRASS_TINT 注）
+	fb_mat.albedo_color = GRASS_TINT
 	fb_mat.roughness = 0.95
 	fb_mat.uv1_triplanar = true
 	fb_mat.uv1_world_triplanar = true

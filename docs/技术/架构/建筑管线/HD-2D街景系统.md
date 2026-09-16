@@ -207,7 +207,7 @@ PostProcessLayer 的屏幕太阳 glow+streak+ghost，要它沿弧线到处移动
 缩放时钉死屏幕底沿。
 
 **战场分支契约（`set_cam_zoom` battlefield 分支）**：战场无背景楼群，纵向取景改钉
-**地平线 = 绿草地皮远端 `BF_HORIZON_Z`（z=0，即行走带后界 688px）**——地平线压
+**地平线 = 绿草地皮远端 `BF_HORIZON_Z`（z=0，即行走带后界 516px）**——地平线压
 **屏幕上 1/3 线**，地面占下 **2/3**、天空占上 1/3，任意缩放档成立
 （`P.z = BF_HORIZON_Z + h_v/(6·sinθ) + P.y/tanθ`）。实测锚：ground z=0 unproject =
 screen y 360（1080p）。街景分支（下 1/3 契约）只服务有楼群填充中上段的城内图。
@@ -374,7 +374,7 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
   虚方法（基类 false=2D 图脚部口径、内收 foot_offset），`Hd2dStreetMap` 覆写
   true；深端取值走 `_walk_deep_y()`（黄线以下就是可行走地面范围——创始人
   2026-09-15：两楼之间应能一路走到黄线，碰撞箱顶到黄线才停；+2px 仅防与
-  bg1 卡共面闪烁，非玩法余量）。战场图覆写 `_walk_deep_y` 维持旧带 688（战斗
+  bg1 卡共面闪烁，非玩法余量）。战场图覆写 `_walk_deep_y` 维持旧带 516（战斗
   阵型按旧域调的）。城墙碰撞带随 `DEEP_WALK_Y` 拉通全深（防台后区穿墙），
   出口触发器纵深跨整个可行走域。建筑 footprint 是真正的深端障碍。
 
@@ -434,7 +434,7 @@ offset/limits 变化时手搓漂、变换不会）。
   装配进 UIRoot top_center 槽）**：滑块量程=**显示百分比域，整 10 档**——
   70%~260%、步进 10%（20 档刻度，SketchHSlider 自绘）；显示基准 `ZOOM_BASE
   = 1.0` → **100%**（默认档恰在刻度上）。拖动 = `set_user_zoom(显示% ×
-  ZOOM_BASE / 100)`（70%→0.525、260%→1.95，均落在 CameraRig 夹制区间内）；
+  ZOOM_BASE / 100)`（70%→0.7、260%→2.6，均落在 CameraRig 夹制区间内）；
   滚轮缩放后 `_process` 每帧 `sync_from_camera` 把句柄吸附最近整 10 刻度、
   标签读相机真实值。ui_global 不反向依赖 world——`CameraRig.ZOOM_*` 不取，
   夹制由 CameraRig 自身保证。

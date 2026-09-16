@@ -18,6 +18,11 @@ const AMBIENT_SPARKLE := "ambient_sparkle"
 ## 软圆点贴图缓存：{直径: ImageTexture}
 static var _dot_cache: Dictionary = {}
 
+## 战斗特效总闸（观察场等纯观演场景关闭用）：false 时打击火花/法术爆炸/
+## 伤害数字/挥砍弧等战斗反馈特效不再生成（环境类特效不受此闸控制）。
+## 默认 true = 零回归；消费场景在 _ready 置 false、_exit_tree 恢复。
+static var battle_fx_enabled: bool = true
+
 
 ## 创建一次性爆发粒子节点（不进树；调用方负责 add_child + global_position）
 static func create_burst(effect_id: String) -> GPUParticles2D:
@@ -284,7 +289,7 @@ static var _damage_text_pool: Array = []
 ## （字号/偏移按相机 zoom 反向放大并钳制，拉远观战大军时数字不缩成蚂蚁）；
 ## 0.7s 上浮淡出后回池。combat 管线（DamagePipeline.apply）结算后调用；fx 挂目标宿主层，不进战斗逻辑。
 static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit: bool) -> void:
-	if tree == null or tree.current_scene == null:
+	if tree == null or tree.current_scene == null or not battle_fx_enabled:
 		return
 	pos = remap_pos(tree, pos)
 	var label: Label = null
@@ -341,7 +346,7 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 ## 挥砍剑光弧 —— 命中帧在攻击者朝向画一道渐隐弧光（白/金），0.16s 消散。
 ## angle_rad: 弧光朝向（世界角）；flip_v: 攻击者面朝左时镜像弧线。
 static func spawn_slash_arc(tree: SceneTree, pos: Vector2, angle_rad: float, crit: bool = false) -> void:
-	if tree == null or tree.current_scene == null:
+	if tree == null or tree.current_scene == null or not battle_fx_enabled:
 		return
 	pos = remap_pos(tree, pos)
 	var arc := Polygon2D.new()

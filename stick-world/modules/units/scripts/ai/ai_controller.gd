@@ -216,7 +216,13 @@ func _make_decision() -> void:
 			_ordered_params = {}
 		else:
 			var cur_behavior: String = _state_machine.get_current_behavior_name()
-			if cur_behavior == _ordered_behavior:
+			# 接敌即战（创始人 2026-09-17：敌人绕过前排无人拦截的根因 =
+			# 命令覆盖无条件压制战斗，行军路上贴脸也不出手）：号令行军中
+			# 敌人进武器射程 → 战斗抢占号令；打完/目标亡后命令经下方
+			# "被中断"分支重新下达续行，号令语义不丢
+			if _enemy_in_weapon_range():
+				pass   # 落入下方战斗决策（attack 抢占号令）
+			elif cur_behavior == _ordered_behavior:
 				if not _state_machine.is_current_finished():
 					return  # 命令执行中，保持
 				# 命令完成，清除并转入正常决策
@@ -277,6 +283,36 @@ func _make_decision() -> void:
 	else:
 		# 未知行为，回 idle
 		_state_machine.travel("idle")
+
+
+## 接敌即战闸（号令行军中）：敌人是否已进武器射程（真贴脸可出手）。
+## 只做近距筛查不建行为——目标选择交由战斗行为自己的索敌链
+## （分配 > 集火名额 > 各自寻敌）。无武器/无射程/未参战 = false。
+func _enemy_in_weapon_range() -> bool:
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	var weapon: Node = _entity.get_weapon() if _entity.has_method("get_weapon") else null
+	if weapon == null or not ("attack_range" in weapon):
+		return false
+	var rng: float = float(weapon.get("attack_range"))
+	if rng <= 0.0:
+		return false
+	var bi: Node = _entity.get_battle_instance() if _entity.has_method("get_battle_instance") else null
+	if bi == null or not is_instance_valid(bi):
+		return false
+	var f: int = _entity.get_faction() if _entity.has_method("get_faction") else 0
+	if f == 0 or not bi.has_method("get_alive_enemies_of"):
+		return false
+	var pos: Vector2 = _entity.global_position
+	var r2: float = (rng * 1.1) * (rng * 1.1)   # 1.1 余量覆盖帧内位移
+	for e in bi.get_alive_enemies_of(f):
+		if e == null or not is_instance_valid(e):
+			continue
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		if pos.distance_squared_to(e.global_position) <= r2:
+			return true
+	return false
 
 
 ## 尝试战斗决策。当 entity 参战（有激活的 battle_instance）时返回 true 并切换到战斗行为。

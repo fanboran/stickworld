@@ -83,6 +83,10 @@ func burst(effect_id: String, global_pos: Vector2) -> void:
 static func spawn_burst(tree: SceneTree, effect_id: String, global_pos: Vector2) -> void:
 	if tree == null:
 		return
+	# 战斗特效总闸（观察场关闭用；环境类特效走各自入口不受此闸控制）
+	if not FxLibrary.battle_fx_enabled and (effect_id == FxLibrary.HIT_SPARK \
+			or effect_id == FxLibrary.MAGIC_BLAST):
+		return
 	global_pos = FxLibrary.remap_pos(tree, global_pos)
 	var pool := tree.get_first_node_in_group("fx_pool") as FxPool
 	if pool == null:

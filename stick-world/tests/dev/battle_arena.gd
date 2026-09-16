@@ -19,7 +19,7 @@ extends Node
 ##
 ## 相机（审计 P0-6）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑全可用），
 ##   居中模式跟随"质心代理"（每帧 lerp）+ 开纵向跟随（rig 侧钳在行走带内）；
-##   缩放 0.75（缩放条 100% 档）——3D 侧战场契约把地平线钉屏幕上 1/3 线，
+##   缩放 1.0（缩放条 100% 档，24px 换轨基准）——3D 侧战场契约把地平线钉屏幕上 1/3 线，
 ##   地面恒占 2/3（HD-2D街景系统.md §4.1）。
 ##
 ## 热键：ESC 返回主菜单 · R 重新开局 · 空格 暂停/继续（TimeManager 全局暂停）。
@@ -40,7 +40,8 @@ const W_MERIC: int = 5
 ## 每方编制 rows 自前向后；front_x = 班最前排相对团队中心的 x，攻方朝 +x，
 ## advance_x = 该班推进目标相对中线的 x，**正值=越过中线（敌方向），负值=停在己方侧**；
 ## follow_gap > 0 = 锚定跟随前一班（编队动态跟队），不下推进号令）：
-## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛先锋卡线、剑锚矛 gap150、火力锚剑 gap150
+## 兵种射程见 weapon_mount WEAPON_RANGE（矛200 / 剑80 / 杖600（施法）/ 弓1400）
+## → 矛先锋卡线、剑锚矛 gap150、火力锚剑 gap150（观察场疏朗化取旧 2D 场值）
 ##
 ## 对战预设（控制面板 1/2/3 切换，重开保持所选档位）：
 const PRESETS: Array = [
@@ -48,15 +49,15 @@ const PRESETS: Array = [
 		"name": "遭遇战·16",
 		"squads": [
 			{
-				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"name": "矛兵班", "front_x": 112.5, "advance_x": 45.0, "follow_gap": 0.0,
 				"rows": [{ "weapon": W_SPEAR, "count": 8 }],
 			},
 			{
-				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
+				"name": "剑士班", "front_x": 63.75, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SWORD, "count": 4 }],
 			},
 			{
-				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
+				"name": "火力班", "front_x": -33.75, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_STAFF, "count": 1 }, { "weapon": W_BOW, "count": 3 }, { "weapon": W_MERIC, "count": 1 }],
 			},
 		],
@@ -65,15 +66,15 @@ const PRESETS: Array = [
 		"name": "标准战役·48",
 		"squads": [
 			{
-				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"name": "矛兵班", "front_x": 112.5, "advance_x": 45.0, "follow_gap": 0.0,
 				"rows": [{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 }],
 			},
 			{
-				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
+				"name": "剑士班", "front_x": 63.75, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 }],
 			},
 			{
-				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
+				"name": "火力班", "front_x": -33.75, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
@@ -82,28 +83,28 @@ const PRESETS: Array = [
 		"name": "大军压境·96",
 		"squads": [
 			{
-				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"name": "矛兵班", "front_x": 112.5, "advance_x": 45.0, "follow_gap": 0.0,
 				"rows": [
 					{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 },
 					{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 },
 				],
 			},
 			{
-				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
+				"name": "剑士班", "front_x": 63.75, "follow_gap": 150.0,
 				"rows": [
 					{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 },
 					{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 },
 				],
 			},
 			{
-				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
+				"name": "火力班", "front_x": -33.75, "follow_gap": 150.0,
 				"rows": [
 					{ "weapon": W_STAFF, "count": 8 },
 					{ "weapon": W_BOW, "count": 8 }, { "weapon": W_BOW, "count": 8 },
 				],
 			},
 			{
-				"name": "治疗班", "front_x": -135.0, "follow_gap": 150.0,
+				"name": "治疗班", "front_x": -101.25, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_MERIC, "count": 2 }],
 			},
 		],
@@ -111,14 +112,19 @@ const PRESETS: Array = [
 ]
 ## 当前预设下标（static：场景 reload 重开/切预设后保持所选档位）
 static var _preset_idx: int = 1
-## 排间距（px，SWL 队列：单位间约 1 个身位余量，此前 58 贴脸）
-const ROW_GAP: float = 110.0
-## 排内左右间距（px）
-const LINE_GAP: float = 90.0
-## 左右两团出生中心 x 相对地图中线的偏移。观战缩放 0.75（缩放条 100% 档）下
-## 半屏 1280px——偏移 1400 时两军最前排（front_x 150）落在 ±1250，开场即在
-## 画面两缘可见、对冲收向中线（"两军拉满全屏"）
-const TEAM_OFFSET_X: float = 1400.0   # HD-2D 战场 88 格深带
+## 排间距（px，沿推进方向 x；x 不受俯角压缩，屏上 = 值×缩放）。班与班、
+## 排与排的纵深梯次：24px 换轨旧 82.5 → 拉开到 130 配合列距疏朗化
+const ROW_GAP: float = 130.0
+## 排内左右间距（px，沿纵深 y 展开）。战场纵深带 516..2556（2040px）：
+## 8 列 ×220=1540 居中铺开。列距必须**补偿俯角透视**——纵深被压扁到约
+## 1/3（k≈0.33×缩放），130px 列距在屏上只有 ~43px，队伍叠成一条（创始人
+## 2026-09-17：垂直距离要拉开）；220px 列距屏上 ~73px，列与列站得开
+const LINE_GAP: float = 220.0
+## 左右两团出生中心 x 相对地图中线的偏移。观战缩放 1.0（缩放条 100% 档，
+## 24px 换轨基准）下半屏 960px——偏移 450 时两军最前排（front_x 112.5）落
+## 在 ±337.5，全军（含纵深后队，48 预设后端 ±892.5）完整在画面内、对冲
+## 收向中线在中景开打（对齐旧 2D 观察场"两军全景居中"构图）
+const TEAM_OFFSET_X: float = 450.0   # 24px 换轨；旧 2D 场口径两军间距 800×0.55 缩放
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
@@ -141,11 +147,18 @@ var _cover: ColorRect = null
 
 
 func _ready() -> void:
+	# 战斗特效关闭（创始人 2026-09-17：战场特效关闭）——纯观演要看清队列与
+	# 交战本身；打击火花/法术爆炸/伤害数字/挥砍弧不再生成，退出时恢复
+	FxLibrary.battle_fx_enabled = false
 	_build_cover()
 	_game_root = _GameRootScene.instantiate()
 	add_child(_game_root)
 	_build_hud()
 	_spawn_and_start.call_deferred()
+
+
+func _exit_tree() -> void:
+	FxLibrary.battle_fx_enabled = true
 
 
 func _spawn_and_start() -> void:
@@ -179,7 +192,10 @@ func _spawn_and_start() -> void:
 	for i in 3:
 		await get_tree().process_frame
 	var mid_x: float = (map.map_left + map.map_right) * 0.5
-	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
+	# 出生纵向 = 行走带正中（ground_y..walk_front_y）：旧公式把前缘余量
+	# （ground_bottom = walk_front_y+195）也算进可站深度，把整军吊向纵深——
+	# 头顶到地平线、画面偏上；带宽中点让 8 列纵深恰好在带内居中铺开
+	var spawn_y: float = map.ground_y + (map.walk_front_y - map.ground_y) * 0.5
 	# 接管相机（审计 P0-6）：不停用 rig——滚轮缩放/边界钳制/平滑全保留；
 	# 居中模式跟随"质心代理"；缩放让可走带（ground band）恰好占满屏高
 	var rig: Node = _game_root.get("camera_rig")
@@ -189,10 +205,12 @@ func _spawn_and_start() -> void:
 		# 南漂时大军沉出屏幕下沿；RTS 观战开 Y 跟随，rig 侧带内钳制）
 		if rig.has_method("set_follow_target_y"):
 			rig.set_follow_target_y(true)
-		# 缩放取 HD-2D 构图契约基准档 0.75（缩放条读 100%；设 1.0 会显示 133%
-		# ——创始人 2026-09-16：观察场缩放条该是 100%）
+		# 缩放取契约基准档 1.0（缩放条 100%）：2D 画布↔3D 锚线对齐只在基准档
+		# 成立（战场 z_bottom 公式的 h_v/(3·sinθ) 项随缩放漂移，非基准档下
+		# 伤害数字/飘字等 2D 重映射元素整体下坠出屏）；战场纵深带已加深到
+		# 2040px，构图由带承担，不再靠缩放拉视野（创始人 2026-09-17）
 		if rig.has_method("set_user_zoom"):
-			rig.set_user_zoom(0.75)
+			rig.set_user_zoom(1.0)
 		_cam_proxy = Marker2D.new()
 		_cam_proxy.name = "ArenaCamProxy"
 		add_child(_cam_proxy)
@@ -241,6 +259,16 @@ func _spawn_and_start() -> void:
 	for si in squad_defs.size():
 		left_squad_ids.append(_make_squad(fs, squads_left[si], "%s·蓝" % squad_defs[si]["name"]))
 		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % squad_defs[si]["name"]))
+	# 接敌前分配目标（创始人 2026-09-17：索敌应在接敌前分配好谁打谁）：
+	# 各单位按 y 邻近认领对面的正对之敌（非严格 1v1——对面密集处自然多人
+	# 共对一人）。行为层 assigned_target 元数据最优先（高于排长集火），
+	# 开战即各自认敌对冲，不再全队涌向集火点
+	for a in _attacker:
+		if is_instance_valid(a):
+			a.set_meta("assigned_target", _nearest_by_y(a, _defender))
+	for d in _defender:
+		if is_instance_valid(d):
+			d.set_meta("assigned_target", _nearest_by_y(d, _attacker))
 	# 编队前进（火柴人战争式）：先锋班（未锚定）下 ADVANCE_ALL 压到目标线；
 	# 锚定班不下推进号令——落点由编队动态跟队 tick 维持（跟队行军 + 接战交还战斗）
 	var to: Node = _game_root.get_tactical_orders()
@@ -267,11 +295,15 @@ func _spawn_and_start() -> void:
 				continue
 			fs.set_squad_follow_squad(left_squad_ids[si], left_squad_ids[si - 1], gap)
 			fs.set_squad_follow_squad(right_squad_ids[si], right_squad_ids[si - 1], gap)
-	# 收掉开局引导大卡（demo_quest 每次新装配都弹，屏幕正中挡观察 6 秒；
-	# 观察场不看新手引导）
+	# 收掉开局引导大卡与任务追踪面板（demo_quest 每次新装配都弹，屏幕正中/
+	# 左上挡观察；观察场不看新手引导）。QuestPanel 只隐藏不释放——demo_quest
+	# 仍持引用驱动它，释放会在下次任务更新时报已释放实例错
 	var opening_hint: Node = get_tree().root.find_child("OpeningHint", true, false)
 	if opening_hint != null:
 		opening_hint.queue_free()
+	var quest_panel: Node = get_tree().root.find_child("QuestPanel", true, false)
+	if quest_panel != null and quest_panel is CanvasItem:
+		(quest_panel as CanvasItem).visible = false
 	_camera_following = true
 	_reveal()
 
@@ -317,6 +349,21 @@ func _make_squad(fs: Node, units: Array, squad_name: String) -> String:
 	if fs.has_method("assign_leader"):
 		fs.assign_leader(sid, leader)
 	return sid
+
+
+## y 邻近认领：候选里取与本单位 y 差最小者（接敌前分配的配对规则；
+## 非排他——对面密集处自然多人共对一人）
+func _nearest_by_y(unit: Node2D, enemies: Array) -> Node:
+	var best: Node = null
+	var best_dy: float = INF
+	for e in enemies:
+		if not is_instance_valid(e):
+			continue
+		var dy: float = absf(e.global_position.y - unit.global_position.y)
+		if dy < best_dy:
+			best_dy = dy
+			best = e
+	return best
 
 
 ## 出生一个演练单位：脚部对齐 + 不附身 + 注入编队系统 + 设主手武器。

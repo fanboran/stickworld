@@ -60,7 +60,10 @@ static func setup(group: CanvasGroup) -> void:
 	var outline_mat := ShaderMaterial.new()
 	outline_mat.shader = OUTLINE_SHADER
 	outline_mat.set_shader_parameter("outline_color", Color.WHITE)
-	outline_mat.set_shader_parameter("outline_width", 1.5)
+	# 1.5 是旧轨 RIG_SCALE=0.475 下的调准值；24px 换轨 rig 等比 ×0.75（现
+	# 0.35625），描边宽度不随缩会相对变粗 33%（细零件被白边吞掉）——等比
+	# 缩至 1.125 保旧轨"外轮廓细白线"定稿观感
+	outline_mat.set_shader_parameter("outline_width", 1.125)
 	outline_mat.set_shader_parameter("adj_tex", _build_adjacency_texture())
 	group.material = outline_mat
 

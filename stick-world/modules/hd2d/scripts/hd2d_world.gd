@@ -1179,12 +1179,10 @@ func _build_world() -> void:
 	var far_y: float = 0.0 if battlefield else PLAT_H
 	var far_near_z: float = 0.0 if battlefield else BAND_SIDEWALK.x
 	if battlefield:
-		_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
-			far_z, far_near_z, far_y, 10.0, Color(0.86, 0.89, 0.96))
-		_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
-			far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
-		_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
-			far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
+		# 战场地面：全幅绿草单一材质铺到 z 95（88 格行走带 + 余量；创始人：
+		# README 头图那样的大绿场）。木本杂物已清空
+		_add_ground_plane_at("grass_alb_128.png", 0.0, 600.0,
+			0.0, 115.0, 0.0, 8.0, Color(0.40, 0.58, 0.30))
 	else:
 		_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
 			far_z, far_near_z, far_y, 5.0, Color(1.04, 1.00, 0.93))
@@ -1197,22 +1195,23 @@ func _build_world() -> void:
 	# 只在分段没铺到的区域露脸。远端收在**第二排后景基线**（=真实地平线，
 	# 创始人 2026-09-15：地平线=第二排楼脚）——远端若越过楼脚，第二排后面
 	# 会多出一条远景地面，可见地平线就被抬高；近端保留到 z=40 防前缘露底。
-	var fb_depth: float = 40.0 - far_z
+	var fb_depth: float = (50.0 if battlefield else 40.0) - far_z
 	var fb_mesh := PlaneMesh.new()
 	fb_mesh.size = Vector2(1200.0, fb_depth)
 	var fb_mi := MeshInstance3D.new()
 	fb_mi.mesh = fb_mesh
 	var fb_mat := StandardMaterial3D.new()
-	var fb_tex := _tex_abs(_temp + GROUND_DIR + "rammed_earth_128.png")
+	var fb_tex := _tex_abs(_temp + GROUND_DIR + ("grass_alb_128.png" if battlefield else "rammed_earth_128.png"))
 	if fb_tex != null:
 		fb_mat.albedo_texture = fb_tex
-	fb_mat.albedo_color = Color(0.70, 0.65, 0.57)
+	# 战场：绿草兜底（同地面材质），远端一并收绿
+	fb_mat.albedo_color = Color(0.40, 0.58, 0.30) if battlefield else Color(0.70, 0.65, 0.57)
 	fb_mat.roughness = 0.95
 	fb_mat.uv1_triplanar = true
 	fb_mat.uv1_world_triplanar = true
 	fb_mat.uv1_scale = Vector3.ONE / 6.0
 	fb_mi.material_override = fb_mat
-	fb_mi.position = Vector3(0.0, -0.05, (far_z + 40.0) * 0.5)
+	fb_mi.position = Vector3(0.0, -0.05, (far_z + (50.0 if battlefield else 40.0)) * 0.5)
 	fb_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	fb_mi.name = "GroundFallback"
 	_ground_root.add_child(fb_mi)
@@ -2179,7 +2178,9 @@ func _apply_stage(stage: String) -> void:
 	# 末排 bg2（≈56）→ 满档。运行时经 set_cam_zoom 重算为同一世界线
 	# （天际线前移 DOF_FAR_START_AHEAD 格），两处口径一致。
 	_cam_attrs.dof_blur_near_enabled = false
-	_cam_attrs.dof_blur_far_enabled = hd and not bool(_opts["flat"])
+	_cam_attrs.dof_blur_far_enabled = hd and not bool(_opts["flat"]) and not battlefield
+	# 战场广角视关远焦（深带中景全落模糊带，绿草地糊成白幕、单位熔进背景——
+	# DOF 电影感是主街近景语言，RTS 观战视不适用）
 	_cam_attrs.dof_blur_near_distance = 24.0
 	_cam_attrs.dof_blur_near_transition = 10.0
 	_cam_attrs.dof_blur_far_distance = 48.0

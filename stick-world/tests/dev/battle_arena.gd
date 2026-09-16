@@ -115,7 +115,7 @@ const ROW_GAP: float = 110.0
 const LINE_GAP: float = 90.0
 ## 左右两团出生中心 x 相对地图中线的偏移（800：开战时两军最前排相距约 1300，
 ## 正常游戏缩放（可视宽 1920）下双方同屏可见，冲锋段有观察余量）
-const TEAM_OFFSET_X: float = 800.0
+const TEAM_OFFSET_X: float = 1400.0   # 两军间距拉满全屏（HD-2D 战场 88 格深带）
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
@@ -186,15 +186,8 @@ func _spawn_and_start() -> void:
 		# 正式游戏（村庄附身互动）user_zoom=1.0 合适，但 RTS 观战的镜头要远得多
 		# （此前 1.0 下单位占屏 24%，观感"镜头贴脸"）
 		if rig.has_method("set_user_zoom"):
-			# 观战缩放 = 可走带恰好占满屏高（构图契约随图走）：
-			# HD-2D 战场带 688~1294（606px）→ ~1.78，战斗铺满画面；
-			# 旧 2D 演练场带深 1242px，保留创始人手调的 0.55（单位占屏 13% 口径）
-			if map.get("WALK_FRONT_Y") != null:
-				rig.set_user_zoom(clampf(1080.0 / maxf(
-					float(map.get("WALK_FRONT_Y")) - float(map.get("WALK_BACK_Y")), 300.0),
-					0.5, 2.2))
-			else:
-				rig.set_user_zoom(0.55)
+			# 观战缩放 1.0：单位占屏 ~12%（README 战斗头图口径）
+			rig.set_user_zoom(1.0)
 		_cam_proxy = Marker2D.new()
 		_cam_proxy.name = "ArenaCamProxy"
 		add_child(_cam_proxy)
@@ -356,15 +349,17 @@ var _hud_timer: float = 0.0
 func _update_camera(delta: float) -> void:
 	if not _camera_following or _cam_proxy == null:
 		return
-	var sum_x: float = 0.0
+	var sum: Vector2 = Vector2.ZERO
 	var n: int = 0
 	for u in _attacker + _defender:
 		if is_instance_valid(u) and not u.is_dead():
-			sum_x += u.global_position.x
+			sum += u.global_position
 			n += 1
 	if n > 0:
-		var target_x: float = sum_x / float(n)
-		_cam_proxy.global_position.x = lerpf(_cam_proxy.global_position.x, target_x, minf(1.0, 3.0 * delta))
+		var target: Vector2 = sum / float(n)
+		_cam_proxy.global_position.x = lerpf(_cam_proxy.global_position.x, target.x, minf(1.0, 3.0 * delta))
+		# 纵深也跟随（HD-2D 俯角把带深压扁 2.3 倍——只跟 X 时大军会沉在屏幕下沿）
+		_cam_proxy.global_position.y = lerpf(_cam_proxy.global_position.y, target.y, minf(1.0, 3.0 * delta))
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -20,17 +20,25 @@ func _configure_hd(hd: Node3D) -> void:
 ## 深端行走界维持旧带（688）：战场阵型间距/部署按旧行走域调的，不随
 ## 主街"前景可行走到黄线"契约扩（战斗手感不变）
 func _walk_deep_y() -> float:
-	return WALK_BACK_Y
+	return walk_back_y
+
+
+## 前缘画面余量（px）：可行走前缘（walk_front_y）之下再铺的地面深度——
+## 屏幕底沿锚在余量下沿——战线贴前缘时也保持在画面内、不沉底不被热键栏压住
+const FRONT_MARGIN_Y := 260.0
+
+
+## 前界 24 格（768px 带）：standard 刻度下 zoom 1.0 时带占屏 ~56%、
+## 单位占屏 ~12%——README 战斗头图的比例
+func _front_band_y() -> float:
+	return 688.0 + 24.0 * 32.0
 
 
 func _ready() -> void:
-	# 战场野地资源稀于主街墙外带，且**西半不开树**：中央偏西全为硬化区
-	# （resource_gen 净空带机制，复用主街"算法就在那"的对接），林线从东半
-	# 渐密——战场开阔可列阵，树丛只做"往森林去"的方向感
-	resource_density = 0.12
-	forest_clear_cells = 6
-	forest_ramp_cells = 30
+	# 大乱斗战场不产资源（树丛=杂物；资源采集在主街墙外带）
+	resource_density = 0.0
 	super()
+	ground_bottom = walk_front_y + FRONT_MARGIN_Y
 
 
 ## 出口链：左出回主街（东缘落）、右出去森林附属图

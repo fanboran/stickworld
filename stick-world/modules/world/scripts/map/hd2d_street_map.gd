@@ -40,8 +40,9 @@ const CITY_TIER := "townlet"
 ## 构图契约"地面占屏幕下 1/3"@zoom=1——默认缩放 0.75 下分界线压屏幕下 1/4，
 ## 见 HD-2D街景系统.md §4.0）——屏幕底沿、2D ground_bottom（蓝线）、
 ## 可行走深度三点合一，整条可见街面都能走。
-const WALK_BACK_Y := 688.0
-const WALK_FRONT_Y := 1294.0
+const walk_back_y := 688.0
+## 前界（屏幕底沿锚线）：_ready 经 _front_band_y() 初始化；战场图覆写钩子加深
+var walk_front_y: float = 1294.0
 
 ## 3D 街景横移换算：1 格 = 32px
 const CELL_PX := 32.0
@@ -91,7 +92,7 @@ func _ready() -> void:
 	super()
 	# 屏幕下边界（CameraRig ground_bottom，即 F3 地面蓝线）钉在 3D 街面的
 	# 可见近沿上——与 3D 相机缩放锚线同一世界线，2D/3D 底沿逐像素重合
-	ground_bottom = WALK_FRONT_Y
+	ground_bottom = walk_front_y
 	# 注册 2D 特效坐标重映射器（FxLibrary.remap_pos 读此组）：HD-2D 图的地面
 	# 受俯角前缩，飘字/粒子按 2D y 直绘会飘在半空，须压到 3D 投影同一地面线
 	add_to_group("fx_pos_remapper")
@@ -115,11 +116,12 @@ func _ready() -> void:
 	# 地面范围，两楼之间应能一路走到黄线）——不设则 MapBase 默认 720 把人拦在
 	# 街心。须在 _hd 就绪后取值（边界来自 3D 侧构图常量），战场图覆写保旧带
 	ground_y = _walk_deep_y()
+	walk_front_y = _front_band_y()
 	# 视野下边界契约（屏幕映射三同步之一）：CameraRig 只认 ground_y + 1080×ground_ratio
 	# 的换算值（**不读 ground_bottom 变量**），此处强制换算使 rig 视野下边界钉在
-	# 3D 底沿锚线 WALK_FRONT_Y 上——差多少，F3 覆盖层/FX 等 2D 画布元素就整体
+	# 3D 底沿锚线 walk_front_y 上——差多少，F3 覆盖层/FX 等 2D 画布元素就整体
 	# 偏多少（1080p 下曾差 95px 致 F3 碰撞箱全体错位；推导见 HD-2D街景系统.md §屏幕映射）
-	ground_ratio = (WALK_FRONT_Y - ground_y) / 1080.0
+	ground_ratio = (walk_front_y - ground_y) / 1080.0
 	# 角色（玩家/NPC）渲染进 3D 场景：逻辑仍在 2D（物理/输入/AI 不动），
 	# 视觉走 proto 的 billboard 通道——写深度、可被前景遮挡、自带接地影
 	if _hd.has_method("enable_play_characters"):
@@ -142,6 +144,13 @@ func _ready() -> void:
 ## 战场图覆写维持旧带（688）——战斗阵型间距按旧可行走域调的，不随本契约扩
 func _walk_deep_y() -> float:
 	return get_fg_bg_boundary_y() + 2.0
+
+
+## 前界钩子（屏幕底沿锚线，_ready 初始化 walk_front_y；战场图覆写加深：
+## HD-2D 俯角把纵深压扁 ~2.3 倍，带浅了大战场只占屏幕下 1/4——
+## 战场前界 = 688 + 88 格×32 = 3504，与旧 2D 演练场带深同刻度）
+func _front_band_y() -> float:
+	return walk_front_y
 
 
 func _process(_delta: float) -> void:
@@ -186,22 +195,13 @@ func _sync_character_render() -> void:
 		if not is_instance_valid(e) or e is not Node2D:
 			continue
 		var body := e as Node2D
-		var rig_host := body.get_node_or_null("RigHost") as Node2D
-		if rig_host == null:
-			continue
+		# 2D 骨架树已随「视觉唯一骨架」删除（实体侧按图自删）：全部实体直接
+		# 走 billboard 镜像，动画数据源 = 实体 _current_anim（状态先行推进）
 		var id: int = e.get_instance_id()
 		var ch: Node3D = _char_map.get(id)
 		if ch == null or not is_instance_valid(ch):
 			ch = _hd.spawn_character()
 			_char_map[id] = ch
-			# 2D 视觉冻结（视觉唯一骨架方向）：billboard 接管渲染后，实体 2D
-			# 骨架整树停处理（不可见且不再烧 IK/动画/描边开销）。数据侧组件
-			# （血条状态机/WeaponMount/_current_anim）都在实体层，不受影响
-			rig_host.visible = false
-			rig_host.process_mode = Node.PROCESS_MODE_DISABLED
-			var sh2d := body.get_node_or_null("ContactShadow") as Node2D
-			if sh2d != null:
-				sh2d.visible = false
 		alive[id] = ch
 		# possessed 玩家：脚下四角框走 3D（与 billboard 同空间同相机，
 		# 速度位置天然一致；2D 画布框在 HD-2D 图上会与角色脱钩）
@@ -209,7 +209,7 @@ func _sync_character_render() -> void:
 			ch.set_bracket_visible(e.has_method("is_possessed") and e.is_possessed())
 		# y 行走带 → 3D 纵深 z（道具/树的 z 同一映射，遮挡关系自动正确）；
 		# 线性格 1 格 = 32px——行走带前端即 3D 屏幕底沿锚线（z_near）
-		var z: float = (body.position.y - DEPTH_Y_MIN) / CELL_PX
+		var z: float = (body.position.y - depth_y_min) / CELL_PX
 		var vel: Vector2 = (body as CharacterBody2D).velocity if body is CharacterBody2D else Vector2.ZERO
 		var moving: bool = vel.length_squared() > 25.0
 		if ch.has_method("set_world_pos"):
@@ -218,8 +218,9 @@ func _sync_character_render() -> void:
 			if _hd.has_method("get_ground_lift_world"):
 				lift = float(_hd.get_ground_lift_world(
 						body.position.x / CELL_PX, z))
+			var flipped: bool = body.has_method("get_facing") and body.call("get_facing") < 0
 			ch.set_world_pos(body.position.x / CELL_PX, z,
-					int(body.get("_facing")) < 0,
+					flipped,
 					depth_scale_at(body.position.y),
 					lift)
 		if ch.has_method("set_anim"):
@@ -260,8 +261,8 @@ func _sync_character_render() -> void:
 ## 纵深融入（HD-2D 最佳实践第一层）：行走带 y → 实体视觉近大远小 + 接地感。
 ## 只缩 RigHost（视觉骨架），不碰碰撞体；实体体型缩放（_apply_scale）是稀有
 ## 事件，其结果会被本帧 base+depth 重建覆盖——以 meta 记录的基准为准。
-const DEPTH_Y_MIN := 688.0
-const DEPTH_Y_MAX := WALK_FRONT_Y
+var depth_y_min: float = 688.0
+var depth_y_max: float = 1294.0
 const DEPTH_SCALE_MIN := 0.92
 const DEPTH_SCALE_MAX := 1.10
 
@@ -351,13 +352,13 @@ func _origin_space_walk_band() -> bool:
 
 
 ## 2D 特效/坐标重映射（fx_pos_remapper 组协议 + MapBase 视觉域协议）：2D 世界
-## y → 3D 投影呈现的同一地面线。锚线 WALK_FRONT_Y 不动，纵深越深压缩越多
+## y → 3D 投影呈现的同一地面线。锚线 walk_front_y 不动，纵深越深压缩越多
 ## （俯角前缩 k=sinθ，数学核 Hd2dProjection）——飘字/粒子由此与角色 feet 对齐。
 func remap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	var ry: float = Hd2dProjection.ground_to_visual_y(pos.y, k, WALK_FRONT_Y)
+	var ry: float = Hd2dProjection.ground_to_visual_y(pos.y, k, walk_front_y)
 	# 台面/台后地面抬升（2D 画布域）：与角色 billboard 脚底抬升同源同值——
 	# 角色走上台面后，青箱/FX/选中框等一切锚 origin 的画布元素跟着贴到抬升后的地面
 	if _hd.has_method("get_ground_lift_px"):
@@ -372,14 +373,14 @@ func unmap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	return Vector2(pos.x, Hd2dProjection.visual_to_ground_y(pos.y, k, WALK_FRONT_Y))
+	return Vector2(pos.x, Hd2dProjection.visual_to_ground_y(pos.y, k, walk_front_y))
 
 
 ## billboard 深度缩放（0.92~1.10 随纵深线性）：3D billboard 渲染、2D rig 镜像
 ## 与悬浮框几何共用同一口径，禁止各处内联 lerp（改档位时三处必须同源）。
 func depth_scale_at(y: float) -> float:
 	return lerpf(DEPTH_SCALE_MIN, DEPTH_SCALE_MAX,
-			clampf((y - DEPTH_Y_MIN) / (DEPTH_Y_MAX - DEPTH_Y_MIN), 0.0, 1.0))
+			clampf((y - depth_y_min) / (depth_y_max - depth_y_min), 0.0, 1.0))
 
 
 ## billboard 视觉身高（canvas px，悬浮框/选中框锚定用）：char_sprite_3d 尺寸
@@ -403,18 +404,18 @@ func entity_hover_rect(range_center: Vector2, range_size: Vector2, entity: Node2
 	var k: float = float(_hd.get_ground_squash())
 	var box_size := Vector2(range_size.x, BILLBOARD_BODY_H_PX)
 	return Hd2dProjection.billboard_hover_rect(
-			entity.global_position, box_size, k, WALK_FRONT_Y, depth_scale_at(entity.global_position.y))
+			entity.global_position, box_size, k, walk_front_y, depth_scale_at(entity.global_position.y))
 
 
 ## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。
-## 3D 取景垂直固定（不随 2D 相机纵移）：屏幕底沿 = 锚线 WALK_FRONT_Y，
+## 3D 取景垂直固定（不随 2D 相机纵移）：屏幕底沿 = 锚线 walk_front_y，
 ## 每格纵深在屏幕上占 32×压缩率×缩放 px（公式推导见 HD-2D街景系统.md §屏幕映射）
 func screen_y_to_ground_y(screen_y: float, effective_zoom: float) -> float:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return screen_y
 	var k: float = float(_hd.get_ground_squash())
 	var vp_h: float = get_viewport_rect().size.y
-	return WALK_FRONT_Y - (vp_h - screen_y) / (k * maxf(effective_zoom, 0.001))
+	return walk_front_y - (vp_h - screen_y) / (k * maxf(effective_zoom, 0.001))
 
 
 ## 城门引导点（gate_router 组协议，BehaviorHarvest 消费）：直线 steering 的
@@ -475,7 +476,7 @@ func get_open_work_sites() -> Array:
 			if str(e.get("card", "")) == "anvil":
 				out.append({
 					"pos": Vector2(float(e["x"]) * CELL_PX,
-							DEPTH_Y_MIN + float(e.get("z", 4.5)) * CELL_PX),
+							depth_y_min + float(e.get("z", 4.5)) * CELL_PX),
 					"work_site_def": "smithy_lv1",
 				})
 		if not out.is_empty():
@@ -504,8 +505,8 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		var x1: float = float(r[1]) * CELL_PX
 		# y 带：实心条目统一 4 元组 [x0, x1, y0, y1]——建筑=地基带
 		# [688, 基线+44]，道具/树=自身纵深带（点障碍，可绕行）
-		var y0: float = float(r[2]) if r.size() > 2 else WALK_BACK_Y
-		var y1: float = float(r[3]) if r.size() > 3 else WALK_FRONT_Y
+		var y0: float = float(r[2]) if r.size() > 2 else walk_back_y
+		var y1: float = float(r[3]) if r.size() > 3 else walk_front_y
 		var shape := CollisionShape2D.new()
 		var rect := RectangleShape2D.new()
 		rect.size = Vector2(maxf(8.0, x1 - x0), maxf(8.0, y1 - y0))
@@ -660,11 +661,16 @@ func _build_exit_triggers() -> void:
 		var rect := RectangleShape2D.new()
 		# 触发带纵深跨整个可行走域（深端=黄线，非旧墙脚线 688）——角色在
 		# 两楼之间的台后区也能正常走出去
-		rect.size = Vector2(96.0, WALK_FRONT_Y - ground_y)
+		rect.size = Vector2(96.0, walk_front_y - ground_y)
 		shape.shape = rect
-		shape.position = Vector2(float(spec["x"]), (ground_y + WALK_FRONT_Y) * 0.5)
+		shape.position = Vector2(float(spec["x"]), (ground_y + walk_front_y) * 0.5)
 		trig.add_child(shape)
 		triggers_host.add_child(trig)
+
+
+## HD-2D 视觉声明（实体侧据此删除 2D 骨架树——视觉唯一骨架方向）
+func uses_billboard_visuals() -> bool:
+	return true
 
 
 ## 出口表（子类按旅行链覆写，如战场图左出回主街/右出去森林）。

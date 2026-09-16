@@ -46,9 +46,9 @@ func _ready() -> void:
 		var er: Node = triggers.get_node_or_null("ExitRight")
 		_check(el != null and String(el.get("target_map_id")) == "hd2d_street", "左出应回主街")
 		_check(er != null and String(er.get("target_map_id")) == "forest_zone", "右出应去森林")
-	# 资源点（resource_gen 算法全域撒布，战场密度 0.15）
+	# 大乱斗战场不产资源（树丛=杂物，创始人 2026-09-15；资源采集在主街墙外带）
 	var nodes := get_tree().get_nodes_in_group("resource_node")
-	_check(nodes.size() >= 5, "野地资源点已撒布（实得 %d）" % nodes.size())
+	_check(nodes.size() == 0, "战场应无资源点（实得 %d）" % nodes.size())
 	# 战场无城墙：无门洞传送带（get_gates 空 → 无传送条）
 	var portals: Node = map.get_node_or_null("GatePortals")
 	var strip_count: int = portals.get_child_count() if portals != null else 0
@@ -68,7 +68,7 @@ func _ready() -> void:
 				elif nm.begins_with("Nature_"):
 					n_nature += 1
 		_check(n_props == 0, "战场应无摆件杂物（创始人 2026-09-15：清空战痕遗物；实得 %d）" % n_props)
-		_check(n_nature >= 5, "战痕自然物卡已摆（实得 %d）" % n_nature)
+		_check(n_nature == 0, "战场应无战痕散布（同杂物清空口径；实得 %d）" % n_nature)
 	print("[verify_bf] 断言完成：%d 失败" % _fails)
 	await _shot()
 	print("[verify_bf] DONE")

@@ -170,8 +170,10 @@ var _profession_id: String = ""
 var is_villager: bool = false
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
-## StickmanRig 引用（渲染骨架）
+## StickmanRig 引用（渲染骨架）；HD-2D 图为 null（视觉走 billboard 唯一骨架）
 var rig: Node2D = null
+## 本实体在 HD-2D 图上：2D 画布视觉链路已删除，渲染全部走 billboard
+var _billboard_visual: bool = false
 ## IK markers 父节点引用
 var _markers_parent: Node2D = null
 ## 当前速度（标量，px/s）
@@ -333,8 +335,16 @@ func _ready() -> void:
 	# 先拿到 StickmanRig 和 IK markers 引用——必须在 _mount_components 之前：
 	# VisualController.setup 连接 rig.animation_finished（攻击播完回切），
 	# 顺序颠倒时 rig 为 null，连接静默丢失（曾致攻击动画播完永不回切）
+	# HD-2D 图（视觉唯一骨架方向）：实体不建 2D 骨架树——billboard 自带骨架
+	# 是唯一视觉骨架；脚偏移仍按 marker 实算（骨架树帧末才释放），数值不变
+	var hd_map: Node = null
+	var map_parent: Node = get_parent()
+	if map_parent != null:
+		hd_map = map_parent.get_parent()
 	var rig_host := get_node_or_null("RigHost")
-	if rig_host != null:
+	if hd_map != null and hd_map.has_method("uses_billboard_visuals") 			and hd_map.uses_billboard_visuals():
+		_billboard_visual = true
+	if not _billboard_visual and rig_host != null:
 		rig = rig_host.get_node_or_null("OutlineGroup/StickmanRig")
 		_markers_parent = rig_host.get_node_or_null("OutlineGroup/Node2D")
 	# 装配子组件（VisualController / InteractionController）
@@ -347,7 +357,13 @@ func _ready() -> void:
 		add_child(se)
 		_status_effects = se
 	# 接触阴影（Demo 打磨：脚底椭圆软阴影，Terraria 式落地感；纯视觉 z 垫底）
-	_scale_rig._spawn_contact_shadow()
+	if _billboard_visual:
+		# 2D 骨架树帧末释放（foot_offset 已在上方按 marker 实算完毕）
+		var stale_rig := get_node_or_null("RigHost")
+		if stale_rig != null:
+			stale_rig.queue_free()
+	else:
+		_scale_rig._spawn_contact_shadow()
 	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
 	_apply_balance_data()
 	# 获取 AIController 子节点（§7.1）
@@ -827,6 +843,11 @@ func _sim_active() -> bool:
 ## 获取朝向
 func get_facing() -> int:
 	return _facing
+
+
+## 是否在 billboard 视觉图上（HD-2D：2D 骨架树已删，crowd 2D 代理不适用）
+func is_on_billboard_map() -> bool:
+	return _billboard_visual
 
 
 func _on_possession_changed(p: bool) -> void:

@@ -78,9 +78,8 @@ func _on_rig_anim_finished(anim_name: String) -> void:
 
 ## 播放动画（含搬运映射与动作锁定处理）。
 func play(anim_name: String) -> void:
-	var rig: Node2D = _entity.rig
-	if rig == null:
-		return
+	# 状态先行：_current_anim 是 HD-2D billboard 动画镜像的唯一数据源
+	# （实体在 HD-2D 图上没有 2D 骨架），必须无条件推进；rig 播放放最后（可缺）
 	# 死亡终态门禁（2026-08-31 审计 P0-1）：dead 是 ANY→dead 的终态，
 	# 死后一切 walk/idle/attack 请求一律拒绝——防移动减速逻辑把死亡动画
 	# 在 0.25s 内覆盖成"尸体站起来"
@@ -99,15 +98,18 @@ func play(anim_name: String) -> void:
 	# set_idle_variant 用 set_state_animation 把 idle state 的动画换成变体（共用 state），
 	# 因此这里仍 play("idle")（状态机有 idle 状态），不能 travel 变体名（状态机无 idle_v2 状态）。
 	# 举盾时跳过变体重挑——idle state 由持盾待命动画占用（_apply_stance_anim）。
+	var rig: Node2D = _entity.rig   # HD-2D 图上为 null（无 2D 骨架，只推状态）
 	if anim_name == "idle" and _entity._current_anim != "idle" and not _blocking:
 		var variant: String = _pick_idle_variant()
-		if rig.has_method("set_idle_variant"):
+		if rig != null and rig.has_method("set_idle_variant"):
 			rig.set_idle_variant(variant)
 	# 盾姿态分层（计划 5）：举盾时 walk/idle 换持盾变体（block_walk/block_crouch）
 	if _blocking and not _entity._carrying and (anim_name == "walk" or anim_name == "idle"):
 		_apply_stance_anim(anim_name)
-	rig.play(play_name)
 	_entity._current_anim = anim_name
+	if rig == null:
+		return
+	rig.play(play_name)
 
 
 ## 举盾/收盾切换（盾姿态分层，计划 5）：正在播 walk/idle 时立即换变体，
@@ -176,12 +178,12 @@ func play_attack(anim_name: String, blocking: bool) -> void:
 ## weapon_mount 命中帧订阅不受影响），只换 state 内的动画资源。
 func _play_attack_variant(base: String, variant: String) -> void:
 	var rig: Node2D = _entity.rig
+	_entity._current_anim = base   # 状态先行（同 play：billboard 镜像数据源）
 	if rig == null:
 		return
 	if rig.has_method("set_state_anim"):
 		rig.set_state_anim(base, variant)  # variant==base 即恢复基础动画
 	rig.play(base)
-	_entity._current_anim = base
 
 
 ## 暂停冻结动画（TimeManager 暂停门禁配套）。

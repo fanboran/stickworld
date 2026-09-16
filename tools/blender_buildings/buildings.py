@@ -4692,7 +4692,7 @@ def assemble_mage_tower(width_cells=6):
         "ratio_exempt": True, "eave_exempt": True,
         "width_exempt": (width_cells < MIN_DOOR_CELLS),
         "reason": "法师塔：竖向塔体（2 层收分塔身 + 悬挑观星台 + 水晶灯室 + 尖锥顶）；"
-                  "锥顶出檐按塔半径比例（非民居坡檐 18~23% 口径）",
+                  "锥顶出檐按塔半径比例（非民居坡檐口径，eave_exempt）",
         "material": "石砌 / 板岩尖顶 + 彩窗 + 符文自发光 + 悬浮水晶"})
     return ob, spec
 

@@ -110,8 +110,8 @@
 | `possession_ended` | entity | PossessionInterface | UI、Units、TimeManager |
 | `interior_entered` | building_id: int | Building | InputDispatcher、UI |
 | `interior_exited` | building_id: int | Building | InputDispatcher、UI |
-| `mega_interior_entered` | building_id: int, map_id: String | Building | GameRoot |
-| `mega_interior_exited` | return_map_id: String | MegaInteriorMap | GameRoot |
+| `mega_interior_entered` | building_id: int, map_id: String | Building | 暂无订户（传送链随 mega_interior 图清退拆除，信号保留待室内 v3） |
+| `mega_interior_exited` | return_map_id: String | ——（发射方已随清退拆除） | 暂无订户 |
 
 ### 2.7 其他
 

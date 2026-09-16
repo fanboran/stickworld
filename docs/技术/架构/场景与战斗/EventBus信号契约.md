@@ -37,8 +37,8 @@
 |------|------|--------|--------|---------|
 | `interior_entered` | building_id | Building | InputDispatcher、UI | 进入室内交互区（透明化触发，[地图与场景图.md](地图与场景图.md) §5.2） |
 | `interior_exited` | building_id | Building | InputDispatcher、UI | 离开室内交互区（[地图与场景图.md](地图与场景图.md) §5.2） |
-| `mega_interior_entered` | building_id, map_id | Building | GameRoot | 传送进入大建筑（[地图与场景图.md](地图与场景图.md) §5.6） |
-| `mega_interior_exited` | return_map_id | MegaInteriorMap | GameRoot | 从大建筑返回（[地图与场景图.md](地图与场景图.md) §5.6.2） |
+| `mega_interior_entered` | building_id, map_id | Building | 暂无订户 | 传送进入大建筑——传送链随 mega_interior 图清退拆除，信号保留待室内 v3（[地图与场景图.md](地图与场景图.md) §5.6） |
+| `mega_interior_exited` | return_map_id | ——（已无发射方） | 暂无订户 | 旧大建筑返回信号，随清退停用（[地图与场景图.md](地图与场景图.md) §5.6.2） |
 
 ### 14.4 战斗编队事件
 

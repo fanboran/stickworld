@@ -42,7 +42,7 @@ scenes/
 | `mega_interior` | mega_interior.tscn | MEGA_INTERIOR |
 | `l1_settlement_00~07` | l1_settlement_XX.tscn | VILLAGE |
 
-出口配置一部分走 `scene_loader.register_map_exit(...)`（左右缘步行出口），HD-2D 主街两端走**城门传送带**（`hd2d_gate_prompt.gd`：玩家走近城门弹"出城"选项框——选项由本方向出口表动态生成：西/东郊资源图直达 + 沿村间道路去对岸村庄；弹出时同步在城外上空展开城外舆图 `hd2d_sky_region_map.gd`，悬浮目的地项高亮舆图对应地块，舆图画出村间道路；村民走静默传送带，`gate_router` 组引导采集村民跨墙）。
+出口配置一部分走 `scene_loader.register_map_exit(...)`（左右缘步行出口），HD-2D 主街两端走**城门传送带**（`hd2d_gate_prompt.gd`：玩家走近城门弹"出城"选项框——资源图直达项按本方向出口表生成；「附近村庄」项列战略图出生 L1 路网的直连邻村，点选直接传送；弹出时同步在城外上空展开城外舆图 `hd2d_sky_region_map.gd`（Tab 战略图同源数据：底图/路网/城邦），悬浮村庄项高亮舆图对应地块；村民走静默传送带，`gate_router` 组引导采集村民跨墙）。
 
 ## 地图切换流程
 

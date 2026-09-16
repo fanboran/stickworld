@@ -47,36 +47,15 @@ const _WorldLoadingOverlayScript: GDScript = preload("res://modules/ui_global/sc
 ## 第二个测试村落地图场景（阶段 0.8 多场景衔接）
 ## 村B = 第一个 city_layout 算法驱动的 HD-2D 村（2026-09-14 全面 HD-2D 化）
 const _VILLAGE_MAP_B_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_village_b.tscn")
-## 道路地图场景（阶段 0.8 村落间道路）
-const _ROAD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/road_a_b.tscn")
-## 测试大建筑内部地图场景（阶段 0.9.5 传送切换）
-const _MEGA_INTERIOR_SCENE: PackedScene = preload("res://modules/world/scenes/maps/mega_interior.tscn")
-## 遭遇战战场地图场景（已退役为 dev 验证图，出征与领地架构 §4.3：进图不自动开战）
+## 遭遇战战场地图场景（HD-2D 城郊战场，出征与领地架构 §4.3：进图不自动开战）
 const _BATTLEFIELD_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_battlefield.tscn")
 const _RESOURCE_W_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_resource_w.tscn")
 const _RESOURCE_E_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_resource_e.tscn")
-const _BATTLEFIELD_2D_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/battlefield.tscn")
-## 守城战战场地图场景（右端城墙+波次敌军，接在遭遇战之后）
-const _SIEGE_MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/siege_battlefield.tscn")
-## 森林附属区域场景（阶段 F）
-const _FOREST_ZONE_SCENE: PackedScene = preload("res://modules/world/scenes/maps/forest_zone.tscn")
 # HD-2D 街景图（3D 原型接入验证场；静态布景，玩家 2D 实体浮于 3D 街景之上）
 const _HD2D_STREET_SCENE: PackedScene = preload("res://modules/world/scenes/maps/hd2d_street.tscn")
-## L1 八城邦聚落场景（P5 进城闭环；tools/worldgen/l1/settlement_mapgen.py 产出，
-## map_id 与 l1_world.json 的 settlement.map_id 一一对应）
-const _L1_SETTLEMENT_SCENES: Array[PackedScene] = [
-	preload("res://modules/world/scenes/maps/l1_settlement_00.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_01.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_02.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_03.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_04.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_05.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_06.tscn"),
-	preload("res://modules/world/scenes/maps/l1_settlement_07.tscn"),
-]
-## L1 八城邦聚落 HD-2D 版（城市生成器接线）：薄实例场景（layout_name=map_id 做
-## CityGen 确定性种子，city_tier 按 tools/worldgen/l1/city_profiles.json 的 size）；
-## 2D 版场景保留作回退/对照，注册不再使用
+## L1 八城邦聚落 HD-2D 版（P5 进城闭环，map_id 与 l1_world.json 的
+## settlement.map_id 一一对应）：薄实例场景（layout_name=map_id 做
+## CityGen 确定性种子，city_tier 按 tools/worldgen/l1/city_profiles.json 的 size）
 const _L1_SETTLEMENT_HD2D_SCENES: Array[PackedScene] = [
 	preload("res://modules/world/scenes/maps/hd2d_settlement_00.tscn"),
 	preload("res://modules/world/scenes/maps/hd2d_settlement_01.tscn"),
@@ -91,30 +70,19 @@ const _L1_SETTLEMENT_HD2D_SCENES: Array[PackedScene] = [
 const _UnitsApiScript: GDScript = preload("res://modules/units/api.gd")
 const _STICKMAN_ENTITY_SCENE: PackedScene = _UnitsApiScript.STICKMAN_ENTITY_SCENE
 
-## 道路地图 ID（主街 -> 村落 B）
-const ROAD_MAP_ID := "road_a_b"
 ## 第二个测试村落地图 ID
 const VILLAGE_B_MAP_ID := "village_b"
-## 测试大建筑内部地图 ID
-const MEGA_INTERIOR_MAP_ID := "mega_interior"
 ## 战场地图 ID（HD-2D 城郊战场，主街东门旅行链可达）
 const BATTLEFIELD_MAP_ID := "battlefield"
 const RESOURCE_W_MAP_ID := "hd2d_resource_w"
 const RESOURCE_E_MAP_ID := "hd2d_resource_e"
-## 旧 2D 战场保留为 dev 空旷演练场：战斗/AI 测试与 dev 探针的开机图
-## （测试需要 2D 空旷初始图 + 秒级开机；不进任何旅行链）
-const BATTLEFIELD_2D_MAP_ID := "battlefield_2d"
-## 守城战战场地图 ID（右端城墙+波次敌军）
-const SIEGE_MAP_ID := "siege_battlefield"
-## 森林附属区域地图 ID（阶段 F）
-const FOREST_ZONE_MAP_ID := "forest_zone"
 const HD2D_STREET_MAP_ID := "hd2d_street"
 ## 新游戏开局主场景（创始人 2026-09-14：启动直连 HD-2D 主街，不再加载村A旧图；
 ## 村A保留注册仅供调试，旅行链/出生链全部改挂本图）
 const START_MAP_ID := HD2D_STREET_MAP_ID
 ## 启动图覆盖（测试/开发用，仿 SaveManager.boot_load_slot 模式）：非空时
-## _load_start_village 加载它而不是 START_MAP_ID。集成测试测 2D 村庄玩法
-## （工位/招兵/战斗…）需要以 village_a 为初始图（含设施生成），显式声明。
+## _load_start_village 加载它而不是 START_MAP_ID（战斗/AI 套件用它挂
+## battlefield 作空旷开机图）。
 var boot_map_id_override: String = ""
 ## 玩家初始 X 位置（世界原点，土路正负对称各 40 格）
 const PLAYER_SPAWN_X: float = 0.0
@@ -188,14 +156,6 @@ var _conquest_manager: Node = null
 # ─────────────────────────────── 招兵与人口（游戏循环深化批次 1）───────────────────────────────
 ## RecruitManager 实例引用（运行时由 SystemSetup 装配；招兵经 OrganizationApi 转发）
 var _recruit_manager: Node = null
-
-# ─────────────────────────────── 传送系统（§5.6；TravelHandler 跨脚本读写，故加忽略）────────────────────────────────
-## 传送返回地图 ID（进入 MegaInteriorMap 前记录，退出时返回）
-@warning_ignore("unused_private_class_variable")
-var _return_map_id: String = ""
-## 传送进入点 X（返回时 spawn 位置）
-@warning_ignore("unused_private_class_variable")
-var _return_spawn_x: float = 0.0
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 @onready var environment_system: Node = get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
@@ -613,22 +573,13 @@ func _register_default_maps() -> void:
 	if scene_loader == null or not scene_loader.has_method("register_map"):
 		return
 	# 注册地图场景
-	scene_loader.register_map(ROAD_MAP_ID, _ROAD_MAP_SCENE, WorldAPI.MapType.ROAD)
 	scene_loader.register_map(VILLAGE_B_MAP_ID, _VILLAGE_MAP_B_SCENE, WorldAPI.MapType.VILLAGE)
-	scene_loader.register_map(MEGA_INTERIOR_MAP_ID, _MEGA_INTERIOR_SCENE, WorldAPI.MapType.MEGA_INTERIOR)
-	# 阶段 F：注册遭遇战战场地图（2026-09-14 HD-2D 重建：主街东门外城郊战场，
-	# 旧 battlefield.tscn 退役 dev 验证图）
+	# 阶段 F：注册遭遇战战场地图（2026-09-14 HD-2D 重建：主街东门外城郊战场）
 	scene_loader.register_map(BATTLEFIELD_MAP_ID, _BATTLEFIELD_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	# 城外资源图两张（创始人 2026-09-15：左右城墙各自传送到一个资源点地图）——
 	# 战场式开阔野地变体，resource_gen 全域密布；城门选项框直达，内缘触发器回城
 	scene_loader.register_map(RESOURCE_W_MAP_ID, _RESOURCE_W_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
 	scene_loader.register_map(RESOURCE_E_MAP_ID, _RESOURCE_E_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
-	# 旧 2D 战场 = dev 空旷演练场（战斗/AI 测试开机图，不进旅行链）
-	scene_loader.register_map(BATTLEFIELD_2D_MAP_ID, _BATTLEFIELD_2D_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
-	# 守城战战场地图（遭遇战右出即达；城防布景+波次敌军由 SiegeDirector 组织）
-	scene_loader.register_map(SIEGE_MAP_ID, _SIEGE_MAP_SCENE, WorldAPI.MapType.BATTLEFIELD)
-	# 阶段 F：注册森林附属区域
-	scene_loader.register_map(FOREST_ZONE_MAP_ID, _FOREST_ZONE_SCENE, WorldAPI.MapType.VILLAGE)
 	# HD-2D 街景图（创始人 2026-09-14：接入游戏内场景；设置面板「调试→测试地图」可选）
 	scene_loader.register_map(HD2D_STREET_MAP_ID, _HD2D_STREET_SCENE, WorldAPI.MapType.VILLAGE)
 	# P5/D1：注册 L1 八城邦聚落图（城内边界不配 register_map_exit——玩家顶到边界
@@ -636,25 +587,13 @@ func _register_default_maps() -> void:
 	# 挂 HD-2D 版：进城由 CityGen 运行时按城名种子+档位生成街景（同主街管线）
 	for i: int in _L1_SETTLEMENT_HD2D_SCENES.size():
 		scene_loader.register_map("l1_settlement_%02d" % i, _L1_SETTLEMENT_HD2D_SCENES[i], WorldAPI.MapType.VILLAGE)
-	# 配置地图出口（步行衔接，详见 §6.2）。
-	# 2026-09-14 启动直连：旅行链原挂在 village_a，现全部改挂 hd2d_street
-	# （新主场景）；村A 保留注册仅供调试，不再承担主场景职责。
-	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT, ROAD_MAP_ID, WorldAPI.EntrySide.LEFT)
-	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	scene_loader.register_map_exit(ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT, VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT)
-	scene_loader.register_map_exit(VILLAGE_B_MAP_ID, WorldAPI.EntrySide.LEFT, ROAD_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	# 阶段 F：健全地图系统（任何地图可步行回村，链式衔接：村↔战场↔森林）
-	# （主街↔战场双缘衔接走两图场景内 ChunkTrigger 硬目标——street 的西出
-	# 实际挂 road_a_b，此处不配 street 左出战场，防与场景触发器语义打架）
+	# 配置地图出口（步行衔接，详见 §6.2）。2026-09-14 启动直连：旅行链全部
+	# 挂 hd2d_street（新主场景）。2026-09-16 旧 2D 图清退：道路/森林/守城图
+	# 删除，主街西缘与战场右缘步行出口随链关闭（城外资源图走城门选项框）。
 	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	# 守城图（独立区域）左出回主街：仅作为 travel 目标登记；平时进出走村口选项
-	scene_loader.register_map_exit(SIEGE_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
-	# 恢复原链：遭遇战场右出通森林（守城图独立后不再串链）
-	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT, FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT)
-	scene_loader.register_map_exit(FOREST_ZONE_MAP_ID, WorldAPI.EntrySide.LEFT, BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	# 资源图↔主街双缘登记（西图接主街西门/东图接主街东门）：城门选项框的
-	# 目的地按钮与城外舆图读出口表生成（hd2d_gate_prompt），内缘触发器回程
-	# 也走这里
+	# 资源图直达按钮读出口表生成（村庄项走战略图 api——hd2d_gate_prompt），
+	# 内缘触发器回程也走这里
 	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT, RESOURCE_W_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT, RESOURCE_E_MAP_ID, WorldAPI.EntrySide.LEFT)
 	scene_loader.register_map_exit(RESOURCE_W_MAP_ID, WorldAPI.EntrySide.RIGHT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT)
@@ -788,7 +727,7 @@ func _validate_children() -> void:
 func _bind_event_bus() -> void:
 	if not EventBus:
 		return
-	# 注：interior_exited / mega_interior_entered / mega_interior_exited 由 TravelHandler 绑定，
+	# 注：interior_exited 由 TravelHandler 绑定，
 	#     game_saving / game_loaded 由 SaveHandler 绑定
 	#     （ui_toggle_pause_requested 死连接已删：暂停走设置面板速度按钮，2026-08 审计）
 

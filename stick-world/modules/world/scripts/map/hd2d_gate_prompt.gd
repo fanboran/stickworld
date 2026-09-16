@@ -1,9 +1,10 @@
 extends Node
 ## 主街城门选项框 —— 玩家走近 ±城门触发线时弹在头顶的按钮组（2D 村图同款
 ## "靠近城门蹦出弹窗"口径，创始人 2026-09-15：城墙即传送门指的是弹窗确认，
-## 不是静默瞬移）。选项：本方向出口表全部目的地（西/东郊资源图直达 + 沿村间
-## 道路去对岸村庄）/ 收起；弹出时同步在城外上空展开城外舆图
-## （hd2d_sky_region_map.gd），悬浮某目的地项 → 舆图对应地块高亮。
+## 不是静默瞬移）。选项：资源图直达（出口表）+ 附近村庄（战略图出生 L1 直连
+## 邻村，暂时直接传送——创始人）/ 收起；弹出时同步在城外上空展开城外舆图
+## （hd2d_sky_region_map.gd，Tab 战略图同源数据），悬浮村庄项 → 舆图对应
+## 地块高亮。
 ## UI 挂 UIRoot HudOverlay 槽（AGENTS 核心指令 5），每帧跟随玩家屏幕坐标；
 ## 村民不经过本组件——采集 AI 走静默传送带（gate_router 协议）。
 
@@ -150,10 +151,64 @@ func _exit_tree() -> void:
 	_sky_map = null
 
 
+# ──────────────────────────── 战略图 Api 对接（附近村庄）────────────────────────
+
+## 战略图 Api（GameRoot 常驻装配 _strategic_map/Content/Api；未装配/未初始化返回 null）
+func _strategic_api() -> Node:
+	if _root == null:
+		return null
+	var sm: Node = _root.get("_strategic_map")
+	if sm == null or not is_instance_valid(sm):
+		return null
+	var content: Node = sm.get_node_or_null("Content")
+	var api: Node = content.get_node_or_null("Api") if content != null else null
+	if api != null and api.has_method("is_initialized") and api.is_initialized():
+		return api
+	return null
+
+
+## 玩家当前锚聚落（api 维护：开局在战略图外场景时保持出生聚落）
+func _anchor_settlement_id(api: Node) -> String:
+	if api != null and api.has_method("get_player_settlement"):
+		var sid := String(api.get_player_settlement())
+		if not sid.is_empty():
+			return sid
+	return ""
+
+
+## 附近村庄 = 锚聚落的路网直连邻村（TravelPlanner 邻接表），按路程升序。
+## 项：{ref: SettlementRef, length: float, open: bool(map_id 已开放)}
+func _nearby_villages(api: Node, anchor: String) -> Array:
+	var out: Array = []
+	if api == null or anchor.is_empty():
+		return out
+	var planner = api.get_travel_planner() if api.has_method("get_travel_planner") else null   # TravelPlanner(RefCounted)
+	if planner == null or not planner.has_method("neighbors"):
+		return out
+	var nb: Dictionary = planner.neighbors(anchor)
+	for sid: String in nb.keys():
+		var ref: Resource = api.get_settlement_ref(sid) if api.has_method("get_settlement_ref") else null
+		if ref == null:
+			continue
+		out.append({
+			"ref": ref,
+			"length": float(nb[sid]),
+			"open": not str(ref.get("map_id")).is_empty(),
+		})
+	out.sort_custom(func(a, b): return float(a["length"]) < float(b["length"]))
+	return out
+
+
 # ──────────────────────────── 城外舆图（天空悬浮图）────────────────────────────
 
-## 弹窗时在对应城外上空展开舆图：数据 = 出口表 BFS（直达一程 + 道路对岸）
+## 弹窗时在对应城外上空展开舆图：数据 = 战略图 Api 的出生 L1 世界（Tab 同源）；
+## 数据未就绪（工具裸场景）时藏图只留菜单
 func _show_sky_map() -> void:
+	var api := _strategic_api()
+	if api == null:
+		if _sky_map != null and is_instance_valid(_sky_map):
+			_sky_map.visible = false
+		return
 	if _sky_map == null or not is_instance_valid(_sky_map):
 		var ui_root: CanvasLayer = _find_ui_root()
 		if ui_root == null:
@@ -162,7 +217,7 @@ func _show_sky_map() -> void:
 		_sky_map.name = "Hd2dSkyRegionMap"
 		_sky_map.visible = false
 		ui_root.add_to_slot("HudOverlay", _sky_map)
-	_sky_map.set_region(_build_region())
+	_sky_map.set_data(api.get_data(), _anchor_settlement_id(api))
 	_sky_map.set_highlight("")
 	_sky_map.visible = true
 	_sky_map.modulate.a = 0.0
@@ -186,52 +241,10 @@ func _follow_sky() -> void:
 	_sky_map.position = Vector2(x, SKY_TOP_Y)
 
 
-## 舆图数据：出口表有向 BFS——当前城直达一程（col ±1）+ 村间道路对岸
-## （col ±2，道路本身画成连线不画瓦片）。空出口表（工具裸场景）给空图。
-func _build_region() -> Dictionary:
-	var region := {"current_id": _map_id, "nodes": [], "links": []}
-	var sl: Node = _root.scene_loader if _root != null else null
-	if _map_id.is_empty() or sl == null or not sl.has_method("get_map_exits"):
-		return region
-	var nodes: Array = region["nodes"]
-	var links: Array = region["links"]
-	var seen := {_map_id: true}
-	nodes.append({"id": _map_id, "name": _title_or_id(_map_id), "col": 0, "current": true})
-	for dir: int in [WorldAPI.EntrySide.LEFT, WorldAPI.EntrySide.RIGHT]:
-		var col := -1 if dir == WorldAPI.EntrySide.LEFT else 1
-		for exit_info: Dictionary in sl.get_map_exits(_map_id, dir):
-			var target := String(exit_info["target"])
-			if seen.has(target):
-				continue
-			seen[target] = true
-			if target.begins_with("road"):
-				# 村间道路：不画瓦片，画成当前城→对岸目的地的连线（一方向多路各一条）
-				for far: Dictionary in sl.get_map_exits(target, WorldAPI.EntrySide.LEFT):
-					_add_far_node(far, target, col, nodes, links, seen)
-				for far: Dictionary in sl.get_map_exits(target, WorldAPI.EntrySide.RIGHT):
-					_add_far_node(far, target, col, nodes, links, seen)
-			else:
-				nodes.append({"id": target, "name": _title_or_id(target),
-						"col": col, "current": false})
-				links.append({"a": _map_id, "b": target, "road": false, "label": ""})
-	return region
-
-
-## 道路对岸节点（跳过接回出发点的路头），label = 道路名
-func _add_far_node(far: Dictionary, road_id: String, col: int,
-		nodes: Array, links: Array, seen: Dictionary) -> void:
-	var fid := String(far["target"])
-	if fid == _map_id or seen.has(fid):
-		return
-	seen[fid] = true
-	nodes.append({"id": fid, "name": _title_or_id(fid), "col": col * 2, "current": false})
-	links.append({"a": _map_id, "b": fid, "road": true, "label": _title_or_id(road_id)})
-
-
-## 目的地悬浮 → 舆图对应地块高亮
-func _on_dest_hover(map_id: String) -> void:
+## 目的地悬浮 → 舆图对应地块高亮（村庄传 settlement_id，资源图无舆图地块不亮）
+func _on_dest_hover(dest_id: String) -> void:
 	if _sky_map != null and is_instance_valid(_sky_map):
-		_sky_map.set_highlight(map_id)
+		_sky_map.set_highlight(dest_id)
 
 
 # ─────────────────────────────── 选项框 UI ────────────────────────────────
@@ -268,8 +281,8 @@ func _build_panel(side: int) -> Control:
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85))
 	col.add_child(title)
-	# 动态项：本方向出口表全部目的地（§5.5.5 一方向多条道路可选）——
-	# 村间道路项文案写对岸村名（"沿村间道路去 村落B"），悬浮点亮舆图地块
+	# 动态项：本方向出口表的资源图直达（§5.5.5 一方向多条可选）；道路目标
+	# 跳过——「去附近村庄」改走战略图数据（村间道路入口撤下，创始人）
 	if _map_id.is_empty():
 		_map_id = _owner_map_id()
 	var sl: Node = _root.scene_loader if _root != null else null
@@ -277,35 +290,45 @@ func _build_panel(side: int) -> Control:
 		var side_key := WorldAPI.EntrySide.LEFT if side < 0 else WorldAPI.EntrySide.RIGHT
 		for exit_info: Dictionary in sl.get_map_exits(_map_id, side_key):
 			var target := String(exit_info["target"])
+			if target.begins_with("road"):
+				continue
 			var entry := int(exit_info.get("entry", WorldAPI.EntrySide.LEFT))
 			var btn := Button.new()
-			btn.text = _dest_label(sl, target)
+			btn.text = "去 %s（传送）" % _title_or_id(target)
 			btn.pressed.connect(_on_choice.bind("travel:%d:%s" % [entry, target]))
-			btn.mouse_entered.connect(_on_dest_hover.bind(target))
-			btn.mouse_exited.connect(_on_dest_hover.bind(""))
 			col.add_child(btn)
+	# 动态项：附近村庄（战略图出生 L1 路网的直连邻村，按路程升序）——
+	# 暂时直接传送（创始人）；悬浮项 → 舆图对应地块高亮
+	var api := _strategic_api()
+	var villages := _nearby_villages(api, _anchor_settlement_id(api))
+	if not villages.is_empty():
+		var cap := Label.new()
+		cap.text = "—— 附近村庄 ——"
+		cap.add_theme_font_size_override("font_size", 12)
+		cap.add_theme_color_override("font_color", Color(0.75, 0.70, 0.60, 0.9))
+		cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(cap)
+	for v: Dictionary in villages:
+		var ref: Resource = v["ref"]
+		var sid := str(ref.get("settlement_id"))
+		var vname := str(ref.get("name"))
+		if vname.is_empty():
+			vname = sid
+		var vbtn := Button.new()
+		if bool(v["open"]):
+			vbtn.text = "去 %s（传送）" % vname
+			vbtn.pressed.connect(_on_choice.bind("village:" + sid))
+		else:
+			vbtn.text = "去 %s（未开放）" % vname
+			vbtn.disabled = true
+		vbtn.mouse_entered.connect(_on_dest_hover.bind(sid))
+		vbtn.mouse_exited.connect(_on_dest_hover.bind(""))
+		col.add_child(vbtn)
 	var btn_last := Button.new()
 	btn_last.text = "收起"
 	btn_last.pressed.connect(_on_choice.bind("dismiss"))
 	col.add_child(btn_last)
 	return box
-
-
-## 目的地显示名：地区报幕表（config/scene_map/map_titles.json）优先；
-## 道路图查它对侧出口接的村庄——"沿村间道路去 村落B"
-func _dest_label(sl: Node, map_id: String) -> String:
-	var title := _title_of(map_id)
-	if map_id.begins_with("road") and sl.has_method("get_map_exits"):
-		for side: int in [WorldAPI.EntrySide.LEFT, WorldAPI.EntrySide.RIGHT]:
-			for far: Dictionary in sl.get_map_exits(map_id, side):
-				if String(far["target"]) == _map_id:
-					continue   # 路的另一头接的是出发点自己，跳过
-				var far_title := _title_of(String(far["target"]))
-				if not far_title.is_empty():
-					return "沿%s去 %s" % [title if not title.is_empty() else "道路", far_title]
-	if title.is_empty():
-		return "去 %s（传送）" % map_id
-	return "去 %s（传送）" % title
 
 
 ## 舆图瓦片名：报幕表 title，未配置回退 map_id
@@ -335,6 +358,9 @@ func _owner_map_id() -> String:
 
 
 func _on_choice(act: String) -> void:
+	if act.begins_with("village:"):
+		_enter_village(act.trim_prefix("village:"))
+		return
 	if act.begins_with("travel:"):
 		# "travel:<entry_side>:<map_id>"——入缘侧来自出口表登记
 		var spec := act.trim_prefix("travel:").split(":", false, 2)
@@ -353,3 +379,12 @@ func _travel(map_id: String, entry_side: int = WorldAPI.EntrySide.LEFT) -> void:
 	if _root == null or _root.scene_loader == null:
 		return
 	_root.scene_loader.travel_to_map(map_id, WorldAPI.TravelMode.TELEPORT, entry_side)
+
+
+## 村庄直达（创始人：暂时直接传送）：走战略图 api.enter_settlement 统一入口
+## （发射 travel_requested + 关战略图），TELEPORT 与城门传送同语义
+func _enter_village(settlement_id: String) -> void:
+	_hide_panel()
+	var api := _strategic_api()
+	if api != null and api.has_method("enter_settlement"):
+		api.enter_settlement(settlement_id, WorldAPI.TravelMode.TELEPORT)

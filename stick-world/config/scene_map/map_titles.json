@@ -6,7 +6,7 @@
     "规则：未配置的 map_id 一律不播报幕；下划线开头的键是文档说明，解析时跳过。",
     "map_id 非穷举，现有如：hd2d_street（新游戏起始主街）/ hd2d_resource_w / hd2d_resource_e /",
     "village_b / road_a_b / mega_interior / battlefield / forest_zone / siege_battlefield 等。",
-    "城门选项框目的地文案与城外舆图瓦片名也读本表（hd2d_gate_prompt）。",
+    "城门选项框的资源图直达文案读本表（hd2d_gate_prompt）；城邦村名走战略图 SettlementRef.name。",
     "战略图聚落（settlement）接入场景图后，同样按其 map_id 在此登记。"
   ],
   "hd2d_street": {

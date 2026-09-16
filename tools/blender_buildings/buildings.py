@@ -7305,7 +7305,7 @@ def assemble_observatory(width_cells=8):
         "window": (40.0, 62.0, sec * 0.55),
         "ratio_exempt": True, "eave_exempt": True,
         "reason": "观星台：竖向塔体（两段收分圆塔 + 悬挑露台 + 铜穹顶 + 望远镜管）；"
-                  "穹顶出檐按塔半径比例（非民居坡檐 18~23% 口径）",
+                  "穹顶出檐按塔半径比例（非民居坡檐口径，eave_exempt）",
         "material": "石砌圆塔 + 铜绿穹顶（可开穹缝）+ 铜望远镜 + 浑环仪"})
     return ob, spec
 

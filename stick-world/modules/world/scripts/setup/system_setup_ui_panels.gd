@@ -225,7 +225,7 @@ func _setup_pause_menu_panel_deferred() -> void:
 func _setup_team_ai_hud() -> void:
 	if _host._root.ui_root == null or _host._root.battle_director == null:
 		return
-	var hud := _host._TeamAiHudScene.instantiate()
+	var hud = _host._TeamAiHudScene.instantiate()
 	if not _host._root.ui_root.add_to_slot("HudOverlay", hud):
 		hud.queue_free()
 		return
@@ -244,7 +244,7 @@ func _setup_team_ai_hud() -> void:
 func _setup_squad_card() -> void:
 	if _host._root.ui_root == null:
 		return
-	var card := _host._SquadCardScene.instantiate()
+	var card = _host._SquadCardScene.instantiate()
 	if not _host._root.ui_root.add_to_slot("ContextPanel/SquadInspector", card):
 		card.queue_free()
 		return

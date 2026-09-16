@@ -87,7 +87,7 @@ func _spawn_contact_shadow() -> void:
 ## 首次 _apply_scale 之前）。
 func _capture_collision_bases() -> void:
 	# 碰撞体移到脚部位置（保留原始 X 偏移并缩放，不硬编码为 0）
-	var col := _entity.get_node_or_null("Collider") as CollisionShape2D
+	var col = _entity.get_node_or_null("Collider") as CollisionShape2D
 	if col != null:
 		var col_orig_x: float = col.position.x
 		_collider_base_x = col_orig_x * _entity.BASE_SCALE
@@ -97,7 +97,7 @@ func _capture_collision_bases() -> void:
 			col.shape = (col.shape as RectangleShape2D).duplicate()
 			_collider_base_size = (col.shape as RectangleShape2D).size
 	# Range 节点也 duplicate shape 并保存原始尺寸
-	var rng := _entity.get_node_or_null("Range") as CollisionShape2D
+	var rng = _entity.get_node_or_null("Range") as CollisionShape2D
 	if rng != null and rng.shape is RectangleShape2D:
 		rng.shape = (rng.shape as RectangleShape2D).duplicate()
 		_range_base_size = (rng.shape as RectangleShape2D).size
@@ -107,7 +107,7 @@ func _capture_collision_bases() -> void:
 		_range_base_y = rng.position.y
 	# Hitbox 子 CollisionShape2D 同步缩放并保存原始尺寸/偏移
 	if _entity.hitbox != null:
-		var hb_shape := _entity.hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
+		var hb_shape = _entity.hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
 		if hb_shape != null and hb_shape.shape is RectangleShape2D:
 			hb_shape.shape = (hb_shape.shape as RectangleShape2D).duplicate()
 			_hitbox_base_size = (hb_shape.shape as RectangleShape2D).size
@@ -129,7 +129,7 @@ func _apply_scale() -> void:
 	_entity.foot_offset = _entity._foot_offset_base * _entity.body_scale
 	# 同步缩放 Collider shape（Collider 不在 rig 层级下，不受 rig.scale 影响）
 	if _collider_base_size != Vector2.ZERO:
-		var col := _entity.get_node_or_null("Collider") as CollisionShape2D
+		var col = _entity.get_node_or_null("Collider") as CollisionShape2D
 		if col != null and col.shape is RectangleShape2D:
 			(col.shape as RectangleShape2D).size = _collider_base_size * s
 			# X 偏移随朝向镜像（原点不在碰撞箱中心时，翻转需镜像偏移）
@@ -141,14 +141,14 @@ func _apply_scale() -> void:
 			col.position.y = 0.0 if _entity._ground_constraints_origin_space else _entity.foot_offset
 	# 同步缩放 Range shape（悬停检测范围，与 Collider 同步缩放）
 	if _range_base_size != Vector2.ZERO:
-		var rng := _entity.get_node_or_null("Range") as CollisionShape2D
+		var rng = _entity.get_node_or_null("Range") as CollisionShape2D
 		if rng != null and rng.shape is RectangleShape2D:
 			(rng.shape as RectangleShape2D).size = _range_base_size * s
 			rng.position.x = _range_base_x * _entity._facing
 			rng.position.y = _range_base_y * _entity.body_scale
 	# 同步缩放 Hitbox 子 shape（受击判定，与 Collider 同步缩放）
 	if _hitbox_base_size != Vector2.ZERO and _entity.hitbox != null:
-		var hb_shape := _entity.hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
+		var hb_shape = _entity.hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
 		if hb_shape != null and hb_shape.shape is RectangleShape2D:
 			(hb_shape.shape as RectangleShape2D).size = _hitbox_base_size * s
 			hb_shape.position.x = _hitbox_base_x * _entity._facing
@@ -183,7 +183,7 @@ func _sync_markers_transform() -> void:
 ## 公式：foot_offset = root_y + outfoot_local_y * BASE_SCALE
 ## 这样无论模型参考系怎么改，脚部位置都能正确对齐地面。
 func _calculate_foot_offset() -> float:
-	var rig_host := _entity.get_node_or_null("RigHost")
+	var rig_host = _entity.get_node_or_null("RigHost")
 	if rig_host == null:
 		return 45.0
 	var root_y: float = (rig_host as Node2D).position.y

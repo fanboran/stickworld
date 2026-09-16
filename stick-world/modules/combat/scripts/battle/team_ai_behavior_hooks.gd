@@ -104,7 +104,7 @@ func apply_default_behavior_plans(plan_of: Dictionary, mapping: Dictionary) -> D
 			var slot: Variant = _host._task_board.get_slot(slot_id)
 			if slot != null and int(slot.kind) == ScriptTaskBoard.KIND_ATTACK:
 				continue
-		var root := _squads.org_root_of(squad_id)
+		var root = _squads.org_root_of(squad_id)
 		if root.is_empty():
 			continue
 		var behavior := org_default_behavior(root)
@@ -112,7 +112,7 @@ func apply_default_behavior_plans(plan_of: Dictionary, mapping: Dictionary) -> D
 			continue
 		# W1：走提交版入口——选中即记冷却、target 解析非有限（发射失败）也记冷却，
 		# 防对昂贵条件反复探测；候选无 cooldown 声明时记账为空操作（零行为变化）。
-		var choice := _host._utility_scorer.pick_behavior_and_commit(behavior, squad_behavior_ctx(squad_id),
+		var choice = _host._utility_scorer.pick_behavior_and_commit(behavior, squad_behavior_ctx(squad_id),
 				squad_id, behavior_seed(), _host._now())
 		if choice.is_empty():
 			continue

@@ -147,7 +147,7 @@ func _find_nearest_enemy_in_range() -> Node:
 
 ## 鼠标是否悬停在 UI 控件上（悬停时玩家左键不攻击，保证按钮可点）。
 func _is_mouse_over_ui() -> bool:
-	var vp := _entity.get_viewport()
+	var vp = _entity.get_viewport()
 	if vp == null:
 		return false
 	if vp.has_method("gui_get_hovered_control"):

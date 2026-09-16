@@ -344,8 +344,8 @@ func _insert_org_item(parent_item: TreeItem, org_id: String) -> void:
 ## 图标 = 组织状态母题；文案 = 主干 + 状态/统辖/士气徽标（超宽逐项降级）；
 ## 「群龙无首」空缺态（架构 §4.3 ③）用危险色 + 空缺标记一眼可辨；补位候选序进悬停提示。
 func _decorate_org_item(item: TreeItem, d: Dictionary, org_id: String) -> void:
-	var people := vitals.org_people(org_id)
-	var morale := vitals.people_morale(people)
+	var people = vitals.org_people(org_id)
+	var morale = vitals.people_morale(people)
 	item.set_text(0, vitals.compose_node_text(d, people, morale))
 	var icon: Texture2D = StickIcons.tex(StringName(STATE_MOTIF.get(int(d.state), &"旗帜")))
 	if icon != null:

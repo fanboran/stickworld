@@ -32,7 +32,7 @@ func setup(host: Node, data: RefCounted) -> void:
 func _refresh_authority_compare(units: Array) -> void:
 	if _host._auth_compare == null:
 		return
-	var current := _data._authority()
+	var current = _data._authority()
 	if is_nan(current) or _host._formation == null \
 			or not _host._formation.has_method("get_squad_authority") \
 			or not _host._formation.has_method("should_switch_squad"):
@@ -97,11 +97,11 @@ func _switch_intent_count(best_id: String, units: Array) -> int:
 			continue
 		if u == self_leader:
 			continue  # 班长本人不被抽走（A9 同守卫）
-		var ai := SquadCardData.ai_of(u)
+		var ai = SquadCardData.ai_of(u)
 		if ai != null and ai.has_method("get_current_behavior") \
 				and String(ai.get_current_behavior()) in ["retreat", "seek_cover"]:
 			continue
-		var se := SquadCardData.status_of(u)
+		var se = SquadCardData.status_of(u)
 		if se != null and se.has_method("has_suppressed") and bool(se.has_suppressed()):
 			continue
 		if best_leader != null and u is Node2D and best_leader is Node2D \

@@ -250,7 +250,7 @@ func get_bound_squad() -> String:
 
 ## 框选解析（_squad_from_selection）在 squad_card_data.gd，此处只做绑定分诊。
 func _rebind_from_selection() -> void:
-	var sid := _data_part._squad_from_selection()
+	var sid = _data_part._squad_from_selection()
 	if sid.is_empty():
 		hide_card()
 		return
@@ -333,7 +333,7 @@ func _on_plan_roles_reassigned(squad_id: String) -> void:
 func _refresh() -> void:
 	if _squad_id.is_empty():
 		return
-	var units := _data_part._alive_units()
+	var units = _data_part._alive_units()
 	_refresh_header(units)
 	_refresh_order()
 	_refresh_phase()
@@ -347,7 +347,7 @@ func _refresh() -> void:
 ## 头部：班名 + 状态徽标（org state × 成员行为聚合；不可判定则不显示徽标）
 func _refresh_header(units: Array) -> void:
 	_name_label.text = _data_part._squad_name()
-	var badge := _data_part._status_badge(units)
+	var badge = _data_part._status_badge(units)
 	_status_chip.visible = not badge.is_empty()
 	if badge.is_empty():
 		return
@@ -399,12 +399,12 @@ func _refresh_phase() -> void:
 
 ## 成员行：集合未变只更新数值（保住选中/悬停态），变化才重建
 func _refresh_members(units: Array) -> void:
-	var sig := SquadCardData.signature(units)
+	var sig = SquadCardData.signature(units)
 	var shown: int = mini(units.size(), ROW_MAX)
 	if sig != _member_sig or _rows.size() != shown:
 		_rebuild_rows()
 		_member_sig = sig
-	var roles := _data_part._roles_of_plan()
+	var roles = _data_part._roles_of_plan()
 	for i in shown:
 		var u: Node = units[i]
 		var role := str(roles.get(u.get_instance_id(), ""))
@@ -424,7 +424,7 @@ func _rebuild_rows() -> void:
 		_members_box.remove_child(child)
 		child.queue_free()
 	_rows.clear()
-	var units := _data_part._alive_units()
+	var units = _data_part._alive_units()
 	var shown: int = mini(units.size(), ROW_MAX)
 	for i in shown:
 		var row: Node = MemberRowScene.instantiate()
@@ -452,7 +452,7 @@ func _refresh_commander() -> void:
 	else:
 		_leader_label.text = "班长空缺"
 		_leader_label.modulate = StickTokens.WARN
-	var authority := _data_part._authority()
+	var authority = _data_part._authority()
 	if is_nan(authority):
 		_authority_label.text = ""
 		_stars_box.visible = false

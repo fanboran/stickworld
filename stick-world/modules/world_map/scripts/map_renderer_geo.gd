@@ -109,11 +109,11 @@ static func build_cached_geometry(h) -> void:
 	for tile in h._data.tiles:
 		if tile.polygon.size() < 3:
 			continue
-		var tpts := tile.polygon
-		var n := tpts.size()
+		var tpts = tile.polygon
+		var n = tpts.size()
 		for i in range(n):
-			var a := tpts[i]
-			var b := tpts[(i + 1) % n]
+			var a = tpts[i]
+			var b = tpts[(i + 1) % n]
 			if edge_touches_lake_fast(h._data, a, b, lake_tol, lake_boxes):
 				continue
 			var key := MapSketch.edge_key(a, b)
@@ -156,7 +156,7 @@ static func bake_base_meshes(h) -> void:
 	h._tiles_mesh = null
 	h._lakes_mesh = null
 	h._neighbors_mesh = null
-	var ctx := h._data.context_size
+	var ctx = h._data.context_size
 	if ctx.x <= 0 or ctx.y <= 0:
 		return
 	# 收集 (多边形, 颜色)：海洋 = 全矩形底由渲染器背景承担（OCEAN 回退分支 + 相机外区域）

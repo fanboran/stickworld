@@ -135,7 +135,7 @@ func _setup_resources_api_deferred() -> void:
 func _attach_resource_bar_to_hud() -> void:
 	if _host._root.ui_root == null:
 		return
-	var hud := _host._root.ui_root.get_node_or_null(UIAPI.PATH_GLOBAL_HUD)
+	var hud = _host._root.ui_root.get_node_or_null(UIAPI.PATH_GLOBAL_HUD)
 	if hud != null and hud.has_method("attach_resources"):
 		var rb: Control = hud.attach_resources(_host._root._resources_api)
 		if rb != null:

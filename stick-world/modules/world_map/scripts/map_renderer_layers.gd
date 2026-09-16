@@ -75,7 +75,7 @@ static func draw_city_labels(h) -> void:
 		var num := city_num_from_tile_id(tile.tile_id)
 		if num.is_empty():
 			continue
-		var pos := tile.settlement.position
+		var pos = tile.settlement.position
 		var txt := "L1城#" + num
 		h.draw_string_outline(font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
 			maxi(1, roundi(halo)), h.LABEL_BG)

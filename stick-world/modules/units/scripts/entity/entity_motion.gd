@@ -226,7 +226,7 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 		_handle_deceleration(delta)
 		if _entity._current_speed > 0:
 			# 保留方向但减速
-			var v_dir := _entity.velocity.normalized() if _entity.velocity.length() > 0.001 else Vector2.ZERO
+			var v_dir = _entity.velocity.normalized() if _entity.velocity.length() > 0.001 else Vector2.ZERO
 			_entity.velocity = v_dir * _entity._current_speed
 		else:
 			_entity.velocity = Vector2.ZERO

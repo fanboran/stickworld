@@ -97,7 +97,7 @@ func issue_retarget_orders(dirty_slot_ids: Array) -> void:
 	var plan_of: Dictionary = {}
 	for squad_id_v in squads:
 		var squad_id := str(squad_id_v)
-		var slot_id := _host._task_board.slot_of_squad(squad_id)
+		var slot_id = _host._task_board.slot_of_squad(squad_id)
 		if slot_id.is_empty() or not dirty_slot_ids.has(slot_id):
 			continue
 		var slot: Variant = _host._task_board.get_slot(slot_id)
@@ -124,7 +124,7 @@ func issue_orders(squads: Array, plan_of: Dictionary, order_type: int = -1,
 		# 玩家手动号令保护期：玩家手动号令 > 姿态自动号令（硬约束，spec §5.2.1.2a）
 		if _host._is_manual_order_active(squad_id):
 			continue
-		var root := _squads.org_root_of(squad_id)
+		var root = _squads.org_root_of(squad_id)
 		if not root.is_empty():
 			# 编制原子性守卫：组内任一成员保护期内 → 整组本轮避让
 			var group_guarded: bool = false

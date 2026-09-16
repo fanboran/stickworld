@@ -57,7 +57,7 @@ func reconcile_tiers() -> void:
 	for tile in _h._data.tiles:
 		if tile.settlement == null:
 			continue
-		var sid := tile.settlement.settlement_id
+		var sid = tile.settlement.settlement_id
 		var t := SettlementBlob.tier_of(tile.settlement.population_score)
 		if t != int(_h._city_tier.get(sid, -1)):
 			_h._city_tier[sid] = t
@@ -71,7 +71,7 @@ func reconcile_tiers() -> void:
 func invalidate(settlement_id: String) -> void:
 	if _h._data == null:
 		return
-	var sref := _h._data.get_settlement(settlement_id)
+	var sref = _h._data.get_settlement(settlement_id)
 	if sref == null:
 		return
 	var new_tier := SettlementBlob.tier_of(sref.population_score)
@@ -100,7 +100,7 @@ func process_overlay_queue() -> void:
 func build_city_patch(sid: String) -> void:
 	if not _h._blob_ready or _h._data == null:
 		return
-	var sref := _h._data.get_settlement(sid)
+	var sref = _h._data.get_settlement(sid)
 	if sref == null or not _h._geo.has(sid):
 		return
 	var tier := int(_h._city_tier.get(sid, -1))
@@ -132,7 +132,7 @@ func build_city_patch(sid: String) -> void:
 
 ## 单城生效档形状 → 小贴图（相对锚点局部栅格化 + 锚点平移定位）。该档无建成区返回 {}。
 func make_city_overlay(sid: String, tier: int) -> Dictionary:
-	var sref := _h._data.get_settlement(sid)
+	var sref = _h._data.get_settlement(sid)
 	if sref == null:
 		return {}
 	var res := SettlementBlob.rasterize_evenodd(
@@ -152,12 +152,12 @@ func make_city_overlay(sid: String, tier: int) -> Dictionary:
 func make_erase_patch(bb: Rect2) -> Dictionary:
 	if _h._terrain_img == null:
 		return {}
-	var ctx := _h._data.context_size
+	var ctx = _h._data.context_size
 	var bounds := Rect2(Vector2.ZERO, Vector2(ctx.x, ctx.y))
 	var rect := bb.grow(2.0).intersection(bounds)
 	if rect.size.x <= 1.0 or rect.size.y <= 1.0:
 		return {}
-	var img := _h._terrain_img.get_region(Rect2i(int(rect.position.x), int(rect.position.y),
+	var img = _h._terrain_img.get_region(Rect2i(int(rect.position.x), int(rect.position.y),
 		int(rect.size.x), int(rect.size.y)))
 	return {"tex": ImageTexture.create_from_image(img), "rect": rect}
 
@@ -188,7 +188,7 @@ func cities_touching(bb: Rect2) -> Array[String]:
 	for tile in _h._data.tiles:
 		if tile.settlement == null:
 			continue
-		var sid := tile.settlement.settlement_id
+		var sid = tile.settlement.settlement_id
 		var ot := int(_h._city_tier.get(sid, SettlementBlob.bake_tier_of(_h._geo, sid)))
 		var obb := city_context_bbox(sid, maxi(ot, SettlementBlob.bake_tier_of(_h._geo, sid)),
 			tile.settlement)
@@ -218,14 +218,14 @@ func draw_vector_fallback(zz: float) -> void:
 	if zz > 0.0001:
 		bew = _h.BLOB_EDGE_WIDTH / zz
 	for tile in _h._data.tiles:
-		var sref := tile.settlement
+		var sref = tile.settlement
 		if sref == null:
 			continue
 		var tier := int(_h._city_tier.get(sref.settlement_id, SettlementBlob.TIER_LOW))
 		var polys := SettlementBlob.city_rings(_h._geo, sref.settlement_id, tier)
 		if polys.is_empty():
 			continue
-		var edge := _h.BLOB_EDGE
+		var edge = _h.BLOB_EDGE
 		if sref.level >= 5:
 			edge = _h.BLOB_EDGE_T5
 		elif sref.level >= 4:

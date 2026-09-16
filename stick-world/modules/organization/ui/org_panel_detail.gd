@@ -202,8 +202,8 @@ func _render_org_detail(d: Dictionary) -> void:
 ## 与树徽标同源数据（vitals.org_people / vitals.people_morale），避免两处口径分叉。
 func _render_org_vitals(d: Dictionary) -> void:
 	var org_id := String(d.id)
-	var people := _host.vitals.org_people(org_id)
-	var morale := _host.vitals.people_morale(people)
+	var people = _host.vitals.org_people(org_id)
+	var morale = _host.vitals.people_morale(people)
 	var panel := SketchPanel.new()
 	panel.tone = SketchPanel.Tone.LIGHT
 	_host._detail_box.add_child(panel)
@@ -243,7 +243,7 @@ func _render_org_vitals(d: Dictionary) -> void:
 		StickKit.label(box, "群龙无首：指挥官空缺，命令将停驻此层——请任命或等待补位",
 				StickKit.LabelKind.HINT, StickTokens.DANGER)
 	# 补位候选序（只读；排序口径归组织侧）
-	var cands := _host.vitals.succession_candidates_of(org_id)
+	var cands = _host.vitals.succession_candidates_of(org_id)
 	if not cands.is_empty():
 		StickKit.label(box, "补位候选序（%d）" % cands.size(), StickKit.LabelKind.SECTION)
 		for i in cands.size():
@@ -275,7 +275,7 @@ func _render_insert_flow() -> void:
 		cmd_label.text = "指挥官人选（成员 ∪ 下级指挥官）："
 		_host._detail_box.add_child(cmd_label)
 		_host._insert_commander_option = OptionButton.new()
-		var candidates := _host.vitals.succession_candidates(d)
+		var candidates = _host.vitals.succession_candidates(d)
 		for i in candidates.size():
 			_host._insert_commander_option.add_item("▲#%s" % String(candidates[i]))
 			_host._insert_commander_option.set_item_metadata(i, candidates[i])

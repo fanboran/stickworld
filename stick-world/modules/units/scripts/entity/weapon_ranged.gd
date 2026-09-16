@@ -38,7 +38,7 @@ func attack_ranged(target: Node) -> Dictionary:
 		result["reason"] = "out_of_range"
 		return result
 	_mount._pending_ranged_target = target
-	var s := _mount._sim()
+	var s = _mount._sim()
 	if s != null:
 		s.register_ranged(_mount._sim_sid(), _mount, target, _get_bow_fire_delay())
 		s.set_cooldown(_mount._sim_sid(), _mount._get_effective_cooldown())

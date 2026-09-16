@@ -117,7 +117,28 @@ func _ready() -> void:
 	# 同 resource_node 组先例；不引 construction_manager 内部注册表）
 	add_to_group("building")
 	_lookup_children()
+	_migrate_collision_geometry_to_canvas_px()
 	_apply_state_visual()
+
+
+## 24px 换轨（2026-09-16）：场景手摆的碰撞几何（PassageBarrier/StandPlatform）
+## 按 32px/格 美术口径制作，运行时一次性 ×0.75 迁到 24px/格 画布口径
+## （幂等，meta 标记防重复；场景文件本身不动）。
+const BARRIER_MIGRATED_META := "_collision_canvas_px_24"
+
+
+func _migrate_collision_geometry_to_canvas_px() -> void:
+	for node_path in ["PassageBarrier", "StandPlatform"]:
+		var body := get_node_or_null(node_path) as Node2D
+		if body == null or body.has_meta(BARRIER_MIGRATED_META):
+			continue
+		body.set_meta(BARRIER_MIGRATED_META, true)
+		for child in body.get_children():
+			if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
+				var cs := child as CollisionShape2D
+				var rect := cs.shape as RectangleShape2D
+				rect.size = rect.size * 0.75
+				cs.position = cs.position * 0.75
 
 
 # ─────────────────────────────── 数据驱动（D2）────────────────────────────────

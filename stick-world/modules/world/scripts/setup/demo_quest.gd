@@ -297,7 +297,7 @@ func _is_current(quest_id: String) -> bool:
 
 # ─────────────────────────────── 开场运镜（Demo 电影感）────────────────────────────────
 
-## 开场：相机从远景（zoom 0.45）缓推到玩家（正常 zoom），2.6s——"从大战略落向个体"
+## 开场：相机从远景（zoom 0.6，旧 0.45×0.75 等效视野）缓推到玩家（正常 zoom），2.6s——"从大战略落向个体"
 ## 的开场叙事，暗合 GDD 尺度跃迁支柱。期间输入不受影响（运镜只动相机）。
 func _play_opening_camera() -> void:
 	var root: Node = get_parent()
@@ -308,10 +308,10 @@ func _play_opening_camera() -> void:
 	if cam == null or player == null or not cam.has_method("set_user_zoom_raw"):
 		return
 	var normal_zoom: float = cam.user_zoom if "user_zoom" in cam else 1.0
-	cam.set_user_zoom_raw(0.45)
+	cam.set_user_zoom_raw(0.6)
 	var tw := cam.create_tween()
 	tw.tween_interval(0.35)
-	tw.tween_method(func(v: float) -> void: cam.set_user_zoom_raw(v), 0.45, normal_zoom, 2.2)		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	tw.tween_method(func(v: float) -> void: cam.set_user_zoom_raw(v), 0.6, normal_zoom, 2.2)		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 
 
 # ─────────────────────────────── 村民气泡（世界内引导）────────────────────────────────

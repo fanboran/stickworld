@@ -68,12 +68,25 @@ func _fill_pillars(fixed_xs: Array, right_x: float, pitch: float) -> Array:
 	return xs
 
 
+## 24px 换轨（2026-09-16）：美术容器内所有常量保持 32px/格 历史口径，
+## 容器级 ×0.75 等比映射到 24px/格 画布——美术常量无需逐个换算。
+const ART_CONTAINER_SCALE := 0.75
+
+
 func _ready() -> void:
 	_ensure_interaction_zone()  # 先建场景缺失件，super 的 _lookup_children 统一连接触发信号
 	super()
 	_build_exterior()
 	_build_interior()
+	_apply_art_container_scale()
 	_apply_state_visual()
+
+
+func _apply_art_container_scale() -> void:
+	for container_name in ["Exterior", "Interior"]:
+		var n := get_node_or_null(container_name) as Node2D
+		if n != null:
+			n.scale = Vector2(ART_CONTAINER_SCALE, ART_CONTAINER_SCALE)
 
 
 ## 按当前 width 重建外观（ConstructionProject 注入实际宽度后调用）。
@@ -221,8 +234,8 @@ func _post_build(_ext: Node2D) -> void:
 const FRONT_LAYERS := ["L4_FrontWall", "L5_Roof"]
 
 ## InteractionZone 碰撞体尺寸（与 PassageBarrier footprint 同型）
-const ZONE_HEIGHT := 390.0
-const ZONE_CY := -190.0
+const ZONE_HEIGHT := 292.5   # 24px 换轨（旧 390）
+const ZONE_CY := -142.5   # 24px 换轨（旧 -190）
 ## 玩家/NPC 实体所在物理层（StickmanEntity collision_layer=2）
 const ENTITY_LAYER := 2
 
@@ -280,9 +293,9 @@ func _ensure_interaction_zone() -> void:
 	zone.collision_mask = ENTITY_LAYER
 	var cs := CollisionShape2D.new()
 	var shape := RectangleShape2D.new()
-	shape.size = Vector2(float(width) * 32.0, ZONE_HEIGHT)
+	shape.size = Vector2(float(width) * 24.0, ZONE_HEIGHT)
 	cs.shape = shape
-	cs.position = Vector2(float(width) * 16.0, ZONE_CY)
+	cs.position = Vector2(float(width) * 12.0, ZONE_CY)
 	cs.name = "ZoneShape"
 	zone.add_child(cs)
 	add_child(zone)
@@ -298,8 +311,8 @@ func _resize_interaction_zone() -> void:
 		return
 	var rect := cs.shape as RectangleShape2D
 	if rect != null:
-		rect.size = Vector2(float(width) * 32.0, ZONE_HEIGHT)
-	cs.position = Vector2(float(width) * 16.0, ZONE_CY)
+		rect.size = Vector2(float(width) * 24.0, ZONE_HEIGHT)
+	cs.position = Vector2(float(width) * 12.0, ZONE_CY)
 
 
 ## 透明化进屋态：前景遮挡层（L3 前景挂件/L4 前景柱/L5 屋顶）整体淡出 + Interior 可见。

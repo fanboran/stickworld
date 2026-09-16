@@ -12,15 +12,15 @@ extends Node
 var _entity: Node2D = null
 
 ## 交互 X 范围：建筑左右各内缩 1 格（16 格建筑 → 角色需在中间 14 格内）
-const INTERACT_CELL_INSET: float = 32.0
+const INTERACT_CELL_INSET: float = 24.0
 ## 交互垂直范围外延容忍（px）
-const INTERACT_VERT_TOL: float = 40.0
+const INTERACT_VERT_TOL: float = 30.0
 ## 工地主体高度（与 ConstructionProject._create_barrier 默认障碍高一致）
-const PROJECT_BODY_HEIGHT: float = 390.0
+const PROJECT_BODY_HEIGHT: float = 292.5
 
 ## 采集判定范围（与资源点中心的 X/Y 距离，px；地面带宽 3 格内可采）
-const HARVEST_X_RANGE: float = 72.0
-const HARVEST_Y_RANGE: float = 96.0
+const HARVEST_X_RANGE: float = 54.0
+const HARVEST_Y_RANGE: float = 72.0
 ## 单次采集量（一次敲击动作的产出）
 const HARVEST_PER_ACTION: int = 20
 ## 手动采集入库的 region（与开局资源、建造扣减同账）

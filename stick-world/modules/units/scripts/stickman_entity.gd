@@ -199,7 +199,7 @@ var _walk_only: bool = false
 ## 击退冲量速度（受击时注入，随帧衰减）
 var _knockback_velocity: Vector2 = Vector2.ZERO
 ## 击退衰减（px/s²）
-const KNOCKBACK_DECAY: float = 700.0
+const KNOCKBACK_DECAY: float = 525.0  # 24px 换轨
 ## 受击红闪 Tween（中断旧闪烁）
 var _hurt_tween: Tween = null
 ## 受击硬直剩余时间（秒，>0 时 AI 停止行动；行业最佳实践 hit stun）
@@ -248,7 +248,7 @@ const REST_MORALE_REGEN: float = 4.0
 
 # ─────────────────────────────── 群体分离（防叠人/1字长蛇）────────────────────────────────
 ## 分离检测半径（真身与推力参数在 entity_motion.gd；bench_units_main.gd 直读本壳）。
-const SEPARATION_RADIUS: float = 54.0
+const SEPARATION_RADIUS: float = 40.5  # 24px 换轨
 ## 头顶血条组件引用（_mount_components 装配）
 var _health_bar: Node = null
 

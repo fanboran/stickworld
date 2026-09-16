@@ -129,14 +129,14 @@ func _test_grid_coords() -> void:
 	if g == null:
 		_runner.assert_true(false, "grid 创建失败")
 		return
-	# 条带 0 中心 = 16.0
+	# 条带 0 中心 = 12.0（24px 换轨，旧 16.0=32/2）
 	var w: float = g.cell_to_world(0)
-	_runner.assert_equal(w, 16.0, "条带 0 中心应为 16.0")
+	_runner.assert_equal(w, 12.0, "条带 0 中心应为 12.0")
 	# world_to_cell
-	var c: int = g.world_to_cell(Vector2(16, 16))
-	_runner.assert_equal(c, 0, "(16,16) 应映射到 0")
-	c = g.world_to_cell(Vector2(33, 33))
-	_runner.assert_equal(c, 1, "(33,33) 应映射到 1")
+	var c: int = g.world_to_cell(Vector2(12, 12))
+	_runner.assert_equal(c, 0, "(12,12) 应映射到 0")
+	c = g.world_to_cell(Vector2(25, 25))
+	_runner.assert_equal(c, 1, "(25,25) 应映射到 1")
 	g.queue_free()
 
 

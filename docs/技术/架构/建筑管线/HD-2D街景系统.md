@@ -46,7 +46,7 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 | `zoom` | 烘焙像素/世界单位（2x） |
 | `units` | 卡画面投影宽高（世界单位，**含出檐**——落位/剪影排布用，不是占地） |
 | `anchor` | 画面中心对应世界点（卡底贴地落位用） |
-| `footprint` | **地面占地 [宽格, 深格]**：贴地顶点（z≤8px）实测、排除出檐；1 格=32。引擎 `_building_solid_rect` 已消费（占地带/碰撞墙） |
+| `footprint` | **地面占地 [宽格, 深格]**：贴地顶点（z≤8px）实测、排除出檐；1 格=32（cards.json 烘焙记账口径，格数与引擎一致）。引擎 `_building_solid_rect` 已消费（占地带/碰撞墙） |
 | `footprint_off` | **占地原点 [dx格, dz格]**：dx 相对卡面（剪影）中心、dz 相对墙脚基线（引擎钉在落位 z 的卡底内容行），正 dz 朝相机；引擎已消费，旧 JSON 缺字段回退=居中+从墙脚向后（口径详见 §4.4） |
 | `footprint_full` | **全模型占地 [宽格, 深格]**（不过滤高度，含屋顶出檐）：碰撞/紫带**深度**口径——墙脚贴地实测对大屋顶建筑只是 1~3 格窄条；引擎深度取 max(全深, 2格)，带后沿不越过深端行走界（§4.4） |
 | `glow_mats` | 参与自发光层的材质名清单 |
@@ -167,11 +167,11 @@ godot --path stick-world res://tests/dev/verify_hd2d_map.tscn
 ### 4.0 线名对照与默认缩放档（术语校准，创始人 2026-09-15）
 
 旧文档多把"地平线"用在 1/3 那条线上——术语自本节起校准，读旧文档时按下表对号。
-**默认缩放倍率 = 0.75**（CameraRig.user_zoom 默认值）：火柴人观感偏大，整体缩画面
+**默认缩放倍率 = 1.0**（CameraRig.user_zoom 默认值）：1 格 = 24 世界单位 = 24 设计像素，脚本所写即屏幕所见；卡 meta 烘焙数据保持 32px/格 记账、引擎按格数消费
 把分界线从 1/3 压到 **1/4**（创始人 2026-09-15）；开场推镜动态读此默认值。下表
 "屏幕位置"以默认档为准，zoom=1 的旧口径在括号里：
 
-| 线 | 世界线 | 屏幕位置（默认 zoom 0.75） | 旧称/易混名 |
+| 线 | 世界线 | 屏幕位置（默认 zoom 1.0） | 旧称/易混名 |
 |---|---|---|---|
 | **前后景分界线** | SKYLINE_Z=-6.73 格 ↔ 2D y≈472.6 | 屏幕下 **1/4** 线（270px）（zoom=1 时 1/3 线/720） | 旧文档"地平线"、天际线基线 |
 | **新地平线**（真实地平线） | 末排背景基线（底衬远端收于此，见 §三点五） | 高于分界线（更远） | —— |
@@ -182,11 +182,11 @@ godot --path stick-world res://tests/dev/verify_hd2d_map.tscn
 
 | 轴 | 契约 | 实现点 |
 |---|---|---|
-| **横移 x** | 3D 相机 x（格）= CameraRig.x / 32 | `set_cam_x` |
-| **缩放** | 3D 只认 user_zoom（`_cam.size = 1080·宽高比/(32·user_zoom)`，KEEP_WIDTH）；base_zoom 两侧同源（vp_h/1080） | `set_cam_zoom` |
+| **横移 x** | 3D 相机 x（格）= CameraRig.x / 24 | `set_cam_x` |
+| **缩放** | 3D 只认 user_zoom（`_cam.size = 1080·宽高比/(24·user_zoom)`，KEEP_WIDTH）；base_zoom 两侧同源（vp_h/1080） | `set_cam_zoom` |
 | **垂直锚线** | CameraRig 视野下边界 = 3D 屏幕底沿地面锚线 z_near，都对应 2D 行走带 y=**1294（WALK_FRONT_Y）** | 见 4.3 |
 
-横移+缩放两条合起来：**屏幕上 1 格 = 32·effective_zoom px，x 方向 2D/3D 仿射恒等**
+横移+缩放两条合起来：**屏幕上 1 格 = 24·effective_zoom px，x 方向 2D/3D 仿射恒等**
 （`world_to_screen` 的 x 分量不需要任何修正）。z_near = SKYLINE_Z + 33.75/(3·sinθ)
 ≈18.93 格由构图契约（地面占屏幕下 1/3、SKYLINE_Z 压 1/3 线=前后景分界线，见 4.0）反推，
 缩放时钉死屏幕底沿。
@@ -202,7 +202,7 @@ godot --path stick-world res://tests/dev/verify_hd2d_map.tscn
 画布等价式：          地面点 (x,y) ≡ 2D 世界点 (x, remap(y)) 按 2D 相机直绘
                       remap_fx_pos(y) = 1294 − (1294 − y)·k − lift_px(x, y)
                       lift_px = 台面/台后地面抬升（z<路肩前缘 1.95 且墙内时
-                      = PLAT_H·32·cosθ ≈ 18.7px，否则 0；战场/资源图恒 0）。
+                      = PLAT_H·24·cosθ ≈ 14.0px，否则 0；战场/资源图恒 0）。
                       与角色 billboard 脚底抬升同源同值（proto
                       get_ground_lift_px）——角色走上台面后，青箱/FX/选中框
                       等 2D 画布元素跟着贴到抬升后的地面，不悬空不陷地
@@ -295,7 +295,7 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
   旧口径 [688, 基线+44] 前端比楼脚多伸 1.4 格、后端退到街心 z=0（"碰撞箱比楼
   低很多"），已废。碰撞墙同源消费。
 - **建筑直立包楼框（building_drawer HD-2D 分支）**：底=**卡底基线**（卡底贴地
-  落位线，元组 [4]）、宽=**占位格宽**（[6][7]×32，4 格整倍数槽位——创始人
+  落位线，元组 [4]）、宽=**占位格宽**（[6][7]×24，4 格整倍数槽位——创始人
   已认可口径；真实墙脚宽=[0][1] 归紫占地带）、高=**卡可见高**（[5]，picture
   高扣 base_cut 地下裁切）——框住楼的视觉范围；白 0.6 描边不填充。
 - **鼠标世界坐标**：y 走 4.2 逆变换；标签钉鼠标屏幕位（世界 y 已是地面带坐标，
@@ -315,7 +315,7 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
     4 格整倍数，都不用于此线）。
   - **占地格子宽度显示**：footprint 内部每 1 格一条浅分隔线（白 0.35），加
     左右边界竖线成 N 格分档——一格一档数宽，不标数字（创始人 2026-09-15）。
-  - ⚠ 占地带元组是**混合口径：x=格（×32 转 px）、y=px**——与 get_solid_rects
+  - ⚠ 占地带元组是**混合口径：x=格（×24 转 px）、y=px**——与 get_solid_rects
     碰撞墙消费端同源同口径，画前先换算 x。完整元组 8 元：
     `[墙脚x0格, 墙脚x1格, 带y0px, 带y1px, 卡基线y px, 卡可见高 px, 占位x0格, 占位x1格]`。
     深度由 cards.json **`footprint_full`[1]**（全模型含屋顶占地，下限 2 格）给出、
@@ -323,7 +323,7 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
     前沿=墙脚基线已定案），
     引擎 `_building_solid_rect` 已消费：dx 相对**卡面（剪影）中心**（引擎把图片
     中心钉在槽位 x，带中心 x=槽位中心+dx）、dz 相对**墙脚基线**（引擎把该线钉
-    在落位 z），正 dz 朝相机，带=[基线+(dz−fd/2)×32, 基线+(dz+fd/2)×32]；旧
+    在落位 z），正 dz 朝相机，带=[基线+(dz−fd/2)×24, 基线+(dz+fd/2)×24]；旧
     JSON 无此字段回退=横向居中+从墙脚基线向后量深格（不重烘行为不变）。
 
 ### 4.5 火柴人锚点与缩放链（防逆向重点）
@@ -341,13 +341,13 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
 - RigHost（2D 骨架）与 2D 接触影隐藏；每实体一个 SubViewport billboard：
   骨架按 `rig.scale=0.5` 缩到 131px 高，脚底墨迹钉在 SubViewport 第 144 行
   （FOOT_ROW，含 ~10px 圆头线墨迹修正），quad 以"**脚底落世界 y=0**"贴地落位。
-- **视觉脚线 = origin 的地面线**（z=(origin.y−688)/32）——接地影、脚下四角框、
+- **视觉脚线 = origin 的地面线**（z=(origin.y−516)/24）——接地影、脚下四角框、
   FX 飘字粒子（remap_fx_pos）全部锚同一条线，互相严格对齐。
 - 纵深缩放：`depth = lerp(0.92, 1.10, 行走带 t)` 由宿主逐帧传给
   `set_world_pos`，乘进 billboard 与接地影（Hd2dStreetMap._apply_depth_visual
   是同口径的 2D 侧实现，**当前无人调用**，属死代码——读缩放链别把它算进去）。
 - 屏幕上角色高 ≈ 131 × SubViewport 像素倍率 × depth × effective_zoom
-  （ez = vp_h/1080 × user_zoom(默认 0.75)）。
+  （ez = vp_h/1080 × user_zoom(默认 1.0)）。
 - **行走带钳制按 origin 空间（2026-09-15 起）**：HD-2D 图实体 Y 钳制直用
   `[深端行走界, WALK_FRONT_Y]=[黄线+2px≈474.6, 1294]`——`MapBase._origin_space_walk_band()`
   虚方法（基类 false=2D 图脚部口径、内收 foot_offset），`Hd2dStreetMap` 覆写
@@ -405,21 +405,21 @@ offset/limits 变化时手搓漂、变换不会）。
 ### 4.7 缩放链路（缩放条整 10 档 ↔ CameraRig ↔ 3D 镜像）
 
 - **CameraRig（`modules/world/scripts/camera/camera_rig.gd`）**：`user_zoom`
-  默认 **0.75**（HD-2D 构图基准档），夹制 `[ZOOM_MIN 0.5, ZOOM_MAX 2.0]`；
+  默认 **1.0**（HD-2D 构图基准档：1 格=24 设计像素），夹制 `[ZOOM_MIN 0.6667, ZOOM_MAX 2.6667]`；
   滚轮步进 `ZOOM_STEP 0.1 × zoom_speed_mult`（设置面板 control/zoom_speed）；
   `base_zoom = vp_h/1080`（分辨率适配），`effective_zoom = base_zoom × user_zoom`
   才是 Camera2D 真值。缩放水平以鼠标为锚点、垂直钉视野下边界（4.3 锚线契约）。
 - **缩放条（`ZoomBar`，`modules/ui_global/scripts/hud/zoom_bar.gd`，SystemSetup
   装配进 UIRoot top_center 槽）**：滑块量程=**显示百分比域，整 10 档**——
   70%~260%、步进 10%（20 档刻度，SketchHSlider 自绘）；显示基准 `ZOOM_BASE
-  = 0.75` → **100%**（默认档恰在刻度上）。拖动 = `set_user_zoom(显示% ×
+  = 1.0` → **100%**（默认档恰在刻度上）。拖动 = `set_user_zoom(显示% ×
   ZOOM_BASE / 100)`（70%→0.525、260%→1.95，均落在 CameraRig 夹制区间内）；
   滚轮缩放后 `_process` 每帧 `sync_from_camera` 把句柄吸附最近整 10 刻度、
   标签读相机真实值。ui_global 不反向依赖 world——`CameraRig.ZOOM_*` 不取，
   夹制由 CameraRig 自身保证。
 - **3D 镜像（`Hd2dStreetMap._process` → `hd2d_world.set_cam_zoom`）**：传给
   3D 的是 `cam2d.zoom.x / base_zoom`（剥掉分辨率适配，**只认 user_zoom**）；
-  3D 侧 `_cam.size = 1080·宽高比/(32·user_zoom)`（`KEEP_WIDTH`，与 2D 逐像素
+  3D 侧 `_cam.size = 1080·宽高比/(24·user_zoom)`（`KEEP_WIDTH`，与 2D 逐像素
   1:1，4.1 三同步）并按锚线公式重钉 `position.z`；DOF far 距离是相机本地量，
   同步按世界线换算（4.8 已知边界）。两套相机脱钩的症结在"多除/少除一次
   base_zoom"，改任何一侧前先核对这条换算链。
@@ -448,8 +448,8 @@ offset/limits 变化时手搓漂、变换不会）。
 ### 6.1 坐标与相机
 
 - 1 格 = 1 Godot 单位 = 32px。x 横向（东正），y 高度，z 纵深（朝相机为正）。
-- 2D 行走带 y_px 688~1294（WALK_BACK_Y/WALK_FRONT_Y）↔ z 0~18.93，`z=(y−688)/32`；y=688 是建筑墙脚线，y=1294 同时是屏幕底沿锚线（换算契约见 §四）。
-- 相机：正交、yaw 0、俯角 26°、KEEP_WIDTH，视高 = 1080/(32·user_zoom) 格，位置 (跟随 x, 11, 锚线公式反推)；远焦 DOF 挂 CameraAttributesPractical（不在 Environment）。
+- 2D 行走带 y_px 516~970.5（WALK_BACK_Y/WALK_FRONT_Y）↔ z 0~18.94，`z=(y−516)/24`；y=516 是建筑墙脚线，y=970.5 同时是屏幕底沿锚线（换算契约见 §四）。
+- 相机：正交、yaw 0、俯角 26°、KEEP_WIDTH，视高 = 1080/(24·user_zoom) 格（构图锚线恒 33.75 格口径，动它 = 动默认构图），位置 (跟随 x, 11, 锚线公式反推)；远焦 DOF 挂 CameraAttributesPractical（不在 Environment）。
 
 ### 6.2 构图三钉（垂直取景的骨架）
 

@@ -237,7 +237,7 @@ func _test_camera_default() -> void:
 	if cam == null:
 		_runner.assert_true(false, "CameraRig 不存在")
 		return
-	_runner.assert_equal(cam.user_zoom, 0.75, "默认 user_zoom 应为 0.75（HD-2D 构图基准档，创始人 2026-09-15）")
+	_runner.assert_equal(cam.user_zoom, 1.0, "默认 user_zoom 应为 1.0（HD-2D 构图基准档，创始人 2026-09-15）")
 	_runner.assert_true(not cam.is_shaking(), "初始应未在震屏")
 
 
@@ -255,7 +255,7 @@ func _test_camera_zoom() -> void:
 	if cam == null:
 		_runner.assert_true(false, "CameraRig 不存在")
 		return
-	# 设置超出范围的值应被 clamp（user_zoom 范围 [0.5, 2.0]，默认 0.75）
+	# 设置超出范围的值应被 clamp（user_zoom 范围 [0.6667, 2.6667]，默认 1.0）
 	cam.set_user_zoom(10.0)
 	_runner.assert_true(cam.user_zoom <= ScriptCameraRig.ZOOM_MAX, "user_zoom 不应超过 ZOOM_MAX")
 	cam.set_user_zoom(0.1)

@@ -20,7 +20,8 @@ extends Node3D
 ##   stick-world/temp/ground_tiles/*.png                   地面分带贴图
 ##   若缺，先跑： blender -b --factory-startup -P stick-world/tests/dev/proto_25d/blender_proto.py
 ##
-## 坐标约定：Godot 单位 = 1 格 = 32 世界单位（同 proto_25d）。
+## 坐标约定：Godot 单位 = 1 格 = 24 引擎单位（2026-09-16 换轨，旧 32；zoom=1 时
+## 1 单位 = 1 设计像素；卡 meta 里烘焙 px 口径的数据经 ×S 统一折算）。
 ##   相机正交、yaw=0°、俯角 20°（对齐交接档 §0.3「纯正面 + 20° 微俯视、禁水平偏航」）。
 ##
 ## ── 继承 proto_25d 的五条实测发现（不得回退）────────────────────────────
@@ -36,7 +37,8 @@ extends Node3D
 ##   3.5~4 格（约 card 高度的 30~45%），建筑只剩上半截露在地面以上。
 ##   本原型按 anchor 落位（见 _spawn_card），建筑底部严格落在世界 y=0。
 
-const S := 1.0 / 32.0                    # Blender 世界单位(px) -> Godot 单位(格)
+const S := 1.0 / 32.0                    # 卡 meta 烘焙 px -> 格：json 恒 32px/格 记账（数据格式，不随换轨变）；
+                                         # 24px/格 的屏幕密度由相机承担（set_cam_zoom），格数口径两侧一致
 const TILT_DEG := 26.0                   # 俯角：创始人要求"稍微增加"（原 20°），本次 +6°
 const CARD_SHADER := preload("res://modules/hd2d/shaders/card.gdshader")
 const CHAR_HOST := preload("res://modules/hd2d/scripts/char_sprite_3d.gd")
@@ -156,7 +158,7 @@ const SKYLINE_Z := -6.73                 # bg1 基线压屏幕下 1/3 线：v=-h
 ## 深端行走界（2D y）：前后景分界线（黄线）+2px 防与 bg1 卡共面闪烁——前景
 ## 整段可行走，建筑 footprint/城墙带是真正障碍（创始人 2026-09-15：黄线以下
 ## 就是可行走地面范围，碰撞箱顶到黄线才停，不留肉眼可见的余量）
-const DEEP_WALK_Y := 688.0 + SKYLINE_Z * 32.0 + 2.0
+const DEEP_WALK_Y := 516.0 + SKYLINE_Z * 24.0 + 1.5
 const BG_LAYERS := 2                     # 背景排数（前排+两排=三排，创始人 2026-09-15）
 ## 背景层距（格）：bg2 紧贴 bg1
 const BG_LAYER_GAP := 3.5
@@ -201,7 +203,7 @@ const WALL_T := 1.2           # 墙厚（格）
 const WALL_H := 10.0          # 墙高（格，管线 v3 §4.1 town 档 320px）
 const GATE_Z0 := 8.0          # 门洞纵深带起（格）
 const GATE_Z1 := 14.0         # 门洞纵深带止（格）
-const WALK_FRONT_PX := 1294.0 # 行走带前端 px（宿主 WALK_FRONT_Y；= 688 + 18.93*32）
+const WALK_FRONT_PX := 970.5 # 行走带前端 px（宿主 WALK_FRONT_Y；= 516 + 18.94*24，旧 1294=688+18.93*32）
 ## 建筑接地影的 z 区间**必须整段落在路肩之外**（z ≥ 2.0）：
 ## 影和路肩都是贴地水平面，z 区间一旦重叠，深度值必然相等 → z-fighting。
 const BSHADOW_Z := 3.3
@@ -576,9 +578,9 @@ func _building_solid_rect(occ: Array) -> Array:
 		fd = float(fp[1])
 	fd = maxf(fd, 2.0)
 	var z: float = float(occ[3]) if occ.size() > 3 else 0.6
-	var base_y: float = 688.0 + z * 32.0
+	var base_y: float = 516.0 + z * 24.0
 	# 带后沿不越过深端行走界（黄线）——大屋顶卡的全深可能越过可行走边界
-	var y0: float = maxf(base_y - fd * 32.0, DEEP_WALK_Y)
+	var y0: float = maxf(base_y - fd * 24.0, DEEP_WALK_Y)
 	# [0][1] 与 [6][7] 同为占位槽宽（宽度口径=白包楼框，创始人定案：
 	# 紫带起码与白框同宽）
 	return [cx - cells * 0.5, cx + cells * 0.5,
@@ -635,7 +637,7 @@ func get_building_rects() -> Array:
 ## （新地平线）是末排背景基线，在这条线更远更高处，勿混淆（创始人 2026-09-15）。
 ## F3 黄线（ground_line_drawer）在 HD-2D 图画这条世界线，缩放时跟着真实分界走
 func get_fg_bg_boundary_y() -> float:
-	return 688.0 + SKYLINE_Z * 32.0
+	return 516.0 + SKYLINE_Z * 24.0
 
 
 ## 城门洞表（x 格 / y px **全行走带**）——传送带贴整面墙（创始人：城墙即
@@ -645,8 +647,8 @@ func get_gates() -> Array:
 	if battlefield:
 		return []
 	return [
-		{"x": -_wall_x(), "y0": 688.0, "y1": WALK_FRONT_PX},
-		{"x": _wall_x(), "y0": 688.0, "y1": WALK_FRONT_PX},
+		{"x": -_wall_x(), "y0": 516.0, "y1": WALK_FRONT_PX},
+		{"x": _wall_x(), "y0": 516.0, "y1": WALK_FRONT_PX},
 	]
 
 
@@ -749,7 +751,7 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	# 挡住——观感"碰撞箱向下偏移 ~32px"（38·ez@113% 档），创始人指认）。
 	if card != "lantern":
 		var half_w: float = float(units[0]) * S * 0.5 * 0.85
-		var y_c: float = 688.0 + z_off * 32.0
+		var y_c: float = 516.0 + z_off * 24.0
 		_prop_solids.append([x - half_w, x + half_w, y_c - 52.0, y_c])
 	return mi
 
@@ -793,7 +795,7 @@ func _card_bottom_pad(card: String, cards: Dictionary, dir: String) -> float:
 		if not units_a.is_empty() and not px_a.is_empty() and float(px_a[0]) > 1.0:
 			pad = float(rows) * float(units_a[0]) / (32.0 * float(px_a[0]))
 		else:
-			pad = float(rows) / 64.0   # 元数据缺失兜底：现烘卡 2px/建模px
+			pad = float(rows) / 64.0   # 元数据缺失兜底：现烘卡 2px/建模px（zoom2）
 		break
 	_pad_cache[key] = pad
 	return pad
@@ -858,7 +860,7 @@ func _place_props() -> void:
 			# 占格件（CityGen 杂物）：并进 F3 建筑辅助线——左右边界双黄线 +
 			# 紫占地带，与建筑同口径；碰撞仍走 _prop_solids 点障碍
 			if float(e.get("occ_cells", 0.0)) > 0.0:
-				var oc_y: float = 688.0 + float(e.get("z", 5.0)) * 32.0
+				var oc_y: float = 516.0 + float(e.get("z", 5.0)) * 24.0
 				var oc_x0: float = float(e["x"]) - float(e["occ_cells"]) * 0.5
 				_clutter_occ.append([oc_x0, oc_x0 + float(e["occ_cells"]),
 						oc_y - 26.0, oc_y + 26.0])
@@ -883,7 +885,7 @@ func _place_nature() -> void:
 
 ## 宿主按资源分布算法落卡（ResourceNode 点位 → 匹配自然物 PBR 卡，卡随点落）
 func spawn_nature_card_at(card: String, x_px: float, y_px: float) -> void:
-	_spawn_nature_card(card, x_px / 32.0, (y_px - 688.0) / 32.0)
+	_spawn_nature_card(card, x_px / 24.0, (y_px - 516.0) / 24.0)
 
 
 ## 自然物卡落位（卡底贴地，同 _spawn_prop 公式；目录/元数据走 nature 侧）。
@@ -928,7 +930,7 @@ func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
 	# 资源点 24px 阈值内（此前整卡宽碰撞把采集 AI 卡死在卡边的教训）
 	if bool(meta.get("solid", false)):
 		var half_w: float = 0.4
-		var y_c: float = 688.0 + z_off * 32.0
+		var y_c: float = 516.0 + z_off * 24.0
 		_prop_solids.append([x - half_w, x + half_w, y_c - 26.0, y_c + 26.0])
 	return mi
 
@@ -940,7 +942,7 @@ func get_open_work_sites() -> Array:
 	for e in PROPS:
 		if str(e["card"]) == "anvil":
 			out.append({
-				"pos": Vector2(float(e["x"]) * 32.0, 688.0 + float(e["z"]) * 32.0),
+				"pos": Vector2(float(e["x"]) * 24.0, 516.0 + float(e["z"]) * 24.0),
 				"work_site_def": "smithy_lv1",
 			})
 	return out
@@ -967,21 +969,25 @@ func set_cam_x(cx: float) -> void:
 ## 3D 相机缩放镜像——与 2D CameraRig **逐像素 1:1**（创始人：紫箱水平移动
 ## 比角色快 / 蓝线与屏幕下边界不重合的根因 = 旧固定视宽 74 格在 1920 下
 ## 25.9 px/格，与 2D 的 32 px/格差 19%，所有 2D 投影物相对 3D 世界漂移）。
-## 可视宽（格）= 2D 可视世界宽 px / 32 = DESIGN_HEIGHT·宽高比/(32·user_zoom)；
-## 纵向 px/格 随之同为 32。锚线 z_near 按"地面占屏幕下 1/3、天际线基线压
+## 25.9 px/格，与 2D 的 24 px/格差档，所有 2D 投影物相对 3D 世界漂移）。
+## 可视宽（格）= 2D 可视世界宽 px / 24 = DESIGN_HEIGHT·宽高比/(24·user_zoom)；
+## 纵向 px/格 随之同为 24。锚线 z_near 按"地面占屏幕下 1/3、天际线基线压
 ## 1/3 线"的构图契约取值，缩放时钉死在屏幕底沿。
 ## 推导：屏幕底沿地面 z = z_c + h_v/(2 sinθ)（z_c = P.z − P.y/tanθ，
-## h_v = DESIGN_HEIGHT/(32·user_zoom)）⇒ P.z = z_near − h_v/(2 sinθ) + P.y/tanθ。
+## h_v = DESIGN_HEIGHT/(24·user_zoom)）⇒ P.z = z_near − h_v/(2 sinθ) + P.y/tanθ。
 func set_cam_zoom(user_zoom: float) -> void:
 	if _cam == null or user_zoom <= 0.05:
 		return
 	var uz: float = clampf(user_zoom, 0.25, 8.0)
 	var vp := _cam.get_viewport().get_visible_rect().size
-	_cam.size = DESIGN_HEIGHT * vp.x / (32.0 * vp.y * uz)
+	_cam.size = DESIGN_HEIGHT * vp.x / (24.0 * vp.y * uz)
 	var t := deg_to_rad(TILT_DEG)
-	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)   # = DESIGN_HEIGHT/(32·uz)
-	var h_v1: float = DESIGN_HEIGHT / 32.0               # zoom=1 基准视高（格）
-	var z_near: float = SKYLINE_Z + h_v1 / (3.0 * sin(t))
+	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)   # = DESIGN_HEIGHT/(24·uz)
+	# 构图锚（格口径，换轨不变）：旧 zoom=1 基准视高 1080/32 = 33.75 格——
+	# 天际线基线压 1/3 线的世界锚线。换轨后默认档 h_v=45 格（旧 0.75 档），
+	# 分界线随之仍压屏幕 1/4 线；动这个数 = 动默认构图（创始人契约）。
+	var h_anchor: float = DESIGN_HEIGHT / 32.0
+	var z_near: float = SKYLINE_Z + h_anchor / (3.0 * sin(t))
 	_cam.position.z = z_near - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
 	# 景深与缩放解耦：far blur 起点钉在**世界线**上——天际线基线向镜头前移
 	# DOF_FAR_START_AHEAD 格（第二排从这条线起吃半档模糊；创始人：第二排景深要明显）。
@@ -992,7 +998,7 @@ func set_cam_zoom(user_zoom: float) -> void:
 
 
 ## 3D 视图对地面纵深的屏幕压缩率（俯角前缩）：3D 与 2D 逐像素 1:1 后，
-## 1 格地面纵深在屏幕上的竖直像素 = 32·sin(俯角)，压缩率即纯 sin(俯角)。
+## 1 格地面纵深在屏幕上的竖直像素 = 24·sin(俯角)，压缩率即纯 sin(俯角)。
 ## 2D 画布的特效/调试框按 2D y 直绘会与 3D 世界错开 (1-压缩率) 倍——
 ## 宿主用本值做坐标重映射（remap_fx_pos）。
 func get_ground_squash() -> float:
@@ -1008,11 +1014,11 @@ func get_ground_lift_world(x: float, z: float) -> float:
 	return PLAT_H if (z < BAND_SIDEWALK.y and absf(x) <= _wall_x()) else 0.0
 
 
-## 2D 画布域抬升（px，zoom=1 基准）：世界抬升 × 32 × cosθ——与角色 billboard
+## 2D 画布域抬升（px，zoom=1 基准）：世界抬升 × 24 × cosθ——与角色 billboard
 ## 脚底抬升同源同值，宿主 remap_fx_pos 消费，青箱/FX/黄线随之贴到抬升后的地面
 func get_ground_lift_px(x_px: float, y_px: float) -> float:
-	var z: float = (y_px - 688.0) / 32.0
-	return get_ground_lift_world(x_px / 32.0, z) * 32.0 * cos(deg_to_rad(TILT_DEG))
+	var z: float = (y_px - 516.0) / 24.0
+	return get_ground_lift_world(x_px / 24.0, z) * 24.0 * cos(deg_to_rad(TILT_DEG))
 
 
 ## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）
@@ -1670,7 +1676,7 @@ func _place_clouds() -> void:
 		var sp := Sprite3D.new()
 		sp.name = "Cloud%d" % i
 		sp.texture = tex
-		sp.pixel_size = 1.0 / 32.0            # 烘焙 px → 世界格（1 格 = 32px）
+		sp.pixel_size = 0.75 / 32.0           # 云图源=旧 2D 画布 px（32px/格口径）→格，换轨 ×0.75
 		sp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		sp.shaded = false
 		sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
@@ -2221,7 +2227,7 @@ func _run_shots(which: String) -> void:
 	var t0 := Time.get_ticks_usec()
 	# SubViewport 实测：量 alpha 包围盒，证明 2D 像素真进了纹理
 	var bb: Rect2i = await _char_host.measure_bbox()
-	var px_per_grid := 32.0 * float(_char_host.px_scale)
+	var px_per_grid := 24.0 * float(_char_host.px_scale)
 	print("[hd2d] SubViewport %dx%d 角色 alpha 包围盒=%s  -> 角色高 %.2f 格 (契约 4.09；1px=%.5f 格)" % [
 		_char_host.viewport.size.x, _char_host.viewport.size.y, str(bb),
 		float(bb.size.y) / px_per_grid, 1.0 / px_per_grid])

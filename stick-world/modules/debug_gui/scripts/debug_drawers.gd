@@ -67,7 +67,7 @@ static func draw_grid(control: Control, ctx: Dictionary) -> void:
 		if map.has_method("get_building_rects"):
 			_draw_hd2d_cell_lines(control, ctx, map)
 		return
-	var cell_size: float = float(grid.get("CELL_SIZE")) if grid.get("CELL_SIZE") != null else 32.0
+	var cell_size: float = float(grid.get("CELL_SIZE")) if grid.get("CELL_SIZE") != null else 24.0
 	# 阶段 F：使用动态边界（支持负数 cell_x）
 	var gw_min: int = grid.get_min_cell() if grid.has_method("get_min_cell") else 0
 	var gw_max: int = grid.get_max_cell() if grid.has_method("get_max_cell") else grid.grid_width - 1
@@ -126,12 +126,12 @@ static func _draw_hd2d_cell_lines(control: Control, ctx: Dictionary, map: Node2D
 	var line_top: float = world_to_screen(Vector2(0.0, _ground_y(map, y_top)), ctx).y
 	var line_bottom: float = world_to_screen(Vector2(0.0, _ground_y(map, y_bottom)), ctx).y
 	var col := Color(1.0, 1.0, 1.0, 0.08)
-	var x: float = ceilf(maxf(x0 * 32.0, view_left) / 32.0) * 32.0
-	var to_x: float = minf(x1 * 32.0, view_right)
+	var x: float = ceilf(maxf(x0 * 24.0, view_left) / 24.0) * 24.0
+	var to_x: float = minf(x1 * 24.0, view_right)
 	while x <= to_x:
 		var screen_x: float = world_to_screen(Vector2(x, 0.0), ctx).x
 		control.draw_line(Vector2(screen_x, line_top), Vector2(screen_x, line_bottom), col, 1.0)
-		x += 32.0
+		x += 24.0
 
 
 ## WalkBarrier（蓝）+ PassageBarrier（紫）
@@ -201,7 +201,7 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 			var top_y: float = world_to_screen(Vector2(0.0, _ground_y(map, float(r[2]))), ctx).y
 			var bot_y: float = world_to_screen(Vector2(0.0, _ground_y(map, float(r[3]))), ctx).y
 			# 占地带 x=格（×32 转 px）、y=px（混合口径，见 _draw_hd2d_cell_lines 注）
-			for rx: float in [float(r[0]) * 32.0, float(r[1]) * 32.0]:
+			for rx: float in [float(r[0]) * 24.0, float(r[1]) * 24.0]:
 				var sx: float = world_to_screen(Vector2(rx, 0.0), ctx).x
 				control.draw_line(Vector2(sx, top_y), Vector2(sx, bot_y), edge_col, 1.5)
 			# 占地格子宽度显示（创始人 2026-09-15：左右边界竖线+逐格浅线，
@@ -210,14 +210,14 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 			var cells_n := maxi(1, int(round(float(r[1]) - float(r[0]))))
 			for i in range(1, cells_n):
 				var cx_line: float = world_to_screen(
-						Vector2((float(r[0]) + i) * 32.0, 0.0), ctx).x
+						Vector2((float(r[0]) + i) * 24.0, 0.0), ctx).x
 				control.draw_line(Vector2(cx_line, top_y), Vector2(cx_line, bot_y),
 						Color(1.0, 1.0, 1.0, 0.35), 1.0)
 			# 紫色占地带（PassageBarrier 口径，2D 图建筑紫框语义；创始人 2026-09-15
 			# 问"紫色碰撞箱是不是不显示了"）：真实墙脚 footprint 的地面投影，
 			# y0/y1 各自 remap——占地贴着楼脚，不再躺到楼前街面上
-			var px0: float = world_to_screen(Vector2(float(r[0]) * 32.0, 0.0), ctx).x
-			var px1: float = world_to_screen(Vector2(float(r[1]) * 32.0, 0.0), ctx).x
+			var px0: float = world_to_screen(Vector2(float(r[0]) * 24.0, 0.0), ctx).x
+			var px1: float = world_to_screen(Vector2(float(r[1]) * 24.0, 0.0), ctx).x
 			var prect := Rect2(Vector2(px0, top_y), Vector2(px1 - px0, bot_y - top_y))
 			control.draw_rect(prect, Color(0.6, 0.2, 0.8, 0.3), true)
 			control.draw_rect(prect, Color(0.6, 0.2, 0.8, 0.8), false, 1.0)
@@ -228,8 +228,8 @@ static func draw_buildings(control: Control, ctx: Dictionary) -> void:
 			if r.size() >= 6:
 				var occ_x0: float = float(r[6]) if r.size() >= 8 else float(r[0])
 				var occ_x1: float = float(r[7]) if r.size() >= 8 else float(r[1])
-				var bx0: float = world_to_screen(Vector2(occ_x0 * 32.0, 0.0), ctx).x
-				var bx1: float = world_to_screen(Vector2(occ_x1 * 32.0, 0.0), ctx).x
+				var bx0: float = world_to_screen(Vector2(occ_x0 * 24.0, 0.0), ctx).x
+				var bx1: float = world_to_screen(Vector2(occ_x1 * 24.0, 0.0), ctx).x
 				var base_line: float = world_to_screen(
 						Vector2(0.0, _ground_y(map, float(r[4]))), ctx).y
 				var box_h: float = float(r[5]) * ctx.get("effective_zoom", 1.0)
@@ -267,11 +267,11 @@ static func _draw_building_outline(control: Control, ctx: Dictionary, building: 
 				if "width" in building:
 					width_cells = maxi(1, int(building.get("width")))
 				else:
-					width_cells = maxi(1, int(round(rs.size.x / 32.0)))
-				var footprint_px: float = width_cells * 32.0
+					width_cells = maxi(1, int(round(rs.size.x / 24.0)))
+				var footprint_px: float = width_cells * 24.0
 				var bottom_y: float = screen_pos.y + screen_size.y * 0.5
 				var col_left_world: float = building.global_position.x + cs.position.x - rs.size.x / 2.0
-				var foot_left_x: float = world_to_screen(Vector2(floor(col_left_world / 32.0) * 32.0, 0), ctx).x
+				var foot_left_x: float = world_to_screen(Vector2(floor(col_left_world / 24.0) * 24.0, 0), ctx).x
 				var foot_right_x: float = foot_left_x + footprint_px * zoom
 				var tick_height: float = 20.0
 				var red := Color(1.0, 0.2, 0.2, 0.9)
@@ -400,7 +400,7 @@ static func draw_terrain_grid(control: Control, ctx: Dictionary) -> void:
 	var ground_bottom: float = map.ground_bottom if "ground_bottom" in map else 1080.0
 	var map_left: float = map.map_left if "map_left" in map else 0.0
 	var map_right: float = map.map_right if "map_right" in map else 8192.0
-	var cell_size: float = 32.0
+	var cell_size: float = 24.0
 	var zoom: float = ctx.get("effective_zoom", 1.0)
 	var cam_pos: Vector2 = ctx.get("camera_pos", Vector2.ZERO)
 	var vp_size: Vector2 = ctx.get("viewport_size", Vector2.ZERO)
@@ -523,7 +523,7 @@ static func draw_world_ruler(control: Control, ctx: Dictionary) -> void:
 	# 自适应刻度间距：目标屏幕间距 ~60px，世界间距向上取整到 32px（1 cell）的倍数
 	var target_screen_step: float = 60.0
 	var world_step: float = target_screen_step / zoom
-	world_step = maxf(32.0, ceil(world_step / 32.0) * 32.0)
+	world_step = maxf(24.0, ceil(world_step / 24.0) * 24.0)
 	# 每 10 格（320px）标数字
 	var label_step: float = 320.0
 	var clamped_left: float = maxf(view_left, map_left)
@@ -538,7 +538,7 @@ static func draw_world_ruler(control: Control, ctx: Dictionary) -> void:
 		var tick_color: Color = Color(0.9, 0.9, 0.9, 0.6) if is_label else Color(0.7, 0.7, 0.7, 0.35)
 		control.draw_line(Vector2(screen_x, p1.y), Vector2(screen_x, p1.y + tick_len), tick_color, 1.0)
 		if is_label:
-			var cell_num: int = int(x / 32.0)
+			var cell_num: int = int(x / 24.0)
 			if x == 0.0:
 				control.draw_string(font, Vector2(screen_x - 40, p1.y + 24), "★ 0 (世界原点)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.8, 0.2, 0.95))
 			else:

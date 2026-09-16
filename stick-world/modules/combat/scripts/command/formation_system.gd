@@ -43,7 +43,7 @@ const DEFAULT_PRESET_ID := "fp_combat_squad"
 ## 预设配置文件路径
 const PRESET_CONFIG_PATH := "res://config/formations/formation_presets.tres"
 ## 队形散开间距（px）：推进横排相邻队员间隔（反编译参考实装 D）
-var SPREAD_SPACING: float = 32.0
+var SPREAD_SPACING: float = 24.0  # 24px 换轨（调参表 var_spread_spacing 运行时覆盖）
 ## 集合围圈半径（px）：RALLY 集结时队员绕圈距离
 const RALLY_RADIUS: float = 24.0
 ## 队伍级目标决策间隔（秒）：排长每此间隔重选一次共享攻击目标（反编译参考实装 D-B）

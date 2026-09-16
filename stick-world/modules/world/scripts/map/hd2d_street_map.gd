@@ -36,16 +36,16 @@ const _GatePromptScript := preload("res://modules/world/scripts/map/hd2d_gate_pr
 const CITY_TIER := "townlet"
 
 ## 街面行走带的 2D y 范围（建筑墙挡住的后段 + 前景可横穿段）。
-## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.93 格，
-## 构图契约"地面占屏幕下 1/3"@zoom=1——默认缩放 0.75 下分界线压屏幕下 1/4，
-## 见 HD-2D街景系统.md §4.0）——屏幕底沿、2D ground_bottom（蓝线）、
-## 可行走深度三点合一，整条可见街面都能走。
-const walk_back_y := 688.0
+## 前端 = 3D 街面的可见近沿（z_near = 天际线基线 + 视高/3/sin26° = 18.94 格，
+## 构图契约"地面占屏幕下 1/3"——24px 换轨后默认 zoom=1.0 即旧 0.75 档构图，
+## 分界线仍压屏幕下 1/4，见 HD-2D街景系统.md §4.0）——屏幕底沿、
+## 2D ground_bottom（蓝线）、可行走深度三点合一，整条可见街面都能走。
+const walk_back_y := 516.0
 ## 前界（屏幕底沿锚线）：_ready 经 _front_band_y() 初始化；战场图覆写钩子加深
-var walk_front_y: float = 1294.0
+var walk_front_y: float = 970.5
 
-## 3D 街景横移换算：1 格 = 32px
-const CELL_PX := 32.0
+## 3D 街景横移换算：1 格 = 24px（2026-09-16 换轨，旧 32）
+const CELL_PX := 24.0
 
 ## 光照档切换时刻（小时）：6:00 天亮、19:00 入夜
 const HOUR_DAY_BREAK := 6.0
@@ -261,8 +261,8 @@ func _sync_character_render() -> void:
 ## 纵深融入（HD-2D 最佳实践第一层）：行走带 y → 实体视觉近大远小 + 接地感。
 ## 只缩 RigHost（视觉骨架），不碰碰撞体；实体体型缩放（_apply_scale）是稀有
 ## 事件，其结果会被本帧 base+depth 重建覆盖——以 meta 记录的基准为准。
-var depth_y_min: float = 688.0
-var depth_y_max: float = 1294.0
+var depth_y_min: float = 516.0
+var depth_y_max: float = 970.5
 const DEPTH_SCALE_MIN := 0.92
 const DEPTH_SCALE_MAX := 1.10
 
@@ -283,7 +283,8 @@ func _apply_depth_visual() -> void:
 func get_spawn_point() -> Vector2:
 	# 街中心前景：玩家落在画面中下（3D 街景可见区内）。
 	# 布局驱动模式与手摆模式都以 0 为街中心（导出器已把布局 x 中心化）。
-	return Vector2(0.0, 1010.0)
+	# 24px 换轨：旧 1010 = 2D 画布 px，×0.75（脚本内画布 y 约定见文件头）。
+	return Vector2(0.0, 757.5)
 
 
 ## HD 场景模式注入钩子（add_child 前调，子类覆写开模式；如战场图开 battlefield）
@@ -333,10 +334,10 @@ func get_npc_spawn_points() -> Array:
 	if half <= 1.0:
 		half = 95.0   # 布局缺失兜底（tscn 手摆语义）
 	for i in 6:
-		pts.append(Vector2((-0.55 + i * 0.16) * half * CELL_PX, 985.0 + (i % 3) * 30.0))
-	pts.append(Vector2(-6.0 * CELL_PX, 1000.0))   # 市集广场
-	pts.append(Vector2(2.0 * CELL_PX, 1030.0))
-	pts.append(Vector2(half * 0.3 * CELL_PX, 1000.0))
+		pts.append(Vector2((-0.55 + i * 0.16) * half * CELL_PX, 738.75 + (i % 3) * 22.5))
+	pts.append(Vector2(-6.0 * CELL_PX, 750.0))   # 市集广场
+	pts.append(Vector2(2.0 * CELL_PX, 772.5))
+	pts.append(Vector2(half * 0.3 * CELL_PX, 750.0))
 	return pts
 
 

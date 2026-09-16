@@ -21,7 +21,7 @@ func _init(entity: Node) -> void:
 
 # ─────────────────────────────── 运动常量 ────────────────────────────────
 ## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT）
-const WALK_ANIM_BASE: float = 100.0
+const WALK_ANIM_BASE: float = 75.0   # 24px 换轨（旧 100；格/秒口径不变 → 动画相位不变）
 ## 动画整体播放倍率（×1.4 加速，与 visual_controller.gd 一致）
 const ANIM_SPEED_MULT: float = 1.4
 ## 切到 idle 的速度阈值（减速停止判定；原实体常量随减速公式迁入）

@@ -12,11 +12,11 @@ extends Node3D
 ##   过一遍 SubViewport 才拿到一张"可被 3D 场景当材质用"的纹理，
 ##   才能让建筑按真深度遮挡角色（见 char_billboard.gdshader 注释）。
 ##
-## 尺寸契约（本原型的锚，别乱改）：
+## 尺寸契约（本原型的锚，别乱改；2026-09-16 换轨 24px/格，等比 ×0.75）：
 ##   StickmanRig 原生空间高 ≈ 262px，脚底在 local y=+131（髋部为原点）。
-##   本脚本把 rig.scale 设成 0.5 → 角色在 SubViewport 里 **131px 高**。
-##   SubViewport 1px 映射 1 格/32 → 角色 = 131/32 = 4.09 格 = 130 Blender 单位
-##   = 1.70m，与交接档 §0.3 的比例锚（火柴人 130px / 1.70m）严格一致。
+##   本脚本把 rig.scale 设成 0.35625 → 角色在 SubViewport 里 **98.25px 高**。
+##   SubViewport 1px 映射 1 格/24 → 角色 = 98.25/24 = 4.09 格 = 97.5 引擎单位
+##   = 1.70m（1 引擎单位 ≈ 1.75cm），与交接档 §0.3 的比例锚（火柴人 1.70m）一致。
 ##
 ## 一个 SubViewport 可以被 N 个 quad 共用（同姿态）；要每个角色不同动画相位，
 ## 必须一个角色一个 SubViewport（成本见汇报的性能读数）。
@@ -29,10 +29,10 @@ const HEALTH_BAR_SCRIPT := preload("res://modules/units/scripts/entity/health_ba
 
 const SV_W := 144            # SubViewport 宽（px）
 const SV_H := 176            # SubViewport 高（px）
-const RIG_SCALE := 0.475      # 原生 ~274px -> ~130px（= 130 世界单位 = 1.70m，§0.3 比例锚）
+const RIG_SCALE := 0.35625   # 原生 ~274px -> ~98px（= 97.5 引擎单位 = 1.70m，§0.3 比例锚；旧轨 0.475×0.75）
 const FOOT_ROW := 144        # 脚底落在 SubViewport 的第几行（自顶向下，留 32px 底边）
-const PX := 1.0 / 32.0       # 1 SubViewport px = 1 Blender 世界单位 = 1/32 格
-const SIZE_K := 1.2          # 角色 billboard 世界占位放大（2026-09-14：偏小反馈）
+const PX := 1.0 / 24.0       # 1 SubViewport px = 1 引擎单位 = 1/24 格（24px 换轨）
+const SIZE_K := 1.0          # 角色 billboard 世界占位（24px 换轨观感轮回归 1.0：门 112.5 > 人 97.5，恢复"门比人高"）
 ## 双脚 IK 目标的中点（stickman_test.tscn 里 outfoot=(28,131) / innerfoot=(-22,131)），
 ## 用来把角色水平居中、脚底钉在 FOOT_ROW。这两个 Marker 是**骨骼 IK 的契约锚点**，
 ## 位置稳定（不随动画帧漂），所以比 alpha 包围盒更适合当摆位基准。

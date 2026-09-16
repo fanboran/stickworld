@@ -184,7 +184,7 @@ func _ready() -> void:
 
 
 ## 设置体型缩放（minidon 等小体型单位）：血条高度/大小同步缩小。
-## 由实体缩放助手 entity_scale_rig.gd 的 _apply_scale 调用。
+## 由实体 _apply_scale 转发调用。
 func set_body_scale(bs: float) -> void:
 	position.y = OFFSET_Y * bs
 	scale = Vector2(maxf(0.1, bs), maxf(0.1, bs))

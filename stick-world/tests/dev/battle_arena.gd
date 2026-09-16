@@ -113,10 +113,10 @@ static var _preset_idx: int = 1
 const ROW_GAP: float = 110.0
 ## 排内左右间距（px）
 const LINE_GAP: float = 90.0
-## 左右两团出生中心 x 相对地图中线的偏移。zoom 1.0 下半屏 960px——偏移 1100
-## 时两军最前排（front_x 150）落在 ±950，开场即在画面两缘可见、对冲收向中线
-## （此前 1400：最前排 ±1250 出画，开战头几秒是一片空场）
-const TEAM_OFFSET_X: float = 1100.0   # HD-2D 战场 88 格深带
+## 左右两团出生中心 x 相对地图中线的偏移。观战缩放 0.75（缩放条 100% 档）下
+## 半屏 1280px——偏移 1400 时两军最前排（front_x 150）落在 ±1250，开场即在
+## 画面两缘可见、对冲收向中线（"两军拉满全屏"）
+const TEAM_OFFSET_X: float = 1400.0   # HD-2D 战场 88 格深带
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
@@ -187,12 +187,10 @@ func _spawn_and_start() -> void:
 		# 南漂时大军沉出屏幕下沿；RTS 观战开 Y 跟随，rig 侧带内钳制）
 		if rig.has_method("set_follow_target_y"):
 			rig.set_follow_target_y(true)
-		# 缩放对齐 SWL 战场观感：单位身高约占屏高 13%（SWL 1080P 下约 8~13%）——
-		# 正式游戏（村庄附身互动）user_zoom=1.0 合适，但 RTS 观战的镜头要远得多
-		# （此前 1.0 下单位占屏 24%，观感"镜头贴脸"）
+		# 缩放取 HD-2D 构图契约基准档 0.75（缩放条读 100%；设 1.0 会显示 133%
+		# ——创始人 2026-09-16：观察场缩放条该是 100%）
 		if rig.has_method("set_user_zoom"):
-			# 观战缩放 1.0：单位占屏 ~12%（README 战斗头图口径）
-			rig.set_user_zoom(1.0)
+			rig.set_user_zoom(0.75)
 		_cam_proxy = Marker2D.new()
 		_cam_proxy.name = "ArenaCamProxy"
 		add_child(_cam_proxy)

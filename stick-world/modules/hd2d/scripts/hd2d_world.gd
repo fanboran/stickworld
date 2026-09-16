@@ -153,6 +153,10 @@ const FRONT_ROW: Array = [
 ##   · bg2 紧贴 bg1（层距 3.5 格——创始人 2026-09-15：第三排紧贴第二排）；
 ##   · bg2 基线 = 真实地平线（底衬远端同步收到此处）。
 const SKYLINE_Z := -6.73                 # bg1 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
+## 战场地平线（格）：绿草地皮远端 z=0（=行走带后界 688px）。战场构图契约
+## （创始人 2026-09-16：全场景只有前景大地无后景）把它钉在屏幕上 1/3 线——
+## 地面占下 2/3、天空占上 1/3，任意缩放档成立（见 set_cam_zoom 战场分支）
+const BF_HORIZON_Z := 0.0
 ## 深端行走界（2D y）：前后景分界线（黄线）+2px 防与 bg1 卡共面闪烁——前景
 ## 整段可行走，建筑 footprint/城墙带是真正障碍（创始人 2026-09-15：黄线以下
 ## 就是可行走地面范围，碰撞箱顶到黄线才停，不留肉眼可见的余量）
@@ -981,8 +985,15 @@ func set_cam_zoom(user_zoom: float) -> void:
 	var t := deg_to_rad(TILT_DEG)
 	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)   # = DESIGN_HEIGHT/(32·uz)
 	var h_v1: float = DESIGN_HEIGHT / 32.0               # zoom=1 基准视高（格）
-	var z_near: float = SKYLINE_Z + h_v1 / (3.0 * sin(t))
-	_cam.position.z = z_near - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
+	if battlefield:
+		# 战场构图契约（创始人 2026-09-16）：全场景只有前景大地——地平线
+		# （绿草地皮远端 BF_HORIZON_Z）钉屏幕上 1/3 线，地面占下 2/3，任意
+		# 缩放档成立。推导同下行：屏幕底沿地面 z = 地平线 + (2/3)·h_v/sinθ
+		# ⇒ P.z = 地平线 + h_v/(6·sinθ) + P.y/tanθ
+		_cam.position.z = BF_HORIZON_Z + h_v / (6.0 * sin(t)) + _cam.position.y / tan(t)
+	else:
+		var z_near: float = SKYLINE_Z + h_v1 / (3.0 * sin(t))
+		_cam.position.z = z_near - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
 	# 景深与缩放解耦：far blur 起点钉在**世界线**上——天际线基线向镜头前移
 	# DOF_FAR_START_AHEAD 格（第二排从这条线起吃半档模糊；创始人：第二排景深要明显）。
 	# dof_blur_far_distance 是相机本地距离，缩放移动相机后若不同步换算，
@@ -1173,8 +1184,11 @@ func _build_world() -> void:
 	# 台面标高一直到地平线，不存在"踩空"落差；野地在墙外两侧，维持 y=0）。
 	# 战场/资源图无台面语义，远景带维持旧分幅 y=0 平铺。所有地皮走世界锚定 UV
 	# （_add_ground_plane_at 内统一）——同材质跨带无缝续接、缩放全局一致。
-	var far_z: float = float(_bg_base_z.get(1,
-		SKYLINE_Z - BG_LAYER_GAP * 1.0))
+	# 战场无背景楼群：兜底远端与主地皮远端对齐（z=0 即地平线，set_cam_zoom
+	# 战场契约把这条线钉屏幕上 1/3 线）——若吃 SKYLINE_Z 系默认值，绿兜底会
+	# 越过地平线多铺 ~10 格，地面占比冲到 76%（创始人 2/3 口径被顶掉）
+	var far_z: float = 0.0 if battlefield \
+			else float(_bg_base_z.get(1, SKYLINE_Z - BG_LAYER_GAP * 1.0))
 	var wx: float = _wall_x()
 	var far_y: float = 0.0 if battlefield else PLAT_H
 	var far_near_z: float = 0.0 if battlefield else BAND_SIDEWALK.x
@@ -1217,16 +1231,11 @@ func _build_world() -> void:
 	_ground_root.add_child(fb_mi)
 	_add_sky_backdrop()                   # 原 2D 天空贴图（远山/树线）立于背景之后
 	_place_clouds()                       # 2D 手绘云烘贴图 → 漂移云牌（异步烘制）
-	if battlefield:
-		# 战场野地铺装：全域草灰绿（同主街墙外野地调）+ 中轴夯土东路
-		# （东门大道的延续，压出"路通战场"的走向）。无台面/墙/街灯。
-		_add_ground_plane_at("rammed_earth_128.png", 0.0, 600.0,
-			0.0, BAND_ROAD.y, 0.0, 6.0, Color(0.68, 0.74, 0.54))
-		_add_ground_plane_at("rammed_earth_128.png", 0.0, 600.0,
-			2.0, 11.0, 0.01, 6.0, Color(0.80, 0.77, 0.62))
-	else:
+	if not battlefield:
 		_add_platform()                   # 人行道台面（三段：中石板/两侧夯土+交接条）+ 台肩长条石
 		_build_walls()                    # 城墙转角收边 + 门洞（碰撞走 get_solid_rects）
+		# 战场野地不再有第二/第三材质（创始人 2026-09-16：整个大地一个材质，
+		# 草灰绿夯土带与中轴夯土东路已删——地面只有上方那层全幅绿草）
 	_add_width_guides()                   # 建筑宽度辅助线（--debug 才显示）
 	_add_horizon_guides()                 # 1/3 线（橙）+ 第三排基线（绿）（--debug 才显示）
 	for dx in _door_path_xs:

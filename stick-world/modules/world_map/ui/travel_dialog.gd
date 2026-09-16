@@ -1,7 +1,9 @@
 extends Control
 class_name TravelDialog
-## 旅行方式选择弹窗（P6/E3，总体设计 §5.10 交互流）—— 双击聚落后弹出：
-## [走过去 | 快速旅行 | 取消]。
+## 旅行弹窗（P6/E3，总体设计 §5.10 交互流）—— 两种模式：
+##   旅行模式（open_for）：双击聚落后弹出 [走过去 | 快速旅行 | 取消]
+##   传送模式（open_confirm）：单击聚落后弹出 [取消 | 传送]——TELEPORT 直达，
+##   不查到访/路网（创始人 2026-09-16：单击聚落即可传送的常规交互）
 ##
 ## 挂 strategic_map.tscn 的 CanvasLayer 直下（战略图层号 100 高于 UIRoot 的 1，
 ## 不能走 UIModalStack/SystemOverlay——会被地图盖住），自管理遮罩与显隐；

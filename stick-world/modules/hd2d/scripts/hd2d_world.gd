@@ -1198,22 +1198,33 @@ func _build_world() -> void:
 	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
 	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
 	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
-	# 中远景地面（背景地面带）：**与道路带同材质分幅**（城心石板/夯土过渡），
+	# 中远景地面（背景地面带，仅城内街景）：**与台面带同材质分幅**（中石板/侧草；
+	# 创始人 2026-09-16：同高即同一片地表，材质跟台面——旧版沿用道路带分幅，抬升
+	# 后把路面材质顶进了台面标高，读作"台面被换材质"）。tile/tint 与台面窄带逐项
+	# 一致、石/草分界同在 ±28——世界锚定 UV 下跨带无缝续接成一整块台面。
 	# 且**与建筑带（台面）同高**（创始人 2026-09-15：建筑带身后的城内地面保持
 	# 台面标高一直到地平线，不存在"踩空"落差；野地在墙外两侧，维持 y=0）。
-	# 战场/资源图无台面语义，远景带维持 y=0 平铺。所有地皮走世界锚定 UV
+	# 战场/资源图无台面语义，远景带维持旧分幅 y=0 平铺。所有地皮走世界锚定 UV
 	# （_add_ground_plane_at 内统一）——同材质跨带无缝续接、缩放全局一致。
 	var far_z: float = float(_bg_base_z.get(1,
 		SKYLINE_Z - BG_LAYER_GAP * 1.0))
 	var wx: float = _wall_x()
 	var far_y: float = 0.0 if battlefield else PLAT_H
 	var far_near_z: float = 0.0 if battlefield else BAND_SIDEWALK.x
-	_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
-		far_z, far_near_z, far_y, 10.0, Color(0.86, 0.89, 0.96))
-	_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
-		far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
-	_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
-		far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
+	if battlefield:
+		_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
+			far_z, far_near_z, far_y, 10.0, Color(0.86, 0.89, 0.96))
+		_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
+			far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
+		_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
+			far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
+	else:
+		_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
+			far_z, far_near_z, far_y, 5.0, Color(1.04, 1.00, 0.93))
+		_add_ground_plane_at("grass_alb_128.png", -(wx + 58.0) * 0.5, wx + 2.0,
+			far_z, far_near_z, far_y, 8.0, Color(0.90, 0.93, 0.80))
+		_add_ground_plane_at("grass_alb_128.png", (wx + 58.0) * 0.5, wx + 2.0,
+			far_z, far_near_z, far_y, 8.0, Color(0.90, 0.93, 0.80))
 	# 兜底大地皮：街面分段各有边界，缩太小视野越出分段范围就露天空
 	# （创始人：缩太小下边界出现虚空）。这层压在所有分段之下（y=-0.05），
 	# 只在分段没铺到的区域露脸。远端收在**第二排后景基线**（=真实地平线，

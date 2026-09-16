@@ -1018,15 +1018,6 @@ func set_cam_zoom(user_zoom: float) -> void:
 	var depth_bottom: float = _cam.position.y * sin(t) - cos(t) * (z_bottom - _cam.position.z)
 	var back: float = maxf(0.0, CAM_NEAR_SAFE - depth_bottom)
 	_cam.position += Vector3(0.0, sin(t), cos(t)) * back
-=======
-	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)   # = DESIGN_HEIGHT/(24·uz)
-	# 构图锚（格口径，换轨不变）：旧 zoom=1 基准视高 1080/32 = 33.75 格——
-	# 天际线基线压 1/3 线的世界锚线。换轨后默认档 h_v=45 格（旧 0.75 档），
-	# 分界线随之仍压屏幕 1/4 线；动这个数 = 动默认构图（创始人契约）。
-	var h_anchor: float = DESIGN_HEIGHT / 32.0
-	var z_near: float = SKYLINE_Z + h_anchor / (3.0 * sin(t))
-	_cam.position.z = z_near - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
->>>>>>> agent/hd2d-unit-24
 	# 景深与缩放解耦：far blur 起点钉在**世界线**上——天际线基线向镜头前移
 	# DOF_FAR_START_AHEAD 格（第二排从这条线起吃半档模糊；创始人：第二排景深要明显）。
 	# dof_blur_far_distance 是相机本地距离，缩放移动相机后若不同步换算，

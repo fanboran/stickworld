@@ -1,1 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="124" height="124" x="2" y="2" fill="#363d52" stroke="#212532" stroke-width="4" rx="14"/><g fill="#fff" transform="translate(12.322 12.322)scale(.101)"><path d="M105 673v33q407 354 814 0v-33z"/><path fill="#478cbf" d="m105 673 152 14q12 1 15 14l4 67 132 10 8-61q2-11 15-15h162q13 4 15 15l8 61 132-10 4-67q3-13 15-14l152-14V427q30-39 56-81-35-59-83-108-43 20-82 47-40-37-88-64 7-51 8-102-59-28-123-42-26 43-46 89-49-7-98 0-20-46-46-89-64 14-123 42 1 51 8 102-48 27-88 64-39-27-82-47-48 49-83 108 26 42 56 81zm0 33v39c0 276 813 276 814 0v-39l-134 12-5 69q-2 10-14 13l-162 11q-12 0-16-11l-10-65H446l-10 65q-4 11-16 11l-162-11q-12-3-14-13l-5-69z"/><path d="M483 600c0 34 58 34 58 0v-86c0-34-58-34-58 0z"/><circle cx="725" cy="526" r="90"/><circle cx="299" cy="526" r="90"/></g><g fill="#414042" transform="translate(12.322 12.322)scale(.101)"><circle cx="307" cy="532" r="60"/><circle cx="717" cy="532" r="60"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- 火柴人帝国模拟 项目图标：黄金时刻天空 + 暮色山影 + 持旗火柴人（贴纸描边风，
+       与主菜单背景/手绘皮肤语言同源） -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd98f"/>
+      <stop offset="0.42" stop-color="#f2a96b"/>
+      <stop offset="0.72" stop-color="#a5685f"/>
+      <stop offset="1" stop-color="#3a2f47"/>
+    </linearGradient>
+    <clipPath id="plate">
+      <rect x="4" y="4" width="120" height="120" rx="18"/>
+    </clipPath>
+  </defs>
+
+  <!-- 底板：暖金→暮蓝渐变 + 深墨描边 -->
+  <rect x="4" y="4" width="120" height="120" rx="18" fill="url(#sky)" stroke="#241a10" stroke-width="5"/>
+
+  <!-- 暮色山影（裁进圆角板内） -->
+  <g clip-path="url(#plate)">
+    <path d="M4 100 L30 72 L48 87 L72 62 L98 88 L112 78 L124 92 L124 124 L4 124 Z" fill="#2c2338" opacity="0.9"/>
+    <ellipse cx="58" cy="109" rx="24" ry="4.5" fill="#1c1520" opacity="0.5"/>
+  </g>
+
+  <!-- 火柴人贴纸描边：深墨底衬一笔，暖白面上一笔 -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#26190e" stroke-width="12">
+      <path d="M58 54 L58 84"/>
+      <path d="M58 62 L42 74"/>
+      <path d="M58 60 L80 48"/>
+      <path d="M80 48 L80 16"/>
+      <path d="M58 84 L46 106"/>
+      <path d="M58 84 L70 106"/>
+    </g>
+    <g stroke="#fdf3dc" stroke-width="6.5">
+      <path d="M58 54 L58 84"/>
+      <path d="M58 62 L42 74"/>
+      <path d="M58 60 L80 48"/>
+      <path d="M80 48 L80 16"/>
+      <path d="M58 84 L46 106"/>
+      <path d="M58 84 L70 106"/>
+    </g>
+  </g>
+
+  <!-- 头：暖白实底 + 深墨描边 -->
+  <circle cx="58" cy="41" r="10" fill="#fdf3dc" stroke="#26190e" stroke-width="4.5"/>
+
+  <!-- 旗：琥珀实底 + 深墨描边（帝国旗） -->
+  <path d="M80 16 Q93 16 104 24 Q93 29 80 33 Z" fill="#e8a33d" stroke="#26190e" stroke-width="3.5" stroke-linejoin="round"/>
+</svg>

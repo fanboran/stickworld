@@ -955,7 +955,7 @@ config/
 
 ## 10. Autoload 依赖
 
-> 全局单例清单（来自 `project.godot`，共 9 个）。新增 autoload 需经批准。
+> 全局单例清单（来自 `project.godot`，共 10 个）。
 
 | 名称              | 脚本                                     | 职责                          | 接线状态     |
 | --------------- | -------------------------------------- | --------------------------- | -------- |
@@ -968,8 +968,9 @@ config/
 | `MusicDirector` | `core/services/music_director.gd`      | 音乐播放（主题变奏集/分层自适应/环境音层）      | ✅ 在役     |
 | `SaveManager`   | `core/autoload/save_manager.gd`        | 存档/读档（SQLite）                | ✅ 活跃     |
 | `DebugApi`      | `modules/debug_gui/api.gd`             | 调试覆盖层管理                     | ✅ 活跃     |
+| `DevSceneEscape` | `modules/debug_gui/scripts/dev_scene_escape.gd` | 开发场景 ESC 回主页兜底（仅 debug 构建生效） | ✅ 活跃 |
 
-**初始化顺序**（自上而下，project.godot 声明序）：`EventBus → WorldState → ConfigManager → TimeManager → BalanceConfig → AudioManager → MusicDirector → SaveManager → DebugApi`
+**初始化顺序**（自上而下，project.godot 声明序）：`EventBus → WorldState → ConfigManager → TimeManager → BalanceConfig → AudioManager → MusicDirector → SaveManager → DebugApi → DevSceneEscape`
 
 **职责边界**：
 

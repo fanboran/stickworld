@@ -62,6 +62,7 @@ func _ready() -> void:
 	_build_title()
 	_start_title_entrance()
 	_build_menu()
+	_build_dev_shortcuts()
 	_version_label.text = "v0.6.0 Demo · stick-world"
 	_version_label.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 	# 亮天空上 TEXT_FAINT 不可见：改暖墨半透明（与描边同族）
@@ -111,6 +112,51 @@ func _has_continue_save() -> bool:
 	if SaveManager and SaveManager.has_method("slot_exists"):
 		return SaveManager.slot_exists(0)
 	return false
+
+
+# ─────────────────────── 右侧临时演示入口（刻意显式临时）───────────────────────
+
+## 钉在菜单列右侧、最能展示工作量的几个场景（开发构建限定，发布构建整组不建）。
+## 刻意做成临时便签观感：组头自述「随时撤」，样式降档（纸面半透明），
+## 甄选口径 = 一屏看懂项目家底：组件全族 / 12v12 大乱斗 / 全员动作 / 可玩试玩场。
+## 与「测试场景」面板的区别：那是全量索引，这里是精选橱窗，随时可整组撤掉。
+const DEV_SHORTCUTS: Array[Dictionary] = [
+	{"label": "组件一览（组件全族陈列）", "path": "res://modules/ui_global/scenes/templates/component_gallery.tscn"},
+	{"label": "12v12 大乱斗战场", "path": "res://tests/dev/battle_arena.tscn"},
+	{"label": "单位动作画廊", "path": "res://tests/dev/unit_action_gallery.tscn"},
+	{"label": "开发者试玩场", "path": "res://tests/dev/dev_playtest.tscn"},
+]
+
+func _build_dev_shortcuts() -> void:
+	if not OS.is_debug_build():
+		return
+	var box := VBoxContainer.new()
+	box.name = "DevShortcuts"
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 6)
+	# 菜单列（锚点居中 ±160）右侧贴邻：+180 起步，留 20px 呼吸
+	box.anchor_left = 0.5
+	box.anchor_top = 0.5
+	box.anchor_right = 0.5
+	box.anchor_bottom = 0.5
+	box.offset_left = 180.0
+	box.offset_right = 440.0
+	box.offset_top = -120.0
+	box.offset_bottom = 120.0
+	add_child(box)
+	# 组头/组脚：暖墨半透明（与版本角标同族，亮天空上可读），自述临时 + ESC 出口
+	var head := StickKit.label(box, "—— 临时演示入口（随时撤）——", StickKit.LabelKind.HINT)
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	head.add_theme_color_override("font_color", Color(0.30, 0.20, 0.14, 0.80))
+	for item in DEV_SHORTCUTS:
+		var btn := StickKit.sketch_button(box, item["label"],
+				func() -> void: get_tree().change_scene_to_file(item["path"]),
+				StickKit.ButtonKind.PAPER, StickTokens.BTN_H)
+		btn.font_size = 15
+		btn.bg_alpha = 0.62
+	var hint := StickKit.label(box, "场景内按 ESC 回主页", StickKit.LabelKind.HINT)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_color_override("font_color", Color(0.30, 0.20, 0.14, 0.60))
 
 
 # ─────────────────────────────── 菜单动作 ────────────────────────────────

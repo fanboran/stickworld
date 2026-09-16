@@ -30,6 +30,7 @@ AudioManager="*res://core/services/audio_manager.gd"
 MusicDirector="*res://core/services/music_director.gd"
 SaveManager="*res://core/autoload/save_manager.gd"
 DebugApi="*res://modules/debug_gui/api.gd"
+DevSceneEscape="*res://modules/debug_gui/scripts/dev_scene_escape.gd"
 
 [display]
 

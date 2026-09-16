@@ -12,6 +12,7 @@
 - **指令范围精确**：停/改/启只作用于被点名的对象，禁止扩大到全部；不可逆操作（终止 agent、删文件、重派）未经确认不执行。
 - **子代理工作纪律：代码先行，渲染最后**：先对照任务清单把全部代码改完并逐项自查（数值/摆布/密度等代码可判的错误不许靠渲染发现），再统一渲染一次出图验收；渲染是最终验证不是开发手段。
 - Godot路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
+- **打包导出统一落 `F:\VSCode\作品集\`**：Windows 导出的产物（exe/pck/dll）一律输出到该本地目录（不入库），export_presets 的 export_path 与手动导出均以此为准；给创始人验收时直接给该目录下对应子目录的完整绝对路径。
 
 ### 文档写作规范
 
@@ -110,6 +111,16 @@
 ├── tests/                 # 自动化测试（unit/integration/smoke/dev 分层，详见 tests/README.md）
 └── docs/                  # 项目文档（指向仓库根 docs/ 的符号链接）
 ```
+
+### 战略图数据 submodule（stickworld-mapdata）
+
+- `stick-world/config/strategic_map` 是独立 git 仓库的 submodule（`git@github.com:fanboran/stickworld-mapdata.git`），主仓只记录指针 commit。战略图 png/json/bin 及其 `.import` 的改动**属于 submodule 仓库**：在 submodule 内开分支提交，主仓收线时同步 bump 指针——两仓都要提交，只动一边会丢改动。
+- 新 clone / 新 worktree 里该目录默认是空的，先初始化：`git submodule update --init -- stick-world/config/strategic_map`。本地想免 SSH/网络拉取（约 541M），先把 url 指到主工作区已有检出，再单次放行 file 协议初始化（新版 git 默认禁止本地路径 clone，不要全局放开）：
+  ```
+  git config submodule.stick-world/config/strategic_map.url "F:/VSCode/game-2/stick-world/config/strategic_map"
+  git -c protocol.file.allow=always submodule update --init -- stick-world/config/strategic_map
+  ```
+- 背景（瘦身动机/历史去向）见 `docs/技术/仓库瘦身与历史去向.md`。
 
 ### 核心模块 (`core/`) 结构
 

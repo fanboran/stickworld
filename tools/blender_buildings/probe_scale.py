@@ -92,7 +92,7 @@ N_EAVE2 = (5.20, 5.42)                 # 两层檐高 400~413px
 N_EAVE3 = (7.80, 8.12)                 # 三层檐高 600~620px
 N_RISE_REL = (0.45, 0.62)              # 单层：rise ≈ 檐高 × 0.5
 N_RISE_ABS = (1.25, 1.65)
-N_EAVE_RATIO = (0.18, 0.23)            # 出檐（每侧）= 建筑宽 × 18~23%
+N_EAVE_ABS_MAX = 60.0                  # 出檐绝对封顶（2026-09-17；≤9 格维持 宽×20.5%）
 N_PITCH_DEG = (18.0, 58.0)             # 屋面坡度（坡面 = 半进深 + 出檐；茅草偏陡、
 N_TOWER_FLOOR = (3.5, 4.5)             # 塔身每层 3.5~4.5m
 N_TOWER_BODY_DOORS = 3.0               # 塔身 ≥ 3×门高（≈6m，够两层）
@@ -195,10 +195,10 @@ def audit(spec, meas):
     add("进深", "%.2f m" % M(depth), "—", None, hard=False)
     if spec.get("eave_exempt") or over <= 0.5:
         add("出檐", "%.2f m（%.1f%%）" % (M(over), over / max(1.0, W) * 100.0),
-            "宽×18~23%（本 def 豁免）", None, hard=False)
+            "绝对封顶 60（本 def 豁免）", None, hard=False)
     else:
         er = over / W
-        add("出檐", "%.2f m（%.1f%%）" % (M(over), er * 100.0), "宽×18~23%",
+        add("出檐", "%.2f m（%.1f%%）" % (M(over), er * 100.0), "宽×20.5% 封顶60",
             _ver(er, *N_EAVE_RATIO), hard_base)
 
     # ---- 门（人 vs 门）
@@ -901,7 +901,7 @@ def draw_panel(ov, d, m, entry, title, base_size, avail_px):
         lines.append(("R", item, actual, ver if hard else None))
     lines.append(("S", "规范：门 2.00m｜层高/单层檐高 2.60~2.72m（≤6 格 2.38）｜"
                        "两层檐高 5.20~5.42｜三层 7.80~8.12"))
-    lines.append(("S", "规范：屋面 rise ≈ 檐高×0.45~0.62｜出檐 宽×18~23%｜"
+    lines.append(("S", "规范：屋面 rise ≈ 檐高×0.45~0.62｜出檐 绝对封顶60｜"
                        "塔身每层 3.5~4.5m｜锥顶组 ≤ 塔身"))
     lines.append(("S", "图注：标尺锚在前墙面平面；20° 俯角下同一 z 平面越靠后"
                        "屏幕越高（进深投影 d·sin20°）"))

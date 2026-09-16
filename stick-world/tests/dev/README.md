@@ -17,6 +17,12 @@ godot --path stick-world res://tests/dev/dev_playtest.tscn -- --map battlefield 
 godot --path stick-world res://tests/dev/dev_playtest.tscn
 ```
 
+> **ESC 退回主菜单**：debug 构建下任意 dev 场景（含界面模板陈列页）按 ESC 直接回
+> 主菜单，由 `DevSceneEscape` autoload 实现
+> （`modules/debug_gui/scripts/dev_scene_escape.gd`）；
+> 自带 ESC 逻辑的场景（battle_arena / unit_action_gallery / sketch_compare /
+> sketch_cloud_gallery）行为不变。
+
 ## 参数
 
 | 参数 | 默认 | 说明 |

@@ -8,8 +8,9 @@ class_name Hd2dBattlefieldMap
 ## 2D 宿主逻辑（碰撞映射/昼夜/相机镜像/角色进 3D/城门引导）与主街同一套，
 ## 只换旅行链、资源密度与出生点语义。
 ##
-## 旅行链：左出回主街（从其东缘落，走东路野地穿东门洞进城）、右出去
-## forest_zone（保留原 战场↔森林 链）。进图不自动刷敌开战（出征与领地架构
+## 旅行链：左出回主街（从其东缘落，走东路野地穿东门洞进城）。右缘步行
+## 出口随森林图清退关闭——森林/野外玩法由城外资源图承担。进图不自动刷敌
+## 开战（出征与领地架构
 ## §4.3：战斗走出征系统；dev 验证走 tests/dev/verify_battle.gd 直达调
 ## InitialContent.spawn_battlefield_enemies）。
 
@@ -42,13 +43,11 @@ func _ready() -> void:
 	ground_bottom = walk_front_y + FRONT_MARGIN_Y
 
 
-## 出口链：左出回主街（东缘落）、右出去森林附属图
+## 出口链：左出回主街（东缘落）
 func _exit_specs() -> Array:
 	return [
 		{"name": "ExitLeft", "x": map_left + 48.0, "target": "hd2d_street",
 		 "entry": WorldAPI.EntrySide.RIGHT},
-		{"name": "ExitRight", "x": map_right - 48.0, "target": "forest_zone",
-		 "entry": WorldAPI.EntrySide.LEFT},
 	]
 
 

@@ -172,20 +172,6 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 	# 配置小地图地图信息（详见 §10.4.6）
 	if _host._minimap != null and _host._minimap.has_method("set_map_info"):
 		_host._minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-	# 初始建筑每图都 spawn：InitialBuildingsList 是每图一份的 defs（L1 城邦/据点全靠它），
-	# 限首图会让其余城永远是空城。场景每次切图重新实例化、BuildingHost 从零开始，
-	# 天然无重复；meta 兜底同实例重入。
-	# 须在玩家 spawn 之前：建筑落位会触发 expand_map 扩图（如村A右城墙把窄边界
-	# 撑回网格宽），先定型边界再落人，入口落点才不随加载时序漂移。
-	if not map.has_meta("initial_buildings_spawned"):
-		map.set_meta("initial_buildings_spawned", true)
-		await _host._world_sub_phase("初始建筑")
-		await _host._worldgen.spawn_initial_buildings(map, _host._world_sub_progress)
-		# 扩图后刷新相机/小地图边界
-		if _host.camera_rig != null and _host.camera_rig.has_method("set_map_bounds"):
-			_host.camera_rig.set_map_bounds(map.map_left, map.map_right)
-		if _host._minimap != null and _host._minimap.has_method("set_map_info"):
-			_host._minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 	# 读档恢复：跳过默认 spawn，由 SaveHandler 接管
 	if _host._pending_save_load:
 		_host._pending_save_load = false

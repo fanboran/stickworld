@@ -148,13 +148,11 @@ const DEV_SCENE_NAMES: Dictionary = {
 	"res://tests/dev/battle_sim.tscn": "战斗模拟观测",
 	"res://tests/dev/battle_perf.tscn": "战斗性能观测",
 	"res://tests/dev/world_perf.tscn": "世界性能观测",
-	"res://tests/dev/siege_wall_showcase.tscn": "攻城城墙陈列",
 	"res://tests/dev/preview_glass_demo.tscn": "玻璃拟态预览",
 	"res://tests/dev/verify_battle.tscn": "功能验证：战斗",
 	"res://tests/dev/verify_build.tscn": "功能验证：建造",
 	"res://tests/dev/verify_harvest.tscn": "功能验证：采集",
 	"res://tests/dev/verify_quest.tscn": "功能验证：任务",
-	"res://tests/dev/verify_parallax.tscn": "功能验证：视差",
 }
 
 ## 界面模板陈列（modules/ui_global 场景，游戏内不可达）
@@ -173,8 +171,8 @@ const TEMPLATE_SCENES: Array[Dictionary] = [
 const SCENE_GROUPS: Array[Dictionary] = [
 	{"id": "templates", "title": "界面模板", "templates": true},
 	{"id": "play", "title": "试玩与观测", "names": ["battle_arena", "unit_action_gallery",
-		"dev_playtest", "battle_sim", "battle_perf", "world_perf", "siege_wall_showcase",
-		"record_demo", "record_night"]},
+		"dev_playtest", "battle_sim", "battle_perf", "world_perf",
+		"record_demo"]},
 	{"id": "gallery", "title": "画廊陈列", "names": ["sketch_compare", "sketch_cloud_gallery",
 		"preview_glass_demo"]},
 	{"id": "verify", "title": "功能验证", "prefix": "verify_"},

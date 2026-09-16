@@ -680,13 +680,12 @@ func uses_billboard_visuals() -> bool:
 	return true
 
 
-## 出口表（子类按旅行链覆写，如战场图左出回主街/右出去森林）。
+## 出口表（子类按旅行链覆写，如战场图左出回主街）。
 ## 东出进战场从其 LEFT 缘落（与步行方向一致——原 RIGHT 会把人扔到战场
-## 最东端，背对全部内容）。
+## 最东端，背对全部内容）。西缘步行出口随道路图清退关闭（城外资源图
+## 走城门选项框直达）。
 func _exit_specs() -> Array:
 	return [
-		{"name": "ExitLeft", "x": map_left + 48.0, "target": "road_a_b",
-		 "entry": WorldAPI.EntrySide.LEFT},
 		{"name": "ExitRight", "x": map_right - 48.0, "target": "battlefield",
 		 "entry": WorldAPI.EntrySide.LEFT},
 	]

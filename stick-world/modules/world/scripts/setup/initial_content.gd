@@ -1,11 +1,13 @@
 extends Node
-## 新游戏初始内容生成器 —— 初始建筑、NPC 与战场敌人的 spawn。
+## 新游戏初始内容生成器 —— NPC 与战场敌人的 spawn。
 ##
 ## 职责：
-## - 初始建筑（读 InitialBuildingsList，直接创建 OPERATIONAL 状态建筑）
 ## - 村庄仓库预置
 ## - NPC 村民生成（含职业分配与装具，经 TownLifeAPI，town_life 模块实现）
 ## - 遭遇战战场敌方生成（启动战斗）
+##
+## （初始建筑 InitialBuildingsList 链随旧 2D 村图清退删除——HD-2D 图建筑由
+##   CityGen/布局器生成；搬运系统的仓库预置 spawn_initial_warehouse 保留）
 ##
 ## 由 GameRoot._ready 挂载为 InitialContent 子节点并调用 setup(root)。
 
@@ -14,49 +16,6 @@ var _root: GameRoot
 
 func setup(root: GameRoot) -> void:
 	_root = root
-
-
-# ─────────────────────────────── 初始建筑 ────────────────────────────────
-
-## 读取地图的 InitialBuildingsList，直接创建 OPERATIONAL 状态建筑（跳过建造过程）。
-## P0-2 修复：绕过存档系统，在 VillageMap 首次加载时预置建筑。
-## on_progress(done, total)：逐栋细分进度回调（可空）——供加载屏副进度条。
-func spawn_initial_buildings(map: Node2D, on_progress: Callable = Callable()) -> void:
-	var ibl: Node = map.get("initial_buildings_list") if "initial_buildings_list" in map else null
-	if ibl == null or not ibl.has_method("get_defs"):
-		return
-	var defs: Array = ibl.get_defs()
-	if defs.is_empty():
-		return
-	# 走 ConstructionApi（2026-08 审计收敛，不再直调内部 manager）
-	var construction_api: Node = _root.get_construction_api() if _root.has_method("get_construction_api") else null
-	if construction_api == null or not construction_api.has_method("spawn_operational_building"):
-		push_warning("[GameRoot] ConstructionApi 未就绪，跳过初始建筑生成")
-		return
-	var i: int = 0
-	for d in defs:
-		# 先上报再干活：副进度条这一格代表「本栋即将开始」，与本栋耗时对齐
-		if on_progress.is_valid():
-			on_progress.call(i, defs.size())
-		var def_id: String = d.get("def_id") if d is Dictionary else d.def_id
-		var cell_x: int = int(d.get("cell_x") if d is Dictionary else d.cell_x)
-		var width: int = int(d.get("width") if d is Dictionary else d.width)
-		if def_id.is_empty():
-			push_warning("[GameRoot] 初始建筑 def_id 为空，跳过")
-			continue
-		var result: Dictionary = construction_api.spawn_operational_building(def_id, cell_x, width)
-		if not result.get("ok", false):
-			push_warning("[GameRoot] 初始建筑生成失败: %s cell_x=%d: %s" % [def_id, cell_x, result.get("error", "未知错误")])
-		# 逐栋让帧：建筑实例化+落位是生成链大头，分帧保加载动画不断流
-		i += 1
-		if i % 2 == 0:
-			# headless 下 frame_post_draw 永不发射——直接 await 会永久挂起，
-			# _on_map_loaded 协程停在首个让帧点、玩家/村民/模式设置全部不执行
-			# （与 game_root._yield_frame 同一根因的 headless 分叉，2026-09 测试基线修复）
-			if DisplayServer.get_name() != "headless":
-				await RenderingServer.frame_post_draw
-	if on_progress.is_valid():
-		on_progress.call(defs.size(), defs.size())
 
 
 ## 预置主街东端民居（搬运系统送货/取货点）：placeholder 兼任仓库，

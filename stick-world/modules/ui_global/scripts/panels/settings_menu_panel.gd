@@ -27,10 +27,9 @@ const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 const MAP_DISPLAY_NAMES: Dictionary = {
 	"hd2d_street": "主街（HD-2D 初始村）",
 	"village_b": "村落 B",
-	"road_a_b": "道路（村落 A↔B）",
 	"battlefield": "遭遇战战场",
-	"forest_zone": "森林区域",
-	"mega_interior": "大建筑内部",
+	"hd2d_resource_w": "城西资源区",
+	"hd2d_resource_e": "城东资源区",
 }
 
 

@@ -22,10 +22,9 @@ const PATH_UI_ROOT := "UIRoot"
 const PATH_BATTLE_DIRECTOR := "BattleDirector"
 
 # ─────────────────────────────── MapInstance 节点路径 ────────────────────────────────
-## MapInstance（村落/战场/道路/室内）下各子节点的相对路径
+## MapInstance（村落/战场）下各子节点的相对路径
 ## 详见 docs/技术/架构/场景与战斗架构.md §3.4
 const PATH_MAP_PLACEMENT_GRID := "PlacementGrid"
-const PATH_MAP_TERRAIN_LAYER := "TerrainLayer"
 const PATH_MAP_DECORATION_LAYER := "DecorationLayer"
 const PATH_MAP_BUILDING_HOST := "BuildingHost"
 const PATH_MAP_ENTITY_HOST := "EntityHost"
@@ -33,8 +32,6 @@ const PATH_MAP_CHUNK_TRIGGERS := "ChunkTriggers"
 const PATH_MAP_BATTLE_ANCHOR := "BattleAnchor"
 ## 地形建筑层（只读，随场景打包，不可拆除，详见 §4.5）
 const PATH_MAP_TERRAIN_BUILDINGS := "TerrainBuildings"
-## 初始建筑数据列表（def_id + cell_x + width，详见 §4.5）
-const PATH_MAP_INITIAL_BUILDINGS_LIST := "InitialBuildingsList"
 ## 地图级通行障碍容器（悬崖/高楼边缘，详见 §7.1.2）
 const PATH_MAP_WALK_BARRIER := "WalkBarrier"
 ## 不可放建筑区域（大石头/山坡阶梯处，详见 §4.2）

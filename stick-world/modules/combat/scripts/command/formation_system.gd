@@ -27,6 +27,13 @@ extends Node
 ## FilterDownARandomRow 行收缩等价）；换位贪心缩短行军穿插（ShouldSwitchUnitsInFormation）；
 ## get_squad_dest mode="formation" 取槽位落点，距落点过远转奔跑追赶
 ## （UpdateCatchingUpToFormation），落定即稳定不重发号令（FormationPositionIsStable）。
+##
+## 子域拆分索引（逻辑下沉同目录助手；状态与公共 API 留本类，行为不变）：
+##   formation_geometry.gd      编队几何 static 库（面向轴/槽位落点/槽位重算+贪心互换）
+##   squad_authority_market.gd  权威值择班市场（周期评估/错峰相位/转投守卫；评分内核留本类）
+##   squad_follow_director.gd   编队动态跟队（锚定落点维持/号令下发/锚定链防环）
+##   squad_report_hooks.gd      信息上报挂点（§4.4 contact/casualty 上报 + 征用互斥）
+##   squad_snapshot.gd          跨图快照/恢复 + BalanceConfig 装载收敛（load_overrides）
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 小队对应的组织层级（L1 = 最低层，排级）
@@ -58,6 +65,12 @@ var CATCHUP_RUN_DIST: float = 140.0
 const LEADER_MORALE_AURA: float = 3.0
 ## 公共目标选择核心（反编译参考实装 A；同模块 combat，显式 preload）
 const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+## 拆分助手（W2 胖文件拆分：状态留本类，逻辑进助手，持宿主回引；助手经 _init 装配）
+const ScriptFormationGeometry := preload("res://modules/combat/scripts/command/formation_geometry.gd")
+const ScriptSquadAuthorityMarket := preload("res://modules/combat/scripts/command/squad_authority_market.gd")
+const ScriptSquadFollowDirector := preload("res://modules/combat/scripts/command/squad_follow_director.gd")
+const ScriptSquadReportHooks := preload("res://modules/combat/scripts/command/squad_report_hooks.gd")
+const ScriptSquadSnapshot := preload("res://modules/combat/scripts/command/squad_snapshot.gd")
 
 ## 工作类型（RimWorld 式抽象职责，见 docs 设计 §二）
 ## 搬运（HAUL）是全员基础能力，不受职责范围限制（见 is_work_allowed）；
@@ -98,9 +111,22 @@ var _squad_targets: Dictionary = {}
 var _squad_decision_timer: float = 0.0
 ## MEDIUM 自主档伤亡上报阈值（存活比跌破沿判定，§4.4）；常规走 balance.variables 行覆盖
 var _casualty_report_threshold: float = 0.30
+## 拆分助手实例（_init 装配；状态留本类，逻辑见各助手文件头注释）
+var _authority_market = null   ## 权威值择班市场（§权威值自主跳槽）
+var _follow_director = null    ## 编队动态跟队（锚定跟随）
+var _report_hooks = null       ## 信息上报挂点（§4.4）+ 征用互斥
+var _snapshot_helper = null    ## 跨图携带快照/恢复
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
+
+func _init() -> void:
+	# 拆分助手装配（须在 _init 运行期绑定 self，不用引用 self 的字段初始化器）
+	_authority_market = ScriptSquadAuthorityMarket.new(self)
+	_follow_director = ScriptSquadFollowDirector.new(self)
+	_report_hooks = ScriptSquadReportHooks.new(self)
+	_snapshot_helper = ScriptSquadSnapshot.new(self)
+
 
 ## 由 GameRoot 装配时注入 OrganizationApi 引用
 func setup(org_api: Node) -> void:
@@ -133,8 +159,7 @@ func _on_commander_assigned(org_id: String, unit_id: int) -> void:
 	_squads[org_id]["leader"] = unit
 
 
-## 从 config/formations/formation_presets.tres 加载编制预设。
-## 加载失败时使用内置默认预设兜底，保证系统可用。
+## 从 config/formations/formation_presets.tres 加载编制预设（失败用内置默认兜底保证可用）。
 func _load_presets() -> void:
 	if _presets_loaded:
 		return
@@ -336,8 +361,7 @@ func disband_squad(squad_id: String) -> void:
 	squad_disbanded.emit(squad_id)
 
 
-## 解散全部小队并清空本地状态（跨图携带前调用：快照导出后调用，
-## 避免旧图实体 freed 后残留引用导致 _process 报错）。
+## 解散全部小队并清空本地状态（跨图携带前、快照导出后调用：避免旧图实体 freed 残留引用）。
 func disband_all_squads() -> void:
 	for squad_id in _squads.keys():
 		var squad: Dictionary = _squads[squad_id]
@@ -432,13 +456,11 @@ const AUTHORITY_MARGIN: float = 0.07
 
 
 ## 组织数据归一化查询（权威值三计价项的统一取数口）：
-## organization_api.get_organization 的生产形态是 {ok, data} 包装（api → manager，
-## 见 modules/organization/api.gd:95 / organization_manager.gd:223），而单测桩常直接
-## 返回裸组织数据字典。本口两种形态都接受：有 ok+data 键则解包 data（ok=false 视为
-## 无数据），否则裸字典原样返回。缺载/查询不可用返回 {}。
-## 归一化而非"生产侧改读 data"的理由：调用点只有本文件的权威值计价与骨干守卫，
-## 把形态差异收敛在一个取数口，避免每处调用各写一遍包装解包；且 api 未来若退回裸
-## 数据形态，生产路径不需要改动。
+## organization_api.get_organization 的生产形态是 {ok, data} 包装（api → manager），
+## 而单测桩常直接返回裸组织数据字典。本口两种形态都接受：有 ok+data 键则解包 data
+## （ok=false 视为无数据），否则裸字典原样返回；缺载/查询不可用返回 {}。
+## 归一化理由：调用点只有权威值计价与骨干守卫，把形态差异收敛在一个取数口，
+## api 未来若退回裸数据形态，生产路径不需要改动。
 func _org_data(org_id: String) -> Dictionary:
 	if _org_api == null or not _org_api.has_method("get_organization"):
 		return {}
@@ -453,9 +475,9 @@ func _org_data(org_id: String) -> Dictionary:
 	return raw
 
 
-## 小队权威值评分（R4 择班内核）：班长在场 1.0 + 组织指挥官在册 0.5
-## + 班长被玩家附身 0.2。组织查询不可用（_org_api 缺载/无该方法）时跳过指挥官项。
-## 小队不存在返回 -INF（调用方以"可入"语义处理无班情况）。
+## 小队权威值评分（R4 择班内核）：班长在场 1.0 + 组织指挥官在册 0.5 + 班长被玩家附身
+## 0.2；组织查询不可用（_org_api 缺载/无该方法）时跳过指挥官项；小队不存在返回 -INF
+##（调用方以"可入"语义处理无班情况）。
 func get_squad_authority(squad_id: String) -> float:
 	if not _squads.has(squad_id):
 		return -INF
@@ -472,18 +494,17 @@ func get_squad_authority(squad_id: String) -> float:
 	return score
 
 
-## 换班判定（R4 滞回）：候选班权威须高出当前班 authority_margin 以上才值得换。
-## 单位当前无班（current_authority = -INF）时任何候选班都值得进（-INF + margin
-## 仍为 -INF，浮点语义天然成立，无需特判）。
+## 换班判定（R4 滞回）：候选班权威须高出当前班 authority_margin 以上才值得换；
+## 当前无班（current_authority = -INF）时任何候选班都值得进（-INF + margin 仍为
+## -INF，浮点语义天然成立，无需特判）。
 func should_switch_squad(current_authority: float, candidate_authority: float) -> bool:
 	return candidate_authority > current_authority + AUTHORITY_MARGIN
 
 
 ## 队伍级目标点分配（反编译参考实装 D）：按单位在队内序号计算个性化目标点，
 ## 取代"全体同一点"——推进横排展开、集合围圈，配合实体 separation 防叠人。
-## mode: "line" 横排散开（推进/冲刺）/ "rally" 围圈（集合）
-##     / "formation" row/col 阵列槽位落点（11b，SWL Formation 直译）/ 其它 返回 base_pos。
-## 参考：遗产 TeamAi/Formation、传奇 Formations/FormationMember。
+## mode: "line" 横排散开（推进/冲刺）/ "rally" 围圈（集合）/ "formation" row/col
+## 阵列槽位落点（11b，SWL Formation 直译）/ 其它 返回 base_pos（参考遗产 TeamAi/Formation）。
 func get_squad_dest(squad_id: String, unit: Node, base_pos: Vector2, mode: String = "") -> Vector2:
 	if not _squads.has(squad_id) or unit == null or not is_instance_valid(unit):
 		return base_pos
@@ -522,8 +543,7 @@ func get_squad_dest(squad_id: String, unit: Node, base_pos: Vector2, mode: Strin
 	return base_pos
 
 
-## 队伍级目标决策（反编译参考实装 D-B）：每 SQUAD_DECISION_INTERVAL 秒为每个战斗小队
-## 选一个共享攻击目标（排长决策 → 队员执行）。由 _process 调用。
+## 队伍级目标决策（反编译参考实装 D-B）：每 SQUAD_DECISION_INTERVAL 秒为每个战斗小队选共享攻击目标（排长决策 → 队员执行）。
 func _decide_squad_targets(delta: float) -> void:
 	if _squads.is_empty():
 		_squad_targets.clear()
@@ -634,96 +654,41 @@ func _remove_unit_from_squad(unit: Node) -> void:
 
 
 # ──────────────────────── 信息上报挂点（§4.4，3-F2）────────────────────────────────
-# combat 只发原始事件，档位门控（autonomy 三档）归组织侧 evaluate_report_gate 判定；
-# P0 三类事件全产自战斗域，经此出口落 report_filed 信号（一层直报）。
+# combat 只发原始事件，档位门控（autonomy 三档）归组织侧 evaluate_report_gate 判定，
+# P0 三类事件全产自战斗域经此出口落 report_filed 信号；函数体在拆分助手
+# squad_report_hooks.gd（W2 壳：状态留本类，签名与行为逐位不变）。
 
 ## 上报出口：组织侧门控通过才落报告（combat 挂点统一用法，架构文档 §4.4）
 func _file_squad_report(squad_id: String, type: String, payload: Dictionary) -> void:
-	if _org_api == null or not _org_api.has_method("evaluate_report_gate"):
-		return
-	if not _org_api.evaluate_report_gate(squad_id, type, payload):
-		return
-	_org_api.file_report(squad_id, {
-		"type": type,
-		"filed_at": Time.get_ticks_msec(),
-		"payload": payload,
-	})
+	if _report_hooks != null:
+		_report_hooks.file_squad_report(squad_id, type, payload)
 
 
-## 伤亡上报评估（死亡清理处每次死亡调用一次）：存活比跌破阈值沿只报首次，
-## 回升（增员/救治）后重置沿标记再报；档位差异由门控承担（HIGH 恒不报/LOW 全量口径下
-## 仍按沿触发——架构文档 §4.4 挂点规格统一状态机）。
+## 伤亡上报评估（死亡清理处每次死亡调用一次；跌破沿只报首次，细则见助手）。
 func _evaluate_casualty_report(squad_id: String) -> void:
-	var squad: Dictionary = _squads.get(squad_id, {})
-	if squad.is_empty():
-		return
-	var alive: int = 0
-	for u in squad["units"]:
-		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
-			alive += 1
-	var dead: int = int(squad.get("casualty_dead", 0))
-	var total: int = alive + dead
-	if total <= 0:
-		return
-	var ratio: float = float(alive) / float(total)
-	if ratio >= _casualty_report_threshold:
-		squad["casualty_reported"] = false
-		return
-	if bool(squad.get("casualty_reported", false)):
-		return
-	squad["casualty_reported"] = true
-	_file_squad_report(squad_id, "casualty_threshold", {
-		"alive": alive,
-		"dead": dead,
-		"total": total,
-		"loss_rate": 1.0 - ratio,
-	})
+	if _report_hooks != null:
+		_report_hooks.evaluate_casualty_report(squad_id)
 
 
-## 小队接敌规模（contact payload.enemy_count）：小队成员射程内去重存活敌人数
-##（口径同 _member_enemy_in_range 的接敌判定，P0 首次接敌时一次性统计）
+## 小队接敌规模（contact payload.enemy_count；口径同 _member_enemy_in_range）。
 func _squad_contact_enemy_count(squad_id: String) -> int:
-	var seen: Dictionary = {}
-	if not _squads.has(squad_id):
+	if _report_hooks == null:
 		return 0
-	for u in _squads[squad_id]["units"]:
-		if not is_instance_valid(u) or (u.has_method("is_dead") and u.is_dead()):
-			continue
-		if not u.has_method("get_battle_instance"):
-			continue
-		var bi: Node = u.get_battle_instance()
-		if bi == null or not is_instance_valid(bi) or not bi.has_method("get_enemies_of"):
-			continue
-		var faction: int = u.get_faction() if u.has_method("get_faction") else 0
-		if faction == 0:
-			continue
-		var weapon: Node = u.get_weapon() if u.has_method("get_weapon") else null
-		var attack_range: float = float(weapon.attack_range) if weapon != null and "attack_range" in weapon else 100.0
-		for e in bi.get_enemies_of(faction):
-			if e == null or not is_instance_valid(e) or (e.has_method("is_dead") and e.is_dead()):
-				continue
-			if u.global_position.distance_to(e.global_position) <= attack_range:
-				seen[e.get_instance_id()] = true
-	return seen.size()
-## 编队征用互斥（小镇生活批次 4）：在岗村民被征入伍自动离岗——清职业回
-## 待业池。duck 协议（get_profession/set_profession），零 town_life 模块依赖，
-## 无职业协议/已待业的单位跳过。离岗后劳作由 BehaviorHarvest 自查职业清空
-## 即时收工（AI 决策层 _try_harvest 同判职业空，不会重进劳作）。
-## 释放/解散不自动回岗（P0 决策：进待业池闲逛，重新分配走存档/后续系统）。
+	return _report_hooks.squad_contact_enemy_count(squad_id)
+
+
+## 编队征用互斥（小镇生活批次 4）：在岗村民被征入伍自动离岗清职业（细则见助手）。
 func _requisition_unit(unit: Node) -> void:
-	if unit == null or not is_instance_valid(unit):
-		return
-	if not unit.has_method("get_profession") or not unit.has_method("set_profession"):
-		return
-	if not String(unit.get_profession()).is_empty():
-		unit.set_profession("")
+	if _report_hooks != null:
+		_report_hooks.requisition_unit(unit)
 
 
 # ──────────────────── 编队结构列阵（SWL Formation 直译，11b）────────────────────────────
+# 几何内核（面向轴/槽位落点/槽位重算+贪心互换）在拆分助手 formation_geometry.gd
+# （W2 static 库，本节留壳；几何 var 参数由壳每次调用传当前值）。
 
-## 小队锚信息（11b 内部）：{"centroid": Vector2 存活成员质心,
-## "facing": Vector2 平均面向轴向（±x，退化回退 +x）}。
-## 槽位分配/落点判定的统一参考系（与 SWL Formation 以部队整体为参考一致）。
+## 小队锚信息（11b 内部）：{"centroid": 存活成员质心, "facing": 平均面向轴向
+## （±x，退化回退 +x）}——槽位分配/落点判定的统一参考系。
 func _squad_anchor(squad_id: String) -> Dictionary:
 	var centroid := Vector2.ZERO
 	var facing := Vector2.ZERO
@@ -732,7 +697,7 @@ func _squad_anchor(squad_id: String) -> Dictionary:
 		for u in _squads[squad_id]["units"]:
 			if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
 				centroid += u.global_position
-				facing += _member_facing(u)
+				facing += ScriptFormationGeometry.member_facing(u)
 				n += 1
 	if n > 0:
 		centroid /= float(n)
@@ -740,76 +705,18 @@ func _squad_anchor(squad_id: String) -> Dictionary:
 	return { "centroid": centroid, "facing": facing }
 
 
-## 成员面向轴向（±x；槽位成本评估用。实体有 get_facing 用真值，桩/无朝向回退 +x）
-func _member_facing(u: Node) -> Vector2:
-	if u != null and u.has_method("get_facing"):
-		return Vector2.LEFT if int(u.get_facing()) < 0 else Vector2.RIGHT
-	return Vector2.RIGHT
-
-
-## 槽位世界坐标（11b，SWL GetFormationXOffset 的列位移等价）：
-## 前列贴 base_pos，后列沿行进方向反侧退 ROW_GAP×col；
-## 同列以 base_pos 为中心沿垂直方向展开（间距 SPREAD_SPACING）。
+## 槽位世界坐标（11b，SWL GetFormationXOffset 的列位移等价；内核见助手 slot_world）。
 func _slot_world(slot: Vector2i, base_pos: Vector2, facing: Vector2) -> Vector2:
-	var perp := Vector2(-facing.y, facing.x)
-	var lateral: float = (float(slot.y) - float(UNITS_PER_COLUMN - 1) * 0.5) * SPREAD_SPACING
-	return base_pos - facing * (float(slot.x) * ROW_GAP) + perp * lateral
+	return ScriptFormationGeometry.slot_world(slot, base_pos, facing, UNITS_PER_COLUMN, SPREAD_SPACING, ROW_GAP)
 
 
-## 编队槽位分配/重算（11b 核心入口，成员增减/死亡时调用）：
-##   - Add/Remove 等价：全队槽位重算，索引序 = 入队序（小队单兵种同质，
-##     入队序即 SWL formationOrder 组序等价）
-##   - FilterDownARandomRow 等价：列数 = ceil(人数/UNITS_PER_COLUMN) 随减员自动
-##     收缩、不留空列（SWL 按随机整行滤除；此处确定性重排，观感待实测校准）
-##   - ShouldSwitchUnitsInFormation 直译：贪心互换——互换两成员槽位后"人到槽"
-##     总行走距离缩短则换（前排让给更近的人，减少行军穿插）；锚 = 小队质心，
-##     朝向 = 平均面向
+## 编队槽位分配/重算（11b 核心入口；全队重算/列收缩/贪心互换内核见
+## formation_geometry.assign_formation_slots）。
 func _assign_formation_slots(squad_id: String) -> void:
-	if not _squads.has(squad_id):
-		return
-	var squad: Dictionary = _squads[squad_id]
-	var alive: Array = []
-	for u in squad["units"]:
-		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
-			alive.append(u)
-	if alive.is_empty():
-		squad["slots"] = {}
-		return
-
-	var slots: Dictionary = {}
-	for i in alive.size():
-		slots[alive[i].get_instance_id()] = Vector2i(
-				floori(float(i) / float(UNITS_PER_COLUMN)), i % UNITS_PER_COLUMN)
-	# ShouldSwitchUnitsInFormation 直译：贪心互换（锚/朝向以当前参考系评估）
-	var anch: Dictionary = _squad_anchor(squad_id)
-	var centroid: Vector2 = anch["centroid"]
-	var facing: Vector2 = anch["facing"]
-	var improved: bool = true
-	var guard: int = 0
-	while improved and guard < 8:  # 人数 ≤12，两两互换最多数轮收敛
-		guard += 1
-		improved = false
-		for a in range(alive.size()):
-			for b in range(a + 1, alive.size()):
-				var ua: Node = alive[a]
-				var ub: Node = alive[b]
-				var sa: Vector2i = slots[ua.get_instance_id()]
-				var sb: Vector2i = slots[ub.get_instance_id()]
-				var cost_before: float = \
-						ua.global_position.distance_to(_slot_world(sa, centroid, facing)) \
-						+ ub.global_position.distance_to(_slot_world(sb, centroid, facing))
-				var cost_after: float = \
-						ua.global_position.distance_to(_slot_world(sb, centroid, facing)) \
-						+ ub.global_position.distance_to(_slot_world(sa, centroid, facing))
-				if cost_after + 1.0 < cost_before:  # 1px 门槛防等距抖动
-					slots[ua.get_instance_id()] = sb
-					slots[ub.get_instance_id()] = sa
-					improved = true
-	squad["slots"] = slots
+	ScriptFormationGeometry.assign_formation_slots(self, squad_id, UNITS_PER_COLUMN, SPREAD_SPACING, ROW_GAP)
 
 
-## 落点稳定检测（SWL FormationPositionIsStable 直译，11b）：单位已在槽位落点
-## 死区（FOLLOW_DEADZONE）内即稳定——跟队 tick 不重发号令，防 travel 重入。
+## 落点稳定检测（SWL FormationPositionIsStable 直译，11b）：单位已在槽位落点死区内即稳定——不重发号令防 travel 重入。
 func _formation_position_is_stable(unit: Node, slot_pos: Vector2) -> bool:
 	return is_instance_valid(unit) \
 			and unit.global_position.distance_to(slot_pos) <= FOLLOW_DEADZONE
@@ -834,110 +741,20 @@ func is_unit_in_formation(unit: Node) -> bool:
 
 
 # ──────────────────────── 编队动态跟队（内部）────────────────────────────────
+# 函数体在拆分助手 squad_follow_director.gd（W2 壳）；落点/守卫/号令语义详见该文件头，
+# 几何 var 参数由壳每次调用传当前值，签名与行为逐位不变。
 
-## 锚定小队落点维持（每 0.5s tick，与队伍目标决策共用节拍）：
-##   1. 前队解散/全灭 → 解除锚定，后队转自主决策（SWL 前队全灭不再跟队）
-##   2. 落点 = 前队质心 − 行进方向 × gap；行进方向取"后队质心 → 前队质心"
-##      （停驻接敌时依然稳定，不依赖速度采样，天然左右军镜像）
-##   3. 前队接敌 → 后队越过 gap 推进到战线支援（不带 hold 驻留，到位/接敌即
-##      交还战斗决策）——否则前队缠斗时后队永远钉在 gap 处"全员卡死"
-##   4. 未接战成员超出死区 → 重下 move 号令（hold_on_arrive 驻留 +
-##      engage_in_range：敌进射程即 finish 交还战斗行为）
+## 锚定小队落点维持（每 0.5s tick）：前队散/灭解除锚定；落点 = 前队质心 − 行进向 × gap；
+## 前队接敌推进支援，未接战成员出死区重下号令（细则见 squad_follow_director 头）。
 func _update_squad_follows() -> void:
-	for squad_id in _squads.keys():
-		if _squads[squad_id].get("follow_squad_id", "") != "":
-			_update_squad_follow(squad_id)
+	if _follow_director != null:
+		_follow_director.update_follows(FOLLOW_DEFAULT_GAP, CATCHUP_RUN_DIST)
 
 
 ## 单个锚定小队的落点计算与成员号令下发。
 func _update_squad_follow(squad_id: String) -> void:
-	var squad: Dictionary = _squads.get(squad_id, {})
-	if squad.is_empty():
-		return
-	# 与"跟随玩家"模式互斥（跟随玩家由 BehaviorFollow 决策，锚定号令会打断它）
-	if squad.get("follow_player", false):
-		return
-	var front_id: String = squad.get("follow_squad_id", "")
-	if front_id.is_empty():
-		return
-	# 前队解散 → 解除锚定
-	if not _squads.has(front_id):
-		clear_squad_follow(squad_id)
-		return
-	# 前队质心（仅存活成员；全灭 → 解除锚定转自主决策）
-	var front_centroid := Vector2.ZERO
-	var front_n: int = 0
-	for u in _squads[front_id]["units"]:
-		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
-			front_centroid += u.global_position
-			front_n += 1
-	if front_n == 0:
-		clear_squad_follow(squad_id)
-		return
-	front_centroid /= float(front_n)
-	# 前队是否接敌（任一存活成员射程内有敌）：接敌 → 后队推进支援，不再钉在 gap 处
-	var front_engaged: bool = false
-	for u in _squads[front_id]["units"]:
-		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()) \
-				and _member_enemy_in_range(u):
-			front_engaged = true
-			break
-	# 后队存活成员与质心
-	var members: Array = []
-	var my_centroid := Vector2.ZERO
-	for u in squad["units"]:
-		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
-			members.append(u)
-			my_centroid += u.global_position
-	if members.is_empty():
-		return
-	my_centroid /= float(members.size())
-	# 行进方向：后队质心 → 前队质心（退化 = 两队重叠，维持原位不推；
-	# 支援模式重叠时仍要推进，不提前返回）
-	var dir: Vector2 = front_centroid - my_centroid
-	if not front_engaged and dir.length_squared() < 1.0:
-		return
-	var anchor: Vector2 = front_centroid
-	if not front_engaged:
-		anchor = front_centroid - dir.normalized() * float(squad.get("follow_gap", FOLLOW_DEFAULT_GAP))
-	# 成员号令下发（接战/撤退/找掩体/被附身成员不打断；玩家号令不覆盖）
-	for u in members:
-		if u.has_method("is_possessed") and u.is_possessed():
-			continue
-		var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
-		if ai == null:
-			continue
-		if ai.has_method("get_current_behavior") \
-				and ai.get_current_behavior() in ["retreat", "seek_cover"]:
-			continue  # 士气驱动行为，不拽回队列
-		if _member_enemy_in_range(u):
-			continue  # 射程内有敌（含风筝窗口），交还给战斗行为
-		var slot: Vector2 = get_squad_dest(squad_id, u, anchor, "formation")
-		# 落点稳定（SWL FormationPositionIsStable 直译，11b）：已在槽位死区内
-		# 不重发号令（无令也不发，防号令空转/动画重播）
-		if _formation_position_is_stable(u, slot):
-			continue
-		# 已有他人号令（无 follow_order 标记 = 玩家/上级号令）→ 不覆盖
-		if ai.has_method("has_order") and ai.has_order():
-			if not (ai.has_method("get_ordered_params")
-					and ai.get_ordered_params().get("follow_order", false)):
-				continue
-			# 已有跟队号令且落点未漂出死区 → 不重复下发（防 travel 重入重播 arrive 动画）
-			if ai.has_method("get_ordered_behavior") and ai.get_ordered_behavior() == "move" \
-					and ai.get_ordered_params().get("target", Vector2.ZERO).distance_to(slot) <= FOLLOW_DEADZONE:
-				continue
-		# 追赶状态（SWL UpdateCatchingUpToFormation 直译，11b）：距槽位过远转
-		# 奔跑追赶（behavior_move 收盾疾跑，落定后恢复端盾）
-		var catching_up: bool = u.global_position.distance_to(slot) > CATCHUP_RUN_DIST
-		ai.set_order("move", {
-			"target": slot,
-			"engage_in_range": true,
-			"run": catching_up,
-			"catching_up": catching_up,
-			# 行军跟队驻留待命；支援推进不驻留——到位即 finish 交还战斗决策
-			"hold_on_arrive": not front_engaged,
-			"follow_order": true,
-		})
+	if _follow_director != null:
+		_follow_director.update_follow(squad_id, FOLLOW_DEFAULT_GAP, CATCHUP_RUN_DIST)
 
 
 ## 成员主手射程内是否有存活敌人（跟队不打断接战成员；行为同 BehaviorMove 接敌检查）。
@@ -965,16 +782,9 @@ func _member_enemy_in_range(u: Node) -> bool:
 
 ## 锚定链是否已包含 squad_id（防成环：设 A→B 前检查 B 的前向链是否回到 A）。
 func _follow_chain_has(squad_id: String, target_id: String) -> bool:
-	var cur: String = target_id
-	var hops: int = 0
-	while not cur.is_empty() and hops < 16:
-		if cur == squad_id:
-			return true
-		if not _squads.has(cur):
-			return false
-		cur = _squads[cur].get("follow_squad_id", "")
-		hops += 1
-	return false
+	if _follow_director == null:
+		return false
+	return _follow_director.follow_chain_has(squad_id, target_id)
 
 
 # ─────────────────────────────── 预设 API ────────────────────────────────
@@ -1136,108 +946,46 @@ func get_squad_name(squad_id: String) -> String:
 
 
 # ─────────────────────────────── 跨图携带（快照/恢复）────────────────────────────────
+# 函数体在拆分助手 squad_snapshot.gd（W2 壳；恢复走宿主公共 API 重建），签名行为不变。
 
-## 导出全部编队快照（跨图携带用，travel 前由 GameRoot 收集）。
-## 返回 Array[Dictionary]：{"name", "preset_id", "work_types", "leader_iid",
-##                           "members": [{"iid", "role"}]}
+## 导出全部编队快照（跨图携带用，travel 前由 GameRoot 收集）：
+## Array[Dictionary]{"name","preset_id","work_types","leader_iid","members":[{"iid","role"}]}
 func export_squads() -> Array:
-	var result: Array = []
-	for squad_id in _squads.keys():
-		var s: Dictionary = _squads[squad_id]
-		var members: Array = []
-		for u in s["units"]:
-			if is_instance_valid(u):
-				members.append({
-					"iid": u.get_instance_id(),
-					"role": u.get_role() if u.has_method("get_role") else "",
-				})
-		var leader_iid: int = 0
-		if s["leader"] != null and is_instance_valid(s["leader"]):
-			leader_iid = s["leader"].get_instance_id()
-		result.append({
-			"name": s["name"],
-			"preset_id": s["preset_id"],
-			"work_types": (s["work_types"] as Array).duplicate(),
-			"leader_iid": leader_iid,
-			"members": members,
-			"follow_player": s.get("follow_player", false),
-		})
-	return result
+	if _snapshot_helper == null:
+		return []
+	return _snapshot_helper.export_squads()
 
 
-## 按快照重建编队（跨图携带恢复，map_loaded 后由 GameRoot 调用）。
-## entity_map: 旧 instance_id(int) -> 新实体(Node)。
+## 按快照重建编队（map_loaded 后由 GameRoot 调用；entity_map = 旧 iid -> 新实体）。
 ## 返回成功恢复的小队数。
 func restore_squads(snapshots: Array, entity_map: Dictionary) -> int:
-	var restored: int = 0
-	for snap in snapshots:
-		var members: Array = []
-		for m in snap.get("members", []):
-			var e: Node = entity_map.get(int(m.get("iid", 0)))
-			if e != null and is_instance_valid(e):
-				members.append(e)
-		if members.is_empty():
-			continue
-		var squad_id: String = create_squad(
-			members, snap.get("name", ""), snap.get("preset_id", DEFAULT_PRESET_ID)
-		)
-		if squad_id.is_empty():
-			continue
-		# 恢复自定义职责范围
-		var work_types: Array = snap.get("work_types", [])
-		if not work_types.is_empty():
-			set_squad_work_types(squad_id, work_types)
-		# 恢复排长
-		var leader_iid: int = int(snap.get("leader_iid", 0))
-		if leader_iid != 0 and entity_map.has(leader_iid):
-			var leader: Node = entity_map[leader_iid]
-			if is_instance_valid(leader) and leader in members:
-				assign_leader(squad_id, leader)
-		# 恢复跟随玩家标志（跨图后跟随不丢）
-		if snap.get("follow_player", false):
-			set_squad_follow(squad_id, true)
-		restored += 1
-	return restored
+	if _snapshot_helper == null:
+		return 0
+	return _snapshot_helper.restore_squads(snapshots, entity_map)
 
 
-## 编队几何数值校准：balance.variables（Excel 平衡变量表）覆盖代码默认。
-## 在 setup（装配注入点）调用；unit 测试直接 new() 不触发，不依赖 autoload。
+## 编队几何数值校准：balance.variables（Excel 平衡变量表）覆盖代码默认；setup 调用
+## （unit 测试不触发、不依赖 autoload）。循环内核见 squad_snapshot.load_overrides。
 func _apply_balance_tuning() -> void:
-	if BalanceConfig == null or BalanceConfig.data.is_empty():
-		return
-	var rows_v: Variant = BalanceConfig.get_value("balance.variables")
-	if not (rows_v is Array):
-		return
-	var by_id := {}
-	for row: Dictionary in rows_v:
-		if row.has("id"):
-			by_id[row["id"]] = row.get("value")
-	for entry: Array in [["var_spread_spacing", SPREAD_SPACING], ["var_follow_default_gap", FOLLOW_DEFAULT_GAP],
-			["var_row_gap", ROW_GAP], ["var_catchup_run_dist", CATCHUP_RUN_DIST],
-			["var_report_casualty_threshold", _casualty_report_threshold]]:
-		var v: Variant = by_id.get(entry[0])
-		if not (v is float or v is int):
-			continue
-		match entry[0]:
-			"var_spread_spacing":
-				SPREAD_SPACING = float(v)
-			"var_follow_default_gap":
-				FOLLOW_DEFAULT_GAP = float(v)
-			"var_row_gap":
-				ROW_GAP = float(v)
-			"var_catchup_run_dist":
-				CATCHUP_RUN_DIST = float(v)
-			"var_report_casualty_threshold":
-				_casualty_report_threshold = float(v)
+	var merged: Dictionary = ScriptSquadSnapshot.load_overrides({
+		"var_spread_spacing": SPREAD_SPACING,
+		"var_follow_default_gap": FOLLOW_DEFAULT_GAP,
+		"var_row_gap": ROW_GAP,
+		"var_catchup_run_dist": CATCHUP_RUN_DIST,
+		"var_report_casualty_threshold": _casualty_report_threshold,
+	}, "balance.variables")
+	SPREAD_SPACING = float(merged["var_spread_spacing"])
+	FOLLOW_DEFAULT_GAP = float(merged["var_follow_default_gap"])
+	ROW_GAP = float(merged["var_row_gap"])
+	CATCHUP_RUN_DIST = float(merged["var_catchup_run_dist"])
+	_casualty_report_threshold = float(merged["var_report_casualty_threshold"])
 
 
 # ──────────────────── A5 小队相位计划（设计文档12号 C8）────────────────────────────────
-# CoH squadai 相位计划的宿主落点：角色分派（位置×素质双维）+ 交替掩护跃进 +
-# 接敌反应（被压制/背敌 → 既有 seek_cover）。计划逻辑全在 squad_phase_plan.gd
-# （RefCounted 纯逻辑，无自转），本系统只做：参数装载 / 号令触发 / 节拍驱动 / 查询出口。
-# 触发点取舍（最小侵入）：TacticalOrders 下发号令后回查通知（号令侧显式挂点，
-# 不经 EventBus 全局监听）——ADVANCE_ALL/SPRINT 激活计划，其余号令撤销计划；
-# 缺省 phase_plan_enabled=false 零回归，config/ai/squad_phase_plan.tres 配置化。
+# CoH squadai 相位计划的宿主落点（角色分派 + 交替掩护跃进 + 接敌反应）：计划逻辑全在
+# squad_phase_plan.gd（RefCounted 纯逻辑），本系统只做参数装载/号令触发/节拍驱动/查询出口。
+# 触发点（最小侵入）：TacticalOrders 下发号令后回查通知——ADVANCE_ALL/SPRINT 激活计划，
+# 其余号令撤销；缺省 phase_plan_enabled=false 零回归，config/ai/squad_phase_plan.tres 配置化。
 
 ## 小队相位计划脚本（同模块 command/，显式 preload 惯例）
 const ScriptSquadPhasePlan := preload("res://modules/combat/scripts/command/squad_phase_plan.gd")
@@ -1252,20 +1000,11 @@ var _phase_plan_params: Dictionary = {}
 var _phase_plan_timer: float = 0.0
 
 
-## 装载相位计划参数（setup 调用）：代码默认 ← BalanceConfig 类型路径
-## ai.squad_phase_plan.global 行覆盖（只认默认键，未知键忽略防错字）。
-## BalanceConfig 缺载/路径缺失安全回退代码默认（unit 测试不依赖 autoload）。
+## 装载相位计划参数（setup 调用）：代码默认 ← BalanceConfig ai.squad_phase_plan.global
+## 行覆盖（只认默认键防错字；缺载安全回退代码默认）。循环内核见 squad_snapshot.load_overrides。
 func _load_phase_plan_params() -> void:
-	_phase_plan_params = ScriptSquadPhasePlan.DEFAULTS.duplicate(true)
-	if BalanceConfig == null or BalanceConfig.data.is_empty():
-		return
-	var row_v: Variant = BalanceConfig.get_value("ai.squad_phase_plan.global")
-	if not (row_v is Dictionary):
-		return
-	var row: Dictionary = row_v
-	for k in row.keys():
-		if _phase_plan_params.has(k):
-			_phase_plan_params[k] = row[k]
+	_phase_plan_params = ScriptSquadSnapshot.load_overrides(
+			ScriptSquadPhasePlan.DEFAULTS.duplicate(true), "ai.squad_phase_plan.global")
 
 
 ## 测试/调参出口：合并覆盖相位计划参数（不改 BalanceConfig）。
@@ -1275,10 +1014,9 @@ func set_phase_plan_params(params: Dictionary) -> void:
 			_phase_plan_params[k] = params[k]
 
 
-## 号令通知（TacticalOrders.issue 下发成功后回查调用，A5 触发点）：
-## 推进类号令（ADVANCE_ALL/SPRINT）激活/重定该小队相位计划；
-## 其余号令（HOLD/RETREAT/TAKE_COVER/RALLY）撤销计划——计划不得与号令打架。
-## 开关关闭 / 非战斗小队 / 小队不存在：静默忽略（零回归闸门）。
+## 号令通知（TacticalOrders.issue 下发成功后回查调用，A5 触发点）：推进类号令
+## （ADVANCE_ALL/SPRINT）激活/重定该小队相位计划；其余号令撤销计划——计划不得与
+## 号令打架。开关关闭 / 非战斗小队 / 小队不存在：静默忽略（零回归闸门）。
 func notify_squad_order(order_type: int, squad_id: String, target_pos: Vector2) -> void:
 	if not bool(_phase_plan_params.get("phase_plan_enabled", false)):
 		return
@@ -1332,8 +1070,8 @@ func _deactivate_phase_plan(squad_id: String) -> void:
 	_squad_phase_plans.erase(squad_id)
 
 
-## 相位计划节拍驱动（_process 调用）：按 phase_tick_interval 累积，每拍推进全部
-## 活跃计划；小队已消亡的计划惰性清理（解散路径零新增挂点）。
+## 相位计划节拍驱动（_process 调用）：按 phase_tick_interval 累积推进全部活跃计划；
+## 小队已消亡的计划惰性清理（解散路径零新增挂点）。
 func _tick_phase_plans(delta: float) -> void:
 	if _squad_phase_plans.is_empty():
 		return
@@ -1396,8 +1134,8 @@ const QUALITY_WEAPON_TIER: Dictionary = {
 }
 
 
-## 小队所在组织树根 id（组织号令通知的编制解析用；沿 parent_org 上溯，上限防环；
-## org_api 缺失/查询失败返回 ""，按散兵口径不入编制组）。
+## 小队所在组织树根 id（组织号令的编制解析用；沿 parent_org 上溯上限防环，
+## org_api 缺失/查询失败返回 "" 按散兵口径不入编制组）。
 func _org_root_of_squad(squad_id: String) -> String:
 	if _org_api == null or not _org_api.has_method("get_organization"):
 		return ""
@@ -1415,33 +1153,13 @@ func _org_root_of_squad(squad_id: String) -> String:
 
 
 # ──────────────────── A9+ 权威值自主跳槽（R4 行为落地：择班的市场调节）────────────────────
-# 已落地的评分内核（本文件 §权威值择班）只回答"哪个班更有权威"，本段把它接上
-# "士兵自己换班"：对每个已注册战斗小队的成员周期性比较
-#   当前班权威值（+ 已在玩家班的黏性加成）
-#   与邻近可投奔班权威值（+ 玩家班吸引力加成），
-# 用既有 should_switch_squad 的 authority_margin 滞回判定，够格才转投（走既有
-# add_unit：组织同步 / 角色 / 槽位 / 征用互斥全部复用，不另造迁移路径）。
-#
-# 落点取舍（为何在 formation_system 而不在 ai_controller / team_ai）：
-#   择班是"编制成员构成"的变化，权威值的三个计价项（班长 / 组织指挥官 / 玩家光环）
-#   全部由本系统持有（_squads.leader、_org_api、is_possessed），迁移动作也只有本
-#   系统能一次做全（org 分配 + 槽位重算）。放 L1 控制器会让每个单位各自查班、
-#   各自迁移，产生重复迁移动线与组织侧失步。
-#
-# 节拍取舍：挂 _process 的 L2 基础节拍扫描（authority_scan_interval 0.5s，与
-# _decide_squad_targets / _tick_phase_plans 同源）——不为人事市场另立定时器/节点；
-# 单单位评估间隔（authority_eval_interval）+ 确定性错峰相位，保证不同拍评估。
-#
-# 为何独立档案 ai.formation_authority 而不并入 ai.squad_phase_plan：
-#   相位计划是号令驱动的战术推进（有明确起止，开闸看队形节奏），权威值跳槽是常驻的
-#   自主人事市场（独立开闸 / 独立节拍 / 独立冷却）。两者必须能独立开合——开相位计划
-#   不等于要开士兵换班；合并会把两张闸门焊死，且一处数值改动同时扰动两个机制。
+# 评估内核（单拍评估/错峰相位/转投守卫/玩家班判定）在拆分助手 squad_authority_market.gd
+# （W2 壳，设计取舍注释随迁）；本节留参数档案、全部 _authority_* 状态、装载/调参出口、
+# 状态快照与节拍/种子壳——评分内核与滞回判定（§权威值择班）仍在本类。
 
 ## 权威值跳槽代码默认档（BalanceConfig 缺载兜底；unit 测试 new() 不依赖 autoload）。
-## authority_rng_seed = 错峰相位的**派生基底/回落值**：实际相位种子按单位所在战斗
-## （battle_instance.get_battle_id() 哈希）与基底混合派生（见 _authority_phase_seed）——
-## 同一场战斗内种子恒定、相位可复现，不同战斗相位模式不重复（多局同基底不再呆板同相）；
-## 取不到 battle_id（无战斗/单位桩/查询链缺环）时回落此常数种子。
+## authority_rng_seed = 错峰相位的**派生基底/回落值**：实际种子按单位所在战斗 battle_id
+## 哈希与基底混合派生（同战斗可复现、跨战斗不同相；取不到 battle_id 回落此常数，规则见助手）。
 const AUTHORITY_DEFAULTS: Dictionary = {
 	"authority_switch_enabled": false,
 	"authority_scan_interval": 0.5,
@@ -1474,20 +1192,11 @@ var _authority_ordinal_seq: int = 0
 var _authority_last_eval_count: int = 0
 
 
-## 装载跳槽参数（setup 调用）：代码默认 ← BalanceConfig 类型路径
-## ai.formation_authority.global 行覆盖（只认默认键，未知键忽略防错字）。
-## BalanceConfig 缺载/路径缺失安全回退代码默认（unit 测试不依赖 autoload）。
+## 装载跳槽参数（setup 调用）：代码默认 ← BalanceConfig ai.formation_authority.global
+## 行覆盖（只认默认键防错字；缺载安全回退代码默认）。循环内核见 squad_snapshot.load_overrides。
 func _load_authority_params() -> void:
-	_authority_params = AUTHORITY_DEFAULTS.duplicate(true)
-	if BalanceConfig == null or BalanceConfig.data.is_empty():
-		return
-	var row_v: Variant = BalanceConfig.get_value("ai.formation_authority.global")
-	if not (row_v is Dictionary):
-		return
-	var row: Dictionary = row_v
-	for k in row.keys():
-		if _authority_params.has(k):
-			_authority_params[k] = row[k]
+	_authority_params = ScriptSquadSnapshot.load_overrides(
+			AUTHORITY_DEFAULTS.duplicate(true), "ai.formation_authority.global")
 
 
 ## 测试/调参出口：合并覆盖跳槽参数（不改 BalanceConfig）。
@@ -1519,8 +1228,8 @@ func get_authority_switch_state() -> Dictionary:
 	}
 
 
-## 跳槽评估节拍驱动（_process 调用）：按 authority_scan_interval 累积，每拍扫描一次
-## 到期单位。开关关闭时直接返回（不累积时钟 = 零开销零行为，零回归基线）。
+## 跳槽评估节拍驱动（_process 调用）：按 authority_scan_interval 累积每拍扫描到期单位；
+## 开关关闭直接返回（不累积时钟 = 零开销零行为，零回归基线）。评估内核在拆分助手。
 func _tick_authority_switch(delta: float) -> void:
 	if not bool(_authority_params.get("authority_switch_enabled", false)):
 		return
@@ -1532,239 +1241,10 @@ func _tick_authority_switch(delta: float) -> void:
 		return
 	_authority_scan_timer = 0.0
 	_authority_clock += beat
-	_evaluate_authority_switches(beat)
+	if _authority_market != null:
+		_authority_market.evaluate_switches(beat)
 
 
-## 单拍评估：收集"够格转投"的成员后统一迁移（先收集后应用——迭代中改 _squads 的
-## 成员数组不安全，且便于"单拍单来源班限流"统计）。
-func _evaluate_authority_switches(beat: float) -> void:
-	_prune_authority_registry()
-	var eval_interval: float = maxf(float(_authority_params.get("authority_eval_interval", 2.0)), beat)
-	var cooldown: float = maxf(float(_authority_params.get("authority_switch_cooldown", 20.0)), 0.0)
-	var radius: float = maxf(float(_authority_params.get("authority_candidate_radius", 800.0)), 0.0)
-	var stay_bonus: float = float(_authority_params.get("authority_stay_in_player_squad_bonus", 0.5))
-	var player_bonus: float = float(_authority_params.get("authority_player_squad_bonus", 0.2))
-	var per_squad_cap: int = maxi(int(_authority_params.get("authority_max_switches_per_squad_tick", 1)), 0)
-	# 班权威与玩家班标记同拍预计算（同拍内班构成不变，省重复组织查询）
-	var authority_of: Dictionary = {}
-	var player_squad: Dictionary = {}
-	for squad_id_v in _squads.keys():
-		var sid := str(squad_id_v)
-		authority_of[sid] = get_squad_authority(sid)
-		player_squad[sid] = _is_player_squad(sid)
-	var moves: Array = []
-	var taken_from: Dictionary = {}
-	var eval_count: int = 0
-	for squad_id_v in _squads.keys():
-		var from_id := str(squad_id_v)
-		# 只评估战斗班（来源与去向都限战斗职责：把劳工/建造队卷进人事市场会打断生产职责）
-		if not is_combat_squad(from_id):
-			continue
-		var squad: Dictionary = _squads[from_id]
-		var current_authority: float = float(authority_of[from_id])
-		if bool(player_squad[from_id]):
-			current_authority += stay_bonus
-		var members: Array = (squad.get("units", []) as Array).duplicate()
-		for u in members:
-			if not is_instance_valid(u) or (u.has_method("is_dead") and u.is_dead()):
-				continue
-			var iid: int = u.get_instance_id()
-			# 首次登记：排定确定性错峰相位（之后每评估一次推进 eval_interval）
-			var next_at: float = _authority_next_at(u, eval_interval)
-			# 冷却窗内不评估（单次跳槽后有冷却，防每拍横跳）
-			if _authority_clock < float(_authority_cooldown_until.get(iid, -INF)):
-				continue
-			if _authority_clock < next_at:
-				continue
-			_authority_next_eval[iid] = _authority_clock + eval_interval
-			eval_count += 1
-			# 「不该动的别动」守卫（班长/指挥官、溃逃/被压制、接战中、玩家号令保护期）
-			if not _authority_may_switch(u, from_id):
-				continue
-			# 邻近可投奔班择优：班长在场（归属感来源）+ 玩家班吸引力加成
-			var best_id := ""
-			var best_authority: float = -INF
-			for cand_id_v in _squads.keys():
-				var cand_id := str(cand_id_v)
-				if cand_id == from_id or not is_combat_squad(cand_id):
-					continue
-				var cand_leader: Node = get_squad_leader(cand_id)
-				if cand_leader == null or not is_instance_valid(cand_leader) \
-						or (cand_leader.has_method("is_dead") and cand_leader.is_dead()):
-					continue
-				if u.global_position.distance_to(cand_leader.global_position) > radius:
-					continue
-				var cand_authority: float = float(authority_of[cand_id])
-				if bool(player_squad[cand_id]):
-					cand_authority += player_bonus
-				if cand_authority > best_authority:
-					best_authority = cand_authority
-					best_id = cand_id
-			if best_id.is_empty():
-				continue
-			# 既有滞回判定（R4 内核；权威差须超 authority_margin 才动）
-			if not should_switch_squad(current_authority, best_authority):
-				continue
-			# 单拍单来源班限流：防"整班雪崩式投奔"的观感突变
-			if int(taken_from.get(from_id, 0)) >= per_squad_cap:
-				continue
-			taken_from[from_id] = int(taken_from.get(from_id, 0)) + 1
-			moves.append({ "unit": u, "to": best_id })
-	_authority_last_eval_count = eval_count
-	# 统一迁移（既有 add_unit：组织同步 / 角色 / 槽位 / 征用互斥）
-	for m in moves:
-		var unit: Node = m["unit"]
-		if not is_instance_valid(unit):
-			continue
-		if add_unit(str(m["to"]), unit):
-			var iid: int = unit.get_instance_id()
-			_authority_cooldown_until[iid] = _authority_clock + cooldown
-			_authority_next_eval[iid] = _authority_clock + eval_interval
-
-
-## 单位下一次评估时刻：首次登记时按确定性错峰相位排定（相位 ∈ [0, eval_interval)），
-## 之后由评估推进。相位取数 = 派生种子 + 登记序（不用 instance_id——同一局面构造下
-## 登记序稳定，结果可复现；instance_id 跨运行不同会破坏确定性）。
-## 派生种子按单位所在战斗（battle_id）哈希与档案基底混合（见 _authority_phase_seed）。
-func _authority_next_at(u: Node, eval_interval: float) -> float:
-	var iid: int = u.get_instance_id()
-	if _authority_next_eval.has(iid):
-		return float(_authority_next_eval[iid])
-	if not _authority_ordinal.has(iid):
-		_authority_ordinal[iid] = _authority_ordinal_seq
-		_authority_ordinal_seq += 1
-	var rng := RandomNumberGenerator.new()
-	rng.seed = _authority_phase_seed(u) + int(_authority_ordinal[iid]) * 7919
-	var phase: float = rng.randf() * eval_interval
-	_authority_next_eval[iid] = phase
-	return phase
-
-
-## 错峰相位派生种子（档案键 authority_rng_seed 的新语义 = 派生基底/回落值）：
-## 实际种子 = 档案基底 与 单位所在战斗 battle_id 哈希 的异或混合——
-##   - 同一场战斗内 battle_id 恒定 → 种子恒定、相位序列可复现（含跨图重载同战斗）；
-##   - 不同战斗 battle_id 不同 → 派生种子不同、相位模式不重复（治多局同基底的呆板同相）；
-##   - 单位拿不到 battle_id（无战斗/单位桩/查询链缺环）→ 回落档案常数种子，
-##     保持单测与无战斗场景的确定性基线（同种子同局面可复现）。
-## 为何用异或而非直接相加：battle_id 形如 battle_<instance_id>，哈希与基底量级悬殊，
-## 异或混合两位空间不重叠，且纯函数（同输入恒同输出）可复现。
+## 错峰相位派生种子（W2 壳，测试直调；u 可为 null 回落档案基底——规则见助手 phase_seed）。
 func _authority_phase_seed(u: Node) -> int:
-	var base: int = int(_authority_params.get("authority_rng_seed", 20260913))
-	var bid: String = _unit_battle_id(u)
-	if bid.is_empty():
-		return base
-	return base ^ int(bid.hash())
-
-
-## 单位 battle_id 查询（duck 链 get_battle_instance → get_battle_id）；
-## 任一环缺失/实例失效/返回空串 → ""（调用方回落档案基底）。
-func _unit_battle_id(u: Node) -> String:
-	if u == null or not is_instance_valid(u) or not u.has_method("get_battle_instance"):
-		return ""
-	var bi: Node = u.get_battle_instance()
-	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_battle_id"):
-		return ""
-	return String(bi.get_battle_id())
-
-
-## 已释放实例的相位/冷却/登记序清理（防字典随阵亡单位无界增长）。
-func _prune_authority_registry() -> void:
-	for iid_v in _authority_next_eval.keys():
-		var obj: Object = instance_from_id(int(iid_v))
-		if not is_instance_valid(obj):
-			_authority_next_eval.erase(iid_v)
-			_authority_cooldown_until.erase(iid_v)
-			_authority_ordinal.erase(iid_v)
-
-
-## 单位是否允许转投（「不该动的别动」硬守卫；任一命中即本拍不换班）：
-##   1. 玩家附身单位 = 玩家本体，AI 不搬动玩家
-##   2. 班长 / 组织在册指挥官本人——RWR max_leader_authority_willing_to_join_another_squad
-##      语义（班长权威高于阈值才肯放人）：本班权威值高于 authority_leader_release_threshold
-##      者视为骨干，不被抽走
-##   3. 士气行为中（retreat / seek_cover = 溃逃 / 找掩体）：不打断士气驱动行为
-##   4. 真实压制态（StatusEffects.SUPPRESSED duck 查询，与相位计划同口径）
-##   5. 接战中（主手射程内有敌）：交还战斗行为，不当场换班
-##   6. 玩家手动号令保护期内（复用 TeamAi 既有保护期状态）
-func _authority_may_switch(u: Node, squad_id: String) -> bool:
-	if u.has_method("is_possessed") and u.is_possessed():
-		return false
-	if _is_squad_leader_or_commander(u, squad_id):
-		return false
-	var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
-	if ai != null and is_instance_valid(ai) and ai.has_method("get_current_behavior") \
-			and ai.get_current_behavior() in ["retreat", "seek_cover"]:
-		return false
-	if _unit_suppressed(u):
-		return false
-	if _member_enemy_in_range(u):
-		return false
-	if _is_manual_order_guarded(u, squad_id):
-		return false
-	return true
-
-
-## 单位是否本班的骨干（班长 / 组织在册指挥官）：不被抽走。
-## 班长判定按 RWR 放人阈值（本班权威值 > authority_leader_release_threshold 才认定
-## 骨干——权威值本身已含班长在场项，等价于"有班长的班不放自己的班长"）。
-func _is_squad_leader_or_commander(u: Node, squad_id: String) -> bool:
-	var squad: Dictionary = _squads.get(squad_id, {})
-	if squad.is_empty():
-		return false
-	if squad.get("leader", null) == u:
-		return get_squad_authority(squad_id) \
-				> float(_authority_params.get("authority_leader_release_threshold", 0.3))
-	var org: Dictionary = _org_data(squad_id)
-	if not org.is_empty():
-		var cmd := String(org.get("commander_id", ""))
-		if not cmd.is_empty() and cmd == str(u.get_instance_id()):
-			return true
-	return false
-
-
-## 真实压制态（duck 查询 StatusEffects.SUPPRESSED；组件缺失 / 压制未启用返回 false）。
-func _unit_suppressed(u: Node) -> bool:
-	if u == null or not is_instance_valid(u) or not u.has_method("get_status_effects"):
-		return false
-	var se: Node = u.get_status_effects()
-	if se == null or not is_instance_valid(se) or not se.has_method("has_suppressed"):
-		return false
-	return bool(se.has_suppressed())
-
-
-## 玩家手动号令保护期查询（复用既有保护期状态，单一真相源）：
-## 经 单位 → battle_instance → get_team_ai(faction) 取该阵营 TeamAi 的
-## is_manual_order_guarded（保护期时间戳由 TeamAi 订阅 EventBus.order_issued tier=0 维护）。
-## TeamAi 未注册（非战斗场景 / 观察场）/ 查询链缺环 → false（无保护期语义）。
-func _is_manual_order_guarded(u: Node, squad_id: String) -> bool:
-	if u == null or not is_instance_valid(u) or not u.has_method("get_battle_instance"):
-		return false
-	var bi: Node = u.get_battle_instance()
-	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_team_ai"):
-		return false
-	var faction: int = int(u.get_faction()) if u.has_method("get_faction") else 0
-	var tai: Variant = bi.get_team_ai(faction)
-	if tai == null or not is_instance_valid(tai) or not tai.has_method("is_manual_order_guarded"):
-		return false
-	return bool(tai.is_manual_order_guarded(squad_id))
-
-
-## 玩家所在班（跳槽吸引力 / 黏性加成的判定口径）。
-## 排除"班长被附身"这一情形：该情形已由 get_squad_authority 的 AUTHORITY_PLAYER_BONUS
-## 计价，此处不重复叠加。剩余两种情形在此计价：
-##   - 该班处于"跟随玩家"模式（玩家点选跟随的班）
-##   - 玩家实体在该班（任一非班长成员被附身）
-func _is_player_squad(squad_id: String) -> bool:
-	var squad: Dictionary = _squads.get(squad_id, {})
-	if squad.is_empty():
-		return false
-	var leader: Node = squad.get("leader", null)
-	if leader != null and is_instance_valid(leader) \
-			and leader.has_method("is_possessed") and leader.is_possessed():
-		return false
-	if bool(squad.get("follow_player", false)):
-		return true
-	for u in squad.get("units", []):
-		if is_instance_valid(u) and u.has_method("is_possessed") and u.is_possessed():
-			return true
-	return false
+	return _authority_market.phase_seed(u)

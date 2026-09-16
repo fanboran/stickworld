@@ -27,7 +27,7 @@ extends RefCounted
 ##   - SoA 用 PackedFloat32Array/PackedInt32Array；需要引用语义的（实体表/
 ##     strike 表/网格 cell）用普通 Array/Dictionary
 
-## 分离检测半径（与 StickmanEntity.SEPARATION_RADIUS 同值——渲染代理侧常量
+## 分离检测半径（与 entity_motion.SEPARATION_RADIUS 同值——渲染代理侧常量
 ## 不便静态读取，战斗单位体型一致，取同值）
 const SEPARATION_RADIUS: float = 54.0
 ## 静态分离单刻位置修正上限（与 MAX_SEPARATION_CORRECTION 同值）
@@ -207,7 +207,7 @@ func query_neighbor_ids(pos: Vector2, radius: float) -> PackedInt32Array:
 	return out
 
 
-## 分离软引导推力（旧链 StickmanEntity._apply_separation 的 sim 版）：
+## 分离软引导推力（旧链 entity_motion.gd _apply_separation 的 sim 版）：
 ## 半径内存活邻居的归一化反向权重和（1 - dist/radius 线性），循环内联在本方法——
 ## 替代旧链逐邻居 Node 遍历与中间数组分配。
 func separation_push(sid: int, radius: float) -> Vector2:

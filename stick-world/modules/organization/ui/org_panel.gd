@@ -13,6 +13,10 @@ extends StickWindow
 ## 任命在先节点随之，不做"先建空框再填人"；L1 叶层可 FORMING 招兵，无需指挥官。
 ## FormationPanel 保持战斗侧快捷位不并（各开各的面板，不做跨面板状态同步）。
 ## 由 SystemSetup 装配到 UIRoot.ModalOverlay 槽，open()/close() 控制可见性。
+##
+## 子域拆分（同目录 RefCounted 助手，宿主 const preload 引用，状态留本类）：
+##   org_panel_vitals.gd —— 活数据聚合：子树人员/士气/统辖候选/群龙无首/树节点文案与提示/士气配色
+##   org_panel_detail.gd —— 详情区视图：刷新分诊/字段与操作行/概览卡/成员列表/插入层级流程
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 选中组织变更（"" = 无选中/面板关闭）。装配层据此联动班组卡（system_setup 接线，
@@ -20,6 +24,10 @@ extends StickWindow
 signal org_selection_changed(org_id: String)
 
 # ─────────────────────────────── 常量 ────────────────────────────────
+## 子域助手（RefCounted；状态留本类、逻辑下沉，见头注释「子域拆分」索引）
+const OrgPanelVitals := preload("res://modules/organization/ui/org_panel_vitals.gd")
+const OrgPanelDetail := preload("res://modules/organization/ui/org_panel_detail.gd")
+
 ## 标签栏（"" = 全部；顺序照架构 §3.2：军事/科研/工程/行政/商业/劳工/运输）
 const TABS: Array = [
 	{"id": "", "label": "全部"},
@@ -90,9 +98,13 @@ var _choosing_commander: bool = false
 var _people_cache: Dictionary = {}
 ## 单兵士气缓存（stickman_id -> float，-1 = 不可解析），同一次建树内复用
 var _morale_cache: Dictionary = {}
-## 当前地图在场实体索引（instance_id -> 实体）；建树/刷新详情时重建（见 _ensure_unit_index）
+## 当前地图在场实体索引（instance_id -> 实体）；建树/刷新详情时重建（索引构建逻辑在 org_panel_vitals.gd）
 var _unit_index: Dictionary = {}
 var _unit_index_built: bool = false
+## 活数据聚合助手实例（org_panel_vitals.gd；setup 注入宿主回引）
+var vitals: RefCounted = null
+## 详情区视图助手实例（org_panel_detail.gd）
+var detail: RefCounted = null
 
 # ─────────────────────────────── UI 元素 ────────────────────────────────
 var _tab_bar: SketchTabBar = null
@@ -120,6 +132,11 @@ func setup(game_root: Node) -> void:
 	window_title = "组织管理"
 	behavior = StickWindow.Behavior.FLOATING
 	_build_window()
+	# 子域助手接线（先于首刷：刷新路径经 vitals/detail 出活）
+	vitals = OrgPanelVitals.new()
+	vitals.setup(self)
+	detail = OrgPanelDetail.new()
+	detail.setup(self)
 	_connect_signals()
 	_refresh_all()
 
@@ -327,499 +344,26 @@ func _insert_org_item(parent_item: TreeItem, org_id: String) -> void:
 ## 图标 = 组织状态母题；文案 = 主干 + 状态/统辖/士气徽标（超宽逐项降级）；
 ## 「群龙无首」空缺态（架构 §4.3 ③）用危险色 + 空缺标记一眼可辨；补位候选序进悬停提示。
 func _decorate_org_item(item: TreeItem, d: Dictionary, org_id: String) -> void:
-	var people := _org_people(org_id)
-	var morale := _people_morale(people)
-	item.set_text(0, _compose_node_text(d, people, morale))
+	var people = vitals.org_people(org_id)
+	var morale = vitals.people_morale(people)
+	item.set_text(0, vitals.compose_node_text(d, people, morale))
 	var icon: Texture2D = StickIcons.tex(StringName(STATE_MOTIF.get(int(d.state), &"旗帜")))
 	if icon != null:
 		item.set_icon(0, icon)
 		item.set_icon_max_width(0, 18)
 	item.set_metadata(0, org_id)
-	item.set_tooltip_text(0, _compose_node_tooltip(d, people, morale))
+	item.set_tooltip_text(0, vitals.compose_node_tooltip(d, people, morale))
 	# 群龙无首 = 指挥官空缺且中间层（L1 可合法空架招兵，不算空缺）——红字压全行
-	if _is_leaderless(d):
+	if vitals.is_leaderless(d):
 		item.set_custom_color(0, StickTokens.DANGER)
 	if org_id == _selected_org:
 		item.select(0)
 
 
-## 刷新详情区：插入流程 > 未选中提示 > 选中组织字段 + 操作 + 成员
+## 刷新详情区（分诊与渲染实现在 org_panel_detail.gd 子域助手，宿主留薄委托）
 func _refresh_detail() -> void:
-	if _detail_box == null:
-		return
-	for child in _detail_box.get_children():
-		child.queue_free()
-	_rename_edit = null
-	_child_name_edit = null
-	_autonomy_option = null
-	_insert_name_edit = null
-	_insert_commander_option = null
-	if not _insert_position.is_empty():
-		_render_insert_flow()
-		return
-	if _selected_org.is_empty():
-		_add_hint("选中左侧组织节点查看详情与操作；或从预设创建独立组织树。")
-		return
-	var r: Dictionary = _org_api.get_organization(_selected_org)
-	if not r.get("ok", false):
-		_selected_org = ""
-		_add_hint("选中组织已不存在。")
-		return
-	_render_org_detail(r.data)
-
-
-func _add_hint(text: String) -> void:
-	var l := Label.new()
-	l.text = text
-	_detail_box.add_child(l)
-
-
-func _render_org_detail(d: Dictionary) -> void:
-	var org_id := String(d.id)
-	var tier := int(d.tier)
-	var tag_zh := String(TAG_INT_TO_ZH.get(int(d.tag), "?"))
-	var tag_str := String(TAG_INT_TO_STR.get(int(d.tag), "MILITARY"))
-	var parent_name := "（无——根组织）"
-	if not String(d.parent_org).is_empty():
-		var pr: Dictionary = _org_api.get_organization(String(d.parent_org))
-		parent_name = String(pr.data.name) if pr.get("ok", false) else String(d.parent_org)
-	# ── 只读字段 ──
-	var cmd := String(d.commander_id)
-	var info := Label.new()
-	info.text = "「%s」 L%d · %s · %s\n指挥官：%s ｜ 成员：%d 人 ｜ 子组织：%d 个\n父组织：%s ｜ 驻地：%s" % [
-		String(d.name), tier, tag_zh, String(STATE_INT_TO_ZH.get(int(d.state), "?")),
-		"▲#%s" % cmd if not cmd.is_empty() else "（无）",
-		(d.personnel as Array).size(), (d.child_orgs as Array).size(),
-		parent_name, String(d.location) if not String(d.location).is_empty() else "（未设）"]
-	_detail_box.add_child(info)
-	# ── 组织概览卡（状态/士气/统辖/群龙无首/补位候选序）──
-	_render_org_vitals(d)
-	# ── 自主权限（即点即改） ──
-	var auto_row := HBoxContainer.new()
-	auto_row.add_theme_constant_override("separation", 6)
-	_detail_box.add_child(auto_row)
-	var auto_label := Label.new()
-	auto_label.text = "自主权限："
-	auto_row.add_child(auto_label)
-	_autonomy_option = OptionButton.new()
-	var current_auto: int = int(d.autonomy_level)  # HIGH=0/MEDIUM=1/LOW=2 与 AUTONOMY_LEVELS 同序
-	for i in AUTONOMY_LEVELS.size():
-		var lv := String(AUTONOMY_LEVELS[i])
-		_autonomy_option.add_item("%s（%s）" % [AUTONOMY_TO_ZH[lv], lv])
-		_autonomy_option.set_item_metadata(i, lv)
-	_autonomy_option.select(current_auto)
-	_autonomy_option.item_selected.connect(_on_autonomy_selected)
-	auto_row.add_child(_autonomy_option)
-	# ── 改名（行内编辑） ──
-	var rename_row := HBoxContainer.new()
-	rename_row.add_theme_constant_override("separation", 6)
-	_detail_box.add_child(rename_row)
-	var rename_label := Label.new()
-	rename_label.text = "改名："
-	rename_row.add_child(rename_label)
-	_rename_edit = LineEdit.new()
-	_rename_edit.text = String(d.name)
-	_rename_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rename_row.add_child(_rename_edit)
-	var rename_btn := Button.new()
-	rename_btn.text = "应用"
-	rename_btn.pressed.connect(_on_rename_pressed)
-	rename_row.add_child(rename_btn)
-	# ── 新建子编制（L1 叶层，可 FORMING 招兵；仅 L2 组织可挂 L1 子） ──
-	var child_row := HBoxContainer.new()
-	child_row.add_theme_constant_override("separation", 6)
-	_detail_box.add_child(child_row)
-	var child_label := Label.new()
-	child_label.text = "新建子编制(L1)："
-	child_row.add_child(child_label)
-	_child_name_edit = LineEdit.new()
-	_child_name_edit.placeholder_text = "名称"
-	_child_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	child_row.add_child(_child_name_edit)
-	var child_btn := Button.new()
-	child_btn.text = "创建"
-	child_btn.disabled = tier != 2
-	child_btn.tooltip_text = "" if tier == 2 else "仅 L2 组织可直接挂 L1 子编制（中间层走「任命统辖」）"
-	child_btn.pressed.connect(_on_create_child_pressed.bind(tag_str))
-	child_row.add_child(child_btn)
-	# ── 插入层级（任命统辖语义入口） ──
-	var insert_row := HBoxContainer.new()
-	insert_row.add_theme_constant_override("separation", 6)
-	_detail_box.add_child(insert_row)
-	var above_btn := Button.new()
-	above_btn.text = "插入上层"
-	above_btn.disabled = String(d.parent_org).is_empty()
-	above_btn.tooltip_text = "" if not above_btn.disabled else "根组织无法在其上方插入层级"
-	above_btn.pressed.connect(_on_insert_pressed.bind("above"))
-	insert_row.add_child(above_btn)
-	var below_btn := Button.new()
-	below_btn.text = "插入下层"
-	below_btn.disabled = tier <= 1
-	below_btn.tooltip_text = "" if tier >= 2 else "L1 叶层不可再挂下层"
-	below_btn.pressed.connect(_on_insert_pressed.bind("below"))
-	insert_row.add_child(below_btn)
-	var insert_hint := Label.new()
-	insert_hint.text = "（中间层 = 任命统辖：命名 + 指挥官一次完成）"
-	insert_hint.modulate = Color(1, 1, 1, 0.6)
-	insert_row.add_child(insert_hint)
-	# ── 危险操作 ──
-	var danger_row := HBoxContainer.new()
-	danger_row.add_theme_constant_override("separation", 6)
-	_detail_box.add_child(danger_row)
-	var remove_btn := Button.new()
-	remove_btn.text = "删除层级"
-	remove_btn.disabled = String(d.parent_org).is_empty()
-	remove_btn.pressed.connect(_on_remove_tier_pressed)
-	danger_row.add_child(remove_btn)
-	var disband_btn := Button.new()
-	disband_btn.text = "解散组织"
-	disband_btn.pressed.connect(_on_disband_pressed)
-	danger_row.add_child(disband_btn)
-	# ── 导出蓝图 ──
-	var export_btn := Button.new()
-	export_btn.text = "导出为蓝图"
-	export_btn.pressed.connect(_on_export_pressed)
-	danger_row.add_child(export_btn)
-	# ── 更换指挥官（任命=换人，节点因人而生不空转；空组织禁用） ──
-	var cmd_row := HBoxContainer.new()
-	cmd_row.add_theme_constant_override("separation", 6)
-	_detail_box.add_child(cmd_row)
-	var cmd_label := Label.new()
-	cmd_label.text = "指挥官："
-	cmd_row.add_child(cmd_label)
-	var choose_btn := Button.new()
-	if _choosing_commander:
-		choose_btn.text = "取消任命"
-		choose_btn.pressed.connect(_on_toggle_choosing)
-	else:
-		choose_btn.text = "从成员列表任命"
-		choose_btn.disabled = (d.personnel as Array).is_empty()
-		choose_btn.tooltip_text = "" if not choose_btn.disabled else "组织无成员，先补充人员"
-		choose_btn.pressed.connect(_on_toggle_choosing)
-	cmd_row.add_child(choose_btn)
-	# ── 成员列表（任命态每行带「任命」按钮） ──
-	var member_title := Label.new()
-	member_title.text = "成员（%d）%s" % [(d.personnel as Array).size(), "——点「任命」设为指挥官" if _choosing_commander else ""]
-	_detail_box.add_child(member_title)
-	for member_id in d.personnel:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		_detail_box.add_child(row)
-		var m_label := Label.new()
-		var is_cmd := String(member_id) == cmd
-		m_label.text = "%s成员 #%s" % ["▲" if is_cmd else "", String(member_id)]
-		m_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(m_label)
-		if _choosing_commander and not is_cmd:
-			var assign_btn := Button.new()
-			assign_btn.text = "任命"
-			assign_btn.pressed.connect(_on_assign_commander.bind(String(member_id)))
-			row.add_child(assign_btn)
-		var rm_btn := Button.new()
-		rm_btn.text = "移除"
-		rm_btn.pressed.connect(_on_remove_member.bind(String(member_id)))
-		row.add_child(rm_btn)
-
-
-## 组织概览卡（内嵌 LIGHT 区块）：状态徽标 + 士气条 + 统辖规模 + 空缺警示 + 补位候选序。
-## 与树徽标同源数据（_org_people/_people_morale），避免两处口径分叉。
-func _render_org_vitals(d: Dictionary) -> void:
-	var org_id := String(d.id)
-	var people := _org_people(org_id)
-	var morale := _people_morale(people)
-	var panel := SketchPanel.new()
-	panel.tone = SketchPanel.Tone.LIGHT
-	_detail_box.add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	panel.add_child(box)
-	# 状态行（图标母题与树节点一致）
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 6)
-	box.add_child(head)
-	var icon := TextureRect.new()
-	icon.texture = StickIcons.tex(StringName(STATE_MOTIF.get(int(d.state), &"旗帜")))
-	icon.custom_minimum_size = Vector2(20, 20)
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	head.add_child(icon)
-	StickKit.label(head, "状态：%s" % String(STATE_INT_TO_ZH.get(int(d.state), "?")),
-			StickKit.LabelKind.BODY)
-	StickKit.label(head, "｜ 直属 %d 人 · 统辖 %d 人" % [
-			(d.personnel as Array).size(), people.size()], StickKit.LabelKind.HINT)
-	# 士气条（存活成员均值；一个都解析不到则不显示该行——取不到就不显示）
-	if morale >= 0.0:
-		var mrow := HBoxContainer.new()
-		mrow.add_theme_constant_override("separation", 6)
-		box.add_child(mrow)
-		StickKit.label(mrow, "士气", StickKit.LabelKind.HINT)
-		var bar := SketchProgress.new()
-		bar.max_value = 1.0
-		bar.value = morale
-		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(180, 14)
-		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		mrow.add_child(bar)
-		StickKit.label(mrow, "%d%%" % int(round(morale * 100.0)), StickKit.LabelKind.HINT,
-				_morale_color(morale))
-	# 群龙无首：与树标记同一语义（空缺就是空缺，不美化）
-	if _is_leaderless(d):
-		StickKit.label(box, "群龙无首：指挥官空缺，命令将停驻此层——请任命或等待补位",
-				StickKit.LabelKind.HINT, StickTokens.DANGER)
-	# 补位候选序（只读；排序口径归组织侧）
-	var cands := _succession_candidates_of(org_id)
-	if not cands.is_empty():
-		StickKit.label(box, "补位候选序（%d）" % cands.size(), StickKit.LabelKind.SECTION)
-		for i in cands.size():
-			StickKit.label(box, "%d. ▲#%s" % [i + 1, String((cands[i] as Dictionary).get("id", ""))],
-					StickKit.LabelKind.HINT)
-
-
-## 插入层级流程（任命统辖）：新层级 > 1 须同时指定指挥官；L1 叶层仅命名
-func _render_insert_flow() -> void:
-	var r: Dictionary = _org_api.get_organization(_selected_org)
-	if not r.get("ok", false):
-		_insert_position = ""
-		_add_hint("选中组织已不存在。")
-		return
-	var d: Dictionary = r.data
-	var tier := int(d.tier)
-	var new_tier := tier + 1 if _insert_position == "above" else tier - 1
-	var title := Label.new()
-	if new_tier == 1:
-		title.text = "新建 L1 子编制（挂到「%s」下）——叶层可 FORMING 招兵" % String(d.name)
-	else:
-		title.text = "任命统辖：新 L%d 组织将统辖「%s」——须指定指挥官" % [new_tier, String(d.name)]
-	_detail_box.add_child(title)
-	_insert_name_edit = LineEdit.new()
-	_insert_name_edit.placeholder_text = "新组织名称"
-	_detail_box.add_child(_insert_name_edit)
-	if new_tier > 1:
-		var cmd_label := Label.new()
-		cmd_label.text = "指挥官人选（成员 ∪ 下级指挥官）："
-		_detail_box.add_child(cmd_label)
-		_insert_commander_option = OptionButton.new()
-		var candidates := _succession_candidates(d)
-		for i in candidates.size():
-			_insert_commander_option.add_item("▲#%s" % String(candidates[i]))
-			_insert_commander_option.set_item_metadata(i, candidates[i])
-		if candidates.is_empty():
-			_insert_commander_option.disabled = true
-			var warn := Label.new()
-			warn.text = "无可用人选（先给组织补充成员，或给下级组织任命指挥官）"
-			warn.modulate = Color(1, 0.6, 0.4)
-			_detail_box.add_child(warn)
-		_detail_box.add_child(_insert_commander_option)
-	var btn_row := HBoxContainer.new()
-	btn_row.add_theme_constant_override("separation", 6)
-	_detail_box.add_child(btn_row)
-	var ok_btn := Button.new()
-	ok_btn.text = "确定"
-	if new_tier > 1:
-		ok_btn.disabled = (d.personnel as Array).is_empty() and _succession_candidates(d).is_empty()
-	ok_btn.pressed.connect(_on_insert_confirm.bind(new_tier))
-	btn_row.add_child(ok_btn)
-	var cancel_btn := Button.new()
-	cancel_btn.text = "取消"
-	cancel_btn.pressed.connect(_on_insert_cancel)
-	btn_row.add_child(cancel_btn)
-
-
-## 统辖候选池：本组织成员 ∪ 直接下级组织的指挥官（架构 §4.3——统辖即指挥下级指挥官）
-func _succession_candidates(d: Dictionary) -> Array[String]:
-	var pool: Array[String] = []
-	for pid in d.personnel:
-		var p := String(pid)
-		if not p.is_empty() and p not in pool:
-			pool.append(p)
-	for child_id in d.child_orgs:
-		var cr: Dictionary = _org_api.get_organization(String(child_id))
-		if not cr.get("ok", false):
-			continue
-		var cc := String(cr.data.commander_id)
-		if not cc.is_empty() and cc not in pool:
-			pool.append(cc)
-	return pool
-
-
-# ───────────────── 组织「活」的可见面（状态 / 士气 / 空缺 / 补位）─────────────────
-# 数据口径：全部走 organization api 只读查询 + 实例 id duck 查询；查询不到即不显示该项，
-# 面板不倒逼组织侧改结构。补位候选序排序口径归组织侧（§4.3.1），面板只读展示。
-
-## 中间层（L2+）指挥官空缺 = 「群龙无首」持续空缺态（组织架构 §4.3 ③）。
-## L1 叶层可合法空架招兵（FORMING），不算空缺——不制造假警报。
-func _is_leaderless(d: Dictionary) -> bool:
-	return int(d.tier) > 1 and String(d.commander_id).is_empty()
-
-
-## 节点行文案：主干 = [L1] 名称 · 标签 [N人] [▲#id]——「N人」= 本层在册直属成员（personnel），
-## 为 0 时整段省略（不显示 0 人，也不造孤零零的分隔点；L2+ 直属通常为 0）。
-## 其后按显示序追加徽标：状态 / 统辖规模 / 士气均值 / 群龙无首（恒末尾）。
-## 除「群龙无首」外逐项做宽度准入——树列不换行，超宽即被裁，宁可少显示也不挤爆行宽。
-func _compose_node_text(d: Dictionary, people: Array[String], morale: float) -> String:
-	var cmd := String(d.commander_id)
-	var direct: int = (d.personnel as Array).size()
-	var text := "[L%d] %s · %s" % [
-		int(d.tier), String(d.name), String(TAG_INT_TO_ZH.get(int(d.tag), "?"))]
-	if direct > 0:
-		text += " %d人" % direct
-	if not cmd.is_empty():
-		text += " ▲#%s" % cmd
-	var leaderless := _is_leaderless(d)
-	var parts: Array[String] = [" · %s" % String(STATE_INT_TO_ZH.get(int(d.state), "?"))]
-	if people.size() > (d.personnel as Array).size():
-		parts.append(" · 辖%d人" % people.size())
-	if morale >= 0.0:
-		parts.append(" · 士气%d%%" % int(round(morale * 100.0)))
-	if leaderless:
-		parts.append(" · 群龙无首")
-	for i in parts.size():
-		# 群龙无首是本批最有信息量的一项：宽度不够也要留下（主干已远窄于预算）
-		var essential := leaderless and i == parts.size() - 1
-		if not essential and _text_width(text + parts[i]) > TREE_TEXT_BUDGET:
-			continue
-		text += parts[i]
-	return text
-
-
-## 悬停提示：状态/指挥官/统辖规模/士气均值/空缺说明 + 补位候选前若干（只读）
-func _compose_node_tooltip(d: Dictionary, people: Array[String], morale: float) -> String:
-	var lines: Array[String] = []
-	lines.append("%s · L%d · %s · %s" % [
-		String(d.name), int(d.tier), String(TAG_INT_TO_ZH.get(int(d.tag), "?")),
-		String(STATE_INT_TO_ZH.get(int(d.state), "?"))])
-	var cmd := String(d.commander_id)
-	lines.append("指挥官：%s" % ("▲#%s" % cmd if not cmd.is_empty() else "（空缺）"))
-	lines.append("直属成员 %d 人 · 统辖 %d 人" % [(d.personnel as Array).size(), people.size()])
-	if morale >= 0.0:
-		lines.append("士气均值：%d%%" % int(round(morale * 100.0)))
-	if _is_leaderless(d):
-		lines.append("群龙无首：命令将停驻此层，等待任命或补位")
-	var cands := _succession_candidates_of(String(d.id))
-	if not cands.is_empty():
-		var shown: Array[String] = []
-		for i in mini(cands.size(), TOOLTIP_CANDIDATE_LIMIT):
-			shown.append("%d. ▲#%s" % [i + 1, String(cands[i].get("id", ""))])
-		lines.append("补位候选序：" + "  ".join(shown))
-	return "\n".join(lines)
-
-
-## 补位候选序（只读消费 organization api；排序口径归组织侧，面板不自算）
-func _succession_candidates_of(org_id: String) -> Array:
-	if _org_api == null or not _org_api.has_method("get_succession_candidates"):
-		return []
-	return _org_api.get_succession_candidates(org_id)
-
-
-## 子树人员集合（本组织成员 ∪ 本组织指挥官 ∪ 各级子组织递归；去重 + 单次建树内缓存）。
-## 聚合口径面向「这一层的指挥官关心什么」——中间层直接成员通常为空，
-## 只有子树聚合才看得到统辖规模与整体士气。
-func _org_people(org_id: String) -> Array[String]:
-	if _people_cache.has(org_id):
-		return _people_cache[org_id]
-	var out: Array[String] = []
-	_collect_people(org_id, out, {})
-	_people_cache[org_id] = out
-	return out
-
-
-func _collect_people(org_id: String, out: Array[String], seen: Dictionary) -> void:
-	if _org_api == null:
-		return
-	var r: Dictionary = _org_api.get_organization(org_id)
-	if not r.get("ok", false):
-		return
-	var d: Dictionary = r.data
-	for raw in [String(d.commander_id)] + (d.personnel as Array):
-		var pid := String(raw)
-		if pid.is_empty() or seen.has(pid):
-			continue
-		seen[pid] = true
-		out.append(pid)
-	for child_id in d.child_orgs:
-		_collect_people(String(child_id), out, seen)
-
-
-## 成员士气均值（0~1，仅存活且可解析成员；无一可解析 → -1 = 不显示该项）
-func _people_morale(people: Array[String]) -> float:
-	var sum := 0.0
-	var n := 0
-	for pid in people:
-		var ratio := _unit_morale(pid)
-		if ratio < 0.0:
-			continue
-		sum += ratio
-		n += 1
-	return sum / float(n) if n > 0 else -1.0
-
-
-func _unit_morale(stickman_id: String) -> float:
-	if _morale_cache.has(stickman_id):
-		return _morale_cache[stickman_id]
-	var value := _probe_unit_morale(stickman_id)
-	_morale_cache[stickman_id] = value
-	return value
-
-
-func _probe_unit_morale(stickman_id: String) -> float:
-	var node := _resolve_unit(stickman_id)
-	if node == null:
-		return -1.0
-	if node.has_method("is_dead") and bool(node.call("is_dead")):
-		return -1.0
-	var health: Node = node.call("get_health") if node.has_method("get_health") else null
-	if health == null or not health.has_method("get_morale_ratio"):
-		return -1.0
-	return clampf(float(health.call("get_morale_ratio")), 0.0, 1.0)
-
-
-## 当前地图实体索引（instance_id -> 在场实体），懒建 + 单次刷新内复用。
-## 不用全局 instance_from_id：那对任意整数（脏档/测试桩数据）会触发 ObjectDB 越界引擎报错；
-## 「地图在场实体表」口径也更诚实——取不到（未出场/他图）就不显示士气。
-func _ensure_unit_index() -> void:
-	if _unit_index_built:
-		return
-	_unit_index_built = true
-	_unit_index.clear()
-	if _game_root == null or not _game_root.has_method("get_current_map"):
-		return
-	var map: Node = _game_root.get_current_map()
-	if map == null or not map.has_method("get_entities"):
-		return
-	for e in map.get_entities():
-		if e != null and is_instance_valid(e) and e.has_method("get_health"):
-			_unit_index[int(e.get_instance_id())] = e
-
-
-## personnel 存的是 stickman 实例 id：经在场实体索引反查（duck 只认能给出 health 的单位）。
-## 只靠实例 id 关联，组织侧与 units 模块零编译期依赖。
-func _resolve_unit(stickman_id: String) -> Node:
-	if not stickman_id.is_valid_int():
-		return null
-	_ensure_unit_index()
-	return _unit_index.get(stickman_id.to_int(), null)
-
-
-## 文案像素宽（量树实际字体）——徽标宽度准入的度量口径
-func _text_width(s: String) -> float:
-	var f: Font = null
-	var fs := 0
-	if _tree != null:
-		f = _tree.get_theme_font("font")
-		fs = _tree.get_theme_font_size("font_size")
-	if f == null:
-		f = ThemeDB.fallback_font
-	if fs <= 0:
-		fs = StickTokens.FONT_BODY
-	return f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-
-
-## 士气条配色：数值之外的颜色冗余（<35% 危险红 / <60% 警告黄 / 其余成功绿）
-func _morale_color(ratio: float) -> Color:
-	if ratio < 0.35:
-		return StickTokens.DANGER
-	if ratio < 0.60:
-		return StickTokens.WARN
-	return StickTokens.SUCCESS
+	if detail != null:
+		detail.refresh_detail()
 
 
 # ─────────────────────────────── 回调 ────────────────────────────────

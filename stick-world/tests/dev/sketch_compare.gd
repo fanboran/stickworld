@@ -4,7 +4,7 @@ extends Control
 ## 血条同源 boiling 自绘控件全族陈列：SketchPanel（DARK/LIGHT）、SketchButton
 ## 四态三色族、SketchProgress、SketchLineEdit、SketchSeparator 波浪线，
 ## 含 300px 宽 / 80px 高 / 30px 矮尺寸边界件；StickHand 程序化手写字体；
-## 底部 GLASS 玻璃对照（主菜单皮肤）。ESC 返回主菜单。
+## 底部 GLASS 玻璃对照（主菜单皮肤）。ESC 确认后回主菜单（DevSceneEscape 统一拦截）。
 
 
 func _ready() -> void:

@@ -18,7 +18,7 @@ extends Node
 ##   2. 用 playback.start() 直达目标 state——绕过"walk_carry 无通往攻击的
 ##      过渡边"等状态图死角，保证任意按钮从任意当前状态都生效
 ##
-## 热键：ESC 返回主菜单 · R 全员复位（回各兵种持械站姿）· F 全员转向。
+## 热键：ESC 确认后回主菜单（DevSceneEscape 统一弹窗拦截）· R 全员复位（回各兵种持械站姿）· F 全员转向。
 
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 const _Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")

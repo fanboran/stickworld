@@ -3,7 +3,7 @@ extends Control
 ## 运行（必须带显示）：
 ##   主菜单「测试场景」→「手绘云候选陈列」，或
 ##   godot --path stick-world res://tests/dev/sketch_cloud_gallery.tscn --resolution 1920x1080
-## ESC 返回主菜单。自动截图仅当命令行带 --shot 时执行
+## ESC 确认后回主菜单（DevSceneEscape 统一拦截）。自动截图仅当命令行带 --shot 时执行
 ##（user://shots/sketch_cloud_0.png / _1.png 两帧），日常浏览不退出。
 
 const SHOT_DIR := "user://shots"

@@ -22,7 +22,7 @@ extends Node
 ##   缩放 0.75（缩放条 100% 档）——3D 侧战场契约把地平线钉屏幕上 1/3 线，
 ##   地面恒占 2/3（HD-2D街景系统.md §4.1）。
 ##
-## 热键：ESC 返回主菜单 · R 重新开局 · 空格 暂停/继续（TimeManager 全局暂停）。
+## 热键：ESC 确认后回主菜单（DevSceneEscape 统一弹窗拦截）· R 重新开局 · 空格 暂停/继续（TimeManager 全局暂停）。
 
 const _GameRootScene: PackedScene = preload("res://modules/world/scenes/game_root.tscn")
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")

@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://c1hd2dsettl03"]
+
+[ext_resource type="Script" path="res://modules/world/scripts/map/hd2d_street_map.gd" id="1_hd2d"]
+
+[node name="Hd2dSettlement03" type="Node2D"]
+script = ExtResource("1_hd2d")
+layout_name = "l1_settlement_03"
+city_tier = "city"
+ground_y = 810.0
+ground_ratio = 0.36
+map_left = -2160.0
+map_right = 2160.0
+ground_bottom = 1080.0
+
+[node name="EntityHost" type="Node2D" parent="."]
+
+[node name="BuildingHost" type="Node2D" parent="."]
+
+[node name="TerrainBuildings" type="Node2D" parent="."]
+
+[node name="WalkBarrier" type="Node2D" parent="."]
+
+[node name="ForegroundLayer" type="Node2D" parent="."]
+z_index = 10

@@ -74,6 +74,19 @@ const _L1_SETTLEMENT_SCENES: Array[PackedScene] = [
 	preload("res://modules/world/scenes/maps/l1_settlement_06.tscn"),
 	preload("res://modules/world/scenes/maps/l1_settlement_07.tscn"),
 ]
+## L1 八城邦聚落 HD-2D 版（城市生成器接线）：薄实例场景（layout_name=map_id 做
+## CityGen 确定性种子，city_tier 按 tools/worldgen/l1/city_profiles.json 的 size）；
+## 2D 版场景保留作回退/对照，注册不再使用
+const _L1_SETTLEMENT_HD2D_SCENES: Array[PackedScene] = [
+	preload("res://modules/world/scenes/maps/hd2d_settlement_00.tscn"),
+	preload("res://modules/world/scenes/maps/hd2d_settlement_01.tscn"),
+	preload("res://modules/world/scenes/maps/hd2d_settlement_02.tscn"),
+	preload("res://modules/world/scenes/maps/hd2d_settlement_03.tscn"),
+	preload("res://modules/world/scenes/maps/hd2d_settlement_04.tscn"),
+	preload("res://modules/world/scenes/maps/hd2d_settlement_05.tscn"),
+	preload("res://modules/world/scenes/maps/hd2d_settlement_06.tscn"),
+	preload("res://modules/world/scenes/maps/hd2d_settlement_07.tscn"),
+]
 ## 玩家火柴人实体场景（2026-08 收敛：经 UnitsAPI 常量引用，替代直接 preload 内部路径）
 const _UnitsApiScript: GDScript = preload("res://modules/units/api.gd")
 const _STICKMAN_ENTITY_SCENE: PackedScene = _UnitsApiScript.STICKMAN_ENTITY_SCENE
@@ -619,9 +632,10 @@ func _register_default_maps() -> void:
 	# HD-2D 街景图（创始人 2026-09-14：接入游戏内场景；设置面板「调试→测试地图」可选）
 	scene_loader.register_map(HD2D_STREET_MAP_ID, _HD2D_STREET_SCENE, WorldAPI.MapType.VILLAGE)
 	# P5/D1：注册 L1 八城邦聚落图（城内边界不配 register_map_exit——玩家顶到边界
-	# 3 秒由 MapBoundaryDetector 开 L1 大图回战略图，双击下一城再进）
-	for i: int in _L1_SETTLEMENT_SCENES.size():
-		scene_loader.register_map("l1_settlement_%02d" % i, _L1_SETTLEMENT_SCENES[i], WorldAPI.MapType.VILLAGE)
+	# 3 秒由 MapBoundaryDetector 开 L1 大图回战略图，双击下一城再进）。
+	# 挂 HD-2D 版：进城由 CityGen 运行时按城名种子+档位生成街景（同主街管线）
+	for i: int in _L1_SETTLEMENT_HD2D_SCENES.size():
+		scene_loader.register_map("l1_settlement_%02d" % i, _L1_SETTLEMENT_HD2D_SCENES[i], WorldAPI.MapType.VILLAGE)
 	# 配置地图出口（步行衔接，详见 §6.2）。
 	# 2026-09-14 启动直连：旅行链原挂在 village_a，现全部改挂 hd2d_street
 	# （新主场景）；村A 保留注册仅供调试，不再承担主场景职责。

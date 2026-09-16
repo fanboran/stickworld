@@ -154,7 +154,7 @@ func _build_dev_shortcuts() -> void:
 				StickKit.ButtonKind.PAPER, StickTokens.BTN_H)
 		btn.font_size = 15
 		btn.bg_alpha = 0.62
-	var hint := StickKit.label(box, "场景内按 ESC 回主页", StickKit.LabelKind.HINT)
+	var hint := StickKit.label(box, "场景内按 ESC 可退回主页", StickKit.LabelKind.HINT)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_color_override("font_color", Color(0.30, 0.20, 0.14, 0.60))
 

@@ -25,6 +25,7 @@ const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
 const CHAR_SHADER := preload("res://modules/hd2d/shaders/char_billboard.gdshader")
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const StickmanOutline := preload("res://modules/units/scripts/rig/stickman_outline.gd")
+const HEALTH_BAR_SCRIPT := preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
 
 const SV_W := 144            # SubViewport 宽（px）
 const SV_H := 176            # SubViewport 高（px）
@@ -272,6 +273,33 @@ func _make_flat_quad(size: Vector2, color: Color, priority: int) -> MeshInstance
 	add_child(mi)
 	return mi
 
+## ── 头顶血条（HD-2D：血条随骨架进 billboard）──
+## 实体 2D 侧血条切数据模式（停画、状态机照跑），宿主逐帧拉快照喂进来；
+## 本节点是同一 HealthBarIndicator 脚本的**驱动镜像**（只绘制不自驱），
+## 画进 SubViewport 纹理 → 随 billboard 一起被 3D 深度排序/近大远小。
+## 摆位：头顶净空（角色 131px 高、脚底 FOOT_ROW，头顶留白 ~10px×超采样）；
+## 尺寸 s = px_scale/1.2：viewport px → 世界 px 折算（SIZE_K=1.2）后与
+## 2D 图上的血条世界大小一致。
+var _health_bar: Node2D = null
+
+func _ensure_health_bar() -> void:
+	if _health_bar != null or viewport == null:
+		return
+	_health_bar = Node2D.new()
+	_health_bar.set_script(HEALTH_BAR_SCRIPT)
+	viewport.add_child(_health_bar)
+	if _health_bar.has_method("set_driven"):
+		_health_bar.set_driven(true)
+	_health_bar.position = Vector2(_sv_size.x * 0.5, 8.0 * px_scale)
+	_health_bar.scale = Vector2(px_scale / 1.2, px_scale / 1.2)
+
+## 宿主逐帧调（镜像层）：喂实体侧血条状态快照
+func apply_health_state(s: Dictionary) -> void:
+	_ensure_health_bar()
+	if _health_bar != null and _health_bar.has_method("apply_bar_state"):
+		_health_bar.apply_bar_state(s)
+
+
 ## 劳作进度（镜像层逐帧调）：ratio 0~1 显示，<0 隐藏。
 ## 逐拍由行为层 set_action_progress/hide_action_progress 驱动（2D/3D 同一数据源）
 func set_work_progress(ratio: float) -> void:
@@ -332,6 +360,17 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0,
 						+ (SV_H * PX * SIZE_K * 0.5 + WP_LIFT) * depth,
 				z)
 		_layout_work_bar()
+
+
+## 描边 zoom 补偿（宿主在世界变焦变化时推一次）：SubViewport 无相机，
+## rig 本地自动补偿恒按 zoom=1 烘宽度——billboard 被世界变焦放大后描边
+## 等比变粗（武器薄刃上尤其刺眼）。把世界 zoom 作为等效画布缩放推给
+## viewport 内 rig，屏幕描边宽度回归恒定。
+func set_outline_zoom(z: float) -> void:
+	if rig == null or not rig.has_method("set_outline_canvas_scale"):
+		return
+	rig.outline_zoom_external = true
+	rig.set_outline_canvas_scale(z)
 
 
 ## 动画切换（只在变化时 play，避免每帧重置动画进度）

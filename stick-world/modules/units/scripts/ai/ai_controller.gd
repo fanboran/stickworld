@@ -416,8 +416,12 @@ func _nearby_ally_break_ratio(bi: Node, profile: Dictionary) -> float:
 	var total: int = 0
 	var broken: int = 0
 	for ally_v in bi.get_allies_of(_entity.get_faction()):
+		# 名单可能含已释放单位（战斗清场竞态）：先有效性后 cast——对 freed 引用
+		# 做 as 运算会报 "Trying to cast a freed object"
+		if not is_instance_valid(ally_v):
+			continue
 		var ally := ally_v as Node2D
-		if ally == null or not is_instance_valid(ally) or ally == _entity:
+		if ally == null or ally == _entity:
 			continue
 		if _entity.global_position.distance_to(ally.global_position) > radius:
 			continue

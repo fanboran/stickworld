@@ -158,6 +158,7 @@ func get_bar_state() -> Dictionary:
 		color = color.darkened(1.0 - flicker)
 	return {
 		"active": _lod_visible and _ratio > 0.0 and _shown > 0.01,
+		"faction": _faction,
 		"shown": _shown,
 		"expand": _expand,
 		"ratio": _ratio,
@@ -181,6 +182,36 @@ func _ready() -> void:
 	z_index = 1000
 	position.y = OFFSET_Y
 	visible = true
+
+
+# ── 驱动模式（HD-2D billboard 血条镜像）─────────────────────────────
+## true = 本节点停用自驱状态机（不 _process、不画），只当绘制模板：宿主从
+## 实体侧自驱实例拉 get_bar_state() 喂 apply_bar_state，billboard 里的镜像
+## 画出同一套手绘血条（同 _draw 实现，零分歧）。血条随骨架进 billboard，
+## 2D 画布侧不再画（2D 画布坐标与 3D 投影对不上）。
+var _driven: bool = false
+var _active: bool = false
+
+func set_driven(v: bool) -> void:
+	_driven = v
+	set_process(not v)
+	visible = false
+
+
+## 喂入自驱实例的状态快照（get_bar_state 产物）。
+func apply_bar_state(s: Dictionary) -> void:
+	_faction = int(s.get("faction", 0))
+	_ratio = float(s.get("ratio", 1.0))
+	_shown = float(s.get("shown", 0.0))
+	_expand = float(s.get("expand", 0.0))
+	_trail_ratio = float(s.get("trail", 1.0))
+	_shake_energy = float(s.get("shake", 0.0))
+	_anim_time = float(s.get("anim_time", 0.0))
+	_wobble_seed = int(s.get("wobble", 0))
+	_max_hp = float(s.get("max_hp", 1.0))
+	_active = bool(s.get("active", false))
+	visible = _active
+	queue_redraw()
 
 
 ## 设置体型缩放（minidon 等小体型单位）：血条高度/大小同步缩小。
@@ -313,6 +344,7 @@ func _refresh() -> void:
 func _draw() -> void:
 	if not visible or _ratio <= 0.0 or _shown <= 0.01:
 		return
+	# 驱动模式的可见门在 apply_bar_state（_active）里，其余绘制路径共用
 	var color: Color = FACTION_COLORS.get(_faction, COLOR_NEUTRAL)
 	# 低血：填充明度闪烁（不用红色——红=低血会与红方语义撞色，改暗化+闪）
 	if _ratio <= LOW_THRESHOLD:

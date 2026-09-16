@@ -122,7 +122,8 @@ const SQUAD_PRESET := "fp_combat_squad"
 var _game_root: Node = null
 var _left_alive_label: Label = null
 var _right_alive_label: Label = null
-const _TARGET_MAP := "battlefield"   # HD-2D 战场（自动化套件才用 battlefield_2d）
+const _TARGET_MAP := "battlefield"   # HD-2D 战场：观察场=真实生产观感（血条随骨架进 billboard）
+	## （battlefield_2d 是自动化套件的 2D 空旷开机图，不承担观感）
 var _hint_label: Label = null
 ## 控制面板预设按钮组（下标对齐 PRESETS）
 var _preset_buttons: Array = []
@@ -154,8 +155,7 @@ func _spawn_and_start() -> void:
 			break
 		await get_tree().process_frame
 	var loader: Node = _game_root.get("scene_loader")
-	# 切到 HD-2D 战场图（观察场要给人看真实生产观感；village 是玩家村，
-	# 建筑/资源点干扰观察。自动化测试套件仍开机 battlefield_2d：2D 空旷+秒级开机）
+	# 切到空旷演练场（village 是玩家村，建筑/资源点干扰观察）
 	if loader != null and loader.has_method("load_map"):
 		loader.load_map(_TARGET_MAP)
 		# 等新图装配（旧图延迟销毁，get_current_map 稳定到 battlefield 再继续）
@@ -186,7 +186,15 @@ func _spawn_and_start() -> void:
 		# 正式游戏（村庄附身互动）user_zoom=1.0 合适，但 RTS 观战的镜头要远得多
 		# （此前 1.0 下单位占屏 24%，观感"镜头贴脸"）
 		if rig.has_method("set_user_zoom"):
-			rig.set_user_zoom(0.55)
+			# 观战缩放 = 可走带恰好占满屏高（构图契约随图走）：
+			# HD-2D 战场带 688~1294（606px）→ ~1.78，战斗铺满画面；
+			# 旧 2D 演练场带深 1242px，保留创始人手调的 0.55（单位占屏 13% 口径）
+			if map.get("WALK_FRONT_Y") != null:
+				rig.set_user_zoom(clampf(1080.0 / maxf(
+					float(map.get("WALK_FRONT_Y")) - float(map.get("WALK_BACK_Y")), 300.0),
+					0.5, 2.2))
+			else:
+				rig.set_user_zoom(0.55)
 		_cam_proxy = Marker2D.new()
 		_cam_proxy.name = "ArenaCamProxy"
 		add_child(_cam_proxy)

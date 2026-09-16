@@ -67,7 +67,7 @@ func _ready() -> void:
 					n_props += 1
 				elif nm.begins_with("Nature_"):
 					n_nature += 1
-		_check(n_props >= 5, "战场遗物卡已摆（实得 %d）" % n_props)
+		_check(n_props == 0, "战场应无摆件杂物（创始人 2026-09-15：清空战痕遗物；实得 %d）" % n_props)
 		_check(n_nature >= 5, "战痕自然物卡已摆（实得 %d）" % n_nature)
 	print("[verify_bf] 断言完成：%d 失败" % _fails)
 	await _shot()

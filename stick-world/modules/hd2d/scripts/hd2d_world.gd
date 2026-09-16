@@ -113,47 +113,14 @@ const NATURE_SPOTS: Array = [
 ## 战场遗物（battlefield 模式手摆）：旧 12V12 战场旧址的残营读法——残旗/破车/
 ## 桶箱散在开阔地，全落地面（无台面）。活树/矿不在此表：野地资源走 resource_gen
 ## 算法全域撒布（宿主 Hd2dBattlefieldMap 消费），战场只做战痕。
-const BF_PROPS: Array = [
-	{"card": "banner", "x": -20.5, "z": 4.8},
-	{"card": "banner", "x": 17.5, "z": 5.6},
-	{"card": "cart", "x": 7.5, "z": 6.2},
-	{"card": "barrel", "x": -31.0, "z": 5.2},
-	{"card": "barrel", "x": 33.5, "z": 4.6},
-	{"card": "crate", "x": -9.5, "z": 5.0},
-	{"card": "crate", "x": 44.0, "z": 6.0},
-	{"card": "wheelbarrow", "x": -45.5, "z": 5.4},
-]
+## 战场摆件表：创始人 2026-09-15 反馈"还有一堆杂物"——清空，战场=开阔可列阵
+## （资源点走 resource_gen 算法的树，玩法保留）
+const BF_PROPS: Array = []
 
 ## 战场野地纯景（battlefield 模式手摆）：枯木/断桩/碎石堆 = 战痕，草丛灌木 =
 ## 荒野回生。`z` ≥ 5 前景带，x 铺满 ±94 格战场全域（中心留稀疏便于列阵读法）。
-const BF_NATURE_SPOTS: Array = [
-	{"card": "dead_tree", "x": -88.0, "z": 9.5},
-	{"card": "dead_tree", "x": -62.0, "z": 6.0},
-	{"card": "dead_tree", "x": 24.0, "z": 10.0},
-	{"card": "dead_tree", "x": 77.0, "z": 8.0},
-	{"card": "dead_tree", "x": 91.0, "z": 6.5},
-	{"card": "stump", "x": -73.0, "z": 5.4},
-	{"card": "stump", "x": -14.0, "z": 9.0},
-	{"card": "stump", "x": 38.5, "z": 5.6},
-	{"card": "stump", "x": 68.0, "z": 10.5},
-	{"card": "rubble", "x": -52.0, "z": 6.4},
-	{"card": "rubble", "x": -3.5, "z": 5.8},
-	{"card": "rubble", "x": 12.5, "z": 9.4},
-	{"card": "rubble", "x": 57.0, "z": 5.2},
-	{"card": "boulder", "x": -81.0, "z": 7.5},
-	{"card": "boulder", "x": 84.5, "z": 9.0},
-	{"card": "bush", "x": -68.5, "z": 9.8},
-	{"card": "bush", "x": -25.0, "z": 5.6},
-	{"card": "bush", "x": 29.0, "z": 6.8},
-	{"card": "bush", "x": 87.5, "z": 5.4},
-	{"card": "grass_clump", "x": -58.0, "z": 5.2},
-	{"card": "grass_clump", "x": -36.0, "z": 9.6},
-	{"card": "grass_clump", "x": 3.0, "z": 5.4},
-	{"card": "grass_clump", "x": 48.5, "z": 10.0},
-	{"card": "grass_clump", "x": 72.5, "z": 5.8},
-	{"card": "mushrooms", "x": -43.0, "z": 8.6},
-	{"card": "mushrooms", "x": 62.0, "z": 6.2},
-]
+## 战痕自然物散布：同上清空（杂物反馈）
+const BF_NATURE_SPOTS: Array = []
 
 ## 前排**摆位意图表**：人只声明 card + 语义锚点 x + 纵深（"大概在哪"），
 ## 实际 x 由 _resolve_front_row 按**画面宽**（cards.json units 数据包围盒）

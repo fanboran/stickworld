@@ -219,7 +219,7 @@ func _process(delta: float) -> void:
 		_do_rebuild()
 	# 描边屏幕像素恒定：画布缩放变化时批量刷描边宽（缩放变化=滚轮/改窗，低频事件；
 	# 平时每帧只有一次取矩阵+浮点比较的开销。编辑器内不补偿，保持设计空间观感）
-	if not Engine.is_editor_hint():
+	if not Engine.is_editor_hint() and not outline_zoom_external:
 		_update_outline_zoom()
 	# 批渲染 pose 脏标记（自动驱动模式）：AnimationTree 自主推进，无法感知姿态
 	# 变化帧，保守每帧标脏（无动画树则姿态恒定，跳过）
@@ -544,6 +544,28 @@ func _do_rebuild() -> void:
 ## 被灌到超粗（渲染后屏幕占比过大），深灰填充被白描边盖成"白色小人"
 ## （视觉验收抓过，1× 机位小护卫）。批渲染路径同口径（StickmanBatchRig
 ## 重烘预烘局部变换），矢量路径改 stroke 几何。
+## 外部驱动描边补偿开关（HD-2D SubViewport 内 rig 无相机：画布缩放恒 1，
+## 本地自动补偿会把 zoom=1 的宽度烘进纹理，billboard 被世界变焦放大后描边
+## 等比变粗）。宿主经 set_outline_canvas_scale 推世界 zoom 进来，本侧自动
+## 补偿停用防互相覆盖。
+var outline_zoom_external := false
+
+## 外部驱动版补偿：s = 宿主世界 zoom（语义与 _update_outline_zoom 的画布
+## 缩放一致——纹理将被放大的倍率），宽度按其收放，屏幕宽度恒定。
+func set_outline_canvas_scale(s: float) -> void:
+	if not is_inside_tree():
+		return
+	if absf(s - _outline_canvas_scale) < 0.001 and absf(absf(scale.x) - _outline_rig_scale) < 0.001:
+		return
+	_outline_canvas_scale = s
+	_outline_rig_scale = absf(scale.x)
+	var eff: float = Skeleton.outline_world_width(s * absf(scale.x))
+	if _batch != null:
+		_batch.set_outline_width(eff)
+	else:
+		Skeleton.apply_outline_zoom(_sprites, eff)
+
+
 func _update_outline_zoom() -> void:
 	if not is_inside_tree():
 		return

@@ -64,6 +64,8 @@ var town_center_world_x: float = 0.0
 var _hd: Node3D = null
 ## 当前光照档（避免每帧重复切换）
 var _light_mode := ""
+## 上次广播描边补偿的世界 zoom（变化才广播）
+var _last_outline_zoom := -1.0
 
 ## resource_gen 算法对接（野外资源分布）：算法只认"硬化地面不长资源"，
 ## 这里把 ±墙线内算硬化（城内无资源点），墙外算野外——林区梯度（近墙净空
@@ -154,7 +156,16 @@ func _process(_delta: float) -> void:
 			# 3D 侧只认玩家缩放：base_zoom 已经把"世界像素/屏幕像素"归一，
 			# 不除掉它，换分辨率后 3D 构图整体错一档（默认缩放按绝对像素算）。
 			var base: float = float(cam2d.get("base_zoom")) if "base_zoom" in cam2d else 1.0
-			_hd.set_cam_zoom(cam2d.zoom.x / maxf(base, 0.001))   # 滚轮缩放同步，防两套相机脱钩
+			var z: float = cam2d.zoom.x / maxf(base, 0.001)
+			_hd.set_cam_zoom(z)   # 滚轮缩放同步，防两套相机脱钩
+			# 描边 zoom 补偿广播（变化才推；billboard 纹理在变焦后描边会等比变粗，
+			# 武器薄刃上尤其刺眼——SubViewport 无相机，rig 自动补偿恒按 zoom=1 烘）
+			if not is_equal_approx(z, _last_outline_zoom):
+				_last_outline_zoom = z
+				for id in _char_map:
+					var ch: Node3D = _char_map[id]
+					if ch != null and is_instance_valid(ch) and ch.has_method("set_outline_zoom"):
+						ch.set_outline_zoom(z)
 	_sync_character_render()
 	_apply_time_of_day(false)
 
@@ -170,7 +181,9 @@ func _sync_character_render() -> void:
 		return
 	var alive: Dictionary = {}
 	for e in get_entities():
-		if e is not Node2D or not is_instance_valid(e):
+		# freed 实体（观察场清场等）先于类型判断——对已释放对象做 is 运算会报
+		# "Trying to cast a freed object"
+		if not is_instance_valid(e) or e is not Node2D:
 			continue
 		var body := e as Node2D
 		var rig_host := body.get_node_or_null("RigHost") as Node2D
@@ -224,6 +237,14 @@ func _sync_character_render() -> void:
 		var mount: Variant = body.get("weapon_mount")
 		if mount != null and is_instance_valid(mount) and ch.has_method("set_weapon_type"):
 			ch.set_weapon_type(int(mount.get("weapon_type")))
+		# 血条随骨架进 billboard：2D 血条切数据模式（停画、状态机照跑——
+		# 在战/掉血/悬浮/LOD 语义全留在实体侧），快照喂 billboard 内镜像。
+		# 2D 画布坐标与 3D 投影对不上，2D 直画会飘；数据模式 = 同一实现两处渲染
+		var bar: Node = body.get_node_or_null("HealthBar")
+		if bar != null and bar.has_method("set_crowd_data_mode"):
+			bar.set_crowd_data_mode(true)
+			if ch.has_method("apply_health_state"):
+				ch.apply_health_state(bar.call("get_bar_state"))
 	# 清理已消失实体（死亡/切图）
 	for id in _char_map.keys():
 		if not alive.has(id):
@@ -243,7 +264,9 @@ const DEPTH_SCALE_MAX := 1.10
 
 func _apply_depth_visual() -> void:
 	for e in get_entities():
-		if e is not Node2D or not is_instance_valid(e):
+		# freed 实体（观察场清场等）先于类型判断——对已释放对象做 is 运算会报
+		# "Trying to cast a freed object"
+		if not is_instance_valid(e) or e is not Node2D:
 			continue
 		var rig := (e as Node2D).get_node_or_null("RigHost") as Node2D
 		if rig == null:

@@ -2023,6 +2023,10 @@ def check_spec(spec, ob=None):
         "eave_px": spec["overhang"],
         "eave_ratio": spec["overhang"] / grid_w,
         "eave_ok": spec.get("eave_exempt") or (spec["overhang"] <= EAVE_ABS_MAX + 0.5),
+        # 坡度下限（2026-09-16）：26° 俯角下 rise < (进深/2+出檐)×tan26° 会露出背面坡
+        "pitch_ok": spec.get("eave_exempt") or spec.get("open_shed") or
+                    (spec.get("rise", 0.0) <= 0.0) or
+                    (spec["rise"] >= (spec["depth"] / 2.0 + spec["overhang"]) * math.tan(math.radians(26.0))),
         "door_ok": (door is None) or (abs(door[1] - DOOR_H) < 0.5 and
                                       (spec.get("composite_door") or
                                        DOOR_W_RANGE[0] <= door[0] <= DOOR_W_RANGE[1])),

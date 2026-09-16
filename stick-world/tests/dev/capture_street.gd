@@ -23,13 +23,16 @@ const OUT_DIR := "res://temp/unit24"
 
 
 func _ready() -> void:
-	var uz := 0.75
+	var uz := 1.0
 	var tag := "shot"
+	var map_id := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--uz="):
 			uz = float(a.get_slice("=", 1))
 		elif a.begins_with("--tag="):
 			tag = a.get_slice("=", 1)
+		elif a.begins_with("--map="):
+			map_id = a.get_slice("=", 1)
 
 	var gr: Node = GameRootScene.instantiate()
 	add_child(gr)
@@ -40,6 +43,16 @@ func _ready() -> void:
 		var sl0: Node = gr.get("scene_loader")
 		if sl0 != null and sl0.get_current_map() != null:
 			break
+	# --map=village_b 等跨图捕获：等启动分帧装配彻底结束（资源点摊薄 ~20s）再切图，
+	# 否则 load_map free 旧图会让排队中的 spawn_npcs 拿到已释放地图而炸
+	if map_id != "":
+		await _wait_s(20.0)
+		var slm: Node = gr.get("scene_loader")
+		print("[capture] slm=", slm, " methods=", slm.get_method_list().size() if slm != null else -1)
+		if slm != null and slm.has_method("load_map"):
+			var got: Node2D = slm.load_map(map_id)
+			print("[capture] load_map(", map_id, ") -> ", got, " current=", slm.get("current_map_id"))
+			await _wait_s(8.0)
 	await _wait_frames(30)  # 装配尾部（镜头就位/描边预热）
 
 	# 定钟 → 等数帧让天空/日光 _process 应用到位 → 再总闸暂停
@@ -56,14 +69,24 @@ func _ready() -> void:
 	# UI 布局与格常量无关，纯世界画面足以做换轨等价验收）
 	_hide_canvas_layers(get_tree().root)
 
-	# 机位硬定（2D 相机 x=0，3D 镜像手动同步；zoom 传用户档）
+	# 机位硬定（2D 相机 x=focus，3D 镜像手动同步；zoom 传用户档）
+	# focus：--map 切图时自动对焦到 abbey_w24 所在位置，否则 0
+	var focus_x := 0.0
 	var cam2d := get_viewport().get_camera_2d()
 	var hd := _find_hd(gr)
+	if map_id != "" and hd != null:
+		var lay_v: Variant = hd.get("_layout")
+		print("[capture] hd=", hd.name, " _layout_type=", typeof(lay_v))
+		if lay_v is Dictionary:
+			for b: Variant in lay_v.get("buildings", []):
+				if str(b.get("card")) == "abbey_w24":
+					focus_x = float(b.get("x"))
+					break
 	if cam2d != null:
-		cam2d.global_position.x = 0.0
+		cam2d.global_position.x = focus_x * 24.0
 	if hd != null:
 		if hd.has_method("set_cam_x"):
-			hd.set_cam_x(0.0)
+			hd.set_cam_x(focus_x)
 		if hd.has_method("set_cam_zoom"):
 			hd.set_cam_zoom(uz)
 		# 换轨诊断探针：实际正交视宽 vs 期望（24 轨 uz=1 → 1920/24=80）
@@ -86,6 +109,21 @@ func _ready() -> void:
 			if p != null:
 				print("[capture] player pos=", p.position, " foot_off=", p.get("foot_offset"))
 	await _wait_frames(5)
+	# 现场诊断：存活的 3D 世界清单 + 当前 3D 相机归属
+	var worlds: Array = []
+	_collect_worlds(gr, worlds)
+	for w in worlds:
+		var wcam: Camera3D = w.get("_cam")
+		print("[capture] world=", w.get_parent().name, " layout=", w.get("layout_name"),
+				" cam_z=", wcam.position.z if wcam != null else -999.0)
+		var lay: Dictionary = w.get("_layout")
+		if not lay.is_empty():
+			var names: Array = []
+			for b: Variant in lay.get("buildings", []):
+				names.append(str(b.get("card")))
+			print("[capture] layout buildings=", names)
+	var cur_cam := get_viewport().get_camera_3d()
+	print("[capture] viewport camera3d=", cur_cam, " world=", cur_cam.get_parent().get_parent().name if cur_cam != null else "none")
 	await _shot(tag + "_overview")
 
 	print("[capture] DONE tag=%s uz=%s -> %s" % [tag, uz, OUT_DIR])
@@ -113,6 +151,13 @@ func _hide_canvas_layers(root: Node) -> void:
 			_hide_canvas_layers(child)
 
 
+func _collect_worlds(root: Node, out: Array) -> void:
+	if root.has_method("get_building_rects") and root is Node3D:
+		out.append(root)
+	for child in root.get_children():
+		_collect_worlds(child, out)
+
+
 func _find_camera3d(root: Node) -> Camera3D:
 	if root is Camera3D:
 		return root
@@ -129,7 +174,9 @@ func _wait_frames(n: int) -> void:
 
 
 func _find_hd(root: Node) -> Node:
-	if root.has_method("get_building_rects"):
+	# 只认 Node3D 世界本体——地图脚本有 get_building_rects 代理（Node2D），
+	# 切图场景下会被先找到，导致 set_cam_x/zoom 打在代理上落空
+	if root is Node3D and root.has_method("get_building_rects"):
 		return root
 	for child in root.get_children():
 		var found := _find_hd(child)

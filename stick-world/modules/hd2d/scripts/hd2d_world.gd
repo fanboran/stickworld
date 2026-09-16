@@ -1165,22 +1165,33 @@ func _build_world() -> void:
 	# 地表中远景用**低对比**贴图（rammed_earth std=0.034），别用 cobble（std=0.107）：
 	# 20° 掠射下 128px 贴图被压 3 倍以上，用高对比纹理时 mip 会在中景糊出一片
 	# "碎石噪声"，读作脏。路面同理，tile 放大到 10 减少 minification。
-	# 中远景地面（背景地面带）：**与道路带同材质分幅**（城心石板/夯土过渡），
+	# 中远景地面（背景地面带，仅城内街景）：**与台面带同材质分幅**（中石板/侧草；
+	# 创始人 2026-09-16：同高即同一片地表，材质跟台面——旧版沿用道路带分幅，抬升
+	# 后把路面材质顶进了台面标高，读作"台面被换材质"）。tile/tint 与台面窄带逐项
+	# 一致、石/草分界同在 ±28——世界锚定 UV 下跨带无缝续接成一整块台面。
 	# 且**与建筑带（台面）同高**（创始人 2026-09-15：建筑带身后的城内地面保持
 	# 台面标高一直到地平线，不存在"踩空"落差；野地在墙外两侧，维持 y=0）。
-	# 战场/资源图无台面语义，远景带维持 y=0 平铺。所有地皮走世界锚定 UV
+	# 战场/资源图无台面语义，远景带维持旧分幅 y=0 平铺。所有地皮走世界锚定 UV
 	# （_add_ground_plane_at 内统一）——同材质跨带无缝续接、缩放全局一致。
 	var far_z: float = float(_bg_base_z.get(1,
 		SKYLINE_Z - BG_LAYER_GAP * 1.0))
 	var wx: float = _wall_x()
 	var far_y: float = 0.0 if battlefield else PLAT_H
 	var far_near_z: float = 0.0 if battlefield else BAND_SIDEWALK.x
-	_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
-		far_z, far_near_z, far_y, 10.0, Color(0.86, 0.89, 0.96))
-	_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
-		far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
-	_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
-		far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
+	if battlefield:
+		_add_ground_plane_at("band_road_stone_128.png", 0.0, 60.0,
+			far_z, far_near_z, far_y, 10.0, Color(0.86, 0.89, 0.96))
+		_add_ground_plane_at("rammed_earth_128.png", -(wx + 30.0) * 0.5, wx - 30.0,
+			far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
+		_add_ground_plane_at("rammed_earth_128.png", (wx + 30.0) * 0.5, wx - 30.0,
+			far_z, far_near_z, far_y, 6.0, Color(0.80, 0.78, 0.62))
+	else:
+		_add_ground_plane_at("band_shoulder_stone_128.png", 0.0, 56.0,
+			far_z, far_near_z, far_y, 5.0, Color(1.04, 1.00, 0.93))
+		_add_ground_plane_at("grass_alb_128.png", -(wx + 58.0) * 0.5, wx + 2.0,
+			far_z, far_near_z, far_y, 8.0, Color(0.90, 0.93, 0.80))
+		_add_ground_plane_at("grass_alb_128.png", (wx + 58.0) * 0.5, wx + 2.0,
+			far_z, far_near_z, far_y, 8.0, Color(0.90, 0.93, 0.80))
 	# 兜底大地皮：街面分段各有边界，缩太小视野越出分段范围就露天空
 	# （创始人：缩太小下边界出现虚空）。这层压在所有分段之下（y=-0.05），
 	# 只在分段没铺到的区域露脸。远端收在**第二排后景基线**（=真实地平线，
@@ -1631,7 +1642,7 @@ func _add_platform() -> void:
 		Vector2(4.8, 1.55))
 	_add_decal("transitions/gtx_brick_gravel_road_v2.png", 28.0, PLAT_H + 0.008,
 		Vector2(4.8, 1.55))
-	# 台肩镶边：中段石条 / 两侧土条（方形截面，高=深=台面高）
+	# 台肩镶边：中段石条 / 两侧土条（倒角截面，高=深=台面高；齐缝无缝拼排）
 	_kerb_run(-28.0, 28.0, "band_kerb_stone")
 	_kerb_run(-_wall_x(), -28.0, "band_kerb_earth")
 	_kerb_run(28.0, _wall_x(), "band_kerb_earth")
@@ -1810,7 +1821,14 @@ func _add_decal(png_rel: String, x: float, y: float, size: Vector2) -> void:
 	_ground_root.add_child(mi)
 
 
-## 台肩镶边：沿 [x0,x1) 一排方形截面长条石（高=深=台面高），逐块长度抖动。
+## 台肩镶边：沿 [x0,x1) 一排倒角截面长条石（高=深=台面高），逐块长度抖动。
+## 无缝+倒角（创始人 2026-09-16）：块间齐缝拼排（留缝会露底）；UV 以世界 x 锚定
+## 连续取样，跨块纹样不断开；截面顶面前后缘各削 KERB_CHAMFER 一刀，棱线吃光。
+## UV 不能换世界三平面投射：kerb 贴图是条带图（下部石块带/上部夯土带），顶面走
+## z 投射会在条带分界处 wrap 穿帮——前/背面 v=世界 y（正落石块带），顶/端面 v
+## 走条带窗口（局部 z + 半深，恒在石块带内）。
+const KERB_CHAMFER := 0.08
+
 func _kerb_run(x0: float, x1: float, tex_base: String) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260917 + int(x0)
@@ -1818,32 +1836,97 @@ func _kerb_run(x0: float, x1: float, tex_base: String) -> void:
 	if t == null:
 		t = _tex_abs(_temp + GROUND_DIR + tex_base + "_128.png")
 	var nt := _tex_abs_soft(_temp + GROUND_DIR + "src/" + tex_base + "_nrm.png")
+	# 整条 run 共享一份材质（UV 已进网格，不再逐块 uv1_scale）
+	var gm := StandardMaterial3D.new()
+	if t != null:
+		gm.albedo_texture = t
+	if nt != null:
+		gm.normal_enabled = true
+		gm.normal_texture = nt
+		gm.normal_scale = 1.0
+	if tex_base != "band_kerb_stone":
+		gm.albedo_color = Color(0.82, 0.76, 0.66)        # 土坎：偏夯土色
+	gm.roughness = 0.90
 	var x := x0
 	while x < x1:
 		var w: float = minf(rng.randf_range(1.7, 2.6), x1 - x)
-		var bm := BoxMesh.new()
-		bm.size = Vector3(w * 0.96, PLAT_H, PLAT_H)   # 方形截面：高 = 深 = 台面高
 		var mi := MeshInstance3D.new()
-		mi.mesh = bm
+		mi.mesh = _kerb_block_mesh(w, x + w * 0.5)
 		# 顶面压低一丝（-0.01）避免与台面共面 z-fighting；沿台面前沿镶边
 		mi.position = Vector3(x + w * 0.5, PLAT_H * 0.5 - 0.01,
 			BAND_SIDEWALK.y + PLAT_H * 0.35)
-		var gm := StandardMaterial3D.new()
-		if t != null:
-			gm.albedo_texture = t
-		if nt != null:
-			gm.normal_enabled = true
-			gm.normal_texture = nt
-			gm.normal_scale = 1.0
-		gm.uv1_scale = Vector3(w / 1.2, PLAT_H / 1.2, 1.0)   # 1 UV ≈ 1.2 格：方石尺度正常
-		if tex_base != "band_kerb_stone":
-			gm.albedo_color = Color(0.82, 0.76, 0.66)        # 土坎：偏夯土色
-		gm.roughness = 0.90
 		mi.material_override = gm
 		mi.name = "PlatRim"
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_ground_root.add_child(mi)
 		x += w
+
+
+## 倒角长条石网格：截面六边形（前/背/底全尺寸，顶面前后缘各削 KERB_CHAMFER），
+## 沿局部 x ∈ [-w/2, w/2] 拉伸；cx_world=摆位中心世界 x（仅 UV 世界锚定用）。
+## 绕序：正面=从外侧看逆时针，逐面用叉积核对过。
+func _kerb_block_mesh(w: float, cx_world: float) -> ArrayMesh:
+	var ch: float = KERB_CHAMFER
+	var hw: float = w * 0.5
+	var h: float = PLAT_H * 0.5
+	var y0: float = -h
+	var y1: float = h
+	var z0: float = -h
+	var z1: float = h
+	var y_off: float = PLAT_H * 0.5 - 0.01   # 摆位 y（v 的世界常量项，与摆位式一致）
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var uvy := func(lx: float, ly: float) -> Vector2:
+		return Vector2((cx_world + lx) / 1.2, maxf(0.0, (y_off + ly) / 1.2))
+	var uvz := func(lx: float, lz: float) -> Vector2:
+		return Vector2((cx_world + lx) / 1.2, (lz + h) / 1.2)
+	var uvc := func(lz: float, ly: float) -> Vector2:
+		return Vector2((lz + h) / 1.2, maxf(0.0, (y_off + ly) / 1.2))
+	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3,
+			ua: Vector2, ub: Vector2, uc: Vector2, ud: Vector2) -> void:
+		for p: Array in [[a, ua], [b, ub], [c, uc], [a, ua], [c, uc], [d, ud]]:
+			st.set_normal(n)
+			st.set_uv(p[1])
+			st.add_vertex(p[0])
+	# 前/背面（v 随世界 y）→ 顶/底面（条带窗口）→ 前后倒角 → 两端六边形
+	quad.call(Vector3(-hw, y0, z1), Vector3(hw, y0, z1), Vector3(hw, y1 - ch, z1),
+		Vector3(-hw, y1 - ch, z1), Vector3(0, 0, 1),
+		uvy.call(-hw, y0), uvy.call(hw, y0), uvy.call(hw, y1 - ch), uvy.call(-hw, y1 - ch))
+	quad.call(Vector3(hw, y0, z0), Vector3(-hw, y0, z0), Vector3(-hw, y1 - ch, z0),
+		Vector3(hw, y1 - ch, z0), Vector3(0, 0, -1),
+		uvy.call(hw, y0), uvy.call(-hw, y0), uvy.call(-hw, y1 - ch), uvy.call(hw, y1 - ch))
+	quad.call(Vector3(-hw, y1, z0 + ch), Vector3(-hw, y1, z1 - ch), Vector3(hw, y1, z1 - ch),
+		Vector3(hw, y1, z0 + ch), Vector3(0, 1, 0),
+		uvz.call(-hw, z0 + ch), uvz.call(-hw, z1 - ch), uvz.call(hw, z1 - ch), uvz.call(hw, z0 + ch))
+	quad.call(Vector3(-hw, y0, z1), Vector3(-hw, y0, z0), Vector3(hw, y0, z0),
+		Vector3(hw, y0, z1), Vector3(0, -1, 0),
+		uvz.call(-hw, z1), uvz.call(-hw, z0), uvz.call(hw, z0), uvz.call(hw, z1))
+	var nc := Vector3(0, 1, 1).normalized()
+	quad.call(Vector3(-hw, y1 - ch, z1), Vector3(hw, y1 - ch, z1), Vector3(hw, y1, z1 - ch),
+		Vector3(-hw, y1, z1 - ch), nc,
+		uvy.call(-hw, y1 - ch), uvy.call(hw, y1 - ch), uvy.call(hw, y1), uvy.call(-hw, y1))
+	var nb := Vector3(0, 1, -1).normalized()
+	quad.call(Vector3(hw, y1 - ch, z0), Vector3(-hw, y1 - ch, z0), Vector3(-hw, y1, z0 + ch),
+		Vector3(hw, y1, z0 + ch), nb,
+		uvy.call(hw, y1 - ch), uvy.call(-hw, y1 - ch), uvy.call(-hw, y1), uvy.call(hw, y1))
+	# 端面六边形（凸，两 quad 拼）：P0..P5 = 前下→前上斜→顶→背→背下斜→背下
+	var hex := [Vector3(0, y0, z1), Vector3(0, y1 - ch, z1), Vector3(0, y1, z1 - ch),
+		Vector3(0, y1, z0 + ch), Vector3(0, y1 - ch, z0), Vector3(0, y0, z0)]
+	var pt := func(i: int, sx: float) -> Vector3: return hex[i] + Vector3(sx, 0, 0)
+	quad.call(pt.call(0, hw), pt.call(5, hw), pt.call(4, hw), pt.call(3, hw), Vector3(1, 0, 0),
+		uvc.call(hex[0].z, hex[0].y), uvc.call(hex[5].z, hex[5].y),
+		uvc.call(hex[4].z, hex[4].y), uvc.call(hex[3].z, hex[3].y))
+	quad.call(pt.call(3, hw), pt.call(2, hw), pt.call(1, hw), pt.call(0, hw), Vector3(1, 0, 0),
+		uvc.call(hex[3].z, hex[3].y), uvc.call(hex[2].z, hex[2].y),
+		uvc.call(hex[1].z, hex[1].y), uvc.call(hex[0].z, hex[0].y))
+	quad.call(pt.call(0, -hw), pt.call(1, -hw), pt.call(2, -hw), pt.call(3, -hw), Vector3(-1, 0, 0),
+		uvc.call(hex[0].z, hex[0].y), uvc.call(hex[1].z, hex[1].y),
+		uvc.call(hex[2].z, hex[2].y), uvc.call(hex[3].z, hex[3].y))
+	quad.call(pt.call(3, -hw), pt.call(4, -hw), pt.call(5, -hw), pt.call(0, -hw), Vector3(-1, 0, 0),
+		uvc.call(hex[3].z, hex[3].y), uvc.call(hex[4].z, hex[4].y),
+		uvc.call(hex[5].z, hex[5].y), uvc.call(hex[0].z, hex[0].y))
+	st.generate_tangents()
+	return st.commit()
 
 
 func _add_sidewalk() -> void:

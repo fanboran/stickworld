@@ -4,6 +4,7 @@ extends Camera2D
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §2.4。
 ## - 垂直显示范围限定：视野下边界固定在草坪下边界（ground_bottom），缩放时不变
+##   （例外：居中模式可开 follow_target_y 纵向贴住跟随目标，RTS 观战类用）
 ## - 水平 1/4 区域跟随：角色进入屏幕两侧 1/4 才触发跟随
 ## - 手动控制：左键拖动 / 边缘滚动 / 滚轮缩放 / 小地图跳转
 ## - 缩放：1.0~2.0，水平以鼠标为锚点，垂直以地面线为基准（视野下边界不变）
@@ -52,6 +53,10 @@ var _configured: bool = false
 var follow_target: Node2D = null
 ## 居中模式（强制角色到中心；可拖动，但禁用边缘滚动，松手即弹回）
 var centered_mode: bool = false
+## 居中模式 Y 跟随（默认关：常规居中镜头保持"视野下边界锚 ground_bottom"契约，
+## 纵深不随目标走；RTS 观战类（战斗演练场）开此后镜头中心纵向贴住目标，
+## 混战线南漂时大军不再沉出屏幕下沿。Y 限制在 [ground_y, ground_bottom] 带内）
+var follow_target_y: bool = false
 ## 手动控制激活中（拖动/边缘/小地图跳转）
 var _manual_active: bool = false
 ## 手动控制冷却剩余时间（拖动/缩放结束后递减，归零时退出 manual）
@@ -230,8 +235,13 @@ func _clamp_camera_x(x: float) -> float:
 
 
 func _update_position(delta: float) -> void:
-	# 垂直位置：视野下边界固定在 ground_bottom，缩放时以草坪下边界为锚点
+	# 垂直位置：默认视野下边界固定在 ground_bottom（缩放时以草坪下边界为锚点）；
+	# 居中模式开 follow_target_y 时改为纵向贴住跟随目标
 	var target_y: float = _compute_camera_y()
+	if centered_mode and follow_target_y and follow_target != null and is_instance_valid(follow_target):
+		var band_y: float = lerpf(global_position.y, follow_target.global_position.y,
+				CENTER_SMOOTHING * delta)
+		target_y = clampf(band_y, ground_y, ground_y + DESIGN_HEIGHT * ground_ratio)
 	# 水平位置
 	var target_x: float = global_position.x
 
@@ -323,7 +333,11 @@ func set_user_zoom_raw(v: float) -> void:
 func snap_to_follow_target() -> void:
 	if follow_target != null and is_instance_valid(follow_target):
 		global_position.x = _clamp_camera_x(follow_target.global_position.x)
-		global_position.y = _compute_camera_y()
+		if centered_mode and follow_target_y:
+			global_position.y = clampf(follow_target.global_position.y,
+					ground_y, ground_y + DESIGN_HEIGHT * ground_ratio)
+		else:
+			global_position.y = _compute_camera_y()
 
 
 func _compute_follow_x(delta: float) -> float:
@@ -553,6 +567,11 @@ func set_centered_mode(p_enabled: bool) -> void:
 	if p_enabled:
 		# 切到居中模式：清除边缘滚动，但保持当前镜头（不立即弹回，等下次松手）
 		_edge_scroll_dir = 0
+
+
+## 居中模式纵向跟随开关（默认关，RTS 观战类镜头开；语义见 follow_target_y 注）
+func set_follow_target_y(p_enabled: bool) -> void:
+	follow_target_y = p_enabled
 
 
 func is_centered_mode() -> bool:

@@ -253,6 +253,14 @@ func _mount_weapons() -> void:
 	if owner_entity == null:
 		push_warning("[WeaponMount] 无持有实体，无法挂武器")
 		return
+	# HD-2D 图（billboard 视觉）：2D 骨架树不创建（entity.rig 为 null），武器/盾
+	# 模型由 billboard 宿主 set_weapon_type 镜像挂载，此处只保战斗数据——
+	# 射程按武器类型照常生效（此前随挂骨失败一并早退，弓 1400/矛 200/杖 600
+	# 在 HD-2D 图全员退化为默认 80，行为层交战距离全错）
+	if owner_entity.get("rig") == null:
+		attack_range = 0.0 if weapon_type == WeaponType.NONE \
+				else float(WEAPON_RANGE.get(weapon_type, attack_range))
+		return
 	var hand: Node2D = _find_hand_bone(owner_entity)
 	if hand == null:
 		push_warning("[WeaponMount] 未找到主手骨骼（hand_inner），无法挂武器")

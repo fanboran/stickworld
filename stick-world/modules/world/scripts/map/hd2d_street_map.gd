@@ -194,6 +194,12 @@ func _sync_character_render() -> void:
 		# "Trying to cast a freed object"
 		if not is_instance_valid(e) or e is not Node2D:
 			continue
+		# 只有火柴人角色有 billboard：箭矢/法术弹等弹道体也挂在 entity_host
+		# （武器远程开火的 parent = 实体父节点），此前每支箭被生成一个整版
+		# SubViewport billboard（idle 鬼影立在插箭点上）+ play("<null>")
+		# 动画状态机三连报错（str(null) 字面化）+ 每箭一个 SubViewport 的浪费
+		if e is not StickmanEntity:
+			continue
 		var body := e as Node2D
 		# 2D 骨架树已随「视觉唯一骨架」删除（实体侧按图自删）：全部实体直接
 		# 走 billboard 镜像，动画数据源 = 实体 _current_anim（状态先行推进）

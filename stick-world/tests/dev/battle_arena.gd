@@ -113,9 +113,10 @@ static var _preset_idx: int = 1
 const ROW_GAP: float = 110.0
 ## 排内左右间距（px）
 const LINE_GAP: float = 90.0
-## 左右两团出生中心 x 相对地图中线的偏移（800：开战时两军最前排相距约 1300，
-## 正常游戏缩放（可视宽 1920）下双方同屏可见，冲锋段有观察余量）
-const TEAM_OFFSET_X: float = 1400.0   # 两军间距拉满全屏（HD-2D 战场 88 格深带）
+## 左右两团出生中心 x 相对地图中线的偏移。zoom 1.0 下半屏 960px——偏移 1100
+## 时两军最前排（front_x 150）落在 ±950，开场即在画面两缘可见、对冲收向中线
+## （此前 1400：最前排 ±1250 出画，开战头几秒是一片空场）
+const TEAM_OFFSET_X: float = 1100.0   # HD-2D 战场 88 格深带
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
@@ -182,6 +183,10 @@ func _spawn_and_start() -> void:
 	var rig: Node = _game_root.get("camera_rig")
 	if rig != null and rig.has_method("set_centered_mode"):
 		rig.set_centered_mode(true)
+		# 纵向贴住战场质心（rig 默认把视野下边界锚死 ground_bottom，混战线
+		# 南漂时大军沉出屏幕下沿；RTS 观战开 Y 跟随，rig 侧带内钳制）
+		if rig.has_method("set_follow_target_y"):
+			rig.set_follow_target_y(true)
 		# 缩放对齐 SWL 战场观感：单位身高约占屏高 13%（SWL 1080P 下约 8~13%）——
 		# 正式游戏（村庄附身互动）user_zoom=1.0 合适，但 RTS 观战的镜头要远得多
 		# （此前 1.0 下单位占屏 24%，观感"镜头贴脸"）
@@ -262,6 +267,11 @@ func _spawn_and_start() -> void:
 				continue
 			fs.set_squad_follow_squad(left_squad_ids[si], left_squad_ids[si - 1], gap)
 			fs.set_squad_follow_squad(right_squad_ids[si], right_squad_ids[si - 1], gap)
+	# 收掉开局引导大卡（demo_quest 每次新装配都弹，屏幕正中挡观察 6 秒；
+	# 观察场不看新手引导）
+	var opening_hint: Node = get_tree().root.find_child("OpeningHint", true, false)
+	if opening_hint != null:
+		opening_hint.queue_free()
 	_camera_following = true
 	_reveal()
 

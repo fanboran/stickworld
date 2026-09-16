@@ -26,7 +26,8 @@ extends Node3D
 ## ── 继承 proto_25d 的五条实测发现（不得回退）────────────────────────────
 ##   1. 卡与相机同基 → 像素级落位（本文件 _cam_basis 与卡 quad 的 basis 同源）；
 ##   2. albedo 亮度差分伪造法线，平面卡才吃真 3D 光照（card.gdshader）；
-##   3. 光照别双计：环境光 + 太阳能量总和 ≈ 1.0（见 _apply_light）；
+##   3. 光照别双计：卡是已带光照的烘焙图，场景光只做保底/氛围（现行昼档
+##      太阳 1.10 = 创始人拍板的高调口径，覆盖旧"总和≈1.0"基线，见 _apply_light）；
 ##   4. render_mode depth_prepass_alpha 消矩形影（card.gdshader）；
 ##   5. 色调映射用 LINEAR —— 卡是已带光照的烘焙图，filmic/aces 会把它压灰。
 ##
@@ -243,8 +244,11 @@ var resource_field := false       # 城外资源图模式（同战场式开阔�
 var _tex_cache: Dictionary = {}
 
 var _env: Environment
-var _sky_mat: ProceduralSkyMaterial
-var _sun: DirectionalLight3D   # 太阳盘 = 程序化天空按本灯方向自动渲染（右上）
+var _sky_quad: MeshInstance3D      # 贴图天幕（相机子 quad，见 _build_sky）
+var _sky_quad_mat: StandardMaterial3D
+var _moon_disc: MeshInstance3D     # 月亮小盘（2D 同款实心白盘，弧线运行）
+var _moon_disc_mat: StandardMaterial3D
+var _sun: DirectionalLight3D   # 主光（昼=太阳档/夜=月光档，方向按档位固定不随盘走）
 var _fill: DirectionalLight3D
 var _ground_root: Node3D
 var _card_root: Node3D
@@ -1109,17 +1113,12 @@ func _card_material(card: String) -> ShaderMaterial:
 func _build_world() -> void:
 	# --- 环境（天空 + 环境光 + 深雾 + 辉光）---
 	_env = Environment.new()
-	_env.background_mode = Environment.BG_SKY
-	_sky_mat = ProceduralSkyMaterial.new()
-	# 渐变天空初值（昼档同 _apply_light；此处只是首帧前兜底）——太阳盘照常由
-	# 材质渲染
-	_sky_mat.sky_top_color = Color(0.31, 0.47, 0.78)
-	_sky_mat.sky_horizon_color = Color(0.80, 0.87, 0.95)
-	_sky_mat.ground_horizon_color = Color(0.78, 0.84, 0.92)
-	_sky_mat.ground_bottom_color = Color(0.42, 0.44, 0.46)
-	var sky := Sky.new()
-	sky.sky_material = _sky_mat
-	_env.sky = sky
+	# 贴图天空（创始人 2026-09-16：弃程序化天空改天幕 quad，纯蓝临时口径）——
+	# 程序化天空在 26° 俯角正交相机下其"天空/地面半球"分界压在屏幕中线，
+	# 蓝天画不进"地面远端→中线"带（灰带读作天空只盖上半屏）。背景模式退
+	# BG_COLOR 只作天幕外的兜底色，真正的天空 = _build_sky 的相机子天幕。
+	_env.background_mode = Environment.BG_COLOR
+	_env.background_color = SKY_BLUE
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	# 发现 5 继承：LINEAR。卡是已带光照的烘焙图，任何 filmic/aces 都会把它压灰。
 	_env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
@@ -1293,10 +1292,11 @@ func _build_world() -> void:
 	_cam.attributes = _cam_attrs
 	add_child(_cam)
 	_cam.current = true
-	set_cam_zoom(1.0)   # 初始取景即按"下边界锚定"校正（否则首帧前是旧中心取景）
-	# 太阳 = 程序化天空自带太阳盘（ProceduralSkyMaterial 对 DirectionalLight3D
-	# 自动渲染，位置由 _sun 的 Euler 决定，现居画面右上）——不再另造日盘；
-	# 它是否被楼群遮挡由深度测试天然处理（详见 HD-2D街景系统.md §太阳）。
+	# 初始取景 = 正式场景默认档（CameraRig.user_zoom=0.75，正式链路由
+	# hd2d_street_map 逐帧同步接管；测试场景没人接管，须同值否则渲染验收
+	# 与正式画面差一档缩放）+ 下边界锚定校正
+	set_cam_zoom(0.75)
+	_build_sky()        # 贴图天幕 + 日/月盘（相机子节点，须在 set_cam_zoom 之后建）
 
 	# --- 2D 角色宿主（SubViewport -> billboard）---
 	# 静默常驻模式（游戏地图挂载）不生成写死的演示火柴人——街上有真玩家了；
@@ -1661,7 +1661,149 @@ func _add_platform() -> void:
 ## 不露"3D 天空直连地面"的缝，楼群缝隙里透出远山/树线。
 func _add_sky_backdrop() -> void:
 	pass   # 解包山脉/树线剪影板已删（创始人 2026-09-15：assets/sky 贴图是解包素材）——
-	# 远景 = 程序化天空 + 底衬远端，背景两层楼群自行遮地平线
+	# 远景 = 天幕 quad + 底衬远端，背景两层楼群自行遮地平线
+
+
+# ------------------------------------------------------------------ 天幕与天体
+
+## 天幕蓝（创始人 2026-09-16：纯蓝临时口径；以后换手绘贴图时只动这里与
+## _build_sky 的材质贴图口）
+const SKY_BLUE := Color(0.31, 0.47, 0.78)
+const SKY_NIGHT := Color(0.03, 0.05, 0.12)
+## 月亮半径（格）：2D SkyStars 月亮 r=26px ÷ 32px/格（2D 月亮本就是实心白盘）
+const MOON_DISC_R: float = 26.0 / 32.0
+## 弧线参数（SkyStars Terraria Main.DrawSunAndMoon 直译，屏幕比例口径）：
+## 横穿 0.65 视宽（1250/1920）、正午高 0.685 半视高（(540-170)/540）、
+## 晨昏下沉 0.463 半视高（250/540）、晨昏放大 scale=1.2-0.4p
+const CELESTIAL_SPAN_FRAC: float = 0.65
+const CELESTIAL_NOON_FRAC: float = 370.0 / 540.0
+const CELESTIAL_DROP_FRAC: float = 250.0 / 540.0
+const SUN_HOUR_START: float = 5.0
+const SUN_HOUR_END: float = 21.0
+const MOON_HOUR_START: float = 19.0
+const MOON_HOUR_END: float = 29.0   # 跨午夜 = 次日 5 时（SkyStars 同窗）
+
+
+## 贴图天幕 + 屏幕后处理太阳/月亮盘（创始人 2026-09-16：程序化天空 → 贴图天空）。
+## 天幕 = 相机子 quad：正交视锥截面恒定（zoom 0.25..8 最大约 240×135 格），
+## 340×220 全缩放档覆盖；深度 120 在地面远端/楼群（≈52~57）之后——地平线
+## 分界由深度测试天然压出，quad 不随镜头平移（无穷远语义）。太阳不摆场景
+## 贴片，弧线位置驱动屏幕后处理炫光（_publish_sun_uv），复刻 2D SkyStars
+## 弧线公式（线性横穿+抛物线高度+晨昏放大），主光方向仍按档位固定（渲染确定性）。
+func _build_sky() -> void:
+	_sky_quad = MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(340.0, 220.0)
+	_sky_quad.mesh = qm
+	_sky_quad_mat = StandardMaterial3D.new()
+	_sky_quad_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_sky_quad_mat.albedo_color = SKY_BLUE
+	# 天幕在雾程之外，不吃雾（否则 build 期默认雾档会把天幕整个洗成雾色）
+	_sky_quad_mat.disable_fog = true
+	_sky_quad.material_override = _sky_quad_mat
+	_sky_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_sky_quad.name = "SkyBackdrop"
+	_sky_quad.position = Vector3(0.0, 0.0, -120.0)
+	_cam.add_child(_sky_quad)
+	# 太阳 = 屏幕后处理炫光（创始人 2026-09-16：就是 PostProcessLayer 那颗
+	# 屏幕太阳，要它沿弧线到处移动）——场景里不摆任何太阳贴片，弧线位置
+	# 每帧经 _publish_sun_uv 写进后处理层 sun_uv；夜间由月盘接管（见下）
+	# 月亮 = 实心小盘（2D SkyStars 月亮本就是实心白盘；月相环面暂不做——
+	# 盘面过小读不出，创始人要再加）
+	_moon_disc = MeshInstance3D.new()
+	var sd := SphereMesh.new()
+	sd.radius = MOON_DISC_R
+	sd.height = MOON_DISC_R * 2.0
+	_moon_disc.mesh = sd
+	_moon_disc_mat = StandardMaterial3D.new()
+	_moon_disc_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_moon_disc_mat.albedo_color = Color(0.95, 0.97, 1.0)
+	_moon_disc_mat.emission_enabled = true
+	_moon_disc_mat.emission = Color(0.85, 0.9, 1.0)
+	_moon_disc_mat.emission_energy_multiplier = 1.6
+	_moon_disc_mat.disable_fog = true
+	_moon_disc.material_override = _moon_disc_mat
+	_moon_disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_moon_disc.name = "MoonDisc"
+	_moon_disc.visible = false
+	_sky_quad.add_child(_moon_disc)
+	_update_celestial()
+
+
+## 天体弧线逐帧更新（挂在 _process；时刻源 WorldState.game_time，缺失按正午）。
+## 太阳（5..21 时）与月亮（19..29 时）共用弧线：屏幕后处理炫光太阳全程跟随，
+## 夜间月盘接管天体读法
+func _update_celestial() -> void:
+	if _cam == null:
+		return
+	var hour: float = 12.0
+	if WorldState != null and WorldState.game_time > 0.0:
+		hour = WorldState.game_time
+	var vp := _cam.get_viewport().get_visible_rect().size
+	var half_w: float = _cam.size * 0.5
+	var half_h: float = half_w * vp.y / maxf(vp.x, 1.0)
+	var lum: float = EnvironmentAPI.sample_sky_bg_color(hour).get_luminance()
+	_moon_disc.visible = false
+	var t: float = _celestial_traverse(hour, SUN_HOUR_START, SUN_HOUR_END)
+	var sun_alpha: float = clampf((lum - 0.25) / 0.30, 0.0, 1.0) if t >= 0.0 else 0.0
+	if t >= 0.0 and sun_alpha > 0.02:
+		_publish_sun_uv(_celestial_uv(half_w, half_h, t))
+		return
+	# 月亮：白盘冷光，夜天越黑越显（SkyStars _sky_gate 同式）；炫光太阳跟随月位
+	var mt: float = _celestial_traverse(hour, MOON_HOUR_START, MOON_HOUR_END)
+	var gate: float = clampf((0.55 - lum) * 4.0, 0.0, 1.0)
+	if mt >= 0.0 and gate > 0.02:
+		_moon_disc_style(half_w, half_h, mt, gate)
+		_publish_sun_uv(_celestial_uv(half_w, half_h, mt))
+
+
+## 天体弧线屏幕位（UV）：x = (t−0.5)×0.65 视宽、y = 抛物线高度，换算 0~1 屏幕坐标
+func _celestial_uv(half_w: float, half_h: float, t: float) -> Vector2:
+	var p := pow(absf(t * 2.0 - 1.0), 2.0)
+	var x := (t - 0.5) * CELESTIAL_SPAN_FRAC * half_w * 2.0
+	var y := (CELESTIAL_NOON_FRAC - p * CELESTIAL_DROP_FRAC) * half_h
+	return Vector2(0.5 + x / (half_w * 2.0), 0.5 - y / (half_h * 2.0))
+
+
+## 屏幕后处理太阳（PostProcessLayer 的 glow+streak+ghost）钉到弧线位置——
+## 正式链路由 SystemSetup 装配该层，这里只驱动位置；独立渲染（shots）没有
+## SystemSetup，自建一层保证验收图与正式是同一颗屏幕太阳
+func _publish_sun_uv(uv: Vector2) -> void:
+	var layer: Node = get_tree().get_first_node_in_group("post_process_layer")
+	if layer == null:
+		layer = PostProcessLayer.new()
+		layer.name = "PostProcessLayer"
+		add_child(layer)
+	if layer.has_method("set_sun_uv"):
+		layer.set_sun_uv(uv)
+
+
+## 月亮盘摆位（小盘冷白；实心白盘是 2D SkyStars 月亮同款语义，月相环面暂不做）
+func _moon_disc_style(half_w: float, half_h: float, t: float, gate: float) -> void:
+	var p := pow(absf(t * 2.0 - 1.0), 2.0)
+	_moon_disc.visible = true
+	_moon_disc.position = Vector3(
+			(t - 0.5) * CELESTIAL_SPAN_FRAC * half_w * 2.0,
+			(CELESTIAL_NOON_FRAC - p * CELESTIAL_DROP_FRAC) * half_h, 1.0)
+	_moon_disc.scale = Vector3.ONE * (1.2 - 0.4 * p)
+	_moon_disc_mat.emission_energy_multiplier = 1.6 * gate
+
+
+## 天体横穿进度（0..1；不在时段 -1；跨午夜窗见 SkyStars._traverse 同式直译——
+## 跨模块只许引 api.gd，12 行公式就地复制）
+static func _celestial_traverse(hour: float, start_h: float, end_h: float) -> float:
+	if hour >= start_h and hour <= end_h:
+		return (hour - start_h) / (end_h - start_h)
+	if end_h > 24.0 and hour < end_h - 24.0:
+		return (hour + 24.0 - start_h) / (end_h - start_h)
+	return -1.0
+
+
+## 天幕/清屏色按昼夜档统一写（_apply_light 出口）
+func _set_sky_look(c: Color) -> void:
+	if _sky_quad_mat != null and is_instance_valid(_sky_quad_mat):
+		_sky_quad_mat.albedo_color = c
+	_env.background_color = c
 
 
 ## 漂移云牌：2D 手绘云（SketchCloud）逐朵烘成贴图 → 3D billboard。
@@ -1684,10 +1826,14 @@ func _place_clouds() -> void:
 		sp.shaded = false
 		sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 		add_child(sp)
-		# 小云（远档）更高——2D SkyDecor 同构；z 钉在 bg2（地平线）身后
+		# 小云（远档）更高——2D SkyDecor 同构；z 钉在 bg2 身后**至少 14 格**：
+		# 卡与相机同基 → 整张卡恒深（bg1≈42 / bg2≈45），云挂得高（y 20~28，
+		# 接近相机高度 28.5）会把沿视轴的深度拉近——原 far−2~8（−12~−18）算出
+		# 深度 34~43 反而比卡面近，云叠在楼顶上（创始人 2026-09-16 指出）。
+		# 推到 far−14~22（深度 48~56）保证在全部背景卡之后、天幕(120)之前
 		sp.position = Vector3(rng.randf_range(-60.0, 60.0),
 				28.0 - (scale_f - 0.7) / 0.6 * 8.0 + rng.randf_range(-1.5, 1.5),
-				far - rng.randf_range(2.0, 8.0))
+				far - rng.randf_range(14.0, 22.0))
 		_clouds3d.append({"node": sp, "scale_f": scale_f,
 				"p": lerpf(0.05, 0.22, (scale_f - 0.7) / 0.6)})
 	_apply_cloud_light(_last_light_mode)
@@ -2045,18 +2191,10 @@ func _apply_light(mode: String) -> void:
 	# 每档先复位再覆盖（幂等，可反复调用）
 	# 白天 = "阳光明媚 + 高调照明"（创始人最终口径）：
 	#   · 去雾（fog 关）—— 大气不再把画面洗灰；
-	#   · 主光金黄白 0.45 + 冷天空环境 0.56：**总和 ≈1.0**（继承 proto_25d 的"光照别
-	#     双计"纪律，卡是已带白天光照的烘焙图）；最高 albedo 砖白 ≈0.85 → 峰值
-	#     ≈0.85，再乘后处理曝光 1.06 ≈0.90，高光不溢出成白板；
-	#   · 冷补光 0.12 抬暗部：明暗比从 ~1.6:1 压到 ~1.15:1（亮部 1.01 / 暗部 0.68
-	#     → 乘 albedo 后 0.86 / 0.58），暗部抬亮但**不致死黑**；
+	#   · 冷天空环境 0.58 抬暗部，冷补光 0.12 压明暗比（卡是已带白天光照的
+	#     烘焙图）；
 	#   · 白平衡略偏暖（主光暖 + gain 微暖 + lift 微抬）。
-	_sky_mat.sky_top_color = Color(0.31, 0.47, 0.78)
-	_sky_mat.sky_horizon_color = Color(0.80, 0.87, 0.95)
-	_sky_mat.ground_horizon_color = Color(0.78, 0.84, 0.92)
-	_sky_mat.ground_bottom_color = Color(0.42, 0.44, 0.46)
-	_sky_mat.energy_multiplier = 1.0
-	_sky_mat.sun_angle_max = 30.0   # 日档太阳盘默认张角（夜档缩成小月亮，见 night 分支）
+	_set_sky_look(SKY_BLUE)
 	_env.ambient_light_color = Color(0.64, 0.71, 0.86)
 	_env.ambient_light_energy = 0.58
 	# 去雾：阳光明媚口径下大气密度 ≈0（保留开关，量级调到看不出）
@@ -2066,7 +2204,9 @@ func _apply_light(mode: String) -> void:
 	_env.fog_depth_begin = 55.0
 	_env.fog_depth_end = 160.0
 	_sun.light_color = Color(1.0, 0.95, 0.83)
-	_sun.light_energy = 0.48
+	# 太阳 1.10（创始人 2026-09-16：恢复提亮档原值——0.48 是场景回退时被连带
+	# 滚回去的；主光方向仍按档位固定，与天幕弧线日盘解耦）
+	_sun.light_energy = 1.10
 	_sun.rotation = Vector3(deg_to_rad(-46.0), deg_to_rad(-62.0), 0)
 	_fill.light_color = Color(0.70, 0.80, 1.0)
 	_fill.light_energy = 0.12
@@ -2097,20 +2237,15 @@ func _apply_light(mode: String) -> void:
 			#     "建筑卡夜里全黑"的主因；街边小物件夜里的月光同样来自夜版贴图；
 			#   ③ 窗光去黄——glow 染色收暖白（CARD_GLOW_TINT）、能量降档，街灯
 			#     降能减饱和，画面不再整片泛橙。
-			_sky_mat.sky_top_color = Color(0.03, 0.05, 0.12)
-			_sky_mat.sky_horizon_color = Color(0.10, 0.13, 0.24)
-			_sky_mat.ground_horizon_color = Color(0.08, 0.10, 0.19)
-			_sky_mat.ground_bottom_color = Color(0.04, 0.05, 0.09)
+			_set_sky_look(SKY_NIGHT)
 			_env.ambient_light_color = Color(0.60, 0.68, 0.90)
 			_env.ambient_light_energy = 0.42
 			_env.fog_enabled = false
 			_env.glow_intensity = 0.9
 			_env.glow_bloom = 0.08
-			# 月亮方向光只给 0.15：能量一高，程序化天空的月亮盘会被远焦 DOF 糊成
-			# 一道斜光带（首版 0.35 实测翻车）；卡亮度由夜版贴图 + night_comp 承担。
-			# 盘面张角缩到 2°——默认 30° 的巨大盘被 DOF 拉成光带（二轮实测），
-			# 缩小后是一颗清晰小月亮
-			_sky_mat.sun_angle_max = 2.0
+			# 月光方向光只给 0.15：月光主要烘在卡里（夜版贴图），能量一高会把
+			# 画面整体推蓝。夜空月盘 = 天幕弧线月盘（_update_celestial），能量
+			# 低不撑亮场景，只作天体读法
 			_sun.light_color = Color(0.62, 0.72, 1.0)
 			_sun.light_energy = 0.15
 			_sun.rotation = Vector3(deg_to_rad(-62.0), deg_to_rad(140.0), 0)
@@ -2192,7 +2327,12 @@ func _apply_stage(stage: String) -> void:
 	# DOF 电影感是主街近景语言，RTS 观战视不适用）
 	_cam_attrs.dof_blur_near_distance = 24.0
 	_cam_attrs.dof_blur_near_transition = 10.0
-	_cam_attrs.dof_blur_far_distance = 48.0
+	# far 走 set_cam_zoom 同一条"天际线世界线"公式，不写死：正式链路有逐帧
+	# set_cam_zoom 兜底重算，静默/shots 路径 stage 覆盖后没人再算——写死 48
+	# 会停在 0.75 档两排背景楼的深度（≈42/45）以内，后排零模糊（与正式观感
+	# 脱节，创始人 2026-09-16 指出测试图没有正式场景一直有的模糊）
+	_cam_attrs.dof_blur_far_distance = (
+			_cam.position.z - SKYLINE_Z - DOF_FAR_START_AHEAD) / cos(deg_to_rad(TILT_DEG))
 	_cam_attrs.dof_blur_far_transition = 20.0
 	# amount 0.20：回到初始渐变（第二排半档、远景满档）——0.26+9 过渡把两层
 	# 糊成一档，渐变读不出来（创始人 2026-09-15）。
@@ -2256,6 +2396,7 @@ func _run_shots(which: String) -> void:
 			"c":
 				_apply_light("day")
 				_apply_stage("c")
+				_char_host.visible = false   # 验收图不要演示火柴人（正式静默模式本就没有）
 				await _settle(1.4)
 				await _shot("hd2d_c_final")
 			"d":
@@ -2263,6 +2404,7 @@ func _run_shots(which: String) -> void:
 			"e":
 				_apply_light("night")
 				_apply_stage("e")
+				_char_host.visible = false
 				await _settle(1.6)
 				await _shot("hd2d_e_night")
 			"s":
@@ -2436,3 +2578,4 @@ func _process(delta: float) -> void:
 	if _measuring:
 		_samples.append(delta * 1000.0)
 	_drift_clouds(delta)
+	_update_celestial()

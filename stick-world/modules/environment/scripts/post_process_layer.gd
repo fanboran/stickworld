@@ -29,6 +29,7 @@ func _ready() -> void:
 	# 是暂停状态的视觉反应（is_paused 查询保留），冻结期间不 tick 就永远淡不出去
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 0.5
+	add_to_group("post_process_layer")
 	_rect = ColorRect.new()
 	_rect.name = "PostProcessRect"
 	_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -37,6 +38,12 @@ func _ready() -> void:
 	_mat.shader = PostShader
 	_rect.material = _mat
 	add_child(_rect)
+
+
+## 屏幕太阳位置（UV 0~1）：HD-2D 天体弧线等外部系统驱动用；
+## 不调用则保持 shader 默认右上角（0.78, 0.16）
+func set_sun_uv(uv: Vector2) -> void:
+	_mat.set_shader_parameter("sun_uv", uv)
 
 
 ## 注入环境系统（昼夜联动数据源）；null 时炫光恒定白天强度

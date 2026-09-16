@@ -691,28 +691,48 @@ def t_ash_soil(n):
 # —— 自然系 ——
 
 def t_grass(n):
-    """草地：城郊 / 公园，密生草皮 + 枯斑 + 苔绿块 + 零星黄白野花。"""
+    """草地：城郊 / 公园，明亮草皮 + 光斑 + 深绿影块 + 黄白粉野花 + 叶簇。
+
+    色板对齐参考图 assets/environment/grassland.png（均色 ≈(0.36, 0.52, 0.23)）：
+    明亮的黄绿手绘风，深色只做影块不做底色。
+    """
     U, V = _uv(n)
     clump = (0.6 * gnoise(U, V, 0.55, n, 1501, oct=3)
              + 0.4 * gnoise(U, V, 0.14, n, 1502, oct=2))
-    alb = cmix(clump, (0.310, 0.440, 0.150), (0.160, 0.266, 0.080))
-    dry = smoothstep(0.56, 0.86, gnoise(U, V, 0.50, n, 1511, oct=3))
-    alb = cmix(dry * 0.70, alb, (0.480, 0.438, 0.198))
-    moss = smoothstep(0.70, 0.94, gnoise(U, V, 0.20, n, 1521, oct=2))
-    alb = cmix(moss * 0.40, alb, (0.090, 0.145, 0.058))
+    alb = cmix(clump, (0.470, 0.650, 0.285), (0.290, 0.470, 0.180))
+    sun = smoothstep(0.50, 0.80, gnoise(U, V, 0.50, n, 1511, oct=3))
+    alb = cmix(sun * 0.75, alb, (0.610, 0.680, 0.325))
+    shade = smoothstep(0.74, 0.94, gnoise(U, V, 0.20, n, 1521, oct=2))
+    alb = cmix(shade * 0.35, alb, (0.215, 0.365, 0.140))
     blade = (0.55 * gnoise2(U, V, 0.060, 0.16, n, 1531, oct=2)
              + 0.45 * gnoise(U, V, 0.075, n, 1532, oct=2))
     alb = cshade(alb, lerp(0.76, 1.24, blade))
-    alb = cshade(alb, lerp(0.90, 1.10, gnoise(U, V, 0.012, n, 1541, oct=2)))
-    alb = cshade(alb, lerp(0.92, 1.08, gnoise2(U, V, 0.018, 0.045, n, 1551, oct=2)))
+    # 离散亮草叶：细各向异性噪声卡阈值 → 一根根短亮条纹（连续渐变会糊成竖拖影）
+    # 离散亮草叶：细各向异性噪声卡阈值 → 短亮条纹；横+竖两向混合（放射叶簇感），
+    # 再用 clump 调制成簇（均匀满铺会读成雨丝，聚簇才像一撮撮草）
+    fine = (gnoise2(U, V, 0.016, 0.036, n, 1533, oct=1)
+            + gnoise2(U, V, 0.036, 0.016, n, 1536, oct=1)) * 0.5
+    strokes = (smoothstep(0.55, 0.90, fine)
+               * (0.30 + 0.70 * smoothstep(0.35, 0.80, clump)))
+    alb = cmix(strokes * 0.60, alb, (0.620, 0.720, 0.340))
+    alb = cshade(alb, lerp(0.94, 1.06, fine))
+    alb = cshade(alb, lerp(0.92, 1.08, gnoise(U, V, 0.012, n, 1541, oct=2)))
+    alb = cshade(alb, lerp(0.94, 1.06, gnoise2(U, V, 0.018, 0.045, n, 1551, oct=2)))
+    leaf = _dots(n, 9, 1585, feat(n, 0.026))
+    alb = cmix(leaf * 0.55, alb, (0.210, 0.370, 0.135))
     fl = _dots(n, 14, 1561, feat(n, 0.020))
-    alb = cmix(fl * 0.80, alb, (0.900, 0.872, 0.400))
+    alb = cmix(fl * 0.80, alb, (0.920, 0.870, 0.420))
     fl2 = _dots(n, 10, 1571, feat(n, 0.016))
-    alb = cmix(fl2 * 0.65, alb, (0.915, 0.915, 0.895))
-    h = (0.30 + 0.30 * blade + 0.18 * clump + 0.12 * (dry - 0.5) + 0.08 * fl
+    alb = cmix(fl2 * 0.65, alb, (0.935, 0.930, 0.905))
+    fl3 = _dots(n, 7, 1591, feat(n, 0.014))
+    alb = cmix(fl3 * 0.70, alb, (0.920, 0.700, 0.780))
+    h = (0.30 + 0.30 * blade + 0.10 * fine + 0.18 * clump + 0.12 * (sun - 0.5)
+         + 0.08 * fl + 0.06 * leaf
          + 0.10 * gnoise2(U, V, 0.020, 0.05, n, 1581, oct=2))
-    rough = np.clip(0.90 - (1.0 - dry) * 0.02, 0.60, 1.0)
-    return _pack(alb, h, rough, n, 1601, 0.026, ao=0.26, nstr=0.85)
+    rough = np.clip(0.90 - (1.0 - sun) * 0.02, 0.60, 1.0)
+    # 周期高通锐化（pblur 环绕无缝）：中低频不动、高频提纯，补偿值噪声的天生软
+    alb = np.clip(alb + 0.55 * (alb - pblur(alb, 1)), 0.0, 1.0)
+    return _pack(alb, h, rough, n, 1601, 0.026, ao=0.22, nstr=0.85)
 
 
 def t_grass_sparse(n):
@@ -1966,7 +1986,7 @@ SPECS = [
          note="暗灰灰渣 + 炭块 + 锈色焦渣，带一条踩踏亮径。", fn=t_ash_soil),
     dict(key="grass", name="草地", zone="城郊 / 公园 / 城外",
          feats=[("草簇", 33.0), ("草叶宽", 4.5), ("野花", 2.0)],
-         note="密生草皮 + 枯斑 + 苔绿块 + 零星黄白野花。", fn=t_grass),
+         note="明亮草皮 + 光斑 + 深绿影块 + 黄白粉野花 + 叶簇。", fn=t_grass),
     dict(key="grass_sparse", name="稀疏草土地", zone="路边 / 荒地 / 院角",
          feats=[("草簇", 22.0), ("小石子", 8.0)],
          note="土为主（约 60%）、草簇缀其中，边界参差。", fn=t_grass_sparse),

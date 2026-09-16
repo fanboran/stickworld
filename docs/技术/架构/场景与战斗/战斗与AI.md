@@ -230,7 +230,7 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 
 `StickmanState` 已有 `autonomy_level` 字段，AIController 读取它决定能否自主行动。
 
-> **实现状态（2026-08）**：当前为**确定性优先级**（命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`；§7.4 灵动性（概率钩子 + 战场导演情绪标签）为 **P1 目标，未实现**。决策优先级当前**硬编码**，计划抽成 `.tres` 数据驱动。
+> **实现状态（2026-08；2026-09-17 观察场批次修订）**：当前为**确定性优先级**（强制溃逃 > 压制禁令 > 命令覆盖【接敌即战例外：号令行军中敌人进武器射程时战斗抢占，打完号令续行】> 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`。索敌分层（behavior_attack）：接敌前分配 `assigned_target`（开战前按 y 邻近写入，最优先）> 排长集火（围攻名额 `MAX_ATTACKERS_PER_TARGET=3`，围满各自寻敌）> sticky 当前目标 > 各自寻敌（`TargetFinder`，反集火）。§7.4 灵动性（概率钩子 + 战场导演情绪标签）为 **P1 目标，未实现**。决策优先级当前**硬编码**，计划抽成 `.tres` 数据驱动。
 
 ### 7.4 小兵步枪式灵动性 — 两层实现
 

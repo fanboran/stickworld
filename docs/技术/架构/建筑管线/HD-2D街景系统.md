@@ -83,6 +83,9 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 ### 2.5 全融合描边（stickman_outline.gd + 双 shader）
 
 创始人定稿口径：**白描边只包整体剪影外轮廓，内部零描边**（肘/膝/臂身交界都不出线，肢体靠剪影读形）。
+**武器全场景无描边（创始人 2026-09-17 全游戏口径）**：武器不属于剪影描边范围——billboard
+镜像武器挂 viewport 根（CanvasGroup 描边组之外，细武器会被外轮廓白线吞成"白武器"）；
+2D 骨架武器为普通 Sprite 无 stroke 层；crowd 批渲染不渲染武器。三条路径均无武器描边。
 
 机制（ID Buffer + 邻接表，最早版即此设计）：
 1. OutlineGroup 整棵收进 CanvasGroup（**子树同搬**，rig→IK marker 相对路径不变）；

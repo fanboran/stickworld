@@ -386,10 +386,12 @@ func set_anim(anim: String) -> void:
 ## 镐/斧/剑因此在街上"空手"。把同一武器场景挂进本 SubViewport 骨架的
 ## 同名骨，GripPoint 对齐口径与 WeaponMount._mount_one 一致（握点落手骨原点）。
 ##
-## 描边豁免（创始人 2026-09-15：武器不应该有描边）：武器**不进 OutlineGroup**
-## （全融合描边 pass 只包火柴人身体剪影）——挂 viewport 根下、经
-## RemoteTransform2D 跟手骨变换：RT2D 自身无绘制不产像素，武器在组外
-## 不吃描边，但缩放/旋转/挥动仍逐帧跟手（含 rig 缩放，比例与 2D 挂骨一致）。
+## 描边豁免（创始人 2026-09-15：武器不应该有描边；2026-09-17 升格**全游戏
+## 口径**：任何场合武器都不应有描边，2D 骨架/批渲染路径经查本就无武器描边）：
+## 武器**不进 OutlineGroup**（全融合描边 pass 只包火柴人身体剪影）——挂
+## viewport 根下、经 RemoteTransform2D 跟手骨变换：RT2D 自身无绘制不产像素，
+## 武器在组外不吃描边，但缩放/旋转/挥动仍逐帧跟手（含 rig 缩放，比例与 2D
+## 挂骨一致）。
 var _weapon_instance: Node2D = null
 var _weapon_follow: RemoteTransform2D = null
 var _weapon_type_cached: int = -1

@@ -40,7 +40,7 @@ func _run() -> void:
 	if sl == null or not sl.has_method("travel_to_map"):
 		_fail("SceneLoader 不可用")
 		return
-	sl.travel_to_map("battlefield_2d", WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
+	sl.travel_to_map("battlefield", WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
 	for i in 30:
 		await get_tree().process_frame
 

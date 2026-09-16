@@ -122,6 +122,7 @@ const SQUAD_PRESET := "fp_combat_squad"
 var _game_root: Node = null
 var _left_alive_label: Label = null
 var _right_alive_label: Label = null
+const _TARGET_MAP := "battlefield"   # HD-2D 战场（自动化套件才用 battlefield_2d）
 var _hint_label: Label = null
 ## 控制面板预设按钮组（下标对齐 PRESETS）
 var _preset_buttons: Array = []
@@ -145,15 +146,20 @@ func _ready() -> void:
 
 func _spawn_and_start() -> void:
 	# 战场图已退役自动刷敌（出征与领地架构 §4.3），本工具自行组织战斗，无幽灵战斗问题
-	# 等默认村图装配完成
-	for i in 10:
+	# 等启动序列走完（boot 阶段列表异步推进——死等帧数会撞在地图注册/首图
+	# 装配完成前：轻则 load_map 静默失败遮罩不撤=黑屏，重则启动收尾把刚切的
+	# 战场图顶掉）。_boot_world_phase 落 false = 世界就绪（覆盖层淡出点）。
+	for i in 1800:   # ~30s 上限
+		if _game_root.get("_boot_world_phase") == false and _game_root.get_current_map() != null:
+			break
 		await get_tree().process_frame
-	# 切到空旷战场地图（village 是玩家村，建筑/资源点干扰观察）
 	var loader: Node = _game_root.get("scene_loader")
+	# 切到 HD-2D 战场图（观察场要给人看真实生产观感；village 是玩家村，
+	# 建筑/资源点干扰观察。自动化测试套件仍开机 battlefield_2d：2D 空旷+秒级开机）
 	if loader != null and loader.has_method("load_map"):
-		loader.load_map("battlefield_2d")
+		loader.load_map(_TARGET_MAP)
 		# 等新图装配（旧图延迟销毁，get_current_map 稳定到 battlefield 再继续）
-		for i in 20:
+		for i in 300:
 			await get_tree().process_frame
 			var m: Node2D = _game_root.get_current_map()
 			if m != null and "battlefield" in str(m.scene_file_path):

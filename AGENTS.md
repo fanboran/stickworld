@@ -12,7 +12,8 @@
 - **指令范围精确**：停/改/启只作用于被点名的对象，禁止扩大到全部；不可逆操作（终止 agent、删文件、重派）未经确认不执行。
 - **子代理工作纪律：代码先行，渲染最后**：先对照任务清单把全部代码改完并逐项自查（数值/摆布/密度等代码可判的错误不许靠渲染发现），再统一渲染一次出图验收；渲染是最终验证不是开发手段。
 - Godot路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
-- **打包导出统一落 `F:\VSCode\作品集\`**：Windows 导出的产物（exe/pck/dll）一律输出到该本地目录（不入库），export_presets 的 export_path 与手动导出均以此为准；给创始人验收时直接给该目录下对应子目录的完整绝对路径。
+- **打包导出统一落 `F:\VSCode\作品集\`**：Windows 导出的产物（exe/pck/dll）一律输出到该本地目录（不入库），export_presets 的 export_path 与手动导出均以此为准；给创始人验收时直接给该目录下对应子目录的完整绝对路径。版本存档按 `stick-world-vX.Y-win64.zip` 命名放在同目录。
+- **打正式包前先核导入缓存**：`.import` 参数（如压缩模式）变更后，`--headless --import` 不一定触发重导入，会把 `.godot/imported/` 里的陈旧 ctex 原样打进 pck（实测虚胖到 511M）——改动过压缩参数后须删 `.godot/imported/`（可连带 `.godot/exported/`）再 `--import` 重建，打出的包才真实。
 
 ### 文档写作规范
 

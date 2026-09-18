@@ -39,7 +39,7 @@ func _initialize() -> void:
 		var warmup: RefCounted = _WarmupScript.new()
 		var count: int = warmup.prepare()
 		print("[CLOSURE] BootWarmup 闭包清单 %d 条（起点 %d 个）：" % [
-			count, (_WarmupScript.ROOT_PATHS as PackedStringArray).size()])
+			count, _WarmupScript.root_paths().size()])
 		var t_w: int = Time.get_ticks_msec()
 		var worst: int = 0
 		for i in count:

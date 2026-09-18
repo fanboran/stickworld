@@ -25,11 +25,11 @@ extends RefCounted
 ## 关闭开关（回滚口径）：`STICK_BOOT_WARMUP=0`
 const ENV_KEY := "STICK_BOOT_WARMUP"
 
-## 扫描起点：进世界时 game_root.tscn 会编译的两个聚合入口。其余依赖由它们展开。
-const ROOT_PATHS: PackedStringArray = [
-	"res://modules/world/scripts/game_root.gd",
-	"res://modules/world/scripts/setup/system_setup.gd",
-]
+## 扫描起点：进世界时 game_root.tscn 会编译的两个聚合入口（装配数据，经
+## SceneRouter 读 scene_routes.json 的 boot_warmup_roots——L1 不硬编码 world
+## 内部路径）。其余依赖由它们展开。
+static func root_paths() -> PackedStringArray:
+	return SceneRouter.route_list(&"boot_warmup_roots")
 
 ## 每块工作时长上限（ms）：到点让一帧，把长冻结切成一串短停顿。
 ## 150ms ≈ 一帧的十倍——单次停顿肉眼近无感，同时让帧开销（~16ms）摊到 ~10%。
@@ -55,7 +55,7 @@ func prepare() -> int:
 	var order: Array[String] = []
 	var seen: Dictionary = {}
 	var queue: Array[String] = []
-	for p in ROOT_PATHS:
+	for p in root_paths():
 		if not seen.has(p):
 			seen[p] = true
 			queue.append(p)

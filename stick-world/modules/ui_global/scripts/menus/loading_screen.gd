@@ -13,7 +13,6 @@ extends Control
 ## 操作竞态（同步加载相撞=主线程死锁；编译竞态=preload 资源风暴、场景切空壳）。
 ## 资源线程化预热只对「无脚本 preload 闭包的纯数据资源」安全。
 
-const GAME_ROOT_SCENE := "res://modules/world/scenes/game_root.tscn"
 const _OverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/world_loading_overlay.gd")
 const _WarmupScript: GDScript = preload("res://modules/ui_global/scripts/loading/boot_warmup.gd")
 ## 跳板停留时间（给常驻层首帧渲染 + 提示可读的最低保障）
@@ -35,7 +34,8 @@ func _ready() -> void:
 		await get_tree().create_timer(rest).timeout
 	if not is_inside_tree():
 		return  # 等待期间本屏已被移出场景树，放弃切场景
-	get_tree().change_scene_to_file(GAME_ROOT_SCENE)
+	# 组合根场景路径经 L0 路由表取用（L1 不硬编码 L3 模块路径，见 SceneRouter 头注）
+	get_tree().change_scene_to_file(SceneRouter.route(&"game_root"))
 
 
 ## 分块预热 `game_root` 的编译闭包（见 BootWarmup 头注）。

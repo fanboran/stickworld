@@ -1,0 +1,7 @@
+{
+	"game_root": "res://modules/world/scenes/game_root.tscn",
+	"boot_warmup_roots": [
+		"res://modules/world/scripts/game_root.gd",
+		"res://modules/world/scripts/setup/system_setup.gd"
+	]
+}

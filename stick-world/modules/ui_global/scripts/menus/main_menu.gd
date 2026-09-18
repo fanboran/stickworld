@@ -15,7 +15,6 @@ extends Control
 ## 场景切换用 change_scene_to_file；读档意图经 SaveManager.boot_load_slot
 ## 传递给 GameRoot（GameRoot 启动时消费并复位）。
 
-const GAME_ROOT_SCENE := "res://modules/world/scenes/game_root.tscn"
 ## 载入屏（主菜单 → 游戏 的过渡画面）
 const LOADING_SCENE := "res://modules/ui_global/scenes/menus/loading_screen.tscn"
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")

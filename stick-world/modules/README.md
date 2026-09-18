@@ -46,11 +46,11 @@
 ## 2. 模块依赖图
 
 > **单向规则**：箭头方向 = "依赖"，高层依赖底层，低层不反向调用。`api.gd` 是允许的耦合点。
-> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 5 个依赖环：combat⇄units / expansion⇄world / organization⇄world / town_life⇄units / world⇄world_map（末者为唯一编译期环，见待办 AR-2）。
+> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 5 个依赖环（静态口径，含 class_name 边）：combat⇄units / expansion⇄world / organization⇄world / town_life⇄units / world⇄world_map；其中 world⇄world_map、combat⇄units 为真 preload 双向环，拆解方向 = 共享词汇下沉 `core/shared/`（见待办 AR-2）。越界基线 = 非装配器跨模块 preload 9 处 + 裸字符串 3 处（audit_deps 越界清单，见待办 AR-1）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。
 
 ```
                               ┌────────────────────────────────┐
-                              │  world（装配根，GameRoot）      │ ← 依赖全部 17 个模块
+                              │  world（装配根，GameRoot）      │ ← 依赖全部 16 个模块
                               └────────────────────────────────┘
    ┌────────────┬─────────────┼─────────────┬──────────────┐
    ▼            ▼             ▼             ▼              ▼
@@ -77,7 +77,7 @@
 
 | 模块 | 依赖（出向） |
 |------|------------|
-| `world` | 全部 17 模块（building_gen/combat/construction/debug_gui/environment/expansion/fx/hd2d/inventory/organization/player_control/resources/texture_gen/town_life/ui_global/units/world_map） |
+| `world` | 全部 16 模块（building_gen/combat/construction/debug_gui/environment/expansion/fx/hd2d/inventory/organization/player_control/resources/town_life/ui_global/units/world_map） |
 | `world_map` | ui_global, world |
 | `organization` | building_gen, ui_global, units, world |
 | `expansion` | units, world |

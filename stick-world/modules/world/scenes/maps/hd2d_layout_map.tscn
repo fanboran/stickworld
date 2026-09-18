@@ -1,11 +1,9 @@
-[gd_scene format=3 uid="uid://jih86odpv4vr"]
+[gd_scene format=3]
 
 [ext_resource type="Script" path="res://modules/world/scripts/map/hd2d_street_map.gd" id="1_hd2d"]
 
-[node name="Hd2dSettlement03" type="Node2D"]
+[node name="Hd2dLayoutMap" type="Node2D"]
 script = ExtResource("1_hd2d")
-layout_name = "l1_settlement_03"
-city_tier = "city"
 ground_y = 810.0
 ground_ratio = 0.36
 map_left = -2160.0

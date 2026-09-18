@@ -87,9 +87,56 @@ var resource_min_spacing := 96.0
 ## 子类可调（战场图调稀——野地要开阔可列阵）
 var resource_density := 0.03
 
+## ── map_id → 参数解析（共享壳收敛）───────────────────────────────────
+## 布局驱动图（主街/村B/L1 聚落）共用一张参数壳场景（hd2d_layout_map.tscn），
+## 实例差异只剩参数：SceneLoader 实例化时写入 META_MAP_ID，_ready 在搭 3D
+## 街景前按下面两条规则推导 layout_name / city_tier。新增城邦 = 新增注册
+## 条目（map_id），零新场景文件。
+##   规则一：l1_settlement_<整数>（聚落模式）→ layout_name = map_id
+##     （兼作 CityGen 确定性种子），city_tier 查 SETTLEMENT_TIERS。
+##   规则二：DIRECT_LAYOUT_MAP_IDS（手摆/算法布局图）→ layout_name = map_id。
+##   其余 map_id（战场等特化子类图）不匹配 → 不写参数，保留 tscn 自带值。
+## 聚落档位表。数据源 tools/worldgen/l1/city_profiles.json 的
+## cities.<map_id>.size（T2 镇 00/06，其余 city；该文件在仓库根 tools/，
+## res:// 之外运行时不可读，故落为代码常量——改档两处须同步）。
+const SETTLEMENT_TIERS := {
+	"l1_settlement_00": "town",
+	"l1_settlement_01": "city",
+	"l1_settlement_02": "city",
+	"l1_settlement_03": "city",
+	"l1_settlement_04": "city",
+	"l1_settlement_05": "city",
+	"l1_settlement_06": "town",
+	"l1_settlement_07": "city",
+}
+## 聚落查表缺失时的安全默认档（镇级；CityGen 内部对未知档兜底 townlet，
+## 本表缺失意味着新城邦还没登记 profile，给中间小档比给大城安全）
+const DEFAULT_SETTLEMENT_TIER := "town"
+## 直接以 map_id 作布局名的非聚落布局图（主街手摆布局 / 村B 算法布局）
+const DIRECT_LAYOUT_MAP_IDS: PackedStringArray = ["hd2d_street", "village_b"]
+const _SETTLEMENT_PREFIX := "l1_settlement_"
+
+
+## 按注入的 map_id 解析壳参数（_ready 开头调用，先于 3D 场景搭建）。
+## 无 meta（未经 SceneLoader 的直接实例化，如编辑器预览）不动参数。
+func _apply_params_from_map_id() -> void:
+	if not has_meta(WorldAPI.META_MAP_ID):
+		return
+	var mid: String = str(get_meta(WorldAPI.META_MAP_ID))
+	var is_settlement: bool = mid.begins_with(_SETTLEMENT_PREFIX) \
+			and mid.substr(_SETTLEMENT_PREFIX.length()).is_valid_int()
+	if is_settlement:
+		layout_name = mid
+		city_tier = str(SETTLEMENT_TIERS.get(mid, DEFAULT_SETTLEMENT_TIER))
+	elif mid in DIRECT_LAYOUT_MAP_IDS:
+		layout_name = mid
+
 
 
 func _ready() -> void:
+	# 共享壳参数解析（layout_name/city_tier 由 map_id 推导）——必须先于
+	# 本函数其余逻辑（3D 街景按这两项生成）
+	_apply_params_from_map_id()
 	super()
 	# 屏幕下边界（CameraRig ground_bottom，即 F3 地面蓝线）钉在 3D 街面的
 	# 可见近沿上——与 3D 相机缩放锚线同一世界线，2D/3D 底沿逐像素重合

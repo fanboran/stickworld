@@ -41,6 +41,12 @@ const PATH_MAP_FOREGROUND_LAYER := "ForegroundLayer"
 ## 地面线标记（y = ground_y，供调试可视化）
 const PATH_MAP_GROUND_LINE := "GroundLine"
 
+# ─────────────────────────────── 地图实例元数据 ────────────────────────────────
+## SceneLoader 实例化地图时写入实例的 meta 键（值为本次加载的 map_id）。
+## 共享参数壳（hd2d_layout_map / hd2d_resource）在 _ready 里读它推导
+## layout_name / city_tier / resource_side——地图本体由此得知"我是谁"。
+const META_MAP_ID := "map_id"
+
 # ─────────────────────────────── 地图类型 ────────────────────────────────
 enum MapType {
 	VILLAGE,        ## 村落地图

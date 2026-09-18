@@ -167,6 +167,10 @@ func travel_to_map(map_id: String, mode: int = WorldAPI.TravelMode.WALK, entry_s
 		push_error("[SceneLoader] 地图场景实例化失败: %s" % map_id)
 		return null
 
+	# 注入本次加载的 map_id（共享参数壳在 _ready 读它推导 layout/tier 等
+	# 参数；必须在 add_child 前写——_ready 随入树触发，届时参数须已就位）
+	new_map.set_meta(WorldAPI.META_MAP_ID, map_id)
+
 	_chunk_host.add_child(new_map)
 	current_map = new_map
 	current_map_id = map_id

@@ -12,6 +12,24 @@ class_name Hd2dResourceMap
 
 @export var resource_side: int = -1   # -1 = 西郊（主街西门出），+1 = 东郊
 
+## ── map_id → 参数解析（共享壳收敛）───────────────────────────────────
+## 东西两张资源 tscn 收敛为一张壳（hd2d_resource.tscn），唯一参数差异
+## resource_side 由 SceneLoader 注入的 map_id 推导（键=历史 map_id，不改）。
+const SIDE_BY_MAP_ID := {
+	"hd2d_resource_w": -1,
+	"hd2d_resource_e": 1,
+}
+
+
+## 按注入的 map_id 解析 resource_side（_ready 开头调用）。
+## 无 meta / 非资源图 id（未经 SceneLoader 的直接实例化）保留现有值。
+func _apply_side_from_map_id() -> void:
+	if not has_meta(WorldAPI.META_MAP_ID):
+		return
+	var mid: String = str(get_meta(WorldAPI.META_MAP_ID))
+	if SIDE_BY_MAP_ID.has(mid):
+		resource_side = int(SIDE_BY_MAP_ID[mid])
+
 
 func _configure_hd(hd: Node3D) -> void:
 	hd.set("battlefield", true)
@@ -19,6 +37,7 @@ func _configure_hd(hd: Node3D) -> void:
 
 
 func _ready() -> void:
+	_apply_side_from_map_id()
 	resource_density = 0.35
 	forest_clear_cells = 2
 	forest_ramp_cells = 8

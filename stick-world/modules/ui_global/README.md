@@ -20,7 +20,8 @@ modules/ui_global/
 │   ├── ui_root.gd                      # UIRoot（CanvasLayer）：槽位路由 add_to_slot + zone 落位 place_in_zone + 模式面板切换 + 通知转发
 │   ├── hud_zone_layout.gd              # HudZoneLayout：HUD zone 注册表（ZONES 表）与定位引擎——层级归 slot，定位归 zone
 │   ├── ui_modal_stack.gd               # UIModalStack：统一模态栈（层键字典 + ESC 逐层 pop + 随栈暂停/输入屏蔽）
-│   ├── uikit.gd                        # UIKit：代码创建出口——full_rect() 全屏根 / widget() 角落部件（不自设 anchor）
+│   ├── hud/zoom_slider.gd              # ZoomSlider：公共缩放条机件（SketchHSlider + 百分比 Label，滑条/滚轮/拖动双向同步；ZoomBar 与战略图 MapHUD 共用；差异参数化）
+│   │                                   # （UIKit 已上收 L0：core/ui_framework/ui_kit.gd，class_name 不变）
 │   ├── stick_screen.gd                 # StickScreen：排他模态弹窗基类（全屏遮罩 + 居中面板 + body/footer）
 │   ├── stick_window.gd                 # StickWindow：非模态浮动窗口基类（FLOATING/DOCK/POPOVER，不入模态栈）
 │   ├── stick_confirm_dialog.gd         # StickConfirmDialog：模态确认框（入 UIModalStack CONFIRM 层）

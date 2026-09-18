@@ -6,6 +6,10 @@ extends Control
 ## EXPLORE 模式下显示"建造"按钮，点击展开建筑列表（仅已注册场景的类型）。
 ## 选中建筑类型进入选址模式：鼠标移动显示半透明 ghost 预览，左键确认建造，右键/Esc 取消。
 ## 资源不足或无场景的建筑类型灰显。由 GameRoot 在 _ready 中 set_script 装配，setup(game_root)。
+##
+## UI 公共层收编：按钮/面板/标签一律经 ui_global 出口创建（StickKit.sketch_button /
+## StickKit.panel / StickKit.label，手绘涂鸦皮肤查 SketchStyle 变体表 + StickTokens
+## 取色）；布局结构与功能行为不变（按钮位置/选址流程原样）。
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
@@ -106,19 +110,18 @@ func setup(game_root: Node) -> void:
 func _build_ui() -> void:
 	# 父 Control 的位置/范围由 ui_root.tscn 预置节点配置（编辑器可见可调）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# 右下角"建造"按钮（避开左侧 ResourceBar）
-	_toggle_btn = Button.new()
+	# 右下角"建造"按钮（避开左侧 ResourceBar）。控件统一走 ui_global 手绘
+	# 组件出口（StickKit.sketch_button → SketchButton，皮肤查 SketchStyle 变体表）
+	_toggle_btn = StickKit.sketch_button(self, "建造", _on_toggle_pressed,
+			StickKit.ButtonKind.NORMAL, 30.0)
 	_toggle_btn.name = "ToggleBtn"
-	_toggle_btn.text = "建造"
 	_toggle_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_toggle_btn.offset_left = -108.0
 	_toggle_btn.offset_top = -42.0
 	_toggle_btn.offset_right = -12.0
 	_toggle_btn.offset_bottom = -12.0
-	_toggle_btn.pressed.connect(_on_toggle_pressed)
-	add_child(_toggle_btn)
-	# 建筑列表面板（按钮上方，右侧）
-	_list_panel = PanelContainer.new()
+	# 建筑列表面板（按钮上方，右侧）：手绘涂鸦面板（SketchPanel）
+	_list_panel = StickKit.panel(self, SketchPanel.Tone.DARK)
 	_list_panel.name = "ListPanel"
 	_list_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_list_panel.offset_left = -220.0
@@ -126,7 +129,6 @@ func _build_ui() -> void:
 	_list_panel.offset_right = -12.0
 	_list_panel.offset_bottom = -54.0
 	_list_panel.visible = false
-	add_child(_list_panel)
 	var scroll := ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_list_panel.add_child(scroll)
@@ -134,20 +136,18 @@ func _build_ui() -> void:
 	_list_container.name = "List"
 	_list_container.add_theme_constant_override("separation", 4)
 	scroll.add_child(_list_container)
-	# 选址模式提示（顶部居中偏右，GlobalHUD 下方且避开地图中央）
-	_hint_label = Label.new()
+	# 选址模式提示（顶部居中偏右，GlobalHUD 下方且避开地图中央）；
+	# 字号/强调色走 StickKit.SECTION 档（14 号琥珀），不再手写 override
+	_hint_label = StickKit.label(self, "选址模式：左键建造 | 右键/Esc 取消",
+			StickKit.LabelKind.SECTION)
 	_hint_label.name = "HintLabel"
-	_hint_label.text = "选址模式：左键建造 | 右键/Esc 取消"
 	_hint_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_hint_label.offset_left = -440.0
 	_hint_label.offset_top = 80.0
 	_hint_label.offset_right = -12.0
 	_hint_label.offset_bottom = 104.0
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_hint_label.add_theme_color_override("font_color", Color(1, 0.95, 0.6))
-	_hint_label.add_theme_font_size_override("font_size", 14)
 	_hint_label.visible = false
-	add_child(_hint_label)
 
 
 # ─────────────────────────────── 建筑列表 ────────────────────────────────
@@ -168,9 +168,7 @@ func _refresh_list() -> void:
 		var entry := _create_build_entry(def_id, def)
 		_list_container.add_child(entry)
 	if _list_container.get_child_count() == 0:
-		var empty := Label.new()
-		empty.text = "（无可建建筑）"
-		_list_container.add_child(empty)
+		StickKit.label(_list_container, "（无可建建筑）", StickKit.LabelKind.HINT)
 
 
 ## 建筑条目 → 图标管线母题（未登记 id 不挂图，走纯文字）
@@ -184,39 +182,27 @@ const BUILDING_MOTIFS: Dictionary = {
 }
 
 
-## 创建单个建筑条目（按钮 + 资源消耗摘要）
+## 创建单个建筑条目（按钮 + 资源消耗摘要）。控件走 ui_global 手绘组件出口
+## （StickKit.sketch_button / StickKit.label），皮肤查 SketchStyle 变体表
 func _create_build_entry(def_id: String, def: Dictionary) -> Control:
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 2)
-	var btn := Button.new()
-	btn.text = str(def.get("name_zh", def_id))
+	var btn := StickKit.sketch_button(vbox, str(def.get("name_zh", def_id)),
+			_on_building_selected.bind(def_id), StickKit.ButtonKind.NORMAL, 30.0)
 	var motif: StringName = BUILDING_MOTIFS.get(def_id, &"")
-	var tex := StickIcons.tex(motif) if motif != &"" else null
-	if tex != null:
-		btn.icon = tex
-		btn.expand_icon = true
-		btn.add_theme_constant_override("icon_max_width", 18)
-	# 与右下角「建造」按钮等高（30px），保证建造菜单内按钮尺寸统一
-	btn.custom_minimum_size = Vector2(0, 30)
-	btn.pressed.connect(_on_building_selected.bind(def_id))
-	vbox.add_child(btn)
-	# 资源消耗摘要
-	var cost_label := Label.new()
-	cost_label.text = _format_cost(def)
-	cost_label.add_theme_font_size_override("font_size", 11)
-	cost_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75))
-	vbox.add_child(cost_label)
+	if motif != &"":
+		# 居中文字菜单条：母题走左缘角标（不占排版位，StickKit 规范用法）
+		StickKit.motif_badge(btn, motif, 18.0)
+	# 资源消耗摘要（TINY 档：11 号 + 弱化字色，Token 取色不手写字面量；
+	# StickKit.label 内部已挂父）
+	StickKit.label(vbox, _format_cost(def), StickKit.LabelKind.TINY)
 	# 资源不足时灰显按钮 + 红字缺口提示（新手引导：缺什么、去哪补）
 	if not _can_afford(def):
 		btn.disabled = true
-		btn.modulate = Color(0.6, 0.6, 0.6)
 		var missing: String = _missing_summary(def)
 		if not missing.is_empty():
-			var miss := Label.new()
-			miss.text = "缺 %s —— 按 F 采集可获取" % missing
-			miss.add_theme_font_size_override("font_size", 11)
-			miss.add_theme_color_override("font_color", Color(0.95, 0.55, 0.45))
-			vbox.add_child(miss)
+			StickKit.label(vbox, "缺 %s —— 按 F 采集可获取" % missing,
+					StickKit.LabelKind.TINY, StickTokens.DANGER)
 	# 把按钮存到 entry 元数据，便于刷新
 	vbox.set_meta("btn", btn)
 	vbox.set_meta("def", def)
@@ -327,18 +313,16 @@ func _start_placing(def_id: String) -> void:
 			_ghost = PlacementGhost.new()
 			_ghost.z_index = WorldZ.OVERLAY_HINT
 			mask_layer.add_child(_ghost)
-	# 确定建造按钮（stage 2 拉伸后才显示）
-	_confirm_btn = Button.new()
+	# 确定建造按钮（stage 2 拉伸后才显示）：ACCENT 琥珀档 = 主行动点
+	_confirm_btn = StickKit.sketch_button(self, "确定建造", _confirm_place,
+			StickKit.ButtonKind.ACCENT, 30.0)
 	_confirm_btn.name = "ConfirmBtn"
-	_confirm_btn.text = "确定建造"
 	_confirm_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_confirm_btn.offset_left = -140.0
 	_confirm_btn.offset_top = -102.0
 	_confirm_btn.offset_right = -12.0
 	_confirm_btn.offset_bottom = -72.0
-	_confirm_btn.pressed.connect(_confirm_place)
 	_confirm_btn.visible = false
-	add_child(_confirm_btn)
 	set_process(true)
 
 

@@ -74,10 +74,10 @@ core/
 │   ├── time_manager.gd    # 时间/速度管理
 │   └── balance_config.gd  # 平衡变量加载（热重载预留）
 ├── entities/              # 核心实体状态快照（RefCounted）
-├── ui_framework/          # UI 基础设施
-│   ├── base_screen.gd     # UI 界面基类
-│   ├── components/        # 通用 UI 组件
-│   └── theme/             # 全局 UI 主题
+├── ui_framework/          # L0 UI 公共层（纯布局原语与无依赖组件，零资产零模块依赖，分层契约见 core/ui_framework/README.md）
+│   ├── ui_kit.gd          # UIKit：full_rect() 全屏根 / widget() 角落部件的代码建 UI 合规出口
+│   └── components/        # progress_painter.gd 世界空间进度条 _draw 公共基类
+│                          # （视觉/主题/屏幕基类属 L1，在 modules/ui_global：sketch 手绘控件族、StickTheme/StickStyle、StickScreen/StickWindow）
 └── services/              # 抽象服务
     ├── audio_manager.gd   # 音频管理器
     ├── analytics/         # 数据分析（预留）

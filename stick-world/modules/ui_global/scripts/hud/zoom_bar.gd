@@ -2,9 +2,10 @@ class_name ZoomBar
 extends HBoxContainer
 ## 缩放条 —— 顶部中央小地图正下方的相机缩放滑块（top_center stack，见 hud_zone_layout.gd）。
 ##
-## 滑块占左侧，右侧显示缩放百分比。支持拖动滑块和滚轮缩放双向同步。
-## 定位归 zone：由装配层经 UIRoot.place_in_zone 落位，本部件只声明体量
-## （custom_minimum_size = 滑块 + 间距 + 标签），不自算屏幕坐标。
+## 薄消费壳：机件（滑条/滚轮/拖动双向同步 + 百分比标签）全部在公共组件
+## ZoomSlider（同目录 zoom_slider.gd），本类只声明顶层缩放条的领域配置——
+## 显示百分比域与 user_zoom 换算。定位归 zone：由装配层经 UIRoot.place_in_zone
+## 落位，本部件只声明体量（custom_minimum_size），不自算屏幕坐标。
 
 ## 滑块宽度（体量声明，与小地图保留区同宽量级）
 const BAR_WIDTH: float = 360.0
@@ -24,72 +25,45 @@ const DISPLAY_STEP: float = 10.0
 ## 显示为 100%（创始人 2026-09-15：缩放条 75% 的数字映射为 100%）。
 const ZOOM_BASE: float = 0.75
 
-var _slider: HSlider = null
-var _label: Label = null
+var _zoom: ZoomSlider = null
 var _camera_rig: Node = null
 
 
 func _ready() -> void:
 	# 体量声明（坐标由 zone 表计算，见 hud_zone_layout.gd）
 	custom_minimum_size = Vector2(BAR_WIDTH + 4.0 + LABEL_WIDTH, BAR_HEIGHT)
-	add_theme_constant_override("separation", 4)
 
 
 ## 由 GameRoot 调用，注入相机引用并构建 UI。
 func setup(camera_rig: Node) -> void:
 	_camera_rig = camera_rig
 	_build_ui()
-	if _camera_rig != null and _camera_rig.has_method("get_user_zoom"):
-		sync_from_camera()
+	_zoom.sync_now()
 
 
 func _build_ui() -> void:
-	# 滑块：条本体宽 = BAR_WIDTH，水平排列由容器管理（无手写 offset）
-	_slider = SketchHSlider.new()
-	_slider.custom_minimum_size = Vector2(BAR_WIDTH, BAR_HEIGHT)
+	_zoom = ZoomSlider.new()
+	_zoom.slider_size = Vector2(BAR_WIDTH, BAR_HEIGHT)
+	_zoom.label_width = LABEL_WIDTH
+	_zoom.separation = 4
+	_zoom.sync_epsilon = 0.05
+	_zoom.get_display_value = func() -> float:
+		if _camera_rig != null and _camera_rig.has_method("get_user_zoom"):
+			return _camera_rig.get_user_zoom() / ZOOM_BASE * 100.0
+		return 100.0
+	_zoom.apply_display = func(v: float) -> void:
+		if _camera_rig != null and _camera_rig.has_method("set_user_zoom"):
+			_camera_rig.set_user_zoom(v / 100.0 * ZOOM_BASE)
+	_zoom.format_percent = func(_display: float) -> String:
+		if _camera_rig != null and _camera_rig.has_method("get_user_zoom"):
+			return "%d%%" % int(round(_camera_rig.get_user_zoom() / ZOOM_BASE * 100))
+		return "100%"
+	add_child(_zoom)
 	# 滑块量程=显示百分比域（整 10 档）：旧 user_zoom 域 0.5~2.0 换算显示
 	# 66.7%~266.7%，端点非整 10（创始人 2026-09-16）。拖动改相机 user_zoom
-	# = 显示%×ZOOM_BASE/100，量程始终覆盖 CameraRig 夹制区间
-	_slider.min_value = DISPLAY_MIN
-	_slider.max_value = DISPLAY_MAX
-	_slider.step = DISPLAY_STEP
-	_slider.value_changed.connect(_on_slider_changed)
-	add_child(_slider)
+	# = 显示%×ZOOM_BASE/100，量程始终覆盖 CameraRig 夹制区间。
+	# set_range 屏蔽量程 clamp 触发的 value_changed，装配不写相机
+	_zoom.set_range(DISPLAY_MIN, DISPLAY_MAX, DISPLAY_STEP)
 	# 缩放档位刻度：70~260 每 10 一档 = 20 档（默认 100% 恰落在刻度上）；
 	# 刻度渲染由 SketchHSlider 自绘接管
-	_slider.tick_count = int((DISPLAY_MAX - DISPLAY_MIN) / DISPLAY_STEP) + 1
-	# 百分比标签：条右侧
-	_label = Label.new()
-	_label.custom_minimum_size = Vector2(LABEL_WIDTH, 0.0)
-	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_label.text = "100%"
-	add_child(_label)
-
-
-func _on_slider_changed(value: float) -> void:
-	# value = 显示百分比（整 10 档）→ 换算相机 user_zoom
-	if _camera_rig != null and _camera_rig.has_method("set_user_zoom"):
-		_camera_rig.set_user_zoom(value / 100.0 * ZOOM_BASE)
-	_update_label()
-
-
-func _update_label() -> void:
-	if _label == null:
-		return
-	if _camera_rig != null and _camera_rig.has_method("get_user_zoom"):
-		_label.text = "%d%%" % int(round(_camera_rig.get_user_zoom() / ZOOM_BASE * 100))
-
-
-## 滚轮缩放后由 GameRoot 调用，同步滑块位置（句柄吸附最近整 10 刻度）
-func sync_from_camera() -> void:
-	if _slider == null or _camera_rig == null or not _camera_rig.has_method("get_user_zoom"):
-		return
-	var display: float = _camera_rig.get_user_zoom() / ZOOM_BASE * 100.0
-	if absf(_slider.value - display) > 0.05:
-		_slider.set_value_no_signal(display)
-		_update_label()
-
-
-func _process(_delta: float) -> void:
-	sync_from_camera()
+	_zoom.slider.tick_count = int((DISPLAY_MAX - DISPLAY_MIN) / DISPLAY_STEP) + 1

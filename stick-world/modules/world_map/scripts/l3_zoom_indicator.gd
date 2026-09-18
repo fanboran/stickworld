@@ -6,7 +6,7 @@ class_name MapHUD
 ##
 ## 组件化（与全局 UI 一致）：
 ##   - 按钮 = 主题 Button（StickTheme/StickKit），不再是自绘矩形
-##   - 缩放条 = 主题 HSlider + 百分比 Label（默认缩放 = 100%，可拖动与滚轮双向同步）
+##   - 缩放条 = 公共组件 ZoomSlider（SketchHSlider + 百分比 Label，拖动与滚轮双向同步）
 ## 布局：左下角单行 [地形|政治] [细分按钮] [缩放条] [百分比]，互不重叠；根节点 PASS 鼠标，
 ## 仅按钮/滑块/标签接收输入，不挡地图拖拽/下钻。
 ##
@@ -44,12 +44,9 @@ var _traffic_btn: Button = null
 var default_zoom: float = 1.0
 
 var _mode_btn: Button = null
-var _slider: HSlider = null
-var _zoom_label: Label = null
+## 缩放条（公共组件：滑条 + 百分比标签 + 双向同步机件）
+var _zoom: ZoomSlider = null
 var _ruler: ColorRect = null
-
-## 滑块范围（min/max）变更时置位，抑制 range clamp 触发的 value_changed 反向写相机
-var _block_slider_signal := false
 
 
 func _ready() -> void:
@@ -87,20 +84,17 @@ func set_default_zoom(z: float) -> void:
 	if z <= 0.0:
 		return
 	default_zoom = z
-	if _slider != null:
-		_block_slider_signal = true
+	if _zoom != null:
 		# 滑块下限不得低于相机硬限（如 L3 全屏模式 min_zoom=适配缩放），
 		# 否则滑块可设出被相机 clamp 拒绝的值，显示与实际缩放脱节
 		var cam_min := 0.0
 		if _camera != null and "min_zoom" in _camera:
 			cam_min = float(_camera.min_zoom)
-		_slider.min_value = maxf(default_zoom * MIN_MULT, cam_min)
-		_slider.max_value = default_zoom * MAX_MULT
 		# 直接落到当前相机缩放，避免 range clamp 触发 value_changed 反向写相机
+		# （set_range 内部屏蔽 clamp 信号）
 		var cur: float = _camera.get_zoom() if _camera != null and _camera.has_method("get_zoom") else z
-		_slider.set_value_no_signal(clampf(cur, _slider.min_value, _slider.max_value))
-		_block_slider_signal = false
-	_update_label()
+		_zoom.set_range(maxf(default_zoom * MIN_MULT, cam_min), default_zoom * MAX_MULT, NAN, cur)
+	_zoom.refresh_label()
 	_update_ruler()
 
 
@@ -138,27 +132,29 @@ func _build_widgets() -> void:
 		_dock_bottom_left(_mode_btn, x, BTN_W, BTN_H)
 		_update_mode_text()
 		x += BTN_W + GAP
-	# 缩放滑块（手绘涂鸦控件族）
-	_slider = SketchHSlider.new()
-	_slider.min_value = default_zoom * MIN_MULT
-	_slider.max_value = default_zoom * MAX_MULT
-	_slider.step = 0.001
-	_slider.custom_minimum_size = Vector2(SLIDER_W, SLIDER_H)
-	_slider.mouse_filter = Control.MOUSE_FILTER_STOP
-	# 先把滑块值落在范围内再接信号：避免初始 value=0 被 min clamp 触发 set_zoom 干扰相机
-	_slider.set_value_no_signal(clampf(default_zoom, _slider.min_value, _slider.max_value))
-	_slider.value_changed.connect(_on_slider_changed)
-	add_child(_slider)
-	_dock_bottom_left(_slider, x, SLIDER_W, SLIDER_H)
-	# 百分比标签
-	_zoom_label = Label.new()
-	_zoom_label.custom_minimum_size = Vector2(LABEL_W, SLIDER_H)
-	_zoom_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_zoom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_zoom_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_zoom_label)
-	_dock_bottom_left(_zoom_label, x + SLIDER_W + GAP, LABEL_W, SLIDER_H)
-	_update_label()
+	# 缩放滑块（公共组件 ZoomSlider：手绘滑条 + 百分比，拖动/滚轮双向同步）
+	_zoom = ZoomSlider.new()
+	_zoom.slider_size = Vector2(SLIDER_W, SLIDER_H)
+	_zoom.label_width = LABEL_W
+	_zoom.separation = int(GAP)
+	_zoom.sync_epsilon = 0.0005
+	_zoom.get_display_value = func() -> float:
+		if _camera != null and _camera.has_method("get_zoom"):
+			return _camera.get_zoom()
+		return default_zoom
+	_zoom.apply_display = func(v: float) -> void:
+		if _camera != null and _camera.has_method("set_zoom"):
+			_camera.set_zoom(v)
+	_zoom.format_percent = func(_display: float) -> String:
+		# 标签读相机真实值（拖动写相机后可能被 clamp，显示与实际缩放一致）
+		var zoom: float = _camera.get_zoom() if _camera != null and _camera.has_method("get_zoom") else default_zoom
+		return "%d%%" % int(roundf(zoom / default_zoom * 100.0))
+	# 先入树（_ready 建子控件）再落量程：把滑块值落在范围内且不触发
+	# set_zoom 干扰相机（set_range 屏蔽 clamp 信号）
+	add_child(_zoom)
+	_zoom.set_range(default_zoom * MIN_MULT, default_zoom * MAX_MULT, 0.001, default_zoom)
+	_dock_bottom_left(_zoom, x, SLIDER_W + GAP + LABEL_W, SLIDER_H)
+	_update_ruler()
 	# 100% 刻度（叠在滑块内底部，对准 grabber 中心）
 	_ruler = ColorRect.new()
 	_ruler.color = Color(StickTokens.ACCENT, 0.75)
@@ -202,13 +198,15 @@ func _sync_mode_buttons() -> void:
 
 
 func _update_ruler() -> void:
-	if _ruler == null or _slider == null:
+	if _ruler == null or _zoom == null or _zoom.slider == null:
 		return
-	var grabber := _slider.get_theme_icon("grabber", "HSlider")
+	var s := _zoom.slider
+	var grabber := s.get_theme_icon("grabber", "HSlider")
 	var gw: float = grabber.get_width() if grabber != null else 16.0
-	var nrm := clampf((default_zoom - _slider.min_value) / (_slider.max_value - _slider.min_value), 0.0, 1.0)
+	var nrm := clampf((default_zoom - s.min_value) / (s.max_value - s.min_value), 0.0, 1.0)
 	var tick_x := nrm * (SLIDER_W - gw) + gw * 0.5
-	_ruler.position = _slider.position + Vector2(tick_x - 1.0, SLIDER_H - 5.0)
+	# 刻度锚滑条在容器内的位置（滑条是 HBox 首子控件，首帧布局前 position=(0,0) 亦正确）
+	_ruler.position = _zoom.position + s.position + Vector2(tick_x - 1.0, SLIDER_H - 5.0)
 	_ruler.size = Vector2(2.0, 4.0)
 
 
@@ -223,30 +221,3 @@ func _update_mode_text() -> void:
 		return
 	var on: bool = _renderer.has_method("get_mode_name") and _renderer.get_mode_name() == "城市"
 	_mode_btn.text = "细分:开" if on else "细分:关"
-
-
-func _on_slider_changed(value: float) -> void:
-	if _block_slider_signal:
-		return
-	if _camera != null and _camera.has_method("set_zoom"):
-		_camera.set_zoom(value)
-	_update_label()
-
-
-func _update_label() -> void:
-	if _zoom_label == null:
-		return
-	var zoom: float = _camera.get_zoom() if _camera != null and _camera.has_method("get_zoom") else default_zoom
-	_zoom_label.text = "%d%%" % int(roundf(zoom / default_zoom * 100.0))
-
-
-## 滚轮缩放后同步滑块 + 百分比
-func _process(_delta: float) -> void:
-	if not is_visible_in_tree() or _slider == null or _camera == null:
-		return
-	if not _camera.has_method("get_zoom"):
-		return
-	var z: float = _camera.get_zoom()
-	if absf(_slider.value - z) > 0.0005:
-		_slider.set_value_no_signal(z)
-	_update_label()

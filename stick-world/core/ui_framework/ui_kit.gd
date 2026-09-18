@@ -2,6 +2,8 @@ class_name UIKit
 extends RefCounted
 ## UI 工具 —— 落实「P1 场景是布局唯一真相源」的代码侧强制。
 ##
+## L0 布局原语，视觉/主题/屏幕基类在 ui_global。
+##
 ## 原则：**禁止用 `Control.new()` + set_script 直接当 UI 根**——会丢失 .tscn 的
 ## anchor 布局（`Control.new()` 默认 anchor(0,0)/size 0，锚定子控件会定位到原点
 ## 负坐标，静默不可见，曾致"建造"按钮消失）。

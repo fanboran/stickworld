@@ -97,7 +97,7 @@ modules/ui_global/           # 全局 UI 层：容器 + 通用控件
 ├── api.gd
 ├── scripts/
 │   ├── ui_root.gd           # UIRoot 主控
-│   ├── hud/                 # GlobalHUD / ClockWidget / Minimap / ZoomBar / ResourceBar
+│   ├── hud/                 # GlobalHUD / ClockWidget / Minimap / ZoomBar（薄壳）/ ZoomSlider（公共缩放条机件）/ ResourceBar
 │   ├── panels/              # ModePanel（容器）/ ContextPanel（容器）/ SettingsMenuPanel
 │   └── indicators/          # 游玩指示器（附身圆圈/悬停方框/中键图标）
 └── scenes/
@@ -109,12 +109,26 @@ modules/ui_global/           # 全局 UI 层：容器 + 通用控件
 
 modules/<模块>/ui/           # 模块专属 UI（各模块自包含）
 ├── combat/ui/               # battle_panel.gd（战斗面板）/ formation_panel.gd（编制窗口）
-├── construction/ui/         # build_menu.gd + build_menu.tscn（建造菜单）
+├── construction/ui/         # build_menu.gd（建造菜单；控件经 StickKit/Sketch 组件出口创建）
 ├── player_control/ui/       # possess_panel.gd（附身面板）
 └── world_map/ui/            # 战略图面板/提示等
 ```
 
 > **装配方式**：业务面板由 `SystemSetup`（world 模块装配器）挂到 UIRoot 的槽位/弹窗层节点，模块代码不跨模块 `get_node`。全屏 UI 根一律用 `UIKit.full_rect()` 创建（强制 FULL_RECT），HUD 部件挂 `HudOverlay` 槽（见 §10.7）。
+
+#### UI 公共层 L0/L1 分层
+
+- **L0 = `core/ui_framework/`**：纯布局原语与无依赖组件，零资产、零模块依赖。现有
+  `ui_kit.gd`（`UIKit` 布局出口，class_name 全局不变）与 `components/progress_painter.gd`
+  （`ProgressPainter` 世界空间进度条 `_draw` 公共基类，建筑双进度条/火柴人动作条共用）。
+- **L1 = `modules/ui_global/`**：视觉实现层——sketch 手绘控件族、主题资产
+  （StickTheme/StickStyle/SketchStyle/StickTokens/StickIcons）、StickScreen/StickWindow
+  屏幕与窗口体系、StickKit 装配器、ZoomSlider 公共缩放条机件。
+- 依赖方向只允许 L1 → L0（ui_global/world_map/units/construction 等 → core 合法，
+  core 不 import 任何模块）；跨模块组件引用走 class_name，不加 preload。
+- 主题不进 core（贴图/Token 是视觉资产，属 L1）；core 不另抽 Screen 基类
+  （StickScreen 已是统一弹窗基类，避免空抽象）。契约细则见
+  [core/ui_framework/README.md](../../../../stick-world/core/ui_framework/README.md)。
 
 ### 10.4 Minimap 小地图系统
 
@@ -303,6 +317,7 @@ hide_legend()
 - 上方蓝色条：材料进度 `[0,1]`（搬运工交付推进）
 - 下方绿色条：建造进度 `[0,1]`（建造工敲击推进，受材料限制：建造 ≤ 材料）
 - 宽度 = 建筑占地宽度 * 32px，位置在 `ground_y - 220`
+- 绘制继承 `ProgressPainter`（`core/ui_framework/components/progress_painter.gd`，bg/fg 双 rect + 描边公共基类）
 - 完工/取消时由 `ConstructionManager` 移除
 
 #### 10.6.2 火柴人头顶动作进度条
@@ -312,6 +327,7 @@ hide_legend()
 - 建造工敲击 build 动画时显示（1.8s 填满）
 - 玩家按 E 敲击建造时显示
 - 完成后隐藏
+- 绘制继承 `ProgressPainter`（同建筑双进度条，单条配置）
 
 #### 10.6.3 交互弹窗
 
@@ -360,7 +376,7 @@ hide_legend()
 
 | 场景 | 做法 |
 |------|------|
-| 全屏面板/UI 根 | `UIKit.full_rect(script, name)`（[uikit.gd](../../../../stick-world/modules/ui_global/scripts/uikit.gd)，强制 FULL_RECT + 双向 grow） |
+| 全屏面板/UI 根 | `UIKit.full_rect(script, name)`（[ui_kit.gd](../../../../stick-world/core/ui_framework/ui_kit.gd)，强制 FULL_RECT + 双向 grow） |
 | 角落 HUD 部件（小地图/缩放条/建造按钮） | 自设 anchor + `UIRoot.add_to_slot("HudOverlay", ...)` |
 | 弹窗/面板类 | 挂 ModalOverlay / ModePanel 等有尺寸槽 |
 

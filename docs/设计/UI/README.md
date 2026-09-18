@@ -60,8 +60,9 @@
 
 - 模板是**落地样例与新界面的起点**：新界面从模板复制起步；现有界面（GlobalHUD /
   SettingsMenuPanel / SavePanel 等）在向 `.tscn` 迁移时顺手换用 StickTheme。
-- 现有 `core/ui_framework/`（UITheme 常量 / BaseScreen / PanelKit）继续有效；
-  StickTheme 是其演进方向——字号常量已对齐（22/13/14/11），Token 集是超集。
+- `core/ui_framework/` 是 L0 布局原语（`UIKit.full_rect()/widget()` 出口），不含主题；
+  主题实现在 `modules/ui_global/scripts/theme/`（StickTheme/StickTokens）——分层契约见
+  `stick-world/core/ui_framework/README.md`。
 - 布局铁律不变：场景是布局唯一真相源，模板全部遵守（骨架在 `.tscn`，内容由 StickKit 装配）。
 
 ---

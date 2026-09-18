@@ -8,7 +8,7 @@
 
 ## 一、是什么
 
-当前**全部游戏内地图的呈现形态**：主街（hd2d_street）、算法村（hd2d_village_b）、城郊战场（hd2d_battlefield）与城外资源图（hd2d_resource_w/e）为 HD-2D 图；道路/守城/森林/室内/L1 聚落与 battlefield_2d（dev 空旷演练场，不进旅行链）仍是 2D 旧图（旧图清单与规格出处见 [`遗留参照与功能差距.md`](遗留参照与功能差距.md)）。
+当前**全部游戏内地图的呈现形态**：主街（hd2d_street）、算法村（village_b）、L1 城邦聚落（l1_settlement_00~07，与主街/村B 共用参数壳 `hd2d_layout_map.tscn`）、城郊战场（hd2d_battlefield，特化脚本专属 tscn）与城外资源图（hd2d_resource_w/e，共用 `hd2d_resource.tscn` 壳）为 HD-2D 图；道路/守城/森林/室内/L1 聚落与 battlefield_2d（dev 空旷演练场，不进旅行链）仍是 2D 旧图（旧图清单与规格出处见 [`遗留参照与功能差距.md`](遗留参照与功能差距.md)）。
 
 三个组成部分：
 

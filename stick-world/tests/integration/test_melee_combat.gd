@@ -7,10 +7,10 @@ extends Node
 ## 退出码：0 全部通过，1 有失败
 ##
 ## 测试覆盖：
-##   - 火柴人自动配剑（WeaponMount 挂载占位剑到右手）
+##   - 火柴人自动配剑（数据层 WeaponMount 持剑 + billboard 镜像层武器挂载）
 ##   - 近战攻击：距离内命中、扣血、受击击退冲量
 ##   - 距离判定：超出剑长拒绝
-##   - 挥砍动画：攻击后武器旋转变化
+##   - 挥砍动画：攻击后实体动画切 attack 档（billboard 逐帧镜像跟播）
 ##   - 攻击冷却：连续攻击被拒绝
 ##
 ## 公共 setup 在 tests/helpers/combat_test_setup.gd。
@@ -18,6 +18,8 @@ extends Node
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
+# 显式 preload 防 headless class_name 未注册（同 WeaponMount 自身先例）
+const ScriptWeaponMount := preload("res://modules/units/scripts/entity/weapon_mount.gd")
 
 var _runner: TestRunner
 var _helper: CombatTestSetup
@@ -36,7 +38,7 @@ func _register_tests() -> void:
 	_tests.append({"name": "配剑: 火柴人右手挂载占位剑", "fn": Callable(self, "_test_sword_mounted"), "async": true})
 	_tests.append({"name": "近战: 距离内命中扣血并击退", "fn": Callable(self, "_test_hit_in_range"), "async": true})
 	_tests.append({"name": "近战: 超出剑长拒绝", "fn": Callable(self, "_test_out_of_range"), "async": true})
-	_tests.append({"name": "挥砍: 攻击后武器旋转变化", "fn": Callable(self, "_test_swing_rotation"), "async": true})
+	_tests.append({"name": "挥砍: 攻击动画切 attack（billboard 镜像跟播）", "fn": Callable(self, "_test_swing_rotation"), "async": true})
 	_tests.append({"name": "冷却: 连续攻击被拒绝", "fn": Callable(self, "_test_cooldown"), "async": true})
 
 
@@ -82,7 +84,10 @@ func _get_weapon(unit: Node) -> Node:
 	return unit.get_weapon()
 
 
-## 配剑：WeaponMount 挂载了占位剑实例
+## 配剑：数据层 WeaponMount 持剑 + billboard 镜像层武器实例挂载。
+## HD-2D 下 weapon_mount 设计性跳过 2D 挂骨（_weapon 恒 null，get_weapon_node
+## 不再有武器），武器视觉由地图每帧经 set_weapon_type 同步进 billboard 骨架
+## hand_inner/weapon_hand（RemoteTransform2D 跟手）。
 func _test_sword_mounted() -> void:
 	var u: Node = _helper.units[0]
 	_runner.assert_true(u != null, "单位应存在")
@@ -92,12 +97,25 @@ func _test_sword_mounted() -> void:
 	_runner.assert_true(wm != null, "应有 WeaponMount")
 	if wm == null:
 		return
-	_runner.assert_true(wm.has_method("get_weapon_node"), "WeaponMount 应提供 get_weapon_node")
-	var sword: Node2D = wm.get_weapon_node()
-	_runner.assert_true(sword != null and is_instance_valid(sword), "右手应挂载占位剑")
+	# 数据层：武器类型与攻击距离（战斗判定的唯一真相源）
+	_runner.assert_true(int(wm.get("weapon_type")) == ScriptWeaponMount.WeaponType.SWORD,
+		"数据层 weapon_type 应为 SWORD，实际 %s" % str(wm.get("weapon_type")))
+	_runner.assert_true(is_equal_approx(float(wm.get("attack_range")), 80.0),
+		"剑攻击距离应为 80，实际 %s" % str(wm.get("attack_range")))
+	# 镜像层：billboard 角色已生成且武器实例挂载
+	# 白盒标注：_char_map 为地图私有字段，待地图暴露公共查询后脱敏（同 minimap 先例）
+	var char_map_v: Variant = _helper.map.get("_char_map")
+	_runner.assert_true(char_map_v is Dictionary, "地图应有 billboard 角色表")
+	var ch: Node = (char_map_v as Dictionary).get(u.get_instance_id()) if char_map_v is Dictionary else null
+	_runner.assert_true(ch != null and is_instance_valid(ch), "单位应有 billboard 角色镜像")
+	if ch == null or not is_instance_valid(ch):
+		return
+	_runner.assert_true(ch.has_method("get_weapon_instance"), "billboard 角色应提供 get_weapon_instance")
+	var sword: Node2D = ch.get_weapon_instance() if ch.has_method("get_weapon_instance") else null
+	_runner.assert_true(sword != null and is_instance_valid(sword), "billboard 骨架应挂载武器镜像")
 	if sword != null and is_instance_valid(sword):
-		_runner.assert_true(sword.get_parent() != null, "剑应挂载到骨骼节点下")
-		# 剑应有握把锚点（GripPoint）
+		_runner.assert_true(sword.get_parent() != null, "武器应挂载在 billboard 场景内")
+		# 剑应有握把锚点（GripPoint，握点对齐手骨口径与 2D 挂骨一致）
 		_runner.assert_true(sword.get_node_or_null("GripPoint") != null, "剑应有 GripPoint")
 
 
@@ -168,7 +186,9 @@ func _test_out_of_range() -> void:
 	_runner.assert_equal(result.get("reason", ""), "out_of_range", "应拒绝为 out_of_range")
 
 
-## 挥砍：攻击后武器跟随手臂动画移动（剑挂 hand_inner 骨骼，attack 动画驱动）
+## 挥砍：攻击后实体动画切 attack 档。HD-2D 下武器在 billboard 内挂手骨
+## （RemoteTransform2D 跟手），billboard set_anim 逐帧镜像实体 _current_anim——
+## 实体动画状态到位 = 挥砍动作与武器跟手在镜像侧成立。
 func _test_swing_rotation() -> void:
 	var atk: Node = _helper.units[0]
 	var def: Node = _helper.units[1]
@@ -179,28 +199,27 @@ func _test_swing_rotation() -> void:
 	if wm == null:
 		_runner.assert_true(false, "WeaponMount 为空")
 		return
-	var sword: Node2D = wm.get_weapon_node()
-	if sword == null:
-		_runner.assert_true(false, "剑未挂载")
-		return
 	# 等冷却恢复
 	wm.update_cooldown(10.0)
 	def.global_position = atk.global_position + Vector2(50, 0)
 	await get_tree().process_frame
-	var pos_before: Vector2 = sword.global_position
 	wm.perform_attack(def)
-	# 触发攻击动画（Swordwrath-Attack1 转译）驱动手臂挥砍，剑挂手骨骼跟随移动
+	# 触发攻击动画（Swordwrath-Attack1 转译）：实体侧状态先行写 _current_anim，
+	# billboard 逐帧镜像同款动画，武器挂手骨跟随挥动
 	if atk.has_method("play_attack"):
 		atk.play_attack()
-	# 动画异步推进：按真实时间轮询等剑跟随手臂移动（headless 下 process_frame
-	# 快于动画推进，帧数等待只推进几毫秒动画——同 _test_cooldown 按真实时间口径）
+	# 动画异步推进：按真实时间轮询等动画状态切到 attack 档（headless 下
+	# process_frame 快于动画推进，帧数等待不可靠——同 _test_cooldown 真实时间口径）
+	var anim_now := ""
 	var waited := 0.0
-	while sword.global_position.distance_to(pos_before) <= 2.0 and waited < 1.0:
+	while waited < 1.0:
+		anim_now = str(atk.get("_current_anim"))
+		if anim_now.begins_with("attack"):
+			break
 		await get_tree().create_timer(0.05).timeout
 		waited += 0.05
-	var pos_after: Vector2 = sword.global_position
-	_runner.assert_true(pos_before.distance_to(pos_after) > 2.0,
-		"攻击后武器应跟随手臂动画挥砍移动，before=%s after=%s" % [pos_before, pos_after])
+	_runner.assert_true(anim_now.begins_with("attack"),
+		"攻击后实体动画应切到 attack 档（billboard 镜像跟播），实际: %s" % anim_now)
 
 
 ## 冷却：攻击后立即再攻被拒绝

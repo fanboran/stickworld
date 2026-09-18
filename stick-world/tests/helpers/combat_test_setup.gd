@@ -72,9 +72,8 @@ func spawn_test_units(count: int) -> void:
 		var e: Node2D = map.spawn_entity(STICKMAN_SCENE, Vector2(x, spawn_y))
 		if e == null:
 			continue
-		# 修正 Y：脚部对齐
-		if e.get("foot_offset") != null:
-			e.global_position.y = spawn_y - e.foot_offset
+		# 不再修 Y：HD-2D 图 origin 即视觉脚线（_origin_space_walk_band），
+		# 旧 2D 图"origin=髋部、spawn_y-foot_offset 对脚"的语义已随 2D 链路退役
 		if e.has_method("set_possessed"):
 			e.set_possessed(false)
 		units.append(e)
@@ -111,7 +110,25 @@ func reset_units(list: Array = []) -> void:
 			u.set_possessed(false)
 
 
-## 包含指定下标单位的最小世界矩形（带 padding）
+## 单位选择判定锚点（视觉域，与 SelectionSystem._unit_anchor 走同一公开地图
+## 协议）：优先 Range 框经 entity_hover_rect 取中心（HD-2D billboard 几何：
+## 底边贴视觉脚线、高 156×深度缩放，中心随深度变化）；无 Range 时回退 origin
+## 经 remap 上提半个 billboard 身高。HD-2D 图 origin 直绘视觉脚线，实体 canvas
+## 域 global_position 与角色视觉不重合——框选/点选用例必须用本锚点构造判定
+## 几何，否则锚点偏移随深度变化会 flaky。
+func anchor_for_unit(u: Node2D) -> Vector2:
+	if map == null or u == null or not is_instance_valid(u):
+		return Vector2.ZERO
+	var rng: CollisionShape2D = u.get_node_or_null("Range") as CollisionShape2D
+	if rng != null and rng.shape is RectangleShape2D:
+		return map.entity_hover_rect(rng.global_position,
+				(rng.shape as RectangleShape2D).size, u).get_center()
+	var p: Vector2 = u.global_position
+	return map.remap_fx_pos(p) - Vector2(0, 78.0 * map.depth_scale_at(p.y))
+
+
+## 包含指定下标单位的最小世界矩形（带 padding）——围绕视觉域锚点构造
+## （见 anchor_for_unit），与生产框选判定域（_unit_anchor）同域同几何。
 func rect_for_units(indices: Array, padding: float = 25.0) -> Rect2:
 	var min_x: float = INF
 	var max_x: float = -INF
@@ -123,7 +140,7 @@ func rect_for_units(indices: Array, padding: float = 25.0) -> Rect2:
 		var u: Node2D = units[i]
 		if not is_instance_valid(u):
 			continue
-		var p: Vector2 = u.global_position
+		var p: Vector2 = anchor_for_unit(u)
 		min_x = minf(min_x, p.x)
 		max_x = maxf(max_x, p.x)
 		min_y = minf(min_y, p.y)

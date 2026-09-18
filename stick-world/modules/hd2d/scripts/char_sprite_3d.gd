@@ -434,6 +434,12 @@ func set_weapon_type(wt: int) -> void:
 	_weapon_follow = follow
 
 
+## 当前武器镜像实例（null=未挂载）：公共只读取口，外部（测试/调试）经此拿
+## billboard 武器，不摸 _weapon_instance 私有字段。
+func get_weapon_instance() -> Node2D:
+	return _weapon_instance
+
+
 ## 显示/隐藏全部角色（含影）。用于 A/B 对照出图。
 func set_chars_visible(v: bool) -> void:
 	for c in get_children():

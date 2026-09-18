@@ -149,8 +149,9 @@ func _test_click_select() -> void:
 		_runner.assert_true(false, "SelectionSystem 为空")
 		return
 	_selection.clear_selection()
-	# 点击 unit 2 的位置
-	var pos: Vector2 = _helper.units[2].global_position
+	# 点击 unit 2 的选择判定锚点（视觉域，与系统点选判定同一几何——HD-2D 图
+	# canvas 域 global_position 与角色视觉不重合，直接点 origin 会脱靶）
+	var pos: Vector2 = _helper.anchor_for_unit(_helper.units[2])
 	var ok: bool = _selection.click_select(pos, false)
 	_runner.assert_true(ok, "应选中一个单位")
 	_runner.assert_equal(_selection.get_selected_count(), 1, "应只有 1 个")

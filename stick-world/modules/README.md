@@ -68,7 +68,7 @@
 │  基础设施：ui_global→fx ｜ player_control→ui_global          │
 │   construction→{building_gen, player_control, ui_global}    │
 │   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
-│   hd2d→{ui_global, units}                                   │
+│   hd2d→{environment, ui_global, units}                      │
 └─────────────────────────────────────────────────────────────┘
    （fx / environment / resources 无出向依赖）
 ```
@@ -91,7 +91,7 @@
 | `texture_gen` | ui_global |
 | `building_gen` | texture_gen |
 | `ui_global` | fx |
-| `hd2d` | ui_global, units |
+| `hd2d` | environment, ui_global, units |
 | `fx` / `environment` / `resources` | （无） |
 
 **关键路径**：

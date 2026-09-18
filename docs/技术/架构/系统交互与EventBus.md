@@ -44,7 +44,7 @@
 
 ## 二、EventBus 事件目录（现行）
 
-> 与 `core/autoload/event_bus.gd` 逐条对齐。共 32 个信号。
+> 与 `core/autoload/event_bus.gd` 逐条对齐。共 39 个信号。
 
 ### 2.1 生命周期事件
 
@@ -87,7 +87,16 @@
 | `order_issued` | order_type: int, target_squad_id: String, source_tier: int | TacticalOrders | UI、Units | 号令下达（source_tier=发令层级，0=玩家直接指挥） |
 | `commander_assigned` | squad_id: String, unit_id: int | FormationSystem | UI | 任命指挥官 |
 
-### 2.5 场景/地图/旅行/战略图事件
+### 2.5 指挥中继事件
+
+> combat 域 CommandChain 逐跳接力信号的 EventBus 镜像（command_chain.gd 发射本地信号后原样转发，链逻辑不变）；消费方是 organization 的指挥链视图，走 EventBus 免跨模块取节点。
+
+| 信号 | 参数 | 发射方 | 接收方 | 触发条件 |
+|------|------|--------|--------|----------|
+| `relay_started` | relay_id: String, order_type: int, from_org: String, to_org: String, hop_index: int, eta: float | CommandChain（combat，本地信号镜像转发） | organization 指挥链视图（command_chain_view 订阅 → command_chain_board）、测试 | 命令单跳起跑；eta = 本跳传输层传播秒数（hop 0 = 玩家跳） |
+| `relay_arrived` | relay_id: String, order_type: int, from_org: String, to_org: String, hop_index: int, outcome: String | CommandChain（combat，同上镜像） | organization 指挥链视图、测试 | 单跳抵达/停驻结局；outcome ∈ {delivered, relayed, rejected_noncombat, dropped_leaderless, dropped_invalid, dropped_no_squad, dropped_no_formation} |
+
+### 2.6 场景/地图/旅行/战略图事件
 
 | 信号 | 参数 | 发射方 | 接收方 | 触发条件 |
 |------|------|--------|--------|----------|
@@ -100,8 +109,17 @@
 | `travel_completed` | to_id: String | SceneLoader | UI | 旅行完成 |
 | `strategic_map_opened` | - | world_map | UI / InputDispatcher | 战略图打开 |
 | `strategic_map_closed` | - | world_map | UI / InputDispatcher | 战略图关闭 |
+| `settlement_updated` | settlement_id: String, population_score: float | 暂无发射方（全仓零 emit） | world_map api（订阅更新聚落规模 + L1 视图 blob 单城重算） | 聚落规模变化触发建成区 blob 重算（建设系统接线前为死订阅） |
 
-### 2.6 UI / 附身 / 室内事件
+### 2.7 出征 / 领地事件
+
+| 信号 | 参数 | 发射方 | 接收方 | 触发条件 |
+|------|------|--------|--------|----------|
+| `territory_state_changed` | territory_id: String, new_state: int | ConquestManager（expansion，据点占领） | DemoQuest（world）、测试 | 据点状态变更；new_state 为 TerritoryRegistry.State 的 int 广播（core 不依赖模块类） |
+| `region_owner_changed` | region_id: String, new_owner: String | ConquestManager（expansion） | 暂无生产订户（仅测试订阅） | 据点占领后地块归属变更；region_id 发 tile 级 id（预留战略图政治模式聚落/地块染色） |
+| `unlock_granted` | unlock_id: String | ConquestManager（expansion） | 暂无生产订户（仅测试订阅） | 征服奖励解锁发放（预留建筑/装备等系统按需接线） |
+
+### 2.8 UI / 附身 / 室内事件
 
 | 信号 | 参数 | 发射方 | 接收方 |
 |------|------|--------|--------|
@@ -110,10 +128,10 @@
 | `possession_ended` | entity | PossessionInterface | UI、Units、TimeManager |
 | `interior_entered` | building_id: int | Building | InputDispatcher、UI |
 | `interior_exited` | building_id: int | Building | InputDispatcher、UI |
-| `mega_interior_entered` | building_id: int, map_id: String | Building | 暂无订户（传送链随 mega_interior 图清退拆除，信号保留待室内 v3） |
-| `mega_interior_exited` | return_map_id: String | ——（发射方已随清退拆除） | 暂无订户 |
+| `mega_interior_entered` | building_id: int, map_id: String | Building | MusicDirector（情境回退）；传送链随 mega_interior 图清退拆除，信号保留待室内 v3 |
+| `mega_interior_exited` | return_map_id: String | ——（发射方已随清退拆除，全仓零 emit） | MusicDirector（情境回退） |
 
-### 2.7 其他
+### 2.9 其他
 
 | 信号 | 参数 | 发射方 | 接收方 | 说明 |
 |------|------|--------|--------|------|

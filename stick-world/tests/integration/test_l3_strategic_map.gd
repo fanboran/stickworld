@@ -275,22 +275,27 @@ func _test_hud() -> void:
 	var slider: HSlider = null
 	var btn: Button = null
 	for ch in hud.get_children():
-		if ch is Label:
-			label = ch
-		elif ch is HSlider:
-			slider = ch
+		if ch is ZoomSlider:
+			# HUD 缩放条已合一为公共组件 ZoomSlider（HBox：内部 SketchHSlider + 百分比 Label）
+			slider = ch.slider
+			label = ch.label
 		elif ch is Button:
 			btn = ch
 	_runner.assert_true(label != null and label.text == "100%",
 			"默认缩放应显示 100%%（实测 %s）" % (label.text if label != null else "无标签"))
-	_runner.assert_true(slider != null, "HUD 缩放条应为 HSlider（非自绘抽象矩形）")
+	_runner.assert_true(slider != null, "HUD 应含 ZoomSlider 缩放条（SketchHSlider + 百分比）")
 	_runner.assert_true(btn != null, "L3 HUD 应有细分模式按钮")
+	# 缩放条几何合理：滑条已被布局出非零尺寸（hud 自身 anchors 不作参照——旧测试亦不断言 hud 几何）
+	_runner.assert_true(slider != null and slider.get_global_rect().size.x > 0.0,
+			"缩放条几何合理（非零尺寸）")
 	# 三元素矩形互不重叠
 	var rects: Array[Rect2] = []
 	if btn != null:
 		rects.append(btn.get_global_rect())
-	rects.append(slider.get_global_rect())
-	rects.append(label.get_global_rect())
+	if slider != null:
+		rects.append(slider.get_global_rect())
+	if label != null:
+		rects.append(label.get_global_rect())
 	var overlap: bool = false
 	for i in range(rects.size()):
 		for j in range(i + 1, rects.size()):

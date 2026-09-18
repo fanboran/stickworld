@@ -319,13 +319,16 @@ func _test_l2_like_hud() -> void:
 	var label: Label = null
 	var slider: HSlider = null
 	for ch in hud.get_children():
-		if ch is Label:
-			label = ch
-		elif ch is HSlider:
-			slider = ch
+		if ch is ZoomSlider:
+			# HUD 缩放条已合一为公共组件 ZoomSlider（HBox：内部 SketchHSlider + 百分比 Label）
+			slider = ch.slider
+			label = ch.label
 	_runner.assert_true(label != null and label.text == "100%",
 			"默认缩放应显示 100%%（实测 %s）" % (label.text if label != null else "无标签"))
-	_runner.assert_true(slider != null, "L1 应有 HSlider 缩放条（与 L2 一致）")
+	_runner.assert_true(slider != null, "L1 应有 ZoomSlider 缩放条（与 L2 一致）")
+	# 缩放条几何合理：滑条已被布局出非零尺寸（hud 自身 anchors 不作参照——旧测试亦不断言 hud 几何）
+	_runner.assert_true(slider != null and slider.get_global_rect().size.x > 0.0,
+			"缩放条几何合理（非零尺寸）")
 	# 重开保留状态（与 L2/L3 一致：首次适配后不再重置）
 	var z_mod: float = cam.get_zoom() * 0.6
 	var off_mod: Vector2 = cam.get_offset() + Vector2(80, -40)

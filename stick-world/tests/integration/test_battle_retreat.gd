@@ -20,11 +20,14 @@ const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman
 
 ## 战斗单位 HP（低值加速战斗收敛）
 const BATTLE_HP: float = 40.0
+## 撤仗场景守军 HP（仅场景 3）：ROUT 触发后存活守军要跑完 ~450px 撤离才能 departed，
+## 40 血会在撤离途中被攻方打死导致 departed=0 假败；提到 100 保证触发后 ≥2 人活着离场
+const RETREAT_DEFENDER_HP: float = 100.0
 ## 战斗单位士气（低值便于触发溃逃）
 const BATTLE_MORALE: float = 25.0
 ## 溃逃阈值（低于此士气溃逃）
 const ROUT_THRESHOLD: float = 10.0
-## 守军撤仗阈值：伤亡率 0.3（3 人守军死 1 即 0.33 > 0.3 触发）
+## 守军撤仗阈值：伤亡率 0.3（4 人守军死 1=0.25 不触发、死 2=0.5 触发，留 2 人撤离）
 const RETREAT_CASUALTY_RATE: float = 0.3
 ## 单场战斗总超时（秒）：串行实测远低于 60s，但全量并行池 CPU 争用时物理帧
 ## 疏于推进、墙钟时间翻倍以上（C3 撤仗链最长：伤亡→ROUT→撤离边缘→departed），
@@ -78,8 +81,10 @@ func _run_tests_async() -> void:
 	_runner.end_test()
 
 	# 场景 3：C3 撤仗（伤亡率超限 → ROUT 撤离 → 玩家胜）
+	# 守军 4 人：伤亡率 0.3 阈值在第 2 死才触发（1/4=0.25 不触发、2/4=0.5 触发），
+	# 触发时必有 2 人存活撤离——3 人编制会在 1s 评估周期内死 2 导致只剩 1 人压线
 	_runner.begin_test("C3 撤仗: 伤亡率超限 → 敌军撤离 → victory=true")
-	var u3: Dictionary = await _setup_battle(5, 3, 1, true)
+	var u3: Dictionary = await _setup_battle(5, 4, 1, true)
 	await _scenario_retreat_on_casualty(u3)
 	_runner.end_test()
 
@@ -134,8 +139,8 @@ func _scenario_defender_win_player_side(units: Dictionary) -> void:
 	await _clear_units(units)
 
 
-## 场景 3：5v3 守军注入撤仗阈值（伤亡率 0.3）+ 守军编战斗小队（TeamAi 号令通道）。
-## 守军伤亡 1/3 → ROUT → RETREAT(evacuate) 撤至右缘 departed → 攻方胜（据点攻陷）。
+## 场景 3：5v4 守军注入撤仗阈值（伤亡率 0.3）+ 守军编战斗小队（TeamAi 号令通道）。
+## 守军伤亡 2/4 → ROUT → RETREAT(evacuate) 撤至右缘 departed → 攻方胜（据点攻陷）。
 func _scenario_retreat_on_casualty(units: Dictionary) -> void:
 	if not units.has("battle"):
 		_runner.assert_true(false, "战斗未启动")
@@ -194,7 +199,9 @@ func _setup_battle(n_attackers: int, n_defenders: int, player_faction: int,
 			attackers.append(e)
 	var defenders: Array = []
 	for i in n_defenders:
-		var e: Node = _spawn_battle_unit(map, Vector2(mr - 500.0 + i * 40.0, spawn_y))
+		# 撤仗场景守军用高体质（撤离路径存活）；其余场景低 HP 加速收敛
+		var hp: float = RETREAT_DEFENDER_HP if with_retreat else BATTLE_HP
+		var e: Node = _spawn_battle_unit(map, Vector2(mr - 500.0 + i * 40.0, spawn_y), hp)
 		if e != null:
 			defenders.append(e)
 	await get_tree().process_frame
@@ -275,8 +282,8 @@ func _unpossess_player() -> void:
 			e.set_possessed(false)
 
 
-## 生成一个战斗单位，设置低 HP/士气加速战斗
-func _spawn_battle_unit(map: Node2D, pos: Vector2) -> Node:
+## 生成一个战斗单位，设置低 HP/士气加速战斗（hp 可覆盖，撤仗场景守军用高体质）
+func _spawn_battle_unit(map: Node2D, pos: Vector2, hp_value: float = BATTLE_HP) -> Node:
 	var e: Node2D = map.spawn_entity(STICKMAN_SCENE, pos)
 	if e == null:
 		return null
@@ -290,8 +297,8 @@ func _spawn_battle_unit(map: Node2D, pos: Vector2) -> Node:
 	if e.has_method("get_health"):
 		var h: Node = e.get_health()
 		if h != null:
-			h.max_hp = BATTLE_HP
-			h.hp = BATTLE_HP
+			h.max_hp = hp_value
+			h.hp = hp_value
 			h.max_morale = BATTLE_MORALE
 			h.morale = BATTLE_MORALE
 			h.rout_threshold = ROUT_THRESHOLD

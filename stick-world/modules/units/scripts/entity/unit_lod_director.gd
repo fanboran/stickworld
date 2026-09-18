@@ -233,7 +233,9 @@ func _refresh_units() -> void:
 
 
 ## 单位是否可跟踪（引用有效、未挂删除队列、存活）。死者不计密度、不下发。
-func _is_trackable(u: Node) -> bool:
+## 参数有意不标注类型：freed 对象若标 : Node 会在传参阶段被隐式检查拒收报错，
+## 函数体内的判活防护永远执行不到。
+func _is_trackable(u) -> bool:
 	if u == null or not is_instance_valid(u) or u.is_queued_for_deletion():
 		return false
 	if u.has_method("is_dead") and u.is_dead():

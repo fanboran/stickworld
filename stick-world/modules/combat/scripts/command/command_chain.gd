@@ -86,6 +86,9 @@ func deliver_via_orgs(plan: Dictionary, org_api: Node, order_type: int, behavior
 			# process_always=false：暂停期（引擎总闸）延时一并暂停，指令不在暗中送达
 			# （暂停原语化批次 A 语义，随传令重构移植到逐跳计时点）
 			await get_tree().create_timer(delay, false).timeout
+		# 传令延迟期间目标组织可能已释放（战斗解散），恢复执行放弃送达
+		if org_api == null or not is_instance_valid(org_api):
+			return
 		_arrive_at_org(root_org, by_source, org_api, order_type, behavior_name, params, spread_mode, 0, relay_id)
 
 
@@ -135,6 +138,9 @@ func _relay_child(from_org: String, to_org: String, by_source: Dictionary, org_a
 	if delay > 0.0:
 		# process_always=false：暂停期（引擎总闸）延时一并暂停（批次 A 语义）
 		await get_tree().create_timer(delay, false).timeout
+	# 传令延迟期间目标组织可能已释放（战斗解散），恢复执行放弃送达
+	if org_api == null or not is_instance_valid(org_api):
+		return
 	_arrive_at_org(to_org, by_source, org_api, order_type, behavior_name, params, spread_mode, hop_index, relay_id)
 
 

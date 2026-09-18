@@ -283,11 +283,12 @@ func _start_fast_travel(settlement_id: String) -> void:
 	if str(status.get("code", "")) != "OK":
 		return
 	_fast_travel_pending = true
-	if map_renderer != null and map_renderer.has_method("set_route_highlight"):
+	if is_instance_valid(map_renderer) and map_renderer.has_method("set_route_highlight"):
 		map_renderer.set_route_highlight(status.get("roads", []), _route_nodes(status.get("path", [])))
 	await get_tree().create_timer(FAST_TRAVEL_HIGHLIGHT_SEC).timeout
 	_fast_travel_pending = false
-	if map_renderer != null and map_renderer.has_method("clear_route_highlight"):
+	# 高亮展示期间 map_renderer 可能已随场景释放（freed 非 null，须 is_instance_valid 判活）
+	if is_instance_valid(map_renderer) and map_renderer.has_method("clear_route_highlight"):
 		map_renderer.clear_route_highlight()
 	if not is_visible_in_tree():
 		return  # 展示期间视图被关闭（ESC/边界触发），放弃传送

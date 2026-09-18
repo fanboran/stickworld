@@ -33,6 +33,8 @@ func _ready() -> void:
 	var rest: float = LOAD_SECONDS - float(Time.get_ticks_msec() - t0) / 1000.0
 	if rest > 0.0:
 		await get_tree().create_timer(rest).timeout
+	if not is_inside_tree():
+		return  # 等待期间本屏已被移出场景树，放弃切场景
 	get_tree().change_scene_to_file(GAME_ROOT_SCENE)
 
 

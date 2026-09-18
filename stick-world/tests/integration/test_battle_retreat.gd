@@ -26,8 +26,11 @@ const BATTLE_MORALE: float = 25.0
 const ROUT_THRESHOLD: float = 10.0
 ## 守军撤仗阈值：伤亡率 0.3（3 人守军死 1 即 0.33 > 0.3 触发）
 const RETREAT_CASUALTY_RATE: float = 0.3
-## 单场战斗总超时（秒）
-const BATTLE_TIMEOUT: float = 60.0
+## 单场战斗总超时（秒）：串行实测远低于 60s，但全量并行池 CPU 争用时物理帧
+## 疏于推进、墙钟时间翻倍以上（C3 撤仗链最长：伤亡→ROUT→撤离边缘→departed），
+## 60s 预算曾在并行 3 下被击穿——翻倍到 120s 换取对负载不敏感（与 run_all 的
+## 套件级 240s 超时仍有间隔：正常 4 场合计 <120s，仅退化场景才会撞套件超时）
+const BATTLE_TIMEOUT: float = 120.0
 
 var _runner: TestRunner
 var _game_root: Node

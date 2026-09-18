@@ -115,18 +115,19 @@ func _test_slot_world() -> void:
 		return
 	var base := Vector2(500, 500)
 	# 无 get_facing → 回退 +x（向右推进）；前列贴 base_pos，横向以 base 为中心
+	# 间距/列间距读实例活动值：setup 会经调参表覆盖（24px 换轨后 SPREAD=24 / ROW_GAP=42）
 	_runner.assert_approx(fs.get_squad_dest(sid, u0, base, "formation").x, base.x, 0.5,
 			"前列槽位 x = 锚 x")
-	_runner.assert_approx(fs.get_squad_dest(sid, u0, base, "formation").y, base.y - 32.0, 0.5,
+	_runner.assert_approx(fs.get_squad_dest(sid, u0, base, "formation").y, base.y - fs.SPREAD_SPACING, 0.5,
 			"前列 row0 横展 −SPREAD")
 	_runner.assert_approx(fs.get_squad_dest(sid, u1, base, "formation").y, base.y, 0.5,
 			"前列 row1 = 锚 y")
 	# 槽位世界坐标纯函数：后列退 ROW_GAP，朝向镜像
 	var d_rear: Vector2 = fs._slot_world(Vector2i(1, 0), base, Vector2.RIGHT)
-	_runner.assert_approx(d_rear.x, base.x - 56.0, 0.5, "后列沿行进反方向退 ROW_GAP")
-	_runner.assert_approx(d_rear.y, base.y - 32.0, 0.5, "后列 row0 横展 −SPREAD")
+	_runner.assert_approx(d_rear.x, base.x - fs.ROW_GAP, 0.5, "后列沿行进反方向退 ROW_GAP")
+	_runner.assert_approx(d_rear.y, base.y - fs.SPREAD_SPACING, 0.5, "后列 row0 横展 −SPREAD")
 	var d_left: Vector2 = fs._slot_world(Vector2i(1, 0), base, Vector2.LEFT)
-	_runner.assert_approx(d_left.x, base.x + 56.0, 0.5, "朝向左时后列镜像到 +x")
+	_runner.assert_approx(d_left.x, base.x + fs.ROW_GAP, 0.5, "朝向左时后列镜像到 +x")
 
 
 func _test_reinforce_on_removal() -> void:
@@ -173,9 +174,10 @@ func _test_swap_closer_to_front() -> void:
 	var base := Vector2(600, 500)
 	var dest_far: Vector2 = fs.get_squad_dest(sid, units[0], base, "formation")
 	var dest_near: Vector2 = fs.get_squad_dest(sid, units[3], base, "formation")
+	# 间距/列间距读实例活动值（setup 经调参表覆盖，24px 换轨后 SPREAD=24 / ROW_GAP=42）
 	_runner.assert_approx(dest_near.x, base.x, 0.5, "近者应换到前列（x = 锚 x）")
-	_runner.assert_approx(dest_near.y, base.y - 32.0, 0.5, "近者占前列 row0")
-	_runner.assert_approx(dest_far.x, base.x - 56.0, 0.5, "远者应被换到后列（退 ROW_GAP）")
+	_runner.assert_approx(dest_near.y, base.y - fs.SPREAD_SPACING, 0.5, "近者占前列 row0")
+	_runner.assert_approx(dest_far.x, base.x - fs.ROW_GAP, 0.5, "远者应被换到后列（退 ROW_GAP）")
 
 
 func _test_stability_query() -> void:

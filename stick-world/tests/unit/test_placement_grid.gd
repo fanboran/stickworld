@@ -48,16 +48,17 @@ func _new_grid(w: int = 16) -> ScriptPlacementGrid:
 # ─────────────────────────────── 用例 ────────────────────────────────
 
 func _test_cell_size_constant() -> void:
-	_runner.add_test("PlacementGrid: CELL_SIZE == 32", func():
-		_runner.assert_equal(ScriptPlacementGrid.CELL_SIZE, 32, "条带宽度应为 32px")
+	_runner.add_test("PlacementGrid: CELL_SIZE == 24（24px 换轨）", func():
+		_runner.assert_equal(ScriptPlacementGrid.CELL_SIZE, 24, "条带宽度应为 24px（旧 32；常量钉值，坐标期望一律用本常量换算）")
 	)
 
 
 func _test_world_to_cell_round_trip() -> void:
 	_runner.add_test("PlacementGrid: 世界坐标<->条带互转", func():
 		var g := _new_grid()
-		_runner.assert_equal(g.world_to_cell(Vector2(100, 999)), 3, "100px -> cell 3（仅看 X）")
-		_runner.assert_equal(g.cell_to_world(3), 112.0, "cell 3 中心 = 3*32+16 = 112")
+		var cell: int = ScriptPlacementGrid.CELL_SIZE
+		_runner.assert_equal(g.world_to_cell(Vector2(100, 999)), 4, "100px -> cell 4（100/24=4.16 截断，仅看 X）")
+		_runner.assert_equal(g.cell_to_world(3), 3.0 * cell + cell * 0.5, "cell 3 中心 = 3*CELL+CELL/2（生产常量换算，24px 下 = 84）")
 	)
 
 

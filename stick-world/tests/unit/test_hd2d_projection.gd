@@ -40,7 +40,11 @@ func _test_squash_k() -> void:
 
 func _test_round_trip() -> void:
 	var k: float = Hd2dProjection.squash_k()
-	var front: float = Hd2dStreetMap.WALK_FRONT_Y
+	# 锚线已从常量 WALK_FRONT_Y 改为实例级 walk_front_y（24px 换轨时删常量；
+	# _ready 前取声明默认 970.5）——读生产默认值当锚，round-trip 对任意锚恒等
+	var anchor := Hd2dStreetMap.new()
+	var front: float = anchor.walk_front_y
+	anchor.free()
 	for y: float in [front, 1000.0, 800.0, 688.0, 472.6]:
 		var v := Hd2dProjection.ground_to_visual_y(y, k, front)
 		var back := Hd2dProjection.visual_to_ground_y(v, k, front)
@@ -66,7 +70,9 @@ func _make_street_map() -> Hd2dStreetMap:
 
 func _test_street_remap_round_trip() -> void:
 	var map := _make_street_map()
-	var front: float = Hd2dStreetMap.WALK_FRONT_Y
+	# 锚线读被测实例（24px 换轨后 WALK_FRONT_Y 常量已删，锚线改实例级 walk_front_y；
+	# 未入树 _ready 不跑 → 即声明默认 970.5，与 remap/unmap 内部取值同源）
+	var front: float = map.walk_front_y
 	for y: float in [front, 1100.0, 800.0, 700.0]:
 		var v := map.remap_fx_pos(Vector2(50.0, y))
 		_runner.assert_approx(v.x, 50.0, 0.0001, "x 恒等（俯角只压纵深）")

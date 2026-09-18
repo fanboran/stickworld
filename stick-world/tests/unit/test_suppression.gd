@@ -394,7 +394,8 @@ func _test_phase_plan() -> void:
 	_runner.assert_equal(proxy_member.ai.orders_for("seek_cover"), 1, "未压制成员走 arrow_threat_time 代理")
 	sup_member.free()
 	proxy_member.free()
-	plan.free()
+	# plan（SquadPhasePlan）extends RefCounted：引用计数自管理，原 plan.free() 会报
+	# "Attempted to free a RefCounted object"——RefCounted 无需也无法手动释放
 
 
 # ─────────────────────────────── 夹具 ────────────────────────────────

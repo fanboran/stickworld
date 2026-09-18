@@ -129,7 +129,6 @@
 | `interior_entered` | building_id: int | Building | InputDispatcher、UI |
 | `interior_exited` | building_id: int | Building | InputDispatcher、UI |
 | `mega_interior_entered` | building_id: int, map_id: String | Building | MusicDirector（情境回退）；传送链随 mega_interior 图清退拆除，信号保留待室内 v3 |
-| `mega_interior_exited` | return_map_id: String | ——（发射方已随清退拆除，全仓零 emit） | MusicDirector（情境回退） |
 
 ### 2.9 其他
 

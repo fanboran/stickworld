@@ -141,7 +141,6 @@ func _wire_event_bus() -> void:
 	_safe_connect("interior_entered", _on_interior_entered)
 	_safe_connect("interior_exited", _on_interior_exited)
 	_safe_connect("mega_interior_entered", _on_mega_interior_entered)
-	_safe_connect("mega_interior_exited", _on_mega_interior_exited)
 	_safe_connect("battle_started", _on_battle_started)
 	_safe_connect("battle_ended", _on_battle_ended)
 	_safe_connect("game_paused", _on_paused)
@@ -243,10 +242,6 @@ func _on_interior_exited(_building_id: int) -> void:
 
 func _on_mega_interior_entered(_building_id: int, _map_id: String) -> void:
 	set_context("interior", true)
-
-
-func _on_mega_interior_exited(_return_map_id: String) -> void:
-	set_context("interior", false)
 
 
 func _on_battle_started(_battle_id: String) -> void:

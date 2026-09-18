@@ -135,7 +135,6 @@ extends Node
 # 传送进入大建筑：Building -> GameRoot
 @warning_ignore("unused_signal") signal mega_interior_entered(building_id: int, map_id: String)
 # 从大建筑返回：MegaInteriorMap -> GameRoot
-@warning_ignore("unused_signal") signal mega_interior_exited(return_map_id: String)
 
 # ─────────────────────────────── 通用工具 ────────────────────────────────
 

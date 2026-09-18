@@ -163,11 +163,33 @@ func _physics_process(delta: float) -> void:
 ## 目标身体（碰撞体）世界位置：Collider 节点优先，缺省回落 root + 典型偏移。
 ## Collider 引用 setup 缓存（箭雨每物理帧数百次查询免 get_node 路径解析），
 ## 缓存失效（未缓存/已释放）时回落实时查找并重新缓存。
+## 仅服务锁定目标的命中路径（飞行命中/爆头判定）；近失压制逐候选走
+## _candidate_body_pos 直查——缓存是单一目标的位置，跨候选复用即错位。
 func _target_body_pos(target: Node) -> Vector2:
 	var col: Node2D = _target_collider
 	if (col == null or not is_instance_valid(col)) and target != null:
-		col = target.get_node_or_null("Collider") as Node2D
+		col = _body_collider(target)
 		_target_collider = col
+	return _body_pos_from(col, target)
+
+
+## 候选身体（碰撞体）世界位置：按候选自身实时直查 Collider，不读写
+## _target_collider 缓存——近失压制语义 = "这一候选的身体位置距爆点是否
+## 在半径内"，与箭的锁定目标无关；复用缓存会把首个候选/锁定目标的位置
+## 误套给其余全部候选（半径判定整体失效）。
+func _candidate_body_pos(body: Node) -> Vector2:
+	return _body_pos_from(_body_collider(body), body)
+
+
+func _body_collider(target: Node) -> Node2D:
+	if target == null:
+		return null
+	return target.get_node_or_null("Collider") as Node2D
+
+
+## 身体位置空间换算（命中/近失两路共用）：碰撞体存在取其全局位，
+## 否则 root + 典型偏移
+func _body_pos_from(col: Node2D, target: Node) -> Vector2:
 	if col != null:
 		return col.global_position
 	return (target as Node2D).global_position + Vector2(8.5, 130)
@@ -339,8 +361,8 @@ func try_near_miss_suppression(candidates: Array = []) -> int:
 			continue
 		if not _is_near_miss_enemy(body):
 			continue  # 只压制敌方（不误伤友军）
-		if global_position.distance_to(_target_body_pos(body)) > _near_miss_radius:
-			continue  # 半径外不算近失
+		if global_position.distance_to(_candidate_body_pos(body)) > _near_miss_radius:
+			continue  # 半径外不算近失（按候选自身碰撞体直算，不读锁定目标缓存）
 		if not body.has_method("get_status_effects"):
 			continue
 		var se: Node = body.get_status_effects()

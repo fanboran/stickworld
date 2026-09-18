@@ -155,7 +155,7 @@ static func _draw_area_rect(control: Control, ctx: Dictionary, area: Node2D, col
 	var remaps: bool = map != null and is_instance_valid(map) and map.has_method("remap_fx_pos")
 	for child in area.get_children():
 		if child is CollisionShape2D:
-			# HD-2D 建筑形状（meta 打标，见 Hd2dStreetMap._build_solid_bodies）
+			# HD-2D 建筑形状（meta 打标，见 Hd2dMapBase._build_solid_bodies）
 			# 的显示改由 draw_buildings 直立包楼框承担，这里跳过防双重绘制
 			if child.has_meta("hd2d_building"):
 				continue

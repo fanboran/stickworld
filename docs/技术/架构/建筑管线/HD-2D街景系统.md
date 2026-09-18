@@ -62,7 +62,9 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - **手摆常量（原型兜底，游戏内不触发）**：FRONT_ROW/PROPS/NATURE_SPOTS（出生村语义翻译），仅无布局时生效。
 - 消费映射：前排=plan row0；**背景三层**（2026-09-17 恢复 9-14 三层背景定案）：bg1=plan row≥1（布局后排整排上台面同高基线）、bg2/bg3 主题段吸附前层缝+补洞把地平线遮死；末层（第三层）楼根=地平线基线，地面远端 far_z 取同一常量（同源对齐）；手摆主街无 plan 背景时 bg1 走主题段自由铺兜底。
 
-### 2.3 宿主（Hd2dStreetMap extends MapBase）
+### 2.3 宿主（MapBase → Hd2dMapBase → Hd2dStreetMap）
+
+继承链三层：`Hd2dMapBase` 承载全部 HD-2D 图共享的宿主机制（本节所列相机镜像/昼夜/角色进 3D/碰撞映射/出口等），`Hd2dStreetMap` 只做城邦布局图特化（map_id → layout_name/city_tier 解析、CityGen plan 注入、按布局收界），资源图/战场图（Hd2dResourceMap/Hd2dBattlefieldMap）直接以 Hd2dMapBase 公共机制运行。
 
 - **相机镜像**：3D 正交相机每帧镜像 2D CameraRig 的 x 与 zoom——1/4 区域跟随、顶栏居中、边缘滚动、中键拖拽、滚轮缩放全部在 CameraRig 上驱动。**为什么**：CameraRig 是全部相机操作的单一入口，3D 侧只做镜像；自己钉死玩家 x 会让手动操作全部失效（踩过）。
 - **昼夜**：读 `WorldState.game_time`（单位=小时 0~24，EnvironmentSystem 写入），6:00/19:00 切 `_apply_light("day"/"night")`。2D 的 CanvasModulate 够不到 3D 场景，必须自己挂。

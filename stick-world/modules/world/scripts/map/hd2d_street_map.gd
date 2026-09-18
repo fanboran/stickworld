@@ -568,7 +568,7 @@ func _spawn_resource_nodes() -> void:
 		var ci: int = int(cursors.get(rtype, 0))
 		cursors[rtype] = ci + 1
 		_hd.spawn_nature_card_at(str(pool[ci % pool.size()]), n.position.x, n.position.y)
-	print("[hd2d] 野外资源点 %d 处（resource_gen 算法分布，墙外带）" % nodes.size())
+	print_debug("[hd2d] 野外资源点 %d 处（resource_gen 算法分布，墙外带）" % nodes.size())
 
 
 func get_terrain_type_at_cell(cx: int) -> int:

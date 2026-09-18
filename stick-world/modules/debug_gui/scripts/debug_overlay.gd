@@ -38,20 +38,20 @@ func _ready() -> void:
 	_draw_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_draw_control.set_script(load("res://modules/debug_gui/scripts/debug_draw_control.gd"))
 	add_child(_draw_control)
-	# 创建可拖动调试面板
-	_debug_panel = Control.new()
-	_debug_panel.name = "DebugPanel"
-	_debug_panel.set_script(load("res://modules/debug_gui/scripts/debug_panel.gd"))
+	# 创建可拖动调试面板（UIKit.full_rect 合规出口；根面 IGNORE——全屏命中面
+	# 会遮住下层 CanvasLayer 的 UI，子控件命中优先不受影响）
+	_debug_panel = UIKit.full_rect(load("res://modules/debug_gui/scripts/debug_panel.gd"), "DebugPanel")
+	_debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_debug_panel)
-	# 创建实体信息文本框
+	# 创建实体信息文本框（脚本自管 size=视口 + IGNORE，不依赖锚点布局——
+	# 显式 TOP_LEFT 与原行为一致；强设 FULL_RECT 会与其手动 size 赋值打架报警）
 	_entity_info_panel = Control.new()
 	_entity_info_panel.name = "DebugInfoPanel"
+	_entity_info_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_entity_info_panel.set_script(load("res://modules/debug_gui/scripts/debug_info_panel.gd"))
 	add_child(_entity_info_panel)
 	# 创建交互式调试工具面板（F4：特效试放/市场/环境/建筑）
-	_tools_panel = Control.new()
-	_tools_panel.name = "DebugToolsPanel"
-	_tools_panel.set_script(load("res://modules/debug_gui/scripts/debug_tools_panel.gd"))
+	_tools_panel = UIKit.full_rect(load("res://modules/debug_gui/scripts/debug_tools_panel.gd"), "DebugToolsPanel")
 	add_child(_tools_panel)
 	# 连接 DebugApi 信号
 	if DebugApi != null:

@@ -484,6 +484,8 @@ func _migrate_loaded_schema(from_version: int) -> bool:
 	# 	if not _db.query("ALTER TABLE …"):
 	# 		push_error("[SaveManager] v2→v3 迁移失败: %s" % str(_db.error_message))
 	# 		return false
+	# 走到这里 = 更旧版本但未命中任何迁移分支（含 v0 旧档：表结构等价，按原样放行）
+	push_warning("[SaveManager] 存档 schema v%d → v%d 无迁移分支，按原样放行" % [from_version, CURRENT_SCHEMA_VERSION])
 	return true
 
 

@@ -90,13 +90,13 @@ func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable())
 	# 配额满待业 wander；契约见 modules/town_life/api.gd）
 	var stats: Dictionary = TownLifeAPI.assign_village_jobs(npcs)
 	# stdout 证据：配比总览 + 逐村民职业/工位（视觉/日志验收材料）
-	print("[TownLife] 村庄配比: 在职=%s 待业=%d（共 %d 人）" % [stats.get("jobs", {}), stats.get("idle", 0), npcs.size()])
+	print_debug("[TownLife] 村庄配比: 在职=%s 待业=%d（共 %d 人）" % [stats.get("jobs", {}), stats.get("idle", 0), npcs.size()])
 	for npc in npcs:
 		if npc == null or not is_instance_valid(npc):
 			continue
 		var pid := String(npc.get_profession()) if npc.has_method("get_profession") else ""
 		if pid.is_empty():
-			print("[TownLife]   %s 待业（村庄闲逛）" % npc.name)
+			print_debug("[TownLife]   %s 待业（村庄闲逛）" % npc.name)
 			continue
 		var prof: Dictionary = TownLifeAPI.get_profession(pid)
 		var site_desc: String = "资源点(%s)" % prof.get("product", "?")
@@ -104,7 +104,7 @@ func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable())
 		if not site_def.is_empty():
 			var site: Dictionary = TownLifeAPI.get_work_site(npc, site_def)
 			site_desc = "工位 X=%d" % int((site.get("pos", Vector2()) as Vector2).x) if not site.is_empty() else "无可用工位"
-		print("[TownLife]   %s 职业=%s(%s) %s" % [npc.name, prof.get("name_zh", pid), pid, site_desc])
+		print_debug("[TownLife]   %s 职业=%s(%s) %s" % [npc.name, prof.get("name_zh", pid), pid, site_desc])
 	# 本子阶段收尾上报（此时村民实体+职业分配全部落定）
 	if on_progress.is_valid():
 		on_progress.call(_root.NPC_COUNT, _root.NPC_COUNT)

@@ -405,6 +405,36 @@ L4 攻占北方行省
 
 **信号**：`resource_changed` / `resource_not_enough` / `price_changed`
 
+#### `modules/items/` — 物品域（L1 基础设施）
+
+**职责**：独立于背包与仓储的物品系统——定义/实例/容器/转移的全项目唯一底座。
+
+**核心件**：`ItemDef`（定义：7 大类/堆叠上限/weapon_type 映射/双手标记/stats）·
+`ItemStack`（运行时堆 def_id+count）· `ItemDB`（注册表，内置 GDScript 真相源）·
+`ItemContainer`（**列表制容器：无总数量限制，唯一上限=每类 max_stack**，容器级
+`stack_overrides` 可覆盖单类）· `ItemTransfer`（容器间原子转移 move/move_all）·
+`region_storage.gd`（区域仓储物品视图，资源品 def ↔ resources 台账弱类型桥接）。
+
+**映射**：`ItemsAPI.RESOURCE_BY_ITEM`（物品↔经济资源双语词典）、
+`WEAPON_ITEM_BY_TYPE`（武器类型→def，尸体遗物生成消费）。
+
+**消费者**：inventory（玩家背包/装备/翻包/村仓）、units（尸体遗物、翻包交互）；
+新库存场景（工坊仓库/商店货柜）= ItemContainer 实例零新概念。详见其 README。
+
+#### `modules/inventory/` — 玩家背包与装备（items 域消费者）
+
+**职责**：列表制背包（无总数量限制）+ 5 装备槽 + Hotbar 指派（10 格，仅武器/工具/消耗品）+
+装备→附身实体桥接（weapon_type/盾/护甲聚合/武器 stats 乘子）+ 翻包与村仓 UI。
+
+**核心件**：`PlayerInventory`（纯数据模型：背包+装备+wield+滚轮循环切武器）·
+`InventoryService`（运行时中枢：桥接/消耗品治疗/开局发放/world_state 表存档）·
+UI 四件套：`inventory_screen`（背包·角色合一，StatsScreen 已并入）/
+`hotbar`（三段式，可视 8 格滑动窗口）/ `container_screen`（双栏转移：翻包/村仓共用）/
+`building_menu_screen`（建筑交互菜单，actions 数据驱动预制）。
+
+**交互**：E 背包 / 滚轮切武器（附身态，Shift+滚轮缩放）/ 数字键 1-9/0 /
+F 翻检遗物与建筑菜单。详见其 README 与 [背包与装备系统.md](../docs/设计/系统/背包与装备系统.md)。
+
 ***
 
 ### 3.4 基础设施

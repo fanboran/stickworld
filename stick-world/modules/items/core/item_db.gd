@@ -104,3 +104,14 @@ static func _build_defs() -> void:
 			{"weight": 3}, -1, false, "闪亮的天然金，硬通货。")
 	_def("mat_diamond", "钻石", ItemDef.Category.MATERIAL, 10, "钻石_64.png",
 			{"weight": 1}, -1, false, "稀有晶体，价值连城。")
+	# ── 资源品（与 resources.resource_id 一一映射，见 items/api.gd
+	#    RESOURCE_BY_ITEM——村仓 RegionStorage 桥的双语词典。堆叠上限=玩家
+	#    背包携带口径；村仓大宗仓储经容器 stack_overrides 放大）
+	_def("mat_wood", "木材", ItemDef.Category.MATERIAL, 50, "",
+			{"weight": 2}, -1, false, "建筑与冶炼的基础材料。")
+	_def("mat_iron_ingot", "铁锭", ItemDef.Category.MATERIAL, 30, "",
+			{"weight": 3}, -1, false, "冶炼成型的铁，锻造的原料。")
+	_def("mat_silk", "丝绸", ItemDef.Category.MATERIAL, 20, "",
+			{"weight": 1}, -1, false, "轻软华贵的高档织物。")
+	_def("mat_asphalt", "沥青", ItemDef.Category.MATERIAL, 20, "",
+			{"weight": 4}, -1, false, "黏黑的天然胶脂，铺路密封。")

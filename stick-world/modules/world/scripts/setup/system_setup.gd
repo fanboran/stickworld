@@ -39,7 +39,6 @@ const _L1ThumbnailScript: GDScript = preload("res://modules/world_map/ui/l1_thum
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
 const _InventoryServiceScript: GDScript = preload("res://modules/inventory/scripts/inventory_service.gd")
 const _InventoryScreenScript: GDScript = preload("res://modules/inventory/ui/inventory_screen.gd")
-const _StatsScreenScript: GDScript = preload("res://modules/inventory/ui/stats_screen.gd")
 const _HotbarScript: GDScript = preload("res://modules/inventory/ui/hotbar.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")

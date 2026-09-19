@@ -103,7 +103,7 @@ func fire_arrow_manual(aim_dir: Vector2, power: float) -> Node2D:
 	parent.add_child(arrow)
 	arrow.global_position = from
 	if arrow.has_method("setup"):
-		arrow.call("setup", vel, _mount.damage, owner_entity, null, power, _mount.ARROW_GRAVITY, 0.0, 0.0)
+		arrow.call("setup", vel, _mount.effective_damage(), owner_entity, null, power, _mount.ARROW_GRAVITY, 0.0, 0.0)
 	return arrow
 
 
@@ -133,7 +133,7 @@ func throw_spear_manual(aim_dir: Vector2, power: float) -> void:
 	parent.add_child(spear)
 	spear.global_position = from
 	if spear.has_method("setup"):
-		spear.call("setup", vel, _mount.damage, owner_entity, null, power, SPEAR_GRAVITY, 0.0, 0.0)
+		spear.call("setup", vel, _mount.effective_damage(), owner_entity, null, power, SPEAR_GRAVITY, 0.0, 0.0)
 
 
 ## 玩家指向施法（SWL Magikill 施法的 PC 翻译）：以鼠标落点为心结算——
@@ -185,7 +185,7 @@ func _cast_magic_core(owner_entity: CharacterBody2D, center: Vector2, main_targe
 	if main_target != null and is_instance_valid(main_target):
 		var health: Node = _mount._get_health(main_target)
 		if health != null and not health.is_dead():
-			var p := DamagePipeline.Params.new(_mount.damage, owner_entity)
+			var p := DamagePipeline.Params.new(_mount.effective_damage(), owner_entity)
 			p.direction = (center - owner_entity.global_position).normalized()
 			p.type = DamagePipeline.DAMAGE_TYPE.SPELL
 			p.is_blockable = false
@@ -221,7 +221,7 @@ func _apply_spell_blast_at(owner_entity: CharacterBody2D, center: Vector2, radiu
 			continue
 		if (e as Node2D).global_position.distance_to(center) > radius:
 			continue
-		var ep := DamagePipeline.Params.new(_mount.damage * 0.5, owner_entity)
+		var ep := DamagePipeline.Params.new(_mount.effective_damage() * 0.5, owner_entity)
 		ep.direction = ((e as Node2D).global_position - center).normalized()
 		ep.type = DamagePipeline.DAMAGE_TYPE.SPLASH
 		ep.is_blockable = false
@@ -290,11 +290,11 @@ func fire_arrow(target: Node) -> void:
 	# 传解算飞行时间 t + 瞄准点地面线（Collider 中心下方约半个身位≈地面）——
 	# 箭越过目标后落在目标脚下地面（miss 插进敌阵），不再"低于出射点 500px"插地（9c）
 	if arrow.has_method("setup"):
-		arrow.call("setup", vel, _mount.damage, owner_entity, target, 1.0, _mount.ARROW_GRAVITY, t, aim_point.y + 65.0)
+		arrow.call("setup", vel, _mount.effective_damage(), owner_entity, target, 1.0, _mount.ARROW_GRAVITY, t, aim_point.y + 65.0)
 	# MissingArrowsTolerance 估计口径（11d）：在飞箭矢按满伤害登记到目标头上，
 	# 弓手出手前据此避免对将死目标浪费箭（箭矢终态扣减，见 arrow_projectile）
 	if target != null and is_instance_valid(target) and "incoming_arrow_damage" in target:
-		target.incoming_arrow_damage += _mount.damage
+		target.incoming_arrow_damage += _mount.effective_damage()
 	# 箭矢威胁标记（SWL SpeartonAi.IsAnyArrowThreat 感知源）：出弓瞬间通知目标，
 	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾
 	if target != null and is_instance_valid(target) and "arrow_threat_time" in target:

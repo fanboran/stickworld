@@ -114,6 +114,11 @@ var HITSTOP_DURATION: float = 0.06
 var HITSTOP_MIN_INTERVAL: float = 0.3
 ## 受击击退力度（与伤害正相关）
 var KNOCKBACK_PER_DAMAGE: float = 16.0
+## 装备伤害乘子（InventoryService 按主手武器 def.attack_mult 写入；玩家
+## 附身实体专属——不动基础值，battle_sim 校准锚点零影响，脱离附身复位 1.0）
+var equip_attack_mult: float = 1.0
+## 装备攻速乘子（def.speed_mult；>1 更快——有效冷却除以它；同为玩家附身专属）
+var equip_speed_mult: float = 1.0
 ## 附身近战溅射（SWL Unit 真值 USER_CONTROLLED_SPLASH_* 直译）：玩家附身单位的
 ## 近战挥击扇形额外收 4 个溅射目标、溅射伤害系数 0.2——"一人成军"的爽感来源
 const USER_CONTROLLED_SPLASH_HIT_LIMIT: int = 4
@@ -796,7 +801,7 @@ func _do_strike() -> void:
 	var victims: Array = _collect_strike_targets(owner_entity, target)
 	for i in victims.size():
 		var victim: Node = victims[i]
-		var p := DamagePipeline.Params.new(damage, owner_entity)
+		var p := DamagePipeline.Params.new(effective_damage(), owner_entity)
 		p.direction = (victim.global_position - owner_entity.global_position).normalized()
 		p.type = DamagePipeline.DAMAGE_TYPE.MELEE
 		p.knockback = damage * KNOCKBACK_PER_DAMAGE
@@ -1112,11 +1117,19 @@ func _get_effective_hit_chance() -> float:
 
 ## 根据情绪标签计算实际冷却
 func _get_effective_cooldown() -> float:
+	var base: float = cooldown
 	match _mood:
 		Mood.EXCITED:
-			return cooldown * 0.85
+			base = cooldown * 0.85
 		_:
-			return cooldown * _user_controlled_speed_mult()
+			base = cooldown * _user_controlled_speed_mult()
+	# 装备攻速乘子（speed_mult>1 更快 → 冷却变短；缺省 1.0 零回归）
+	return base / maxf(0.05, equip_speed_mult)
+
+
+## 装备后有效伤害（基础值 × 装备乘子；所有出手结算统一走本出口）
+func effective_damage() -> float:
+	return damage * equip_attack_mult
 
 
 ## 主控攻速倍率（dump Unit 真值 USER_CONTROLLED_ATTACK_SPEED = 1.3：

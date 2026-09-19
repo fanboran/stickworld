@@ -14,9 +14,7 @@ const CAPTION_H: float = 15.0
 ## 动作格图标（图标管线成品，母题中文名）；缺图回退 null 走程序简笔
 const ACTION_ICONS := {
 	"interact": "res://assets/icons/按按钮小手_64.png",
-	"unstuck": "res://assets/icons/传送门_64.png",
 	"inventory": "res://assets/icons/背包_64.png",
-	"stats": "res://assets/icons/火柴人_64.png",
 }
 
 static var _action_tex_cache: Dictionary = {}

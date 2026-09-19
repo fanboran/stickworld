@@ -60,11 +60,9 @@ func try_interact() -> void:
 				_entity.set_player_build_timer(1.8)
 				_play_world_sfx("build_hit")
 		"warehouse":
-			if _entity.is_carrying():
-				# 扔回材料到仓库
-				_entity.set_carrying(false)
-			else:
-				_entity.set_carrying(true)
+			# 建筑交互菜单（预制框架）：建材取放保留 + 村仓（RegionStorage
+			# 物品视图经 ContainerScreen 存取）+ 占位动作
+			_open_building_menu(warehouse, "仓库")
 		"barracks":
 			# 招兵（成败与原因通知由 RecruitManager 内发，交互层零通知职责；
 			# 但**听觉反馈**在这里：花资源招兵是重要动作，成败各给一声）
@@ -75,6 +73,58 @@ func try_interact() -> void:
 				AudioManager.play_event("ui_confirm" if ok else "ui_denied")
 		"resource":
 			_try_harvest_resource_node(target as Node2D)
+		"loot":
+			_open_loot_container(target as Node2D)
+
+
+## 翻包：打开 ContainerScreen 翻检尸体遗物（模态自动暂停；转移原语走
+## items 域 ItemTransfer）。窗口实例经组查找（SystemSetup 装配在 ModalOverlay）。
+func _open_loot_container(corpse: Node2D) -> void:
+	if corpse == null or not corpse.has_meta("loot"):
+		return
+	var loot: ItemContainer = corpse.get_meta("loot")
+	if loot == null or loot.is_empty():
+		return
+	var loop := Engine.get_main_loop() as SceneTree
+	if loop == null or loop.root == null:
+		return
+	var screen: Node = loop.root.find_child("ContainerScreen", true, false)
+	if screen != null and screen.has_method("open_with"):
+		screen.open_with(loot, "翻检遗物")
+
+
+## 建筑交互菜单（预制框架）：actions 数据驱动，后续建筑（工坊/商店）只注册
+## 新 action 零改框架。村仓经 RegionStorage 桥 resources（区域粒度暂全局视图，
+## 地图区域 id 接线后收紧）。
+func _open_building_menu(_building: Node2D, building_name: String) -> void:
+	var loop := Engine.get_main_loop() as SceneTree
+	if loop == null or loop.root == null:
+		return
+	var menu: Node = loop.root.find_child("BuildingMenuScreen", true, false)
+	if menu == null or not menu.has_method("open_with"):
+		return
+	var carrying: bool = _entity.is_carrying()
+	var actions: Array = [
+		{"label": ("放回建材" if carrying else "拿起建材"),
+		 "callback": func() -> void: _entity.set_carrying(not carrying)},
+		{"label": "打开村仓（资源存取）",
+		 "callback": Callable(self, "_open_region_storage")},
+		{"label": "进入内景", "enabled": false},
+	]
+	menu.open_with(building_name, actions)
+
+
+## 打开村仓（RegionStorage 物品视图：资源品 def ↔ resources 台账）
+func _open_region_storage() -> void:
+	var loop := Engine.get_main_loop() as SceneTree
+	if loop == null or loop.root == null:
+		return
+	var screen: Node = loop.root.find_child("ContainerScreen", true, false)
+	if screen == null or not screen.has_method("open_with"):
+		return
+	var api: Node = _get_resources_api()
+	var storage := RegionStorage.new("", api)
+	screen.open_with(storage, "村口仓库")
 
 
 ## 按住 F 的连续交互（采集手感）：动作锁解除后自动续作，由实体物理帧驱动。
@@ -147,6 +197,32 @@ func _find_nearest_resource_node() -> Node2D:
 		if dx + dy < best_dist:
 			best_dist = dx + dy
 			best = rn
+	return best
+
+
+## 附近带遗物的尸体（翻包探测；判定口径与资源点同款矩形，走地图实体表）
+func _find_nearest_lootable_corpse() -> Node2D:
+	var map_ref: Node2D = _entity.get_map_reference() if _entity.has_method("get_map_reference") else null
+	if map_ref == null or not is_instance_valid(map_ref) or not map_ref.has_method("get_entities"):
+		return null
+	var best: Node2D = null
+	var best_dist: float = INF
+	for node in map_ref.get_entities():
+		var c := node as Node2D
+		if c == null or not is_instance_valid(c) or c == _entity:
+			continue
+		if not c.has_meta("loot"):
+			continue
+		var loot: ItemContainer = c.get_meta("loot")
+		if loot == null or loot.is_empty():
+			continue
+		var dx: float = absf(c.global_position.x - _entity.global_position.x)
+		var dy: float = absf(c.global_position.y - _entity.global_position.y)
+		if dx > HARVEST_X_RANGE or dy > HARVEST_Y_RANGE:
+			continue
+		if dx + dy < best_dist:
+			best_dist = dx + dy
+			best = c
 	return best
 
 
@@ -252,6 +328,11 @@ func _find_interact_target() -> Dictionary:
 			var bar_bounds: Dictionary = _get_building_barrier_bounds(barracks)
 			return {"target": barracks, "kind": "barracks", "hint": String(org_api.get_recruit_hint()),
 					"center_x": float(bar_bounds.center), "hint_y": -1.0}
+	# 尸体遗物（翻包，items 域容器交互）：附近有带遗物的尸体优先于资源点
+	var corpse: Node2D = _find_nearest_lootable_corpse()
+	if corpse != null:
+		return {"target": corpse, "kind": "loot", "hint": "按F翻检遗物",
+				"center_x": corpse.global_position.x, "hint_y": corpse.global_position.y - 92.0}
 	# 资源点（采集）
 	var rn: Node2D = _find_nearest_resource_node()
 	if rn != null:

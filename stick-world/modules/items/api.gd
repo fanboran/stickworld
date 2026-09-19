@@ -32,3 +32,14 @@ static func item_id_for(resource_id: StringName) -> StringName:
 		if RESOURCE_BY_ITEM[key] == resource_id:
 			return key
 	return &""
+
+
+## 武器类型 → 玩家可用武器 def（对齐 WeaponMount.WeaponType 枚举序 0-5；
+## MERIC=5 祭司专用不开放装备故无映射。死亡遗物生成/兵种武器物品化消费）
+const WEAPON_ITEM_BY_TYPE: Dictionary = {
+	0: &"wpn_sword_001",
+	1: &"wpn_spear_001",
+	2: &"wpn_bow_001",
+	3: &"wpn_pickaxe_001",
+	4: &"wpn_staff_001",
+}

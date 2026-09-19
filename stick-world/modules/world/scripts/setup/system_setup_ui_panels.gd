@@ -292,3 +292,12 @@ func _setup_inventory() -> void:
 	_host._root._inventory_screen = inv
 	if inv.has_method("setup"):
 		inv.setup(_host._root, service)
+	# 容器交互窗口（翻包/村仓共用双栏转移）+ 建筑交互菜单（预制框架）
+	var container := UIKit.full_rect(_host._ContainerScreenScript, "ContainerScreen")
+	if _host._root.ui_root.add_to_slot("ModalOverlay", container) \
+			and container.has_method("setup"):
+		container.setup(_host._root, service)
+	var bmenu := UIKit.full_rect(_host._BuildingMenuScript, "BuildingMenuScreen")
+	if _host._root.ui_root.add_to_slot("ModalOverlay", bmenu) \
+			and bmenu.has_method("setup"):
+		bmenu.setup(_host._root, service)

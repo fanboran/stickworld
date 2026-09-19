@@ -500,10 +500,16 @@ func _physics_process(delta: float) -> void:
 				if col != null:
 					col.set_deferred("disabled", true)
 		# 尸体淡出（SWL fadeOutOver 语义，2026-09-01 观察场反馈：尸体永存
-		# 堆满战场）——碰撞禁用后停留 CORPSE_LIFETIME，再 CORPSE_FADE 淡入地里移除
+		# 堆满战场）——碰撞禁用后停留 CORPSE_LIFETIME，再 CORPSE_FADE 淡入地里移除；
+		# 有遗物的尸体停留 ×3（12s 翻检窗口，与 _on_died tween 同拍）；翻空的
+		# 尸体快进淡出（遗物被搬走，不再占战场）
 		elif not possessed and _corpse_fade_timer < 0.0:
-			_corpse_fade_timer = CORPSE_LIFETIME
+			_corpse_fade_timer = CORPSE_LIFETIME * (3.0 if has_meta("loot") else 1.0)
 		if not possessed and _corpse_fade_timer >= 0.0:
+			if _corpse_fade_timer > CORPSE_FADE:
+				var loot: ItemContainer = get_loot_container()
+				if loot != null and loot.is_empty():
+					_corpse_fade_timer = CORPSE_FADE  # 翻空快进淡出
 			_corpse_fade_timer -= delta
 			if _corpse_fade_timer <= 0.0:
 				queue_free()
@@ -1088,13 +1094,44 @@ func _on_died() -> void:
 	if _battle_instance != null and is_instance_valid(_battle_instance):
 		if _battle_instance.has_method("on_unit_died"):
 			_battle_instance.on_unit_died(self)
-	# Demo 收敛：尸体滞留 5s 后淡出退场（战场清爽不堆尸；附身实体除外——
+	# 尸体遗物（翻包式掉落，items 域容器）：玩家附身实体不掉（装备属于玩家
+	# 背包）；NPC 按武器/盾生成遗物容器挂 meta("loot")
+	var stay: float = 5.0
+	if not possessed and _generate_loot_container():
+		stay = 12.0  # 有遗物的尸体延长保留（翻检窗口；翻空由物理帧快进淡出）
+	# Demo 收敛：尸体滞留后淡出退场（战场清爽不堆尸；附身实体除外——
 	# 玩家视点所在的身体不做异步自毁）
 	if not possessed:
 		var fade := create_tween()
-		fade.tween_interval(5.0)
+		fade.tween_interval(stay)
 		fade.tween_property(self, "modulate:a", 0.0, 1.4)
 		fade.tween_callback(queue_free)
+
+
+## 死亡遗物生成（weapon_type→def 映射 + 盾 + 随机小额消耗品）。
+## 返回是否生成了非空容器（决定尸体保留时长）。
+func _generate_loot_container() -> bool:
+	var loot := ItemContainer.new()
+	if weapon_mount != null and is_instance_valid(weapon_mount):
+		var wt: int = int(weapon_mount.weapon_type)
+		var wid: StringName = ItemsAPI.WEAPON_ITEM_BY_TYPE.get(wt, &"")
+		if wid != &"":
+			loot.add(wid, 1)
+		# 盾：显式装备盾或矛士兵种默认盾
+		if bool(weapon_mount.equipped_shield) \
+				or (bool(weapon_mount.shield_enabled) and wt == 1):
+			loot.add(&"shd_wood_001", 1)
+	if randf() < 0.3:
+		loot.add(&"con_bandage", 1)
+	if loot.is_empty():
+		return false
+	set_meta("loot", loot)
+	return true
+
+
+## 遗物容器查询（翻包交互/物理帧翻空检测消费）
+func get_loot_container() -> ItemContainer:
+	return get_meta("loot") if has_meta("loot") else null
 
 
 ## 受击处理（反编译参考实装 B）：按攻击者方位 vs 自身朝向判定正面/背面，

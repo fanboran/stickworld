@@ -31,12 +31,42 @@ var _previous_speed: int = TimeManager.Speed.X1
 var _slowed_time: bool = false
 ## 待附身实体（由外部在模式切换前设置，解决 SelectionSystem 清空选择的问题）
 var _pending_entity: Node2D = null
+## 箭矢镜头（SWL ArrowCam）：放箭后镜头短暂跟随箭矢飞行，终态切回玩家实体。
+## 默认关（game/arrow_cam 配置）。
+var _arrow_cam_enabled: bool = false
+## 箭矢镜头当前跟随的箭（WeakRef；箭 free 后自动失效）
+var _arrow_cam_arrow: WeakRef = null
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
-	pass
+	if ConfigManager and ConfigManager.has_key("game/arrow_cam"):
+		_arrow_cam_enabled = bool(ConfigManager.get_value("game/arrow_cam"))
+
+
+func _process(_delta: float) -> void:
+	# 箭矢镜头恢复轮询：箭已 free（WeakRef 失效）或已终态（插地/命中 _stuck）
+	# 时把镜头切回玩家实体
+	if _arrow_cam_arrow == null:
+		return
+	var arrow = _arrow_cam_arrow.get_ref()
+	var spent: bool = arrow == null \
+			or (arrow.get("_stuck") != null and bool(arrow.get("_stuck")))
+	if spent:
+		_arrow_cam_arrow = null
+		if _camera_rig != null and _possessed_entity != null \
+				and is_instance_valid(_possessed_entity):
+			_camera_rig.set_follow_target(_possessed_entity)
+
+
+## 玩家放箭通知（箭矢镜头入口；entity_possession 松手放箭后转交）：
+## 开启时镜头跟随箭矢飞行，箭终态由 _process 切回实体。
+func on_player_arrow_launched(arrow: Node2D) -> void:
+	if not _arrow_cam_enabled or _camera_rig == null or arrow == null:
+		return
+	_arrow_cam_arrow = weakref(arrow)
+	_camera_rig.set_follow_target(arrow)
 
 
 ## 装配注入（SystemSetup 调用）：替代父链遍历反查 game_root（2026-08 收敛）
@@ -53,8 +83,8 @@ func setup(game_root: Node) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# ESC 退出附身
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+	# ESC 退出附身（键位走 InputMap action：possess_escape）
+	if event.is_action_pressed("possess_escape"):
 		if _input_dispatcher != null and _input_dispatcher.has_method("is_mode") and _input_dispatcher.is_mode(PlayerControlAPI.Mode.POSSESS):
 			_release_and_exit()
 			get_viewport().set_input_as_handled()

@@ -49,6 +49,8 @@ const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/e
 const _InteractionControllerScript: GDScript = preload("res://modules/units/scripts/entity/interaction_controller.gd")
 ## 头顶血条组件脚本（受击后显示 HP，满血隐藏）
 const _HealthBarScript: GDScript = preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
+## 蓄力轨迹预览组件脚本（拉弓/投矛抛物线预测点、杖落点 AOE 圈）
+const _AimPreviewScript: GDScript = preload("res://modules/units/scripts/entity/aim_trajectory_preview.gd")
 ## 运动助手脚本（移动/分离/加减速，方法体所在）
 const _MotionScript: GDScript = preload("res://modules/units/scripts/entity/entity_motion.gd")
 ## 附身输入助手脚本（玩家控制，方法体所在）
@@ -266,6 +268,8 @@ var _interaction: Node = null
 var _motion: RefCounted = null
 ## 附身输入助手（玩家控制方法体所在）
 var _possession: RefCounted = null
+## 蓄力轨迹预览（拉弓/投矛期间的抛物线预测点；_ready 装配，隐藏待命）
+var _aim_preview: Node2D = null
 ## 缩放/骨架同步助手（渲染判定缩放/markers 同步方法体所在）
 var _scale_rig: RefCounted = null
 
@@ -288,34 +292,41 @@ func _enter_tree() -> void:
 
 
 ## 玩家按 Alt 切换散步/奔跑模式（仅附身时生效）
-## 鼠标左键攻击（仅附身时生效，§7.5）
+## 鼠标左键攻击（仅附身时生效，§7.5；按下/松开两态走蓄力状态机）
 ## Q 键切换建造/战斗模式（仅附身时生效）
+## 键位走 InputMap action（project.godot [input] possess_* 段，09 文档 §三）
 func _input(event: InputEvent) -> void:
 	if not possessed:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ALT:
+	if event.is_action_pressed("possess_walk_toggle"):
 		_walk_only = not _walk_only
 		if _walk_only and _is_running:
 			_is_running = false
 			_current_speed = WALK_SPEED
 			_visual.play("walk")
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_Q:
+	elif event.is_action_pressed("possess_mode"):
 		_toggle_combat_mode()
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		# 玩家点击：挥砍攻击（仅当鼠标不在 UI 控件上——编制按钮/建造菜单等优先）
+	elif event.is_action_pressed("possess_attack"):
+		# 玩家按下：按武器分流（弓/矛/杖蓄力，近战直接攻击）——仅当鼠标不在
+		# UI 控件上（编制按钮/建造菜单等优先）
 		if _possession._is_mouse_over_ui():
 			return
-		_player_attack()
+		_possession._player_attack_press()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
-		# 副手盾：按住右键举盾、松开放下（UI 上按下不触发；松开总生效）
-		if event.pressed and _possession._is_mouse_over_ui():
-			return
-		_possession._set_player_blocking(event.pressed)
-		if event.pressed:
+	elif event.is_action_released("possess_attack"):
+		# 玩家松开：蓄力收口（放箭/投矛/施法；非蓄力态静默）
+		_possession._player_attack_release()
+		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_G:
+	elif event.is_action("possess_block"):
+		# 副手盾：按住右键举盾、松开放下（UI 上按下不触发；松开总生效）
+		if event.is_action_pressed("possess_block") and _possession._is_mouse_over_ui():
+			return
+		_possession._set_player_blocking(event.is_action_pressed("possess_block"))
+		if event.is_action_pressed("possess_block"):
+			get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("possess_swing"):
 		# 空挥（复刻原版 User Control）：无目标也出攻击动作，纯动作无伤害
 		_possession._player_swing()
 		if get_viewport() != null:
@@ -466,6 +477,12 @@ func _mount_components() -> void:
 	if _health_bar.has_method("setup"):
 		_health_bar.setup(get_node_or_null("HealthComponent"))
 
+	# 蓄力轨迹预览（拉弓/投矛抛物线点列、杖落点 AOE 圈；默认隐藏待命）
+	_aim_preview = Node2D.new()
+	_aim_preview.set_script(_AimPreviewScript)
+	_aim_preview.name = "AimTrajectoryPreview"
+	add_child(_aim_preview)
+
 
 func _physics_process(delta: float) -> void:
 	# 死亡收口（2026-08-31 审计 P0-1）：尸体没有物理帧——不跑 AI、不减速回切
@@ -515,6 +532,7 @@ func _physics_process(delta: float) -> void:
 	# 仅在被附身时处理玩家输入
 	if possessed:
 		_possession._handle_player_input(delta)
+		_possess_regen(delta)
 	else:
 		# AI 控制：先让 AIController 决策（设置 _ai_move_dir），再处理移动。
 		# 战斗性能优化：AI 决策与行为状态机降到 30Hz（隔物理帧、传倍增 delta
@@ -608,13 +626,13 @@ func _physics_process(delta: float) -> void:
 # ─────────────────────────────── 玩家输入（按F / H 由交互控制器处理）────────────────────────────────
 
 ## 玩家附身时按F：交互（取放材料 / 敲击建造，实现见 InteractionController）。
-## 按H：脱离卡死。
+## 按H：脱离卡死。键位走 InputMap action（possess_interact / possess_unstuck）。
 func _unhandled_input(event: InputEvent) -> void:
 	if not possessed:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
+	if event.is_action_pressed("possess_interact"):
 		_interaction.try_interact()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_H:
+	elif event.is_action_pressed("possess_unstuck"):
 		escape_stuck()
 
 
@@ -731,6 +749,58 @@ func _player_attack() -> void:
 ## 找最近敌人在武器射程内（方法体在 entity_possession.gd；test_possession.gd 守卫调用）。
 func _find_nearest_enemy_in_range() -> Node:
 	return _possession._find_nearest_enemy_in_range()
+
+
+## 玩家蓄力瞄准中查询（方法体在 entity_possession.gd；hitstop 互斥/轨迹预览消费）。
+func is_aim_charging() -> bool:
+	return _possession.is_aim_charging()
+
+
+## 蓄力轨迹预览刷新（方法体在 entity_possession.gd 每帧调用；按武器分流：
+## 弓/矛=抛物线预测点列，杖=鼠标落点 AOE 圈）。
+func update_charge_preview(origin: Vector2, velocity: Vector2) -> void:
+	if _aim_preview == null or not is_instance_valid(_aim_preview):
+		return
+	var wt: int = -1
+	if weapon_mount != null and "weapon_type" in weapon_mount:
+		wt = int(weapon_mount.weapon_type)
+	if wt == 4:
+		if weapon_mount.has_method("get_spell_aoe_radius"):
+			_aim_preview.set_spell_aoe(get_global_mouse_position(),
+					weapon_mount.get_spell_aoe_radius())
+	elif wt == 2 or wt == 1:
+		var g: float = weapon_mount.get_charge_gravity() if weapon_mount.has_method("get_charge_gravity") else 2000.0
+		_aim_preview.set_trajectory(origin, velocity, g)
+
+
+## 隐藏蓄力预览（松手出手/取消附身路径统一收口）
+func hide_charge_preview() -> void:
+	if _aim_preview != null and is_instance_valid(_aim_preview):
+		_aim_preview.set_trajectory_active(false)
+
+
+# ─────────────────────────────── 附身增益（SWL Unit 真值）────────────────────────────────
+## 附身回血速率（HP/s；SWL 字段名真值 healthRegenPerSecondWhenUserControlled，
+## 数值无 dump 真值为语义推断，待实测校准）
+const POSSESS_REGEN_PER_SECOND: float = 0.5
+## 回血小数累积器（heal 整数 HP 一口，避免高频小数 heal 信号刷屏）
+var _possess_regen_accum: float = 0.0
+
+
+## 附身期间缓慢回血（玩家附身的单位自带恢复——鼓励亲自下场）。
+## 满血/死亡不结算；每累积满 1 HP 调一次 HealthComponent.heal。
+func _possess_regen(delta: float) -> void:
+	var health: Node = get_node_or_null("HealthComponent")
+	if health == null or not is_instance_valid(health):
+		return
+	if health.is_dead() or health.hp >= health.max_hp:
+		_possess_regen_accum = 0.0
+		return
+	_possess_regen_accum += delta * POSSESS_REGEN_PER_SECOND
+	if _possess_regen_accum >= 1.0:
+		var whole: int = int(_possess_regen_accum)
+		_possess_regen_accum -= float(whole)
+		health.heal(float(whole))
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -871,6 +941,9 @@ func _on_possession_changed(p: bool) -> void:
 		_current_speed = 0.0
 		_is_running = false
 		velocity = Vector2.ZERO
+		# 退出附身强制收口蓄力态（清瞄准慢放，防 Engine.time_scale 卡在 0.5）
+		_possession.cancel_charge()
+		hide_charge_preview()
 	# 取消附身时也清除 AI 移动方向，避免残留
 	_ai_move_dir = Vector2.ZERO
 	_ai_running = false

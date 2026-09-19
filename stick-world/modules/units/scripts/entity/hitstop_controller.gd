@@ -12,11 +12,15 @@ var _last_hitstop_ms: int = -999000
 
 ## 尝试触发顿帧：headless 短路；仅附身单位命中触发；min_interval 节流。
 ## 恢复定时器 ignore_time_scale=true，不受冻结影响。
+## 与瞄准慢放互斥：蓄力瞄准中（拉弓/投矛/施法按住）不触发顿帧——
+## 顿帧恢复 timer 会把 time_scale 拉回 1.0，打断瞄准慢放档。
 func try_trigger(owner_entity: CharacterBody2D, tree: SceneTree,
 		time_scale: float, duration: float, min_interval: float) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	if owner_entity == null or not owner_entity.is_possessed():
+		return
+	if owner_entity.has_method("is_aim_charging") and owner_entity.is_aim_charging():
 		return
 	var now_ms: int = Time.get_ticks_msec()
 	if now_ms - _last_hitstop_ms < int(min_interval * 1000.0):
@@ -25,5 +29,11 @@ func try_trigger(owner_entity: CharacterBody2D, tree: SceneTree,
 	Engine.time_scale = time_scale
 	if tree != null:
 		tree.create_timer(duration, true, false, true).timeout.connect(func():
+			# 恢复时刻若玩家已进入蓄力瞄准（顿帧期间开始拉弓），保持慢放档
+			# 不覆盖——慢放的退出由松手/取消路径统一恢复 1.0
+			if owner_entity != null and is_instance_valid(owner_entity) \
+					and owner_entity.has_method("is_aim_charging") \
+					and owner_entity.is_aim_charging():
+				return
 			Engine.time_scale = 1.0
 		)

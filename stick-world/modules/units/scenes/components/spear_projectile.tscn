@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3]
+
+; 矛投射物（玩家蓄力投掷，SWL Spearton.ThrowSpear/SpawnSpear 语义）——
+; 复用 arrow_projectile.gd 抛物线积分/命中/插地链路，贴图换 spear.png。
+; spear.png 竖直尖朝上（与 weapon_spear.tscn 同源图），Sprite 预转 +90°
+; 使矛尖朝右；根节点 rotation 由脚本跟弹道速度角，叠加后矛尖恒指飞行方向。
+[ext_resource type="Script" path="res://modules/units/scripts/weapons/arrow_projectile.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/spear.png" id="2_tex"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_spear"]
+size = Vector2(60, 4)
+
+[node name="SpearProjectile" type="Area2D"]
+collision_layer = 8
+collision_mask = 2
+script = ExtResource("1_script")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+rotation = 1.5708
+scale = Vector2(0.3, 0.3)
+texture = ExtResource("2_tex")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_spear")

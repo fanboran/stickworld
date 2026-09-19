@@ -5,6 +5,7 @@
 > - **Sketch 手绘皮肤体系**：SketchButton 变体表驱动 + StickTheme 全局主题 + StickTokens 设计 Token，主菜单与游戏内同一皮肤
 > - **通用 HUD 部件**：Minimap / ZoomBar / ClockWidget / ResourceBar / NotificationFeed 等
 > - **模板层**（`scenes/templates/`）：各界面骨架的可运行陈列，F6 逐个验收
+> - **键鼠说明组件**（`scripts/keymap/`）：键盘/鼠标按键功能可视化图（设置「控制」分类），数据源 = 按键注册表（`data/keymap/key_bindings.json`，改按键须同步该表）
 >
 > 架构口径（三层 UI 分层 / 布局铁律 / 槽位路由）见 [docs/技术/架构/场景与战斗/UI.md](../../../docs/技术/架构/场景与战斗/UI.md)；业务面板由 `SystemSetup`（modules/world 装配器）挂进本层容器，模块代码不跨模块 `get_node`。
 
@@ -46,6 +47,12 @@ modules/ui_global/
 │   │   ├── sketch_fonts.gd             #   SketchFonts：StickHand 程序化手写字体加载（缺失回退引擎默认）
 │   │   ├── sketch_icons.gd             #   SketchIcons：原生控件主题兜底图标（SDF 定型扰动）
 │   │   └── sketch_cloud.gd             #   SketchCloud：大世界手绘云（世界级元素，非 UI 控件）
+│   ├── keymap/                        # 键鼠说明组件（键盘/鼠标按键功能可视化，设置「控制」分类在用）
+│   │   ├── keymap_view.gd             #   KeymapView：组合视图（域过滤条 + 键盘图 + 鼠标图/域图例）
+│   │   ├── sketch_keyboard.gd         #   SketchKeyboard：ANSI 104 键盘自绘（注册表标注 + 悬停说明卡 + 按下实时点亮）
+│   │   ├── sketch_mouse.gd            #   SketchMouse：鼠标自绘（左右键/滚轮/侧键区域标注与点亮）
+│   │   ├── keymap_layout.gd           #   KeymapLayout：键盘布局装载器（data/keymap/keyboard_layouts.json，unit 宽度行式布局）
+│   │   └── key_binding_registry.gd    #   KeyBindingRegistry：按键注册表装载与索引（键→功能标注反查/域过滤/同域冲突检测）
 │   ├── hud/                            # 常驻 HUD 部件（只声明体量，定位归 zone 表）
 │   │   ├── global_hud.gd               #   GlobalHUD：顶栏通栏（功能入口按钮群 + 资源条 host），setup 注入 CameraRig/GameRoot
 │   │   ├── clock_widget.gd             #   ClockWidget：24h 表盘 + 下半圆 P 社式速度弧（点击弧段调速）

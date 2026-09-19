@@ -136,6 +136,9 @@ func _rebuild_content() -> void:
 		_add_stuck_button()
 	for field in cat["fields"]:
 		_add_field_row(field)
+	# 控制分类：键鼠说明图（键盘/鼠标布局 + 按键注册表标注 + 按下实时点亮）
+	if _active_category == "control":
+		_add_keymap_view()
 	# 调试分类：调试构建 + 游戏内时追加测试地图入口
 	if _active_category == "debug" and OS.is_debug_build() and _game_root != null:
 		_add_section_title("测试地图")
@@ -207,6 +210,14 @@ func _on_stuck_pressed() -> void:
 	e.escape_stuck()
 	StickKit.toast(self, "已传送至附近空旷地带", "info")
 	close()
+
+
+## 键鼠说明图（设置·控制分类）：KeymapView 组合视图，数据源 = 按键注册表
+## （key_bindings.json），与代码内硬编码按键的同步纪律见 KeyBindingRegistry 头注。
+func _add_keymap_view() -> void:
+	var view := KeymapView.new()
+	view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content_vbox.add_child(view)
 
 
 ## 设置项字段行（slider / option / toggle），值变化经 _on_field_changed 分流：

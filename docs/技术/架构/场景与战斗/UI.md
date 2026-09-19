@@ -123,7 +123,8 @@ modules/<模块>/ui/           # 模块专属 UI（各模块自包含）
   （`ProgressPainter` 世界空间进度条 `_draw` 公共基类，建筑双进度条/火柴人动作条共用）。
 - **L1 = `modules/ui_global/`**：视觉实现层——sketch 手绘控件族、主题资产
   （StickTheme/StickStyle/SketchStyle/StickTokens/StickIcons）、StickScreen/StickWindow
-  屏幕与窗口体系、StickKit 装配器、ZoomSlider 公共缩放条机件。
+  屏幕与窗口体系、StickKit 装配器、ZoomSlider 公共缩放条机件、keymap 键鼠说明组件族
+  （KeymapView/SketchKeyboard/SketchMouse + 按键注册表，数据 `data/keymap/`）。
 - 依赖方向只允许 L1 → L0（ui_global/world_map/units/construction 等 → core 合法，
   core 不 import 任何模块）；跨模块组件引用走 class_name，不加 preload。
 - 主题不进 core（贴图/Token 是视觉资产，属 L1）；core 不另抽 Screen 基类

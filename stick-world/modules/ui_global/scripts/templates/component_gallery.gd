@@ -12,7 +12,7 @@ const INDEX_SCENE := "res://modules/ui_global/scenes/templates/template_index.ts
 
 ## 分组清单（构建函数 _build_<id>）
 const SECTIONS: Array[String] = [
-	"buttons", "labels", "inputs", "tabs", "sliders", "lists", "feedback",
+	"buttons", "labels", "inputs", "tabs", "sliders", "lists", "feedback", "keymap",
 ]
 
 @onready var _content: VBoxContainer = $Window/MainVBox/Scroll/ContentVBox
@@ -184,6 +184,15 @@ func _build_feedback() -> void:
 		StickKit.confirm(self, "拆除建筑", "拆除后将返还 50% 材料，确定拆除「草棚」吗？",
 				func(): StickKit.toast(self, "已拆除（演示）", "info"), "拆除", StickKit.ButtonKind.DANGER)
 	, StickKit.ButtonKind.ACCENT)
+
+
+# ─────────────────────────────── 键鼠说明图 ────────────────────────────────
+
+func _build_keymap() -> void:
+	var sec := StickKit.section(_content, "键鼠说明 / KEYMAP")
+	var view := KeymapView.new()
+	view.custom_minimum_size = Vector2(0.0, 430.0)
+	sec.add_child(view)
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────

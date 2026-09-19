@@ -1040,6 +1040,30 @@ func get_map_reference() -> Node2D:
 	return _map_ref
 
 
+## 个体装备记录（loadout 奠基，设计文档 10 §3.4）：{main_hand/off_hand/armor_*
+## -> def_id}。spawn/读档回填时经 set_loadout 应用（main_hand 覆盖兵种默认
+## weapon_type——玩家全能换装的同一单点驱动）；死亡遗物按当前 weapon_type
+## 反查生成（_generate_loot_container）。个体背包/给 NPC 发装备→E-4 经济闭环。
+var _loadout: Dictionary = {}
+
+
+## 应用个体装备记录：main_hand 有值且是玩家可用武器 def 时覆盖 weapon_type
+func set_loadout(d: Dictionary) -> void:
+	_loadout = d
+	var main_id: StringName = StringName(String(d.get("main_hand", "")))
+	if main_id == &"":
+		return
+	for wt in ItemsAPI.WEAPON_ITEM_BY_TYPE:
+		if ItemsAPI.WEAPON_ITEM_BY_TYPE[wt] == main_id:
+			if weapon_mount != null and is_instance_valid(weapon_mount):
+				weapon_mount.weapon_type = int(wt)
+			return
+
+
+func get_loadout() -> Dictionary:
+	return _loadout
+
+
 ## 写入职业 id（initial_content spawn 时经 TownLifeAPI 分配；弱类型协议，
 ## 契约见 modules/town_life/api.gd）。空串 = 待业——批次 4 征兵离岗走此通道。
 func set_profession(id: String) -> void:

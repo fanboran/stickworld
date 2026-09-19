@@ -135,6 +135,9 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 		var ai: Node = entity.get_ai_controller() if entity.has_method("get_ai_controller") else null
 		if ai != null and is_instance_valid(ai) and ai.has_method("export_timing_state"):
 			extra["ai_timing"] = ai.export_timing_state()
+		# 个体装备记录（loadout 奠基）：随档往返（读档经 set_loadout 应用主手）
+		if entity.has_method("get_loadout") and not entity.get_loadout().is_empty():
+			extra["loadout"] = entity.get_loadout()
 		rows.append({
 			"slot_id": slot_id, "map_id": map_id,
 			"entity_id": "ent_%04d" % idx,
@@ -307,6 +310,11 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> void:
 			var ai: Node = entity.get_ai_controller() if entity.has_method("get_ai_controller") else null
 			if ai != null and is_instance_valid(ai) and ai.has_method("import_timing_state"):
 				ai.import_timing_state(timing)
+		# 个体装备记录回填（loadout）：main_hand 覆盖兵种默认武器。老档无字段
+		# → 保持 spawn 默认，不报错
+		var loadout: Variant = _parse_extra_field(row, "loadout")
+		if loadout is Dictionary and entity.has_method("set_loadout"):
+			entity.set_loadout(loadout)
 		# town_life 回填（职业/村民身份随档）：读档后村民才能继续劳作——
 		# 职业回填后重挂装具（工具不入档，按 id 重新应用）。老档无字段 →
 		# 保持默认（无职业/非村民），不报错；配置已删改的职业 id 回待业池。

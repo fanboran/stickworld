@@ -51,6 +51,7 @@ static func stickman_to_dict(s: StickmanState) -> Dictionary:
 		"defense": s.defense,
 		"speed": s.speed,
 		"equipment": s.equipment.duplicate(),
+		"loadout": s.loadout.duplicate(),
 		"skills": s.skills.duplicate(),
 		"traits": s.traits.duplicate(),
 		"current_task": s.current_task,

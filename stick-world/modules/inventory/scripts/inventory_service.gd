@@ -12,6 +12,10 @@ extends Node
 ##      game_saving/game_loaded 信号直写——WorldState 同款契约）
 ## SystemSetup 装配后挂 GameRoot 下。
 
+## 徒手武器类型（对齐 WeaponMount.WeaponType.NONE=6；本地常量防跨模块
+## class_name 依赖成环——units 侧经 RegionStorage 依赖本模块的物品域）
+const WEAPON_TYPE_NONE: int = 6
+
 ## 开局装备（发放后自动穿上）
 const STARTER_EQUIP: Array[StringName] = [
 	&"wpn_sword_001", &"shd_wood_001",
@@ -128,7 +132,7 @@ func _apply_equipment_to_entity() -> void:
 			if "equip_speed_mult" in wm:
 				wm.equip_speed_mult = maxf(0.05, wdef.stat("speed_mult", 1.0))
 		else:
-			wm.weapon_type = WeaponMount.WeaponType.NONE
+			wm.weapon_type = WEAPON_TYPE_NONE
 			if "equip_attack_mult" in wm:
 				wm.equip_attack_mult = 1.0
 			if "equip_speed_mult" in wm:

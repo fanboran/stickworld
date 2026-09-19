@@ -35,7 +35,8 @@
 | `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
 | `debug_gui`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
 | `fx`                   | 战斗特效（粒子池 FxPool + FxLibrary 效果配置：血溅/火花/飘字等） | ✅ 在役     |
-| `inventory`            | 玩家专属物品栏（Hotbar 快捷栏/背包/统计屏，经 InventoryService） | ✅ 在役     |
+| `items`                | 物品域 L1（ItemDef/ItemContainer 列表制/ItemTransfer/资源品映射，独立于背包与仓储） | ✅ 在役     |
+| `inventory`            | 玩家背包与装备（列表制背包/装备槽/Hotbar 指派/合一窗口/翻包与村仓 UI，经 InventoryService） | ✅ 在役     |
 | `expansion`            | 出征与领地（TerritoryRegistry/GarrisonSpawner/ConquestManager） | ✅ P0 在役（C1~C7） |
 | `town_life`            | NPC 小镇生活（职业分工/劳作/经济自动产出端）   | ✅ 在役     |
 
@@ -50,7 +51,7 @@
 
 ```
                               ┌────────────────────────────────┐
-                              │  world（装配根，GameRoot）      │ ← 依赖全部 16 个模块
+                              │  world（装配根，GameRoot）      │ ← 依赖全部 17 个模块
                               └────────────────────────────────┘
    ┌────────────┬─────────────┼─────────────┬──────────────┐
    ▼            ▼             ▼             ▼              ▼
@@ -65,26 +66,26 @@
      │           │      └─────────────────────┘        │
      ▼           ▼                                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  基础设施：ui_global→fx ｜ player_control→ui_global          │
+│  基础设施：items（零出向）｜ ui_global→fx ｜ player_control→ui_global │
 │   construction→{building_gen, player_control, ui_global}    │
 │   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
 │   hd2d→{environment, ui_global, units}                      │
 └─────────────────────────────────────────────────────────────┘
-   （fx / environment / resources 无出向依赖）
+   （items / fx / environment / resources 无出向依赖）
 ```
 
 **实测边表**（`python tools/audit_deps.py`，直接依赖）：
 
 | 模块 | 依赖（出向） |
 |------|------------|
-| `world` | 全部 16 模块（building_gen/combat/construction/debug_gui/environment/expansion/fx/hd2d/inventory/organization/player_control/resources/town_life/ui_global/units/world_map） |
+| `world` | 全部 17 模块（building_gen/combat/construction/debug_gui/environment/expansion/fx/hd2d/inventory/items/organization/player_control/resources/town_life/ui_global/units/world_map） |
 | `world_map` | ui_global, world |
 | `organization` | building_gen, ui_global, units, world |
 | `expansion` | units, world |
 | `combat` | fx, player_control, ui_global, units |
-| `units` | combat, fx, player_control, town_life |
+| `units` | combat, fx, items, player_control, town_life |
 | `town_life` | units |
-| `inventory` | ui_global, units |
+| `inventory` | items, ui_global, units |
 | `construction` | building_gen, player_control, ui_global |
 | `player_control` | ui_global |
 | `debug_gui` | fx, ui_global |
@@ -92,7 +93,7 @@
 | `building_gen` | texture_gen |
 | `ui_global` | fx |
 | `hd2d` | environment, ui_global, units |
-| `fx` / `environment` / `resources` | （无） |
+| `items` / `fx` / `environment` / `resources` | （无） |
 
 **关键路径**：
 

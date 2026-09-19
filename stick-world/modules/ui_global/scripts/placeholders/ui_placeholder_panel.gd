@@ -136,7 +136,7 @@ func _node_card(text: String) -> PanelContainer:
 ## ESC 关闭。在模态栈中时让位给 GameRoot._handle_escape 统一退栈（不自行消费）；
 ## 无栈环境（模板预览场景）自关。
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+	if event is InputEventKey and event.pressed and not event.is_echo() and event.keycode == KEY_ESCAPE:
 		var stack := UIModalStack.find(self)
 		if stack != null and stack.get_entry(UIModalStack.Layer.EMPIRE_PANEL) == self:
 			return

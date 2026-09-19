@@ -87,6 +87,6 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
+	if event.is_action_pressed("common/toggle_world_map"):
 		open_world_map_requested.emit(false)
 		get_viewport().set_input_as_handled()

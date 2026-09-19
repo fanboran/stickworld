@@ -97,21 +97,20 @@ func _input(event: InputEvent) -> void:
 	# 滚轮缩放（连续，不触发粒度切换）
 	if zoom_enabled and event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+		if event.is_action_pressed("strategy/zoom_in"):
 			_zoom_at_point(mb.position, zoom_step)
-		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		elif event.is_action_pressed("strategy/zoom_out"):
 			_zoom_at_point(mb.position, -zoom_step)
 
 	# 中键拖拽
 	if drag_enabled and event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_MIDDLE:
-			if mb.pressed:
-				_is_dragging = true
-				_drag_start = mb.position
-				_drag_offset_start = _offset
-			else:
-				_is_dragging = false
+		if event.is_action_pressed("strategy/pan"):
+			_is_dragging = true
+			_drag_start = mb.position
+			_drag_offset_start = _offset
+		elif event.is_action_released("strategy/pan"):
+			_is_dragging = false
 
 	if drag_enabled and event is InputEventMouseMotion and _is_dragging:
 		var mm: InputEventMouseMotion = event as InputEventMouseMotion

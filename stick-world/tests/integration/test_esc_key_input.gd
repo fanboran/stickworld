@@ -35,10 +35,13 @@ func _run_tests_async() -> void:
 	get_tree().quit(exit_code)
 
 
-## 向根 Viewport 注入真实按键（走 GUI → _input → _unhandled_input 完整管线）
+## 向根 Viewport 注入真实按键（走 GUI → _input → _unhandled_input 完整管线）。
+## keycode 与 physical_keycode 双填（OS 真实输入两字段都有；玩法键是
+## InputBindings 的 physical 绑定，只填 keycode 不命中 is_action）。
 func _send_key(code: Key) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = code
+	ev.physical_keycode = code
 	ev.pressed = true
 	get_viewport().push_input(ev)
 

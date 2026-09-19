@@ -34,10 +34,16 @@ func _ready() -> void:
 	title.add_theme_color_override("font_color", Color(1.0, 0.84, 0.45))
 	box.add_child(title)
 
+	# 按键字母接按键注册表（input_actions.json 单一真相源），构建时求值一次
+	var key_interact := KeyBindingRegistry.action_key_hint("possess/interact")
+	var key_inventory := KeyBindingRegistry.action_key_hint("world/open_inventory")
+	var key_combat := KeyBindingRegistry.action_key_hint("possess/toggle_combat")
+	var key_world_map := KeyBindingRegistry.action_key_hint("common/toggle_world_map")
+	var key_pause := KeyBindingRegistry.action_key_hint("common/toggle_pause")
 	for line: String in [
-		"WASD 移动　·　F 采集 / 交互（可按住连采）　·　E 背包",
-		"Q 建造/战斗模式（左键攻击 / 框选）　·　1-4 快捷栏物品",
-		"Tab 战略图　·　空格 暂停/继续",
+		"WASD 移动　·　%s 采集 / 交互（可按住连采）　·　%s 背包" % [key_interact, key_inventory],
+		"%s 建造/战斗模式（左键攻击 / 框选）　·　1-4 快捷栏物品" % key_combat,
+		"%s 战略图　·　%s 暂停/继续" % [key_world_map, key_pause],
 		"跟随右上角「阶段目标」推进游戏",
 	]:
 		var l := Label.new()

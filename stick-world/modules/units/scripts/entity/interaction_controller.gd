@@ -80,7 +80,7 @@ func try_interact() -> void:
 ## 按住 F 的连续交互（采集手感）：动作锁解除后自动续作，由实体物理帧驱动。
 ## 单次按下仍走 try_interact（_unhandled_input），本方法只负责"按住"的续采。
 func try_hold_interact() -> void:
-	if not Input.is_key_pressed(KEY_F):
+	if not Input.is_action_pressed("possess/interact"):
 		return
 	# 敲击动作锁期间不重复触发（1.8s 一拍，与单次交互同节奏）
 	if float(_entity.get("_player_build_timer")) > 0.0:

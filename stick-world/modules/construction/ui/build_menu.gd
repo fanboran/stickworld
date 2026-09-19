@@ -512,7 +512,7 @@ func _input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			_cancel_placing()
 			get_viewport().set_input_as_handled()
-	elif event is InputEventKey and event.pressed:
+	elif event is InputEventKey and event.pressed and not event.is_echo():
 		if event.keycode == KEY_ESCAPE:
 			_cancel_placing()
 			get_viewport().set_input_as_handled()

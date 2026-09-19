@@ -70,14 +70,14 @@ func _process(_delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# F3 切换调试覆盖层（is_echo 过滤按住连发，防反复开关）
-	if event is InputEventKey and event.pressed and not event.is_echo() and event.keycode == KEY_F3:
+	# F3 切换调试覆盖层（is_action_pressed 默认过滤键盘重复，按住不连发）
+	if event.is_action_pressed("debug/toggle_overlay"):
 		if DebugApi != null:
 			DebugApi.toggle_visibility()
 		get_viewport().set_input_as_handled()
 		return
 	# F9 热重载平衡数值（BalanceConfig 重扫 res://config/**/*.tres，toast 反馈）
-	if event is InputEventKey and event.pressed and not event.is_echo() and event.keycode == KEY_F9:
+	if event.is_action_pressed("debug/hot_reload"):
 		if BalanceConfig != null and BalanceConfig.has_method("reload"):
 			BalanceConfig.reload()
 			EventBus.ui_notification.emit(

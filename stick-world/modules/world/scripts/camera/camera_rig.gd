@@ -170,55 +170,54 @@ func _unhandled_input(event: InputEvent) -> void:
 	# 防止鼠标在模态面板上时事件穿透到世界（UI 遮罩只挡下层派发，不拦 _unhandled_input）
 	if TimeManager and TimeManager.is_paused():
 		return
-	# 拖动开始/结束
+	# 拖动开始/结束（键判定走 InputBindings 动作表）
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				_dragging = true
-				_manual_active = true
-				_manual_cooldown = 0.0
-				_returning = false
-				_drag_start_mouse = event.position
-				_drag_start_cam = global_position
-			else:
-				if _dragging:
-					_dragging = false
-					if centered_mode:
-						# 居中模式：松手立即进入弹回过渡（平滑缓动，非硬切）
-						_manual_active = false
-						_manual_cooldown = 0.0
-						_returning = true
-						_return_elapsed = 0.0
-					elif _edge_scroll_dir != 0:
-						# 边缘滚动持续中：保持 manual，不计时
-						_manual_cooldown = 0.0
-					else:
-						# 自由镜头模式：启动 5 秒冷却，期间无操作才弹回
-						_manual_cooldown = MANUAL_COOLDOWN_TIME
+		if event.is_action_pressed("world/drag"):
+			_dragging = true
+			_manual_active = true
+			_manual_cooldown = 0.0
+			_returning = false
+			_drag_start_mouse = event.position
+			_drag_start_cam = global_position
+		elif event.is_action_released("world/drag"):
+			if _dragging:
+				_dragging = false
+				if centered_mode:
+					# 居中模式：松手立即进入弹回过渡（平滑缓动，非硬切）
+					_manual_active = false
+					_manual_cooldown = 0.0
+					_returning = true
+					_return_elapsed = 0.0
+				elif _edge_scroll_dir != 0:
+					# 边缘滚动持续中：保持 manual，不计时
+					_manual_cooldown = 0.0
+				else:
+					# 自由镜头模式：启动 5 秒冷却，期间无操作才弹回
+					_manual_cooldown = MANUAL_COOLDOWN_TIME
 		# 中键滚动（红警风格：鼠标偏离锚点方向 = 相机移动方向；control/middle_drag 关闭时不响应）
-		elif event.button_index == MOUSE_BUTTON_MIDDLE and _middle_drag_enabled:
-			if event.pressed:
-				_middle_scrolling = true
-				_middle_anchor = event.position
-				_manual_active = true
-				_manual_cooldown = 0.0
-				_returning = false
-			else:
-				if _middle_scrolling:
-					_middle_scrolling = false
-					if centered_mode:
-						_manual_active = false
-						_manual_cooldown = 0.0
-						_returning = true
-						_return_elapsed = 0.0
-					elif _edge_scroll_dir != 0:
-						_manual_cooldown = 0.0
-					else:
-						_manual_cooldown = MANUAL_COOLDOWN_TIME
+		elif event.is_action_pressed("world/pan") and _middle_drag_enabled:
+			_middle_scrolling = true
+			_middle_anchor = event.position
+			_manual_active = true
+			_manual_cooldown = 0.0
+			_returning = false
+		elif event.is_action_released("world/pan"):
+			# 松开不受开关限制（开关中途关闭也要能收住拖拽态）
+			if _middle_scrolling:
+				_middle_scrolling = false
+				if centered_mode:
+					_manual_active = false
+					_manual_cooldown = 0.0
+					_returning = true
+					_return_elapsed = 0.0
+				elif _edge_scroll_dir != 0:
+					_manual_cooldown = 0.0
+				else:
+					_manual_cooldown = MANUAL_COOLDOWN_TIME
 		# 滚轮缩放
-		elif event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+		elif event.is_action_pressed("world/zoom_in"):
 			_zoom_at_mouse(ZOOM_STEP * zoom_speed_mult)
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+		elif event.is_action_pressed("world/zoom_out"):
 			_zoom_at_mouse(-ZOOM_STEP * zoom_speed_mult)
 
 

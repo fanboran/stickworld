@@ -95,19 +95,19 @@ func _auto_find_components() -> void:
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree():
 		return
-	if event is InputEventKey and event.pressed:
+	# echo 过滤覆盖 ESC 入口（按住键盘重复会连发退栈）；N 走动作查询本就过滤 echo
+	if event is InputEventKey and event.pressed and not event.is_echo():
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_ESCAPE:
 			close()
 			get_viewport().set_input_as_handled()
-		elif key.keycode == KEY_N:
+		elif event.is_action_pressed("strategy/toggle_detail"):
 			# N：细分开关（L1 <-> 城市预览效果）
 			if map_renderer != null and map_renderer.has_method("toggle_display_mode"):
 				map_renderer.toggle_display_mode()
 			get_viewport().set_input_as_handled()
 		return
-	if event is InputEventMouseButton and event.pressed \
-			and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton and event.is_action_pressed("strategy/select"):
 		# GUI 先决（同 L1 控制器）：悬停控件（HUD 模式条/细分按钮）时点击归 UI，防穿透下钻
 		if get_viewport().gui_get_hovered_control() != null:
 			return

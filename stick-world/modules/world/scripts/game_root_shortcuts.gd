@@ -2,7 +2,8 @@ extends RefCounted
 ## GameRoot 快捷键/模态助手 —— 无 class_name（经 game_root.gd const preload 引用）。
 ##
 ## 职责域：
-##   快捷键全分派（F5/F9/Ctrl+S/K/O/J/L/E/C/数字 1-4/空格/ESC）→ handle_shortcuts
+##   快捷键全分派（动作表驱动：存读档/面板开关/快捷栏/暂停/ESC——绑定见
+##   assets/config/input_actions.json）→ handle_shortcuts
 ##   ESC 统一模态栈逐层退栈（附身让位/战略图优先/暂停菜单兜底）→ _handle_escape
 ##   模态面板开关公共路径（背包/属性/设置菜单）→ toggle_inventory / toggle_stats_panel /
 ##   toggle_settings_menu / _toggle_modal_panel
@@ -22,55 +23,67 @@ func _init(host: GameRoot) -> void:
 
 ## 快捷键总入口（由子节点 ShortcutGate 转发，暂停期照常触发；宿主节点自身
 ## PAUSABLE，引擎暂停期 _unhandled_input 不再触发，故不经标准回调接入口）。
+## 键判定走 InputBindings 动作表（assets/config/input_actions.json），
+## is_action_pressed 默认过滤键盘重复(echo)——按住 E/空格等不再连发切换。
+## ESC 例外保持裸键码（模态栈语义，自带 echo 过滤）。
 func handle_shortcuts(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed:
 		return
 	var ek: InputEventKey = event as InputEventKey
 	# F5 快速保存到槽位 0
-	if ek.keycode == KEY_F5:
+	if event.is_action_pressed("common/quick_save"):
 		_host.quick_save()
 		_host.get_viewport().set_input_as_handled()
 	# F9 快速读取槽位 0
-	elif ek.keycode == KEY_F9:
+	elif event.is_action_pressed("common/quick_load"):
 		_host.quick_load()
 		_host.get_viewport().set_input_as_handled()
 	# Ctrl+S 打开/关闭存档面板
-	elif ek.keycode == KEY_S and (ek.ctrl_pressed or ek.meta_pressed):
+	elif event.is_action_pressed("common/save_panel"):
 		_host.toggle_save_panel()
 		_host.get_viewport().set_input_as_handled()
 	# 功能面板快捷键（K/O/J/L → 空面板占位；系统落地后替换真实面板）
-	elif ek.keycode == KEY_K:
+	elif event.is_action_pressed("world/panel_tech"):
 		_open_placeholder_panel("tech_tree")
 		_host.get_viewport().set_input_as_handled()
-	elif ek.keycode == KEY_O:
+	elif event.is_action_pressed("world/panel_empire"):
 		_open_placeholder_panel("empire_overview")
 		_host.get_viewport().set_input_as_handled()
-	elif ek.keycode == KEY_J:
+	elif event.is_action_pressed("world/panel_collection"):
 		_open_placeholder_panel("collection")
 		_host.get_viewport().set_input_as_handled()
-	elif ek.keycode == KEY_L:
+	elif event.is_action_pressed("world/panel_logistics"):
 		_open_placeholder_panel("logistics")
 		_host.get_viewport().set_input_as_handled()
 	# E 开关背包（背包装备系统；其他模态打开时让位给 ESC 栈）
-	elif ek.keycode == KEY_E:
+	elif event.is_action_pressed("world/open_inventory"):
 		toggle_inventory()
 		_host.get_viewport().set_input_as_handled()
 	# C 开关角色属性面板（属性/伤痕状态/装备概览）
-	elif ek.keycode == KEY_C:
+	elif event.is_action_pressed("world/open_stats"):
 		toggle_stats_panel()
 		_host.get_viewport().set_input_as_handled()
 	# 数字 1-4：使用 Hotbar 物品格（消耗品；同 Hotbar 点击）
-	elif ek.keycode >= KEY_1 and ek.keycode <= KEY_4:
-		_use_hotbar_slot(ek.keycode - KEY_1)
+	elif event.is_action_pressed("world/hotbar_1"):
+		_use_hotbar_slot(0)
+		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_2"):
+		_use_hotbar_slot(1)
+		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_3"):
+		_use_hotbar_slot(2)
+		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_4"):
+		_use_hotbar_slot(3)
 		_host.get_viewport().set_input_as_handled()
 	# 空格切换暂停（Demo：战斗自动暂停后的直觉恢复键；模态打开时 ESC 栈优先，
 	# 空格仅在世界层生效）
-	elif ek.keycode == KEY_SPACE:
+	elif event.is_action_pressed("common/toggle_pause"):
 		if TimeManager != null:
 			TimeManager.toggle_pause()
 		_host.get_viewport().set_input_as_handled()
 	# ESC：统一模态/暂停菜单栈控制（见 _handle_escape）
-	elif ek.keycode == KEY_ESCAPE:
+	elif ek.keycode == KEY_ESCAPE and not ek.is_echo():
 		if _handle_escape():
 			_host.get_viewport().set_input_as_handled()
 

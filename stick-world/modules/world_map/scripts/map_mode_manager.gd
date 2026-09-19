@@ -78,18 +78,18 @@ func _is_view_open() -> bool:
 	return false
 
 
-## 数字键 1/2/3 切换（仅本视图打开时响应；消费事件防场景图玩法键穿透）
+## 数字键 1/2/3 切换（InputMap 动作 strategy/mode_*，主键盘+小键盘双绑定一次覆盖；
+## 仅本视图打开时响应；消费事件防场景图玩法键穿透）
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_view_open():
 		return
-	if event is InputEventKey and event.pressed and not event.is_echo():
-		var key := event as InputEventKey
-		if key.keycode == KEY_1 or key.keycode == KEY_KP_1:
+	if event is InputEventKey and event.pressed:
+		if event.is_action_pressed("strategy/mode_terrain"):
 			set_mode(Mode.TERRAIN)
 			get_viewport().set_input_as_handled()
-		elif key.keycode == KEY_2 or key.keycode == KEY_KP_2:
+		elif event.is_action_pressed("strategy/mode_political"):
 			set_mode(Mode.POLITICAL)
 			get_viewport().set_input_as_handled()
-		elif key.keycode == KEY_3 or key.keycode == KEY_KP_3:
+		elif event.is_action_pressed("strategy/mode_traffic"):
 			set_mode(Mode.TRAFFIC)
 			get_viewport().set_input_as_handled()

@@ -290,32 +290,34 @@ func _enter_tree() -> void:
 ## 玩家按 Alt 切换散步/奔跑模式（仅附身时生效）
 ## 鼠标左键攻击（仅附身时生效，§7.5）
 ## Q 键切换建造/战斗模式（仅附身时生效）
+## 键判定走 InputBindings 动作表（is_action_pressed 默认过滤键盘重复）
 func _input(event: InputEvent) -> void:
 	if not possessed:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ALT:
+	if event.is_action_pressed("possess/toggle_walk_run"):
 		_walk_only = not _walk_only
 		if _walk_only and _is_running:
 			_is_running = false
 			_current_speed = WALK_SPEED
 			_visual.play("walk")
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_Q:
+	elif event.is_action_pressed("possess/toggle_combat"):
 		_toggle_combat_mode()
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	elif event is InputEventMouseButton and event.is_action_pressed("possess/attack"):
 		# 玩家点击：挥砍攻击（仅当鼠标不在 UI 控件上——编制按钮/建造菜单等优先）
 		if _possession._is_mouse_over_ui():
 			return
 		_player_attack()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+	elif event is InputEventMouseButton \
+			and (event.is_action_pressed("possess/block") or event.is_action_released("possess/block")):
 		# 副手盾：按住右键举盾、松开放下（UI 上按下不触发；松开总生效）
 		if event.pressed and _possession._is_mouse_over_ui():
 			return
 		_possession._set_player_blocking(event.pressed)
 		if event.pressed:
 			get_viewport().set_input_as_handled()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_G:
+	elif event.is_action_pressed("possess/swing"):
 		# 空挥（复刻原版 User Control）：无目标也出攻击动作，纯动作无伤害
 		_possession._player_swing()
 		if get_viewport() != null:
@@ -612,9 +614,9 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not possessed:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
+	if event.is_action_pressed("possess/interact"):
 		_interaction.try_interact()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_H:
+	elif event.is_action_pressed("possess/escape_stuck"):
 		escape_stuck()
 
 

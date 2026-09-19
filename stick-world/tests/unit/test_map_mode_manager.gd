@@ -85,10 +85,13 @@ func _test_key_input() -> void:
 	add_child(view)
 	var mgr := MapModeManager.new()
 	view.add_child(mgr)
+	# 模式键走 InputMap 动作（physical 绑定）：注入事件须同时设 keycode 与
+	# physical_keycode，动作匹配才命中（注册侧只读 physical_keycode）
 	# 视图打开（Content visible=true）：KEY_2 → POLITICAL
 	view.visible = true
 	var ev2 := InputEventKey.new()
 	ev2.keycode = KEY_2
+	ev2.physical_keycode = KEY_2
 	ev2.pressed = true
 	mgr._unhandled_input(ev2)
 	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.POLITICAL,
@@ -96,6 +99,7 @@ func _test_key_input() -> void:
 	# KEY_3 → TRAFFIC（R4 第三态；数字小键盘同义）
 	var ev3 := InputEventKey.new()
 	ev3.keycode = KEY_3
+	ev3.physical_keycode = KEY_3
 	ev3.pressed = true
 	mgr._unhandled_input(ev3)
 	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TRAFFIC,
@@ -103,6 +107,7 @@ func _test_key_input() -> void:
 	# KEY_1 → TERRAIN（数字小键盘同义）
 	var ev1 := InputEventKey.new()
 	ev1.keycode = KEY_KP_1
+	ev1.physical_keycode = KEY_KP_1
 	ev1.pressed = true
 	mgr._unhandled_input(ev1)
 	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TERRAIN,
@@ -111,6 +116,7 @@ func _test_key_input() -> void:
 	view.visible = false
 	var ev4 := InputEventKey.new()
 	ev4.keycode = KEY_2
+	ev4.physical_keycode = KEY_2
 	ev4.pressed = true
 	mgr._unhandled_input(ev4)
 	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TERRAIN,

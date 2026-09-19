@@ -133,7 +133,8 @@ core/
 │   ├── save_manager.gd    # 存档/读档服务
 │   ├── config_manager.gd  # 游戏配置管理
 │   ├── time_manager.gd    # 时间/速度管理
-│   └── balance_config.gd  # 平衡变量加载（热重载预留）
+│   ├── balance_config.gd  # 平衡变量加载（热重载预留）
+│   └── input_bindings.gd  # 输入绑定单一真相源（assets/config/input_actions.json → InputMap 动作注册）
 ├── entities/              # 核心实体状态快照（RefCounted）
 ├── ui_framework/          # L0 UI 公共层（纯布局原语与无依赖组件，零资产零模块依赖，分层契约见 core/ui_framework/README.md）
 │   ├── ui_kit.gd          # UIKit：full_rect() 全屏根 / widget() 角落部件的代码建 UI 合规出口

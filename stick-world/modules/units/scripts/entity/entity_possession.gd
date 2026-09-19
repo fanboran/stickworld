@@ -35,13 +35,13 @@ func _handle_player_input(delta: float) -> void:
 		_entity._apply_movement(delta, Vector2.ZERO, false, false)
 		return
 	var dir := Vector2.ZERO
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+	if Input.is_action_pressed("possess/move_left"):
 		dir.x -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+	if Input.is_action_pressed("possess/move_right"):
 		dir.x += 1.0
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+	if Input.is_action_pressed("possess/move_up"):
 		dir.y -= 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+	if Input.is_action_pressed("possess/move_down"):
 		dir.y += 1.0
 	_entity._apply_movement(delta, dir, false, not _entity._walk_only)
 

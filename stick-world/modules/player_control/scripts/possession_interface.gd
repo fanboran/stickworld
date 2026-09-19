@@ -53,8 +53,8 @@ func setup(game_root: Node) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# ESC 退出附身
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+	# ESC 退出附身（echo 过滤：按住 ESC 键盘重复不连发）
+	if event is InputEventKey and event.pressed and not event.is_echo() and event.keycode == KEY_ESCAPE:
 		if _input_dispatcher != null and _input_dispatcher.has_method("is_mode") and _input_dispatcher.is_mode(PlayerControlAPI.Mode.POSSESS):
 			_release_and_exit()
 			get_viewport().set_input_as_handled()

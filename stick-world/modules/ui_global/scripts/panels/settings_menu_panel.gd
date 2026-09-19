@@ -145,7 +145,9 @@ func _rebuild_content() -> void:
 		for map_id in _get_registered_map_ids():
 			_add_map_button(map_id)
 		var tip := Label.new()
-		tip.text = "提示：Tab 打开大世界导航 · Q 切换战斗模式 · 顶栏「编制」编队"
+		tip.text = "提示：%s 打开大世界导航 · %s 切换战斗模式 · 顶栏「编制」编队" \
+				% [KeyBindingRegistry.action_key_hint("common/toggle_world_map"),
+				KeyBindingRegistry.action_key_hint("possess/toggle_combat")]
 		tip.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 		tip.modulate = StickTokens.TEXT_DIM
 		_content_vbox.add_child(tip)
@@ -284,7 +286,7 @@ func _on_field_changed(value: Variant, key: String) -> void:
 		return
 	var stored: Variant = value
 	if key in _VOLUME_KEYS and typeof(value) in [TYPE_FLOAT, TYPE_INT]:
-		stored = clampf(float(value) / 100.0, 0.0, 1.0)
+		stored = _to_stored_volume(value)
 	if ConfigManager and ConfigManager.has_method("set_value"):
 		ConfigManager.set_value(key, stored)
 	_apply_live_setting(key, value)
@@ -297,7 +299,7 @@ func _on_apply() -> void:
 			# 音量键：面板域 0~100 百分比 -> 存储域 0~1 线性（AudioManager/ConfigManager 约定）
 			var stored: Variant = _values[key]
 			if key in _VOLUME_KEYS and typeof(stored) in [TYPE_FLOAT, TYPE_INT]:
-				stored = clampf(float(stored) / 100.0, 0.0, 1.0)
+				stored = _to_stored_volume(stored)
 			ConfigManager.set_value(key, stored)
 			written += 1
 			_apply_live_setting(key, _values[key])
@@ -455,6 +457,12 @@ func _on_return_to_menu_confirmed() -> void:
 ## 音量键（面板域 0~100 百分比；存储域 0~1 线性，通道与 ConfigManager.VOLUME_CHANNELS
 ## 一致：master/bgm/sfx，见 _on_apply 换算）
 const _VOLUME_KEYS: Array[String] = ["audio/master_volume", "audio/bgm_volume", "audio/sfx_volume"]
+
+
+## 面板域 0~100 百分比 -> 存储域 0~1 线性（音量键写档方向；
+## 读档方向逆变换见 _normalize_stored_value）
+static func _to_stored_volume(value: Variant) -> float:
+	return clampf(float(value) / 100.0, 0.0, 1.0)
 
 ## 待应用项（07-设置界面 §五「应用生效」）：改动只进 _values 暂存，点「应用」
 ## 或关闭面板时才生效。其余字段全部即时生效（改动即写 ConfigManager + 实时接线）。

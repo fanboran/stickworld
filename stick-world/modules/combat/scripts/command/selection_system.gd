@@ -105,36 +105,35 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		_handle_mouse_motion(event)
 	elif event is InputEventKey:
-		if event.pressed and event.keycode == KEY_ESCAPE:
+		if event.pressed and not event.is_echo() and event.keycode == KEY_ESCAPE:
 			clear_selection()
 			get_viewport().set_input_as_handled()
 
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
-	if event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			_left_held = true
+	if event.is_action_pressed("command/select"):
+		_left_held = true
+		_dragging = false
+		_drag_start_screen = event.position
+		_drag_current_screen = event.position
+	elif event.is_action_released("command/select"):
+		if _left_held:
+			if _dragging:
+				# 框选完成
+				var world_start := _screen_to_world(_drag_start_screen)
+				var world_end := _screen_to_world(_drag_current_screen)
+				var rect := Rect2(world_start, world_end - world_start).abs()
+				_do_box_select(rect, event.shift_pressed)
+			else:
+				# 单击选择
+				var world_pos := _screen_to_world(event.position)
+				_do_click_select(world_pos, event.shift_pressed)
+			_left_held = false
 			_dragging = false
-			_drag_start_screen = event.position
-			_drag_current_screen = event.position
-		else:
-			if _left_held:
-				if _dragging:
-					# 框选完成
-					var world_start := _screen_to_world(_drag_start_screen)
-					var world_end := _screen_to_world(_drag_current_screen)
-					var rect := Rect2(world_start, world_end - world_start).abs()
-					_do_box_select(rect, event.shift_pressed)
-				else:
-					# 单击选择
-					var world_pos := _screen_to_world(event.position)
-					_do_click_select(world_pos, event.shift_pressed)
-				_left_held = false
-				_dragging = false
-				queue_redraw()
-			# 消费左键事件，阻止 CameraRig 拖拽相机
-			get_viewport().set_input_as_handled()
-	elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			queue_redraw()
+		# 消费左键事件，阻止 CameraRig 拖拽相机
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("command/clear"):
 		# 右键清空选择
 		clear_selection()
 		_left_held = false

@@ -406,8 +406,8 @@ func _setup_unit_lod() -> void:
 
 # ─────────────────────────────── 引擎回调（必须留在 Node 宿主） ───────────────────────────────
 
-## M 键全局监听（打开/关闭 L3 大世界战略图）
+## M 键全局监听（打开/关闭 L3 大世界战略图；走 InputBindings 动作表）
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_M:
+	if event.is_action_pressed("common/toggle_strategic_map"):
 		_maps()._toggle_l3_strategic_map()
 		get_viewport().set_input_as_handled()

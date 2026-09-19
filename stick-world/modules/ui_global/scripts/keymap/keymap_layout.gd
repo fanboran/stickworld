@@ -8,35 +8,16 @@ extends RefCounted
 
 const LAYOUTS_PATH := "res://modules/ui_global/data/keymap/keyboard_layouts.json"
 
-## find_keycode_from_string 解析不了的键名 → Key 枚举常量直取
-## （实测 META/PRINTSCREEN/KP_* 无名可查，2026-09 无头验证）。
-const _KEY_OVERRIDES: Dictionary = {
-	"META": KEY_META,
-	"PRINTSCREEN": KEY_PRINT,
-	"KP_DIVIDE": KEY_KP_DIVIDE,
-	"KP_MULTIPLY": KEY_KP_MULTIPLY,
-	"KP_SUBTRACT": KEY_KP_SUBTRACT,
-	"KP_ADD": KEY_KP_ADD,
-	"KP_ENTER": KEY_KP_ENTER,
-	"KP_0": KEY_KP_0, "KP_1": KEY_KP_1, "KP_2": KEY_KP_2, "KP_3": KEY_KP_3,
-	"KP_4": KEY_KP_4, "KP_5": KEY_KP_5, "KP_6": KEY_KP_6, "KP_7": KEY_KP_7,
-	"KP_8": KEY_KP_8, "KP_9": KEY_KP_9,
-	"KP_DOT": KEY_KP_PERIOD,
-}
+## 键名解析委托 L0 装载器（单字符 ASCII + 覆盖表 + find_keycode_from_string，
+## 与输入绑定共用同一张解析表）。
+const InputBindingsScript := preload("res://core/autoload/input_bindings.gd")
 
 static var _cache: Array[Dictionary] = []
 
 
 ## 键名 → Godot Key 枚举值；解析失败返回 KEY_NONE（=0）。
-## 单字符字母/数字直取字符码（KEY_A=65 起，与 find_keycode_from_string 同值）。
 static func resolve_key(code: String) -> int:
-	if code.length() == 1:
-		var c: String = code[0]
-		if (c >= "0" and c <= "9") or (c >= "A" and c <= "Z") or (c >= "a" and c <= "z"):
-			return c.unicode_at(0)
-	if _KEY_OVERRIDES.has(code):
-		return int(_KEY_OVERRIDES[code])
-	return OS.find_keycode_from_string(code)
+	return InputBindingsScript.resolve_key(code)
 
 
 ## 装载 ANSI 104 布局为键矩形表：[{code:int, legend:String, x:float, y:float, w:float, h:float}]。

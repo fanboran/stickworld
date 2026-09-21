@@ -31,6 +31,7 @@ func _ready() -> void:
 	_runner.add_test("种子确定性：同种子同决策序列", _test_seed_determinism)
 	_runner.add_test("withdraw 档行为：朝锚点行军、抵达收束、士气恢复", _test_withdraw_behavior)
 	_runner.add_test("withdraw 降级：锚点不可用回退 fallback / evacuate 优先", _test_withdraw_degrade)
+	_runner.add_test("fallback 收敛：贴边无路可退 → 脱离战场登记 departed", _test_fallback_jam_departs)
 	_runner.add_test("W1 get_retreat_mod_state：观测快照（enabled/因子/掷骰/节流余量）", _test_w1_state_getter)
 	_runner.run()
 	print(_runner.summary())
@@ -307,6 +308,76 @@ func _test_withdraw_degrade() -> void:
 	battle_plain.free()
 
 
+## fallback 收敛加固（结束判定 P2）：撤退方向被可走带夹死（敌人正上/正下 → 位移被
+## y 夹紧清零）且已贴边时，不再"原地打转收束回决策"（那会下一轮再接敌、再溃逃，
+## 常规战斗无 duration_limit 兜底 → 永不收敛），而是朝己方出生侧边缘脱离战场并
+## 登记 departed（BattleInstance._count_alive 计非存活）。
+func _test_fallback_jam_departs() -> void:
+	var entity := _FakeEntity.new()
+	entity.map_left = 0.0
+	entity.map_right = 1800.0
+	entity.ground_y = 0.0
+	entity.ground_bottom = 400.0
+	# 贴带顶（pos.y <= ground_y + 20）+ 贴右缘（map_right - 50 内收带）
+	entity.global_position = Vector2(1755.0, 20.0)
+	var health := _FakeHealth.new()
+	health.morale_ratio = 0.2  # 低于 SAFE_MORALE_RATIO(0.6)：士气恢复不会提前收束
+	entity.health = health
+	var battle := _FakeBattle.new()
+	# 敌人正下方 80px：撤退方向朝上出带（被夹死），且在 SAFE_DISTANCE(320) 内
+	var enemy := _FakeAlly.new()
+	enemy.faction = 2
+	enemy.global_position = Vector2(1755.0, 100.0)
+	battle.enemies.append(enemy)
+	battle.units.append(entity)
+	var retreat: BehaviorRetreat = ScriptBehaviorRetreat.new()
+	retreat.entity = entity
+	retreat.enter("", {"battle": battle})
+	_runner.assert_false(retreat._withdraw, "缺省 params → fallback 档")
+	_runner.assert_true(retreat.get_retreat_dir().y < 0.0, "撤退方向朝上（垂直，出可走带）")
+	retreat.update(0.1)
+	_runner.assert_true(retreat.is_finished(), "贴边夹死一次即收束（不原地打转）")
+	_runner.assert_true(entity.departed, "按战役离场登记 departed（战斗可收敛）")
+	_runner.assert_true(entity.stopped, "离场后停步（溃兵视觉保留）")
+	# 零回归：带内夹死（未贴边）不误判离场——仍是脱战重整，不回战斗前先离场
+	var entity2 := _FakeEntity.new()
+	entity2.map_left = 0.0
+	entity2.map_right = 1800.0
+	entity2.ground_y = 0.0
+	entity2.ground_bottom = 400.0
+	entity2.global_position = Vector2(900.0, 20.0)
+	var health2 := _FakeHealth.new()
+	health2.morale_ratio = 0.2
+	entity2.health = health2
+	var battle2 := _FakeBattle.new()
+	var enemy2 := _FakeAlly.new()
+	enemy2.faction = 2
+	enemy2.global_position = Vector2(900.0, 100.0)
+	battle2.enemies.append(enemy2)
+	battle2.units.append(entity2)
+	var retreat2: BehaviorRetreat = ScriptBehaviorRetreat.new()
+	retreat2.entity = entity2
+	retreat2.enter("", {"battle": battle2})
+	retreat2.update(0.1)
+	_runner.assert_false(entity2.departed, "带内夹死不登记 departed（仍是脱战重整）")
+	_runner.assert_false(retreat2.is_finished(), "带内夹死继续朝边缘脱离（未收束）")
+	_runner.assert_gt(entity2.global_position.x, 900.0, "朝己方出生侧边缘移动")
+	# 有界兜底：无论走得到走不到边缘，行为都必须收束（禁止无限挂起）
+	var steps2 := 0
+	while not retreat2.is_finished() and steps2 < 400:
+		retreat2.update(0.1)
+		steps2 += 1
+	_runner.assert_true(retreat2.is_finished(), "脱战重整在有界步数内收束（%d 步）" % steps2)
+	retreat.free()
+	retreat2.free()
+	health.free()
+	health2.free()
+	entity.free()
+	entity2.free()
+	battle.free()
+	battle2.free()
+
+
 ## 左侧假敌（降级后撤方向 = 远离敌 = 朝右）
 func _make_left_enemy() -> _FakeAlly:
 	var enemy := _FakeAlly.new()
@@ -414,6 +485,14 @@ class _FakeEntity extends CharacterBody2D:
 	var battle: Node = null
 	var stopped: bool = false
 	var last_dir := Vector2.ZERO
+	## 战场边界/可走带（离场判定读取）。ground_bottom == ground_y 时 y 夹紧不生效，
+	## 既有 fallback 用例不受影响；默认 map_right 远离用例坐标亦不触发贴边离场。
+	var map_left: float = 0.0
+	var map_right: float = 1800.0
+	var ground_y: float = 0.0
+	var ground_bottom: float = 0.0
+	## 战役离场标记（BattleInstance._count_alive 计非存活）
+	var departed: bool = false
 
 	func get_weapon() -> Node:
 		return self

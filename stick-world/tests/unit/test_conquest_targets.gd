@@ -31,6 +31,7 @@ func _ready() -> void:
 	_runner.add_test("奖励: 入账明细一句话（资源名+解锁展示名）", _test_describe_loot)
 	_runner.add_test("奖励: 解锁项配置对齐（展示名↔建筑门禁）", _test_unlock_config_alignment)
 	_runner.add_test("入口: 聚落反查只认未臣服", _test_find_by_settlement)
+	_runner.add_test("归属: 真值反查与归属一句话（已臣服仍可查）", _test_territory_truth)
 	_runner.add_test("兼容: 旧字段 rewards_preview 保留", _test_legacy_preview)
 	_runner.run()
 	print(_runner.summary())
@@ -184,6 +185,39 @@ func _test_find_by_settlement() -> void:
 	var backup: Variant = WorldState.territories.get(id, null)
 	WorldState.territories[id] = {"state": 1, "garrison_losses": 0, "control_progress": 100.0}
 	_runner.assert_true(api.find_target_by_settlement(key).is_empty(), "已臣服不再作为出征目标")
+	if backup == null:
+		WorldState.territories.erase(id)
+	else:
+		WorldState.territories[id] = backup
+	api.queue_free()
+
+
+## 归属真值面（P4）：聚落反查不论是否臣服 / 归属一句话两态 / tile_key 进数据面
+## （战略图 tooltip 归属行与据点面板都读这面，已臣服据点也必须查得到）
+func _test_territory_truth() -> void:
+	var api := _make_api()
+	var targets: Array = api.list_targets()
+	_runner.assert_gt(targets.size(), 0, "据点清单非空")
+	var first: Dictionary = targets[0]
+	var key := String(first.get("settlement_key", ""))
+	var id := String(first.get("id", ""))
+	_runner.assert_false(String(first.get("tile_key", "")).is_empty(),
+			"数据面带 tile_key（战略图定位/染色用）")
+	_runner.assert_equal(api.describe_owner(first), "未易手", "未易手据点归属串")
+	# 已臣服：归属真值仍可查（tooltip/面板要显示"我方已占"），只有"可征伐目标"反查才应返回空
+	var backup: Variant = WorldState.territories.get(id, null)
+	WorldState.territories[id] = {
+		"state": 1, "garrison_losses": 0, "control_progress": 100.0,
+		"owner": "player", "faction": "fac_player",
+	}
+	var owned: Dictionary = api.find_territory_by_settlement(key)
+	_runner.assert_equal(String(owned.get("id", "")), id, "已臣服据点仍可反查（归属展示用）")
+	_runner.assert_true(api.find_target_by_settlement(key).is_empty(), "已臣服不再是可征伐目标")
+	_runner.assert_equal(api.describe_owner(owned), "我方已占", "我方已占归属串")
+	_runner.assert_equal(api.describe_owner({"owner": "fac_plain"}), "fac_plain",
+			"AI 势力 id 原样透出（P5 国家层接入后换展示名）")
+	_runner.assert_true(api.find_territory_by_settlement("settlement_not_exist").is_empty(),
+			"非本模块据点的聚落反查为空")
 	if backup == null:
 		WorldState.territories.erase(id)
 	else:

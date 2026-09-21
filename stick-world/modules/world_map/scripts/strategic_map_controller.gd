@@ -57,6 +57,10 @@ const FAST_TRAVEL_HIGHLIGHT_SEC: float = 0.8
 var _title_bar: MapTitleBar = null
 var _legend: MapLegend = null
 
+## 据点面板（CanvasLayer 直接子节点，同批显隐；数据源与行回调在
+## _auto_find_components 注入——面板不自己认识 expansion，见 territory_panel.gd）
+var _territory_panel: TerritoryPanel = null
+
 ## 全屏海洋底（CanvasLayer 首子节点，z 最低）。C21：地图一打开就整屏铺海洋，
 ## 不再让场景图从地图四周（上下尤其明显）露出来。显隐随本视图（下钻 L2 时收起，
 ## 由 L2 自己的海洋底接管）。
@@ -125,6 +129,12 @@ func _auto_find_components() -> void:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _legend == null:
 		_legend = MapControllerUtil.find_sibling(self, "MapLegend") as MapLegend
+	if _territory_panel == null:
+		_territory_panel = MapControllerUtil.find_sibling(self, "TerritoryPanel") as TerritoryPanel
+		if _territory_panel != null:
+			_territory_panel.targets_fn = _list_territories
+			_territory_panel.activate_fn = _on_territory_row_activated
+			_territory_panel.refresh()
 	if _ocean_backdrop == null:
 		_ocean_backdrop = MapControllerUtil.find_sibling(self, "OceanBackground")
 	if _mode_manager == null:
@@ -180,6 +190,8 @@ func _set_overlay_visible(v: bool) -> void:
 		_title_bar.visible = v
 	if _legend != null:
 		_legend.set_shown(v)
+	if _territory_panel != null:
+		_territory_panel.set_shown(v)
 	if _tooltip != null and _tooltip.has_method("reset"):
 		_tooltip.call("reset")  # 复位 hover 记忆，重开后按当前鼠标位置重新评估
 
@@ -204,7 +216,7 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 	_last_click_time = now
 	_last_click_settlement = settlement.settlement_id
 	if is_double and double_click_enter:
-		_handle_settlement_activation(settlement.settlement_id)
+		activate_settlement(settlement.settlement_id)
 	elif left_click_selects:
 		api.select(settlement.settlement_id)
 		if api.has_signal("settlement_clicked"):
@@ -220,12 +232,13 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 ## F3 调试传送开关已撤（创始人 2026-09-16）：传送改为常规单击交互走确认弹窗
 ## （TravelDialog.open_confirm），确认后经 TELEPORT 直达 enter_settlement。
 
-## 双击聚落分流（P6/E3 交互流，总体设计 §5.10）：
+## 激活聚落（**公共**：地图双击与据点面板行点击共用同一分流，两入口不分叉）：
+##   敌据点（expansion 有对位且未臣服）→ 征伐确认
 ##   无 map_id → 不动作（tooltip 已提示「未开放进入」）
 ##   SELF（已在此聚落）→ 直接进城（不构成旅行，无弹窗）
 ##   其余 → 弹旅行方式窗[走过去|快速旅行|取消]（快速旅行可达性在窗内展示）
 ## 快速旅行高亮展示期（_fast_travel_pending）忽略新激活。
-func _handle_settlement_activation(settlement_id: String) -> void:
+func activate_settlement(settlement_id: String) -> void:
 	if api == null or not api.has_method("get_travel_status"):
 		return
 	if _fast_travel_pending:
@@ -268,6 +281,24 @@ func _conquest_target_for(settlement_id: String) -> Dictionary:
 func _expansion_api() -> Node:
 	var tree := get_tree()
 	return tree.get_first_node_in_group("expansion_api") if tree != null else null
+
+
+## 据点清单数据源（据点面板 targets_fn）：转发 expansion api.list_targets；
+## 未装配 expansion（dev 直开战略图）返回空表 → 面板空态隐藏
+func _list_territories() -> Array:
+	var expansion := _expansion_api()
+	if expansion == null or not expansion.has_method("list_targets"):
+		return []
+	return expansion.list_targets()
+
+
+## 据点面板行点击：先按 tile_key 定位到该聚落地块，再走 activate_settlement
+## 同一交互链（未易手据点弹征伐确认 / 我方已占据点弹旅行窗）
+func _on_territory_row_activated(target: Dictionary) -> void:
+	var tile_key := String(target.get("tile_key", ""))
+	if not tile_key.is_empty() and api != null and api.has_method("camera_focus"):
+		api.camera_focus(tile_key)
+	activate_settlement(String(target.get("settlement_key", "")))
 
 
 ## 出征确认（双击敌聚落）：先给情报（守军编成/敌将/战利品），确认才动身
@@ -428,6 +459,9 @@ func open() -> void:
 		if _title_bar != null:
 			_update_title_bar(l1_label)
 	_fill_legend()
+	# 据点清单按当前归属重刷（关图期间可能已占领/易手）
+	if _territory_panel != null:
+		_territory_panel.refresh()
 	_set_overlay_visible(true)
 	if EventBus != null:
 		EventBus.strategic_map_opened.emit()

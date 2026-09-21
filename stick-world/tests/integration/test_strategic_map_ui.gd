@@ -18,6 +18,7 @@ const L1_JSON_PATH := "res://config/strategic_map/l1_world.json"
 const L1_BASE_DIR := "res://config/strategic_map"
 const L2_REGION := "region_001"
 const L2_BASE_DIR := "res://config/strategic_map/l2_packs"
+const ExpansionApiScript := preload("res://modules/expansion/api.gd")
 
 var _runner: TestRunner
 var _l1_scene: Node = null
@@ -48,6 +49,8 @@ func _ready() -> void:
 	_runner.add_test("tooltip 聚落内容：名称/级别/政权/双击进入", _test_tooltip_content, true)
 	_runner.add_test("tooltip map_id 为空：未开放进入", _test_tooltip_enterable, true)
 	_runner.add_test("tooltip 空聚落/无数据：隐藏不误导", _test_tooltip_hidden, true)
+	_runner.add_test("据点归属面：tooltip 归属行读真值（两态 + 非据点隐藏）", _test_territory_tooltip_line, true)
+	_runner.add_test("据点面板：空态隐藏 / 逐据点一行 / 行点击回调", _test_territory_panel, true)
 	_runner.add_test("L2 打开：层级指示 + 当前地区号", _test_l2_indicator, true)
 	_runner.add_test("L3 打开：层级指示 + 关闭提示", _test_l3_indicator, true)
 	_runner.add_test("L2/L3 名牌：地区序号/大世界 + 概览副标题", _test_l2_l3_title, true)
@@ -415,3 +418,108 @@ func _esc_event() -> InputEvent:
 	ev.keycode = KEY_ESCAPE
 	ev.pressed = true
 	return ev
+
+
+# ───────────────────── P4：据点归属面（tooltip 归属行 / 据点面板）─────────────────────
+
+## tooltip 归属行读归属真值（WorldState.territories 的 owner/faction）：
+## 未易手 / 我方已占两态；非本模块据点的聚落隐藏该行；expansion 未装配也不炸。
+func _test_territory_tooltip_line() -> void:
+	if _tooltip == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	# 未装配 expansion：归属行隐藏（不误显"未易手"）
+	var tile := L1TileDef.new()
+	tile.tile_id = "probe_tile"
+	tile.owner_state_id = "state_probe"
+	var s := SettlementRef.new()
+	s.settlement_id = "settlement_probe"
+	s.name = "探针城"
+	s.level = 1
+	s.map_id = "probe_map"
+	tile.settlement = s
+	_tooltip.update_for_tile(tile)
+	_runner.assert_false(_tooltip._territory_label.visible, "expansion 未装配时隐藏归属行")
+	# 装配 expansion：据点聚落显示归属行
+	var api := Node.new()
+	api.set_script(ExpansionApiScript)
+	add_child(api)
+	var targets: Array = api.list_targets()
+	_runner.assert_gt(targets.size(), 0, "前置：据点配置可载入")
+	var first: Dictionary = targets[0]
+	var key := String(first.get("settlement_key", ""))
+	var id := String(first.get("id", ""))
+	var t_tile := L1TileDef.new()
+	t_tile.tile_id = "probe_territory_tile"
+	t_tile.owner_state_id = "state_probe"
+	var t_ref := SettlementRef.new()
+	t_ref.settlement_id = key
+	t_ref.name = "探针据点城"
+	t_ref.level = 1
+	t_ref.map_id = "probe_map"
+	t_tile.settlement = t_ref
+	_tooltip.update_for_tile(t_tile)
+	_runner.assert_true(_tooltip._territory_label.visible, "据点聚落显示归属行")
+	_runner.assert_true(_tooltip._territory_label.text.contains("未易手"),
+			"未易手据点归属行（实测 %s）" % _tooltip._territory_label.text)
+	# 非据点聚落：归属行隐藏（世界地图上的普通聚落没有归属真值）
+	_tooltip.update_for_tile(tile)
+	_runner.assert_false(_tooltip._territory_label.visible, "非据点聚落隐藏归属行")
+	# 占领（写真值 owner=player）→ 同一行变"我方已占"
+	var backup: Variant = WorldState.territories.get(id, null)
+	WorldState.territories[id] = {
+		"state": 1, "garrison_losses": 0, "control_progress": 100.0,
+		"owner": "player", "faction": "fac_player",
+	}
+	_tooltip.update_for_tile(t_tile)
+	_runner.assert_true(_tooltip._territory_label.text.contains("我方已占"),
+			"占领后归属行读真值（实测 %s）" % _tooltip._territory_label.text)
+	if backup == null:
+		WorldState.territories.erase(id)
+	else:
+		WorldState.territories[id] = backup
+	# 归属行两态都在（清理展示态，不影响后续用例）
+	_runner.assert_true(_tooltip.visible, "tooltip 整体仍显示")
+	api.queue_free()
+	_tooltip.reset()
+
+
+## 据点面板：无数据源空态隐藏；注入数据源后逐据点一行、标题带已占计数；
+## 行点击回调收到整条 target（控制器据此定位 + 激活）。
+func _test_territory_panel() -> void:
+	if _l1_scene == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	var panel: TerritoryPanel = _l1_scene.get_node_or_null("TerritoryPanel") as TerritoryPanel
+	_runner.assert_true(panel != null, "L1 场景应挂 TerritoryPanel")
+	if panel == null:
+		return
+	_runner.assert_true(panel.get_parent() == _l1_scene, "据点面板应挂 CanvasLayer 直下")
+	# 无数据源（expansion 未装配）→ 空态：set_shown(true) 也保持隐藏
+	panel.targets_fn = Callable()
+	panel.refresh()
+	panel.set_shown(true)
+	_runner.assert_false(panel.visible, "无据点数据时空态隐藏")
+	var api := Node.new()
+	api.set_script(ExpansionApiScript)
+	add_child(api)
+	var fired: Array = []
+	panel.targets_fn = api.list_targets
+	panel.activate_fn = func(t: Dictionary) -> void: fired.append(String(t.get("id", "")))
+	panel.refresh()
+	panel.set_shown(true)
+	var targets: Array = api.list_targets()
+	_runner.assert_true(panel.visible, "有据点数据时显示")
+	_runner.assert_equal(panel._rows.size(), targets.size(), "逐据点一行（实测 %d）" % panel._rows.size())
+	_runner.assert_true(panel._rows[0].text.contains(String((targets[0] as Dictionary).get("name_zh", ""))),
+			"行文案含据点名（实测 %s）" % panel._rows[0].text)
+	panel._rows[0].pressed.emit()
+	_runner.assert_equal(fired.size(), 1, "行点击触发回调一次")
+	_runner.assert_equal(fired[0], String((targets[0] as Dictionary).get("id", "")),
+			"回调收到该行据点 id")
+	# 清理：回空态（本场景实例后续用例还要用）
+	api.queue_free()
+	panel.targets_fn = Callable()
+	panel.activate_fn = Callable()
+	panel.refresh()
+	panel.set_shown(false)

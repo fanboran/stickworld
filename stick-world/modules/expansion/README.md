@@ -21,7 +21,7 @@ modules/expansion/
 
 ## 对外契约
 
-- 查询：`list_targets()`（出城选项数据源：名称/剩余守军/占领态/归属/奖励预览）、`find_target_by_settlement(id)`（战略图双击判定）、`describe_target(target)`（情报一句话）、`describe_loot(granted)`（占领通告入账明细）、`unlock_label(id)`、`get_territory_state(id)`、`is_all_captured()`（通关判定）；流程：`launch_campaign(territory_id)` 出征、`capture_territory(territory_id)` 占领。
+- 查询：`list_targets()`（据点清单数据源——城门出城选项、战略图双击判定、战略图据点面板共用；含名称/剩余守军/占领态/归属/奖励预览/tile_key，已臣服据点同样在列）、`find_territory_by_settlement(id)`（聚落反查归属真值，不论是否臣服）、`find_target_by_settlement(id)`（可征伐判定，已臣服返回空）、`describe_target(target)`（情报一句话）、`describe_owner(target)`（归属一句话：未易手 / 我方已占 / 势力 id）、`describe_loot(granted)`（占领通告入账明细）、`unlock_label(id)`、`get_territory_state(id)`、`is_all_captured()`（通关判定）；流程：`launch_campaign(territory_id)` 出征、`capture_territory(territory_id)` 占领。
 - 信号分工：点对点走本 api（`territory_captured / conquest_completed`）；全局广播走 EventBus（`territory_state_changed / region_owner_changed / unlock_granted`，状态枚举经本 api 常量取值，不引内部脚本）。
 - 运行时状态记录在 WorldState：`territories[id]`（state / garrison_losses / control_progress / owner / faction）与 `unlocks` 解锁台账（征服奖励写入，各消费端自听 `unlock_granted`），跨图存活；敌将不受战损扣减、每次进图均在位。
 - 解锁项展示名表 `UNLOCK_LABELS`（id → 中文名）与建筑侧门禁（`buildings.tres` 的 `unlocked_by_tech`）用同一 id；两侧对齐由 `tests/unit/test_conquest_targets.gd` 的配置对齐用例兜底。
@@ -33,7 +33,7 @@ modules/expansion/
 - `core/`：WorldState（领地状态容器）、EventBus。
 - 装配注入（SystemSetup）：SceneLoader（travel_to_map 跨图）、CombatApi（start_battle 接敌）、ResourcesApi（占领奖励入账）。
 - 刷单位经 UnitsApi 场景常量，不 preload units 内部路径。
-- 被依赖：`modules/world/`（game_root 出城入口、demo_quest、conquest_anchor 守军锚点）。
+- 被依赖：`modules/world/`（game_root 出城入口、demo_quest、conquest_anchor 守军锚点）、`modules/world_map/`（战略图双击出征确认、聚落 tooltip 归属行、据点面板——都经组 `expansion_api` 取实例，不引本模块内部脚本）。
 
 ---
 

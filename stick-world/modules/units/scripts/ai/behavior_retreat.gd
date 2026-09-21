@@ -13,6 +13,10 @@ extends BehaviorBase
 ##   - 保持招架（retreat_keep_block）：持盾兵种撤退全程举盾，finish/死亡/战斗结束还原
 ##   - 垂直位游走（rout_strafe_enabled）：撤退叠加垂直于敌我连线的横向分量，消除贴边零位移
 ##
+## 收敛加固（结束判定 P2）：fallback 通道里"撤退方向被可走带夹死"（敌人正上/正下
+## 致位移被 y 夹紧清零）不再原地打转收束，而是朝己方出生侧边缘脱离战场并登记
+## departed——否则"溃逃—恢复—再战"无休止，常规战斗（无 duration_limit 兜底）永不收敛。
+##
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
 ##   - evacuate: true 战役撤离（见上；TeamAi ROUT 姿态经 RETREAT 号令传入）
@@ -35,6 +39,9 @@ const MORALE_RECOVER_PER_SEC: float = 8.0
 const SAFE_MORALE_RATIO: float = 0.6
 ## 战役撤离：判定抵达边缘带的内收余量（px；阵营锚点 margin 260，正常布阵不误触）
 const DEPART_EDGE_EPSILON: float = 50.0
+## 无路可退后的脱离行军上限（秒）——只作有界兜底：正常行军至边缘远短于此，
+## 走不到（被卡住/移动无效）也必须收束，禁止行为无限挂起
+const DEPART_MARCH_LIMIT: float = 12.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属战斗实例
@@ -55,6 +62,9 @@ var _withdraw: bool = false
 var _withdraw_anchor: Vector2 = Vector2.ZERO
 ## withdraw 撤退计时（上限 = 档案 retreat_mod_withdraw_max_time）
 var _withdraw_timer: float = 0.0
+## 脱离行军已启动（fallback 位移夹死 → 朝己方边缘离场；一次性补充 _timer 后不再补，
+## 保证行为有界收束。enter 时复位）
+var _departing: bool = false
 
 
 func _ready() -> void:
@@ -68,6 +78,7 @@ func enter(previous: String, params: Dictionary) -> void:
 		_battle = entity.get_battle_instance()
 	_timer = RETREAT_DURATION
 	_evacuate = bool(params.get("evacuate", false))
+	_departing = false
 	# A3 双档语义：withdraw = 撤退回锚点（方向固定锚点）；缺省 = fallback 后撤
 	# （既有语义）。evacuate 优先；锚点解析失败降级 fallback。
 	_withdraw = false
@@ -167,10 +178,25 @@ func update(delta: float) -> void:
 			move_dir.y = 0.0
 		move_dir = move_dir.normalized() if move_dir.length_squared() > 0.0001 else Vector2.ZERO
 	if move_dir == Vector2.ZERO:
-		# 无路可退（贴边）：停止撤退，交还决策（脱火士气恢复后自然再接敌）
-		if entity.has_method("ai_stop"):
-			entity.ai_stop()
-		_finish_with_block_restore()
+		# 无路可退（撤退方向被可走带夹死：敌人正上/正下，位移被 y 夹紧清零）：
+		# 不原地打转交还决策——"贴边零位移即 finish" 会让该单位下一轮重新接敌、
+		# 再溃逃，形成无休止的"溃逃—恢复—再战"（常规战斗无 duration_limit 兜底，
+		# 战斗因此永不收敛）。改按战役撤离口径朝己方出生侧边缘脱离战场：走到边缘带
+		# 即登记 departed，BattleInstance._count_alive 在有限时间内收敛。
+		if not _departing:
+			_departing = true
+			_timer = DEPART_MARCH_LIMIT  # 一次性补充行军时限（有界兜底，见常量注释）
+		_retreat_dir = _evac_dir()
+		if _at_retreat_edge():
+			_register_departed()
+			return
+		if entity.has_method("ai_move"):
+			entity.ai_move(_retreat_dir, true)
+		if _timer <= 0.0:
+			# 走不到边缘（卡住/移动无效）：收束交还决策，行为不挂起
+			if entity.has_method("ai_stop"):
+				entity.ai_stop()
+			_finish_with_block_restore()
 		return
 	if entity.has_method("ai_move"):
 		entity.ai_move(move_dir, true)

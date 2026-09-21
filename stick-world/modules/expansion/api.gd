@@ -78,11 +78,14 @@ func set_flow_manager(manager: Node) -> void:
 
 # ===== 查询（C1 实装）=====
 
-## 可征伐据点列表（出征入口数据源：城门出城选项 / 战略图双击确认）：
-## {id, name_zh, map_id, settlement_key, state, captured, owner, faction, garrison_count,
-##  garrison: [{profile, name_zh, count, tier}], commander: {profile, name_zh},
-##  rewards: {resources: [{id, name_zh, amount}], unlocks: [String]},
-##  rewards_preview: {res_id: amount}}（展示层便捷：describe_target()）
+## 可征伐据点列表（出征入口数据源：城门出城选项 / 战略图双击确认 / 据点面板）：
+## {id, name_zh, map_id, settlement_key, tile_key, entry_side, state, captured, owner,
+##  faction, garrison_count, garrison: [{profile, name_zh, count, tier}],
+##  commander: {profile, name_zh}, rewards: {resources: [{id, name_zh, amount}],
+##  unlocks: [String]}, rewards_preview: {res_id: amount}}
+## （展示层便捷：describe_target() 情报串 / describe_owner() 归属串；
+##  已臣服据点同样在列——据点面板要"已占/未易手"两态；
+##  tile_key = 所属 L1 地块 id，战略图按它定位/染色）
 ## garrison_count = 当前剩余守军（配置 − garrison_losses 车轮战扣减，clamp 0；
 ## 不含敌将——敌将每次进图均在位，架构 §2.3）
 func list_targets() -> Array[Dictionary]:
@@ -99,6 +102,7 @@ func list_targets() -> Array[Dictionary]:
 			"name_zh": String(row.get("name_zh", "")),
 			"map_id": String(row.get("map_id", "")),
 			"settlement_key": String(row.get("settlement_key", "")),
+			"tile_key": String(row.get("tile_key", "")),
 			"entry_side": int(row.get("entry_side", 0)),
 			"state": state,
 			"captured": state == _RegistryScript.State.CAPTURED,
@@ -119,15 +123,36 @@ func list_targets() -> Array[Dictionary]:
 	return out
 
 
-## 按战略图聚落 id 反查据点（双击聚落判"这是不是可征伐的敌据点"）——
-## 无对位/已臣服返回空字典
-func find_target_by_settlement(settlement_id: String) -> Dictionary:
+## 按战略图聚落 id 反查据点配置（不论是否已臣服）——tooltip 归属行与据点面板
+## 读归属真值的入口；不是本模块据点的聚落返回空字典
+func find_territory_by_settlement(settlement_id: String) -> Dictionary:
 	if settlement_id.is_empty():
 		return {}
 	for t in list_targets():
-		if String(t.get("settlement_key", "")) == settlement_id and not bool(t.get("captured", false)):
+		if String(t.get("settlement_key", "")) == settlement_id:
 			return t
 	return {}
+
+
+## 按战略图聚落 id 反查可征伐目标（双击聚落判"这是不是可征伐的敌据点"）——
+## 无对位/已臣服返回空字典
+func find_target_by_settlement(settlement_id: String) -> Dictionary:
+	var t := find_territory_by_settlement(settlement_id)
+	if t.is_empty() or bool(t.get("captured", false)):
+		return {}
+	return t
+
+
+## 归属一句话（tooltip 归属行 / 据点面板共用，展示层不各自拼串）：
+## 空 owner = 原主未易手 / PLAYER_OWNER_ID = 我方已占 / 其余为 AI 势力 id
+## （P5 国家层接入前 factions.tres 未加载，只能给 id）
+func describe_owner(target: Dictionary) -> String:
+	var owner := String(target.get("owner", ""))
+	if owner.is_empty():
+		return "未易手"
+	if owner == _RegistryScript.PLAYER_OWNER_ID:
+		return "我方已占"
+	return owner
 
 
 ## 目标情报一句话（确认框/提示文案共用；展示层不各自拼串）：

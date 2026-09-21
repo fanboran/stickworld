@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://modules/world_map/scripts/strategic_map_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_renderer.gd" id="2_renderer"]
@@ -12,6 +12,7 @@
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_mode_manager.gd" id="10_mode"]
 [ext_resource type="Script" path="res://modules/world_map/ui/travel_dialog.gd" id="11_travel"]
 [ext_resource type="Script" path="res://modules/world_map/ui/map_ocean_backdrop.gd" id="12_ocean"]
+[ext_resource type="Script" path="res://modules/world_map/ui/territory_panel.gd" id="13_terr"]
 
 [node name="StrategicMap" type="CanvasLayer"]
 
@@ -57,6 +58,10 @@ script = ExtResource("7_tip")
 
 [node name="MapTitleBar" type="PanelContainer" parent="."]
 script = ExtResource("8_title")
+visible = false
+
+[node name="TerritoryPanel" type="PanelContainer" parent="."]
+script = ExtResource("13_terr")
 visible = false
 
 [node name="MapLegend" type="PanelContainer" parent="."]

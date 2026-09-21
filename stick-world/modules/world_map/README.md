@@ -46,7 +46,8 @@ modules/world_map/
 │   ├── l1_thumbnail.gd              # L1Thumbnail：顶部小地图区世界缩略窗（Tab 顶部态双窗之一，另一窗 = Minimap）
 │   ├── map_title_bar.gd             # MapTitleBar：左上角视图名牌（层级徽标 + 视图名 + 数据概览）
 │   ├── map_legend.gd                # MapLegend：右下角图例（数据驱动，切模式换整套条目）
-│   ├── settlement_tooltip.gd        # SettlementTooltip：聚落悬停提示
+│   ├── settlement_tooltip.gd        # SettlementTooltip：聚落悬停提示（含据点归属行）
+│   ├── territory_panel.gd           # TerritoryPanel：左上据点面板（已占/未易手清单，行点击定位并激活）
 │   ├── travel_dialog.gd             # TravelDialog：双击聚落弹窗 [走过去 | 快速旅行 | 取消]
 │   └── map_ocean_backdrop.gd        # MapOceanBackdrop：全屏海洋底（三视图共用，CanvasLayer 首子节点）
 ├── scenes/
@@ -75,7 +76,7 @@ modules/world_map/
 - 选中/相机/模式：`select` / `deselect` / `camera_focus` / `screen_to_map` / `map_to_screen` / `set_map_mode` / `get_map_mode`
 - 政治（只读）：`get_state_color` / `get_states`
 
-**消费的全局事件**：`EventBus.settlement_updated`（聚落规模刷新 → 当前 L1 单城 blob 重算；L2/L3 为烘焙静态层不重算）、`battle_started/ended`（战斗中禁旅行）、`region_owner_changed`（政治模式染色的数据源，见 EventBus 信号注释）。
+**消费的全局事件**：`EventBus.settlement_updated`（聚落规模刷新 → 当前 L1 单城 blob 重算；L2/L3 为烘焙静态层不重算）、`battle_started/ended`（战斗中禁旅行）、`territory_state_changed`（据点面板重刷，`TerritoryPanel` 订阅）。`region_owner_changed` 是按归属真值做政治染色的既定数据源，接收端尚未实装（染色粒度待拍板，见 [docs/技术/架构/出征与领地架构.md](docs/技术/架构/出征与领地架构.md) §十）。
 
 ## 视图层级与输入
 

@@ -9,7 +9,8 @@ class_name SettlementTooltip
 ## 数据源：每帧轮询 MapRenderer.hovered_tile_id（渲染器已做悬停命中检测），
 ## 内容更新抽成 update_for_tile 供测试直接调用（headless 下 _process 不运行）。
 ##
-## 内容：聚落名称 / 级别 / 归属政权 / 进入状态（P6：按快速旅行可达性显示提示）。
+## 内容：聚落名称 / 级别 / 归属政权 / 据点归属（仅配置里的据点）/ 进入状态
+## （P6：按快速旅行可达性显示提示）。
 
 ## 鼠标指针到面板左上角的偏移（面板出现在指针右下侧）
 const CURSOR_OFFSET := Vector2(18.0, 18.0)
@@ -29,6 +30,7 @@ var _api: Node = null
 var _name_label: Label = null
 var _level_label: Label = null
 var _owner_label: Label = null
+var _territory_label: Label = null
 var _enter_label: Label = null
 
 ## 当前展示的 tile（"" = 无）
@@ -69,6 +71,8 @@ func _build_widgets() -> void:
 	_name_label = StickKit.label(vbox, "", StickKit.LabelKind.BODY)
 	_level_label = StickKit.label(vbox, "", StickKit.LabelKind.TINY, StickTokens.TEXT_DIM)
 	_owner_label = StickKit.label(vbox, "", StickKit.LabelKind.TINY, StickTokens.TEXT_DIM)
+	_territory_label = StickKit.label(vbox, "", StickKit.LabelKind.TINY)
+	_territory_label.visible = false
 	_enter_label = StickKit.label(vbox, "", StickKit.LabelKind.TINY)
 	_enter_label.visible = false
 
@@ -115,6 +119,7 @@ func update_for_tile(tile: L1TileDef) -> void:
 	_level_label.text = "级别 T%d · %s" % [s.level, lvl_name]
 	var owner_name := _owner_display_name(tile)
 	_owner_label.text = "政权 %s" % owner_name
+	_update_territory_line(s)
 	# 进入状态（P6 快速旅行语义，§5.10）：无 map_id = 未开放；SELF = 当前位置；
 	# 可达 = 双击弹旅行窗；不可达 = 注明原因（走过去仍可，见弹窗）
 	if s.map_id.is_empty():
@@ -157,6 +162,31 @@ func _owner_display_name(tile: L1TileDef) -> String:
 	var info: Dictionary = states.get(tile.owner_state_id, {})
 	var name: String = info.get("name", "")
 	return name if not name.is_empty() else tile.owner_state_id
+
+
+## 据点归属行（归属真值，与上一行的 worldgen 政权是两个层）：
+## 只对配置里的据点显示；真值经 expansion 契约面读（TerritoryRegistry 的 owner/faction
+## 出口），未装配 expansion（dev 直开战略图 / headless 用例）或非据点聚落时隐藏本行。
+func _update_territory_line(s: SettlementRef) -> void:
+	if _territory_label == null:
+		return
+	var expansion := _expansion_api()
+	if expansion == null or not expansion.has_method("find_territory_by_settlement") \
+			or not expansion.has_method("describe_owner"):
+		_territory_label.visible = false
+		return
+	var target: Dictionary = expansion.find_territory_by_settlement(s.settlement_id)
+	if target.is_empty():
+		_territory_label.visible = false
+		return
+	_territory_label.text = "归属 %s" % expansion.describe_owner(target)
+	_territory_label.visible = true
+
+
+## 出征与领地模块 api（组查找，与战略图控制器同口径：不引 expansion 全局类名）
+func _expansion_api() -> Node:
+	var tree := get_tree()
+	return tree.get_first_node_in_group("expansion_api") if tree != null else null
 
 
 ## 跟随鼠标：指针右下偏移，夹进安全矩形（HUD 预留区避让，不出屏）

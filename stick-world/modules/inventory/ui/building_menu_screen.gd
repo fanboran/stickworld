@@ -34,7 +34,7 @@ func open_with(building_name: String, actions: Array) -> void:
 		child.queue_free()
 	for a in actions:
 		var enabled: bool = bool(a.get("enabled", true))
-		var btn := StickKit.sketch_button(_action_box, str(a.get("label", "?")),
+		var btn := StickKit.sketch_button(_action_box, str(a.get("label", "?")), Callable(),
 				StickKit.ButtonKind.NORMAL if enabled else StickKit.ButtonKind.PAPER)
 		btn.disabled = not enabled
 		if enabled:

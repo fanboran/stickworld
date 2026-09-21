@@ -62,7 +62,7 @@ func try_interact() -> void:
 		"warehouse":
 			# 建筑交互菜单（预制框架）：建材取放保留 + 村仓（RegionStorage
 			# 物品视图经 ContainerScreen 存取）+ 占位动作
-			_open_building_menu(warehouse, "仓库")
+			_open_building_menu(target as Node2D, "仓库")
 		"barracks":
 			# 招兵（成败与原因通知由 RecruitManager 内发，交互层零通知职责；
 			# 但**听觉反馈**在这里：花资源招兵是重要动作，成败各给一声）

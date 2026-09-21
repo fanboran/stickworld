@@ -24,7 +24,7 @@ func _init(p_region_id: String = "", p_api: Node = null) -> void:
 # ─────────────────────────────── ItemContainer 协议（ContainerScreen 消费）────
 
 ## 存入（玩家往村仓放资源品）：非资源品全量退回
-func add(def_id: StringName, count: int) -> int:
+func add(def_id: StringName, count: int = 1) -> int:
 	var res_id: StringName = ItemsAPI.resource_id_for(def_id)
 	if res_id == &"" or count <= 0 or _api == null:
 		return count
@@ -33,7 +33,7 @@ func add(def_id: StringName, count: int) -> int:
 
 
 ## 取出（玩家从村仓取资源品）：库存不足整体失败
-func remove(def_id: StringName, count: int) -> bool:
+func remove(def_id: StringName, count: int = 1) -> bool:
 	var res_id: StringName = ItemsAPI.resource_id_for(def_id)
 	if res_id == &"" or count <= 0 or _api == null:
 		return false

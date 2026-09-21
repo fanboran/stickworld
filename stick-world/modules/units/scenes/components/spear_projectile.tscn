@@ -5,7 +5,7 @@
 ; spear.png 竖直尖朝上（与 weapon_spear.tscn 同源图），Sprite 预转 +90°
 ; 使矛尖朝右；根节点 rotation 由脚本跟弹道速度角，叠加后矛尖恒指飞行方向。
 [ext_resource type="Script" path="res://modules/units/scripts/weapons/arrow_projectile.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://modules/units/assets/textures/weapons/spear.png" id="2_tex"]
+[ext_resource type="Texture2D" path="res://modules/stick_rig/assets/textures/weapons/spear.png" id="2_tex"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_spear"]
 size = Vector2(60, 4)

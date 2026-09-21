@@ -11,7 +11,7 @@ signal test_done(code: int)
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptCommandChain := preload("res://modules/combat/scripts/command/command_chain.gd")
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const ScriptTacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
 const ScriptBoard := preload("res://modules/organization/ui/command_chain_board.gd")
 const ViewScene: PackedScene = preload("res://modules/organization/ui/command_chain_view.tscn")
 ## 显式 preload 取视图常量（tests/README 禁区：不依赖 class_name 全局注册）

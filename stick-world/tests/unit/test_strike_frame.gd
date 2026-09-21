@@ -18,7 +18,7 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 ## 显式 preload：确保 headless 批量模式下 DamagePipeline/TargetFinder 的
 ## class_name 已注册（weapon_mount.gd 内部按全局类名引用它们）。
 const _DamagePipeline := preload("res://modules/combat/scripts/battle/damage_pipeline.gd")
-const _TargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+const _TargetFinder := preload("res://modules/tactics/scripts/target_finder.gd")
 const WeaponMountScript := preload("res://modules/units/scripts/entity/weapon_mount.gd")
 const HealthComponentScript := preload("res://modules/units/scripts/entity/health_component.gd")
 

@@ -12,7 +12,7 @@ extends Node
 ## 用户参数（`--` 之后）：
 ##   --anims=a,b,c  动画短名列表（缺省 idle,walk,run,attack）
 ##   --fps=N        采样帧率（缺省 15；采样点含 t=0 与 t=duration 两端）
-##   --dir=路径     动画 .tres 目录（缺省 res://modules/units/animations/ 发布版）
+##   --dir=路径     动画 .tres 目录（缺省 res://modules/stick_rig/animations/ 发布版）
 ##   --out=路径     输出 JSON 路径（缺省 res://tools/baking/rig_pose.json）
 ##
 ## 契约要点（历史教训，勿改）：
@@ -22,11 +22,11 @@ extends Node
 ##   - 动画未列出的骨骼 = setup 姿势（对齐 Spine 语义：未列骨骼保持默认姿势）；
 ##   - 数值保留 3 位小数（duration 4 位，对齐契约示例 0.6667）。
 
-const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
+const Skeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
 
 const DEFAULT_ANIMS := "idle,walk,run,attack"
 const DEFAULT_FPS := 15.0
-const DEFAULT_DIR := "res://modules/units/animations/"
+const DEFAULT_DIR := "res://modules/stick_rig/animations/"
 const DEFAULT_OUT := "res://tools/baking/rig_pose.json"
 
 

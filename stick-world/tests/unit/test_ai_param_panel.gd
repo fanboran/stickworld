@@ -15,7 +15,7 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 const ScriptAIController := preload("res://modules/units/scripts/ai/ai_controller.gd")
 const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
 const ScriptBehaviorHeal := preload("res://modules/units/scripts/ai/behavior_heal.gd")
-const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+const ScriptTargetFinder := preload("res://modules/tactics/scripts/target_finder.gd")
 const ScriptFormationSystem := preload("res://modules/formation/scripts/formation_system.gd")
 
 var _runner: TestRunner

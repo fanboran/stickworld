@@ -8,8 +8,8 @@ extends EditorScript
 ##   outhand = Vector2(55, 3), innerhand = Vector2(73, -17)
 ## 修改 walk.tres 后重新运行此脚本即可同步搬运动画（腿走+手搬）。
 
-const WALK_PATH := "res://modules/units/animations/walk.tres"
-const CARRY_PATH := "res://modules/units/animations/walk_carry.tres"
+const WALK_PATH := "res://modules/stick_rig/animations/walk.tres"
+const CARRY_PATH := "res://modules/stick_rig/animations/walk_carry.tres"
 
 # 搬运手部姿势（单帧常量，双手抬到身前持物）
 const CARRY_OUTHAND := Vector2(55, 3)

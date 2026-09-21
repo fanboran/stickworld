@@ -320,7 +320,7 @@ func _emit(d: Dictionary) -> void:
 ## vs"实体物理+脚本"vs"主循环底噪"。诊断会改变单位状态，放最后（哈希已算完）。
 func _diag_breakdown() -> void:
 	const FRAMES := 120
-	var overlay_script: GDScript = load("res://modules/units/scripts/rig/procedural_overlay.gd")
+	var overlay_script: GDScript = load("res://modules/stick_rig/scripts/procedural_overlay.gd")
 	# A：现状（全开）
 	var ms_a := await _diag_time_window(FRAMES)
 	# C：只停动画 GDScript（rig._process 检测 + overlay 叠加），实体物理照跑

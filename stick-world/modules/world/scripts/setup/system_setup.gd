@@ -23,11 +23,9 @@ const _BattleDirectorScript: GDScript = preload("res://modules/combat/scripts/ba
 const _CombatApiScript: GDScript = preload("res://modules/combat/api.gd")
 const _SelectionSystemScript: GDScript = preload("res://modules/combat/scripts/command/selection_system.gd")
 const _FormationSystemScript: GDScript = preload("res://modules/formation/scripts/formation_system.gd")
-## 共享目标决策内核（formation 零 combat 依赖：由装配层把 combat 目标过滤注入编队系统）
-const _TargetFinderScript: GDScript = preload("res://modules/combat/scripts/target_finder.gd")
 const _OrganizationManagerScript: GDScript = preload("res://modules/organization/scripts/organization_manager.gd")
 const _OrganizationApiScript: GDScript = preload("res://modules/organization/api.gd")
-const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const _TacticalOrdersScript: GDScript = preload("res://modules/tactics/api.gd").Orders
 const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command/command_chain.gd")
 const _BattlePanelScript: GDScript = preload("res://modules/combat/ui/battle_panel.gd")
 const _FormationPanelScript: GDScript = preload("res://modules/formation/ui/formation_panel.gd")

@@ -36,7 +36,7 @@ extends Node
 ##   ② 六件武器正式截图（数据取各 weapon_*.tscn 现值）。
 ## 运行：GODOT --path stick-world res://tools/baking/render_weapon_check.tscn
 
-const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
+const Skeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
 const WEAPON_DIR := "res://modules/units/scenes/components/"
 
 const OUT_DIR := "res://tools/baking/_faithful"

@@ -52,7 +52,6 @@ extends RefCounted
 
 ## 同模块档案（显式 preload，headless 防御惯例 §七.3）
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
 const ScriptTaskBoard := preload("res://modules/combat/scripts/battle/task_board.gd")
 const ScriptUtilityScorer := preload("res://modules/combat/scripts/battle/utility_scorer.gd")
 ## 拆分助手（W2 胖文件拆分：状态留本类，逻辑进 RefCounted 助手，持宿主回引；

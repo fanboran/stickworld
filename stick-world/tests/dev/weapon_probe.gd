@@ -3,7 +3,7 @@ extends Node2D
 ## A 白纹理(对照) / B 导入武器纹理原样 / C 自建图集透明底 / D 不透明品红底图集+discard shader
 ## 用法：godot --path . res://tests/dev/weapon_probe.tscn（1s 自动截图退出）
 
-const BatchRig := preload("res://modules/units/scripts/rig/stickman_batch_rig.gd")
+const BatchRig := preload("res://modules/stick_rig/scripts/stickman_batch_rig.gd")
 
 var _elapsed: float = 0.0
 
@@ -17,13 +17,13 @@ func _ready() -> void:
 	# A 白纹理对照（红色识别）
 	_mm(100, BatchRig._get_white_tex(), null, Color(1, 0, 0, 1))
 	# B 导入武器纹理原样（CompressedTexture2D，带透明背景）
-	_mm(250, load("res://modules/units/assets/textures/weapons/spear.png"), null, Color(1, 1, 1, 1))
+	_mm(250, load("res://modules/stick_rig/assets/textures/weapons/spear.png"), null, Color(1, 1, 1, 1))
 	# C 自建图集（透明底）：sword + pickaxe blit
 	var atlas := Image.create(256, 128, false, Image.FORMAT_RGBA8)
-	var simg: Image = (load("res://modules/units/assets/textures/weapons/sword.png") as Texture2D).get_image()
+	var simg: Image = (load("res://modules/stick_rig/assets/textures/weapons/sword.png") as Texture2D).get_image()
 	simg.convert(Image.FORMAT_RGBA8)
 	atlas.blit_rect(simg, Rect2i(Vector2i.ZERO, simg.get_size()), Vector2i(4, 4))
-	var pimg: Image = (load("res://modules/units/assets/textures/weapons/pickaxe.png") as Texture2D).get_image()
+	var pimg: Image = (load("res://modules/stick_rig/assets/textures/weapons/pickaxe.png") as Texture2D).get_image()
 	pimg.convert(Image.FORMAT_RGBA8)
 	atlas.blit_rect(pimg, Rect2i(Vector2i.ZERO, pimg.get_size()), Vector2i(132, 4))
 	_mm(400, ImageTexture.create_from_image(atlas), null, Color(1, 1, 1, 1))

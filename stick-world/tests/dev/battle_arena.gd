@@ -27,7 +27,7 @@ extends Node
 const _GameRootScene: PackedScene = preload("res://modules/world/scenes/game_root.tscn")
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 const _MainMenuScene := "res://modules/ui_global/scenes/menus/main_menu.tscn"
-const _TacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const _TacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
 
 ## 武器类型（对齐 WeaponMount.WeaponType：0 剑 1 矛 2 弓 3 镐 4 杖）
 const W_SWORD: int = 0

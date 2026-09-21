@@ -9,9 +9,9 @@ extends Node
 ## 注入的 Hit 事件元数据（hit_time 等，命中帧对齐依赖）——重烘焙后必须重跑
 ## inject_anim_events.tscn 恢复；其 Spine 源缺失时至少 git checkout 恢复旧 tres。
 
-const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
+const Skeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
 
-const OUTPUT_DIR := "res://modules/units/animations/"
+const OUTPUT_DIR := "res://modules/stick_rig/animations/"
 
 
 func _ready() -> void:

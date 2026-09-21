@@ -19,7 +19,7 @@ extends Node
 ##
 ## 运行：godot --headless --path stick-world res://tools/baking/wash_anims.tscn
 
-const ANIM_DIR := "res://modules/units/animations/"
+const ANIM_DIR := "res://modules/stick_rig/animations/"
 const ANIMATIONS: Array[String] = [
 	"idle", "idle_v2", "walk", "run", "attack", "dead",
 	"hit_front", "hit_back", "walk_carry", "build", "arrive", "dead_headshot", "block",

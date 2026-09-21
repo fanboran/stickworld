@@ -11,7 +11,7 @@ signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptFormationSystem := preload("res://modules/formation/scripts/formation_system.gd")
 const ScriptSquadPhasePlan := preload("res://modules/formation/scripts/squad_phase_plan.gd")
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const ScriptTacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
 
 var _runner: TestRunner
 

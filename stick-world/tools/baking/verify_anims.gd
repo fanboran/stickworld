@@ -2,7 +2,7 @@ extends Node
 ## 验证：直接采样转换后动画 .tres 的骨骼旋转关键帧，应用到骨架，检查摆动角度是否合理。
 ## walk: 腿应在竖直附近摆动（thigh ±40°）、臂摆动、头微动；attack: 挥剑幅度大。
 
-const StickmanSkeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
+const StickmanSkeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
 
 var _skel: Skeleton2D
 
@@ -14,7 +14,7 @@ func _ready() -> void:
 	add_child(_skel)
 
 	for anim_name in ["walk", "attack", "idle", "run", "dead"]:
-		var anim: Animation = load("res://modules/units/animations/%s.tres" % anim_name)
+		var anim: Animation = load("res://modules/stick_rig/animations/%s.tres" % anim_name)
 		print("=== %s (len=%.2f) ===" % [anim_name, anim.length])
 		for t in [0.0, anim.length * 0.25, anim.length * 0.5, anim.length * 0.75, anim.length]:
 			_apply(anim, t)

@@ -4,13 +4,13 @@ extends Node
 ##
 ## 数据源：external/decompiled/legacy/spine_raw/textures/universal.png
 ##        + external/decompiled/legacy/spine_raw/核心单位骨架/[universal.atlas].txt
-## 输出：res://modules/units/assets/textures/weapons/*.png
+## 输出：res://modules/stick_rig/assets/textures/weapons/*.png
 ##
 ## 运行：godot --headless --path "F:/VSCode/game-2-aux/stick-world" res://tools/baking/extract_weapons.tscn
 
 const ATLAS_PATH := "F:/VSCode/game-2-aux/external/decompiled/legacy/spine_raw/核心单位骨架/[universal.atlas].txt"
 const PNG_PATH := "F:/VSCode/game-2-aux/external/decompiled/legacy/spine_raw/textures/universal.png"
-const OUTPUT_DIR := "res://modules/units/assets/textures/weapons/"
+const OUTPUT_DIR := "res://modules/stick_rig/assets/textures/weapons/"
 
 ## 提取清单：贴图名 -> 输出文件名。
 ## region 名以各兵种皮肤 weapon/Arrow1 附件实际引用为准（不是想当然）：

@@ -6,7 +6,7 @@ signal test_done(code: int)
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+const Anims := preload("res://modules/stick_rig/scripts/stickman_anims.gd")
 
 var _runner: TestRunner
 

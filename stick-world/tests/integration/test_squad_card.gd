@@ -17,7 +17,7 @@ extends Node
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
-const TacticalOrdersScript := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const TacticalOrdersScript := preload("res://modules/tactics/scripts/tactical_orders.gd")
 
 ## 测试单位数量（= 成员行期望数）
 const UNIT_COUNT: int = 5

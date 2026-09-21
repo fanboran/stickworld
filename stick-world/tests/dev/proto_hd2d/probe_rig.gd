@@ -4,7 +4,7 @@ extends Node
 ## 跑法：
 ##   godot --path stick-world res://tests/dev/proto_hd2d/probe_rig.tscn
 
-const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
+const RIG_SCENE := "res://modules/stick_rig/scenes/stickman_test.tscn"
 
 func _ready() -> void:
 	for anim in ["idle", "walk"]:

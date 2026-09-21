@@ -87,7 +87,7 @@
 1. **文件夹结构**：模块一级目录按功能划分（`/modules/`、`/core/`），新功能 = 新模块，互不干扰，保证高可扩展性；模块内二级目录按类型划分（scenes/、scripts/、assets/ 等），找场景去 scenes/、找脚本去 scripts/，保证高速定位。功能定边界、类型定导航，两级结合。
 2. **耦合原则**：模块间通信优先使用 `core/autoload/event_bus.gd` 的全局事件总线，或通过模块的 `api.gd` 定义信号。不要跨模块 `get_node` 或引用非 API 内部方法。
 3. **接口契约**：模块对外交互须通过其根目录下的 `api.gd` 文件。
-4. **依赖分层**：只允许高层依赖低层——L0 `core/` → L1 基础设施（ui_global/fx/texture_gen/building_gen/environment/hd2d）→ L2 玩法（combat/formation/units/construction/organization/resources/inventory/player_control/world_map/debug_gui/expansion/town_life）→ L3 组装（world 唯一 composition root）。hd2d 按 api.gd 自述归 L1 渲染基础设施，其对 units 的现存依赖为 AR-1 在册越界债务。改动跨模块结构后跑 `python tools/audit_deps.py` 自检（零依赖环；跨模块 preload 仅限 api.gd 或行内 `audit-exempt` 标记+理由）。架构收敛工作项（AR 系列）见 `docs/项目/待办事项.md`。
+4. **依赖分层**：只允许高层依赖低层——L0 `core/` → L1 基础设施（ui_global/fx/texture_gen/building_gen/environment/hd2d/stick_rig）→ L2 玩法（combat/formation/tactics/units/construction/organization/resources/inventory/player_control/world_map/debug_gui/expansion/town_life）→ L3 组装（world 唯一 composition root）。stick_rig = 火柴人唯一视觉骨架（L1），tactics = 目标选择/战术号令共享词汇（L2，零出向）。改动跨模块结构后跑 `python tools/audit_deps.py` 自检（零依赖环；跨模块 preload 仅限 api.gd 或行内 `audit-exempt` 标记+理由）。架构收敛工作项（AR 系列）见 `docs/项目/待办事项.md`。
 
 **解耦核心策略**：
 

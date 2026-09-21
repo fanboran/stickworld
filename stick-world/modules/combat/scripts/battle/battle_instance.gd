@@ -22,7 +22,7 @@ const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 ## D 刀：数据化批模拟内核（ProjectSettings sim/battle_sim 开关，见 BattleSim.is_enabled）
 const ScriptBattleSim := preload("res://modules/combat/scripts/battle/battle_sim.gd")
-const ScriptCrowdRenderer := preload("res://modules/units/scripts/rig/crowd_renderer.gd")
+const ScriptCrowdRenderer := preload("res://modules/stick_rig/api.gd").CROWD_RENDERER_SCRIPT
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 战斗结束（胜负/平局判定完成，实例即将 queue_free）。

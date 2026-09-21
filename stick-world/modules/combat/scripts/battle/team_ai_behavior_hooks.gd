@@ -16,8 +16,8 @@ extends RefCounted
 ## 消费方：team_ai_order_emitter（issue_stance_orders 内对无令小队接管）。依赖
 ## 同伴：team_ai_squad_query（组织根查询、小队质心）。装配序 query 先于本类。
 
-## 同模块号令脚本（OrderType 枚举消费；combat 域内 preload 惯例）
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+## 号令脚本（OrderType 枚举消费；tactics/api.gd 契约出口）
+const ScriptTacticalOrders := preload("res://modules/tactics/api.gd").Orders
 ## 同模块任务槽板（KIND_ATTACK 判定消费）
 const ScriptTaskBoard := preload("res://modules/combat/scripts/battle/task_board.gd")
 

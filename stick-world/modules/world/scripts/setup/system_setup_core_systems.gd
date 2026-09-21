@@ -228,16 +228,6 @@ func _setup_tactical_system() -> void:
 	_host._root._tactical_orders = to
 	if to.has_method("setup"):
 		to.setup(_host._root._formation_system, _host._root._command_chain, _host._root._organization_api)
-	# formation 模块零 combat 静态依赖（零依赖环）：共享目标决策器与推进类号令枚举
-	# 由装配层注入真值——formation 侧缺省仅覆盖单测/独立环境（见 formation_system 注入接口注释）
-	var fs: Node = _host._root._formation_system
-	if fs != null:
-		if fs.has_method("set_target_decider"):
-			fs.set_target_decider(Callable(_host._TargetFinderScript, "find_target"))
-		if fs.has_method("set_advance_order_types"):
-			fs.set_advance_order_types([
-				_host._TacticalOrdersScript.OrderType.ADVANCE_ALL,
-				_host._TacticalOrdersScript.OrderType.SPRINT])
 
 
 # ─────────────────────────────── 指挥链传输层装配（3-F2）────────────────────────────────

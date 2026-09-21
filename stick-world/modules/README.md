@@ -22,9 +22,11 @@
 | `world`                | 常驻主场景（GameRoot）+ 地图/相机/输入分发 | ✅ P0 完整     |
 | `world/placement_grid` | 32px 竖向条带占地网格               | ✅ P0 完整     |
 | `world_map`            | 战略图（鸟瞰多边形领土，玩家不在其中）         | ✅ L1 单层在役（六期观感返工已合并） |
-| `units`                | 火柴人角色（实体 + 骨骼 + AI）         | ✅ P0 完整     |
-| `combat`               | 小队级战斗实例 + 号令/指挥链/掩体/阵营 AI    | ✅ P0 完整     |
+| `units`                | 火柴人角色（实体 + AI；渲染骨架归 `stick_rig`） | ✅ P0 完整     |
+| `combat`               | 小队级战斗实例 + 指挥链/掩体/阵营 AI    | ✅ P0 完整     |
 | `formation`            | 战斗阵列（编队槽位/几何/跟队/相位计划/编制 UI） | ✅ 在役       |
+| `tactics`              | 战术决策词汇（目标选择 TargetFinder + 战术号令 TacticalOrders，units/formation/combat 共用） | ✅ 在役       |
+| `stick_rig`            | 火柴人唯一视觉骨架（骨骼/动画/描边/血条/crowd 合批/武器表现，L1 渲染基础设施） | ✅ 在役       |
 | `construction`         | 建造/升级/拆除/修理（运行时）            | ✅ P0 完整     |
 | `building_gen`         | 程序化建筑生成（BuildingDef → 节点树）  | 🟡 B0-B2 阶段 |
 | `texture_gen`          | CPU 贴图 + GPU Shader 材质库     | ✅ 完整        |
@@ -47,11 +49,11 @@
 ## 2. 模块依赖图
 
 > **单向规则**：箭头方向 = "依赖"，高层依赖底层，低层不反向调用。`api.gd` 是允许的耦合点。
-> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 5 个依赖环（静态口径，含 class_name 边）：combat⇄units / expansion⇄world / organization⇄world / town_life⇄units / world⇄world_map；其中 world⇄world_map、combat⇄units 为真 preload 双向环，拆解方向 = 共享词汇下沉 `core/shared/`（见待办 AR-2）。越界基线 = 非装配器跨模块 preload 9 处 + 裸字符串 3 处（audit_deps 越界清单，见待办 AR-1）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。
+> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 4 个依赖环（静态口径，含 class_name 边）：expansion⇄world / organization⇄world / town_life⇄units / world⇄world_map（均数据面弱耦合在册容忍）；combat⇄units（AR-2）与 hd2d→units（AR-1）已随 `tactics`/`stick_rig` 域拆分清偿。越界基线 = 非装配器跨模块 preload 6 处 + 裸字符串 2 处（audit_deps 越界清单）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。
 
 ```
                               ┌────────────────────────────────┐
-                              │  world（装配根，GameRoot）      │ ← 依赖全部 17 个模块
+                              │  world（装配根，GameRoot）      │ ← 依赖全部 18 个模块
                               └────────────────────────────────┘
    ┌────────────┬─────────────┼─────────────┬──────────────┐
    ▼            ▼             ▼             ▼              ▼
@@ -61,30 +63,31 @@
 └────┬────┘ └────┬────┘ └────┬─────┘ └────┬─────┘ └─────┬─────┘
      │           │           │            │             │
      │           │           ▼            ▼             │
-     │           │      ┌─────────────────────┐        │
-     │           │      │ units⇄combat/formation │        │   执行者（town_life→units）
-     │           │      └─────────────────────┘        │
-     ▼           ▼                                     ▼
+     │           │      ┌──────────────────────────┐    │
+     │           │      │ units→{combat,formation} │    │   执行者（town_life→units）
+     │           │      │ tactics（目标/号令词汇）  │    │
+     │           │      └──────────────────────────┘    │
+     ▼           ▼                                      ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  基础设施：ui_global→fx ｜ player_control→ui_global          │
 │   construction→{building_gen, player_control, ui_global}    │
 │   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
-│   hd2d→{environment, ui_global, units}                      │
+│   hd2d→{environment, stick_rig, ui_global}                  │
 └─────────────────────────────────────────────────────────────┘
-   （fx / environment / resources 无出向依赖）
+   （fx / environment / resources / stick_rig / tactics 无出向依赖）
 ```
 
 **实测边表**（`python tools/audit_deps.py`，直接依赖）：
 
 | 模块 | 依赖（出向） |
 |------|------------|
-| `world` | 全部 17 模块（building_gen/combat/construction/debug_gui/environment/expansion/formation/fx/hd2d/inventory/organization/player_control/resources/town_life/ui_global/units/world_map） |
+| `world` | 全部 18 模块（building_gen/combat/construction/debug_gui/environment/expansion/formation/fx/hd2d/inventory/organization/player_control/resources/tactics/town_life/ui_global/units/world_map） |
 | `world_map` | ui_global, world |
 | `organization` | building_gen, ui_global, units, world |
 | `expansion` | units, world |
-| `combat` | formation, fx, player_control, ui_global, units |
-| `units` | combat, formation, fx, player_control, town_life |
-| `formation` | ui_global |
+| `combat` | formation, fx, player_control, stick_rig, tactics, ui_global |
+| `units` | combat, formation, fx, player_control, stick_rig, tactics, town_life |
+| `formation` | tactics, ui_global |
 | `town_life` | units |
 | `inventory` | ui_global, units |
 | `construction` | building_gen, player_control, ui_global |
@@ -93,8 +96,8 @@
 | `texture_gen` | ui_global |
 | `building_gen` | texture_gen |
 | `ui_global` | fx |
-| `hd2d` | environment, ui_global, units |
-| `fx` / `environment` / `resources` | （无） |
+| `hd2d` | environment, stick_rig, ui_global |
+| `fx` / `environment` / `resources` / `stick_rig` / `tactics` | （无） |
 
 **关键路径**：
 
@@ -242,7 +245,7 @@ StickmanEntity (CharacterBody2D)
 - **三层命令系统**（详见 units）：玩家指令 → 编制默认 → 单位本能
 - **指挥链延迟**：`base_delay × tier_diff × commander_efficiency_modifier`，玩家附身该层级时延迟为 0
 - **战场导演**（`battle_ai_director.gd`）：每 2-5s 给单位打情绪标签（HESITANT/EXCITED/PANICKED/STEADY）→ 灵动性
-- **队伍类型编制**（2026-08 新增）：编队由**编制预设**驱动（`config/formations/formation_presets.tres`），预设定义组织标签 + 职责范围（工作类型 WORK_COMBAT/BUILD/HAUL/FORAGE）+ 成员角色；职责范围可调整（`set_squad_work_types`）；AIController 决策按队伍职责过滤（建造队不参战/战斗班不接建造派工，未编队全能）；TacticalOrders 拒绝非战斗职责小队号令。UI 见 [`modules/combat/ui` 编制管理窗口（FormationPanel）](#modulescombat--战斗模块)
+- **队伍类型编制**（2026-08 新增）：编队由**编制预设**驱动（`config/formations/formation_presets.tres`），预设定义组织标签 + 职责范围（工作类型 WORK_COMBAT/BUILD/HAUL/FORAGE）+ 成员角色；职责范围可调整（`set_squad_work_types`）；AIController 决策按队伍职责过滤（建造队不参战/战斗班不接建造派工，未编队全能）；TacticalOrders 拒绝非战斗职责小队号令。UI 见 [`modules/formation/ui` 编制管理窗口（FormationPanel）](#modulesformation--战斗阵列模块)
 
 **预设号令**（P0 范围）：
 
@@ -455,7 +458,7 @@ UIRoot
 | 归属 | 内容 |
 |------|------|
 | `modules/ui_global/` | 容器（UIRoot/HUD/ModePanel/ContextPanel/ModalOverlay）、通用 HUD 控件（小地图/缩放条/时钟/资源条）、游玩指示器、全局弹窗（设置/存档，不绑业务模块） |
-| `modules/<模块>/ui/` | 深度耦合该模块 API 的业务面板（如 `combat/ui/` 战斗面板与编制窗口、`construction/ui/` 建造菜单、`player_control/ui/` 附身面板、`world_map/ui/` 战略图面板） |
+| `modules/<模块>/ui/` | 深度耦合该模块 API 的业务面板（如 `combat/ui/` 战斗面板、`formation/ui/` 编制窗口、`construction/ui/` 建造菜单、`player_control/ui/` 附身面板、`world_map/ui/` 战略图面板） |
 
 **依赖注入约定**（2026-08 审计后统一）：
 

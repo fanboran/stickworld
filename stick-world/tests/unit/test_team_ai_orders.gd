@@ -9,7 +9,7 @@ signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const ScriptTacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
 
 var _runner: TestRunner
 

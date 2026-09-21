@@ -21,11 +21,11 @@ extends Node3D
 ## 一个 SubViewport 可以被 N 个 quad 共用（同姿态）；要每个角色不同动画相位，
 ## 必须一个角色一个 SubViewport（成本见汇报的性能读数）。
 
-const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
+const RIG_SCENE := preload("res://modules/stick_rig/api.gd").RIG_SCENE_PATH
 const CHAR_SHADER := preload("res://modules/hd2d/shaders/char_billboard.gdshader")
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
-const StickmanOutline := preload("res://modules/units/scripts/rig/stickman_outline.gd")
-const HEALTH_BAR_SCRIPT := preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
+const StickmanOutline := preload("res://modules/stick_rig/api.gd").OUTLINE_SCRIPT
+const HEALTH_BAR_SCRIPT := preload("res://modules/stick_rig/api.gd").HEALTH_BAR_SCRIPT
 
 const SV_W := 144            # SubViewport 宽（px）
 const SV_H := 176            # SubViewport 高（px）
@@ -404,9 +404,9 @@ func set_weapon_type(wt: int) -> void:
 	if _weapon_follow != null and is_instance_valid(_weapon_follow):
 		_weapon_follow.queue_free()
 		_weapon_follow = null
-	if rig == null or wt == int(WeaponMount.WeaponType.NONE):
+	if rig == null or wt == int(StickRigAPI.WeaponType.NONE):
 		return
-	var scene_path: String = str(WeaponMount.WEAPON_SCENE_PATHS.get(wt, ""))
+	var scene_path: String = str(StickRigAPI.WEAPON_SCENE_PATHS.get(wt, ""))
 	if scene_path.is_empty():
 		return
 	var bone: Node2D = rig.get_node_or_null(

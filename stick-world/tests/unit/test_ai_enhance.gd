@@ -9,7 +9,7 @@ signal test_done(code: int)
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptBattleInstance := preload("res://modules/combat/scripts/battle/battle_instance.gd")
-const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+const ScriptTargetFinder := preload("res://modules/tactics/scripts/target_finder.gd")
 const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
 
 var _runner: TestRunner

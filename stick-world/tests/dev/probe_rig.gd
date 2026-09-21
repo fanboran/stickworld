@@ -29,7 +29,7 @@ func _ready() -> void:
 	var sprites: Dictionary = rig.get("_sprites") if "_sprites" in rig else {}
 	var names: Dictionary = rig.get("ScriptSkeleton").BONE_NAMES if false else {}
 	# 骨骼世界位置
-	var sk: GDScript = load("res://modules/units/scripts/rig/stickman_skeleton.gd")
+	var sk: GDScript = load("res://modules/stick_rig/scripts/stickman_skeleton.gd")
 	var bone_names: Dictionary = sk.BONE_NAMES
 	for id in bones:
 		var b: Node2D = bones[id]

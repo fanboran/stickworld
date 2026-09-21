@@ -14,7 +14,7 @@ extends Node
 ## clear_action / set_action_progress / hide_action_progress）。
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）
-const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+const Anims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 ## 兵种行为档案（盾姿态分层：持盾动画组/池按武器类型查档案，计划 5）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 

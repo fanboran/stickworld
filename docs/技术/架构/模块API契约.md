@@ -313,12 +313,50 @@ const ARRIVE_TOLERANCE: float           # 相位计划到位容差默认值（co
 # create_squad / assign_leader / add_unit / get_squad_units / get_squad_leader
 # get_squad_dest(squad_id, unit, base_pos, mode)   # mode: "formation" / "line" / "rally"
 # set_squad_follow_squad / get_squad_target / is_unit_in_formation
-# notify_squad_order / notify_org_order            # 号令触发相位计划
-# set_target_decider / set_advance_order_types     # 装配层反向注入（combat 目标内核与号令枚举真值）
+# notify_squad_order / notify_org_order            # 号令触发相位计划（推进类枚举 = tactics Orders.OrderType）
 ```
 
 > 实现全在 `scripts/`（编队总成/间距真相源/槽位几何/跟队/相位计划/快照/权威值/上报）与 `ui/`（编制窗口/L1 班组卡）；
-> 外部模块禁止 preload 内部脚本。号令的语义与下发在 combat（`TacticalOrders`/`CommandChain`），阵列只回答落点与到位判定。
+> 外部模块禁止 preload 内部脚本。号令的语义与目标选择在 tactics（`TacticalOrders`/`TargetFinder`）、下发链在 combat（`CommandChain`），阵列只回答落点与到位判定。
+
+---
+
+## 六-B、战术决策模块 `modules/tactics/api.gd`（已实现契约）
+
+```gdscript
+# 战术号令脚本（TacticalOrders：OrderType 枚举 ADVANCE_ALL/SPRINT/HOLD_POSITION/RETREAT/TAKE_COVER/RALLY
+# + issue 小队直令 / issue_to_org 组织逐层；formation/command_chain/org 引用由装配层注入，不静态依赖）
+const Orders: GDScript
+
+# 目标选择脚本（TargetFinder：find_target / find_weakest_ally / find_targets_in_arc，
+# 规则经 opts 链式过滤——prefer_low_hp / prefer_large / fixate_on / ignore_current_attackers / max_attackers_per_target）
+const Finder: GDScript
+```
+
+> 从 combat 聚合迁出的共享战术词汇：units（行为层选目标）、formation（小队共享目标 + 相位计划号令判定）、
+> combat（team_ai 号令编排/效用打分/战斗面板）三方单向依赖，combat⇄units 环（AR-2）根因消除。
+> 消费方一律经本文件常量 preload（显式链保 headless 防御惯例），禁止 preload scripts/ 内部文件。
+
+---
+
+## 六-C、骨架渲染模块 `modules/stick_rig/api.gd`（已实现契约，L1）
+
+```gdscript
+# 脚本出口（显式 preload 链）
+const ANIMS_SCRIPT: GDScript          # StickmanAnims：动画名/变体池/WEAPON_ATTACK_ANIM 单一真相源
+const HEALTH_BAR_SCRIPT: GDScript     # HealthBarIndicator：头顶血条 + crowd GPU 烘制参数
+const OUTLINE_SCRIPT: GDScript        # StickmanOutline：CanvasGroup 双 pass 描边（hd2d 消费）
+const CROWD_RENDERER_SCRIPT: GDScript # crowd 批量渲染器（combat BattleInstance 装配）
+
+# 场景与武器视觉词汇
+const RIG_SCENE_PATH: String          # 骨架场景（实体场景与 HD-2D billboard 共用实例源）
+enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF, MERIC, NONE }  # 装备状态数值口径
+const WEAPON_SCENE_PATHS: Dictionary  # 武器类型 -> 表现场景路径（WeaponMount const 转发保持旧引用点）
+```
+
+> 火柴人唯一视觉骨架（AGENTS.md 核心指令 6）：骨骼/动画/描边/血条/crowd 合批/武器表现组件归本模块（L1），
+> 实体侧（units）持数据与状态机经 api 驱动渲染。对实体的运行时协作走鸭子协议（节点名/has_method/get），
+> L1 不反向依赖 L2；hd2d 的角色 billboard 经本 api 取骨架场景/描边/血条/武器镜像（AR-1 清偿）。
 
 ---
 
@@ -363,7 +401,7 @@ func check_and_unlock(badge_id: String) -> Dictionary
 
 ## 九、模块间 API 依赖图
 
-> 仅含已实现模块（construction / building_gen / texture_gen / resources / organization / combat / formation / world_map / world / units / player_control / environment / fx / debug_gui）。
+> 仅含已实现模块（construction / building_gen / texture_gen / resources / organization / combat / formation / tactics / stick_rig / world_map / world / units / player_control / environment / fx / debug_gui / inventory / expansion / town_life）。
 > technology（见 §二）、expansion / logistics / achievement（未实现）为阶段 2 设计契约，实现时补充出边。
 > world 为组装根：SystemSetup 集中装配各模块组件，跨模块依赖汇聚于此而非散布（详见 场景与战斗架构.md）。
 

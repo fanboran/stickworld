@@ -3,7 +3,7 @@ extends Node2D
 ## 用法：godot --path . res://tests/dev/crowd_probe.tscn（1s 后自动截图退出）
 
 const EntityScene := preload("res://modules/units/scenes/stickman_entity.tscn")
-const CrowdRenderer := preload("res://modules/units/scripts/rig/crowd_renderer.gd")
+const CrowdRenderer := preload("res://modules/stick_rig/scripts/crowd_renderer.gd")
 
 var _crowd: RefCounted = null
 var _slots: Array = []

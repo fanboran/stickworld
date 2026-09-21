@@ -3,7 +3,7 @@ extends Node
 ##
 ## 跑法：godot --path stick-world res://tests/dev/proto_hd2d/probe_rig3.tscn
 
-const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
+const RIG_SCENE := "res://modules/stick_rig/scenes/stickman_test.tscn"
 
 func _ready() -> void:
 	await _variant("asis", Vector2(-20, 112), Vector2(24, 115), false)

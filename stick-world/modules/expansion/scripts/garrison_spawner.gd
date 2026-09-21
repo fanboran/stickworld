@@ -169,8 +169,7 @@ func _spawn_unit(map: Node2D, pos: Vector2, profile: String) -> Node2D:
 	return u
 
 
-## 按兵种档案的 variant 装武器（setter call_deferred 重挂，spawn 后设置安全；
-## 先例照 siege_director）
+## 按兵种档案的 variant 装武器（setter call_deferred 重挂，spawn 后设置安全）
 func _apply_weapon(u: Node2D, profile: String) -> void:
 	if profile.is_empty() or u.get("weapon_mount") == null:
 		return

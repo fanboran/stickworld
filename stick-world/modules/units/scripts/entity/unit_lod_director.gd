@@ -31,7 +31,7 @@ extends Node
 ## 挂载与自动发现：由 SystemSetup 装配挂到 GameRoot（节点名 UnitLodDirector），
 ## setup(game_root) 后每拍自动发现——地图经 GameRoot.get_current_map() 解析，
 ## 地图实例变更时重解析 map.find_child("EntityHost", true, false) 并缓存宿主
-## 引用、重置档位状态；单位集每拍从缓存宿主的子节点刷新（演练场/攻城波次等
+## 引用、重置档位状态；单位集每拍从缓存宿主的子节点刷新（演练场等
 ## 晚于地图装配的刷兵下一拍自动纳入，递归 find_child 只付在换绑时）；相机每拍
 ## 取 game_root 视口激活相机。地图未加载 / 无相机（headless 测试）时空转，
 ## 单位保持默认全速（零行为变化）。
@@ -176,7 +176,7 @@ func _retier() -> void:
 		return
 	# 地图换绑：实例变更时重解析 EntityHost 宿主并重置档位状态
 	_rebind_map()
-	# 单位集刷新（每拍）：晚于地图装配的刷兵（演练场/攻城波次）下一拍自动纳入
+	# 单位集刷新（每拍）：晚于地图装配的刷兵（演练场等）下一拍自动纳入
 	_refresh_units()
 	if _units.is_empty():
 		return

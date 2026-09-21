@@ -2,7 +2,7 @@ class_name StoneBrickGen
 extends Object
 ## CPU 程序化石砖纹理生成（静态工具）。
 ##
-## 用途：城墙/城门贴图的运行时生成与离线烘焙（tools/bake_siege_textures.gd）
+## 用途：城墙/城门贴图的运行时生成与离线烘焙（tools/baking/render_walls.gd）
 ## 共用同一算法，保证"代码生成的石砖结构"在烘焙产物与运行时兜底两条路上一致。
 ##
 ## 配方（与 texture_gen/materials/stone_wall 的 GPU 配方同族，CPU 实现）：

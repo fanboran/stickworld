@@ -125,9 +125,7 @@ var inventory_service: Node = null
 ## 背包界面（InventoryScreen；E 键开关，SystemSetup 装配；shortcuts 助手经 _host 读写）
 @warning_ignore("unused_private_class_variable")
 var _inventory_screen: Control = null
-## 角色属性面板（StatsScreen；C 键开关，SystemSetup 装配；shortcuts 助手经 _host 读写）
 @warning_ignore("unused_private_class_variable")
-var _stats_panel: Control = null
 
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
 ## PossessionInterface 实例引用（运行时由 SystemSetup 装配）
@@ -762,16 +760,12 @@ func handle_shortcuts(event: InputEvent) -> void:
 	_shortcuts.handle_shortcuts(event)
 
 
-## 开关背包界面（E 键）：Hotbar / StatsScreen 调用。逻辑在 game_root_shortcuts.gd。
+## 开关背包界面（E 键）：Hotbar 调用。逻辑在 game_root_shortcuts.gd。
 func toggle_inventory() -> void:
 	_shortcuts.toggle_inventory()
 
 
 ## 开关角色属性面板（C 键）：Hotbar 调用。逻辑在 game_root_shortcuts.gd。
-func toggle_stats_panel() -> void:
-	_shortcuts.toggle_stats_panel()
-
-
 ## 打开功能空面板（经 ui_global/placeholders，系统落地后替换真实面板）。
 ## 快捷键（K/O/J/L）与暂停菜单「功能」分区共用此入口。
 ## 逻辑在 game_root_shortcuts.gd（薄壳转发，测试直调签名不变）。

@@ -55,6 +55,8 @@ var attack: float = 0.0
 var defense: float = 0.0
 var speed: float = 0.0
 var equipment: Dictionary = {}
+## 个体装备记录（loadout 奠基，设计文档 10 §3.4）：{main_hand/off_hand/armor_* -> def_id}
+var loadout: Dictionary = {}
 var skills: Array[String] = []
 var traits: Array[String] = []
 var current_task: String = ""

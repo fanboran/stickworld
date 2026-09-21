@@ -414,6 +414,10 @@ func _update_aim_rhythm(delta: float) -> bool:
 	if not _aiming:
 		_aiming = true
 		_aim_timer = _gauss((hold.x + hold.y) * 0.5, maxf(0.05, (hold.y - hold.x) / 3.0))
+		# AI 附身技能档位（SWL Personality.UserControlSkill）：LIMITED 拉弓更拖沓、
+		# PRO 更果断（默认中位 ×1.0 零回归）
+		_aim_timer *= float(ScriptBehaviorProfiles.SKILL_AIM_HOLD_MULT.get(
+				int(_profile.get("user_control_skill", 1)), 1.0))
 		var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 		if weapon != null and weapon.has_method("get_sustained_fire_heat") \
 				and weapon.get_sustained_fire_heat() >= BURST_HEAT_THRESHOLD:

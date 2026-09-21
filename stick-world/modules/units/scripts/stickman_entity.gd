@@ -49,6 +49,8 @@ const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/e
 const _InteractionControllerScript: GDScript = preload("res://modules/units/scripts/entity/interaction_controller.gd")
 ## 头顶血条组件脚本（受击后显示 HP，满血隐藏）
 const _HealthBarScript: GDScript = preload("res://modules/stick_rig/api.gd").HEALTH_BAR_SCRIPT
+## 蓄力轨迹预览组件脚本（拉弓/投矛抛物线预测点、杖落点 AOE 圈）
+const _AimPreviewScript: GDScript = preload("res://modules/units/scripts/entity/aim_trajectory_preview.gd")
 ## 运动助手脚本（移动/分离/加减速，方法体所在）
 const _MotionScript: GDScript = preload("res://modules/units/scripts/entity/entity_motion.gd")
 ## 附身输入助手脚本（玩家控制，方法体所在）
@@ -266,6 +268,8 @@ var _interaction: Node = null
 var _motion: RefCounted = null
 ## 附身输入助手（玩家控制方法体所在）
 var _possession: RefCounted = null
+## 蓄力轨迹预览（拉弓/投矛期间的抛物线预测点；_ready 装配，隐藏待命）
+var _aim_preview: Node2D = null
 ## 缩放/骨架同步助手（渲染判定缩放/markers 同步方法体所在）
 var _scale_rig: RefCounted = null
 
@@ -288,7 +292,7 @@ func _enter_tree() -> void:
 
 
 ## 玩家按 Alt 切换散步/奔跑模式（仅附身时生效）
-## 鼠标左键攻击（仅附身时生效，§7.5）
+## 鼠标左键攻击（仅附身时生效，§7.5；按下/松开两态走蓄力状态机）
 ## Q 键切换建造/战斗模式（仅附身时生效）
 ## 键判定走 InputBindings 动作表（is_action_pressed 默认过滤键盘重复）
 func _input(event: InputEvent) -> void:
@@ -303,10 +307,16 @@ func _input(event: InputEvent) -> void:
 	elif event.is_action_pressed("possess/toggle_combat"):
 		_toggle_combat_mode()
 	elif event is InputEventMouseButton and event.is_action_pressed("possess/attack"):
-		# 玩家点击：挥砍攻击（仅当鼠标不在 UI 控件上——编制按钮/建造菜单等优先）
+		# 玩家按下：按武器分流（弓/矛/杖蓄力，近战直接攻击）——仅当鼠标不在
+		# UI 控件上（编制按钮/建造菜单等优先）
 		if _possession._is_mouse_over_ui():
 			return
-		_player_attack()
+		_possession._player_attack_press()
+		if get_viewport() != null:
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.is_action_released("possess/attack"):
+		# 玩家松开：蓄力收口（放箭/投矛/施法；非蓄力态静默）
+		_possession._player_attack_release()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton \
@@ -468,6 +478,12 @@ func _mount_components() -> void:
 	if _health_bar.has_method("setup"):
 		_health_bar.setup(get_node_or_null("HealthComponent"))
 
+	# 蓄力轨迹预览（拉弓/投矛抛物线点列、杖落点 AOE 圈；默认隐藏待命）
+	_aim_preview = Node2D.new()
+	_aim_preview.set_script(_AimPreviewScript)
+	_aim_preview.name = "AimTrajectoryPreview"
+	add_child(_aim_preview)
+
 
 func _physics_process(delta: float) -> void:
 	# 死亡收口（2026-08-31 审计 P0-1）：尸体没有物理帧——不跑 AI、不减速回切
@@ -485,10 +501,16 @@ func _physics_process(delta: float) -> void:
 				if col != null:
 					col.set_deferred("disabled", true)
 		# 尸体淡出（SWL fadeOutOver 语义，2026-09-01 观察场反馈：尸体永存
-		# 堆满战场）——碰撞禁用后停留 CORPSE_LIFETIME，再 CORPSE_FADE 淡入地里移除
+		# 堆满战场）——碰撞禁用后停留 CORPSE_LIFETIME，再 CORPSE_FADE 淡入地里移除；
+		# 有遗物的尸体停留 ×3（12s 翻检窗口，与 _on_died tween 同拍）；翻空的
+		# 尸体快进淡出（遗物被搬走，不再占战场）
 		elif not possessed and _corpse_fade_timer < 0.0:
-			_corpse_fade_timer = CORPSE_LIFETIME
+			_corpse_fade_timer = CORPSE_LIFETIME * (3.0 if has_meta("loot") else 1.0)
 		if not possessed and _corpse_fade_timer >= 0.0:
+			if _corpse_fade_timer > CORPSE_FADE:
+				var loot: ItemContainer = get_loot_container()
+				if loot != null and loot.is_empty():
+					_corpse_fade_timer = CORPSE_FADE  # 翻空快进淡出
 			_corpse_fade_timer -= delta
 			if _corpse_fade_timer <= 0.0:
 				queue_free()
@@ -517,6 +539,7 @@ func _physics_process(delta: float) -> void:
 	# 仅在被附身时处理玩家输入
 	if possessed:
 		_possession._handle_player_input(delta)
+		_possess_regen(delta)
 	else:
 		# AI 控制：先让 AIController 决策（设置 _ai_move_dir），再处理移动。
 		# 战斗性能优化：AI 决策与行为状态机降到 30Hz（隔物理帧、传倍增 delta
@@ -610,7 +633,7 @@ func _physics_process(delta: float) -> void:
 # ─────────────────────────────── 玩家输入（按F / H 由交互控制器处理）────────────────────────────────
 
 ## 玩家附身时按F：交互（取放材料 / 敲击建造，实现见 InteractionController）。
-## 按H：脱离卡死。
+## 按H：脱离卡死。键位走 InputMap action（possess/interact / possess/escape_stuck）。
 func _unhandled_input(event: InputEvent) -> void:
 	if not possessed:
 		return
@@ -733,6 +756,58 @@ func _player_attack() -> void:
 ## 找最近敌人在武器射程内（方法体在 entity_possession.gd；test_possession.gd 守卫调用）。
 func _find_nearest_enemy_in_range() -> Node:
 	return _possession._find_nearest_enemy_in_range()
+
+
+## 玩家蓄力瞄准中查询（方法体在 entity_possession.gd；hitstop 互斥/轨迹预览消费）。
+func is_aim_charging() -> bool:
+	return _possession.is_aim_charging()
+
+
+## 蓄力轨迹预览刷新（方法体在 entity_possession.gd 每帧调用；按武器分流：
+## 弓/矛=抛物线预测点列，杖=鼠标落点 AOE 圈）。
+func update_charge_preview(origin: Vector2, velocity: Vector2) -> void:
+	if _aim_preview == null or not is_instance_valid(_aim_preview):
+		return
+	var wt: int = -1
+	if weapon_mount != null and "weapon_type" in weapon_mount:
+		wt = int(weapon_mount.weapon_type)
+	if wt == 4:
+		if weapon_mount.has_method("get_spell_aoe_radius"):
+			_aim_preview.set_spell_aoe(get_global_mouse_position(),
+					weapon_mount.get_spell_aoe_radius())
+	elif wt == 2 or wt == 1:
+		var g: float = weapon_mount.get_charge_gravity() if weapon_mount.has_method("get_charge_gravity") else 2000.0
+		_aim_preview.set_trajectory(origin, velocity, g)
+
+
+## 隐藏蓄力预览（松手出手/取消附身路径统一收口）
+func hide_charge_preview() -> void:
+	if _aim_preview != null and is_instance_valid(_aim_preview):
+		_aim_preview.set_trajectory_active(false)
+
+
+# ─────────────────────────────── 附身增益（SWL Unit 真值）────────────────────────────────
+## 附身回血速率（HP/s；SWL 字段名真值 healthRegenPerSecondWhenUserControlled，
+## 数值无 dump 真值为语义推断，待实测校准）
+const POSSESS_REGEN_PER_SECOND: float = 0.5
+## 回血小数累积器（heal 整数 HP 一口，避免高频小数 heal 信号刷屏）
+var _possess_regen_accum: float = 0.0
+
+
+## 附身期间缓慢回血（玩家附身的单位自带恢复——鼓励亲自下场）。
+## 满血/死亡不结算；每累积满 1 HP 调一次 HealthComponent.heal。
+func _possess_regen(delta: float) -> void:
+	var health: Node = get_node_or_null("HealthComponent")
+	if health == null or not is_instance_valid(health):
+		return
+	if health.is_dead() or health.hp >= health.max_hp:
+		_possess_regen_accum = 0.0
+		return
+	_possess_regen_accum += delta * POSSESS_REGEN_PER_SECOND
+	if _possess_regen_accum >= 1.0:
+		var whole: int = int(_possess_regen_accum)
+		_possess_regen_accum -= float(whole)
+		health.heal(float(whole))
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -873,6 +948,9 @@ func _on_possession_changed(p: bool) -> void:
 		_current_speed = 0.0
 		_is_running = false
 		velocity = Vector2.ZERO
+		# 退出附身强制收口蓄力态（清瞄准慢放，防 Engine.time_scale 卡在 0.5）
+		_possession.cancel_charge()
+		hide_charge_preview()
 	# 取消附身时也清除 AI 移动方向，避免残留
 	_ai_move_dir = Vector2.ZERO
 	_ai_running = false
@@ -963,6 +1041,30 @@ func get_map_reference() -> Node2D:
 	return _map_ref
 
 
+## 个体装备记录（loadout 奠基，设计文档 10 §3.4）：{main_hand/off_hand/armor_*
+## -> def_id}。spawn/读档回填时经 set_loadout 应用（main_hand 覆盖兵种默认
+## weapon_type——玩家全能换装的同一单点驱动）；死亡遗物按当前 weapon_type
+## 反查生成（_generate_loot_container）。个体背包/给 NPC 发装备→E-4 经济闭环。
+var _loadout: Dictionary = {}
+
+
+## 应用个体装备记录：main_hand 有值且是玩家可用武器 def 时覆盖 weapon_type
+func set_loadout(d: Dictionary) -> void:
+	_loadout = d
+	var main_id: StringName = StringName(String(d.get("main_hand", "")))
+	if main_id == &"":
+		return
+	for wt in ItemsAPI.WEAPON_ITEM_BY_TYPE:
+		if ItemsAPI.WEAPON_ITEM_BY_TYPE[wt] == main_id:
+			if weapon_mount != null and is_instance_valid(weapon_mount):
+				weapon_mount.weapon_type = int(wt)
+			return
+
+
+func get_loadout() -> Dictionary:
+	return _loadout
+
+
 ## 写入职业 id（initial_content spawn 时经 TownLifeAPI 分配；弱类型协议，
 ## 契约见 modules/town_life/api.gd）。空串 = 待业——批次 4 征兵离岗走此通道。
 func set_profession(id: String) -> void:
@@ -1017,13 +1119,44 @@ func _on_died() -> void:
 	if _battle_instance != null and is_instance_valid(_battle_instance):
 		if _battle_instance.has_method("on_unit_died"):
 			_battle_instance.on_unit_died(self)
-	# Demo 收敛：尸体滞留 5s 后淡出退场（战场清爽不堆尸；附身实体除外——
+	# 尸体遗物（翻包式掉落，items 域容器）：玩家附身实体不掉（装备属于玩家
+	# 背包）；NPC 按武器/盾生成遗物容器挂 meta("loot")
+	var stay: float = 5.0
+	if not possessed and _generate_loot_container():
+		stay = 12.0  # 有遗物的尸体延长保留（翻检窗口；翻空由物理帧快进淡出）
+	# Demo 收敛：尸体滞留后淡出退场（战场清爽不堆尸；附身实体除外——
 	# 玩家视点所在的身体不做异步自毁）
 	if not possessed:
 		var fade := create_tween()
-		fade.tween_interval(5.0)
+		fade.tween_interval(stay)
 		fade.tween_property(self, "modulate:a", 0.0, 1.4)
 		fade.tween_callback(queue_free)
+
+
+## 死亡遗物生成（weapon_type→def 映射 + 盾 + 随机小额消耗品）。
+## 返回是否生成了非空容器（决定尸体保留时长）。
+func _generate_loot_container() -> bool:
+	var loot := ItemContainer.new()
+	if weapon_mount != null and is_instance_valid(weapon_mount):
+		var wt: int = int(weapon_mount.weapon_type)
+		var wid: StringName = ItemsAPI.WEAPON_ITEM_BY_TYPE.get(wt, &"")
+		if wid != &"":
+			loot.add(wid, 1)
+		# 盾：显式装备盾或矛士兵种默认盾
+		if bool(weapon_mount.equipped_shield) \
+				or (bool(weapon_mount.shield_enabled) and wt == 1):
+			loot.add(&"shd_wood_001", 1)
+	if randf() < 0.3:
+		loot.add(&"con_bandage", 1)
+	if loot.is_empty():
+		return false
+	set_meta("loot", loot)
+	return true
+
+
+## 遗物容器查询（翻包交互/物理帧翻空检测消费）
+func get_loot_container() -> ItemContainer:
+	return get_meta("loot") if has_meta("loot") else null
 
 
 ## 受击处理（反编译参考实装 B）：按攻击者方位 vs 自身朝向判定正面/背面，

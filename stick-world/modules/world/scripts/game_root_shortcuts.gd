@@ -5,11 +5,11 @@ extends RefCounted
 ##   快捷键全分派（动作表驱动：存读档/面板开关/快捷栏/暂停/ESC——绑定见
 ##   assets/config/input_actions.json）→ handle_shortcuts
 ##   ESC 统一模态栈逐层退栈（附身让位/战略图优先/暂停菜单兜底）→ _handle_escape
-##   模态面板开关公共路径（背包/属性/设置菜单）→ toggle_inventory / toggle_stats_panel /
+##   模态面板开关公共路径（背包/设置菜单）→ toggle_inventory /
 ##   toggle_settings_menu / _toggle_modal_panel
 ##   Hotbar 物品格转发与占位面板 → _use_hotbar_slot / _open_placeholder_panel
 ##
-## 设计：面板/服务引用（_inventory_screen / _stats_panel / _settings_menu_panel /
+## 设计：面板/服务引用（_inventory_screen / _settings_menu_panel /
 ## _pause_menu_panel / inventory_service 等）全部留在宿主 GameRoot，本助手只承载
 ## 逻辑，经 _host 回引读写；宿主保留同名薄壳转发（ShortcutGate 转发与测试直调
 ## 的签名不变）。
@@ -27,6 +27,18 @@ func _init(host: GameRoot) -> void:
 ## is_action_pressed 默认过滤键盘重复(echo)——按住 E/空格等不再连发切换。
 ## ESC 例外保持裸键码（模态栈语义，自带 echo 过滤）。
 func handle_shortcuts(event: InputEvent) -> void:
+	# ── 滚轮（先于键盘过滤；09 文档 §二创始人定稿：附身态滚轮默认=切武器，
+	#    Shift+滚轮=缩放放行给相机；非附身滚轮全放行=战略层缩放现状）──
+	if event is InputEventMouseButton and event.pressed \
+			and (event.button_index == MOUSE_BUTTON_WHEEL_UP \
+			or event.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+		if _is_possess_mode() and not event.shift_pressed:
+			var dir: int = 1 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1
+			if _host.inventory_service != null \
+					and _host.inventory_service.has_method("cycle_weapon"):
+				_host.inventory_service.cycle_weapon(dir)
+			_host.get_viewport().set_input_as_handled()
+		return
 	if not (event is InputEventKey) or not event.pressed:
 		return
 	var ek: InputEventKey = event as InputEventKey
@@ -59,11 +71,7 @@ func handle_shortcuts(event: InputEvent) -> void:
 	elif event.is_action_pressed("world/open_inventory"):
 		toggle_inventory()
 		_host.get_viewport().set_input_as_handled()
-	# C 开关角色属性面板（属性/伤痕状态/装备概览）
-	elif event.is_action_pressed("world/open_stats"):
-		toggle_stats_panel()
-		_host.get_viewport().set_input_as_handled()
-	# 数字 1-4：使用 Hotbar 物品格（消耗品；同 Hotbar 点击）
+	# 数字 1-9/0：使用 Hotbar 指派格（武器=换装/消耗品=使用；同 Hotbar 点击）
 	elif event.is_action_pressed("world/hotbar_1"):
 		_use_hotbar_slot(0)
 		_host.get_viewport().set_input_as_handled()
@@ -76,6 +84,24 @@ func handle_shortcuts(event: InputEvent) -> void:
 	elif event.is_action_pressed("world/hotbar_4"):
 		_use_hotbar_slot(3)
 		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_5"):
+		_use_hotbar_slot(4)
+		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_6"):
+		_use_hotbar_slot(5)
+		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_7"):
+		_use_hotbar_slot(6)
+		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_8"):
+		_use_hotbar_slot(7)
+		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_9"):
+		_use_hotbar_slot(8)
+		_host.get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("world/hotbar_0"):
+		_use_hotbar_slot(9)
+		_host.get_viewport().set_input_as_handled()
 	# 空格切换暂停（Demo：战斗自动暂停后的直觉恢复键；模态打开时 ESC 栈优先，
 	# 空格仅在世界层生效）
 	elif event.is_action_pressed("common/toggle_pause"):
@@ -86,6 +112,12 @@ func handle_shortcuts(event: InputEvent) -> void:
 	elif ek.keycode == KEY_ESCAPE and not ek.is_echo():
 		if _handle_escape():
 			_host.get_viewport().set_input_as_handled()
+
+
+## 是否处于附身模式（滚轮切武器的门禁）
+func _is_possess_mode() -> bool:
+	return _host.input_dispatcher != null \
+			and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS
 
 
 ## 打开/关闭设置菜单（左上角齿轮按钮 / 暂停菜单「设置」调用）。
@@ -109,11 +141,6 @@ func toggle_inventory() -> void:
 	_toggle_modal_panel(_host._inventory_screen, UIModalStack.Layer.INVENTORY)
 
 
-## 开关角色属性面板（C 键）：与背包同款模态规则。Hotbar 的 C 动作格同路。
-func toggle_stats_panel() -> void:
-	_toggle_modal_panel(_host._stats_panel, UIModalStack.Layer.STATS)
-
-
 ## 模态面板开关公共路径：开着关 / 其他模态开着让位 / 压栈打开
 func _toggle_modal_panel(panel: Control, layer: int) -> void:
 	if panel == null:
@@ -133,10 +160,10 @@ func _toggle_modal_panel(panel: Control, layer: int) -> void:
 		panel.open()
 
 
-## 使用 Hotbar 物品格（数字键 1-4；转发背包服务，需附身实体承接效果）
+## 使用 Hotbar 指派格（数字键 1-9/0；转发背包服务：武器=换装、消耗品=使用）
 func _use_hotbar_slot(index: int) -> void:
-	if _host.inventory_service != null and _host.inventory_service.has_method("use_hotbar_item"):
-		_host.inventory_service.use_hotbar_item(index)
+	if _host.inventory_service != null and _host.inventory_service.has_method("use_hotbar_slot"):
+		_host.inventory_service.use_hotbar_slot(index)
 
 
 ## 打开功能空面板（经 ui_global/placeholders，系统落地后替换真实面板）。

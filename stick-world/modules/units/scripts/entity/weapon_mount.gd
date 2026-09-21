@@ -56,6 +56,10 @@ const ARROW_SCENE_PATH := "res://modules/units/scenes/components/arrow.tscn"
 const ARROW_SCENE: PackedScene = preload("res://modules/units/scenes/components/arrow.tscn")
 ## 抛物线箭矢水平分速（px/s；竖直初速按距离解算，重力 ARROW_GRAVITY）
 var ARROW_VX: float = 850.0
+## 手动放箭力度→箭速映射区间（SWL ArrowSpeedMinPower/MaxPower 语义：
+## 轻点=软箭快速平射，满蓄=全力抛射；MAX 与 AI 解算速 ARROW_VX 对齐）
+var ARROW_VX_MIN: float = 380.0
+var ARROW_VX_MAX: float = 850.0
 ## 抛物线箭矢重力（px/s²）：900px 远射弧顶 ≈ 230px（越友军头顶），150px 内近似平射
 var ARROW_GRAVITY: float = 2000.0
 ## 箭矢预判系数（瞄移动目标时提前量 × 飞行时间 × 系数）
@@ -101,6 +105,15 @@ var HITSTOP_DURATION: float = 0.06
 var HITSTOP_MIN_INTERVAL: float = 0.3
 ## 受击击退力度（与伤害正相关）
 var KNOCKBACK_PER_DAMAGE: float = 16.0
+## 装备伤害乘子（InventoryService 按主手武器 def.attack_mult 写入；玩家
+## 附身实体专属——不动基础值，battle_sim 校准锚点零影响，脱离附身复位 1.0）
+var equip_attack_mult: float = 1.0
+## 装备攻速乘子（def.speed_mult；>1 更快——有效冷却除以它；同为玩家附身专属）
+var equip_speed_mult: float = 1.0
+## 附身近战溅射（SWL Unit 真值 USER_CONTROLLED_SPLASH_* 直译）：玩家附身单位的
+## 近战挥击扇形额外收 4 个溅射目标、溅射伤害系数 0.2——"一人成军"的爽感来源
+const USER_CONTROLLED_SPLASH_HIT_LIMIT: int = 4
+const USER_CONTROLLED_SPLASH_MODIFIER: float = 0.2
 
 # ─────────────────────────────── 情绪标签（§7.4，battle_ai_director 设置）────────────────────────────────
 ## 战场导演打的情绪标签，影响命中与冷却
@@ -611,6 +624,85 @@ func perform_swing() -> bool:
 	return true
 
 
+# ─────────────────────────────── 玩家蓄力操控（SWL ArcherControls PC 翻译）───
+
+## 玩家拉弓起手（SWL DrawBow：按住进入瞄准态）：仅播攻击动画——不进冷却、
+## 不登记命中结算，冷却与出手都在松手时刻（release_player_shot）判。
+## 蓄满 1000ms × 瞄准慢放 0.5 恰使 attack_bow 走到 Drawn@0.5 拉满帧。
+func begin_player_draw() -> void:
+	_play_swing()
+
+
+## 玩家松手放箭（SWL AimReleased → UserControlledArrowReleased）：
+## 手动弹道（aim_dir 由鼠标指向给出，power 由按住时长给出），冷却门在出手时刻判。
+## 返回箭矢实例（无出手为 null；箭矢镜头消费）。
+func release_player_shot(aim_dir: Vector2, power: float) -> Node2D:
+	if not can_attack():
+		return null
+	var arrow: Node2D = _ranged.fire_arrow_manual(aim_dir, power)
+	_cooldown_after_player_action()
+	return arrow
+
+
+## 玩家蓄力投矛（SWL Spearton.ThrowSpear 的 PC 翻译）：投掷走双倍冷却
+## （技能语义，原版掷后接拔剑近战，拔剑未实装前用冷却差模拟节奏差）。
+func throw_spear_manual(aim_dir: Vector2, power: float) -> bool:
+	if not can_attack():
+		return false
+	_ranged.throw_spear_manual(aim_dir, power)
+	var factor: float = 2.0
+	var s := _sim()
+	if s != null:
+		s.set_cooldown(_sim_sid(), _get_effective_cooldown() * factor)
+	else:
+		_cooldown_timer = _get_effective_cooldown() * factor
+	return true
+
+
+## 玩家指向施法（SWL Magikill 攻击的 PC 翻译）：落点=鼠标世界坐标，
+## 不再自动锁敌；AOE 以落点为心结算（cast_magic_at 实现）。
+func cast_magic_at(point: Vector2) -> bool:
+	if not can_attack():
+		return false
+	_ranged.cast_magic_at(get_owner_entity(), point)
+	_cooldown_after_player_action()
+	return true
+
+
+## 玩家蓄力出手的冷却登记（出手时刻进冷却，与 AI 攻速语义一致）
+func _cooldown_after_player_action() -> void:
+	var s := _sim()
+	if s != null:
+		s.set_cooldown(_sim_sid(), _get_effective_cooldown())
+	else:
+		_cooldown_timer = _get_effective_cooldown()
+
+
+## 手动放箭出射点（射手胸口，与 fire_arrow/fire_arrow_manual 同源）
+func get_arrow_origin() -> Vector2:
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		return global_position
+	return _ranged.get_muzzle_pos(owner_entity)
+
+
+## 蓄力→出手速度映射（SWL ArrowSpeedMinPower/MaxPower：力度决定箭速）
+func charge_launch_speed(power: float) -> float:
+	return lerpf(ARROW_VX_MIN, ARROW_VX_MAX, clampf(power, 0.0, 1.0))
+
+
+## 蓄力预览/投射重力（弓=箭重力、矛=矛重力；轨迹预览与实际投射同源）
+func get_charge_gravity() -> float:
+	if weapon_type == WeaponType.SPEAR:
+		return _ranged.SPEAR_GRAVITY
+	return ARROW_GRAVITY
+
+
+## 法术 AOE 半径（杖落点圈预览与结算同源；档案 spell_aoe_radius，缺省 90）
+func get_spell_aoe_radius() -> float:
+	return float(ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("spell_aoe_radius", 90.0))
+
+
 ## 命中帧兜底比例：只在动画**没有** Hit 事件数据时使用（程序化动画/测试桩）。
 ## 有事件数据时一律用事件真值——解包数据里各武器命中点差异很大
 ## （剑 75%、矛 52%、弓 27%、镐 67%、杖 60%），写死 0.45 是拍脑袋。
@@ -700,7 +792,7 @@ func _do_strike() -> void:
 	var victims: Array = _collect_strike_targets(owner_entity, target)
 	for i in victims.size():
 		var victim: Node = victims[i]
-		var p := DamagePipeline.Params.new(damage, owner_entity)
+		var p := DamagePipeline.Params.new(effective_damage(), owner_entity)
 		p.direction = (victim.global_position - owner_entity.global_position).normalized()
 		p.type = DamagePipeline.DAMAGE_TYPE.MELEE
 		p.knockback = damage * KNOCKBACK_PER_DAMAGE
@@ -708,11 +800,14 @@ func _do_strike() -> void:
 		p.crit_damage_multiplier = crit_damage_multiplier
 		p.crit_self_damage = crit_bonus_damage_inflicted_to_self
 		p.head_shot_bonus_damage = head_shot_bonus_damage
-		# 超出"能打中人数"的部分按溅射系数结算（NumberOfUnitsThatCanHitWithSplash）
+		# 超出"能打中人数"的部分按溅射系数结算（NumberOfUnitsThatCanHitWithSplash）；
+		# 附身挥击的额外目标走原版附身溅射系数（USER_CONTROLLED_SPLASH_MODIFIER）
 		if i >= number_of_units_that_can_hit:
 			p.amount *= splash_modifier
 			p.type = DamagePipeline.DAMAGE_TYPE.SPLASH
 			p.is_blockable = false
+			if owner_entity.has_method("is_possessed") and owner_entity.is_possessed():
+				p.amount *= USER_CONTROLLED_SPLASH_MODIFIER / maxf(splash_modifier, 0.01)
 		DamagePipeline.apply(victim, p)
 		if owner_entity.has_method("get_battle_instance"):
 			var battle: Node = owner_entity.get_battle_instance()
@@ -751,7 +846,11 @@ func _has_reached_hit_frame() -> bool:
 func _collect_strike_targets(owner_entity: Node, main_target: Node) -> Array:
 	if owner_entity == null or main_target == null:
 		return [main_target] if main_target != null else []
-	var max_count: int = number_of_units_that_can_hit + number_of_units_that_can_hit_with_splash
+	# 附身溅射（SWL USER_CONTROLLED_SPLASH_HIT_LIMIT）：玩家附身挥击扇形
+	# 额外多收 4 个溅射目标
+	var possessed_bonus: int = USER_CONTROLLED_SPLASH_HIT_LIMIT \
+			if owner_entity.has_method("is_possessed") and owner_entity.is_possessed() else 0
+	var max_count: int = number_of_units_that_can_hit + number_of_units_that_can_hit_with_splash + possessed_bonus
 	if max_count <= 1:
 		return [main_target]
 	var facing: Vector2 = _owner_facing(owner_entity, main_target)
@@ -1009,11 +1108,19 @@ func _get_effective_hit_chance() -> float:
 
 ## 根据情绪标签计算实际冷却
 func _get_effective_cooldown() -> float:
+	var base: float = cooldown
 	match _mood:
 		Mood.EXCITED:
-			return cooldown * 0.85
+			base = cooldown * 0.85
 		_:
-			return cooldown * _user_controlled_speed_mult()
+			base = cooldown * _user_controlled_speed_mult()
+	# 装备攻速乘子（speed_mult>1 更快 → 冷却变短；缺省 1.0 零回归）
+	return base / maxf(0.05, equip_speed_mult)
+
+
+## 装备后有效伤害（基础值 × 装备乘子；所有出手结算统一走本出口）
+func effective_damage() -> float:
+	return damage * equip_attack_mult
 
 
 ## 主控攻速倍率（dump Unit 真值 USER_CONTROLLED_ATTACK_SPEED = 1.3：

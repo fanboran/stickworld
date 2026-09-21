@@ -214,14 +214,24 @@ func _unhandled_input(event: InputEvent) -> void:
 					_manual_cooldown = 0.0
 				else:
 					_manual_cooldown = MANUAL_COOLDOWN_TIME
-		# 滚轮缩放
+		# 滚轮缩放（09 文档 §二创始人定稿：附身态滚轮默认=切武器让位，
+		# Shift+滚轮才是缩放；非附身滚轮=缩放。与 ShortcutGate 滚轮拦截双保险）
 		elif event.is_action_pressed("world/zoom_in"):
-			_zoom_at_mouse(ZOOM_STEP * zoom_speed_mult)
+			if not _possess_wheel_weapon_mode(event):
+				_zoom_at_mouse(ZOOM_STEP * zoom_speed_mult)
 		elif event.is_action_pressed("world/zoom_out"):
-			_zoom_at_mouse(-ZOOM_STEP * zoom_speed_mult)
+			if not _possess_wheel_weapon_mode(event):
+				_zoom_at_mouse(-ZOOM_STEP * zoom_speed_mult)
 
 
 # ─────────────────────────────── 位置更新 ────────────────────────────────
+
+## 附身态滚轮是否已让位武器切换（滚轮非 Shift 时相机不吃事件）
+func _possess_wheel_weapon_mode(event: InputEventMouseButton) -> bool:
+	var d: Node = PlayerControlAPI.get_input_dispatcher()
+	if d == null or not d.has_method("get_mode"):
+		return false
+	return d.get_mode() == PlayerControlAPI.Mode.POSSESS and not event.shift_pressed
 
 ## 相机 X 边界约束：视野边缘不超出地图范围（不是中心点 clamp）
 func _clamp_camera_x(x: float) -> float:

@@ -38,7 +38,8 @@
 | `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
 | `debug_gui`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
 | `fx`                   | 战斗特效（粒子池 FxPool + FxLibrary 效果配置：血溅/火花/飘字等） | ✅ 在役     |
-| `inventory`            | 玩家专属物品栏（Hotbar 快捷栏/背包/统计屏，经 InventoryService） | ✅ 在役     |
+| `items`                | 物品域 L1（ItemDef/ItemContainer 列表制/ItemTransfer/资源品映射，独立于背包与仓储） | ✅ 在役     |
+| `inventory`            | 玩家背包与装备（列表制背包/装备槽/Hotbar 指派/合一窗口/翻包与村仓 UI，经 InventoryService） | ✅ 在役     |
 | `expansion`            | 出征与领地（TerritoryRegistry/GarrisonSpawner/ConquestManager） | ✅ P0 在役（C1~C7） |
 | `town_life`            | NPC 小镇生活（职业分工/劳作/经济自动产出端）   | ✅ 在役     |
 
@@ -69,12 +70,12 @@
      │           │      └──────────────────────────┘    │
      ▼           ▼                                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  基础设施：ui_global→fx ｜ player_control→ui_global          │
+│  基础设施：items（零出向）｜ ui_global→fx ｜ player_control→ui_global │
 │   construction→{building_gen, player_control, ui_global}    │
 │   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
 │   hd2d→{environment, stick_rig, ui_global}                  │
 └─────────────────────────────────────────────────────────────┘
-   （fx / environment / resources / stick_rig / tactics 无出向依赖）
+   （items / fx / environment / resources / stick_rig / tactics 无出向依赖）
 ```
 
 **实测边表**（`python tools/audit_deps.py`，直接依赖）：
@@ -86,10 +87,10 @@
 | `organization` | building_gen, ui_global, units, world |
 | `expansion` | units, world |
 | `combat` | formation, fx, player_control, stick_rig, tactics, ui_global |
-| `units` | combat, formation, fx, player_control, stick_rig, tactics, town_life |
+| `units` | combat, formation, fx, items, player_control, stick_rig, tactics, town_life |
 | `formation` | tactics, ui_global |
 | `town_life` | units |
-| `inventory` | ui_global, units |
+| `inventory` | items, ui_global |
 | `construction` | building_gen, player_control, ui_global |
 | `player_control` | ui_global |
 | `debug_gui` | fx, ui_global |
@@ -97,7 +98,7 @@
 | `building_gen` | texture_gen |
 | `ui_global` | fx |
 | `hd2d` | environment, stick_rig, ui_global |
-| `fx` / `environment` / `resources` / `stick_rig` / `tactics` | （无） |
+| `items` / `fx` / `environment` / `resources` / `stick_rig` / `tactics` | （无） |
 
 **关键路径**：
 
@@ -408,6 +409,36 @@ L4 攻占北方行省
 - `set_price_ceiling` / `set_price_floor` / `set_tax_rate`（L4+ 层级可用）
 
 **信号**：`resource_changed` / `resource_not_enough` / `price_changed`
+
+#### `modules/items/` — 物品域（L1 基础设施）
+
+**职责**：独立于背包与仓储的物品系统——定义/实例/容器/转移的全项目唯一底座。
+
+**核心件**：`ItemDef`（定义：7 大类/堆叠上限/weapon_type 映射/双手标记/stats）·
+`ItemStack`（运行时堆 def_id+count）· `ItemDB`（注册表，内置 GDScript 真相源）·
+`ItemContainer`（**列表制容器：无总数量限制，唯一上限=每类 max_stack**，容器级
+`stack_overrides` 可覆盖单类）· `ItemTransfer`（容器间原子转移 move/move_all）·
+`region_storage.gd`（区域仓储物品视图，资源品 def ↔ resources 台账弱类型桥接）。
+
+**映射**：`ItemsAPI.RESOURCE_BY_ITEM`（物品↔经济资源双语词典）、
+`WEAPON_ITEM_BY_TYPE`（武器类型→def，尸体遗物生成消费）。
+
+**消费者**：inventory（玩家背包/装备/翻包/村仓）、units（尸体遗物、翻包交互）；
+新库存场景（工坊仓库/商店货柜）= ItemContainer 实例零新概念。详见其 README。
+
+#### `modules/inventory/` — 玩家背包与装备（items 域消费者）
+
+**职责**：列表制背包（无总数量限制）+ 5 装备槽 + Hotbar 指派（10 格，仅武器/工具/消耗品）+
+装备→附身实体桥接（weapon_type/盾/护甲聚合/武器 stats 乘子）+ 翻包与村仓 UI。
+
+**核心件**：`PlayerInventory`（纯数据模型：背包+装备+wield+滚轮循环切武器）·
+`InventoryService`（运行时中枢：桥接/消耗品治疗/开局发放/world_state 表存档）·
+UI 四件套：`inventory_screen`（背包·角色合一，StatsScreen 已并入）/
+`hotbar`（三段式，可视 8 格滑动窗口）/ `container_screen`（双栏转移：翻包/村仓共用）/
+`building_menu_screen`（建筑交互菜单，actions 数据驱动预制）。
+
+**交互**：E 背包 / 滚轮切武器（附身态，Shift+滚轮缩放）/ 数字键 1-9/0 /
+F 翻检遗物与建筑菜单。详见其 README 与 [背包与装备系统.md](../docs/设计/系统/背包与装备系统.md)。
 
 ***
 

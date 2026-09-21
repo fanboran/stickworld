@@ -230,6 +230,12 @@ func _handle_settlement_activation(settlement_id: String) -> void:
 		return
 	if _fast_travel_pending:
 		return
+	# 出征入口（出征与领地架构 §九 入口二）：双击敌据点 → 出征确认，而不是
+	# 走进敌城；已臣服/无对位聚落回落旅行分流（占领后双击=巡视自家）
+	var target := _conquest_target_for(settlement_id)
+	if not target.is_empty():
+		_confirm_conquest(target)
+		return
 	var status: Dictionary = api.get_travel_status(settlement_id)
 	var code: String = str(status.get("code", ""))
 	if code == "NO_SCENE":
@@ -250,6 +256,56 @@ func _handle_settlement_activation(settlement_id: String) -> void:
 
 ## 弹窗确认：TELEPORT → 直达传送（enter_settlement 不查可达性，传送即到访）；
 ## FAST_TRAVEL → 快速旅行（可达性校验 + 途经路径高亮）；WALK → 步行道路流程
+## 该聚落对应的可征伐敌据点（无对位/已臣服 → 空字典）。取实例走组查找
+## （expansion/api.gd 的 GROUP），不引全局类名——契约面仍经 api.gd 方法调用
+func _conquest_target_for(settlement_id: String) -> Dictionary:
+	var expansion := _expansion_api()
+	if expansion == null or not expansion.has_method("find_target_by_settlement"):
+		return {}
+	return expansion.find_target_by_settlement(settlement_id)
+
+
+func _expansion_api() -> Node:
+	var tree := get_tree()
+	return tree.get_first_node_in_group("expansion_api") if tree != null else null
+
+
+## 出征确认（双击敌聚落）：先给情报（守军编成/敌将/战利品），确认才动身
+func _confirm_conquest(target: Dictionary) -> void:
+	var expansion := _expansion_api()
+	if expansion == null or not expansion.has_method("describe_target"):
+		return
+	var layer := _ui_layer()
+	if layer == null:
+		# 弹窗宿主缺失（dev 直开战略图）→ 直接出征，不锁死玩法
+		_launch_conquest(String(target.get("id", "")))
+		return
+	StickKit.confirm(layer, "征伐 · %s" % String(target.get("name_zh", "")),
+			expansion.describe_target(target),
+			func() -> void: _launch_conquest(String(target.get("id", ""))),
+			"出征", StickKit.ButtonKind.DANGER)
+
+
+func _launch_conquest(territory_id: String) -> void:
+	var expansion := _expansion_api()
+	if expansion == null or not expansion.has_method("launch_campaign"):
+		return
+	if expansion.launch_campaign(territory_id):
+		close()
+
+
+## 弹窗宿主（SystemOverlay 槽；UIRoot 缺失返回 null）
+func _ui_layer() -> Control:
+	var tree := get_tree()
+	if tree == null:
+		return null
+	var ui_root: CanvasLayer = tree.get_first_node_in_group("ui_root")
+	if ui_root == null:
+		return null
+	var slot := ui_root.get_node_or_null("SystemOverlay")
+	return slot if slot is Control else null
+
+
 func _on_travel_confirmed(settlement_id: String, mode: int) -> void:
 	if api == null:
 		return

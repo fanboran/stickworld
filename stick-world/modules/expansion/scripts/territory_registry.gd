@@ -13,11 +13,16 @@ enum State { HOSTILE, CAPTURED }
 ## 首版手写配置；定稿后迁 Excel 管线（路径不变）
 const CONFIG_PATH := "res://config/expansion/territories.tres"
 
+## 兵种名表（守军编成展示用：garrison[].profile = stickmen.tres 的 id）
+const STICKMEN_PATH := "res://config/units/stickmen.tres"
+
 ## §9.1 预留：控制度 P0 恒满值（占领即 100%），P1 拆 CAPTURED 时启用爬升
 const CONTROL_PROGRESS_FULL := 100.0
 
 var _rows: Array = []
 var _by_id: Dictionary = {}
+## 兵种 id → name_zh（惰性装载，缺表回退空串 → 展示层回落 id）
+var _profile_names: Dictionary = {}
 
 
 ## 装载配置（BalanceResource.variables.data → 消毒行数组 + id 索引）。
@@ -68,6 +73,66 @@ func get_garrison_count(id: String) -> int:
 		if entry is Dictionary:
 			total += int(entry.get("count", 0))
 	return total
+
+
+## 车轮战扣减的唯一真相源（GarrisonSpawner 刷军与展示层情报共用，防两处分叉）：
+## 剩余配额 = 配置总数 − losses，从 garrison **头部条目填满**（前排主力优先满编，
+## 后排先缺；条目保留，count 可为 0）。返回新数组，不改配置行。
+static func apply_losses(garrison: Array, losses: int) -> Array:
+	var quota: int = 0
+	for entry in garrison:
+		if entry is Dictionary:
+			quota += int(entry.get("count", 0))
+	quota -= maxi(losses, 0)
+	var out: Array = []
+	for entry in garrison:
+		if not (entry is Dictionary):
+			continue
+		var row: Dictionary = (entry as Dictionary).duplicate(true)
+		var count := int(row.get("count", 0))
+		var kept := mini(count, maxi(quota, 0))
+		quota -= kept
+		row["count"] = kept
+		out.append(row)
+	return out
+
+
+## 剩余守军逐条编成（守军情报展示：出城选项 tooltip / 征伐确认框）——
+## 每条附 name_zh（兵种表缺失时回落 profile id）。不含敌将。
+func get_remaining_garrison(id: String, losses: int = -1) -> Array[Dictionary]:
+	if losses < 0:
+		losses = get_garrison_losses(id)
+	var out: Array[Dictionary] = []
+	for entry in apply_losses(get_territory(id).get("garrison", []), losses):
+		var profile := String(entry.get("profile", ""))
+		out.append({
+			"profile": profile,
+			"name_zh": profile_name(profile),
+			"count": int(entry.get("count", 0)),
+			"tier": String(entry.get("tier", "")),
+		})
+	return out
+
+
+## 车轮战累计战损（WorldState 无记录 → 0）
+func get_garrison_losses(id: String) -> int:
+	var record: Variant = WorldState.territories.get(id, {})
+	if not (record is Dictionary):
+		return 0
+	return int((record as Dictionary).get("garrison_losses", 0))
+
+
+## 兵种 id → name_zh（stickmen.tres；缺表/缺行回落 id 本身）
+func profile_name(profile_id: String) -> String:
+	if profile_id.is_empty():
+		return ""
+	if _profile_names.is_empty():
+		var res: Resource = load(STICKMEN_PATH)
+		if res != null and res is BalanceResource:
+			for row in BalanceResource.sanitized_rows(res):
+				if row is Dictionary:
+					_profile_names[String(row.get("id", ""))] = String(row.get("name_zh", ""))
+	return String(_profile_names.get(profile_id, "")) if _profile_names.has(profile_id) else profile_id
 
 
 ## 运行时状态的初始形态（WorldState.territories 缺失条目的查询缺省；

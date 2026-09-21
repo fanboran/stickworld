@@ -93,7 +93,8 @@ func spawn_garrison(map: Node2D, territory_id: String) -> Array:
 
 
 ## 车轮战扣减后的有效配置（garrison 条目 count 已扣减 garrison_losses；
-## 配置缺失返回空字典）。扣减语义：剩余配额从头部条目填满，后排先缺。
+## 配置缺失返回空字典）。扣减语义：剩余配额从头部条目填满，后排先缺——
+## 规则单一真相源在 TerritoryRegistry.apply_losses（守军情报展示同用，防分叉）。
 func get_effective_row(territory_id: String) -> Dictionary:
 	if _registry == null or not _registry.has_territory(territory_id):
 		return {}
@@ -101,19 +102,11 @@ func get_effective_row(territory_id: String) -> Dictionary:
 	# 已臣服据点再进：不刷守军（架构 §2.3），以友化空图运行
 	if get_territory_state(territory_id) == TerritoryRegistry.State.CAPTURED:
 		return {}
-	var losses: int = WorldState.territories.get(territory_id, {}).get("garrison_losses", 0) \
-			if WorldState.territories.get(territory_id, {}) is Dictionary else 0
+	var losses: int = _registry.get_garrison_losses(territory_id)
 	if losses <= 0:
 		return row
 	var effective := row.duplicate(true)
-	var quota: int = _registry.get_garrison_count(territory_id) - losses
-	for entry in effective.get("garrison", []):
-		if not (entry is Dictionary):
-			continue
-		var count := int(entry.get("count", 0))
-		var kept := mini(count, maxi(quota, 0))
-		quota -= kept
-		entry["count"] = kept
+	effective["garrison"] = TerritoryRegistry.apply_losses(row.get("garrison", []), losses)
 	return effective
 
 

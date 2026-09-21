@@ -45,6 +45,12 @@ extends Node
 ## victory = 玩家阵营胜（BattleInstance.player_faction 基准，C2 征服循环修正；
 ## 未设置 player_faction 时默认攻方 = 旧 attacker 语义兼容）
 @warning_ignore("unused_signal") signal battle_ended(battle_id: String, victory: bool)
+## 战斗结算载荷：在 battle_ended **之前**发射（结算数据先到，胜负随后），
+## battle_ended 保持二元胜负语义不变。summary 携带
+## result/reason/duration/player_wins/player_faction/casualties/alive——
+## 监听方不必回查已 queue_free 的 BattleInstance。
+## 发射方：BattleInstance._end；首个消费方：ConquestManager（据点战战报）
+@warning_ignore("unused_signal") signal battle_settled(battle_id: String, summary: Dictionary)
 # 阵营 AI 姿态变更（TeamAi -> 调试 HUD/测试断言）：from/to_stance 值序
 # 0=GARRISON/1=DEFEND/2=ATTACK（对齐 dump Team.Stance 枚举序）；
 # 3=ROUT 为本作扩展（敌将撤仗终态，据点战专用，见出征与领地架构 §4.2）

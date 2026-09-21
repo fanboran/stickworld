@@ -74,6 +74,14 @@ var _victory_check_timer: float = 0.0
 var _casualties_attacker: int = 0
 ## 防守方伤亡数（死亡）
 var _casualties_defender: int = 0
+## 相持超时上限（秒；<= 0 = 不限）——超时按剩余兵力判（多者胜，平局按守方胜），
+## 防"溃逃—恢复—再战"长期相持永不收敛（结束判定补全；据点战由 ConquestManager 设）
+var duration_limit: float = 0.0
+## 收束原因（"annihilation" / "mutual" / "timeout"；结算摘要与测试用）
+var _end_reason: String = ""
+## 收束瞬间双方存活数（_end 清空列表前快照，供结算摘要；监听方不必回查已释放实例）
+var _final_alive_attacker: int = 0
+var _final_alive_defender: int = 0
 ## 每目标当前攻击者数（防集火重叠；反编译参考实装 A 的 TODO 落地）。
 ## 结构：target.instance_id -> {"attackers": {attacker_iid: 最后登记 msec}}。
 ## 计数按新鲜窗口衰减（审计 P1-3）：攻击者停手超过窗口后自动失效，
@@ -484,16 +492,42 @@ func get_player_faction() -> int:
 
 # ─────────────────────────────── 内部 ────────────────────────────────
 
-## 检查胜负条件：一方全灭（含战役撤离离场）则另一方胜
+## 检查胜负条件：一方全灭（含战役撤离离场）则另一方胜；相持超时按剩余兵力判。
+## 结束判定三路（P2）：全灭/互灭（歼灭）→ 超时（相持收敛兜底）
 func _check_victory() -> void:
 	var a_alive: int = _count_alive(_units_attacker)
 	var b_alive: int = _count_alive(_units_defender)
+	_final_alive_attacker = a_alive
+	_final_alive_defender = b_alive
 	if a_alive == 0 and b_alive == 0:
-		_end(State.DRAW)
+		_end(State.DRAW, "mutual")
 	elif a_alive == 0:
-		_end(State.DEFENDER_WIN)
+		_end(State.DEFENDER_WIN, "annihilation")
 	elif b_alive == 0:
-		_end(State.ATTACKER_WIN)
+		_end(State.ATTACKER_WIN, "annihilation")
+	elif duration_limit > 0.0 and _duration >= duration_limit:
+		# 相持超时：剩余兵力多者胜；相等/攻方更少 = 未能拿下，按守方胜
+		_end(State.ATTACKER_WIN if a_alive > b_alive else State.DEFENDER_WIN, "timeout")
+
+
+## 结算摘要（battle_ended 后的数据载荷；_end 已清空列表，故用收束快照）：
+## result/reason/duration/player_wins/player_faction/casualties/alive
+func get_summary() -> Dictionary:
+	return {
+		"result": _state,
+		"reason": _end_reason,
+		"duration": _duration,
+		"player_wins": get_winner() == _player_faction,
+		"player_faction": _player_faction,
+		"casualties": {
+			FACTION_ATTACKER: _casualties_attacker,
+			FACTION_DEFENDER: _casualties_defender,
+		},
+		"alive": {
+			FACTION_ATTACKER: _final_alive_attacker,
+			FACTION_DEFENDER: _final_alive_defender,
+		},
+	}
 
 
 ## 存活计数：死亡与离场（departed，撤至地图边缘）均计非存活
@@ -514,11 +548,12 @@ static func _is_departed(u) -> bool:
 	return u != null and "departed" in u and bool(u.get("departed"))
 
 
-func _end(result: State) -> void:
+func _end(result: State, reason: String = "annihilation") -> void:
 	# 防御：_check_victory 可能在同一帧多次命中，只允许结束一次
 	if _state != State.ENGAGED:
 		return
 	_state = result
+	_end_reason = reason
 	# 清理单位身上的战斗引用（AI 依据 battle_instance 判参战，结束后应立即解除）。
 	# departed 保持置位（战后可查离场状态/溃兵视觉），下一场 add_unit 时复位；
 	# sim 注册同步解除（单位交还旧实体链自驱）
@@ -544,6 +579,9 @@ func _end(result: State) -> void:
 			tai.dispose()
 	_team_ai.clear()
 	if EventBus != null:
+		# 先发结算载荷再发胜负（battle_settled → battle_ended）：监听方的据点战
+		# 状态机在 battle_ended 处理里就清掉了战役登记，结算数据须先到
+		EventBus.battle_settled.emit(get_battle_id(), get_summary())
 		var player_wins: bool = get_winner() == _player_faction
 		EventBus.battle_ended.emit(get_battle_id(), player_wins)
 	# 通知登记方（BattleDirector）及时注销本实例（防 _battles 残留失效引用），随后自身释放

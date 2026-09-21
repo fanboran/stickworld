@@ -23,6 +23,8 @@ const PLAYER_OWNER_ID := "player"
 const HOME_MAP_ID := "hd2d_street"
 ## 奖励入账 region（与初始资源发放/建造扣减同池，保证玩家可直接消费）
 const REWARD_REGION := "test_region"
+## 据点战相持超时上限（秒；结束判定 P2）——超时按剩余兵力判，防长期不收敛
+const CONQUEST_BATTLE_LIMIT_S := 240.0
 
 ## 领地清单（与 expansion/api.gd 共享实例）
 var _registry: TerritoryRegistry = null
@@ -59,6 +61,7 @@ func setup(registry: TerritoryRegistry, spawner: GarrisonSpawner, api: Node,
 	if EventBus != null:
 		EventBus.map_loaded.connect(_on_map_loaded)
 		EventBus.battle_ended.connect(_on_battle_ended)
+		EventBus.battle_settled.connect(_on_battle_settled)
 
 
 # ─────────────────────────────── 流程入口（api 转发 / 测试直达）────────────────────────────
@@ -138,6 +141,10 @@ func _on_map_loaded(map_id: String, _map_type: int) -> void:
 		push_warning("[ConquestManager] 据点战开启失败: %s" % territory_id)
 		return
 	_enable_commander_retreat(battle, _registry.get_territory(territory_id))
+	# 相持超时上限（结束判定 P2）：据点战给硬上限，防"溃逃—恢复—再战"长期不收敛；
+	# 超时按剩余兵力判（攻方未占优 = 未拿下，守方胜）
+	if "duration_limit" in battle:
+		battle.duration_limit = CONQUEST_BATTLE_LIMIT_S
 	_register_campaign(battle, territory_id, attackers, defenders)
 	print_verbose("[ConquestManager] 据点战开启: %s（守军 %d + 敌将）" % [territory_id, defenders.size() - 1])
 
@@ -185,7 +192,29 @@ func _has_campaign_for(territory_id: String) -> bool:
 	return false
 
 
-# ─────────────────────────────── 收束（battle_ended）────────────────────────────
+# ─────────────────────────────── 收束（battle_ended / battle_settled）────────────────────────────
+
+## 结算载荷（battle_settled 在 battle_ended 之前到达——此时战役登记仍在册）：
+## 输出据点战战报——伤亡/用时/收束原因（超时/歼灭）玩家可见；
+## 领地状态机仍由 _on_battle_ended 驱动，本处只做呈现
+func _on_battle_settled(battle_id: String, summary: Dictionary) -> void:
+	if EventBus == null or not EventBus.has_signal("ui_notification"):
+		return
+	var territory_id: String = String(_campaigns.get(battle_id, {}).get("territory_id", ""))
+	if territory_id.is_empty():
+		return  # 非据点战不报战报（普通战斗自行处理）
+	var name_zh := String(_registry.get_territory(territory_id).get("name_zh", territory_id))
+	var casualties: Dictionary = summary.get("casualties", {}) if summary.get("casualties") is Dictionary else {}
+	var my_loss: int = int(casualties.get(1, 0))     # faction 1 = 攻方（玩家侧）
+	var foe_loss: int = int(casualties.get(2, 0))
+	var seconds: float = float(summary.get("duration", 0.0))
+	var reason := String(summary.get("reason", ""))
+	var verdict := "拿下" if bool(summary.get("player_wins", false)) else "未克"
+	var tail := "（相持超时收兵）" if reason == "timeout" else ""
+	EventBus.ui_notification.emit("战报",
+			"%s %s——我损 %d / 敌损 %d，历时 %d 秒%s" % [name_zh, verdict, my_loss, foe_loss, int(seconds), tail],
+			"info" if bool(summary.get("player_wins", false)) else "warn")
+
 
 func _on_battle_ended(battle_id: String, victory: bool) -> void:
 	var campaign: Dictionary = _campaigns.get(battle_id, {})

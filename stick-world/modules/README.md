@@ -23,7 +23,8 @@
 | `world/placement_grid` | 32px 竖向条带占地网格               | ✅ P0 完整     |
 | `world_map`            | 战略图（鸟瞰多边形领土，玩家不在其中）         | ✅ L1 单层在役（六期观感返工已合并） |
 | `units`                | 火柴人角色（实体 + 骨骼 + AI）         | ✅ P0 完整     |
-| `combat`               | 小队级战斗实例 + 编队/指令/掩体          | ✅ P0 完整     |
+| `combat`               | 小队级战斗实例 + 号令/指挥链/掩体/阵营 AI    | ✅ P0 完整     |
+| `formation`            | 战斗阵列（编队槽位/几何/跟队/相位计划/编制 UI） | ✅ 在役       |
 | `construction`         | 建造/升级/拆除/修理（运行时）            | ✅ P0 完整     |
 | `building_gen`         | 程序化建筑生成（BuildingDef → 节点树）  | 🟡 B0-B2 阶段 |
 | `texture_gen`          | CPU 贴图 + GPU Shader 材质库     | ✅ 完整        |
@@ -50,7 +51,7 @@
 
 ```
                               ┌────────────────────────────────┐
-                              │  world（装配根，GameRoot）      │ ← 依赖全部 16 个模块
+                              │  world（装配根，GameRoot）      │ ← 依赖全部 17 个模块
                               └────────────────────────────────┘
    ┌────────────┬─────────────┼─────────────┬──────────────┐
    ▼            ▼             ▼             ▼              ▼
@@ -61,7 +62,7 @@
      │           │           │            │             │
      │           │           ▼            ▼             │
      │           │      ┌─────────────────────┐        │
-     │           │      │ units ⇄ combat      │        │   执行者（town_life→units）
+     │           │      │ units⇄combat/formation │        │   执行者（town_life→units）
      │           │      └─────────────────────┘        │
      ▼           ▼                                     ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -77,12 +78,13 @@
 
 | 模块 | 依赖（出向） |
 |------|------------|
-| `world` | 全部 16 模块（building_gen/combat/construction/debug_gui/environment/expansion/fx/hd2d/inventory/organization/player_control/resources/town_life/ui_global/units/world_map） |
+| `world` | 全部 17 模块（building_gen/combat/construction/debug_gui/environment/expansion/formation/fx/hd2d/inventory/organization/player_control/resources/town_life/ui_global/units/world_map） |
 | `world_map` | ui_global, world |
 | `organization` | building_gen, ui_global, units, world |
 | `expansion` | units, world |
-| `combat` | fx, player_control, ui_global, units |
-| `units` | combat, fx, player_control, town_life |
+| `combat` | formation, fx, player_control, ui_global, units |
+| `units` | combat, formation, fx, player_control, town_life |
+| `formation` | ui_global |
 | `town_life` | units |
 | `inventory` | ui_global, units |
 | `construction` | building_gen, player_control, ui_global |

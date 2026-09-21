@@ -298,6 +298,30 @@ func call_airstrike(battle_id: String, target: Vector2) -> Dictionary  # 巫师�
 
 ---
 
+## 六-A、战斗阵列模块 `modules/formation/api.gd`（已实现契约）
+
+```gdscript
+# 间距/物理分离单一真相源（常量；units 实体链与 combat 批模拟同源读取）
+const SEPARATION_RADIUS: float          # 分离检测半径
+const SPREAD_SPACING_DEFAULT: float     # 横向间距默认值（balance.variables var_spread_spacing 覆盖）
+const ROW_GAP_DEFAULT: float            # 列间距默认值（balance.variables var_row_gap 覆盖）
+const UNITS_PER_COLUMN: int             # 每列人数
+const FOLLOW_DEADZONE: float            # 跟队/落定死区
+const ARRIVE_TOLERANCE: float           # 相位计划到位容差默认值（config/ai/squad_phase_plan.tres 覆盖）
+
+# 运行期实例（FormationSystem，class_name 全局）：由装配层创建并注入，消费方 duck 调用
+# create_squad / assign_leader / add_unit / get_squad_units / get_squad_leader
+# get_squad_dest(squad_id, unit, base_pos, mode)   # mode: "formation" / "line" / "rally"
+# set_squad_follow_squad / get_squad_target / is_unit_in_formation
+# notify_squad_order / notify_org_order            # 号令触发相位计划
+# set_target_decider / set_advance_order_types     # 装配层反向注入（combat 目标内核与号令枚举真值）
+```
+
+> 实现全在 `scripts/`（编队总成/间距真相源/槽位几何/跟队/相位计划/快照/权威值/上报）与 `ui/`（编制窗口/L1 班组卡）；
+> 外部模块禁止 preload 内部脚本。号令的语义与下发在 combat（`TacticalOrders`/`CommandChain`），阵列只回答落点与到位判定。
+
+---
+
 ## 七、物流模块 `modules/logistics/api.gd`（未实现，阶段 2 设计契约）
 
 ```gdscript
@@ -339,7 +363,7 @@ func check_and_unlock(badge_id: String) -> Dictionary
 
 ## 九、模块间 API 依赖图
 
-> 仅含已实现模块（construction / building_gen / texture_gen / resources / organization / combat / world_map / world / units / player_control / environment / fx / debug_gui）。
+> 仅含已实现模块（construction / building_gen / texture_gen / resources / organization / combat / formation / world_map / world / units / player_control / environment / fx / debug_gui）。
 > technology（见 §二）、expansion / logistics / achievement（未实现）为阶段 2 设计契约，实现时补充出边。
 > world 为组装根：SystemSetup 集中装配各模块组件，跨模块依赖汇聚于此而非散布（详见 场景与战斗架构.md）。
 

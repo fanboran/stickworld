@@ -12,7 +12,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptFormationSystem := preload("res://modules/combat/scripts/command/formation_system.gd")
+const ScriptFormationSystem := preload("res://modules/formation/scripts/formation_system.gd")
 
 ## batch_runner 收割退出码用（TestRunner.finish_process 依赖本信号）
 signal test_done(code: int)

@@ -1,10 +1,10 @@
 # combat：战场组织与战斗 AI
 
-> 战斗的组织层：多战场调度与战斗实例、编队/号令/指挥链、阵营 AI 与任务槽、伤害管线与批模拟、战斗 UI。单位级行为状态机在 [modules/units/](../units/README.md)，本模块不碰单位级决策。
+> 战斗的组织层：多战场调度与战斗实例、号令/指挥链、阵营 AI 与任务槽、伤害管线与批模拟、战斗 UI。编队/阵列与编制 UI 在 [modules/formation/](../formation/README.md)，单位级行为状态机在 [modules/units/](../units/README.md)——本模块不碰单位级决策与阵列几何。
 > - `scripts/battle/`：战斗实例/导演/阵营 AI/任务槽/效用打分/伤害管线/批模拟/掩体
-> - `scripts/command/`：编队/号令/指挥链/框选/小队相位计划
+> - `scripts/command/`：号令/指挥链/框选（编队/阵列在 [modules/formation/](../formation/README.md)）
 > - `scripts/target_finder.gd`：公共目标选择核心（本模块对外公共类，units 行为层复用）
-> - `ui/`：战斗面板/编制窗口/L1 班组卡/TeamAi HUD
+> - `ui/`：战斗面板/TeamAi HUD
 >
 > 对外契约见 [api.gd](api.gd)（CombatApi）：`start_battle` / `issue_order` / 编队跨图快照三族方法，
 > BattleDirector / TacticalOrders / FormationSystem 引用由装配层注入（setup / set_tactical_orders /
@@ -34,16 +34,11 @@ modules/combat/
 │   │   ├── damage_pipeline.gd                # DamagePipeline：伤害单入口（修饰链/入血/反伤/表现链，禁绕过直调 take_damage）
 │   │   └── cover_system.gd                   # CoverSystem：掩体查询（扫描 group "cover_marker"）
 │   └── command/
-│       ├── formation_system.gd               # FormationSystem：编队（小队/预设/职责/槽位列阵/跟队/权威值/相位计划宿主段/跨图快照）
 │       ├── tactical_orders.gd                # TacticalOrders：号令下达入口（issue 小队直令 / issue_to_org 组织逐层）
 │       ├── command_chain.gd                  # CommandChain：号令送达执行器 + 逐跳接力（传播延迟 = 距离 ÷ 媒介速度）
-│       ├── selection_system.gd               # SelectionSystem：BATTLE 模式框选/点选（InputDispatcher handler）
-│       └── squad_phase_plan.gd               # SquadPhasePlan：小队相位计划（角色分派 + 交替掩护跃进相位机，纯逻辑无自转）
+│       └── selection_system.gd               # SelectionSystem：BATTLE 模式框选/点选（InputDispatcher handler）
 └── ui/
     ├── battle_panel.gd                       # 战斗面板（框选信息/编制入口/号令按钮）
-    ├── formation_panel.gd                    # 编制管理窗口（创建编队/职责勾选/任命排长/解散，村庄战场通用）
-    ├── squad_card.tscn / squad_card.gd       # L1 班组卡（状态徽标/号令栏/班长权威值对比/成员行，挂 ContextPanel 槽）
-    ├── squad_member_row.tscn / squad_member_row.gd  # 班组卡成员行（角色角标/士气微型条/单兵状态，纯呈现件）
     └── team_ai_hud.tscn / team_ai_hud.gd     # TeamAi 状态 HUD（姿态徽标/attack%/任务槽占用，F3 drawer 开关）
 ```
 
@@ -52,6 +47,7 @@ modules/combat/
 ## 依赖
 
 - `modules/units/`：唯一路径 preload 是 battle_instance.gd → modules/units/scripts/rig/crowd_renderer.gd（批模拟单位的渲染代理）。其余一律弱类型：`StickmanEntity.set_battle_sim` / `set_formation_system` 注入后 duck 调用；`ui/` 全程 has_method 探测，查询不可用即跳过该行或整卡收起。
+- `modules/formation/`：编队/阵列与编制 UI 在此（本模块经 `set_formation_system` 注入 + `get_squad_dest` 等 duck 调用消费；装配层把 TargetFinder 与推进类号令枚举反向注入）。
 - `modules/organization/`：经 OrganizationApi 弱类型引用（编队落 L1 组织节点、issue_to_org 的 hop 计划与传输秒数、指挥官在册查询），不 preload 内部文件。
 - 装配（modules/world 的 SystemSetup）：给 GameRoot.BattleDirector 挂脚本、实例化 CombatApi、装配 TacticalOrders / CommandChain / FormationSystem / SelectionSystem / UnitLodDirector 与战斗 UI——本模块节点不自行进树。
 - 平衡数据（BalanceConfig，手写档案非 Excel 导出）：`ai.personality`（单一参数档案 global 行：节拍/开局门禁/攻击百分比/任务槽评分权重/效用打分与 softmax/team_ai_enabled）、`ai.squad_phase_plan`、`ai.formation_authority`、`ai.org_default_behavior`、`ai.behavior_profiles`（units 档案的行覆盖层）。
@@ -85,14 +81,10 @@ GameRoot.BattleDirector（多战场调度；team_ai_enabled 开时对双方启�
 - 效用打分（default_behavior v2）：组织 default_behavior 字段的候选集经 UtilityScorer 打分——filter 资格谓词（未知谓词 fail-closed）+ demand ±demand_increment 打分 + softmax 轮盘选优（weight/weight_rules 静态权重可委托）+ 冷却；选择结果映射为号令下发。配置生产端在 config/ai/org_default_behavior.tres（writer_enabled 总闸控制写入组织，消费门 default_behavior_v2_enabled 是独立闸）。
 - 参数合并序：代码默认（team_ai_profiles.gd `DEFAULTS`）< personality.tres global 行（load_personality_overlay）< enable_team_ai 显式 overrides；DEFAULTS 之外的新键（如 default_behavior_v2_enabled / softmax_* 族）需在 team_ai.gd `setup` 的补挂循环显式加键。
 
-### 编队（FormationSystem）
+### 编队/阵列（formation 模块）
 
-- 小队 = L1 MILITARY 组织节点；本地维护 unit↔squad 双向映射；编制预设来自 config/formations/formation_presets.tres（内置战斗班兜底）。职责 WorkType 五类（COMBAT/BUILD/HAUL/TRANSPORT/FORAGE），HAUL 是全员基础能力 `is_work_allowed` 恒放行；排长任命/补位经 EventBus.commander_assigned 回写。
-- 结构列阵：每列 UNITS_PER_COLUMN=3、列距 ROW_GAP，槽位随成员增减自动重算；`get_squad_dest mode="formation"` 取槽位落点，距落点过远转奔跑追赶，落定不重发号令；小队可锚定跟随另一小队（前队质心 − 行进方向 × gap，死区防抖，前队全灭自动解除）。
-- 队伍级共享目标：每 0.5s 为每个战斗小队选共享攻击目标（经 TargetFinder），队员在攻击行为里优先集火。
-- 权威值择班：`get_squad_authority` = 班长在场 1.0 + 组织指挥官在册 0.5 + 班长被玩家附身 0.2；`should_switch_squad` 滞回 authority_margin=0.07。自主跳槽（authority_switch_enabled）按宿主节拍周期评估：邻近班权威对比 + 玩家班吸引/黏性加成 + 单位冷却与错峰相位 + 班长放人阈值 + 单拍迁出上限；迁移复用既有 add_unit（组织同步/角色/槽位一次做全）。
-- 小队相位计划（phase_plan_enabled）：推进类号令（ADVANCE_ALL/SPRINT）激活、其余号令撤销；成员分 CORE/SCOUT/左右翼四角色（编队槽位列序 × 素质代理双维），CORE_LEAP→CORE_WAIT→FLANK_LEAP→FLANK_WAIT 交替掩护跃进直至终点。计划逻辑全在 squad_phase_plan.gd（纯逻辑无自转），本系统只做参数装载/号令触发/节拍驱动/查询出口；跟随玩家或锚定跟队的小队不激活。
-- 跨图携带：export_squads / disband_all_squads / restore_squads（CombatApi 透传，换图前导出、新图按快照重建）。
+- 小队/编队槽位、槽位几何与动态跟队、相位跃进计划、权威值择班、编制快照与编制 UI 全部在 [modules/formation/](../formation/README.md)；本模块只经 `get_squad_dest` / `set_formation_system` 等 duck 接口消费它。
+- 间距与物理分离的数值真相源在同模块 `formation_spacing.gd`（不变式：体宽 < 分离半径 < 编队间距）；装配层把 combat `TargetFinder.find_target` 与推进类号令枚举注入编队系统。
 
 ### GK 机制开关族
 
@@ -104,10 +96,10 @@ GameRoot.BattleDirector（多战场调度；team_ai_enabled 开时对双方启�
 | 任务槽内核 | slot_kernel_enabled（ai.personality） | team_ai.gd `_task_board_enabled` → task_board.gd | test_task_board.gd |
 | 效用打分 | default_behavior_v2_enabled / demand_increment / demand_variance / softmax_*（ai.personality）；写入端 ai.org_default_behavior 的 writer_enabled | team_ai.gd → utility_scorer.gd | test_utility_scorer.gd / test_org_default_behavior.gd |
 | 点射节奏 | burst_shots / burst_wait / night_hesitate_mult（ai.behavior_profiles baseline 行） | units behavior_attack.gd（连射-停顿节奏）+ units weapon_mount.gd（连射散布热度） | test_ai_param_panel.gd |
-| 压制=定时锁死 | suppression_enabled 键族（ai.behavior_profiles baseline 行） | units status_effects.gd（触发+士气流失）/ ai_controller.gd（决策禁令）/ arrow_projectile.gd（近失）；squad_phase_plan.gd 消费其查询 | test_suppression.gd |
+| 压制=定时锁死 | suppression_enabled 键族（ai.behavior_profiles baseline 行） | units status_effects.gd（触发+士气流失）/ ai_controller.gd（决策禁令）/ arrow_projectile.gd（近失）；modules/formation/scripts/squad_phase_plan.gd 消费其查询 | test_suppression.gd |
 | 撤退调制 | retreat_mod_enabled 键族（ai.behavior_profiles）+ retreat_chance（ai.personality.global） | units ai_controller.gd（中间带掷骰）+ units behavior_retreat.gd（双档） | test_ai_retreat_modulation.gd |
-| 小队相位计划 | phase_plan_enabled（ai.squad_phase_plan.global，生效默认开） | formation_system.gd 宿主段 → squad_phase_plan.gd | test_squad_phase_plan.gd |
-| 权威值跳槽 | authority_switch_enabled 键族（ai.formation_authority.global，生效默认开） | formation_system.gd 权威值择班段 + 自主跳槽段 | test_authority_switch.gd |
+| 小队相位计划 | phase_plan_enabled（ai.squad_phase_plan.global，生效默认开） | modules/formation/scripts/formation_system.gd 宿主段 → squad_phase_plan.gd | test_squad_phase_plan.gd |
+| 权威值跳槽 | authority_switch_enabled 键族（ai.formation_authority.global，生效默认开） | modules/formation/scripts/formation_system.gd 权威值择班段 + 自主跳槽段 | test_authority_switch.gd |
 | 出生错峰/决策时钟 | spawn_jitter_enabled / probe_fail_cooldown_enabled（ai.behavior_profiles） | units ai_controller.gd 决策时钟族（读档按 ai_timing 字段回填） | test_ai_spawn_jitter.gd / test_ai_timing_save.gd |
 
 ### 扩展指引：加一个 TeamAi 机制开关

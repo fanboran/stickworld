@@ -14,7 +14,7 @@ extends RefCounted
 ## - 各方法与宿主原同名函数逐一对应，行为与拆分前逐行等价。
 
 ## 取数助手类（类调用其 static 单兵探测，规避 STATIC_CALLED_ON_INSTANCE 警告）
-const SquadCardData: GDScript = preload("res://modules/combat/ui/squad_card_data.gd")
+const SquadCardData: GDScript = preload("res://modules/formation/ui/squad_card_data.gd")
 
 var _host: Node  ## 班组卡宿主（无 class_name，动态回引）
 var _data: RefCounted  ## 取数助手（squad_card_data.gd 实例，setup 注入）

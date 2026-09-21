@@ -19,7 +19,7 @@ const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 const ScriptAIController := preload("res://modules/units/scripts/ai/ai_controller.gd")
 const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
-const ScriptSquadPhasePlan := preload("res://modules/combat/scripts/command/squad_phase_plan.gd")
+const ScriptSquadPhasePlan := preload("res://modules/formation/scripts/squad_phase_plan.gd")
 const ScriptArrowProjectile := preload("res://modules/units/scripts/weapons/arrow_projectile.gd")
 
 var _runner: TestRunner

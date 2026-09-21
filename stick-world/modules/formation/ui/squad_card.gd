@@ -95,11 +95,11 @@ const CANDIDATE_RADIUS: float = 800.0
 ## 权威对比列出上限（本班 + 前 N 名邻近班；L1 稀疏纪律，不堆全表）
 const CANDIDATE_ROW_MAX: int = 3
 
-const MemberRowScene: PackedScene = preload("res://modules/combat/ui/squad_member_row.tscn")
+const MemberRowScene: PackedScene = preload("res://modules/formation/ui/squad_member_row.tscn")
 ## 取数助手（全 duck 系统查询 + 单兵 static 探测；无 class_name，const preload 引用）
-const SquadCardData: GDScript = preload("res://modules/combat/ui/squad_card_data.gd")
+const SquadCardData: GDScript = preload("res://modules/formation/ui/squad_card_data.gd")
 ## 权威对比块助手（UI-W4a 择班表达渲染 + 邻近班私有取数）
-const SquadCardAuthority: GDScript = preload("res://modules/combat/ui/squad_card_authority.gd")
+const SquadCardAuthority: GDScript = preload("res://modules/formation/ui/squad_card_authority.gd")
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null

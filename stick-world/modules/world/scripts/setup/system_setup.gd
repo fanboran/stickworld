@@ -22,13 +22,15 @@ const _ConstructionApiScript: GDScript = preload("res://modules/construction/api
 const _BattleDirectorScript: GDScript = preload("res://modules/combat/scripts/battle/battle_director.gd")
 const _CombatApiScript: GDScript = preload("res://modules/combat/api.gd")
 const _SelectionSystemScript: GDScript = preload("res://modules/combat/scripts/command/selection_system.gd")
-const _FormationSystemScript: GDScript = preload("res://modules/combat/scripts/command/formation_system.gd")
+const _FormationSystemScript: GDScript = preload("res://modules/formation/scripts/formation_system.gd")
+## 共享目标决策内核（formation 零 combat 依赖：由装配层把 combat 目标过滤注入编队系统）
+const _TargetFinderScript: GDScript = preload("res://modules/combat/scripts/target_finder.gd")
 const _OrganizationManagerScript: GDScript = preload("res://modules/organization/scripts/organization_manager.gd")
 const _OrganizationApiScript: GDScript = preload("res://modules/organization/api.gd")
 const _TacticalOrdersScript: GDScript = preload("res://modules/combat/scripts/command/tactical_orders.gd")
 const _CommandChainScript: GDScript = preload("res://modules/combat/scripts/command/command_chain.gd")
 const _BattlePanelScript: GDScript = preload("res://modules/combat/ui/battle_panel.gd")
-const _FormationPanelScript: GDScript = preload("res://modules/combat/ui/formation_panel.gd")
+const _FormationPanelScript: GDScript = preload("res://modules/formation/ui/formation_panel.gd")
 const _OrgPanelScript: GDScript = preload("res://modules/organization/ui/org_panel.gd")
 const _StrategicOverviewPanelScript: GDScript = preload("res://modules/organization/ui/strategic_overview_panel.gd")
 const _CommandChainViewScene: PackedScene = preload("res://modules/organization/ui/command_chain_view.tscn")
@@ -63,7 +65,7 @@ const _ConquestManagerScript: GDScript = preload("res://modules/expansion/script
 const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
 const _OrgReportNarratorScript: GDScript = preload("res://modules/organization/ui/org_report_narrator.gd")
 const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
-const _SquadCardScene: PackedScene = preload("res://modules/combat/ui/squad_card.tscn")
+const _SquadCardScene: PackedScene = preload("res://modules/formation/ui/squad_card.tscn")
 
 # 域助手（同模块内 preload，非跨模块依赖；实例懒初始化见各 _xxx_part() getter）
 const _CorePartScript: GDScript = preload("res://modules/world/scripts/setup/system_setup_core_systems.gd")

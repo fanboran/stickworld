@@ -9,8 +9,8 @@ signal test_done(code: int)
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptFormationSystem := preload("res://modules/combat/scripts/command/formation_system.gd")
-const ScriptSquadPhasePlan := preload("res://modules/combat/scripts/command/squad_phase_plan.gd")
+const ScriptFormationSystem := preload("res://modules/formation/scripts/formation_system.gd")
+const ScriptSquadPhasePlan := preload("res://modules/formation/scripts/squad_phase_plan.gd")
 const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
 
 var _runner: TestRunner

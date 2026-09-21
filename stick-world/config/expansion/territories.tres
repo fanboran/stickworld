@@ -16,6 +16,8 @@ _meta = {
 		"garrison[].profile": "兵种档案 = config/units/stickmen.tres 的单位 id（GarrisonSpawner 按 id 经 UnitsApi 刷出）",
 		"garrison[].tier": "战术档位 = config/combat/tactics.tres 的战术 id",
 		"commander.retreat_thresholds": "敌将撤仗评估阈值：casualty_rate 伤亡率 / loss_ratio 战损比 / timeout 相持秒数",
+		"name_zh": "据点名用通用描述性称谓（现代直白，直接叫它的样子/功能），禁武侠式雅名——命名口径见 docs/设计/命名与数值口径.md",
+		"rewards.resources": "奖励数值取整十、量级克制（不写个位零头、不搞几十几十的堆叠）——数值口径见 docs/设计/命名与数值口径.md",
 		"rewards.unlocks": "占领解锁项 id → 写入 WorldState.unlocks 台账，消费端自听 EventBus.unlock_granted 生效（现为建筑可建集门禁：id 须与 config/buildings/buildings.tres 的 unlocked_by_tech 对齐，展示名见 modules/expansion/api.gd 的 UNLOCK_LABELS）",
 		"entry_side": "玩家进入方位（守军布阵参考）：0=西（左）",
 		"settlement_key": "L1 世界包聚落 id（settlement.settlement_id），占领后染色目标",
@@ -39,14 +41,14 @@ variables = {
 				"retreat_thresholds": {"casualty_rate": 0.7, "loss_ratio": 4.0, "timeout": 75.0}
 			},
 			"rewards": {
-				"resources": {"res_wood": 30, "res_stone": 20},
+				"resources": {"res_wood": 10, "res_stone": 10},
 				"unlocks": []
 			},
 			"entry_side": 0
 		},
 		{
 			"id": "ter_bandit_camp_02",
-			"name_zh": "赤岭寨",
+			"name_zh": "红色山林",
 			"map_id": "l1_settlement_03",
 			"settlement_key": "settlement_city_1036",
 			"tile_key": "city_1036",
@@ -59,14 +61,14 @@ variables = {
 				"retreat_thresholds": {"casualty_rate": 0.6, "loss_ratio": 3.0, "timeout": 90.0}
 			},
 			"rewards": {
-				"resources": {"res_wood": 40, "res_stone": 40, "res_iron_ingot": 20},
+				"resources": {"res_wood": 10, "res_stone": 10, "res_iron_ingot": 10},
 				"unlocks": ["unlock_stone_warehouse"]
 			},
 			"entry_side": 0
 		},
 		{
 			"id": "ter_warlord_keep_01",
-			"name_zh": "铁腕要塞",
+			"name_zh": "石墙要塞",
 			"map_id": "l1_settlement_04",
 			"settlement_key": "settlement_city_1037",
 			"tile_key": "city_1037",
@@ -81,7 +83,7 @@ variables = {
 				"retreat_thresholds": {"casualty_rate": 0.5, "loss_ratio": 2.5, "timeout": 120.0}
 			},
 			"rewards": {
-				"resources": {"res_stone": 60, "res_iron_ingot": 40},
+				"resources": {"res_stone": 20, "res_iron_ingot": 10},
 				"unlocks": ["unlock_wall_tier3"]
 			},
 			"entry_side": 0

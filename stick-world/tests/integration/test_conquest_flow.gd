@@ -7,10 +7,10 @@ extends Node
 ##      写实 + 资源奖励入账（res_wood +30 / res_stone +20）+ 一条「战利品」通告
 ##      + territory_state_changed / region_owner_changed 广播；
 ##   2. 已臣服据点再进不刷军、不开战，launch_campaign 拒征（返回 false）；
-##   3. 败仗（赤岭寨）：守军战损持久化 garrison_losses=2（state 仍 HOSTILE），
+##   3. 败仗（红色山林）：守军战损持久化 garrison_losses=2（state 仍 HOSTILE），
 ##      玩家残部传回村A，可再次出征（launch_campaign 返回 true）；
 ##   4. 三座据点全占 → ExpansionApi.conquest_completed 恰发一次（captured 3/3 统计），
-##      占领不清战损记录；赤岭寨/铁腕要塞的解锁项随之入 WorldState.unlocks 台账。
+##      占领不清战损记录；红色山林/石墙要塞的解锁项随之入 WorldState.unlocks 台账。
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_conquest_flow.tscn
 ## 退出码：0 全部通过，1 有失败
@@ -20,8 +20,8 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptGarrisonSpawner := preload("res://modules/expansion/scripts/garrison_spawner.gd")
 
 const TID_1 := "ter_bandit_camp_01"  # 黑石营地：l1_settlement_02，守军 3 + 敌将
-const TID_2 := "ter_bandit_camp_02"  # 赤岭寨：l1_settlement_03，守军 5 + 敌将
-const TID_3 := "ter_warlord_keep_01"  # 铁腕要塞：l1_settlement_04
+const TID_2 := "ter_bandit_camp_02"  # 红色山林：l1_settlement_03，守军 5 + 敌将
+const TID_3 := "ter_warlord_keep_01"  # 石墙要塞：l1_settlement_04
 const MAP_1 := "l1_settlement_02"
 const MAP_2 := "l1_settlement_03"
 const HOME_MAP := "hd2d_street"  # 2026-09-14 启动直连：家图 = HD-2D 主街
@@ -120,15 +120,15 @@ func _test_victory_capture() -> void:
 	_runner.assert_equal(int(rec.get("state", -1)), 1, "黑石营地应转 CAPTURED(1)")
 	_runner.assert_equal(String(rec.get("owner", "")), "player", "归属 owner 写为 player（疆域真值）")
 	_runner.assert_equal(String(rec.get("faction", "")), "fac_player", "faction 写为玩家势力 id")
-	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 30.0, 0.001, "木奖励 +30 入账")
-	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 20.0, 0.001, "石奖励 +20 入账")
+	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 10.0, 0.001, "木奖励 +10 入账")
+	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 10.0, 0.001, "石奖励 +10 入账")
 	# 奖励可见：占领通告一条说全"谁臣服 + 到手什么"（文案拼装归 extension api.describe_loot）
 	var loot_line := ""
 	for sig in _sig_notify:
 		if sig.size() == 3 and String(sig[0]) == "征服":
 			loot_line = String(sig[1])
 	_runner.assert_true(loot_line.contains("已臣服"), "征服通告含臣服文案，实得「%s」" % loot_line)
-	_runner.assert_true(loot_line.contains("战利品 木材30、石料20"),
+	_runner.assert_true(loot_line.contains("战利品 木材10、石料10"),
 			"征服通告含战利品明细（奖励可见），实得「%s」" % loot_line)
 	var state_ok := false
 	for sig in _sig_state:
@@ -159,13 +159,13 @@ func _test_captured_no_respawn() -> void:
 	_runner.assert_equal(_garrison_units(map).size(), 0, "已臣服据点 EntityHost 无 garrison 单位")
 
 
-## 用例 4「败仗车轮战」（赤岭寨）：杀 2 守军 → 玩家侧全灭 → 战损持久化 + 回村可再征
+## 用例 4「败仗车轮战」（红色山林）：杀 2 守军 → 玩家侧全灭 → 战损持久化 + 回村可再征
 func _test_defeat_attrition() -> void:
 	# 只擦本用例目标领地——整表清空会连带抹掉用例 2 的占领记录，用例 5 通关判定就永远差一座
 	WorldState.territories.erase(TID_2)
 	var map: Node2D = await _travel_to(MAP_2, WorldAPI.EntrySide.LEFT)
-	_runner.assert_true(map != null, "赤岭寨图加载成功")
-	_runner.assert_true(_combat.has_active_battle(), "进赤岭寨应自动开战")
+	_runner.assert_true(map != null, "红色山林图加载成功")
+	_runner.assert_true(_combat.has_active_battle(), "进红色山林应自动开战")
 	# 恢复 X1（开战自动暂停，同用例 2 口径），否则战斗不 tick
 	TimeManager.set_speed(TimeManager.Speed.X1)
 	# 杀恰好 2 个普通守军（跳过敌将；防御性取 min 防越界）
@@ -207,9 +207,9 @@ func _test_conquest_completed() -> void:
 	_api.capture_territory(TID_3)
 	_disconnect_notify_signal()
 	_runner.assert_equal(_sig_done.size(), 1, "conquest_completed 应恰发 1 次，实得 %d" % _sig_done.size())
-	# 解锁项落池（奖励闭环消费端的数据面）：赤岭寨开石造仓库、铁腕要塞开大型城墙
-	_runner.assert_true(WorldState.has_unlock("unlock_stone_warehouse"), "赤岭寨解锁项入 WorldState.unlocks")
-	_runner.assert_true(WorldState.has_unlock("unlock_wall_tier3"), "铁腕要塞解锁项入 WorldState.unlocks")
+	# 解锁项落池（奖励闭环消费端的数据面）：红色山林开石造仓库、石墙要塞开大型城墙
+	_runner.assert_true(WorldState.has_unlock("unlock_stone_warehouse"), "红色山林解锁项入 WorldState.unlocks")
+	_runner.assert_true(WorldState.has_unlock("unlock_wall_tier3"), "石墙要塞解锁项入 WorldState.unlocks")
 	var loot_lines: Array[String] = []
 	for sig in _sig_notify:
 		if sig.size() == 3 and String(sig[0]) == "征服":

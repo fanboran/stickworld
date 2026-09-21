@@ -9,9 +9,9 @@ extends Node
 ## 全循环剧本（交接档批次 6）：
 ##   新开局（落村A、领地表空、api 骨架就绪）
 ##   → 征伐黑石营地（守军 3+敌将，全灭收束）→ 占领 + 资源入账 + 广播
-##   → 征伐赤岭寨（杀 2 守军后玩家侧全灭 = 败仗）→ 守军战损持久化 + 自动回村
-##   → 再征赤岭寨（车轮战扣减：实刷 3 守军 + 敌将）→ 占领 + 解锁广播（石造仓库门禁放行）
-##   → 征伐铁腕要塞 → 3/3 全占 → conquest_completed → 通关结算卡弹出可见。
+##   → 征伐红色山林（杀 2 守军后玩家侧全灭 = 败仗）→ 守军战损持久化 + 自动回村
+##   → 再征红色山林（车轮战扣减：实刷 3 守军 + 敌将）→ 占领 + 解锁广播（石造仓库门禁放行）
+##   → 征伐石墙要塞 → 3/3 全占 → conquest_completed → 通关结算卡弹出可见。
 ##
 ## 确定性手法（批次 4/5 测试坑总结，同 test_conquest_flow）：
 ##   - 开战自动暂停（TimeManager.auto_pause_battle）：每场战斗开始后须
@@ -27,8 +27,8 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptGarrisonSpawner := preload("res://modules/expansion/scripts/garrison_spawner.gd")
 
 const TID_1 := "ter_bandit_camp_01"  # 黑石营地：l1_settlement_02，守军 3 + 敌将
-const TID_2 := "ter_bandit_camp_02"  # 赤岭寨：l1_settlement_03，守军 5 + 敌将
-const TID_3 := "ter_warlord_keep_01"  # 铁腕要塞：l1_settlement_04，守军 8 + 敌将
+const TID_2 := "ter_bandit_camp_02"  # 红色山林：l1_settlement_03，守军 5 + 敌将
+const TID_3 := "ter_warlord_keep_01"  # 石墙要塞：l1_settlement_04，守军 8 + 敌将
 const HOME_MAP := "hd2d_street"  # 2026-09-14 启动直连：新开局/败仗回村都在 HD-2D 主街
 ## 战斗结束/回村轮询节奏：0.25s 步进（战斗结束超时 30s，回村轮询 20s）
 const POLL_INTERVAL := 0.25
@@ -61,7 +61,7 @@ func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("新开局：落村A + 领地表空 + api 骨架就绪", Callable(self, "_test_new_run_skeleton"), true)
 	_runner.add_test("征伐第 1 座：黑石营地占领入账广播", Callable(self, "_test_first_capture"), true)
-	_runner.add_test("再征第 2 座：赤岭寨车轮战扣减生效", Callable(self, "_test_attrition_recapture"), true)
+	_runner.add_test("再征第 2 座：红色山林车轮战扣减生效", Callable(self, "_test_attrition_recapture"), true)
 	_runner.add_test("征伐第 3 座：全占通关 + 结算弹出", Callable(self, "_test_completion_overlay"), true)
 	_run_tests()
 
@@ -104,8 +104,8 @@ func _test_new_run_skeleton() -> void:
 		return
 	# territories.tres 守军编成 3/5/8（不含敌将），新开局无车轮战扣减
 	_runner.assert_equal(int(targets[0].get("garrison_count", -1)), 3, "黑石营地守军 3")
-	_runner.assert_equal(int(targets[1].get("garrison_count", -1)), 5, "赤岭寨守军 5")
-	_runner.assert_equal(int(targets[2].get("garrison_count", -1)), 8, "铁腕要塞守军 8")
+	_runner.assert_equal(int(targets[1].get("garrison_count", -1)), 5, "红色山林守军 5")
+	_runner.assert_equal(int(targets[2].get("garrison_count", -1)), 8, "石墙要塞守军 8")
 	for t in targets:
 		_runner.assert_false(bool(t.get("captured", true)), "%s 应为 HOSTILE" % String(t.get("id", "")))
 	_runner.assert_false(_api.is_all_captured(), "开局不应判通关")
@@ -134,8 +134,8 @@ func _test_first_capture() -> void:
 	_disconnect_capture_signals()
 	var rec: Dictionary = WorldState.territories.get(TID_1, {})
 	_runner.assert_equal(int(rec.get("state", -1)), 1, "黑石营地应转 CAPTURED(1)")
-	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 30.0, 0.001, "木奖励 +30 入账")
-	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 20.0, 0.001, "石奖励 +20 入账")
+	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 10.0, 0.001, "木奖励 +10 入账")
+	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 10.0, 0.001, "石奖励 +10 入账")
 	var state_ok := false
 	for sig in _sig_state:
 		if sig.size() == 2 and sig[0] == TID_1 and int(sig[1]) == 1:
@@ -148,17 +148,17 @@ func _test_first_capture() -> void:
 	_runner.assert_true(owner_ok, "region_owner_changed 捕获 (city_1035, player)，实得 %s" % [str(_sig_owner)])
 	_runner.assert_true(_target_captured(TID_1), "list_targets 中黑石营地 captured=true")
 	_runner.assert_false(_api.is_all_captured(), "尚有 2 座未占，不应判通关")
-	# 奖励闭环消费端基线：石造仓库由赤岭寨解锁，此刻应仍被门禁挡着
+	# 奖励闭环消费端基线：石造仓库由红色山林解锁，此刻应仍被门禁挡着
 	_runner.assert_false(_game_root.get_construction_api().is_def_unlocked("stone_warehouse"),
 			"开局石造仓库未解锁（门禁基线）")
 
 
-## 用例 3「再征第 2 座（车轮战）」：赤岭寨先打一场败仗（杀 2 守军后玩家侧全灭）
+## 用例 3「再征第 2 座（车轮战）」：红色山林先打一场败仗（杀 2 守军后玩家侧全灭）
 ## → garrison_losses=2 持久化 + 自动回村；再征时实刷守军 5-2=3（+敌将）→ 全灭占领 + 解锁广播
 func _test_attrition_recapture() -> void:
 	# —— 第一场：败仗制造车轮战战损 ——
-	_runner.assert_true(_manager.launch_campaign(TID_2), "赤岭寨应可出征")
-	var b: Node = await _await_battle("进赤岭寨应自动开战")
+	_runner.assert_true(_manager.launch_campaign(TID_2), "红色山林应可出征")
+	var b: Node = await _await_battle("进红色山林应自动开战")
 	if b == null:
 		return
 	TimeManager.set_speed(TimeManager.Speed.X1)
@@ -184,7 +184,7 @@ func _test_attrition_recapture() -> void:
 	_runner.assert_equal(_target_garrison_count(TID_2), 3, "list_targets 守军余量 5-2=3")
 	# —— 第二场：再征，车轮战扣减在 spawn 层生效 ——
 	_runner.assert_true(_manager.launch_campaign(TID_2), "败仗不判负，可再征")
-	var b2: Node = await _await_battle("再进赤岭寨应再开战")
+	var b2: Node = await _await_battle("再进红色山林应再开战")
 	if b2 == null:
 		return
 	_runner.assert_equal(b2.get_alive_count(2), 4, "实刷守军 5-2=3 + 敌将 = 4（车轮战扣减）")
@@ -205,25 +205,25 @@ func _test_attrition_recapture() -> void:
 	if _cb_unlock.is_valid() and EventBus.unlock_granted.is_connected(_cb_unlock):
 		EventBus.unlock_granted.disconnect(_cb_unlock)
 	_runner.assert_equal(int(WorldState.territories.get(TID_2, {}).get("state", -1)), 1,
-			"赤岭寨应转 CAPTURED(1)")
-	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 40.0, 0.001, "木奖励 +40 入账")
-	_runner.assert_approx(_resources.get_stock("res_iron_ingot") - iron0, 20.0, 0.001, "铁锭奖励 +20 入账")
+			"红色山林应转 CAPTURED(1)")
+	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 10.0, 0.001, "木奖励 +10 入账")
+	_runner.assert_approx(_resources.get_stock("res_iron_ingot") - iron0, 10.0, 0.001, "铁锭奖励 +10 入账")
 	_runner.assert_true(_sig_unlock.has("unlock_stone_warehouse"),
 			"unlock_granted 应广播 unlock_stone_warehouse，实得 %s" % str(_sig_unlock))
 	# 奖励闭环打通：解锁项入池（WorldState.unlocks）且建筑门禁当场放行
 	_runner.assert_true(WorldState.has_unlock("unlock_stone_warehouse"),
 			"解锁项入 WorldState.unlocks 台账")
 	_runner.assert_true(_game_root.get_construction_api().is_def_unlocked("stone_warehouse"),
-			"占领赤岭寨后石造仓库解锁（消费端门禁放行）")
+			"占领红色山林后石造仓库解锁（消费端门禁放行）")
 	_runner.assert_false(_game_root.get_construction_api().is_def_unlocked("wall_tier3"),
-			"大型城墙由铁腕要塞解锁，此刻仍锁着")
+			"大型城墙由石墙要塞解锁，此刻仍锁着")
 
 
-## 用例 4「征伐第 3 座 → 通关」：铁腕要塞占领 → conquest_completed 恰发一次
+## 用例 4「征伐第 3 座 → 通关」：石墙要塞占领 → conquest_completed 恰发一次
 ## （统计 3/3、含玩家伤亡）→ 通关结算卡 ConquestVictoryOverlay 挂 ModalOverlay 且可见
 func _test_completion_overlay() -> void:
-	_runner.assert_true(_manager.launch_campaign(TID_3), "铁腕要塞应可出征")
-	var b: Node = await _await_battle("进铁腕要塞应自动开战")
+	_runner.assert_true(_manager.launch_campaign(TID_3), "石墙要塞应可出征")
+	var b: Node = await _await_battle("进石墙要塞应自动开战")
 	if b == null:
 		return
 	TimeManager.set_speed(TimeManager.Speed.X1)
@@ -237,7 +237,7 @@ func _test_completion_overlay() -> void:
 	for i in 10:
 		await get_tree().process_frame
 	_runner.assert_equal(int(WorldState.territories.get(TID_3, {}).get("state", -1)), 1,
-			"铁腕要塞应转 CAPTURED(1)")
+			"石墙要塞应转 CAPTURED(1)")
 	_runner.assert_true(_api.is_all_captured(), "3/3 全占判定 true")
 	_runner.assert_equal(_sig_done.size(), 1, "conquest_completed 应恰发 1 次，实得 %d" % _sig_done.size())
 	if not _sig_done.is_empty():
@@ -245,7 +245,7 @@ func _test_completion_overlay() -> void:
 		_runner.assert_equal(int(stats.get("captured", -1)), 3, "统计 captured 3/3")
 		_runner.assert_equal(int(stats.get("total", -1)), 3, "统计 total 3")
 		_runner.assert_true(int(stats.get("player_losses", -1)) >= 1,
-				"统计含玩家伤亡（赤岭寨败仗至少折损 1，实得 %d）" % int(stats.get("player_losses", -1)))
+				"统计含玩家伤亡（红色山林败仗至少折损 1，实得 %d）" % int(stats.get("player_losses", -1)))
 		_runner.assert_true(stats.has("game_time"), "统计含 game_time 键")
 	# 通关结算弹出（C6：conquest_completed → demo_quest 动态建 ConquestVictoryOverlay
 	# 挂 UIRoot.ModalOverlay 槽，show_conquest 置 visible——弹链全程同步，此处直接断言）

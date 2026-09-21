@@ -215,8 +215,14 @@ func _spawn_and_start() -> void:
 			var row: Dictionary = rows[ri]
 			var x_off: float = float(def["front_x"]) - ri * ROW_GAP
 			var count: int = int(row["count"])
+			# 行内间距按行宽自适应压缩：大行（10 人×LINE_GAP 90 = ±405px）超出
+			# 行走带纵深时向中心收，不越界（越界者被地面约束钳到带缘叠成一排）
+			var half_span: float = (count - 1) * 0.5 * LINE_GAP
+			var max_half: float = (map.ground_bottom - map.ground_y) * 0.5 - 40.0
+			var gap: float = LINE_GAP if half_span <= max_half \
+					else (max_half * 2.0) / float(maxi(count - 1, 1))
 			for k in count:
-				var y: float = spawn_y + (float(k) - (count - 1) * 0.5) * LINE_GAP
+				var y: float = spawn_y + (float(k) - (count - 1) * 0.5) * gap
 				var lt := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + x_off, y), int(row["weapon"]), fs)
 				if lt != null:
 					l_units.append(lt)
@@ -324,7 +330,10 @@ func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
 	var e: Node2D = map.spawn_entity(_StickmanScene, pos)
 	if e == null:
 		return null
-	if e.get("foot_offset") != null:
+	# 脚部对齐：HD-2D 图 origin 即视觉脚线（billboard 脚锚），不上移；
+	# 2D 图 origin=髋、脚在 origin+foot_offset，仍需上移校正（口径同 world.InitialContent）
+	if e.get("foot_offset") != null \
+			and not (e.has_method("is_on_billboard_map") and e.is_on_billboard_map()):
 		e.global_position.y = pos.y - e.foot_offset
 	if e.has_method("set_possessed"):
 		e.set_possessed(false)

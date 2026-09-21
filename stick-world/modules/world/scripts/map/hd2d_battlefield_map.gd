@@ -29,12 +29,14 @@ func _walk_deep_y() -> float:
 const FRONT_MARGIN_Y := 195.0
 
 
-## 前界 24 格（576px 带）+ 前缘余量：观战缩放（缩放条 100% 档）下
-## 3D 契约把地平线（绿草远端）钉屏幕上 1/3 线，地面恒占屏 2/3
-## （set_cam_zoom 战场分支，HD-2D街景系统.md §4.1）——README 战斗头图口径
-## （24px 换轨：旧 688+24×32=1456 → 516+24×24=1092）
+## 前界 83 格（1992px 带）+ 前缘余量：带深按观战构图契约定——观察缩放
+## （缩放条 100% 档=0.75）下 set_cam_zoom 战场分支的 3D 视深 = 1080/(24·uz)
+## ×(2/3)/sin26° ≈ 91 格，带+前缘余量（83×24+195=2187px）恰好铺满屏幕下
+## 2/3、屏幕底沿≈ground_bottom（2703≈2705）——部署线（带中点）落在屏幕
+## 中部，README 战斗头图口径。24px 换轨曾把带缩到 24 格，部队全挤在地平线
+## 下一条窄带（创始人"占位偏上"，实测带仅占可视地面顶部 ~26%）
 func _front_band_y() -> float:
-	return 516.0 + 24.0 * 24.0
+	return 516.0 + 24.0 * 83.0
 
 
 func _ready() -> void:
@@ -70,7 +72,8 @@ func get_spawn_point() -> Vector2:
 			side = int(sl.get_last_entry_side())
 	var x: float = map_left + 150.0 if side == WorldAPI.EntrySide.LEFT \
 			else map_right - 150.0
-	return Vector2(x, 1010.0)
+	# 落点纵深取行走带 85% 偏前（旧带同口径：1010/带顶 516 + 旧带深 576 ≈ 0.86）
+	return Vector2(x, 516.0 + (walk_front_y - 516.0) * 0.85)
 
 
 ## 无村民（战场无劳作设施；supports_village_facilities 继承主街=false）

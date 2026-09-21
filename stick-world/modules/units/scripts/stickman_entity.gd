@@ -248,7 +248,7 @@ const REST_MORALE_REGEN: float = 4.0
 
 # ─────────────────────────────── 群体分离（防叠人/1字长蛇）────────────────────────────────
 ## 分离检测半径（真身与推力参数在 entity_motion.gd；bench_units_main.gd 直读本壳）。
-const SEPARATION_RADIUS: float = 40.5  # 24px 换轨
+const SEPARATION_RADIUS: float = preload("res://modules/formation/api.gd").SEPARATION_RADIUS
 ## 头顶血条组件引用（_mount_components 装配）
 var _health_bar: Node = null
 

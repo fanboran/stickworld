@@ -22,7 +22,7 @@ variables = {
 			"leap_min_dist": 120.0,
 			"leap_max_dist": 420.0,
 			"leap_timeout": 6.0,
-			"arrive_tolerance": 48.0,
+			"arrive_tolerance": 96.0,
 			"wait_core_min": 2.0,
 			"wait_core_max": 4.0,
 			"wait_flank_min": 2.0,

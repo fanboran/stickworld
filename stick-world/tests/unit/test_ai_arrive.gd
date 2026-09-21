@@ -8,7 +8,7 @@ signal test_done(code: int)
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptBehaviorMove := preload("res://modules/units/scripts/ai/behavior_move.gd")
-const ScriptFormationSystem := preload("res://modules/combat/scripts/command/formation_system.gd")
+const ScriptFormationSystem := preload("res://modules/formation/scripts/formation_system.gd")
 
 var _runner: TestRunner
 

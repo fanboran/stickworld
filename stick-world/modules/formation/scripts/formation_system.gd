@@ -42,8 +42,9 @@ const SQUAD_TIER := 1
 const DEFAULT_PRESET_ID := "fp_combat_squad"
 ## 预设配置文件路径
 const PRESET_CONFIG_PATH := "res://config/formations/formation_presets.tres"
-## 队形散开间距（px）：推进横排相邻队员间隔（反编译参考实装 D）
-var SPREAD_SPACING: float = 24.0  # 24px 换轨（调参表 var_spread_spacing 运行时覆盖）
+## 队形散开间距（px）：推进横排相邻队员间隔（反编译参考实装 D）。
+## 默认值取 formation_spacing 单一真相源（不变式见彼处；调参表 var_spread_spacing 运行时覆盖）
+var SPREAD_SPACING: float = FormationSpacing.SPREAD_SPACING_DEFAULT
 ## 集合围圈半径（px）：RALLY 集结时队员绕圈距离
 const RALLY_RADIUS: float = 24.0
 ## 队伍级目标决策间隔（秒）：排长每此间隔重选一次共享攻击目标（反编译参考实装 D-B）
@@ -51,26 +52,31 @@ const SQUAD_DECISION_INTERVAL: float = 0.5
 ## 编队动态跟队默认间距（px，SWL GapBetweenFormationGroups 量级）：
 ## 后队落点 = 前队质心 − 行进方向 × gap
 var FOLLOW_DEFAULT_GAP: float = 150.0
-## 跟队重下发死区（px）：成员距锚定队形位小于此值不重下号令（防抖动/防 arrive 动画重播）
-const FOLLOW_DEADZONE: float = 40.0
+## 跟队重下发死区（px）：成员距锚定队形位小于此值不重下号令（防抖动/防 arrive 动画重播）。
+## 须小于槽位间距（SPREAD_SPACING/ROW_GAP）——大于间距会把"站错一格"的成员
+## 误判为已落定，编队失守不再纠位（相位计划侧的同名容差另在 config/ai/
+## squad_phase_plan.tres arrive_tolerance，口径见彼处）
+const FOLLOW_DEADZONE: float = FormationSpacing.FOLLOW_DEADZONE
 ## 每列人数（SWL Formation.UNITS_PER_COLUMN 直译，11b）：同列单位沿垂直方向排开，
 ## 多列沿行进方向反侧退 ROW_GAP。无 dump 数值真值，按三班 8~10 人取 3，待实测校准
-const UNITS_PER_COLUMN: int = 3
+const UNITS_PER_COLUMN: int = FormationSpacing.UNITS_PER_COLUMN
 ## 列间距（px，SWL Formation.ROW_GAP 直译，11b；无 dump 真值，待实测校准）
-var ROW_GAP: float = 56.0
+var ROW_GAP: float = FormationSpacing.ROW_GAP_DEFAULT
 ## 追赶奔跑阈值（px，11b）：距槽位落点超过此值转奔跑追赶
 ## （SWL UpdateCatchingUpToFormation；无 dump 真值，待实测校准）
 var CATCHUP_RUN_DIST: float = 140.0
 ## 指挥官光环士气恢复速率（每秒；排长存活时队员士气恢复，AI 完善批次 3）
 const LEADER_MORALE_AURA: float = 3.0
-## 公共目标选择核心（反编译参考实装 A；同模块 combat，显式 preload）
-const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+## 共享目标决策器（Callable(unit, opts) -> Node；装配层注入 combat TargetFinder.find_target，
+## 正式链路必注入）。本模块**零静态依赖 combat**（零依赖环红线）——未注入时走下方
+## 最近存活敌人兜底（单测/独立环境语义等价；目标过滤策略以注入实现为准）
+var _target_decider: Callable = Callable()
 ## 拆分助手（W2 胖文件拆分：状态留本类，逻辑进助手，持宿主回引；助手经 _init 装配）
-const ScriptFormationGeometry := preload("res://modules/combat/scripts/command/formation_geometry.gd")
-const ScriptSquadAuthorityMarket := preload("res://modules/combat/scripts/command/squad_authority_market.gd")
-const ScriptSquadFollowDirector := preload("res://modules/combat/scripts/command/squad_follow_director.gd")
-const ScriptSquadReportHooks := preload("res://modules/combat/scripts/command/squad_report_hooks.gd")
-const ScriptSquadSnapshot := preload("res://modules/combat/scripts/command/squad_snapshot.gd")
+const ScriptFormationGeometry := preload("res://modules/formation/scripts/formation_geometry.gd")
+const ScriptSquadAuthorityMarket := preload("res://modules/formation/scripts/squad_authority_market.gd")
+const ScriptSquadFollowDirector := preload("res://modules/formation/scripts/squad_follow_director.gd")
+const ScriptSquadReportHooks := preload("res://modules/formation/scripts/squad_report_hooks.gd")
+const ScriptSquadSnapshot := preload("res://modules/formation/scripts/squad_snapshot.gd")
 
 ## 工作类型（RimWorld 式抽象职责，见 docs 设计 §二）
 ## 搬运（HAUL）是全员基础能力，不受职责范围限制（见 is_work_allowed）；
@@ -543,6 +549,45 @@ func get_squad_dest(squad_id: String, unit: Node, base_pos: Vector2, mode: Strin
 	return base_pos
 
 
+## 注入共享目标决策器（装配层 system_setup 调用）：Callable(unit: Node, opts: Dictionary) -> Node。
+## 签名与 combat TargetFinder.find_target 一致——注入后共享目标选型与战斗目标过滤同源。
+func set_target_decider(decider: Callable) -> void:
+	_target_decider = decider
+
+
+## 小队共享目标选型：注入决策器优先（正式链路 = combat TargetFinder），
+## 未注入（单测/独立环境）用最近存活敌人兜底。
+func _pick_squad_target(rep: Node, battle: Node) -> Node:
+	if _target_decider.is_valid():
+		return _target_decider.call(rep, { "battle": battle })
+	return _nearest_alive_enemy(rep, battle)
+
+
+## 最近存活敌人（兜底路径）：阵营口径与 combat TargetFinder._collect_enemies 一致
+## （faction_id 属性取阵营；候选优先取 battle 存活列表接口）。
+func _nearest_alive_enemy(rep: Node, battle: Node) -> Node:
+	if rep == null or not is_instance_valid(rep) or battle == null:
+		return null
+	var faction: int = rep.faction_id if "faction_id" in rep else 0
+	var enemies: Array = []
+	if battle.has_method("get_alive_enemies_of"):
+		enemies = battle.get_alive_enemies_of(faction)
+	elif battle.has_method("get_enemies_of"):
+		enemies = battle.get_enemies_of(faction)
+	var best: Node = null
+	var best_d_sq: float = INF
+	for e in enemies:
+		if e == null or not is_instance_valid(e):
+			continue
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		var d_sq: float = rep.global_position.distance_squared_to(e.global_position)
+		if d_sq < best_d_sq:
+			best_d_sq = d_sq
+			best = e
+	return best
+
+
 ## 队伍级目标决策（反编译参考实装 D-B）：每 SQUAD_DECISION_INTERVAL 秒为每个战斗小队选共享攻击目标（排长决策 → 队员执行）。
 func _decide_squad_targets(delta: float) -> void:
 	if _squads.is_empty():
@@ -573,7 +618,7 @@ func _decide_squad_targets(delta: float) -> void:
 		if battle == null or not is_instance_valid(battle):
 			_squad_targets.erase(squad_id)
 			continue
-		var target: Node = ScriptTargetFinder.find_target(rep, { "battle": battle })
+		var target: Node = _pick_squad_target(rep, battle)
 		if target == null:
 			# 脱离接触：清共享目标，contact 上报的"首次"状态随之重置（再接敌再报）
 			_squad_targets.erase(squad_id)
@@ -988,9 +1033,11 @@ func _apply_balance_tuning() -> void:
 # 其余号令撤销；缺省 phase_plan_enabled=false 零回归，config/ai/squad_phase_plan.tres 配置化。
 
 ## 小队相位计划脚本（同模块 command/，显式 preload 惯例）
-const ScriptSquadPhasePlan := preload("res://modules/combat/scripts/command/squad_phase_plan.gd")
-## 号令类型枚举（通知判定 ADVANCE/SPRINT 用；同模块显式 preload，无跨模块依赖）
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const ScriptSquadPhasePlan := preload("res://modules/formation/scripts/squad_phase_plan.gd")
+## 推进类号令枚举值（相位计划激活判定用）。本模块**零静态依赖 combat 号令枚举**——
+## 缺省值与 combat TacticalOrders.OrderType 对齐（0=ADVANCE_ALL / 1=SPRINT），
+## 装配层经 set_advance_order_types 注入真值（枚举增改只需改注入点，无需改本模块）
+var _advance_order_types: Array = [0, 1]
 
 ## 活跃相位计划：squad_id -> SquadPhasePlan（计划随小队消亡由节拍侧惰性清理）
 var _squad_phase_plans: Dictionary = {}
@@ -1014,6 +1061,11 @@ func set_phase_plan_params(params: Dictionary) -> void:
 			_phase_plan_params[k] = params[k]
 
 
+## 注入推进类号令枚举值（装配层 system_setup 调用，来自 combat TacticalOrders.OrderType）。
+func set_advance_order_types(types: Array) -> void:
+	_advance_order_types = types.duplicate()
+
+
 ## 号令通知（TacticalOrders.issue 下发成功后回查调用，A5 触发点）：推进类号令
 ## （ADVANCE_ALL/SPRINT）激活/重定该小队相位计划；其余号令撤销计划——计划不得与
 ## 号令打架。开关关闭 / 非战斗小队 / 小队不存在：静默忽略（零回归闸门）。
@@ -1022,8 +1074,7 @@ func notify_squad_order(order_type: int, squad_id: String, target_pos: Vector2) 
 		return
 	if not _squads.has(squad_id) or not is_combat_squad(squad_id):
 		return
-	if order_type == ScriptTacticalOrders.OrderType.ADVANCE_ALL \
-			or order_type == ScriptTacticalOrders.OrderType.SPRINT:
+	if order_type in _advance_order_types:
 		_activate_phase_plan(squad_id, target_pos)
 	else:
 		_deactivate_phase_plan(squad_id)

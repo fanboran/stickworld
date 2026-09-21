@@ -70,7 +70,7 @@ const DEFAULTS: Dictionary = {
 	"leap_min_dist": 120.0,       ## 单轮跃进最小距离（px）
 	"leap_max_dist": 420.0,       ## 单轮跃进最大距离（px）
 	"leap_timeout": 6.0,          ## 单相位移动超时（s；成员受阻也推进相位，防卡死）
-	"arrive_tolerance": 48.0,     ## 到位死区（px；量级对齐 FormationSystem.FOLLOW_DEADZONE）
+	"arrive_tolerance": FormationSpacing.ARRIVE_TOLERANCE,  ## 到位容差（px；单一真相源，见 formation_spacing 不变式）
 	"wait_core_min": 2.0,         ## 核心跃进后全队还击等待下限（s，CoH infantry-plan 2~4s 真值）
 	"wait_core_max": 4.0,         ## 核心跃进后全队还击等待上限（s，CoH 真值）
 	"wait_flank_min": 2.0,        ## 双翼跟进后等待下限（s，CoH infantry-plan 2~3.5s 真值）
@@ -290,7 +290,7 @@ func _enter(phase: int) -> void:
 ##   - 全员到位（或移动超时）→ 进入等待相位；末跳（跃进线即终点）完成 → 计划完成。
 func _tick_leap(units: Array, core_wave: bool) -> void:
 	var wave_roles: Array = [ROLE_CORE, ROLE_SCOUT] if core_wave else [ROLE_RFLANK, ROLE_LFLANK]
-	var tolerance: float = float(_p.get("arrive_tolerance", 48.0))
+	var tolerance: float = float(_p.get("arrive_tolerance", FormationSpacing.ARRIVE_TOLERANCE))
 	var all_set: bool = true
 	for u in units:
 		var role := get_role_of(u)
@@ -411,7 +411,7 @@ func _advance_leap_line() -> void:
 	_advance_dir = to_target.normalized() if remaining > 1.0 else Vector2.RIGHT
 	var step: float = clampf(remaining * float(_p.get("leap_step_ratio", 0.35)),
 			float(_p.get("leap_min_dist", 120.0)), float(_p.get("leap_max_dist", 420.0)))
-	if remaining <= step + float(_p.get("arrive_tolerance", 48.0)):
+	if remaining <= step + float(_p.get("arrive_tolerance", FormationSpacing.ARRIVE_TOLERANCE)):
 		_leap_line = _final_target
 	else:
 		_leap_line = centroid + _advance_dir * step
@@ -481,7 +481,7 @@ func _ordered_to(u: Node, dest: Vector2) -> bool:
 	var params: Dictionary = {}
 	if ai.has_method("get_ordered_params"):
 		params = ai.get_ordered_params()
-	return params.get("target", Vector2.INF).distance_to(dest) <= float(_p.get("arrive_tolerance", 48.0))
+	return params.get("target", Vector2.INF).distance_to(dest) <= float(_p.get("arrive_tolerance", FormationSpacing.ARRIVE_TOLERANCE))
 
 
 ## 波次跃进号令下发（engage_in_range：途中敌进射程即停下接战，与 ADVANCE_ALL 同语义）。

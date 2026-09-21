@@ -95,14 +95,44 @@ func initialize(json_path: String, base_dir: String) -> void:
 		_travel_planner.setup(_birth_data.roads)
 	# C2 blob 实时变动：建设系统广播 settlement_updated -> 当前/出生数据中该聚落
 	# 规模刷新 + 当前视图单城重算（L2/L3 为烘焙静态层，本局规模不变不重算）
-	if EventBus != null:
-		if not EventBus.settlement_updated.is_connected(_on_settlement_updated):
-			EventBus.settlement_updated.connect(_on_settlement_updated)
-		# 战斗中禁用快速旅行（计数维护：多场并发战斗全结束才解除）
-		if not EventBus.battle_started.is_connected(_on_battle_started):
-			EventBus.battle_started.connect(_on_battle_started)
-		if not EventBus.battle_ended.is_connected(_on_battle_ended):
-			EventBus.battle_ended.connect(_on_battle_ended)
+		if EventBus != null:
+			if not EventBus.settlement_updated.is_connected(_on_settlement_updated):
+				EventBus.settlement_updated.connect(_on_settlement_updated)
+			# 战斗中禁用快速旅行（计数维护：多场并发战斗全结束才解除）
+			if not EventBus.battle_started.is_connected(_on_battle_started):
+				EventBus.battle_started.connect(_on_battle_started)
+			if not EventBus.battle_ended.is_connected(_on_battle_ended):
+				EventBus.battle_ended.connect(_on_battle_ended)
+			# 疆域归属变动 → 政治模式逐地块染色刷新（占多少染多少）
+			if not EventBus.region_owner_changed.is_connected(_on_region_owner_changed):
+				EventBus.region_owner_changed.connect(_on_region_owner_changed)
+			if not EventBus.territory_state_changed.is_connected(_on_territory_state_changed_for_owner):
+				EventBus.territory_state_changed.connect(_on_territory_state_changed_for_owner)
+		refresh_territory_ownership()
+
+
+## 归属变动（ConquestManager 占领后广播）→ 重取已占地块表。
+## 一律整表重取而不是按载荷增量改：真值是 WorldState.territories，
+## 重取幂等且与"读档读回的归属"同一路径（信号载荷只作触发用）
+func _on_region_owner_changed(_tile_key: String, _new_owner: String) -> void:
+	refresh_territory_ownership()
+
+
+func _on_territory_state_changed_for_owner(_territory_id: String, _new_state: int) -> void:
+	refresh_territory_ownership()
+
+
+## 已占地块表 → 渲染器（政治模式逐地块染色）。数据源 = expansion 契约面
+## （组查找，不引 expansion 全局类名）；expansion 未装配（dev 直开战略图）→ 空表 = 不染色
+func refresh_territory_ownership() -> void:
+	if _renderer == null or not _renderer.has_method("set_owned_tiles"):
+		return
+	var tree := get_tree()
+	var expansion: Node = tree.get_first_node_in_group("expansion_api") if tree != null else null
+	var keys: Array = []
+	if expansion != null and expansion.has_method("get_owned_tile_keys"):
+		keys = expansion.get_owned_tile_keys()
+	_renderer.set_owned_tiles(keys)
 
 
 func _on_battle_started(_battle_id: String) -> void:

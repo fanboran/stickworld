@@ -292,6 +292,15 @@ func _list_territories() -> Array:
 	return expansion.list_targets()
 
 
+## 玩家已占地块 id（政治图例的「我方疆域」条目用；染色本身在渲染器侧按同一份
+## expansion 真值逐地块取色）。未装配 expansion → 空表
+func _owned_tile_keys() -> Array:
+	var expansion := _expansion_api()
+	if expansion == null or not expansion.has_method("get_owned_tile_keys"):
+		return []
+	return expansion.get_owned_tile_keys()
+
+
 ## 据点面板行点击：先按 tile_key 定位到该聚落地块，再走 activate_settlement
 ## 同一交互链（未易手据点弹征伐确认 / 我方已占据点弹旅行窗）
 func _on_territory_row_activated(target: Dictionary) -> void:
@@ -516,6 +525,13 @@ func _fill_legend() -> void:
 		if pol_entries.is_empty():
 			_legend.set_entries([])  # 空态：set_shown 自动保持隐藏
 			return
+		# 我方疆域条目（P4 逐地块染色：占多少染多少）——有已占地块才加，无则不留空条目
+		var owned: Array = _owned_tile_keys()
+		if not owned.is_empty():
+			pol_entries.append({
+				"color": MapTokens.L1_PLAYER_TERRITORY_COLOR,
+				"text": "我方疆域 ×%d 地块" % owned.size(),
+			})
 		_legend.set_title("政权")
 		_legend.set_entries(pol_entries)
 		return

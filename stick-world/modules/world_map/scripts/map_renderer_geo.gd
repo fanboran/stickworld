@@ -170,7 +170,8 @@ static func bake_base_meshes(h) -> void:
 	var neighbor_pairs: Array = []
 	for tile in h._data.tiles:
 		if tile.polygon.size() >= 3:
-			tile_pairs.append([tile.polygon, h._data.get_state_color(tile.owner_state_id)])
+			# 取色归宿主 tile_fill_color：玩家已占地块染玩家疆域色，其余按政权色
+			tile_pairs.append([tile.polygon, h.tile_fill_color(tile)])
 	for lake in h._data.lakes:
 		lake_pairs.append([pts(lake), h.LAKE_COLOR])
 	for ni in h._data.neighbors.size():

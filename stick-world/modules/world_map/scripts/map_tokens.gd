@@ -106,6 +106,14 @@ const BIOME_LEGEND: Array[Dictionary] = [
 ## 城市常驻描边（内部城界，灰墨内容线；屏幕像素固定）
 const L1_TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
 const L1_TILE_BORDER_WIDTH := 2.0
+
+## 玩家已占疆域填充色（政治模式按地块染色：占多少染多少，逐 tile 覆盖所属政权色）。
+## 【AI 提案/待定】80 国政权色统一压在同一低饱和彩度区间（worldgen l3/palette.py 的
+## 等色相环 × 明度档设计），故取一支高饱和色与全体政权色拉开距离；同时避开三个
+## 语义色槽（琥珀=操作线唯一合法位 / 危险红 / 成功绿）。改观感只动本常量——
+## 渲染器与政治图例同源取值。
+const L1_PLAYER_TERRITORY_COLOR := Color(0.72, 0.30, 0.78)
+
 ## 出生 L1 权威轮廓（深灰墨，略粗区分出生块边界）
 const L1_BORDER_COLOR := Color(0.25, 0.25, 0.25)
 const L1_BORDER_WIDTH := 2.5

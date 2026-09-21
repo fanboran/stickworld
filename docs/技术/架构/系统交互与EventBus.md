@@ -116,7 +116,7 @@
 | 信号 | 参数 | 发射方 | 接收方 | 触发条件 |
 |------|------|--------|--------|----------|
 | `territory_state_changed` | territory_id: String, new_state: int | ConquestManager（expansion，据点占领） | 城门出门框（world）、战略图据点面板（world_map）、DemoQuest（world）、测试 | 据点状态变更；new_state 为 TerritoryRegistry.State 的 int 广播（core 不依赖模块类） |
-| `region_owner_changed` | region_id: String, new_owner: String | ConquestManager（expansion） | 暂无生产订户（仅测试订阅） | 据点占领后地块归属变更；region_id 发 tile 级 id（预留战略图政治模式聚落/地块染色） |
+| `region_owner_changed` | region_id: String, new_owner: String | ConquestManager（expansion） | 战略图（world_map/api.gd：重取已占地块表 → 政治模式逐格染色） | 据点占领后地块归属变更；region_id 发 tile 级 id（归属最小单位是 tile，见出征架构 §9.1） |
 | `unlock_granted` | unlock_id: String | ConquestManager（expansion） | 暂无生产订户（仅测试订阅） | 征服奖励解锁发放（预留建筑/装备等系统按需接线） |
 
 ### 2.8 UI / 附身 / 室内事件

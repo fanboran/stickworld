@@ -155,6 +155,20 @@ func describe_owner(target: Dictionary) -> String:
 	return owner
 
 
+## 玩家已占地块 id 列表（tile_key；战略图政治模式逐地块染色的数据源——
+## 占住多少格就染多少格，不整国变色）。归属真值在 WorldState.territories，
+## 本方法只做"哪些地块的 owner 是玩家"的投影，空表 = 尚未占领任何地块
+func get_owned_tile_keys() -> Array[String]:
+	var out: Array[String] = []
+	for t in list_targets():
+		if String(t.get("owner", "")) != _RegistryScript.PLAYER_OWNER_ID:
+			continue
+		var key := String(t.get("tile_key", ""))
+		if not key.is_empty():
+			out.append(key)
+	return out
+
+
 ## 目标情报一句话（确认框/提示文案共用；展示层不各自拼串）：
 ## 「守军 剑士×2、弓手×1（敌将：平原步兵）｜战利品 木材30、石料20」
 func describe_target(target: Dictionary) -> String:

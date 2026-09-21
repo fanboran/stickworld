@@ -76,7 +76,9 @@ modules/world_map/
 - 选中/相机/模式：`select` / `deselect` / `camera_focus` / `screen_to_map` / `map_to_screen` / `set_map_mode` / `get_map_mode`
 - 政治（只读）：`get_state_color` / `get_states`
 
-**消费的全局事件**：`EventBus.settlement_updated`（聚落规模刷新 → 当前 L1 单城 blob 重算；L2/L3 为烘焙静态层不重算）、`battle_started/ended`（战斗中禁旅行）、`territory_state_changed`（据点面板重刷，`TerritoryPanel` 订阅）。`region_owner_changed` 是按归属真值做政治染色的既定数据源，接收端尚未实装（染色粒度待拍板，见 [docs/技术/架构/出征与领地架构.md](docs/技术/架构/出征与领地架构.md) §十）。
+**消费的全局事件**：`EventBus.settlement_updated`（聚落规模刷新 → 当前 L1 单城 blob 重算；L2/L3 为烘焙静态层不重算）、`battle_started/ended`（战斗中禁旅行）、`territory_state_changed`（据点面板重刷，`TerritoryPanel` 订阅）、`region_owner_changed` 与 `territory_state_changed`（归属变动 → `api.refresh_territory_ownership` 整表重取已占地块喂给渲染器）。
+
+**疆域染色**：政治模式的地块填充按已占地块**逐格**覆盖（占多少染多少，不整国变色）——取色唯一出口 `MapRenderer.tile_fill_color`，色值取自 `MapTokens.L1_PLAYER_TERRITORY_COLOR`（渲染器与政治图例同源）；已占集合来自 expansion 契约面 `get_owned_tile_keys()`（组 `expansion_api` 查找，不引 expansion 全局类名）。
 
 ## 视图层级与输入
 

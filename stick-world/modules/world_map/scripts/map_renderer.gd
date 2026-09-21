@@ -216,6 +216,10 @@ var _player_visible := false
 ## 玩家所在地块政权色（标记中心点/脉冲环用；内容语义）
 var _player_state_color := Color.WHITE
 
+## 玩家已占地块 id 集合（tile_key → true；归属真值由 api 从 expansion 喂入，见
+## set_owned_tiles）。政治模式的填充色按此逐地块覆盖——占多少染多少。
+var _owned_tiles: Dictionary = {}
+
 var _debug_was_visible: bool = false
 
 ## 当前所在城市的流动描边（"你在这里"，细粒度层级）：
@@ -338,6 +342,31 @@ func set_current_tile(tile_id: String) -> void:
 ## 已由 api 更新，这里重判档位并把该城排进补丁队列优先生成。不在当前数据中的 id 忽略）
 func invalidate_blob(settlement_id: String) -> void:
 	_blob().invalidate(settlement_id)
+
+
+## 玩家已占地块集合（tile_key 数组；api 从 expansion 归属真值喂入）。
+## 政治模式的填充按此**逐地块**覆盖：占住多少格就染多少格（不整国变色——
+## 归属的最小单位是 tile_key，见架构 §9.1）。空表 = 全部按所有权政色（原样）。
+func set_owned_tiles(tile_keys: Array) -> void:
+	var next: Dictionary = {}
+	for k in tile_keys:
+		var key := String(k)
+		if not key.is_empty():
+			next[key] = true
+	if next == _owned_tiles:
+		return
+	_owned_tiles = next
+	# 地块填充色烘进顶点色 mesh（_Geo.bake_base_meshes）→ 变了必须重烘再重绘，
+	# 否则政治模式仍是旧色（POLITICAL 无贴图底，填充全走该 mesh）
+	_Geo.bake_base_meshes(self)
+	queue_redraw()
+
+
+## 地块填充色（政治模式填充的唯一取色处）：玩家已占 → 玩家疆域色；否则所属政权色。
+func tile_fill_color(tile: L1TileDef) -> Color:
+	if _owned_tiles.has(tile.tile_id):
+		return MapTokens.L1_PLAYER_TERRITORY_COLOR
+	return _data.get_state_color(tile.owner_state_id)
 
 
 ## 构建当前城流动描边缓存（R2）：几何 = 当前城 mid 档建成区轮廓（包几何最大外环，
@@ -509,7 +538,7 @@ func _draw() -> void:
 		for tile in _data.tiles:
 			if tile.polygon.size() < 3:
 				continue
-			draw_colored_polygon(tile.polygon, _data.get_state_color(tile.owner_state_id))
+			draw_colored_polygon(tile.polygon, tile_fill_color(tile))
 	# 2.5 城市建成区（C2/§R5）：仅地形模式显示（政治/交通不画，§R4 创始人拍板）。
 	#     贴图就绪 = 三档嵌套贴图逐层叠加（每城显示烘焙档形状）+ 单城档位补丁
 	#     （先 erase 回贴底图，再 overlay 生效档形状）；未就绪 = 包几何矢量回退。

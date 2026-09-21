@@ -218,10 +218,16 @@ func _test_territory_truth() -> void:
 			"AI 势力 id 原样透出（P5 国家层接入后换展示名）")
 	_runner.assert_true(api.find_territory_by_settlement("settlement_not_exist").is_empty(),
 			"非本模块据点的聚落反查为空")
+	# 已占地块表（战略图逐地块染色的数据源）：未占 → 空；占了 → 只出该据点的 tile_key
+	var owned_keys: Array = api.get_owned_tile_keys()
+	_runner.assert_equal(owned_keys.size(), 1, "已占地块表只有刚占的这一格（占多少染多少）")
+	_runner.assert_equal(String(owned_keys[0]), String(first.get("tile_key", "")),
+			"已占地块 id = 该据点 tile_key")
 	if backup == null:
 		WorldState.territories.erase(id)
 	else:
 		WorldState.territories[id] = backup
+	_runner.assert_true(api.get_owned_tile_keys().is_empty(), "归属复原后已占地块表为空")
 	api.queue_free()
 
 

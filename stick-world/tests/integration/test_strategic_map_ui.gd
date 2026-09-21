@@ -51,6 +51,8 @@ func _ready() -> void:
 	_runner.add_test("tooltip 空聚落/无数据：隐藏不误导", _test_tooltip_hidden, true)
 	_runner.add_test("据点归属面：tooltip 归属行读真值（两态 + 非据点隐藏）", _test_territory_tooltip_line, true)
 	_runner.add_test("据点面板：空态隐藏 / 逐据点一行 / 行点击回调", _test_territory_panel, true)
+	_runner.add_test("P4 染色：政治填充按已占地块逐格覆盖（占多少染多少）", _test_owned_tile_dyeing, true)
+	_runner.add_test("P4 染色：政治图例含「我方疆域」条目（无则不空留）", _test_legend_player_entry, true)
 	_runner.add_test("L2 打开：层级指示 + 当前地区号", _test_l2_indicator, true)
 	_runner.add_test("L3 打开：层级指示 + 关闭提示", _test_l3_indicator, true)
 	_runner.add_test("L2/L3 名牌：地区序号/大世界 + 概览副标题", _test_l2_l3_title, true)
@@ -523,3 +525,83 @@ func _test_territory_panel() -> void:
 	panel.activate_fn = Callable()
 	panel.refresh()
 	panel.set_shown(false)
+
+
+## P4 染色：政治模式的填充按已占地块**逐格**覆盖——占多少染多少，不整国变色。
+## 取色唯一出口 = MapRenderer.tile_fill_color（填充 mesh 烘焙与矢量回退同源）。
+func _test_owned_tile_dyeing() -> void:
+	if _l1_content == null or _l1_api == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	var renderer: MapRenderer = _l1_content.get_node_or_null("MapRenderer") as MapRenderer
+	_runner.assert_true(renderer != null, "前置：L1 Content 应挂 MapRenderer")
+	if renderer == null:
+		return
+	var data: L1WorldData = _l1_api.get_data()
+	if data == null or data.tiles.size() < 2:
+		_runner.assert_true(false, "前置：L1 数据至少两块地（实测 %d）" % (data.tiles.size() if data != null else -1))
+		return
+	var t0: L1TileDef = data.tiles[0]
+	var t1: L1TileDef = data.tiles[1]
+	var baseline0: Color = data.get_state_color(t0.owner_state_id)
+	# 未占领：按所属政权色（原样）
+	renderer.set_owned_tiles([])
+	_runner.assert_equal(renderer.tile_fill_color(t0), baseline0, "未占地块按所属政权色填充")
+	# 占一块：这一格变玩家疆域色，邻格不动（逐格覆盖的语义核心）
+	renderer.set_owned_tiles([t0.tile_id])
+	_runner.assert_equal(renderer.tile_fill_color(t0), MapTokens.L1_PLAYER_TERRITORY_COLOR,
+			"已占地块染玩家疆域色")
+	_runner.assert_equal(renderer.tile_fill_color(t1), data.get_state_color(t1.owner_state_id),
+			"未占邻格不变色（占多少染多少，非整国变色）")
+	# 再占一格：两格都染（占多少染多少）
+	renderer.set_owned_tiles([t0.tile_id, t1.tile_id])
+	_runner.assert_equal(renderer.tile_fill_color(t1), MapTokens.L1_PLAYER_TERRITORY_COLOR,
+			"第二块已占后同样染色")
+	# 清空：回政权色（读档/开局无归属时不留染色残留）
+	renderer.set_owned_tiles([])
+	_runner.assert_equal(renderer.tile_fill_color(t0), baseline0, "清空已占地块表后回政权色")
+
+
+## P4 染色：政治图例在有已占地块时补一条「我方疆域」，无已占地块时不留空条目
+func _test_legend_player_entry() -> void:
+	if _l1_content == null or _l1_legend == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	var api := Node.new()
+	api.set_script(ExpansionApiScript)
+	add_child(api)
+	var targets: Array = api.list_targets()
+	_runner.assert_gt(targets.size(), 0, "前置：据点配置可载入")
+	var id := String((targets[0] as Dictionary).get("id", ""))
+	var backup: Variant = WorldState.territories.get(id, null)
+	WorldState.territories[id] = {
+		"state": 1, "garrison_losses": 0, "control_progress": 100.0,
+		"owner": "player", "faction": "fac_player",
+	}
+	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	_l1_content.call("_fill_legend")
+	_runner.assert_true(_legend_has_text("我方疆域"), "政治图例含「我方疆域」条目")
+	if backup == null:
+		WorldState.territories.erase(id)
+	else:
+		WorldState.territories[id] = backup
+	_l1_content.call("_fill_legend")
+	_runner.assert_false(_legend_has_text("我方疆域"), "无已占地块时不留空条目")
+	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
+	api.queue_free()
+
+
+## 图例内是否存在含指定文字的标签（图例条目 = 色块 + 文字，逐层找 Label）
+func _legend_has_text(needle: String) -> bool:
+	if _l1_legend == null:
+		return false
+	return _find_label_text(_l1_legend, needle)
+
+
+func _find_label_text(node: Node, needle: String) -> bool:
+	if node is Label and (node as Label).text.contains(needle):
+		return true
+	for child in node.get_children():
+		if _find_label_text(child, needle):
+			return true
+	return false

@@ -46,7 +46,7 @@
 | 9a 暂停只停位移、肢体还动 | TimeManager 门禁补全 | rig `set_anim_paused` + 箭矢/武器挂载门禁 + batch_runner 隔离 |
 | 9b 后队全员卡死 | 前队接敌 → 后队越过 gap 推进支援 | `_update_squad_follow` 锚点改前队质心、不带 hold |
 | 9c 弓箭贴地小半圆插前线 | GROUND_DROP=屏幕 y 深度误判 | 解算飞行时间 t + 瞄准点地面线，落点=目标脚下 |
-| 9e 法师无爆炸 | `_cast_magic` 延迟直结无 AOE/FX | `spell_aoe_radius`(90) 溅射+击晕 + MAGIC_BLAST 粒子（dump `CastStun/StunOpponents/unitsToDamage` 真值） |
+| 9e 法师无爆炸 | `_cast_magic` 延迟直结无 AOE/FX | `spell_aoe_radius`(90) 溅射+击晕（dump `CastStun/StunOpponents/unitsToDamage` 真值）；命中粒子已按"战斗不产粒子"口径移除 |
 | 9g 反向拉弓 | 风筝撤退朝向翻转 | 实体 `face_towards` + 开火前 `_face_target()` |
 | 9i 怯战者后排站死 | 战斗中士气永不恢复 + 溃逃贴墙 | 脱火 ≥3s 半速恢复 + retreat 方向夹紧可走带 |
 | 9l 法师召唤无上限 | 每 12s 无条件召 2 只 | 按施法者跟踪存活 ≤ summon_count（对齐 dump `minions/IsAtMaxMinions`） |

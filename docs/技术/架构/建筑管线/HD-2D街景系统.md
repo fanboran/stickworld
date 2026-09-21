@@ -92,6 +92,10 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 3. CanvasGroup 自身材质 = 描边 shader：`hint_screen_texture` 采到的就是**组自身缓冲**——前景像素查 8 邻域，不同 ID 且不邻接→分隔线；背景像素邻近前景→外轮廓白线。
 
 生效范围=char_host（每角色独立 SubViewport，屏幕空间描边付得起）；2D 批渲染路径不受影响。
+**武器不吃描边（任何场合）**：描边 pass 作用于组缓冲，组内任何像素都会被外轮廓白线
+包一圈——细武器（弓片/矛杆两三像素宽）会被白线吞成"白武器"。billboard 镜像武器因此
+挂 SubViewport 根（`FusedOutlineGroup` 之外，经 RemoteTransform2D 跟手骨）；
+2D 骨架武器是普通 Sprite 无 stroke 层；crowd 批渲染不画武器。
 
 **火柴人渲染踩坑备查**（本节知识曾完全无记载，复排查了两天）：
 - 骨架渲染是**全局两遍**（stickman_skeleton.gd）：所有描边层 z=-1 压底、所有填充层 z=0 置顶——肢体重叠处填充无缝融合，描边只在整体剪影外轮廓出线（"只有剪影描边"口径，与 ID Buffer 全融合同语义）。部件间相对遮挡靠填充层之间的树序（`reorder_render_order`）；武器/盾相对 z=+7 盖全身肢体（weapon_mount）。
@@ -400,13 +404,22 @@ walk_band` 旗帜门控，实体 set_ground_constraints 注入）。视觉系（
 | 层 | 位置 | 职责 |
 |---|---|---|
 | 数学核 | `Hd2dProjection`（`modules/world/scripts/map/hd2d_projection.gd`，静态类） | `squash_k()`=sin(俯角)（`TILT_DEG` 26°）、`ground_to_visual_y`/`visual_to_ground_y` 正逆变换、`billboard_hover_rect` 悬浮框矩形；纯仿射、正逆互为精确逆，round-trip 由 `tests/unit/test_hd2d_projection.gd` 锁死。消费方**不直接调本类**，一律走地图协议 |
-| 运行时出口 | `MapBase` 三方法（2D 图恒等）→ `Hd2dStreetMap` 覆写 | `remap_fx_pos`（画布域→视觉域，含台面 lift）、`unmap_fx_pos`（视觉域→画布域）、`entity_hover_rect`（悬浮/选中/点选/框选共用矩形）；屏幕域逆变换另有 `screen_y_to_ground_y`（F3 鼠标读数） |
+| 运行时出口 | `MapBase` 四方法（2D 图恒等）→ `Hd2dStreetMap` 覆写 | `remap_fx_pos`（画布域→视觉域，含台面 lift）、`unmap_fx_pos`（视觉域→画布域）、`entity_hover_rect`（悬浮/选中/点选/框选共用矩形）、`fx_anchor_lift`（实体随身特效的锚点抬升＝billboard 髋高，铁律 2 的落地点）；屏幕域逆变换另有 `screen_y_to_ground_y`（F3 鼠标读数） |
 | 消费方 | fx / debug_gui / ui_global / combat | 见下两条链 |
 
 **画（飘字/粒子）链**：地图宿主 `_ready` 时 `add_to_group("fx_pos_remapper")`；
 `FxLibrary.remap_pos(tree, pos)` 静态查该组并转发到地图的 `remap_fx_pos`
-（组外/2D 图原样返回零扰动）；`spawn_damage_text`/`spawn_slash_arc` 等入口内部
-已过此口。**调用链上已有 remap 的出口（如 `FxPool.spawn_burst` 内部先
+（组外/2D 图原样返回零扰动）。**两档锚点**分开走：
+
+- **地面锚点**（建造尘土/采集飘屑/特效放置点）——`remap_pos`，只压 y。
+- **实体随身锚点**（命中飘字、挥砍弧光）——`FxLibrary.remap_body_pos` =
+  `remap_pos(地面锚)` **减** `fx_anchor_lift()`：HD-2D 图实体原点=视觉脚线，
+  而随身元素按 2D 口径挂髋，抬升量即 billboard 髋高（`Hd2dMapBase.BILLBOARD_HIP_H_PX`）。
+  不抬则飘字/弧光被当成地面纵深压到目标脚面上（铁律 2：只有地面锚点压缩、
+  身体纵向尺寸不压缩）。箭矢自己带一层 `VisualRoot` 容器逐帧补同源偏移
+  （地面分量压、弹道高度不压，见 `arrow_projectile._apply_visual_offset`）。
+
+**调用链上已有 remap 的出口（如 `FxPool.spawn_burst` 内部先
 `FxLibrary.remap_pos` 再发射），上游传视觉域坐标前须先 `unmap_fx_pos` 逆回，
 防二次压缩**（4.2.1 铁律 4）。
 

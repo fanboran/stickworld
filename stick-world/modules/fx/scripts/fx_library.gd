@@ -2,6 +2,11 @@ class_name FxLibrary
 extends RefCounted
 ## 粒子特效配置库 —— 效果 ID → GPUParticles2D 参数（纯代码构建，零外部资产）。
 ##
+## 只含非战斗粒子：建造尘土 / 采集飘屑 / 环境星光。**战斗不产粒子特效**——
+## 打击火花、法术爆炸一类命中反馈在混战里糊住火柴人剪影、且与俯角投影域
+## 互相错位，战斗表现改由命中帧动画与血条承担（战斗观感口径见
+## docs/技术/架构/建筑管线/HD-2D街景系统.md）。
+##
 ## ⚠️ PLACEHOLDER 素材（2026-08-22）：全部视觉参数为程序化占位实现，
 ## 替换清单见 docs/项目/待办事项.md「PLACEHOLDER 素材替换」——
 ## 后续替换方向：手绘粒子贴图（当前为运行时生成的软圆点）、逐效果调参、
@@ -10,8 +15,6 @@ extends RefCounted
 ## 一次性爆发生效 ID
 const BUILD_DUST := "build_dust"      ## 建造完工尘土
 const GATHER_DEBRIS := "gather_debris" ## 采集/收割飘屑
-const HIT_SPARK := "hit_spark"        ## 战斗打击火花
-const MAGIC_BLAST := "magic_blast"    ## 法术爆炸（Magikill 施法命中点，紫白星芒环形爆发）
 ## 环境闪光源 ID（AmbientSparkleSpawner 用，非 burst 语义）
 const AMBIENT_SPARKLE := "ambient_sparkle"
 
@@ -31,10 +34,6 @@ static func create_burst(effect_id: String) -> GPUParticles2D:
 			_config_dust(p)
 		GATHER_DEBRIS:
 			_config_debris(p)
-		HIT_SPARK:
-			_config_spark(p)
-		MAGIC_BLAST:
-			_config_magic_blast(p)
 		AMBIENT_SPARKLE:
 			_config_sparkle(p)
 		_:
@@ -189,55 +188,6 @@ static func spawn_ingredient(pool: Node, effect_id: String, position: Vector2, v
 			push_warning("[Fx] 无演员特效配置: %s" % effect_id)
 
 
-## ── 配置：打击火花（白黄高速四射，急阻尼）──
-static func _config_spark(p: GPUParticles2D) -> void:
-	p.amount = 16
-	p.lifetime = 0.38
-	p.explosiveness = 1.0
-	p.texture = _star4(18)
-	var m := ParticleProcessMaterial.new()
-	m.direction = Vector3(0, -1, 0)
-	m.spread = 180.0
-	m.initial_velocity_min = 140.0
-	m.initial_velocity_max = 280.0
-	m.gravity = Vector3(0, 240, 0)
-	m.damping_min = 260.0
-	m.damping_max = 440.0
-	m.scale_min = 0.9
-	m.scale_max = 1.7
-	m.color = Color(1.0, 0.92, 0.55, 1.0)
-	var grad := Gradient.new()
-	grad.set_color(0, Color(1, 1, 1, 1))
-	grad.set_color(1, Color(1, 0.75, 0.3, 0.0))
-	m.color_ramp = _ramp_tex(grad)
-	p.process_material = m
-
-
-## ── 配置：法术爆炸（Magikill 命中点：紫白星芒大范围环形爆发，急阻尼定住成形）──
-static func _config_magic_blast(p: GPUParticles2D) -> void:
-	p.amount = 30
-	p.lifetime = 0.55
-	p.explosiveness = 1.0
-	p.texture = _star4(26)
-	var m := ParticleProcessMaterial.new()
-	m.direction = Vector3(0, -1, 0)
-	m.spread = 180.0
-	m.initial_velocity_min = 160.0
-	m.initial_velocity_max = 340.0
-	m.gravity = Vector3(0, 120, 0)
-	m.damping_min = 300.0
-	m.damping_max = 520.0
-	m.scale_min = 1.0
-	m.scale_max = 2.2
-	m.color = Color(0.78, 0.62, 1.0, 1.0)
-	var grad := Gradient.new()
-	grad.set_color(0, Color(1, 1, 1, 1.0))
-	grad.set_color(0.4, Color(0.85, 0.7, 1.0, 0.9))
-	grad.set_color(1, Color(0.5, 0.3, 0.8, 0.0))
-	m.color_ramp = _ramp_tex(grad)
-	p.process_material = m
-
-
 ## 运行时生成软圆点贴图（径向 alpha 衰减），按直径缓存
 static func _dot(diameter: int) -> Texture2D:
 	if _dot_cache.has(diameter):
@@ -276,6 +226,24 @@ static func remap_pos(tree: SceneTree, pos: Vector2) -> Vector2:
 	return pos
 
 
+## 实体随身特效的锚点抬升（px，视觉域原值）：HD-2D 图实体原点=视觉脚线，
+## 而随身特效（飘字/挥砍弧）按 2D 口径挂在髋上——差值由地图协议给出
+## （billboard 髋高）。**不参与纵深压缩**（MapBase 视觉域协议铁律 2：只有
+## 地面锚点压缩、身体纵向尺寸不压缩）；2D 图原点即髋，恒 0 = 零回归。
+static func body_lift(tree: SceneTree) -> float:
+	if tree == null:
+		return 0.0
+	var m := tree.get_first_node_in_group("fx_pos_remapper")
+	if m != null and m.has_method("fx_anchor_lift"):
+		return float(m.call("fx_anchor_lift"))
+	return 0.0
+
+
+## 实体随身特效锚点：地面锚点过投影重映射 + 身体抬升（视觉域原值）
+static func remap_body_pos(tree: SceneTree, pos: Vector2) -> Vector2:
+	return remap_pos(tree, pos) - Vector2(0.0, body_lift(tree))
+
+
 ## 飘字复用池（战斗性能优化：混战每秒几十次 Label.new+Tween 创建销毁，
 ## 池化后 Label 只建一次反复改文本/位置重飘；场景切换后失效引用自动丢弃）
 static var _damage_text_pool: Array = []
@@ -283,10 +251,12 @@ static var _damage_text_pool: Array = []
 ## 在目标头顶飘伤害数字（白=普通 / 金=暴击·爆头）；出生弹性回落 + 恒定屏上尺寸
 ## （字号/偏移按相机 zoom 反向放大并钳制，拉远观战大军时数字不缩成蚂蚁）；
 ## 0.7s 上浮淡出后回池。combat 管线（DamagePipeline.apply）结算后调用；fx 挂目标宿主层，不进战斗逻辑。
+## 锚点 = 目标原点（HD-2D 图 = 视觉脚线），经 remap_body_pos 抬到身体高度后再叠
+## 内部 -62 头顶偏移——不抬的话数字落在目标脚面上（本轮"火柴人与特效错位"根因）。
 static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit: bool) -> void:
 	if tree == null or tree.current_scene == null:
 		return
-	pos = remap_pos(tree, pos)
+	pos = remap_body_pos(tree, pos)
 	var label: Label = null
 	if not _damage_text_pool.is_empty():
 		# 弹出到无类型临时再判活：池里可能有场景切换时被释放的悬垂引用，
@@ -339,11 +309,12 @@ static func spawn_damage_text(tree: SceneTree, pos: Vector2, amount: float, crit
 
 
 ## 挥砍剑光弧 —— 命中帧在攻击者朝向画一道渐隐弧光（白/金），0.16s 消散。
-## angle_rad: 弧光朝向（世界角）；flip_v: 攻击者面朝左时镜像弧线。
+## pos: 攻击者原点（HD-2D 图 = 视觉脚线）+ 身高内偏移；弧光随身体抬升（同飘字，
+## 见 remap_body_pos）。angle_rad: 弧光朝向（世界角）
 static func spawn_slash_arc(tree: SceneTree, pos: Vector2, angle_rad: float, crit: bool = false) -> void:
 	if tree == null or tree.current_scene == null:
 		return
-	pos = remap_pos(tree, pos)
+	pos = remap_body_pos(tree, pos)
 	var arc := Polygon2D.new()
 	var seg: int = 20
 	var r0: float = 14.0

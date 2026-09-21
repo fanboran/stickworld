@@ -76,7 +76,7 @@ func burst(effect_id: String, global_pos: Vector2) -> void:
 
 # ─────────────────────────────── 静态便捷入口 ────────────────────────────────
 
-## 业务侧统一入口：FxPool.spawn_burst(get_tree(), FxLibrary.HIT_SPARK, global_position)。
+## 业务侧统一入口：FxPool.spawn_burst(get_tree(), FxLibrary.BUILD_DUST, global_position)。
 ## 场景中无 FxPool（如纯逻辑测试）时静默忽略；
 ## 但游戏内若 FxPool 缺席（主菜单/GameRoot 未装配）是异常路径——debug 构建下第一次
 ## 缺失时 push_warning + toast，帮助玩家/开发者快速定位"没效果"根因。

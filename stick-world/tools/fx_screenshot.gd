@@ -5,7 +5,7 @@ extends SceneTree
 ##   godot --path stick-world --script tools/fx_screenshot.gd
 ## 输出：F:/MyMy/图片/Work/*.png
 ##
-## 覆盖：水晶闪光（白天/夜间）、星芒贴图特写、打击火花、建造尘土、采集飘屑。
+## 覆盖：水晶闪光（白天/夜间）、星芒贴图特写、建造尘土、采集飘屑。
 ## 无 autoload 依赖（纯 class_name），可在任意工程状态下运行。
 
 const OUT_DIR := "F:/MyMy/图片/Work"
@@ -217,12 +217,3 @@ func _burst_shots() -> void:
 	await _capture("05_采集飘屑")
 	debris.queue_free()
 	await _wait_frames(2)
-
-	# 06 打击火花：峰值极早（0.1s 左右）
-	var spark := FxLibrary.create_burst(FxLibrary.HIT_SPARK)
-	_stage.add_child(spark)
-	spark.global_position = Vector2(960, 580)
-	spark.emitting = true
-	await _wait_frames(7)
-	await _capture("06_打击火花")
-	spark.queue_free()

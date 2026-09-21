@@ -38,6 +38,16 @@ func _register_tests() -> void:
 	_tests.append({"name": "飘字: 钳制上下限 0.35→28 / 3.0→11", "fn": Callable(self, "_test_clamp"), "async": true})
 	_tests.append({"name": "飘字: 暴击 17/描边4 + 歪斜回正", "fn": Callable(self, "_test_crit"), "async": true})
 	_tests.append({"name": "飘字: 上浮淡出 + 回池隐藏", "fn": Callable(self, "_test_lifecycle"), "async": true})
+	_tests.append({"name": "飘字: 随身锚点抬升（HD-2D 协议）", "fn": Callable(self, "_test_body_lift"), "async": true})
+
+
+## 替身地图：只暴露飘字链消费的两个协议方法（k=0.5 便于心算）
+class StubRemapMap extends Node2D:
+	func remap_fx_pos(pos: Vector2) -> Vector2:
+		return Vector2(pos.x, pos.y * 0.5)
+
+	func fx_anchor_lift() -> float:
+		return 50.23
 
 
 func _run_tests_async() -> void:
@@ -151,3 +161,30 @@ func _test_lifecycle() -> void:
 	_runner.assert_true(lb.modulate.a < 1.0, "0.25s 后淡出应已开始，a=%f" % lb.modulate.a)
 	await get_tree().create_timer(0.9).timeout
 	_runner.assert_false(lb.visible, "0.7s 结束后应隐藏回池")
+
+
+## 随身锚点抬升（MapBase 视觉域协议铁律 2）：HD-2D 图实体原点=视觉脚线，
+## 飘字须"地面锚压缩 + 髋高抬升（不压缩）"才能贴到目标身体，否则落在脚面上。
+func _test_body_lift() -> void:
+	await _settle()
+	_cam.zoom = Vector2.ONE
+	# 2D 口径（无组桩）：锚点恒等，只叠内部头顶偏移 -62
+	var lb := await _spawn_one(5.0, false, true)
+	if lb == null:
+		_runner.assert_true(false, "2D 口径用例飘字未出现")
+		return
+	_runner.assert_approx(lb.position.y, 540.0 - 62.0, 0.5, "2D 图：锚点恒等 + 头顶偏移")
+	await _settle()
+	# HD-2D 口径：地面锚 540 压 k=0.5 → 270，再减抬升 50.23 与头顶偏移 62
+	var map := StubRemapMap.new()
+	add_child(map)
+	map.add_to_group("fx_pos_remapper")
+	lb = await _spawn_one(5.0, false, true)
+	map.remove_from_group("fx_pos_remapper")
+	remove_child(map)
+	map.free()
+	if lb == null:
+		_runner.assert_true(false, "HD-2D 口径用例飘字未出现")
+		return
+	_runner.assert_approx(lb.position.y, 540.0 * 0.5 - 50.23 - 62.0, 0.5,
+			"HD-2D 图：地面锚压缩 + 髋高抬升 + 头顶偏移")

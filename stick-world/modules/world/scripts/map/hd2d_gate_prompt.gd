@@ -31,7 +31,7 @@ const SKY_ANCHOR_OFF_PX := 360.0
 const SKY_TOP_Y := 108.0
 
 
-var _root: Node = null   # GameRoot（scene_loader 旅行用，同 SiegeGatePrompt 口径）
+var _root: Node = null   # GameRoot（scene_loader 旅行用）
 
 func setup(map: Node2D) -> void:
 	_map = map

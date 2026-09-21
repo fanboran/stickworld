@@ -51,7 +51,10 @@ const SQUAD_DECISION_INTERVAL: float = 0.5
 ## 编队动态跟队默认间距（px，SWL GapBetweenFormationGroups 量级）：
 ## 后队落点 = 前队质心 − 行进方向 × gap
 var FOLLOW_DEFAULT_GAP: float = 150.0
-## 跟队重下发死区（px）：成员距锚定队形位小于此值不重下号令（防抖动/防 arrive 动画重播）
+## 跟队重下发死区（px）：成员距锚定队形位小于此值不重下号令（防抖动/防 arrive 动画重播）。
+## 须小于槽位间距（SPREAD_SPACING/ROW_GAP）——大于间距会把"站错一格"的成员
+## 误判为已落定，编队失守不再纠位（相位计划侧的同名容差另在 config/ai/
+## squad_phase_plan.tres arrive_tolerance，口径见彼处）
 const FOLLOW_DEADZONE: float = 40.0
 ## 每列人数（SWL Formation.UNITS_PER_COLUMN 直译，11b）：同列单位沿垂直方向排开，
 ## 多列沿行进方向反侧退 ROW_GAP。无 dump 数值真值，按三班 8~10 人取 3，待实测校准

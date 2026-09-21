@@ -30,9 +30,11 @@ const ANIM_SPEED_MULT: float = 1.4
 ## 切到 idle 的速度阈值（减速停止判定；原实体常量随减速公式迁入）
 const IDLE_THRESHOLD: float = 5.0
 ## 分离检测半径（px）：与友军/任何单位过近时互相推开——
-## 必须略大于碰撞体宽（≈52），否则中心距 42 时身体已深度重叠
-## （实体侧留同值 const 壳供 bench 直读，真身在此）
-const SEPARATION_RADIUS: float = 54.0
+## 24px 换轨后碰撞体宽 ≈83×0.375≈31：半径须略大于体宽（不叠身），且不大于
+## 编队槽位间距（否则分离力持续对抗槽位吸附，队列挤散抖动）。40.5 = 换轨前
+## 54×0.75 等比缩（实体壳 2026-09-17 已改，本真身漏改致阵型混乱，本次补齐；
+## 实体侧留同值 const 壳供 bench 直读）
+const SEPARATION_RADIUS: float = 40.5
 ## 分离推力系数（叠加到 AI 移动方向）
 const SEPARATION_FORCE: float = 1.6
 ## 静态分离单帧位置修正上限（px）：N 路推力累加后仍 ≤ 此值，防瞬移（审计 P0-3）

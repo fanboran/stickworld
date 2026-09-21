@@ -67,8 +67,10 @@ func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable())
 			x = randf_range(-400.0, -100.0)
 		var npc: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(x, y))
 		if npc != null:
-			# 修正 Y：让脚部对齐落脚面
-			if npc.get("foot_offset") != null:
+			# 修正 Y：让脚部对齐落脚面（HD-2D 图 origin 即视觉脚线/billboard 脚锚，
+			# 不上移；2D 图 origin=髋、脚在 origin+foot_offset，仍需上移校正）
+			if npc.get("foot_offset") != null \
+					and not (npc.has_method("is_on_billboard_map") and npc.is_on_billboard_map()):
 				npc.global_position.y = y - npc.foot_offset
 			if npc.has_method("set_possessed"):
 				npc.set_possessed(false)  # NPC 不被附身，AIController 自动接管
@@ -146,8 +148,9 @@ func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> Ar
 		var e: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
 		if e == null:
 			continue
-		# 修正 Y：让脚部对齐 spawn_y
-		if e.get("foot_offset") != null:
+		# 修正 Y：让脚部对齐 spawn_y（口径同 spawn_npcs：HD-2D origin 即脚线不动）
+		if e.get("foot_offset") != null \
+				and not (e.has_method("is_on_billboard_map") and e.is_on_billboard_map()):
 			e.global_position.y = spawn_y - e.foot_offset
 		# 不附身（AI 接管）
 		if e.has_method("set_possessed"):
@@ -169,7 +172,9 @@ func _spawn_ally_unit(map: Node2D, idx: int) -> Node2D:
 	var e: Node2D = map.spawn_entity(_root._STICKMAN_ENTITY_SCENE, Vector2(x, spawn_y))
 	if e == null:
 		return null
-	if e.get("foot_offset") != null:
+	# 修正 Y：让脚部对齐 spawn_y（口径同 spawn_npcs：HD-2D origin 即脚线不动）
+	if e.get("foot_offset") != null \
+			and not (e.has_method("is_on_billboard_map") and e.is_on_billboard_map()):
 		e.global_position.y = spawn_y - e.foot_offset
 	if e.has_method("set_possessed"):
 		e.set_possessed(false)

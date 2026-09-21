@@ -210,7 +210,10 @@ func _spawn_villager() -> void:
 	var npc: Node2D = map.spawn_entity(_STICKMAN_SCENE, Vector2(x, spawn_y))
 	if npc == null:
 		return
-	if npc.get("foot_offset") != null:
+	# 修正 Y：让脚部对齐 spawn_y（口径同 world.InitialContent.spawn_npcs：
+	# HD-2D 图 origin 即视觉脚线不上移，2D 图 origin=髋才需上移 foot_offset）
+	if npc.get("foot_offset") != null \
+			and not (npc.has_method("is_on_billboard_map") and npc.is_on_billboard_map()):
 		npc.global_position.y = spawn_y - npc.foot_offset
 	if npc.has_method("set_possessed"):
 		npc.set_possessed(false)

@@ -28,8 +28,8 @@ extends RefCounted
 ##     strike 表/网格 cell）用普通 Array/Dictionary
 
 ## 分离检测半径（与 entity_motion.SEPARATION_RADIUS 同值——渲染代理侧常量
-## 不便静态读取，战斗单位体型一致，取同值）
-const SEPARATION_RADIUS: float = 54.0
+## 不便静态读取，战斗单位体型一致，取同值；24px 换轨 40.5 同步见彼处注释）
+const SEPARATION_RADIUS: float = 40.5
 ## 静态分离单刻位置修正上限（与 MAX_SEPARATION_CORRECTION 同值）
 const MAX_SEPARATION_CORRECTION: float = 3.0
 ## 击退衰减（与 KNOCKBACK_DECAY 同值）

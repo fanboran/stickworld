@@ -261,7 +261,7 @@ variables = {
 		{
 			"id": "var_spread_spacing",
 			"category": "formation",
-			"value": 24,
+			"value": 48,
 			"min": 8,
 			"max": 128,
 			"step": 1,
@@ -279,7 +279,7 @@ variables = {
 		{
 			"id": "var_row_gap",
 			"category": "formation",
-			"value": 42,
+			"value": 56,
 			"min": 16,
 			"max": 160,
 			"step": 1,

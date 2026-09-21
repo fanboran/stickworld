@@ -11,7 +11,7 @@ extends Node
 ##   → 征伐黑石营地（守军 3+敌将，全灭收束）→ 占领 + 资源入账 + 广播
 ##   → 征伐红色山林（杀 2 守军后玩家侧全灭 = 败仗）→ 守军战损持久化 + 自动回村
 ##   → 再征红色山林（车轮战扣减：实刷 3 守军 + 敌将）→ 占领 + 解锁广播（石造仓库门禁放行）
-##   → 征伐石墙要塞 → 3/3 全占 → conquest_completed → 通关结算卡弹出可见。
+##   → 征伐铁腕要塞 → 3/3 全占 → conquest_completed → 通关结算卡弹出可见。
 ##
 ## 确定性手法（批次 4/5 测试坑总结，同 test_conquest_flow）：
 ##   - 开战自动暂停（TimeManager.auto_pause_battle）：每场战斗开始后须
@@ -28,7 +28,7 @@ const ScriptGarrisonSpawner := preload("res://modules/expansion/scripts/garrison
 
 const TID_1 := "ter_bandit_camp_01"  # 黑石营地：l1_settlement_02，守军 3 + 敌将
 const TID_2 := "ter_bandit_camp_02"  # 红色山林：l1_settlement_03，守军 5 + 敌将
-const TID_3 := "ter_warlord_keep_01"  # 石墙要塞：l1_settlement_04，守军 8 + 敌将
+const TID_3 := "ter_warlord_keep_01"  # 铁腕要塞：l1_settlement_04，守军 8 + 敌将
 const HOME_MAP := "hd2d_street"  # 2026-09-14 启动直连：新开局/败仗回村都在 HD-2D 主街
 ## 战斗结束/回村轮询节奏：0.25s 步进（战斗结束超时 30s，回村轮询 20s）
 const POLL_INTERVAL := 0.25
@@ -105,7 +105,7 @@ func _test_new_run_skeleton() -> void:
 	# territories.tres 守军编成 3/5/8（不含敌将），新开局无车轮战扣减
 	_runner.assert_equal(int(targets[0].get("garrison_count", -1)), 3, "黑石营地守军 3")
 	_runner.assert_equal(int(targets[1].get("garrison_count", -1)), 5, "红色山林守军 5")
-	_runner.assert_equal(int(targets[2].get("garrison_count", -1)), 8, "石墙要塞守军 8")
+	_runner.assert_equal(int(targets[2].get("garrison_count", -1)), 8, "铁腕要塞守军 8")
 	for t in targets:
 		_runner.assert_false(bool(t.get("captured", true)), "%s 应为 HOSTILE" % String(t.get("id", "")))
 	_runner.assert_false(_api.is_all_captured(), "开局不应判通关")
@@ -216,14 +216,14 @@ func _test_attrition_recapture() -> void:
 	_runner.assert_true(_game_root.get_construction_api().is_def_unlocked("stone_warehouse"),
 			"占领红色山林后石造仓库解锁（消费端门禁放行）")
 	_runner.assert_false(_game_root.get_construction_api().is_def_unlocked("wall_tier3"),
-			"大型城墙由石墙要塞解锁，此刻仍锁着")
+			"大型城墙由铁腕要塞解锁，此刻仍锁着")
 
 
-## 用例 4「征伐第 3 座 → 通关」：石墙要塞占领 → conquest_completed 恰发一次
+## 用例 4「征伐第 3 座 → 通关」：铁腕要塞占领 → conquest_completed 恰发一次
 ## （统计 3/3、含玩家伤亡）→ 通关结算卡 ConquestVictoryOverlay 挂 ModalOverlay 且可见
 func _test_completion_overlay() -> void:
-	_runner.assert_true(_manager.launch_campaign(TID_3), "石墙要塞应可出征")
-	var b: Node = await _await_battle("进石墙要塞应自动开战")
+	_runner.assert_true(_manager.launch_campaign(TID_3), "铁腕要塞应可出征")
+	var b: Node = await _await_battle("进铁腕要塞应自动开战")
 	if b == null:
 		return
 	TimeManager.set_speed(TimeManager.Speed.X1)
@@ -237,7 +237,7 @@ func _test_completion_overlay() -> void:
 	for i in 10:
 		await get_tree().process_frame
 	_runner.assert_equal(int(WorldState.territories.get(TID_3, {}).get("state", -1)), 1,
-			"石墙要塞应转 CAPTURED(1)")
+			"铁腕要塞应转 CAPTURED(1)")
 	_runner.assert_true(_api.is_all_captured(), "3/3 全占判定 true")
 	_runner.assert_equal(_sig_done.size(), 1, "conquest_completed 应恰发 1 次，实得 %d" % _sig_done.size())
 	if not _sig_done.is_empty():

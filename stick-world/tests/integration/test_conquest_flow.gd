@@ -10,7 +10,7 @@ extends Node
 ##   3. 败仗（红色山林）：守军战损持久化 garrison_losses=2（state 仍 HOSTILE），
 ##      玩家残部传回村A，可再次出征（launch_campaign 返回 true）；
 ##   4. 三座据点全占 → ExpansionApi.conquest_completed 恰发一次（captured 3/3 统计），
-##      占领不清战损记录；红色山林/石墙要塞的解锁项随之入 WorldState.unlocks 台账。
+##      占领不清战损记录；红色山林/铁腕要塞的解锁项随之入 WorldState.unlocks 台账。
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_conquest_flow.tscn
 ## 退出码：0 全部通过，1 有失败
@@ -21,7 +21,7 @@ const ScriptGarrisonSpawner := preload("res://modules/expansion/scripts/garrison
 
 const TID_1 := "ter_bandit_camp_01"  # 黑石营地：l1_settlement_02，守军 3 + 敌将
 const TID_2 := "ter_bandit_camp_02"  # 红色山林：l1_settlement_03，守军 5 + 敌将
-const TID_3 := "ter_warlord_keep_01"  # 石墙要塞：l1_settlement_04
+const TID_3 := "ter_warlord_keep_01"  # 铁腕要塞：l1_settlement_04
 const MAP_1 := "l1_settlement_02"
 const MAP_2 := "l1_settlement_03"
 const HOME_MAP := "hd2d_street"  # 2026-09-14 启动直连：家图 = HD-2D 主街
@@ -207,9 +207,9 @@ func _test_conquest_completed() -> void:
 	_api.capture_territory(TID_3)
 	_disconnect_notify_signal()
 	_runner.assert_equal(_sig_done.size(), 1, "conquest_completed 应恰发 1 次，实得 %d" % _sig_done.size())
-	# 解锁项落池（奖励闭环消费端的数据面）：红色山林开石造仓库、石墙要塞开大型城墙
+	# 解锁项落池（奖励闭环消费端的数据面）：红色山林开石造仓库、铁腕要塞开大型城墙
 	_runner.assert_true(WorldState.has_unlock("unlock_stone_warehouse"), "红色山林解锁项入 WorldState.unlocks")
-	_runner.assert_true(WorldState.has_unlock("unlock_wall_tier3"), "石墙要塞解锁项入 WorldState.unlocks")
+	_runner.assert_true(WorldState.has_unlock("unlock_wall_tier3"), "铁腕要塞解锁项入 WorldState.unlocks")
 	var loot_lines: Array[String] = []
 	for sig in _sig_notify:
 		if sig.size() == 3 and String(sig[0]) == "征服":

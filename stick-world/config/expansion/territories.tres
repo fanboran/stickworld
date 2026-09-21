@@ -68,7 +68,7 @@ variables = {
 		},
 		{
 			"id": "ter_warlord_keep_01",
-			"name_zh": "石墙要塞",
+			"name_zh": "铁腕要塞",
 			"map_id": "l1_settlement_04",
 			"settlement_key": "settlement_city_1037",
 			"tile_key": "city_1037",

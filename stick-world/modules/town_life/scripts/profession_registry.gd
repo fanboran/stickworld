@@ -25,9 +25,10 @@ extends RefCounted
 ##   quota          村庄该职业最大在职数（批次 4 配比；缺省 1）[提案/待定]
 ##                  工位职业实际配额 = min(quota, 工位容量)，见 count_work_capacity
 ##
-## 数值口径（[提案/待定]，待实测定稿）：采集 20/拍与玩家手采同速（HARVEST_PER_ACTION）；
-## 打铁 consume 10 矿 → produce 6 锭/拍（熔炼损耗），节拍 4s 略快于采集 5s，
-## 全链矿净增速为正（矿工 4/s vs 铁匠 2.5/s），三资源库存可同时增长。
+## 数值口径（不膨胀、取整十；见 docs/设计/命名与数值口径.md §二）：采集 10/拍与玩家
+## 手采同速（HARVEST_PER_ACTION 10）；打铁 consume 5 矿 → produce 3 锭/拍（熔炼损耗比
+## 固定），节拍 4s 略快于采集 5s，全链矿净增速为正（矿工 2/s vs 铁匠 1.25/s），
+## 三资源库存可同时增长。
 ##
 ## 装具通道（批次 1 验收核心"职业可见"）：
 ##   - 工具 entity.weapon_mount.weapon_type（garrison_spawner 先例：

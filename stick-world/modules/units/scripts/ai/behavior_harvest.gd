@@ -249,16 +249,16 @@ func _settle() -> void:
 	if api == null or not api.has_method("produce"):
 		return
 	if _mode == Mode.RESOURCE:
-		var qty := int(float(_prof.get("produce_amount", 20.0)))
+		var qty := int(float(_prof.get("produce_amount", 10.0)))
 		if qty <= 0:
-			qty = 20
+			qty = 10
 		# 实际采得量以资源点余量为准（与玩家手采同语义）；采空由下帧 _locate 换点
 		var gained: int = _node.harvest(qty)
 		if gained > 0:
 			api.produce(String(_node.get_resource_id()), float(gained), HARVEST_REGION, SOURCE_NPC)
 	else:
 		var consume_res := String(_prof.get("consume_res", ""))
-		var produce_amount: float = float(_prof.get("produce_amount", 6.0))
+		var produce_amount: float = float(_prof.get("produce_amount", 3.0))
 		if consume_res.is_empty():
 			api.produce(String(_prof.get("product", "")), produce_amount, HARVEST_REGION, SOURCE_NPC)
 			return

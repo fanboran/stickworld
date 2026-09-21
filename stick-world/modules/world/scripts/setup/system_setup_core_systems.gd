@@ -142,14 +142,15 @@ func _attach_resource_bar_to_hud() -> void:
 			_host._root._resource_bar = rb
 
 
-## P0 初始资源：木材 300 / 石料 300 / 铁矿 100（足够建造兵营 + 几段城墙）
+## P0 初始资源：木材 80 / 石料 80 / 铁矿 30（数值口径：不膨胀、取整十；约为民居
+## 成本 30/10 的 2.7 倍，够建造兵营 40/30/10 + 一两座民居 + 几段土墙 10/10）
 func _grant_initial_resources() -> void:
 	if _host._root._resources_api == null or not _host._root._resources_api.has_method("produce"):
 		return
 	var initial: Dictionary = {
-		"res_wood": 300.0,
-		"res_stone": 300.0,
-		"res_metal_ore": 100.0,
+		"res_wood": 80.0,
+		"res_stone": 80.0,
+		"res_metal_ore": 30.0,
 	}
 	for res_id in initial.keys():
 		_host._root._resources_api.produce(res_id, initial[res_id], "test_region", "初始资源")

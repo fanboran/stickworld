@@ -4,7 +4,7 @@ extends Node
 ##
 ## 验收门（交接档批次 C5 + P3 奖励闭环）：
 ##   1. 打完一场（黑石营地）：WorldState.territories 状态转 CAPTURED + 归属 owner/faction
-##      写实 + 资源奖励入账（res_wood +30 / res_stone +20）+ 一条「战利品」通告
+##      写实 + 资源奖励入账（res_wood +10 / res_stone +10）+ 一条「战利品」通告
 ##      + territory_state_changed / region_owner_changed 广播；
 ##   2. 已臣服据点再进不刷军、不开战，launch_campaign 拒征（返回 false）；
 ##   3. 败仗（红色山林）：守军战损持久化 garrison_losses=2（state 仍 HOSTILE），

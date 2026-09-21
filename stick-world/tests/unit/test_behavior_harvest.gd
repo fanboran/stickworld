@@ -267,11 +267,11 @@ func _test_worksite_conversion() -> void:
 	_runner.assert_equal(api.consume_calls.size(), 1, "一拍应 consume 一次")
 	if not api.consume_calls.is_empty():
 		_runner.assert_equal(String(api.consume_calls[0][0]), "res_metal_ore", "消耗原料 = 矿")
-		_runner.assert_equal(float(api.consume_calls[0][1]), 10.0, "消耗量 = consume_amount")
+		_runner.assert_equal(float(api.consume_calls[0][1]), 5.0, "消耗量 = consume_amount")
 	_runner.assert_equal(api.produce_calls.size(), 1, "一拍应 produce 一次")
 	if not api.produce_calls.is_empty():
 		_runner.assert_equal(String(api.produce_calls[0][0]), "res_iron_ingot", "产出 = 铁锭")
-		_runner.assert_equal(float(api.produce_calls[0][1]), 6.0, "产出量 = produce_amount")
+		_runner.assert_equal(float(api.produce_calls[0][1]), 3.0, "产出量 = produce_amount")
 
 
 func _test_worksite_no_material() -> void:

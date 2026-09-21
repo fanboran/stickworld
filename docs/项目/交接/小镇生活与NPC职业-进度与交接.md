@@ -69,7 +69,7 @@
 
 - **行为本体**：`modules/units/scripts/ai/behavior_harvest.gd`（BehaviorHarvest，BehaviorBase 子类，行为名 `harvest`）——泛化工作循环：寻位→移动→劳作（`play_attack()` 按武器路由挥镐/挥剑，cycle 节拍一拍一挥+头顶进度条）→产出入账→循环。双模式按职业档案 `work_site_def` 分流：空=资源点模式（resource_node 组内找**最近未枯竭且 `get_resource_id()==product`** 的点，每拍 `harvest()` 实采实入账，采空自动换点/换树）；非空=工位模式（占位定点，`consume→produce` 两步转化，原料不足空拍等待）。行为不引用 world/town_life 内部类，跨模块只走鸭子协议与 TownLifeAPI 契约。
 - **决策接线**：`ai_controller.gd` 的 `_try_harvest()`——次序=命令覆盖>战斗>跟随>建造派工(work/haul)>**采集(harvest)>idle**；职责过滤走 `_can_work(WORK_FORAGE)`（FORAGE 从预留转实装）；待业（职业空串）不采集。采集结束（无资源/无工位）回 idle，决策循环稍后自动重试。
-- **职业配置新增字段**（`config/town_life/professions.tres`）：`produce_amount`（每拍产出量：采集 20=与玩家手采同速、打铁 6）、`consume_res`/`consume_amount`（铁匠 consume 10 矿/拍）。数值口径全部 [提案/待定]：矿工净增 4/s > 铁匠消耗 2.5/s，三资源可同时增长（集成测试已验证）。
+- **职业配置新增字段**（`config/town_life/professions.tres`）：`produce_amount`（每拍产出量：采集 10=与玩家手采同速、打铁 3）、`consume_res`/`consume_amount`（铁匠 consume 5 矿/拍）。数值口径（2026-09-22 资产数值重定标后）：矿工净增 2/s > 铁匠消耗 1.25/s，三资源可同时增长（集成测试已验证）；全仓资产刻度见 [`资产数值重定标-进度与交接.md`](资产数值重定标-进度与交接.md)。
 - **资源转换语义**：ResourcesApi 无原子"转换"，铁匠链在行为内两步实现（`consume(res_metal_ore)` 成功才 `produce(res_iron_ingot)`）；region 与玩家手采同账 `test_region`。
 - **占位工位**（[提案/待定]）：`ProfessionRegistry.PLACEHOLDER_WORK_SITES = {"smithy_lv1": 1120.0}`（仓库右侧、村民区之间的村道口；Y 运行时取实体地面线+40）。经 `TownLifeAPI.get_placeholder_work_site_x(def)` 查询，未配置返回 NAN=寻位失败。**批次 3 起转为降级路径**（WorkSlots 真槽位优先，无匹配建筑时兜底；详见批次 3 落地物）。
 - **资源点重生**（[提案/待定] 数值）：`resource_node.gd` 采空**不再自毁**，转枯竭态（`visible=false`+不可采+挂 REGEN_TIME=90s 单次 Timer）→ `_regrow()` 原地长满（变体/位置不变，modulate 复位）。玩家交互与 NPC 寻位都跳过枯竭点。**已知限制**：枯竭点不进存档（`save_resource_nodes_to_db` 过滤 is_depleted 维持原状），跨存档读回后该点消失、不处于重生倒计时。

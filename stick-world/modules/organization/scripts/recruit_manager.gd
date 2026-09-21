@@ -19,8 +19,9 @@ extends Node
 ## 士兵标记（招兵选取排除 + 人口统计排除；C 线职业系统沿用此 meta 惯例）
 const META_SOLDIER := "recruit_soldier"
 
-## 招兵成本（AI 提案待实测定稿；只吃木/石——铁锭留给 C 线矿→锭装备链，不阻塞首战兵源）
-const RECRUIT_COST := {"res_wood": 30.0, "res_stone": 10.0}
+## 招兵成本（数值口径：不膨胀、取整十；只吃木/石——铁锭留给 C 线矿→锭装备链，
+## 不阻塞首战兵源）。木10 石10 = 黑石营地一次占领奖励的量级，占领即够招一名民兵。
+const RECRUIT_COST := {"res_wood": 10.0, "res_stone": 10.0}
 ## 资源账区（与采集/建造/征服奖励同池）
 const RECRUIT_REGION := "test_region"
 ## 兵营建筑 def_id（config/buildings/buildings.tres；场景注册归 building_gen）
@@ -87,7 +88,7 @@ func recruit() -> Dictionary:
 		return _fail("没有空闲村民可应征（等待人口增长）", "no_villager")
 	for res_id in RECRUIT_COST:
 		if float(_resources_api.get_stock(String(res_id))) < float(RECRUIT_COST[res_id]):
-			return _fail("招募民兵需要 30 木材 10 石材（资源不足）", "insufficient_resources")
+			return _fail("招募民兵需要 10 木材 10 石材（资源不足）", "insufficient_resources")
 	for res_id in RECRUIT_COST:
 		_resources_api.consume(String(res_id), float(RECRUIT_COST[res_id]),
 				RECRUIT_REGION, "招兵")
@@ -97,7 +98,7 @@ func recruit() -> Dictionary:
 		villager.weapon_mount.weapon_type = WeaponMount.WeaponType.SWORD
 	if villager.has_method("play_arrive"):
 		villager.play_arrive()
-	EventBus.ui_notification.emit("兵营", "一名村民应征入伍（-30 木材 -10 石材）", "info")
+	EventBus.ui_notification.emit("兵营", "一名村民应征入伍（-10 木材 -10 石材）", "info")
 	return {"ok": true, "soldier": villager}
 
 
@@ -107,8 +108,8 @@ func get_recruit_hint() -> String:
 		return "没有空闲村民可应征"
 	for res_id in RECRUIT_COST:
 		if float(_resources_api.get_stock(String(res_id))) < float(RECRUIT_COST[res_id]):
-			return "招募民兵需 30木材 10石材（资源不足）"
-	return "按F 招募民兵（30木材 10石材）"
+			return "招募民兵需 10木材 10石材（资源不足）"
+	return "按F 招募民兵（10木材 10石材）"
 
 
 ## 距 pos 最近的可用兵营（OPERATIONAL 状态；无则 null）。

@@ -25,7 +25,7 @@ variables = {
 		},
 		{
 			"id": "fac_volcano",
-			"name_zh": "炎炉部落",
+			"name_zh": "火山部落",
 			"civilization_type": "agriculture",
 			"start_region": "reg_volcano_01",
 			"color_hex": "#FF5722",
@@ -41,7 +41,7 @@ variables = {
 		},
 		{
 			"id": "fac_desert",
-			"name_zh": "赤砂汗国",
+			"name_zh": "沙漠汗国",
 			"civilization_type": "nomadic",
 			"start_region": "reg_desert_01",
 			"color_hex": "#FFC107",
@@ -49,7 +49,7 @@ variables = {
 		},
 		{
 			"id": "fac_ocean",
-			"name_zh": "碧波联邦",
+			"name_zh": "海洋联邦",
 			"civilization_type": "commerce",
 			"start_region": "reg_ocean_01",
 			"color_hex": "#2196F3",
@@ -57,7 +57,7 @@ variables = {
 		},
 		{
 			"id": "fac_forest",
-			"name_zh": "苍翠猎团",
+			"name_zh": "森林猎团",
 			"civilization_type": "agriculture",
 			"start_region": "reg_forest_01",
 			"color_hex": "#4CAF50",

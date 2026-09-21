@@ -27,7 +27,7 @@ variables = {
 		},
 		{
 			"id": "reg_volcano_01",
-			"name_zh": "炎炉山脉",
+			"name_zh": "火山山脉",
 			"terrain": "mountain",
 			"resources": "metal,black_pitch",
 			"stickmen_types": "volcano,giant",
@@ -47,7 +47,7 @@ variables = {
 		},
 		{
 			"id": "reg_desert_01",
-			"name_zh": "赤砂荒原",
+			"name_zh": "沙漠荒原",
 			"terrain": "desert",
 			"resources": "stone",
 			"stickmen_types": "desert,centaur",
@@ -57,7 +57,7 @@ variables = {
 		},
 		{
 			"id": "reg_ocean_01",
-			"name_zh": "碧波群岛",
+			"name_zh": "海洋群岛",
 			"terrain": "coast",
 			"resources": "food,wood",
 			"stickmen_types": "ocean",
@@ -67,7 +67,7 @@ variables = {
 		},
 		{
 			"id": "reg_forest_01",
-			"name_zh": "苍翠密林",
+			"name_zh": "森林",
 			"terrain": "forest",
 			"resources": "wood,food",
 			"stickmen_types": "forest,winged",

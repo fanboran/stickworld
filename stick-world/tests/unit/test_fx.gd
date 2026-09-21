@@ -26,8 +26,7 @@ func _ready() -> void:
 
 
 func _test_ids() -> void:
-	var ids: Array = [FxLibrary.BUILD_DUST, FxLibrary.GATHER_DEBRIS, FxLibrary.HIT_SPARK,
-			FxLibrary.MAGIC_BLAST, FxLibrary.AMBIENT_SPARKLE]
+	var ids: Array = [FxLibrary.BUILD_DUST, FxLibrary.GATHER_DEBRIS, FxLibrary.AMBIENT_SPARKLE]
 	var seen := {}
 	for id: String in ids:
 		_runner.assert_true(id != "", "特效 ID 不应为空")
@@ -36,8 +35,7 @@ func _test_ids() -> void:
 
 
 func _test_create_burst() -> void:
-	for id: String in [FxLibrary.BUILD_DUST, FxLibrary.GATHER_DEBRIS, FxLibrary.HIT_SPARK,
-			FxLibrary.MAGIC_BLAST, FxLibrary.AMBIENT_SPARKLE]:
+	for id: String in [FxLibrary.BUILD_DUST, FxLibrary.GATHER_DEBRIS, FxLibrary.AMBIENT_SPARKLE]:
 		var p := FxLibrary.create_burst(id)
 		_runner.assert_true(p != null, "%s 应产出粒子" % id)
 		if p != null:
@@ -52,7 +50,7 @@ func _test_unknown_id() -> void:
 
 
 func _test_spawn_burst_null_tree() -> void:
-	FxPool.spawn_burst(null, FxLibrary.HIT_SPARK, Vector2.ZERO)
+	FxPool.spawn_burst(null, FxLibrary.BUILD_DUST, Vector2.ZERO)
 	_runner.assert_true(true, "空树调用应静默返回不崩溃")
 
 
@@ -60,13 +58,13 @@ func _test_spawn_burst_no_pool() -> void:
 	# 前置：本测试环境无 fx_pool 组节点（未装配 GameRoot）
 	_runner.assert_true(get_tree().get_first_node_in_group("fx_pool") == null,
 			"前置失败：测试环境不应存在 fx_pool")
-	FxPool.spawn_burst(get_tree(), FxLibrary.HIT_SPARK, Vector2.ZERO)
+	FxPool.spawn_burst(get_tree(), FxLibrary.BUILD_DUST, Vector2.ZERO)
 	_runner.assert_true(true, "无池调用应静默返回不崩溃")
 
 
 func _test_burst_pools() -> void:
 	var pool: FxPool = ScriptFxPool.new()
-	pool.burst(FxLibrary.HIT_SPARK, Vector2(10, 20))
+	pool.burst(FxLibrary.BUILD_DUST, Vector2(10, 20))
 	_runner.assert_equal(pool.get_child_count(), 1, "首次 burst 应扩池 1 个粒子")
 	var child := pool.get_child(0) as GPUParticles2D
 	_runner.assert_true(child != null, "池内应为 GPUParticles2D")

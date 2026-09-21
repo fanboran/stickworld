@@ -98,6 +98,15 @@ const DEPTH_SCALE_MAX := 1.10
 ## billlboard 不随 body_scale 缩放（set_world_pos 无此参），本值亦不乘。
 const BILLBOARD_BODY_H_PX := 156.0
 
+## billboard 髋高（canvas px）：视觉脚线以上到髋 = char_sprite_3d 的脚底锚
+## FOOT_ANCHOR.y 141 × RIG_SCALE 0.35625 = 50.23（billboard 按脚墨迹落 FOOT_ROW，
+## 故量到脚墨迹而非脚骨 marker；24px 换轨下 1 SubViewport px = 1 canvas px、
+## SIZE_K=1，直接用 canvas px 量纲）。随身特效（命中飘字/挥砍弧/箭矢）锚点
+## 从视觉脚线抬到身体高度用本值（身体纵向不压缩，见视觉域协议铁律 2）。
+## ⚠ 改 char_sprite_3d 的 RIG_SCALE/FOOT_ANCHOR 时同步本值
+## （tests/unit/test_hd2d_projection.gd 有同步断言）。
+const BILLBOARD_HIP_H_PX := 50.23
+
 ## 角色 → 3D billboard 渲染同步映射表（实体 instance_id -> char_host(Node3D)）
 var _char_map: Dictionary = {}
 
@@ -368,6 +377,15 @@ func unmap_fx_pos(pos: Vector2) -> Vector2:
 		return pos
 	var k: float = float(_hd.get_ground_squash())
 	return Vector2(pos.x, Hd2dProjection.visual_to_ground_y(pos.y, k, walk_front_y))
+
+
+## 随身特效锚点抬升（MapBase 协议覆写）：HD-2D 图实体原点=视觉脚线，
+## 随身特效按 2D 口径挂髋——抬升量 = billboard 髋高（身体纵向不压缩）。
+## _hd 未就绪（图还没挂 3D 层）时回退 0 = 等同 2D 口径。
+func fx_anchor_lift() -> float:
+	if _hd == null or not _hd.has_method("get_ground_squash"):
+		return 0.0
+	return BILLBOARD_HIP_H_PX
 
 
 ## 悬浮框视觉域矩形（MapBase 协议覆写）：HD-2D billboard 几何——origin=视觉

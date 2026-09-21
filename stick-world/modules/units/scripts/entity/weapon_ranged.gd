@@ -67,7 +67,7 @@ func _get_bow_fire_delay() -> float:
 ## 格挡对法术无效（is_blockable=false，原版盾挡箭不挡魔法）。
 ## **命中点爆炸 AOE（放倒一片）**：对齐 dump Magikill.CastStun/StunOpponents/
 ## unitsToDamage/STUN_RANGE 真值——命中点半径内敌人同时受击 + 击晕（2026-09-01 反馈 9e），
-## 半径挂档案 spell_aoe_radius（STAFF 90），并触发 MAGIC_BLAST 爆炸粒子。
+## 半径挂档案 spell_aoe_radius（STAFF 90）。
 func cast_magic(target: Node) -> void:
 	var owner_entity: CharacterBody2D = _mount.get_owner_entity()
 	if owner_entity == null or target == null or not is_instance_valid(target):
@@ -91,14 +91,11 @@ func cast_magic(target: Node) -> void:
 			battle.register_attacker(target, owner_entity)
 	if dealt > 0.0 and target.has_method("apply_hit_reaction"):
 		target.apply_hit_reaction(p.direction, dealt * _mount.KNOCKBACK_PER_DAMAGE)
-	# 命中点爆炸 AOE（放倒一片）+ 爆炸粒子
+	# 命中点爆炸 AOE（放倒一片）：只结算伤害与击晕，不产粒子
 	var aoe_radius: float = float(
 			ScriptBehaviorProfiles.get_profile(int(_mount.weapon_type)).get("spell_aoe_radius", 0.0))
 	if aoe_radius > 0.0:
 		_apply_spell_blast(owner_entity, target, aoe_radius)
-	if owner_entity.get_tree() != null:
-		FxPool.spawn_burst(owner_entity.get_tree(), FxLibrary.MAGIC_BLAST,
-				_body_pos(target) + Vector2(0, -30))
 
 
 ## 法术爆炸 AOE 结算（SWL StunOpponents 直译）：命中点 radius 内其他敌人

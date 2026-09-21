@@ -52,6 +52,9 @@ var _target: Node = null
 var _traveled: float = 0.0
 ## 出射高度（落地判定基准）
 var _launch_y: float = 0.0
+## 出弓点脚线（画布域 y，0 = 未捕获）：视觉域偏移的地面分量起点。
+## _ready 时节点尚未定位，故在首帧 _apply_visual_offset 里惰性捕获（见该函数）。
+var _launch_ground_y: float = 0.0
 ## 已飞行时间（s；抛物线解算模式下与 _solve_time 比较判落地）
 var _flight_time: float = 0.0
 ## 解算飞行时间（s，>0 = 抛物线解算模式）：飞满后继续沿弹道下落到瞄准点地面线
@@ -113,6 +116,58 @@ func _ready() -> void:
 	z_index = 900
 	body_entered.connect(_on_body_entered)
 	_launch_y = global_position.y
+	_wrap_visual_root()
+
+
+## ── HD-2D 视觉域偏移 ──────────────────────────────────────────────
+## 绘制子节点收进 VisualRoot（碰撞形状留在根上，Area2D 判定不动），逐帧按图协议
+## （`FxLibrary.remap_pos` → `remap_fx_pos`）把弹道地面线压进视觉域：箭的物理位置
+## 在画布域（Area2D 判定/命中距离都在画布域算），直接照画会落在 billboard 部队
+## 下方的草地上。**只压地面分量、弹道高度按原值保留**（身体纵向不压缩，
+## MapBase 视觉域协议铁律 2）——按融合值直映射会把弧高当纵深，箭飞进天里。
+## 2D 图 remap 恒等 → 偏移恒 0（零回归）。
+var _visual_root: Node2D = null
+
+func _wrap_visual_root() -> void:
+	_visual_root = Node2D.new()
+	_visual_root.name = "VisualRoot"
+	for ch in get_children():
+		if ch is CollisionShape2D or ch is CollisionPolygon2D:
+			continue   # 碰撞形状必须是 Area2D 直接子级，留在根上
+		remove_child(ch)
+		_visual_root.add_child(ch)
+	add_child(_visual_root)
+
+
+func _apply_visual_offset() -> void:
+	if _visual_root == null:
+		return
+	# 出弓点脚线（首帧位置 = 出弓位）：_ready 时节点还没定位，不能在 _ready 取
+	if _launch_ground_y == 0.0:
+		_launch_ground_y = global_position.y + 70.0
+	var ground := Vector2(global_position.x, _ground_line_y())
+	# 偏移 = 地面线的投影压缩量：箭在视觉域的落点 = 视觉地面线 − 原值弧高
+	# （弧高由 pos.y 与地面线的差隐含携带，此处不再单独减一次）
+	_visual_root.position = (FxLibrary.remap_pos(get_tree(), ground) - ground).rotated(-rotation)
+
+
+## 弹道地面线（画布域 y）：出弓点脚线 → 瞄准点脚线按飞行进度插值。
+## 出弓点 = 出弓位 + 70 回推脚线（weapon_ranged 的 from = 脚线 − 70）；
+## 瞄准点脚线 = 传入的插地线（aim_point + 65，aim_point 即目标脚线）回退 65。
+func _ground_line_y() -> float:
+	if _solve_time <= 0.0 or _solve_ground_y <= 0.0:
+		return _launch_ground_y
+	return lerpf(_launch_ground_y, _solve_ground_y - 65.0, _ground_progress())
+
+
+## 飞行进度 [0,1]：按已飞距离 / 解算总程（抛物线模式下速度幅值近似恒定）
+func _ground_progress() -> float:
+	if _solve_time <= 0.0:
+		return 0.0
+	var total: float = _vel.length() * _solve_time
+	if total <= 1.0:
+		return 0.0
+	return clampf(_traveled / total, 0.0, 1.0)
 
 
 func _physics_process(delta: float) -> void:
@@ -120,6 +175,7 @@ func _physics_process(delta: float) -> void:
 	# 步长经 sim_delta 携带速度档（弹道积分随档位缩放）
 	if TimeManager != null:
 		delta = TimeManager.sim_delta(delta)
+	_apply_visual_offset()
 	if _stuck:
 		# 插地淡出（SWL fadeOutOver）
 		_stuck_timer += delta

@@ -13,11 +13,10 @@ extends Control
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 一次性爆发型特效（视口中心试放 + 点放）
-const FX_IDS: Array = [FxLibrary.BUILD_DUST, FxLibrary.GATHER_DEBRIS, FxLibrary.HIT_SPARK]
+const FX_IDS: Array = [FxLibrary.BUILD_DUST, FxLibrary.GATHER_DEBRIS]
 const FX_LABELS := {
 	FxLibrary.BUILD_DUST: "建造尘土",
 	FxLibrary.GATHER_DEBRIS: "采集飘屑",
-	FxLibrary.HIT_SPARK: "打击火花",
 }
 const MARKET_ADJUST_AMOUNT := 50.0
 const AUTO_REFRESH_INTERVAL := 0.5

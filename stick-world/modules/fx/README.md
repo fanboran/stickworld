@@ -31,7 +31,7 @@ modules/fx/
 ## 对外契约
 
 - 爆发特效：`FxPool.spawn_burst(tree, effect_id, global_pos)`；效果 ID 常量在 `FxLibrary`
-  （BUILD_DUST / GATHER_DEBRIS / HIT_SPARK / MAGIC_BLAST / AMBIENT_SPARKLE）
+  （BUILD_DUST / GATHER_DEBRIS / AMBIENT_SPARKLE —— 非战斗粒子；战斗不产粒子特效）
 - 战斗演出：`FxLibrary.spawn_damage_text`（combat 的 DamagePipeline 结算后调用）、
   `spawn_slash_arc`（units 的 WeaponMount 命中帧调用）、`spawn_confetti`（ui_global 胜利画面）
 - 环境闪光：`CrystalSparkles.attach_to(host, z, theme, tier)`（AmbientSparkleSpawner 自动挂载）

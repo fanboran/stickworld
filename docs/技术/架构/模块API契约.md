@@ -493,8 +493,8 @@ const LIGHT_KEYFRAMES: Array  # 时间[小时] -> CanvasModulate.color（深夜/
 > 无状态特效服务：无 api 节点实例、无信号契约。对外入口是全局类 FxPool 的静态方法（组查找模式，业务方不持有池节点引用）。
 
 ```gdscript
-# 业务方调用示例（效果 ID 常量表见 FxLibrary：BUILD_DUST / GATHER_DEBRIS / HIT_SPARK 等）
-FxPool.spawn_burst(get_tree(), FxLibrary.HIT_SPARK, global_position)
+# 业务方调用示例（效果 ID 常量表见 FxLibrary：BUILD_DUST / GATHER_DEBRIS / AMBIENT_SPARKLE）
+FxPool.spawn_burst(get_tree(), FxLibrary.BUILD_DUST, global_position)
 ```
 
 > 池实例由 SystemSetup 挂载到 GameRoot（group "fx_pool"）；无池环境（纯逻辑测试）spawn_burst 静默跳过不报错。

@@ -61,6 +61,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_inventory.gd",
 	"res://tests/unit/test_map_camera_clamp.gd",
 	"res://tests/unit/test_hd2d_projection.gd",
+	"res://tests/unit/test_hd2d_fx_anchor.gd",
 	"res://tests/unit/test_map_mode_manager.gd",
 	"res://tests/unit/test_population_jitter.gd",
 	"res://tests/unit/test_river_parse.gd",

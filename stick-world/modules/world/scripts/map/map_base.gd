@@ -210,7 +210,7 @@ func get_passage_barriers() -> Array:
 
 
 # ── 视觉域坐标协议（HD-2D 投影唯一出口；2D 图全部恒等）──────────────────
-## 2D 图视觉域=画布域，三个方法均恒等；HD-2D 图在 Hd2dMapBase 覆写。
+## 2D 图视觉域=画布域，各方法均恒等；HD-2D 图在 Hd2dMapBase 覆写。
 ## 铁律：只有**地面锚点**参与映射；**身体纵向尺寸/偏移不映射**（billboard
 ## 直立绘制，俯角只压地面纵深）。一切锚定实体位置的画布元素（悬浮框/选中框/
 ## 飘字粒子/提示面板）与一切屏幕点选判定，都必须经本组方法进同一域再比较，
@@ -225,6 +225,14 @@ func remap_fx_pos(pos: Vector2) -> Vector2:
 ## 先 canvas_transform.affine_inverse() 落视觉域，再经此逆回画布域。
 func unmap_fx_pos(pos: Vector2) -> Vector2:
 	return pos
+
+
+## 实体随身特效的锚点抬升（px，视觉域原值）：实体原点 → 身体（髋）的高度差。
+## 2D 图实体原点即髋，恒 0；HD-2D 图原点=视觉脚线（覆写为 billboard 髋高）——
+## 命中飘字/挥砍弧/箭矢这类"挂在身上"的画布元素据此从脚线抬回身体高度，
+## 否则会被当成地面纵深压到脚面上（铁律 2 的落地点）。
+func fx_anchor_lift() -> float:
+	return 0.0
 
 
 ## 实体悬浮框的视觉域矩形：输入 Range 框（画布域中心/尺寸，实体局部语义）

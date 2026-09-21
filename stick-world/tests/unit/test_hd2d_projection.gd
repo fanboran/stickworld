@@ -10,6 +10,8 @@ signal test_done(code: int)
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+## billboard 几何真相源（随身特效抬升常量的同步对象）
+const CharSprite3D := preload("res://modules/hd2d/scripts/char_sprite_3d.gd")
 
 var _runner: TestRunner
 
@@ -28,6 +30,7 @@ func _ready() -> void:
 	_runner.add_test("Hd2dStreetMap: remap/unmap 互逆（mock k）", _test_street_remap_round_trip)
 	_runner.add_test("Hd2dStreetMap: 悬浮框 billboard 几何", _test_street_hover_rect)
 	_runner.add_test("Hd2dStreetMap: _hd 未就绪回退 2D 恒等", _test_street_fallback_identity)
+	_runner.add_test("随身特效抬升: 协议口径 + billboard 几何同步", _test_fx_anchor_lift)
 	_runner.add_test("实体碰撞箱: origin 空间贴脚线门控", _test_entity_collider_origin_space)
 	_runner.run()
 	print(_runner.summary())
@@ -128,3 +131,23 @@ func _test_entity_collider_origin_space() -> void:
 	_runner.assert_approx(col.position.y, foot_offset, 0.001, "翻回 2D 口径：箱回脚位")
 	remove_child(ent)
 	ent.free()
+
+
+func _test_fx_anchor_lift() -> void:
+	# 随身特效锚点抬升（铁律 2 的落地点）：2D 图原点=髋 → 0；HD-2D 图原点=视觉
+	# 脚线 → billboard 髋高（命中飘字/挥砍弧据此抬到身体，不被压到脚面）
+	var base := MapBase.new()
+	_runner.assert_approx(base.fx_anchor_lift(), 0.0, 0.0001, "2D 图抬升恒 0")
+	base.free()
+	var map := _make_street_map()
+	_runner.assert_approx(map.fx_anchor_lift(), Hd2dStreetMap.BILLBOARD_HIP_H_PX, 0.0001,
+			"HD-2D 图抬升 = billboard 髋高")
+	map.free()
+	var fresh := Hd2dStreetMap.new()
+	_runner.assert_approx(fresh.fx_anchor_lift(), 0.0, 0.0001, "_hd 未就绪回退 0")
+	fresh.free()
+	# 同步断言：常量必须等于 billboard 脚线以上到髋的几何（FOOT_ANCHOR 量到脚墨迹，
+	# billboard 按脚墨迹落 FOOT_ROW）——改 char_sprite_3d 几何时本值必须同步
+	_runner.assert_approx(Hd2dStreetMap.BILLBOARD_HIP_H_PX,
+			CharSprite3D.FOOT_ANCHOR.y * CharSprite3D.RIG_SCALE, 0.01,
+			"BILLBOARD_HIP_H_PX = FOOT_ANCHOR.y × RIG_SCALE（billboard 髋高）")

@@ -249,6 +249,24 @@ func is_building_registered(def_id: String) -> bool:
 	return _catalog.is_registered(def_id)
 
 
+## 建筑是否已解锁（奖励闭环的数据侧门禁）：def 的 `unlocked_by_tech` = 需已获的
+## 解锁/科技 id，比对 WorldState.unlocks 台账（含开局基线，见 WorldState.STARTING_UNLOCKS）；
+## 未声明要求恒为已解锁。展示侧（BuildMenu 灰显）与建造入口（start_construction_at
+## 拒建）共用本判定，禁止两处分叉
+func is_def_unlocked(def_id: String) -> bool:
+	var req := get_def_unlock_requirement(def_id)
+	if req.is_empty():
+		return true
+	return WorldState != null and WorldState.has_unlock(req)
+
+
+## 建筑所需解锁/科技 id（未声明要求返回空串；目录未装配时同样按无要求——装配时序不影响判定）
+func get_def_unlock_requirement(def_id: String) -> String:
+	if _catalog == null:
+		return ""
+	return String(_catalog.get_def(def_id).get("unlocked_by_tech", ""))
+
+
 func _physics_process(delta: float) -> void:
 	# 推进所有活跃项目：步长经 sim_delta 携带速度档；暂停冻结由引擎总闸负责
 	# （本节点 PAUSABLE——此前无暂停门禁，暂停期建造照走，"假暂停"旧账一并了结）
@@ -273,10 +291,13 @@ func start_construction(region_id: String, building_type: String, org_id: String
 
 ## 开工建造（指定位置 cell_x，可选 width 覆盖 def 宽度）。返回 {ok:true, project_id, cell_x, width} 或 {ok:false, error}。
 func start_construction_at(region_id: String, building_type: String, cell_x: int, _org_id: String = "", width: int = -1) -> Dictionary:
-	if _map == null:
-		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
+	# 请求合法性先于环境就绪判定（未注册/未解锁与地图无关，也不因缺地图而被掩盖）
 	if not _catalog.is_registered(building_type):
 		return {"ok": false, "error": "未注册建筑类型: %s" % building_type}
+	if not is_def_unlocked(building_type):
+		return {"ok": false, "error": "未解锁建筑: %s（需先取得对应技术/战果）" % building_type}
+	if _map == null:
+		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
 	var scene: PackedScene = _catalog.get_scene(building_type)
 	# P0-6 从 buildings.tres 读取 build_time；width 默认取 def，可由调用方覆盖
 	var def: Dictionary = _catalog.get_def(building_type)

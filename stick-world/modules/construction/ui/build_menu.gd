@@ -98,6 +98,9 @@ func setup(game_root: Node) -> void:
 	# 监听资源变化刷新按钮可用性
 	if _resources_api != null and _resources_api.has_signal("resource_changed"):
 		_resources_api.resource_changed.connect(_on_resource_changed)
+	# 监听解锁发放（奖励闭环消费端）：新解锁的建筑当场出现在列表里可用
+	if EventBus != null and EventBus.has_signal("unlock_granted"):
+		EventBus.unlock_granted.connect(_on_unlock_granted)
 	# 监听模式切换，仅 EXPLORE 显示建造按钮
 	if _input_dispatcher != null and _input_dispatcher.has_signal("mode_changed"):
 		_input_dispatcher.mode_changed.connect(_on_mode_changed)
@@ -196,8 +199,13 @@ func _create_build_entry(def_id: String, def: Dictionary) -> Control:
 	# 资源消耗摘要（TINY 档：11 号 + 弱化字色，Token 取色不手写字面量；
 	# StickKit.label 内部已挂父）
 	StickKit.label(vbox, _format_cost(def), StickKit.LabelKind.TINY)
-	# 资源不足时灰显按钮 + 红字缺口提示（新手引导：缺什么、去哪补）
-	if not _can_afford(def):
+	# 未解锁（def 声明了 unlocked_by_tech 且尚未获得）：条目保留可见但灰显，
+	# 让玩家知道"还有这种建筑、得先取得对应技术/战果"（奖励闭环的可见性）
+	if not _is_unlocked(def_id):
+		btn.disabled = true
+		StickKit.label(vbox, "未解锁 —— 需先取得对应技术/战果",
+				StickKit.LabelKind.TINY, StickTokens.DANGER)
+	elif not _can_afford(def):
 		btn.disabled = true
 		var missing: String = _missing_summary(def)
 		if not missing.is_empty():
@@ -219,6 +227,13 @@ func _format_cost(def: Dictionary) -> String:
 	if parts.is_empty():
 		return "免费"
 	return " · ".join(parts)
+
+
+## 检查建筑是否已解锁（判定归 ConstructionManager，展示层只问结论）
+func _is_unlocked(def_id: String) -> bool:
+	if _construction_manager == null or not _construction_manager.has_method("is_def_unlocked"):
+		return true
+	return _construction_manager.is_def_unlocked(def_id)
 
 
 ## 检查资源是否足够建造
@@ -254,6 +269,13 @@ func _missing_summary(def: Dictionary) -> String:
 
 func _on_resource_changed(_rid: String, _amt: float, _delta: float, _region: String) -> void:
 	# 隐藏期间跳过重建（resource_changed 高频触发）；打开路径 _on_toggle_pressed 必刷新
+	if _list_panel == null or not _list_panel.visible:
+		return
+	_refresh_list()
+
+
+## 解锁发放（奖励闭环消费端）：面板开着就当场重刷——刚解锁的建筑由灰显变可建
+func _on_unlock_granted(_unlock_id: String) -> void:
 	if _list_panel == null or not _list_panel.visible:
 		return
 	_refresh_list()

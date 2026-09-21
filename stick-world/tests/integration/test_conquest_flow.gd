@@ -2,14 +2,15 @@ extends Node
 ## 集成测试：出征与领地循环（批次 C5）——launch_campaign 接敌开战 → 胜仗占领入账
 ## → 已臣服再进不刷军 → 败仗车轮战回村 → 全图占领通关判定。
 ##
-## 验收门（交接档批次 C5）：
-##   1. 打完一场（黑石营地）：WorldState.territories 状态转 CAPTURED + 资源奖励入账
-##      （res_wood +30 / res_stone +20）+ territory_state_changed / region_owner_changed 广播；
+## 验收门（交接档批次 C5 + P3 奖励闭环）：
+##   1. 打完一场（黑石营地）：WorldState.territories 状态转 CAPTURED + 归属 owner/faction
+##      写实 + 资源奖励入账（res_wood +30 / res_stone +20）+ 一条「战利品」通告
+##      + territory_state_changed / region_owner_changed 广播；
 ##   2. 已臣服据点再进不刷军、不开战，launch_campaign 拒征（返回 false）；
 ##   3. 败仗（赤岭寨）：守军战损持久化 garrison_losses=2（state 仍 HOSTILE），
 ##      玩家残部传回村A，可再次出征（launch_campaign 返回 true）；
 ##   4. 三座据点全占 → ExpansionApi.conquest_completed 恰发一次（captured 3/3 统计），
-##      占领不清战损记录。
+##      占领不清战损记录；赤岭寨/铁腕要塞的解锁项随之入 WorldState.unlocks 台账。
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_conquest_flow.tscn
 ## 退出码：0 全部通过，1 有失败
@@ -40,9 +41,11 @@ var _resources: Node = null
 var _cb_state: Callable
 var _cb_owner: Callable
 var _cb_done: Callable
+var _cb_notify: Callable
 var _sig_state: Array = []
 var _sig_owner: Array = []
 var _sig_done: Array = []
+var _sig_notify: Array = []
 
 
 func _ready() -> void:
@@ -96,6 +99,7 @@ func _test_campaign_engage() -> void:
 ## 用例 2「胜仗占领与收益」（接用例 1 的战斗）：杀光守军方 → victory → 自动占领入账
 func _test_victory_capture() -> void:
 	WorldState.territories = {}
+	WorldState.unlocks = {}
 	var map: Node2D = _game_root.get_current_map()
 	# 开战自动暂停（TimeManager auto_pause_battle，玩家观察窗 UX）：
 	# 测试模拟玩家恢复 X1，否则 BattleInstance 暂停门禁不 tick、胜负判定不执行
@@ -114,8 +118,18 @@ func _test_victory_capture() -> void:
 	_disconnect_capture_signals()
 	var rec: Dictionary = WorldState.territories.get(TID_1, {})
 	_runner.assert_equal(int(rec.get("state", -1)), 1, "黑石营地应转 CAPTURED(1)")
+	_runner.assert_equal(String(rec.get("owner", "")), "player", "归属 owner 写为 player（疆域真值）")
+	_runner.assert_equal(String(rec.get("faction", "")), "fac_player", "faction 写为玩家势力 id")
 	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 30.0, 0.001, "木奖励 +30 入账")
 	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 20.0, 0.001, "石奖励 +20 入账")
+	# 奖励可见：占领通告一条说全"谁臣服 + 到手什么"（文案拼装归 extension api.describe_loot）
+	var loot_line := ""
+	for sig in _sig_notify:
+		if sig.size() == 3 and String(sig[0]) == "征服":
+			loot_line = String(sig[1])
+	_runner.assert_true(loot_line.contains("已臣服"), "征服通告含臣服文案，实得「%s」" % loot_line)
+	_runner.assert_true(loot_line.contains("战利品 木材30、石料20"),
+			"征服通告含战利品明细（奖励可见），实得「%s」" % loot_line)
 	var state_ok := false
 	for sig in _sig_state:
 		if sig.size() == 2 and sig[0] == TID_1 and int(sig[1]) == 1:
@@ -185,11 +199,23 @@ func _test_defeat_attrition() -> void:
 ## 用例 5「通关判定」：补占 2 座 → 3/3 → conquest_completed 恰发一次，战损记录保留
 func _test_conquest_completed() -> void:
 	_sig_done.clear()
+	_sig_notify.clear()
 	_cb_done = func(stats: Dictionary) -> void: _sig_done.append(stats.duplicate())
 	_api.conquest_completed.connect(_cb_done)
+	_connect_notify_signal()
 	_api.capture_territory(TID_2)
 	_api.capture_territory(TID_3)
+	_disconnect_notify_signal()
 	_runner.assert_equal(_sig_done.size(), 1, "conquest_completed 应恰发 1 次，实得 %d" % _sig_done.size())
+	# 解锁项落池（奖励闭环消费端的数据面）：赤岭寨开石造仓库、铁腕要塞开大型城墙
+	_runner.assert_true(WorldState.has_unlock("unlock_stone_warehouse"), "赤岭寨解锁项入 WorldState.unlocks")
+	_runner.assert_true(WorldState.has_unlock("unlock_wall_tier3"), "铁腕要塞解锁项入 WorldState.unlocks")
+	var loot_lines: Array[String] = []
+	for sig in _sig_notify:
+		if sig.size() == 3 and String(sig[0]) == "征服":
+			loot_lines.append(String(sig[1]))
+	_runner.assert_true(" ".join(loot_lines).contains("解锁 石造仓库"),
+			"占领通告把解锁项按展示名写出，实得 %s" % str(loot_lines))
 	if _sig_done.is_empty():
 		return
 	var stats: Dictionary = _sig_done[0]
@@ -279,10 +305,27 @@ func _await_map_id(target: String) -> bool:
 func _connect_capture_signals() -> void:
 	_sig_state.clear()
 	_sig_owner.clear()
+	_sig_notify.clear()
 	_cb_state = func(tid: String, st: int) -> void: _sig_state.append([tid, st])
 	_cb_owner = func(rid: String, owner_id: String) -> void: _sig_owner.append([rid, owner_id])
 	EventBus.territory_state_changed.connect(_cb_state)
 	EventBus.region_owner_changed.connect(_cb_owner)
+	_connect_notify_signal()
+
+
+## 占领通告捕获（奖励可见：ui_notification 落通知 feed）
+func _connect_notify_signal() -> void:
+	if EventBus == null or not EventBus.has_signal("ui_notification"):
+		return
+	_cb_notify = func(title: String, body: String, level: String) -> void:
+		_sig_notify.append([title, body, level])
+	EventBus.ui_notification.connect(_cb_notify)
+
+
+func _disconnect_notify_signal() -> void:
+	if _cb_notify.is_valid() and EventBus != null and EventBus.has_signal("ui_notification") \
+			and EventBus.ui_notification.is_connected(_cb_notify):
+		EventBus.ui_notification.disconnect(_cb_notify)
 
 
 func _disconnect_capture_signals() -> void:
@@ -290,6 +333,7 @@ func _disconnect_capture_signals() -> void:
 		EventBus.territory_state_changed.disconnect(_cb_state)
 	if _cb_owner.is_valid() and EventBus.region_owner_changed.is_connected(_cb_owner):
 		EventBus.region_owner_changed.disconnect(_cb_owner)
+	_disconnect_notify_signal()
 
 
 func _cleanup() -> void:
@@ -297,3 +341,4 @@ func _cleanup() -> void:
 	if _cb_done.is_valid() and _api != null and _api.conquest_completed.is_connected(_cb_done):
 		_api.conquest_completed.disconnect(_cb_done)
 	WorldState.territories = {}
+	WorldState.unlocks = {}

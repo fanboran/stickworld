@@ -21,9 +21,10 @@ modules/expansion/
 
 ## 对外契约
 
-- 查询：`list_targets()`（出城选项数据源：名称/剩余守军/占领态/奖励预览）、`get_territory_state(id)`、`is_all_captured()`（通关判定）；流程：`launch_campaign(territory_id)` 出征、`capture_territory(territory_id)` 占领。
+- 查询：`list_targets()`（出城选项数据源：名称/剩余守军/占领态/归属/奖励预览）、`find_target_by_settlement(id)`（战略图双击判定）、`describe_target(target)`（情报一句话）、`describe_loot(granted)`（占领通告入账明细）、`unlock_label(id)`、`get_territory_state(id)`、`is_all_captured()`（通关判定）；流程：`launch_campaign(territory_id)` 出征、`capture_territory(territory_id)` 占领。
 - 信号分工：点对点走本 api（`territory_captured / conquest_completed`）；全局广播走 EventBus（`territory_state_changed / region_owner_changed / unlock_granted`，状态枚举经本 api 常量取值，不引内部脚本）。
-- 运行时状态（state / garrison_losses）记录在 WorldState.territories 容器，跨图存活；敌将不受战损扣减、每次进图均在位。
+- 运行时状态记录在 WorldState：`territories[id]`（state / garrison_losses / control_progress / owner / faction）与 `unlocks` 解锁台账（征服奖励写入，各消费端自听 `unlock_granted`），跨图存活；敌将不受战损扣减、每次进图均在位。
+- 解锁项展示名表 `UNLOCK_LABELS`（id → 中文名）与建筑侧门禁（`buildings.tres` 的 `unlocked_by_tech`）用同一 id；两侧对齐由 `tests/unit/test_conquest_targets.gd` 的配置对齐用例兜底。
 
 ---
 
@@ -39,4 +40,5 @@ modules/expansion/
 ## 扩展指引
 
 - 加新据点：在 `config/expansion/territories.tres` 加领地行（id / map_id / 守军编成 / 奖励），无需改代码。
+- 加解锁项：奖励 `rewards.unlocks` 里的 id 要在 `api.gd` 的 `UNLOCK_LABELS` 登记展示名，并让消费端（如建筑 def 的 `unlocked_by_tech`）认这个 id——否则只入台账不产生效果（配置对齐用例会红灯）。
 - 改车轮战/守军补员口径：先读 scripts/garrison_spawner.gd 类头的职责边界说明，再动 ConquestManager 的战损写入点。

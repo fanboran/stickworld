@@ -177,6 +177,14 @@ func get_building_state(building_id: String) -> Dictionary:
 	return _manager.get_building_state(building_id)
 
 
+## 建筑是否已解锁（奖励闭环消费端对外查询；未解锁类型 start_construction* 会拒建）。
+## 未初始化环境返回 true（不阻断测试/工具直达）
+func is_def_unlocked(def_id: String) -> bool:
+	if not _is_initialized:
+		return true
+	return _manager.is_def_unlocked(def_id)
+
+
 # ===== 升级 =====
 
 ## 升级建筑

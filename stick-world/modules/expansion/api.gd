@@ -21,6 +21,19 @@ const _RegistryScript := preload("res://modules/expansion/scripts/territory_regi
 const STATE_HOSTILE := _RegistryScript.State.HOSTILE
 const STATE_CAPTURED := _RegistryScript.State.CAPTURED
 
+## 解锁项展示名（据点奖励 unlocks 项 id → 玩家可读名；未登记回落 id 本身）。
+## 展示名与建筑侧门禁（buildings.tres 的 unlocked_by_tech）共用同一 id——
+## 改 id 时两处同步，配置对齐由 tests/unit/test_conquest_targets.gd 的
+## 「解锁项配置对齐」用例兜底（奖励声明的每一项都须有展示名且对得上建筑门槛）
+const UNLOCK_LABELS: Dictionary = {
+	"unlock_stone_warehouse": "石造仓库",
+	"unlock_wall_tier3": "大型城墙",
+}
+
+## 解锁项展示名（缺表回落 id）
+func unlock_label(unlock_id: String) -> String:
+	return String(UNLOCK_LABELS.get(unlock_id, unlock_id))
+
 
 # ===== 公共信号 =====
 
@@ -66,7 +79,7 @@ func set_flow_manager(manager: Node) -> void:
 # ===== 查询（C1 实装）=====
 
 ## 可征伐据点列表（出征入口数据源：城门出城选项 / 战略图双击确认）：
-## {id, name_zh, map_id, settlement_key, state, captured, garrison_count,
+## {id, name_zh, map_id, settlement_key, state, captured, owner, faction, garrison_count,
 ##  garrison: [{profile, name_zh, count, tier}], commander: {profile, name_zh},
 ##  rewards: {resources: [{id, name_zh, amount}], unlocks: [String]},
 ##  rewards_preview: {res_id: amount}}（展示层便捷：describe_target()）
@@ -89,6 +102,8 @@ func list_targets() -> Array[Dictionary]:
 			"entry_side": int(row.get("entry_side", 0)),
 			"state": state,
 			"captured": state == _RegistryScript.State.CAPTURED,
+			"owner": _registry.get_owner(id),
+			"faction": _registry.get_faction(id),
 			"garrison_count": maxi(0, _registry.get_garrison_count(id) - _registry.get_garrison_losses(id)),
 			"garrison": _registry.get_remaining_garrison(id),
 			"commander": {
@@ -137,10 +152,23 @@ func describe_target(target: Dictionary) -> String:
 		if res is Dictionary:
 			loot.append("%s%d" % [String(res.get("name_zh", "")), int(res.get("amount", 0))])
 	for unlock in rewards.get("unlocks", []):
-		loot.append(String(unlock))
+		loot.append("解锁 %s" % unlock_label(String(unlock)))
 	if not loot.is_empty():
 		parts.append("｜战利品 " + "、".join(loot))
 	return " ".join(parts)
+
+
+## 入账明细一句话（占领通告用，展示层不各自拼串）：
+## 「战利品 木材30、石料20、解锁 石造仓库」；无入账无解锁返回空串
+func describe_loot(granted: Dictionary) -> String:
+	var parts: Array[String] = []
+	for row in _reward_resource_rows(granted):
+		parts.append("%s%d" % [String(row.get("name_zh", "")), int(row.get("amount", 0))])
+	for id in _reward_unlock_ids(granted):
+		parts.append("解锁 %s" % unlock_label(id))
+	if parts.is_empty():
+		return ""
+	return "战利品 " + "、".join(parts)
 
 
 ## 奖励资源行（res_id → name_zh；资源表缺失回落 id）

@@ -35,10 +35,13 @@ func _test_memory_roundtrip() -> void:
 	WorldState.territories = {}
 	WorldState.territories[TID_1] = {
 		"state": 1, "garrison_losses": 2, "control_progress": 100.0,
+		"owner": "player", "faction": "fac_player",
 	}
+	WorldState.unlocks = {"unlock_stone_warehouse": true}
 	# 存档落库走 JSON.stringify（WorldState._on_game_saving），此处按同一编码仿真一跳
 	var snapshot: Dictionary = JSON.parse_string(JSON.stringify(WorldState.get_save_data()))
 	WorldState.territories = {}
+	WorldState.unlocks = {}
 	WorldState.load_save_data(snapshot)
 	_runner.assert_true(WorldState.territories.has(TID_1), "territories 条目随快照恢复")
 	var record: Dictionary = WorldState.territories[TID_1]
@@ -46,20 +49,32 @@ func _test_memory_roundtrip() -> void:
 	_runner.assert_equal(int(record["state"]), 1, "state 值 CAPTURED")
 	_runner.assert_equal(int(record["garrison_losses"]), 2, "战损值保持")
 	_runner.assert_approx(float(record["control_progress"]), 100.0, 0.001, "控制度保持")
+	_runner.assert_equal(String(record["owner"]), "player", "归属 owner 随快照恢复")
+	_runner.assert_equal(String(record["faction"]), "fac_player", "势力 faction 随快照恢复")
+	_runner.assert_true(WorldState.has_unlock("unlock_stone_warehouse"), "解锁池随快照恢复")
+	_runner.assert_false(WorldState.has_unlock("unlock_never_granted"), "未获解锁仍为未获")
 
 
 func _test_save_roundtrip() -> void:
 	WorldState.territories = {}
-	WorldState.territories[TID_1] = {"state": 1, "garrison_losses": 3, "control_progress": 100.0}
+	WorldState.territories[TID_1] = {
+		"state": 1, "garrison_losses": 3, "control_progress": 100.0,
+		"owner": "player", "faction": "fac_player",
+	}
+	WorldState.unlocks = {"unlock_wall_tier3": true}
 	SaveManager.delete_game(TEST_SLOT)
 	_runner.assert_true(SaveManager.save_game(TEST_SLOT), "存档成功（game_saving → world_state 表）")
 	WorldState.territories = {}
+	WorldState.unlocks = {}
 	_runner.assert_true(SaveManager.load_game(TEST_SLOT), "读档成功（game_loaded → WorldState 恢复）")
 	SaveManager.end_load()  # load 保持 DB 打开等场景恢复，测试无场景须手动关
 	_runner.assert_true(WorldState.territories.has(TID_1), "读档后领地状态回传")
 	var record: Dictionary = WorldState.territories.get(TID_1, {})
 	_runner.assert_equal(int(record.get("state", -1)), 1, "state 经 DB 往返保持")
 	_runner.assert_equal(int(record.get("garrison_losses", -1)), 3, "战损经 DB 往返保持")
+	_runner.assert_equal(String(record.get("owner", "")), "player", "归属 owner 经 DB 往返保持")
+	_runner.assert_equal(String(record.get("faction", "")), "fac_player", "势力 faction 经 DB 往返保持")
+	_runner.assert_true(WorldState.has_unlock("unlock_wall_tier3"), "解锁池经 DB 往返保持")
 
 
 func _test_api_queries() -> void:
@@ -71,9 +86,10 @@ func _test_api_queries() -> void:
 	var targets: Array[Dictionary] = api.list_targets()
 	_runner.assert_equal(targets.size(), 3, "3 座据点可征伐")
 	for t in targets:
-		_runner.assert_true(t.has_all(["id", "name_zh", "garrison_count", "captured", "rewards_preview"]),
-				"target %s 字段齐全" % t.get("id", "?"))
+		_runner.assert_true(t.has_all(["id", "name_zh", "garrison_count", "captured", "owner",
+				"faction", "rewards_preview"]), "target %s 字段齐全" % t.get("id", "?"))
 		_runner.assert_false(bool(t["captured"]), "%s 初始未臣服" % t.get("id", "?"))
+		_runner.assert_true(String(t["owner"]).is_empty(), "%s 初始无归属（owner 空）" % t.get("id", "?"))
 	# 状态查询：缺失条目 → HOSTILE；写入后翻 CAPTURED
 	_runner.assert_equal(api.get_territory_state(TID_1), 0, "缺失条目按 HOSTILE 查询")
 	# 车轮战扣减感知：list_targets 守军数 = 配置 − garrison_losses（C6 出城选项口径）
@@ -104,9 +120,10 @@ func _test_event_bus_signals() -> void:
 	# 零订户发射不炸（C5 接线前的冒烟）
 	EventBus.territory_state_changed.emit(TID_1, 1)
 	EventBus.region_owner_changed.emit("city_1035", "player")
-	EventBus.unlock_granted.emit("unlock_arrow_tower")
+	EventBus.unlock_granted.emit("unlock_stone_warehouse")
 
 
 func _cleanup() -> void:
 	WorldState.territories = {}
+	WorldState.unlocks = {}
 	SaveManager.delete_game(TEST_SLOT)

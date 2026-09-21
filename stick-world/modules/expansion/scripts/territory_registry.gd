@@ -19,6 +19,14 @@ const STICKMEN_PATH := "res://config/units/stickmen.tres"
 ## §9.1 预留：控制度 P0 恒满值（占领即 100%），P1 拆 CAPTURED 时启用爬升
 const CONTROL_PROGRESS_FULL := 100.0
 
+## 归属标识：玩家（region_owner_changed 的 new_owner 与 territories[].owner 共用
+## 同一取值；染色/归属展示消费端按此比对）
+const PLAYER_OWNER_ID := "player"
+
+## 玩家势力 id（factions.tres 外键位）——占领后写入 territories[].faction；
+## 真源映射（玩家对应哪个 factions 条目）随国家层接入（P5）定稿，此处为占位取值
+const PLAYER_FACTION_ID := "fac_player"
+
 var _rows: Array = []
 var _by_id: Dictionary = {}
 ## 兵种 id → name_zh（惰性装载，缺表回退空串 → 展示层回落 id）
@@ -114,12 +122,26 @@ func get_remaining_garrison(id: String, losses: int = -1) -> Array[Dictionary]:
 	return out
 
 
+## 领地当前控制者（""=原主未易手 / PLAYER_OWNER_ID=玩家已占 / P5 起为 AI 势力 id）——
+## 疆域表现的归属真值（战略图染色/归属展示读此，不另建归属表）
+func get_owner(id: String) -> String:
+	return String(get_record(id).get("owner", ""))
+
+
+## 领地所属势力 id（factions.tres 外键；""=未映射，国家层接入前普遍为空）
+func get_faction(id: String) -> String:
+	return String(get_record(id).get("faction", ""))
+
+
+## 领地运行时状态记录（WorldState 无记录返回空字典——调用方按 initial_state 语义取缺省）
+func get_record(id: String) -> Dictionary:
+	var record: Variant = WorldState.territories.get(id, {})
+	return record if record is Dictionary else {}
+
+
 ## 车轮战累计战损（WorldState 无记录 → 0）
 func get_garrison_losses(id: String) -> int:
-	var record: Variant = WorldState.territories.get(id, {})
-	if not (record is Dictionary):
-		return 0
-	return int((record as Dictionary).get("garrison_losses", 0))
+	return int(get_record(id).get("garrison_losses", 0))
 
 
 ## 兵种 id → name_zh（stickmen.tres；缺表/缺行回落 id 本身）
@@ -142,6 +164,8 @@ static func initial_state() -> Dictionary:
 		"state": State.HOSTILE,
 		"garrison_losses": 0,
 		"control_progress": CONTROL_PROGRESS_FULL,
+		"owner": "",
+		"faction": "",
 	}
 
 
@@ -154,4 +178,6 @@ static func normalize_state(value: Variant) -> Dictionary:
 		"state": int(value.get("state", State.HOSTILE)),
 		"garrison_losses": int(value.get("garrison_losses", 0)),
 		"control_progress": float(value.get("control_progress", CONTROL_PROGRESS_FULL)),
+		"owner": String(value.get("owner", "")),
+		"faction": String(value.get("faction", "")),
 	}

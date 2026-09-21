@@ -38,8 +38,20 @@ var visited_settlements: Dictionary = {}
 ## 字段规范 = TerritoryRegistry.initial_state()（core 不反向依赖模块，此处内联同形）：
 ##   state: int（0=HOSTILE/1=CAPTURED，TerritoryRegistry.State）；garrison_losses: int
 ##   （车轮战累计守军战损，玩家败仗不判负只扣敌军）；control_progress: float
-##   （§9.1 P 社化预留，P0 恒 100）。只存已发生变化的领地，缺失条目按初始态查询
+##   （§9.1 P 社化预留，P0 恒 100）；owner: String（实际控制者 id，""=原主未易手 /
+##   "player"=玩家已占）；faction: String（控制者所属势力 id，factions.tres 外键，
+##   国家层接入前的预留位）。只存已发生变化的领地，缺失条目按初始态查询
 var territories: Dictionary = {}
+
+## 已获解锁/科技 id 池（{unlock_id: true}）——"科技随征服到手"（设计 04-科技系统
+## §二）在科技系统实装前的通用台账：征服奖励的 rewards.unlocks 写此池，消费端
+## （建筑可建集等）按 id 查询。开局基线见 STARTING_UNLOCKS。
+var unlocks: Dictionary = {}
+
+## 开局已获解锁/科技 id（基线）：门禁只挡"未获"项，基线保证门禁引入前后开局
+## 可建集不变（当前唯一受门禁的现役建筑是 tech_military_1 的兵营）。
+## 科技系统实装（config/tech）后本基线随科技表迁出。
+const STARTING_UNLOCKS: Array[String] = ["tech_military_1"]
 
 ## ── 步行旅行队列（F6/E5，瞬态不进存档——读档恒回出发聚落）──
 ## 途经道路段序列（按行进序）：[{road_id, road(道路数据条目), from_map_id, to_map_id}]。
@@ -59,7 +71,41 @@ func start_new_run() -> void:
 	run_seed = randi()
 	visited_settlements = {}
 	territories = {}
+	unlocks = {}
 	reset_walk()
+
+
+## 是否已获某解锁/科技 id。基线恒成立——不依赖 start_new_run/读档是否已跑，
+## 测试与工具直达（只 new 出 WorldState 环境）判定一致
+func has_unlock(unlock_id: String) -> bool:
+	if unlock_id.is_empty():
+		return false
+	return unlocks.has(unlock_id) or STARTING_UNLOCKS.has(unlock_id)
+
+
+## 授予解锁/科技（幂等）。首次授予返回 true——调用方据此决定是否广播/提示
+func grant_unlock(unlock_id: String) -> bool:
+	if unlock_id.is_empty():
+		return false
+	var is_new := not has_unlock(unlock_id)
+	unlocks[unlock_id] = true
+	return is_new
+
+
+## 已获解锁/科技 id（含基线；基线在前、其余按字典序，供展示与断言稳定比对）
+func get_unlock_ids() -> Array[String]:
+	var out: Array[String] = []
+	for id in STARTING_UNLOCKS:
+		out.append(id)
+	var rest: Array[String] = []
+	for id in unlocks.keys():
+		var s := String(id)
+		if not out.has(s):
+			rest.append(s)
+	rest.sort()
+	for s in rest:
+		out.append(s)
+	return out
 
 
 ## 清空步行队列（步行完成/读档/新开局）
@@ -283,6 +329,7 @@ func get_save_data() -> Dictionary:
 		"run_seed": run_seed,
 		"visited_settlements": visited_settlements.keys(),
 		"territories": territories,
+		"unlocks": get_unlock_ids(),
 		"stickmen": WorldStateSerializer.serialize_dict(stickmen, WorldStateSerializer.stickman_to_dict),
 		"organizations": WorldStateSerializer.serialize_dict(organizations, WorldStateSerializer.organization_to_dict),
 		"regions": WorldStateSerializer.serialize_dict(regions, WorldStateSerializer.region_to_dict),
@@ -311,7 +358,15 @@ func load_save_data(data: Dictionary) -> void:
 			"state": int(v.get("state", 0)),
 			"garrison_losses": int(v.get("garrison_losses", 0)),
 			"control_progress": float(v.get("control_progress", 100.0)),
+			"owner": str(v.get("owner", "")),
+			"faction": str(v.get("faction", "")),
 		}
+	# 解锁池：旧档无 unlocks 字段时为空（基线经 has_unlock 恒生效，不靠存档补齐）
+	unlocks = {}
+	for uid in data.get("unlocks", []):
+		var s := str(uid)
+		if not s.is_empty():
+			unlocks[s] = true
 	reset_walk()  # 步行队列瞬态不进存档——读档恒从聚落出发
 	stickmen = WorldStateSerializer.deserialize_dict(data.get("stickmen", {}), WorldStateSerializer.stickman_from_dict)
 	organizations = WorldStateSerializer.deserialize_dict(data.get("organizations", {}), WorldStateSerializer.organization_from_dict)

@@ -16,8 +16,6 @@ extends Node
 ## （faction 1），败仗 = 玩家侧全灭/撤离，不判负——守军战损持久化（车轮战）、
 ## 玩家传回村A 可再征。
 
-## region_owner_changed 的玩家侧归属标识（P0 无接收端；§9.1 语义：发 tile 级 id）
-const PLAYER_OWNER_ID := "player"
 ## 败仗回村（game_root._register_default_maps 的注册 id；expansion 不引 world 常量）
 ## 2026-09-14 启动直连：家图 = HD-2D 主街 hd2d_street
 const HOME_MAP_ID := "hd2d_street"
@@ -92,19 +90,19 @@ func capture_territory(territory_id: String) -> void:
 	if _get_state(territory_id) == TerritoryRegistry.State.CAPTURED:
 		return  # 幂等（测试直达与 battle_ended 双路径）
 	var row: Dictionary = _registry.get_territory(territory_id)
-	var record: Dictionary = WorldState.territories.get(territory_id, {})
 	var state: Dictionary = TerritoryRegistry.initial_state()
-	state["garrison_losses"] = int(record.get("garrison_losses", 0)) if record is Dictionary else 0
+	state["garrison_losses"] = _registry.get_garrison_losses(territory_id)
 	state["state"] = TerritoryRegistry.State.CAPTURED
+	state["owner"] = TerritoryRegistry.PLAYER_OWNER_ID
+	state["faction"] = TerritoryRegistry.PLAYER_FACTION_ID
 	WorldState.territories[territory_id] = state
-	_grant_rewards(territory_id, row)
+	var loot := _grant_rewards(row)
 	EventBus.territory_state_changed.emit(territory_id, TerritoryRegistry.State.CAPTURED)
-	# §9.1 P 社化预留：发 tile 级 id（P0 一座据点占一个 tile）；P0 无接收端
-	EventBus.region_owner_changed.emit(String(row.get("tile_key", "")), PLAYER_OWNER_ID)
+	# §9.1 P 社化预留：发 tile 级 id（P0 一座据点占一个 tile）；疆域表现消费端读真值
+	EventBus.region_owner_changed.emit(String(row.get("tile_key", "")), TerritoryRegistry.PLAYER_OWNER_ID)
 	if _api != null and _api.has_signal("territory_captured"):
 		_api.territory_captured.emit(territory_id, row.get("rewards", {}))
-	if EventBus.has_signal("ui_notification"):
-		EventBus.ui_notification.emit("征服", "%s已臣服" % String(row.get("name_zh", "")), "info")
+	_notify_capture(row, loot)
 	_check_conquest_completed()
 
 
@@ -229,12 +227,11 @@ func _on_battle_ended(battle_id: String, victory: bool) -> void:
 	# 败仗不判负：守军战损持久化（车轮战），玩家传回村A 可再征（架构 §三败仗路径）
 	var losses := _count_losses(campaign.get("garrison", []))
 	if losses > 0:
-		var record: Dictionary = WorldState.territories.get(territory_id, {})
 		var state: Dictionary = TerritoryRegistry.initial_state()
 		state["state"] = _get_state(territory_id)
-		state["garrison_losses"] = int(record.get("garrison_losses", 0)) \
-				if record is Dictionary else 0
-		state["garrison_losses"] += losses
+		state["garrison_losses"] = _registry.get_garrison_losses(territory_id) + losses
+		state["owner"] = _registry.get_owner(territory_id)
+		state["faction"] = _registry.get_faction(territory_id)
 		WorldState.territories[territory_id] = state
 	if EventBus.has_signal("ui_notification"):
 		var name_zh := String(_registry.get_territory(territory_id).get("name_zh", territory_id))
@@ -267,19 +264,46 @@ func _count_losses(units: Array) -> int:
 
 # ─────────────────────────────── 收益与通关 ─────────────────────────────
 
-## 奖励发放：资源入账（与建造同池可直接消费）+ 解锁广播（消费端各系统自听）
-func _grant_rewards(territory_id: String, row: Dictionary) -> void:
+## 奖励发放：资源入账（与建造同池可直接消费）+ 解锁入池（WorldState.unlocks 台账）+
+## unlock_granted 广播（**只广播新获项**——重复占领/读档重放不再提示）。
+## 返回实际入账明细 {"resources": {res_id: amount}, "unlocks": [id]}（与配置 rewards
+## 同形，供 api.describe_loot 直接拼通告；解锁项的中文名由消费端自报）
+func _grant_rewards(row: Dictionary) -> Dictionary:
 	var rewards: Dictionary = row.get("rewards", {}) if row.get("rewards", {}) is Dictionary else {}
 	var resources: Dictionary = rewards.get("resources", {}) \
 			if rewards.get("resources", {}) is Dictionary else {}
 	var name_zh := String(row.get("name_zh", ""))
+	var granted_res: Dictionary = {}
 	for res_id in resources:
+		var amount := float(resources[res_id])
+		granted_res[String(res_id)] = amount
 		if _resources_api != null and _resources_api.has_method("produce"):
-			_resources_api.produce(String(res_id), float(resources[res_id]),
+			_resources_api.produce(String(res_id), amount,
 					REWARD_REGION, "占领奖励:%s" % name_zh)
 	var unlocks: Array = rewards.get("unlocks", []) if rewards.get("unlocks", []) is Array else []
+	var granted_unlocks: Array[String] = []
 	for unlock_id in unlocks:
-		EventBus.unlock_granted.emit(String(unlock_id))
+		var id := String(unlock_id)
+		if id.is_empty():
+			continue
+		granted_unlocks.append(id)
+		if WorldState.grant_unlock(id):
+			EventBus.unlock_granted.emit(id)
+	return {"resources": granted_res, "unlocks": granted_unlocks}
+
+
+## 占领通告（奖励可见）：一条通知把"谁臣服 + 到手什么"说全，不堆多条提示。
+## 文案拼装归 api（describe_loot），本处只组装标题与尾句
+func _notify_capture(row: Dictionary, loot: Dictionary) -> void:
+	if EventBus == null or not EventBus.has_signal("ui_notification"):
+		return
+	var tail := ""
+	if _api != null and _api.has_method("describe_loot"):
+		var line: String = _api.describe_loot(loot)
+		if not line.is_empty():
+			tail = "——" + line
+	EventBus.ui_notification.emit("征服",
+			"%s 已臣服%s" % [String(row.get("name_zh", "")), tail], "info")
 
 
 ## 通关判定：全部 CAPTURED → conquest_completed（通关结算 UI 归批次 C6 消费）

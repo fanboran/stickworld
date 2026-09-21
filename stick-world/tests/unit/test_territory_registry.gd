@@ -83,16 +83,24 @@ func _test_state_normalize() -> void:
 	_runner.assert_equal(int(init["state"]), TerritoryRegistry.State.HOSTILE, "初始态 HOSTILE")
 	_runner.assert_equal(int(init["garrison_losses"]), 0, "初始战损 0")
 	_runner.assert_approx(float(init["control_progress"]), 100.0, 0.001, "控制度满值（§9.1 P0 恒 100）")
+	_runner.assert_equal(String(init["owner"]), "", "初始无归属（owner 空）")
+	_runner.assert_equal(String(init["faction"]), "", "初始无势力映射（faction 空）")
 	# JSON 往返：int 序列化后 parse 回 float，normalize 整型还原
-	var captured := {"state": TerritoryRegistry.State.CAPTURED, "garrison_losses": 2, "control_progress": 100.0}
+	var captured := {
+		"state": TerritoryRegistry.State.CAPTURED, "garrison_losses": 2, "control_progress": 100.0,
+		"owner": TerritoryRegistry.PLAYER_OWNER_ID, "faction": TerritoryRegistry.PLAYER_FACTION_ID,
+	}
 	var roundtrip: Variant = JSON.parse_string(JSON.stringify(captured))
 	var norm: Dictionary = TerritoryRegistry.normalize_state(roundtrip)
 	_runner.assert_true(norm["state"] is int, "state 整型还原")
 	_runner.assert_equal(int(norm["state"]), TerritoryRegistry.State.CAPTURED, "state 值保持 CAPTURED")
 	_runner.assert_true(norm["garrison_losses"] is int, "garrison_losses 整型还原")
 	_runner.assert_equal(int(norm["garrison_losses"]), 2, "garrison_losses 值保持")
+	_runner.assert_equal(String(norm["owner"]), "player", "归属 owner 往返保持")
+	_runner.assert_equal(String(norm["faction"]), "fac_player", "势力 faction 往返保持")
 	# 部分缺失/非法输入回落规范形，不炸
 	var partial: Dictionary = TerritoryRegistry.normalize_state({"state": 1})
 	_runner.assert_equal(int(partial["garrison_losses"]), 0, "缺失字段补缺省")
+	_runner.assert_equal(String(partial["owner"]), "", "缺失归属补空串")
 	_runner.assert_true(TerritoryRegistry.normalize_state("junk") == TerritoryRegistry.initial_state(), "非字典输入回落初始态")
 	_runner.assert_true(TerritoryRegistry.normalize_state(null) == TerritoryRegistry.initial_state(), "null 输入回落初始态")

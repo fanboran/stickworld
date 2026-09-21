@@ -270,7 +270,7 @@ variables = {
 			"interior_mode": 0,
 			"mega_interior_map_id": null,
 			"description": "上面能放一堆器械的大墙",
-			"unlocked_by_tech": null,
+			"unlocked_by_tech": "unlock_wall_tier3",
 			"wall_tier": 3,
 			"can_stand_on": true,
 			"is_gate": false
@@ -350,7 +350,7 @@ variables = {
 			"interior_mode": 0,
 			"mega_interior_map_id": null,
 			"description": "厚石墙仓储建筑，储重物抗风雪",
-			"unlocked_by_tech": null,
+			"unlocked_by_tech": "unlock_stone_warehouse",
 			"wall_tier": null,
 			"can_stand_on": null,
 			"is_gate": null

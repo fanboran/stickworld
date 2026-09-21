@@ -114,9 +114,12 @@ extends Node
 # new_state 取 TerritoryRegistry.State（int 广播，core 不依赖模块类）
 @warning_ignore("unused_signal") signal territory_state_changed(territory_id: String, new_state: int)
 # 地块归属变更：ConquestManager -> 战略图政治模式聚落/地块染色（世界地图数据流 §7.3
-# 契约的发射方落实）；region_id 发 tile 级 id（架构 §9.1 P 社化预留：据点=地块入口，归属按面建模）
+# 契约的发射方落实）；region_id 发 tile 级 id（架构 §9.1 P 社化预留：据点=地块入口，归属按面建模）；
+# new_owner 取值同 WorldState.territories[].owner（TerritoryRegistry.PLAYER_OWNER_ID="player"）
 @warning_ignore("unused_signal") signal region_owner_changed(region_id: String, new_owner: String)
-# 解锁发放：ConquestManager -> 建筑系统/装备系统等（各系统自听此信号；P0 示例：箭塔建筑型号）
+# 解锁发放：ConquestManager -> 各消费端自听（设计 04-科技系统 §二「科技随征服到手」；
+# 只发新获项，重复占领不再广播）。现役消费端：建筑可建集门禁（ConstructionManager 按
+# WorldState.unlocks 判定 + BuildMenu 重刷列表）；新解锁项入 WorldState.unlocks 台账
 @warning_ignore("unused_signal") signal unlock_granted(unlock_id: String)
 
 # ─────────────────────────────── UI 通用信号 ───────────────────────────────

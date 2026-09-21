@@ -10,7 +10,7 @@ extends Node
 ##   新开局（落村A、领地表空、api 骨架就绪）
 ##   → 征伐黑石营地（守军 3+敌将，全灭收束）→ 占领 + 资源入账 + 广播
 ##   → 征伐赤岭寨（杀 2 守军后玩家侧全灭 = 败仗）→ 守军战损持久化 + 自动回村
-##   → 再征赤岭寨（车轮战扣减：实刷 3 守军 + 敌将）→ 占领 + 解锁广播
+##   → 再征赤岭寨（车轮战扣减：实刷 3 守军 + 敌将）→ 占领 + 解锁广播（石造仓库门禁放行）
 ##   → 征伐铁腕要塞 → 3/3 全占 → conquest_completed → 通关结算卡弹出可见。
 ##
 ## 确定性手法（批次 4/5 测试坑总结，同 test_conquest_flow）：
@@ -148,6 +148,9 @@ func _test_first_capture() -> void:
 	_runner.assert_true(owner_ok, "region_owner_changed 捕获 (city_1035, player)，实得 %s" % [str(_sig_owner)])
 	_runner.assert_true(_target_captured(TID_1), "list_targets 中黑石营地 captured=true")
 	_runner.assert_false(_api.is_all_captured(), "尚有 2 座未占，不应判通关")
+	# 奖励闭环消费端基线：石造仓库由赤岭寨解锁，此刻应仍被门禁挡着
+	_runner.assert_false(_game_root.get_construction_api().is_def_unlocked("stone_warehouse"),
+			"开局石造仓库未解锁（门禁基线）")
 
 
 ## 用例 3「再征第 2 座（车轮战）」：赤岭寨先打一场败仗（杀 2 守军后玩家侧全灭）
@@ -205,8 +208,15 @@ func _test_attrition_recapture() -> void:
 			"赤岭寨应转 CAPTURED(1)")
 	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 40.0, 0.001, "木奖励 +40 入账")
 	_runner.assert_approx(_resources.get_stock("res_iron_ingot") - iron0, 20.0, 0.001, "铁锭奖励 +20 入账")
-	_runner.assert_true(_sig_unlock.has("unlock_arrow_tower"),
-			"unlock_granted 应广播 unlock_arrow_tower，实得 %s" % str(_sig_unlock))
+	_runner.assert_true(_sig_unlock.has("unlock_stone_warehouse"),
+			"unlock_granted 应广播 unlock_stone_warehouse，实得 %s" % str(_sig_unlock))
+	# 奖励闭环打通：解锁项入池（WorldState.unlocks）且建筑门禁当场放行
+	_runner.assert_true(WorldState.has_unlock("unlock_stone_warehouse"),
+			"解锁项入 WorldState.unlocks 台账")
+	_runner.assert_true(_game_root.get_construction_api().is_def_unlocked("stone_warehouse"),
+			"占领赤岭寨后石造仓库解锁（消费端门禁放行）")
+	_runner.assert_false(_game_root.get_construction_api().is_def_unlocked("wall_tier3"),
+			"大型城墙由铁腕要塞解锁，此刻仍锁着")
 
 
 ## 用例 4「征伐第 3 座 → 通关」：铁腕要塞占领 → conquest_completed 恰发一次
@@ -383,3 +393,4 @@ func _cleanup() -> void:
 	if _cb_done.is_valid() and _api != null and _api.conquest_completed.is_connected(_cb_done):
 		_api.conquest_completed.disconnect(_cb_done)
 	WorldState.territories = {}
+	WorldState.unlocks = {}

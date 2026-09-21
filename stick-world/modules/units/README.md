@@ -1,16 +1,19 @@
 # units：火柴人实体系统
 
-> 火柴人完整单兵栈：矢量骨骼渲染 + 物理实体 + 行为 AI。
-> - `scripts/rig/`：Skeleton2D 骨架、矢量肢体/批渲染/小兵代理、动画状态机、LOD 节流
-> - `scripts/stickman_entity.gd` + `scripts/entity/`：CharacterBody2D 外壳与子组件（生命/武器/交互/血条/状态效果）
+> 火柴人完整单兵栈的**实体与行为侧**：物理实体 + 行为 AI。
+> - `scripts/stickman_entity.gd` + `scripts/entity/`：CharacterBody2D 外壳与子组件（生命/武器/交互/状态效果）
 > - `scripts/ai/`：行为状态机 + 兵种行为档案
-> - `scenes/` `animations/`：实体场景与动画资源
+> - `scenes/`：实体场景
+>
+> 渲染骨架（骨骼/动画/描边/血条/crowd 合批/武器表现）已拆分至 [modules/stick_rig/](../stick_rig/README.md)（L1），
+> 跨模块取用经 `../stick_rig/api.gd`（StickRigAPI）；`WeaponMount.WeaponType / WEAPON_SCENE_PATHS`
+> 为其 const 转发，旧引用点不变。
 >
 > 对外契约见 [api.gd](api.gd)（UnitsAPI）：外部实例化实体一律用 `UnitsAPI.STICKMAN_ENTITY_SCENE`，
-> 其余经全局 class_name（StickmanEntity / StickmanRig / HealthComponent…）的公共方法交互。
-> 常用出口：StickmanRig 的 `play()` / `animation_finished` / `animation_event` 信号，
-> StickmanEntity 的 `set_possessed` / `get_facing` / `ai_move` / `set_ground_constraints` /
-> `set_formation_system` / `set_battle_sim`。模块自身不向 EventBus 发射信号。
+> 其余经全局 class_name（StickmanEntity / HealthComponent…）的公共方法交互。
+> 常用出口：StickmanEntity 的 `set_possessed` / `get_facing` / `ai_move` / `set_ground_constraints` /
+> `set_formation_system` / `set_battle_sim`；骨架动画经 StickRigAPI 的 `play()` /
+> `animation_finished` / `animation_event`。模块自身不向 EventBus 发射信号。
 >
 > 系统级设计规范：[docs/技术/架构/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗架构.md) §7、
 > [docs/技术/架构/场景与战斗/战斗与AI.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗/战斗与AI.md)。
@@ -22,35 +25,18 @@
 ```
 modules/units/
 ├── api.gd                                # 对外 API（UnitsAPI：实体场景常量 + 契约说明）
-├── animations/                           # Animation 资源（55 个 .tres：idle/walk/run/attack*/dead*/hit*/block*/build/heal…；bake_anims 产物）
-├── assets/textures/weapons/              # 武器贴图（剑/矛/弓/盾/镐/法杖/箭）
 ├── scenes/
-│   ├── stickman_entity.tscn              # 实体场景（RigHost + Collider + AIController + HealthComponent + Hitbox + WeaponMount + Range；运行时再装配 Visual/Interaction/血条）
-│   ├── stickman_test.tscn                # 渲染壳（rig + 调试控制器；HD-2D 角色通道复用取 rig）
-│   └── components/                       # 武器/盾/箭矢场景（GripPoint 对齐握把）
-├── shaders/
-│   ├── stickman_outline.gdshader         # 邻接融合描边 Outline Pass（解码 ID + 查邻接表定融合/分隔）
-│   └── stickman_outline_id.gdshader      # ID Pass（part_id 编码进 alpha）
+│   ├── stickman_entity.tscn              # 实体场景（RigHost + Collider + AIController + HealthComponent + Hitbox + WeaponMount + Range；运行时再装配 Visual/Interaction/血条；骨架子树实例化 stick_rig 场景）
+│   └── components/
+│       └── arrow.tscn                    # 箭矢投影物场景（GripPoint 语义；武器/盾表现组件在 stick_rig）
 └── scripts/
     ├── stickman_entity.gd                # StickmanEntity：物理外壳（附身输入/AI 移动/地面约束/群体分离/受击反馈/尸体消隐/接触阴影/平衡数据装载）
-    ├── rig/                              # 渲染骨架管线
-    │   ├── stickman_skeleton.gd          # 骨骼数据（23 骨，含 weapon_hand/shield_hand 武器骨）+ 矢量肢体构建 + 全局两遍渲染
-    │   ├── stickman_rig.gd               # StickmanRig 主控（动画树推进/事件派发/LOD 节流/低帧分桶/小兵代理切换/描边缩放补偿）
-    │   ├── stickman_anims.gd             # 动画注册表（状态机装配/武器→动画映射表/死亡受击变体池/事件元数据）
-    │   ├── stickman_batch_rig.gd         # 批渲染层：每单位 4 个 MultiMesh 桶替代约 30 个矢量部件（开关 STICK_BATCH_RIG）
-    │   ├── crowd_renderer.gd             # 小兵渲染代理：全战场共享 4 桶 MMI + 代码插值动画（开关 STICK_CROWD）
-    │   ├── stickman_outline.gd           # 邻接融合描边装配（供 HD-2D 角色通道的 CanvasGroup 用）
-    │   ├── procedural_overlay.gd         # 程序化叠加层（呼吸/移动惯性/挥击回弹/受击抖动）
-    │   ├── crowd_bar_wobble.gdshader     # 小兵代理血条桶着色器
-    │   ├── crowd_weapon_atlas.gdshader   # 小兵代理武器图集桶着色器
-    │   └── stickman_test.gd              # 渲染壳调试控制器（实体场景实例化时禁用其脚本）
     ├── entity/
     │   ├── visual_controller.gd          # 动画播放组件（搬运映射/动作锁定/待机变体/受击插播/持盾姿态/头顶进度条）
     │   ├── interaction_controller.gd     # 按 F 交互（工地交付与建造/仓库取放/兵营招兵/资源采集）+ 交互提示弹窗
     │   ├── health_component.gd           # HP/士气组件（died/damaged/healed/morale_changed 信号）
-    │   ├── health_bar_indicator.gd       # 头顶阵营点 + 手绘血条（满血=点、掉血=条，自绘无资源依赖）
     │   ├── action_progress_indicator.gd  # 头顶动作进度条（搬运/建造，行为脚本经 set_action_progress 更新）
-    │   ├── weapon_mount.gd               # 武器挂载/攻击执行/命中帧事件/格挡/放箭/召唤与法术
+    │   ├── weapon_mount.gd               # 武器挂载/攻击执行/命中帧事件/格挡/放箭/召唤与法术（类型/场景映射经 StickRigAPI 转发）
     │   ├── block_resolver.gd             # 盾牌格挡纯判定（正面扇区 + 概率掷骰，无状态）
     │   ├── hitstop_controller.gd         # 命中顿帧（仅附身命中触发，全局最小间隔节流）
     │   ├── hitbox.gd                     # 受击判定 Area2D + 碰撞层 bit 常量
@@ -65,7 +51,6 @@ modules/units/
     │   ├── behavior_move.gd 等 10 个     # move/idle/follow/retreat/seek_cover/heal/harvest/haul/wander/work
     │   └── behavior_profiles.gd          # 兵种行为档案（代码基线 + 代码兵种覆盖 + BalanceConfig 行覆盖，三层合并）
     └── weapons/
-        ├── stickman_weapon.gd            # 武器挂到手骨（双持：右手 weapon_hand / 左手 shield_hand）
         └── arrow_projectile.gd           # 箭矢（抛物线弹道/爆头/插身/插地/近失判定/飞行时间伤害衰减）
 ```
 
@@ -73,15 +58,18 @@ modules/units/
 
 ## 依赖
 
-- `modules/combat/`（唯一跨模块代码出口）：TargetFinder（combat 对外公共目标选择类）——behavior_attack / behavior_heal / weapon_mount 三处经行内 `audit-exempt` 标记路径 preload。除此之外不 preload combat 任何内部文件：编队职责走 duck 协议（FormationSystem 实例由装配层经 `set_formation_system` 注入，`is_work_allowed`/`is_unit_squad_following` 未注入时放行），阵营姿态常量与工作类型常量在 ai_controller.gd 持本地副本。
+- `modules/tactics/`（目标选择）：behavior_attack / behavior_heal / weapon_mount 经 `../tactics/api.gd` 契约出口 preload TargetFinder（Finder 常量）。编队职责走 duck 协议（FormationSystem 实例由装配层经 `set_formation_system` 注入，`is_work_allowed`/`is_unit_squad_following` 未注入时放行），阵营姿态常量与工作类型常量在 ai_controller.gd 持本地副本。
+- `modules/combat/`（单向）：stickman_entity 的 `var _sim: BattleSim` 类型注解（批模拟接管）与 arrow_projectile 的 DamagePipeline 伤害结算——单向合法边，无环。
+- `modules/stick_rig/`（渲染骨架，L1）：骨架/动画/描边/血条/武器表现组件，经 `../stick_rig/api.gd`（StickRigAPI）取脚本/场景/武器类型映射。
 - 平衡数据（BalanceConfig autoload，缺载回退代码默认）：`units.stickmen`（兵种 base_hp / base_attack，按 `stickman_def_id` 取行）、`balance.variables`（var_walk_speed / var_run_speed / var_base_scale）、`ai.behavior_profiles`（兵种档案行覆盖）、`ai.personality`（retreat_chance 撤退掷骰概率）。
-- 离线管线 `tools/baking/`：bake_anims.tscn 烘焙 animations/*.tres；spine_import.gd 导出动画事件元数据（Hit/Sound/Drawn/Mine）；extract_weapons.gd 裁剪武器贴图。
+- 离线管线 `tools/baking/`：bake_anims.tscn 烘焙 stick_rig/animations/*.tres；spine_import.gd 导出动画事件元数据（Hit/Sound/Drawn/Mine）；extract_weapons.gd 裁剪武器贴图（产出 stick_rig/assets/textures/weapons/）。
 
-### 与 combat 模块的边界
+### 与 combat / tactics 模块的边界
 
-- units → combat：只有 TargetFinder 一条路径（见上）。个体 AI 不感知 TeamAi/TaskBoard；撤退掷骰概率经 `BehaviorProfiles.get_personality_retreat_chance()` 读 BalanceConfig，不直连 combat 代码。
-- combat → units：BattleInstance 经 `scripts/rig/crowd_renderer.gd` 挂小兵渲染代理、经 `set_battle_sim()` 把参战实体降级为渲染/受击代理；FormationSystem/TeamAi 不被 units 引用，靠装配层注入 + duck 协议闭环。
-- 依赖现状（audit_deps 口径）：combat ↔ units 存在二元环——units→combat 的三处 TargetFinder audit-exempt preload，与 combat→units 的 crowd_renderer preload；收敛工作项见 docs/项目/待办事项.md AR 系列。
+- units → tactics：目标选择唯一出口（TargetFinder 经 api 常量）。个体 AI 不感知 TeamAi/TaskBoard；撤退掷骰概率经 `BehaviorProfiles.get_personality_retreat_chance()` 读 BalanceConfig，不直连 combat 代码。
+- units → combat（单向）：BattleSim 类型注解与 DamagePipeline 结算（见上）。
+- combat → units：BattleInstance 经 `stick_rig` 的 crowd_renderer 挂小兵渲染代理、经 `set_battle_sim()` 把参战实体降级为渲染/受击代理；FormationSystem/TeamAi 不被 units 引用，靠装配层注入 + duck 协议闭环。
+- 依赖现状（audit_deps 口径）：combat⇄units 二元环已清偿（AR-2，随 tactics/stick_rig 域拆分），现为单向 units→combat。
 
 ---
 
@@ -125,7 +113,7 @@ modules/units/
 ### 扩展指引：加一个新姿态动画
 
 1. `animations/<名>.tres`：动画资源（骨骼 rotation 轨道；tools/baking/bake_anims.tscn 烘焙；一次性动画 LOOP_NONE）。
-2. `scripts/rig/stickman_anims.gd`：加常量 → `setup_player` 里 `_load_anim` 入库 → `setup_tree` 建 state 与过渡。一次性动画必须 AT_START 切入（sync=false + reset=true），否则会从旧动画进度映射进来、越过内嵌事件。
+2. `../stick_rig/scripts/stickman_anims.gd`：加常量 → `setup_player` 里 `_load_anim` 入库 → `setup_tree` 建 state 与过渡。一次性动画必须 AT_START 切入（sync=false + reset=true），否则会从旧动画进度映射进来、越过内嵌事件。
 3. 消费侧三选一：实体组件（visual_controller.gd 播放与播完回切）、行为脚本（如 play_attack）、或档案池键（behavior_profiles 的 attack_pool / stand_pool / block_* 系，按武器类型随机抽取）。
 4. 命中/音效时机写成动画元数据事件（Hit/Sound/…），消费方经 `StickmanRig.animation_event` 信号或 `get_anim_event_time` 读真值，禁止按动画进度比例拍脑袋折算。
 5. 单元套件：tests/unit/test_stickman_anims.gd（注册于 tests/batch_runner.gd 的 UNIT_SCRIPTS 清单）。

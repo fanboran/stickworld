@@ -65,8 +65,8 @@ extends RefCounted
 ##     softmax_weight_scale / softmax_temperature / weight_calculate_enabled /
 ##     cooldown_enabled 全档案化（代码默认仅兜底）。
 
-## 同模块号令脚本（行为名 -> OrderType 映射消费；combat 域内 preload 惯例）
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+## 号令脚本（行为名 -> OrderType 映射消费；tactics/api.gd 契约出口）
+const ScriptTacticalOrders := preload("res://modules/tactics/api.gd").Orders
 
 # ─────────────────────── W1 档案键代码默认（真值在 personality.tres，仅兜底）───────────────────────
 ## softmax_enabled=false 走 argmax 退化路径（与升级前逐位一致）

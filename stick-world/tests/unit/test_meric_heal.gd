@@ -7,12 +7,12 @@ signal test_done(code: int)
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+const ScriptTargetFinder := preload("res://modules/tactics/scripts/target_finder.gd")
 const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 const ScriptWeaponMount := preload("res://modules/units/scripts/entity/weapon_mount.gd")
-const ScriptAnims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+const ScriptAnims := preload("res://modules/stick_rig/scripts/stickman_anims.gd")
 
 var _runner: TestRunner
 

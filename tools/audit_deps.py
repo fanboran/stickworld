@@ -37,15 +37,14 @@ ASSEMBLER = {"modules/world/scripts/setup/system_setup.gd"}
 # ── 棘轮基线（在册债务，只降不升；修复后应回填收缩）─────────────────────────
 # 二元环以字典序小者开头登记，与输出规范化一致
 KNOWN_CYCLES = {
-    ("combat", "units"),
     ("expansion", "world"),
     ("organization", "world"),
     ("town_life", "units"),
     ("world", "world_map"),
 }
-PRELOAD_VIOL_BASELINE = 9   # AR-1 在册越界 preload 数
-STRING_VIOL_BASELINE = 3    # 裸字符串跨模块越界（debug_gui×2 下行 / hd2d×1 测试场景，
-                            # 均低危下行方向，AR-1 随改随迁；新增即 FAIL）
+PRELOAD_VIOL_BASELINE = 6   # 在册越界 preload（hd2d→ui_global 云朵 / world→hd2d 场景 /
+                            # demo_quest→ui_global×4；AR-1 已清偿后收缩）
+STRING_VIOL_BASELINE = 2    # 裸字符串跨模块越界（debug_gui×2 下行低危；AR-1 清偿后收缩）
 
 
 def module_of(path: str):

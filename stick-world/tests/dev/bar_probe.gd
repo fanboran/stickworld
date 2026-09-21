@@ -12,9 +12,9 @@ extends Node2D
 ## - 无 shader TIME 依赖（wobble 数值 CPU 预烘进网格）。
 ## 身体/阴影/武器 MMI 在此隐藏——只留血条 4 组桶。
 
-const CrowdRenderer := preload("res://modules/units/scripts/rig/crowd_renderer.gd")
-const BatchRig := preload("res://modules/units/scripts/rig/stickman_batch_rig.gd")
-const Indicator := preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
+const CrowdRenderer := preload("res://modules/stick_rig/scripts/crowd_renderer.gd")
+const BatchRig := preload("res://modules/stick_rig/scripts/stickman_batch_rig.gd")
+const Indicator := preload("res://modules/stick_rig/scripts/health_bar_indicator.gd")
 
 const RATIOS := [1.0, 0.8, 0.6, 0.4, 0.2, 0.05]
 const ROW_A := 120.0

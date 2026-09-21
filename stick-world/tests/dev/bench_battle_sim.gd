@@ -20,7 +20,7 @@ extends Node
 
 const _GameRootScene: PackedScene = preload("res://modules/world/scenes/game_root.tscn")
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
-const _TargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+const _TargetFinder := preload("res://modules/tactics/scripts/target_finder.gd")
 const _BehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
 # ── 基准配置 ──

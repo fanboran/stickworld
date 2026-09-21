@@ -36,9 +36,9 @@ var BASE_SCALE: float = 0.5
 ## 主手武器类型 -> 攻击动画名：单一真相源在 StickmanAnims.WEAPON_ATTACK_ANIM。
 ## 表现侧（本文件 play_attack）与战斗侧（weapon_mount 订阅命中帧事件）共用同一张表，
 ## 避免"播矛刺动画、却按剑的命中帧结算"的错配。
-const WEAPON_ATTACK_ANIM: Dictionary = preload("res://modules/units/scripts/rig/stickman_anims.gd").WEAPON_ATTACK_ANIM
+const WEAPON_ATTACK_ANIM: Dictionary = preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT.WEAPON_ATTACK_ANIM
 ## 动画名/变体池（死亡与受击变体选择用）
-const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+const Anims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 ## 状态效果组件脚本（BURN/POISON/SLOW/STUN；显式 preload 防 headless class_name 未注册）
 const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
 
@@ -48,7 +48,7 @@ const _VisualControllerScript: GDScript = preload("res://modules/units/scripts/e
 ## 交互控制器组件脚本（按F交互/提示弹窗）
 const _InteractionControllerScript: GDScript = preload("res://modules/units/scripts/entity/interaction_controller.gd")
 ## 头顶血条组件脚本（受击后显示 HP，满血隐藏）
-const _HealthBarScript: GDScript = preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
+const _HealthBarScript: GDScript = preload("res://modules/stick_rig/api.gd").HEALTH_BAR_SCRIPT
 ## 运动助手脚本（移动/分离/加减速，方法体所在）
 const _MotionScript: GDScript = preload("res://modules/units/scripts/entity/entity_motion.gd")
 ## 附身输入助手脚本（玩家控制，方法体所在）

@@ -20,7 +20,7 @@ func _ready() -> void:
 	var entity: Node2D = STICKMAN_SCENE.instantiate()
 	world.add_child(entity)
 	entity.position = Vector2(250, 990)
-	var overlay_script: GDScript = preload("res://modules/units/scripts/rig/procedural_overlay.gd")
+	var overlay_script: GDScript = preload("res://modules/stick_rig/scripts/procedural_overlay.gd")
 	# 测试：禁用描边 shader 看颜色是否正常
 	var rig: Node = entity.get("rig")
 	if rig != null:

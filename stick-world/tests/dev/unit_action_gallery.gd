@@ -21,7 +21,7 @@ extends Node
 ## 热键：ESC 确认后回主菜单（DevSceneEscape 统一弹窗拦截）· R 全员复位（回各兵种持械站姿）· F 全员转向。
 
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
-const _Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+const _Anims := preload("res://modules/stick_rig/scripts/stickman_anims.gd")
 const _MainMenuScene := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 
 ## 武器类型（对齐 WeaponMount.WeaponType 枚举序）
@@ -43,7 +43,7 @@ const UNITS: Array = [
 	{"name": "小护卫 0.65×", "weapon": W_SWORD, "scale": 0.65},
 ]
 
-## 动作分类清单（按钮从上到下逐行展开；动画名对齐 modules/units/animations/*.tres）。
+## 动作分类清单（按钮从上到下逐行展开；动画名对齐 modules/stick_rig/animations/*.tres）。
 ## walk_bvh/walk_heavy 等孤儿资产未被 setup_player 入库，运行时管线播不了，不入列。
 const ACTION_CATEGORIES: Array = [
 	{"cat": "待机", "anims": ["idle", "idle_v2", "idle_spear", "idle_spear_v2", "idle_spear_v3",

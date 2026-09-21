@@ -11,7 +11,7 @@ extends Node
 ## 用户参数（`--` 之后）：
 ##   --only=a,b,c     只转换指定动画（增量，避免整份重建冲掉洗稿成果）
 ##   --out-dir=路径   输出目录覆盖（支持 res:// 与绝对路径，不存在则自动创建；
-##                    缺省写 res://modules/units/animations/。忠实版验收用：
+##                    缺省写 res://modules/stick_rig/animations/。忠实版验收用：
 ##                    --out-dir=res://tools/baking/_faithful 直出未洗稿动画）
 ##
 ## 设计说明：
@@ -26,7 +26,7 @@ extends Node
 ##   - 动画只列"发生变化"的骨骼，未列骨骼保持骨架默认（本项目直立姿势）。
 ##   - 生成动画名对齐 stickman_anims 使用的名字，覆盖旧程序化动画。
 
-const OUTPUT_DIR := "res://modules/units/animations/"
+const OUTPUT_DIR := "res://modules/stick_rig/animations/"
 const SPINE_FILE := "F:/VSCode/game-2-aux/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
 
 ## 实际输出目录（--out-dir 覆盖；缺省 = OUTPUT_DIR，保持现行为不动）
@@ -386,7 +386,7 @@ static func _event_summary(events: Array) -> String:
 
 ## 骨骼路径（相对 AnimationPlayer root_node = StickmanRig/Skeleton2D）
 static func _bone_path(is_pos: bool, bone_key: Variant) -> String:
-	const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
+	const Skeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
 	if is_pos:
 		return "hip:position"
 	var bone_id: int = bone_key

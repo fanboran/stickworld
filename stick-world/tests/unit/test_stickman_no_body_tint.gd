@@ -19,10 +19,10 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 ## batch_runner 收割退出码用（TestRunner.finish_process 依赖本信号）
 signal test_done(code: int)
 
-const RIG_PATH := "res://modules/units/scripts/rig/stickman_rig.gd"
-const RENDERER_PATH := "res://modules/units/scripts/rig/crowd_renderer.gd"
+const RIG_PATH := "res://modules/stick_rig/scripts/stickman_rig.gd"
+const RENDERER_PATH := "res://modules/stick_rig/scripts/crowd_renderer.gd"
 const PROFESSION_PATH := "res://modules/town_life/scripts/profession_registry.gd"
-const SKELETON_PATH := "res://modules/units/scripts/rig/stickman_skeleton.gd"
+const SKELETON_PATH := "res://modules/stick_rig/scripts/stickman_skeleton.gd"
 
 var _runner: TestRunner
 

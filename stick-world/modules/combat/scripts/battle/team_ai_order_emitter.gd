@@ -19,8 +19,8 @@ extends RefCounted
 ## 装配序 query/hooks 先于本类；依赖无环（本类不回依 slot_kernel，重定向由
 ## kernel 调本类）。
 
-## 同模块号令脚本（OrderType 枚举消费；combat 域内 preload 惯例）
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+## 号令脚本（OrderType 枚举消费；tactics/api.gd 契约出口）
+const ScriptTacticalOrders := preload("res://modules/tactics/api.gd").Orders
 ## 同模块任务槽板（KIND_ATTACK 判定消费）
 const ScriptTaskBoard := preload("res://modules/combat/scripts/battle/task_board.gd")
 

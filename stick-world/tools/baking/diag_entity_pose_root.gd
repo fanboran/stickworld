@@ -6,7 +6,7 @@ extends Node
 ## 截图根视口 + 分区域像素包围盒 + 骨骼变换全量打印。
 ## 运行：GODOT --path stick-world res://tools/baking/diag_entity_pose_root.tscn（非 headless）
 
-const Skeleton := preload("res://modules/units/scripts/rig/stickman_skeleton.gd")
+const Skeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
 const ENTITY_SCENE := preload("res://modules/units/scenes/stickman_entity.tscn")
 
 const OUT_DIR := "res://tools/baking/_faithful"

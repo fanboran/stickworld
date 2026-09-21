@@ -13,10 +13,9 @@ extends BehaviorBase
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
 
-# 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）
-# audit-exempt: headless 防御性路径 preload（经 api 转发会重新依赖 class_name 注册，
-# 失去防御意义）；TargetFinder 为 combat 对外公共类型（combat/api.gd 已声明契约）
-const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+# 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）；
+# TargetFinder 为 tactics 对外公共类型（tactics/api.gd 契约出口）
+const ScriptTargetFinder := preload("res://modules/tactics/api.gd").Finder
 ## 兵种行为档案（RWR 式基线+覆盖，见 behavior_profiles.gd）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 

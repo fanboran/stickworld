@@ -17,7 +17,7 @@ const ScriptUtilityScorer := preload("res://modules/combat/scripts/battle/utilit
 const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 const ScriptTaskBoard := preload("res://modules/combat/scripts/battle/task_board.gd")
-const ScriptTacticalOrders := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const ScriptTacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
 
 ## 采样基准种子（"最高权重胜率 / 份额贴合"类用例统一口径，便于对照）
 const SAMPLE_SEED: int = 20260911

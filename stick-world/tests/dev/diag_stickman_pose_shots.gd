@@ -12,7 +12,7 @@ extends Node
 ## 产出：<outdir>/<prefix>_<姿态>_zoom_<档位>.png
 
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
-const _Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+const _Anims := preload("res://modules/stick_rig/scripts/stickman_anims.gd")
 
 ## 武器类型（对齐 WeaponMount.WeaponType 枚举序）
 const W_SWORD: int = 0

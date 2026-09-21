@@ -1,0 +1,70 @@
+[gd_scene format=3 uid="uid://bitpg2trkppie"]
+
+[ext_resource type="Script" uid="uid://cjrg7kwfc7ljw" path="res://modules/stick_rig/scripts/stickman_rig.gd" id="1_rig"]
+[ext_resource type="Script" uid="uid://cnaex1dwul5e3" path="res://modules/stick_rig/scripts/stickman_test.gd" id="2_test"]
+
+[sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_leg_outer"]
+target_nodepath = NodePath("../Node2D/outfoot")
+joint_one_bone_idx = 0
+joint_one_bone2d_node = NodePath("hip/spine_root/thigh_outer")
+joint_two_bone_idx = 1
+joint_two_bone2d_node = NodePath("hip/spine_root/thigh_outer/shin_outer")
+
+[sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_leg_inner"]
+target_nodepath = NodePath("../Node2D/innerfoot")
+joint_one_bone_idx = 3
+joint_one_bone2d_node = NodePath("hip/spine_root/thigh_inner")
+joint_two_bone_idx = 4
+joint_two_bone2d_node = NodePath("hip/spine_root/thigh_inner/shin_inner")
+
+[sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_arm_outer"]
+target_nodepath = NodePath("../Node2D/outhand")
+flip_bend_direction = true
+joint_one_bone_idx = 9
+joint_one_bone2d_node = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer")
+joint_two_bone_idx = 10
+joint_two_bone2d_node = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer")
+
+[sub_resource type="SkeletonModification2DTwoBoneIK" id="SkeletonModification2DTwoBoneIK_arm_inner"]
+target_nodepath = NodePath("../Node2D/innerhand")
+flip_bend_direction = true
+joint_one_bone_idx = 11
+joint_one_bone2d_node = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner")
+joint_two_bone_idx = 12
+joint_two_bone2d_node = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner")
+
+[sub_resource type="SkeletonModificationStack2D" id="SkeletonModificationStack2D_ik"]
+enabled = true
+modification_count = 4
+modifications/0 = SubResource("SkeletonModification2DTwoBoneIK_leg_outer")
+modifications/1 = SubResource("SkeletonModification2DTwoBoneIK_leg_inner")
+modifications/2 = SubResource("SkeletonModification2DTwoBoneIK_arm_outer")
+modifications/3 = SubResource("SkeletonModification2DTwoBoneIK_arm_inner")
+
+[node name="StickmanTest" type="Node2D" unique_id=372756659]
+script = ExtResource("2_test")
+
+[node name="OutlineGroup" type="Node2D" parent="." unique_id=787805134]
+
+[node name="StickmanRig" type="Skeleton2D" parent="OutlineGroup" unique_id=1221827476]
+modification_stack = SubResource("SkeletonModificationStack2D_ik")
+script = ExtResource("1_rig")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="OutlineGroup/StickmanRig" unique_id=726246529]
+
+[node name="AnimationTree" type="AnimationTree" parent="OutlineGroup/StickmanRig" unique_id=1737963116]
+active = false
+
+[node name="Node2D" type="Node2D" parent="OutlineGroup" unique_id=542218933]
+
+[node name="outfoot" type="Marker2D" parent="OutlineGroup/Node2D" unique_id=1500419271]
+position = Vector2(28, 131)
+
+[node name="innerfoot" type="Marker2D" parent="OutlineGroup/Node2D" unique_id=264248036]
+position = Vector2(-22, 131)
+
+[node name="outhand" type="Marker2D" parent="OutlineGroup/Node2D" unique_id=372756660]
+position = Vector2(-20, 112)
+
+[node name="innerhand" type="Marker2D" parent="OutlineGroup/Node2D" unique_id=372756661]
+position = Vector2(24, 115)

@@ -15,13 +15,13 @@ signal test_done(code: int)
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
-const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
-const TargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+const Anims := preload("res://modules/stick_rig/scripts/stickman_anims.gd")
+const TargetFinder := preload("res://modules/tactics/scripts/target_finder.gd")
 const DamagePipeline := preload("res://modules/combat/scripts/battle/damage_pipeline.gd")
 const WeaponMountScript := preload("res://modules/units/scripts/entity/weapon_mount.gd")
 const HealthComponentScript := preload("res://modules/units/scripts/entity/health_component.gd")
 
-const ANIM_DIR := "res://modules/units/animations/"
+const ANIM_DIR := "res://modules/stick_rig/animations/"
 
 ## 解包 Spine 数据里各攻击动画的 Hit 事件真值（秒），用于断言"读的是真值"
 const EXPECTED_HIT_TIME: Dictionary = {
@@ -408,17 +408,17 @@ func _test_headshot_death() -> void:
 ##        bow 为 mesh 精确仿射逆映射。旧链的 grip y 符号反（剑握到刃尖/杖握到尾端），
 ##        旧链 rot 用局部角 84.97 当世界角（剑竖直的假象），2026-08-30 修正钉死。
 const EXPECTED_GRIP: Dictionary = {
-	"res://modules/units/scenes/components/weapon_sword.tscn":
+	"res://modules/stick_rig/scenes/components/weapon_sword.tscn":
 		{"rot": 46.85, "scale": Vector2(0.483, 0.483), "grip": Vector2(4.4, 64.6)},
-	"res://modules/units/scenes/components/weapon_spear.tscn":
+	"res://modules/stick_rig/scenes/components/weapon_spear.tscn":
 		{"rot": 0.71, "scale": Vector2(0.616, 0.631), "grip": Vector2(0.8, 5.5)},
-	"res://modules/units/scenes/components/weapon_pickaxe.tscn":
+	"res://modules/stick_rig/scenes/components/weapon_pickaxe.tscn":
 		{"rot": -33.47, "scale": Vector2(0.511, 0.512), "grip": Vector2(0.3, 63.3)},
-	"res://modules/units/scenes/components/weapon_magicstaff.tscn":
+	"res://modules/stick_rig/scenes/components/weapon_magicstaff.tscn":
 		{"rot": -1.49, "scale": Vector2(0.480, 0.482), "grip": Vector2(1.9, -26.9)},
-	"res://modules/units/scenes/components/weapon_bow.tscn":
+	"res://modules/stick_rig/scenes/components/weapon_bow.tscn":
 		{"rot": 55.61, "scale": Vector2(0.955, 0.965), "grip": Vector2(13.0, -0.8)},
-	"res://modules/units/scenes/components/weapon_shield.tscn":
+	"res://modules/stick_rig/scenes/components/weapon_shield.tscn":
 		{"rot": 3.91, "scale": Vector2(0.631, 0.632), "grip": Vector2(-3.5, 24.2)},
 }
 
@@ -455,7 +455,7 @@ func _test_weapon_grip_data() -> void:
 				"%s GripPoint %s 应落在贴图 %dx%d 内" % [path, grip.position, tex.get_width(), tex.get_height()])
 		inst.free()
 	# 镐贴图 region 防回退：应为 "pickaxe1 (2)"（113x190），不是 "pickaxe"（55x198 狼牙棒）
-	var pick: Texture2D = load("res://modules/units/assets/textures/weapons/pickaxe.png")
+	var pick: Texture2D = load("res://modules/stick_rig/assets/textures/weapons/pickaxe.png")
 	_runner.assert_not_null(pick, "pickaxe.png 应存在")
 	if pick != null:
 		_runner.assert_true(pick.get_width() == 113 and pick.get_height() == 190,

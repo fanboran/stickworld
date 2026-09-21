@@ -29,15 +29,14 @@ extends Node2D
 ## - weapon_block.gd    持盾格挡：三重判定 + blockResetInterval 节流（_block；
 ##                      is_shield_blocking/notify_block_succeeded facade 留本类）
 
-const Anims := preload("res://modules/units/scripts/rig/stickman_anims.gd")
+const Anims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 ## 兵种行为档案（aim_scatter 等按武器类型读取）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 ## 状态效果（法术击晕 STUN 类型引用；显式 preload 防 headless class_name 未注册）
 const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
 ## 目标查找器（AOE 挥击扇形搜索）；显式 preload 防 headless class_name 未注册
-# audit-exempt: headless 防御性路径 preload（经 api 转发会重新依赖 class_name 注册，
-# 失去防御意义）；TargetFinder 为 combat 对外公共类型（combat/api.gd 已声明契约）
-const ScriptTargetFinder := preload("res://modules/combat/scripts/target_finder.gd")
+## （TargetFinder 为 tactics 对外公共类型，tactics/api.gd 契约出口）
+const ScriptTargetFinder := preload("res://modules/tactics/api.gd").Finder
 ## 数值校准助手（static 函数库；WEAPON_DEF_ID 本地整数键先例见该文件头注释）
 const WeaponBalance := preload("res://modules/units/scripts/entity/weapon_balance.gd")
 ## 远程弹道助手（弓延迟放箭/杖施法/法术 AOE/抛物线发射）
@@ -45,20 +44,12 @@ const WeaponRanged := preload("res://modules/units/scripts/entity/weapon_ranged.
 ## 持盾格挡助手（三重判定 + blockResetInterval 节流）
 const WeaponBlock := preload("res://modules/units/scripts/entity/weapon_block.gd")
 
-# ─────────────────────────────── 武器类型 ────────────────────────────────
-enum WeaponType { SWORD, SPEAR, BOW, PICKAXE, STAFF, MERIC, NONE }
-
-## 武器类型 -> 武器场景（贴图由 extract_weapons.gd 从解包图集裁剪）
-const WEAPON_SCENE_PATHS: Dictionary = {
-	WeaponType.SWORD: "res://modules/units/scenes/components/weapon_sword.tscn",
-	WeaponType.SPEAR: "res://modules/units/scenes/components/weapon_spear.tscn",
-	WeaponType.BOW: "res://modules/units/scenes/components/weapon_bow.tscn",
-	WeaponType.PICKAXE: "res://modules/units/scenes/components/weapon_pickaxe.tscn",
-	WeaponType.STAFF: "res://modules/units/scenes/components/weapon_magicstaff.tscn",
-	WeaponType.MERIC: "res://modules/units/scenes/components/weapon_mericstaff.tscn",
-}
+## 武器类型与表现场景映射的真相源在 stick_rig api（武器视觉词汇归 L1）；
+## 此处 const 转发保持 WeaponMount.WeaponType / WEAPON_SCENE_PATHS 旧引用点不变
+const WeaponType = StickRigAPI.WeaponType
+const WEAPON_SCENE_PATHS: Dictionary = StickRigAPI.WEAPON_SCENE_PATHS
 ## 盾牌场景（挂左手）
-const SHIELD_SCENE_PATH := "res://modules/units/scenes/components/weapon_shield.tscn"
+const SHIELD_SCENE_PATH: String = StickRigAPI.WEAPON_SHIELD_PATH
 ## 箭矢投影物场景（弓远程攻击发射）
 const ARROW_SCENE_PATH := "res://modules/units/scenes/components/arrow.tscn"
 ## 箭矢场景预加载（战斗性能优化：此前每箭 load() 走一次资源路径解析）

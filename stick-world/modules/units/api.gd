@@ -1,17 +1,17 @@
 ## Units 模块公共接口契约
 ##
-## 本模块提供火柴人角色系统，包括：
-## - StickmanRig: 渲染骨架（骨骼、纹理、动画、武器）
-## - StickmanSkeleton: 骨骼数据与构建
-## - 矢量肢体渲染：Line2D/Polygon2D（stickman_skeleton.gd）
-## - StickmanAnims: 动画系统
-## - StickmanWeapon: 武器挂载
-## - StickmanEntity: 物理+碰撞外壳（CharacterBody2D），持有 StickmanRig
+## 本模块提供火柴人角色系统的**实体与行为侧**，包括：
+## - StickmanEntity: 物理+碰撞外壳（CharacterBody2D），持有渲染骨架（骨架本体归 stick_rig）
 ## - AIController: 🆕 AI 决策大脑（行为状态机调度，详见 §7.1/§7.2）
 ## - BehaviorStateMachine: 🆕 行为状态机
 ## - BehaviorBase / BehaviorIdle / BehaviorMove: 🆕 行为节点
 ##
-## 外部模块应通过 StickmanRig 的公共 API 与本模块交互：
+## 渲染骨架（StickmanRig / StickmanSkeleton / StickmanAnims / StickmanWeapon，
+## 含动画资产与武器表现组件）已拆分至 stick_rig 模块（L1），跨模块取用经
+## stick_rig/api.gd 契约出口（ANIMS_SCRIPT / RIG_SCENE_PATH / WeaponType 等）。
+## 实体侧经 WeaponMount.WeaponType / WEAPON_SCENE_PATHS 的 const 转发保持旧引用点。
+##
+## 外部模块应通过 StickmanRig 的公共 API 与骨架交互（实现归 stick_rig）：
 ##   - play(anim_name: String)          播放动画
 ##   - get_current_anim() -> String      获取当前动画名
 ##   - get_bone_by_id(id: int) -> Node2D 获取骨骼节点
@@ -34,7 +34,7 @@
 ##
 ## 常量：
 ##   - StickmanRig.ANIM_IDLE / ANIM_WALK / ANIM_ATTACK / ANIM_DEAD
-##   - StickmanRig.WeaponType (SWORD, SPEAR, BOW, SHIELD, UNARMED)
+##   - StickRigAPI.WeaponType (SWORD, SPEAR, BOW, PICKAXE, STAFF, MERIC, NONE；WeaponMount 转发)
 ##   - StickmanEntity.WALK_SPEED / RUN_SPEED / BASE_SCALE（实例数值，可被平衡校准覆盖）
 ##
 ## 信号：

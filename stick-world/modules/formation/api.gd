@@ -5,9 +5,10 @@
 ## （SquadPhasePlan）→ 编制快照/权威值择班/信息上报，以及编制 UI
 ## （ui/formation_panel 编制窗口、ui/squad_card 班组卡、ui/squad_member_row 成员行）。
 ##
-## 边界（与 combat 模块的分工）：号令的语义与下发（TacticalOrders / CommandChain）
-## 属 combat——本模块只回答"人站在哪、阵列怎么排、何时算到位"，号令经
-## get_squad_dest(…, "formation") 取落点。
+## 边界（与 tactics / combat 模块的分工）：号令的语义与目标选择（TargetFinder /
+## TacticalOrders）属 tactics，号令的下发链（CommandChain）属 combat——本模块只回答
+## "人站在哪、阵列怎么排、何时算到位"，号令经 get_squad_dest(…, "formation") 取落点，
+## 共享目标选型与推进类号令枚举直取 tactics/api.gd 契约出口。
 ##
 ## 外部模块通过本契约交互：
 ##   - FormationAPI.SEPARATION_RADIUS / SPREAD_SPACING_DEFAULT / ROW_GAP_DEFAULT /

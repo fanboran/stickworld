@@ -12,9 +12,10 @@
 > 对外契约见 [api.gd](api.gd)（FormationAPI）：间距/分离半径常量（units 实体链与 combat 批模拟同源读取）+
 > 装配注入的运行期 FormationSystem 实例（duck 调用）。**外部模块禁止 preload 模块内部脚本路径**。
 >
-> 边界：号令的语义与下发（TacticalOrders / CommandChain）属 [modules/combat/](../combat/README.md)——本模块只回答
-> "人站在哪、阵列怎么排、何时算到位"，号令经 `get_squad_dest(…, "formation")` 取落点。**零静态依赖 combat**
-> （零依赖环红线）：共享目标决策器与推进类号令枚举由装配层 `system_setup` 注入真值，见下"装配与注入"。
+> 边界：号令的语义与目标选择（TacticalOrders / TargetFinder）属 [modules/tactics/](../tactics/README.md)，
+> 号令的下发链（CommandChain）属 [modules/combat/](../combat/README.md)——本模块只回答
+> "人站在哪、阵列怎么排、何时算到位"，号令经 `get_squad_dest(…, "formation")` 取落点。
+> 共享目标选型与推进类号令枚举直取 `../tactics/api.gd` 契约出口（Orders / Finder 常量）。
 >
 > 系统级设计规范：[docs/技术/架构/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗架构.md) §8.2/§8.3。
 
@@ -47,21 +48,17 @@ modules/formation/
 - **小队** = L1 MILITARY 组织节点；本地维护 unit↔squad 双向映射；编制预设来自 config/formations/formation_presets.tres（内置战斗班兜底）。职责 WorkType 五类（COMBAT/BUILD/HAUL/TRANSPORT/FORAGE），HAUL 是全员基础能力 `is_work_allowed` 恒放行；排长任命/补位经 EventBus.commander_assigned 回写。
 - **结构列阵**：每列 UNITS_PER_COLUMN、列距 ROW_GAP、横向间距 SPREAD_SPACING（默认值全在 formation_spacing.gd，横向/列距可经 `balance.variables` 的 `var_spread_spacing` / `var_row_gap` 覆盖）；槽位随成员增减自动重算（列收缩不留空列 + 贪心换位缩短行军穿插）；`get_squad_dest mode="formation"` 取槽位落点，距落点过远转奔跑追赶，落定不重发号令；小队可锚定跟随另一小队（前队质心 − 行进方向 × gap，死区防抖，前队全灭自动解除）。
 - **间距不变式**（改数值前必读 formation_spacing.gd 文件头）：碰撞体宽 < 分离半径 < 横向间距 ≤ 列间距；跟队死区 < 横向间距；到位容差 ≥ 2×横向间距。分离半径曾有三份副本且换轨只改到一份，导致分离力持续对抗槽位、队列被推散（"阵型混乱"根因）——此后只在本模块维护、消费方经 api.gd 取值。
-- **队伍级共享目标**：每 0.5s 为每个战斗小队选共享攻击目标，队员在攻击行为里优先集火。选型经注入的决策器（正式链路 = combat TargetFinder），未注入（单测/独立环境）用最近存活敌人兜底。
+- **队伍级共享目标**：每 0.5s 为每个战斗小队选共享攻击目标，队员在攻击行为里优先集火。选型走 tactics `TargetFinder.find_target`（经 `../tactics/api.gd` 的 Finder 常量；缺省 opts = 最近存活敌人，与单测/独立环境语义一致）。
 - **权威值择班**：`get_squad_authority` = 班长在场 1.0 + 组织指挥官在册 0.5 + 班长被玩家附身 0.2；`should_switch_squad` 滞回 authority_margin=0.07。自主跳槽（authority_switch_enabled）按宿主节拍周期评估：邻近班权威对比 + 玩家班吸引/黏性加成 + 单位冷却与错峰相位 + 班长放人阈值 + 单拍迁出上限；迁移复用既有 add_unit（组织同步/角色/槽位一次做全）。
 - **小队相位计划**（phase_plan_enabled）：推进类号令激活、其余号令撤销（推进类枚举值由装配层注入，见下）；成员分 CORE/SCOUT/左右翼四角色（编队槽位列序 × 素质代理双维），CORE_LEAP→CORE_WAIT→FLANK_LEAP→FLANK_WAIT 交替掩护跃进直至终点；到位容差取 formation_spacing.gd 的 ARRIVE_TOLERANCE（`config/ai/squad_phase_plan.tres` 覆盖）。计划逻辑全在 squad_phase_plan.gd（纯逻辑无自转），本系统只做参数装载/号令触发/节拍驱动/查询出口；跟随玩家或锚定跟队的小队不激活。
 - **跨图携带**：export_squads / disband_all_squads / restore_squads（CombatApi 透传，换图前导出、新图按快照重建）。
 
 ---
 
-## 装配与注入
+## 装配与消费
 
-- 实例化与挂树在 composition root（`modules/world/scripts/setup/`）：创建 FormationSystem 节点挂 GameRoot，再 `setup(OrganizationApi)`；同一装配步把实例注入 TacticalOrders / CommandChain / BattleDirector 与实体（`set_formation_system`）。
-- **反向注入**（本模块零静态依赖 combat）：装配层调用
-  - `set_target_decider(Callable)` ← combat `TargetFinder.find_target`（共享目标选型与战斗目标过滤同源）；
-  - `set_advance_order_types(Array)` ← combat `TacticalOrders.OrderType` 的推进类取值（相位计划激活判定）。
-  
-  两个接口的缺省值只服务单测/独立环境；正式链路一律注入。
+- 实例化与挂树在 composition root（`modules/world/scripts/setup/`）：创建 FormationSystem 节点挂 GameRoot，再 `setup(OrganizationApi)`；同一装配步把实例注入 TacticalOrders（tactics）/ CommandChain / BattleDirector 与实体（`set_formation_system`）。
+- 战术词汇直取 `../tactics/api.gd` 契约出口：共享目标选型 = `Finder.find_target`，相位计划推进类号令枚举 = `Orders.OrderType`（ADVANCE_ALL / SPRINT，编译期常量对齐，枚举增改无需改本模块）。
 - `score` 类查询与号令触发全部经 duck 调用（`has_method` 防护），消费方不 preload 本模块内部脚本。
 
 ---

@@ -14,7 +14,7 @@ extends Node
 ## 退出码：0 全部通过，1 有失败
 
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
-const TacticalOrdersScript := preload("res://modules/combat/scripts/command/tactical_orders.gd")
+const TacticalOrdersScript := preload("res://modules/tactics/scripts/tactical_orders.gd")
 
 ## 截图输出目录（gitignored：工程内 temp/shots_squadcard/，见 .gitignore `temp/`）
 const OUT_DIR := "res://temp/shots_squadcard"

@@ -1,13 +1,12 @@
 # combat：战场组织与战斗 AI
 
-> 战斗的组织层：多战场调度与战斗实例、号令/指挥链、阵营 AI 与任务槽、伤害管线与批模拟、战斗 UI。编队/阵列与编制 UI 在 [modules/formation/](../formation/README.md)，单位级行为状态机在 [modules/units/](../units/README.md)——本模块不碰单位级决策与阵列几何。
+> 战斗的组织层：多战场调度与战斗实例、指挥链、阵营 AI 与任务槽、伤害管线与批模拟、战斗 UI。编队/阵列与编制 UI 在 [modules/formation/](../formation/README.md)，目标选择与战术号令在 [modules/tactics/](../tactics/README.md)，单位级行为状态机在 [modules/units/](../units/README.md)——本模块不碰单位级决策、阵列几何与号令语义。
 > - `scripts/battle/`：战斗实例/导演/阵营 AI/任务槽/效用打分/伤害管线/批模拟/掩体
-> - `scripts/command/`：号令/指挥链/框选（编队/阵列在 [modules/formation/](../formation/README.md)）
-> - `scripts/target_finder.gd`：公共目标选择核心（本模块对外公共类，units 行为层复用）
+> - `scripts/command/`：指挥链/框选（号令语义与目标选择在 [modules/tactics/](../tactics/README.md)）
 > - `ui/`：战斗面板/TeamAi HUD
 >
 > 对外契约见 [api.gd](api.gd)（CombatApi）：`start_battle` / `issue_order` / 编队跨图快照三族方法，
-> BattleDirector / TacticalOrders / FormationSystem 引用由装配层注入（setup / set_tactical_orders /
+> BattleDirector / TacticalOrders（tactics）/ FormationSystem 引用由装配层注入（setup / set_tactical_orders /
 > setup_formation_system）；FormationSystem 为内部类，外部经实例注入 + duck 协议使用。
 >
 > 系统级设计规范：[docs/技术/架构/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗架构.md) §8、
@@ -21,7 +20,6 @@
 modules/combat/
 ├── api.gd                                    # 对外 API（CombatApi：start_battle/issue_order/export_squads 等，委托注入的宿主节点）
 ├── scripts/
-│   ├── target_finder.gd                      # TargetFinder：目标选择核心（opts 链式过滤：prefer_low_hp/prefer_large/fixate_on/防集火/AOE 扇形）
 │   ├── battle/
 │   │   ├── battle_director.gd                # BattleDirector：多战场调度（挂 GameRoot.BattleDirector；TeamAi 生产启用开关读 personality）
 │   │   ├── battle_instance.gd                # BattleInstance：单场战斗宿主（状态流转/士气事件/防集火/批模拟装配/TeamAi 注册制）
@@ -34,11 +32,10 @@ modules/combat/
 │   │   ├── damage_pipeline.gd                # DamagePipeline：伤害单入口（修饰链/入血/反伤/表现链，禁绕过直调 take_damage）
 │   │   └── cover_system.gd                   # CoverSystem：掩体查询（扫描 group "cover_marker"）
 │   └── command/
-│       ├── tactical_orders.gd                # TacticalOrders：号令下达入口（issue 小队直令 / issue_to_org 组织逐层）
 │       ├── command_chain.gd                  # CommandChain：号令送达执行器 + 逐跳接力（传播延迟 = 距离 ÷ 媒介速度）
 │       └── selection_system.gd               # SelectionSystem：BATTLE 模式框选/点选（InputDispatcher handler）
 └── ui/
-    ├── battle_panel.gd                       # 战斗面板（框选信息/编制入口/号令按钮）
+    ├── battle_panel.gd                       # 战斗面板（框选信息/编制入口/号令按钮；OrderType 经 ../tactics/api.gd 取）
     └── team_ai_hud.tscn / team_ai_hud.gd     # TeamAi 状态 HUD（姿态徽标/attack%/任务槽占用，F3 drawer 开关）
 ```
 
@@ -46,7 +43,7 @@ modules/combat/
 
 ## 依赖
 
-- `modules/units/`：唯一路径 preload 是 battle_instance.gd → modules/units/scripts/rig/crowd_renderer.gd（批模拟单位的渲染代理）。其余一律弱类型：`StickmanEntity.set_battle_sim` / `set_formation_system` 注入后 duck 调用；`ui/` 全程 has_method 探测，查询不可用即跳过该行或整卡收起。
+- `modules/units/`：唯一路径 preload 是 battle_instance.gd → ../stick_rig/scripts/crowd_renderer.gd（批模拟单位的渲染代理）。其余一律弱类型：`StickmanEntity.set_battle_sim` / `set_formation_system` 注入后 duck 调用；`ui/` 全程 has_method 探测，查询不可用即跳过该行或整卡收起。
 - `modules/formation/`：编队/阵列与编制 UI 在此（本模块经 `set_formation_system` 注入 + `get_squad_dest` 等 duck 调用消费；装配层把 TargetFinder 与推进类号令枚举反向注入）。
 - `modules/organization/`：经 OrganizationApi 弱类型引用（编队落 L1 组织节点、issue_to_org 的 hop 计划与传输秒数、指挥官在册查询），不 preload 内部文件。
 - 装配（modules/world 的 SystemSetup）：给 GameRoot.BattleDirector 挂脚本、实例化 CombatApi、装配 TacticalOrders / CommandChain / FormationSystem / SelectionSystem / UnitLodDirector 与战斗 UI——本模块节点不自行进树。

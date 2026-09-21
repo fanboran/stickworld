@@ -249,9 +249,9 @@ func _settle() -> void:
 	if api == null or not api.has_method("produce"):
 		return
 	if _mode == Mode.RESOURCE:
-		var qty := int(float(_prof.get("produce_amount", 10.0)))
+		var qty := int(float(_prof.get("produce_amount", 9.0)))
 		if qty <= 0:
-			qty = 10
+			qty = 9
 		# 实际采得量以资源点余量为准（与玩家手采同语义）；采空由下帧 _locate 换点
 		var gained: int = _node.harvest(qty)
 		if gained > 0:

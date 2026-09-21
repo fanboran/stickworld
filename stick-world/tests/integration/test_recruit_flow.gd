@@ -3,7 +3,7 @@ extends Node
 ##
 ## 验收门（交接档批次 1）：
 ##   1. 招兵成功：兵营旁 recruit → 空闲村民变身士兵（META_SOLDIER + 退出劳工池
-##      + 换剑）+ 资源扣减（-10木 -10石）；
+##      + 换剑）+ 资源扣减（-12木 -9石）；
 ##   2. 无空闲村民拒招（reason=no_villager）；
 ##   3. 人口再生：pop_growth_interval 加速后村民自动增长；
 ##   4. 人口上限：pop_cap 内再生封顶；
@@ -19,8 +19,8 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const TestHelpers := preload("res://tests/core/test_helpers.gd")
 
 ## 招兵成本（与 RecruitManager.RECRUIT_COST 对齐）
-const COST_WOOD := 10.0
-const COST_STONE := 10.0
+const COST_WOOD := 12.0
+const COST_STONE := 9.0
 
 var _runner: TestRunner
 var _game_root: Node = null
@@ -105,9 +105,9 @@ func _test_recruit_success() -> void:
 	_runner.assert_equal(_villager_count(), 0, "招募后空闲村民归零")
 	_runner.assert_equal(_soldier_count(), recruited, "士兵数 = 招募数")
 	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, -COST_WOOD * float(recruited), 0.001,
-			"木 -10×%d" % recruited)
+			"木 -12×%d" % recruited)
 	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, -COST_STONE * float(recruited), 0.001,
-			"石 -10×%d" % recruited)
+			"石 -9×%d" % recruited)
 
 
 ## 用例 2「无空闲村民拒招」（接用例 1 耗尽态）

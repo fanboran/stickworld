@@ -90,9 +90,9 @@ variables = {
 		{
 			"id": "var_expand_cost_base",
 			"category": "expansion",
-			"value": 50,
-			"min": 10,
-			"max": 200,
+			"value": 45,
+			"min": 8,
+			"max": 90,
 			"step": 10,
 			"description": "扩张基础消耗"
 		},

@@ -21,7 +21,7 @@ variables = {
 			"tier": 1,
 			"category": "economy",
 			"prerequisites": null,
-			"research_cost": 10,
+			"research_cost": 9,
 			"unlocks": ["stone_axe", "stone_pickaxe", "basic_quarry"]
 		},
 		{
@@ -30,7 +30,7 @@ variables = {
 			"tier": 1,
 			"category": "military",
 			"prerequisites": null,
-			"research_cost": 20,
+			"research_cost": 14,
 			"unlocks": ["warrior", "spear", "wooden_shield"]
 		},
 		{
@@ -39,7 +39,7 @@ variables = {
 			"tier": 1,
 			"category": "administration",
 			"prerequisites": null,
-			"research_cost": 10,
+			"research_cost": 11,
 			"unlocks": ["tribal_council", "basic_laws", "census_tent"]
 		},
 		{
@@ -48,7 +48,7 @@ variables = {
 			"tier": 2,
 			"category": "economy",
 			"prerequisites": "tech_stone_tools",
-			"research_cost": 40,
+			"research_cost": 38,
 			"unlocks": ["bronze_axe", "bronze_pickaxe", "smelter", "copper_mine"]
 		},
 		{
@@ -57,7 +57,7 @@ variables = {
 			"tier": 2,
 			"category": "military",
 			"prerequisites": "tech_basic_combat",
-			"research_cost": 40,
+			"research_cost": 34,
 			"unlocks": ["spearman", "shield_wall", "barracks", "military_drill"]
 		},
 		{
@@ -66,7 +66,7 @@ variables = {
 			"tier": 2,
 			"category": "administration",
 			"prerequisites": "tech_primitive_administration",
-			"research_cost": 30,
+			"research_cost": 26,
 			"unlocks": ["scribe", "clay_tablet", "record_keeping", "royal_decree"]
 		},
 		{
@@ -75,7 +75,7 @@ variables = {
 			"tier": 2,
 			"category": "science",
 			"prerequisites": "tech_primitive_administration",
-			"research_cost": 40,
+			"research_cost": 29,
 			"unlocks": ["herbalist", "field_hospital", "healing_salve"]
 		},
 		{
@@ -84,7 +84,7 @@ variables = {
 			"tier": 3,
 			"category": "economy",
 			"prerequisites": "tech_bronze_working",
-			"research_cost": 80,
+			"research_cost": 72,
 			"unlocks": ["iron_axe", "iron_pickaxe", "blast_furnace", "iron_mine"]
 		},
 		{
@@ -93,7 +93,7 @@ variables = {
 			"tier": 3,
 			"category": "military",
 			"prerequisites": "tech_formation_tactics,tech_bronze_working",
-			"research_cost": 90,
+			"research_cost": 78,
 			"unlocks": ["horseman", "cavalry_archer", "stable", "horse_breeding"]
 		},
 		{
@@ -102,7 +102,7 @@ variables = {
 			"tier": 3,
 			"category": "science",
 			"prerequisites": "tech_early_writing,tech_herbal_medicine",
-			"research_cost": 70,
+			"research_cost": 58,
 			"unlocks": ["philosopher", "academy", "natural_philosophy", "logic"]
 		},
 		{
@@ -111,7 +111,7 @@ variables = {
 			"tier": 3,
 			"category": "administration",
 			"prerequisites": "tech_early_writing",
-			"research_cost": 60,
+			"research_cost": 52,
 			"unlocks": ["bureaucrat", "tax_office", "census", "archives"]
 		},
 		{
@@ -120,7 +120,7 @@ variables = {
 			"tier": 3,
 			"category": "economy",
 			"prerequisites": "tech_early_writing,tech_bronze_working",
-			"research_cost": 80,
+			"research_cost": 66,
 			"unlocks": ["merchant", "marketplace", "trade_route", "currency"]
 		}
 	]

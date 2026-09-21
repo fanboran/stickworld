@@ -134,8 +134,8 @@ func _test_first_capture() -> void:
 	_disconnect_capture_signals()
 	var rec: Dictionary = WorldState.territories.get(TID_1, {})
 	_runner.assert_equal(int(rec.get("state", -1)), 1, "黑石营地应转 CAPTURED(1)")
-	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 10.0, 0.001, "木奖励 +10 入账")
-	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 10.0, 0.001, "石奖励 +10 入账")
+	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 12.0, 0.001, "木奖励 +12 入账")
+	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 9.0, 0.001, "石奖励 +9 入账")
 	var state_ok := false
 	for sig in _sig_state:
 		if sig.size() == 2 and sig[0] == TID_1 and int(sig[1]) == 1:
@@ -206,8 +206,8 @@ func _test_attrition_recapture() -> void:
 		EventBus.unlock_granted.disconnect(_cb_unlock)
 	_runner.assert_equal(int(WorldState.territories.get(TID_2, {}).get("state", -1)), 1,
 			"红色山林应转 CAPTURED(1)")
-	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 10.0, 0.001, "木奖励 +10 入账")
-	_runner.assert_approx(_resources.get_stock("res_iron_ingot") - iron0, 10.0, 0.001, "铁锭奖励 +10 入账")
+	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 12.0, 0.001, "木奖励 +12 入账")
+	_runner.assert_approx(_resources.get_stock("res_iron_ingot") - iron0, 9.0, 0.001, "铁锭奖励 +9 入账")
 	_runner.assert_true(_sig_unlock.has("unlock_stone_warehouse"),
 			"unlock_granted 应广播 unlock_stone_warehouse，实得 %s" % str(_sig_unlock))
 	# 奖励闭环打通：解锁项入池（WorldState.unlocks）且建筑门禁当场放行

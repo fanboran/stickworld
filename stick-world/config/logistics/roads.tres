@@ -19,8 +19,8 @@ variables = {
 			"id": "road_dirt",
 			"name_zh": "土路",
 			"speed_bonus": "1.2x",
-			"build_cost_stone": 10,
-			"build_cost_wood": 10,
+			"build_cost_stone": 9,
+			"build_cost_wood": 9,
 			"build_time": 5,
 			"maintenance": 1,
 			"unlock_tech": null
@@ -29,8 +29,8 @@ variables = {
 			"id": "road_stone",
 			"name_zh": "石板路",
 			"speed_bonus": "1.5x",
-			"build_cost_stone": 20,
-			"build_cost_wood": 10,
+			"build_cost_stone": 18,
+			"build_cost_wood": 9,
 			"build_time": 15,
 			"maintenance": 2,
 			"unlock_tech": "tech_stone_road"
@@ -39,8 +39,8 @@ variables = {
 			"id": "road_highway",
 			"name_zh": "帝国大道",
 			"speed_bonus": "2.0x",
-			"build_cost_stone": 40,
-			"build_cost_wood": 20,
+			"build_cost_stone": 38,
+			"build_cost_wood": 18,
 			"build_time": 30,
 			"maintenance": 5,
 			"unlock_tech": "tech_imperial_road"
@@ -49,10 +49,10 @@ variables = {
 			"id": "canal",
 			"name_zh": "运河",
 			"speed_bonus": "3.0x",
-			"build_cost_stone": 80,
+			"build_cost_stone": 75,
 			"build_cost_wood": 0,
 			"build_time": 60,
-			"maintenance": 10,
+			"maintenance": 9,
 			"unlock_tech": "tech_canal"
 		}
 	]

@@ -4,7 +4,7 @@ extends Node
 ##
 ## 验收门（交接档批次 C5 + P3 奖励闭环）：
 ##   1. 打完一场（黑石营地）：WorldState.territories 状态转 CAPTURED + 归属 owner/faction
-##      写实 + 资源奖励入账（res_wood +10 / res_stone +10）+ 一条「战利品」通告
+##      写实 + 资源奖励入账（res_wood +12 / res_stone +9）+ 一条「战利品」通告
 ##      + territory_state_changed / region_owner_changed 广播；
 ##   2. 已臣服据点再进不刷军、不开战，launch_campaign 拒征（返回 false）；
 ##   3. 败仗（红色山林）：守军战损持久化 garrison_losses=2（state 仍 HOSTILE），
@@ -120,15 +120,15 @@ func _test_victory_capture() -> void:
 	_runner.assert_equal(int(rec.get("state", -1)), 1, "黑石营地应转 CAPTURED(1)")
 	_runner.assert_equal(String(rec.get("owner", "")), "player", "归属 owner 写为 player（疆域真值）")
 	_runner.assert_equal(String(rec.get("faction", "")), "fac_player", "faction 写为玩家势力 id")
-	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 10.0, 0.001, "木奖励 +10 入账")
-	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 10.0, 0.001, "石奖励 +10 入账")
+	_runner.assert_approx(_resources.get_stock("res_wood") - wood0, 12.0, 0.001, "木奖励 +12 入账")
+	_runner.assert_approx(_resources.get_stock("res_stone") - stone0, 9.0, 0.001, "石奖励 +9 入账")
 	# 奖励可见：占领通告一条说全"谁臣服 + 到手什么"（文案拼装归 extension api.describe_loot）
 	var loot_line := ""
 	for sig in _sig_notify:
 		if sig.size() == 3 and String(sig[0]) == "征服":
 			loot_line = String(sig[1])
 	_runner.assert_true(loot_line.contains("已臣服"), "征服通告含臣服文案，实得「%s」" % loot_line)
-	_runner.assert_true(loot_line.contains("战利品 木材10、石料10"),
+	_runner.assert_true(loot_line.contains("战利品 木材12、石料9"),
 			"征服通告含战利品明细（奖励可见），实得「%s」" % loot_line)
 	var state_ok := false
 	for sig in _sig_state:

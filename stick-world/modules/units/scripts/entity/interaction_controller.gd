@@ -21,8 +21,8 @@ const PROJECT_BODY_HEIGHT: float = 292.5
 ## 采集判定范围（与资源点中心的 X/Y 距离，px；地面带宽 3 格内可采）
 const HARVEST_X_RANGE: float = 54.0
 const HARVEST_Y_RANGE: float = 72.0
-## 单次采集量（一次敲击动作的产出；数值口径不膨胀、取整十，与村民伐木/采矿每拍同速）
-const HARVEST_PER_ACTION: int = 10
+## 单次采集量（一次敲击动作的产出；数值口径自然数不膨胀，与村民伐木/采矿每拍同速）
+const HARVEST_PER_ACTION: int = 9
 ## 手动采集入库的 region（与开局资源、建造扣减同账）
 const HARVEST_REGION: String = "test_region"
 

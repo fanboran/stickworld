@@ -222,13 +222,13 @@ func _attempt_community(a: int, b: int, rows: int, road: Vector2i,
 		var node: Node2D = ScriptResourceNode.new()
 		node.resource_type = rtype0
 		# 储量按类型：大树给更多木；稀有矿储少而值高
-		# （数值口径：不膨胀——一棵树 ≈ 1 座民居 30 木，采空 = 4~8 拍）
+		# （数值口径：自然数不膨胀——一棵树 ≈ 1 座民居 28 木，采空 = 4~8 拍）
 		match rtype0:
-			0: node.amount = 40 + randi_range(0, 40)   # WOOD 40~80
-			1: node.amount = 30 + randi_range(0, 20)   # STONE 30~50
-			2: node.amount = 20 + randi_range(0, 20)   # METAL 20~40
-			3: node.amount = 10 + randi_range(0, 10)   # DIAMOND 10~20
-			_: node.amount = 20 + randi_range(0, 20)   # GOLD 20~40
+			0: node.amount = 35 + randi_range(0, 40)   # WOOD 35~75
+			1: node.amount = 28 + randi_range(0, 20)   # STONE 28~48
+			2: node.amount = 18 + randi_range(0, 18)   # METAL 18~36
+			3: node.amount = 9 + randi_range(0, 9)     # DIAMOND 9~18
+			_: node.amount = 18 + randi_range(0, 18)   # GOLD 18~36
 		node.position = Vector2(px, py)
 		_root.decoration_layer.add_child(node)
 		nodes.append(node)

@@ -13,7 +13,7 @@
   - output/<preview>.png                       2048 预览（ID mask 新 LUT 上色，验收用）
 
 改完必须刷 bin + import（同仓库约定）：
-  godot --headless --path stick-world --script res://tools/l_world_bake.gd
+  godot --headless --path stick-world --script res://tools/worldgen/l_world_bake.gd
   godot --headless --path stick-world --import
 
 用法：

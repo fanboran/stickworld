@@ -44,34 +44,38 @@
  "capital_min_sep_px": 260,
  "capital_min_sep_comment": "都城最小间距（8192 级像素）；实际间距按圈尺寸自适应放大（bbox 对角线/sqrt(配额)），种子按 population_score 降序 + 四叉树间距筛选（FMG 同族，§7.4-1）",
  "colors": {
-  "comment": "政权色 = OKLCH 感知均匀色轮派生（观感返工第三批 C23；2026-09-11 美化：色相压缩到暖调大地系 hue_center=80/span=240 避开品红纯绿段 + 彩度 0.05~0.075 + 明度带收窄 0.60~0.78——做旧羊皮纸地图观感，与墨字+羊皮纸 halo 同语言），贪心图着色保证相邻国 OKLab ΔE ≥ min_delta_e。候选生成/分配唯一真相源 = palette.py（生成器与 state_recolor.py 共用）",
-  "hue_count": 18,
+  "comment": "政权色 = OKLCH 感知均匀色轮派生，候选生成/分配唯一真相源 = palette.py（生成器与 state_recolor.py 共用），贪心图着色保证相邻国 OKLab ΔE ≥ min_delta_e。标尺参照 WorldBox 的国家地块配色（`worldbox_Data` 的 colors_general 数据：20 个手选高区分度色 + 变体，饱和度 0~100、明度 13~100 全跨度铺开——鲜艳主档为主，另有深档与浅档）：色相走满满环 360°、彩度按档变化 0.055~0.145（不再是单一低饱和带）、明度 0.47~0.87。",
+  "hue_count": 20,
   "hue_offset_deg": 10.0,
   "tiers": [
    {
-    "l": 0.78,
-    "c": 0.052
+    "l": 0.87,
+    "c": 0.055
+   },
+   {
+    "l": 0.79,
+    "c": 0.105
    },
    {
     "l": 0.72,
-    "c": 0.062
+    "c": 0.14
    },
    {
-    "l": 0.665,
-    "c": 0.07
+    "l": 0.64,
+    "c": 0.145
    },
    {
-    "l": 0.615,
-    "c": 0.072
+    "l": 0.55,
+    "c": 0.12
    },
    {
-    "l": 0.57,
-    "c": 0.068
+    "l": 0.47,
+    "c": 0.09
    }
   ],
   "min_delta_e": 0.105,
   "hue_center_deg": 80.0,
-  "hue_span_deg": 240.0
+  "hue_span_deg": 360.0
  },
  "name_source": "state_names_placeholder.json",
  "name_source_comment": "命名接口（创始人 2026-09-08 定）：指向占位词表 JSON（键=state_id）；词表不存在/缺项时生成「文化圈前缀+编号」占位名并回写词表；重跑时已有键的名字原样保留——世界观会话定稿后换表重跑即可，不改代码。占位名全部标注「提案/待定」",

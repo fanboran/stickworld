@@ -5,7 +5,7 @@
 
     U = a·核场(exp(-d²/2σ²)×cap(θ_d)) + b·道路条带场(exp(-d_r/w_r)×沿路长度衰减→手指)
         + Σ卫星种子高斯(沿路 0.5~1.3R 避水体) + amp·fBm(2~3 八度 value noise)
-    U *= 排除层(水体/陡坡/海域硬置 0，SLEUTH 式否决)
+    U *= 排除层(水体/陡坡/海域硬置 0 + 城块净空带，SLEUTH 式否决)
     τ 按目标面积分位数反解: τ = quantile(U[可建], 1 - A_target/A_avail)   # A_target = π·R_ref²·k
     binary_opening(1) → binary_closing(2) → find_contours 亚像素多环(外环+内环洞+飞地)
     → shapely simplify 保拓扑；洞面积 < max(3% 城区, 60px²) 丢弃
@@ -100,6 +100,32 @@ def _city_tile_geom(t, ox, oy):
             parts = [x for x in fixed.geoms if x.geom_type == "Polygon"]
             pg = max(parts, key=lambda x: x.area) if parts else pg
     return pg if pg.area > 1.0 else None
+
+
+def tile_clear_mask(city, wx0, wy0, W, margin):
+    """城块界净空栅格：城块内缩 margin 后栅格化为窗口 bool（True=可建）。
+    在掩膜级排除（并进 excl）→ 轮廓自然收在净空带内、粗糙化照常生效，
+    不产生剪裁直线硬边；clip_polys_to_tile 只作最后兜底。
+    内缩空（城块窄于 2×margin）→ 全 False（该城合法塌缩为无建成区）。"""
+    tp = city.get("tile_geom")
+    if tp is None or margin <= 0:
+        return None
+    inset = tp.buffer(-margin)
+    if inset.is_empty:
+        return np.zeros((W, W), bool)
+    parts = [inset] if inset.geom_type == "Polygon" else \
+        [g for g in getattr(inset, "geoms", []) if g.geom_type == "Polygon"]
+    img = Image.new("1", (W, W), 0)
+    d = ImageDraw.Draw(img)
+    for pg in parts:
+        ext = [(x - wx0, y - wy0) for x, y in pg.exterior.coords]
+        if len(ext) >= 3:
+            d.polygon(ext, fill=1)
+        for hr in pg.interiors:
+            hole = [(x - wx0, y - wy0) for x, y in hr.coords]
+            if len(hole) >= 3:
+                d.polygon(hole, fill=0)
+    return np.array(img, bool)
 
 
 def load_cities():
@@ -347,6 +373,11 @@ def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache):
     wt = ctx["world"]["water"][wy0:wy0 + W, wx0:wx0 + W]
     ld = ctx["world"]["land"][wy0:wy0 + W, wx0:wx0 + W]
     excl = (ld & (~wt) & (sl < p["exclusion"]["slope_hard"])).astype(np.float32)
+    # 6.5 城块净空带：界内侧 margin 内禁建，并进排除层（τ 反解/种子/绿楔自动继承）
+    # ——建成区从源头缩回界内，不再靠剪裁切出直线硬边
+    clear = tile_clear_mask(city, wx0, wy0, W, float(p["contour"]["tile_clear_margin"]))
+    if clear is not None:
+        excl *= clear
 
     # 2 核场 exp(-d²/2σ²)×cap(θ_d) + 3 道路串珠场 + 5 fBm（fBm 不参与种子落点判定）
     core = np.exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma)) * cap_at(city["cap"], dx, dy)
@@ -374,13 +405,16 @@ def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache):
     if avail < 8 or float(U.max()) <= 1e-4:
         return np.zeros((W, W), bool), info, (wx0, wy0)
     q = 1.0 - a_target / avail
-    if q < 0.0:                     # 可建区比目标还小（被山水围死）→ 退而取最强 fallback_q
-        q = float(p["area"]["fallback_q"])
+    if q < 1.0 - float(p["area"].get("max_fill", 0.85)):
+        # 目标面积装不进城块可建区（净空带后常态）→ 顶格填 max_fill（留绿楔余量）。
+        # 旧 fallback_q=0.9（取最强 10%）会把被城块约束的城缩成小圆点
+        q = 1.0 - float(p["area"].get("max_fill", 0.85))
     tau = float(np.quantile(U[excl > 0], float(np.clip(q, 0.0, 0.999))))
     info["tau"] = round(tau, 4)
 
     # 8 形态学清理：opening 去孤点（0=跳过，飞地由面积阈值把关），closing 连近斑（绿楔保留）
-    mask = U > tau
+    # & (excl > 0)：fallback_q 可能解出负 τ（U 含绿楔/fBm 负场），须防排除区（水体/净空带）经 U=0 回流
+    mask = (U > tau) & (excl > 0)
     orad, crad = int(p["morph"]["opening_r"]), int(p["morph"]["closing_r"])
     if orad > 0:
         mask = morphology.opening(mask, morphology.disk(orad))

@@ -13,7 +13,7 @@
   "k": 0.9,
   "gamma": 0.7,
   "min_total_area": 30,
-  "fallback_q": 0.9
+  "max_fill": 0.85
  },
  "core": {
   "a": 1.0,
@@ -77,6 +77,7 @@
   "hole_min_frac": 0.02,
   "hole_min_abs": 40.0,
   "enclave_min_area": 45.0,
+  "tile_clear_margin": 40,
   "tile_margin": 10
  },
  "preview": {

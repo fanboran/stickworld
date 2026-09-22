@@ -106,6 +106,9 @@ const BIOME_LEGEND: Array[Dictionary] = [
 ## 城市常驻描边（内部城界，灰墨内容线；屏幕像素固定）
 const L1_TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
 const L1_TILE_BORDER_WIDTH := 2.0
+## 三岔交汇点补圆半径比（× 线宽）：要盖住折角倒角的外凸量（90° 折角约 0.7×线宽），
+## 取 0.8——比线略宽一点点，同色叠加后读作"线条在交汇处合成一个点"
+const L1_JUNCTION_DOT_RATIO := 0.8
 
 ## 玩家已占疆域填充色（政治模式按地块染色：占多少染多少，逐 tile 覆盖所属政权色）。
 ## 定值依据：80 国政权色走 OKLCH 全色环 20 色相 × 6 档（含鲜艳/深/浅，见
@@ -121,6 +124,30 @@ const L1_BORDER_WIDTH := 2.5
 ## 邻居老 L1 块空心轮廓（A3 空心化：灰轮廓不填充；与 PoliticalLut.NEIGHBOR_COLOR 同值 0.45 灰）
 const L1_NEIGHBOR_COLOR := Color(0.45, 0.45, 0.45)
 const L1_NEIGHBOR_BORDER_WIDTH := 2.0
+## 邻省色块压暗量（政治模式：邻省按各自政权色上色但"暗一阶"——本省读作当前焦点，
+## 周边仍是同一张地形图上的政权色，只是低一档亮度）。侧表无该省政权时回退 L1_NEIGHBOR_COLOR 平灰。
+const L1_NEIGHBOR_DIM := 0.28
+## 政治模式地块界线宽（比常驻灰城界略粗）：地块多边形各自平滑后相邻边有 1~2px 不共线，
+## 界线略粗才能把缝盖住，读作"色块严丝合缝贴在图上"（WorldBox 式观感的成立条件）
+const L1_POLITICAL_TILE_BORDER_WIDTH := 3.0
+
+## 政治模式「水面回贴」判水阈值（地形贴图的绿-蓝差，归一化）：地形水体色
+## （ocean_near/far、lake、river，见 tools/worldgen/*/terrain_params.json）
+## g-b 实测 ≈ -0.15，陆地形色（含雪 238/242/246、岩 148/142/132）g-b ≥ +0.016，
+## 分离干净——阈值取 -0.06 ± 0.03 过渡带，雪地不会被误判成水。
+## 见 map_renderer 的水面回贴 pass（色块沿岸溢出/湖河被吞的收敛手段）
+const L1_WATER_GB_MID := -0.06
+const L1_WATER_GB_SOFT := 0.03
+## 水面回贴贴图分辨率步长（1 = 与地形 1:1 原样回贴：水体像素与地形逐字节相同，
+## 只有"水陆过渡带"（g-b 落在阈值带内）会半透明混色。**不用抽样**——抽样后线性过滤
+## 会把水色与邻近陆色混出一道浅带，正是"色块不严丝合缝"的观感来源）
+const L1_WATER_STRIDE := 1
+
+## 左右切省箭头（UI 贴在屏幕左右中）：填充 = 目标邻省主导政权色（侧表缺回退纸色），
+## 描边用墨色与地图装裱语言一致；箭头在内容区之外（贴屏幕边），故用 UI 墨而非地图线槽
+const L1_ARROW_FILL := Color(0.86, 0.83, 0.76)
+const L1_ARROW_INK := StickTokens.INK
+const L1_ARROW_INK_WIDTH := 1.5
 ## 内容区"纸张边界"黑框（装裱观感）
 const L1_PAPER_BORDER_COLOR := Color(0.08, 0.08, 0.08)
 const L1_PAPER_BORDER_WIDTH := 4.0

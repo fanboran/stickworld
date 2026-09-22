@@ -61,6 +61,10 @@ var _legend: MapLegend = null
 ## _auto_find_components 注入——面板不自己认识 expansion，见 territory_panel.gd）
 var _territory_panel: TerritoryPanel = null
 
+## 左右切省箭头（CanvasLayer 直接子节点，同批显隐；目标由本控制器按邻省方位算，
+## 见 province_switch_arrows.gd）
+var _arrows: ProvinceSwitchArrows = null
+
 ## 全屏海洋底（CanvasLayer 首子节点，z 最低）。C21：地图一打开就整屏铺海洋，
 ## 不再让场景图从地图四周（上下尤其明显）露出来。显隐随本视图（下钻 L2 时收起，
 ## 由 L2 自己的海洋底接管）。
@@ -135,6 +139,11 @@ func _auto_find_components() -> void:
 			_territory_panel.targets_fn = _list_territories
 			_territory_panel.activate_fn = _on_territory_row_activated
 			_territory_panel.refresh()
+	if _arrows == null:
+		_arrows = MapControllerUtil.find_sibling(self, "ProvinceSwitchArrows") as ProvinceSwitchArrows
+		if _arrows != null:
+			_arrows.targets_fn = _list_province_arrows
+			_arrows.activate_fn = switch_province
 	if _ocean_backdrop == null:
 		_ocean_backdrop = MapControllerUtil.find_sibling(self, "OceanBackground")
 	if _mode_manager == null:
@@ -192,6 +201,8 @@ func _set_overlay_visible(v: bool) -> void:
 		_legend.set_shown(v)
 	if _territory_panel != null:
 		_territory_panel.set_shown(v)
+	if _arrows != null:
+		_arrows.set_shown(v)
 	if _tooltip != null and _tooltip.has_method("reset"):
 		_tooltip.call("reset")  # 复位 hover 记忆，重开后按当前鼠标位置重新评估
 
@@ -308,6 +319,70 @@ func _on_territory_row_activated(target: Dictionary) -> void:
 	if not tile_key.is_empty() and api != null and api.has_method("camera_focus"):
 		api.camera_focus(tile_key)
 	activate_settlement(String(target.get("settlement_key", "")))
+
+
+## 左右切省箭头目标（province_switch_arrows.targets_fn）：
+## 候选 = 当前包数据的 neighbors[].label（相邻老 L1 块），方位按**全局质心**判定
+## （ProvincePolitics 侧表；局部多边形被 context 裁过、方位会偏心，只用于画形状）。
+## 左右各取"最朝该侧"的一个邻省；侧表缺失 / 邻省无质心 / 无包数据 → 该侧不返回（箭头不画）。
+func _list_province_arrows() -> Array:
+	var out: Array = []
+	if api == null or not api.has_method("get_data"):
+		return out
+	var data: L1WorldData = api.get_data()
+	if data == null:
+		return out
+	var pol := ProvincePolitics.load_shared()
+	if pol == null:
+		return out
+	var self_label: int = int(api.get_current_l1_label()) \
+			if api.has_method("get_current_l1_label") else 0
+	var self_center := pol.centroid_of(self_label)
+	if self_center == Vector2.INF:
+		return out
+	var dirs: Array = []
+	for nb in data.neighbors:
+		var label := int((nb as Dictionary).get("label", 0))
+		if label <= 0 or label == self_label:
+			continue
+		var center := pol.centroid_of(label)
+		if center == Vector2.INF:
+			continue
+		if api.has_method("has_l1_data") and not api.has_l1_data(label):
+			continue
+		dirs.append([label, center - self_center])
+	for side in [ProvincePolitics.SIDE_LEFT, ProvincePolitics.SIDE_RIGHT]:
+		var label := ProvincePolitics.pick_by_side(dirs, side)
+		if label <= 0:
+			continue
+		var state_name := pol.state_name_of(label)
+		out.append({
+			"side": side,
+			"label": label,
+			"bearing": pol.centroid_of(label) - self_center,
+			"color": pol.color_of(label),
+			"text": "切到相邻省份 #%d%s" % [
+				label, " · %s" % state_name if not state_name.is_empty() else ""],
+		})
+	return out
+
+
+## 切到相邻 L1 省份（箭头入口）：换包 + 重适配视角 + 刷新名牌/图例/据点/箭头。
+## 与 L2 下钻（open_l1）的**语义差别**：不改 _drill_from_l2——ESC 行为跟"从哪进来的"走，
+## Tab 直开切省后 ESC 仍是关闭地图，下钻态切省后 ESC 仍是返回 L2。
+## 返回是否切换成功（无数据 / 同一省份 / api 缺位 → false，视图不动）。
+func switch_province(l1_label: int) -> bool:
+	if api == null or not api.has_method("open_l1") \
+			or not api.has_method("get_current_l1_label"):
+		return false
+	if l1_label == api.get_current_l1_label():
+		return false
+	if not api.open_l1(l1_label):
+		return false
+	_view_initialized = false
+	_reset_view_for_current_l1()
+	_refresh_view_meta()
+	return true
 
 
 ## 出征确认（双击敌聚落）：先给情报（守军编成/敌将/战利品），确认才动身
@@ -430,37 +505,52 @@ func open() -> void:
 		if api.ensure_player_l1(_player_l1_label):
 			_view_initialized = false
 	visible = true
-	# 首次打开：初始视角 = 整图适配（默认 100%），地图居中（出生 L1 在 context 中心）；
-	# 之后保留用户位置/缩放（与 L2 一致）
-	if not _view_initialized:
-		_view_initialized = true
-		if map_camera != null and map_camera.has_method("set_zoom"):
-			var vp := get_viewport()
-			if vp != null:
-				var vp_size: Vector2 = vp.get_visible_rect().size
-				var msize: float = 1024.0
-				if api != null and api.has_method("get_data"):
-					var d: RefCounted = api.get_data()
-					if d != null and d.size > 0:
-						msize = float(d.size)
-				var target_h: float = vp_size.y * 0.85
-				var fit_zoom: float = target_h / msize
-				# 默认缩放 = 整图适配（全部周边陆地可见，出生 L1 居中）
-				var default_zoom: float = clampf(fit_zoom * DEFAULT_ZOOM_MULT,
-						map_camera.min_zoom, map_camera.max_zoom)
-				map_camera.set_zoom(default_zoom)
-				# 默认缩放 = 整图适配 = 100%（HUD 百分比按此归一化显示）
-				if _hud != null and _hud.has_method("set_default_zoom"):
-					_hud.set_default_zoom(default_zoom)
-				if map_camera.has_method("set_offset"):
-					# 地图中心对准屏幕中心，打开即居中
-					map_camera.set_offset(vp_size * 0.5 - Vector2(
-						msize * default_zoom * 0.5, msize * default_zoom * 0.5))
+	_reset_view_for_current_l1()
 	if _hud != null:
 		_hud.visible = true
 	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
 	if map_renderer != null and map_renderer.has_method("set_map_mode"):
 		map_renderer.set_map_mode(MapModeManager.current_mode)
+	_refresh_view_meta()
+	_set_overlay_visible(true)
+	if EventBus != null:
+		EventBus.strategic_map_opened.emit()
+
+
+## 视角适配新 context（首次打开 / 换 L1 省份后调用一次）：整图适配 = 100%，地图居中
+## （出生 L1 位于 context 中心）；已适配过则保留用户位置/缩放（与 L2/L3 一致）
+func _reset_view_for_current_l1() -> void:
+	if _view_initialized:
+		return
+	_view_initialized = true
+	if map_camera == null or not map_camera.has_method("set_zoom"):
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var vp_size: Vector2 = vp.get_visible_rect().size
+	var msize: float = 1024.0
+	if api != null and api.has_method("get_data"):
+		var d: RefCounted = api.get_data()
+		if d != null and d.size > 0:
+			msize = float(d.size)
+	var target_h: float = vp_size.y * 0.85
+	var fit_zoom: float = target_h / msize
+	# 默认缩放 = 整图适配（全部周边陆地可见，出生 L1 居中）
+	var default_zoom: float = clampf(fit_zoom * DEFAULT_ZOOM_MULT,
+			map_camera.min_zoom, map_camera.max_zoom)
+	map_camera.set_zoom(default_zoom)
+	# 默认缩放 = 整图适配 = 100%（HUD 百分比按此归一化显示）
+	if _hud != null and _hud.has_method("set_default_zoom"):
+		_hud.set_default_zoom(default_zoom)
+	if map_camera.has_method("set_offset"):
+		# 地图中心对准屏幕中心，打开即居中
+		map_camera.set_offset(vp_size * 0.5 - Vector2(
+			msize * default_zoom * 0.5, msize * default_zoom * 0.5))
+
+
+## 视图元信息刷新（打开 / 切省共用）：粒度指示器 + 名牌 + 图例 + 据点清单 + 切省箭头
+func _refresh_view_meta() -> void:
 	# 粒度指示：层级 + 当前地块号 + ESC 语义（直开=关闭 / 下钻=返回 L2）
 	if _indicator != null and api != null and api.has_method("get_current_l1_label"):
 		var l1_label: int = api.get_current_l1_label()
@@ -471,9 +561,9 @@ func open() -> void:
 	# 据点清单按当前归属重刷（关图期间可能已占领/易手）
 	if _territory_panel != null:
 		_territory_panel.refresh()
-	_set_overlay_visible(true)
-	if EventBus != null:
-		EventBus.strategic_map_opened.emit()
+	# 切省箭头按当前省份的邻省重算（换省后两侧目标都变）
+	if _arrows != null:
+		_arrows.refresh()
 
 
 ## 名牌内容：地块 #N + 聚落数概览

@@ -13,9 +13,16 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const L1_SCENE: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
 const L2_SCENE: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l2.tscn")
 const L3_SCENE: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l3.tscn")
+const _Geo := preload("res://modules/world_map/scripts/map_renderer_geo.gd")
+const _TexJobs := preload("res://modules/world_map/scripts/map_renderer_tex_jobs.gd")
 
 const L1_JSON_PATH := "res://config/strategic_map/l1_world.json"
 const L1_BASE_DIR := "res://config/strategic_map"
+## l1_terrain.png 实测取样点：水体 / 陆地（水面回贴判水断言用）
+const WATER_PX := Vector2i(710, 403)
+const LAND_PX := Vector2i(631, 401)
+## 出生 L1 的三个相邻老 L1 块（l1_world.json neighbors）
+const BIRTH_NEIGHBORS := [18, 67, 68]
 const L2_REGION := "region_001"
 const L2_BASE_DIR := "res://config/strategic_map/l2_packs"
 const ExpansionApiScript := preload("res://modules/expansion/api.gd")
@@ -53,6 +60,8 @@ func _ready() -> void:
 	_runner.add_test("据点面板：空态隐藏 / 逐据点一行 / 行点击回调", _test_territory_panel, true)
 	_runner.add_test("P4 染色：政治填充按已占地块逐格覆盖（占多少染多少）", _test_owned_tile_dyeing, true)
 	_runner.add_test("P4 染色：政治图例含「我方疆域」条目（无则不空留）", _test_legend_player_entry, true)
+	_runner.add_test("邻省上下文：政权色暗一阶 + 水面回贴 + 左右切省箭头", _test_province_context, true)
+	_runner.add_test("水面回贴：判水烘焙（水体原样回贴 / 陆地不覆盖）", _test_water_restore, true)
 	_runner.add_test("L2 打开：层级指示 + 当前地区号", _test_l2_indicator, true)
 	_runner.add_test("L3 打开：层级指示 + 关闭提示", _test_l3_indicator, true)
 	_runner.add_test("L2/L3 名牌：地区序号/大世界 + 概览副标题", _test_l2_l3_title, true)
@@ -614,3 +623,96 @@ func _find_label_text(node: Node, needle: String) -> bool:
 		if _find_label_text(child, needle):
 			return true
 	return false
+
+
+## 邻省上下文 + 左右切省箭头（本批：灰色邻块 → 地形 + 暗一阶政权色；左右箭头切相邻 L1 省）。
+## 断言走真实数据与真实链路：ProvincePolitics 侧表 → 邻块取色；控制器 _list_province_arrows
+## → 箭头目标；switch_province → api 实际换包且不改 ESC 语义。
+func _test_province_context() -> void:
+	if _l1_api == null or _l1_content == null:
+		_runner.assert_true(false, "前置装配缺失")
+		return
+	_l1_api.initialize(L1_JSON_PATH, L1_BASE_DIR)
+	_l1_content.visible = true
+	_l1_content.call("open")
+	var arrows: ProvinceSwitchArrows = _l1_scene.get_node_or_null("ProvinceSwitchArrows") as ProvinceSwitchArrows
+	_runner.assert_true(arrows != null, "L1 场景应挂 ProvinceSwitchArrows")
+	if arrows == null:
+		return
+	_runner.assert_true(arrows.get_parent() == _l1_scene,
+			"箭头挂 CanvasLayer 直下（Control 挂 Node2D 下 anchor 参照为 0 会跑位）")
+	_runner.assert_true(arrows.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+			"箭头根不吃鼠标（不挡地图拖拽/点选）")
+	_runner.assert_true(arrows.targets_fn.is_valid() and arrows.activate_fn.is_valid(),
+			"控制器已注入 targets_fn / activate_fn")
+	# 目标：出生省 #69 的三个邻省按全局质心分左右，两侧都有目标（不留死位）
+	var targets: Array = _l1_content.call("_list_province_arrows")
+	_runner.assert_eq(targets.size(), 2, "出生省两侧各有切省目标（实测 %d）" % targets.size())
+	var left := 0
+	var right := 0
+	for t in targets:
+		if int((t as Dictionary).get("side", 0)) == ProvincePolitics.SIDE_LEFT:
+			left = int(t.get("label", 0))
+		else:
+			right = int(t.get("label", 0))
+	_runner.assert_true(BIRTH_NEIGHBORS.has(left), "左目标取自相邻省（实测 #%d）" % left)
+	_runner.assert_true(BIRTH_NEIGHBORS.has(right), "右目标取自相邻省（实测 #%d）" % right)
+	_runner.assert_true(left != right, "左右目标不同（实测 #%d/#%d）" % [left, right])
+	_runner.assert_true(_l1_api.has_l1_data(left), "邻省 #%d 有可直接打开的包数据" % left)
+	_runner.assert_true(not _l1_api.has_l1_data(999), "无数据 label 判否（箭头不列死目标）")
+	# 邻块取色 = 侧表政权色暗一阶（不是旧平灰）
+	var pol := ProvincePolitics.load_shared()
+	_runner.assert_true(pol != null, "省份政治面侧表装载成功")
+	var renderer: MapRenderer = _l1_content.get_node_or_null("MapRenderer") as MapRenderer
+	if pol != null and renderer != null:
+		var nb: Dictionary = (_l1_api.get_data() as L1WorldData).neighbors[0]
+		var nb_label := int(nb.get("label", 0))
+		var got: Color = _Geo.neighbor_block_color(renderer, nb)
+		var want: Color = pol.color_of(nb_label).darkened(MapTokens.L1_NEIGHBOR_DIM)
+		_runner.assert_true(got.a > 0.0 and got.is_equal_approx(want),
+				"邻省块色 = 政权色暗一阶（#%d 实测 %s / 期望 %s）" % [nb_label, got, want])
+		_runner.assert_true(not got.is_equal_approx(MapTokens.L1_NEIGHBOR_COLOR),
+				"邻省不再是平灰")
+	# 切省：api 实际换包 + 指示器跟随 + ESC 语义不变（仍为直开关闭）
+	var switched: bool = _l1_content.call("switch_province", left)
+	_runner.assert_true(switched, "switch_province(#%d) 成功" % left)
+	_runner.assert_eq(_l1_api.get_current_l1_label(), left, "当前 L1 已切到 #%d" % left)
+	if _l1_indicator != null:
+		_runner.assert_eq(_l1_indicator._subtitle_label.text, "#%d" % left,
+				"指示器跟随切省（实测 %s）" % _l1_indicator._subtitle_label.text)
+	_runner.assert_true(not bool(_l1_content._drill_from_l2),
+			"切省不改下钻标志（ESC 仍关闭地图，不误返回 L2）")
+	_runner.assert_true(not _l1_content.call("switch_province", left),
+			"重复切同一省返回 false（幂等）")
+	_l1_content.call("close")
+
+
+## 水面回贴：地形贴图 → RGBA 贴图（RGB 原样 / A = 判水量）。水体 alpha 满、陆地 0，
+## 使政治色块边界与地图海岸线/湖岸线对齐（色块沿岸溢出与湖河被吞的收敛手段）。
+func _test_water_restore() -> void:
+	var path := "%s/l1_terrain.png" % L1_BASE_DIR
+	var img: Image = _TexJobs.bake_water_restore(path, MapTokens.L1_WATER_STRIDE,
+			MapTokens.L1_WATER_GB_MID, MapTokens.L1_WATER_GB_SOFT)
+	_runner.assert_true(img != null, "水面回贴贴图烘焙成功（%s）" % path)
+	if img == null:
+		return
+	_runner.assert_eq(img.get_format(), Image.FORMAT_RGBA8, "格式 RGBA8（RGB 原色 + 判水 alpha）")
+	var src := Image.new()
+	var f := FileAccess.open(path, FileAccess.READ)
+	var loaded := f != null and src.load_png_from_buffer(f.get_buffer(f.get_length())) == OK
+	if f != null:
+		f.close()
+	_runner.assert_true(loaded, "源地形贴图可读")
+	if not loaded:
+		return
+	src.convert(Image.FORMAT_RGB8)
+	var water := img.get_pixel(WATER_PX.x, WATER_PX.y)
+	var land := img.get_pixel(LAND_PX.x, LAND_PX.y)
+	_runner.assert_true(water.a > 0.9, "水体像素回贴 alpha 拉满（实测 %.2f）" % water.a)
+	_runner.assert_true(land.a < 0.1, "陆地像素不回贴（实测 %.2f）" % land.a)
+	var sw := src.get_pixel(WATER_PX.x, WATER_PX.y)
+	_runner.assert_true(absf(water.r - sw.r) < 0.01 and absf(water.g - sw.g) < 0.01
+			and absf(water.b - sw.b) < 0.01, "水体 RGB 原样回贴（逐字节同源）")
+	# 雪地/岩地不被误判成水（地形色板 g-b 分离：陆地形色均 ≥ +0.016）
+	var gb := (sw.g - sw.b)
+	_runner.assert_true(gb < -0.06, "取样水体像素确为水（g-b=%.3f）" % gb)

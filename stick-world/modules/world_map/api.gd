@@ -207,6 +207,15 @@ func get_current_l1_label() -> int:
 	return _current_l1_label
 
 
+## 该老 L1 是否有可直接打开的数据（出生省 = 根目录单份数据；其余 = l1_packs 包）。
+## 供 UI 判可用性（切省箭头只列可打开的目标），避免点下去才报错。
+func has_l1_data(l1_label: int) -> bool:
+	if l1_label == BIRTH_L1_LABEL:
+		return _birth_data != null
+	return FileAccess.file_exists(
+			"res://config/strategic_map/l1_packs/l1_%03d/l1_world.json" % l1_label)
+
+
 ## 玩家位置动态接线（F2/C1，总体设计 §5.6）：玩家所在场景图 map_id → 反查聚落。
 ## P6 增强：命中即记录到访（WorldState.visited_settlements）+ 更新玩家所在聚落
 ## （快速旅行路网起点）。聚落判定以出生 L1 数据为权威（玩家只可能在 8 城邦场景内）；

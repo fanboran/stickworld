@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://modules/world_map/scripts/strategic_map_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_renderer.gd" id="2_renderer"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://modules/world_map/ui/travel_dialog.gd" id="11_travel"]
 [ext_resource type="Script" path="res://modules/world_map/ui/map_ocean_backdrop.gd" id="12_ocean"]
 [ext_resource type="Script" path="res://modules/world_map/ui/territory_panel.gd" id="13_terr"]
+[ext_resource type="Script" path="res://modules/world_map/ui/province_switch_arrows.gd" id="14_arrows"]
 
 [node name="StrategicMap" type="CanvasLayer"]
 
@@ -67,6 +68,16 @@ visible = false
 [node name="MapLegend" type="PanelContainer" parent="."]
 script = ExtResource("9_legend")
 visible = false
+
+[node name="ProvinceSwitchArrows" type="Control" parent="."]
+script = ExtResource("14_arrows")
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
 [node name="TravelDialog" type="Control" parent="."]
 script = ExtResource("11_travel")

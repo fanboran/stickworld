@@ -23,6 +23,7 @@ modules/world_map/
 │   ├── travel_planner.gd            # TravelPlanner：路网 Dijkstra（快速/步行旅行共用，带阻断过滤）
 │   ├── l3_world_data.gd             # L3WorldData：大世界 13 个 L2 地区分块（索引图 + 政权 mask/mesh + states 表）
 │   ├── l2_world_data.gd             # L2WorldData：地区视图包（底图/地块索引图，label 与 L3 独立命名空间）
+│   ├── province_politics.gd         # ProvincePolitics：老 L1 省份政治面侧表（69 省主导政权色 + 全局质心；邻省上色与切省方位）
 │   └── political_lut.gd             # PoliticalLut：政权色 256x1 LUT（运行时查表上色，改表即换色零重烘）
 ├── scripts/
 │   ├── strategic_map_controller.gd  # StrategicMapController：L1 主控制器（Tab；单击选中/双击进城/ESC 关）
@@ -48,6 +49,7 @@ modules/world_map/
 │   ├── map_legend.gd                # MapLegend：右下角图例（数据驱动，切模式换整套条目）
 │   ├── settlement_tooltip.gd        # SettlementTooltip：聚落悬停提示（含据点归属行）
 │   ├── territory_panel.gd           # TerritoryPanel：左上据点面板（已占/未易手清单，行点击定位并激活）
+│   ├── province_switch_arrows.gd     # ProvinceSwitchArrows：屏幕左中/右中扁等腰三角（点击切相邻 L1 省份）
 │   ├── travel_dialog.gd             # TravelDialog：双击聚落弹窗 [走过去 | 快速旅行 | 取消]
 │   └── map_ocean_backdrop.gd        # MapOceanBackdrop：全屏海洋底（三视图共用，CanvasLayer 首子节点）
 ├── scenes/
@@ -68,7 +70,7 @@ modules/world_map/
 - 战略图开/关通知统一走 `EventBus.strategic_map_opened/closed`，本地不重复声明
 
 **方法分组**：
-- 初始化/数据：`setup` / `initialize`（出生 L1）/ `open_l1(l1_label)`（下钻老 L1 视图包）/ `ensure_player_l1` / `get_data` / `query_at_screen` / `get_settlement_ref` / `get_tiles` / `get_roads`
+- 初始化/数据：`setup` / `initialize`（出生 L1）/ `open_l1(l1_label)`（下钻老 L1 视图包）/ `ensure_player_l1` / `has_l1_data(label)`（该老 L1 是否有可直接打开的包）/ `get_data` / `query_at_screen` / `get_settlement_ref` / `get_tiles` / `get_roads`
 - 玩家位置：`set_player_map(map_id)`（场景图反查聚落，命中即记到访 + 更新快速旅行起点）
 - 快速旅行：`get_travel_status` → `TRAVEL_*` 状态码（OK/SELF/NO_SCENE/UNVISITED/UNREACHABLE/BLOCKED/BATTLE）+ `fast_travel_to`；语义 = 已到访 ∧ 路网连通 ∧ 未阻断 ∧ 非战斗
 - 步行旅行：`get_walk_status` / `walk_to`（不要求已到访——走过去正是解锁到访的手段；组装 `WorldState` 步行队列后发 `EventBus.travel_requested`）
@@ -81,6 +83,12 @@ modules/world_map/
 **疆域染色**：政治模式的地块填充按已占地块**逐格**覆盖（占多少染多少，不整国变色）——取色唯一出口 `MapRenderer.tile_fill_color`，玩家疆域色取自 `MapTokens.L1_PLAYER_TERRITORY_COLOR`（纯白，渲染器与政治图例同源）；已占集合来自 expansion 契约面 `get_owned_tile_keys()`（组 `expansion_api` 查找，不引 expansion 全局类名）。
 
 **政治模式观感（WorldBox 式）**：地形贴图（`l1_terrain.png`）打底 → 政权色**半透明**覆盖（`MapRenderer.POLITICAL_FILL_ALPHA`）→ 地块边缘用地块**国色**描边（`tile_border_color`，不透明），灰地块界只留给地形/交通模式。L2/L3 世界图仍是烘焙 mask 的不透明政治填充 + 墨色界线。
+
+**邻省上下文层（L1 政治模式）**：邻省块也是「地形透出 + 政权色」，只是比本省**暗一阶**（`MapTokens.L1_NEIGHBOR_DIM`）——色源是侧表 `data/province_politics.gd`（`ProvincePolitics`，读 `config/strategic_map/l1_province_politics.json`：69 个老 L1 省的**主导政权色 + 全局质心**，由 `tools/worldgen/l1/export_province_politics.py` 从 `l3_l1.json` 多边形 × 8192 政权 ID mask 众数采样）。侧表缺失 → 回退旧平灰（`L1_NEIGHBOR_COLOR`），视图不锁死。
+
+**水面回贴（色块与地图严丝合缝）**：地块多边形沿岸会溢出到浅水、且会把地块内的湖河一起染色。政治模式在覆盖层之上再贴一层**由地形贴图烘出的 RGBA 贴图**（`map_renderer_tex_jobs.bake_water_restore`，后台线程：RGB = 地形原色、A = 判水量）——判水用绿-蓝差（地形水色 g-b ≈ −0.15、陆地形色含雪/岩 ≥ +0.016，`MapTokens.L1_WATER_GB_MID`），**必须 1:1 不抽样**（抽样后线性过滤会混出岸边浅带）。政治界宽另取 `L1_POLITICAL_TILE_BORDER_WIDTH`（略粗于常驻灰界，盖住相邻地块多边形 1~2px 的不共线缝）。
+
+**左右切省箭头（L1）**：`ui/province_switch_arrows.gd`（`ProvinceSwitchArrows`）在屏幕左中/右中各贴一个**扁等腰三角**，填充 = 目标省主导政权色、朝向按邻省实际方位旋转（限幅 ±51.6°）；目标由控制器 `_list_province_arrows()` 用侧表**全局质心**判左右（`ProvincePolitics.pick_by_side` 纯函数：最朝该侧、同分取近者、全在另一侧则取最不偏者），点击走 `StrategicMapController.switch_province(label)` → `api.open_l1` 换包 + 视角重适配，**不改 `_drill_from_l2`**（ESC 语义跟入口走）。api 侧配 `has_l1_data(label)` 只列可打开的目标。
 
 ## 视图层级与输入
 

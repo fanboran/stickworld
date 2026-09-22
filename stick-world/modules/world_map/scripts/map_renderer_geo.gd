@@ -80,21 +80,22 @@ static func edge_touches_lake_fast(data: L1WorldData, a: Vector2, b: Vector2, to
 	return false
 
 
-## 构建不随 zoom/hover 变化的静态几何缓存（写回宿主 _cached_segs / _cached_l1_closed /
+## 构建不随 zoom/hover 变化的静态几何缓存（写回宿主 _cached_tile_chains / _cached_l1_closed /
 ## _cached_neighbor_outlines / _river_lines / _river_widths / _road_dirt_lines /
-## _road_paved_lines / _segs_valid）：城市描边段（跳过邻湖边）+ 出生 L1 轮廓
+## _road_paved_lines / _segs_valid）：城界描边**链**（跳过邻湖边）+ 出生 L1 轮廓
 ## + 邻居空心轮廓（A3）+ 河流折线。仅 set_data / 首帧调用一次。
-## feedback1 去抖动：缓存存原始平滑点列（直绘，Godot antialiased）；
-## 无向边去重保留——共享边只描一次，线条严丝合缝不叠双线。
+## feedback1 去抖动：缓存存原始平滑点列（直绘，Godot antialiased）。
+## ⚠️ 城界由「无向边去重段 + draw_multiline」改为「逐地块成链 + draw_polyline」：
+## draw_multiline 逐段各带自己的端点外伸，三岔口三条边各自探头 → 灰线读作分叉
+## （创始人反馈）；成链后链内相邻段共顶点成折角，交汇处不再外伸。共享边两侧地块
+## 各画一遍（同色同宽，叠画无痕），代价是段数 ×2，地块数量级（8~29）下可忽略。
 static func build_cached_geometry(h) -> void:
-	h._cached_segs = PackedVector2Array()
 	h._cached_l1_closed = PackedVector2Array()
-	# 宿主缓存为元素类型化数组（Array[PackedVector2Array]）：跨脚本动态赋普通 []
-	# 会被运行时拒绝（Invalid assignment），类型化数组须 clear() 就地清空
 	# 宿主缓存为元素类型化数组（Array[PackedVector2Array]）：跨脚本动态赋普通 []
 	# 会被运行时拒绝（Invalid assignment）且中止本函数，后续构建全部跳过；
 	# 类型化数组须 clear() 就地清空
 	h._cached_neighbor_outlines.clear()
+	h._cached_tile_chains.clear()
 	h._river_lines.clear()
 	h._river_widths = PackedFloat32Array()
 	# 邻居空心轮廓（闭合折线缓存）
@@ -108,25 +109,14 @@ static func build_cached_geometry(h) -> void:
 	var lake_boxes: Array[Rect2] = []
 	for lake in h._data.lakes:
 		lake_boxes.append(lake_bbox(lake, lake_tol))
-	# 城界描边段：无向边去重（相邻 tile 共享边只描一次——同一物理边一份描边，
-	# 端点与邻边共点，三岔交界严丝合缝）
-	var seen_edges := {}
+	# 城界描边链：逐地块按点序成链（跳过邻湖段 → 一段连续保留边自成一条链）
 	for tile in h._data.tiles:
 		if tile.polygon.size() < 3:
 			continue
-		var tpts = tile.polygon
-		var n = tpts.size()
-		for i in range(n):
-			var a = tpts[i]
-			var b = tpts[(i + 1) % n]
-			if edge_touches_lake_fast(h._data, a, b, lake_tol, lake_boxes):
-				continue
-			var key := MapSketch.edge_key(a, b)
-			if seen_edges.has(key):
-				continue
-			seen_edges[key] = true
-			h._cached_segs.append(a)
-			h._cached_segs.append(b)
+		for chain in tile_border_chains(h._data, tile.polygon, lake_tol, lake_boxes):
+			h._cached_tile_chains.append(chain)
+	# 三岔交汇点（补圆盖外凸尖用）
+	h._cached_junctions = junction_points(h._data)
 	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环）——闭合缓存
 	if h._data.l1_polygon.size() >= 3:
 		h._cached_l1_closed = closed(h._data.l1_polygon)
@@ -152,10 +142,90 @@ static func build_cached_geometry(h) -> void:
 	h._segs_valid = true
 
 
+## 交汇点（≥3 个地块共享的顶点，按 0.05px 量化归并）。
+## 用途：绘制端在这些点补一个同色小圆——"灰线分叉"的真因是各环在交汇处各自成折角，
+## 折角外侧倒角沿各自方向外凸（实测三块边界几何共点，最小线段距 0.000px，纯渲染层问题），
+## 补圆把外凸尖盖住，三条线读作汇于一点。仅 set_data/首帧构建一次。
+static func junction_points(data: L1WorldData) -> PackedVector2Array:
+	var users: Dictionary = {}
+	for tile in data.tiles:
+		if tile.polygon.size() < 3:
+			continue
+		for p in tile.polygon:
+			var key := "%d_%d" % [roundi(p.x * 20.0), roundi(p.y * 20.0)]
+			if not users.has(key):
+				users[key] = {"pt": p, "n": 0, "tiles": {}}
+			var e: Dictionary = users[key]
+			if not (e["tiles"] as Dictionary).has(tile.tile_id):
+				(e["tiles"] as Dictionary)[tile.tile_id] = true
+				e["n"] = int(e["n"]) + 1
+	var out := PackedVector2Array()
+	for key in users:
+		var e: Dictionary = users[key]
+		if int(e["n"]) >= 3:
+			out.append(e["pt"])
+	return out
+
+
+## 单地块城界链：按多边形点序把连续"非邻湖"边并成折线链（邻湖段断开），
+## 整环都不邻湖时返回一条闭合链（首点续尾）。链内相邻段共顶点 ⇒ draw_polyline
+## 在交汇处成折角、端点不外伸（三岔口不再分叉）。
+static func tile_border_chains(data: L1WorldData, poly: PackedVector2Array,
+		lake_tol: float, lake_boxes: Array[Rect2]) -> Array:
+	var out: Array = []
+	var n := poly.size()
+	if n < 3:
+		return out
+	var kept := PackedByteArray()
+	kept.resize(n)
+	var n_kept := 0
+	for i in n:
+		if not edge_touches_lake_fast(data, poly[i], poly[(i + 1) % n], lake_tol, lake_boxes):
+			kept[i] = 1
+			n_kept += 1
+	if n_kept == 0:
+		return out
+	if n_kept == n:
+		var ring := PackedVector2Array(poly)
+		ring.append(poly[0])
+		out.append(ring)
+		return out
+	# 每条链从"前一段被跳过"的保留边起（保证覆盖完整的连续保留段）
+	var visited := 0
+	var i := 0
+	while visited < n_kept and i < 2 * n:
+		if kept[i % n] == 1 and kept[(i - 1 + n) % n] == 0:
+			var chain := PackedVector2Array()
+			var j := i
+			while kept[j % n] == 1:
+				chain.append(poly[j % n])
+				visited += 1
+				j += 1
+			chain.append(poly[j % n])
+			out.append(chain)
+			i = j
+		else:
+			i += 1
+	return out
+
+
+## 邻省块填充色（政治模式）：该老 L1 省**主导政权色暗一阶**——地形照常透出，
+## 周边比本省低一档亮度（创始人：周围灰色地区 → 地形图 + 政权色，暗一阶）。
+## 侧表缺失或该省无主导政权 → 回退旧灰底（L1_NEIGHBOR_COLOR）。
+static func neighbor_block_color(h, neighbor: Dictionary) -> Color:
+	var label := int(neighbor.get("label", 0))
+	var pol: ProvincePolitics = h.province_politics()
+	if pol != null and label > 0:
+		var c := pol.color_of(label)
+		if c.a > 0.0:
+			return c.darkened(h.L1_NEIGHBOR_DIM)
+	return h.NEIGHBOR_COLOR
+
+
 ## 烘焙静态色块层（写回宿主 _tiles_mesh / _lakes_mesh / _neighbors_mesh）：
-## 城市色块与湖泊各一张 ArrayMesh（顶点色，三角形独立顶点）。
+## 城市色块 / 湖泊 / 邻省块各一张 ArrayMesh（顶点色，三角形独立顶点）。
 ## Geometry2D.triangulate_polygon 一次性 earcut（C++，含凹多边形），仅 set_data / 首帧调用一次。
-## 邻居老 L1 块不参与（A3 空心化：只描边不填充，轮廓走 build_cached_geometry 缓存）。
+## 邻省块取色 = 该省主导政权色暗一阶（neighbor_block_color；侧表缺失回退灰底）。
 ## 拆两张 mesh：河流画在两层层间（tiles 上、lakes 下），见宿主 _draw 1.5 层。
 static func bake_base_meshes(h) -> void:
 	h._tiles_mesh = null
@@ -175,10 +245,12 @@ static func bake_base_meshes(h) -> void:
 	for lake in h._data.lakes:
 		lake_pairs.append([pts(lake), h.LAKE_COLOR])
 	for ni in h._data.neighbors.size():
-		for poly in h._data.neighbors[ni].get("polygons", []):
+		var nb: Dictionary = h._data.neighbors[ni]
+		var nb_color: Color = neighbor_block_color(h, nb)
+		for poly in nb.get("polygons", []):
 			var npts := pts(poly)
 			if npts.size() >= 3:
-				neighbor_pairs.append([npts, h.NEIGHBOR_COLOR])
+				neighbor_pairs.append([npts, nb_color])
 	h._tiles_mesh = mesh_from_pairs(tile_pairs)
 	h._lakes_mesh = mesh_from_pairs(lake_pairs)
 	h._neighbors_mesh = mesh_from_pairs(neighbor_pairs)

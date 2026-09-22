@@ -337,7 +337,8 @@ func _fingerprints() -> void:
 	for k in blob_keys:
 		blob_fp[k] = _hash(r1._blob_outlines[k])
 	_fp("l1mesh.blobs", _hash(blob_fp))
-	_fp("l1mesh.cached_segs", _hash(r1._cached_segs))
+	_fp("l1mesh.tile_chains", _fp_packed_list(r1._cached_tile_chains))
+	_fp("l1mesh.junctions", _hash(r1._cached_junctions))
 	_fp("l1mesh.l1_closed", _hash(r1._cached_l1_closed))
 	_fp("l1mesh.glow", _hash(r1._glow_outline))
 	_fp("l1mesh.neighbor_outlines", _fp_packed_list(r1._cached_neighbor_outlines))

@@ -60,6 +60,8 @@ var hovered_tile_id: String = ""
 ## hover 每帧触发 → 卡顿源；缓存后 hover 重绘 = 一次 draw_polyline 循环。
 ## ⚠️ 存的是**逐地块链**（非去重段）：三岔口灰线分叉的收敛手段，见 map_renderer_geo。
 var _cached_tile_chains: Array[PackedVector2Array] = []
+## 描边链所属地块（与 _cached_tile_chains 同序；政治模式国色描边按地块取色）
+var _cached_tile_chain_owners: Array[String] = []
 ## 三岔交汇点（≥3 地块共享顶点；描边时补同色小圆盖住各环折角的外凸尖，"灰线分叉"收敛）
 var _cached_junctions: PackedVector2Array = PackedVector2Array()
 ## 出生 L1 权威轮廓（主大陆单环，闭合；export 已保证 l1_polygon 只含最大环）
@@ -398,13 +400,19 @@ func tile_border_color(tile: L1TileDef) -> Color:
 
 ## 政治模式地块描边：逐地块闭合多边形直绘国色（L1 单包地块数少，
 ## 每块一次 draw_polyline 的成本可忽略；同色相邻边由后画者定色，与 WorldBox 同理）。
+## 走缓存链（贴水面段[湖/河]已断开不描——贴陆后河岸即城块界线，描边会把河框起来
+## 读作「河流被描边」；海岸边保留 = 国界勾勒语义）。
 func _draw_political_tile_borders(width: float) -> void:
 	if _data == null:
 		return
+	var by_tile: Dictionary = {}
 	for tile in _data.tiles:
-		if tile.polygon.size() < 3:
+		by_tile[tile.tile_id] = tile
+	for ci in _cached_tile_chains.size():
+		var tile: L1TileDef = by_tile.get(_cached_tile_chain_owners[ci], null)
+		if tile == null:
 			continue
-		draw_polyline(_Geo.closed(tile.polygon), tile_border_color(tile), width, true)
+		draw_polyline(_cached_tile_chains[ci], tile_border_color(tile), width, true)
 
 
 ## 构建当前城流动描边缓存（R2）：几何 = 当前城 mid 档建成区轮廓（包几何最大外环，
@@ -609,7 +617,8 @@ func _draw() -> void:
 			_blob().draw_vector_fallback(zz)
 	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
 	_Layers.draw_neighbor_outlines(self, zz)
-	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）。
+	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过贴水面边（湖/河岸一圈不描边
+	#    ——贴陆后河岸即城块界线，描了会把河框起来读作「河流被描边」；海岸边保留=国界勾勒）。
 	#    描边段不随 zoom/hover 变化 → 缓存复用（原每帧重建 = 4668 段 × 湖边数 距离计算，hover 卡顿源）
 	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:

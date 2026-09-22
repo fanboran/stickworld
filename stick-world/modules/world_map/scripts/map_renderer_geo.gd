@@ -52,15 +52,7 @@ static func lake_edge_tol(data: L1WorldData) -> float:
 
 ## 湖多边形包围盒（外扩 tol）——邻湖判定预筛用
 static func lake_bbox(lake: Array, tol: float) -> Rect2:
-	var bb := Rect2()
-	var first := true
-	for pt in pts(lake):
-		if first:
-			bb = Rect2(pt, Vector2.ZERO)
-			first = false
-		else:
-			bb = bb.expand(pt)
-	return bb.grow(tol)
+	return polyline_bbox(pts(lake), tol)
 
 
 ## 边中点是否贴着某湖（bbox 预筛加速版）：中点不在任何湖 bbox 内直接 false
@@ -80,9 +72,42 @@ static func edge_touches_lake_fast(data: L1WorldData, a: Vector2, b: Vector2, to
 	return false
 
 
-## 构建不随 zoom/hover 变化的静态几何缓存（写回宿主 _cached_tile_chains / _cached_l1_closed /
+## 折线包围盒（外扩 reach）——河流/湖泊贴边判定预筛用
+static func polyline_bbox(rpts: PackedVector2Array, grow: float) -> Rect2:
+	var bb := Rect2()
+	var first := true
+	for pt in rpts:
+		if first:
+			bb = Rect2(pt, Vector2.ZERO)
+			first = false
+		else:
+			bb = bb.expand(pt)
+	return bb.grow(grow)
+
+
+## 边中点是否贴着某条河（骨架中心线 + 半河宽）：贴陆后河岸即城块界线，
+## 描边会沿河岸把河框起来读作「河流被描边」——贴河边与贴湖边同样跳过不描。
+static func edge_touches_river_fast(a: Vector2, b: Vector2, tol: float,
+		river_lines: Array, river_widths: PackedFloat32Array,
+		river_boxes: Array[Rect2]) -> bool:
+	if river_boxes.is_empty():
+		return false
+	var mid := (a + b) * 0.5
+	for ri in range(river_boxes.size()):
+		if not river_boxes[ri].has_point(mid):
+			continue
+		var lpts: PackedVector2Array = river_lines[ri]
+		var reach := tol + float(river_widths[ri]) * 0.5
+		for i in range(lpts.size() - 1):
+			if dist_point_segment(mid, lpts[i], lpts[i + 1]) <= reach:
+				return true
+	return false
+
+
+## 构建不随 zoom/hover 变化的静态几何缓存（写回宿主 _cached_tile_chains（+
+## _cached_tile_chain_owners 平行记录地块，政治国色描边取色用）/ _cached_l1_closed /
 ## _cached_neighbor_outlines / _river_lines / _river_widths / _road_dirt_lines /
-## _road_paved_lines / _segs_valid）：城界描边**链**（跳过邻湖边）+ 出生 L1 轮廓
+## _road_paved_lines / _segs_valid）：城界描边**链**（跳过贴水面边[湖/河]）+ 出生 L1 轮廓
 ## + 邻居空心轮廓（A3）+ 河流折线。仅 set_data / 首帧调用一次。
 ## feedback1 去抖动：缓存存原始平滑点列（直绘，Godot antialiased）。
 ## ⚠️ 城界由「无向边去重段 + draw_multiline」改为「逐地块成链 + draw_polyline」：
@@ -96,6 +121,7 @@ static func build_cached_geometry(h) -> void:
 	# 类型化数组须 clear() 就地清空
 	h._cached_neighbor_outlines.clear()
 	h._cached_tile_chains.clear()
+	h._cached_tile_chain_owners.clear()
 	h._river_lines.clear()
 	h._river_widths = PackedFloat32Array()
 	# 邻居空心轮廓（闭合折线缓存）
@@ -104,29 +130,36 @@ static func build_cached_geometry(h) -> void:
 			var npts := pts(poly)
 			if npts.size() >= 3:
 				h._cached_neighbor_outlines.append(closed(npts))
-	var lake_tol := lake_edge_tol(h._data)
-	# 湖 bbox（外扩 tol）预筛：段中点不在任何湖 bbox 内 → 直接非邻湖，省精确距离计算
-	var lake_boxes: Array[Rect2] = []
-	for lake in h._data.lakes:
-		lake_boxes.append(lake_bbox(lake, lake_tol))
-	# 城界描边链：逐地块按点序成链（跳过邻湖段 → 一段连续保留边自成一条链）
-	for tile in h._data.tiles:
-		if tile.polygon.size() < 3:
-			continue
-		for chain in tile_border_chains(h._data, tile.polygon, lake_tol, lake_boxes):
-			h._cached_tile_chains.append(chain)
-	# 三岔交汇点（补圆盖外凸尖用）
-	h._cached_junctions = junction_points(h._data)
-	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环）——闭合缓存
-	if h._data.l1_polygon.size() >= 3:
-		h._cached_l1_closed = closed(h._data.l1_polygon)
-	# 河流折线（矢量回退层；宽随河流数据）
+	# 河流折线（矢量水体层 + 城界描边贴河判定的数据源；宽随河流数据）
 	for ri in h._data.rivers.size():
 		var rv: Dictionary = h._data.rivers[ri]
 		var rpts: PackedVector2Array = rv.get("pts", PackedVector2Array())
 		if rpts.size() >= 2:
 			h._river_lines.append(rpts)
 			h._river_widths.append(maxf(float(rv.get("w", 2.0)), h.RIVER_MIN_WIDTH))
+	var water_tol := lake_edge_tol(h._data)
+	# 湖/河 bbox（外扩 tol）预筛：段中点不在任何 bbox 内 → 直接不贴，省精确距离计算
+	var lake_boxes: Array[Rect2] = []
+	for lake in h._data.lakes:
+		lake_boxes.append(lake_bbox(lake, water_tol))
+	var river_boxes: Array[Rect2] = []
+	for ri in range(h._river_lines.size()):
+		river_boxes.append(polyline_bbox(
+			h._river_lines[ri], water_tol + float(h._river_widths[ri]) * 0.5))
+	# 城界描边链：逐地块按点序成链（跳过贴水面段[湖/河] → 连续保留边自成一条链）；
+	# 平行数组记 owner tile_id（政治模式国色描边按地块取色）
+	for tile in h._data.tiles:
+		if tile.polygon.size() < 3:
+			continue
+		for chain in tile_border_chains(h._data, tile.polygon, water_tol, lake_boxes,
+				h._river_lines, h._river_widths, river_boxes):
+			h._cached_tile_chains.append(chain)
+			h._cached_tile_chain_owners.append(tile.tile_id)
+	# 三岔交汇点（补圆盖外凸尖用）
+	h._cached_junctions = junction_points(h._data)
+	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环）——闭合缓存
+	if h._data.l1_polygon.size() >= 3:
+		h._cached_l1_closed = closed(h._data.l1_polygon)
 	# 道路分级（R6 实线分级，废 F5 虚线切分）：土路细 / 官道粗；
 	# 仅交通模式矢量回退时绘制（正常观感走 l1_travel.png 贴图）
 	h._road_dirt_lines.clear()
@@ -167,11 +200,13 @@ static func junction_points(data: L1WorldData) -> PackedVector2Array:
 	return out
 
 
-## 单地块城界链：按多边形点序把连续"非邻湖"边并成折线链（邻湖段断开），
-## 整环都不邻湖时返回一条闭合链（首点续尾）。链内相邻段共顶点 ⇒ draw_polyline
-## 在交汇处成折角、端点不外伸（三岔口不再分叉）。
+## 单地块城界链：按多边形点序把连续"不贴水面"边并成折线链（贴湖/河段断开），
+## 整环都不贴水面时返回一条闭合链（首点续尾）。链内相邻段共顶点 ⇒ draw_polyline
+## 在交汇处成折角、端点不外伸（三岔口不再分叉）。海岸边保留（国界勾勒语义）。
 static func tile_border_chains(data: L1WorldData, poly: PackedVector2Array,
-		lake_tol: float, lake_boxes: Array[Rect2]) -> Array:
+		water_tol: float, lake_boxes: Array[Rect2],
+		river_lines: Array, river_widths: PackedFloat32Array,
+		river_boxes: Array[Rect2]) -> Array:
 	var out: Array = []
 	var n := poly.size()
 	if n < 3:
@@ -180,7 +215,9 @@ static func tile_border_chains(data: L1WorldData, poly: PackedVector2Array,
 	kept.resize(n)
 	var n_kept := 0
 	for i in n:
-		if not edge_touches_lake_fast(data, poly[i], poly[(i + 1) % n], lake_tol, lake_boxes):
+		if not edge_touches_lake_fast(data, poly[i], poly[(i + 1) % n], water_tol, lake_boxes) \
+				and not edge_touches_river_fast(poly[i], poly[(i + 1) % n], water_tol,
+					river_lines, river_widths, river_boxes):
 			kept[i] = 1
 			n_kept += 1
 	if n_kept == 0:

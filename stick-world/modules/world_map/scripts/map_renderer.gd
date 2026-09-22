@@ -125,15 +125,6 @@ const POLITICAL_FILL_ALPHA := 0.55
 var _mode_textures: Dictionary = {}
 ## TERRAIN 底图 Image（降档擦除贴图的取样源；随贴图线程解码后保留）
 var _terrain_img: Image = null
-## 政治模式「水面回贴」贴图（RGBA：RGB = 地形原色、A = 判水量；线程内从地形贴图烘，
-## 分辨率 1/L1_WATER_STRIDE）。政治模式下垫在政权色覆盖层之上，把沿岸溢出到水面的
-## 色块与"被色块吞掉的湖河"还原成地形水色——色块与地图严丝合缝的收敛手段。
-## 缺失（未烘完/贴图缺）时跳过该 pass，政治层照常显示（只是岸边略溢）。
-var _water_tex: ImageTexture = null
-## 水面回贴烘制在途（防空转重复入队）
-var _water_pending: bool = false
-## 水面回贴烘制失败记忆（缺贴图/格式不符时不再重排队）
-var _water_failed: bool = false
 ## 贴图加载线程（单线程串行消费 _load_queue；R9 样板：目标归档 + join 防段错误）
 var _tex_thread: Thread = null
 var _tex_result: Image = null
@@ -173,10 +164,6 @@ const NEIGHBOR_COLOR := MapTokens.L1_NEIGHBOR_COLOR
 const NEIGHBOR_BORDER_WIDTH := MapTokens.L1_NEIGHBOR_BORDER_WIDTH
 ## 邻省块压暗量（政治模式邻省按政权色上色但暗一阶；见 map_renderer_geo）
 const L1_NEIGHBOR_DIM := MapTokens.L1_NEIGHBOR_DIM
-## 水面回贴参数（判水阈值/采样步长；见 map_renderer_tex_jobs.bake_water_restore）
-const L1_WATER_STRIDE := MapTokens.L1_WATER_STRIDE
-const L1_WATER_GB_MID := MapTokens.L1_WATER_GB_MID
-const L1_WATER_GB_SOFT := MapTokens.L1_WATER_GB_SOFT
 ## 内容区"纸张边界"黑框（context 外缘，A3）
 const PAPER_BORDER_COLOR := MapTokens.L1_PAPER_BORDER_COLOR
 const PAPER_BORDER_WIDTH := MapTokens.L1_PAPER_BORDER_WIDTH
@@ -304,9 +291,6 @@ func set_data(data: L1WorldData) -> void:
 	_tex().join()
 	_mode_textures = {}
 	_terrain_img = null
-	_water_tex = null
-	_water_pending = false
-	_water_failed = false
 	_blob_tex.clear()
 	for i in SettlementBlob.TIER_COUNT:
 		_blob_tex.append(null)
@@ -570,11 +554,15 @@ func _draw() -> void:
 					Color(1.0, 1.0, 1.0, POLITICAL_FILL_ALPHA))
 		if _tiles_mesh != null:
 			draw_mesh(_tiles_mesh, null, Transform2D(), Color(1.0, 1.0, 1.0, POLITICAL_FILL_ALPHA))
-		# 水面回贴：贴图水面原样贴回色块之上（地块多边形沿岸会溢出到浅水、并把地块内的
-		# 湖河一起染色——本 pass 让水读作水、色块边界与贴图海岸线/湖岸线对齐）。
-		# 画在界线之前：沿河/湖的界线仍压在水的上层可见
-		if _water_tex != null:
-			draw_texture_rect(_water_tex, Rect2(Vector2.ZERO, ctx_size), false)
+		# 水体矢量后处理（水陆同源 D3，创始人 2026-09-22 定向）：河流 polyline +
+		# 湖泊 polygon 画在色块之上、界线之下——几何贴陆（I2）后色块本就盖不到水面，
+		# 矢量水与色块边/描边出自生成端同一份水陆真相（I3），运行时零判水、放大不糊。
+		# 河宽 = EDT 实测 w + 1px（盖住底图 gaussian_filter(0.9) 的羽化边；宽取自
+		# EDT 是同源纪律，不得改固定像素宽）。旧「绿-蓝差判水水面回贴」已退役。
+		for ri in _river_lines.size():
+			draw_polyline(_river_lines[ri], RIVER_COLOR, _river_widths[ri] + 1.0, true)
+		if _lakes_mesh != null:
+			draw_mesh(_lakes_mesh, null)
 	# 1. 矢量回退层（贴图缺失/未解码完成时）
 	if not terrain_base:
 		if _tiles_mesh == null:

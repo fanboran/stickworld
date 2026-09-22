@@ -36,6 +36,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "l2_export"))
 import mesh_extract  # noqa: E402
+import land_snap  # noqa: E402  水陆同源：贴陆后处理 + 水陆三真相加载
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # tools/worldgen
 V2_DIR = os.path.join(HERE, "output", "l1_v2")
@@ -269,7 +270,8 @@ def render_panorama(out_size=2048):
     citydata = json.load(open(os.path.join(V2_DIR, "city_data.json"), encoding="utf-8"))
     legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_8192.npy")).astype(np.int32)
     city_labels = np.load(os.path.join(V2_DIR, "city_labels_8192.npy")).astype(np.int32)
-    lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
+    # 湖用精细代（与包内 lakes/地形贴图同源；load_water_masks 缺输入即报错）
+    _, lake, _ = land_snap.load_water_masks(os.path.join(HERE, "output"))
     res = legacy.shape[0]
 
     print("[P] 8192 上色（LUT 查表）...")
@@ -361,15 +363,19 @@ def main():
         return
     # 城市层 8192 生成 + 老 L1 拼 8192 原图 + 湖泊 8192 原样（全链无重采样）
     legacy = np.load(os.path.join(V2_DIR, "legacy_l1_labels_8192.npy")).astype(np.int32)
-    # 城块蒙版：S1 细化场优先（label 编号与 city_labels 完全一致，边界已 fBm 自然化；
-    # 审计#1——L1 视图城块边界旧代几何欠账的根治入口）
+    # 城块蒙版：S1 细化场（水陆同源 D2 定向后的唯一代；缺输入报错退出——
+    # 旧代曾因 refined 落在 diag/ 路径断链而静默回退 city_labels，是「哪里算水」
+    # 三口径之一的根源，见 水陆同源重建-方案.md L4.2）
     refined_path = os.path.join(V2_DIR, "refined_city_labels_8192.npy")
-    if os.path.exists(refined_path):
-        city_labels = np.load(refined_path).astype(np.int32)
-        print("  城块蒙版 = refined_city_labels_8192.npy（S1 细化场）")
-    else:
-        city_labels = np.load(os.path.join(V2_DIR, "city_labels_8192.npy")).astype(np.int32)
-    lake = np.array(Image.open(os.path.join(HERE, "output", "fractal_lake_mask_8192.png"))) > 0
+    if not os.path.exists(refined_path):
+        print("错误：缺 %s（先跑 l3/refine_city_labels.py；禁止回退旧代 city_labels）"
+              % refined_path)
+        sys.exit(1)
+    city_labels = np.load(refined_path).astype(np.int32)
+    print("  城块蒙版 = refined_city_labels_8192.npy（S1 细化场，唯一代）")
+    # 水陆三真相（水陆同源 I1）：locked 陆地 + 精细湖光栅 + 河掩膜，
+    # 湖多边形/地形贴图/贴陆后处理共用同一份（load_water_masks 缺输入即报错）
+    land8, lake, river8 = land_snap.load_water_masks(os.path.join(HERE, "output"))
 
     # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距（按 res 缩放）
     # R3 --polys-only：窗口直接读包内 world_origin+context_size（river_export 注入时
@@ -407,9 +413,17 @@ def main():
     ctx_lake = lake[y0:y0 + side, x0:x0 + side].copy()
     # 8192：直接裁剪 8192 级城市标签（城市层已在 8192 生成，真实精细边界）
     ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
-    # 城市块裁剪湖泊：湖区域不属于任何城市块——城市块在湖边的边界沿湖弧线（与湖泊 mesh
-    # 共享同一像素边界），消除"湖泊丝滑弧线 vs 陆地直线大块"交界处的缝隙
-    ctx_city[ctx_lake] = 0
+    # 贴陆后处理（水陆同源 L2 层，轮廓提取前统一接入）：水面（海/湖/河）标签
+    # 归 0 + 纯陆地内 0 空洞按 EDT 最近城块回填——几何 ∩ 水 = 0 且 陆地 \ 几何 = 0
+    # （不变量 I2）；城块边界与地形水线出自同一份掩膜（I3 生成侧）。
+    # 旧实现只挖湖（ctx_city[ctx_lake]=0），海靠城块场自身不越海、河上有标签、
+    # 陆地毛边不回填——三处口径漂移即「色块与地图不严丝合缝」的几何侧根源。
+    ctx_land = land8[y0:y0 + side, x0:x0 + side]
+    ctx_river = river8[y0:y0 + side, x0:x0 + side]
+    ctx_city, snap_stats = land_snap.snap_labels_to_land(
+        ctx_city, ctx_land, ctx_lake | ctx_river)
+    print("  贴陆后处理：越水清除 %d px，陆地回填 %d px"
+          % (snap_stats["cleared_px"], snap_stats["filled_px"]))
     # R3 起换 extract_smooth_mesh：find_contours 亚像素等值线 + 共享弧统一平滑，
     # 整数台阶根除（--polys-only 的 patch 与全新生成同管线）。
     # 城市/邻居合成一张标签图一次提取（邻居 +10000 命名空间）——城块与
@@ -474,9 +488,9 @@ def main():
         # 曾漏转换，导致邻块多边形整体沿主对角轴翻转（涂灰时不可见，2026-09-22 上色后暴露）。
         neighbors_data.append({"label": int(k),
                                "polygons": [r for p in mv.get("outer", [])
-                                            for r in to_xy(mesh_extract.f32_clean_ring(p))],
+                                            for r in mesh_extract.f32_clean_ring(to_xy(p))],
                                "holes": [r for p in mv.get("holes", [])
-                                         for r in to_xy(mesh_extract.f32_clean_ring(p))]})
+                                         for r in mesh_extract.f32_clean_ring(to_xy(p))]})
     nbr_labels.sort()
     print("  邻居老 L1 块 (%d):" % len(nbr_labels), nbr_labels)
     # 湖泊：context 内全部湖像素（覆盖邻居/非地块区；地块内湖极少，直接作湖泊色覆盖城市块）

@@ -14,13 +14,9 @@ const L1_SCENE: PackedScene = preload("res://modules/world_map/scenes/strategic_
 const L2_SCENE: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l2.tscn")
 const L3_SCENE: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l3.tscn")
 const _Geo := preload("res://modules/world_map/scripts/map_renderer_geo.gd")
-const _TexJobs := preload("res://modules/world_map/scripts/map_renderer_tex_jobs.gd")
 
 const L1_JSON_PATH := "res://config/strategic_map/l1_world.json"
 const L1_BASE_DIR := "res://config/strategic_map"
-## l1_terrain.png 实测取样点：水体 / 陆地（水面回贴判水断言用）
-const WATER_PX := Vector2i(710, 403)
-const LAND_PX := Vector2i(631, 401)
 ## 出生 L1 的三个相邻老 L1 块（l1_world.json neighbors）
 const BIRTH_NEIGHBORS := [18, 67, 68]
 const L2_REGION := "region_001"
@@ -60,8 +56,8 @@ func _ready() -> void:
 	_runner.add_test("据点面板：空态隐藏 / 逐据点一行 / 行点击回调", _test_territory_panel, true)
 	_runner.add_test("P4 染色：政治填充按已占地块逐格覆盖（占多少染多少）", _test_owned_tile_dyeing, true)
 	_runner.add_test("P4 染色：政治图例含「我方疆域」条目（无则不空留）", _test_legend_player_entry, true)
-	_runner.add_test("邻省上下文：政权色暗一阶 + 水面回贴 + 切省箭头环", _test_province_context, true)
-	_runner.add_test("水面回贴：判水烘焙（水体原样回贴 / 陆地不覆盖）", _test_water_restore, true)
+	_runner.add_test("邻省上下文：政权色暗一阶 + 水体矢量 + 切省箭头环", _test_province_context, true)
+	_runner.add_test("水体矢量：政治模式河湖数据就绪（湖多边形界内 / 河宽 EDT）", _test_water_vector, true)
 	_runner.add_test("L2 打开：层级指示 + 当前地区号", _test_l2_indicator, true)
 	_runner.add_test("L3 打开：层级指示 + 关闭提示", _test_l3_indicator, true)
 	_runner.add_test("L2/L3 名牌：地区序号/大世界 + 概览副标题", _test_l2_l3_title, true)
@@ -728,32 +724,34 @@ func _ring_extent(polys: Array) -> Vector2:
 	return hi - lo
 
 
-## 水面回贴：地形贴图 → RGBA 贴图（RGB 原样 / A = 判水量）。水体 alpha 满、陆地 0，
-## 使政治色块边界与地图海岸线/湖岸线对齐（色块沿岸溢出与湖河被吞的收敛手段）。
-func _test_water_restore() -> void:
-	var path := "%s/l1_terrain.png" % L1_BASE_DIR
-	var img: Image = _TexJobs.bake_water_restore(path, MapTokens.L1_WATER_STRIDE,
-			MapTokens.L1_WATER_GB_MID, MapTokens.L1_WATER_GB_SOFT)
-	_runner.assert_true(img != null, "水面回贴贴图烘焙成功（%s）" % path)
-	if img == null:
-		return
-	_runner.assert_eq(img.get_format(), Image.FORMAT_RGBA8, "格式 RGBA8（RGB 原色 + 判水 alpha）")
-	var src := Image.new()
-	var f := FileAccess.open(path, FileAccess.READ)
-	var loaded := f != null and src.load_png_from_buffer(f.get_buffer(f.get_length())) == OK
+## 水体矢量后处理（水陆同源 D3）：政治模式水 = 河流 polyline（EDT 实测宽）+
+## 湖泊 polygon，画在色块之上——运行时不再判水（旧绿-蓝差回贴已退役）。
+## 数据面守门：湖多边形非空且顶点在 context 界内；河流逐条 w>0（EDT 宽纪律）。
+func _test_water_vector() -> void:
+	var data := L1WorldData.load_from(L1_JSON_PATH, L1_BASE_DIR)
+	var ctx := data.context_size
+	_runner.assert_true(data.lakes.size() > 0, "湖多边形非空（精细湖光栅同批重提）")
+	var in_bounds := true
+	for lake in data.lakes:
+		if (lake as Array).size() < 3:
+			in_bounds = false
+			break
+		for p in (lake as Array):
+			if float(p[0]) < 0.0 or float(p[0]) > float(ctx.x) \
+					or float(p[1]) < 0.0 or float(p[1]) > float(ctx.y):
+				in_bounds = false
+				break
+		if not in_bounds:
+			break
+	_runner.assert_true(in_bounds, "湖多边形顶点全部在 context 界内")
+	_runner.assert_true(data.rivers.size() > 0, "河流折线非空")
+	var edt_width := true
+	for rv in data.rivers:
+		if float(rv.get("w", 0.0)) <= 0.0 or (rv.get("pts") as PackedVector2Array).size() < 2:
+			edt_width = false
+			break
+	_runner.assert_true(edt_width, "河流逐条 w>0 且 ≥2 点（宽度取自生成端 EDT 实测）")
+	var f := FileAccess.open("%s/l1_terrain.png" % L1_BASE_DIR, FileAccess.READ)
+	_runner.assert_true(f != null, "地形底图在包内（矢量水画其上）")
 	if f != null:
 		f.close()
-	_runner.assert_true(loaded, "源地形贴图可读")
-	if not loaded:
-		return
-	src.convert(Image.FORMAT_RGB8)
-	var water := img.get_pixel(WATER_PX.x, WATER_PX.y)
-	var land := img.get_pixel(LAND_PX.x, LAND_PX.y)
-	_runner.assert_true(water.a > 0.9, "水体像素回贴 alpha 拉满（实测 %.2f）" % water.a)
-	_runner.assert_true(land.a < 0.1, "陆地像素不回贴（实测 %.2f）" % land.a)
-	var sw := src.get_pixel(WATER_PX.x, WATER_PX.y)
-	_runner.assert_true(absf(water.r - sw.r) < 0.01 and absf(water.g - sw.g) < 0.01
-			and absf(water.b - sw.b) < 0.01, "水体 RGB 原样回贴（逐字节同源）")
-	# 雪地/岩地不被误判成水（地形色板 g-b 分离：陆地形色均 ≥ +0.016）
-	var gb := (sw.g - sw.b)
-	_runner.assert_true(gb < -0.06, "取样水体像素确为水（g-b=%.3f）" % gb)

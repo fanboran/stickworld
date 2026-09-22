@@ -15,8 +15,12 @@
   1. fBm 域扭曲反向采样：refined(p) = labels(p + warp(p))，warp = 两 octave
      value noise（低频 260px/amp 11px 大弯 + 高频 64px/amp 3.5px 细碎，两通道
      独立 seed）——大致边界保持、边缘分形细化
-  2. 海岸贴合：refined[原生海岸蒙版==0] = 0（贴 locked_continent_8192 的自然
-     分形海岸，与 update_tiles_coastline 同一真相源）
+  2. 海岸贴合（由轮廓提取前的统一贴陆后处理接管，本脚本不再自做）：曾声明
+     "refined[原生海岸蒙版==0]=0 贴 locked_continent"，实际实现只做了 EDT 空洞
+     回填（warp_sample 内 coast_land & (out==0)），细化场越海 0.79%~3.22%
+     （距陆地 p50 3px/max 12px，2026-09-22 审计实测）——本步注释与代码不符
+     即「越海缝」来源。现由 l2_export/land_snap.snap_labels_to_land 在
+     extract_mesh 调用点统一贴陆（水面归 0 + 纯陆地回填），两代标签场均可套用
   3. 陆地空洞回填：warp 在海岸带把海采进陆地的像素，EDT 填最近城块；
      内陆零碎水域（河流/小池塘——容器 exclude 在 tiles 外的场 0）同回填，
      political 场只保留海与湖 mask 两种水域

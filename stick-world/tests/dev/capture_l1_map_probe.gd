@@ -61,16 +61,7 @@ func _ready() -> void:
 			await get_tree().process_frame
 		print("MODE ", MODE_NAMES[mode], " texture_ready=", _renderer._mode_textures.has(mode),
 				" frames=", guard)
-		# 政治模式还要等「水面回贴」贴图烘完（线程内像素扫描）——否则拍到未收敛的岸边溢出
-		if mode == MapModeManager.Mode.POLITICAL:
-			var t0 := Time.get_ticks_msec()
-			var wguard := 0
-			while _renderer._water_tex == null and not _renderer._water_failed and wguard < 600:
-				wguard += 1
-				await get_tree().process_frame
-			print("WATER_RESTORE ready=", _renderer._water_tex != null,
-					" failed=", _renderer._water_failed,
-					" 等待 ", Time.get_ticks_msec() - t0, "ms /", wguard, " 帧")
+		# 政治模式水体 = 矢量 pass（水陆同源 D3，水面回贴退役），贴图就位即收敛
 		await _wait_frames(6)
 		var name: String = MODE_NAMES[mode]
 		var ctx := float(maxi(_data.context_size.y, _data.size))

@@ -478,6 +478,21 @@ if [ ${#pool[@]} -gt 0 ]; then
 	done
 fi
 
+# ── 水陆同源守门（仅全量；纯 Python 读产物，不需要 Godot）──
+# 三不变量逐包断言（几何贴陆/陆地全覆盖/色块边贴水线/湖同源），失败计入失败项。
+# 出生包秒级 + 全图掩码加载 ~30s；P2 全量重烘后守门脚本自身升 --all。
+if [ -z "${FILTER:-}" ] && [ -z "${MATCH:-}" ] && [ -z "${CHANGED:-}" ]; then
+	echo ""
+	echo "=== mapdata 守门（水陆同源三不变量）==="
+	if py -3 "$PROJECT_DIR/../tools/worldgen/check_mapdata_consistency.py" 2>&1; then
+		total_pass=$((total_pass + 1))
+		echo "[PASS] mapdata_consistency"
+	else
+		total_fail=$((total_fail + 1)); failures+=("mapdata_consistency")
+		echo "[FAIL] mapdata_consistency"
+	fi
+fi
+
 # JSON 报告（-Report）
 if [ -n "$REPORT" ] && [ ${#report_entries[@]} -gt 0 ]; then
 	{

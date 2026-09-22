@@ -85,6 +85,33 @@ def load_inputs():
     return elev, land, lake, river, labels8, hot8
 
 
+def narrow_source_band(labels8, land, water, band_px):
+    """源流带收窄（D1=创始人 2026-09-22 拍板 C 版）：biome_labels 里的源流带是
+    binary_dilation 1px@2048（=4px@8192）的沿岸膨胀带，与真水同色——色块/描边贴
+    真水线后，带宽透出色读作「色块与地面分离」。本函数在 8192 级把带收窄到贴水
+    band_px，带外源流像素按 EDT 最近非源流群系还原（2048 栅格表达不了半像素，
+    故收窄在烘焙端 8192 场做，biome 中间体不动）。
+
+    Args:
+        labels8: 8192 群系场（uint8，SOURCE 会被就地修改——传副本）
+        land: 8192 陆地掩膜；water: 8192 水面（湖|河，与贴图同代）
+        band_px: 收窄后的贴水带宽（8192 原生 px）
+    """
+    src_mask = labels8 == SOURCE
+    if not src_mask.any():
+        return labels8
+    from scipy.ndimage import binary_dilation, distance_transform_edt
+    band = binary_dilation(water, iterations=band_px) & land & ~water
+    outside = src_mask & ~band
+    if outside.any():
+        ref = labels8.copy()
+        ref[src_mask] = 0   # 源流带当洞，EDT 找最近非源流群系
+        _, idx = distance_transform_edt(ref == 0, return_indices=True)
+        vals = labels8[idx[0], idx[1]]
+        labels8[outside] = vals[outside]
+    return labels8
+
+
 def build_hillshade(elev, land, hp):
     """西北 45° 光源 hillshade，multiply [1-strength, 1+strength]。
 

@@ -48,14 +48,10 @@ func _ready() -> void:
 	await _settle_mode(MapModeManager.Mode.TERRAIN)
 	await _capture("terrain_full")
 
-	# 政治模式：邻省政权色暗一阶 + 本省政权色 + 水面回贴 + 左右箭头
+	# 政治模式：邻省政权色暗一阶 + 本省政权色 + 水体矢量 pass + 左右箭头
+	# （水陆同源 D3：水面回贴退役，河湖由矢量画在色块之上，无需等待烘贴）
 	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
 	await _settle_mode(MapModeManager.Mode.POLITICAL)
-	var guard := 0
-	while _renderer._water_tex == null and not _renderer._water_failed and guard < 600:
-		guard += 1
-		await get_tree().process_frame
-	print("WATER_RESTORE ready=", _renderer._water_tex != null, " failed=", _renderer._water_failed)
 	await _capture("political_full")
 
 	# 放大看三岔口/海岸（同机位判「色块严丝合缝」）

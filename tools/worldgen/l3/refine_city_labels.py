@@ -15,8 +15,12 @@
   1. fBm 域扭曲反向采样：refined(p) = labels(p + warp(p))，warp = 两 octave
      value noise（低频 260px/amp 11px 大弯 + 高频 64px/amp 3.5px 细碎，两通道
      独立 seed）——大致边界保持、边缘分形细化
-  2. 海岸贴合：refined[原生海岸蒙版==0] = 0（贴 locked_continent_8192 的自然
-     分形海岸，与 update_tiles_coastline 同一真相源）
+  2. 海岸贴合（由轮廓提取前的统一贴陆后处理接管，本脚本不再自做）：曾声明
+     "refined[原生海岸蒙版==0]=0 贴 locked_continent"，实际实现只做了 EDT 空洞
+     回填（warp_sample 内 coast_land & (out==0)），细化场越海 0.79%~3.22%
+     （距陆地 p50 3px/max 12px，2026-09-22 审计实测）——本步注释与代码不符
+     即「越海缝」来源。现由 l2_export/land_snap.snap_labels_to_land 在
+     extract_mesh 调用点统一贴陆（水面归 0 + 纯陆地回填），两代标签场均可套用
   3. 陆地空洞回填：warp 在海岸带把海采进陆地的像素，EDT 填最近城块；
      内陆零碎水域（河流/小池塘——容器 exclude 在 tiles 外的场 0）同回填，
      political 场只保留海与湖 mask 两种水域
@@ -56,6 +60,15 @@ DEFAULT_PARAMS = {
                     "L1 地块间/海岸/湖岸=自然地形）——城-城边界像素位移衰减为 0，"
                     "falloff=衰减带宽 px",
 }
+
+
+def build_locked_land():
+    """最新陆地真相 = locked_continent_8192（水陆同源 I1 唯一海陆真相）。
+
+    旧版用 13 区 tiles 拼图（coast_land）做空洞回填参考——它海岸略内缩且不是
+    海岸裁剪真相源；细化场海岸必须贴最新 locked（创始人 2026-09-22 指令）。"""
+    p = os.path.join(OUT_DIR, "locked", "locked_continent_8192.png")
+    return np.array(Image.open(p).convert("L")) > 127
 
 
 def build_land_mask():
@@ -146,8 +159,16 @@ def build_damp(labels, parent_map, falloff):
     return np.clip(dist / float(falloff), 0.0, 1.0).astype(np.float32)
 
 
-def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None):
-    """fBm 域扭曲反向采样 + 海岸贴合 + 陆地空洞回填。damp=城-城边界位移衰减场。"""
+def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None, land_true=None):
+    """fBm 域扭曲反向采样 + 海岸贴合 + 陆地空洞回填。damp=城-城边界位移衰减场。
+
+    海岸贴合（2026-09-22 创始人指令「陆地边缘蒙版对齐最新版」真正落地）：
+    warp 是连续位移场，会把海岸边的城块整体位移 ±amp——输出场的 0 区不是最新
+    海岸（旧注释「无需额外海岸蒙版」不成立，审计实测细化场越海 0.79%~3.22%）。
+    现按最新 locked_continent_8192 真相裁切：越海标签归 0，让细化蒙版的陆地
+    边缘精确贴最新海岸；内部省界/城块划分从原始 labels 提取（warp 反向采样
+    拓扑不变，同省城-城界 damp 保持直线）。
+    """
     H, W = labels.shape
     out = np.zeros_like(labels)
     for y0 in range(0, H, block):
@@ -165,10 +186,16 @@ def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None):
                          0, H - 1).astype(np.int64)
             out[y0:y0 + hh, x0:x0 + ww] = labels[sy, sx]
         print("    warp %d/%d" % (y0 + hh, H), flush=True)
-    # 海陆语义自洽：warp 是连续位移场，输出 0 即海（城块容器的海岸已按 8192
-    # 原生分形裁切——update_tiles_coastline 同源），无需额外海岸蒙版。
-    # 极小概率的位移跨界空洞（细半岛 11px 位移）用 EDT 回填兜底：
-    hole = coast_land & (out == 0)
+    # 海岸贴合（真实现）：陆地边缘对齐最新 locked 海岸，越海归 0
+    if land_true is not None:
+        n_sea = int((out[~land_true] != 0).sum())
+        out[~land_true] = 0
+        print("    海岸贴合（locked 最新版）：越海清除 %d px" % n_sea, flush=True)
+        land_true_use = land_true
+    else:
+        land_true_use = coast_land
+    # 陆地空洞回填：最新陆地内 warp 位移跨界产生的 0 空洞（细半岛 11px 位移）
+    hole = land_true_use & (out == 0)
     n_hole = int(hole.sum())
     if n_hole:
         _, inds = ndi.distance_transform_edt(out == 0, return_indices=True)
@@ -240,7 +267,8 @@ def main():
     damp = build_damp(labels, parent_map, prm.get("damp_falloff", 28))
     lake_mask = np.array(Image.open(os.path.join(
         OUT_DIR, "fractal_lake_mask_8192.png")).convert("L")) > 0
-    refined = warp_sample(labels, coast_land, prm, damp=damp, lake_mask=lake_mask)
+    refined = warp_sample(labels, coast_land, prm, damp=damp, lake_mask=lake_mask,
+                          land_true=build_locked_land())
 
     print("[3] 对角接触 4 连通化 ...")
     refined = decouple_diagonal(refined, int(prm["diag_max_iter"]))

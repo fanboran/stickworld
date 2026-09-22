@@ -305,9 +305,9 @@ def main():
     ap = argparse.ArgumentParser(description="L1 地形底图烘焙（R9，B2 同管线 per-L1 裁切）")
     ap.add_argument("--pack", nargs="*", help="只处理指定包（目录名如 l1_001；spawn = 出生包）")
     ap.add_argument("--spawn-only", action="store_true", help="只跑出生包（调参快速预览）")
-    ap.add_argument("--lake-refined", action="store_true",
-                    help="审计#4 湖岸案：湖输入换 refined 湖光栅（mesh 同口径，含海湾案"
-                         "修正），terrain 与政治模式水面一致")
+    ap.add_argument("--lake-legacy", action="store_true",
+                    help="审计对照专用：湖输入回退旧代 fractal_lake_mask（与政治几何/"
+                         "湖多边形不同代，正常链路禁用——水陆同源 D2 定向精细代为唯一代）")
     args = ap.parse_args()
 
     t0 = time.time()
@@ -325,14 +325,26 @@ def main():
 
     print("[1/2] 加载 B2 全局场（terrain_render 同源）...", flush=True)
     elev, land, lake, river, labels8, hot8 = tr.load_inputs()
-    if args.lake_refined:
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                        "..", "l3"))
-        from reexport_political_id import build_lake_raster
-        refined = np.load(os.path.join(OUTPUT_DIR, "l1_v2",
-                                       "refined_city_labels_8192.npy")).astype(np.int32)
-        lake = build_lake_raster(refined, lake)
-        print("  湖输入 = refined 湖光栅（%d px）" % int(lake.sum()), flush=True)
+    if not args.lake_legacy:
+        # 水陆同源 D2：湖输入 = 精细湖光栅（refined_lake_mask_8192.npy，与
+        # export_l1_view_context 湖多边形、贴陆后处理同一份文件）——缺输入报错
+        # 退出，禁止静默回退旧代（分代重烘 = 「色块与地图不严丝合缝」复发温床）
+        lake_path = os.path.join(OUTPUT_DIR, "refined_lake_mask_8192.npy")
+        if not os.path.exists(lake_path):
+            print("错误：缺 %s（由 refine 后湖面真值产出；--lake-legacy 仅审计对照）"
+                  % lake_path, flush=True)
+            sys.exit(1)
+        lake = np.load(lake_path).astype(bool)
+        print("  湖输入 = refined 湖光栅（%d px，唯一代）" % int(lake.sum()), flush=True)
+    # 源流带收窄（D1 拍板 C 版，2026-09-22）：带从 4px@8192 收窄到贴水 2px，
+    # 带外源流域还原最近群系——色块/描边贴真水线后宽带透色读作「分离开裂」；
+    # 2048 中间体不动（半像素不可表达），收窄在烘焙端 8192 场做
+    narrow_px = int(p.get("source_narrow_px", 2))
+    if narrow_px > 0:
+        fields_labels = tr.narrow_source_band(
+            labels8.copy(), land, lake | river, narrow_px)
+        labels8 = fields_labels
+        print("  源流带收窄 = %d px@8192（D1=C）" % narrow_px, flush=True)
     shade, ocean_edt, lake_in, coast_dark, river_a = tr.build_fields(
         elev, land, lake, river, p)
     # EDT 返回 float64，压成 float32 减半内存（8192² 场 ×2）

@@ -5,7 +5,7 @@
 
     U = a·核场(exp(-d²/2σ²)×cap(θ_d)) + b·道路条带场(exp(-d_r/w_r)×沿路长度衰减→手指)
         + Σ卫星种子高斯(沿路 0.5~1.3R 避水体) + amp·fBm(2~3 八度 value noise)
-    U *= 排除层(水体/陡坡/海域硬置 0，SLEUTH 式否决)
+    U *= 排除层(水体/陡坡/海域硬置 0 + 城块净空带，SLEUTH 式否决)
     τ 按目标面积分位数反解: τ = quantile(U[可建], 1 - A_target/A_avail)   # A_target = π·R_ref²·k
     binary_opening(1) → binary_closing(2) → find_contours 亚像素多环(外环+内环洞+飞地)
     → shapely simplify 保拓扑；洞面积 < max(3% 城区, 60px²) 丢弃
@@ -39,6 +39,7 @@ from PIL import Image, ImageDraw
 from scipy import ndimage as ndi
 from skimage import measure, morphology
 from shapely.geometry import Polygon
+from shapely.ops import unary_union
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # tools/worldgen
 OUTPUT_DIR = os.path.join(HERE, "output")
@@ -100,6 +101,32 @@ def _city_tile_geom(t, ox, oy):
             parts = [x for x in fixed.geoms if x.geom_type == "Polygon"]
             pg = max(parts, key=lambda x: x.area) if parts else pg
     return pg if pg.area > 1.0 else None
+
+
+def tile_clear_mask(city, wx0, wy0, W, margin):
+    """城块界净空栅格：城块内缩 margin 后栅格化为窗口 bool（True=可建）。
+    在掩膜级排除（并进 excl）→ 轮廓自然收在净空带内、粗糙化照常生效，
+    不产生剪裁直线硬边；clip_polys_to_tile 只作最后兜底。
+    内缩空（城块窄于 2×margin）→ 全 False（该城合法塌缩为无建成区）。"""
+    tp = city.get("tile_geom")
+    if tp is None or margin <= 0:
+        return None
+    inset = tp.buffer(-margin)
+    if inset.is_empty:
+        return np.zeros((W, W), bool)
+    parts = [inset] if inset.geom_type == "Polygon" else \
+        [g for g in getattr(inset, "geoms", []) if g.geom_type == "Polygon"]
+    img = Image.new("1", (W, W), 0)
+    d = ImageDraw.Draw(img)
+    for pg in parts:
+        ext = [(x - wx0, y - wy0) for x, y in pg.exterior.coords]
+        if len(ext) >= 3:
+            d.polygon(ext, fill=1)
+        for hr in pg.interiors:
+            hole = [(x - wx0, y - wy0) for x, y in hr.coords]
+            if len(hole) >= 3:
+                d.polygon(hole, fill=0)
+    return np.array(img, bool)
 
 
 def load_cities():
@@ -322,7 +349,23 @@ def window_of(wx, wy, r_ref, wp):
     return W, wx0, wy0
 
 
-def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache):
+def polys_region_mask(polys, wx0, wy0, W):
+    """blob 多边形集合（世界坐标 (outer, holes) 列表）→ 窗口栅格 bool（True=轮廓内）。
+    档间嵌套用：下一档的可建区 = 上一档最终轮廓（粗糙化后）的内部。"""
+    img = Image.new("1", (W, W), 0)
+    d = ImageDraw.Draw(img)
+    for outer, holes in polys:
+        ext = [(x - wx0, y - wy0) for x, y in np.asarray(outer)]
+        if len(ext) >= 3:
+            d.polygon(ext, fill=1)
+        for h in holes:
+            hp = [(x - wx0, y - wy0) for x, y in np.asarray(h)]
+            if len(hp) >= 3:
+                d.polygon(hp, fill=0)
+    return np.array(img, bool)
+
+
+def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache, region_polys=None):
     """管线 1~8 步：场叠加 + 排除层 + τ 分位数反解 + 形态学清理 → mask（及诊断 info）"""
     r_ref = r_ref_of(city["level"], s, p["area"], lv_bands)
     W, wx0, wy0 = window_of(city["wx"], city["wy"], r_ref, p["window"])
@@ -347,6 +390,17 @@ def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache):
     wt = ctx["world"]["water"][wy0:wy0 + W, wx0:wx0 + W]
     ld = ctx["world"]["land"][wy0:wy0 + W, wx0:wx0 + W]
     excl = (ld & (~wt) & (sl < p["exclusion"]["slope_hard"])).astype(np.float32)
+    # 6.5 城块净空带：界内侧 margin 内禁建，并进排除层（τ 反解/种子/绿楔自动继承）
+    # ——建成区从源头缩回界内，不再靠剪裁切出直线硬边
+    clear = tile_clear_mask(city, wx0, wy0, W, float(p["contour"]["tile_clear_margin"]))
+    if clear is not None:
+        excl *= clear
+    if region_polys:
+        # 腐蚀 2px：栅格往返（多边形→像素→等值线+简化）边缘有 ±1px 量化误差，
+        # 不腐蚀则下一档轮廓会在大档边沿探出 1~2px 薄条（叠画重影）
+        rmask = morphology.erosion(
+            polys_region_mask(region_polys, wx0, wy0, W), morphology.disk(2))
+        excl *= rmask
 
     # 2 核场 exp(-d²/2σ²)×cap(θ_d) + 3 道路串珠场 + 5 fBm（fBm 不参与种子落点判定）
     core = np.exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma)) * cap_at(city["cap"], dx, dy)
@@ -374,13 +428,16 @@ def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache):
     if avail < 8 or float(U.max()) <= 1e-4:
         return np.zeros((W, W), bool), info, (wx0, wy0)
     q = 1.0 - a_target / avail
-    if q < 0.0:                     # 可建区比目标还小（被山水围死）→ 退而取最强 fallback_q
-        q = float(p["area"]["fallback_q"])
+    if q < 1.0 - float(p["area"].get("max_fill", 0.85)):
+        # 目标面积装不进城块可建区（净空带后常态）→ 顶格填 max_fill（留绿楔余量）。
+        # 旧 fallback_q=0.9（取最强 10%）会把被城块约束的城缩成小圆点
+        q = 1.0 - float(p["area"].get("max_fill", 0.85))
     tau = float(np.quantile(U[excl > 0], float(np.clip(q, 0.0, 0.999))))
     info["tau"] = round(tau, 4)
 
     # 8 形态学清理：opening 去孤点（0=跳过，飞地由面积阈值把关），closing 连近斑（绿楔保留）
-    mask = U > tau
+    # & (excl > 0)：fallback_q 可能解出负 τ（U 含绿楔/fBm 负场），须防排除区（水体/净空带）经 U=0 回流
+    mask = (U > tau) & (excl > 0)
     orad, crad = int(p["morph"]["opening_r"]), int(p["morph"]["closing_r"])
     if orad > 0:
         mask = morphology.opening(mask, morphology.disk(orad))
@@ -538,6 +595,14 @@ def clip_polys_to_tile(polys, city, cp):
     tp = city.get("tile_geom")
     if tp is None or not polys:
         return polys, 0.0
+    # 城块内缩（创始人 2026-09-22：blob 缩小到不和地块边界接触）——
+    # 裁剪基准 = 城块多边形 buffer(-tile_margin)，blob 边缘与城块界留隙；
+    # 内缩后为空（超小城块）则退回原多边形
+    margin = float(cp.get("tile_margin", 0.0))
+    if margin > 0.0:
+        inset = tp.buffer(-margin)
+        if not inset.is_empty and inset.area > 100.0:
+            tp = inset
     out = []
     area_before = 0.0
     area_after = 0.0
@@ -569,18 +634,76 @@ def clip_polys_to_tile(polys, city, cp):
     return out, max(area_before - area_after, 0.0)
 
 
-def generate_city_tier(city, s, tier_idx, ctx, p, lv_bands, fbm_cache):
-    """完整单城单档：管线 → 多边形集合（世界坐标）+ 诊断 info"""
-    mask, info, (wx0, wy0) = city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache)
-    if not mask.any():
-        return [], info
-    polys = mask_to_polys(mask, city["sid"], wx0, wy0, p, info.get("scale", 1.0))
-    polys, cut = clip_polys_to_tile(polys, city, p["contour"])
-    if cut > 1.0:
-        info["clip_cut"] = int(cut)
-    info["n_outer"] = len(polys)
-    info["n_holes"] = sum(len(h) for _, h in polys)
-    return polys, info
+def clip_polys_to_polys(polys, upper_polys, min_area):
+    """下一档最终轮廓 ∩ 上一档最终轮廓（档间硬嵌套的最后闸口）。
+    上一档轮廓经粗糙化后是收敛闸口的唯一可靠约束：下一档自身粗糙化位移可达 ~14px，
+    掩膜级腐蚀 2px 兜不住甩出大档的边条（叠画重影）。交边 = 上一档有机轮廓，
+    叠加渲染被上一档盖住，无可见硬边；升档补丁「新形状⊇旧形状」由此严格成立。
+    输入已是简化后多边形，交结果不再简化（避免 DP 外凸重探出界），仅滤碎片。
+    返回 (polys, 被裁掉的面积 px²)。"""
+    parts_upper = []
+    for o, hs in upper_polys:
+        up = Polygon(np.asarray(o), [np.asarray(h) for h in hs])
+        if not up.is_valid:
+            up = up.buffer(0)
+        if not up.is_empty:
+            parts_upper.append(up)
+    if not parts_upper:
+        return [], 0.0
+    upper = unary_union(parts_upper)
+    if not upper.is_valid:
+        upper = upper.buffer(0)
+    out = []
+    area_before = 0.0
+    area_after = 0.0
+    for outer, holes in polys:
+        pg = Polygon(np.asarray(outer), [np.asarray(h) for h in holes])
+        if not pg.is_valid:
+            pg = pg.buffer(0)
+        if pg.is_empty:
+            continue
+        area_before += pg.area
+        g = pg.intersection(upper)
+        if g.is_empty:
+            continue
+        parts = [g] if g.geom_type == "Polygon" else \
+            [x for x in getattr(g, "geoms", []) if x.geom_type == "Polygon"]
+        for part in parts:
+            if part.area < min_area:
+                continue
+            out.append((np.asarray(part.exterior.coords)[:-1],
+                        [np.asarray(h.coords)[:-1] for h in part.interiors]))
+            area_after += part.area
+    return out, max(area_before - area_after, 0.0)
+
+
+def generate_city(city, ctx, p, lv_bands, fbm_cache):
+    """单城三档链式生成：高→中→低，档间硬嵌套（中⊆高、低⊆中）——
+    下一档的可建区 = 上一档最终轮廓（粗糙化后）的内部。渲染端三档贴图整包
+    叠画，小档被大档盖住是硬前提，档间形状独立必出重影。
+    返回 {tier: (polys, info)}，键序同 TIER_ORDER。"""
+    out = {}
+    region_polys = None
+    for tier in reversed(TIER_ORDER):
+        ti = TIER_ORDER.index(tier)
+        mask, info, (wx0, wy0) = city_field_mask(city, float(p["tiers"][tier]), ti,
+                                                 ctx, p, lv_bands, fbm_cache, region_polys)
+        polys = []
+        if mask.any():
+            polys = mask_to_polys(mask, city["sid"], wx0, wy0, p, info.get("scale", 1.0))
+            polys, cut = clip_polys_to_tile(polys, city, p["contour"])
+            if region_polys:
+                polys, cut2 = clip_polys_to_polys(polys, region_polys,
+                                                  float(p["contour"]["enclave_min_area"]))
+                cut += cut2
+            if cut > 1.0:
+                info["clip_cut"] = int(cut)
+            info["n_outer"] = len(polys)
+            info["n_holes"] = sum(len(h) for _, h in polys)
+        out[tier] = (polys, info)
+        if polys:
+            region_polys = polys
+    return {t: out[t] for t in TIER_ORDER}
 
 
 def box_counting_dim_pts(pts, eps_list):
@@ -842,12 +965,9 @@ def main():
     t0 = time.time()
     for n, c in enumerate(order):
         fbm_cache = {}                      # 每城独立（3 档共享同窗 fBm），防全量内存累积
-        polys_by_tier, info_by_tier = {}, {}
-        for ti, tier in enumerate(TIER_ORDER):
-            polys, info = generate_city_tier(c, float(p["tiers"][tier]), ti,
-                                             ctx, p, lv_bands, fbm_cache)
-            polys_by_tier[tier] = polys
-            info_by_tier[tier] = info
+        by_tier = generate_city(c, ctx, p, lv_bands, fbm_cache)
+        polys_by_tier = {t: by_tier[t][0] for t in TIER_ORDER}
+        info_by_tier = {t: by_tier[t][1] for t in TIER_ORDER}
         results[c["sid"]] = {"polys": polys_by_tier, "info": info_by_tier,
                              "biome": city_biome(c)}
         stats[c["sid"]] = {"level": c["level"], "ps": c["ps"],

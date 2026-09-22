@@ -5,7 +5,7 @@ extends RefCounted
 ## 纪律：状态全部留在宿主 map_renderer.gd（_geo/_city_tier/_blob_tex/_blob_ready/
 ## _city_overlays/_city_erases/_overlay_queue 等），本助手经 _h 动态回引读写，
 ## 不另立状态、不写 class_name（防全局类循环引用）；
-## load_pack / current_city_outline 为 static 纯函数（输入数据 → 输出，不触宿主）。
+## load_pack 为 static 纯函数（输入数据 → 输出，不触宿主）。
 ## 拆分前后行为逐行等价（数值/分支顺序/绘制顺序零变化）。
 
 ## 同模块几何库（点列闭合工具；宿主同款 preload）
@@ -29,24 +29,9 @@ static func load_pack(data: L1WorldData) -> Dictionary:
 	return {"geo": geo, "tiers": tiers}
 
 
-## 当前城建成区轮廓（mid 档最大外环平移到城市锚点 + 弧长重采样闭合；
-## 与建成区图形重合的 R2 语义，旧径向 blob 轮廓已随 §R5 退役）。
-## 固定 mid 档——分数变化不再引起描边几何跳变。
-## 语义与拆分前宿主内联体一致：命中块即止（块无聚落返回空）。
-static func current_city_outline(geo: Dictionary, data: L1WorldData,
-		tile_id: String) -> PackedVector2Array:
-	for tile in data.tiles:
-		if tile.tile_id == tile_id:
-			if tile.settlement != null:
-				var ring := SettlementBlob.glow_outline(geo, tile.settlement.settlement_id)
-				if ring.size() >= 3:
-					var pts := PackedVector2Array()
-					pts.resize(ring.size())
-					for i in ring.size():
-						pts[i] = ring[i] + tile.settlement.position
-					return FlowOutline.resample_closed(pts)
-			return PackedVector2Array()
-	return PackedVector2Array()
+## 当前城建成区轮廓已退役：「你在这里」蓝光流动描边改描当前城**地块多边形**
+## （map_renderer._build_glow_outline 直取 tile.polygon；建成区形状自带描边，
+## 不承担地界语义——创始人复检纠偏）。SettlementBlob.glow_outline 保留为几何工具（单测覆盖）。
 
 
 ## 档位对账（三档贴图就绪后一次）：运行时扰动分 vs 烘焙档不同的城 → 补丁队列

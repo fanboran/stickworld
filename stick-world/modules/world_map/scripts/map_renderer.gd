@@ -125,15 +125,6 @@ const POLITICAL_FILL_ALPHA := 0.55
 var _mode_textures: Dictionary = {}
 ## TERRAIN 底图 Image（降档擦除贴图的取样源；随贴图线程解码后保留）
 var _terrain_img: Image = null
-## 政治模式「水面回贴」贴图（RGBA：RGB = 地形原色、A = 判水量；线程内从地形贴图烘，
-## 分辨率 1/L1_WATER_STRIDE）。政治模式下垫在政权色覆盖层之上，把沿岸溢出到水面的
-## 色块与"被色块吞掉的湖河"还原成地形水色——色块与地图严丝合缝的收敛手段。
-## 缺失（未烘完/贴图缺）时跳过该 pass，政治层照常显示（只是岸边略溢）。
-var _water_tex: ImageTexture = null
-## 水面回贴烘制在途（防空转重复入队）
-var _water_pending: bool = false
-## 水面回贴烘制失败记忆（缺贴图/格式不符时不再重排队）
-var _water_failed: bool = false
 ## 贴图加载线程（单线程串行消费 _load_queue；R9 样板：目标归档 + join 防段错误）
 var _tex_thread: Thread = null
 var _tex_result: Image = null
@@ -173,10 +164,6 @@ const NEIGHBOR_COLOR := MapTokens.L1_NEIGHBOR_COLOR
 const NEIGHBOR_BORDER_WIDTH := MapTokens.L1_NEIGHBOR_BORDER_WIDTH
 ## 邻省块压暗量（政治模式邻省按政权色上色但暗一阶；见 map_renderer_geo）
 const L1_NEIGHBOR_DIM := MapTokens.L1_NEIGHBOR_DIM
-## 水面回贴参数（判水阈值/采样步长；见 map_renderer_tex_jobs.bake_water_restore）
-const L1_WATER_STRIDE := MapTokens.L1_WATER_STRIDE
-const L1_WATER_GB_MID := MapTokens.L1_WATER_GB_MID
-const L1_WATER_GB_SOFT := MapTokens.L1_WATER_GB_SOFT
 ## 内容区"纸张边界"黑框（context 外缘，A3）
 const PAPER_BORDER_COLOR := MapTokens.L1_PAPER_BORDER_COLOR
 const PAPER_BORDER_WIDTH := MapTokens.L1_PAPER_BORDER_WIDTH
@@ -304,9 +291,6 @@ func set_data(data: L1WorldData) -> void:
 	_tex().join()
 	_mode_textures = {}
 	_terrain_img = null
-	_water_tex = null
-	_water_pending = false
-	_water_failed = false
 	_blob_tex.clear()
 	for i in SettlementBlob.TIER_COUNT:
 		_blob_tex.append(null)
@@ -412,25 +396,17 @@ func tile_border_color(tile: L1TileDef) -> Color:
 	return c
 
 
-## 政治模式地块描边：逐地块闭合多边形直绘国色（L1 单包地块数少，
-## 每块一次 draw_polyline 的成本可忽略；同色相邻边由后画者定色，与 WorldBox 同理）。
-func _draw_political_tile_borders(width: float) -> void:
-	if _data == null:
-		return
-	for tile in _data.tiles:
-		if tile.polygon.size() < 3:
-			continue
-		draw_polyline(_Geo.closed(tile.polygon), tile_border_color(tile), width, true)
-
-
-## 构建当前城流动描边缓存（R2）：几何 = 当前城 mid 档建成区轮廓（包几何最大外环，
-## 与建成区图形重合的 R2 语义；旧径向 blob 轮廓已随 §R5 退役）。
-## 固定 mid 档——分数变化不再引起描边几何跳变。（轮廓提取见 blob 助手 static 纯函数）
+## 构建当前城流动描边缓存（R2）：几何 = 当前城**地块多边形**（tile.polygon）。
+## 「你在这里」标记的是城市地块（绘制点注释同此语义；曾描建成区 mid 档轮廓，
+## 建成区形状自带描边且随档位/生成参数漂移，不承担地界语义——创始人复检纠偏）。
 func _build_glow_outline() -> void:
 	_glow_outline = PackedVector2Array()
 	if _data == null or _current_tile_id.is_empty():
 		return
-	_glow_outline = _BlobLayer.current_city_outline(_geo, _data, _current_tile_id)
+	for tile in _data.tiles:
+		if tile.tile_id == _current_tile_id and tile.polygon.size() >= 3:
+			_glow_outline = FlowOutline.resample_closed(tile.polygon)
+			break
 
 
 func set_camera(camera: MapCamera) -> void:
@@ -570,11 +546,9 @@ func _draw() -> void:
 					Color(1.0, 1.0, 1.0, POLITICAL_FILL_ALPHA))
 		if _tiles_mesh != null:
 			draw_mesh(_tiles_mesh, null, Transform2D(), Color(1.0, 1.0, 1.0, POLITICAL_FILL_ALPHA))
-		# 水面回贴：贴图水面原样贴回色块之上（地块多边形沿岸会溢出到浅水、并把地块内的
-		# 湖河一起染色——本 pass 让水读作水、色块边界与贴图海岸线/湖岸线对齐）。
-		# 画在界线之前：沿河/湖的界线仍压在水的上层可见
-		if _water_tex != null:
-			draw_texture_rect(_water_tex, Rect2(Vector2.ZERO, ctx_size), false)
+		# 水体不另画 pass（水陆同源推论）：几何贴陆（I2）后色块根本不进水面，
+		# 地形贴图里的海/湖/河原样可见即读作水——再叠矢量水（纯色）反而盖掉
+		# 贴图的渐变水面制造色差线。放大极端糊的再议超分，不在此层补。
 	# 1. 矢量回退层（贴图缺失/未解码完成时）
 	if not terrain_base:
 		if _tiles_mesh == null:
@@ -621,19 +595,14 @@ func _draw() -> void:
 			_blob().draw_vector_fallback(zz)
 	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
 	_Layers.draw_neighbor_outlines(self, zz)
-	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过"地块-湖泊"边（湖泊一圈不描边）。
+	# 5. 城市描边（非政治模式：常驻灰城界）：屏幕像素固定（不随缩放，避免粗细跳变）。
+	#    政治模式**不描边**（创始人 2026-09-22 裁决：国色描边层整个删——描边是语义
+	#    强调不是修复手段，贴陆后色块边即地面真值边，色块自身边界已可读）。
 	#    描边段不随 zoom/hover 变化 → 缓存复用（原每帧重建 = 4668 段 × 湖边数 距离计算，hover 卡顿源）
 	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:
 		tw = TILE_BORDER_WIDTH / zz
-	if map_mode == MapModeManager.Mode.POLITICAL:
-		# 政治模式：地块界换成**国色描边**（WorldBox 式；灰地块界留给其他模式）。
-		# 比常驻灰界略粗——地块多边形各自平滑后相邻边有 1~2px 不共线，粗一档才盖得住缝
-		var pbw: float = MapTokens.L1_POLITICAL_TILE_BORDER_WIDTH
-		if zz > 0.0001:
-			pbw = MapTokens.L1_POLITICAL_TILE_BORDER_WIDTH / zz
-		_draw_political_tile_borders(pbw)
-	else:
+	if map_mode != MapModeManager.Mode.POLITICAL:
 		# 逐地块成链直绘（链内折角相连）：draw_multiline 逐段自带端点外伸，三岔口会
 		# 读作"灰线分叉"——成链后交汇处严丝合缝（共享边两侧各画一遍，同色无痕）
 		for chain in _cached_tile_chains:

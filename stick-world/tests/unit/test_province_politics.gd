@@ -7,8 +7,9 @@ extends Node
 ##     侧表是采样产物，不能凭空造色）
 ##   - 出生省（#69）与三个邻省（18/67/68）可查（L1 视图邻省上色的直接消费点）
 ##   - ProvincePolitics.load_shared 单例 / color_of / centroid_of / state_name_of 接口
-##   - pick_by_side 方位选邻纯函数（左右各取最朝该侧、同分取近者、全在另一侧兜底、
-##     无候选返回 0）
+##   - **质心轴序回归**（2026-09-22 缺陷）：l3_l1.json 的 polygons 与 centroid 同为 [y,x]，
+##     侧表必须存 [x,y]——不换序会让方位沿主对角轴翻转（出生省邻省应落在 西南#18 /
+##     西北#67 / 正西#68，翻转后会变成 东北/东南/正北）
 
 signal test_done(code: int)
 
@@ -29,7 +30,7 @@ func _ready() -> void:
 	_runner.add_test("侧表：色值/政权与 political_data 对齐", _test_color_alignment)
 	_runner.add_test("侧表：出生省与三个邻省可查", _test_birth_entries)
 	_runner.add_test("ProvincePolitics：装载与查询接口", _test_loader)
-	_runner.add_test("pick_by_side：方位选邻", _test_pick_by_side)
+	_runner.add_test("质心轴序：[x,y] 存储 + 邻省方位与全球地理一致", _test_centroid_axis)
 	_runner.run(_on_done)
 
 
@@ -102,13 +103,36 @@ func _test_birth_entries() -> void:
 	_runner.assert_true(str(birth.get("name", "")) != "", "出生省有主导政权名")
 	for nb in BIRTH_NEIGHBORS:
 		_runner.assert_true(prov.has(str(nb)), "邻省 #%d 在侧表内" % nb)
-	# 三邻省与出生省的方位：18/67 在左（x 更小）、68 几乎正上方
-	var bc: Array = (prov[str(BIRTH_L1_LABEL)] as Dictionary).get("centroid", [0, 0])
-	var dx18: float = float((prov["18"] as Dictionary)["centroid"][0]) - float(bc[0])
-	var dx67: float = float((prov["67"] as Dictionary)["centroid"][0]) - float(bc[0])
-	var dx68: float = float((prov["68"] as Dictionary)["centroid"][0]) - float(bc[0])
-	_runner.assert_true(dx18 < 0.0 and dx67 < 0.0, "邻省 18/67 在出生省左侧")
-	_runner.assert_true(absf(dx68) < 200.0, "邻省 68 方位接近正上（dx=%.0f）" % dx68)
+
+
+## 轴序回归：侧表存 [x,y]，且出生省三个邻省方位与全球地理一致（#18 东北 / #67 西北 /
+## #68 正西）——这是「邻块像被对角轴翻转」缺陷的守门断言（见 export_province_politics.py
+## 的轴序注释）。
+func _test_centroid_axis() -> void:
+	var prov: Dictionary = _read_json(SIDE_DATA).get("provinces", {})
+	# 出生省质心必须落在出生包的 context 窗口内（[y,x] 误存时会落到窗口外）
+	var b: Dictionary = _read_json("res://config/strategic_map/l1_world.json")
+	var birth: Dictionary = prov.get(str(BIRTH_L1_LABEL), {})
+	var cen: Array = birth.get("centroid", [0, 0])
+	var wo: Array = b.get("world_origin", [0, 0])
+	var ctx: Array = b.get("context_size", [0, 0])
+	var side := float(ctx[0]) if ctx.size() > 0 else 0.0
+	var dx := float(cen[0]) - float(wo[0])
+	var dy := float(cen[1]) - float(wo[1])
+	_runner.assert_true(dx > 0.0 and dx < side and dy > 0.0 and dy < side,
+			"出生省质心在本包 context 窗口内（局部 dx=%.0f dy=%.0f side=%.0f）" % [dx, dy, side])
+	var self_c: Array = birth.get("centroid", [0, 0])
+	var cases := [
+		[18, 1, -1, "东北"], [67, -1, -1, "西北"], [68, -1, 0, "正西"],
+	]
+	for c in cases:
+		var e: Dictionary = prov.get(str(c[0]), {})
+		var vx := float(e.get("centroid", [0, 0])[0]) - float(self_c[0])
+		var vy := float(e.get("centroid", [0, 0])[1]) - float(self_c[1])
+		var x_ok: bool = (vx > 0.0) if int(c[1]) > 0 else ((vx < 0.0) if int(c[1]) < 0 else absf(vx) < 200.0)
+		var y_ok: bool = (vy < 0.0) if int(c[2]) < 0 else (vy > 0.0)
+		_runner.assert_true(x_ok and y_ok,
+				"邻省 #%d 方位应为%s（实测向量 %+.0f,%+.0f）" % [c[0], c[3], vx, vy])
 
 
 func _test_loader() -> void:
@@ -127,34 +151,3 @@ func _test_loader() -> void:
 	_runner.assert_true(a.centroid_of(999) == Vector2.INF, "未知省质心 = INF")
 	_runner.assert_true(a.state_name_of(BIRTH_L1_LABEL) != "", "已知省有政权名")
 	_runner.assert_eq(a.state_name_of(999), "", "未知省政权名空串")
-
-
-func _test_pick_by_side() -> void:
-	# 左右各一：正右 / 正左
-	var dirs: Array = [[11, Vector2(100.0, 0.0)], [22, Vector2(-100.0, 0.0)]]
-	_runner.assert_eq(ProvincePolitics.pick_by_side(dirs, ProvincePolitics.SIDE_RIGHT), 11,
-			"右箭头取正右邻省")
-	_runner.assert_eq(ProvincePolitics.pick_by_side(dirs, ProvincePolitics.SIDE_LEFT), 22,
-			"左箭头取正左邻省")
-	# 斜向：更朝该侧者胜（不是更近者胜）
-	var slant: Array = [[1, Vector2(-100.0, 10.0)], [2, Vector2(-40.0, 200.0)]]
-	_runner.assert_eq(ProvincePolitics.pick_by_side(slant, ProvincePolitics.SIDE_LEFT), 1,
-			"左箭头取最朝左侧（不取更近但偏上的）")
-	# 同分取更近者
-	var tie: Array = [[7, Vector2(-50.0, 50.0)], [8, Vector2(-20.0, 20.0)]]
-	_runner.assert_eq(ProvincePolitics.pick_by_side(tie, ProvincePolitics.SIDE_LEFT), 8,
-			"同分取更近者")
-	# 全在另一侧：兜底取最不偏者（出生省只有左上/下左/正上三邻，右箭头不留死位）
-	var all_left: Array = [[31, Vector2(-562.0, -427.0)], [32, Vector2(-277.0, 659.0)],
-			[33, Vector2(-3.0, -529.0)]]
-	_runner.assert_eq(ProvincePolitics.pick_by_side(all_left, ProvincePolitics.SIDE_RIGHT), 33,
-			"无右侧候选时兜底取最不偏者")
-	_runner.assert_eq(ProvincePolitics.pick_by_side(all_left, ProvincePolitics.SIDE_LEFT), 31,
-			"按最朝左取（#31 而非更近的 #32）")
-	# 无候选 / 退化输入
-	_runner.assert_eq(ProvincePolitics.pick_by_side([], ProvincePolitics.SIDE_LEFT), 0,
-			"无候选返回 0")
-	_runner.assert_eq(ProvincePolitics.pick_by_side([[5, Vector2.ZERO]],
-			ProvincePolitics.SIDE_LEFT), 0, "零向量候选跳过")
-	_runner.assert_eq(ProvincePolitics.pick_by_side([["bad"], {}],
-			ProvincePolitics.SIDE_LEFT), 0, "畸形条目跳过不崩")

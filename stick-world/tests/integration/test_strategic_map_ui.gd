@@ -60,7 +60,7 @@ func _ready() -> void:
 	_runner.add_test("据点面板：空态隐藏 / 逐据点一行 / 行点击回调", _test_territory_panel, true)
 	_runner.add_test("P4 染色：政治填充按已占地块逐格覆盖（占多少染多少）", _test_owned_tile_dyeing, true)
 	_runner.add_test("P4 染色：政治图例含「我方疆域」条目（无则不空留）", _test_legend_player_entry, true)
-	_runner.add_test("邻省上下文：政权色暗一阶 + 水面回贴 + 左右切省箭头", _test_province_context, true)
+	_runner.add_test("邻省上下文：政权色暗一阶 + 水面回贴 + 切省箭头环", _test_province_context, true)
 	_runner.add_test("水面回贴：判水烘焙（水体原样回贴 / 陆地不覆盖）", _test_water_restore, true)
 	_runner.add_test("L2 打开：层级指示 + 当前地区号", _test_l2_indicator, true)
 	_runner.add_test("L3 打开：层级指示 + 关闭提示", _test_l3_indicator, true)
@@ -625,9 +625,10 @@ func _find_label_text(node: Node, needle: String) -> bool:
 	return false
 
 
-## 邻省上下文 + 左右切省箭头（本批：灰色邻块 → 地形 + 暗一阶政权色；左右箭头切相邻 L1 省）。
-## 断言走真实数据与真实链路：ProvincePolitics 侧表 → 邻块取色；控制器 _list_province_arrows
-## → 箭头目标；switch_province → api 实际换包且不改 ESC 语义。
+## 邻省上下文 + 切省箭头环（本批：灰色邻块 → 地形 + 暗一阶政权色；每个相邻省份一个
+## 箭头排在地图内虚拟圆环上、背离圆心指向该省）。
+## 断言走真实数据与真实链路：ProvincePolitics 侧表 → 邻块取色；控制器 _arrow_ring_config
+## → 箭头环；switch_province → api 实际换包且不改 ESC 语义。
 func _test_province_context() -> void:
 	if _l1_api == null or _l1_content == null:
 		_runner.assert_true(false, "前置装配缺失")
@@ -643,23 +644,40 @@ func _test_province_context() -> void:
 			"箭头挂 CanvasLayer 直下（Control 挂 Node2D 下 anchor 参照为 0 会跑位）")
 	_runner.assert_true(arrows.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 			"箭头根不吃鼠标（不挡地图拖拽/点选）")
-	_runner.assert_true(arrows.targets_fn.is_valid() and arrows.activate_fn.is_valid(),
-			"控制器已注入 targets_fn / activate_fn")
-	# 目标：出生省 #69 的三个邻省按全局质心分左右，两侧都有目标（不留死位）
-	var targets: Array = _l1_content.call("_list_province_arrows")
-	_runner.assert_eq(targets.size(), 2, "出生省两侧各有切省目标（实测 %d）" % targets.size())
-	var left := 0
-	var right := 0
-	for t in targets:
-		if int((t as Dictionary).get("side", 0)) == ProvincePolitics.SIDE_LEFT:
-			left = int(t.get("label", 0))
-		else:
-			right = int(t.get("label", 0))
-	_runner.assert_true(BIRTH_NEIGHBORS.has(left), "左目标取自相邻省（实测 #%d）" % left)
-	_runner.assert_true(BIRTH_NEIGHBORS.has(right), "右目标取自相邻省（实测 #%d）" % right)
-	_runner.assert_true(left != right, "左右目标不同（实测 #%d/#%d）" % [left, right])
-	_runner.assert_true(_l1_api.has_l1_data(left), "邻省 #%d 有可直接打开的包数据" % left)
-	_runner.assert_true(not _l1_api.has_l1_data(999), "无数据 label 判否（箭头不列死目标）")
+	_runner.assert_true(arrows.targets_fn.is_valid() and arrows.activate_fn.is_valid()
+			and arrows.screen_pos_fn.is_valid(), "控制器已注入 targets_fn / activate_fn / screen_pos_fn")
+	# 箭头环：出生省三个邻省 → 三个箭头，方位与全球地理一致（#18 东北 / #67 西北 / #68 正西）
+	var cfg: Dictionary = _l1_content.call("_arrow_ring_config")
+	var ring_arrows: Array = cfg.get("arrows", [])
+	_runner.assert_eq(ring_arrows.size(), BIRTH_NEIGHBORS.size(),
+			"每个相邻省份一个箭头（实测 %d 个）" % ring_arrows.size())
+	var got_labels: Array = []
+	var by_label := {}
+	for a in ring_arrows:
+		var label := int((a as Dictionary).get("label", 0))
+		got_labels.append(label)
+		by_label[label] = a
+		_runner.assert_true(BIRTH_NEIGHBORS.has(label), "箭头目标取自相邻省（实测 #%d）" % label)
+		_runner.assert_true(((a as Dictionary).get("color", Color(0, 0, 0, 0)) as Color).a > 0.0,
+				"箭头 #%d 取到政权色（填充=目标省省色）" % label)
+	for nb in BIRTH_NEIGHBORS:
+		_runner.assert_true(got_labels.has(nb), "邻省 #%d 有对应箭头" % nb)
+	# 方位角（背离圆心 = 指向该省）：#68 正西 ≈ ±π、#67 西北 ≈ -3π/4、#18 东北 ≈ -π/4
+	var ang68: float = float((by_label.get(68, {}) as Dictionary).get("angle", 99.0))
+	var ang18: float = float((by_label.get(18, {}) as Dictionary).get("angle", 99.0))
+	_runner.assert_true(absf(absf(ang68) - PI) < 0.25,
+			"#68 正西（angle=%.2f rad）" % ang68)
+	_runner.assert_true(absf(ang18 + PI * 0.25) < 0.4,
+			"#18 东北（angle=%.2f rad）" % ang18)
+	# 圆环锚在地图内：圆心 = context 中心、半径 < 中心到边的距离
+	var center: Vector2 = cfg.get("center", Vector2.ZERO)
+	var radius: float = float(cfg.get("radius", 0.0))
+	var side := float(maxi((_l1_api.get_data() as L1WorldData).context_size.x,
+			(_l1_api.get_data() as L1WorldData).context_size.y))
+	_runner.assert_true(center.distance_to(Vector2(side, side) * 0.5) < 1.0,
+			"圆环圆心 = context 中心（实测 %s）" % center)
+	_runner.assert_true(radius > 0.0 and radius < minf(center.x, center.y),
+			"圆环半径落在图内（r=%.0f 中心距边 %.0f）" % [radius, minf(center.x, center.y)])
 	# 邻块取色 = 侧表政权色暗一阶（不是旧平灰）
 	var pol := ProvincePolitics.load_shared()
 	_runner.assert_true(pol != null, "省份政治面侧表装载成功")
@@ -673,18 +691,41 @@ func _test_province_context() -> void:
 				"邻省块色 = 政权色暗一阶（#%d 实测 %s / 期望 %s）" % [nb_label, got, want])
 		_runner.assert_true(not got.is_equal_approx(MapTokens.L1_NEIGHBOR_COLOR),
 				"邻省不再是平灰")
+		# 邻块多边形轴序回归：邻块必须与会块一样是 [x,y]（曾被漏转 to_xy → 沿对角轴翻转）
+		var ext := _ring_extent(nb.get("polygons", []))
+		_runner.assert_true(ext.x > 0.0 and ext.x > ext.y,
+				"邻块 #%d 形状横向为主（轴序未翻转；实测 bbox %.0f×%.0f）" % [nb_label, ext.x, ext.y])
 	# 切省：api 实际换包 + 指示器跟随 + ESC 语义不变（仍为直开关闭）
-	var switched: bool = _l1_content.call("switch_province", left)
-	_runner.assert_true(switched, "switch_province(#%d) 成功" % left)
-	_runner.assert_eq(_l1_api.get_current_l1_label(), left, "当前 L1 已切到 #%d" % left)
+	var probe: int = int(BIRTH_NEIGHBORS[BIRTH_NEIGHBORS.size() - 1])
+	var switched: bool = _l1_content.call("switch_province", probe)
+	_runner.assert_true(switched, "switch_province(#%d) 成功" % probe)
+	_runner.assert_eq(_l1_api.get_current_l1_label(), probe, "当前 L1 已切到 #%d" % probe)
 	if _l1_indicator != null:
-		_runner.assert_eq(_l1_indicator._subtitle_label.text, "#%d" % left,
+		_runner.assert_eq(_l1_indicator._subtitle_label.text, "#%d" % probe,
 				"指示器跟随切省（实测 %s）" % _l1_indicator._subtitle_label.text)
 	_runner.assert_true(not bool(_l1_content._drill_from_l2),
 			"切省不改下钻标志（ESC 仍关闭地图，不误返回 L2）")
-	_runner.assert_true(not _l1_content.call("switch_province", left),
+	_runner.assert_true(not _l1_content.call("switch_province", probe),
 			"重复切同一省返回 false（幂等）")
+	# 切省后箭头环随新省重算（邻省集合变了，箭头数量随数据走）
+	var cfg2: Dictionary = _l1_content.call("_arrow_ring_config")
+	_runner.assert_true((cfg2.get("arrows", []) as Array).size() > 0,
+			"切省后箭头环重算（新省邻省集）")
 	_l1_content.call("close")
+
+
+## 多边形点列的包围盒尺寸（点列为 [x,y] 数组）
+func _ring_extent(polys: Array) -> Vector2:
+	var lo := Vector2.INF
+	var hi := -Vector2.INF
+	for ring in polys:
+		for p in (ring as Array):
+			var v := Vector2(float(p[0]), float(p[1]))
+			lo = lo.min(v)
+			hi = hi.max(v)
+	if lo == Vector2.INF:
+		return Vector2.ZERO
+	return hi - lo
 
 
 ## 水面回贴：地形贴图 → RGBA 贴图（RGB 原样 / A = 判水量）。水体 alpha 满、陆地 0，

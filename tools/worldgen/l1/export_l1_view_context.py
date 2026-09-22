@@ -469,11 +469,14 @@ def main():
         if not outs:
             continue
         nbr_labels.append(int(k))
+        # ⚠️ 轴序：mesh_extract 的环是 (y,x) 角点，**必须过 to_xy**——L1 数据格式统一
+        # [x,y]（见 l_world_bake.gd 的「L1：原样序列化 [x,y]」与 L1TileDef._polygon_from）。
+        # 曾漏转换，导致邻块多边形整体沿主对角轴翻转（涂灰时不可见，2026-09-22 上色后暴露）。
         neighbors_data.append({"label": int(k),
                                "polygons": [r for p in mv.get("outer", [])
-                                            for r in mesh_extract.f32_clean_ring(p)],
+                                            for r in to_xy(mesh_extract.f32_clean_ring(p))],
                                "holes": [r for p in mv.get("holes", [])
-                                         for r in mesh_extract.f32_clean_ring(p)]})
+                                         for r in to_xy(mesh_extract.f32_clean_ring(p))]})
     nbr_labels.sort()
     print("  邻居老 L1 块 (%d):" % len(nbr_labels), nbr_labels)
     # 湖泊：context 内全部湖像素（覆盖邻居/非地块区；地块内湖极少，直接作湖泊色覆盖城市块）

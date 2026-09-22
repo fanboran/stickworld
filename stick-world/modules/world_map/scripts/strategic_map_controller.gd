@@ -38,6 +38,10 @@ var _last_click_settlement: String = ""
 ## 默认缩放 = 整图适配（打开即见 context 全部陆地，出生 L1 居中，并以此作为 HUD 的 100%）
 const DEFAULT_ZOOM_MULT := 1.0
 
+## 切省箭头环半径比（× context 边长）：0.40 —— 环贴在地图内缘（离地图边框约 1/10 边长），
+## 既不压住中心内容，也不越出地图框（地图外不放箭头）
+const ARROW_RING_RATIO := 0.40
+
 ## 底部 HUD（CanvasLayer 直接子节点，open/close 同步显隐）
 var _hud: Control = null
 
@@ -142,8 +146,9 @@ func _auto_find_components() -> void:
 	if _arrows == null:
 		_arrows = MapControllerUtil.find_sibling(self, "ProvinceSwitchArrows") as ProvinceSwitchArrows
 		if _arrows != null:
-			_arrows.targets_fn = _list_province_arrows
+			_arrows.targets_fn = _arrow_ring_config
 			_arrows.activate_fn = switch_province
+			_arrows.screen_pos_fn = map_to_screen_pos
 	if _ocean_backdrop == null:
 		_ocean_backdrop = MapControllerUtil.find_sibling(self, "OceanBackground")
 	if _mode_manager == null:
@@ -321,26 +326,34 @@ func _on_territory_row_activated(target: Dictionary) -> void:
 	activate_settlement(String(target.get("settlement_key", "")))
 
 
-## 左右切省箭头目标（province_switch_arrows.targets_fn）：
-## 候选 = 当前包数据的 neighbors[].label（相邻老 L1 块），方位按**全局质心**判定
-## （ProvincePolitics 侧表；局部多边形被 context 裁过、方位会偏心，只用于画形状）。
-## 左右各取"最朝该侧"的一个邻省；侧表缺失 / 邻省无质心 / 无包数据 → 该侧不返回（箭头不画）。
-func _list_province_arrows() -> Array:
-	var out: Array = []
+## 切省箭头环配置（province_switch_arrows.targets_fn）：
+## **每个相邻老 L1 省份一个箭头**，排在**地图内容区内的虚拟圆环**上——圆心 = 本省
+## context 中心，半径 = context 边长 × ARROW_RING_RATIO；每个箭头的方位角 = 该邻省
+## 全局质心相对本省的方位（方向背离圆心，即指向该省）。
+## 方向用**全局质心**（ProvincePolitics 侧表；局部多边形被 context 裁过、方位会偏心）。
+## 侧表缺失 / 邻省无质心 / 无包数据 → 该邻省不出箭头（不出死箭头）。
+## 返回 {"center": Vector2, "radius": float, "arrows": [{label, angle, color, text}]}。
+func _arrow_ring_config() -> Dictionary:
+	var cfg := {"center": Vector2.ZERO, "radius": 0.0, "arrows": []}
 	if api == null or not api.has_method("get_data"):
-		return out
+		return cfg
 	var data: L1WorldData = api.get_data()
 	if data == null:
-		return out
+		return cfg
 	var pol := ProvincePolitics.load_shared()
 	if pol == null:
-		return out
+		return cfg
 	var self_label: int = int(api.get_current_l1_label()) \
 			if api.has_method("get_current_l1_label") else 0
 	var self_center := pol.centroid_of(self_label)
 	if self_center == Vector2.INF:
-		return out
-	var dirs: Array = []
+		return cfg
+	var side := float(maxi(data.context_size.x, data.context_size.y))
+	if side <= 0.0:
+		side = float(data.size)
+	cfg["center"] = Vector2(side, side) * 0.5
+	cfg["radius"] = side * ARROW_RING_RATIO
+	var arrows: Array = []
 	for nb in data.neighbors:
 		var label := int((nb as Dictionary).get("label", 0))
 		if label <= 0 or label == self_label:
@@ -350,21 +363,26 @@ func _list_province_arrows() -> Array:
 			continue
 		if api.has_method("has_l1_data") and not api.has_l1_data(label):
 			continue
-		dirs.append([label, center - self_center])
-	for side in [ProvincePolitics.SIDE_LEFT, ProvincePolitics.SIDE_RIGHT]:
-		var label := ProvincePolitics.pick_by_side(dirs, side)
-		if label <= 0:
+		var dir := center - self_center
+		if dir.length() <= 0.0001:
 			continue
 		var state_name := pol.state_name_of(label)
-		out.append({
-			"side": side,
+		arrows.append({
 			"label": label,
-			"bearing": pol.centroid_of(label) - self_center,
+			"angle": dir.angle(),
 			"color": pol.color_of(label),
 			"text": "切到相邻省份 #%d%s" % [
 				label, " · %s" % state_name if not state_name.is_empty() else ""],
 		})
-	return out
+	cfg["arrows"] = arrows
+	return cfg
+
+
+## 地图坐标 → 屏幕坐标（切省箭头环定位用；相机缺失时原样返回）
+func map_to_screen_pos(map_pos: Vector2) -> Vector2:
+	if api != null and api.has_method("map_to_screen"):
+		return api.map_to_screen(map_pos)
+	return map_pos
 
 
 ## 切到相邻 L1 省份（箭头入口）：换包 + 重适配视角 + 刷新名牌/图例/据点/箭头。

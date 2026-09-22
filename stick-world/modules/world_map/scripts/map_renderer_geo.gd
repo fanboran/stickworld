@@ -87,6 +87,8 @@ static func polyline_bbox(rpts: PackedVector2Array, grow: float) -> Rect2:
 
 ## 边中点是否贴着某条河（骨架中心线 + 半河宽）：贴陆后河岸即城块界线，
 ## 描边会沿河岸把河框起来读作「河流被描边」——贴河边与贴湖边同样跳过不描。
+## 河折线**端点**（入海口/入湖口）邻域同样跳过：海岸描边语义到河口收笔，
+## 否则两侧海岸描边在河口合拢，河口读作被框住的「小海湾」。
 static func edge_touches_river_fast(a: Vector2, b: Vector2, tol: float,
 		river_lines: Array, river_widths: PackedFloat32Array,
 		river_boxes: Array[Rect2]) -> bool:
@@ -98,6 +100,8 @@ static func edge_touches_river_fast(a: Vector2, b: Vector2, tol: float,
 			continue
 		var lpts: PackedVector2Array = river_lines[ri]
 		var reach := tol + float(river_widths[ri]) * 0.5
+		if mid.distance_to(lpts[0]) <= reach or mid.distance_to(lpts[lpts.size() - 1]) <= reach:
+			return true
 		for i in range(lpts.size() - 1):
 			if dist_point_segment(mid, lpts[i], lpts[i + 1]) <= reach:
 				return true

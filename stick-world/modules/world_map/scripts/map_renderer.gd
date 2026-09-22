@@ -562,15 +562,9 @@ func _draw() -> void:
 					Color(1.0, 1.0, 1.0, POLITICAL_FILL_ALPHA))
 		if _tiles_mesh != null:
 			draw_mesh(_tiles_mesh, null, Transform2D(), Color(1.0, 1.0, 1.0, POLITICAL_FILL_ALPHA))
-		# 水体矢量后处理（水陆同源 D3，创始人 2026-09-22 定向）：河流 polyline +
-		# 湖泊 polygon 画在色块之上、界线之下——几何贴陆（I2）后色块本就盖不到水面，
-		# 矢量水与色块边/描边出自生成端同一份水陆真相（I3），运行时零判水、放大不糊。
-		# 河宽 = EDT 实测 w + 1px（盖住底图 gaussian_filter(0.9) 的羽化边；宽取自
-		# EDT 是同源纪律，不得改固定像素宽）。旧「绿-蓝差判水水面回贴」已退役。
-		for ri in _river_lines.size():
-			draw_polyline(_river_lines[ri], RIVER_COLOR, _river_widths[ri] + 1.0, true)
-		if _lakes_mesh != null:
-			draw_mesh(_lakes_mesh, null)
+		# 水体不另画 pass（水陆同源推论）：几何贴陆（I2）后色块根本不进水面，
+		# 地形贴图里的海/湖/河原样可见即读作水——再叠矢量水（纯色）反而盖掉
+		# 贴图的渐变水面制造色差线。放大极端糊的再议超分，不在此层补。
 	# 1. 矢量回退层（贴图缺失/未解码完成时）
 	if not terrain_base:
 		if _tiles_mesh == null:

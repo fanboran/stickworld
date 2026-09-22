@@ -336,6 +336,15 @@ def main():
             sys.exit(1)
         lake = np.load(lake_path).astype(bool)
         print("  湖输入 = refined 湖光栅（%d px，唯一代）" % int(lake.sum()), flush=True)
+    # 源流带收窄（D1 拍板 C 版，2026-09-22）：带从 4px@8192 收窄到贴水 2px，
+    # 带外源流域还原最近群系——色块/描边贴真水线后宽带透色读作「分离开裂」；
+    # 2048 中间体不动（半像素不可表达），收窄在烘焙端 8192 场做
+    narrow_px = int(p.get("source_narrow_px", 2))
+    if narrow_px > 0:
+        fields_labels = tr.narrow_source_band(
+            labels8.copy(), land, lake | river, narrow_px)
+        labels8 = fields_labels
+        print("  源流带收窄 = %d px@8192（D1=C）" % narrow_px, flush=True)
     shade, ocean_edt, lake_in, coast_dark, river_a = tr.build_fields(
         elev, land, lake, river, p)
     # EDT 返回 float64，压成 float32 减半内存（8192² 场 ×2）

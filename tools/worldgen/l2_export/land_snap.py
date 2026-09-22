@@ -38,15 +38,28 @@ def snap_labels_to_land(labels, land, water):
     out[water_all] = 0
 
     holes = (~water_all) & (out == 0)
-    filled = 0
+    filled_mask = np.zeros_like(out, dtype=bool)
     if holes.any() and (out != 0).any():
         # EDT 的 input 非 0 处求到最近 0 处的距离/索引 —— 取反即「洞像素 →
         # 最近有标签像素」，indices 直接给出取值坐标（refine_city_labels 同款）
         _, idx = distance_transform_edt(out == 0, return_indices=True)
         src = out[idx[0], idx[1]]
         take = holes & (src != 0)
-        filled = int(take.sum())
         out[take] = src[take]
+        filled_mask = take
+        filled = int(take.sum())
+        # 回填边界自然化：EDT 最近标签的等距边是平直直线/直角，放大后读作
+        # 「莫名其妙的方块」——对回填像素做 3×3 众数滤波两轮，边界跟随
+        # 周围标签的自然轮廓（只动回填像素，城块间 watershed 原始直线不碰）
+        for _ in range(2):
+            ys, xs = np.where(filled_mask)
+            for y, x in zip(ys.tolist(), xs.tolist()):
+                win = out[max(0, y - 1):y + 2, max(0, x - 1):x + 2].ravel()
+                win = win[win != 0]
+                if win.size:
+                    out[y, x] = np.bincount(win).argmax()
+    else:
+        filled = 0
     return out, {"cleared_px": cleared, "filled_px": filled}
 
 

@@ -1,4 +1,5 @@
 {
+  "source_narrow_px": 2,
   "hillshade": {
     "sigma": 2.5,
     "strength": 0.15,

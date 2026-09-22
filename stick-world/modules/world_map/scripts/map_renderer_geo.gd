@@ -201,49 +201,21 @@ static func junction_points(data: L1WorldData) -> PackedVector2Array:
 	return out
 
 
-## 单地块城界链：按多边形点序把连续"不贴水面"边并成折线链（贴湖/河段断开），
-## 整环都不贴水面时返回一条闭合链（首点续尾）。链内相邻段共顶点 ⇒ draw_polyline
-## 在交汇处成折角、端点不外伸（三岔口不再分叉）。海岸边保留（国界勾勒语义）。
+## 单地块城界链：整环一条闭合链（首点续尾）。链内相邻段共顶点 ⇒ draw_polyline
+## 在交汇处成折角、端点不外伸（三岔口不再分叉）。
+## 跳水面段（贴湖/河断开）已退役：政治国色描边删除后该逻辑只剩「省界虚线」
+## 副作用（河沿岸段全断读作虚线，创始人 2026-09-22 复检指出）——P 社省界
+## 语义 = 沿湖/河也连续画。
 static func tile_border_chains(data: L1WorldData, poly: PackedVector2Array,
 		water_tol: float, lake_boxes: Array[Rect2],
 		river_lines: Array, river_widths: PackedFloat32Array,
 		river_boxes: Array[Rect2]) -> Array:
 	var out: Array = []
-	var n := poly.size()
-	if n < 3:
+	if poly.size() < 3:
 		return out
-	var kept := PackedByteArray()
-	kept.resize(n)
-	var n_kept := 0
-	for i in n:
-		if not edge_touches_lake_fast(data, poly[i], poly[(i + 1) % n], water_tol, lake_boxes) \
-				and not edge_touches_river_fast(poly[i], poly[(i + 1) % n], water_tol,
-					river_lines, river_widths, river_boxes):
-			kept[i] = 1
-			n_kept += 1
-	if n_kept == 0:
-		return out
-	if n_kept == n:
-		var ring := PackedVector2Array(poly)
-		ring.append(poly[0])
-		out.append(ring)
-		return out
-	# 每条链从"前一段被跳过"的保留边起（保证覆盖完整的连续保留段）
-	var visited := 0
-	var i := 0
-	while visited < n_kept and i < 2 * n:
-		if kept[i % n] == 1 and kept[(i - 1 + n) % n] == 0:
-			var chain := PackedVector2Array()
-			var j := i
-			while kept[j % n] == 1:
-				chain.append(poly[j % n])
-				visited += 1
-				j += 1
-			chain.append(poly[j % n])
-			out.append(chain)
-			i = j
-		else:
-			i += 1
+	var ring := PackedVector2Array(poly)
+	ring.append(poly[0])
+	out.append(ring)
 	return out
 
 

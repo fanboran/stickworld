@@ -538,6 +538,14 @@ def clip_polys_to_tile(polys, city, cp):
     tp = city.get("tile_geom")
     if tp is None or not polys:
         return polys, 0.0
+    # 城块内缩（创始人 2026-09-22：blob 缩小到不和地块边界接触）——
+    # 裁剪基准 = 城块多边形 buffer(-tile_margin)，blob 边缘与城块界留隙；
+    # 内缩后为空（超小城块）则退回原多边形
+    margin = float(cp.get("tile_margin", 0.0))
+    if margin > 0.0:
+        inset = tp.buffer(-margin)
+        if not inset.is_empty and inset.area > 100.0:
+            tp = inset
     out = []
     area_before = 0.0
     area_after = 0.0

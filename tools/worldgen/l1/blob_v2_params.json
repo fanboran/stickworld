@@ -76,7 +76,8 @@
   "simplify_tol": 0.5,
   "hole_min_frac": 0.02,
   "hole_min_abs": 40.0,
-  "enclave_min_area": 45.0
+  "enclave_min_area": 45.0,
+  "tile_margin": 10
  },
  "preview": {
   "closeup_win": 512,
@@ -102,14 +103,27 @@
  "bake": {
   "ss": 2,
   "desat": 0.62,
-  "warm_shift": [8, 3, -6],
+  "warm_shift": [
+   8,
+   3,
+   -6
+  ],
   "value_noise_amp": 0.06,
-  "value_noise_wl": [42.0, 13.0],
+  "value_noise_wl": [
+   42.0,
+   13.0
+  ],
   "roof_grid": 4.2,
-  "roof_size": [1.0, 3.0],
+  "roof_size": [
+   1.0,
+   3.0
+  ],
   "roof_density": 0.8,
   "roof_align_deg": 25.0,
-  "gridline_gap": [9.0, 16.0],
+  "gridline_gap": [
+   9.0,
+   16.0
+  ],
   "gridline_alpha": 0.13,
   "halo_px": 3,
   "halo_alpha": 0.4,

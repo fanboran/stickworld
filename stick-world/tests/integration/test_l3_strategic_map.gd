@@ -151,15 +151,15 @@ func _test_display_mode() -> void:
 
 
 func _test_political_layer() -> void:
-	# R7/R9 政治模式 + 边界超分 S3：POLITICAL 下矢量 fill 优先（共享弧三角网 +
+	# R7/R9 政治层 + 边界超分 S3：政治层打开时矢量 fill 优先（共享弧三角网 +
 	# 顶点色查 PoliticalLut，同步就绪即建）；political_mesh 缺失时回退 ID mask
 	# 异步解码路线。改 LUT 即全图换色的 CPU 侧自证在 test_political_data（unit），
-	# 此处验证真实接线：MapModeManager 广播 → L3 控制器 → 渲染器 set_map_mode。
+	# 此处验证真实接线：MapModeManager 广播 → L3 控制器 → 渲染器 set_layer_on。
 	if _scene == null or _renderer == null or _data == null:
 		_runner.assert_true(false, "前置：L3 场景未装载")
 		return
-	var was_mode: int = MapModeManager.current_mode
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	var was_political: bool = MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL)
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, true)
 	var deadline := Time.get_ticks_msec() + 15000
 	while _renderer._political_layer == null and _renderer._political_fill_meshes.is_empty() \
 			and Time.get_ticks_msec() < deadline:
@@ -174,12 +174,12 @@ func _test_political_layer() -> void:
 			"矢量 fill 缓存为 ArrayMesh 分块列表")
 		var vlut := PoliticalLut.load_shared()
 		_runner.assert_true(vlut != null, "共享 PoliticalLut 可查（fill 顶点色真相源）")
-		MapModeManager.set_mode(was_mode)
+		MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, was_political)
 		return
 	if _renderer._political_layer == null:
-		MapModeManager.set_mode(was_mode)
+		MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, was_political)
 		return
-	_runner.assert_true(_renderer._political_layer.visible, "POLITICAL 下着色层可见")
+	_runner.assert_true(_renderer._political_layer.visible, "政治层下着色层可见")
 	var mat: ShaderMaterial = _renderer._political_layer.material
 	_runner.assert_true(mat != null and mat.shader == PoliticalLut.COLORIZE_SHADER,
 		"着色层挂 PoliticalLut.COLORIZE_SHADER")
@@ -189,9 +189,11 @@ func _test_political_layer() -> void:
 		"shader LUT 参数 = 共享 PoliticalLut 纹理（改 LUT 全图生效）")
 	_runner.assert_true(_renderer._political_layer.z_index == -1,
 		"着色层垫底（z=-1，上层界线/hover 照画）")
-	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)  # 广播复位，防污染后续用例
+	# 关政治层：mask 着色层隐藏（政治层 off = 地形底图路线）
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, false)
 	_runner.assert_true(not _renderer._political_layer.visible,
-		"复位 TERRAIN 后着色层隐藏")
+		"关政治层后着色层隐藏")
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, was_political)  # 复位，防污染后续用例
 
 
 func _test_debug_labels() -> void:

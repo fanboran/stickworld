@@ -19,7 +19,10 @@ var _edge_road: Dictionary = {}
 var _node_ids: Array[String] = []
 
 
-## 从 L1WorldData.roads 构建路网图（roads 条目缺 from/to 的跳过——旧包直线回退段无端点语义）
+## 从 L1WorldData.roads_local 构建路网图（roads 条目缺 from/to 的跳过——旧包直线回退段无端点语义）。
+## ⚠️ 调用方必须传**本包道路视图**（L1WorldData.roads_local）：全量 roads 含跨包/邻块显示段
+## （from/to 为邻包聚落、length_px 是 context 窗口内裁剪段长），入图会造孤立节点并低估距离，
+## 污染可达性与最短路。过滤落点在上游（L1WorldData.local_roads），本类只管建图。
 func setup(roads: Array) -> void:
 	_adj = {}
 	_edge_road = {}

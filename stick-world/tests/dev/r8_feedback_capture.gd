@@ -23,7 +23,7 @@ func _ready() -> void:
 	await _shot_l1()
 	await _shot_l2()
 	await _shot_l3()
-	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
+	_reset_layers()
 	print("FEEDBACK1_CAPTURE_DONE")
 	get_tree().quit()
 
@@ -49,6 +49,25 @@ func _capture(shot_name: String) -> void:
 	print("SHOT ", shot_name, " ", img.get_size())
 
 
+## 应用层开关预设（未列出的层全关；全局静态表）
+func _apply_layers(on_layers: Array) -> void:
+	for layer in [MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+			MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE]:
+		MapModeManager.set_layer_on(layer, on_layers.has(layer))
+
+
+## 层开关复位为默认态（政治/城市开，交通/资源关）
+func _reset_layers() -> void:
+	_apply_layers([MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY])
+
+
+## 直接驱动的渲染器也要跟着刷新（未被控制器接线的裸渲染器）
+func _renderer_set_layers(renderer: Node2D, on_layers: Array) -> void:
+	for layer in [MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+			MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE]:
+		renderer.set_layer_on(layer, on_layers.has(layer))
+
+
 ## 轮询条件满足或超时（条件 callable 返回 true 即通过）
 func _wait_until(cond: Callable) -> void:
 	for i in WAIT_FRAMES:
@@ -63,28 +82,29 @@ func _teardown(nodes: Array) -> void:
 	await get_tree().process_frame
 
 
-## ── L1：l1_002 地形适配（新字号标注）+ 政治模式三岔点放大（严丝合缝）──
+## ── L1：l1_002 裸底图适配（新字号标注）+ 政治层三岔点放大（严丝合缝）──
 func _shot_l1() -> void:
-	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
+	_apply_layers([])
 	var data := L1WorldData.load_from(
 		SM_BASE + "/l1_packs/l1_002/l1_world.json", SM_BASE + "/l1_packs/l1_002")
 	var renderer := MapRenderer.new()
 	add_child(renderer)
 	var cam := _make_camera(renderer, 1.0, Vector2.ZERO)  # 占位，下面按 context 重算
 	renderer.set_data(data)
-	renderer.set_map_mode(MapModeManager.Mode.TERRAIN)
+	_renderer_set_layers(renderer, [])
 	var ctx := float(maxi(data.context_size.y, data.size))
 	var fit := _vp_size.y * 0.85 / ctx
 	cam.set_zoom(fit)
 	cam.set_offset(_vp_size * 0.5 - Vector2(ctx, ctx) * fit * 0.5)
-	await _wait_until(func(): return renderer._mode_textures.size() > 0 and renderer._blob_ready)
+	# 裸底图档：城市层关（建成区贴图不入队），只等底图就位
+	await _wait_until(func(): return renderer._base_tex != null)
 	for i in 8:
 		await get_tree().process_frame
 	await _capture("feedback1_l1_terrain_fit")
-	# 政治（矢量政权色填充，无贴图干扰）→ 三岔点放大 zoom 3.0：城界 2px 屏幕宽，
+	# 政治层（矢量政权色覆盖；城市层关以免色块被建成区压住）→ 三岔点放大 zoom 3.0：
 	# 检查共享边单线、三岔端点共点无缝
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	renderer.set_map_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
+	_renderer_set_layers(renderer, [MapModeManager.Layer.POLITICAL])
 	for i in 4:
 		await get_tree().process_frame
 	var seam := _find_junction(data)
@@ -117,16 +137,16 @@ func _find_junction(data: L1WorldData) -> Vector2:
 	return best if best != Vector2.INF else Vector2.ZERO
 
 
-## ── L2：region_001 政治默认视角（1.75 适配，控制器口径）──
+## ── L2：region_001 政治层默认视角（1.75 适配，控制器口径）──
 func _shot_l2() -> void:
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
 	var data := L2WorldData.load_from(
 		SM_BASE + "/l2_packs/region_001/l2_world.json", SM_BASE + "/l2_packs/region_001")
 	var renderer := L2MapRenderer.new()
 	add_child(renderer)
 	var cam := _make_camera(renderer, 1.0, Vector2.ZERO)
 	renderer.set_data(data)
-	renderer.set_map_mode(MapModeManager.Mode.POLITICAL)
+	_renderer_set_layers(renderer, [MapModeManager.Layer.POLITICAL])
 	var ctx := float(maxi(data.context_size.x, data.context_size.y))
 	var fit := _vp_size.y * 0.72 / ctx
 	cam.set_zoom(fit * 1.75)
@@ -137,15 +157,15 @@ func _shot_l2() -> void:
 	await _teardown([renderer, cam])
 
 
-## ── L3：政治三连拍 fit / 2x / 4x（多缩放档政权色全覆盖验证）──
+## ── L3：政治层三连拍 fit / 2x / 4x（多缩放档政权色全覆盖验证）──
 func _shot_l3() -> void:
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
 	var data := L3WorldData.load_from(SM_BASE + "/l3_world.json", SM_BASE)
 	var renderer := L3MapRenderer.new()
 	add_child(renderer)
 	var cam := _make_camera(renderer, 1.0, Vector2.ZERO)
 	renderer.set_data(data)
-	renderer.set_map_mode(MapModeManager.Mode.POLITICAL)
+	_renderer_set_layers(renderer, [MapModeManager.Layer.POLITICAL])
 	# 等政权 ID mask 后台解码 + RGBA8 归一 + 纹理就绪（67MB PNG，数秒）
 	await _wait_until(func(): return renderer._political_layer != null)
 	# 都城星标均值 ≈ 陆地中心（2x 取景用）；首星（4x 取景用）

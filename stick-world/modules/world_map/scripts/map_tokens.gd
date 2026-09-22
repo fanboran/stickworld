@@ -103,6 +103,26 @@ const BIOME_LEGEND: Array[Dictionary] = [
 	{"color": Color(118.0 / 255.0, 62.0 / 255.0, 54.0 / 255.0), "text": "火山"},
 ]
 
+## 资源点标记（L1 资源层）：六种资源 id 的填充色 + 矢量标记尺寸。
+## id 复用物品域资源表正式 id（config/resources/resources.tres 的 res_wood / res_stone /
+## res_metal_ore / res_gold_ore / res_diamond / res_black_asphalt）；色取**描述性材料本色**
+## （木绿 / 石浅灰 / 铁深灰 / 金金黄 / 钻白 / 沥青黑）。表外 id 走默认中性色，不报错。
+const L1_RESOURCE_COLORS := {
+	"res_wood": Color(0.34, 0.60, 0.30),
+	"res_stone": Color(0.72, 0.72, 0.70),
+	"res_metal_ore": Color(0.35, 0.36, 0.38),
+	"res_gold_ore": Color(0.92, 0.75, 0.25),
+	"res_diamond": Color(0.96, 0.97, 1.0),
+	"res_black_asphalt": Color(0.10, 0.10, 0.11),
+}
+## 表外资源 id 的默认色（浅暖灰中性点，位置信息仍可读；不报错）
+const L1_RESOURCE_DEFAULT_COLOR := Color(0.62, 0.60, 0.56)
+## 资源点半径（屏幕像素固定，绘制时 ÷zoom；3~4px 保证整图适配下仍可见）
+const L1_RESOURCE_RADIUS := 3.5
+## 资源点描边（深墨细圈：浅色资源点压在浅底图上也能读出边界；屏幕像素固定）
+const L1_RESOURCE_OUTLINE := Color(0.12, 0.12, 0.12, 0.85)
+const L1_RESOURCE_OUTLINE_WIDTH := 1.0
+
 ## 城市常驻描边（内部城界，灰墨内容线；屏幕像素固定）
 const L1_TILE_BORDER_COLOR := Color(0.35, 0.35, 0.35)
 const L1_TILE_BORDER_WIDTH := 2.0

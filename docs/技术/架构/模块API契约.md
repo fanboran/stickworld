@@ -450,12 +450,13 @@ func enter_settlement(settlement_id: String) -> void
 func close_strategic_map() -> void
 # [Q] 控制器 visible=false 并发射 EventBus.strategic_map_closed（恢复场景图输入）
 
-# 地图模式（B4：TERRAIN 默认 / POLITICAL，三视图共享全局静态 MapModeManager.current_mode）
-func set_map_mode(mode: int) -> void
-# [Q] 切换全局模式并广播（HUD 模式条/图例/渲染器同步）；重复设置静默
+# 图层开关（底图恒地形；政治/城市/交通/资源四层独立开关可叠加，三视图共享全局静态 MapModeManager）
+func set_layer_on(layer: int, on: bool) -> void
+# [P] layer ∈ MapModeManager.Layer{POLITICAL, CITY, TRAFFIC, RESOURCE}
+# [Q] 设置层开关并广播 layer_toggled（HUD 开关条/图例/渲染器同步）；同值静默
 
-func get_map_mode() -> int
-# [Q] 返回 MapModeManager.Mode 枚举值
+func is_layer_on(layer: int) -> bool
+# [Q] 返回该层当前开关态；默认 政治=开 城市=开 交通=关 资源=关
 
 # 模块本地信号
 signal settlement_clicked(settlement_id: String)

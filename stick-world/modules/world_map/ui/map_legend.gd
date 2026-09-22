@@ -2,8 +2,8 @@ extends PanelContainer
 class_name MapLegend
 ## 战略图右下角图例 —— 色块 + 文字条目，数据驱动
 ##
-## 接口即 Phase B 模式系统的预留位：MapModeManager（B4）实装后，切模式时
-## 调 set_title/set_entries 换整套内容（地形=群系色 / 政治=政权色），组件无模式概念。
+## 接口即 Phase B 图层系统的预留位：MapModeManager（B4）实装后，图层开关变化时
+## 调 set_title/set_entries 换整套内容（按开启的图层逐层拼条目），组件无图层概念。
 ## A2 落地形态：L1 视图挂一个实例，条目 = 出生 8 城邦政权色（与地图填充同色源）。
 ##
 ## 停靠右下角并整体抬高避让底部 MapHUD（H=56 通栏，控件集中左侧，抬高纯防视觉贴边）。

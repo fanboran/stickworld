@@ -85,6 +85,120 @@ static func polyline_bbox(rpts: PackedVector2Array, grow: float) -> Rect2:
 	return bb.grow(grow)
 
 
+# ───────────────────────── 矩形裁剪（邻省完整渲染用）─────────────────────────
+## 邻包 context 与本包窗口只部分相交，邻包的城块多边形/城块界必须裁进窗口才能画
+## （不裁会把窗口外的半张省画到装裱框外的海洋背景上）。裁剪区一律是轴对齐矩形。
+
+## 凸多边形矩形裁剪（Sutherland–Hodgman，四条边依次裁）。裁剪区为矩形（凸）时
+## 结果是一条闭合多边形（沿裁剪边可能出现共线点，填充无碍）。退化返回空数组。
+static func clip_polygon_rect(poly: PackedVector2Array, rect: Rect2) -> PackedVector2Array:
+	if poly.size() < 3:
+		return PackedVector2Array()
+	var out := poly
+	for edge in 4:
+		out = _clip_polygon_edge(out, edge, rect)
+		if out.size() < 3:
+			return PackedVector2Array()
+	return out
+
+
+## 单边裁剪（edge：0 左 / 1 右 / 2 上 / 3 下）
+static func _clip_polygon_edge(poly: PackedVector2Array, edge: int, rect: Rect2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var n := poly.size()
+	if n == 0:
+		return out
+	for i in n:
+		var cur := poly[i]
+		var prev := poly[(i - 1 + n) % n]
+		var cur_in := _inside_edge(cur, edge, rect)
+		var prev_in := _inside_edge(prev, edge, rect)
+		if cur_in:
+			if not prev_in:
+				out.append(_cross_edge(prev, cur, edge, rect))
+			out.append(cur)
+		elif prev_in:
+			out.append(_cross_edge(prev, cur, edge, rect))
+	return out
+
+
+static func _inside_edge(p: Vector2, edge: int, rect: Rect2) -> bool:
+	match edge:
+		0: return p.x >= rect.position.x
+		1: return p.x <= rect.end.x
+		2: return p.y >= rect.position.y
+		_: return p.y <= rect.end.y
+
+
+## 线段与裁剪边交点的参数插值（边与线段不平行；调用方保证两端一内一外）
+static func _cross_edge(a: Vector2, b: Vector2, edge: int, rect: Rect2) -> Vector2:
+	var d := b - a
+	var t := 0.0
+	match edge:
+		0:
+			t = (rect.position.x - a.x) / d.x if absf(d.x) > 0.000001 else 0.0
+		1:
+			t = (rect.end.x - a.x) / d.x if absf(d.x) > 0.000001 else 0.0
+		2:
+			t = (rect.position.y - a.y) / d.y if absf(d.y) > 0.000001 else 0.0
+		_:
+			t = (rect.end.y - a.y) / d.y if absf(d.y) > 0.000001 else 0.0
+	return a + d * clampf(t, 0.0, 1.0)
+
+
+## 折线矩形裁剪：逐段 Liang–Barsky，相邻存活段接续成链（不引入沿裁剪边的假边——
+## 城块界在窗口边界处必须收笔，否则会沿装裱框画出一圈灰线）。返回若干条折线。
+static func clip_polyline_rect(pts: PackedVector2Array, rect: Rect2) -> Array:
+	var out: Array = []
+	var run := PackedVector2Array()
+	for i in range(pts.size() - 1):
+		var seg := clip_segment_rect(pts[i], pts[i + 1], rect)
+		if seg.is_empty():
+			if run.size() >= 2:
+				out.append(run)
+			run = PackedVector2Array()
+			continue
+		if run.is_empty():
+			run = PackedVector2Array([seg[0]])
+		run.append(seg[1])
+	if run.size() >= 2:
+		out.append(run)
+	return out
+
+
+## 单段 Liang–Barsky 裁剪：返回空（全外）/ [入点, 出点]
+static func clip_segment_rect(a: Vector2, b: Vector2, rect: Rect2) -> PackedVector2Array:
+	var dx := b.x - a.x
+	var dy := b.y - a.y
+	var p := PackedFloat32Array([-dx, dx, -dy, dy])
+	var q := PackedFloat32Array([
+		a.x - rect.position.x, rect.end.x - a.x,
+		a.y - rect.position.y, rect.end.y - a.y,
+	])
+	var t0 := 0.0
+	var t1 := 1.0
+	for i in 4:
+		var pi: float = p[i]
+		if absf(pi) < 0.000001:
+			if q[i] < 0.0:
+				return PackedVector2Array()   # 平行且在裁剪区外
+			continue
+		var r: float = q[i] / pi
+		if pi < 0.0:
+			if r > t1:
+				return PackedVector2Array()
+			if r > t0:
+				t0 = r
+		else:
+			if r < t0:
+				return PackedVector2Array()
+			if r < t1:
+				t1 = r
+	if t1 < t0:
+		return PackedVector2Array()
+	return PackedVector2Array([a + Vector2(dx, dy) * t0, a + Vector2(dx, dy) * t1])
+
+
 ## 边中点是否贴着某条河（骨架中心线 + 半河宽）：贴陆后河岸即城块界线，
 ## 描边会沿河岸把河框起来读作「河流被描边」——贴河边与贴湖边同样跳过不描。
 ## 河折线**端点**（入海口/入湖口）邻域同样跳过：海岸描边语义到河口收笔，
@@ -162,7 +276,7 @@ static func build_cached_geometry(h) -> void:
 	if h._data.l1_polygon.size() >= 3:
 		h._cached_l1_closed = closed(h._data.l1_polygon)
 	# 道路分级（R6 实线分级，废 F5 虚线切分）：土路细 / 官道粗；
-	# 仅交通模式矢量回退时绘制（正常观感走 l1_travel.png 贴图）
+	# 交通层开关打开时矢量绘制（底图不含道路，交通层为本包道路的唯一呈现）
 	h._road_dirt_lines.clear()
 	h._road_paved_lines.clear()
 	for rd in h._data.roads:
@@ -235,34 +349,60 @@ static func neighbor_block_color(h, neighbor: Dictionary) -> Color:
 ## 烘焙静态色块层（写回宿主 _tiles_mesh / _lakes_mesh / _neighbors_mesh）：
 ## 城市色块 / 湖泊 / 邻省块各一张 ArrayMesh（顶点色，三角形独立顶点）。
 ## Geometry2D.triangulate_polygon 一次性 earcut（C++，含凹多边形），仅 set_data / 首帧调用一次。
-## 邻省块取色 = 该省主导政权色暗一阶（neighbor_block_color；侧表缺失回退灰底）。
+## 邻省块取色 = 该省主导政权色暗一阶（neighbor_block_color；侧表缺失回退灰底），
+## 已完整装载的邻省交给邻省完整渲染层（见 bake_neighbors_mesh）。
 ## 拆两张 mesh：河流画在两层层间（tiles 上、lakes 下），见宿主 _draw 1.5 层。
 static func bake_base_meshes(h) -> void:
 	h._tiles_mesh = null
 	h._lakes_mesh = null
-	h._neighbors_mesh = null
 	var ctx = h._data.context_size
 	if ctx.x <= 0 or ctx.y <= 0:
+		bake_neighbors_mesh(h)
 		return
 	# 收集 (多边形, 颜色)：海洋 = 全矩形底由渲染器背景承担（OCEAN 回退分支 + 相机外区域）
 	var tile_pairs: Array = []   # [[PackedVector2Array, Color], ...]
 	var lake_pairs: Array = []
-	var neighbor_pairs: Array = []
+	for lake in h._data.lakes:
+		lake_pairs.append([pts(lake), h.LAKE_COLOR])
 	for tile in h._data.tiles:
 		if tile.polygon.size() >= 3:
 			# 取色归宿主 tile_fill_color：玩家已占地块染玩家疆域色，其余按政权色
 			tile_pairs.append([tile.polygon, h.tile_fill_color(tile)])
-	for lake in h._data.lakes:
-		lake_pairs.append([pts(lake), h.LAKE_COLOR])
-	for ni in h._data.neighbors.size():
-		var nb: Dictionary = h._data.neighbors[ni]
-		var nb_color: Color = neighbor_block_color(h, nb)
-		for poly in nb.get("polygons", []):
-			var npts := pts(poly)
-			if npts.size() >= 3:
-				neighbor_pairs.append([npts, nb_color])
 	h._tiles_mesh = mesh_from_pairs(tile_pairs)
 	h._lakes_mesh = mesh_from_pairs(lake_pairs)
+	bake_neighbors_mesh(h)
+
+
+## 邻省块兜底灰底/暗色块 mesh（只含**未**完整装载的邻省）。
+## 邻省完整渲染装载完成后该省从本 mesh 退出：同层两份半透明填充会叠暗，
+## 且完整层（逐城块真实政权色）已覆盖其窗口——退出的省读起来是"升级"不是"变色"。
+static func bake_neighbors_mesh(h) -> void:
+	h._neighbors_mesh = null
+	var neighbor_pairs: Array = []
+	for ni in h._data.neighbors.size():
+		var nb: Dictionary = h._data.neighbors[ni]
+		if h._nb_loaded.has(int(nb.get("label", 0))):
+			continue
+		var nb_color: Color = neighbor_block_color(h, nb)
+		# 洞环（内陆海洞/湖等 label 0 区）逐个从外环裁掉（Geometry2D 布尔），
+		# 否则邻块填色盖住水域（守门 I2a 同口径）
+		var nb_holes: Array = nb.get("holes", [])
+		for poly in nb.get("polygons", []):
+			var npts := pts(poly)
+			if npts.size() < 3:
+				continue
+			var pieces: Array = [npts]
+			for hole in nb_holes:
+				var hpts := pts(hole)
+				if hpts.size() < 3:
+					continue
+				var next_pieces: Array = []
+				for piece in pieces:
+					next_pieces.append_array(Geometry2D.clip_polygons(piece, hpts))
+				pieces = next_pieces
+			for piece in pieces:
+				if piece.size() >= 3:
+					neighbor_pairs.append([piece, nb_color])
 	h._neighbors_mesh = mesh_from_pairs(neighbor_pairs)
 
 

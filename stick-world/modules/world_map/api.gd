@@ -89,10 +89,12 @@ func initialize(json_path: String, base_dir: String) -> void:
 			_renderer.set_data(_data)
 		if _camera != null and _camera.has_method("set_data"):
 			_camera.set_data(_data)
-		# 快速旅行（P6）：路网图基于出生 L1 数据（8 城邦 MST 全连通）
+		# 快速旅行（P6）：路网图基于出生 L1 的**本包道路视图**（roads_local）——
+		# 全量 roads 含跨包/邻块显示段（from/to 是邻包聚落、length_px 是窗口内裁剪段长），
+		# 入图会造孤立节点并按短距离计费，污染可达性与最短路（渲染仍用全量 roads）
 		_player_settlement_id = _birth_data.spawn_settlement_id
 		_travel_planner = TravelPlanner.new()
-		_travel_planner.setup(_birth_data.roads)
+		_travel_planner.setup(_birth_data.roads_local)
 	# C2 blob 实时变动：建设系统广播 settlement_updated -> 当前/出生数据中该聚落
 	# 规模刷新 + 当前视图单城重算（L2/L3 为烘焙静态层，本局规模不变不重算）
 		if EventBus != null:
@@ -205,6 +207,25 @@ func ensure_player_l1(l1_label: int) -> bool:
 ## 当前加载的 L1 全局 label（BIRTH_L1_LABEL = 出生）
 func get_current_l1_label() -> int:
 	return _current_l1_label
+
+
+## L1 全局 label → 所属 L2 地区视图 id（region_%03d；无地区/包缺失返回空串）。
+## 供 HUD 层级按钮「地区 L2」判可用性与跳转（L1→L2 反查）：
+## 地区 label 取 l1_province_politics.json 的 region 字段（与 l2_packs 目录命名同源），
+## 再以包文件存在性兜底——不把不存在的地区当可跳转目标。
+func get_region_for_l1(l1_label: int) -> String:
+	var pol := ProvincePolitics.load_shared()
+	if pol == null:
+		return ""
+	var region := pol.region_of(l1_label)
+	if region <= 0:
+		return ""
+	var region_id := "region_%03d" % region
+	var base := "res://config/strategic_map/l2_packs/%s" % region_id
+	if not (FileAccess.file_exists("%s/l2_world.json" % base)
+			or FileAccess.file_exists("%s/l2_world.bin" % base)):
+		return ""
+	return region_id
 
 
 ## 该老 L1 是否有可直接打开的数据（出生省 = 根目录单份数据；其余 = l1_packs 包）。
@@ -497,16 +518,17 @@ func map_to_screen(map_pos: Vector2) -> Vector2:
 	return map_pos
 
 
-# ===== 地图模式（B4，MapModeManager）=====
+# ===== 地图层开关（B4，MapModeManager）=====
 
-## 设置地图模式（MapModeManager.Mode.TERRAIN / POLITICAL；跨视图全局生效并广播）
-func set_map_mode(mode: int) -> void:
-	MapModeManager.set_mode(mode)
+## 设置地图层开关（layer = MapModeManager.Layer.POLITICAL / CITY / TRAFFIC / RESOURCE；
+## 跨视图全局生效并广播；底图恒在，不属于任何层）
+func set_layer_on(layer: int, on: bool) -> void:
+	MapModeManager.set_layer_on(layer, on)
 
 
-## 当前地图模式（MapModeManager.Mode 枚举值）
-func get_map_mode() -> int:
-	return MapModeManager.current_mode
+## 该地图层当前是否开启
+func is_layer_on(layer: int) -> bool:
+	return MapModeManager.is_layer_on(layer)
 
 
 # ===== 政治属性（只读查询） =====

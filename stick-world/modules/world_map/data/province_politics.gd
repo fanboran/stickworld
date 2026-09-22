@@ -10,7 +10,8 @@ extends RefCounted
 ## 消费点（都在 L1 视图的"邻省上下文层"）：
 ##   1) 政治模式邻省色块按各自主导政权色**暗一阶**上色（地形照常透出），不再一律平灰；
 ##   2) 切省箭头环按邻省**全局质心**判方位——用全局几何而不是 context 裁切后的局部
-##      多边形，避免方位被裁切偏心带歪（局部多边形只用于画形状）。
+##      多边形，避免方位被裁切偏心带歪（局部多边形只用于画形状）；
+##   3) HUD「地区 L2」按钮的 L1→L2 反查（region 字段 = L3 地区 label，region_of）。
 ##
 ## 侧表缺失（文件不在/解析失败）一律返回空结果，调用方各自回退旧口径
 ## （邻省回退灰底、箭头隐藏），不锁死视图。
@@ -87,3 +88,10 @@ func state_name_of(label: int) -> String:
 func centroid_of(label: int) -> Vector2:
 	var info: Dictionary = provinces.get(label, {})
 	return info.get("centroid", Vector2.INF)
+
+
+## 该省所属 L3 地区 label（1..13；未知/无地区返回 0）。
+## 消费点：HUD「地区 L2」按钮的 L1→L2 反查（地区视图 id = region_%03d % region）。
+func region_of(label: int) -> int:
+	var info: Dictionary = provinces.get(label, {})
+	return int(info.get("region", 0))

@@ -196,18 +196,18 @@ func _test_key_index() -> void:
 	var w_annots: Array = idx.get(KEY_W, [])
 	_runner.assert_gt(w_annots.size(), 0, "W 标注非空")
 	_runner.assert_equal(String(w_annots[0]["domain"]), "possess", "W 标注域 = possess")
-	# 同一动作的多键绑定各自落键：1 与 KP_1 都索引到 strategy/mode_terrain
+	# 同一动作的多键绑定各自落键：1 与 KP_1 都索引到 strategy/layer_political
 	var one_annots: Array = idx.get(KEY_1, [])
 	var has_strategy := false
 	for a: Dictionary in one_annots:
-		if String(a["action"]) == "strategy/mode_terrain":
+		if String(a["action"]) == "strategy/layer_political":
 			has_strategy = true
-	_runner.assert_true(has_strategy, "主键盘 1 应索引到 strategy/mode_terrain")
+	_runner.assert_true(has_strategy, "主键盘 1 应索引到 strategy/layer_political")
 	_runner.assert_true(idx.has(KEY_KP_1), "KP_1 也应入索引（同动作第二绑定）")
 	# 域过滤：只看战略图时 W 消失、小键盘 2 仍在
 	var strat: Dictionary = Registry.key_index(data, PackedStringArray(["strategy"]))
 	_runner.assert_false(strat.has(KEY_W), "过滤战略图后 W 不在索引")
-	_runner.assert_true(strat.has(KEY_KP_2), "过滤战略图后 KP_2（政治模式）仍在")
+	_runner.assert_true(strat.has(KEY_KP_2), "过滤战略图后 KP_2（城市层）仍在")
 	# 修饰键绑定：Ctrl+S 存档（common）与 S 移动（possess）并存于同一键
 	var s_annots: Array = idx.get(KEY_S, [])
 	_runner.assert_equal(s_annots.size(), 2, "S 键应有 2 条标注（possess 移动 + common Ctrl+S）")

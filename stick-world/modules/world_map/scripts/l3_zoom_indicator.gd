@@ -1,14 +1,21 @@
 extends Control
 class_name MapHUD
-## 战略图底部 HUD：地图模式条（地形/政治，B4）+ 缩放条（HSlider + 百分比）+ 细分模式按钮（仅 L3）。
+## 战略图底部 HUD：层级按钮组（本省 L1/地区 L2/世界 L3）+ 图层开关条（政治/城市/交通/资源，B4）
+## + 缩放条（HSlider + 百分比）+ 细分模式按钮（仅 L3）。
 ## 通用组件：L1 / L3 / L2 场景共用（Content 下有带 toggle_display_mode 的渲染器才显示细分按钮；
-## 挂 MapModeManager 才显示模式条）。
+## 挂 MapModeManager 才显示图层开关条）。
+##
+## 层级按钮组（需求 8：不止靠 Tab/M 快捷键切层级）：
+##   [本省 L1] [地区 L2] [世界 L3]，当前所在层级高亮（控制器 open 时经 set_level_state 喂）。
+##   点击 → EventBus.strategic_map_level_requested(level)，由装配方（system_setup）统一分派
+##   （视图互斥与场景图输入暂停/恢复是装配方记账，控制器各管各会记错账）。
+##   不可达层级（无该视图 / 无对应地区包）置灰 + tooltip 说明，不报错。
 ##
 ## 组件化（与全局 UI 一致）：
 ##   - 按钮 = 主题 Button（StickTheme/StickKit），不再是自绘矩形
 ##   - 缩放条 = 公共组件 ZoomSlider（SketchHSlider + 百分比 Label，拖动与滚轮双向同步）
-## 布局：左下角单行 [地形|政治] [细分按钮] [缩放条] [百分比]，互不重叠；根节点 PASS 鼠标，
-## 仅按钮/滑块/标签接收输入，不挡地图拖拽/下钻。
+## 布局：左下角单行 [本省 L1|地区 L2|世界 L3] [政治|城市|交通|资源] [细分按钮] [缩放条] [百分比]，
+## 互不重叠；根节点 PASS 鼠标，仅按钮/滑块/标签接收输入，不挡地图拖拽/下钻。
 ##
 ## 缩放归一化：控制器 open() 时调用 set_default_zoom(初始缩放)，此后显示
 ## 当前缩放相对默认缩放的百分比（默认 = 100%）。
@@ -17,14 +24,20 @@ const H := 56.0
 
 const BTN_W := 150.0
 const BTN_H := StickTokens.BTN_H
-## 小号按钮高（模式条全排 + 细分按钮统一用此高度，顶底对齐）
+## 小号按钮高（图层开关条全排 + 细分按钮统一用此高度，顶底对齐）
 const BTN_H_SM := StickTokens.BTN_H_SM
 const MODE_BTN_W := 56.0
+## 层级按钮宽（容「本省 L1」四字 + 内边距）
+const LEVEL_BTN_W := 78.0
 const SLIDER_W := 240.0
 const SLIDER_H := 28.0
 const LABEL_W := 60.0
 ## 控件间距（设计语言五档 4/6/8/12/16 取 12）
 const GAP := 12.0
+
+## 层级按钮标识与文案（顺序 = 从细到粗，与视图粒度一致）
+const LEVELS: Array[String] = ["L1", "L2", "L3"]
+const LEVEL_LABELS := {"L1": "本省 L1", "L2": "地区 L2", "L3": "世界 L3"}
 
 ## 滑块允许的缩放倍数范围（相对默认缩放）
 const MIN_MULT := 0.5
@@ -33,12 +46,14 @@ const MAX_MULT := 3.0
 var _camera: Node = null
 var _renderer: Node = null
 
-## 地图模式管理器（同场景 Content 子节点；无则不显示模式条）
+## 图层开关管理器（同场景 Content 子节点；无则不显示开关条）
 var _mode_manager: Node = null
-var _mode_group: ButtonGroup = null
-var _terrain_btn: Button = null
-var _political_btn: Button = null
-var _traffic_btn: Button = null
+## 开关按钮表（layer → Button；点按翻转该层，广播回流刷新按下态）
+var _layer_btns: Dictionary = {}
+
+## 层级按钮表（level → Button）与当前层级（控制器 set_level_state 喂）
+var _level_btns: Dictionary = {}
+var _current_level: String = ""
 
 ## 默认缩放（该视图首次打开时的初始缩放 = 100%）
 var default_zoom: float = 1.0
@@ -57,8 +72,8 @@ func _ready() -> void:
 		if content != null:
 			_camera = content.get_node_or_null("MapCamera")
 			_mode_manager = content.get_node_or_null("MapModeManager")
-			if _mode_manager != null and _mode_manager.has_signal("mode_changed"):
-				_mode_manager.mode_changed.connect(_on_map_mode_changed)
+			if _mode_manager != null and _mode_manager.has_signal("layer_toggled"):
+				_mode_manager.layer_toggled.connect(_on_layer_toggled)
 			# 查找带 toggle_display_mode 的渲染器（L3 有 = 显示细分按钮；L2 无 = 恒城市模式）
 			for ch in content.get_children():
 				if ch.has_method("toggle_display_mode"):
@@ -100,30 +115,23 @@ func set_default_zoom(z: float) -> void:
 
 func _build_widgets() -> void:
 	var x: float = StickTokens.SCREEN_MARGIN
-	# 地图模式条（B4；R4 三模式）：地形/政治/交通 单选按钮（ButtonGroup；
-	# 状态随静态模式广播同步）
+	# 层级按钮组（需求 8）：[本省 L1][地区 L2][世界 L3] 三档独立 toggle（当前层高亮，
+	# 不可达层置灰）；点击发 EventBus.strategic_map_level_requested，装配方统一分派
+	for lv in LEVELS:
+		var b := _make_level_button(String(lv))
+		_dock_bottom_left(b, x, LEVEL_BTN_W, BTN_H_SM)
+		x += LEVEL_BTN_W + GAP
+	_sync_level_buttons()
+	x += GAP * 0.5
+	# 图层开关条（B4）：政治/城市/交通/资源 四联独立 toggle 按钮（无单选组——
+	# 四层可任意叠加；状态随静态开关表广播同步）
 	if _mode_manager != null:
-		_mode_group = ButtonGroup.new()
-		_terrain_btn = _make_mode_button("地形", MapModeManager.Mode.TERRAIN)
-		_dock_bottom_left(_terrain_btn, x, MODE_BTN_W, StickTokens.BTN_H_SM)
-		x += MODE_BTN_W + GAP
-		_political_btn = _make_mode_button("政治", MapModeManager.Mode.POLITICAL)
-		_dock_bottom_left(_political_btn, x, MODE_BTN_W, BTN_H_SM)
-		x += MODE_BTN_W + GAP
-		_traffic_btn = _make_mode_button("交通", MapModeManager.Mode.TRAFFIC)
-		_dock_bottom_left(_traffic_btn, x, MODE_BTN_W, BTN_H_SM)
-		x += MODE_BTN_W + GAP
-		_sync_mode_buttons()
-		# 资源/物流覆盖层入口预留（创始人要求）：枚举已留、数据未接，置灰占位
-		for r in [["资源", "未开放：资源覆盖层数据接入后启用"],
-				["物流", "未开放：物流覆盖层数据接入后启用"]]:
-			var rb := StickKit.button(self, r[0], Callable(),
-					StickKit.ButtonKind.NORMAL, BTN_H_SM)
-			rb.disabled = true
-			rb.tooltip_text = r[1]
-			rb.custom_minimum_size = Vector2(MODE_BTN_W, BTN_H_SM)
-			_dock_bottom_left(rb, x, MODE_BTN_W, BTN_H_SM)
+		for layer in [MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+				MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE]:
+			var b := _make_layer_button(MapModeManager.layer_name(layer), layer)
+			_dock_bottom_left(b, x, MODE_BTN_W, BTN_H_SM)
 			x += MODE_BTN_W + GAP
+		_sync_layer_buttons()
 	# 细分模式按钮（仅 L3 有 toggle_display_mode）
 	if _renderer != null and _renderer.has_method("toggle_display_mode"):
 		_mode_btn = StickKit.sketch_button(self, "细分:关", _on_mode_pressed,
@@ -172,29 +180,60 @@ func _dock_bottom_left(node: Control, x: float, w: float, h: float) -> void:
 	node.offset_bottom = -StickTokens.SCREEN_MARGIN
 
 
-## 造模式条按钮（toggle + 单选组；点击写全局静态模式，广播回流同步另一颗）
-func _make_mode_button(text: String, mode: int) -> Button:
-	var b := StickKit.button(self, text, func() -> void: MapModeManager.set_mode(mode),
+## 造图层开关按钮（toggle，独立不成组；点击翻转全局静态开关表，广播回流同步按下态）
+func _make_layer_button(text: String, layer: int) -> Button:
+	var b := StickKit.button(self, text, func() -> void: MapModeManager.toggle_layer(layer),
 			StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
 	b.toggle_mode = true
-	b.button_group = _mode_group
 	b.custom_minimum_size = Vector2(MODE_BTN_W, StickTokens.BTN_H_SM)
+	_layer_btns[layer] = b
 	return b
 
 
-## 模式变更（含他视图切模式广播回流）：同步三颗按钮按压态
-func _on_map_mode_changed(_mode: int) -> void:
-	_sync_mode_buttons()
+## 造层级按钮（toggle，独立不成组；点击发全局层级切换请求，状态由控制器回流刷新）
+func _make_level_button(level: String) -> Button:
+	var b := StickKit.button(self, str(LEVEL_LABELS.get(level, level)),
+			_on_level_pressed.bind(level), StickKit.ButtonKind.NORMAL, StickTokens.BTN_H_SM)
+	b.toggle_mode = true
+	b.custom_minimum_size = Vector2(LEVEL_BTN_W, StickTokens.BTN_H_SM)
+	_level_btns[level] = b
+	return b
 
 
-func _sync_mode_buttons() -> void:
-	if _terrain_btn == null or _political_btn == null:
-		return
-	var m: int = MapModeManager.current_mode
-	_terrain_btn.set_pressed_no_signal(m == MapModeManager.Mode.TERRAIN)
-	_political_btn.set_pressed_no_signal(m == MapModeManager.Mode.POLITICAL)
-	if _traffic_btn != null:
-		_traffic_btn.set_pressed_no_signal(m == MapModeManager.Mode.TRAFFIC)
+## 层级按钮点击 → 全局请求（装配方分派；逐级出口不各自关闭/打开视图，记错输入暂停账）
+func _on_level_pressed(level: String) -> void:
+	if EventBus != null:
+		EventBus.strategic_map_level_requested.emit(level)
+
+
+## 设置层级状态（控制器 open 时喂）：current 高亮，enabled 内 false 的层级置灰。
+## tips: 层级 → tooltip 文案（不可达原因 / 操作说明；空串 = 清空提示）。
+func set_level_state(current: String, enabled: Dictionary = {}, tips: Dictionary = {}) -> void:
+	_current_level = current
+	for lv in _level_btns:
+		var b: Button = _level_btns[lv]
+		b.set_pressed_no_signal(String(lv) == current)
+		b.disabled = not bool(enabled.get(lv, true))
+		b.tooltip_text = str(tips.get(lv, ""))
+	_sync_level_buttons()
+
+
+## 层级按钮按下态同步（当前层级高亮；控制器可能在他视图切层后回流）
+func _sync_level_buttons() -> void:
+	for lv in _level_btns:
+		var b: Button = _level_btns[lv]
+		b.set_pressed_no_signal(String(lv) == _current_level)
+
+
+## 图层开关变更（含他视图切层广播回流）：按静态开关表刷新四颗按钮按下态
+func _on_layer_toggled(_layer: int, _on: bool) -> void:
+	_sync_layer_buttons()
+
+
+func _sync_layer_buttons() -> void:
+	for layer in _layer_btns:
+		var b: Button = _layer_btns[layer]
+		b.set_pressed_no_signal(MapModeManager.is_layer_on(layer))
 
 
 func _update_ruler() -> void:

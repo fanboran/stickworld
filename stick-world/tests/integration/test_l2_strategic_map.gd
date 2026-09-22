@@ -191,8 +191,8 @@ func _test_political_layer() -> void:
 	if data == null or data.political_id_texture == null:
 		return
 	_l2_renderer.set_data(data)
-	var was_mode: int = MapModeManager.current_mode
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	var was_political: bool = MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL)
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, true)
 	await get_tree().process_frame
 	# 边界超分 S3：political_mesh 注入后矢量 fill 优先（MeshInstance2D 垫底 +
 	# 顶点色查表 shader）；mask（Sprite2D）降级回退。按实际路线断言。
@@ -200,14 +200,14 @@ func _test_political_layer() -> void:
 	var layer: Sprite2D = _l2_renderer._political_layer
 	_runner.assert_true(not fills.is_empty() or layer != null, "政治着色层已构建")
 	if fills.is_empty() and layer == null:
-		MapModeManager.set_mode(was_mode)
+		MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, was_political)
 		return
 	if not fills.is_empty():
 		# 矢量主路线（S3）：draw_mesh 直绘 + 顶点色直烘 LUT 最终 RGB
 		_runner.assert_true(fills[0] is ArrayMesh, "矢量 fill 缓存为 ArrayMesh 分块列表")
 		var vlut := PoliticalLut.load_shared()
 		_runner.assert_true(vlut != null, "共享 PoliticalLut 可查（与 L3/图例同源）")
-		MapModeManager.set_mode(was_mode)
+		MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, was_political)
 		await get_tree().process_frame
 		return
 	_runner.assert_true(layer.visible, "POLITICAL 下着色层可见")
@@ -219,9 +219,12 @@ func _test_political_layer() -> void:
 	_runner.assert_true(lut != null and lut_tex == lut.texture,
 		"shader LUT 参数 = 共享 PoliticalLut 纹理（与 L3/图例同源，改 LUT 全图生效）")
 	_runner.assert_true(layer.z_index == -1, "着色层垫底（z=-1，上层界线/河流照画）")
-	MapModeManager.set_mode(was_mode)
+	# 关政治层：mask 着色层隐藏（政治层 off = 地形底图路线）
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, false)
 	await get_tree().process_frame
-	_runner.assert_true(not layer.visible, "复位模式后着色层隐藏")
+	_runner.assert_true(not layer.visible, "关政治层后着色层隐藏")
+	# 复位（开关表全局静态，防污染本文件后续用例）
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, was_political)
 
 
 func _test_drilldown() -> void:

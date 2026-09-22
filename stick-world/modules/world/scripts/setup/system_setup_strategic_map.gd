@@ -64,6 +64,10 @@ func _setup_boundary_detector() -> void:
 	# 战略图关闭 -> 恢复场景图输入（api.close_strategic_map / ESC 都发此信号）
 	if EventBus != null:
 		EventBus.strategic_map_closed.connect(_on_strategic_map_closed)
+		# HUD 层级按钮请求（需求 8）：视图互斥与场景图输入暂停/恢复由装配方统一记账
+		# （控制器各管各的会记错账——关一视图顺便解除暂停、目标视图又以为还开着）
+		if not EventBus.strategic_map_level_requested.is_connected(_on_level_requested):
+			EventBus.strategic_map_level_requested.connect(_on_level_requested)
 	# F2/C1 玩家位置动态接线（总体设计 §5.6）：每次场景图加载 → world_map api
 	# 反查所在聚落，更新图钉 + 当前地块描边（跨 L1 的 region/Tab 跟随留 D 期）
 	if _host._root.scene_loader != null and _host._root.scene_loader.has_signal("map_loaded") \
@@ -158,8 +162,90 @@ func _toggle_l3_strategic_map() -> void:
 		_pause_scene_input(true)
 
 
+# ─────────────────────── HUD 层级按钮分派（需求 8）───────────────────────
+
+## HUD 层级按钮请求分派（EventBus.strategic_map_level_requested）：
+##   L1 = 本省地块视图（回到玩家当前所在 L1，与 Tab 开图同语义）
+##   L2 = 当前所在 L1 所属地区视图（L1 视图内点击才可达）
+##   L3 = 大世界视图
+## 三条路径统一在这里做「关旧视图 → 开新视图 → 场景图输入暂停」记账。
+func _on_level_requested(level: String) -> void:
+	match level:
+		"L1":
+			_open_l1_view_from_hud()
+		"L2":
+			_open_l2_for_current_l1()
+		"L3":
+			_open_l3_view_from_hud()
+
+
+## L1 视图（本省地块）：直接开 L1 大图（不等 Tab 三态——层级按钮是显式目标）。
+## L1 打开会发 strategic_map_opened，L3 控制器据此互斥自关（含下钻中的 L2）。
+func _open_l1_view_from_hud() -> void:
+	_ensure_strategic_maps()
+	if _host._root._strategic_map == null:
+		return
+	# 已在 L1 大图（按钮高亮态被点）：不重复 open（免得重复发 strategic_map_opened）
+	if _host._tab_state == _host.TabMapState.FULL_L1:
+		return
+	_open_l1_full_map()
+
+
+## L3 视图（大世界）：关 L1（若在）→ 确保 L3 会话打开 → 落在 L3 自身（下钻态时上跳一层）。
+func _open_l3_view_from_hud() -> void:
+	_ensure_strategic_maps()
+	if _host._root._strategic_map_l3 == null:
+		return
+	var l3_content: Node = _host._root._strategic_map_l3.get_node_or_null("Content")
+	if l3_content == null:
+		return
+	var l1_content: Node = _host._root._strategic_map.get_node_or_null("Content") \
+			if _host._root._strategic_map != null else null
+	if l1_content != null and l1_content.visible and l1_content.has_method("close"):
+		l1_content.close()
+	if not l3_content.visible and l3_content.has_method("open"):
+		l3_content.call("open")   # 内含 L2 恢复分支，随后 show_l3 保证落在 L3 本身
+	if l3_content.has_method("show_l3"):
+		l3_content.call("show_l3")
+	_pause_scene_input(true)
+
+
+## L2 视图（地区）：当前所在 L1 → 所属地区（l1_province_politics.json 的 region 反查，
+## api.get_region_for_l1）。无对应地区包则不动（按钮本应置灰，此处兜底）。
+func _open_l2_for_current_l1() -> void:
+	_ensure_strategic_maps()
+	if _host._root._strategic_map_l3 == null:
+		return
+	var l3_content: Node = _host._root._strategic_map_l3.get_node_or_null("Content")
+	if l3_content == null or not l3_content.has_method("open_region"):
+		return
+	var region_id := _region_for_current_l1()
+	if region_id.is_empty():
+		return
+	var l1_content: Node = _host._root._strategic_map.get_node_or_null("Content") \
+			if _host._root._strategic_map != null else null
+	if l1_content != null and l1_content.visible and l1_content.has_method("close"):
+		l1_content.close()
+	if not l3_content.visible and l3_content.has_method("open"):
+		l3_content.call("open")
+	l3_content.call("open_region", region_id)
+	_pause_scene_input(true)
+
+
+## 当前所在 L1 的所属地区 id（经 L1 视图 api 反查；未装配/无地区返回空串）
+func _region_for_current_l1() -> String:
+	var content: Node = _host._root._strategic_map.get_node_or_null("Content") \
+			if _host._root._strategic_map != null else null
+	var api: Node = content.get_node_or_null("Api") if content != null else null
+	if api == null or not api.has_method("get_current_l1_label") \
+			or not api.has_method("get_region_for_l1"):
+		return ""
+	return str(api.get_region_for_l1(api.get_current_l1_label()))
+
+
 ## Tab / 边界触发入口（Minimap 常驻不受 Tab 影响；L1 缩略窗也常驻——创始人反馈）。
 ## full_map=true（边界自动触发，如顶边界持续推进）：直接开 L1 大图（保留原"出城看图"语义）；
+## full_map=false（玩家按 Tab）：缩略窗态开 L1 大图 / 大图态关闭回缩略窗（互切）。
 ## full_map=false（玩家按 Tab）：缩略窗态开 L1 大图 / 大图态关闭回缩略窗（互切）。
 ## M（L3/L2）会话期间忽略：新开视图 = 玩家所见的互斥原则——否则状态机在 L3 海洋层下
 ## 悄悄切态（L1 被盖住打开），M 一关 L1 意外弹出。

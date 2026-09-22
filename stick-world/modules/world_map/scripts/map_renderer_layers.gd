@@ -4,7 +4,7 @@ extends RefCounted
 ## 宿主 _draw 按层序号逐层调用，本文件只读宿主状态、不写。
 ##
 ## 子域：快速旅行路由高亮（1.6 层）/ 邻居空心轮廓（4.5 层）/ 城市中心点（6.5 层）/
-## F3 城市编号（8 层）/ 玩家位置标记（9 层）。
+## 资源点标记（7 层）/ F3 城市编号（8 层）/ 玩家位置标记（9 层）。
 ## 线宽/色 token 真相源在宿主 MapTokens 别名层（经 h 取用），
 ## 本文件零新增色值字面量（与拆分前逐行等价）。
 
@@ -51,6 +51,25 @@ static func draw_city_dots(h, zz: float) -> void:
 			continue
 		h.draw_circle(tile.settlement.position, dot_r, h.CITY_DOT_COLOR)
 		h.draw_arc(tile.settlement.position, dot_r, 0.0, TAU, 48, h.CITY_DOT_RING, ring_w, true)
+
+
+## 资源点标记（资源层）：填充圆点 + 深墨细描边，半径/描边宽屏幕像素固定（÷zoom）。
+## 取色走 MapTokens.L1_RESOURCE_COLORS（资源 id → 材料本色）；表外 id 走默认中性色（照画，不报错）。
+## 数据为空（包内无 resources 字段）= 本层无内容，静默不画。
+static func draw_resource_markers(h, zz: float) -> void:
+	if h._data == null or h._data.resources.is_empty():
+		return
+	var r: float = h.RESOURCE_RADIUS
+	var ow: float = h.RESOURCE_OUTLINE_WIDTH
+	if zz > 0.0001:
+		r = h.RESOURCE_RADIUS / zz
+		ow = h.RESOURCE_OUTLINE_WIDTH / zz
+	for res in h._data.resources:
+		var d: Dictionary = res
+		var col: Color = h.RESOURCE_COLORS.get(str(d.get("id", "")), h.RESOURCE_DEFAULT_COLOR)
+		var pos: Vector2 = d.get("pos", Vector2.ZERO)
+		h.draw_circle(pos, r, col)
+		h.draw_arc(pos, r, 0.0, TAU, 24, h.RESOURCE_OUTLINE, ow, true)
 
 
 ## F3 调试：给城市打编号（屏幕恒定字号，不随缩放放大成大字）。

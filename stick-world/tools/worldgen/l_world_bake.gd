@@ -61,7 +61,8 @@ func _bake_l1(json_path: String) -> int:
 	return 1 if _bake_raw(json_path) else 0
 
 
-## L1：整份 json 原样序列化（polygon 保持 Array），只换容器
+## L1：整份 json 原样序列化（polygon 保持 Array），只换容器——后续新增的根字段
+## （如资源层的 resources：[{id, pos:[x,y]}]）随 payload 一并进 bin，无需另加紧凑化。
 func _bake_raw(json_path: String) -> bool:
 	var jt := FileAccess.get_file_as_string(json_path)
 	if jt.is_empty():

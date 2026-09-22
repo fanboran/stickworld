@@ -31,7 +31,14 @@ var tiles: Array[L1TileDef] = []
 ## 道路（E1/P3.5 贴地形折线，F5 渲染分级，P6 路网图消费端点）：
 ## [{"pts": PackedVector2Array(context 坐标), "from": String, "to": String,
 ##    "tier": "DIRT"/"PAVED", "length_px": float}]
+## 全量含跨包/邻块显示段（from/to 可能是邻包聚落 id，polyline 为 context 窗口内的裁剪段）
+## ——渲染层消费（邻省道路也要画出窗口内那截）。
 var roads: Array = []
+
+## 本包道路视图（roads 中 from/to 双端都在本包聚落集合内的条目）：
+## 路网图/快速旅行建图**只**消费本视图——跨包段的 length_px 是裁剪段长（小于全边真值），
+## 入图会把邻包聚落当孤立节点并按短距离计费，污染可达性与最短路。
+var roads_local: Array = []
 
 ## 政权（state_id -> 信息）
 var states: Dictionary = {}
@@ -58,6 +65,10 @@ var lakes: Array = []
 ## [{"pts": PackedVector2Array(context 坐标), "w": float(地图单位宽)}]
 var rivers: Array = []
 
+## 资源点（资源层数据源）：[{"id": String(wood/stone/iron/diamond/gold/black_pitch),
+## "pos": Vector2(context 坐标)}]；包内无该字段 = 空数组（资源层自然不画，不报错）
+var resources: Array = []
+
 ## context 左上角在 8192 世界坐标中的原点（生成端注入；跨 L1 定位/河流裁切用）
 var world_origin := Vector2i.ZERO
 
@@ -72,7 +83,11 @@ var _tile_by_id: Dictionary = {}
 ## 从 JSON/紧凑 bin + PNG 加载 L1 世界数据
 ## json_path: l1_world.json 的 res:// 路径（bin 优先：同名 .bin 原样序列化，见 _read_data_dict）
 ## base_dir: 含 l1_base.png / l1_mask.png 的目录（res:// 路径，末尾无斜杠）
-static func load_from(json_path: String, base_dir: String) -> L1WorldData:
+## shapes_only: 只装配渲染邻省所需的形状（tiles/states/context/world_origin）——
+##   跳过底图/索引图、neighbors/lakes/rivers/resources 与 roads。
+##   邻省完整渲染只消费城块多边形/政权色/窗口定位（地形与河流已在本包底图里），
+##   按需装载邻包（2~17 个）时这几项是纯浪费（贴图常驻内存 + 大数组解析）。
+static func load_from(json_path: String, base_dir: String, shapes_only: bool = false) -> L1WorldData:
 	var world := L1WorldData.new()
 	world.base_dir = base_dir
 	var data := _read_data_dict(json_path)
@@ -92,33 +107,36 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 	var csz: Array = data.get("context_size", [])
 	if csz.size() >= 2:
 		world.context_size = Vector2i(int(csz[0]), int(csz[1]))
-	world.neighbors = data.get("neighbors", [])
-	world.lakes = data.get("lakes", [])
-	world.rivers = _rivers_from(data.get("rivers", []))
 	var worg: Array = data.get("world_origin", [])
 	if worg.size() >= 2:
 		world.world_origin = Vector2i(int(worg[0]), int(worg[1]))
+	if not shapes_only:
+		world.neighbors = data.get("neighbors", [])
+		world.lakes = data.get("lakes", [])
+		world.rivers = _rivers_from(data.get("rivers", []))
+		world.resources = _resources_from(data.get("resources", []))
 
-	# 底图 + 索引图
-	var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l1_base.png")]
-	var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l1_mask.png")]
-	if ResourceLoader.exists(base_path):
-		world.base_texture = load(base_path) as Texture2D
-		if world.base_texture == null:
-			push_warning("[L1WorldData] 底图资源类型非 Texture2D: %s" % base_path)
-	else:
-		push_warning("[L1WorldData] 底图不存在: %s" % base_path)
-	if ResourceLoader.exists(mask_path):
-		var mask_tex: Texture2D = load(mask_path) as Texture2D
-		if mask_tex != null:
-			world.mask_image = mask_tex.get_image()
+	# 底图 + 索引图（shapes_only 不需要：邻省地形/河流已在本包底图内）
+	if not shapes_only:
+		var base_path := "%s/%s" % [base_dir, data.get("base_texture", "l1_base.png")]
+		var mask_path := "%s/%s" % [base_dir, data.get("mask_texture", "l1_mask.png")]
+		if ResourceLoader.exists(base_path):
+			world.base_texture = load(base_path) as Texture2D
+			if world.base_texture == null:
+				push_warning("[L1WorldData] 底图资源类型非 Texture2D: %s" % base_path)
 		else:
-			# 兼容直接导入为 Image 的资源
-			world.mask_image = load(mask_path) as Image
-			if world.mask_image == null:
-				push_warning("[L1WorldData] 索引图资源类型非 Texture2D/Image: %s" % mask_path)
-	else:
-		push_warning("[L1WorldData] 索引图不存在: %s" % mask_path)
+			push_warning("[L1WorldData] 底图不存在: %s" % base_path)
+		if ResourceLoader.exists(mask_path):
+			var mask_tex: Texture2D = load(mask_path) as Texture2D
+			if mask_tex != null:
+				world.mask_image = mask_tex.get_image()
+			else:
+				# 兼容直接导入为 Image 的资源
+				world.mask_image = load(mask_path) as Image
+				if world.mask_image == null:
+					push_warning("[L1WorldData] 索引图资源类型非 Texture2D/Image: %s" % mask_path)
+		else:
+			push_warning("[L1WorldData] 索引图不存在: %s" % mask_path)
 
 	# 政权
 	for s in (data.get("states", []) as Array):
@@ -135,6 +153,7 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 		}
 
 	# 地块 + 聚落
+	var settlement_ids: Dictionary = {}
 	for td in (data.get("tiles", []) as Array):
 		var tile := L1TileDef.new()
 		var tile_dict: Dictionary = td
@@ -164,12 +183,30 @@ static func load_from(json_path: String, base_dir: String) -> L1WorldData:
 				WorldState.run_seed if WorldState else 0,
 				sref.settlement_id == world.spawn_settlement_id)
 			tile.settlement = sref
+			settlement_ids[sref.settlement_id] = true
 		world.tiles.append(tile)
 		world._tile_by_id[tile.tile_id] = tile
 
 	# 道路（F5 结构化：贴地形折线 + tier 分级；无 polyline 回退两端聚落直线）
-	world.roads = _roads_from(data.get("roads", []), world.tiles)
+	# shapes_only 不建路网（邻省完整渲染不画道路：本包底图已含邻省窗口内的道路像素）
+	if not shapes_only:
+		world.roads = _roads_from(data.get("roads", []), world.tiles)
+		world.roads_local = local_roads(world.roads, settlement_ids)
 	return world
+
+
+## 本包道路视图：只保留 from/to 双端都在 settlement_ids 内的条目。
+## 跨包/邻块显示段（一端或两端为邻包聚落）在此剔除——其 length_px 是 context 窗口内的
+## 裁剪段长，入路网图会低估且带来孤立节点（快速旅行可达性判定的污染源）。
+static func local_roads(roads: Array, settlement_ids: Dictionary) -> Array:
+	var out: Array = []
+	for rd in roads:
+		var d: Dictionary = rd if rd is Dictionary else {}
+		var a := str(d.get("from", ""))
+		var b := str(d.get("to", ""))
+		if settlement_ids.has(a) and settlement_ids.has(b):
+			out.append(d)
+	return out
 
 
 ## 根据屏幕/地图坐标查询命中的聚落
@@ -233,6 +270,21 @@ static func _rivers_from(arr: Array) -> Array:
 		var pts := _polygon_from(d.get("pts", []))
 		if pts.size() >= 2:
 			out.append({"pts": pts, "w": float(d.get("w", 2.0))})
+	return out
+
+
+## 资源点归一化：json {"id": String, "pos": [x, y]} → {"id": String, "pos": Vector2}
+## （bin/json 同构处理：L1 bin 为 json 原样序列化，pos 始终是 Array；
+## 缺 id / pos 不足 2 分的条目跳过——字段缺失 = 空数组，资源层不画）
+static func _resources_from(arr: Array) -> Array:
+	var out: Array = []
+	for rv in arr:
+		var d: Dictionary = rv if rv is Dictionary else {}
+		var id := str(d.get("id", ""))
+		var pos: Array = d.get("pos", [])
+		if id.is_empty() or pos.size() < 2:
+			continue
+		out.append({"id": id, "pos": Vector2(float(pos[0]), float(pos[1]))})
 	return out
 
 

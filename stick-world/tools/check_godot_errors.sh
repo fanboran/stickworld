@@ -28,7 +28,10 @@ if command -v cygpath >/dev/null 2>&1; then
 	LOG_ROOT="$(cygpath -u "$LOG_ROOT" 2>/dev/null || echo "$LOG_ROOT")"
 	TMP_BASE="$(cygpath -u "$TMP_BASE" 2>/dev/null || echo "$TMP_BASE")"
 fi
-LOG_DIR="$LOG_ROOT/Godot/app_userdata/stick_world/logs"
+# user:// 目录名 = 项目名（project.godot 的 config/name），读它定位日志，改名不再失效
+PROJ_NAME="$(sed -n 's/^config\/name="\(.*\)"/\1/p' "$PROJECT_DIR/project.godot" | head -n 1)"
+PROJ_NAME="${PROJ_NAME:-stick_world}"
+LOG_DIR="$LOG_ROOT/Godot/app_userdata/$PROJ_NAME/logs"
 MAX_FILES=10
 WARNINGS=0
 QUICK=0

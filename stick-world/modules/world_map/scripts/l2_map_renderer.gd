@@ -19,10 +19,11 @@ enum DisplayMode { MODE_L1, MODE_CITY }
 var _data: L2WorldData = null
 var _camera: MapCamera = null
 
-## 当前地图模式（B4 TERRAIN/POLITICAL，MapModeManager 广播 → 控制器转发）。
-## 地形底图层（B2 产 l2_terrain.png）与政权叠加层（Phase F）落地前两模式渲染一致
-## （回退现状着色），本字段为届时分层绘制的接入口
-var map_mode: int = MapModeManager.Mode.TERRAIN
+## 政治层开关（读 MapModeManager 静态表；控制器在 layer_toggled 时调 set_layer_on 刷新）。
+## 政治层开 = 政权着色路线（矢量 fill 优先 / mask 回退）；政治层关 = 地形底图路线。
+## L2 无城市/交通/资源层对应的渲染内容，这些层的开关被忽略（不报错）
+func _political_on() -> bool:
+	return MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL)
 
 ## 恒城市模式（L2 即"具体到城市"的视图）；不再提供 toggle_display_mode（无细分按钮）
 var display_mode: int = DisplayMode.MODE_CITY
@@ -159,7 +160,7 @@ func _ensure_political_layer() -> void:
 	_political_layer.material = mat
 	# z=-1（相对）：垫在本节点 _draw 的界线/河流/hover 之下
 	_political_layer.z_index = -1
-	_political_layer.visible = map_mode == MapModeManager.Mode.POLITICAL
+	_political_layer.visible = _political_on()
 	add_child(_political_layer)
 
 
@@ -189,14 +190,14 @@ func _on_lut_color_changed(_sid: String, _col: Color) -> void:
 	queue_redraw()
 
 
-## 地图模式切换（控制器在 open() 时也推一次当前模式——跨视图全局状态）
-func set_map_mode(mode: int) -> void:
-	if mode == map_mode:
+## 层开关变更（控制器在 layer_toggled / open() 时调用）：本渲染器只认政治层，
+## 其余层的开关忽略（L2 无对应渲染内容）
+func set_layer_on(layer: int, on: bool) -> void:
+	if layer != MapModeManager.Layer.POLITICAL:
 		return
-	map_mode = mode
 	_ensure_political_layer()
 	if _political_layer != null:
-		_political_layer.visible = mode == MapModeManager.Mode.POLITICAL
+		_political_layer.visible = on
 	queue_redraw()
 
 
@@ -273,13 +274,14 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if _data == null:
 		return
-	# 地形模式（B2）：程序着色底图替代填充层（湖泊/海洋/邻居地形已在纹理内）
-	var terrain := map_mode == MapModeManager.Mode.TERRAIN and _data.terrain_texture != null
-	# 政治模式两条路线（边界超分 S3）：
+	# 政治层关 = 地形底图路线（B2）：程序着色底图替代填充层（湖泊/海洋/邻居地形已在纹理内）
+	var political_on := _political_on()
+	var terrain := not political_on and _data.terrain_texture != null
+	# 政治层开两条路线（边界超分 S3）：
 	#   矢量 = _draw 内 draw_mesh fill（自带 code 0 海洋底矩形垫底）；
 	#   mask 回退 = _political_layer（ID mask 含海洋/湖泊/邻区保留码）垫底，跳过 1/2/3 层
-	var political_vector := map_mode == MapModeManager.Mode.POLITICAL 			and not _political_fill_meshes.is_empty()
-	var political_mask := map_mode == MapModeManager.Mode.POLITICAL 			and _political_layer != null
+	var political_vector := political_on 			and not _political_fill_meshes.is_empty()
+	var political_mask := political_on 			and _political_layer != null
 	var political := political_vector or political_mask
 	# 1. 海洋背景（context 尺寸；地形纹理的虚空透明区透出此色）。
 	#    政治模式两条路线的垫底层都自带海洋色（mask 含海洋保留码空区 / 矢量 fill

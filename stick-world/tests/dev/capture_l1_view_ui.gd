@@ -4,7 +4,7 @@ extends Node
 ##
 ## 用法（需真实渲染，不能 headless）：
 ##   godot --path stick-world res://tests/dev/capture_l1_view_ui.tscn
-## 产物（gitignored）：stick-world/temp/l1_view_ui/{political_full.png, terrain_full.png,
+## 产物（gitignored）：stick-world/temp/l1_view_ui/{base_full.png, political_full.png,
 ##                    political_zoom.png, after_switch.png}
 ##
 ## 与 capture_l1_map_probe 的分工：那个用裸渲染器做像素级取样（观感收敛过程用），
@@ -43,16 +43,21 @@ func _ready() -> void:
 	_content.call("open")
 	await _wait_frames(6)
 
-	# 地形模式（对照：邻省地形原样）
-	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
-	await _settle_mode(MapModeManager.Mode.TERRAIN)
-	await _capture("terrain_full")
+	# 裸底图（对照：四层全关 = 底图 + 交互层）
+	_apply_layers([])
+	await _settle_layers()
+	await _capture("base_full")
 
-	# 政治模式：邻省政权色暗一阶 + 本省政权色 + 水体矢量 pass + 左右箭头
-	# （水陆同源 D3：水面回贴退役，河湖由矢量画在色块之上，无需等待烘贴）
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	await _settle_mode(MapModeManager.Mode.POLITICAL)
+	# 政治层：邻省政权色暗一阶 + 本省政权色 + 左右箭头（城市层关，色块读得清）
+	_apply_layers([MapModeManager.Layer.POLITICAL])
+	await _settle_layers()
 	await _capture("political_full")
+
+	# 默认态（政治+城市同开）= 玩家进图首屏：邻省完整信息（逐城块政权色 + 城块界
+	# + 建成区 blob）随分帧装载升级呈现——等邻包数据与贴图全就绪再拍
+	_apply_layers([MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY])
+	await _wait_neighbors_ready()
+	await _capture("default_full")
 
 	# 放大看三岔口/海岸（同机位判「色块严丝合缝」）
 	var data: L1WorldData = _api.get_data()
@@ -73,13 +78,40 @@ func _ready() -> void:
 	get_tree().quit()
 
 
-## 等模式静态底图就位（渲染器异步线程）
-func _settle_mode(mode: int) -> void:
+## 应用层开关预设（未列出的层全关）+ 唤醒渲染器；底图恒在，等它就位（渲染器异步线程）
+func _apply_layers(on_layers: Array) -> void:
+	for layer in [MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+			MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE]:
+		var on: bool = on_layers.has(layer)
+		MapModeManager.set_layer_on(layer, on)
+		_renderer.set_layer_on(layer, on)
+
+
+func _settle_layers() -> void:
 	var guard := 0
-	while not _renderer._mode_textures.has(mode) and guard < 900:
+	while _renderer._base_tex == null and guard < 900:
 		guard += 1
 		await get_tree().process_frame
 	await _wait_frames(6)
+
+
+## 邻省分帧装载 + 三档贴图解码全就绪（默认态档的等待条件；600 帧上限兜底）
+func _wait_neighbors_ready() -> void:
+	var expected: int = _api.get_data().neighbors.size()
+	var guard := 0
+	while guard < 600:
+		guard += 1
+		var all_ready: bool = _renderer._nb_loaded.size() >= expected
+		if all_ready:
+			for pack in _renderer._nb_packs:
+				if not bool((pack as Dictionary).get("blob_ready", false)):
+					all_ready = false
+					break
+		if all_ready:
+			break
+		await get_tree().process_frame
+	print("NB_READY loaded=", _renderer._nb_loaded.size(), "/", expected, " frames=", guard)
+	await _wait_frames(4)
 
 
 func _focus(center: Vector2, zoom: float) -> void:

@@ -37,13 +37,14 @@ var _title_bar: MapTitleBar = null
 ## 全屏海洋底（CanvasLayer 首子节点，z 最低；C21：下钻视图同样整屏铺海洋）
 var _ocean_backdrop: Control = null
 
-## 地图模式管理器（Content 子节点，B4：切模式转发渲染器）
+## 地图层开关管理器（Content 子节点，B4：政治层开关转发渲染器）
 var _mode_manager: MapModeManager = null
 
 var _current_region_id: String = ""
 
 
 func _ready() -> void:
+	add_to_group(MapControllerUtil.GROUP_L2_VIEW)
 	_auto_find_components()
 	# 层号统一走 LayerOrder 常量（本节点是 CanvasLayer 的 Content 子节点）
 	var canvas := get_parent() as CanvasLayer
@@ -51,9 +52,9 @@ func _ready() -> void:
 		canvas.layer = LayerOrder.STRATEGIC_L2
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
-	# 地图模式（B4）：切模式 → 渲染器换层（地形底图/政权叠加层数据落地前仅记录）
-	if _mode_manager != null and not _mode_manager.mode_changed.is_connected(_on_map_mode_changed):
-		_mode_manager.mode_changed.connect(_on_map_mode_changed)
+	# 地图层开关（B4）：政治层开关 → 渲染器换层（其余层 L2 无内容，忽略）
+	if _mode_manager != null and not _mode_manager.layer_toggled.is_connected(_on_layer_toggled):
+		_mode_manager.layer_toggled.connect(_on_layer_toggled)
 
 
 ## 注入 L1 下钻视图（由接线方调用）
@@ -164,11 +165,20 @@ func open(region_id: String) -> void:
 	visible = true
 	if _ocean_backdrop != null:
 		_ocean_backdrop.visible = true
-	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
-	if map_renderer != null and map_renderer.has_method("set_map_mode"):
-		map_renderer.set_map_mode(MapModeManager.current_mode)
+	# 地图层开关（B4）：本视图关闭期间他视图可能切过政治层（全局静态），打开时同步渲染器
+	if map_renderer != null and map_renderer.has_method("set_layer_on"):
+		map_renderer.set_layer_on(MapModeManager.Layer.POLITICAL,
+				MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL))
 	if _hud != null:
 		_hud.visible = true
+	# HUD 层级按钮组（需求 8）：当前层级 L2 高亮；L1 可达 = 已注入 L1 下钻视图；
+	# L3 可达 = 大世界视图已装配（地区视图脱离 L3 单独开时置灰不报错）
+	if _hud != null and _hud.has_method("set_level_state"):
+		var l3_on := MapControllerUtil.view_in_tree(self, MapControllerUtil.GROUP_L3_VIEW)
+		_hud.set_level_state("L2", {"L1": l1_view != null, "L2": true, "L3": l3_on}, {
+			"L1": "回到本省地块视图" if l1_view != null else "地块视图未装配",
+			"L3": "查看大世界" if l3_on else "大世界视图未装配",
+		})
 	# 粒度指示：L2 层级 + 当前地区 ID（提示文案由组件按 view_level 生成）
 	if _indicator != null:
 		var rid: String = data.region_id if data != null and not data.region_id.is_empty() else _current_region_id
@@ -214,7 +224,7 @@ func get_current_region_id() -> String:
 	return _current_region_id
 
 
-## 地图模式变更（B4 广播）：转发渲染器（地形底图/政权叠加层数据落地前仅记录模式）
-func _on_map_mode_changed(_mode: int) -> void:
-	if map_renderer != null and map_renderer.has_method("set_map_mode"):
-		map_renderer.set_map_mode(MapModeManager.current_mode)
+## 层开关变更（B4 广播）：转发渲染器（L2 只消费政治层）
+func _on_layer_toggled(layer: int, on: bool) -> void:
+	if map_renderer != null and map_renderer.has_method("set_layer_on"):
+		map_renderer.set_layer_on(layer, on)

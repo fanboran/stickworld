@@ -1,6 +1,6 @@
 extends RefCounted
 ## MapRenderer 建成区 blob V2 层助手（§R5）——每城三档嵌套形状的档位对账、单城补丁
-## 生成（分帧防卡顿）与 TERRAIN 模式的两套档位绘制件。
+## 生成（分帧防卡顿）与城市层的两套档位绘制件。
 ##
 ## 纪律：状态全部留在宿主 map_renderer.gd（_geo/_city_tier/_blob_tex/_blob_ready/
 ## _city_overlays/_city_erases/_overlay_queue 等），本助手经 _h 动态回引读写，

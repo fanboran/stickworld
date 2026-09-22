@@ -28,7 +28,7 @@ var _title_bar: MapTitleBar = null
 ## 下钻 L2 时保留（L2 层号 102 更高，内容盖在其上，下钻仍在全屏海洋会话内）
 var _ocean_background: Control = null
 
-## 地图模式管理器（Content 子节点，B4：切模式转发渲染器）
+## 地图层开关管理器（Content 子节点，B4：政治层开关转发渲染器）
 var _mode_manager: MapModeManager = null
 
 ## 全屏初始视角的上下海洋边距（屏幕像素）：地图数据贴陆地裁切（边缘即陆地），
@@ -43,6 +43,7 @@ var _l2_active: bool = false
 
 
 func _ready() -> void:
+	add_to_group(MapControllerUtil.GROUP_L3_VIEW)
 	_auto_find_components()
 	# 层号统一走 LayerOrder 常量（本节点是 CanvasLayer 的 Content 子节点）
 	var canvas := get_parent() as CanvasLayer
@@ -51,9 +52,9 @@ func _ready() -> void:
 	# 渲染器悬停检测需要相机做屏幕->地图坐标换算
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
-	# 地图模式（B4）：切模式 → 渲染器换层（地形底图/政权叠加层数据落地前仅记录）
-	if _mode_manager != null and not _mode_manager.mode_changed.is_connected(_on_map_mode_changed):
-		_mode_manager.mode_changed.connect(_on_map_mode_changed)
+	# 地图层开关（B4）：政治层开关 → 渲染器换层（其余层 L3 无内容，忽略）
+	if _mode_manager != null and not _mode_manager.layer_toggled.is_connected(_on_layer_toggled):
+		_mode_manager.layer_toggled.connect(_on_layer_toggled)
 	# 视图互斥（L1 层号 100 低于 L3 的 101，L1 打开会整个被盖住）：Tab 打开 L1 时
 	# （唯一发 strategic_map_opened 的路径）本视图若仍可见则一并收起，保证
 	# "新打开的视图 = 玩家看到的视图"；L3 收起连带 L2（close 内已处理）
@@ -153,6 +154,54 @@ func _open_l2(label: int) -> void:
 	l2_view.open("region_%03d" % label)
 
 
+## 按地区 id 直接下钻（region_%03d；HUD「地区 L2」层级按钮经装配方调用）。
+## 复用 _open_l2 的完整下钻路径（隐藏自身/HUD + L2 视图 open），返回是否成功。
+func open_region(region_id: String) -> bool:
+	if l2_view == null or not region_id.begins_with("region_"):
+		return false
+	var num := region_id.substr("region_".length())
+	if not num.is_valid_int():
+		return false
+	var label := num.to_int()
+	if label <= 0:
+		return false
+	_open_l2(label)
+	return true
+
+
+## 确保本视图（L3）自身在前台：若正下钻 L2 则先退掉 L2（等价 L2 的 ESC 返回）。
+## 供装配方处理 HUD「世界 L3」按钮——从 L2 点它 = 上跳一层，而不是恢复下钻态。
+func show_l3() -> void:
+	if l2_view != null and l2_view.visible:
+		if l2_view.has_method("set_view_visible"):
+			l2_view.call("set_view_visible", false)
+		else:
+			l2_view.visible = false
+	_l2_active = false
+	visible = true
+	if _zoom_indicator != null:
+		_zoom_indicator.visible = true
+	if _indicator != null:
+		_indicator.set_view("L3")
+		_indicator.visible = true
+	if _title_bar != null:
+		_update_title_bar()
+		_title_bar.visible = true
+	_sync_hud_levels()
+
+
+## HUD 层级按钮状态（进入本视图时调用）：L3 = 当前；L1 可达 = 地块视图已装配；
+## L2 在本视图内不可直接点（下钻入口是点击地图中的地区，故置灰带提示）。
+func _sync_hud_levels() -> void:
+	if _zoom_indicator == null or not _zoom_indicator.has_method("set_level_state"):
+		return
+	var l1_on := MapControllerUtil.view_in_tree(self, MapControllerUtil.GROUP_L1_VIEW)
+	_zoom_indicator.set_level_state("L3", {"L1": l1_on, "L2": false, "L3": true}, {
+		"L1": "回到本省地块视图" if l1_on else "地块视图未装配",
+		"L2": "点击地图中的地区下钻",
+	})
+
+
 ## L2 返回（ESC）：恢复 L3 显示
 func _on_l2_back() -> void:
 	_l2_active = false
@@ -165,15 +214,17 @@ func _on_l2_back() -> void:
 	if _title_bar != null:
 		_update_title_bar()
 		_title_bar.visible = true
+	_sync_hud_levels()
 
 
 ## 打开 L3 地图（M 键触发）—— 全屏海洋底（场景图不再透出）
 ## 保留上次状态：相机位置/缩放不变；若上次关闭时在 L2 视图内，恢复 L2 显示
 func open() -> void:
 	_set_ocean_background_visible(true)
-	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
-	if map_renderer != null and map_renderer.has_method("set_map_mode"):
-		map_renderer.set_map_mode(MapModeManager.current_mode)
+	# 地图层开关（B4）：本视图关闭期间他视图可能切过政治层（全局静态），打开时同步渲染器
+	if map_renderer != null and map_renderer.has_method("set_layer_on"):
+		map_renderer.set_layer_on(MapModeManager.Layer.POLITICAL,
+				MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL))
 	if not _view_initialized:
 		_view_initialized = true
 		var map_size := 2048.0
@@ -227,6 +278,7 @@ func open() -> void:
 		if _title_bar != null:
 			_update_title_bar()
 			_title_bar.visible = true
+		_sync_hud_levels()
 
 
 ## 关闭 L3 地图（ESC / M 键）—— 收起海洋背景，回场景图
@@ -267,7 +319,7 @@ func _set_ocean_background_visible(v: bool) -> void:
 		_ocean_background.visible = v
 
 
-## 地图模式变更（B4 广播）：转发渲染器（地形底图/政权叠加层数据落地前仅记录模式）
-func _on_map_mode_changed(_mode: int) -> void:
-	if map_renderer != null and map_renderer.has_method("set_map_mode"):
-		map_renderer.set_map_mode(MapModeManager.current_mode)
+## 层开关变更（B4 广播）：转发渲染器（L3 只消费政治层）
+func _on_layer_toggled(layer: int, on: bool) -> void:
+	if map_renderer != null and map_renderer.has_method("set_layer_on"):
+		map_renderer.set_layer_on(layer, on)

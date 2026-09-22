@@ -48,7 +48,7 @@ func _ready() -> void:
 	_runner.add_test("L1 场景装配：粒度指示器 + 聚落 tooltip", _test_l1_assembly, true)
 	_runner.add_test("L1 直开（Tab）：层级指示 + 关闭提示", _test_l1_indicator_direct, true)
 	_runner.add_test("L1 下钻：地块号切换 + ESC 返回地区提示", _test_l1_indicator_drill, true)
-	_runner.add_test("L1 名牌 + 图例：地块名/聚落数/模式驱动图例（地形↔政权↔交通）", _test_l1_title_legend, true)
+	_runner.add_test("L1 名牌 + 图例：地块名/聚落数/图层开关驱动图例（政治/城市/交通/资源）", _test_l1_title_legend, true)
 	_runner.add_test("tooltip 聚落内容：名称/级别/政权/双击进入", _test_tooltip_content, true)
 	_runner.add_test("tooltip map_id 为空：未开放进入", _test_tooltip_enterable, true)
 	_runner.add_test("tooltip 空聚落/无数据：隐藏不误导", _test_tooltip_hidden, true)
@@ -80,17 +80,22 @@ func _test_l1_assembly() -> void:
 	_l1_title_bar = _l1_scene.get_node_or_null("MapTitleBar") as MapTitleBar
 	_l1_legend = _l1_scene.get_node_or_null("MapLegend") as MapLegend
 	_runner.assert_true(_l1_api != null, "L1 场景应含 Api")
-	# B4 模式系统 + R4 三模式：Content 挂 MapModeManager + HUD 地形/政治/交通三模式按钮
+	# B4 图层开关系统：Content 挂 MapModeManager + HUD 政治/城市/交通/资源四联 toggle 按钮
 	var mode_mgr: Node = _l1_content.get_node_or_null("MapModeManager")
 	_runner.assert_true(mode_mgr != null, "L1 Content 下应挂 MapModeManager（B4）")
 	var hud: Control = _l1_scene.get_node_or_null("ZoomIndicator")
 	if hud != null:
-		var n_mode_btns := 0
+		var n_layer_btns := 0
 		for ch in hud.get_children():
 			if ch is Button and ch.toggle_mode:
-				n_mode_btns += 1
-		_runner.assert_true(n_mode_btns == 3,
-			"L1 HUD 应有地形/政治/交通三模式按钮（R4，实测 %d）" % n_mode_btns)
+				n_layer_btns += 1
+		# 层级 3 联（本省 L1/地区 L2/世界 L3，需求 8）+ 图层 4 联（政治/城市/交通/资源，B4）
+		_runner.assert_true(n_layer_btns == 7,
+			"L1 HUD 应有层级 3 联 + 图层 4 联共 7 个 toggle 按钮（实测 %d）" % n_layer_btns)
+		var level_btns: Dictionary = hud.get("_level_btns")
+		_runner.assert_true(level_btns.size() == 3 and level_btns.has("L1") \
+				and level_btns.has("L2") and level_btns.has("L3"),
+			"HUD 层级按钮组 = 本省 L1/地区 L2/世界 L3（实测 %s）" % str(level_btns.keys()))
 	_runner.assert_true(_l1_indicator != null, "L1 Content 下应挂 GranularityIndicator")
 	_runner.assert_true(_tooltip != null, "L1 Content 下应挂 SettlementTooltip")
 	_runner.assert_true(_l1_title_bar != null, "L1 应挂 MapTitleBar")
@@ -166,22 +171,25 @@ func _test_l1_title_legend() -> void:
 		"名牌显示玩家所在 L1（实测 %s）" % _l1_title_bar._title_label.text)
 	_runner.assert_true(_l1_title_bar._subtitle_label.text == "8 聚落",
 		"副标题聚落数（实测 %s）" % _l1_title_bar._subtitle_label.text)
-	# 图例（B4 默认 TERRAIN 地形模式）：地物水系 + B2 群系色 + C2 建成区
-	# （R4：地形 = 底图 + 建成区；道路条目移交通模式——共 9：海洋/湖泊/平原/森林/
-	# 荒漠/冰原/水源带/火山/城镇建成区）
+	# 图例（B4 开关层机制；默认 = 政治层开 + 城市层开）：条目 = 政治层 10 条
+	# （R7 文化圈聚合代表性子集 9 圈 + 城邦聚合 1 条）+ 城市层建成区 1 条 = 11 条；
+	# 标题 = 最上层（渲染叠放序最上的开启层 = 城市层）
 	_runner.assert_true(_l1_legend.visible, "open 后图例可见")
-	_runner.assert_true(_l1_legend._title_label.text == "图例 · 地形",
-		"地形模式图例标题（实测 %s）" % _l1_legend._title_label.text)
-	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 9,
-		"地形模式 9 条目（实测 %d）" % _l1_legend._entries_box.get_child_count())
-	# 切政治模式（R4：政治 = 政权色，不显示建成区/道路）。R7 80 国：图例 =
-	# 文化圈聚合代表性子集（9 圈各一条 + 城邦聚合一条 = 10 条），不塞 80 条；
+	_runner.assert_true(_l1_legend._title_label.text == "图例 · 城市",
+		"默认（政治+城市）图例标题 = 城市层（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 11,
+		"默认 11 条目 = 政治 10 + 建成区 1（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	var blob_text: Label = (_l1_legend._entries_box.get_child(10) as HBoxContainer).get_child(1)
+	_runner.assert_true(blob_text.text == "城镇建成区",
+		"末条目 = 城市层建成区（实测 %s）" % blob_text.text)
+	# 关城市层 → 只剩政治层条目。R7 80 国：图例 = 文化圈聚合代表性子集
+	# （9 圈各一条 + 城邦聚合一条 = 10 条），不塞 80 条；
 	# 色源 = PoliticalLut（与 L2/L3 政治模式同一份运行时 LUT）
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	_runner.assert_true(_l1_legend._title_label.text == "图例 · 政权",
-		"政治模式图例标题（实测 %s）" % _l1_legend._title_label.text)
+	MapModeManager.set_layer_on(MapModeManager.Layer.CITY, false)
+	_runner.assert_true(_l1_legend._title_label.text == "图例 · 政治",
+		"仅政治层图例标题（实测 %s）" % _l1_legend._title_label.text)
 	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 10,
-		"10 条目 = 9 文化圈聚合 + 城邦聚合（R7，实测 %d）" % _l1_legend._entries_box.get_child_count())
+		"仅政治层 10 条目 = 9 文化圈聚合 + 城邦聚合（R7，实测 %d）" % _l1_legend._entries_box.get_child_count())
 	var last_entry: HBoxContainer = _l1_legend._entries_box.get_child(9)
 	var last_text: Label = last_entry.get_child(1)
 	_runner.assert_true(last_text.text == "自由城邦 ×8",
@@ -225,17 +233,45 @@ func _test_l1_title_legend() -> void:
 				"首条目 = 最大文化圈聚合（实测 %s）" % text_label.text)
 		_runner.assert_true(swatch.color.is_equal_approx(lut.color_of(top_id)),
 			"首条目色块 = 该圈最大国 LUT 政权色（%s，%d 城）" % [top_id, top_n])
-	# 切交通模式（R4：交通 = 土路/官道条目；R6 废虚线——文字不得再带线型标注）
-	MapModeManager.set_mode(MapModeManager.Mode.TRAFFIC)
+	# 开交通层（政治 + 交通）：条目 = 政治 10 + 土路/官道 2 = 12；标题 = 交通（最上层）
+	MapModeManager.set_layer_on(MapModeManager.Layer.TRAFFIC, true)
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 交通",
-		"交通模式图例标题（实测 %s）" % _l1_legend._title_label.text)
-	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 2,
-		"交通模式 2 条目：土路/官道（实测 %d）" % _l1_legend._entries_box.get_child_count())
-	var road_text: Label = (_l1_legend._entries_box.get_child(0) as HBoxContainer).get_child(1)
+		"政治+交通图例标题 = 交通层（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 12,
+		"12 条目 = 政治 10 + 道路 2（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	var road_text: Label = (_l1_legend._entries_box.get_child(10) as HBoxContainer).get_child(1)
 	_runner.assert_true(road_text.text == "土路",
 		"交通条目文字 =「土路」（R6 废虚线标注，实测 %s）" % road_text.text)
-	# 复位地形模式（模式是全局静态，防污染本文件后续用例）
-	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
+	# 关政治层（仅交通）：条目 = 土路/官道 2（R6 废虚线——文字不得再带线型标注）
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, false)
+	_runner.assert_true(_l1_legend._title_label.text == "图例 · 交通",
+		"仅交通层图例标题（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 2,
+		"仅交通层 2 条目：土路/官道（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	var only_road: Label = (_l1_legend._entries_box.get_child(0) as HBoxContainer).get_child(1)
+	_runner.assert_true(only_road.text == "土路",
+		"交通条目文字 =「土路」（实测 %s）" % only_road.text)
+	# 再开城市层 + 资源层（城市 + 交通 + 资源，政治关）：条目 = 建成区 1 + 道路 2 + 资源 6 = 9；
+	# 标题 = 资源（最上层）。资源条目色点与地图资源点同源（MapRenderer.RESOURCE_COLORS）
+	MapModeManager.set_layer_on(MapModeManager.Layer.CITY, true)
+	MapModeManager.set_layer_on(MapModeManager.Layer.RESOURCE, true)
+	_runner.assert_true(_l1_legend._title_label.text == "图例 · 资源",
+		"城市+交通+资源图例标题 = 资源层（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 9,
+		"9 条目 = 建成区 1 + 道路 2 + 资源 6（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	var wood_row: HBoxContainer = _l1_legend._entries_box.get_child(3)
+	_runner.assert_true((wood_row.get_child(1) as Label).text == "木材",
+		"资源条目 = 六种资源 id 色点+名（实测首条 %s）" % (wood_row.get_child(1) as Label).text)
+	_runner.assert_true((wood_row.get_child(0) as ColorRect).color.is_equal_approx(
+			MapRenderer.RESOURCE_COLORS["res_wood"]), "资源条目色点与地图资源点同源")
+	# 全关：仍给底图说明（海洋/湖泊 + 6 群系 = 8 条），标题回退底图
+	_reset_layers(true)
+	_runner.assert_true(_l1_legend._title_label.text == "图例 · 地形",
+		"全关图例标题 = 底图（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 8,
+		"全关 8 条目 = 海洋/湖泊 + 6 群系（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	# 复位默认开关态（开关表全局静态，防污染本文件后续用例）
+	_reset_layers()
 	# 空态：清空条目后 set_shown 不再显示（Phase B 模式无图例内容的语义）
 	_l1_legend.set_entries([])
 	_l1_legend.set_shown(true)
@@ -420,6 +456,14 @@ func _test_view_exclusion() -> void:
 		_runner.assert_true(not l2_view.visible, "L2 下钻视图一并收起（close 连带隐藏）")
 
 
+## 图层开关复位：默认态 = 政治/城市开、交通/资源关；all_off = 四层全关（只余底图）
+func _reset_layers(all_off: bool = false) -> void:
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, not all_off)
+	MapModeManager.set_layer_on(MapModeManager.Layer.CITY, not all_off)
+	MapModeManager.set_layer_on(MapModeManager.Layer.TRAFFIC, false)
+	MapModeManager.set_layer_on(MapModeManager.Layer.RESOURCE, false)
+
+
 func _esc_event() -> InputEvent:
 	var ev := InputEventKey.new()
 	ev.keycode = KEY_ESCAPE
@@ -566,8 +610,8 @@ func _test_owned_tile_dyeing() -> void:
 	renderer.set_owned_tiles([])
 	_runner.assert_equal(renderer.tile_fill_color(t0), baseline0, "清空已占地块表后回政权色")
 	# WorldBox 式政治图（创始人 2026-09-22）：地形打底 + 半透明国色覆盖 + 国色描边
-	_runner.assert_true(MapRenderer.MODE_TEXTURES.has(MapModeManager.Mode.POLITICAL),
-			"政治模式要有地形底图（打底可见），不是全平涂")
+	_runner.assert_true(MapRenderer.BASE_TEXTURE == "l1_terrain.png",
+			"底图恒为 l1_terrain.png（政治层叠在其上，不是全平涂）")
 	_runner.assert_true(MapRenderer.POLITICAL_FILL_ALPHA > 0.0
 			and MapRenderer.POLITICAL_FILL_ALPHA < 1.0, "政治覆盖层为半透明（实测 %.2f）"
 			% MapRenderer.POLITICAL_FILL_ALPHA)
@@ -592,7 +636,7 @@ func _test_legend_player_entry() -> void:
 		"state": 1, "garrison_losses": 0, "control_progress": 100.0,
 		"owner": "player", "faction": "fac_player",
 	}
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, true)
 	_l1_content.call("_fill_legend")
 	_runner.assert_true(_legend_has_text("我方疆域"), "政治图例含「我方疆域」条目")
 	if backup == null:
@@ -601,7 +645,7 @@ func _test_legend_player_entry() -> void:
 		WorldState.territories[id] = backup
 	_l1_content.call("_fill_legend")
 	_runner.assert_false(_legend_has_text("我方疆域"), "无已占地块时不留空条目")
-	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
+	_reset_layers()
 	api.queue_free()
 
 

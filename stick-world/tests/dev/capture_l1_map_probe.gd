@@ -1,28 +1,31 @@
 extends Node
-## L1 地图观感探针 —— 三模式（地形/政治/交通）在「城界三岔口」与「海岸线」的放大取样。
+## L1 地图观感探针 —— 图层开关（裸底图/政治/城市/交通）在「城界三岔口」与「海岸线」的放大取样。
 ##
 ## 用法（需真实渲染，不能 headless）：
 ##   godot --path stick-world res://tests/dev/capture_l1_map_probe.tscn
-## 产物（gitignored）：stick-world/temp/l1_probe/{terrain|political|traffic}_{full|junction|coast}.png
+## 产物（gitignored）：stick-world/temp/l1_probe/{base|political|city|traffic}_{full|junction|coast}.png
 ##
+## 底图（l1_terrain.png）恒在；每档只开一个开关层，用于判各层自身的像素级观感。
 ## 取样点由数据自身算出（不写死坐标）：三岔口 = 被 ≥3 个地块共享的顶点；
-## 海岸线 = 附近 6px 内同时存在地块码与海洋码(0) 的顶点。三模式同机位复拍，便于逐张对比。
+## 海岸线 = 附近 6px 内同时存在地块码与海洋码(0) 的顶点。各档同机位复拍，便于逐张对比。
 
 const SM_BASE := "res://config/strategic_map"
 const L1_JSON := SM_BASE + "/l1_world.json"
-const OUT_DIR := "res://temp/l1_probe"
+var OUT_DIR := "res://temp/l1_probe"
 ## 放大档（城界/海岸线的像素级观感）
 const ZOOM := 3.0
-const MODES := [
-	MapModeManager.Mode.TERRAIN,
-	MapModeManager.Mode.POLITICAL,
-	MapModeManager.Mode.TRAFFIC,
+## 取样档：每档只开列出的层（[] = 裸底图；层是独立开关，可任意叠加，这里逐层隔离取样）
+const PRESETS := [
+	{"name": "base", "layers": []},
+	{"name": "political", "layers": [MapModeManager.Layer.POLITICAL]},
+	{"name": "city", "layers": [MapModeManager.Layer.CITY]},
+	{"name": "traffic", "layers": [MapModeManager.Layer.TRAFFIC]},
+	{"name": "resource", "layers": [MapModeManager.Layer.RESOURCE]},
+	{"name": "all", "layers": [
+		MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+		MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE,
+	]},
 ]
-const MODE_NAMES := {
-	MapModeManager.Mode.TERRAIN: "terrain",
-	MapModeManager.Mode.POLITICAL: "political",
-	MapModeManager.Mode.TRAFFIC: "traffic",
-}
 
 var _vp_size: Vector2
 var _data: L1WorldData
@@ -33,7 +36,16 @@ var _cam: MapCamera
 func _ready() -> void:
 	_vp_size = get_viewport().get_visible_rect().size
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
-	_data = L1WorldData.load_from(L1_JSON, SM_BASE)
+	# L1_PROBE_PACK=002 可选环境变量：指定取样包（默认出生根包；出生包无资源点时
+	# 用它换有资源点的包拍 resource 档），产物目录按包区分
+	var pack_env := OS.get_environment("L1_PROBE_PACK")
+	var json_path := L1_JSON
+	if not pack_env.is_empty():
+		var label := pack_env.to_int()
+		json_path = SM_BASE + "/l1_packs/l1_%03d/l1_world.json" % label
+		OUT_DIR = OUT_DIR + "_l1_%03d" % label
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
+	_data = L1WorldData.load_from(json_path, SM_BASE)
 	if _data == null:
 		print("L1_PROBE_FAIL no data")
 		get_tree().quit(1)
@@ -51,19 +63,18 @@ func _ready() -> void:
 	var junction := _junction_point()
 	var coast := _coast_point()
 	print("PROBE_POINTS junction=", junction, " coast=", coast)
-	for mode in MODES:
-		MapModeManager.set_mode(mode)
-		_renderer.set_map_mode(mode)
-		# 静态底图异步线程解码：等当前模式的贴图就位（否则拍到矢量回退态）
+	for preset in PRESETS:
+		var layers: Array = preset["layers"]
+		_apply_layers(layers)
+		# 静态底图异步线程解码：等底图就位（否则拍到矢量回退态）
 		var guard := 0
-		while not _renderer._mode_textures.has(mode) and guard < 900:
+		while _renderer._base_tex == null and guard < 900:
 			guard += 1
 			await get_tree().process_frame
-		print("MODE ", MODE_NAMES[mode], " texture_ready=", _renderer._mode_textures.has(mode),
-				" frames=", guard)
-		# 政治模式水体 = 矢量 pass（水陆同源 D3，水面回贴退役），贴图就位即收敛
+		print("PRESET ", preset["name"], " layers=", layers, " base_ready=",
+				_renderer._base_tex != null, " frames=", guard)
 		await _wait_frames(6)
-		var name: String = MODE_NAMES[mode]
+		var name: String = preset["name"]
 		var ctx := float(maxi(_data.context_size.y, _data.size))
 		_focus(Vector2(ctx, ctx) * 0.5, _vp_size.y * 0.85 / ctx)
 		await _wait_frames(4)
@@ -78,6 +89,16 @@ func _ready() -> void:
 			await _capture(name + "_coast")
 	print("L1_PROBE_DONE")
 	get_tree().quit()
+
+
+## 应用层开关预设（未列出的层全关），并唤醒渲染器贴图加载/重绘
+## （走控制器同款路径：静态开关表 + 渲染器刷新各一次）
+func _apply_layers(on_layers: Array) -> void:
+	for layer in [MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+			MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE]:
+		var on: bool = on_layers.has(layer)
+		MapModeManager.set_layer_on(layer, on)
+		_renderer.set_layer_on(layer, on)
 
 
 ## 三岔口：被 ≥3 个地块共享的顶点（坐标按 0.05px 量化归并）

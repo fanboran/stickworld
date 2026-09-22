@@ -23,6 +23,7 @@ func _ready() -> void:
 	_runner.add_test("阻断：中间节点切断连通", _test_blocked_midway)
 	_runner.add_test("真数据：出生 L1 MST 全连通", _test_birth_data)
 	_runner.add_test("真数据：roads from/to 透传（回归锚）", _test_endpoints_passthrough)
+	_runner.add_test("本包道路视图：跨包显示段被剔除（建图忽略）", _test_local_roads_filter)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -135,7 +136,7 @@ func _test_birth_data() -> void:
 		_runner.assert_true(false, "出生 L1 加载失败")
 		return
 	var p := TravelPlanner.new()
-	p.setup(world.roads)
+	p.setup(world.roads_local)
 	var n_settlements := 0
 	for tile in world.tiles:
 		if tile.settlement != null:
@@ -171,3 +172,45 @@ func _test_endpoints_passthrough() -> void:
 			all_have_endpoints = false
 			break
 	_runner.assert_true(all_have_endpoints, "每条道路 from/to 非空（bin/json 同构透传）")
+
+
+## 本包道路视图（L1WorldData.local_roads / roads_local）：跨包显示段必须被剔除，
+## 且建图只收双端在本包的边（真数据 + 合成最小数组双路覆盖）。
+func _test_local_roads_filter() -> void:
+	# 合成最小 roads：a-b/c 为本包，x 为邻包聚落（跨包段）
+	var roads: Array = [
+		_road("a", "b", 10.0),
+		_road("b", "c", 7.0),
+		_road("c", "x", 3.0),    # 跨包：to 为邻包聚落
+		_road("x", "y", 2.0),    # 跨包：双端邻包
+	]
+	var local: Array = L1WorldData.local_roads(roads, {"a": true, "b": true, "c": true})
+	_runner.assert_equal(local.size(), 2, "只保留双端在本包的 2 条")
+	var p := TravelPlanner.new()
+	p.setup(local)
+	_runner.assert_equal(p.get_nodes().size(), 3, "邻包聚落 x/y 不入图（节点仍 3）")
+	_runner.assert_false(p.has_settlement("x"), "跨包聚落 x 不应成为路网节点")
+	_runner.assert_false(p.has_settlement("y"), "跨包聚落 y 不应成为路网节点")
+
+	# 真数据：出生包 roads_local ⊆ roads，且每条双端都在本包聚落集合内
+	var world = L1WorldData.load_from("res://config/strategic_map/l1_world.json",
+			"res://config/strategic_map")
+	if world == null:
+		_runner.assert_true(false, "出生 L1 加载失败")
+		return
+	var ids: Dictionary = {}
+	for tile in world.tiles:
+		if tile.settlement != null:
+			ids[tile.settlement.settlement_id] = true
+	_runner.assert_true(world.roads_local.size() <= world.roads.size(),
+			"roads_local 为 roads 子集（实测 %d/%d）" % [world.roads_local.size(), world.roads.size()])
+	var all_local := true
+	for rd in world.roads_local:
+		if not (ids.has(str(rd.get("from", ""))) and ids.has(str(rd.get("to", "")))):
+			all_local = false
+			break
+	_runner.assert_true(all_local, "roads_local 每条双端都在本包聚落集合内")
+	var planner := TravelPlanner.new()
+	planner.setup(world.roads_local)
+	_runner.assert_equal(planner.get_nodes().size(), world.tiles.size(),
+			"建图节点数 = 本包地块数（邻包聚落未污染）")

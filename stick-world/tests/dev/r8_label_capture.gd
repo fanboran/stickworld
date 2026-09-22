@@ -26,19 +26,19 @@ func _ready() -> void:
 	await _shot_l1()
 	await _shot_l3()
 	await _shot_l2()
-	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
+	_reset_layers()
 	print("R8_LABEL_CAPTURE_DONE")
 	get_tree().quit()
 
 
-## ── L1（Tab）：出生地块政治模式 + 地形模式，验证 C19/C23/C24 与全屏海洋底 ──
+## ── L1（Tab）：出生地块政治层 / 裸底图 / 交通层，验证 C19/C23/C24 与全屏海洋底 ──
 func _shot_l1() -> void:
 	var scene: Node = preload("res://modules/world_map/scenes/strategic_map.tscn").instantiate()
 	add_child(scene)
 	var content: Node = scene.get_node("Content")
 	var api: Node = content.get_node("Api")
 	api.call("initialize", SM + "/l1_world.json", SM)
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
 	content.call("open")
 	await _settle(10)
 	_diag_ocean("L1", scene)
@@ -46,15 +46,15 @@ func _shot_l1() -> void:
 	var data: L1WorldData = api.call("get_data")
 	var rect := Rect2(Vector2.ZERO, Vector2(data.context_size))
 	await _capture("feedback3_l1_political", cam, rect)
-	MapModeManager.set_mode(MapModeManager.Mode.TERRAIN)
+	_apply_layers([])
 	await _settle(14)
 	_diag("L1", content.get("map_renderer"))
 	await _capture("feedback3_l1_terrain", cam, rect)
-	# 交通模式（R6 道路渲染 + l1_travel 底图）——道路图验收
-	MapModeManager.set_mode(MapModeManager.Mode.TRAFFIC)
+	# 交通层（R6 道路矢量折线）——道路图验收
+	_apply_layers([MapModeManager.Layer.TRAFFIC])
 	await _settle(14)
 	await _capture("feedback3_l1_traffic", cam, rect)
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
 	await _settle(6)
 	await _teardown([scene])
 
@@ -67,7 +67,7 @@ func _shot_l3() -> void:
 	var renderer: L3MapRenderer = content.get("map_renderer")
 	var cam: MapCamera = content.get("map_camera")
 	renderer.set_data(L3WorldData.load_from(SM + "/l3_world.json", SM))
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
 	content.call("open")
 	# 等政权着色层就绪（S3 矢量 fill 优先，mask 异步回退）
 	await _wait_until(func(): return renderer._political_layer != null 		or not renderer._political_fill_meshes.is_empty())
@@ -103,7 +103,7 @@ func _shot_l2() -> void:
 	add_child(scene)
 	var content: Node = scene.get_node("Content")
 	content.call("open", "region_%03d" % BIRTH_REGION_LABEL)
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
 	await _settle(12)
 	_diag_ocean("L2", scene)
 	var cam: MapCamera = content.get("map_camera")
@@ -183,7 +183,29 @@ func _diag(tag: String, renderer: Node2D) -> void:
 	print("DIAG ", tag, " items=", ll._items.size(), " stars=", ll._stars.size(),
 			" font=", ll._font_reg != null, " bold=", ll._font_bold != null,
 			" vis=", ll.visible, " in_tree=", ll.is_inside_tree(),
-			" mode=", MapModeManager.current_mode)
+			" layers=", _layer_flags())
+
+
+## 应用层开关预设（未列出的层全关；全局静态表——真实场景树里控制器会跟着刷新渲染器）
+func _apply_layers(on_layers: Array) -> void:
+	for layer in [MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+			MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE]:
+		MapModeManager.set_layer_on(layer, on_layers.has(layer))
+
+
+## 层开关复位为默认态（政治/城市开，交通/资源关）
+func _reset_layers() -> void:
+	_apply_layers([MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY])
+
+
+## 诊断打印用：四层开关态（如 "pol=1 city=0 traf=0 res=0"）
+func _layer_flags() -> String:
+	return "pol=%d city=%d traf=%d res=%d" % [
+		int(MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL)),
+		int(MapModeManager.is_layer_on(MapModeManager.Layer.CITY)),
+		int(MapModeManager.is_layer_on(MapModeManager.Layer.TRAFFIC)),
+		int(MapModeManager.is_layer_on(MapModeManager.Layer.RESOURCE)),
+	]
 
 
 ## 轮询条件满足或超时（条件 callable 返回 true 即通过）

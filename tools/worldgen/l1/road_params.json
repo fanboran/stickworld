@@ -1,6 +1,13 @@
 {
  "_注释": "L1 路网生成参数（road_generate.py，P3.5 贴地形重做）。边权 = 步长(px) × max(0.6, 1 + 上/下坡方向代价 + 静态加成)，静态加成 = 谷脊TPI + 河湖 + 群系 + 蜿蜒噪声，海洋不可通行。g 值单位 = 等效平路世界 px。坡度单位 = 每 px 高度 ×1000（平原≈1，山地≈26-40）。",
 
+ "skeleton": "delaunay",
+ "skeleton_注释": "L1 内骨架口径：delaunay = 各包城市 Delaunay 邻接全连边（连通度口径「周围有几个城市就有几条路，除非被山脉切断」）；mst = 旧基线（每包 n−1 条无冗余，无参 CLI --skeleton 可覆盖，供统计对比）",
+ "delaunay_dist_cap_mult": 1.5,
+ "delaunay_dist_cap_注释": "Delaunay 超长边过滤上限 = 本值 × 该包 Delaunay 候选邻边中位长（剔除非凸领土/离群城的 Qhull 长边）；过滤后按 MST 补回断连分量，保证无城市被孤立",
+ "clip_pad_px": 0,
+ "clip_pad_注释": "回写时包窗口裁剪矩形的外扩 px（>0 = 收边段允许越窗 pad 便于观感拼接；0 = 严格贴窗，验收口径「polyline 点均在窗口内」按 0）",
+
  "grid_res": 4096,
  "astar_bbox_pad": 140,
  "astar_window_max": 6000000,

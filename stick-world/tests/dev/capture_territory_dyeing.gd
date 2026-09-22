@@ -1,5 +1,5 @@
 extends Node
-## 疆域染色验收捕图器 —— 政治模式下「占据多少就染色多少」的占领前后对比。
+## 疆域染色验收捕图器 —— 政治层下「占据多少就染色多少」的占领前后对比。
 ##
 ## 用法（需真实渲染，不能 headless）：
 ##   godot --path stick-world res://tests/dev/capture_territory_dyeing.tscn
@@ -44,18 +44,16 @@ func _ready() -> void:
 	_cam.target = _renderer
 	_renderer.set_camera(_cam)
 	_renderer.set_data(_data)
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	_renderer.set_map_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
 	_api = Node.new()
 	_api.set_script(ApiScript)
 	add_child(_api)
-	# 政治模式底图 = l1_terrain.png（异步线程解码）：等它就位再拍，否则拍到矢量回退态
+	# 底图 = l1_terrain.png（异步线程解码）：等它就位再拍，否则拍到矢量回退态
 	var guard := 0
-	while not _renderer._mode_textures.has(MapModeManager.Mode.POLITICAL) and guard < 900:
+	while _renderer._base_tex == null and guard < 900:
 		guard += 1
 		await get_tree().process_frame
-	print("TERRAIN_BASE_READY ", _renderer._mode_textures.has(MapModeManager.Mode.POLITICAL),
-			" 等待帧 ", guard)
+	print("TERRAIN_BASE_READY ", _renderer._base_tex != null, " 等待帧 ", guard)
 	await _wait_frames(6)
 
 	# 据点地块（配置的 tile_key 在本包数据里定位；取第一座做放大对比）
@@ -81,7 +79,7 @@ func _ready() -> void:
 	var owned: Array = _api.get_owned_tile_keys()
 	print("OWNED_TILES ", owned)
 	_renderer.set_owned_tiles(owned)
-	_renderer.set_map_mode(MapModeManager.Mode.POLITICAL)
+	_apply_layers([MapModeManager.Layer.POLITICAL])
 	await _wait_frames(8)
 	await _capture("after_zoom")
 
@@ -97,6 +95,15 @@ func _ready() -> void:
 		WorldState.territories.erase(id)
 	print("DYEING_CAPTURE_DONE")
 	get_tree().quit()
+
+
+## 应用层开关预设（未列出的层全关）+ 唤醒渲染器（裸渲染器未被控制器接线）
+func _apply_layers(on_layers: Array) -> void:
+	for layer in [MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+			MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE]:
+		var on: bool = on_layers.has(layer)
+		MapModeManager.set_layer_on(layer, on)
+		_renderer.set_layer_on(layer, on)
 
 
 ## 据点地块：配置里每个 territory 的 tile_key 在数据中对应的 L1TileDef

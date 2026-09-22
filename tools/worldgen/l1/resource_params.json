@@ -1,0 +1,48 @@
+{
+ "_注释": "L1 战略图资源点派生参数（resource_export.py）。分布规则为 AI 提案/待验收——阈值按 8192 级高度场分位标定（陆地高度 p50 0.067 / p80 0.19 / p90 0.27 / p95 0.42；slope 单位 = 每世界 px 高度，陆地 p90≈0.003 / p99≈0.005）。整表可调，改完重跑即生效。",
+
+ "grid_step": 4,
+ "grid_step_注释": "采样栅格步长（8192 世界 px）；窗口边长 > grid_max×grid_step 时逐级翻倍，控制单包栅格规模",
+ "grid_max": 512,
+
+ "min_gap_ratio": 0.05,
+ "min_gap_ratio_注释": "同包资源点最小间距 = 本值 × 窗口边长（防同类型聚成一团）",
+ "sample_pool": 400,
+ "sample_pool_注释": "每类型从合格格里抽多少候选（抽不中/间距不合规就跳过下一个）",
+
+ "max_per_pack": 6,
+ "max_per_pack_注释": "每包资源点总上限（资源开关是地图图层不是清单）",
+
+ "order": ["wood", "stone", "iron", "gold", "diamond", "black_pitch"],
+ "order_注释": "常见→稀有（超上限截断时先砍靠前的常见类型；同序输出保证 diff 稳定）",
+
+ "resources": {
+  "wood": "res_wood",
+  "stone": "res_stone",
+  "iron": "res_metal_ore",
+  "gold": "res_gold_ore",
+  "diamond": "res_diamond",
+  "black_pitch": "res_black_asphalt"
+ },
+ "resources_注释": "类型 → 资源表 id（config/resources/resources.tres）。gold/diamond 暂无资源表条目，先占位（提案/待验收）；black_pitch 复用已有的黑色沥青",
+
+ "quota": {
+  "wood": {"kind": "range", "lo": 1, "hi": 2},
+  "stone": {"kind": "range", "lo": 0, "hi": 2},
+  "iron": {"kind": "chance", "p": 0.6},
+  "gold": {"kind": "chance", "p": 0.55},
+  "diamond": {"kind": "chance", "p": 0.5},
+  "black_pitch": {"kind": "chance", "p": 0.18}
+ },
+ "quota_注释": "range = 每包 [lo,hi] 均匀随机；chance = 概率出现 1 个；fixed = 定额。配额是上限，找不到合格格则该类型为空（合格格本身已限「只在大山里」——实测 70 包里 gold 合格 12 包 / diamond 合格 10 包，配额概率决定其中几包真出点）",
+
+ "rules": {
+  "wood": {"biomes": [2]},
+  "stone": {"h_min": 0.13, "h_max": 0.30},
+  "iron": {"h_min": 0.30},
+  "gold": {"h_min": 0.45, "slope_min": 0.004},
+  "diamond": {"h_min": 0.55, "slope_min": 0.0055},
+  "black_pitch": {"h_max": 0.05, "biomes": [1, 5]}
+ },
+ "rules_注释": "合格格条件（并可：biomes 群系 ∈ 列表 / h_min·h_max 高度带 / slope_min 坡度下限）；所有类型都额外要求「本包地块内 ∧ 陆地 ∧ 非海非湖非河」。群系码 0 海 1 平原 2 森林 3 荒漠 4 冰原 5 源流 6 火山"
+}

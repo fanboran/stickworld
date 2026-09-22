@@ -1,9 +1,9 @@
 extends Node
-## 单元测试：MapModeManager（B4 地图模式系统，总体设计 §5.5；R4 三模式）。
+## 单元测试：MapModeManager（B4 地图层开关系统，总体设计 §5.5）。
 ##
-## 覆盖：默认 TERRAIN / set_mode 切换与信号 / static 广播多实例 / 数字键切换
-## （含视图关闭门控）/ api.gd 委托读写 / TRAFFIC 第三态（R4）。
-## 模式是静态全局状态：每个用例前后重置为 TERRAIN，防污染同批后续套件。
+## 覆盖：默认开关态四项 / toggle_layer 返回值与状态翻转 / static 广播多实例 /
+## 数字键 1/2/3/4 切层（含视图关闭门控）/ api.gd 委托读写 / 层中文名。
+## 层开关是静态全局状态：每个用例前后重置为默认态，防污染同批后续套件。
 
 signal test_done(code: int)
 
@@ -16,47 +16,71 @@ var _runner: TestRunner
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("模式: 默认 TERRAIN + 中文名", _test_default)
-	_runner.add_test("模式: set_mode 切换发信号 + 重复设置静默", _test_set_mode_signal)
-	_runner.add_test("模式: static 广播——多实例同收", _test_broadcast)
-	_runner.add_test("模式: 数字键 1/2/3 切换 + 视图关闭门控", _test_key_input)
-	_runner.add_test("模式: TRAFFIC 三态切换（R4）", _test_traffic_mode)
-	_runner.add_test("模式: api.gd 委托读写", _test_api)
-	MapModeManager.current_mode = MapModeManager.Mode.TERRAIN
+	_runner.add_test("层: 默认开关态四项 + 中文名", _test_default)
+	_runner.add_test("层: toggle_layer 返回值与状态翻转 + 重复设置静默", _test_toggle)
+	_runner.add_test("层: static 广播——多实例同收", _test_broadcast)
+	_runner.add_test("层: 数字键 1/2/3/4 切层 + 视图关闭门控", _test_key_input)
+	_runner.add_test("层: api.gd 委托读写", _test_api)
+	_reset()
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _reset() -> void:
-	MapModeManager.current_mode = MapModeManager.Mode.TERRAIN
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, true)
+	MapModeManager.set_layer_on(MapModeManager.Layer.CITY, true)
+	MapModeManager.set_layer_on(MapModeManager.Layer.TRAFFIC, false)
+	MapModeManager.set_layer_on(MapModeManager.Layer.RESOURCE, false)
 
 
 func _test_default() -> void:
 	_reset()
-	_runner.assert_equal(MapModeManager.get_mode(), MapModeManager.Mode.TERRAIN,
-			"默认模式应为 TERRAIN（创始人要求默认地形图）")
-	_runner.assert_equal(MapModeManager.get_mode_name(), "地形", "当前模式中文名")
-	_runner.assert_equal(MapModeManager.get_mode_name(MapModeManager.Mode.POLITICAL),
-			"政治", "指定模式中文名")
-	_runner.assert_equal(MapModeManager.get_mode_name(MapModeManager.Mode.TRAFFIC),
-			"交通", "交通模式中文名（R4 三模式）")
-	_runner.assert_equal(MapModeManager.get_mode_name(999), "", "未知模式名返回空串")
+	_runner.assert_true(MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL),
+			"政治层默认开")
+	_runner.assert_true(MapModeManager.is_layer_on(MapModeManager.Layer.CITY),
+			"城市层默认开")
+	_runner.assert_false(MapModeManager.is_layer_on(MapModeManager.Layer.TRAFFIC),
+			"交通层默认关")
+	_runner.assert_false(MapModeManager.is_layer_on(MapModeManager.Layer.RESOURCE),
+			"资源层默认关")
+	_runner.assert_equal(MapModeManager.layer_name(MapModeManager.Layer.POLITICAL), "政治",
+			"政治层中文名")
+	_runner.assert_equal(MapModeManager.layer_name(MapModeManager.Layer.CITY), "城市",
+			"城市层中文名")
+	_runner.assert_equal(MapModeManager.layer_name(MapModeManager.Layer.TRAFFIC), "交通",
+			"交通层中文名")
+	_runner.assert_equal(MapModeManager.layer_name(MapModeManager.Layer.RESOURCE), "资源",
+			"资源层中文名")
+	_runner.assert_equal(MapModeManager.layer_name(999), "", "未知层名返回空串")
+	_runner.assert_false(MapModeManager.is_layer_on(999), "未知层视为关（不报错）")
 
 
-func _test_set_mode_signal() -> void:
+func _test_toggle() -> void:
 	_reset()
 	var mgr := MapModeManager.new()
 	add_child(mgr)
 	var got: Array = []
-	mgr.mode_changed.connect(func(m: int) -> void: got.append(m))
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.POLITICAL,
-			"set_mode 应更新全局静态模式")
-	_runner.assert_equal(got.size(), 1, "切换应发一次 mode_changed")
-	_runner.assert_equal(got[0], MapModeManager.Mode.POLITICAL, "信号应携带新模式")
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	_runner.assert_equal(got.size(), 1, "重复设置同模式应静默不发信号")
+	mgr.layer_toggled.connect(func(layer: int, on: bool) -> void: got.append([layer, on]))
+	# 交通层：默认关 → 开（返回值 = 新状态），信号带 (层, 新状态)
+	var on: bool = MapModeManager.toggle_layer(MapModeManager.Layer.TRAFFIC)
+	_runner.assert_true(on, "toggle 关→开返回新状态 true")
+	_runner.assert_true(MapModeManager.is_layer_on(MapModeManager.Layer.TRAFFIC),
+			"toggle 后静态开关表已翻转")
+	_runner.assert_equal(got.size(), 1, "toggle 应发一次 layer_toggled")
+	_runner.assert_equal(got[0][0], MapModeManager.Layer.TRAFFIC, "信号携带层号")
+	_runner.assert_equal(got[0][1], true, "信号携带新状态")
+	# 再 toggle：开 → 关，返回值 false
+	on = MapModeManager.toggle_layer(MapModeManager.Layer.TRAFFIC)
+	_runner.assert_false(on, "toggle 开→关返回新状态 false")
+	_runner.assert_false(MapModeManager.is_layer_on(MapModeManager.Layer.TRAFFIC), "层已关闭")
+	_runner.assert_equal(got.size(), 2, "第二次 toggle 再发一次信号")
+	# 重复设置同状态静默（幂等不发信号）
+	MapModeManager.set_layer_on(MapModeManager.Layer.TRAFFIC, false)
+	_runner.assert_equal(got.size(), 2, "重复设置同状态应静默不发信号")
+	# 未知层：不改状态、返回 false、不发信号
+	_runner.assert_false(MapModeManager.toggle_layer(999), "未知层 toggle 返回 false")
+	_runner.assert_equal(got.size(), 2, "未知层 toggle 不发信号")
 	mgr.queue_free()
 	_reset()
 
@@ -68,12 +92,12 @@ func _test_broadcast() -> void:
 	add_child(a)
 	add_child(b)
 	var got: Array = []
-	a.mode_changed.connect(func(m: int) -> void: got.append("a:%d" % m))
-	b.mode_changed.connect(func(m: int) -> void: got.append("b:%d" % m))
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
+	a.layer_toggled.connect(func(layer: int, on: bool) -> void: got.append("a:%d=%s" % [layer, on]))
+	b.layer_toggled.connect(func(layer: int, on: bool) -> void: got.append("b:%d=%s" % [layer, on]))
+	MapModeManager.set_layer_on(MapModeManager.Layer.RESOURCE, true)
 	_runner.assert_equal(got.size(), 2, "两个存活实例都应收到广播（实测 %s）" % str(got))
-	_runner.assert_true(got.has("a:%d" % MapModeManager.Mode.POLITICAL)
-			and got.has("b:%d" % MapModeManager.Mode.POLITICAL), "广播携带新模式")
+	_runner.assert_true(got.has("a:%d=true" % MapModeManager.Layer.RESOURCE)
+			and got.has("b:%d=true" % MapModeManager.Layer.RESOURCE), "广播携带层号与新状态")
 	a.queue_free()
 	b.queue_free()
 	_reset()
@@ -85,68 +109,55 @@ func _test_key_input() -> void:
 	add_child(view)
 	var mgr := MapModeManager.new()
 	view.add_child(mgr)
-	# 模式键走 InputMap 动作（physical 绑定）：注入事件须同时设 keycode 与
+	# 层键走 InputMap 动作（physical 绑定）：注入事件须同时设 keycode 与
 	# physical_keycode，动作匹配才命中（注册侧只读 physical_keycode）
-	# 视图打开（Content visible=true）：KEY_2 → POLITICAL
+	# 视图打开（Content visible=true）：KEY_1 翻政治层（默认开 → 关）
 	view.visible = true
-	var ev2 := InputEventKey.new()
-	ev2.keycode = KEY_2
-	ev2.physical_keycode = KEY_2
-	ev2.pressed = true
-	mgr._unhandled_input(ev2)
-	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.POLITICAL,
-			"视图打开时 KEY_2 应切政治")
-	# KEY_3 → TRAFFIC（R4 第三态；数字小键盘同义）
-	var ev3 := InputEventKey.new()
-	ev3.keycode = KEY_3
-	ev3.physical_keycode = KEY_3
-	ev3.pressed = true
-	mgr._unhandled_input(ev3)
-	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TRAFFIC,
-			"视图打开时 KEY_3 应切交通")
-	# KEY_1 → TERRAIN（数字小键盘同义）
-	var ev1 := InputEventKey.new()
-	ev1.keycode = KEY_KP_1
-	ev1.physical_keycode = KEY_KP_1
-	ev1.pressed = true
-	mgr._unhandled_input(ev1)
-	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TERRAIN,
-			"视图打开时 KP_1 应切地形")
+	_press(mgr, KEY_1)
+	_runner.assert_false(MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL),
+			"视图打开时 KEY_1 应翻转政治层")
+	# KEY_2 翻城市层（默认开 → 关）
+	_press(mgr, KEY_2)
+	_runner.assert_false(MapModeManager.is_layer_on(MapModeManager.Layer.CITY),
+			"视图打开时 KEY_2 应翻转城市层")
+	# KEY_3 翻交通层（默认关 → 开）
+	_press(mgr, KEY_3)
+	_runner.assert_true(MapModeManager.is_layer_on(MapModeManager.Layer.TRAFFIC),
+			"视图打开时 KEY_3 应翻转交通层")
+	# KEY_KP_4 翻资源层（小键盘同义；默认关 → 开）
+	_press(mgr, KEY_KP_4)
+	_runner.assert_true(MapModeManager.is_layer_on(MapModeManager.Layer.RESOURCE),
+			"视图打开时 KP_4 应翻转资源层")
 	# 视图关闭（Content visible=false）：按键不响应（1/2/3 归场景图玩法）
 	view.visible = false
-	var ev4 := InputEventKey.new()
-	ev4.keycode = KEY_2
-	ev4.physical_keycode = KEY_2
-	ev4.pressed = true
-	mgr._unhandled_input(ev4)
-	_runner.assert_equal(MapModeManager.current_mode, MapModeManager.Mode.TERRAIN,
+	_press(mgr, KEY_1)
+	_runner.assert_false(MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL),
 			"视图关闭时按键不应响应")
 	mgr.queue_free()
 	view.queue_free()
 	_reset()
 
 
-func _test_traffic_mode() -> void:
-	_reset()
-	# R4 三模式语义：TERRAIN → TRAFFIC → POLITICAL 全链切换，静态全局状态即时更新
-	MapModeManager.set_mode(MapModeManager.Mode.TRAFFIC)
-	_runner.assert_equal(MapModeManager.get_mode(), MapModeManager.Mode.TRAFFIC,
-			"TRAFFIC 应为可切换的第三态（R4）")
-	_runner.assert_equal(MapModeManager.get_mode_name(), "交通", "当前模式名 = 交通")
-	MapModeManager.set_mode(MapModeManager.Mode.POLITICAL)
-	_runner.assert_equal(MapModeManager.get_mode(), MapModeManager.Mode.POLITICAL,
-			"交通 → 政治切换")
-	_reset()
+## 注入一次物理键按下事件（keycode + physical_keycode 双设才能命中 physical 绑定）
+func _press(mgr: MapModeManager, key: int) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = key
+	ev.physical_keycode = key
+	ev.pressed = true
+	mgr._unhandled_input(ev)
 
 
 func _test_api() -> void:
 	_reset()
 	var api: Node = ScriptApi.new()
-	api.set_map_mode(MapModeManager.Mode.POLITICAL)
-	_runner.assert_equal(api.get_map_mode(), MapModeManager.Mode.POLITICAL,
-			"api.set_map_mode 应写全局模式")
-	api.set_map_mode(MapModeManager.Mode.TRAFFIC)
-	_runner.assert_equal(api.get_map_mode(), MapModeManager.Mode.TRAFFIC,
-			"api.set_map_mode 应支持 TRAFFIC（R4）")
+	api.set_layer_on(MapModeManager.Layer.TRAFFIC, true)
+	_runner.assert_true(api.is_layer_on(MapModeManager.Layer.TRAFFIC),
+			"api.set_layer_on 应写全局开关表")
+	api.set_layer_on(MapModeManager.Layer.RESOURCE, true)
+	_runner.assert_true(api.is_layer_on(MapModeManager.Layer.RESOURCE),
+			"api.set_layer_on 应支持资源层")
+	api.set_layer_on(MapModeManager.Layer.POLITICAL, false)
+	_runner.assert_false(api.is_layer_on(MapModeManager.Layer.POLITICAL),
+			"api.set_layer_on 应支持关层")
 	api.queue_free()
 	_reset()

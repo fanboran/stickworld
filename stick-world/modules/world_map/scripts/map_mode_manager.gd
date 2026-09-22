@@ -1,42 +1,45 @@
 extends Node
 class_name MapModeManager
-## 地图模式管理器（B4，总体设计 §5.5；R4 三模式语义分离）——
-## TERRAIN 地形（默认）/ POLITICAL 政治 / TRAFFIC 交通
+## 地图层开关管理器（B4，总体设计 §5.5）—— 底图恒在 + 四个独立开关层
 ##
-## 三模式语义（创始人 2026-09-08 拍板，观感返工 §R4）：
-##   - 地形 = 底图 + 建成区（建成区仅本模式显示）
-##   - 政治 = 政权 + 界线（不显示建成区、不显示道路）
-##   - 交通 = 底图 + 道路（不显示建成区；道路已烘焙进 l1_travel.png）
+## 层语义（四层独立可叠加，底图 l1_terrain.png 恒画）：
+##   - 政治：政权色覆盖（本省半透明 α=0.55 + 邻省暗一阶）
+##   - 城市：建成区 blob 三档 + 城市常驻描边链
+##   - 交通：道路矢量折线（土路/官道两 tier）
+##   - 资源：资源点矢量标记
 ##
-## 模式是跨视图全局状态（L3 切到政治，之后 Tab 开 L1 也是政治）：当前模式存静态变量，
+## 层开关是跨视图全局状态（L3 开政治，之后 Tab 开 L1 也是政治）：开关表存静态变量，
 ## 每个战略图场景（L1/L2/L3）在 Content 下挂一个实例，实例负责两件事：
-##   - 数字键切换（1=地形 / 2=政治 / 3=交通）：Content 隐藏时（视图关闭）不响应，
+##   - 数字键 1/2/3/4 切层（政治/城市/交通/资源）：Content 隐藏时（视图关闭）不响应，
 ##     地图关闭时 1/2/3 归场景图玩法占用，互不干扰
-##   - mode_changed 信号：HUD 模式条 / L1 图例 / 渲染器订阅；
-##     static set_mode 广播给全部存活实例，跨视图即时同步
-## 资源/人口/战线模式本轮不实装（战略图架构 §八枚举预留，届时在 Mode 追加）。
+##   - layer_toggled 信号：HUD 开关条 / L1 图例 / 渲染器订阅；
+##     static set_layer_on 广播给全部存活实例，跨视图即时同步
+## 层开关只表达"画不画这一层"，渲染内容全在各渲染器内，L2/L3 无对应层的开关被忽略。
 
-## 模式变更信号（本实例所在视图的 HUD/图例/渲染器订阅）
-signal mode_changed(mode: int)
+## 层开关变更信号（本实例所在视图的 HUD/图例/渲染器订阅）
+signal layer_toggled(layer: int, on: bool)
 
-enum Mode { TERRAIN, POLITICAL, TRAFFIC, RESOURCE, LOGISTICS }
-## TRAFFIC（交通）：R4 三模式第三态（L1 交通 = l1_travel.png 贴图 + 交互层）。
-## RESOURCE（资源）/ LOGISTICS（物流）本轮不实装：HUD 模式条置灰占位（创始人要求
-## 提前预留覆盖层入口），数据接入后启用；STICKMAN/BATTLEFRONT（战略图架构 §八）届时再补枚举
+## 层枚举（顺序 = 渲染叠放顺序：政治 → 城市 → 交通 → 资源）
+enum Layer { POLITICAL, CITY, TRAFFIC, RESOURCE }
 
-## 全局当前模式（默认 TERRAIN——创始人要求默认地形图）
-static var current_mode: int = Mode.TERRAIN
+## 层开关表（静态全局状态）：政治/城市默认开（底图上叠政权色与建成区），
+## 交通/资源默认关（按需开）
+static var _layer_on: Dictionary = {
+	Layer.POLITICAL: true,
+	Layer.CITY: true,
+	Layer.TRAFFIC: false,
+	Layer.RESOURCE: false,
+}
 
-## 存活实例（static set_mode 广播 mode_changed 用；场景懒加载实例化/释放时进出）
+## 存活实例（static set_layer_on 广播 layer_toggled 用；场景懒加载实例化/释放时进出）
 static var _instances: Array[MapModeManager] = []
 
-## 模式中文名（HUD 按钮/图例标题用）
-const MODE_NAMES := {
-	Mode.TERRAIN: "地形",
-	Mode.POLITICAL: "政治",
-	Mode.TRAFFIC: "交通",
-	Mode.RESOURCE: "资源",
-	Mode.LOGISTICS: "物流",
+## 层中文名（HUD 开关按钮/图例标题用）
+const LAYER_NAMES := {
+	Layer.POLITICAL: "政治",
+	Layer.CITY: "城市",
+	Layer.TRAFFIC: "交通",
+	Layer.RESOURCE: "资源",
 }
 
 
@@ -48,22 +51,31 @@ func _exit_tree() -> void:
 	_instances.erase(self)
 
 
-## 切换全局模式并广播全部实例（重复设置同模式静默不发信号）
-static func set_mode(mode: int) -> void:
-	if mode == current_mode:
+## 设置某层开关并广播全部实例（重复设置同状态静默不发信号；未知层忽略）
+static func set_layer_on(layer: int, on: bool) -> void:
+	if not _layer_on.has(layer) or bool(_layer_on[layer]) == on:
 		return
-	current_mode = mode
+	_layer_on[layer] = on
 	for inst in _instances:
-		inst.mode_changed.emit(mode)
+		inst.layer_toggled.emit(layer, on)
 
 
-static func get_mode() -> int:
-	return current_mode
+## 翻转某层开关，返回新状态（未知层返回 false 且不改状态）
+static func toggle_layer(layer: int) -> bool:
+	if not _layer_on.has(layer):
+		return false
+	var on: bool = not bool(_layer_on[layer])
+	set_layer_on(layer, on)
+	return on
 
 
-## 模式中文名（缺省 = 当前模式；未知值返回空串）
-static func get_mode_name(mode: int = -1) -> String:
-	return MODE_NAMES.get(mode if mode >= 0 else current_mode, "")
+static func is_layer_on(layer: int) -> bool:
+	return bool(_layer_on.get(layer, false))
+
+
+## 层中文名（未知层返回空串）
+static func layer_name(layer: int) -> String:
+	return LAYER_NAMES.get(layer, "")
 
 
 ## 视图是否打开：沿父链找第一个 CanvasItem（Content，控制器 open/close 切它的 visible）
@@ -78,18 +90,21 @@ func _is_view_open() -> bool:
 	return false
 
 
-## 数字键 1/2/3 切换（InputMap 动作 strategy/mode_*，主键盘+小键盘双绑定一次覆盖；
+## 数字键 1/2/3/4 切层（InputMap 动作 strategy/layer_*，主键盘+小键盘双绑定一次覆盖；
 ## 仅本视图打开时响应；消费事件防场景图玩法键穿透）
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_view_open():
 		return
 	if event is InputEventKey and event.pressed:
-		if event.is_action_pressed("strategy/mode_terrain"):
-			set_mode(Mode.TERRAIN)
+		if event.is_action_pressed("strategy/layer_political"):
+			toggle_layer(Layer.POLITICAL)
 			get_viewport().set_input_as_handled()
-		elif event.is_action_pressed("strategy/mode_political"):
-			set_mode(Mode.POLITICAL)
+		elif event.is_action_pressed("strategy/layer_city"):
+			toggle_layer(Layer.CITY)
 			get_viewport().set_input_as_handled()
-		elif event.is_action_pressed("strategy/mode_traffic"):
-			set_mode(Mode.TRAFFIC)
+		elif event.is_action_pressed("strategy/layer_traffic"):
+			toggle_layer(Layer.TRAFFIC)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("strategy/layer_resource"):
+			toggle_layer(Layer.RESOURCE)
 			get_viewport().set_input_as_handled()

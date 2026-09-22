@@ -65,6 +65,9 @@ var _legend: MapLegend = null
 ## _auto_find_components 注入——面板不自己认识 expansion，见 territory_panel.gd）
 var _territory_panel: TerritoryPanel = null
 
+## 政权列表侧栏（CanvasLayer 直接子节点，同批显隐；当包 states 逐行，行点击聚焦都城）
+var _states_panel: ProvinceStatesPanel = null
+
 ## 左右切省箭头（CanvasLayer 直接子节点，同批显隐；目标由本控制器按邻省方位算，
 ## 见 province_switch_arrows.gd）
 var _arrows: ProvinceSwitchArrows = null
@@ -74,7 +77,7 @@ var _arrows: ProvinceSwitchArrows = null
 ## 由 L2 自己的海洋底接管）。
 var _ocean_backdrop: Control = null
 
-## 地图模式管理器（Content 子节点，B4：TERRAIN 默认/POLITICAL；图例/渲染器随模式切换）
+## 地图层开关管理器（Content 子节点，B4：图层开关广播；图例/渲染器随层刷新）
 var _mode_manager: MapModeManager = null
 
 ## 首次打开时设置初始视角（之后保留用户位置/缩放）
@@ -89,6 +92,7 @@ var _player_l1_label: int = 69
 
 
 func _ready() -> void:
+	add_to_group(MapControllerUtil.GROUP_L1_VIEW)
 	_auto_find_components()
 	# 层号统一走 LayerOrder 常量（本节点是 CanvasLayer 的 Content 子节点）
 	var canvas := get_parent() as CanvasLayer
@@ -102,9 +106,9 @@ func _ready() -> void:
 	# 缩放/平移后即时重绘：描边/轮廓宽度跟随新 zoom（消除粗细滞后跳变）
 	if map_camera != null and map_camera.has_method("set_map_renderer"):
 		map_camera.set_map_renderer(map_renderer)
-	# 地图模式（B4）：切模式 → 渲染器换层 + 图例换内容（HUD 模式条自行订阅广播）
-	if _mode_manager != null and not _mode_manager.mode_changed.is_connected(_on_map_mode_changed):
-		_mode_manager.mode_changed.connect(_on_map_mode_changed)
+	# 地图层开关（B4）：图层开/关 → 渲染器刷新 + 图例重算（HUD 开关条自行订阅广播）
+	if _mode_manager != null and not _mode_manager.layer_toggled.is_connected(_on_layer_toggled):
+		_mode_manager.layer_toggled.connect(_on_layer_toggled)
 	# 底部 HUD（CanvasLayer 直接子节点）
 	var layer := get_parent()
 	if layer != null:
@@ -143,6 +147,10 @@ func _auto_find_components() -> void:
 			_territory_panel.targets_fn = _list_territories
 			_territory_panel.activate_fn = _on_territory_row_activated
 			_territory_panel.refresh()
+	if _states_panel == null:
+		_states_panel = MapControllerUtil.find_sibling(self, "ProvinceStatesPanel") as ProvinceStatesPanel
+		if _states_panel != null and api != null and api.has_method("get_data"):
+			_states_panel.focus_fn = _focus_state_capital
 	if _arrows == null:
 		_arrows = MapControllerUtil.find_sibling(self, "ProvinceSwitchArrows") as ProvinceSwitchArrows
 		if _arrows != null:
@@ -206,6 +214,8 @@ func _set_overlay_visible(v: bool) -> void:
 		_legend.set_shown(v)
 	if _territory_panel != null:
 		_territory_panel.set_shown(v)
+	if _states_panel != null:
+		_states_panel.set_shown(v)
 	if _arrows != null:
 		_arrows.set_shown(v)
 	if _tooltip != null and _tooltip.has_method("reset"):
@@ -324,6 +334,21 @@ func _on_territory_row_activated(target: Dictionary) -> void:
 	if not tile_key.is_empty() and api != null and api.has_method("camera_focus"):
 		api.camera_focus(tile_key)
 	activate_settlement(String(target.get("settlement_key", "")))
+
+
+## 政权列表行点击：相机聚焦该政权都城所在地块（复用 api.camera_focus 的
+## 地块质心聚焦路径，不另起一套定位；未知聚落/无地块静默不动）
+func _focus_state_capital(settlement_id: String) -> void:
+	if api == null or settlement_id.is_empty() or not api.has_method("get_data"):
+		return
+	var data: L1WorldData = api.get_data()
+	if data == null:
+		return
+	for tile in data.tiles:
+		if tile.settlement != null and tile.settlement.settlement_id == settlement_id:
+			if api.has_method("camera_focus"):
+				api.camera_focus(tile.tile_id)
+			return
 
 
 ## 切省箭头环配置（province_switch_arrows.targets_fn）：
@@ -526,9 +551,11 @@ func open() -> void:
 	_reset_view_for_current_l1()
 	if _hud != null:
 		_hud.visible = true
-	# 地图模式（B4）：本视图关闭期间他视图可能切过模式（全局静态），打开时同步渲染器
-	if map_renderer != null and map_renderer.has_method("set_map_mode"):
-		map_renderer.set_map_mode(MapModeManager.current_mode)
+	# 地图层开关（B4）：本视图关闭期间他视图可能切过图层（全局静态），打开时同步渲染器
+	if map_renderer != null and map_renderer.has_method("set_layer_on"):
+		for layer in [MapModeManager.Layer.POLITICAL, MapModeManager.Layer.CITY,
+				MapModeManager.Layer.TRAFFIC, MapModeManager.Layer.RESOURCE]:
+			map_renderer.set_layer_on(layer, MapModeManager.is_layer_on(layer))
 	_refresh_view_meta()
 	_set_overlay_visible(true)
 	if EventBus != null:
@@ -576,12 +603,36 @@ func _refresh_view_meta() -> void:
 		if _title_bar != null:
 			_update_title_bar(l1_label)
 	_fill_legend()
+	# HUD 层级按钮组（需求 8）：当前层级 L1 高亮；L2 可达 = 当前省有所属地区包；
+	# L3 可达 = 大世界视图已装配（L1 场景直开时无 L3 节点 → 置灰不报错）
+	_sync_hud_levels()
 	# 据点清单按当前归属重刷（关图期间可能已占领/易手）
 	if _territory_panel != null:
 		_territory_panel.refresh()
+	# 政权列表按当前包重刷（换省后整表换政权/都城）
+	if _states_panel != null and api != null and api.has_method("get_data"):
+		_states_panel.set_data(api.get_data())
 	# 切省箭头按当前省份的邻省重算（换省后两侧目标都变）
 	if _arrows != null:
 		_arrows.refresh()
+
+
+## HUD 层级按钮状态（进入本视图 / 切省后调用）：本省 L1 = 当前；
+## 地区 L2 可达 = 当前省在 l2_packs 有对应地区包；世界 L3 可达 = L3 视图已装配。
+func _sync_hud_levels() -> void:
+	if _hud == null or not _hud.has_method("set_level_state"):
+		return
+	var l3_on := MapControllerUtil.view_in_tree(self, MapControllerUtil.GROUP_L3_VIEW)
+	var l2_on := l3_on and MapControllerUtil.view_in_tree(self, MapControllerUtil.GROUP_L2_VIEW)
+	if l2_on and api != null and api.has_method("get_region_for_l1") \
+			and api.has_method("get_current_l1_label"):
+		l2_on = not str(api.get_region_for_l1(api.get_current_l1_label())).is_empty()
+	else:
+		l2_on = false
+	_hud.set_level_state("L1", {"L1": true, "L2": l2_on, "L3": l3_on}, {
+		"L2": "查看本省所属地区" if l2_on else "本省无对应地区视图",
+		"L3": "查看大世界" if l3_on else "大世界视图未装配",
+	})
 
 
 ## 名牌内容：地块 #N + 聚落数概览
@@ -599,59 +650,99 @@ func _update_title_bar(l1_label: int) -> void:
 	_title_bar.set_content("L1", "地块 #%d" % l1_label, subtitle)
 
 
-## 图例内容随地图模式切换（B4 机制；R4 三模式语义，走 MapLegend.set_title/set_entries）：
-## TERRAIN 地形 = 地物水系 + 群系色 + 建成区（建成区仅本模式显示，§R4 创始人拍板）
-## POLITICAL 政治 = 政权色条目（与地图填充同色源 get_state_color；不显示建成区/道路）
-## TRAFFIC 交通 = 土路/官道条目（道路已烘焙进 l1_travel.png 贴图；无虚线/实线字样——R6 废虚线）
+## 图例内容按开启的图层逐层拼条目（B4 开关层机制；走 MapLegend.set_title/set_entries）：
+## 政治层开 = 政权色条目（与地图填充同色源；R7 80 国走文化圈聚合代表性子集）
+## 城市层开 = 建成区条目；交通层开 = 土路/官道条目；资源层开 = 六种资源点色条目
+## 标题 = 最上层（渲染叠放序最上的开启层）；全关时仍给底图说明（海洋/湖泊/群系）
 func _fill_legend() -> void:
 	if _legend == null:
 		return
-	var mode := MapModeManager.current_mode
-	if mode == MapModeManager.Mode.TRAFFIC:
-		_legend.set_title("交通")
-		_legend.set_entries(MapRenderer.ROAD_LEGEND)
-		return
-	if mode == MapModeManager.Mode.POLITICAL:
-		# R7 80 国：图例只展示族色+明度档的代表性子集（每文化圈聚合一条 +
-		# 城邦聚合一条，不塞 80 条）；LUT 缺失时回退出生 8 城邦逐条（旧口径）。
-		# 色源 = PoliticalLut（与 L2/L3 政治模式同一份运行时 LUT，改 LUT 全局生效）
-		var pol_entries: Array = []
-		var lut := PoliticalLut.load_shared()
-		if lut != null:
-			pol_entries = _political_legend_entries(lut)
-		else:
-			var data: L1WorldData = api.get_data() if api != null and api.has_method("get_data") else null
-			var states: Dictionary = api.get_states() if api != null and api.has_method("get_states") else {}
-			if data == null:
-				return
-			for state_id in states:
-				var info: Dictionary = states[state_id]
-				pol_entries.append({
-					"color": data.get_state_color(state_id),
-					"text": str(info.get("name", state_id)),
-				})
-		if pol_entries.is_empty():
-			_legend.set_entries([])  # 空态：set_shown 自动保持隐藏
-			return
-		# 我方疆域条目（P4 逐地块染色：占多少染多少）——有已占地块才加，无则不留空条目
-		var owned: Array = _owned_tile_keys()
-		if not owned.is_empty():
-			pol_entries.append({
-				"color": MapTokens.L1_PLAYER_TERRITORY_COLOR,
-				"text": "我方疆域 ×%d 地块" % owned.size(),
-			})
-		_legend.set_title("政权")
-		_legend.set_entries(pol_entries)
-		return
-	# TERRAIN 地形（默认）
-	_legend.set_title("地形")
-	var entries := [
-		{"color": MapRenderer.OCEAN_COLOR, "text": "海洋"},
-		{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
-	]
-	entries.append_array(MapRenderer.BIOME_LEGEND)
-	entries.append({"color": MapRenderer.BLOB_FILL, "text": "城镇建成区"})
+	var entries: Array = []
+	# 标题 = 最上层（渲染叠放序最上的开启层；全关 = 底图）
+	var title := "地形"
+	for layer in [MapModeManager.Layer.RESOURCE, MapModeManager.Layer.TRAFFIC,
+			MapModeManager.Layer.CITY, MapModeManager.Layer.POLITICAL]:
+		if MapModeManager.is_layer_on(layer):
+			title = MapModeManager.layer_name(layer)
+			break
+	if MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL):
+		entries.append_array(_political_legend_entries_all())
+	if MapModeManager.is_layer_on(MapModeManager.Layer.CITY):
+		entries.append({"color": MapRenderer.BLOB_FILL, "text": "城镇建成区"})
+	if MapModeManager.is_layer_on(MapModeManager.Layer.TRAFFIC):
+		entries.append_array(MapRenderer.ROAD_LEGEND)
+	if MapModeManager.is_layer_on(MapModeManager.Layer.RESOURCE):
+		entries.append_array(_resource_legend_entries())
+	if entries.is_empty():
+		# 全关：底图（l1_terrain.png）自身的说明性条目
+		entries = [
+			{"color": MapRenderer.OCEAN_COLOR, "text": "海洋"},
+			{"color": MapRenderer.LAKE_COLOR, "text": "湖泊"},
+		]
+		entries.append_array(MapRenderer.BIOME_LEGEND)
+	_legend.set_title(title)
 	_legend.set_entries(entries)
+
+
+## 政治层图例条目（R7 80 国：图例只展示族色+明度档的代表性子集——每文化圈聚合一条 +
+## 城邦聚合一条，不塞 80 条；LUT 缺失时回退出生 8 城邦逐条（旧口径））。
+## 色源 = PoliticalLut（与 L2/L3 政治模式同一份运行时 LUT，改 LUT 全局生效）；
+## 有已占地块时补一条「我方疆域」（P4 逐地块染色：占多少染多少）
+func _political_legend_entries_all() -> Array:
+	var pol_entries: Array = []
+	var lut := PoliticalLut.load_shared()
+	if lut != null:
+		pol_entries = _political_legend_entries(lut)
+	else:
+		var data: L1WorldData = api.get_data() if api != null and api.has_method("get_data") else null
+		var states: Dictionary = api.get_states() if api != null and api.has_method("get_states") else {}
+		if data == null:
+			return pol_entries
+		for state_id in states:
+			var info: Dictionary = states[state_id]
+			pol_entries.append({
+				"color": data.get_state_color(state_id),
+				"text": str(info.get("name", state_id)),
+			})
+	var owned: Array = _owned_tile_keys()
+	if not owned.is_empty():
+		pol_entries.append({
+			"color": MapTokens.L1_PLAYER_TERRITORY_COLOR,
+			"text": "我方疆域 ×%d 地块" % owned.size(),
+		})
+	return pol_entries
+
+
+## 资源层图例条目：六种资源 id 的色点 + 中文名（色源 = MapRenderer.RESOURCE_COLORS，
+## 与地图上的资源点圆点同源；id 为资源表正式 id）
+func _resource_legend_entries() -> Array:
+	var out: Array = []
+	for e in MapRenderer.RESOURCE_LEGEND:
+		var id := str(e.get("id", ""))
+		out.append({
+			"color": MapRenderer.RESOURCE_COLORS.get(id, MapRenderer.RESOURCE_DEFAULT_COLOR),
+			"text": _resource_display_name(id),
+		})
+	return out
+
+
+## 资源表在 BalanceConfig 里的类型路径候选（config/ 目录扫描口径 = 目录名.表名：
+## config/resources/resources.tres → "resources.resources"；若日后改放 config/resources.tres
+## 则为 "resources"——两者都试，读不到就走兜底名）
+const RESOURCE_TABLE_PATHS: Array[String] = ["resources.resources", "resources"]
+
+
+## 资源 id 中文名：优先读物品域资源表（config/resources/resources.tres 经 BalanceConfig
+## 装载，与物品系统同一份数据），表缺失/无该 id/无 name_zh 时回退 MapRenderer 兜底名
+func _resource_display_name(id: String) -> String:
+	if BalanceConfig != null:
+		for path in RESOURCE_TABLE_PATHS:
+			var row: Variant = BalanceConfig.data.get("%s.%s" % [path, id], null)
+			if row is Dictionary:
+				var name_zh := str((row as Dictionary).get("name_zh", ""))
+				if not name_zh.is_empty():
+					return name_zh
+	return MapRenderer.resource_fallback_name(id)
 
 
 ## 政治图例的代表性子集（R7）：每文化圈一条（色 = 圈内最大国的政权色，
@@ -695,10 +786,10 @@ func _political_legend_entries(lut: PoliticalLut) -> Array:
 	return grouped
 
 
-## 地图模式切换（MapModeManager 广播）：渲染器换层 + 图例换内容
-func _on_map_mode_changed(_mode: int) -> void:
-	if map_renderer != null and map_renderer.has_method("set_map_mode"):
-		map_renderer.set_map_mode(MapModeManager.current_mode)
+## 层开关变更（MapModeManager 广播）：渲染器刷新 + 图例重算
+func _on_layer_toggled(layer: int, on: bool) -> void:
+	if map_renderer != null and map_renderer.has_method("set_layer_on"):
+		map_renderer.set_layer_on(layer, on)
 	_fill_legend()
 
 

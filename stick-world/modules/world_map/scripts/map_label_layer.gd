@@ -24,7 +24,7 @@ extends Node2D
 ##
 ## 数据源：L3 = l3_city.json（80 国 name/capital + 1040 城块 centroid/area）；
 ## L2 = l2_world.json（region_id + cities[level] + states.capital）；L1 = 包内
-## settlement name（「城市N」占位照画）。L3/L2 标注是政治语义 → 仅 POLITICAL 模式
+## settlement name（「城市N」占位照画）。L3/L2 标注是政治语义 → 仅政治层打开时
 ## 显示（国名/都城随政权走）；L1 城市名/星标是聚落语义 → 全模式显示。
 
 ## 视图适配 zoom 的竖向占比提示（层自算 fit zoom = 视口高 × hint / 地图跨度；
@@ -40,7 +40,7 @@ var _camera: MapCamera = null
 var _host: Node2D = null
 var _items: Array[Dictionary] = []
 var _stars: Array[Dictionary] = []
-## true = 标注是政治语义（L3/L2），仅 POLITICAL 模式绘制；false = 全模式（L1）
+## true = 标注是政治语义（L3/L2），仅政治层打开时绘制；false = 全层开（L1）
 var _political_only: bool = false
 ## 地图跨度（map 单位）+ 适配占比 hint → fit zoom
 var _map_extent: float = 1.0
@@ -240,7 +240,7 @@ func _process(_delta: float) -> void:
 	if not visible or (_items.is_empty() and _stars.is_empty()):
 		return
 	var political := not _political_only \
-			or MapModeManager.current_mode == MapModeManager.Mode.POLITICAL
+			or MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL)
 	if political != _last_political:
 		_last_political = political
 		queue_redraw()
@@ -264,7 +264,7 @@ func _draw() -> void:
 		return
 	if _host != null and not _host.visible:   # 视图关闭跟随（headless 安全：直读 visible）
 		return
-	if _political_only and MapModeManager.current_mode != MapModeManager.Mode.POLITICAL:
+	if _political_only and not MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL):
 		return
 	var z := 1.0
 	var off := Vector2.ZERO

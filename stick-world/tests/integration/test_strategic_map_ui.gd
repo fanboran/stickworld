@@ -560,6 +560,15 @@ func _test_owned_tile_dyeing() -> void:
 	# 清空：回政权色（读档/开局无归属时不留染色残留）
 	renderer.set_owned_tiles([])
 	_runner.assert_equal(renderer.tile_fill_color(t0), baseline0, "清空已占地块表后回政权色")
+	# WorldBox 式政治图（创始人 2026-09-22）：地形打底 + 半透明国色覆盖 + 国色描边
+	_runner.assert_true(MapRenderer.MODE_TEXTURES.has(MapModeManager.Mode.POLITICAL),
+			"政治模式要有地形底图（打底可见），不是全平涂")
+	_runner.assert_true(MapRenderer.POLITICAL_FILL_ALPHA > 0.0
+			and MapRenderer.POLITICAL_FILL_ALPHA < 1.0, "政治覆盖层为半透明（实测 %.2f）"
+			% MapRenderer.POLITICAL_FILL_ALPHA)
+	var bc: Color = renderer.tile_border_color(t0)
+	_runner.assert_equal(bc.a, 1.0, "地块描边用不透明国色")
+	_runner.assert_equal(Color(bc.r, bc.g, bc.b), baseline0, "描边色与所属政权填充同源")
 
 
 ## P4 染色：政治图例在有已占地块时补一条「我方疆域」，无已占地块时不留空条目

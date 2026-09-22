@@ -49,7 +49,14 @@ func _ready() -> void:
 	_api = Node.new()
 	_api.set_script(ApiScript)
 	add_child(_api)
-	await _wait_frames(10)
+	# 政治模式底图 = l1_terrain.png（异步线程解码）：等它就位再拍，否则拍到矢量回退态
+	var guard := 0
+	while not _renderer._mode_textures.has(MapModeManager.Mode.POLITICAL) and guard < 900:
+		guard += 1
+		await get_tree().process_frame
+	print("TERRAIN_BASE_READY ", _renderer._mode_textures.has(MapModeManager.Mode.POLITICAL),
+			" 等待帧 ", guard)
+	await _wait_frames(6)
 
 	# 据点地块（配置的 tile_key 在本包数据里定位；取第一座做放大对比）
 	var tiles := _territory_tiles()

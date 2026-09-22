@@ -105,7 +105,8 @@ const OVERLAY_BUDGET_PER_FRAME := 2
 
 ## 模式静态底图（R9 静态层烘焙化 + R4 三模式）：TERRAIN = 本包 l1_terrain.png
 ## （B2 同管线，地形/群系/河湖/海洋）；TRAFFIC = l1_travel.png（地形底图 + R6 道路
-## casing 双层实线烘焙）。POLITICAL 无贴图（R9 裁决：政权色随游戏进程变化，运行时矢量）。
+## casing 双层实线烘焙）；POLITICAL 也用 l1_terrain.png 打底——地形照常可见，政权色
+## 以半透明覆盖叠在其上、地块边缘用该地块国色描边（WorldBox 式政治图观感）。
 ## 贴图坐标 ↔ context 坐标 1:1（与 l1_base.png 同系无 offset）。异步后台线程解码
 ## （l3_map_renderer 三线程同款样板：FileAccess 直读不需 .import；Thread 未 join 直接
 ## 销毁在 Windows 会段错误——_exit_tree / set_data 换包前统一 wait_to_finish）。
@@ -113,8 +114,11 @@ const OVERLAY_BUDGET_PER_FRAME := 2
 const MODE_TEXTURES := {
 	MapModeManager.Mode.TERRAIN: "l1_terrain.png",
 	MapModeManager.Mode.TRAFFIC: "l1_travel.png",
+	MapModeManager.Mode.POLITICAL: "l1_terrain.png",
 }
-## 按模式缓存的本包底图（set_data 换包清空；POLITICAL 恒缺席）
+## 政治模式覆盖层不透明度：地形打底要透得出来、国色又要读得出（1.0 = 旧的全平涂）
+const POLITICAL_FILL_ALPHA := 0.55
+## 按模式缓存的本包底图（set_data 换包清空）
 var _mode_textures: Dictionary = {}
 ## TERRAIN 底图 Image（降档擦除贴图的取样源；随贴图线程解码后保留）
 var _terrain_img: Image = null
@@ -369,6 +373,25 @@ func tile_fill_color(tile: L1TileDef) -> Color:
 	return _data.get_state_color(tile.owner_state_id)
 
 
+## 地块描边色（政治模式）：与填充同源的**不透明**国色——WorldBox 式政治图是
+## 「地形打底 + 半透明国色覆盖 + 边缘国色描边」，描边要与覆盖色同源才读得出是一国。
+func tile_border_color(tile: L1TileDef) -> Color:
+	var c := tile_fill_color(tile)
+	c.a = 1.0
+	return c
+
+
+## 政治模式地块描边：逐地块闭合多边形直绘国色（L1 单包地块数少，
+## 每块一次 draw_polyline 的成本可忽略；同色相邻边由后画者定色，与 WorldBox 同理）。
+func _draw_political_tile_borders(width: float) -> void:
+	if _data == null:
+		return
+	for tile in _data.tiles:
+		if tile.polygon.size() < 3:
+			continue
+		draw_polyline(_Geo.closed(tile.polygon), tile_border_color(tile), width, true)
+
+
 ## 构建当前城流动描边缓存（R2）：几何 = 当前城 mid 档建成区轮廓（包几何最大外环，
 ## 与建成区图形重合的 R2 语义；旧径向 blob 轮廓已随 §R5 退役）。
 ## 固定 mid 档——分数变化不再引起描边几何跳变。（轮廓提取见 blob 助手 static 纯函数）
@@ -503,7 +526,17 @@ func _draw() -> void:
 	# 静态几何缓存（城市描边段/出生轮廓/邻居空心轮廓/道路分级）——描边/轮廓层全模式消费
 	if not _segs_valid:
 		_build_cached_geometry()
-	# 1. 矢量回退层（贴图缺失/未解码完成时）；POLITICAL 恒走本层（政权色全填充）
+	# 1.0 政治模式覆盖层（贴图打底已画）：邻居老 L1 块灰底 + 政权色**半透明**覆盖
+	#     （地形从覆盖层下透出来 = WorldBox 式政治图；描边在 5. 层走国色）。
+	#     贴图未解码完成时 terrain_base 为 false，走下方矢量回退（全平涂，旧观感）。
+	if map_mode == MapModeManager.Mode.POLITICAL and terrain_base:
+		if _tiles_mesh == null:
+			_Geo.bake_base_meshes(self)
+		if _neighbors_mesh != null:
+			draw_mesh(_neighbors_mesh, null)
+		if _tiles_mesh != null:
+			draw_mesh(_tiles_mesh, null, Transform2D(), Color(1.0, 1.0, 1.0, POLITICAL_FILL_ALPHA))
+	# 1. 矢量回退层（贴图缺失/未解码完成时）
 	if not terrain_base:
 		if _tiles_mesh == null:
 			_Geo.bake_base_meshes(self)
@@ -554,7 +587,10 @@ func _draw() -> void:
 	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:
 		tw = TILE_BORDER_WIDTH / zz
-	if _cached_segs.size() >= 2:
+	if map_mode == MapModeManager.Mode.POLITICAL:
+		# 政治模式：地块界换成**国色描边**（WorldBox 式；灰地块界留给其他模式）
+		_draw_political_tile_borders(tw)
+	elif _cached_segs.size() >= 2:
 		draw_multiline(_cached_segs, TILE_BORDER_COLOR, tw, true)
 	# 6. 出生 L1 权威轮廓（屏幕像素固定，略粗区分出生块；邻居分界同理）
 	var bw: float = BORDER_WIDTH

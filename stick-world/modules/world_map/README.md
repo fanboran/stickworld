@@ -78,7 +78,9 @@ modules/world_map/
 
 **消费的全局事件**：`EventBus.settlement_updated`（聚落规模刷新 → 当前 L1 单城 blob 重算；L2/L3 为烘焙静态层不重算）、`battle_started/ended`（战斗中禁旅行）、`territory_state_changed`（据点面板重刷，`TerritoryPanel` 订阅）、`region_owner_changed` 与 `territory_state_changed`（归属变动 → `api.refresh_territory_ownership` 整表重取已占地块喂给渲染器）。
 
-**疆域染色**：政治模式的地块填充按已占地块**逐格**覆盖（占多少染多少，不整国变色）——取色唯一出口 `MapRenderer.tile_fill_color`，色值取自 `MapTokens.L1_PLAYER_TERRITORY_COLOR`（渲染器与政治图例同源）；已占集合来自 expansion 契约面 `get_owned_tile_keys()`（组 `expansion_api` 查找，不引 expansion 全局类名）。
+**疆域染色**：政治模式的地块填充按已占地块**逐格**覆盖（占多少染多少，不整国变色）——取色唯一出口 `MapRenderer.tile_fill_color`，玩家疆域色取自 `MapTokens.L1_PLAYER_TERRITORY_COLOR`（纯白，渲染器与政治图例同源）；已占集合来自 expansion 契约面 `get_owned_tile_keys()`（组 `expansion_api` 查找，不引 expansion 全局类名）。
+
+**政治模式观感（WorldBox 式）**：地形贴图（`l1_terrain.png`）打底 → 政权色**半透明**覆盖（`MapRenderer.POLITICAL_FILL_ALPHA`）→ 地块边缘用地块**国色**描边（`tile_border_color`，不透明），灰地块界只留给地形/交通模式。L2/L3 世界图仍是烘焙 mask 的不透明政治填充 + 墨色界线。
 
 ## 视图层级与输入
 

@@ -375,7 +375,7 @@ def main():
     print("  城块蒙版 = refined_city_labels_8192.npy（S1 细化场，唯一代）")
     # 水陆三真相（水陆同源 I1）：locked 陆地 + 精细湖光栅 + 河掩膜，
     # 湖多边形/地形贴图/贴陆后处理共用同一份（load_water_masks 缺输入即报错）
-    land8, lake, river8 = land_snap.load_water_masks(os.path.join(HERE, "output"))
+    land8, lake, _river8 = land_snap.load_water_masks(os.path.join(HERE, "output"))
 
     # context：出生 L1 贴近裁剪正方形（地块特写），四周留 --margin 边距（按 res 缩放）
     # R3 --polys-only：窗口直接读包内 world_origin+context_size（river_export 注入时
@@ -413,16 +413,15 @@ def main():
     ctx_lake = lake[y0:y0 + side, x0:x0 + side].copy()
     # 8192：直接裁剪 8192 级城市标签（城市层已在 8192 生成，真实精细边界）
     ctx_city = city_labels[y0:y0 + side, x0:x0 + side].copy()
-    # 贴陆后处理（水陆同源 L2 层，轮廓提取前统一接入）：水面（海/湖/河）标签
-    # 归 0 + 纯陆地内 0 空洞按 EDT 最近城块回填——几何 ∩ 水 = 0 且 陆地 \ 几何 = 0
-    # （不变量 I2）；城块边界与地形水线出自同一份掩膜（I3 生成侧）。
-    # 旧实现只挖湖（ctx_city[ctx_lake]=0），海靠城块场自身不越海、河上有标签、
-    # 陆地毛边不回填——三处口径漂移即「色块与地图不严丝合缝」的几何侧根源。
+    # 贴陆后处理（水陆同源 L2 层，轮廓提取前统一接入）：海/湖标签归 0 +
+    # 纯陆地内 0 空洞按 EDT 最近城块回填（边界众数自然化）。
+    # **河不清标签**（创始人 2026-09-22 定性）：河是陆地上的线状水，地面归属
+    # 穿河而过，河流视觉由地形贴图层负责（与道路同为后处理叠加语义）——
+    # 清了河带标签，城块多边形就在河带露海底色、河带把城块切成两截、
+    # 描边沿河岸画一圈（把河框起来），三个症状同根。
     ctx_land = land8[y0:y0 + side, x0:x0 + side]
-    ctx_river = river8[y0:y0 + side, x0:x0 + side]
-    ctx_city, snap_stats = land_snap.snap_labels_to_land(
-        ctx_city, ctx_land, ctx_lake | ctx_river)
-    print("  贴陆后处理：越水清除 %d px，陆地回填 %d px"
+    ctx_city, snap_stats = land_snap.snap_labels_to_land(ctx_city, ctx_land, ctx_lake)
+    print("  贴陆后处理：海湖清除 %d px，陆地回填 %d px（河不清标签，贴图负责）"
           % (snap_stats["cleared_px"], snap_stats["filled_px"]))
     # R3 起换 extract_smooth_mesh：find_contours 亚像素等值线 + 共享弧统一平滑，
     # 整数台阶根除（--polys-only 的 patch 与全新生成同管线）。

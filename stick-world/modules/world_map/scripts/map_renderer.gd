@@ -60,8 +60,6 @@ var hovered_tile_id: String = ""
 ## hover 每帧触发 → 卡顿源；缓存后 hover 重绘 = 一次 draw_polyline 循环。
 ## ⚠️ 存的是**逐地块链**（非去重段）：三岔口灰线分叉的收敛手段，见 map_renderer_geo。
 var _cached_tile_chains: Array[PackedVector2Array] = []
-## 描边链所属地块（与 _cached_tile_chains 同序；政治模式国色描边按地块取色）
-var _cached_tile_chain_owners: Array[String] = []
 ## 三岔交汇点（≥3 地块共享顶点；描边时补同色小圆盖住各环折角的外凸尖，"灰线分叉"收敛）
 var _cached_junctions: PackedVector2Array = PackedVector2Array()
 ## 出生 L1 权威轮廓（主大陆单环，闭合；export 已保证 l1_polygon 只含最大环）
@@ -398,23 +396,6 @@ func tile_border_color(tile: L1TileDef) -> Color:
 	return c
 
 
-## 政治模式地块描边：逐地块闭合多边形直绘国色（L1 单包地块数少，
-## 每块一次 draw_polyline 的成本可忽略；同色相邻边由后画者定色，与 WorldBox 同理）。
-## 走缓存链（贴水面段[湖/河]已断开不描——贴陆后河岸即城块界线，描边会把河框起来
-## 读作「河流被描边」；海岸边保留 = 国界勾勒语义）。
-func _draw_political_tile_borders(width: float) -> void:
-	if _data == null:
-		return
-	var by_tile: Dictionary = {}
-	for tile in _data.tiles:
-		by_tile[tile.tile_id] = tile
-	for ci in _cached_tile_chains.size():
-		var tile: L1TileDef = by_tile.get(_cached_tile_chain_owners[ci], null)
-		if tile == null:
-			continue
-		draw_polyline(_cached_tile_chains[ci], tile_border_color(tile), width, true)
-
-
 ## 构建当前城流动描边缓存（R2）：几何 = 当前城 mid 档建成区轮廓（包几何最大外环，
 ## 与建成区图形重合的 R2 语义；旧径向 blob 轮廓已随 §R5 退役）。
 ## 固定 mid 档——分数变化不再引起描边几何跳变。（轮廓提取见 blob 助手 static 纯函数）
@@ -611,20 +592,14 @@ func _draw() -> void:
 			_blob().draw_vector_fallback(zz)
 	# 4.5 邻居老 L1 块空心描边（A3：只描边不填充；屏幕像素固定）
 	_Layers.draw_neighbor_outlines(self, zz)
-	# 5. 城市描边：屏幕像素固定（不随缩放，避免粗细跳变）；跳过贴水面边（湖/河岸一圈不描边
-	#    ——贴陆后河岸即城块界线，描了会把河框起来读作「河流被描边」；海岸边保留=国界勾勒）。
+	# 5. 城市描边（非政治模式：常驻灰城界）：屏幕像素固定（不随缩放，避免粗细跳变）。
+	#    政治模式**不描边**（创始人 2026-09-22 裁决：国色描边层整个删——描边是语义
+	#    强调不是修复手段，贴陆后色块边即地面真值边，色块自身边界已可读）。
 	#    描边段不随 zoom/hover 变化 → 缓存复用（原每帧重建 = 4668 段 × 湖边数 距离计算，hover 卡顿源）
 	var tw: float = TILE_BORDER_WIDTH
 	if zz > 0.0001:
 		tw = TILE_BORDER_WIDTH / zz
-	if map_mode == MapModeManager.Mode.POLITICAL:
-		# 政治模式：地块界换成**国色描边**（WorldBox 式；灰地块界留给其他模式）。
-		# 比常驻灰界略粗——地块多边形各自平滑后相邻边有 1~2px 不共线，粗一档才盖得住缝
-		var pbw: float = MapTokens.L1_POLITICAL_TILE_BORDER_WIDTH
-		if zz > 0.0001:
-			pbw = MapTokens.L1_POLITICAL_TILE_BORDER_WIDTH / zz
-		_draw_political_tile_borders(pbw)
-	else:
+	if map_mode != MapModeManager.Mode.POLITICAL:
 		# 逐地块成链直绘（链内折角相连）：draw_multiline 逐段自带端点外伸，三岔口会
 		# 读作"灰线分叉"——成链后交汇处严丝合缝（共享边两侧各画一遍，同色无痕）
 		for chain in _cached_tile_chains:

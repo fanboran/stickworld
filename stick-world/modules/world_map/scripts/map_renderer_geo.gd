@@ -108,8 +108,7 @@ static func edge_touches_river_fast(a: Vector2, b: Vector2, tol: float,
 	return false
 
 
-## 构建不随 zoom/hover 变化的静态几何缓存（写回宿主 _cached_tile_chains（+
-## _cached_tile_chain_owners 平行记录地块，政治国色描边取色用）/ _cached_l1_closed /
+## 构建不随 zoom/hover 变化的静态几何缓存（写回宿主 _cached_tile_chains / _cached_l1_closed /
 ## _cached_neighbor_outlines / _river_lines / _river_widths / _road_dirt_lines /
 ## _road_paved_lines / _segs_valid）：城界描边**链**（跳过贴水面边[湖/河]）+ 出生 L1 轮廓
 ## + 邻居空心轮廓（A3）+ 河流折线。仅 set_data / 首帧调用一次。
@@ -125,7 +124,6 @@ static func build_cached_geometry(h) -> void:
 	# 类型化数组须 clear() 就地清空
 	h._cached_neighbor_outlines.clear()
 	h._cached_tile_chains.clear()
-	h._cached_tile_chain_owners.clear()
 	h._river_lines.clear()
 	h._river_widths = PackedFloat32Array()
 	# 邻居空心轮廓（闭合折线缓存）
@@ -158,7 +156,6 @@ static func build_cached_geometry(h) -> void:
 		for chain in tile_border_chains(h._data, tile.polygon, water_tol, lake_boxes,
 				h._river_lines, h._river_widths, river_boxes):
 			h._cached_tile_chains.append(chain)
-			h._cached_tile_chain_owners.append(tile.tile_id)
 	# 三岔交汇点（补圆盖外凸尖用）
 	h._cached_junctions = junction_points(h._data)
 	# L1 权威轮廓 = 主大陆单环（export 已保证 l1_polygon 只含最大环）——闭合缓存

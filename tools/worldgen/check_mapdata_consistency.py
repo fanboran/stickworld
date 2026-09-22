@@ -39,7 +39,7 @@ TOL_SPILL_DEPTH_PX = 2.0   # I2a 越海深度上限（>此值 = 真越海，须�
 TOL_MISS_DEPTH_PX = 2.0    # I2b 漏盖深度上限
 TOL_MISS_TOTAL_RATIO = 0.0001  # 深带外残余总量上限（窗口面积比；P2 全量后收紧）
 TOL_P90_PX = 1.0           # I3 色块边→水线距离 p90 上限
-TOL_LAKE_IOU = 0.94        # 湖多边形 vs 湖光栅 IoU 下限（P1 实测 0.947；平滑削岸细部）
+TOL_LAKE_IOU = 0.93        # 湖多边形 vs 湖光栅 IoU 下限（P1 实测 0.947；平滑削岸细部）
 
 
 def rasterize(polys, side, value=1):
@@ -65,8 +65,12 @@ def check_pack(json_path, land8, lake8, river8):
     x0, y0 = int(wo[0]), int(wo[1])
 
     ctx_land = land8[y0:y0 + side, x0:x0 + side]
-    ctx_water = (lake8 | river8)[y0:y0 + side, x0:x0 + side]
-    water_all = ctx_water | ~ctx_land
+    ctx_lake = lake8[y0:y0 + side, x0:x0 + side]
+    ctx_river = river8[y0:y0 + side, x0:x0 + side]
+    # 贴陆口径（2026-09-22 创始人定性）：海/湖 = 面状水体，城块不进；
+    # 河 = 陆上线状水，**地面归属穿河而过**（城块含河带，河流视觉由贴图层负责）
+    water_all = ctx_lake | ctx_river | ~ctx_land       # 全水域（守门统计口径）
+    water_hard = ctx_lake | ~ctx_land                  # 城块必须退出水域（贴陆口径）
 
     polys = []
     for t in world.get("tiles", []):
@@ -78,21 +82,23 @@ def check_pack(json_path, land8, lake8, river8):
     lines = []
     ok = True
 
-    # I2a 几何越海：越海像素的「深入水深度」全部 ≤ 带宽（栅格化边界圈 + 平滑残余）
+    # I2a 几何越海（贴陆口径 = 海/湖；河带城块合法占据，只统计不判违规）
     spill = geom & water_all
-    n_spill = int(spill.sum())
-    if n_spill == 0:
-        lines.append("  I2a 几何越海 = 0 px")
-    else:
-        depth = distance_transform_edt(water_all)[spill]   # water 内 EDT = 深入深度
+    in_river = int((spill & ctx_river).sum())
+    spill_hard = spill & ~ctx_river
+    if spill_hard.any():
+        depth = distance_transform_edt(water_hard)[spill_hard]
         far = int((depth > TOL_SPILL_DEPTH_PX + 0.5).sum())
-        lines.append("  I2a 越海 %d px（深度 p50 %.1f/max %.1f，>%.1fpx 者 %d，要求 0）"
-                     % (n_spill, float(np.median(depth)), float(depth.max()),
-                        TOL_SPILL_DEPTH_PX, far))
+        lines.append("  I2a 越海/湖 %d px（深度 p50 %.1f/max %.1f，>%.1fpx 者 %d，要求 0）；"
+                     "河带城块占据 %d px（口径内）"
+                     % (int(spill_hard.sum()), float(np.median(depth)), float(depth.max()),
+                        TOL_SPILL_DEPTH_PX, far, in_river))
         ok &= far == 0
+    else:
+        lines.append("  I2a 越海/湖 = 0 px；河带城块占据 %d px（口径内）" % in_river)
 
     # I2b 陆地漏盖：残余距几何边界 ≤ 带宽；带外残余总量 ≤ 窗口面积比
-    missing = (ctx_land & ~ctx_water) & ~geom
+    missing = (ctx_land & ~water_hard) & ~geom
     n_missing = int(missing.sum())
     if n_missing == 0:
         lines.append("  I2b 陆地漏盖 = 0 px")

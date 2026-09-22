@@ -82,13 +82,13 @@ modules/world_map/
 
 **疆域染色**：政治模式的地块填充按已占地块**逐格**覆盖（占多少染多少，不整国变色）——取色唯一出口 `MapRenderer.tile_fill_color`，玩家疆域色取自 `MapTokens.L1_PLAYER_TERRITORY_COLOR`（纯白，渲染器与政治图例同源）；已占集合来自 expansion 契约面 `get_owned_tile_keys()`（组 `expansion_api` 查找，不引 expansion 全局类名）。
 
-**政治模式观感（WorldBox 式）**：地形贴图（`l1_terrain.png`）打底 → 政权色**半透明**覆盖（`MapRenderer.POLITICAL_FILL_ALPHA`）→ **矢量河湖** → 地块边缘用地块**国色**描边（`tile_border_color`，不透明），灰地块界只留给地形/交通模式。L2/L3 世界图仍是烘焙 mask 的不透明政治填充 + 墨色界线。
+**政治模式观感（WorldBox 式）**：地形贴图（`l1_terrain.png`）打底 → 政权色**半透明**覆盖（`MapRenderer.POLITICAL_FILL_ALPHA`）→ 完。**无描边层**（创始人 2026-09-22 裁决删除——描边是语义强调不是修复手段，色块自身边界已可读），灰城界只留给地形模式。河流在贴图层（陆上线状水，城块归属穿河而过、色块盖不到水所以贴图河原样可见）；海/湖为面状水体（城块不进，贴图水原样透出）。L2/L3 世界图仍是烘焙 mask 的不透明政治填充 + 墨色界线。
 
 **邻省上下文层（L1 政治模式）**：邻省块也是「地形透出 + 政权色」，只是比本省**暗一阶**（`MapTokens.L1_NEIGHBOR_DIM`）——色源是侧表 `data/province_politics.gd`（`ProvincePolitics`，读 `config/strategic_map/l1_province_politics.json`：69 个老 L1 省的**主导政权色 + 全局质心**，由 `tools/worldgen/l1/export_province_politics.py` 从 `l3_l1.json` 多边形 × 8192 政权 ID mask 众数采样；⚠️ `l3_l1.json` 的 polygons 与 centroid **同为 `[y,x]`**，侧表统一转存 `[x,y]`）。侧表缺失 → 回退旧平灰（`L1_NEIGHBOR_COLOR`），视图不锁死。
 
 ⚠️ **邻块多边形轴序**（2026-09-22 修）：L1 数据格式统一 `[x,y]`（同地块），但 `export_l1_view_context.py` 早先写邻居块时漏了 `to_xy`（mesh_extract 输出是 `(y,x)`），导致**邻块整体沿主对角轴翻转**——涂灰时看不出，邻省上色后立刻暴露为「色块像被左上右下对称轴翻转」。导出器已修；既有 70 包用 `tools/worldgen/l1/fix_neighbor_axis_l1.py` 换序并重烤 bin。
 
-**矢量水体（水陆同源 D3）**：政治模式的水 = 声明式矢量 pass，画在色块之上、描边之下——河流 `draw_polyline`（宽 = 生成端 EDT 实测 `w` + 1px，多 1px 盖住底图 `gaussian_filter(0.9)` 的羽化边；宽取自 EDT 是同源纪律，不得改固定像素宽），湖泊 `_lakes_mesh`（`MapTokens.L1_LAKE`），色与地形 token 同源。前提是生成端**贴陆**（`tools/worldgen/l2_export/land_snap.py`：水面归 0 + 纯陆地 EDT 回填，几何不进水面、陆地全覆盖），色块本就盖不到水，矢量水与色块边/描边出自同一份水陆真相——运行时**零判水**（旧「绿-蓝差判水水面回贴」已整体退役），放大不糊。守门断言 `tools/worldgen/check_mapdata_consistency.py`（接 `tests/run_all.sh` 全量）逐包守住三不变量。政治/灰城两模式的描边都走缓存链 `_cached_tile_chains`（`map_renderer_geo.tile_border_chains`：贴水面段[湖/河岸]断开不描——贴陆后河岸即城块界线，描了会把河框起来；海岸边保留 = 国界勾勒语义；`_cached_tile_chain_owners` 平行记录地块，政治国色按地块取色）。政治界宽另取 `L1_POLITICAL_TILE_BORDER_WIDTH`（略粗于常驻灰界）。
+**水体与描边（水陆同源现行口径）**：政治/地形模式均无水体矢量 pass（贴图缺失回退分支保留矢量河湖兜底）、政治模式无描边。城界灰线走缓存链 `_cached_tile_chains`（`map_renderer_geo.tile_border_chains`：贴湖岸段断开不描）。守门断言 `tools/worldgen/check_mapdata_consistency.py`（接 `tests/run_all.sh` 全量）：几何 vs 海/湖越海深度带归零、陆地漏盖、水线双向贴合、湖多边形同源 IoU；河带城块占据为口径内行为只统计不判违规。
 
 **切省箭头环（L1）**：`ui/province_switch_arrows.gd`（`ProvinceSwitchArrows`）——**每个相邻老 L1 省份一个箭头**，全部排在**地图内容区内的虚拟圆环**上（圆环锚在地图坐标系，随缩放/平移跟随：圆心 = context 中心，半径 = 边长 × `ARROW_RING_RATIO`），箭头**背离圆心**指向对应省份，填充 = 该省主导政权色，悬停提亮，tooltip「切到相邻省份 #N · 政权名」。方位由控制器 `_arrow_ring_config()` 按侧表**全局质心**算（`angle = atan2(dy, dx)`）；点击走 `switch_province(label)` → `api.open_l1` 换包 + 视角重适配，**不改 `_drill_from_l2`**（ESC 语义跟入口走）。api 侧配 `has_l1_data(label)` 只列可打开的目标；侧表缺该省 → 不出该箭头（不留死箭头）。
 

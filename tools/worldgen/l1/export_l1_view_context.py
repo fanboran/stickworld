@@ -423,10 +423,12 @@ def main():
     ctx_city, snap_stats = land_snap.snap_labels_to_land(ctx_city, ctx_land, ctx_lake)
     print("  贴陆后处理：海湖清除 %d px，陆地回填 %d px（河不清标签，贴图负责）"
           % (snap_stats["cleared_px"], snap_stats["filled_px"]))
-    # R3 起换 extract_smooth_mesh：find_contours 亚像素等值线 + 共享弧统一平滑，
-    # 整数台阶根除（--polys-only 的 patch 与全新生成同管线）。
-    # 城市/邻居合成一张标签图一次提取（邻居 +10000 命名空间）——城块与
-    # 邻居块的交界才共享弧缓存/点焊（分两次提取则交界各自平滑出楔形缝）。
+    # P 社式忠实提取（创始人 2026-09-22 裁决「忠实还原蒙版」）：extract_mesh
+    # 顶点=像素角点、相邻 label 共享同一角点（天生公共边，Clausewitz 架构），
+    # simplify_mesh 删共线+Chaikin 只平 1~2px 小台阶、保真实长边直角——
+    # 蒙版上的直线边界提取后仍是直线。R3 的 find_contours 亚像素+平滑版会
+    # 把直线搅成锯齿（「分叉」观感来源），且共享性靠弧缓存/点焊补救、漏洞多。
+    # 城市/邻居合成一张标签图一次提取（邻居 +10000 命名空间）——交界共享角点。
     # 组合规则（city 优先覆盖，R3 定标；审计#1 修正——旧实现写反成 legacy 覆写
     # 全部城块，city_mesh 恒空、tiles 一直走 city_data 兜底旧几何）：
     #   本 L1 城块（parent==lab_l1）留 city 命名空间；其余陆地按城块 parent_l1
@@ -465,10 +467,10 @@ def main():
               % (side, side, n_miss))
         return
 
-    combined_mesh = mesh_extract.extract_smooth_mesh(ctx_combined)
+    combined_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_combined))
     city_mesh = {k: v for k, v in combined_mesh.items() if k < 10000}
     legacy_mesh = {k - 10000: v for k, v in combined_mesh.items() if k > 10000}
-    lake_mesh = mesh_extract.extract_smooth_mesh(ctx_lake.astype(np.int32))
+    lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)))
 
     # 邻居块（灰色）：context 内除出生块外的所有老 L1 块（细化场 parent 聚合）
     # 多连通（大陆 + 岛屿）时 extract 输出多个外环——渲染端按 polygons 全画

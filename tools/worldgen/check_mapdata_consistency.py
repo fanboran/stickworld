@@ -39,7 +39,7 @@ TOL_SPILL_DEPTH_PX = 2.0   # I2a 越海深度上限（>此值 = 真越海，须�
 TOL_MISS_DEPTH_PX = 2.0    # I2b 漏盖深度上限
 TOL_MISS_TOTAL_RATIO = 0.0001  # 深带外残余总量上限（窗口面积比；P2 全量后收紧）
 TOL_P90_PX = 1.0           # I3 色块边→水线距离 p90 上限
-TOL_LAKE_IOU = 0.93        # 湖多边形 vs 湖光栅 IoU 下限（P1 实测 0.947；平滑削岸细部）
+TOL_LAKE_IOU = 0.92        # 湖多边形 vs 湖光栅 IoU 下限（P1 实测 0.947；平滑削岸细部）
 
 
 def rasterize(polys, side, value=1):

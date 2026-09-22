@@ -396,14 +396,17 @@ func tile_border_color(tile: L1TileDef) -> Color:
 	return c
 
 
-## 构建当前城流动描边缓存（R2）：几何 = 当前城 mid 档建成区轮廓（包几何最大外环，
-## 与建成区图形重合的 R2 语义；旧径向 blob 轮廓已随 §R5 退役）。
-## 固定 mid 档——分数变化不再引起描边几何跳变。（轮廓提取见 blob 助手 static 纯函数）
+## 构建当前城流动描边缓存（R2）：几何 = 当前城**地块多边形**（tile.polygon）。
+## 「你在这里」标记的是城市地块（绘制点注释同此语义；曾描建成区 mid 档轮廓，
+## 建成区形状自带描边且随档位/生成参数漂移，不承担地界语义——创始人复检纠偏）。
 func _build_glow_outline() -> void:
 	_glow_outline = PackedVector2Array()
 	if _data == null or _current_tile_id.is_empty():
 		return
-	_glow_outline = _BlobLayer.current_city_outline(_geo, _data, _current_tile_id)
+	for tile in _data.tiles:
+		if tile.tile_id == _current_tile_id and tile.polygon.size() >= 3:
+			_glow_outline = FlowOutline.resample_closed(tile.polygon)
+			break
 
 
 func set_camera(camera: MapCamera) -> void:

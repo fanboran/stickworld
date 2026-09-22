@@ -55,6 +55,37 @@ def main():
     for dist, sid, ti in (bad if top_n <= 0 else rows[:top_n]):
         print("  %.1f px  %s tier%d" % (dist, sid, ti))
 
+    # 档间嵌套对账（低⊆中⊆高）：渲染端三档贴图整包叠画，小档溢出大档=重影。
+    # 按外环并集量「本档溢出上一档」的面积（构造端以粗糙化轮廓做界，允许贴边不允许出头）
+    from shapely.ops import unary_union
+
+    def _valid_union(parts):
+        u = unary_union(parts)
+        return u if u.is_valid else u.buffer(0)
+
+    tier_polys = {}
+    for ci, ti, kind, oi, s, n in meta:
+        if n < 3:
+            continue
+        pg = Polygon(rings[s:s + n])
+        if not pg.is_valid:
+            pg = pg.buffer(0)
+        if pg.is_empty:
+            continue
+        tier_polys.setdefault((str(ids[ci]), int(ti)), []).append(pg)
+    nest_worst = []
+    for (sid, ti), parts in tier_polys.items():
+        higher = tier_polys.get((sid, ti + 1))
+        if not higher:
+            continue
+        over = _valid_union(parts).difference(_valid_union(higher))
+        if not over.is_empty and over.area > 1.0:
+            nest_worst.append((over.area, sid, ti))
+    nest_worst.sort(reverse=True)
+    print("[nest] 档间溢出 %d 城×档" % len(nest_worst))
+    for a, sid, ti in nest_worst[:6]:
+        print("  %.0f px²  %s tier%d 溢出 tier%d" % (a, sid, ti, ti + 1))
+
 
 if __name__ == "__main__":
     main()

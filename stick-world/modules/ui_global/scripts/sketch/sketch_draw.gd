@@ -231,3 +231,129 @@ static func draw_gear(c: CanvasItem, center: Vector2, radius: float, seed: int,
 		var rr: float = radius * 0.26 + wobble(i * 7 + 80, seed) * 0.5
 		hole.append(center + Vector2(cos(a), sin(a)) * rr)
 	c.draw_colored_polygon(hole, bg)
+
+
+# ───────────────────────── 播放器图形（走带/音符）─────────────────────────
+# 为什么自绘而不走图标管线：StickHand 字体**不含** ▶ / ⏸ / ⏮ / ⏭ / ♪ 这些符号
+# （实测 has_char 全 false），贴图管线也没有对应母题——音乐播放器的走带键
+# 和音符角标只能矢量自绘。画法与 draw_gear 同源：wobble 扰动 + 马克笔笔画。
+
+## 可自绘的图形（SketchGlyphButton 的 glyph 取值）
+enum Glyph { NOTE, PLAY, PAUSE, PREV, NEXT, REPEAT }
+
+
+## 图形总入口：center = 图形中心，radius = 图形外接半径（约等于短边的一半 × 0.4）
+static func draw_glyph(c: CanvasItem, glyph: int, center: Vector2, radius: float,
+		seed: int, color: Color) -> void:
+	match glyph:
+		Glyph.NOTE:
+			draw_note(c, center, radius, seed, color)
+		Glyph.PLAY:
+			draw_play(c, center, radius, seed, color)
+		Glyph.PAUSE:
+			draw_pause(c, center, radius, seed, color)
+		Glyph.PREV:
+			draw_track_step(c, center, radius, seed, color, true)
+		Glyph.NEXT:
+			draw_track_step(c, center, radius, seed, color, false)
+		Glyph.REPEAT:
+			draw_repeat(c, center, radius, seed, color)
+
+
+## 音符（八分音符）：实心扁圆符头 + 符干 + 右甩符尾（原声带入口的角标）
+static func draw_note(c: CanvasItem, center: Vector2, r: float, seed: int,
+		color: Color) -> void:
+	var head_c := center + Vector2(-r * 0.30, r * 0.62)
+	_filled_ellipse(c, head_c, Vector2(r * 0.62, r * 0.46), seed + 3, color)
+	# 符干：符头右缘起笔，竖到顶部（略右倾，手写感）
+	var stem_bottom := head_c + Vector2(r * 0.52, -r * 0.12)
+	var stem_top := stem_bottom + Vector2(r * 0.16, -r * 1.62)
+	_stroke(c, [stem_bottom, stem_top], r * 0.20, seed + 5, color)
+	# 符尾：顶部向右下的一笔弧
+	var flag_a := stem_top + Vector2(r * 0.02, r * 0.06)
+	var flag_b := stem_top + Vector2(r * 0.92, r * 0.46)
+	var flag_mid := (flag_a + flag_b) * 0.5 + Vector2(r * 0.10, -r * 0.26)
+	_stroke(c, [flag_a, flag_mid, flag_b], r * 0.19, seed + 7, color)
+
+
+## 播放：右向实心三角（左缘略钝，避免"打印感"）
+static func draw_play(c: CanvasItem, center: Vector2, r: float, seed: int,
+		color: Color) -> void:
+	var tip := center + Vector2(r * 0.86, 0.0)
+	var top := center + Vector2(-r * 0.62, -r * 0.80)
+	var bottom := center + Vector2(-r * 0.62, r * 0.80)
+	var mid_top := Vector2(tip.x, top.y).lerp(Vector2(top.x, top.y), 0.32) \
+			+ Vector2(0.0, wobble(1, seed) * r * 0.10)
+	var mid_bottom := Vector2(tip.x, bottom.y).lerp(Vector2(bottom.x, bottom.y), 0.32) \
+			+ Vector2(0.0, wobble(2, seed) * r * 0.10)
+	c.draw_colored_polygon(PackedVector2Array([tip, mid_top, top, bottom, mid_bottom]), color)
+
+
+## 暂停：两根竖条（等宽、圆头）
+static func draw_pause(c: CanvasItem, center: Vector2, r: float, seed: int,
+		color: Color) -> void:
+	var w: float = r * 0.30
+	var h: float = r * 0.82
+	for i in 2:
+		var x: float = center.x + (-1.0 if i == 0 else 1.0) * (w * 0.95) \
+				+ wobble(i + 11, seed) * r * 0.06
+		_stroke(c, [Vector2(x, center.y - h), Vector2(x, center.y + h)], w, seed + i, color)
+
+
+## 上一曲/下一曲：三角 + 端竖条（next=true 时整体镜像）
+static func draw_track_step(c: CanvasItem, center: Vector2, r: float, seed: int,
+		color: Color, back: bool) -> void:
+	var dir: float = 1.0 if back else -1.0
+	var tip := center + Vector2(-dir * r * 0.30, 0.0)
+	var a := center + Vector2(dir * r * 0.72, -r * 0.74)
+	var b := center + Vector2(dir * r * 0.72, r * 0.74)
+	c.draw_colored_polygon(PackedVector2Array([tip, a, b]), color)
+	_stroke(c, [Vector2(a.x + dir * r * 0.14, a.y), Vector2(b.x + dir * r * 0.14, b.y)],
+			r * 0.28, seed + 17, color)
+
+
+## 循环：开口圆环 + 端头箭头（环形箭头，开口朝右上）
+static func draw_repeat(c: CanvasItem, center: Vector2, r: float, seed: int,
+		color: Color) -> void:
+	var rr: float = r * 0.72
+	var seg := 18
+	var start_a: float = -PI * 0.35
+	var end_a: float = TAU - PI * 0.62
+	var pts := PackedVector2Array()
+	for i in seg + 1:
+		var a: float = start_a + (end_a - start_a) * float(i) / float(seg)
+		var rad: float = rr + wobble(i * 2, seed) * r * 0.07
+		pts.append(center + Vector2(cos(a), sin(a)) * rad)
+	c.draw_polyline(pts, color, r * 0.20, true)
+	# 端头箭头：末端切线方向上的小三角
+	var tail := pts[0]
+	var next_p := pts[1]
+	var tg := (tail - next_p).normalized()
+	var nrm := Vector2(-tg.y, tg.x)
+	c.draw_colored_polygon(PackedVector2Array([
+		tail + tg * r * 0.44,
+		tail + nrm * r * 0.34,
+		tail - nrm * r * 0.34,
+	]), color)
+
+
+## 实心扰动椭圆（符头）
+static func _filled_ellipse(c: CanvasItem, center: Vector2, half: Vector2, seed: int,
+		color: Color) -> void:
+	var pts := PackedVector2Array()
+	var seg := 12
+	for i in seg:
+		var a: float = TAU * float(i) / float(seg)
+		var k: float = 1.0 + wobble(i * 3, seed) * 0.10
+		pts.append(center + Vector2(cos(a) * half.x * k, sin(a) * half.y * k))
+	c.draw_colored_polygon(pts, color)
+
+
+## 折线马克笔笔画（圆头端帽 + 圆角连接，与 draw_wavy_line 同观感）
+static func _stroke(c: CanvasItem, pts: Array, width: float, seed: int, color: Color) -> void:
+	if pts.size() < 2:
+		return
+	var path := PackedVector2Array(pts)
+	c.draw_polyline(path, color, width, true)
+	for p: Vector2 in pts:
+		c.draw_circle(p, width * 0.5, color)

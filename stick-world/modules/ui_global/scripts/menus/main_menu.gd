@@ -3,13 +3,14 @@ extends Control
 ## 主菜单（正式版）—— 启动流程第一屏，进入游戏的中枢。
 ##
 ## 设计见 docs/设计/UI/03-主菜单与流程.md；视觉走 StickTheme 手绘皮肤 +
-## 黄金时刻天空场景（手绘云/暮色山/闲逛火柴人），主行动点实底琥珀。
+## 黄金时刻天空场景（手绘云/暮色山/飞鸟），主行动点实底琥珀。
 ##
 ## 流程：
 ##   ├ 继续游戏 → 读最近存档（槽位 0，无档禁用）
 ##   ├ 新游戏   → 确认框 → 进 game_root（新开局）
 ##   ├ 读取存档 → SavePanel 只读模式 → 选槽进 game_root（boot_load_slot 指定）
 ##   ├ 设置     → SettingsMenuPanel（与游戏内同一份，game_root 为空时跳过调试区）
+##   ├ 制作人员 → 名单面板（CC-BY 署名合规出口）；同行方钮 → 原声带页
 ##   └ 退出游戏 → 危险确认框
 ##
 ## 场景切换用 change_scene_to_file；读档意图经 SaveManager.boot_load_slot
@@ -17,11 +18,12 @@ extends Control
 
 ## 载入屏（主菜单 → 游戏 的过渡画面）
 const LOADING_SCENE := "res://modules/ui_global/scenes/menus/loading_screen.tscn"
+## 原声带页（制作人员同行的方钮入口）
+const SOUNDTRACK_SCENE := "res://modules/ui_global/scenes/menus/soundtrack_player.tscn"
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
-## 手绘云（背景漂移云；与世界天空同选型期四风格混排）
-const SketchCloudScript: GDScript = preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
 
 ## 菜单项数据：id / 文案 / 变体档位 / 母题图标（icon = 管线母题中文名，无则不挂）
+## / companion = 同行方钮（方钮与主条目挤一行，右侧贴邻；见 _build_menu）
 ## 亮天空上的次级入口一律 PAPER 纸面档（白描边贴图在亮底不可见）；
 ## 新游戏 = PRIMARY（实底琥珀主行动点，§1.2）；
 ## alpha = 半透明纸面（除顶部两个主行动外天空透出来，视觉层级落到主行动上）
@@ -30,8 +32,11 @@ const MENU_ITEMS: Array[Dictionary] = [
 	{"id": "new_game", "label": "新游戏", "kind": StickKit.ButtonKind.PRIMARY, "icon": &"旗帜"},
 	{"id": "load", "label": "读取存档", "kind": StickKit.ButtonKind.PAPER, "icon": &"两本书", "alpha": 0.62},
 	{"id": "settings", "label": "设置", "kind": StickKit.ButtonKind.PAPER, "icon": &"齿轮", "alpha": 0.62},
-	# 制作人员：CC-BY 署名的合规出口（钢琴采样/环境音素材，见 docs/技术/音频/音乐资产登记与来源.md）
-	{"id": "credits", "label": "制作人员", "kind": StickKit.ButtonKind.PAPER, "icon": &"奖章", "alpha": 0.62},
+	# 制作人员 + 原声带：都是"关于这部作品的"内容，挤一行（署名页左、音乐页右方钮）。
+	# 制作人员是 CC-BY 署名的合规出口（钢琴采样/环境音素材，见 docs/技术/音频/音乐资产登记与来源.md）
+	{"id": "credits", "label": "制作人员", "kind": StickKit.ButtonKind.PAPER, "icon": &"奖章", "alpha": 0.62,
+		"companion": {"id": "soundtrack", "tip": "游戏原声带（曲目播放器）",
+			"glyph": SketchDraw.Glyph.NOTE}},
 	# 测试场景入口：仅开发构建显示（正式发布隐藏），字段 debug_only 过滤于 _build_menu
 	{"id": "arena", "label": "测试场景", "kind": StickKit.ButtonKind.PAPER, "debug_only": true, "icon": &"立方体", "alpha": 0.62},
 	{"id": "quit", "label": "退出游戏", "kind": StickKit.ButtonKind.PAPER, "icon": &"木门", "alpha": 0.62},
@@ -57,7 +62,7 @@ func _ready() -> void:
 	SketchTextures.animation_enabled = true
 	SketchTextures.ensure_driver(get_tree())
 	theme = StickTheme.create()
-	_build_background()
+	_build_backdrop()
 	_build_title()
 	_start_title_entrance()
 	_build_menu()
@@ -90,8 +95,17 @@ func _build_menu() -> void:
 		# 开发专用入口（测试场景等）在非 debug 构建下不显示
 		if item.get("debug_only", false) and not OS.is_debug_build():
 			continue
-		var btn := StickKit.sketch_button(_menu_column, item["label"],
+		# 带同行方钮的条目：主条目 + 方钮挤一行（方钮贴右缘，行高等于主按钮高）
+		var row: Control = _menu_column
+		if item.has("companion"):
+			var line := HBoxContainer.new()
+			line.add_theme_constant_override("separation", 10)
+			_menu_column.add_child(line)
+			row = line
+		var btn := StickKit.sketch_button(row, item["label"],
 				_on_menu_pressed.bind(item), item["kind"], StickTokens.BTN_H_LG)
+		if row != _menu_column:
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		# 视觉全归变体（PAPER 纸面 / PRIMARY 实底琥珀）；字号是排版参数走实例属性
 		btn.font_size = 18
 		if item.has("alpha"):
@@ -104,6 +118,35 @@ func _build_menu() -> void:
 			btn.disabled = not _has_continue_save()
 			if badge != null and btn.disabled:
 				badge.modulate.a = 0.45
+		if item.has("companion"):
+			_build_companion_square(row, item["companion"])
+
+
+## 同行方钮（条目 companion 字段）：正方形、与主按钮等高，图形走 SketchDraw 自绘
+## （字体与图标管线都没有音乐符号，见 SketchGlyphButton 头注）。
+## 亮天空上沿用主条目的纸面观感：PAPER 变体 + 同档半透明底。
+func _build_companion_square(row: Control, spec: Dictionary) -> void:
+	var sq := SketchGlyphButton.new()
+	sq.name = "SoundtrackButton"
+	sq.glyph = spec.get("glyph", SketchDraw.Glyph.NOTE)
+	sq.square_size = StickTokens.BTN_H_LG
+	sq.kind = SketchButton.Kind.PAPER
+	sq.bg_alpha = 0.62
+	sq.icon_mode = SketchStyle.IconMode.NONE
+	sq.tooltip_text = spec.get("tip", "")
+	sq.pressed.connect(func() -> void:
+		if AudioManager and AudioManager.has_method("play_event"):
+			AudioManager.play_event("ui_click"))
+	# 动作走同一张分发表（_on_menu_pressed），方钮也只是一个菜单条目
+	sq.pressed.connect(_on_menu_pressed.bind(spec))
+	# 亮底描边走深墨（SketchGearButton 的 ink_skin 分支）
+	sq.ink_skin = true
+	row.add_child(sq)
+
+
+## 原声带页（曲目播放器）
+func _open_soundtrack() -> void:
+	get_tree().change_scene_to_file(SOUNDTRACK_SCENE)
 
 
 func _has_continue_save() -> bool:
@@ -176,6 +219,8 @@ func _on_menu_pressed(item: Dictionary) -> void:
 			_open_settings_panel()
 		"credits":
 			_open_credits_panel()
+		"soundtrack":
+			_open_soundtrack()
 		"arena":
 			_open_arena_panel()
 
@@ -469,177 +514,13 @@ func _close_credits_panel() -> void:
 
 # ─────────────────────────────── 背景装饰（Demo 第一印象）────────────────────────────────
 
-## 主菜单背景：黄金时刻天空 + 远近山剪影 + 手绘漂移云 + 闲逛火柴人
-## （审计整改：旧渐变中段橙→灰过渡发闷像雾霾，色相断链；山是中饱和扁平蓝与暖天撞色；
-##  云用 ANIME 光滑体积风读作 clipart——三件一起按手绘语言调谐）
-func _build_background() -> void:
-	# 天空垂直渐变：暖金 → 琥珀玫瑰 → 暮尘 → 深暮蓝，色相连续不断链
-	var sky := TextureRect.new()
-	sky.name = "SkyGradient"
-	sky.set_anchors_preset(Control.PRESET_FULL_RECT)
-	sky.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sky.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	sky.stretch_mode = TextureRect.STRETCH_SCALE
-	var grad := Gradient.new()
-	grad.set_color(0, Color(0.99, 0.82, 0.55))
-	grad.set_color(1, Color(0.23, 0.20, 0.29))
-	grad.add_point(0.42, Color(0.94, 0.67, 0.46))
-	grad.add_point(0.72, Color(0.62, 0.44, 0.44))
-	var gt := GradientTexture2D.new()
-	gt.fill_from = Vector2(0, 0)
-	gt.fill_to = Vector2(0, 1)
-	gt.gradient = grad
-	gt.width = 8
-	gt.height = 512
-	sky.texture = gt
-	add_child(sky)
-	move_child(sky, 1)  # 垫在 Background 之上、菜单列之下
-	_sky_rect = sky
-	# 远山（贴屏幕底）：暮色染调（蓝贴图×暖玫瑰 = 黄金时刻大气透视的暮紫，
-	# 消中饱和扁平蓝与暖天的撞色）
-	if ResourceLoader.exists(SkyDecorMountains):
-		var m := TextureRect.new()
-		m.name = "Mountains"
-		_mountains_rect = m
-		m.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		m.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		m.stretch_mode = TextureRect.STRETCH_TILE
-		m.texture = load(SkyDecorMountains)
-		m.anchor_left = 0.0
-		m.anchor_right = 1.0
-		m.anchor_top = 1.0
-		m.anchor_bottom = 1.0
-		m.offset_top = -300.0
-		m.offset_bottom = 0.0
-		m.modulate = Color(0.82, 0.60, 0.56)
-		add_child(m)
-		move_child(m, 2)
-	# 近山一层（更暗更近，叠出纵深；无此贴图时静默跳过）
-	if ResourceLoader.exists(SkyDecorMountainsNear):
-		var mn := TextureRect.new()
-		mn.name = "MountainsNear"
-		_mountains_near_rect = mn
-		mn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		mn.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		mn.stretch_mode = TextureRect.STRETCH_TILE
-		mn.texture = load(SkyDecorMountainsNear)
-		mn.anchor_left = 0.0
-		mn.anchor_right = 1.0
-		mn.anchor_top = 1.0
-		mn.anchor_bottom = 1.0
-		mn.offset_top = -170.0
-		mn.offset_bottom = 0.0
-		mn.modulate = Color(0.45, 0.36, 0.40)
-		add_child(mn)
-		move_child(mn, 3)
-	# 漂移云（手绘简笔画系三风格混排：毛线团/笔触/鼓包，与沸腾语言同源；
-	# 原 ANIME 光滑体积风读作 clipart 已弃）——山之上、菜单之下（index 4）
-	_cloud_rects = []
-	for i in 3:
-		var c: Node2D = SketchCloudScript.new()
-		c.set("style", [1, 2, 0][i % 3])
-		c.set("cloud_size", Vector2(200.0, 83.0) * randf_range(0.85, 1.2))
-		c.position = Vector2(randf_range(0.1, 0.7) * 1920.0, randf_range(40.0, 300.0))
-		c.modulate = Color(1, 1, 1, 0.85)
-		add_child(c)
-		move_child(c, 4)
-		_cloud_rects.append(c)
-		_cloud_base_ys.append(c.position.y)
-	# 远空飞鸟（自绘剪影，与游戏内 sky_birds 同视觉语言；云上山下）
-	var birds: Node2D = MenuBirdsScript.new()
-	birds.name = "MenuBirds"
-	add_child(birds)
-	move_child(birds, 2)
-
-const SkyDecorMountains := "res://assets/sky/bg_mountain_far.png"
-const SkyDecorMountainsNear := "res://assets/sky/bg_mountain_near.png"
-const SkyDecorCloudA := "res://assets/sky/cloud_a.png"
-const SkyDecorCloudB := "res://assets/sky/cloud_b.png"
-const MenuBirdsScript := preload("res://modules/ui_global/scripts/menus/menu_birds.gd")
-var _cloud_rects: Array = []
-
-
-# ─────────────────────────────── 精致细节（Demo 打磨包）────────────────────────────────
-
-## 背景视差引用
-var _sky_rect: TextureRect = null
-var _mountains_rect: TextureRect = null
-var _mountains_near_rect: TextureRect = null
-## 鼠标归一化位置（-0.5~0.5），用于背景层反向微移
-var _mouse_norm: Vector2 = Vector2.ZERO
-## 闲逛火柴人彩蛋
-var _walker: TextureRect = null
-var _walker_frame: float = 0.0
-var _walker_dir: float = 1.0
-var _walker_cooldown: float = 0.8
-var _walker_last_frame: int = -1
-
-## 远山暮色基调（蓝贴图×暖玫瑰=黄金时刻大气透视；视差呼吸围绕此色）
-const MOUNTAIN_TINT := Color(0.82, 0.60, 0.56)
-
-const WalkerF0 := "res://assets/sky/walker_f0.png"
-const WalkerF1 := "res://assets/sky/walker_f1.png"
-
-## 鼠标视差：背景各层按深度反向微移（精致菜单标配——画面"活"）
-func _process(delta: float) -> void:
-	# 云缓移（原逻辑；回绕宽度按 cloud_size）
-	for i in _cloud_rects.size():
-		var c: Node2D = _cloud_rects[i]
-		c.position.x += (6.0 + 4.0 * i) * delta
-		if c.position.x > 1920.0:
-			c.position.x = -float((c.get("cloud_size") as Vector2).x)
-	# 鼠标视差
-	var mp := get_viewport().get_mouse_position()
-	var target := Vector2(mp.x / 1920.0 - 0.5, mp.y / 1080.0 - 0.5)
-	_mouse_norm = _mouse_norm.lerp(target, minf(1.0, 3.0 * delta))
-	# 山层贴底 anchor 不被视差破坏：远山以暮色基调做轻微明暗呼吸暗示深度，
-	# 近山只做 x 向微视差（直接改 position 会破坏贴底锚点，只动 x 分量）
-	if _mountains_rect != null:
-		_mountains_rect.modulate = MOUNTAIN_TINT.lerp(
-				MOUNTAIN_TINT.lightened(0.06), (_mouse_norm.x + 0.5))
-	if _mountains_near_rect != null:
-		_mountains_near_rect.position.x = -_mouse_norm.x * 12.0
-	if _sky_rect != null:
-		_sky_rect.position = -_mouse_norm * 6.0
-	for i in _cloud_rects.size():
-		_cloud_rects[i].position.y = _cloud_base_ys[i] - _mouse_norm.y * (16.0 + 8.0 * i)
-	_update_walker(delta)
-
-
-var _cloud_base_ys: Array = []
-## 火柴人闲逛彩蛋 → 视觉主体（审计：主菜单缺火柴人视觉主体）。
-## 加大加实、走完短休整即返场——山脊线上永远有火柴人在生活。
-func _update_walker(delta: float) -> void:
-	if _walker == null and not ResourceLoader.exists(WalkerF0):
-		return
-	if _walker == null:
-		_walker_cooldown -= delta
-		if _walker_cooldown <= 0.0:
-			_walker = TextureRect.new()
-			_walker.texture = load(WalkerF0)
-			_walker.modulate = Color(1, 1, 1, 0.85)
-			_walker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			add_child(_walker)
-			move_child(_walker, 1)
-			_walker_dir = 1.0 if randf() < 0.5 else -1.0
-			var start_x: float = -80.0 if _walker_dir > 0 else 1920.0 + 80.0
-			_walker.position = Vector2(start_x, 640.0 + randf() * 100.0)
-			_walker.scale = Vector2(2.1, 2.1)
-			if _walker_dir < 0:
-				_walker.scale.x = -2.1  # 面向行走方向
-		return
-	# 行走动画：2 帧交替 + 平移（帧号变化才 load/赋值 texture——每帧赋值
-	# 触发 TextureRect 重绘 + 路径字符串构造，主菜单常驻 _process 白烧）
-	_walker_frame += delta * 6.0
-	var frame: int = int(_walker_frame) % 2
-	if frame != _walker_last_frame:
-		_walker_last_frame = frame
-		_walker.texture = load(WalkerF0 if frame == 0 else WalkerF1)
-	_walker.position.x += _walker_dir * 55.0 * delta
-	if _walker.position.x < -120.0 or _walker.position.x > 1960.0:
-		_walker.queue_free()
-		_walker = null
-		_walker_cooldown = randf_range(0.8, 2.2)
+## 主菜单背景：黄金时刻天空 + 暮色远近山 + 手绘漂移云 + 飞鸟
+## （视觉与视差全在 MenuBackdrop，与原声带页共用同一片天空）
+func _build_backdrop() -> void:
+	var backdrop := MenuBackdrop.new()
+	backdrop.name = "Backdrop"
+	add_child(backdrop)
+	move_child(backdrop, 1)  # 垫在 Background 之上、菜单列/版本角标之下
 
 
 ## 标题进场：淡入 + 上浮（首印之一）

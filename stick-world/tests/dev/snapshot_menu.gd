@@ -14,7 +14,8 @@ func _ready() -> void:
 	add_child(menu)
 	await get_tree().create_timer(1.2).timeout
 	# 确定性让飞鸟入镜（自然生成要等 3s+ 且位置随机）
-	var birds: Node = menu.get_node_or_null("MenuBirds")
+	# （背景自 2026-09 抽成 MenuBackdrop 子节点，故按名递归找）
+	var birds: Node = menu.find_child("MenuBirds", true, false)
 	if birds != null and birds.has_method("spawn_now"):
 		birds.spawn_now(true)
 	await get_tree().create_timer(0.8).timeout

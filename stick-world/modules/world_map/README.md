@@ -88,6 +88,10 @@ modules/world_map/
 
 ⚠️ **邻块多边形轴序**（2026-09-22 修）：L1 数据格式统一 `[x,y]`（同地块），但 `export_l1_view_context.py` 早先写邻居块时漏了 `to_xy`（mesh_extract 输出是 `(y,x)`），导致**邻块整体沿主对角轴翻转**——涂灰时看不出，邻省上色后立刻暴露为「色块像被左上右下对称轴翻转」。导出器已修；既有 70 包用 `tools/worldgen/l1/fix_neighbor_axis_l1.py` 换序并重烤 bin。
 
+**验收截图（切省后·邻省完整信息全景）**：当前省切到相邻省后的整屏——11 个邻省完整渲染（城块真实政权色暗一阶 + 城块界 + blob），层级按钮与政权列表侧栏在位（模式体系重构批）：
+
+![切省后邻省完整信息全景](../../../docs/images/gallery/06_l1_switch_neighbors.png)
+
 **水体与描边（水陆同源现行口径）**：政治/地形模式均无水体矢量 pass（贴图缺失回退分支保留矢量河湖兜底）、政治模式无描边。城界灰线走缓存链 `_cached_tile_chains`（`map_renderer_geo.tile_border_chains`：贴湖岸段断开不描）。守门断言 `tools/worldgen/check_mapdata_consistency.py`（接 `tests/run_all.sh` 全量）：几何 vs 海/湖越海深度带归零、陆地漏盖、水线双向贴合、湖多边形同源 IoU；河带城块占据为口径内行为只统计不判违规。
 
 **切省箭头环（L1）**：`ui/province_switch_arrows.gd`（`ProvinceSwitchArrows`）——**每个相邻老 L1 省份一个箭头**，全部排在**地图内容区内的虚拟圆环**上（圆环锚在地图坐标系，随缩放/平移跟随：圆心 = context 中心，半径 = 边长 × `ARROW_RING_RATIO`），箭头**背离圆心**指向对应省份，填充 = 该省主导政权色，悬停提亮，tooltip「切到相邻省份 #N · 政权名」。方位由控制器 `_arrow_ring_config()` 按侧表**全局质心**算（`angle = atan2(dy, dx)`）；点击走 `switch_province(label)` → `api.open_l1` 换包 + 视角重适配，**不改 `_drill_from_l2`**（ESC 语义跟入口走）。api 侧配 `has_l1_data(label)` 只列可打开的目标；侧表缺该省 → 不出该箭头（不留死箭头）。

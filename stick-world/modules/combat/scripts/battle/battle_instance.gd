@@ -75,7 +75,7 @@ var _casualties_attacker: int = 0
 ## 防守方伤亡数（死亡）
 var _casualties_defender: int = 0
 ## 相持超时上限（秒；<= 0 = 不限）——超时按剩余兵力判（多者胜，平局按守方胜），
-## 防"溃逃—恢复—再战"长期相持永不收敛（结束判定补全；据点战由 ConquestManager 设）
+## 防"溃逃—恢复—再战"长期相持永不收敛（结束判定补全；由开战调用方按需设置）
 var duration_limit: float = 0.0
 ## 收束原因（"annihilation" / "mutual" / "timeout"；结算摘要与测试用）
 var _end_reason: String = ""

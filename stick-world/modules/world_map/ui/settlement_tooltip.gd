@@ -164,29 +164,12 @@ func _owner_display_name(tile: L1TileDef) -> String:
 	return name if not name.is_empty() else tile.owner_state_id
 
 
-## 据点归属行（归属真值，与上一行的 worldgen 政权是两个层）：
-## 只对配置里的据点显示；真值经 expansion 契约面读（TerritoryRegistry 的 owner/faction
-## 出口），未装配 expansion（dev 直开战略图 / headless 用例）或非据点聚落时隐藏本行。
-func _update_territory_line(s: SettlementRef) -> void:
+## 归属行骨架（与上一行的 worldgen 政权是两个层）：政权归属真值源接入
+## （世界模型统一契约）前恒隐藏——行本体与排布保留，接入后经真值域填充。
+func _update_territory_line(_s: SettlementRef) -> void:
 	if _territory_label == null:
 		return
-	var expansion := _expansion_api()
-	if expansion == null or not expansion.has_method("find_territory_by_settlement") \
-			or not expansion.has_method("describe_owner"):
-		_territory_label.visible = false
-		return
-	var target: Dictionary = expansion.find_territory_by_settlement(s.settlement_id)
-	if target.is_empty():
-		_territory_label.visible = false
-		return
-	_territory_label.text = "归属 %s" % expansion.describe_owner(target)
-	_territory_label.visible = true
-
-
-## 出征与领地模块 api（组查找，与战略图控制器同口径：不引 expansion 全局类名）
-func _expansion_api() -> Node:
-	var tree := get_tree()
-	return tree.get_first_node_in_group("expansion_api") if tree != null else null
+	_territory_label.visible = false
 
 
 ## 跟随鼠标：指针右下偏移，夹进安全矩形（HUD 预留区避让，不出屏）

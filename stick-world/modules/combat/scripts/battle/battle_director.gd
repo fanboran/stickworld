@@ -75,9 +75,9 @@ func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array,
 	# 订阅结束信号：战斗结束时（_end 内、queue_free 前）及时注销本实例，防 _battles 膨胀
 	bi.battle_finished.connect(_on_battle_finished)
 	# W1 TeamAi 生产启用（裁决 2026-09-12：战场默认开，配置可关；组织界面与AI状态
-	# 接线总体方案 §2.5）：延迟到帧末执行——同帧内专属调用方（据点战 conquest_manager
-	# 注入守军撤仗阈值等）先行注册带 overrides 的阵营，到点经 get_team_ai 守卫幂等
-	# 跳过，不吞专属 overrides；battle_sim 观察场同帧直启亦不受扰动。
+	# 接线总体方案 §2.5）：延迟到帧末执行——同帧内专属调用方先行注册带 overrides
+	# 的阵营，到点经 get_team_ai 守卫幂等跳过，不吞专属 overrides；
+	# battle_sim 观察场同帧直启亦不受扰动。
 	if _team_ai_enabled():
 		call_deferred("_enable_team_ai_production", bi)
 	return bi
@@ -85,7 +85,7 @@ func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array,
 
 ## 帧末回调：对攻守双方启用 TeamAi（见 start_battle_at 注释）。
 ## overrides 不传——机制参数统一走 personality 单一档案（难度键已随难度层退役）；
-## 已注册阵营（专属调用方，如据点战守军撤仗阈值）跳过，保留其 overrides 语义。
+## 已注册阵营（带 overrides 的专属调用方）跳过，保留其 overrides 语义。
 func _enable_team_ai_production(bi: Node) -> void:
 	if bi == null or not is_instance_valid(bi) or not bi.has_method("enable_team_ai"):
 		return

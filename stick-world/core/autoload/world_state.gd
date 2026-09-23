@@ -34,17 +34,8 @@ var run_seed: int = 0
 ## 出生聚落不落此表——api 判定时恒视为已到访（不依赖开局加载时序）
 var visited_settlements: Dictionary = {}
 
-## 领地运行时状态（出征与领地循环，架构 §2.2）：{territory_id: 状态字典}。
-## 字段规范 = TerritoryRegistry.initial_state()（core 不反向依赖模块，此处内联同形）：
-##   state: int（0=HOSTILE/1=CAPTURED，TerritoryRegistry.State）；garrison_losses: int
-##   （车轮战累计守军战损，玩家败仗不判负只扣敌军）；control_progress: float
-##   （§9.1 P 社化预留，P0 恒 100）；owner: String（实际控制者 id，""=原主未易手 /
-##   "player"=玩家已占）；faction: String（控制者所属势力 id，factions.tres 外键，
-##   国家层接入前的预留位）。只存已发生变化的领地，缺失条目按初始态查询
-var territories: Dictionary = {}
-
 ## 已获解锁/科技 id 池（{unlock_id: true}）——"科技随征服到手"（设计 04-科技系统
-## §二）在科技系统实装前的通用台账：征服奖励的 rewards.unlocks 写此池，消费端
+## §二）在科技系统实装前的通用台账：解锁发放方经 grant_unlock 写此池，消费端
 ## （建筑可建集等）按 id 查询。开局基线见 STARTING_UNLOCKS。
 var unlocks: Dictionary = {}
 
@@ -70,7 +61,6 @@ var walk_origin_map_id: String = ""
 func start_new_run() -> void:
 	run_seed = randi()
 	visited_settlements = {}
-	territories = {}
 	unlocks = {}
 	reset_walk()
 
@@ -328,7 +318,6 @@ func get_save_data() -> Dictionary:
 		"game_time": game_time,
 		"run_seed": run_seed,
 		"visited_settlements": visited_settlements.keys(),
-		"territories": territories,
 		"unlocks": get_unlock_ids(),
 		"stickmen": WorldStateSerializer.serialize_dict(stickmen, WorldStateSerializer.stickman_to_dict),
 		"organizations": WorldStateSerializer.serialize_dict(organizations, WorldStateSerializer.organization_to_dict),
@@ -346,21 +335,6 @@ func load_save_data(data: Dictionary) -> void:
 	visited_settlements = {}
 	for sid in data.get("visited_settlements", []):
 		visited_settlements[str(sid)] = true
-	territories = {}
-	# JSON 往返把 int 变 float，载入侧整型还原（字段规范见 TerritoryRegistry.initial_state，
-	# core 不反向依赖模块故此处内联同形——两处字段须同步改）
-	var ter_save: Dictionary = data.get("territories", {})
-	for tid in ter_save:
-		var v: Variant = ter_save[tid]
-		if not (v is Dictionary):
-			continue
-		territories[str(tid)] = {
-			"state": int(v.get("state", 0)),
-			"garrison_losses": int(v.get("garrison_losses", 0)),
-			"control_progress": float(v.get("control_progress", 100.0)),
-			"owner": str(v.get("owner", "")),
-			"faction": str(v.get("faction", "")),
-		}
 	# 解锁池：旧档无 unlocks 字段时为空（基线经 has_unlock 恒生效，不靠存档补齐）
 	unlocks = {}
 	for uid in data.get("unlocks", []):

@@ -300,32 +300,6 @@ func _stickman_cmd_attribute(stickman_id: String) -> float:
 	return float(value) if value is float or value is int else -1.0
 
 
-# ─────────────────────────────── 征服系统装配（出征与领地架构 §一）───────────────────────────────
-
-## 实例化 ExpansionApi + ConquestManager：单一 TerritoryRegistry 共享给
-## api 查询面/GarrisonSpawner/ConquestManager；ConquestManager 常驻 GameRoot
-## （监听全局 map_loaded/battle_ended，领地状态跨图存活）。
-func _setup_conquest_system() -> void:
-	var registry := TerritoryRegistry.new()
-	registry.load_config()
-	var api := Node.new()
-	api.set_script(_host._ExpansionApiScript)
-	api.name = "ExpansionApi"
-	_host._root.add_child(api)
-	_host._root._expansion_api = api
-	api.setup(registry)
-	var spawner := GarrisonSpawner.new()
-	spawner.setup(registry)
-	var manager := Node.new()
-	manager.set_script(_host._ConquestManagerScript)
-	manager.name = "ConquestManager"
-	_host._root.add_child(manager)
-	_host._root._conquest_manager = manager
-	manager.setup(registry, spawner, api,
-			_host._root._combat_api, _host._root._resources_api, _host._root.scene_loader)
-	api.set_flow_manager(manager)
-
-
 # ─────────────────────────────── 招兵与人口装配（游戏循环深化批次 1）───────────────────────────────
 
 ## RecruitManager 常驻 GameRoot（人口再生 tick 跨图存活但只在村A 计时）；

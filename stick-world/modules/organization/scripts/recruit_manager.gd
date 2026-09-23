@@ -12,7 +12,7 @@ extends Node
 ## 劳工池（不再被建造派工），战损后由人口再生补员，回路闭合：
 ## 资源 → 招兵 → 村民减少 → 人口再生 → 可再招。
 ##
-## 装配：SystemSetup 挂 GameRoot 常驻（照 ConquestManager 同模式）；跨模块
+## 装配：SystemSetup 挂 GameRoot 常驻；跨模块
 ## 消费经 OrganizationApi 转发（api.gd 招兵段），玩家交互经
 ## interaction_controller → entity.get_organization_api() 触发。
 

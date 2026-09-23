@@ -96,11 +96,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_settings_apply.tscn"
 	"tests/integration/test_notification_feed.tscn"
 	"tests/integration/test_debug_api.tscn"
-	"tests/integration/test_expansion_territories.tscn"
 	"tests/integration/test_battle_retreat.tscn"
-	"tests/integration/test_garrison_spawner.tscn"
-	"tests/integration/test_conquest_flow.tscn"
-	"tests/integration/test_conquest_e2e.tscn"
 	"tests/integration/test_recruit_flow.tscn"
 	"tests/integration/test_town_life_harvest.tscn"
 	"tests/integration/test_town_life_worksite.tscn"
@@ -119,9 +115,6 @@ declare -A SUITE_TIMEOUT=(
 	# 实测 94~118s（并行 3 下），原 180 预算按"串行×2"公式偏低——池内争用时曾误杀一次 TIMEOUT。
 	# 提到 240 保留挂死检测能力（真挂死远不止此数），消除争用误杀。
 	["tests/integration/test_battle_retreat.tscn"]=240
-	["tests/integration/test_garrison_spawner.tscn"]=120
-	["tests/integration/test_conquest_flow.tscn"]=180
-	["tests/integration/test_conquest_e2e.tscn"]=180
 	["tests/integration/test_recruit_flow.tscn"]=120
 	["tests/integration/test_town_life_harvest.tscn"]=240
 	["tests/integration/test_town_life_worksite.tscn"]=300
@@ -198,21 +191,14 @@ affected_suites() {
 				picked["tests/integration/test_town_life_harvest.tscn"]=1
 				picked["tests/integration/test_game_root_assembly.tscn"]=1
 				picked["tests/integration/test_village_map.tscn"]=1
-				picked["tests/integration/test_garrison_spawner.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1
 				picked["tests/integration/test_modal_stack.tscn"]=1
 				picked["tests/integration/test_battle_ui.tscn"]=1
-				picked["tests/integration/test_conquest_e2e.tscn"]=1
 				picked["tests/integration/test_recruit_flow.tscn"]=1
 				picked["tests/smoke/test_new_game_smoke.tscn"]=1
 				picked["tests/smoke/test_cross_map_travel.tscn"]=1 ;;
 			stick-world/modules/debug_gui/*|stick-world/modules/debug_GUI/*)
 				picked["tests/integration/test_debug_api.tscn"]=1 ;;
-			stick-world/modules/expansion/*)
-				picked["tests/integration/test_expansion_territories.tscn"]=1
-				picked["tests/integration/test_garrison_spawner.tscn"]=1
-				picked["tests/integration/test_conquest_flow.tscn"]=1
-				picked["tests/integration/test_conquest_e2e.tscn"]=1 ;;
 			stick-world/modules/ui_global/*)
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_menu_navigation.tscn"]=1
@@ -220,8 +206,7 @@ affected_suites() {
 				picked["tests/integration/test_esc_key_input.tscn"]=1
 				picked["tests/integration/test_ui_layout.tscn"]=1
 				picked["tests/integration/test_settings_apply.tscn"]=1
-				picked["tests/integration/test_notification_feed.tscn"]=1
-				picked["tests/integration/test_conquest_e2e.tscn"]=1 ;;
+				picked["tests/integration/test_notification_feed.tscn"]=1 ;;
 			stick-world/modules/resources/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1 ;;
 			stick-world/modules/organization/*)

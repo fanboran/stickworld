@@ -47,8 +47,7 @@ modules/world_map/
 │   ├── l1_thumbnail.gd              # L1Thumbnail：顶部小地图区世界缩略窗（Tab 顶部态双窗之一，另一窗 = Minimap）
 │   ├── map_title_bar.gd             # MapTitleBar：左上角视图名牌（层级徽标 + 视图名 + 数据概览）
 │   ├── map_legend.gd                # MapLegend：右下角图例（数据驱动，切模式换整套条目）
-│   ├── settlement_tooltip.gd        # SettlementTooltip：聚落悬停提示（含据点归属行）
-│   ├── territory_panel.gd           # TerritoryPanel：左上据点面板（已占/未易手清单，行点击定位并激活）
+│   ├── settlement_tooltip.gd        # SettlementTooltip：聚落悬停提示（含归属行骨架，真值源接入前恒隐藏）
 │   ├── province_switch_arrows.gd     # ProvinceSwitchArrows：屏幕左中/右中扁等腰三角（点击切相邻 L1 省份）
 │   ├── travel_dialog.gd             # TravelDialog：双击聚落弹窗 [走过去 | 快速旅行 | 取消]
 │   └── map_ocean_backdrop.gd        # MapOceanBackdrop：全屏海洋底（三视图共用，CanvasLayer 首子节点）
@@ -78,9 +77,9 @@ modules/world_map/
 - 选中/相机/模式：`select` / `deselect` / `camera_focus` / `screen_to_map` / `map_to_screen` / `set_map_mode` / `get_map_mode`
 - 政治（只读）：`get_state_color` / `get_states`
 
-**消费的全局事件**：`EventBus.settlement_updated`（聚落规模刷新 → 当前 L1 单城 blob 重算；L2/L3 为烘焙静态层不重算）、`battle_started/ended`（战斗中禁旅行）、`territory_state_changed`（据点面板重刷，`TerritoryPanel` 订阅）、`region_owner_changed` 与 `territory_state_changed`（归属变动 → `api.refresh_territory_ownership` 整表重取已占地块喂给渲染器）。
+**消费的全局事件**：`EventBus.settlement_updated`（聚落规模刷新 → 当前 L1 单城 blob 重算；L2/L3 为烘焙静态层不重算）、`battle_started/ended`（战斗中禁旅行）、`region_owner_changed`（归属变动 → api 内部归属累积表 → `refresh_territory_ownership` 整表重取已占地块喂给渲染器；发射方待世界模型接入，接入前测试可代发驱动）。
 
-**疆域染色**：政治模式的地块填充按已占地块**逐格**覆盖（占多少染多少，不整国变色）——取色唯一出口 `MapRenderer.tile_fill_color`，玩家疆域色取自 `MapTokens.L1_PLAYER_TERRITORY_COLOR`（纯白，渲染器与政治图例同源）；已占集合来自 expansion 契约面 `get_owned_tile_keys()`（组 `expansion_api` 查找，不引 expansion 全局类名）。
+**疆域染色**：政治模式的地块填充按已占地块**逐格**覆盖（占多少染多少，不整国变色）——取色唯一出口 `MapRenderer.tile_fill_color`，玩家疆域色取自 `MapTokens.L1_PLAYER_TERRITORY_COLOR`（纯白，渲染器与政治图例同源）；已占集合来自本模块 api 的 `get_owned_tile_keys()`（内部归属累积表，玩家 id="player"，由 `region_owner_changed` 驱动累积）。
 
 **政治模式观感（WorldBox 式）**：地形贴图（`l1_terrain.png`）打底 → 政权色**半透明**覆盖（`MapRenderer.POLITICAL_FILL_ALPHA`）→ 完。**无描边层**（创始人 2026-09-22 裁决删除——描边是语义强调不是修复手段，色块自身边界已可读），灰城界只留给地形模式。河流在贴图层（陆上线状水，城块归属穿河而过、色块盖不到水所以贴图河原样可见）；海/湖为面状水体（城块不进，贴图水原样透出）。L2/L3 世界图仍是烘焙 mask 的不透明政治填充 + 墨色界线。
 

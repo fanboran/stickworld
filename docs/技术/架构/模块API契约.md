@@ -160,31 +160,17 @@ func set_tax_rate(rate: float) -> Dictionary
 
 ---
 
-## 四、扩张模块 `modules/expansion/api.gd`（未实现，阶段 2 设计契约）
+## 四、扩张模块 `modules/expansion`（无对外 api）
+
+expansion 模块不设 `api.gd` 对外契约面（据点玩法层的配置/编排/出入口按 [`docs/设计/完整版蓝图.md`](../设计/完整版蓝图.md) §6.1 拆除，模块收敛为纯管道）；仅保留驻军生成服务：
 
 ```gdscript
-# 地块查询
-func get_region(region_id: String) -> Dictionary
-func get_adjacent_regions(region_id: String) -> Array[String]
-func get_regions_by_owner(owner_id: String) -> Array[String]
-func get_control_percentage(region_id: String) -> float
-
-# 控制度变化（战斗系统调用）
-func add_control(region_id: String, amount: float, new_owner: String) -> Dictionary
-# [Q] 控制度增加, 达到 100% 时发射 territory_gained
-
-func lose_control(region_id: String, amount: float) -> Dictionary
-# [Q] 控制度减少, 降至 0% 时发射 territory_lost
-
-# 外交
-func declare_war(target_id: String, casus_belli: String) -> Dictionary
-func propose_peace(target_id: String, terms: Dictionary) -> Dictionary
-func propose_alliance(target_id: String) -> Dictionary
-func annex_vassal(vassal_id: String) -> Dictionary
-
-# 殖民
-func start_colonization(region_id: String, org_id: String) -> Dictionary
-# [P] region 无主
+# scripts/garrison_spawner.gd（RefCounted 纯服务，无节点、无信号）
+func spawn_garrison(map: Node, row: Dictionary) -> Array
+# 按 map 内 ConquestAnchor 布阵刷出守军实体，返回守军实体名单
+# [P] row 为编成 Dictionary 直接传入：{garrison: [{profile, count, tier}], commander: {profile}}
+# [Q] ConquestAnchor 位于 modules/world/scripts/map/（HD-2D 宿主直接消费）
+# 数据源：编成由调用方给定，将来 = 世界模型政权账面；当前无生产调用方（测试可代发驱动）
 ```
 
 ---

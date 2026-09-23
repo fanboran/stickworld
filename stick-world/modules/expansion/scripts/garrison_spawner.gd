@@ -1,21 +1,15 @@
 class_name GarrisonSpawner
 extends RefCounted
-## 守军生成器 —— 按 ConquestAnchor 布阵 + territories 配置刷据点守军。
+## 驻军生成管道 —— 按 ConquestAnchor 布阵 + 外部传入编成刷守军。
 ##
-## 出处：docs/技术/架构/出征与领地架构.md §一/§2.3/§4.3（本类为 C4 落地）。
-## 职责边界：只刷军不开战——监听 map_loaded 与 CombatApi.start_battle 的接敌
-## 编排归 ConquestManager（批次 C5）。刷单位照 initial_content 先例走
-## UnitsApi 场景常量 + MapBase.spawn_entity（兵种档案经 spawn 的 def_id 参数
-## 在进树前写入，实体 _ready 拉数值）。
-##
-## 车轮战持久化：剩余守军 = 配置 count 之和 − WorldState.territories[id]
-## .garrison_losses（败仗战损累计，ConquestManager 批次 C5 写入）；逐条目从
-## 头部填满（前排主力优先满编，后排先缺）。已臣服据点（CAPTURED）短路不刷。
-## 敌将（commander）不受 garrison_losses 影响，每次进图均在位。
+## 职责边界：只刷军不开战（接敌开战编排归调用方）。刷单位照 initial_content
+## 先例走 UnitsApi 场景常量 + MapBase.spawn_entity（兵种档案经 spawn 的 def_id
+## 参数在进树前写入，实体 _ready 拉数值）。编成数据源 = 调用方给的 row
+## （{garrison: [{profile, count, tier}], commander: {profile}}）。
 
 ## 守军单位来源标记（调试/测试识别；战斗侧不读）
 const META_GARRISON_UNIT := "garrison_unit"
-## 敌将来源标记（ConquestManager 败仗统计排除敌将用——敌将不受 garrison_losses 扣减，架构 §2.3）
+## 敌将来源标记（战损统计/筛选排除敌将用——敌将属指挥层不计入伍额）
 const META_GARRISON_COMMANDER := "garrison_commander"
 ## 守军战术档位透传（tactics.tres 的战术 id；行为消费端待战术系统实装）
 const META_GARRISON_TIER := "garrison_tier"
@@ -36,20 +30,15 @@ const _VARIANT_WEAPONS := {
 	"meric": WeaponMount.WeaponType.MERIC,
 }
 
-var _registry: TerritoryRegistry = null
 ## 无锚点警告每图只发一次（fallback 属可玩降级，不刷屏）
 var _warned_maps: Dictionary = {}
 
 
-## 注入领地清单（与 expansion/api.gd 共享同一实例）
-func setup(registry: TerritoryRegistry) -> void:
-	_registry = registry
-
-
-## 按配置刷据点守军（含敌将），返回全部守军实体数组（供 ConquestManager
-## 开战传 defenders；空数组 = 已臣服/配置缺失/无可刷条目）。
-func spawn_garrison(map: Node2D, territory_id: String) -> Array:
-	var row := get_effective_row(territory_id)
+## 按编成刷守军（含敌将），返回全部守军实体数组（供调用方开战传
+## defenders；空数组 = 编成缺失/无可刷条目）。
+## row 字段：{garrison: [{profile: String, count: int, tier: String}],
+## commander: {profile: String}}（tier 为 tactics.tres 战术 id 透传）
+func spawn_garrison(map: Node2D, row: Dictionary) -> Array:
 	if row.is_empty() or map == null:
 		return []
 	var anchor: ConquestAnchor = ConquestAnchor.find_in(map)
@@ -74,7 +63,7 @@ func spawn_garrison(map: Node2D, territory_id: String) -> Array:
 			if not tier.is_empty():
 				u.set_meta(META_GARRISON_TIER, tier)
 			spawned.append(u)
-	# 敌将（不受车轮战扣减；无锚点时布在守军阵末位之后）
+	# 敌将（无锚点时布在守军阵末位之后）
 	var commander: Dictionary = row.get("commander", {}) if row.get("commander", {}) is Dictionary else {}
 	var cmd_profile := String(commander.get("profile", ""))
 	if not cmd_profile.is_empty():
@@ -90,32 +79,6 @@ func spawn_garrison(map: Node2D, territory_id: String) -> Array:
 			c.set_meta(META_GARRISON_COMMANDER, true)
 			spawned.append(c)
 	return spawned
-
-
-## 车轮战扣减后的有效配置（garrison 条目 count 已扣减 garrison_losses；
-## 配置缺失返回空字典）。扣减语义：剩余配额从头部条目填满，后排先缺——
-## 规则单一真相源在 TerritoryRegistry.apply_losses（守军情报展示同用，防分叉）。
-func get_effective_row(territory_id: String) -> Dictionary:
-	if _registry == null or not _registry.has_territory(territory_id):
-		return {}
-	var row: Dictionary = _registry.get_territory(territory_id)
-	# 已臣服据点再进：不刷守军（架构 §2.3），以友化空图运行
-	if get_territory_state(territory_id) == TerritoryRegistry.State.CAPTURED:
-		return {}
-	var losses: int = _registry.get_garrison_losses(territory_id)
-	if losses <= 0:
-		return row
-	var effective := row.duplicate(true)
-	effective["garrison"] = TerritoryRegistry.apply_losses(row.get("garrison", []), losses)
-	return effective
-
-
-## 领地运行时状态（与 api.get_territory_state 同语义：无记录按 HOSTILE）
-func get_territory_state(territory_id: String) -> int:
-	var record: Variant = WorldState.territories.get(territory_id, {})
-	if not (record is Dictionary):
-		return TerritoryRegistry.State.HOSTILE
-	return int(record.get("state", TerritoryRegistry.State.HOSTILE))
 
 
 ## 守军出生点：锚点 GarrisonSlots 优先；无锚点按地图右侧半区程序化横排

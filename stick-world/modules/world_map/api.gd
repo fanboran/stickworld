@@ -60,6 +60,14 @@ var _block_filter: Callable = Callable()
 ## 战斗中标志（battle_started/battle_ended 计数维护；战斗中禁用快速旅行）
 var _battle_count: int = 0
 
+# ===== 疆域染色（region_owner_changed 管道） =====
+
+## 玩家政权 id（region_owner_changed 载荷口径；统一契约落地后为政权域 id）
+const PLAYER_OWNER_ID := "player"
+## 地块归属累积表：{tile_key: owner_id}——由 region_owner_changed 信号驱动
+## （发射方为世界模型政权归属变更；接入前测试可代发驱动染色管道）
+var _tile_owners: Dictionary = {}
+
 
 # ===== 初始化 =====
 
@@ -108,33 +116,29 @@ func initialize(json_path: String, base_dir: String) -> void:
 			# 疆域归属变动 → 政治模式逐地块染色刷新（占多少染多少）
 			if not EventBus.region_owner_changed.is_connected(_on_region_owner_changed):
 				EventBus.region_owner_changed.connect(_on_region_owner_changed)
-			if not EventBus.territory_state_changed.is_connected(_on_territory_state_changed_for_owner):
-				EventBus.territory_state_changed.connect(_on_territory_state_changed_for_owner)
 		refresh_territory_ownership()
 
 
-## 归属变动（ConquestManager 占领后广播）→ 重取已占地块表。
-## 一律整表重取而不是按载荷增量改：真值是 WorldState.territories，
-## 重取幂等且与"读档读回的归属"同一路径（信号载荷只作触发用）
-func _on_region_owner_changed(_tile_key: String, _new_owner: String) -> void:
+## 归属变动 → 累积表更新并重刷
+func _on_region_owner_changed(tile_key: String, new_owner: String) -> void:
+	_tile_owners[tile_key] = new_owner
 	refresh_territory_ownership()
 
 
-func _on_territory_state_changed_for_owner(_territory_id: String, _new_state: int) -> void:
-	refresh_territory_ownership()
+## 玩家已占地块 id 列表（政治模式逐地块染色 + 图例「我方疆域」数据源）
+func get_owned_tile_keys() -> Array:
+	var keys: Array = []
+	for tile_key in _tile_owners:
+		if String(_tile_owners[tile_key]) == PLAYER_OWNER_ID:
+			keys.append(tile_key)
+	return keys
 
 
-## 已占地块表 → 渲染器（政治模式逐地块染色）。数据源 = expansion 契约面
-## （组查找，不引 expansion 全局类名）；expansion 未装配（dev 直开战略图）→ 空表 = 不染色
+## 已占地块表 → 渲染器（政治模式逐地块染色；空表 = 不染色）
 func refresh_territory_ownership() -> void:
 	if _renderer == null or not _renderer.has_method("set_owned_tiles"):
 		return
-	var tree := get_tree()
-	var expansion: Node = tree.get_first_node_in_group("expansion_api") if tree != null else null
-	var keys: Array = []
-	if expansion != null and expansion.has_method("get_owned_tile_keys"):
-		keys = expansion.get_owned_tile_keys()
-	_renderer.set_owned_tiles(keys)
+	_renderer.set_owned_tiles(get_owned_tile_keys())
 
 
 func _on_battle_started(_battle_id: String) -> void:

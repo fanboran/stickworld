@@ -59,8 +59,6 @@ const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/
 const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
 const _DemoQuestScript: GDScript = preload("res://modules/world/scripts/setup/demo_quest.gd")
 const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/entity/unit_lod_director.gd")
-const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
-const _ConquestManagerScript: GDScript = preload("res://modules/expansion/scripts/conquest_manager.gd")
 const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
 const _OrgReportNarratorScript: GDScript = preload("res://modules/organization/ui/org_report_narrator.gd")
 const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
@@ -161,7 +159,6 @@ func _step_table() -> Array:
 		["编队系统", _setup_formation_system],
 		["战术系统", _setup_tactical_system],
 		["指挥传输", _setup_command_transport],
-		["征服系统", _setup_conquest_system],
 		["招兵系统", _setup_recruit_system],
 		["战斗面板", _setup_battle_panel],
 		["编队面板", _setup_formation_panel],
@@ -239,10 +236,6 @@ func _setup_tactical_system() -> void:
 
 func _setup_command_transport() -> void:
 	_core()._setup_command_transport()
-
-
-func _setup_conquest_system() -> void:
-	_core()._setup_conquest_system()
 
 
 func _setup_recruit_system() -> void:

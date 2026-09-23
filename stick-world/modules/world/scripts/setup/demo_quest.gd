@@ -1,5 +1,5 @@
 extends Node
-## 演示目标链 —— 四阶段引导（采集→建造→编队→征伐）+ 演示结算 + 通关结算。
+## 演示目标链 —— 三阶段引导（采集→建造→编队）+ 演示结算。
 ##
 ## 存在意义：Demo 阶段给陌生玩家一条"10 分钟能走完的目标线"，把自由沙盒收束成
 ## 有头有尾的章节体验（创始人诉求：HR 打开知道要干什么）。
@@ -8,11 +8,9 @@ extends Node
 ## - 采集：ResourcesApi.resource_changed（基线法累计，避免把开局初始资源算成进度）
 ## - 建造：ConstructionApi.building_completed
 ## - 编队：EventBus.squad_created
-## - 征伐：EventBus.territory_state_changed（任意据点 CAPTURED，架构 §七）——
-##   battle_ended 只做战斗横幅与胜局统计，不再驱动目标（旧"战场"目标已退役）
+## - battle_ended 只做战斗横幅与胜局统计，不驱动目标
 ##
-## 通关结算分层（架构 §七）：第四目标完成即弹演示结算（第一章）；3 座据点全占
-## 由 expansion.conquest_completed 弹通关总结算（victory_overlay 复用）。
+## 末目标完成即弹演示结算（第一章）。
 ##
 ## 由 SystemSetup 在资源系统 deferred 装配之后创建（保证初始资源已发放、
 ## 基线快照正确），UI 部件 QuestPanel / VictoryOverlay 均由本组件驱动。
@@ -24,9 +22,6 @@ const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud
 const _VictoryOverlayScript: GDScript = preload("res://modules/ui_global/scripts/overlays/victory_overlay.gd")
 const _OpeningHintScript: GDScript = preload("res://modules/ui_global/scripts/overlays/opening_hint_overlay.gd")
 const _BattleBannerScript: GDScript = preload("res://modules/ui_global/scripts/overlays/battle_banner.gd")
-## expansion 模块对外契约（STATE_CAPTURED 常量 + conquest_completed 信号；
-## 跨模块引用走 api.gd，SystemSetup 同款先例）
-const _ExpansionApiScript: GDScript = preload("res://modules/expansion/api.gd")
 
 var _quests: Array = []
 var _index: int = -1
@@ -64,8 +59,6 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 			"desc": "右下角「建造」→ 选建筑 → 左键放置 → 靠近按 F 施工", "target": 1.0},
 		{"id": "squad", "title": "组建一个编队",
 			"desc": "顶栏「编制」创建编队（或 Q 切战斗模式框选士兵）", "target": 1.0},
-		{"id": "conquest", "title": "攻陷敌据点",
-			"desc": "敌据点犯境：率队出征，攻陷第一座敌据点——去右侧城门，选「⚔ 征伐」", "target": 1.0},
 	]
 	# 读档启动：玩家已有进度，不重新引导（目标全达成、不弹演示结算）
 	if SaveManager != null and SaveManager.boot_load_slot >= 0:
@@ -85,8 +78,7 @@ func setup(panel: Control, resources_api: Node, construction_api: Node, ui_root:
 	_notify("欢迎来到火柴人大战略", "WASD 移动 · E 采集/交互 · Q 战斗模式 · Tab 战略图 · ESC 暂停")
 
 
-## 读档局：全部目标直接标记完成（不弹演示、不发推进信号）；
-## 通关结算信号仍接（读档后继续征伐到全占，总结算照常）
+## 读档局：全部目标直接标记完成（不弹演示、不发推进信号）
 func _skip_all_for_loaded_save() -> void:
 	_index = _quests.size()
 	_victory_shown = true
@@ -94,7 +86,6 @@ func _skip_all_for_loaded_save() -> void:
 		for q in _quests:
 			_panel.mark_done(String(q.title))
 		_panel.show_all_done()
-	_bind_conquest_signals()
 
 
 # ─────────────────────────────── 信号绑定 ────────────────────────────────
@@ -112,23 +103,6 @@ func _bind_signals() -> void:
 			EventBus.battle_ended.connect(_on_battle_ended)
 		if EventBus.has_signal("battle_started"):
 			EventBus.battle_started.connect(_on_battle_started)
-		if EventBus.has_signal("territory_state_changed"):
-			EventBus.territory_state_changed.connect(_on_territory_state_changed)
-	_bind_conquest_signals()
-
-
-## 通关结算信号（expansion 点对点，架构 §五）——setup 与读档局两路都接
-func _bind_conquest_signals() -> void:
-	var api: Node = _expansion_api()
-	if api != null and api.has_signal("conquest_completed"):
-		if not api.conquest_completed.is_connected(_on_conquest_completed):
-			api.conquest_completed.connect(_on_conquest_completed)
-
-
-## expansion api（GameRoot 装配字段；缺失时返回 null，引导功能静默降级）
-func _expansion_api() -> Node:
-	var root: Node = get_parent()
-	return root.get("_expansion_api") if root != null and "_expansion_api" in root else null
 
 
 # ─────────────────────────────── 目标推进 ────────────────────────────────
@@ -151,7 +125,6 @@ func _advance() -> void:
 	_panel.show_quest(String(q.title), String(q.desc), _progress_text(q))
 	if EventBus != null and EventBus.has_signal("quest_advanced"):
 		EventBus.quest_advanced.emit(String(q.id))
-	_update_battle_arrow(String(q.id))
 	_villager_speak(String(q.id))
 	# 采集类目标推进时立即检查一次（乱序期间可能已采够）
 	if String(q.id) == "harvest" and _quest_progress(q) >= float(q.target):
@@ -252,43 +225,9 @@ func _on_battle_started(_battle_id: String) -> void:
 
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 	_show_battle_banner(victory)
-	# victory 语义 = 玩家阵营胜（C2 修正，BattleInstance.player_faction 基准）。
-	# 第四目标不再由战斗胜负驱动（据点占领走 territory_state_changed），只做统计。
+	# victory 语义 = 玩家阵营胜（BattleInstance.player_faction 基准）；只做统计
 	if victory:
 		_battle_win_count += 1
-
-
-## 第四目标完成判定（架构 §七）：任意敌据点 CAPTURED = "攻陷第一座敌据点"
-func _on_territory_state_changed(_territory_id: String, new_state: int) -> void:
-	if new_state != _ExpansionApiScript.STATE_CAPTURED:
-		return
-	if _is_current("conquest"):
-		_complete_current()
-	else:
-		_pending_done["conquest"] = true
-
-
-## 通关总结算（3 座全占；与演示结算分层，victory_overlay 复用，架构 §七）
-func _on_conquest_completed(stats: Dictionary) -> void:
-	if _ui_root == null:
-		_notify("全境归服", "敌据点已全部荡平，继续自由游玩！")
-		return
-	var overlay: Control = UIKit.full_rect(_VictoryOverlayScript, "ConquestVictoryOverlay")
-	if not _ui_root.add_to_slot("ModalOverlay", overlay):
-		overlay.queue_free()
-		return
-	if AudioManager != null:
-		# 通关礼炮是独立语义，不借用战斗结算音：
-		# 共用事件名会在 3 秒内互相掐断（2.84s 的长音被后一个停掉）
-		AudioManager.play_event("victory_fanfare")
-	var game_sec: int = int(float(stats.get("game_time", 0.0)))
-	overlay.show_conquest({
-		"time_text": "%d 分 %02d 秒" % [game_sec / 60, game_sec % 60],
-		"captured": int(stats.get("captured", 0)),
-		"total": int(stats.get("total", 0)),
-		"losses": int(stats.get("player_losses", 0)),
-	})
-	_notify("全境归服", "敌据点全部荡平，领地征服完成")
 
 
 func _is_current(quest_id: String) -> bool:
@@ -316,13 +255,11 @@ func _play_opening_camera() -> void:
 
 # ─────────────────────────────── 村民气泡（世界内引导）────────────────────────────────
 
-## 台词表：每个目标由村民之口说出（引导世界内化，而非纯 UI 弹窗）。
-## conquest 条目是兜底文案——实际台词按第一个未臣服据点名动态生成（§七）
+## 台词表：每个目标由村民之口说出（引导世界内化，而非纯 UI 弹窗）
 const _VILLAGER_LINES: Dictionary = {
 	"harvest": "村里的储备快见底了，东边的树和石头都能采！按住 E 别松手～",
 	"build": "材料够了就盖点什么吧！点右下角「建造」，选好后靠近敲几下。",
 	"squad": "人多力量大。顶栏「编制」把伙伴们编成一队，跟我们一起干！",
-	"conquest": "敌据点烧到村口了！去城门选「⚔ 征伐」，带弟兄们荡平它！",
 }
 
 func _villager_speak(quest_id: String) -> void:
@@ -335,22 +272,7 @@ func _villager_speak(quest_id: String) -> void:
 		_bubble = VillagerBubble.new()
 		_bubble.name = "VillagerBubble"
 		npc.add_child(_bubble)
-	var line := String(_VILLAGER_LINES[quest_id])
-	if quest_id == "conquest":
-		line = _conquest_line(line)
-	_bubble.speak(line, 4.5)
-
-
-## 征伐台词动态化：写第一个未臣服据点名（territories 配置，§七 对照表）；
-## api 缺失/已全占时回退兜底文案
-func _conquest_line(fallback: String) -> String:
-	var api: Node = _expansion_api()
-	if api == null or not api.has_method("list_targets"):
-		return fallback
-	for t in api.list_targets():
-		if t is Dictionary and not bool(t.get("captured", true)):
-			return "%s的敌人犯境了！去城门选「⚔ 征伐」，带弟兄们荡平它！" % String(t.get("name_zh", ""))
-	return fallback
+	_bubble.speak(String(_VILLAGER_LINES[quest_id]), 4.5)
 
 ## 找一个非附身村民（气泡宿主；NPC 生成晚于装配，惰性+失败静默）
 func _find_any_villager() -> Node2D:
@@ -363,51 +285,6 @@ func _find_any_villager() -> Node2D:
 		if ent != null and is_instance_valid(ent) and ent.has_method("is_possessed") 				and not ent.is_possessed() and ent.has_method("is_dead") and not ent.is_dead():
 			return ent
 	return null
-
-
-# ─────────────────────────────── 城门方向指示 ────────────────────────────────
-
-## 征伐目标激活时屏幕右缘呼吸箭头（城门=出城选项=征伐入口的空间引导，§七）
-var _battle_arrow: Control = null
-
-func _update_battle_arrow(quest_id: String) -> void:
-	if quest_id == "conquest":
-		_show_battle_arrow()
-	else:
-		_hide_battle_arrow()
-
-func _show_battle_arrow() -> void:
-	if _battle_arrow != null and is_instance_valid(_battle_arrow):
-		return
-	if _ui_root == null:
-		return
-	_battle_arrow = Control.new()  # 非 UI 根，纯承载容器（子节点自理 anchor）
-	_battle_arrow.name = "BattleArrow"
-	_battle_arrow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_battle_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var lbl := Label.new()
-	lbl.text = "▶ 城门 · 征伐"
-	lbl.add_theme_font_size_override("font_size", StickTokens.FONT_TITLE)
-	lbl.add_theme_color_override("font_color", Color(1.0, 0.62, 0.3))
-	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	lbl.add_theme_constant_override("outline_size", 5)
-	lbl.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	lbl.offset_left = -170.0
-	lbl.offset_right = -24.0
-	lbl.offset_top = -20.0
-	lbl.offset_bottom = 20.0
-	_battle_arrow.add_child(lbl)
-	var tw := lbl.create_tween().set_loops()
-	tw.tween_property(lbl, "modulate:a", 0.35, 0.7)
-	tw.tween_property(lbl, "modulate:a", 1.0, 0.7)
-	if not _ui_root.add_to_slot("HudOverlay", _battle_arrow):
-		_battle_arrow.queue_free()
-		_battle_arrow = null
-
-func _hide_battle_arrow() -> void:
-	if _battle_arrow != null and is_instance_valid(_battle_arrow):
-		_battle_arrow.queue_free()
-	_battle_arrow = null
 
 
 # ─────────────────────────────── 胜利结算 ────────────────────────────────

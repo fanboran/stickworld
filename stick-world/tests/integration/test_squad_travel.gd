@@ -140,7 +140,7 @@ func _test_squad_restored() -> void:
 
 
 ## 遭遇战已启动，双方人数正确（战场进图不再自动刷敌——测试直达组织遭遇战，
-## 验证跨图后开战链路可用；正式接敌编排归 ConquestManager，批次 C5）
+## 验证跨图后开战链路可用；正式接敌编排归世界模型焦点战争批次）
 func _test_battle_started() -> void:
 	if _battle_director == null or not _battle_director.has_method("has_active_battle"):
 		_runner.assert_true(false, "BattleDirector 为空")

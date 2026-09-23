@@ -2,8 +2,7 @@ extends Control
 ## 结算画面 —— 全屏半透明遮罩 + 中心结算卡（统计 + 继续按钮）。
 ##
 ## 经 UIKit.full_rect 创建、挂 UIRoot.ModalOverlay 槽；由 DemoQuest 调
-## show_victory（演示四阶段结算）/ show_conquest（领地征服通关结算，架构 §七）
-## 填充内容——同一卡片两种文案形态复用。点「继续游玩」隐藏自身（继续自由沙盒）。
+## show_victory（演示阶段结算）填充内容。点「继续游玩」隐藏自身（继续自由沙盒）。
 
 var _card: PanelContainer
 
@@ -33,17 +32,6 @@ func show_victory(stats: Dictionary) -> void:
 				int(stats.get("squads", 0)), int(stats.get("battles", 0)),
 			],
 			"自由沙盒已开放：Tab 战略图 / Q 战斗指挥 / 附身任意士兵微操")
-	_play_entrance()
-
-
-## 通关总结算（敌据点全部荡平）。stats: {time_text, captured, total, losses}
-func show_conquest(stats: Dictionary) -> void:
-	_fill_card("全 境 归 服", "火柴人大战略 —— 领地征服完成",
-			"占领 %d / %d　·　用时 %s　·　我方伤亡 %d" % [
-				int(stats.get("captured", 0)), int(stats.get("total", 0)),
-				String(stats.get("time_text", "-")), int(stats.get("losses", 0)),
-			],
-			"这一片土地已姓火柴：继续经营村庄，或 Tab 战略图巡视版图")
 	_play_entrance()
 
 

@@ -5,7 +5,7 @@ extends RefCounted
 ## 数据源：`config/strategic_map/l1_province_politics.json`（worldgen 侧表，由
 ## `tools/worldgen/l1/export_province_politics.py` 从 l3_l1.json 多边形 ×
 ## l3_political_id_8192.png 众数采样产出）。**静态快照**：世界生成期的主导政权，
-## 不随运行时占领变动（领土归属真值在 `WorldState.territories`，见出征与领地架构 §9.1）。
+## 不随运行时占领变动（运行时归属染色走 EventBus.region_owner_changed 管道）。
 ##
 ## 消费点（都在 L1 视图的"邻省上下文层"）：
 ##   1) 政治模式邻省色块按各自主导政权色**暗一阶**上色（地形照常透出），不再一律平灰；

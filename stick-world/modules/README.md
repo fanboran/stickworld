@@ -40,7 +40,7 @@
 | `fx`                   | 战斗特效（粒子池 FxPool + FxLibrary 效果配置：血溅/火花/飘字等） | ✅ 在役     |
 | `items`                | 物品域 L1（ItemDef/ItemContainer 列表制/ItemTransfer/资源品映射，独立于背包与仓储） | ✅ 在役     |
 | `inventory`            | 玩家背包与装备（列表制背包/装备槽/Hotbar 指派/合一窗口/翻包与村仓 UI，经 InventoryService） | ✅ 在役     |
-| `expansion`            | 出征与领地（TerritoryRegistry/GarrisonSpawner/ConquestManager） | ✅ P0 在役（C1~C7） |
+| `expansion`            | 驻军生成管道（GarrisonSpawner，零出向纯管道，无 api.gd） | 🟡 无装配调用方（数据源待世界模型） |
 | `town_life`            | NPC 小镇生活（职业分工/劳作/经济自动产出端）   | ✅ 在役     |
 
 > **已废弃**：~~`modules/world_map/scripts/world_map_controller.gd`~~ 已删除（重构为 `strategic_map_controller.gd`；P0 新 0.9 进一步重写为 L1 单层，旧三级粒度框架弃用，见 [待办事项.md](../../docs/项目/待办事项.md) 高优先级）。
@@ -50,20 +50,20 @@
 ## 2. 模块依赖图
 
 > **单向规则**：箭头方向 = "依赖"，高层依赖底层，低层不反向调用。`api.gd` 是允许的耦合点。
-> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 4 个依赖环（静态口径，含 class_name 边）：expansion⇄world / organization⇄world / town_life⇄units / world⇄world_map（均数据面弱耦合在册容忍）；combat⇄units（AR-2）与 hd2d→units（AR-1）已随 `tactics`/`stick_rig` 域拆分清偿。越界基线 = 非装配器跨模块 preload 6 处 + 裸字符串 2 处（audit_deps 越界清单）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。
+> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 3 个依赖环（静态口径，含 class_name 边）：organization⇄world / town_life⇄units / world⇄world_map（均数据面弱耦合在册容忍）；combat⇄units（AR-2）、hd2d→units（AR-1）与 expansion⇄world 已清偿。越界基线 = 非装配器跨模块 preload 6 处 + 裸字符串 2 处（audit_deps 越界清单）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。
 
 ```
                               ┌────────────────────────────────┐
-                              │  world（装配根，GameRoot）      │ ← 依赖全部 18 个模块
+                              │  world（装配根，GameRoot）      │ ← 依赖全部 17 个模块
                               └────────────────────────────────┘
-   ┌────────────┬─────────────┼─────────────┬──────────────┐
-   ▼            ▼             ▼             ▼              ▼
-┌─────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐
-│ world_  │ │ organiza│ │ expansion│ │ combat   │ │ inventory │   玩法/视图层
-│   map   │ │  tion   │ │          │ │          │ │           │
-└────┬────┘ └────┬────┘ └────┬─────┘ └────┬─────┘ └─────┬─────┘
-     │           │           │            │             │
-     │           │           ▼            ▼             │
+   ┌───────────────────┼──────────────┬───────────────┐
+   ▼                   ▼              ▼               ▼
+┌─────────┐ ┌─────────┐ ┌──────────┐ ┌───────────┐
+│ world_  │ │ organiza│ │ combat   │ │ inventory │   玩法/视图层
+│   map   │ │  tion   │ │          │ │           │
+└────┬────┘ └────┬────┘ └────┬─────┘ └─────┬─────┘
+     │           │           │             │
+     │           │           ▼             │
      │           │      ┌──────────────────────────┐    │
      │           │      │ units→{combat,formation} │    │   执行者（town_life→units）
      │           │      │ tactics（目标/号令词汇）  │    │
@@ -75,17 +75,17 @@
 │   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
 │   hd2d→{environment, stick_rig, ui_global}                  │
 └─────────────────────────────────────────────────────────────┘
-   （items / fx / environment / resources / stick_rig / tactics 无出向依赖）
+   （items / fx / environment / resources / stick_rig / tactics / expansion 无出向依赖）
 ```
 
 **实测边表**（`python tools/audit_deps.py`，直接依赖）：
 
 | 模块 | 依赖（出向） |
 |------|------------|
-| `world` | 全部 18 模块（building_gen/combat/construction/debug_gui/environment/expansion/formation/fx/hd2d/inventory/organization/player_control/resources/tactics/town_life/ui_global/units/world_map） |
+| `world` | 全部 17 模块（building_gen/combat/construction/debug_gui/environment/formation/fx/hd2d/inventory/organization/player_control/resources/tactics/town_life/ui_global/units/world_map） |
 | `world_map` | ui_global, world |
 | `organization` | building_gen, ui_global, units, world |
-| `expansion` | units, world |
+| `expansion` | （无，零出向） |
 | `combat` | formation, fx, player_control, stick_rig, tactics, ui_global |
 | `units` | combat, formation, fx, items, player_control, stick_rig, tactics, town_life |
 | `formation` | tactics, ui_global |
@@ -104,7 +104,7 @@
 
 - `world` 是装配根：所有模块实例由 `system_setup.gd` 在 GameRoot 下装配注入
 - `organization` 是枢纽：军事组织触发 `combat`、工程组织触发 `construction`、商业组织触发 `resources` 流动
-- `units` 是被调用方：玩法系统（combat/town_life/expansion）通过 `units/api.gd` 拉取/驱动火柴人
+- `units` 是被调用方：玩法系统（combat/town_life）通过 `units/api.gd` 拉取/驱动火柴人
 - `world` 是场景图容器：所有运行实体（建筑、单位、组织实例）都挂在它的 `MapInstance` 下
 - `world_map` 是战略图视图：依赖 `world` 取数据、`ui_global` 出 UI；玩家不在其中
 
@@ -974,7 +974,7 @@ config/
 | 指挥中继 | `relay_started(relay_id, order_type, from_org, to_org, hop_index, eta)` / `relay_arrived(relay_id, order_type, from_org, to_org, hop_index, outcome)` |
 | 场景/旅行 | `travel_requested(map_id, travel_mode)` / `travel_started(from_id, to_id, mode)` / `travel_completed(to_id)` / `map_loaded(map_id, map_type)` / `map_unloaded(map_id)` / `chunk_loaded(chunk_idx)` / `chunk_unloaded(chunk_idx)` |
 | 战略图 | `strategic_map_opened` / `strategic_map_closed` / `settlement_updated(settlement_id, population_score)` |
-| 领地 | `territory_state_changed(territory_id, new_state)` / `region_owner_changed(region_id, new_owner)` / `unlock_granted(unlock_id)` |
+| 领地归属/解锁 | `region_owner_changed(region_id, new_owner)` / `unlock_granted(unlock_id)` |
 | 附身 | `possession_started(entity)` / `possession_ended(entity)` |
 | UI | `ui_notification(title, body, level)` |
 | 室内交互 | `interior_entered(building_id)` / `interior_exited(building_id)` / `mega_interior_entered(building_id, map_id)` / `mega_interior_exited(return_map_id)` |

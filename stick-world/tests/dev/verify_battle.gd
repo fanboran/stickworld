@@ -90,8 +90,7 @@ func _run() -> void:
 	else:
 		_fail("空格恢复后 %.0fs 未分胜负（AI 自主接战断链）" % BATTLE_TIMEOUT)
 
-	# 3) DemoQuest 胜局统计验证（battle_ended 只计数不驱动目标；第四目标
-	# 完成改由据点占领信号 territory_state_changed 驱动，出征与领地架构 §七）
+	# 3) DemoQuest 胜局统计验证（battle_ended 只计数不驱动目标）
 	var wins: int = int(quest.get("_battle_win_count"))
 	if result["victory"]:
 		if wins == 1:

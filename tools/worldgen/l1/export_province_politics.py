@@ -123,7 +123,7 @@ def main():
             "size": int(l1.get("size", 8192)),
             "n_provinces": len(provinces),
             "note": "静态世界生成快照：用于战略图 L1 邻省上下文上色与方位判定，"
-                    "不随运行时占领变化（领土归属真值在 WorldState.territories）",
+                    "不随运行时占领变化",
         },
         "provinces": provinces,
     })

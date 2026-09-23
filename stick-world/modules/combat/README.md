@@ -71,7 +71,7 @@ GameRoot.BattleDirector（多战场调度；team_ai_enabled 开时对双方启�
 ### 阵营 AI（TeamAi）
 
 - 节拍分帧：beat_interval（0.5s，下限 MIN_BEAT_INTERVAL）基础节拍上 DECIDE / BUILD 双相位轮转，决策不逐帧思考；暂停/非 ENGAGED 不累积。
-- 姿态机：GARRISON/DEFEND/ATTACK 双阈值滞回（attack_enter/exit、defend_enter/exit）+ 统一切换冷却；开局攻击门禁 = seconds_before_attack ± start_attack_variance 掷骰（默认固定种子 DEFAULT_RANDOM_SEED，单测可锁、扫参可复现）。第四姿态 ROUT 为撤仗终态：战役三阈值（伤亡率/战损比/相持超时）默认全负不评估，据点战经 overrides 注入，任一满足即全军 RETREAT 撤离离场（单位 departed 计非存活）。
+- 姿态机：GARRISON/DEFEND/ATTACK 双阈值滞回（attack_enter/exit、defend_enter/exit）+ 统一切换冷却；开局攻击门禁 = seconds_before_attack ± start_attack_variance 掷骰（默认固定种子 DEFAULT_RANDOM_SEED，单测可锁、扫参可复现）。第四姿态 ROUT 为撤仗终态：战役三阈值（伤亡率/战损比/相持超时）默认全负不评估，需要战役评估的战斗（如守军战）经 `enable_team_ai` 的 overrides 注入，任一满足即全军 RETREAT 撤离离场（单位 departed 计非存活）。
 - 决策内核双轨：slot_kernel_enabled=true 走任务槽（有攻击槽→ATTACK，槽清空→DEFEND）；false 或任务板缺失退化为 should_attack/should_defend 比例条件。
 - 任务槽（TaskBoard）：TeamAi 只创建/杀槽（期望进攻槽数 = attack% × 原子单元数），槽↔小队匹配归执行侧 match_groups（组织化编制一组/散兵一组）；槽带集结点与集结/目标超时；目标评分四因子 threat / avoid_clumps / distance / inertia（防振荡），权重真值在档案。
 - 攻击百分比四规则（优先级高→低）：胜利目标危急（vp_rule_enabled 缺省关）→ 基地威胁封顶 → 基调曲线（baseline + 每分钟递增，封顶 max）→ 军力优势递增；结果缓存在 `get_attack_percentage`，HUD 轮询不重算。

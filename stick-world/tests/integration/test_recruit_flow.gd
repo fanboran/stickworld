@@ -8,7 +8,7 @@ extends Node
 ##   3. 人口再生：pop_growth_interval 加速后村民自动增长；
 ##   4. 人口上限：pop_cap 内再生封顶；
 ##   5. 资源不足拒招（reason=insufficient_resources）；
-##   6. 士兵出征口径：无守军 meta、存活——ConquestManager 收集玩家侧可收录。
+##   6. 士兵出征口径：无守军 meta、存活——编队收集玩家侧可收录。
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_recruit_flow.tscn
 ## 退出码：0 全部通过，1 有失败
@@ -72,7 +72,6 @@ func _run_tests() -> void:
 	_runner.assert_not_null(_recruit, "RecruitManager 就绪")
 	await _runner.run_async()
 	print(_runner.summary())
-	WorldState.territories = {}
 	get_tree().quit(0 if _runner.all_passed() else 1)
 
 
@@ -141,14 +140,14 @@ func _test_pop_cap() -> void:
 
 
 ## 用例 5「资源不足拒招 + 士兵出征口径」：清空木材 → 拒招；
-## 士兵无守军 meta、存活（ConquestManager._collect_player_units 口径可收录）
+## 士兵无守军 meta、存活（编队收集过滤条件可收录）
 func _test_insufficient_and_soldier() -> void:
 	var wood_stock: float = _resources.get_stock("res_wood")
 	_resources.consume("res_wood", wood_stock, "test_region", "测试清库")
 	var r: Dictionary = _org_api.recruit()
 	_runner.assert_false(bool(r.get("ok", true)), "资源不足应拒招")
 	_runner.assert_equal(String(r.get("reason", "")), "insufficient_resources", "原因 = insufficient_resources")
-	# 士兵出征口径（照 ConquestManager._collect_player_units 过滤条件）
+	# 士兵出征口径（照编队收集的过滤条件）
 	var map: Node2D = _game_root.get_current_map()
 	var host: Node = map.get_node_or_null("EntityHost")
 	_runner.assert_not_null(host, "EntityHost 存在")

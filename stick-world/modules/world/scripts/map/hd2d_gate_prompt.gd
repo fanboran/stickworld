@@ -41,9 +41,6 @@ func setup(map: Node2D) -> void:
 			_root = n
 			break
 		n = n.get_parent()
-	# 征伐项随领地状态刷新（占领/臣服后重选项框内容）
-	if not EventBus.territory_state_changed.is_connected(_on_territory_state_changed):
-		EventBus.territory_state_changed.connect(_on_territory_state_changed)
 
 
 func _process(_delta: float) -> void:
@@ -327,25 +324,6 @@ func _build_panel(side: int) -> Control:
 		vbtn.mouse_entered.connect(_on_dest_hover.bind(sid))
 		vbtn.mouse_exited.connect(_on_dest_hover.bind(""))
 		col.add_child(vbtn)
-	# 动态项：征伐（扩张循环入口，出征与领地架构 §三）——未臣服据点逐项列出，
-	# 文案「⚔ 征伐 <名>（守军N）」，悬浮给编成/战利品情报，点击弹确认框
-	var targets := _conquest_targets()
-	if not targets.is_empty():
-		var ccap := Label.new()
-		ccap.text = "—— 征伐 ——"
-		ccap.add_theme_font_size_override("font_size", 12)
-		ccap.add_theme_color_override("font_color", Color(0.85, 0.62, 0.45, 0.95))
-		ccap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(ccap)
-	for t: Dictionary in targets:
-		var cbtn := Button.new()
-		cbtn.text = "⚔ 征伐 %s（守军 %d）" % [
-			String(t.get("name_zh", "")), int(t.get("garrison_count", 0))]
-		var c_api := _expansion_api()
-		if c_api != null and c_api.has_method("describe_target"):
-			cbtn.tooltip_text = c_api.describe_target(t)
-		cbtn.pressed.connect(_on_conquest_pressed.bind(t))
-		col.add_child(cbtn)
 	var btn_last := Button.new()
 	btn_last.text = "收起"
 	btn_last.pressed.connect(_on_choice.bind("dismiss"))
@@ -377,58 +355,6 @@ func _owner_map_id() -> String:
 	if sl != null and "current_map_id" in sl:
 		return String(sl.current_map_id)
 	return ""
-
-
-## 可征伐据点（未臣服）：expansion 契约面取数，装配缺失时静默空列表
-## （headless 子测试/无扩张装配场景不炸，城门其余选项照常）。
-## 取实例走组查找（expansion/api.gd 的 GROUP）——本脚本在 hd2d_map_base 的
-## preload 链里，引全局类名会致该链 parse 期解析失败（实测）。
-func _expansion_api() -> Node:
-	return get_tree().get_first_node_in_group("expansion_api")
-
-
-func _conquest_targets() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	var api := _expansion_api()
-	if api == null or not api.has_method("list_targets"):
-		return out
-	for t in api.list_targets():
-		if t is Dictionary and not bool((t as Dictionary).get("captured", false)):
-			out.append(t)
-	return out
-
-
-## 征伐确认：先看情报（编成/敌将/战利品）再决定，确认即出征（跨图带队走
-## ConquestManager.launch_campaign → travel_to_map）；取消不动身
-func _on_conquest_pressed(target: Dictionary) -> void:
-	var api := _expansion_api()
-	if api == null or not api.has_method("describe_target"):
-		return
-	StickKit.confirm(_panel, "征伐 · %s" % String(target.get("name_zh", "")),
-			api.describe_target(target), _conquest_confirm_callable(String(target.get("id", ""))),
-			"出征", StickKit.ButtonKind.DANGER)
-
-
-## 确认回调（独立成 Callable，避免多行 lambda 参与实参缩进）
-func _conquest_confirm_callable(territory_id: String) -> Callable:
-	return func() -> void:
-		_on_conquest_confirmed(territory_id)
-
-
-func _on_conquest_confirmed(territory_id: String) -> void:
-	var api := _expansion_api()
-	if api == null or not api.has_method("launch_campaign"):
-		return
-	if api.launch_campaign(territory_id):
-		_suppress_side = _shown_side
-		_hide_panel()
-
-
-## 领地状态变化（占领/臣服）：选项框开着就整框重刷（征伐项随状态增减）
-func _on_territory_state_changed(_territory_id: String, _new_state: int) -> void:
-	if _panel == null or not is_instance_valid(_panel) or _shown_side == 0:
-		return
-	_refresh_panel(_shown_side)
 
 
 func _on_choice(act: String) -> void:

@@ -137,12 +137,6 @@ var _possess_panel: Control = null
 ## ResourcesApi 实例引用（运行时由 SystemSetup 装配）
 var _resources_api: Node = null
 
-# ─────────────────────────────── 征服系统（出征与领地循环）───────────────────────────────
-## ExpansionApi 实例引用（运行时由 SystemSetup 装配）
-var _expansion_api: Node = null
-## ConquestManager 实例引用（运行时由 SystemSetup 装配）
-var _conquest_manager: Node = null
-
 # ─────────────────────────────── 招兵与人口（游戏循环深化批次 1）───────────────────────────────
 ## RecruitManager 实例引用（运行时由 SystemSetup 装配；招兵经 OrganizationApi 转发）
 var _recruit_manager: Node = null
@@ -414,11 +408,6 @@ func get_combat_api() -> Node:
 ## 获取 ResourcesApi 引用（供测试用）
 func get_resources_api() -> Node:
 	return _resources_api
-
-
-## 征服流程管理器（出征/占领/收益；测试与跨模块消费走 expansion/api.gd）
-func get_conquest_manager() -> Node:
-	return _conquest_manager
 
 
 ## 招兵与人口管理器（测试/调试用；玩家交互走 organization/api.gd 转发）

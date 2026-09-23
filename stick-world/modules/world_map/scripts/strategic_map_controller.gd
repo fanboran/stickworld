@@ -61,10 +61,6 @@ const FAST_TRAVEL_HIGHLIGHT_SEC: float = 0.8
 var _title_bar: MapTitleBar = null
 var _legend: MapLegend = null
 
-## 据点面板（CanvasLayer 直接子节点，同批显隐；数据源与行回调在
-## _auto_find_components 注入——面板不自己认识 expansion，见 territory_panel.gd）
-var _territory_panel: TerritoryPanel = null
-
 ## 政权列表侧栏（CanvasLayer 直接子节点，同批显隐；当包 states 逐行，行点击聚焦都城）
 var _states_panel: ProvinceStatesPanel = null
 
@@ -141,12 +137,6 @@ func _auto_find_components() -> void:
 		_title_bar = MapControllerUtil.find_sibling(self, "MapTitleBar") as MapTitleBar
 	if _legend == null:
 		_legend = MapControllerUtil.find_sibling(self, "MapLegend") as MapLegend
-	if _territory_panel == null:
-		_territory_panel = MapControllerUtil.find_sibling(self, "TerritoryPanel") as TerritoryPanel
-		if _territory_panel != null:
-			_territory_panel.targets_fn = _list_territories
-			_territory_panel.activate_fn = _on_territory_row_activated
-			_territory_panel.refresh()
 	if _states_panel == null:
 		_states_panel = MapControllerUtil.find_sibling(self, "ProvinceStatesPanel") as ProvinceStatesPanel
 		if _states_panel != null and api != null and api.has_method("get_data"):
@@ -212,8 +202,6 @@ func _set_overlay_visible(v: bool) -> void:
 		_title_bar.visible = v
 	if _legend != null:
 		_legend.set_shown(v)
-	if _territory_panel != null:
-		_territory_panel.set_shown(v)
 	if _states_panel != null:
 		_states_panel.set_shown(v)
 	if _arrows != null:
@@ -258,8 +246,7 @@ func _handle_left_click(screen_pos: Vector2) -> void:
 ## F3 调试传送开关已撤（创始人 2026-09-16）：传送改为常规单击交互走确认弹窗
 ## （TravelDialog.open_confirm），确认后经 TELEPORT 直达 enter_settlement。
 
-## 激活聚落（**公共**：地图双击与据点面板行点击共用同一分流，两入口不分叉）：
-##   敌据点（expansion 有对位且未臣服）→ 征伐确认
+## 激活聚落（**公共**分流）：
 ##   无 map_id → 不动作（tooltip 已提示「未开放进入」）
 ##   SELF（已在此聚落）→ 直接进城（不构成旅行，无弹窗）
 ##   其余 → 弹旅行方式窗[走过去|快速旅行|取消]（快速旅行可达性在窗内展示）
@@ -268,12 +255,6 @@ func activate_settlement(settlement_id: String) -> void:
 	if api == null or not api.has_method("get_travel_status"):
 		return
 	if _fast_travel_pending:
-		return
-	# 出征入口（出征与领地架构 §九 入口二）：双击敌据点 → 出征确认，而不是
-	# 走进敌城；已臣服/无对位聚落回落旅行分流（占领后双击=巡视自家）
-	var target := _conquest_target_for(settlement_id)
-	if not target.is_empty():
-		_confirm_conquest(target)
 		return
 	var status: Dictionary = api.get_travel_status(settlement_id)
 	var code: String = str(status.get("code", ""))
@@ -293,47 +274,12 @@ func activate_settlement(settlement_id: String) -> void:
 	_travel_dialog.open_for(settlement_id, display_name, status)
 
 
-## 弹窗确认：TELEPORT → 直达传送（enter_settlement 不查可达性，传送即到访）；
-## FAST_TRAVEL → 快速旅行（可达性校验 + 途经路径高亮）；WALK → 步行道路流程
-## 该聚落对应的可征伐敌据点（无对位/已臣服 → 空字典）。取实例走组查找
-## （expansion/api.gd 的 GROUP），不引全局类名——契约面仍经 api.gd 方法调用
-func _conquest_target_for(settlement_id: String) -> Dictionary:
-	var expansion := _expansion_api()
-	if expansion == null or not expansion.has_method("find_target_by_settlement"):
-		return {}
-	return expansion.find_target_by_settlement(settlement_id)
-
-
-func _expansion_api() -> Node:
-	var tree := get_tree()
-	return tree.get_first_node_in_group("expansion_api") if tree != null else null
-
-
-## 据点清单数据源（据点面板 targets_fn）：转发 expansion api.list_targets；
-## 未装配 expansion（dev 直开战略图）返回空表 → 面板空态隐藏
-func _list_territories() -> Array:
-	var expansion := _expansion_api()
-	if expansion == null or not expansion.has_method("list_targets"):
-		return []
-	return expansion.list_targets()
-
-
-## 玩家已占地块 id（政治图例的「我方疆域」条目用；染色本身在渲染器侧按同一份
-## expansion 真值逐地块取色）。未装配 expansion → 空表
+## 玩家已占地块 id（政治图例的「我方疆域」条目用；染色本身在渲染器侧按
+## world_map api 的同一份真值逐地块取色）
 func _owned_tile_keys() -> Array:
-	var expansion := _expansion_api()
-	if expansion == null or not expansion.has_method("get_owned_tile_keys"):
-		return []
-	return expansion.get_owned_tile_keys()
-
-
-## 据点面板行点击：先按 tile_key 定位到该聚落地块，再走 activate_settlement
-## 同一交互链（未易手据点弹征伐确认 / 我方已占据点弹旅行窗）
-func _on_territory_row_activated(target: Dictionary) -> void:
-	var tile_key := String(target.get("tile_key", ""))
-	if not tile_key.is_empty() and api != null and api.has_method("camera_focus"):
-		api.camera_focus(tile_key)
-	activate_settlement(String(target.get("settlement_key", "")))
+	if api != null and api.has_method("get_owned_tile_keys"):
+		return api.get_owned_tile_keys()
+	return []
 
 
 ## 政权列表行点击：相机聚焦该政权都城所在地块（复用 api.camera_focus 的
@@ -428,30 +374,6 @@ func switch_province(l1_label: int) -> bool:
 	return true
 
 
-## 出征确认（双击敌聚落）：先给情报（守军编成/敌将/战利品），确认才动身
-func _confirm_conquest(target: Dictionary) -> void:
-	var expansion := _expansion_api()
-	if expansion == null or not expansion.has_method("describe_target"):
-		return
-	var layer := _ui_layer()
-	if layer == null:
-		# 弹窗宿主缺失（dev 直开战略图）→ 直接出征，不锁死玩法
-		_launch_conquest(String(target.get("id", "")))
-		return
-	StickKit.confirm(layer, "征伐 · %s" % String(target.get("name_zh", "")),
-			expansion.describe_target(target),
-			func() -> void: _launch_conquest(String(target.get("id", ""))),
-			"出征", StickKit.ButtonKind.DANGER)
-
-
-func _launch_conquest(territory_id: String) -> void:
-	var expansion := _expansion_api()
-	if expansion == null or not expansion.has_method("launch_campaign"):
-		return
-	if expansion.launch_campaign(territory_id):
-		close()
-
-
 ## 弹窗宿主（SystemOverlay 槽；UIRoot 缺失返回 null）
 func _ui_layer() -> Control:
 	var tree := get_tree()
@@ -464,6 +386,8 @@ func _ui_layer() -> Control:
 	return slot if slot is Control else null
 
 
+## 弹窗确认：TELEPORT → 直达传送（enter_settlement 不查可达性，传送即到访）；
+## FAST_TRAVEL → 快速旅行（可达性校验 + 途经路径高亮）；WALK → 步行道路流程
 func _on_travel_confirmed(settlement_id: String, mode: int) -> void:
 	if api == null:
 		return
@@ -606,9 +530,6 @@ func _refresh_view_meta() -> void:
 	# HUD 层级按钮组（需求 8）：当前层级 L1 高亮；L2 可达 = 当前省有所属地区包；
 	# L3 可达 = 大世界视图已装配（L1 场景直开时无 L3 节点 → 置灰不报错）
 	_sync_hud_levels()
-	# 据点清单按当前归属重刷（关图期间可能已占领/易手）
-	if _territory_panel != null:
-		_territory_panel.refresh()
 	# 政权列表按当前包重刷（换省后整表换政权/都城）
 	if _states_panel != null and api != null and api.has_method("get_data"):
 		_states_panel.set_data(api.get_data())

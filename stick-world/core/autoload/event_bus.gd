@@ -49,11 +49,11 @@ extends Node
 ## battle_ended 保持二元胜负语义不变。summary 携带
 ## result/reason/duration/player_wins/player_faction/casualties/alive——
 ## 监听方不必回查已 queue_free 的 BattleInstance。
-## 发射方：BattleInstance._end；首个消费方：ConquestManager（据点战战报）
+## 发射方：BattleInstance._end
 @warning_ignore("unused_signal") signal battle_settled(battle_id: String, summary: Dictionary)
 # 阵营 AI 姿态变更（TeamAi -> 调试 HUD/测试断言）：from/to_stance 值序
 # 0=GARRISON/1=DEFEND/2=ATTACK（对齐 dump Team.Stance 枚举序）；
-# 3=ROUT 为本作扩展（敌将撤仗终态，据点战专用，见出征与领地架构 §4.2）
+# 3=ROUT 为本作扩展（敌将溃逃终态）
 @warning_ignore("unused_signal") signal team_ai_stance_changed(battle_id: String, faction: int, from_stance: int, to_stance: int, reason: String)
 # 治疗施放（WeaponMount.cast_heal -> battle_sim 采样/可观测性，P7 批次 7b）：
 # battle_id 经施法者 get_battle_instance().get_battle_id()；caster/target 用 instance_id；
@@ -112,16 +112,14 @@ extends Node
 # 战略图 L1 重算该聚落建成区 blob（总体设计 §5.7 实时变动；发射方建设系统接线前测试代发）
 @warning_ignore("unused_signal") signal settlement_updated(settlement_id: String, population_score: float)
 
-# ─────────────────────────────── 出征 / 领地（出征与领地架构 §六）────────────────────────────────
-# 领地状态变更：ConquestManager（批次 C5）-> 出城选项/征伐面板刷新；
-# new_state 取 TerritoryRegistry.State（int 广播，core 不依赖模块类）
-@warning_ignore("unused_signal") signal territory_state_changed(territory_id: String, new_state: int)
-# 地块归属变更：ConquestManager -> 战略图政治模式聚落/地块染色（世界地图数据流 §7.3
-# 契约的发射方落实）；region_id 发 tile 级 id（架构 §9.1 P 社化预留：据点=地块入口，归属按面建模）；
-# new_owner 取值同 WorldState.territories[].owner（TerritoryRegistry.PLAYER_OWNER_ID="player"）
+# ─────────────────────────────── 领土归属 / 解锁 ─────────────────────────────────
+# 地块归属变更 -> 战略图政治模式逐地块染色（世界地图数据流 §7.3 契约）；
+# region_id 发 tile 级 id（归属按面建模，据点=地块入口）；new_owner 为控制者
+# id（"player"=玩家，统一契约落地后为政权域 id）。发射方：世界模型政权归属变更
+# （接入前测试可代发驱动染色管道）
 @warning_ignore("unused_signal") signal region_owner_changed(region_id: String, new_owner: String)
-# 解锁发放：ConquestManager -> 各消费端自听（设计 04-科技系统 §二「科技随征服到手」；
-# 只发新获项，重复占领不再广播）。现役消费端：建筑可建集门禁（ConstructionManager 按
+# 解锁发放 -> 各消费端自听（设计 04-科技系统 §二「科技随征服到手」；只发新获项，
+# 重复授予不再广播）。现役消费端：建筑可建集门禁（ConstructionManager 按
 # WorldState.unlocks 判定 + BuildMenu 重刷列表）；新解锁项入 WorldState.unlocks 台账
 @warning_ignore("unused_signal") signal unlock_granted(unlock_id: String)
 

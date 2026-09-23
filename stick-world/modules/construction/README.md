@@ -55,5 +55,5 @@ modules/construction/
 
 ## 扩展指引
 
-- 新增可建造建筑：在 building_gen 侧补场景与 buildings.tres 定义行（见 [`../building_gen/README.md`](../building_gen/README.md)），本模块启动时自动注册进建造菜单；要"打赢某据点才解锁"就把该行的 `unlocked_by_tech` 填成据点奖励里的解锁 id（Excel 源 `config/excel/建筑数据.xlsx` 的 buildings sheet）。
+- 新增可建造建筑：在 building_gen 侧补场景与 buildings.tres 定义行（见 [`../building_gen/README.md`](../building_gen/README.md)），本模块启动时自动注册进建造菜单；要"解锁项发放后才可建"就把该行的 `unlocked_by_tech` 填成解锁 id——门禁按 `WorldState.unlocks` 台账判定、`BuildMenu` 随 `unlock_granted` 重刷（发射方待世界模型接入；Excel 源 `config/excel/建筑数据.xlsx` 的 buildings sheet）。
 - 新增存档字段：改 scripts/catalog/building_persistence.gd 的表列与恢复映射，入口仍走 api.gd 的 save/load。

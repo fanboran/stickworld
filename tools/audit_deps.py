@@ -37,7 +37,6 @@ ASSEMBLER = {"modules/world/scripts/setup/system_setup.gd"}
 # ── 棘轮基线（在册债务，只降不升；修复后应回填收缩）─────────────────────────
 # 二元环以字典序小者开头登记，与输出规范化一致
 KNOWN_CYCLES = {
-    ("expansion", "world"),
     ("organization", "world"),
     ("town_life", "units"),
     ("world", "world_map"),

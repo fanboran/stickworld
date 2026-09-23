@@ -9,7 +9,7 @@ signal test_done(code: int)
 ## ② 未获解锁则拒建——数据侧拦在 start_construction_at（不靠 UI 自觉），
 ##    报错文案含 def_id 便于排查；
 ## ③ 授予解锁（WorldState.grant_unlock）后当场放行；重复授予幂等返回 false
-##    （ConquestManager 据此只广播新获项，防重复提示）；
+##    （授予方据此只广播新获项，防重复提示）；
 ## ④ 无要求（unlocked_by_tech 为空/缺字段）的建筑恒可建——旧 def 不受影响。
 ##
 ## fixture：真 buildings.tres 经 ConstructionManager._ready 装载（无地图、无资源注入，

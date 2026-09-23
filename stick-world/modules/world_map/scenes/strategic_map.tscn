@@ -12,7 +12,6 @@
 [ext_resource type="Script" path="res://modules/world_map/scripts/map_mode_manager.gd" id="10_mode"]
 [ext_resource type="Script" path="res://modules/world_map/ui/travel_dialog.gd" id="11_travel"]
 [ext_resource type="Script" path="res://modules/world_map/ui/map_ocean_backdrop.gd" id="12_ocean"]
-[ext_resource type="Script" path="res://modules/world_map/ui/territory_panel.gd" id="13_terr"]
 [ext_resource type="Script" path="res://modules/world_map/ui/province_switch_arrows.gd" id="14_arrows"]
 [ext_resource type="Script" path="res://modules/world_map/ui/province_states_panel.gd" id="15_states"]
 
@@ -60,10 +59,6 @@ script = ExtResource("7_tip")
 
 [node name="MapTitleBar" type="PanelContainer" parent="."]
 script = ExtResource("8_title")
-visible = false
-
-[node name="TerritoryPanel" type="PanelContainer" parent="."]
-script = ExtResource("13_terr")
 visible = false
 
 [node name="MapLegend" type="PanelContainer" parent="."]

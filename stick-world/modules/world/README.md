@@ -30,11 +30,11 @@ modules/world/
     ├── camera/
     │   └── camera_rig.gd               # CameraRig：1/4 区域跟随 / 边缘滚动 / 滚轮缩放 / 震屏（加载地图时注入边界）
     ├── setup/                          # GameRoot 的脚本化子模块（运行时挂载，各持 setup(root)）
-    │   ├── system_setup.gd             #   SystemSetup 装配器：步骤表驱动，装配全部常驻子系统与 UI（37 步）
+    │   ├── system_setup.gd             #   SystemSetup 装配器：步骤表驱动，装配全部常驻子系统与 UI（36 步）
     │   ├── save_handler.gd             #   SaveHandler：SQLite 存读档全流程（地图/建筑/实体/资源点 → save_meta）
     │   ├── travel_handler.gd           #   TravelHandler：玩家实体查找 + 室内退出检查（大建筑传送链随 mega_interior 图清退拆除）
     │   ├── initial_content.gd          #   InitialContent：村民 NPC（经 TownLifeAPI 配比）/ dev 遭遇战 / 仓库预置
-    │   ├── demo_quest.gd               #   DemoQuest：四阶段引导目标链（采集→建造→编队→征伐）+ 结算
+    │   ├── demo_quest.gd               #   DemoQuest：三阶段引导目标链（采集→建造→编队）+ 结算
     │   └── villager_bubble.gd          #   VillagerBubble：村民头顶对话气泡（DemoQuest 驱动）
     ├── loading/
     │   ├── scene_loader.gd             #   SceneLoader：map_id 注册表 + 出口表 + travel_to_map 统一入口 + EventBus 转发
@@ -94,7 +94,7 @@ modules/world/
 | 订阅 | `game_saving` / `game_loaded` | SaveHandler |
 | 订阅 | `interior_exited` | TravelHandler（室内退出检查；`mega_interior_entered/exited` 已无订户，信号定义保留待室内 v3 接回） |
 | 订阅 | `strategic_map_closed` | SystemSetup（恢复场景图输入） |
-| 订阅 | `squad_created` / `battle_started` / `battle_ended` / `territory_state_changed` | DemoQuest（目标链推进） |
+| 订阅 | `squad_created` / `battle_started` / `battle_ended` | DemoQuest（目标链推进） |
 
 ---
 
@@ -102,7 +102,7 @@ modules/world/
 
 组合根按依赖分层自上而下装配（`scripts/setup/system_setup.gd` 步骤表），全部经各模块 `api.gd` 或其自包含场景：
 
-- 玩法/视图模块：`modules/units/`（实体场景经 UnitsAPI 常量）、`modules/player_control/`、`modules/combat/`、`modules/construction/`、`modules/organization/`、`modules/resources/`、`modules/inventory/`、`modules/expansion/`、`modules/town_life/`（TownLifeAPI 村民配比与职业外观）
+- 玩法/视图模块：`modules/units/`（实体场景经 UnitsAPI 常量）、`modules/player_control/`、`modules/combat/`、`modules/construction/`、`modules/organization/`、`modules/resources/`、`modules/inventory/`、`modules/town_life/`（TownLifeAPI 村民配比与职业外观）
 - 基础设施模块：`modules/ui_global/`（UIRoot/UIKit/模态栈/HUD 部件）、`modules/debug_gui/`、`modules/fx/`、`modules/environment/`（EnvironmentSystem 挂在 game_root.tscn）、`modules/world_map/`（战略图 L1/L2/L3 场景）、`modules/hd2d/`（HD-2D 3D 街景世界场景）、`modules/texture_gen/`（城墙烘卡贴图生成）
 - Autoload：EventBus / WorldState / SaveManager / TimeManager / AudioManager / BalanceConfig（装配首步 reload）/ DebugApi
 - 依赖分层与边表以 `tools/audit_deps.py` 实测为准

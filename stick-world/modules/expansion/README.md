@@ -1,8 +1,9 @@
-# expansion：出征与领地扩张
+# expansion：驻军生成管道
 
-> 出征据点 → 接敌开战 → 占领奖励 → 通关判定的流程编排，外加领地配置与运行时状态查询。
-> 模块只做编排不造引擎：刷军归 GarrisonSpawner、战斗归 CombatApi/BattleInstance、跨图归 SceneLoader、资源归 ResourcesApi。
-> 系统级设计见 [docs/技术/架构/出征与领地架构.md](docs/技术/架构/出征与领地架构.md)。
+> 纯管道模块：按调用方传入的编成 Dictionary 在地图 `ConquestAnchor` 处刷出守军实体（含敌将）。
+> 无 api.gd、无信号、零出向依赖，暂无生产调用方（数据源将来 = 世界模型政权账面，测试可代发驱动）。
+> 只刷军不开战——接敌开战编排归调用方，战斗归 CombatApi/BattleInstance。
+> 系统级参考见 [docs/技术/架构/出征与领地架构.md](docs/技术/架构/出征与领地架构.md)（据点玩法层已按完整版蓝图 §6.1 拆除，该文降为管道参考）。
 
 ---
 
@@ -10,35 +11,29 @@
 
 ```
 modules/expansion/
-├── api.gd                       # 对外契约：领地查询 + 流程转发 + 2 条点对点信号 + 状态枚举常量
 └── scripts/
-    ├── territory_registry.gd    # 领地清单：装载 config/expansion/territories.tres，State 枚举（HOSTILE/CAPTURED）
-    ├── conquest_manager.gd      # 征服流程状态机（常驻 GameRoot）：监听 map_loaded/battle_ended，占领/奖励/败仗回村
-    └── garrison_spawner.gd      # 守军生成：按 ConquestAnchor 布阵，剩余守军 = 配置 − 战损（车轮战，已臣服短路不刷）
+    └── garrison_spawner.gd      # GarrisonSpawner：spawn_garrison(map, row) 按 ConquestAnchor 布阵刷守军
 ```
 
 ---
 
-## 对外契约
+## 管道契约
 
-- 查询：`list_targets()`（据点清单数据源——城门出城选项、战略图双击判定、战略图据点面板共用；含名称/剩余守军/占领态/归属/奖励预览/tile_key，已臣服据点同样在列）、`find_territory_by_settlement(id)`（聚落反查归属真值，不论是否臣服）、`find_target_by_settlement(id)`（可征伐判定，已臣服返回空）、`get_owned_tile_keys()`（玩家已占地块 id——战略图政治模式逐地块染色的数据源）、`describe_target(target)`（情报一句话）、`describe_owner(target)`（归属一句话：未易手 / 我方已占 / 势力 id）、`describe_loot(granted)`（占领通告入账明细）、`unlock_label(id)`、`get_territory_state(id)`、`is_all_captured()`（通关判定）；流程：`launch_campaign(territory_id)` 出征、`capture_territory(territory_id)` 占领。
-- 信号分工：点对点走本 api（`territory_captured / conquest_completed`）；全局广播走 EventBus（`territory_state_changed / region_owner_changed / unlock_granted`，状态枚举经本 api 常量取值，不引内部脚本）。
-- 运行时状态记录在 WorldState：`territories[id]`（state / garrison_losses / control_progress / owner / faction）与 `unlocks` 解锁台账（征服奖励写入，各消费端自听 `unlock_granted`），跨图存活；敌将不受战损扣减、每次进图均在位。
-- 解锁项展示名表 `UNLOCK_LABELS`（id → 中文名）与建筑侧门禁（`buildings.tres` 的 `unlocked_by_tech`）用同一 id；两侧对齐由 `tests/unit/test_conquest_targets.gd` 的配置对齐用例兜底。
+- `spawn_garrison(map: Node2D, row: Dictionary) -> Array`：按 map 内 `ConquestAnchor` 的 GarrisonSlots/CommanderSlot 布阵刷出守军，返回守军实体名单（含敌将，供调用方开战传 defenders；空数组 = 编成缺失/无可刷条目）。
+- `row` 契约：编成由调用方直接传入——`{garrison: [{profile: String, count: int, tier: String}], commander: {profile: String}}`。`profile` 为兵种档案 id（单位场景经 UnitsApi 常量引用 + `MapBase.spawn_entity` 的 def_id 在进树前写入，实体 `_ready` 拉数值）；`tier` 为 tactics.tres 战术 id 透传（行为消费端待战术系统实装）。
+- 兵种武器：按兵种档案 variant 映射武器类型（未知 variant 保持默认剑）。
+- 无锚点 fallback：按地图右侧半区程序化横排（`FALLBACK_START_RATIO` / `FALLBACK_SLOT_SPACING`），每图一次性 warning，不阻断。
+
+## META 常量（来源标记，调试/统计识别用）
+
+- `META_GARRISON_UNIT`：守军单位来源标记。
+- `META_GARRISON_COMMANDER`：敌将来源标记（敌将属指挥层不计入伍额，战损统计/筛选排除用）。
+- `META_GARRISON_TIER`：守军战术档位透传。
 
 ---
 
 ## 依赖
 
-- `core/`：WorldState（领地状态容器）、EventBus。
-- 装配注入（SystemSetup）：SceneLoader（travel_to_map 跨图）、CombatApi（start_battle 接敌）、ResourcesApi（占领奖励入账）。
-- 刷单位经 UnitsApi 场景常量，不 preload units 内部路径。
-- 被依赖：`modules/world/`（game_root 出城入口、demo_quest、conquest_anchor 守军锚点）、`modules/world_map/`（战略图双击出征确认、聚落 tooltip 归属行、据点面板——都经组 `expansion_api` 取实例，不引本模块内部脚本）。
-
----
-
-## 扩展指引
-
-- 加新据点：在 `config/expansion/territories.tres` 加领地行（id / map_id / 守军编成 / 奖励），无需改代码。
-- 加解锁项：奖励 `rewards.unlocks` 里的 id 要在 `api.gd` 的 `UNLOCK_LABELS` 登记展示名，并让消费端（如建筑 def 的 `unlocked_by_tech`）认这个 id——否则只入台账不产生效果（配置对齐用例会红灯）。
-- 改车轮战/守军补员口径：先读 scripts/garrison_spawner.gd 类头的职责边界说明，再动 ConquestManager 的战损写入点。
+- 零模块出向：单位场景经 UnitsApi 常量引用，不 preload 模块内部路径。
+- 不发射/订阅 EventBus 信号；无对外契约面。
+- 被依赖：无（暂无装配调用方）。`ConquestAnchor` 锚点类在 `modules/world/scripts/map/`（随宿主场景挂载，HD-2D 宿主直接消费），不在本模块。

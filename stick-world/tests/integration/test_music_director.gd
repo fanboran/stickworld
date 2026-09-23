@@ -41,6 +41,10 @@ func _ready() -> void:
 	_runner.add_test("解析: 情境 → 曲目", _test_resolve_cue, false)
 	_runner.add_test("解析: 优先级 战斗>室内>战略图>地图", _test_resolve_priority, false)
 	_runner.add_test("分层: tier 控制层音量", _test_tier_gating, false)
+	_runner.add_test("曲目表: 与清单同源同序", _test_track_list, false)
+	_runner.add_test("预览: 起播/满层/循环开关/暂停", _test_preview_playback, false)
+	_runner.add_test("预览: 情境不抢曲、退场还原", _test_preview_isolation, false)
+	_runner.add_test("预览: 退役层收尾不串台", _test_preview_retired_layer, false)
 	_runner.add_test("压限: duck 转发到 AudioManager 且与音量共存",
 		_test_duck_forwarding, false)
 	_runner.add_test("降级: 缺失 cue / 缺失环境音不报错", _test_graceful_degradation, false)
@@ -243,6 +247,131 @@ func _find_layer_player(layer_name: String) -> AudioStreamPlayer:
 		if child is AudioStreamPlayer and child.name == "L_" + layer_name:
 			return child
 	return null
+
+
+# ─────────────────────────── 曲目表与原声带预览 ───────────────────────────
+
+## 曲目表 = 清单的投影（原声带页的数据源）：条数、顺序、字段都要与清单一致，
+## 否则界面会与"实际会放出来的东西"脱钩（加曲子只该改清单）
+func _test_track_list() -> void:
+	var cues := _cues()
+	var tracks: Array[Dictionary] = MusicDirector.get_track_list()
+	_runner.assert_equal(tracks.size(), cues.size(),
+		"曲目表条数应等于清单 cue 数")
+	var cue_ids: Array = cues.keys()
+	for i in tracks.size():
+		var t: Dictionary = tracks[i]
+		_runner.assert_equal(str(t["id"]), str(cue_ids[i]),
+			"第 %d 首应是清单第 %d 项（唱片序 = 清单声明序）" % [i + 1, i + 1])
+		for key in ["title", "key", "bpm", "duration_s", "loop", "layer_count", "lineup"]:
+			_runner.assert_true(t.has(key), "曲目项应含 %s" % key)
+		var entry: Dictionary = cues[t["id"]]
+		_runner.assert_equal(str(t["title"]), str(entry["title"]), "曲名应与清单一致")
+		_runner.assert_equal(int(t["layer_count"]), (entry["layers"] as Array).size(),
+			"层数应与清单一致")
+		var lineup: Array = t["lineup"]
+		_runner.assert_equal(lineup.size(), int(t["layer_count"]),
+			"编制明细条数应等于层数")
+		for layer: Dictionary in lineup:
+			_runner.assert_true(layer.has("name") and layer.has("tier"),
+				"编制明细应含 name/tier")
+
+
+## 预览播放（原声带页点曲目走这条路径）：绕过情境解析、固定满层、
+## 循环开关改的是流自身的 loop 属性
+func _test_preview_playback() -> void:
+	MusicDirector.set_enabled(true)      # 这条用例要走真实播放路径（headless 无声）
+	MusicDirector.set_context("battle", false)
+	MusicDirector.set_context("interior", false)
+	MusicDirector.set_context("strategic", false)
+	MusicDirector.set_context("map_type", -1)
+	_runner.assert_false(MusicDirector.is_previewing(), "初始不在预览态")
+	_runner.assert_false(MusicDirector.start_preview("no_such_cue_exists"),
+		"不存在的 cue 应拒绝预览")
+	_runner.assert_true(MusicDirector.start_preview("village", true), "已知 cue 应能预览")
+	_runner.assert_true(MusicDirector.is_previewing(), "应进入预览态")
+	_runner.assert_equal(MusicDirector.get_preview_track(), "village", "预览曲目应记下")
+	_runner.assert_equal(MusicDirector.get_tier(), 2,
+		"预览应固定满层（tier=2：听的是完整编制）")
+	var dur := float(_cues()["village"]["duration_s"])
+	_runner.assert_approx(MusicDirector.preview_duration(), dur, 0.01, "预览时长应取清单值")
+	# 循环开关落到流上（village 在清单里是循环体；这里反向验证"能强制不循环"）
+	_runner.assert_true(_layer_stream_loops("piano"), "默认预览应循环")
+	MusicDirector.start_preview("village", false)
+	_runner.assert_false(_layer_stream_loops("piano"), "循环关时应写 loop=false")
+	# 暂停走 stream_paused（继续播放要从原位置接上，不释放层）
+	MusicDirector.set_preview_paused(true)
+	_runner.assert_true(MusicDirector.is_preview_paused(), "暂停态应记下")
+	var p: AudioStreamPlayer = _find_layer_player("piano")
+	_runner.assert_true(p != null and p.stream_paused, "层的播放应真的挂起")
+	MusicDirector.set_preview_paused(false)
+	_runner.assert_false(p.stream_paused, "继续后层应恢复")
+	# 收尾：退出预览（下面的用例还要用系统）
+	MusicDirector.stop_preview(0.0)
+	MusicDirector.set_enabled(false)
+	_runner.assert_false(MusicDirector.is_previewing(), "stop_preview 应退出预览态")
+
+
+## 预览与情境解析的边界：预览期间任何状态变化都不换曲；退场还原入场前的曲目
+func _test_preview_isolation() -> void:
+	MusicDirector.set_enabled(true)
+	MusicDirector.set_context("started", true)
+	MusicDirector.set_context("battle", false)
+	MusicDirector.set_context("interior", false)
+	MusicDirector.set_context("strategic", false)
+	MusicDirector.set_context("map_type", 2)     # 户外 → field_day
+	_runner.assert_equal(MusicDirector.get_cue(), "field_day", "先落到户外昼曲")
+	MusicDirector.set_tier(1, 0.0)
+	# 预览一首：随后的情境变化不许把它换掉
+	MusicDirector.start_preview("battle", true)
+	MusicDirector.set_context("map_type", 0)     # 走进村落
+	_runner.assert_equal(MusicDirector.get_cue(), "battle",
+		"预览期间情境变化不应抢走曲目（实际：%s）" % MusicDirector.get_cue())
+	_runner.assert_equal(MusicDirector.get_preview_track(), "battle", "预览曲目仍在")
+	# 退场：回到入场前那首与原强度
+	MusicDirector.stop_preview(0.0)
+	_runner.assert_false(MusicDirector.is_previewing(), "退场后不再是预览态")
+	_runner.assert_equal(MusicDirector.get_cue(), "field_day", "退场应还原入场前的曲目")
+	_runner.assert_equal(MusicDirector.get_tier(), 1, "退场应还原入场前的强度档")
+	MusicDirector.set_context("map_type", -1)
+	MusicDirector.set_enabled(false)
+
+
+## 退役层（Fading_ 前缀）拖尾播到 EOF 也会发 finished：回调若不甄别发送者，
+## 会把上一曲的收尾算到新预览头上（页面凭空自动跳下一曲）。
+## 对退役层引用直接发信号来模拟这条时序。
+func _test_preview_retired_layer() -> void:
+	MusicDirector.set_enabled(true)
+	MusicDirector.start_preview("village", false)
+	var retired: AudioStreamPlayer = _find_layer_player("piano")
+	MusicDirector.start_preview("field_day", false)   # village 的层全部退役淡出
+	_runner.assert_true(MusicDirector.is_previewing(), "换曲后仍在预览态")
+	var finished_cue := [""]
+	var spy := func(cue_id: String) -> void: finished_cue[0] = cue_id
+	MusicDirector.preview_finished.connect(spy)
+	# 退役层拖尾到 EOF：不该触发 preview_finished
+	retired.finished.emit()
+	_runner.assert_true(finished_cue[0].is_empty(),
+		"退役层的 finished 不应触发 preview_finished（实际：%s）" % finished_cue[0])
+	# 当前层的收尾：正常通知
+	var current: AudioStreamPlayer = _find_layer_player("piano")
+	_runner.assert_true(current != null and current != retired, "换曲后 piano 指向新层")
+	current.finished.emit()
+	_runner.assert_equal(finished_cue[0], "field_day", "当前层收尾正常通知")
+	MusicDirector.preview_finished.disconnect(spy)
+	MusicDirector.stop_preview(0.0)
+	MusicDirector.set_enabled(false)
+	_runner.assert_false(MusicDirector.is_previewing(), "收尾退出预览态")
+
+
+## 取某层流的循环开关（预览的循环开关落在 AudioStreamOggVorbis.loop 上）。
+## 按名取层是可靠的：退役层在淡出时会被改名成 Fading_L_<层名>（play_cue 腾位），
+## L_<层名> 恒指当前在放的那一层。
+func _layer_stream_loops(layer_name: String) -> bool:
+	var p: AudioStreamPlayer = _find_layer_player(layer_name)
+	if p == null or p.stream == null:
+		return false
+	return (p.stream as AudioStreamOggVorbis).loop
 
 
 # ─────────────────────────────── 压限 ────────────────────────────────

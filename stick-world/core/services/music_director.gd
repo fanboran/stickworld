@@ -29,10 +29,17 @@ extends Node
 ##
 ## 6. **节点恒为 PROCESS_MODE_ALWAYS**：游戏暂停（SceneTree.paused）时音乐
 ##    继续播放，只做压限（duck）。音乐被暂停切断会非常突兀。
+##
+## 7. **预览模式供原声带页**（界内曲目表点播）：曲目由人点名而非情境解析，
+##    期间情境解析让位（否则玩家的状态变化会把正在听的曲子换掉），退场还原。
 
 signal cue_changed(cue_id: String)
 signal tier_changed(tier: int)
 signal context_changed(context: Dictionary)
+## 预览起播（页面选中态由点播路径自行维护，此信号供测试/工具观测）；
+## 非循环预览播到末尾发 preview_finished（原声带页据此自动下一曲）
+signal preview_started(cue_id: String)
+signal preview_finished(cue_id: String)
 
 const MANIFEST_PATH := "res://assets/audio/bgm/music_manifest.json"
 const AMBIENCE_DIR := "res://assets/audio/ambience/"
@@ -48,6 +55,10 @@ const FADE_TIER := 2.0
 const FADE_STINGER := 0.35
 const FADE_AMBIENCE := 4.0
 const FADE_DUCK := 0.6
+## 预览（原声带页）入场/退场：比换曲短，点曲目要"立刻响"
+const FADE_PREVIEW := 0.6
+## 预览固定满层：听的是完整编制，不是某个强度档
+const PREVIEW_TIER := 2
 
 ## 压限档位（dB）。**按来源具名请求**（见 AudioManager.request_music_duck）：
 ## 暂停 / 战斗 / 结算短句各自独立，生效值取最深的那条，互不覆盖。
@@ -91,6 +102,17 @@ var _ambience_name: String = ""
 var _tween: Tween = null
 var _enabled: bool = true
 var _rng := RandomNumberGenerator.new()
+
+## 预览模式（原声带页）：非空 = 正在预览该 cue
+var _preview: String = ""
+## 预览是否循环（页面「循环」开关；关 = 播完发 preview_finished 让页面走下一曲）
+var _preview_looped: bool = true
+var _preview_paused: bool = false
+## 一次性结束通知的去重（各层同长，会各自 finished）
+var _preview_finished_sent: bool = false
+## 入场前在放的曲目/强度，退场时原样还原（""=原本静默）
+var _preview_backup_cue: String = ""
+var _preview_backup_tier: int = 0
 
 
 func _ready() -> void:
@@ -179,6 +201,9 @@ func get_context() -> Dictionary:
 
 func _apply_context() -> void:
 	if not _context["started"]:
+		return
+	# 预览期间情境解析让位：原声带页点的是"这首"，任何状态变化都不该把它换掉
+	if _preview != "":
 		return
 	var want := _resolve_cue()
 	if want != "" and want != _cue:
@@ -276,7 +301,8 @@ func _on_resumed() -> void:
 
 ## 切到指定 cue。分层淡入淡出：新 cue 的层从静音起播，
 ## 旧 cue 的层同时淡出，淡化结束再释放旧播放器。
-func play_cue(cue_id: String, fade_s: float = FADE_CUE) -> void:
+## loop_override：-1 = 依清单（默认）；0/1 = 强制不循环/循环（原声带页的循环开关）。
+func play_cue(cue_id: String, fade_s: float = FADE_CUE, loop_override: int = -1) -> void:
 	var entry: Dictionary = _cue_entry(cue_id)
 	if entry.is_empty():
 		push_warning("[MusicDirector] 清单里没有 cue：%s" % cue_id)
@@ -292,6 +318,13 @@ func play_cue(cue_id: String, fade_s: float = FADE_CUE) -> void:
 	var old_players := _players
 	_players = {}
 	_layer_db = {}
+	# 腾位：树上任何还叫 L_<层名> 的旧层先改名（本轮换下来的 + 上一轮 stop_all 后仍在
+	# 淡出的遗留）。退役层还要活约 1s，同父同名会害 Godot 把**新**建的播放器改名成
+	# @AudioStreamPlayer@N，"L_<层名>" 的身份就落到退役层头上（按名查层的工具/测试会
+	# 读到旧层状态）。扫树而不是只看老字典，孤儿层也不漏。
+	for child in get_children():
+		if child is AudioStreamPlayer and str(child.name).begins_with("L_"):
+			child.name = "Fading_" + str(child.name)
 
 	for layer in entry.get("layers", []):
 		var p := AudioStreamPlayer.new()
@@ -303,7 +336,7 @@ func play_cue(cue_id: String, fade_s: float = FADE_CUE) -> void:
 			push_warning("[MusicDirector] 加载失败：%s" % path)
 			p.queue_free()
 			continue
-		_configure_loop(stream, entry)
+		_configure_loop(stream, entry, loop_override)
 		p.stream = stream
 		p.volume_db = SILENT_DB
 		add_child(p)
@@ -320,13 +353,13 @@ func play_cue(cue_id: String, fade_s: float = FADE_CUE) -> void:
 	cue_changed.emit(cue_id)
 
 
-func _configure_loop(stream: AudioStream, entry: Dictionary) -> void:
+func _configure_loop(stream: AudioStream, entry: Dictionary, loop_override: int = -1) -> void:
 	## 循环参数来自清单，不手工填：OGG 不读内嵌循环点，
 	## 只有这里一处赋值，避免"文件里的值"与"代码里的值"不一致。
 	if not (stream is AudioStreamOggVorbis):
 		return
 	var ogg := stream as AudioStreamOggVorbis
-	ogg.loop = bool(entry.get("loop", true))
+	ogg.loop = bool(entry.get("loop", true)) if loop_override < 0 else loop_override == 1
 	ogg.loop_offset = float(entry.get("loop_offset", 0.0))
 	ogg.bpm = float(entry.get("bpm", 72.0))
 	ogg.bar_beats = int(entry.get("bar_beats", 4))
@@ -473,6 +506,151 @@ func unduck(fade_s: float = FADE_DUCK) -> void:
 	release_duck(&"music_director", fade_s)
 
 
+# ───────────────────────── 预览模式（原声带页点播）─────────────────────────
+# 与情境解析的分工：解析回答"现在该放哪首"（游戏在跑时由状态决定），预览回答
+# "人要听哪首"（曲目表点名）。两者都要拥有一套分层播放，所以共用本类的播放路径
+# （play_cue 的分层/淡化/清单循环），只多一个"谁说了算"的开关。
+
+## 曲目表 —— 原声带页的唯一数据源 = 清单本身（唱片序 = 清单声明序）。
+## 加一首曲子只改 tools/music 渲染出的清单，界面自动多一行（本节不维护第二份曲目表）。
+## 每项：id / 曲名 / 调性 / 速度 / 时长 / 是否循环体 / 层数 / 编制明细（层名 + 强度档）。
+func get_track_list() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for cue_id: String in _manifest.get("cues", {}).keys():
+		var entry := _cue_entry(cue_id)
+		var lineup: Array[Dictionary] = []
+		for layer: Dictionary in entry.get("layers", []):
+			lineup.append({"name": str(layer.get("name", "")), "tier": int(layer.get("tier", 0))})
+		out.append({
+			"id": cue_id,
+			"title": str(entry.get("title", cue_id)),
+			"key": str(entry.get("key", "")),
+			"bpm": float(entry.get("bpm", 0.0)),
+			"duration_s": float(entry.get("duration_s", 0.0)),
+			"loop": bool(entry.get("loop", true)),
+			"layer_count": lineup.size(),
+			"lineup": lineup,
+		})
+	return out
+
+
+func is_previewing() -> bool:
+	return _preview != ""
+
+
+func get_preview_track() -> String:
+	return _preview
+
+
+func is_preview_paused() -> bool:
+	return _preview_paused
+
+
+## 起播预览：绕过情境解析，固定满层（听的是完整编制），循环与否由页面开关决定。
+## 首次入场记住"本来在放什么"，退场原样还原（见 stop_preview）。
+func start_preview(cue_id: String, looped: bool = true) -> bool:
+	if not has_cue(cue_id):
+		push_warning("[MusicDirector] 预览失败，清单里没有 cue：%s" % cue_id)
+		return false
+	if _preview == "":
+		_preview_backup_cue = _cue
+		_preview_backup_tier = _tier
+	_preview = cue_id
+	_preview_looped = looped
+	_preview_paused = false
+	_preview_finished_sent = false
+	# 直接改档位而不走 set_tier：set_tier 会给**旧**层挂淡化，与 play_cue 的
+	# 旧层淡出叠成两条 tween 抢同一个 volume_db（先改档再起播一次算对目标音量）
+	_tier = PREVIEW_TIER
+	play_cue(cue_id, FADE_PREVIEW, 1 if looped else 0)
+	# 非循环预览播到末尾要通知页面走下一曲：各层同长同起点，任一层收尾即整曲收尾。
+	# 绑定发送者：换曲后退役层（Fading_ 前缀）拖尾播完也会触发 finished，回调里甄别
+	for name in _players.keys():
+		var p: AudioStreamPlayer = _players[name]
+		p.finished.connect(_on_preview_layer_finished.bind(p))
+	preview_started.emit(cue_id)
+	return true
+
+
+## 退出预览：还原入场前的曲目与强度；原本静默则淡出静音。
+## 原声带页在离开场景（返回主菜单）时调用——预览是"过路状态"，不该留在系统里。
+func stop_preview(fade_s: float = FADE_CUE) -> void:
+	if _preview == "":
+		return
+	_preview = ""
+	_preview_paused = false
+	_preview_finished_sent = false
+	var restore_cue := _preview_backup_cue
+	var restore_tier := _preview_backup_tier
+	_preview_backup_cue = ""
+	if restore_cue != "":
+		_tier = restore_tier     # 先复位强度，play_cue 才按旧档取层目标
+		play_cue(restore_cue, fade_s)
+	else:
+		stop_all(fade_s)
+
+
+## 预览暂停/继续（走带按钮）。暂停不释放层：继续播放要从原位置接上。
+func set_preview_paused(paused: bool) -> void:
+	if _preview == "":
+		return
+	_preview_paused = paused
+	for name in _players.keys():
+		var p: AudioStreamPlayer = _players[name]
+		if is_instance_valid(p):
+			p.stream_paused = paused
+
+
+## 拖动进度条：各层同帧 seek 到同一点（同长同起点，采样级同步不破）
+func preview_seek(sec: float) -> void:
+	if _preview == "":
+		return
+	var pos := clampf(sec, 0.0, preview_duration())
+	for name in _players.keys():
+		var p: AudioStreamPlayer = _players[name]
+		if is_instance_valid(p):
+			p.seek(pos)
+
+
+## 当前播放位置（秒）。循环曲取模：引擎位置跨 loop 边界回绕，取模后进度条
+## 单调走到头再回零（否则进度条会越过总时长）。
+func preview_position() -> float:
+	var p := _first_layer_player()
+	if p == null:
+		return 0.0
+	var dur := preview_duration()
+	var pos: float = p.get_playback_position()
+	if dur <= 0.0:
+		return pos
+	return fposmod(pos, dur) if _preview_looped else minf(pos, dur)
+
+
+## 当前预览曲目时长（秒）；非预览态返回 0
+func preview_duration() -> float:
+	if _preview == "":
+		return 0.0
+	return float(_cue_entry(_preview).get("duration_s", 0.0))
+
+
+func _first_layer_player() -> AudioStreamPlayer:
+	for name in _players.keys():
+		var p: AudioStreamPlayer = _players[name]
+		if is_instance_valid(p):
+			return p
+	return null
+
+
+## 只认当前在放的层：换曲后旧层改名 Fading_ 拖尾淡出（约 0.9s 后释放），期间播到
+## EOF 仍会发 finished——不甄别会把上一曲的收尾算到当前预览头上，页面凭空跳下一曲
+func _on_preview_layer_finished(p: AudioStreamPlayer) -> void:
+	if _preview == "" or _preview_looped or _preview_finished_sent:
+		return
+	if not is_instance_valid(p) or not _players.values().has(p):
+		return
+	_preview_finished_sent = true
+	preview_finished.emit(_preview)
+
+
 # ─────────────────────────────── 工具 ────────────────────────────────
 
 func stop_all(fade_s: float = 1.0) -> void:
@@ -483,6 +661,10 @@ func stop_all(fade_s: float = 1.0) -> void:
 	_players = {}
 	_layer_db = {}
 	_cue = ""
+	_preview = ""
+	_preview_paused = false
+	_preview_finished_sent = false
+	_preview_backup_cue = ""
 	_fade_player(_ambience, SILENT_DB, fade_s)
 	_ambience_name = ""
 
@@ -528,6 +710,8 @@ func get_state_report() -> Dictionary:
 		"context": _context.duplicate(),
 		"manifest_cues": _manifest.get("cue_count", 0),
 		"playing": is_playing(),
+		"preview": _preview,
+		"preview_paused": _preview_paused,
 	}
 
 

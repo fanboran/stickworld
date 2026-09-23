@@ -32,6 +32,8 @@ import os
 import sys
 
 import numpy as np
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
 from PIL import Image
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "l2_export"))
@@ -347,8 +349,11 @@ def main():
     # 输出目录：默认 Tab 单份（config/strategic_map）；--out-dir 批量 L2 下钻数据（每老 L1 一份）
     out_dir = os.path.abspath(args.out_dir) if args.out_dir else GAME_DIR
     os.makedirs(out_dir, exist_ok=True)
-    if args.base_only:
-        # 审计#8：lab_l1 以包内登记为准（批量重烘免传 --start-l1）
+    _old = None
+    if args.base_only or args.polys_only:
+        # 审计#8：lab_l1 以包内登记为准（批量重烘免传 --start-l1）。
+        # ⚠️ 曾只挂 base_only：polys-only 全按默认 69 跑 → 自家 tiles 全部 patch
+        # 跳过（旧几何）、邻居丢 spawn 区（P2 守门 1/70 的根因），两支必须同读
         with open(os.path.join(out_dir, "l1_world.json"), encoding="utf-8") as f:
             _old = json.load(f)
         lab_l1 = int(_old.get("parent_l1_label") or args.start_l1)
@@ -443,7 +448,16 @@ def main():
     par = parent_lut[ctx_city]
     birth = is_birth[ctx_city] & (ctx_city > 0)
     ctx_combined = np.where(birth, ctx_city, par + 10000).astype(np.int32)
-    ctx_combined[par == 0] = 0
+    # 无城块陆地（荒野：refined 有标签但 city_data 无城块 → par==0）——不得清零丢
+    # 几何（曾致 l1_068 等包整区漏盖），归荒野邻块命名空间（30000+refined，与
+    # legacy 10000+ 不相交），渲染为灰色邻块（politics 侧表必缺色 → 回退灰底）
+    wild = (par == 0) & (ctx_city > 0)
+    ctx_combined[wild] = ctx_city[wild] + 30000
+    # 无主陆地兜底：refined 没分块的陆地（太小不入城块分割的小岛等）也归荒野，
+    # 保证 I2b「每块陆地都有几何覆盖」结构性成立
+    bare = (ctx_city == 0) & ctx_land & (~ctx_lake)
+    ctx_combined[bare] = 30000
+    ctx_combined[ctx_city == 0] = 0        # 水（海/湖，snap 已清 0）无几何
 
     if args.base_only:
         # 审计#8：底图换新代形状——城市色取包内 states 现行表（与运行时
@@ -469,16 +483,47 @@ def main():
 
     combined_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_combined))
     city_mesh = {k: v for k, v in combined_mesh.items() if k < 10000}
-    legacy_mesh = {k - 10000: v for k, v in combined_mesh.items() if k > 10000}
+    # 邻块两族：10000+legacy（城块 parent 聚合，label=legacy id）、30000+refined
+    # （荒野，label=refined id+20000 空间不相交）
+    nbr_mesh = {}
+    for k, v in combined_mesh.items():
+        if 10000 < k < 30000:
+            nbr_mesh[k - 10000] = v
+        elif k >= 30000:
+            nbr_mesh[k - 20000] = v
     lake_mesh = mesh_extract.simplify_mesh(mesh_extract.extract_mesh(ctx_lake.astype(np.int32)))
 
-    # 邻居块（灰色）：context 内除出生块外的所有老 L1 块（细化场 parent 聚合）
-    # 多连通（大陆 + 岛屿）时 extract 输出多个外环——渲染端按 polygons 全画
-    #（出生块自身陆地全部归入城块命名空间，legacy_mesh 中无 lab_l1 条目）
+    # 湖泊多边形先挖掉自己的洞（湖中岛=陆地，由几何层画；结果仍存 (y,x)）——
+    # 否则湖实心外环把岛也涂成湖（守门 I2b 的 geom 减湖后整岛漏盖）
+    for k in lake_mesh:
+        mv = lake_mesh[k]
+        if not mv.get("holes"):
+            continue
+        island = unary_union([Polygon(to_xy(h)) for h in mv["holes"]])
+        pieces = []
+        for p in mv.get("outer", []):
+            pg = Polygon(to_xy(p))
+            if not pg.is_valid:
+                pg = pg.buffer(0)
+            g = pg.difference(island) if not island.is_empty else pg
+            parts = [g] if g.geom_type == "Polygon" else \
+                [x for x in getattr(g, "geoms", []) if x.geom_type == "Polygon"]
+            pieces.extend(x for x in parts if not x.is_empty)
+        mv["outer"] = [np.asarray([(c[1], c[0]) for c in x.exterior.coords])[:-1]
+                       for x in pieces]
+        mv["holes"] = []
+    # 已知残量（P3 待收口）：Chaikin 在窄水道/峡口的跨桥细条（全量实测最重
+    # ~500px、深度 ≤10px，2048 视图 ~1px）——shapely 水面减法在复杂窗不可行
+    # （l1_025 单包 overlay 分钟级），改由守门 I2a cap 容差 + P3 水感知平滑收口
+
+    # 邻居块（灰色）：context 内除出生城块外的所有陆地（细化场 parent 聚合）
+    # + 荒野（无城块陆地）。多连通（大陆 + 岛屿）时 extract 输出多个外环——
+    # 渲染端按 polygons 全画。⚠️ 不得按 k == lab_l1 跳过：跨区归属的城块
+    # （parent 指向本包 label）不是本包 tiles，跳过 = 整区陆地无几何（l1_068 漏盖根因）
     neighbors_data = []
     nbr_labels = []
-    for k, mv in legacy_mesh.items():
-        if k <= 0 or k == lab_l1:
+    for k, mv in nbr_mesh.items():
+        if k <= 0:
             continue
         outs = [to_xy(p) for p in mv.get("outer", [])]
         if not outs:
@@ -554,14 +599,12 @@ def main():
     # 出生 L1 权威轮廓 = 本 L1 城块多边形并集的最大外环（与 tile 填充逐点一致；
     # 旧实现取 legacy 块轮廓——旧代几何且与细化城块差 ±11-14px）。
     # 只取最大环：岛屿不画 L1 轮廓（防多环串接成跨海乱飞线；岛屿由城市色块/描边呈现）
-    from shapely.geometry import Polygon as ShPolygon
-    from shapely.ops import unary_union
     l1_polygon = []
     _geoms = []
     for t in tiles:
         for r in t["polygons"]:
             if len(r) >= 3:
-                _geoms.append(ShPolygon(r).buffer(0))
+                _geoms.append(Polygon(r).buffer(0))
     if _geoms:
         _u = unary_union(_geoms)
         _polys = list(_u.geoms) if _u.geom_type == "MultiPolygon" else [_u]

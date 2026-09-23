@@ -98,13 +98,15 @@ def load_water_masks(output_dir):
     return land, lake, river
 
 
-def purge_sea_lakes(lake, land, min_offshore_frac=0.5):
+def purge_sea_lakes(lake, land, min_offshore_frac=0.0):
     """湖光栅净化（创始人 2026-09-22 复检发现）：剔除「连海组件」。
 
     build_lake_raster 的连海判据 = 组件贴图幅边——漏掉「经窄水道与海相连、
     但组件本身不贴图幅边」的海湾小水斑（实测一例 167px 组件 160/169 在海里，
     被三处消费成 base 湖色方块/碎湖多边形/守门 IoU 拉低）。判据补强：
     组件膨胀 4px 的邻域环内海占比 ≥ min_offshore_frac → 判连海，剔除。
+    2026-09-23 创始人定「湖不临海」：阈值 0.5 → 0.0（凡邻域触海即剔，
+    半开海岸潟湖不再留作湖）。
     """
     from scipy import ndimage as ndi
     out = lake.copy()
@@ -117,7 +119,7 @@ def purge_sea_lakes(lake, land, min_offshore_frac=0.5):
         comp = cl == cid
         ring = ndi.binary_dilation(comp, iterations=4) & ~comp
         n_ring = int(ring.sum())
-        if n_ring and int((ring & sea).sum()) / n_ring >= min_offshore_frac:
+        if n_ring and int((ring & sea).sum()) / n_ring > min_offshore_frac:
             out[comp] = False
             n_purged += 1
     return out, n_purged

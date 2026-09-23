@@ -194,6 +194,12 @@ def chaikin_smooth(loop, corner_min_len=3.0):
     某顶点相邻两条边都足够长（>=corner_min_len）视为**真实角**，保留原顶点不切角；
     像素台阶（边长 1~2px 的小凸点）仍做 Chaikin 平滑。判定只依赖共享边长 ->
     相邻地块结论一致，无缝保持。
+
+    长短边交替的顶点再分两类（P2 全量守门发现：窄湾口 1~2px 宽、纵深 10px+，
+    被当台阶平滑=色块桥接海湾/海峡）：
+    - **凹口折返**（跨过短边看前后长边方向，转角 >90°）→ 保留顶点，湾口不桥；
+    - **楼梯同向**（前后长边方向连续，转角 ≈0）→ 照常平滑。
+    判定只用环局部几何与长度/夹角（对环取向不变式）→ 共享边两侧结论一致。
     """
     n = len(loop)
     if n < 3:
@@ -207,6 +213,26 @@ def chaikin_smooth(loop, corner_min_len=3.0):
         len2 = math.hypot(c[0] - b[0], c[1] - b[1])
         if len1 >= corner_min_len and len2 >= corner_min_len:
             keep[k] = True
+        elif len1 < corner_min_len and len2 < corner_min_len:
+            keep[k] = False
+        else:
+            # 长短交替：跨过短边取前后长边方向，转角大 = 折返凹口，保留
+            if len1 < corner_min_len:
+                a2 = loop[(k - 2) % n]
+                d1 = (a[0] - a2[0], a[1] - a2[1])       # 前长边方向
+                d2 = (c[0] - b[0], c[1] - b[1])         # 后长边方向
+            else:
+                c2 = loop[(k + 2) % n]
+                d1 = (b[0] - a[0], b[1] - a[1])         # 前长边方向
+                d2 = (c2[0] - c[0], c2[1] - c[1])       # 后长边方向
+            cross = d1[0] * d2[1] - d1[1] * d2[0]
+            dot = d1[0] * d2[0] + d1[1] * d2[1]
+            l1 = math.hypot(*d1)
+            l2 = math.hypot(*d2)
+            if l1 < 1e-9 or l2 < 1e-9:
+                keep[k] = True
+            else:
+                keep[k] = abs(math.atan2(cross, dot)) > math.pi / 2.0
     out = []
     for k in range(n):
         if keep[k]:

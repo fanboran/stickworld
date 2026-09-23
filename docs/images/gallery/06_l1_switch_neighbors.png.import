@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://81cf5l1aolie"
-path="res://.godot/imported/walker_f0.png-09fce8a4f2ed10619ddc637244efa8d4.ctex"
+uid="uid://cps1mhv87btxf"
+path="res://.godot/imported/06_l1_switch_neighbors.png-699d0c9e6f0c397d3fc8c936cf039711.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sky/walker_f0.png"
-dest_files=["res://.godot/imported/walker_f0.png-09fce8a4f2ed10619ddc637244efa8d4.ctex"]
+source_file="res://docs/images/gallery/06_l1_switch_neighbors.png"
+dest_files=["res://.godot/imported/06_l1_switch_neighbors.png-699d0c9e6f0c397d3fc8c936cf039711.ctex"]
 
 [params]
 

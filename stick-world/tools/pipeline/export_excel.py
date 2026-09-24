@@ -19,6 +19,7 @@ Excel 格式约定:
       --yes / -y 可跳过阻断强制导出（供自动化脚本使用）
     - id 为空的数据行永远不会写入 .tres（防 {id: null} 垃圾行进产物），
       --yes 强制导出时同样跳过；全空行同样只在报错中出现，从不写入产物
+    - 退役 sheet（RETIRED_SHEETS 清单）不解析不导出，数据留在 xlsx 供参考
     - 重导出时保留目标 .tres 头部已有的 uid="uid://..."（若存在）
 
 输出:
@@ -51,6 +52,12 @@ REF_COLUMN_PATTERN = re.compile(r"^(.+)_id$")
 
 # .tres 资源声明行中的 uid 属性（Godot 4.4+ 持久资源 uid）
 UID_ATTR_PATTERN = re.compile(r'\buid="(uid://[^"]+)"')
+
+# 退役 sheet 清单：(xlsx 文件名, sheet 名)——数据仍留在 xlsx 供参考，但不再导出 .tres
+# （防止重跑导出复活已退役配置；退役依据见各系统设计文档）
+RETIRED_SHEETS = {
+    ("扩张数据.xlsx", "factions"),  # 政权真源已换 worldgen political_data.json（世界模型 M1）
+}
 
 
 # ---------------------------------------------------------------------------
@@ -520,6 +527,9 @@ def export_all(dry_run=False, assume_yes=False):
             continue
 
         for sheet_name in wb.sheetnames:
+            if (file_name, sheet_name) in RETIRED_SHEETS:
+                print(f"  ├─ Sheet '{sheet_name}': 已退役（RETIRED_SHEETS），跳过导出")
+                continue
             ws = wb[sheet_name]
             raw_headers, headers, data_rows, sheet_errors, metadata, blank_rows = parse_sheet_with_raw(ws)
 

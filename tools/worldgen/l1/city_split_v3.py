@@ -186,23 +186,23 @@ def grow_cities(land, parent, seeds, seed_labels):
 
 
 def cap_by_claim(labels, seeds, seed_labels, claims):
-    """主张盘封顶：距自己聚落欧氏距离 > 主张半径的像素退归荒地（label 0）。"""
-    lab_of = {int(lb): i for i, lb in enumerate(seed_labels)}
-    labs = np.unique(labels[labels > 0])
-    removed = 0
-    for lb in labs:
-        i = lab_of[int(lb)]
-        m = labels == lb
-        ys, xs = np.nonzero(m)
-        y0p, y1p = int(ys.min()), int(ys.max()) + 1
-        x0p, x1p = int(xs.min()), int(xs.max()) + 1
-        sy, sx = seeds[i][1], seeds[i][0]
-        yy, xx = np.mgrid[y0p:y1p, x0p:x1p]
-        d2 = (yy - sy) ** 2 + (xx - sx) ** 2
-        far = m[y0p:y1p, x0p:x1p] & (d2 > claims[i] ** 2)
-        removed += int(far.sum())
-        labels[y0p:y1p, x0p:x1p][far] = 0
-    return removed
+    """主张覆盖封顶（创始人定稿：城块直接填满、不留圆形空隙）——
+    只有「最近城的主张半径都够不到」的像素才退归荒地（label 0）。
+    相邻城的覆盖交叠区由划分自然切分（拼满无孔），荒地只在所有城都太远的
+    大片区域出现。判据：dist(p, 最近城) ≤ 该最近城的 claim 半径。"""
+    from scipy.ndimage import distance_transform_edt
+    h, w = labels.shape
+    seed_mask = np.zeros((h, w), dtype=bool)
+    claim_img = np.zeros((h, w), dtype=np.float32)
+    for i, (sx, sy) in enumerate(seeds):
+        seed_mask[int(sy), int(sx)] = True
+        claim_img[int(sy), int(sx)] = float(claims[i])
+    dist, (iy, ix) = distance_transform_edt(~seed_mask, return_indices=True)
+    claim_at = claim_img[iy, ix]
+    covered = dist <= claim_at
+    n_removed = int(((labels > 0) & ~covered).sum())
+    labels[~covered] = 0
+    return n_removed
 
 
 def load_legacy_parent_colors():

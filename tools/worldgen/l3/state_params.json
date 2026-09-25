@@ -490,7 +490,11 @@
     "min_sep_px": 900,
     "sep_relax": 0.75,
     "max_relax_rounds": 7,
-    "central_tau_px": 900
+    "central_tau_px": 900,
+    "cap_pop_base": 0.55,
+    "cap_pop_span": 0.9,
+    "cap_level1_discount": 0.35,
+    "cap_pop_comment": "都城适宜性人口因子：cap_suit=geo×cent×(base+span×ps)；level1 城再×discount（大城更可能为都；偏远区域无大城时村都城为地理必然）"
    },
    "graph": {
     "comment": "kNN 城图（2048 级坐标、max_edge 与 state_expand_lite 同口径）+ 分量桥接（_bridge_components 借用）；选 kNN 不选 Delaunay：Delaunay 长薄三角形边跨海跨山无意义，kNN+距离上限贴合 attack_cost 沿线积分语义且桥接兜底孤岛。geo_cost = attack_cost 沿连线 line_samples 点采样均值 × 8192 级距离（fields_meta 消费口径；8192 mmap 直采保 2px 河流带不被降采样稀释）",

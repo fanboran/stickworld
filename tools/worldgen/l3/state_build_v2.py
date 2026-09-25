@@ -109,6 +109,9 @@ def build_city_attrs(settle, suit, res, cents, cap_p, ssp):
     hws = float(ssp["h_w_suit"])
     hwr = float(ssp["h_w_res"])
     tau = float(cap_p["central_tau_px"])
+    cap_p0 = float(cap_p.get("cap_pop_base", 0.55))
+    cap_p1 = float(cap_p.get("cap_pop_span", 0.9))
+    cap_l1 = float(cap_p.get("cap_level1_discount", 0.35))
     cities = []
     for c in sorted(settle, key=lambda x: int(x["label"])):
         s = sb.bilinear_at(suit, c["x"], c["y"])
@@ -122,6 +125,12 @@ def build_city_attrs(settle, suit, res, cents, cap_p, ssp):
             cent = 0.0
         else:
             cent = math.exp(-math.hypot(c["x"] - cen[0], c["y"] - cen[1]) / tau)
+        # 都城适宜性含人口因子（大城更可能为都：都城=政权心脏，村庄都城观感错位；
+        # 软权重不硬排除——1 城邦的村城仍可当都）+ level 1 折扣
+        lv = int(c.get("level", 1))
+        pop_f = cap_p0 + cap_p1 * float(c["population_score"])
+        if lv <= 1:
+            pop_f *= cap_l1
         cities.append({
             "label": int(c["label"]),
             "sid": sid_of(c["label"]),
@@ -129,7 +138,7 @@ def build_city_attrs(settle, suit, res, cents, cap_p, ssp):
             "dom": int(c["dominant"]),
             "mix": float(c["mix"]),
             "pop": float(c["population_score"]),
-            "geo": geo, "cap_suit": geo * cent,
+            "geo": geo, "cap_suit": geo * cent * pop_f,
         })
     _tag_island_groups(cities)
     return cities
@@ -918,19 +927,31 @@ def unify_small_islands(states, owner, cities, gp):
         for sid, _n in over:
             if len(cnt) <= mid_cap:
                 break
+            if sid not in cnt:
+                continue
             strongest = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))
             strongest = [k for k, _ in strongest if k != sid][0]
-            for u in us:
-                if owner[u] == sid and                         cities[u]["sid"] != states[sid]["capital"]:
-                    states[sid]["cities"].discard(u)
-                    owner[u] = strongest
-                    states[strongest]["cities"].add(u)
+            uset = set(us)
+            whole = all(w in uset for w in states[sid]["cities"])                 or len(states[sid]["cities"]) <= 3
+            if whole:
+                for w in list(states[sid]["cities"]):
+                    states[sid]["cities"].discard(w)
+                    owner[w] = strongest
+                    states[strongest]["cities"].add(w)
                     moved += 1
+                states[sid]["extinct_round"] = 0
+                states[sid]["cause"] = "island_unify"
+            else:
+                for u in us:
+                    if owner[u] == sid and                             cities[u]["sid"] != states[sid]["capital"]:
+                        states[sid]["cities"].discard(u)
+                        owner[u] = strongest
+                        states[strongest]["cities"].add(u)
+                        moved += 1
             if not states[sid]["cities"]:
                 states[sid]["extinct_round"] = 0
                 states[sid]["cause"] = "island_unify"
-            del cnt[sid]
-            cnt[strongest] = cnt.get(strongest, 0) + 1
+            cnt[strongest] = cnt.get(strongest, 0) + cnt.pop(sid, 0)
     if moved:
         print("  [island] 小岛群归一迁移 %d 城" % moved)
 

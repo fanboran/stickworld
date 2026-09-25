@@ -101,11 +101,11 @@ def main():
         else:
             sid, name, color = "", "", [110, 110, 110]
             n_reserved += 1
-        # ⚠️ 轴序：l3_l1.json 的 polygons 与 centroid **同为 [y,x]**（见 export_l3_l1_view.py
-        # 的 main_polys_only：centroid 写的是 [ys.mean(), xs.mean()]）。本表统一存 [x,y]
-        # （运行时直接 Vector2(x, y) 用），故质心必须换序——不换序会让方位判定沿主对角轴翻转。
+        # 轴序（实测判定）：l3_l1.json 的 polygons 是 [y,x]，但 centroid 已是 [x,y]
+        # （centroid 落在包窗口的 x/y 区间内，与 polygons 轴序不同）——本表统一存
+        # [x,y]（运行时直接 Vector2(x, y) 用），centroid 原样直传，勿再换序。
         cen = t.get("centroid", [0.0, 0.0])
-        centroid_xy = [round(float(cen[1]), 2), round(float(cen[0]), 2)]
+        centroid_xy = [round(float(cen[0]), 2), round(float(cen[1]), 2)]
         provinces[str(label)] = {
             "state_id": sid,
             "name": name,

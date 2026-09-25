@@ -159,7 +159,8 @@ def build_damp(labels, parent_map, falloff):
     return np.clip(dist / float(falloff), 0.0, 1.0).astype(np.float32)
 
 
-def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None, land_true=None):
+def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None, land_true=None,
+                preserve=None):
     """fBm 域扭曲反向采样 + 海岸贴合 + 陆地空洞回填。damp=城-城边界位移衰减场。
 
     海岸贴合（2026-09-22 创始人指令「陆地边缘蒙版对齐最新版」真正落地）：
@@ -168,6 +169,11 @@ def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None, 
     现按最新 locked_continent_8192 真相裁切：越海标签归 0，让细化蒙版的陆地
     边缘精确贴最新海岸；内部省界/城块划分从原始 labels 提取（warp 反向采样
     拓扑不变，同省城-城界 damp 保持直线）。
+
+    preserve（v2 荒地语义）：无主荒地掩膜（bool 场，True=保持 0 不回填）。
+    城块划分 v3 的主张盘封顶在陆地上留 0=荒地——这些 0 是设计产物不是 warp
+    空洞，两处回填（海岸带空洞 + 内陆零碎水域）都必须跳过，否则荒地被最近
+    城块吃掉。空洞回填只修城块域内的 warp 裂缝；荒地边界随 warp 自然摆动。
     """
     H, W = labels.shape
     out = np.zeros_like(labels)
@@ -195,7 +201,10 @@ def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None, 
     else:
         land_true_use = coast_land
     # 陆地空洞回填：最新陆地内 warp 位移跨界产生的 0 空洞（细半岛 11px 位移）
+    # （v2 荒地语义：preserve=True 的设计荒地 0 不算空洞，不回填）
     hole = land_true_use & (out == 0)
+    if preserve is not None:
+        hole &= ~preserve
     n_hole = int(hole.sum())
     if n_hole:
         _, inds = ndi.distance_transform_edt(out == 0, return_indices=True)
@@ -213,6 +222,8 @@ def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None, 
         thick = ndi.binary_opening(zero, structure=struct, iterations=5)
         keep = thick | lake_mask
         hole2 = zero & ~keep
+        if preserve is not None:
+            hole2 &= ~preserve
         n2 = int(hole2.sum())
         if n2:
             _, inds = ndi.distance_transform_edt(zero, return_indices=True)
@@ -267,8 +278,21 @@ def main():
     damp = build_damp(labels, parent_map, prm.get("damp_falloff", 28))
     lake_mask = np.array(Image.open(os.path.join(
         OUT_DIR, "fractal_lake_mask_8192.png")).convert("L")) > 0
+    land_locked = build_locked_land()
+    # 设计荒地（v2）：城块划分 v3 主张盘封顶 + 无聚落分量留在输入场的陆地 0。
+    # 判别「荒地 vs 细水（河/塘）」：荒地 = 能容纳 ~9px 厚度核的 0 陆地组件
+    # （腐蚀 4 轮存活再膨胀回收）——河/塘/贫富城块间的薄缝容不下核，仍按 EU4
+    # 惯例回填城块；不能用厚度开运算判（荒地连海成一片，开运算分不开）。
+    river_mask = np.array(Image.open(os.path.join(
+        OUT_DIR, "fractal_river_mask_8192.png")).convert("L")) > 127
+    zero_land = land_locked & (labels == 0) & ~lake_mask & ~river_mask
+    ones3 = np.ones((3, 3), dtype=bool)
+    core = ndi.binary_erosion(zero_land, structure=ones3, iterations=4)
+    preserve = ndi.binary_dilation(core, structure=ones3, iterations=5) & zero_land
+    print("    设计荒地 %d px（陆地 %.1f%%）" % (
+        int(preserve.sum()), preserve.sum() / max(land_locked.sum(), 1) * 100))
     refined = warp_sample(labels, coast_land, prm, damp=damp, lake_mask=lake_mask,
-                          land_true=build_locked_land())
+                          land_true=land_locked, preserve=preserve)
 
     print("[3] 对角接触 4 连通化 ...")
     refined = decouple_diagonal(refined, int(prm["diag_max_iter"]))

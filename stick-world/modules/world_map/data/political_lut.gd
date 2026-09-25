@@ -2,7 +2,7 @@ class_name PoliticalLut
 extends RefCounted
 ## 政权色 LUT（R7/R9 过渡态裁决：政权色运行时上色，零烘焙）。
 ##
-## 生成端把 CONTENT_PALETTE 派生的 80 国色写进 political_data.json（states[].color
+## 生成端把 CONTENT_PALETTE 派生的政权色写进 political_data.json（states[].color
 ## + states[].lut_index），并产政权 ID mask（L3 一张 8192 单通道 PNG / L2 每地区
 ## 一张窗口裁切，像素值 = lut_index）。本类在运行时把 states 表构建成 256x1 LUT
 ## 纹理，供 political_mask_colorize.gdshader 逐像素查表上色——
@@ -16,7 +16,7 @@ extends RefCounted
 ## 政权色变更信号（矢量 fill 直烘 RGB 路线的重烘通知；set_state_color 发射）
 signal state_color_changed(sid: String, col: Color)
 
-## mask 保留码：自由城邦（无归属陆地，L3/L2 mask 通用）
+## mask 保留码：无主荒地（无归属陆地；V2 世界语义为主张盘外荒地，L3/L2 mask 通用）
 const CODE_FREE_CITY := 253
 ## L2 mask 保留码：湖泊（色值同 L2MapRenderer.LAKE_COLOR）
 const CODE_LAKE := 254
@@ -48,7 +48,7 @@ static var _shared: PoliticalLut = null
 
 ## 政权表（state_id -> info：name/culture/culture_label/color/lut_index/is_city_state/n_cities...）
 var states: Dictionary = {}
-## state_id -> lut_index（1..80）
+## state_id -> lut_index（1..N，N=政权数 176）
 var index_of: Dictionary = {}
 ## 256x1 RGBA8 色表图像（x = lut_index；0 透明；253/254/255 保留码）
 var image: Image = null

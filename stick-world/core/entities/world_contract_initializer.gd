@@ -2,35 +2,34 @@ class_name WorldContractInitializer extends RefCounted
 ## 世界契约初始化器 —— 新开局从 mapdata 真源全量构建政权域/城市域
 ## （世界模型整合 M1 统一契约，完整版蓝图 §3.4）。
 ##
-## 两路语义：新开局 = 真源构建（本类全量灌入 80 政权 + 1040 城）；
+## 两路语义：新开局 = 真源构建（本类全量灌入 179 政权 + 1036 城，V2 世界重生成）；
 ## 读档 = 存档恢复（WorldState.load_save_data，不经本类）。
 ## 玩家政权壳由 WorldState.start_new_run 先立（state_id "player"），本类灌入用
 ## merge 非覆盖——玩家壳保留；真源 states 表亦无该 id（防御见 build 内断言）。
 ##
 ## ── 数据真源与选择理由 ──
-##   政权/归属：political_data.json（states 80 表 + city_owners 1040 表，唯一真相源；
-##     72KB，导出包不排除该文件、也无 bin，直接 JSON 读）。
-##   城市规模分（population_score）：l3_city 单文件覆盖全部 1040 城（label 连续
-##     1..1040 含出生 8 城），其 population_score 与 70 份 l1 包侧逐城全同
-##     （1040/1040 一致，实测）；而 70 份 l1_world.json 合计约 100MB，逐包解析
-##     不可接受——故规模分取 l3_city，不扫 l1 包。
+##   政权/归属：political_data.json（states 179 表 + city_owners 1036 表，唯一真相源；
+##     导出包不排除该文件、也无 bin，直接 JSON 读）。
+##   城市规模分（population_score）：l3_city 单文件覆盖全部 1036 城（label 连续
+##     1..1036），其 population_score 与 70 份 l1 包侧逐城全同（V2 重烤后同源）；
+##     而 70 份 l1_world.json 合计约 100MB，逐包解析不可接受——故规模分取
+##     l3_city，不扫 l1 包。
 ##   装载约定：l3_city / l1_world 走「bin 优先 + JSON 兜底」（LWDB + bytes_to_var，
 ##     与 l1/l2/l3_world_data 的 _read_data_dict 同款——导出包 exclude_filter 排除
 ##     大 JSON 只带 .bin，纯 JSON 读会在导出包静默降级）；political_data 无 bin
 ##     且不被排除，直接 JSON 读。
 ##
 ## ── id / tile_key 映射规律（以实际数据核实）──
-##   l3_city.tiles[].label（连续 1..1040）↔ 聚落 id "settlement_city_%03d"
+##   l3_city.tiles[].label（连续 1..1036）↔ 聚落 id "settlement_city_%03d"
 ##   （%03d 为最小 3 位零填充：label 1 → settlement_city_001，1036 →
 ##   settlement_city_1036；与生成端 / l3_world_data 同规则）↔ tile_key
 ##   "city_%03d"（l1 包/出生包 tile_id 实测格式，同源数字）。
 ##
 ## ── level 推导（档位 1-5，与 SettlementRef.Level 同形，语义见 city_state.gd）──
 ##   level := level_from_score(base_ps)：ps < 0.187 → 1（村）；< 0.342 → 2（镇）；
-##   否则 → 3（城）。阈值从当前真源全集反推：对 1040 城 100% 复现 l1 包
-##   settlement.level 字段（零误差）——即 L1 场景 SettlementRef.level 的运行时口径，
-##   账面档位与玩家进城所见档位逐城一致。不取 l3_city 自带 level 字段：那是战略图
-##   blob 的另一套分档（阈值 0.35/0.55），与 L1 场景口径约 75% 城不一致。
+##   否则 → 3（城）。阈值 = V2 生成端唯一档位口径（settlement_build 同阈值算
+##   level）；l3_city 自带 level 字段同源，本函数按反推保持不依赖该字段存在性，
+##   账面档位与玩家进城所见（SettlementRef.level）逐城一致。
 ##   当前真源只出 1-3 档；4/5 档（中心城市/帝国首都）由 M2+ 人口自然成长涌现
 ##   （涌现优先于配置），本函数不产出。
 ##   ⚠️ worldgen 生成端若改 level 规则，须重核两阈值（tests/unit/test_world_contract.gd
@@ -115,7 +114,7 @@ static func build_initial_contract(run_seed: int) -> Dictionary:
 	var factions_out: Dictionary = {}
 	for state_id in states:
 		var fid := str(state_id)
-		# 契约冲突防御：玩家 id 为保留 id，真源混入即跳过该条（80 表实测无此 id，
+		# 契约冲突防御：玩家 id 为保留 id，真源混入即跳过该条（179 表实测无此 id，
 		# tests/unit/test_world_contract.gd 有独立断言）
 		if fid == PLAYER_FACTION_ID:
 			push_error("[WorldContractInitializer] states 表混入玩家保留 id \"player\"，跳过该条")
@@ -219,7 +218,7 @@ static func _read_political_data() -> Dictionary:
 
 
 ## l3_city 的 label → population_score 表（bin 优先，见 _read_data_dict；
-## 缺该城条目回退 0.0 → 1 档带下沿，当前真源 1040 城全有该字段）
+## 缺该城条目回退 0.0 → 1 档带下沿，当前真源 1036 城全有该字段）
 static func _read_city_scores() -> Dictionary:
 	var data := _read_data_dict(L3_CITY_PATH)
 	var out: Dictionary = {}

@@ -162,7 +162,7 @@ func set_tax_rate(rate: float) -> Dictionary
 
 ## 四、扩张模块 `modules/expansion`（无对外 api）
 
-expansion 模块不设 `api.gd` 对外契约面（据点玩法层的配置/编排/出入口按 [`docs/设计/完整版蓝图.md`](../设计/完整版蓝图.md) §6.1 拆除，模块收敛为纯管道）；仅保留驻军生成服务：
+expansion 模块不设 `api.gd` 对外契约面（据点玩法层的配置/编排/出入口按 [`docs/设计/完整版蓝图.md`](../../设计/完整版蓝图.md) §6.1 拆除，模块收敛为纯管道）；仅保留驻军生成服务：
 
 ```gdscript
 # scripts/garrison_spawner.gd（RefCounted 纯服务，无节点、无信号）

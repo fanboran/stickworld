@@ -201,6 +201,41 @@ def main():
                      h["annexations"], h["collapses"], h["border_flips"],
                      h["states_initial"], h["states_final"], h["states_born"],
                      h["states_extinct"], sum(sizes.values())))
+
+    # ---- 小岛群岛内统一（创始人定向：同一个岛屿内更容易统一） ----
+    import numpy as np
+    from scipy import ndimage as _nd
+    biome = np.load(os.path.join(fc.OUTPUT_DIR, "biome_labels_2048.npy"))
+    grp_lab, _ = _nd.label(_nd.binary_dilation(biome > 0, iterations=2))
+    kk = fc.SIZE / fc.SIZE_FULL
+    pos = {s["settlement_id"]: (s["x"], s["y"]) for s in settle}
+    grp_of = {cid: int(grp_lab[int(pos[cid][1] * kk), int(pos[cid][0] * kk)])
+              for cid in city_owners}
+    grp_n = {}
+    for g in grp_of.values():
+        grp_n[g] = grp_n.get(g, 0) + 1
+    small_split = []
+    grp_states = {}
+    for cid, sid in city_owners.items():
+        grp_states.setdefault(grp_of[cid], set()).add(sid)
+    mid_split = []
+    for g, sset in grp_states.items():
+        if g <= 0:
+            continue
+        if grp_n[g] <= 12 and len(sset) > 1:
+            small_split.append(g)      # ≤12 城小岛必须一国
+        if 12 < grp_n[g] <= 30 and len(sset) > 4:
+            mid_split.append((g, len(sset)))  # 13-30 城群国数上限
+    if not small_split and not mid_split:
+        check_ok("小岛群岛内统一",
+                 "≤12 城岛群归一国；13-30 城群国数 ≤4")
+    else:
+        msg = []
+        if small_split:
+            msg.append("多国分占小岛群: %s" % small_split[:6])
+        if mid_split:
+            msg.append("13-30 城群超4国: %s" % mid_split[:6])
+        check_fail(fails, "小岛群岛内统一", "；".join(msg))
     bad_hist = [sid for sid, s in states.items()
                 if s["history"]["annexed"] < 0 or s["history"]["flips_in"] < 0
                 or s["history"]["flips_out"] < 0]

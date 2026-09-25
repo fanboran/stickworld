@@ -496,7 +496,12 @@
     "comment": "kNN 城图（2048 级坐标、max_edge 与 state_expand_lite 同口径）+ 分量桥接（_bridge_components 借用）；选 kNN 不选 Delaunay：Delaunay 长薄三角形边跨海跨山无意义，kNN+距离上限贴合 attack_cost 沿线积分语义且桥接兜底孤岛。geo_cost = attack_cost 沿连线 line_samples 点采样均值 × 8192 级距离（fields_meta 消费口径；8192 mmap 直采保 2px 河流带不被降采样稀释）",
     "knear": 8,
     "max_edge_px": 520,
-    "line_samples": 24
+    "line_samples": 24,
+    "k_island": 10.0,
+    "island_group_dilate_px": 2,
+    "k_island_comment": "跨岛群边权重罚（同岛更易统一）；岛群=海膨胀 dilate_px 后连通的陆块（窄海峡可渡）；A6 兼并限同岛群",
+    "grp_single_max_cities": 12,
+    "grp_single_max_cities_comment": "≤此城数的岛群归一国（都城限1/清洗归一/解体保护三处同参）；13-30 城群允许多国（合并与文化自然收敛，check 断言国数上限）"
    },
    "merge": {
     "comment": "边权（静态）= geo_cost × (1 + k_culture×(1-城对相似度))；Dijkstra 松弛时乘每态因子 (1/expansionism_i) × (1 + k_capital×min(1,(城到本国都城 px 测地距/reach)²)) × w_i 面积反馈 × (1+eps×已占城数)。城对相似度 = sim(dom_u,dom_v)×(1-mix_u)×(1-mix_v)（culture_similarity.json 消费口径），任一端 dominant=0 → 文化因子取 1（荒野城纯地理归属，孤立小邦形态允许）。Balzer 面积反馈迭代到采样 target（大国自然多吃、小国到量即止）",
@@ -541,7 +546,8 @@
     "collapse_over": 8,
     "p_indep": 0.32,
     "p_flip": 0.6,
-    "flip_mix_min": 0.3
+    "flip_mix_min": 0.3,
+    "collapse_island_max": 30
    },
    "naming": {
     "comment": "构型命名：每文化语素库自 culture_sources.morph_seed 派生（np.random.default_rng）——声母字库按语系共享（同语系听感相近）、韵母/政权后缀/城市后缀按生计原型分档，荒野文化（dominant=0）用通用中性库；构词法 = [方位前缀]+词根(1-2 音节)+后缀，政权名 3-5 字、城市名 2-4 字，全表去重。生成名全部「提案/待定」",

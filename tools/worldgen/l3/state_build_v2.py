@@ -131,7 +131,22 @@ def build_city_attrs(settle, suit, res, cents, cap_p, ssp):
             "pop": float(c["population_score"]),
             "geo": geo, "cap_suit": geo * cent,
         })
+    _tag_island_groups(cities)
     return cities
+
+
+def _tag_island_groups(cities, gp=None):
+    """岛群标记（创始人定向：同岛/同岛群更易统一）——陆地连通分量归并岛群：
+    海膨胀 dilate_px 后连通的陆块视为同一岛群（窄海峡=可渡，允许群岛国），
+    城附 grp 字段；跨群边权受重罚、A6 兼并限同群。确定性。"""
+    from scipy import ndimage
+    biome = np.load(os.path.join(fc.OUTPUT_DIR, "biome_labels_2048.npy"))
+    dil = int((gp or {}).get("island_group_dilate_px", 2))
+    land_d = ndimage.binary_dilation(biome > 0, iterations=dil)
+    grp_lab, _ = ndimage.label(land_d)
+    k = fc.SIZE / fc.SIZE_FULL
+    for c in cities:
+        c["grp"] = int(grp_lab[int(c["y"] * k), int(c["x"] * k)])
 
 
 # ---------- 规模谱（A4-2） ----------
@@ -246,20 +261,46 @@ def clamp_targets_to_pools(targets, cap_nodes, pxadj, spec, cap):
 # ---------- 都城抽取（A4-1） ----------
 
 def pick_capitals(cities, n_c, cap_p):
-    """都城适宜性降序 + 四叉树最小间距自适应放宽（state_expand_lite 同族）。"""
+    """都城适宜性降序 + 四叉树最小间距自适应放宽（state_expand_lite 同族）。
+
+    先按岛群配额占席（创始人定向：同岛更易统一——城数 ≥ grp_quota_min 的
+    岛群至少 1 个都城，岛内先成国核），再全局按分排序补齐。"""
     pool = sorted(cities, key=lambda c: (-c["cap_suit"], c["label"]))
     sep0 = float(cap_p["min_sep_px"])
+    quota_min = int(cap_p.get("grp_quota_min", 3))
+    grp_city = {}
+    for c in cities:
+        grp_city.setdefault(c.get("grp", 0), []).append(c)
+    big_grps = [g for g, cs in grp_city.items()
+                if len(cs) >= quota_min and g > 0]
     picks = []
     for relax in range(int(cap_p["max_relax_rounds"]) + 1):
         sep = sep0 * (float(cap_p["sep_relax"]) ** relax)
         qt = _SeedQuadtree(0.0, 0.0, float(fc.SIZE_FULL), float(fc.SIZE_FULL))
         picks = []
+        # 阶段一：岛群配额（每大群 1 席，群内按 cap_suit 降序试间距）
+        for g in sorted(big_grps):
+            for c in sorted(grp_city[g], key=lambda x: (-x["cap_suit"], x["label"])):
+                if not qt.has_within(float(c["x"]), float(c["y"]), sep):
+                    qt.insert(float(c["x"]), float(c["y"]))
+                    picks.append(c)
+                    break
+        # 阶段二：全局补齐（小岛群限 1 都城——岛内统一；大群/大陆不限）
+        cap_single = int(cap_p.get("grp_single_max_cities", 30))
+        grp_cap_n = Counter(c.get("grp", 0) for c in picks)
         for c in pool:
             if len(picks) >= n_c:
                 break
+            g = c.get("grp", 0)
+            if g != 0 and len(grp_city.get(g, [])) <= cap_single                     and grp_cap_n.get(g, 0) >= 1:
+                continue
+            mid_cap = int(cap_p.get("grp_mid_max_caps", 3))
+            if g != 0 and cap_single < len(grp_city.get(g, [])) <= 30                     and grp_cap_n.get(g, 0) >= mid_cap:
+                continue  # 13-30 城群都城上限（防碎岛）
             if not qt.has_within(float(c["x"]), float(c["y"]), sep):
                 qt.insert(float(c["x"]), float(c["y"]))
                 picks.append(c)
+                grp_cap_n[g] += 1
         if len(picks) >= n_c:
             break
     if len(picks) < n_c:  # 兜底：无视间距补齐（间距已放到最松仍不足）
@@ -327,6 +368,8 @@ def build_graph(cities, attack, simM, gp, mgp):
                      0, fc.SIZE_FULL - 1)
         cost = float(np.asarray(attack[ly, lx], dtype=np.float64).mean())
         w = cost * dist8 * pair_culture_factor(a, b, simM, kc)
+        if a.get("grp", 0) != b.get("grp", -1):
+            w *= float(gp.get("k_island", 10.0))  # 跨岛群重罚：同岛更易统一
         adj[i].append((j, w))
         adj[j].append((i, w))
         pxadj[i].append((j, dist8))
@@ -482,8 +525,10 @@ def normalize_pass(owner, states, adj, cities, simM, nrm, cap, targets=None):
             continue
         city_state[sid] = s["cities"]
         state_culture[sid] = s["culture"]
-        cap_nodes.add(next(u for u in s["cities"]
-                           if cities[u]["sid"] == s["capital"]))
+        cap_u = next((u for u in s["cities"]
+                      if cities[u]["sid"] == s["capital"]), None)
+        if cap_u is not None:
+            cap_nodes.add(cap_u)
     flipped_total = 0
     for _ in range(max_rounds):
         flipped = 0
@@ -513,6 +558,11 @@ def normalize_pass(owner, states, adj, cities, simM, nrm, cap, targets=None):
             for best_s, _bn in ranked:
                 if len(city_state[best_s]) >= ceiling(best_s):
                     continue  # 无房位，看次选
+                gu = city.get("grp", 0)
+                if gu != 0 and gu not in {
+                        cities[w].get("grp", 0)
+                        for w in city_state[best_s]}:
+                    continue  # 跨岛群翻转：破坏「同岛统一」，不翻
                 if city["mix"] >= mix_tr and own_n >= 1:
                     dc, ds = city["dom"], state_culture.get(best_s, 0)
                     if dc > 0 and ds > 0 and \
@@ -804,6 +854,87 @@ def _pick_weighted(cands, weights, rng):
     return cands[-1]
 
 
+def unify_small_islands(states, owner, cities, gp):
+    """小岛群终态归一（创始人定向：同一个岛屿内更容易统一）——城数 ≤
+    grp_single_max_cities 的岛群，名下城全部归群内城数最多的国；被剥空的
+    国消亡（cause= island_unify）。大陆/大岛群不受影响。确定性。"""
+    cap_single = int(gp.get("grp_single_max_cities", 30))
+    grp_city = {}
+    for u, c in enumerate(cities):
+        g = c.get("grp", 0)
+        if g != 0:
+            grp_city.setdefault(g, []).append(u)
+    moved = 0
+    for g, us in grp_city.items():
+        if len(us) > cap_single:
+            continue
+        cnt = {}
+        for u in us:
+            cnt[owner[u]] = cnt.get(owner[u], 0) + 1
+        if len(cnt) <= 1:
+            continue
+        # keep 优先都城在群内的国（岛国核心），否则城数最多
+        cap_in = [sid for sid in cnt
+                  if any(cities[u]["sid"] == states[sid]["capital"]
+                         for u in us if owner[u] == sid)]
+        if cap_in:
+            keep = sorted(cap_in)[0]
+        else:
+            keep = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+        uset = set(us)
+        done_whole = set()
+        for u in us:
+            sid = owner[u]
+            if sid == keep or sid in done_whole:
+                continue
+            # 跨国国首都受保护；全国皆在本群的国（含纯城邦）与 ≤3 城微国整体吸收
+            whole = all(w in uset for w in states[sid]["cities"])                 or len(states[sid]["cities"]) <= 3
+            if whole:
+                for w in list(states[sid]["cities"]):  # 全国城（含外群）
+                    states[sid]["cities"].discard(w)
+                    owner[w] = keep
+                    states[keep]["cities"].add(w)
+                    moved += 1
+                states[sid]["extinct_round"] = 0
+                states[sid]["cause"] = "island_unify"
+                done_whole.add(sid)
+            elif cities[u]["sid"] != states[sid]["capital"]:
+                states[sid]["cities"].discard(u)
+                owner[u] = keep
+                states[keep]["cities"].add(u)
+                moved += 1
+                if not states[sid]["cities"]:
+                    states[sid]["extinct_round"] = 0
+                    states[sid]["cause"] = "island_unify"
+    # 13-30 城群超 mid 上限收敛（最弱超额国并入群内最强国，首都例外）
+    mid_cap = int(gp.get("grp_mid_max_states", 4))
+    for g, us in grp_city.items():
+        if not (cap_single < len(us) <= 30):
+            continue
+        cnt = {}
+        for u in us:
+            cnt[owner[u]] = cnt.get(owner[u], 0) + 1
+        over = sorted(cnt.items(), key=lambda kv: (kv[1], kv[0]))
+        for sid, _n in over:
+            if len(cnt) <= mid_cap:
+                break
+            strongest = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))
+            strongest = [k for k, _ in strongest if k != sid][0]
+            for u in us:
+                if owner[u] == sid and                         cities[u]["sid"] != states[sid]["capital"]:
+                    states[sid]["cities"].discard(u)
+                    owner[u] = strongest
+                    states[strongest]["cities"].add(u)
+                    moved += 1
+            if not states[sid]["cities"]:
+                states[sid]["extinct_round"] = 0
+                states[sid]["cause"] = "island_unify"
+            del cnt[sid]
+            cnt[strongest] = cnt.get(strongest, 0) + 1
+    if moved:
+        print("  [island] 小岛群归一迁移 %d 城" % moved)
+
+
 def run_history(states, owner, adj, cities, simM, hp, rng, cap, n, mix_min_arr):
     """A6 K 轮虚拟历史：兼并战 / 继承解体 / 边疆易手。
 
@@ -917,6 +1048,13 @@ def run_history(states, owner, adj, cities, simM, hp, rng, cap, n, mix_min_arr):
             states[sid]["cause"] = "flip_drained"
         counters["border_flips"] += 1
 
+    def grp_overlap(a_sid, b_sid):
+        """两国名下城是否同岛群交叠（兼并合法性：同群才可吞——跨海征服
+        留给运行时海权，静态版图不产生）。"""
+        ga = {cities[u].get("grp", 0) for u in states[a_sid]["cities"]}
+        gb = {cities[u].get("grp", 0) for u in states[b_sid]["cities"]}
+        return bool(ga & gb)
+
     for rnd in range(1, rounds + 1):
         # ---- 兼并战：强国按进攻成本选邻接弱邻吞并（概率随强弱差增大） ----
         sizes = {sid: len(s["cities"]) for sid, s in states.items()
@@ -927,7 +1065,8 @@ def run_history(states, owner, adj, cities, simM, hp, rng, cap, n, mix_min_arr):
             nbr = sorted({owner[v] for u in states[att]["cities"]
                           for v, _ in adj[u]} - {att})
             weaker = [b for b in nbr if len(states[b]["cities"])
-                      < len(states[att]["cities"])]
+                      < len(states[att]["cities"])
+                      and grp_overlap(att, b)]
             if weaker:
                 tgt = min(weaker, key=lambda b: (
                     _contact_min(states[att]["cities"], owner, adj, b),
@@ -951,6 +1090,16 @@ def run_history(states, owner, adj, cities, simM, hp, rng, cap, n, mix_min_arr):
             if s["extinct_round"] is not None:
                 continue
             if len(s["cities"]) > col_over and rng.random() < p_col:
+                grps = {cities[u].get("grp", 0) for u in s["cities"]}
+                grp_city = {}
+                for u in s["cities"]:
+                    g = cities[u].get("grp", 0)
+                    grp_city.setdefault(g, []).append(u)
+                island_only = any(g != 0 and len(grp_city[g]) == len(s["cities"])
+                                  for g in grps)
+                if island_only and len(s["cities"]) <= int(
+                        hp.get("collapse_island_max", 30)):
+                    continue  # 小岛国不解体：岛内统一优先于戏剧性碎裂
                 collapse(sid, rnd)
         # ---- 边疆易手：模糊带单城重归属 ----
         if rng.random() < p_flip:
@@ -1263,6 +1412,7 @@ def build(P, dry_run=False, skip_preview=False):
                          cap, n_total, mix_arr)
     n_flip2 = normalize_pass(owner, states, adj, cities, simM, sp["normalize"],
                              cap, targets=tgt_map)
+    unify_small_islands(states, owner, cities, sp["graph"])  # 终态闸：岛群归一在最后
     reattribute_cultures(states, cities)
     n_rehome2 = culture_rehome_pass(states, owner, adj, cities, simM, keep,
                                     cap, tgt_map)

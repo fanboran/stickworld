@@ -216,5 +216,339 @@
    "label": "熔岩",
    "biome": 6
   }
+ },
+ "fields_v2": {
+  "comment": "世界重生成 v2 A1/A2/A3 场层与聚落参数。fields_build.py 派生资源丰度×4 / 宜居度 / 进攻成本场；culture_build.py 派生文化场 v2（源点 + 测地扩散 + 相似度矩阵）；settlement_build.py 派生聚落集（变半径泊松盘 + 对数正态规模谱，settlements_v2.json）。产物全部在 tools/worldgen/output/fields/（gitignored 不入库）；同 seed 逐位确定，重跑即整体重调。",
+  "fields_seed": 20260925,
+  "compute_size": 4096,
+  "compute_size_comment": "FBM/卷积/EDT 的计算分辨率（8192 的一半，内存与耗时折中）；连续场 bilinear 上采样、标签场块复制上采样，输出 npy 统一 8192 级（与现有 mask 同网格同坐标）",
+  "resources": {
+   "comment": "资源丰度 = clip(群系先验 × (floor + (1-floor)×FBM), 0, 1)。FBM 为多倍频值噪声（fields_common.fbm，空间自相关，禁白噪声——资源成带成片），每类频率/倍频/幅度/脊状独立；先验只按群系/高程给基线，空间扰动全在 FBM。矿脉用 ridged FBM（1-|2n-1|）产生脉状高值带",
+   "floor": 0.3,
+   "mineral": {
+    "comment": "矿脉：高程带先验（山地隆起 mount_elev_lo..hi 线性爬升）+ 火山/荒漠加成",
+    "base": 0.06,
+    "mountain_gain": 0.62,
+    "mount_elev_lo": 0.4,
+    "mount_elev_hi": 0.85,
+    "volcanic_bonus": 0.5,
+    "desert_bonus": 0.18,
+    "fbm": {
+     "base_freq": 9.0,
+     "octaves": 4,
+     "gain": 0.55,
+     "lacunarity": 2.15,
+     "ridged": true
+    }
+   },
+   "fertile": {
+    "comment": "沃土：平原最高、森林/源流次之，河谷沿岸（river_bonus×河流密度）加成；低频 FBM 成片",
+    "biome_prior": {
+     "1": 0.78,
+     "2": 0.42,
+     "3": 0.05,
+     "4": 0.03,
+     "5": 0.6,
+     "6": 0.12
+    },
+    "river_bonus": 0.18,
+    "fbm": {
+     "base_freq": 6.0,
+     "octaves": 4,
+     "gain": 0.5,
+     "lacunarity": 2.0,
+     "ridged": false
+    }
+   },
+   "forest": {
+    "comment": "林产：森林群系基线最高，平原/源流次之；中频 FBM",
+    "biome_prior": {
+     "1": 0.22,
+     "2": 0.85,
+     "3": 0.02,
+     "4": 0.05,
+     "5": 0.35,
+     "6": 0.3
+    },
+    "river_bonus": 0.0,
+    "fbm": {
+     "base_freq": 8.0,
+     "octaves": 4,
+     "gain": 0.5,
+     "lacunarity": 2.0,
+     "ridged": false
+    }
+   },
+   "fishsalt": {
+    "comment": "渔盐：海岸带/湖泊沿岸指数衰减先验（渔场）+ 荒漠内陆小基线（盐碱），FBM 调制出簇",
+    "coast_gain": 0.85,
+    "coast_tau_px": 14.0,
+    "lake_gain": 0.8,
+    "lake_tau_px": 18.0,
+    "desert_base": 0.12,
+    "fbm": {
+     "base_freq": 10.0,
+     "octaves": 3,
+     "gain": 0.55,
+     "lacunarity": 2.2,
+     "ridged": false
+    }
+   }
+  },
+  "water": {
+   "comment": "水因子（宜居度输入，均 0..1）：河流密度 = 河流掩膜高斯核卷积(river_sigma_px) 按 river_norm_quantile 分位归一；湖泊/海岸 = 距离指数衰减 exp(-dist/tau)；合成后按群系乘子相乘（荒漠乘子最大 → 河谷/绿洲成局部高点）。距离单位 = compute 级像素",
+   "river_sigma_px": 6.0,
+   "river_norm_quantile": 0.995,
+   "lake_tau_px": 26.0,
+   "coast_tau_px": 46.0,
+   "w_river": 0.5,
+   "w_lake": 0.28,
+   "w_coast": 0.22,
+   "biome_multiplier": {
+    "1": 1.0,
+    "2": 0.85,
+    "3": 1.6,
+    "4": 0.5,
+    "5": 1.1,
+    "6": 0.8
+   }
+  },
+  "suitability": {
+   "comment": "宜居度 = clip(群系基线 + 群系乘子×水因子 − 坡度罚 + 资源增益, 0, 1)；海洋与湖泊 = 0。坡度 = |∇elev| 按陆地 slope_norm_quantile 分位归一（分辨率稳健）。资源增益 = gain_max×tanh(Σw_i·res_i/gain_norm) 饱和曲线",
+   "biome_base": {
+    "1": 0.62,
+    "2": 0.5,
+    "3": 0.12,
+    "4": 0.13,
+    "5": 0.55,
+    "6": 0.15
+   },
+   "slope_norm_quantile": 0.85,
+   "slope_penalty": 0.55,
+   "slope_cap": 1.5,
+   "gain_max": 0.2,
+   "gain_norm": 1.1,
+   "w_mineral": 0.5,
+   "w_fertile": 1.0,
+   "w_forest": 0.55,
+   "w_fishsalt": 0.7
+  },
+  "attack_cost": {
+   "comment": "进攻成本场 [1,∞)（A4 合并边权「沿线积分」消费）：陆地 = 1 + c_slope×归一坡度 + c_veg×群系通行系数（植被/沙漠/冰原通行性）；河流带（掩膜膨胀 river_band_px，防沿线稀疏采样漏采）乘 k_river_cross；水体（海/湖）恒值 k_water_cost = 跨海/跨湖罚",
+   "c_slope": 1.6,
+   "slope_cap": 2.0,
+   "veg_by_biome": {
+    "1": 0.1,
+    "2": 0.85,
+    "3": 0.5,
+    "4": 0.7,
+    "5": 0.15,
+    "6": 1.2
+   },
+   "c_veg": 1.5,
+   "river_band_px": 2,
+   "k_river_cross": 3.0,
+   "k_water_cost": 28.0
+  },
+  "culture": {
+   "comment": "A2 文化场 v2：K 个源点泊松盘撒在宜居度高分位陆地（不足逐轮放宽分位）；属性由源点周边 window_px 窗口环境派生（生计=规则+种子随机，地形偏好=窗口群系占比归一）；语系 = 贪心空间聚簇。测地扩散 cost 骨架与 state_expand_lite.culture_flood 完全同构（fields_common.build_flood_cost，2048 级计算保证 k_* 语义同构，k_cross_region=跨出源点所在 region 的软罚）；场强 = exp(-cum/T)，top2 归一得混合度；reach_cap_cum 同 culture_flood 的 6000 截断语义（超出=无主荒野文化）",
+   "seed": 20260926,
+   "k_sources": 20,
+   "min_sep_px": 1000,
+   "min_sep_px_comment": "泊松盘最小间距（8192 级；culture 在 2048 级计算，内部 /4）",
+   "suit_quantile": 0.55,
+   "window_px": 33,
+   "flood": {
+    "k_slope": 350.0,
+    "k_river": 6.0,
+    "k_desert": 0.5,
+    "k_ice": 0.6,
+    "k_cross_region": 30.0
+   },
+   "strength_temp": 750.0,
+   "strength_temp_comment": "主导文化场强 = exp(-cum/T)（A4 文化中心性消费）；混合度不用温度（尺度无关公式 c1/(c1+c2)，中线=0.5「半亲」，见 culture_build）",
+   "reach_cap_cum": 6000.0,
+   "n_families": 6,
+   "family_join_frac": 1.7,
+   "family_join_frac_comment": "语系聚簇距离 = family_join_frac × min_sep（2048 级）",
+   "livelihood_rules": {
+    "comment": "生计模式派生（窗口占比阈值，按序匹配；*_p 为命中后二选一概率）：冰原→渔猎；荒漠→游牧(desert_nomad_p)/商贸；紧岸(距海<coast_dist_px)→商贸(coast_trade_p)/渔猎；森林→渔猎(forest_fisher_p)/商贸；高山→游牧；其余内陆平原/河谷→农耕(inland_farm_p)/商贸。紧岸阈值刻意小（宜居度海岸加成会吸源点，宽岸带会让商贸一家独大）",
+    "ice": 0.35,
+    "desert": 0.35,
+    "coast": 0.35,
+    "coast_dist_px": 8.0,
+    "forest": 0.4,
+    "mountain": 0.4,
+    "desert_nomad_p": 0.65,
+    "coast_trade_p": 0.65,
+    "forest_fisher_p": 0.6,
+    "inland_farm_p": 0.8
+   },
+   "livelihood_min_each": 2,
+   "livelihood_min_each_comment": "生计覆盖均衡（culture_build.balance_livelihoods）：每种生计至少 ≥N 个源点——derive_livelihood 随 seed 漂移（曾出 游牧 0/渔猎 3）。均衡在派生后做：缺额生计按枚举序，用源点地形偏好（terrain_pref）打环境适配分，从富余（改派后仍 ≥N）生计里挑适配最高者改派——荒漠/高山源点改游牧、森林/冰原/临水源点改渔猎，环境语义不破坏；无随机数，确定性",
+   "similarity": {
+    "comment": "源点两两相似度 = w_family×同语系 + w_livelihood×生计相近表(对称,缺项0) + w_terrain×地形偏好余弦；和已在 [0,1] 内。tile 级相似度（A4 消费口径）= 各自主导文化相似度 × (1−各自混合度)",
+    "w_family": 0.45,
+    "w_livelihood": 0.3,
+    "w_terrain": 0.25,
+    "livelihood_sim": {
+     "农耕-游牧": 0.35,
+     "农耕-渔猎": 0.5,
+     "农耕-商贸": 0.5,
+     "游牧-渔猎": 0.1,
+     "游牧-商贸": 0.4,
+     "渔猎-商贸": 0.5
+    }
+   },
+   "race_rules": {
+    "comment": "种族映射阈值（derive_race 按序匹配）：火山/冰原/荒漠占比超阈即定种族，高山两档分巨人/矮人，森林→羽翼、源流→术师人，其余平原族。八原生种族与 StickmanState.race 对齐",
+    "volcanic": 0.1,
+    "ice": 0.3,
+    "desert": 0.3,
+    "mountain_high": 0.32,
+    "mountain_mid": 0.15,
+    "forest": 0.4,
+    "source": 0.15
+   },
+   "biome_seats": {
+    "comment": "环境保底席位：群系内源点不足 min_sources 时在宜居度最高处补位（冰原=雪地火柴人家园、火山=火山族；创始人定向）",
+    "冰原": {
+     "min_sources": 2,
+     "frac": 0.3
+    },
+    "火山": {
+     "min_sources": 1,
+     "frac": 0.3
+    }
+   }
+  },
+  "settlements": {
+   "comment": "A3 聚落生成（settlement_build.py）：变半径泊松盘选址——盘半径 = r_max − (r_max−r_min)×((suit−suit_min)/(1−suit_min))^radius_curve（8192 级像素，suit = 候选点 bilinear 宜居度；宜居 → 小半径密集，贴近阈值 → 大半径极稀），suit < suit_min 直接无聚落（荒地由阈值自然产生，不后处理）；候选在活跃点 annulus [r, 2r] 内生成，冲突判据 = 与既有点距离 < max(候选半径, 既有点半径)；种子池大数量随机点保底孤岛/半岛连通域覆盖。规模 population_score = clamp(h × LogNormal(μ_b, σ_b), 0, 1)：h = h_w_suit×窗口宜居度 + h_w_res×tanh(窗口资源加权和/gain_norm)（窗口 = window_px 的 2048 级方形窗陆内均值，SAT O(1) 查询；资源权重口径与 A1 suitability 的 w_* 一致），μ_b 按全局陆地宜居度分位分带（band_quantiles 切 len(mu_by_band) 带，贫瘠带整体左移、富庶带右移）。level 阈值 0.187/0.342 = 场景口径（world_contract_initializer.LEVEL2/3_PS_MIN 同源），全球单一口径；4/5 档不产生（留人口成长）。id 编号 label 1..N 连续、settlement_id = settlement_city_%03d（沿用 political_data.city_owners 体系）。数量目标 n_target_band 只作验收带，实际由泊松盘+阈值自然决定不硬凑。荒地 = 不产聚落条目（无主地语义 A4 政治分配生效），荒地率 = 宜居陆地中聚落主张盘未覆盖占比（见 claim_cap_px_comment）。选址在 8192 坐标空间连续计算，场值自 2048 级采样（位置精度约 ±4px = 场网格半格，见产物 meta）",
+   "seed": 20260927,
+   "n_target_band": [
+    800,
+    1200
+   ],
+   "suit_min": 0.16,
+   "suit_min_comment": "宜居度低于此值直接无聚落（荒地阈值）；约对应全球陆地 13% 分位以下的连续低值带",
+   "r_min_px": 40,
+   "r_max_px": 175,
+   "radius_curve": 2.0,
+   "radius_curve_comment": "半径曲线指数：t = (suit−suit_min)/(1−suit_min)，r = r_max − (r_max−r_min)×t^curve——curve>1 让中低宜居度长期贴近 r_max（近荒地极稀），只有富庶区才收紧到 r_min（对比度更强）",
+   "claim_cap_px": 110,
+   "claim_cap_px_comment": "聚落主张半径封顶（8192 级）：荒地率度量的覆盖半径 = min(泊松半径, claim_cap_px)——泊松半径是「下一聚落至少多远」的排除半径而非主张半径；封顶后贫瘠带大间距聚落之间留出成片无主荒地、富庶带小间距自动铺满。A4 无主地分配宜采用同口径（消费契约见 settlements_v2.json meta）",
+   "seed_pool": 60000,
+   "seed_pool_comment": "种子池随机候选点数（全域均匀撒点逐个尝试落点，再各自 Bridson 扩张——保证孤岛/半岛每个足够大的连通域都有机会获得聚落）",
+   "candidates_per_active": 24,
+   "max_total_attempts": 600000,
+   "max_total_attempts_comment": "候选尝试总数硬上限（防病态参数下死循环；正常远达不到）",
+   "window_px": 33,
+   "window_px_comment": "环境窗口边长（2048 级，与 culture 窗口同源）——宜居度/资源取陆内均值再进 h",
+   "h_w_suit": 0.7,
+   "h_w_res": 0.3,
+   "resource_weights": {
+    "mineral": 0.5,
+    "fertile": 1.0,
+    "forest": 0.55,
+    "fishsalt": 0.7
+   },
+   "gain_norm": 1.1,
+   "band_quantiles": [
+    0.3,
+    0.55,
+    0.8
+   ],
+   "mu_by_band": [
+    -1.45,
+    -1.15,
+    -0.95,
+    -0.65
+   ],
+   "mu_by_band_comment": "各宜居度带（贫→富）的 LogNormal 均值 μ_b：贫瘠带整体左移（多数超小村）、富庶带右移（出大城）；σ = sigma_b 全局共用",
+   "sigma_b": 0.5,
+   "level_thresholds": [
+    0.187,
+    0.342
+   ],
+   "level_thresholds_comment": "population_score → level 阈值（场景口径，与 world_contract_initializer 的 LEVEL2_PS_MIN/LEVEL3_PS_MIN 同值）；<0.187=1 村、<0.342=2 镇、≥0.342=3 城",
+   "settlements_comment2": "荒地率口径：覆盖用主张盘（claim_cap_px 封顶）而非泊松排除盘——排除盘饱和堆积会把荒地率压到盘间隙（~4%），与「荒地成片」验收矛盾"
+  },
+  "states_v2": {
+   "comment": "A4 国家生成 v2 + A6 加速历史 + 构型命名（state_build_v2.py）。输入 = 棒 1 场产物 + 棒 2 settlements_v2.json；输出 = output/fields/political_data_v2.json（schema 对齐 political_data：states/city_owners/meta，culture 字段 = v2 文化源点序号 1..K、0=荒野）。同 seed 逐位确定（np.random.default_rng 单流消费 + 显式排序，禁 set 迭代序依赖）",
+   "seed": 20260928,
+   "spectrum": {
+    "comment": "每国 target ~ 截断对数正态：ln target ~ N(ln median, sigma)，clamp [floor, cap]（下尾压成 1 城邦、上尾压成 cap 大国原子）；N_c（都城数）= round(总城数 / 谱均值) 反推；Σtarget = 总城数经「尺度二分 + 最大余数整数化」精确归一。目标采样后再做「局地池」可行性钳制（target ≤ 都城 local_reach 内可达城数，缺额按余量比例摊回、池和不足逐轮放宽——贫瘠区州小、富庶区州大，保谱形优先；联合可行性由 normalize 规模带天花板 + reclaim 带内流动收尾保证），钳制前后直方图都进 meta",
+    "median": 4.0,
+    "sigma": 0.85,
+    "cap": 18,
+    "floor": 1,
+    "local_reach_px": 1100,
+    "local_reach_px_comment": "局地可行池半径（8192 级，城图 px 测地）：都城可达城数 = target 上限；不足摊额时逐轮 ×1.3 放宽保证 Σ 可行"
+   },
+   "capital": {
+    "comment": "都城适宜性 = 资源禀赋项 × 文化中心性。资源禀赋项复用 settlements 的 h 口径（h_w_suit×宜居 + h_w_res×tanh(资源加权和/gain_norm)，城点双线性采样）；文化中心性 = exp(-城到主导文化「场强质心」欧氏距离 / central_tau_px)，质心自 culture_strength 2048 场按主导文化加权（荒野城 dominant=0 中心性=0 不参选都城）；四叉树最小间距（state_expand_lite._SeedQuadtree 借用）自适应放宽",
+    "min_sep_px": 900,
+    "sep_relax": 0.75,
+    "max_relax_rounds": 7,
+    "central_tau_px": 900
+   },
+   "graph": {
+    "comment": "kNN 城图（2048 级坐标、max_edge 与 state_expand_lite 同口径）+ 分量桥接（_bridge_components 借用）；选 kNN 不选 Delaunay：Delaunay 长薄三角形边跨海跨山无意义，kNN+距离上限贴合 attack_cost 沿线积分语义且桥接兜底孤岛。geo_cost = attack_cost 沿连线 line_samples 点采样均值 × 8192 级距离（fields_meta 消费口径；8192 mmap 直采保 2px 河流带不被降采样稀释）",
+    "knear": 8,
+    "max_edge_px": 520,
+    "line_samples": 24
+   },
+   "merge": {
+    "comment": "边权（静态）= geo_cost × (1 + k_culture×(1-城对相似度))；Dijkstra 松弛时乘每态因子 (1/expansionism_i) × (1 + k_capital×min(1,(城到本国都城 px 测地距/reach)²)) × w_i 面积反馈 × (1+eps×已占城数)。城对相似度 = sim(dom_u,dom_v)×(1-mix_u)×(1-mix_v)（culture_similarity.json 消费口径），任一端 dominant=0 → 文化因子取 1（荒野城纯地理归属，孤立小邦形态允许）。Balzer 面积反馈迭代到采样 target（大国自然多吃、小国到量即止）",
+    "k_culture": 2.6,
+    "k_capital": 1.0,
+    "capital_reach_px": 1100,
+    "expansionism": {
+     "min": 0.75,
+     "max": 1.45
+    },
+    "cap_factor": 2.2,
+    "cap_factor_comment": "容量硬上限 = ceil(target × cap_factor)（防 runaway；取宽值消除局部饱和未覆盖 pocket，超配由 reclaim 规模回收拉回；A6 兼并/解体并入、normalize 翻转受 cap/天花板约束）",
+    "feedback": {
+     "eta": 0.6,
+     "rounds": 10,
+     "w_clip": [
+      0.2,
+      3.5
+     ]
+    },
+    "fill_pressure": 2.5,
+    "fill_pressure_comment": "竞速配额压力：松弛代价乘 (1 + κ×已占城数/target)——到量即贵、缺口国自然续灌，规模配额在竞速内动态达成（取代旧 balance_eps 全局项）"
+   },
+   "normalize": {
+    "comment": "多数邻域翻转消飞地（FMG normalize 同款）：非都城城最大异国邻居数 ≥ min_foreign 且 > 本国数则翻给该邻国。过渡带放宽：mix ≥ mix_transition 的城阈值提高到 min_foreign_transition，且「相似文化飞地」保留（sim(城主导, 目标国文化) ≥ sim_enclave_keep 且仍有本国邻居）——文化过渡带允许少量跨相似文化飞地",
+    "min_foreign": 2,
+    "min_foreign_transition": 3,
+    "mix_transition": 0.35,
+    "sim_enclave_keep": 0.5,
+    "max_rounds": 6
+   },
+   "history": {
+    "comment": "A6 加速历史 K 轮（DF 路线轻量版；K=0 退化纯分配）。兼并战：强国（城数 ≥ annex_min_attacker，按规模加权抽签）选邻接弱国中接触成本（最低静态边权 = geo×文化罚）最低者吞并，accept 概率 = clip(p_annex×(1+k_gap×强弱差), 0, annex_p_max)，吞并后不超 cap；继承解体：城数 > collapse_over 的国每轮 p_collapse 碎一地——非都城城按 label 序各以 p_indep 独立成邦（WorldBox makeOwnKingdom 同构）、余者并入接触成本最低且未满 cap 的邻国；边疆易手：模糊带（mix ≥ flip_mix_min）边界城翻给接触成本最低邻国。事件全部走 attack_cost×文化相似度判据；兴衰史计数进 meta.history",
+    "rounds": 30,
+    "p_annex": 0.75,
+    "annex_min_attacker": 4,
+    "annex_sim_min": 0.5,
+    "annex_sim_min_comment": "兼并文化门槛：attacker 与目标国文化相似度（荒野国=0 视为中性放行）≥ 此值才可吞并——与自检的近亲文化放宽口径（sim_enclave_keep）一致，大国版图沿文化近亲方向长",
+    "k_gap": 1.5,
+    "annex_p_max": 0.95,
+    "p_collapse": 0.012,
+    "collapse_over": 8,
+    "p_indep": 0.32,
+    "p_flip": 0.6,
+    "flip_mix_min": 0.3
+   },
+   "naming": {
+    "comment": "构型命名：每文化语素库自 culture_sources.morph_seed 派生（np.random.default_rng）——声母字库按语系共享（同语系听感相近）、韵母/政权后缀/城市后缀按生计原型分档，荒野文化（dominant=0）用通用中性库；构词法 = [方位前缀]+词根(1-2 音节)+后缀，政权名 3-5 字、城市名 2-4 字，全表去重。生成名全部「提案/待定」",
+    "prefix_p": 0.35,
+    "root_second_syll_p": 0.3,
+    "city_suffix_p": 0.4
+   }
+  }
  }
 }

@@ -1,0 +1,1056 @@
+[
+ {
+  "def_name": "alchemy",
+  "res": [
+   620,
+   475
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 109,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "bakery",
+  "res": [
+   620,
+   440
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 98,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "barn",
+  "res": [
+   620,
+   449
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 97,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "barracks",
+  "res": [
+   620,
+   614
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 114,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 14,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "cathedral",
+  "res": [
+   612,
+   834
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 131,
+  "pivot_col": 306.0,
+  "back_bbox": [
+   49,
+   562
+  ],
+  "front_bbox": [
+   37,
+   574
+  ],
+  "back_center": 305.5,
+  "front_center": 305.5,
+  "back_px": 514,
+  "front_px": 538,
+  "back_px_exp": 512.0,
+  "front_px_exp": 536.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "chapel",
+  "res": [
+   356,
+   580
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 117,
+  "pivot_col": 178.0,
+  "back_bbox": [
+   49,
+   306
+  ],
+  "front_bbox": [
+   37,
+   318
+  ],
+  "back_center": 177.5,
+  "front_center": 177.5,
+  "back_px": 258,
+  "front_px": 282,
+  "back_px_exp": 256.0,
+  "front_px_exp": 280.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "church",
+  "res": [
+   484,
+   791
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 123,
+  "pivot_col": 242.0,
+  "back_bbox": [
+   49,
+   434
+  ],
+  "front_bbox": [
+   37,
+   446
+  ],
+  "back_center": 241.5,
+  "front_center": 241.5,
+  "back_px": 386,
+  "front_px": 410,
+  "back_px_exp": 384.0,
+  "front_px_exp": 408.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "cottage",
+  "res": [
+   438,
+   414
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 85,
+  "pivot_col": 219.0,
+  "back_bbox": [
+   90,
+   347
+  ],
+  "front_bbox": [
+   37,
+   400
+  ],
+  "back_center": 218.5,
+  "front_center": 218.5,
+  "back_px": 258,
+  "front_px": 364,
+  "back_px_exp": 256.0,
+  "front_px_exp": 362.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "council_hall",
+  "res": [
+   438,
+   455
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 109,
+  "pivot_col": 219.0,
+  "back_bbox": [
+   90,
+   347
+  ],
+  "front_bbox": [
+   37,
+   400
+  ],
+  "back_center": 218.5,
+  "front_center": 218.5,
+  "back_px": 258,
+  "front_px": 364,
+  "back_px_exp": 256.0,
+  "front_px_exp": 362.0,
+  "clipped": 4,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "gatehouse",
+  "res": [
+   356,
+   498
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 89,
+  "pivot_col": 178.0,
+  "back_bbox": [
+   121,
+   234
+  ],
+  "front_bbox": [
+   37,
+   318
+  ],
+  "back_center": 177.5,
+  "front_center": 177.5,
+  "back_px": 114,
+  "front_px": 282,
+  "back_px_exp": 112.0,
+  "front_px_exp": 280.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "governor_palace",
+  "res": [
+   800,
+   947
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 182,
+  "pivot_col": 400.0,
+  "back_bbox": [
+   143,
+   656
+  ],
+  "front_bbox": [
+   37,
+   762
+  ],
+  "back_center": 399.5,
+  "front_center": 399.5,
+  "back_px": 514,
+  "front_px": 726,
+  "back_px_exp": 512.0,
+  "front_px_exp": 724.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "guildhall",
+  "res": [
+   624,
+   675
+  ],
+  "px_per_unit": 0.9999,
+  "floor_row": 105,
+  "pivot_col": 312.0,
+  "back_bbox": [
+   119,
+   504
+  ],
+  "front_bbox": [
+   37,
+   586
+  ],
+  "back_center": 311.5,
+  "front_center": 311.5,
+  "back_px": 386,
+  "front_px": 550,
+  "back_px_exp": 384.0,
+  "front_px_exp": 548.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "hayloft",
+  "res": [
+   620,
+   466
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 96,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "house",
+  "res": [
+   620,
+   446
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 98,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "imperial_palace",
+  "res": [
+   800,
+   1126
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 201,
+  "pivot_col": 400.0,
+  "back_bbox": [
+   143,
+   656
+  ],
+  "front_bbox": [
+   37,
+   762
+  ],
+  "back_center": 399.5,
+  "front_center": 399.5,
+  "back_px": 514,
+  "front_px": 726,
+  "back_px_exp": 512.0,
+  "front_px_exp": 724.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "library",
+  "res": [
+   620,
+   655
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 148,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "lighthouse",
+  "res": [
+   257,
+   617
+  ],
+  "px_per_unit": 1.0002,
+  "floor_row": 95,
+  "pivot_col": 128.5,
+  "back_bbox": [
+   52,
+   194
+  ],
+  "front_bbox": [
+   37,
+   219
+  ],
+  "back_center": 123.0,
+  "front_center": 128.0,
+  "back_px": 143,
+  "front_px": 183,
+  "back_px_exp": 156.0,
+  "front_px_exp": 181.0,
+  "clipped": 0,
+  "back_w_err": 13.0,
+  "front_w_err": 2.0,
+  "back_c_err": 5.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "round: back ⊆ front tower body"
+ },
+ {
+  "def_name": "mage_tower",
+  "res": [
+   255,
+   1084
+  ],
+  "px_per_unit": 0.9992,
+  "floor_row": 93,
+  "pivot_col": 127.5,
+  "back_bbox": [
+   53,
+   195
+  ],
+  "front_bbox": [
+   37,
+   217
+  ],
+  "back_center": 124.0,
+  "front_center": 127.0,
+  "back_px": 143,
+  "front_px": 181,
+  "back_px_exp": 159.9,
+  "front_px_exp": 179.1,
+  "clipped": 0,
+  "back_w_err": 16.9,
+  "front_w_err": 1.9,
+  "back_c_err": 3.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "round: back ⊆ front tower body"
+ },
+ {
+  "def_name": "mint",
+  "res": [
+   620,
+   627
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 121,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 6,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "plaster_house",
+  "res": [
+   620,
+   446
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 98,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 13,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "rowhouse",
+  "res": [
+   620,
+   845
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 96,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 8,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "shelter",
+  "res": [
+   348,
+   323
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 64,
+  "pivot_col": 174.0,
+  "back_bbox": [
+   77,
+   270
+  ],
+  "front_bbox": [
+   37,
+   310
+  ],
+  "back_center": 173.5,
+  "front_center": 173.5,
+  "back_px": 194,
+  "front_px": 274,
+  "back_px_exp": 192.0,
+  "front_px_exp": 272.0,
+  "clipped": 22,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "shop",
+  "res": [
+   620,
+   613
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 99,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 62,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "smithy1",
+  "res": [
+   438,
+   416
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 68,
+  "pivot_col": 219.0,
+  "back_bbox": [
+   90,
+   347
+  ],
+  "front_bbox": [
+   37,
+   400
+  ],
+  "back_center": 218.5,
+  "front_center": 218.5,
+  "back_px": 258,
+  "front_px": 364,
+  "back_px_exp": 256.0,
+  "front_px_exp": 362.0,
+  "clipped": 5,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "smithy2",
+  "res": [
+   450,
+   432
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 75,
+  "pivot_col": 225.0,
+  "back_bbox": [
+   96,
+   353
+  ],
+  "front_bbox": [
+   37,
+   412
+  ],
+  "back_center": 224.5,
+  "front_center": 224.5,
+  "back_px": 258,
+  "front_px": 376,
+  "back_px_exp": 256.0,
+  "front_px_exp": 374.0,
+  "clipped": 18,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "smithy3",
+  "res": [
+   620,
+   434
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 98,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 6,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "smithy4",
+  "res": [
+   620,
+   499
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 118,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "stable",
+  "res": [
+   620,
+   480
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 108,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 5,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "tavern",
+  "res": [
+   620,
+   621
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 105,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 210,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "tower",
+  "res": [
+   288,
+   593
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 97,
+  "pivot_col": 144.0,
+  "back_bbox": [
+   47,
+   240
+  ],
+  "front_bbox": [
+   37,
+   250
+  ],
+  "back_center": 143.5,
+  "front_center": 143.5,
+  "back_px": 194,
+  "front_px": 214,
+  "back_px_exp": 192.0,
+  "front_px_exp": 212.0,
+  "clipped": 8,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "town_hall",
+  "res": [
+   620,
+   629
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 112,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   38,
+   581
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 544,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 0.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "townhouse",
+  "res": [
+   620,
+   666
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 105,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 24,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "warehouse",
+  "res": [
+   620,
+   499
+  ],
+  "px_per_unit": 1.0,
+  "floor_row": 128,
+  "pivot_col": 310.0,
+  "back_bbox": [
+   117,
+   502
+  ],
+  "front_bbox": [
+   37,
+   582
+  ],
+  "back_center": 309.5,
+  "front_center": 309.5,
+  "back_px": 386,
+  "front_px": 546,
+  "back_px_exp": 384.0,
+  "front_px_exp": 544.0,
+  "clipped": 0,
+  "back_w_err": 2.0,
+  "front_w_err": 2.0,
+  "back_c_err": 0.5,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "bbox_vs_assembler_width"
+ },
+ {
+  "def_name": "windmill",
+  "res": [
+   435,
+   510
+  ],
+  "px_per_unit": 1.0003,
+  "floor_row": 93,
+  "pivot_col": 217.5,
+  "back_bbox": [
+   138,
+   297
+  ],
+  "front_bbox": [
+   38,
+   396
+  ],
+  "back_center": 217.5,
+  "front_center": 217.0,
+  "back_px": 160,
+  "front_px": 359,
+  "back_px_exp": 168.1,
+  "front_px_exp": 359.0,
+  "clipped": 0,
+  "back_w_err": 8.1,
+  "front_w_err": 0.0,
+  "back_c_err": 0.0,
+  "front_c_err": 0.5,
+  "OK": true,
+  "criterion": "round: back ⊆ front tower body"
+ }
+]

@@ -397,7 +397,8 @@ def make_previews(settlements, suit, eff_land, out_dir, font):
     base = (base.astype(np.float32) * 0.5 + 14).astype(np.uint8)
     img = Image.fromarray(base)
     dr = ImageDraw.Draw(img)
-    lv_color = {1: (120, 205, 120), 2: (240, 190, 85), 3: (240, 95, 70)}
+    lv_color = {0: (110, 105, 95), 1: (120, 205, 120), 2: (240, 190, 85),
+                3: (240, 95, 70)}
     for s in sorted(settlements, key=lambda t: (t["level"], t["population_score"])):
         rad = 2.0 + 7.5 * s["population_score"]
         x, y = s["x"] / K_FIELD, s["y"] / K_FIELD

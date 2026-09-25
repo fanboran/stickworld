@@ -132,6 +132,8 @@ def build_city_attrs(settle, suit, res, cents, cap_p, ssp):
         pop_f = cap_p0 + cap_p1 * float(c["population_score"])
         if lv <= 1:
             pop_f *= cap_l1
+        if int(c.get("level", 1)) == 0:
+            continue  # 灰色填充点（规模 0）：不参与政权分配（无主地块，渲染灰）
         cities.append({
             "label": int(c["label"]),
             "sid": sid_of(c["label"]),

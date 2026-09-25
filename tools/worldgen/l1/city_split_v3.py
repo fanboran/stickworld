@@ -91,12 +91,13 @@ def claim_radius_of(suit_px, sp):
     r_min, r_max = float(sp["r_min_px"]), float(sp["r_max_px"])
     curve = float(sp["radius_curve"])
     cap = float(sp["claim_cap_px"])
+    scale = float(sp.get("claim_scale", 1.0))
     suit = float(suit_px)
     if suit <= suit_min:
-        return cap
+        return cap * scale
     t = (suit - suit_min) / (1.0 - suit_min)
     r = r_max - (r_max - r_min) * (t ** curve)
-    return min(r, cap)
+    return min(r, cap) * scale
 
 
 def load_settlement_seeds(parent, sp):
@@ -135,7 +136,12 @@ def load_settlement_seeds(parent, sp):
             x, y = found
             n_snap += 1
         suit_px = sb.bilinear_at(suit, x, y)   # bilinear_at 收 8192 级坐标（内除 K_FIELD）
-        claims.append(claim_radius_of(suit_px, sp))
+        if int(s.get("level", 1)) == 0:
+            # 缝隙填充点（规模 0）：主张盘强制满半径 cap×scale——其使命是把
+            # 地图铺满无残缝，不随宜居度收缩（与 fill_gap_seeds 的覆盖估算一致）
+            claims.append(float(sp["claim_cap_px"]) * float(sp.get("claim_scale", 1.0)))
+        else:
+            claims.append(claim_radius_of(suit_px, sp))
         seeds.append([x, y])
         labels.append(int(s["label"]))
     print("  聚落 %d 个（落水吸附 %d）" % (len(seeds), n_snap))
@@ -186,23 +192,23 @@ def grow_cities(land, parent, seeds, seed_labels):
 
 
 def cap_by_claim(labels, seeds, seed_labels, claims):
-    """主张覆盖封顶（创始人定稿：城块直接填满、不留圆形空隙）——
-    只有「最近城的主张半径都够不到」的像素才退归荒地（label 0）。
-    相邻城的覆盖交叠区由划分自然切分（拼满无孔），荒地只在所有城都太远的
-    大片区域出现。判据：dist(p, 最近城) ≤ 该最近城的 claim 半径。"""
-    from scipy.ndimage import distance_transform_edt
-    h, w = labels.shape
-    seed_mask = np.zeros((h, w), dtype=bool)
-    claim_img = np.zeros((h, w), dtype=np.float32)
-    for i, (sx, sy) in enumerate(seeds):
-        seed_mask[int(sy), int(sx)] = True
-        claim_img[int(sy), int(sx)] = float(claims[i])
-    dist, (iy, ix) = distance_transform_edt(~seed_mask, return_indices=True)
-    claim_at = claim_img[iy, ix]
-    covered = dist <= claim_at
-    n_removed = int(((labels > 0) & ~covered).sum())
-    labels[~covered] = 0
-    return n_removed
+    """主张盘封顶：距自己聚落欧氏距离 > 主张半径的像素退归荒地（label 0）。"""
+    lab_of = {int(lb): i for i, lb in enumerate(seed_labels)}
+    labs = np.unique(labels[labels > 0])
+    removed = 0
+    for lb in labs:
+        i = lab_of[int(lb)]
+        m = labels == lb
+        ys, xs = np.nonzero(m)
+        y0p, y1p = int(ys.min()), int(ys.max()) + 1
+        x0p, x1p = int(xs.min()), int(xs.max()) + 1
+        sy, sx = seeds[i][1], seeds[i][0]
+        yy, xx = np.mgrid[y0p:y1p, x0p:x1p]
+        d2 = (yy - sy) ** 2 + (xx - sx) ** 2
+        far = m[y0p:y1p, x0p:x1p] & (d2 > claims[i] ** 2)
+        removed += int(far.sum())
+        labels[y0p:y1p, x0p:x1p][far] = 0
+    return removed
 
 
 def load_legacy_parent_colors():
@@ -301,8 +307,16 @@ def main():
         m = labels == lb
         if m.any():
             preview[m] = rgb
-    # 城块配色纯图（不叠城心记号——形状本身即信息，圆点观感多余）
-    Image.fromarray(preview).save(os.path.join(OUT_DIR, "city_preview_%d.png" % RES))
+    prev_img = Image.fromarray(preview)
+    from PIL import ImageDraw as _ID
+    dr = _ID.Draw(prev_img)
+    dot_r = 3
+    for i, (cx, cy) in enumerate(seeds):
+        x, y = float(cx), float(cy)
+        dr.ellipse([x - dot_r, y - dot_r, x + dot_r, y + dot_r],
+                   outline=(12, 12, 12), width=1)
+        dr.ellipse([x - 1, y - 1, x + 1, y + 1], fill=(250, 250, 250))
+    prev_img.save(os.path.join(OUT_DIR, "city_preview_%d.png" % RES))
 
     idx_img = np.zeros((RES, RES, 3), dtype=np.uint8)
     idx_img[labels > 0, 0] = (labels[labels > 0] >> 16) & 0xFF
@@ -312,9 +326,12 @@ def main():
 
     city_img = np.full((RES, RES, 3), 235, dtype=np.uint8)
     city_img[land, :] = 220
+    box = 5
     for (cx, cy) in seeds:
-        x0c, y0c = int(cx), int(cy)
-        city_img[max(0, y0c):y0c + 1, max(0, x0c):x0c + 1, :] = (200, 40, 40)
+        x0c, y0c = int(cx) - box // 2, int(cy) - box // 2
+        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 0] = 200
+        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 1] = 40
+        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 2] = 40
     Image.fromarray(city_img).save(os.path.join(OUT_DIR, "city_cities_%d.png" % RES))
 
     np.save(os.path.join(OUT_DIR, "city_labels_%d.npy" % RES), labels)

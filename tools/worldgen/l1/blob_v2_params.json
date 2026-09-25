@@ -11,9 +11,10 @@
  },
  "area": {
   "k": 0.9,
-  "gamma": 0.7,
+  "gamma": 1.5,
   "min_total_area": 30,
-  "max_fill": 0.85
+  "max_fill": 0.85,
+  "comment_gamma": "档差放大（创始人验收反馈）：R_ref=base+g_max·s^gamma，gamma 1.5 让低档贴地、高档明显大"
  },
  "core": {
   "a": 1.0,

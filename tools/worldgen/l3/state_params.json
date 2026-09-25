@@ -483,7 +483,34 @@
     "cap": 18,
     "floor": 1,
     "local_reach_px": 1100,
-    "local_reach_px_comment": "局地可行池半径（8192 级，城图 px 测地）：都城可达城数 = target 上限；不足摊额时逐轮 ×1.3 放宽保证 Σ 可行"
+    "local_reach_px_comment": "局地可行池半径（8192 级，城图 px 测地）：都城可达城数 = target 上限；不足摊额时逐轮 ×1.3 放宽保证 Σ 可行",
+    "region_tilt": {
+     "comment": "碎度地区化（创始人定向）：每国 target × 都城所在群系 tilt——贫瘠区天生更碎、富庶区易生大国（biome id：1 平原/2 森林/3 荒漠/4 冰原/5 源流/6 火山）",
+     "1": 1.25,
+     "2": 1.0,
+     "3": 0.5,
+     "4": 0.55,
+     "5": 1.3,
+     "6": 0.5
+    },
+    "spawn_cluster": {
+     "comment": "出生小国群（创始人定向：手动设计出生所在 L1 地块）——出生 L1（49）及 9 个邻接地块内的国家 target 上限 3（1-3 城小国群）+ 都城间距加密（×0.45）让该区多出小国核心",
+     "spawn_settlement_id": "settlement_city_427",
+     "l1_labels": [
+      38,
+      39,
+      40,
+      43,
+      44,
+      45,
+      46,
+      48,
+      49,
+      50
+     ],
+     "max_cities": 3,
+     "capital_sep_mult": 0.45
+    }
    },
    "capital": {
     "comment": "都城适宜性 = 资源禀赋项 × 文化中心性。资源禀赋项复用 settlements 的 h 口径（h_w_suit×宜居 + h_w_res×tanh(资源加权和/gain_norm)，城点双线性采样）；文化中心性 = exp(-城到主导文化「场强质心」欧氏距离 / central_tau_px)，质心自 culture_strength 2048 场按主导文化加权（荒野城 dominant=0 中心性=0 不参选都城）；四叉树最小间距（state_expand_lite._SeedQuadtree 借用）自适应放宽",
@@ -551,7 +578,20 @@
     "p_indep": 0.32,
     "p_flip": 0.6,
     "flip_mix_min": 0.3,
-    "collapse_island_max": 30
+    "collapse_island_max": 30,
+    "spawn_protect_l1": [
+     38,
+     39,
+     40,
+     43,
+     44,
+     45,
+     46,
+     48,
+     49,
+     50
+    ],
+    "spawn_protect_comment": "出生圈老 L1 列表：区内国不参与 A6 兼并（手设计小国群版图稳定）"
    },
    "naming": {
     "comment": "构型命名：每文化语素库自 culture_sources.morph_seed 派生（np.random.default_rng）——声母字库按语系共享（同语系听感相近）、韵母/政权后缀/城市后缀按生计原型分档，荒野文化（dominant=0）用通用中性库；构词法 = [方位前缀]+词根(1-2 音节)+后缀，政权名 3-5 字、城市名 2-4 字，全表去重。生成名全部「提案/待定」",

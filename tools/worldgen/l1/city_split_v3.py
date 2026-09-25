@@ -301,16 +301,8 @@ def main():
         m = labels == lb
         if m.any():
             preview[m] = rgb
-    prev_img = Image.fromarray(preview)
-    from PIL import ImageDraw as _ID
-    dr = _ID.Draw(prev_img)
-    dot_r = 3
-    for i, (cx, cy) in enumerate(seeds):
-        x, y = float(cx), float(cy)
-        dr.ellipse([x - dot_r, y - dot_r, x + dot_r, y + dot_r],
-                   outline=(12, 12, 12), width=1)
-        dr.ellipse([x - 1, y - 1, x + 1, y + 1], fill=(250, 250, 250))
-    prev_img.save(os.path.join(OUT_DIR, "city_preview_%d.png" % RES))
+    # 城块配色纯图（不叠城心记号——形状本身即信息，圆点观感多余）
+    Image.fromarray(preview).save(os.path.join(OUT_DIR, "city_preview_%d.png" % RES))
 
     idx_img = np.zeros((RES, RES, 3), dtype=np.uint8)
     idx_img[labels > 0, 0] = (labels[labels > 0] >> 16) & 0xFF
@@ -320,12 +312,9 @@ def main():
 
     city_img = np.full((RES, RES, 3), 235, dtype=np.uint8)
     city_img[land, :] = 220
-    box = 5
     for (cx, cy) in seeds:
-        x0c, y0c = int(cx) - box // 2, int(cy) - box // 2
-        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 0] = 200
-        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 1] = 40
-        city_img[max(0, y0c):y0c + box, max(0, x0c):x0c + box, 2] = 40
+        x0c, y0c = int(cx), int(cy)
+        city_img[max(0, y0c):y0c + 1, max(0, x0c):x0c + 1, :] = (200, 40, 40)
     Image.fromarray(city_img).save(os.path.join(OUT_DIR, "city_cities_%d.png" % RES))
 
     np.save(os.path.join(OUT_DIR, "city_labels_%d.npy" % RES), labels)

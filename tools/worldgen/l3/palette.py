@@ -148,12 +148,16 @@ def _coprime_stride(n: int) -> int:
     return 1
 
 
-def assign_colors(candidates, order, neighbors, min_delta_e):
+def assign_colors(candidates, order, neighbors, min_delta_e,
+                  state_culture=None, culture_band=None):
     """贪心分配：按 order（大国优先）逐国取色。
 
-    选色键 = (违反量, 该明度档已用次数, 该候选已用次数, 轮转次序) 字典序取最小：
+    选色键 = (违反量, 文化带外, 该明度档已用次数, 该候选已用次数, 轮转次序) 字典序取最小：
       1. **违反量**（硬约束优先）= Σ_相邻已分配国 max(0, min_delta_e − ΔE)² ——
          只要存在「不与任何已分配邻居撞色」的候选，就一定要用它；
+      1.5 **文化带外惩罚**（创始人定向）：state_culture/culture_band 给定时，
+         同文化国优先用同色相带（组内以明度档深浅区分，相似文化=同色系）；
+         带外候选在 ΔE 冲突时仍可被选（硬约束绝对优先，保证可分性）；
       2. **明度档已用次数**——防止大国把最亮的档全占掉（否则整图偏白/偏灰，
          各档均匀铺开才是协调观感）；
       3. **候选已用次数**——同一颜色尽量不复用（候选多于政权数）；
@@ -186,7 +190,13 @@ def assign_colors(candidates, order, neighbors, min_delta_e):
                 de = delta_e(p["lab"], q["lab"])
                 if de < min_delta_e:
                     viol += (min_delta_e - de) ** 2
-            key = (viol, tier_use.get(p["tier"], 0), use_count.get(pi, 0), rot_rank[pi])
+            band_pen = 0
+            if state_culture is not None and culture_band is not None:
+                band = culture_band.get(state_culture.get(sid))
+                if band is not None and p["hue"] not in band:
+                    band_pen = 1
+            key = (viol, band_pen, tier_use.get(p["tier"], 0),
+                   use_count.get(pi, 0), rot_rank[pi])
             if best_key is None or key < best_key:
                 best_pi, best_key = pi, key
         assigned[sid] = candidates[best_pi]

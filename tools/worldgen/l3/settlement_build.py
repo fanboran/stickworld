@@ -399,12 +399,10 @@ def make_previews(settlements, suit, eff_land, out_dir, font):
     dr = ImageDraw.Draw(img)
     lv_color = {1: (120, 205, 120), 2: (240, 190, 85), 3: (240, 95, 70)}
     for s in sorted(settlements, key=lambda t: (t["level"], t["population_score"])):
-        rad = 2.0 + 7.5 * s["population_score"]
+        rad = 1.2 + 3.6 * s["population_score"]
         x, y = s["x"] / K_FIELD, s["y"] / K_FIELD
         dr.ellipse([x - rad, y - rad, x + rad, y + rad],
-                   fill=lv_color[s["level"]],
-                   outline=(255, 255, 255) if s["level"] == 3 else (18, 20, 26),
-                   width=1)
+                   fill=lv_color[s["level"]])
     _save_titled(img, out_dir, "settlements_preview_locations_2048.png",
                  "A3 聚落分布（点大小=population_score 绿=L1村 黄=L2镇 红=L3城；"
                  "底=宜居度淡色，无点区=荒地）", font)

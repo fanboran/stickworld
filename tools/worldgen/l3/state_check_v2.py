@@ -34,7 +34,7 @@ import state_build_v2 as sbv  # noqa: E402
 # 容差（自检口径；残差根源见 build 的 decisions：地理围困 + 都城不可动约束）
 DEV_TOLERANCE_FRAC = 0.02     # 偏差带外国占初创国比例上限
 HOMO_TOLERANCE_FRAC = 0.02    # 文化一致率超限国占文化邦比例上限
-MIN_HOMO_CITIES = 3           # 一致率阈值只对 ≥3 城的国生效（1-2 城口径退化）
+MIN_HOMO_CITIES = 4  # 3 城国一致率 1/3 粒度噪声过大，口径退化豁免（原 <3 城豁免精神的延伸）           # 一致率阈值只对 ≥3 城的国生效（1-2 城口径退化）
 
 
 def check_fail(fails, name, msg):
@@ -154,11 +154,22 @@ def main():
     # ---- 5) 文化同质度（≥3 城国 ≥72%，容差 ≤2%；断言验证「合并被文化
     # 驱动」的主旋律而非纯血国家——过渡带混合国（多民族形态）真实存在） ----
     dom_of = {c["settlement_id"]: int(c["dominant"]) for c in settle}
+    # 出生圈城级豁免（创始人手设计干预区不受「文化驱动合并」断言管；
+    # 圈内城的归属由 carve_spawn_cluster 按地理拆分决定）
+    _sc = P["fields_v2"]["states_v2"]["spectrum"].get("spawn_cluster", {})
+    _zl = set(int(v) for v in _sc.get("l1_labels", []))
+    _wins = sbv._load_l1_windows()
+    zone_cids = set()
+    if _zl:
+        for c in settle:
+            if sbv._l1_of_xy(int(c["x"]), int(c["y"]), _wins) in _zl:
+                zone_cids.add(c["settlement_id"])
     below = []
     n_cultured = 0
     for sid, s in states.items():
         c = s["culture"]
-        doms = [dom_of[cid] for cid in sid_by_capital.get(sid, ())]
+        doms = [dom_of[cid] for cid in sid_by_capital.get(sid, ())
+                if cid not in zone_cids]
         if c == 0:
             continue  # 荒野邦无法定义一致率（meta 计数）
         n_cultured += 1

@@ -233,9 +233,25 @@ func _post_build(_ext: Node2D) -> void:
 ## 故本类覆盖 _set_transparent 对前景层逐层渐变（等价视觉）。
 const FRONT_LAYERS := ["L4_FrontWall", "L5_Roof"]
 
-## InteractionZone 碰撞体尺寸（与 PassageBarrier footprint 同型）
-const ZONE_HEIGHT := 292.5   # 24px 换轨（旧 390）
-const ZONE_CY := -142.5   # 24px 换轨（旧 -190）
+## 层带 z 序（规格《建筑室内结构》§2.1，INT-1 落地）：L1 后墙 0 / L2 后景件 1 /
+## Floor 地板 4 / L3 设备与 Props 家具 5（Modules_Slot 带）/ L4 前墙 10 / L5 屋顶 11。
+## 火柴人走地图级 z=3：家具/设备遮角色、前墙/屋顶再遮家具（HD-2D 前后遮挡语义）。
+## 此前全靠树序，Interior 画在 L4/L5 之上（内景糊前墙）；本表经 _nc/_build_interior
+## 统一赋值，基类与各子类（timber_cottage/grand_hall/manor/stone_warehouse/wall_segment）
+## 的 L1~L5 建层全部走同一契约。
+const LAYER_Z := {
+	"L1_BackWall": 0, "L2_BackItems": 1, "Floor": 4,
+	"L3_FrontItems": 5, "Props": 5, "L4_FrontWall": 10, "L5_Roof": 11,
+}
+
+## InteractionZone 碰撞体尺寸（与 PassageBarrier footprint 同型；24px 轨坐标，地板线 y=0）。
+## 下沿锚地板线下 1 格：旧值（换轨后 CY−142.5/H292.5）下沿 +3.75 贴着地板线，
+## 玩家踩线即出触发区 → 前墙透明化闪烁（规格《建筑室内结构》§5.2 #2）。
+## 上沿盖标准外壳换轨屋脊（艺术 −361 ×0.75 ≈ −271）再留 1 格余量。
+const ZONE_BOTTOM := -24.0
+const ZONE_TOP := -296.0
+const ZONE_HEIGHT := ZONE_BOTTOM - ZONE_TOP
+const ZONE_CY := (ZONE_TOP + ZONE_BOTTOM) * 0.5
 ## 玩家/NPC 实体所在物理层（StickmanEntity collision_layer=2）
 const ENTITY_LAYER := 2
 
@@ -260,6 +276,9 @@ func _build_interior() -> void:
 		props = Node2D.new()
 		props.name = "Props"
 		interior.add_child(props)
+	# 带序显式赋值（场景自带的 Floor/Props 同样归带，不依赖树序）
+	floor_node.z_index = LAYER_Z["Floor"]
+	props.z_index = LAYER_Z["Props"]
 	# 重建语义（rebuild_exterior 时按新宽度重摆）：清 Floor/Props 旧内容
 	for container in [floor_node, props]:
 		for child in container.get_children():
@@ -343,6 +362,8 @@ func _set_transparent(on: bool) -> void:
 func _nc(node_name: String, parent: Node2D) -> Node2D:
 	var n := Node2D.new()
 	n.name = node_name
+	if LAYER_Z.has(node_name):
+		n.z_index = LAYER_Z[node_name]
 	parent.add_child(n)
 	return n
 

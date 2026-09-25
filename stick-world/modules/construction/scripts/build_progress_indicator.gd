@@ -8,12 +8,15 @@ extends ProgressPainter
 ## 完工/取消时由 ConstructionManager 移除。
 ## 绘制走 L0 公共基类 ProgressPainter（bg/fg 双 rect + 描边），外观不变。
 
-## 进度条宽度（像素）= 建筑占地宽度 * 32
+## 进度条宽度（像素）= 建筑占地宽度 × 条带宽
 var _bar_width: float = 64.0
 ## 材料进度 [0,1]
 var _material_progress: float = 0.0
 ## 建造进度 [0,1]
 var _build_progress: float = 0.0
+
+## 占地条带宽（px）：锚定 PlacementGrid.CELL_SIZE（换轨时两处同步）
+const CELL_PX: float = 24.0
 
 ## 进度条高度
 const _BAR_HEIGHT: float = 6.0
@@ -28,9 +31,9 @@ const _COLOR_BUILD := Color(0.3, 0.85, 0.35, 1.0)
 
 ## 初始化：设置位置和宽度
 func setup(cell_x: int, width: int, ground_y: float) -> void:
-	var center_x: float = (float(cell_x) + float(width) * 0.5) * 32.0
+	var center_x: float = (float(cell_x) + float(width) * 0.5) * CELL_PX
 	position = Vector2(center_x, ground_y - 220.0)
-	_bar_width = maxf(float(width) * 32.0, 48.0)
+	_bar_width = maxf(float(width) * CELL_PX, 48.0)
 	z_index = WorldZ.OVERLAY_PROGRESS
 
 

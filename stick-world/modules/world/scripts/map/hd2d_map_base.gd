@@ -110,6 +110,18 @@ const BILLBOARD_HIP_H_PX := 50.23
 ## 角色 → 3D billboard 渲染同步映射表（实体 instance_id -> char_host(Node3D)）
 var _char_map: Dictionary = {}
 
+# ─────────────────────────────── 建筑宿主（ROOT-1 装配）────────────────────────────────
+## 显式 preload，避免 headless 下 class_name 全局注册未触发（同 placement_grid.gd 口径）
+const ScriptPlacementGrid := preload("res://modules/world/scripts/placement/placement_grid.gd")
+
+## 1D 条带占地网格（duck 契约属性：construction 经 _map.get("placement_grid")
+## 读取；节点名守 WorldAPI.PATH_MAP_PLACEMENT_GRID，F3 调试网格按子节点名定位）。
+var placement_grid: ScriptPlacementGrid = null
+## 建筑落位基线偏移（duck 契约，construction 完工/直放落位读）：HD-2D 图建筑
+## 落前排建筑带墙脚线 walk_back_y（与街景前排卡同深度带，玩家可走到楼前），
+## 运行时在 _setup_building_hosting 推导（= walk_back_y − ground_y）。
+var building_baseline_offset: float = 96.0
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
@@ -163,6 +175,7 @@ func _ready() -> void:
 	if prompt.has_method("setup"):
 		prompt.setup(self)
 	_apply_time_of_day(true)
+	_setup_building_hosting()
 
 
 ## 壳参数解析钩子（_ready 开头调，先于 3D 场景搭建）。基类无参数壳语义；
@@ -479,6 +492,54 @@ func get_open_work_sites() -> Array:
 	if _hd != null and _hd.has_method("get_open_work_sites"):
 		return _hd.get_open_work_sites()
 	return []
+
+
+# ─────────────────────────────── 建筑宿主装配 ────────────────────────────────
+
+## 建筑宿主装配（ROOT-1）：占地网格挂图 + 街景占位封锁 + 落位基线推导——
+## 此后 construction 的选址校验/占用登记/建筑落位 duck 链在本图全通（建造
+## 菜单入口本就常驻，此前卡在「地图缺少 placement_grid」）。
+## 视觉为过渡态：Building 的 2D 程序化外观直接叠画在画布层（画布在 3D 之上），
+## 与 3D 街景风格断裂——3D 卡视觉随 ROOT-2（plan 物化）替换，本装配只管机制。
+## 必须在 _apply_hd_bounds 之后调（网格覆盖范围随收界后的地图边界走）。
+func _setup_building_hosting() -> void:
+	placement_grid = ScriptPlacementGrid.new()
+	placement_grid.name = "PlacementGrid"
+	add_child(placement_grid)
+	# 建造过程层（工地占位灰盒/进度条挂载，WorldAPI.PATH_MAP_BUILD_MASK_LAYER
+	# 契约名；construction 侧按「属性→子节点」双路径查找，子节点名即命中）
+	var mask_layer := Node2D.new()
+	mask_layer.name = "BuildMaskLayer"
+	add_child(mask_layer)
+	# 覆盖整图含两侧 2 格余量（expand 支持负 cell；主街以街中心 x=0 对称）
+	var left_cell := floori(map_left / CELL_PX) - 2
+	var right_cell := ceili(map_right / CELL_PX) + 2
+	placement_grid.expand_range(left_cell, right_cell - left_cell)
+	_block_built_up_cells()
+	building_baseline_offset = walk_back_y - ground_y
+
+
+## 把 3D 侧已成街景登记为不可建条带（玩家建筑不得叠在烘卡楼/杂物/城墙上）：
+## 前排建筑带与杂物带经 get_building_rects（x=格，宽度口径=占位槽宽，宽松
+## 封锁方向安全）；城墙带 = ±墙线 ±半墙厚（0.6 格，对齐 hd2d 侧 WALL_T=1.2）。
+## 战场图无城墙（hd2d battlefield 模式）跳过墙带；资源图无前排卡时表为空，
+## 封锁自然为零。未封锁 ≠ 可建 —— 网格条带仍是 1D（只看 x），可行走带与
+## 建造带的纵深归属由落位基线统一钉在前排带。
+func _block_built_up_cells() -> void:
+	for r: Variant in get_building_rects():
+		var c0 := floori(float(r[0]))
+		var c1 := ceili(float(r[1]))
+		if c1 > c0:
+			placement_grid.set_blocked_area(c0, c1 - c0)
+	if _hd == null or bool(_hd.get("battlefield")):
+		return
+	var wall_cells: float = get_wall_px() / CELL_PX
+	if wall_cells <= 1.0:
+		return
+	for sx: float in [-1.0, 1.0]:
+		var wc0 := floori(sx * wall_cells - 0.6)
+		var wc1 := ceili(sx * wall_cells + 0.6)
+		placement_grid.set_blocked_area(wc0, wc1 - wc0)
 
 
 # ─────────────────────────────── 碰撞/调试数据口 ────────────────────────────────

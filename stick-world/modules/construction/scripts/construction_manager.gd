@@ -32,6 +32,10 @@ const ScriptBuildProgressTracker := preload("res://modules/construction/scripts/
 const _BuildingCatalogScript: GDScript = preload("res://modules/construction/scripts/catalog/building_catalog.gd")
 const _BuildingPersistenceScript: GDScript = preload("res://modules/construction/scripts/catalog/building_persistence.gd")
 
+## 占地条带宽（px）：锚定 PlacementGrid.CELL_SIZE（world 模块 L3，construction
+## 不得 preload 反向依赖，换轨时两处同步——同 build_menu/behavior_work 口径）
+const CELL_PX: float = 24.0
+
 # ─────────────────────────────── 字段 ────────────────────────────────
 
 ## 派工系统
@@ -206,7 +210,7 @@ func _rebuild_project_cache() -> void:
 	for p in _projects.values():
 		if p is ScriptConstructionProject:
 			var proj: ScriptConstructionProject = p as ScriptConstructionProject
-			_project_cache.append([float(proj.cell_x) * 32.0 + float(proj.width) * 16.0, proj])
+			_project_cache.append([float(proj.cell_x) * CELL_PX + float(proj.width) * CELL_PX * 0.5, proj])
 	_project_cache_dirty = false
 
 
@@ -407,8 +411,8 @@ func _update_city_terrain_mask() -> void:
 func _clear_resource_nodes_in_area(cell_x: int, width: int, region_id: String) -> void:
 	if _map == null:
 		return
-	var cell_start_x: float = cell_x * 32.0
-	var cell_end_x: float = (cell_x + width) * 32.0
+	var cell_start_x: float = cell_x * CELL_PX
+	var cell_end_x: float = (cell_x + width) * CELL_PX
 	# 经地图查询接口取资源点（替代全局 group 扫描，2026-08 收敛）
 	var nodes: Array = _map.get_resource_nodes() if _map.has_method("get_resource_nodes") else []
 	for node in nodes:
@@ -518,8 +522,8 @@ func get_all_project_ids() -> Array:
 func _entity_blocking(cell_x: int, width: int) -> bool:
 	if _map == null or not _map.has_method("get_entities"):
 		return false
-	var left_x: float = float(cell_x) * 32.0
-	var right_x: float = left_x + float(width) * 32.0
+	var left_x: float = float(cell_x) * CELL_PX
+	var right_x: float = left_x + float(width) * CELL_PX
 	# 建筑体 Y 范围（与 PassageBarrier 一致：约 [baseline-390, baseline]，不含脚下空地）
 	var ground_y: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0)
 	var baseline_offset: float = float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
@@ -598,7 +602,7 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 		building.set_map_reference(_map)
 
 	# 摆放位置：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基准线（地平线向下 baseline_offset）
-	var world_x: float = cell_x * 32.0
+	var world_x: float = float(cell_x) * CELL_PX
 	var ground_y: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0)
 	var baseline_offset: float = float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
 	var baseline: float = ground_y + baseline_offset

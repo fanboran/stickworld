@@ -18,6 +18,10 @@ extends RefCounted
 ## 本模块不引用 units 内部类，避免 construction→units 编译期依赖）
 const BODY_COLLISION_LAYER: int = 2
 
+## 占地条带宽（px）：锚定 PlacementGrid.CELL_SIZE（construction 不 preload world 模块，
+## 换轨时两处同步——同 construction_manager 口径）
+const CELL_PX: float = 24.0
+
 const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
 
 # ─────────────────────────────── 状态 ────────────────────────────────
@@ -268,11 +272,13 @@ func _create_barrier() -> void:
 	var host: Node2D = map.get("walk_barrier") if "walk_barrier" in map else null
 	if host == null:
 		return
-	# 占位碰撞箱：位于地面线 ground_y ~ ground_y+96（96px 高、坐在地面上），
-	# 与占位符建筑一致；X 覆盖整栋建筑宽度（跟随实际拉伸宽度）。
+	# 占位碰撞箱：高 96、坐在建筑基线带上（[baseline-96, baseline]，与完工建筑
+	# 碰撞底同带）；X 覆盖整栋建筑宽度（跟随实际拉伸宽度）。基线 = ground_y +
+	# building_baseline_offset（地图 duck 属性，各图型自定建筑落位带）
 	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	var site_size := Vector2(float(width) * 32.0, 96.0)
-	var site_center := Vector2(float(cell_x) * 32.0 + float(width) * 16.0, ground_y + 48.0)
+	var baseline_off: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
+	var site_size := Vector2(float(width) * CELL_PX, 96.0)
+	var site_center := Vector2((float(cell_x) + float(width) * 0.5) * CELL_PX, ground_y + baseline_off - 48.0)
 	_barrier = StaticBody2D.new()
 	_barrier.visible = false
 	# 与实体同层（BODY）：实体 collision_mask 含 layer 2，move_and_slide 自然阻挡
@@ -288,7 +294,7 @@ func _create_barrier() -> void:
 
 
 ## 创建未建成时的占位建筑视觉（灰色盒子 + 黑色左右边缘，随建筑宽度拉伸）。
-## 位于地面线 ground_y ~ ground_y+96，与占位碰撞箱一致。
+## 位于建筑基线带 [baseline-96, baseline]，与占位碰撞箱一致。
 func _create_placeholder_visual() -> void:
 	if _placeholder_visual != null and is_instance_valid(_placeholder_visual):
 		return
@@ -299,8 +305,9 @@ func _create_placeholder_visual() -> void:
 		host = map.get_node_or_null("BuildMaskLayer")
 	if host == null:
 		return
-	var w: float = float(width) * 32.0
+	var w: float = float(width) * CELL_PX
 	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
+	var baseline_off: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
 	var vis := Node2D.new()
 	vis.name = "ConstructionPlaceholder"
 	vis.z_index = WorldZ.FOREGROUND
@@ -319,7 +326,7 @@ func _create_placeholder_visual() -> void:
 	edge_r.polygon = PackedVector2Array([Vector2(w - 4, -96), Vector2(w, -96), Vector2(w, 0), Vector2(w - 4, 0)])
 	edge_r.color = Color(0, 0, 0, 1.0)
 	vis.add_child(edge_r)
-	vis.position = Vector2(float(cell_x) * 32.0, ground_y + 96.0)
+	vis.position = Vector2(float(cell_x) * CELL_PX, ground_y + baseline_off)
 	host.add_child(vis)
 	_placeholder_visual = vis
 

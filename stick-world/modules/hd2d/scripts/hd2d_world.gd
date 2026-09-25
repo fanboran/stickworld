@@ -425,6 +425,15 @@ func _parse_args() -> void:
 		elif s.begins_with("--hide="):
 			# --hide=shadow,plat,cards：诊断用分组隐藏（对照实验定位视觉缺陷来源）
 			_opts["hide"] = s.get_slice("=", 1)
+		elif s.begins_with("--ink="):
+			# --ink=1.5：卡线实验——外轮廓墨线宽（屏幕 px；0 = 关）
+			_opts["ink"] = float(s.get_slice("=", 1))
+		elif s.begins_with("--inkline="):
+			# --inkline=0.6：卡线实验——内部结构墨线强度（0 = 关）
+			_opts["inkline"] = float(s.get_slice("=", 1))
+		elif s.begins_with("--inkthresh="):
+			# --inkthresh=0.12：卡线实验——内部墨线亮度梯度阈值（越大线越少）
+			_opts["inkthresh"] = float(s.get_slice("=", 1))
 
 
 # ------------------------------------------------------------------ 资源
@@ -740,6 +749,7 @@ func _spawn_prop(card: String, x: float, z_off: float, plat: bool) -> MeshInstan
 	mi.basis = _cam_basis()
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER
+	_apply_ink(m)
 	m.set_shader_parameter("albedo_tex", _tex_abs(_temp + PROP_DIR + card + ".png"))
 	# 夜版道具卡缺失回退日版（街边小物件夜里的月光来自 Blender 烘的夜版贴图）
 	var prop_night := _tex_abs_soft(_temp + PROP_DIR + card + "_night.png")
@@ -922,6 +932,7 @@ func _spawn_nature_card(card: String, x: float, z_off: float) -> MeshInstance3D:
 	mi.basis = _cam_basis()
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER
+	_apply_ink(m)
 	m.set_shader_parameter("albedo_tex", _tex_abs(_temp + NATURE_DIR + card + ".png"))
 	# 夜版自然物卡缺失回退日版（树/矿/水晶夜里的月光来自 Blender 烘的夜版贴图）
 	var nature_night := _tex_abs_soft(_temp + NATURE_DIR + card + "_night.png")
@@ -1101,6 +1112,19 @@ func _pick_card(list: Array, ci: int, room: float) -> String:
 	return ""
 
 
+## 卡线实验（临时项，命令行开关）——把 --ink/--inkline/--inkthresh 推给卡材质。
+## 三个参数默认 0 = 完全关：不传参时生产观感与改动前逐像素一致。
+## 覆盖建筑卡与道具/自然物卡（同一材质族），避免"楼有墨线、树没有"的观感割裂。
+func _apply_ink(m: ShaderMaterial) -> void:
+	var px := float(_opts.get("ink", 0.0))
+	var ln := float(_opts.get("inkline", 0.0))
+	if px <= 0.0 and ln <= 0.0:
+		return
+	m.set_shader_parameter("ink_px", px)
+	m.set_shader_parameter("ink_line", ln)
+	m.set_shader_parameter("ink_thresh", float(_opts.get("inkthresh", 0.10)))
+
+
 func _card_material(card: String) -> ShaderMaterial:
 	var meta: Dictionary = _cards.get(card, {})
 	var base := _temp + CARD_DIR
@@ -1115,6 +1139,7 @@ func _card_material(card: String) -> ShaderMaterial:
 		ngt = alb
 	var m := ShaderMaterial.new()
 	m.shader = CARD_SHADER
+	_apply_ink(m)
 	m.set_shader_parameter("albedo_tex", alb)
 	m.set_shader_parameter("albedo_night_tex", ngt)
 	m.set_shader_parameter("glow_tex", glo)

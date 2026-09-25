@@ -216,7 +216,7 @@
 | 材质库 | `materials.py` | **64 key**：26 基础 → 54（玻璃系 `stained_glass/glass_lead/glass_clear/glass_bottle/crystal/rune_glow/bronze/patina` + 城市地面 10）→ 57（`glow_water/parchment/leather`）→ 64（**`glazing_win` 真透明窗玻璃（隔窗见内景已实证，alpha≈0.075/峰 0.16）**、`bark/leaf_card(alpha 叶卡)/rock/copper_ore/gold_ore/grass_band`）。做旧 AGE 13 key + 逐体色变 OBJ_VAR（跨进程确定）。`glazing_win` 进 ALPHA_KEYS(BLENDED)+透射阴影；`stained_glass`/`glass_lead` 语义收窄"仅 cathedral/chapel"。回归：新旧逐像素 max diff=1/255；25% 门禁自评 PASS |
 | 建筑几何库 | `buildings.py` | **27 种装配器**（19 + 第三轮 8：mage_tower/alchemy/library/barracks/warehouse/stable/shelter 独立化 + hayloft；barn 黑盒子已消）。屋顶二轮（檐口断面/檐下 AO/檩条/草束）+ 立面修正（WINDOW_SPEC 窗表/二层补墙/烟囱落地泛水）。**比例审计已校正**：mage_tower 塔身 1×4.6m→2×3.66m、锥顶比 0.85→0.72；stable/hayloft 底层抬到 2.07/2.12m；带门层统一 2.62m（门占 75%）；`STOREY_H_BAND` 196~212；townhouse16 由 FAIL 转 PASS |
 | 道具层 | `props.py` | **94 件**（60 + 34 玻璃/魔法/宗教/军政：彩窗板/蒸馏器/符文碑/祭坛/兵器架/蜂箱…）+ 14 套 DRESS 配方（含 alchemy/chapel/library）；挂墙件贴**真实前墙面**（`wall_y/wall_depth/reserved`，cathedral 彩窗板悬空已修）；`MOUNT_SCALE` 小件补偿；炼金坊前场避让 |
-| **内景层** | `interiors.py` | **29 def 全覆盖**（7+19+3 别名），每套后墙+地板+楼板+功能家具+暖光；`_back/_front` 两层带 alpha 交付，**像素对齐 29/29 ≤0.5px**（复现游戏 `WallFront.modulate.a=0.3` 机制）；`clip_to_walls()` 修 GAME_SCALE 越界。cottage/shelter 判定需 12 格档；gatehouse=门洞通道 |
+| **内景层** | `interiors.py` | **34 def 全覆盖**（7+19+3 别名+行政 5），每套后墙+地板+楼板+功能家具+暖光；`_back/_front` 两层带 alpha 交付并入库 `tex/proto25d/interiors/`，**像素对齐 34/34 ≤0.5px**（复现游戏 `WallFront.modulate.a=0.3` 机制）；`clip_to_walls()` 修 GAME_SCALE 越界。cottage/shelter 判定需 12 格档；gatehouse=门洞通道 |
 | **自然物** | `nature.py` + `field_dist.py` | 16 类（阔叶/窄冠/针叶/枯树/树桩/灌木/芦苇/草丛/蘑菇群/水晶簇/金铜铁矿露头/矿脉带/碎石/巨岩），已换新材质（bark/alpha 叶卡/rock/ore/crystal/grass_band）；三级密度场分布（簇包络×子团×开天窗，实测离散指数 2.7 vs 均匀≈0） |
 | **地面体系** | `ground_tiles.py` | **分段链**：3 带（肩/缘/道）× 3 区带（center 石板大理石/mid 旧砖碎石/edge 夯土砾石）× 5 变体，可链式拼接；**规模包含映射**（村=[edge] 子集、镇=mid+edge、城=全档，`_manifest.json`）；**动态建造件**（落地环/门前径/位掩码过渡边角件，跟 PlacementGrid）；decal 8 种带撒布参数；新旧过渡段 3；多尺度补丁（0.4/0.8/1.6m）+ 去竖纹返工。硬指标：周期残差 ~e-13、光照中性 0/57 违规、夜晚调制 -44% |
 | **昼夜分层** | `daynight.py` | 发光白名单（按节点 Emission 真值：flat_fire/flat_ember/stained_glass/glass_lead/rune_glow/crystal）；glow 层干净分离（非黑像素 1.72% 全为发光件）；**合成公式已标定：夜 = albedo×tint(0.038,0.049,0.092) + glow×1.0，MAE 0.011**；窗户引擎侧抽 42% 随机亮 |
@@ -229,7 +229,7 @@
 - 材质：`pbr_mat2/mat3/mat4/mat5_*.png`（样片/做旧对照/玻璃地面/透明实证与自然物）
 - 建筑：`pbr_buildings_v2.png`、`pbr_b2_*`、`pbr_d3a/d3b_<def>.png`、`pbr_roof2_*`、`pbr_facade_*`、**`pbr_scale_sheet.png`（45 档带 0.5m 刻度尺与偏差标注）** + `pbr_scale_<def>.png`×45
 - 道具：`pbr_props{,3,4}_*.png`（94 件总览/实景/挂墙修正对照）
-- 内景：`pbr_int_<def>_{back,front}.png`×29、`pbr_int_{sheet2x,layers,window}.png`
+- 内景：`pbr_int_<def>_{back,front}.png`×34（**入库** `stick-world/modules/hd2d/assets/tex/proto25d/interiors/`；管线产出 `temp/proto25d/interiors/`，品控四件在 `docs/技术/架构/建筑管线/图/interiors/`）
 - 自然：`pbr_nature_{strip,forest,ore}.png`、`pbr_field_dist.png`
 - 地面：`pbr_ground_{segments,chain_demo,pieces,grid_demo,decals,street,night}.png` + `ground_tiles/`（分段/件/decal + `_manifest.json`）
 - 昼夜：`pbr_dn_{day,night,glow,layers}.png`
@@ -238,7 +238,7 @@
 
 ### 已知落差（诚实清单）
 - **比例根因待裁**：20° 俯角把"进深×sin20°"计入屏幕高度（house12 屋顶屏占≈墙高 79%），是"头重脚轻"主因——相机为硬约束未动几何；门宽 0.60~0.76m 与规范 0.9~1.0m 冲突（§8.7 与 §8.3 自相矛盾）；窗宽 0.53~1.15m 待 WINDOW_SPEC 统一；瞭望塔 1.83m/段不达标（改高动城档天际线）。
-- 内景：gatehouse 偏暗；cottage/shelter 进深不足家具贴墙一排；塔类层间梯读作长斜板；cathedral 中殿净深 2.6~4m 长椅只 2 排；manor/stone_warehouse/placeholder 运行时 def 未出图。
+- 内景：gatehouse 偏暗；cottage/shelter 进深不足家具贴墙一排；塔类层间梯读作长斜板；cathedral 中殿净深 2.6~4m 长椅只 2 排；`manor`/`stone_warehouse` 无内景（`placeholder` 草棚可归 `shelter` 档）。
 - 自然物：针叶树冠仍实心锥台（叶卡会上洞）；bark 辨识度一般；叶卡偶见直线边。
 - HD-2D：2D 角色与 3D 光照非逐像素耦合（tint 近似）；角色 `depth_draw_never` 在高深度背景前有 DOF 误糊风险；批渲染路径未解算（矢量路径可用）。
 - 城市布局器新 8 def（mage_tower/alchemy/library/barracks/warehouse/stable/shelter/hayloft 独立档）未入 `city_layout.DEFS`；validate 的 ASM_TIER_ATTR 待补 stable/shelter。
@@ -255,7 +255,7 @@
 4. **city_layout 补 8 新 def** + validate ASM_TIER_ATTR 对齐 + 分段地面接入 `probe_city_scene` 全档重渲。
 5. **比例遗留提请创始人裁定**：门宽/窗宽规范冲突、瞭望塔段高、（可选）俯角 vs 屋顶屏占。
 6. **README 素材库画廊**（创始人点名：挑图复制+索引，体现工作量）。
-7. **待创始人观感验收**：比例审计 45 档标注图、真透明窗玻璃实证、内景 29 def、自然物、地面分段体系、昼夜分层、HD-2D 原型。
+7. **待创始人观感验收**：比例审计 45 档标注图、真透明窗玻璃实证、内景 34 def、自然物、地面分段体系、昼夜分层、HD-2D 原型。
 
 ### 今日关键决策（创始人拍板，2026-09-13）
 

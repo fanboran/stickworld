@@ -10,7 +10,7 @@
 
     python tools/blender_buildings/probe_interiors.py
 
-渲染模式产出（均带 alpha，`film_transparent=True`；`stick-world/temp/`）::
+渲染模式产出（均带 alpha，`film_transparent=True`；`stick-world/temp/proto25d/interiors/`）::
 
     pbr_int_<def>_back.png    后层（Interior 层）：后墙 + 地板 + 天花 + 家具 + 暖光
     pbr_int_<def>_front.png   前层（Exterior + WallFront）：前墙 + 屋顶 + 门窗框，
@@ -35,6 +35,7 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
@@ -44,7 +45,17 @@ try:
 except ImportError:            # 系统 python：走合成模式
     HAVE_BPY = False
 
-OUT_DIR = ("F:/VSCode/game-2/stick-world/temp")
+#: 交付输出目录 —— 落 `stick-world/temp/proto25d/interiors/`，路径含 `/temp/`
+#: 是刻意的：运行时 `hd2d_world._tex_abs()` 会把含 `/temp/` 的路径镜像到
+#: `res://modules/hd2d/assets/tex/` 同名子路径，与建筑卡（`temp/proto25d/cards/`
+#: ↔ `tex/proto25d/cards/`）同规则。入库 = 把本目录产物拷进
+#: `stick-world/modules/hd2d/assets/tex/proto25d/interiors/`（见《建筑资产清单》§四）。
+OUT_DIR = os.path.join(REPO, "stick-world", "temp", "proto25d", "interiors")
+
+#: 品控件（对齐台账、三格机制图、窗洞特写、2x 拼页）与渲染中间对的输出目录。
+#: 刻意与 OUT_DIR 分开：入库只拷 OUT_DIR 下平铺的 `pbr_int_<def>_{back,front}.png`，
+#: 品控件归《建筑资产清单》§九 验收图索引，不随资产进 res:// 贴图库。
+QA_DIR = os.path.join(OUT_DIR, "_qa")
 
 YAW = 0.0
 TILT = 20.0
@@ -380,6 +391,7 @@ def render_mode():
     import interiors
 
     os.makedirs(OUT_DIR, exist_ok=True)
+    os.makedirs(QA_DIR, exist_ok=True)
     _clear()
     sc = _setup_scene()
     cam = _make_camera()
@@ -430,8 +442,8 @@ def render_mode():
     if not only:
         try:
             lv_name, lv_wc = LAYERS_DEF
-            lv_b = os.path.join(OUT_DIR, "_int_layers_back.png")
-            lv_f = os.path.join(OUT_DIR, "_int_layers_front.png")
+            lv_b = os.path.join(QA_DIR, "_int_layers_back.png")
+            lv_f = os.path.join(QA_DIR, "_int_layers_front.png")
             lv_fr = _framing_rect(B, *LAYERS_FRAME)
             _render_pair(B, interiors, cam, ext, lv_name, lv_wc, 2.0, lv_b, lv_f,
                          frame=lv_fr, samples=64)
@@ -440,8 +452,8 @@ def render_mode():
             print("!! 三格机制图渲染失败: %s" % exc)
         try:
             win_name, win_wc = WIN_DEF
-            wb = os.path.join(OUT_DIR, "_int_win_back.png")
-            wf = os.path.join(OUT_DIR, "_int_win_front.png")
+            wb = os.path.join(QA_DIR, "_int_win_back.png")
+            wf = os.path.join(QA_DIR, "_int_win_front.png")
             fr = _framing_rect(B, *WIN_RECT)
             _render_pair(B, interiors, cam, ext, win_name, win_wc, 4.0, wb, wf,
                          frame=fr, samples=64)
@@ -452,7 +464,7 @@ def render_mode():
     # ---- 像素对齐实测汇总（写 json，报告直接引用；**与既有表合并**，
     #      这样 `INT_ONLY=` 的重渲不会把其它 def 的实测记录抹掉）
     import json
-    ap = os.path.join(OUT_DIR, "pbr_int_alignment.json")
+    ap = os.path.join(QA_DIR, "pbr_int_alignment.json")
     if os.path.exists(ap):
         try:
             with open(ap, encoding="utf-8") as fh:
@@ -552,10 +564,11 @@ def _npimg(arr):
 def compose_mode():
     from PIL import Image
     os.makedirs(OUT_DIR, exist_ok=True)
+    os.makedirs(QA_DIR, exist_ok=True)
 
     # ---- 1) pbr_int_layers.png：三格并排（back / front / front@0.3 over back）
-    lb = _load(os.path.join(OUT_DIR, "_int_layers_back.png"))
-    lf = _load(os.path.join(OUT_DIR, "_int_layers_front.png"))
+    lb = _load(os.path.join(QA_DIR, "_int_layers_back.png"))
+    lf = _load(os.path.join(QA_DIR, "_int_layers_front.png"))
     h, w, _ = lb.shape
     bg = _bg_checker(w, h, 22)
     p1 = _over(bg, lb)
@@ -568,16 +581,16 @@ def compose_mode():
     sheet = _label(sheet, "%s back (Interior) | front opaque | "
                           "front alpha=0.3 over back == game WallFront.modulate.a=0.3"
                           % LAYERS_DEF[0])
-    sheet.save(os.path.join(OUT_DIR, "pbr_int_layers.png"))
+    sheet.save(os.path.join(QA_DIR, "pbr_int_layers.png"))
 
     # ---- 2) pbr_int_window.png：shop 大窗特写（front 不透明叠 back）
-    wb = _load(os.path.join(OUT_DIR, "_int_win_back.png"))
-    wf = _load(os.path.join(OUT_DIR, "_int_win_front.png"))
+    wb = _load(os.path.join(QA_DIR, "_int_win_back.png"))
+    wf = _load(os.path.join(QA_DIR, "_int_win_front.png"))
     h2, w2, _ = wb.shape
     bg2 = _bg_checker(w2, h2, 18)
     win = _label(_npimg(_over(_over(bg2, wb), wf)), "see-through window: interior "
                  "furniture + warm light visible through clear glass")
-    win.save(os.path.join(OUT_DIR, "pbr_int_window.png"))
+    win.save(os.path.join(QA_DIR, "pbr_int_window.png"))
 
     # ---- 3) pbr_int_sheet2x.png：全部 def 内景 back 总览拼页
     #: 小体量（单层）给到真 2x 便于看清家具；高塔（>450px）按 900px 上限缩放，
@@ -602,10 +615,10 @@ def compose_mode():
     for i, t in enumerate(tiles):
         r, c = divmod(i, cols)
         sheet2.paste(t, (8 + c * (cw + 8), 8 + r * (ch + 8)))
-    sheet2.convert("RGB").save(os.path.join(OUT_DIR, "pbr_int_sheet2x.png"))
+    sheet2.convert("RGB").save(os.path.join(QA_DIR, "pbr_int_sheet2x.png"))
 
     for f in ("pbr_int_layers.png", "pbr_int_window.png", "pbr_int_sheet2x.png"):
-        p = os.path.join(OUT_DIR, f)
+        p = os.path.join(QA_DIR, f)
         print("%-24s %s" % (f, p))
     print("INTERIORS_COMPOSE_OK")
 
@@ -613,7 +626,7 @@ def compose_mode():
 def verify_report_mode():
     """只读 `pbr_int_alignment.json` 重印对齐表（不需要 Blender，也不重渲）。"""
     import json
-    ap = os.path.join(OUT_DIR, "pbr_int_alignment.json")
+    ap = os.path.join(QA_DIR, "pbr_int_alignment.json")
     if not os.path.exists(ap):
         print("!! 缺 %s（先跑一次渲染模式）" % ap)
         return

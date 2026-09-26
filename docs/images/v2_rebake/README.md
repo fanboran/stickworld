@@ -132,8 +132,8 @@
 
 ![arcs_preview_birth_closeup](arcs_preview_birth_closeup.png)
 
-- **看什么**：共享弧边界的政区拓扑（战略图描边/邻接的数据基座）。⚠ 本轮城块边界已变，这两张是**旧链产物**，待 `l3/arc_topology.py --write` 重跑后更新——观感验收以此两图现状为准先过其余，弧图等重跑后再看。
-- **生成**：`l3/arc_topology.py`。
+- **看什么**：共享弧边界的政区拓扑（战略图描边/邻接的数据基座）：政区 LUT 色填充 + 三级界线叠加（黑=国界、深灰=地区界、浅灰=自由城邦界），D4 为出生区 1:1 特写。预览已按本轮 refined 1693 城块重出（干跑，未写数据）；**数据落地（l3_city 换源 + political_mesh + L2 注入）随 §五收尾 `--write` 执行**。
+- **生成**：`l3/arc_topology.py`（干跑即出预览；`--write` 才写数据）。
 
 ---
 
@@ -141,12 +141,12 @@
 
 ### E1/E2 blob 城市轮廓
 
-![blob_preview_2048](blob_preview_2048.png)
+![blob_v2_preview_2048](blob_v2_preview_2048.png)
 
-![blob_closeup](blob_closeup.png)
+![blob_v2_closeup](blob_v2_closeup.png)
 
-- **看什么**：城市在战略图上的有机形状轮廓（三档规模 s=0.2/0.5/0.9 嵌套）。⚠ **当前仍是旧参数效果**——"几档差异太小"的修正（gamma 0.7→1.5 + 档带 g_max 抬升）已提交，但需 blob v2 几何链重烤后才可见，重烤后此两图替换。
-- **生成**：现行 `l1/blob_bake.py`；重烤走 `l1/blob_v2_generate.py` → `l1/blob_v2_bake.py`（分档参数在 submodule `blob_params.json` levels 段）。
+- **看什么**：城市在战略图上的有机形状轮廓（三档规模嵌套，分档差异按新参数放大后重渲）。E2 特写含 4 代表城；配套抽查图（贫瘠 10 城拼图/分形维自检）在 `tools/worldgen/output/blob_v2_barren_check.png`、`blob_v2_fractal_check.png`。**数据烘焙（70 包）随 §五收尾 `blob_v2_bake.py` 执行**。
+- **生成**：`l1/blob_v2_generate.py`（出预览与几何）；烘焙走 `l1/blob_v2_bake.py`（分档参数在 submodule `blob_params.json` levels 段）。
 
 ---
 
@@ -157,7 +157,7 @@
 | A 场预览 ×4 | 定稿 | 对照理解 B/C 的密度与色带来源 |
 | B 聚落城块 ×7 | **本轮新出** | B1 撒点疏密、B3 圆块拼合与群岛、B6/B7 边界自然化 |
 | C 政权 ×2 | **本轮重渲** | C1 文化色带 + 出生区小国群 + 无跨海飞地 |
-| D 线网 ×4 | 道路/河流定稿；**弧图旧，待重跑** | D2 道路走向合理性 |
-| E blob ×2 | **旧效果，参数已改待重烤** | 重烤后再验档差 |
+| D 线网 ×4 | 定稿；弧图按 refined 城块重出（数据落地待 §五） | D2 道路走向合理性、D3/D4 界线与特写 |
+| E blob ×2 | **新参数重渲** | 三档规模差异是否拉开（数据烘焙待 §五） |
 
 > 出生点确认：关洋湾（`settlement_city_427`，2 城小国都城）——在 C1 政治图出生区查看。

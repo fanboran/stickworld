@@ -73,7 +73,7 @@ function exportTxt(){ // 编辑闭环：导出完整源文件（状态/依赖/�
   if(p===n.id)bad.push(n.id+" 自环前置");
   else if(!byId[p])bad.push(n.id+" 前置悬空 "+p);});});
  if(bad.length&&!confirm("发现 "+bad.length+" 处问题（导出后 --check 会报 ERROR）：\n"+bad.slice(0,6).join("\n")+"\n仍要导出吗？"))return;
- let out="# 任务依赖图（看板导出——覆盖 docs/项目/任务依赖图.txt 后运行 python tools/deptask/gen.py --check）\n";
+ let out="# 任务依赖图（看板导出——覆盖 tools/deptask/任务依赖图.txt 后运行 python tools/deptask/gen.py --check）\n";
  out+="# 校验: python tools/deptask/gen.py --check   生成: python tools/deptask/gen.py\n";
  out+="线序: "+lanes.join(", ")+"\n";
  if(divideX!=null)out+="分割线: "+Math.round(divideX)+"\n";

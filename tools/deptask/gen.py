@@ -49,7 +49,7 @@
 位置=x,y 单位为世界像素。
 
 用法：
-  python tools/deptask/gen.py                 # 校验 + 调度报告 + 生成 docs/项目/任务依赖图.html
+  python tools/deptask/gen.py                 # 校验 + 调度报告 + 生成 tools/deptask/任务依赖图.html
   python tools/deptask/gen.py --check         # 只校验 + 调度报告（不生成）
   python tools/deptask/gen.py --lanes 8       # 建议派活组合的并行线上限（默认 6）
 """
@@ -671,7 +671,7 @@ def main():
         cmd = argv[0]
         rest = argv[1:]
         root0 = Path(__file__).resolve().parents[2]
-        src0 = root0 / "docs" / "项目" / "任务依赖图.txt"
+        src0 = root0 / "tools" / "deptask" / "任务依赖图.txt"
         if cmd == "claim":
             if not rest:
                 print("用法: claim <id> --by <AI名>")
@@ -700,8 +700,8 @@ def main():
                 rounds = int(rest[rest.index("--rounds") + 1])
             return cmd_sim(src0, agents_n, rounds)
     ap = argparse.ArgumentParser()
-    ap.add_argument("-s", "--src", default="docs/项目/任务依赖图.txt")
-    ap.add_argument("-o", "--out", default="docs/项目/任务依赖图.html")
+    ap.add_argument("-s", "--src", default="tools/deptask/任务依赖图.txt")
+    ap.add_argument("-o", "--out", default="tools/deptask/任务依赖图.html")
     ap.add_argument("--check", action="store_true", help="只校验+调度报告不生成")
     ap.add_argument("--lanes", type=int, default=6, help="建议派活组合的并行线上限（默认 6）")
     args = ap.parse_args()

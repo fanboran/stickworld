@@ -4,14 +4,14 @@
 <meta name="color-scheme" content="dark">
 <title>任务依赖图</title>
 <style>/*__CSS__*/</style></head><body>
-<div id="bar"><div class="row"><b class="logo" title="任务依赖图 · 唯一真相源 docs/项目/任务依赖图.txt">任务依赖图</b><span class="sub">DAG 调度台</span>
+<div id="bar"><div class="row"><b class="logo" title="任务依赖图 · 唯一真相源 tools/deptask/任务依赖图.txt">任务依赖图</b><span class="sub">DAG 调度台</span>
  <span class="sep"></span>
  <input id="search" placeholder="搜索 id / 名称 / 备注…">
  <span class="sep"></span>
  <button class="btn" onclick="locateActive()" title="定位到进行中/可开工任务区（活跃面）">⌖ 当前面</button>
  <button class="btn" onclick="fitAll()" title="缩放至全图可见">⛶ 全图</button>
  <button class="btn" onclick="relayout()" title="dagre 重新分层布线（交叉最小化；会清除手动布局）">⟲ 重排</button>
- <button class="btn" id="exportBtn" onclick="exportTxt()" title="导出完整源文件（含状态/依赖/布局编辑）→ 覆盖 docs/项目/任务依赖图.txt → 跑 --check 校验">⬇ 导出源</button>
+ <button class="btn" id="exportBtn" onclick="exportTxt()" title="导出完整源文件（含状态/依赖/布局编辑）→ 覆盖 tools/deptask/任务依赖图.txt → 跑 --check 校验">⬇ 导出源</button>
  <button class="btn" onclick="showDivide=!showDivide;this.classList.toggle('on',showDivide);dirty=true" title="完成/未完成分割墙显隐（拖墙=右区整体平移）">✂ 分割墙</button>
  <button class="btn" onclick="document.getElementById('help').style.display='flex'" title="操作说明">? 帮助</button>
  <div class="chips">
@@ -78,7 +78,7 @@
  ——认领后卡片 ◉agent 色边框呼吸+工位占用边；done 完成日志入底栏<br>
  <b>✂ 拆解</b>：策划 AI 拆解入口——右键任务→拆解为子任务，表单预填前置=父任务、id 自动编号<br>
  <b>编辑闭环</b>：改状态/连边/新建后节点右上角亮●角标——点「⬇ 导出源」下载完整 txt，
- 覆盖 docs/项目/任务依赖图.txt 后跑 <b>python tools/deptask/gen.py --check</b>（有错误禁派活）<br>
+ 覆盖 tools/deptask/任务依赖图.txt 后跑 <b>python tools/deptask/gen.py --check</b>（有错误禁派活）<br>
  <b>快捷键</b>：N 新建 · F 适配 · T 塔台巡航 · G 泳道带重排 · L 活跃面 · D 底栏折叠 · C 关键路径 · R 就绪集 · 1-6 切视图<br>
  <b>底栏</b>（Tab 键折叠）：▦运行图=泳道带×时间的任务条（火车运行图：滚轮缩放/拖拽平移/点条跳主图，
  运行中条=右缘琥珀光标，描边色=认领 agent）· ≡调度日志=事件流（悬停行联动主图高亮）<br>

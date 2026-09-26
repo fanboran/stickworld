@@ -1,7 +1,10 @@
 {
     "files.exclude": {
-        ".workbuddy": true,
-        ".codebuddy": true,
+        "**/.workbuddy": true,
+        "**/.codebuddy": true,
+        "**/.trae": true,
+        "**/.zcode": true,
+        "**/.obsidian": true,
         "**/*.uid": true,
 		"**/*.import": true
 	},

@@ -136,7 +136,7 @@ $PY l3/settle_preview_v2.py           # settlements_preview_locations_2048.png�
 
 ### 验收图 → 生成管线速查
 
-> 验收目录：`F:\VSCode\game-2\temp\v2_rebake\`——各图由下述脚本产到 `output/` 后复制过去（不入库）。
+> 验收目录：`F:\VSCode\game-2\temp\v2_rebake\`——各图由下述脚本产到 `output/` 后复制过去；**逐图讲解（嵌图+看点）见 [docs/images/v2_rebake/README.md](../../docs/images/v2_rebake/README.md)**。
 
 | 验收图 | 生成脚本 | 关键输入 |
 |---|---|---|

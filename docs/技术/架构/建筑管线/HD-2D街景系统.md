@@ -473,7 +473,7 @@ offset/limits 变化时手搓漂、变换不会）。
 ## 五、待迁移与已知边界
 
 - 道路/守城/森林/室内/L1 聚落图仍是 2D 旧图；战斗类测试以 battlefield_2d（2D 空旷演练场，`boot_map_id_override` 开机）为底。
-- 设施类测试 7 套 SUSPENDED（.tscn.suspended 摘出矩阵）：待玩法设施（PlacementGrid/兵营/仓库实体）接入 HD-2D 图后在生产图重建。
+- 设施类测试 7 套 SUSPENDED（.tscn.suspended 摘出矩阵；盘上 6 套，驻军套随据点 M0 拆除退役）：待 `ROOT-3` 翻 `supports_village_facilities()` + `ROOT-5` 在生产图重建。设施宿主本体已就位——ROOT-1 装配 PlacementGrid/BuildingHost，ROOT-2（2026-09-27）把 CityGen plan 前排物化为视觉壳 Building 实体（3D 烘卡继续只做视觉；映射表 `building_gen/api.gd`；`ConstructionManager.set_map` 自动物化，存档不落档）。
 - 角色 billboard 已镜像主手武器：`weapon_mount.weapon_type` → `char_sprite_3d.set_weapon_type`，武器场景挂进 billboard 内部骨架的同名手骨（GripPoint 对齐口径同 WeaponMount）——武器随 2D RigHost 隐藏导致的"村民空手=没有职业"观感由此闭合；副手/盾不在 WeaponMount 类型表内，未镜像。
 - 村民待业/工作行为依赖 WorldState.game_time 节律，与昼夜挂钩同源。
 

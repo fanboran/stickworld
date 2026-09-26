@@ -58,3 +58,37 @@ static func load_building_scene(def_id: String) -> PackedScene:
 ## 返回本模块提供的默认建筑 def_id 列表（可供构造系统注册为可建造建筑）。
 static func get_default_building_def_ids() -> Array:
 	return _BUILDING_SCENE_PATHS.keys()
+
+
+# ===== 管线 def ↔ 运行时 def 映射（INT-4） =====
+
+## 管线 def（CityGen 卡名去 `_wN` 宽度后缀，如 smithy2_w8 → smithy2）到运行时
+## def_id（本模块场景表口径）的映射。键 = 运行时 def_id，值 = 管线 def 名单 +
+## 首选宽度档（格，供 DYN 动态宽度与建造端落表参考）。
+## 未收录的管线 def 无运行时实体——3D 烘卡照常摆（纯视觉），物化层跳过。
+## stone_warehouse 为 city+ 仓储的备选壳（warehouse 的石头变体），启用时在
+## warehouse 的名单里择档替换。
+const _PIPELINE_DEF_MAP := {
+	"smithy_lv1": {"defs": ["smithy1", "smithy2", "smithy3", "smithy4"], "width": 8},
+	"warehouse": {"defs": ["warehouse"], "width": 16},
+	"barracks": {"defs": ["barracks"], "width": 12},
+	"grand_hall": {"defs": ["guildhall", "council_hall", "governor_palace",
+			"imperial_palace"], "width": 12},
+	"timber_cottage": {"defs": ["house", "townhouse", "rowhouse"], "width": 10},
+	"placeholder": {"defs": ["cottage", "hayloft", "shelter", "inn_post"], "width": 8},
+}
+
+
+## 反查：管线 def → 运行时 def_id（未收录返回空串）。
+## CityGen plan 物化（ConstructionManager）与内景底图加载（INT-3，后续）共用。
+static func runtime_def_for_pipeline(pipeline_def: String) -> String:
+	for runtime_id: String in _PIPELINE_DEF_MAP.keys():
+		if pipeline_def in _PIPELINE_DEF_MAP[runtime_id]["defs"]:
+			return runtime_id
+	return ""
+
+
+## 映射表整体导出（键=运行时 def、值=管线 def 名单+首选宽度档）——INT-4 落表
+## 与审计用；运行时消费走 runtime_def_for_pipeline 单口。
+static func pipeline_def_map() -> Dictionary:
+	return _PIPELINE_DEF_MAP.duplicate(true)

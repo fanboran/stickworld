@@ -123,6 +123,9 @@ func _wait(sec: float) -> void:
 
 
 func _shot() -> void:
+	# headless 哑渲染不产帧，frame_post_draw 永不触发（实测探针挂死在截图）——跳过
+	if DisplayServer.get_name() == "headless":
+		return
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://temp/proto_hd2d"))

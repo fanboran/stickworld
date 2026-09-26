@@ -150,6 +150,23 @@ func occupy(cell_x: int, w: int, occupant: Variant) -> bool:
 	return true
 
 
+## plan 物化专用占用：跳过 can_place 校验（同一建筑的 3D 卡带已在宿主侧按
+## 视觉封锁 blocked，再 occupy 必然撞自身封锁——语义上是同一栋楼，合法）。
+## 物化建筑 is_terrain 不可拆，blocked 态与占用态长期共存；get_occupant
+## 只读 cell.occupant，不受 blocked 影响。
+func occupy_force(cell_x: int, w: int, occupant: Variant) -> bool:
+	if w <= 0:
+		return false
+	for x in range(cell_x, cell_x + w):
+		if not _cells.has(x):
+			return false
+	for x in range(cell_x, cell_x + w):
+		var cell: ScriptGridCell = _cells[x]
+		cell.set_occupied(occupant)
+		cell_occupied.emit(x, occupant)
+	return true
+
+
 ## 按占用者释放所有相关条带
 func release(occupant: Variant) -> void:
 	for key: int in _cells.keys():

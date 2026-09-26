@@ -38,7 +38,8 @@ def main():
                 3: (240, 95, 70)}
     n0 = 0
     for s in sorted(pts, key=lambda t: (t["level"], t["population_score"])):
-        x, y = s["x"] / K_FIELD, s["y"] / K_FIELD
+        # settlements_v2 坐标为 8192 级，×K_FIELD（0.25）降到 2048 画布
+        x, y = s["x"] * K_FIELD, s["y"] * K_FIELD
         if int(s["level"]) == 0:
             r = 1.0
             dr.ellipse([x - r, y - r, x + r, y + r], fill=lv_color[0],

@@ -59,8 +59,14 @@ def main():
         th = float(P.get("absorb_max_px", 600.0))
         glab, gn = ndi2.label(gaps, structure=np.ones((3, 3), dtype=int))
         gsz = np.bincount(glab.ravel())
-        big = [k for k in range(1, gn + 1) if int(gsz[k]) > th]
-        print("实际缝块 %d 个；> %.0f px² 的 %d 个（需撒点）" % (gn, th, len(big)))
+        # 「离最近地块的直线距离」逐缝块最小值：>3px 的块没有同陆块邻接地块可并
+        #（孤岛/隔水缝），不论大小都得撒点给它自己的地块；≤3px 的小块由
+        # city_split 的 absorb 同陆块并缝吃掉
+        ed = ndi2.distance_transform_edt(np.asarray(lab) == 0)
+        min_d = ndi2.minimum(ed, glab, np.arange(1, gn + 1))
+        big = [k for k in range(1, gn + 1)
+               if int(gsz[k]) > th or float(min_d[k - 1]) > 3.0]
+        print("实际缝块 %d 个；需撒点（>%.0fpx² 或孤块）的 %d 个" % (gn, th, len(big)))
         sp8 = float(P.get("filler_spacing_px", 140.0))
         added2 = 0
         label2 = len(pts)

@@ -5,8 +5,9 @@
   1. 城市点 = settlements_v2.json 的 1036 聚落（变半径泊松盘选址产物），不再撒点。
      tile label = 聚落 label（1..1036 连续），settlement_id = settlement_city_%03d
      ——与 political_data.city_owners / world_contract_initializer 的映射体系同源。
-  2. 主张盘封顶（settlement_build claim 口径，A4 无主荒地同源）：城块生长仍按
-     老 L1 分组多源膨胀（watershed），生长后把「距自己聚落欧氏距离 > 主张半径」
+  2. 主张盘封顶（settlement_build claim 口径，A4 无主荒地同源）：城块生长按
+     老 L1 分组做「最近聚落抗衡」（EDT 一次距离变换取每像素最近种子——平面
+     多源膨胀的等价快算），生长后把「距自己聚落欧氏距离 > 主张半径」
      的像素退归无主荒地（label 0）。主张半径 = min(泊松盘半径, claim_cap_px)，
      泊松盘半径按同一公式自 suitability 场复算（r_max − (r_max−r_min)×
      ((suit−suit_min)/(1−suit_min))^radius_curve）。
@@ -30,7 +31,11 @@
 
 用法：
   python tools/worldgen/l1/city_split_v3.py            # 全量（确定性，seed 只进配色无算法随机）
+  python tools/worldgen/l1/city_split_v3.py --labels-only --cached-parent
+      # 填缝迭代快跑：只算标签场 + 缝隙统计（跳过 mesh/配色/预览/JSON），
+      # 复用已落盘的 legacy_l1_labels_8192.npy（ Packs 变更后须删缓存全量重跑）
 """
+import argparse
 import colorsys
 import json
 import os
@@ -39,7 +44,6 @@ import sys
 import numpy as np
 from PIL import Image
 from scipy import ndimage as ndi
-from skimage.segmentation import watershed
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # tools/worldgen
 L2_PACKS = os.path.join(HERE, "output", "l2_packs")
@@ -48,6 +52,7 @@ OUT_DIR = os.path.join(HERE, "output", "l1_v2")
 FIELDS_DIR = os.path.join(HERE, "output", "fields")
 sys.path.insert(0, os.path.join(HERE, "l2_export"))
 sys.path.insert(0, os.path.join(HERE, "l3"))
+import landmass_util as lmu  # noqa: E402
 import mesh_extract  # noqa: E402
 import settlement_build as sb  # noqa: E402  （suitability bilinear 采样复用）
 
@@ -111,7 +116,11 @@ def load_settlement_seeds(parent, sp):
     # 城名表在 A4 政治产物（political_data_v2.json meta.city_names，构型命名批次产出）
     with open(os.path.join(FIELDS_DIR, "political_data_v2.json"), encoding="utf-8") as f:
         city_names = json.load(f).get("meta", {}).get("city_names", {})
-    suit = np.load(os.path.join(FIELDS_DIR, "suitability.npy")).astype(np.float32)
+    # 2048 场口径（settlement_build._sub4 同式）：8192 原图 [::4,::4] 抽取后
+    # 供 bilinear_at（其按 2048 场索引，直接喂 8192 原图会错位采样）
+    suit = np.ascontiguousarray(
+        np.load(os.path.join(FIELDS_DIR, "suitability.npy"))[::4, ::4]
+    ).astype(np.float32)
 
     seeds, labels, claims = [], [], []
     n_snap = 0
@@ -150,7 +159,9 @@ def load_settlement_seeds(parent, sp):
 
 
 def grow_cities(land, parent, seeds, seed_labels):
-    """老 L1 分组多源膨胀（v2 grow_cities 改）：
+    """老 L1 分组「最近聚落抗衡」（EDT）：
+    - 每分量内每像素归「欧氏最近的聚落种子」——平面多源膨胀的等价快算
+      （平地上 watershed 膨胀 = 欧氏 Voronoi，一次距离变换出全图）；
     - 无聚落分量不兜底撒点，直接留 0（荒地）；
     - label = 聚落 label（不再分配新 id）。"""
     size = land.shape[0]
@@ -170,7 +181,6 @@ def grow_cities(land, parent, seeds, seed_labels):
         seeds_plab = seeds_by_parent.get(int(plab), [])
         for k in range(1, npc + 1):
             cmask = pcomp == k
-            cy, cx = np.nonzero(cmask)
             idxs = [i for i in seeds_plab
                     if cmask[int(seeds[i][1]) - y0p, int(seeds[i][0]) - x0p]]
             if not idxs:
@@ -181,10 +191,11 @@ def grow_cities(land, parent, seeds, seed_labels):
                 px = int(seeds[sidx][0]) - x0p
                 py = int(seeds[sidx][1]) - y0p
                 markers[py, px] = int(seed_labels[sidx])
-            seg = watershed(np.zeros(cmask.shape, dtype=np.uint8), markers,
-                            mask=cmask, connectivity=2)
+            _, inds = ndi.distance_transform_edt(markers == 0,
+                                                 return_indices=True)
+            seg = markers[inds[0], inds[1]]
             sub = labels[y0p:y1p + 1, x0p:x1p + 1]
-            m = seg > 0
+            m = cmask & (seg > 0)
             sub[m] = seg[m]
     if empty_parents:
         print("  无聚落连通分量 %d 个 → 荒地" % empty_parents)
@@ -211,16 +222,17 @@ def cap_by_claim(labels, seeds, seed_labels, claims):
     return removed
 
 
-def absorb_gaps(labels, land, area_of, sp):
-    """缝隙并入相邻地块（创始人定案：缝隙都很小，不加新地块）——
-    陆地（老 L1 覆盖）内 labels==0 的连通缝 → 并入「邻接地块中面积最小者」
-    （顺带缩小地块面积差）。海/湖在 land 之外，保持 0。返回吸收像素数。"""
+def absorb_gaps(labels, land, area_of, sp, lm):
+    """缝隙并入相邻地块——陆地（老 L1 覆盖）内 labels==0 的连通缝 → 并入
+    「同陆块邻接地块中面积最小者」（顺带缩小地块面积差）。缝按 4 连通标记、
+    邻接地块按陆块过滤：窄海峡对岸的块再近也不并（防群岛跨水染色）；同陆块
+    无邻接地块的孤缝保留 0（由撒点给它自己的地块）。返回吸收像素数。"""
     from scipy import ndimage as ndi2
     gaps = (labels == 0) & land
     if not gaps.any():
         return 0
     th = float(sp.get("absorb_max_px", 600.0))  # 极小缝阈值（约地块 1/30）
-    lab, n = ndi2.label(gaps, structure=STRUCT8)
+    lab, n = ndi2.label(gaps)   # 4 连通：缝块不跨对角贴（与陆块 4 连通一致）
     sizes = np.bincount(lab.ravel())
     n_abs = 0
     for k in range(1, n + 1):
@@ -233,9 +245,10 @@ def absorb_gaps(labels, land, area_of, sp):
         win = labels[y0:y1, x0:x1]
         sub = m[y0:y1, x0:x1]
         dil = ndi2.binary_dilation(sub, iterations=2)
-        neigh = win[(win > 0) & dil]
+        lm_id = int(lm[ys[0], xs[0]])
+        neigh = win[(win > 0) & dil & (lm[y0:y1, x0:x1] == lm_id)]
         if neigh.size == 0:
-            continue  # 孤缝（四周无地块，贴边）保留
+            continue  # 同陆块无邻接地块（孤缝/隔水）保留
         vals = [int(v) for v in np.unique(neigh)]
         best = min(vals, key=lambda v: (area_of.get(v, 1 << 30), v))
         win[sub] = best
@@ -281,13 +294,36 @@ def city_palette(labels, parent, parent_color):
     return palette
 
 
+def gap_stats(labels, land, th):
+    """陆地 0 区统计：(总px, 陆地%, >th 连通块数, 最大块px)。填缝迭代的收敛判据。"""
+    gaps = (labels == 0) & land
+    total = int(gaps.sum())
+    if total == 0:
+        return 0, 0.0, 0, 0
+    glab, gn = ndi.label(gaps, structure=STRUCT8)
+    sizes = np.bincount(glab.ravel())[1:]
+    big = int((sizes > th).sum())
+    return total, 100.0 * total / max(int(land.sum()), 1), big, int(sizes.max())
+
+
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--labels-only", action="store_true",
+                    help="只算标签场 + 缝隙统计（填缝迭代用，不写 mesh/预览/JSON）")
+    ap.add_argument("--cached-parent", action="store_true",
+                    help="复用已落盘的 legacy_l1_labels_%d.npy（同 Packs 前提下确定性一致）" % RES)
+    args = ap.parse_args()
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(os.path.join(HERE, "l3", "state_params.json"), encoding="utf-8") as f:
         sp = json.load(f)["fields_v2"]["settlements"]
 
     print("[1/6] 构建全局老 L1 蒙版（res=%d）..." % RES)
-    parent = build_legacy_l1_mask(RES)
+    cache = os.path.join(OUT_DIR, "legacy_l1_labels_%d.npy" % RES)
+    if args.cached_parent and os.path.exists(cache):
+        parent = np.load(cache)
+        print("  复用缓存 %s（老 L1 地块 %d 个）" % (os.path.basename(cache), int(parent.max())))
+    else:
+        parent = build_legacy_l1_mask(RES)
     n_l1 = int(parent.max())
     land = parent > 0
     print("  老 L1 地块 %d 个，陆地 %.1f%%" % (n_l1, land.mean() * 100))
@@ -307,7 +343,23 @@ def main():
     missing = [int(l) for l in seed_labels if int(l) not in present]
     counts = np.bincount(labels.ravel())
     areas = {int(lb): int(counts[lb]) if lb < counts.size else 0 for lb in seed_labels}
-    n_absorbed = absorb_gaps(labels, land, areas, sp)
+    if args.labels_only:
+        # 迭代快跑跳过 absorb（≤阈值微缝逐块循环慢，且不影响 >阈值 撒点判据）；
+        # 微缝吸收只在全量跑做
+        if missing:
+            raise RuntimeError("城块缺失（聚落无地盘）: %s" % missing[:10])
+        np.save(os.path.join(OUT_DIR, "city_labels_%d.npy" % RES), labels)
+        th = float(sp.get("absorb_max_px", 600.0))
+        total, pct, big, mx = gap_stats(labels, land, th)
+        print("[labels-only] 缝隙：%d px（%.2f%% 陆地）；>%.0fpx² 块 %d 个（最大 %dpx）%s"
+              % (total, pct, th, big, mx, "→ 已收敛" if big == 0 else "→ 需继续撒点"))
+        return
+    lm_land, n_lmass = lmu.landmass_ids(land)
+    n_absorbed = absorb_gaps(labels, land, areas, sp, lm_land)
+    n_bad, n_refill = lmu.enforce_single_landmass(labels, lm_land)
+    if n_bad:
+        print("  一城块一陆块收尾：跨陆块清理 %d px（同陆块回填 %d px）"
+              % (n_bad, n_refill))
     counts = np.bincount(labels.ravel())
     areas = {int(lb): int(counts[lb]) if lb < counts.size else 0 for lb in seed_labels}
     print("  缝隙并入相邻地块 %d px（陆地 0 区清零）" % n_absorbed)

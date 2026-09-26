@@ -41,6 +41,8 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage as ndi
 
+import landmass_util as lmu
+
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(HERE, "output")
 LABELS_PATH = os.path.join(OUT_DIR, "l1_v2", "city_labels_8192.npy")
@@ -201,15 +203,19 @@ def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None, 
     else:
         land_true_use = coast_land
     # 陆地空洞回填：最新陆地内 warp 位移跨界产生的 0 空洞（细半岛 11px 位移）
-    # （v2 荒地语义：preserve=True 的设计荒地 0 不算空洞，不回填）
+    # （v2 荒地语义：preserve=True 的设计荒地 0 不算空洞，不回填）。
+    # 同陆块约束：直线 EDT 最近会把海峡对岸的块染过来（群岛跨水染色根因），
+    # 回填按陆块分组、只取同陆块城块做种子
+    lm_base, _ = ndi.label(land_true_use)
+    lm_ext = lmu.propagate_over_water(lm_base, land_true_use)
     hole = land_true_use & (out == 0)
     if preserve is not None:
         hole &= ~preserve
     n_hole = int(hole.sum())
     if n_hole:
-        _, inds = ndi.distance_transform_edt(out == 0, return_indices=True)
-        out[hole] = out[inds[0][hole], inds[1][hole]]
-        print("    陆地空洞回填 %d px（EDT 最近城块）" % n_hole, flush=True)
+        n_fill = lmu.edt_fill_within_landmass(out, hole, lm_ext)
+        print("    陆地空洞回填 %d/%d px（同陆块最近城块）" % (n_fill, n_hole),
+              flush=True)
     # 内陆零碎水域回填（河流/小池塘）：watershed 容器把它们 exclude 在 tiles 外
     #（场 0），political 渲染下成为 navy 细缝，岸线轮廓弧被当界线画成细丝。
     # 政治场只保留两种水域：块状海/湖 与 湖 mask——其余场 0 一律 EDT 填最近
@@ -226,10 +232,9 @@ def warp_sample(labels, coast_land, prm, block=1024, damp=None, lake_mask=None, 
             hole2 &= ~preserve
         n2 = int(hole2.sum())
         if n2:
-            _, inds = ndi.distance_transform_edt(zero, return_indices=True)
-            out[hole2] = out[inds[0][hole2], inds[1][hole2]]
-            print("    内陆零碎水域回填 %d px（河流/池塘/河口细道 → 最近城块）" % n2,
-                  flush=True)
+            n_fill2 = lmu.edt_fill_within_landmass(out, hole2, lm_ext)
+            print("    内陆零碎水域回填 %d/%d px（河流/池塘/河口细道 → 同陆块最近城块）"
+                  % (n_fill2, n2), flush=True)
     return out
 
 
@@ -296,6 +301,13 @@ def main():
 
     print("[3] 对角接触 4 连通化 ...")
     refined = decouple_diagonal(refined, int(prm["diag_max_iter"]))
+
+    # warp 位移跨水采样的兜底：一城块一陆块（外块的零散像素清 0 后同陆块回填）
+    print("[3.5] 一城块一陆块收尾 ...")
+    lm_base, _ = ndi.label(land_locked)
+    lm_ext = lmu.propagate_over_water(lm_base, land_locked)
+    n_bad, n_ref = lmu.enforce_single_landmass(refined, lm_ext)
+    print("    跨陆块清理 %d px（同陆块回填 %d px）" % (n_bad, n_ref))
 
     # ---- 校验 ----
     print("[4] 校验 ...")

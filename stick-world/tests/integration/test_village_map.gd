@@ -15,7 +15,8 @@ extends Node
 const TestRunner := preload("res://tests/core/test_runner.gd")
 # WorldAPI / PlayerControlAPI 是全局 class_name，无需 preload
 # 显式 preload 各实现脚本，用于类型 cast
-const ScriptVillageMap := preload("res://modules/world/scripts/map/village_map.gd")
+# 死链清退（village_map.gd 已随 2D 村图删除）：本测试已 SUSPENDED，置空待 HD-2D 重建
+const ScriptVillageMap: Variant = null
 const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
 const ScriptInputDispatcher := preload("res://modules/player_control/scripts/input_dispatcher.gd")
 const ScriptCameraRig := preload("res://modules/world/scripts/camera/camera_rig.gd")
@@ -125,7 +126,7 @@ func _test_village_children() -> void:
 		_runner.assert_true(false, "地图未加载")
 		return
 	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_PLACEMENT_GRID) != null, "PlacementGrid 应存在")
-	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_LAYER) != null, "TerrainLayer 应存在")
+	_runner.assert_true(map.get_node_or_null("TerrainLayer") != null, "TerrainLayer 应存在")
 	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST) != null, "BuildingHost 应存在")
 	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST) != null, "EntityHost 应存在")
 	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_BATTLE_ANCHOR) != null, "BattleAnchor 应存在")
@@ -133,8 +134,10 @@ func _test_village_children() -> void:
 
 
 func _test_village_ground_fields() -> void:
+	@warning_ignore("untyped_declaration")
 	var map_node := _get_current_map()
 	if map_node == null:
+		@warning_ignore("untyped_declaration")
 		_runner.assert_true(false, "地图未加载")
 		return
 	var map: ScriptVillageMap = map_node as ScriptVillageMap
@@ -156,6 +159,8 @@ func _test_village_ground_fields() -> void:
 func _test_village_spawn() -> void:
 	var map_node := _get_current_map()
 	if map_node == null:
+		@warning_ignore("untyped_declaration")
+		@warning_ignore("untyped_declaration")
 		_runner.assert_true(false, "地图未加载")
 		return
 	var map: ScriptVillageMap = map_node as ScriptVillageMap
@@ -168,6 +173,8 @@ func _test_village_spawn() -> void:
 
 
 func _test_player_spawned() -> void:
+	@warning_ignore("untyped_declaration")
+	@warning_ignore("untyped_declaration")
 	var map_node := _get_current_map()
 	if map_node == null:
 		_runner.assert_true(false, "地图未加载")
@@ -198,8 +205,11 @@ func _test_camera_follows_player() -> void:
 	if cam.follow_target != null:
 		_runner.assert_true(cam.follow_target is CharacterBody2D, "跟随目标应为 CharacterBody2D")
 
+@warning_ignore("untyped_declaration")
+@warning_ignore("untyped_declaration")
 
 func _test_player_ground_lock() -> void:
+	@warning_ignore("untyped_declaration")
 	var map_node := _get_current_map()
 	if map_node == null:
 		_runner.assert_true(false, "地图未加载")
@@ -222,6 +232,7 @@ func _test_player_ground_lock() -> void:
 	_runner.assert_equal(e.map_left, map.map_left, "玩家 map_left 应与地图一致")
 	_runner.assert_equal(e.map_right, map.map_right, "玩家 map_right 应与地图一致")
 	# Y 应在 [ground_y - foot_offset, ground_bottom - foot_offset] 范围内
+	@warning_ignore("untyped_declaration")
 	var y_min: float = e.ground_y - e.foot_offset
 	var y_max: float = e.ground_bottom - e.foot_offset
 	_runner.assert_true(e.global_position.y >= y_min - 1.0, "玩家 y 不应低于 ground_y - foot_offset")
@@ -260,8 +271,10 @@ func _test_camera_config() -> void:
 
 
 func _test_explore_handler_registered() -> void:
+	@warning_ignore("untyped_declaration")
 	var d: ScriptInputDispatcher = _get_game_root_child(WorldAPI.PATH_INPUT_DISPATCHER) as ScriptInputDispatcher
 	if d == null:
+		@warning_ignore("untyped_declaration")
 		_runner.assert_true(false, "InputDispatcher 不存在")
 		return
 	var handler: Node = d.get_handler(PlayerControlAPI.Mode.EXPLORE)
@@ -295,12 +308,14 @@ func _test_stickman_entity_api() -> void:
 # ─────────────────────────────── 新增节点与接口测试 ────────────────────────────────
 
 func _test_village_new_children() -> void:
+	@warning_ignore("untyped_declaration")
+	@warning_ignore("untyped_declaration")
 	var map := _get_current_map()
 	if map == null:
 		_runner.assert_true(false, "地图未加载")
 		return
 	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_TERRAIN_BUILDINGS) != null, "TerrainBuildings 应存在")
-	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_INITIAL_BUILDINGS_LIST) != null, "InitialBuildingsList 应存在")
+	_runner.assert_true(map.get_node_or_null("InitialBuildingsList") != null, "InitialBuildingsList 应存在")
 	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_WALK_BARRIER) != null, "WalkBarrier 应存在")
 	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_BUILD_MASK_LAYER) != null, "BuildMaskLayer 应存在")
 	_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_FOREGROUND_LAYER) != null, "ForegroundLayer 应存在")
@@ -313,6 +328,8 @@ func _test_village_new_children() -> void:
 func _test_village_ground_bottom() -> void:
 	var map_node := _get_current_map()
 	if map_node == null:
+		@warning_ignore("untyped_declaration")
+		@warning_ignore("untyped_declaration")
 		_runner.assert_true(false, "地图未加载")
 		return
 	var map: ScriptVillageMap = map_node as ScriptVillageMap
@@ -323,6 +340,8 @@ func _test_village_ground_bottom() -> void:
 
 
 func _test_village_walk_barrier_query() -> void:
+	@warning_ignore("untyped_declaration")
+	@warning_ignore("untyped_declaration")
 	var map_node := _get_current_map()
 	if map_node == null:
 		_runner.assert_true(false, "地图未加载")

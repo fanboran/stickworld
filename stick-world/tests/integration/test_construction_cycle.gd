@@ -14,7 +14,8 @@ const ScriptConstructionProject := preload("res://modules/construction/scripts/c
 # audit-exempt: headless 防御性路径 preload；Building 为 building_gen 对外公共类型
 # （building_gen/api.gd 已声明契约），此处经全局类名判型会依赖 class_name 注册时序
 const ScriptBuilding := preload("res://modules/building_gen/scripts/building.gd")
-const MAP_SCENE: PackedScene = preload("res://tests/helpers/village_testbed.tscn")
+# 死链清退（village_testbed 已删）：本测试已 SUSPENDED，场景置空待 HD-2D 重建
+const MAP_SCENE: PackedScene = null
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 
 var _runner: TestRunner

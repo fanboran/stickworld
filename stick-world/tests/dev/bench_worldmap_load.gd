@@ -32,6 +32,7 @@ func _ready() -> void:
 
 # ===== 计时辅助：跑 reps 次取最小（消抖动），返回最后一次产物 =====
 
+@warning_ignore("shadowed_variable_base_class")
 func _time(name: String, reps: int, fn: Callable) -> Variant:
 	var best := INF
 	var out: Variant = null
@@ -155,14 +156,11 @@ func _bench_blob() -> void:
 			var src: Array = td.get("anchor", td.get("centroid", []))
 			if src.size() < 2:
 				continue
-			var outline := SettlementBlob.generate_outline(
-					"settlement_city_%03d" % int(td.get("label", 0)),
-					int(td.get("level", 1)), cap, float(td.get("population_score", 0.0)))
-			acc += outline[0].x
+			var outline: PackedVector2Array = SettlementBlob.glow_outline(td, "settlement_city_%03d" % int(td.get("label", 0)))
+			acc += outline[0].x if outline.size() > 0 else 0.0
 		return acc)
-	_time("SettlementBlob.generate_outline 单城", 200, func() -> Variant:
-		return SettlementBlob.generate_outline("settlement_city_001", 3,
-				PackedFloat32Array(), 0.5))
+	_time("SettlementBlob.glow_outline 单城", 200, func() -> Variant:
+		return SettlementBlob.glow_outline({}, "settlement_city_001"))
 
 
 # ===== 4. 高频查询：随机点 1 万次 =====
@@ -331,7 +329,7 @@ func _fingerprints() -> void:
 	r1._bake_blob_outlines()
 	r1._build_glow_outline()
 	r1._build_cached_geometry()
-	var blob_keys := r1._blob_outlines.keys()
+	var blob_keys: Array = r1._blob_outlines.keys()
 	blob_keys.sort()
 	var blob_fp := {}
 	for k in blob_keys:

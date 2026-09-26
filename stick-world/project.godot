@@ -67,3 +67,17 @@ anti_aliasing/quality/msaa_3d=2
 [sim]
 
 battle_sim=true
+
+[debug]
+; GDScript 静态分析风格类警告降档（默认 Warn → Ignore）：项目数百脚本历史风格不一，
+; 未用参数/遮蔽/整除取整等均为风格提示非缺陷（真实错误=Error 级不受影响，照常显示）。
+; 2026-09-27 创始人批准清理「问题面板 200+ 存量」时定档。
+gdscript/warnings/unused_signal=0
+gdscript/warnings/unused_variable=0
+gdscript/warnings/unused_parameter=0
+gdscript/warnings/shadowed_variable=0
+gdscript/warnings/shadowed_variable_base_class=0
+gdscript/warnings/shadowed_global_identifier=0
+gdscript/warnings/integer_division=0
+gdscript/warnings/narrowing_conversion=0
+gdscript/warnings/redundant_await=0

@@ -14,7 +14,8 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const ScriptConstructionManager := preload("res://modules/construction/scripts/construction_manager.gd")
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
-const MAP_SCENE: PackedScene = preload("res://tests/helpers/village_testbed.tscn")
+# 死链清退（village_testbed 已删）：本测试已 SUSPENDED，场景置空待 HD-2D 重建
+const MAP_SCENE: PackedScene = null
 
 const TEST_SLOT := 4
 const TEST_MAP_ID := "test_map"

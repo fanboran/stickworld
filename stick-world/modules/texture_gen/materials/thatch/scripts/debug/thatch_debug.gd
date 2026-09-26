@@ -145,7 +145,8 @@ func _build_ui() -> void:
 
 ## 本地面板滑杆：仅改数值显示，不写 uniform（uniform 回写由各控件的独立回调承担，
 ## 与基类 _add_slider 的"拖动即写 uniform"语义不同，故保留本地实现）
-func _add_slider(parent: Control, label_text: String, min_v: float, max_v: float, default_v: float, step: float) -> HSlider:
+func _add_slider(parent: Control, label_text: String, min_v: float, max_v: float,
+		default_v: float, step: float, _uniform_name: String = "", _component: int = -1) -> HSlider:
 	var label := Label.new()
 	label.text = "%s: %s" % [label_text, str(default_v)]
 	label.name = "Label_" + label_text

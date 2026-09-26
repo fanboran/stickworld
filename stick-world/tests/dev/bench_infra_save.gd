@@ -11,7 +11,8 @@ extends Node
 ## 运行：godot --headless --path . res://tests/dev/bench_infra_save.tscn
 
 const ScriptConstructionManager := preload("res://modules/construction/scripts/construction_manager.gd")
-const MAP_SCENE: PackedScene = preload("res://modules/world/scenes/maps/village_a.tscn")
+# 死链清退（旧 2D 村图 village_a 已删）：本 bench 依赖的场景不存在，置空待重写
+const MAP_SCENE: PackedScene = null
 
 ## 合成规模（中期存档体量）
 const N_STICKMEN := 300
@@ -39,7 +40,7 @@ func _ready() -> void:
 	await _setup_building_fixture()
 	_bench_world_state_serialize()
 	_bench_sqlite_bulk_write()
-	await _bench_full_roundtrip()
+	_bench_full_roundtrip()
 	_cleanup()
 	print("BENCH save DONE")
 	get_tree().quit(0)
@@ -150,6 +151,7 @@ func _make_route(seed_i: int) -> Array[Vector2]:
 
 ## 真场景 + 真 ConstructionManager，spawn 200 栋 placeholder（读档/存档路径真实）
 func _setup_building_fixture() -> void:
+	@warning_ignore("integer_division")
 	var t0 := Time.get_ticks_usec()
 	_map = MAP_SCENE.instantiate()
 	add_child(_map)

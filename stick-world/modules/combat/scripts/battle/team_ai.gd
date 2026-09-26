@@ -656,7 +656,7 @@ func is_manual_order_guarded(squad_id: String) -> bool:
 
 
 # ─────────────────────────────── default_behavior v2 效用打分（A4 · C7，非 dump 直译）────────────────────────────────
-## CoH tactics.ai demand 系统同构（docs/审计/英雄连AI逆向_2026-09-11.md §3.5，评分实现
+## CoH tactics.ai demand 系统同构（docs/项目/审计/英雄连AI逆向_2026-09-11.md §3.5，评分实现
 ## 归 UtilityScorer）。接入逻辑在拆分助手 team_ai_behavior_hooks.gd（W2）：组织配置
 ## 取数 / 小队上下文快照 / 接入点门禁；状态（_org_api/_utility_scorer/选择观测面）
 ## 留本类，公共出口留本节。

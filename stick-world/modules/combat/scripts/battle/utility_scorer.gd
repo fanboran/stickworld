@@ -3,7 +3,7 @@ extends RefCounted
 ## 效用打分选择器（A4 · 设计文档12号 C7，CoH tactics.ai demand 系统同构机制、原创代码；
 ## W1 融合 WorldBox 个体 AI 内核的 softmax 轮盘选优与冷却）。
 ##
-## CoH 逆向锚点（docs/审计/英雄连AI逆向_2026-09-11.md §3.5）：
+## CoH 逆向锚点（docs/项目/审计/英雄连AI逆向_2026-09-11.md §3.5）：
 ##   每个小队技能/行为由三件套函数构成——
 ##   - TacticFilter_*（资格过滤：能不能用，情境谓词 AND 组合）
 ##   - TacticDemand_*（情境打分：命中 +s_demand_increment(50)，否则 -50）
@@ -45,7 +45,7 @@ extends RefCounted
 ## 按小队错峰：RNG 种子 = hash(base_seed + squad_id)——同时触发的小队各掷各的，
 ## 同小队同局面跨拍确定性一致（battle_sim 可复现、单测可锁）。
 ##
-## W1 · WorldBox 个体 AI 内核（逆向笔记 docs/审计/worldbox-reverse/1-个体AI内核.md §二 M2/M6/M7）
+## W1 · WorldBox 个体 AI 内核（逆向笔记 docs/项目/审计/worldbox-reverse/1-个体AI内核.md §二 M2/M6/M7）
 ## 把 A4 的 argmax 选优升级为 softmax 轮盘赌，并补两个配套机制：
 ##   - M2 轮盘（默认开）：权重 w 是**软优先级**，高权重也会偶尔输给低权重（杜绝行为僵化）。
 ##     CoH 分数量纲（±demand_increment）经 softmax_weight_scale 归一到 WorldBox w 域（0.05~5），

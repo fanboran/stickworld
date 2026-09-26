@@ -2,7 +2,7 @@ extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
 ## 单元测试：A4 · C7 效用打分选择器 + W1 · WorldBox softmax 轮盘（设计文档12号 §三C7 / §五批次表 A4；
-## W1 真值 docs/审计/worldbox-reverse/1-个体AI内核.md §二 M2/M6/M7 与 §三 Top1）。
+## W1 真值 docs/项目/审计/worldbox-reverse/1-个体AI内核.md §二 M2/M6/M7 与 §三 Top1）。
 ## 覆盖：档案键（W1 五键默认 + A4 既有键）/ 三件套解析（含 W1 候选键透传）/ filter 资格过滤 fail-closed /
 ## demand ±分 / 方差扰动界 / 按小队错峰 / softmax 轮盘软优先（份额 + 采样胜率一致）/
 ## 数值稳定（极端量纲不溢出）/ 温度调节 / argmax 退化路径逐位一致锁 / weight_rules 状态调制 /

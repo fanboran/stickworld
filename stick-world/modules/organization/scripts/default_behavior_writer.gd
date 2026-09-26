@@ -19,7 +19,7 @@ extends RefCounted
 ## 不触碰任何组织状态（零回归门）。开闸只负责"灌配置"，是否参与决策由消费端门
 ## `default_behavior_v2_enabled` 决定（两个闸独立）。
 ##
-## 数值为语义推断初值【提案/待定】（锚点 docs/审计/worldbox-reverse/1-个体AI内核.md §二 M7），
+## 数值为语义推断初值【提案/待定】（锚点 docs/项目/审计/worldbox-reverse/1-个体AI内核.md §二 M7），
 ## 待效用打分器开闸后实测校准。本类只做配置->实体搬运，不做需求打分（那是 UtilityScorer 职责）。
 
 ## 档案路径（BalanceConfig 同样扫描装载为类型路径 ai.org_default_behavior；此处直接

@@ -2,7 +2,7 @@ class_name SquadPhasePlan
 extends RefCounted
 ## 小队相位计划 v1（A5 · 设计文档12号 C8，CoH squadai 相位计划简化直译、原创代码）。
 ##
-## CoH 逆向锚点（docs/审计/英雄连AI逆向_2026-09-11.md §4.2 infantry-plan）：
+## CoH 逆向锚点（docs/项目/审计/英雄连AI逆向_2026-09-11.md §4.2 infantry-plan）：
 ##   交替掩护跃进 = Core 先跃进找掩体 → 全队还击等 2~4s → 两翼跟进（再等 2~3.5s）
 ##   → 循环；ACTION_WAIT_RANDOM 随机等待 = 去同步化。
 ## 简化（本批 v1 范围）：不做真实掩护几何（cover_system 掩体搜索留给 seek_cover

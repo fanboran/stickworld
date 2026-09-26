@@ -292,9 +292,10 @@ func _enter_tree() -> void:
 
 
 ## 玩家按 Alt 切换散步/奔跑模式（仅附身时生效）
-## 鼠标左键攻击（仅附身时生效，§7.5；按下/松开两态走蓄力状态机）
 ## Q 键切换建造/战斗模式（仅附身时生效）
 ## 键判定走 InputBindings 动作表（is_action_pressed 默认过滤键盘重复）
+## 鼠标攻击/举盾在 _unhandled_input（GUI 优先：点 UI 控件的事件到不了游戏侧，
+## 无需 hovered 让路补丁——该补丁依赖 hover 缓存时序，建造菜单按钮曾被误吞）
 func _input(event: InputEvent) -> void:
 	if not possessed:
 		return
@@ -306,27 +307,6 @@ func _input(event: InputEvent) -> void:
 			_visual.play("walk")
 	elif event.is_action_pressed("possess/toggle_combat"):
 		_toggle_combat_mode()
-	elif event is InputEventMouseButton and event.is_action_pressed("possess/attack"):
-		# 玩家按下：按武器分流（弓/矛/杖蓄力，近战直接攻击）——仅当鼠标不在
-		# UI 控件上（编制按钮/建造菜单等优先）
-		if _possession._is_mouse_over_ui():
-			return
-		_possession._player_attack_press()
-		if get_viewport() != null:
-			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.is_action_released("possess/attack"):
-		# 玩家松开：蓄力收口（放箭/投矛/施法；非蓄力态静默）
-		_possession._player_attack_release()
-		if get_viewport() != null:
-			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton \
-			and (event.is_action_pressed("possess/block") or event.is_action_released("possess/block")):
-		# 副手盾：按住右键举盾、松开放下（UI 上按下不触发；松开总生效）
-		if event.pressed and _possession._is_mouse_over_ui():
-			return
-		_possession._set_player_blocking(event.pressed)
-		if event.pressed:
-			get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("possess/swing"):
 		# 空挥（复刻原版 User Control）：无目标也出攻击动作，纯动作无伤害
 		_possession._player_swing()
@@ -634,6 +614,10 @@ func _physics_process(delta: float) -> void:
 
 ## 玩家附身时按F：交互（取放材料 / 敲击建造，实现见 InteractionController）。
 ## 按H：脱离卡死。键位走 InputMap action（possess/interact / possess/escape_stuck）。
+## 鼠标左键攻击（§7.5；按下/松开两态走蓄力状态机）、右键举盾同在此层：
+## GUI（mf=STOP 控件）优先消费鼠标——点建造菜单/编制按钮的事件到不了这里，
+## 不再需要 hovered 让路补丁。攻击消费后 set_input_as_handled，挡住同层的
+## 相机拖动（world/drag 同为左键，"空地拖移"注释本就要求攻击优先消费）。
 func _unhandled_input(event: InputEvent) -> void:
 	if not possessed:
 		return
@@ -641,6 +625,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		_interaction.try_interact()
 	elif event.is_action_pressed("possess/escape_stuck"):
 		escape_stuck()
+	elif event is InputEventMouseButton and event.is_action_pressed("possess/attack"):
+		# 玩家按下：按武器分流（弓/矛/杖蓄力，近战直接攻击）
+		_possession._player_attack_press()
+		if get_viewport() != null:
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.is_action_released("possess/attack"):
+		# 玩家松开：蓄力收口（放箭/投矛/施法；非蓄力态静默）
+		_possession._player_attack_release()
+		if get_viewport() != null:
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton \
+			and (event.is_action_pressed("possess/block") or event.is_action_released("possess/block")):
+		# 副手盾：按住右键举盾、松开放下
+		_possession._set_player_blocking(event.pressed)
+		if event.pressed:
+			get_viewport().set_input_as_handled()
 
 
 # ─────────────────────────────── 玩家输入 ────────────────────────────────

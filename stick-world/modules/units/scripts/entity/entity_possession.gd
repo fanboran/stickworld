@@ -9,7 +9,7 @@ extends RefCounted
 ## - 战斗/探索模式切换（_toggle_combat_mode，Q 键）
 ## - 副手盾格挡（_set_player_blocking，右键按住/松开）
 ## - 输入辅助（_find_input_dispatcher / _find_nearest_enemy_in_range /
-##   _is_ranged_weapon / _is_mouse_over_ui / _aim_dir / _mouse_world）
+##   _is_ranged_weapon / _aim_dir / _mouse_world）
 ##
 ## 引擎回调 _input/_unhandled_input 留实体薄壳；tests/integration 直呼的
 ## _toggle_combat_mode / _player_attack / _find_nearest_enemy_in_range
@@ -333,13 +333,3 @@ func _find_nearest_enemy_in_range() -> Node:
 			nearest_dist = dist
 			nearest = e
 	return nearest
-
-
-## 鼠标是否悬停在 UI 控件上（悬停时玩家左键不攻击，保证按钮可点）。
-func _is_mouse_over_ui() -> bool:
-	var vp = _entity.get_viewport()
-	if vp == null:
-		return false
-	if vp.has_method("gui_get_hovered_control"):
-		return vp.gui_get_hovered_control() != null
-	return false

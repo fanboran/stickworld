@@ -28,6 +28,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--spacing", type=float, default=190.0, help="填充点间距（8192 级 px）")
     ap.add_argument("--cap", type=float, default=110.0, help="主张盘封顶半径（8192 级 px）")
+    ap.add_argument("--from-labels", action="store_true",
+                    help="按实际划分（city_labels_8192 的 0 区）取缝——仅 >absorb_max_px 的块撒点")
     args = ap.parse_args()
 
     P = fc.load_params()["fields_v2"]["settlements"]
@@ -46,6 +48,51 @@ def main():
     lake = np.array(Image.open(os.path.join(
         fc.OUTPUT_DIR, "fractal_lake_mask_8192.png")).convert("L")) > 127
     lake = lake[::4, ::4]
+
+    if args.from_labels:
+        from scipy import ndimage as ndi2
+        lab = np.load(os.path.join(fc.OUTPUT_DIR, "l1_v2", "city_labels_8192.npy"),
+                      mmap_mode="r")
+        parent = np.load(os.path.join(fc.OUTPUT_DIR, "l1_v2", "legacy_l1_labels_8192.npy"),
+                         mmap_mode="r")
+        gaps = (np.asarray(lab) == 0) & (np.asarray(parent) > 0)
+        th = float(P.get("absorb_max_px", 600.0))
+        glab, gn = ndi2.label(gaps, structure=np.ones((3, 3), dtype=int))
+        gsz = np.bincount(glab.ravel())
+        big = [k for k in range(1, gn + 1) if int(gsz[k]) > th]
+        print("实际缝块 %d 个；> %.0f px² 的 %d 个（需撒点）" % (gn, th, len(big)))
+        sp8 = float(P.get("filler_spacing_px", 140.0))
+        added2 = 0
+        label2 = len(pts)
+        for k in big:
+            ys, xs = np.nonzero(glab == k)
+            # 覆盖驱动贪心：每次取剩余缝像素任一点撒点，划掉其盘（半径
+            # cap×scale，与 city_split 同口径）内的缝像素——保证块内 100%
+            # 被点盘覆盖（窄长缝网格撒点会漏，此式不漏）
+            R = float(P.get("claim_cap_px", 110.0)) * float(P.get("claim_scale", 1.0))
+            rem = np.ones(ys.size, dtype=bool)
+            while rem.any():
+                j = int(np.argmax(rem))  # 任一剩余点
+                py, px = int(ys[j]), int(xs[j])
+                label2 += 1
+                pts.append({
+                    "label": label2,
+                    "settlement_id": "settlement_city_%03d" % label2,
+                    "x": px, "y": py, "level": 0,
+                    "population_score": 0.0,
+                    "dominant": int(domf[min(int(py*K), S-1), min(int(px*K), S-1)]),
+                    "mix": float(mixf[min(int(py*K), S-1), min(int(px*K), S-1)]),
+                    "filler": True,
+                })
+                added2 += 1
+                d2 = (ys - py) ** 2 + (xs - px) ** 2
+                rem &= d2 > R * R
+        data.setdefault("meta", {})["fillers_labels"] = {"n": added2, "blocks": len(big)}
+        with open(os.path.join(FIELDS, "settlements_v2.json"), "w",
+                  encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, ensure_ascii=False)
+        print("按实际划分撒点 %d 个（总 %d）" % (added2, len(pts)))
+        return
 
     r_min = float(P["r_min_px"])
     r_max = float(P["r_max_px"])
@@ -111,9 +158,9 @@ def main():
         gap2 = int(gap.sum())
         print("  轮 %d（间距 %.0f）：累计填充 %d，残缝 %.3f%%"
               % (rounds, sp, added, 100.0 * gap2 / land_n))
-        if gap2 <= 0.005 * land_n or rounds >= 6:
+        if gap2 <= 0.0015 * land_n or rounds >= 10:
             break
-        sp *= 0.7
+        sp *= 0.62
     gap2 = int(gap.sum())
     print("填充点 %d 个（label %d..%d）；剩余未覆盖 %d px（%.3f%% 陆地）"
           % (added, n0 + 1, label, gap2,

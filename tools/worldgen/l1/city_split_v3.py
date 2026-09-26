@@ -211,6 +211,38 @@ def cap_by_claim(labels, seeds, seed_labels, claims):
     return removed
 
 
+def absorb_gaps(labels, land, area_of, sp):
+    """缝隙并入相邻地块（创始人定案：缝隙都很小，不加新地块）——
+    陆地（老 L1 覆盖）内 labels==0 的连通缝 → 并入「邻接地块中面积最小者」
+    （顺带缩小地块面积差）。海/湖在 land 之外，保持 0。返回吸收像素数。"""
+    from scipy import ndimage as ndi2
+    gaps = (labels == 0) & land
+    if not gaps.any():
+        return 0
+    th = float(sp.get("absorb_max_px", 600.0))  # 极小缝阈值（约地块 1/30）
+    lab, n = ndi2.label(gaps, structure=STRUCT8)
+    sizes = np.bincount(lab.ravel())
+    n_abs = 0
+    for k in range(1, n + 1):
+        if int(sizes[k]) > th:
+            continue  # 大缝/长缝：不并（由 fill_gap_seeds 撒新地块）
+        m = lab == k
+        ys, xs = np.nonzero(m)
+        y0, y1 = max(0, ys.min() - 2), min(labels.shape[0], ys.max() + 3)
+        x0, x1 = max(0, xs.min() - 2), min(labels.shape[1], xs.max() + 3)
+        win = labels[y0:y1, x0:x1]
+        sub = m[y0:y1, x0:x1]
+        dil = ndi2.binary_dilation(sub, iterations=2)
+        neigh = win[(win > 0) & dil]
+        if neigh.size == 0:
+            continue  # 孤缝（四周无地块，贴边）保留
+        vals = [int(v) for v in np.unique(neigh)]
+        best = min(vals, key=lambda v: (area_of.get(v, 1 << 30), v))
+        win[sub] = best
+        n_abs += int(sub.sum())
+    return n_abs
+
+
 def load_legacy_parent_colors():
     """老 L1 的父色（city_split_v2.load_legacy_parent_colors 同式）。"""
     pc = {}
@@ -275,6 +307,10 @@ def main():
     missing = [int(l) for l in seed_labels if int(l) not in present]
     counts = np.bincount(labels.ravel())
     areas = {int(lb): int(counts[lb]) if lb < counts.size else 0 for lb in seed_labels}
+    n_absorbed = absorb_gaps(labels, land, areas, sp)
+    counts = np.bincount(labels.ravel())
+    areas = {int(lb): int(counts[lb]) if lb < counts.size else 0 for lb in seed_labels}
+    print("  缝隙并入相邻地块 %d px（陆地 0 区清零）" % n_absorbed)
     tiny = [lb for lb, a in areas.items() if a < 40]
     land_px = int(land.sum())
     wild_px = land_px - int((labels > 0).sum())

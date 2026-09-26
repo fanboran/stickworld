@@ -99,6 +99,7 @@ var _people_cache: Dictionary = {}
 ## 单兵士气缓存（stickman_id -> float，-1 = 不可解析），同一次建树内复用
 var _morale_cache: Dictionary = {}
 ## 当前地图在场实体索引（instance_id -> 实体）；建树/刷新详情时重建（索引构建逻辑在 org_panel_vitals.gd）
+@warning_ignore("unused_private_class_variable")
 var _unit_index: Dictionary = {}
 var _unit_index_built: bool = false
 ## 活数据聚合助手实例（org_panel_vitals.gd；setup 注入宿主回引）

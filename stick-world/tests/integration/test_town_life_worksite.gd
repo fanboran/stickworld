@@ -197,6 +197,7 @@ func _test_real_slot() -> void:
 		var b: Node = sm.get_node_or_null("BehaviorHarvest")
 		if b == null or b.get_mode_name() != "worksite":
 			return false
+		@warning_ignore("confusable_capture_reassignment")
 		hv = b
 		return b.get_worksite_building() == _shop
 	var arrived: bool = await _poll_until(ARRIVE_TIMEOUT, on_slot)

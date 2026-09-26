@@ -99,7 +99,6 @@ var _duck_db: float = 0.0
 var _stinger: AudioStreamPlayer = null
 var _ambience: AudioStreamPlayer = null
 var _ambience_name: String = ""
-var _tween: Tween = null
 var _enabled: bool = true
 var _rng := RandomNumberGenerator.new()
 

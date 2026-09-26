@@ -67,9 +67,9 @@ static func stickman_from_dict(d: Dictionary) -> StickmanState:
 	var s: StickmanState = StickmanState.new()
 	s.id = d.get("id", "")
 	s.name = d.get("name", "")
-	s.race = int(d.get("race", 0))
+	s.race = int(d.get("race", 0)) as StickmanState.Race
 	s.variant = int(d.get("variant", 0))
-	s.age = int(d.get("age", 1))
+	s.age = int(d.get("age", 1)) as StickmanState.Age
 	s.hp = d.get("hp", 0.0)
 	s.max_hp = d.get("max_hp", 0.0)
 	s.stamina = d.get("stamina", 0.0)
@@ -87,7 +87,7 @@ static func stickman_from_dict(d: Dictionary) -> StickmanState:
 	s.org_role = d.get("org_role", "")
 	var loc: Array = d.get("location", [0.0, 0.0])
 	s.location = Vector2(loc[0], loc[1]) if loc.size() >= 2 else Vector2.ZERO
-	s.state = int(d.get("state", 0))
+	s.state = int(d.get("state", 0)) as StickmanState.State
 	return s
 
 
@@ -120,7 +120,7 @@ static func organization_from_dict(d: Dictionary) -> OrganizationState:
 	var o: OrganizationState = OrganizationState.new()
 	o.id = d.get("id", "")
 	o.name = d.get("name", "")
-	o.tag = int(d.get("tag", 0))
+	o.tag = int(d.get("tag", 0)) as OrganizationState.Tag
 	o.tier = int(d.get("tier", 1))
 	o.parent_org = d.get("parent_org", "")
 	o.child_orgs.assign(d.get("child_orgs", []))
@@ -128,14 +128,14 @@ static func organization_from_dict(d: Dictionary) -> OrganizationState:
 	o.personnel.assign(d.get("personnel", []))
 	o.personnel_template = d.get("personnel_template", {}).duplicate()
 	o.equipment_template = d.get("equipment_template", {}).duplicate()
-	o.autonomy_level = int(d.get("autonomy_level", 1))
-	o.succession_rule = int(d.get("succession_rule", 0))
+	o.autonomy_level = int(d.get("autonomy_level", 1)) as OrganizationState.AutonomyLevel
+	o.succession_rule = int(d.get("succession_rule", 0)) as OrganizationState.SuccessionRule
 	o.default_behavior = d.get("default_behavior", {}).duplicate()
-	o.supply_priority = int(d.get("supply_priority", 1))
+	o.supply_priority = int(d.get("supply_priority", 1)) as OrganizationState.SupplyPriority
 	o.morale_threshold = d.get("morale_threshold", 0.0)
 	o.current_project = d.get("current_project", "")
 	o.location = d.get("location", "")
-	o.state = int(d.get("state", 0))
+	o.state = int(d.get("state", 0)) as OrganizationState.State
 	return o
 
 
@@ -208,7 +208,7 @@ static func battle_from_dict(d: Dictionary) -> BattleState:
 	b.region_id = d.get("region_id", "")
 	b.attacker_orgs.assign(d.get("attacker_orgs", []))
 	b.defender_orgs.assign(d.get("defender_orgs", []))
-	b.state = int(d.get("state", 0))
+	b.state = int(d.get("state", 0)) as BattleState.State
 	b.casualties_attacker = int(d.get("casualties_attacker", 0))
 	b.casualties_defender = int(d.get("casualties_defender", 0))
 	b.duration = d.get("duration", 0.0)
@@ -240,11 +240,11 @@ static func project_to_dict(p: ProjectState) -> Dictionary:
 static func project_from_dict(d: Dictionary) -> ProjectState:
 	var p: ProjectState = ProjectState.new()
 	p.id = d.get("id", "")
-	p.type = int(d.get("type", 0))
+	p.type = int(d.get("type", 0)) as ProjectState.Type
 	p.owner_org_id = d.get("owner_org_id", "")
 	p.name = d.get("name", "")
 	p.description = d.get("description", "")
-	p.state = int(d.get("state", 0))
+	p.state = int(d.get("state", 0)) as ProjectState.State
 	p.progress = d.get("progress", 0.0)
 	p.assigned_orgs.assign(d.get("assigned_orgs", []))
 	p.assigned_resources = d.get("assigned_resources", {}).duplicate()
@@ -283,7 +283,7 @@ static func supply_chain_from_dict(d: Dictionary) -> SupplyChainState:
 	sc.frequency = d.get("frequency", 0.0)
 	sc.carrier_org_id = d.get("carrier_org_id", "")
 	sc.route.assign(_deserialize_vec2_array(d.get("route", [])))
-	sc.state = int(d.get("state", 0))
+	sc.state = int(d.get("state", 0)) as SupplyChainState.State
 	sc.efficiency = d.get("efficiency", 0.0)
 	return sc
 

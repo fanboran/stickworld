@@ -241,7 +241,7 @@ func _update_ruler() -> void:
 		return
 	var s := _zoom.slider
 	var grabber := s.get_theme_icon("grabber", "HSlider")
-	var gw: float = grabber.get_width() if grabber != null else 16.0
+	var gw: float = float(grabber.get_width()) if grabber != null else 16.0
 	var nrm := clampf((default_zoom - s.min_value) / (s.max_value - s.min_value), 0.0, 1.0)
 	var tick_x := nrm * (SLIDER_W - gw) + gw * 0.5
 	# 刻度锚滑条在容器内的位置（滑条是 HBox 首子控件，首帧布局前 position=(0,0) 亦正确）

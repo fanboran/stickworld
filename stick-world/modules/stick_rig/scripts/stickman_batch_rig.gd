@@ -577,6 +577,7 @@ func _emit_limb(data: Dictionary, bone_pre_idx: int) -> void:
 	var ow := _ow
 	if node_type == Skel.TYPE_CIRCLE:
 		var r := maxf(length, w * 2.0) / 2.0
+		@warning_ignore("confusable_local_declaration")
 		var base := Transform2D(0.0, Vector2(data["x"], data["y"]))
 		_push(1, bone_pre_idx, base * _scale2(r + ow, r + ow), stroke_color)
 		_push(3, bone_pre_idx, base * _scale2(r, r), fill_color)

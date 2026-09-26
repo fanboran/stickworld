@@ -9,7 +9,6 @@ const _UIKitScript: GDScript = preload("res://core/ui_framework/ui_kit.gd")
 
 var _frames: int = 0
 var _shot_path: String = ""
-var _stage: int = 0
 const SHOT_FRAME: int = 45
 
 

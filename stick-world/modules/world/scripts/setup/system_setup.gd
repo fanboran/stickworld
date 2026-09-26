@@ -79,11 +79,14 @@ var _root: GameRoot
 ## 顶部小地图区双窗 = Minimap（本城市俯视）+ L1Thumbnail（出生 L1 世界缩略）。
 enum TabMapState { HIDDEN, TOP_MINIMAPS, FULL_L1 }
 
+@warning_ignore("unused_private_class_variable")
 var _tab_state: int = TabMapState.HIDDEN
 ## L1 世界缩略窗（与 Minimap 并列）
+@warning_ignore("unused_private_class_variable")
 var _l1_thumbnail: Control = null
 ## L1 班组卡引用（装配层持有，供 OrgPanel 选中联动调用 show_squad/hide_card——
 ## 不跨模块 get_node；UI-W4b 班组卡触发源补全）
+@warning_ignore("unused_private_class_variable")
 var _squad_card: Control = null
 
 # 域助手实例（bind(self) 需运行期绑定，不用引用 self 的字段初始化器）

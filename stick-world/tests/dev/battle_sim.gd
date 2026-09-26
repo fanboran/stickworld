@@ -211,6 +211,7 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 	var heal_cast_count: int = 0        # P7 heal_cast 信号计数
 	var eb: Node = get_node_or_null("/root/EventBus")
 	var heal_handler: Callable = func(_bid: String, _caster: int, _target: int, _anim: String) -> void:
+		@warning_ignore("confusable_capture_reassignment")
 		heal_cast_count += 1
 	if eb != null and eb.has_signal("heal_cast"):
 		eb.heal_cast.connect(heal_handler)

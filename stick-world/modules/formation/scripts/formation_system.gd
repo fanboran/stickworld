@@ -1201,8 +1201,10 @@ var _authority_next_eval: Dictionary = {}
 ## 单单位跳槽冷却截止时刻：iid -> float
 var _authority_cooldown_until: Dictionary = {}
 ## 单单位稳定登记序：iid -> int（错峰相位取数；不用 instance_id 以免跨运行不可复现）
+@warning_ignore("unused_private_class_variable")
 var _authority_ordinal: Dictionary = {}
 ## 登记序自增计数
+@warning_ignore("unused_private_class_variable")
 var _authority_ordinal_seq: int = 0
 ## 最近一拍实际评估到的单位数（错峰观测位；测试/UI 用）
 var _authority_last_eval_count: int = 0

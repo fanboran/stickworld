@@ -125,7 +125,7 @@ func _make_stickman(id: String, i: int) -> StickmanState:
 	s.org_rank = i % 5
 	s.org_role = "soldier"
 	s.location = Vector2(float(i * 13 % 2000), float(i * 7 % 1000))
-	s.state = i % 4
+	s.state = (i % 4) as StickmanState.State
 	return s
 
 

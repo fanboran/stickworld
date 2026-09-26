@@ -1204,6 +1204,7 @@ var _status_effects: Node = null
 ## 组件方法存在性缓存（首次查询记布尔）：is_stunned/_handle_acceleration 每物理帧
 ## 都要查 has_stun/get_speed_mult，大群单位下 has_method 字符串反射是纯浪费
 var _se_has_stun: bool = false
+@warning_ignore("unused_private_class_variable")
 var _se_has_speed_mult: bool = false
 var _se_checked: bool = false
 ## health/战斗实例方法存在性缓存（同上，_apply_rest_morale_recovery 每物理帧消费）
@@ -1211,8 +1212,11 @@ var _health_morale_checked: bool = false
 var _health_has_morale: bool = false
 var _battle_has_is_active: bool = false
 ## weapon_mount 方法/字段存在性缓存（@onready 装配后不变；举盾移速/受击每帧消费）
+@warning_ignore("unused_private_class_variable")
 var _wm_has_blocking: bool = false
+@warning_ignore("unused_private_class_variable")
 var _wm_has_block_move_mult: bool = false
+@warning_ignore("unused_private_class_variable")
 var _wm_checked: bool = false
 
 ## 获取状态效果组件（_ready 装配；测试桩可能无）

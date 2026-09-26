@@ -123,7 +123,7 @@ func _ready() -> void:
 				names.append(str(b.get("card")))
 			print("[capture] layout buildings=", names)
 	var cur_cam := get_viewport().get_camera_3d()
-	print("[capture] viewport camera3d=", cur_cam, " world=", cur_cam.get_parent().get_parent().name if cur_cam != null else "none")
+	print("[capture] viewport camera3d=", cur_cam, " world=", str(cur_cam.get_parent().get_parent().name) if cur_cam != null else "none")
 	await _shot(tag + "_overview")
 
 	print("[capture] DONE tag=%s uz=%s -> %s" % [tag, uz, OUT_DIR])

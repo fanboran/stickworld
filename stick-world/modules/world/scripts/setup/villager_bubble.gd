@@ -5,7 +5,6 @@ extends Node2D
 ## 由 DemoQuest 在目标推进时调用 speak()；挂在村民实体头顶（跟随 y 排序微调）。
 
 var _label: Label = null
-var _tail: Polygon2D = null
 var _tween: Tween = null
 
 

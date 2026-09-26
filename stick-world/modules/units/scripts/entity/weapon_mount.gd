@@ -423,6 +423,7 @@ func _reload_weapons() -> void:
 ## 不动当前 HP（主控换武器不应回血/扣血，装备迁移归 P9 物品栏）。
 ## （weapon_type → 兵种 def 映射表 WEAPON_DEF_ID 已下沉 weapon_balance.gd，
 ## 校准入口 WeaponBalance.apply(self) 在 _reload_weapons 尾部触发。）
+@warning_ignore("unused_private_class_variable")
 var _hp_calibrated: bool = false
 
 

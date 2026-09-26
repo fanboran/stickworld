@@ -187,7 +187,7 @@ static func separator(parent: Control) -> void:
 ## 面板：直出手绘 SketchPanel（DARK/LIGHT）
 static func panel(parent: Control, tone: int = 0) -> PanelContainer:
 	var p := SketchPanel.new()
-	p.tone = tone
+	p.tone = tone as SketchPanel.Tone
 	parent.add_child(p)
 	return p
 

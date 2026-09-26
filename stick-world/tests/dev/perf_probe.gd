@@ -23,7 +23,6 @@ var _mark := "boot"
 var _secs := 0.0
 var _acc := 0.0
 var _samples: PackedFloat32Array = []
-var _last_row_us := 0
 
 
 func _ready() -> void:
@@ -255,7 +254,6 @@ func _handle(line: String) -> String:
 			return "ok"
 		_:
 			return "err 未知命令: %s" % cmd
-	return "ok"
 
 
 func _find(path: String) -> Node:

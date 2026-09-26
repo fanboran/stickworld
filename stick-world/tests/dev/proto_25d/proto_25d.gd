@@ -95,11 +95,9 @@ var _lamps: Array[OmniLight3D] = []
 var _measuring := false
 var _samples: PackedFloat32Array = PackedFloat32Array()
 var _draw_samples: PackedInt32Array = PackedInt32Array()
-var _phase := ""
 var _phase_rows: Array[String] = []
 
 var _opts := {"shots": "all", "perf": "", "cards": true, "models": true, "tag": ""}
-var _t0 := 0
 
 
 func _ready() -> void:

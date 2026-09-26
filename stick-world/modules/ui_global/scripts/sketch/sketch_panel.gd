@@ -22,7 +22,9 @@ enum Tone { DARK, LIGHT }
 ## 紧凑内边距（小对话框：内容有多少占多少，不摆大面板的架子）
 @export var compact := false
 
+@warning_ignore("unused_private_class_variable")
 var _seed: int = 0
+@warning_ignore("unused_private_class_variable")
 var _timer: float = 0.0
 
 

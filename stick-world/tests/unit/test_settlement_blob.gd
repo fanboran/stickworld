@@ -99,6 +99,7 @@ func _test_tier_nesting() -> void:
 	# 找一个三档全有环的城：bbox 严格包含 low ⊆ mid ⊆ high（面积随档不减）
 	var sid := ""
 	for s: String in geo:
+		@warning_ignore("confusable_local_declaration")
 		var rings: Array = geo[s].get("rings", [])
 		if rings.size() < SettlementBlob.TIER_COUNT:
 			continue

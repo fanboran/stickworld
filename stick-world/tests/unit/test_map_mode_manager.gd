@@ -61,6 +61,7 @@ func _test_toggle() -> void:
 	var mgr := MapModeManager.new()
 	add_child(mgr)
 	var got: Array = []
+	@warning_ignore("confusable_local_declaration")
 	mgr.layer_toggled.connect(func(layer: int, on: bool) -> void: got.append([layer, on]))
 	# 交通层：默认关 → 开（返回值 = 新状态），信号带 (层, 新状态)
 	var on: bool = MapModeManager.toggle_layer(MapModeManager.Layer.TRAFFIC)
@@ -141,8 +142,8 @@ func _test_key_input() -> void:
 ## 注入一次物理键按下事件（keycode + physical_keycode 双设才能命中 physical 绑定）
 func _press(mgr: MapModeManager, key: int) -> void:
 	var ev := InputEventKey.new()
-	ev.keycode = key
-	ev.physical_keycode = key
+	ev.keycode = key as Key
+	ev.physical_keycode = key as Key
 	ev.pressed = true
 	mgr._unhandled_input(ev)
 

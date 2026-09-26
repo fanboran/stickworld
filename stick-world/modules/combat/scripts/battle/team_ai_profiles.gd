@@ -157,6 +157,7 @@ const MIN_BEAT_INTERVAL: float = 0.5
 const DEFAULT_RANDOM_SEED: int = 20260911
 
 ## 覆盖缓存（overrides 序列化键 -> 合并后档案；供 battle_sim 扫参复用）
+@warning_ignore("unused_private_class_variable")
 static var _cache: Dictionary = {}
 
 

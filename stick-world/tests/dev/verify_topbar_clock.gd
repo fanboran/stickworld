@@ -111,7 +111,7 @@ func _check_clickable() -> void:
 	var hit_org: bool = hovered == _org or (_org != null and hovered != null
 			and _org.is_ancestor_of(hovered))
 	_check(hit_org, "鼠标在按钮中心时命中的是按钮（实际命中：%s）"
-			% (hovered.name if hovered != null else "<无>"))
+			% (str(hovered.name) if hovered != null else "<无>"))
 
 	# 真点击：motion → 按下 → 抬起，断言 pressed 触发
 	var fired: Array[bool] = [false]

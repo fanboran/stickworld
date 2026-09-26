@@ -144,7 +144,9 @@ var _auth_part: RefCounted = null
 @onready var _authority_label: Label = $Body/Commander/Authority
 @onready var _auth_compare: VBoxContainer = $Body/AuthCompare
 @onready var _auth_title: Label = $Body/AuthCompare/AuthTitle
+@warning_ignore("unused_private_class_variable")
 @onready var _auth_rows: VBoxContainer = $Body/AuthCompare/AuthRows
+@warning_ignore("unused_private_class_variable")
 @onready var _defect_hint: PanelContainer = $Body/AuthCompare/DefectHint
 @onready var _defect_label: Label = $Body/AuthCompare/DefectHint/DefectLabel
 @onready var _forming_row: HBoxContainer = $Body/Forming

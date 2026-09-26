@@ -54,6 +54,7 @@ func _run() -> void:
 
 	# 4) 施工推进：模拟玩家 E 敲击（每次 total_work/8，敲 10 次必完）
 	var completed: bool = false
+	@warning_ignore("confusable_capture_reassignment")
 	var done_watcher: Callable = func(_bid: String, _rid: String): completed = true
 	if c_api.has_signal("building_completed"):
 		c_api.building_completed.connect(done_watcher)

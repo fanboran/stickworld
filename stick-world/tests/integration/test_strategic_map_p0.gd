@@ -207,8 +207,6 @@ func _test_enter() -> void:
 	if _api == null or not _api.is_initialized():
 		_runner.assert_true(false, "前置数据加载失败，跳过")
 		return
-		_runner.assert_true(false, "前置数据加载失败，跳过")
-		return
 	var data: RefCounted = _api.get_data()
 	# 找带 map_id 的聚落（城市层暂无可玩地图 -> 应没有；将来接入后自动恢复进入验证）
 	var target_id: String = ""

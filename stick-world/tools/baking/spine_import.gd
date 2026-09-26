@@ -312,7 +312,7 @@ func _extract_translate(translate: Array) -> Array:
 ## events: Spine 内嵌事件表（_extract_events 产物），写入 Animation 元数据。
 func _save_anim(anim_name: String, tracks: Array, length: float, loop_mode: int, events: Array) -> bool:
 	var anim := Animation.new()
-	anim.loop_mode = loop_mode
+	anim.loop_mode = loop_mode as Animation.LoopMode
 	anim.length = length
 	_write_event_meta(anim, events)
 	for track_data in tracks:

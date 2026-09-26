@@ -101,7 +101,7 @@ static func mouse_id(id: String) -> int:
 static func build_bind_event(bind: Dictionary) -> InputEvent:
 	if bind.has("mouse"):
 		var mb := InputEventMouseButton.new()
-		mb.button_index = mouse_id(String(bind["mouse"]))
+		mb.button_index = mouse_id(String(bind["mouse"])) as MouseButton
 		if mb.button_index == 0:
 			return null
 		return mb
@@ -110,11 +110,11 @@ static func build_bind_event(bind: Dictionary) -> InputEvent:
 	if bind.has("physical"):
 		code = resolve_key(String(bind["physical"]))
 		if code != 0:
-			ev.physical_keycode = code
+			ev.physical_keycode = code as Key
 	elif bind.has("key"):
 		code = resolve_key(String(bind["key"]))
 		if code != 0:
-			ev.keycode = code
+			ev.keycode = code as Key
 	else:
 		return null
 	if code == 0:

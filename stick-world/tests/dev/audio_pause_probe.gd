@@ -49,7 +49,7 @@ func _mk_asp(n: String, pm: int, s: AudioStream) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
 	p.name = n
 	p.stream = s
-	p.process_mode = pm
+	p.process_mode = pm as Node.ProcessMode
 	p.volume_db = 0.0
 	add_child(p)
 	return p
@@ -59,7 +59,7 @@ func _mk_asp2d(n: String, pm: int, s: AudioStream) -> AudioStreamPlayer2D:
 	var p := AudioStreamPlayer2D.new()
 	p.name = n
 	p.stream = s
-	p.process_mode = pm
+	p.process_mode = pm as Node.ProcessMode
 	p.volume_db = 0.0
 	p.max_distance = 1000.0
 	p.position = Vector2(50, 0)

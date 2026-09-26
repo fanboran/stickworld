@@ -106,6 +106,7 @@ var _num_military: int = 0
 ## 快照：敌方军事单位数
 var _num_enemy_military: int = 0
 ## 快照：本方/敌方存活单位质心（号令目标点）
+@warning_ignore("unused_private_class_variable")
 var _own_centroid: Vector2 = Vector2.ZERO
 var _enemy_centroid: Vector2 = Vector2.ZERO
 ## 快照：本方/敌方军事力量值（按兵种权重加权求和）
@@ -117,8 +118,10 @@ var _own_threatened: bool = false
 var _initial_own_strength: float = -1.0
 ## A2 快照：敌方存活军事单位 [{pos, weight}]（C4 攻击目标候选/评分取数；
 ## 不持单位引用只留值拷贝，防 freed 悬挂，与快照口径一致）
+@warning_ignore("unused_private_class_variable")
 var _enemy_units_snapshot: Array = []
 ## A2 快照：敌军在本方锚点 enemy_close_dist 半径内的力量值（C5 基地威胁取数）
+@warning_ignore("unused_private_class_variable")
 var _enemy_strength_near_base: float = 0.0
 ## A2 · C3 任务槽板实例（setup 装配；权重/超时与 _p 同源档案；
 ## slot_kernel_enabled=false 时决策不走槽，板仍同步保持观测面一致）

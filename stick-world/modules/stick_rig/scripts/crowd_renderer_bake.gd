@@ -89,6 +89,7 @@ static func _emit_limb(data: Dictionary, bone_idx: int, bidx: Array, xforms: Arr
 	var fill_color: Color = Color.WHITE if is_body else Skel._color_for_type(node_type, {})
 	if node_type == Skel.TYPE_CIRCLE:
 		var r := maxf(length, w * 2.0) / 2.0
+		@warning_ignore("confusable_local_declaration")
 		var base := Transform2D(0.0, Vector2(data["x"], data["y"]))
 		_push(1, bone_idx, base * _scale2(r + ow, r + ow), Color.BLACK, bidx, xforms, colors)
 		_push(3, bone_idx, base * _scale2(r, r), fill_color, bidx, xforms, colors)

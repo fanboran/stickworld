@@ -51,11 +51,11 @@ var icon_mode: int = SketchStyle.IconMode.NONE:
 		_apply_flats()
 		queue_redraw()
 
+@warning_ignore("unused_private_class_variable")
 var _seed: int = 0
+@warning_ignore("unused_private_class_variable")
 var _timer: float = 0.0
 
-
-var _last_dark: bool = false
 
 func _ready() -> void:
 	_apply_flats()

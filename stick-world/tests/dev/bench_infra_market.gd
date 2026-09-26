@@ -35,6 +35,7 @@ func _ready() -> void:
 	var t_new_runs: Array = []
 	var t_old_runs: Array = []
 	for round_i in 3:
+		@warning_ignore("confusable_local_declaration")
 		var t0 := Time.get_ticks_usec()
 		for i in N_TICKS:
 			changes = mgr.tick_supply_demand()

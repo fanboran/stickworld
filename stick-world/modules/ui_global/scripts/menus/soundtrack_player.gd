@@ -284,7 +284,7 @@ func _add_glyph_button(parent: Control, glyph: int, tip: String, size: float,
 func _time_label(parent: Control, align: int) -> Label:
 	var l := StickKit.label(parent, "0:00", StickKit.LabelKind.HINT)
 	l.custom_minimum_size = Vector2(56.0, 0.0)
-	l.horizontal_alignment = align
+	l.horizontal_alignment = align as HorizontalAlignment
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return l
 

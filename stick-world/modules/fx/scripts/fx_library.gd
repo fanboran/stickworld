@@ -179,7 +179,7 @@ static func _ensure_ingredient_effects() -> void:
 static func spawn_ingredient(pool: Node, effect_id: String, position: Vector2, velocity: Vector2 = Vector2.ZERO) -> void:
 	_ensure_ingredient_effects()
 	if pool == null or not pool.has_method("spawn_ingredient_effect"):
-		push_warning("[Fx] 池节点缺少 spawn_ingredient_effect: %s" % (pool.name if pool else "null"))
+		push_warning("[Fx] 池节点缺少 spawn_ingredient_effect: %s" % (str(pool.name) if pool else "null"))
 		return
 	match effect_id:
 		AMBIENT_SPARKLE:

@@ -65,22 +65,22 @@ func _test_volume_to_bus() -> void:
 	var bgm_idx: int = AudioServer.get_bus_index("BGM")
 	_runner.assert_true(bgm_idx != -1, "BGM 总线应已由 AudioManager 创建")
 	_runner.assert_approx(AudioServer.get_bus_volume_db(bgm_idx),
-			ConfigManager.linear_to_db(0.42), 0.01, "BGM 总线 dB 应等于 linear_to_db(0.42)")
+			ConfigManagerScript.linear_to_db(0.42), 0.01, "BGM 总线 dB 应等于 linear_to_db(0.42)")
 	AudioManager.set_volume("sfx", 0.33)
 	var sfx_idx: int = AudioServer.get_bus_index("SFX")
 	_runner.assert_true(sfx_idx != -1, "SFX 总线应已由 AudioManager 创建")
 	_runner.assert_approx(AudioServer.get_bus_volume_db(sfx_idx),
-			ConfigManager.linear_to_db(0.33), 0.01, "SFX 总线 dB 应等于 linear_to_db(0.33)")
+			ConfigManagerScript.linear_to_db(0.33), 0.01, "SFX 总线 dB 应等于 linear_to_db(0.33)")
 	AudioManager.set_volume("master", 0.55)
 	var master_idx: int = AudioServer.get_bus_index("Master")
 	_runner.assert_approx(AudioServer.get_bus_volume_db(master_idx),
-			ConfigManager.linear_to_db(0.55), 0.01, "Master 总线 dB 应等于 linear_to_db(0.55)")
+			ConfigManagerScript.linear_to_db(0.55), 0.01, "Master 总线 dB 应等于 linear_to_db(0.55)")
 	# 存储同步（内存，auto_save 已关）
 	_runner.assert_equal(ConfigManager.get_value("audio/bgm_volume"), 0.42, "bgm 音量应写入 ConfigManager")
 	# 通道隔离：改 bgm 不影响 sfx 总线
 	AudioManager.set_volume("bgm", 0.9)
 	_runner.assert_approx(AudioServer.get_bus_volume_db(sfx_idx),
-			ConfigManager.linear_to_db(0.33), 0.01, "改 bgm 不应影响 SFX 总线")
+			ConfigManagerScript.linear_to_db(0.33), 0.01, "改 bgm 不应影响 SFX 总线")
 
 
 ## 设置面板「应用」端到端：_values（面板域 0~100）→ ConfigManager（0~1）→ 总线
@@ -98,10 +98,10 @@ func _test_panel_apply_end_to_end() -> void:
 			"面板 25% 应存为 0.25 线性")
 	var bgm_idx: int = AudioServer.get_bus_index("BGM")
 	_runner.assert_approx(AudioServer.get_bus_volume_db(bgm_idx),
-			ConfigManager.linear_to_db(0.25), 0.01, "应用后 BGM 总线应即时生效")
+			ConfigManagerScript.linear_to_db(0.25), 0.01, "应用后 BGM 总线应即时生效")
 	var sfx_idx: int = AudioServer.get_bus_index("SFX")
 	_runner.assert_approx(AudioServer.get_bus_volume_db(sfx_idx),
-			ConfigManager.linear_to_db(0.60), 0.01, "应用后 SFX 总线应即时生效")
+			ConfigManagerScript.linear_to_db(0.60), 0.01, "应用后 SFX 总线应即时生效")
 	panel.queue_free()
 
 
@@ -114,7 +114,7 @@ func _test_immediate_volume() -> void:
 	panel._on_field_changed(30.0, "audio/sfx_volume")
 	var sfx_idx: int = AudioServer.get_bus_index("SFX")
 	_runner.assert_approx(AudioServer.get_bus_volume_db(sfx_idx),
-			ConfigManager.linear_to_db(0.30), 0.01, "拖动音效滑条应即时写总线（不经应用）")
+			ConfigManagerScript.linear_to_db(0.30), 0.01, "拖动音效滑条应即时写总线（不经应用）")
 	_runner.assert_equal(ConfigManager.get_value("audio/sfx_volume"), 0.30,
 			"拖动音效滑条应即时写 ConfigManager")
 	panel.queue_free()
@@ -203,7 +203,7 @@ func _test_restart_restore() -> void:
 	add_child(am2)
 	var bgm_idx: int = AudioServer.get_bus_index("BGM")
 	_runner.assert_approx(AudioServer.get_bus_volume_db(bgm_idx),
-			ConfigManager.linear_to_db(0.36), 0.01, "新 AudioManager 启动应把存量音量应用到总线")
+			ConfigManagerScript.linear_to_db(0.36), 0.01, "新 AudioManager 启动应把存量音量应用到总线")
 	# 新 UIRoot 启动：show_fps=true 时计数器应直接可见
 	var ui2: CanvasLayer = UiRootScene.instantiate()
 	add_child(ui2)

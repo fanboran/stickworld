@@ -65,6 +65,7 @@ var _cached_junctions: PackedVector2Array = PackedVector2Array()
 ## 出生 L1 权威轮廓（主大陆单环，闭合；export 已保证 l1_polygon 只含最大环）
 var _cached_l1_closed: PackedVector2Array = PackedVector2Array()
 ## 邻居老 L1 块空心轮廓（每块一条闭合折线，A3 空心化）
+@warning_ignore("unused_private_class_variable")
 var _cached_neighbor_outlines: Array[PackedVector2Array] = []
 ## 河流折线（矢量回退层消费）+ 平行宽度表
 var _river_lines: Array[PackedVector2Array] = []
@@ -119,11 +120,15 @@ var _base_tex: Texture2D = null
 ## 底图 Image（降档擦除贴图的取样源；随贴图线程解码后保留）
 var _terrain_img: Image = null
 ## 贴图加载线程（单线程串行消费 _load_queue；R9 样板：目标归档 + join 防段错误）
+@warning_ignore("unused_private_class_variable")
 var _tex_thread: Thread = null
+@warning_ignore("unused_private_class_variable")
 var _tex_result: Image = null
 ## 在途任务（{"kind": "base"/"blob", "slot": int, "path": String}；完成时按它归档）
+@warning_ignore("unused_private_class_variable")
 var _tex_slot: Dictionary = {}
 ## 待加载队列（模式切换/set_data 时按需补充）
+@warning_ignore("unused_private_class_variable")
 var _load_queue: Array[Dictionary] = []
 
 ## ===== 线条/色彩 token（R8 层2）：真相源在 MapTokens，本文件零色值/线宽字面量 =====
@@ -284,10 +289,13 @@ var _neighbors: RefCounted = null
 
 ## ===== 邻省完整渲染状态（需求 7；机制体在 map_renderer_neighbors.gd）=====
 ## 已装载的邻包（每项见 _Neighbors.build_pack：data/offset/clip/mesh/borders/blob_tex…）
+@warning_ignore("unused_private_class_variable")
 var _nb_packs: Array = []
 ## 待装载邻包 label 队列（每帧 1 包，分帧防首卡）
+@warning_ignore("unused_private_class_variable")
 var _nb_queue: Array[int] = []
 ## 已完整装载的邻省 label（兜底色块 mesh 据此排除——避免两份半透明填充叠暗）
+@warning_ignore("unused_private_class_variable")
 var _nb_loaded: Dictionary = {}
 
 

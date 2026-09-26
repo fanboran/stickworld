@@ -77,7 +77,7 @@ func _run() -> void:
 	var page := get_tree().current_scene as SoundtrackPlayer
 	_check(page != null and page.name == "SoundtrackPlayer",
 		"点方钮进入原声带页（current_scene=%s）"
-		% (get_tree().current_scene.name if get_tree().current_scene != null else "null"))
+		% (str(get_tree().current_scene.name) if get_tree().current_scene != null else "null"))
 	if page == null or page.name != "SoundtrackPlayer":
 		return _finish()
 	for i in 5:

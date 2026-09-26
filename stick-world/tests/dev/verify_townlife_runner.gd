@@ -122,7 +122,7 @@ func _focus_shot(shot_name: String) -> void:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	img.save_png("%s/%s.png" % [SHOT_DIR, shot_name])
-	print("[Verify] %s.png（target=%s）" % [shot_name, target.name if target != null else "default"])
+	print("[Verify] %s.png（target=%s）" % [shot_name, str(target.name) if target != null else "default"])
 
 
 func _frames(n: int) -> void:

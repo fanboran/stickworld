@@ -28,9 +28,10 @@ func setup(_game_root: Node, service: Node) -> void:
 
 
 func _build_content() -> void:
-	_body.add_child(StickKit.label(_body,
+	# StickKit.label 内部已挂父（勿再外层 add_child——双重挂父报错）
+	StickKit.label(_body,
 			"左键 = 转移到对面（按堆叠上限截断）· 右键 = 整类转完",
-			StickKit.LabelKind.HINT))
+			StickKit.LabelKind.HINT)
 	var main := HBoxContainer.new()
 	main.add_theme_constant_override("separation", 24)
 	_body.add_child(main)
@@ -90,7 +91,7 @@ func _rebuild_side(box: VBoxContainer, container: ItemContainer, to_player: bool
 		box.remove_child(child)
 		child.queue_free()
 	if container == null or container.is_empty():
-		box.add_child(StickKit.label(box, "空空如也", StickKit.LabelKind.HINT))
+		StickKit.label(box, "空空如也", StickKit.LabelKind.HINT)
 		return
 	var last_cat: int = -1
 	for e in container.entries():

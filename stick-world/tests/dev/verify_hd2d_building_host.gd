@@ -91,8 +91,12 @@ func _check_spawn() -> void:
 	_check(grid.is_occupied(placed_at), "网格占用已登记（cell %d）" % placed_at)
 	_check(absf(b.global_position.x - float(placed_at) * 24.0) < 1.0,
 			"落位 x 对齐条带左缘（实得 %.1f，期望 %.1f）" % [b.global_position.x, float(placed_at) * 24.0])
-	_check(b.global_position.y > 300.0 and b.global_position.y < 520.0,
-			"落位 y 在前排建筑带（实得 %.1f，墙脚线 516 附近）" % b.global_position.y)
+	# 落位脚线（root y + collision_bottom）应与逐格基线一致（HD-2D = 邻居楼卡
+	# 墙脚线 530~574 带或楼排中位；旧图 = ground_y+offset）
+	var foot: float = b.global_position.y + float(b.call("get_collision_bottom_local"))
+	var expect_foot: float = float(_map.call("get_building_baseline_at", placed_at, 2))
+	_check(absf(foot - expect_foot) < 1.0,
+			"落位脚线与逐格基线一致（实得 %.1f，基线 %.1f，楼排带 530~574）" % [foot, expect_foot])
 	_check(b.get_node_or_null("InteractionZone") != null, "InteractionZone 存在（交互链挂点）")
 	# 占用闭环：同址再放被拒
 	var again: Dictionary = api.spawn_operational_building("placeholder", placed_at, 2)

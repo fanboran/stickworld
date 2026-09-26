@@ -516,6 +516,16 @@ func get_all_project_ids() -> Array:
 
 # ─────────────────────────────── 拆除 ────────────────────────────────
 
+## 落位基线（px，画布域）：地图支持逐格墙脚线（HD-2D，get_building_baseline_at）
+## 则按格子范围取邻居楼线，否则 ground_y + building_baseline_offset（旧图回退）。
+func _baseline_at(cell_x: int, width: int) -> float:
+	if _map != null and _map.has_method("get_building_baseline_at"):
+		return float(_map.call("get_building_baseline_at", cell_x, width))
+	var ground_y: float = float(_map.get("ground_y") if _map != null and "ground_y" in _map else 810.0)
+	var off: float = float(_map.get("building_baseline_offset") if _map != null and "building_baseline_offset" in _map else 96.0)
+	return ground_y + off
+
+
 ## 选址范围内是否有实体（玩家/NPC）阻挡放置。
 ## 判定：实体脚部（Collider）位于建筑体 Y 范围（约 [baseline-390, baseline]）内且 X 在选址范围，
 ## 防止放置后玩家被罩在建筑内；站在建筑脚下空地（Y 更大）不算妨碍。
@@ -525,9 +535,8 @@ func _entity_blocking(cell_x: int, width: int) -> bool:
 	var left_x: float = float(cell_x) * CELL_PX
 	var right_x: float = left_x + float(width) * CELL_PX
 	# 建筑体 Y 范围（与 PassageBarrier 一致：约 [baseline-390, baseline]，不含脚下空地）
-	var ground_y: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0)
-	var baseline_offset: float = float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
-	var baseline: float = ground_y + baseline_offset
+	# 基线逐格取（HD-2D 邻居楼线；旧图 duck 回退 ground_y+offset）
+	var baseline: float = _baseline_at(cell_x, width)
 	var body_top: float = baseline - 390.0
 	var body_bottom: float = baseline
 	for e in _map.get_entities():
@@ -601,11 +610,10 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	if building.has_method("set_map_reference"):
 		building.set_map_reference(_map)
 
-	# 摆放位置：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基准线（地平线向下 baseline_offset）
+	# 摆放位置：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基线
+	# （基线逐格取：HD-2D 邻居楼线；旧图 duck 回退 ground_y+offset）
 	var world_x: float = float(cell_x) * CELL_PX
-	var ground_y: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0)
-	var baseline_offset: float = float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
-	var baseline: float = ground_y + baseline_offset
+	var baseline: float = _baseline_at(cell_x, width)
 	var collision_bottom_local: float = 0.0
 	if building is Building:
 		collision_bottom_local = (building as Building).get_collision_bottom_local()

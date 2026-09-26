@@ -66,7 +66,12 @@ func _create_indicator(project: ScriptConstructionProject) -> void:
 	if mask_layer == null:
 		return
 	var indicator: Node2D = ScriptBuildProgressIndicator.new()
-	indicator.setup(project.cell_x, project.width, float(_map.get("ground_y") if "ground_y" in _map else 810.0))
+	# 悬挂线 = 建筑基线（逐格取：HD-2D 邻居楼线；旧图 duck 回退 ground_y+offset）
+	var baseline: float = float(_map.get("ground_y") if "ground_y" in _map else 810.0) \
+			+ float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
+	if _map.has_method("get_building_baseline_at"):
+		baseline = float(_map.call("get_building_baseline_at", project.cell_x, project.width))
+	indicator.setup(project.cell_x, project.width, baseline)
 	mask_layer.add_child(indicator)
 	_indicators[project.project_id] = indicator
 	indicator.update_progress(project.get_material_progress(), project.get_progress())

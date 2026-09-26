@@ -72,7 +72,7 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - **边界自适应**：布局驱动模式按布局街宽收 map_left/right（±半宽+8 格）。
 - **出口**：东西村口 ChunkTrigger（纯代码创建），旅行链注册在 game_root。
 - **设施门控**：`supports_village_facilities()`=false 跳过 2D 建筑设施（仓库/程序化资源点）；`wants_villager_npcs()`=true 照常生成村民——两个门控分开，因为村民不需要 2D 建筑也能干活（见 2.6）。
-- **建筑宿主**：`_setup_building_hosting()`（_ready 尾部）装配 `PlacementGrid`（duck 属性 + WorldAPI 子节点名双契约，覆盖整图含负 cell）、把 3D 前排建筑/杂物/城墙带登记为 blocked（玩家建筑不叠街景）、推导 `building_baseline_offset`（建筑落前排墙脚线 walk_back_y）、补 `BuildMaskLayer`（工地占位/进度条挂载）——建造菜单→选址→占用→落位链在本图全通。建筑视觉为过渡态：2D 程序化外观叠画在画布层（画布在 3D 之上），3D 卡视觉随 plan 物化（ROOT-2）替换。
+- **建筑宿主**：`_setup_building_hosting()`（_ready 尾部）装配 `PlacementGrid`（duck 属性 + WorldAPI 子节点名双契约，覆盖整图含负 cell）、把 3D 前排建筑/杂物/城墙带登记为 blocked（玩家建筑不叠街景）、推导 `building_baseline_offset`（楼排墙脚线中位）与逐格 `get_building_baseline_at`（建造范围压到哪栋楼卡就站那栋的 foot 线——预览/工地/成品与 3D 邻居同线；foot = 516 + z×24，实测 530~574）、补 `BuildMaskLayer`（工地占位/进度条挂载）——建造菜单→选址→占用→落位链在本图全通。建筑视觉为过渡态：2D 程序化外观叠画在画布层（画布在 3D 之上），3D 卡视觉随 plan 物化（ROOT-2）替换。
 
 ### 2.4 角色渲染：2D 逻辑 + 3D 视觉（char_sprite_3d.gd）
 

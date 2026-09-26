@@ -29,10 +29,10 @@ const _COLOR_BUILD_BG := ProgressPainter.COLOR_BG
 const _COLOR_BUILD := Color(0.3, 0.85, 0.35, 1.0)
 
 
-## 初始化：设置位置和宽度
-func setup(cell_x: int, width: int, ground_y: float) -> void:
+## 初始化：设置位置和宽度。base_line = 建筑基线（条浮在基线上方 220px）
+func setup(cell_x: int, width: int, base_line: float) -> void:
 	var center_x: float = (float(cell_x) + float(width) * 0.5) * CELL_PX
-	position = Vector2(center_x, ground_y - 220.0)
+	position = Vector2(center_x, base_line - 220.0)
 	_bar_width = maxf(float(width) * CELL_PX, 48.0)
 	z_index = WorldZ.OVERLAY_PROGRESS
 

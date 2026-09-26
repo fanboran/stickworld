@@ -273,12 +273,10 @@ func _create_barrier() -> void:
 	if host == null:
 		return
 	# 占位碰撞箱：高 96、坐在建筑基线带上（[baseline-96, baseline]，与完工建筑
-	# 碰撞底同带）；X 覆盖整栋建筑宽度（跟随实际拉伸宽度）。基线 = ground_y +
-	# building_baseline_offset（地图 duck 属性，各图型自定建筑落位带）
-	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	var baseline_off: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
+	# 碰撞底同带）；X 覆盖整栋建筑宽度（跟随实际拉伸宽度）。
+	# 基线经 _baseline_at（HD-2D 逐格贴邻居墙脚线，旧图 duck 回退）
 	var site_size := Vector2(float(width) * CELL_PX, 96.0)
-	var site_center := Vector2((float(cell_x) + float(width) * 0.5) * CELL_PX, ground_y + baseline_off - 48.0)
+	var site_center := Vector2((float(cell_x) + float(width) * 0.5) * CELL_PX, _baseline_at() - 48.0)
 	_barrier = StaticBody2D.new()
 	_barrier.visible = false
 	# 与实体同层（BODY）：实体 collision_mask 含 layer 2，move_and_slide 自然阻挡
@@ -306,8 +304,6 @@ func _create_placeholder_visual() -> void:
 	if host == null:
 		return
 	var w: float = float(width) * CELL_PX
-	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	var baseline_off: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
 	var vis := Node2D.new()
 	vis.name = "ConstructionPlaceholder"
 	vis.z_index = WorldZ.FOREGROUND
@@ -326,7 +322,7 @@ func _create_placeholder_visual() -> void:
 	edge_r.polygon = PackedVector2Array([Vector2(w - 4, -96), Vector2(w, -96), Vector2(w, 0), Vector2(w - 4, 0)])
 	edge_r.color = Color(0, 0, 0, 1.0)
 	vis.add_child(edge_r)
-	vis.position = Vector2(float(cell_x) * CELL_PX, ground_y + baseline_off)
+	vis.position = Vector2(float(cell_x) * CELL_PX, _baseline_at())
 	host.add_child(vis)
 	_placeholder_visual = vis
 
@@ -336,6 +332,17 @@ func _remove_placeholder_visual() -> void:
 	if _placeholder_visual != null and is_instance_valid(_placeholder_visual):
 		_placeholder_visual.queue_free()
 	_placeholder_visual = null
+
+
+## 落位基线（px，画布域）：地图支持逐格墙脚线（HD-2D，get_building_baseline_at）
+## 则按本项目格子范围取邻居楼线，否则 ground_y + building_baseline_offset
+## （旧 2D 图 duck 回退）。工地障碍/占位视觉/完工落位三处共用，保证同线不跳位。
+func _baseline_at() -> float:
+	if map != null and map.has_method("get_building_baseline_at"):
+		return float(map.call("get_building_baseline_at", cell_x, width))
+	var ground_y: float = float(map.get("ground_y") if map != null and "ground_y" in map else 810.0)
+	var off: float = float(map.get("building_baseline_offset") if map != null and "building_baseline_offset" in map else 96.0)
+	return ground_y + off
 
 
 ## 完工：UNDER_CONSTRUCTION → OPERATIONAL
@@ -391,15 +398,13 @@ func _complete() -> void:
 	# 注入地图引用（建筑判定玩家实体用，2026-08 审计收敛）
 	if new_building.has_method("set_map_reference"):
 		new_building.set_map_reference(map)
-	# 计算世界坐标：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基准线（地平线向下 baseline_offset）
+	# 计算世界坐标：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基线
 	var cell_size: int = 32
 	var placement_grid: Node = map.get("placement_grid") if "placement_grid" in map else null
 	if placement_grid != null and "CELL_SIZE" in placement_grid:
 		cell_size = int(placement_grid.CELL_SIZE)
 	var world_x: float = float(cell_x) * float(cell_size)
-	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
-	var baseline: float = ground_y + baseline_offset
+	var baseline: float = _baseline_at()
 	var collision_bottom_local: float = 0.0
 	if new_building is Building:
 		collision_bottom_local = (new_building as Building).get_collision_bottom_local()

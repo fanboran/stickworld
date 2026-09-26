@@ -117,9 +117,9 @@ const ScriptPlacementGrid := preload("res://modules/world/scripts/placement/plac
 ## 1D 条带占地网格（duck 契约属性：construction 经 _map.get("placement_grid")
 ## 读取；节点名守 WorldAPI.PATH_MAP_PLACEMENT_GRID，F3 调试网格按子节点名定位）。
 var placement_grid: ScriptPlacementGrid = null
-## 建筑落位基线偏移（duck 契约，construction 完工/直放落位读）：HD-2D 图建筑
-## 落前排建筑带墙脚线 walk_back_y（与街景前排卡同深度带，玩家可走到楼前），
-## 运行时在 _setup_building_hosting 推导（= walk_back_y − ground_y）。
+## 建筑落位基线偏移（duck 契约，construction 完工/直放落位读）：默认 =
+## 楼排墙脚线中位 − ground_y（运行时 _setup_building_hosting 推导）；逐格贴
+## 邻居墙脚线走 get_building_baseline_at（消费方 has_method 优先）。
 var building_baseline_offset: float = 96.0
 
 
@@ -516,7 +516,48 @@ func _setup_building_hosting() -> void:
 	var right_cell := ceili(map_right / CELL_PX) + 2
 	placement_grid.expand_range(left_cell, right_cell - left_cell)
 	_block_built_up_cells()
-	building_baseline_offset = walk_back_y - ground_y
+	_derive_building_baseline()
+
+
+## 楼排墙脚线采集（px，画布域）：3D 前排楼卡的 foot 基线（get_building_rects
+## 契约 [4]，仅收建筑条目——len≥6，4 元组是杂物无包楼框）。3D 楼站在天际线
+## 基线（516）前方 z≥0.6 格处，foot = 516 + z×24（实测主街 19 栋 = 530~574）——
+## 玩家建筑/预览/工地必须落同一条件带（初版钉 walk_back_y=516 → 全体悬空一层）。
+func _front_row_foot_lines() -> Array:
+	var foots: Array = []
+	for r: Variant in get_building_rects():
+		if r.size() >= 6:
+			foots.append(float(r[4]))
+	return foots
+
+
+## 默认落位基线推导：楼排墙脚线中位（无楼排的图回退 walk_back_y——资源/战场
+## 图无前排卡，基线仅在意外建造时兜底）。
+func _derive_building_baseline() -> void:
+	var foots := _front_row_foot_lines()
+	var line: float = walk_back_y
+	if not foots.is_empty():
+		foots.sort()
+		line = foots[foots.size() / 2]
+	building_baseline_offset = line - ground_y
+
+
+## 逐格落位基线（px，画布域）：建造范围压到哪(几)栋楼卡的占地带，就站那(几)栋
+## 的墙脚线（跨多栋取中位）——预览/工地/成品三者共用此口，保证与 3D 邻居同线；
+## 查找范围两侧放宽半格（紧贴楼卡的大空隙内放楼同样跟邻居线）；都压不到
+## （墙外野地/大空地）→ 回退楼排中位基线。
+func get_building_baseline_at(cell_x: int, width: int) -> float:
+	# get_building_rects 的 x 口径=格（y 才是 px），查找按格、放宽半格
+	var lo_c: float = float(cell_x) - 0.5
+	var hi_c: float = float(cell_x + maxi(width, 1)) + 0.5
+	var foots: Array = []
+	for r: Variant in get_building_rects():
+		if r.size() >= 6 and float(r[1]) > lo_c and float(r[0]) < hi_c:
+			foots.append(float(r[4]))
+	if foots.is_empty():
+		return ground_y + building_baseline_offset
+	foots.sort()
+	return foots[foots.size() / 2]
 
 
 ## 把 3D 侧已成街景登记为不可建条带（玩家建筑不得叠在烘卡楼/杂物/城墙上）：

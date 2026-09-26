@@ -425,10 +425,15 @@ func _process(_delta: float) -> void:
 	if _confirm_btn != null:
 		_confirm_btn.visible = _draft_placed
 	# 更新 ghost 参数并重绘（单节点自绘，避免每帧建删数十个节点导致卡顿/闪烁）
+	# 基线逐格取（HD-2D 邻居楼线，与工地/成品同线；旧图 duck 回退 ground_y+offset）
 	var width: int = maxi(1, _cell_end - _cell_start)
-	var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-	var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
-	var baseline: float = ground_y + baseline_offset
+	var baseline: float
+	if map.has_method("get_building_baseline_at"):
+		baseline = float(map.call("get_building_baseline_at", _cell_start, width))
+	else:
+		var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
+		var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
+		baseline = ground_y + baseline_offset
 	var top: float = baseline - _GHOST_HEIGHT
 	var in_bounds: bool = true
 	for c in range(width):

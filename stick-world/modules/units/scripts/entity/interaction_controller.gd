@@ -247,13 +247,23 @@ func _get_building_barrier_bounds(building: Node2D) -> Dictionary:
 	var w: int = int(building.get("width")) if "width" in building else 2
 	var left_x: float = building.global_position.x
 	var map: Node2D = _entity.get_map()
-	var ground_y: float = float(map.get("ground_y") if map != null and "ground_y" in map else 810.0)
-	var baseline_offset: float = float(map.get("building_baseline_offset") if map != null and "building_baseline_offset" in map else 96.0)
-	var baseline: float = ground_y + baseline_offset
+	var baseline: float = _map_building_baseline(map, 0, 1)
 	return {
-		"left": left_x, "right": left_x + float(w) * 32.0, "center": left_x + float(w) * 16.0,
+		"left": left_x, "right": left_x + float(w) * 24.0, "center": left_x + float(w) * 12.0,
 		"top": baseline - PROJECT_BODY_HEIGHT, "bottom": baseline,
 	}
+
+
+## 地图建筑基线（px，画布域）：HD-2D 图逐格取邻居楼线（get_building_baseline_at，
+## cell_x=0/width=1 仅用于无格子上下文的回退——楼排线在全图同带）；旧图 duck 回退
+## ground_y + building_baseline_offset。
+func _map_building_baseline(map: Node2D, cell_x: int, width: int) -> float:
+	if map == null:
+		return 810.0 + 96.0
+	if map.has_method("get_building_baseline_at"):
+		return float(map.call("get_building_baseline_at", cell_x, width))
+	return float(map.get("ground_y") if "ground_y" in map else 810.0) \
+			+ float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
 
 
 ## 实体 X 是否位于建筑横向中间 (width-2) 格区间内（左右各内缩 1 格；宽度不足时退化为整体）
@@ -273,14 +283,12 @@ func _is_y_in_building_zone(top: float, bottom: float) -> bool:
 
 ## 检测实体是否在工地交互范围内（横向中间 (width-2) 格 + 垂直在主体范围内）。
 func _is_near_project(project: RefCounted) -> bool:
-	var left_x: float = float(project.cell_x) * 32.0
-	var right_x: float = left_x + float(project.width) * 32.0
+	var left_x: float = float(project.cell_x) * 24.0
+	var right_x: float = left_x + float(project.width) * 24.0
 	if not _is_x_in_building_zone(left_x, right_x):
 		return false
 	var map: Node2D = _entity.get_map()
-	var ground_y: float = float(map.get("ground_y") if map != null and "ground_y" in map else 810.0)
-	var baseline_offset: float = float(map.get("building_baseline_offset") if map != null and "building_baseline_offset" in map else 96.0)
-	var baseline: float = ground_y + baseline_offset
+	var baseline: float = _map_building_baseline(map, int(project.cell_x), int(project.width))
 	return _is_y_in_building_zone(baseline - PROJECT_BODY_HEIGHT, baseline)
 
 
@@ -299,8 +307,8 @@ func _find_interact_target() -> Dictionary:
 		# 优先：工地
 		var project: RefCounted = _entity.get_construction_manager().get_nearest_project(_entity.global_position)
 		if project != null and _is_near_project(project):
-			var left_x: float = float(project.cell_x) * 32.0
-			var right_x: float = left_x + float(project.width) * 32.0
+			var left_x: float = float(project.cell_x) * 24.0
+			var right_x: float = left_x + float(project.width) * 24.0
 			var cx: float = (left_x + right_x) * 0.5
 			var hint: String = ""
 			if _entity.is_carrying():

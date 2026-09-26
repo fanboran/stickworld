@@ -67,9 +67,10 @@ func setup(game_root: Node, service: Node) -> void:
 
 
 func _build_content() -> void:
-	_body.add_child(StickKit.label(_body,
+	# StickKit.label 内部已挂父（勿再外层 add_child——双重挂父报错，下同）
+	StickKit.label(_body,
 			"左键 装备/使用 · 右键 指派快捷栏 · 滚轮（游戏中）切武器",
-			StickKit.LabelKind.HINT))
+			StickKit.LabelKind.HINT)
 	var main := HBoxContainer.new()
 	main.add_theme_constant_override("separation", 24)
 	_body.add_child(main)
@@ -173,7 +174,7 @@ func _rebuild_list() -> void:
 		child.queue_free()
 	var entries: Array = _inv.bag.entries()
 	if entries.is_empty():
-		_list_box.add_child(StickKit.label(_list_box, "背包空空如也", StickKit.LabelKind.HINT))
+		StickKit.label(_list_box, "背包空空如也", StickKit.LabelKind.HINT)
 		return
 	var last_cat: int = -1
 	for e in entries:
@@ -186,7 +187,8 @@ func _rebuild_list() -> void:
 					"%s（%d）" % [cat_name, _entries_in_cat(entries, def.category)],
 					StickKit.LabelKind.SECTION)
 			head.modulate = Color(StickTokens.ACCENT, 0.9)
-		_list_box.add_child(_make_entry_row(e))
+		# 行已在 _make_entry_row 内经 StickKit.row(_list_box) 挂父，勿再外层 add
+		_make_entry_row(e)
 
 
 func _entries_in_cat(entries: Array, cat: int) -> int:
@@ -285,7 +287,7 @@ func _refresh_stats_card() -> void:
 	var se: Node = entity.get_node_or_null("StatusEffects")
 	var actives: Array = se.list_active() if se != null and se.has_method("list_active") else []
 	if actives.is_empty():
-		_effects_box.add_child(StickKit.label(_effects_box, "无伤痕", StickKit.LabelKind.TINY))
+		StickKit.label(_effects_box, "无伤痕", StickKit.LabelKind.TINY)
 	else:
 		for e in actives:
 			var line := StickKit.label(_effects_box,

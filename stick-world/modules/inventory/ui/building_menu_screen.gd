@@ -18,7 +18,8 @@ func setup(_game_root: Node, _service: Node) -> void:
 
 
 func _build_content() -> void:
-	_body.add_child(StickKit.label(_body, "选择与建筑的交互", StickKit.LabelKind.HINT))
+	# StickKit.label 内部已挂父（勿再外层 add_child——双重挂父报错）
+	StickKit.label(_body, "选择与建筑的交互", StickKit.LabelKind.HINT)
 	_action_box = VBoxContainer.new()
 	_action_box.add_theme_constant_override("separation", 8)
 	_action_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL

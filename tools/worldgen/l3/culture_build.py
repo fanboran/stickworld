@@ -19,7 +19,7 @@
   culture_strength.npy（float16，主导文化场强 exp(-cum/T)）
   culture_sources.json（源点表；语素库后续挂 morph_seed，本任务只留 seed 占位）
   culture_similarity.json（K×K 矩阵）
-  city_culture.json（1040 城采样：主导/次文化 + 混合度）
+  city_culture.json（1036 聚落采样：主导/次文化 + 混合度）
 预览：culture_preview_2048.png（源点 + 场强边界 + 过渡带 + 相似度矩阵热图）
 
 用法：
@@ -461,7 +461,7 @@ def main():
         json.dump({
             "_meta": {
                 "status": "提案/待定",
-                "note": "1040 城文化采样（来自 culture_field/mix 场，anchor 8192 级）。",
+                "note": "1036 聚落文化采样（来自 culture_field/mix 场，anchor 8192 级）。",
                 "dominant": "源点序号 1..K（0=无主荒野/水体）",
                 "second": "次文化源点序号（仅过渡带 mix≥0.15 报告，否则 -1）",
             },

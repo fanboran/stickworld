@@ -2,13 +2,13 @@ class_name WorldContractInitializer extends RefCounted
 ## 世界契约初始化器 —— 新开局从 mapdata 真源全量构建政权域/城市域
 ## （世界模型整合 M1 统一契约，完整版蓝图 §3.4）。
 ##
-## 两路语义：新开局 = 真源构建（本类全量灌入 179 政权 + 1036 城，V2 世界重生成）；
+## 两路语义：新开局 = 真源构建（本类全量灌入 176 政权 + 1036 城，V2 世界重生成）；
 ## 读档 = 存档恢复（WorldState.load_save_data，不经本类）。
 ## 玩家政权壳由 WorldState.start_new_run 先立（state_id "player"），本类灌入用
 ## merge 非覆盖——玩家壳保留；真源 states 表亦无该 id（防御见 build 内断言）。
 ##
 ## ── 数据真源与选择理由 ──
-##   政权/归属：political_data.json（states 179 表 + city_owners 1036 表，唯一真相源；
+##   政权/归属：political_data.json（states 176 表 + city_owners 1036 表，唯一真相源；
 ##     导出包不排除该文件、也无 bin，直接 JSON 读）。
 ##   城市规模分（population_score）：l3_city 单文件覆盖全部 1036 城（label 连续
 ##     1..1036），其 population_score 与 70 份 l1 包侧逐城全同（V2 重烤后同源）；
@@ -114,7 +114,7 @@ static func build_initial_contract(run_seed: int) -> Dictionary:
 	var factions_out: Dictionary = {}
 	for state_id in states:
 		var fid := str(state_id)
-		# 契约冲突防御：玩家 id 为保留 id，真源混入即跳过该条（179 表实测无此 id，
+		# 契约冲突防御：玩家 id 为保留 id，真源混入即跳过该条（176 表实测无此 id，
 		# tests/unit/test_world_contract.gd 有独立断言）
 		if fid == PLAYER_FACTION_ID:
 			push_error("[WorldContractInitializer] states 表混入玩家保留 id \"player\"，跳过该条")

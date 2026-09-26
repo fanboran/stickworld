@@ -260,7 +260,7 @@ def render_panorama(out_size=2048):
     """L1 世界全景 preview（F8 缩略窗底图候选，总体设计 §5.12.3 定标表）。
 
     与 l1_base.png 同一套配色规则（OCEAN/NEIGHBOR/LAKE + 城市政权色），
-    范围 = 全部老 L1 块（69 块 + 1040 城）的陆地世界：海洋底 → 灰陆地 →
+    范围 = 全部老 L1 块（69 块 + 1693 城块）的陆地世界：海洋底 → 灰陆地 →
     城市政权色（city_data.json rgb，与各 l1 包 states 同色源）→ 湖泊。
     8192 原生上色（LUT 查表，免逐城市全图扫描）→ 陆地 bbox 正方形裁切
     （外扩 5%）→ LANCZOS 降采样。

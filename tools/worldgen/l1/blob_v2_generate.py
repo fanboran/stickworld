@@ -20,7 +20,7 @@
 产物：几何+统计进 output/blob_v2/（gitignored）；入库对比图落 output/ 根 blob_v2_*.png。
 
 用法：
-    python blob_v2_generate.py               # 全量 1048 城 × 3 档 + 全部预览
+    python blob_v2_generate.py               # 全量 1036 正常聚落 × 3 档 + 全部预览
     python blob_v2_generate.py --sample      # 只跑特写/贫瘠抽查/分形样本城（调参快循环）
     python blob_v2_generate.py --no-overview # 跳过全图概览渲染
 
@@ -130,7 +130,7 @@ def tile_clear_mask(city, wx0, wy0, W, margin):
 
 
 def load_cities():
-    """收集 1048 城：世界锚点 / level / population_score / blob_capacity[16] / 周边道路(世界系)"""
+    """收集 1036 正常聚落：世界锚点 / level / population_score / blob_capacity[16] / 周边道路(世界系)"""
     print("[v2] 收集城市锚点与周边道路（L1 视图包，只读）...")
     paths = [os.path.join(GAME_DIR, "l1_world.json")]
     pack_dir = os.path.join(GAME_DIR, "l1_packs")

@@ -88,7 +88,7 @@ func start_new_run() -> void:
 	player_faction.state_id = PLAYER_FACTION_ID
 	player_faction.name = "玩家政权"
 	register_faction(player_faction)
-	# worldgen 真源灌入 80 政权 + 1040 城（世界模型整合 M1）：新开局 = 真源构建
+	# worldgen 真源灌入（随 political_data 真源，现行 176 政权 + 1036 城）：新开局 = 真源构建
 	# （political_data.json + l3_city），读档 = 存档恢复（load_save_data，不经
 	# 初始化器）；merge 非覆盖，上面的玩家政权壳保留
 	WorldContractInitializer.apply_to_world_state(self)

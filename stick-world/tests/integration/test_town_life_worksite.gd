@@ -188,7 +188,8 @@ func _test_real_slot() -> void:
 	api.produce("res_metal_ore", ORE_SEED_STOCK, "test_region", "测试预置")
 
 	# 铁匠应走到真槽位上班（worksite 模式 + 建筑引用 = 摆点）
-	var hv: Node = null
+	# hv 用 Array 承载：lambda 捕获按值，直接重赋值外部变量不回写（曾致到岗后提前 return、后半段断言空转）
+	var hv: Array = [null]
 	var on_slot := func() -> bool:
 		if _behavior(smith) != "harvest":
 			return false
@@ -197,12 +198,11 @@ func _test_real_slot() -> void:
 		var b: Node = sm.get_node_or_null("BehaviorHarvest")
 		if b == null or b.get_mode_name() != "worksite":
 			return false
-		@warning_ignore("confusable_capture_reassignment")
-		hv = b
+		hv[0] = b
 		return b.get_worksite_building() == _shop
 	var arrived: bool = await _poll_until(ARRIVE_TIMEOUT, on_slot)
 	_runner.assert_true(arrived, "铁匠应寻到真槽位上班（%.0fs 内）" % ARRIVE_TIMEOUT)
-	if not arrived or hv == null:
+	if not arrived or hv[0] == null:
 		return
 	_runner.assert_approx(smith.global_position.x, REAL_SLOT_X, 60.0,
 			"铁匠站位应贴近槽位 X=1320（实 %.0f）" % smith.global_position.x)

@@ -41,6 +41,10 @@ func save_to_db(db, slot_id: int, map_id: String) -> void:
 		if not is_instance_valid(b) or not (b is Building):
 			continue
 		var typed: Building = b as Building
+		# plan 物化建筑不落档：由 CityGen 确定性 plan 每次进图重生成（ROOT-2），
+		# 落档会在读档侧与重物化叠出双份
+		if typed.has_meta("plan_generated"):
+			continue
 		bld_rows.append({
 			"slot_id": slot_id, "building_id": b_id, "map_id": map_id,
 			"def_id": typed.def_id, "cell_x": typed.cell_x,
@@ -114,13 +118,21 @@ func load_from_db(db, slot_id: int, map_id: String) -> void:
 	_root._on_projects_changed()
 
 
-## 清空所有建筑和项目（读档前调用）
+## 清空所有建筑和项目（读档前调用）。plan 物化建筑归布局 plan 管（确定性
+## 重生成，ROOT-2），读档不清——只清 DB 拥有的玩家建筑与项目。
 func _clear_all_buildings_and_projects() -> void:
-	for b in _root._buildings.values():
+	var doomed: Array = []
+	for b_id in _root._buildings.keys():
+		var b: Node = _root._buildings[b_id]
+		if b != null and b.has_meta("plan_generated"):
+			continue
+		doomed.append(b_id)
 		if is_instance_valid(b):
 			b.queue_free()
-	_root._buildings.clear()
-	_root._building_to_id.clear()
+	for b_id in doomed:
+		var b: Node = _root._buildings[b_id]
+		_root._buildings.erase(b_id)
+		_root._building_to_id.erase(b)
 	_root._projects.clear()
 	_root._finished_projects.clear()
 	_root._on_buildings_changed()

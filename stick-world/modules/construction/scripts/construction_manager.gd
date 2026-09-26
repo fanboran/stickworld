@@ -32,6 +32,10 @@ const ScriptBuildProgressTracker := preload("res://modules/construction/scripts/
 const _BuildingCatalogScript: GDScript = preload("res://modules/construction/scripts/catalog/building_catalog.gd")
 const _BuildingPersistenceScript: GDScript = preload("res://modules/construction/scripts/catalog/building_persistence.gd")
 
+## building_gen 公共契约（L1，跨模块 preload 仅限 api.gd 的合规出口）——
+## plan 物化的管线 def → 运行时 def 映射查它（INT-4 单源）
+const _BuildingGenAPI: GDScript = preload("res://modules/building_gen/api.gd")
+
 ## 占地条带宽（px）：锚定 PlacementGrid.CELL_SIZE（world 模块 L3，construction
 ## 不得 preload 反向依赖，换轨时两处同步——同 build_menu/behavior_work 口径）
 const CELL_PX: float = 24.0
@@ -124,6 +128,103 @@ func set_map(map: Node2D) -> void:
 	_map = map
 	# 阶段 E：进度条跟踪器同步地图引用
 	_indicators.set_map(map)
+	# ROOT-2：CityGen plan 物化（布局图前排 → Building 实体；duck 协议，非布局图自然跳过）
+	_materialize_plan_buildings(map)
+
+
+# ─────────────────────────────── CityGen plan 物化（ROOT-2）────────────────────────
+
+## plan 物化幂等标记（挂 map 上，防 set_map 重复触发）
+const _PLAN_MATERIALIZED_META := "_plan_buildings_materialized"
+
+## 城市布局 plan → Building 实体：烘卡只做视觉（3D 街景照摆），实体承载玩法
+## （工位/交互区/注册表——工位·招兵·仓库·生产·住房五链的宿主）。
+## SPN-3 性能口径第一档：按图物化——每图一聚落，进图物化本图前排（10~40 栋
+## 无外部视觉的 Node2D 壳，轻量）；窗口级懒物化归 M4 焦点实体化。
+## 幂等：map meta 标记；换图时旧实体随 BuildingHost/注册表一起清（set_map 头部）。
+func _materialize_plan_buildings(map: Node2D) -> void:
+	if map == null or not map.has_method("get_plan_buildings"):
+		return
+	if map.has_meta(_PLAN_MATERIALIZED_META):
+		return
+	map.set_meta(_PLAN_MATERIALIZED_META, true)
+	var entries: Array = map.get_plan_buildings()
+	if entries.is_empty():
+		return
+	var host: Node2D = map.get("building_host") if "building_host" in map else null
+	var grid: Node = map.get("placement_grid") if "placement_grid" in map else null
+	if host == null:
+		push_warning("[ConstructionManager] plan 物化跳过：map.building_host 不存在")
+		return
+	var spawned: int = 0
+	for entry: Variant in entries:
+		if _materialize_one_plan_building(map, host, grid, entry):
+			spawned += 1
+	print_verbose("[ConstructionManager] plan 物化: %d/%d 栋 (%s)" % [spawned, entries.size(), map.name])
+
+
+## 物化单栋：管线 def 查映射（无映射=纯视觉卡，跳过不算错）→ 实例化场景 →
+## 视觉壳模式 + 按宽比缩放 → 贴卡落位 → occupy_force + 注册进 _buildings。
+## 落位口径：x 贴卡精确左沿（非取整格——3D 卡是视觉真相源，实体几何随它）；
+## y = 卡脚基线 − 碰撞底×缩放（缩放后碰撞底的实际伸长按比例折算）。
+func _materialize_one_plan_building(map: Node2D, host: Node2D, grid: Node, entry: Variant) -> bool:
+	var pipeline_def: String = str(entry.get("def", ""))
+	var def_id: String = _BuildingGenAPI.runtime_def_for_pipeline(pipeline_def)
+	if def_id.is_empty() or not _catalog.is_registered(def_id):
+		return false
+	var plan_cells: float = float(entry.get("cells", 0.0))
+	var center: float = float(entry.get("x", 0.0))
+	if plan_cells <= 0.0:
+		return false
+	var cell_x: int = floori(center - plan_cells * 0.5)
+	var width: int = ceili(center + plan_cells * 0.5) - cell_x
+	var scene: PackedScene = _catalog.get_scene(def_id)
+	if scene == null:
+		return false
+	var building: Node = scene.instantiate()
+	if building == null or not building is Node2D:
+		push_warning("[ConstructionManager] plan 物化场景实例化失败: %s" % def_id)
+		return false
+	var typed: Building = building as Building
+	# def 宽（32px 轨美术原生格数）→ plan 宽（实际占格）统一缩放：障碍/交互区/
+	# 工位整体随缩；外部视觉已关（视觉壳），缩放只对齐玩法几何与卡脚印
+	var def: Dictionary = _catalog.get_def(def_id)
+	var def_width: int = int(def.get("width", width)) if not def.is_empty() else width
+	var scale_factor: float = float(width) / float(def_width) if def_width > 0 else 1.0
+	(building as Node2D).scale = Vector2(scale_factor, scale_factor)
+	if typed != null:
+		typed.def_id = def_id
+		typed.cell_x = cell_x
+		typed.width = width
+		# 城市既有建筑：3D 卡永在，拆实体=视觉与玩法失联 → 不可拆
+		typed.is_terrain = true
+		if not def.is_empty() and typed.has_method("apply_building_def"):
+			typed.apply_building_def(def)
+		# plan 物化标记：存档侧据此跳过（plan 确定性重生成，不归 DB 管）
+		typed.set_meta("plan_generated", true)
+	host.add_child(building)
+	if typed != null:
+		typed.set_visual_shell_only(true)
+		if typed.has_method("set_map_reference"):
+			typed.set_map_reference(map)
+	var baseline: float = float(map.call("get_plan_baseline_y", float(entry.get("z", 0.6)))) \
+			if map.has_method("get_plan_baseline_y") else 0.0
+	var world_x: float = (center - plan_cells * 0.5) * CELL_PX
+	var cbl: float = typed.get_collision_bottom_local() if typed != null else 0.0
+	(building as Node2D).global_position = Vector2(world_x, baseline - cbl * scale_factor)
+	if typed != null:
+		typed.set_state(Building.State.OPERATIONAL)
+	# 占用（含 blocked 态格——封锁本就来自同一建筑的 3D 卡带）
+	if grid != null and grid.has_method("occupy_force"):
+		grid.occupy_force(cell_x, width, building)
+	# 注册进管理表（get_nearest_warehouse/编号查询等玩法链消费）
+	var building_id := "%04d" % _next_building_id
+	_next_building_id += 1
+	building.set_meta("building_id", building_id)
+	_buildings[building_id] = building
+	_building_to_id[building] = building_id
+	_on_buildings_changed()
+	return true
 
 
 # ─────────────────────────────── 资源系统注入 ────────────────────────────────

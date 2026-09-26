@@ -583,6 +583,29 @@ func _block_built_up_cells() -> void:
 		placement_grid.set_blocked_area(wc0, wc1 - wc0)
 
 
+# ─────────────────────────────── plan 物化数据口（ROOT-2）────────────────────────
+
+## CityGen plan 前排条目（row0）——物化层数据口，ConstructionManager.set_map
+## 经 duck 协议读取（条目含 def/x(中心,格)/cells(宽,格)/z(纵深,格)）。
+## 后排 row≥1 是天际线布景，不物化（SPN-3 口径：每图只物化本聚落前排）。
+## 非布局图（战场/资源图无 CityGen plan）layout_data 为空 → 返回空表自然跳过。
+func get_plan_buildings() -> Array:
+	if _hd == null:
+		return []
+	var ld: Dictionary = _hd.get("layout_data") if "layout_data" in _hd else {}
+	var out: Array = []
+	for b: Variant in ld.get("buildings", []):
+		if int(b.get("row", 0)) == 0:
+			out.append(b)
+	return out
+
+
+## plan 前排建筑的落位基线（px）：与 3D 卡脚线同公式（walk_back_y + z×24，
+## 同 hd2d_world._building_solid_rect 的 base_y）——物化实体与烘卡同线。
+func get_plan_baseline_y(z_cells: float) -> float:
+	return walk_back_y + z_cells * CELL_PX
+
+
 # ─────────────────────────────── 碰撞/调试数据口 ────────────────────────────────
 
 ## F3 调试可视化：把 HD-2D 碰撞墙并入 walk barrier 绘制（蓝框）

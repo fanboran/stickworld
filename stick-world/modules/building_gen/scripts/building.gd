@@ -60,6 +60,9 @@ var upgrade_level: int = 0
 var health: float = 100.0
 ## 最大血量
 var max_health: float = 100.0
+## 视觉壳模式（HD-2D plan 物化建筑）：外部程序化视觉关闭，视觉由 3D 烘卡
+## 承担（ROOT-2 口径：烘卡只做视觉、实体承载玩法）。交互区/工位/通行障碍照常。
+var _visual_shell_only: bool = false
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────
 ## 子节点引用
@@ -119,6 +122,8 @@ func _ready() -> void:
 	_lookup_children()
 	_migrate_collision_geometry_to_canvas_px()
 	_apply_state_visual()
+	if _visual_shell_only:
+		_apply_visual_shell()
 
 
 ## 24px 换轨（2026-09-16）：场景手摆的碰撞几何（PassageBarrier/StandPlatform）
@@ -136,8 +141,12 @@ func _migrate_collision_geometry_to_canvas_px() -> void:
 		for child in body.get_children():
 			if child is CollisionShape2D and (child as CollisionShape2D).shape is RectangleShape2D:
 				var cs := child as CollisionShape2D
-				var rect := cs.shape as RectangleShape2D
+				# 场景子资源跨实例共享（tscn 未标 local_to_scene）：不复制直接缩放，
+				# 同场景第二栋实例会把同一份 shape 再 ×0.75（实测双铁匠铺碰撞体缩
+				# 两次、挡板偏小）——duplicate 成实例私有再缩
+				var rect := (cs.shape as RectangleShape2D).duplicate() as RectangleShape2D
 				rect.size = rect.size * 0.75
+				cs.shape = rect
 				cs.position = cs.position * 0.75
 
 
@@ -303,6 +312,20 @@ func set_state(new_state: State) -> void:
 	state_changed.emit(old, new_state)
 	if new_state == State.OPERATIONAL:
 		completed.emit(self)
+
+
+## 视觉壳模式开关：on = 隐藏外部程序化视觉（视觉由 3D 烘卡承担），
+## 玩法件（InteractionZone/WorkSlots/PassageBarrier/Interior）不受影响。
+## add_child 前后调用均可（_ready 会按标记补应用）。
+func set_visual_shell_only(on: bool) -> void:
+	_visual_shell_only = on
+	if on:
+		_apply_visual_shell()
+
+
+func _apply_visual_shell() -> void:
+	if _exterior != null:
+		_exterior.visible = false
 
 
 func _apply_state_visual() -> void:

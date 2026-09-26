@@ -45,6 +45,9 @@ var cell_x: int = 0
 var width: int = 1
 ## 所属区域 ID（用于 start_construction(region_id, ...)，P0 留空）
 var region_id: String = ""
+## 落位基线深度（px，画布域，y 轴）：建造菜单传鼠标点击深度；<=0 = 未指定，
+## 落位基线由地图口径推导（见 _baseline_at）。占地登记仍只看 x 条带（1D 契约）。
+var baseline_y: float = -1.0
 ## 地图引用（用于实例化 Building 到 BuildingHost、查询 ground_y 等）
 var map: Node2D = null
 ## 建筑场景模板（P0 由 ConstructionManager 根据 def_id 查表注入）
@@ -338,6 +341,8 @@ func _remove_placeholder_visual() -> void:
 ## 则按本项目格子范围取邻居楼线，否则 ground_y + building_baseline_offset
 ## （旧 2D 图 duck 回退）。工地障碍/占位视觉/完工落位三处共用，保证同线不跳位。
 func _baseline_at() -> float:
+	if baseline_y > 0.0:
+		return baseline_y
 	if map != null and map.has_method("get_building_baseline_at"):
 		return float(map.call("get_building_baseline_at", cell_x, width))
 	var ground_y: float = float(map.get("ground_y") if map != null and "ground_y" in map else 810.0)

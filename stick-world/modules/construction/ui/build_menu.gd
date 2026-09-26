@@ -52,6 +52,8 @@ var _last_cell_start: int = 0
 var _last_cell_end: int = 0
 ## 确定建造按钮（stage 2 才显示）
 var _confirm_btn: Button = null
+## 选址阶段缓存的落位基线（每帧随鼠标更新；确认时鼠标已在按钮上，不能再取）
+var _placing_baseline: float = -1.0
 ## ghost 预览高度（像素，向上，接近大多数建筑视觉高度）
 const _GHOST_HEIGHT: float = 280.0
 const _CELL_SIZE: int = 24  # 24px 换轨（旧 32）
@@ -377,13 +379,28 @@ func _confirm_place() -> void:
 	if api == null or not api.has_method("start_construction_at"):
 		return
 	var width: int = maxi(1, _cell_end - _cell_start)
-	var result: Dictionary = api.start_construction_at(_BUILD_REGION, _placing_def_id, _cell_start, "", width)
+	# 落位深度用选址阶段缓存的鼠标基线（此刻鼠标已移到确认按钮上，不能再取）
+	var result: Dictionary = api.start_construction_at(_BUILD_REGION, _placing_def_id, _cell_start, "", width,
+			_placing_baseline)
 	if result.get("ok", false):
 		_show_notify("开始建造: %s (cell=%d, 宽=%d)" % [_placing_def_id, _cell_start, width])
 	else:
 		_show_notify("建造失败: %s" % result.get("error", "未知错误"))
 	# 建造后退出选址模式
 	_cancel_placing()
+
+
+## 落位基线（px，画布域）：**跟随鼠标点击深度**——玩家点哪层地面，楼就落哪层
+## （此前钉楼排线/楼排中位，前景街面点楼落到楼排线上 = 预览比点击处高一层楼）。
+## 1D 占地契约不变：占用登记仍只看 x 条带，本值只是落位/预览/工地共用的深度。
+## 钳制在行走带内（黄线 ~ 屏幕底沿上 1 格）；无深度语义的图（旧 2D）走 duck 偏移。
+func _placement_baseline(map: Node2D) -> float:
+	if not map.has_method("get_fg_bg_boundary_y"):
+		var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
+		return ground_y + float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
+	var deep: float = float(map.get("walk_back_y") if "walk_back_y" in map else 516.0)
+	var front: float = float(map.get("walk_front_y") if "walk_front_y" in map else 970.5)
+	return clampf(_get_mouse_world_y(), deep, front - 24.0)
 
 
 # ─────────────────────────────── 每帧更新 ghost ────────────────────────────────
@@ -425,15 +442,10 @@ func _process(_delta: float) -> void:
 	if _confirm_btn != null:
 		_confirm_btn.visible = _draft_placed
 	# 更新 ghost 参数并重绘（单节点自绘，避免每帧建删数十个节点导致卡顿/闪烁）
-	# 基线逐格取（HD-2D 邻居楼线，与工地/成品同线；旧图 duck 回退 ground_y+offset）
+	# 落位深度跟随鼠标（预览=工地=成品同一条线，见 _placement_baseline 注）
 	var width: int = maxi(1, _cell_end - _cell_start)
-	var baseline: float
-	if map.has_method("get_building_baseline_at"):
-		baseline = float(map.call("get_building_baseline_at", _cell_start, width))
-	else:
-		var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-		var baseline_offset: float = float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
-		baseline = ground_y + baseline_offset
+	var baseline: float = _placement_baseline(map)
+	_placing_baseline = baseline
 	var top: float = baseline - _GHOST_HEIGHT
 	var in_bounds: bool = true
 	for c in range(width):

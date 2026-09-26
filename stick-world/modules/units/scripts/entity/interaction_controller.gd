@@ -287,8 +287,12 @@ func _is_near_project(project: RefCounted) -> bool:
 	var right_x: float = left_x + float(project.width) * 24.0
 	if not _is_x_in_building_zone(left_x, right_x):
 		return false
-	var map: Node2D = _entity.get_map()
-	var baseline: float = _map_building_baseline(map, int(project.cell_x), int(project.width))
+	var baseline: float
+	if project.baseline_y > 0.0:
+		baseline = float(project.baseline_y)
+	else:
+		var map: Node2D = _entity.get_map()
+		baseline = _map_building_baseline(map, int(project.cell_x), int(project.width))
 	return _is_y_in_building_zone(baseline - PROJECT_BODY_HEIGHT, baseline)
 
 

@@ -86,11 +86,12 @@ func start_construction(region_id: String, building_type: String, org_id: String
 	return result
 
 
-## 开工建造（指定位置 cell_x，可选 width 覆盖 def 宽度）
-func start_construction_at(region_id: String, building_type: String, cell_x: int, org_id: String = "", width: int = -1) -> Dictionary:
+## 开工建造（指定位置 cell_x，可选 width 覆盖 def 宽度；baseline_y=落位深度 px，
+## ≤0 时由地图按自身口径推导——建造菜单传鼠标点击深度，见 BuildMenu._placement_baseline）
+func start_construction_at(region_id: String, building_type: String, cell_x: int, org_id: String = "", width: int = -1, baseline_y: float = -1.0) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	var result := _manager.start_construction_at(region_id, building_type, cell_x, org_id, width)
+	var result := _manager.start_construction_at(region_id, building_type, cell_x, org_id, width, baseline_y)
 	if result.get("ok", false):
 		building_started.emit(result.get("project_id", ""), region_id)
 	return result
@@ -98,10 +99,10 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 
 ## 直接生成 OPERATIONAL 状态建筑（绕过建造过程，用于初始建筑/仓库预置）。
 ## [P] def_id 已注册（get_registered_def_ids 包含它）
-func spawn_operational_building(def_id: String, cell_x: int, width: int = 1) -> Dictionary:
+func spawn_operational_building(def_id: String, cell_x: int, width: int = 1, baseline_y: float = -1.0) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	return _manager.spawn_operational_building(def_id, cell_x, width)
+	return _manager.spawn_operational_building(def_id, cell_x, width, baseline_y)
 
 
 ## 注入当前地图（供项目实例化建筑使用；地图切换时调用）

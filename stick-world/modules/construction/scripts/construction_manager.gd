@@ -294,7 +294,7 @@ func start_construction(region_id: String, building_type: String, org_id: String
 
 
 ## 开工建造（指定位置 cell_x，可选 width 覆盖 def 宽度）。返回 {ok:true, project_id, cell_x, width} 或 {ok:false, error}。
-func start_construction_at(region_id: String, building_type: String, cell_x: int, _org_id: String = "", width: int = -1) -> Dictionary:
+func start_construction_at(region_id: String, building_type: String, cell_x: int, _org_id: String = "", width: int = -1, baseline_y: float = -1.0) -> Dictionary:
 	# 请求合法性先于环境就绪判定（未注册/未解锁与地图无关，也不因缺地图而被掩盖）
 	if not _catalog.is_registered(building_type):
 		return {"ok": false, "error": "未注册建筑类型: %s" % building_type}
@@ -319,7 +319,7 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	if not validate_result.ok:
 		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
 	# 放置校验：选址范围内有实体（玩家/NPC）则拒绝，防止放置后玩家被罩在建筑内
-	if _entity_blocking(cell_x, width):
+	if _entity_blocking(cell_x, width, baseline_y):
 		return {"ok": false, "error": "选址范围内有单位，无法放置"}
 	# P0-9 资源检查（校验与扣减放在选址/实体校验之后：此前先扣资源再校验，
 	# 校验失败会白扣资源，2026-08 审计修复）
@@ -333,6 +333,8 @@ func start_construction_at(region_id: String, building_type: String, cell_x: int
 	var project_id := "proj_%04d" % _next_project_id
 	_next_project_id += 1
 	var project := ScriptConstructionProject.new(project_id, building_type, cell_x, width, _map, scene, total_work, region_id)
+	# 落位深度（建造菜单传鼠标点击深度；≤0 时由地图口径推导，见 _baseline_at）
+	project.baseline_y = baseline_y
 	# D2 数据驱动：def 随项目携带，完工时 apply_building_def 应用到建筑（interior_mode 等）
 	project.building_def = def
 	_projects[project_id] = project
@@ -518,7 +520,9 @@ func get_all_project_ids() -> Array:
 
 ## 落位基线（px，画布域）：地图支持逐格墙脚线（HD-2D，get_building_baseline_at）
 ## 则按格子范围取邻居楼线，否则 ground_y + building_baseline_offset（旧图回退）。
-func _baseline_at(cell_x: int, width: int) -> float:
+func _baseline_at(cell_x: int, width: int, baseline_y: float = -1.0) -> float:
+	if baseline_y > 0.0:
+		return baseline_y
 	if _map != null and _map.has_method("get_building_baseline_at"):
 		return float(_map.call("get_building_baseline_at", cell_x, width))
 	var ground_y: float = float(_map.get("ground_y") if _map != null and "ground_y" in _map else 810.0)
@@ -529,14 +533,14 @@ func _baseline_at(cell_x: int, width: int) -> float:
 ## 选址范围内是否有实体（玩家/NPC）阻挡放置。
 ## 判定：实体脚部（Collider）位于建筑体 Y 范围（约 [baseline-390, baseline]）内且 X 在选址范围，
 ## 防止放置后玩家被罩在建筑内；站在建筑脚下空地（Y 更大）不算妨碍。
-func _entity_blocking(cell_x: int, width: int) -> bool:
+func _entity_blocking(cell_x: int, width: int, baseline_y: float = -1.0) -> bool:
 	if _map == null or not _map.has_method("get_entities"):
 		return false
 	var left_x: float = float(cell_x) * CELL_PX
 	var right_x: float = left_x + float(width) * CELL_PX
 	# 建筑体 Y 范围（与 PassageBarrier 一致：约 [baseline-390, baseline]，不含脚下空地）
-	# 基线逐格取（HD-2D 邻居楼线；旧图 duck 回退 ground_y+offset）
-	var baseline: float = _baseline_at(cell_x, width)
+	# 基线与实际落位同源（点击深度优先；旧图 duck 回退 ground_y+offset）
+	var baseline: float = _baseline_at(cell_x, width, baseline_y)
 	var body_top: float = baseline - 390.0
 	var body_bottom: float = baseline
 	for e in _map.get_entities():
@@ -556,7 +560,7 @@ func _entity_blocking(cell_x: int, width: int) -> bool:
 ## 直接生成已完工建筑（OPERATIONAL 状态），跳过建造过程。
 ## 用于：InitialBuildingsList 预置建筑、地形建筑初始化、测试快速部署。
 ## 返回 {ok, building_id, cell_x, width} 或 {ok:false, error}。
-func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) -> Dictionary:
+func spawn_operational_building(def_id: String, cell_x: int, width: int = -1, baseline_y: float = -1.0) -> Dictionary:
 	if _map == null:
 		return {"ok": false, "error": "未设置地图（ConstructionManager.set_map 未调用）"}
 	if not _catalog.is_registered(def_id):
@@ -578,7 +582,7 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 	if not validate_result.ok:
 		return {"ok": false, "error": "选址无效: %s" % validate_result.reason}
 	# 放置校验：选址范围内有实体（玩家/NPC）则拒绝，防止放置后玩家被罩在建筑内
-	if _entity_blocking(cell_x, width):
+	if _entity_blocking(cell_x, width, baseline_y):
 		return {"ok": false, "error": "选址范围内有单位，无法放置"}
 
 	# 阶段 F：建造自动清场（砍树给木材）
@@ -611,9 +615,9 @@ func spawn_operational_building(def_id: String, cell_x: int, width: int = -1) ->
 		building.set_map_reference(_map)
 
 	# 摆放位置：原点在建筑左下角，X=左边缘对齐 cell_x，Y=下边缘对齐建筑基线
-	# （基线逐格取：HD-2D 邻居楼线；旧图 duck 回退 ground_y+offset）
+	# （基线与预览/工地同源：点击深度优先，否则地图口径）
 	var world_x: float = float(cell_x) * CELL_PX
-	var baseline: float = _baseline_at(cell_x, width)
+	var baseline: float = _baseline_at(cell_x, width, baseline_y)
 	var collision_bottom_local: float = 0.0
 	if building is Building:
 		collision_bottom_local = (building as Building).get_collision_bottom_local()
@@ -693,7 +697,7 @@ func upgrade_building(building_id: String) -> Dictionary:
 	if _resources_api != null:
 		var def: Dictionary = _catalog.get_def(typed.def_id)
 		if not def.is_empty():
-			var cost_result := _costs.consume(_costs.extract_def_costs(def, 0.5), region_id, "升级:%s" % typed.def_id)
+			var cost_result := _costs.consume(ScriptBuildingCosts.extract_def_costs(def, 0.5), region_id, "升级:%s" % typed.def_id)
 			if not cost_result.get("ok", false):
 				return cost_result
 	typed.upgrade_level += 1
@@ -723,7 +727,7 @@ func repair_building(building_id: String, _org_id: String) -> Dictionary:
 		var def: Dictionary = _catalog.get_def(typed.def_id)
 		if not def.is_empty():
 			var cost_result := _costs.consume(
-					_costs.extract_def_costs(def, 0.3 * missing_ratio), region_id, "修理:%s" % typed.def_id)
+					ScriptBuildingCosts.extract_def_costs(def, 0.3 * missing_ratio), region_id, "修理:%s" % typed.def_id)
 			if not cost_result.get("ok", false):
 				return cost_result
 	typed.health = typed.max_health

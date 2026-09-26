@@ -11,16 +11,29 @@ tools/worldgen/
 ├── README.md              # 本文档
 ├── requirements.txt       # Python 依赖
 ├── .gitignore             # 忽略 _backup/ 备份与中间产物
-├── l3/                    # L3 大陆生成 + 群系 + 地形着色 + 地区划分（活跃）
+├── l3/                    # L3 大陆生成 + 群系 + 地形着色 + 地区划分 + 世界重生成 V2 链（活跃）
 │   ├── fractal_continent.py        # 分形大陆（8K 高度场 + 河流）
 │   ├── biome_generate.py           # 群系生成（Whittaker 温湿矩阵 → biome_labels_2048.npy + 炎热大陆热区）
 │   ├── biome_params.json           # 群系参数（温度/降水/干旱带/雨影/热区，全外置可调）
 │   ├── terrain_render.py           # 程序着色地形底图（l3_terrain.png + L2 每地区裁切，--install 入 config）
 │   ├── terrain_params.json         # 着色参数（hillshade/明度/岩石雪线/海洋渐变/海岸线/热区暖调）
-│   ├── state_expand_lite.py        # 政权简化版（P7：文化圈锚点 flood-fill + 都城扩张 → political_data.json + 政权底图，--dry-run 免写）
-│   ├── state_params.json           # 政权参数（文化圈锚点/命名表/flood 与扩张系数/容量上限，全外置可调）
 │   ├── region_split.py             # 地区划分（watershed 沿地形切分）
-│   └── region_preview_annotated.py # 地区标注预览
+│   ├── region_preview_annotated.py # 地区标注预览
+│   ├── state_expand_lite.py        # 政权简化版（P7：文化圈锚点 flood-fill + 都城扩张 → political_data.json + 政权底图，--dry-run 免写）
+│   ├── state_params.json           # 政权参数（V2 链共用：fields_v2 / settlements / states_v2 全段外置可调）
+│   ├── fields_common.py            # V2 公共件（路径常量 / 2048 场读取 / FBM / 预览 colormap）
+│   ├── fields_build.py             # A1 场（宜居度/资源/进攻成本 → fields/*.npy + 场预览）
+│   ├── culture_build.py            # A2 文化场（源点 flood → culture_field/mix + culture_preview）
+│   ├── settlement_build.py         # A3 聚落（变半径泊松 → settlements_v2.json + 密度预览）
+│   ├── origin_seed_recover.py      # 填缝①：原地块质心落灰区 → 优先复种点（在通用撒点之前）
+│   ├── fill_gap_seeds.py           # 填缝②：灰缝覆盖驱动撒规模 0 点（--from-labels 按实际划分取缝）
+│   ├── landmass_util.py            # 同陆块约束（4 连通陆块 / 最近陆地传播 / 同陆块回填 / 一城块一陆块收尾）
+│   ├── refine_city_labels.py       # 城块边界 fBm 域扭曲细化（--write；同陆块回填 + 跨块收尾）
+│   ├── city_preview_from_refined.py# 城块终图（refined 场渲染，locked 海岸线口径 + 灰统计）
+│   ├── settle_preview_v2.py        # 聚落撒点图终版（settlements_preview_locations_2048.png）
+│   ├── state_build_v2.py           # A4/A6 政权（划分 + 加速史 + 命名 → political_data_v2 + 政治图/规模谱）
+│   ├── arc_topology.py             # 共享弧拓扑重建（arcs 预览；城块变更后须重跑）
+│   └── bake_political_v2.py        # 政治数据注入（l3_city 双层 + political_data + --l2 包侧）
 ├── l2_export/             # L2/L3 网格提取 + 烘焙 + 全部视图导出（活跃，本次核心）
 │   ├── mesh_extract.py             # 共享顶点网格提取 + Chaikin 平滑 + DP 降顶点
 │   ├── earclip.py                  # 纯 Python 单环耳切剖分
@@ -33,6 +46,7 @@ tools/worldgen/
 │   └── update_tiles_coastline.py   # 按 8K 蒙版裁切海岸线
 ├── l1/                    # L1 地块合并 / 生成 / 全大陆 L1 蒙版（活跃）
 │   ├── city_split_v2.py           # 老 L1 之下细分城市（13 地区 tiles 拼全局 → 城市蒙版，8192 级，1040 城）
+│   ├── city_split_v3.py           # V2 聚落表重切城块（EDT 最近聚落抗衡 + 主张盘封顶 + 同陆块并缝；--labels-only --cached-parent 填缝迭代快跑）
 │   ├── export_l1_view_context.py  # 出生老 L1 视图上下文导出（Tab 数据源，8192 级；--panorama 出世界全景 preview，F8 缩略窗候选底图）
 │   ├── export_l3_l1_view.py          # L3 视觉层双模式（老 L1 矢量 + 城市贴图 + hover 索引图）
 │   ├── export_l2_city_previews.py   # L2 城市模式贴图（每地区 context 尺寸，读 city_preview_8192）
@@ -71,6 +85,77 @@ biome_generate.py ──▶ output/biome_labels_2048.npy + biome_hot_zone_2048.p
         ──▶ config/strategic_map/l3_terrain.png + l2_packs/*/l2_terrain.png（游戏内 TERRAIN 模式底图）
 ```
 
+## 世界重生成 V2 链与验收图管线
+
+> V2 = 在既有大陆/群系/地区之上重做「场 → 文化 → 聚落 → 城块 → 政权」。定稿模型与进度见 `docs/项目/交接/世界模型整合-进度与交接.md` §五；本节是**操作手册**：每一步敲什么、吃什么、产什么、验收图从哪来。
+
+### 阶段流（自上而下，上游产物是下游输入）
+
+```
+fractal_continent / biome_generate / region_split（旧链：大陆/群系/13 地区）
+  └─ l3/fields_build.py     A1 场 → output/fields/{suitability,mineral,fertile,forest,fishsalt,attack_cost}.npy
+                            + fields_preview_{suitability,resources,attack_cost}_2048.png
+     └─ l3/culture_build.py A2 文化 → culture_field/culture_mix.npy + culture_preview_2048.png
+        └─ l3/settlement_build.py  A3 聚落 → settlements_v2.json（1036 正常聚落，坐标 8192 级）
+                                   + settlements_preview_density_2048.png
+           └─ 填缝链改写 settlements_v2.json（追加规模 0 点：原地块复种 + 灰缝撒点，见下）
+              └─ l3/state_build_v2.py  A4/A6 政权 → political_data_v2.json
+                                        + states_v2_preview_{political,spectrum}_2048.png
+```
+
+### 城块划分 + 填缝迭代（定稿操作序列）
+
+```bash
+PY=py -3.12   # PATH 里 Inkscape 自带 python 无 scipy，必须用 py -3.12
+
+# ① 快速试划分（复用已落盘老 L1 蒙版；只算标签场 + 缝隙统计，分钟级）
+$PY l1/city_split_v3.py --labels-only --cached-parent
+#    → output/l1_v2/city_labels_8192.npy；末行「>600px² 块 N 个」是收敛判据
+
+# ② 原地块位置优先复种（创始人定稿顺序：在通用撒点之前）
+$PY l3/origin_seed_recover.py
+#    → submodule 各包 tiles 多边形质心落灰区的，追加为 settlements_v2.json 规模 0 点
+
+# ③ 通用灰缝撒点（>600px² 块、离最近地块 >3px 的孤块不论大小都给点）
+$PY l3/fill_gap_seeds.py --from-labels
+
+# ④ 循环 ①⇄③，直到 ① 末行报「已收敛」（>600px² 块 0）
+
+# ⑤ 全量划分（EDT 生长 / 主张盘封顶 / 同陆块并缝 absorb / 一城块一陆块收尾 / mesh / 配色 / JSON）
+$PY l1/city_split_v3.py --cached-parent
+#    → city_labels_8192.npy + city_data.json + city_partition/city_cities_8192.png
+
+# ⑥ 边界细化（fBm 域扭曲 + 同陆块回填 + 跨陆块收尾）
+$PY l3/refine_city_labels.py --write
+#    → refined_city_labels_8192.npy + output/refine_preview_{海岸段,内陆界}.png
+
+# ⑦ 终图两张
+$PY l3/city_preview_from_refined.py   # city_preview_8192.png（locked 海岸线口径，附灰区统计）
+$PY l3/settle_preview_v2.py           # settlements_preview_locations_2048.png（撒点 + 灰点）
+```
+
+### 验收图 → 生成管线速查
+
+> 验收目录：`F:\VSCode\game-2\temp\v2_rebake\`——各图由下述脚本产到 `output/` 后复制过去（不入库）。
+
+| 验收图 | 生成脚本 | 关键输入 |
+|---|---|---|
+| fields_preview_{suitability,resources,attack_cost}_2048 | `l3/fields_build.py` | 8K 高程 / 群系 / 河湖 → 场 npy |
+| culture_preview_2048 | `l3/culture_build.py` | A1 场 + 群系 |
+| settlements_preview_density_2048 | `l3/settlement_build.py` | settlements_v2.json |
+| settlements_preview_locations_2048 | `l3/settle_preview_v2.py`（终版，覆盖 settlement_build 的初版） | settlements_v2.json + suitability + biome_labels_2048 |
+| city_preview_8192（终图） | `l3/city_preview_from_refined.py` | refined_city_labels_8192.npy + city_data.json 配色 + locked 海岸线 |
+| city_partition_8192 / city_cities_8192 | `l1/city_split_v3.py`（步骤⑤内建预览） | city_labels（未细化） |
+| refine_preview_海岸段 / 内陆界 | `l3/refine_city_labels.py`（自带对比预览） | 旧 labels vs refined 并排 |
+| states_v2_preview_political_2048 / spectrum | `l3/state_build_v2.py`（`--skip-preview` 可关） | political_data_v2 + refined 场 + 聚落表 |
+| river_vectors_preview | `l2_export/river_export.py` | locked 河流 |
+| roads_preview_2048 | `l1/road_generate.py` | 聚落表 + 地形 |
+| arcs_preview_2048 / birth_closeup | `l3/arc_topology.py --write` | 城块 mesh（**城块变更后须重跑**） |
+| blob_preview_2048 / blob_closeup | `l1/blob_bake.py`（现行 R7 代）；重烤走 `l1/blob_v2_generate.py` → `l1/blob_v2_bake.py`，分档参数 = submodule `blob_params.json` levels 段 | 城块 + blob 几何 npz |
+
+- 城块几何更新后（city_labels / refined 变更），arcs、包内道路、political mask 等下游按交接档 §五剩余工作清单重跑；本表只列预览图的直接生成器。
+- `l3/tile_world_*.py`（属性层试验线）已废弃，勿再运行。
+
 ## Demo 工作量展示素材
 
 创始人指示：以下预览图作为对外 Demo 展示的工作量佐证（已 gitignore 白名单入库，路径相对 `tools/worldgen/output/`）：
@@ -86,6 +171,7 @@ biome_generate.py ──▶ output/biome_labels_2048.npy + biome_hot_zone_2048.p
 
 ## 运行注意
 
+- **Python 解释器**：用 `py -3.12`（PATH 里 Inkscape 自带的 python 没有 scipy，直接敲 `python` 会 `ModuleNotFoundError`）。
 - **工作目录**：在 `tools/worldgen/` 根目录运行脚本（部分脚本用 `HERE` 定位 `output/`，已在子目录脚本中用「双 dirname 回退根目录」处理）。
 - **依赖**：`pip install -r requirements.txt`（numpy / PIL / scipy / scikit-image）。
 - **产物同步**：`export_*` 会把运行时素材拷到 `stick-world/config/strategic_map/`，随包发布。

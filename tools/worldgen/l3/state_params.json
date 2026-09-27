@@ -498,8 +498,8 @@
      "6": 0.5
     },
     "spawn_cluster": {
-     "comment": "出生小国群（创始人定向：手动设计出生所在 L1 地块）——出生 L1（49）及 9 个邻接地块内的国家 target 上限 3（1-3 城小国群）+ 都城间距加密（×0.45）让该区多出小国核心",
-     "spawn_settlement_id": "settlement_city_427",
+     "comment": "出生点=创始人早已确定的位置（旧出生包 settlement_city_1036@世界(5865,3251)），V2 同位置映射 settlement_city_399；b604d34 轮自行改定 city_427/关洋湾已废弃。l1_labels 保护圈仍为 427 邻域，待创始人裁决（挪到 399 邻域或删除小国群设计）",
+     "spawn_settlement_id": "settlement_city_399",
      "l1_labels": [
       38,
       39,

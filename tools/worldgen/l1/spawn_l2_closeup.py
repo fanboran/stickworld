@@ -55,7 +55,7 @@ def main():
             continue
         polys = g.mask_to_polys(mask, c["sid"], ox, oy, p, info.get("scale", 1.0))
         polys, _cut = g.clip_polys_to_tile(polys, c, p["contour"])
-        is_spawn = c["sid"] == "settlement_city_427"
+        is_spawn = (abs(c["wx"] - sx) < 60 and abs(c["wy"] - sy) < 60)
         for outer, holes in polys:
             pts = [((px - x0) * k, (py - y0) * k) for px, py in outer]
             if is_spawn:
@@ -74,7 +74,7 @@ def main():
     mx, my = (sx - x0) * k, (sy - y0) * k
     for r, col in ((26, (255, 80, 60, 90)), (7, (255, 80, 60, 200))):
         dr.ellipse([mx - r, my - r, mx + r, my + r], outline=col, width=3)
-    dr.text((mx + 32, my - 10), "关洋湾（出生点·lv2·ps0.29）", fill=(255, 235, 220, 255))
+    dr.text((mx + 32, my - 10), "出生点（创始人定：旧包1036位置 → V2 city_399）", fill=(255, 235, 220, 255))
 
     dst = os.path.join(OUTPUT_DIR, "spawn_l2_closeup.png")
     img.save(dst)

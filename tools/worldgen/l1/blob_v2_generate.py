@@ -718,7 +718,20 @@ def generate_city(city, ctx, p, lv_bands, fbm_cache):
         out[tier] = (polys, info)
         if polys:
             region_polys = polys
-    return {t: out[t] for t in TIER_ORDER}
+    # 独立档 'ps'：按城自身 population_score 连续算一版（不参与链式嵌套，
+    # 仅供概览预览连续正比画；三档叠画消费链不变）
+    mask, info, (wx0, wy0) = city_field_mask(city, float(city.get("ps", 0.0)), 9,
+                                             ctx, p, lv_bands, fbm_cache, None)
+    polys = []
+    if mask.any():
+        polys = mask_to_polys(mask, city["sid"], wx0, wy0, p, info.get("scale", 1.0))
+        polys, cut = clip_polys_to_tile(polys, city, p["contour"])
+        if cut > 1.0:
+            info["clip_cut"] = int(cut)
+        info["n_outer"] = len(polys)
+        info["n_holes"] = sum(len(h) for _, h in polys)
+    out["ps"] = (polys, info)
+    return {t: out[t] for t in tuple(TIER_ORDER) + ("ps",)}
 
 
 def box_counting_dim_pts(pts, eps_list):
@@ -905,10 +918,10 @@ def render_overview(ctx, cities_order, results):
     n = 0
     for c in cities_order:
         r = results.get(c["sid"])
-        if not r or not r["polys"]["mid"]:
+        if not r or not (r["polys"].get("ps") or r["polys"]["mid"]):
             continue
-        tier = "low" if c["ps"] < 0.35 else ("mid" if c["ps"] < 0.65 else "high")
-        for outer, _holes in r["polys"][tier] or r["polys"]["mid"]:
+        tier = "ps"   # 连续正比：按城自身规模独立档画（创始人 2026-09-27）
+        for outer, _holes in r["polys"].get(tier) or r["polys"]["mid"]:
             pts = [(x / k, y / k) for x, y in outer]
             if len(pts) >= 3:
                 dr.polygon(pts, fill=(198, 188, 170, 150), outline=(70, 62, 50, 200))

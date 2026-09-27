@@ -994,14 +994,14 @@ def main():
     for n, c in enumerate(order):
         fbm_cache = {}                      # 每城独立（3 档共享同窗 fBm），防全量内存累积
         by_tier = generate_city(c, ctx, p, lv_bands, fbm_cache)
-        polys_by_tier = {t: by_tier[t][0] for t in TIER_ORDER}
-        info_by_tier = {t: by_tier[t][1] for t in TIER_ORDER}
+        polys_by_tier = {t: by_tier[t][0] for t in tuple(TIER_ORDER) + ("ps",)}
+        info_by_tier = {t: by_tier[t][1] for t in tuple(TIER_ORDER) + ("ps",)}
         results[c["sid"]] = {"polys": polys_by_tier, "info": info_by_tier,
                              "biome": city_biome(c)}
         stats[c["sid"]] = {"level": c["level"], "ps": c["ps"],
                            "tiers": {t: {k: (round(v, 3) if isinstance(v, float) else v)
                                          for k, v in info_by_tier[t].items()}
-                                     for t in TIER_ORDER}}
+                                     for t in tuple(TIER_ORDER) + ("ps",)}}
         if (n + 1) % 100 == 0:
             print("  ... %d/%d 城（%.0fs）" % (n + 1, len(order), time.time() - t0))
     print("[v2] 管线完成 %.1fs" % (time.time() - t0))

@@ -64,16 +64,13 @@ def djb2(s: str) -> int:
 
 
 def r_ref_of(level, s, area_p, lv_bands):
-    """尺度半径（归一化，创始人 2026-09-27：剪影按面积成正比 + 整体缩小）：
-    目标面积线性 A(s) = a_min + (a_max−a_min)·s（s=population_score 0..1），
-    半径开根号导出 R = sqrt(A/(π·k))——面积严格随规模线性，不再按 level 分带、
-    不按直径映射（直径映射面积二次膨胀）。a_min/a_max 取 area 段
-    （a_max=大城地块容量 p75，整体收缩让大城基本装进自己地块）。level 仅保签容错。"""
+    """尺度半径（归一化，创始人 2026-09-27 口径）：
+    A(s) = a_max·s 过零——面积严格与规模成正比、空城面积为 0；
+    半径开根号导出 R = sqrt(A/(πk))；不按 level 分带、不按下限垫底。
+    装不下时由 max_fill 顶格缩到地块装得下为止（随机形状随 τ 自然重采样）。"""
     k = float(area_p.get("k", 0.9))
-    a_min = float(area_p.get("a_min_px2", 600.0))
     a_max = float(area_p.get("a_max_px2", 12000.0))
-    a = a_min + (a_max - a_min) * max(s, 0.0)
-    return math.sqrt(a / (math.pi * k))
+    return math.sqrt(max(a_max * max(s, 0.0), 0.0) / (math.pi * k))
 
 
 # ==================== 输入加载 ====================
@@ -399,8 +396,18 @@ def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache, region_polys
     ld = ctx["world"]["land"][wy0:wy0 + W, wx0:wx0 + W]
     excl = (ld & (~wt) & (sl < p["exclusion"]["slope_hard"])).astype(np.float32)
     # 6.5 城块净空带：界内侧 margin 内禁建，并进排除层（τ 反解/种子/绿楔自动继承）
-    # ——建成区从源头缩回界内，不再靠剪裁切出直线硬边
-    clear = tile_clear_mask(city, wx0, wy0, W, float(p["contour"]["tile_clear_margin"]))
+    # ——建成区从源头缩回界内，不再靠剪裁切出直线硬边。
+    # 净空带自适应降档（创始人 2026-09-27：装不下就缩到装得下为止）：判据 =
+    # 可建区装得下本档目标面积才接受该 margin，装不下逐级 40→24→12→6→0；
+    # margin 0 仍装不下 = 地块容量不足，交给 max_fill 顶格填（纯地形性无建成区仍合法）
+    a_target = math.pi * r_ref * r_ref * float(p["area"]["k"])
+    base_margin = float(p["contour"]["tile_clear_margin"])
+    for margin in [base_margin, base_margin * 0.6, base_margin * 0.3,
+                   base_margin * 0.15, 0.0]:
+        clear = tile_clear_mask(city, wx0, wy0, W, margin)
+        buildable = excl if clear is None else (excl * clear)
+        if buildable.sum() >= a_target:
+            break
     if clear is not None:
         excl *= clear
     if region_polys:

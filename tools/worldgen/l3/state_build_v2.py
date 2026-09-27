@@ -1120,34 +1120,19 @@ def make_previews(P, suit, eff_land, cities, owner, states_out, meta):
     if (lab < 0).any():
         rgb[lab < 0] = np.array(WASTELAND_RGB, dtype=np.uint8)  # 城块场 0=无主荒地
     landm = eff_land
-    # 荒地掩膜（仅 Voronoi 回退路线）：城的「主张盘」之外的无城陆地
-    claim = np.zeros((S, S), dtype=bool)
-    if lab.min() >= 0:
-        claim[:] = True  # 真实场路线：荒地已由 lab<0 表达，跳过圆盘裁剪
-    ssp = P["fields_v2"]["settlements"]
-    su = np.asarray(suit, dtype=np.float32)
-    cap_px = float(ssp.get("claim_cap_px", 110.0))
-    r_min = float(ssp.get("r_min_px", 60.0))
-    r_max = float(ssp.get("r_max_px", 260.0))
-    rc = float(ssp.get("radius_curve", 2.0))
-    s_min = float(ssp.get("suit_min", 0.05))
-    for c in cities:
-        sv = float(su[min(int(c["y"] / K), S - 1), min(int(c["x"] / K), S - 1)])
-        t = max(0.0, min(1.0, (sv - s_min) / max(1.0 - s_min, 1e-6)))
-        r_px = (r_max - (r_max - r_min) * (t ** rc)) / K
-        r_use = min(r_px, cap_px / K)
-        cx, cy = c["x"] / K, c["y"] / K
-        x0, x1 = max(0, int(cx - r_use)), min(S, int(cx + r_use) + 1)
-        y0, y1 = max(0, int(cy - r_use)), min(S, int(cy + r_use) + 1)
-        if x1 <= x0 or y1 <= y0:
-            continue
-        yy, xx = np.mgrid[y0:y1, x0:x1]
-        claim[y0:y1, x0:x1] |= ((yy - cy) ** 2 + (xx - cx) ** 2) <= r_use * r_use
-    wasteland = landm & (~claim)
-    rgb[wasteland] = WASTELAND_RGB
+    # 城块场直出（创始人 2026-09-28：政治图=地块图换上色，无圆盘无 Voronoi 裁剪）：
+    # 块色=归属国色；lab<0 由 landm 分流——海=洋色、陆上无主=荒地灰
+    rgb = lut[lab_clip + 1]
+    rgb[lab < 0] = WASTELAND_RGB
     rgb[~landm] = OCEAN_RGB
-    b_h = (lab[1:, :] != lab[:-1, :]) & landm[1:, :] & landm[:-1, :]
-    b_w = (lab[:, 1:] != lab[:, :-1]) & landm[:, 1:] & landm[:, :-1]
+    # 国界按归属国（不按块）：相邻像素归属国不同即描暗线
+    sid_idx = {sid: i + 1 for i, sid in enumerate(live)}
+    own_int = np.zeros(len(cities) + 1, dtype=np.int32)
+    for i, c in enumerate(cities):
+        own_int[i + 1] = sid_idx.get(owner[c["label"] - 1], 0)
+    own_lab = own_int[lab_clip + 1]
+    b_h = (own_lab[1:, :] != own_lab[:-1, :]) & landm[1:, :] & landm[:-1, :]
+    b_w = (own_lab[:, 1:] != own_lab[:, :-1]) & landm[:, 1:] & landm[:, :-1]
     dark = (rgb * 0.35).astype(np.uint8)
     rgb[1:, :][b_h] = dark[1:, :][b_h]
     rgb[:, 1:][b_w] = dark[:, 1:][b_w]
@@ -1179,7 +1164,7 @@ def make_previews(P, suit, eff_land, cities, owner, states_out, meta):
             % (len(states_out), meta["n_cities"]), font=font,
             fill=(240, 240, 245))
     d2.text((S + 18, 52), "白圈=都城（大圈=12+ 城强权）· 白点=城市 · 暗线=国界"
-            "（最近城 Voronoi 视觉聚合，正式 ID mask 由棒 4 重烤）",
+            "（城块场直出：地块换国色，国界按归属描线）",
             font=font_s, fill=(170, 175, 185))
     top = sorted(live, key=lambda s: (-states_out[s]["n_cities"], s))[:24]
     for i, sid in enumerate(top):

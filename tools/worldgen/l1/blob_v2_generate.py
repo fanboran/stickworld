@@ -65,12 +65,12 @@ def djb2(s: str) -> int:
 
 def r_ref_of(level, s, area_p, lv_bands):
     """尺度半径（归一化，创始人 2026-09-27 口径）：
-    A(s) = a_max·s 过零——面积严格与规模成正比、空城面积为 0；
-    半径开根号导出 R = sqrt(A/(πk))；不按 level 分带、不按下限垫底。
-    装不下时由 max_fill 顶格缩到地块装得下为止（随机形状随 τ 自然重采样）。"""
-    k = float(area_p.get("k", 0.9))
-    a_max = float(area_p.get("a_max_px2", 12000.0))
-    return math.sqrt(max(a_max * max(s, 0.0), 0.0) / (math.pi * k))
+    R(ps) = r0 + r1·ps（8192 级 = 撒点图 settle_preview_v2 的 r=2.0+7.5·ps@2048 ×4）——
+    剪影直径逐城等于城市规模撒点图的点直径（面积随规模平方放大，同撒点观感跨度）。
+    装不下时由 max_fill 顶格缩到地块装得下为止。"""
+    r0 = float(area_p.get("r0_px", 8.0))
+    r1 = float(area_p.get("r1_px", 30.0))
+    return r0 + r1 * max(s, 0.0)
 
 
 # ==================== 输入加载 ====================

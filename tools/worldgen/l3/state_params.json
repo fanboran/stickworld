@@ -498,19 +498,11 @@
      "6": 0.5
     },
     "spawn_cluster": {
-     "comment": "出生点=创始人早已确定的位置（旧出生包 settlement_city_1036@世界(5865,3251)），V2 同位置映射 settlement_city_399；b604d34 轮自行改定 city_427/关洋湾已废弃。l1_labels 保护圈仍为 427 邻域，待创始人裁决（挪到 399 邻域或删除小国群设计）",
+     "comment": "出生小国群（创始人定向保留，2026-09-28 迁至真出生点）：出生 L1(69) 及邻接 68 内国家 target 上限 3（1-3 城小国群）+ 都城间距加密（×0.45）；出生点=创始人已定位置映射 city_399",
      "spawn_settlement_id": "settlement_city_399",
      "l1_labels": [
-      38,
-      39,
-      40,
-      43,
-      44,
-      45,
-      46,
-      48,
-      49,
-      50
+      69,
+      68
      ],
      "max_cities": 3,
      "capital_sep_mult": 0.45
@@ -584,16 +576,8 @@
     "flip_mix_min": 0.3,
     "collapse_island_max": 30,
     "spawn_protect_l1": [
-     38,
-     39,
-     40,
-     43,
-     44,
-     45,
-     46,
-     48,
-     49,
-     50
+     69,
+     68
     ],
     "spawn_protect_comment": "出生圈老 L1 列表：区内国不参与 A6 兼并（手设计小国群版图稳定）"
    },

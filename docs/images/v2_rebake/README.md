@@ -44,9 +44,9 @@
 
 ## E · 视觉表现
 
-![blob 城市轮廓全图](blob_preview_2048.png)
+![blob 城市剪影全图](blob_v2_preview_2048.png)
 
-![blob 代表城特写](blob_closeup.png)
+![blob 代表城特写](blob_v2_closeup.png)
 
 ---
 
@@ -68,10 +68,10 @@
 | C1 规模谱直方图 | 先验/target/终局三系列——"上百小政权"起点形态：大量 1-3 城小国 + 少量区域大国 | `l3/state_build_v2.py` 内建 |
 | D1 河流矢量 | 注入 70 包的河流折线（贴地形、顺流向） | `l2_export/river_export.py` |
 | D2 道路网络 | 2185 条城间道路贴地形折线（绕山不走崖），跨包接缝连续；连接正常聚落（原址点不修路） | `l1/road_generate.py` |
-| E1 blob 轮廓全图 | 城市在战略图上的有机形状轮廓（现行径向容量管线：16 方向地形容量，被山卡被水卡→不规则形）；level≥3 城画轮廓、其余锚点 | `l1/blob_preview_v2world.py`（旧管线公式接 V2 聚落表） |
-| E2 blob 代表城特写 | 出生城 + 容量跨度最大 3 城，三档嵌套轮廓（黄 s=0.2/青 s=0.5/红 s=0.9，白色辐射条=该方向生长容量）；三档差异由 submodule `blob_params.json` levels/gamma 段控制 | `l1/blob_preview_v2world.py` |
+| E1 blob 城市剪影全图 | 城市剪影（**现行 R5 场叠加管线**——与游戏内 Tab 城区图同源；场场叠加→阈值→marching squares，建成区限自身城块内，地块不规则→形状有机多样） | `l1/blob_v2_generate.py` |
+| E2 blob 代表城特写 | 出生城 + 代表城三档嵌套（low/mid/high 随人口切档）；档差由 submodule `blob_params.json` levels 段 + `blob_v2_params.json` 控制 | `l1/blob_v2_generate.py` |
 
 > 原 D3/D4（弧拓扑预览）已退出验收清单：渲染与 B3 同源同观感，其真正产出是矢量数据与内部指标（共享弧配对率、面积守恒）——降为管线自检（`l3/arc_topology.py`，收线时 `--write` 落地），观感以实机描边为准。
 > 原政权政治图已退出验收清单：与 B3 城块图同底不同色（重复），且其生成端预览器仍是主张盘圆渲染（退役模型残留）；政权归属数据以 `political_data_v2.json` 为准，政治观感走实机。
 > 出生点确认：关洋湾（`settlement_city_427`，2 城小国都城）——在 B3 城块图出生区可见其地块。
-> 游戏包烘焙（blob 贴图、属性回写、mask 重导）随交接档 §五收尾清单执行。
+> 游戏包烘焙（blob 三档贴图 `blob_v2_bake.py`、属性回写、mask 重导）随交接档 §五收尾清单执行——烘焙后游戏内 Tab 城区图即切换为 V2 世界的城市剪影。

@@ -120,8 +120,8 @@ $PY l3/city_preview_from_refined.py   # city_preview_8192.png（locked 海岸线
 $PY l3/settle_preview_v2.py           # settlements_preview_locations_2048.png（撒点 + 灰点）
 $PY l3/state_build_v2.py              # 政权 + states_v2_preview_{political,spectrum}_2048.png
 
-# ④ blob 验收图（旧管线形状公式 + V2 世界数据，不写游戏包）
-$PY l1/blob_preview_v2world.py        # blob_preview_2048.png + blob_closeup.png
+# ④ blob 验收图（现行 R5 场叠加管线——与游戏内 Tab 城区图同源；只出预览不写游戏包）
+$PY l1/blob_v2_generate.py            # blob_v2_preview_2048.png + blob_v2_closeup.png
 ```
 
 ### 验收图 → 生成管线速查
@@ -140,7 +140,7 @@ $PY l1/blob_preview_v2world.py        # blob_preview_2048.png + blob_closeup.png
 | states_v2_preview_political_2048 / spectrum | `l3/state_build_v2.py`（`--skip-preview` 可关） | political_data_v2 + refined 场 + 聚落表 |
 | river_vectors_preview | `l2_export/river_export.py` | locked 河流 |
 | roads_preview_2048 | `l1/road_generate.py` | 聚落表 + 地形 |
-| blob_preview_2048 / blob_closeup | `l1/blob_preview_v2world.py`（旧径向管线形状公式接 V2 聚落表；分档参数 = submodule `blob_params.json` levels 段） | settlements_v2 + 高度场/河湖/locked 陆 |
+| blob_v2_preview_2048 / blob_v2_closeup | `l1/blob_v2_generate.py`（现行 R5 场叠加管线，产 blob_low/mid/high 烘焙源几何；分档参数 = submodule `blob_params.json` levels 段 + `l1/blob_v2_params.json`） | settlements_v2 + 城块多边形 + 地形场 |
 
 - `l3/arc_topology.py`（共享弧拓扑 → political_mesh）：**管线自检工具，不出验收图**——城块几何定稿收线时 `--write` 落地，指标（弧配对率/面积守恒）进交接档。
 

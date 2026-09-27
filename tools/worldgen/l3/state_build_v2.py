@@ -1,21 +1,16 @@
-"""世界重生成 v2 A4+A6：国家生成（state_build_v2.py）
+"""世界重生成 v2：国家生成 · 都城自适应涌现（state_build_v2.py）
 
-算法提案 §A4（随机规模谱 + 自然合并）+ §A6（生成期加速历史）+ 构型命名（已圈选）：
-  1. 都城抽取：都城适宜性 = 资源禀赋项 × 文化中心性（主导文化「场强质心」距离的
-     exp 反比，温度口径同 fields_meta strength_temp 的消费式），四叉树最小间距
-     自适应筛选 N_c 个都城；N_c 由规模谱均值反推（N_c ≈ 总城数 / 谱均值）
-  2. 规模目标采样：每国 target ~ 截断对数正态（median/sigma/cap/floor 参数化），
-     Σtarget = 总城数（尺度二分 + 最大余数整数化）；再做「局地可行池」钳制
-     （target ≤ 都城 local_reach 内可达城数，缺额按余量摊回——贫瘠区州小、
-     富庶区州大）。规模谱直方图是核心验收（必产 png + 全表进 meta）
-  3. 加权合并：kNN 城图（分量桥接兜底孤岛；不选 Delaunay——长薄三角形边跨海
-     跨山无语义），静态边权 = attack_cost 沿线积分 × (1 + k_culture×(1-城对
-     文化相似度))；Dijkstra 松弛时乘每态因子 (1/expansionism_i) ×
-     (1 + k_capital×距都城 px 测地衰减) × w_i 面积反馈（Balzer 式迭代到采样
-     target）；normalize 消飞地（过渡带放宽——相似文化小飞地保留）
-  4. A6 加速历史：K 轮随机事件（兼并战 / 继承解体 / 边疆易手），判据全部
-     attack_cost × 文化相似度；兴衰史计数进 meta.history（「打出来的版图」
-     可追溯）；K=0 退化纯分配
+机制（创始人 2026-09-28 定向：都城不再预摆，政权与都城均由兼并涌现）：
+  1. 微核起步：全部正常聚落（level>0）初始各自成一个微核政权；规模谱只用于
+     反推「期望政权数」N_c（N_c ≈ 总城数 / 谱均值），不再有逐国 target
+  2. 文化加权/邻接兼并（复用 A4/A6 的静态边权）：kNN 城图（分量桥接兜底孤岛）
+     上静态边权 = attack_cost 沿线积分 × (1 + k_culture×(1-城对文化相似度))；
+     按最廉价边优先（Kruskal 式，文化近亲 + 地理便宜先并）迭代兼并，直至存活
+     政权数 == N_c。兼并只走城图邻接边、限同岛群、规模不超谱 cap
+  3. 出生区约束（换表达）：L1 69/68（spectrum.spawn_cluster.l1_labels）内的政权
+     规模封顶 max_cities（3）城——合并到此即停，不许长成大国；无任何间距参数
+  4. 都城 = 国内 population_score 最高（并列取 label 小）的城；国文化按名下城
+     主导文化多数派归因
   5. 构型命名：每文化语素库自 culture_sources.morph_seed 派生（声母字库按语系
      共享、韵母/后缀按生计原型分档、荒野文化用中性库），政权名/城市名 =
      [方位前缀]+词根+后缀 合成，全局去重、长度约束；生成名全部「提案/待定」
@@ -37,7 +32,6 @@
 """
 
 import argparse
-import heapq
 import json
 import math
 import os
@@ -51,7 +45,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fields_common as fc  # noqa: E402
 import palette  # noqa: E402  （政权色唯一真相源，只调用）
 import settlement_build as sb  # noqa: E402  （bilinear_at / load_fields_2048 复用）
-from state_expand_lite import _SeedQuadtree, _bridge_components  # noqa: E402  （借用不改）
+from state_expand_lite import _bridge_components  # noqa: E402  （借用不改）
 
 K = fc.SIZE_FULL // fc.SIZE  # 4：8192 坐标 → 2048 场网格缩比
 FIELDS_DIR = fc.FIELDS_DIR
@@ -82,56 +76,14 @@ def load_inputs():
     return settle, sources, simj, suit, res, dom, mix, eff_land, strength, attack
 
 
-def culture_centroids(dom, strength, eff_land):
-    """每文化「场强质心」（2048 级强度加权质心 → 8192 级坐标；A4 文化中心性用）。"""
-    n_cult = int(dom.max())
-    yy, xx = np.indices(dom.shape, dtype=np.float64)
-    cents = {}
-    for c in range(1, n_cult + 1):
-        w = np.where((dom == c) & eff_land, strength, 0.0).astype(np.float64)
-        tw = float(w.sum())
-        if tw <= 1e-9:
-            cents[c] = None
-            continue
-        cents[c] = (float((w * xx).sum() / tw) * K, float((w * yy).sum() / tw) * K)
-    return cents
+def build_city_attrs(settle):
+    """城属性补全：label/sid/坐标/主导文化/混合度/人口/规模档 + 岛群与老 L1 归属。
 
-
-def build_city_attrs(settle, suit, res, cents, cap_p, ssp):
-    """城属性补全：都城适宜性 = 资源禀赋项 × 文化中心性。
-
-    资源禀赋项复用 settlements 的 h 口径（h_w_suit×宜居 + h_w_res×
-    tanh(资源加权和/gain_norm)，城点双线性采样）；文化中心性 =
-    exp(-城到主导文化场强质心的欧氏距离 / central_tau_px)，dominant=0（荒野）
-    中心性 = 0 不参选都城。节点序 = label 序（index = label-1）。
+    都城不再预选（涌现制），故不再算都城适宜度；都城由各国按 population_score
+    选（见 emerge_states / finalize_capitals）。节点序 = label 序（index = label-1）。
     """
-    rw = ssp["resource_weights"]
-    gn = float(ssp["gain_norm"])
-    hws = float(ssp["h_w_suit"])
-    hwr = float(ssp["h_w_res"])
-    tau = float(cap_p["central_tau_px"])
-    cap_p0 = float(cap_p.get("cap_pop_base", 0.55))
-    cap_p1 = float(cap_p.get("cap_pop_span", 0.9))
-    cap_l1 = float(cap_p.get("cap_level1_discount", 0.35))
     cities = []
     for c in sorted(settle, key=lambda x: int(x["label"])):
-        s = sb.bilinear_at(suit, c["x"], c["y"])
-        r = 0.0
-        for rk, wk in rw.items():
-            r += float(wk) * sb.bilinear_at(res[rk], c["x"], c["y"])
-        r = math.tanh(r / gn)
-        geo = hws * s + hwr * r
-        cen = cents.get(int(c["dominant"]))
-        if cen is None:
-            cent = 0.0
-        else:
-            cent = math.exp(-math.hypot(c["x"] - cen[0], c["y"] - cen[1]) / tau)
-        # 都城适宜性含人口因子（大城更可能为都：都城=政权心脏，村庄都城观感错位；
-        # 软权重不硬排除——1 城邦的村城仍可当都）+ level 1 折扣
-        lv = int(c.get("level", 1))
-        pop_f = cap_p0 + cap_p1 * float(c["population_score"])
-        if lv <= 1:
-            pop_f *= cap_l1
         cities.append({
             "label": int(c["label"]),
             "sid": sid_of(c["label"]),
@@ -139,7 +91,7 @@ def build_city_attrs(settle, suit, res, cents, cap_p, ssp):
             "dom": int(c["dominant"]),
             "mix": float(c["mix"]),
             "pop": float(c["population_score"]),
-            "geo": geo, "cap_suit": geo * cent * pop_f,
+            "level": int(c.get("level", 1)),
         })
     _tag_island_groups(cities)
     return cities
@@ -265,174 +217,122 @@ def sample_spectrum(n_total, spec, rng):
     return n_c, [int(x) for x in base], obs
 
 
-def _dijkstra_count_within(pxadj, src, reach):
-    """px 测地距离 ≤ reach 的可达城数（截断 Dijkstra，含自身）。"""
-    dist = {src: 0.0}
-    heap = [(0.0, src)]
-    cnt = 0
-    while heap:
-        d, u = heapq.heappop(heap)
-        if d > dist.get(u, math.inf) + 1e-9:
-            continue
-        cnt += 1
-        for v, w in pxadj[u]:
-            nd = d + w
-            if nd <= reach and nd < dist.get(v, math.inf) - 1e-9:
-                dist[v] = nd
-                heapq.heappush(heap, (nd, v))
-    return cnt
+# ---------- 微核涌现合并（都城自适应） ----------
+
+def _city_nbr_w(adj, i, j):
+    """城 i 到邻城 j 的静态边权（build_graph 产物；找不到 = inf）。"""
+    for v, w in adj[i]:
+        if v == j:
+            return w
+    return math.inf
 
 
-def _spawn_xy(settle, spec):
-    """出生点坐标（settlements_v2 里按 spawn_settlement_id 查；未配置/查不到=None）。"""
-    sid = str(spec.get("spawn_settlement_id", "settlement_city_427"))
-    for s in settle:
-        if s.get("settlement_id") == sid:
-            return (float(s["x"]), float(s["y"]))
-    return None
+def emerge_states(cities, adj, edges, cap, spawn_labels, spawn_cap, n_target):
+    """微核起步 + 最廉价边优先兼并，直到政权数 == n_target（都城自适应涌现）。
 
-
-def tilt_targets_by_region(targets, cap_picks, spec, spawn_xy):
-    """碎度地区化（创始人定向：沙漠/极地天生更碎，富庶区易生大国）+ 出生点
-    小国群（出生地块附近一堆几城小国）。
-
-    每国 target × 都城所在群系的 tilt 因子（贫瘠<1 更碎、富庶>1 更大）；
-    出生点半径内国家 target clamp 上限；最后按比例归一化回 Σ 守恒
-    （国数不变，只改规模分配）。spawn_xy 为 None 时跳过后半段。
+    全部 level>0 聚落初始各自成微核；静态边权（build_graph 的 attack_cost×
+    culture 因子）按 (w, i, j) 升序处理，两端属不同政权、同岛群、且合并后不超
+    上限时兼并（winner = 城数多者，并列比人口、再比 label 小）——文化近亲 +
+    地理便宜先并，即「打出来的版图」在生成期的确定性加速版。上限 = 谱 cap；
+    出生 L1（spawn_labels）政权封顶 spawn_cap（合并到此即停、不许长成大国）。
+    返回 (owner, states, n_merge, n_core)；level==0 填充点暂不归属（owner=-1，
+    由 assign_orphans 收尾）。
     """
-    tilt = spec.get("region_tilt", {})
-    raw = []
-    for cap, t in zip(cap_picks, targets):
-        f = float(tilt.get(str(cap.get("biome", 1)), 1.0))
-        raw.append(max(float(t) * f, 1.0))
-    spawn_cfg = spec.get("spawn_cluster", {})
-    if spawn_cfg:
-        labels = set(int(v) for v in spawn_cfg.get("l1_labels", []))
-        m = float(spawn_cfg.get("max_cities", 3.0))
-        if labels:
-            for i, cap in enumerate(cap_picks):
-                if int(cap.get("l1", 0)) in labels:
-                    raw[i] = min(raw[i], m)
-    s_now, s_goal = sum(raw), sum(targets)
-    if s_now <= 0:
-        return targets
-    cap_hi = int(spec.get("cap", 18))
-    out = [max(min(int(round(v * s_goal / s_now)), cap_hi), 1) for v in raw]
-    # 出生区 clamp 后置（归一化乘系数会放大 clamp，必须最后再钳一次）
-    if spawn_cfg and spawn_cfg.get("l1_labels"):
-        labels = set(int(v) for v in spawn_cfg["l1_labels"])
-        m2 = int(spawn_cfg.get("max_cities", 3))
-        for i, cap in enumerate(cap_picks):
-            if int(cap.get("l1", 0)) in labels:
-                out[i] = min(out[i], m2)
-    return out
+    n = len(cities)
+    is_core = [cities[u]["level"] > 0 for u in range(n)]
+    core = [u for u in range(n) if is_core[u]]
+    parent = list(range(n))
+    size = [1] * n
+    grp = [cities[u].get("grp", 0) for u in range(n)]
+    spawn = [int(cities[u].get("l1", 0)) in spawn_labels for u in range(n)]
+    maxpop = [cities[u]["pop"] for u in range(n)]
+    minlab = [cities[u]["label"] for u in range(n)]
+    annexed = [0] * n
 
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
 
-def clamp_targets_to_pools(targets, cap_nodes, pxadj, spec, cap):
-    """局地可行池钳制（reach 圆池，保谱形）：target ≤ 都城 local_reach 内可达城数。
-
-    缺额按余量（min(pool, cap) − t）比例摊回；池总和不足时逐轮 ×1.3 放宽
-    reach（确定性，必收敛）。圆池互相重叠、不作联合硬界——联合可行性由
-    normalize 规模带天花板 + reclaim 带内流动收尾保证（保谱形优先）。
-    """
-    n_total = int(sum(targets))
-    reach = float(spec["local_reach_px"])
-    for _ in range(24):
-        pools = np.array([_dijkstra_count_within(pxadj, nd, reach)
-                          for nd in cap_nodes], dtype=np.int64)
-        ub = np.minimum(pools, cap)
-        t = np.minimum(np.array(targets, dtype=np.int64), ub)
-        deficit = n_total - int(t.sum())
-        if deficit <= 0:
-            return [int(x) for x in t], pools, reach
-        head = ub - t
-        if int(head.sum()) < deficit:
-            reach *= 1.3
-            continue
-        exact = deficit * head / head.sum()
-        add = np.floor(exact).astype(np.int64)
-        add = np.minimum(add, head)
-        rem = deficit - int(add.sum())
-        order = np.lexsort((np.arange(len(t)), -(exact - add)))
-        i = 0
-        while rem > 0 and i < len(t) * 4:
-            k = int(order[i % len(t)])
-            if add[k] < head[k]:
-                add[k] += 1
-                rem -= 1
-            i += 1
-        t = t + add
-        if int(t.sum()) == n_total:
-            return [int(x) for x in t], pools, reach
-        reach *= 1.3
-    raise RuntimeError("局地可行池钳制未收敛（reach=%s）" % reach)
-
-
-# ---------- 都城抽取（A4-1） ----------
-
-def pick_capitals(cities, n_c, cap_p, spawn_cfg=None):
-    """都城适宜性降序 + 四叉树最小间距自适应放宽（state_expand_lite 同族）。
-
-    先按岛群配额占席（同岛更易统一：城数 ≥ grp_quota_min 的岛群至少 1 都城），
-    再出生区加密占席（创始人定向：出生 L1 地块附近一堆 1-3 城小国——更小的
-    间距让该区多出都城=多出小国核心），最后全局按分排序补齐。"""
-    pool = sorted(cities, key=lambda c: (-c["cap_suit"], c["label"]))
-    sep0 = float(cap_p["min_sep_px"])
-    quota_min = int(cap_p.get("grp_quota_min", 3))
-    grp_city = {}
-    for c in cities:
-        grp_city.setdefault(c.get("grp", 0), []).append(c)
-    big_grps = [g for g, cs in grp_city.items()
-                if len(cs) >= quota_min and g > 0]
-    picks = []
-    for relax in range(int(cap_p["max_relax_rounds"]) + 1):
-        sep = sep0 * (float(cap_p["sep_relax"]) ** relax)
-        qt = _SeedQuadtree(0.0, 0.0, float(fc.SIZE_FULL), float(fc.SIZE_FULL))
-        picks = []
-        # 阶段零：出生区加密（每城都有资格当都——间距 = sep×mult）
-        if spawn_cfg:
-            labels = set(int(v) for v in spawn_cfg.get("l1_labels", []))
-            mult = float(spawn_cfg.get("capital_sep_mult", 0.45))
-            sep_s = sep * mult
-            sp_pool = [c for c in pool if int(c.get("l1", 0)) in labels]
-            for c in sp_pool:
-                if not qt.has_within(float(c["x"]), float(c["y"]), sep_s):
-                    qt.insert(float(c["x"]), float(c["y"]))
-                    picks.append(c)
-        # 阶段一：岛群配额（每大群 1 席，群内按 cap_suit 降序试间距）
-        for g in sorted(big_grps):
-            for c in sorted(grp_city[g], key=lambda x: (-x["cap_suit"], x["label"])):
-                if not qt.has_within(float(c["x"]), float(c["y"]), sep):
-                    qt.insert(float(c["x"]), float(c["y"]))
-                    picks.append(c)
-                    break
-        # 阶段二：全局补齐（小岛群限 1 都城——岛内统一；大群/大陆不限）
-        cap_single = int(cap_p.get("grp_single_max_cities", 30))
-        grp_cap_n = Counter(c.get("grp", 0) for c in picks)
-        for c in pool:
-            if len(picks) >= n_c:
-                break
-            g = c.get("grp", 0)
-            if g != 0 and len(grp_city.get(g, [])) <= cap_single                     and grp_cap_n.get(g, 0) >= 1:
-                continue
-            mid_cap = int(cap_p.get("grp_mid_max_caps", 3))
-            if g != 0 and cap_single < len(grp_city.get(g, [])) <= 30                     and grp_cap_n.get(g, 0) >= mid_cap:
-                continue  # 13-30 城群都城上限（防碎岛）
-            if not qt.has_within(float(c["x"]), float(c["y"]), sep):
-                qt.insert(float(c["x"]), float(c["y"]))
-                picks.append(c)
-                grp_cap_n[g] += 1
-        if len(picks) >= n_c:
+    wedges = []
+    for (i, j) in sorted(edges):
+        if is_core[i] and is_core[j]:
+            wedges.append((_city_nbr_w(adj, i, j), i, j))
+    wedges.sort()
+    k = len(core)
+    n_merge = 0
+    for w, i, j in wedges:
+        if k <= n_target:
             break
-    if len(picks) < n_c:  # 兜底：无视间距补齐（间距已放到最松仍不足）
-        got = {c["label"] for c in picks}
-        for c in pool:
-            if len(picks) >= n_c:
-                break
-            if c["label"] not in got:
-                picks.append(c)
-                got.add(c["label"])
-    return picks[:n_c]
+        ri, rj = find(i), find(j)
+        if ri == rj or grp[ri] != grp[rj]:
+            continue
+        lim = spawn_cap if (spawn[ri] or spawn[rj]) else cap
+        if size[ri] + size[rj] > lim:
+            continue
+        if (size[ri], maxpop[ri], -minlab[ri]) >= (size[rj], maxpop[rj], -minlab[rj]):
+            wa, wb = ri, rj
+        else:
+            wa, wb = rj, ri
+        parent[wb] = wa
+        size[wa] += size[wb]
+        if maxpop[wb] > maxpop[wa]:
+            maxpop[wa] = maxpop[wb]
+        if minlab[wb] < minlab[wa]:
+            minlab[wa] = minlab[wb]
+        spawn[wa] = spawn[wa] or spawn[wb]
+        annexed[wa] += 1
+        k -= 1
+        n_merge += 1
+
+    members = defaultdict(set)
+    for u in core:
+        members[find(u)].add(u)
+    states = {}
+    sid_of_root = {}
+    for idx, r in enumerate(sorted(members)):
+        sid = "state_em_%04d" % (idx + 1)
+        sid_of_root[r] = sid
+        comp = members[r]
+        capu = max(comp, key=lambda u: (cities[u]["pop"], -cities[u]["label"]))
+        states[sid] = {
+            "capital": cities[capu]["sid"], "culture": cities[capu]["dom"],
+            "cities": set(comp), "born_round": 0, "annexed": annexed[r],
+            "flips_in": 0, "flips_out": 0, "collapsed": False,
+            "extinct_round": None, "cause": None, "target": len(comp),
+        }
+    owner = [-1] * n
+    for u in core:
+        owner[u] = sid_of_root[find(u)]
+    return owner, states, n_merge, len(core)
+
+
+def assign_orphans(owner, states, cities, adj, core):
+    """level==0 填充点归属：并入接触边权最低的邻接政权（无则最近微核）。"""
+    for u in range(len(cities)):
+        if owner[u] != -1:
+            continue
+        best, bw = None, None
+        for v, w in adj[u]:
+            if owner[v] != -1 and (bw is None or w < bw or (w == bw and v < best)):
+                best, bw = v, w
+        if best is None:
+            best = min(core, key=lambda v: (
+                math.hypot(cities[v]["x"] - cities[u]["x"],
+                           cities[v]["y"] - cities[u]["y"]), v))
+        owner[u] = owner[best]
+        states[owner[u]]["cities"].add(u)
+
+
+def finalize_capitals(states, cities):
+    """都城 = 国内 population_score 最高（并列取 label 小）的城。"""
+    for s in states.values():
+        if s["extinct_round"] is not None:
+            continue
+        capu = max(s["cities"],
+                   key=lambda u: (cities[u]["pop"], -cities[u]["label"]))
+        s["capital"] = cities[capu]["sid"]
 
 
 # ---------- 城图（A4-3） ----------
@@ -498,207 +398,7 @@ def build_graph(cities, attack, simM, gp, mgp):
     return adj, pxadj, edges
 
 
-# ---------- 加权合并（A4-3/4） ----------
-
-def geodesic_px(pxadj, src, n):
-    """城图 px 测地距离（单源 Dijkstra，全图；capital 衰减用）。"""
-    dist = [math.inf] * n
-    dist[src] = 0.0
-    heap = [(0.0, src)]
-    while heap:
-        d, u = heapq.heappop(heap)
-        if d > dist[u] + 1e-9:
-            continue
-        for v, w in pxadj[u]:
-            nd = d + w
-            if nd < dist[v] - 1e-9:
-                dist[v] = nd
-                heapq.heappush(heap, (nd, v))
-    return dist
-
-
-def capital_decay(cap_nodes, pxadj, n, mgp):
-    """每国都城衰减数组：1 + k_capital×min(1,(px 测地距/reach)²)。
-
-    近都城 ≈ 1（不罚），reach 外饱和到 1+k_capital（软性 reach 上限）。
-    不可达（inf）同饱和。返回 {sid: float32 数组}。
-    """
-    kcap = float(mgp["k_capital"])
-    reach = float(mgp["capital_reach_px"])
-    out = {}
-    for sid, node in cap_nodes:
-        d = np.asarray(geodesic_px(pxadj, node, n), dtype=np.float64)
-        out[sid] = (1.0 + kcap * np.minimum(1.0, (d / reach) ** 2)).astype(np.float32)
-    return out
-
-
-def dijkstra_allocate(cap_nodes, sids, adj, caps, bf, dec, eps, n, targets):
-    """多源竞速 Dijkstra（state_expand_lite 同族骨架 + 配额压力项）。
-
-    bf = w_i 面积反馈 / expansionism（每态标量）；dec[sid] = 城级都城衰减数组；
-    松弛代价额外乘 (1 + κ×已占城数/target)：到量即贵、缺口国自然续灌——
-    规模配额在竞速内动态达成（κ = fill_pressure）。平局次序 = (cost, ordinal,
-    node) 全确定。返回 (owner 数组, counts)。
-    """
-    owner = [-1] * n
-    counts = {sid: 0 for sid in sids}
-    heap = []
-    for ordinal, ((_, node), sid) in enumerate(zip(cap_nodes, sids)):
-        heapq.heappush(heap, (0.0, ordinal, node, sid))
-    while heap:
-        cost, ordinal, u, sid = heapq.heappop(heap)
-        if owner[u] != -1:
-            continue
-        if counts[sid] >= caps[sid]:
-            continue
-        owner[u] = sid
-        counts[sid] += 1
-        darr = dec[sid]
-        f = bf[sid] * (1.0 + eps * counts[sid] / max(targets[sid], 1))
-        for v, w in adj[u]:
-            if owner[v] == -1:
-                heapq.heappush(heap,
-                               (cost + w * f * float(darr[v]), ordinal, v, sid))
-    return owner, counts
-
-
-def allocate(cap_nodes, sids, targets, adj, pxadj, n, mgp, rng):
-    """Balzer 式面积反馈迭代到采样 target + 无容量兜底（覆盖必满）。"""
-    exr = mgp["expansionism"]
-    eta = float(mgp["feedback"]["eta"])
-    rounds = int(mgp["feedback"]["rounds"])
-    wlo, whi = [float(x) for x in mgp["feedback"]["w_clip"]]
-    capf = float(mgp["cap_factor"])
-    kappa = float(mgp["fill_pressure"])
-    exs = {sid: float(rng.uniform(exr["min"], exr["max"])) for sid in sids}
-    caps = {sid: max(1, math.ceil(targets[sid] * capf)) for sid in sids}
-    dec = capital_decay(cap_nodes, pxadj, n, mgp)
-    wf = {sid: 1.0 for sid in sids}
-    owner, counts = None, None
-    for rnd in range(rounds + 1):
-        bf = {sid: wf[sid] / exs[sid] for sid in sids}
-        owner, counts = dijkstra_allocate(cap_nodes, sids, adj, caps, bf, dec,
-                                          kappa, n, targets)
-        if rnd == rounds:
-            break
-        for sid in sids:
-            got = max(counts[sid], 1)
-            wf[sid] = float(np.clip(wf[sid] * (got / targets[sid]) ** eta, wlo, whi))
-    uncov = [i for i, o in enumerate(owner) if o == -1]
-    if uncov:
-        # 兜底（cap 感知）：未覆盖城逐轮并入「有房位」的邻接政权（最低边权）；
-        # 邻接全满时归邻接中最空者（覆盖优先，极端病态 pocket 才会触达）
-        remaining = set(uncov)
-        while remaining:
-            progressed = False
-            for u in sorted(remaining):
-                nbr = {owner[v] for v, _ in adj[u] if owner[v] != -1}
-                if not nbr:
-                    continue
-                room = [b for b in nbr if counts[b] < caps[b]]
-                tgt_b = room if room else sorted(
-                    nbr, key=lambda b: (-(caps[b] - counts[b]), b))[:1]
-                b = min(tgt_b, key=lambda x: (
-                    min((w for v, w in adj[u] if owner[v] == x),
-                        default=math.inf), counts[x], x))
-                owner[u] = b
-                counts[b] += 1
-                remaining.discard(u)
-                progressed = True
-            if not progressed:
-                break
-        for u in sorted(remaining):  # 与城图不连通的孤点（桥接后不应存在）
-            owner[u] = min(sids, key=lambda x: (counts[x], x))
-            counts[owner[u]] += 1
-    return owner, counts, exs, caps, wf, len(uncov)
-
-
-# ---------- normalize（A4-5） ----------
-
-def normalize_pass(owner, states, adj, cities, simM, nrm, cap, targets=None):
-    """多数邻域翻转消飞地（FMG 同款 + 过渡带放宽 + cap/规模带感知 + 文化亲和）。
-
-    非都城城：异国邻居按（数量降序, 文化亲和降序, sid）逐个考察，第一个满足
-    「数量 ≥ 阈值、> 本国数、且还有房位」的接收。房位 = min(cap, 规模带天花板
-    target+band+1)（targets 缺省 = A6 新生国/未带 target，天花板 = cap）——防
-    normalize 把小目标国翻成大国。过渡带（mix ≥ mix_transition）城阈值提高到
-    min_foreign_transition，且「相似文化飞地」保留：sim(城主导, 目标国文化) ≥
-    sim_enclave_keep 且仍有本国邻居——文化过渡带允许少量跨相似文化飞地。
-    """
-    min_f = int(nrm["min_foreign"])
-    min_ft = int(nrm["min_foreign_transition"])
-    mix_tr = float(nrm["mix_transition"])
-    sim_keep = float(nrm["sim_enclave_keep"])
-    max_rounds = int(nrm["max_rounds"])
-
-    def ceiling(sid):
-        # 规模带天花板：target + band(max(2, 15%×target)) + 1（A6 新生国 = cap）
-        if targets is None or sid not in targets:
-            return cap
-        t = targets[sid]
-        return min(cap, int(t + max(2.0, 0.15 * t)))
-
-    cap_nodes = set()
-    city_state = {}
-    state_culture = {}
-    for sid, s in states.items():
-        if s["extinct_round"] is not None:
-            continue
-        city_state[sid] = s["cities"]
-        state_culture[sid] = s["culture"]
-        cap_u = next((u for u in s["cities"]
-                      if cities[u]["sid"] == s["capital"]), None)
-        if cap_u is not None:
-            cap_nodes.add(cap_u)
-    flipped_total = 0
-    for _ in range(max_rounds):
-        flipped = 0
-        for u in range(len(owner)):
-            sid = owner[u]
-            if u in cap_nodes:
-                continue
-            cnt = Counter(owner[v] for v, _ in adj[u])
-            own_n = cnt.pop(sid, 0)
-            if not cnt:
-                continue
-            city = cities[u]
-            thr = min_ft if city["mix"] >= mix_tr else min_f
-
-            def affinity(bs):
-                ds = state_culture.get(bs, 0)
-                if city["dom"] == 0 or ds == 0:
-                    return 0.5  # 荒野无文化身份 → 中性
-                return float(simM[city["dom"] - 1][ds - 1])
-
-            # 接收国资格 = 数量 ≥ 阈值且 > 本国数；选优 = 文化亲和最高优先
-            # （错配城流向文化最近国）、其次邻居数（多数邻域语义）、sid 序
-            ranked = sorted(
-                ((bs, bn) for bs, bn in cnt.items()
-                 if bn >= thr and bn > own_n),
-                key=lambda kv: (-affinity(kv[0]), -kv[1], kv[0]))
-            for best_s, _bn in ranked:
-                if len(city_state[best_s]) >= ceiling(best_s):
-                    continue  # 无房位，看次选
-                gu = city.get("grp", 0)
-                if gu != 0 and gu not in {
-                        cities[w].get("grp", 0)
-                        for w in city_state[best_s]}:
-                    continue  # 跨岛群翻转：破坏「同岛统一」，不翻
-                if city["mix"] >= mix_tr and own_n >= 1:
-                    dc, ds = city["dom"], state_culture.get(best_s, 0)
-                    if dc > 0 and ds > 0 and \
-                            float(simM[dc - 1][ds - 1]) >= sim_keep:
-                        continue  # 相似文化飞地保留（过渡带放宽）
-                city_state[sid].discard(u)
-                city_state[best_s].add(u)
-                owner[u] = best_s
-                flipped += 1
-                break
-        flipped_total += flipped
-        if flipped == 0:
-            break
-    return flipped_total
-
+# ---------- normalize（历史遗留：涌现制下不再调用） ----------
 
 def reattribute_cultures(states, cities):
     """国文化归因：改按名下城主导文化的多数派（并列先都城主导、再小 id）。
@@ -722,351 +422,9 @@ def reattribute_cultures(states, cities):
                                               kv[0]))[0][0]
 
 
-def culture_rehome_pass(states, owner, adj, cities, simM, keep, cap, targets,
-                        max_rounds=6):
-    """文化归位：错配城（主导文化与国文化 sim < keep）迁往文化相同/近亲邻国。
+# ---------- 终态闸（岛群归一 / 超 cap 削顶） ----------
 
-    与 normalize 的多数邻域规则互补——normalize 消数量飞地，归位消文化错位；
-    接收方 = 文化相同或近亲（sim ≥ keep）、有房位且接收后仍在规模带内
-    （err < band，规模回收不因归位破功），取最低边权。可能留下 1 邻居的小
-    飞地，但 normalize 的相似文化飞地保留规则不会再翻走。返回归位城数。
-    """
-    def band(t):
-        return max(2.0, 0.15 * t)
-
-    moved_total = 0
-    for _ in range(max_rounds):
-        moved = 0
-        cap_nodes = {next(u for u in s["cities"]
-                          if cities[u]["sid"] == s["capital"])
-                     for sid, s in states.items()
-                     if s["extinct_round"] is None}
-        sizes = {sid: len(s["cities"]) for sid, s in states.items()
-                 if s["extinct_round"] is None}
-        for u in range(len(owner)):
-            sid = owner[u]
-            s = states.get(sid)
-            if s is None or s["extinct_round"] is not None or u in cap_nodes:
-                continue
-            c = s["culture"]
-            d = cities[u]["dom"]
-            if c == 0 or d == 0 or float(simM[c - 1][d - 1]) >= keep:
-                continue  # 非错配
-            recv = sorted({owner[v] for v, _ in adj[u] if owner[v] != sid})
-            pool = []
-            for b in recv:
-                if not (states[b]["culture"] > 0
-                        and (states[b]["culture"] == d
-                             or float(simM[states[b]["culture"] - 1][d - 1]) >= keep)
-                        and sizes[b] < cap):
-                    continue
-                if b in targets and not (
-                        sizes[b] - targets[b] < band(targets[b])):
-                    continue  # 接收后超带（A6 新生国无 target，仅 cap 约束）
-                pool.append(b)
-            if pool:
-                b = min(pool, key=lambda x: (
-                    min((w for v, w in adj[u] if owner[v] == x),
-                        default=math.inf), len(states[x]["cities"]), x))
-                s["cities"].discard(u)
-                states[b]["cities"].add(u)
-                owner[u] = b
-                sizes[sid] -= 1
-                sizes[b] += 1
-                moved += 1
-        moved_total += moved
-        if moved == 0:
-            break
-    return moved_total
-
-
-def reclaim_pass(states, owner, adj, cities, simM, targets, cap, rounds=20,
-                 per_round_give=6, relief_rounds=4, relief_give=20):
-    """规模回收收尾（两相，方向性流动防震荡）。
-
-    常规相：给出方 = err > 0（严格过剩；Σerr² 随每次转让下降，无乒乓），接收方
-    = 接收后 err < band 且 < cap（缺口最大优先 → 文化亲和 → 边权最低）。
-    救济相：给出方 = err > −band（带内有余量即可让）；接收方分两档——给出方
-    超带/超 cap 时任意带内缺口（强制排空），否则只救「深缺口」（err < −band，
-    直救地理围困的缺国）。候选城文化错配者优先送走、离都城远者次之。
-    band(t) = max(2, 15%×t)。只走邻接边，不产生新飞地。返回转让城数。
-    """
-    def band(t):
-        return max(2.0, 0.15 * t)
-
-    def aff(dom, sid):
-        c = states[sid]["culture"] if sid in states else 0
-        if dom == 0 or c == 0:
-            return 0.5
-        return float(simM[dom - 1][c - 1])
-
-    cap_node = {sid: next(u for u in s["cities"]
-                          if cities[u]["sid"] == s["capital"])
-                for sid, s in states.items() if s["extinct_round"] is None}
-
-    def try_move(sid, sizes, relaxed):
-        """一次过户。接收方：常规相 = 真缺口（err < 0）；救济相（给出方已超带/
-        超 cap）= 接收后仍在带内（err < band）。优先缺口最大（水位差）、其次
-        与城文化亲和最高、再次边权最低。候选城 = 非都城且有异国邻居，文化
-        错配者优先送走、离都城远者次之。成功返回 True。"""
-        s = states[sid]
-        cu = s["culture"]
-        cands = sorted(
-            (u for u in s["cities"]
-             if u != cap_node[sid]
-             and any(owner[v] != sid for v, _ in adj[u])),
-            key=lambda u: (
-                0 if (cu > 0 and cities[u]["dom"] not in (0, cu)) else 1,
-                -math.hypot(cities[u]["x"] - cities[cap_node[sid]]["x"],
-                            cities[u]["y"] - cities[cap_node[sid]]["y"]),
-                u))
-        for u in cands:
-            recv = sorted({owner[v] for v, _ in adj[u] if owner[v] != sid})
-            if relaxed:
-                pool = [b for b in recv
-                        if sizes[b] - targets[b] < band(targets[b])
-                        and sizes[b] < cap]
-            else:
-                pool = [b for b in recv
-                        if sizes[b] < targets[b] and sizes[b] < cap]
-            if pool:
-                b = min(pool, key=lambda x: (
-                    -(targets[x] - sizes[x]),
-                    -aff(cities[u]["dom"], x),
-                    min((w for v, w in adj[u] if owner[v] == x),
-                        default=math.inf), x))
-                s["cities"].discard(u)
-                states[b]["cities"].add(u)
-                owner[u] = b
-                sizes[sid] -= 1
-                sizes[b] += 1
-                return True
-        return False
-
-    moved_total = 0
-
-    def relay_move(sid, sizes):
-        """跨国接力：BFS 找最近的真缺口国（err < 0 且 < cap），沿路径逐跳过户。
-
-        中间国每跳「收一城、放一城」净尺寸不变（不产生新带违规），源头 -1、
-        终点 +1——解决「邻接全在带缘、单跳无去处」的地理围困残差。
-        限 20 跳（1 城邦不作中间节点）；某跳无可用城则放弃本次接力。成功返回 True。
-        """
-        adj_states = defaultdict(set)
-        for u in range(len(owner)):
-            a = owner[u]
-            for v, _w in adj[u]:
-                b = owner[v]
-                if a != b:
-                    adj_states[a].add(b)
-                    adj_states[b].add(a)
-        parent = {sid: None}
-        queue = [sid]
-        tgt = None
-        while queue and tgt is None:
-            s = queue.pop(0)
-            for nb in sorted(adj_states.get(s, ())):
-                if nb in parent:
-                    continue
-                parent[nb] = s
-                if sizes[nb] < targets[nb] and sizes[nb] < cap:
-                    tgt = nb
-                    break
-                if sizes[nb] >= 2:  # 1 城邦无法转手（都城不可动），不作中间节点
-                    queue.append(nb)
-        if tgt is None:
-            return False
-        path = [tgt]
-        while parent[path[-1]] is not None:
-            path.append(parent[path[-1]])
-        path.reverse()
-        if len(path) > 21:  # 源头 + 20 跳上限
-            return False
-        # 逆序跳（先放后收）：中间国先 -1 再由上一跳回补，瞬时尺寸不升——
-        # cap 不会被中间态击穿；终点国为真缺口（< target），+1 仍在带内
-        for i in range(len(path) - 2, -1, -1):
-            a, b = path[i], path[i + 1]
-            if i > 0 and sizes[a] <= 1:
-                return False  # 中间国放空了（防御）
-            cands = sorted(
-                (u for u in states[a]["cities"]
-                 if cities[u]["sid"] != states[a]["capital"]
-                 and any(owner[v] == b for v, _ in adj[u])),
-                key=lambda u: (
-                    min((w for v, w in adj[u] if owner[v] == b),
-                        default=math.inf), u))
-            if not cands:
-                return False
-            u = cands[0]
-            states[a]["cities"].discard(u)
-            states[b]["cities"].add(u)
-            owner[u] = b
-            sizes[a] -= 1
-            sizes[b] += 1
-        return True
-
-    def run(phase_givers, give_cap, over_for):
-        nonlocal moved_total
-        for _ in range(rounds if over_for == "regular" else relief_rounds):
-            moved = 0
-            sizes = {sid: len(states[sid]["cities"]) for sid in cap_node}
-            givers = phase_givers(sizes)
-            givers.sort(key=lambda s: (-(sizes[s] - targets[s]), s))
-            for sid in givers:
-                n = 0
-                while n < give_cap:
-                    err = sizes[sid] - targets[sid]
-                    if over_for == "regular":
-                        if not err > 0:
-                            break
-                        if try_move(sid, sizes, relaxed=False):
-                            n += 1
-                            continue
-                        if relay_move(sid, sizes):
-                            n += 1
-                            continue
-                        break
-                    else:
-                        if not (err > band(targets[sid]) or sizes[sid] > cap):
-                            break
-                        if try_move(sid, sizes, relaxed=True):
-                            n += 1
-                            continue
-                        if relay_move(sid, sizes):
-                            n += 1
-                            continue
-                        break
-                moved += n
-            moved_total += moved
-            if moved == 0:
-                break
-
-    run(lambda sizes: [sid for sid in sizes
-                       if sizes[sid] - targets[sid] > 0],
-        per_round_give, "regular")
-    run(lambda sizes: [sid for sid in sizes
-                       if sizes[sid] - targets[sid] > -band(targets[sid])
-                       or sizes[sid] > cap],
-        relief_give, "relief")
-    return moved_total
-
-
-# ---------- A6 加速历史 ----------
-
-def _contact_min(nodes_a, owner, adj, sid_b):
-    """A 国诸城与 B 国的最低静态接触边权（进攻软度；找不到 = inf）。"""
-    best = math.inf
-    for u in nodes_a:
-        for v, w in adj[u]:
-            if owner[v] == sid_b and w < best:
-                best = w
-    return best
-
-
-def _pick_weighted(cands, weights, rng):
-    """按权重抽签（累计和 + 单次二分；确定性）。"""
-    tot = float(sum(weights))
-    x = float(rng.random()) * tot
-    acc = 0.0
-    for c, w in zip(cands, weights):
-        acc += float(w)
-        if x <= acc:
-            return c
-    return cands[-1]
-
-
-def carve_spawn_cluster(states, owner, cities, sp):
-    """出生圈局部重划分（创始人定向：手动设计出生 L1 地块的 1-3 城小国群）。
-
-    圈内（spawn_cluster.l1_labels）的城按「cap_suit 降序种子 + 最近邻贪心生长」
-    编成 ≤max_cities 城的组，每组一国（无视原归属，直接从组构新国；被剥空国
-    extinct）。圈外国仅失去圈内部分、圈外保留。新国文化=组内 dominant 众数，
-    首都=组内 cap_suit 最高；色/名在后续色板与命名段自动覆盖。确定性。
-    返回 (born, died) 供 meta 守恒计数。"""
-    cfg = sp.get("spectrum", {}).get("spawn_cluster", {})
-    labels = set(int(v) for v in cfg.get("l1_labels", []))
-    if not labels:
-        return 0, 0
-    m = int(cfg.get("max_cities", 3))
-    max_d = float(cfg.get("group_max_dist_px", 600.0))
-    label_used = {sid for sid, st in states.items()
-                  if st["extinct_round"] is None}
-    used = {sid: set(st["cities"]) for sid, st in states.items()}
-    # （used 仅作快照；剥夺必须真删 states[sid]["cities"]）
-    U = [u for u, c in enumerate(cities) if int(c.get("l1", 0)) in labels]
-    Uset = set(U)
-    if not Uset:
-        return 0, 0
-    pool = sorted(U, key=lambda u: (-cities[u]["cap_suit"], u))
-    groups = []
-    free = set(U)
-    for seed in pool:
-        if seed not in free:
-            continue
-        grp = [seed]
-        free.discard(seed)
-        while len(grp) < m and free:
-            # 组内最近的未分配城（欧氏，>max_d 不并；限同岛群）
-            best_u, best_d = None, None
-            for u in free:
-                if cities[u].get("grp", 0) != cities[seed].get("grp", -1):
-                    continue
-                d = min(math.hypot(cities[u]["x"] - cities[v]["x"],
-                                   cities[u]["y"] - cities[v]["y"])
-                        for v in grp)
-                if best_d is None or d < best_d:
-                    best_u, best_d = u, d
-            if best_u is None or best_d > max_d:
-                break
-            grp.append(best_u)
-            free.discard(best_u)
-        groups.append(grp)
-    # 新国编号：续编 state_v2_%03d
-    next_n = max([int(sid.rsplit("_", 1)[1]) for sid in states]) + 1
-    born = 0
-    # 从原国剥夺圈内城
-    for u in U:
-        sid = owner[u]
-        if sid in states and u in states[sid]["cities"]:
-            states[sid]["cities"].discard(u)
-    died = 0
-    for grp in groups:
-        sid = "state_v2_%03d" % next_n
-        next_n += 1
-        cs = set(grp)
-        doms = {}
-        for u in grp:
-            doms[cities[u]["dom"]] = doms.get(cities[u]["dom"], 0) + 1
-        culture = sorted(doms.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
-        cap_u = max(grp, key=lambda u: (cities[u]["cap_suit"], -u))
-        states[sid] = {
-            "cities": cs, "born_round": 0, "annexed": 0, "flips_in": 0,
-            "flips_out": 0, "collapsed": False, "extinct_round": None,
-            "capital": cities[cap_u]["sid"], "culture": int(culture),
-            "target": len(grp),
-        }
-        for u in grp:
-            owner[u] = sid
-        born += 1
-    # 被剥空的国 extinct；未灭绝但首都被剥夺的国补选新首都
-    for sid in list(states.keys()):
-        st = states[sid]
-        if st["extinct_round"] is not None or sid in ("player",):
-            continue
-        if not st["cities"] and sid in used:
-            st["extinct_round"] = 0
-            st["cause"] = "spawn_carve"
-            died += 1
-            continue
-        if st["cities"] and not any(cities[u]["sid"] == st["capital"]
-                                    for u in st["cities"]):
-            newcap = max(st["cities"],
-                         key=lambda u: (cities[u]["cap_suit"], -u))
-            st["capital"] = cities[newcap]["sid"]
-    return born, died
-
-
-def enforce_cap(states, owner, cities, cap_hi):
+def enforce_cap(states, owner, cities, cap_hi, spawn_labels=None, spawn_cap=3):
     """超 cap 削顶（终态闸）：超 cap 国按「距首都最远」逐个把城转给邻接未满的国
     （无邻接者保留，宁超不散）。确定性。返回迁移数。"""
     moved = 0
@@ -1105,7 +463,8 @@ def enforce_cap(states, owner, cities, cap_hi):
                     b = owner[v]
                     cnt[b] = cnt.get(b, 0) + 1
             cand = [b for b, _ in sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))
-                    if len(states[b]["cities"]) < cap_hi]
+                    if _cap_room_ok(states, cities, b, u, cap_hi,
+                                    spawn_labels, spawn_cap)]
             if not cand:
                 continue
             b = cand[0]
@@ -1118,6 +477,19 @@ def enforce_cap(states, owner, cities, cap_hi):
         if not done:
             break
     return moved
+
+
+def _cap_room_ok(states, cities, sid, u, cap_hi, spawn_labels, spawn_cap):
+    """接收方 b 收下城 u 后是否不破上限：普通国 ≤ cap_hi；含出生 L1 城的国
+    （或 u 本身是出生 L1 城 → 收下后变成出生国）≤ spawn_cap。"""
+    nxt = len(states[sid]["cities"]) + 1
+    if spawn_labels and int(cities[u].get("l1", 0)) in spawn_labels:
+        return nxt <= spawn_cap
+    if spawn_labels:
+        for w in states[sid]["cities"]:
+            if int(cities[w].get("l1", 0)) in spawn_labels:
+                return nxt <= spawn_cap
+    return nxt <= cap_hi
 
 
 def unify_small_islands(states, owner, cities, gp):
@@ -1211,191 +583,6 @@ def unify_small_islands(states, owner, cities, gp):
             cnt[strongest] = cnt.get(strongest, 0) + cnt.pop(sid, 0)
     if moved:
         print("  [island] 小岛群归一迁移 %d 城" % moved)
-
-
-def run_history(states, owner, adj, cities, simM, hp, rng, cap, n, mix_min_arr):
-    """A6 K 轮虚拟历史：兼并战 / 继承解体 / 边疆易手。
-
-    判据全部走 attack_cost×文化相似度（= 静态边权 w）。事件计数与逐国兴衰史
-    直接记在 states 条目上（meta.history 汇总）。返回事件计数 dict。
-    """
-    rounds = int(hp["rounds"])
-    p_annex = float(hp["p_annex"])
-    att_min = int(hp["annex_min_attacker"])
-    att_sim = float(hp.get("annex_sim_min", 0.0))
-    k_gap = float(hp["k_gap"])
-    p_max = float(hp["annex_p_max"])
-    p_col = float(hp["p_collapse"])
-    col_over = int(hp["collapse_over"])
-    p_indep = float(hp["p_indep"])
-    p_flip = float(hp["p_flip"])
-    flip_mix = float(hp["flip_mix_min"])
-    next_idx = len(states)
-    counters = {"annexations": 0, "collapses": 0, "border_flips": 0,
-                "born": 0, "annex_skipped_cap": 0}
-
-    def new_state(node, rnd):
-        nonlocal next_idx
-        sid = "state_v2_%03d" % next_idx
-        next_idx += 1
-        states[sid] = {
-            "capital": cities[node]["sid"], "culture": cities[node]["dom"],
-            "cities": {node}, "born_round": rnd, "annexed": 0,
-            "flips_in": 0, "flips_out": 0, "collapsed": False,
-            "extinct_round": None, "cause": None, "target": None,
-        }
-        owner[node] = sid
-        counters["born"] += 1
-        return sid
-
-    def annex(att, tgt, rnd):
-        cs = states[att]["cities"] | states[tgt]["cities"]
-        for u in states[tgt]["cities"]:
-            owner[u] = att
-        states[att]["cities"] = cs
-        states[att]["annexed"] += 1
-        states[tgt]["extinct_round"] = rnd
-        states[tgt]["cause"] = "annexed_by:%s" % att
-        counters["annexations"] += 1
-
-    def collapse(sid, rnd):
-        s = states[sid]
-        cap_node = next(n for n in s["cities"]
-                        if cities[n]["sid"] == s["capital"])
-        s["collapsed"] = True
-        for u in sorted(s["cities"] - {cap_node}):
-            s["cities"].discard(u)  # 先出账再落新主（独立/并入都一样）
-            if rng.random() < p_indep:
-                new_state(u, rnd)
-                continue
-            hosts = sorted({owner[v] for v, _ in adj[u]
-                            if owner[v] != sid and owner[v] is not None
-                            and len(states[owner[v]]["cities"]) < cap})
-            if hosts:
-                d = cities[u]["dom"]
-
-                def host_aff(b):
-                    cb = states[b]["culture"]
-                    if d == 0 or cb == 0:
-                        return 0.5
-                    return float(simM[cb - 1][d - 1])
-
-                best = min(hosts, key=lambda b: (
-                    -host_aff(b),  # 文化近亲优先接收
-                    min((w for v, w in adj[u] if owner[v] == b),
-                        default=math.inf),
-                    len(states[b]["cities"]), b))
-                states[best]["cities"].add(u)
-                owner[u] = best
-            else:
-                new_state(u, rnd)  # 无邻可并 → 独立成邦
-        counters["collapses"] += 1
-
-    def border_flip(rnd):
-        cand = []
-        for u in range(n):
-            sid = owner[u]
-            s = states.get(sid)
-            if s is None or cities[u]["sid"] == s["capital"]:
-                continue
-            if mix_min_arr[u] < flip_mix:
-                continue
-            if any(owner[v] != sid for v, _ in adj[u]):
-                cand.append(u)
-        if not cand:
-            return
-        u = cand[int(rng.integers(0, len(cand)))]
-        sid = owner[u]
-        recv = {}
-        for v, w in adj[u]:
-            b = owner[v]
-            if b != sid and len(states[b]["cities"]) < cap:
-                recv.setdefault(b, []).append(w)
-        if not recv:
-            return
-        best_s, ws = sorted(
-            ((b, min(ww)) for b, ww in recv.items()),
-            key=lambda t: (t[1], len(states[t[0]]["cities"]), t[0]))[0]
-        states[sid]["cities"].discard(u)
-        states[best_s]["cities"].add(u)
-        states[sid]["flips_out"] += 1
-        states[best_s]["flips_in"] += 1
-        owner[u] = best_s
-        if not states[sid]["cities"]:  # 防御（都城不参选，正常到不了）
-            states[sid]["extinct_round"] = rnd
-            states[sid]["cause"] = "flip_drained"
-        counters["border_flips"] += 1
-
-    spawn_labels = set(int(v) for v in
-                       hp.get("spawn_protect_l1", []))
-
-    def spawn_protected(sid):
-        """出生区保护：都城在老 L1 出生圈内的国不参与兼并（版图手设计稳定）。"""
-        if not spawn_labels:
-            return False
-        for u in states[sid]["cities"]:
-            if int(cities[u].get("l1", 0)) in spawn_labels:
-                return True
-        return False
-
-    def grp_overlap(a_sid, b_sid):
-        """两国名下城是否同岛群交叠（兼并合法性：同群才可吞——跨海征服
-        留给运行时海权，静态版图不产生）。"""
-        ga = {cities[u].get("grp", 0) for u in states[a_sid]["cities"]}
-        gb = {cities[u].get("grp", 0) for u in states[b_sid]["cities"]}
-        return bool(ga & gb)
-
-    for rnd in range(1, rounds + 1):
-        # ---- 兼并战：强国按进攻成本选邻接弱邻吞并（概率随强弱差增大） ----
-        sizes = {sid: len(s["cities"]) for sid, s in states.items()
-                 if s["extinct_round"] is None}
-        cands = sorted(sid for sid, sz in sizes.items() if sz >= att_min)
-        if cands:
-            att = _pick_weighted(cands, [sizes[c] for c in cands], rng)
-            nbr = sorted({owner[v] for u in states[att]["cities"]
-                          for v, _ in adj[u]} - {att})
-            weaker = [b for b in nbr if len(states[b]["cities"])
-                      < len(states[att]["cities"])
-                      and grp_overlap(att, b)
-                      and not spawn_protected(att) and not spawn_protected(b)]
-            if weaker:
-                tgt = min(weaker, key=lambda b: (
-                    _contact_min(states[att]["cities"], owner, adj, b),
-                    len(states[b]["cities"]), b))
-                ca, ct = states[att]["culture"], states[tgt]["culture"]
-                compat = (ca == 0 or ct == 0
-                          or float(simM[ca - 1][ct - 1]) >= att_sim)
-                gap = (len(states[att]["cities"])
-                       - len(states[tgt]["cities"])) / max(
-                           len(states[att]["cities"]), 1)
-                p = min(p_max, p_annex * (1.0 + k_gap * gap))
-                if compat and rng.random() < p:
-                    if (len(states[att]["cities"])
-                            + len(states[tgt]["cities"])) <= cap:
-                        annex(att, tgt, rnd)
-                    else:
-                        counters["annex_skipped_cap"] += 1
-        # ---- 继承解体：城数超阈值的国概率碎一地 ----
-        for sid in sorted(list(states.keys())):
-            s = states[sid]
-            if s["extinct_round"] is not None:
-                continue
-            if len(s["cities"]) > col_over and rng.random() < p_col:
-                grps = {cities[u].get("grp", 0) for u in s["cities"]}
-                grp_city = {}
-                for u in s["cities"]:
-                    g = cities[u].get("grp", 0)
-                    grp_city.setdefault(g, []).append(u)
-                island_only = any(g != 0 and len(grp_city[g]) == len(s["cities"])
-                                  for g in grps)
-                if island_only and len(s["cities"]) <= int(
-                        hp.get("collapse_island_max", 30)):
-                    continue  # 小岛国不解体：岛内统一优先于戏剧性碎裂
-                collapse(sid, rnd)
-        # ---- 边疆易手：模糊带单城重归属 ----
-        if rng.random() < p_flip:
-            border_flip(rnd)
-    return counters
 
 
 # ---------- 构型命名 ----------
@@ -1554,17 +741,19 @@ def assign_colors(states_out, owner, edges, colors_spec):
 
 # ---------- 产物组装 ----------
 
-def homogeneity_stats(states, states_out, cities, simM, mix_tr, sim_keep):
+def homogeneity_stats(states, states_out, cities, simM, mix_tr, sim_keep,
+                      rename=None):
     """文化同质度：各国名下城主导文化与国文化一致率（近亲文化放宽口径）。
 
     一致 = 城主导 == 国文化，或城为荒野（dominant=0，无文化身份不算冲突），
     或近亲文化放宽（sim(城主导, 国文化) ≥ sim_keep——「跨相似文化」不算冲突，
     与 normalize 的相似文化飞地保留同口径）。国文化 = 0（荒野邦）无法定义
     一致率，单独计数不参与阈值。cities 集合读 states 账本，一致率写回
-    states_out[sid]["culture_agreement"]。
+    states_out[rename[sid]]["culture_agreement"]（states 为内部 id 时用 rename 映射）。
     """
     rep = {"cultured_states": 0, "wild_states": 0, "wild_cities": 0,
            "min_rate": 1.0, "min_state": None, "below": []}
+    rename = rename or {}
     for sid, s in states.items():
         if s["extinct_round"] is not None:
             continue
@@ -1581,12 +770,13 @@ def homogeneity_stats(states, states_out, cities, simM, mix_tr, sim_keep):
             if d == c or d == 0 or float(simM[c - 1][d - 1]) >= sim_keep:
                 ok += 1
         rate = ok / max(len(nodes), 1)
-        states_out[sid]["culture_agreement"] = round(rate, 4)
+        pub_sid = rename.get(sid, sid)
+        states_out[pub_sid]["culture_agreement"] = round(rate, 4)
         if rate < rep["min_rate"]:
             rep["min_rate"] = rate
-            rep["min_state"] = sid
+            rep["min_state"] = pub_sid
         if rate < 0.8:
-            rep["below"].append((sid, round(rate, 3), len(nodes)))
+            rep["below"].append((pub_sid, round(rate, 3), len(nodes)))
     return rep
 
 
@@ -1594,67 +784,54 @@ def build(P, dry_run=False, skip_preview=False):
     """全流程：返回 product dict（meta/states/city_owners），供主函数落盘、
     供 state_check_v2.py 做同 seed 逐位对比。"""
     sp = P["fields_v2"]["states_v2"]
-    ssp = P["fields_v2"]["settlements"]
     rng = np.random.default_rng(int(sp["seed"]))
 
-    print("[1/8] 读棒 1 场产物 + 棒 2 聚落集...", flush=True)
+    print("[1/7] 读棒 1 场产物 + 棒 2 聚落集...", flush=True)
     (settle, sources, simj, suit, res, dom, mix, eff_land,
      strength, attack) = load_inputs()
     race_by_culture = {src["id"]: src.get("race") for src in sources}
     simM = simj["matrix"]
     n_total = len(settle)
 
-    print("[2/8] 都城适宜性（资源禀赋×文化中心性）...", flush=True)
-    cents = culture_centroids(dom, strength, eff_land)
-    cities = build_city_attrs(settle, suit, res, cents, sp["capital"], ssp)
+    print("[2/7] 城属性（规模档 / 岛群 / 老 L1 归属）...", flush=True)
+    cities = build_city_attrs(settle)
 
-    print("[3/8] 规模谱采样（截断对数正态）...", flush=True)
-    n_c, targets, spec_obs = sample_spectrum(n_total, sp["spectrum"], rng)
-    print("  谱均值 %.2f → 都城数 N_c = %d" % (spec_obs["sampler_mean"], n_c))
+    print("[3/7] 规模谱期望政权数（截断对数正态均值反推）...", flush=True)
+    n_c, _prior, spec_obs = sample_spectrum(n_total, sp["spectrum"], rng)
+    print("  谱均值 %.2f → 期望政权数 N_c = %d" % (spec_obs["sampler_mean"], n_c))
 
-    cap_picks = pick_capitals(cities, n_c, sp["capital"], sp["spectrum"].get("spawn_cluster"))
-    spawn_xy = _spawn_xy(settle, sp["spectrum"])
-    targets = tilt_targets_by_region(targets, cap_picks, sp["spectrum"], spawn_xy)
-    cap_nodes = [c["label"] - 1 for c in cap_picks]
-
-    print("[4/8] 城图（kNN + 桥接 + attack_cost 沿线积分）...", flush=True)
+    print("[4/7] 城图（kNN + 桥接 + attack_cost 沿线积分）...", flush=True)
     adj, pxadj, edges = build_graph(cities, attack, simM, sp["graph"],
                                     sp["merge"])
 
-    print("[5/8] 局地可行池钳制 + 加权合并（Balzer 反馈）...", flush=True)
-    targets, pools, reach_used = clamp_targets_to_pools(
-        targets, cap_nodes, pxadj, sp["spectrum"], int(sp["spectrum"]["cap"]))
-    sids = ["state_v2_%03d" % k for k in range(n_c)]
-    tgt_map = {sid: t for sid, t in zip(sids, targets)}
-    owner, counts, exs, caps, wf, n_uncov = allocate(
-        [(sid, nd) for sid, nd in zip(sids, cap_nodes)], sids, tgt_map,
-        adj, pxadj, n_total, sp["merge"], rng)
-    got_pre = {sid: int(counts[sid]) for sid in sids}
+    cap = int(sp["spectrum"]["cap"])
+    spawn_cfg = sp["spectrum"].get("spawn_cluster", {})
+    spawn_labels = set(int(v) for v in spawn_cfg.get("l1_labels", []))
+    spawn_cap = int(spawn_cfg.get("max_cities", 3))
 
-    def dev_stats(snapshot):
-        bad = [sid for sid, a in snapshot.items()
-               if abs(a["got"] - a["target"]) > max(2.0, 0.15 * a["target"])]
-        errs = [abs(a["got"] - a["target"]) for a in snapshot.values()]
-        return bad, (max(errs) if errs else 0.0), \
-            (sum(errs) / max(len(errs), 1))
+    print("[5/7] 微核涌现合并（最廉价文化边优先，直至 %d 政权）..." % n_c,
+          flush=True)
+    core = [u for u in range(n_total) if cities[u]["level"] > 0]
+    owner, states, n_merge, n_core = emerge_states(
+        cities, adj, edges, cap, spawn_labels, spawn_cap, n_c)
+    assign_orphans(owner, states, cities, adj, core)
+    got = len(states)
+    print("  微核 %d → 政权 %d（兼并 %d 次；%s）"
+          % (n_core, got, n_merge,
+             "达标" if got <= n_c else "边用尽未达标"))
 
-    bad_pre, err_max_pre, err_avg_pre = dev_stats(
-        {sid: {"target": int(tgt_map[sid]), "got": got_pre[sid]} for sid in sids})
-    print("  未覆盖城 %d；分配后偏差带外 %d 国（最大 %.0f / 平均 %.2f）"
-          % (n_uncov, len(bad_pre), err_max_pre, err_avg_pre))
-
-    # 政权登记簿（A6 的账本）
-    states = {}
-    for k, sid in enumerate(sids):
-        node = cap_nodes[k]
-        states[sid] = {
-            "capital": cities[node]["sid"], "culture": cities[node]["dom"],
-            "cities": {node}, "born_round": 0, "annexed": 0,
-            "flips_in": 0, "flips_out": 0, "collapsed": False,
-            "extinct_round": None, "cause": None, "target": tgt_map[sid],
-        }
-    for u, sid in enumerate(owner):
-        states[sid]["cities"].add(u)
+    # 终态闸：小岛群岛内统一 + 超 cap 削顶（出生 L1 国仍封顶 spawn_cap）
+    unify_small_islands(states, owner, cities, sp["graph"])
+    n_cap_moved = enforce_cap(states, owner, cities, cap,
+                              spawn_labels, spawn_cap)
+    unify_small_islands(states, owner, cities, sp["graph"])
+    reattribute_cultures(states, cities)
+    finalize_capitals(states, cities)
+    live_n = sum(1 for s in states.values() if s["extinct_round"] is None)
+    print("  终态闸：超 cap 削顶迁移 %d 城；存活政权 %d；最大 %d 城"
+          % (n_cap_moved, live_n,
+             max(len(s["cities"]) for s in states.values()
+                 if s["extinct_round"] is None)))
 
     mix_tr_dbg = float(sp["normalize"]["mix_transition"])
     sim_keep_dbg = float(sp["normalize"]["sim_enclave_keep"])
@@ -1675,107 +852,62 @@ def build(P, dry_run=False, skip_preview=False):
                     bad += 1
         return bad
 
-    print("  [diag] 分配后文化错配城数：%d" % cultural_mismatch())
+    print("  [diag] 涌现后文化错配城数：%d" % cultural_mismatch())
 
-    print("[6/8] normalize 消飞地 + 规模回收 + 文化归位（四轮迭代）...", flush=True)
-    cap = int(sp["spectrum"]["cap"])
-    keep = float(sp["normalize"]["sim_enclave_keep"])
-    n_flip = n_reclaim = n_rehome = 0
-    for it in range(4):
-        n_flip += normalize_pass(owner, states, adj, cities, simM,
-                                 sp["normalize"], cap, targets=tgt_map)
-        reattribute_cultures(states, cities)
-        n_rehome += culture_rehome_pass(states, owner, adj, cities, simM,
-                                        keep, cap, tgt_map)
-        n_reclaim += reclaim_pass(states, owner, adj, cities, simM, tgt_map,
-                                  cap)
-    reattribute_cultures(states, cities)
-    print("  翻转 %d 城 + 回收转让 %d 城 + 文化归位 %d 城"
-          % (n_flip, n_reclaim, n_rehome))
-    print("  [diag] 收敛后文化错配城数：%d" % cultural_mismatch())
-    # 分配阶段快照（自检：target 与实际偏差带；A6 前的口径）
-    allocation = {sid: {"target": int(tgt_map[sid]),
-                        "got": len(states[sid]["cities"])} for sid in sids}
-    bad_post, err_max_post, err_avg_post = dev_stats(allocation)
-    over = [sid for sid in bad_post if allocation[sid]["got"] > allocation[sid]["target"]]
-    print("  收敛后偏差带外 %d 国（超 %d / 缺 %d；最大 %.0f / 平均 %.2f）；最大政权 %d 城"
-          % (len(bad_post), len(over), len(bad_post) - len(over),
-             err_max_post, err_avg_post,
-             max(len(s["cities"]) for s in states.values())))
-    for sid in bad_post[:10]:
-        print("    [dev] %s target=%d got=%d" % (
-            sid, allocation[sid]["target"], allocation[sid]["got"]))
+    # ---- 终局组装：存活政权重编号（规模降序 → 都城 label → 旧 id） ----
+    def _cap_label(s):
+        return int(s["capital"].rsplit("_", 1)[1])
 
-    print("[7/8] A6 加速历史 %d 轮..." % int(sp["history"]["rounds"]),
-          flush=True)
-    mix_arr = np.array([c["mix"] for c in cities], dtype=np.float64)
-    hcount = run_history(states, owner, adj, cities, simM, sp["history"], rng,
-                         cap, n_total, mix_arr)
-    n_flip2 = normalize_pass(owner, states, adj, cities, simM, sp["normalize"],
-                             cap, targets=tgt_map)
-    unify_small_islands(states, owner, cities, sp["graph"])  # 终态闸：岛群归一
-    reattribute_cultures(states, cities)
-    n_rehome2 = culture_rehome_pass(states, owner, adj, cities, simM, keep,
-                                    cap, tgt_map)
-    reattribute_cultures(states, cities)
-    # 终态闸（最后）：出生圈手设计 + 超 cap 削顶
-    carve_born, carve_died = carve_spawn_cluster(states, owner, cities, sp)
-    n_cap_moved = enforce_cap(states, owner, cities, cap)
-    unify_small_islands(states, owner, cities, sp["graph"])  # 岛群归一终裁
-    reattribute_cultures(states, cities)
-    print("  [终态] 出生圈重划分：新生 %d 国 / 消亡 %d 国；超 cap 削顶迁移 %d 城"
-          % (carve_born, carve_died, n_cap_moved))
-    print("  事件：%s；事后 normalize 再翻 %d 城 + 归位 %d 城；最大政权 %d 城"
-          % (hcount, n_flip2, n_rehome2,
-             max(len(s["cities"]) for s in states.values()
-                 if s["extinct_round"] is None)))
-
-    # ---- 终局组装 ----
-    live = sorted(sid for sid, s in states.items() if s["extinct_round"] is None)
+    live_old = sorted((sid for sid, s in states.items()
+                       if s["extinct_round"] is None),
+                      key=lambda sid: (-len(states[sid]["cities"]),
+                                       _cap_label(states[sid]), sid))
+    rename = {old: "state_v2_%03d" % (i + 1) for i, old in enumerate(live_old)}
     states_out = {}
-    for sid in live:
-        s = states[sid]
-        cu = next(u for u in sorted(s["cities"])
-                  if cities[u]["sid"] == s["capital"])
+    for old in live_old:
+        s = states[old]
+        sid = rename[old]
         c = s["culture"]
         cid = ("cult_%02d" % c) if c > 0 else None
         states_out[sid] = {
-            "name": "", "capital": s["capital"],
-            "culture": int(c),
-            "culture_id": cid,
-            "race": race_by_culture.get(cid),
-            "alliance": None,
-            "is_city_state": len(s["cities"]) == 1,
-            "name_status": "提案/待定",
-            "n_cities": len(s["cities"]),
-            "target": s["target"],
+            "name": "", "capital": s["capital"], "culture": int(c),
+            "culture_id": cid, "race": race_by_culture.get(cid),
+            "alliance": None, "is_city_state": len(s["cities"]) == 1,
+            "name_status": "提案/待定", "n_cities": len(s["cities"]),
+            "target": len(s["cities"]),
             "history": {
-                "born_round": s["born_round"], "annexed": s["annexed"],
-                "flips_in": s["flips_in"], "flips_out": s["flips_out"],
-                "collapsed": s["collapsed"],
+                "born_round": 0, "annexed": s["annexed"],
+                "flips_in": 0, "flips_out": 0, "collapsed": False,
             },
         }
-    print("[8/8] 构型命名 + 色板 + meta...", flush=True)
+    for u in range(n_total):
+        owner[u] = rename[owner[u]]
+
+    print("[6/7] 构型命名 + 色板 + meta...", flush=True)
     city_names, name_samples = name_all(states_out, cities, sources,
                                         sp["naming"], int(sp["seed"]))
 
     conflicts = assign_colors(states_out, owner, edges, P["colors"])
     homo = homogeneity_stats(states, states_out, cities, simM,
                              float(sp["normalize"]["mix_transition"]),
-                             float(sp["normalize"]["sim_enclave_keep"]))
+                             float(sp["normalize"]["sim_enclave_keep"]),
+                             rename=rename)
 
     city_owners = {cities[u]["sid"]: owner[u] for u in range(n_total)}
     sizes = {sid: states_out[sid]["n_cities"] for sid in states_out}
 
-    # ---- 规模谱统计（先验 raw / 钳制后 target / 终局 final） ----
+    # ---- 规模谱统计（先验 raw / 终局 final；target 已取消） ----
     final_hist = Counter(sizes.values())
-    tgt_hist = Counter(tgt_map[sid] for sid in sids)
     raw_hist = {int(k): int(v) for k, v in spec_obs["raw_hist"].items()}
-    size_axis = sorted(set(final_hist) | set(tgt_hist) | set(raw_hist))
-    spectrum_table = [[sz, int(raw_hist.get(sz, 0)), int(tgt_hist.get(sz, 0)),
+    size_axis = sorted(set(final_hist) | set(raw_hist))
+    spectrum_table = [[sz, int(raw_hist.get(sz, 0)),
                        int(final_hist.get(sz, 0))] for sz in size_axis]
 
     extinct = [sid for sid, s in states.items() if s["extinct_round"] is not None]
+    # 自检口径：逐国 target = 涌现终局规模（无先验 target，偏差带恒为零）
+    allocation = {rename[sid]: {"target": states_out[rename[sid]]["n_cities"],
+                                "got": states_out[rename[sid]]["n_cities"]}
+                  for sid in live_old}
     meta = {
         "status": "提案/待定",
         "generated_by": "state_build_v2.py",
@@ -1800,46 +932,46 @@ def build(P, dry_run=False, skip_preview=False):
                            " → 文化因子取 1（荒野城纯地理归属）",
         "spectrum": {
             "params": {k: sp["spectrum"][k] for k in
-                       ("median", "sigma", "cap", "floor", "local_reach_px")},
-            "n_states_initial": n_c,
+                       ("median", "sigma", "cap", "floor")},
+            "n_states_target": n_c,
             "sampler_mean": spec_obs["sampler_mean"],
-            "local_reach_used_px": round(float(reach_used), 1),
-            "table_comment": "列 = [城数, 先验采样直方(钳制前), target 直方(局地池"
-                             "钳制后), 终局直方(A6 后)]",
+            "n_core_microstates": n_core,
+            "n_merges": n_merge,
+            "spawn_cap": spawn_cap,
+            "spawn_l1": sorted(spawn_labels),
+            "table_comment": "列 = [城数, 谱先验采样直方(期望), 终局涌现直方]；"
+                             "N_c = 谱均值反推的期望政权数，涌现合并到该数即停",
             "table": spectrum_table,
         },
-        "capital_rule": "都城适宜性 = 资源禀赋项(h 口径复用 settlements) × 文化中心性"
-                        "(exp(-距主导文化场强质心/%.0f px))；荒野城不参选；四叉树间距 "
-                        "%.0f px 自适应" % (float(sp["capital"]["central_tau_px"]),
-                                            float(sp["capital"]["min_sep_px"])),
-        "merge_formula": "边权 = attack_cost 沿线积分 × (1+%.1f×(1-城对相似度))，松弛"
-                         "时乘 (1/%.2f~%.2f expansionism) × (1+%.1f×min(1,(都城 px 测"
-                         "地距/%.0f)²)) × w_i 反馈 × (1+%.1f×已占数/target 配额压力)"
-                         % (float(sp["merge"]["k_culture"]),
-                            float(sp["merge"]["expansionism"]["min"]),
-                            float(sp["merge"]["expansionism"]["max"]),
-                            float(sp["merge"]["k_capital"]),
-                            float(sp["merge"]["capital_reach_px"]),
-                            float(sp["merge"]["fill_pressure"])),
+        "capital_rule": "都城 = 国内 population_score 最高（并列取 label 小）的城；"
+                        "都城不再预摆——全部 level>0 聚落初始各自为微核，按文化加权"
+                        "邻接边最廉价优先兼并涌现出政权，都城随之确定",
+        "merge_formula": "边权 = attack_cost 沿线积分 × (1+%.1f×(1-城对相似度))；"
+                         "微核间按最廉价边优先（Kruskal 式）合并，同岛群才可并、"
+                         "合并后 ≤ 谱 cap(%d)；出生 L1 %s 内政权封顶 %d 城"
+                         % (float(sp["merge"]["k_culture"]), cap,
+                            "/".join(str(x) for x in sorted(spawn_labels)),
+                            spawn_cap),
         "allocation_check": {
-            "note": "target 与实际城数偏差带（±max(2, 15%×target)）在 A6 前的分配快照"
-                    "上判（A6 本身就是改版图的事件层，终局谱由模拟涌现）；逐国快照如"
-                    "下，born_round>0 的 A6 新邦无 target",
+            "note": "涌现制无先验 target：逐国 target = 终局涌现规模（偏差带恒为零）。"
+                    "本表保留 schema 兼容供自检脚本消费，got 即 n_cities",
             "states": allocation,
         },
         "history": {
-            "rounds": int(sp["history"]["rounds"]),
-            "annexations": hcount["annexations"],
-            "annex_skipped_cap": hcount["annex_skipped_cap"],
-            "collapses": hcount["collapses"],
-            "border_flips": hcount["border_flips"],
-            "states_born": hcount["born"] + carve_born,
-            "states_extinct": len(extinct),
-            "states_initial": n_c,
+            "rounds": 0,
+            "annexations": n_merge,
+            "annex_skipped_cap": 0,
+            "collapses": 0,
+            "border_flips": 0,
+            "states_born": 0,
+            "states_extinct": n_core - len(states_out),
+            "states_initial": n_core,
             "states_final": len(states_out),
             "extinct_list": sorted(extinct),
-            "note": "兼并战/继承解体/边疆易手各以 attack_cost×文化相似度判据触发；"
-                    "states[].history 记逐国兴衰计数（annexed/flips/collapsed）",
+            "note": "涌现兼并：微核按最廉价文化边合并至期望政权数即停；每个兼并消融"
+                    "一个微核（计入 annexations，不逐个列 extinct_list）；"
+                    "extinct_list = 终态闸（岛群归一）中消亡的组建成国；"
+                    "states[].history.annexed 记该国直接吞并的微核数",
         },
         "homogeneity": {
             "rule": "一致 = 城主导==国文化 或 城为荒野(dominant=0) 或 近亲文化放宽"
@@ -1868,27 +1000,24 @@ def build(P, dry_run=False, skip_preview=False):
         "decisions": [
             "城图选 kNN（k=8 + 距离上限 + 分量桥接）而非 Delaunay：Delaunay 长薄三角"
             "形边跨海跨山无语义，kNN 贴合 attack_cost 沿线积分语义",
-            "荒野城（dominant=0，152 座）文化因子取 1：纯地理归属，孤立小邦形态按提"
-            "案允许，不做特殊保护",
-            "次文化 second 字段不需要：A4 城对相似度消费口径只用 dominant×mix，"
-            "settlements_v2.json 已含，无需折算",
-            "target 偏差带判在 A6 前的分配快照（meta.allocation_check）；终局谱由 A6 "
-            "涌现，只判谱形（≥5 个 12+ 城大国、≥8 个 1 城邦、无超 cap）",
-            "is_city_state = 终局城数==1（A6 后一城邦自动成立，比 target==1 更符合"
-            "「打出来」的语义）",
-            "都城中心性用「场强质心距离」exp 反比（温度口径同 fields_meta 的 "
-            "strength_temp 消费式）；荒野城中心性=0 不参选都城",
-            "cult_13/14 各仅 1 城：按全局竞争处理（不设文化配额），其城若当选都城则"
-            "自成邦、否则并入邻邦——结果见 meta.history 与 states 分布",
-            "国文化 = 名下城主导文化的多数派归因（并列先都城主导、再小 id），非都城"
-            "主导——都城落在文化过渡带/孤点时少数派都城会把国文化归错（探针实测多"
-            "数派归因使失败国一致率 0.36→0.91）；归因在收敛与 A6 后各重算一次",
-            "规模收敛 = 竞速配额压力（fill_pressure）+ normalize 规模带天花板 + "
-            "reclaim 两相回收（严格过剩→真缺口；超带/超 cap 强制排空）+ 跨国接力"
-            "（BFS 最近真缺口、中间国净零过户、1 城邦不作中间节点）",
-            "自检容差（state_check_v2.py，残差为地理围困 + 都城不可动的 1 城邦阻断"
-            "回收的硬约束）：偏差带外 ≤2% 初创国；文化同质度阈值只对 ≥3 城国生效、"
-            "超限 ≤2% 文化邦",
+            "荒野城（dominant=0）文化因子取 1：纯地理归属，孤立小邦形态允许",
+            "都城自适应涌现（创始人 2026-09-28 定向）：删除四叉树泊松盘预摆/最小间距/"
+            "出生区都城加密，改为全部 level>0 聚落各为微核、按最廉价文化加权邻接边"
+            "迭代兼并至谱均值反推的期望政权数 N_c；都城 = 国内 population_score 最高"
+            "（并列取 label 小）的城",
+            "出生区约束换表达（原 capitalize 加密参数删除）：L1 69/68 内政权规模封顶"
+            " max_cities=3 城——合并到此即停、不许长成大国；不用任何间距参数，"
+            "spawn_protect_l1=[69,68] 的「出生区不被大国吞并」语义照旧",
+            "兼并只走城图邻接边、限同岛群（跨海征服留给运行时海权，静态版图不产生）、"
+            "合并后不超谱 cap；兼并为确定性贪心（无需随机事件层）",
+            "is_city_state = 终局城数==1",
+            "国文化 = 名下城主导文化的多数派归因（并列先都城主导、再小 id）",
+            "旧分配机制（局地池钳制/normalize 消飞地/reclaim 规模回收/文化归位/"
+            "A6 随机事件层/carve_spawn_cluster 出生圈重划分）在涌现制下全部退役；"
+            "仅保留终态闸：小岛群岛内统一 + 超 cap 削顶（出生国仍封顶 3）",
+            "自检脚本（state_check_v2.py）消费的 meta.allocation_check / meta.history "
+            "键保留：涌现制无先验 target，逐国 target = 终局规模（偏差带恒为零）；"
+            "守恒口径 = 微核数 + 0 − 兼并消融数 = 终局政权数",
         ],
         "determinism": "同 seed 逐位确定：np.random.default_rng 单流固定次序消费 + "
                        "显式排序（禁 set 迭代序依赖）+ 全整数/浮点确定性运算",
@@ -1897,23 +1026,29 @@ def build(P, dry_run=False, skip_preview=False):
     product = {"meta": meta, "states": states_out, "city_owners": city_owners}
 
     # ---- 控制台报告 ----
-    print("\n=== A4 规模谱（核心验收）===")
-    print("  城数 | 先验采样 | target(钳制后) | 终局(A6 后)")
+    print("\n=== 规模谱（核心验收，涌现制）===")
+    print("  城数 | 谱先验采样 | 终局涌现")
     for row in spectrum_table:
-        print("  %3d  | %6d   | %6d        | %6d" % tuple(row))
+        print("  %3d  | %6d   | %6d" % tuple(row))
     big = [sid for sid, n in sizes.items() if n >= 12]
     one = [sid for sid, n in sizes.items() if n == 1]
-    print("  终局：≥12 城大国 %d 个（%s）；1 城邦 %d 个；最大 %d 城 / 政权 %d 个"
-          % (len(big), ", ".join("%s:%d" % (s, sizes[s]) for s in big[:8]),
-             len(one), max(sizes.values()), len(sizes)))
-    dev_bad = [sid for sid, a in allocation.items()
-               if abs(a["got"] - a["target"]) > max(2.0, 0.15 * a["target"])]
-    print("  分配偏差带外（A6 前）：%d 国 %s" % (len(dev_bad), dev_bad[:8]))
-    print("=== A6 加速历史 ===")
-    print("  兼并 %d（cap 拒绝 %d）/ 解体 %d / 易手 %d；新生 %d、消亡 %d；"
-          "政权 %d → %d" % (hcount["annexations"], hcount["annex_skipped_cap"],
-                            hcount["collapses"], hcount["border_flips"],
-                            hcount["born"], len(extinct), n_c, len(states_out)))
+    small13 = [sid for sid, n in sizes.items() if 1 <= n <= 3]
+    print("  终局：期望政权数 %d → 实际 %d；≥12 城大国 %d 个（%s）；1-3 城小国 %d；"
+          "1 城邦 %d；最大 %d 城"
+          % (n_c, len(sizes), len(big),
+             ", ".join("%s:%d" % (s, sizes[s]) for s in big[:8]),
+             len(small13), len(one), max(sizes.values())))
+    spawn_id = spawn_cfg.get("spawn_settlement_id")
+    if spawn_id in city_owners:
+        s_sid = city_owners[spawn_id]
+        so = states_out[s_sid]
+        print("  出生城 %s → %s（%s，%d 城，都城 %s）"
+              % (spawn_id, s_sid, so["name"], so["n_cities"], so["capital"]))
+    print("=== 涌现兼并 ===")
+    print("  微核 %d → 组建成国 %d（兼并 %d 次）→ 终态闸后 %d；最大政权 %d 城；"
+          "超 cap 削顶迁移 %d 城"
+          % (n_core, n_core - n_merge, n_merge, len(states_out),
+             max(sizes.values()), n_cap_moved))
     print("=== 文化同质度 ===")
     print("  文化邦 %d（一致率最低 %.3f @ %s）/ 荒野邦 %d（%d 城，豁免）"
           % (homo["cultured_states"], homo["min_rate"], homo["min_state"],
@@ -2064,16 +1199,16 @@ def make_previews(P, suit, eff_land, cities, owner, states_out, meta):
     hist_img = Image.new("RGB", (W, H), (20, 22, 28))
     dh = ImageDraw.Draw(hist_img)
     table = meta["spectrum"]["table"]
-    mx = max(max(r[1], r[2], r[3]) for r in table) or 1
+    mx = max(max(r[1], r[2]) for r in table) or 1
     x0, y0 = 70, 90
     slot = max(14, (W - 150) // max(len(table), 1))
     bw = max(3, (slot - 6) // 3)
-    dh.text((24, 18), "规模谱直方图（多数小国少数大国）— 蓝=先验采样 / 绿=target"
-            "（局地池钳制后）/ 橙=终局（A6 后）", font=font, fill=(240, 240, 245))
-    for k, (sz, a, b, c) in enumerate(table):
+    dh.text((24, 18), "规模谱直方图（多数小国少数大国）— 蓝=谱先验采样（期望）/ "
+            "橙=终局涌现", font=font, fill=(240, 240, 245))
+    for k, (sz, a, c) in enumerate(table):
         x = x0 + k * slot
         for j, (val, col) in enumerate(((a, (90, 130, 210)),
-                                        (b, (90, 190, 130)),
+                                        (0, (90, 190, 130)),
                                         (c, (235, 150, 70)))):
             if val <= 0:
                 continue
@@ -2081,9 +1216,8 @@ def make_previews(P, suit, eff_land, cities, owner, states_out, meta):
             bx = x + j * (bw + 1)
             dh.rectangle([bx, H - 60 - h, bx + bw, H - 60], fill=col)
         dh.text((x, H - 52), str(sz), font=font_s, fill=(200, 200, 210))
-    for i, (lab_, col) in enumerate((("先验采样", (90, 130, 210)),
-                                     ("target", (90, 190, 130)),
-                                     ("终局", (235, 150, 70)))):
+    for i, (lab_, col) in enumerate((("谱先验采样", (90, 130, 210)),
+                                     ("终局涌现", (235, 150, 70)))):
         dh.rectangle([70 + i * 150, H - 30, 92 + i * 150, H - 14], fill=col)
         dh.text((100 + i * 150, H - 32), lab_, font=font_s, fill=(220, 220, 228))
     out2 = os.path.join(FIELDS_DIR, "states_v2_preview_spectrum.png")

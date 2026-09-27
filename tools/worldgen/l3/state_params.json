@@ -478,46 +478,23 @@
    "absorb_max_px_comment": "极小缝阈值（8192级 px²，约地块 p50 的 1/30）：≤此值的缝隙并入相邻地块；更大/更长的缝由 fill_gap_seeds 撒新地块"
   },
   "states_v2": {
-   "comment": "A4 国家生成 v2 + A6 加速历史 + 构型命名（state_build_v2.py）。输入 = 棒 1 场产物 + 棒 2 settlements_v2.json；输出 = output/fields/political_data_v2.json（schema 对齐 political_data：states/city_owners/meta，culture 字段 = v2 文化源点序号 1..K、0=荒野）。同 seed 逐位确定（np.random.default_rng 单流消费 + 显式排序，禁 set 迭代序依赖）",
+   "comment": "A4 国家生成 v2 · 都城自适应涌现（state_build_v2.py）。输入 = 棒 1 场产物 + 棒 2 settlements_v2.json；输出 = output/fields/political_data_v2.json（schema 对齐 political_data：states/city_owners/meta，culture 字段 = v2 文化源点序号 1..K、0=荒野）。机制 = 全部 level>0 聚落各为微核，按文化加权邻接边（attack_cost 沿线积分 × 文化因子）最廉价优先迭代兼并，至谱均值反推的期望政权数 N_c；都城 = 国内 population_score 最高（并列取 label 小）的城。同 seed 逐位确定（np.random.default_rng 单流消费 + 显式排序，禁 set 迭代序依赖）",
    "seed": 20260928,
    "spectrum": {
-    "comment": "每国 target ~ 截断对数正态：ln target ~ N(ln median, sigma)，clamp [floor, cap]（下尾压成 1 城邦、上尾压成 cap 大国原子）；N_c（都城数）= round(总城数 / 谱均值) 反推；Σtarget = 总城数经「尺度二分 + 最大余数整数化」精确归一。目标采样后再做「局地池」可行性钳制（target ≤ 都城 local_reach 内可达城数，缺额按余量比例摊回、池和不足逐轮放宽——贫瘠区州小、富庶区州大，保谱形优先；联合可行性由 normalize 规模带天花板 + reclaim 带内流动收尾保证），钳制前后直方图都进 meta",
+    "comment": "每国 target ~ 截断对数正态（ln target ~ N(ln median, sigma)，clamp [floor, cap]）——涌现制下该谱只用于反推「期望政权数」N_c = round(总城数 / 谱均值，含钳制)，不再逐国分配 target；政权规模由文化加权兼并自然涌现。合并上限 = cap（合并后超 cap 即跳过）；floor 仅参与 N_c 反推",
     "median": 4.0,
     "sigma": 0.85,
     "cap": 18,
     "floor": 1,
-    "local_reach_px": 1100,
-    "local_reach_px_comment": "局地可行池半径（8192 级，城图 px 测地）：都城可达城数 = target 上限；不足摊额时逐轮 ×1.3 放宽保证 Σ 可行",
-    "region_tilt": {
-     "comment": "碎度地区化（创始人定向）：每国 target × 都城所在群系 tilt——贫瘠区天生更碎、富庶区易生大国（biome id：1 平原/2 森林/3 荒漠/4 冰原/5 源流/6 火山）",
-     "1": 1.25,
-     "2": 1.0,
-     "3": 0.5,
-     "4": 0.55,
-     "5": 1.3,
-     "6": 0.5
-    },
     "spawn_cluster": {
-     "comment": "出生小国群（创始人定向保留，2026-09-28 迁至真出生点）：出生 L1(69) 及邻接 68 内国家 target 上限 3（1-3 城小国群）+ 都城间距加密（×0.45）；出生点=创始人已定位置映射 city_399",
+     "comment": "出生小国群约束（创始人 2026-09-28 定向换表达）：L1 68/69 内的政权规模封顶 max_cities=3 城——兼并到此即停、不许长成大国；不含任何间距/加密参数（原 capital_sep_mult 等摆放专用键已删）。出生点 = 创始人已定位置映射 city_399（l1 68）。history.spawn_protect_l1 与之同值，「出生区不被大国吞并」语义照旧",
      "spawn_settlement_id": "settlement_city_399",
      "l1_labels": [
       69,
       68
      ],
-     "max_cities": 3,
-     "capital_sep_mult": 0.45
+     "max_cities": 3
     }
-   },
-   "capital": {
-    "comment": "都城适宜性 = 资源禀赋项 × 文化中心性。资源禀赋项复用 settlements 的 h 口径（h_w_suit×宜居 + h_w_res×tanh(资源加权和/gain_norm)，城点双线性采样）；文化中心性 = exp(-城到主导文化「场强质心」欧氏距离 / central_tau_px)，质心自 culture_strength 2048 场按主导文化加权（荒野城 dominant=0 中心性=0 不参选都城）；四叉树最小间距（state_expand_lite._SeedQuadtree 借用）自适应放宽",
-    "min_sep_px": 900,
-    "sep_relax": 0.75,
-    "max_relax_rounds": 7,
-    "central_tau_px": 900,
-    "cap_pop_base": 0.55,
-    "cap_pop_span": 0.9,
-    "cap_level1_discount": 0.35,
-    "cap_pop_comment": "都城适宜性人口因子：cap_suit=geo×cent×(base+span×ps)；level1 城再×discount（大城更可能为都；偏远区域无大城时村都城为地理必然）"
    },
    "graph": {
     "comment": "kNN 城图（2048 级坐标、max_edge 与 state_expand_lite 同口径）+ 分量桥接（_bridge_components 借用）；选 kNN 不选 Delaunay：Delaunay 长薄三角形边跨海跨山无意义，kNN+距离上限贴合 attack_cost 沿线积分语义且桥接兜底孤岛。geo_cost = attack_cost 沿连线 line_samples 点采样均值 × 8192 级距离（fields_meta 消费口径；8192 mmap 直采保 2px 河流带不被降采样稀释）",
@@ -531,50 +508,16 @@
     "grp_single_max_cities_comment": "≤此城数的岛群归一国（都城限1/清洗归一/解体保护三处同参）；13-30 城群允许多国（合并与文化自然收敛，check 断言国数上限）"
    },
    "merge": {
-    "comment": "边权（静态）= geo_cost × (1 + k_culture×(1-城对相似度))；Dijkstra 松弛时乘每态因子 (1/expansionism_i) × (1 + k_capital×min(1,(城到本国都城 px 测地距/reach)²)) × w_i 面积反馈 × (1+eps×已占城数)。城对相似度 = sim(dom_u,dom_v)×(1-mix_u)×(1-mix_v)（culture_similarity.json 消费口径），任一端 dominant=0 → 文化因子取 1（荒野城纯地理归属，孤立小邦形态允许）。Balzer 面积反馈迭代到采样 target（大国自然多吃、小国到量即止）",
-    "k_culture": 2.6,
-    "k_capital": 1.0,
-    "capital_reach_px": 1100,
-    "expansionism": {
-     "min": 0.75,
-     "max": 1.45
-    },
-    "cap_factor": 2.2,
-    "cap_factor_comment": "容量硬上限 = ceil(target × cap_factor)（防 runaway；取宽值消除局部饱和未覆盖 pocket，超配由 reclaim 规模回收拉回；A6 兼并/解体并入、normalize 翻转受 cap/天花板约束）",
-    "feedback": {
-     "eta": 0.6,
-     "rounds": 10,
-     "w_clip": [
-      0.2,
-      3.5
-     ]
-    },
-    "fill_pressure": 2.5,
-    "fill_pressure_comment": "竞速配额压力：松弛代价乘 (1 + κ×已占城数/target)——到量即贵、缺口国自然续灌，规模配额在竞速内动态达成（取代旧 balance_eps 全局项）"
+    "comment": "静态边权 = geo_cost（attack_cost 沿线 line_samples 点采样均值 × 8192 级距离）× (1 + k_culture×(1-城对相似度))。城对相似度 = sim(dom_u,dom_v)×(1-mix_u)×(1-mix_v)（culture_similarity.json 消费口径），任一端 dominant=0 → 文化因子取 1（荒野城纯地理归属）。涌现制下微核间即按此边权最廉价优先合并（Kruskal 式），无 expansionism/capital 衰减/面积反馈等分配期修饰项",
+    "k_culture": 5.0
    },
    "normalize": {
-    "comment": "多数邻域翻转消飞地（FMG normalize 同款）：非都城城最大异国邻居数 ≥ min_foreign 且 > 本国数则翻给该邻国。过渡带放宽：mix ≥ mix_transition 的城阈值提高到 min_foreign_transition，且「相似文化飞地」保留（sim(城主导, 目标国文化) ≥ sim_enclave_keep 且仍有本国邻居）——文化过渡带允许少量跨相似文化飞地",
-    "min_foreign": 2,
-    "min_foreign_transition": 3,
+    "comment": "（涌现制下 normalize 消飞地已退役）仅保留文化同质度报告口径：mix_transition = 纳入统计的混合度阈值；sim_enclave_keep = 近亲文化放宽阈值（sim(城主导, 国文化) ≥ 此值视为一致）。state_check_v2.py 消费 sim_enclave_keep",
     "mix_transition": 0.35,
-    "sim_enclave_keep": 0.5,
-    "max_rounds": 6
+    "sim_enclave_keep": 0.5
    },
    "history": {
-    "comment": "A6 加速历史 K 轮（DF 路线轻量版；K=0 退化纯分配）。兼并战：强国（城数 ≥ annex_min_attacker，按规模加权抽签）选邻接弱国中接触成本（最低静态边权 = geo×文化罚）最低者吞并，accept 概率 = clip(p_annex×(1+k_gap×强弱差), 0, annex_p_max)，吞并后不超 cap；继承解体：城数 > collapse_over 的国每轮 p_collapse 碎一地——非都城城按 label 序各以 p_indep 独立成邦（WorldBox makeOwnKingdom 同构）、余者并入接触成本最低且未满 cap 的邻国；边疆易手：模糊带（mix ≥ flip_mix_min）边界城翻给接触成本最低邻国。事件全部走 attack_cost×文化相似度判据；兴衰史计数进 meta.history",
-    "rounds": 30,
-    "p_annex": 0.75,
-    "annex_min_attacker": 4,
-    "annex_sim_min": 0.5,
-    "annex_sim_min_comment": "兼并文化门槛：attacker 与目标国文化相似度（荒野国=0 视为中性放行）≥ 此值才可吞并——与自检的近亲文化放宽口径（sim_enclave_keep）一致，大国版图沿文化近亲方向长",
-    "k_gap": 1.5,
-    "annex_p_max": 0.95,
-    "p_collapse": 0.012,
-    "collapse_over": 8,
-    "p_indep": 0.32,
-    "p_flip": 0.6,
-    "flip_mix_min": 0.3,
-    "collapse_island_max": 30,
+    "comment": "（涌现制下 A6 随机事件层已退役）仅保留出生区保护标签：spawn_protect_l1 与 spectrum.spawn_cluster.l1_labels 同值，语义 = 出生 L1 圈内政权不被兼并吞并（现由「规模封顶 max_cities」实现，合并进大国被上限阻断）",
     "spawn_protect_l1": [
      69,
      68

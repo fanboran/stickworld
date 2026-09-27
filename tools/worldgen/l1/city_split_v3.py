@@ -5,17 +5,13 @@
   1. 城市点 = settlements_v2.json 的 1036 聚落（变半径泊松盘选址产物），不再撒点。
      tile label = 聚落 label（1..1036 连续），settlement_id = settlement_city_%03d
      ——与 political_data.city_owners / world_contract_initializer 的映射体系同源。
-  2. 主张盘封顶（settlement_build claim 口径，A4 无主荒地同源）：城块生长按
-     老 L1 分组做「最近聚落抗衡」（EDT 一次距离变换取每像素最近种子——平面
-     多源膨胀的等价快算），生长后把「距自己聚落欧氏距离 > 主张半径」
-     的像素退归无主荒地（label 0）。主张半径 = min(泊松盘半径, claim_cap_px)，
-     泊松盘半径按同一公式自 suitability 场复算（r_max − (r_max−r_min)×
-     ((suit−suit_min)/(1−suit_min))^radius_curve）。
-     → 荒地 = 无聚落主张覆盖的陆地（贫瘠带成片、富庶带零星），语义与
-       settlements_v2.json meta.wilderness_note 一致（荒地率同口径）。
+  2. 纯「最近聚落抗衡」（创始人 2026-09-27 裁决：抗衡即唯一边界）：城块生长按
+     老 L1 分组做 EDT 一次距离变换取每像素最近种子（平面多源膨胀的等价快算），
+     每寸陆地都有归属、无缝无灰。早期「主张盘封顶」（距聚落超主张半径退灰，
+     再撒填充点补洞）已退役——圆块/灰缝/填充点链的根源，git 历史可考古。
   3. 无聚落的老 L1 连通分量（离岛等）不再兜底撒点——直接留荒地（v2 语义：
      无聚落即无主，不再造「质心兜底城」）。
-  4. 面积下限合并取消：主张盘封顶后小城块是贫瘠带的正常形态，合并会破坏
+  4. 面积下限合并取消：小城块是贫瘠带的正常形态，合并会破坏
      「一聚落一城块」的 1:1 映射。
   5. 落水聚落吸附：v2 聚落位置自 2048 场采样（±4px），个别点位按 region 蒙版
      落在水上——吸附到最近老 L1 陆地像素（≤ 数 px，仅影响城块种子位置，
@@ -336,8 +332,8 @@ def main():
     print("[3/6] 按老 L1 分组多源膨胀生长城块 ...")
     labels = grow_cities(land, parent, seeds, seed_labels)
 
-    print("[4/6] 主张盘封顶（claim_cap=%d px）..." % int(sp["claim_cap_px"]))
-    removed = cap_by_claim(labels, seeds, seed_labels, claims)
+    # 主张盘封顶已退役（创始人 2026-09-27：抗衡即唯一边界）——纯 EDT 划分无缝无灰
+    removed = 0
     n_city = len(seed_labels)
     present = set(int(v) for v in np.unique(labels) if v > 0)
     missing = [int(l) for l in seed_labels if int(l) not in present]

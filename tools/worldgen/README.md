@@ -25,8 +25,7 @@ tools/worldgen/
 │   ├── fields_build.py             # A1 场（宜居度/资源/进攻成本 → fields/*.npy + 场预览）
 │   ├── culture_build.py            # A2 文化场（源点 flood → culture_field/mix + culture_preview）
 │   ├── settlement_build.py         # A3 聚落（变半径泊松 → settlements_v2.json + 密度预览）
-│   ├── origin_seed_recover.py      # 填缝①：原地块质心落灰区 → 优先复种点（在通用撒点之前）
-│   ├── fill_gap_seeds.py           # 填缝②：灰缝覆盖驱动撒规模 0 点（--from-labels 按实际划分取缝）
+│   ├── origin_seed_recover.py      # 原地块质心复种（落灰区的原址优先成点；纯抗衡下通常 0 个，存量 6 点在 settlements_v2.json）
 │   ├── landmass_util.py            # 同陆块约束（4 连通陆块 / 最近陆地传播 / 同陆块回填 / 一城块一陆块收尾）
 │   ├── refine_city_labels.py       # 城块边界 fBm 域扭曲细化（--write；同陆块回填 + 跨块收尾）
 │   ├── city_preview_from_refined.py# 城块终图（refined 场渲染，locked 海岸线口径 + 灰统计）
@@ -46,7 +45,7 @@ tools/worldgen/
 │   └── update_tiles_coastline.py   # 按 8K 蒙版裁切海岸线
 ├── l1/                    # L1 地块合并 / 生成 / 全大陆 L1 蒙版（活跃）
 │   ├── city_split_v2.py           # 老 L1 之下细分城市（13 地区 tiles 拼全局 → 城市蒙版，8192 级，1040 城）
-│   ├── city_split_v3.py           # V2 聚落表重切城块（EDT 最近聚落抗衡 + 主张盘封顶 + 同陆块并缝；--labels-only --cached-parent 填缝迭代快跑）
+│   ├── city_split_v3.py           # V2 聚落表重切城块（纯 EDT 最近聚落抗衡，无缝无灰；同陆块并缝 + 一城块一陆块收尾）
 │   ├── export_l1_view_context.py  # 出生老 L1 视图上下文导出（Tab 数据源，8192 级；--panorama 出世界全景 preview，F8 缩略窗候选底图）
 │   ├── export_l3_l1_view.py          # L3 视觉层双模式（老 L1 矢量 + 城市贴图 + hover 索引图）
 │   ├── export_l2_city_previews.py   # L2 城市模式贴图（每地区 context 尺寸，读 city_preview_8192）
@@ -96,42 +95,33 @@ fractal_continent / biome_generate / region_split（旧链：大陆/群系/13 �
   └─ l3/fields_build.py     A1 场 → output/fields/{suitability,mineral,fertile,forest,fishsalt,attack_cost}.npy
                             + fields_preview_{suitability,resources,attack_cost}_2048.png
      └─ l3/culture_build.py A2 文化 → culture_field/culture_mix.npy + culture_preview_2048.png
-        └─ l3/settlement_build.py  A3 聚落 → settlements_v2.json（1036 正常聚落，坐标 8192 级）
+        └─ l3/settlement_build.py  A3 聚落 → settlements_v2.json（1036 正常聚落 + 6 原址复种点，坐标 8192 级）
                                    + settlements_preview_density_2048.png
-           └─ 填缝链改写 settlements_v2.json（追加规模 0 点：原地块复种 + 灰缝撒点，见下）
+           └─ l1/city_split_v3.py  城块 = 纯「最近聚落抗衡」（EDT，每寸陆地都有归属、无缝无灰）
               └─ l3/state_build_v2.py  A4/A6 政权 → political_data_v2.json
                                         + states_v2_preview_{political,spectrum}_2048.png
 ```
 
-### 城块划分 + 填缝迭代（定稿操作序列）
+### 城块划分 + 终图（定稿操作序列）
 
 ```bash
 PY=py -3.12   # PATH 里 Inkscape 自带 python 无 scipy，必须用 py -3.12
 
-# ① 快速试划分（复用已落盘老 L1 蒙版；只算标签场 + 缝隙统计，分钟级）
-$PY l1/city_split_v3.py --labels-only --cached-parent
-#    → output/l1_v2/city_labels_8192.npy；末行「>600px² 块 N 个」是收敛判据
-
-# ② 原地块位置优先复种（创始人定稿顺序：在通用撒点之前）
-$PY l3/origin_seed_recover.py
-#    → submodule 各包 tiles 多边形质心落灰区的，追加为 settlements_v2.json 规模 0 点
-
-# ③ 通用灰缝撒点（>600px² 块、离最近地块 >3px 的孤块不论大小都给点）
-$PY l3/fill_gap_seeds.py --from-labels
-
-# ④ 循环 ①⇄③，直到 ① 末行报「已收敛」（>600px² 块 0）
-
-# ⑤ 全量划分（EDT 生长 / 主张盘封顶 / 同陆块并缝 absorb / 一城块一陆块收尾 / mesh / 配色 / JSON）
+# ① 全量划分（纯 EDT 最近聚落抗衡 / 同陆块并缝 / 一城块一陆块收尾 / mesh / 配色 / JSON）
 $PY l1/city_split_v3.py --cached-parent
 #    → city_labels_8192.npy + city_data.json + city_partition/city_cities_8192.png
 
-# ⑥ 边界细化（fBm 域扭曲 + 同陆块回填 + 跨陆块收尾）
+# ② 边界细化（fBm 域扭曲 + 同陆块回填 + 跨陆块收尾）
 $PY l3/refine_city_labels.py --write
 #    → refined_city_labels_8192.npy + output/refine_preview_{海岸段,内陆界}.png
 
-# ⑦ 终图两张
+# ③ 终图与政权
 $PY l3/city_preview_from_refined.py   # city_preview_8192.png（locked 海岸线口径，附灰区统计）
 $PY l3/settle_preview_v2.py           # settlements_preview_locations_2048.png（撒点 + 灰点）
+$PY l3/state_build_v2.py              # 政权 + states_v2_preview_{political,spectrum}_2048.png
+
+# ④ blob 验收图（旧管线形状公式 + V2 世界数据，不写游戏包）
+$PY l1/blob_preview_v2world.py        # blob_preview_2048.png + blob_closeup.png
 ```
 
 ### 验收图 → 生成管线速查
@@ -150,8 +140,9 @@ $PY l3/settle_preview_v2.py           # settlements_preview_locations_2048.png�
 | states_v2_preview_political_2048 / spectrum | `l3/state_build_v2.py`（`--skip-preview` 可关） | political_data_v2 + refined 场 + 聚落表 |
 | river_vectors_preview | `l2_export/river_export.py` | locked 河流 |
 | roads_preview_2048 | `l1/road_generate.py` | 聚落表 + 地形 |
-| arcs_preview_2048 / birth_closeup | `l3/arc_topology.py --write` | 城块 mesh（**城块变更后须重跑**） |
-| blob_preview_2048 / blob_closeup | `l1/blob_bake.py`（现行 R7 代）；重烤走 `l1/blob_v2_generate.py` → `l1/blob_v2_bake.py`，分档参数 = submodule `blob_params.json` levels 段 | 城块 + blob 几何 npz |
+| blob_preview_2048 / blob_closeup | `l1/blob_preview_v2world.py`（旧径向管线形状公式接 V2 聚落表；分档参数 = submodule `blob_params.json` levels 段） | settlements_v2 + 高度场/河湖/locked 陆 |
+
+- `l3/arc_topology.py`（共享弧拓扑 → political_mesh）：**管线自检工具，不出验收图**——城块几何定稿收线时 `--write` 落地，指标（弧配对率/面积守恒）进交接档。
 
 - 城块几何更新后（city_labels / refined 变更），arcs、包内道路、political mask 等下游按交接档 §五剩余工作清单重跑；本表只列预览图的直接生成器。
 - `l3/tile_world_*.py`（属性层试验线）已废弃，勿再运行。

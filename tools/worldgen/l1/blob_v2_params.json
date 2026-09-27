@@ -13,7 +13,7 @@
     "k": 0.9,
     "min_total_area": 30,
     "max_fill": 0.85,
-    "a_max_px2": 12000
+    "a_max_px2": 4080
   },
   "core": {
     "a": 1.0,

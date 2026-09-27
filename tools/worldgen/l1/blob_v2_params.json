@@ -11,9 +11,10 @@
   },
   "area": {
     "k": 0.9,
-    "gamma": 0.7,
     "min_total_area": 30,
-    "max_fill": 0.85
+    "max_fill": 0.85,
+    "a_min_px2": 600,
+    "a_max_px2": 12000
   },
   "core": {
     "a": 1.0,

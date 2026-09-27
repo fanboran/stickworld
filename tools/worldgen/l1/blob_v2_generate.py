@@ -10,8 +10,9 @@
     binary_opening(1) → binary_closing(2) → find_contours 亚像素多环(外环+内环洞+飞地)
     → shapely simplify 保拓扑；洞面积 < max(3% 城区, 60px²) 丢弃
 
-尺度 R_ref(level, s) = base + g_max·s^gamma 复用旧 blob_params.json 的 level 带
-（与 blob_bake.py 的容量探测段同源，保证「容量卡向」语义一致）。
+尺度（归一化）：目标面积线性 A(s) = a_min + (a_max−a_min)·s，R_ref = sqrt(A/(πk))
+——剪影面积与规模 population_score 成正比（创始人 2026-09-27 口径），带宽整体收缩
+（a_max = 大城地块容量 p75，见 blob_v2_params.json area 段）。
 
 三档（tiers.low/mid/high）：每城按档位 s 各算一版轮廓——运行时随人口增长切档（R5 裁决）。
 贫瘠城（s 低 / capacity≈0 / 被山恋水卡死）目标面积自然塌缩 → 合法输出「无建成区」。
@@ -63,9 +64,16 @@ def djb2(s: str) -> int:
 
 
 def r_ref_of(level, s, area_p, lv_bands):
-    """尺度半径：复用旧 blob level 带 base + g_max·s^gamma（与容量探测段同源）"""
-    base, g_max = lv_bands.get(level, (30.0, 30.0))
-    return base + g_max * (max(s, 0.0) ** float(area_p["gamma"]))
+    """尺度半径（归一化，创始人 2026-09-27：剪影按面积成正比 + 整体缩小）：
+    目标面积线性 A(s) = a_min + (a_max−a_min)·s（s=population_score 0..1），
+    半径开根号导出 R = sqrt(A/(π·k))——面积严格随规模线性，不再按 level 分带、
+    不按直径映射（直径映射面积二次膨胀）。a_min/a_max 取 area 段
+    （a_max=大城地块容量 p75，整体收缩让大城基本装进自己地块）。level 仅保签容错。"""
+    k = float(area_p.get("k", 0.9))
+    a_min = float(area_p.get("a_min_px2", 600.0))
+    a_max = float(area_p.get("a_max_px2", 12000.0))
+    a = a_min + (a_max - a_min) * max(s, 0.0)
+    return math.sqrt(a / (math.pi * k))
 
 
 # ==================== 输入加载 ====================

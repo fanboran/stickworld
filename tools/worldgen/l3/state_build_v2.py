@@ -1139,18 +1139,14 @@ def make_previews(P, suit, eff_land, cities, owner, states_out, meta):
     img = Image.fromarray(rgb, "RGB")
 
     dr = ImageDraw.Draw(img)
-    for c in cities:  # 城点（极小标记；形状由城块表达，不再画圆）
-        x, y = c["x"] / K, c["y"] / K
-        r = 1.2 + (1.0 if c["pop"] >= 0.342 else 0.5)
-        dr.ellipse([x - r, y - r, x + r, y + r], fill=(250, 250, 245))
     cap_lab = []
     for sid in live:
         cap = states_out[sid]["capital"]
         node = next(c for c in cities if c["sid"] == cap)
         x, y = node["x"] / K, node["y"] / K
-        rr = 4 if states_out[sid]["n_cities"] >= 12 else 3
-        dr.ellipse([x - rr, y - rr, x + rr, y + rr], outline=(255, 255, 255),
-                   width=2, fill=(20, 20, 24))
+        rr = 3
+        dr.ellipse([x - rr, y - rr, x + rr, y + rr],
+                   outline=(20, 20, 24), width=1, fill=(255, 255, 255))
         cap_lab.append((states_out[sid]["n_cities"], x, y,
                         states_out[sid]["name"], sid))
     for n, x, y, name, _sid in sorted(cap_lab, reverse=True)[:16]:
@@ -1163,7 +1159,7 @@ def make_previews(P, suit, eff_land, cities, owner, states_out, meta):
     d2.text((S + 18, 20), "A4+A6 政治版图 v2（%d 政权 · %d 城）"
             % (len(states_out), meta["n_cities"]), font=font,
             fill=(240, 240, 245))
-    d2.text((S + 18, 52), "白圈=都城（大圈=12+ 城强权）· 白点=城市 · 暗线=国界"
+    d2.text((S + 18, 52), "白点=都城 · 暗线=国界"
             "（城块场直出：地块换国色，国界按归属描线）",
             font=font_s, fill=(170, 175, 185))
     top = sorted(live, key=lambda s: (-states_out[s]["n_cities"], s))[:24]

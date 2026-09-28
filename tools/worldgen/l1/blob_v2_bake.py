@@ -198,24 +198,14 @@ def _smoothstep(x, a, b):
 
 
 def settlement_base(ps, sc, ring_rgb=None):
-    """现实聚落屋顶色随规模插值 + 地景自适应（创始人 2026-09-29 两轮指正）：
-    村 = 土墙草顶黄棕 / 镇 = 陶瓦（柔化防锈斑感）/ 城 = 石砌暖灰；绿地上的暖棕
-    与植被绿互补；**中性高亮地形（雪）切屋顶灰斑**——雪白地上的陶瓦红读作锈渍，
-    真实雪景里的聚落 = 深色屋顶/裸地灰。判据 = 环带均值 RGB 的亮度 × 饱和度
-    （雪=高亮低饱和；沙漠暖坦饱和度高不触发，走土色明度耦合）。"""
-    v = np.asarray(sc.get("village", [166, 130, 90]), np.float32)
-    t = np.asarray(sc.get("town", [170, 117, 89]), np.float32)
-    c = np.asarray(sc.get("city", [148, 138, 128]), np.float32)
+    """城市剪影 = 中性灰阶石砌色随规模加深（创始人 2026-09-29 三轮指正后的定案：
+    村浅灰 → 镇中灰 → 城深灰，**无任何暖偏**——暖棕/陶瓦在地图上读作铁锈）。
+    地形只走明度耦合（lum_gain，derive_base_color 内），不做色相自适应。"""
+    v = np.asarray(sc.get("village", [150, 149, 145]), np.float32)
+    t = np.asarray(sc.get("town", [133, 132, 129]), np.float32)
+    c = np.asarray(sc.get("city", [112, 112, 114]), np.float32)
     base = v + (t - v) * _smoothstep(ps, 0.15, 0.45)
-    base = base + (c - base) * _smoothstep(ps, 0.45, 0.8)
-    if ring_rgb is not None:
-        mx, mn = float(ring_rgb.max()), float(ring_rgb.min())
-        lum = float(ring_rgb.mean())
-        sat = (mx - mn) / max(mx, 1.0)
-        snow_f = _smoothstep(lum, 172.0, 210.0) * (1.0 - _smoothstep(sat, 0.16, 0.32))
-        gray = np.asarray(sc.get("roof_gray", [128, 121, 113]), np.float32)
-        base = base + (gray - base) * (snow_f * 0.85)
-    return base
+    return base + (c - base) * _smoothstep(ps, 0.45, 0.8)
 
 
 def derive_base_color(terrain_img, ax, ay, r_in, r_out, bake_p, ps=0.0, valid=None):
@@ -521,17 +511,19 @@ def bake_pack(pack_dir, geoms, lv_bands, gamma, bake_p, terrain_img,
             n_draw += 1
     # 河从城上过（创始人 2026-09-29）：场已不剔河（城跨河连续不切开），贴图端
     # 把河在城像素上重描——否则城贴图盖住地形河线。逐档层都描（运行时三层叠放，
-    # 只描 low 会被上层建成区盖掉）
+    # 只描 low 会被上层建成区盖掉）。alpha 用高斯软核覆盖率（AA，无硬边锯齿）
     if river8 is not None:
         ox_i, oy_i = int(ox), int(oy)
         rv = river8[oy_i:oy_i + H, ox_i:ox_i + W]
         if rv.any():
+            ra = ndi.gaussian_filter(rv.astype(np.float32), sigma=0.9)
+            alpha = np.clip((ra - 0.35) / 0.35, 0.0, 1.0)
             for t in TIERS:
                 arr = np.asarray(canvases[t]).copy()
-                draw = rv & (arr[..., 3] > 0)
-                if draw.any():
+                w = alpha * (arr[..., 3] > 0)
+                if (w > 0).any():
                     f = arr[..., :3].astype(np.float32)
-                    f[draw] = f[draw] * 0.3 + np.array([46.0, 102.0, 140.0]) * 0.7
+                    f[:] = f * (1.0 - w[..., None] * 0.7)                         + np.array([46.0, 102.0, 140.0]) * (w[..., None] * 0.7)
                     arr[..., :3] = f.astype(np.uint8)
                     canvases[t] = Image.fromarray(arr)
     for t in TIERS:

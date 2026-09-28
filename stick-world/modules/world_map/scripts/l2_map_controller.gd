@@ -174,11 +174,13 @@ func open(region_id: String) -> void:
 	# HUD 层级按钮组（需求 8）：当前层级 L2 高亮；L1 可达 = 已注入 L1 下钻视图；
 	# L3 可达 = 大世界视图已装配（地区视图脱离 L3 单独开时置灰不报错）
 	if _hud != null and _hud.has_method("set_level_state"):
-		var l3_on := MapControllerUtil.view_in_tree(self, MapControllerUtil.GROUP_L3_VIEW)
-		_hud.set_level_state("L2", {"L1": l1_view != null, "L2": true, "L3": l3_on}, {
-			"L1": "回到本省地块视图" if l1_view != null else "地块视图未装配",
-			"L3": "查看大世界" if l3_on else "大世界视图未装配",
+		# 层级按钮常启用（跳转入口语义，L1 由分派端 ensure 装配）；政治层恢复可点
+		_hud.set_level_state("L2", {"L1": true, "L2": true, "L3": true}, {
+			"L1": "回到本省地块视图",
+			"L3": "查看大世界",
 		})
+		if _hud.has_method("set_layer_enabled"):
+			_hud.set_layer_enabled(MapModeManager.Layer.POLITICAL, true)
 	# 粒度指示：L2 层级 + 当前地区 ID（提示文案由组件按 view_level 生成）
 	if _indicator != null:
 		var rid: String = data.region_id if data != null and not data.region_id.is_empty() else _current_region_id

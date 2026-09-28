@@ -141,7 +141,7 @@ func _test_world_map_dynamic() -> void:
 	content.open()
 	await get_tree().process_frame
 	_runner.assert_true(content.visible, "打开后战略图应可见")
-	# 渲染器应持有 L1 数据（8 城邦）
+	# 渲染器应持有 L1 数据（出生 L1 全部城块有聚落）
 	var api: Node = content.get_node_or_null("Api")
 	_runner.assert_true(api != null and api.is_initialized(), "战略图 api 应已初始化（L1 数据加载）")
 	if api != null and api.is_initialized():
@@ -150,7 +150,7 @@ func _test_world_map_dynamic() -> void:
 		for tile in data.tiles:
 			if tile.settlement != null:
 				settled += 1
-		_runner.assert_true(settled == 8, "战略图应含 8 个城邦聚落，实际 %d" % settled)
+		_runner.assert_true(settled == 10, "战略图应含 10 个城邦聚落（出生 L1 69 全块），实际 %d" % settled)
 	# 关闭
 	content.close()
 	await get_tree().process_frame

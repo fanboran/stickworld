@@ -154,6 +154,11 @@ def check_pack(json_path, land8, lake8, river8, wasteland8=None):
             ocean = ~ctx_land
             ob = ocean ^ binary_erosion(ocean)
             unc = ob & ~binary_dilation(geom_eff)
+            if wasteland8 is not None:
+                # V2 纯抗衡语义：无聚落离岛/无主陆地不切块（创始人 2026-09-27 裁决
+                # 「无聚落即无主留荒地」）——荒地邻接的海岸线无城块描边是设计，不计缺口
+                unc &= ~binary_dilation(
+                    wasteland8[y0:y0 + side, x0:x0 + side], iterations=2)
             b = 8
             inner = unc.copy()
             inner[:b, :] = False

@@ -27,14 +27,14 @@ const RUN_SEED := 20260925
 ## 口径漂移即红灯；期望值 = V2 生成端 settlement_build 同阈值口径的 level）
 const LEVEL_ANCHORS := {
 	"settlement_city_001": 1,   # ps 0.1441（村）
-	"settlement_city_427": 2,   # ps 0.2882（镇；出生点）
+	"settlement_city_427": 2,   # ps 0.2882（镇）
 	"settlement_city_056": 3,   # ps 0.3428（城；近阈值边界守护）
 }
 
 ## 出生聚落（population 每局扰动免疫）→ 人口可精确断言（档内插值无抖动）
-## V2 出生点 = 关洋湾都城 settlement_city_427（2 城小国，出生包 l1_049）
-const SPAWN_ID := "settlement_city_427"
-const SPAWN_EXPECT_POP := 415
+## V2 出生点 = 西达塞行成员城 settlement_city_399（3 城小国，出生包 l1_069）
+const SPAWN_ID := "settlement_city_399"
+const SPAWN_EXPECT_POP := 332
 
 var _runner: TestRunner
 ## 只读共享夹具：构建含大文件装载，逐用例重建会拖垮批量窗口；

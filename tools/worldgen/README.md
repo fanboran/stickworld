@@ -140,7 +140,7 @@ $PY l1/blob_v2_generate.py            # blob_v2_preview_2048.png + blob_v2_close
 | states_v2_preview_political_2048 / spectrum | `l3/state_build_v2.py`（`--skip-preview` 可关） | political_data_v2 + refined 场 + 聚落表 |
 | river_vectors_preview | `l2_export/river_export.py` | locked 河流 |
 | roads_preview_2048 | `l1/road_generate.py` | 聚落表 + 地形 |
-| blob_v2_preview_2048 / blob_v2_closeup | `l1/blob_v2_generate.py`（现行 R5 场叠加管线，产 blob_low/mid/high 烘焙源几何；分档参数 = submodule `blob_params.json` levels 段 + `l1/blob_v2_params.json`） | settlements_v2 + 城块多边形 + 地形场 |
+| blob_v2_preview_2048 / blob_v2_closeup | `l1/blob_v2_generate.py`（现行 R5 场叠加管线，产三档烘焙源几何 npz；尺寸/分档参数统一在 `l1/blob_v2_params.json`：R=r0_px+r1_px·ps 零截距终态 r0=0/r1=30、三档 ps=0.18/0.5/0.82；submodule 根 `blob_params.json` 是退役径向代的旧档，v2 不读） | settlements_v2 + 城块多边形 + 地形场 |
 
 - `l3/arc_topology.py`（共享弧拓扑 → political_mesh）：**管线自检工具，不出验收图**——城块几何定稿收线时 `--write` 落地，指标（弧配对率/面积守恒）进交接档。
 

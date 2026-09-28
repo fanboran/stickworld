@@ -2,7 +2,7 @@ extends Node
 ## 单元测试：population_score 每局扰动（C3，总体设计 §5.7）。
 ##
 ## 覆盖：出生聚落免疫 / 基准值≤0 不扰动 / ±15% 边界 / run_seed 确定性
-## / l1_world.json 装配接线（8 城非零 + 出生城等于基准）。
+## / l1_world.json 装配接线（10 城非零 + 出生城等于基准）。
 
 signal test_done(code: int)
 
@@ -76,7 +76,7 @@ func _test_world_state_roundtrip() -> void:
 
 func _test_l1_load_wiring() -> void:
 	var world = L1WorldData.load_from("res://config/strategic_map/l1_world.json", "res://config/strategic_map")
-	_runner.assert_true(world != null and world.tiles.size() == 8, "出生 L1 装配 8 地块")
+	_runner.assert_true(world != null and world.tiles.size() == 10, "出生 L1 装配 10 地块")
 	# 出生城免疫断言用动态基准（C2 起 population_score 由 blob_bake 统一全大陆分位尺回写）
 	var spawn_base := -1.0
 	for t in world.tiles:
@@ -99,5 +99,5 @@ func _test_l1_load_wiring() -> void:
 		if s.settlement_id == world.spawn_settlement_id:
 			# run_seed=0（headless 未开局）→ 出生城免疫，装配值等于 JSON 基准
 			spawn_base_ok = spawn_base > 0.0 and absf(s.population_score - spawn_base) < 1e-6
-	_runner.assert_equal(with_score, 8, "8 城 population_score 均从 JSON 读出且非零")
+	_runner.assert_equal(with_score, 10, "10 城 population_score 均从 JSON 读出且非零")
 	_runner.assert_true(spawn_base_ok, "出生聚落 population_score 等于 JSON 基准（免疫）")

@@ -57,7 +57,7 @@ def rasterize(polys, side, value=1):
     return np.asarray(img, dtype=np.int8) > 0
 
 
-def check_pack(json_path, land8, lake8, river8):
+def check_pack(json_path, land8, lake8, river8, wasteland8=None):
     """单包断言。返回 (ok, lines)：lines 为逐项实测行。"""
     with open(json_path, encoding="utf-8") as f:
         world = json.load(f)
@@ -119,8 +119,12 @@ def check_pack(json_path, land8, lake8, river8):
     else:
         lines.append("  I2a 越海/湖 = 0 px；河带城块占据 %d px（口径内）" % in_river)
 
-    # I2b 陆地漏盖：残余距几何边界 ≤ 带宽；带外残余总量 ≤ 窗口面积比
+    # I2b 陆地漏盖：残余距几何边界 ≤ 带宽；带外残余总量 ≤ 窗口面积比。
+    # V2 荒地语义：政治 mask 253 区（无主荒地=主张盘外无城块）是设计语义，
+    # 从残余中剔除；mask 缺省（旧代数据）时退化为原判据。
     missing = (ctx_land & ~water_hard) & ~geom
+    if wasteland8 is not None:
+        missing &= ~wasteland8[y0:y0 + side, x0:x0 + side]
     n_missing = int(missing.sum())
     if n_missing == 0:
         lines.append("  I2b 陆地漏盖 = 0 px")
@@ -150,6 +154,11 @@ def check_pack(json_path, land8, lake8, river8):
             ocean = ~ctx_land
             ob = ocean ^ binary_erosion(ocean)
             unc = ob & ~binary_dilation(geom_eff)
+            if wasteland8 is not None:
+                # V2 纯抗衡语义：无聚落离岛/无主陆地不切块（创始人 2026-09-27 裁决
+                # 「无聚落即无主留荒地」）——荒地邻接的海岸线无城块描边是设计，不计缺口
+                unc &= ~binary_dilation(
+                    wasteland8[y0:y0 + side, x0:x0 + side], iterations=2)
             b = 8
             inner = unc.copy()
             inner[:b, :] = False
@@ -198,6 +207,16 @@ def main():
 
     print("[守门] 加载水陆三真相（%s）..." % OUTPUT_DIR)
     land8, lake8, river8 = land_snap.load_water_masks(OUTPUT_DIR)
+    # V2 政治 mask（253=无主荒地）——读不到则退化旧判据
+    wasteland8 = None
+    mask_path = os.path.join(GAME_DIR, "l3_political_id_8192.png")
+    if os.path.isfile(mask_path):
+        m = np.array(Image.open(mask_path))
+        wasteland8 = (m == 253)
+        print("[守门] 荒地掩膜：%s（253 区 %d px）" % (os.path.basename(mask_path),
+                                                     int(wasteland8.sum())))
+    else:
+        print("[守门] 无 l3_political_id_8192.png，I2b 用旧判据（无荒地剔除）")
 
     packs = [(os.path.join(GAME_DIR, "l1_world.json"), "spawn")]
     packs_dir = os.path.join(GAME_DIR, "l1_packs")
@@ -215,7 +234,7 @@ def main():
     n_ok = 0
     for jp, name in packs:
         print("[%s] %s" % (name, jp))
-        ok, lines = check_pack(jp, land8, lake8, river8)
+        ok, lines = check_pack(jp, land8, lake8, river8, wasteland8)
         for ln in lines:
             print(ln)
         n_ok += 1 if ok else 0

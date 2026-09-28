@@ -1,7 +1,7 @@
 """L3 视觉层导出（老 L1 / 城市两级 + 老 L1 索引图）—— L3 直接用多边形色块显示细分子地块。
 
 背景（2026-08）：
-  - L3 视觉 = 老 L1 地块（69 块）或城市（1038 块，像 city_preview 花花绿绿），
+  - L3 视觉 = 老 L1 地块（69 块）或城市（1693 块 = 1036 聚落 + 657 填充，像 city_preview 花花绿绿），
     通过游戏内"显示模式"按钮切换；
   - 交互不变：hover 命中老 L1 地块（l3_l1_index.png 索引图），点击下钻 L2；
   - 配色调鲜艳（s=0.85，明度 0.5~0.98，亮色比例高）。
@@ -9,7 +9,7 @@
 输入：output/l1_v2/legacy_l1_labels_8192.npy + city_labels_8192.npy + region_labels.npy
 输出（config/strategic_map/）：
   - l3_l1.json   老 L1 视觉层（69 块，8192 级 polygons/holes/color）
-  - l3_city.json 城市视觉层（1040 块，同上；DP 抽稀控制体积）
+  - l3_city.json 城市视觉层（1693 块 = 1036 聚落 + 657 填充，同上；DP 抽稀控制体积）
   - l3_l1_index_8192.png  老 L1 索引图（label 直编，8192 级，hover 查询用）
   - l3_city_preview_8192.png 城市模式栅格贴图（源自 city_preview_8192.png）
 

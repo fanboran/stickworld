@@ -2,7 +2,7 @@ extends Node
 ## 单元测试：政治矢量 mesh（边界超分 S3，弧拓扑运行时格式）。
 ##
 ## 覆盖：l3_political_mesh 数据存在且字段齐 / fill 三角网一致性（idx 值域、code
-## 与顶点数对齐、code 值域 = 政权 1..80 + 253 自由城邦 + 254 湖）/ 弧数据一致性
+## 与顶点数对齐、code 值域 = 政权 1..193 + 253 无主荒地 + 254 湖）/ 弧数据一致性
 ## （arc_ptr 单调、arc_code 值域、arc_border 与两侧 code 的界分类一致、弧引用
 ## tile 合法）/ L3WorldData.political_mesh bin 装载（Packed 形态）/ 顶点色编码
 ## 往返（code → vertex R → code，生成端与 shader 同式）/ 13 份 L2 pack 注入存在
@@ -15,7 +15,7 @@ const L3WorldData := preload("res://modules/world_map/data/l3_world_data.gd")
 const L2WorldData := preload("res://modules/world_map/data/l2_world_data.gd")
 const PoliticalLut := preload("res://modules/world_map/data/political_lut.gd")
 
-const N_STATES := 80
+const N_STATES := 193
 const CODE_FREE := 253
 const CODE_LAKE := 254
 ## 界类型（与 MapTokens/生成端 arc_topology 同码表）

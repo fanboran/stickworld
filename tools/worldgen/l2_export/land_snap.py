@@ -18,8 +18,11 @@ import numpy as np
 from scipy.ndimage import distance_transform_edt
 
 
-def snap_labels_to_land(labels, land, water, river=None):
+def snap_labels_to_land(labels, land, water, river=None, preserve=None):
     """标签场贴陆：海/湖归 0 + 纯陆地内 0 空洞按 EDT 最近标签回填（边界众数自然化）。
+
+    preserve（v2 荒地语义，可选）：bool 场，True=设计荒地（无主陆地，保持 0）——
+    回填跳过这些像素（城块划分 v3 主张盘封顶留出的无城陆地不是「洞」）。
 
     水面分两类口径（创始人 2026-09-22 定性）：
       - 海/湖 = 面状水体，城块不进（色块层露真水，湖岸即城块界线）；
@@ -45,6 +48,8 @@ def snap_labels_to_land(labels, land, water, river=None):
     out[sea_or_lake] = 0
 
     holes = (~sea_or_lake) & (out == 0)
+    if preserve is not None:
+        holes = holes & ~np.asarray(preserve, dtype=bool)
     filled_mask = np.zeros_like(out, dtype=bool)
     if holes.any() and (out != 0).any():
         # EDT 的 input 非 0 处求到最近 0 处的距离/索引 —— 取反即「洞像素 →

@@ -1,8 +1,8 @@
-"""population_score 补齐（总体设计 §5.7 / C3，纯数据项）
+"""population_score 补齐（总体设计 §5.7 / C3，纯数据项）（R7 代，V2 已由 state_build_v2 接管）
 
 对既有 config JSON 就地补充 population_score 字段（确定性纯函数，不改几何）：
   - l1_world.json 8 城邦：level 已知，按同级别内面积分位映射到级别分数带
-  - l3_city.json 1040 城：无级别，按 2048 归一面积分位派生级别（p85+ → T3，
+  - l3_city.json 1036 城：无级别，按 2048 归一面积分位派生级别（p85+ → T3，
     p55+ → T2，其余 T1），再同级别内按面积分位映射分数带
 
 分数带（对齐 §5.7 blob 的 T1-T5 base 半径梯度）：
@@ -65,7 +65,7 @@ def main():
     json.dump(d1, open(p1, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(f"l1_world.json: {len(items)} 聚落 population_score 已写入")
 
-    # --- l3_city.json：1040 城（无级别 → 面积分位派生 T1/T2/T3） ---
+    # --- l3_city.json：1036 城（无级别 → 面积分位派生 T1/T2/T3） ---
     p2 = os.path.join(CONFIG_DIR, "l3_city.json")
     d2 = json.load(open(p2, encoding="utf-8"))
     areas = sorted(t["area_px"] / 16.0 for t in d2["tiles"])  # 8192 → 2048 归一

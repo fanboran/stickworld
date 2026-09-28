@@ -173,14 +173,15 @@ func _test_rasterize() -> void:
 func _test_l1_data() -> void:
 	var data := L1WorldData.load_from("%s/l1_world.json" % CFG, CFG)
 	_runner.assert_true(data != null and not data.tiles.is_empty(), "出生包加载")
+	# blob_capacity 已随径向 blob_bake 退役（V2 渲染走 blob_v2_geo.bin 三档贴图，
+	# 不消费容量曲线）；L1 包装配只验聚落就位与规模分
 	var found := false
 	for tile in data.tiles:
-		if tile.settlement != null and not tile.settlement.blob_capacity.is_empty():
+		if tile.settlement != null:
 			found = true
-			_runner.assert_equal(16, tile.settlement.blob_capacity.size(), "capacity 16 值")
 			_runner.assert_true(tile.settlement.population_score > 0.0, "population_score 就位")
 			break
-	_runner.assert_true(found, "出生包聚落带 blob_capacity")
+	_runner.assert_true(found, "出生包聚落装配")
 
 
 func _test_l2_data() -> void:

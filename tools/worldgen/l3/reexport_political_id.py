@@ -92,6 +92,26 @@ def build_mask8():
             code = CODE_FREE
             n_free += 1
         code_lut[int(t["label"])] = code
+    # owners 覆盖层：原址复种点（level 0，不在 l3_city tiles）归属为空 = 无主
+    # 荒地（253）——不补则这些块落 0=海洋码；其余 owners 补齐 tile 缺失的 lut 码
+    pdata = json.load(open(os.path.join(GAME_CFG, "political_data.json"),
+                           encoding="utf-8"))
+    n_overlay = 0
+    n_free0 = 0
+    for sid_path, state_id in pdata.get("city_owners", {}).items():
+        lb = int(str(sid_path).replace("settlement_city_", ""))
+        if lb <= n_lab and code_lut[lb] == 0:
+            code = lut_of_state.get(str(state_id), 0) if state_id else 0
+            if code > 0:
+                code_lut[lb] = code
+                n_overlay += 1
+            else:
+                code_lut[lb] = CODE_FREE
+                n_free0 += 1
+    # 兜底：仍无码的 label（数据缺失防御）一律荒地，杜绝陆上 0=海洋码
+    for lb in range(1, n_lab + 1):
+        if code_lut[lb] == 0:
+            code_lut[lb] = CODE_FREE
     arr = np.zeros(refined.shape, dtype=np.uint8)
     land = refined > 0
     arr[land] = code_lut[refined[land]]
@@ -99,8 +119,8 @@ def build_mask8():
     land8 = np.asarray(Image.open(LOCKED).convert("L")) > 127
     hole = (refined == 0) & land8 & (~lake_r)
     arr[hole] = CODE_FREE
-    print("[1] mask8 %s 城块码 %d 种，无归属=FREE %d 块，湖 %d px，荒野回填 %d px"
-          % (arr.shape, len(np.unique(arr[land])), n_free,
+    print("[1] mask8 %s 城块码 %d 种，无归属=FREE %d 块，owners 覆盖 %d 块，湖 %d px，荒野回填 %d px"
+          % (arr.shape, len(np.unique(arr[land])), n_free, n_overlay,
              int(((~land) & lake_r).sum()), int(hole.sum())))
     return arr
 

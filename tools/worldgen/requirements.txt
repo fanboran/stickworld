@@ -1,2 +1,5 @@
 numpy>=2.0
 Pillow>=10.0
+# v2 场层（fields_build/culture_build/fields_check）新增：
+scipy>=1.11
+scikit-image>=0.22

@@ -22,7 +22,7 @@ extends Node2D
 ##   - 都城标记（C20）：同心环 + 中心实点（浅底衬环 + 墨环 + 墨点），恒定屏幕
 ##     尺寸、恒显；取代原「金色五星」（小尺寸下糊成一团、彩色底上像贴纸）
 ##
-## 数据源：L3 = l3_city.json（80 国 name/capital + 1040 城块 centroid/area）；
+## 数据源：L3 = l3_city.json（176 国 name/capital + 1036 城块 centroid/area）；
 ## L2 = l2_world.json（region_id + cities[level] + states.capital）；L1 = 包内
 ## settlement name（「城市N」占位照画）。L3/L2 标注是政治语义 → 仅政治层打开时
 ## 显示（国名/都城随政权走）；L1 城市名/星标是聚落语义 → 全模式显示。

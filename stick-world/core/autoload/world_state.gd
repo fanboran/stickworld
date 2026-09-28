@@ -2,16 +2,19 @@ extends Node
 ## 运行时世界状态中心 —— 集中管理所有实体状态。
 ##
 ## ⚠️ 冻结状态（2026-08-22 审计决策）：
-##   - 仅 game_time 为生产字段（EnvironmentSystem 推进/恢复）；
 ##   - 六大实体容器（stickmen/organizations/regions/battles/projects/supply_chains）
 ##     全部零调用，处于冻结预留态——不删除、不接线，technology 阶段 1 重建时
-##     再决策接入或归档；core/entities/ 七个状态类同步冻结；
+##     再决策接入或归档；core/entities/ 对应七个状态类同步冻结；
 ##   - 存档走 game_saving/game_loaded 信号直写 world_state 表（含旧档回退）。
 ##
-## 所有游戏实体（stickmen、organizations、regions 等）的状态存储于此，
+## 统一契约生产域（世界模型整合 M1，完整版蓝图 §3.4）：cities/factions 两容器
+## 为生产数据——所有城（玩家/AI）同一套城市模型，政权实力 = 名下城市聚合；
+## 玩家政权与 AI 政权同构（不设 is_player 标记，由 id 约定判定，见
+## PLAYER_FACTION_ID）。
+##
 ## 各模块通过 WorldState 读写实体数据，而非各自维护独立状态。
 
-# ─────────────────────────────── 实体容器 ────────────────────────────────
+# ─────────────────────────── 冻结预留容器 ────────────────────────────────
 
 var stickmen: Dictionary = {}          # {id: StickmanState}
 var organizations: Dictionary = {}      # {id: OrganizationState}
@@ -19,6 +22,21 @@ var regions: Dictionary = {}            # {str(id): RegionState}
 var battles: Dictionary = {}            # {id: BattleState}
 var projects: Dictionary = {}           # {id: ProjectState}
 var supply_chains: Dictionary = {}      # {id: SupplyChainState}
+
+# ─────────────────────── 统一契约生产域（M1）─────────────────────────────
+
+## 玩家政权 id 约定（与 world_map api 的 PLAYER_OWNER_ID 对齐；core 不依赖
+## 模块，两处各持一份字面量，语义一致由契约文档保证）
+const PLAYER_FACTION_ID := "player"
+
+## 城市域 {settlement_id: CityState}——所有城（玩家/AI）同一套城市模型。
+## 主键与 mapdata 生成端聚落 id 同格式（settlement_city_%03d）；
+## CityState 字段规范见 core/entities/city_state.gd
+var cities: Dictionary = {}
+
+## 政权域 {state_id: FactionState}——键为 80 国表 id 或 "player"。
+## FactionState 字段规范见 core/entities/faction_state.gd
+var factions: Dictionary = {}
 
 # ─────────────────────────────── 全局状态 ────────────────────────────────
 
@@ -62,6 +80,18 @@ func start_new_run() -> void:
 	run_seed = randi()
 	visited_settlements = {}
 	unlocks = {}
+	# 统一契约两域重置 + 玩家政权同构壳——壳在此先立（capital 空 / lut_index -1 /
+	# 0 城，M5 三出身才定初始条件）；name 用通用描述性称谓，禁武侠雅名
+	cities = {}
+	factions = {}
+	var player_faction := FactionState.new()
+	player_faction.state_id = PLAYER_FACTION_ID
+	player_faction.name = "玩家政权"
+	register_faction(player_faction)
+	# worldgen 真源灌入（随 political_data 真源，现行 176 政权 + 1036 城）：新开局 = 真源构建
+	# （political_data.json + l3_city），读档 = 存档恢复（load_save_data，不经
+	# 初始化器）；merge 非覆盖，上面的玩家政权壳保留
+	WorldContractInitializer.apply_to_world_state(self)
 	reset_walk()
 
 
@@ -238,10 +268,73 @@ func unregister_supply_chain(entity_id: String) -> void:
 	supply_chains.erase(entity_id)
 
 
+## 注册一个城市实体（统一契约生产域）。
+func register_city(state: CityState) -> void:
+	cities[state.settlement_id] = state
+
+
+## 注销一个城市实体。
+func unregister_city(settlement_id: String) -> void:
+	cities.erase(settlement_id)
+
+
+## 注册一个政权实体（统一契约生产域）。
+func register_faction(state: FactionState) -> void:
+	factions[state.state_id] = state
+
+
+## 注销一个政权实体。
+func unregister_faction(state_id: String) -> void:
+	factions.erase(state_id)
+
+
+# ─────────────────────── 统一契约聚合查询 ────────────────────────────────
+# 政权实力 = 名下城市聚合（完整版蓝图 §3.4）；所有查询按 settlement_id 排序
+# 保证确定性（id 为 %03d 零填充格式，字典序 = 数值序）。
+
+## 某政权名下城市列表（CityState 数组，按 settlement_id 升序）。
+## 未注册政权 id 与"注册但 0 城"同语义，返回空数组
+func get_faction_cities(state_id: String) -> Array:
+	var ids: Array = []
+	for settlement_id in cities:
+		var city := cities[settlement_id] as CityState
+		if city != null and city.owner_state_id == state_id:
+			ids.append(str(settlement_id))
+	ids.sort()
+	var owned: Array = []
+	for sid in ids:
+		owned.append(cities[sid])
+	return owned
+
+
+## 某政权账面人口 = 名下城市 population 总和
+func faction_population(state_id: String) -> int:
+	var total := 0
+	for city in get_faction_cities(state_id):
+		total += int(city.population)
+	return total
+
+
+## 某政权军队账面总兵力 = 名下城市 garrison 数量总和（{profile_id: int} 值求和）
+func faction_garrison_total(state_id: String) -> int:
+	var total := 0
+	for city in get_faction_cities(state_id):
+		for profile_id in city.garrison:
+			total += int(city.garrison[profile_id])
+	return total
+
+
+## 某政权名下 tile 数——M1 阶段 1 tile 1 聚落，= 名下城数（tile_key 即城的
+## 染色口径 id）；tile 粒度细化（1 tile 多聚落/无聚落 tile）后本口径须同步改写
+func faction_tile_count(state_id: String) -> int:
+	return get_faction_cities(state_id).size()
+
+
 # ─────────────────────────────── 通用查询 ────────────────────────────────
 
 ## 根据实体类型和 ID 查找实体。
-## 支持的 entity_type：stickmen, organizations, regions, battles, projects, supply_chains
+## 支持的 entity_type：stickmen, organizations, regions, battles, projects,
+## supply_chains, cities, factions
 func get_entity(entity_type: String, entity_id: String) -> Variant:
 	# Variant 接收：_get_container 未知类型返回 null，typed Dictionary 赋值会先崩
 	var container: Variant = _get_container(entity_type)
@@ -280,6 +373,10 @@ func _get_container(entity_type: String) -> Variant:
 			return projects
 		"supply_chains":
 			return supply_chains
+		"cities":
+			return cities
+		"factions":
+			return factions
 		_:
 			return null
 
@@ -296,6 +393,8 @@ func clean_invalid_refs() -> void:
 	_clean_container(battles)
 	_clean_container(projects)
 	_clean_container(supply_chains)
+	_clean_container(cities)
+	_clean_container(factions)
 
 
 ## 清理单个容器中无效的实体引用。
@@ -325,6 +424,8 @@ func get_save_data() -> Dictionary:
 		"battles": WorldStateSerializer.serialize_dict(battles, WorldStateSerializer.battle_to_dict),
 		"projects": WorldStateSerializer.serialize_dict(projects, WorldStateSerializer.project_to_dict),
 		"supply_chains": WorldStateSerializer.serialize_dict(supply_chains, WorldStateSerializer.supply_chain_to_dict),
+		"cities": WorldStateSerializer.serialize_dict(cities, WorldStateSerializer.city_to_dict),
+		"factions": WorldStateSerializer.serialize_dict(factions, WorldStateSerializer.faction_to_dict),
 	}
 
 
@@ -348,3 +449,7 @@ func load_save_data(data: Dictionary) -> void:
 	battles = WorldStateSerializer.deserialize_dict(data.get("battles", {}), WorldStateSerializer.battle_from_dict)
 	projects = WorldStateSerializer.deserialize_dict(data.get("projects", {}), WorldStateSerializer.project_from_dict)
 	supply_chains = WorldStateSerializer.deserialize_dict(data.get("supply_chains", {}), WorldStateSerializer.supply_chain_from_dict)
+	# 统一契约两域：旧档缺键回退空域不崩（int/float 类型还原与坏值兜底在
+	# city_from_dict/faction_from_dict 逐字段负责）
+	cities = WorldStateSerializer.deserialize_dict(data.get("cities", {}), WorldStateSerializer.city_from_dict)
+	factions = WorldStateSerializer.deserialize_dict(data.get("factions", {}), WorldStateSerializer.faction_from_dict)

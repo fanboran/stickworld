@@ -2,7 +2,7 @@
 """blob_v2 净空验收：逐环量「blob 边到城块界」的最小距离（世界 px @8192）。
 判据：tile_clear_margin(40) - roughen 三倍频最坏叠加(~14.5) - closing/栅格化(~1.5) ≈ 24px，
 低于下限 = 净空带被侵蚀或剪裁兜底咬到了。用法：
-    python blob_v2_gap_check.py            # 全量 1040 城
+    python blob_v2_gap_check.py            # 全量 1036 正常聚落
     python blob_v2_gap_check.py 100        # 只看差距最小的前 100 环
 """
 import os

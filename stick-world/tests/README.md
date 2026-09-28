@@ -83,19 +83,19 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 | T0-7 | **数字标号全部清除**：test_stage_01~08 全部迁移完成——01→integration/test_game_root_assembly、02→integration/test_village_map、03→integration/test_ai_behaviors、05→integration/test_battle_lifecycle、06→integration/test_selection_formation、07→integration/test_possession、08→smoke/test_cross_map_travel | ✅ |
 | T0-8 | **单元覆盖补齐（2026-08 审计）**：organization_manager（15 用例，含 insert_tier 修复回归 + WorldState 容器同步 + 序列化 round-trip）、entity_states（7 用例，WorldState 状态类序列化）、resources_api（6 用例，信号转发层）——补测过程揪出并修复 2 个真实 bug：`get_child_orgs` 返回类型崩溃、`from_dict` typed Array 赋值崩溃 | ✅ 3 文件 28 用例 |
 
-**当前结构（unit 批量 61 套 + integration 39 可跑 + smoke 2，`run_all.sh` 编排）**：
-- `tests/unit/`（61 套）：单进程批量跑（`batch_runner.tscn`），清单见 `batch_runner.gd`
-- `tests/integration/`（登记 46 套 = 39 可跑 + 7 悬置，见下方「悬置套件」）：battle_lifecycle、conquest_e2e、conquest_flow、battle_retreat、expansion_territories、garrison_spawner*、recruit_flow*、town_life_harvest*、town_life_worksite*、save_roundtrip*、construction_cycle*、village_map*（* = 悬置）以及 org 系五套（org_panel/org_command_chain/org_e2e/org_report_narrator/org_panel_badges）、squad_card、music_director、sfx_policy、modal_stack、esc_key_input、ui_layout、settings_apply、notification_feed、debug_api、anim_finished、fx_damage_text 等
+**当前结构（unit 批量 68 套 + integration 40 可跑 + smoke 2，`run_all.sh` 编排；当前 36 通过 / 4 失败 / 6 悬置，4 个集成校准待办见 [世界模型整合-进度与交接 §五](../../docs/项目/交接/世界模型整合-进度与交接.md)）**：
+- `tests/unit/`（68 套）：单进程批量跑（`batch_runner.tscn`），清单见 `batch_runner.gd`（世界模型：test_world_contract 176 政权/1036 城装载+聚合+存档兼容、test_political_data 176 政权/LUT 1..176/ID mask）
+- `tests/integration/`（登记 46 套 = 40 可跑 + 6 悬置，见下方「悬置套件」）：battle_lifecycle、conquest_e2e、conquest_flow、battle_retreat、expansion_territories、garrison_spawner、recruit_flow*、town_life_harvest*、town_life_worksite*、save_roundtrip*、construction_cycle*、village_map*（* = 悬置）以及 org 系五套（org_panel/org_command_chain/org_e2e/org_report_narrator/org_panel_badges）、squad_card、music_director、sfx_policy、modal_stack、esc_key_input、ui_layout、settings_apply、notification_feed、debug_api、anim_finished、fx_damage_text 等
 - `tests/smoke/`（2 套）：new_game_smoke、cross_map_travel
 - `tests/dev/`（不进 CI）：dev_playtest、battle_arena、各类 verify_*/探针场景
 
 ### 悬置套件（.tscn.suspended）
 
-7 个 integration 套件的场景文件已改名为 `.tscn.suspended` 悬置（`test_construction_cycle` / `test_village_map` / `test_save_roundtrip` / `test_garrison_spawner` / `test_recruit_flow` / `test_town_life_harvest` / `test_town_life_worksite`）：
+6 个 integration 套件的场景文件已改名为 `.tscn.suspended` 悬置（`test_construction_cycle` / `test_village_map` / `test_save_roundtrip` / `test_recruit_flow` / `test_town_life_harvest` / `test_town_life_worksite`）：
 
 - **原因**：均为依赖旧 2D 村落/世界设施（village_a 系地图、旧世界链路）的**设施类套件**，随旧世界清退悬置，待 HD-2D 重建后恢复
 - **登记**：仍保留在 `run_all.sh` 的 `INTEGRATION_SUITES` 清单中（挂起状态可见）
-- **运行器现状**：`run_all.sh` 尚不识别 `.suspended` 后缀，悬置套件空跑会产生固定 7 个假失败（审计快照 `docs/项目/审计/代码审计_2026-09-14.md` §二已登记运行器修复项：识别悬置后缀跳过并输出 `[SKIP]`）
+- **运行器现状**：`run_all.sh` 已识别 `.suspended` 后缀（跳过并输出 `[SKIP]`），悬置套件不产生假失败
 - 清单自检（manifest_check）只扫 `*.tscn`，悬置文件不参与"盘上存在但未登记"校验
 
 > 功能 ↔ 场景 ↔ 覆盖 的完整对应关系见 [`docs/技术/教程/测试矩阵.md`](../../docs/技术/教程/测试矩阵.md)。

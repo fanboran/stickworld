@@ -1,15 +1,13 @@
 extends Node
-## 单元测试：政权数据一致性（R7 扩容 80 国 + ID mask/LUT 运行时链路，总体设计 §5.11）。
+## 单元测试：政权数据一致性（V2 世界重生成 193 国 + ID mask/LUT 运行时链路）。
 ##
-## 覆盖：political_data.json 全量覆盖（1040 城无缺漏/无孤儿）/ 归属合法性 +
-## 字段完整 / 政权总数 == 80（创始人 2026-09-08 定档）/ 出生 8 城邦 id/归属沿用、
-## 色值合法且互不相同（C23 起色板唯一真相源 = tools/worldgen/l3/palette.py，LUT
-## 序号排尾不变）/ lut_index 1..80 连续唯一 / l3_city 注入一致（state_id+城文化）/
-## L2 packs 注入一致 / 文化圈锚定（首都城文化 == 国文化 100%，城文化归属一致率
-## ≥95%，9 圈都有政权）/ L3 ID mask 与 json 一致（首都 anchor 像素 == lut_index，
-## 值域合法含 253 自由城邦）/ L2 ID mask 保留码（253 自由城邦/254 湖泊/255 邻区）
-## / L3WorldData.states bin 装载 / PoliticalLut 构建与「改 LUT 即换色」运行时链路
-## （R9 验收硬指标的自证）。
+## 覆盖：political_data.json 全量覆盖（城主表 ⊇ l3_city 1036 城 + 6 原址复种点，无缺漏/无孤儿）/ 归属合法性 +
+## 字段完整 / 政权总数 == 193 + 规模谱窗口（1 城邦与 12+ 城大国并存、cap 18）/
+## lut_index 1..193 连续唯一 / l3_city 注入一致（state_id+城文化）/
+## L2 packs 注入一致 / 文化值域（0 荒野 + 1..22 源点序号）/ L3 ID mask 与 json
+## 一致（首都城块质心像素 == lut_index，值域含 253 无主荒地）/ L2 ID mask 保留码
+## / L3WorldData.states bin 装载 / PoliticalLut 构建与「改 LUT 即换色」运行时链路。
+## V2 出生 8 城邦特殊态取消：出生点为普通小国成员城（settlement_city_399，西达塞行）。
 
 signal test_done(code: int)
 
@@ -17,18 +15,12 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const L3WorldData := preload("res://modules/world_map/data/l3_world_data.gd")
 const PoliticalLut := preload("res://modules/world_map/data/political_lut.gd")
 
-## 硬锚点文化圈 → 合法 region 集（§5.11.1 种族-地域表 / state_params.json cultures：
-## 火焰=region_008、水=region_011、极地=北部冰原带 1/2/3/9、沙漠=南部荒漠带
-## 10+南探 6/11、森林=region_004、雪山=region_007）；测试夹具与参数表同源
-const LEGAL_REGIONS := {
-	"fire": [8], "water": [11], "forest": [4], "giant": [7],
-	"polar": [1, 2, 3, 9], "desert": [10, 6, 11],
-	"golden": [5, 12], "nomad": [6], "plain": [13],
-}
-## 越界宽忍度：末轮兜底（圈飞地被邻国实际控制）允许的占比上限
-const MAX_REGION_VIOL_RATIO := 0.02
-const N_CULTURES := 9
-const N_STATES := 80
+## V2 文化体系：22 文化源点序号（settlements_v2 dominant）+ 0=荒野文化
+const MAX_CULTURE := 22
+const N_STATES := 193
+const N_CITIES := 1036
+## 规模谱窗口（截断对数正态采样 + A6 涌现有界）
+const CAP_MAX := 18
 
 var _runner: TestRunner
 
@@ -37,13 +29,13 @@ func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("political_data: 城主表全量覆盖", _test_full_coverage)
 	_runner.add_test("political_data: 归属全部合法 + 字段完整", _test_owners_legal)
-	_runner.add_test("政权总数 == 80（8 城邦 + 72 新国，Zipf 型碎度窗口）", _test_total_states)
-	_runner.add_test("出生 8 城邦沿用（id/归属不变，色=族代表色，LUT 序号排尾）", _test_birth_states_preserved)
-	_runner.add_test("lut_index 1..80 连续唯一", _test_lut_index_coverage)
+	_runner.add_test("政权总数 == 193 + 规模谱窗口（1 城邦与大国并存，cap 18）", _test_total_states)
+	_runner.add_test("出生点（V2 西达塞行成员城）归属合法", _test_spawn_point)
+	_runner.add_test("lut_index 1..193 连续唯一", _test_lut_index_coverage)
 	_runner.add_test("l3_city 注入与真相源一致", _test_l3_city_injection)
 	_runner.add_test("L2 packs 注入一致（13 地区）", _test_l2_injection)
-	_runner.add_test("文化圈锚定（首都 100% / 全城一致率 ≥95% / 9 圈有政权）", _test_culture_anchoring)
-	_runner.add_test("L3 ID mask 与 json 一致（首都 anchor 像素 == lut_index）", _test_l3_id_mask)
+	_runner.add_test("文化值域（0 荒野 + 1..22 源点序号）", _test_culture_anchoring)
+	_runner.add_test("L3 ID mask 与 json 一致（首都锚点像素 == lut_index）", _test_l3_id_mask)
 	_runner.add_test("L2 ID mask 值域与保留码（自由城邦/湖泊/邻区）", _test_l2_id_mask)
 	_runner.add_test("L3WorldData.states 装载（bin 路径）", _test_l3_states_loaded)
 	_runner.add_test("PoliticalLut：构建 + 改 LUT 即换色（R9 硬指标自证）", _test_political_lut)
@@ -73,12 +65,13 @@ func _test_full_coverage() -> void:
 	var owners: Dictionary = pd.get("city_owners", {})
 	var l3 := _read_json("res://config/strategic_map/l3_city.json")
 	var expect := (l3.get("tiles", []) as Array).size()
-	_runner.assert_equal(owners.size(), expect, "城主表 = l3_city 城总数")
+	_runner.assert_true(owners.size() >= expect,
+			"城主表覆盖 l3_city 全部城（1042 = 1036 城 + 6 原址复种点，实测 %d）" % owners.size())
 	var empty := 0
 	for k in owners:
 		if str(owners[k]).is_empty():
 			empty += 1
-	_runner.assert_equal(empty, 0, "无空归属")
+	_runner.assert_equal(empty, 6, "空归属恰为 6 原址复种点（无主荒地，实测 %d）" % empty)
 
 
 func _test_owners_legal() -> void:
@@ -86,7 +79,8 @@ func _test_owners_legal() -> void:
 	var states: Dictionary = pd.get("states", {})
 	var bad := 0
 	for k in pd.get("city_owners", {}):
-		if not states.has(pd["city_owners"][k]):
+		var v := str(pd["city_owners"][k])
+		if not v.is_empty() and not states.has(v):
 			bad += 1
 	_runner.assert_equal(bad, 0)
 	# 每个 state 结构完整（完整版字段预留：alliance 可空但键在；R7 增 lut_index）
@@ -113,79 +107,43 @@ func _test_owners_legal() -> void:
 func _test_total_states() -> void:
 	var pd := _read_json("res://config/strategic_map/political_data.json")
 	var states: Dictionary = pd.get("states", {})
-	var n_city_state := 0
-	for sid in states:
-		if states[sid].get("is_city_state", false):
-			n_city_state += 1
 	_runner.assert_equal(states.size(), N_STATES,
-			"政权总数定档 80（实测 %d）" % states.size())
-	_runner.assert_equal(n_city_state, 8, "出生城邦 8 个（实测 %d）" % n_city_state)
-	_runner.assert_equal(int(pd.get("meta", {}).get("n_states", 0)), N_STATES,
-			"meta.n_states = 80")
-	# 碎度窗口：Zipf 型大小悬殊（最大国 ≥ 4 倍中位数、上限防巨无霸、每国 ≥1 城）
+			"政权总数定档 193（V2 随机规模谱，实测 %d）" % states.size())
+	# 规模谱窗口：1 城邦与 12+ 城大国并存、cap 18 封顶，is_city_state == (城数==1)
 	var counts := {}
 	for k in pd.get("city_owners", {}):
 		var sid: String = pd["city_owners"][k]
 		counts[sid] = int(counts.get(sid, 0)) + 1
-	var sizes: Array = []
+	var n_one := 0
+	var n_big := 0
+	var smax := 0
+	var flag_bad := 0
 	for sid in states:
-		if not states[sid].get("is_city_state", false):
-			sizes.append(int(counts.get(sid, 0)))
-	sizes.sort()
-	var smin: int = sizes[0]
-	var smax: int = sizes[sizes.size() - 1]
-	var median: int = sizes[sizes.size() / 2]
-	_runner.assert_true(smin >= 1, "新国每国至少 1 城（min=%d）" % smin)
-	_runner.assert_true(smax >= median * 4,
-			"大小悬殊（max=%d 应 ≥ 4×中位数 %d，Zipf 型）" % [smax, median])
-	_runner.assert_true(smax <= 120, "单国城数 ≤ 120（实测 %d）" % smax)
+		var n := int(counts.get(sid, 0))
+		if n == 1:
+			n_one += 1
+		if n >= 12:
+			n_big += 1
+		smax = maxi(smax, n)
+		if states[sid].get("is_city_state", false) != (n == 1):
+			flag_bad += 1
+	_runner.assert_equal(flag_bad, 0, "is_city_state 与城数不符（%d）" % flag_bad)
+	_runner.assert_true(n_one >= 8, "1 城邦 >=8 个（实测 %d）" % n_one)
+	_runner.assert_true(n_big >= 5, "12+ 城大国 >=5 个（实测 %d）" % n_big)
+	_runner.assert_true(smax <= CAP_MAX, "单国城数 <= cap %d（实测 %d）" % [CAP_MAX, smax])
 
 
-func _test_birth_states_preserved() -> void:
-	var birth := _read_json("res://config/strategic_map/l1_world.json")
+func _test_spawn_point() -> void:
+	# V2 出生点 = 西达塞行成员城（3 城小国 state_v2_085，都城 442）；出生包 l1_069
+	var l1 := _read_json("res://config/strategic_map/l1_world.json")
+	var spawn := str(l1.get("spawn_settlement_id", ""))
+	_runner.assert_equal(spawn, "settlement_city_399",
+			"出生点 = settlement_city_399（实测 %s）" % spawn)
 	var pd := _read_json("res://config/strategic_map/political_data.json")
-	var states: Dictionary = pd.get("states", {})
 	var owners: Dictionary = pd.get("city_owners", {})
-	var birth_sids: Array = []
-	for s in (birth.get("states", []) as Array):
-		birth_sids.append(str(s["state_id"]))
-	birth_sids.sort()
-	var ok := true
-	var distinct := {}
-	for i in birth_sids.size():
-		var sid := str(birth_sids[i])
-		if not states.has(sid):
-			ok = false
-			break
-		# C23：色板唯一真相源 = tools/worldgen/l3/palette.py（OKLCH 色轮候选 +
-		# 城块邻接贪心分配），出生城邦与 72 新国一次参与——本处不再硬编码族色，
-		# 改查「可解析、值域合法、且 8 邦互不相同」的不变量
-		var col: Array = states[sid].get("color", [])
-		if col.size() != 3:
-			ok = false
-			break
-		for v in col:
-			if int(v) < 0 or int(v) > 255:
-				ok = false
-				break
-		if not ok:
-			break
-		distinct[str(col)] = true
-	_runner.assert_true(ok, "出生 states id 沿用 + 色值合法（色板见 palette.py）")
-	# 8 邦色互不重复（可分性下限；相邻可分由生成端 ΔE 约束保证）
-	_runner.assert_equal(distinct.size(), birth_sids.size(), "8 邦色互不重复")
-	# 出生城邦 LUT 序号排尾（73..80），新国占 1..72
-	var birth_idx: Array = []
-	for sid in states:
-		if states[sid].get("is_city_state", false):
-			birth_idx.append(int(states[sid].get("lut_index", 0)))
-	birth_idx.sort()
-	_runner.assert_true(birth_idx == [73, 74, 75, 76, 77, 78, 79, 80],
-			"出生城邦 lut_index = 73..80（实测 %s）" % str(birth_idx))
-	for tl in (birth.get("tiles", []) as Array):
-		var s: Dictionary = tl.get("settlement", {})
-		_runner.assert_equal(str(owners.get(s.get("settlement_id", ""), "")),
-				str(tl.get("owner_state_id", "")), "出生城归属沿用 owner_state_id")
+	_runner.assert_true(owners.has(spawn), "出生点归属在城表中")
+	var sid := str(owners.get(spawn, ""))
+	_runner.assert_true(pd.get("states", {}).has(sid), "出生点归属政权在表中（%s）" % sid)
 
 
 func _test_lut_index_coverage() -> void:
@@ -195,7 +153,7 @@ func _test_lut_index_coverage() -> void:
 		idx.append(int(pd["states"][sid].get("lut_index", 0)))
 	idx.sort()
 	_runner.assert_true(idx == range(1, N_STATES + 1),
-			"lut_index 应恰为 1..80（实测 %d 个，尾=%s）" % [idx.size(), str(idx.slice(mini(idx.size() - 3, 0)))])
+			"lut_index 应恰为 1..193（实测 %d 个，尾=%s）" % [idx.size(), str(idx.slice(mini(idx.size() - 3, 0)))])
 
 
 func _test_l3_city_injection() -> void:
@@ -251,56 +209,31 @@ func _test_l2_injection() -> void:
 
 
 func _test_culture_anchoring() -> void:
+	# V2 文化值域：states[].culture in 0..22（0=荒野文化）；tile.culture 同域；
+	# 荒野城（culture 0）占比 <20%（文化场覆盖率合理）
 	var pd := _read_json("res://config/strategic_map/political_data.json")
 	var states: Dictionary = pd.get("states", {})
+	var mad := 0
+	for sid in states:
+		var c := int(states[sid].get("culture", -1))
+		if c < 0 or c > MAX_CULTURE:
+			mad += 1
+	_runner.assert_equal(mad, 0, "states[].culture 值域 0..%d（越界 %d）" % [MAX_CULTURE, mad])
 	var l3 := _read_json("res://config/strategic_map/l3_city.json")
-	# 9 文化圈都有政权（含 6 硬锚点圈：火焰/水/森林/雪山/极地/沙漠）
-	var cultures := {}
-	for sid in states:
-		cultures[str(states[sid].get("culture", ""))] = true
-	var missing := 0
-	for c in LEGAL_REGIONS:
-		if not cultures.has(c):
-			missing += 1
-	_runner.assert_equal(missing, 0, "硬锚点文化圈都有政权")
-	_runner.assert_true(cultures.size() >= N_CULTURES,
-			"文化圈全覆盖（实测 %d 圈）" % cultures.size())
-	# 首都城文化 == 国文化（生成端种子只在合法区选 → 应 100%）
-	var tiles := _tiles_by_label(l3)
-	var cap_bad := 0
-	var cap_checked := 0
-	for sid in states:
-		var sd: Dictionary = states[sid]
-		var label := int(str(sd.get("capital", "")).trim_prefix("settlement_city_"))
-		var t: Dictionary = tiles.get(label, {})
-		if t.is_empty():
-			continue
-		cap_checked += 1
-		if str(t.get("culture", "")) != str(sd.get("culture", "")):
-			cap_bad += 1
-	_runner.assert_true(cap_checked == N_STATES, "首都城全部查到（%d）" % cap_checked)
-	_runner.assert_equal(cap_bad, 0, "首都城文化 == 国文化（越界 %d）" % cap_bad)
-	# §5.11.1 region 锚定（政权必须落在对应文化圈合法区）：tile.region ∈
-	# 所属国文化合法区。越界只允许来自末轮兜底（圈飞地被邻国实际控制），
-	# 总量 ≤2%，且硬锚点圈（火焰/水/森林/雪山/极地）零越界
-	var viol := 0
-	var hard_viol := 0
+	var bad := 0
+	var wild := 0
 	var total := 0
 	for t in (l3.get("tiles", []) as Array):
-		var sid := str(t.get("state_id", ""))
-		if sid.is_empty() or not states.has(sid):
-			continue
+		var c := int(t.get("culture", -1))
 		total += 1
-		var cu := str(states[sid].get("culture", ""))
-		var region := int(t.get("region", -1))
-		if not LEGAL_REGIONS.get(cu, []).has(region):
-			viol += 1
-			if cu in ["fire", "water", "forest", "giant", "polar"]:
-				hard_viol += 1
-	_runner.assert_true(total > 1000, "参查城数（%d）" % total)
-	_runner.assert_equal(hard_viol, 0, "硬锚点圈 region 零越界（越界 %d）" % hard_viol)
-	_runner.assert_true(float(viol) / float(maxi(total, 1)) <= MAX_REGION_VIOL_RATIO,
-			"region 越界 ≤2%%（实测 %d/%d）" % [viol, total])
+		if c < 0 or c > MAX_CULTURE:
+			bad += 1
+		if c == 0:
+			wild += 1
+	_runner.assert_equal(bad, 0, "tile.culture 值域（越界 %d）" % bad)
+	_runner.assert_true(total >= 1000, "参查城数（%d）" % total)
+	_runner.assert_true(float(wild) / float(maxi(total, 1)) < 0.2,
+			"荒野文化城占比 <20%%（实测 %d/%d）" % [wild, total])
 
 
 func _test_l3_id_mask() -> void:
@@ -316,7 +249,7 @@ func _test_l3_id_mask() -> void:
 			"ID mask 8192（实测 %d）" % (img.get_width() if img != null else 0))
 	if img == null:
 		return
-	# 值域：政权码 0..80 + 保留码 253（自由城邦）/ 254（湖泊，feedback2 D）——稀疏采样
+	# 值域：政权码 0..193 + 保留码 253（无主荒地）/ 254（湖泊）——稀疏采样
 	var bad_val := 0
 	var has_free := false
 	var has_lake := false
@@ -330,7 +263,7 @@ func _test_l3_id_mask() -> void:
 			has_lake = true
 		elif v > states.size():
 			bad_val += 1
-	_runner.assert_equal(bad_val, 0, "ID mask 值域 ⊆ 0..80 + 253/254（稀疏采样越界 %d）" % bad_val)
+	_runner.assert_equal(bad_val, 0, "ID mask 值域 ⊆ 0..193 + 253/254（稀疏采样越界 %d）" % bad_val)
 	# 保留码存在性：253 荒野回填 / 254 块内湖都是细碎斑块，稀疏对角线采不到 →
 	# 16px 子格稠密扫描（26 万采样，headless <1s）
 	has_free = false
@@ -342,9 +275,10 @@ func _test_l3_id_mask() -> void:
 				has_free = true
 			elif v == PoliticalLut.CODE_LAKE:
 				has_lake = true
-	_runner.assert_true(has_free, "ID mask 含 253 自由城邦保留码（陆地无 0 洞）")
+	_runner.assert_true(has_free, "ID mask 含 253 无主荒地保留码（V2 荒地语义）")
 	_runner.assert_true(has_lake, "ID mask 含 254 湖泊保留码（块内湖不再是海色洞）")
-	# 首都 anchor 像素 == lut_index（anchor 是 8192 级 [x,y]）
+	# 首都城块锚点像素 == lut_index（anchor = 聚落烘焙锚点，必在城块内；
+	# 质心不可用——块含内湖时质心可能落在湖像素上（254））
 	var tiles := _tiles_by_label(l3)
 	var mismatch := 0
 	var checked := 0
@@ -359,8 +293,8 @@ func _test_l3_id_mask() -> void:
 		checked += 1
 		if v != int(sd.get("lut_index", -1)):
 			mismatch += 1
-	_runner.assert_true(checked == N_STATES, "80 国首都全查（%d）" % checked)
-	_runner.assert_equal(mismatch, 0, "首都 anchor 像素 == lut_index（错 %d）" % mismatch)
+	_runner.assert_true(checked == N_STATES, "193 国首都全查（%d）" % checked)
+	_runner.assert_equal(mismatch, 0, "首都质心像素 == lut_index（错 %d）" % mismatch)
 
 
 func _test_l2_id_mask() -> void:
@@ -372,7 +306,7 @@ func _test_l2_id_mask() -> void:
 	_runner.assert_true(img != null and img.get_width() > 0, "L2 ID mask 可读")
 	if img == null:
 		return
-	# 值域：政权码 1..80 + 保留码 253/254/255 + 0
+	# 值域：政权码 1..193 + 保留码 253/254/255 + 0
 	var bad := 0
 	var has_state := false
 	var has_reserved := false
@@ -397,7 +331,7 @@ func _test_l3_states_loaded() -> void:
 			"res://config/strategic_map/l3_world.json", "res://config/strategic_map")
 	_runner.assert_true(data != null, "L3 数据可加载")
 	_runner.assert_true(data.states.size() == N_STATES,
-			"states 经 bin 装载（实测 %d）" % data.states.size())
+			"states 经 bin 装载（实测 %d，193 国）" % data.states.size())
 	var has_state_id := false
 	for t in data.city_tiles:
 		if str(t.get("state_id", "")).begins_with("state_"):
@@ -421,12 +355,12 @@ func _test_political_lut() -> void:
 	_runner.assert_true(lut != null, "PoliticalLut 可从 L3 states 构建")
 	if lut == null:
 		return
-	_runner.assert_equal(lut.states.size(), N_STATES, "LUT 覆盖 80 国")
+	_runner.assert_equal(lut.states.size(), N_STATES, "LUT 覆盖 193 国")
 	_runner.assert_true(lut.texture != null, "LUT 纹理已建")
 	# LUT 色与真相源一致（取一个非城邦样本）
 	var sample := ""
 	for s in pd.get("states", {}):
-		if not pd["states"][s].get("is_city_state", false):
+		if int(pd["states"][s].get("n_cities", 0)) > 3:
 			sample = s
 			break
 	_runner.assert_true(not sample.is_empty(), "样本国存在")

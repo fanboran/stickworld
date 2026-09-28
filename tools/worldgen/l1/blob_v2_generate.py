@@ -10,8 +10,9 @@
     binary_opening(1) → binary_closing(2) → find_contours 亚像素多环(外环+内环洞+飞地)
     → shapely simplify 保拓扑；洞面积 < max(3% 城区, 60px²) 丢弃
 
-尺度 R_ref(level, s) = base + g_max·s^gamma 复用旧 blob_params.json 的 level 带
-（与 blob_bake.py 的容量探测段同源，保证「容量卡向」语义一致）。
+尺度（归一化）：目标面积线性 A(s) = a_min + (a_max−a_min)·s，R_ref = sqrt(A/(πk))
+——剪影面积与规模 population_score 成正比（创始人 2026-09-27 口径），带宽整体收缩
+（a_max = 大城地块容量 p75，见 blob_v2_params.json area 段）。
 
 三档（tiers.low/mid/high）：每城按档位 s 各算一版轮廓——运行时随人口增长切档（R5 裁决）。
 贫瘠城（s 低 / capacity≈0 / 被山恋水卡死）目标面积自然塌缩 → 合法输出「无建成区」。
@@ -20,7 +21,7 @@
 产物：几何+统计进 output/blob_v2/（gitignored）；入库对比图落 output/ 根 blob_v2_*.png。
 
 用法：
-    python blob_v2_generate.py               # 全量 1048 城 × 3 档 + 全部预览
+    python blob_v2_generate.py               # 全量 1036 正常聚落 × 3 档 + 全部预览
     python blob_v2_generate.py --sample      # 只跑特写/贫瘠抽查/分形样本城（调参快循环）
     python blob_v2_generate.py --no-overview # 跳过全图概览渲染
 
@@ -63,9 +64,13 @@ def djb2(s: str) -> int:
 
 
 def r_ref_of(level, s, area_p, lv_bands):
-    """尺度半径：复用旧 blob level 带 base + g_max·s^gamma（与容量探测段同源）"""
-    base, g_max = lv_bands.get(level, (30.0, 30.0))
-    return base + g_max * (max(s, 0.0) ** float(area_p["gamma"]))
+    """尺度半径（归一化，创始人 2026-09-27 口径）：
+    R(ps) = r0 + r1·ps（8192 级 = 撒点图 settle_preview_v2 的 r=2.0+7.5·ps@2048 ×4）——
+    剪影直径逐城等于城市规模撒点图的点直径（面积随规模平方放大，同撒点观感跨度）。
+    装不下时由 max_fill 顶格缩到地块装得下为止。"""
+    r0 = float(area_p.get("r0_px", 8.0))
+    r1 = float(area_p.get("r1_px", 30.0))
+    return r0 + r1 * max(s, 0.0)
 
 
 # ==================== 输入加载 ====================
@@ -130,7 +135,7 @@ def tile_clear_mask(city, wx0, wy0, W, margin):
 
 
 def load_cities():
-    """收集 1048 城：世界锚点 / level / population_score / blob_capacity[16] / 周边道路(世界系)"""
+    """收集 1036 正常聚落：世界锚点 / level / population_score / blob_capacity[16] / 周边道路(世界系)"""
     print("[v2] 收集城市锚点与周边道路（L1 视图包，只读）...")
     paths = [os.path.join(GAME_DIR, "l1_world.json")]
     pack_dir = os.path.join(GAME_DIR, "l1_packs")
@@ -391,8 +396,18 @@ def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache, region_polys
     ld = ctx["world"]["land"][wy0:wy0 + W, wx0:wx0 + W]
     excl = (ld & (~wt) & (sl < p["exclusion"]["slope_hard"])).astype(np.float32)
     # 6.5 城块净空带：界内侧 margin 内禁建，并进排除层（τ 反解/种子/绿楔自动继承）
-    # ——建成区从源头缩回界内，不再靠剪裁切出直线硬边
-    clear = tile_clear_mask(city, wx0, wy0, W, float(p["contour"]["tile_clear_margin"]))
+    # ——建成区从源头缩回界内，不再靠剪裁切出直线硬边。
+    # 净空带自适应降档（创始人 2026-09-27：装不下就缩到装得下为止）：判据 =
+    # 可建区装得下本档目标面积才接受该 margin，装不下逐级 40→24→12→6→0；
+    # margin 0 仍装不下 = 地块容量不足，交给 max_fill 顶格填（纯地形性无建成区仍合法）
+    a_target = math.pi * r_ref * r_ref * float(p["area"]["k"])
+    base_margin = float(p["contour"]["tile_clear_margin"])
+    for margin in [base_margin, base_margin * 0.6, base_margin * 0.3,
+                   base_margin * 0.15, 0.0]:
+        clear = tile_clear_mask(city, wx0, wy0, W, margin)
+        buildable = excl if clear is None else (excl * clear)
+        if buildable.sum() >= a_target:
+            break
     if clear is not None:
         excl *= clear
     if region_polys:
@@ -703,7 +718,20 @@ def generate_city(city, ctx, p, lv_bands, fbm_cache):
         out[tier] = (polys, info)
         if polys:
             region_polys = polys
-    return {t: out[t] for t in TIER_ORDER}
+    # 独立档 'ps'：按城自身 population_score 连续算一版（不参与链式嵌套，
+    # 仅供概览预览连续正比画；三档叠画消费链不变）
+    mask, info, (wx0, wy0) = city_field_mask(city, float(city.get("ps", 0.0)), 9,
+                                             ctx, p, lv_bands, fbm_cache, None)
+    polys = []
+    if mask.any():
+        polys = mask_to_polys(mask, city["sid"], wx0, wy0, p, info.get("scale", 1.0))
+        polys, cut = clip_polys_to_tile(polys, city, p["contour"])
+        if cut > 1.0:
+            info["clip_cut"] = int(cut)
+        info["n_outer"] = len(polys)
+        info["n_holes"] = sum(len(h) for _, h in polys)
+    out["ps"] = (polys, info)
+    return {t: out[t] for t in tuple(TIER_ORDER) + ("ps",)}
 
 
 def box_counting_dim_pts(pts, eps_list):
@@ -890,10 +918,10 @@ def render_overview(ctx, cities_order, results):
     n = 0
     for c in cities_order:
         r = results.get(c["sid"])
-        if not r or not r["polys"]["mid"]:
+        if not r or not (r["polys"].get("ps") or r["polys"]["mid"]):
             continue
-        tier = "low" if c["ps"] < 0.35 else ("mid" if c["ps"] < 0.65 else "high")
-        for outer, _holes in r["polys"][tier] or r["polys"]["mid"]:
+        tier = "ps"   # 连续正比：按城自身规模独立档画（创始人 2026-09-27）
+        for outer, _holes in r["polys"].get(tier) or r["polys"]["mid"]:
             pts = [(x / k, y / k) for x, y in outer]
             if len(pts) >= 3:
                 dr.polygon(pts, fill=(198, 188, 170, 150), outline=(70, 62, 50, 200))
@@ -966,14 +994,14 @@ def main():
     for n, c in enumerate(order):
         fbm_cache = {}                      # 每城独立（3 档共享同窗 fBm），防全量内存累积
         by_tier = generate_city(c, ctx, p, lv_bands, fbm_cache)
-        polys_by_tier = {t: by_tier[t][0] for t in TIER_ORDER}
-        info_by_tier = {t: by_tier[t][1] for t in TIER_ORDER}
+        polys_by_tier = {t: by_tier[t][0] for t in tuple(TIER_ORDER) + ("ps",)}
+        info_by_tier = {t: by_tier[t][1] for t in tuple(TIER_ORDER) + ("ps",)}
         results[c["sid"]] = {"polys": polys_by_tier, "info": info_by_tier,
                              "biome": city_biome(c)}
         stats[c["sid"]] = {"level": c["level"], "ps": c["ps"],
                            "tiers": {t: {k: (round(v, 3) if isinstance(v, float) else v)
                                          for k, v in info_by_tier[t].items()}
-                                     for t in TIER_ORDER}}
+                                     for t in tuple(TIER_ORDER) + ("ps",)}}
         if (n + 1) % 100 == 0:
             print("  ... %d/%d 城（%.0fs）" % (n + 1, len(order), time.time() - t0))
     print("[v2] 管线完成 %.1fs" % (time.time() - t0))

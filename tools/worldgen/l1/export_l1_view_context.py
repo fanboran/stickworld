@@ -260,7 +260,7 @@ def render_panorama(out_size=2048):
     """L1 世界全景 preview（F8 缩略窗底图候选，总体设计 §5.12.3 定标表）。
 
     与 l1_base.png 同一套配色规则（OCEAN/NEIGHBOR/LAKE + 城市政权色），
-    范围 = 全部老 L1 块（69 块 + 1040 城）的陆地世界：海洋底 → 灰陆地 →
+    范围 = 全部老 L1 块（69 块 + 1693 城块）的陆地世界：海洋底 → 灰陆地 →
     城市政权色（city_data.json rgb，与各 l1 包 states 同色源）→ 湖泊。
     8192 原生上色（LUT 查表，免逐城市全图扫描）→ 陆地 bbox 正方形裁切
     （外扩 5%）→ LANCZOS 降采样。
@@ -339,6 +339,9 @@ def main():
                     help="审计#8：只重写 l1_base.png（细化场形状 + 包内 states 现行色，"
                          "与运行时 get_state_color 同源）；窗口读包内 world_origin，"
                          "json/索引图/几何一概不动")
+    ap.add_argument("--spawn-settlement", default="",
+                    help="出生聚落 id（v2：出生 8 城邦特殊态取消，出生包 spawn 指定"
+                         "聚落落位；缺省 = 包内最大城块，旧口径）")
     args = ap.parse_args()
     if args.panorama:
         render_panorama(args.panorama_size)
@@ -425,7 +428,11 @@ def main():
     # 清了河带标签，城块多边形就在河带露海底色、河带把城块切成两截、
     # 描边沿河岸画一圈（把河框起来），三个症状同根。
     ctx_land = land8[y0:y0 + side, x0:x0 + side]
-    ctx_city, snap_stats = land_snap.snap_labels_to_land(ctx_city, ctx_land, ctx_lake)
+    # v2 荒地：细化场留在陆地上的 0 = 设计荒地（主张盘封顶 + 无聚落分量）——
+    # 贴陆后处理不回填（preserve 透传），由荒野邻块命名空间（30000+）接管几何
+    wasteland_ctx = ctx_land & (~ctx_lake) & (ctx_city == 0)
+    ctx_city, snap_stats = land_snap.snap_labels_to_land(
+        ctx_city, ctx_land, ctx_lake, preserve=wasteland_ctx)
     print("  贴陆后处理：海湖清除 %d px，陆地回填 %d px（河不清标签，贴图负责）"
           % (snap_stats["cleared_px"], snap_stats["filled_px"]))
     # P 社式忠实提取（创始人 2026-09-22 裁决「忠实还原蒙版」）：extract_mesh
@@ -555,6 +562,13 @@ def main():
     city_pos = {int(c["label"]): [v * cd_scale for v in c["city"]] for c in cities}
     # 面积归一化到 2048 级判定 level（8192 级 area_px ÷16 后语义不变）
     city_area = {int(c["label"]): int(c["area_px"] * (2048 * 2048) // (cd_size * cd_size)) for c in cities}
+    # v2：level/population_score/name 由聚落表真源（city_data 直传 settlements_v2）
+    # 给出，不再用面积阈值现场推——城块划分 v3 起随行携带
+    city_level = {int(c["label"]): int(c.get("level", 0) or (
+        3 if city_area[c["label"]] > 1500 else (2 if city_area[c["label"]] > 600 else 1)))
+        for c in cities}
+    city_ps = {int(c["label"]): float(c.get("population_score", 0.0)) for c in cities}
+    city_name = {int(c["label"]): str(c.get("name", "") or "城市") for c in cities}
     tiles = []
     for rank, c in enumerate(cities, start=1):
         mv = city_mesh.get(int(c["label"]), {})
@@ -568,7 +582,7 @@ def main():
         if len(outs) > 1:
             outs = [r for r in outs if _area_xy(r) >= 3.0] or outs
             outs = sorted(outs, key=_area_xy, reverse=True)
-        level = 3 if city_area[c["label"]] > 1500 else (2 if city_area[c["label"]] > 600 else 1)
+        level = city_level[c["label"]]
         pos = city_pos[c["label"]]
         main_outer = outs[0] if outs else []
         # 湖边段投影到湖轮廓：地块填充与湖泊交界的缝隙（套用湖轮廓，严丝合缝）
@@ -590,12 +604,20 @@ def main():
             "owner_state_id": "state_%03d" % c["label"],
             "settlement": {
                 "settlement_id": "settlement_city_%03d" % c["label"],
-                "name": "城市%d" % rank,
+                "name": city_name[c["label"]],
                 "level": level,
                 "position_px": [round(float(pos[0]) - x0, 2), round(float(pos[1]) - y0, 2)],
                 "map_id": "",
+                "population_score": city_ps[c["label"]],
             },
         })
+    # 出生包（config 根单份）：settlement.map_id 回填 l1_settlement_%02d（面积降序
+    # 编号，运行时 CityGen 按城名种子+档位生成街景，map_id 只是壳场景参数）。
+    # 旧链由 settlement_mapgen.py 回填——其 .tscn 产物已随 2D 场景清退删除，
+    # 本工具直接落 map_id，避免重跑时复活退役场景文件。
+    if out_dir == GAME_DIR:
+        for rank, t in enumerate(tiles):
+            t["settlement"]["map_id"] = "l1_settlement_%02d" % rank
     # 出生 L1 权威轮廓 = 本 L1 城块多边形并集的最大外环（与 tile 填充逐点一致；
     # 旧实现取 legacy 块轮廓——旧代几何且与细化城块差 ±11-14px）。
     # 只取最大环：岛屿不画 L1 轮廓（防多环串接成跨海乱飞线；岛屿由城市色块/描边呈现）
@@ -615,7 +637,7 @@ def main():
 
     states = [{
         "state_id": t["owner_state_id"],
-        "name": "城邦%d" % i,
+        "name": t["settlement"]["name"],
         "capital_settlement_id": t["settlement"]["settlement_id"],
         "color": [int(v) for v in rgb_by_label[int(t["tile_id"][5:])]],
     } for i, t in enumerate(tiles, start=1)]
@@ -662,7 +684,11 @@ def main():
         "mask_texture": "l1_mask.png",
         "parent_l1_label": lab_l1,
         "l1_polygon": l1_polygon,
-        "spawn_settlement_id": tiles[0]["settlement"]["settlement_id"],
+        # v2：--spawn-settlement 指定出生聚落（出生 8 城邦特殊态取消）；缺省回落包内最大城块
+        "spawn_settlement_id": (args.spawn_settlement
+                                if args.spawn_settlement in
+                                [t["settlement"]["settlement_id"] for t in tiles]
+                                else tiles[0]["settlement"]["settlement_id"]),
         "tiles": tiles,
         "states": states,
         "roads": roads,

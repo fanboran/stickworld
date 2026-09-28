@@ -42,6 +42,7 @@ from skimage.graph import MCP_Geometric
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import palette  # noqa: E402  （同目录：候选色生成 + 贪心分配，见其模块注释）
+import fields_common  # noqa: E402  （同目录：v2 场层公共函数；culture_flood 的 cost 底场构造抽到此，行为逐位不变）
 
 SIZE = 2048
 SIZE_FULL = 8192
@@ -138,12 +139,12 @@ def culture_flood(seeds, elev, river, biome, region, cultures, fp):
     合法 region 集外生效，§5.11.1 锚点语义），各自 MCP 求累计代价 → 逐像素
     argmin 归圈。返回 culture_idx+1 标签图（0 = 海/无）。
     （P7 定标：不许单 cost 场混跑——任一 culture 合法即免罚会削弱锚定；罚 30 挡游牧）
+    cost 底场构造抽到 fields_common.build_flood_cost（v2 文化场共用；表达式顺序
+    与 dtype 等价抽取，全量重跑产物逐位不变）。
     """
-    gy, gx = np.gradient(elev)
-    gradmag = np.sqrt(gy * gy + gx * gx)
-    land = biome > 0
-    base = 1.0 + fp["k_slope"] * gradmag         + fp["k_river"] * river         + fp["k_desert"] * (biome == BI_DESERT)         + fp["k_ice"] * (biome == BI_ICE)
-    base = np.where(land, base, 1e6).astype(np.float64)
+    base, land = fields_common.build_flood_cost(
+        elev, river, biome,
+        fp["k_slope"], fp["k_river"], fp["k_desert"], fp["k_ice"])
 
     n_cu = len(cultures)
     cum_all = np.full((n_cu, region.shape[0], region.shape[1]),

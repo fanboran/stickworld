@@ -1,15 +1,18 @@
 class_name WorldStateSerializer
 extends RefCounted
-## 世界状态序列化器 —— world_state 六大实体容器的 JSON 友好编解码。
+## 世界状态序列化器 —— world_state 实体容器的 JSON 友好编解码。
 ##
 ## 职责：纯静态无状态编解码（State ↔ Dictionary），存档格式权威仍在 world_state.gd
 ## （容器名 → 存档键的映射由其 get_save_data/load_save_data 掌握）。
 ##
-## ⚠️ 冻结预留：对接的六容器与 core/entities 状态类均未接入生产数据流
-## （见 world_state.gd 头注），technology 阶段 1 重建时再决策接入或归档。
+## ⚠️ 冻结预留：stickmen/organizations/regions/battles/projects/supply_chains
+## 六容器与对应状态类未接入生产数据流（见 world_state.gd 头注），technology
+## 阶段 1 重建时再决策接入或归档。cities/factions 为统一契约生产域
+## （世界模型整合 M1，完整版蓝图 §3.4），编解码随存档即时生效。
 ##
-## 兼容性约束：字段名/默认值/结构改动 = 存档格式变更，旧档会丢字段，
-## 改动前须确认 round-trip 测试（tests/unit/test_entity_states.gd）同步更新。
+## 兼容性约束（覆盖全部编解码对象，含 CityState/FactionState）：字段名/默认值/
+## 结构改动 = 存档格式变更，旧档会丢字段，改动前须确认 round-trip 测试
+## （tests/unit/test_entity_states.gd）同步更新。
 
 # ─────────────────────────────── 通用编解码 ────────────────────────────────
 
@@ -286,6 +289,61 @@ static func supply_chain_from_dict(d: Dictionary) -> SupplyChainState:
 	sc.state = int(d.get("state", 0)) as SupplyChainState.State
 	sc.efficiency = d.get("efficiency", 0.0)
 	return sc
+
+
+# ── City（统一契约生产域）──
+
+static func city_to_dict(c: CityState) -> Dictionary:
+	return {
+		"settlement_id": c.settlement_id,
+		"tile_key": c.tile_key,
+		"owner_state_id": c.owner_state_id,
+		"level": c.level,
+		"population": c.population,
+		"garrison": c.garrison.duplicate(),
+		"buildings": c.buildings.duplicate(),
+		"sim_tier": c.sim_tier,
+	}
+
+
+static func city_from_dict(d: Dictionary) -> CityState:
+	var c: CityState = CityState.new()
+	c.settlement_id = d.get("settlement_id", "")
+	c.tile_key = d.get("tile_key", "")
+	c.owner_state_id = d.get("owner_state_id", "")
+	# int 字段经 int() 还原：JSON 往返把 int 变 float，String 混入取 0（不崩）
+	c.level = int(d.get("level", 1))
+	c.population = int(d.get("population", 0))
+	c.sim_tier = int(d.get("sim_tier", CityState.SimTier.LEDGER))
+	# 军队账面 {profile_id: int}：值为 int 计数须逐值还原（JSON 往返 int→float）
+	var g: Variant = d.get("garrison", {})
+	if g is Dictionary:
+		for profile_id in g:
+			c.garrison[profile_id] = int(g[profile_id])
+	# 建筑账面（M1 恒空容器）：duplicate 防 aliasing
+	var b: Variant = d.get("buildings", {})
+	c.buildings = b.duplicate() if b is Dictionary else {}
+	return c
+
+
+# ── Faction（统一契约生产域）──
+
+static func faction_to_dict(f: FactionState) -> Dictionary:
+	return {
+		"state_id": f.state_id,
+		"name": f.name,
+		"capital_settlement_id": f.capital_settlement_id,
+		"lut_index": f.lut_index,
+	}
+
+
+static func faction_from_dict(d: Dictionary) -> FactionState:
+	var f: FactionState = FactionState.new()
+	f.state_id = d.get("state_id", "")
+	f.name = d.get("name", "")
+	f.capital_settlement_id = d.get("capital_settlement_id", "")
+	f.lut_index = int(d.get("lut_index", -1))
+	return f
 
 
 # ── Vector2 序列化辅助 ──

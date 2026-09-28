@@ -13,8 +13,11 @@
 # 0) 依赖（必须用 Python 3.12 正式版解释器，见 requirements.txt 顶部的说明）
 pip install -r tools/music/requirements.txt
 
-# 1) 一次性：拉渲染引擎与音源（约 490MB，落到仓库 temp/ 下，gitignored）
+# 1) 一次性：拉渲染引擎与音源（约 515MB，落到仓库 temp/ 下，gitignored）
+#    sfizz + FluidSynth + Salamander 钢琴采样 455 个 + GM SoundFont；
+#    全部按 tools/music/toolchain_pins.json 的 commit / 内容指纹下载并校验
 python tools/music/setup_toolchain.py
+python tools/music/setup_toolchain.py --verify     # 校验采样指纹与音源 sha256
 
 # 2) 管线自检（验证 DSP/响度/循环/导出"算得对"，不是"能跑通"）
 python tools/music/selftest.py
@@ -36,6 +39,31 @@ python tools/music/tone_check.py --stems interior
 python tools/music/tone_check.py --raw C4v10.flac
 ```
 
+## 复现交付件（可复现性口径）
+
+同参数 ⇒ 同一份音频。渲染是**确定性**的（随机种子固定、引擎与音源版本钉死），
+因此"重渲一遍"得到的音频与已交付的 OGG **逐样点相同**（OGG 容器字节可能因编码器
+非确定性不同，解码后的 PCM 相同）。实测（`menu_title`，两层）：
+
+| 层 | 样点数 | 与交付件相关性 | 最大样点差 | LUFS（交付 / 重渲） |
+| --- | --- | --- | --- | --- |
+| piano | 5,585,455 | 1.000000 | −240 dB | −16.972 / −16.972 |
+| strings | 5,585,455 | 1.000000 | −240 dB | −20.828 / −20.828 |
+
+复现的前置条件只有**工具链装全**这一条（`setup_toolchain.py`）。它曾在两处让人
+"装了也跑不出来"，现在都有明确机制兜住：
+
+- **采样清单不靠 GitHub API 枚举**：匿名限额 60 次/小时，额度用尽时安装直接
+  403（`rate limit exceeded`）→ 采样下不了 → 整条管线停摆。现读入库的
+  `toolchain_pins.json`（commit + 479 个文件的 git blob 指纹），**不调用 API**，
+  下载后逐文件校验内容；上游是浮动分支时也照钉住的 commit 走。
+- **GM SoundFont 由脚本下载**：编制声部（弦乐/竖琴/钟琴/木管/定音鼓）全靠它，
+  早先只在登记档写了来源、**没有任何脚本会装它**，缺它时 `render_all.py` 直接退出。
+  现按 `MuseScore_General.sf3`（MIT，39.9MB）的 URL + sha256 自动装到 `soundfonts/`。
+
+有意升级音源版本时：改 `gen_toolchain_pins.py` 的目标后重跑生成新清单，再跑
+`setup_toolchain.py`（旧采样会被指纹校验拦下，需先删）。
+
 ## 常用参数
 
 ```bash
@@ -50,7 +78,9 @@ python tools/music/qa_audio.py --delivered             # 检查交付的 OGG 而
 
 | 路径 | 内容 |
 | --- | --- |
-| `setup_toolchain.py` | 工具链安装（sfizz / FluidSynth / Salamander 钢琴采样 / 清单） |
+| `setup_toolchain.py` | 工具链安装（sfizz / FluidSynth / Salamander 钢琴采样 / GM SoundFont / 清单） |
+| `toolchain_pins.json` | **工具链钉版清单**（采样 commit + 逐文件 blob 指纹 + SoundFont sha256），入库 |
+| `gen_toolchain_pins.py` | 生成/更新上面那份清单（需 `GITHUB_TOKEN`，只在有意换版本时跑） |
 | `selftest.py` | 管线自检（已知答案的输入 → 验证输出） |
 | `compose/common.py` | **音乐基因**：主主题（级数化）、和声进行、编曲助手、力度/音区规则 |
 | `compose/cues.py` | 九首曲子的定义（分层、调性、混音覆盖） |

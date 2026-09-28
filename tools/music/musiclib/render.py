@@ -70,13 +70,19 @@ def piano_sfz() -> Path:
 
 def soundfont() -> Path:
     """GM SoundFont 路径。可由 MUSIC_SOUNDFONT 覆盖；否则取工具链里的
-    `soundfonts/*.sf2|sf3`（安装脚本登记的那一份）。"""
+    `soundfonts/*.sf2|sf3`（安装脚本登记的那一份）。
+
+    只认**像音源的**候选（≥1MB）：安装脚本会在同目录留标记文件，而标记若带
+    `.sf3` 扩展名就会被这里取到并传给 fluidsynth → **静默渲染出空轨**
+    （曾因此让弦乐层变成 1kbps 的空 ogg）。两道防线：标记不带 sf2/sf3 后缀 +
+    这里按体积过滤。
+    """
     env = os.environ.get("MUSIC_SOUNDFONT")
     if env:
         return Path(env)
     d = toolchain_root() / "soundfonts"
     for ext in ("*.sf2", "*.sf3"):
-        hits = sorted(d.glob(ext))
+        hits = [p for p in sorted(d.glob(ext)) if p.stat().st_size >= (1 << 20)]
         if hits:
             return hits[0]
     raise FileNotFoundError("找不到 GM SoundFont，请先运行 setup_toolchain.py")
@@ -137,8 +143,24 @@ def _run(cmd: list, out: Path) -> dict:
                            % (proc.returncode, proc.stdout[-3000:],
                               proc.stderr[-3000:]))
     info = sf.info(str(out))
+    # **空轨要报错，不能静默通过**：音源传错（比如把标记文件当成 .sf3 音源）时
+    # fluidsynth 会"成功"渲染出一段全零音频，管线一路绿灯直到交付件变成空层——
+    # 这类失败必须在源头炸掉，并把命令行打出来（否则只能靠听出"弦乐没了"来发现）。
+    peak = _peak(str(out))
+    if peak <= 1e-7:
+        raise RuntimeError(
+            "渲染结果全零（peak=%.1e）：音源或 MIDI 有问题。命令：\n  %s\n%s"
+            % (peak, " ".join(str(c) for c in cmd), proc.stdout[-1500:]))
     return {"wav": str(out), "frames": info.frames, "sr": info.samplerate,
-            "channels": info.channels, "duration_s": round(info.duration, 3)}
+            "channels": info.channels, "duration_s": round(info.duration, 3),
+            "peak": peak}
+
+
+def _peak(wav_path: str, max_seconds: float = 30.0) -> float:
+    """读一段（默认前 30s 足够覆盖起奏）求绝对峰值，用于"空轨"判定。"""
+    x, _fs = sf.read(wav_path, always_2d=True,
+                     frames=int(max_seconds * 48000))
+    return float(abs(x).max()) if x.size else 0.0
 
 
 def render_stem(stem_name: str, engine: str, midi_path: str, out_wav: str,

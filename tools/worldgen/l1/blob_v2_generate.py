@@ -910,9 +910,8 @@ def render_fractal(db_rows, eps_list, outlines):
 
 
 def _settlement_base(ps, sc, ring_rgb=None):
-    """现实聚落屋顶色随规模插值 + 地景自适应（与 blob_v2_bake.settlement_base
-    同式同参）：村土棕 / 镇陶瓦（柔化）/ 城石灰；中性高亮（雪）切屋顶灰斑
-    （雪上陶瓦红读作锈渍——创始人 2026-09-29）。"""
+    """城市剪影 = 中性灰阶石砌色随规模加深（与 blob_v2_bake.settlement_base
+    同式同参，无暖偏无色相自适应——见 bake 端 docstring）。"""
 
     def ss(x, a, b):
         if b <= a:
@@ -920,19 +919,11 @@ def _settlement_base(ps, sc, ring_rgb=None):
         u = min(1.0, max(0.0, (x - a) / (b - a)))
         return u * u * (3.0 - 2.0 * u)
 
-    v = np.asarray(sc.get("village", [166, 130, 90]), np.float32)
-    t = np.asarray(sc.get("town", [170, 117, 89]), np.float32)
-    c = np.asarray(sc.get("city", [148, 138, 128]), np.float32)
+    v = np.asarray(sc.get("village", [150, 149, 145]), np.float32)
+    t = np.asarray(sc.get("town", [133, 132, 129]), np.float32)
+    c = np.asarray(sc.get("city", [112, 112, 114]), np.float32)
     base = v + (t - v) * ss(ps, 0.15, 0.45)
-    base = base + (c - base) * ss(ps, 0.45, 0.8)
-    if ring_rgb is not None:
-        mx, mn = float(ring_rgb.max()), float(ring_rgb.min())
-        lum = float(ring_rgb.mean())
-        sat = (mx - mn) / max(mx, 1.0)
-        snow_f = ss(lum, 172.0, 210.0) * (1.0 - ss(sat, 0.16, 0.32))
-        gray = np.asarray(sc.get("roof_gray", [128, 121, 113]), np.float32)
-        base = base + (gray - base) * (snow_f * 0.85)
-    return base
+    return base + (c - base) * ss(ps, 0.45, 0.8)
 
 
 def _ring_fill(terrain_img, ax, ay, r_in, r_out, ps, sc, valid=None):
@@ -999,16 +990,16 @@ def render_overview(ctx, cities_order, results):
                 dr.polygon(pts, fill=fill)
                 n += 1
     # 河从城上过（创始人 2026-09-29）：场已不剔河（城跨河连续），预览端把河
-    # 在城像素上重描——river & 城覆盖（与底图逐像素 diff 即城掩膜）
+    # 在城像素上重描——覆盖率用 4x 块均值（天然 AA 无锯齿），城掩膜 = 与底图逐像素 diff
     out = np.asarray(img.convert("RGB"), dtype=np.uint8).copy()
     changed = (out != base_arr).any(axis=2)
     rv = ctx.get("river")
     if rv is not None and changed.any():
-        r4 = rv.reshape(out.shape[0], 4, out.shape[1], 4).any(axis=(1, 3))
-        draw = r4 & changed
-        if draw.any():
-            out[draw] = (out[draw].astype(np.float32) * 0.3
-                         + np.array([46.0, 102.0, 140.0]) * 0.7).astype(np.uint8)
+        cov = rv.reshape(out.shape[0], 4, out.shape[1], 4).mean(axis=(1, 3))
+        w = np.clip(cov * 1.6, 0.0, 1.0) * changed * 0.7
+        f = out.astype(np.float32)
+        f[:] = f * (1.0 - w[..., None]) + np.array([46.0, 102.0, 140.0]) * w[..., None]
+        out = f.astype(np.uint8)
     path = os.path.join(BLOB_V2_DIR, "blob_v2_preview_2048.png")
     Image.fromarray(out).save(path)
     print("  %s（%d 个多边形）" % (path, n))

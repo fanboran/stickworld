@@ -48,12 +48,6 @@
    "shade_strength_注释": "路面乘 hillshade 强度（shade 场向 1 收缩的比例，1=全量明暗贴地形）",
    "cull_margin_px": 16,
    "cull_margin_注释": "折线 bbox 与窗口相交测试的外扩余量（> 最大线宽半宽 + 收尖长度即可）"
-  },
-  "river_crisp": true,
-  "unsharp": {
-   "radius": 1.4,
-   "percent": 55,
-   "threshold": 2
   }
  }
 }

@@ -40,8 +40,8 @@ import sys
 import time
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
-from PIL import Image, ImageDraw
+from scipy.ndimage import gaussian_filter, binary_dilation
+from PIL import Image, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 L3_DIR = os.path.join(os.path.dirname(HERE), "l3")
@@ -78,6 +78,27 @@ def list_packs():
         if os.path.isfile(jp):
             packs.append((jp, name))
     return packs
+
+
+def post_river_sharpen(rgb, sl, fields, colors, lp):
+    """河流锐线 + 整图轻度锐化（创始人 2026-09-29：河流放大清晰度低、Tab 尺度
+    地形发虚）——软化河床之上按原始 8192 掩膜叠核心线（1px 外扩保细河），
+    再 UnsharpMask 提细节；travel 变体在道路层之下同样生效。"""
+    if lp.get("river_crisp", True):
+        rv = fields["river"][sl] & fields["land"][sl] & (~fields["lake"][sl])
+        if rv.any():
+            core = binary_dilation(rv, iterations=1)
+            f = rgb.astype(np.float32)
+            f[core] = f[core] * 0.25 + np.asarray(colors["river"], np.float32) * 0.75
+            rgb = np.clip(f, 0.0, 255.0).astype(np.uint8)
+    us = lp.get("unsharp")
+    if us:
+        rgb = np.asarray(Image.fromarray(rgb).filter(
+            ImageFilter.UnsharpMask(radius=float(us.get("radius", 1.4)),
+                                    percent=int(us.get("percent", 55)),
+                                    threshold=int(us.get("threshold", 2)))),
+                        dtype=np.uint8)
+    return rgb
 
 
 def render_window(sl, fields, colors, blend_sigma):
@@ -144,6 +165,7 @@ def bake_pack(json_path, fields, colors, lp, texture_name):
         return False
     sl = (slice(y0, y0 + side), slice(x0, x0 + side))
     rgb = render_window(sl, fields, colors, lp["biome_blend_sigma"])
+    rgb = post_river_sharpen(rgb, sl, fields, colors, lp)
     out = os.path.join(os.path.dirname(json_path), texture_name)
     Image.fromarray(rgb).save(out)
     print("  %s: %d² @ (%d,%d) -> %.1f MB" % (
@@ -287,6 +309,7 @@ def bake_travel_pack(json_path, fields, colors, lp, tp, v2_roads):
         return False
     sl = (slice(y0, y0 + side), slice(x0, x0 + side))
     rgb = render_window(sl, fields, colors, lp["biome_blend_sigma"])
+    rgb = post_river_sharpen(rgb, sl, fields, colors, lp)
     base = Image.fromarray(rgb).convert("RGBA")
     ss = int(tp["ss"])
     layer = draw_road_layer(side, x0, y0, v2_roads, fields["shade"][sl], tp)
@@ -351,7 +374,7 @@ def main():
     fields = {"labels8": labels8, "elev": elev, "land": land, "lake": lake,
               "shade": shade, "ocean_edt": ocean_edt.astype(np.float32),
               "lake_in": lake_in.astype(np.float32), "coast_dark": coast_dark,
-              "river_a": river_a, "hot8": hot8, "p": p}
+              "river_a": river_a, "hot8": hot8, "p": p, "river": river}
 
     v2_roads = None
     if tp:

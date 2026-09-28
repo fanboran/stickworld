@@ -200,7 +200,7 @@ func draw_fill(canvas: CanvasItem) -> void:
 		var m: ArrayMesh = pack.get("mesh", null)
 		if m != null:
 			canvas.draw_mesh(m, null, Transform2D(),
-					Color(1.0, 1.0, 1.0, _h.POLITICAL_FILL_ALPHA))
+					Color(1.0, 1.0, 1.0, _h.L1_NEIGHBOR_FILL_ALPHA))
 
 
 ## 城块界（城市层）：邻省灰城界链，线宽与本省同口径（屏幕像素固定）

@@ -85,6 +85,7 @@ func build_pack(label: int) -> Dictionary:
 		return {}
 	var offset := Vector2(data.world_origin - _h._data.world_origin)
 	var clip := clip_rect_for(label)
+	var prov_polys := province_polys_for(label)
 	var blob_tex: Array = []
 	for i in SettlementBlob.TIER_COUNT:
 		blob_tex.append(null)
@@ -93,7 +94,7 @@ func build_pack(label: int) -> Dictionary:
 		"data": data,
 		"offset": offset,
 		"clip": clip,
-		"mesh": build_fill_mesh(data, offset, clip),
+		"mesh": build_fill_mesh(data, offset, clip, prov_polys),
 		"borders": build_borders(data, offset, clip),
 		"blob_tex": blob_tex,
 		"blob_rect": Rect2(),
@@ -111,6 +112,21 @@ static func pack_dir_for(label: int) -> String:
 			or FileAccess.file_exists("%s/l1_world.bin" % BIRTH_BASE):
 		return BIRTH_BASE
 	return ""
+
+
+## 该邻省的省界多边形（本包 neighbors[] 的 polygons，本包 context 局部坐标）——
+## 完整层城块裁进省界（不规则共边），不再只用包围盒直边裁（省界直线化 = 裁剪痕，
+## 创始人 2026-09-29 指正）
+func province_polys_for(label: int) -> Array:
+	var out: Array = []
+	for nb in _h._data.neighbors:
+		if int((nb as Dictionary).get("label", 0)) != label:
+			continue
+		for poly in (nb as Dictionary).get("polygons", []):
+			var pts := _GeoLib.pts(poly)
+			if pts.size() >= 3:
+				out.append(pts)
+	return out
 
 
 ## 该邻省的裁剪矩形 = 本包 context 矩形 ∩ 该邻省窗口多边形包围盒
@@ -137,7 +153,8 @@ func clip_rect_for(label: int) -> Rect2:
 
 
 ## 邻省政权色填充 mesh：逐城块取邻包 states 真实政权色 × 邻省暗一阶（同本省覆盖口径）
-func build_fill_mesh(data: L1WorldData, offset: Vector2, clip: Rect2) -> ArrayMesh:
+func build_fill_mesh(data: L1WorldData, offset: Vector2, clip: Rect2,
+		prov_polys: Array = []) -> ArrayMesh:
 	if clip.size.x <= 0.0 or clip.size.y <= 0.0:
 		return null
 	var pairs: Array = []
@@ -148,9 +165,21 @@ func build_fill_mesh(data: L1WorldData, offset: Vector2, clip: Rect2) -> ArrayMe
 		var clipped := _GeoLib.clip_polygon_rect(moved, clip)
 		if clipped.size() < 3:
 			continue
-		var col: Color = data.get_state_color(tile.owner_state_id)
-		col.s *= _h.L1_NEIGHBOR_DESAT
-		pairs.append([clipped, col.darkened(_h.L1_NEIGHBOR_DIM)])
+		# 省界裁剪：城块只保留省界多边形内的部分（不规则共边贴齐兜底省面，
+		# 越界的包围盒直边不再压到邻省兜底上）
+		var pieces: Array = [clipped]
+		if not prov_polys.is_empty():
+			var inside: Array = []
+			for piece in pieces:
+				for pp2 in prov_polys:
+					inside.append_array(Geometry2D.intersect_polygons(piece, pp2))
+			pieces = inside
+		for piece in pieces:
+			if piece.size() < 3:
+				continue
+			var col: Color = data.get_state_color(tile.owner_state_id)
+			col.s *= _h.L1_NEIGHBOR_DESAT
+			pairs.append([piece, col.darkened(_h.L1_NEIGHBOR_DIM)])
 	return _GeoLib.mesh_from_pairs(pairs)
 
 

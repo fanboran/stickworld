@@ -374,16 +374,16 @@ static func bake_base_meshes(h) -> void:
 	bake_neighbors_mesh(h)
 
 
-## 邻省块兜底灰底/暗色块 mesh（只含**未**完整装载的邻省）。
-## 邻省完整渲染装载完成后该省从本 mesh 退出：同层两份半透明填充会叠暗，
-## 且完整层（逐城块真实政权色）已覆盖其窗口——退出的省读起来是"升级"不是"变色"。
+## 邻省块兜底省面 mesh：**始终画全部邻省**（含已完整装载的）——完整渲染层只覆盖
+## 「该省 ∩ 该省自己包窗口」，窗口外的省域若兜底退出即露地形（绿斑，创始人
+## 2026-09-29 指正：省间交接是不规则共边，直线边 = 裁剪痕，绿的在界外）。
+## 叠序 = 兜底在下、完整层逐城块叠上：填充 alpha 0.85 下叠暗效应可忽略，
+## 换来窗口外省域必有省面色。
 static func bake_neighbors_mesh(h) -> void:
 	h._neighbors_mesh = null
 	var neighbor_pairs: Array = []
 	for ni in h._data.neighbors.size():
 		var nb: Dictionary = h._data.neighbors[ni]
-		if h._nb_loaded.has(int(nb.get("label", 0))):
-			continue
 		var nb_color: Color = neighbor_block_color(h, nb)
 		# 洞环（内陆海洞/湖等 label 0 区）逐个从外环裁掉（Geometry2D 布尔），
 		# 否则邻块填色盖住水域（守门 I2a 同口径）

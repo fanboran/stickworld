@@ -342,6 +342,7 @@ static func neighbor_block_color(h, neighbor: Dictionary) -> Color:
 	if pol != null and label > 0:
 		var c := pol.color_of(label)
 		if c.a > 0.0:
+			c.s *= h.L1_NEIGHBOR_DESAT
 			return c.darkened(h.L1_NEIGHBOR_DIM)
 	return h.NEIGHBOR_COLOR
 

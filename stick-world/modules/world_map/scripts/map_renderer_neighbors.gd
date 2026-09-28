@@ -148,7 +148,9 @@ func build_fill_mesh(data: L1WorldData, offset: Vector2, clip: Rect2) -> ArrayMe
 		var clipped := _GeoLib.clip_polygon_rect(moved, clip)
 		if clipped.size() < 3:
 			continue
-		pairs.append([clipped, data.get_state_color(tile.owner_state_id).darkened(_h.L1_NEIGHBOR_DIM)])
+		var col: Color = data.get_state_color(tile.owner_state_id)
+		col.s *= _h.L1_NEIGHBOR_DESAT
+		pairs.append([clipped, col.darkened(_h.L1_NEIGHBOR_DIM)])
 	return _GeoLib.mesh_from_pairs(pairs)
 
 

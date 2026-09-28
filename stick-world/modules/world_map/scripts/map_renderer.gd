@@ -188,6 +188,7 @@ const NEIGHBOR_COLOR := MapTokens.L1_NEIGHBOR_COLOR
 const NEIGHBOR_BORDER_WIDTH := MapTokens.L1_NEIGHBOR_BORDER_WIDTH
 ## 邻省块压暗量（政治模式邻省按政权色上色但暗一阶；见 map_renderer_geo）
 const L1_NEIGHBOR_DIM := MapTokens.L1_NEIGHBOR_DIM
+const L1_NEIGHBOR_DESAT := MapTokens.L1_NEIGHBOR_DESAT
 ## 内容区"纸张边界"黑框（context 外缘，A3）
 const PAPER_BORDER_COLOR := MapTokens.L1_PAPER_BORDER_COLOR
 const PAPER_BORDER_WIDTH := MapTokens.L1_PAPER_BORDER_WIDTH

@@ -184,6 +184,7 @@ const NEIGHBOR_BORDER_WIDTH := MapTokens.L1_NEIGHBOR_BORDER_WIDTH
 ## 邻省块压暗量（政治模式邻省按政权色上色但暗一阶；见 map_renderer_geo）
 const L1_NEIGHBOR_DIM := MapTokens.L1_NEIGHBOR_DIM
 const L1_NEIGHBOR_DESAT := MapTokens.L1_NEIGHBOR_DESAT
+const L1_NEIGHBOR_FILL_ALPHA := MapTokens.L1_NEIGHBOR_FILL_ALPHA
 ## 内容区"纸张边界"黑框（context 外缘，A3）
 const PAPER_BORDER_COLOR := MapTokens.L1_PAPER_BORDER_COLOR
 const PAPER_BORDER_WIDTH := MapTokens.L1_PAPER_BORDER_WIDTH
@@ -582,10 +583,10 @@ func _draw() -> void:
 		if _tiles_mesh == null:
 			_Geo.bake_base_meshes(self)
 		if _neighbors_mesh != null:
-			# 邻省块与本省同一覆盖口径（同 alpha），只是色已暗一阶——周边仍是"地形上的
-			# 政权色"，与本省连成一张图，不再是压住地形的平灰
+			# 邻省块 alpha 高于本省（L1_NEIGHBOR_FILL_ALPHA）：绿相省份半透明叠绿
+			# 地形会读作「露底」，省面色须主导（创始人 2026-09-29）
 			draw_mesh(_neighbors_mesh, null, Transform2D(),
-					Color(1.0, 1.0, 1.0, POLITICAL_FILL_ALPHA))
+					Color(1.0, 1.0, 1.0, L1_NEIGHBOR_FILL_ALPHA))
 		# 邻省完整渲染：已装载邻省改为逐城块真实政权色（乘暗一阶），叠在兜底色块之上
 		_nb().draw_fill(self)
 		if _tiles_mesh != null:

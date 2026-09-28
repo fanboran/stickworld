@@ -71,7 +71,7 @@
 | C2 规模谱直方图 | 先验/target/终局三系列——"上百小政权"起点形态：大量 1-3 城小国 + 少量区域大国 | `l3/state_build_v2.py` 内建 |
 | D1 河流矢量 | 注入 70 包的河流折线（贴地形、顺流向） | `l2_export/river_export.py` |
 | D2 道路网络 | 2185 条城间道路贴地形折线（绕山不走崖），跨包接缝连续；连接正常聚落（原址点不修路） | `l1/road_generate.py` |
-| E1 blob 城市剪影全图 | 城市剪影（**现行 R5 场叠加管线**——与游戏内 Tab 城区图同源；场场叠加→阈值→marching squares，建成区限自身城块内，地块不规则→形状有机多样） | `l1/blob_v2_generate.py` |
+| E1 blob 城市剪影全图 | 城市剪影（**现行 R5 场叠加管线**——与游戏内 Tab 城区图同源；场场叠加→阈值→marching squares，建成区限自身城块内，地块不规则→形状有机多样）；**无描边，填充色取城周地形环带**（脱饱和暖灰化，与底图同源不悬浮——创始人 2026-09-28） | `l1/blob_v2_generate.py` |
 | E2 blob 代表城特写 | 出生城 + 代表城三档嵌套（low/mid/high 随人口切档）；档差由 submodule `blob_params.json` levels 段 + `blob_v2_params.json` 控制 | `l1/blob_v2_generate.py` |
 
 > 原 D3/D4（弧拓扑预览）已退出验收清单：渲染与 B3 同源同观感，其真正产出是矢量数据与内部指标（共享弧配对率、面积守恒）——降为管线自检（`l3/arc_topology.py`，收线时 `--write` 落地），观感以实机描边为准。

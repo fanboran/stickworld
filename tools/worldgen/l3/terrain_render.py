@@ -26,7 +26,7 @@
 """
 
 import numpy as np
-from scipy.ndimage import distance_transform_edt, binary_erosion, gaussian_filter
+from scipy.ndimage import distance_transform_edt, binary_erosion, gaussian_filter, laplace
 from PIL import Image
 import json
 import os
@@ -113,22 +113,40 @@ def narrow_source_band(labels8, land, water, band_px):
 
 
 def build_hillshade(elev, land, hp):
-    """西北 45° 光源 hillshade，multiply [1-strength, 1+strength]。
+    """西北 45° 光源多尺度 hillshade + 谷地曲率暗化，multiply [1-strength, 1+strength]。
 
     图像坐标 x 向右、y 向下，西北 = (-1,-1) 方向；坡面朝西北（高度沿东南向升，
     gx,gy > 0）为受光面提亮。海洋填海平面高度避免陆海跳变产生假边缘。
+
+    多尺度：单一细 sigma 的刻面阴影在 8192→2048 降采样时被平均掉（细 σ@8192
+    折算不足 1px@2048），观感「磨平」——分 σ 档叠加（细刻面 + 中尺度 + 成图
+    存活的山谷/山脊 traces），各档按自身幅值归一再加权；拉普拉斯曲率项
+    （谷横剖面凹 → 二阶导 > 0 → 减光，脊反之）补上地形图式的谷地痕迹。
+    scales 缺省回退单 [sigma, 1.0]（旧档兼容）。
     """
     sea_level = float(np.median(elev[land][:1000])) * 0.05 if land.any() else 0.02
     es = np.where(land, elev, np.float32(sea_level))
-    es = gaussian_filter(es, sigma=hp["sigma"])
-    gy, gx = np.gradient(es)
     az = math.radians(hp["light_az_deg"])
     lx, ly = math.cos(az), math.sin(az)
-    dot = gx * lx + gy * ly
-    scale = np.percentile(np.abs(dot), 98.5)
+    total = np.zeros(es.shape, dtype=np.float32)
+    for sigma, w in hp.get("scales") or [[hp["sigma"], 1.0]]:
+        ess = gaussian_filter(es, sigma=sigma)
+        gy, gx = np.gradient(ess)
+        dot = gx * lx + gy * ly
+        scale = np.percentile(np.abs(dot), 98.5)
+        if scale < 1e-9:
+            scale = 1e-9
+        total += w * (dot / scale)
+    cv = hp.get("curvature")
+    if cv:
+        c = laplace(gaussian_filter(es, sigma=cv["sigma"]))
+        cscale = np.percentile(np.abs(c), 98.0)
+        if cscale > 1e-9:
+            total -= cv["weight"] * (c / cscale)
+    scale = np.percentile(np.abs(total), 98.5)
     if scale < 1e-9:
         scale = 1e-9
-    return 1.0 + hp["strength"] * np.clip(dot / scale, -1.0, 1.0)
+    return 1.0 + hp["strength"] * np.clip(total / scale, -1.0, 1.0)
 
 
 def build_fields(elev, land, lake, river, p):

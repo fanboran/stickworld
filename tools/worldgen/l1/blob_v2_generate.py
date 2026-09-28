@@ -909,22 +909,48 @@ def render_fractal(db_rows, eps_list, outlines):
     print("  %s" % os.path.basename(out))
 
 
+def _ring_fill(terrain_img, ax, ay, r_in, r_out):
+    """地形环带取色 → blob 填充色（脱饱和暖灰化，blob_v2_bake 同式：desat 0.62
+    向亮度收敛 + warm_shift [8,3,-6]）——色相源自周边地形，剪影不再悬浮。"""
+    W, H = terrain_img.size
+    x0, x1 = max(0, int(ax - r_out)), min(W, int(ax + r_out) + 1)
+    y0, y1 = max(0, int(ay - r_out)), min(H, int(ay + r_out) + 1)
+    if x1 <= x0 or y1 <= y0:
+        return (150, 142, 128, 235)
+    a = np.asarray(terrain_img.crop((x0, y0, x1, y1)), dtype=np.float32)
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    d = np.hypot(xx - ax, yy - ay)
+    m = (d >= r_in) & (d <= r_out)
+    if not m.any():
+        m = d <= r_out
+    col = a[m].mean(axis=0)
+    lum = float(col @ np.array([0.299, 0.587, 0.114]))
+    col = col * (1.0 - 0.62) + lum * 0.62
+    col += np.array([8.0, 3.0, -6.0])
+    return tuple(int(v) for v in np.clip(col, 0.0, 255.0)) + (235,)
+
+
 def render_overview(ctx, cities_order, results):
-    """全图概览（gitignored）：按 population_score 选档画到 2048 地形底图（洞不画，0.25x 不可辨）"""
+    """全图概览（gitignored）：按 population_score 选档画到 2048 地形底图
+    （洞不画，0.25x 不可辨）。无描边、填充色取自城周地形环带（创始人
+    2026-09-28：融入地形图本身，不悬浮）。"""
     terr = ctx["terrain_img"]
     img = terr.convert("RGBA")
     dr = ImageDraw.Draw(img, "RGBA")
     k = SIZE / terr.size[0]
+    ring = 30.0 / k                       # 终态 R=30@8192 → 2048 视图像素
     n = 0
     for c in cities_order:
         r = results.get(c["sid"])
         if not r or not (r["polys"].get("ps") or r["polys"]["mid"]):
             continue
         tier = "ps"   # 连续正比：按城自身规模独立档画（创始人 2026-09-27）
+        ax, ay = c["wx"] / k, c["wy"] / k
+        fill = _ring_fill(terr, ax, ay, ring * 1.2, ring * 2.6)
         for outer, _holes in r["polys"].get(tier) or r["polys"]["mid"]:
             pts = [(x / k, y / k) for x, y in outer]
             if len(pts) >= 3:
-                dr.polygon(pts, fill=(198, 188, 170, 150), outline=(70, 62, 50, 200))
+                dr.polygon(pts, fill=fill)
                 n += 1
     path = os.path.join(BLOB_V2_DIR, "blob_v2_preview_2048.png")
     img.convert("RGB").save(path)

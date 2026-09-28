@@ -86,9 +86,13 @@ def bake_l3_and_political_data():
         l3 = json.load(f)
     tiles = l3["tiles"]
     labels = sorted(int(t["label"]) for t in tiles)
-    assert labels == list(range(1, n_cities + 1)), \
-        "l3_city tiles label 与 v2 城表不对齐（%d..%d / %d 城）" % (
-            labels[0], labels[-1], n_cities)
+    # owners 可含原址复种点（level 0，涌现制下已归政权）——l3_city tiles 只覆盖正常聚落，
+    # 对齐口径 = tiles label 连续且全部在 owners 内
+    assert labels == list(range(1, len(labels) + 1)), \
+        "l3_city tiles label 应连续 1..N（现 %d..%d / %d 块）" % (
+            labels[0], labels[-1], len(labels))
+    assert all(sid_of(lb) in owners for lb in labels), \
+        "l3_city tiles 存在 owners 未覆盖的城块"
 
     for t in tiles:
         lb = int(t["label"])

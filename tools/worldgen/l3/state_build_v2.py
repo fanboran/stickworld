@@ -235,8 +235,8 @@ def emerge_states(cities, adj, edges, cap, spawn_labels, spawn_cap, n_target):
     上限时兼并（winner = 城数多者，并列比人口、再比 label 小）——文化近亲 +
     地理便宜先并，即「打出来的版图」在生成期的确定性加速版。上限 = 谱 cap；
     出生 L1（spawn_labels）政权封顶 spawn_cap（合并到此即停、不许长成大国）。
-    返回 (owner, states, n_merge, n_core)；level==0 填充点暂不归属（owner=-1，
-    由 assign_orphans 收尾）。
+    返回 (owner, states, n_merge, n_core)；level==0 原址复种点不属任何政权
+    （owner=-1，由 assign_orphans 记账到附属国——输出层剥离为无主）。
     """
     n = len(cities)
     is_core = [cities[u]["level"] > 0 for u in range(n)]
@@ -309,7 +309,10 @@ def emerge_states(cities, adj, edges, cap, spawn_labels, spawn_cap, n_target):
 
 
 def assign_orphans(owner, states, cities, adj, core):
-    """level==0 填充点归属：并入接触边权最低的邻接政权（无则最近微核）。"""
+    """level==0 原址复种点记账：并入接触边权最低的邻接政权（无则最近微核）。
+
+    仅内部记账（避免 -1 哨兵穿透 rename/终态闸）；政权归属输出层剥离——
+    city_owners 落空串（无主荒地）、n_cities 不计复种点。"""
     for u in range(len(cities)):
         if owner[u] != -1:
             continue
@@ -869,12 +872,14 @@ def build(P, dry_run=False, skip_preview=False):
         sid = rename[old]
         c = s["culture"]
         cid = ("cult_%02d" % c) if c > 0 else None
+        # 原址复种点（level 0）不算政权城：n_cities/is_city_state 只数正常聚落
+        n_real = sum(1 for u in s["cities"] if cities[u]["level"] > 0)
         states_out[sid] = {
             "name": "", "capital": s["capital"], "culture": int(c),
             "culture_id": cid, "race": race_by_culture.get(cid),
-            "alliance": None, "is_city_state": len(s["cities"]) == 1,
-            "name_status": "提案/待定", "n_cities": len(s["cities"]),
-            "target": len(s["cities"]),
+            "alliance": None, "is_city_state": n_real == 1,
+            "name_status": "提案/待定", "n_cities": n_real,
+            "target": n_real,
             "history": {
                 "born_round": 0, "annexed": s["annexed"],
                 "flips_in": 0, "flips_out": 0, "collapsed": False,
@@ -893,7 +898,11 @@ def build(P, dry_run=False, skip_preview=False):
                              float(sp["normalize"]["sim_enclave_keep"]),
                              rename=rename)
 
-    city_owners = {cities[u]["sid"]: owner[u] for u in range(n_total)}
+    # 原址复种点（level 0）不参与政权：归属输出为空串（无主荒地，政治图灰显）；
+    # 内部 owner 仍指向附属国仅为记账（避免 -1 哨兵穿透 rename/终态闸）
+    city_owners = {cities[u]["sid"]:
+                   (owner[u] if cities[u]["level"] > 0 else "")
+                   for u in range(n_total)}
     sizes = {sid: states_out[sid]["n_cities"] for sid in states_out}
 
     # ---- 规模谱统计（先验 raw / 终局 final；target 已取消） ----
@@ -1113,6 +1122,9 @@ def make_previews(P, suit, eff_land, cities, owner, states_out, meta):
     col_by_sid = {sid: tuple(states_out[sid]["color"]) for sid in live}
     lut = np.zeros((len(cities) + 1, 3), dtype=np.uint8)
     for i, c in enumerate(cities):
+        if c["level"] <= 0:
+            lut[i + 1] = WASTELAND_RGB  # 原址复种点：无主荒地灰
+            continue
         sid = owner[c["label"] - 1]
         lut[i + 1] = col_by_sid.get(sid, (120, 120, 120))
     lab_clip = np.clip(lab, 0, len(cities) - 1)
@@ -1129,7 +1141,7 @@ def make_previews(P, suit, eff_land, cities, owner, states_out, meta):
     sid_idx = {sid: i + 1 for i, sid in enumerate(live)}
     own_int = np.zeros(len(cities) + 1, dtype=np.int32)
     for i, c in enumerate(cities):
-        own_int[i + 1] = sid_idx.get(owner[c["label"] - 1], 0)
+        own_int[i + 1] = 0 if c["level"] <= 0 else sid_idx.get(owner[c["label"] - 1], 0)
     own_lab = own_int[lab_clip + 1]
     b_h = (own_lab[1:, :] != own_lab[:-1, :]) & landm[1:, :] & landm[:-1, :]
     b_w = (own_lab[:, 1:] != own_lab[:, :-1]) & landm[:, 1:] & landm[:, :-1]

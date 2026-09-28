@@ -82,20 +82,26 @@ def main():
         check_fail(fails, "城表全覆盖", "缺 %d / 多 %d（如 %s）"
                    % (len(missing), len(extra),
                       (sorted(missing)[:3] + sorted(extra)[:3])))
-    dangling = {v for v in city_owners.values() if v not in states}
+    # 空串 = 无主（原址复种点 level 0，不参与政权）；非空 owner 才要求指向存续 states
+    dangling = {v for v in city_owners.values() if v and v not in states}
     if dangling:
         check_fail(fails, "悬空引用", "%d 个 owner 不在 states：%s"
                    % (len(dangling), sorted(dangling)[:3]))
     cnt_by_state = {}
+    n_free = 0
     for v in city_owners.values():
-        cnt_by_state[v] = cnt_by_state.get(v, 0) + 1
+        if v:
+            cnt_by_state[v] = cnt_by_state.get(v, 0) + 1
+        else:
+            n_free += 1
     bad_n = [sid for sid, s in states.items()
              if s["n_cities"] != cnt_by_state.get(sid, 0)]
     if bad_n:
         check_fail(fails, "n_cities 对账", "%d 国与 city_owners 计数不符（如 %s）"
                    % (len(bad_n), bad_n[:3]))
     elif not dangling:
-        check_ok("n_cities 对账", "逐国 n_cities == 名下城数（Σ=%d）" % n_set)
+        check_ok("n_cities 对账", "逐国 n_cities == 名下城数（Σ=%d，无主 %d）"
+                 % (n_set - n_free, n_free))
 
     # ---- 2) target 与实际偏差带（A6 前快照 + 容差） ----
     alloc = meta["allocation_check"]["states"]
@@ -112,8 +118,10 @@ def main():
         check_fail(fails, "target 偏差带", "超带 %d 国 > 容差 %d：%s"
                    % (len(band_bad), tol,
                       ["%s t%d/g%d" % x for x in band_bad[:8]]))
-    if abs(sum(a["got"] for a in alloc.values()) - n_set) > 0:
-        check_fail(fails, "分配快照守恒", "Σgot ≠ 总城数")
+    # 守恒口径：正常聚落 = 总聚落 − 无主原址点（Σgot 只数参政城）
+    if abs(sum(a["got"] for a in alloc.values()) - (n_set - n_free)) > 0:
+        check_fail(fails, "分配快照守恒", "Σgot ≠ 正常聚落数（%d − 无主 %d）"
+                   % (n_set, n_free))
 
     # ---- 3) 规模谱（终局，核心验收） ----
     sizes = {sid: s["n_cities"] for sid, s in states.items()}
@@ -203,9 +211,9 @@ def main():
                    "initial %d + born %d − extinct %d = %d ≠ final %d（states %d）"
                    % (h["states_initial"], h["states_born"], h["states_extinct"],
                       expect_final, h["states_final"], len(states)))
-    elif sum(sizes.values()) != n_set:
-        check_fail(fails, "A6 自洽-城数守恒", "Σ n_cities = %d ≠ %d"
-                   % (sum(sizes.values()), n_set))
+    elif sum(sizes.values()) != n_set - n_free:
+        check_fail(fails, "A6 自洽-城数守恒", "Σ n_cities = %d ≠ 正常聚落数 %d"
+                   % (sum(sizes.values()), n_set - n_free))
     else:
         check_ok("A6 事件自洽", "兼并 %d / 解体 %d / 易手 %d；政权 %d → %d（新生 "
                  "%d、消亡 %d，守恒）；终局 Σ城 = %d" % (

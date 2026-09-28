@@ -2,7 +2,7 @@ extends Node
 ## 单元测试：世界契约初始化器（世界模型整合 M1——mapdata 真源 → CityState/FactionState
 ## 全量装载）。
 ##
-## 覆盖：装载数量（176 政权 + 1036 城，V2 世界重生成）/ 零悬空（城→政权、政权→都城双向）/ 字段保真
+## 覆盖：装载数量（193 政权 + 1036 城，V2 世界重生成）/ 零悬空（城→政权、政权→都城双向）/ 字段保真
 ## （全量含单城邦/最大国/中位国）/ 聚合对齐（faction_tile_count == n_cities、总和 == 1036）/
 ## 人口推导（同 seed 确定性、档位量级单调、出生城免疫精确值、自然数不整十扎堆）/
 ## tile_key 映射（含 3 位零填充）/ level 锚点（生成端档位口径守护）/ garrison 账面
@@ -18,7 +18,7 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptWS := preload("res://core/autoload/world_state.gd")
 const ScriptInit := preload("res://core/entities/world_contract_initializer.gd")
 
-const N_STATES := 176
+const N_STATES := 193
 const N_CITIES := 1036
 ## 固定测试种子（确定性断言用；start_new_run 路径由其内部 randi() 定种子）
 const RUN_SEED := 20260925
@@ -49,7 +49,7 @@ func _ready() -> void:
 	_build_ms = Time.get_ticks_msec() - t0
 	print("[world_contract] 单次全量装载耗时: %d ms（political_data.json + l3_city bin 优先）" % _build_ms)
 	_runner = TestRunner.new()
-	_runner.add_test("world_contract: 全量装载 176 政权 + 1036 城", _test_load_counts)
+	_runner.add_test("world_contract: 全量装载 193 政权 + 1036 城", _test_load_counts)
 	_runner.add_test("world_contract: 零悬空（城→政权 / 政权→都城）", _test_no_dangling)
 	_runner.add_test("world_contract: 字段保真（最大国/单城邦/中位国抽样）", _test_field_fidelity)
 	_runner.add_test("world_contract: 聚合对齐（tile 数 == n_cities，总和 1036）", _test_aggregates)
@@ -83,7 +83,7 @@ func _factions() -> Dictionary:
 
 
 func _test_load_counts() -> void:
-	_runner.assert_equal(_factions().size(), N_STATES, "政权数 176（实测 %d）" % _factions().size())
+	_runner.assert_equal(_factions().size(), N_STATES, "政权数 193（实测 %d）" % _factions().size())
 	_runner.assert_equal(_cities().size(), N_CITIES, "城市数 1036（实测 %d）" % _cities().size())
 	# 装载耗时观测（无硬阈值——CI 磁盘差异大，超常在汇总里人眼看）
 	_runner.assert_true(_build_ms >= 0, "装载耗时可测（%d ms）" % _build_ms)
@@ -141,13 +141,13 @@ func _test_aggregates() -> void:
 		var want := int(states[sid].get("n_cities", -1))
 		_runner.assert_equal(ws.faction_tile_count(sid), want,
 				"%s tile 数 == n_cities（%d）" % [sid, want])
-	# 全 176 政权城数总和 == 1036；玩家壳不占城
+	# 全 193 政权城数总和 == 1036；玩家壳不占城
 	var total := 0
 	for sid in ws.factions:
 		if sid == "player":
 			continue
 		total += ws.faction_tile_count(str(sid))
-	_runner.assert_equal(total, N_CITIES, "176 政权城数总和 == 1036（实测 %d）" % total)
+	_runner.assert_equal(total, N_CITIES, "193 政权城数总和 == 1036（实测 %d）" % total)
 	_runner.assert_equal(ws.faction_tile_count("player"), 0, "玩家壳 0 城")
 	ws.free()
 
@@ -296,7 +296,7 @@ func _test_bin_json_consistency() -> void:
 func _test_player_coexistence() -> void:
 	var ws := ScriptWS.new()
 	ws.start_new_run()
-	_runner.assert_equal(ws.factions.size(), N_STATES + 1, "开局 176 AI 政权 + 玩家壳（实测 %d）" % ws.factions.size())
+	_runner.assert_equal(ws.factions.size(), N_STATES + 1, "开局 193 AI 政权 + 玩家壳（实测 %d）" % ws.factions.size())
 	_runner.assert_equal(ws.cities.size(), N_CITIES, "开局 1036 城（实测 %d）" % ws.cities.size())
 	# 玩家壳不被灌入冲掉（merge 非覆盖）
 	var player: FactionState = ws.get_entity("factions", "player")
@@ -304,7 +304,7 @@ func _test_player_coexistence() -> void:
 	if player != null:
 		_runner.assert_equal(player.name, "玩家政权", "玩家壳 name 保留")
 	# 真源无 "player" id（防御断言：灌入域与玩家 id 无冲突）
-	_runner.assert_false(_factions().has("player"), "真源 176 表不含玩家保留 id")
+	_runner.assert_false(_factions().has("player"), "真源 193 表不含玩家保留 id")
 	# 幂等：重复 start_new_run 全量重置不翻倍
 	ws.start_new_run()
 	_runner.assert_equal(ws.factions.size(), N_STATES + 1, "重复开局政权数不翻倍")

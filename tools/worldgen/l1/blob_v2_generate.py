@@ -84,11 +84,10 @@ def load_inputs():
     river = np.array(Image.open(os.path.join(OUTPUT_DIR, "fractal_river_mask_8192.png")).convert("L")) > 127
     lake = np.array(Image.open(os.path.join(OUTPUT_DIR, "fractal_lake_mask_8192.png")).convert("L")) > 127
     land = np.array(Image.open(os.path.join(OUTPUT_DIR, "locked", "locked_continent_8192.png")).convert("L")) > 127
-    water = river | lake
-    del river, lake
+    water = river | lake          # 特写底图 tint 用（河湖都算水）
     print("  梯度 p50/p90/p97 = %.5f / %.5f / %.5f"
           % tuple(np.percentile(grad[land], [50, 90, 97])))
-    return grad, water, land
+    return grad, water, land, lake, river
 
 
 def _city_tile_geom(t, ox, oy):
@@ -390,11 +389,12 @@ def city_field_mask(city, s, tier_idx, ctx, p, lv_bands, fbm_cache, region_polys
     scale = float(np.clip(r_ref / float(ds.get("ref", 60.0)),
                           float(ds.get("min", 0.45)), 1.0))
 
-    # 6 排除层先算：水体/陡坡/海域硬置 0（SLEUTH 式否决）
+    # 6 排除层先算：湖/陡坡/海域硬置 0（SLEUTH 式否决）；河不剔（创始人
+    # 2026-09-29：城不该被河切成两半——建成区跨河连续，河由贴图端叠画穿城）
     sl = ctx["world"]["grad"][wy0:wy0 + W, wx0:wx0 + W]
-    wt = ctx["world"]["water"][wy0:wy0 + W, wx0:wx0 + W]
+    lk = ctx["world"]["lake"][wy0:wy0 + W, wx0:wx0 + W]
     ld = ctx["world"]["land"][wy0:wy0 + W, wx0:wx0 + W]
-    excl = (ld & (~wt) & (sl < p["exclusion"]["slope_hard"])).astype(np.float32)
+    excl = (ld & (~lk) & (sl < p["exclusion"]["slope_hard"])).astype(np.float32)
     # 6.5 城块净空带：界内侧 margin 内禁建，并进排除层（τ 反解/种子/绿楔自动继承）
     # ——建成区从源头缩回界内，不再靠剪裁切出直线硬边。
     # 净空带自适应降档（创始人 2026-09-27：装不下就缩到装得下为止）：判据 =
@@ -909,36 +909,81 @@ def render_fractal(db_rows, eps_list, outlines):
     print("  %s" % os.path.basename(out))
 
 
-def _ring_fill(terrain_img, ax, ay, r_in, r_out):
-    """地形环带取色 → blob 填充色（脱饱和暖灰化，blob_v2_bake 同式：desat 0.62
-    向亮度收敛 + warm_shift [8,3,-6]）——色相源自周边地形，剪影不再悬浮。"""
+def _settlement_base(ps, sc, ring_rgb=None):
+    """现实聚落屋顶色随规模插值 + 地景自适应（与 blob_v2_bake.settlement_base
+    同式同参）：村土棕 / 镇陶瓦（柔化）/ 城石灰；中性高亮（雪）切屋顶灰斑
+    （雪上陶瓦红读作锈渍——创始人 2026-09-29）。"""
+
+    def ss(x, a, b):
+        if b <= a:
+            return 0.0
+        u = min(1.0, max(0.0, (x - a) / (b - a)))
+        return u * u * (3.0 - 2.0 * u)
+
+    v = np.asarray(sc.get("village", [166, 130, 90]), np.float32)
+    t = np.asarray(sc.get("town", [170, 117, 89]), np.float32)
+    c = np.asarray(sc.get("city", [148, 138, 128]), np.float32)
+    base = v + (t - v) * ss(ps, 0.15, 0.45)
+    base = base + (c - base) * ss(ps, 0.45, 0.8)
+    if ring_rgb is not None:
+        mx, mn = float(ring_rgb.max()), float(ring_rgb.min())
+        lum = float(ring_rgb.mean())
+        sat = (mx - mn) / max(mx, 1.0)
+        snow_f = ss(lum, 172.0, 210.0) * (1.0 - ss(sat, 0.16, 0.32))
+        gray = np.asarray(sc.get("roof_gray", [128, 121, 113]), np.float32)
+        base = base + (gray - base) * (snow_f * 0.85)
+    return base
+
+
+def _ring_fill(terrain_img, ax, ay, r_in, r_out, ps, sc, valid=None):
+    """聚落惯例色 × 地形环带明度微调——色相取现实村/城屋顶色（环带取色在深绿
+    地形会「融没」，色相须与地形解耦），明度随周边地形轻微挂钩保局部感。"""
     W, H = terrain_img.size
     x0, x1 = max(0, int(ax - r_out)), min(W, int(ax + r_out) + 1)
     y0, y1 = max(0, int(ay - r_out)), min(H, int(ay + r_out) + 1)
-    if x1 <= x0 or y1 <= y0:
-        return (150, 142, 128, 235)
-    a = np.asarray(terrain_img.crop((x0, y0, x1, y1)), dtype=np.float32)
-    yy, xx = np.mgrid[y0:y1, x0:x1]
-    d = np.hypot(xx - ax, yy - ay)
-    m = (d >= r_in) & (d <= r_out)
-    if not m.any():
-        m = d <= r_out
-    col = a[m].mean(axis=0)
-    lum = float(col @ np.array([0.299, 0.587, 0.114]))
-    col = col * (1.0 - 0.62) + lum * 0.62
-    col += np.array([8.0, 3.0, -6.0])
+    ring_rgb = None
+    ring_lum = 128.0
+    if x1 > x0 and y1 > y0:
+        a = np.asarray(terrain_img.crop((x0, y0, x1, y1)), dtype=np.float32)
+        yy, xx = np.mgrid[y0:y1, x0:x1]
+        d = np.hypot(xx - ax, yy - ay)
+        m = (d >= r_in) & (d <= r_out)
+        if valid is not None:
+            v = valid[y0:y1, x0:x1]          # 剔水：环带里的海/湖蓝会带偏地景判定
+            m2 = m & v
+            if m2.sum() >= 8:
+                m = m2
+            else:
+                m3 = (d <= r_out) & v
+                if m3.sum() >= 4:
+                    m = m3
+        if not m.any():
+            m = d <= r_out
+        ring_rgb = a[m].mean(axis=0)
+        ring_lum = float(ring_rgb.mean())
+    mod = max(-0.35, min(0.35, ring_lum / 128.0 - 1.0))
+    col = _settlement_base(ps, sc, ring_rgb=ring_rgb) * (1.0 + float(sc.get("lum_gain", 0.12)) * mod)
     return tuple(int(v) for v in np.clip(col, 0.0, 255.0)) + (235,)
 
 
 def render_overview(ctx, cities_order, results):
     """全图概览（gitignored）：按 population_score 选档画到 2048 地形底图
-    （洞不画，0.25x 不可辨）。无描边、填充色取自城周地形环带（创始人
-    2026-09-28：融入地形图本身，不悬浮）。"""
+    （洞不画，0.25x 不可辨）。无描边；填充色 = 现实聚落屋顶色（村土棕→
+    镇陶瓦→城石灰，随规模）× 地形明度微调（创始人 2026-09-29）。"""
     terr = ctx["terrain_img"]
     img = terr.convert("RGBA")
     dr = ImageDraw.Draw(img, "RGBA")
     k = SIZE / terr.size[0]
     ring = 30.0 / k                       # 终态 R=30@8192 → 2048 视图像素
+    sc = ctx.get("settlement_colors") or {}
+    base_arr = np.asarray(terr.convert("RGB"), dtype=np.uint8)
+    # 环带有效掩膜（2048）：sure-land（块 all）∧ 非湖非河（块 any）——剔水防带偏
+    wd = ctx["world"]
+    S4 = terr.size[1]
+    land4 = wd["land"].reshape(S4, 4, S4, 4).all(axis=(1, 3))
+    lake4 = wd["lake"].reshape(S4, 4, S4, 4).any(axis=(1, 3))
+    riv4 = ctx["river"].reshape(S4, 4, S4, 4).any(axis=(1, 3))
+    valid4 = land4 & ~lake4 & ~riv4
     n = 0
     for c in cities_order:
         r = results.get(c["sid"])
@@ -946,14 +991,26 @@ def render_overview(ctx, cities_order, results):
             continue
         tier = "ps"   # 连续正比：按城自身规模独立档画（创始人 2026-09-27）
         ax, ay = c["wx"] / k, c["wy"] / k
-        fill = _ring_fill(terr, ax, ay, ring * 1.2, ring * 2.6)
+        fill = _ring_fill(terr, ax, ay, ring * 1.2, ring * 2.6,
+                          float(c.get("ps", 0.0)), sc, valid=valid4)
         for outer, _holes in r["polys"].get(tier) or r["polys"]["mid"]:
             pts = [(x / k, y / k) for x, y in outer]
             if len(pts) >= 3:
                 dr.polygon(pts, fill=fill)
                 n += 1
+    # 河从城上过（创始人 2026-09-29）：场已不剔河（城跨河连续），预览端把河
+    # 在城像素上重描——river & 城覆盖（与底图逐像素 diff 即城掩膜）
+    out = np.asarray(img.convert("RGB"), dtype=np.uint8).copy()
+    changed = (out != base_arr).any(axis=2)
+    rv = ctx.get("river")
+    if rv is not None and changed.any():
+        r4 = rv.reshape(out.shape[0], 4, out.shape[1], 4).any(axis=(1, 3))
+        draw = r4 & changed
+        if draw.any():
+            out[draw] = (out[draw].astype(np.float32) * 0.3
+                         + np.array([46.0, 102.0, 140.0]) * 0.7).astype(np.uint8)
     path = os.path.join(BLOB_V2_DIR, "blob_v2_preview_2048.png")
-    img.convert("RGB").save(path)
+    Image.fromarray(out).save(path)
     print("  %s（%d 个多边形）" % (path, n))
 
 
@@ -996,13 +1053,16 @@ def main():
     p = json.load(open(PARAMS_PATH, encoding="utf-8"))
     os.makedirs(BLOB_V2_DIR, exist_ok=True)
 
-    grad, water, land = load_inputs()
+    grad, water, land, lake, river = load_inputs()
     cities, spawn_sid = load_cities()
     terr_path = os.path.join(OUTPUT_DIR, "l3_terrain.png")
     terrain_img = Image.open(terr_path).convert("RGB") if os.path.exists(terr_path) else None
     if terrain_img is None:
         print("  !! 缺 %s，预览跳过（几何仍生成）" % terr_path)
-    ctx = {"world": {"grad": grad, "water": water, "land": land}, "terrain_img": terrain_img}
+    ctx = {"world": {"grad": grad, "water": water, "land": land, "lake": lake},
+           "terrain_img": terrain_img,
+           "settlement_colors": p.get("settlement_colors") or {},
+           "river": river}
     old = json.load(open(os.path.join(GAME_DIR, "blob_params.json"), encoding="utf-8"))
     lv_bands = {int(k): (float(v["base"]), float(v["g_max"])) for k, v in old["levels"].items()}
 

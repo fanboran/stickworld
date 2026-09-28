@@ -14,7 +14,7 @@
   贫瘠城（该档无环）自然缺席。
 
 卫星感填充（§7.1-4 分层清单）：
-  1. 底色 = l1_terrain.png 城锚环带均值 → 脱饱和暖灰化（周边群系色派生）
+  1. 底色 = 现实聚落屋顶色随规模插值（村土棕/镇陶瓦/城石灰）× 地形环带明度微调
   2. 城内 fBm 明暗（blob_v2_generate 同款 value noise，观感同源）
   3. 屋顶噪点 = 网格 jitter 撒矩形（密度 ∝ ps、随距锚点衰减、长边对齐主路方位）
   4. 隐约路网线 = 主路方位 ±90° 正交线，10-20% 透明度，clip 进形状
@@ -190,8 +190,37 @@ def city_road_azimuth(world, sid):
 
 # ==================== 卫星感填充 ====================
 
-def derive_base_color(terrain_img, ax, ay, r_in, r_out, bake_p):
-    """底色 = 地形底图锚点环带均值 → 脱饱和暖灰化（周边群系色派生，§7.1-4.1）"""
+def _smoothstep(x, a, b):
+    if b <= a:
+        return 0.0
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def settlement_base(ps, sc, ring_rgb=None):
+    """现实聚落屋顶色随规模插值 + 地景自适应（创始人 2026-09-29 两轮指正）：
+    村 = 土墙草顶黄棕 / 镇 = 陶瓦（柔化防锈斑感）/ 城 = 石砌暖灰；绿地上的暖棕
+    与植被绿互补；**中性高亮地形（雪）切屋顶灰斑**——雪白地上的陶瓦红读作锈渍，
+    真实雪景里的聚落 = 深色屋顶/裸地灰。判据 = 环带均值 RGB 的亮度 × 饱和度
+    （雪=高亮低饱和；沙漠暖坦饱和度高不触发，走土色明度耦合）。"""
+    v = np.asarray(sc.get("village", [166, 130, 90]), np.float32)
+    t = np.asarray(sc.get("town", [170, 117, 89]), np.float32)
+    c = np.asarray(sc.get("city", [148, 138, 128]), np.float32)
+    base = v + (t - v) * _smoothstep(ps, 0.15, 0.45)
+    base = base + (c - base) * _smoothstep(ps, 0.45, 0.8)
+    if ring_rgb is not None:
+        mx, mn = float(ring_rgb.max()), float(ring_rgb.min())
+        lum = float(ring_rgb.mean())
+        sat = (mx - mn) / max(mx, 1.0)
+        snow_f = _smoothstep(lum, 172.0, 210.0) * (1.0 - _smoothstep(sat, 0.16, 0.32))
+        gray = np.asarray(sc.get("roof_gray", [128, 121, 113]), np.float32)
+        base = base + (gray - base) * (snow_f * 0.85)
+    return base
+
+
+def derive_base_color(terrain_img, ax, ay, r_in, r_out, bake_p, ps=0.0, valid=None):
+    """底色 = 聚落惯例色（settlement_base 随规模）× 地形环带明度微调——
+    色相取现实聚落屋顶色，明度随周边地形（雪地偏亮/密林偏暗）轻微挂钩。"""
     W, H = terrain_img.size
     x0, x1 = max(0, int(ax - r_out)), min(W, int(ax + r_out) + 1)
     y0, y1 = max(0, int(ay - r_out)), min(H, int(ay + r_out) + 1)
@@ -201,12 +230,21 @@ def derive_base_color(terrain_img, ax, ay, r_in, r_out, bake_p):
         yy, xx = np.mgrid[y0:y1, x0:x1]
         d = np.sqrt((xx - ax) ** 2 + (yy - ay) ** 2)
         band = (d >= r_in) & (d <= r_out)
+        if valid is not None:
+            v = valid[y0:y1, x0:x1]      # 剔水：环带里的海/湖蓝会带偏地景判定
+            b2 = band & v
+            if b2.sum() >= 16:
+                band = b2
+            else:
+                b3 = (d <= r_out) & v
+                if b3.sum() >= 8:
+                    band = b3
         if band.sum() >= 16:
             rgb = win[band].mean(axis=0)
-    g = float(rgb.mean())
-    rgb = rgb * (1.0 - bake_p["desat"]) + g * bake_p["desat"]
-    rgb = rgb + np.asarray(bake_p["warm_shift"], np.float32)
-    return np.clip(rgb, 24.0, 246.0)
+    lum_gain = float(bake_p.get("lum_gain", 0.12))
+    mod = max(-0.35, min(0.35, float(rgb.mean()) / 128.0 - 1.0))
+    base = settlement_base(ps, bake_p.get("settlement_colors", {}), ring_rgb=rgb)
+    return np.clip(base * (1.0 + lum_gain * mod), 24.0, 246.0)
 
 
 def fill_city_layer(canvas, mask, holes_mask, ax, ay, r_ref, azimuth, seed,
@@ -427,7 +465,8 @@ def write_geo_bin(path, doc):
 
 # ==================== 单包烘焙 ====================
 
-def bake_pack(pack_dir, geoms, lv_bands, gamma, bake_p, terrain_img):
+def bake_pack(pack_dir, geoms, lv_bands, gamma, bake_p, terrain_img,
+              river8=None, water_masks=None):
     with open(os.path.join(pack_dir, "l1_world.json"), encoding="utf-8") as f:
         world = json.load(f)
     wo = world.get("world_origin")
@@ -443,6 +482,14 @@ def bake_pack(pack_dir, geoms, lv_bands, gamma, bake_p, terrain_img):
     n_draw = 0
     rel_by_sid = {}
     ox, oy = float(wo[0]), float(wo[1])
+    valid_win = None
+    if water_masks is not None:
+        land8, lake8 = water_masks
+        ox_i, oy_i0 = int(ox), int(oy)
+        valid_win = (land8[oy_i0:oy_i0 + H, ox_i:ox_i + W]
+                     & ~lake8[oy_i0:oy_i0 + H, ox_i:ox_i + W])
+        if river8 is not None:
+            valid_win &= ~river8[oy_i0:oy_i0 + H, ox_i:ox_i + W]
     for c in cities:
         g = geoms.get(c["sid"])
         if g is None:
@@ -464,13 +511,29 @@ def bake_pack(pack_dir, geoms, lv_bands, gamma, bake_p, terrain_img):
             s_lvl = {"low": 0.18, "mid": 0.5, "high": 0.82}[t]
             band = lv_bands.get(g["level"], (30.0, 30.0))
             rr = band[0] + band[1] * (s_lvl ** gamma)
-            # 底色采样环带随档（low 小、high 大）
+            # 底色采样环带随档（low 小、high 大）；valid = 剔水掩膜（海/湖蓝带偏地景判定）
             base = derive_base_color(terrain_img, c["px"], c["py"],
-                                     max(10.0, rr * 0.9), rr * 1.7, bake_p)
+                                     max(10.0, rr * 0.9), rr * 1.7, bake_p,
+                                     ps=g["ps"], valid=valid_win)
             seed = djb2(c["sid"]) + ti * 7919
             bake_city_tier(canvases[t], rel[t], c["px"], c["py"], rr, az,
                            seed, base, bake_p, g["ps"])
             n_draw += 1
+    # 河从城上过（创始人 2026-09-29）：场已不剔河（城跨河连续不切开），贴图端
+    # 把河在城像素上重描——否则城贴图盖住地形河线。逐档层都描（运行时三层叠放，
+    # 只描 low 会被上层建成区盖掉）
+    if river8 is not None:
+        ox_i, oy_i = int(ox), int(oy)
+        rv = river8[oy_i:oy_i + H, ox_i:ox_i + W]
+        if rv.any():
+            for t in TIERS:
+                arr = np.asarray(canvases[t]).copy()
+                draw = rv & (arr[..., 3] > 0)
+                if draw.any():
+                    f = arr[..., :3].astype(np.float32)
+                    f[draw] = f[draw] * 0.3 + np.array([46.0, 102.0, 140.0]) * 0.7
+                    arr[..., :3] = f.astype(np.uint8)
+                    canvases[t] = Image.fromarray(arr)
     for t in TIERS:
         canvases[t].save(os.path.join(pack_dir, TIER_FILES[t]))
     doc = build_geo_doc(cities, geoms, rel_by_sid)
@@ -576,6 +639,20 @@ def main():
         params = json.load(f)
     bake_p = dict(BAKE_DEFAULTS)
     bake_p.update(params.get("bake") or {})
+    bake_p["settlement_colors"] = params.get("settlement_colors") or {}
+    river_path = os.path.join(OUTPUT_DIR, "fractal_river_mask_8192.png")
+    river8 = None
+    if os.path.exists(river_path):
+        river8 = np.asarray(Image.open(river_path).convert("L")) > 127
+        print("[bake] 河流掩膜就位（城内重描穿城河线）")
+    water_masks = None
+    land_path = os.path.join(OUTPUT_DIR, "locked", "locked_continent_8192.png")
+    lake_path = os.path.join(OUTPUT_DIR, "fractal_lake_mask_8192.png")
+    if os.path.exists(land_path) and os.path.exists(lake_path):
+        land8 = np.asarray(Image.open(land_path).convert("L")) > 127
+        lake8 = np.asarray(Image.open(lake_path).convert("L")) > 127
+        water_masks = (land8, lake8)
+        print("[bake] 水陆掩膜就位（底色环带剔水）")
     with open(os.path.join(GAME_DIR, "blob_params.json"), encoding="utf-8") as f:
         old = json.load(f)
     lv_bands = {int(k): (float(v["base"]), float(v["g_max"])) for k, v in old["levels"].items()}
@@ -599,7 +676,8 @@ def main():
             print("  !! 缺 l1_terrain.png，跳过: %s" % n, flush=True)
             continue
         terrain_img = Image.open(terr).convert("RGB")
-        if bake_pack(d, geoms, lv_bands, gamma, bake_p, terrain_img):
+        if bake_pack(d, geoms, lv_bands, gamma, bake_p, terrain_img,
+                         river8=river8, water_masks=water_masks):
             ok += 1
     if not args.no_preview and ok > 0:
         print("[bake] 运行时预览 ...", flush=True)

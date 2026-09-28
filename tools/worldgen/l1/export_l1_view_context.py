@@ -460,10 +460,17 @@ def main():
     # legacy 10000+ 不相交），渲染为灰色邻块（politics 侧表必缺色 → 回退灰底）
     wild = (par == 0) & (ctx_city > 0)
     ctx_combined[wild] = ctx_city[wild] + 30000
-    # 无主陆地兜底：refined 没分块的陆地（太小不入城块分割的小岛等）也归荒野，
-    # 保证 I2b「每块陆地都有几何覆盖」结构性成立
+    # 无主陆地兜底：refined 没分块的陆地（太小不入城块分割的小岛、纯抗衡下
+    # 无聚落离岛/refine 边缘残条）也须有几何（I2b「每块陆地都有几何覆盖」）。
+    # 有 legacy 省界的并回该省命名空间（创始人 2026-09-29 指正：荒野以 30000
+    # 灰斑嵌在暗色邻省里 =「边塌陷露底」观感——省面必须完整）；legacy 也没界
+    # 的真荒岛才留 30000 灰（海上无主小岛，语义正确）
     bare = (ctx_city == 0) & ctx_land & (~ctx_lake)
-    ctx_combined[bare] = 30000
+    if bare.any():
+        lbw = legacy[y0:y0 + side, x0:x0 + side]
+        m = bare & (lbw > 0)
+        ctx_combined[m] = lbw[m] + 10000
+        ctx_combined[bare & ~m] = 30000
     ctx_combined[ctx_city == 0] = 0        # 水（海/湖，snap 已清 0）无几何
 
     if args.base_only:

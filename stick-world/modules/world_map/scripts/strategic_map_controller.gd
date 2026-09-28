@@ -543,17 +543,20 @@ func _refresh_view_meta() -> void:
 func _sync_hud_levels() -> void:
 	if _hud == null or not _hud.has_method("set_level_state"):
 		return
-	var l3_on := MapControllerUtil.view_in_tree(self, MapControllerUtil.GROUP_L3_VIEW)
-	var l2_on := l3_on and MapControllerUtil.view_in_tree(self, MapControllerUtil.GROUP_L2_VIEW)
-	if l2_on and api != null and api.has_method("get_region_for_l1") \
+	# 层级按钮常启用（创始人 2026-09-29：层级按钮 = 跳转入口，不是已开视图切换器）——
+	# L3 由分派端 ensure 装配；L2 按本省所属地区包反查，无地区包才置灰
+	var l2_on := true
+	if api != null and api.has_method("get_region_for_l1")\
 			and api.has_method("get_current_l1_label"):
 		l2_on = not str(api.get_region_for_l1(api.get_current_l1_label())).is_empty()
-	else:
-		l2_on = false
-	_hud.set_level_state("L1", {"L1": true, "L2": l2_on, "L3": l3_on}, {
+	_hud.set_level_state("L1", {"L1": true, "L2": l2_on, "L3": true}, {
 		"L2": "查看本省所属地区" if l2_on else "本省无对应地区视图",
-		"L3": "查看大世界" if l3_on else "大世界视图未装配",
+		"L3": "查看大世界",
 	})
+	# L1 无政治附加层：政治层锁定常开（视图默认即政治配色）、按钮禁用
+	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, true)
+	if _hud.has_method("set_layer_enabled"):
+		_hud.set_layer_enabled(MapModeManager.Layer.POLITICAL, false)
 
 
 ## 名牌内容：地块 #N + 聚落数概览
@@ -580,14 +583,14 @@ func _fill_legend() -> void:
 		return
 	var entries: Array = []
 	# 标题 = 最上层（渲染叠放序最上的开启层；全关 = 底图）
+	# L1 无政治图例（创始人 2026-09-29：政治图例是全局文化圈口径，属 L2/L3 世界层；
+	# L1 政治层锁定常开、按钮禁用，图例只列可开关的附加层）
 	var title := "地形"
 	for layer in [MapModeManager.Layer.RESOURCE, MapModeManager.Layer.TRAFFIC,
-			MapModeManager.Layer.CITY, MapModeManager.Layer.POLITICAL]:
+			MapModeManager.Layer.CITY]:
 		if MapModeManager.is_layer_on(layer):
 			title = MapModeManager.layer_name(layer)
 			break
-	if MapModeManager.is_layer_on(MapModeManager.Layer.POLITICAL):
-		entries.append_array(_political_legend_entries_all())
 	if MapModeManager.is_layer_on(MapModeManager.Layer.CITY):
 		entries.append({"color": MapRenderer.BLOB_FILL, "text": "城镇建成区"})
 	if MapModeManager.is_layer_on(MapModeManager.Layer.TRAFFIC):

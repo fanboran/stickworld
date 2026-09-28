@@ -195,11 +195,14 @@ func show_l3() -> void:
 func _sync_hud_levels() -> void:
 	if _zoom_indicator == null or not _zoom_indicator.has_method("set_level_state"):
 		return
-	var l1_on := MapControllerUtil.view_in_tree(self, MapControllerUtil.GROUP_L1_VIEW)
-	_zoom_indicator.set_level_state("L3", {"L1": l1_on, "L2": false, "L3": true}, {
-		"L1": "回到本省地块视图" if l1_on else "地块视图未装配",
-		"L2": "点击地图中的地区下钻",
+	# 层级按钮常启用（跳转入口语义）：L1 = 玩家当前省（分派端 ensure），
+	# L2 = 玩家当前省所属地区（分派端反查）；政治层恢复可点（L1 锁定态退出）
+	_zoom_indicator.set_level_state("L3", {"L1": true, "L2": true, "L3": true}, {
+		"L1": "回到本省地块视图",
+		"L2": "查看本省所属地区",
 	})
+	if _zoom_indicator.has_method("set_layer_enabled"):
+		_zoom_indicator.set_layer_enabled(MapModeManager.Layer.POLITICAL, true)
 
 
 ## L2 返回（ESC）：恢复 L3 显示

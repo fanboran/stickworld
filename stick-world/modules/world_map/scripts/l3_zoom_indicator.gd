@@ -225,6 +225,14 @@ func _sync_level_buttons() -> void:
 		b.set_pressed_no_signal(String(lv) == _current_level)
 
 
+## 图层按钮可用性（L1 锁政治层：视图默认即政治配色、无附加层可关——按钮禁用；
+## L2/L3 恢复可点。创始人 2026-09-29）
+func set_layer_enabled(layer: int, enabled: bool) -> void:
+	var b: Button = _layer_btns.get(layer)
+	if b != null:
+		b.disabled = not enabled
+
+
 ## 图层开关变更（含他视图切层广播回流）：按静态开关表刷新四颗按钮按下态
 func _on_layer_toggled(_layer: int, _on: bool) -> void:
 	_sync_layer_buttons()

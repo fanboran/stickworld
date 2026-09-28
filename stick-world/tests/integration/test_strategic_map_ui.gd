@@ -169,87 +169,37 @@ func _test_l1_title_legend() -> void:
 		"名牌显示玩家所在 L1（实测 %s）" % _l1_title_bar._title_label.text)
 	_runner.assert_true(_l1_title_bar._subtitle_label.text == "10 聚落",
 		"副标题聚落数（实测 %s）" % _l1_title_bar._subtitle_label.text)
-	# 图例（B4 开关层机制；默认 = 政治层开 + 城市层开）：条目 = 政治层 24 条
-	# （V2 193 国：文化源点聚合 23 组 + 城邦聚合 1 条）+ 城市层建成区 1 条 = 25 条；
-	# 标题 = 最上层（渲染叠放序最上的开启层 = 城市层）
+	# 图例（B4 开关层机制）。L1 无政治图例（创始人 2026-09-29：政治图例是全局
+	# 文化圈口径，属 L2/L3 世界层；L1 政治层锁定常开、按钮禁用）——
+	# 默认 = 政治层开（锁定）+ 城市层开：条目 = 建成区 1 条，标题 = 城市层
 	_runner.assert_true(_l1_legend.visible, "open 后图例可见")
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 城市",
-		"默认（政治+城市）图例标题 = 城市层（实测 %s）" % _l1_legend._title_label.text)
-	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 25,
-		"默认 25 条目 = 政治 24 + 建成区 1（实测 %d）" % _l1_legend._entries_box.get_child_count())
-	var blob_text: Label = (_l1_legend._entries_box.get_child(24) as HBoxContainer).get_child(1)
+		"默认（政治锁定+城市）图例标题 = 城市层（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 1,
+		"默认 1 条目 = 建成区（L1 无政治图例，实测 %d）" % _l1_legend._entries_box.get_child_count())
+	var blob_text: Label = (_l1_legend._entries_box.get_child(0) as HBoxContainer).get_child(1)
 	_runner.assert_true(blob_text.text == "城镇建成区",
-		"末条目 = 城市层建成区（实测 %s）" % blob_text.text)
-	# 关城市层 → 只剩政治层条目。V2 193 国：图例 = 文化源点聚合
-	# （23 组各一条 + 城邦聚合一条 = 24 条），不塞 193 条；
-	# 色源 = PoliticalLut（与 L2/L3 政治模式同一份运行时 LUT）
+		"条目 = 城市层建成区（实测 %s）" % blob_text.text)
+	# 关城市层 → 无附加层条目：回退底图说明（海洋/湖泊 + 6 群系 = 8 条），标题 = 地形
 	MapModeManager.set_layer_on(MapModeManager.Layer.CITY, false)
-	_runner.assert_true(_l1_legend._title_label.text == "图例 · 政治",
-		"仅政治层图例标题（实测 %s）" % _l1_legend._title_label.text)
-	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 24,
-		"仅政治层 24 条目 = 23 文化源点聚合 + 城邦聚合（实测 %d）" % _l1_legend._entries_box.get_child_count())
-	var last_entry: HBoxContainer = _l1_legend._entries_box.get_child(23)
-	var last_text: Label = last_entry.get_child(1)
-	_runner.assert_true(last_text.text == "自由城邦 ×78",
-		"末条目 = 城邦聚合（实测 %s）" % last_text.text)
-	# 首条目 = 规模最大文化圈（「族标签 ×N 国」），色块 = 该圈最大国的 LUT 政权色
-	var first_entry: HBoxContainer = _l1_legend._entries_box.get_child(0)
-	var swatch: ColorRect = first_entry.get_child(0)
-	var text_label: Label = first_entry.get_child(1)
-	_runner.assert_true("×" in text_label.text and text_label.text.ends_with("国"),
-		"首条目 = 文化圈聚合（实测 %s）" % text_label.text)
-	var lut := PoliticalLut.load_shared()
-	_runner.assert_true(lut != null, "PoliticalLut 可用")
-	if lut != null:
-		# 首条目 = 新国数最多的文化圈；色块 = 该圈最大国的 LUT 政权色
-		var cnt := {}
-		for sid in lut.states:
-			var info: Dictionary = lut.states[sid]
-			if bool(info.get("is_city_state", false)):
-				continue
-			var cu := str(info.get("culture", ""))
-			cnt[cu] = int(cnt.get(cu, 0)) + 1
-		var top_cu := ""
-		var top_cn := -1
-		for cu in cnt:
-			if int(cnt[cu]) > top_cn:
-				top_cn = int(cnt[cu])
-				top_cu = cu
-		var top_n := -1
-		var top_id := ""
-		for sid in lut.states:
-			var info: Dictionary = lut.states[sid]
-			if bool(info.get("is_city_state", false)):
-				continue
-			if str(info.get("culture", "")) != top_cu:
-				continue
-			if int(info.get("n_cities", 0)) > top_n:
-				top_n = int(info.get("n_cities", 0))
-				top_id = sid
-		_runner.assert_true(text_label.text == "%s ×%d 国"
-				% [str(lut.states[top_id].get("culture_label", top_cu)), top_cn],
-				"首条目 = 最大文化圈聚合（实测 %s）" % text_label.text)
-		_runner.assert_true(swatch.color.is_equal_approx(lut.color_of(top_id)),
-			"首条目色块 = 该圈最大国 LUT 政权色（%s，%d 城）" % [top_id, top_n])
-	# 开交通层（政治 + 交通）：条目 = 政治 24 + 土路/官道 2 = 26；标题 = 交通（最上层）
+	_runner.assert_true(_l1_legend._title_label.text == "图例 · 地形",
+		"仅政治锁定（无图例条目）标题回退底图（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 8,
+		"底图说明 8 条目 = 海洋/湖泊 + 6 群系（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	# 开交通层：条目 = 土路/官道 2；标题 = 交通（最上层）
 	MapModeManager.set_layer_on(MapModeManager.Layer.TRAFFIC, true)
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 交通",
-		"政治+交通图例标题 = 交通层（实测 %s）" % _l1_legend._title_label.text)
-	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 26,
-		"26 条目 = 政治 24 + 道路 2（实测 %d）" % _l1_legend._entries_box.get_child_count())
-	var road_text: Label = (_l1_legend._entries_box.get_child(24) as HBoxContainer).get_child(1)
+		"交通图例标题 = 交通层（实测 %s）" % _l1_legend._title_label.text)
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 2,
+		"交通层 2 条目：土路/官道（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	var road_text: Label = (_l1_legend._entries_box.get_child(0) as HBoxContainer).get_child(1)
 	_runner.assert_true(road_text.text == "土路",
 		"交通条目文字 =「土路」（R6 废虚线标注，实测 %s）" % road_text.text)
-	# 关政治层（仅交通）：条目 = 土路/官道 2（R6 废虚线——文字不得再带线型标注）
+	# 政治层开关直呼 Manager（按钮在 L1 已禁用，状态翻转不影响图例——无政治条目）
 	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, false)
-	_runner.assert_true(_l1_legend._title_label.text == "图例 · 交通",
-		"仅交通层图例标题（实测 %s）" % _l1_legend._title_label.text)
 	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 2,
-		"仅交通层 2 条目：土路/官道（实测 %d）" % _l1_legend._entries_box.get_child_count())
-	var only_road: Label = (_l1_legend._entries_box.get_child(0) as HBoxContainer).get_child(1)
-	_runner.assert_true(only_road.text == "土路",
-		"交通条目文字 =「土路」（实测 %s）" % only_road.text)
-	# 再开城市层 + 资源层（城市 + 交通 + 资源，政治关）：条目 = 建成区 1 + 道路 2 + 资源 6 = 9；
+		"政治翻转后仍 2 条目：土路/官道（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	# 再开城市层 + 资源层（城市 + 交通 + 资源）：条目 = 建成区 1 + 道路 2 + 资源 6 = 9；
 	# 标题 = 资源（最上层）。资源条目色点与地图资源点同源（MapRenderer.RESOURCE_COLORS）
 	MapModeManager.set_layer_on(MapModeManager.Layer.CITY, true)
 	MapModeManager.set_layer_on(MapModeManager.Layer.RESOURCE, true)
@@ -539,6 +489,8 @@ func _test_owned_tile_dyeing() -> void:
 ## P4 染色：政治图例在有已占地块时补一条「我方疆域」，无已占地块时不留空条目。
 ## 驱动 = EventBus.region_owner_changed（染色管道的信号入口，测试代发）
 func _test_legend_player_entry() -> void:
+	# L1 无政治图例（创始人 2026-09-29）：「我方疆域」条目随政治图例一并退出 L1——
+	# 占据地块仍在地图上以玩家疆域色呈现（tile_fill_color），图例不再列政治条目
 	if _l1_content == null or _l1_legend == null:
 		_runner.assert_true(false, "前置装配缺失")
 		return
@@ -550,8 +502,7 @@ func _test_legend_player_entry() -> void:
 	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, true)
 	EventBus.region_owner_changed.emit(tile_key, "player")
 	_l1_content.call("_fill_legend")
-	_runner.assert_true(_legend_has_text("我方疆域"), "政治图例含「我方疆域」条目")
-	# 归属易手（非玩家）→ 不再计入我方疆域，图例不留空条目
+	_runner.assert_false(_legend_has_text("×"), "L1 图例无政治条目（文化圈聚合/我方疆域均不出现）")
 	EventBus.region_owner_changed.emit(tile_key, "fac_probe")
 	_l1_content.call("_fill_legend")
 	_runner.assert_false(_legend_has_text("我方疆域"), "无已占地块时不留空条目")

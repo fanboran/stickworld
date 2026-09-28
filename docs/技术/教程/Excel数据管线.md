@@ -38,7 +38,7 @@
 | 文件名 | 用途 | 对应游戏内容 |
 |--------|------|-------------|
 | `平衡变量.xlsx` | 全局平衡变量 | 攻击力、税率、研究速度等可调参数 |
-| `资源数据.xlsx` | 资源定义 | 食物、木材、石料、铁锭等 |
+| `资源数据.xlsx` | 资源定义 | 木材、石料、金属矿、铁锭等 |
 | `建筑数据.xlsx` | 建筑定义 | 民居、农场、工坊、兵营等 |
 | `单位数据.xlsx` | 单位定义 | 兵种、武器、防具 |
 | `制造.xlsx` | 制造配方 | 可制造物品与材料消耗 |
@@ -79,7 +79,7 @@
 | 规则 | 说明 | 示例 |
 |------|------|------|
 | 英文蛇形命名 | 小写字母 + 下划线 | `base_price`、`max_hp` |
-| `id` 列 | 每行数据的唯一标识，必填 | `res_food`、`house` |
+| `id` 列 | 每行数据的唯一标识，必填 | `res_wood`、`house` |
 | `id*` 表示必填 | 列名末尾加 `*` 表示该列不能为空 | `id*`（但 `id` 列即使不加 `*` 也会被检查） |
 | `xxx_id` 表示引用 | 指向另一张表的 `id` | `unlocked_by_tech_id` 指向科技表的某个 id |
 
@@ -92,7 +92,7 @@
 | `10` | int（整数） | 纯数字，没有小数点 |
 | `3.14` | float（浮点数） | 有小数点的数字 |
 | `true` / `false` | bool（布尔值） | 不区分大小写 |
-| `食物` | string（字符串） | 普通文本 |
+| `木材` | string（字符串） | 普通文本 |
 | `[1, 2, 3]` | Array（数组） | 用 JSON 方括号格式 |
 | `{"key": "value"}` | Dict（字典） | 用 JSON 花括号格式 |
 | 嵌入单元格的图片 | 图片路径 | 见 2.5 图片处理 |
@@ -298,7 +298,7 @@ balance.variables.var_attack_base.max   -> 100
 # 在任意游戏脚本中
 var attack = BalanceConfig.get_value("balance.variables.var_attack_base.value")
 var tax_rate = BalanceConfig.get_value("balance.variables.var_tax_rate.value")
-var wood_price = BalanceConfig.get_value("resources.resources.res_wood.base_price")
+var wood_price = BalanceConfig.get_value("resources.resources.res_wood.initial_price")  # 价格键属旧市场模型
 ```
 
 > **注意**：`BalanceConfig` 的 `reload()` 方法目前还在开发中。当前版本修改 Excel 数据后需要重新导出并重启游戏才能生效。热加载功能将在后续版本中实现。

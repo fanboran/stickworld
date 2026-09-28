@@ -41,8 +41,9 @@ GlobalHUD (Control)
 │   ├── ResourceBar (HBoxContainer)      ← 资源数量条
 │   │   ├── ResourceSlot[res_wood]       ← 木材图标 + 数量
 │   │   ├── ResourceSlot[res_stone]      ← 石料图标 + 数量
-│   │   ├── ResourceSlot[res_metal_ore]  ← 金属矿图标 + 数量
-│   │   └── ResourceSlot[res_black_asphalt] ← 黑色沥青图标 + 数量
+│   │   ├── ResourceSlot[res_metal_ore]  ← 铁矿图标 + 数量
+│   │   ├── ResourceSlot[res_gold]       ← 黄金图标 + 数量
+│   │   └── ResourceSlot[res_diamond]    ← 钻石图标 + 数量（沥青已根除待清退，不在 HUD）
 │   └── CenteredButton                   ← 居中模式按钮
 ├── NotificationLabel                    ← 通知文字（淡入淡出）
 └── ClockWidget                          ← 圆形表盘（详见现有实现）
@@ -52,7 +53,7 @@ GlobalHUD (Control)
 
 | 属性 | 设计 |
 |------|------|
-| 显示资源 | P0 的 4 种基础资源（[建筑与定居点.md](建筑与定居点.md) §9.4.1） |
+| 显示资源 | 现行 5 种（木/石/铁/金/钻，见 `resource_bar.gd`；沥青已根除待清退，不在 HUD） |
 | 数据来源 | `resources_api.get_stock(resource_id, "player_territory")` |
 | 更新方式 | 信号驱动：订阅 `resources_api.resource_changed` 信号，非每帧轮询 |
 | 显示格式 | `[图标] 数量`（如 `🪵 150`），数量变化时短暂高亮（0.5s 黄色闪烁） |
@@ -67,7 +68,7 @@ func _setup_resource_bar(resources_api: Node) -> void:
     resources_api.resource_changed.connect(_on_resource_changed)
     resources_api.resource_not_enough.connect(_on_resource_not_enough)
     # 初始化显示当前库存
-    for res_id in ["res_wood", "res_stone", "res_metal_ore", "res_black_asphalt"]:
+    for res_id in ["res_wood", "res_stone", "res_metal_ore", "res_gold", "res_diamond"]:
         var amount := resources_api.get_stock(res_id, "player_territory")
         _update_resource_slot(res_id, amount)
 

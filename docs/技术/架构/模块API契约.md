@@ -152,6 +152,7 @@ func produce(resource_id: String, amount: float, region_id: String, source: Stri
 func transfer(resource_id: String, amount: float, from_region: String, to_region: String) -> Dictionary
 # [Q] from 扣减, to 增加（有运输损耗, 实际到达 = amount * (1 - 损耗率)）
 
+# ⚠ 市场参数接口属旧市场模型实录；新口径价格机制为提案级（初期高度非市场），随 DEC-15 经济重做重审。
 # 市场参数调节（L4+ 层级可用）
 func set_price_ceiling(resource_id: String, price: float) -> Dictionary
 func set_price_floor(resource_id: String, price: float) -> Dictionary
@@ -395,10 +396,10 @@ func check_and_unlock(badge_id: String) -> Dictionary
 construction ──-> resources (消耗建材)
              ──-> building_gen (经 api 加载建筑场景; Building 为其公共类型)
 resources    ──-> (无出向 API 依赖, 通过 EventBus 通信)
-organization ──-> resources (征兵消耗沥青)
+organization ──-> resources (招兵扣 RECRUIT_COST 木/石)
              ──-> construction (建设组织)
              ──-> combat (军事组织)
-combat       ──-> resources (消耗弹药/食物)
+combat       ──-> resources (消耗弹药——待接线；无食物资源)
              ──-> organization (伤亡)
              ──-> units (经公共类型 TargetFinder / StickmanEntity)
 world_map    ──-> ui_global (主题工具箱 StickKit/StickTheme/StickStyle)

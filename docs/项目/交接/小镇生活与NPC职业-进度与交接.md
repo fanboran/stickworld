@@ -61,7 +61,7 @@
 - **实体协议**：`stickman_entity.set_profession/get_profession`（弱类型 id，**空串=待业**；批次 4 征兵离岗走 set_profession("")）。
 - **挂接点**：`initial_content.spawn_npcs` 调 `TownLifeAPI.assign_village_job(npc, i)`（轮转 index % 职业数；真实 NPC_COUNT=2 → 只分到铁匠+伐木工）。
 - **工具暂代**：铁匠 pickaxe 代锤、伐木工 sword 代斧（TOOL_WEAPONS 映射表在 registry；批次 2 上专属工具模型时只改配置与映射）。
-- **资源 id 真名**（resources.tres）：`res_wood / res_stone / res_metal_ore / res_iron_ingot / res_black_asphalt / res_silk`——设计要点里的"res_ore"真名是 **res_metal_ore**。
+- **资源 id 真名**（resources.tres）：`res_wood / res_stone / res_metal_ore / res_iron_ingot / res_black_asphalt / res_silk`——设计要点里的"res_ore"真名是 **res_metal_ore**（⚠ 沥青已根除、待清退）。
 - **dev 截图场景**：`tests/dev/snapshot_professions.tscn`（真渲染：`godot --path stick-world res://tests/dev/snapshot_professions.tscn`；补 spawn 矿工凑三职业同框 + stdout 打印职业证据）。
 - **已知未验证**：NPC_COUNT 扩充在批次 4。
 

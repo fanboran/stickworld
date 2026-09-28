@@ -32,11 +32,11 @@
 | 交互对 | 类型 | 说明 |
 |--------|------|------|
 | 组织->一切 | ✅ | 组织是核心枢纽。军事组织触发战斗，工程组织触发建设，科研组织触发科技，商业组织触发资源流动 |
-| 战斗->资源 | ✅ | 战斗消耗资源（弹药/食物/沥青），战胜获得资源（缴获） |
+| 战斗->资源 | 部分 | 战胜缴获✅；战斗物资消耗未实现——弹药待接线，无食物/沥青消耗端且两资源已废/待清退 |
 | 战斗->扩张 | ✅ | 战胜->获得地块控制度 |
-| 运输->战斗 | ✅ | 运输断供->前线战斗力下降 |
+| 运输->战斗 | ✅ | 运输断供->前线物/人不在场（无弹转肉搏、缺员无法回补——物理事实，见 物流系统 §3.1） |
 | 科技->组织 | ✅ | 科技解锁新的编制类型/组织能力 |
-| 资源->科技 | ✅ | 科研消耗资源（纸/墨/实验材料/沥青） |
+| 资源->科技 | ✅ | 科研消耗资源（纸/墨/实验材料；法系材料方向为液态法力） |
 | 建设->运输 | ✅ | 修路->运输效率提升 |
 | 经营建设->一切 | ✅ | 经营建设是所有循环的起点和终点 |
 
@@ -61,7 +61,7 @@
 
 | 类别 | 信号 | 参数 |
 |------|------|------|
-| 资源 | `resource_changed` / `resource_not_enough` / `price_changed`（resources/api.gd） | resource_id, ... |
+| 资源 | `resource_changed` / `resource_not_enough` / `price_changed`（resources/api.gd） | resource_id, ...（旧市场模型信号，随经济重做重审） |
 | 建筑 | `building_started` / `building_completed` / `building_removed`（construction/api.gd） | building_id: String, region_id: String |
 | 建筑 | `building_damaged`（construction/api.gd） | building_id: String, damage_amount: float |
 | 建筑 | `building_upgraded`（construction/api.gd） | building_id: String, old_tier: int, new_tier: int |

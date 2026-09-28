@@ -149,17 +149,20 @@ def _run(cmd: list, out: Path) -> dict:
     peak = _peak(str(out))
     if peak <= 1e-7:
         raise RuntimeError(
-            "渲染结果全零（peak=%.1e）：音源或 MIDI 有问题。命令：\n  %s\n%s"
+            "渲染结果整曲为零（peak=%.1e）：音源或 MIDI 有问题。命令：\n  %s\n%s"
             % (peak, " ".join(str(c) for c in cmd), proc.stdout[-1500:]))
     return {"wav": str(out), "frames": info.frames, "sr": info.samplerate,
             "channels": info.channels, "duration_s": round(info.duration, 3),
             "peak": peak}
 
 
-def _peak(wav_path: str, max_seconds: float = 30.0) -> float:
-    """读一段（默认前 30s 足够覆盖起奏）求绝对峰值，用于"空轨"判定。"""
-    x, _fs = sf.read(wav_path, always_2d=True,
-                     frames=int(max_seconds * 48000))
+def _peak(wav_path: str) -> float:
+    """**整曲**绝对峰值，用于"空轨"判定。
+
+    不能只看开头若干秒：分层曲目里晚进的层（如 `field_day` 的钟琴从第 16 小节
+    ≈53s 才进来）前几十秒本来就没声音，读一段会把正常层误判成空轨（实测踩过）。
+    """
+    x, _fs = sf.read(wav_path, always_2d=True)
     return float(abs(x).max()) if x.size else 0.0
 
 

@@ -76,10 +76,10 @@ const AMBIENCE_LEVEL := 0.34
 ## 单独一个函数表达规则，比散在各处的事件回调可读、可测。
 const CUE_FOR_MAP_TYPE := {
 	0: "village",        # WorldAPI.MapType.VILLAGE
-	1: "battle",         # BATTLEFIELD
+	1: "battlefield",    # BATTLEFIELD：**地图本身**是荒原（交战由 battle 情境压过）
 	2: "field_day",      # ROAD
-	3: "interior",       # INDOOR
-	4: "interior",       # MEGA_INTERIOR
+	3: "interior",       # INDOOR（小房间：独奏钢琴）
+	4: "interior_hall",  # MEGA_INTERIOR（大建筑内部：加弦乐与钢片琴、大混响）
 }
 
 var _manifest: Dictionary = {}
@@ -96,7 +96,16 @@ var _context: Dictionary = {
 	"started": false,
 }
 var _duck_db: float = 0.0
-var _stinger: AudioStreamPlayer = null
+## 当前正在播的短句 id（""=没有）
+var _stinger_cue: String = ""
+## 变奏族轮换进度：族基准 cue → 当前轮到的成员下标
+var _rotation: Dictionary = {}
+## 上一次解析出的"族基准"（含非族 cue）：只有它变化才算"进入了新场景"，据此轮换
+var _last_base: String = ""
+## 跨图抵达时是否要打一个"抵达"标点（travel_started 置位、下一次 map_loaded 消费）
+var _expect_arrival: bool = false
+## 短句播放器组（多层短句 = 多个播放器同时起播，各层音量已在交付件里配平）
+var _stinger_players: Array = []
 var _ambience: AudioStreamPlayer = null
 var _ambience_name: String = ""
 var _enabled: bool = true
@@ -119,11 +128,6 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.seed = 20260913
 	_load_manifest()
-
-	_stinger = AudioStreamPlayer.new()
-	_stinger.name = "_StingerPlayer"
-	_stinger.bus = AudioManager.BUS_BGM
-	add_child(_stinger)
 
 	_ambience = AudioStreamPlayer.new()
 	_ambience.name = "_AmbiencePlayer"
@@ -167,6 +171,7 @@ func _wire_event_bus() -> void:
 	_safe_connect("game_paused", _on_paused)
 	_safe_connect("game_resumed", _on_resumed)
 	_safe_connect("map_unloaded", _on_map_unloaded)
+	_safe_connect("travel_started", _on_travel_started)
 
 
 func _safe_connect(sig_name: String, cb: Callable) -> void:
@@ -217,7 +222,18 @@ func _apply_context() -> void:
 
 ## 曲目解析：从"最具体"到"最一般"逐层回退。
 ## 优先级：战斗 > 室内 > 战略图 > 地图类型 > 户外（昼夜）。
+##
+## 最后一步走**变奏族轮换**：同一个场景第二次进入时，同族的另一版（换主奏乐器）
+## 会被选中——长时停留/反复进出同一张图时，这是最有效的抗疲劳手段
+## （族由作曲侧在 compose/cues.py 声明，随清单下发，见 _pick_variant）。
 func _resolve_cue() -> String:
+	var base := _resolve_base_cue()
+	if base == "":
+		return base
+	return _pick_variant(base)
+
+
+func _resolve_base_cue() -> String:
 	if _context["battle"]:
 		return "battle"
 	if _context["interior"]:
@@ -227,10 +243,36 @@ func _resolve_cue() -> String:
 	var mt: int = int(_context["map_type"])
 	if mt >= 0 and CUE_FOR_MAP_TYPE.has(mt):
 		var cue: String = CUE_FOR_MAP_TYPE[mt]
-		if cue == "field_day" and bool(_context["night"]):
-			return "field_night"
+		# 村落也有夜曲（与野外同一套昼夜手法：同主题级数、换调式）
+		if bool(_context["night"]):
+			if cue == "field_day":
+				return "field_night"
+			if cue == "village":
+				return "village_night"
 		return cue
 	return "field_night" if bool(_context["night"]) else "field_day"
+
+
+## 变奏族轮换：**进入**某个场景时取族内的下一版。
+##
+## 关键在"什么算进入"：`_resolve_cue()` 会在每次情境变化时被调用（同一个场景常常
+## 被重复解析），所以不能按"解析次数"轮换——那会让曲目在同一次停留里来回翻。
+## 这里只在**族基准变化**时推进指针：同一场景的重复解析保持当前那一版。
+##
+## 为什么不按"每次循环"轮换：那要么在循环点硬切（把折回处理过的循环尾巴切掉），
+## 要么交叉淡化（需要双套播放器 + 逐帧对齐），代价与风险都大；按进入轮换零时序风险，
+## 效果同样是"每次回到这里听到的不一样"。族成员同调同速同长，轮换无跳变。
+func _pick_variant(base: String) -> String:
+	var members: Array = _manifest.get("variation_sets", {}).get(base, [])
+	var same_scene: bool = (base == _last_base)
+	_last_base = base
+	if members.size() < 2:
+		return base
+	if same_scene and _cue != "" and members.has(_cue):
+		return _cue                    # 场景没变：保持正在播的那一版
+	var idx: int = int(_rotation.get(base, 0)) % members.size()
+	_rotation[base] = (idx + 1) % members.size()
+	return str(members[idx])
 
 
 # ─────────────────────────────── 事件回调 ────────────────────────────────
@@ -242,6 +284,11 @@ func _on_game_started() -> void:
 
 func _on_map_loaded(_map_id: String, map_type: int) -> void:
 	set_context("map_type", map_type)
+	# 跨图抵达：给一声短标点（"抬头看了一眼新地方"）。首发加载不响——
+	# 那时候该由标题曲淡出、场景曲淡入自己完成交接。
+	if _expect_arrival:
+		_expect_arrival = false
+		play_stinger("sting_arrival")
 
 
 func _on_map_unloaded(_map_id: String) -> void:
@@ -275,15 +322,15 @@ func _on_battle_started(_battle_id: String) -> void:
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 	# 先叠一句结算短句，再回到场景音乐（短句不打断主曲，主曲仍按情境解析）
 	play_stinger("sting_victory" if victory else "sting_defeat")
-	# 短句期间保持一段浅压限：否则战斗档一撤、音乐回到全音量，短句尾巴被盖掉
-	request_duck(&"sting", DUCK_STINGER, FADE_DUCK)
-	_release_sting_duck_later()
 	set_context("battle", false)
 
 
-func _release_sting_duck_later() -> void:
-	await get_tree().create_timer(DUCK_STINGER_HOLD_S, true, false, true).timeout
-	release_duck(&"sting", FADE_DUCK)
+## travel_started 带三个参数（from_id, to_id, mode）——签名必须一致，
+## 否则 Godot 直接报参数错、回调不会执行（"抵达标点从不触发"）。
+func _on_travel_started(_from_id: String, _to_id: String, _mode: int) -> void:
+	# 跨图出发：下一次 map_loaded = "抵达了一个新地方"（首发加载不打标点）
+	_expect_arrival = true
+	_rotation.clear()      # 换了地方，变奏族从头轮（下一族首进用基础版）
 
 
 func _on_paused() -> void:
@@ -403,6 +450,10 @@ func _cue_entry(cue_id: String) -> Dictionary:
 # ─────────────────────────────── stinger ──────────────────────────────
 
 ## 一次性短句：叠在主曲之上，不参与层管理，播完即止。
+##
+## **多层短句要整叠播**：交付件是按层落盘的（sting_victory = piano+strings+bells
+## 三个文件，各层已带配平好的音量），只播 layers[0] 会得到一个"只剩钟琴/只剩弦乐"
+## 的残句——既存的胜利/失败短句就踩过这个坑（一直只响了字母序第一层）。
 func play_stinger(cue_id: String, fade_s: float = FADE_STINGER) -> void:
 	if not _enabled:
 		return
@@ -411,16 +462,61 @@ func play_stinger(cue_id: String, fade_s: float = FADE_STINGER) -> void:
 	if layers.is_empty():
 		push_warning("[MusicDirector] 清单里没有 stinger：%s" % cue_id)
 		return
-	var path := "res://assets/audio/bgm/" + str(layers[0]["file"])
-	var stream: AudioStream = load(path)
-	if stream == null:
+	stop_stinger()          # 同一时刻只允许一句短句（新句接管旧句）
+	var started := 0
+	for l in layers:
+		var stream: AudioStream = load("res://assets/audio/bgm/" + str(l["file"]))
+		if stream == null:
+			continue
+		if stream is AudioStreamOggVorbis:
+			(stream as AudioStreamOggVorbis).loop = false
+		var p := AudioStreamPlayer.new()
+		p.name = "_Stinger_%s" % str(l["name"])
+		p.bus = AudioManager.BUS_BGM
+		p.stream = stream
+		p.volume_db = SILENT_DB
+		add_child(p)
+		p.play()
+		_fade_player(p, 0.0, fade_s)
+		if started == 0:
+			# 各层等长：以第一层播完作为整句结束（若已被新短句接管则忽略）
+			p.finished.connect(func() -> void: _on_stinger_finished(cue_id))
+		_stinger_players.append(p)
+		started += 1
+	if started == 0:
 		return
-	if stream is AudioStreamOggVorbis:
-		(stream as AudioStreamOggVorbis).loop = false
-	_stinger.stream = stream
-	_stinger.volume_db = SILENT_DB
-	_stinger.play()
-	_fade_player(_stinger, 0.0, fade_s)
+	_stinger_cue = cue_id
+	# 短句期间把音乐压低，**保持时长按短句实际长度**——固定 2.5s 会让长标点
+	# （如"入主" 8 小节 ≈25s）的后半句在音乐回到全音量后被盖掉。
+	request_duck(&"sting", DUCK_STINGER, FADE_DUCK)
+	_release_sting_duck_later(float(entry.get("duration_s", 0.0)) + FADE_DUCK)
+
+
+func _release_sting_duck_later(hold_s: float = DUCK_STINGER_HOLD_S) -> void:
+	await get_tree().create_timer(maxf(hold_s, 0.5), true, false, true).timeout
+	release_duck(&"sting", FADE_DUCK)
+
+
+## 短句自然播完：清状态并回收播放器（若已被新短句接管则不动它）
+func _on_stinger_finished(cue_id: String) -> void:
+	if _stinger_cue != cue_id:
+		return
+	stop_stinger()
+
+
+## 当前正在播的短句 id（""=没有）；供测试/调试观测
+func get_stinger_cue() -> String:
+	return _stinger_cue
+
+
+## 立即停掉短句（场景切换/预览入场时用；正常流程让它自然播完）
+func stop_stinger() -> void:
+	for p in _stinger_players:
+		if p != null and is_instance_valid(p):
+			p.stop()
+			p.queue_free()
+	_stinger_players.clear()
+	_stinger_cue = ""
 
 
 # ─────────────────────────────── 环境音层 ──────────────────────────────

@@ -521,7 +521,7 @@ def deliver_layers(cue, processed: dict, fs: int = 48000,
 
 def mix_cue(cue, stem_paths: dict, fs: int = 48000,
             overrides: dict | None = None, bus: dict | None = None,
-            target_lufs: float | None = None,
+            target_lufs: float | None = None, balance: dict | None = None,
             wrap_tail: bool = True, return_stems: bool = False) -> tuple:
     """把某个 cue 的分轨混成成品。
 
@@ -556,10 +556,13 @@ def mix_cue(cue, stem_paths: dict, fs: int = 48000,
         # 层的**平衡**按"意图 + 实测"自动配平：量出这一层发声时的电平，
         # 对齐到相对钢琴的目标偏移（见 LAYER_BALANCE_DB 的说明）。
         # 曲目里显式写的 gain_db 作为**额外的艺术偏移**叠加上去。
+        # `balance` = 该 cue 的偏移**覆盖表**：变奏里"主奏换人"时必须给，
+        # 否则换到竖琴/马林巴的主奏层会被默认偏移压到钢琴之下，等于没有主奏。
         if "gain_db" not in ov:
             cue_gain = float(cue.stems[name].gain_db) if name in cue.stems else 0.0
-            auto = (balance_ref - activities[name]
-                    + float(LAYER_BALANCE_DB.get(name, -6.0)))
+            offset = float((balance or {}).get(
+                name, LAYER_BALANCE_DB.get(name, -6.0)))
+            auto = (balance_ref - activities[name] + offset)
             auto = float(np.clip(auto, -BALANCE_CLAMP_DB, BALANCE_CLAMP_DB))
             if abs(auto) >= BALANCE_CLAMP_DB - 1e-6:
                 print("    [mix] 警告：%s/%s 的自动配平触到上限 %.1f dB"

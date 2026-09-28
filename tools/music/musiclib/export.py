@@ -56,11 +56,21 @@ def cue_tier_map() -> dict:
         "field_day":   {"piano": 0, "strings": 1, "harp": 2, "bells": 2},
         "field_night": {"piano": 0, "strings": 1, "bells": 2},
         "village":     {"piano": 0, "guitar": 1, "marimba": 2, "winds": 2},
+        "village_night": {"piano": 0, "guitar": 1, "marimba": 2},
         "interior":    {"piano": 0},
+        "interior_hall": {"piano": 0, "strings": 1, "bells": 2},
         "strategic":   {"pad": 0, "vibraphone": 1, "piano": 1, "bells": 2},
         "battle":      {"piano": 0, "strings": 1, "perc": 1, "winds": 2},
+        "battlefield": {"piano": 0, "strings": 1, "winds": 2},
+        # 变奏 B 组：**主奏层降一档**——在这一版里它是主奏（不是点缀），
+        # 若仍按基础曲的 tier=2 处理，低强度下整首曲子会没有旋律。
+        "field_day_b": {"piano": 0, "strings": 1, "harp": 1, "bells": 2},
+        "village_b":   {"piano": 0, "guitar": 1, "marimba": 1, "winds": 2},
+        "battle_b":    {"piano": 0, "strings": 1, "perc": 1, "winds": 2},
         "sting_victory": {"mix": 0},
         "sting_defeat":  {"mix": 0},
+        "sting_conquest": {"mix": 0},
+        "sting_arrival":  {"mix": 0},
     }
 
 
@@ -73,8 +83,13 @@ def cue_tier_map() -> dict:
 # 平衡的唯一真相源是渲染/混音阶段；`db` 字段保留为**运行时可选的微调**，默认 0。
 TIER_DEFAULT_DB = {}
 
-def build_manifest(reports: list) -> dict:
-    """把各 cue 的混音报告汇总成引擎消费的清单。"""
+def build_manifest(reports: list, variation_sets: dict | None = None) -> dict:
+    """把各 cue 的混音报告汇总成引擎消费的清单。
+
+    `variation_sets`（cue → 同族成员列表，见 compose/cues.py）写进清单，
+    运行时的轮换据此工作：**"谁能和谁互换"是作曲侧的声明，引擎只消费**，
+    不靠名字后缀去猜。
+    """
     tiers = cue_tier_map()
     cues = {}
     for rep in reports:
@@ -105,7 +120,12 @@ def build_manifest(reports: list) -> dict:
             })
         entry["layers"].sort(key=lambda l: (l["tier"], l["name"]))
         cues[cid] = entry
-    return {"version": 1, "cue_count": len(cues), "cues": cues}
+    # 变奏族：只登记"成员都在清单里"的组（半成品族会让运行时轮换到空曲目）
+    sets = {k: [c for c in v if c in cues]
+            for k, v in (variation_sets or {}).items()}
+    sets = {k: v for k, v in sets.items() if len(v) > 1}
+    return {"version": 1, "cue_count": len(cues), "cues": cues,
+            "variation_sets": sets}
 
 
 def write_manifest(manifest: dict, path: str) -> None:

@@ -148,6 +148,7 @@ def build(cue_id: str, out_dir: Path, fmt: str, do_tiers: bool,
 
     full, report, processed = MIX.mix_cue(
         cue, paths, overrides=CUES.MIX_OVERRIDES.get(cue_id, {}),
+        balance=CUES.LAYER_BALANCE_BY_CUE.get(cue_id, {}),
         target_lufs=None if is_loop else -14.0,
         wrap_tail=is_loop, return_stems=True)
     # 试听用的"全层版"要用**交付分层之和**，而不是母带：
@@ -190,7 +191,7 @@ def build(cue_id: str, out_dir: Path, fmt: str, do_tiers: bool,
 
 
 def build_reel(cue_ids: list, out_dir: Path, fmt: str, seg_s: float,
-               gap_s: float) -> list:
+               gap_s: float, name: str = "00_试听串烧_每首一段") -> list:
     """试听串烧：每首取一段串联。
 
     取段位置默认从**第 3 个 8 小节乐句**开始（情绪打开处）——这是每首曲子
@@ -206,6 +207,7 @@ def build_reel(cue_ids: list, out_dir: Path, fmt: str, seg_s: float,
             continue
         audio, _rep = MIX.mix_cue(cue, paths,
                                   overrides=CUES.MIX_OVERRIDES.get(cid, {}),
+                                  balance=CUES.LAYER_BALANCE_BY_CUE.get(cid, {}),
                                   target_lufs=None if is_loop else -14.0,
                                   wrap_tail=is_loop)
         if is_loop:
@@ -221,10 +223,10 @@ def build_reel(cue_ids: list, out_dir: Path, fmt: str, seg_s: float,
     reel = np.concatenate(parts, axis=0)
     wav = out_dir / "_tmp_reel.wav"
     MIX.save_mix(reel, str(wav))
-    meta = encode(wav, out_dir / ("00_试听串烧_每首一段.%s" % fmt), fmt)
+    meta = encode(wav, out_dir / ("%s.%s" % (name, fmt)), fmt)
     wav.unlink(missing_ok=True)
-    print("    00_试听串烧_每首一段.%-20s %5.2f MB   共 %d 首 / %.0f 秒"
-          % (fmt, meta["mb"], len(cue_ids), len(reel) / fs))
+    print("    %-34s %5.2f MB   共 %d 首 / %.0f 秒"
+          % ("%s.%s" % (name, fmt), meta["mb"], len(cue_ids), len(reel) / fs))
     return [meta]
 
 
@@ -244,6 +246,10 @@ def main() -> int:
     ap.add_argument("--gap", type=float, default=0.8, help="串烧段间留白（秒）")
     ap.add_argument("--no-reel", action="store_true")
     ap.add_argument("--no-loop-check", action="store_true")
+    ap.add_argument("--reel-cues",
+                    help="只把指定 cue（逗号分隔）串成一条额外样带——"
+                         "用于「只验收本批新增曲目」，不必重听全部")
+    ap.add_argument("--reel-name", default="01_新曲串烧", help="额外样带的文件名前缀")
     args = ap.parse_args()
 
     if not STEMS.exists():
@@ -265,6 +271,17 @@ def main() -> int:
     if not args.no_reel:
         print("  ── 串烧 ──")
         total += build_reel(cue_ids, out_dir, args.format, args.seg, args.gap)
+    if args.reel_cues:
+        # 只串本批新增曲目：验收时不必在已有曲目里翻找（27 首歌的整条串烧要 10 分钟）
+        extra = [s.strip() for s in args.reel_cues.split(",") if s.strip()]
+        known = {cid for cid, _ in CUES.BUILDERS}
+        unknown = [c for c in extra if c not in known]
+        if unknown:
+            print("[错误] --reel-cues 里有未知 cue：%s" % unknown, file=sys.stderr)
+            return 2
+        print("  ── 额外串烧（%d 首）──" % len(extra))
+        total += build_reel(extra, out_dir, args.format, args.seg, args.gap,
+                            name=args.reel_name)
     print("\n[完成] %d 个文件 / %.1f MB → %s"
           % (len(total), sum(m["mb"] for m in total), out_dir))
     return 0

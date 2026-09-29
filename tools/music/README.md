@@ -23,6 +23,9 @@ python tools/music/setup_toolchain.py --verify     # 校验采样指纹与音源
 # 2) 写谱自检（调外音 / 和声避讳音 / 音区 / 留白，渲染前先跑）
 python tools/music/compose/check_melody.py
 
+# 2c) 改了和声骨架之后：把谱面注释里的和弦功能同步过来（否则注释在说谎）
+python tools/music/compose/annotate_melody.py --write
+
 # 2b) 管线自检（验证 DSP/响度/循环/导出"算得对"，不是"能跑通"）
 python tools/music/selftest.py
 
@@ -88,9 +91,10 @@ python tools/music/qa_audio.py --delivered             # 检查交付的 OGG 而
 | `gen_toolchain_pins.py` | 生成/更新上面那份清单（需 `GITHUB_TOKEN`，只在有意换版本时跑） |
 | `selftest.py` | 管线自检（已知答案的输入 → 验证输出） |
 | `compose/themes.py` | **旋律库**：14 条原创旋律（级数化谱面 + 自带和声骨架 + 每条乐句带推荐八度） |
-| `compose/common.py` | **编曲基因**：和声骨架、级数→音高、编曲助手、力度/音区规则 |
+| `compose/common.py` | **编曲基因**：骨架条目库（`SKELETONS`）、级数→音高、编曲助手、力度/音区规则 |
 | `compose/cues.py` | 十七首曲子的定义（旋律 + 编制 + 分层 + 混音覆盖） |
 | `compose/check_melody.py` | **写谱自检**：调外音 / 和声避讳音 / 音区 / 留白（渲染前跑） |
+| `compose/annotate_melody.py` | **注释同步**：按骨架重写谱面注释里的和弦功能（换和声后跑） |
 | `musiclib/theory.py` | 乐理层：音高/音阶/和弦/级数/声部连接/音型 |
 | `musiclib/score.py` | 谱面数据结构 + MIDI 导出 + 人性化（力度/踏板/微时值） |
 | `musiclib/render.py` | 分轨离线渲染（sfizz 钢琴 / FluidSynth 编制） |

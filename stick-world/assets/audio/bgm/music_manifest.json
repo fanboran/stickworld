@@ -451,8 +451,8 @@
       "loop": false,
       "loop_offset": 0.0,
       "key": "D major",
-      "duration_s": 6.682,
-      "loudness_lufs": -14.0,
+      "duration_s": 8.655,
+      "loudness_lufs": -14.03,
       "layers": [
         {
           "name": "bells",

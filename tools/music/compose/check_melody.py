@@ -27,31 +27,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from compose import common as C                          # noqa: E402
 from compose import themes as TH                         # noqa: E402
 from musiclib import theory as T                         # noqa: E402
-
-
-def signature() -> TH.Melody:
-    """招牌主题（原野主题）—— 唯一被两首曲子共用的旋律，同样要过检。
-
-    它按最常出现的那一套校验：**D 大调 + 卡农进行 + 钢琴八度（transpose=12）**。
-    三个乐句在 `themes.py` 里是裸事件表（`THEME_A/B/C`），因为标题画面与白天原野
-    都用 `render_form` 直接排曲式；这里给它们套一个 Melody 壳，让检查器能统一处理。
-    """
-    return TH.Melody(
-        id="yuanye", name="原野主题（招牌）", key="D", scale="major",
-        harmony=tuple(C.CANON), mood="邀请、开阔",
-        note="曲式在调用点给定（标题画面 A C A C / 白天原野 A A B C）",
-        form=("A", "A", "B", "C"),
-        phrases={
-            "A": TH.Phrase(events=TH.THEME_A, transpose=12,
-                           register="D5~D6（钢琴）", role="陈述"),
-            "B": TH.Phrase(events=TH.THEME_B, transpose=12,
-                           register="D6~B6（高潮句，整体升八度）", role="打开"),
-            "C": TH.Phrase(events=TH.THEME_C, transpose=12,
-                           register="D5~A5（骨架长音）", role="收束"),
-        })
 
 
 def _chord_pcs(key: str, scale: str, roman: str) -> set:
@@ -172,7 +149,6 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     lib = dict(TH.MELODIES)
-    lib["yuanye"] = signature()
     ids = args or sorted(lib)
     reports = [check(lib[i]) for i in ids]
 

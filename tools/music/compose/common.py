@@ -13,30 +13,23 @@
   - **一层一件事**：同一件乐器要么唱旋律、要么伴奏，不兼任；
   - **点状音只做"光"**：每小节 1~2 个、落在弱拍、音区比旋律高一个八度。
 
-统一性来自**和声骨架 + 编制纪律 + 制作口径**这三样（全曲共用），而不是共用旋律；
-旋律各自成篇，共用旋律的只有招牌主题（标题画面与白天原野）。
+每首曲子自带**旋律与和声骨架**（见 `themes.py`），本文件不假设任何"全库统一"：
+它提供的助手只保证"写出来的东西密度合适、配器有纪律"，风格由调用点决定。
 """
 
 from compose import themes as TH
 from musiclib import theory as T
 
-# ─────────────────────── 招牌主题（原野主题）───────────────────────
-# 全部旋律素材在 compose/themes.py。这里只把招牌主题再导出一次：整部作品里
-# 只有它被两首曲子共用（标题画面 + 白天原野 = "这个世界的声音"），
-# 其余曲目各有各的旋律。曲式与写作规则见 themes.py 与
-# docs/设计/音乐/作曲技法参考.md。
-THEME_A, THEME_B, THEME_C = TH.THEME_A, TH.THEME_B, TH.THEME_C
-THEME_FORM = TH.THEME_FORM
+# ───────────────────── 和声骨架条目库（可选，非强制）─────────────────────
+# **每首曲子的和声骨架由它自己在 themes.py 里声明**（`Melody.harmony`），
+# 本文件只留几条公有领域的经典套路当条目库：写新曲时可以直接取用，
+# 也可以另起一条。和声进行本身不受版权保护（见音乐设计文档 §和声语汇）。
 
-# ─────────────────────────── 和声骨架 ──────────────────────────────
-# 整部配乐只用这三条 8 小节骨架 + 一条 4 小节骨架。和声进行本身不受版权保护，
-# 且都是公有领域的经典套路（见 docs/设计/音乐/音乐设计文档.md §和声语汇）。
-
-# 卡农进行：大调曲目（序/昼/小镇/室内/厅堂/战略/凯旋）的地基，天生闭合可循环
+# 卡农进行：天生闭合、可无限循环，大调抒情曲最稳的地基
 CANON = ["I", "V", "vi", "iii", "IV", "I", "IV", "V"]
-# 自然小调骨架：夜 / 夜镇 / 折戟
+# 自然小调骨架：幽暗但不压抑
 CANON_MINOR = ["i", "v", "VI", "III", "iv", "i", "iv", "v"]
-# 田园骨架：小镇（更轻快、生活化的 I-vi-IV-V 变体）
+# 田园骨架：更轻快、生活化的 I-vi-IV-V 变体
 VILLAGE = ["I", "iii", "IV", "V", "I", "vi", "IV", "V"]
 # 出征骨架（每小节一个和弦、4 小节一轮）：开阔的推进感，不凶
 MARCH = ["i", "VI", "III", "VII"]
@@ -60,8 +53,8 @@ MARCH = ["i", "VI", "III", "VII"]
 # 旋律八度**不用全局默认值**，而是在每个调用点显式给出。
 # 原因：不同乐器的舒适音区不同（钢琴旋律常用 C5~C6，长笛/双簧管常用 C5~A5，
 # 而同一个主题在不同调上落点也不同——D 大调比 G 大调低 5 个半音）。一个全局
-# 常量必然让某些曲子的某个声部跑到乐器音域之外。所以这里只定义"参考八度"，
-# 具体值由 cues.py 逐个声明并可被注释解释。
+# 常量必然让某些乐器跑到音域之外。所以这里只定义"参考八度"，
+# 具体值由 themes.py 在**每条乐句**上声明（`Phrase.transpose` + `register`）。
 MELODY_OCTAVE_SHIFT = 0
 
 # 力度整体上移系数。
@@ -86,24 +79,13 @@ def _trim(vel: float) -> int:
 def render_theme(cue, stem, events, key: str, scale: str,
                  bar_offset: int = 0, vel_scale: float = 1.0,
                  transpose: int = MELODY_OCTAVE_SHIFT) -> None:
-    """把级数形式的主题写进某个 stem。"""
+    """把级数形式的一串音（一条乐句）写进某个 stem。"""
     for (bar, beat, dur, deg, oct_shift, vel) in events:
         if deg is None:
             continue
         pitch = T.degree(key, scale, deg, oct_shift) + transpose
         stem.add(cue.bar(bar + bar_offset) + beat, dur, pitch,
                  max(1, min(127, int(round(vel * vel_scale * VELOCITY_TRIM)))))
-
-
-def render_form(cue, stem, key: str, scale: str, form=None,
-                vel_scale: float = 1.0, transpose: int = MELODY_OCTAVE_SHIFT,
-                phrase_bars: int = 8) -> None:
-    """按 32 小节曲式把主题的四个乐句依次写进 stem。"""
-    form = form or THEME_FORM
-    for i, phrase in enumerate(form):
-        render_theme(cue, stem, phrase, key, scale,
-                     bar_offset=i * phrase_bars, vel_scale=vel_scale,
-                     transpose=transpose)
 
 
 def render_phrase(cue, stem, melody, phrase: str, bar_offset: int = 0,

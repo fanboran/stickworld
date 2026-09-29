@@ -7,8 +7,8 @@
 （钢琴为主角、每曲只用一件独奏木管、打击乐只做点状音）与共用的制作口径。
 
   cue_id          曲名        触发                        调性     BPM  层  旋律
-  menu_title      原野·序     标题画面 / 启动             D 大调   66   2   招牌主题
-  field_day       原野·昼     map_loaded 户外·白天        D 大调   72   4   招牌主题
+  menu_title      原野·序     标题画面 / 启动             D 大调   66   2   menu
+  field_day       原野·昼     map_loaded 户外·白天        D 大调   72   4   field_day
   field_day_b     原野·昼·竖琴 户外·白天（同场轮换）        D 大调   72   4   day_harp
   field_night     原野·夜     map_loaded 户外·夜晚        B 小调   63   3   night
   village         小镇        map_loaded(VILLAGE)         G 大调   84   4   village_tune
@@ -62,23 +62,22 @@ def _new(cue_id: str, title: str, bpm: float, key: str, scale: str,
 # ─────────────────────────── 标题画面 ────────────────────────────────
 
 def build_menu_title() -> S.Cue:
-    """最简编制：只有钢琴与一缕弦乐。用作"进入这个世界"的第一印象，
-    所以刻意留白最多——玩家刚打开游戏，不需要被信息淹没。
+    """标题画面：只有钢琴与一缕弦乐，留白最多——玩家刚打开游戏，不需要被信息淹没。
 
-    这是**招牌主题**（原野主题）的两处出场之一，只陈述与收束、不进入 B 段：
-    保持"未完成"的邀请感。主题素材见 themes.py。"""
+    旋律与和声都归这首自己（`themes.MENU`，骨架 IV-V-iii-vi-IV-V-I-V）：
+    从下属和弦开场（"门先开着"），第 6 小节落回主音、第 7 小节又回到属和弦收句，
+    循环处不关门。"""
     c = _new("menu_title", "原野·序", 66, "D", "major")
+    mel = MEL.MENU
     p = c.stem("piano", program=S.GM["acoustic_grand"])
-    C.render_form(c, p, "D", "major", form=[C.THEME_A, C.THEME_C,
-                                            C.THEME_A, C.THEME_C],
-                  vel_scale=0.94, transpose=12)
-    C.add_piano_accompaniment(c, p, "D", "major", C.CANON, 0, BARS,
+    C.render_melody(c, p, mel, vel_scale=0.94)
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               bass_vel=54, arp_vel=42, pattern="up_down_inner")
     S.pedal_bars(p, c, 0, BARS, "per_bar")
     S.humanize_timing(p, 0.016, seed=101)
 
     st = c.stem("strings", program=S.GM["strings_slow"], gain_db=-3.0)
-    C.add_pad(c, st, "D", "major", C.CANON, 4, BARS, beats_per_chord=8,
+    C.add_pad(c, st, mel.key, mel.scale, mel.harmony, 4, BARS, beats_per_chord=8,
               low=55, high=76, vel=40)
     S.humanize_timing(st, 0.05, seed=102)
     return c
@@ -87,13 +86,17 @@ def build_menu_title() -> S.Cue:
 # ─────────────────────────── 户外 · 白天 ──────────────────────────────
 
 def build_field_day() -> S.Cue:
-    """探索/赶路的主曲，也是**招牌主题**的家。情绪弧线：钢琴独白 → 弦乐进场
-    → 钟琴点亮 → 打开 → 收回，32 小节走完一个完整的呼吸。这是玩家听到最多的
-    一首，因此层次最多（4 层），但任何一层单独听都成立。"""
+    """探索/赶路的主曲，也是玩家听到最多的一首。情绪弧线：钢琴独白 → 弦乐进场
+    → 钟琴点亮 → 打开 → 收回，32 小节走完一个完整的呼吸。因此层次最多（4 层），
+    但任何一层单独听都成立。
+
+    旋律与和声归这首自己（`themes.FIELD_DAY`，骨架 I-vi-IV-ii-V-I-IV-V）：
+    三度下行链天生"顺流"，终止又把每一句推回开头。"""
     c = _new("field_day", "原野·昼", 72, "D", "major")
+    mel = MEL.FIELD_DAY
     p = c.stem("piano", program=S.GM["acoustic_grand"])
-    C.render_form(c, p, "D", "major", transpose=12)
-    C.add_piano_accompaniment(c, p, "D", "major", C.CANON, 0, BARS,
+    C.render_melody(c, p, mel)
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               bass_vel=60, arp_vel=48)
     S.pedal_bars(p, c, 0, BARS, "per_bar")
     S.apply_velocity_arch(p, 0.9, 1.08)
@@ -102,20 +105,20 @@ def build_field_day() -> S.Cue:
 
     st = c.stem("strings", program=S.GM["strings_ensemble"], gain_db=-2.0)
     # 弦乐从第 4 小节淡入（用力度渐强近似），第 3 乐句撤掉，把空间留给钟琴
-    C.add_pad(c, st, "D", "major", C.CANON, 4, 16, beats_per_chord=8,
+    C.add_pad(c, st, mel.key, mel.scale, mel.harmony, 4, 16, beats_per_chord=8,
               low=57, high=79, vel=44)
-    C.add_pad(c, st, "D", "major", C.CANON, 24, BARS, beats_per_chord=8,
+    C.add_pad(c, st, mel.key, mel.scale, mel.harmony, 24, BARS, beats_per_chord=8,
               low=57, high=79, vel=42)
     S.apply_velocity_arch(st, 0.8, 1.05)
     S.humanize_timing(st, 0.06, seed=202)
 
     hp = c.stem("harp", program=S.GM["harp"], gain_db=-4.0)
-    C.add_harp_figures(c, hp, "D", "major", C.CANON, 8, 24, vel=38)
-    C.add_harp_figures(c, hp, "D", "major", C.CANON, 28, BARS, vel=36)
+    C.add_harp_figures(c, hp, mel.key, mel.scale, mel.harmony, 8, 24, vel=38)
+    C.add_harp_figures(c, hp, mel.key, mel.scale, mel.harmony, 28, BARS, vel=36)
     S.humanize_timing(hp, 0.02, seed=203)
 
     bl = c.stem("bells", program=S.GM["glockenspiel"], gain_db=-6.0)
-    C.add_bell_accents(c, bl, "D", "major", C.CANON, 16, 32, vel=42,
+    C.add_bell_accents(c, bl, mel.key, mel.scale, mel.harmony, 16, 32, vel=42,
                        per_bar=1, seed=204)
     S.humanize_timing(bl, 0.02, seed=205)
     return c
@@ -127,33 +130,34 @@ def build_field_day_b() -> S.Cue:
     """原野·昼（同场轮换版）：**主奏从钢琴换到竖琴**，钢琴退成纯伴奏。
 
     与 `field_day` 同调、同速、同长、层名一一对应，运行时整层替换：
-    换的只是"谁在唱"。旋律是自己的一条（`day_harp`），不是招牌主题换个乐器——
-    招牌主题只留在标题画面与基础版里，轮换的意义正是"同一片原野的另一首歌"。
+    换的只是"谁在唱"。旋律是自己的一条（`day_harp`）：轮换的意义正是
+    "同一片原野的另一首歌"，而不是同一段旋律换件乐器。
 
     竖琴的音色是"颗粒的、向上的"：主奏走完整个曲式，同时用跨八度分解给自己
     铺一层空气；弦乐更轻，钟琴只在收束句出现。
     """
     c = _new("field_day_b", "原野·昼·竖琴", 72, "D", "major")
+    mel = MEL.DAY_HARP
 
     p = c.stem("piano", program=S.GM["acoustic_grand"], gain_db=-2.0)
-    C.add_piano_accompaniment(c, p, "D", "major", C.CANON, 0, BARS,
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               bass_vel=58, arp_vel=46, pattern="up_down")
     S.pedal_bars(p, c, 0, BARS, "per_bar")
     S.humanize_timing(p, 0.02, seed=1101)
 
     hp = c.stem("harp", program=S.GM["harp"], gain_db=-1.0)
     C.render_melody(c, hp, MEL.DAY_HARP, vel_scale=0.9)
-    C.add_harp_figures(c, hp, "D", "major", C.CANON, 0, BARS, low=57, high=84,
+    C.add_harp_figures(c, hp, mel.key, mel.scale, mel.harmony, 0, BARS, low=57, high=84,
                        vel=32, span=6)
     S.humanize_timing(hp, 0.02, seed=1102)
 
     st = c.stem("strings", program=S.GM["strings_ensemble"], gain_db=-5.0)
-    C.add_pad(c, st, "D", "major", C.CANON, 8, 24, beats_per_chord=8,
+    C.add_pad(c, st, mel.key, mel.scale, mel.harmony, 8, 24, beats_per_chord=8,
               low=57, high=79, vel=36)
     S.humanize_timing(st, 0.06, seed=1103)
 
     bl = c.stem("bells", program=S.GM["glockenspiel"], gain_db=-9.0)
-    C.add_bell_accents(c, bl, "D", "major", C.CANON, 24, BARS, vel=36,
+    C.add_bell_accents(c, bl, mel.key, mel.scale, mel.harmony, 24, BARS, vel=36,
                        per_bar=1, seed=1104)
     S.humanize_timing(bl, 0.02, seed=1105)
     return c
@@ -172,9 +176,10 @@ def build_field_night() -> S.Cue:
     也跟着让出中高音区，避免与旋律抢同一片空间。
     """
     c = _new("field_night", "原野·夜", 63, "B", "minor")
+    mel = MEL.NIGHT
     p = c.stem("piano", program=S.GM["acoustic_grand"])
     C.render_melody(c, p, MEL.NIGHT)
-    C.add_piano_accompaniment(c, p, "B", "minor", C.CANON_MINOR, 0, BARS,
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               arp_low=48, arp_high=70,
                               bass_vel=52, arp_vel=40, pattern="up_down_inner")
     S.pedal_bars(p, c, 0, BARS, "half")     # 每两小节一踩：更朦胧
@@ -183,12 +188,12 @@ def build_field_night() -> S.Cue:
 
     st = c.stem("strings", program=S.GM["strings_slow"], gain_db=-4.0)
     # 低音区长音（大提琴质感）：夜里的弦乐不该在高音区飘
-    C.add_pad(c, st, "B", "minor", C.CANON_MINOR, 0, BARS, beats_per_chord=8,
+    C.add_pad(c, st, mel.key, mel.scale, mel.harmony, 0, BARS, beats_per_chord=8,
               low=45, high=64, vel=38)
     S.humanize_timing(st, 0.07, seed=302)
 
     bl = c.stem("bells", program=S.GM["music_box"], gain_db=-8.0)
-    C.add_bell_accents(c, bl, "B", "minor", C.CANON_MINOR, 8, BARS, vel=34,
+    C.add_bell_accents(c, bl, mel.key, mel.scale, mel.harmony, 8, BARS, vel=34,
                        per_bar=1, low=79, high=93, seed=303)
     S.humanize_timing(bl, 0.03, seed=304)
     return c
@@ -204,23 +209,24 @@ def build_village() -> S.Cue:
     **钢琴在这里闭口**——交接乐句时让主奏让位，比两件乐器一起唱干净得多。
     """
     c = _new("village", "小镇", 84, "G", "major")
+    mel = MEL.VILLAGE
     p = c.stem("piano", program=S.GM["acoustic_grand"], gain_db=-1.0)
     # G 大调比 D 大调高 5 个半音：再提高八度会顶到 E7（钢琴的薄区），
     # 因此小镇保持原八度，靠长笛与马林巴在更高的音区提供亮度
     C.render_melody(c, p, MEL.VILLAGE, skip=(2,))
-    C.add_piano_accompaniment(c, p, "G", "major", C.VILLAGE, 0, BARS,
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               bass_vel=58, arp_vel=46, pattern="up_down")
     S.pedal_bars(p, c, 0, BARS, "per_bar")
     S.humanize_timing(p, 0.02, seed=401)
 
     g = c.stem("guitar", program=S.GM["nylon_guitar"])
     # 吉他只做伴奏型指弹，不抢旋律；和声节奏与钢琴一致
-    C.add_harp_figures(c, g, "G", "major", C.VILLAGE, 0, BARS, low=48, high=67,
+    C.add_harp_figures(c, g, mel.key, mel.scale, mel.harmony, 0, BARS, low=48, high=67,
                        vel=36, span=4)
     S.humanize_timing(g, 0.026, seed=402)
 
     m = c.stem("marimba", program=S.GM["marimba"], gain_db=-6.0)
-    C.add_pad(c, m, "G", "major", C.VILLAGE, 8, BARS, beats_per_chord=8,
+    C.add_pad(c, m, mel.key, mel.scale, mel.harmony, 8, BARS, beats_per_chord=8,
               low=67, high=84, vel=34)
     S.humanize_timing(m, 0.03, seed=403)
 
@@ -243,9 +249,10 @@ def build_village_b() -> S.Cue:
     旋律与基础版不同（`village_marimba`）：签名是同音重复的"敲击"与切分。
     """
     c = _new("village_b", "小镇·木琴", 84, "G", "major")
+    mel = MEL.VILLAGE_MARIMBA
 
     p = c.stem("piano", program=S.GM["acoustic_grand"], gain_db=-4.0)
-    C.add_piano_accompaniment(c, p, "G", "major", C.VILLAGE, 0, BARS,
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               bass_vel=54, arp_vel=38, pattern="up_down_inner")
     S.pedal_bars(p, c, 0, BARS, "per_bar")
     S.humanize_timing(p, 0.02, seed=1201)
@@ -255,7 +262,7 @@ def build_village_b() -> S.Cue:
     S.humanize_timing(m, 0.014, seed=1202)
 
     g = c.stem("guitar", program=S.GM["nylon_guitar"], gain_db=-1.0)
-    C.add_harp_figures(c, g, "G", "major", C.VILLAGE, 0, BARS, low=48, high=67,
+    C.add_harp_figures(c, g, mel.key, mel.scale, mel.harmony, 0, BARS, low=48, high=67,
                        vel=38, span=6)
     S.humanize_timing(g, 0.024, seed=1203)
 
@@ -275,20 +282,21 @@ def build_village_night() -> S.Cue:
     像灯一盏盏熄掉，只剩一盏还亮着。
     """
     c = _new("village_night", "夜镇", 72, "E", "minor")
+    mel = MEL.VILLAGE_NIGHT
     p = c.stem("piano", program=S.GM["acoustic_grand"])
     C.render_melody(c, p, MEL.VILLAGE_NIGHT)
-    C.add_piano_accompaniment(c, p, "E", "minor", C.CANON_MINOR, 0, BARS,
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               bass_vel=48, arp_vel=36, pattern="up_down_inner")
     S.pedal_bars(p, c, 0, BARS, "half")
     S.humanize_timing(p, 0.026, seed=1001)
 
     g = c.stem("guitar", program=S.GM["nylon_guitar"], gain_db=-2.0)
-    C.add_harp_figures(c, g, "E", "minor", C.CANON_MINOR, 0, BARS, low=45,
+    C.add_harp_figures(c, g, mel.key, mel.scale, mel.harmony, 0, BARS, low=45,
                        high=64, vel=32, span=4)
     S.humanize_timing(g, 0.03, seed=1002)
 
     m = c.stem("marimba", program=S.GM["marimba"], gain_db=-10.0)
-    C.add_bell_accents(c, m, "E", "minor", C.CANON_MINOR, 8, BARS, vel=28,
+    C.add_bell_accents(c, m, mel.key, mel.scale, mel.harmony, 8, BARS, vel=28,
                        per_bar=1, low=64, high=79, seed=1003)
     S.humanize_timing(m, 0.03, seed=1004)
     return c
@@ -303,9 +311,10 @@ def build_interior() -> S.Cue:
     旋律也按"室内"写：音域只有六度（F5~C6）、休止多、句尾悬留不解决。
     """
     c = _new("interior", "灯下", 58, "F", "major")
+    mel = MEL.INTERIOR
     p = c.stem("piano", program=S.GM["acoustic_grand"])
     C.render_melody(c, p, MEL.INTERIOR)
-    C.add_piano_accompaniment(c, p, "F", "major", C.CANON, 0, BARS,
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               bass_vel=48, arp_vel=38, pattern="up_down_inner",
                               rest_bars=(7, 15, 23, 31))
     S.pedal_bars(p, c, 0, BARS, "half")
@@ -325,21 +334,22 @@ def build_interior_hall() -> S.Cue:
     是有人走动的公共空间，所以旋律也更宽（附点推进、跨六度以上）。
     """
     c = _new("interior_hall", "厅堂", 62, "F", "major")
+    mel = MEL.HALL
     p = c.stem("piano", program=S.GM["acoustic_grand"])
     C.render_melody(c, p, MEL.HALL, vel_scale=0.94)
-    C.add_piano_accompaniment(c, p, "F", "major", C.CANON, 0, BARS,
+    C.add_piano_accompaniment(c, p, mel.key, mel.scale, mel.harmony, 0, BARS,
                               bass_vel=54, arp_vel=44)
     S.pedal_bars(p, c, 0, BARS, "per_bar")
     S.humanize_timing(p, 0.02, seed=901)
 
     st = c.stem("strings", program=S.GM["strings_slow"], gain_db=-3.0)
-    C.add_pad(c, st, "F", "major", C.CANON, 0, BARS, beats_per_chord=8,
+    C.add_pad(c, st, mel.key, mel.scale, mel.harmony, 0, BARS, beats_per_chord=8,
               low=57, high=79, vel=42)
     S.humanize_timing(st, 0.06, seed=902)
 
     # 钢片琴（比钟琴暗一档）：点状音只在后半段出现，像窗外透进来的光
     bl = c.stem("bells", program=S.GM["celesta"], gain_db=-9.0)
-    C.add_bell_accents(c, bl, "F", "major", C.CANON, 16, BARS, vel=34,
+    C.add_bell_accents(c, bl, mel.key, mel.scale, mel.harmony, 16, BARS, vel=34,
                        per_bar=1, seed=903)
     S.humanize_timing(bl, 0.02, seed=904)
     return c
@@ -355,13 +365,14 @@ def build_strategic() -> C.Cue:
     旋律以四度五度跳进连接（不是级进）：跳进让一条慢旋律显得"远"。
     """
     c = _new("strategic", "远望", 64, "C", "major")
+    mel = MEL.STRATEGIC
     pd = c.stem("pad", program=S.GM["pad_warm"])
-    C.add_pad(c, pd, "C", "major", C.CANON, 0, BARS, beats_per_chord=8,
+    C.add_pad(c, pd, mel.key, mel.scale, mel.harmony, 0, BARS, beats_per_chord=8,
               low=55, high=76, vel=42)
     S.humanize_timing(pd, 0.08, seed=601)
 
     v = c.stem("vibraphone", program=S.GM["vibraphone"], gain_db=-4.0)
-    C.add_harp_figures(c, v, "C", "major", C.CANON, 0, BARS, low=72, high=91,
+    C.add_harp_figures(c, v, mel.key, mel.scale, mel.harmony, 0, BARS, low=72, high=91,
                        vel=32, span=6)
     S.humanize_timing(v, 0.03, seed=602)
 
@@ -371,7 +382,7 @@ def build_strategic() -> C.Cue:
     S.humanize_timing(p, 0.026, seed=603)
 
     bl = c.stem("bells", program=S.GM["celesta"], gain_db=-9.0)
-    C.add_bell_accents(c, bl, "C", "major", C.CANON, 8, BARS, vel=36,
+    C.add_bell_accents(c, bl, mel.key, mel.scale, mel.harmony, 8, BARS, vel=36,
                        per_bar=1, low=81, high=93, seed=604)
     return c
 
@@ -394,7 +405,8 @@ def build_battle() -> S.Cue:
     第 3 个乐句交给双簧管唱 B——每件乐器只在自己的乐句里说话。
     """
     c = _new("battle", "出征", 104, "D", "minor")
-    ROM = C.MARCH
+    mel = MEL.BATTLE
+    ROM = mel.harmony
 
     # 钢琴：右手固定 8 分音型（推进力），左手低音；A 段在第 2、4 乐句由钢琴唱
     p = c.stem("piano", program=S.GM["acoustic_grand"], gain_db=-2.0)
@@ -442,7 +454,8 @@ def build_battle_b() -> C.Cue:
     （`battle_strings`）：长音 + 上行四度写成的"号子"，不是基础版的踏步附点。
     """
     c = _new("battle_b", "出征·弦乐", 104, "D", "minor")
-    ROM = C.MARCH
+    mel = MEL.BATTLE_STRINGS
+    ROM = mel.harmony
 
     # 弦乐：每小节四个四分音符的断奏（推进）+ 中音区长音（张力）
     #       第 3 个乐句由它唱旋律 A（弦乐的中音区正是这条 A 段写的音区）
@@ -496,7 +509,8 @@ def build_battlefield() -> S.Cue:
     钢琴在双簧管唱的时候**整段闭嘴**。
     """
     c = _new("battlefield", "余烬", 66, "D", "minor")
-    ROM = C.MARCH
+    mel = MEL.BATTLEFIELD
+    ROM = mel.harmony
 
     p = c.stem("piano", program=S.GM["acoustic_grand"])
     C.render_melody(c, p, MEL.BATTLEFIELD, skip=(1, 3), vel_scale=0.95)
@@ -528,11 +542,12 @@ def build_sting_victory() -> S.Cue:
     上行琶音 + 弦乐渐强 + 一记钟琴落在主音上，两小节结束。"""
     c = _new("sting_victory", "凯旋", 72, "D", "major", bars=2, loop=False)
     p = c.stem("piano", program=S.GM["acoustic_grand"])
-    seq = [50, 54, 57, 62, 66, 69, 74]
-    for i, pit in enumerate(seq):
-        p.add(i * 0.25, 1.5, pit, 58 + i * 4)
-    p.add(1.75, 3.0, 74, 76)
-    p.add(1.75, 3.0, 62, 62)
+    # 一条两小节的旋律（不是琶音）：五音起 → 上行到主音 → 顶点 A5 → 回落 D6 落定。
+    # 起于五音、落在主音，是"松了一口气"的形状；与"抵达"的竖琴掠过是两件事。
+    for (beat, dur, pit, vel) in ((0.0, 1.0, 69, 62), (1.0, 1.0, 74, 64),
+                                  (2.0, 2.0, 78, 68), (4.0, 1.0, 81, 66),
+                                  (5.0, 1.0, 78, 64), (6.0, 2.5, 86, 72)):
+        p.add(beat, dur, pit, vel)
     S.pedal_bars(p, c, 0, 2, "per_bar")
 
     st = c.stem("strings", program=S.GM["strings_ensemble"], gain_db=-1.0)

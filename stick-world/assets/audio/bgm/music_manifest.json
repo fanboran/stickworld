@@ -253,8 +253,8 @@
       "loop": true,
       "loop_offset": 0.0,
       "key": "F major",
-      "duration_s": 132.395,
-      "loudness_lufs": -15.03,
+      "duration_s": 132.414,
+      "loudness_lufs": -15.01,
       "layers": [
         {
           "name": "piano",
@@ -509,8 +509,8 @@
       "loop": false,
       "loop_offset": 0.0,
       "key": "D major",
-      "duration_s": 27.802,
-      "loudness_lufs": -14.08,
+      "duration_s": 27.856,
+      "loudness_lufs": -14.18,
       "layers": [
         {
           "name": "bells",

@@ -41,7 +41,10 @@ python tools/music/preview.py
 python tools/music/preview.py --cue field_day --tier-cues field_day
 python tools/music/melody_reel.py       # 只混"唱旋律的层"串一条（听"每曲是不是不同的曲子"）
 
-# 6) 音色体检（改混音配方前后对比八度带分布，别凭感觉调 EQ）
+# 6) 乐谱（MusicXML：能被 MuseScore 打开、能打印；随仓库入库）
+python tools/music/export_scores.py
+
+# 7) 音色体检（改混音配方前后对比八度带分布，别凭感觉调 EQ）
 python tools/music/tone_check.py
 python tools/music/tone_check.py --stems interior
 python tools/music/tone_check.py --raw C4v10.flac
@@ -107,10 +110,13 @@ python tools/music/qa_audio.py --delivered             # 检查交付的 OGG 而
 | `preview.py` | **试听样带**：分层叠好→MP3（全层版/分层同增益对比/串烧/循环三遍验接缝） |
 | `melody_reel.py` | **旋律串烧**：只混旋律层串一条，验收"每曲是否真有自己的旋律" |
 | `qa_audio.py` | 质检报告与阈值判定 |
+| `export_scores.py` | **乐谱导出**：MusicXML（逐音对应 + 自检：小节时值 / 连音线 / 音高直方图） |
+| `musiclib/sheet.py` | MusicXML 写入与自检（记谱量化、分声部、连音线、反复记号） |
 | `tone_check.py` | 音色体检（八度带分布 / 频谱斜率 / 有源帧谱质心） |
 | `ambience.py` | 环境音层生成（风/鸟/蝉/夜虫/海浪/溪流） |
 | `docs/ambience_sources.md` | 环境音层的来源与许可登记 |
 | `out/` | 中间产物（MIDI / 分轨 WAV / 母带 WAV / 报告），**gitignored** |
+| `scores/` | **乐谱（MusicXML）**，随仓库入库（口径见该目录 README） |
 
 交付件写到 `stick-world/assets/audio/bgm/<cue>/<layer>.ogg` + `music_manifest.json`
 （进版本库，游戏直接加载）。

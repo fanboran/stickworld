@@ -62,8 +62,8 @@ def process_cue(cue, skip_render: bool = False, skip_ogg: bool = False,
     target = None if is_loop else -14.0
     audio, report, processed = MIX.mix_cue(
         cue, {n: i["wav"] for n, i in render_info.items()},
-        overrides=overrides, target_lufs=target, wrap_tail=is_loop,
-        return_stems=True)
+        overrides=overrides, balance=CUES.LAYER_BALANCE_BY_CUE.get(cid, {}),
+        target_lufs=target, wrap_tail=is_loop, return_stems=True)
     # 交付分层 = 逐层做线性整形 + 同一个总线增益（这样叠起来才等于母带）
     layers, dinfo = MIX.deliver_layers(
         cue, processed, target_lufs=target, wrap_tail=is_loop,
@@ -142,7 +142,7 @@ def main() -> int:
             print("[错误] 找不到 %s；先跑一次 render_all.py" % MIX_REPORT, file=sys.stderr)
             return 2
         reports = json.loads(MIX_REPORT.read_text(encoding="utf-8"))
-        manifest = EX.build_manifest(reports)
+        manifest = EX.build_manifest(reports, CUES.VARIATION_SETS)
         EX.write_manifest(manifest, str(DELIVER / "music_manifest.json"))
         print("[清单] 已按现有报告重建：%d 个 cue / %d 个层"
               % (manifest["cue_count"],
@@ -178,7 +178,7 @@ def main() -> int:
     MIX_REPORT.write_text(json.dumps(reports, ensure_ascii=False, indent=2),
                           encoding="utf-8")
     if not args.skip_ogg:
-        manifest = EX.build_manifest(reports)
+        manifest = EX.build_manifest(reports, CUES.VARIATION_SETS)
         EX.write_manifest(manifest, str(DELIVER / "music_manifest.json"))
         print("\n[交付] %d 个 cue 写入 %s" % (len(reports), DELIVER))
         print("[清单] %s（%d 个 cue / %d 个层）"

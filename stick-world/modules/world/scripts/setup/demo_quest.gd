@@ -299,6 +299,9 @@ func _show_victory() -> void:
 		return
 	if AudioManager != null:
 		AudioManager.play_event("victory_fanfare")
+	if MusicDirector != null and MusicDirector.has_method("play_stinger"):
+		# 音乐上的"落定"：礼炮是音效层，这句是音乐层（8 小节、按自身长度压限音乐）
+		MusicDirector.play_stinger("sting_conquest")
 	var elapsed_sec: float = (Time.get_ticks_msec() - _start_msec) / 1000.0
 	var minutes: int = int(elapsed_sec) / 60
 	var seconds: int = int(elapsed_sec) % 60

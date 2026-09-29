@@ -1,7 +1,8 @@
 # 音乐管线（tools/music）
 
-> 从**作曲**到**游戏内可播放的 OGG** 的完整离线管线。九首曲子（一部主题与变奏集）、
-> 分层渲染、无缝循环、混音母带、客观质检，全部由代码生成、可复现。
+> 从**作曲**到**游戏内可播放的 OGG** 的完整离线管线。十七首曲子（每首一条自己的
+> 旋律与和声骨架）、分层渲染、无缝循环、混音母带、客观质检，
+> 全部由代码生成、可复现。
 >
 > 想了解音乐本身怎么设计 → [docs/设计/音乐/](../../docs/设计/音乐/)；
 > 想了解运行时怎么放 → [docs/技术/架构/音乐系统.md](../../docs/技术/架构/音乐系统.md)；
@@ -19,7 +20,13 @@ pip install -r tools/music/requirements.txt
 python tools/music/setup_toolchain.py
 python tools/music/setup_toolchain.py --verify     # 校验采样指纹与音源 sha256
 
-# 2) 管线自检（验证 DSP/响度/循环/导出"算得对"，不是"能跑通"）
+# 2) 写谱自检（调外音 / 和声避讳音 / 音区 / 留白，渲染前先跑）
+python tools/music/compose/check_melody.py
+
+# 2c) 改了和声骨架之后：把谱面注释里的和弦功能同步过来（否则注释在说谎）
+python tools/music/compose/annotate_melody.py --write
+
+# 2b) 管线自检（验证 DSP/响度/循环/导出"算得对"，不是"能跑通"）
 python tools/music/selftest.py
 
 # 3) 一键：谱面 → MIDI → 分轨渲染 → 混音 → 母带 → 交付 OGG + 清单
@@ -32,8 +39,12 @@ python tools/music/qa_audio.py --check   # 有违规即非零退出（可进 CI�
 # 5) 试听样带（把分层叠好、编码成能直接双击播放的 MP3，供人听验收）
 python tools/music/preview.py
 python tools/music/preview.py --cue field_day --tier-cues field_day
+python tools/music/melody_reel.py       # 只混"唱旋律的层"串一条（听"每曲是不是不同的曲子"）
 
-# 6) 音色体检（改混音配方前后对比八度带分布，别凭感觉调 EQ）
+# 6) 乐谱（MusicXML：能被 MuseScore 打开、能打印；随仓库入库）
+python tools/music/export_scores.py
+
+# 7) 音色体检（改混音配方前后对比八度带分布，别凭感觉调 EQ）
 python tools/music/tone_check.py
 python tools/music/tone_check.py --stems interior
 python tools/music/tone_check.py --raw C4v10.flac
@@ -82,8 +93,11 @@ python tools/music/qa_audio.py --delivered             # 检查交付的 OGG 而
 | `toolchain_pins.json` | **工具链钉版清单**（采样 commit + 逐文件 blob 指纹 + SoundFont sha256），入库 |
 | `gen_toolchain_pins.py` | 生成/更新上面那份清单（需 `GITHUB_TOKEN`，只在有意换版本时跑） |
 | `selftest.py` | 管线自检（已知答案的输入 → 验证输出） |
-| `compose/common.py` | **音乐基因**：主主题（级数化）、和声进行、编曲助手、力度/音区规则 |
-| `compose/cues.py` | 九首曲子的定义（分层、调性、混音覆盖） |
+| `compose/themes.py` | **旋律库**：14 条原创旋律（级数化谱面 + 自带和声骨架 + 每条乐句带推荐八度） |
+| `compose/common.py` | **编曲基因**：骨架条目库（`SKELETONS`）、级数→音高、编曲助手、力度/音区规则 |
+| `compose/cues.py` | 十七首曲子的定义（旋律 + 编制 + 分层 + 混音覆盖） |
+| `compose/check_melody.py` | **写谱自检**：调外音 / 和声避讳音 / 音区 / 留白（渲染前跑） |
+| `compose/annotate_melody.py` | **注释同步**：按骨架重写谱面注释里的和弦功能（换和声后跑） |
 | `musiclib/theory.py` | 乐理层：音高/音阶/和弦/级数/声部连接/音型 |
 | `musiclib/score.py` | 谱面数据结构 + MIDI 导出 + 人性化（力度/踏板/微时值） |
 | `musiclib/render.py` | 分轨离线渲染（sfizz 钢琴 / FluidSynth 编制） |
@@ -94,11 +108,15 @@ python tools/music/qa_audio.py --delivered             # 检查交付的 OGG 而
 | `musiclib/export.py` | OGG 编码 + 引擎清单生成 |
 | `render_all.py` | 总编排 |
 | `preview.py` | **试听样带**：分层叠好→MP3（全层版/分层同增益对比/串烧/循环三遍验接缝） |
+| `melody_reel.py` | **旋律串烧**：只混旋律层串一条，验收"每曲是否真有自己的旋律" |
 | `qa_audio.py` | 质检报告与阈值判定 |
+| `export_scores.py` | **乐谱导出**：MusicXML（逐音对应 + 自检：小节时值 / 连音线 / 音高直方图） |
+| `musiclib/sheet.py` | MusicXML 写入与自检（记谱量化、分声部、连音线、反复记号） |
 | `tone_check.py` | 音色体检（八度带分布 / 频谱斜率 / 有源帧谱质心） |
 | `ambience.py` | 环境音层生成（风/鸟/蝉/夜虫/海浪/溪流） |
 | `docs/ambience_sources.md` | 环境音层的来源与许可登记 |
 | `out/` | 中间产物（MIDI / 分轨 WAV / 母带 WAV / 报告），**gitignored** |
+| `scores/` | **乐谱（MusicXML）**，随仓库入库（口径见该目录 README） |
 
 交付件写到 `stick-world/assets/audio/bgm/<cue>/<layer>.ogg` + `music_manifest.json`
 （进版本库，游戏直接加载）。

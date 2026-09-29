@@ -20,10 +20,13 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 
 const MANIFEST_PATH := "res://assets/audio/bgm/music_manifest.json"
 const BGM_DIR := "res://assets/audio/bgm/"
-## 游戏流程实际会触发的全部 cue + 两首结算短句
+## 游戏流程实际会触发的全部 cue（含变奏 B 组与三首标点）
 const EXPECTED_CUES := [
-	"menu_title", "field_day", "field_night", "village", "interior",
-	"strategic", "battle", "sting_victory", "sting_defeat",
+	"menu_title", "field_day", "field_day_b", "field_night",
+	"village", "village_b", "village_night",
+	"interior", "interior_hall", "strategic",
+	"battle", "battle_b", "battlefield",
+	"sting_victory", "sting_defeat", "sting_conquest", "sting_arrival",
 ]
 
 var _runner: TestRunner
@@ -34,12 +37,16 @@ func _ready() -> void:
 	MusicDirector.set_enabled(false)      # 本套件只测逻辑，不出声
 	_runner = TestRunner.new()
 	_runner.add_test("清单: 文件存在且格式正确", _test_manifest_shape, false)
-	_runner.add_test("清单: 九个 cue 齐备", _test_all_cues_present, false)
+	_runner.add_test("清单: 全部 cue 齐备（17 首）", _test_all_cues_present, false)
 	_runner.add_test("清单: 每 cue 字段完整", _test_cue_fields, false)
 	_runner.add_test("清单: 层文件真实存在", _test_layer_files_exist, false)
 	_runner.add_test("清单: 循环体是整数小节", _test_loop_is_integer_bars, false)
 	_runner.add_test("解析: 情境 → 曲目", _test_resolve_cue, false)
 	_runner.add_test("解析: 优先级 战斗>室内>战略图>地图", _test_resolve_priority, false)
+	_runner.add_test("变奏: 族成员同调同速同长同层名", _test_variation_family_contract, false)
+	_runner.add_test("变奏: 再次进入同一场景换一版", _test_variation_rotation, false)
+	_runner.add_test("标点: 抵达打点、战斗结算不打点", _test_arrival_stinger, false)
+	_runner.add_test("标点: 压限按短句长度释放", _test_stinger_duck_hold, true)
 	_runner.add_test("分层: tier 控制层音量", _test_tier_gating, false)
 	_runner.add_test("曲目表: 与清单同源同序", _test_track_list, false)
 	_runner.add_test("预览: 起播/满层/循环开关/暂停", _test_preview_playback, false)
@@ -53,6 +60,11 @@ func _ready() -> void:
 
 func _run_tests_async() -> void:
 	await _runner.run_async()
+	# 收尾：停掉短句与曲目播放器，否则退出时报"资源仍在使用"（污染报错自检）
+	MusicDirector.stop_stinger()
+	MusicDirector.stop_all(0.0)
+	await get_tree().process_frame
+	await get_tree().process_frame
 	print(_runner.summary())
 	MusicDirector.set_enabled(true)
 	get_tree().quit(0 if _runner.all_passed() else 1)
@@ -145,11 +157,12 @@ func _test_loop_is_integer_bars() -> void:
 func _test_resolve_cue() -> void:
 	var cases := [
 		[{"map_type": 0}, "village", "村落地图 → 小镇"],
+		[{"map_type": 0, "night": true}, "village_night", "村落 夜晚 → 夜镇"],
 		[{"map_type": 3}, "interior", "室内地图 → 灯下"],
-		[{"map_type": 4}, "interior", "大建筑内部 → 灯下"],
+		[{"map_type": 4}, "interior_hall", "大建筑内部 → 厅堂"],
 		[{"map_type": 2}, "field_day", "道路/户外 白天 → 原野·昼"],
 		[{"map_type": 2, "night": true}, "field_night", "户外 夜晚 → 原野·夜"],
-		[{"map_type": 1}, "battle", "战场地图 → 出征"],
+		[{"map_type": 1}, "battlefield", "战场地图（非交战）→ 余烬"],
 		[{"map_type": -1}, "field_day", "未知地图兜底 → 户外白天"],
 	]
 	MusicDirector.set_context("started", true)
@@ -184,6 +197,118 @@ func _test_resolve_priority() -> void:
 	MusicDirector.set_context("battle", false)
 	MusicDirector.set_context("interior", false)
 	MusicDirector.set_context("strategic", false)
+
+
+# ─────────────────────────────── 变奏族 ────────────────────────────────
+
+## 族成员必须**同调、同速、同长、层名一一对应**——运行时轮换的无缝前提。
+## 这条守的是"作曲侧改了变奏却忘了对齐基础曲"（改完听着会发现，但没人天天听）。
+func _test_variation_family_contract() -> void:
+	var man := _load_manifest()
+	var sets: Dictionary = man.get("variation_sets", {})
+	_runner.assert_gt(sets.size(), 0,
+		"清单应带 variation_sets（作曲侧声明，运行时据此轮换）")
+	var cues := _cues()
+	for base in sets.keys():
+		var members: Array = sets[base]
+		_runner.assert_gt(members.size(), 1, "%s 的变奏族应至少两个成员" % base)
+		_runner.assert_true(cues.has(base), "族基准 %s 应在清单里" % base)
+		var ref: Dictionary = cues.get(base, {})
+		var ref_layers := _layer_names(ref)
+		for m in members:
+			_runner.assert_true(cues.has(m), "族成员 %s 应在清单里" % m)
+			if not cues.has(m):
+				continue
+			var c: Dictionary = cues[m]
+			_runner.assert_equal(int(c.get("bpm", 0)), int(ref.get("bpm", -1)),
+				"%s 与 %s 的 BPM 必须一致（轮换不能变速）" % [m, base])
+			_runner.assert_equal(int(c.get("beat_count", 0)), int(ref.get("beat_count", -1)),
+				"%s 与 %s 的循环拍数必须一致（轮换要对齐小节）" % [m, base])
+			_runner.assert_equal(int(c.get("bar_beats", 0)), int(ref.get("bar_beats", -1)),
+				"%s 与 %s 的拍号必须一致" % [m, base])
+			_runner.assert_equal(str(c.get("key", "")), str(ref.get("key", "")),
+				"%s 与 %s 的调性必须一致" % [m, base])
+			_runner.assert_equal(str(c.get("loop", "")), str(ref.get("loop", "")),
+				"%s 与 %s 的循环属性必须一致" % [m, base])
+			_runner.assert_true(_layer_names(c) == ref_layers,
+				"%s 与 %s 的层名集合必须一致（运行时按层名整体替换）" % [m, base])
+
+
+func _layer_names(entry: Dictionary) -> Array:
+	var out: Array = []
+	for l in entry.get("layers", []):
+		out.append(str(l["name"]))
+	out.sort()
+	return out
+
+
+## 再次进入同一场景 → 换同族另一版（抗疲劳轮换的对外行为）。
+func _test_variation_rotation() -> void:
+	MusicDirector.set_context("started", true)
+	MusicDirector.set_context("battle", false)
+	MusicDirector.set_context("interior", false)
+	MusicDirector.set_context("strategic", false)
+	MusicDirector.set_context("night", false)
+	MusicDirector.set_context("map_type", 2)        # 先离开（去户外）
+	MusicDirector.set_context("map_type", 0)        # 第 1 次进村落
+	var first := MusicDirector.get_cue()
+	_runner.assert_true(first in ["village", "village_b"],
+		"村落应解析到小镇或它的变奏（实际 %s）" % first)
+	MusicDirector.set_context("map_type", 2)        # 离开
+	MusicDirector.set_context("map_type", 0)        # 第 2 次进村落
+	var second := MusicDirector.get_cue()
+	_runner.assert_true(second in ["village", "village_b"],
+		"第 2 次进村落应仍解析到同族（实际 %s）" % second)
+	_runner.assert_not_equal(second, first,
+		"连续两次进入同一场景应换一版（实测 %s → %s）" % [first, second])
+	# 收尾：回到户外，避免影响后续用例
+	MusicDirector.set_context("map_type", 2)
+
+
+# ─────────────────────────────── 标点（stinger）────────────────────────────
+
+## 跨图抵达打点、首发加载不打点；战斗结算用结算短句（不是抵达短句）。
+func _test_arrival_stinger() -> void:
+	_runner.assert_true(MusicDirector.has_cue("sting_arrival"),
+		"清单里应有抵达标点 sting_arrival")
+	_runner.assert_true(MusicDirector.has_cue("sting_conquest"),
+		"清单里应有入主标点 sting_conquest")
+	MusicDirector.set_enabled(true)
+	MusicDirector.set_context("started", true)
+	# 首发加载（没有 travel_started）→ 不打点
+	EventBus.map_loaded.emit("map_a", 2)
+	_runner.assert_equal(MusicDirector.get_stinger_cue(), "",
+		"首发加载不该打抵达标点")
+	# 跨图：travel_started → 下一次 map_loaded 打点
+	EventBus.travel_started.emit("map_a", "map_b", 0)
+	EventBus.map_loaded.emit("map_b", 2)
+	_runner.assert_equal(MusicDirector.get_stinger_cue(), "sting_arrival",
+		"跨图抵达应打 sting_arrival（实际 %s）" % MusicDirector.get_stinger_cue())
+	MusicDirector.stop_stinger()
+	MusicDirector.set_enabled(false)
+
+
+## 短句压限**按短句自身长度**释放：长标点不能被短保持提前放开。
+func _test_stinger_duck_hold() -> void:
+	MusicDirector.set_enabled(true)
+	AudioManager.release_music_duck(&"sting", 0.0)
+	_runner.assert_approx(AudioManager.get_music_duck_db(), 0.0, 0.001,
+		"起测前不应有残留压限")
+	MusicDirector.play_stinger("sting_arrival")
+	_runner.assert_approx(AudioManager.get_music_duck_db(),
+		MusicDirector.DUCK_STINGER, 0.001,
+		"短句播放期间应请求浅压限")
+	var dur := float(_cues().get("sting_arrival", {}).get("duration_s", 4.0))
+	# 等短句播完 + 释放时间；若实现用的是固定 2.5s 保持，这里会提前放开
+	await _wait_s(dur + 1.2)
+	_runner.assert_approx(AudioManager.get_music_duck_db(), 0.0, 0.001,
+		"短句结束后压限应自行释放（实测 %.2f）" % AudioManager.get_music_duck_db())
+	MusicDirector.stop_stinger()
+	MusicDirector.set_enabled(false)
+
+
+func _wait_s(sec: float) -> void:
+	await get_tree().create_timer(sec, true, false, true).timeout
 
 
 # ─────────────────────────────── 分层 ────────────────────────────────
@@ -319,8 +444,10 @@ func _test_preview_isolation() -> void:
 	MusicDirector.set_context("battle", false)
 	MusicDirector.set_context("interior", false)
 	MusicDirector.set_context("strategic", false)
-	MusicDirector.set_context("map_type", 2)     # 户外 → field_day
-	_runner.assert_equal(MusicDirector.get_cue(), "field_day", "先落到户外昼曲")
+	MusicDirector.set_context("map_type", 2)     # 户外 → field_day（或它的变奏，见变奏族）
+	var before := MusicDirector.get_cue()
+	_runner.assert_true(before in ["field_day", "field_day_b"],
+		"先落到户外昼曲（或其变奏）")
 	MusicDirector.set_tier(1, 0.0)
 	# 预览一首：随后的情境变化不许把它换掉
 	MusicDirector.start_preview("battle", true)
@@ -331,7 +458,9 @@ func _test_preview_isolation() -> void:
 	# 退场：回到入场前那首与原强度
 	MusicDirector.stop_preview(0.0)
 	_runner.assert_false(MusicDirector.is_previewing(), "退场后不再是预览态")
-	_runner.assert_equal(MusicDirector.get_cue(), "field_day", "退场应还原入场前的曲目")
+	_runner.assert_equal(MusicDirector.get_cue(), before,
+		"退场应还原入场前的曲目（实测 %s，入场前 %s）"
+		% [MusicDirector.get_cue(), before])
 	_runner.assert_equal(MusicDirector.get_tier(), 1, "退场应还原入场前的强度档")
 	MusicDirector.set_context("map_type", -1)
 	MusicDirector.set_enabled(false)

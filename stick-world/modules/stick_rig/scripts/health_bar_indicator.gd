@@ -56,6 +56,15 @@ const COLOR_OUTLINE := Color(0.05, 0.04, 0.03, 0.95)
 const COLOR_TRAIL := Color(1.0, 0.97, 0.9, 0.95)
 ## 低血闪烁（<30% 填充明度波动）
 const LOW_THRESHOLD: float = 0.3
+## ── 军衔标记（血条上侧方点：rank0 无 / 1=一点 / 2=两点 / 3=三点）──
+## 方点边长（px，局部）：像素口径取整，缩放后仍可辨
+const RANK_DOT_SIZE: float = 4.0
+## 方点间距（px）
+const RANK_DOT_GAP: float = 2.0
+## 军衔点行中心 y：条顶 -3.5 / 圆点顶 -6.0 之上，留呼吸空隙
+const RANK_DOT_Y: float = -9.0
+## 军衔点颜色（白——阵营色条/暗色地面上可读；亮背景靠暗底垫层压底）
+const COLOR_RANK := Color(1.0, 1.0, 1.0, 0.96)
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 ## 当前血量比例 [0,1]
@@ -66,6 +75,8 @@ var _health: Node = null
 var _max_hp: float = 1.0
 ## 阵营 ID（0=未参战 → 灰点）
 var _faction: int = 0
+## 军衔（0=兵/1=班长/2=排长/3=指挥官）：拉取式读实体，决定上侧方点数
+var _rank: int = 0
 ## 是否受过伤（true 后圆点展开为横条；治疗回满退回圆点）
 var _ever_damaged: bool = false
 ## 展开进度 0(圆点)~1(全宽横条)
@@ -159,6 +170,8 @@ func get_bar_state() -> Dictionary:
 	return {
 		"active": _lod_visible and _ratio > 0.0 and _shown > 0.01,
 		"faction": _faction,
+		# 军衔随快照透传：批量桶与 billboard 镜像同源拿点数
+		"rank": _rank,
 		"shown": _shown,
 		"expand": _expand,
 		"ratio": _ratio,
@@ -201,6 +214,7 @@ func set_driven(v: bool) -> void:
 ## 喂入自驱实例的状态快照（get_bar_state 产物）。
 func apply_bar_state(s: Dictionary) -> void:
 	_faction = int(s.get("faction", 0))
+	_rank = clampi(int(s.get("rank", 0)), 0, 3)
 	_ratio = float(s.get("ratio", 1.0))
 	_shown = float(s.get("shown", 0.0))
 	_expand = float(s.get("expand", 0.0))
@@ -241,6 +255,16 @@ func set_faction(fid: int) -> void:
 	queue_redraw()
 
 
+## 设置军衔（由 StickmanEntity.set_rank 转发；班长轮转/任命即时重绘点数）。
+## 与 _process 的拉取兜底互为双通道：推送管即时性，拉取管装配时序漏推。
+func set_rank(r: int) -> void:
+	r = clampi(r, 0, 3)
+	if r == _rank:
+		return
+	_rank = r
+	queue_redraw()
+
+
 func _process(delta: float) -> void:
 	# LOD 频率闸门：节流档累积到 1/hz 才跑一次（delta 换成累计值，速率语义不变）
 	if _update_hz <= 0.0:
@@ -254,6 +278,12 @@ func _process(delta: float) -> void:
 	_anim_time += delta
 	# 跟头 x 对齐：头球中心水平跟随（动画摆头时标记贴着头走）
 	_follow_head()
+	# 军衔拉取：变了就重绘（班长轮转/任命时点数实时跟走；数据模式下
+	# _rank 经 get_bar_state 写进快照喂批量桶，billboard 镜像经 apply 喂）
+	var rk: int = _resolve_rank()
+	if rk != _rank:
+		_rank = rk
+		queue_redraw()
 	# 显示状态机：在战 / 掉血未满 / 悬浮的血量不满单位 → 显示；否则渐隐
 	_threat_timer -= delta
 	if _threat_timer <= 0.0:
@@ -354,6 +384,8 @@ func _draw() -> void:
 	# 展开未完成时叠加阵营圆点（渐隐）
 	if _expand < 0.999:
 		_draw_dot(color)
+	# 军衔方点（血条上侧，最上层）
+	_draw_rank_dots()
 
 
 ## 阵营色小圆点（展开进度越完整越淡出）
@@ -367,6 +399,37 @@ func _draw_dot(color: Color) -> void:
 	var loop := pts.duplicate()
 	loop.append(pts[0])
 	draw_polyline(loop, o, OUTLINE_WIDTH)
+
+
+## 从所属实体拉取军衔（0=兵/1=班长/2=排长/3=指挥官）。
+## rank 正式字段由编制侧（stickman_entity）落地，此处三级兜底读取：
+## get_rank() → rank 属性 → "rank" meta——字段一立好即自动接通，无需再改本类。
+func _resolve_rank() -> int:
+	var entity := get_parent()
+	if entity == null or not is_instance_valid(entity):
+		return 0
+	if entity.has_method("get_rank"):
+		return clampi(int(entity.get_rank()), 0, 3)
+	if "rank" in entity:
+		return clampi(int(entity.get("rank")), 0, 3)
+	if entity.has_meta("rank"):
+		return clampi(int(entity.get_meta("rank")), 0, 3)
+	return 0
+
+
+## 军衔方点：血条上侧横排居中（rank0 无标记；1/2/3 = 1/2/3 点）。
+## 像素口径取整、不参与 boiling 扰动——信息层清晰优先；白点下垫暗底，
+## 亮背景（天空/浅色地面）下也可读。
+func _draw_rank_dots() -> void:
+	if _rank <= 0:
+		return
+	var s: float = RANK_DOT_SIZE
+	var x: float = -(_rank * s + (_rank - 1) * RANK_DOT_GAP) * 0.5
+	for i in _rank:
+		var cx: float = x + i * (s + RANK_DOT_GAP)
+		# 暗底垫层（四周外扩 1px，压亮背景）
+		draw_rect(Rect2(cx - 1.0, RANK_DOT_Y - s * 0.5 - 1.0, s + 2.0, s + 2.0), COLOR_BG)
+		draw_rect(Rect2(cx, RANK_DOT_Y - s * 0.5, s, s), COLOR_RANK)
 
 
 ## 手绘风横条：背景条 + 白残影 + 阵营填充 + 粗黑手绘描边。

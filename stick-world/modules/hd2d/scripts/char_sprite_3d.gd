@@ -73,12 +73,15 @@ var _my_shadow: MeshInstance3D = null
 var _flip := false
 var _anim := "idle"
 var _depth := 1.0
+## 纯后台计算豁免（headless）：真视觉链不装配，见 build() 内注释
+var _pure_sim := false
 
 
 ## 建 SubViewport + 火柴人。parent 必须是已在树内的节点。
 func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	_host = parent
 	_tilt_deg = tilt_deg
+	_pure_sim = DisplayServer.get_name() == "headless"
 	# 强制走**矢量部件路径**（旧路径），不走 MultiMesh 批渲染。
 	# 实测：批渲染路径在本 SubViewport 里渲染出的是"未解算的横躺姿态"，
 	# 用 probe_rig3.gd（--char 对照）可复现。
@@ -90,6 +93,16 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	_sv_size = Vector2i(int(SV_W * px_scale), int(SV_H * px_scale))
 	_foot_row = FOOT_ROW * px_scale
 	var rig_scale := RIG_SCALE * px_scale
+	# 纯后台计算豁免（自对弈 Benchmark / 无头指标台）：SubViewport/CanvasGroup/
+	# 材质/接地影整条视觉链不装配——sim 开启时 sim 是命中时序权威，rig 只是
+	# 动画位置的兜底读源（实体链回退时仍可能轮询），故裸留一份不进视口。
+	if _pure_sim:
+		var inst0: Node = load(RIG_SCENE).instantiate()
+		inst0.set_script(null)
+		add_child(inst0)
+		rig = inst0.get_node("OutlineGroup/StickmanRig") as Node2D
+		rig.scale = Vector2(rig_scale, rig_scale)
+		return
 	viewport = SubViewport.new()
 	viewport.name = "CharSubViewport"
 	viewport.size = _sv_size
@@ -167,22 +180,23 @@ func add_char(x: float, z: float, flip: bool = false) -> MeshInstance3D:
 	add_child(mi)
 	quads.append(mi)
 
-	# 接地影：贴地水平 quad，随角色 x/z 走
-	var sq := QuadMesh.new()
-	sq.size = Vector2(4.2, 2.6) * SIZE_K
-	var sh := MeshInstance3D.new()
-	sh.mesh = sq
-	sh.material_override = _shadow_mat
-	sh.position = Vector3(x, 0.09, z)
-	sh.rotation = Vector3(deg_to_rad(-90), 0, 0)
-	sh.name = "Shadow_%d" % quads.size()
-	sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(sh)
-	if _shadow == null:
-		_shadow = sh
+	# 接地影：贴地水平 quad，随角色 x/z 走（纯后台计算豁免：不建）
+	if not _pure_sim:
+		var sq := QuadMesh.new()
+		sq.size = Vector2(4.2, 2.6) * SIZE_K
+		var sh := MeshInstance3D.new()
+		sh.mesh = sq
+		sh.material_override = _shadow_mat
+		sh.position = Vector3(x, 0.09, z)
+		sh.rotation = Vector3(deg_to_rad(-90), 0, 0)
+		sh.name = "Shadow_%d" % quads.size()
+		sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(sh)
+		if _shadow == null:
+			_shadow = sh
+		_my_shadow = sh
 	# 游戏接入：记录本实例的 quad/影引用（set_world_pos 每帧驱动）
 	_quad = mi
-	_my_shadow = sh
 	return mi
 
 
@@ -217,6 +231,8 @@ static func _get_bracket_tex() -> ImageTexture:
 var _bracket_quad: MeshInstance3D = null
 
 func set_bracket_visible(v: bool) -> void:
+	if _pure_sim:
+		return
 	if v and _bracket_quad == null and not quads.is_empty():
 		var q := QuadMesh.new()
 		q.size = Vector2(3.4, 2.2)
@@ -250,7 +266,7 @@ var _wp_ratio: float = -1.0           # -1 = 隐藏
 var _wp_anchor := Vector3.ZERO        # 本帧 (x, bar_y, z)，set_world_pos 写入
 
 func _ensure_work_bar() -> void:
-	if _wp_bg != null or _quad == null:
+	if _pure_sim or _wp_bg != null or _quad == null:
 		return
 	_wp_bg = _make_flat_quad(WP_SIZE, Color(0.08, 0.08, 0.10, 0.72), 6)
 	_wp_fill = _make_flat_quad(WP_SIZE, Color(0.95, 0.72, 0.18, 0.95), 7)
@@ -396,7 +412,7 @@ var _weapon_follow: RemoteTransform2D = null
 var _weapon_type_cached: int = -1
 
 func set_weapon_type(wt: int) -> void:
-	if wt == _weapon_type_cached:
+	if _pure_sim or wt == _weapon_type_cached:
 		return
 	_weapon_type_cached = wt
 	if _weapon_instance != null and is_instance_valid(_weapon_instance):

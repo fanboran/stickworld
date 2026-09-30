@@ -20,6 +20,36 @@ const WIN_RATE_LINE := 0.65     # 稳定战胜线
 
 
 func run() -> void:
+	var args := OS.get_cmdline_user_args()
+	if not args.is_empty():
+		_run_single(args)
+		return
+	_run_series()
+
+
+## 并行模式：run_parallel.py 每场起一个无头进程，经 `--` 用户参数下发本场配置，
+## JSON 结果落绝对路径由编排器汇总。这是 Benchmark 的正用形态（多核并行、纯后台）。
+func _run_single(args: PackedStringArray) -> void:
+	var cfg := {"index": "0", "side": "0", "brain_a": BRAIN_A, "brain_b": BRAIN_B, "out": ""}
+	for a in args:
+		var kv := String(a).trim_prefix("--").split("=", true, 1)
+		if kv.size() == 2 and cfg.has(kv[0]):
+			cfg[kv[0]] = kv[1]
+	var a_side := int(cfg.side)
+	var r := await _one_battle(a_side, cfg.brain_a, cfg.brain_b)
+	r["index"] = int(cfg.index)
+	r["a_side"] = a_side
+	var f := FileAccess.open(cfg.out, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(r))
+		f.close()
+	print("[Bench] 第%s场 A在%s：%s 胜（时长 %.0fs，战力 攻%d : 守%d）→ %s" % [
+		cfg.index, "攻方" if a_side == 0 else "守方", r["winner"],
+		r["duration_s"], r["str_a"], r["str_b"], cfg.out])
+	get_tree().quit(0)
+
+
+func _run_series() -> void:
 	print("[Bench] === 自对弈 Benchmark：A=%s vs B=%s，%d 场换边轮换 ===" % [
 		_brain_label(BRAIN_A), _brain_label(BRAIN_B), N_BATTLES])
 	var results: Array = []
@@ -34,7 +64,7 @@ func run() -> void:
 	get_tree().quit(0)
 
 
-func _one_battle(a_side: int) -> Dictionary:
+func _one_battle(a_side: int, path_a: String = BRAIN_A, path_b: String = BRAIN_B) -> Dictionary:
 	get_tree().change_scene_to_file(ARENA_SCENE)
 	await _frames(SETTLE_FRAMES)
 	var battle := _find_battle_instance()
@@ -42,8 +72,8 @@ func _one_battle(a_side: int) -> Dictionary:
 		return {"winner": "error", "duration_s": 0.0, "str_a": 0, "str_b": 0}
 	var fac_a := 0 if a_side == 0 else 1
 	var fac_b := 1 - fac_a
-	var brain_a: RefCounted = _make_brain(BRAIN_A, fac_a)
-	var brain_b: RefCounted = _make_brain(BRAIN_B, fac_b)
+	var brain_a: RefCounted = _make_brain(path_a, fac_a)
+	var brain_b: RefCounted = _make_brain(path_b, fac_b)
 	var frames := 0
 	while frames < TIMEOUT_FRAMES:
 		await _frames(TICK_EVERY)

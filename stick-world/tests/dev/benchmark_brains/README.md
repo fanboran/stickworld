@@ -10,8 +10,24 @@
 
 1. 把现任卫冕者的脚本路径填进 driver 的 `BRAIN_B`（首任卫冕者 = 内嵌默认 AI，即 `BRAIN_B` 留空）。
 2. 写挑战者 `my_brain_v2.gd`（继承/duck 复用 base），填进 `BRAIN_A`。
-3. headless 跑 `res://tests/dev/diag_arena_benchmark_shots.tscn`，胜率 ≥ 65% → 挑战者接替卫冕者（`BRAIN_B` 换成它），否则回炉。
-4. 接受者把脚本路径登记进本 README 的「历任卫冕者」表，形成可追溯的进步链。
+3. **并行跑 Benchmark（正用形态，多核并行纯后台）**：
+
+   ```bash
+   python stick-world/tests/dev/benchmark_brains/run_parallel.py --battles 8 \
+       --brain-a res://tests/dev/benchmark_brains/my_v2.gd
+   ```
+
+   每场一个无头 Godot 进程（剔除全部视觉装配：`char_sprite_3d` headless 豁免 +
+   `--headless` 无 GPU + battle_sim 批模拟内核），半数场次换边消除占位偏差，
+   结束输出胜率/左右偏置/稳定战胜线判定。
+4. 胜率 ≥ 65% → 挑战者接替卫冕者（`BRAIN_B` 换成它），否则回炉。
+5. 接受者把脚本路径登记进本 README 的「历任卫冕者」表，形成可追溯的进步链。
+
+## 封装层铁律
+
+选手与**附身玩家同权**：只能操作封装层对外暴露的接口（基类命令门面 + 只读观察），
+禁止直调内部实现、禁止全知透视——判据是"玩家附身操控时能做到的事"。改封装层内
+（接口语义不变）随便改；改封装层外（改变可做之事）必须先立接口契约。
 
 ## 历任卫冕者
 

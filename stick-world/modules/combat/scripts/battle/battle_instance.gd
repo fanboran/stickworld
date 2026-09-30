@@ -15,6 +15,8 @@ extends Node
 ## （_player_faction 与胜方一致），非攻方胜。未 set_player_faction 时默认攻方 = 旧测试兼容。
 ## 战役撤离（C3）：单位带 departed 标记（撤至地图边缘离场）计非存活——
 ## 守军全部离场或全灭同样触发战斗收束。
+## 溃散收敛（9k）：有效战力（未死且未溃逃）归零即结束——全员溃逃的残局
+## 不再悬挂，溃兵留在战场（战斗引用解除，不再重开）。
 
 const ScriptCoverSystem := preload("res://modules/combat/scripts/battle/cover_system.gd")
 const ScriptBattleAIDirector := preload("res://modules/combat/scripts/battle/battle_ai_director.gd")
@@ -77,7 +79,9 @@ var _casualties_defender: int = 0
 ## 相持超时上限（秒；<= 0 = 不限）——超时按剩余兵力判（多者胜，平局按守方胜），
 ## 防"溃逃—恢复—再战"长期相持永不收敛（结束判定补全；由开战调用方按需设置）
 var duration_limit: float = 0.0
-## 收束原因（"annihilation" / "mutual" / "timeout"；结算摘要与测试用）
+## 收束原因（"annihilation" / "rout" / "mutual" / "timeout"；结算摘要与测试用）：
+## annihilation=全灭（含撤离离场）、rout=有效战力溃散归零（9k 溃逃收敛）、
+## mutual=双方同时归零、timeout=相持超时
 var _end_reason: String = ""
 ## 收束瞬间双方存活数（_end 清空列表前快照，供结算摘要；监听方不必回查已释放实例）
 var _final_alive_attacker: int = 0
@@ -492,8 +496,13 @@ func get_player_faction() -> int:
 
 # ─────────────────────────────── 内部 ────────────────────────────────
 
-## 检查胜负条件：一方全灭（含战役撤离离场）则另一方胜；相持超时按剩余兵力判。
-## 结束判定三路（P2）：全灭/互灭（歼灭）→ 超时（相持收敛兜底）
+## 检查胜负条件（四路收束）：一方全灭（含战役撤离离场）→ 歼灭；
+## 一方有效战力归零（未死但全员溃逃，9k 溃逃收敛）→ 溃散；
+## 双方同时归零 → 平局；相持超时按剩余兵力判（兜底）。
+## 有效战力 = 未死 且 未溃逃（is_routed）且 未离场——全员溃逃的残局不再挂着
+## "打不死也停不下"：战斗结算落定，溃兵不追击不清场（实体留在战场，仅解除
+## 战斗引用；士气恢复脱离 routed 后战斗已结束，set_battle_instance 已断，
+## 不会重新开打，与 behavior_retreat 的"溃逃—恢复—再战"循环语义兼容）。
 func _check_victory() -> void:
 	var a_alive: int = _count_alive(_units_attacker)
 	var b_alive: int = _count_alive(_units_defender)
@@ -505,9 +514,18 @@ func _check_victory() -> void:
 		_end(State.DEFENDER_WIN, "annihilation")
 	elif b_alive == 0:
 		_end(State.ATTACKER_WIN, "annihilation")
-	elif duration_limit > 0.0 and _duration >= duration_limit:
-		# 相持超时：剩余兵力多者胜；相等/攻方更少 = 未能拿下，按守方胜
-		_end(State.ATTACKER_WIN if a_alive > b_alive else State.DEFENDER_WIN, "timeout")
+	else:
+		var a_eff: int = _count_effective(_units_attacker)
+		var b_eff: int = _count_effective(_units_defender)
+		if a_eff == 0 and b_eff == 0:
+			_end(State.DRAW, "rout")
+		elif a_eff == 0:
+			_end(State.DEFENDER_WIN, "rout")
+		elif b_eff == 0:
+			_end(State.ATTACKER_WIN, "rout")
+		elif duration_limit > 0.0 and _duration >= duration_limit:
+			# 相持超时：剩余兵力多者胜；相等/攻方更少 = 未能拿下，按守方胜
+			_end(State.ATTACKER_WIN if a_alive > b_alive else State.DEFENDER_WIN, "timeout")
 
 
 ## 结算摘要（battle_ended 后的数据载荷；_end 已清空列表，故用收束快照）：
@@ -539,6 +557,23 @@ func _count_alive(units: Array) -> int:
 		if u.has_method("is_dead") and u.is_dead():
 			continue
 		if _is_departed(u):
+			continue
+		n += 1
+	return n
+
+
+## 有效战力计数（9k 溃逃收敛）：未死、未离场且未溃逃（is_routed）——溃兵不计入。
+## is_routed 走鸭式探测（测试桩可能无该方法：无方法视作有效，保持旧计数语义）。
+func _count_effective(units: Array) -> int:
+	var n: int = 0
+	for u in units:
+		if not is_instance_valid(u):
+			continue
+		if u.has_method("is_dead") and u.is_dead():
+			continue
+		if _is_departed(u):
+			continue
+		if u.has_method("is_routed") and u.is_routed():
 			continue
 		n += 1
 	return n

@@ -234,6 +234,12 @@ var _last_hit_ms: int = -999999
 const COMBAT_MORALE_RECOVER_DELAY: float = 3.0
 ## 脱火恢复速率倍率（相对 REST_MORALE_REGEN）
 const COMBAT_MORALE_RECOVER_FACTOR: float = 0.5
+## 脱战回血延迟（s）：距上次受击超过此秒数才开始回（9j；缺陷表口径"脱战 5s 后回"）
+const OUT_OF_COMBAT_HP_REGEN_DELAY: float = 5.0
+## 脱战回血速率（HP/s，整十口径；待实测校准）
+const OUT_OF_COMBAT_HP_REGEN_RATE: float = 10.0
+## 脱战回血上限（max_hp 比例）：最多回到血上限的 25%（战损留痕，9j 缺陷表口径）
+const OUT_OF_COMBAT_HP_REGEN_CAP_RATIO: float = 0.25
 ## 死亡后 Collider 禁用倒计时（s；-1=已禁用/未死。在 _physics_process 死亡分支计时，
 ## 替代 SceneTreeTimer lambda——清场竞态下 lambda 捕获失效报错）
 var _dead_disable_timer: float = -1.0
@@ -543,6 +549,7 @@ func _physics_process(delta: float) -> void:
 		# 实体只保留 AI 决策节流（上方）+ 意图速度标量/动画（_handle_ai_input→
 		# _apply_movement 末尾写 sim）+ 士气/硬直/markers。
 		_apply_rest_morale_recovery(delta)
+		_apply_rest_hp_recovery(delta)
 		if _hit_stun_timer > 0.0:
 			_hit_stun_timer = maxf(0.0, _hit_stun_timer - delta)
 		_sync_markers_transform()
@@ -576,6 +583,8 @@ func _physics_process(delta: float) -> void:
 		velocity = prev_velocity
 	# 士气自然恢复（AI 完善批次 3，行业最佳实践）：脱离战斗后逐渐回士气，防永久溃逃
 	_apply_rest_morale_recovery(delta)
+	# 脱战回血（9j）：脱离火线 5s 后 HP 缓慢恢复（上限 25% max_hp；附身单位走 _possess_regen）
+	_apply_rest_hp_recovery(delta)
 	# 击退冲量衰减
 	if _knockback_velocity != Vector2.ZERO:
 		var kb_len: float = _knockback_velocity.length()
@@ -808,6 +817,37 @@ func _possess_regen(delta: float) -> void:
 		var whole: int = int(_possess_regen_accum)
 		_possess_regen_accum -= float(whole)
 		health.heal(float(whole))
+
+
+## 脱战回血小数累积器（与附身回血同款：整数 HP 一口结算，避免高频小数 heal 刷屏）
+var _rest_regen_accum: float = 0.0
+
+
+## 脱战回血（9j 最简版：数值先通，血条渐补表现不做）：脱离火线（5s 未受击，
+## 与士气恢复同源的 _last_hit_ms 判定）后 HP 缓慢恢复，最多回到血上限的 25%
+## （战损留痕）。附身单位不叠此通道（走 SWL 真值 _possess_regen 慢回）。
+func _apply_rest_hp_recovery(delta: float) -> void:
+	if possessed or health_component == null:
+		return
+	if health_component.is_dead() or health_component.hp >= health_component.max_hp:
+		_rest_regen_accum = 0.0
+		return
+	var since_hit: float = (Time.get_ticks_msec() - _last_hit_ms) / 1000.0
+	if since_hit < OUT_OF_COMBAT_HP_REGEN_DELAY:
+		_rest_regen_accum = 0.0
+		return
+	var cap: float = health_component.max_hp * OUT_OF_COMBAT_HP_REGEN_CAP_RATIO
+	if health_component.hp >= cap:
+		_rest_regen_accum = 0.0
+		return
+	_rest_regen_accum += delta * OUT_OF_COMBAT_HP_REGEN_RATE
+	if _rest_regen_accum >= 1.0:
+		var whole: int = mini(int(_rest_regen_accum), int(cap - health_component.hp))
+		if whole > 0:
+			_rest_regen_accum -= float(whole)
+			health_component.heal(float(whole))
+		else:
+			_rest_regen_accum = 0.0  # 上限截断：尾差不足 1 HP，丢弃余量
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────

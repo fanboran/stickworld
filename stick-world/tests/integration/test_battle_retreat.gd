@@ -10,8 +10,11 @@ extends Node
 ##   1. C2 默认语义回归：player_faction 未传（=攻方），攻方胜 → victory=true
 ##   2. C2 守方语义：player_faction=2，守方胜 → victory=true（攻城战场景语义）
 ##   3. C3 撤仗：守军 TeamAi 注入撤退阈值，伤亡率超限 → ROUT → 全军撤离边缘
-##      departed → battle_ended(victory=true)（据点攻陷）
-##   4. C3 零回归：enable_team_ai 不注入撤退阈值 → 不撤仗，守军全灭判定照常
+##      departed → battle_ended(victory=true)（据点攻陷）——场景双方满士气，
+##      让"伤亡率→ROUT→撤离"先于 9k 溃散收敛发生（低士气会被溃散收敛抢先收束）
+##   4. C3 零回归：enable_team_ai 不注入撤退阈值 → 不撤仗，全灭/溃散收敛判定照常
+##   （9k 溃散收敛：有效战力归零即结束——弱方可能整体溃散提前收束而非死绝，
+##     收束原因 reason ∈ annihilation/rout 均合规，per-unit 全灭断言改按 reason 判）
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -40,6 +43,8 @@ var _game_root: Node
 var _formation: Node = null
 ## battle_ended 捕获：[victory]
 var _ended_victory: Array = []
+## battle_settled 捕获：[reason]（9k 溃散收敛后按收束原因断言，替代 per-unit 全灭检查）
+var _ended_reason: Array = []
 ## team_ai_stance_changed 捕获：faction 2 是否到过 ROUT(3)
 var _saw_rout: bool = false
 
@@ -65,6 +70,8 @@ func _run_tests_async() -> void:
 	if EventBus != null:
 		if EventBus.has_signal("battle_ended"):
 			EventBus.battle_ended.connect(_on_battle_ended)
+		if EventBus.has_signal("battle_settled"):
+			EventBus.battle_settled.connect(_on_battle_settled)
 		if EventBus.has_signal("team_ai_stance_changed"):
 			EventBus.team_ai_stance_changed.connect(_on_stance_changed)
 
@@ -106,6 +113,10 @@ func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 	_ended_victory.append(victory)
 
 
+func _on_battle_settled(_battle_id: String, summary: Dictionary) -> void:
+	_ended_reason.append(String(summary.get("reason", "")))
+
+
 func _on_stance_changed(_battle_id: String, faction: int, _from: int, to: int, _reason: String) -> void:
 	if faction == 2 and to == 3:
 		_saw_rout = true
@@ -113,29 +124,32 @@ func _on_stance_changed(_battle_id: String, faction: int, _from: int, to: int, _
 
 # ─────────────────────────────── 场景 ────────────────────────────────
 
-## 场景 1：攻强守弱 5v2，player_faction 默认 1（攻方）。攻方全歼守军 → victory=true。
+## 场景 1：攻强守弱 5v2，player_faction 默认 1（攻方）。攻方全歼/守军溃散 → victory=true。
 func _scenario_default_attacker_win(units: Dictionary) -> void:
 	if not units.has("battle"):
 		_runner.assert_true(false, "战斗未启动")
 		return
-	var defenders: Array = units["defenders"]
 	var ok: bool = await _await_battle_end()
 	_runner.assert_true(ok, "战斗应在 %.0fs 内结束" % BATTLE_TIMEOUT)
 	_runner.assert_true(_pop_victory() == true, "默认语义（攻方=玩家）：攻方胜 → victory=true")
-	_runner.assert_true(_all_dead(defenders), "守军应全灭（无撤仗配置走全灭判定）")
+	# 9k 溃散收敛：无撤仗配置的弱方可能整体溃散提前收束（不再保证死绝），歼灭/溃散均合规
+	var reason: String = _pop_reason()
+	_runner.assert_true(reason == "annihilation" or reason == "rout",
+			"守军应全灭或溃散收敛（实际 reason=%s）" % reason)
 	await _clear_units(units)
 
 
-## 场景 2：攻弱守强 1v4，player_faction=2（守方=玩家）。守方全歼攻方 → victory=true。
+## 场景 2：攻弱守强 1v4，player_faction=2（守方=玩家）。守方全歼/攻方溃散 → victory=true。
 func _scenario_defender_win_player_side(units: Dictionary) -> void:
 	if not units.has("battle"):
 		_runner.assert_true(false, "战斗未启动")
 		return
-	var attackers: Array = units["attackers"]
 	var ok: bool = await _await_battle_end()
 	_runner.assert_true(ok, "战斗应在 %.0fs 内结束" % BATTLE_TIMEOUT)
 	_runner.assert_true(_pop_victory() == true, "守方语义（player_faction=2）：守方胜 → victory=true")
-	_runner.assert_true(_all_dead(attackers), "攻方应全灭")
+	var reason: String = _pop_reason()
+	_runner.assert_true(reason == "annihilation" or reason == "rout",
+			"攻方应全灭或溃散收敛（实际 reason=%s）" % reason)
 	await _clear_units(units)
 
 
@@ -150,29 +164,34 @@ func _scenario_retreat_on_casualty(units: Dictionary) -> void:
 	_runner.assert_true(ok, "战斗应在 %.0fs 内结束" % BATTLE_TIMEOUT)
 	_runner.assert_true(_saw_rout, "守军 TeamAi 应切换到 ROUT 姿态（stance=3）")
 	_runner.assert_true(_pop_victory() == true, "守军撤离/全灭 → 玩家（攻方）胜 → victory=true")
-	# 撤仗路径验证：至少 1 名守军以 departed 离场（非死亡）
+	var reason: String = _pop_reason()
+	_runner.assert_true(reason == "annihilation" or reason == "rout",
+			"守军应撤离离场/全灭或溃散收敛（实际 reason=%s）" % reason)
+	# 撤仗路径验证：至少 1 名守军以 departed 离场（非死亡）——
+	# 场景双方满士气（见 _setup_battle），溃散收敛不会抢先截断撤离路径
 	var departed_count: int = 0
 	for e in defenders:
 		if is_instance_valid(e) and not (e.has_method("is_dead") and e.is_dead()) \
 				and "departed" in e and bool(e.get("departed")):
 			departed_count += 1
 	_runner.assert_true(departed_count > 0, "应有守军以 departed 离场（战役撤离路径，非全灭）")
-	print("[test] 撤仗场景：departed=%d/%d, stance_rout=%s" % [departed_count, defenders.size(), str(_saw_rout)])
+	print("[test] 撤仗场景：departed=%d/%d, stance_rout=%s, reason=%s" % [departed_count, defenders.size(), str(_saw_rout), reason])
 	await _clear_units(units)
 
 
 ## 场景 4：enable_team_ai(2) 不注入撤退阈值（默认全负）→ 撤仗评估关闭，
-## 守军打光走全灭判定（注册制零回归闸门）。
+## 守军打光走全灭/溃散收敛判定（注册制零回归闸门）。
 func _scenario_no_retreat_annihilation(units: Dictionary) -> void:
 	if not units.has("battle"):
 		_runner.assert_true(false, "战斗未启动")
 		return
-	var defenders: Array = units["defenders"]
 	var ok: bool = await _await_battle_end()
 	_runner.assert_true(ok, "战斗应在 %.0fs 内结束" % BATTLE_TIMEOUT)
 	_runner.assert_true(not _saw_rout, "无撤退阈值时 TeamAi 不应切 ROUT")
 	_runner.assert_true(_pop_victory() == true, "守军全灭 → 玩家胜 → victory=true")
-	_runner.assert_true(_all_dead(defenders), "守军应全灭（全灭判定照常）")
+	var reason: String = _pop_reason()
+	_runner.assert_true(reason == "annihilation" or reason == "rout",
+			"守军应全灭或溃散收敛（实际 reason=%s）" % reason)
 	await _clear_units(units)
 
 
@@ -184,6 +203,7 @@ func _scenario_no_retreat_annihilation(units: Dictionary) -> void:
 func _setup_battle(n_attackers: int, n_defenders: int, player_faction: int,
 		with_retreat: bool, team_ai_no_retreat: bool = false) -> Dictionary:
 	_ended_victory.clear()
+	_ended_reason.clear()
 	_saw_rout = false
 	var map: Node2D = _get_current_map()
 	if map == null:
@@ -204,6 +224,16 @@ func _setup_battle(n_attackers: int, n_defenders: int, player_faction: int,
 		var e: Node = _spawn_battle_unit(map, Vector2(mr - 500.0 + i * 40.0, spawn_y), hp)
 		if e != null:
 			defenders.append(e)
+	# 撤仗场景双方满士气：9k 溃散收敛下低士气（25）会在伤亡率触发前整体溃散
+	# 提前收束，压住 C3"伤亡率→ROUT→撤离"路径——满士气让撤仗决策先于溃散收敛
+	if with_retreat:
+		for side_units: Array in [attackers, defenders]:
+			for e: Node in side_units:
+				if is_instance_valid(e) and e.has_method("get_health"):
+					var h: Node = e.get_health()
+					if h != null:
+						h.max_morale = 100.0
+						h.morale = 100.0
 	await get_tree().process_frame
 	await get_tree().process_frame
 	# 撤仗场景的守军需要编战斗小队（TeamAi 号令按小队下发，散兵收不到号令）
@@ -256,13 +286,11 @@ func _pop_victory() -> bool:
 	return bool(_ended_victory.pop_front())
 
 
-func _all_dead(units: Array) -> bool:
-	for e in units:
-		if is_instance_valid(e):
-			if not (e.has_method("is_dead") and e.is_dead()) \
-					and not ("departed" in e and bool(e.get("departed"))):
-				return false
-	return true
+## 取走捕获的收束原因（FIFO；一场一报）
+func _pop_reason() -> String:
+	if _ended_reason.is_empty():
+		return ""
+	return String(_ended_reason.pop_front())
 
 
 func _get_current_map() -> Node2D:

@@ -1458,11 +1458,6 @@ func is_dead() -> bool:
 	return health_component != null and health_component.is_dead()
 
 
-## 是否溃逃（士气低于阈值且未死）
-func is_routed() -> bool:
-	return health_component != null and health_component.is_routed()
-
-
 # ─────────────────────────────── 受击反馈（§7.5 近战打击感）────────────────────────────────
 
 ## 受击反馈：物理击退冲量 + 受击红闪。

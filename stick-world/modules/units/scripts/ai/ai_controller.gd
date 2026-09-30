@@ -56,7 +56,7 @@ const SURROUND_MIN: int = 2
 const WALL_LOOKBACK: float = 80.0
 ## 低血狂暴判定阈值（hp_ratio 低于此值视为低血）
 const RAGE_LOW_HP: float = 0.3
-## 狂暴所需最低士气（低血但士气高于此值 → 狂暴反击；低于此值走溃逃）
+## 狂暴所需最低士气（低血但士气高于此值 → 狂暴反击；低于此值走避战调制）
 const RAGE_MORALE_THRESHOLD: float = 0.4
 ## 撤退掷骰 RNG 默认种子（A3 · C6：固定默认种子锁确定性，单测可锁/battle_sim
 ## 可复现；与 A1 team_ai DEFAULT_RANDOM_SEED 同值惯例。测试经
@@ -126,6 +126,9 @@ var _wd_last_pos: Vector2 = Vector2.ZERO
 var _wd_nudge_until: float = -1.0e9
 ## 分离推力方向（触发时随机掷一次，短窗内恒定）
 var _wd_nudge_dir: Vector2 = Vector2.ZERO
+## 避战行为态（裁决【删溃逃、立避战】：由 behavior_retreat enter/exit 置位清位，
+## 非士气阈值推导——"谁执行谁置位"单一真相源；is_disengaging() 对外查询）
+var _disengaging: bool = false
 
 # ─────────────────────────────── 命令覆盖（§8.3 战术号令）────────────────────────────────
 ## 当前下达的命令行为名（空=无命令，由 AI 自主决策）
@@ -203,41 +206,32 @@ func physics_update(delta: float) -> void:
 # ─────────────────────────────── 决策逻辑 ────────────────────────────────
 
 ## P0 决策：命令覆盖 > 战斗（参战时）> work（有派工）> idle/wander 循环。
-## 命令覆盖：tactical_orders 下达的号令优先于自主决策，但溃逃例外。
+## 命令覆盖：tactical_orders 下达的号令优先于自主决策。
 ## 职责过滤：编队中的单位只能做队伍职责范围内的行为（见 _can_work / _can_combat）。
-## 优先级（A6 · C9 落定）：强制溃逃链 > 压制禁令 > 命令覆盖 > 自主决策。
-##   - 溃逃 > 压制：禁令是"不敢动"不是"不能逃"，士气崩溃照样跑；
-##   - 压制 > 命令覆盖：CoH pinned isInterruptablePlan=false——禁令期号令
-##     **挂起不清除**（压制是暂态锁死，号令是玩家意图），压制结束自动续行。
+## 优先级（裁决【删溃逃、立避战】落定）：压制避战 > 命令覆盖 > 自主决策。
+##   - 被压制 → 强制避战（RA 压制式脱离：脱离接火优先于一切，含号令——但号令
+##     **挂起不清除**，压制结束自动续行，玩家意图保留）；
+##   - 单位级"士气崩溃强制溃逃"链已删除（溃逃退役）：低士气降级为避战打分输入
+##     （C6 三因子概率调制），被压/劣势时脱离接火是战术行为不是失控逃跑。
 func _make_decision() -> void:
-	# 强制溃逃链（士气崩溃）：最高优先——清号令走溃逃强制链（is_routed →
-	# retreat 在 _try_combat），压制期亦溃逃
-	if _is_routing():
-		_ordered_behavior = ""
-		_ordered_params = {}
-	# 压制禁令（A6 · C9 定时锁死）：非溃逃被压制 → 强制短行为（原地停滞），
-	# 不可被常规决策与号令执行打断（惩罚来自模拟因果，非数值折扣）
-	elif _is_suppressed():
-		_suppressed_stall()
+	# 压制避战（RA 压制式脱离）：被压制 → 立即脱离接火（优先找掩体，无掩体走
+	# fallback 短距后撤）；号令挂起不清除，压制结束由命令覆盖段自动续行
+	if _is_suppressed():
+		_suppressed_disengage()
 		return
-	# 0. 命令覆盖（最高优先级，溃逃例外）
+	# 0. 命令覆盖（最高优先级）
 	if not _ordered_behavior.is_empty():
-		if _is_routing():
-			# 士气崩溃，无视命令强制溃逃
+		var cur_behavior: String = _state_machine.get_current_behavior_name()
+		if cur_behavior == _ordered_behavior:
+			if not _state_machine.is_current_finished():
+				return  # 命令执行中，保持
+			# 命令完成，清除并转入正常决策
 			_ordered_behavior = ""
 			_ordered_params = {}
 		else:
-			var cur_behavior: String = _state_machine.get_current_behavior_name()
-			if cur_behavior == _ordered_behavior:
-				if not _state_machine.is_current_finished():
-					return  # 命令执行中，保持
-				# 命令完成，清除并转入正常决策
-				_ordered_behavior = ""
-				_ordered_params = {}
-			else:
-				# 命令被中断（如战斗行为抢占），重新下达
-				_state_machine.travel(_ordered_behavior, _ordered_params)
-				return
+			# 命令被中断（如战斗行为抢占），重新下达
+			_state_machine.travel(_ordered_behavior, _ordered_params)
+			return
 	# 1. 战斗决策（最高优先级，阶段 0.5）
 	# W2 域级失败冷却（默认关 = 逐拍探测，零回归）：仅在上次"选敌探测失败"后
 	# 的冷却窗内跳过重探（探测成功 = 已在战斗中，不会入冷却，故跳过期必无战事）
@@ -341,7 +335,7 @@ func _stuck_break(profile: Dictionary, pos: Vector2) -> void:
 
 
 ## 尝试战斗决策。当 entity 参战（有激活的 battle_instance）时返回 true 并切换到战斗行为。
-## 决策优先级：溃逃/士气极低 -> retreat；重伤且附近有掩体 -> seek_cover；默认 -> attack。
+## 决策优先级：低士气脱战 -> 不接敌待命；C6 劣势掷骰 -> 避战；重伤且附近有掩体 -> seek_cover；默认 -> attack。
 ## 职责过滤：队伍职责不含 WORK_COMBAT 的单位不进入战斗决策（如建造队/工人队）。
 func _try_combat() -> bool:
 	if _entity == null or not is_instance_valid(_entity):
@@ -364,23 +358,19 @@ func _try_combat() -> bool:
 			return true
 	var bi_param: Dictionary = {"battle": bi}
 	var health: Node = _entity.get_health() if _entity.has_method("get_health") else null
-	# 溃逃或士气极低 -> retreat（IsUnderThreat 真值化：低士气且**确有近身威胁**
-	# 才溃逃；脱战低士气不强制溃逃，交由士气自然恢复——9i 配套）
-	if health != null:
-		if health.has_method("is_routed") and health.is_routed():
-			_state_machine.travel("retreat", bi_param)
+	# 低士气决策（裁决【删溃逃、立避战】：is_routed 强制溃逃链已删除——低士气降级
+	# 为避战打分输入）：脱战（近身无威胁）且士气过低 → 不主动接敌，原地待命回士气
+	#（9i+ 再战/试探脉冲仍可拉回）；近身低士气**不强制脱离**，保持还击（C6 掷骰
+	# 治理去留——避免"finish→重 travel"逐拍抖动，还击本身就是避战期的合法行为）
+	if health != null and health.has_method("get_morale_ratio") \
+			and health.get_morale_ratio() < 0.25 and not _is_under_threat(bi):
+		# 脱战低士气：9i+ 增强（逃开后再战 + 前排试探接敌）
+		if _try_rout_reengage(bi, bi_param, health):
 			return true
-		if health.has_method("get_morale_ratio") and health.get_morale_ratio() < 0.25:
-			if _is_under_threat(bi):
-				_state_machine.travel("retreat", bi_param)
-				return true
-			# 脱战低士气：9i+ 增强（逃开后再战 + 前排试探接敌，档案开关默认关 = 既有行为）
-			if _try_rout_reengage(bi, bi_param, health):
-				return true
-			# 既有行为：不进战斗决策（避免 travel→finish 抖动），原地待命回士气
-			return false
-	# A3 · C6 概率调制撤退：补"未到强制阈值但战况恶化"的中间带（档案开关默认关 =
-	# 零回归；强制链优先，见 _try_retreat_modulation 注释）
+		# 既有行为：不进战斗决策（避免 travel→finish 抖动），原地待命回士气
+		return false
+	# A3 · C6 概率调制避战：劣势/被压时概率脱离接火（裁决口径：避战是模拟高阶
+	# 操作智慧的战术行为，非失控逃跑；强制链优先的旧注释随溃逃退役删除）
 	if _try_retreat_modulation(bi, bi_param, health):
 		return true
 	# 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙背水一战
@@ -404,14 +394,13 @@ func _try_combat() -> bool:
 	return true
 
 
-## A3 · C6 概率调制撤退（设计文档12号 §三C6 / 设计原则3）：补"未到强制阈值但
-## 战况恶化"的中间带——血量/士气逼近阈值或周边友军崩坏时，按档案概率掷骰
-## 触发 RETREAT（非确定性开关，消除阈值边界的机械感；掷骰是执行机制不是因果，
-## 候选判定仍是真实战况）。与既有强制溃逃链并存：上游 is_routed / 低士气+近身
-## 威胁已 return（强制链优先），本函数只处理中间带。
-## 双档语义（CoH fallback_*/retreat_* 同构）：战线崩坏 → withdraw 撤退回己方
-## 锚点；个人战况恶化 → fallback 战术后退（脱离接触原地后撤重整）。
-## 返回 true 表示已切入撤退行为。
+## A3 · C6 概率调制避战（裁决【删溃逃、立避战】：设计文档12号 §三C6 / 设计原则3）：
+## 劣势（血量/士气逼近阈值或周边友军崩坏）时按档案概率掷骰脱离接火——非确定性
+## 开关消除阈值边界的机械感（掷骰是执行机制不是因果，候选判定仍是真实战况）。
+## 出口 = 避战统一出口（_travel_disengage：优先 seek_cover，无掩体走 fallback
+## 短距后撤；绝不走向地图边缘）。旧"强制溃逃链并存/双档 withdraw"语义随溃逃退役：
+## withdraw 档保留为命令路径语义（可下令的 RETREAT / TeamAi ROUT 撤离），C6 不再下发。
+## 返回 true 表示已切入避战行为。
 func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bool:
 	var profile: Dictionary = _get_behavior_profile()
 	if not bool(profile.get("retreat_mod_enabled", false)):
@@ -457,15 +446,13 @@ func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bo
 	_retreat_mod_last_result = roll < chance
 	if roll >= chance:
 		return false
-	# 双档语义：战线崩坏 → 撤退（回锚点）；个人战况恶化 → 后撤（战术后退重整）
-	var params: Dictionary = bi_param.duplicate()
-	params["retreat_mode"] = "withdraw" if line_collapsed else "fallback"
-	_state_machine.travel("retreat", params)
+	# 避战统一出口：优先 seek_cover（就掩还击），无掩体走 fallback 短距脱离
+	_travel_disengage(bi)
 	return true
 
 
 ## 附近友军崩坏比例（A3 · C6 候选因子三）：判定半径内同阵营单位中"已阵亡或
-## 已溃逃"的占比（CoH retreat_suppressed_percentage「周边小队被压制比例」同构
+## 避战中"的占比（CoH retreat_suppressed_percentage「周边小队被压制比例」同构
 ## ——本作压制映射到士气/存活状态）。无友军（孤军）返回 0：孤军安危由个人
 ## 血量/士气因子承担，不构成战线崩坏信号。
 func _nearby_ally_break_ratio(bi: Node, profile: Dictionary) -> float:
@@ -488,11 +475,13 @@ func _nearby_ally_break_ratio(bi: Node, profile: Dictionary) -> float:
 			continue
 		total += 1
 		var dead: bool = ally.has_method("is_dead") and ally.is_dead()
-		var routed: bool = false
-		var ah: Node = ally.get_health() if ally.has_method("get_health") else null
-		if ah != null and is_instance_valid(ah) and ah.has_method("is_routed"):
-			routed = ah.is_routed()
-		if dead or routed:
+		# 避战中（行为态，duck 查询队友 AIController）的友军同计"战线崩坏"——
+		# 脱离接火的队友不再支撑战线（裁决【删溃逃、立避战】：旧 is_routed 退役）
+		var disengaging: bool = false
+		var aai: Node = ally.get_ai_controller() if ally.has_method("get_ai_controller") else null
+		if aai != null and is_instance_valid(aai) and aai.has_method("is_disengaging"):
+			disengaging = bool(aai.is_disengaging())
+		if dead or disengaging:
 			broken += 1
 	if total <= 0:
 		return 0.0
@@ -711,18 +700,19 @@ func _query_team_stance(bi: Node) -> int:
 	return int(tai.get_stance())
 
 
-## 状态调制检测（反编译参考实装 E）：低血 / 溃逃 / 被围 / 背墙。
-## 返回 {"low_hp", "routing", "surrounded", "backed_to_wall"} 布尔集。
+## 状态调制检测（反编译参考实装 E）：低血 / 避战 / 被围 / 背墙。
+## 返回 {"low_hp", "disengaging", "surrounded", "backed_to_wall"} 布尔集。
 func _compute_state_modifiers(bi: Node, health: Node) -> Dictionary:
 	var mods := {
 		"low_hp": false,
-		"routing": false,
+		"disengaging": false,
 		"surrounded": false,
 		"backed_to_wall": false,
 	}
 	if health != null:
 		mods["low_hp"] = health.has_method("get_hp_ratio") and health.get_hp_ratio() < RAGE_LOW_HP
-		mods["routing"] = health.has_method("is_routed") and health.is_routed()
+	# 避战中（裁决：溃逃退役后的行为态）不狂暴——脱离接火的单位不背水一战
+	mods["disengaging"] = _disengaging
 	# 被围：SURROUND_RANGE 内敌对单位数 >= SURROUND_MIN（空间网格邻域查询）
 	if bi != null:
 		mods["surrounded"] = _count_enemies_near(
@@ -739,12 +729,12 @@ func _compute_state_modifiers(bi: Node, health: Node) -> Dictionary:
 
 
 ## 狂暴判定（反编译参考实装 E，参考传奇 RageSystem/DesperationTriggered）：
-##   - 溃逃中 -> 不狂暴（走溃逃）
-##   - 被围 + 背墙 -> 背水一战，强制狂暴（不溃逃）
+##   - 避战中 -> 不狂暴（脱离接火的单位不背水一战）
+##   - 被围 + 背墙 -> 背水一战，强制狂暴
 ##   - 低血且士气高于 RAGE_MORALE_THRESHOLD -> 狂暴反击
 ##   - 其余 -> 不狂暴（走现有 seek_cover / attack 决策）
 func _should_rage(mods: Dictionary, health: Node) -> bool:
-	if mods.get("routing", false):
+	if mods.get("disengaging", false):
 		return false
 	if mods.get("surrounded", false) and mods.get("backed_to_wall", false):
 		return true
@@ -920,6 +910,18 @@ func _try_follow() -> bool:
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
 
+## 是否避战中（裁决【删溃逃、立避战】的行为态查询口）：由 behavior_retreat
+## enter/exit 置位清位。消费面：UI 状态角标/友军战线崩坏比例/狂暴抑制等
+## "这个单位现在在不在脱离接火"的询问；非士气阈值推导。
+func is_disengaging() -> bool:
+	return _disengaging
+
+
+## 避战行为态置位/清位（behavior_retreat 专用；外部勿调——状态由执行行为拥有）
+func set_disengaging(v: bool) -> void:
+	_disengaging = v
+
+
 ## 获取当前行为名。
 func get_current_behavior() -> String:
 	if _state_machine == null:
@@ -971,37 +973,47 @@ func has_order() -> bool:
 
 # ─────────────────────────────── 内部辅助 ────────────────────────────────
 
-## 检查实体是否正在溃逃（士气低于阈值）。
-func _is_routing() -> bool:
-	if _entity == null or not is_instance_valid(_entity):
-		return false
-	if not _entity.has_method("get_health"):
-		return false
-	var health: Node = _entity.get_health()
-	if health == null or not health.has_method("is_routed"):
-		return false
-	return health.is_routed()
+# （_is_routing 已随裁决【删溃逃、立避战】删除：溃逃布尔态退役，
+#   避战行为态走 is_disengaging()——由 behavior_retreat 置位，非士气阈值推导）
 
 
-# ─────────────────────────────── 压制禁令（A6 · C9 定时锁死）────────────────────────────────
+# ─────────────────────────────── 压制避战（裁决【删溃逃、立避战】：RA 压制式脱离）────────────────────────────────
 
 ## 是否被压制：查询状态效果组件 SUPPRESSED 态（duck；组件缺失/压制未启用
-## 返回 false = 零回归）。压制=短时行为禁令（惩罚来自模拟因果，非数值折扣；
-## CoH pinned-reaction-plan isInterruptablePlan=false 直译）。
+## 返回 false = 零回归）。
 func _is_suppressed() -> bool:
 	var se: Node = _status_effects_of()
 	return se != null and se.has_method("has_suppressed") and bool(se.has_suppressed())
 
 
-## 压制期强制短行为（压制蹲伏/停滞）：原地停步 + 落 idle，每决策拍重申
-## （禁令期任何 travel 下一拍都被拉回——"不可被常规决策打断"）。
-## 受击反馈动画/被推挤走物理与表现层，不受禁令影响。号令挂起不清除：
-## 压制结束后命令覆盖段检测 cur != ordered 自动续行。
-func _suppressed_stall() -> void:
-	if _entity != null and is_instance_valid(_entity) and _entity.has_method("ai_stop"):
-		_entity.ai_stop()
-	if _state_machine != null and _state_machine.get_current_behavior_name() != "idle":
-		_state_machine.travel("idle")
+## 压制期强制避战（RA 压制式脱离，替代旧 A6 强制停滞）：被压就脱离接火——
+## 已在避战行为（retreat/seek_cover 进行中）则保持，否则切入避战统一出口。
+## 号令挂起不清除（玩家意图保留），压制结束由命令覆盖段检测 cur != ordered
+## 自动续行；避战行为的自身收束条件（安全距离/士气回升/时限）交还决策。
+func _suppressed_disengage() -> void:
+	var cur: String = _state_machine.get_current_behavior_name() \
+			if _state_machine != null else ""
+	if cur in ["retreat", "seek_cover"] and not _state_machine.is_current_finished():
+		return  # 已在避战中，保持（每拍重申无意义）
+	var bi: Node = _entity.get_battle_instance() \
+			if _entity.has_method("get_battle_instance") else null
+	_travel_disengage(bi)
+
+
+## 避战统一出口（裁决【删溃逃、立避战】）：优先 seek_cover（有掩体先就掩——
+## behavior_seek_cover 内建"掩体中还击"，即"避战期不主动接敌但被打还手"的就掩
+## 半边）；无掩体走 fallback 短距后撤（SAFE_DISTANCE 内脱离，behavior_retreat
+## 既有语义，绝不走向地图边缘）。压制强制避战与 C6 概率调制共用。
+func _travel_disengage(bi: Node) -> void:
+	var bi_param: Dictionary = {"battle": bi} if bi != null and is_instance_valid(bi) else {}
+	var cover = bi.get_cover() if bi != null and is_instance_valid(bi) \
+			and bi.has_method("get_cover") else null
+	if cover != null and cover.has_method("has_covers") and cover.has_covers():
+		_state_machine.travel("seek_cover", bi_param)
+		return
+	var params: Dictionary = bi_param.duplicate()
+	params["retreat_mode"] = "fallback"
+	_state_machine.travel("retreat", params)
 
 
 ## 所属实体状态效果组件（duck；缺失返回 null——测试桩/未装配环境零回归）。

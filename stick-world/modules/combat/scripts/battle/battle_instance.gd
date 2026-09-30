@@ -496,13 +496,12 @@ func get_player_faction() -> int:
 
 # ─────────────────────────────── 内部 ────────────────────────────────
 
-## 检查胜负条件（四路收束）：一方全灭（含战役撤离离场）→ 歼灭；
-## 一方有效战力归零（未死但全员溃逃，9k 溃逃收敛）→ 溃散；
-## 双方同时归零 → 平局；相持超时按剩余兵力判（兜底）。
-## 有效战力 = 未死 且 未溃逃（is_routed）且 未离场——全员溃逃的残局不再挂着
-## "打不死也停不下"：战斗结算落定，溃兵不追击不清场（实体留在战场，仅解除
-## 战斗引用；士气恢复脱离 routed 后战斗已结束，set_battle_instance 已断，
-## 不会重新开打，与 behavior_retreat 的"溃逃—恢复—再战"循环语义兼容）。
+## 检查胜负条件（裁决【删溃逃、立避战】后三路收束）：一方全灭（含战役撤离
+## 离场）→ 歼灭；相持超时按剩余兵力判（兜底）。
+## 战斗收敛兜底 = TeamAi 指挥层撤退（C3：伤亡率超限 → ROUT → 全军撤离 departed）
+## + duration_limit 超时判——旧"溃散收敛"（有效战力含 is_routed 扣除）随溃逃
+## 退役删除：避战是战术行为不改变有效战力，避战中的单位被打仍还手，战斗照常
+## 由歼灭/撤离/超时收束。
 func _check_victory() -> void:
 	var a_alive: int = _count_alive(_units_attacker)
 	var b_alive: int = _count_alive(_units_defender)
@@ -514,18 +513,9 @@ func _check_victory() -> void:
 		_end(State.DEFENDER_WIN, "annihilation")
 	elif b_alive == 0:
 		_end(State.ATTACKER_WIN, "annihilation")
-	else:
-		var a_eff: int = _count_effective(_units_attacker)
-		var b_eff: int = _count_effective(_units_defender)
-		if a_eff == 0 and b_eff == 0:
-			_end(State.DRAW, "rout")
-		elif a_eff == 0:
-			_end(State.DEFENDER_WIN, "rout")
-		elif b_eff == 0:
-			_end(State.ATTACKER_WIN, "rout")
-		elif duration_limit > 0.0 and _duration >= duration_limit:
-			# 相持超时：剩余兵力多者胜；相等/攻方更少 = 未能拿下，按守方胜
-			_end(State.ATTACKER_WIN if a_alive > b_alive else State.DEFENDER_WIN, "timeout")
+	elif duration_limit > 0.0 and _duration >= duration_limit:
+		# 相持超时：剩余兵力多者胜；相等/攻方更少 = 未能拿下，按守方胜
+		_end(State.ATTACKER_WIN if a_alive > b_alive else State.DEFENDER_WIN, "timeout")
 
 
 ## 结算摘要（battle_ended 后的数据载荷；_end 已清空列表，故用收束快照）：
@@ -562,21 +552,9 @@ func _count_alive(units: Array) -> int:
 	return n
 
 
-## 有效战力计数（9k 溃逃收敛）：未死、未离场且未溃逃（is_routed）——溃兵不计入。
-## is_routed 走鸭式探测（测试桩可能无该方法：无方法视作有效，保持旧计数语义）。
-func _count_effective(units: Array) -> int:
-	var n: int = 0
-	for u in units:
-		if not is_instance_valid(u):
-			continue
-		if u.has_method("is_dead") and u.is_dead():
-			continue
-		if _is_departed(u):
-			continue
-		if u.has_method("is_routed") and u.is_routed():
-			continue
-		n += 1
-	return n
+## （_count_effective 已随裁决【删溃逃、立避战】删除：有效战力=未死未离场，
+## 即 _count_alive 本身；避战是战术行为不再扣有效战力，战斗收敛走
+## TeamAi 撤离 departed / duration_limit 兜底）
 
 
 static func _is_departed(u) -> bool:

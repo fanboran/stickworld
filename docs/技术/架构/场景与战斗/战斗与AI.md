@@ -135,12 +135,12 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 ├── behavior_follow.gd               ✅ 跟随（小队"跟随玩家"）
 ├── behavior_attack.gd               ✅ 攻击（命中帧→伤害事件）
 ├── behavior_seek_cover.gd           ✅ 找掩体
-├── behavior_retreat.gd              ✅ 撤退（当前亦承担溃逃）
+├── behavior_retreat.gd              ✅ 撤退/避战（fallback 档=避战：RA 压制式脱离，不走向地图边缘）
 ├── behavior_work.gd                 ✅ 建造（build 动画驱动，受材料进度限制）
 ├── behavior_haul.gd                 ✅ 搬运（仓库↔工地往返）
 ├── behavior_suppress.gd             📋 火力压制（设计未实现）
 ├── behavior_flank.gd                📋 侧翼包抄（设计未实现）
-├── behavior_flee.gd                 📋 独立溃逃（设计未实现，暂由 retreat 承担）
+├── behavior_flee.gd                 📋 独立溃逃（已随裁决【删溃逃、立避战】取消立项——溃逃永久退役，避战由 retreat fallback 档承担）
 └── behavior_state_machine.gd        ✅ 状态机调度
 ```
 
@@ -230,7 +230,7 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 
 `StickmanState` 已有 `autonomy_level` 字段，AIController 读取它决定能否自主行动。
 
-> **实现状态**：决策优先级当前**确定性硬编码**（命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`，计划抽成 `.tres` 数据驱动；§7.4 第一层概率钩子**已在役**（档案参数化，生效层开关表见 12-游戏AI系统.md §7.3），第二层战场导演情绪标签未接通（`battle_ai_director.gd` 在库待接线）。
+> **实现状态**：决策优先级当前**确定性硬编码**（压制避战 > 命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`，计划抽成 `.tres` 数据驱动；单位级强制溃逃链已随裁决【删溃逃、立避战】删除（士气=避战打分输入，避战行为态经 `AIController.is_disengaging()` 查询）；§7.4 第一层概率钩子**已在役**（档案参数化，生效层开关表见 12-游戏AI系统.md §7.3），第二层战场导演情绪标签未接通（`battle_ai_director.gd` 在库待接线）。
 
 ### 7.4 小兵步枪式灵动性 — 两层实现
 
@@ -254,7 +254,7 @@ func update(delta):
 `battle_ai_director.gd` 周期性（每 2~5s）给单位打"情绪标签"：
 - `HESITANT` — 犹豫（命中率-30%、移动减速）
 - `EXCITED` — 亢奋（追击倾向+50%、忽视指令概率+10%）
-- `PANICKED` — 恐慌（找掩体优先级最高、可能溃逃）
+- `PANICKED` — 恐慌（找掩体优先级最高、大概率触发避战脱离）
 - `STEADY` — 稳定（默认）
 
 **卡死看门狗**：`ai_controller._watchdog_tick` O(1)（只记上次采样位置 + 计时，零扫描零分配）——有移动意图（>10px/s）但窗口 2s 内净位移 <12px 判卡死，处置 = 重进 attack（enter 清目标/持瞄，下一拍重选）+ 0.25s 随机方向分离推力；无移动意图自动清零豁免（站桩输出/压制/硬直/待命不误伤）。档案键 `stuck_watchdog_*` 五键（12-游戏AI系统.md §7.3）。

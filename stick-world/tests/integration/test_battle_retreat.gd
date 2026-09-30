@@ -10,11 +10,11 @@ extends Node
 ##   1. C2 默认语义回归：player_faction 未传（=攻方），攻方胜 → victory=true
 ##   2. C2 守方语义：player_faction=2，守方胜 → victory=true（攻城战场景语义）
 ##   3. C3 撤仗：守军 TeamAi 注入撤退阈值，伤亡率超限 → ROUT → 全军撤离边缘
-##      departed → battle_ended(victory=true)（据点攻陷）——场景双方满士气，
-##      让"伤亡率→ROUT→撤离"先于 9k 溃散收敛发生（低士气会被溃散收敛抢先收束）
-##   4. C3 零回归：enable_team_ai 不注入撤退阈值 → 不撤仗，全灭/溃散收敛判定照常
-##   （9k 溃散收敛：有效战力归零即结束——弱方可能整体溃散提前收束而非死绝，
-##     收束原因 reason ∈ annihilation/rout 均合规，per-unit 全灭断言改按 reason 判）
+##      departed → battle_ended(victory=true)（据点攻陷）——场景双方满士气
+##      （避战打分不被触发，撤仗决策不被 C6 调制搅局）
+##   4. C3 零回归：enable_team_ai 不注入撤退阈值 → 不撤仗，全灭/超时收敛判定照常
+##   （裁决【删溃逃、立避战】：9k 溃散收敛随溃逃退役删除——战斗收束 ∈
+##     annihilation（含撤离 departed）/timeout，per-unit 全灭断言按 reason 判）
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -26,10 +26,6 @@ const BATTLE_HP: float = 40.0
 ## 撤仗场景守军 HP（仅场景 3）：ROUT 触发后存活守军要跑完 ~450px 撤离才能 departed，
 ## 40 血会在撤离途中被攻方打死导致 departed=0 假败；提到 100 保证触发后 ≥2 人活着离场
 const RETREAT_DEFENDER_HP: float = 100.0
-## 战斗单位士气（低值便于触发溃逃）
-const BATTLE_MORALE: float = 25.0
-## 溃逃阈值（低于此士气溃逃）
-const ROUT_THRESHOLD: float = 10.0
 ## 守军撤仗阈值：伤亡率 0.3（4 人守军死 1=0.25 不触发、死 2=0.5 触发，留 2 人撤离）
 const RETREAT_CASUALTY_RATE: float = 0.3
 ## 单场战斗总超时（秒）：串行实测远低于 60s，但全量并行池 CPU 争用时物理帧
@@ -37,13 +33,16 @@ const RETREAT_CASUALTY_RATE: float = 0.3
 ## 60s 预算曾在并行 3 下被击穿——翻倍到 120s 换取对负载不敏感（与 run_all 的
 ## 套件级 240s 超时仍有间隔：正常 4 场合计 <120s，仅退化场景才会撞套件超时）
 const BATTLE_TIMEOUT: float = 120.0
+## 战斗时长上限（裁决【删溃逃、立避战】：溃散收敛退役后的收敛兜底之二——
+## TeamAi 撤离 departed 之外，超时按剩余兵力判胜，防避战拉锯挂死战斗）
+const BATTLE_DURATION_LIMIT: float = 90.0
 
 var _runner: TestRunner
 var _game_root: Node
 var _formation: Node = null
 ## battle_ended 捕获：[victory]
 var _ended_victory: Array = []
-## battle_settled 捕获：[reason]（9k 溃散收敛后按收束原因断言，替代 per-unit 全灭检查）
+## battle_settled 捕获：[reason]（按收束原因断言，替代 per-unit 全灭检查）
 var _ended_reason: Array = []
 ## team_ai_stance_changed 捕获：faction 2 是否到过 ROUT(3)
 var _saw_rout: bool = false
@@ -134,8 +133,8 @@ func _scenario_default_attacker_win(units: Dictionary) -> void:
 	_runner.assert_true(_pop_victory() == true, "默认语义（攻方=玩家）：攻方胜 → victory=true")
 	# 9k 溃散收敛：无撤仗配置的弱方可能整体溃散提前收束（不再保证死绝），歼灭/溃散均合规
 	var reason: String = _pop_reason()
-	_runner.assert_true(reason == "annihilation" or reason == "rout",
-			"守军应全灭或溃散收敛（实际 reason=%s）" % reason)
+	_runner.assert_true(reason == "annihilation" or reason == "timeout",
+			"守军应全灭或超时收敛（实际 reason=%s）" % reason)
 	await _clear_units(units)
 
 
@@ -148,8 +147,8 @@ func _scenario_defender_win_player_side(units: Dictionary) -> void:
 	_runner.assert_true(ok, "战斗应在 %.0fs 内结束" % BATTLE_TIMEOUT)
 	_runner.assert_true(_pop_victory() == true, "守方语义（player_faction=2）：守方胜 → victory=true")
 	var reason: String = _pop_reason()
-	_runner.assert_true(reason == "annihilation" or reason == "rout",
-			"攻方应全灭或溃散收敛（实际 reason=%s）" % reason)
+	_runner.assert_true(reason == "annihilation" or reason == "timeout",
+			"攻方应全灭或超时收敛（实际 reason=%s）" % reason)
 	await _clear_units(units)
 
 
@@ -165,10 +164,10 @@ func _scenario_retreat_on_casualty(units: Dictionary) -> void:
 	_runner.assert_true(_saw_rout, "守军 TeamAi 应切换到 ROUT 姿态（stance=3）")
 	_runner.assert_true(_pop_victory() == true, "守军撤离/全灭 → 玩家（攻方）胜 → victory=true")
 	var reason: String = _pop_reason()
-	_runner.assert_true(reason == "annihilation" or reason == "rout",
-			"守军应撤离离场/全灭或溃散收敛（实际 reason=%s）" % reason)
-	# 撤仗路径验证：至少 1 名守军以 departed 离场（非死亡）——
-	# 场景双方满士气（见 _setup_battle），溃散收敛不会抢先截断撤离路径
+	_runner.assert_true(reason == "annihilation" or reason == "timeout",
+			"守军应撤离离场/全灭或超时收敛（实际 reason=%s）" % reason)
+	# 撤仗路径验证：至少 1 名守军以 departed 离场（非死亡）
+	# （满士气下 C6 避战调制不触发，撤离路径由 TeamAi ROUT 号令独立驱动）
 	var departed_count: int = 0
 	for e in defenders:
 		if is_instance_valid(e) and not (e.has_method("is_dead") and e.is_dead()) \
@@ -180,7 +179,7 @@ func _scenario_retreat_on_casualty(units: Dictionary) -> void:
 
 
 ## 场景 4：enable_team_ai(2) 不注入撤退阈值（默认全负）→ 撤仗评估关闭，
-## 守军打光走全灭/溃散收敛判定（注册制零回归闸门）。
+## 守军打光走全灭/超时收敛判定（注册制零回归闸门）。
 func _scenario_no_retreat_annihilation(units: Dictionary) -> void:
 	if not units.has("battle"):
 		_runner.assert_true(false, "战斗未启动")
@@ -190,8 +189,8 @@ func _scenario_no_retreat_annihilation(units: Dictionary) -> void:
 	_runner.assert_true(not _saw_rout, "无撤退阈值时 TeamAi 不应切 ROUT")
 	_runner.assert_true(_pop_victory() == true, "守军全灭 → 玩家胜 → victory=true")
 	var reason: String = _pop_reason()
-	_runner.assert_true(reason == "annihilation" or reason == "rout",
-			"守军应全灭或溃散收敛（实际 reason=%s）" % reason)
+	_runner.assert_true(reason == "annihilation" or reason == "timeout",
+			"守军应全灭或超时收敛（实际 reason=%s）" % reason)
 	await _clear_units(units)
 
 
@@ -226,16 +225,6 @@ func _setup_battle(n_attackers: int, n_defenders: int, player_faction: int,
 		var e: Node = _spawn_battle_unit(map, Vector2(mr - 280.0 + i * 40.0, spawn_y), hp)
 		if e != null:
 			defenders.append(e)
-	# 撤仗场景双方满士气：9k 溃散收敛下低士气（25）会在伤亡率触发前整体溃散
-	# 提前收束，压住 C3"伤亡率→ROUT→撤离"路径——满士气让撤仗决策先于溃散收敛
-	if with_retreat:
-		for side_units: Array in [attackers, defenders]:
-			for e: Node in side_units:
-				if is_instance_valid(e) and e.has_method("get_health"):
-					var h: Node = e.get_health()
-					if h != null:
-						h.max_morale = 100.0
-						h.morale = 100.0
 	await get_tree().process_frame
 	await get_tree().process_frame
 	# 撤仗场景的守军需要编战斗小队（TeamAi 号令按小队下发，散兵收不到号令）
@@ -253,6 +242,8 @@ func _setup_battle(n_attackers: int, n_defenders: int, player_faction: int,
 			battle.enable_team_ai(2, {"retreat_casualty_rate": RETREAT_CASUALTY_RATE})
 		else:
 			battle.enable_team_ai(2)
+	# 收敛兜底（裁决【删溃逃、立避战】）：溃散收敛退役，超时判接管
+	battle.duration_limit = BATTLE_DURATION_LIMIT
 	# 开战自动暂停（玩家观察窗口），测试模拟玩家立即恢复
 	if TimeManager != null and TimeManager.is_paused():
 		TimeManager.set_speed(TimeManager.Speed.X1)
@@ -312,7 +303,8 @@ func _unpossess_player() -> void:
 			e.set_possessed(false)
 
 
-## 生成一个战斗单位，设置低 HP/士气加速战斗（hp 可覆盖，撤仗场景守军用高体质）
+## 生成一个战斗单位（低 HP 加速战斗；士气保持满值——收敛类测试不看避战，
+## C6 调制行为有专项单测；hp 可覆盖，撤仗场景守军用高体质）
 func _spawn_battle_unit(map: Node2D, pos: Vector2, hp_value: float = BATTLE_HP) -> Node:
 	var e: Node2D = map.spawn_entity(STICKMAN_SCENE, pos)
 	if e == null:
@@ -323,13 +315,10 @@ func _spawn_battle_unit(map: Node2D, pos: Vector2, hp_value: float = BATTLE_HP) 
 	# 取消附身（AI 接管）
 	if e.has_method("set_possessed"):
 		e.set_possessed(false)
-	# 设置低 HP/士气加速战斗
+	# 设置低 HP（士气保持组件默认满值）
 	if e.has_method("get_health"):
 		var h: Node = e.get_health()
 		if h != null:
 			h.max_hp = hp_value
 			h.hp = hp_value
-			h.max_morale = BATTLE_MORALE
-			h.morale = BATTLE_MORALE
-			h.rout_threshold = ROUT_THRESHOLD
 	return e

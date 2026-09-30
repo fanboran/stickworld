@@ -22,7 +22,7 @@ extends PanelContainer
 ##        逐个 get_squad_authority + should_switch_squad，全部真实查询；
 ##   角色/相位 → squad_phase_plan 经宿主私有表 duck 取用（debug_info_panel.gd 先例），
 ##        刷新走 phase_changed / roles_reassigned 两信号（A5/W1 已补，不逐帧轮询）；
-##   士气/单兵状态 → 单位侧只读口 get_health().get_morale_ratio()/is_routed()、
+##   士气/单兵状态 → 单位侧只读口 get_health().get_morale_ratio()/AIController.is_disengaging()、
 ##        get_status_effects().has_suppressed()/has_effect(HEAL|STUN)；组件缺失跳过；
 ##   组织态 FORMING 招兵位 → organization_api.get_organization().state；
 ##   号令 → EventBus.order_issued（瞬时事件：换绑小队即清空，无存量查询口——见交接遗留）。

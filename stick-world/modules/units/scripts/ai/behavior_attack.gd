@@ -7,8 +7,8 @@ extends BehaviorBase
 ##
 ## 完成条件（finish 后由 AIController 决策切换）：
 ##   - 无敌人 / 战斗结束
-##   - 自身溃逃（士气低于阈值）-> AIController 切 retreat
 ##   - 自身重伤且附近有掩体 -> AIController 切 seek_cover
+##   （裁决【删溃逃、立避战】：低士气不再打断攻击——保持还击，去留由 C6 调制裁决）
 ##
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
@@ -26,8 +26,6 @@ const ScriptAnims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 const ACQUIRE_INTERVAL: float = 0.5
 ## 犹豫检查间隔（秒）
 const HESITATE_CHECK_INTERVAL: float = 0.5
-## 低士气阈值（低于此值触发撤退决策）
-const LOW_MORALE_THRESHOLD: float = 0.3
 ## 低 HP 阈值（低于此值且附近有掩体触发找掩体）
 const LOW_HP_THRESHOLD: float = 0.3
 ## 掩体查询范围（附近多少像素内有掩体算"附近"）
@@ -229,16 +227,11 @@ func update(delta: float) -> void:
 			finish()
 			return
 
-	# 自身状态检查：士气/HP 过低 -> finish 让 AIController 决策
+	# 自身状态检查：HP 过低 -> finish 让 AIController 决策（裁决【删溃逃、立避战】：
+	# 旧 is_routed/低士气 finish 自检随溃逃退役——低士气单位保持还击，去留由
+	# ai_controller 的 C6 概率调制裁决，避免逐拍 finish→重 travel 抖动）
 	var health: Node = entity.get_health() if _cap_get_health else null
 	if health != null:
-		if health.has_method("is_routed") and health.is_routed():
-			finish()
-			return
-		# 狂暴时放宽士气下限（低血狂暴不因士气波动收手；溃逃仍由 AIController 处理）
-		if not _rage and health.has_method("get_morale_ratio") and health.get_morale_ratio() < LOW_MORALE_THRESHOLD:
-			finish()
-			return
 		# 狂暴时跳过"低血找掩体"（反编译参考实装 E）：背水一战不撤退
 		if not _rage and health.has_method("get_hp_ratio") and health.get_hp_ratio() < LOW_HP_THRESHOLD and _has_cover_nearby():
 			finish()

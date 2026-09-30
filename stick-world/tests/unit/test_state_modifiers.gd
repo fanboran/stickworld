@@ -18,16 +18,12 @@ class FakeHealth:
 	extends Node
 	var _hp_ratio: float = 1.0
 	var _morale_ratio: float = 1.0
-	var _routed: bool = false
 
 	func get_hp_ratio() -> float:
 		return _hp_ratio
 
 	func get_morale_ratio() -> float:
 		return _morale_ratio
-
-	func is_routed() -> bool:
-		return _routed
 
 
 class FakeEnemy:
@@ -130,7 +126,7 @@ func _ready() -> void:
 	_runner.add_test("狂暴判定: 被围+背墙强制狂暴", _test_rage_surrounded_wall)
 	_runner.add_test("狂暴判定: 低血+士气高狂暴", _test_rage_low_hp_high_morale)
 	_runner.add_test("狂暴判定: 低血+士气低不狂暴", _test_rage_low_hp_low_morale)
-	_runner.add_test("狂暴判定: 溃逃不狂暴", _test_rage_routing)
+	_runner.add_test("狂暴判定: 避战不狂暴", _test_rage_disengaging)
 	_runner.add_test("狂暴行为: 狂暴跳过低血找掩体 finish", _test_attack_rage_no_finish)
 	_runner.add_test("狂暴行为: 非狂暴低血+掩体 finish", _test_attack_normal_finish)
 	_runner.run()
@@ -202,10 +198,12 @@ func _test_rage_low_hp_low_morale() -> void:
 	entity.health._hp_ratio = 0.2
 	entity.health._morale_ratio = 0.3
 	var mods: Dictionary = ai._compute_state_modifiers(w["battle"], entity.health)
-	_runner.assert_false(ai._should_rage(mods, entity.health), "低血+士气低不应狂暴（走溃逃）")
+	_runner.assert_false(ai._should_rage(mods, entity.health), "低血+士气低不应狂暴（走避战调制）")
 
 
-func _test_rage_routing() -> void:
+func _test_rage_disengaging() -> void:
+	# 裁决【删溃逃、立避战】：避战是行为态（set_disengaging 置位），非士气阈值——
+	# 避战中的单位不狂暴（脱离接火的单位不背水一战）
 	var w: Dictionary = _make_world()
 	var ai: Node = w["ai"]
 	var entity: FakeEntity = w["entity"]
@@ -216,9 +214,10 @@ func _test_rage_routing() -> void:
 		e.position = Vector2(50 + i * 30, 0)
 		battle.enemies.append(e)
 	cover._in_cover_positions = [entity.position + Vector2(-80, 0)]
-	entity.health._routed = true
+	ai.set_disengaging(true)
 	var mods: Dictionary = ai._compute_state_modifiers(battle, entity.health)
-	_runner.assert_false(ai._should_rage(mods, entity.health), "溃逃不应狂暴")
+	_runner.assert_true(bool(mods.get("disengaging", false)), "避战行为态应进 mods")
+	_runner.assert_false(ai._should_rage(mods, entity.health), "避战不应狂暴")
 
 
 ## 构造一个进入 update 的行为：battle 有 1 敌、battle active、entity 低血

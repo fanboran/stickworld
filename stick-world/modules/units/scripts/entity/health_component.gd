@@ -8,8 +8,13 @@ extends Node
 ## 职责：
 ##   - 维护 hp / max_hp / morale / max_morale
 ##   - take_damage() 扣血并降低士气
-##   - 提供 is_dead() / is_routed() 查询（溃逃由 AI 行为判断）
+##   - 提供 is_dead() 查询
 ##   - 发射 died / damaged / morale_changed 信号供外部响应
+##
+## 士气语义（裁决【删溃逃、立避战】）：士气值/受击损士气/恢复/光环全部保留，
+## 降级为**避战打分输入**（AIController C6 三因子等消费）——组件层不再持有
+## "溃逃"布尔态（旧 rout_threshold/is_routed 已退役：避战是行为态，由避战行为
+## 置位，经 AIController.is_disengaging() 查询，不是士气阈值推导）。
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 @warning_ignore("unused_signal") signal died
@@ -22,8 +27,6 @@ extends Node
 @export var max_hp: float = 100.0
 ## 最大士气
 @export var max_morale: float = 100.0
-## 溃逃士气阈值（低于此值视为溃逃）
-@export var rout_threshold: float = 20.0
 ## 受伤时士气下降系数（每点伤害扣多少士气）
 @export var morale_damage_ratio: float = 0.6
 
@@ -102,11 +105,6 @@ func set_morale(value: float) -> void:
 ## 是否已死亡
 func is_dead() -> bool:
 	return hp <= 0.0
-
-
-## 是否溃逃（士气低于阈值且未死）
-func is_routed() -> bool:
-	return not is_dead() and morale <= rout_threshold
 
 
 ## HP 比例 [0,1]

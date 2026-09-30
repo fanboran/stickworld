@@ -220,7 +220,9 @@ func apply_suppression(source: Node = null) -> bool:
 
 
 ## 压制允许判定（两类触发源共用，避免豁免规则在两条路径上分叉）：
-## 总开关 / 兵种级免疫 / 玩家附身 / 已死亡 / 已溃逃。
+## 总开关 / 兵种级免疫 / 玩家附身 / 已死亡。
+## （裁决【删溃逃、立避战】：旧"已溃逃豁免"行随溃逃退役删除——压制现在**触发**
+## 避战而非与强制溃逃竞争优先级，避战中的单位继续可被压制 = 延长脱离，语义自洽）
 func _can_suppress() -> bool:
 	if _owner == null or not is_instance_valid(_owner):
 		return false
@@ -233,9 +235,6 @@ func _can_suppress() -> bool:
 		return false  # 玩家附身：行为禁令语义不作用于玩家操控
 	if _owner.has_method("is_dead") and _owner.is_dead():
 		return false  # 已死者不压制（致死一击的受击反馈链不受影响）
-	var health: Node = _health_of()
-	if health != null and health.has_method("is_routed") and health.is_routed():
-		return false  # 豁免：已溃逃者禁令无意义（强制溃逃链优先于压制禁令）
 	return true
 
 

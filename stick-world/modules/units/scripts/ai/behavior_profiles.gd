@@ -81,14 +81,15 @@ const BASELINE: Dictionary = {
 	"block_move_mult": 1.0,                 ## 持盾移速倍率（举盾行军更沉稳）
 	"attack_pool": [],                      ## 攻击动画池（9f：非举盾攻击随机抽取；空=只用武器基础攻击动画。动画名对齐 stickman_anims）
 	"stand_pool": [],                       ## 站姿变体池（9r：进待机随机抽取；空=武器默认站姿。动画名对齐 stickman_anims）
-	# ── 9i+ 溃逃保真五项增强（P6 批次 7c：能力开关，默认全关 = 零回归）──
+	# ── 9i+ 避战保真五项增强（P6 批次 7c：能力开关，默认全关 = 零回归；
+	#    裁决【删溃逃、立避战】后键名沿用、语义改为避战——"溃逃"退役）──
 	# 消费函数与降级路径：开关关 / 姿态查询不可用（未注册阵营 AI）→ 既有行为。
 	# 全部只改走位/决策取向，不触碰选目标、出手、伤害管线。数值均待实测校准。
-	"rout_reengage_enabled": false,         ## 逃开后再战（ai_controller._try_combat 脱战低士气分支）
+	"rout_reengage_enabled": false,         ## 避战解除后再战（ai_controller._try_combat 脱战低士气分支）
 	"re_engage_morale": 0.15,               ## 再战所需士气比例（0~1；需 < 低士气阈值 0.25 才在脱战分支内触发，待实测校准）
-	"retreat_keep_block": false,            ## 保持招架（behavior_retreat：持盾兵种撤退全程举盾）
-	"rout_strafe_enabled": false,           ## 垂直位游走（behavior_retreat：撤退叠加垂直横向分量）
-	"rout_strafe_strength": 0.35,           ## 横向分量强度（0~1 叠加到撤退方向）
+	"retreat_keep_block": false,            ## 保持招架（behavior_retreat：持盾兵种避战全程举盾）
+	"rout_strafe_enabled": false,           ## 避战横向游走（behavior_retreat：脱离叠加垂直横向分量，不走直线）
+	"rout_strafe_strength": 0.35,           ## 横向分量强度（0~1 叠加到脱离方向）
 	"test_engage_enabled": false,           ## 前排怯战试探接敌（ai_controller：脱战低士气脉冲接敌）
 	"test_pulse_on": 2.0,                   ## 试探接敌脉冲开启时长（s）
 	"test_pulse_off": 3.0,                  ## 试探接敌脉冲关闭时长（s）
@@ -127,10 +128,12 @@ const BASELINE: Dictionary = {
 	"burst_wait": Vector2(1.2, 1.8),        ## R3 点射间停顿时长区间（s，RWR wait 1.2±0.6 直译）
 	"night_hesitate_mult": 1.0,             ## R3 夜间犹豫时长倍率（RWR 昼 0.3~0.6/夜 0.8~1.1 ≈ ×1.8~2.7；1.0 = 零回归；夜间判定见 behavior_attack._is_night）
 	"heal_buzz_distance": 60.0,             ## R5 防扎堆治疗（px：候选伤员被登记"治疗中"未过期时跳过，RWR consider_someone_already_healing_wounded_distance 10m 同构；0=关）
-	# ── A3 · C6 概率调制撤退（AI集大成；CoH personality retreat_* 真值见逆向笔记 §3.4；
-	#    数值为语义映射初值待实测校准；总开关默认关 = 既有强制溃逃链原样 = 零回归。
-	#    消费点：ai_controller._try_combat 中间带掷骰 + behavior_retreat 双档语义）──
-	"retreat_mod_enabled": false,           ## 自主撤退/后撤概率调制总开关（false=只走既有强制溃逃链）
+	# ── A3 · C6 概率调制避战（AI集大成；CoH personality retreat_* 真值见逆向笔记 §3.4；
+	#    数值为语义映射初值待实测校准；总开关默认关 = 零回归。
+	#    消费点：ai_controller._try_combat 掷骰 + behavior_retreat fallback 档 +
+	#    _travel_disengage 统一出口（优先 seek_cover；裁决【删溃逃、立避战】后
+	#    C6 不再下发 withdraw——该档保留为命令路径语义：可下令的 RETREAT/TeamAi ROUT））──
+	"retreat_mod_enabled": false,           ## 自主避战概率调制总开关（劣势/被压时概率脱离接火）
 	"retreat_mod_hp_ratio": 0.49,           ## 血量低于此比例 → 撤退候选因子一（CoH retreat_capacity_percentage 0.49）
 	"retreat_mod_morale_ratio": 0.35,       ## 士气低于此比例 → 撤退候选因子二（本作士气维度映射，CoH 无直接对应；须 ≥ 强制链低士气阈值 0.25，只补中间带）
 	"retreat_mod_ally_break_ratio": 0.51,   ## 附近友军溃逃/阵亡比例 ≥ 此值 → 撤退候选因子三（CoH retreat_suppressed_percentage 0.51 同构）

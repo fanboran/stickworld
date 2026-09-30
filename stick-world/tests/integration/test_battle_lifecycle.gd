@@ -23,10 +23,6 @@ const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman
 # ─────────────────────────────── 战斗单位配置 ────────────────────────────────
 ## 战斗单位 HP（低值加速战斗）
 const BATTLE_HP: float = 40.0
-## 战斗单位士气（低值便于触发溃逃）
-const BATTLE_MORALE: float = 25.0
-## 溃逃阈值（低于此士气溃逃）
-const ROUT_THRESHOLD: float = 10.0
 ## 进攻方起始 X
 const ATTACKER_X: float = 1500.0
 ## 防守方起始 X
@@ -140,10 +136,7 @@ func _spawn_battle_unit(map: Node2D, pos: Vector2) -> Node:
 		var h: Node = e.get_health()
 		if h != null:
 			h.max_hp = BATTLE_HP
-			h.hp = BATTLE_HP
-			h.max_morale = BATTLE_MORALE
-			h.morale = BATTLE_MORALE
-			h.rout_threshold = ROUT_THRESHOLD
+			h.hp = BATTLE_HP  # 士气保持组件默认满值（收敛类测试不看避战，C6 有专项单测）
 	return e
 
 
@@ -228,6 +221,9 @@ func _test_start_battle() -> void:
 	# 启动战斗
 	_battle = _game_root.start_test_battle(_attackers, _defenders)
 	_runner.assert_true(_battle != null, "battle_instance 应创建")
+	# 收敛兜底（裁决【删溃逃、立避战】：溃散收敛退役，超时判接管）
+	if _battle != null:
+		_battle.duration_limit = 90.0
 	if _battle != null:
 		_runner.assert_true(_battle.is_active(), "battle_instance 应激活")
 	# 开战自动暂停（TimeManager._on_battle_started，game/auto_pause_battle 默认 true）
@@ -275,7 +271,7 @@ func _test_casualties_occur() -> void:
 		if _count_dead() > 0:
 			had_casualty = true
 			break
-	# 伤亡或战斗收敛（溃散结算提前落定）任一即为战斗产生实际效果
+	# 伤亡或战斗收敛（提前结算落定）任一即为战斗产生实际效果
 	_runner.assert_true(had_casualty or battle_converged,
 			"战斗应产生伤亡或收敛结束（%ds 内）" % int(CASUALTY_TIMEOUT))
 	print("[test] 伤亡检测完成，elapsed=%.1f, dead=%d, converged=%s" % [elapsed, _count_dead(), battle_converged])

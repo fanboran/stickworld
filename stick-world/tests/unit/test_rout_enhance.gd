@@ -1,7 +1,8 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：9i+ 溃逃保真五项增强（P6 · 6.3）。
+## 单元测试：9i+ 避战保真五项增强（P6 · 6.3；裁决【删溃逃、立避战】后键名沿用、
+## 语义改避战——"溃逃"退役，本文件名保留防断 run_all 收录）。
 ## 覆盖：未开闸开关默认关（零回归闸门）/ 已开闸开关默认开（GK-1 rout_strafe / GK-2
 ## rout_reengage+test_engage）/ 数值默认值 / 可覆盖开启 / TeamAi 姿态查询接口。
 ## 不进场景树，确定性（纯档案 + 接口存在性验证）。

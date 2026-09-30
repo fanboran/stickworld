@@ -32,7 +32,7 @@ func run() -> void:
 		get_tree().quit(1)
 		return
 	var f := FileAccess.open(CSV_PATH, FileAccess.WRITE)
-	f.store_line("t,alive_a,alive_d,routed,near80,near80_run,mutual_pair,dens_cv,mean_nn,churn_flip")
+	f.store_line("t,alive_a,alive_d,disengaging,near80,near80_run,mutual_pair,dens_cv,mean_nn,churn_flip")
 	for s in TOTAL_SAMPLES:
 		await _frames(SAMPLE_EVERY)
 		# 溃散收敛（9k-2）：战斗可能提前结算、实例 queue_free——收敛即止，
@@ -60,13 +60,13 @@ func _sample(battle: Node, t: float, idx: int) -> Dictionary:
 			var hp: Node = u.get_health() if u.has_method("get_health") else null
 			if hp != null and hp.is_dead():
 				continue
-			var routed: bool = hp != null and hp.is_routed()
-			units.append({"u": u, "pos": (u as Node2D).global_position, "routed": routed})
+			units.append({"u": u, "pos": (u as Node2D).global_position,
+				"disengaging": _unit_disengaging(u)})
 	var alive := units.size()
-	var routed_n := 0
+	var disengaging_n := 0
 	for it in units:
-		if it["routed"]:
-			routed_n += 1
+		if it["disengaging"]:
+			disengaging_n += 1
 	# 最近敌 + 位移速度
 	var near_d := {}
 	var speed := {}
@@ -76,8 +76,6 @@ func _sample(battle: Node, t: float, idx: int) -> Dictionary:
 		for ot in units:
 			if ot["u"] == it["u"]:
 				continue
-			if ot["routed"]:
-				continue    # 溃兵不算战斗对手
 			var d: float = (it["pos"] as Vector2).distance_to(ot["pos"])
 			if d < best:
 				best = d
@@ -127,11 +125,17 @@ func _sample(battle: Node, t: float, idx: int) -> Dictionary:
 		"near80": near80, "near80_run": near80_run,
 		"mutual": mutual, "cv": cv, "mean_nn": mean_nn, "churn": churn,
 		"csv": "%2.1f,%d,%d,%d,%d,%d,%d,%.3f,%.1f,%d" % [
-			t, _alive_of(battle, 0), _alive_of(battle, 1), routed_n,
+			t, _alive_of(battle, 0), _alive_of(battle, 1), disengaging_n,
 			near80, near80_run, mutual, cv, mean_nn, churn],
 	}
 	_rows.append(row)
 	return row
+
+
+## 避战行为态（溃逃已退役，语义=战术脱离接火）：鸭子探测 AIController
+func _unit_disengaging(u: Node) -> bool:
+	var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
+	return ai != null and ai.has_method("is_disengaging") and bool(ai.is_disengaging())
 
 
 func _alive_of(battle: Node, faction: int) -> int:

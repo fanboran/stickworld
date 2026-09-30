@@ -52,7 +52,7 @@ func enemy_units() -> Array:
 	return _alive_units(1 - int(ctx.faction))
 
 
-## 战场快照（只读，值拷贝）：{pos, hp_ratio, morale_ratio, routed}
+## 战场快照（只读，值拷贝）：{pos, hp_ratio, morale_ratio, disengaging}
 func snapshot(units: Array) -> Array:
 	var out: Array = []
 	for u in units:
@@ -64,9 +64,15 @@ func snapshot(units: Array) -> Array:
 			"pos": (u as Node2D).global_position,
 			"hp_ratio": hp.get_health_ratio() if hp.has_method("get_health_ratio") else 1.0,
 			"morale_ratio": float(hp.morale) / float(hp.max_morale) if "morale" in hp and hp.max_morale > 0 else 1.0,
-			"routed": hp.is_routed(),
+			"disengaging": _is_disengaging(u),
 		})
 	return out
+
+
+## 避战行为态（溃逃已退役）：鸭子探测 AIController.is_disengaging()
+func _is_disengaging(u: Node) -> bool:
+	var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
+	return ai != null and ai.has_method("is_disengaging") and bool(ai.is_disengaging())
 
 
 ## 有效战力（未死未溃单位数）——与 driver 的胜负判定同口径
@@ -112,6 +118,6 @@ func _alive_units(faction: int) -> Array:
 		if not is_instance_valid(u):
 			continue
 		var hp: Node = u.get_health() if u.has_method("get_health") else null
-		if hp != null and not hp.is_dead() and not hp.is_routed():
+		if hp != null and not hp.is_dead():
 			out.append(u)
 	return out

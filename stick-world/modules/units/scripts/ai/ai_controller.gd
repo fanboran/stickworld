@@ -117,6 +117,16 @@ var _retreat_mod_last_roll: float = NAN
 var _retreat_mod_last_chance: float = NAN
 var _retreat_mod_last_result: bool = false
 
+# ── 9h 卡死看门狗（O(1)：只记上次采样位置 + 累计计时，不扫描不查询邻居）──
+## 有移动意图（实体速度 > 档案阈值）但窗口内净位移 ≈ 0 → 强制重决策。
+var _wd_timer: float = 0.0
+## 窗口起点位置（进入有意图态时采样；窗口到期时与此比较算净位移）
+var _wd_last_pos: Vector2 = Vector2.ZERO
+## 分离推力截止时刻（_world_time 时钟；推力期内每拍覆盖行为层移动意图）
+var _wd_nudge_until: float = -1.0e9
+## 分离推力方向（触发时随机掷一次，短窗内恒定）
+var _wd_nudge_dir: Vector2 = Vector2.ZERO
+
 # ─────────────────────────────── 命令覆盖（§8.3 战术号令）────────────────────────────────
 ## 当前下达的命令行为名（空=无命令，由 AI 自主决策）
 var _ordered_behavior: String = ""
@@ -186,6 +196,8 @@ func physics_update(delta: float) -> void:
 	_world_time += delta
 	if _advance_decision_clock(_decision_clock._now()):
 		_make_decision()
+	# 9h 卡死看门狗（决策之后跑：触发时的分离推力覆盖行为层本拍移动意图）
+	_watchdog_tick(delta)
 
 
 # ─────────────────────────────── 决策逻辑 ────────────────────────────────
@@ -277,6 +289,55 @@ func _make_decision() -> void:
 	else:
 		# 未知行为，回 idle
 		_state_machine.travel("idle")
+
+
+# ─────────────────────────── 9h 卡死看门狗 ───────────────────────────
+
+## 卡死看门狗（O(1)：只记上次采样位置 + 累计计时，不扫描邻居/列表——逐单位每拍
+## 调用零额外分配）。判定 = 有移动意图（实体速度超阈值）但窗口内净位移低于下限
+## （对齐缺陷表 9h"全员卡死"：意图在跑、实际钉死——典型于互相对穿卡位/分离力
+## 对冲）。触发动作：战斗中重进 attack（enter 清目标/持瞄状态 → 下一拍重选目标 =
+## "清当前目标/换目标"）+ 一次短分离推力（随机方向覆盖行为层意图，行为下一拍
+## 收回控制权）；号令行军等非战斗行为只推力不清令（号令是玩家意图不归看门狗撤）。
+## 无意图（站桩输出/压制/硬直/待命）即清零重计——不误伤合法静止。
+func _watchdog_tick(delta: float) -> void:
+	var profile: Dictionary = _get_behavior_profile()
+	if not bool(profile.get("stuck_watchdog_enabled", true)):
+		return
+	# 分离推力期内先覆盖移动意图（本拍行为层已跑完，这里最后写=生效）
+	if _world_time < _wd_nudge_until:
+		if _entity.has_method("ai_move"):
+			_entity.ai_move(_wd_nudge_dir, false)
+	var pos: Vector2 = _entity.global_position
+	var intent_min: float = maxf(float(profile.get("stuck_watchdog_intent_speed", 10.0)), 0.1)
+	if _entity.velocity.length_squared() < intent_min * intent_min:
+		_wd_timer = 0.0
+		_wd_last_pos = pos
+		return
+	if _wd_timer <= 0.0:
+		_wd_last_pos = pos
+	_wd_timer += delta
+	if _wd_timer < maxf(float(profile.get("stuck_watchdog_window", 2.0)), 0.1):
+		return
+	_wd_timer = 0.0
+	var drift: float = pos.distance_to(_wd_last_pos)
+	_wd_last_pos = pos
+	if drift >= float(profile.get("stuck_watchdog_min_drift", 12.0)):
+		return  # 窗口内确实挪动了：不算卡死
+	_stuck_break(profile, pos)
+
+
+## 卡死触发处置：换目标（战斗中重进 attack）+ 分离推力 + 可关调试日志。
+func _stuck_break(profile: Dictionary, pos: Vector2) -> void:
+	_wd_nudge_dir = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
+	_wd_nudge_until = _world_time + 0.25
+	if _state_machine != null and _state_machine.get_current_behavior_name() == "attack":
+		_state_machine.travel("attack")  # enter 清 _target/_aim → 下一拍重选目标
+	if bool(profile.get("stuck_watchdog_log", true)):
+		var behavior: String = _state_machine.get_current_behavior_name() \
+				if _state_machine != null else "?"
+		print("[AIController] 卡死看门狗触发: pos=%v 行为=%s 换目标+分离推力" % [pos, behavior])
+
 
 
 ## 尝试战斗决策。当 entity 参战（有激活的 battle_instance）时返回 true 并切换到战斗行为。

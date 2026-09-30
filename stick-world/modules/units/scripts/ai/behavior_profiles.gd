@@ -109,7 +109,20 @@ const BASELINE: Dictionary = {
 	# ── A9 · R1/R3/R5 个体 AI 参数面板（RWR interval/burst 族直译，AI集大成；
 	#    全部语义推断初值待实测校准；消费点见 ai_controller/behavior_attack/behavior_heal）──
 	"decision_interval": 0.3,               ## R1 主决策间隔（s，RWR choose_enemy_time 族；镜像旧 DECISION_INTERVAL 常量 = 零回归）
-	"decision_variance": 0.0,               ## R1 间隔 ± 方差半宽（s，RWR wait_time_variance 同构——逐拍重掷去同步；0 = 旧固定节拍）
+	"decision_variance": 0.0,               ## R1 间隔 ± 方差半宽（s，RWR wait_time 1.2±0.6 方差比 0.5 同构——逐拍重掷去同步；0 = 旧固定节拍。
+	                                        ##   开闸走 .tres 生效层（RWR 方差比 0.5×节拍 0.3 → 保守可取 0.1，待实测校准）：
+	                                        ##   代码基线被 test_ai_spawn_jitter「缺载兜底 0.3」与 test_ai_param_panel
+	                                        ##   「baseline.decision_variance = 0（零回归）」双锁锁定，基线翻非零必挂测试）
+	"target_switch_ratio": 0.6,             ## 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：集火目标距离 < 当前目标距离 × 此值才换靶；<=0 = 关滞回回旧"始终换"语义（待实测校准）
+	# ── 9h 卡死看门狗（消费点 ai_controller._watchdog_tick，O(1) 无扫描；
+	#    默认开——对齐"有移动意图却钉死不动"的观察场主诉，关 = 既有无看门狗语义）──
+	"stuck_watchdog_enabled": true,         ## 卡死看门狗总开关
+	"stuck_watchdog_window": 2.0,           ## 判定窗口（s，任务书区间 1.5~2.5 取中，待实测校准）
+	"stuck_watchdog_intent_speed": 10.0,    ## 移动意图阈值（px/s：实体速度低于此视为合法静止，不计窗）
+	"stuck_watchdog_min_drift": 12.0,       ## 窗口内最小净位移（px，低于此判卡死；与分离抖动同量级，待实测校准）
+	"stuck_watchdog_log": true,             ## 触发调试日志开关（每触发一条，低频）
+	# ── 9u 开火放行（消费点 behavior_attack；持瞄对拍/y 门槛永久禁射修正）──
+	"y_aim_grace": 1.5,                     ## |Δy| 连续超容忍超过此时长必放行开火（s；抛物线弹道解算吸收 y 差，放行防"弓手站桩不放箭"，待实测校准）
 	"burst_shots": 0,                       ## R3 连射点数（发：连发此数后插 wait 停顿再射，RWR burst_time 族；0=关零回归；远程与近战均按档案开关）
 	"burst_wait": Vector2(1.2, 1.8),        ## R3 点射间停顿时长区间（s，RWR wait 1.2±0.6 直译）
 	"night_hesitate_mult": 1.0,             ## R3 夜间犹豫时长倍率（RWR 昼 0.3~0.6/夜 0.8~1.1 ≈ ×1.8~2.7；1.0 = 零回归；夜间判定见 behavior_attack._is_night）
@@ -214,7 +227,9 @@ const CLASS_PROFILES: Dictionary = {
 		"hesitate_prob": 0.08,
 	},
 	STAFF: {
-		"kite_range": 0.0,
+		"kite_range": 0.0,              ## 保持 0：被 test_rout_enhance「STAFF kite_range=0.0 覆盖」锁定；
+										##   开保距走此行覆盖值（施法射程 600 已无死锁，锚点取弓手 500 档下浮
+										##   480 待实测校准）——与 decision_variance 同走协调批
 		"hesitate_prob": 0.06,
 		"hesitate_time": Vector2(0.5, 1.1),
 		"leash_mult": 5.0,

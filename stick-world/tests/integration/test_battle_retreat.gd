@@ -211,7 +211,9 @@ func _setup_battle(n_attackers: int, n_defenders: int, player_faction: int,
 		return {}
 	var mr: float = float(map.get("map_right")) if "map_right" in map else 8192.0
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
-	# 守军靠右缘布阵（撤离距离短，加速场景收敛）；攻方贴守方左侧快速接敌
+	# 守军靠右缘布阵（撤离距离短，加速场景收敛）；攻方贴守方左侧快速接敌。
+	# 守军贴缘 280px 起（出手预测门槛落地后追击不再对移动目标空挥，撤离腿必须
+	# 短于追击腿，否则"伤亡率触发→撤离"被全歼抢先，departed 语义验不到）
 	var attackers: Array = []
 	for i in n_attackers:
 		var e: Node = _spawn_battle_unit(map, Vector2(mr - 1100.0 + i * 40.0, spawn_y))
@@ -221,7 +223,7 @@ func _setup_battle(n_attackers: int, n_defenders: int, player_faction: int,
 	for i in n_defenders:
 		# 撤仗场景守军用高体质（撤离路径存活）；其余场景低 HP 加速收敛
 		var hp: float = RETREAT_DEFENDER_HP if with_retreat else BATTLE_HP
-		var e: Node = _spawn_battle_unit(map, Vector2(mr - 500.0 + i * 40.0, spawn_y), hp)
+		var e: Node = _spawn_battle_unit(map, Vector2(mr - 280.0 + i * 40.0, spawn_y), hp)
 		if e != null:
 			defenders.append(e)
 	# 撤仗场景双方满士气：9k 溃散收敛下低士气（25）会在伤亡率触发前整体溃散

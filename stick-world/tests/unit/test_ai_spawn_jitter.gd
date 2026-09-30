@@ -335,7 +335,10 @@ func _test_domain_independence() -> void:
 # ─────────────────── 观测面 / 缺载 / ③ 门控 ────────────────────
 
 func _test_timing_state() -> void:
-	_restore_rows()
+	# R1 方差开闸（.tres baseline.decision_variance=0.1）后真实档案的间隔是掷骰值，
+	# "触发后 next_at 精确 = now+interval"的确定性断言须注入关档钉住 variance 0
+	#（本用例验状态字段齐全与到期一致性，方差语义由 test_ai_param_panel R1 管辖）
+	_inject_off_rows()
 	var clock := _FakeClock.new()
 	var ai: AIController = _make_ai(clock, 9)
 	ai.apply_spawn_jitter()
@@ -368,6 +371,7 @@ func _test_timing_state() -> void:
 	_runner.assert_approx(float(st2["decision"]["next_at"]), next_at + BASE_INTERVAL, 0.000001,
 			"下次到期 = 触发时刻 + 当前间隔")
 	ai.free()
+	_restore_rows()
 
 
 func _test_config_missing() -> void:

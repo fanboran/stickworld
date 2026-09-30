@@ -94,6 +94,29 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 
 生效范围=char_host（每角色独立 SubViewport，屏幕空间描边付得起）；2D 批渲染路径不受影响。
 
+**角色 SubViewport 禁开 msaa_2d**：描边材质经 `hint_screen_texture` 读回组缓冲，
+msaa_2d 开着时读到未 resolve 的多重采样数据（逐通道错采样）——色散直接烘焙进
+角色贴图。视口保持 MSAA_DISABLED，边缘平滑由 px_scale 超采样承担。
+
+**HD-2D post 通道运行期关所在视口的 msaa_2d（hd2d_world 进树时改、_exit_tree 恢复）**：
+post（post_hd2d.gdshader）经 hint_screen_texture 整屏拷贝背缓冲，工程级 msaa_2d
+开着时同样逐通道错采样——全屏 RGB 色散，草地噪点/血条镶边即此（细白线处才肉眼
+可见）。HD-2D 场景内 3D 抗锯齿走 msaa_3d 不受影响；纯 2D 场景不经 hd2d_world，
+工程级 msaa_2d=2（2D 路径抗锯齿生命线，测试金丝雀锚定）保持不动。
+
+**角色贴图烘焙路线（char_sprite_3d `_blit_capture`；2026-09-30 创始人验收指正
+"角色满身 RGB 色散 + 缩小后满身锯齿"的最终方案）**：排查实证（贴图回读/2D 直显
+均干净、16 轮参数探针全无法消除）——本引擎组合下 **spatial 管线采样画布 RT 会
+在细亮线两侧产生逐通道错位的红青镶边**（自定义 shader 与 Sprite3D 同病，换
+格式/尺寸/过滤/MSAA 全无效，属引擎/驱动层缺陷，工程侧不可修）。绕行：billboard
+不直采视口 RT，按节拍把视口内容回读落成**带真实 mip 链的 ImageTexture** 喂给
+char_billboard（ImageTexture 路径=建筑卡同款，实测干净；真实 mip 链同时治好
+"ViewportTexture 无 mip、缩小走样满身锯齿"）。回读是 sync 点，必须节流：FIFO
+公平队列 + 每帧预算（BLIT_BUDGET）摊帧，动画中单位按 BLIT_FPS 节拍刷新，idle
+姿态休眠、换动画立即唤醒（set_anim 排期）。注意：不要对 SubViewport 做运行期
+size 重分配——实测会永久破坏其 CanvasGroup 内容（回读全白），分档只切 alpha
+口径（QUALITY_TIERS：特写硬切定稿 / 缩小档软边）。
+
 **火柴人渲染踩坑备查**（本节知识曾完全无记载，复排查了两天）：
 - 骨架渲染是**全局两遍**（stickman_skeleton.gd）：所有描边层 z=-1 压底、所有填充层 z=0 置顶——肢体重叠处填充无缝融合，描边只在整体剪影外轮廓出线（"只有剪影描边"口径，与 ID Buffer 全融合同语义）。部件间相对遮挡靠填充层之间的树序（`reorder_render_order`）；武器/盾相对 z=+7 盖全身肢体（weapon_mount）。
 - 渲染双路径：MultiMesh 批渲染（`render/batch_rig` 工程设置，默认开；环境变量 `STICK_BATCH_RIG` 强制覆盖）vs 矢量 Line2D 路径。批渲染是战场规模的技术，SubViewport 里两条路径都可用。crowd 桶（`render/crowd_renderer` / `STICK_CROWD`）同款"描边先画、填充后画"语义（y 分带内）。

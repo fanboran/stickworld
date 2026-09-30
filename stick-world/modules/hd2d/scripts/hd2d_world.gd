@@ -275,6 +275,7 @@ var _char_host: Node3D = null
 var _post_layer: CanvasLayer
 var _post_rect: ColorRect
 var _post_mat: ShaderMaterial
+var _post_viewport_msaa2d := 0   # 进树时视口 msaa_2d 原值（_exit_tree 恢复）
 var _hud: Label
 var _hud2: Label
 
@@ -354,6 +355,13 @@ func _ready() -> void:
 
 ## 诊断对照实验：按 --hide= 组名隐藏节点组（shadow=接地影面片 / plat=台面系几何 /
 ## cards=建筑卡 / kerb=台肩镶边）。只影响显示，不改落位。
+func _exit_tree() -> void:
+	# 恢复 post 通道关掉的视口 2D MSAA（缘由见 post 层创建处注释）
+	if _post_viewport_msaa2d != 0 and get_viewport() != null:
+		get_viewport().msaa_2d = _post_viewport_msaa2d
+	_post_viewport_msaa2d = 0
+
+
 func _apply_hide_groups() -> void:
 	var spec := str(_opts.get("hide", ""))
 	if spec.is_empty():
@@ -1341,6 +1349,15 @@ func _build_world() -> void:
 	_post_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_post_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_post_layer.add_child(_post_rect)
+
+	# post 通道经 hint_screen_texture 整屏拷贝背缓冲：所在视口开着 msaa_2d 时，
+	# 拷贝读回的是未 resolve 的多重采样数据，R/G/B 落自不同子像素采样点——
+	# 全屏 RGB 色散，只在描边细线等高对比处肉眼可见（2026-09-30 验收指正根因；
+	# HUD 在更高 CanvasLayer 自绘不经这份拷贝，所以只有 3D 世界内容花）。
+	# 本视口 2D MSAA 关到退出树为止：3D 世界抗锯齿走 msaa_3d 不受影响；
+	# 纯 2D 场景不经 hd2d_world，工程级 msaa_2d=2（2D 路径抗锯齿生命线）保持不动。
+	_post_viewport_msaa2d = get_viewport().msaa_2d
+	get_viewport().msaa_2d = Viewport.MSAA_DISABLED
 
 	# HUD 标签（只在遮挡对照图里显示，给两格加字）
 	_hud = _make_label(Vector2(24, 18), 30)

@@ -41,6 +41,8 @@
 - 2026-09-30：渲染五阶段落 `F:\VSCode\game-2\temp\观察场AI验收\`（t4=红方全灭/三旗尽取/蓝方建制收场；旗行 HUD 上线）。**分支待创始人验收后合并 main**；fps≈10 为旧渲染线性能账（渲染修复在 agent/arena-25d-fix 分支，两条合并后一并生效）。
 - 2026-09-30：**RL 训练线开工**（创始人方向：AlphaGo 式自博弈、随机不对称对阵+正反两局平均防过拟合、一个网络执掌双方、评估裁判=赢手调规划器）。泰坦 C++ GDExtension 训练核落库（`ea92b665`，addons/rl_core）：对拍误差 1e-15、**吞吐 230~240 倍**（261 局/s vs 1.12）、checkpoint 与 GDScript 版双向兼容；GPU 判断书留档（当前网络规模上 GPU 是负优化，向量化 compute shader + 大网络/10⁵ 轮才值得）。阿尔法 GDScript 设施施工中（tests/dev/rl/ + nn_brain）。
 - 2026-09-30：**【删溃逃、立避战】方向裁决落地**（e1465a3b）：is_routed/rout_threshold 退役、is_disengaging() 行为态立起（谁执行谁置位）、压制触发避战、避战带打带跑、C3 指挥层撤仗与可下令 RETREAT 保留、士气降级为避战打分输入；结算=全灭/离场/超时(duration_limit)。全量 39 过 / 1 环境项；benchmark 选手与指标台同步适配（`438d67d7`）。**本轮验收产物中的"溃逃"口径自此作废**，观察场数字以避战版复测为准。
+- 2026-09-30：**RL 训练线全链贯通**（阿尔法批）：57 维镜像观察/正反两局合批/REINFORCE 断点续训/nn_brain 部署位，343 轮 538 场零自身崩溃、熵 3.84 无塌缩、攻守无偏置（49.3/50.7）；评估协议=每 50 轮 vs 军师规划器 3 组正反（当前 50%——网络未形成泛化优势，符合预期）。**无限循环训练已在后台续跑（iter 340 起）**，杀 godot 进程即停、重跑 `res://tests/dev/rl/selfplay_trainer.tscn` 即续。运行档 `user://rl/`（checkpoint/train_log/eval_log）。
+- **RL 后续项**：① 泰坦 C++ 环境为 47 维紧凑规格，与阿尔法真实环境 57 维**不同构**（"互通"仅 JSON 格式）——切 `RLTrainer.train(n)` 长期跑之前须把 C++ env 对齐 57 维真实规格（GDScript env 留作对拍锚点）；② arrow_projectile.gd 在 time_scale=5 下有命中已释放目标的竞态报错（非致命，待修）；③ 评估对手是单台规划器，其改版会造成基准漂移。
 
 ## 下一步
 

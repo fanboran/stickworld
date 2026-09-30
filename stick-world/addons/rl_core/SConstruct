@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+# rl_core · GDExtension 构建（RL 自博弈训练热路径 C++ 化）
+#
+# 用法（在 addons/rl_core/ 下）：
+#   scons platform=windows target=template_debug arch=x86_64 use_mingw=yes -j8
+#
+# godot-cpp 定位：默认用仓库 worktree 根的 external/godot-cpp（../
+# ../../external/godot-cpp，相对本文件），可用环境变量 GODOT_CPP_PATH 覆盖。
+# 首次构建会连带编译 godot-cpp 静态库（mingw 下数分钟量级，之后增量复用）。
+
+# 本文件被 scons 执行时无 __file__：约定在 addons/rl_core/ 目录下调用 scons，
+# THIS_DIR = 当前工作目录。
+import os
+
+THIS_DIR = os.getcwd()
+GODOT_CPP_PATH = os.environ.get(
+    "GODOT_CPP_PATH",
+    os.path.join(THIS_DIR, "..", "..", "..", "external", "godot-cpp"),
+)
+
+env = SConscript(os.path.join(GODOT_CPP_PATH, "SConstruct"))
+
+# mingw 定点：本机编译器在 "C:/Program Files/mingw64"（带空格）。SCons 会把命令
+# 按空格切开传给 spawn（首 token 变成 'C:/Program'），godot-cpp 的 my_spawn 长行
+# 分块（按 cmd.endswith("ar") 判定）因此全部失效——AR 超长命令行必炸。解法：
+# 在用户目录建无空格 junction 指向真实工具链，五个工具命令全部走 junction。
+if env["platform"] == "windows" and not env.get("is_msvc"):
+    import os.path
+
+    def _exists(p):
+        return bool(p) and os.path.exists(p)
+
+    real_mingw = "C:/Program Files/mingw64"
+    probe = real_mingw + "/bin/x86_64-w64-mingw32-g++.exe"
+    if os.path.exists(probe):
+        junc = os.environ.get("RL_CORE_MINGW_JUNCTION", "C:/Users/fanbo/.scons-mingw64")
+        if not os.path.exists(junc):
+            import _winapi
+            _winapi.CreateJunction(real_mingw.replace("/", "\\"), junc)
+        if os.path.exists(junc + "/bin/x86_64-w64-mingw32-g++.exe"):
+            pre = junc + "/bin/x86_64-w64-mingw32-"
+            env["CC"] = pre + "gcc"
+            env["CXX"] = pre + "g++"
+            env["AR"] = pre + "gcc-ar"
+            env["RANLIB"] = pre + "gcc-ranlib"
+            env["LINK"] = pre + "g++"
+            print("[rl_core] mingw 工具链走 junction：" + junc)
+
+# 保险起见补齐共享库前缀设置（部分 mingw 分支不设）
+env["SHLIBPREFIX"] = ""
+env["IMPLIBPREFIX"] = ""
+
+# 纯核心（rl_net/rl_env/rl_trainer/rl_json）不 include 任何 Godot 头；
+# 绑定层（rl_bindings/register_types）走 godot-cpp。
+env.Append(CPPPATH=[os.path.join(THIS_DIR, "src")])
+
+sources = Glob(os.path.join(THIS_DIR, "src", "*.cpp"))
+
+if env["platform"] == "macos":
+    library = env.SharedLibrary(
+        os.path.join(THIS_DIR, "bin", "librl_core.{}.framework".format(env["suffix"])),
+        source=sources,
+    )
+else:
+    library = env.SharedLibrary(
+        os.path.join(THIS_DIR, "bin", "librl_core{}{}".format(env["suffix"], env["SHLIBSUFFIX"])),
+        source=sources,
+    )
+
+Default(library)

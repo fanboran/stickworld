@@ -129,6 +129,10 @@ var _task_board: ScriptTaskBoard = null
 ## W1 观测缓存：最近一次决策周期重算的攻击百分比（get_attack_percentage 消费；
 ## 决策节拍刷新而非查询时重算——HUD 轮询不重跑四规则，方案 §2.6）
 var _cached_attack_pct: float = 0.0
+## 意图规划器接管标记（夺点观察场）：true = TeamAi 让位——tick 空转、不发任何姿态
+## 号令（号令权归 tactics SquadIntentPlanner；双脑同场会对同一批班互相覆盖号令打摆）。
+## 默认 false = 姿态机照常，零行为漂移。
+var _planner_suppressed: bool = false
 
 ## 节流计时器三件套（dump 字段直译：_lastStanceChangeTime/_lastGarrisonTime/_lastBuildUpdate；
 ## 时钟源 = battle.get_duration() 战斗秒：暂停冻结、随宿主）
@@ -246,11 +250,19 @@ func set_order_refs(orders: Node, formation: Node) -> void:
 	_org_api = _resolve_org_api()
 
 
+## 让位开关（夺点观察场接线）：true 时本方 TeamAi 停发姿态号令（号令权让给
+## tactics SquadIntentPlanner），false 恢复姿态机。只影响号令，不影响观测查询。
+func set_planner_suppressed(suppressed: bool) -> void:
+	_planner_suppressed = suppressed
+
+
 ## 宿主 tick（BattleInstance._physics_process 内调用，每物理帧进入）。
 ## C1 固定节拍分帧：按 beat_interval 累积，每拍只跑一个相位（DECIDE=快照+姿态决策 /
 ## BUILD=造兵桩），轮转推进——决策不逐帧思考，单拍峰值成本减半。
 ## 后置：相位推进完整（while 兼容 delta 尖峰）；姿态变更时号令已受理或已跳过（不排队）。
 func tick(delta: float) -> void:
+	if _planner_suppressed:
+		return  # 意图规划器接管期：空转让号令权（防双脑对同批班互覆号令）
 	if _battle == null or not is_instance_valid(_battle):
 		return
 	# 决策门禁（宿主已保证 ENGAGED；暂停/倍速由引擎总闸与 sim_delta 全局负责）

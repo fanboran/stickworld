@@ -17,6 +17,14 @@ extends Node
 ##   前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长集火 +
 ##   兵种行为档案（冲脸/持阵/风筝）接管。
 ##
+## 夺点模式（CAPTURE_ENABLED 默认开）：中线布 3 个夺点（左/中/右，y 错开），双方各一台
+##   班级意图规划器（tactics SquadIntentPlanner，0.5s 节拍）按打分给每班选意图
+##   （攻点/驻防/接火 + 惯性防抖）并翻译成 TacticalOrders 下发；到旗边先停驻观察
+##   约 0.8s 再入场（Ravenfield"先看再进"）。夺点接手后开战推进/跟队锚定与 TeamAi
+##   姿态号令全部让位（规划器独占号令权，防双脑互覆）。控制面板战况板加旗点状态行
+##   （"旗：左我/中敌/右争夺"）。开关关闭 = 完整回退上面一段的旧开战逻辑。
+##   规划器打分权重/风格表 = RL 搜索变量集（待实测校准），见 squad_intent_planner.gd。
+##
 ## 相机（审计 P0-6）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑全可用），
 ##   居中模式跟随"质心代理"（每帧 lerp）+ 开纵向跟随（rig 侧钳在行走带内）；
 ##   缩放 0.75（缩放条 100% 档）——3D 侧战场契约把地平线钉屏幕上 1/3 线，
@@ -28,6 +36,8 @@ const _GameRootScene: PackedScene = preload("res://modules/world/scenes/game_roo
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 const _MainMenuScene := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 const _TacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
+## tactics 模块契约出口（夺点/意图规划器；跨模块 preload 走 api.gd 惯例）
+const _TacticsAPI: GDScript = preload("res://modules/tactics/api.gd")
 
 ## 武器类型（对齐 WeaponMount.WeaponType：0 剑 1 矛 2 弓 3 镐 4 杖）
 const W_SWORD: int = 0
@@ -122,16 +132,37 @@ const TEAM_OFFSET_X: float = 1400.0   # HD-2D 战场 88 格深带
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
+## ── 夺点模式（开 = 意图规划器接管开战；关 = 完整回退旧 ADVANCE_ALL + 跟队逻辑）──
+const CAPTURE_ENABLED: bool = true
+## 夺点占领半径（px）
+const CAPTURE_RADIUS: float = 180.0
+## 相邻夺点横向间距（px，相对中线左右展开）
+const CAPTURE_X_SPREAD: float = 500.0
+## 夺点纵向错开偏移（px，相对行走带中心）
+const CAPTURE_Y_OFFSET: float = 200.0
+## 纵向夹紧安全边距（px：点心离行走带上下沿至少此值，再取整十）
+const CAPTURE_Y_MARGIN: float = 100.0
+## 旗点状态行用方位标签（与布点顺序一一对应：左/中/右）
+const CAPTURE_POINT_LABELS: Array = ["左", "中", "右"]
+
 var _game_root: Node = null
 var _left_alive_label: Label = null
 var _right_alive_label: Label = null
 const _TARGET_MAP := "battlefield"   # HD-2D 战场：观察场=真实生产观感（血条随骨架进 billboard）
 	## （battlefield_2d 是自动化套件的 2D 空旷开机图，不承担观感）
 var _hint_label: Label = null
+## 旗点状态行（夺点模式；"旗：左我/中敌/右争夺"）
+var _flag_label: Label = null
 ## 控制面板预设按钮组（下标对齐 PRESETS）
 var _preset_buttons: Array = []
 var _attacker: Array = []
 var _defender: Array = []
+## 夺点实例列表（tactics CapturePoint；布点顺序 = 左/中/右）
+var _capture_points: Array = []
+## 意图规划器（faction -> SquadIntentPlanner；夺点模式每方一台）
+var _planners: Dictionary = {}
+## 编队系统引用（单位快照 provider 取班号用）
+var _arena_formation: Node = null
 ## 相机跟随代理（camera_rig 居中模式目标；每帧 lerp 到存活质心）
 var _cam_proxy: Marker2D = null
 ## 战斗开始后开启质心跟随
@@ -247,32 +278,40 @@ func _spawn_and_start() -> void:
 	for si in squad_defs.size():
 		left_squad_ids.append(_make_squad(fs, squads_left[si], "%s·蓝" % squad_defs[si]["name"]))
 		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % squad_defs[si]["name"]))
-	# 编队前进（火柴人战争式）：先锋班（未锚定）下 ADVANCE_ALL 压到目标线；
-	# 锚定班不下推进号令——落点由编队动态跟队 tick 维持（跟队行军 + 接战交还战斗）
+	# 开战推进接管权分流：夺点模式 = 意图规划器（布点 + 双方各一台，0.5s 节拍
+	# 自主攻点/驻防/接火）；关闭 = 完整回退旧开战逻辑（下 else 分支，逐行原样）
 	var to: Node = _game_root.get_tactical_orders()
-	if to != null and to.has_method("issue"):
-		for si in squad_defs.size():
-			var def: Dictionary = squad_defs[si]
-			if float(def.get("follow_gap", 0.0)) > 0.0:
-				continue  # 锚定班：剑班/火力班由动态跟队接管
-			var adv_x: float = float(def["advance_x"])
-			var lid: String = left_squad_ids[si]
-			var rid: String = right_squad_ids[si]
-			if not lid.is_empty():
-				to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, lid, Vector2(mid_x + adv_x, spawn_y), 0)
-			if not rid.is_empty():
-				to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, rid, Vector2(mid_x - adv_x, spawn_y), 0)
+	if CAPTURE_ENABLED:
+		_setup_capture_mode(mid_x, spawn_y, map, fs, to, left_squad_ids, right_squad_ids)
+		# 双脑仲裁：夺点模式号令权归规划器，TeamAi 姿态机让位（延迟到帧末——
+		# BattleDirector 也是帧末才注册生产 TeamAi，本方排其后才能拿到实例）
+		if battle != null:
+			_suppress_team_ai.call_deferred(battle)
 	else:
-		push_warning("[Arena] TacticalOrders 未就绪，编队前进跳过")
-	# 编队动态跟队（SWL MoveInFormationBehindAnotherFormation + GapBetweenFormationGroups
-	# 直译）：剑班锚矛班、火力班锚剑班，后队落点 = 前队质心 − 行进方向 × gap
-	if fs != null and fs.has_method("set_squad_follow_squad"):
-		for si in squad_defs.size():
-			var gap: float = float(squad_defs[si].get("follow_gap", 0.0))
-			if gap <= 0.0 or si == 0:
-				continue
-			fs.set_squad_follow_squad(left_squad_ids[si], left_squad_ids[si - 1], gap)
-			fs.set_squad_follow_squad(right_squad_ids[si], right_squad_ids[si - 1], gap)
+		# 回退路径（夺点关闭）：旧行为原样——先锋班单线 ADVANCE_ALL + 锚定班动态跟队
+		if to != null and to.has_method("issue"):
+			for si in squad_defs.size():
+				var def: Dictionary = squad_defs[si]
+				if float(def.get("follow_gap", 0.0)) > 0.0:
+					continue  # 锚定班：剑班/火力班由动态跟队接管
+				var adv_x: float = float(def["advance_x"])
+				var lid: String = left_squad_ids[si]
+				var rid: String = right_squad_ids[si]
+				if not lid.is_empty():
+					to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, lid, Vector2(mid_x + adv_x, spawn_y), 0)
+				if not rid.is_empty():
+					to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, rid, Vector2(mid_x - adv_x, spawn_y), 0)
+		else:
+			push_warning("[Arena] TacticalOrders 未就绪，编队前进跳过")
+		# 编队动态跟队（SWL MoveInFormationBehindAnotherFormation + GapBetweenFormationGroups
+		# 直译）：剑班锚矛班、火力班锚剑班，后队落点 = 前队质心 − 行进方向 × gap
+		if fs != null and fs.has_method("set_squad_follow_squad"):
+			for si in squad_defs.size():
+				var gap: float = float(squad_defs[si].get("follow_gap", 0.0))
+				if gap <= 0.0 or si == 0:
+					continue
+				fs.set_squad_follow_squad(left_squad_ids[si], left_squad_ids[si - 1], gap)
+				fs.set_squad_follow_squad(right_squad_ids[si], right_squad_ids[si - 1], gap)
 	# 收掉开局引导大卡（demo_quest 每次新装配都弹，屏幕正中挡观察 6 秒；
 	# 观察场不看新手引导）
 	var opening_hint: Node = get_tree().root.find_child("OpeningHint", true, false)
@@ -351,6 +390,96 @@ func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
 	return e
 
 
+# ─────────────────────────────── 夺点模式 ────────────────────────────────
+
+## 布夺点 + 装双方意图规划器（夺点模式开战逻辑）：三点横排中线、y 错开、行走带内
+## 夹紧取整十；规划器接管开战推进——号令经 TacticalOrders 下发（AI 口径 tier=1），
+## 单位数据经 provider 回传（tactics L2 零出向，本观察场是注入方）。
+func _setup_capture_mode(mid_x: float, spawn_y: float, map: Node2D, fs: Node, to: Node,
+		left_squad_ids: Array, right_squad_ids: Array) -> void:
+	_arena_formation = fs
+	var band_top: float = map.ground_y + CAPTURE_Y_MARGIN
+	var band_bottom: float = map.ground_bottom - CAPTURE_Y_MARGIN
+	var defs: Array = [
+		{ "id": "capture_left", "pos": Vector2(mid_x - CAPTURE_X_SPREAD, spawn_y - CAPTURE_Y_OFFSET) },
+		{ "id": "capture_center", "pos": Vector2(mid_x, spawn_y) },
+		{ "id": "capture_right", "pos": Vector2(mid_x + CAPTURE_X_SPREAD, spawn_y + CAPTURE_Y_OFFSET) },
+	]
+	for d in defs:
+		var pos: Vector2 = d["pos"]
+		pos.y = snappedf(clampf(pos.y, band_top, band_bottom), 10.0)
+		pos.x = snappedf(pos.x, 10.0)
+		# CapturePoint 是 RefCounted（非 Node）：无类型注解承接，防赋值类型炸
+		var point = _TacticsAPI.CapturePoint.new()
+		point.setup(d["id"], pos, CAPTURE_RADIUS)
+		point.capture_owner_changed.connect(_on_capture_owner_changed)
+		_capture_points.append(point)
+	# 双方各一台规划器；占领结算权归攻方那台（同局恰好一台，防双份积分——
+	# 结算权纪律见 squad_intent_planner.gd 文件头）。规划器同为 RefCounted。
+	var provider := Callable(self, "_capture_unit_snapshot")
+	for side_v in [[1, left_squad_ids, true], [2, right_squad_ids, false]]:
+		var side: Array = side_v
+		var planner = _TacticsAPI.IntentPlanner.new()
+		planner.setup(side[0], _capture_points, side[1], to, provider, side[2])
+		_planners[side[0]] = planner
+
+
+## 单位快照 provider（规划器每拍回调查询）：只交位置/阵营/班号值拷贝，
+## 不交单位引用——tactics 侧零出向、无 freed 悬挂。
+func _capture_unit_snapshot() -> Array:
+	var snap: Array = []
+	for u in _attacker + _defender:
+		if not is_instance_valid(u) or u.is_dead():
+			continue
+		snap.append({
+			"pos": u.global_position,
+			"faction": u.get_faction() if u.has_method("get_faction") else 0,
+			"squad_id": String(_arena_formation.get_unit_squad(u)) if _arena_formation != null else "",
+		})
+	return snap
+
+
+## TeamAi 让位（夺点模式）：两方姿态机停发号令，号令权独归意图规划器。
+## 帧末执行——BattleDirector 同帧帧末才注册生产 TeamAi，本调用排其后才拿得到实例。
+func _suppress_team_ai(battle: Node) -> void:
+	if battle == null or not is_instance_valid(battle) or not battle.has_method("get_team_ai"):
+		return
+	for f in [1, 2]:
+		# TeamAi 是 RefCounted（非 Node）：无类型注解承接，防赋值类型炸
+		var tai = battle.get_team_ai(f)
+		if tai != null and tai.has_method("set_planner_suppressed"):
+			tai.set_planner_suppressed(true)
+
+
+## 夺点易主（CapturePoint 模块信号）：立即刷旗点状态行（不等 0.25s HUD 节流）。
+func _on_capture_owner_changed(_point_id: String, _from_faction: int, _to_faction: int) -> void:
+	_update_hud()
+
+
+## 旗点状态行（格式「旗：左我/中敌/右争夺」；视角 = 蓝方/攻方）。
+func _flag_status_text() -> String:
+	if _capture_points.is_empty():
+		return ""
+	var parts: Array = []
+	for pi in _capture_points.size():
+		parts.append("%s%s" % [CAPTURE_POINT_LABELS[pi], _point_token(_capture_points[pi])])
+	return "旗：%s" % "/".join(parts)
+
+
+## 单点状态词：争夺（双方在场拉锯，或单方正夺进度中）/ 我 / 敌 / 中立。
+## （point 为 CapturePoint，RefCounted——无类型注解鸭子调用）
+func _point_token(point) -> String:
+	if point.is_contested() or point.get_progress() > 0.0:
+		return "争夺"
+	match point.get_owner_faction():
+		1:
+			return "我"
+		2:
+			return "敌"
+		_:
+			return "中立"
+
+
 func _process(delta: float) -> void:
 	# HUD 存活计数节流 0.25s（战斗性能优化：每帧 O(n) 双列表扫描不参与观察）
 	_hud_timer -= delta
@@ -358,6 +487,9 @@ func _process(delta: float) -> void:
 		_hud_timer = 0.25
 		_update_hud()
 	_update_camera(delta)
+	# 夺点意图规划（每方一台；规划器内部 0.5s 节拍 + 暂停守卫，此处只喂帧 delta）
+	for k in _planners:
+		_planners[k].tick(delta)
 
 
 ## HUD 节流计时
@@ -436,6 +568,7 @@ func _build_hud() -> void:
 	board.add_child(board_v)
 	_left_alive_label = _make_label(board_v, Vector2.ZERO, Color(0.55, 0.75, 1.0), StickTokens.FONT_HUD)
 	_right_alive_label = _make_label(board_v, Vector2.ZERO, Color(1.0, 0.62, 0.55), StickTokens.FONT_HUD)
+	_flag_label = _make_label(board_v, Vector2.ZERO, Color(0.92, 0.85, 0.5), StickTokens.FONT_HUD)
 	_hint_label = _make_label(board_v, Vector2.ZERO, Color(0.8, 0.8, 0.8), StickTokens.FONT_HINT)
 	_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
 	# 控制面板（底部居中）：对战预设按钮组 + 重开按钮——点按立即重开
@@ -480,6 +613,9 @@ func _make_label(parent: Control, _pos: Vector2, color: Color, size: int) -> Lab
 func _update_hud() -> void:
 	if _left_alive_label == null:
 		return
+	# 旗点状态行（夺点模式；回退模式无点 → 空串不占位）
+	if _flag_label != null:
+		_flag_label.text = _flag_status_text()
 	# 部队尚未生成完（数组为空）不能判胜负——空集双 0 会误显示"战斗结束"
 	if _attacker.is_empty() or _defender.is_empty():
 		_left_alive_label.text = "蓝方（攻）集结中"

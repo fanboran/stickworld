@@ -9,11 +9,14 @@
 
 ```
 modules/tactics/
-├── api.gd            # 对外契约：Orders / Finder 脚本常量出口（跨模块 preload 唯一入口）
+├── api.gd            # 对外契约：Orders / Finder / CapturePoint / IntentPlanner 脚本常量出口（跨模块 preload 唯一入口）
 ├── README.md
 └── scripts/
     ├── target_finder.gd    # TargetFinder：公共目标选择核心（RefCounted，static 函数库）
-    └── tactical_orders.gd  # TacticalOrders：战术号令节点（OrderType 枚举 + issue/issue_to_org）
+    ├── tactical_orders.gd  # TacticalOrders：战术号令节点（OrderType 枚举 + issue/issue_to_org）
+    └── capture/
+        ├── capture_point.gd          # CapturePoint：夺点结算原子（位置/半径/归属/进度，拉锯积分+易主信号）
+        └── squad_intent_planner.gd   # SquadIntentPlanner：班级意图规划器（0.5s 节拍打分选意图+号令翻译）
 ```
 
 ## 机制要点
@@ -26,13 +29,24 @@ modules/tactics/
   TAKE_COVER / RALLY）+ issue / issue_to_org 送达；经运行时注入的 formation /
   command_chain / organization 引用回查（`notify_squad_order` / `notify_org_order`），
   **不静态依赖它们**——依赖方向恒为消费方 → tactics。
+- **CapturePoint / SquadIntentPlanner**（夺点驱动宏观意图，小兵步枪编班路线）：夺点 =
+  纯逻辑结算原子（半径内单方积分、双方冻结互消、满进度易主并发 `capture_owner_changed`
+  模块信号；`get_capture_state()` 供 Benchmark 选手只读探测）；规划器 = 每 0.5s 一拍给
+  每班打分选意图（攻点/驻防/接火 + 惯性防抖）并翻译成 TacticalOrders 下发，攻点走
+  「旗边先观察再入场」三相位。两者零出向：单位数据经调用方注入 provider 回传、
+  号令经注入的 TacticalOrders 节点下发；同局两台规划器**恰好一台**
+  `setup(drives_settlement = true)` 管占领结算（防双份积分）。打分权重与每方风格表
+  （STYLE_TABLES：进攻性/驻防需求/观察时长）= RL 搜索变量集，待实测校准。
 
 ## 装配与消费
 
-- 跨模块取脚本一律经 `api.gd` 常量（`Orders` / `Finder`），显式 preload 链保 headless
-  防御惯例（§七.3）；禁止 preload 本模块 scripts/ 内部文件（audit_deps 越界 preload 棘轮）。
+- 跨模块取脚本一律经 `api.gd` 常量（`Orders` / `Finder` / `CapturePoint` / `IntentPlanner`），
+  显式 preload 链保 headless 防御惯例（§七.3）；禁止 preload 本模块 scripts/ 内部文件
+  （audit_deps 越界 preload 棘轮）。
 - 装配（world/scripts/setup）：`TacticalOrders` 实例挂 GameRoot，setup 注入
   FormationSystem / CommandChain / OrganizationApi。
+- 夺点/规划器当前消费方：观察场 `tests/dev/battle_arena.gd`（夺点模式接线 + TeamAi
+  让位仲裁）；Benchmark 选手基类按 `tick(delta)` + `get_capture_state()` 接入。
 - 消费方：units 行为层（behavior_attack / behavior_heal / weapon_mount 的目标选择）、
   formation（小队共享目标 + 相位计划激活判定）、combat（team_ai 号令编排 /
   utility_scorer 映射）、combat UI（battle_panel 号令按钮）。

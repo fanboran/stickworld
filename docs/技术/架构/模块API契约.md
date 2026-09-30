@@ -318,11 +318,23 @@ const Orders: GDScript
 # 目标选择脚本（TargetFinder：find_target / find_weakest_ally / find_targets_in_arc，
 # 规则经 opts 链式过滤——prefer_low_hp / prefer_large / fixate_on / ignore_current_attackers / max_attackers_per_target）
 const Finder: GDScript
+
+# 夺点结算脚本（CapturePoint：位置/半径/归属/进度；半径内单方积分、双方冻结互消、
+# 满进度易主并发模块信号 capture_owner_changed(point_id, from_faction, to_faction)；
+# get_capture_state() 只读探测——Benchmark 选手基类按此方法名识别旗点）
+const CapturePoint: GDScript
+
+# 班级意图规划器（SquadIntentPlanner：0.5s 节拍攻点/驻防/接火打分选意图 + 惯性防抖，
+# 翻译 TacticalOrders 下发；tick(delta) 外部可驱动不宿主耦合；单位数据经调用方注入
+# provider 回传——L2 零出向；同局两台恰好一台 setup(drives_settlement=true) 管占领结算）
+const IntentPlanner: GDScript
 ```
 
 > 从 combat 聚合迁出的共享战术词汇：units（行为层选目标）、formation（小队共享目标 + 相位计划号令判定）、
 > combat（team_ai 号令编排/效用打分/战斗面板）三方单向依赖，combat⇄units 环（AR-2）根因消除。
 > 消费方一律经本文件常量 preload（显式链保 headless 防御惯例），禁止 preload scripts/ 内部文件。
+> CapturePoint/IntentPlanner 当前接线在观察场（tests/dev/battle_arena.gd 夺点模式），
+> 生产战场接线挂后续批次（TeamAi 与意图规划器的号令权仲裁已在 TeamAi.set_planner_suppressed 留口）。
 
 ---
 
